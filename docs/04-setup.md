@@ -17,11 +17,14 @@
 | --- | --- | --- |
 | Git | 최신 | 소스 관리 |
 | uv | 최신 | Python 설치·가상환경·의존성 (pip·venv 직접 사용 안 함) |
-| Python | > 미정: 3.12 제안 ([ADR-0005](decisions/0005-python-version.md)) | uv가 설치 |
+| Python | **3.12** ([ADR-0005](decisions/0005-python-version.md)) | **직접 깔지 않는다 — uv가 내려받는다.** 시스템 Python 버전은 상관없다 |
 | Docker | 최신 | 서버 쪽 Neo4j (선택: PostgreSQL) |
 | Ollama | 최신 | 로컬 LLM (외부 API를 쓰면 생략) |
 | Node.js | LTS | 웹 화면(Next.js) 개발·빌드 ([ADR-0017](decisions/0017-web-nextjs-design-system.md)). 웹 화면을 만지지 않는 PC는 생략 |
 | pnpm | 최신 (corepack으로) | `web/` 의존성 |
+
+> **Python은 uv가 관리한다.** PC에 Python이 없어도, 또는 다른 버전(3.13·3.14)이 깔려 있어도 된다. 워크스페이스 루트의 `.python-version`(`3.12`)과 `[tool.uv]`의 `python-preference = "only-managed"`가 uv가 내려받은 3.12만 쓰게 한다 ([ADR-0005](decisions/0005-python-version.md) 구현). 확인: `uv python find 3.12`가 `.../uv/python/cpython-3.12-.../bin/python3.12`를 가리키면 맞다.
+> 그래서 명령은 `python ...`이 아니라 `uv run python ...`으로 쓴다. 맨 `python`은 PC마다 다른 인터프리터다.
 
 ## 3. Windows (클라이언트 주 환경)
 
