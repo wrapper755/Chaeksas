@@ -1,6 +1,6 @@
 # 04. 개발 환경 구성
 
-> 상태: **코드 전.** 필요한 도구와 OS별 주의점을 먼저 정리한다. M1에서 실제 명령(`uv sync`, 실행 스크립트)이 생기면 "확인됨" 표시와 함께 갱신한다.
+> 상태: **일부 확인됨.** `uv sync --all-packages` → `uv run pytest`는 **Linux(aarch64)에서 돈다.** Windows와 CI는 아직 확인하지 않았고, `web/`·Playwright·Docker 쪽은 그 단계가 오면 갱신한다.
 > 이 문서는 **새 PC에서 이 문서만 보고** 환경을 만들 수 있어야 한다. 막히는 곳이 있으면 그 자리에서 고친다.
 
 ## 1. 어떤 PC에 무엇을 까는가
@@ -39,9 +39,9 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 git clone <저장소 주소> C:\dev\Chaeksas
 cd C:\dev\Chaeksas
 
-# 3) Python과 의존성 (M1 이후)
-uv python install 3.12
-uv sync
+# 3) Python과 의존성 (uv가 3.12를 내려받는다)
+uv sync --all-packages
+uv run pytest
 
 # 4) Playwright 브라우저 (M1 이후)
 uv run playwright install chromium
@@ -79,10 +79,10 @@ pnpm dev --filter center-console   # http://localhost:8501
 # 1) uv
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# 2) 저장소와 의존성 (M1 이후)
+# 2) 저장소와 의존성 (uv가 3.12를 내려받는다)
 git clone <저장소 주소> ~/dev/Chaeksas && cd ~/dev/Chaeksas
-uv python install 3.12
-uv sync
+uv sync --all-packages
+uv run pytest
 
 # 3) Neo4j (UI 자동화 앱용)
 docker run -d --name chaeksas-neo4j -p 7474:7474 -p 7687:7687 \

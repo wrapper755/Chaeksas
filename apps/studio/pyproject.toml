@@ -1,0 +1,21 @@
+[project]
+name = "chaeksas-studio"
+version = "0.1.0"
+description = "Studio — BPM 프로세스 편집, 시험 실행(자율 수행), 학습, 패키지 빌드·업로드"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "chaeksas-core",
+    "chaeksas-qt",
+]
+
+[tool.uv.sources]
+chaeksas-core = { workspace = true }
+chaeksas-qt = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# chaeksas는 PEP 420 네임스페이스 — src/chaeksas 밑에 __init__.py를 두지 않는다
+packages = ["src/chaeksas"]

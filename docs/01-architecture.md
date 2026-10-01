@@ -89,7 +89,7 @@ contracts ◀── extension_api ◀── core ◀── studio, bot_ui, serve
 - 서비스 앱끼리 서로 import하지 않는다. 필요하면 HTTP로 부른다.
 - `core`는 Qt를 import하지 않는다. 화면은 `studio`, `bot_ui`의 몫. `worker`는 화면이 없다.
 - 제품 코드는 `spikes/`를 import하지 않는다.
-- 위 규칙은 import 검사 테스트로 강제한다 (M1).
+- 위 규칙은 `tests/test_import_direction.py`가 강제한다 (**있음**). 두 가지를 본다: 선언한 의존(`pyproject.toml`, 전이 포함)과 실제 import(AST). 규칙을 더하려면 그 파일의 `FORBIDDEN_DEPS`·`FORBIDDEN_IMPORTS` 표에 줄을 더한다.
 
 ## 6. OS별로 갈리는 지점 (인터페이스 뒤에 둔다)
 
@@ -119,9 +119,13 @@ contracts ◀── extension_api ◀── core ◀── studio, bot_ui, serve
 
 ## 8. 저장소(코드) 구조
 
+폴더는 아래 그대로, **import 이름은 `chaeksas.<이름>`**(확장은 `chaeksas.ext.<id>`)이다. src 레이아웃이라 멤버마다 `src/chaeksas/<이름>/`이고, `src/chaeksas/`에는 `__init__.py`를 두지 않는다 (PEP 420 네임스페이스, [ADR-0019](decisions/0019-package-names.md)).
+
 ```
 Chaeksas/
-├─ pyproject.toml          # uv workspace 루트 (패키지 아님)
+├─ pyproject.toml          # uv workspace 루트 (패키지 아님) + ruff·pytest·mypy 설정
+├─ .python-version         # 3.12 (ADR-0005)
+├─ uv.lock                 # 워크스페이스 전체 하나
 ├─ packages/
 │  ├─ contracts/           # 공통 계약
 │  ├─ extension_api/       # 확장이 구현하는 인터페이스 (ADR-0018)
@@ -142,9 +146,11 @@ Chaeksas/
 │  ├─ apps/svc-console/    # 서비스 앱 관리 콘솔 (앱마다 하나씩 띄움)
 │  └─ packages/            # ui(구성요소+토큰 CSS), api-types(계약에서 생성), config
 ├─ design/                 # tokens.json (디자인 토큰 원본), preview.html
-├─ spikes/                 # 실험 (제품 코드에서 import 금지)
-├─ tests/                  # 앱 간 통합·계약 테스트
+├─ spikes/                 # 실험 (제품 코드에서 import 금지, 워크스페이스 멤버 아님)
+├─ tests/                  # 앱 간 통합·계약 테스트 + 의존 방향 검사(§5)
 └─ docs/
 ```
+
+> 상태: 위 Python 멤버 11개와 `tests/`는 M1에서 만들어졌다 (`uv sync --all-packages` → `uv run pytest`). `web/`은 아직 없다.
 
 근거: [ADR-0018](decisions/0018-extensions.md), [ADR-0017](decisions/0017-web-nextjs-design-system.md), [ADR-0015](decisions/0015-run-location.md), [ADR-0004](decisions/0004-monorepo-uv-workspace.md), [ADR-0010](decisions/0010-service-apps.md), [ADR-0012](decisions/0012-bot-ui.md), [ADR-0013](decisions/0013-api-keys.md).

@@ -1,0 +1,17 @@
+[project]
+name = "chaeksas-extension-api"
+version = "0.1.0"
+description = "확장이 구현하는 안정 인터페이스 — 태스크 종류·수행기, 편집기, 유틸리티, 로컬 런타임 (ADR-0018)"
+requires-python = ">=3.12,<3.13"
+dependencies = ["chaeksas-contracts"]
+
+[tool.uv.sources]
+chaeksas-contracts = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# chaeksas는 PEP 420 네임스페이스 — src/chaeksas 밑에 __init__.py를 두지 않는다
+packages = ["src/chaeksas"]

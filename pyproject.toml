@@ -1,0 +1,42 @@
+# uv 워크스페이스 루트 — 이 파일 자체는 패키지가 아니다 (docs/01-architecture.md §8).
+# 멤버는 packages/*, apps/*, extensions/* 각각의 pyproject.toml에 있다.
+
+[tool.uv.workspace]
+members = ["packages/*", "apps/*", "extensions/*"]
+# spikes/는 멤버가 아니다 — 제품 코드가 import하지 않는다 (CLAUDE.md §3).
+# web/은 pnpm 워크스페이스다 (ADR-0017).
+
+[tool.uv]
+# ADR-0005: 인터프리터는 uv가 관리한다. 시스템 Python은 후보에서 뺀다.
+python-preference = "only-managed"
+python-downloads = "automatic"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = ["spikes", "docs/08-business-examples/_source"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "PTH"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["chaeksas"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.12"
+namespace_packages = true
+explicit_package_bases = true
+strict = true
+# 뼈대 단계: 외부 라이브러리 타입이 없는 것은 아직 막지 않는다.
+ignore_missing_imports = true

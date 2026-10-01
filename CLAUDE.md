@@ -26,8 +26,8 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 ## 3. 작업 순서 (반드시)
 
-0. 예제를 고치면 → `_source/spec_*.py`를 고친 뒤 `python docs/08-business-examples/_source/build.py`로 다시 만든다.
-   끝내기 전에 `python docs/08-business-examples/_source/build.py --check` (쓰지 않고 검사만, 어긋나면 1). 표준 라이브러리만 쓴다.
+0. 예제를 고치면 → `_source/spec_*.py`를 고친 뒤 `uv run python docs/08-business-examples/_source/build.py`로 다시 만든다.
+   끝내기 전에 `uv run python docs/08-business-examples/_source/build.py --check` (쓰지 않고 검사만, 어긋나면 1). 표준 라이브러리만 쓴다.
    `build.py`는 생성만 하지 않는다 — C14 검사(B3 짝·B11·B12), 호출 대상·DMN 입출력·케이스 필수 입력·결재 폼 칸 타입을 대조해 틀리면 아무것도 쓰지 않고 멈춘다. 커버리지 표와 마일스톤 시험 묶음도 예제에서 자동으로 계산한다.
 1. 모르는 것 → `spikes/<주제>/`에서 실험. 실험 코드는 제품 코드에서 import 금지.
 2. 실험이 끝나면 → ADR 작성 (`docs/decisions/template.md` 복사). 결론이 "안 된다"여도 쓴다.
@@ -76,6 +76,9 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 ## 7. 현재 상태
 
-문서 단계 (M0). 제품 코드 없음 — 지금 돌아가는 코드는 예제 생성기(`docs/08-business-examples/_source/`)뿐이다.
-`docs/04-setup.md`의 `uv sync`·`uv run pytest`는 M1에 생길 것이고 아직 루트에 `pyproject.toml`이 없다.
-다음 할 일은 `docs/05-roadmap.md`의 M0 체크리스트.
+M1 시작. **뼈대는 있고 내용은 비어 있다** — uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있고, 각 패키지는 docstring만 있는 빈 패키지다.
+
+- 명령: `uv sync --all-packages` → `uv run pytest` (47개 통과, Linux aarch64에서만 확인). 검사는 `uv run ruff check .`, `uv run mypy tests packages apps extensions`.
+- import 이름은 `chaeksas.<이름>`, 확장은 `chaeksas.ext.<id>` ([ADR-0019](docs/decisions/0019-package-names.md)). `src/chaeksas/`에 `__init__.py`를 만들면 조용히 깨진다.
+- 의존 방향은 `tests/test_import_direction.py`가 막는다. 새 멤버를 더하면 `tests/test_workspace.py`의 `MEMBERS` 표도 고친다.
+- 아직 없는 것: CI(Windows·Linux), `web/`, 디자인 토큰 생성기, 스파이크 S1~S5, 확장 `extension.json`(C13), 외부 의존(PySide6·FastAPI·Playwright). 남은 M1 기준은 `docs/05-roadmap.md`.
