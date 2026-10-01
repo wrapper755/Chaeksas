@@ -1,0 +1,305 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx20_employee_onboarding" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_new_hire" name="new_hire" />
+  <bpmn:process id="Proc_bx20_employee_onboarding" name="입사자 온보딩" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "directory": "hr-directory"
+  },
+  "extensions": [
+    {
+      "id": "directory",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "사번",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "이름",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "부서",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "입사일",
+      "type": "date",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "팀장메일",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "개인메일",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "IT팀메일",
+      "type": "string",
+      "required": false,
+      "description": "",
+      "default": "it@example.com"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="입사 확정">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_new_hire" />
+    </bpmn:startEvent>
+    <bpmn:subProcess id="Sub_Accounts" name="계정 준비">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:startEvent id="Acc_Start" name="시작">
+        <bpmn:outgoing>Flow_Sub_Accounts_01</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:parallelGateway id="Acc_Split" name="동시에">
+        <bpmn:incoming>Flow_Sub_Accounts_01</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Accounts_02</bpmn:outgoing>
+        <bpmn:outgoing>Flow_Sub_Accounts_03</bpmn:outgoing>
+        <bpmn:outgoing>Flow_Sub_Accounts_04</bpmn:outgoing>
+      </bpmn:parallelGateway>
+      <bpmn:serviceTask id="Acc_Mail" name="메일 계정">
+        <bpmn:extensionElements>
+          <chk:serviceCall>{
+  "app_id": "directory",
+  "operation": "create_mail_account",
+  "input": {
+    "emp_id": "사번",
+    "name": "이름"
+  },
+  "output": {
+    "회사메일": "email"
+  }
+}</chk:serviceCall>
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_Sub_Accounts_02</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Accounts_05</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Acc_Chat" name="메신저 계정">
+        <bpmn:extensionElements>
+          <chk:serviceCall>{
+  "app_id": "directory",
+  "operation": "create_chat_account",
+  "input": {
+    "emp_id": "사번"
+  },
+  "output": {
+    "메신저": "account"
+  }
+}</chk:serviceCall>
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_Sub_Accounts_03</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Accounts_06</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Acc_Group" name="그룹웨어 부서 배정">
+        <bpmn:extensionElements>
+          <chk:serviceCall>{
+  "app_id": "directory",
+  "operation": "assign_department",
+  "input": {
+    "emp_id": "사번",
+    "dept": "부서"
+  },
+  "output": {
+    "배정": "result"
+  }
+}</chk:serviceCall>
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_Sub_Accounts_04</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Accounts_07</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:parallelGateway id="Acc_Join" name="모두 끝">
+        <bpmn:incoming>Flow_Sub_Accounts_05</bpmn:incoming>
+        <bpmn:incoming>Flow_Sub_Accounts_06</bpmn:incoming>
+        <bpmn:incoming>Flow_Sub_Accounts_07</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Accounts_08</bpmn:outgoing>
+      </bpmn:parallelGateway>
+      <bpmn:endEvent id="Acc_End" name="끝">
+        <bpmn:incoming>Flow_Sub_Accounts_08</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Flow_Sub_Accounts_01" sourceRef="Acc_Start" targetRef="Acc_Split" />
+      <bpmn:sequenceFlow id="Flow_Sub_Accounts_02" sourceRef="Acc_Split" targetRef="Acc_Mail" />
+      <bpmn:sequenceFlow id="Flow_Sub_Accounts_03" sourceRef="Acc_Split" targetRef="Acc_Chat" />
+      <bpmn:sequenceFlow id="Flow_Sub_Accounts_04" sourceRef="Acc_Split" targetRef="Acc_Group" />
+      <bpmn:sequenceFlow id="Flow_Sub_Accounts_05" sourceRef="Acc_Mail" targetRef="Acc_Join" />
+      <bpmn:sequenceFlow id="Flow_Sub_Accounts_06" sourceRef="Acc_Chat" targetRef="Acc_Join" />
+      <bpmn:sequenceFlow id="Flow_Sub_Accounts_07" sourceRef="Acc_Group" targetRef="Acc_Join" />
+      <bpmn:sequenceFlow id="Flow_Sub_Accounts_08" sourceRef="Acc_Join" targetRef="Acc_End" />
+    </bpmn:subProcess>
+    <bpmn:serviceTask id="Task_Welcome" name="환영 안내 쓰기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n입사자 `이름`(`부서`)이 `입사일`에 첫 출근한다. 회사 메일은 `회사메일`이다. 업무 파라미터 `첫날안내`에 공통 일정이 있다.\n\n## 할 일\n입사자에게 보낼 따뜻하고 간결한 환영 메일 본문을 쓴다. 첫날 일정과 계정 정보를 포함한다.\n\n## 판단하지 않는 것\n급여·평가·계약 조건을 언급하지 않는다.\n\n## 반환\n- `환영본문`: string",
+  "domain": "llm",
+  "results": {
+    "환영본문": "string"
+  },
+  "tools": [],
+  "params": {
+    "첫날안내": "09:30 로비 집결 → 10:00 오리엔테이션 → 13:00 팀 합류"
+  }
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Approve_Equipment" name="장비 지급 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "장비 지급 확인",
+  "description": "총무팀: 장비를 지급한 뒤 자산번호를 입력하세요.",
+  "show": [
+    "이름",
+    "부서",
+    "입사일"
+  ],
+  "fields": [
+    {
+      "key": "노트북",
+      "label": "노트북 자산번호",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "출입카드",
+      "label": "출입카드 지급",
+      "type": "bool",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sendTask id="Task_MailHire" name="입사자에게">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{개인메일}"
+  ],
+  "subject": "{이름}님, 입사를 환영합니다",
+  "body": "{환영본문}",
+  "attachments": [],
+  "store_as": null
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Task_MailLead" name="팀장에게">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{팀장메일}"
+  ],
+  "subject": "[온보딩] {이름} 준비 완료",
+  "body": "계정·장비 준비가 끝났습니다. 노트북 {노트북}",
+  "attachments": [],
+  "store_as": null
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:sendTask id="Task_Escalate" name="IT 에스컬레이션">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{IT팀메일}"
+  ],
+  "subject": "[온보딩 지연] {이름} 계정 준비 2일 초과",
+  "body": "확인 부탁드립니다.",
+  "attachments": [],
+  "store_as": null
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_Escalated" name="에스컬레이션 끝">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_Late" name="2일" attachedToRef="Sub_Accounts" cancelActivity="false">
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">P2D</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Sub_Accounts" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Sub_Accounts" targetRef="Task_Welcome" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Welcome" targetRef="Approve_Equipment" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Approve_Equipment" targetRef="Task_MailHire" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_MailHire" targetRef="Task_MailLead" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_MailLead" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Bnd_Late" targetRef="Task_Escalate" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Escalate" targetRef="End_Escalated" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx20_employee_onboarding">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="282" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="322" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Accounts_di" bpmnElement="Sub_Accounts" isExpanded="true"><dc:Bounds x="266" y="80" width="612" height="440" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Acc_Start_di" bpmnElement="Acc_Start"><dc:Bounds x="296" y="132" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="276" y="172" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Acc_Split_di" bpmnElement="Acc_Split"><dc:Bounds x="402" y="125" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="382" y="179" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Acc_Mail_di" bpmnElement="Acc_Mail"><dc:Bounds x="522" y="110" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Acc_Chat_di" bpmnElement="Acc_Chat"><dc:Bounds x="522" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Acc_Group_di" bpmnElement="Acc_Group"><dc:Bounds x="522" y="410" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Acc_Join_di" bpmnElement="Acc_Join"><dc:Bounds x="692" y="125" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="672" y="179" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Acc_End_di" bpmnElement="Acc_End"><dc:Bounds x="812" y="132" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="792" y="172" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Welcome_di" bpmnElement="Task_Welcome"><dc:Bounds x="948" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Equipment_di" bpmnElement="Approve_Equipment"><dc:Bounds x="1118" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_MailHire_di" bpmnElement="Task_MailHire"><dc:Bounds x="1288" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_MailLead_di" bpmnElement="Task_MailLead"><dc:Bounds x="1458" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Escalate_di" bpmnElement="Task_Escalate"><dc:Bounds x="948" y="590" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Escalated_di" bpmnElement="End_Escalated"><dc:Bounds x="1150" y="612" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1130" y="652" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1628" y="282" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1608" y="322" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Late_di" bpmnElement="Bnd_Late"><dc:Bounds x="838" y="502" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="834" y="540" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="300" /><di:waypoint x="266" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="878" y="300" /><di:waypoint x="948" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="1048" y="300" /><di:waypoint x="1118" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="1218" y="300" /><di:waypoint x="1288" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="1388" y="300" /><di:waypoint x="1458" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="1558" y="300" /><di:waypoint x="1628" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="856" y="538" /><di:waypoint x="856" y="630" /><di:waypoint x="948" y="630" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1048" y="630" /><di:waypoint x="1150" y="630" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Accounts_01_di" bpmnElement="Flow_Sub_Accounts_01"><di:waypoint x="332" y="150" /><di:waypoint x="402" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Accounts_02_di" bpmnElement="Flow_Sub_Accounts_02"><di:waypoint x="452" y="150" /><di:waypoint x="522" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Accounts_03_di" bpmnElement="Flow_Sub_Accounts_03"><di:waypoint x="427" y="175" /><di:waypoint x="427" y="300" /><di:waypoint x="522" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Accounts_04_di" bpmnElement="Flow_Sub_Accounts_04"><di:waypoint x="427" y="175" /><di:waypoint x="427" y="450" /><di:waypoint x="522" y="450" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Accounts_05_di" bpmnElement="Flow_Sub_Accounts_05"><di:waypoint x="622" y="150" /><di:waypoint x="692" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Accounts_06_di" bpmnElement="Flow_Sub_Accounts_06"><di:waypoint x="622" y="300" /><di:waypoint x="667" y="300" /><di:waypoint x="667" y="150" /><di:waypoint x="692" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Accounts_07_di" bpmnElement="Flow_Sub_Accounts_07"><di:waypoint x="622" y="450" /><di:waypoint x="667" y="450" /><di:waypoint x="667" y="150" /><di:waypoint x="692" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Accounts_08_di" bpmnElement="Flow_Sub_Accounts_08"><di:waypoint x="742" y="150" /><di:waypoint x="812" y="150" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_fx06_document_read" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_fx06_document_read" name="문서 AI 태스크" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "파일",
+      "type": "string",
+      "required": true,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="시작">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Read" name="PDF 읽기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`파일`은 견적서 PDF다.\n\n## 할 일\n공급자·합계·유효기간을 읽는다.\n\n## 판단하지 않는 것\n값을 계산하지 않는다.\n\n## 반환\n- `견적`: {공급자, 합계(int), 유효기간(date)}",
+  "domain": "doc",
+  "results": {
+    "견적": "dict"
+  },
+  "tools": [
+    "pdf_text_tool"
+  ],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Read" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Read" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_fx06_document_read">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Read_di" bpmnElement="Task_Read"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="436" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="416" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

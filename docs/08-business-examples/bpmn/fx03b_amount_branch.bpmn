@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_fx03b_amount_branch" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_fx03b_amount_branch" name="금액 분기 (호출 대상)" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [
+    "구분"
+  ],
+  "inputs": [
+    {
+      "name": "금액",
+      "type": "int",
+      "required": true,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="시작">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="Gw" name="100만 이상?" default="Flow_03">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:scriptTask id="Task_Big" name="고액" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:script>구분 = '고액'</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:scriptTask id="Task_Small" name="소액" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:script>구분 = '소액'</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Gw" />
+    <bpmn:sequenceFlow id="Flow_02" name="예" sourceRef="Gw" targetRef="Task_Big">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">금액 &gt;= 1000000</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_03" name="아니오" sourceRef="Gw" targetRef="Task_Small" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Big" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Small" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_fx03b_amount_branch">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_di" bpmnElement="Gw" isMarkerVisible="true"><dc:Bounds x="266" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="246" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Big_di" bpmnElement="Task_Big"><dc:Bounds x="386" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Small_di" bpmnElement="Task_Small"><dc:Bounds x="386" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="556" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="536" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="291" y="145" /><di:waypoint x="291" y="270" /><di:waypoint x="386" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="295" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="316" y="120" /><di:waypoint x="386" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="320" y="102" width="36" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="486" y="270" /><di:waypoint x="531" y="270" /><di:waypoint x="531" y="120" /><di:waypoint x="556" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="486" y="120" /><di:waypoint x="556" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

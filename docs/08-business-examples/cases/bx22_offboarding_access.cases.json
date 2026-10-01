@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "process": "Proc_bx22_offboarding_access",
+  "cases": [
+    {
+      "name": "정상",
+      "description": "",
+      "inputs": {
+        "사번": "E008",
+        "이름": "최서연",
+        "퇴사일": "2026-10-31"
+      },
+      "expected": {
+        "실패수": 0
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "ERP 실패",
+      "description": "모의 ERP가 E009에 503을 계속 돌려준다 — 재시도 2번 뒤 실패",
+      "inputs": {
+        "사번": "E009",
+        "이름": "정하준",
+        "퇴사일": "2026-10-31"
+      },
+      "expected": {
+        "실패수": 1,
+        "실패": [
+          {
+            "시스템": "ERP"
+          }
+        ]
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

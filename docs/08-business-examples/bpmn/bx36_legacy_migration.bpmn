@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx36_legacy_migration" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:error id="Err_TASK_FAILED" name="TASK_FAILED" errorCode="TASK_FAILED" />
+  <bpmn:process id="Proc_bx36_legacy_migration" name="레거시 화면 데이터 이관" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "pc",
+  "service_keys": {
+    "ui-automation": "it-legacy-ui",
+    "crm": "it-crm"
+  },
+  "extensions": [
+    {
+      "id": "ui-automation",
+      "version": "&gt;=0.4,&lt;0.5"
+    },
+    {
+      "id": "crm",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "고객번호목록",
+      "type": "list",
+      "required": true,
+      "description": "이번 묶음"
+    }
+  ]
+}</chk:process>
+      <chk:defaults>{
+  "forbidden_actions": [
+    "저장·삭제 버튼을 누르지 않는다"
+  ],
+  "desktop": {
+    "app": "CustomerManager"
+  }
+}</chk:defaults>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="묶음 시작">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Read" name="카드 읽기">
+      <bpmn:extensionElements>
+        <chk:task type="ui_task" extension="ui-automation">{
+  "page_id": "legacy.customer.card",
+  "steps": [
+    {
+      "key": "search.no",
+      "action": "fill",
+      "value": "{번호}"
+    },
+    {
+      "key": "search.go",
+      "action": "click"
+    },
+    {
+      "key": "card.fields",
+      "action": "read_table",
+      "result": "카드"
+    }
+  ],
+  "heal": true
+}</chk:task>
+        <chk:loop>{
+  "collection": "고객번호목록",
+  "item": "번호",
+  "result": "카드",
+  "collect_into": "카드목록"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Split" name="예외 카드 고르기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:script>카드값 = [표를사전(c) for c in 카드목록]
+정상 = [c for c in 카드값 if 빈칸없음(c, ['이름', '연락처', '주소', '등급'])]
+예외번호 = [n for n, c in zip(고객번호목록, 카드값) if not 빈칸없음(c, ['이름', '연락처', '주소', '등급'])]
+수작업 = []</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_ReadOdd" name="예외 카드 읽기 (자율)">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n레거시 고객 관리 프로그램에서 고객번호 `번호`의 카드를 연다. 이 카드는 표준 화면과 모양이 다르다.\n\n## 할 일\n이름·연락처·주소·등급을 읽는다.\n\n## 판단하지 않는 것\n어떤 값도 고치지 않는다.\n\n## 반환\n- `카드`: dict",
+  "domain": "desktop",
+  "results": {
+    "카드": "dict"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+        <chk:loop>{
+  "collection": "예외번호",
+  "item": "번호",
+  "result": "카드",
+  "collect_into": "예외카드"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_OddFail" name="예외는 사람에게" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:script>예외카드 = []
+수작업 = 예외번호</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Import" name="CRM에 넣기">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "crm",
+  "operation": "upsert_customers",
+  "input": {
+    "customers": "정상 + 예외카드"
+  },
+  "output": {
+    "넣음": "result"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_OddFail" name="재생 실패" attachedToRef="Task_ReadOdd">
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_TASK_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Read" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Read" targetRef="Task_Split" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Split" targetRef="Task_ReadOdd" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_ReadOdd" targetRef="Task_Import" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Import" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Bnd_OddFail" targetRef="Task_OddFail" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_OddFail" targetRef="Task_Import" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx36_legacy_migration">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Read_di" bpmnElement="Task_Read"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Split_di" bpmnElement="Task_Split"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReadOdd_di" bpmnElement="Task_ReadOdd"><dc:Bounds x="606" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_OddFail_di" bpmnElement="Task_OddFail"><dc:Bounds x="776" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Import_di" bpmnElement="Task_Import"><dc:Bounds x="946" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1116" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1096" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_OddFail_di" bpmnElement="Bnd_OddFail"><dc:Bounds x="666" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="662" y="180" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="120" /><di:waypoint x="946" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="1046" y="120" /><di:waypoint x="1116" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="684" y="178" /><di:waypoint x="684" y="270" /><di:waypoint x="776" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="876" y="270" /><di:waypoint x="921" y="270" /><di:waypoint x="921" y="120" /><di:waypoint x="946" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

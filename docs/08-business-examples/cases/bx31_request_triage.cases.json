@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "process": "Proc_bx31_request_triage",
+  "cases": [
+    {
+      "name": "노트북 고장",
+      "description": "",
+      "inputs": {
+        "요청번호": "R-1",
+        "요청자": "a@example.com",
+        "본문": "노트북 화면이 안 켜져요. 오늘 오후 고객 미팅이 있어요."
+      },
+      "expected": {
+        "종류": "장비",
+        "긴급도": "높음"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "애매한 요청",
+      "description": "",
+      "inputs": {
+        "요청번호": "R-2",
+        "요청자": "a@example.com",
+        "본문": "그거 좀 봐주세요"
+      },
+      "expected": {
+        "종류": "기타"
+      },
+      "approvals": {
+        "Approve_Manual": {
+          "종류": "기타",
+          "긴급도": "낮음"
+        }
+      },
+      "manual": false
+    }
+  ]
+}

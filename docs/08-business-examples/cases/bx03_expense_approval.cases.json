@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "process": "Proc_bx03_expense_approval",
+  "cases": [
+    {
+      "name": "영수증 없음",
+      "description": "",
+      "inputs": {
+        "신청번호": "EX-2609-014",
+        "신청자": "김하나",
+        "항목": "택시",
+        "금액": 25000,
+        "영수증": false,
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "결과": "사전반려"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "소액 자동승인",
+      "description": "",
+      "inputs": {
+        "신청번호": "EX-2609-014",
+        "신청자": "김하나",
+        "항목": "택시",
+        "금액": 30000,
+        "영수증": true,
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "결과": "자동승인"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "결재 승인",
+      "description": "",
+      "inputs": {
+        "신청번호": "EX-2609-014",
+        "신청자": "김하나",
+        "항목": "출장 숙박",
+        "금액": 480000,
+        "영수증": true,
+        "회신주소": {
+          "$test_receiver": "reply"
+        },
+        "리마인드기한": "PT30S",
+        "마감기한": "PT60S"
+      },
+      "expected": {
+        "결과": "승인"
+      },
+      "approvals": {
+        "Approve_Expense": {
+          "승인여부": true,
+          "결재의견": "출장 확인함"
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "기한 초과",
+      "description": "자동 응답이 없으므로 타이머가 이긴다",
+      "inputs": {
+        "신청번호": "EX-2609-015",
+        "신청자": "김하나",
+        "항목": "출장 숙박",
+        "금액": 480000,
+        "영수증": true,
+        "회신주소": {
+          "$test_receiver": "reply"
+        },
+        "리마인드기한": "PT1S",
+        "마감기한": "PT3S"
+      },
+      "expected": {
+        "결과": "기한초과반려"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

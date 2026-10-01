@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "process": "Proc_bx32_customer_inquiry",
+  "cases": [
+    {
+      "name": "배송 문의",
+      "description": "",
+      "inputs": {
+        "문의번호": "T-1001",
+        "제목": "배송 언제 와요?",
+        "본문": "주문한 지 5일 지났어요"
+      },
+      "expected": {
+        "근거부족": false
+      },
+      "approvals": {
+        "Approve_Agent": {
+          "최종답변": "안녕하세요 고객님, ...",
+          "보내기": true
+        }
+      },
+      "manual": false
+    }
+  ]
+}

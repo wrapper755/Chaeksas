@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmn:definitions xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Defs_shipping_fee" name="배송비" namespace="urn:chaeksas:examples">
+  <dmn:decision id="shipping_fee" name="배송비">
+    <dmn:decisionTable id="DT_shipping_fee" hitPolicy="FIRST">
+      <dmn:input id="In_0" label="등급">
+        <dmn:inputExpression id="InE_0" typeRef="string"><dmn:text>등급</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:input id="In_1" label="지역">
+        <dmn:inputExpression id="InE_1" typeRef="string"><dmn:text>지역</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:input id="In_2" label="무게">
+        <dmn:inputExpression id="InE_2" typeRef="number"><dmn:text>무게</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:output id="Out_0" name="fee" typeRef="number" />
+      <dmn:output id="Out_1" name="reason" typeRef="string" />
+      <dmn:rule id="Rule_0">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R0_I0"><dmn:text>"VIP"</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R0_I1"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R0_I2"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R0_O0"><dmn:text>0</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R0_O1"><dmn:text>"VIP 무료"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_1">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R1_I0"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R1_I1"><dmn:text>"도서산간"</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R1_I2"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R1_O0"><dmn:text>8000</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R1_O1"><dmn:text>"도서산간"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_2">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R2_I0"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R2_I1"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R2_I2"><dmn:text>&gt; 20</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R2_O0"><dmn:text>6000</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R2_O1"><dmn:text>"20kg 초과"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_3">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R3_I0"><dmn:text>"우수"</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R3_I1"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R3_I2"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R3_O0"><dmn:text>1500</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R3_O1"><dmn:text>"우수 할인"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_4">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R4_I0"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R4_I1"><dmn:text>"지방"</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R4_I2"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R4_O0"><dmn:text>3500</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R4_O1"><dmn:text>"지방"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_5">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R5_I0"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R5_I1"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R5_I2"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R5_O0"><dmn:text>3000</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R5_O1"><dmn:text>"기본"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+</dmn:definitions>

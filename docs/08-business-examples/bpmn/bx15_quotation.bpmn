@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx15_quotation" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_quote_request" name="quote_request" />
+  <bpmn:process id="Proc_bx15_quotation" name="견적서 작성" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "erp": "sales-erp",
+    "crm": "sales-crm"
+  },
+  "extensions": [
+    {
+      "id": "erp",
+      "version": "&gt;=1,&lt;2"
+    },
+    {
+      "id": "crm",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "요청번호",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "고객",
+      "type": "dict",
+      "required": true,
+      "description": "{이름, 지역, 등급}"
+    },
+    {
+      "name": "품목",
+      "type": "list",
+      "required": true,
+      "description": "{코드, 수량}"
+    },
+    {
+      "name": "할인율",
+      "type": "number",
+      "required": false,
+      "description": "0~1"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="견적 요청">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_quote_request" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Price" name="단가 조회">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "erp",
+  "operation": "get_prices",
+  "input": {
+    "codes": "품목"
+  },
+  "output": {
+    "단가표": "prices"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Weight" name="무게·소계" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:script>무게 = 총무게(품목, 단가표)
+소계 = 소계(품목, 단가표)
+할인율 = 할인율 or 0
+승인 = True
+조정할인율 = None</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:callActivity id="Call_Shipping" name="배송비 (BX-12)" calledElement="Proc_bx12_shipping_fee">
+      <bpmn:extensionElements>
+        <chk:call>{
+  "input": {
+    "지역": "고객.지역",
+    "무게": "무게",
+    "등급": "고객.등급"
+  },
+  "output": {
+    "배송비": "배송비"
+  }
+}</chk:call>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:exclusiveGateway id="Gw_Discount" name="할인 10% 초과?" default="Flow_06">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Discount" name="할인 결재">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "견적 할인 승인",
+  "description": "",
+  "show": [
+    "고객",
+    "소계",
+    "할인율",
+    "배송비"
+  ],
+  "fields": [
+    {
+      "key": "승인",
+      "label": "승인합니까?",
+      "type": "bool",
+      "required": true
+    },
+    {
+      "key": "조정할인율",
+      "label": "조정 할인율",
+      "type": "number",
+      "required": false
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:scriptTask id="Task_Total" name="합계" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+      <bpmn:script>할인율 = (조정할인율 if 조정할인율 is not None else 할인율) if 승인 else 0.1
+합계 = round(소계 * (1 - 할인율)) + 배송비</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Doc" name="견적서 문장">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n견적 수치(`소계`, `할인율`, `배송비`, `합계`)는 이미 확정되었다.\n\n## 할 일\n고객 `고객.이름`에게 보낼 견적서 인사말과 조건 문단을 쓴다.\n\n## 판단하지 않는 것\n수치를 바꾸거나 새 조건을 만들지 않는다.\n\n## 반환\n- `문단`: string",
+  "domain": "llm",
+  "results": {
+    "문단": "string"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_Data_Quote">
+        <bpmn:targetRef>Data_Quote</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Attach" name="CRM에 첨부">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "crm",
+  "operation": "attach_document",
+  "input": {
+    "request_id": "요청번호",
+    "file": "견적서경로"
+  },
+  "output": {
+    "첨부결과": "result"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Price" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Price" targetRef="Task_Weight" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Weight" targetRef="Call_Shipping" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Call_Shipping" targetRef="Gw_Discount" />
+    <bpmn:sequenceFlow id="Flow_05" name="초과" sourceRef="Gw_Discount" targetRef="Approve_Discount">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">할인율 &gt; 0.1</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_06" name="이하" sourceRef="Gw_Discount" targetRef="Task_Total" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Approve_Discount" targetRef="Task_Total" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Total" targetRef="Task_Doc" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Doc" targetRef="Task_Attach" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_Attach" targetRef="End" />
+    <bpmn:dataObject id="DO_Data_Quote" />
+    <bpmn:dataObjectReference id="Data_Quote" name="견적서" dataObjectRef="DO_Data_Quote">
+      <bpmn:extensionElements>
+        <chk:dataOutput>{
+  "path": "견적/{요청번호}.md",
+  "format": "md",
+  "store_as": "견적서경로",
+  "template": "# 견적서 {요청번호}\n\n{문단}\n\n소계 {소계} / 할인 {할인율} / 배송비 {배송비} / 합계 {합계}"
+}</chk:dataOutput>
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx15_quotation">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Price_di" bpmnElement="Task_Price"><dc:Bounds x="266" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Weight_di" bpmnElement="Task_Weight"><dc:Bounds x="436" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_Shipping_di" bpmnElement="Call_Shipping"><dc:Bounds x="606" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Discount_di" bpmnElement="Gw_Discount" isMarkerVisible="true"><dc:Bounds x="776" y="135" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="189" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Discount_di" bpmnElement="Approve_Discount"><dc:Bounds x="896" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Total_di" bpmnElement="Task_Total"><dc:Bounds x="1066" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Doc_di" bpmnElement="Task_Doc"><dc:Bounds x="1236" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Attach_di" bpmnElement="Task_Attach"><dc:Bounds x="1406" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1576" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1556" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Quote_di" bpmnElement="Data_Quote"><dc:Bounds x="1268" y="20" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1310" y="36" width="46" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="160" /><di:waypoint x="266" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="160" /><di:waypoint x="436" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="160" /><di:waypoint x="606" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="160" /><di:waypoint x="776" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="801" y="185" /><di:waypoint x="801" y="310" /><di:waypoint x="896" y="310" /><bpmndi:BPMNLabel><dc:Bounds x="805" y="292" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="826" y="160" /><di:waypoint x="1066" y="160" /><bpmndi:BPMNLabel><dc:Bounds x="830" y="142" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="996" y="310" /><di:waypoint x="1041" y="310" /><di:waypoint x="1041" y="160" /><di:waypoint x="1066" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1166" y="160" /><di:waypoint x="1236" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1336" y="160" /><di:waypoint x="1406" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1506" y="160" /><di:waypoint x="1576" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Quote_di" bpmnElement="DOA_Data_Quote"><di:waypoint x="1286" y="120" /><di:waypoint x="1286" y="70" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

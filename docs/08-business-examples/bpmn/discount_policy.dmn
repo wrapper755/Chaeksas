@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmn:definitions xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Defs_discount_policy" name="할인 정책" namespace="urn:chaeksas:examples">
+  <dmn:decision id="discount_policy" name="할인 정책">
+    <dmn:decisionTable id="DT_discount_policy" hitPolicy="FIRST">
+      <dmn:input id="In_0" label="금액">
+        <dmn:inputExpression id="InE_0" typeRef="number"><dmn:text>amount</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:input id="In_1" label="등급">
+        <dmn:inputExpression id="InE_1" typeRef="string"><dmn:text>grade</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:output id="Out_0" name="discount" typeRef="number" />
+      <dmn:output id="Out_1" name="discount_reason" typeRef="string" />
+      <dmn:rule id="Rule_0">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R0_I0"><dmn:text>&gt;= 1000000</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R0_I1"><dmn:text>"VIP"</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R0_O0"><dmn:text>0.2</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R0_O1"><dmn:text>"VIP 대량 주문"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_1">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R1_I0"><dmn:text>&gt;= 1000000</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R1_I1"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R1_O0"><dmn:text>0.1</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R1_O1"><dmn:text>"대량 주문"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_2">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R2_I0"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R2_I1"><dmn:text>"VIP"</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R2_O0"><dmn:text>0.05</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R2_O1"><dmn:text>"VIP"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_3">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R3_I0"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R3_I1"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R3_O0"><dmn:text>0</dmn:text></dmn:outputEntry>
+        <dmn:outputEntry id="R3_O1"><dmn:text>"할인 없음"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+</dmn:definitions>

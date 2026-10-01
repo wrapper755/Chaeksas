@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx04_tax_invoice_issue" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_bx04_tax_invoice_issue" name="세금계산서 발행 (포털 → 회계 프로그램)" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "pc",
+  "service_keys": {
+    "ui-automation": "finance-tax"
+  },
+  "extensions": [
+    {
+      "id": "ui-automation",
+      "version": "&gt;=0.4,&lt;0.5"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "대상월",
+      "type": "string",
+      "required": false,
+      "description": "`YYYY-MM`, 비우면 지난달"
+    },
+    {
+      "name": "최소발행금액",
+      "type": "int",
+      "required": false,
+      "description": "합계가 이보다 작으면 발행하지 않음"
+    },
+    {
+      "name": "담당자메일",
+      "type": "string",
+      "required": false,
+      "description": "",
+      "default": "tax@example.com"
+    }
+  ]
+}</chk:process>
+      <chk:defaults>{
+  "forbidden_actions": [
+    "포털에서 수정·삭제 링크를 누르지 않는다",
+    "발행대장의 머리글과 합계 수식 칸을 고치지 않는다"
+  ],
+  "confirm_triggers": [
+    "포털 로그인 화면이 나타남"
+  ],
+  "web": {
+    "profile": "supplier-portal"
+  }
+}</chk:defaults>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="매월 1일">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 9 1 * *</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_Prepare" name="발행 준비" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>대상월 = 대상월 or 지난달()
+최소발행금액 = 최소발행금액 or 0</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_ReadPortal" name="거래 내역 조회">
+      <bpmn:extensionElements>
+        <chk:task type="ui_task" extension="ui-automation">{
+  "page_id": "supplier.portal.transactions",
+  "steps": [
+    {
+      "key": "filter.month",
+      "action": "fill",
+      "value": "{대상월}"
+    },
+    {
+      "key": "filter.search",
+      "action": "click"
+    },
+    {
+      "key": "result.table",
+      "action": "read_table",
+      "result": "거래내역"
+    }
+  ],
+  "heal": true
+}</chk:task>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Sum" name="합계 검산" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:script>건수 = len(거래내역)
+포털합계 = 합계(거래내역, '금액')
+발행대상 = 건수 &gt; 0 and 포털합계 &gt;= 최소발행금액</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_Issue" name="발행 대상?" default="Flow_06">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_EnterBook" name="회계 프로그램 입력">
+      <bpmn:extensionElements>
+        <chk:task type="ui_task" extension="ui-automation">{
+  "page_id": "accounting.taxbook.sheet",
+  "steps": [
+    {
+      "key": "row.next",
+      "action": "fill",
+      "value": "{행}"
+    },
+    {
+      "key": "menu.save",
+      "action": "click"
+    }
+  ],
+  "heal": true
+}</chk:task>
+        <chk:loop>{
+  "collection": "거래내역",
+  "item": "행",
+  "result": "입력결과",
+  "collect_into": "입력결과목록"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_ReadTotal" name="시트 합계 읽기">
+      <bpmn:extensionElements>
+        <chk:task type="ui_task" extension="ui-automation">{
+  "page_id": "accounting.taxbook.sheet",
+  "steps": [
+    {
+      "key": "cell.total",
+      "action": "read",
+      "result": "시트합계"
+    }
+  ],
+  "heal": true
+}</chk:task>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Verify" name="발행 검증" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_Data_Report">
+        <bpmn:targetRef>Data_Report</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+      <bpmn:script>검증통과 = 시트합계 == 포털합계
+검증메모 = '' if 검증통과 else '합계가 다름'
+보고서본문 = 발행보고양식(대상월, 건수, 포털합계, 시트합계, 검증통과)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sendTask id="Task_Notify" name="담당자 통지">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{담당자메일}"
+  ],
+  "subject": "[{대상월}] 세금계산서 발행 {건수}건 — 검증 {검증통과}",
+  "body": "보고서를 첨부합니다.",
+  "attachments": [
+    "보고서경로"
+  ],
+  "store_as": "통지결과"
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_Skip" name="발행 안 함">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Prepare" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Prepare" targetRef="Task_ReadPortal" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_ReadPortal" targetRef="Task_Sum" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Sum" targetRef="Gw_Issue" />
+    <bpmn:sequenceFlow id="Flow_05" name="발행" sourceRef="Gw_Issue" targetRef="Task_EnterBook">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">발행대상</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_06" name="대상 없음" sourceRef="Gw_Issue" targetRef="End_Skip" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_EnterBook" targetRef="Task_ReadTotal" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_ReadTotal" targetRef="Task_Verify" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Verify" targetRef="Task_Notify" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_Notify" targetRef="End" />
+    <bpmn:dataObject id="DO_Data_Report" />
+    <bpmn:dataObjectReference id="Data_Report" name="발행 보고" dataObjectRef="DO_Data_Report">
+      <bpmn:extensionElements>
+        <chk:dataOutput>{
+  "path": "세금계산서/{대상월}_발행보고.md",
+  "format": "md",
+  "store_as": "보고서경로",
+  "template": "{보고서본문}"
+}</chk:dataOutput>
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx04_tax_invoice_issue">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Prepare_di" bpmnElement="Task_Prepare"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReadPortal_di" bpmnElement="Task_ReadPortal"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Sum_di" bpmnElement="Task_Sum"><dc:Bounds x="606" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Issue_di" bpmnElement="Gw_Issue" isMarkerVisible="true"><dc:Bounds x="776" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_EnterBook_di" bpmnElement="Task_EnterBook"><dc:Bounds x="896" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReadTotal_di" bpmnElement="Task_ReadTotal"><dc:Bounds x="1066" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Verify_di" bpmnElement="Task_Verify"><dc:Bounds x="1236" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Notify_di" bpmnElement="Task_Notify"><dc:Bounds x="1406" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Skip_di" bpmnElement="End_Skip"><dc:Bounds x="928" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="908" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1576" y="252" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1556" y="292" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Report_di" bpmnElement="Data_Report"><dc:Bounds x="1268" y="130" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1310" y="146" width="70" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="120" /><di:waypoint x="776" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="801" y="145" /><di:waypoint x="801" y="270" /><di:waypoint x="896" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="805" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="826" y="120" /><di:waypoint x="928" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="830" y="102" width="60" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="996" y="270" /><di:waypoint x="1066" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1166" y="270" /><di:waypoint x="1236" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1336" y="270" /><di:waypoint x="1406" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1506" y="270" /><di:waypoint x="1576" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Report_di" bpmnElement="DOA_Data_Report"><di:waypoint x="1286" y="230" /><di:waypoint x="1286" y="180" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

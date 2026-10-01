@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "process": "Proc_fx03_call_mapping",
+  "cases": [
+    {
+      "name": "기본",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "신청자구분": "고액",
+        "보증인구분": "소액"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

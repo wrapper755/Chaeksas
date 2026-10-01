@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx14_supplier_portal_orders" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_bx14_supplier_portal_orders" name="공급사 포털 주문 내역 수집" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "pc",
+  "service_keys": {
+    "ui-automation": "purchase-portal"
+  },
+  "extensions": [
+    {
+      "id": "ui-automation",
+      "version": "&gt;=0.4,&lt;0.5"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "조회일",
+      "type": "string",
+      "required": false,
+      "description": "`YYYY-MM-DD`, 비우면 어제"
+    }
+  ]
+}</chk:process>
+      <chk:defaults>{
+  "confirm_triggers": [
+    "로그인 화면",
+    "2단계 인증 화면",
+    "캡차"
+  ],
+  "forbidden_actions": [
+    "주문 취소·수정 버튼을 누르지 않는다"
+  ],
+  "web": {
+    "profile": "supplier-portal"
+  }
+}</chk:defaults>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="매일 08:00">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 8 * * *</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_Date" name="조회일 정하기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>조회일 = 조회일 or 어제()</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Orders" name="주문 내역 읽기">
+      <bpmn:extensionElements>
+        <chk:task type="ui_task" extension="ui-automation">{
+  "page_id": "supplier.portal.orders",
+  "steps": [
+    {
+      "key": "filter.date",
+      "action": "fill",
+      "value": "{조회일}"
+    },
+    {
+      "key": "filter.search",
+      "action": "click"
+    },
+    {
+      "key": "orders.table",
+      "action": "read_table",
+      "result": "주문"
+    }
+  ],
+  "heal": true
+}</chk:task>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Append" name="공유 시트에 덧붙이기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`주문`은 포털 표의 줄 목록이다. 업무 파라미터 `시트경로`가 공유 xlsx다.\n\n## 할 일\n`주문`을 시트 마지막 줄 다음에 덧붙이고 저장한다. 이미 같은 주문번호가 있으면 건너뛴다.\n\n## 판단하지 않는 것\n기존 줄을 고치거나 지우지 않는다.\n\n## 반환\n- `추가건수`: int\n- `건너뜀`: int",
+  "domain": "doc",
+  "results": {
+    "추가건수": "int",
+    "건너뜀": "int"
+  },
+  "tools": [
+    "excel_writer_tool"
+  ],
+  "params": {
+    "시트경로": "\\\\fileserver\\구매\\주문수집.xlsx"
+  }
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Date" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Date" targetRef="Task_Orders" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Orders" targetRef="Task_Append" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Append" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx14_supplier_portal_orders">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Date_di" bpmnElement="Task_Date"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Orders_di" bpmnElement="Task_Orders"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Append_di" bpmnElement="Task_Append"><dc:Bounds x="606" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="776" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="120" /><di:waypoint x="776" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

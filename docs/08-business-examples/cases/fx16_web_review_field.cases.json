@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "process": "Proc_fx16_web_review_field",
+  "cases": [
+    {
+      "name": "승인",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "승인": true
+      },
+      "approvals": {
+        "Approve_Review": {
+          "승인": true
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "사람이 확인",
+      "description": "",
+      "inputs": {},
+      "expected": {},
+      "approvals": {},
+      "manual": true
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "process": "Proc_bx07_corporate_card_review",
+  "cases": [
+    {
+      "name": "위반 1건",
+      "description": "",
+      "inputs": {
+        "내역파일": "samples/card/2026-09-W4.csv"
+      },
+      "expected": {
+        "위반건수": 1
+      },
+      "approvals": {
+        "Approve_Explain": {
+          "인정": true,
+          "사유": "고객 접대 — 사전 보고됨"
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "위반 없음",
+      "description": "",
+      "inputs": {
+        "내역파일": "samples/card/2026-09-W3.csv"
+      },
+      "expected": {
+        "위반건수": 0
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

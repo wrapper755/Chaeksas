@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "process": "Proc_fx09_sequential_loop",
+  "cases": [
+    {
+      "name": "3건",
+      "description": "",
+      "inputs": {
+        "신청목록": [
+          {
+            "id": 1,
+            "금액": 30000,
+            "영수증": true
+          },
+          {
+            "id": 2,
+            "금액": 900000,
+            "영수증": true
+          },
+          {
+            "id": 3,
+            "금액": 10000,
+            "영수증": false
+          }
+        ]
+      },
+      "expected": {
+        "승인수": 1
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "빈 목록",
+      "description": "",
+      "inputs": {
+        "신청목록": []
+      },
+      "expected": {
+        "승인수": 0
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "process": "Proc_bx12_shipping_fee",
+  "cases": [
+    {
+      "name": "기본",
+      "description": "",
+      "inputs": {
+        "지역": "수도권",
+        "무게": 2,
+        "등급": "일반"
+      },
+      "expected": {
+        "배송비": 3000
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "VIP 도서산간",
+      "description": "FIRST 정책 — 위 규칙이 이긴다",
+      "inputs": {
+        "지역": "도서산간",
+        "무게": 30,
+        "등급": "VIP"
+      },
+      "expected": {
+        "배송비": 0
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "무거운 지방",
+      "description": "",
+      "inputs": {
+        "지역": "지방",
+        "무게": 25,
+        "등급": "일반"
+      },
+      "expected": {
+        "배송비": 6000
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "무게 경계값",
+      "description": "20kg은 초과가 아님",
+      "inputs": {
+        "지역": "수도권",
+        "무게": 20,
+        "등급": "일반"
+      },
+      "expected": {
+        "배송비": 3000
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

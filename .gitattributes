@@ -1,0 +1,10 @@
+# 줄바꿈은 저장소에서 LF로 고정 (Windows·Linux 공동 작업)
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+*.png binary
+*.jpg binary
+*.ico binary
+*.pkg binary
+*.zip binary

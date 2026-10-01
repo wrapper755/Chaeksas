@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "process": "Proc_bx35_voc_weekly",
+  "cases": [
+    {
+      "name": "소량 120건",
+      "description": "모의 SaaS가 120건 → 3묶음",
+      "inputs": {},
+      "expected": {
+        "분석묶음": [
+          "*",
+          "*",
+          "*"
+        ]
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "process": "Proc_fx06_document_read",
+  "cases": [
+    {
+      "name": "샘플",
+      "description": "",
+      "inputs": {
+        "파일": "samples/docs/quote.pdf"
+      },
+      "expected": {
+        "견적": {
+          "합계": 1320000
+        }
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "process": "Proc_fx15_web_form",
+  "cases": [
+    {
+      "name": "시험 페이지",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "제출메시지": "*",
+        "연락처": "*"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

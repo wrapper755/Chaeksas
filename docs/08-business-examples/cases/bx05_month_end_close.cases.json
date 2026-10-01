@@ -1,0 +1,104 @@
+{
+  "schema": 1,
+  "process": "Proc_bx05_month_end_close",
+  "cases": [
+    {
+      "name": "세 통보 모두 도착",
+      "description": "",
+      "inputs": {
+        "마감월": "2026-09"
+      },
+      "expected": {
+        "승인": true,
+        "분개경로": "*"
+      },
+      "approvals": {
+        "Approve_Close": {
+          "승인": true
+        }
+      },
+      "messages": [
+        {
+          "after_s": 2,
+          "name": "close_sales_done",
+          "correlation": "2026-09",
+          "payload": {
+            "매출확정": {
+              "매출": 120000000
+            }
+          }
+        },
+        {
+          "after_s": 2,
+          "name": "close_purchase_done",
+          "correlation": "2026-09",
+          "payload": {
+            "매입확정": {
+              "매입": 80000000
+            }
+          }
+        },
+        {
+          "after_s": 2,
+          "name": "close_stock_done",
+          "correlation": "2026-09",
+          "payload": {
+            "재고실사": {
+              "상품": 30000000
+            }
+          }
+        }
+      ],
+      "manual": false
+    },
+    {
+      "name": "팀장 보류",
+      "description": "",
+      "inputs": {
+        "마감월": "2026-09"
+      },
+      "expected": {
+        "승인": false
+      },
+      "approvals": {
+        "Approve_Close": {
+          "승인": false,
+          "메모": "매입 불일치 확인 후 재마감"
+        }
+      },
+      "messages": [
+        {
+          "after_s": 2,
+          "name": "close_sales_done",
+          "correlation": "2026-09",
+          "payload": {
+            "매출확정": {
+              "매출": 120000000
+            }
+          }
+        },
+        {
+          "after_s": 2,
+          "name": "close_purchase_done",
+          "correlation": "2026-09",
+          "payload": {
+            "매입확정": {
+              "매입": 80000000
+            }
+          }
+        },
+        {
+          "after_s": 2,
+          "name": "close_stock_done",
+          "correlation": "2026-09",
+          "payload": {
+            "재고실사": {
+              "상품": 30000000
+            }
+          }
+        }
+      ],
+      "manual": false
+    }
+  ]
+}

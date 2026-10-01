@@ -1,0 +1,55 @@
+{
+  "schema": 1,
+  "process": "Proc_bx33_access_request",
+  "cases": [
+    {
+      "name": "위키 읽기",
+      "description": "",
+      "inputs": {
+        "신청번호": "AR-1",
+        "사번": "E001",
+        "시스템": "Wiki",
+        "권한": "read",
+        "사유": "문서 열람",
+        "신청자메일": "a@example.com"
+      },
+      "expected": {
+        "위험도": "낮음"
+      },
+      "approvals": {
+        "Approve_Lead": {
+          "승인": true
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "ERP 쓰기",
+      "description": "",
+      "inputs": {
+        "신청번호": "AR-2",
+        "사번": "E001",
+        "시스템": "ERP",
+        "권한": "write",
+        "사유": "전표 입력",
+        "신청자메일": "a@example.com"
+      },
+      "expected": {
+        "위험도": "높음"
+      },
+      "approvals": {
+        "Approve_Lead": {
+          "승인": true
+        },
+        "Approve_Owner": {
+          "승인": true
+        },
+        "Approve_Sec": {
+          "승인": true,
+          "기간": 30
+        }
+      },
+      "manual": false
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "process": "Proc_fx14_timers",
+  "cases": [
+    {
+      "name": "응답",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "결과": "응답"
+      },
+      "approvals": {
+        "Approve_Review": {
+          "승인": true
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "시간 초과",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "결과": "보류"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

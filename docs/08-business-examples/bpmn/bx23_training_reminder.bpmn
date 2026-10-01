@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx23_training_reminder" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_bx23_training_reminder" name="필수 교육 이수 독려" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "lms": "hr-lms",
+    "mailer": "hr-mailer"
+  },
+  "extensions": [
+    {
+      "id": "lms",
+      "version": "&gt;=1,&lt;2"
+    },
+    {
+      "id": "mailer",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": []
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="매주 수요일">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 10 * * 3</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_List" name="미이수자">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "lms",
+  "operation": "list_incomplete",
+  "input": {},
+  "output": {
+    "미이수": "items"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:businessRuleTask id="Task_Level" name="독려 단계">
+      <bpmn:extensionElements>
+        <chk:rule>{
+  "decision": "training_nudge",
+  "input": {
+    "남은일수": "사람.남은일수"
+  },
+  "output": {
+    "단계": "단계"
+  }
+}</chk:rule>
+        <chk:loop>{
+  "collection": "미이수",
+  "item": "사람",
+  "result": "단계",
+  "collect_into": "단계목록"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+    </bpmn:businessRuleTask>
+    <bpmn:scriptTask id="Task_Merge" name="대상 만들기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:script>대상목록 = [dict(p, 단계=s) for p, s in zip(미이수, 단계목록)]</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Write" name="안내 메일 쓰기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`대상`은 미이수자 한 명(이름, 메일, 팀장메일, 교육명, 마감일, 남은일수, 링크, 단계)이다. 교육 시스템이 돌려준 값에 `단계`를 붙였다.\n\n## 할 일\n단계에 맞는 안내 메일 제목과 본문을 쓴다. 받는 사람은 `대상.메일`, 「팀장참조」·「인사팀보고」면 참조에 `대상.팀장메일`(인사팀보고는 업무 파라미터 `인사팀메일`도). 이수 링크는 `대상.링크`를 그대로 쓴다.\n\n## 판단하지 않는 것\n불이익을 과장하지 않는다.\n\n## 반환\n- `메일`: {받는사람, 참조, 제목, 본문}",
+  "domain": "llm",
+  "results": {
+    "메일": "dict"
+  },
+  "tools": [],
+  "params": {
+    "인사팀메일": "hr@example.com"
+  }
+}</chk:aiTask>
+        <chk:loop>{
+  "collection": "대상목록",
+  "item": "대상",
+  "result": "메일",
+  "collect_into": "메일목록"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false" />
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Send" name="일괄 발송">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "mailer",
+  "operation": "send_bulk",
+  "input": {
+    "mails": "메일목록"
+  },
+  "output": {
+    "발송": "result"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_List" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_List" targetRef="Task_Level" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Level" targetRef="Task_Merge" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Merge" targetRef="Task_Write" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Write" targetRef="Task_Send" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Send" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx23_training_reminder">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_List_di" bpmnElement="Task_List"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Level_di" bpmnElement="Task_Level"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Merge_di" bpmnElement="Task_Merge"><dc:Bounds x="606" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Write_di" bpmnElement="Task_Write"><dc:Bounds x="776" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Send_di" bpmnElement="Task_Send"><dc:Bounds x="946" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1116" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1096" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="120" /><di:waypoint x="776" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="876" y="120" /><di:waypoint x="946" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="1046" y="120" /><di:waypoint x="1116" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

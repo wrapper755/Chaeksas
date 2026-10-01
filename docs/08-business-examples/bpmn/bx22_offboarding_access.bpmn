@@ -1,0 +1,308 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx22_offboarding_access" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_employee_left" name="employee_left" />
+  <bpmn:error id="Err_TASK_FAILED" name="TASK_FAILED" errorCode="TASK_FAILED" />
+  <bpmn:process id="Proc_bx22_offboarding_access" name="퇴사자 계정 회수" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "directory": "sec-directory",
+    "erp": "sec-erp"
+  },
+  "extensions": [
+    {
+      "id": "directory",
+      "version": "&gt;=1,&lt;2"
+    },
+    {
+      "id": "erp",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "사번",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "이름",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "퇴사일",
+      "type": "date",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "보안팀메일",
+      "type": "string",
+      "required": false,
+      "description": "",
+      "default": "security@example.com"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="퇴사 처리">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_employee_left" />
+    </bpmn:startEvent>
+    <bpmn:subProcess id="Sub_Revoke" name="계정 회수">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:startEvent id="Rv_Start" name="시작">
+        <bpmn:outgoing>Flow_Sub_Revoke_01</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:scriptTask id="Rv_Init" name="실패 칸 비우기" scriptFormat="chk-expr">
+        <bpmn:incoming>Flow_Sub_Revoke_01</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_02</bpmn:outgoing>
+        <bpmn:script>메일실패 = None
+VPN실패 = None
+ERP실패 = None</bpmn:script>
+      </bpmn:scriptTask>
+      <bpmn:parallelGateway id="Rv_Split" name="동시에">
+        <bpmn:incoming>Flow_Sub_Revoke_02</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_03</bpmn:outgoing>
+        <bpmn:outgoing>Flow_Sub_Revoke_04</bpmn:outgoing>
+        <bpmn:outgoing>Flow_Sub_Revoke_05</bpmn:outgoing>
+      </bpmn:parallelGateway>
+      <bpmn:serviceTask id="Rv_Mail" name="메일">
+        <bpmn:extensionElements>
+          <chk:serviceCall>{
+  "app_id": "directory",
+  "operation": "disable_mail",
+  "input": {
+    "emp_id": "사번"
+  },
+  "output": {
+    "메일회수": "result"
+  },
+  "retry": {
+    "max": 2,
+    "on": [
+      503
+    ]
+  }
+}</chk:serviceCall>
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_Sub_Revoke_03</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_06</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Rv_Vpn" name="VPN">
+        <bpmn:extensionElements>
+          <chk:serviceCall>{
+  "app_id": "directory",
+  "operation": "disable_vpn",
+  "input": {
+    "emp_id": "사번"
+  },
+  "output": {
+    "VPN회수": "result"
+  },
+  "retry": {
+    "max": 2,
+    "on": [
+      503
+    ]
+  }
+}</chk:serviceCall>
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_Sub_Revoke_04</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_09</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:serviceTask id="Rv_Erp" name="ERP">
+        <bpmn:extensionElements>
+          <chk:serviceCall>{
+  "app_id": "erp",
+  "operation": "disable_user",
+  "input": {
+    "emp_id": "사번"
+  },
+  "output": {
+    "ERP회수": "result"
+  },
+  "retry": {
+    "max": 2,
+    "on": [
+      503
+    ]
+  }
+}</chk:serviceCall>
+        </bpmn:extensionElements>
+        <bpmn:incoming>Flow_Sub_Revoke_05</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_12</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:scriptTask id="Rv_MailFail" name="메일 실패 기록" scriptFormat="chk-expr">
+        <bpmn:incoming>Flow_Sub_Revoke_07</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_08</bpmn:outgoing>
+        <bpmn:script>메일실패 = dict(시스템='메일', 오류=error_message)</bpmn:script>
+      </bpmn:scriptTask>
+      <bpmn:scriptTask id="Rv_VpnFail" name="VPN 실패 기록" scriptFormat="chk-expr">
+        <bpmn:incoming>Flow_Sub_Revoke_10</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_11</bpmn:outgoing>
+        <bpmn:script>VPN실패 = dict(시스템='VPN', 오류=error_message)</bpmn:script>
+      </bpmn:scriptTask>
+      <bpmn:scriptTask id="Rv_ErpFail" name="ERP 실패 기록" scriptFormat="chk-expr">
+        <bpmn:incoming>Flow_Sub_Revoke_13</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_14</bpmn:outgoing>
+        <bpmn:script>ERP실패 = dict(시스템='ERP', 오류=error_message)</bpmn:script>
+      </bpmn:scriptTask>
+      <bpmn:exclusiveGateway id="Rv_MailDone" name="메일 끝">
+        <bpmn:incoming>Flow_Sub_Revoke_06</bpmn:incoming>
+        <bpmn:incoming>Flow_Sub_Revoke_08</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_15</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:exclusiveGateway id="Rv_VpnDone" name="VPN 끝">
+        <bpmn:incoming>Flow_Sub_Revoke_09</bpmn:incoming>
+        <bpmn:incoming>Flow_Sub_Revoke_11</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_16</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:exclusiveGateway id="Rv_ErpDone" name="ERP 끝">
+        <bpmn:incoming>Flow_Sub_Revoke_12</bpmn:incoming>
+        <bpmn:incoming>Flow_Sub_Revoke_14</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_17</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:parallelGateway id="Rv_Join" name="모두 끝">
+        <bpmn:incoming>Flow_Sub_Revoke_15</bpmn:incoming>
+        <bpmn:incoming>Flow_Sub_Revoke_16</bpmn:incoming>
+        <bpmn:incoming>Flow_Sub_Revoke_17</bpmn:incoming>
+        <bpmn:outgoing>Flow_Sub_Revoke_18</bpmn:outgoing>
+      </bpmn:parallelGateway>
+      <bpmn:endEvent id="Rv_End" name="끝">
+        <bpmn:incoming>Flow_Sub_Revoke_18</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:boundaryEvent id="Bnd_MailFail" name="실패" attachedToRef="Rv_Mail">
+        <bpmn:outgoing>Flow_Sub_Revoke_07</bpmn:outgoing>
+        <bpmn:errorEventDefinition errorRef="Err_TASK_FAILED" />
+      </bpmn:boundaryEvent>
+      <bpmn:boundaryEvent id="Bnd_VpnFail" name="실패" attachedToRef="Rv_Vpn">
+        <bpmn:outgoing>Flow_Sub_Revoke_10</bpmn:outgoing>
+        <bpmn:errorEventDefinition errorRef="Err_TASK_FAILED" />
+      </bpmn:boundaryEvent>
+      <bpmn:boundaryEvent id="Bnd_ErpFail" name="실패" attachedToRef="Rv_Erp">
+        <bpmn:outgoing>Flow_Sub_Revoke_13</bpmn:outgoing>
+        <bpmn:errorEventDefinition errorRef="Err_TASK_FAILED" />
+      </bpmn:boundaryEvent>
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_01" sourceRef="Rv_Start" targetRef="Rv_Init" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_02" sourceRef="Rv_Init" targetRef="Rv_Split" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_03" sourceRef="Rv_Split" targetRef="Rv_Mail" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_04" sourceRef="Rv_Split" targetRef="Rv_Vpn" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_05" sourceRef="Rv_Split" targetRef="Rv_Erp" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_06" sourceRef="Rv_Mail" targetRef="Rv_MailDone" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_07" sourceRef="Bnd_MailFail" targetRef="Rv_MailFail" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_08" sourceRef="Rv_MailFail" targetRef="Rv_MailDone" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_09" sourceRef="Rv_Vpn" targetRef="Rv_VpnDone" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_10" sourceRef="Bnd_VpnFail" targetRef="Rv_VpnFail" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_11" sourceRef="Rv_VpnFail" targetRef="Rv_VpnDone" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_12" sourceRef="Rv_Erp" targetRef="Rv_ErpDone" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_13" sourceRef="Bnd_ErpFail" targetRef="Rv_ErpFail" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_14" sourceRef="Rv_ErpFail" targetRef="Rv_ErpDone" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_15" sourceRef="Rv_MailDone" targetRef="Rv_Join" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_16" sourceRef="Rv_VpnDone" targetRef="Rv_Join" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_17" sourceRef="Rv_ErpDone" targetRef="Rv_Join" />
+      <bpmn:sequenceFlow id="Flow_Sub_Revoke_18" sourceRef="Rv_Join" targetRef="Rv_End" />
+    </bpmn:subProcess>
+    <bpmn:scriptTask id="Task_Count" name="실패 모으기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:script>실패 = [x for x in [메일실패, VPN실패, ERP실패] if x is not None]
+실패수 = len(실패)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_Fail" name="실패 있음?" default="Flow_05">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:sendTask id="Task_Security" name="보안팀 알림">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{보안팀메일}"
+  ],
+  "subject": "[계정 회수] {이름}({사번}) 수동 처리 {실패수}건",
+  "body": "실패한 시스템: {실패}",
+  "attachments": [],
+  "store_as": null
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Sub_Revoke" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Sub_Revoke" targetRef="Task_Count" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Count" targetRef="Gw_Fail" />
+    <bpmn:sequenceFlow id="Flow_04" name="있음" sourceRef="Gw_Fail" targetRef="Task_Security">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">실패수 &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_05" name="없음" sourceRef="Gw_Fail" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Security" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx22_offboarding_access">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="507" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="547" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Revoke_di" bpmnElement="Sub_Revoke" isExpanded="true"><dc:Bounds x="266" y="80" width="1072" height="890" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_Start_di" bpmnElement="Rv_Start"><dc:Bounds x="296" y="132" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="276" y="172" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_Init_di" bpmnElement="Rv_Init"><dc:Bounds x="402" y="110" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_Split_di" bpmnElement="Rv_Split"><dc:Bounds x="572" y="125" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="552" y="179" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_Mail_di" bpmnElement="Rv_Mail"><dc:Bounds x="692" y="110" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_Vpn_di" bpmnElement="Rv_Vpn"><dc:Bounds x="692" y="260" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_Erp_di" bpmnElement="Rv_Erp"><dc:Bounds x="692" y="410" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_MailFail_di" bpmnElement="Rv_MailFail"><dc:Bounds x="862" y="560" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_VpnFail_di" bpmnElement="Rv_VpnFail"><dc:Bounds x="862" y="710" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_ErpFail_di" bpmnElement="Rv_ErpFail"><dc:Bounds x="862" y="860" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_MailDone_di" bpmnElement="Rv_MailDone" isMarkerVisible="true"><dc:Bounds x="1032" y="125" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1012" y="179" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_VpnDone_di" bpmnElement="Rv_VpnDone" isMarkerVisible="true"><dc:Bounds x="1032" y="275" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1012" y="329" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_ErpDone_di" bpmnElement="Rv_ErpDone" isMarkerVisible="true"><dc:Bounds x="1032" y="425" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1012" y="479" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_Join_di" bpmnElement="Rv_Join"><dc:Bounds x="1152" y="125" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1132" y="179" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Rv_End_di" bpmnElement="Rv_End"><dc:Bounds x="1272" y="132" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1252" y="172" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_MailFail_di" bpmnElement="Bnd_MailFail"><dc:Bounds x="752" y="172" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="748" y="210" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_VpnFail_di" bpmnElement="Bnd_VpnFail"><dc:Bounds x="752" y="322" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="748" y="360" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_ErpFail_di" bpmnElement="Bnd_ErpFail"><dc:Bounds x="752" y="472" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="748" y="510" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Count_di" bpmnElement="Task_Count"><dc:Bounds x="1408" y="485" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Fail_di" bpmnElement="Gw_Fail" isMarkerVisible="true"><dc:Bounds x="1578" y="500" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1558" y="554" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Security_di" bpmnElement="Task_Security"><dc:Bounds x="1698" y="1040" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1868" y="507" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1848" y="547" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="525" /><di:waypoint x="266" y="525" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="1338" y="525" /><di:waypoint x="1408" y="525" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="1508" y="525" /><di:waypoint x="1578" y="525" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="1603" y="550" /><di:waypoint x="1603" y="1080" /><di:waypoint x="1698" y="1080" /><bpmndi:BPMNLabel><dc:Bounds x="1607" y="1062" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="1628" y="525" /><di:waypoint x="1868" y="525" /><bpmndi:BPMNLabel><dc:Bounds x="1632" y="507" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="1798" y="1080" /><di:waypoint x="1843" y="1080" /><di:waypoint x="1843" y="525" /><di:waypoint x="1868" y="525" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_01_di" bpmnElement="Flow_Sub_Revoke_01"><di:waypoint x="332" y="150" /><di:waypoint x="402" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_02_di" bpmnElement="Flow_Sub_Revoke_02"><di:waypoint x="502" y="150" /><di:waypoint x="572" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_03_di" bpmnElement="Flow_Sub_Revoke_03"><di:waypoint x="622" y="150" /><di:waypoint x="692" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_04_di" bpmnElement="Flow_Sub_Revoke_04"><di:waypoint x="597" y="175" /><di:waypoint x="597" y="300" /><di:waypoint x="692" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_05_di" bpmnElement="Flow_Sub_Revoke_05"><di:waypoint x="597" y="175" /><di:waypoint x="597" y="450" /><di:waypoint x="692" y="450" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_06_di" bpmnElement="Flow_Sub_Revoke_06"><di:waypoint x="792" y="150" /><di:waypoint x="1032" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_07_di" bpmnElement="Flow_Sub_Revoke_07"><di:waypoint x="770" y="208" /><di:waypoint x="770" y="220" /><di:waypoint x="817" y="220" /><di:waypoint x="817" y="600" /><di:waypoint x="862" y="600" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_08_di" bpmnElement="Flow_Sub_Revoke_08"><di:waypoint x="962" y="600" /><di:waypoint x="1007" y="600" /><di:waypoint x="1007" y="150" /><di:waypoint x="1032" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_09_di" bpmnElement="Flow_Sub_Revoke_09"><di:waypoint x="792" y="300" /><di:waypoint x="1032" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_10_di" bpmnElement="Flow_Sub_Revoke_10"><di:waypoint x="770" y="358" /><di:waypoint x="770" y="370" /><di:waypoint x="817" y="370" /><di:waypoint x="817" y="750" /><di:waypoint x="862" y="750" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_11_di" bpmnElement="Flow_Sub_Revoke_11"><di:waypoint x="962" y="750" /><di:waypoint x="1007" y="750" /><di:waypoint x="1007" y="300" /><di:waypoint x="1032" y="300" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_12_di" bpmnElement="Flow_Sub_Revoke_12"><di:waypoint x="792" y="450" /><di:waypoint x="1032" y="450" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_13_di" bpmnElement="Flow_Sub_Revoke_13"><di:waypoint x="770" y="508" /><di:waypoint x="770" y="900" /><di:waypoint x="862" y="900" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_14_di" bpmnElement="Flow_Sub_Revoke_14"><di:waypoint x="962" y="900" /><di:waypoint x="1007" y="900" /><di:waypoint x="1007" y="450" /><di:waypoint x="1032" y="450" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_15_di" bpmnElement="Flow_Sub_Revoke_15"><di:waypoint x="1082" y="150" /><di:waypoint x="1152" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_16_di" bpmnElement="Flow_Sub_Revoke_16"><di:waypoint x="1082" y="300" /><di:waypoint x="1107" y="300" /><di:waypoint x="1107" y="150" /><di:waypoint x="1152" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_17_di" bpmnElement="Flow_Sub_Revoke_17"><di:waypoint x="1082" y="450" /><di:waypoint x="1107" y="450" /><di:waypoint x="1107" y="150" /><di:waypoint x="1152" y="150" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_Revoke_18_di" bpmnElement="Flow_Sub_Revoke_18"><di:waypoint x="1202" y="150" /><di:waypoint x="1272" y="150" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

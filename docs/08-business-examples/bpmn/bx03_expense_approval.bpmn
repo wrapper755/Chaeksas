@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx03_expense_approval" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_expense_request" name="expense_request" />
+  <bpmn:error id="Err_SEND_FAILED" name="SEND_FAILED" errorCode="SEND_FAILED" />
+  <bpmn:process id="Proc_bx03_expense_approval" name="지출 결재" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "신청번호",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "신청자",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "항목",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "금액",
+      "type": "int",
+      "required": true,
+      "description": "원"
+    },
+    {
+      "name": "영수증",
+      "type": "bool",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "회신주소",
+      "type": "string",
+      "required": true,
+      "description": "경비 시스템의 회신 웹훅"
+    },
+    {
+      "name": "자동승인한도",
+      "type": "int",
+      "required": false,
+      "description": "원",
+      "default": 100000
+    },
+    {
+      "name": "리마인드기한",
+      "type": "string",
+      "required": false,
+      "description": "ISO 기간",
+      "default": "P3D"
+    },
+    {
+      "name": "마감기한",
+      "type": "string",
+      "required": false,
+      "description": "ISO 기간",
+      "default": "P7D"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="지출 신청 도착">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_expense_request" />
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_Precheck" name="사전 점검" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>기한초과 = False
+승인여부 = False
+결재의견 = ''
+경로 = '사전반려' if not 영수증 else ('자동승인' if 금액 &lt;= 자동승인한도 else '결재')</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_NeedApproval" name="결재가 필요한가?" default="Flow_04">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Expense" name="결재 대기">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "지출 결재",
+  "description": "기한이 지나면 자동 반려됩니다.",
+  "show": [
+    "신청번호",
+    "신청자",
+    "항목",
+    "금액",
+    "영수증",
+    "마감기한"
+  ],
+  "fields": [
+    {
+      "key": "승인여부",
+      "label": "승인합니까?",
+      "type": "bool",
+      "required": true
+    },
+    {
+      "key": "결재의견",
+      "label": "의견",
+      "type": "text",
+      "required": false
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sendTask id="Task_Remind" name="리마인드">
+      <bpmn:extensionElements>
+        <chk:webhook>{
+  "url": "{회신주소}",
+  "method": "POST",
+  "body": "fields:[신청번호, 리마인드기한]",
+  "timeout_s": 10,
+  "store_as": "리마인드발송"
+}</chk:webhook>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_Remind" name="리마인드 끝">
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:scriptTask id="Task_Expired" name="기한 초과" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+      <bpmn:script>기한초과 = True</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:scriptTask id="Task_Result" name="결과 정리" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_Data_Log">
+        <bpmn:targetRef>Data_Log</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+      <bpmn:script>결과 = '사전반려' if 경로 == '사전반려' else ('자동승인' if 경로 == '자동승인' else ('기한초과반려' if 기한초과 else ('승인' if 승인여부 else '반려')))
+보고서본문 = 지출기록양식(신청번호, 결과, 결재의견)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sendTask id="Task_Reply" name="신청자에게 회신">
+      <bpmn:extensionElements>
+        <chk:webhook>{
+  "url": "{회신주소}",
+  "method": "POST",
+  "body": "fields:[신청번호, 결과, 결재의견]",
+  "timeout_s": 10,
+  "store_as": "회신결과"
+}</chk:webhook>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:scriptTask id="Task_ReplyFailed" name="회신 실패 기록" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+      <bpmn:script>회신오류 = error_message</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_Remind" name="리마인드 기한" attachedToRef="Approve_Expense" cancelActivity="false">
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">리마인드기한</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Bnd_Deadline" name="마감 기한" attachedToRef="Approve_Expense">
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">마감기한</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Bnd_ReplyFail" name="회신 실패" attachedToRef="Task_Reply">
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_SEND_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Precheck" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Precheck" targetRef="Gw_NeedApproval" />
+    <bpmn:sequenceFlow id="Flow_03" name="결재" sourceRef="Gw_NeedApproval" targetRef="Approve_Expense">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">경로 == '결재'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_04" name="사전반려·자동승인" sourceRef="Gw_NeedApproval" targetRef="Task_Result" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Approve_Expense" targetRef="Task_Result" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Bnd_Remind" targetRef="Task_Remind" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Remind" targetRef="End_Remind" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Bnd_Deadline" targetRef="Task_Expired" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Expired" targetRef="Task_Result" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_Result" targetRef="Task_Reply" />
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_Reply" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Bnd_ReplyFail" targetRef="Task_ReplyFailed" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_ReplyFailed" targetRef="End" />
+    <bpmn:dataObject id="DO_Data_Log" />
+    <bpmn:dataObjectReference id="Data_Log" name="처리 기록" dataObjectRef="DO_Data_Log">
+      <bpmn:extensionElements>
+        <chk:dataOutput>{
+  "path": "지출결재/{신청번호}.md",
+  "format": "md",
+  "store_as": "기록경로",
+  "template": "{보고서본문}"
+}</chk:dataOutput>
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx03_expense_approval">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Precheck_di" bpmnElement="Task_Precheck"><dc:Bounds x="266" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_NeedApproval_di" bpmnElement="Gw_NeedApproval" isMarkerVisible="true"><dc:Bounds x="436" y="135" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="416" y="189" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Expense_di" bpmnElement="Approve_Expense"><dc:Bounds x="556" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Remind_di" bpmnElement="Task_Remind"><dc:Bounds x="726" y="420" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Remind_di" bpmnElement="End_Remind"><dc:Bounds x="928" y="442" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="908" y="482" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Expired_di" bpmnElement="Task_Expired"><dc:Bounds x="726" y="570" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Result_di" bpmnElement="Task_Result"><dc:Bounds x="896" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Reply_di" bpmnElement="Task_Reply"><dc:Bounds x="1066" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReplyFailed_di" bpmnElement="Task_ReplyFailed"><dc:Bounds x="1236" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1406" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1386" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Remind_di" bpmnElement="Bnd_Remind"><dc:Bounds x="616" y="332" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="612" y="370" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Deadline_di" bpmnElement="Bnd_Deadline"><dc:Bounds x="571" y="332" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="567" y="370" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_ReplyFail_di" bpmnElement="Bnd_ReplyFail"><dc:Bounds x="1126" y="182" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1122" y="220" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Log_di" bpmnElement="Data_Log"><dc:Bounds x="928" y="20" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="970" y="36" width="70" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="160" /><di:waypoint x="266" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="160" /><di:waypoint x="436" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="461" y="185" /><di:waypoint x="461" y="310" /><di:waypoint x="556" y="310" /><bpmndi:BPMNLabel><dc:Bounds x="465" y="292" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="486" y="160" /><di:waypoint x="896" y="160" /><bpmndi:BPMNLabel><dc:Bounds x="490" y="142" width="108" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="656" y="310" /><di:waypoint x="871" y="310" /><di:waypoint x="871" y="160" /><di:waypoint x="896" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="634" y="368" /><di:waypoint x="634" y="460" /><di:waypoint x="726" y="460" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="826" y="460" /><di:waypoint x="928" y="460" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="589" y="368" /><di:waypoint x="589" y="610" /><di:waypoint x="726" y="610" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="826" y="610" /><di:waypoint x="871" y="610" /><di:waypoint x="871" y="160" /><di:waypoint x="896" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="996" y="160" /><di:waypoint x="1066" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11"><di:waypoint x="1166" y="160" /><di:waypoint x="1406" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12"><di:waypoint x="1144" y="218" /><di:waypoint x="1144" y="310" /><di:waypoint x="1236" y="310" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13"><di:waypoint x="1336" y="310" /><di:waypoint x="1381" y="310" /><di:waypoint x="1381" y="160" /><di:waypoint x="1406" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Log_di" bpmnElement="DOA_Data_Log"><di:waypoint x="946" y="120" /><di:waypoint x="946" y="70" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

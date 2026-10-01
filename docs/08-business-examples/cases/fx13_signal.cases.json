@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "process": "Proc_fx13_signal",
+  "cases": [
+    {
+      "name": "정상",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "작업": "완료"
+      },
+      "approvals": {},
+      "messages": [
+        {
+          "after_s": 4,
+          "name": "work_done",
+          "correlation": "W-1",
+          "payload": {}
+        }
+      ],
+      "manual": false
+    },
+    {
+      "name": "문제",
+      "description": "abort가 1초쯤 오므로 4초 뒤 완료 메시지는 받을 곳이 없다",
+      "inputs": {
+        "검사결과": "bad"
+      },
+      "expected": {
+        "작업": "중단"
+      },
+      "approvals": {},
+      "messages": [
+        {
+          "after_s": 4,
+          "name": "work_done",
+          "correlation": "W-1",
+          "payload": {}
+        }
+      ],
+      "manual": false
+    }
+  ]
+}

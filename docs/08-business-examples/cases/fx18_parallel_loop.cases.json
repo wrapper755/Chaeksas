@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "process": "Proc_fx18_parallel_loop",
+  "cases": [
+    {
+      "name": "5개",
+      "description": "",
+      "inputs": {
+        "주소목록": [
+          "https://example.com",
+          "https://example.com",
+          "https://example.com",
+          "https://example.com",
+          "https://example.com"
+        ]
+      },
+      "expected": {
+        "정상": 5
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "process": "Proc_bx30_contract_review",
+  "cases": [
+    {
+      "name": "표준 계약",
+      "description": "",
+      "inputs": {
+        "요청번호": "CR-01",
+        "계약서": "samples/contracts/standard.pdf",
+        "상대방": "가나상사",
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "등급": "낮음"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "무제한 배상",
+      "description": "",
+      "inputs": {
+        "요청번호": "CR-02",
+        "계약서": "samples/contracts/unlimited_liability.pdf",
+        "상대방": "다라물산",
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "등급": "높음"
+      },
+      "approvals": {
+        "Approve_Legal": {
+          "의견": "배상 한도 조항 추가 필요",
+          "서명가능": false
+        }
+      },
+      "manual": false
+    }
+  ]
+}

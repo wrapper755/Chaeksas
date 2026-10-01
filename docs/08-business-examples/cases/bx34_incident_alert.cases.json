@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "process": "Proc_bx34_incident_alert",
+  "cases": [
+    {
+      "name": "1차 확인 후 복구",
+      "description": "",
+      "inputs": {
+        "경보번호": "AL-1",
+        "서비스": "payment-api",
+        "내용": "5xx 비율 12%"
+      },
+      "expected": {
+        "확인": true
+      },
+      "approvals": {
+        "Approve_Ack1": {
+          "확인": true
+        }
+      },
+      "messages": [
+        {
+          "after_s": 10,
+          "name": "monitor_recovered",
+          "correlation": "AL-1",
+          "payload": {}
+        }
+      ],
+      "manual": false
+    },
+    {
+      "name": "에스컬레이션",
+      "description": "자동 응답 없음 — 2초씩 두 번 지나 팀장 호출로 끝난다",
+      "inputs": {
+        "경보번호": "AL-2",
+        "서비스": "payment-api",
+        "내용": "5xx 비율 12%",
+        "확인기한": "PT2S"
+      },
+      "expected": {
+        "요약": "*"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

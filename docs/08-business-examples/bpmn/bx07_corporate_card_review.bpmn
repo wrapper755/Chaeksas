@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx07_corporate_card_review" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_bx07_corporate_card_review" name="법인카드 사용 내역 정리" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "내역파일",
+      "type": "string",
+      "required": false,
+      "description": "카드사 CSV 경로. 비우면 공유 폴더의 지난주 파일"
+    },
+    {
+      "name": "카드폴더",
+      "type": "string",
+      "required": false,
+      "description": "",
+      "default": "\\\\fileserver\\재무\\법인카드"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="매주 월요일">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">30 8 * * 1</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_File" name="파일 정하기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>내역파일 = 내역파일 or 카드폴더 + '/' + 지난주표기() + '.csv'</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Parse" name="내역 읽기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`내역파일`은 카드사가 준 CSV다. 열 이름이 카드사마다 조금씩 다르다.\n\n## 할 일\n모든 줄을 {승인번호, 일시, 요일(월~일), 시(0~23), 가맹점, 업종, 금액, 사용자}로 정리한다. 요일·시는 일시에서 계산한다.\n\n## 판단하지 않는 것\n정책 위반 여부는 판단하지 않는다.\n\n## 반환\n- `내역`: list",
+  "domain": "doc",
+  "results": {
+    "내역": "list"
+  },
+  "tools": [
+    "csv_parser_tool"
+  ],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Account" name="계정과목 붙이기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`건`은 카드 사용 한 건이다. 업무 파라미터 `계정과목표`에 업종별 기본 계정이 있다.\n\n## 할 일\n이 건의 계정과목을 하나 고르고 근거를 한 줄로 적는다.\n\n## 판단하지 않는 것\n금액을 바꾸지 않는다.\n\n## 반환\n- `분류`: {승인번호, 계정과목, 근거}",
+  "domain": "llm",
+  "results": {
+    "분류": "dict"
+  },
+  "tools": [],
+  "params": {
+    "계정과목표": {
+      "음식점": "복리후생비",
+      "택시": "여비교통비",
+      "숙박": "여비교통비",
+      "문구": "소모품비"
+    }
+  }
+}</chk:aiTask>
+        <chk:loop>{
+  "collection": "내역",
+  "item": "건",
+  "result": "분류",
+  "collect_into": "분류목록"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+    </bpmn:serviceTask>
+    <bpmn:businessRuleTask id="Task_Policy" name="정책 점검">
+      <bpmn:extensionElements>
+        <chk:rule>{
+  "decision": "card_policy",
+  "input": {
+    "요일": "건.요일",
+    "시": "건.시",
+    "업종": "건.업종",
+    "금액": "건.금액"
+  },
+  "output": {
+    "사유": "violation"
+  }
+}</chk:rule>
+        <chk:loop>{
+  "collection": "내역",
+  "item": "건",
+  "result": "사유",
+  "collect_into": "사유목록"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+    </bpmn:businessRuleTask>
+    <bpmn:scriptTask id="Task_Collect" name="위반 모으기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+      <bpmn:script>위반 = [dict(건, 사유=s) for 건, s in zip(내역, 사유목록) if len(s) &gt; 0]
+위반건수 = len(위반)
+인정 = None</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_Violation" name="위반 있음?" default="Flow_08">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Explain" name="팀장 소명 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "법인카드 정책 위반 소명",
+  "description": "",
+  "show": [
+    "위반"
+  ],
+  "fields": [
+    {
+      "key": "인정",
+      "label": "업무상 사용으로 인정합니까?",
+      "type": "bool",
+      "required": true
+    },
+    {
+      "key": "사유",
+      "label": "사유",
+      "type": "text",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:scriptTask id="Task_Build" name="전표 자료 만들기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_Data_Upload">
+        <bpmn:targetRef>Data_Upload</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+      <bpmn:script>전표 = 전표자료(내역, 분류목록, 위반, 인정)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_File" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_File" targetRef="Task_Parse" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Parse" targetRef="Task_Account" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Account" targetRef="Task_Policy" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Policy" targetRef="Task_Collect" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Collect" targetRef="Gw_Violation" />
+    <bpmn:sequenceFlow id="Flow_07" name="있음" sourceRef="Gw_Violation" targetRef="Approve_Explain">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">위반건수 &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_08" name="없음" sourceRef="Gw_Violation" targetRef="Task_Build" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Approve_Explain" targetRef="Task_Build" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_Build" targetRef="End" />
+    <bpmn:dataObject id="DO_Data_Upload" />
+    <bpmn:dataObjectReference id="Data_Upload" name="전표 업로드 파일" dataObjectRef="DO_Data_Upload">
+      <bpmn:extensionElements>
+        <chk:dataOutput>{
+  "path": "카드/{오늘}_전표.xlsx",
+  "format": "xlsx",
+  "store_as": "전표경로",
+  "variables": [
+    "전표"
+  ],
+  "sheet": "전표"
+}</chk:dataOutput>
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx07_corporate_card_review">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_File_di" bpmnElement="Task_File"><dc:Bounds x="266" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Parse_di" bpmnElement="Task_Parse"><dc:Bounds x="436" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Account_di" bpmnElement="Task_Account"><dc:Bounds x="606" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Policy_di" bpmnElement="Task_Policy"><dc:Bounds x="776" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Collect_di" bpmnElement="Task_Collect"><dc:Bounds x="946" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Violation_di" bpmnElement="Gw_Violation" isMarkerVisible="true"><dc:Bounds x="1116" y="135" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1096" y="189" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Explain_di" bpmnElement="Approve_Explain"><dc:Bounds x="1236" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Build_di" bpmnElement="Task_Build"><dc:Bounds x="1406" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1576" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1556" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Upload_di" bpmnElement="Data_Upload"><dc:Bounds x="1438" y="20" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1480" y="36" width="118" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="160" /><di:waypoint x="266" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="160" /><di:waypoint x="436" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="160" /><di:waypoint x="606" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="160" /><di:waypoint x="776" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="876" y="160" /><di:waypoint x="946" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="1046" y="160" /><di:waypoint x="1116" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="1141" y="185" /><di:waypoint x="1141" y="310" /><di:waypoint x="1236" y="310" /><bpmndi:BPMNLabel><dc:Bounds x="1145" y="292" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1166" y="160" /><di:waypoint x="1406" y="160" /><bpmndi:BPMNLabel><dc:Bounds x="1170" y="142" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1336" y="310" /><di:waypoint x="1381" y="310" /><di:waypoint x="1381" y="160" /><di:waypoint x="1406" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1506" y="160" /><di:waypoint x="1576" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Upload_di" bpmnElement="DOA_Data_Upload"><di:waypoint x="1456" y="120" /><di:waypoint x="1456" y="70" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

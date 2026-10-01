@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_fx04_folder_poll" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_fx04_folder_poll" name="폴더 감시 (조건 시작 대체)" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "감시폴더",
+      "type": "string",
+      "required": false,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="5분마다">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">*/5 * * * *</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_List" name="파일 목록" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>파일 = 파일목록(감시폴더 + '/*')
+건수 = len(파일)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_Any" name="있음?" default="Flow_04">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Confirm" name="처리 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "받은 파일 처리",
+  "description": "",
+  "show": [
+    "파일"
+  ],
+  "fields": [
+    {
+      "key": "처리",
+      "label": "처리함",
+      "type": "bool",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_None" name="없음">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_List" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_List" targetRef="Gw_Any" />
+    <bpmn:sequenceFlow id="Flow_03" name="있음" sourceRef="Gw_Any" targetRef="Approve_Confirm">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">건수 &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_04" name="없음" sourceRef="Gw_Any" targetRef="End_None" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Approve_Confirm" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_fx04_folder_poll">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_List_di" bpmnElement="Task_List"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Any_di" bpmnElement="Gw_Any" isMarkerVisible="true"><dc:Bounds x="436" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="416" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Confirm_di" bpmnElement="Approve_Confirm"><dc:Bounds x="556" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_None_di" bpmnElement="End_None"><dc:Bounds x="588" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="568" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="726" y="252" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="706" y="292" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="461" y="145" /><di:waypoint x="461" y="270" /><di:waypoint x="556" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="465" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="486" y="120" /><di:waypoint x="588" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="490" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="656" y="270" /><di:waypoint x="726" y="270" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

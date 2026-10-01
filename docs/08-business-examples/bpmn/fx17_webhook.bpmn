@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_fx17_webhook" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:error id="Err_SEND_FAILED" name="SEND_FAILED" errorCode="SEND_FAILED" />
+  <bpmn:process id="Proc_fx17_webhook" name="웹훅 보내기" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "대상주소",
+      "type": "string",
+      "required": true,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="시작">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_Make" name="보낼 값" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>건수 = 3
+상태 = '완료'</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sendTask id="Task_Hook" name="보내기">
+      <bpmn:extensionElements>
+        <chk:webhook>{
+  "url": "{대상주소}",
+  "method": "POST",
+  "body": "fields:[건수, 상태]",
+  "timeout_s": 10,
+  "store_as": "응답"
+}</chk:webhook>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:scriptTask id="Task_Fail" name="실패" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:script>실패 = error_message</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_Fail" name="실패" attachedToRef="Task_Hook">
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_SEND_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Make" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Make" targetRef="Task_Hook" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Hook" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Bnd_Fail" targetRef="Task_Fail" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Fail" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_fx17_webhook">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Make_di" bpmnElement="Task_Make"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Hook_di" bpmnElement="Task_Hook"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Fail_di" bpmnElement="Task_Fail"><dc:Bounds x="606" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="776" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Fail_di" bpmnElement="Bnd_Fail"><dc:Bounds x="496" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="492" y="180" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="776" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="514" y="178" /><di:waypoint x="514" y="270" /><di:waypoint x="606" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="706" y="270" /><di:waypoint x="751" y="270" /><di:waypoint x="751" y="120" /><di:waypoint x="776" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

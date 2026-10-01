@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx31_request_triage" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_ops_request" name="ops_request" />
+  <bpmn:process id="Proc_bx31_request_triage" name="업무 요청 접수·분배" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "ticketing": "ops-ticket"
+  },
+  "extensions": [
+    {
+      "id": "ticketing",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "요청번호",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "요청자",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "본문",
+      "type": "string",
+      "required": true,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="요청 도착">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_ops_request" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Classify" name="요청 분류">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`본문`은 직원이 자유롭게 쓴 요청이다.\n\n## 할 일\n종류(장비|권한|시설|기타), 긴급도(높음|보통|낮음), 한 줄 요약, 확신도(0~1)를 낸다.\n\n## 판단하지 않는 것\n요청을 직접 처리하거나 해결책을 제시하지 않는다.\n\n## 반환\n- `종류`: string\n- `긴급도`: string\n- `요약`: string\n- `확신도`: number",
+  "domain": "llm",
+  "results": {
+    "종류": "string",
+    "긴급도": "string",
+    "요약": "string",
+    "확신도": "number"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gw_Confident" name="확신?" default="Flow_04">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Manual" name="사람이 분류">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "요청 분류",
+  "description": "",
+  "show": [
+    "본문",
+    "종류",
+    "긴급도",
+    "요약",
+    "확신도"
+  ],
+  "fields": [
+    {
+      "key": "종류",
+      "label": "종류",
+      "type": "choice",
+      "required": true,
+      "choices": [
+        "장비",
+        "권한",
+        "시설",
+        "기타"
+      ]
+    },
+    {
+      "key": "긴급도",
+      "label": "긴급도",
+      "type": "choice",
+      "required": true,
+      "choices": [
+        "높음",
+        "보통",
+        "낮음"
+      ]
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_Ticket" name="티켓 만들기">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "ticketing",
+  "operation": "create_ticket",
+  "input": {
+    "queue": "종류",
+    "priority": "긴급도",
+    "title": "요약",
+    "body": "본문"
+  },
+  "output": {
+    "티켓번호": "id"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_Ack" name="접수 확인">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{요청자}"
+  ],
+  "subject": "[접수] {요약}",
+  "body": "티켓 {티켓번호}로 접수되었습니다. 담당: {종류} 팀",
+  "attachments": [],
+  "store_as": null
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Classify" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Classify" targetRef="Gw_Confident" />
+    <bpmn:sequenceFlow id="Flow_03" name="확신" sourceRef="Gw_Confident" targetRef="Task_Ticket">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">확신도 &gt;= 0.8</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_04" name="애매" sourceRef="Gw_Confident" targetRef="Approve_Manual" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Approve_Manual" targetRef="Task_Ticket" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Ticket" targetRef="Task_Ack" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Ack" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx31_request_triage">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Classify_di" bpmnElement="Task_Classify"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Confident_di" bpmnElement="Gw_Confident" isMarkerVisible="true"><dc:Bounds x="436" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="416" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Manual_di" bpmnElement="Approve_Manual"><dc:Bounds x="556" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Ticket_di" bpmnElement="Task_Ticket"><dc:Bounds x="726" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Ack_di" bpmnElement="Task_Ack"><dc:Bounds x="896" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1066" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1046" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="486" y="120" /><di:waypoint x="726" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="490" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="486" y="120" /><di:waypoint x="556" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="490" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="656" y="120" /><di:waypoint x="726" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="826" y="120" /><di:waypoint x="896" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="996" y="120" /><di:waypoint x="1066" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

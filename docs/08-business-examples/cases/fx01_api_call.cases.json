@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "process": "Proc_fx01_api_call",
+  "cases": [
+    {
+      "name": "기본",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "원화": {
+          "$gt": 0
+        }
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

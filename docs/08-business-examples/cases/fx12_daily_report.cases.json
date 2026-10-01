@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "process": "Proc_fx12_daily_report",
+  "cases": [
+    {
+      "name": "기본",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "보고경로": "*"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

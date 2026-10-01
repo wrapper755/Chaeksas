@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "process": "Proc_bx37_clause_review",
+  "cases": [
+    {
+      "name": "무제한 배상",
+      "description": "",
+      "inputs": {
+        "조항": "을은 갑에게 발생한 모든 손해를 배상한다.",
+        "종류": "손해배상"
+      },
+      "expected": {
+        "결과": {
+          "점수": {
+            "$gte": 4
+          }
+        }
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "빈 조항",
+      "description": "",
+      "inputs": {
+        "조항": "",
+        "종류": "해지"
+      },
+      "expected": {
+        "결과": {
+          "점수": 3
+        }
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

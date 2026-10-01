@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "process": "Proc_bx20_employee_onboarding",
+  "cases": [
+    {
+      "name": "정상 입사",
+      "description": "",
+      "inputs": {
+        "사번": "E2610-01",
+        "이름": "박지민",
+        "부서": "재무팀",
+        "입사일": "2026-10-12",
+        "팀장메일": "lead@example.com",
+        "개인메일": "jimin@example.net"
+      },
+      "expected": {
+        "회사메일": "*"
+      },
+      "approvals": {
+        "Approve_Equipment": {
+          "노트북": "NB-2210",
+          "출입카드": true
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "정상 입사 (사람이 확인)",
+      "description": "",
+      "inputs": {
+        "사번": "E2610-02",
+        "이름": "이도윤",
+        "부서": "영업팀",
+        "입사일": "2026-10-12",
+        "팀장메일": "lead@example.com",
+        "개인메일": "doyun@example.net"
+      },
+      "expected": {},
+      "approvals": {},
+      "manual": true
+    }
+  ]
+}

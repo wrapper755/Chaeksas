@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "process": "Proc_fx08_error_boundary",
+  "cases": [
+    {
+      "name": "주소 실패",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "원화": 1350,
+        "대체": true
+      },
+      "approvals": {
+        "Approve_Check": {
+          "확인": true
+        }
+      },
+      "manual": false
+    }
+  ]
+}

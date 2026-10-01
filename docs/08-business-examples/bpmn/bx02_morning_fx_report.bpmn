@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx02_morning_fx_report" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:error id="Err_SEND_FAILED" name="SEND_FAILED" errorCode="SEND_FAILED" />
+  <bpmn:process id="Proc_bx02_morning_fx_report" name="매일 아침 환율 점검 보고" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "상한",
+      "type": "dict",
+      "required": false,
+      "description": "통화별 상한. 비우면 운영 기본값(스크립트)"
+    },
+    {
+      "name": "하한",
+      "type": "dict",
+      "required": false,
+      "description": "통화별 하한"
+    },
+    {
+      "name": "담당자",
+      "type": "string",
+      "required": false,
+      "description": "받는 사람 메일"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="평일 09:00">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 9 * * 1-5</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_FetchFx" name="환율 조회">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n업무 파라미터 `조회주소`가 환율 API 주소다.\n\n## 할 일\n그 주소를 GET으로 한 번 불러 KRW·EUR·JPY 환율과 기준일을 꺼낸다.\n\n## 판단하지 않는 것\n환율이 높은지 낮은지 판단하지 않는다.\n\n## 반환\n- `환율`: {KRW, EUR, JPY} (number)\n- `기준일`: string `YYYY-MM-DD`",
+  "domain": "api",
+  "results": {
+    "환율": "dict",
+    "기준일": "date"
+  },
+  "tools": [
+    "http_request_tool"
+  ],
+  "params": {
+    "조회주소": "https://api.frankfurter.dev/v1/latest?base=USD&amp;symbols=KRW,EUR,JPY"
+  },
+  "limits": {
+    "max_steps": 6
+  }
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Check" name="점검" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:script>상한 = 상한 or {'KRW': 1400}
+하한 = 하한 or {'KRW': 1200}
+담당자 = 담당자 or 설정('재무담당자메일')
+경고 = 범위벗어남(환율, 상한, 하한)
+경고수 = len(경고)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_Warn" name="경고 있음?" default="Flow_05">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Warn" name="환율 경고 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "환율 경고 확인",
+  "description": "",
+  "show": [
+    "기준일",
+    "환율",
+    "경고",
+    "상한",
+    "하한"
+  ],
+  "fields": [
+    {
+      "key": "조치필요",
+      "label": "조치가 필요합니까?",
+      "type": "bool",
+      "required": true
+    },
+    {
+      "key": "메모",
+      "label": "메모",
+      "type": "text",
+      "required": false
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:scriptTask id="Task_Report" name="보고서 만들기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_Data_Report">
+        <bpmn:targetRef>Data_Report</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+      <bpmn:script>보고서본문 = 아침보고양식(기준일, 환율, 경고, 조치필요 if 경고수 &gt; 0 else None)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sendTask id="Task_Send" name="담당자에게 보내기">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{담당자}"
+  ],
+  "subject": "[{기준일}] 환율 점검 — 경고 {경고수}건",
+  "body": "보고서를 첨부합니다.",
+  "attachments": [
+    "보고서경로"
+  ],
+  "store_as": "발송결과"
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:scriptTask id="Task_SendFailed" name="메일 실패 기록" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:script>발송오류 = error_message</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_SendFail" name="보내기 실패" attachedToRef="Task_Send">
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_SEND_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_FetchFx" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_FetchFx" targetRef="Task_Check" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Check" targetRef="Gw_Warn" />
+    <bpmn:sequenceFlow id="Flow_04" name="있음" sourceRef="Gw_Warn" targetRef="Approve_Warn">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">경고수 &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_05" name="없음" sourceRef="Gw_Warn" targetRef="Task_Report" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Approve_Warn" targetRef="Task_Report" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Report" targetRef="Task_Send" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Send" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Bnd_SendFail" targetRef="Task_SendFailed" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_SendFailed" targetRef="End" />
+    <bpmn:dataObject id="DO_Data_Report" />
+    <bpmn:dataObjectReference id="Data_Report" name="아침보고" dataObjectRef="DO_Data_Report">
+      <bpmn:extensionElements>
+        <chk:dataOutput>{
+  "path": "아침보고/아침보고_{기준일}.md",
+  "format": "md",
+  "store_as": "보고서경로",
+  "template": "{보고서본문}"
+}</chk:dataOutput>
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx02_morning_fx_report">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FetchFx_di" bpmnElement="Task_FetchFx"><dc:Bounds x="266" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Check_di" bpmnElement="Task_Check"><dc:Bounds x="436" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Warn_di" bpmnElement="Gw_Warn" isMarkerVisible="true"><dc:Bounds x="606" y="135" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="586" y="189" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Warn_di" bpmnElement="Approve_Warn"><dc:Bounds x="726" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Report_di" bpmnElement="Task_Report"><dc:Bounds x="896" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Send_di" bpmnElement="Task_Send"><dc:Bounds x="1066" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendFailed_di" bpmnElement="Task_SendFailed"><dc:Bounds x="1236" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1406" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1386" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_SendFail_di" bpmnElement="Bnd_SendFail"><dc:Bounds x="1126" y="182" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1122" y="220" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Report_di" bpmnElement="Data_Report"><dc:Bounds x="928" y="20" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="970" y="36" width="58" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="160" /><di:waypoint x="266" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="160" /><di:waypoint x="436" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="160" /><di:waypoint x="606" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="631" y="185" /><di:waypoint x="631" y="310" /><di:waypoint x="726" y="310" /><bpmndi:BPMNLabel><dc:Bounds x="635" y="292" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="656" y="160" /><di:waypoint x="896" y="160" /><bpmndi:BPMNLabel><dc:Bounds x="660" y="142" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="826" y="310" /><di:waypoint x="871" y="310" /><di:waypoint x="871" y="160" /><di:waypoint x="896" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="996" y="160" /><di:waypoint x="1066" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1166" y="160" /><di:waypoint x="1406" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1144" y="218" /><di:waypoint x="1144" y="310" /><di:waypoint x="1236" y="310" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1336" y="310" /><di:waypoint x="1381" y="310" /><di:waypoint x="1381" y="160" /><di:waypoint x="1406" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Report_di" bpmnElement="DOA_Data_Report"><di:waypoint x="946" y="120" /><di:waypoint x="946" y="70" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

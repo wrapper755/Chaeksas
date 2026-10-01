@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "process": "Proc_fx11_parallel",
+  "cases": [
+    {
+      "name": "기본",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "합": 6
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

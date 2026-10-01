@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx30_contract_review" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_contract_review" name="contract_review" />
+  <bpmn:process id="Proc_bx30_contract_review" name="계약서 검토" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "요청번호",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "계약서",
+      "type": "string",
+      "required": true,
+      "description": "PDF 경로"
+    },
+    {
+      "name": "상대방",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "회신주소",
+      "type": "string",
+      "required": true,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="검토 요청">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_contract_review" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Extract" name="조항 뽑기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`계약서`는 계약서 PDF다.\n\n## 할 일\n손해배상, 지식재산, 해지 조항의 원문을 찾아 그대로 옮긴다. 조항 번호도 적는다.\n\n## 판단하지 않는 것\n조항이 유리한지 불리한지 판단하지 않는다. 없으면 빈 문자열.\n\n## 반환\n- `손해배상조항`: string\n- `지재권조항`: string\n- `해지조항`: string",
+  "domain": "doc",
+  "results": {
+    "손해배상조항": "string",
+    "지재권조항": "string",
+    "해지조항": "string"
+  },
+  "tools": [
+    "pdf_text_tool"
+  ],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:parallelGateway id="Gw_Split" name="세 조항 동시에">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:callActivity id="Call_Damages" name="손해배상 검토" calledElement="Proc_bx37_clause_review">
+      <bpmn:extensionElements>
+        <chk:call>{
+  "input": {
+    "조항": "손해배상조항",
+    "종류": "'손해배상'"
+  },
+  "output": {
+    "손해배상결과": "결과"
+  }
+}</chk:call>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:callActivity id="Call_IP" name="지재권 검토" calledElement="Proc_bx37_clause_review">
+      <bpmn:extensionElements>
+        <chk:call>{
+  "input": {
+    "조항": "지재권조항",
+    "종류": "'지식재산'"
+  },
+  "output": {
+    "지재권결과": "결과"
+  }
+}</chk:call>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:callActivity id="Call_Term" name="해지 검토" calledElement="Proc_bx37_clause_review">
+      <bpmn:extensionElements>
+        <chk:call>{
+  "input": {
+    "조항": "해지조항",
+    "종류": "'해지'"
+  },
+  "output": {
+    "해지결과": "결과"
+  }
+}</chk:call>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:parallelGateway id="Gw_Join" name="모으기">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:scriptTask id="Task_Grade" name="위험 등급" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:script>점수 = [손해배상결과.점수, 지재권결과.점수, 해지결과.점수]
+등급 = '높음' if max(점수) &gt;= 4 else ('보통' if max(점수) &gt;= 2 else '낮음')</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_High" name="높음?" default="Flow_12">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Legal" name="법무팀 검토">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "계약 위험 검토",
+  "description": "",
+  "show": [
+    "상대방",
+    "손해배상결과",
+    "지재권결과",
+    "해지결과",
+    "등급"
+  ],
+  "fields": [
+    {
+      "key": "의견",
+      "label": "법무 의견",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "서명가능",
+      "label": "서명 가능",
+      "type": "bool",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_Opinion" name="의견서 쓰기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n세 조항의 검토 결과(`손해배상결과`, `지재권결과`, `해지결과`)와 `등급`, 법무 의견(있으면 `의견`)이 있다.\n\n## 할 일\n요청자가 읽을 검토 의견서를 쓴다: 요약 → 조항별 위험과 수정 제안 → 결론.\n\n## 판단하지 않는 것\n검토 결과에 없는 새 위험을 만들지 않는다.\n\n## 반환\n- `의견서`: string (markdown)",
+  "domain": "llm",
+  "results": {
+    "의견서": "string"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+      <bpmn:outgoing>Flow_14</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_Data_Opinion">
+        <bpmn:targetRef>Data_Opinion</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_Reply" name="의견서 회신">
+      <bpmn:extensionElements>
+        <chk:webhook>{
+  "url": "{회신주소}",
+  "method": "POST",
+  "body": "fields:[요청번호, 등급, 의견서경로]",
+  "timeout_s": 10,
+  "store_as": null
+}</chk:webhook>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_14</bpmn:incoming>
+      <bpmn:outgoing>Flow_15</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_15</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Extract" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Extract" targetRef="Gw_Split" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Gw_Split" targetRef="Call_Damages" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Gw_Split" targetRef="Call_IP" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Gw_Split" targetRef="Call_Term" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Call_Damages" targetRef="Gw_Join" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Call_IP" targetRef="Gw_Join" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Call_Term" targetRef="Gw_Join" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Gw_Join" targetRef="Task_Grade" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_Grade" targetRef="Gw_High" />
+    <bpmn:sequenceFlow id="Flow_11" name="높음" sourceRef="Gw_High" targetRef="Approve_Legal">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">등급 == '높음'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_12" name="보통·낮음" sourceRef="Gw_High" targetRef="Task_Opinion" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Approve_Legal" targetRef="Task_Opinion" />
+    <bpmn:sequenceFlow id="Flow_14" sourceRef="Task_Opinion" targetRef="Task_Reply" />
+    <bpmn:sequenceFlow id="Flow_15" sourceRef="Task_Reply" targetRef="End" />
+    <bpmn:dataObject id="DO_Data_Opinion" />
+    <bpmn:dataObjectReference id="Data_Opinion" name="검토 의견서" dataObjectRef="DO_Data_Opinion">
+      <bpmn:extensionElements>
+        <chk:dataOutput>{
+  "path": "계약검토/{요청번호}.md",
+  "format": "md",
+  "store_as": "의견서경로",
+  "template": "{의견서}"
+}</chk:dataOutput>
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx30_contract_review">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Extract_di" bpmnElement="Task_Extract"><dc:Bounds x="266" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Split_di" bpmnElement="Gw_Split"><dc:Bounds x="436" y="135" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="416" y="189" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_Damages_di" bpmnElement="Call_Damages"><dc:Bounds x="556" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_IP_di" bpmnElement="Call_IP"><dc:Bounds x="556" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_Term_di" bpmnElement="Call_Term"><dc:Bounds x="556" y="420" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Join_di" bpmnElement="Gw_Join"><dc:Bounds x="726" y="135" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="706" y="189" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Grade_di" bpmnElement="Task_Grade"><dc:Bounds x="846" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_High_di" bpmnElement="Gw_High" isMarkerVisible="true"><dc:Bounds x="1016" y="135" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="996" y="189" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Legal_di" bpmnElement="Approve_Legal"><dc:Bounds x="1136" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Opinion_di" bpmnElement="Task_Opinion"><dc:Bounds x="1306" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Reply_di" bpmnElement="Task_Reply"><dc:Bounds x="1476" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1646" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1626" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Opinion_di" bpmnElement="Data_Opinion"><dc:Bounds x="1338" y="20" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1380" y="36" width="82" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="160" /><di:waypoint x="266" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="160" /><di:waypoint x="436" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="486" y="160" /><di:waypoint x="556" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="461" y="185" /><di:waypoint x="461" y="310" /><di:waypoint x="556" y="310" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="461" y="185" /><di:waypoint x="461" y="460" /><di:waypoint x="556" y="460" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="656" y="160" /><di:waypoint x="726" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="656" y="310" /><di:waypoint x="701" y="310" /><di:waypoint x="701" y="160" /><di:waypoint x="726" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="656" y="460" /><di:waypoint x="701" y="460" /><di:waypoint x="701" y="160" /><di:waypoint x="726" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="776" y="160" /><di:waypoint x="846" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="946" y="160" /><di:waypoint x="1016" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11"><di:waypoint x="1041" y="185" /><di:waypoint x="1041" y="310" /><di:waypoint x="1136" y="310" /><bpmndi:BPMNLabel><dc:Bounds x="1045" y="292" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12"><di:waypoint x="1066" y="160" /><di:waypoint x="1306" y="160" /><bpmndi:BPMNLabel><dc:Bounds x="1070" y="142" width="60" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13"><di:waypoint x="1236" y="310" /><di:waypoint x="1281" y="310" /><di:waypoint x="1281" y="160" /><di:waypoint x="1306" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_14_di" bpmnElement="Flow_14"><di:waypoint x="1406" y="160" /><di:waypoint x="1476" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_15_di" bpmnElement="Flow_15"><di:waypoint x="1576" y="160" /><di:waypoint x="1646" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Opinion_di" bpmnElement="DOA_Data_Opinion"><di:waypoint x="1356" y="120" /><di:waypoint x="1356" y="70" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,89 @@
+{
+  "schema": 1,
+  "process": "Proc_bx13_return_processing",
+  "cases": [
+    {
+      "name": "불량 환불",
+      "description": "",
+      "inputs": {
+        "반품번호": "RT-01",
+        "주문번호": "OD-77",
+        "사유": "전원이 안 켜져요",
+        "금액": 59000,
+        "고객메일": "c@example.com"
+      },
+      "expected": {
+        "분류": "불량",
+        "환불액": 59000
+      },
+      "approvals": {},
+      "messages": [
+        {
+          "after_s": 5,
+          "name": "return_arrived",
+          "correlation": "RT-01",
+          "payload": {
+            "검수통과": true,
+            "검수메모": ""
+          }
+        }
+      ],
+      "manual": false
+    },
+    {
+      "name": "단순 변심",
+      "description": "",
+      "inputs": {
+        "반품번호": "RT-02",
+        "주문번호": "OD-78",
+        "사유": "색이 마음에 안 들어요",
+        "금액": 30000,
+        "고객메일": "c@example.com"
+      },
+      "expected": {
+        "분류": "단순변심",
+        "환불액": 27000
+      },
+      "approvals": {},
+      "messages": [
+        {
+          "after_s": 5,
+          "name": "return_arrived",
+          "correlation": "RT-02",
+          "payload": {
+            "검수통과": true,
+            "검수메모": ""
+          }
+        }
+      ],
+      "manual": false
+    },
+    {
+      "name": "검수 불가",
+      "description": "",
+      "inputs": {
+        "반품번호": "RT-03",
+        "주문번호": "OD-79",
+        "사유": "사용감이 있어요",
+        "금액": 30000,
+        "고객메일": "c@example.com"
+      },
+      "expected": {
+        "검수통과": false
+      },
+      "approvals": {},
+      "messages": [
+        {
+          "after_s": 5,
+          "name": "return_arrived",
+          "correlation": "RT-03",
+          "payload": {
+            "검수통과": false,
+            "검수메모": "사용 흔적"
+          }
+        }
+      ],
+      "manual": false
+    }
+  ]
+}

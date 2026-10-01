@@ -1,0 +1,292 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx33_access_request" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_access_request" name="access_request" />
+  <bpmn:process id="Proc_bx33_access_request" name="IT 권한 신청" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "directory": "it-directory"
+  },
+  "extensions": [
+    {
+      "id": "directory",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "신청번호",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "사번",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "시스템",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "권한",
+      "type": "string",
+      "required": true,
+      "description": "read/write/admin"
+    },
+    {
+      "name": "사유",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "신청자메일",
+      "type": "string",
+      "required": true,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="권한 신청">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_access_request" />
+    </bpmn:startEvent>
+    <bpmn:businessRuleTask id="Task_Risk" name="위험도">
+      <bpmn:extensionElements>
+        <chk:rule>{
+  "decision": "access_risk",
+  "input": {
+    "시스템": "시스템",
+    "권한": "권한"
+  },
+  "output": {
+    "위험도": "risk"
+  }
+}</chk:rule>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:userTask id="Approve_Lead" name="팀장">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "권한 신청 (팀장)",
+  "description": "",
+  "show": [
+    "사번",
+    "시스템",
+    "권한",
+    "사유",
+    "위험도"
+  ],
+  "fields": [
+    {
+      "key": "승인",
+      "label": "승인",
+      "type": "bool",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gw_Need2" name="관리자 결재 필요?" default="Flow_05">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Owner" name="시스템 관리자">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "권한 신청 (시스템 관리자)",
+  "description": "",
+  "show": [
+    "사번",
+    "시스템",
+    "권한",
+    "사유",
+    "위험도"
+  ],
+  "fields": [
+    {
+      "key": "승인",
+      "label": "승인",
+      "type": "bool",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gw_Need3" name="보안팀 결재 필요?" default="Flow_08">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Sec" name="보안팀">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "권한 신청 (보안팀)",
+  "description": "",
+  "show": [
+    "사번",
+    "시스템",
+    "권한",
+    "사유",
+    "위험도"
+  ],
+  "fields": [
+    {
+      "key": "승인",
+      "label": "승인",
+      "type": "bool",
+      "required": true
+    },
+    {
+      "key": "기간",
+      "label": "허용 기간(일)",
+      "type": "number",
+      "required": false,
+      "default": 90
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gw_Ok" name="모두 승인?" default="Flow_11">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_Grant" name="권한 부여">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "directory",
+  "operation": "grant",
+  "input": {
+    "emp_id": "사번",
+    "system": "시스템",
+    "role": "권한"
+  },
+  "output": {
+    "부여": "result"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Schedule" name="회수 예약">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "directory",
+  "operation": "schedule_revoke",
+  "input": {
+    "emp_id": "사번",
+    "system": "시스템",
+    "after_days": "기간"
+  },
+  "output": {
+    "예약": "result"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_Notify" name="결과 안내">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{신청자메일}"
+  ],
+  "subject": "[{시스템}] 권한 신청 결과",
+  "body": "승인: {승인}",
+  "attachments": [],
+  "store_as": null
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+      <bpmn:outgoing>Flow_14</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_14</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Risk" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Risk" targetRef="Approve_Lead" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Approve_Lead" targetRef="Gw_Need2" />
+    <bpmn:sequenceFlow id="Flow_04" name="중간 이상" sourceRef="Gw_Need2" targetRef="Approve_Owner">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">승인 and 위험도 != '낮음'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_05" name="낮음·반려" sourceRef="Gw_Need2" targetRef="Gw_Ok" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Approve_Owner" targetRef="Gw_Need3" />
+    <bpmn:sequenceFlow id="Flow_07" name="높음" sourceRef="Gw_Need3" targetRef="Approve_Sec">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">승인 and 위험도 == '높음'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_08" name="—" sourceRef="Gw_Need3" targetRef="Gw_Ok" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Approve_Sec" targetRef="Gw_Ok" />
+    <bpmn:sequenceFlow id="Flow_10" name="승인" sourceRef="Gw_Ok" targetRef="Task_Grant">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">승인</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_11" name="반려" sourceRef="Gw_Ok" targetRef="Task_Notify" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_Grant" targetRef="Task_Schedule" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_Schedule" targetRef="Task_Notify" />
+    <bpmn:sequenceFlow id="Flow_14" sourceRef="Task_Notify" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx33_access_request">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Risk_di" bpmnElement="Task_Risk"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Lead_di" bpmnElement="Approve_Lead"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Need2_di" bpmnElement="Gw_Need2" isMarkerVisible="true"><dc:Bounds x="606" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="586" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Owner_di" bpmnElement="Approve_Owner"><dc:Bounds x="726" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Need3_di" bpmnElement="Gw_Need3" isMarkerVisible="true"><dc:Bounds x="896" y="245" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="876" y="299" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Sec_di" bpmnElement="Approve_Sec"><dc:Bounds x="1016" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Ok_di" bpmnElement="Gw_Ok" isMarkerVisible="true"><dc:Bounds x="1186" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1166" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Grant_di" bpmnElement="Task_Grant"><dc:Bounds x="1306" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Schedule_di" bpmnElement="Task_Schedule"><dc:Bounds x="1476" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Notify_di" bpmnElement="Task_Notify"><dc:Bounds x="1646" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1816" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1796" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="631" y="145" /><di:waypoint x="631" y="270" /><di:waypoint x="726" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="635" y="252" width="60" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="656" y="120" /><di:waypoint x="1186" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="660" y="102" width="60" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="826" y="270" /><di:waypoint x="896" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="921" y="295" /><di:waypoint x="921" y="420" /><di:waypoint x="1016" y="420" /><bpmndi:BPMNLabel><dc:Bounds x="925" y="402" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="921" y="245" /><di:waypoint x="921" y="120" /><di:waypoint x="1186" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="925" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1116" y="420" /><di:waypoint x="1161" y="420" /><di:waypoint x="1161" y="120" /><di:waypoint x="1186" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1211" y="145" /><di:waypoint x="1211" y="270" /><di:waypoint x="1306" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="1215" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11"><di:waypoint x="1236" y="120" /><di:waypoint x="1646" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="1240" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12"><di:waypoint x="1406" y="270" /><di:waypoint x="1476" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13"><di:waypoint x="1576" y="270" /><di:waypoint x="1621" y="270" /><di:waypoint x="1621" y="120" /><di:waypoint x="1646" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_14_di" bpmnElement="Flow_14"><di:waypoint x="1746" y="120" /><di:waypoint x="1816" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

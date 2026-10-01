@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "process": "Proc_bx16_reorder_proposal",
+  "cases": [
+    {
+      "name": "부족 2품목",
+      "description": "모의 WMS가 2품목을 안전재고 아래로 돌려준다",
+      "inputs": {},
+      "expected": {
+        "제안수": 2,
+        "작업번호": "*"
+      },
+      "approvals": {
+        "Approve_Order": {
+          "승인": true
+        }
+      },
+      "manual": false
+    }
+  ]
+}

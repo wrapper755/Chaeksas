@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "process": "Proc_bx10_vendor_onboarding_review",
+  "cases": [
+    {
+      "name": "국내 소액",
+      "description": "서류 확인만 돈다",
+      "inputs": {
+        "신청번호": "VR-001",
+        "거래처명": "가나상사",
+        "사업자번호": "123-45-67890",
+        "해외": false,
+        "예상거래액": 10000000,
+        "서류": [
+          "samples/vendor/biz.pdf",
+          "samples/vendor/bank.pdf"
+        ],
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "권고": "승인"
+      },
+      "approvals": {
+        "Approve_Vendor": {
+          "결정": "승인"
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "해외 대액",
+      "description": "세 점검 모두 돈다. 통장 사본 없음",
+      "inputs": {
+        "신청번호": "VR-002",
+        "거래처명": "Acme Trading",
+        "사업자번호": "999-99-99999",
+        "해외": true,
+        "예상거래액": 300000000,
+        "서류": [
+          "samples/vendor/biz.pdf"
+        ],
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "권고": "반려"
+      },
+      "approvals": {
+        "Approve_Vendor": {
+          "결정": "보완요청",
+          "의견": "통장 사본 누락"
+        }
+      },
+      "manual": false
+    }
+  ]
+}

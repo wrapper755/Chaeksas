@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx01_invoice_reconciliation" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:error id="Err_SEND_FAILED" name="SEND_FAILED" errorCode="SEND_FAILED" />
+  <bpmn:process id="Proc_bx01_invoice_reconciliation" name="월별 청구서 대사" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "대상월",
+      "type": "string",
+      "required": false,
+      "description": "`YYYY-MM`. 비우면 지난달"
+    },
+    {
+      "name": "청구서폴더",
+      "type": "string",
+      "required": false,
+      "description": "청구서 PDF가 있는 공유 폴더 (서버에서 읽을 수 있는 경로)"
+    },
+    {
+      "name": "재무팀메일",
+      "type": "string",
+      "required": false,
+      "description": "받는 사람",
+      "default": "finance@example.com"
+    }
+  ]
+}</chk:process>
+      <chk:defaults>{
+  "limits": {
+    "timeout_s": 180,
+    "max_steps": 10
+  },
+  "forbidden_actions": [
+    "파일을 수정·삭제하지 않는다"
+  ]
+}</chk:defaults>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="매월 1일">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 9 1 * *</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_Collect" name="자료 모으기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>대상월 = 대상월 or 지난달()
+청구서파일 = 파일목록(청구서폴더 + '/' + 대상월 + '/*.pdf')
+대장파일 = 청구서폴더 + '/' + 대상월 + '/ledger_' + 대상월 + '.xlsx'</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_ReadLedger" name="발주 대장 읽기">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`대장파일`은 이번 달 발주 대장(xlsx)이다. 한 줄이 발주 한 건이다.\n\n## 할 일\n모든 줄을 읽어 발주번호·공급사·공급가액·입고여부를 목록으로 돌려준다. 빈 줄과 합계 줄은 뺀다.\n\n## 판단하지 않는 것\n대사·지급 판단은 하지 않는다. 값이 비어 있으면 비운 채로 둔다.\n\n## 반환\n- `발주목록`: list of {발주번호(string), 공급사(string), 공급가액(int), 입고(bool)}",
+  "domain": "doc",
+  "results": {
+    "발주목록": "list"
+  },
+  "tools": [
+    "excel_parser_tool"
+  ],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_ReadInvoice" name="청구서 판독">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`청구서`는 PDF 한 장의 경로다. 공급사마다 양식이 다르다 (공급가액/과세 공급가, 발주번호/PO No./참조 발주).\n\n## 할 일\n이 한 장에서 공급사·청구번호·발주번호·공급가액·부가세·합계를 읽는다.\n\n## 판단하지 않는 것\n다른 청구서와 비교하거나 중복 여부를 판단하지 않는다 (그건 대사 단계의 일).\n\n## 반환\n- `청구`: {공급사, 청구번호, 발주번호(string — 숫자로 바꾸지 않는다), 공급가액(int), 부가세(int), 합계(int)}",
+  "domain": "doc",
+  "results": {
+    "청구": "dict"
+  },
+  "tools": [
+    "pdf_text_tool"
+  ],
+  "params": {}
+}</chk:aiTask>
+        <chk:loop>{
+  "collection": "청구서파일",
+  "item": "청구서",
+  "result": "청구",
+  "collect_into": "청구목록"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Reconcile" name="대사" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:script>결과 = 대사규칙(발주목록, 청구목록)
+지급대상 = 결과.지급
+보류 = 결과.보류
+미청구 = 결과.미청구
+지급합계 = 합계(지급대상, '합계')
+보류건수 = len(보류)
+지급진행 = '지급 대상대로 진행'
+의견 = ''</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_HasHold" name="보류 있음?" default="Flow_07">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Hold" name="보류 건 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "청구서 보류 확인",
+  "description": "보류 사유를 확인하세요. 승인하면 지급 대상만 지급 요청합니다.",
+  "show": [
+    "대상월",
+    "보류",
+    "지급대상",
+    "지급합계"
+  ],
+  "fields": [
+    {
+      "key": "지급진행",
+      "label": "처리",
+      "type": "choice",
+      "required": true,
+      "choices": [
+        "지급 대상대로 진행",
+        "이번 달 전체 보류"
+      ]
+    },
+    {
+      "key": "의견",
+      "label": "의견",
+      "type": "text",
+      "required": false
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:scriptTask id="Task_Report" name="보고서 만들기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_Data_Table">
+        <bpmn:targetRef>Data_Table</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+      <bpmn:script>지급대상 = [] if 지급진행 == '이번 달 전체 보류' else 지급대상
+지급합계 = 합계(지급대상, '합계')
+보고서본문 = 대사표양식(대상월, 지급대상, 보류, 미청구, 지급합계, 의견)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sendTask id="Task_Mail" name="재무팀에 보내기">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{재무팀메일}"
+  ],
+  "subject": "[{대상월}] 청구서 대사 결과 — 지급 {지급합계}원, 보류 {보류건수}건",
+  "body": "첨부한 대사표를 확인해 주세요.",
+  "attachments": [
+    "대사표경로"
+  ],
+  "store_as": "발송결과"
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:scriptTask id="Task_MailFailed" name="메일 실패 기록" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+      <bpmn:script>발송오류 = error_message</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_MailFail" name="보내기 실패" attachedToRef="Task_Mail">
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_SEND_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Collect" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Collect" targetRef="Task_ReadLedger" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_ReadLedger" targetRef="Task_ReadInvoice" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_ReadInvoice" targetRef="Task_Reconcile" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Reconcile" targetRef="Gw_HasHold" />
+    <bpmn:sequenceFlow id="Flow_06" name="있음" sourceRef="Gw_HasHold" targetRef="Approve_Hold">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">보류건수 &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_07" name="없음" sourceRef="Gw_HasHold" targetRef="Task_Report" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Approve_Hold" targetRef="Task_Report" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Report" targetRef="Task_Mail" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_Mail" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Bnd_MailFail" targetRef="Task_MailFailed" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_MailFailed" targetRef="End" />
+    <bpmn:dataObject id="DO_Data_Table" />
+    <bpmn:dataObjectReference id="Data_Table" name="대사표" dataObjectRef="DO_Data_Table">
+      <bpmn:extensionElements>
+        <chk:dataOutput>{
+  "path": "대사표/대사표_{대상월}.md",
+  "format": "md",
+  "store_as": "대사표경로",
+  "template": "{보고서본문}"
+}</chk:dataOutput>
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx01_invoice_reconciliation">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Collect_di" bpmnElement="Task_Collect"><dc:Bounds x="266" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReadLedger_di" bpmnElement="Task_ReadLedger"><dc:Bounds x="436" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReadInvoice_di" bpmnElement="Task_ReadInvoice"><dc:Bounds x="606" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Reconcile_di" bpmnElement="Task_Reconcile"><dc:Bounds x="776" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_HasHold_di" bpmnElement="Gw_HasHold" isMarkerVisible="true"><dc:Bounds x="946" y="135" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="926" y="189" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Hold_di" bpmnElement="Approve_Hold"><dc:Bounds x="1066" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Report_di" bpmnElement="Task_Report"><dc:Bounds x="1236" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Mail_di" bpmnElement="Task_Mail"><dc:Bounds x="1406" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_MailFailed_di" bpmnElement="Task_MailFailed"><dc:Bounds x="1576" y="270" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1746" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1726" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_MailFail_di" bpmnElement="Bnd_MailFail"><dc:Bounds x="1466" y="182" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1462" y="220" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Table_di" bpmnElement="Data_Table"><dc:Bounds x="1268" y="20" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1310" y="36" width="46" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="160" /><di:waypoint x="266" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="160" /><di:waypoint x="436" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="160" /><di:waypoint x="606" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="160" /><di:waypoint x="776" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="876" y="160" /><di:waypoint x="946" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="971" y="185" /><di:waypoint x="971" y="310" /><di:waypoint x="1066" y="310" /><bpmndi:BPMNLabel><dc:Bounds x="975" y="292" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="996" y="160" /><di:waypoint x="1236" y="160" /><bpmndi:BPMNLabel><dc:Bounds x="1000" y="142" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1166" y="310" /><di:waypoint x="1211" y="310" /><di:waypoint x="1211" y="160" /><di:waypoint x="1236" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1336" y="160" /><di:waypoint x="1406" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1506" y="160" /><di:waypoint x="1746" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11"><di:waypoint x="1484" y="218" /><di:waypoint x="1484" y="310" /><di:waypoint x="1576" y="310" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12"><di:waypoint x="1676" y="310" /><di:waypoint x="1721" y="310" /><di:waypoint x="1721" y="160" /><di:waypoint x="1746" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Table_di" bpmnElement="DOA_Data_Table"><di:waypoint x="1286" y="120" /><di:waypoint x="1286" y="70" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

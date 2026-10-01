@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "process": "Proc_bx17_erp_po_entry",
+  "cases": [
+    {
+      "name": "2건 입력",
+      "description": "`*`는 「값이 있음」",
+      "inputs": {
+        "발주": [
+          {
+            "품목": "P-100",
+            "수량": 40
+          },
+          {
+            "품목": "P-200",
+            "수량": 10
+          }
+        ]
+      },
+      "expected": {
+        "발주번호목록": [
+          "*",
+          "*"
+        ]
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

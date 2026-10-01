@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "process": "Proc_fx19_manual_task_pc",
+  "cases": [
+    {
+      "name": "확인",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "확인됨": true
+      },
+      "approvals": {
+        "Manual_Paper": {}
+      },
+      "manual": false
+    }
+  ]
+}

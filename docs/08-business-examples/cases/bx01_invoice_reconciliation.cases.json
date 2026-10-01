@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "process": "Proc_bx01_invoice_reconciliation",
+  "cases": [
+    {
+      "name": "8월 정상",
+      "description": "샘플 7건: 지급 2건, 보류 5건(금액 불일치·미입고·미등록 발주·중복·부가세), 미청구 2건",
+      "inputs": {
+        "대상월": "2026-08",
+        "청구서폴더": "samples/invoice_reconciliation"
+      },
+      "expected": {
+        "지급합계": 6358000,
+        "보류건수": 5
+      },
+      "approvals": {
+        "Approve_Hold": {
+          "지급진행": "지급 대상대로 진행",
+          "의견": "보류 5건 공급사에 확인 요청"
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "8월 정상 (사람이 확인)",
+      "description": "결재 폼이 실제로 보이는지 확인",
+      "inputs": {
+        "대상월": "2026-08",
+        "청구서폴더": "samples/invoice_reconciliation"
+      },
+      "expected": {
+        "보류건수": 5
+      },
+      "approvals": {},
+      "manual": true
+    },
+    {
+      "name": "문제 없는 달",
+      "description": "보류가 없으면 결재 없이 바로 보고",
+      "inputs": {
+        "대상월": "2026-07",
+        "청구서폴더": "samples/invoice_reconciliation"
+      },
+      "expected": {
+        "보류건수": 0
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "청구서 없음",
+      "description": "빈 폴더 — 반복이 0번 돌고 끝나야 한다",
+      "inputs": {
+        "대상월": "2026-06",
+        "청구서폴더": "samples/invoice_reconciliation"
+      },
+      "expected": {
+        "지급합계": 0,
+        "보류건수": 0
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

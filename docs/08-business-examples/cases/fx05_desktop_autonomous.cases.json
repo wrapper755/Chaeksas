@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "process": "Proc_fx05_desktop_autonomous",
+  "cases": [
+    {
+      "name": "곱셈",
+      "description": "",
+      "inputs": {
+        "식": "12*34"
+      },
+      "expected": {
+        "결과": 408
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

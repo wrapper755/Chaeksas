@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmn:definitions xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Defs_training_nudge" name="독려 단계" namespace="urn:chaeksas:examples">
+  <dmn:decision id="training_nudge" name="독려 단계">
+    <dmn:decisionTable id="DT_training_nudge" hitPolicy="FIRST">
+      <dmn:input id="In_0" label="남은일수">
+        <dmn:inputExpression id="InE_0" typeRef="number"><dmn:text>남은일수</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:output id="Out_0" name="단계" typeRef="string" />
+      <dmn:rule id="Rule_0">
+        <dmn:description>마감 지남 — 인사팀에도 보고</dmn:description>
+        <dmn:inputEntry id="R0_I0"><dmn:text>&lt; 0</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R0_O0"><dmn:text>"인사팀보고"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_1">
+        <dmn:description>팀장을 참조로</dmn:description>
+        <dmn:inputEntry id="R1_I0"><dmn:text>[0..7]</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R1_O0"><dmn:text>"팀장참조"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_2">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R2_I0"><dmn:text>&gt; 7</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R2_O0"><dmn:text>"본인안내"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+</dmn:definitions>

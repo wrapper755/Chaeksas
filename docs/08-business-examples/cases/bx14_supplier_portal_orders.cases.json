@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "process": "Proc_bx14_supplier_portal_orders",
+  "cases": [
+    {
+      "name": "어제 주문",
+      "description": "",
+      "inputs": {
+        "조회일": "2026-09-30"
+      },
+      "expected": {
+        "추가건수": 3
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "같은 날 다시 실행",
+      "description": "멱등 — 중복 덧붙이지 않음",
+      "inputs": {
+        "조회일": "2026-09-30"
+      },
+      "expected": {
+        "추가건수": 0,
+        "건너뜀": 3
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "로그인 만료",
+      "description": "프로필 세션을 지우고 실행 — 확인 창이 뜨고 사람이 로그인하면 계속",
+      "inputs": {
+        "조회일": "2026-09-30"
+      },
+      "expected": {},
+      "approvals": {},
+      "manual": true
+    }
+  ]
+}

@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chaeksas 스타일 미리보기</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<style>
+/* 생성 파일: design/tokens.json에서 만든 미리보기. 직접 고치지 말 것. */
+:root {
+  --bg-canvas: #F6F7F9;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #EEF0F3;
+  --bg-inverse: #1A1D23;
+  --border-default: #DDE1E6;
+  --border-strong: #B9C0CA;
+  --text-primary: #1A1D23;
+  --text-secondary: #4A5361;
+  --text-muted: #5F6875;
+  --text-inverse: #FFFFFF;
+  --primary: #2552C7;
+  --primary-hover: #1D44A8;
+  --primary-subtle: #E8EEFC;
+  --primary-fg: #FFFFFF;
+  --focus: #2552C7;
+  --status-neutral-fg: #4A5361;
+  --status-neutral-bg: #EEF0F3;
+  --status-neutral-solid: #7D8693;
+  --status-active-fg: #1D4ED8;
+  --status-active-bg: #E6EEFF;
+  --status-active-solid: #2563EB;
+  --status-done-fg: #166534;
+  --status-done-bg: #E5F5EA;
+  --status-done-solid: #16A34A;
+  --status-failed-fg: #B42318;
+  --status-failed-bg: #FDECEA;
+  --status-failed-solid: #DC2626;
+  --danger-fg: #FFFFFF;
+  --status-waiting-fg: #6D28D9;
+  --status-waiting-bg: #F1EAFE;
+  --status-waiting-solid: #7C3AED;
+  --status-warning-fg: #92400E;
+  --status-warning-bg: #FEF3E2;
+  --status-warning-solid: #D97706;
+  --status-replayed-fg: #0F6670;
+  --status-replayed-bg: #E3F5F6;
+  --status-replayed-solid: #0E9AA7;
+  --font-sans: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", D2Coding, Consolas, "Noto Sans Mono", monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg-canvas: #0F1115;
+  --bg-surface: #171A20;
+  --bg-subtle: #20242C;
+  --bg-inverse: #E8EAEE;
+  --border-default: #2C313A;
+  --border-strong: #3D444F;
+  --text-primary: #E8EAEE;
+  --text-secondary: #B4BBC6;
+  --text-muted: #939CA9;
+  --text-inverse: #0F1115;
+  --primary: #7AA2FF;
+  --primary-hover: #9AB8FF;
+  --primary-subtle: #1B2A4D;
+  --primary-fg: #0F1115;
+  --focus: #7AA2FF;
+  --status-neutral-fg: #B4BBC6;
+  --status-neutral-bg: #232831;
+  --status-neutral-solid: #8A93A1;
+  --status-active-fg: #93B4FF;
+  --status-active-bg: #1A2747;
+  --status-active-solid: #5B8CFF;
+  --status-done-fg: #7FD49A;
+  --status-done-bg: #15301F;
+  --status-done-solid: #34C266;
+  --status-failed-fg: #FF9A8F;
+  --status-failed-bg: #3A1A18;
+  --status-failed-solid: #F2564A;
+  --danger-fg: #0F1115;
+  --status-waiting-fg: #C4A6FF;
+  --status-waiting-bg: #2A1F45;
+  --status-waiting-solid: #9F7AEA;
+  --status-warning-fg: #F5B65C;
+  --status-warning-bg: #36260F;
+  --status-warning-solid: #E09A2B;
+  --status-replayed-fg: #6FD3DB;
+  --status-replayed-bg: #10302F;
+  --status-replayed-solid: #2BB5C0;
+} }
+:root[data-theme="dark"] {
+  --bg-canvas: #0F1115;
+  --bg-surface: #171A20;
+  --bg-subtle: #20242C;
+  --bg-inverse: #E8EAEE;
+  --border-default: #2C313A;
+  --border-strong: #3D444F;
+  --text-primary: #E8EAEE;
+  --text-secondary: #B4BBC6;
+  --text-muted: #939CA9;
+  --text-inverse: #0F1115;
+  --primary: #7AA2FF;
+  --primary-hover: #9AB8FF;
+  --primary-subtle: #1B2A4D;
+  --primary-fg: #0F1115;
+  --focus: #7AA2FF;
+  --status-neutral-fg: #B4BBC6;
+  --status-neutral-bg: #232831;
+  --status-neutral-solid: #8A93A1;
+  --status-active-fg: #93B4FF;
+  --status-active-bg: #1A2747;
+  --status-active-solid: #5B8CFF;
+  --status-done-fg: #7FD49A;
+  --status-done-bg: #15301F;
+  --status-done-solid: #34C266;
+  --status-failed-fg: #FF9A8F;
+  --status-failed-bg: #3A1A18;
+  --status-failed-solid: #F2564A;
+  --danger-fg: #0F1115;
+  --status-waiting-fg: #C4A6FF;
+  --status-waiting-bg: #2A1F45;
+  --status-waiting-solid: #9F7AEA;
+  --status-warning-fg: #F5B65C;
+  --status-warning-bg: #36260F;
+  --status-warning-solid: #E09A2B;
+  --status-replayed-fg: #6FD3DB;
+  --status-replayed-bg: #10302F;
+  --status-replayed-solid: #2BB5C0;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg-canvas);color:var(--text-primary);font-family:var(--font-sans);font-size:14px;line-height:1.5}
+.shell{display:grid;grid-template-columns:232px 1fr;min-height:100vh}
+nav{background:var(--bg-surface);border-right:1px solid var(--border-default);padding:16px 12px}
+nav .brand{font-weight:700;font-size:16px;padding:4px 8px 16px}
+nav a{display:block;padding:8px;border-radius:6px;color:var(--text-secondary);text-decoration:none}
+nav a.on{background:var(--primary-subtle);color:var(--primary);font-weight:600}
+main{padding:24px;min-width:0}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:24px;flex-wrap:wrap}
+h1{font-size:24px;line-height:1.3;margin:0} .desc{color:var(--text-muted);margin-top:4px}
+section{background:var(--bg-surface);border:1px solid var(--border-default);border-radius:8px;padding:20px;margin-bottom:24px;overflow-x:auto}
+h2{font-size:18px;margin:0 0 16px}
+.btn{height:32px;padding:0 12px;border-radius:6px;border:1px solid transparent;font:inherit;font-weight:500;cursor:pointer}
+.btn.p{background:var(--primary);color:var(--primary-fg)} .btn.p:hover{background:var(--primary-hover)}
+.btn.s{background:var(--bg-surface);color:var(--text-primary);border-color:var(--border-strong)}
+.btn.g{background:transparent;color:var(--text-secondary)}
+.btn.d{background:var(--status-failed-solid);color:var(--danger-fg)}
+.btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:9999px;font-size:12px;font-weight:500;margin:0 6px 6px 0;white-space:nowrap}
+.badge i{width:6px;height:6px;border-radius:50%;display:inline-block}
+.s-neutral{background:var(--status-neutral-bg);color:var(--status-neutral-fg)} .s-neutral i{background:var(--status-neutral-solid)}.s-active{background:var(--status-active-bg);color:var(--status-active-fg)} .s-active i{background:var(--status-active-solid)}.s-done{background:var(--status-done-bg);color:var(--status-done-fg)} .s-done i{background:var(--status-done-solid)}.s-failed{background:var(--status-failed-bg);color:var(--status-failed-fg)} .s-failed i{background:var(--status-failed-solid)}.s-waiting{background:var(--status-waiting-bg);color:var(--status-waiting-fg)} .s-waiting i{background:var(--status-waiting-solid)}.s-warning{background:var(--status-warning-bg);color:var(--status-warning-fg)} .s-warning i{background:var(--status-warning-solid)}.s-replayed{background:var(--status-replayed-bg);color:var(--status-replayed-fg)} .s-replayed i{background:var(--status-replayed-solid)}
+.grp{display:flex;flex-wrap:wrap;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-default)}
+.gl{width:120px;color:var(--text-muted);font-size:12px;flex-shrink:0}
+.sws{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px}
+.sw code{font-family:var(--font-mono);font-size:12px;color:var(--text-secondary)}
+.chip{height:40px;border-radius:6px;border:1px solid var(--border-default);margin-bottom:4px} .chip.sm{height:22px;width:60px}
+table{border-collapse:collapse;width:100%;min-width:640px}
+th,td{text-align:left;padding:0 12px;height:36px;border-bottom:1px solid var(--border-default)}
+th{background:var(--bg-subtle);font-size:13px;color:var(--text-secondary);font-weight:600}
+td.n{text-align:right;font-variant-numeric:tabular-nums} td code{font-family:var(--font-mono);font-size:12px}
+.field{display:flex;flex-direction:column;gap:4px;max-width:360px}
+.field input{height:32px;border:1px solid var(--border-strong);border-radius:6px;padding:0 10px;font:inherit;background:var(--bg-surface);color:var(--text-primary)}
+.field input:focus{outline:2px solid var(--focus);outline-offset:1px}
+.field .err{color:var(--status-failed-fg);font-size:12px}
+.field.bad input{border-color:var(--status-failed-solid)}
+.empty{text-align:center;padding:32px;color:var(--text-muted);border:1px dashed var(--border-strong);border-radius:8px}
+.banner{border-radius:8px;padding:12px 16px;background:var(--status-failed-bg);color:var(--status-failed-fg)}
+.banner b{display:block} details{margin-top:6px;font-size:13px}
+.ty{margin:6px 0;line-height:1.3}
+.toggle{position:fixed;right:16px;bottom:16px}
+@media (max-width:760px){.shell{grid-template-columns:1fr} nav{display:none} main{padding:16px}}
+</style></head>
+<body><div class="shell">
+<nav aria-label="탐색"><div class="brand">Chaeksas 콘솔</div>
+<a href="#" class="on">실행 로그</a><a href="#">Bot 현황</a><a href="#">Bot UI 현황</a><a href="#">서버 실행</a><a href="#">결재함</a><a href="#">작업 지시</a><a href="#">리소스</a><a href="#">Center API 키</a></nav>
+<main>
+<div class="top"><div><h1>스타일 미리보기</h1><div class="desc">design/tokens.json에서 만든 페이지 · 웹 콘솔과 Qt 화면이 같은 토큰을 쓴다</div></div>
+<div class="row"><button class="btn s">새로 고침</button><button class="btn p">새 작업...</button></div></div>
+
+<section><h2>상태 표기 (색 + 글자, U7)</h2><div class="grp"><div class="gl">실행·노드</div><span class="badge s-neutral"><i></i>대기</span><span class="badge s-active"><i></i>실행 중</span><span class="badge s-waiting"><i></i>기다리는 중</span><span class="badge s-done"><i></i>완료</span><span class="badge s-failed"><i></i>실패</span><span class="badge s-replayed"><i></i>재생됨</span><span class="badge s-neutral"><i></i>취소됨</span></div><div class="grp"><div class="gl">Bot</div><span class="badge s-neutral"><i></i>대기</span><span class="badge s-waiting"><i></i>대기열</span><span class="badge s-active"><i></i>실행 중</span><span class="badge s-waiting"><i></i>결재 대기</span><span class="badge s-waiting"><i></i>확인 대기</span><span class="badge s-failed"><i></i>오류</span><span class="badge s-failed"><i></i>실행 불가</span><span class="badge s-active"><i></i>감시 중</span><span class="badge s-neutral"><i></i>수동 실행 전용</span><span class="badge s-neutral"><i></i>비활성</span></div><div class="grp"><div class="gl">Bot UI</div><span class="badge s-done"><i></i>연결됨</span><span class="badge s-warning"><i></i>연결 끊김</span><span class="badge s-neutral"><i></i>등록 전</span><span class="badge s-failed"><i></i>키 폐기됨</span><span class="badge s-failed"><i></i>키 만료</span><span class="badge s-neutral"><i></i>비활성</span></div><div class="grp"><div class="gl">Worker 프로세스</div><span class="badge s-done"><i></i>실행 중</span><span class="badge s-active"><i></i>요청 처리 중</span><span class="badge s-active"><i></i>셀렉터 등록 중</span><span class="badge s-warning"><i></i>다시 띄우는 중</span><span class="badge s-failed"><i></i>멈춤</span><span class="badge s-warning"><i></i>Bot UI가 꺼져 있음</span><span class="badge s-neutral"><i></i>꺼 둠</span><span class="badge s-active"><i></i>예약됨</span></div><div class="grp"><div class="gl">서버 실행기</div><span class="badge s-done"><i></i>동작</span><span class="badge s-neutral"><i></i>일시 중지</span><span class="badge s-active"><i></i>정리 중</span><span class="badge s-failed"><i></i>오류</span><span class="badge s-warning"><i></i>오프라인</span></div><div class="grp"><div class="gl">API 키</div><span class="badge s-done"><i></i>사용 중</span><span class="badge s-warning"><i></i>만료</span><span class="badge s-neutral"><i></i>폐기됨</span></div><div class="grp"><div class="gl">결재</div><span class="badge s-waiting"><i></i>대기</span><span class="badge s-done"><i></i>답함</span><span class="badge s-warning"><i></i>시간 초과</span><span class="badge s-neutral"><i></i>회수됨</span></div><div class="grp"><div class="gl">작업</div><span class="badge s-neutral"><i></i>대기</span><span class="badge s-active"><i></i>전달됨</span><span class="badge s-waiting"><i></i>대기열</span><span class="badge s-done"><i></i>수락</span><span class="badge s-failed"><i></i>거절</span><span class="badge s-warning"><i></i>만료</span><span class="badge s-neutral"><i></i>취소됨</span></div><div class="grp"><div class="gl">로케이터</div><span class="badge s-done"><i></i>사용 중</span><span class="badge s-waiting"><i></i>검증 전</span><span class="badge s-neutral"><i></i>대체됨</span></div><div class="grp"><div class="gl">서비스 앱</div><span class="badge s-done"><i></i>정상</span><span class="badge s-warning"><i></i>저하</span><span class="badge s-failed"><i></i>응답 없음</span><span class="badge s-neutral"><i></i>확인 전</span></div><div class="grp"><div class="gl">사전 점검</div><span class="badge s-done"><i></i>정상</span><span class="badge s-warning"><i></i>경고</span><span class="badge s-failed"><i></i>실행 불가</span></div><div class="grp"><div class="gl">확장</div><span class="badge s-done"><i></i>켜짐</span><span class="badge s-neutral"><i></i>꺼짐</span><span class="badge s-warning"><i></i>호환 안 됨</span><span class="badge s-failed"><i></i>필요하지만 없음</span></div><div class="grp"><div class="gl">온라인</div><span class="badge s-done"><i></i>온라인</span><span class="badge s-warning"><i></i>오프라인</span></div><div class="grp"><div class="gl">패키지</div><span class="badge s-waiting"><i></i>후보</span><span class="badge s-done"><i></i>승인됨</span><span class="badge s-warning"><i></i>지원 종료</span><span class="badge s-failed"><i></i>철회</span><span class="badge s-neutral"><i></i>로컬만</span></div><div class="grp"><div class="gl">서명</div><span class="badge s-done"><i></i>확인됨</span><span class="badge s-warning"><i></i>서명 없음</span><span class="badge s-failed"><i></i>서명 불일치</span><span class="badge s-failed"><i></i>서명 확인 안 됨</span></div><div class="grp"><div class="gl">Bot 준비</div><span class="badge s-done"><i></i>준비됨</span><span class="badge s-failed"><i></i>서비스 앱 키 없음</span><span class="badge s-failed"><i></i>확장 없음</span><span class="badge s-failed"><i></i>사전 점검 실행 불가</span></div><div class="grp"><div class="gl">서비스 앱 키 참조</div><span class="badge s-done"><i></i>정상</span><span class="badge s-failed"><i></i>없음</span><span class="badge s-failed"><i></i>거부됨</span><span class="badge s-warning"><i></i>만료</span><span class="badge s-failed"><i></i>폐기됨</span><span class="badge s-neutral"><i></i>확인 전</span><span class="badge s-failed"><i></i>등록 필요</span></div><div class="grp"><div class="gl">UI 세션</div><span class="badge s-done"><i></i>성공</span><span class="badge s-waiting"><i></i>전환</span><span class="badge s-failed"><i></i>실패</span><span class="badge s-active"><i></i>진행 중</span><span class="badge s-neutral"><i></i>시험</span></div><div class="grp"><div class="gl">배치 결정</div><span class="badge s-done"><i></i>적용</span><span class="badge s-failed"><i></i>거부</span></div></section>
+
+<section><h2>표 (CON-01 실행 로그 예)</h2>
+<table><thead><tr><th>실행 id</th><th>상태</th><th>Bot</th><th>실행 위치</th><th>시작</th><th style="text-align:right">소요(초)</th></tr></thead><tbody>
+<tr><td><code>run_20261001_101500_a1b2c3</code></td><td><span class="badge s-active"><i></i>실행 중</span></td><td>ERP 주문 입력</td><td>PC</td><td>10:15</td><td class="n">42</td></tr>
+<tr><td><code>run_20261001_103000_d4e5f6</code></td><td><span class="badge s-waiting"><i></i>결재 대기</span></td><td>세금계산서 발행</td><td>서버</td><td>10:30</td><td class="n">1,204</td></tr>
+<tr><td><code>run_20261001_094512_99ab01</code></td><td><span class="badge s-done"><i></i>완료</span></td><td>세금계산서 발행</td><td>서버</td><td>09:45</td><td class="n">18</td></tr>
+<tr><td><code>run_20261001_091003_77c1e2</code></td><td><span class="badge s-failed"><i></i>실패</span></td><td>ERP 주문 입력</td><td>PC</td><td>09:10</td><td class="n">95</td></tr>
+</tbody></table></section>
+
+<section><h2>단추</h2><div class="row">
+<button class="btn p">저장</button><button class="btn s">취소</button><button class="btn g">로그 폴더 열기</button><button class="btn d">키 폐기...</button><button class="btn p" disabled>등록</button></div>
+<p class="desc">한 영역에 주 단추(채움)는 하나. 창을 여는 단추는 「...」. 되돌릴 수 없는 동작은 위험 단추 + 확인 창(기본 「취소」).</p></section>
+
+<section><h2>입력·오류·빈 상태</h2>
+<div class="row" style="align-items:flex-start;gap:24px">
+<div class="field"><label>키 참조 이름 *</label><input value="finance-invoice"></div>
+<div class="field bad"><label>Center 주소 *</label><input value="http://center:88"><span class="err">Center에 닿지 못했습니다 — 주소와 포트를 확인하세요</span></div></div>
+<div style="height:16px"></div>
+<div class="banner"><b>실행 실패 — 서비스 앱 키 finance-invoice가 거부되었습니다 (403)</b><details><summary>상세 보기</summary><code>key_revoked · tax-invoice/issue · run_20261001_091003_77c1e2</code></details></div>
+<div style="height:16px"></div>
+<div class="empty">작업 지시가 없습니다. 「새 작업...」으로 만드세요.</div></section>
+
+<section><h2>색 토큰</h2><div class="sws"><div class="sw"><div class="chip" style="background:var(--bg-canvas)"></div><code>bg.canvas</code></div><div class="sw"><div class="chip" style="background:var(--bg-surface)"></div><code>bg.surface</code></div><div class="sw"><div class="chip" style="background:var(--bg-subtle)"></div><code>bg.subtle</code></div><div class="sw"><div class="chip" style="background:var(--border-default)"></div><code>border.default</code></div><div class="sw"><div class="chip" style="background:var(--border-strong)"></div><code>border.strong</code></div><div class="sw"><div class="chip" style="background:var(--text-primary)"></div><code>text.primary</code></div><div class="sw"><div class="chip" style="background:var(--text-secondary)"></div><code>text.secondary</code></div><div class="sw"><div class="chip" style="background:var(--text-muted)"></div><code>text.muted</code></div><div class="sw"><div class="chip" style="background:var(--primary)"></div><code>primary</code></div><div class="sw"><div class="chip" style="background:var(--primary-subtle)"></div><code>primary.subtle</code></div></div>
+<h2 style="margin-top:20px">상태 토큰 (fg / bg / solid)</h2><table style="min-width:360px"><tbody><tr><td><span class="badge s-neutral"><i></i>neutral</span></td><td><div class="chip sm" style="background:var(--status-neutral-fg)"></div></td><td><div class="chip sm" style="background:var(--status-neutral-bg)"></div></td><td><div class="chip sm" style="background:var(--status-neutral-solid)"></div></td></tr><tr><td><span class="badge s-active"><i></i>active</span></td><td><div class="chip sm" style="background:var(--status-active-fg)"></div></td><td><div class="chip sm" style="background:var(--status-active-bg)"></div></td><td><div class="chip sm" style="background:var(--status-active-solid)"></div></td></tr><tr><td><span class="badge s-done"><i></i>done</span></td><td><div class="chip sm" style="background:var(--status-done-fg)"></div></td><td><div class="chip sm" style="background:var(--status-done-bg)"></div></td><td><div class="chip sm" style="background:var(--status-done-solid)"></div></td></tr><tr><td><span class="badge s-failed"><i></i>failed</span></td><td><div class="chip sm" style="background:var(--status-failed-fg)"></div></td><td><div class="chip sm" style="background:var(--status-failed-bg)"></div></td><td><div class="chip sm" style="background:var(--status-failed-solid)"></div></td></tr><tr><td><span class="badge s-waiting"><i></i>waiting</span></td><td><div class="chip sm" style="background:var(--status-waiting-fg)"></div></td><td><div class="chip sm" style="background:var(--status-waiting-bg)"></div></td><td><div class="chip sm" style="background:var(--status-waiting-solid)"></div></td></tr><tr><td><span class="badge s-warning"><i></i>warning</span></td><td><div class="chip sm" style="background:var(--status-warning-fg)"></div></td><td><div class="chip sm" style="background:var(--status-warning-bg)"></div></td><td><div class="chip sm" style="background:var(--status-warning-solid)"></div></td></tr><tr><td><span class="badge s-replayed"><i></i>replayed</span></td><td><div class="chip sm" style="background:var(--status-replayed-fg)"></div></td><td><div class="chip sm" style="background:var(--status-replayed-bg)"></div></td><td><div class="chip sm" style="background:var(--status-replayed-solid)"></div></td></tr></tbody></table></section>
+
+<section><h2>글자</h2><div class="ty" style="font-size:30px;font-weight:600">display · 30px — 세금계산서 발행 Bot 실행 기록</div><div class="ty" style="font-size:24px;font-weight:600">h1 · 24px — 세금계산서 발행 Bot 실행 기록</div><div class="ty" style="font-size:20px;font-weight:600">h2 · 20px — 세금계산서 발행 Bot 실행 기록</div><div class="ty" style="font-size:18px;font-weight:600">h3 · 18px — 세금계산서 발행 Bot 실행 기록</div><div class="ty" style="font-size:16px;font-weight:400">body-lg · 16px — 세금계산서 발행 Bot 실행 기록</div><div class="ty" style="font-size:14px;font-weight:400">body · 14px — 세금계산서 발행 Bot 실행 기록</div><div class="ty" style="font-size:13px;font-weight:400">body-sm · 13px — 세금계산서 발행 Bot 실행 기록</div><div class="ty" style="font-size:12px;font-weight:400">caption · 12px — 세금계산서 발행 Bot 실행 기록</div><div class="ty" style="font-family:var(--font-mono);font-size:13px">mono · run_20261001_101500_a1b2c3 · chk_svc_a1b2c3d4…</div></section>
+</main></div>
+<button class="btn s toggle" onclick="var r=document.documentElement;r.dataset.theme=(r.dataset.theme==='dark'?'light':'dark')">밝게 / 어둡게</button>
+</body></html>

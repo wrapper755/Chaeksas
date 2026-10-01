@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "process": "Proc_fx02_business_rule",
+  "cases": [
+    {
+      "name": "VIP 대량",
+      "description": "",
+      "inputs": {
+        "금액": 1500000,
+        "등급": "VIP"
+      },
+      "expected": {
+        "할인율": 0.2,
+        "최종가": 1200000
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "일반 소량",
+      "description": "",
+      "inputs": {
+        "금액": 50000,
+        "등급": "일반"
+      },
+      "expected": {
+        "할인율": 0
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx34_incident_alert" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_monitor_alert" name="monitor_alert" />
+  <bpmn:message id="Msg_monitor_recovered" name="monitor_recovered" />
+  <bpmn:process id="Proc_bx34_incident_alert" name="장애 알림 대응" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "observability": "ops-observability"
+  },
+  "extensions": [
+    {
+      "id": "observability",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "경보번호",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "서비스",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "내용",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "팀장메일",
+      "type": "string",
+      "required": false,
+      "description": "",
+      "default": "oncall-lead@example.com"
+    },
+    {
+      "name": "확인기한",
+      "type": "string",
+      "required": false,
+      "description": "ISO 기간",
+      "default": "PT10M"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="경보">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_monitor_alert" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Logs" name="최근 로그">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "observability",
+  "operation": "recent_logs",
+  "input": {
+    "service": "서비스",
+    "minutes": "15"
+  },
+  "output": {
+    "로그": "lines"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Summary" name="상황 요약">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`내용`은 경보, `로그`는 최근 15분 로그다.\n\n## 할 일\n무슨 일이 일어나는지 3줄로 요약하고 추정 원인 후보를 최대 3개 적는다.\n\n## 판단하지 않는 것\n조치를 실행하지 않는다. 확실하지 않으면 「추정」이라고 적는다.\n\n## 반환\n- `요약`: string\n- `원인후보`: list",
+  "domain": "llm",
+  "results": {
+    "요약": "string",
+    "원인후보": "list"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Approve_Ack1" name="1차 당직 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "장애 확인 (1차)",
+  "description": "",
+  "show": [
+    "서비스",
+    "요약",
+    "원인후보"
+  ],
+  "fields": [
+    {
+      "key": "확인",
+      "label": "확인함",
+      "type": "bool",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Approve_Ack2" name="2차 당직 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "장애 확인 (2차)",
+  "description": "",
+  "show": [
+    "서비스",
+    "요약",
+    "원인후보"
+  ],
+  "fields": [
+    {
+      "key": "확인",
+      "label": "확인함",
+      "type": "bool",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sendTask id="Task_Lead" name="팀장 호출">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{팀장메일}"
+  ],
+  "subject": "[긴급] {서비스} 장애 — 당직 무응답",
+  "body": "{요약}",
+  "attachments": [],
+  "store_as": null
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:receiveTask id="Recv_Recovered" name="복구 기다림" messageRef="Msg_monitor_recovered">
+      <bpmn:extensionElements>
+        <chk:receive>{
+  "correlation": "경보번호",
+  "payload": []
+}</chk:receive>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:endEvent id="End_Lead" name="팀장 호출 끝">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End" name="복구">
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_Ack1" name="확인기한" attachedToRef="Approve_Ack1">
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">확인기한</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Bnd_Ack2" name="확인기한" attachedToRef="Approve_Ack2">
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">확인기한</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Logs" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Logs" targetRef="Task_Summary" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Summary" targetRef="Approve_Ack1" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Approve_Ack1" targetRef="Recv_Recovered" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Bnd_Ack1" targetRef="Approve_Ack2" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Approve_Ack2" targetRef="Recv_Recovered" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Bnd_Ack2" targetRef="Task_Lead" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Lead" targetRef="End_Lead" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Recv_Recovered" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx34_incident_alert">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Logs_di" bpmnElement="Task_Logs"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Summary_di" bpmnElement="Task_Summary"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Ack1_di" bpmnElement="Approve_Ack1"><dc:Bounds x="606" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Ack2_di" bpmnElement="Approve_Ack2"><dc:Bounds x="776" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Lead_di" bpmnElement="Task_Lead"><dc:Bounds x="946" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Recv_Recovered_di" bpmnElement="Recv_Recovered"><dc:Bounds x="946" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Lead_di" bpmnElement="End_Lead"><dc:Bounds x="1116" y="402" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1096" y="442" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1116" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1096" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Ack1_di" bpmnElement="Bnd_Ack1"><dc:Bounds x="666" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="662" y="180" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Ack2_di" bpmnElement="Bnd_Ack2"><dc:Bounds x="836" y="292" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="832" y="330" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="120" /><di:waypoint x="946" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="684" y="178" /><di:waypoint x="684" y="270" /><di:waypoint x="776" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="876" y="270" /><di:waypoint x="921" y="270" /><di:waypoint x="921" y="120" /><di:waypoint x="946" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="854" y="328" /><di:waypoint x="854" y="420" /><di:waypoint x="946" y="420" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1046" y="420" /><di:waypoint x="1116" y="420" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1046" y="120" /><di:waypoint x="1116" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx35_voc_weekly" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_bx35_voc_weekly" name="VOC 주간 분석" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "ext-helpdesk": "cs-helpdesk-read"
+  },
+  "extensions": [
+    {
+      "id": "ext-helpdesk",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "경영진메일",
+      "type": "list",
+      "required": false,
+      "description": "",
+      "default": [
+        "exec@example.com"
+      ]
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="매주 월요일">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 7 * * 1</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_Range" name="기간 정하기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>시작일 = 날짜더하기(오늘, -7)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Fetch" name="지난주 VOC">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "ext-helpdesk",
+  "operation": "export_tickets",
+  "input": {
+    "since": "시작일"
+  },
+  "output": {
+    "VOC": "items"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Chunk" name="50건씩 묶기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:script>묶음 = 나누기(VOC, 50)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Analyze" name="묶음 분석">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`한묶음`은 고객 문의·리뷰 최대 50건이다.\n\n## 할 일\n건마다 주제(자유 단어 1~2개)와 감성(긍정|중립|부정)을 붙인다.\n\n## 판단하지 않는 것\n건을 합치거나 빼지 않는다.\n\n## 반환\n- `분석`: list of {id, 주제, 감성}",
+  "domain": "llm",
+  "results": {
+    "분석": "list"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+        <chk:loop>{
+  "collection": "묶음",
+  "item": "한묶음",
+  "result": "분석",
+  "collect_into": "분석묶음"
+}</chk:loop>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false" />
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Merge" name="합치고 세기" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+      <bpmn:dataOutputAssociation id="DOA_Data_Detail">
+        <bpmn:targetRef>Data_Detail</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+      <bpmn:script>전체 = 펼치기(분석묶음)
+주제별 = 세기(전체, '주제')
+부정비율 = 비율(전체, 감성='부정')</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Brief" name="경영진 요약">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`주제별` 건수와 `부정비율`, 대표 문의 몇 개가 있다.\n\n## 할 일\n한 장 요약을 쓴다: 이번 주 핵심 3가지, 늘어난 불만, 제안.\n\n## 판단하지 않는 것\n숫자를 새로 만들지 않는다.\n\n## 반환\n- `요약`: string",
+  "domain": "llm",
+  "results": {
+    "요약": "string"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:sendTask id="Task_Send" name="배포">
+      <bpmn:extensionElements>
+        <chk:email>{
+  "to": [
+    "{경영진메일}"
+  ],
+  "subject": "[VOC 주간] 부정 {부정비율}",
+  "body": "{요약}",
+  "attachments": [
+    "상세경로"
+  ],
+  "store_as": null
+}</chk:email>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Range" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Range" targetRef="Task_Fetch" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Fetch" targetRef="Task_Chunk" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Chunk" targetRef="Task_Analyze" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Analyze" targetRef="Task_Merge" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Merge" targetRef="Task_Brief" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Brief" targetRef="Task_Send" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Send" targetRef="End" />
+    <bpmn:dataObject id="DO_Data_Detail" />
+    <bpmn:dataObjectReference id="Data_Detail" name="상세" dataObjectRef="DO_Data_Detail">
+      <bpmn:extensionElements>
+        <chk:dataOutput>{
+  "path": "VOC/{오늘}_상세.xlsx",
+  "format": "xlsx",
+  "store_as": "상세경로",
+  "variables": [
+    "전체",
+    "주제별"
+  ]
+}</chk:dataOutput>
+      </bpmn:extensionElements>
+    </bpmn:dataObjectReference>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx35_voc_weekly">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Range_di" bpmnElement="Task_Range"><dc:Bounds x="266" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Fetch_di" bpmnElement="Task_Fetch"><dc:Bounds x="436" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Chunk_di" bpmnElement="Task_Chunk"><dc:Bounds x="606" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Analyze_di" bpmnElement="Task_Analyze"><dc:Bounds x="776" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Merge_di" bpmnElement="Task_Merge"><dc:Bounds x="946" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Brief_di" bpmnElement="Task_Brief"><dc:Bounds x="1116" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Send_di" bpmnElement="Task_Send"><dc:Bounds x="1286" y="120" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1456" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1436" y="182" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Detail_di" bpmnElement="Data_Detail"><dc:Bounds x="978" y="20" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="1020" y="36" width="34" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="160" /><di:waypoint x="266" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="160" /><di:waypoint x="436" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="160" /><di:waypoint x="606" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="160" /><di:waypoint x="776" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="876" y="160" /><di:waypoint x="946" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="1046" y="160" /><di:waypoint x="1116" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="1216" y="160" /><di:waypoint x="1286" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1386" y="160" /><di:waypoint x="1456" y="160" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Detail_di" bpmnElement="DOA_Data_Detail"><di:waypoint x="996" y="120" /><di:waypoint x="996" y="70" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

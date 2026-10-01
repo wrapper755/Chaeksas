@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "process": "Proc_bx36_legacy_migration",
+  "cases": [
+    {
+      "name": "5건 묶음",
+      "description": "",
+      "inputs": {
+        "고객번호목록": [
+          "C001",
+          "C002",
+          "C003",
+          "C004",
+          "C005"
+        ]
+      },
+      "expected": {
+        "넣음": {
+          "count": 5
+        },
+        "수작업": []
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

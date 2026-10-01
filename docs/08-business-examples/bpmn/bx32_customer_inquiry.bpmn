@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx32_customer_inquiry" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_cs_inquiry" name="cs_inquiry" />
+  <bpmn:error id="Err_TASK_FAILED" name="TASK_FAILED" errorCode="TASK_FAILED" />
+  <bpmn:process id="Proc_bx32_customer_inquiry" name="고객 문의 답변 초안" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "kb-search": "cs-kb",
+    "ext-helpdesk": "cs-helpdesk"
+  },
+  "extensions": [
+    {
+      "id": "kb-search",
+      "version": "&gt;=1,&lt;2"
+    },
+    {
+      "id": "ext-helpdesk",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "문의번호",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "제목",
+      "type": "string",
+      "required": true,
+      "description": ""
+    },
+    {
+      "name": "본문",
+      "type": "string",
+      "required": true,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="문의 도착">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_cs_inquiry" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Search" name="FAQ 검색">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "kb-search",
+  "operation": "search",
+  "input": {
+    "query": "본문",
+    "top_k": "5"
+  },
+  "output": {
+    "근거": "hits"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Draft" name="답변 초안">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`본문`은 고객 문의, `근거`는 사내 FAQ 검색 결과(최대 5개)다.\n\n## 할 일\n근거만 사용해 정중한 답변 초안을 쓴다. 근거가 부족하면 `근거부족`을 true로.\n\n## 판단하지 않는 것\n근거에 없는 정책·보상을 약속하지 않는다.\n\n## 반환\n- `초안`: string\n- `근거부족`: bool",
+  "domain": "llm",
+  "results": {
+    "초안": "string",
+    "근거부족": "bool"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Approve_Agent" name="상담원 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "답변 확인",
+  "description": "",
+  "show": [
+    "제목",
+    "본문",
+    "초안",
+    "근거부족"
+  ],
+  "fields": [
+    {
+      "key": "최종답변",
+      "label": "최종 답변",
+      "type": "text",
+      "required": true
+    },
+    {
+      "key": "보내기",
+      "label": "보내기",
+      "type": "bool",
+      "required": true
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gw_Send" name="보내기?" default="Flow_06">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_Post" name="답변 등록">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "ext-helpdesk",
+  "operation": "post_reply",
+  "input": {
+    "ticket_id": "문의번호",
+    "body": "최종답변"
+  },
+  "output": {
+    "등록": "result"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Approve_Check" name="등록 여부 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "답변 등록 확인",
+  "description": "등록 응답을 받지 못했습니다. 헬프데스크 화면에서 확인하세요. 자동으로 다시 보내지 않습니다.",
+  "show": [
+    "문의번호",
+    "최종답변",
+    "error_message"
+  ],
+  "fields": [
+    {
+      "key": "등록됨",
+      "label": "외부 헬프데스크에 답변이 등록되어 있습니까?",
+      "type": "choice",
+      "required": true,
+      "choices": [
+        "등록됨",
+        "안 됨 — 직접 등록함"
+      ]
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_Timeout" name="실패·결과 모름" attachedToRef="Task_Post">
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_TASK_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Search" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Search" targetRef="Task_Draft" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Draft" targetRef="Approve_Agent" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Approve_Agent" targetRef="Gw_Send" />
+    <bpmn:sequenceFlow id="Flow_05" name="보냄" sourceRef="Gw_Send" targetRef="Task_Post">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">보내기</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_06" name="보류" sourceRef="Gw_Send" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Post" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Bnd_Timeout" targetRef="Approve_Check" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Approve_Check" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx32_customer_inquiry">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Search_di" bpmnElement="Task_Search"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Draft_di" bpmnElement="Task_Draft"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Agent_di" bpmnElement="Approve_Agent"><dc:Bounds x="606" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Send_di" bpmnElement="Gw_Send" isMarkerVisible="true"><dc:Bounds x="776" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Post_di" bpmnElement="Task_Post"><dc:Bounds x="896" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Check_di" bpmnElement="Approve_Check"><dc:Bounds x="1066" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1236" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1216" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Timeout_di" bpmnElement="Bnd_Timeout"><dc:Bounds x="956" y="292" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="952" y="330" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="120" /><di:waypoint x="776" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="801" y="145" /><di:waypoint x="801" y="270" /><di:waypoint x="896" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="805" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="826" y="120" /><di:waypoint x="1236" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="830" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="996" y="270" /><di:waypoint x="1211" y="270" /><di:waypoint x="1211" y="120" /><di:waypoint x="1236" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="974" y="328" /><di:waypoint x="974" y="420" /><di:waypoint x="1066" y="420" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1166" y="420" /><di:waypoint x="1211" y="420" /><di:waypoint x="1211" y="120" /><di:waypoint x="1236" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

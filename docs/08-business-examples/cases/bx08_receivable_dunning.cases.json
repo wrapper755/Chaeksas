@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "process": "Proc_bx08_receivable_dunning",
+  "cases": [
+    {
+      "name": "평소",
+      "description": "시험용 ERP 모의 서버: 연체 3건(10일·40일·20일)",
+      "inputs": {},
+      "expected": {
+        "이관건수": 0
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "이관 1건",
+      "description": "모의 서버에 95일 연체 1건 추가",
+      "inputs": {},
+      "expected": {
+        "이관건수": 1
+      },
+      "approvals": {
+        "Approve_Legal": {
+          "이관": true
+        }
+      },
+      "manual": false
+    }
+  ]
+}

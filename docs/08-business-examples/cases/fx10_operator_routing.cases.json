@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "process": "Proc_fx10_operator_routing",
+  "cases": [
+    {
+      "name": "환율",
+      "description": "",
+      "inputs": {
+        "요청": "오늘 달러 환율?",
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "intent": "exchange_rate"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "질문",
+      "description": "",
+      "inputs": {
+        "요청": "회의실 예약 어떻게 해요?",
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "intent": "answer"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "process": "Proc_bx24_leave_balance",
+  "cases": [
+    {
+      "name": "E001",
+      "description": "",
+      "inputs": {
+        "사번": "E001"
+      },
+      "expected": {
+        "잔여": 11.5
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "E002",
+      "description": "",
+      "inputs": {
+        "사번": "E002"
+      },
+      "expected": {
+        "잔여": 3
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

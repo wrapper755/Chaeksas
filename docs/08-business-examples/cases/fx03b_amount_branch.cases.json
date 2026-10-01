@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "process": "Proc_fx03b_amount_branch",
+  "cases": [
+    {
+      "name": "고액",
+      "description": "",
+      "inputs": {
+        "금액": 1000000
+      },
+      "expected": {
+        "구분": "고액"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "소액",
+      "description": "",
+      "inputs": {
+        "금액": 999999
+      },
+      "expected": {
+        "구분": "소액"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "process": "Proc_bx21_leave_request",
+  "cases": [
+    {
+      "name": "2일 승인",
+      "description": "",
+      "inputs": {
+        "신청번호": "LV-1",
+        "사번": "E001",
+        "시작일": "2026-10-20",
+        "일수": 2,
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "승인": true
+      },
+      "approvals": {
+        "Approve_Lead": {
+          "승인": true
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "5일 부서장 반려",
+      "description": "",
+      "inputs": {
+        "신청번호": "LV-2",
+        "사번": "E001",
+        "시작일": "2026-11-02",
+        "일수": 5,
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "결과": "반려"
+      },
+      "approvals": {
+        "Approve_Lead": {
+          "승인": true
+        },
+        "Approve_Head": {
+          "승인": false
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "잔여 부족",
+      "description": "",
+      "inputs": {
+        "신청번호": "LV-3",
+        "사번": "E002",
+        "시작일": "2026-10-20",
+        "일수": 20,
+        "회신주소": {
+          "$test_receiver": "reply"
+        }
+      },
+      "expected": {
+        "결과": "반려"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

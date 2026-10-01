@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_fx13_signal" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_work_done" name="work_done" />
+  <bpmn:signal id="Sig_abort" name="abort" />
+  <bpmn:signal id="Sig_ready" name="ready" />
+  <bpmn:process id="Proc_fx13_signal" name="신호 던지기·받기" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "검사결과",
+      "type": "string",
+      "required": false,
+      "description": "",
+      "default": "ok"
+    },
+    {
+      "name": "작업번호",
+      "type": "string",
+      "required": false,
+      "description": "",
+      "default": "W-1"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="시작">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:parallelGateway id="Gw_Fork" name="">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:intermediateCatchEvent id="Wait_A" name="1초 뒤">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">PT1S</bpmn:timeDuration>
+      </bpmn:timerEventDefinition>
+    </bpmn:intermediateCatchEvent>
+    <bpmn:scriptTask id="Task_Prepare" name="준비 (A)" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:script>준비 = True</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:intermediateThrowEvent id="Thr_Ready" name="ready">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+      <bpmn:signalEventDefinition signalRef="Sig_ready" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:scriptTask id="Task_Inspect" name="검사 (A)" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:script>result = 검사결과</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_Problem" name="문제?" default="Flow_09">
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:intermediateThrowEvent id="Thr_Abort" name="abort">
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:signalEventDefinition signalRef="Sig_abort" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End_A" name="A 끝">
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:intermediateCatchEvent id="Wait_Ready" name="ready 대기">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+      <bpmn:signalEventDefinition signalRef="Sig_ready" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:receiveTask id="Recv_Work" name="본 작업 완료 받기" messageRef="Msg_work_done">
+      <bpmn:extensionElements>
+        <chk:receive>{
+  "correlation": "작업번호",
+  "payload": []
+}</chk:receive>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:scriptTask id="Task_Work" name="본 작업 기록 (B)" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+      <bpmn:script>작업 = '완료'</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:scriptTask id="Task_Cleanup" name="정리 (B)" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_14</bpmn:incoming>
+      <bpmn:outgoing>Flow_15</bpmn:outgoing>
+      <bpmn:script>작업 = '중단'</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End_B" name="B 끝">
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+      <bpmn:incoming>Flow_15</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_Abort" name="abort" attachedToRef="Recv_Work">
+      <bpmn:outgoing>Flow_14</bpmn:outgoing>
+      <bpmn:signalEventDefinition signalRef="Sig_abort" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Gw_Fork" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Gw_Fork" targetRef="Wait_A" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Gw_Fork" targetRef="Wait_Ready" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Wait_A" targetRef="Task_Prepare" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Prepare" targetRef="Thr_Ready" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Thr_Ready" targetRef="Task_Inspect" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Inspect" targetRef="Gw_Problem" />
+    <bpmn:sequenceFlow id="Flow_08" name="문제" sourceRef="Gw_Problem" targetRef="Thr_Abort">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">result != 'ok'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_09" name="정상" sourceRef="Gw_Problem" targetRef="End_A" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Thr_Abort" targetRef="End_A" />
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Wait_Ready" targetRef="Recv_Work" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Recv_Work" targetRef="Task_Work" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_Work" targetRef="End_B" />
+    <bpmn:sequenceFlow id="Flow_14" sourceRef="Bnd_Abort" targetRef="Task_Cleanup" />
+    <bpmn:sequenceFlow id="Flow_15" sourceRef="Task_Cleanup" targetRef="End_B" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_fx13_signal">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Fork_di" bpmnElement="Gw_Fork"><dc:Bounds x="266" y="95" width="50" height="50" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Wait_A_di" bpmnElement="Wait_A"><dc:Bounds x="386" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="366" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Prepare_di" bpmnElement="Task_Prepare"><dc:Bounds x="492" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Thr_Ready_di" bpmnElement="Thr_Ready"><dc:Bounds x="694" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="674" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Inspect_di" bpmnElement="Task_Inspect"><dc:Bounds x="832" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Problem_di" bpmnElement="Gw_Problem" isMarkerVisible="true"><dc:Bounds x="1002" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="982" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Thr_Abort_di" bpmnElement="Thr_Abort"><dc:Bounds x="1122" y="252" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1102" y="292" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_A_di" bpmnElement="End_A"><dc:Bounds x="1228" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1208" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Wait_Ready_di" bpmnElement="Wait_Ready"><dc:Bounds x="386" y="252" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="366" y="292" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Recv_Work_di" bpmnElement="Recv_Work"><dc:Bounds x="492" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Work_di" bpmnElement="Task_Work"><dc:Bounds x="662" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Cleanup_di" bpmnElement="Task_Cleanup"><dc:Bounds x="662" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_B_di" bpmnElement="End_B"><dc:Bounds x="864" y="252" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="844" y="292" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Abort_di" bpmnElement="Bnd_Abort"><dc:Bounds x="552" y="292" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="548" y="330" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="316" y="120" /><di:waypoint x="386" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="291" y="145" /><di:waypoint x="291" y="270" /><di:waypoint x="386" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="422" y="120" /><di:waypoint x="492" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="592" y="120" /><di:waypoint x="694" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="730" y="120" /><di:waypoint x="832" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="932" y="120" /><di:waypoint x="1002" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="1027" y="145" /><di:waypoint x="1027" y="270" /><di:waypoint x="1122" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="1031" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1052" y="120" /><di:waypoint x="1228" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="1056" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1158" y="270" /><di:waypoint x="1203" y="270" /><di:waypoint x="1203" y="120" /><di:waypoint x="1228" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11"><di:waypoint x="422" y="270" /><di:waypoint x="492" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12"><di:waypoint x="592" y="270" /><di:waypoint x="662" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13"><di:waypoint x="762" y="270" /><di:waypoint x="864" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_14_di" bpmnElement="Flow_14"><di:waypoint x="570" y="328" /><di:waypoint x="570" y="420" /><di:waypoint x="662" y="420" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_15_di" bpmnElement="Flow_15"><di:waypoint x="762" y="420" /><di:waypoint x="839" y="420" /><di:waypoint x="839" y="270" /><di:waypoint x="864" y="270" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

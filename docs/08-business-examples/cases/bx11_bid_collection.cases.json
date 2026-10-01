@@ -1,0 +1,117 @@
+{
+  "schema": 1,
+  "process": "Proc_bx11_bid_collection",
+  "cases": [
+    {
+      "name": "견적 3건 후 마감",
+      "description": "견적 3건을 메시지로 넣은 뒤 마감 대기. `{\"$now_plus\": \"PT20S\"}`는 케이스를 돌리는 순간부터 20초 뒤 시각 (C14 케이스 입력 규칙)",
+      "inputs": {
+        "입찰번호": "BID-2610-01",
+        "마감시각": {
+          "$now_plus": "PT20S"
+        },
+        "품목": [
+          "A4 용지 500박스"
+        ]
+      },
+      "expected": {
+        "응찰수": 3
+      },
+      "approvals": {
+        "Approve_Award": {
+          "낙찰사": "가나상사",
+          "사유": "최저가"
+        }
+      },
+      "messages": [
+        {
+          "after_s": 2,
+          "name": "bid_quote",
+          "correlation": "BID-2610-01",
+          "payload": {
+            "견적": {
+              "공급사": "가나상사",
+              "단가": 1002,
+              "납기": "5일",
+              "조건": "-",
+              "회신메일": "q2@example.com"
+            }
+          }
+        },
+        {
+          "after_s": 4,
+          "name": "bid_quote",
+          "correlation": "BID-2610-01",
+          "payload": {
+            "견적": {
+              "공급사": "다라물산",
+              "단가": 1004,
+              "납기": "5일",
+              "조건": "-",
+              "회신메일": "q4@example.com"
+            }
+          }
+        },
+        {
+          "after_s": 6,
+          "name": "bid_quote",
+          "correlation": "BID-2610-01",
+          "payload": {
+            "견적": {
+              "공급사": "마바테크",
+              "단가": 1006,
+              "납기": "5일",
+              "조건": "-",
+              "회신메일": "q6@example.com"
+            }
+          }
+        }
+      ],
+      "manual": false
+    },
+    {
+      "name": "유찰",
+      "description": "",
+      "inputs": {
+        "입찰번호": "BID-2610-03",
+        "마감시각": {
+          "$now_plus": "PT3S"
+        },
+        "품목": [
+          "토너"
+        ]
+      },
+      "expected": {
+        "응찰수": 0
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "공고 취소",
+      "description": "취소 메시지를 받으면 취소 통보 후 전체 종료",
+      "inputs": {
+        "입찰번호": "BID-2610-02",
+        "마감시각": {
+          "$now_plus": "P1D"
+        },
+        "품목": [
+          "토너"
+        ]
+      },
+      "expected": {
+        "응찰수": 0
+      },
+      "approvals": {},
+      "messages": [
+        {
+          "after_s": 2,
+          "name": "bid_cancelled",
+          "correlation": "BID-2610-02",
+          "payload": {}
+        }
+      ],
+      "manual": false
+    }
+  ]
+}

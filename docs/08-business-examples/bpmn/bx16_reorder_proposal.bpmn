@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_bx16_reorder_proposal" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_bx16_reorder_proposal" name="재고 발주 제안 (서버) → ERP 입력 (PC)" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "wms": "scm-wms",
+    "center-jobs": "scm-center-jobs"
+  },
+  "extensions": [
+    {
+      "id": "wms",
+      "version": "&gt;=1,&lt;2"
+    },
+    {
+      "id": "center-jobs",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": []
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="매일 07:00">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:timerEventDefinition>
+        <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 7 * * 1-5</bpmn:timeCycle>
+      </bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Stock" name="재고 읽기">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "wms",
+  "operation": "list_stock",
+  "input": {},
+  "output": {
+    "재고": "items"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Calc" name="발주량 계산" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:script>제안 = [dict(품목=x.code, 수량=x.safety * 2 - x.qty) for x in 재고 if x.qty &lt; x.safety]
+제안수 = len(제안)</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:exclusiveGateway id="Gw_Any" name="제안 있음?" default="Flow_05">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Approve_Order" name="발주 확인">
+      <bpmn:extensionElements>
+        <chk:approval>{
+  "title": "발주 제안 확인",
+  "description": "",
+  "show": [
+    "제안"
+  ],
+  "fields": [
+    {
+      "key": "승인",
+      "label": "제안대로 발주합니까?",
+      "type": "bool",
+      "required": true
+    },
+    {
+      "key": "메모",
+      "label": "메모",
+      "type": "text",
+      "required": false
+    }
+  ],
+  "location": "center"
+}</chk:approval>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gw_Order" name="발주?" default="Flow_08">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:scriptTask id="Task_Confirm" name="확정" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+      <bpmn:script>확정 = 제안</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Dispatch" name="ERP 입력 작업 지시">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "center-jobs",
+  "operation": "create_job",
+  "input": {
+    "bpm_process": "'bx17_erp_po_entry'",
+    "target": "'group:구매-PC'",
+    "inputs": "{'발주': 확정}"
+  },
+  "output": {
+    "작업번호": "job_id"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Stock" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Stock" targetRef="Task_Calc" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Calc" targetRef="Gw_Any" />
+    <bpmn:sequenceFlow id="Flow_04" name="있음" sourceRef="Gw_Any" targetRef="Approve_Order">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">제안수 &gt; 0</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_05" name="없음" sourceRef="Gw_Any" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Approve_Order" targetRef="Gw_Order" />
+    <bpmn:sequenceFlow id="Flow_07" name="발주" sourceRef="Gw_Order" targetRef="Task_Confirm">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">승인</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_08" name="보류" sourceRef="Gw_Order" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Confirm" targetRef="Task_Dispatch" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_Dispatch" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx16_reorder_proposal">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Stock_di" bpmnElement="Task_Stock"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Calc_di" bpmnElement="Task_Calc"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Any_di" bpmnElement="Gw_Any" isMarkerVisible="true"><dc:Bounds x="606" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="586" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Order_di" bpmnElement="Approve_Order"><dc:Bounds x="726" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Order_di" bpmnElement="Gw_Order" isMarkerVisible="true"><dc:Bounds x="896" y="245" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="876" y="299" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Confirm_di" bpmnElement="Task_Confirm"><dc:Bounds x="1016" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Dispatch_di" bpmnElement="Task_Dispatch"><dc:Bounds x="1186" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1356" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1336" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="631" y="145" /><di:waypoint x="631" y="270" /><di:waypoint x="726" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="635" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="656" y="120" /><di:waypoint x="1356" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="660" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="826" y="270" /><di:waypoint x="896" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="921" y="295" /><di:waypoint x="921" y="420" /><di:waypoint x="1016" y="420" /><bpmndi:BPMNLabel><dc:Bounds x="925" y="402" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="921" y="245" /><di:waypoint x="921" y="120" /><di:waypoint x="1356" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="925" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="1116" y="420" /><di:waypoint x="1186" y="420" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1286" y="420" /><di:waypoint x="1331" y="420" /><di:waypoint x="1331" y="120" /><di:waypoint x="1356" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

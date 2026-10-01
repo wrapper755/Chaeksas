@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_fx15_web_form" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_fx15_web_form" name="웹 양식 제출 (PC)" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "pc",
+  "service_keys": {
+    "ui-automation": "test-ui"
+  },
+  "extensions": [
+    {
+      "id": "ui-automation",
+      "version": "&gt;=0.4,&lt;0.5"
+    }
+  ],
+  "outputs": [],
+  "inputs": []
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="시작">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:scriptTask id="Task_Prepare" name="신청 내용" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+      <bpmn:script>신청 = dict(이름='홍길동', 내용='장비 요청')</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:serviceTask id="Task_Submit" name="제출">
+      <bpmn:extensionElements>
+        <chk:task type="ui_task" extension="ui-automation">{
+  "page_id": "intranet.request.form",
+  "steps": [
+    {
+      "key": "form.name",
+      "action": "fill",
+      "value": "{신청.이름}"
+    },
+    {
+      "key": "form.body",
+      "action": "fill",
+      "value": "{신청.내용}"
+    },
+    {
+      "key": "form.submit",
+      "action": "click",
+      "navigates": true
+    },
+    {
+      "key": "result.message",
+      "action": "read",
+      "result": "제출메시지"
+    }
+  ],
+  "heal": true
+}</chk:task>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gw_Submitted" name="제출됨?" default="Flow_05">
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_Lookup" name="담당자 연락처">
+      <bpmn:extensionElements>
+        <chk:task type="ui_task" extension="ui-automation">{
+  "page_id": "intranet.request.done",
+  "steps": [
+    {
+      "key": "owner.contact",
+      "action": "read",
+      "result": "연락처"
+    }
+  ],
+  "heal": true
+}</chk:task>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_NotSubmitted" name="미제출 기록" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+      <bpmn:script>메모 = '제출 실패'</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Prepare" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Prepare" targetRef="Task_Submit" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Submit" targetRef="Gw_Submitted" />
+    <bpmn:sequenceFlow id="Flow_04" name="예" sourceRef="Gw_Submitted" targetRef="Task_Lookup">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">'접수' in 제출메시지</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_05" name="아니오" sourceRef="Gw_Submitted" targetRef="Task_NotSubmitted" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Lookup" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_NotSubmitted" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_fx15_web_form">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Prepare_di" bpmnElement="Task_Prepare"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Submit_di" bpmnElement="Task_Submit"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Submitted_di" bpmnElement="Gw_Submitted" isMarkerVisible="true"><dc:Bounds x="606" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="586" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Lookup_di" bpmnElement="Task_Lookup"><dc:Bounds x="726" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotSubmitted_di" bpmnElement="Task_NotSubmitted"><dc:Bounds x="726" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="896" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="876" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="631" y="145" /><di:waypoint x="631" y="270" /><di:waypoint x="726" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="635" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="656" y="120" /><di:waypoint x="726" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="660" y="102" width="36" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="826" y="270" /><di:waypoint x="871" y="270" /><di:waypoint x="871" y="120" /><di:waypoint x="896" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="826" y="120" /><di:waypoint x="896" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

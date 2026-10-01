@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "process": "Proc_bx23_training_reminder",
+  "cases": [
+    {
+      "name": "3명",
+      "description": "",
+      "inputs": {},
+      "expected": {
+        "메일목록": [
+          "*",
+          "*",
+          "*"
+        ]
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

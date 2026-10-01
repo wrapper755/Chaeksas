@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "process": "Proc_bx04_tax_invoice_issue",
+  "cases": [
+    {
+      "name": "정상 발행",
+      "description": "",
+      "inputs": {
+        "대상월": "2026-08"
+      },
+      "expected": {
+        "건수": 4,
+        "검증통과": true
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "발행 대상 없음",
+      "description": "",
+      "inputs": {
+        "대상월": "2026-08",
+        "최소발행금액": 1000000
+      },
+      "expected": {
+        "발행대상": false
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "로그인 만료",
+      "description": "포털 세션이 만료되면 확인 창(CMN-01)으로 사람이 로그인한 뒤 계속",
+      "inputs": {
+        "대상월": "2026-08"
+      },
+      "expected": {},
+      "approvals": {},
+      "manual": true
+    }
+  ]
+}

@@ -1,0 +1,201 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_fx10_operator_routing" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:message id="Msg_work_request" name="work_request" />
+  <bpmn:error id="Err_TASK_FAILED" name="TASK_FAILED" errorCode="TASK_FAILED" />
+  <bpmn:process id="Proc_fx10_operator_routing" name="요청 라우팅 (운영 비서)" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {
+    "web-reader": "ops-web-reader"
+  },
+  "extensions": [
+    {
+      "id": "web-reader",
+      "version": "&gt;=1,&lt;2"
+    }
+  ],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "요청",
+      "type": "string",
+      "required": true,
+      "description": "직원 메시지"
+    },
+    {
+      "name": "회신주소",
+      "type": "string",
+      "required": true,
+      "description": ""
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="요청">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Msg_work_request" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Triage" name="분류">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`요청`은 직원 메시지다.\n\n## 할 일\nintent를 exchange_rate | answer | web_summary 중 하나로.\n\n## 판단하지 않는 것\n요청을 처리하지 않는다.\n\n## 반환\n- `intent`: string",
+  "domain": "llm",
+  "results": {
+    "intent": "string"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:exclusiveGateway id="Gw_Intent" name="종류?" default="Flow_05">
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Task_Rate" name="환율 조회">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n직원이 환율을 물었다. 공개 환율 API(업무 파라미터 `주소`)를 쓴다.\n\n## 할 일\nUSD/KRW 환율을 조회해 한 문장으로 답한다.\n\n## 판단하지 않는 것\n환율 전망·투자 조언을 하지 않는다.\n\n## 반환\n- `답`: string",
+  "domain": "api",
+  "results": {
+    "답": "string"
+  },
+  "tools": [
+    "http_request_tool"
+  ],
+  "params": {
+    "주소": "https://api.frankfurter.dev/v1/latest?base=USD&amp;symbols=KRW"
+  }
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Answer" name="답변">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`요청`은 직원 메시지다.\n\n## 할 일\n`요청`에 짧게 답한다.\n\n## 판단하지 않는 것\n사내 정책·규정은 지어내지 않는다 — 모르면 모른다고 답한다.\n\n## 반환\n- `답`: string",
+  "domain": "llm",
+  "results": {
+    "답": "string"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_07</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Web" name="웹 요약">
+      <bpmn:extensionElements>
+        <chk:serviceCall>{
+  "app_id": "web-reader",
+  "operation": "summarize_url",
+  "input": {
+    "url": "요청"
+  },
+  "output": {
+    "답": "summary"
+  }
+}</chk:serviceCall>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:scriptTask id="Task_Fail" name="실패 답" scriptFormat="chk-expr">
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+      <bpmn:script>답 = '처리하지 못했습니다: ' + error_message</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:sendTask id="Task_Reply" name="회신">
+      <bpmn:extensionElements>
+        <chk:webhook>{
+  "url": "{회신주소}",
+  "method": "POST",
+  "body": "fields:[답]",
+  "timeout_s": 10,
+  "store_as": null
+}</chk:webhook>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:incoming>Flow_12</bpmn:incoming>
+      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_13</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Bnd_Rate" name="실패" attachedToRef="Task_Rate">
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_TASK_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Bnd_Answer" name="실패" attachedToRef="Task_Answer">
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_TASK_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Bnd_Web" name="실패" attachedToRef="Task_Web">
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+      <bpmn:errorEventDefinition errorRef="Err_TASK_FAILED" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Triage" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Triage" targetRef="Gw_Intent" />
+    <bpmn:sequenceFlow id="Flow_03" name="환율" sourceRef="Gw_Intent" targetRef="Task_Rate">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">intent == 'exchange_rate'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_04" name="웹" sourceRef="Gw_Intent" targetRef="Task_Web">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">intent == 'web_summary'</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_05" name="답변" sourceRef="Gw_Intent" targetRef="Task_Answer" />
+    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Rate" targetRef="Task_Reply" />
+    <bpmn:sequenceFlow id="Flow_07" sourceRef="Task_Answer" targetRef="Task_Reply" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Web" targetRef="Task_Reply" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Bnd_Rate" targetRef="Task_Fail" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Bnd_Answer" targetRef="Task_Fail" />
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Bnd_Web" targetRef="Task_Fail" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_Fail" targetRef="Task_Reply" />
+    <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_Reply" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_fx10_operator_routing">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Triage_di" bpmnElement="Task_Triage"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Intent_di" bpmnElement="Gw_Intent" isMarkerVisible="true"><dc:Bounds x="436" y="95" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="416" y="149" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Rate_di" bpmnElement="Task_Rate"><dc:Bounds x="556" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Answer_di" bpmnElement="Task_Answer"><dc:Bounds x="556" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Web_di" bpmnElement="Task_Web"><dc:Bounds x="556" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Fail_di" bpmnElement="Task_Fail"><dc:Bounds x="726" y="530" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Reply_di" bpmnElement="Task_Reply"><dc:Bounds x="896" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1066" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1046" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Rate_di" bpmnElement="Bnd_Rate"><dc:Bounds x="616" y="292" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="612" y="330" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Answer_di" bpmnElement="Bnd_Answer"><dc:Bounds x="616" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="612" y="180" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Web_di" bpmnElement="Bnd_Web"><dc:Bounds x="616" y="442" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="612" y="480" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="461" y="145" /><di:waypoint x="461" y="270" /><di:waypoint x="556" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="465" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="461" y="145" /><di:waypoint x="461" y="420" /><di:waypoint x="556" y="420" /><bpmndi:BPMNLabel><dc:Bounds x="465" y="402" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="486" y="120" /><di:waypoint x="556" y="120" /><bpmndi:BPMNLabel><dc:Bounds x="490" y="102" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="656" y="270" /><di:waypoint x="871" y="270" /><di:waypoint x="871" y="120" /><di:waypoint x="896" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="656" y="120" /><di:waypoint x="896" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="656" y="420" /><di:waypoint x="871" y="420" /><di:waypoint x="871" y="120" /><di:waypoint x="896" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="634" y="328" /><di:waypoint x="634" y="340" /><di:waypoint x="681" y="340" /><di:waypoint x="681" y="570" /><di:waypoint x="726" y="570" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="634" y="178" /><di:waypoint x="634" y="190" /><di:waypoint x="681" y="190" /><di:waypoint x="681" y="570" /><di:waypoint x="726" y="570" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11"><di:waypoint x="634" y="478" /><di:waypoint x="634" y="570" /><di:waypoint x="726" y="570" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12"><di:waypoint x="826" y="570" /><di:waypoint x="871" y="570" /><di:waypoint x="871" y="120" /><di:waypoint x="896" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13"><di:waypoint x="996" y="120" /><di:waypoint x="1066" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
