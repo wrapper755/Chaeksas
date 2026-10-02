@@ -1,0 +1,88 @@
+/* 생성 파일: design/tokens.json에서 만든다. 직접 고치지 말고 원본을 고친 뒤 scripts/gen_tokens.py (dark) */
+
+QWidget {
+  background-color: #0F1115;
+  color: #E8EAEE;
+  font-family: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  font-size: 14px;
+}
+
+QFrame#Surface, QGroupBox, QDialog {
+  background-color: #171A20;
+  border: 1px solid #2C313A;
+  border-radius: 8px;
+}
+
+QLabel#Secondary { color: #B4BBC6; }
+QLabel#Muted { color: #939CA9; }
+
+QPushButton {
+  background-color: #7AA2FF;
+  color: #0F1115;
+  border: none;
+  border-radius: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-weight: 500;
+}
+QPushButton:hover { background-color: #9AB8FF; }
+QPushButton:focus { border: 2px solid #7AA2FF; }
+QPushButton:disabled { background-color: #20242C; color: #939CA9; }
+
+QPushButton#Secondary {
+  background-color: #171A20;
+  color: #E8EAEE;
+  border: 1px solid #3D444F;
+}
+
+QPushButton#Danger {
+  background-color: #F2564A;
+  color: #0F1115;
+}
+
+QLineEdit, QComboBox, QPlainTextEdit, QTextEdit, QSpinBox {
+  background-color: #171A20;
+  color: #E8EAEE;
+  border: 1px solid #3D444F;
+  border-radius: 6px;
+  min-height: 32px;
+  padding: 0 8px;
+}
+QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus {
+  border: 2px solid #7AA2FF;
+}
+
+QHeaderView::section {
+  background-color: #20242C;
+  color: #B4BBC6;
+  border: none;
+  border-bottom: 1px solid #2C313A;
+  height: 32px;
+  padding: 0 8px;
+}
+QTableView, QTreeView, QListView {
+  background-color: #171A20;
+  alternate-background-color: #0F1115;
+  border: 1px solid #2C313A;
+  border-radius: 8px;
+}
+QTableView::item:selected, QTreeView::item:selected, QListView::item:selected {
+  background-color: #1B2A4D;
+  color: #E8EAEE;
+}
+
+QToolTip {
+  background-color: #E8EAEE;
+  color: #0F1115;
+  border: none;
+  padding: 4px 8px;
+}
+
+QProgressBar {
+  background-color: #20242C;
+  border: none;
+  border-radius: 9999px;
+  height: 8px;
+  text-align: center;
+}
+QProgressBar::chunk { background-color: #5B8CFF; border-radius: 9999px; }
