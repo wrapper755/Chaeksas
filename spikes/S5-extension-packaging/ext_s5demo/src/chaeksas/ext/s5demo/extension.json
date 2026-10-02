@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "id": "s5demo",
+  "name": "S5 시험 확장",
+  "version": "0.1.0",
+  "tier": "builtin"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "s3-studio-shell-web",
+  "private": true,
+  "description": "S3 스파이크: bpmn-js 배포본을 node_modules에서 그대로 읽는다 (번들러 없음)",
+  "dependencies": {
+    "bpmn-js": "18.31.0"
+  }
+}
