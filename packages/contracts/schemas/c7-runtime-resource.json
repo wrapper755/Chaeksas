@@ -1,0 +1,94 @@
+{
+  "$defs": {
+    "RuntimeHost": {
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "RuntimeHost",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c7-runtime-resource",
+  "additionalProperties": true,
+  "description": "실행하는 쪽이 보고한 런타임 (C4 등록·하트비트, C12).",
+  "properties": {
+    "browsers": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Browsers",
+      "type": "array"
+    },
+    "desktop_backend": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Desktop Backend"
+    },
+    "extensions": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Extensions",
+      "type": "array"
+    },
+    "host": {
+      "$ref": "#/$defs/RuntimeHost"
+    },
+    "os": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Os"
+    },
+    "versions": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Versions",
+      "type": "object"
+    }
+  },
+  "required": [
+    "host"
+  ],
+  "title": "RuntimeResource",
+  "type": "object"
+}

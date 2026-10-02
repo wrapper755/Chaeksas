@@ -48,8 +48,12 @@
 | C4 | `chaeksas.contracts.bot_ui` | (모델 검증만) | 같음 |
 | C5 | `chaeksas.contracts.center_api` | `validate_deployment()`, `validate_job_create()`, `cancel_outcome()` | (문서에 JSON 예시 없음) |
 | C6 | `chaeksas.contracts.approvals` | `validate_answer()` — Center와 실행하는 쪽이 **같이 쓴다**. `validate_create()`, `request_id_for()`, `apply_defaults()` | `tests/test_contract_examples.py` |
+| C7 | `chaeksas.contracts.resources` | `missing()` — C1 `requires` ↔ 리소스 목록 대조. `blocking_at_deploy()`가 배포를 막을 것만 고른다 | (문서에 JSON 예시 없음) |
+| C7 | `chaeksas.contracts.center_keys` | `key_state()`, `expires_soon()`, `prefix_of()`, `validate_create()` | 같음 |
 
 V5~V8은 **역할에 따라 누가 검사하는지가 다르므로** 함수를 나눠 뒀다. Center는 `verify_time(..., check_not_before=False)`로 예약 배포를 받아 두고, 실행하는 쪽만 `not_before`를 본다.
+
+검사 함수 이름이 계약마다 겹칠 수 있다 (`validate_create`가 C6·C7 둘에 있다). 모듈 안의 이름은 계약 문서 그대로 두고, `chaeksas.contracts`에서 다시 내보낼 때만 계약을 붙인다 (`validate_approval_create`·`validate_center_key_create`).
 
 검사 함수는 **저장소를 보지 않는다.** 상태가 필요한 검사(대상이 존재하는지, 같은 봉투가 이미 있는지, 활성 배포가 몇 개인지)는 Center가 자기 저장소에서 읽어 인자로 넘긴다 — 없으면 그 검사를 건너뛰고, 무엇을 건너뛰는지 docstring에 적혀 있다.
 

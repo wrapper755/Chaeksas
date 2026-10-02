@@ -18,6 +18,7 @@ from pydantic import Field, model_validator
 
 from chaeksas.contracts._base import ContractModel, Sha256, Timestamp, Violation
 from chaeksas.contracts.manifest import Manifest
+from chaeksas.contracts.resources import MissingResource
 from chaeksas.contracts.signing import AdminKey, Envelope, verify, verify_time
 
 #: 헤더 이름 — 문자열을 코드 곳곳에 흩어 두지 않는다 (프로토타입에서 문서의 `X-Bot-Id`와
@@ -49,7 +50,7 @@ KNOWN_REJECT_REASONS = frozenset(
 KNOWN_QUEUED_REASONS = frozenset({"global_limit", "per_bot_limit", "paused"})
 KNOWN_CANCEL_RESULTS = frozenset({"cancelled", "refused_already_started"})
 KNOWN_TARGET_TYPES = frozenset({"bot_ui", "server_runner"})
-KNOWN_MISSING_RESOURCE_TYPES = frozenset({"toolpack", "ui_page", "service_app", "operation"})
+# `missing_resources`의 값 목록은 C7이 소유한다 (`resources.KNOWN_MISSING_TYPES`).
 KNOWN_AUTH_KINDS = frozenset(
     {"read_token", "admin_token", "studio_key", "bot_ui_key", "server_runner_key", "integration_key"}
 )
@@ -83,14 +84,6 @@ class PreflightSummary(ContractModel):
 
     warnings: list[str] = Field(default_factory=list)
     blocked: list[str] = Field(default_factory=list)
-
-
-class MissingResource(ContractModel):
-    """패키지가 쓰는데 Center 리소스 목록(C7)에 없는 것. 읽을 때 대조해 계산한다."""
-
-    type: str  # 열린 문자열 (KNOWN_MISSING_RESOURCE_TYPES)
-    id: str
-    reason: str
 
 
 class PackageInfo(ContractModel):

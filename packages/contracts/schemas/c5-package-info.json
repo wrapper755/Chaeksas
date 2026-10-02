@@ -232,7 +232,7 @@
     },
     "MissingResource": {
       "additionalProperties": true,
-      "description": "패키지가 쓰는데 Center 리소스 목록(C7)에 없는 것. 읽을 때 대조해 계산한다.",
+      "description": "패키지가 쓰는데 Center 리소스 목록에 없는(또는 맞지 않는) 것 하나.\n\nC5 `PackageInfo.missing_resources`에 실린다.",
       "properties": {
         "id": {
           "title": "Id",

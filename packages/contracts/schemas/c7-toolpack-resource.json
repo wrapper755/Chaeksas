@@ -1,0 +1,38 @@
+{
+  "$id": "urn:chaeksas:contracts:c7-toolpack-resource",
+  "additionalProperties": true,
+  "properties": {
+    "content_hash": {
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "tools": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Tools",
+      "type": "array"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "status",
+    "content_hash"
+  ],
+  "title": "ToolpackResource",
+  "type": "object"
+}

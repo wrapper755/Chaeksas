@@ -1,0 +1,33 @@
+{
+  "$id": "urn:chaeksas:contracts:c7-center-key-create-request",
+  "additionalProperties": true,
+  "description": "`POST /center-keys` — 관리자 토큰으로만.",
+  "properties": {
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "type"
+  ],
+  "title": "CenterKeyCreateRequest",
+  "type": "object"
+}

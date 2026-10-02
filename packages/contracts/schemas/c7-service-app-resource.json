@@ -1,0 +1,215 @@
+{
+  "$defs": {
+    "Operation": {
+      "additionalProperties": true,
+      "description": "서비스 앱의 작업 하나.\n\n> 모양의 원본은 **C11**이다 (`docs/03-contracts/C11-service-app-common.md`).\n> C7의 누락 검사가 `modes`·`server_ok`를 보아야 해서 먼저 둔다. C11을 구현할 때\n> 그 모듈로 옮긴다 (C2의 `AdminKey`와 같은 식).",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "fallback": {
+          "default": "none",
+          "title": "Fallback",
+          "type": "string"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Schema"
+        },
+        "modes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Modes",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        },
+        "server_ok": {
+          "default": true,
+          "title": "Server Ok",
+          "type": "boolean"
+        },
+        "timeout_s": {
+          "default": 60,
+          "title": "Timeout S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Operation",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c7-service-app-resource",
+  "additionalProperties": true,
+  "description": "서비스 앱 하나 (확장의 서버 부분).",
+  "properties": {
+    "app_id": {
+      "title": "App Id",
+      "type": "string"
+    },
+    "base_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Base Url"
+    },
+    "category": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Category"
+    },
+    "checked_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Checked At"
+    },
+    "console_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Console Url"
+    },
+    "extension_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Extension Id"
+    },
+    "manifest_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Manifest At"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "operations": {
+      "items": {
+        "$ref": "#/$defs/Operation"
+      },
+      "title": "Operations",
+      "type": "array"
+    },
+    "status": {
+      "default": "unknown",
+      "title": "Status",
+      "type": "string"
+    },
+    "status_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Status Reasons",
+      "type": "array"
+    },
+    "used_by": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Used By",
+      "type": "array"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    }
+  },
+  "required": [
+    "app_id"
+  ],
+  "title": "ServiceAppResource",
+  "type": "object"
+}

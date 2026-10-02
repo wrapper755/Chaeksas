@@ -19,7 +19,7 @@ from chaeksas.contracts import (
     apply_defaults,
     request_id_for,
     validate_answer,
-    validate_create,
+    validate_approval_create,
 )
 from chaeksas.contracts.approvals import AUTO_WITHDRAW_REASONS, VALUE_RETENTION_DAYS
 
@@ -67,8 +67,8 @@ def test_node_instance_starts_at_one() -> None:
 
 def test_confirmation_is_not_accepted_by_center() -> None:
     """확인은 화면 앞 사람만 답할 수 있어 Center로 올리지 않는다."""
-    assert validate_create(request()) == []
-    v = validate_create(request(layer="confirmation"))
+    assert validate_approval_create(request()) == []
+    v = validate_approval_create(request(layer="confirmation"))
     assert [x.code for x in v] == ["confirmation_not_allowed"]
 
 

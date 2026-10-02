@@ -1,0 +1,153 @@
+{
+  "$defs": {
+    "BoundTo": {
+      "additionalProperties": true,
+      "description": "키가 묶인 곳. Bot UI용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4).",
+      "properties": {
+        "first_seen": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "First Seen"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "machine_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Machine Name"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "BoundTo",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c7-center-key-created",
+  "additionalProperties": true,
+  "description": "발급 응답 — 여기에만 원문 `key`가 실린다. 다시 볼 수 없다.\n\n받는 쪽(운영자)은 이 값을 Bot UI·Studio 설정이나 OS 비밀 저장소에 넣는다.\n**기록·로그에 남기지 않는다.**",
+  "properties": {
+    "bound_to": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BoundTo"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "key": {
+      "pattern": "^chk_ctr_[A-Za-z0-9_-]{40}$",
+      "title": "Key",
+      "type": "string"
+    },
+    "key_id": {
+      "pattern": "^ck_[0-9a-f]{8}$",
+      "title": "Key Id",
+      "type": "string"
+    },
+    "last_used_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Used At"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "prefix": {
+      "title": "Prefix",
+      "type": "string"
+    },
+    "revoked_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revoked At"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "key_id",
+    "name",
+    "type",
+    "prefix",
+    "state",
+    "created_at",
+    "key"
+  ],
+  "title": "CenterKeyCreated",
+  "type": "object"
+}

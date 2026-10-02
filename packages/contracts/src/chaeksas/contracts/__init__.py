@@ -13,6 +13,10 @@
 | C4 | `bot_ui` | Bot UI 등록·하트비트 |
 | C5 | `center_api` | 패키지·배포·작업 + 배포·작업 검사 |
 | C6 | `approvals` | 결재 요청·답 + 폼으로 답 검증 |
+| C7 | `resources`, `center_keys` | 리소스 목록 + 누락 검사, Center API 키 |
+
+검사 함수가 계약마다 있어서, 이름이 겹치는 것은 루트에서 계약을 붙여 다시 내보낸다
+(`validate_approval_create`, `validate_center_key_create`). 모듈 안의 이름은 계약 문서 그대로다.
 
 자세히: docs/01-architecture.md §2, docs/03-contracts/.
 """
@@ -28,8 +32,8 @@ from chaeksas.contracts.approvals import (
     apply_defaults,
     request_id_for,
     validate_answer,
-    validate_create,
 )
+from chaeksas.contracts.approvals import validate_create as validate_approval_create
 from chaeksas.contracts.bot_ui import (
     ApprovalAck,
     ApprovalDispatch,
@@ -56,13 +60,22 @@ from chaeksas.contracts.center_api import (
     JobInfo,
     JobTarget,
     ListParams,
-    MissingResource,
     PackageInfo,
     PreflightSummary,
     cancel_outcome,
     validate_deployment,
     validate_job_create,
 )
+from chaeksas.contracts.center_keys import (
+    BoundTo,
+    CenterKeyCreated,
+    CenterKeyCreateRequest,
+    CenterKeyInfo,
+    expires_soon,
+    key_state,
+    prefix_of,
+)
+from chaeksas.contracts.center_keys import validate_create as validate_center_key_create
 from chaeksas.contracts.events import (
     EventBatchResponse,
     RejectedLine,
@@ -90,6 +103,21 @@ from chaeksas.contracts.manifest import (
     ToolpackRef,
     Trigger,
     validate,
+)
+from chaeksas.contracts.resources import (
+    ContributedResource,
+    ExtensionResource,
+    InstalledOn,
+    MissingResource,
+    Operation,
+    ResourceIndex,
+    ResourceList,
+    RuntimeHost,
+    RuntimeResource,
+    ServiceAppResource,
+    ToolpackResource,
+    blocking_at_deploy,
+    missing,
 )
 from chaeksas.contracts.signing import (
     AdminKey,
@@ -181,8 +209,7 @@ __all__ = [
     "JobInfo",
     "JobTarget",
     "ListParams",
-    "MissingResource",
-    "PackageInfo",
+    "PackageInfo",  # `MissingResource`는 C7이 소유한다
     "PreflightSummary",
     "cancel_outcome",
     "validate_deployment",
@@ -197,5 +224,27 @@ __all__ = [
     "apply_defaults",
     "request_id_for",
     "validate_answer",
-    "validate_create",
+    "validate_approval_create",
+    # C7
+    "BoundTo",
+    "CenterKeyCreateRequest",
+    "CenterKeyCreated",
+    "CenterKeyInfo",
+    "ContributedResource",
+    "ExtensionResource",
+    "InstalledOn",
+    "MissingResource",
+    "Operation",
+    "ResourceIndex",
+    "ResourceList",
+    "RuntimeHost",
+    "RuntimeResource",
+    "ServiceAppResource",
+    "ToolpackResource",
+    "blocking_at_deploy",
+    "expires_soon",
+    "key_state",
+    "missing",
+    "prefix_of",
+    "validate_center_key_create",
 ]

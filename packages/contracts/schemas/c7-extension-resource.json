@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "InstalledOn": {
+      "additionalProperties": true,
+      "description": "이 확장을 가진 실행하는 쪽의 수와 버전 분포 (C4·C12 보고. Studio는 세지 않는다).",
+      "properties": {
+        "by_version": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "By Version",
+          "type": "object"
+        },
+        "hosts": {
+          "default": 0,
+          "title": "Hosts",
+          "type": "integer"
+        }
+      },
+      "title": "InstalledOn",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c7-extension-resource",
+  "additionalProperties": true,
+  "description": "확장 하나 (C13 정의에서 모은 것).",
+  "properties": {
+    "contributes_summary": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Contributes Summary",
+      "type": "object"
+    },
+    "definition": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Definition"
+    },
+    "definition_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Definition Hash"
+    },
+    "envelope": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Envelope"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "installed_on": {
+      "$ref": "#/$defs/InstalledOn"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "protocol": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Protocol"
+    },
+    "publisher": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Publisher"
+    },
+    "service_app_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Service App Id"
+    },
+    "status": {
+      "default": "n/a",
+      "title": "Status",
+      "type": "string"
+    },
+    "tier": {
+      "title": "Tier",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "tier"
+  ],
+  "title": "ExtensionResource",
+  "type": "object"
+}

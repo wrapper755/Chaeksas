@@ -18,11 +18,16 @@ from chaeksas.contracts import (
     AnswerRequest,
     ApprovalCreateRequest,
     ApprovalInfo,
+    CenterKeyCreated,
+    CenterKeyCreateRequest,
+    CenterKeyInfo,
+    ContributedResource,
     DeploymentClaim,
     DeploymentInfo,
     Envelope,
     ErrorBody,
     EventBatchResponse,
+    ExtensionResource,
     HeartbeatRequest,
     HeartbeatResponse,
     JobCreateRequest,
@@ -33,6 +38,9 @@ from chaeksas.contracts import (
     RegisterRequest,
     RegisterResponse,
     RunEvent,
+    RuntimeResource,
+    ServiceAppResource,
+    ToolpackResource,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -59,6 +67,14 @@ MODELS: list[tuple[str, Any]] = [
     ("c6-approval-create-request", ApprovalCreateRequest),
     ("c6-approval-info", ApprovalInfo),
     ("c6-answer-request", AnswerRequest),
+    ("c7-extension-resource", ExtensionResource),
+    ("c7-service-app-resource", ServiceAppResource),
+    ("c7-contributed-resource", ContributedResource),
+    ("c7-toolpack-resource", ToolpackResource),
+    ("c7-runtime-resource", RuntimeResource),
+    ("c7-center-key-create-request", CenterKeyCreateRequest),
+    ("c7-center-key-info", CenterKeyInfo),
+    ("c7-center-key-created", CenterKeyCreated),
 ]
 
 
