@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>S3 canvas</title>
+  <!-- 오프라인: 모든 자원은 로컬 파일 (업무 PC는 인터넷이 막혀 있을 수 있다) -->
+  <link rel="stylesheet" href="node_modules/bpmn-js/dist/assets/diagram-js.css">
+  <link rel="stylesheet" href="node_modules/bpmn-js/dist/assets/bpmn-js.css">
+  <link rel="stylesheet" href="node_modules/bpmn-js/dist/assets/bpmn-font/css/bpmn-embedded.css">
+  <style>
+    html, body, #canvas { margin: 0; height: 100%; }
+    body { font-family: "Malgun Gothic", sans-serif; }
+  </style>
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script src="node_modules/bpmn-js/dist/bpmn-modeler.production.min.js"></script>
+  <script src="chk-moddle.js"></script>
+</head>
+<body>
+<div id="canvas"></div>
+<script>
+  // chk: 확장을 moddle에 알려 줄지 — ?moddle=1 이면 chk-moddle.js의 설명을 쓴다
+  const useModdle = new URLSearchParams(location.search).get("moddle") === "1";
+
+  async function boot() {
+    const opts = { container: "#canvas" };
+    if (useModdle) {
+      opts.moddleExtensions = { chk: window.CHK_MODDLE };
+    }
+    const modeler = new BpmnJS(opts);
+    let dirty = false;
+    modeler.on("commandStack.changed", () => { dirty = true; bridge && bridge.changed(true); });
+
+    // Python이 부르는 함수들. 결과는 모두 bridge.result(요청 id, JSON)로 돌려준다 (runJavaScript는 Promise를 못 받는다)
+    const api = {
+      async importXML(xml) {
+        const t0 = performance.now();
+        const r = await modeler.importXML(xml);
+        modeler.get("canvas").zoom("fit-viewport");
+        dirty = false;
+        return { ms: Math.round(performance.now() - t0), warnings: r.warnings.map(w => w.message) };
+      },
+      async saveXML() {
+        const { xml } = await modeler.saveXML({ format: true });
+        return { xml };
+      },
+      async setLabel(id, text) {
+        const reg = modeler.get("elementRegistry");
+        modeler.get("modeling").updateLabel(reg.get(id), text);
+        return { ok: true };
+      },
+      async stats() {
+        return { elements: modeler.get("elementRegistry").getAll().length, dirty,
+                 moddle: useModdle };
+      },
+    };
+
+    let bridge = null;
+    new QWebChannel(qt.webChannelTransport, ch => {
+      bridge = ch.objects.bridge;
+      window.chk = (reqId, name, argsJson) => {
+        api[name](...JSON.parse(argsJson))
+          .then(r => bridge.result(reqId, JSON.stringify({ ok: true, ...r })))
+          .catch(e => bridge.result(reqId, JSON.stringify({ ok: false, error: String(e && e.message || e) })));
+      };
+      bridge.ready();
+    });
+  }
+  boot();
+</script>
+</body>
+</html>
