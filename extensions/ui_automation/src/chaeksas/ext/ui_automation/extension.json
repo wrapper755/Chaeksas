@@ -1,5 +1,5 @@
 {
-  "schema": 1,
+  "schema": 2,
   "id": "ui-automation",
   "version": "0.1.0",
   "name": "UI 자동화",
@@ -43,7 +43,7 @@
       {
         "id": "worker",
         "label": "Worker 프로세스",
-        "command": ["chk-worker"],
+        "entry": "ui_automation.worker:serve",
         "port_setting": "CHK_WORKER__LOCAL_API__PORT",
         "default_port": 8899,
         "health": "/v1/health",

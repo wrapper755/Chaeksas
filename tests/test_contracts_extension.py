@@ -34,7 +34,7 @@ NOW = "2026-10-02T09:00:00+09:00"
 def builtin(**over: Any) -> dict[str, Any]:
     """내장 확장 정의 하나 (검사를 통과하는 최소 모양)."""
     base: dict[str, Any] = {
-        "schema": 1,
+        "schema": 2,
         "id": "doc-ocr",
         "version": "1.2.0",
         "name": "문서 인식",
@@ -59,7 +59,7 @@ def builtin(**over: Any) -> dict[str, Any]:
 def external(**over: Any) -> dict[str, Any]:
     """외부 확장 정의 하나 (HTTP 어댑터)."""
     base: dict[str, Any] = {
-        "schema": 1,
+        "schema": 2,
         "id": "ext-ocr",
         "version": "1.0.0",
         "name": "외부 OCR",
@@ -121,7 +121,7 @@ def test_unknown_contributes_key_is_kept_not_rejected() -> None:
 
 def test_higher_schema_is_refused() -> None:
     with pytest.raises(ValueError, match="모르는"):
-        parse(builtin(schema=2))
+        parse(builtin(schema=3))
 
 
 def test_bad_id_is_refused() -> None:
@@ -158,7 +158,7 @@ def test_catalog_is_schema_versioned() -> None:
         ("task_types", [{"id": "t", "label": "t", "run_locations": ["pc"]}]),
         ("studio.editors", [{"task_type": "t", "entry": "x:Y"}]),
         ("bot_ui.utilities", [{"id": "u", "label": "u", "entry": "x:Y"}]),
-        ("bot_ui.local_runtimes", [{"id": "r", "label": "r", "command": ["r"]}]),
+        ("bot_ui.local_runtimes", [{"id": "r", "label": "r", "entry": "x:Y"}]),
         ("configuration", [{"key": "k", "label": "k", "scope": "bot_ui"}]),
         ("preflight", [{"id": "p", "entry": "x:Y"}]),
         ("console.pages", [{"id": "c", "label": "c", "module": "m"}]),
@@ -391,11 +391,28 @@ def test_utility_key_must_land_in_a_secret_config_field() -> None:
     assert validate_extension(parse(definition)) == []
 
 
+def test_local_runtime_needs_an_entry() -> None:
+    definition = builtin(contributes={"bot_ui.local_runtimes": [{"id": "r", "label": "r", "entry": ""}]})
+    assert "entry_missing" in codes(definition)
+
+
+def test_old_command_field_is_refused_not_ignored() -> None:
+    """schema 1의 `command`만 적은 정의는 **거부된다** (schema 2에서 `entry`가 필수, ADR-0024).
+
+    조용히 무시하면 Bot UI가 로컬 런타임을 띄우지 못하는데 확장은 켜진 것처럼 보인다.
+    """
+    definition = builtin(
+        schema=1, contributes={"bot_ui.local_runtimes": [{"id": "worker", "label": "W", "command": ["chk-worker"]}]}
+    )
+    with pytest.raises(ValueError, match="entry"):
+        parse(definition)
+
+
 def test_unknown_scope_and_start_are_reported() -> None:
     definition = builtin(contributes={"configuration": [{"key": "k", "label": "k", "scope": "bot"}]})
     assert "unknown_scope" in codes(definition)
     definition = builtin(
-        contributes={"bot_ui.local_runtimes": [{"id": "r", "label": "r", "command": ["r"], "start": "someday"}]}
+        contributes={"bot_ui.local_runtimes": [{"id": "r", "label": "r", "entry": "x:Y", "start": "someday"}]}
     )
     assert "unknown_start" in codes(definition)
 

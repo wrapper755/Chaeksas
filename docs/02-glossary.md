@@ -118,7 +118,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 화면 | `page` | 자동화 대상 화면 하나. `page_id`로 식별, URL 패턴 또는 창 식별자를 가진다 |
 | 요소 | `element` | 화면 안의 조작 대상. `page_id::semantic_key`로 식별 |
 | 시맨틱 키 | `semantic_key` | 요소의 업무 이름 (`submit_button`). BPMN·AI는 셀렉터 대신 이것을 쓴다 |
-| 로케이터 | `locator` | 요소를 찾는 방법 하나 (role, test_id, css, xpath, automation_id, control_name) |
+| 로케이터 | `locator` | 요소를 찾는 방법 하나 (role, test_id, css, xpath, automation_id, class_name, control_name) |
 | 사다리 | `ladder` | 한 요소의 로케이터들을 우선순위대로 늘어놓은 것. 앞에서부터 시도 |
 | 동작 | `action` | 요소에 하는 일 8종: fill, click, press, read, read_table, read_options, read_selection, select |
 | UI 셀렉터 등록 | `selector_registry` (기능) | UI 자동화 확장이 Bot UI에 기여하는 유틸리티 (기본 제공). 화면 요소를 담아 검증하고 UI 자동화 앱에 등록·삭제 |

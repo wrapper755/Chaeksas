@@ -59,6 +59,7 @@ from chaeksas.extension_api import (
     BotUiUtility,
     EntryError,
     ExtensionContext,
+    LocalRuntimeEntry,
     PreflightCheck,
     Secrets,
     Settings,
@@ -425,6 +426,24 @@ class ExtensionHost:
         assert owner is not None
         utility: BotUiUtility = self._instantiate(owner, found.value.entry, expect=BotUiUtility, what="유틸리티")
         return utility
+
+    def local_runtime(self, extension_id: str, runtime_id: str) -> LocalRuntimeEntry:
+        """로컬 런타임의 진입점 (`<확장 id>:<런타임 id>`).
+
+        **자식 프로세스 안에서** 쓰는 길이다. Bot UI가 자기 실행 파일을 `--local-runtime
+        <확장 id>:<런타임 id>`로 다시 띄우면, 그 자식이 이것으로 진입점을 풀어 부른다
+        (ADR-0024). 띄우고 감시하는 일 자체는 Bot UI의 몫이다.
+        """
+        owner = self.get(extension_id)
+        if owner is None or not owner.enabled:
+            raise LookupError(f"켜진 확장이 아니다: {extension_id}")
+        declared = next((r for r in owner.manifest.contributes.bot_ui_local_runtimes if r.id == runtime_id), None)
+        if declared is None:
+            raise LookupError(f"확장 {extension_id}에 기여된 로컬 런타임이 아니다: {runtime_id}")
+        entry: LocalRuntimeEntry = self._instantiate(
+            owner, declared.entry, expect=LocalRuntimeEntry, what="로컬 런타임 진입점"
+        )
+        return entry
 
     def preflight_checks(self) -> list[Contribution[PreflightCheck]]:
         """사전 점검들. 하나가 만들어지지 않으면 그것만 빼고 기록한다 — 점검이 실행을 막지 않는다."""

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 from urllib.parse import urlsplit
 
 from pydantic import Field, ValidationError
@@ -145,14 +145,19 @@ class Utility(ContractModel):
 
 
 class LocalRuntime(ContractModel):
-    """Bot UI가 띄우고 감시하는 로컬 프로세스 (BUI-09·11). **선언이고, 코드가 아니다.**
+    """Bot UI가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).
+
+    **명령줄은 확장이 적지 않는다** (schema 2, ADR-0024). `entry`가 런타임을 실행하는 코드를
+    가리키고, Bot UI가 **자기 실행 파일을 자식으로 다시 띄워** 그 `entry`를 부른다 — 설치
+    파일로 묶은 앱 안에는 콘솔 스크립트가 없기 때문이다.
 
     포트를 코드에 적지 않는다 — 설정 이름(`port_setting`)과 기본값만 둔다 (CLAUDE.md §5).
     """
 
     id: str
     label: str
-    command: list[str]
+    #: `"<모듈>:<이름>"` — `extension_api.LocalRuntimeEntry` 모양의 호출 가능한 것.
+    entry: str
     port_setting: str | None = None
     default_port: int | None = None
     health: str | None = None  # 상태 확인 경로 (예: /v1/health)
@@ -319,7 +324,13 @@ class KeyNeed(ContractModel):
 
 
 class ExtensionManifest(SchemaVersioned):
-    """확장 정의 (C13 최상위). 파일 하나 = 확장 하나."""
+    """확장 정의 (C13 최상위). 파일 하나 = 확장 하나.
+
+    schema 2에서 `bot_ui.local_runtimes`의 `command`(명령 배열)가 `entry`(진입점)로 바뀌었다
+    (ADR-0024). 필드의 뜻이 바뀐 것이라 번호를 올렸다 (계약 README 원칙 2).
+    """
+
+    SCHEMA: ClassVar[int] = 2
 
     id: ExtensionId
     version: SemVer
@@ -623,9 +634,9 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
             out.append(Violation(rule="C13", code="unknown_start",
                                  message=f"로컬 런타임 {rt.id}의 start를 모른다: {rt.start}",
                                  items=sorted(KNOWN_STARTS)))
-        if not rt.command:
-            out.append(Violation(rule="C13", code="command_missing",
-                                 message=f"로컬 런타임 {rt.id}에 실행 명령이 없다"))
+        if not rt.entry:
+            out.append(Violation(rule="C13", code="entry_missing",
+                                 message=f"로컬 런타임 {rt.id}에 진입점(entry)이 없다"))
 
     config_keys = {item.key for item in c.configuration}
     for need in m.requires_keys:

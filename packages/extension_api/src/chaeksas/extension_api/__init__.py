@@ -9,7 +9,7 @@
 | `task_types[].editor`, `studio.editors` | `TaskEditor` (`kind="schema"`면 필요 없다) |
 | `bot_ui.utilities` | `BotUiUtility` |
 | `preflight` | `PreflightCheck` |
-| `bot_ui.local_runtimes` | (없음 — 선언뿐. Bot UI가 띄운다) |
+| `bot_ui.local_runtimes` | `LocalRuntimeEntry` (자식 프로세스에서 불린다) |
 | `studio.resource_views`, `console.pages`, `resources`, `configuration` | (없음 — 선언뿐) |
 | 외부 앱 (`service.adapter`) | (없음 — `core`의 해석기가 부른다. 규격은 `http_adapter`) |
 
@@ -34,6 +34,7 @@ from chaeksas.extension_api.contributions import (
     SEVERITY_WARN,
     BotUiUtility,
     Finding,
+    LocalRuntimeEntry,
     PreflightCheck,
     PreflightTarget,
     TaskEditor,
@@ -82,6 +83,7 @@ __all__ = [
     # 기여
     "BotUiUtility",
     "Finding",
+    "LocalRuntimeEntry",
     "PreflightCheck",
     "PreflightTarget",
     "SEVERITIES",

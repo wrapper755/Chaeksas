@@ -527,15 +527,8 @@
     },
     "LocalRuntime": {
       "additionalProperties": true,
-      "description": "Bot UI가 띄우고 감시하는 로컬 프로세스 (BUI-09·11). **선언이고, 코드가 아니다.**\n\n포트를 코드에 적지 않는다 — 설정 이름(`port_setting`)과 기본값만 둔다 (CLAUDE.md §5).",
+      "description": "Bot UI가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).\n\n**명령줄은 확장이 적지 않는다** (schema 2, ADR-0024). `entry`가 런타임을 실행하는 코드를\n가리키고, Bot UI가 **자기 실행 파일을 자식으로 다시 띄워** 그 `entry`를 부른다 — 설치\n파일로 묶은 앱 안에는 콘솔 스크립트가 없기 때문이다.\n\n포트를 코드에 적지 않는다 — 설정 이름(`port_setting`)과 기본값만 둔다 (CLAUDE.md §5).",
       "properties": {
-        "command": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Command",
-          "type": "array"
-        },
         "default_port": {
           "anyOf": [
             {
@@ -547,6 +540,10 @@
           ],
           "default": null,
           "title": "Default Port"
+        },
+        "entry": {
+          "title": "Entry",
+          "type": "string"
         },
         "health": {
           "anyOf": [
@@ -594,7 +591,7 @@
       "required": [
         "id",
         "label",
-        "command"
+        "entry"
       ],
       "title": "LocalRuntime",
       "type": "object"
@@ -850,7 +847,7 @@
   },
   "$id": "urn:chaeksas:contracts:c13-extension-manifest",
   "additionalProperties": true,
-  "description": "확장 정의 (C13 최상위). 파일 하나 = 확장 하나.",
+  "description": "확장 정의 (C13 최상위). 파일 하나 = 확장 하나.\n\nschema 2에서 `bot_ui.local_runtimes`의 `command`(명령 배열)가 `entry`(진입점)로 바뀌었다\n(ADR-0024). 필드의 뜻이 바뀐 것이라 번호를 올렸다 (계약 README 원칙 2).",
   "properties": {
     "api": {
       "anyOf": [

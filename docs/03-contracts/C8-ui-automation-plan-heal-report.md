@@ -53,16 +53,21 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 
 | 필드 | 타입 | 뜻 |
 | --- | --- | --- |
-| `type` | `role` \| `test_id` \| `css` \| `xpath` (웹), `automation_id` \| `control_name` (데스크톱) | 전략 |
+| `type` | `role` \| `test_id` \| `css` \| `xpath` (웹), `automation_id` \| `class_name` \| `control_name` (데스크톱) | 전략 |
 | `value` | str | `role`이면 ARIA role, 그 밖은 셀렉터 문자열 |
 | `name` | str? | `role`일 때만, 필수. 접근성 이름 |
-| `priority` | int? | 없으면 기본값: role 1, test_id 2, css 3, xpath 4 / automation_id 1, control_name 2 |
+| `priority` | int? | 없으면 기본값: role 1, test_id 2, css 3, xpath 4 / automation_id 1, class_name 2, control_name 3 |
 | `status` | `active` \| `unverified` \| `deprecated` | `deprecated`는 시도하지 않는다 |
 | `exact` | bool | 이름 정확히 일치 |
+| `control_type` | str? | 데스크톱만. 그 전략으로 찾은 것을 **컨트롤 종류로 좁힌다** (예: `Edit`, `Button`, `DataItem`). 값은 UIA ControlType 이름이고, Linux 백엔드는 AT-SPI 역할로 옮긴다 |
 | `timeout_ms` | int? | |
 | `platform` | `web` \| `desktop` | 전략과 맞아야 한다 |
 
-- `locator_key` = `<type>|<value>|<name 또는 빈 문자열>`. 통계·승격·보고에서 로케이터를 가리킬 때 쓴다.
+- `locator_key` = `<type>|<value>|<name 또는 빈 문자열>`. 통계·승격·보고에서 로케이터를 가리킬 때 쓴다. **`control_type`은 열쇠에 넣지 않는다** — 같은 요소를 좁히는 조건일 뿐이라, 넣으면 같은 로케이터의 통계가 갈린다.
+- **데스크톱 전략은 안정한 순서대로 쓴다** ([ADR-0020](../decisions/0020-windows-desktop-backend.md)).
+  - `automation_id`(UIA `AutomationId`)가 가장 안정하다. 그러나 메모장 편집기처럼 **`AutomationId`가 없는 컨트롤이 흔하다.**
+  - `class_name`(UIA `ClassName`)은 언어를 따라 바뀌지 않아 `control_name`보다 먼저 시도한다. 대신 창 안에서 여러 개가 같은 값을 가질 수 있어 `control_type`으로 좁히는 것을 권한다.
+  - `control_name`(UIA `Name`)은 **화면 언어에 따라 달라진다** (같은 메모장 편집기가 한국어에서 「텍스트 편집기」다). 이것만으로 잡은 로케이터는 다른 언어 PC에서 깨진다 — 등록할 때 `class_name`을 함께 남긴다.
 
 ### plan
 
@@ -165,3 +170,4 @@ C11 오류 형식을 따른다. 이 계약에서 더하는 코드는 다음과 �
 | --- | --- | --- | --- |
 | 2026-10-01 | 1 | 초안. 프로토타입의 계획·치유·보고를 C11 작업으로 옮겼다. 그 과정에서 바뀐 것: 작업 임차 없앰, `business_key`·수행 모드 필수, 보고에서 읽은 값 제거, 스냅샷의 업무 값 가리기, `revision`으로 캐시 | 0008, 0010, 0013 |
 | 2026-10-01 | 1 | 검토 반영: 세션 안 작업별 `call_seq`, 보고 재전송은 5xx만·4xx는 보내지 못한 보고로, 모르는 화면 보고도 받음, `origin: test`는 승격에서 제외, 치유 기본값·운영에서 막는 법 명시 | 0018 |
+| 2026-10-03 | 1 | 데스크톱 로케이터에 `class_name` 전략과 `control_type` 조건을 더했다. 기본 우선순위도 바뀐다 — `control_name`이 2에서 **3**으로 내려간다 (화면 언어에 따라 달라지므로). 구현이 아직 없어 schema는 그대로 1 | 0020 |

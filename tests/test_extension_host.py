@@ -21,6 +21,7 @@ from chaeksas.extension_api import (
     API_VERSION,
     BotUiUtility,
     EntryError,
+    LocalRuntimeEntry,
     PreflightCheck,
     TaskEditor,
     TaskExecutor,
@@ -84,7 +85,8 @@ def test_builtin_contributes_task_type_and_utility(host: ExtensionHost) -> None:
 def test_builtin_declares_the_worker_as_a_local_runtime(host: ExtensionHost) -> None:
     """Worker는 플랫폼의 구성요소가 아니라 확장이 선언한 로컬 런타임이다 (ADR-0018)."""
     runtimes = {c.value.id: c.value for c in host.local_runtimes()}
-    assert runtimes["worker"].command == ["chk-worker"]
+    # schema 2 — 명령줄이 아니라 진입점이다 (Bot UI가 자기 실행 파일을 다시 띄운다, ADR-0024).
+    assert runtimes["worker"].entry == "ui_automation.worker:serve"
     assert runtimes["worker"].default_port == 8899
     assert runtimes["worker"].port_setting == "CHK_WORKER__LOCAL_API__PORT"
     assert runtimes["worker"].start == "on_demand", "항상 띄우지 않는다 (필요할 때만)"
@@ -151,6 +153,16 @@ def test_resolved_code_matches_the_interface(host: ExtensionHost) -> None:
     assert isinstance(checks[0].value, PreflightCheck)
 
 
+def test_local_runtime_entry_resolves(host: ExtensionHost) -> None:
+    """Bot UI가 자식으로 다시 떴을 때 쓰는 길 (`--local-runtime ui-automation:worker`)."""
+    entry = host.local_runtime(BUILTIN_ID, "worker")
+    assert isinstance(entry, LocalRuntimeEntry)
+    with pytest.raises(LookupError, match="로컬 런타임이 아니다"):
+        host.local_runtime(BUILTIN_ID, "nope")
+    with pytest.raises(LookupError):
+        host.local_runtime("nope", "worker")
+
+
 def test_executor_is_made_once_editor_every_time(host: ExtensionHost) -> None:
     assert host.executor("ui_task") is host.executor("ui_task")
     assert host.editor("ui_task") is not host.editor("ui_task")
@@ -188,7 +200,7 @@ def test_context_for_an_unknown_extension_raises(host: ExtensionHost) -> None:
 
 def definition(**over: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "schema": 1,
+        "schema": 2,
         "id": "doc-ocr",
         "version": "1.0.0",
         "name": "문서 인식",
@@ -354,7 +366,7 @@ def test_summarize_shows_why(host: ExtensionHost) -> None:
 
 def external_definition() -> dict[str, Any]:
     return {
-        "schema": 1,
+        "schema": 2,
         "id": "ext-ocr",
         "version": "1.0.0",
         "name": "외부 OCR",

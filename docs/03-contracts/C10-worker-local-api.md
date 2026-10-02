@@ -26,7 +26,7 @@
 - **세션 비밀:** 세션을 열면 응답에 `session_secret`이 온다. 그 세션의 스텝·이동·닫기 요청은 헤더 `X-CHK-Session`에 이 값을 실어야 한다. 다른 호출자가 남의 세션을 조작하거나 닫지 못하게 하려는 것이다.
 - **기동:**
   1. Bot UI가 두 토큰 파일을 쓴다.
-  2. `chk-worker --port <p> --token-dir <폴더>`로 Worker를 띄운다.
+  2. Worker를 띄운다. **Bot UI가 자기 실행 파일을 자식으로 다시 띄우고**(`--local-runtime ui-automation:worker --port <p> --token-dir <폴더>`), 그 자식이 확장의 진입점을 부른다 (C13 `bot_ui.local_runtimes[].entry`, [ADR-0024](../decisions/0024-desktop-packaging-extensions.md)). 개발 환경에서는 같은 인자로 `python -m chaeksas.bot_ui`다 — 설치 파일로 묶은 앱 안에는 `chk-worker` 같은 콘솔 스크립트가 없다.
   3. `GET /v1/health`가 200이 될 때까지 기다린다 (최대 30초).
   4. Worker가 죽으면 다시 띄운다 (최대 3회 연속, BUI-09).
 - **UI 세션은 한 번에 하나다** (ADR-0014 §4). 열려 있는 세션이 있으면, 다른 쪽이 세션을 열 때 409 `worker_busy`를 받는다.
@@ -148,6 +148,16 @@
 | 422 | `instruction_not_allowed` / `value_required` / `value_not_allowed` / `unknown_semantic_key` | 요청 모양이 틀림 | 재시도하지 않음 |
 | 502 | `ui_automation_unreachable` | UI 자동화 앱에 닿지 못하고 캐시도 없음 | 태스크 재시도 정책을 따른다 |
 | 503 | `browser_unavailable` | 브라우저를 띄우지 못함 | Bot UI에 알리고 확인으로 넘긴다 |
+| 503 | `session_locked` | **화면이 잠겨 있다.** 잠긴 동안 Worker는 화면 조작·캡처를 하지 않는다 | **재시도 가능.** 풀리거나 스텝 시간 제한에 닿을 때까지 기다린다 (아래) |
+
+### `session_locked` (잠금 화면)
+
+Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023-bot-ui-process-supervision.md)). **UIA 결과로는 알 수 없다** — 잠긴 동안에도 UIA는 요소와 위치를 정상으로 돌려주므로, 그대로 두면 보이지 않는 화면에 입력하고 빈 화면을 캡처한다.
+
+- 잠긴 동안 들어온 **조작·캡처 스텝**은 수행하지 않고 이 오류로 돌려준다. 읽기만 하는 요청(`/v1/health`, 세션 상태)은 그대로 답한다.
+- 부르는 쪽(실행기·Studio)은 **그 스텝의 시간 제한 안에서 기다렸다 다시 부른다.** 시간 제한에 닿으면 UI 태스크를 확인(CMN-01)으로 넘긴다 — 사람이 PC 앞에 없다는 뜻이기 때문이다.
+- `detail.locked_since`(Timestamp)를 실으면 부르는 쪽이 얼마나 잠겨 있었는지 사람에게 보일 수 있다.
+- 실행 기록에는 **잠김으로 기다린 사실만** 남긴다 (C3). 화면 내용은 남기지 않는다.
 
 ## 호환 규칙
 
@@ -161,3 +171,5 @@
 | 2026-10-01 | 1 | 초안 | 0012, 0013, 0014 |
 | 2026-10-01 | 1 | 검토 반영: 토큰은 파일로만 넘기고 사용·관리 토큰으로 나눔, `session_secret`, 실행 예약과 유휴 시간 제한·강제 닫기, `caller.attempt`와 4단 `business_key`, 셀렉터 등록 caller, 재시작 시 조작 스텝이 있었으면 자동으로 다시 하지 않음 | — |
 | 2026-10-01 | 1 | 확장 검토 반영: `registration/submit` 없앰 (레지스트리는 확장 유틸리티가 직접), 등록 세션은 `service_key` 불필요 | 0018 |
+| 2026-10-03 | 1 | 잠금 화면 오류 `session_locked`(503, 재시도 가능) 추가. 잠긴 동안 조작·캡처를 하지 않고, 부르는 쪽은 스텝 시간 제한 안에서 기다린다 | 0023 |
+| 2026-10-03 | 1 | 기동 절차의 2단계를 고쳤다 — `chk-worker` 명령이 아니라 Bot UI가 자기 실행 파일을 `--local-runtime`으로 다시 띄운다 (묶인 앱에는 콘솔 스크립트가 없다). 주고받는 API는 그대로라 schema는 1 | 0024 |

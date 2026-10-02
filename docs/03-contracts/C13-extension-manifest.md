@@ -3,7 +3,7 @@
 | 항목 | 값 |
 | --- | --- |
 | 상태 | **합의** (2026-10-01, 독립 검토 반영). 모델·검사 규칙 **구현됨** |
-| schema | 1 |
+| schema | 2 (1은 `local_runtimes.command`를 쓰던 것 — 아래 변경 이력) |
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·Bot UI·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
 | 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |
 | 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md) |
@@ -54,7 +54,7 @@
 
 | 필드 | 타입 | 필수 | 뜻 |
 | --- | --- | --- | --- |
-| `schema` | int | ✓ | 1 |
+| `schema` | int | ✓ | 2 |
 | `id` | str | ✓ | `^[a-z][a-z0-9-]{1,49}$`. 서버 부분이 있으면 그 `app_id`와 같다 (예: `ui-automation`) |
 | `version` | str | ✓ | SemVer |
 | `name` | str | ✓ | 화면 표시 이름 |
@@ -83,7 +83,7 @@
 | `studio.editors` | `[{task_type, entry}]` | Studio | 불가 (자동 폼) |
 | `studio.resource_views` | `[{id, label, resource_type, creates_task_type?}]` | STU-03 | 가능 (선언) |
 | `bot_ui.utilities` | `[{id, label, menu: "tools", entry, needs_runtime?}]` | Bot UI 「도구」 메뉴·탭 | 불가 |
-| `bot_ui.local_runtimes` | `[{id, label, command, port_setting, default_port, health, token_dir, start}]` | Bot UI (BUI-09·11) | 불가 |
+| `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start}]` | Bot UI (BUI-09·11) | 불가 |
 | `configuration` | `[{key, label, scope, schema, secret}]` | 설정 화면 칸 (BUI-03 「확장별 설정」, STU-10, 서버 실행기 설정) | 불가 |
 | `preflight` | `[{id, entry}]` | Studio·Bot UI·서버 실행기 사전 점검 | 불가 |
 | `console.pages` | `[{id, label, module}]` | 서비스 앱 관리 콘솔 | 불가 (자기 콘솔 링크만) |
@@ -93,8 +93,11 @@
 
 - `run_locations`: 이 태스크 종류를 쓸 수 있는 실행 위치. `ui_task`는 `["pc"]`다.
 - `start`: `on_demand` 또는 `always`.
-- `command`: 로컬 런타임을 띄우는 명령. **`command[0]`을 PATH에서 찾는 것으로는 안 된다** — 설치 파일로 묶은 앱 안에는 콘솔 스크립트(`chk-worker`)가 없다 (PyInstaller는 실행 파일 하나를 만든다).
-  > **바뀐다** ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md) 수락, 이 표는 아직 안 고쳤다): 내장·사내 확장에서는 `command`를 **`entry`**(런타임 진입점 문자열)로 바꾸고, 호스트가 실제 명령을 만든다. 묶였으면 `<Bot UI 실행 파일> --local-runtime <확장 id>:<런타임 id> --port <p> --token-dir <폴더>`, 개발 환경에서는 같은 인자로 `python -m chaeksas.bot_ui`. 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))과 서명을 함께 쓴다. ADR 수락 뒤 위 표의 `command`를 고친다.
+- `bot_ui.local_runtimes[].entry`: 런타임을 **실행하는 코드**를 가리킨다 (`entry` 형식은 위와 같고, 그 확장 패키지 안만 가리킬 수 있다). **명령줄을 확장이 적지 않는다** — Bot UI가 만든다 ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md)).
+  - Bot UI는 **자기 실행 파일을 자식으로 다시 띄운다**: `<Bot UI 실행 파일> --local-runtime <확장 id>:<런타임 id> --port <p> --token-dir <폴더>`. 개발 환경(소스 실행)에서는 같은 인자로 `python -m chaeksas.bot_ui`다.
+  - 자식은 그 확장의 `entry`를 풀어 부르고, 그때부터 화면 없는 서버로 돈다 (Worker는 C10).
+  - 왜 명령이 아니라 진입점인가: 설치 파일로 묶은 앱 안에는 콘솔 스크립트(`chk-worker`)가 없다 (PyInstaller는 실행 파일 하나를 만든다). 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))·서명·파이썬 런타임을 그대로 함께 쓴다.
+  - 작업 관리자에서는 Bot UI와 같은 이름으로 보인다. 구별은 명령줄(`--local-runtime …`)로 한다.
 - `configuration`의 `scope`: `bot_ui`, `studio`, `server_runner` 중 하나.
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.
 - **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 키(`requires_keys` `utility`)도 이 칸으로 받는다.
@@ -194,7 +197,7 @@ Operation:
 
 ```json
 {
-  "schema": 1, "id": "ui-automation", "version": "0.4.0", "name": "UI 자동화", "publisher": "Chaeksas",
+  "schema": 2, "id": "ui-automation", "version": "0.4.0", "name": "UI 자동화", "publisher": "Chaeksas",
   "tier": "builtin", "api": ">=1,<2",
   "service": {"protocol": "chk-c11", "base_url": "http://svc-uia:8000"},
   "requires_keys": [
@@ -207,7 +210,7 @@ Operation:
     "studio.resource_views": [{"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page", "creates_task_type": "ui_task"}],
     "bot_ui.utilities": [{"id": "selector-registration", "label": "UI 셀렉터 등록", "menu": "tools",
                           "entry": "ui_automation.client:SelectorRegistration", "needs_runtime": "worker"}],
-    "bot_ui.local_runtimes": [{"id": "worker", "label": "Worker 프로세스", "command": ["chk-worker"],
+    "bot_ui.local_runtimes": [{"id": "worker", "label": "Worker 프로세스", "entry": "ui_automation.worker:serve",
                                "port_setting": "CHK_WORKER__LOCAL_API__PORT", "default_port": 8899,
                                "health": "/v1/health", "token_dir": true, "start": "on_demand"}],
     "configuration": [{"key": "registrar_key", "label": "등록 담당자 키", "scope": "bot_ui",
@@ -223,7 +226,7 @@ Operation:
 
 ```json
 {
-  "schema": 1, "id": "ext-ocr", "version": "1.0.0", "name": "외부 OCR", "publisher": "외부 업체",
+  "schema": 2, "id": "ext-ocr", "version": "1.0.0", "name": "외부 OCR", "publisher": "외부 업체",
   "tier": "external",
   "service": {"protocol": "http-adapter", "base_url": "https://ocr.example.com",
     "adapter": {
@@ -270,7 +273,8 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 | 2026-10-01 | 1 | 초안 | 0018 |
 | 2026-10-01 | 1 | 검토 반영 (아래) | — |
 | 2026-10-02 | 1 | 구현하며 명시한 것: `entry` 형식과 그 확장 패키지 안으로 제한, 예시의 편집기·유틸리티 entry를 `client`로 (ADR-0018 §6 폴더 구성) | 0018 |
-| 2026-10-02 | 1 | 설치 파일로 묶어 보고 명시한 것: `extension.json`은 파이썬 패키지 안, `command`로는 묶인 앱의 로컬 런타임을 띄울 수 없다 (`entry`로 바꾸는 것은 ADR 수락 뒤 적용) | 0024 |
+| 2026-10-02 | 1 | 설치 파일로 묶어 보고 명시한 것: `extension.json`은 파이썬 패키지 안 | 0024 |
+| 2026-10-03 | **2** | `bot_ui.local_runtimes`의 `command`(명령 배열)를 **`entry`**(진입점 문자열)로 **바꿨다.** 명령줄은 Bot UI가 만들고, 자기 실행 파일을 자식으로 다시 띄운다. 필드의 뜻이 바뀌었으므로 schema를 올린다 | 0024 |
 
 검토 반영 내용:
 
