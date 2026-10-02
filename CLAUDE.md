@@ -53,6 +53,7 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 - 경로는 `pathlib.Path`만. 문자열로 `/` 붙이기, 하드코딩된 `/home/...`·`/usr/bin/...` 금지.
 - 사용자 데이터·설정 위치는 `platformdirs`로 얻는다 (Windows `%LOCALAPPDATA%`, Linux `~/.local/share`).
 - 파일 입출력은 항상 `encoding="utf-8"` 명시 (Windows 기본 인코딩은 cp949).
+- **한글을 화면에 찍는 도구(생성기·CLI)는 stdout도 UTF-8로 고정한다.** Windows의 기본 코드페이지(cp949·cp1252)에서는 `print("경고: …")` 한 줄에 `UnicodeEncodeError`로 죽는다. `if hasattr(sys.stdout, "reconfigure"): sys.stdout.reconfigure(encoding="utf-8")`. `tests/test_generators_on_windows_encoding.py`가 Linux에서도 막는다.
 - 외부 프로세스는 `subprocess`에 인자 리스트로 넘긴다. `shell=True`, bash 전용 문법 금지.
 - **서버 우선.** 업무 대부분은 서버 BPM 프로세스(「서버 Bot」, 기본값)로 돌고, PC Bot은 UI 조작·현장 확인·PC 전용 자원이 필요할 때만 쓴다 (`docs/decisions/0016-server-first.md`).
 - BPM 프로세스는 **실행 위치**(PC / 서버)를 가진다. 서버 실행은 Center가 관리하는 서버 실행기(`apps/server_runner`)가 맡고 동시 실행을 허용한다. 서버 실행 BPM 프로세스에는 UI 태스크·웹/데스크톱 AI 태스크·현장 확인을 넣을 수 없다 (`docs/decisions/0015-run-location.md`).
@@ -78,7 +79,7 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 M1 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11과 `service_kit`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다.
 
-- 명령: `uv sync --all-packages` → `uv run pytest` (249개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
+- 명령: `uv sync --all-packages` → `uv run pytest` (259개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
 - 계약 모델을 고치면 → `uv run python scripts/gen_schemas.py`, 디자인 토큰을 고치면 → `uv run python scripts/gen_tokens.py` (명암비 검사 포함). 둘 다 `--check`가 pytest·CI에 들어 있어 잊으면 깨진다.
 - import 이름은 `chaeksas.<이름>`, 확장은 `chaeksas.ext.<id>` ([ADR-0019](docs/decisions/0019-package-names.md)). `src/chaeksas/`에 `__init__.py`를 만들면 조용히 깨진다.
 - 의존 방향은 `tests/test_import_direction.py`가 막는다. 새 멤버를 더하면 `tests/test_workspace.py`의 `MEMBERS` 표도 고친다.
