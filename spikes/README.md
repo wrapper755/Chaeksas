@@ -10,5 +10,5 @@
 
 제품 코드(`packages/`, `apps/`)는 이 폴더를 import하지 않는다.
 
-끝난 스파이크: S1~S5 → [ADR-0020](../docs/decisions/0020-windows-desktop-backend.md)~[0024](../docs/decisions/0024-desktop-packaging-extensions.md) (모두 「제안」).
+끝난 스파이크: S1~S5 → [ADR-0020](../docs/decisions/0020-windows-desktop-backend.md)~[0024](../docs/decisions/0024-desktop-packaging-extensions.md) (모두 수락).
 S1~S4는 Windows 11 실기에서, S5는 Windows(묶기·크기·기동)와 Linux(`linux-core-hook/`, 확장 호스트와 훅)에서 나눠 봤다.

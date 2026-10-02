@@ -94,7 +94,7 @@
 - `run_locations`: 이 태스크 종류를 쓸 수 있는 실행 위치. `ui_task`는 `["pc"]`다.
 - `start`: `on_demand` 또는 `always`.
 - `command`: 로컬 런타임을 띄우는 명령. **`command[0]`을 PATH에서 찾는 것으로는 안 된다** — 설치 파일로 묶은 앱 안에는 콘솔 스크립트(`chk-worker`)가 없다 (PyInstaller는 실행 파일 하나를 만든다).
-  > 제안 ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md)): 내장·사내 확장에서는 `command`를 **`entry`**(런타임 진입점 문자열)로 바꾸고, 호스트가 실제 명령을 만든다. 묶였으면 `<Bot UI 실행 파일> --local-runtime <확장 id>:<런타임 id> --port <p> --token-dir <폴더>`, 개발 환경에서는 같은 인자로 `python -m chaeksas.bot_ui`. 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))과 서명을 함께 쓴다. ADR 수락 뒤 위 표의 `command`를 고친다.
+  > **바뀐다** ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md) 수락, 이 표는 아직 안 고쳤다): 내장·사내 확장에서는 `command`를 **`entry`**(런타임 진입점 문자열)로 바꾸고, 호스트가 실제 명령을 만든다. 묶였으면 `<Bot UI 실행 파일> --local-runtime <확장 id>:<런타임 id> --port <p> --token-dir <폴더>`, 개발 환경에서는 같은 인자로 `python -m chaeksas.bot_ui`. 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))과 서명을 함께 쓴다. ADR 수락 뒤 위 표의 `command`를 고친다.
 - `configuration`의 `scope`: `bot_ui`, `studio`, `server_runner` 중 하나.
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.
 - **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 키(`requires_keys` `utility`)도 이 칸으로 받는다.
@@ -270,7 +270,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 | 2026-10-01 | 1 | 초안 | 0018 |
 | 2026-10-01 | 1 | 검토 반영 (아래) | — |
 | 2026-10-02 | 1 | 구현하며 명시한 것: `entry` 형식과 그 확장 패키지 안으로 제한, 예시의 편집기·유틸리티 entry를 `client`로 (ADR-0018 §6 폴더 구성) | 0018 |
-| 2026-10-02 | 1 | 설치 파일로 묶어 보고 명시한 것: `extension.json`은 파이썬 패키지 안, `command[0]`은 PATH에만 의존하지 않는다(제안) | 0020 |
+| 2026-10-02 | 1 | 설치 파일로 묶어 보고 명시한 것: `extension.json`은 파이썬 패키지 안, `command`로는 묶인 앱의 로컬 런타임을 띄울 수 없다 (`entry`로 바꾸는 것은 ADR 수락 뒤 적용) | 0024 |
 
 검토 반영 내용:
 

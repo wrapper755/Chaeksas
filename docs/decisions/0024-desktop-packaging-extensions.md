@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 제안 |
+| 상태 | 수락 (2026-10-03). 설치 프로그램 종류는 미정 |
 | 날짜 | 2026-10-02 |
 | 관련 | 스파이크 `spikes/S5-extension-packaging/`(Windows)·`.../linux-core-hook/`(Linux, 확장 호스트와 훅), ADR-0018(확장), ADR-0019(이름 공간), ADR-0021(DPI), ADR-0022(Studio 캔버스), ADR-0023(자동 시작), 계약 C13 |
 | 구현 | 훅: `packages/core/src/chaeksas/core/__pyinstaller/` (배선 검사 `tests/test_extension_host.py`) |

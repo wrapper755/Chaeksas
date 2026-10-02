@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 제안 |
+| 상태 | 수락 (2026-10-03). Linux 구현은 미확인 |
 | 날짜 | 2026-10-02 |
 | 관련 | 스파이크 `spikes/S4-resident-supervisor/`, ADR-0012·0014(실행기 제안), ADR-0020·0021(Worker), 계약 C10, 화면 BUI-01·BUI-09, `docs/01-architecture.md` §6 |
 
