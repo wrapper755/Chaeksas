@@ -78,9 +78,10 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 M1 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다.
 
-- 명령: `uv sync --all-packages` → `uv run pytest` (219개 통과, Linux aarch64에서만 확인). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
+- 명령: `uv sync --all-packages` → `uv run pytest` (219개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
 - 계약 모델을 고치면 → `uv run python scripts/gen_schemas.py` (JSON Schema 생성물). `--check`가 pytest에 들어 있어 잊으면 테스트가 깨진다.
 - import 이름은 `chaeksas.<이름>`, 확장은 `chaeksas.ext.<id>` ([ADR-0019](docs/decisions/0019-package-names.md)). `src/chaeksas/`에 `__init__.py`를 만들면 조용히 깨진다.
 - 의존 방향은 `tests/test_import_direction.py`가 막는다. 새 멤버를 더하면 `tests/test_workspace.py`의 `MEMBERS` 표도 고친다.
 - 계약을 고칠 때는 문서(`docs/03-contracts/`)가 원본이다. 문서의 JSON 예시를 테스트가 **문서에서 뽑아** 검증하니(`tests/test_contract_examples.py`), 예시도 같이 고친다.
-- 아직 없는 것: CI(Windows·Linux), `web/`, 디자인 토큰 생성기, 스파이크 S1~S5, 확장 `extension.json`(C13), 나머지 계약(C8~C14), 외부 의존(PySide6·FastAPI·Playwright). 남은 M1 기준은 `docs/05-roadmap.md`.
+- 푸시·PR마다 CI가 돈다 (`.github/workflows/ci.yml`): 매트릭스 두 개에서 pytest·ruff·mypy·생성물 최신 여부. 경로를 비교할 때 `str(path)`가 아니라 `as_posix()`를 쓴다 (Windows는 `\`).
+- 아직 없는 것: `web/`, 디자인 토큰 생성기, 스파이크 S1~S5, 확장 `extension.json`(C13), 나머지 계약(C8~C14), 외부 의존(PySide6·FastAPI·Playwright). 남은 M1 기준은 `docs/05-roadmap.md`.

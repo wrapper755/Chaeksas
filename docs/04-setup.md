@@ -1,6 +1,6 @@
 # 04. 개발 환경 구성
 
-> 상태: **일부 확인됨.** `uv sync --all-packages` → `uv run pytest`는 **Linux(aarch64)에서 돈다.** Windows와 CI는 아직 확인하지 않았고, `web/`·Playwright·Docker 쪽은 그 단계가 오면 갱신한다.
+> 상태: **일부 확인됨.** `uv sync --all-packages` → `uv run pytest`가 **CI(Windows Server + Linux x86_64)와 개발 PC(Linux aarch64)에서 돈다.** `web/`·Playwright·Docker 쪽과 Windows 데스크톱(Studio 창·트레이·UIA)은 그 단계가 오면 갱신한다.
 > 이 문서는 **새 PC에서 이 문서만 보고** 환경을 만들 수 있어야 한다. 막히는 곳이 있으면 그 자리에서 고친다.
 
 ## 1. 어떤 PC에 무엇을 까는가
@@ -126,8 +126,8 @@ curl -fsSL https://ollama.com/install.sh | sh
 
 ## 7. 확인 체크리스트 (M1 완료 시 채움)
 
-- [ ] Windows 11에서 clone → `uv sync` → 테스트 통과
-- [ ] Linux에서 clone → `uv sync` → 테스트 통과
+- [x] Windows에서 clone → `uv sync` → 테스트 통과 (CI `windows-latest` = Windows Server. **Windows 11 데스크톱은 아직 확인 안 됨**)
+- [x] Linux에서 clone → `uv sync` → 테스트 통과 (CI `ubuntu-latest` x86_64 + 개발 PC aarch64)
 - [ ] Windows에서 Studio 창이 뜬다
 - [ ] Windows에서 Bot UI가 Worker 프로세스를 띄우고, Worker가 Chromium을 조작한다
 - [ ] Linux 서버의 Center에 Windows Bot UI가 Center API 키로 등록·하트비트한다

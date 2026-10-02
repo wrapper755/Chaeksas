@@ -1,9 +1,20 @@
 # Chaeksas
 
+[![CI](https://github.com/wrapper755/Chaeksas/actions/workflows/ci.yml/badge.svg)](https://github.com/wrapper755/Chaeksas/actions/workflows/ci.yml)
+
 BPMN으로 업무 프로세스를 그리고, 각 단계의 실제 일(웹·데스크톱 화면 조작, 문서 처리, 판단, 서버 API 호출)은 AI 에이전트·Worker·서비스 앱이 수행하는 업무 자동화 플랫폼.
 
-> **현재 상태: 문서 단계 (코드 없음).** 구현은 [docs/05-roadmap.md](docs/05-roadmap.md)의 M1부터 시작한다.
+> **현재 상태: M1 진행.** 문서 묶음과 업무 예제 50개 위에, uv 워크스페이스(Python 멤버 11개)와 **공통 계약 C1~C7**이 올라가 있다. 나머지 패키지는 아직 빈 패키지다. 남은 단계는 [docs/05-roadmap.md](docs/05-roadmap.md).
 > 이 저장소는 프로토타입 4개를 **참고만 하여 새로 만든다.** 프로토타입 코드는 수정하지 않는다 ([ADR-0001](docs/decisions/0001-new-repo-prototypes-as-reference.md)).
+
+## 돌려 보기
+
+```bash
+uv sync --all-packages
+uv run pytest
+```
+
+Python은 따로 깔지 않는다 — uv가 3.12를 내려받는다 ([ADR-0005](docs/decisions/0005-python-version.md)). 자세한 환경 구성은 [docs/04-setup.md](docs/04-setup.md).
 
 ## 처음 보는 사람이 읽는 순서
 
