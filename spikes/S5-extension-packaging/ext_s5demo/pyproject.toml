@@ -1,0 +1,18 @@
+[project]
+name = "chaeksas-ext-s5demo"
+version = "0.1.0"
+description = "S5 시험용 내장 확장 — Qt 유틸리티 하나, 로컬 런타임 하나, 데이터 파일 하나"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+# ADR-0018: 확장은 엔트리 포인트 그룹 chaeksas.extensions로 등록한다
+[project.entry-points."chaeksas.extensions"]
+s5demo = "chaeksas.ext.s5demo:EXTENSION"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# chaeksas는 PEP 420 네임스페이스 — src/chaeksas 밑에 __init__.py를 두지 않는다
+packages = ["src/chaeksas"]

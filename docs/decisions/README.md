@@ -32,3 +32,4 @@
 | [0021](0021-worker-dpi-capture.md) | Worker 프로세스는 시작하자마자 Per-Monitor v2 DPI 인식을 선언하고, 캡처는 `mss`로 한다 (S2) | 제안 (다중 모니터 미확인) |
 | [0022](0022-studio-canvas.md) | Studio 캔버스는 QtWebEngine 안의 bpmn-js 배포본, Python과는 QWebChannel로 잇는다 (S3) | 제안 |
 | [0023](0023-bot-ui-process-supervision.md) | Bot 실행은 Bot UI의 자식 프로세스(실행기)로 확정, 자식마다 Job Object, 자동 시작은 작업 스케줄러 (S4) | 제안 (Linux 미확인) |
+| [0024](0024-desktop-packaging-extensions.md) | Studio·Bot UI는 PyInstaller onedir, 확장 옵션은 엔트리 포인트에서 계산, 로컬 런타임은 같은 실행 파일로 (S5) | 제안 (설치 프로그램 미정) |

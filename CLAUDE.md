@@ -84,4 +84,4 @@ M1 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`
 - 의존 방향은 `tests/test_import_direction.py`가 막는다. 새 멤버를 더하면 `tests/test_workspace.py`의 `MEMBERS` 표도 고친다.
 - 계약을 고칠 때는 문서(`docs/03-contracts/`)가 원본이다. 문서의 JSON 예시를 테스트가 **문서에서 뽑아** 검증하니(`tests/test_contract_examples.py`), 예시도 같이 고친다.
 - 푸시·PR마다 CI가 돈다 (`.github/workflows/ci.yml`): 매트릭스 두 개에서 pytest·ruff·mypy·생성물 최신 여부. 경로를 비교할 때 `str(path)`가 아니라 `as_posix()`를 쓴다 (Windows는 `\`).
-- 아직 없는 것: `web/`, 디자인 토큰 생성기, 스파이크 S5 (S1~S4 → ADR-0020~0023, 모두 제안), 확장 `extension.json`(C13), 나머지 계약(C8~C14), 외부 의존(PySide6·FastAPI·Playwright). 남은 M1 기준은 `docs/05-roadmap.md`.
+- 아직 없는 것: `web/`, 디자인 토큰 생성기, ADR-0020~0024(스파이크 S1~S5 결론, 모두 제안)의 수락, 확장 `extension.json`(C13), 나머지 계약(C8~C14), 외부 의존(PySide6·FastAPI·Playwright). 남은 M1 기준은 `docs/05-roadmap.md`.
