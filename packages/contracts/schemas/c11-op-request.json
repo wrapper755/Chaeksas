@@ -1,0 +1,124 @@
+{
+  "$defs": {
+    "Caller": {
+      "additionalProperties": true,
+      "description": "누가 부르는가. `type`은 열린 문자열 (KNOWN_CALLER_TYPES).",
+      "properties": {
+        "bpm_process_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bpm Process Id"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Caller",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c11-op-request",
+  "additionalProperties": true,
+  "description": "`POST /v1/ops/{operation}` 요청.",
+  "properties": {
+    "attempt": {
+      "minimum": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "business_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Business Key"
+    },
+    "call_seq": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Call Seq",
+      "type": "integer"
+    },
+    "caller": {
+      "$ref": "#/$defs/Caller"
+    },
+    "input": {
+      "additionalProperties": true,
+      "title": "Input",
+      "type": "object"
+    },
+    "mode": {
+      "title": "Mode",
+      "type": "string"
+    },
+    "node_id": {
+      "title": "Node Id",
+      "type": "string"
+    },
+    "node_instance": {
+      "minimum": 1,
+      "title": "Node Instance",
+      "type": "integer"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema",
+    "mode",
+    "run_id",
+    "node_id",
+    "node_instance",
+    "attempt",
+    "caller"
+  ],
+  "title": "OpRequest",
+  "type": "object"
+}

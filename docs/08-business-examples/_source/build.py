@@ -10,6 +10,11 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+# Windows 콘솔·파이프의 기본 코드페이지(cp949·cp1252)에서는 한글을 찍다 터진다.
+# 이 도구들은 한글로 말하므로 stdout을 UTF-8로 고정한다 (CI의 Windows에서 실제로 터졌다).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 

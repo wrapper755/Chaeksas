@@ -1,0 +1,35 @@
+{
+  "$id": "urn:chaeksas:contracts:c11-health-response",
+  "additionalProperties": true,
+  "description": "`GET /healthz` — 인증 없음.",
+  "properties": {
+    "reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    }
+  },
+  "required": [
+    "status"
+  ],
+  "title": "HealthResponse",
+  "type": "object"
+}

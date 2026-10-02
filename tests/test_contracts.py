@@ -312,3 +312,21 @@ def test_generated_json_schemas_are_current() -> None:
         capture_output=True, text=True, cwd=root,
     )
     assert r.returncode == 0, f"스키마가 모델과 다르다 — gen_schemas.py를 다시 돌려라\n{r.stdout}{r.stderr}"
+
+
+def test_generated_design_tokens_are_current() -> None:
+    """토큰을 고치고 `scripts/gen_tokens.py`를 다시 돌리지 않으면 여기가 깨진다.
+
+    명암비 검사도 이 안에서 돈다 — 기준을 깨는 색이 들어오면 생성기가 1로 끝난다
+    (`docs/07-style-guide.md` §8-3).
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    r = subprocess.run(
+        [sys.executable, str(root / "scripts" / "gen_tokens.py"), "--check"],
+        capture_output=True, text=True, cwd=root,
+    )
+    assert r.returncode == 0, f"토큰 생성물이 원본과 다르다 — gen_tokens.py를 다시 돌려라\n{r.stdout}{r.stderr}"

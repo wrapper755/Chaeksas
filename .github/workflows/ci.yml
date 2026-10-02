@@ -63,6 +63,10 @@ jobs:
       - name: 업무 예제 생성물 최신 여부
         run: uv run python docs/08-business-examples/_source/build.py --check
 
+      # 명암비 검사도 이 안에서 돈다 (기준을 깨는 색이 들어오면 1로 끝난다).
+      - name: 디자인 토큰 생성물 최신 여부
+        run: uv run python scripts/gen_tokens.py --check
+
       # 작업 트리가 더러워졌다면 생성물을 커밋하지 않은 것이다 (--check가 놓친 경우).
       - name: 작업 트리가 깨끗한가
         run: git diff --exit-code

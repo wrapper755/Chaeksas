@@ -56,6 +56,8 @@ FORBIDDEN_DEPS = [
     ("chaeksas-ext-ui-automation", "chaeksas-core", "§5 — 확장의 service·worker는 core를 import하지 않는다"),
     ("chaeksas-contracts", "chaeksas-extension-api", "§2 — contracts는 로직·I/O를 모른다"),
     ("chaeksas-extension-api", "chaeksas-core", "§5 — 방향은 extension_api ◀── core"),
+    ("chaeksas-service-kit", "chaeksas-core", "§5 — service_kit은 contracts만 본다 (업무 로직·실행을 모른다)"),
+    ("chaeksas-service-kit", "chaeksas-qt", "§2 — 서비스 앱은 화면이 없다"),
     ("chaeksas-server-runner", "chaeksas-qt", "§2 — 서버 실행기는 화면이 없다"),
     ("chaeksas-core", "chaeksas-qt", "§5 — core는 Qt를 import하지 않는다"),
 ]

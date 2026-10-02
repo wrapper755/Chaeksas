@@ -1,7 +1,7 @@
 # 07. 스타일 가이드
 
 > 상태: **확인 (2026-10-01, 미리보기 검토 완료).** 모든 화면(Studio, Bot UI, Center 콘솔, 서비스 앱 관리 콘솔)이 이 문서와 `design/tokens.json` 하나를 따른다 ([ADR-0017](decisions/0017-web-nextjs-design-system.md)).
-> 미리보기: `design/preview.html`을 브라우저로 연다 (밝게/어둡게 전환 단추 있음).
+> 미리보기: `design/preview.html`을 브라우저로 연다 (밝게/어둡게 전환 단추, 명암비 표 포함). 생성물이다.
 > 화면 배치·문구의 개별 결정은 `06-screens/`, 공통 UX 원칙 U1~U17은 [06-screens/README.md](06-screens/README.md) §2.
 
 ## 1. 원칙
@@ -159,6 +159,6 @@
 ## 8. 바꾸는 법
 
 1. `design/tokens.json`을 고친다 (새 토큰은 이름 규칙 `<분류>.<이름>[.<변형>]`).
-2. 생성기를 돌린다 (`uv run python scripts/gen_tokens.py`, M1) → 웹 CSS·Qt QSS·미리보기가 바뀐다.
-3. 명암비 검사가 통과해야 한다 (생성기가 §2의 기준으로 검사하고 실패하면 멈춘다).
+2. 생성기를 돌린다 (`uv run python scripts/gen_tokens.py`) → `web/packages/ui/src/tokens.css`, `packages/qt/…/theme/{tokens.py,theme-light.qss,theme-dark.qss}`, `design/preview.html`이 바뀐다. **모두 생성물이니 직접 고치지 않는다.**
+3. 명암비 검사가 통과해야 한다 (생성기가 §2의 기준으로 검사하고, 실패하면 **아무것도 쓰지 않고** 멈춘다). `--check`가 CI와 pytest에 들어 있다.
 4. 이 문서의 표를 함께 고친다.

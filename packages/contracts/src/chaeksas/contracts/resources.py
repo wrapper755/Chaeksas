@@ -18,6 +18,7 @@ from pydantic import Field
 from chaeksas.contracts._base import ContractModel, Timestamp
 from chaeksas.contracts._semver import InvalidVersion, satisfies
 from chaeksas.contracts.manifest import Manifest
+from chaeksas.contracts.service_app import Operation
 
 #: 리소스를 다시 읽는 주기 (`CHK_CENTER__RESOURCE__POLL_S`). 「새로 고침」은 즉시.
 STATUS_POLL_S = 60
@@ -29,7 +30,7 @@ KNOWN_RESOURCE_TYPES = frozenset({"extension", "service_app", "contributed", "to
 KNOWN_SERVICE_APP_STATUSES = frozenset({"ok", "degraded", "unreachable", "unknown"})
 KNOWN_EXTENSION_TIERS = frozenset({"builtin", "internal", "external"})  # C13
 KNOWN_PROTOCOLS = frozenset({"chk-c11", "http-adapter"})  # 없으면 클라이언트 기여만
-KNOWN_MODES = frozenset({"autonomous", "deterministic"})
+# 수행 모드 값은 C11이 소유한다 (`service_app.MODES`).
 
 #: 누락 검사 결과의 `type`·`reason` (C7 「누락 검사」 표).
 KNOWN_MISSING_TYPES = frozenset({"extension", "service_app", "operation", "resource", "toolpack"})
@@ -48,24 +49,6 @@ class MissingResource(ContractModel):
     type: str  # KNOWN_MISSING_TYPES
     id: str
     reason: str  # KNOWN_MISSING_REASONS
-
-
-class Operation(ContractModel):
-    """서비스 앱의 작업 하나.
-
-    > 모양의 원본은 **C11**이다 (`docs/03-contracts/C11-service-app-common.md`).
-    > C7의 누락 검사가 `modes`·`server_ok`를 보아야 해서 먼저 둔다. C11을 구현할 때
-    > 그 모듈로 옮긴다 (C2의 `AdminKey`와 같은 식).
-    """
-
-    name: str
-    description: str | None = None
-    modes: list[str] = Field(default_factory=list)  # KNOWN_MODES
-    fallback: str = "none"  # 기본 none — 운영에서 LLM이 몰래 개입하지 않게
-    input_schema: dict[str, Any] | None = None
-    output_schema: dict[str, Any] | None = None
-    timeout_s: int = 60
-    server_ok: bool = True
 
 
 class InstalledOn(ContractModel):
