@@ -78,7 +78,7 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 M1 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11과 `service_kit`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다.
 
-- 명령: `uv sync --all-packages` → `uv run pytest` (247개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
+- 명령: `uv sync --all-packages` → `uv run pytest` (249개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
 - 계약 모델을 고치면 → `uv run python scripts/gen_schemas.py` (JSON Schema 생성물). `--check`가 pytest에 들어 있어 잊으면 테스트가 깨진다.
 - import 이름은 `chaeksas.<이름>`, 확장은 `chaeksas.ext.<id>` ([ADR-0019](docs/decisions/0019-package-names.md)). `src/chaeksas/`에 `__init__.py`를 만들면 조용히 깨진다.
 - 의존 방향은 `tests/test_import_direction.py`가 막는다. 새 멤버를 더하면 `tests/test_workspace.py`의 `MEMBERS` 표도 고친다.
