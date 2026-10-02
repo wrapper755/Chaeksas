@@ -34,6 +34,7 @@ ADR-0018: 확장은 엔트리 포인트 그룹 `chaeksas.extensions`로 찾고, 
 | `botui_main.py`, `studio_main.py` | PyInstaller 진입 스크립트 (Studio 쪽만 WebEngine을 import) |
 | `build.py` | 변형 A~E를 묶고 각 실행 파일의 `--selftest`를 두 번(cold·warm) 돌림 → `out/summary.json` |
 | `app.manifest` | PyInstaller 기본 매니페스트 + `dpiAwareness PerMonitorV2` |
+| [`linux-core-hook/`](linux-core-hook/NOTES.md) | **덧붙임** — 시험용 호스트가 아니라 진짜 `chaeksas.core.extensions`와 내장 확장으로, B의 세 인자를 `core`가 주는 PyInstaller 훅으로 자동화해 **인자 0개**로 되게 한 기록 (Linux). ADR-0024가 이것을 쓴다 |
 
 ```bash
 cd spikes/S5-extension-packaging

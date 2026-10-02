@@ -48,15 +48,15 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 | S2 화면 캡처·DPI | 125%·150% 배율, 다중 모니터에서 캡처 좌표 = 클릭 좌표 | 캡처 방식 → Worker는 PMv2 인식 + `mss` ([ADR-0021](decisions/0021-worker-dpi-capture.md), 제안 — 다중 모니터 미확인) |
 | S3 Studio 셸 | PySide6 + QtWebEngine + bpmn-js가 Windows에서 뜨고 저장·불러오기 | Studio UI 기반 → QtWebEngine + bpmn-js 배포본 + QWebChannel ([ADR-0022](decisions/0022-studio-canvas.md), 제안) |
 | S4 상주·자동 시작 | Bot UI 자동 시작, Bot UI가 Worker 프로세스와 실행기 하나(자식 프로세스)를 띄우고 감시·재시작·강제 종료, 대기열에서 다음 Bot으로 넘어가기, 실행 중 Bot → Worker REST, 잠금 화면·로그오프 시 동작 | Bot 실행 형태(자식 프로세스 여부) 확정 (ADR-0012) → 실행기 = 자식 프로세스 + Job Object, 자동 시작은 작업 스케줄러 ([ADR-0023](decisions/0023-bot-ui-process-supervision.md), 제안) |
-| S5 확장 로딩 | 엔트리 포인트(`chaeksas.extensions`)로 찾은 내장 확장이 Windows 설치 파일(PyInstaller 등)로 묶인 Studio·Bot UI에서 로드되는지, 확장의 Qt 화면·로컬 런타임 실행 파일이 함께 들어가는지 | 확장 패키징 방식 → PyInstaller onedir + 엔트리 포인트에서 옵션 계산 + 같은 실행 파일로 로컬 런타임 ([ADR-0024](decisions/0024-desktop-packaging-extensions.md), 제안) |
+| S5 확장 로딩 | 엔트리 포인트(`chaeksas.extensions`)로 찾은 내장 확장이 Windows 설치 파일(PyInstaller 등)로 묶인 Studio·Bot UI에서 로드되는지, 확장의 Qt 화면·로컬 런타임 실행 파일이 함께 들어가는지 | 확장 패키징 방식 → PyInstaller onedir + 엔트리 포인트에서 옵션 계산 + 같은 실행 파일로 로컬 런타임 ([ADR-0024](decisions/0024-desktop-packaging-extensions.md), 제안 — 확장 옵션은 `core`가 주는 PyInstaller 훅이 넣는다, Linux에서 확인) |
 
 완료 기준:
 - [x] 루트에서 `uv sync`, `uv run pytest`가 Windows·Linux 모두 통과 (CI 두 개) — `.github/workflows/ci.yml`, `windows-latest` + `ubuntu-latest` 매트릭스
 - [x] 의존 방향 import 검사 테스트 통과 (`01-architecture` §5) — `tests/test_import_direction.py` (선언 의존 전이 + 실제 import)
-- [x] 계약 패키지에서 JSON Schema가 생성됨 — `scripts/gen_schemas.py` (C1~C7·C11 모델 30개. 나머지는 그 단계에서)
+- [x] 계약 패키지에서 JSON Schema가 생성됨 — `scripts/gen_schemas.py` (C1~C7·C11·C13 모델 33개. 나머지는 그 단계에서)
 - [x] `service_kit`으로 만든 빈 서비스 앱이 `/healthz`, `/manifest`에 답하고, 관리 콘솔에서 발급한 API 키로만 호출되며, 허용되지 않은 모드를 거부함 (C11) — `tests/test_service_kit.py` 28개. **관리 콘솔 화면(SVC-00~03)은 `web/`이라 아직 없다**
 - [x] 스파이크 S1~S5 ADR 작성 — ADR-0020~0024 (모두 「제안」, 수락 대기)
-- [ ] `packages/extension_api`(인터페이스)와 `core` 확장 호스트 골격, 빈 내장 확장 하나가 Studio·Bot UI에 태스크 종류·유틸리티를 기여함, 플랫폼이 특정 확장을 import하지 않음을 검사 테스트로 확인 ([ADR-0018](decisions/0018-extensions.md))
+- [x] `packages/extension_api`(인터페이스)와 `core` 확장 호스트 골격, 빈 내장 확장 하나가 Studio·Bot UI에 태스크 종류·유틸리티를 기여함, 플랫폼이 특정 확장을 import하지 않음을 검사 테스트로 확인 ([ADR-0018](decisions/0018-extensions.md)) — C13 모델·검사 규칙 E1~E6(`chaeksas.contracts.extension`), 인터페이스(`TaskExecutor`·`TaskEditor`·`BotUiUtility`·`PreflightCheck`·어댑터 해석기 규격), 호스트(`chaeksas.core.extensions`: 엔트리 포인트 `chaeksas.extensions` → 기여 등록 → `entry` 해석), 내장 확장 `ui-automation`의 `extension.json`. `tests/test_extension_host.py`·`tests/test_contracts_extension.py`. **화면·수행은 뼈대뿐이다** (UI 태스크 수행·셀렉터 등록 화면은 M4)
 - [x] `design/tokens.json` → 웹 CSS·Qt QSS·미리보기 생성기와 명암비 검사, CI가 생성물 최신 여부 확인 — `scripts/gen_tokens.py`. **Tailwind 테마는 `web/` 뼈대와 함께** (버전 미확정)
 - [ ] `web/` 워크스페이스: `packages/ui`(Button·StatusBadge·DataTable·Field·Dialog·EmptyState·ErrorBanner), `api-types`가 계약 JSON Schema에서 생성됨, Windows에서 `pnpm dev`
 - [ ] Qt 테마: 같은 토큰으로 밝게/어둡게, Pretendard 포함
