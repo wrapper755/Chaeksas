@@ -33,8 +33,9 @@ def test_interpreter_is_312() -> None:
 
 def test_workspace_members_match_disk() -> None:
     """이 표가 실제 멤버 목록과 같은가 (멤버를 더하면 표도 고쳐야 한다)."""
+    # as_posix(): Windows에서 `str()`은 `apps\admin`을 주므로 표와 비교할 수 없다.
     found = {
-        str(p.parent.relative_to(ROOT))
+        p.parent.relative_to(ROOT).as_posix()
         for pattern in ("packages/*", "apps/*", "extensions/*")
         for p in ROOT.glob(f"{pattern}/pyproject.toml")
     }
