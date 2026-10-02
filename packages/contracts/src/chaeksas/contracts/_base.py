@@ -48,6 +48,22 @@ class ContractModel(BaseModel):
         return self.model_dump(exclude_none=True)
 
 
+class Violation(ContractModel):
+    """검사·검증 규칙 위반 하나. 응답 `detail[]`의 한 줄이 된다.
+
+    C1의 검사 규칙(R1~R8)과 C2의 검증 규칙(V1~V8)이 같은 모양을 쓴다.
+    """
+
+    rule: str  # R1~R8 (C1) / V1~V8 (C2)
+    code: str | None = None  # 계약이 정한 사유 코드 (있을 때만)
+    message: str
+    items: list[str] = Field(default_factory=list)  # 걸린 항목
+
+    def __str__(self) -> str:
+        tail = f" {self.items}" if self.items else ""
+        return f"[{self.rule}{'/' + self.code if self.code else ''}] {self.message}{tail}"
+
+
 class SchemaVersioned(ContractModel):
     """최상위 계약 모델 — `schema` 번호를 가진다.
 

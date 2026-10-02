@@ -3,7 +3,8 @@ name = "chaeksas-contracts"
 version = "0.1.0"
 description = "공통 계약 — 주고받는 데이터 모델, 스키마 버전, 해시·서명 규칙 (C1~C14)"
 requires-python = ">=3.12,<3.13"
-dependencies = ["pydantic>=2.9"]
+# cryptography: C2의 Ed25519 서명 검증. 표준 라이브러리에 Ed25519가 없다.
+dependencies = ["cryptography>=43", "pydantic>=2.9"]
 
 [build-system]
 requires = ["hatchling"]

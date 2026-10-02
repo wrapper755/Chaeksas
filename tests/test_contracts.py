@@ -250,6 +250,30 @@ def test_r6_hash_mismatch_is_caught_only_when_computed() -> None:
     assert [x.code for x in v] == ["hash_mismatch"]
 
 
+def test_r6_with_real_package_hash(tmp_path: Any) -> None:
+    """C1 R6 + C2 해시 — 패키지 실물에서 계산한 값으로 검사한다 (더 이상 조건부가 아니다)."""
+    import json
+    from pathlib import Path
+
+    from chaeksas.contracts import content_hash_dir
+
+    root = Path(tmp_path) / "pkg"
+    (root / "process").mkdir(parents=True)
+    (root / "process" / "main.bpmn").write_bytes(b"<definitions/>")
+    body = manifest().to_json_dict()
+    (root / "manifest.json").write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
+
+    # 해시를 계산해 매니페스트에 적어 넣으면 통과한다.
+    real = content_hash_dir(root)
+    m = Manifest.model_validate(body | {"content_hash": real})
+    assert validate(m, computed_hash=real) == []
+
+    # 파일 하나를 고치면 해시가 달라지고 R6이 잡는다.
+    (root / "process" / "main.bpmn").write_bytes(b"<definitions changed=''/>")
+    v = validate(m, computed_hash=content_hash_dir(root))
+    assert [x.code for x in v] == ["hash_mismatch"]
+
+
 def test_r7_empty_toolpack_hash_is_caught() -> None:
     m = manifest(requires=Requires(toolpacks=[ToolpackRef(id="tp", version="1.0.0", content_hash="")]))
     assert [x.rule for x in validate(m)] == ["R7"]

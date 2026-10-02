@@ -15,10 +15,13 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.contracts import (
+    DeploymentClaim,
+    Envelope,
     EventBatchResponse,
     HeartbeatRequest,
     HeartbeatResponse,
     Manifest,
+    PackageClaim,
     RegisterRequest,
     RegisterResponse,
     RunEvent,
@@ -30,6 +33,10 @@ OUT_DIR = ROOT / "packages" / "contracts" / "schemas"
 # (파일 이름, 모델) — 이름 앞에 계약 번호를 붙여 문서에서 찾기 쉽게 한다.
 MODELS: list[tuple[str, Any]] = [
     ("c1-manifest", Manifest),
+    # C2: 봉투는 payload를 dict로 두므로(바이트 보존), claim 모양은 따로 내보낸다.
+    ("c2-envelope", Envelope),
+    ("c2-claim-deployment", DeploymentClaim),
+    ("c2-claim-package", PackageClaim),
     ("c3-run-event", RunEvent),
     ("c3-event-batch-response", EventBatchResponse),
     ("c4-register-request", RegisterRequest),

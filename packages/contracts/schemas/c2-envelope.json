@@ -1,0 +1,45 @@
+{
+  "$id": "urn:chaeksas:contracts:c2-envelope",
+  "additionalProperties": true,
+  "description": "서명 봉투. `payload`는 **받은 그대로** 둔다.",
+  "properties": {
+    "alg": {
+      "const": "ed25519",
+      "title": "Alg",
+      "type": "string"
+    },
+    "key_id": {
+      "pattern": "^[0-9a-f]{16}$",
+      "title": "Key Id",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "sig": {
+      "title": "Sig",
+      "type": "string"
+    },
+    "signed_at": {
+      "title": "Signed At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "payload",
+    "key_id",
+    "alg",
+    "sig",
+    "signed_at"
+  ],
+  "title": "Envelope",
+  "type": "object"
+}

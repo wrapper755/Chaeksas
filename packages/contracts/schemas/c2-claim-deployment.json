@@ -1,0 +1,100 @@
+{
+  "$defs": {
+    "DeploymentTarget": {
+      "additionalProperties": true,
+      "description": "`{type: \"bot_ui\" | \"server_runner\", id}`. 서버 배포는 `id`에 `\"*\"`를 쓸 수 있다.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "DeploymentTarget",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c2-claim-deployment",
+  "additionalProperties": true,
+  "description": "`kind: \"deployment\"` — 배포.",
+  "properties": {
+    "bpm_process_id": {
+      "title": "Bpm Process Id",
+      "type": "string"
+    },
+    "content_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "deployment_id": {
+      "title": "Deployment Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "kind": {
+      "const": "deployment",
+      "title": "Kind",
+      "type": "string"
+    },
+    "max_concurrency": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Concurrency"
+    },
+    "not_before": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Not Before"
+    },
+    "target": {
+      "$ref": "#/$defs/DeploymentTarget"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "deployment_id",
+    "target",
+    "bpm_process_id",
+    "version",
+    "content_hash"
+  ],
+  "title": "DeploymentClaim",
+  "type": "object"
+}

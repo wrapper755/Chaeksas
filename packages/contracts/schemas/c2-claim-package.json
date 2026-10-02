@@ -1,0 +1,33 @@
+{
+  "$id": "urn:chaeksas:contracts:c2-claim-package",
+  "additionalProperties": true,
+  "description": "`kind: \"package\"` — 패키지 승인.",
+  "properties": {
+    "content_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "package",
+      "title": "Kind",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "id",
+    "version",
+    "content_hash"
+  ],
+  "title": "PackageClaim",
+  "type": "object"
+}

@@ -11,7 +11,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, model_validator
 
-from chaeksas.contracts._base import ContractModel, SchemaVersioned, Sha256, Timestamp
+from chaeksas.contracts._base import ContractModel, SchemaVersioned, Sha256, Timestamp, Violation
 
 PackageKind = Literal["bpm_process", "process_lib", "toolpack"]
 RunLocation = Literal["server", "pc"]
@@ -171,19 +171,6 @@ class Manifest(SchemaVersioned):
         return self
 
 
-class Violation(ContractModel):
-    """검사 규칙 위반 하나. 422 응답 `detail[]`의 한 줄이 된다."""
-
-    rule: str  # R1~R8
-    code: str | None = None  # 계약이 정한 코드 (있을 때만)
-    message: str
-    items: list[str] = Field(default_factory=list)  # 걸린 항목 (R2 등)
-
-    def __str__(self) -> str:
-        tail = f" {self.items}" if self.items else ""
-        return f"[{self.rule}{'/' + self.code if self.code else ''}] {self.message}{tail}"
-
-
 def _check_r1(m: Manifest) -> list[Violation]:
     out = []
     if m.kind == "bpm_process":
@@ -290,7 +277,8 @@ def validate(
     인자를 주지 않으면 **매니페스트 하나만 보고 할 수 있는 검사**만 한다.
 
     - `lib_locations`: `<id>@<version>` → `"server"`\\|`"pc"`. 없으면 R3을 건너뛴다.
-    - `computed_hash`: C2 `content_hash(패키지)`로 계산한 값. 없으면 R6을 건너뛴다.
+    - `computed_hash`: 패키지 실물에서 계산한 해시. 없으면 R6을 건너뛴다.
+      폴더면 `chaeksas.contracts.hashing.content_hash_dir(root)`, zip이면 `content_hash_zip(path)`.
 
     여기서 하지 않는 것:
     - **R5** (키 값·비밀이 없음) — Studio 빌드가 보장한다. Center는 R4만 본다 (C1 검사 규칙 표).

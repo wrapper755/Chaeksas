@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp
+from chaeksas.contracts.signing import AdminKey
 
 #: 하트비트 기본 간격과 온라인 판정 (CON-03).
 DEFAULT_HEARTBEAT_S = 30
@@ -25,8 +26,9 @@ BotUiId = Annotated[str, Field(pattern=r"^bui_[0-9a-f]{8}$")]
 MachineId = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 """PC 고유값의 SHA-256. **원값은 보내지 않는다.**"""
 
-KeyId = Annotated[str, Field(pattern=r"^[0-9a-f]{16}$")]
-"""Admin 공개키 raw 32바이트의 SHA-256 앞 16 hex (C2)."""
+__all__ = [  # AdminKey는 C2가 소유한다 — 여기서는 다시 내보내기만 (C4 `admin_keys`)
+    "AdminKey",
+]
 
 # 알려진 값 (모두 열린 문자열).
 KNOWN_BOT_UI_STATUSES = frozenset(
@@ -65,15 +67,6 @@ class Runtimes(ContractModel):
     browsers: list[str] = Field(default_factory=list)
     desktop_backend: str | None = None
     extensions: list[ExtensionState] = Field(default_factory=list)
-
-
-class AdminKey(ContractModel):
-    """배포 서명 검증용 Admin 공개키 (C2). 철회된 키도 `revoked_at`과 함께 내려온다."""
-
-    key_id: KeyId
-    public_key: str  # raw 32바이트 base64
-    label: str | None = None
-    revoked_at: Timestamp | None = None
 
 
 class RegisterRequest(SchemaVersioned):

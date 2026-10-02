@@ -2,7 +2,7 @@
   "$defs": {
     "AdminKey": {
       "additionalProperties": true,
-      "description": "배포 서명 검증용 Admin 공개키 (C2). 철회된 키도 `revoked_at`과 함께 내려온다.",
+      "description": "Admin 공개키 하나. 철회된 키도 `revoked_at`과 함께 내려온다 (C4로 배포된다).",
       "properties": {
         "key_id": {
           "pattern": "^[0-9a-f]{16}$",

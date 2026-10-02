@@ -18,6 +18,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from chaeksas.contracts import (
+    Envelope,
     EventBatchResponse,
     HeartbeatRequest,
     HeartbeatResponse,
@@ -31,6 +32,7 @@ DOCS = Path(__file__).resolve().parent.parent / "docs" / "03-contracts"
 EXAMPLES: list[tuple[str, int, Any]] = [
     ("C1-package-manifest", 0, Manifest),  # 서버 Bot
     ("C1-package-manifest", 1, Manifest),  # PC Bot
+    ("C2-signing-envelope", 0, Envelope),  # 배포 봉투
     ("C3-run-events", 0, TypeAdapter(list[RunEvent])),  # 이벤트 배치
     ("C3-run-events", 1, EventBatchResponse),  # 응답
     ("C4-bot-ui-center", 0, HeartbeatRequest),
@@ -75,6 +77,17 @@ def test_c1_example_passes_validate() -> None:
     for index in (0, 1):
         m = Manifest.model_validate(json.loads(expand_abbreviations(json_blocks("C1-package-manifest")[index])))
         assert validate(m) == [], f"예시 {index}가 검사에 걸렸다: {[str(v) for v in validate(m)]}"
+
+
+def test_c2_example_payload_reads_as_a_deployment_claim() -> None:
+    """봉투 예시의 `payload`가 claim 모델과 맞는지 (`target`·`not_before: null` 포함)."""
+    from chaeksas.contracts import DeploymentClaim, parse_claim
+
+    env = Envelope.model_validate(json.loads(expand_abbreviations(json_blocks("C2-signing-envelope")[0])))
+    claim = parse_claim(env)
+    assert isinstance(claim, DeploymentClaim)
+    assert claim.target.type == "bot_ui"
+    assert claim.not_before is None
 
 
 def test_c3_example_data_keys_are_complete() -> None:

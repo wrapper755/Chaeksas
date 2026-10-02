@@ -5,7 +5,8 @@
 | 상태 | **합의** (2026-10-01, 독립 검토 반영) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Admin(서명) → Center(검증·보관) → Bot UI·서버 실행기(다시 검증) |
-| 코드 위치 | `packages/contracts/signing.py`, `packages/contracts/hashing.py` |
+| 코드 위치 | `packages/contracts/src/chaeksas/contracts/signing.py`, `…/hashing.py` (import `chaeksas.contracts.signing`, [ADR-0019](../decisions/0019-package-names.md)) |
+| JSON Schema | [`c2-envelope.json`](../../packages/contracts/schemas/c2-envelope.json) · [`c2-claim-deployment.json`](../../packages/contracts/schemas/c2-claim-deployment.json) · [`c2-claim-package.json`](../../packages/contracts/schemas/c2-claim-package.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0015](../decisions/0015-run-location.md) |
 | 관련 화면 | ADM(명령), CON-02·CON-03 「최근 배치 결정」, CON-06 |
 
