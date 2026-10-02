@@ -1,0 +1,33 @@
+{
+  "$id": "urn:chaeksas:contracts:c2-claim-extension",
+  "additionalProperties": true,
+  "description": "`kind: \"extension\"` — 외부 확장 정의 승인 (C13).\n\n정의가 서비스 앱 키를 어느 주소로 보낼지 정하므로 배포와 같은 관문을 둔다.\n`definition_hash`는 `canonical_json(정의)`의 해시다 (`contracts.extension.definition_hash`).",
+  "properties": {
+    "definition_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Definition Hash",
+      "type": "string"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "const": "extension",
+      "title": "Kind",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "id",
+    "version",
+    "definition_hash"
+  ],
+  "title": "ExtensionClaim",
+  "type": "object"
+}

@@ -1,0 +1,962 @@
+{
+  "$defs": {
+    "AdapterAuth": {
+      "additionalProperties": true,
+      "description": "어느 헤더에 키 참조로 푼 값을 넣나. **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다).",
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "AdapterAuth",
+      "type": "object"
+    },
+    "AdapterHealth": {
+      "additionalProperties": true,
+      "description": "없으면 Center는 상태를 「확인 전」으로 둔다.",
+      "properties": {
+        "expect_status": {
+          "default": 200,
+          "title": "Expect Status",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "AdapterHealth",
+      "type": "object"
+    },
+    "AdapterLimits": {
+      "additionalProperties": true,
+      "properties": {
+        "max_response_kb": {
+          "default": 1024,
+          "title": "Max Response Kb",
+          "type": "integer"
+        },
+        "timeout_s": {
+          "default": 60,
+          "title": "Timeout S",
+          "type": "integer"
+        }
+      },
+      "title": "AdapterLimits",
+      "type": "object"
+    },
+    "AdapterOperation": {
+      "additionalProperties": true,
+      "description": "외부 앱의 작업 하나. 기본값이 보수적이다 — 자율 수행만, 멱등 아님.\n\n`idempotent: false`인 작업이 결과를 모르는 실패(시간 초과·연결 끊김)를 만나면 자동으로\n다시 부르지 않는다. PC는 확인으로 넘기고, 서버는 실행 실패·오류 경계로 보낸다.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "idempotent": {
+          "default": false,
+          "title": "Idempotent",
+          "type": "boolean"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Schema"
+        },
+        "modes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Modes",
+          "type": "array"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        },
+        "request": {
+          "$ref": "#/$defs/AdapterRequest"
+        },
+        "response": {
+          "$ref": "#/$defs/AdapterResponse"
+        },
+        "retry_on": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Retry On",
+          "type": "array"
+        },
+        "server_ok": {
+          "default": true,
+          "title": "Server Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name",
+        "request"
+      ],
+      "title": "AdapterOperation",
+      "type": "object"
+    },
+    "AdapterRequest": {
+      "additionalProperties": true,
+      "description": "요청 템플릿. 값은 위치별로 인코딩한다 (§4-2).",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Body"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Headers",
+          "type": "object"
+        },
+        "method": {
+          "title": "Method",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "query": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Query",
+          "type": "object"
+        }
+      },
+      "required": [
+        "method",
+        "path"
+      ],
+      "title": "AdapterRequest",
+      "type": "object"
+    },
+    "AdapterResponse": {
+      "additionalProperties": true,
+      "description": "어디서 출력 필드를 꺼내나. 값은 제한된 JSONPath다.",
+      "properties": {
+        "error_when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ErrorWhen"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Output",
+          "type": "object"
+        }
+      },
+      "title": "AdapterResponse",
+      "type": "object"
+    },
+    "ConfigurationItem": {
+      "additionalProperties": true,
+      "description": "설정 화면의 칸 하나 (BUI-03 「확장별 설정」, STU-10, 서버 실행기 설정).\n\n**`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에 남기지 않는다.",
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "schema": {
+          "additionalProperties": true,
+          "title": "Schema",
+          "type": "object"
+        },
+        "scope": {
+          "title": "Scope",
+          "type": "string"
+        },
+        "secret": {
+          "default": false,
+          "title": "Secret",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "scope"
+      ],
+      "title": "ConfigurationItem",
+      "type": "object"
+    },
+    "ConsolePage": {
+      "additionalProperties": true,
+      "description": "그 서비스 앱 관리 콘솔의 고유 화면 (웹 모듈, `web/apps/svc-console`이 불러 쓴다).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "module": {
+          "title": "Module",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "module"
+      ],
+      "title": "ConsolePage",
+      "type": "object"
+    },
+    "Contributes": {
+      "additionalProperties": true,
+      "description": "기여 지점 (ADR-0018 §2). **모르는 열쇠는 무시한다** (호환 규칙) — `extra=\"allow\"`가 보관한다.",
+      "properties": {
+        "bot_ui.local_runtimes": {
+          "items": {
+            "$ref": "#/$defs/LocalRuntime"
+          },
+          "title": "Bot Ui.Local Runtimes",
+          "type": "array"
+        },
+        "bot_ui.utilities": {
+          "items": {
+            "$ref": "#/$defs/Utility"
+          },
+          "title": "Bot Ui.Utilities",
+          "type": "array"
+        },
+        "configuration": {
+          "items": {
+            "$ref": "#/$defs/ConfigurationItem"
+          },
+          "title": "Configuration",
+          "type": "array"
+        },
+        "console.pages": {
+          "items": {
+            "$ref": "#/$defs/ConsolePage"
+          },
+          "title": "Console.Pages",
+          "type": "array"
+        },
+        "preflight": {
+          "items": {
+            "$ref": "#/$defs/PreflightContribution"
+          },
+          "title": "Preflight",
+          "type": "array"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/ResourceContribution"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
+        "studio.editors": {
+          "items": {
+            "$ref": "#/$defs/StudioEditorContribution"
+          },
+          "title": "Studio.Editors",
+          "type": "array"
+        },
+        "studio.resource_views": {
+          "items": {
+            "$ref": "#/$defs/ResourceView"
+          },
+          "title": "Studio.Resource Views",
+          "type": "array"
+        },
+        "task_types": {
+          "items": {
+            "$ref": "#/$defs/TaskTypeContribution"
+          },
+          "title": "Task Types",
+          "type": "array"
+        }
+      },
+      "title": "Contributes",
+      "type": "object"
+    },
+    "Editor": {
+      "additionalProperties": true,
+      "description": "태스크 편집기. `kind=\"schema\"`면 입력 JSON Schema로 자동 폼을 만든다 (STU-14 방식).",
+      "properties": {
+        "entry": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entry"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "Editor",
+      "type": "object"
+    },
+    "ErrorWhen": {
+      "additionalProperties": true,
+      "description": "응답이 실패를 뜻하는 조건. `equals`·`not_equals`·`exists` 중 하나만 쓴다.",
+      "properties": {
+        "equals": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Equals"
+        },
+        "exists": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Exists"
+        },
+        "not_equals": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Equals"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "title": "ErrorWhen",
+      "type": "object"
+    },
+    "Executor": {
+      "additionalProperties": true,
+      "description": "`extension_api.TaskExecutor`를 구현한 객체를 가리킨다.",
+      "properties": {
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entry"
+      ],
+      "title": "Executor",
+      "type": "object"
+    },
+    "HttpAdapter": {
+      "additionalProperties": true,
+      "description": "C11을 따르지 않는 외부 앱을 **코드 없이** 붙이는 선언 (§4).\n\n해석기는 `chaeksas.core`에 하나뿐이고, 안전 규칙(https만·리다이렉트 금지·사설망 차단·\nDNS 고정·크기 상한)을 그 해석기가 지킨다.",
+      "properties": {
+        "allow_private_network": {
+          "default": false,
+          "title": "Allow Private Network",
+          "type": "boolean"
+        },
+        "allowed_hosts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Allowed Hosts",
+          "type": "array"
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AdapterAuth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "health": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AdapterHealth"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "limits": {
+          "$ref": "#/$defs/AdapterLimits"
+        },
+        "operations": {
+          "items": {
+            "$ref": "#/$defs/AdapterOperation"
+          },
+          "title": "Operations",
+          "type": "array"
+        }
+      },
+      "title": "HttpAdapter",
+      "type": "object"
+    },
+    "KeyNeed": {
+      "additionalProperties": true,
+      "description": "이 확장이 쓰는 서비스 앱 키 하나.\n\n- `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.\n- `utility`: Bot UI 유틸리티가 쓸 때. `configuration`의 `secret` 칸으로 받는다.",
+      "properties": {
+        "config_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Key"
+        },
+        "extra_scopes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Extra Scopes",
+          "type": "array"
+        },
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
+        }
+      },
+      "required": [
+        "purpose"
+      ],
+      "title": "KeyNeed",
+      "type": "object"
+    },
+    "LocalRuntime": {
+      "additionalProperties": true,
+      "description": "Bot UI가 띄우고 감시하는 로컬 프로세스 (BUI-09·11). **선언이고, 코드가 아니다.**\n\n포트를 코드에 적지 않는다 — 설정 이름(`port_setting`)과 기본값만 둔다 (CLAUDE.md §5).",
+      "properties": {
+        "command": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Command",
+          "type": "array"
+        },
+        "default_port": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Default Port"
+        },
+        "health": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Health"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "port_setting": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Port Setting"
+        },
+        "start": {
+          "default": "on_demand",
+          "title": "Start",
+          "type": "string"
+        },
+        "token_dir": {
+          "default": false,
+          "title": "Token Dir",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "command"
+      ],
+      "title": "LocalRuntime",
+      "type": "object"
+    },
+    "PreflightContribution": {
+      "additionalProperties": true,
+      "description": "사전 점검 하나 (`extension_api.PreflightCheck`).",
+      "properties": {
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "entry"
+      ],
+      "title": "PreflightContribution",
+      "type": "object"
+    },
+    "ResourceContribution": {
+      "additionalProperties": true,
+      "description": "Center 리소스 목록(C7)에 올릴 자원 갈래. 응답은 §5 공통 카탈로그 형식이다.",
+      "properties": {
+        "catalog_url": {
+          "title": "Catalog Url",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "label",
+        "catalog_url"
+      ],
+      "title": "ResourceContribution",
+      "type": "object"
+    },
+    "ResourceView": {
+      "additionalProperties": true,
+      "description": "Studio 리소스 탐색기(STU-03)의 한 갈래. **선언뿐이라 외부 확장도 쓸 수 있다.**",
+      "properties": {
+        "creates_task_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Creates Task Type"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "resource_type": {
+          "title": "Resource Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "resource_type"
+      ],
+      "title": "ResourceView",
+      "type": "object"
+    },
+    "Service": {
+      "additionalProperties": true,
+      "description": "서버 부분. **주소의 출처는 하나다** — Center 리소스 등록(C7)의 `base_url`이 있으면\n그것을, 없으면 이 값을 쓴다. 클라이언트 설정에 따로 두지 않는다.",
+      "properties": {
+        "adapter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpAdapter"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url"
+        },
+        "protocol": {
+          "title": "Protocol",
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol"
+      ],
+      "title": "Service",
+      "type": "object"
+    },
+    "StudioEditorContribution": {
+      "additionalProperties": true,
+      "description": "Studio 속성 패널의 태스크 편집기 (태스크 종류와 따로 더할 때).",
+      "properties": {
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        },
+        "task_type": {
+          "title": "Task Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_type",
+        "entry"
+      ],
+      "title": "StudioEditorContribution",
+      "type": "object"
+    },
+    "TaskTypeContribution": {
+      "additionalProperties": true,
+      "description": "Studio 팔레트·속성 편집기에 더하는 태스크 종류 하나 (실행기가 수행한다).",
+      "properties": {
+        "bpmn": {
+          "default": "serviceTask",
+          "title": "Bpmn",
+          "type": "string"
+        },
+        "editor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Editor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Executor"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icon"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "run_locations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Run Locations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "TaskTypeContribution",
+      "type": "object"
+    },
+    "Utility": {
+      "additionalProperties": true,
+      "description": "Bot UI 「도구」 메뉴·탭에 더하는 유틸리티 하나 (BUI-06~08).",
+      "properties": {
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "menu": {
+          "default": "tools",
+          "title": "Menu",
+          "type": "string"
+        },
+        "needs_runtime": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Needs Runtime"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "entry"
+      ],
+      "title": "Utility",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c13-extension-manifest",
+  "additionalProperties": true,
+  "description": "확장 정의 (C13 최상위). 파일 하나 = 확장 하나.",
+  "properties": {
+    "api": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Api"
+    },
+    "console_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Console Url"
+    },
+    "contributes": {
+      "$ref": "#/$defs/Contributes"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "docs_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Docs Url"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9-]{1,49}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "publisher": {
+      "title": "Publisher",
+      "type": "string"
+    },
+    "requires_keys": {
+      "items": {
+        "$ref": "#/$defs/KeyNeed"
+      },
+      "title": "Requires Keys",
+      "type": "array"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "service": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Service"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tier": {
+      "title": "Tier",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "version",
+    "name",
+    "publisher",
+    "tier"
+  ],
+  "title": "ExtensionManifest",
+  "type": "object"
+}

@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **합의** (2026-10-01, 독립 검토 반영). 모델·검사 규칙 **구현됨** |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·Bot UI·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
-| 코드 위치 | `packages/contracts/extension.py`, 인터페이스 `packages/extension_api/` |
+| 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |
 | 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md) |
 | 관련 화면 | BUI-01·03·11, STU-03·14·15, CON-07 |
 
@@ -18,6 +18,7 @@
 ### 내장·사내 확장
 
 - 확장 패키지 안에 `extension.json`을 둔다. 확장 호스트가 엔트리 포인트 `chaeksas.extensions`로 찾는다.
+  - **파이썬 패키지 안**이다 (`extensions/<id>/src/chaeksas/ext/<id>/extension.json`). 호스트가 `importlib.resources`로 읽으므로, 패키지 밖에 두면 설치 파일로 묶은 뒤 사라진다 ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md)).
 - 정의는 설치 파일에 들어 있으므로 서명된 설치 파일이 곧 신뢰의 근거다.
 - 실행하는 쪽(Bot UI, 서버 실행기)은 설치된 확장의 `{id, version, definition_hash}`를 Center에 보고한다 (C4·C12 `extensions`).
 - 서버 부분이 있으면 그 서비스 앱의 `/manifest`가 `extension: {id, version, definition_hash}`를 싣는다 (C11).
@@ -92,6 +93,8 @@
 
 - `run_locations`: 이 태스크 종류를 쓸 수 있는 실행 위치. `ui_task`는 `["pc"]`다.
 - `start`: `on_demand` 또는 `always`.
+- `command`: 로컬 런타임을 띄우는 명령. **`command[0]`을 PATH에서 찾는 것으로는 안 된다** — 설치 파일로 묶은 앱 안에는 콘솔 스크립트(`chk-worker`)가 없다 (PyInstaller는 실행 파일 하나를 만든다).
+  > 제안 ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md)): 내장·사내 확장에서는 `command`를 **`entry`**(런타임 진입점 문자열)로 바꾸고, 호스트가 실제 명령을 만든다. 묶였으면 `<Bot UI 실행 파일> --local-runtime <확장 id>:<런타임 id> --port <p> --token-dir <폴더>`, 개발 환경에서는 같은 인자로 `python -m chaeksas.bot_ui`. 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))과 서명을 함께 쓴다. ADR 수락 뒤 위 표의 `command`를 고친다.
 - `configuration`의 `scope`: `bot_ui`, `studio`, `server_runner` 중 하나.
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.
 - **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 키(`requires_keys` `utility`)도 이 칸으로 받는다.
@@ -99,6 +102,8 @@
   - `{"kind": "builtin", "entry": "…"}`: 확장이 준 편집기.
   - `{"kind": "schema"}`: 입력 JSON Schema로 만든 자동 폼 (STU-14 방식).
 - `executor`: `{"entry": "…"}`. `extension_api.TaskExecutor`를 구현한다.
+- **`entry` 형식: `"<모듈>:<이름>"`.** 모듈은 확장 이름 공간(`chaeksas.ext`) 밑에서 찾는다 — `ui_automation.client:UiTaskExecutor`는 `chaeksas.ext.ui_automation.client.UiTaskExecutor`다 ([ADR-0019](../decisions/0019-package-names.md)). 가리키는 것은 **인자 없이 만들 수 있는 클래스**(또는 이미 만들어진 객체)이고, 확장 호스트가 만들어 `extension_api`의 모양인지 확인한 뒤 켠다.
+  - 확장 호스트는 **그 확장의 패키지 안**만 허용한다. 정의가 다른 모듈(`os:getcwd` 같은 것)을 가리켜 import시킬 수 없다.
 - `resources[].catalog_url`: 상대 경로(서버 부분 기준) 또는 `allowed_hosts` 안의 주소. 응답은 §5 공통 카탈로그 형식이다.
 
 ### KeyNeed
@@ -197,11 +202,11 @@ Operation:
     {"purpose": "utility", "extra_scopes": ["registry_write"], "config_key": "registrar_key"}],
   "contributes": {
     "task_types": [{"id": "ui_task", "label": "UI 태스크", "icon": "mouse-pointer-click", "bpmn": "serviceTask",
-                    "editor": {"kind": "builtin", "entry": "ui_automation.studio:UiTaskEditor"},
+                    "editor": {"kind": "builtin", "entry": "ui_automation.client:UiTaskEditor"},
                     "executor": {"entry": "ui_automation.client:UiTaskExecutor"}, "run_locations": ["pc"]}],
     "studio.resource_views": [{"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page", "creates_task_type": "ui_task"}],
     "bot_ui.utilities": [{"id": "selector-registration", "label": "UI 셀렉터 등록", "menu": "tools",
-                          "entry": "ui_automation.bot_ui:SelectorRegistration", "needs_runtime": "worker"}],
+                          "entry": "ui_automation.client:SelectorRegistration", "needs_runtime": "worker"}],
     "bot_ui.local_runtimes": [{"id": "worker", "label": "Worker 프로세스", "command": ["chk-worker"],
                                "port_setting": "CHK_WORKER__LOCAL_API__PORT", "default_port": 8899,
                                "health": "/v1/health", "token_dir": true, "start": "on_demand"}],
@@ -264,6 +269,8 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 | --- | --- | --- | --- |
 | 2026-10-01 | 1 | 초안 | 0018 |
 | 2026-10-01 | 1 | 검토 반영 (아래) | — |
+| 2026-10-02 | 1 | 구현하며 명시한 것: `entry` 형식과 그 확장 패키지 안으로 제한, 예시의 편집기·유틸리티 entry를 `client`로 (ADR-0018 §6 폴더 구성) | 0018 |
+| 2026-10-02 | 1 | 설치 파일로 묶어 보고 명시한 것: `extension.json`은 파이썬 패키지 안, `command[0]`은 PATH에만 의존하지 않는다(제안) | 0020 |
 
 검토 반영 내용:
 

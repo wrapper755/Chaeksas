@@ -19,8 +19,10 @@ from pydantic import TypeAdapter
 
 from chaeksas.contracts import (
     ApprovalCreateRequest,
+    Catalog,
     Envelope,
     EventBatchResponse,
+    ExtensionManifest,
     HeartbeatRequest,
     HeartbeatResponse,
     Manifest,
@@ -39,6 +41,9 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C4-bot-ui-center", 0, HeartbeatRequest),
     ("C4-bot-ui-center", 1, HeartbeatResponse),
     ("C6-approvals", 0, ApprovalCreateRequest),
+    ("C13-extension-manifest", 0, Catalog),  # 공통 카탈로그 형식
+    ("C13-extension-manifest", 1, ExtensionManifest),  # 내장 확장
+    ("C13-extension-manifest", 2, ExtensionManifest),  # 외부 확장
 ]
 
 
@@ -48,9 +53,11 @@ def json_blocks(doc: str) -> list[str]:
 
 
 def expand_abbreviations(raw: str) -> str:
-    """문서가 읽기 쉽게 줄여 쓴 값을 늘린다 (`sha256:9f2c…` → 64자, `"…": "…"` 제거)."""
+    """문서가 읽기 쉽게 줄여 쓴 값을 늘린다 (`sha256:9f2c…` → 64자, `"…"` 자리 제거·채우기)."""
     raw = re.sub(r'"sha256:([0-9a-f]*)…"', lambda m: '"sha256:' + (m.group(1) + "0" * 64)[:64] + '"', raw)
-    raw = re.sub(r',?\s*"…"\s*:\s*"…"', "", raw)  # 봉투 payload의 생략 표시 (앞 쉼표까지)
+    # 시간 칸의 생략 표시는 지울 수 없다 (시간대까지 있어야 통과한다) — 실제 값으로 채운다.
+    raw = re.sub(r'"(\w*(?:_at|At))":\s*"…"', r'"\1": "2026-10-01T09:00:00+09:00"', raw)
+    raw = re.sub(r',?\s*"…"\s*:\s*"[^"]*"', "", raw)  # 생략 표시 칸 (앞 쉼표까지)
     raw = re.sub(r'"sig":\s*"…"', '"sig": "QUJD"', raw)
     return raw
 
@@ -90,6 +97,19 @@ def test_c2_example_payload_reads_as_a_deployment_claim() -> None:
     assert isinstance(claim, DeploymentClaim)
     assert claim.target.type == "bot_ui"
     assert claim.not_before is None
+
+
+def test_c13_examples_pass_validate() -> None:
+    """C13 예시 둘은 검사 규칙(E1·E3·모양)을 통과하고, 내장 쪽은 api 범위도 맞아야 한다."""
+    from chaeksas.contracts import check_extension_api, validate_extension
+    from chaeksas.extension_api import API_VERSION
+
+    blocks = json_blocks("C13-extension-manifest")
+    builtin = ExtensionManifest.model_validate(json.loads(expand_abbreviations(blocks[1])))
+    external = ExtensionManifest.model_validate(json.loads(expand_abbreviations(blocks[2])))
+    for m in (builtin, external):
+        assert validate_extension(m) == [], f"{m.id}: {[str(v) for v in validate_extension(m)]}"
+    assert check_extension_api(builtin, api_version=API_VERSION) == []
 
 
 def test_c3_example_data_keys_are_complete() -> None:
