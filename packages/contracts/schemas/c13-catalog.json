@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "CatalogItem": {
+      "additionalProperties": true,
+      "description": "공통 카탈로그 항목 (§5). `data`의 모양은 확장이 정하고, Center는 해석하지 않는다.",
+      "properties": {
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summary"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "CatalogItem",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c13-catalog",
+  "additionalProperties": true,
+  "description": "`resources[].catalog_url`의 응답 (§5).\n\n**비밀·셀렉터·업무 값을 넣지 않는다.** 카탈로그는 서버망 안에서만 연다.",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/CatalogItem"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "revision": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revision"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "title": "Catalog",
+  "type": "object"
+}

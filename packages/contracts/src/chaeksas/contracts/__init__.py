@@ -15,6 +15,7 @@
 | C6 | `approvals` | 결재 요청·답 + 폼으로 답 검증 |
 | C7 | `resources`, `center_keys` | 리소스 목록 + 누락 검사, Center API 키 |
 | C11 | `service_app` | 서비스 앱 공통 (manifest·작업 호출·키·멱등). 뼈대는 `chaeksas.service_kit` |
+| C13 | `extension` | 확장 정의 + 검사 규칙 E1~E6. 호스트는 `chaeksas.core.extensions` |
 
 검사 함수가 계약마다 있어서, 이름이 겹치는 것은 루트에서 계약을 붙여 다시 내보낸다
 (`validate_approval_create`, `validate_center_key_create`). 모듈 안의 이름은 계약 문서 그대로다.
@@ -83,6 +84,39 @@ from chaeksas.contracts.events import (
     RunEvent,
     missing_data_keys,
 )
+from chaeksas.contracts.extension import (
+    AdapterAuth,
+    AdapterHealth,
+    AdapterLimits,
+    AdapterOperation,
+    AdapterRequest,
+    AdapterResponse,
+    Catalog,
+    CatalogItem,
+    ConfigurationItem,
+    ConsolePage,
+    Contributes,
+    Editor,
+    ErrorWhen,
+    Executor,
+    ExtensionManifest,
+    HttpAdapter,
+    KeyNeed,
+    LocalRuntime,
+    PreflightContribution,
+    ResourceContribution,
+    ResourceView,
+    Service,
+    StudioEditorContribution,
+    TaskTypeContribution,
+    Utility,
+    definition_hash,
+    task_type_conflicts,
+    verify_external,
+)
+from chaeksas.contracts.extension import check_api as check_extension_api
+from chaeksas.contracts.extension import check_size as check_extension_size
+from chaeksas.contracts.extension import validate as validate_extension
 from chaeksas.contracts.hashing import (
     FloatInPayloadError,
     canonical_json,
@@ -143,6 +177,7 @@ from chaeksas.contracts.signing import (
     DeploymentClaim,
     DeploymentTarget,
     Envelope,
+    ExtensionClaim,
     PackageClaim,
     RevokeClaim,
     key_id_for,
@@ -181,6 +216,7 @@ __all__ = [
     "DeploymentClaim",
     "DeploymentTarget",
     "Envelope",
+    "ExtensionClaim",
     "FloatInPayloadError",
     "PackageClaim",
     "RevokeClaim",
@@ -281,4 +317,36 @@ __all__ = [
     "resolve_mode",
     "service_app_key_state",
     "service_app_prefix_of",
+    # C13 (`ExtensionClaim`은 C2가 소유한다)
+    "AdapterAuth",
+    "AdapterHealth",
+    "AdapterLimits",
+    "AdapterOperation",
+    "AdapterRequest",
+    "AdapterResponse",
+    "Catalog",
+    "CatalogItem",
+    "ConfigurationItem",
+    "ConsolePage",
+    "Contributes",
+    "Editor",
+    "ErrorWhen",
+    "Executor",
+    "ExtensionManifest",
+    "HttpAdapter",
+    "KeyNeed",
+    "LocalRuntime",
+    "PreflightContribution",
+    "ResourceContribution",
+    "ResourceView",
+    "Service",
+    "StudioEditorContribution",
+    "TaskTypeContribution",
+    "Utility",
+    "check_extension_api",
+    "check_extension_size",
+    "definition_hash",
+    "task_type_conflicts",
+    "validate_extension",
+    "verify_external",
 ]

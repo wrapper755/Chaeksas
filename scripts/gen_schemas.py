@@ -18,6 +18,7 @@ from chaeksas.contracts import (
     AnswerRequest,
     ApprovalCreateRequest,
     ApprovalInfo,
+    Catalog,
     CenterKeyCreated,
     CenterKeyCreateRequest,
     CenterKeyInfo,
@@ -27,6 +28,8 @@ from chaeksas.contracts import (
     Envelope,
     ErrorBody,
     EventBatchResponse,
+    ExtensionClaim,
+    ExtensionManifest,
     ExtensionResource,
     HealthResponse,
     HeartbeatRequest,
@@ -62,6 +65,7 @@ MODELS: list[tuple[str, Any]] = [
     ("c2-envelope", Envelope),
     ("c2-claim-deployment", DeploymentClaim),
     ("c2-claim-package", PackageClaim),
+    ("c2-claim-extension", ExtensionClaim),
     ("c3-run-event", RunEvent),
     ("c3-event-batch-response", EventBatchResponse),
     ("c4-register-request", RegisterRequest),
@@ -88,6 +92,8 @@ MODELS: list[tuple[str, Any]] = [
     ("c11-op-request", OpRequest),
     ("c11-op-response", OpResponse),
     ("c11-health-response", HealthResponse),
+    ("c13-extension-manifest", ExtensionManifest),
+    ("c13-catalog", Catalog),
 ]
 
 

@@ -104,6 +104,19 @@ class PackageClaim(ContractModel):
     content_hash: Sha256
 
 
+class ExtensionClaim(ContractModel):
+    """`kind: "extension"` — 외부 확장 정의 승인 (C13).
+
+    정의가 서비스 앱 키를 어느 주소로 보낼지 정하므로 배포와 같은 관문을 둔다.
+    `definition_hash`는 `canonical_json(정의)`의 해시다 (`contracts.extension.definition_hash`).
+    """
+
+    kind: Literal["extension"]
+    id: str
+    version: str
+    definition_hash: Sha256
+
+
 class AdminKeyClaim(ContractModel):
     """`kind: "admin_key"` — Admin 공개키 추가."""
 
@@ -141,7 +154,7 @@ class Envelope(SchemaVersioned):
         return bytes.fromhex(sha256_hex(canonical_json(self.payload)))
 
 
-def parse_claim(envelope: Envelope) -> DeploymentClaim | PackageClaim | AdminKeyClaim | RevokeClaim:
+def parse_claim(envelope: Envelope) -> DeploymentClaim | PackageClaim | ExtensionClaim | AdminKeyClaim | RevokeClaim:
     """`payload`를 종류에 맞는 모델로 읽는다 (검증과 별개로, 값을 쓰려고).
 
     모르는 종류면 `ValueError`. 검증은 `verify()`가 한다.
@@ -151,6 +164,8 @@ def parse_claim(envelope: Envelope) -> DeploymentClaim | PackageClaim | AdminKey
         return DeploymentClaim.model_validate(envelope.payload)
     if kind == "package":
         return PackageClaim.model_validate(envelope.payload)
+    if kind == "extension":
+        return ExtensionClaim.model_validate(envelope.payload)
     if kind == "admin_key":
         return AdminKeyClaim.model_validate(envelope.payload)
     if kind.endswith("_revoke") or kind == "revoke":
