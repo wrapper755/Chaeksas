@@ -1,0 +1,68 @@
+# CI — Windows 클라이언트 + Linux 서버 조합에서 확인한다 (docs/05-roadmap.md 원칙:
+# "내 PC에서 된다"는 완료가 아니다).
+#
+# 러너는 GitHub이 띄우는 VM이다. ubuntu-latest는 x86_64, windows-latest는 Windows Server다.
+# 개발 PC(aarch64 Linux)와 다른 환경이라, 여기서 처음 드러나는 문제가 있다.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# 같은 브랜치에 연달아 푸시하면 앞의 실행을 끊는다 (무료 한도 절약).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: 테스트 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false # 한쪽이 깨져도 다른 쪽 결과를 봐야 한다
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # Python은 uv가 내려받는다 (.python-version = 3.12, ADR-0005).
+      # PYTHONUTF8은 **일부러 켜지 않는다** — Windows 기본 인코딩에서 돌려야
+      # `encoding="utf-8"`을 빠뜨린 곳이 드러난다 (CLAUDE.md §5).
+      #
+      # setup-uv는 떠 있는 메이저 태그(v10)가 없어 정확한 버전으로 고정한다.
+      # 올릴 때는 이 줄을 손으로 고친다.
+      - name: uv 설치
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Python 3.12 (uv 관리형)
+        run: uv python install
+
+      # --frozen: uv.lock을 그대로 쓴다. lock이 pyproject와 어긋나면 여기서 멈춘다.
+      - name: 의존성
+        run: uv sync --all-packages --frozen
+
+      - name: 테스트
+        run: uv run pytest
+
+      - name: ruff
+        run: uv run ruff check .
+
+      - name: mypy
+        run: uv run mypy
+
+      # 생성물이 원본과 어긋나면 멈춘다. 둘 다 아무것도 쓰지 않고 검사만 한다.
+      - name: 계약 JSON Schema 최신 여부
+        run: uv run python scripts/gen_schemas.py --check
+
+      - name: 업무 예제 생성물 최신 여부
+        run: uv run python docs/08-business-examples/_source/build.py --check
+
+      # 작업 트리가 더러워졌다면 생성물을 커밋하지 않은 것이다 (--check가 놓친 경우).
+      - name: 작업 트리가 깨끗한가
+        run: git diff --exit-code
