@@ -95,7 +95,7 @@ contracts ◀── extension_api ◀── core ◀── studio, bot_ui, serve
 
 | 기능 | Windows (주) | Linux (선택) | 비고 |
 | --- | --- | --- | --- |
-| 데스크톱 앱 조작 (Worker) | UIA (`pywinauto` 또는 `uiautomation`) | AT-SPI | 프로토타입은 AT-SPI만 실사용 |
+| 데스크톱 앱 조작 (Worker) | UIA (`uiautomation`, [ADR-0020](decisions/0020-windows-desktop-backend.md) 제안) | AT-SPI | 프로토타입은 AT-SPI만 실사용. Windows는 S1에서 메모장·엑셀로 확인 |
 | 화면 캡처 (Worker) | `mss`/Win32, DPI 인식 필수 | xdg-desktop-portal, Pillow | 배율(125%, 150%) 주의 |
 | 브라우저 조작 (Worker) | Playwright (Chromium/Edge) | Playwright | 공통 |
 | Bot UI 로그인 시 자동 시작 | 시작 프로그램 / 작업 스케줄러 | XDG autostart | 트레이 하나만 |
