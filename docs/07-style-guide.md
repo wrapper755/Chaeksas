@@ -64,7 +64,10 @@
 | `size.caption` 12 | | 배지, 보조 정보, 시각 |
 
 - 숫자 열은 `font-variant-numeric: tabular-nums` + 오른쪽 정렬.
-- 글꼴 파일은 저장소에 포함한다 (Windows 현장 PC에 Pretendard가 없으므로). 웹은 `next/font`로 자체 호스팅 (외부 CDN 금지 — 사내망).
+- 글꼴 파일은 저장소에 포함한다 (Windows 현장 PC에 Pretendard가 없으므로). **외부 CDN 금지** — 사내망이다.
+  - 웹: `web/packages/ui/src/fonts/`의 가변 woff2 하나를 `@font-face`로 자체 호스팅한다. 패밀리 이름을 토큰의 글꼴 스택에 적힌 이름(`Pretendard Variable`)과 **같게** 선언해, 화면 코드가 토큰만 보면 되게 한다.
+  - 데스크톱: `packages/qt/src/chaeksas/qt/fonts/`의 **굵기별 정적 OTF**를 `load_fonts()`가 등록한다 (Qt는 가변 글꼴의 굵기 축을 고르게 다루지 못한다).
+  - 라이선스 파일(SIL OFL 1.1)을 글꼴과 함께 둔다.
 
 ### 2-4. 간격·크기·모양
 

@@ -71,7 +71,7 @@ pnpm --filter @chaeksas/center-console dev   # 하나만 — http://localhost:85
 - 계약을 고치면 **두 단계**다: `uv run python scripts/gen_schemas.py` (스키마) → `pnpm gen:api-types` (타입). 손으로 타입을 쓰지 않는다.
 - 토큰을 바꾸면 `uv run python scripts/gen_tokens.py`로 웹 CSS·Tailwind 테마·상태 표·Qt QSS를 다시 만든다.
 - Tailwind 4는 설정 파일이 없다 — 테마가 CSS(`@theme`)다. 그래서 토큰 생성기가 `web/packages/ui/src/theme.css`를 만든다.
-- 사내망에서 글꼴을 외부 CDN으로 받지 않는다. Pretendard 파일은 저장소에 포함한다.
+- 사내망에서 글꼴을 외부 CDN으로 받지 않는다. Pretendard·JetBrains Mono는 **저장소에 들어 있다** (웹 `web/packages/ui/src/fonts/`, 데스크톱 `packages/qt/src/chaeksas/qt/fonts/`). 따로 깔 것이 없다.
 
 ### Windows 주의점
 

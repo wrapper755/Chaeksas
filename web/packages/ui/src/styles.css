@@ -1,6 +1,7 @@
 /* 모든 웹 화면이 이 파일 하나를 불러온다 (앱의 globals.css에서 import).
    tokens.css·theme.css는 생성물이다 — design/tokens.json을 고친 뒤 scripts/gen_tokens.py. */
 @import "tailwindcss";
+@import "./fonts.css";
 @import "./tokens.css";
 @import "./theme.css";
 

@@ -136,9 +136,29 @@ def test_following_the_system_connects_once(app: Any) -> None:
     assert getattr(app, "_chk_theme_following", False) is True
 
 
-def test_load_fonts_does_not_fail_without_font_files() -> None:
-    """글꼴 바이너리는 아직 저장소에 없다 (`fonts/README.md`). 없으면 조용히 넘어간다."""
-    assert isinstance(load_fonts(), list)
+def test_load_fonts_registers_the_bundled_families(app: Any) -> None:
+    """포함한 글꼴이 실제로 등록되는가 (`fonts/README.md`).
+
+    현장 PC에 Pretendard가 없어서 저장소에 넣었다 — 등록이 안 되면 한글이 시스템 글꼴로
+    떨어지고, 화면 폭 계산이 설계서와 달라진다.
+    """
+    from PySide6.QtGui import QFontDatabase
+
+    families = load_fonts()
+    assert "Pretendard" in families, families
+    assert "JetBrains Mono" in families, families
+    # QSS의 글꼴 스택이 가리키는 이름으로 잡혀야 한다.
+    assert "Pretendard" in QFontDatabase.families()
+    # 스타일 가이드가 쓰는 네 굵기 (400·500·600·700).
+    assert {"Regular", "Medium", "SemiBold", "Bold"} <= set(QFontDatabase.styles("Pretendard"))
+
+
+def test_fonts_ship_with_the_license() -> None:
+    """OFL은 재배포할 때 라이선스를 함께 두라고 한다."""
+    from importlib.resources import files
+
+    names = {entry.name for entry in files("chaeksas.qt.fonts").iterdir()}
+    assert {"OFL-Pretendard.txt", "OFL-JetBrainsMono.txt"} <= names, sorted(names)
 
 
 # ─────────────────────────── 상태 색 ───────────────────────────

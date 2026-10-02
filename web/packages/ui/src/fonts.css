@@ -1,0 +1,21 @@
+/* 글꼴 자체 호스팅 — **외부 CDN을 쓰지 않는다** (사내망, 스타일 가이드 §2-3).
+   패밀리 이름은 `design/tokens.json`의 글꼴 스택에 적힌 이름 그대로다
+   (`Pretendard Variable`, `JetBrains Mono`). 그래서 토큰을 고치지 않고도 이어진다.
+   라이선스: SIL OFL 1.1 — `OFL-Pretendard.txt`, `OFL-JetBrainsMono.txt`. */
+
+@font-face {
+  font-family: "Pretendard Variable";
+  /* 가변 글꼴 하나로 모든 굵기를 덮는다 (정적 파일 네 개보다 작다). */
+  src: url("./fonts/PretendardVariable.woff2") format("woff2-variations");
+  font-weight: 45 920;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("./fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
