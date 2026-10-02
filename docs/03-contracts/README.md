@@ -9,7 +9,7 @@
 2. **스키마 버전을 명시한다.** 계약마다 `schema` 정수를 가진다. 필드 **추가**는 같은 번호에서, 필드 **변경·삭제**는 번호를 올린다.
 3. **받는 쪽은 관대하게.** 모르는 이벤트 종류·선택 필드는 거부하지 않고 저장·무시한다. 필수 필드 누락만 거부한다.
 4. **보내는 쪽은 엄격하게.** 보낼 때는 모델로 만들고 검증한다.
-5. **JSON Schema를 내보낸다.** 모델에서 `schemas/*.json`을 생성해 문서에 링크한다 (M1). 다른 언어 도구도 같은 명세를 쓸 수 있다.
+5. **JSON Schema를 내보낸다.** 모델에서 `packages/contracts/schemas/*.json`을 생성해 문서에 링크한다 — `uv run python scripts/gen_schemas.py` (`--check`는 생성물이 모델과 다르면 1로 끝난다). 다른 언어 도구도 같은 명세를 쓸 수 있다. 스키마는 **생성물이니 직접 고치지 않는다.**
 6. **값은 기록하지 않는다.** 실행 기록·보고에 업무 값, 결재 답, 비밀, 스크린샷을 넣지 않는다 (기본값). 필요하면 명시적 옵션으로.
 7. **수행 모드를 싣는다.** Worker·서비스 앱에 가는 요청은 `mode`(autonomous / deterministic)를 가진다. 받는 쪽은 모드를 바꾸지 않는다. 유일한 예외는 C11의 폴백이며, 호출한 키가 자율 수행을 허용할 때만 일어나고 응답 `mode_used`로 드러난다.
 8. **식별자로 서로를 잇는다.** 실행(`run_id`) ↔ UI 세션(`business_key`) ↔ 결재·확인(`request_id`) ↔ 서비스 앱 호출(`run_id`, `node_id`) 연결은 계약 필드로 한다.
@@ -36,6 +36,16 @@
 | [C14](C14-bpmn-extensions.md) | BPMN 확장 속성 (`chk:*` — 태스크 종류별 속성, 반복·파일 출력·이벤트 규칙, 시험 케이스 형식·비교 규칙, 실행 전 검사 B1~B13) | Studio → 패키지 → 실행기·서버 실행기, Center 업로드 검사 | 초안 | Studio `agentworks:*` 확장 속성 ([업무 예제](../08-business-examples/README.md)가 이 형식으로 쓰였다) |
 
 새 계약 문서는 [template.md](template.md)를 복사해 `C<번호>-<이름>.md`로 만든다.
+
+### 코드로 있는 것
+
+| 계약 | 모듈 | 검사 함수 | 문서 예시 시험 |
+| --- | --- | --- | --- |
+| C1 | `chaeksas.contracts.manifest` | `validate()` — R1·R2·R3·R4·R6·R7 (R5는 Studio, R8은 Center 배포 때) | `tests/test_contract_examples.py` |
+| C3 | `chaeksas.contracts.events` | `missing_data_keys()` — 줄 단위 거부용 | 같음 |
+| C4 | `chaeksas.contracts.bot_ui` | (모델 검증만) | 같음 |
+
+문서의 JSON 예시는 **테스트가 문서에서 뽑아** 모델로 검증한다. 예시를 고치면 테스트가 깨지므로 문서와 코드가 어긋날 수 없다 (프로토타입에서 `X-Bot-Id` 헤더·`{"events": […]}` 본문이 코드와 달랐던 일).
 
 ## 프로토타입에서 이미 알려진 결함 (새 계약에서 막을 것)
 

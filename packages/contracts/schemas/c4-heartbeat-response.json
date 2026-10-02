@@ -1,0 +1,236 @@
+{
+  "$defs": {
+    "AdminKey": {
+      "additionalProperties": true,
+      "description": "배포 서명 검증용 Admin 공개키 (C2). 철회된 키도 `revoked_at`과 함께 내려온다.",
+      "properties": {
+        "key_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Key Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "public_key": {
+          "title": "Public Key",
+          "type": "string"
+        },
+        "revoked_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revoked At"
+        }
+      },
+      "required": [
+        "key_id",
+        "public_key"
+      ],
+      "title": "AdminKey",
+      "type": "object"
+    },
+    "ApprovalDispatch": {
+      "additionalProperties": true,
+      "description": "답이 정해진 결재 (C6).",
+      "properties": {
+        "answer": {
+          "default": null,
+          "title": "Answer"
+        },
+        "answered_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answered At"
+        },
+        "answered_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answered By"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "state"
+      ],
+      "title": "ApprovalDispatch",
+      "type": "object"
+    },
+    "JobDispatch": {
+      "additionalProperties": true,
+      "description": "내려온 작업 하나. ack가 올 때까지 매번 실린다.",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "inputs": {
+          "additionalProperties": true,
+          "title": "Inputs",
+          "type": "object"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "requested_at": {
+          "title": "Requested At",
+          "type": "string"
+        },
+        "requested_by": {
+          "title": "Requested By",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "job_id",
+        "bpm_process_id",
+        "requested_by",
+        "requested_at"
+      ],
+      "title": "JobDispatch",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c4-heartbeat-response",
+  "additionalProperties": true,
+  "description": "하트비트 응답 — 지시는 모두 여기 실려 내려온다 (ADR-0007).\n\n`deployments`는 **저장된 JSON 그대로** 다룬다. C2 봉투를 모델로 바꿔 다시 직렬화하면\n`canonical_json`이 달라져 서명이 깨지므로, 일부러 `dict`로 둔다.",
+  "properties": {
+    "admin_keys": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/AdminKey"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Admin Keys"
+    },
+    "approvals": {
+      "items": {
+        "$ref": "#/$defs/ApprovalDispatch"
+      },
+      "title": "Approvals",
+      "type": "array"
+    },
+    "cancel_jobs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Cancel Jobs",
+      "type": "array"
+    },
+    "deployments": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Deployments",
+      "type": "array"
+    },
+    "disabled": {
+      "default": false,
+      "title": "Disabled",
+      "type": "boolean"
+    },
+    "jobs": {
+      "items": {
+        "$ref": "#/$defs/JobDispatch"
+      },
+      "title": "Jobs",
+      "type": "array"
+    },
+    "next_heartbeat_s": {
+      "default": 30,
+      "title": "Next Heartbeat S",
+      "type": "integer"
+    },
+    "server_time": {
+      "title": "Server Time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "server_time"
+  ],
+  "title": "HeartbeatResponse",
+  "type": "object"
+}

@@ -1,0 +1,55 @@
+{
+  "$defs": {
+    "RejectedLine": {
+      "additionalProperties": true,
+      "description": "받지 못한 줄 하나.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "seq": {
+          "title": "Seq",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "seq",
+        "code"
+      ],
+      "title": "RejectedLine",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c3-event-batch-response",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/runs/{run_id}/events`의 응답.",
+  "properties": {
+    "accepted": {
+      "title": "Accepted",
+      "type": "integer"
+    },
+    "duplicates": {
+      "default": 0,
+      "title": "Duplicates",
+      "type": "integer"
+    },
+    "rejected": {
+      "items": {
+        "$ref": "#/$defs/RejectedLine"
+      },
+      "title": "Rejected",
+      "type": "array"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "accepted"
+  ],
+  "title": "EventBatchResponse",
+  "type": "object"
+}

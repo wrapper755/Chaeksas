@@ -1,0 +1,549 @@
+{
+  "$defs": {
+    "ApprovalAck": {
+      "additionalProperties": true,
+      "properties": {
+        "accepted": {
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "accepted"
+      ],
+      "title": "ApprovalAck",
+      "type": "object"
+    },
+    "CurrentRun": {
+      "additionalProperties": true,
+      "description": "실행 자리 1건 (ADR-0014).",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node Id"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "bpm_process_id",
+        "version",
+        "state",
+        "started_at",
+        "source"
+      ],
+      "title": "CurrentRun",
+      "type": "object"
+    },
+    "DeploymentResult": {
+      "additionalProperties": true,
+      "description": "배포 적용 결정 (CON-03 「최근 배치 결정」). 실행이 아니므로 C3로 보내지 않는다.",
+      "properties": {
+        "at": {
+          "title": "At",
+          "type": "string"
+        },
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "deployment_id": {
+          "title": "Deployment Id",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "title": "Result",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "deployment_id",
+        "bpm_process_id",
+        "version",
+        "result",
+        "at"
+      ],
+      "title": "DeploymentResult",
+      "type": "object"
+    },
+    "ExtensionState": {
+      "additionalProperties": true,
+      "description": "설치된 확장 하나 (C13).",
+      "properties": {
+        "definition_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition Hash"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionState",
+      "type": "object"
+    },
+    "JobAck": {
+      "additionalProperties": true,
+      "description": "이번 주기에 처리한 작업 하나.",
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Position"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "title": "Result",
+          "type": "string"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        }
+      },
+      "required": [
+        "job_id",
+        "result"
+      ],
+      "title": "JobAck",
+      "type": "object"
+    },
+    "Queue": {
+      "additionalProperties": true,
+      "description": "대기열. `items`는 순서대로.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/QueueItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "max": {
+          "title": "Max",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max"
+      ],
+      "title": "Queue",
+      "type": "object"
+    },
+    "QueueItem": {
+      "additionalProperties": true,
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "queue_id": {
+          "title": "Queue Id",
+          "type": "string"
+        },
+        "requested_at": {
+          "title": "Requested At",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "queue_id",
+        "source",
+        "bpm_process_id",
+        "requested_at"
+      ],
+      "title": "QueueItem",
+      "type": "object"
+    },
+    "Readiness": {
+      "additionalProperties": true,
+      "description": "설치된 Bot 하나의 준비 상태.",
+      "properties": {
+        "blocked": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "missing_key_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Key Refs",
+          "type": "array"
+        },
+        "ready": {
+          "title": "Ready",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bpm_process_id",
+        "version",
+        "ready"
+      ],
+      "title": "Readiness",
+      "type": "object"
+    },
+    "Versions": {
+      "additionalProperties": true,
+      "properties": {
+        "bot_ui": {
+          "title": "Bot Ui",
+          "type": "string"
+        },
+        "core": {
+          "title": "Core",
+          "type": "string"
+        },
+        "worker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Worker"
+        }
+      },
+      "required": [
+        "bot_ui",
+        "core"
+      ],
+      "title": "Versions",
+      "type": "object"
+    },
+    "WorkerState": {
+      "additionalProperties": true,
+      "description": "Worker 프로세스 상태. `off`는 \"필요할 때 시작, 아직 안 띄움\".",
+      "properties": {
+        "reserved_for": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reserved For"
+        },
+        "restarts": {
+          "default": 0,
+          "title": "Restarts",
+          "type": "integer"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "WorkerState",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c4-heartbeat-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/bot-ui/heartbeat` — 30초마다 (응답의 `next_heartbeat_s`를 따름).",
+  "properties": {
+    "approval_acks": {
+      "items": {
+        "$ref": "#/$defs/ApprovalAck"
+      },
+      "title": "Approval Acks",
+      "type": "array"
+    },
+    "current_run": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CurrentRun"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "deployment_results": {
+      "items": {
+        "$ref": "#/$defs/DeploymentResult"
+      },
+      "title": "Deployment Results",
+      "type": "array"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/ExtensionState"
+      },
+      "title": "Extensions",
+      "type": "array"
+    },
+    "job_acks": {
+      "items": {
+        "$ref": "#/$defs/JobAck"
+      },
+      "title": "Job Acks",
+      "type": "array"
+    },
+    "queue": {
+      "$ref": "#/$defs/Queue"
+    },
+    "readiness": {
+      "items": {
+        "$ref": "#/$defs/Readiness"
+      },
+      "title": "Readiness",
+      "type": "array"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "unsent_events": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unsent Events"
+    },
+    "versions": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Versions"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "worker": {
+      "$ref": "#/$defs/WorkerState"
+    }
+  },
+  "required": [
+    "schema",
+    "status",
+    "current_run",
+    "queue",
+    "worker"
+  ],
+  "title": "HeartbeatRequest",
+  "type": "object"
+}

@@ -1,0 +1,627 @@
+{
+  "$defs": {
+    "Built": {
+      "additionalProperties": true,
+      "description": "누가 언제 무엇으로 빌드했나.",
+      "properties": {
+        "at": {
+          "title": "At",
+          "type": "string"
+        },
+        "by": {
+          "title": "By",
+          "type": "string"
+        },
+        "core": {
+          "title": "Core",
+          "type": "string"
+        },
+        "spec_version": {
+          "title": "Spec Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "by",
+        "at",
+        "core",
+        "spec_version"
+      ],
+      "title": "Built",
+      "type": "object"
+    },
+    "ExtensionNeed": {
+      "additionalProperties": true,
+      "description": "쓰는 확장과 버전 범위 (C13). 외부 확장은 `definition_hash`로 정의를 고정한다.",
+      "properties": {
+        "definition_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition Hash"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionNeed",
+      "type": "object"
+    },
+    "HumanNeeds": {
+      "additionalProperties": true,
+      "description": "사람 개입 종류. 서버 실행 가능 여부(R2) 판정에 쓴다.",
+      "properties": {
+        "approval_center": {
+          "default": false,
+          "title": "Approval Center",
+          "type": "boolean"
+        },
+        "approval_field": {
+          "default": false,
+          "title": "Approval Field",
+          "type": "boolean"
+        },
+        "confirmation": {
+          "default": false,
+          "title": "Confirmation",
+          "type": "boolean"
+        }
+      },
+      "title": "HumanNeeds",
+      "type": "object"
+    },
+    "ProvidedProcess": {
+      "additionalProperties": true,
+      "description": "`process_lib`이 제공하는 공유 BPM 프로세스 하나.",
+      "properties": {
+        "ai_tasks": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ai Tasks"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "human": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HumanNeeds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "process_id": {
+          "title": "Process Id",
+          "type": "string"
+        },
+        "reads": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reads",
+          "type": "array"
+        },
+        "run_location": {
+          "anyOf": [
+            {
+              "enum": [
+                "server",
+                "pc"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Location"
+        },
+        "writes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Writes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "process_id",
+        "file"
+      ],
+      "title": "ProvidedProcess",
+      "type": "object"
+    },
+    "ProvidedTool": {
+      "additionalProperties": true,
+      "description": "툴팩이 제공하는 도구 하나. `args`는 JSON Schema.",
+      "properties": {
+        "args": {
+          "additionalProperties": true,
+          "title": "Args",
+          "type": "object"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "domain": {
+          "title": "Domain",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "domain"
+      ],
+      "title": "ProvidedTool",
+      "type": "object"
+    },
+    "Provides": {
+      "additionalProperties": true,
+      "properties": {
+        "processes": {
+          "items": {
+            "$ref": "#/$defs/ProvidedProcess"
+          },
+          "title": "Processes",
+          "type": "array"
+        },
+        "tools": {
+          "items": {
+            "$ref": "#/$defs/ProvidedTool"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "title": "Provides",
+      "type": "object"
+    },
+    "Requires": {
+      "additionalProperties": true,
+      "description": "실행에 필요한 것. 모두 선택이고, 없으면 \"제한 없음\"이다.",
+      "properties": {
+        "core": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Core"
+        },
+        "domains": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Domains",
+          "type": "array"
+        },
+        "extensions": {
+          "items": {
+            "$ref": "#/$defs/ExtensionNeed"
+          },
+          "title": "Extensions",
+          "type": "array"
+        },
+        "libs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Libs",
+          "type": "array"
+        },
+        "os": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Os",
+          "type": "array"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/ResourceRef"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
+        "runtimes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Runtimes",
+          "type": "array"
+        },
+        "secrets": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Secrets",
+          "type": "array"
+        },
+        "service_apps": {
+          "items": {
+            "$ref": "#/$defs/ServiceAppNeed"
+          },
+          "title": "Service Apps",
+          "type": "array"
+        },
+        "settings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Settings",
+          "type": "array"
+        },
+        "task_types": {
+          "items": {
+            "$ref": "#/$defs/TaskTypeNeed"
+          },
+          "title": "Task Types",
+          "type": "array"
+        },
+        "toolpacks": {
+          "items": {
+            "$ref": "#/$defs/ToolpackRef"
+          },
+          "title": "Toolpacks",
+          "type": "array"
+        },
+        "tools": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tools",
+          "type": "array"
+        }
+      },
+      "title": "Requires",
+      "type": "object"
+    },
+    "ResourceRef": {
+      "additionalProperties": true,
+      "description": "확장이 기여한 자원 중 쓰는 것 (예: `{type: \"ui_page\", id: \"erp.order.form\"}`).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "ResourceRef",
+      "type": "object"
+    },
+    "ServiceAppNeed": {
+      "additionalProperties": true,
+      "description": "부르는 서비스 앱과 **키 참조**. 키 값은 절대 들어가지 않는다 (R5).",
+      "properties": {
+        "app_id": {
+          "title": "App Id",
+          "type": "string"
+        },
+        "key_ref": {
+          "title": "Key Ref",
+          "type": "string"
+        },
+        "operations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "task_key_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Task Key Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "app_id",
+        "operations",
+        "key_ref"
+      ],
+      "title": "ServiceAppNeed",
+      "type": "object"
+    },
+    "TaskTypeNeed": {
+      "additionalProperties": true,
+      "description": "확장이 기여한 태스크 종류와, 그 확장 정의에 적힌 실행 위치. R2 판정에 쓴다.",
+      "properties": {
+        "extension": {
+          "title": "Extension",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "run_locations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Run Locations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "extension",
+        "run_locations"
+      ],
+      "title": "TaskTypeNeed",
+      "type": "object"
+    },
+    "ToolpackRef": {
+      "additionalProperties": true,
+      "description": "쓰는 툴팩. 해시로 고정한다 (R7).",
+      "properties": {
+        "content_hash": {
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "content_hash"
+      ],
+      "title": "ToolpackRef",
+      "type": "object"
+    },
+    "Trigger": {
+      "additionalProperties": true,
+      "description": "시작 방법. `kind`는 열린 문자열 (알려진 값은 `KNOWN_TRIGGER_KINDS`).",
+      "properties": {
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "title": "Trigger",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c1-manifest",
+  "additionalProperties": true,
+  "description": "패키지 매니페스트 (C1 최상위).\n\n`kind=\"bpm_process\"`이고 `run_location`이 없으면 **`server`로 채운다** (서버 우선, 호환 규칙).",
+  "properties": {
+    "built": {
+      "$ref": "#/$defs/Built"
+    },
+    "content_hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "entry": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Entry"
+    },
+    "human": {
+      "$ref": "#/$defs/HumanNeeds"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "bpm_process",
+        "process_lib",
+        "toolpack"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "outputs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Outputs",
+      "type": "array"
+    },
+    "process_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Process Id"
+    },
+    "provides": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Provides"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "requires": {
+      "$ref": "#/$defs/Requires"
+    },
+    "run_location": {
+      "anyOf": [
+        {
+          "enum": [
+            "server",
+            "pc"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Location"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "triggers": {
+      "items": {
+        "$ref": "#/$defs/Trigger"
+      },
+      "title": "Triggers",
+      "type": "array"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "kind",
+    "id",
+    "version",
+    "requires",
+    "human",
+    "built",
+    "content_hash"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

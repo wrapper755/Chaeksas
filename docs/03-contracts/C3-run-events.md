@@ -5,7 +5,8 @@
 | 상태 | **합의** (2026-10-01, 독립 검토 반영) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Bot UI(실행 중 Bot)·서버 실행기·Studio(선택) → Center |
-| 코드 위치 | `packages/contracts/events.py` |
+| 코드 위치 | `packages/contracts/src/chaeksas/contracts/events.py` (import `chaeksas.contracts.events`, [ADR-0019](../decisions/0019-package-names.md)) |
+| JSON Schema | [`c3-run-event.json`](../../packages/contracts/schemas/c3-run-event.json) · [`c3-event-batch-response.json`](../../packages/contracts/schemas/c3-event-batch-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md) |
 
 ## 목적

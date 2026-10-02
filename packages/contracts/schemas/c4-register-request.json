@@ -1,0 +1,151 @@
+{
+  "$defs": {
+    "ExtensionState": {
+      "additionalProperties": true,
+      "description": "설치된 확장 하나 (C13).",
+      "properties": {
+        "definition_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition Hash"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionState",
+      "type": "object"
+    },
+    "Runtimes": {
+      "additionalProperties": true,
+      "properties": {
+        "browsers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Browsers",
+          "type": "array"
+        },
+        "desktop_backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Desktop Backend"
+        },
+        "extensions": {
+          "items": {
+            "$ref": "#/$defs/ExtensionState"
+          },
+          "title": "Extensions",
+          "type": "array"
+        }
+      },
+      "title": "Runtimes",
+      "type": "object"
+    },
+    "Versions": {
+      "additionalProperties": true,
+      "properties": {
+        "bot_ui": {
+          "title": "Bot Ui",
+          "type": "string"
+        },
+        "core": {
+          "title": "Core",
+          "type": "string"
+        },
+        "worker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Worker"
+        }
+      },
+      "required": [
+        "bot_ui",
+        "core"
+      ],
+      "title": "Versions",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c4-register-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/bot-ui/register` — 처음 한 번, 그리고 이름·버전이 바뀔 때.\n\n`bot_ui_id`를 본문에 넣지 않는다. **신원은 Center API 키로 정한다.**",
+  "properties": {
+    "machine_id": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Machine Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "os": {
+      "title": "Os",
+      "type": "string"
+    },
+    "runtimes": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Runtimes"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "versions": {
+      "$ref": "#/$defs/Versions"
+    }
+  },
+  "required": [
+    "schema",
+    "machine_id",
+    "name",
+    "os",
+    "versions"
+  ],
+  "title": "RegisterRequest",
+  "type": "object"
+}

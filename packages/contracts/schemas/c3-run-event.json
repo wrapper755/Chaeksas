@@ -1,0 +1,58 @@
+{
+  "$id": "urn:chaeksas:contracts:c3-run-event",
+  "additionalProperties": true,
+  "description": "실행 이벤트 한 줄. 로컬 `runs/<run_id>.jsonl`의 한 줄이자 전송 단위.\n\n`data`에는 **업무 값·결재 답·비밀·스크린샷을 넣지 않는다** (README 원칙 6).",
+  "properties": {
+    "data": {
+      "additionalProperties": true,
+      "title": "Data",
+      "type": "object"
+    },
+    "kind": {
+      "description": "열린 문자열 — 모르는 종류도 저장한다",
+      "title": "Kind",
+      "type": "string"
+    },
+    "node_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Node Id"
+    },
+    "run_id": {
+      "pattern": "^(run|test)_\\d{8}_\\d{6}_[0-9a-f]{6}$",
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "seq": {
+      "description": "실행 안에서 1부터 단조 증가",
+      "minimum": 1,
+      "title": "Seq",
+      "type": "integer"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "run_id",
+    "seq",
+    "ts",
+    "kind"
+  ],
+  "title": "RunEvent",
+  "type": "object"
+}

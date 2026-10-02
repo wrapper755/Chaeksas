@@ -40,3 +40,19 @@ explicit_package_bases = true
 strict = true
 # 뼈대 단계: 외부 라이브러리 타입이 없는 것은 아직 막지 않는다.
 ignore_missing_imports = true
+# 멤버마다 src 레이아웃이라 각 src가 모듈 경로의 뿌리다 (chaeksas.* 네임스페이스, ADR-0019).
+# 뿌리를 알려 주지 않으면 같은 파일이 packages.contracts.src.chaeksas.contracts로도 보여 충돌한다.
+mypy_path = [
+    "packages/contracts/src",
+    "packages/extension_api/src",
+    "packages/core/src",
+    "packages/qt/src",
+    "packages/service_kit/src",
+    "apps/studio/src",
+    "apps/bot_ui/src",
+    "apps/server_runner/src",
+    "apps/admin/src",
+    "apps/center/src",
+    "extensions/ui_automation/src",
+]
+files = ["tests", "scripts", "packages/*/src", "apps/*/src", "extensions/*/src"]

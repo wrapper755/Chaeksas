@@ -5,7 +5,8 @@
 | 상태 | **합의** (2026-10-01, 독립 검토 반영) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Bot UI ↔ Center |
-| 코드 위치 | `packages/contracts/bot_ui.py` |
+| 코드 위치 | `packages/contracts/src/chaeksas/contracts/bot_ui.py` (import `chaeksas.contracts.bot_ui`, [ADR-0019](../decisions/0019-package-names.md)) |
+| JSON Schema | [`c4-register-request.json`](../../packages/contracts/schemas/c4-register-request.json) · [`c4-register-response.json`](../../packages/contracts/schemas/c4-register-response.json) · [`c4-heartbeat-request.json`](../../packages/contracts/schemas/c4-heartbeat-request.json) · [`c4-heartbeat-response.json`](../../packages/contracts/schemas/c4-heartbeat-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md) |
 | 관련 화면 | BUI-01·03·04·09, CON-03·05·11 |
 

@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "AdminKey": {
+      "additionalProperties": true,
+      "description": "배포 서명 검증용 Admin 공개키 (C2). 철회된 키도 `revoked_at`과 함께 내려온다.",
+      "properties": {
+        "key_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Key Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "public_key": {
+          "title": "Public Key",
+          "type": "string"
+        },
+        "revoked_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revoked At"
+        }
+      },
+      "required": [
+        "key_id",
+        "public_key"
+      ],
+      "title": "AdminKey",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c4-register-response",
+  "additionalProperties": true,
+  "properties": {
+    "admin_keys": {
+      "items": {
+        "$ref": "#/$defs/AdminKey"
+      },
+      "title": "Admin Keys",
+      "type": "array"
+    },
+    "bot_ui_id": {
+      "pattern": "^bui_[0-9a-f]{8}$",
+      "title": "Bot Ui Id",
+      "type": "string"
+    },
+    "heartbeat_interval_s": {
+      "default": 30,
+      "title": "Heartbeat Interval S",
+      "type": "integer"
+    },
+    "server_time": {
+      "title": "Server Time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "bot_ui_id",
+    "server_time"
+  ],
+  "title": "RegisterResponse",
+  "type": "object"
+}
