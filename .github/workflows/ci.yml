@@ -96,8 +96,12 @@ jobs:
       - uses: actions/checkout@v7
 
       # pnpm 버전은 web/package.json의 packageManager가 정한다 (한 곳에서만 올린다).
+      # `defaults.run.working-directory`는 `run` 단계에만 걸리고 **액션 입력에는 걸리지 않는다** —
+      # 경로를 적지 않으면 저장소 루트의 package.json을 찾다가 멈춘다.
       - name: pnpm 설치
         uses: pnpm/action-setup@v4
+        with:
+          package_json_file: web/package.json
 
       - name: Node.js LTS
         uses: actions/setup-node@v5
