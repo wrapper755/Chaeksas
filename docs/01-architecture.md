@@ -152,6 +152,6 @@ Chaeksas/
 └─ docs/
 ```
 
-> 상태: 위 Python 멤버 11개와 `tests/`는 M1에서 만들어졌다 (`uv sync --all-packages` → `uv run pytest`). `web/`은 아직 없다.
+> 상태: 위 Python 멤버 11개와 `tests/`는 M1에서 만들어졌다 (`uv sync --all-packages` → `uv run pytest`). `web/`도 뼈대가 있다 (pnpm 워크스페이스: `apps/center-console`·`apps/svc-console`, `packages/ui`·`api-types`·`config`). 화면 내용은 M2다.
 
 근거: [ADR-0018](decisions/0018-extensions.md), [ADR-0017](decisions/0017-web-nextjs-design-system.md), [ADR-0015](decisions/0015-run-location.md), [ADR-0004](decisions/0004-monorepo-uv-workspace.md), [ADR-0010](decisions/0010-service-apps.md), [ADR-0012](decisions/0012-bot-ui.md), [ADR-0013](decisions/0013-api-keys.md).

@@ -1,0 +1,32 @@
+/* 모든 웹 화면이 이 파일 하나를 불러온다 (앱의 globals.css에서 import).
+   tokens.css·theme.css는 생성물이다 — design/tokens.json을 고친 뒤 scripts/gen_tokens.py. */
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./theme.css";
+
+/* 이 패키지의 구성요소도 훑는다. Tailwind 4는 CSS를 불러온 앱 폴더만 자동으로 훑으므로,
+   워크스페이스 패키지는 스스로 적어야 한다 (적지 않으면 구성요소의 클래스가 조용히 빠진다). */
+@source "./**/*.{ts,tsx}";
+
+/* 바탕·글자·글꼴은 토큰으로 (스타일 가이드 §2). 색값을 직접 쓰지 않는다. */
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: var(--font-family-sans);
+  font-size: var(--font-size-body);
+  line-height: 1.5;
+}
+
+/* 포커스 표시는 지우지 않는다 (스타일 가이드 §7 — 키보드로만 쓰는 사람이 있다). */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* 운영체제의 「동작 줄이기」를 따른다. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

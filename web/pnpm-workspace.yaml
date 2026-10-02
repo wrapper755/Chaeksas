@@ -1,0 +1,4 @@
+# web/은 pnpm 워크스페이스다 (ADR-0017 §4). 파이썬 쪽은 uv 워크스페이스(루트 pyproject.toml).
+packages:
+  - apps/*
+  - packages/*

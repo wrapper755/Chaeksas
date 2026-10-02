@@ -70,3 +70,46 @@ jobs:
       # 작업 트리가 더러워졌다면 생성물을 커밋하지 않은 것이다 (--check가 놓친 경우).
       - name: 작업 트리가 깨끗한가
         run: git diff --exit-code
+
+  # 웹 화면 (ADR-0017). 파이썬 쪽과 따로 돈다 — 도구가 둘(uv + pnpm)이다.
+  web:
+    name: 웹 (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # pnpm 버전은 web/package.json의 packageManager가 정한다 (한 곳에서만 올린다).
+      - name: pnpm 설치
+        uses: pnpm/action-setup@v4
+
+      - name: Node.js LTS
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      # --frozen-lockfile: lock이 package.json과 어긋나면 여기서 멈춘다 (uv --frozen과 같은 뜻).
+      - name: 의존성
+        run: pnpm install --frozen-lockfile
+
+      # 계약 스키마에서 생성한 타입이 최신인가. 스키마 자체의 최신 여부는 Python 쪽이 본다.
+      - name: 계약 타입 최신 여부
+        run: pnpm check:api-types
+
+      - name: 타입 검사
+        run: pnpm typecheck
+
+      - name: 빌드
+        run: pnpm build
+
+      - name: 작업 트리가 깨끗한가
+        run: git diff --exit-code

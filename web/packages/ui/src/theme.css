@@ -1,0 +1,69 @@
+/* 생성 파일: design/tokens.json에서 만든다. 직접 고치지 말고 원본을 고친 뒤 scripts/gen_tokens.py */
+
+@theme {
+  /* 색 — 이름은 토큰 그대로 (`bg.surface` → `bg-surface` 유틸리티) */
+  --color-bg-canvas: var(--bg-canvas);
+  --color-bg-surface: var(--bg-surface);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-bg-inverse: var(--bg-inverse);
+  --color-border-default: var(--border-default);
+  --color-border-strong: var(--border-strong);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-inverse: var(--text-inverse);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-fg: var(--primary-fg);
+  --color-focus: var(--focus);
+  --color-status-neutral-fg: var(--status-neutral-fg);
+  --color-status-neutral-bg: var(--status-neutral-bg);
+  --color-status-neutral-solid: var(--status-neutral-solid);
+  --color-status-active-fg: var(--status-active-fg);
+  --color-status-active-bg: var(--status-active-bg);
+  --color-status-active-solid: var(--status-active-solid);
+  --color-status-done-fg: var(--status-done-fg);
+  --color-status-done-bg: var(--status-done-bg);
+  --color-status-done-solid: var(--status-done-solid);
+  --color-status-failed-fg: var(--status-failed-fg);
+  --color-status-failed-bg: var(--status-failed-bg);
+  --color-status-failed-solid: var(--status-failed-solid);
+  --color-danger-fg: var(--danger-fg);
+  --color-status-waiting-fg: var(--status-waiting-fg);
+  --color-status-waiting-bg: var(--status-waiting-bg);
+  --color-status-waiting-solid: var(--status-waiting-solid);
+  --color-status-warning-fg: var(--status-warning-fg);
+  --color-status-warning-bg: var(--status-warning-bg);
+  --color-status-warning-solid: var(--status-warning-solid);
+  --color-status-replayed-fg: var(--status-replayed-fg);
+  --color-status-replayed-bg: var(--status-replayed-bg);
+  --color-status-replayed-solid: var(--status-replayed-solid);
+
+  /* 글꼴 */
+  --font-sans: var(--font-family-sans);
+  --font-mono: var(--font-family-mono);
+
+  /* 글자 크기 (`text-body`) */
+  --text-caption: var(--font-size-caption);
+  --text-body-sm: var(--font-size-body-sm);
+  --text-body: var(--font-size-body);
+  --text-body-lg: var(--font-size-body-lg);
+  --text-h3: var(--font-size-h3);
+  --text-h2: var(--font-size-h2);
+  --text-h1: var(--font-size-h1);
+  --text-display: var(--font-size-display);
+
+  /* 간격 — 토큰이 4px 단위라 Tailwind의 배수 하나로 맞는다 (`p-4` = 16px = space.4) */
+  --spacing: 4px;
+
+  /* 둥글기·그림자 */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+  --radius-full: var(--radius-full);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+}

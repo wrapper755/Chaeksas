@@ -1,0 +1,13 @@
+{
+  "name": "chaeksas-web",
+  "private": true,
+  "packageManager": "pnpm@10.32.1",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "build": "pnpm --filter \"./apps/*\" build",
+    "typecheck": "pnpm -r typecheck",
+    "gen:api-types": "pnpm --filter @chaeksas/api-types generate",
+    "check:api-types": "pnpm --filter @chaeksas/api-types generate -- --check"
+  }
+}

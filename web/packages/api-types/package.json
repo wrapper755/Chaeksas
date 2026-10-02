@@ -1,0 +1,21 @@
+{
+  "name": "@chaeksas/api-types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "generate": "node generate.mjs",
+    "check": "node generate.mjs --check",
+    "typecheck": "tsc --project tsconfig.json"
+  },
+  "devDependencies": {
+    "@chaeksas/config": "workspace:*",
+    "@types/node": "26.6.4",
+    "json-schema-to-typescript": "16.0.0",
+    "typescript": "7.0.2"
+  }
+}

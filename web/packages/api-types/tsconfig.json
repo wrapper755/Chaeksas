@@ -1,0 +1,4 @@
+{
+  "extends": "@chaeksas/config/tsconfig.base.json",
+  "include": ["src"]
+}

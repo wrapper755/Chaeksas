@@ -25,7 +25,10 @@ ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "design" / "tokens.json"
 
 #: ADR-0017이 정한 생성물.
-WEB_CSS = ROOT / "web" / "packages" / "ui" / "src" / "tokens.css"
+WEB_SRC = ROOT / "web" / "packages" / "ui" / "src"
+WEB_CSS = WEB_SRC / "tokens.css"
+WEB_THEME = WEB_SRC / "theme.css"
+WEB_STATUS_MAP = WEB_SRC / "status-map.ts"
 QT_DIR = ROOT / "packages" / "qt" / "src" / "chaeksas" / "qt" / "theme"
 PREVIEW = ROOT / "design" / "preview.html"
 
@@ -34,6 +37,9 @@ BANNER = "생성 파일: design/tokens.json에서 만든다. 직접 고치지 �
 #: 글자 명암비 기준 (WCAG 2.2 AA, 스타일 가이드 D6).
 AA_TEXT = 4.5
 AA_UI = 3.0
+
+#: Tailwind는 간격을 **배수 하나**(`--spacing`)로 쓴다. 그 한 걸음에 해당하는 토큰.
+SPACING_STEP = "1"
 
 STATUSES = ("neutral", "active", "done", "failed", "waiting", "warning", "replayed")
 BACKGROUNDS = ("bg.canvas", "bg.surface", "bg.subtle")
@@ -84,6 +90,27 @@ def contrast_rows(colors: dict[str, str]) -> list[tuple[str, str, float, float, 
         ("border.strong", "bg.surface", contrast(colors["border.strong"], colors["bg.surface"]), AA_UI, False)
     )
     return rows
+
+
+def check_spacing_scale(tokens: dict[str, Any]) -> list[str]:
+    """간격 토큰이 **한 걸음의 배수**인가 (Tailwind 테마가 배수 하나로 매핑된다).
+
+    어긋나면 `p-6` 같은 유틸리티가 토큰과 다른 값이 되는데, 화면을 봐도 눈치채기 어렵다.
+    그래서 생성 단계에서 막는다.
+    """
+    space = tokens["space"]
+    step = space.get(SPACING_STEP)
+    if not step:
+        return [f"space.{SPACING_STEP}이 없거나 0이다 — Tailwind 간격의 한 걸음이 필요하다"]
+    out = []
+    for key, value in space.items():
+        try:
+            steps = float(key)
+        except ValueError:
+            continue  # 숫자가 아닌 이름은 유틸리티로 쓰지 않는다
+        if value != steps * step:
+            out.append(f"space.{key}={value}가 space.{SPACING_STEP}({step})의 {steps}배가 아니다")
+    return out
 
 
 def check_contrast(tokens: dict[str, Any]) -> tuple[list[str], list[str]]:
@@ -154,6 +181,78 @@ def web_css(tokens: dict[str, Any]) -> str:
     lines += color_block("dark", indent="    ")
     lines.append("  }")
     lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def web_theme_css(tokens: dict[str, Any]) -> str:
+    """Tailwind 테마 (ADR-0017 §3). Tailwind 4는 설정 파일 대신 CSS `@theme`을 읽는다.
+
+    값을 다시 적지 않고 `tokens.css`의 변수를 가리킨다 — 원본은 하나다. 그래서 테마를 바꾸면
+    (`data-theme="dark"`) Tailwind 유틸리티의 색도 함께 바뀐다.
+    """
+    lines = [f"/* {BANNER} */", "", "@theme {"]
+
+    lines.append("  /* 색 — 이름은 토큰 그대로 (`bg.surface` → `bg-surface` 유틸리티) */")
+    for key in tokens["color"]["light"]:
+        lines.append(f"  --color-{key.replace('.', '-')}: var({css_var(key)});")
+
+    lines.append("")
+    lines.append("  /* 글꼴 */")
+    lines.append("  --font-sans: var(--font-family-sans);")
+    lines.append("  --font-mono: var(--font-family-mono);")
+    lines.append("")
+    lines.append("  /* 글자 크기 (`text-body`) */")
+    for key in tokens["font"]:
+        kind, _, name = key.partition(".")
+        if kind == "size":
+            lines.append(f"  --text-{name}: var({css_var('font.' + key)});")
+
+    lines.append("")
+    lines.append("  /* 간격 — 토큰이 4px 단위라 Tailwind의 배수 하나로 맞는다 (`p-4` = 16px = space.4) */")
+    lines.append(f"  --spacing: {tokens['space'][SPACING_STEP]}px;")
+
+    lines.append("")
+    lines.append("  /* 둥글기·그림자 */")
+    for key in tokens["radius"]:
+        lines.append(f"  --radius-{key}: var({css_var('radius.' + str(key))});")
+    for key in tokens["shadow"]:
+        lines.append(f"  --shadow-{key}: var({css_var('shadow.' + key)});")
+    lines.append("}")
+    return "\n".join(lines) + "\n"
+
+
+def web_status_map_ts(tokens: dict[str, Any]) -> str:
+    """상태 표기 → 상태 색 (스타일 가이드 §2-2). Qt의 `STATUS_MAP`과 같은 내용이다.
+
+    **화면이 표기를 직접 쓰지 않게** 하려고 생성한다. 여기 없는 표기를 쓰면 타입이 막는다.
+    """
+    statuses = [k.split(".")[1] for k in tokens["color"]["light"] if k.startswith("status.") and k.endswith(".fg")]
+    lines = [
+        f"// {BANNER}",
+        "",
+        "/** 상태 색 7가지 (스타일 가이드 §2-2). */",
+        "export const STATUS_TOKENS = [" + ", ".join(f'"{s}"' for s in statuses) + "] as const;",
+        "",
+        "export type StatusToken = (typeof STATUS_TOKENS)[number];",
+        "",
+        "/** 상태 표기 → 상태 색. 열쇠는 화면 설계서(`docs/06-screens`)의 묶음 이름이다. */",
+        "export const STATUS_MAP = {",
+    ]
+    for group, mapping in tokens["status_map"].items():
+        lines.append(f'  "{group}": {{')
+        lines += [f'    "{label}": "{token}",' for label, token in mapping.items()]
+        lines.append("  },")
+    lines += [
+        "} as const satisfies Record<string, Record<string, StatusToken>>;",
+        "",
+        "export type StatusGroup = keyof typeof STATUS_MAP;",
+        "",
+        "/** 그 묶음의 표기에 맞는 상태 색. 모르는 표기는 `undefined` — 화면은 회색으로 보이고,",
+        " *  계약의 상태 값이 열린 문자열이라(계약 원칙 10) 모르는 값 하나로 화면이 깨지지 않는다. */",
+        "export function statusToken(group: StatusGroup, label: string): StatusToken | undefined {",
+        "  return (STATUS_MAP[group] as Record<string, StatusToken>)[label];",
+        "}",
+    ]
     return "\n".join(lines) + "\n"
 
 
@@ -430,6 +529,8 @@ th {{ color:var(--text-secondary); background:var(--bg-subtle); }}
 def outputs(tokens: dict[str, Any]) -> dict[Path, str]:
     return {
         WEB_CSS: web_css(tokens),
+        WEB_THEME: web_theme_css(tokens),
+        WEB_STATUS_MAP: web_status_map_ts(tokens),
         QT_DIR / "tokens.py": qt_tokens_py(tokens),
         QT_DIR / "theme-light.qss": qt_qss(tokens, "light"),
         QT_DIR / "theme-dark.qss": qt_qss(tokens, "dark"),
@@ -443,10 +544,11 @@ def main() -> int:
     tokens = json.loads(SOURCE.read_text(encoding="utf-8"))
 
     errors, warnings = check_contrast(tokens)
+    errors += check_spacing_scale(tokens)
     for line in warnings:
         print("경고:", line)
     if errors:
-        print("명암비 검사 실패 — 아무것도 쓰지 않는다:")
+        print("검사 실패 — 아무것도 쓰지 않는다:")
         for line in errors:
             print("  -", line)
         return 1

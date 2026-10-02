@@ -1,0 +1,2 @@
+/* 공용 스타일 하나만 불러온다 (Tailwind + 토큰 + 테마). 색값을 여기 적지 않는다. */
+@import "@chaeksas/ui/styles.css";

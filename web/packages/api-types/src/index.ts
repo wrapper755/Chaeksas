@@ -1,0 +1,42 @@
+/* 생성 파일: packages/contracts/schemas에서 만든다. 직접 고치지 말고
+   계약 모델을 고친 뒤 `uv run python scripts/gen_schemas.py`,
+   그다음 `pnpm --filter @chaeksas/api-types generate`. */
+
+/** 생성된 계약 모듈 목록. 타입은 계약별 경로로 가져온다 (이름이 겹치는 것이 있다). */
+export const CONTRACT_MODULES = [
+  "c1-manifest",
+  "c11-health-response",
+  "c11-op-request",
+  "c11-op-response",
+  "c11-service-app-manifest",
+  "c13-catalog",
+  "c13-extension-manifest",
+  "c2-claim-deployment",
+  "c2-claim-extension",
+  "c2-claim-package",
+  "c2-envelope",
+  "c3-event-batch-response",
+  "c3-run-event",
+  "c4-heartbeat-request",
+  "c4-heartbeat-response",
+  "c4-register-request",
+  "c4-register-response",
+  "c5-deployment-info",
+  "c5-error-body",
+  "c5-job-create-request",
+  "c5-job-info",
+  "c5-package-info",
+  "c6-answer-request",
+  "c6-approval-create-request",
+  "c6-approval-info",
+  "c7-center-key-create-request",
+  "c7-center-key-created",
+  "c7-center-key-info",
+  "c7-contributed-resource",
+  "c7-extension-resource",
+  "c7-runtime-resource",
+  "c7-service-app-resource",
+  "c7-toolpack-resource",
+] as const;
+
+export type ContractModule = (typeof CONTRACT_MODULES)[number];

@@ -52,13 +52,25 @@ uv run playwright install chromium
 ```powershell
 # Node.js LTS 설치 (Windows: winget, Linux: 배포판 패키지 또는 nvm)
 winget install --id OpenJS.NodeJS.LTS -e
-corepack enable          # pnpm 사용 준비
+corepack enable          # pnpm 사용 준비 (버전은 web/package.json의 packageManager가 정한다)
 cd web
-pnpm install             # M1 이후
-pnpm dev --filter center-console   # http://localhost:8501
+pnpm install
+pnpm dev                 # 콘솔 둘을 함께 띄운다 (8501, 8001)
+pnpm --filter @chaeksas/center-console dev   # 하나만 — http://localhost:8501
 ```
 
-- 토큰을 바꾸면 `uv run python scripts/gen_tokens.py`로 웹 CSS·Qt QSS를 다시 만든다 (M1).
+| 명령 (`web/`에서) | 하는 일 |
+| --- | --- |
+| `pnpm dev` | 콘솔 둘을 함께 띄운다 (Center 8501, 서비스 앱 8001) |
+| `pnpm build` | 둘 다 제품 빌드 (`output: standalone`) |
+| `pnpm typecheck` | 모든 패키지·앱의 TypeScript 검사 |
+| `pnpm gen:api-types` | 계약 JSON Schema → TypeScript 타입 |
+| `pnpm check:api-types` | 그 타입이 최신인지 검사만 (CI가 쓴다) |
+
+- **고정한 버전** ([ADR-0017](decisions/0017-web-nextjs-design-system.md) — 「버전은 M1에서 고정」): Node 22 LTS, pnpm 10.32.1, Next.js 16.3.8, React 19.3.0, TypeScript 7.0.2, Tailwind CSS 4.3.3, lucide-react 1.50.0. `web/.npmrc`가 `save-exact=true`라 새 의존성도 정확한 버전으로 적힌다.
+- 계약을 고치면 **두 단계**다: `uv run python scripts/gen_schemas.py` (스키마) → `pnpm gen:api-types` (타입). 손으로 타입을 쓰지 않는다.
+- 토큰을 바꾸면 `uv run python scripts/gen_tokens.py`로 웹 CSS·Tailwind 테마·상태 표·Qt QSS를 다시 만든다.
+- Tailwind 4는 설정 파일이 없다 — 테마가 CSS(`@theme`)다. 그래서 토큰 생성기가 `web/packages/ui/src/theme.css`를 만든다.
 - 사내망에서 글꼴을 외부 CDN으로 받지 않는다. Pretendard 파일은 저장소에 포함한다.
 
 ### Windows 주의점
@@ -72,6 +84,7 @@ pnpm dev --filter center-console   # http://localhost:8501
 | 루프백 방화벽 알림 | Worker가 8899를 열 때 방화벽 창 | 127.0.0.1에만 바인드하면 보통 뜨지 않음. 뜨면 "개인 네트워크"만 허용 |
 | 백신 실시간 검사 | `uv sync`, Playwright 설치가 매우 느림 | 개발 폴더를 검사 예외에 추가 (조직 정책 확인) |
 | 실행 정책 | `.ps1` 스크립트 실행 거부 | 스크립트 대신 `uv run <명령>`을 쓴다 |
+| 포트가 이미 쓰임 | `pnpm dev`가 `EADDRINUSE: :::8501`로 죽음 | 다른 프로그램(프로토타입 Streamlit도 8501을 쓴다)이 잡고 있다. `pnpm --filter <앱> exec next dev --port <빈 포트>`로 옮겨 띄운다 |
 
 ## 4. Linux (서버 주 환경)
 
