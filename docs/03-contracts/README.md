@@ -47,6 +47,7 @@
 | C3 | `chaeksas.contracts.events` | `missing_data_keys()` — 줄 단위 거부용 | 같음 |
 | C4 | `chaeksas.contracts.bot_ui` | (모델 검증만) | 같음 |
 | C5 | `chaeksas.contracts.center_api` | `validate_deployment()`, `validate_job_create()`, `cancel_outcome()` | (문서에 JSON 예시 없음) |
+| C6 | `chaeksas.contracts.approvals` | `validate_answer()` — Center와 실행하는 쪽이 **같이 쓴다**. `validate_create()`, `request_id_for()`, `apply_defaults()` | `tests/test_contract_examples.py` |
 
 V5~V8은 **역할에 따라 누가 검사하는지가 다르므로** 함수를 나눠 뒀다. Center는 `verify_time(..., check_not_before=False)`로 예약 배포를 받아 두고, 실행하는 쪽만 `not_before`를 본다.
 

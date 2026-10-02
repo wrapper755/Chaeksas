@@ -18,6 +18,7 @@ import pytest
 from pydantic import TypeAdapter
 
 from chaeksas.contracts import (
+    ApprovalCreateRequest,
     Envelope,
     EventBatchResponse,
     HeartbeatRequest,
@@ -37,6 +38,7 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C3-run-events", 1, EventBatchResponse),  # 응답
     ("C4-bot-ui-center", 0, HeartbeatRequest),
     ("C4-bot-ui-center", 1, HeartbeatResponse),
+    ("C6-approvals", 0, ApprovalCreateRequest),
 ]
 
 

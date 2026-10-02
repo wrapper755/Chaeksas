@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.contracts import (
+    AnswerRequest,
+    ApprovalCreateRequest,
+    ApprovalInfo,
     DeploymentClaim,
     DeploymentInfo,
     Envelope,
@@ -53,6 +56,9 @@ MODELS: list[tuple[str, Any]] = [
     ("c5-job-create-request", JobCreateRequest),
     ("c5-job-info", JobInfo),
     ("c5-error-body", ErrorBody),  # C11과 같은 오류 형식
+    ("c6-approval-create-request", ApprovalCreateRequest),
+    ("c6-approval-info", ApprovalInfo),
+    ("c6-answer-request", AnswerRequest),
 ]
 
 

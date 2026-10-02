@@ -1,0 +1,169 @@
+{
+  "$defs": {
+    "Form": {
+      "additionalProperties": true,
+      "description": "답의 모양. 없으면 「승인 / 반려」 두 단추다.",
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FormField"
+          },
+          "title": "Fields",
+          "type": "array"
+        }
+      },
+      "title": "Form",
+      "type": "object"
+    },
+    "FormField": {
+      "additionalProperties": true,
+      "description": "결재 폼의 칸 하나. STU-04 결재 「출력」 표와 같은 모양이다.",
+      "properties": {
+        "choices": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Choices"
+        },
+        "default": {
+          "default": null,
+          "title": "Default"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "type"
+      ],
+      "title": "FormField",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c6-approval-create-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/approvals` — 실행하는 쪽이 결재를 올린다.\n\n`request_id`는 `run_id`·`node_id`·`node_instance`와 **맞아야 한다**. 어긋나면 답이 엉뚱한\n노드로 돌아갈 수 있으므로 모델이 막는다.",
+  "properties": {
+    "bpm_process_id": {
+      "title": "Bpm Process Id",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "form": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Form"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "layer": {
+      "title": "Layer",
+      "type": "string"
+    },
+    "node_id": {
+      "title": "Node Id",
+      "type": "string"
+    },
+    "node_instance": {
+      "minimum": 1,
+      "title": "Node Instance",
+      "type": "integer"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "review": {
+      "additionalProperties": true,
+      "title": "Review",
+      "type": "object"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "request_id",
+    "layer",
+    "run_id",
+    "node_id",
+    "node_instance",
+    "bpm_process_id",
+    "version"
+  ],
+  "title": "ApprovalCreateRequest",
+  "type": "object"
+}

@@ -1,0 +1,17 @@
+{
+  "$id": "urn:chaeksas:contracts:c6-answer-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/approvals/{request_id}/answer`.\n\n`answered_by`는 **본문에서 받지 않는다.** 콘솔 BFF가 `X-CHK-Actor` 헤더로 보낸다.",
+  "properties": {
+    "answer": {
+      "additionalProperties": true,
+      "title": "Answer",
+      "type": "object"
+    }
+  },
+  "required": [
+    "answer"
+  ],
+  "title": "AnswerRequest",
+  "type": "object"
+}

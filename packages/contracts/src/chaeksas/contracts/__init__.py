@@ -12,11 +12,24 @@
 | C3 | `events` | 실행 이벤트 (`kind`는 열린 문자열) |
 | C4 | `bot_ui` | Bot UI 등록·하트비트 |
 | C5 | `center_api` | 패키지·배포·작업 + 배포·작업 검사 |
+| C6 | `approvals` | 결재 요청·답 + 폼으로 답 검증 |
 
 자세히: docs/01-architecture.md §2, docs/03-contracts/.
 """
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Sha256, Timestamp, Violation
+from chaeksas.contracts.approvals import (
+    AnswerRequest,
+    ApprovalCreateRequest,
+    ApprovalHost,
+    ApprovalInfo,
+    Form,
+    FormField,
+    apply_defaults,
+    request_id_for,
+    validate_answer,
+    validate_create,
+)
 from chaeksas.contracts.bot_ui import (
     ApprovalAck,
     ApprovalDispatch,
@@ -138,19 +151,6 @@ __all__ = [
     "verify_package",
     "verify_target",
     "verify_time",
-    # C5
-    "DeploymentInfo",
-    "ErrorBody",
-    "JobCreateRequest",
-    "JobInfo",
-    "JobTarget",
-    "ListParams",
-    "MissingResource",
-    "PackageInfo",
-    "PreflightSummary",
-    "cancel_outcome",
-    "validate_deployment",
-    "validate_job_create",
     # C3
     "EventBatchResponse",
     "RejectedLine",
@@ -174,4 +174,28 @@ __all__ = [
     "Runtimes",
     "Versions",
     "WorkerState",
+    # C5
+    "DeploymentInfo",
+    "ErrorBody",
+    "JobCreateRequest",
+    "JobInfo",
+    "JobTarget",
+    "ListParams",
+    "MissingResource",
+    "PackageInfo",
+    "PreflightSummary",
+    "cancel_outcome",
+    "validate_deployment",
+    "validate_job_create",
+    # C6
+    "AnswerRequest",
+    "ApprovalCreateRequest",
+    "ApprovalHost",
+    "ApprovalInfo",
+    "Form",
+    "FormField",
+    "apply_defaults",
+    "request_id_for",
+    "validate_answer",
+    "validate_create",
 ]

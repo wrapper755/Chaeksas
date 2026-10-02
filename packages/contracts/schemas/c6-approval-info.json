@@ -1,0 +1,293 @@
+{
+  "$defs": {
+    "ApprovalHost": {
+      "additionalProperties": true,
+      "description": "이 결재를 올린 쪽.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "ApprovalHost",
+      "type": "object"
+    },
+    "Form": {
+      "additionalProperties": true,
+      "description": "답의 모양. 없으면 「승인 / 반려」 두 단추다.",
+      "properties": {
+        "fields": {
+          "items": {
+            "$ref": "#/$defs/FormField"
+          },
+          "title": "Fields",
+          "type": "array"
+        }
+      },
+      "title": "Form",
+      "type": "object"
+    },
+    "FormField": {
+      "additionalProperties": true,
+      "description": "결재 폼의 칸 하나. STU-04 결재 「출력」 표와 같은 모양이다.",
+      "properties": {
+        "choices": {
+          "anyOf": [
+            {
+              "items": {},
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Choices"
+        },
+        "default": {
+          "default": null,
+          "title": "Default"
+        },
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "type"
+      ],
+      "title": "FormField",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c6-approval-info",
+  "additionalProperties": true,
+  "description": "`GET /api/v1/approvals` — 콘솔(CON-04 결재함)이 읽는 모양.",
+  "properties": {
+    "answer": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answer"
+    },
+    "answered_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answered At"
+    },
+    "answered_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answered By"
+    },
+    "bpm_process_id": {
+      "title": "Bpm Process Id",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "delivered": {
+      "default": false,
+      "title": "Delivered",
+      "type": "boolean"
+    },
+    "delivery_accepted": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delivery Accepted"
+    },
+    "delivery_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Delivery Reason"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "form": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Form"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "host": {
+      "$ref": "#/$defs/ApprovalHost"
+    },
+    "layer": {
+      "title": "Layer",
+      "type": "string"
+    },
+    "node_id": {
+      "title": "Node Id",
+      "type": "string"
+    },
+    "node_instance": {
+      "minimum": 1,
+      "title": "Node Instance",
+      "type": "integer"
+    },
+    "request_id": {
+      "title": "Request Id",
+      "type": "string"
+    },
+    "review": {
+      "additionalProperties": true,
+      "title": "Review",
+      "type": "object"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Title"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "withdraw_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Withdraw Reason"
+    }
+  },
+  "required": [
+    "schema",
+    "request_id",
+    "layer",
+    "run_id",
+    "node_id",
+    "node_instance",
+    "bpm_process_id",
+    "version",
+    "host",
+    "state",
+    "created_at"
+  ],
+  "title": "ApprovalInfo",
+  "type": "object"
+}
