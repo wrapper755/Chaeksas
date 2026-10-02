@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "id": "ui-automation",
+  "version": "0.1.0",
+  "name": "UI 자동화",
+  "description": "화면을 보고 조작하는 태스크와, 셀렉터를 등록하는 도구를 더한다.",
+  "publisher": "Chaeksas",
+  "tier": "builtin",
+  "api": ">=1,<2",
+  "service": {
+    "protocol": "chk-c11",
+    "base_url": "http://svc-uia:8000"
+  },
+  "requires_keys": [
+    {"purpose": "run", "extra_scopes": []},
+    {"purpose": "utility", "extra_scopes": ["registry_write"], "config_key": "registrar_key"}
+  ],
+  "contributes": {
+    "task_types": [
+      {
+        "id": "ui_task",
+        "label": "UI 태스크",
+        "icon": "mouse-pointer-click",
+        "bpmn": "serviceTask",
+        "editor": {"kind": "builtin", "entry": "ui_automation.client:UiTaskEditor"},
+        "executor": {"entry": "ui_automation.client:UiTaskExecutor"},
+        "run_locations": ["pc"]
+      }
+    ],
+    "studio.resource_views": [
+      {"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page", "creates_task_type": "ui_task"}
+    ],
+    "bot_ui.utilities": [
+      {
+        "id": "selector-registration",
+        "label": "UI 셀렉터 등록",
+        "menu": "tools",
+        "entry": "ui_automation.client:SelectorRegistration",
+        "needs_runtime": "worker"
+      }
+    ],
+    "bot_ui.local_runtimes": [
+      {
+        "id": "worker",
+        "label": "Worker 프로세스",
+        "command": ["chk-worker"],
+        "port_setting": "CHK_WORKER__LOCAL_API__PORT",
+        "default_port": 8899,
+        "health": "/v1/health",
+        "token_dir": true,
+        "start": "on_demand"
+      }
+    ],
+    "configuration": [
+      {
+        "key": "registrar_key",
+        "label": "등록 담당자 키",
+        "scope": "bot_ui",
+        "schema": {"type": "string"},
+        "secret": true
+      }
+    ],
+    "preflight": [
+      {"id": "pages-registered", "entry": "ui_automation.client:PagesRegisteredCheck"}
+    ],
+    "console.pages": [
+      {"id": "overview", "label": "개요", "module": "ui-automation/overview"}
+    ],
+    "resources": [
+      {"type": "ui_page", "label": "UI 화면", "catalog_url": "/v1/catalog"}
+    ]
+  }
+}

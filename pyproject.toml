@@ -22,7 +22,9 @@ dev = [
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-extend-exclude = ["spikes", "docs/08-business-examples/_source"]
+# __pyinstaller/: PyInstaller 분석 과정이 읽는 훅. 평범한 모듈이 아니다 (파일 이름에 점, 전역
+# 변수로 결과를 돌려준다). 설치 파일을 만들 때만 쓰이므로 검사에서 뺀다 (ADR-0024).
+extend-exclude = ["spikes", "docs/08-business-examples/_source", "**/__pyinstaller"]
 
 [tool.ruff.lint]
 # PLW1514: 텍스트 파일을 열 때 encoding을 적지 않은 곳 (CLAUDE.md §5 — Windows 기본 인코딩은
@@ -61,3 +63,5 @@ mypy_path = [
     "extensions/ui_automation/src",
 ]
 files = ["tests", "scripts", "packages/*/src", "apps/*/src", "extensions/*/src"]
+# PyInstaller 훅은 모듈 이름 규칙 밖이다 (위 ruff 설명과 같은 이유).
+exclude = ["/__pyinstaller/"]
