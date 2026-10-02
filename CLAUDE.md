@@ -77,9 +77,9 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 ## 7. 현재 상태
 
-M1 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11·C13, `service_kit`, `extension_api`, `core`의 확장 호스트, 내장 확장 `ui-automation`의 `extension.json`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다. 확장의 클라이언트 코드(UI 태스크 수행·편집기·셀렉터 등록)는 모양만 맞춘 뼈대이고 속은 M4다. `web/`은 pnpm 워크스페이스(앱 2 + 패키지 3)가 서고 구성요소 7개·계약 타입 생성이 들어 있지만, 화면 내용은 M2다.
+M1 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11·C13, `service_kit`, `extension_api`, `core`의 확장 호스트, 내장 확장 `ui-automation`의 `extension.json`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다. 확장의 클라이언트 코드(UI 태스크 수행·편집기·셀렉터 등록)는 모양만 맞춘 뼈대이고 속은 M4다. `web/`은 pnpm 워크스페이스(앱 2 + 패키지 3)가 서고 구성요소 7개·계약 타입 생성이 들어 있지만, 화면 내용은 M2다. `qt`는 테마 적용(`apply_theme()`)까지 있고 위젯은 없다.
 
-- 명령: `uv sync --all-packages` → `uv run pytest` (338개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
+- 명령: `uv sync --all-packages` → `uv run pytest` (354개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
 - 계약 모델을 고치면 → `uv run python scripts/gen_schemas.py`, 디자인 토큰을 고치면 → `uv run python scripts/gen_tokens.py` (명암비·간격 배수 검사 포함). 둘 다 `--check`가 pytest·CI에 들어 있어 잊으면 깨진다.
 - 웹은 `web/`에서 pnpm (`pnpm install` → `pnpm dev`·`pnpm typecheck`·`pnpm build`). **계약을 고치면 두 단계다** — `gen_schemas.py`로 스키마, 그다음 `pnpm gen:api-types`로 TypeScript 타입. 색·크기는 토큰만 쓴다 (`tokens.css`·`theme.css`는 생성물). 상태 표기는 생성된 `status-map.ts`에 있는 것만 쓴다.
 - import 이름은 `chaeksas.<이름>`, 확장은 `chaeksas.ext.<id>` ([ADR-0019](docs/decisions/0019-package-names.md)). `src/chaeksas/`에 `__init__.py`를 만들면 조용히 깨진다.
@@ -87,4 +87,5 @@ M1 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`
 - 계약을 고칠 때는 문서(`docs/03-contracts/`)가 원본이다. 문서의 JSON 예시를 테스트가 **문서에서 뽑아** 검증하니(`tests/test_contract_examples.py`), 예시도 같이 고친다.
 - 푸시·PR마다 CI가 돈다 (`.github/workflows/ci.yml`): 매트릭스 두 개에서 pytest·ruff·mypy·생성물 최신 여부. 경로를 비교할 때 `str(path)`가 아니라 `as_posix()`를 쓴다 (Windows는 `\`).
 - 확장은 엔트리 포인트 `chaeksas.extensions`로 찾는다. 확장 하나를 더하면 `extension.json`을 그 확장의 **파이썬 패키지 안**에 두고(호스트가 `importlib.resources`로 읽는다), `pyproject.toml`에 엔트리 포인트를 적는다. 기여의 `entry`는 그 확장 패키지 안만 가리킬 수 있다. 설치 파일에 넣는 일은 `core`가 주는 PyInstaller 훅이 하므로 빌드 인자를 적지 않는다 ([ADR-0024](docs/decisions/0024-desktop-packaging-extensions.md)).
-- 아직 없는 것: Qt 테마와 PySide6, 웹 화면 내용(CON-*·SVC-*는 M2), HTTP 어댑터 해석기(규격만 있다), 계약 코드 C8~C10·C12·C14, Playwright. 남은 M1 기준은 `docs/05-roadmap.md`.
+- 데스크톱은 `apply_theme(app)` 한 줄로 테마를 쓴다 (글꼴 등록 + QSS + 팔레트). Qt 테스트는 `QT_QPA_PLATFORM=offscreen`으로 화면 없이 돈다.
+- 아직 없는 것: 글꼴 바이너리(`packages/qt/.../fonts/README.md`), Qt 공용 위젯, 웹 화면 내용(CON-*·SVC-*는 M2), HTTP 어댑터 해석기(규격만 있다), 계약 코드 C8~C10·C12·C14, Playwright. 남은 M1 기준은 `docs/05-roadmap.md`.

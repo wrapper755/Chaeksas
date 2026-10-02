@@ -59,7 +59,7 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 - [x] `packages/extension_api`(인터페이스)와 `core` 확장 호스트 골격, 빈 내장 확장 하나가 Studio·Bot UI에 태스크 종류·유틸리티를 기여함, 플랫폼이 특정 확장을 import하지 않음을 검사 테스트로 확인 ([ADR-0018](decisions/0018-extensions.md)) — C13 모델·검사 규칙 E1~E6(`chaeksas.contracts.extension`), 인터페이스(`TaskExecutor`·`TaskEditor`·`BotUiUtility`·`PreflightCheck`·어댑터 해석기 규격), 호스트(`chaeksas.core.extensions`: 엔트리 포인트 `chaeksas.extensions` → 기여 등록 → `entry` 해석), 내장 확장 `ui-automation`의 `extension.json`. `tests/test_extension_host.py`·`tests/test_contracts_extension.py`. **화면·수행은 뼈대뿐이다** (UI 태스크 수행·셀렉터 등록 화면은 M4)
 - [x] `design/tokens.json` → 웹 CSS·Tailwind 테마(`@theme`)·상태 표(TS)·Qt QSS·미리보기 생성기와 명암비·간격 배수 검사, CI가 생성물 최신 여부 확인 — `scripts/gen_tokens.py`
 - [x] `web/` 워크스페이스: `packages/ui`(Button·StatusBadge·DataTable·Field·Dialog·EmptyState·ErrorBanner), `api-types`가 계약 JSON Schema에서 생성됨(33묶음), Windows에서 `pnpm dev` — pnpm 워크스페이스(앱 2 + 패키지 3), Next.js 16·Tailwind 4, CI에 웹 작업 추가(Win+Linux에서 `check:api-types`·`typecheck`·`build`). **실제 화면(CON-*·SVC-*)은 M2다** — 지금 페이지는 토큰·구성요소·타입이 이어졌는지 보는 뼈대다
-- [ ] Qt 테마: 같은 토큰으로 밝게/어둡게, Pretendard 포함
+- [ ] Qt 테마: 같은 토큰으로 밝게/어둡게, Pretendard 포함 — 적용 코드는 **있다** (`chaeksas.qt.theme.apply_theme()`: 글꼴 등록 + 생성된 QSS + 팔레트, 「시스템 따름」은 OS 변경을 따라간다. `tests/test_qt_theme.py` 16개가 화면 없이 돈다). **글꼴 바이너리(Pretendard·JetBrains Mono)를 아직 넣지 않았다** — `packages/qt/src/chaeksas/qt/fonts/README.md`
 
 ## M2. Center 최소 + Bot UI 연결
 

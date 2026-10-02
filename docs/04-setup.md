@@ -103,7 +103,14 @@ docker run -d --name chaeksas-neo4j -p 7474:7474 -p 7687:7687 \
 
 # 4) Ollama (로컬 LLM을 쓸 때)
 curl -fsSL https://ollama.com/install.sh | sh
+
+# 5) Qt 테스트를 돌릴 때만 (화면 없이 돌려도 그래픽 라이브러리가 필요하다)
+sudo apt-get install -y --no-install-recommends \
+  libegl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libfreetype6
 ```
+
+- **Qt 테스트는 화면이 없어도 돈다** — `QT_QPA_PLATFORM=offscreen`을 테스트가 스스로 켠다. 위 라이브러리가 없으면 그 테스트만 건너뛴다 (CI는 깔고 돌린다).
+- PySide6는 `uv sync`가 받는다. `packages/qt`는 **Essentials만** 쓰고, QtWebEngine이 든 Addons는 Studio가 따로 받는다 ([ADR-0022](decisions/0022-studio-canvas.md)·[ADR-0024](decisions/0024-desktop-packaging-extensions.md) — Bot UI 설치 파일을 작게 두려는 것이다).
 
 > 제안: M2에서 서버 쪽 구성(Center, 서비스 앱, Neo4j)을 `docker compose` 파일 하나로 묶는다. 그러면 Windows에서도 Docker Desktop으로 같은 서버를 띄울 수 있다.
 

@@ -3,7 +3,10 @@ name = "chaeksas-qt"
 version = "0.1.0"
 description = "공용 PySide6 위젯·테마·결재 창 (토큰에서 생성한 QSS를 쓴다)"
 requires-python = ">=3.12,<3.13"
-dependencies = []
+# PySide6-Essentials만 쓴다 (QtWidgets·QtGui). QtWebEngine이 든 Addons는 Studio 캔버스에만
+# 필요하므로(ADR-0022) `apps/studio`가 따로 받는다 — Bot UI 설치 파일을 작게 두려는 것이다
+# (ADR-0024: Studio 551MB 중 WebEngine 194MB).
+dependencies = ["PySide6-Essentials==6.11.2"]
 
 [build-system]
 requires = ["hatchling"]

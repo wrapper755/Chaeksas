@@ -534,7 +534,7 @@ def outputs(tokens: dict[str, Any]) -> dict[Path, str]:
         QT_DIR / "tokens.py": qt_tokens_py(tokens),
         QT_DIR / "theme-light.qss": qt_qss(tokens, "light"),
         QT_DIR / "theme-dark.qss": qt_qss(tokens, "dark"),
-        QT_DIR / "__init__.py": f'"""Qt 테마 — {BANNER}."""\n',
+        # `theme/__init__.py`는 손으로 쓴다 (테마를 **적용하는** 코드가 거기 있다).
         PREVIEW: preview_html(tokens, contrast_rows(tokens["color"]["light"])),
     }
 
