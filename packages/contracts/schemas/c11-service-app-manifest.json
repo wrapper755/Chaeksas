@@ -1,5 +1,25 @@
 {
   "$defs": {
+    "ExtensionRef": {
+      "additionalProperties": true,
+      "description": "이 서비스 앱이 어느 확장의 서버 부분인가 (C13). 내장·사내 확장이면 넣는다.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionRef",
+      "type": "object"
+    },
     "Operation": {
       "additionalProperties": true,
       "description": "작업 하나. Studio가 이것만 보고 서비스 앱 태스크 편집기(STU-14)를 만든다.",
@@ -77,97 +97,36 @@
       "type": "object"
     }
   },
-  "$id": "urn:chaeksas:contracts:c7-service-app-resource",
+  "$id": "urn:chaeksas:contracts:c11-service-app-manifest",
   "additionalProperties": true,
-  "description": "서비스 앱 하나 (확장의 서버 부분).",
+  "description": "`GET /manifest` — 인증 없음 (비밀이 없다). Center가 리소스 목록에 쓴다 (C7).",
   "properties": {
     "app_id": {
       "title": "App Id",
       "type": "string"
     },
-    "base_url": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Base Url"
-    },
     "category": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Category"
-    },
-    "checked_at": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Checked At"
+      "title": "Category",
+      "type": "string"
     },
     "console_url": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Console Url"
+      "title": "Console Url",
+      "type": "string"
     },
-    "extension_id": {
+    "extension": {
       "anyOf": [
         {
-          "type": "string"
+          "$ref": "#/$defs/ExtensionRef"
         },
         {
           "type": "null"
         }
       ],
-      "default": null,
-      "title": "Extension Id"
-    },
-    "manifest_at": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Manifest At"
+      "default": null
     },
     "name": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Name"
+      "title": "Name",
+      "type": "string"
     },
     "operations": {
       "items": {
@@ -176,41 +135,24 @@
       "title": "Operations",
       "type": "array"
     },
-    "status": {
-      "default": "unknown",
-      "title": "Status",
-      "type": "string"
-    },
-    "status_reasons": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Status Reasons",
-      "type": "array"
-    },
-    "used_by": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Used By",
-      "type": "array"
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
     },
     "version": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Version"
+      "title": "Version",
+      "type": "string"
     }
   },
   "required": [
-    "app_id"
+    "schema",
+    "app_id",
+    "name",
+    "version",
+    "category",
+    "console_url"
   ],
-  "title": "ServiceAppResource",
+  "title": "ServiceAppManifest",
   "type": "object"
 }

@@ -14,6 +14,7 @@
 | C5 | `center_api` | 패키지·배포·작업 + 배포·작업 검사 |
 | C6 | `approvals` | 결재 요청·답 + 폼으로 답 검증 |
 | C7 | `resources`, `center_keys` | 리소스 목록 + 누락 검사, Center API 키 |
+| C11 | `service_app` | 서비스 앱 공통 (manifest·작업 호출·키·멱등). 뼈대는 `chaeksas.service_kit` |
 
 검사 함수가 계약마다 있어서, 이름이 겹치는 것은 루트에서 계약을 붙여 다시 내보낸다
 (`validate_approval_create`, `validate_center_key_create`). 모듈 안의 이름은 계약 문서 그대로다.
@@ -72,9 +73,9 @@ from chaeksas.contracts.center_keys import (
     CenterKeyCreateRequest,
     CenterKeyInfo,
     expires_soon,
-    key_state,
-    prefix_of,
 )
+from chaeksas.contracts.center_keys import key_state as center_key_state
+from chaeksas.contracts.center_keys import prefix_of as center_key_prefix_of
 from chaeksas.contracts.center_keys import validate_create as validate_center_key_create
 from chaeksas.contracts.events import (
     EventBatchResponse,
@@ -109,7 +110,6 @@ from chaeksas.contracts.resources import (
     ExtensionResource,
     InstalledOn,
     MissingResource,
-    Operation,
     ResourceIndex,
     ResourceList,
     RuntimeHost,
@@ -119,6 +119,24 @@ from chaeksas.contracts.resources import (
     blocking_at_deploy,
     missing,
 )
+from chaeksas.contracts.service_app import (
+    Caller,
+    ExtensionRef,
+    HealthResponse,
+    KeySelfResponse,
+    Operation,
+    OpRequest,
+    OpResponse,
+    ServiceAppKey,
+    ServiceAppManifest,
+    Usage,
+    UsageRecord,
+    authorize,
+    idempotency_key,
+    resolve_mode,
+)
+from chaeksas.contracts.service_app import key_state as service_app_key_state
+from chaeksas.contracts.service_app import prefix_of as service_app_prefix_of
 from chaeksas.contracts.signing import (
     AdminKey,
     AdminKeyClaim,
@@ -233,8 +251,7 @@ __all__ = [
     "ContributedResource",
     "ExtensionResource",
     "InstalledOn",
-    "MissingResource",
-    "Operation",
+    "MissingResource",  # `Operation`은 C11이 소유한다
     "ResourceIndex",
     "ResourceList",
     "RuntimeHost",
@@ -242,9 +259,26 @@ __all__ = [
     "ServiceAppResource",
     "ToolpackResource",
     "blocking_at_deploy",
+    "center_key_prefix_of",
+    "center_key_state",
     "expires_soon",
-    "key_state",
     "missing",
-    "prefix_of",
     "validate_center_key_create",
+    # C11
+    "Caller",
+    "ExtensionRef",
+    "HealthResponse",
+    "KeySelfResponse",
+    "OpRequest",
+    "OpResponse",
+    "Operation",
+    "ServiceAppKey",
+    "ServiceAppManifest",
+    "Usage",
+    "UsageRecord",
+    "authorize",
+    "idempotency_key",
+    "resolve_mode",
+    "service_app_key_state",
+    "service_app_prefix_of",
 ]

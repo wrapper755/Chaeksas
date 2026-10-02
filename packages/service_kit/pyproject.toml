@@ -3,7 +3,10 @@ name = "chaeksas-service-kit"
 version = "0.1.0"
 description = "서비스 앱 공통 뼈대 — API 키 발급·검증, 관리 API, healthz·manifest, 작업 호출 틀 (C11)"
 requires-python = ">=3.12,<3.13"
-dependencies = ["chaeksas-contracts"]
+dependencies = [
+    "chaeksas-contracts",
+    "fastapi>=0.115",
+]
 
 [tool.uv.sources]
 chaeksas-contracts = { workspace = true }

@@ -53,8 +53,8 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 완료 기준:
 - [x] 루트에서 `uv sync`, `uv run pytest`가 Windows·Linux 모두 통과 (CI 두 개) — `.github/workflows/ci.yml`, `windows-latest` + `ubuntu-latest` 매트릭스
 - [x] 의존 방향 import 검사 테스트 통과 (`01-architecture` §5) — `tests/test_import_direction.py` (선언 의존 전이 + 실제 import)
-- [x] 계약 패키지에서 JSON Schema가 생성됨 — `scripts/gen_schemas.py` (C1~C7 모델 26개. C8~C14는 그 단계에서)
-- [ ] `service_kit`으로 만든 빈 서비스 앱이 `/healthz`, `/manifest`에 답하고, 관리 콘솔에서 발급한 API 키로만 호출되며, 허용되지 않은 모드를 거부함 (C11)
+- [x] 계약 패키지에서 JSON Schema가 생성됨 — `scripts/gen_schemas.py` (C1~C7·C11 모델 30개. 나머지는 그 단계에서)
+- [x] `service_kit`으로 만든 빈 서비스 앱이 `/healthz`, `/manifest`에 답하고, 관리 콘솔에서 발급한 API 키로만 호출되며, 허용되지 않은 모드를 거부함 (C11) — `tests/test_service_kit.py` 28개. **관리 콘솔 화면(SVC-00~03)은 `web/`이라 아직 없다**
 - [ ] 스파이크 S1~S5 ADR 작성
 - [ ] `packages/extension_api`(인터페이스)와 `core` 확장 호스트 골격, 빈 내장 확장 하나가 Studio·Bot UI에 태스크 종류·유틸리티를 기여함, 플랫폼이 특정 확장을 import하지 않음을 검사 테스트로 확인 ([ADR-0018](decisions/0018-extensions.md))
 - [ ] `design/tokens.json` → 웹 CSS·Qt QSS·미리보기 생성기와 명암비 검사, CI가 생성물 최신 여부 확인

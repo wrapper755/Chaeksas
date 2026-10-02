@@ -50,6 +50,8 @@
 | C6 | `chaeksas.contracts.approvals` | `validate_answer()` — Center와 실행하는 쪽이 **같이 쓴다**. `validate_create()`, `request_id_for()`, `apply_defaults()` | `tests/test_contract_examples.py` |
 | C7 | `chaeksas.contracts.resources` | `missing()` — C1 `requires` ↔ 리소스 목록 대조. `blocking_at_deploy()`가 배포를 막을 것만 고른다 | (문서에 JSON 예시 없음) |
 | C7 | `chaeksas.contracts.center_keys` | `key_state()`, `expires_soon()`, `prefix_of()`, `validate_create()` | 같음 |
+| C11 | `chaeksas.contracts.service_app` | `authorize()`(키 권한), `resolve_mode()`(폴백 규칙), `idempotency_key()`, `key_state()` | (문서 예시는 HTTP라 모델 시험은 `tests/test_service_kit.py`) |
+| C11 | **`chaeksas.service_kit`** | 계약을 지키는 FastAPI 앱 하나(`create_app`) — `/healthz`·`/manifest`·`POST /v1/ops/{작업}`·`/v1/keys/self`, 키 검증·권한, 멱등, 오류 형식, 사용 기록 | 같음 |
 
 V5~V8은 **역할에 따라 누가 검사하는지가 다르므로** 함수를 나눠 뒀다. Center는 `verify_time(..., check_not_before=False)`로 예약 배포를 받아 두고, 실행하는 쪽만 `not_before`를 본다.
 

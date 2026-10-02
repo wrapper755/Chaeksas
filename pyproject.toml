@@ -13,6 +13,7 @@ python-downloads = "automatic"
 
 [dependency-groups]
 dev = [
+    "httpx>=0.27", # fastapi TestClient
     "pytest>=8.3",
     "ruff>=0.8",
     "mypy>=1.13",

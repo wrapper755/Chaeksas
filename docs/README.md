@@ -5,7 +5,7 @@
 | [00-vision.md](00-vision.md) | 비전, 사용자, 범위, 성공 기준, 열린 질문 | 초안 |
 | [01-architecture.md](01-architecture.md) | 배치, 구성요소, 태스크별 호출 경로, 통신·의존 규칙, OS별 분기 | 제안 |
 | [02-glossary.md](02-glossary.md) | 용어집 (프로세스·화면 구별, Bot UI·Bot·Worker, BPM 프로세스, 수행 모드, 서비스 앱, API 키·키 참조) | 초안 |
-| [03-contracts/](03-contracts/README.md) | 계약 원칙과 목록 C1~C14 | 합의 12개, 초안 2개(C12 서버 실행기 M7, C14 BPMN 확장 속성). **코드: C1~C7 모델 + JSON Schema** |
+| [03-contracts/](03-contracts/README.md) | 계약 원칙과 목록 C1~C14 | 합의 12개, 초안 2개(C12 서버 실행기 M7, C14 BPMN 확장 속성). **코드: C1~C7·C11 모델 + JSON Schema, `service_kit`** |
 | [04-setup.md](04-setup.md) | Windows·Linux 환경 구성, 포트 기본값, 환경변수 | 코드 전 |
 | [05-roadmap.md](05-roadmap.md) | M0~M7 단계와 완료 기준 (각 단계의 인수 시험 = 업무 예제) | 제안 |
 | [06-screens/](06-screens/README.md) | 화면 설계서 (Studio, Bot UI, Center 콘솔, 서비스 앱 관리 콘솔, Admin). Worker는 화면 없음 | 검토 완료 |

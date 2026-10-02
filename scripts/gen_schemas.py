@@ -28,17 +28,21 @@ from chaeksas.contracts import (
     ErrorBody,
     EventBatchResponse,
     ExtensionResource,
+    HealthResponse,
     HeartbeatRequest,
     HeartbeatResponse,
     JobCreateRequest,
     JobInfo,
     Manifest,
+    OpRequest,
+    OpResponse,
     PackageClaim,
     PackageInfo,
     RegisterRequest,
     RegisterResponse,
     RunEvent,
     RuntimeResource,
+    ServiceAppManifest,
     ServiceAppResource,
     ToolpackResource,
 )
@@ -75,6 +79,10 @@ MODELS: list[tuple[str, Any]] = [
     ("c7-center-key-create-request", CenterKeyCreateRequest),
     ("c7-center-key-info", CenterKeyInfo),
     ("c7-center-key-created", CenterKeyCreated),
+    ("c11-service-app-manifest", ServiceAppManifest),
+    ("c11-op-request", OpRequest),
+    ("c11-op-response", OpResponse),
+    ("c11-health-response", HealthResponse),
 ]
 
 

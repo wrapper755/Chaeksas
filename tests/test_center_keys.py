@@ -13,9 +13,9 @@ from chaeksas.contracts import (
     CenterKeyCreated,
     CenterKeyCreateRequest,
     CenterKeyInfo,
+    center_key_prefix_of,
+    center_key_state,
     expires_soon,
-    key_state,
-    prefix_of,
     validate_center_key_create,
 )
 from chaeksas.contracts.center_keys import (
@@ -35,7 +35,7 @@ def info(**over: object) -> CenterKeyInfo:
         "key_id": "ck_1a2b3c4d",
         "name": "현장PC-1",
         "type": "bot_ui",
-        "prefix": prefix_of(RAW),
+        "prefix": center_key_prefix_of(RAW),
         "state": "active",
         "created_at": NOW,
     }
@@ -72,8 +72,8 @@ def test_raw_key_shape_is_checked() -> None:
 
 
 def test_prefix_is_the_first_16_chars() -> None:
-    assert prefix_of(RAW) == KEY_PREFIX + "A" * 8
-    assert len(prefix_of(RAW)) == PREFIX_LEN
+    assert center_key_prefix_of(RAW) == KEY_PREFIX + "A" * 8
+    assert len(center_key_prefix_of(RAW)) == PREFIX_LEN
 
 
 def test_key_id_shape() -> None:
@@ -86,20 +86,20 @@ def test_key_id_shape() -> None:
 
 
 def test_active_key() -> None:
-    assert key_state(now=NOW) == "active"
-    assert key_state(now=NOW, expires_at="2027-10-01T10:00:00+09:00") == "active"
+    assert center_key_state(now=NOW) == "active"
+    assert center_key_state(now=NOW, expires_at="2027-10-01T10:00:00+09:00") == "active"
 
 
 def test_expired_key() -> None:
-    assert key_state(now=NOW, expires_at="2026-09-30T10:00:00+09:00") == "expired"
+    assert center_key_state(now=NOW, expires_at="2026-09-30T10:00:00+09:00") == "expired"
     # 딱 그 순간도 만료로 본다
-    assert key_state(now=NOW, expires_at=NOW) == "expired"
+    assert center_key_state(now=NOW, expires_at=NOW) == "expired"
 
 
 def test_revoked_wins_over_expired() -> None:
     """폐기가 만료보다 앞선다 — 폐기된 키는 만료 여부와 무관하게 폐기됨이다."""
-    assert key_state(now=NOW, expires_at="2026-09-30T10:00:00+09:00", revoked_at=NOW) == "revoked"
-    assert key_state(now=NOW, revoked_at="2026-05-01T10:00:00+09:00") == "revoked"
+    assert center_key_state(now=NOW, expires_at="2026-09-30T10:00:00+09:00", revoked_at=NOW) == "revoked"
+    assert center_key_state(now=NOW, revoked_at="2026-05-01T10:00:00+09:00") == "revoked"
 
 
 def test_expiry_warning_window() -> None:
