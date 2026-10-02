@@ -1,0 +1,26 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-error-body",
+  "additionalProperties": true,
+  "description": "오류 응답 본문. C11과 같은 형식이다.",
+  "properties": {
+    "code": {
+      "title": "Code",
+      "type": "string"
+    },
+    "detail": {
+      "additionalProperties": true,
+      "title": "Detail",
+      "type": "object"
+    },
+    "message": {
+      "title": "Message",
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "ErrorBody",
+  "type": "object"
+}

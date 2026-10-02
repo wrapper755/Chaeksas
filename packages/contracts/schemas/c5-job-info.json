@@ -1,0 +1,202 @@
+{
+  "$defs": {
+    "JobTarget": {
+      "additionalProperties": true,
+      "description": "작업 대상. 서버 실행기는 `id`를 비우거나 `\"*\"`로 두면 Center가 고른다.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "JobTarget",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c5-job-info",
+  "additionalProperties": true,
+  "description": "`GET /jobs/{id}` — 만들 때 받은 것 + Center가 아는 것.\n\n취소(`DELETE /jobs/{id}`)도 이 모양으로 답한다. 202일 때는 `cancel_requested=true`이고,\n결과는 다음 하트비트의 ack로 `cancel_result`에 적힌다.",
+  "properties": {
+    "bpm_process_id": {
+      "title": "Bpm Process Id",
+      "type": "string"
+    },
+    "cancel_requested": {
+      "default": false,
+      "title": "Cancel Requested",
+      "type": "boolean"
+    },
+    "cancel_result": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cancel Result"
+    },
+    "dispatched_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dispatched At"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "idempotency_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Idempotency Key"
+    },
+    "inputs": {
+      "additionalProperties": true,
+      "title": "Inputs",
+      "type": "object"
+    },
+    "job_id": {
+      "pattern": "^job_[0-9a-f]{8}$",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "queue_position": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Queue Position"
+    },
+    "requested_at": {
+      "title": "Requested At",
+      "type": "string"
+    },
+    "requested_by": {
+      "title": "Requested By",
+      "type": "string"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    },
+    "run_status": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Status"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "state_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "State Reason"
+    },
+    "target": {
+      "$ref": "#/$defs/JobTarget"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    }
+  },
+  "required": [
+    "bpm_process_id",
+    "target",
+    "inputs",
+    "job_id",
+    "requested_by",
+    "requested_at",
+    "state"
+  ],
+  "title": "JobInfo",
+  "type": "object"
+}

@@ -46,8 +46,11 @@
 | C2 | `chaeksas.contracts.signing` | `sign()`, `verify()`(V1~V4), `verify_time()`(V5), `verify_target()`(V6), `verify_package()`(V7), `verify_admin_key_addition()`(V8) | 같음 |
 | C3 | `chaeksas.contracts.events` | `missing_data_keys()` — 줄 단위 거부용 | 같음 |
 | C4 | `chaeksas.contracts.bot_ui` | (모델 검증만) | 같음 |
+| C5 | `chaeksas.contracts.center_api` | `validate_deployment()`, `validate_job_create()`, `cancel_outcome()` | (문서에 JSON 예시 없음) |
 
 V5~V8은 **역할에 따라 누가 검사하는지가 다르므로** 함수를 나눠 뒀다. Center는 `verify_time(..., check_not_before=False)`로 예약 배포를 받아 두고, 실행하는 쪽만 `not_before`를 본다.
+
+검사 함수는 **저장소를 보지 않는다.** 상태가 필요한 검사(대상이 존재하는지, 같은 봉투가 이미 있는지, 활성 배포가 몇 개인지)는 Center가 자기 저장소에서 읽어 인자로 넘긴다 — 없으면 그 검사를 건너뛰고, 무엇을 건너뛰는지 docstring에 적혀 있다.
 
 문서의 JSON 예시는 **테스트가 문서에서 뽑아** 모델로 검증한다. 예시를 고치면 테스트가 깨지므로 문서와 코드가 어긋날 수 없다 (프로토타입에서 `X-Bot-Id` 헤더·`{"events": […]}` 본문이 코드와 달랐던 일).
 

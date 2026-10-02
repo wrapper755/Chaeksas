@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "JobTarget": {
+      "additionalProperties": true,
+      "description": "작업 대상. 서버 실행기는 `id`를 비우거나 `\"*\"`로 두면 Center가 고른다.",
+      "properties": {
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "JobTarget",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c5-job-create-request",
+  "additionalProperties": true,
+  "description": "`POST /jobs`.\n\n`requested_by`는 **본문에서 받지 않는다.** 키 이름이나 `X-CHK-Actor` 헤더로 Center가 채운다.",
+  "properties": {
+    "bpm_process_id": {
+      "title": "Bpm Process Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "idempotency_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Idempotency Key"
+    },
+    "inputs": {
+      "additionalProperties": true,
+      "title": "Inputs",
+      "type": "object"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    },
+    "target": {
+      "$ref": "#/$defs/JobTarget"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    }
+  },
+  "required": [
+    "bpm_process_id",
+    "target",
+    "inputs"
+  ],
+  "title": "JobCreateRequest",
+  "type": "object"
+}

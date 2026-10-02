@@ -16,12 +16,17 @@ from typing import Any
 
 from chaeksas.contracts import (
     DeploymentClaim,
+    DeploymentInfo,
     Envelope,
+    ErrorBody,
     EventBatchResponse,
     HeartbeatRequest,
     HeartbeatResponse,
+    JobCreateRequest,
+    JobInfo,
     Manifest,
     PackageClaim,
+    PackageInfo,
     RegisterRequest,
     RegisterResponse,
     RunEvent,
@@ -43,6 +48,11 @@ MODELS: list[tuple[str, Any]] = [
     ("c4-register-response", RegisterResponse),
     ("c4-heartbeat-request", HeartbeatRequest),
     ("c4-heartbeat-response", HeartbeatResponse),
+    ("c5-package-info", PackageInfo),
+    ("c5-deployment-info", DeploymentInfo),
+    ("c5-job-create-request", JobCreateRequest),
+    ("c5-job-info", JobInfo),
+    ("c5-error-body", ErrorBody),  # C11과 같은 오류 형식
 ]
 
 

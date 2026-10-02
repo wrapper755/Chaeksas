@@ -11,6 +11,7 @@
 | C2 | `hashing`, `signing` | `canonical_json`·`content_hash`, 서명 봉투 + 검증 규칙 V1~V8 |
 | C3 | `events` | 실행 이벤트 (`kind`는 열린 문자열) |
 | C4 | `bot_ui` | Bot UI 등록·하트비트 |
+| C5 | `center_api` | 패키지·배포·작업 + 배포·작업 검사 |
 
 자세히: docs/01-architecture.md §2, docs/03-contracts/.
 """
@@ -34,6 +35,20 @@ from chaeksas.contracts.bot_ui import (
     Runtimes,
     Versions,
     WorkerState,
+)
+from chaeksas.contracts.center_api import (
+    DeploymentInfo,
+    ErrorBody,
+    JobCreateRequest,
+    JobInfo,
+    JobTarget,
+    ListParams,
+    MissingResource,
+    PackageInfo,
+    PreflightSummary,
+    cancel_outcome,
+    validate_deployment,
+    validate_job_create,
 )
 from chaeksas.contracts.events import (
     EventBatchResponse,
@@ -123,6 +138,19 @@ __all__ = [
     "verify_package",
     "verify_target",
     "verify_time",
+    # C5
+    "DeploymentInfo",
+    "ErrorBody",
+    "JobCreateRequest",
+    "JobInfo",
+    "JobTarget",
+    "ListParams",
+    "MissingResource",
+    "PackageInfo",
+    "PreflightSummary",
+    "cancel_outcome",
+    "validate_deployment",
+    "validate_job_create",
     # C3
     "EventBatchResponse",
     "RejectedLine",
