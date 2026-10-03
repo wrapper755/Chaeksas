@@ -63,10 +63,10 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 
 ## M2. Center 최소 + Bot UI 연결
 
-- [ ] Linux 서버에 Center가 뜨고, 콘솔에서 발급한 Center API 키를 Windows Bot UI에 넣으면 등록 → 하트비트 (C4, CON-11, BUI-03) — **Center 쪽은 있다** (`chk-center`, 키 발급·등록·하트비트 28개 시험). 콘솔 화면과 Bot UI는 남았다
+- [ ] Linux 서버에 Center가 뜨고, 콘솔에서 발급한 Center API 키를 Windows Bot UI에 넣으면 등록 → 하트비트 (C4, CON-11, BUI-03) — **Center와 콘솔은 있다** (콘솔에서 키를 발급해 넣을 수 있다). 남은 것은 Bot UI 앱과 Windows 실기 확인 (`chk-center`, 키 발급·등록·하트비트 28개 시험). 콘솔 화면과 Bot UI는 남았다
 - [x] Bot UI별 Center API 키로 다른 Bot UI를 사칭할 수 없음 — 키는 처음 등록한 PC(`machine_id`)에 묶이고 다른 PC에서 쓰면 409 `machine_mismatch`. 운영자가 「PC 묶음 풀기」로 되돌린다
 - [x] 패키지 업로드·목록·다운로드, 해시 검증 (C1, C5 일부) — **보낸 해시를 믿지 않고 파일에서 다시 계산해** 매니페스트와 대조한다 (R6). zip 경로 탈출·크기도 Center가 먼저 막는다
-- [ ] Center 콘솔(Next.js): 공통 틀(CON-00), 관리자 로그인 세션(BFF), Bot UI 현황(CON-03), Center API 키(CON-11)
+- [x] Center 콘솔(Next.js): 공통 틀(CON-00), 관리자 로그인 세션(BFF), Bot UI 현황(CON-03), Center API 키(CON-11) — 토큰은 암호화된 httpOnly 쿠키에 담겨 **브라우저에 내려가지 않는다**(HTML에 새지 않는 것을 확인). 실제로 띄운 Center에 붙여 두 화면이 실 데이터를 그리는 것까지 봤다. 아직 없는 화면은 탐색에서 끄고 이유를 보인다
 - [ ] 서비스 앱 관리 콘솔(Next.js): SVC-00~02
 - [ ] 서버 구성 `docker compose` 한 번으로 기동 — `deploy/compose.yaml`·`Dockerfile.center`를 썼지만 **이 PC에 Docker가 없어 실제로 띄워 보지 못했다**
 

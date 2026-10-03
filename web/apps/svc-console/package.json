@@ -6,7 +6,7 @@
     "dev": "next dev --port 8001",
     "build": "next build",
     "start": "next start --port 8001",
-    "typecheck": "tsc --project tsconfig.json"
+    "typecheck": "next typegen && tsc --project tsconfig.json"
   },
   "dependencies": {
     "@chaeksas/api-types": "workspace:*",

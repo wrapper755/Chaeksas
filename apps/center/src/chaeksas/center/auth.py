@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hmac
 from dataclasses import dataclass
+from urllib.parse import unquote
 
 from fastapi import Request
 
@@ -21,6 +22,7 @@ from chaeksas.center import keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
 
+#: 콘솔(BFF)이 로그인한 사용자 이름을 싣는 헤더. **값은 UTF-8 퍼센트 인코딩** (C5).
 ACTOR_HEADER = "X-CHK-Actor"
 
 
@@ -44,8 +46,18 @@ def bearer(request: Request) -> str | None:
 
 
 def _console_actor(request: Request, *, fallback: str) -> str:
-    """콘솔이 보낸 사용자 이름. 없으면 토큰 이름을 쓴다."""
-    return request.headers.get(ACTOR_HEADER, "").strip() or fallback
+    """콘솔이 보낸 사용자 이름. 없으면 토큰 이름을 쓴다.
+
+    값은 **UTF-8 퍼센트 인코딩**이다 (C5) — HTTP 헤더에 한글을 그대로 넣을 수 없다. 디코딩이
+    안 되면 받은 문자열을 그대로 쓴다 (이름 하나 때문에 요청을 거부하지 않는다).
+    """
+    raw = request.headers.get(ACTOR_HEADER, "").strip()
+    if not raw:
+        return fallback
+    try:
+        return unquote(raw, errors="strict") or fallback
+    except (UnicodeDecodeError, ValueError):
+        return raw
 
 
 def caller(request: Request, store: Store, *, admin_token: str | None, read_token: str | None) -> Caller:

@@ -62,6 +62,7 @@ pnpm --filter @chaeksas/center-console dev   # 하나만 — http://localhost:85
 | 명령 (`web/`에서) | 하는 일 |
 | --- | --- |
 | `pnpm dev` | 콘솔 둘을 함께 띄운다 (Center 8501, 서비스 앱 8001) |
+| 환경변수 | Center 콘솔: `CHK_CONSOLE__CENTER_URL`(기본 `http://localhost:8800`), `CHK_CONSOLE__SESSION_SECRET`(**필수**, 16자 이상 — 로그인 쿠키를 암호화한다) |
 | `pnpm build` | 둘 다 제품 빌드 (`output: standalone`) |
 | `pnpm typecheck` | 모든 패키지·앱의 TypeScript 검사 |
 | `pnpm gen:api-types` | 계약 JSON Schema → TypeScript 타입 |

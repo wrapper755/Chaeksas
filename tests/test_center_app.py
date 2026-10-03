@@ -179,7 +179,10 @@ def test_register_then_heartbeat(client: TestClient) -> None:
     listed = client.get("/api/v1/bot-uis", headers=READ).json()
     assert len(listed) == 1
     assert listed[0]["online"] is True, "방금 하트비트를 받았으니 온라인이다"
-    assert listed[0]["state"]["status"] == "idle"
+    assert listed[0]["status"] == "idle"
+    # 키 정보는 앞자리·만료·상태만 (C7 — 원문·해시는 주지 않는다).
+    assert listed[0]["key"]["prefix"] == raw[:16]
+    assert set(listed[0]["key"]) == {"prefix", "expires_at", "state"}
 
 
 def test_register_is_idempotent(client: TestClient) -> None:
@@ -261,10 +264,10 @@ def test_heartbeat_keeps_the_latest_state(client: TestClient) -> None:
         worker={"state": "running", "restarts": 0, "session": "bot"},
     )
     assert client.post("/api/v1/bot-ui/heartbeat", json=running, headers=auth).status_code == 200
-    state = client.get("/api/v1/bot-uis", headers=READ).json()[0]["state"]
-    assert state["status"] == "running"
-    assert state["current_run"]["run_id"] == "run_1"
-    assert state["worker"]["session"] == "bot"
+    found = client.get("/api/v1/bot-uis", headers=READ).json()[0]
+    assert found["status"] == "running"
+    assert found["current_run"]["run_id"] == "run_1"
+    assert found["worker"]["session"] == "bot"
 
 
 def test_disabled_bot_ui_still_heartbeats(client: TestClient) -> None:
@@ -424,6 +427,44 @@ def test_zip_with_a_path_escape_is_refused(client: TestClient) -> None:
 def test_not_a_zip_is_refused(client: TestClient) -> None:
     response = upload(client, "zip이 아니다".encode())
     assert response.status_code == 422 and response.json()["code"] == "not_a_zip"
+
+
+def test_actor_name_with_hangul_travels_percent_encoded(client: TestClient) -> None:
+    """콘솔이 보내는 사용자 이름은 한글이다 — 헤더에는 퍼센트 인코딩으로 온다 (C5).
+
+    그대로 실으면 보내는 쪽 HTTP 라이브러리가 요청을 거부한다 (콘솔을 붙이다 드러났다).
+    """
+    from urllib.parse import quote
+
+    headers = {**ADMIN, "X-CHK-Actor": quote("운영자 김")}
+    created = client.post(
+        "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=headers
+    )
+    assert created.status_code == 201
+    assert created.json()["uploaded_by"] == "운영자 김"
+
+
+def test_actor_name_that_is_not_encoded_is_kept_as_is(client: TestClient) -> None:
+    """디코딩이 안 되는 값이 와도 요청을 거부하지 않는다 (이름 하나 때문에 막지 않는다)."""
+    headers = {**ADMIN, "X-CHK-Actor": "plain-name"}
+    created = client.post(
+        "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=headers
+    )
+    assert created.status_code == 201 and created.json()["uploaded_by"] == "plain-name"
+
+
+def test_actor_header_is_ignored_for_key_callers(client: TestClient) -> None:
+    """키로 부를 때는 `X-CHK-Actor`를 믿지 않는다 (C5) — 키 이름이 행위자다."""
+    from urllib.parse import quote
+
+    _key_id, raw = issue_key(client, name="현장 PC 1")
+    auth = {"Authorization": f"Bearer {raw}", "X-CHK-Actor": quote("관리자인 척")}
+    client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
+    # 키로는 업로드할 수 없으니, 행위자가 쓰이는 길(업로드)은 막혀 있다.
+    denied = client.post(
+        "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=auth
+    )
+    assert denied.status_code == 403
 
 
 def test_upload_needs_the_admin_token(client: TestClient) -> None:

@@ -1,0 +1,524 @@
+{
+  "$defs": {
+    "BotUiKey": {
+      "additionalProperties": true,
+      "description": "그 Bot UI가 쓰는 Center API 키 (C7). **원문·해시는 주지 않는다.**",
+      "properties": {
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "prefix": {
+          "title": "Prefix",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prefix",
+        "state"
+      ],
+      "title": "BotUiKey",
+      "type": "object"
+    },
+    "CurrentRun": {
+      "additionalProperties": true,
+      "description": "실행 자리 1건 (ADR-0014).",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node Id"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "bpm_process_id",
+        "version",
+        "state",
+        "started_at",
+        "source"
+      ],
+      "title": "CurrentRun",
+      "type": "object"
+    },
+    "ExtensionState": {
+      "additionalProperties": true,
+      "description": "설치된 확장 하나 (C13).",
+      "properties": {
+        "definition_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition Hash"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionState",
+      "type": "object"
+    },
+    "Queue": {
+      "additionalProperties": true,
+      "description": "대기열. `items`는 순서대로.",
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/QueueItem"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "max": {
+          "title": "Max",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max"
+      ],
+      "title": "Queue",
+      "type": "object"
+    },
+    "QueueItem": {
+      "additionalProperties": true,
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "queue_id": {
+          "title": "Queue Id",
+          "type": "string"
+        },
+        "requested_at": {
+          "title": "Requested At",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "queue_id",
+        "source",
+        "bpm_process_id",
+        "requested_at"
+      ],
+      "title": "QueueItem",
+      "type": "object"
+    },
+    "Readiness": {
+      "additionalProperties": true,
+      "description": "설치된 Bot 하나의 준비 상태.",
+      "properties": {
+        "blocked": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "missing_key_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Key Refs",
+          "type": "array"
+        },
+        "ready": {
+          "title": "Ready",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bpm_process_id",
+        "version",
+        "ready"
+      ],
+      "title": "Readiness",
+      "type": "object"
+    },
+    "Runtimes": {
+      "additionalProperties": true,
+      "properties": {
+        "browsers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Browsers",
+          "type": "array"
+        },
+        "desktop_backend": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Desktop Backend"
+        },
+        "extensions": {
+          "items": {
+            "$ref": "#/$defs/ExtensionState"
+          },
+          "title": "Extensions",
+          "type": "array"
+        }
+      },
+      "title": "Runtimes",
+      "type": "object"
+    },
+    "Versions": {
+      "additionalProperties": true,
+      "properties": {
+        "bot_ui": {
+          "title": "Bot Ui",
+          "type": "string"
+        },
+        "core": {
+          "title": "Core",
+          "type": "string"
+        },
+        "worker": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Worker"
+        }
+      },
+      "required": [
+        "bot_ui",
+        "core"
+      ],
+      "title": "Versions",
+      "type": "object"
+    },
+    "WorkerState": {
+      "additionalProperties": true,
+      "description": "Worker 프로세스 상태. `off`는 \"필요할 때 시작, 아직 안 띄움\".",
+      "properties": {
+        "reserved_for": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reserved For"
+        },
+        "restarts": {
+          "default": 0,
+          "title": "Restarts",
+          "type": "integer"
+        },
+        "session": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Session"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "title": "WorkerState",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c5-bot-ui-info",
+  "additionalProperties": true,
+  "description": "`GET /bot-uis`의 한 줄 (CON-03).\n\n상태 값은 **Bot UI가 하트비트로 보고한 그대로**다 (C4). Center가 더하는 것은 온라인\n판정(`online`)과 키 정보(`key`)뿐이다.",
+  "properties": {
+    "bot_ui_id": {
+      "title": "Bot Ui Id",
+      "type": "string"
+    },
+    "current_run": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/CurrentRun"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "disabled": {
+      "default": false,
+      "title": "Disabled",
+      "type": "boolean"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/ExtensionState"
+      },
+      "title": "Extensions",
+      "type": "array"
+    },
+    "key": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/BotUiKey"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "last_seen_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Seen At"
+    },
+    "machine_id": {
+      "title": "Machine Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "online": {
+      "default": false,
+      "title": "Online",
+      "type": "boolean"
+    },
+    "os": {
+      "title": "Os",
+      "type": "string"
+    },
+    "queue": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Queue"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "readiness": {
+      "items": {
+        "$ref": "#/$defs/Readiness"
+      },
+      "title": "Readiness",
+      "type": "array"
+    },
+    "registered_at": {
+      "title": "Registered At",
+      "type": "string"
+    },
+    "runtimes": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Runtimes"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "status": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Status"
+    },
+    "versions": {
+      "$ref": "#/$defs/Versions"
+    },
+    "worker": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/WorkerState"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "bot_ui_id",
+    "name",
+    "os",
+    "machine_id",
+    "versions",
+    "registered_at"
+  ],
+  "title": "BotUiInfo",
+  "type": "object"
+}

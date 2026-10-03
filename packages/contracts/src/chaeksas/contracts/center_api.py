@@ -17,6 +17,15 @@ from typing import Annotated, Any
 from pydantic import Field, model_validator
 
 from chaeksas.contracts._base import ContractModel, Sha256, Timestamp, Violation
+from chaeksas.contracts.bot_ui import (
+    CurrentRun,
+    ExtensionState,
+    Queue,
+    Readiness,
+    Runtimes,
+    Versions,
+    WorkerState,
+)
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.resources import MissingResource
 from chaeksas.contracts.signing import AdminKey, Envelope, verify, verify_time
@@ -103,6 +112,42 @@ class PackageInfo(ContractModel):
     preflight: PreflightSummary = Field(default_factory=PreflightSummary)
     manifest: Manifest | None = None
     missing_resources: list[MissingResource] = Field(default_factory=list)
+
+
+class BotUiKey(ContractModel):
+    """그 Bot UI가 쓰는 Center API 키 (C7). **원문·해시는 주지 않는다.**"""
+
+    prefix: str
+    expires_at: Timestamp | None = None
+    state: str  # active / expired / revoked
+
+
+class BotUiInfo(ContractModel):
+    """`GET /bot-uis`의 한 줄 (CON-03).
+
+    상태 값은 **Bot UI가 하트비트로 보고한 그대로**다 (C4). Center가 더하는 것은 온라인
+    판정(`online`)과 키 정보(`key`)뿐이다.
+    """
+
+    bot_ui_id: str
+    name: str
+    os: str
+    machine_id: str
+    versions: Versions  # 등록할 때 반드시 받는다 (C4 `register`)
+    runtimes: Runtimes | None = None
+    registered_at: Timestamp
+    last_seen_at: Timestamp | None = None
+    #: 마지막 하트비트가 90초 이내인가 (C4 「온라인 판정」).
+    online: bool = False
+    disabled: bool = False
+    #: 아래는 마지막 하트비트의 내용. 아직 하트비트가 없으면 비어 있다.
+    status: str | None = None
+    current_run: CurrentRun | None = None
+    queue: Queue | None = None
+    worker: WorkerState | None = None
+    readiness: list[Readiness] = Field(default_factory=list)
+    extensions: list[ExtensionState] = Field(default_factory=list)
+    key: BotUiKey | None = None
 
 
 # ─────────────────────────── 배포 ───────────────────────────

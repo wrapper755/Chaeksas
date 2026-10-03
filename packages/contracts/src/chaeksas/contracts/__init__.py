@@ -98,6 +98,8 @@ from chaeksas.contracts.bpmn_ext import Node as BpmnNode
 from chaeksas.contracts.bpmn_ext import matches as matches_expected
 from chaeksas.contracts.bpmn_ext import validate as validate_bpmn
 from chaeksas.contracts.center_api import (
+    BotUiInfo,
+    BotUiKey,
     DeploymentInfo,
     ErrorBody,
     JobCreateRequest,
@@ -301,6 +303,8 @@ __all__ = [
     "Versions",
     "WorkerState",
     # C5
+    "BotUiInfo",
+    "BotUiKey",
     "DeploymentInfo",
     "ErrorBody",
     "JobCreateRequest",

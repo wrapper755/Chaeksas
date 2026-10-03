@@ -79,7 +79,7 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 M1 끝, M2 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11·C13·C14, `service_kit`, `extension_api`, `core`의 확장 호스트, 내장 확장 `ui-automation`의 `extension.json`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다. 확장의 클라이언트 코드(UI 태스크 수행·편집기·셀렉터 등록)는 모양만 맞춘 뼈대이고 속은 M4다. `web/`은 pnpm 워크스페이스(앱 2 + 패키지 3)가 서고 구성요소 7개·계약 타입 생성이 들어 있지만, 화면 내용은 M2다. `qt`는 테마 적용(`apply_theme()`)과 포함 글꼴까지 있고 위젯은 없다. `apps/center`는 **키·등록·하트비트·패키지까지 돈다** (`uv run chk-center`, `deploy/compose.yaml`).
 
-- 명령: `uv sync --all-packages` → `uv run pytest` (534개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
+- 명령: `uv sync --all-packages` → `uv run pytest` (537개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
 - 계약 모델을 고치면 → `uv run python scripts/gen_schemas.py`, 디자인 토큰을 고치면 → `uv run python scripts/gen_tokens.py` (명암비·간격 배수 검사 포함). 둘 다 `--check`가 pytest·CI에 들어 있어 잊으면 깨진다.
 - 웹은 `web/`에서 pnpm (`pnpm install` → `pnpm dev`·`pnpm typecheck`·`pnpm build`). **계약을 고치면 두 단계다** — `gen_schemas.py`로 스키마, 그다음 `pnpm gen:api-types`로 TypeScript 타입. 색·크기는 토큰만 쓴다 (`tokens.css`·`theme.css`는 생성물). 상태 표기는 생성된 `status-map.ts`에 있는 것만 쓴다.
 - import 이름은 `chaeksas.<이름>`, 확장은 `chaeksas.ext.<id>` ([ADR-0019](docs/decisions/0019-package-names.md)). `src/chaeksas/`에 `__init__.py`를 만들면 조용히 깨진다.
@@ -90,4 +90,5 @@ M1 끝, M2 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있
 - 데스크톱은 `apply_theme(app)` 한 줄로 테마를 쓴다 (글꼴 등록 + QSS + 팔레트). Qt 테스트는 `QT_QPA_PLATFORM=offscreen`으로 화면 없이 돈다.
 - C14(BPMN `chk:*`)는 모델·읽기·검사 B1~B14가 있다. 업무 예제 50개를 읽고 검사하는 테스트가 그것을 지킨다 — 예제를 고치면 함께 돈다.
 - Center는 `apps/center`에 있고 **API만** 가진다 (콘솔은 `web/apps/center-console`, ADR-0017). 비밀은 환경변수로만 준다 — `CHK_CENTER__ADMIN_TOKEN`이 없으면 쓰기 API가 막힌다.
+- 콘솔의 브라우저 코드는 토큰을 모른다. 세션은 **암호화된 httpOnly 쿠키**(`lib/session.ts`), Center 호출은 **서버에서만**(`lib/center.ts`, `server-only`). 쓰기는 Server Action으로 한다.
 - 아직 없는 것: Center 콘솔 화면·Bot UI 앱(M2 남은 조각), 배포·작업·결재·리소스 목록(M5), Qt 공용 위젯, HTTP 어댑터 해석기(규격만 있다), 계약 코드 C8~C10·C12, 식 도우미 함수 목록(M3), Playwright. 남은 M1 기준은 `docs/05-roadmap.md`.

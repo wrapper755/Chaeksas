@@ -23,11 +23,19 @@ from chaeksas.center.settings import MAX_REQUEST_KB, ONLINE_WITHIN_S
 from chaeksas.center.storage import Store, dumps, loads, now_iso
 from chaeksas.contracts.bot_ui import (
     BotUiId,
+    CurrentRun,
+    ExtensionState,
     HeartbeatRequest,
     HeartbeatResponse,
+    Queue,
+    Readiness,
     RegisterRequest,
     RegisterResponse,
+    Runtimes,
+    Versions,
+    WorkerState,
 )
+from chaeksas.contracts.center_api import BotUiInfo, BotUiKey
 from chaeksas.contracts.center_keys import BoundTo
 
 router = APIRouter(prefix="/api/v1/bot-ui", tags=["bot-ui"])
@@ -165,29 +173,49 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
     )
 
 
-def bot_ui_listing(store: Store) -> list[dict[str, Any]]:
-    """CON-03 「Bot UI 현황」이 쓰는 목록. 온라인 판정은 마지막 하트비트가 90초 이내인가다."""
+def bot_ui_listing(store: Store) -> list[BotUiInfo]:
+    """CON-03 「Bot UI 현황」 (C5 `BotUiInfo`).
+
+    상태는 **Bot UI가 하트비트로 보고한 그대로** 싣고, Center가 더하는 것은 온라인 판정과
+    키 정보뿐이다. 키는 앞자리·만료·상태만 준다 — 원문·해시는 주지 않는다 (C7).
+    """
     now = datetime.fromisoformat(now_iso())
     out = []
     for row in store.rows("SELECT * FROM bot_uis ORDER BY name"):
         last_seen = row["last_seen_at"]
-        online = False
-        if last_seen:
-            online = (now - datetime.fromisoformat(last_seen)).total_seconds() <= ONLINE_WITHIN_S
+        online = bool(
+            last_seen and (now - datetime.fromisoformat(last_seen)).total_seconds() <= ONLINE_WITHIN_S
+        )
+        state = loads(row["state_json"], {}) or {}
+        record = keys.get(store, row["key_id"])
         out.append(
-            {
-                "bot_ui_id": row["bot_ui_id"],
-                "name": row["name"],
-                "os": row["os"],
-                "machine_id": row["machine_id"],
-                "versions": loads(row["versions_json"], {}),
-                "runtimes": loads(row["runtimes_json"], None),
-                "registered_at": row["registered_at"],
-                "last_seen_at": last_seen,
-                "online": online,
-                "disabled": bool(row["disabled"]),
-                "state": loads(row["state_json"], None),
-            }
+            BotUiInfo(
+                bot_ui_id=row["bot_ui_id"],
+                name=row["name"],
+                os=row["os"],
+                machine_id=row["machine_id"],
+                versions=Versions.model_validate(loads(row["versions_json"], {})),
+                runtimes=Runtimes.model_validate(loads(row["runtimes_json"]))
+                if loads(row["runtimes_json"])
+                else None,
+                registered_at=row["registered_at"],
+                last_seen_at=last_seen,
+                online=online,
+                disabled=bool(row["disabled"]),
+                status=state.get("status"),
+                current_run=CurrentRun.model_validate(state["current_run"]) if state.get("current_run") else None,
+                queue=Queue.model_validate(state["queue"]) if state.get("queue") else None,
+                worker=WorkerState.model_validate(state["worker"]) if state.get("worker") else None,
+                readiness=[Readiness.model_validate(r) for r in state.get("readiness", [])],
+                extensions=[ExtensionState.model_validate(e) for e in state.get("extensions", [])],
+                key=BotUiKey(
+                    prefix=record.prefix,
+                    expires_at=record.expires_at,
+                    state=record.state(now=now_iso()),
+                )
+                if record
+                else None,
+            )
         )
     return out
 
