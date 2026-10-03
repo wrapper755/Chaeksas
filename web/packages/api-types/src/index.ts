@@ -11,6 +11,7 @@ export const CONTRACT_MODULES = [
   "c11-service-app-manifest",
   "c13-catalog",
   "c13-extension-manifest",
+  "c14-case-file",
   "c2-claim-deployment",
   "c2-claim-extension",
   "c2-claim-package",
