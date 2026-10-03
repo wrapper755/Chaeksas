@@ -232,14 +232,20 @@ class SettingsDialog(QDialog):
                 return
 
         wanted = self._pending_settings()
-        self._agent.settings = wanted
-        wanted.save()
-
+        failure = None
         if self._autostart.available:
             try:
                 self._autostart.enable() if wanted.autostart else self._autostart.disable()
-            except RuntimeError as e:  # pragma: no cover - 권한 문제
-                QMessageBox.warning(self, "자동 시작", str(e))
+            except RuntimeError as e:
+                # 켰다고 저장해 두면 다음에 열 때 칸이 거짓말을 한다 — OS의 실제 상태를 남긴다 (BUI-03).
+                failure = str(e)
+                wanted = replace(wanted, autostart=self._autostart.enabled())
+                self.autostart.setChecked(wanted.autostart)
+
+        self._agent.settings = wanted
+        wanted.save()
+        if failure:
+            QMessageBox.warning(self, "자동 시작", failure)
         self.accept()
 
 

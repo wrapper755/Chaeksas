@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
+from chaeksas.center.responses import Utf8JSONResponse
 from chaeksas.contracts.center_api import ErrorBody
 
 
@@ -28,7 +29,7 @@ class ApiError(Exception):
 
     def response(self) -> JSONResponse:
         body = ErrorBody(code=self.code, message=self.message, detail=self.detail)
-        return JSONResponse(status_code=self.status, content=body.to_json_dict())
+        return Utf8JSONResponse(status_code=self.status, content=body.to_json_dict())
 
 
 async def handle(_request: Request, exc: Exception) -> JSONResponse:

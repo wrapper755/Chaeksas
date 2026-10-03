@@ -13,12 +13,13 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 
 from chaeksas.center import keys
 from chaeksas.center.api import bot_ui, packages
 from chaeksas.center.auth import Caller, caller, require_admin, require_read
 from chaeksas.center.errors import ApiError, handle
+from chaeksas.center.responses import Utf8JSONResponse
 from chaeksas.center.settings import Settings
 from chaeksas.center.storage import Store, now_iso
 from chaeksas.contracts.center_keys import CenterKeyCreated, CenterKeyCreateRequest
@@ -29,7 +30,8 @@ API = "/api/v1"
 
 def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     """Center 앱 하나. `store`를 주면 그것을 쓴다 (시험은 메모리 DB를 준다)."""
-    app = FastAPI(title="Chaeksas Center", version="0.1.0")
+    # 모든 JSON 응답에 charset=utf-8 (PowerShell 5.1이 한글을 깨뜨리지 않게, 이슈 #3)
+    app = FastAPI(title="Chaeksas Center", version="0.1.0", default_response_class=Utf8JSONResponse)
     app.state.settings = settings
     app.state.store = store or Store(settings.db_path)
 
@@ -134,7 +136,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         info, created = packages.upload(
             app.state.store, package_dir=settings.package_dir, raw=raw, actor=found.actor
         )
-        return JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
+        return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
 
     @app.get(f"{API}/packages")
     def list_packages(

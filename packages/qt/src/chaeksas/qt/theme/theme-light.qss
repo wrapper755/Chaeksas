@@ -13,6 +13,24 @@ QFrame#Surface, QGroupBox, QDialog {
   border-radius: 8px;
 }
 
+/* QGroupBox에 테두리를 입히면 Qt가 제목 자리를 비워 주지 않는다 — 여백과 ::title을 직접 정한다.
+   없으면 제목이 첫 줄과 겹친다 (이슈 #3). */
+QGroupBox {
+  margin-top: 16px;
+  padding: 12px 8px 8px 8px;
+}
+QGroupBox::title {
+  subcontrol-origin: margin;
+  subcontrol-position: top left;
+  left: 12px;
+  padding: 0 4px;
+  color: #4A5361;
+  font-weight: 600;
+}
+
+/* QWidget 배경이 글자 위젯에도 칠해져 흰 상자 안에 회색 칸이 생긴다 — 글자는 놓인 곳의 배경을 따른다. */
+QLabel, QCheckBox, QRadioButton { background-color: transparent; }
+
 QLabel#Secondary { color: #4A5361; }
 QLabel#Muted { color: #5F6875; }
 
