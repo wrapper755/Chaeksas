@@ -1,0 +1,198 @@
+"""설정·PC 고유값·비밀·자동 시작 — OS가 갈리는 자리 (CLAUDE.md §5, ADR-0011·0023).
+
+Windows CI에서도 이 파일이 돈다. **OS 전용 길은 그 OS에서만** 실제로 실행되고, 나머지는
+「무엇을 부르려 하는가」를 본다 (`schtasks` 인자 등).
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from chaeksas.bot_ui import autostart as autostart_module
+from chaeksas.bot_ui import machine
+from chaeksas.bot_ui.credentials import ENV_CENTER_API_KEY, Credentials, SecretsUnavailable
+from chaeksas.bot_ui.settings import (
+    DEFAULT_QUEUE_MAX,
+    DEFAULT_WORKER_PORT,
+    START_ALWAYS,
+    RuntimeSettings,
+    Settings,
+)
+
+# ─────────────────────────── 설정 ───────────────────────────
+
+
+def test_defaults_come_from_the_setup_doc() -> None:
+    """포트·대기열 기본값의 원본은 `docs/04-setup.md` §6이다 (코드에 숫자를 흘리지 않는다)."""
+    found = Settings()
+    assert found.queue_max == DEFAULT_QUEUE_MAX == 20
+    assert found.runtime("worker") is not None
+    assert found.runtime("worker").port == DEFAULT_WORKER_PORT == 8899  # type: ignore[union-attr]
+    assert found.autostart is True and found.signed_only is True
+
+
+def test_settings_round_trip_through_a_file(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    before = Settings(
+        center_url="http://center:8800",
+        name="재무팀 PC-03",
+        queue_max=5,
+        runtimes=(RuntimeSettings(runtime_id="worker", port=9000, start=START_ALWAYS),),
+    )
+    before.save(path)
+    after = Settings.load(path)
+    assert (after.center_url, after.name, after.queue_max) == ("http://center:8800", "재무팀 PC-03", 5)
+    assert after.runtime("worker").start == START_ALWAYS  # type: ignore[union-attr]
+    # UTF-8로 쓴다 (Windows 기본 인코딩은 cp949다 — CLAUDE.md §5).
+    assert "재무팀 PC-03" in path.read_text(encoding="utf-8")
+
+
+def test_a_broken_settings_file_falls_back_to_defaults(tmp_path: Path) -> None:
+    """설정이 깨졌다고 앱이 안 뜨면 고칠 길이 없다 — 기본값으로 뜨고 BUI-03을 보인다."""
+    path = tmp_path / "settings.json"
+    path.write_text("{고장", encoding="utf-8")
+    assert Settings.load(path).queue_max == DEFAULT_QUEUE_MAX
+
+
+def test_environment_variables_win(monkeypatch: Any, tmp_path: Path) -> None:
+    """`CHK_BOT_UI__*`가 파일을 덮는다 (ADR-0011 — 중첩은 `__`)."""
+    path = tmp_path / "settings.json"
+    Settings(center_url="http://file:8800", queue_max=5).save(path)
+    monkeypatch.setenv("CHK_BOT_UI__CENTER__URL", "http://env:8800")
+    monkeypatch.setenv("CHK_BOT_UI__QUEUE__MAX", "7")
+    monkeypatch.setenv("CHK_BOT_UI__WORKER__PORT", "9100")
+    monkeypatch.setenv("CHK_BOT_UI__AUTOSTART", "false")
+
+    found = Settings.load(path)
+    assert (found.center_url, found.queue_max) == ("http://env:8800", 7)
+    assert found.runtime("worker").port == 9100  # type: ignore[union-attr]
+    assert found.autostart is False
+
+
+def test_saving_never_writes_a_secret(tmp_path: Path) -> None:
+    path = Settings().save(tmp_path / "settings.json")
+    assert "key" not in path.read_text(encoding="utf-8").lower()
+
+
+# ─────────────────────────── PC 고유값 ───────────────────────────
+
+
+def test_machine_id_is_a_hash_not_the_raw_value(tmp_path: Path) -> None:
+    """C4 — **원값은 보내지 않는다.** SHA-256만 보낸다."""
+    found = machine.machine_id(tmp_path)
+    assert len(found) == 64 and found == found.lower()
+    raw = machine.raw_machine_value(tmp_path)
+    assert raw not in found
+
+
+def test_machine_id_is_stable(tmp_path: Path) -> None:
+    """같은 PC면 같은 값이다 — 아니면 키 묶기가 매번 깨진다 (C4)."""
+    assert machine.machine_id(tmp_path) == machine.machine_id(tmp_path)
+
+
+def test_a_missing_os_value_falls_back_to_a_stored_random(tmp_path: Path, monkeypatch: Any) -> None:
+    """OS 고유값을 못 읽어도 **다시 켜면 같은 값**이어야 한다 (파일에 적어 둔다)."""
+    monkeypatch.setattr(machine, "_linux_machine_id", lambda: None)
+    monkeypatch.setattr(machine, "_windows_machine_guid", lambda: None)
+    monkeypatch.setattr(machine, "_macos_platform_uuid", lambda: None)
+
+    first = machine.raw_machine_value(tmp_path)
+    assert (tmp_path / machine.FALLBACK_NAME).exists()
+    assert machine.raw_machine_value(tmp_path) == first
+
+
+def test_os_label_and_pc_name_are_filled() -> None:
+    label = machine.os_label()
+    assert label and " " not in label
+    if sys.platform == "win32":  # pragma: no cover - OS 분기
+        assert label.startswith("windows")
+    assert machine.pc_name()
+
+
+# ─────────────────────────── 비밀 ───────────────────────────
+
+
+def test_environment_variable_can_stand_in_for_the_keyring(monkeypatch: Any) -> None:
+    """헤드리스 CI·개발에서는 환경변수로 준다 (평소에는 OS 비밀 저장소)."""
+    monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_fromenv")
+    assert Credentials().center_api_key() == "chk_ctr_fromenv"
+
+
+def test_saving_without_a_store_fails_loudly(monkeypatch: Any) -> None:
+    """저장소가 없으면 **분명히 실패한다** — 평문으로 흘리지 않는다."""
+    found = Credentials()
+    monkeypatch.setattr(found, "_keyring", lambda: None)
+    with pytest.raises(SecretsUnavailable, match="비밀 저장소"):
+        found.set_center_api_key("chk_ctr_x")
+
+
+def test_service_app_keys_are_kept_by_reference_name(monkeypatch: Any) -> None:
+    """ADR-0013 §3 — BPM 프로세스 속성에는 **참조 이름**만 있고 값은 여기 있다."""
+    from conftest import FakeCredentials  # noqa: PLC0415
+
+    found = FakeCredentials()
+    found.set_service_app_key("finance-invoice", "chk_svc_abc")
+    assert found.service_app_key("finance-invoice") == "chk_svc_abc"
+    assert found.service_app_key("없는-참조") is None
+
+
+# ─────────────────────────── 자동 시작 ───────────────────────────
+
+
+def test_the_launch_command_can_start_the_app() -> None:
+    """등록할 명령은 `python -m chaeksas.bot_ui`다 (묶으면 실행 파일 하나)."""
+    command = autostart_module.launch_command()
+    assert command[0] == sys.executable
+    assert command[1:] == ["-m", "chaeksas.bot_ui"]
+
+
+def test_windows_task_scheduler_arguments(monkeypatch: Any) -> None:
+    """실제 등록은 Windows에서만 — 여기서는 **무엇을 부르려 하는가**를 본다 (ADR-0023)."""
+    found = autostart_module.WindowsTaskScheduler(command=["C:\\Program Files\\Chaeksas\\bot-ui.exe"])
+    args = found.create_args()
+    assert args[:4] == ["/Create", "/TN", autostart_module.TASK_NAME, "/TR"]
+    assert "/SC" in args and args[args.index("/SC") + 1] == "ONLOGON"
+    # 권한을 올리지 않는다 (UAC 창이 뜨지 않게).
+    assert args[args.index("/RL") + 1] == "LIMITED"
+    assert "/F" in args, "이미 있으면 덮어써야 한다 (새 버전을 깔았을 때)"
+
+
+def test_windows_arguments_quote_a_command_with_spaces() -> None:
+    found = autostart_module.WindowsTaskScheduler(command=["C:\\py.exe", "-m", "chaeksas.bot_ui"])
+    target = found.create_args()[4]
+    assert "-m" in target and "chaeksas.bot_ui" in target
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 작업 스케줄러")
+def test_windows_autostart_really_registers() -> None:  # pragma: no cover - Windows CI에서만
+    """Windows에서는 **실제로** 등록하고 지운다 (CI가 돌린다)."""
+    found = autostart_module.WindowsTaskScheduler(task_name="Chaeksas Bot UI 시험")
+    try:
+        found.enable()
+        assert found.enabled()
+    finally:
+        found.disable()
+    assert not found.enabled()
+
+
+def test_linux_autostart_writes_a_desktop_file(tmp_path: Path) -> None:
+    found = autostart_module.FreedesktopAutostart(directory=tmp_path, command=["/usr/bin/chk-bot-ui"])
+    assert not found.enabled()
+    found.enable()
+    assert found.enabled()
+    text = found.path.read_text(encoding="utf-8")
+    assert "Exec=/usr/bin/chk-bot-ui" in text
+    assert "Type=Application" in text
+    found.disable()
+    assert not found.enabled()
+
+
+def test_the_os_picker_gives_something_that_answers(monkeypatch: Any) -> None:
+    found = autostart_module.autostart()
+    # 어느 OS에서든 물어볼 수 있다 (모르는 OS면 「할 수 없다」고 답한다).
+    assert isinstance(found.enabled(), bool)
+    assert found.available == (sys.platform == "win32" or sys.platform.startswith("linux"))

@@ -34,6 +34,28 @@ Sha256 = Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 """`sha256:<hex 64>` (C2의 `content_hash` 형식)."""
 
 
+def _with_required_nulls(model: BaseModel, dumped: dict[str, object]) -> dict[str, object]:
+    """`exclude_none`이 지워 버린 **필수 필드의 `null`**을 되돌려 놓는다 (중첩까지).
+
+    선택 필드의 `None`은 그대로 빠진 채 둔다 — 보내는 모양을 늘리지 않는다 (C2 서명 대상의
+    `canonical_json`이 달라지면 안 된다).
+    """
+    for name, info in type(model).model_fields.items():
+        key = info.alias or name
+        value = getattr(model, name, None)
+        if info.is_required() and value is None:
+            dumped[key] = None
+            continue
+        slot = dumped.get(key)
+        if isinstance(value, BaseModel) and isinstance(slot, dict):
+            _with_required_nulls(value, slot)
+        elif isinstance(value, list) and isinstance(slot, list):
+            for item, item_slot in zip(value, slot, strict=False):
+                if isinstance(item, BaseModel) and isinstance(item_slot, dict):
+                    _with_required_nulls(item, item_slot)
+    return dumped
+
+
 class ContractModel(BaseModel):
     """모르는 필드를 보관하고, 직렬화할 때 별명을 쓰는 바탕 모델."""
 
@@ -44,8 +66,14 @@ class ContractModel(BaseModel):
     )
 
     def to_json_dict(self) -> dict[str, object]:
-        """JSON으로 보낼 모양 (별명 키, `None`인 선택 필드는 뺀다)."""
-        return self.model_dump(exclude_none=True)
+        """JSON으로 보낼 모양 (별명 키, `None`인 **선택** 필드는 뺀다).
+
+        **필수 필드는 `None`이어도 싣는다.** 계약에 「필수이지만 비어 있을 수 있다」고 적은
+        자리가 있다 (C4 `current_run` — 실행 자리가 비었다는 뜻을 `null`로 보낸다). 빼 버리면
+        받는 쪽이 「필수 필드 누락」으로 거부한다 — Bot UI 하트비트가 실제로 422로 막혔다.
+        """
+        dumped = self.model_dump(exclude_none=True)
+        return _with_required_nulls(self, dumped)
 
 
 #: 위반의 무게. **경고는 막지 않는다** — 화면에 보이고 사람이 판단한다 (C14 검사 규칙).

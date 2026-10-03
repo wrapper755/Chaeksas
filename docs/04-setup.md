@@ -127,6 +127,7 @@ sudo apt-get install -y --no-install-recommends \
 - Bot UI 대기열 크기: 기본 20, `CHK_BOT_UI__QUEUE__MAX`. 실행 자리(동시 실행 Bot 수)는 1로 고정이라 설정이 없다 ([ADR-0014](decisions/0014-one-bot-per-pc.md)).
 - Worker 프로세스는 Bot UI가 띄운다. 개발 PC에도 Bot UI를 설치해 켜 두면 Studio 시험 실행이 그 Worker를 쓴다.
 - Center API 키: Center 콘솔(CON-11)에서 발급해 Bot UI 설정·Studio 설정에 넣는다. 개발·CI에서만 `CHK_CENTER__API_KEY`.
+- Bot UI: `uv run chk-bot-ui` (트레이에 뜬다. 트레이가 없는 환경이면 메인 창으로 뜬다). 설정은 BUI-03 창에서 하고 파일은 사용자 데이터 폴더의 `settings.json`이다. 환경변수로 덮어쓸 수 있다 — `CHK_BOT_UI__CENTER__URL`, `CHK_BOT_UI__QUEUE__MAX`, `CHK_BOT_UI__WORKER__PORT`, `CHK_BOT_UI__AUTOSTART`, `CHK_BOT_UI__DATA_DIR`. **Center API 키는 OS 비밀 저장소**에 있고, 비밀 저장소가 없는 환경(헤드리스 CI)에서는 `CHK_BOT_UI__CENTER_API_KEY`로 준다.
 - 서비스 앱 관리자 토큰: `CHK_SVC_<앱 id>__ADMIN_TOKEN` (예: `CHK_SVC_UI_AUTOMATION__ADMIN_TOKEN`). **이 토큰이 없으면 그 앱의 관리 API(`/admin/v1/*`)가 503으로 닫혀 있다** — 빈 토큰으로 열리지 않는다 ([C11](03-contracts/C11-service-app-common.md) §관리 API). 서비스 앱 API 키는 그 콘솔(SVC-02)에서 발급해 Bot UI 설정·Studio 설정에 **참조 이름**으로 넣는다.
 
 ## 6. 포트

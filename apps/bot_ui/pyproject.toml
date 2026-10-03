@@ -4,11 +4,19 @@ version = "0.1.0"
 description = "Bot UI — 트레이 GUI, Bot 다운로드·실행, Worker 프로세스 감시, 확장 유틸리티"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "chaeksas-contracts",
     "chaeksas-core",
     "chaeksas-qt",
+    "httpx>=0.27",        # Center 호출 (C4)
+    "keyring>=25.4",      # OS 비밀 저장소 — Center API 키 (CLAUDE.md §5)
+    "platformdirs>=4.3",  # 사용자 데이터 위치
 ]
 
+[project.scripts]
+chk-bot-ui = "chaeksas.bot_ui.app:main"
+
 [tool.uv.sources]
+chaeksas-contracts = { workspace = true }
 chaeksas-core = { workspace = true }
 chaeksas-qt = { workspace = true }
 
