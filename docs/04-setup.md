@@ -146,6 +146,8 @@ sudo apt-get install -y --no-install-recommends \
 | Ollama | 11434 | 로컬 또는 서버 | `CHK_LLM__BASE_URL` |
 
 > 주의: 프로토타입과 같은 기본 포트다. 한 PC에서 프로토타입과 새 구성요소를 동시에 띄우면 충돌하므로, 그때는 환경변수로 한쪽을 옮긴다.
+>
+> `docker compose`로 띄울 때는 `.env`의 `CHK_CENTER__HOST_PORT`·`CHK_CONSOLE__HOST_PORT`가 **호스트 쪽 포트만** 옮긴다 (컨테이너 안의 포트는 위 표 그대로다).
 
 ## 7. 확인 체크리스트 (M1 완료 시 채움)
 

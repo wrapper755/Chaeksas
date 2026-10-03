@@ -4,7 +4,9 @@
 #   cp .env.example .env     # 토큰을 채운다 (비밀은 저장소에 넣지 않는다)
 #   docker compose up -d
 #
-# Neo4j·LLM 게이트웨이는 UI 자동화 앱이 생기는 M4에 더한다.
+# 서비스 앱 관리 콘솔(`svc-console`)은 **서비스 앱마다 하나**다. 첫 서비스 앱(UI 자동화)이
+# 생기는 M4에 그 앱과 함께 더한다 — 지금 올리면 가리킬 앱이 없다.
+# Neo4j·LLM 게이트웨이도 M4다.
 name: chaeksas
 
 services:
@@ -18,9 +20,29 @@ services:
       CHK_CENTER__READ_TOKEN: ${CHK_CENTER__READ_TOKEN:-}
       CHK_CENTER__PORT: "8800"
     ports:
-      - "8800:8800"
+      # 컨테이너 안의 포트는 문서의 기본값 그대로 두고, **호스트 쪽만** 바꿀 수 있게 한다
+      # (한 PC에서 프로토타입과 같이 띄우면 겹친다 — `docs/04-setup.md` §6의 주의).
+      - "${CHK_CENTER__HOST_PORT:-8800}:8800"
     volumes:
       - center-data:/data
+    restart: unless-stopped
+
+  center-console:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.console
+      args:
+        APP: center-console
+    environment:
+      # 콘솔은 **컨테이너 이름**으로 Center를 부른다 (브라우저가 아니라 콘솔 서버가 부르기 때문에
+      # localhost가 아니다, ADR-0017 §1).
+      CHK_CONSOLE__CENTER_URL: http://center:8800
+      CHK_CONSOLE__SESSION_SECRET: ${CHK_CONSOLE__SESSION_SECRET:?세션 비밀을 .env에 넣으세요 (16자 이상)}
+      PORT: "8501"
+    ports:
+      - "${CHK_CONSOLE__HOST_PORT:-8501}:8501"
+    depends_on:
+      - center
     restart: unless-stopped
 
 volumes:

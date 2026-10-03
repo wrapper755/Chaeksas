@@ -1,0 +1,47 @@
+# 콘솔 컨테이너 (Next.js). **콘솔 둘이 같은 Dockerfile을 쓴다** — 어느 앱인지는 `APP`으로 정한다.
+#
+#   docker build --build-arg APP=center-console -f deploy/Dockerfile.console .
+#
+# 계약 타입(`web/packages/api-types/src`)은 저장소에 들어 있으므로 여기서 만들지 않는다.
+# 스키마에서 다시 만드는 일은 `scripts/gen_schemas.py` → `pnpm gen:api-types`이고, CI가 최신인지 본다.
+ARG NODE_VERSION=22-slim
+
+FROM node:${NODE_VERSION} AS deps
+ENV PNPM_HOME=/pnpm CI=1
+WORKDIR /web
+# pnpm 버전은 web/package.json의 `packageManager`가 정한다 (corepack이 읽는다).
+COPY web/package.json web/pnpm-workspace.yaml web/pnpm-lock.yaml ./
+COPY web/packages/api-types/package.json packages/api-types/
+COPY web/packages/config/package.json packages/config/
+COPY web/packages/ui/package.json packages/ui/
+COPY web/apps/center-console/package.json apps/center-console/
+COPY web/apps/svc-console/package.json apps/svc-console/
+RUN corepack enable && pnpm install --frozen-lockfile
+
+FROM node:${NODE_VERSION} AS build
+ARG APP
+ENV CI=1 NEXT_TELEMETRY_DISABLED=1
+WORKDIR /web
+COPY --from=deps /web/node_modules node_modules
+COPY --from=deps /web/packages packages
+COPY --from=deps /web/apps apps
+COPY web/ ./
+RUN corepack enable && pnpm --filter "@chaeksas/${APP}" build
+
+FROM node:${NODE_VERSION} AS runtime
+ARG APP
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+WORKDIR /web
+# `output: standalone`이 필요한 것만 모아 준다 (pnpm 워크스페이스라 앱 경로가 그대로 남는다).
+COPY --from=build /web/apps/${APP}/.next/standalone ./
+COPY --from=build /web/apps/${APP}/.next/static ./apps/${APP}/.next/static
+# 서버 진입점 경로에 APP이 들어가므로 환경변수로 옮겨 CMD를 고정한다.
+ENV CHK_CONSOLE_SERVER=/web/apps/${APP}/server.js
+
+# 컨테이너 안에서는 비관리자로 돈다 (node 이미지의 `node` 사용자, uid 1000).
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
+
+CMD ["sh", "-c", "exec node \"$CHK_CONSOLE_SERVER\""]

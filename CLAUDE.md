@@ -78,7 +78,7 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 ## 7. 현재 상태
 
-M1 끝, M2 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11·C13·C14, `service_kit`, `extension_api`, `core`의 확장 호스트, 내장 확장 `ui-automation`의 `extension.json`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다. 확장의 클라이언트 코드(UI 태스크 수행·편집기·셀렉터 등록)는 모양만 맞춘 뼈대이고 속은 M4다. `web/`은 pnpm 워크스페이스(앱 2 + 패키지 3)에 구성요소 7개·계약 타입 생성이 있고, **Center 콘솔(CON-00·03·11)과 서비스 앱 콘솔(SVC-00~03)이 실제로 돈다**. `qt`는 테마 적용(`apply_theme()`)과 포함 글꼴까지 있고 위젯은 없다. `apps/center`는 **키·등록·하트비트·패키지까지 돈다** (`uv run chk-center`, `deploy/compose.yaml`).
+M1 끝, M2 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11·C13·C14, `service_kit`, `extension_api`, `core`의 확장 호스트, 내장 확장 `ui-automation`의 `extension.json`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다. 확장의 클라이언트 코드(UI 태스크 수행·편집기·셀렉터 등록)는 모양만 맞춘 뼈대이고 속은 M4다. `web/`은 pnpm 워크스페이스(앱 2 + 패키지 3)에 구성요소 7개·계약 타입 생성이 있고, **Center 콘솔(CON-00·03·11)과 서비스 앱 콘솔(SVC-00~03)이 실제로 돈다**. `qt`는 테마 적용(`apply_theme()`)과 포함 글꼴까지 있고 위젯은 없다. `apps/center`는 **키·등록·하트비트·패키지까지 돈다** (`uv run chk-center`). 서버 구성은 `deploy/compose.yaml` 한 번으로 Center + Center 콘솔이 뜬다 (확인함).
 
 - 명령: `uv sync --all-packages` → `uv run pytest` (550개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
 - 계약 모델을 고치면 → `uv run python scripts/gen_schemas.py`, 디자인 토큰을 고치면 → `uv run python scripts/gen_tokens.py` (명암비·간격 배수 검사 포함). 둘 다 `--check`가 pytest·CI에 들어 있어 잊으면 깨진다.
