@@ -16,7 +16,7 @@
 | M6 | 첫 릴리스 | 시나리오 1~4 Windows 현장 PC 통과 | M5 |
 | M7 | 서버 실행 | 서버 실행기, 서버 Bot 동시 실행, 상태 저장·재개, PC 위임, CON-12 | M6 |
 
-## M0. 문서 기준선 (지금)
+## M0. 문서 기준선
 
 - [x] 배포 단위 이름 확정: **BPM 프로세스** (운영 화면: Bot)
 - [x] 포트 기본값 + 설정 변경, 환경변수 접두사 `CHK_` ([ADR-0011](decisions/0011-config-ports-env.md))
@@ -63,14 +63,14 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 
 ## M2. Center 최소 + Bot UI 연결
 
-- [ ] Linux 서버에 Center가 뜨고, 콘솔에서 발급한 Center API 키를 Windows Bot UI에 넣으면 등록 → 하트비트 (C4, CON-11, BUI-03) — **Center·콘솔·Bot UI 앱이 모두 있다.** 등록→하트비트 한 바퀴는 실제 Center 앱을 붙여 시험한다(`tests/test_bot_ui_agent.py` — 키 묶기 409, 종류 틀림 403, 폐기된 키, 닿지 못함, `disabled`까지). 남은 것은 **Windows 실기 확인**뿐이다: 트레이 아이콘·메뉴 동작, 작업 스케줄러 자동 시작, Job Object로 자식 트리 종료, 자격 증명 관리자, 잠금 화면·로그오프. Windows CI가 단위 시험은 돌린다. 실기 확인 목록은 [이슈 #3](https://github.com/wrapper755/Chaeksas/issues/3)
+- [x] Linux 서버에 Center가 뜨고, 콘솔에서 발급한 Center API 키를 Windows Bot UI에 넣으면 등록 → 하트비트 (C4, CON-11, BUI-03) — **Windows 11 실기에서 확인했다** (일반 권한, 한국어, 확인 목록은 [이슈 #3](https://github.com/wrapper755/Chaeksas/issues/3)). 트레이·메뉴·설정 창, 자격 증명 관리자, 작업 스케줄러 자동 시작(로그오프→로그인), Job Object로 손자까지 종료, 잠금 중 하트비트 유지, 로그오프 94초 뒤 Center에서 오프라인까지 봤다. 실기에서 나온 결함 9건은 [#4](https://github.com/wrapper755/Chaeksas/pull/4)·[#5](https://github.com/wrapper755/Chaeksas/pull/5)에서 고치고 같은 PC에서 다시 확인했다 — 일반 권한 자동 시작(작업 XML), 글꼴 힌팅, QSS 그룹 상자·숫자 칸, 150% 배율 창 크기, Center 응답 charset, 시험 격리
 - [x] Bot UI별 Center API 키로 다른 Bot UI를 사칭할 수 없음 — 키는 처음 등록한 PC(`machine_id`)에 묶이고 다른 PC에서 쓰면 409 `machine_mismatch`. 운영자가 「PC 묶음 풀기」로 되돌린다
 - [x] 패키지 업로드·목록·다운로드, 해시 검증 (C1, C5 일부) — **보낸 해시를 믿지 않고 파일에서 다시 계산해** 매니페스트와 대조한다 (R6). zip 경로 탈출·크기도 Center가 먼저 막는다
 - [x] Center 콘솔(Next.js): 공통 틀(CON-00), 관리자 로그인 세션(BFF), Bot UI 현황(CON-03), Center API 키(CON-11) — 토큰은 암호화된 httpOnly 쿠키에 담겨 **브라우저에 내려가지 않는다**(HTML에 새지 않는 것을 확인). 실제로 띄운 Center에 붙여 두 화면이 실 데이터를 그리는 것까지 봤다. 아직 없는 화면은 탐색에서 끄고 이유를 보인다
 - [x] 서비스 앱 관리 콘솔(Next.js): SVC-00~03 + `service_kit`의 관리 API(`/admin/v1/status`·`keys`·`usage`, C11) — 콘솔 **한 벌**이 모든 서비스 앱을 그린다(`CHK_SVC_CONSOLE__APP_URL`로 어느 앱인지 정하고, 고유 메뉴는 `app_id`로 고른다). 관리 API는 **관리자 토큰으로만** 열리고 업무 키로는 403, 토큰을 설정하지 않으면 경로 전체가 503이다. 발급 원문은 한 번만 보이고 목록에는 앞자리 16자만 남는다. 실제로 띄운 앱(UI 자동화 데모)에 붙여 세 화면이 실 데이터를 그리는 것과, 토큰·업무 값이 HTML에 새지 않는 것을 봤다. 좁히기·「키별 합계」와 UIA 고유 화면은 M4
 - [x] 서버 구성 `docker compose` 한 번으로 기동 — Center API(8800) + Center 콘솔(8501)이 같은 compose로 뜨고, 콘솔이 `http://center:8800`으로 Center를 부르고, 볼륨에 데이터가 남는 것(컨테이너를 다시 띄워도 키가 남는다)까지 봤다. 둘 다 비관리자로 돈다. 콘솔 이미지는 `Dockerfile.console` 하나로 만들고 어느 콘솔인지는 빌드 인자 `APP`이 정한다. `svc-console`은 서비스 앱마다 하나라서 첫 서비스 앱과 함께 M4에 더한다
 
-## M3. 실행 코어
+## M3. 실행 코어 (지금)
 
 - [ ] BPMN 실행: 시작·종료, AI 태스크, 배타 게이트웨이, 결재(로컬)
 - [ ] C14 요소 전부: 스크립트(식 언어·도우미 목록 확정), 규칙(DMN, 반복 포함), 포함·병렬 게이트웨이, 차례·병렬 반복, 하위 프로세스, 호출(매핑), 타이머(시작·중간·경계), 메시지 시작·받기·경계(상관 키), 신호(실행 안), 메일·웹훅, 파일 출력, 이정표
