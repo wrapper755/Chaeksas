@@ -67,7 +67,7 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 - [x] Bot UI별 Center API 키로 다른 Bot UI를 사칭할 수 없음 — 키는 처음 등록한 PC(`machine_id`)에 묶이고 다른 PC에서 쓰면 409 `machine_mismatch`. 운영자가 「PC 묶음 풀기」로 되돌린다
 - [x] 패키지 업로드·목록·다운로드, 해시 검증 (C1, C5 일부) — **보낸 해시를 믿지 않고 파일에서 다시 계산해** 매니페스트와 대조한다 (R6). zip 경로 탈출·크기도 Center가 먼저 막는다
 - [x] Center 콘솔(Next.js): 공통 틀(CON-00), 관리자 로그인 세션(BFF), Bot UI 현황(CON-03), Center API 키(CON-11) — 토큰은 암호화된 httpOnly 쿠키에 담겨 **브라우저에 내려가지 않는다**(HTML에 새지 않는 것을 확인). 실제로 띄운 Center에 붙여 두 화면이 실 데이터를 그리는 것까지 봤다. 아직 없는 화면은 탐색에서 끄고 이유를 보인다
-- [ ] 서비스 앱 관리 콘솔(Next.js): SVC-00~02
+- [x] 서비스 앱 관리 콘솔(Next.js): SVC-00~03 + `service_kit`의 관리 API(`/admin/v1/status`·`keys`·`usage`, C11) — 콘솔 **한 벌**이 모든 서비스 앱을 그린다(`CHK_SVC_CONSOLE__APP_URL`로 어느 앱인지 정하고, 고유 메뉴는 `app_id`로 고른다). 관리 API는 **관리자 토큰으로만** 열리고 업무 키로는 403, 토큰을 설정하지 않으면 경로 전체가 503이다. 발급 원문은 한 번만 보이고 목록에는 앞자리 16자만 남는다. 실제로 띄운 앱(UI 자동화 데모)에 붙여 세 화면이 실 데이터를 그리는 것과, 토큰·업무 값이 HTML에 새지 않는 것을 봤다. 좁히기·「키별 합계」와 UIA 고유 화면은 M4
 - [ ] 서버 구성 `docker compose` 한 번으로 기동 — `deploy/compose.yaml`·`Dockerfile.center`를 썼지만 **이 PC에 Docker가 없어 실제로 띄워 보지 못했다**
 
 ## M3. 실행 코어

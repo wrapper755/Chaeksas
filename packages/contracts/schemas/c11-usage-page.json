@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "Usage": {
+      "additionalProperties": true,
+      "description": "LLM 사용량. 이름은 C3 `llm_usage`와 같다. **금액은 넣지 않는다.**",
+      "properties": {
+        "input_tokens": {
+          "default": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "output_tokens": {
+          "default": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "title": "Usage",
+      "type": "object"
+    },
+    "UsageRecord": {
+      "additionalProperties": true,
+      "description": "사용 기록 한 줄 (앱 안, SVC-03). **입력·출력 값은 기록하지 않는다.**",
+      "properties": {
+        "at": {
+          "title": "At",
+          "type": "string"
+        },
+        "caller_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caller Type"
+        },
+        "duration_ms": {
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "key_name": {
+          "title": "Key Name",
+          "type": "string"
+        },
+        "mode": {
+          "title": "Mode",
+          "type": "string"
+        },
+        "operation": {
+          "title": "Operation",
+          "type": "string"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        },
+        "status": {
+          "title": "Status",
+          "type": "integer"
+        },
+        "usage": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Usage"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "at",
+        "key_name",
+        "operation",
+        "mode",
+        "status",
+        "duration_ms"
+      ],
+      "title": "UsageRecord",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c11-usage-page",
+  "additionalProperties": true,
+  "description": "`GET /admin/v1/usage` (SVC-03). 최근 것부터. **입력·출력 값은 없다** (계약 원칙 6).",
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/UsageRecord"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "total": {
+      "default": 0,
+      "title": "Total",
+      "type": "integer"
+    }
+  },
+  "title": "UsagePage",
+  "type": "object"
+}

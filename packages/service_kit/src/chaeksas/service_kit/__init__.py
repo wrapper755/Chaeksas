@@ -6,10 +6,12 @@
 계약 모델 자체는 `chaeksas.contracts.service_app`에 있다 — 부르는 쪽(Bot·Studio·Worker)도
 같은 모델을 쓴다.
 
-관리 콘솔 화면(SVC-00~03)은 웹이다 (`web/apps/svc-console`, ADR-0017). 여기서는 그 화면이
-부를 관리 API의 재료(키 발급·사용 기록)만 둔다.
+관리 콘솔 화면(SVC-00~03)은 웹이다 (`web/apps/svc-console`, ADR-0017). 그 화면이 부르는
+**관리 API(`/admin/v1/status`·`keys`·`usage`)는 여기서 제공한다** — `create_app(admin_token=…)`을
+주면 열리고, 주지 않으면 503이다 (빈 토큰으로 열리지 않는다).
 """
 
+from chaeksas.service_kit.admin import DependencyProbe
 from chaeksas.service_kit.app import Handler, OpError, OpResult, create_app
 from chaeksas.service_kit.keys import find_key, generate_key, hash_key, issue
 from chaeksas.service_kit.stores import (
@@ -23,6 +25,7 @@ from chaeksas.service_kit.stores import (
 )
 
 __all__ = [
+    "DependencyProbe",
     "Handler",
     "IdempotencyStore",
     "InMemoryIdempotencyStore",

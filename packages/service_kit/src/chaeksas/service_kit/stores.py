@@ -42,6 +42,14 @@ class KeyStore(Protocol):
     def touch(self, key: ServiceAppKey, *, at: str) -> None:
         """`last_used_at` 갱신."""
 
+    def add(self, key: ServiceAppKey) -> None:
+        """새 키를 넣는다 (관리 API 발급, SVC-02)."""
+        ...
+
+    def revoke(self, key: ServiceAppKey, *, at: str) -> None:
+        """폐기 시각을 남긴다. **지우지 않는다** — 사용 기록이 이름을 가리킨다."""
+        ...
+
 
 class IdempotencyStore(Protocol):
     """멱등 저장소."""
@@ -72,6 +80,9 @@ class InMemoryKeyStore:
 
     def add(self, key: ServiceAppKey) -> None:
         self.keys.append(key)
+
+    def revoke(self, key: ServiceAppKey, *, at: str) -> None:
+        key.revoked_at = at
 
 
 @dataclass

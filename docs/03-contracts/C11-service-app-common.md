@@ -108,6 +108,38 @@
 
 시각 / 키 이름 / 작업 / 수행 모드 / 결과(HTTP 코드) / 소요 / `run_id` / `caller.type` / LLM 사용량. **입력·출력 값은 기록하지 않는다.**
 
+## 관리 API (`/admin/v1/*`, SVC-00~03)
+
+관리 콘솔이 쓰는 API. **업무 호출(`/v1/ops`)과 권한이 다르다** — 서비스 앱 API 키로는 부를 수 없고,
+앱 설정의 **관리자 토큰**으로만 부른다 (`Authorization: Bearer <관리자 토큰>`). 화면은
+`web/apps/svc-console` 한 벌이 그린다 (ADR-0017).
+
+| 메서드·경로 | 뜻 | 화면 |
+| --- | --- | --- |
+| `GET /admin/v1/status` | 앱 요약·작업별 최근 통계·의존 상태·Center 등록 여부 | SVC-01 |
+| `GET /admin/v1/keys` | 키 목록 (**원문·해시 없음**) | SVC-02 |
+| `POST /admin/v1/keys` | 발급. 응답에 **원문 `key`가 한 번만** 실린다 | SVC-02 |
+| `DELETE /admin/v1/keys/{name}` | 폐기 (지우지 않고 `revoked_at`을 남긴다) | SVC-02 |
+| `GET /admin/v1/usage?limit=` | 사용 기록 (최근 것부터). **입력·출력 값은 없다** | SVC-03 |
+
+AdminStatus:
+
+| 필드 | 뜻 |
+| --- | --- |
+| `app_id`, `name`, `version`, `category`, `console_url` | manifest와 같은 값 (C11 `/manifest`) |
+| `started_at`, `uptime_s` | 가동 시간 |
+| `operations` | 작업마다 `{name, description, modes, fallback, server_ok, calls_24h, errors_24h, error_rate}` — 수는 **앱 안의 사용 기록**에서 센다 |
+| `dependencies` | 바깥 의존마다 `{name, status, detail?}` (예: Neo4j, LLM 게이트웨이). `status`는 `ok`·`degraded`·`unreachable`·`unknown` |
+| `center` | `{registered, base_url?, last_reported_at?}` — Center 리소스 목록(C7)에 올라가 있는지 |
+
+AdminKeyInfo: `ServiceAppKey`에서 **`hash`를 뺀 것** + `state`(`active`·`expired`·`revoked`).
+발급 응답(AdminKeyCreated)은 거기에 `key`(원문)를 더한다.
+
+- 키 이름은 앱 안에서 **유일하다** — 같은 이름으로 다시 발급하면 409 `name_conflict`. BPM
+  프로세스의 키 참조 이름과 맞추기를 권하므로(SVC-02), 이름이 겹치면 어느 키인지 알 수 없다.
+- 관리자 토큰이 설정되지 않았으면 관리 API 전체가 503 `admin_disabled`다. **빈 토큰으로 열리지
+  않는다.**
+
 ## 예시
 
 ```http
@@ -165,6 +197,7 @@ Content-Type: application/json
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-03 | 1 | 관리 API(`/admin/v1/status`·`keys`·`usage`)의 경로·모델·권한을 적었다 — ADR-0017이 경로만 말하고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |
 | 2026-10-01 | 1 | 초안 (키는 앱 관리 콘솔 발급·자체 검증, 멱등 키, `server_ok`) | 0010, 0013, 0015 |
 | 2026-10-01 | 1 | 검토 반영: 멱등 키에 `operation`·`node_instance` 추가와 본문 충돌 409, 폴백은 키가 자율 수행을 허용할 때만, 키 앞자리 규칙, usage 이름 통일, 보관 7일 | — |
 | 2026-10-01 | 1 | 확장 반영: manifest `extension` 선택 필드 | 0018 |

@@ -1,0 +1,61 @@
+{
+  "$id": "urn:chaeksas:contracts:c11-admin-key-create-request",
+  "additionalProperties": true,
+  "description": "`POST /admin/v1/keys`. 기본 권한은 **결정 수행만**이다 (운영 키가 자율 수행을 못 하게).",
+  "properties": {
+    "allowed_modes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Modes",
+      "type": "array"
+    },
+    "allowed_operations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Operations",
+      "type": "array"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "extra_scopes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Extra Scopes",
+      "type": "array"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "AdminKeyCreateRequest",
+  "type": "object"
+}

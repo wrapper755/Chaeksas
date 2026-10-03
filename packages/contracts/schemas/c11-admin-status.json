@@ -1,0 +1,206 @@
+{
+  "$defs": {
+    "CenterRegistration": {
+      "additionalProperties": true,
+      "description": "Center 리소스 목록(C7)에 올라가 있나 (SVC-01 「Center 등록」).",
+      "properties": {
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Base Url"
+        },
+        "last_reported_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Reported At"
+        },
+        "registered": {
+          "default": false,
+          "title": "Registered",
+          "type": "boolean"
+        }
+      },
+      "title": "CenterRegistration",
+      "type": "object"
+    },
+    "Dependency": {
+      "additionalProperties": true,
+      "description": "바깥 의존 하나 (SVC-01 「의존」) — 예: Neo4j, LLM 게이트웨이.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "status"
+      ],
+      "title": "Dependency",
+      "type": "object"
+    },
+    "OperationStatus": {
+      "additionalProperties": true,
+      "description": "작업 하나의 선언 + 최근 통계 (SVC-01 「작업」). 수는 앱 안의 사용 기록에서 센다.",
+      "properties": {
+        "calls_24h": {
+          "default": 0,
+          "title": "Calls 24H",
+          "type": "integer"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "error_rate": {
+          "default": 0.0,
+          "title": "Error Rate",
+          "type": "number"
+        },
+        "errors_24h": {
+          "default": 0,
+          "title": "Errors 24H",
+          "type": "integer"
+        },
+        "fallback": {
+          "default": "none",
+          "title": "Fallback",
+          "type": "string"
+        },
+        "modes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Modes",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "server_ok": {
+          "default": true,
+          "title": "Server Ok",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "OperationStatus",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c11-admin-status",
+  "additionalProperties": true,
+  "description": "`GET /admin/v1/status` (SVC-01). **관리자 토큰으로만** 부른다.",
+  "properties": {
+    "app_id": {
+      "title": "App Id",
+      "type": "string"
+    },
+    "category": {
+      "title": "Category",
+      "type": "string"
+    },
+    "center": {
+      "$ref": "#/$defs/CenterRegistration"
+    },
+    "console_url": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Console Url"
+    },
+    "dependencies": {
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "operations": {
+      "items": {
+        "$ref": "#/$defs/OperationStatus"
+      },
+      "title": "Operations",
+      "type": "array"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "started_at": {
+      "title": "Started At",
+      "type": "string"
+    },
+    "uptime_s": {
+      "default": 0,
+      "title": "Uptime S",
+      "type": "integer"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "app_id",
+    "name",
+    "version",
+    "category",
+    "started_at"
+  ],
+  "title": "AdminStatus",
+  "type": "object"
+}

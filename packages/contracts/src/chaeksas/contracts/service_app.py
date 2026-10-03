@@ -281,3 +281,109 @@ def resolve_mode(op: Operation, *, requested: str, key: ServiceAppKey) -> tuple[
         message=f"작업 {op.name}은 {requested} 수행을 지원하지 않는다",
         items=sorted(op.modes),
     )
+
+
+# ─────────────────────────── 관리 API (`/admin/v1/*`, SVC-00~03) ───────────────────────────
+
+#: 의존 상태 (SVC-01). 열린 문자열이고 알려진 값은 이것들이다.
+KNOWN_DEPENDENCY_STATUSES = frozenset({"ok", "degraded", "unreachable", "unknown"})
+
+
+class OperationStatus(ContractModel):
+    """작업 하나의 선언 + 최근 통계 (SVC-01 「작업」). 수는 앱 안의 사용 기록에서 센다."""
+
+    name: str
+    description: str | None = None
+    modes: list[str] = Field(default_factory=list)
+    fallback: str = "none"
+    server_ok: bool = True
+    calls_24h: int = 0
+    errors_24h: int = 0
+    #: 0.0~1.0. 호출이 없으면 0.
+    error_rate: float = 0.0
+
+
+class Dependency(ContractModel):
+    """바깥 의존 하나 (SVC-01 「의존」) — 예: Neo4j, LLM 게이트웨이."""
+
+    name: str
+    status: str  # KNOWN_DEPENDENCY_STATUSES
+    detail: str | None = None
+
+
+class CenterRegistration(ContractModel):
+    """Center 리소스 목록(C7)에 올라가 있나 (SVC-01 「Center 등록」)."""
+
+    registered: bool = False
+    base_url: str | None = None
+    last_reported_at: Timestamp | None = None
+
+
+class AdminStatus(SchemaVersioned):
+    """`GET /admin/v1/status` (SVC-01). **관리자 토큰으로만** 부른다."""
+
+    app_id: str
+    name: str
+    version: str
+    category: str
+    console_url: str | None = None
+    started_at: Timestamp
+    uptime_s: int = 0
+    operations: list[OperationStatus] = Field(default_factory=list)
+    dependencies: list[Dependency] = Field(default_factory=list)
+    center: CenterRegistration = Field(default_factory=CenterRegistration)
+
+
+class AdminKeyInfo(ContractModel):
+    """키 하나 (SVC-02). `ServiceAppKey`에서 **`hash`를 뺀 것** + `state`."""
+
+    name: str
+    prefix: str
+    allowed_operations: list[str] = Field(default_factory=list)
+    allowed_modes: list[str] = Field(default_factory=list)
+    extra_scopes: list[str] = Field(default_factory=list)
+    created_at: Timestamp | None = None
+    expires_at: Timestamp | None = None
+    last_used_at: Timestamp | None = None
+    revoked_at: Timestamp | None = None
+    state: str  # active / expired / revoked
+
+
+class AdminKeyCreateRequest(ContractModel):
+    """`POST /admin/v1/keys`. 기본 권한은 **결정 수행만**이다 (운영 키가 자율 수행을 못 하게)."""
+
+    name: str
+    allowed_operations: list[str] = Field(default_factory=lambda: ["*"])
+    allowed_modes: list[str] = Field(default_factory=lambda: [MODE_DETERMINISTIC])
+    extra_scopes: list[str] = Field(default_factory=list)
+    expires_at: Timestamp | None = None
+    note: str | None = None
+
+
+class AdminKeyCreated(AdminKeyInfo):
+    """발급 응답. **원문 `key`는 이 응답에만 실린다** (SVC-02 — 다시 볼 수 없다)."""
+
+    key: str
+
+
+class UsagePage(ContractModel):
+    """`GET /admin/v1/usage` (SVC-03). 최근 것부터. **입력·출력 값은 없다** (계약 원칙 6)."""
+
+    items: list[UsageRecord] = Field(default_factory=list)
+    total: int = 0
+
+
+def admin_key_info(key: ServiceAppKey, *, now: str) -> AdminKeyInfo:
+    """저장된 키 레코드 → 화면에 보일 모양. **해시를 빼는 유일한 길로 둔다.**"""
+    return AdminKeyInfo(
+        name=key.name,
+        prefix=key.prefix,
+        allowed_operations=key.allowed_operations,
+        allowed_modes=key.allowed_modes,
+        extra_scopes=key.extra_scopes,
+        created_at=key.created_at,
+        expires_at=key.expires_at,
+        last_used_at=key.last_used_at,
+        revoked_at=key.revoked_at,
+        state=key_state(key, now=now),
+    )

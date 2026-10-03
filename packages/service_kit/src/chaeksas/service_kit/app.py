@@ -20,6 +20,7 @@ from pydantic import ValidationError
 
 from chaeksas.contracts.service_app import (
     Caller,
+    CenterRegistration,
     HealthResponse,
     KeySelfResponse,
     Operation,
@@ -34,6 +35,8 @@ from chaeksas.contracts.service_app import (
     key_state,
     resolve_mode,
 )
+from chaeksas.service_kit.admin import DependencyProbe
+from chaeksas.service_kit.admin import create_router as create_admin_router
 from chaeksas.service_kit.keys import find_key
 from chaeksas.service_kit.stores import (
     IdempotencyStore,
@@ -112,11 +115,18 @@ def create_app(
     idempotency: IdempotencyStore | None = None,
     usage_log: UsageLog | None = None,
     health: Callable[[], HealthResponse] | None = None,
+    admin_token: str | None = None,
+    dependencies: DependencyProbe | None = None,
+    center: CenterRegistration | None = None,
     now: Callable[[], str] = _now,
 ) -> FastAPI:
     """계약을 지키는 앱 하나.
 
     `handlers`의 열쇠는 manifest의 작업 이름이어야 한다 — 어긋나면 만들 때 바로 멈춘다.
+
+    `admin_token`을 주면 관리 API(`/admin/v1/*`, SVC-00~03)가 열린다. 주지 않으면 그 경로는
+    503이다 — **빈 토큰으로 열리지 않는다** (C11).
+    `dependencies`는 앱이 자기 바깥 의존(Neo4j·LLM …)의 상태를 돌려주는 함수다 (SVC-01).
     """
     declared = {op.name for op in manifest.operations}
     if set(handlers) != declared:
@@ -133,6 +143,19 @@ def create_app(
     app.state.keys = keys
     app.state.idempotency = idem
     app.state.usage_log = log
+    app.state.admin_token = admin_token
+    started_at = now()
+    app.include_router(
+        create_admin_router(
+            manifest,
+            keys=keys,
+            usage_log=log,
+            started_at=started_at,
+            dependencies=dependencies,
+            center=center,
+            now=now,
+        )
+    )
 
     @app.get("/healthz")
     def healthz() -> HealthResponse:

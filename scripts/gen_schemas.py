@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.contracts import (
+    AdminKeyCreated,
+    AdminKeyCreateRequest,
+    AdminKeyInfo,
+    AdminStatus,
     AnswerRequest,
     ApprovalCreateRequest,
     ApprovalInfo,
@@ -50,6 +54,7 @@ from chaeksas.contracts import (
     ServiceAppManifest,
     ServiceAppResource,
     ToolpackResource,
+    UsagePage,
 )
 
 # Windows 콘솔·파이프의 기본 코드페이지(cp949·cp1252)에서는 한글을 찍다 터진다.
@@ -95,6 +100,11 @@ MODELS: list[tuple[str, Any]] = [
     ("c11-op-request", OpRequest),
     ("c11-op-response", OpResponse),
     ("c11-health-response", HealthResponse),
+    ("c11-admin-status", AdminStatus),
+    ("c11-admin-key-create-request", AdminKeyCreateRequest),
+    ("c11-admin-key-created", AdminKeyCreated),
+    ("c11-admin-key-info", AdminKeyInfo),
+    ("c11-usage-page", UsagePage),
     ("c13-extension-manifest", ExtensionManifest),
     ("c13-catalog", Catalog),
     ("c14-case-file", CaseFile),

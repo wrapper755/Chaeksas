@@ -1,0 +1,95 @@
+{
+  "$id": "urn:chaeksas:contracts:c11-admin-key-info",
+  "additionalProperties": true,
+  "description": "키 하나 (SVC-02). `ServiceAppKey`에서 **`hash`를 뺀 것** + `state`.",
+  "properties": {
+    "allowed_modes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Modes",
+      "type": "array"
+    },
+    "allowed_operations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Operations",
+      "type": "array"
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "extra_scopes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Extra Scopes",
+      "type": "array"
+    },
+    "last_used_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Used At"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "prefix": {
+      "title": "Prefix",
+      "type": "string"
+    },
+    "revoked_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revoked At"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "prefix",
+    "state"
+  ],
+  "title": "AdminKeyInfo",
+  "type": "object"
+}

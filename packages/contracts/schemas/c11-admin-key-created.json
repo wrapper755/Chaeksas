@@ -1,0 +1,100 @@
+{
+  "$id": "urn:chaeksas:contracts:c11-admin-key-created",
+  "additionalProperties": true,
+  "description": "발급 응답. **원문 `key`는 이 응답에만 실린다** (SVC-02 — 다시 볼 수 없다).",
+  "properties": {
+    "allowed_modes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Modes",
+      "type": "array"
+    },
+    "allowed_operations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Operations",
+      "type": "array"
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "extra_scopes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Extra Scopes",
+      "type": "array"
+    },
+    "key": {
+      "title": "Key",
+      "type": "string"
+    },
+    "last_used_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Used At"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "prefix": {
+      "title": "Prefix",
+      "type": "string"
+    },
+    "revoked_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revoked At"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "prefix",
+    "state",
+    "key"
+  ],
+  "title": "AdminKeyCreated",
+  "type": "object"
+}

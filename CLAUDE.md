@@ -55,6 +55,7 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 - 파일 입출력은 항상 `encoding="utf-8"` 명시 (Windows 기본 인코딩은 cp949).
 - **한글을 화면에 찍는 도구(생성기·CLI)는 stdout도 UTF-8로 고정한다.** Windows의 기본 코드페이지(cp949·cp1252)에서는 `print("경고: …")` 한 줄에 `UnicodeEncodeError`로 죽는다. `if hasattr(sys.stdout, "reconfigure"): sys.stdout.reconfigure(encoding="utf-8")`. `tests/test_generators_on_windows_encoding.py`가 Linux에서도 막는다.
 - 외부 프로세스는 `subprocess`에 인자 리스트로 넘긴다. `shell=True`, bash 전용 문법 금지.
+- **HTTP 헤더 값에 한글을 넣지 않는다.** 헤더는 ASCII라서 보내는 쪽 라이브러리가 요청 자체를 거부한다 (httpx·undici 모두). 사람 이름 같은 값은 퍼센트 인코딩해서 싣고 받는 쪽이 디코딩한다 (C5 `X-CHK-Actor`). 토큰·키도 ASCII만 쓴다.
 - **서버 우선.** 업무 대부분은 서버 BPM 프로세스(「서버 Bot」, 기본값)로 돌고, PC Bot은 UI 조작·현장 확인·PC 전용 자원이 필요할 때만 쓴다 (`docs/decisions/0016-server-first.md`).
 - BPM 프로세스는 **실행 위치**(PC / 서버)를 가진다. 서버 실행은 Center가 관리하는 서버 실행기(`apps/server_runner`)가 맡고 동시 실행을 허용한다. 서버 실행 BPM 프로세스에는 UI 태스크·웹/데스크톱 AI 태스크·현장 확인을 넣을 수 없다 (`docs/decisions/0015-run-location.md`).
 - **PC 한 대에서 실행 중인 Bot은 하나**, 결재·확인을 기다려도 끝날 때까지 자리를 쥔다. 나머지 요청은 Bot UI 대기열에서 기다린다. Worker의 UI 세션도 한 번에 하나 (`docs/decisions/0014-one-bot-per-pc.md`).
@@ -77,9 +78,9 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 
 ## 7. 현재 상태
 
-M1 끝, M2 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11·C13·C14, `service_kit`, `extension_api`, `core`의 확장 호스트, 내장 확장 `ui-automation`의 `extension.json`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다. 확장의 클라이언트 코드(UI 태스크 수행·편집기·셀렉터 등록)는 모양만 맞춘 뼈대이고 속은 M4다. `web/`은 pnpm 워크스페이스(앱 2 + 패키지 3)가 서고 구성요소 7개·계약 타입 생성이 들어 있지만, 화면 내용은 M2다. `qt`는 테마 적용(`apply_theme()`)과 포함 글꼴까지 있고 위젯은 없다. `apps/center`는 **키·등록·하트비트·패키지까지 돈다** (`uv run chk-center`, `deploy/compose.yaml`).
+M1 끝, M2 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있다. **`contracts`의 C1~C7·C11·C13·C14, `service_kit`, `extension_api`, `core`의 확장 호스트, 내장 확장 `ui-automation`의 `extension.json`만 내용이 있고**, 나머지 패키지는 docstring만 있는 빈 패키지다. 확장의 클라이언트 코드(UI 태스크 수행·편집기·셀렉터 등록)는 모양만 맞춘 뼈대이고 속은 M4다. `web/`은 pnpm 워크스페이스(앱 2 + 패키지 3)에 구성요소 7개·계약 타입 생성이 있고, **Center 콘솔(CON-00·03·11)과 서비스 앱 콘솔(SVC-00~03)이 실제로 돈다**. `qt`는 테마 적용(`apply_theme()`)과 포함 글꼴까지 있고 위젯은 없다. `apps/center`는 **키·등록·하트비트·패키지까지 돈다** (`uv run chk-center`, `deploy/compose.yaml`).
 
-- 명령: `uv sync --all-packages` → `uv run pytest` (537개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
+- 명령: `uv sync --all-packages` → `uv run pytest` (550개 통과. CI가 Windows + Linux x86_64에서, 개발 PC가 Linux aarch64에서 돈다). 검사는 `uv run ruff check .`, `uv run mypy` (인자 없이 — 경로는 `pyproject.toml`에 있다).
 - 계약 모델을 고치면 → `uv run python scripts/gen_schemas.py`, 디자인 토큰을 고치면 → `uv run python scripts/gen_tokens.py` (명암비·간격 배수 검사 포함). 둘 다 `--check`가 pytest·CI에 들어 있어 잊으면 깨진다.
 - 웹은 `web/`에서 pnpm (`pnpm install` → `pnpm dev`·`pnpm typecheck`·`pnpm build`). **계약을 고치면 두 단계다** — `gen_schemas.py`로 스키마, 그다음 `pnpm gen:api-types`로 TypeScript 타입. 색·크기는 토큰만 쓴다 (`tokens.css`·`theme.css`는 생성물). 상태 표기는 생성된 `status-map.ts`에 있는 것만 쓴다.
 - import 이름은 `chaeksas.<이름>`, 확장은 `chaeksas.ext.<id>` ([ADR-0019](docs/decisions/0019-package-names.md)). `src/chaeksas/`에 `__init__.py`를 만들면 조용히 깨진다.
@@ -91,4 +92,5 @@ M1 끝, M2 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있
 - C14(BPMN `chk:*`)는 모델·읽기·검사 B1~B14가 있다. 업무 예제 50개를 읽고 검사하는 테스트가 그것을 지킨다 — 예제를 고치면 함께 돈다.
 - Center는 `apps/center`에 있고 **API만** 가진다 (콘솔은 `web/apps/center-console`, ADR-0017). 비밀은 환경변수로만 준다 — `CHK_CENTER__ADMIN_TOKEN`이 없으면 쓰기 API가 막힌다.
 - 콘솔의 브라우저 코드는 토큰을 모른다. 세션은 **암호화된 httpOnly 쿠키**(`lib/session.ts`), Center 호출은 **서버에서만**(`lib/center.ts`, `server-only`). 쓰기는 Server Action으로 한다.
-- 아직 없는 것: Center 콘솔 화면·Bot UI 앱(M2 남은 조각), 배포·작업·결재·리소스 목록(M5), Qt 공용 위젯, HTTP 어댑터 해석기(규격만 있다), 계약 코드 C8~C10·C12, 식 도우미 함수 목록(M3), Playwright. 남은 M1 기준은 `docs/05-roadmap.md`.
+- 서비스 앱 콘솔(`web/apps/svc-console`)은 **한 벌로 모든 서비스 앱**을 그린다 — 어느 앱인지는 `CHK_SVC_CONSOLE__APP_URL`이 정하고, 앱 이름·버전·고유 메뉴는 `/admin/v1/status`의 `app_id`에서 온다. 관리 API(`service_kit`의 `admin.py`)는 **관리자 토큰으로만** 열린다 — `CHK_SVC_<앱>__ADMIN_TOKEN`이 없으면 503이고, 업무 키로 부르면 403이다 (키를 가진 Bot이 다른 키를 발급하지 못한다).
+- 아직 없는 것: Bot UI 앱(M2 남은 조각), 배포·작업·결재·리소스 목록(M5), Qt 공용 위젯, HTTP 어댑터 해석기(규격만 있다), 계약 코드 C8~C10·C12, 식 도우미 함수 목록(M3), Playwright. 남은 M1 기준은 `docs/05-roadmap.md`.

@@ -5,10 +5,15 @@
 /** 생성된 계약 모듈 목록. 타입은 계약별 경로로 가져온다 (이름이 겹치는 것이 있다). */
 export const CONTRACT_MODULES = [
   "c1-manifest",
+  "c11-admin-key-create-request",
+  "c11-admin-key-created",
+  "c11-admin-key-info",
+  "c11-admin-status",
   "c11-health-response",
   "c11-op-request",
   "c11-op-response",
   "c11-service-app-manifest",
+  "c11-usage-page",
   "c13-catalog",
   "c13-extension-manifest",
   "c14-case-file",

@@ -26,7 +26,8 @@ export interface Column<T> {
 export interface DataTableProps<T> {
   columns: Array<Column<T>>;
   rows: T[];
-  rowKey: (row: T) => string;
+  /** 줄의 고유 열쇠. 기록처럼 id가 없는 줄은 `index`를 쓴다 (SVC-03 사용 기록). */
+  rowKey: (row: T, index: number) => string;
   density?: "default" | "compact";
   showBusiness?: boolean;
   /** 줄이 없을 때 — 다음에 할 일을 말한다 (U12). */
@@ -77,8 +78,8 @@ export function DataTable<T>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={rowKey(row)} className="hover:bg-bg-subtle">
+          {rows.map((row, index) => (
+            <tr key={rowKey(row, index)} className="hover:bg-bg-subtle">
               {shown.map((c) => (
                 <td
                   key={c.key}
