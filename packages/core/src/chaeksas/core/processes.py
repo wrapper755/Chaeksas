@@ -27,6 +27,8 @@ from typing import IO, Any
 
 log = logging.getLogger(__name__)
 
+#: Windows인가. **분기에는 쓰지 않는다** — mypy는 `sys.platform` 비교만 보고 다른 OS의 코드를
+#: 지우므로, 분기는 `if sys.platform == "win32":`로 쓴다. 이 상수는 부르는 쪽에서 묻기 위한 것이다.
 IS_WINDOWS = sys.platform == "win32"
 
 #: 곱게 멈추기를 기다리는 기본 시간. 넘으면 강제 종료한다.
@@ -191,12 +193,10 @@ class ChildProcess:
             stdout = self._log_file
 
         kwargs: dict[str, Any] = {}
-        if IS_WINDOWS:  # pragma: no cover - OS 분기
+        if sys.platform == "win32":  # pragma: no cover - OS 분기
             # 새 프로세스 그룹: CTRL_BREAK_EVENT를 자식에게만 보낼 수 있다.
             # 콘솔 창은 띄우지 않는다 (Bot UI는 트레이 앱이다).
-            kwargs["creationflags"] = (
-                subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW  # type: ignore[attr-defined]
-            )
+            kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
             self._job = _windows_job()
         else:
             # 새 세션 — 부모가 받은 Ctrl+C가 자식에게 번지지 않고, 그룹째 신호를 보낼 수 있다.
@@ -261,10 +261,10 @@ class ChildProcess:
         return base
 
     def _signal_graceful(self, process: subprocess.Popen[bytes]) -> None:
-        if IS_WINDOWS:  # pragma: no cover - OS 분기
+        if sys.platform == "win32":  # pragma: no cover - OS 분기
             try:
                 # 콘솔 없는 자식에게는 닿지 않는다 — 그럼 바로 강제 종료로 간다.
-                process.send_signal(signal.CTRL_BREAK_EVENT)  # type: ignore[attr-defined]
+                process.send_signal(signal.CTRL_BREAK_EVENT)
                 return
             except (OSError, ValueError):
                 process.terminate()
@@ -275,7 +275,7 @@ class ChildProcess:
             process.terminate()
 
     def _kill(self, process: subprocess.Popen[bytes]) -> None:
-        if IS_WINDOWS:  # pragma: no cover - OS 분기
+        if sys.platform == "win32":  # pragma: no cover - OS 분기
             process.kill()
             return
         try:

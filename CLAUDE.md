@@ -60,7 +60,7 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 - BPM 프로세스는 **실행 위치**(PC / 서버)를 가진다. 서버 실행은 Center가 관리하는 서버 실행기(`apps/server_runner`)가 맡고 동시 실행을 허용한다. 서버 실행 BPM 프로세스에는 UI 태스크·웹/데스크톱 AI 태스크·현장 확인을 넣을 수 없다 (`docs/decisions/0015-run-location.md`).
 - **PC 한 대에서 실행 중인 Bot은 하나**, 결재·확인을 기다려도 끝날 때까지 자리를 쥔다. 나머지 요청은 Bot UI 대기열에서 기다린다. Worker의 UI 세션도 한 번에 하나 (`docs/decisions/0014-one-bot-per-pc.md`).
 - 자식 프로세스(Bot UI → Worker 프로세스·실행기 하나) 관리는 공통 헬퍼로. `os.killpg`, 그룹 신호는 Windows에 없다. Bot(BPM 프로세스)은 Worker를 띄우거나 끄지 않는다.
-- OS 전용 기능(UIA/AT-SPI, 자동 시작, 비밀 저장소)은 인터페이스 뒤에 두고 구현을 OS별로 나눈다.
+- OS 전용 기능(UIA/AT-SPI, 자동 시작, 비밀 저장소)은 인터페이스 뒤에 두고 구현을 OS별로 나눈다. OS 분기는 **`if sys.platform == "win32":`로 쓴다** — mypy가 그 비교만 보고 다른 OS의 코드를 지운다 (`IS_WINDOWS` 같은 별명 상수로 분기하면 Windows 전용 API가 Linux에서 오류가 된다). 개발 PC에서 `uv run mypy --platform win32`로 반대쪽도 본다 (CI에도 있다).
 - 비밀 값(토큰·비밀번호)은 코드·설정 파일·실행 기록에 넣지 않는다. 환경변수 또는 OS 비밀 저장소(`keyring`).
 - 포트 숫자를 코드에 직접 쓰지 않는다. 설정 모델의 기본값에만 둔다 (`docs/04-setup.md` §6).
 - 환경변수는 `CHK_` 접두사, 중첩은 `__` (`CHK_CENTER__PORT`).

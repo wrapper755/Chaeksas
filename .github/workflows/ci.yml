@@ -65,6 +65,11 @@ jobs:
       - name: mypy
         run: uv run mypy
 
+      # OS 분기는 한쪽만 검사된다 (mypy가 `sys.platform` 비교로 다른 쪽을 지운다). Windows 작업이
+      # 네이티브로 보지만, Linux에서도 Windows 쪽을 함께 봐서 더 빨리 걸리게 한다.
+      - name: mypy (Windows 쪽 분기)
+        run: uv run mypy --platform win32
+
       # 생성물이 원본과 어긋나면 멈춘다. 둘 다 아무것도 쓰지 않고 검사만 한다.
       - name: 계약 JSON Schema 최신 여부
         run: uv run python scripts/gen_schemas.py --check
