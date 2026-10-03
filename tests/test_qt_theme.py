@@ -110,7 +110,9 @@ def test_spinbox_arrows_point_at_real_files() -> None:
         sheet = qss(theme)
         assert "@THEME_DIR@" not in sheet
         images = re.findall(r"url\(([^)]+)\)", sheet)
-        assert {Path(i).name for i in images} == {f"arrow-up-{theme}.svg", f"arrow-down-{theme}.svg"}
+        names = {Path(i).name for i in images}
+        # 화살표는 반드시 있고, **쓰는 그림 전부**가 실제 파일이어야 한다 (체크박스 ✓도 여기 걸린다).
+        assert {f"arrow-up-{theme}.svg", f"arrow-down-{theme}.svg"} <= names
         assert all(Path(i).is_file() for i in images), images
 
 
@@ -256,3 +258,48 @@ def test_menus_are_unhinted_on_the_native_windows_platform() -> None:
         pytest.skip(f"네이티브 Qt 플랫폼을 띄울 수 없다: {done.stderr.strip()[:200]}")
     assert done.returncode == 0, done.stderr
     assert done.stdout.split() == ["QMenu", "PreferNoHinting", "QMessageBox", "PreferNoHinting"], done.stdout
+
+
+# ─────────────────────── 체크박스 표시기 (이슈 #3 꼬리) ───────────────────────
+
+
+def test_checkbox_indicator_is_drawn_by_the_stylesheet() -> None:
+    """QCheckBox에 스타일을 주면 Qt가 **기본 표시기를 그리지 않는다** — 직접 그려야 한다.
+
+    고치기 전에는 체크된 칸이 상자 없이 ✓만 보였다 (이슈 #3).
+    """
+    for theme in (THEME_LIGHT, THEME_DARK):
+        text = qss(theme)
+        assert "QCheckBox::indicator" in text
+        assert "QRadioButton::indicator" in text
+        # 켜진 칸은 채우고 ✓를 올린다 (✓는 생성한 SVG).
+        assert f"check-{theme}.svg" in text
+        for state in (":hover", ":checked", ":disabled"):
+            assert f"QCheckBox::indicator{state}" in text, (theme, state)
+
+
+def test_the_checkbox_indicator_really_has_a_box(app: Any) -> None:
+    """**그려 보고** 확인한다 — QSS에 규칙이 있어도 Qt가 적용하는지는 별 문제다.
+
+    테마를 입힌 체크박스를 실제로 그려, 켜진 표시기에 바탕색(primary)과 ✓ 색(primary.fg)이
+    둘 다 있는지 본다. 고치기 전에는 바탕이 없어 ✓만 떠 있었다 (이슈 #3).
+    """
+    from PySide6.QtWidgets import QCheckBox
+
+    apply_theme(app, choice=THEME_LIGHT)
+    colors = tokens.colors(dark=False)
+    box = QCheckBox("확인")
+    box.setChecked(True)
+    box.resize(160, 28)
+    box.show()
+    app.processEvents()
+
+    image = box.grab().toImage()
+    # 표시기는 왼쪽에 있다 (space.4 = 16px + 여백).
+    seen = {image.pixelColor(x, y).name().upper() for x in range(20) for y in range(image.height())}
+    box.hide()
+    box.deleteLater()
+    app.processEvents()
+
+    assert colors["primary"].upper() in seen, "켜진 표시기의 바탕이 없다"
+    assert colors["primary.fg"].upper() in seen, "✓가 없다"

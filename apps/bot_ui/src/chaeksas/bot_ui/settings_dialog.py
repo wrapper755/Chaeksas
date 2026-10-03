@@ -36,8 +36,15 @@ from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.center_client import CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import SecretsUnavailable
 from chaeksas.bot_ui.settings import START_ALWAYS, START_WHEN_NEEDED, RuntimeSettings, Settings
+from chaeksas.contracts.center_keys import KEY_PREFIX, looks_like_key
 
 log = logging.getLogger(__name__)
+
+#: 모양이 아닌 값을 붙여 넣었을 때 (이슈 #3 — 명령 한 줄이 그대로 키로 저장돼 401만 났다).
+KEY_SHAPE_MESSAGE = (
+    f"Center API 키는 「{KEY_PREFIX}」로 시작하는 48자입니다 — "
+    "Center 콘솔 「Center API 키」에서 발급한 값만 붙여 넣으세요."
+)
 
 #: 키를 넣었는지 사람에게 알려 주는 자리 글. **값은 보이지 않는다.**
 KEY_SET_PLACEHOLDER = "저장된 키가 있습니다 (바꾸려면 새로 붙여 넣으세요)"
@@ -204,6 +211,10 @@ class SettingsDialog(QDialog):
         wanted = self._pending_settings()
         typed = self.api_key.text().strip()
         if typed:
+            if not looks_like_key(typed):
+                # 모양부터 틀린 값을 저장하면 등록이 401로만 실패해 이유를 알 수 없다 (이슈 #3).
+                self.result_label.setText(KEY_SHAPE_MESSAGE)
+                return
             try:
                 self._agent.credentials.set_center_api_key(typed)
             except SecretsUnavailable as e:
@@ -253,6 +264,11 @@ class SettingsDialog(QDialog):
         """설정 파일에 쓰고, 키를 비밀 저장소에, 자동 시작을 OS에 반영한다."""
         typed = self.api_key.text().strip()
         if typed:
+            if not looks_like_key(typed):
+                QMessageBox.warning(self, "키 모양이 다릅니다", KEY_SHAPE_MESSAGE)
+                self.api_key.selectAll()
+                self.api_key.setFocus()
+                return
             try:
                 self._agent.credentials.set_center_api_key(typed)
             except SecretsUnavailable as e:
@@ -277,4 +293,4 @@ class SettingsDialog(QDialog):
         self.accept()
 
 
-__all__ = ["KEY_EMPTY_PLACEHOLDER", "KEY_SET_PLACEHOLDER", "SettingsDialog"]
+__all__ = ["KEY_EMPTY_PLACEHOLDER", "KEY_SET_PLACEHOLDER", "KEY_SHAPE_MESSAGE", "SettingsDialog"]

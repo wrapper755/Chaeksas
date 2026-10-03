@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from typing import Annotated
 
@@ -35,6 +36,19 @@ KeyRaw = Annotated[str, Field(pattern=rf"^{KEY_PREFIX}[A-Za-z0-9_-]{{{KEY_RANDOM
 def prefix_of(key: str) -> str:
     """키 원문 → 화면에 보이는 앞자리 (`chk_ctr_` + 무작위 8자)."""
     return key[:PREFIX_LEN]
+
+
+#: 키 원문의 모양. `KeyRaw`와 같은 패턴이다 (두 곳에 적지 않는다).
+KEY_RE = re.compile(rf"^{KEY_PREFIX}[A-Za-z0-9_-]{{{KEY_RANDOM_LEN}}}$")
+
+
+def looks_like_key(raw: str) -> bool:
+    """붙여 넣은 값이 Center API 키 모양인가.
+
+    **키를 확인하는 것이 아니다** — 받는 쪽만 진짜를 안다. 다른 것을 붙여 넣었을 때(명령 한 줄,
+    따옴표가 붙은 값) 등록이 401로만 실패해 이유를 알 수 없는 일을 막으려는 것이다 (이슈 #3).
+    """
+    return bool(KEY_RE.fullmatch(raw.strip()))
 
 
 def key_state(*, now: str, expires_at: str | None = None, revoked_at: str | None = None) -> str:

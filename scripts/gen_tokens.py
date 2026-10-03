@@ -323,6 +323,21 @@ def qt_arrow_svg(tokens: dict[str, Any], theme: str, direction: str) -> str:
     )
 
 
+def qt_check_svg(tokens: dict[str, Any], theme: str) -> str:
+    """체크박스의 ✓. 색은 `primary.fg`(채운 상자 위에 올라간다), 크기는 간격 토큰 space.3."""
+    size = tokens["space"]["3"]
+    color = tokens["color"][theme]["primary.fg"]
+    # 선 세 점: 왼쪽에서 아래로 내려가 오른쪽 위로 올라간다.
+    corner = (size * 0.42, size * 0.78)
+    points = f"{size * 0.2:.1f},{size * 0.55:.1f} {corner[0]:.1f},{corner[1]:.1f} {size * 0.8:.1f},{size * 0.25:.1f}"
+    return (
+        f"<!-- {BANNER} ({theme}) -->\n"
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
+        f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round"/></svg>\n'
+    )
+
+
 def qt_qss(tokens: dict[str, Any], theme: str) -> str:
     """QSS에는 변수가 없어 테마마다 파일 하나씩 만든다."""
     c = tokens["color"][theme]
@@ -431,6 +446,31 @@ QSpinBox::down-arrow {{
   image: url(@THEME_DIR@/arrow-down-{theme}.svg);
   width: {s["2"]}px;
   height: {s["1"]}px;
+}}
+
+/* QCheckBox·QRadioButton에 **무엇이든** 스타일을 주면 Qt가 기본 표시기를 그리지 않는다 — 체크된 칸이
+   상자 없이 ✓만 보였다 (이슈 #3). 표시기를 직접 그린다. ✓는 생성한 SVG다. */
+QCheckBox::indicator, QRadioButton::indicator {{
+  width: {s["4"]}px;
+  height: {s["4"]}px;
+  border: 1px solid {c["border.strong"]};
+  background-color: {c["bg.surface"]};
+}}
+QCheckBox::indicator {{ border-radius: {r["sm"]}px; }}
+QRadioButton::indicator {{ border-radius: {s["2"]}px; }}  /* 지름의 절반 = 동그라미 */
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {{ border-color: {c["primary"]}; }}
+QCheckBox::indicator:checked {{
+  background-color: {c["primary"]};
+  border-color: {c["primary"]};
+  image: url(@THEME_DIR@/check-{theme}.svg);
+}}
+QRadioButton::indicator:checked {{
+  background-color: {c["bg.surface"]};
+  border: {s["1"]}px solid {c["primary"]};
+}}
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {{
+  background-color: {c["bg.subtle"]};
+  border-color: {c["border.default"]};
 }}
 
 QHeaderView::section {{
@@ -603,6 +643,7 @@ def outputs(tokens: dict[str, Any]) -> dict[Path, str]:
             for t in ("light", "dark")
             for d in ("up", "down")
         },
+        **{QT_DIR / f"check-{t}.svg": qt_check_svg(tokens, t) for t in ("light", "dark")},
         # `theme/__init__.py`는 손으로 쓴다 (테마를 **적용하는** 코드가 거기 있다).
         PREVIEW: preview_html(tokens, contrast_rows(tokens["color"]["light"])),
     }

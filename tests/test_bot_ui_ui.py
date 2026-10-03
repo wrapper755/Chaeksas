@@ -25,6 +25,8 @@ from chaeksas.bot_ui.store import Store  # noqa: E402
 from chaeksas.contracts.bot_ui import CurrentRun, JobDispatch  # noqa: E402
 
 AT = "2026-10-03T09:00:00+09:00"
+#: 모양이 맞는 키 (`chk_ctr_` + 무작위 40자). 모양이 틀리면 설정 창이 막는다.
+NEW_KEY = "chk_ctr_" + "b" * 40
 
 
 @pytest.fixture(scope="session")
@@ -52,6 +54,31 @@ def fake_autostart(monkeypatch: Any) -> FakeAutostart:
     fake = FakeAutostart()
     monkeypatch.setattr(autostart_module, "autostart", lambda: fake)
     return fake
+
+
+@pytest.fixture(autouse=True)
+def modal_boxes(monkeypatch: Any) -> list[tuple[str, str]]:
+    """**어떤 시험도 모달 창에서 멈추지 않게.**
+
+    경고·확인 창은 응답을 기다린다 — 시험이 그것을 띄우면 통째로 멈춘다 (이슈 #3에서 실제로
+    그랬다). 띄운 내용을 기록만 하고 넘어간다. 「확인」 창은 **「취소」를 고른 것으로** 둔다
+    (화면 규칙의 기본값이다) — 누른 뒤를 보려는 시험은 다시 `monkeypatch`로 바꾼다.
+    """
+    from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
+
+    shown: list[tuple[str, str]] = []
+
+    def warning(_parent: Any, title: str, text: str, *_args: Any, **_kwargs: Any) -> Any:
+        shown.append((title, text))
+        return QMessageBox.StandardButton.Ok
+
+    def question(_parent: Any, title: str, text: str, *_args: Any, **_kwargs: Any) -> Any:
+        shown.append((title, text))
+        return QMessageBox.StandardButton.Cancel
+
+    monkeypatch.setattr(QMessageBox, "warning", warning)
+    monkeypatch.setattr(QMessageBox, "question", question)
+    return shown
 
 
 @pytest.fixture(autouse=True)
@@ -186,18 +213,18 @@ def test_settings_dialog_saves_to_the_file_without_secrets(app: Any, agent: Agen
     dialog = SettingsDialog(agent)
     dialog.center_url.setText("http://center.example.com:8800")
     dialog.queue_max.setValue(5)
-    dialog.api_key.setText("chk_ctr_newkey")
+    dialog.api_key.setText(NEW_KEY)
 
     dialog.save()
 
     assert agent.settings.center_url == "http://center.example.com:8800"
     assert agent.settings.queue_max == 5
-    assert agent.credentials.center_api_key() == "chk_ctr_newkey"
+    assert agent.credentials.center_api_key() == NEW_KEY
     # 저장은 시험용 데이터 폴더로 간다 (conftest) — 개발 PC의 진짜 설정이 아니다.
     path = agent.settings.config_path
     assert path.parent == Path(os.environ["CHK_BOT_UI__DATA_DIR"])
     # **설정 파일에 키가 없다** (CLAUDE.md §5).
-    assert "chk_ctr_newkey" not in path.read_text(encoding="utf-8")
+    assert NEW_KEY not in path.read_text(encoding="utf-8")
 
 
 def test_the_settings_dialog_fits_the_screen_and_keeps_its_buttons(app: Any, agent: Agent) -> None:
@@ -347,3 +374,37 @@ def test_shutdown_reports_center_jobs_as_rejected(app: Any, tmp_path: Path) -> N
     assert [a.job_id for a in agent.store.state.pending_acks] == ["job_center"]
     # Worker는 꺼졌다 (ADR-0023 — 트리째).
     assert worker.state == "off" and not worker.child.alive
+
+
+def test_a_pasted_non_key_is_refused_with_a_reason(
+    app: Any, agent: Agent, modal_boxes: list[tuple[str, str]]
+) -> None:
+    """이슈 #3 — curl 명령 한 줄이 그대로 키로 저장돼 등록이 401로만 실패했다.
+
+    모양이 아니면 **저장하지 않고** 이유를 보인다. 「저장」은 경고 창을 띄우고 칸으로 돌려보낸다.
+    """
+    from chaeksas.bot_ui.settings_dialog import KEY_SHAPE_MESSAGE, SettingsDialog  # noqa: PLC0415
+
+    dialog = SettingsDialog(agent)
+    dialog.api_key.setText("Invoke-RestMethod -Uri http://127.0.0.1:8800/api/v1/center-keys")
+
+    dialog.test_connection()
+    assert dialog.result_label.text() == KEY_SHAPE_MESSAGE
+    # 비밀 저장소는 손대지 않는다 — 전에 넣은 키가 그대로다.
+    assert agent.credentials.center_api_key() == "chk_ctr_test"
+
+    dialog.save()
+    assert modal_boxes == [("키 모양이 다릅니다", KEY_SHAPE_MESSAGE)]
+    assert agent.credentials.center_api_key() == "chk_ctr_test"
+    assert dialog.result() == 0, "저장되지 않았으므로 창이 닫히지 않는다"
+
+
+def test_a_well_shaped_key_is_saved(app: Any, agent: Agent) -> None:
+    from chaeksas.bot_ui.settings_dialog import SettingsDialog  # noqa: PLC0415
+    from chaeksas.contracts.center_keys import KEY_PREFIX, KEY_RANDOM_LEN  # noqa: PLC0415
+
+    key = KEY_PREFIX + "c" * KEY_RANDOM_LEN
+    dialog = SettingsDialog(agent)
+    dialog.api_key.setText(f"  {key}  ")  # 붙여 넣을 때 공백이 섞인다
+    dialog.save()
+    assert agent.credentials.center_api_key() == key

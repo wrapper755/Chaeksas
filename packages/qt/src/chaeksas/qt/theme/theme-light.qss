@@ -104,6 +104,31 @@ QSpinBox::down-arrow {
   height: 4px;
 }
 
+/* QCheckBox·QRadioButton에 **무엇이든** 스타일을 주면 Qt가 기본 표시기를 그리지 않는다 — 체크된 칸이
+   상자 없이 ✓만 보였다 (이슈 #3). 표시기를 직접 그린다. ✓는 생성한 SVG다. */
+QCheckBox::indicator, QRadioButton::indicator {
+  width: 16px;
+  height: 16px;
+  border: 1px solid #B9C0CA;
+  background-color: #FFFFFF;
+}
+QCheckBox::indicator { border-radius: 4px; }
+QRadioButton::indicator { border-radius: 8px; }  /* 지름의 절반 = 동그라미 */
+QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: #2552C7; }
+QCheckBox::indicator:checked {
+  background-color: #2552C7;
+  border-color: #2552C7;
+  image: url(@THEME_DIR@/check-light.svg);
+}
+QRadioButton::indicator:checked {
+  background-color: #FFFFFF;
+  border: 4px solid #2552C7;
+}
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+  background-color: #EEF0F3;
+  border-color: #DDE1E6;
+}
+
 QHeaderView::section {
   background-color: #EEF0F3;
   color: #4A5361;

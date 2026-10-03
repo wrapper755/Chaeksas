@@ -137,3 +137,31 @@ def test_unbound_key_has_no_binding() -> None:
 
 def test_unknown_state_is_accepted() -> None:
     assert info(state="뭔가_새로운").state == "뭔가_새로운"
+
+
+# ─────────────────────────── 키 모양 (붙여 넣기 실수) ───────────────────────────
+
+
+def test_a_real_key_shape_passes() -> None:
+    from chaeksas.contracts.center_keys import KEY_PREFIX, KEY_RANDOM_LEN, looks_like_key
+
+    assert looks_like_key(KEY_PREFIX + "A" * KEY_RANDOM_LEN)
+    # 앞뒤 공백은 붙여 넣기에서 흔하다 — 깎아서 본다.
+    assert looks_like_key(f"  {KEY_PREFIX}{'a' * KEY_RANDOM_LEN}\n")
+
+
+def test_things_people_actually_paste_are_refused() -> None:
+    """이슈 #3 — curl 명령 한 줄이 그대로 키로 저장돼 등록이 401로만 실패했다."""
+    from chaeksas.contracts.center_keys import KEY_PREFIX, KEY_RANDOM_LEN, looks_like_key
+
+    for pasted in (
+        "",
+        "   ",
+        'Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8800/api/v1/center-keys',
+        f'"{KEY_PREFIX}{"A" * KEY_RANDOM_LEN}"',  # 따옴표가 함께 복사된 경우
+        KEY_PREFIX + "A" * (KEY_RANDOM_LEN - 1),  # 한 글자 짧다
+        KEY_PREFIX + "A" * (KEY_RANDOM_LEN + 1),
+        "chk_svc_" + "A" * KEY_RANDOM_LEN,  # 서비스 앱 키 (다른 종류다)
+        KEY_PREFIX + "A" * (KEY_RANDOM_LEN - 1) + "!",
+    ):
+        assert not looks_like_key(pasted), pasted
