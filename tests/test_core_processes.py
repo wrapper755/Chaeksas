@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import time
@@ -83,13 +84,34 @@ def test_a_missing_program_says_so() -> None:
 
 
 def test_output_goes_to_the_log_file(tmp_path: Path) -> None:
+    """자식이 찍은 **한글**이 로그 파일에 그대로 들어간다.
+
+    Windows에서는 출력을 파일로 돌리면 그 파일의 인코딩이 시스템 코드페이지가 되어 한글을
+    찍는 자식이 죽는다 — 그래서 `ChildProcess`가 UTF-8 입출력을 물려준다 (CI가 잡아 줬다).
+    """
     log = tmp_path / "logs" / "worker.log"
-    child = ChildProcess(args=python("print('안녕')"), log_path=log, name="worker")
+    child = ChildProcess(args=python("print('안녕 Worker')"), log_path=log, name="worker")
     child.start()
     assert waits_until(lambda: child.poll() is not None)
     child.stop()
-    # 폴더를 만들고 붙여 쓴다. 자식이 찍은 한글이 그대로 들어 있다.
-    assert "안녕" in log.read_text(encoding="utf-8")
+    # 폴더를 만들고 붙여 쓴다.
+    assert "안녕 Worker" in log.read_text(encoding="utf-8")
+    assert "UnicodeEncodeError" not in log.read_text(encoding="utf-8")
+
+
+def test_the_child_environment_carries_utf8_and_what_we_pass(tmp_path: Path) -> None:
+    """준 환경변수는 그대로 가고, 그 위에 UTF-8 설정이 얹힌다."""
+    log = tmp_path / "env.log"
+    child = ChildProcess(
+        args=python("import os; print(os.environ['CHK_TEST_MARK'], os.environ['PYTHONUTF8'])"),
+        env={"CHK_TEST_MARK": "표시", "PATH": os.environ.get("PATH", "")},
+        log_path=log,
+        name="worker",
+    )
+    child.start()
+    assert waits_until(lambda: child.poll() is not None)
+    child.stop()
+    assert log.read_text(encoding="utf-8").strip() == "표시 1"
 
 
 def test_the_whole_tree_dies(tmp_path: Path) -> None:
@@ -114,8 +136,6 @@ def _alive(pid: int) -> bool:
             ["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True, check=False
         )
         return str(pid) in found.stdout
-    import os  # noqa: PLC0415
-
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

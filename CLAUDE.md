@@ -89,7 +89,7 @@ M1 끝, M2 진행. uv 워크스페이스(Python 멤버 11개)와 `tests/`가 있
 - 푸시·PR마다 CI가 돈다 (`.github/workflows/ci.yml`): 매트릭스 두 개에서 pytest·ruff·mypy·생성물 최신 여부. 경로를 비교할 때 `str(path)`가 아니라 `as_posix()`를 쓴다 (Windows는 `\`).
 - 확장은 엔트리 포인트 `chaeksas.extensions`로 찾는다. 확장 하나를 더하면 `extension.json`을 그 확장의 **파이썬 패키지 안**에 두고(호스트가 `importlib.resources`로 읽는다), `pyproject.toml`에 엔트리 포인트를 적는다. 기여의 `entry`는 그 확장 패키지 안만 가리킬 수 있다. 설치 파일에 넣는 일은 `core`가 주는 PyInstaller 훅이 하므로 빌드 인자를 적지 않는다 ([ADR-0024](docs/decisions/0024-desktop-packaging-extensions.md)).
 - 데스크톱은 `apply_theme(app)` 한 줄로 테마를 쓴다 (글꼴 등록 + QSS + 팔레트). Qt 테스트는 `QT_QPA_PLATFORM=offscreen`으로 화면 없이 돈다.
-- 자식 프로세스(Worker·실행기)는 `chaeksas.core.processes`만 쓴다 — Windows는 **Job Object**로 묶어 트리째 끄고, 그 밖에서는 프로세스 그룹에 신호를 보낸다. `os.killpg`를 직접 부르지 않는다 (ADR-0023).
+- 자식 프로세스(Worker·실행기)는 `chaeksas.core.processes`만 쓴다 — Windows는 **Job Object**로 묶어 트리째 끄고, 그 밖에서는 프로세스 그룹에 신호를 보낸다. `os.killpg`를 직접 부르지 않는다 (ADR-0023). 자식에게 UTF-8 입출력(`PYTHONUTF8`)도 물려준다 — 출력을 로그 파일로 돌리면 Windows에서 한글을 찍다 죽는다.
 - Bot UI의 비밀(Center API 키·서비스 앱 키)은 `credentials.py`를 거친다 — OS 비밀 저장소가 없으면 **저장이 분명히 실패한다**(평문으로 흘리지 않는다). 읽기는 환경변수가 먼저다 (개발·CI).
 - C14(BPMN `chk:*`)는 모델·읽기·검사 B1~B14가 있다. 업무 예제 50개를 읽고 검사하는 테스트가 그것을 지킨다 — 예제를 고치면 함께 돈다.
 - Center는 `apps/center`에 있고 **API만** 가진다 (콘솔은 `web/apps/center-console`, ADR-0017). 비밀은 환경변수로만 준다 — `CHK_CENTER__ADMIN_TOKEN`이 없으면 쓰기 API가 막힌다.

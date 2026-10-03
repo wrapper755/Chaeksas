@@ -38,6 +38,13 @@ MAX_RESTARTS = 5
 #: 이 시간 넘게 살아 있었으면 「잘 돌았다」로 보고 연속 실패 수를 되돌린다.
 HEALTHY_AFTER_S = 60.0
 
+#: 자식에게 물려주는 UTF-8 입출력 설정.
+#:
+#: Windows에서 자식의 출력을 파일로 돌리면 그 파일의 인코딩이 **시스템 코드페이지**(cp949·cp1252)가
+#: 되어, 한글을 찍는 자식이 `UnicodeEncodeError`로 죽는다 (CI의 Windows가 잡아 줬다). 우리 자식
+#: (Worker·실행기)은 한글로 말하므로 UTF-8을 물려준다. 파이썬이 아닌 자식은 이 값을 무시한다.
+UTF8_ENV = {"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
+
 
 class ProcessError(RuntimeError):
     """자식 프로세스를 띄우지 못했다."""
@@ -145,6 +152,8 @@ class ChildProcess:
     #: 자식의 출력을 적을 파일. `None`이면 부모와 같은 곳으로 간다.
     log_path: Path | None = None
     name: str = "child"
+    #: 자식의 입출력을 UTF-8로 맞춘다 (`UTF8_ENV`). 끄면 OS 기본 코드페이지를 쓴다.
+    utf8_io: bool = True
 
     _process: subprocess.Popen[bytes] | None = field(default=None, init=False, repr=False)
     _job: int | None = field(default=None, init=False, repr=False)
@@ -197,7 +206,7 @@ class ChildProcess:
             process: subprocess.Popen[bytes] = subprocess.Popen(  # noqa: S603 — 인자 리스트, shell 없음
                 list(self.args),
                 cwd=str(self.cwd) if self.cwd else None,
-                env=dict(self.env) if self.env is not None else None,
+                env=self._env(),
                 stdout=stdout,
                 stderr=subprocess.STDOUT if stdout is not None else None,
                 stdin=subprocess.DEVNULL,
@@ -241,6 +250,15 @@ class ChildProcess:
         self._cleanup_log()
         self._started_at = None
         return code
+
+    def _env(self) -> dict[str, str] | None:
+        """자식에게 줄 환경. UTF-8 입출력을 물려준다 (`UTF8_ENV`를 보라)."""
+        if self.env is None and not self.utf8_io:
+            return None
+        base = dict(self.env) if self.env is not None else dict(os.environ)
+        if self.utf8_io:
+            base.update(UTF8_ENV)
+        return base
 
     def _signal_graceful(self, process: subprocess.Popen[bytes]) -> None:
         if IS_WINDOWS:  # pragma: no cover - OS 분기
@@ -358,6 +376,7 @@ class Supervisor:
 
 __all__ = [
     "DEFAULT_STOP_TIMEOUT_S",
+    "UTF8_ENV",
     "HEALTHY_AFTER_S",
     "IS_WINDOWS",
     "MAX_RESTARTS",
