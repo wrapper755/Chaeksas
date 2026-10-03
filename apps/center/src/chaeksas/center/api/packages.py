@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import shutil
 import zipfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -27,18 +29,31 @@ MAX_ENTRIES = 5000
 MAX_UNCOMPRESSED_MB = 1024
 
 
-def _safe_zip(path: Path) -> zipfile.ZipFile:
-    """zip을 열고 **위험한 항목**을 거부한다.
+@contextmanager
+def _open_zip(path: Path) -> Iterator[zipfile.ZipFile]:
+    """zip을 열고 **반드시 닫는다.**
 
-    - 절대 경로·`..`: 푸는 쪽에서 폴더 밖에 쓰게 된다 (경로 탈출).
-    - 항목 수·풀린 크기 한도: 작은 파일로 디스크를 채우는 공격 (zip bomb).
+    닫지 않으면 Windows가 그 파일을 지우지 못한다 (`WinError 32` — 다른 프로세스가 쓰는 중).
+    검사가 실패하는 길에서도 닫혀야 해서 컨텍스트 관리자로 둔다. CI의 Windows가 잡아 줬다.
     """
     try:
         archive = zipfile.ZipFile(path)
     except zipfile.BadZipFile as e:
         raise ApiError(422, "not_a_zip", "zip 파일이 아니다") from e
+    try:
+        yield archive
+    finally:
+        archive.close()
 
-    entries = archive.infolist()
+
+def check_zip_safety(path: Path) -> None:
+    """**위험한 항목**을 거부한다. 푸는 곳은 현장 PC이므로 Center가 먼저 본다.
+
+    - 절대 경로·`..`·드라이브 문자: 푸는 쪽에서 폴더 밖에 쓰게 된다 (경로 탈출).
+    - 항목 수·풀린 크기 한도: 작은 파일로 디스크를 채우는 공격 (zip bomb).
+    """
+    with _open_zip(path) as archive:
+        entries = archive.infolist()
     if len(entries) > MAX_ENTRIES:
         raise ApiError(422, "zip_too_many_entries", f"zip 항목이 {MAX_ENTRIES}개를 넘는다")
     total = 0
@@ -49,12 +64,12 @@ def _safe_zip(path: Path) -> zipfile.ZipFile:
         total += item.file_size
     if total > MAX_UNCOMPRESSED_MB * 1024 * 1024:
         raise ApiError(422, "zip_too_large", f"풀린 크기가 {MAX_UNCOMPRESSED_MB} MB를 넘는다")
-    return archive
 
 
 def read_manifest(path: Path) -> Manifest:
-    """zip 루트의 `manifest.json`을 읽는다 (C1)."""
-    with _safe_zip(path) as archive:
+    """zip 루트의 `manifest.json`을 읽는다 (C1). 먼저 안전 검사를 한다."""
+    check_zip_safety(path)
+    with _open_zip(path) as archive:
         try:
             raw = archive.read(MANIFEST_NAME)
         except KeyError as e:

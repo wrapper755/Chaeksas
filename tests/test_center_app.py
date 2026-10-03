@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import tempfile
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, datetime
@@ -325,12 +326,11 @@ def build_package(
 
     # content_hash는 **자기 자신을 뺀** 내용의 해시다 (C2 규칙) — 두 번 만들어 채운다.
     staged = zip_bytes(json.dumps(manifest, ensure_ascii=False))
-    tmp = Path("/tmp") / f".chk-test-{package_id}-{version}.zip"  # noqa: S108
-    tmp.write_bytes(staged)
-    try:
+    # 임시 파일 위치는 OS가 정한다 (`/tmp`는 Windows에 없다 — CLAUDE.md §5).
+    with tempfile.TemporaryDirectory() as folder:
+        tmp = Path(folder) / f"{package_id}-{version}.zip"
+        tmp.write_bytes(staged)
         manifest["content_hash"] = content_hash_zip(tmp)
-    finally:
-        tmp.unlink(missing_ok=True)
     return zip_bytes(json.dumps(manifest, ensure_ascii=False))
 
 
