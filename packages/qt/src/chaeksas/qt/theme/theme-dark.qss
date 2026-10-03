@@ -70,6 +70,40 @@ QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBo
   border: 2px solid #7AA2FF;
 }
 
+/* QSpinBox에 테두리·둥근 모서리를 입히면 기본 ▲▼ 단추가 그 테두리 위에 그대로 겹쳐 잘린다 (이슈 #3, 150%).
+   단추를 테두리 안쪽에 세로로 놓고, 칸 오른쪽에 그 자리를 비운다. */
+QSpinBox { padding-right: 24px; }
+QSpinBox::up-button, QSpinBox::down-button {
+  subcontrol-origin: border;
+  width: 20px;
+  border: none;
+  border-left: 1px solid #2C313A;
+  background-color: transparent;
+}
+QSpinBox::up-button {
+  subcontrol-position: top right;
+  margin: 1px 1px 0 0;
+  border-top-right-radius: 6px;
+}
+QSpinBox::down-button {
+  subcontrol-position: bottom right;
+  margin: 0 1px 1px 0;
+  border-bottom-right-radius: 6px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover { background-color: #20242C; }
+/* 단추를 꾸미면 Qt가 기본 화살표를 그리지 않는다 — 생성한 SVG를 쓴다. `@THEME_DIR@`는 테마를 읽을 때
+   그 패키지 폴더의 실제 경로로 바뀐다 (chaeksas.qt.theme.qss). */
+QSpinBox::up-arrow {
+  image: url(@THEME_DIR@/arrow-up-dark.svg);
+  width: 8px;
+  height: 4px;
+}
+QSpinBox::down-arrow {
+  image: url(@THEME_DIR@/arrow-down-dark.svg);
+  width: 8px;
+  height: 4px;
+}
+
 QHeaderView::section {
   background-color: #20242C;
   color: #B4BBC6;

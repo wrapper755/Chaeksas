@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 from importlib.resources import as_file, files
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from chaeksas.qt.theme import tokens
@@ -36,6 +37,8 @@ THEME_SYSTEM = "system"
 THEME_LIGHT = "light"
 THEME_DARK = "dark"
 THEME_CHOICES = (THEME_SYSTEM, THEME_LIGHT, THEME_DARK)
+#: 생성된 QSS 안의 그림 경로 자리 — `qss()`가 이 패키지 폴더의 실제 경로로 바꾼다.
+THEME_DIR_PLACEHOLDER = "@THEME_DIR@"
 
 #: 앱에 포함하는 글꼴 파일이 있는 곳 (`packages/qt/src/chaeksas/qt/fonts/`).
 FONT_PACKAGE = "chaeksas.qt.fonts"
@@ -62,7 +65,10 @@ def resolve(choice: str, *, app: QApplication | None = None) -> str:
 def qss(theme: str) -> str:
     """그 테마의 QSS (생성물). QSS에는 변수가 없어 테마마다 파일이 하나씩이다."""
     name = f"theme-{THEME_DARK if theme == THEME_DARK else THEME_LIGHT}.qss"
-    return (files(__package__ or "chaeksas.qt.theme") / name).read_text(encoding="utf-8")
+    root = files(__package__ or "chaeksas.qt.theme")
+    # QSS의 그림(`url(...)`)은 실행 위치 기준이라, 생성물의 `@THEME_DIR@`를 이 패키지 폴더의 실제 경로로 바꾼다.
+    # 설치본(PyInstaller onedir)에서도 패키지 데이터는 실제 파일이다 (ADR-0024).
+    return (root / name).read_text(encoding="utf-8").replace(THEME_DIR_PLACEHOLDER, Path(str(root)).as_posix())
 
 
 def load_fonts() -> list[str]:

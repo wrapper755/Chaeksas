@@ -311,6 +311,18 @@ def qt_tokens_py(tokens: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def qt_arrow_svg(tokens: dict[str, Any], theme: str, direction: str) -> str:
+    """QSpinBox ▲▼ 화살표. 색은 토큰 `text.secondary`, 크기는 간격 토큰 (가로 space.2 × 세로 space.1)."""
+    w, h = tokens["space"]["2"], tokens["space"]["1"]
+    color = tokens["color"][theme]["text.secondary"]
+    points = f"0,{h} {w // 2},0 {w},{h}" if direction == "up" else f"0,0 {w // 2},{h} {w},0"
+    return (
+        f"<!-- {BANNER} ({theme}) -->\n"
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">'
+        f'<polygon points="{points}" fill="{color}"/></svg>\n'
+    )
+
+
 def qt_qss(tokens: dict[str, Any], theme: str) -> str:
     """QSS에는 변수가 없어 테마마다 파일 하나씩 만든다."""
     c = tokens["color"][theme]
@@ -385,6 +397,40 @@ QLineEdit, QComboBox, QPlainTextEdit, QTextEdit, QSpinBox {{
 }}
 QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus {{
   border: 2px solid {c["focus"]};
+}}
+
+/* QSpinBox에 테두리·둥근 모서리를 입히면 기본 ▲▼ 단추가 그 테두리 위에 그대로 겹쳐 잘린다 (이슈 #3, 150%).
+   단추를 테두리 안쪽에 세로로 놓고, 칸 오른쪽에 그 자리를 비운다. */
+QSpinBox {{ padding-right: {s["6"]}px; }}
+QSpinBox::up-button, QSpinBox::down-button {{
+  subcontrol-origin: border;
+  width: {s["5"]}px;
+  border: none;
+  border-left: 1px solid {c["border.default"]};
+  background-color: transparent;
+}}
+QSpinBox::up-button {{
+  subcontrol-position: top right;
+  margin: 1px 1px 0 0;
+  border-top-right-radius: {r["md"]}px;
+}}
+QSpinBox::down-button {{
+  subcontrol-position: bottom right;
+  margin: 0 1px 1px 0;
+  border-bottom-right-radius: {r["md"]}px;
+}}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background-color: {c["bg.subtle"]}; }}
+/* 단추를 꾸미면 Qt가 기본 화살표를 그리지 않는다 — 생성한 SVG를 쓴다. `@THEME_DIR@`는 테마를 읽을 때
+   그 패키지 폴더의 실제 경로로 바뀐다 (chaeksas.qt.theme.qss). */
+QSpinBox::up-arrow {{
+  image: url(@THEME_DIR@/arrow-up-{theme}.svg);
+  width: {s["2"]}px;
+  height: {s["1"]}px;
+}}
+QSpinBox::down-arrow {{
+  image: url(@THEME_DIR@/arrow-down-{theme}.svg);
+  width: {s["2"]}px;
+  height: {s["1"]}px;
 }}
 
 QHeaderView::section {{
@@ -552,6 +598,11 @@ def outputs(tokens: dict[str, Any]) -> dict[Path, str]:
         QT_DIR / "tokens.py": qt_tokens_py(tokens),
         QT_DIR / "theme-light.qss": qt_qss(tokens, "light"),
         QT_DIR / "theme-dark.qss": qt_qss(tokens, "dark"),
+        **{
+            QT_DIR / f"arrow-{d}-{t}.svg": qt_arrow_svg(tokens, t, d)
+            for t in ("light", "dark")
+            for d in ("up", "down")
+        },
         # `theme/__init__.py`는 손으로 쓴다 (테마를 **적용하는** 코드가 거기 있다).
         PREVIEW: preview_html(tokens, contrast_rows(tokens["color"]["light"])),
     }

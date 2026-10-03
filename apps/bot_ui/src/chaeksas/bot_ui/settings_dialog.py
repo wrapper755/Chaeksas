@@ -13,16 +13,19 @@ import logging
 from dataclasses import replace
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QFrame,
     QGroupBox,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QSpinBox,
     QVBoxLayout,
     QWidget,
@@ -51,18 +54,43 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Bot UI 설정")
         self.setMinimumWidth(560)
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(self._center_box())
-        layout.addWidget(self._run_box())
-        layout.addWidget(self._runtime_box())
-        layout.addWidget(self._later_box())
+        # 내용은 스크롤 영역에, 단추는 그 밖에 둔다 — 1920×1080을 150%로 쓰면 화면 높이가 672라
+        # 창 전체가 들어가지 않고 「저장」이 화면 밖으로 나갔다 (BUI-03, 이슈 #3 2-12).
+        content = QWidget()
+        sections = QVBoxLayout(content)
+        sections.setContentsMargins(0, 0, 0, 0)
+        sections.addWidget(self._center_box())
+        sections.addWidget(self._run_box())
+        sections.addWidget(self._runtime_box())
+        sections.addWidget(self._later_box())
+        sections.addStretch(1)
+
+        self.sections_area = QScrollArea()
+        self.sections_area.setWidget(content)
+        self.sections_area.setWidgetResizable(True)
+        self.sections_area.setFrameShape(QFrame.Shape.NoFrame)
+        self.sections_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("저장")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("취소")
         buttons.accepted.connect(self.save)
         buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.sections_area, 1)
         layout.addWidget(buttons)
+        self._fit_to_screen(content)
+
+    def _fit_to_screen(self, content: QWidget) -> None:
+        """내용이 다 보이는 높이로 열되, 화면(작업 표시줄 뺀 영역)을 넘지 않게."""
+        screen = self.screen() or QGuiApplication.primaryScreen()
+        available = screen.availableGeometry().height() if screen else 0
+        # 스크롤 영역 밖(단추·여백·제목 표시줄)이 차지하는 몫을 남긴다.
+        outside = self.sizeHint().height() - self.sections_area.sizeHint().height()
+        wanted = content.sizeHint().height() + outside
+        height = min(wanted, int(available * 0.9)) if available else wanted
+        self.resize(max(self.minimumWidth(), self.sizeHint().width()), height)
 
     # ── 섹션 ──
 

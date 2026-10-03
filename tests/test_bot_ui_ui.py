@@ -200,6 +200,26 @@ def test_settings_dialog_saves_to_the_file_without_secrets(app: Any, agent: Agen
     assert "chk_ctr_newkey" not in path.read_text(encoding="utf-8")
 
 
+def test_the_settings_dialog_fits_the_screen_and_keeps_its_buttons(app: Any, agent: Agent) -> None:
+    """1920×1080을 150%로 쓰면 화면 높이가 672라 창이 넘쳐 「저장」이 화면 밖으로 나갔다 (BUI-03, 이슈 #3 2-12).
+
+    내용은 스크롤 영역에 두고, 단추는 그 밖에 둔다. 창은 화면 높이를 넘지 않게 연다.
+    """
+    from PySide6.QtWidgets import QDialogButtonBox  # noqa: PLC0415
+
+    from chaeksas.bot_ui.settings_dialog import SettingsDialog  # noqa: PLC0415
+
+    dialog = SettingsDialog(agent)
+    available = dialog.screen().availableGeometry().height()
+    assert dialog.height() <= available
+    buttons = dialog.findChild(QDialogButtonBox)
+    assert buttons is not None
+    content = dialog.sections_area.widget()
+    assert content is not None
+    assert not content.isAncestorOf(buttons), "단추가 스크롤 안에 있으면 화면 밖으로 밀린다"
+    assert content.isAncestorOf(dialog.center_url)
+
+
 def test_a_failed_autostart_is_not_saved_as_on(app: Any, agent: Agent, monkeypatch: Any) -> None:
     """권한이 없어 등록이 실패하면 경고하고, 칸·설정 파일을 **OS의 실제 상태**로 되돌린다 (BUI-03, 이슈 #3)."""
     from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
