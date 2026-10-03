@@ -101,6 +101,19 @@ def test_group_box_titles_have_room_and_labels_take_the_box_color() -> None:
         assert "QLabel, QCheckBox, QRadioButton { background-color: transparent; }" in sheet
 
 
+def test_spinbox_arrows_point_at_real_files() -> None:
+    """▲▼ 단추를 꾸미면 화살표를 직접 줘야 한다 — 생성한 SVG의 경로가 실제 파일이어야 한다 (이슈 #3, 150%)."""
+    import re  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    for theme in (THEME_LIGHT, THEME_DARK):
+        sheet = qss(theme)
+        assert "@THEME_DIR@" not in sheet
+        images = re.findall(r"url\(([^)]+)\)", sheet)
+        assert {Path(i).name for i in images} == {f"arrow-up-{theme}.svg", f"arrow-down-{theme}.svg"}
+        assert all(Path(i).is_file() for i in images), images
+
+
 def test_qss_falls_back_to_light_for_unknown_theme() -> None:
     assert qss("무지개") == qss(THEME_LIGHT)
 
