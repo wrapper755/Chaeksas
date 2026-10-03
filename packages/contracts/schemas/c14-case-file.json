@@ -1,0 +1,132 @@
+{
+  "$defs": {
+    "Case": {
+      "additionalProperties": true,
+      "description": "시험 케이스 하나. **패키지에 넣지 않는다** (Studio에서만 쓴다).",
+      "properties": {
+        "approvals": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Approvals",
+          "type": "object"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "expected": {
+          "additionalProperties": true,
+          "title": "Expected",
+          "type": "object"
+        },
+        "inputs": {
+          "additionalProperties": true,
+          "title": "Inputs",
+          "type": "object"
+        },
+        "manual": {
+          "default": false,
+          "title": "Manual",
+          "type": "boolean"
+        },
+        "messages": {
+          "items": {
+            "$ref": "#/$defs/CaseMessage"
+          },
+          "title": "Messages",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Case",
+      "type": "object"
+    },
+    "CaseMessage": {
+      "additionalProperties": true,
+      "description": "시작 뒤 `after_s`초에 보내는 메시지 (Center 메시지 API와 같은 모양).",
+      "properties": {
+        "after_s": {
+          "default": 0,
+          "title": "After S",
+          "type": "integer"
+        },
+        "correlation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correlation"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "CaseMessage",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c14-case-file",
+  "additionalProperties": true,
+  "description": "케이스 파일 (`cases/*.json`).",
+  "properties": {
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/Case"
+      },
+      "title": "Cases",
+      "type": "array"
+    },
+    "process": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Process"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "title": "CaseFile",
+  "type": "object"
+}

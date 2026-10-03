@@ -48,20 +48,32 @@ class ContractModel(BaseModel):
         return self.model_dump(exclude_none=True)
 
 
+#: 위반의 무게. **경고는 막지 않는다** — 화면에 보이고 사람이 판단한다 (C14 검사 규칙).
+SEVERITY_ERROR = "error"
+SEVERITY_WARNING = "warning"
+
+
 class Violation(ContractModel):
     """검사·검증 규칙 위반 하나. 응답 `detail[]`의 한 줄이 된다.
 
-    C1의 검사 규칙(R1~R8)과 C2의 검증 규칙(V1~V8)이 같은 모양을 쓴다.
+    C1의 검사 규칙(R1~R8), C2의 검증 규칙(V1~V8), C13의 E1~E6, C14의 B1~B14가 같은 모양을 쓴다.
     """
 
-    rule: str  # R1~R8 (C1) / V1~V8 (C2)
+    rule: str  # R1~R8 (C1) / V1~V8 (C2) / E1~E6 (C13) / B1~B14 (C14)
     code: str | None = None  # 계약이 정한 사유 코드 (있을 때만)
     message: str
     items: list[str] = Field(default_factory=list)  # 걸린 항목
+    #: `error`(막는다) 또는 `warning`(보이고 넘어간다). 기본은 막는 쪽이다.
+    severity: str = SEVERITY_ERROR
+
+    @property
+    def blocks(self) -> bool:
+        return self.severity != SEVERITY_WARNING
 
     def __str__(self) -> str:
         tail = f" {self.items}" if self.items else ""
-        return f"[{self.rule}{'/' + self.code if self.code else ''}] {self.message}{tail}"
+        mark = "" if self.blocks else " (경고)"
+        return f"[{self.rule}{'/' + self.code if self.code else ''}]{mark} {self.message}{tail}"
 
 
 class SchemaVersioned(ContractModel):

@@ -16,6 +16,7 @@
 | C7 | `resources`, `center_keys` | 리소스 목록 + 누락 검사, Center API 키 |
 | C11 | `service_app` | 서비스 앱 공통 (manifest·작업 호출·키·멱등). 뼈대는 `chaeksas.service_kit` |
 | C13 | `extension` | 확장 정의 + 검사 규칙 E1~E6. 호스트는 `chaeksas.core.extensions` |
+| C14 | `bpmn_ext` | BPMN 확장 속성(`chk:*`) 모델 + BPMN 읽기 + 검사 B1~B14 + 시험 케이스 형식 |
 
 검사 함수가 계약마다 있어서, 이름이 겹치는 것은 루트에서 계약을 붙여 다시 내보낸다
 (`validate_approval_create`, `validate_center_key_create`). 모듈 안의 이름은 계약 문서 그대로다.
@@ -23,7 +24,15 @@
 자세히: docs/01-architecture.md §2, docs/03-contracts/.
 """
 
-from chaeksas.contracts._base import ContractModel, SchemaVersioned, Sha256, Timestamp, Violation
+from chaeksas.contracts._base import (
+    SEVERITY_ERROR,
+    SEVERITY_WARNING,
+    ContractModel,
+    SchemaVersioned,
+    Sha256,
+    Timestamp,
+    Violation,
+)
 from chaeksas.contracts.approvals import (
     AnswerRequest,
     ApprovalCreateRequest,
@@ -55,6 +64,39 @@ from chaeksas.contracts.bot_ui import (
     Versions,
     WorkerState,
 )
+from chaeksas.contracts.bpmn_ext import (
+    BUILTIN_VARS,
+    AiTask,
+    Approval,
+    BpmnProcess,
+    BpmnReadError,
+    Call,
+    Case,
+    CaseFile,
+    CaseMessage,
+    DataOutput,
+    DecisionIo,
+    Defaults,
+    Email,
+    ExtensionTask,
+    InputDecl,
+    Loop,
+    ProcessInfo,
+    Receive,
+    Rule,
+    ServiceCall,
+    Webhook,
+    available_vars,
+    blocking,
+    duration_hours,
+    expression_vars,
+    is_var_name,
+    read_process,
+)
+from chaeksas.contracts.bpmn_ext import Flow as BpmnFlow
+from chaeksas.contracts.bpmn_ext import Node as BpmnNode
+from chaeksas.contracts.bpmn_ext import matches as matches_expected
+from chaeksas.contracts.bpmn_ext import validate as validate_bpmn
 from chaeksas.contracts.center_api import (
     DeploymentInfo,
     ErrorBody,
@@ -193,6 +235,8 @@ from chaeksas.contracts.signing import (
 __all__ = [
     # 바탕
     "ContractModel",
+    "SEVERITY_ERROR",
+    "SEVERITY_WARNING",
     "SchemaVersioned",
     "Sha256",
     "Timestamp",
@@ -349,4 +393,36 @@ __all__ = [
     "task_type_conflicts",
     "validate_extension",
     "verify_external",
+    # C14 (`ExtensionNeed`는 C1이, `FormField`는 C6이 소유한다)
+    "AiTask",
+    "Approval",
+    "BUILTIN_VARS",
+    "BpmnFlow",
+    "BpmnNode",
+    "BpmnProcess",
+    "BpmnReadError",
+    "Call",
+    "Case",
+    "CaseFile",
+    "CaseMessage",
+    "DataOutput",
+    "DecisionIo",
+    "Defaults",
+    "Email",
+    "ExtensionTask",
+    "InputDecl",
+    "Loop",
+    "ProcessInfo",
+    "Receive",
+    "Rule",
+    "ServiceCall",
+    "Webhook",
+    "available_vars",
+    "blocking",
+    "duration_hours",
+    "expression_vars",
+    "is_var_name",
+    "matches_expected",
+    "read_process",
+    "validate_bpmn",
 ]

@@ -18,6 +18,7 @@ from chaeksas.contracts import (
     AnswerRequest,
     ApprovalCreateRequest,
     ApprovalInfo,
+    CaseFile,
     Catalog,
     CenterKeyCreated,
     CenterKeyCreateRequest,
@@ -94,6 +95,7 @@ MODELS: list[tuple[str, Any]] = [
     ("c11-health-response", HealthResponse),
     ("c13-extension-manifest", ExtensionManifest),
     ("c13-catalog", Catalog),
+    ("c14-case-file", CaseFile),
 ]
 
 
