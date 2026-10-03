@@ -26,6 +26,7 @@ from chaeksas.qt.theme import (  # noqa: E402
     resolve,
     status_color,
     tokens,
+    unhinted,
 )
 
 
@@ -90,6 +91,14 @@ def test_qss_differs_by_theme_and_uses_tokens() -> None:
     assert tokens.DARK["bg.canvas"] not in light
 
 
+def test_group_box_titles_have_room_and_labels_take_the_box_color() -> None:
+    """테두리 입힌 QGroupBox는 제목 자리·::title이 없으면 제목이 첫 줄과 겹친다 (이슈 #3)."""
+    for theme in (THEME_LIGHT, THEME_DARK):
+        sheet = qss(theme)
+        assert "QGroupBox::title" in sheet and "subcontrol-origin: margin" in sheet
+        assert "QLabel, QCheckBox, QRadioButton { background-color: transparent; }" in sheet
+
+
 def test_qss_falls_back_to_light_for_unknown_theme() -> None:
     assert qss("무지개") == qss(THEME_LIGHT)
 
@@ -126,6 +135,17 @@ def test_apply_theme_sets_stylesheet_and_palette(app: Any) -> None:
 
     assert apply_theme(app, choice=THEME_LIGHT) == THEME_LIGHT
     assert app.styleSheet() == qss(THEME_LIGHT)
+
+
+def test_the_app_font_is_unhinted(app: Any) -> None:
+    """Windows에서 Pretendard의 「으·스·그」 가로획이 힌팅으로 사라졌다 (이슈 #3) — 앱 글꼴의 힌팅을 끈다."""
+    from PySide6.QtGui import QFont  # noqa: PLC0415
+
+    apply_theme(app, choice=THEME_LIGHT)
+    assert app.font().hintingPreference() == QFont.HintingPreference.PreferNoHinting
+    original = QFont("Pretendard")
+    assert unhinted(original).hintingPreference() == QFont.HintingPreference.PreferNoHinting
+    assert original.hintingPreference() == QFont.HintingPreference.PreferDefaultHinting  # 사본만 바뀐다
 
 
 def test_following_the_system_connects_once(app: Any) -> None:

@@ -1,13 +1,14 @@
 """설정·PC 고유값·비밀·자동 시작 — OS가 갈리는 자리 (CLAUDE.md §5, ADR-0011·0023).
 
 Windows CI에서도 이 파일이 돈다. **OS 전용 길은 그 OS에서만** 실제로 실행되고, 나머지는
-「무엇을 부르려 하는가」를 본다 (`schtasks` 인자 등).
+「무엇을 부르려 하는가」를 본다 (`schtasks` 인자·작업 XML 등).
 """
 
 from __future__ import annotations
 
 import os
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -151,21 +152,54 @@ def test_the_launch_command_can_start_the_app() -> None:
     assert command[1:] == ["-m", "chaeksas.bot_ui"]
 
 
-def test_windows_task_scheduler_arguments(monkeypatch: Any) -> None:
+TASK_NS = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+
+
+def task_xml(command: list[str], user: str = "PC-03\\홍길동") -> Any:
+    found = autostart_module.WindowsTaskScheduler(command=command, user=user)
+    return ET.fromstring(found.task_xml().split("?>", 1)[1])  # 선언의 encoding="UTF-16"은 문자열에 안 맞는다
+
+
+def test_windows_task_scheduler_arguments() -> None:
     """실제 등록은 Windows에서만 — 여기서는 **무엇을 부르려 하는가**를 본다 (ADR-0023)."""
     found = autostart_module.WindowsTaskScheduler(command=["C:\\Program Files\\Chaeksas\\bot-ui.exe"])
-    args = found.create_args()
-    assert args[:4] == ["/Create", "/TN", autostart_module.TASK_NAME, "/TR"]
-    assert "/SC" in args and args[args.index("/SC") + 1] == "ONLOGON"
+    args = found.create_args(Path("task.xml"))
+    assert args == ["/Create", "/TN", autostart_module.TASK_NAME, "/XML", "task.xml", "/F"]
+    # `/SC ONLOGON`은 「모든 사용자의 로그온」이라 관리자가 아니면 거부된다 (이슈 #3).
+    assert "/SC" not in args and "/RL" not in args
+
+
+def test_the_task_starts_at_this_users_logon_without_elevation() -> None:
+    """일반 권한으로 등록되려면 트리거와 실행 사용자가 **이 사용자**여야 한다 (이슈 #3)."""
+    root = task_xml(["C:\\Program Files\\Chaeksas\\bot-ui.exe"])
+    assert root.findtext("t:Triggers/t:LogonTrigger/t:UserId", namespaces=TASK_NS) == "PC-03\\홍길동"
+    principal = root.find("t:Principals/t:Principal", TASK_NS)
+    assert principal is not None
+    assert principal.findtext("t:UserId", namespaces=TASK_NS) == "PC-03\\홍길동"
+    assert principal.findtext("t:LogonType", namespaces=TASK_NS) == "InteractiveToken"
     # 권한을 올리지 않는다 (UAC 창이 뜨지 않게).
-    assert args[args.index("/RL") + 1] == "LIMITED"
-    assert "/F" in args, "이미 있으면 덮어써야 한다 (새 버전을 깔았을 때)"
+    assert principal.findtext("t:RunLevel", namespaces=TASK_NS) == "LeastPrivilege"
+
+
+def test_the_task_is_not_stopped_by_time_or_battery() -> None:
+    """상주 앱이다 — 72시간 기본 제한, 배터리 조건을 끈다 (ADR-0023)."""
+    settings = task_xml(["C:\\bot-ui.exe"]).find("t:Settings", TASK_NS)
+    assert settings is not None
+    assert settings.findtext("t:ExecutionTimeLimit", namespaces=TASK_NS) == "PT0S"
+    assert settings.findtext("t:DisallowStartIfOnBatteries", namespaces=TASK_NS) == "false"
+    assert settings.findtext("t:StopIfGoingOnBatteries", namespaces=TASK_NS) == "false"
+    assert settings.findtext("t:MultipleInstancesPolicy", namespaces=TASK_NS) == "IgnoreNew"
 
 
 def test_windows_arguments_quote_a_command_with_spaces() -> None:
-    found = autostart_module.WindowsTaskScheduler(command=["C:\\py.exe", "-m", "chaeksas.bot_ui"])
-    target = found.create_args()[4]
-    assert "-m" in target and "chaeksas.bot_ui" in target
+    root = task_xml(["C:\\Program Files\\Py & Co\\python.exe", "-m", "chaeksas.bot_ui"])
+    assert root.findtext("t:Actions/t:Exec/t:Command", namespaces=TASK_NS) == "C:\\Program Files\\Py & Co\\python.exe"
+    assert root.findtext("t:Actions/t:Exec/t:Arguments", namespaces=TASK_NS) == "-m chaeksas.bot_ui"
+
+
+def test_an_installed_exe_has_no_arguments_element() -> None:
+    root = task_xml(["C:\\Program Files\\Chaeksas\\bot-ui.exe"])
+    assert root.find("t:Actions/t:Exec/t:Arguments", TASK_NS) is None
 
 
 @pytest.mark.skipif(

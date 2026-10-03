@@ -17,7 +17,7 @@ import pytest
 # PySide6를 불러오기 **전에** 정해야 한다.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from conftest import FakeCredentials  # noqa: E402
+from conftest import FakeAutostart, FakeCredentials  # noqa: E402
 
 from chaeksas.bot_ui.agent import Agent  # noqa: E402
 from chaeksas.bot_ui.settings import Settings  # noqa: E402
@@ -38,6 +38,20 @@ def app() -> Any:
         return QApplication([])
     except Exception as e:  # pragma: no cover - 환경 문제
         pytest.skip(f"Qt 플랫폼 플러그인을 띄울 수 없다: {e}")
+
+
+@pytest.fixture(autouse=True)
+def fake_autostart(monkeypatch: Any) -> FakeAutostart:
+    """설정 창의 「저장」이 **진짜 작업 스케줄러를 부르지 않게.**
+
+    부르면 그 PC에 자동 시작이 등록되고, 권한이 없는 PC에서는 경고 창이 응답을 기다리며 시험이 멈춘다
+    (이슈 #3). 다른 동작을 보려는 시험은 다시 `monkeypatch.setattr`로 바꾼다.
+    """
+    from chaeksas.bot_ui import autostart as autostart_module  # noqa: PLC0415
+
+    fake = FakeAutostart()
+    monkeypatch.setattr(autostart_module, "autostart", lambda: fake)
+    return fake
 
 
 @pytest.fixture(autouse=True)
@@ -174,15 +188,39 @@ def test_settings_dialog_saves_to_the_file_without_secrets(app: Any, agent: Agen
     dialog.queue_max.setValue(5)
     dialog.api_key.setText("chk_ctr_newkey")
 
-    path = tmp_path / "settings.json"
-    dialog._pending_settings().save(path)  # noqa: SLF001 — 저장 경로만 바꿔 본다
     dialog.save()
 
     assert agent.settings.center_url == "http://center.example.com:8800"
     assert agent.settings.queue_max == 5
     assert agent.credentials.center_api_key() == "chk_ctr_newkey"
+    # 저장은 시험용 데이터 폴더로 간다 (conftest) — 개발 PC의 진짜 설정이 아니다.
+    path = agent.settings.config_path
+    assert path.parent == Path(os.environ["CHK_BOT_UI__DATA_DIR"])
     # **설정 파일에 키가 없다** (CLAUDE.md §5).
     assert "chk_ctr_newkey" not in path.read_text(encoding="utf-8")
+
+
+def test_a_failed_autostart_is_not_saved_as_on(app: Any, agent: Agent, monkeypatch: Any) -> None:
+    """권한이 없어 등록이 실패하면 경고하고, 칸·설정 파일을 **OS의 실제 상태**로 되돌린다 (BUI-03, 이슈 #3)."""
+    from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
+
+    from chaeksas.bot_ui import autostart as autostart_module  # noqa: PLC0415
+    from chaeksas.bot_ui import settings_dialog  # noqa: PLC0415
+
+    failing = FakeAutostart(fail="자동 시작을 등록하지 못했습니다: 오류: 액세스가 거부되었습니다.")
+    monkeypatch.setattr(autostart_module, "autostart", lambda: failing)
+    warnings: list[str] = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, text: warnings.append(text))
+
+    dialog = settings_dialog.SettingsDialog(agent)
+    dialog.autostart.setChecked(True)
+    dialog.save()
+
+    assert failing.calls == ["enable"]
+    assert warnings == ["자동 시작을 등록하지 못했습니다: 오류: 액세스가 거부되었습니다."]
+    assert dialog.autostart.isChecked() is False
+    assert agent.settings.autostart is False
+    assert Settings.load(agent.settings.config_path).autostart is False
 
 
 def test_settings_dialog_reports_why_a_connection_failed(app: Any, tmp_path: Path) -> None:

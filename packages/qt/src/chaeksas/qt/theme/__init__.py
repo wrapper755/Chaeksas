@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 from chaeksas.qt.theme import tokens
 
 if TYPE_CHECKING:  # QApplication을 타입으로만 쓴다 (import 비용을 줄인다)
-    from PySide6.QtGui import QPalette
+    from PySide6.QtGui import QFont, QPalette
     from PySide6.QtWidgets import QApplication
 
 LOG = logging.getLogger(__name__)
@@ -130,6 +130,20 @@ def palette(theme: str) -> QPalette:
     return pal
 
 
+def unhinted(font: QFont) -> QFont:
+    """힌팅을 끈 사본.
+
+    Windows(DirectWrite)는 Pretendard(CFF 외곽선)를 작은 크기에서 힌팅하다 얇은 가로획을 지운다 —
+    14px에서 「으·스」, 12px에서 「그」의 「ㅡ」가 사라졌다 (이슈 #3). 힌팅을 끄면 크기와 상관없이 그려진다.
+    QSS는 글꼴 이름·크기만 정하고 힌팅은 정하지 못하므로 앱 글꼴에 둔다 (QSS가 이 위에 얹힌다).
+    """
+    from PySide6.QtGui import QFont
+
+    copy = QFont(font)
+    copy.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
+    return copy
+
+
 def apply_theme(app: QApplication, *, choice: str = THEME_SYSTEM) -> str:
     """글꼴·QSS·팔레트를 적용하고, 실제로 쓴 테마(`light`/`dark`)를 돌려준다.
 
@@ -137,6 +151,7 @@ def apply_theme(app: QApplication, *, choice: str = THEME_SYSTEM) -> str:
     """
     theme = resolve(choice, app=app)
     load_fonts()
+    app.setFont(unhinted(app.font()))
     app.setPalette(palette(theme))
     app.setStyleSheet(qss(theme))
 

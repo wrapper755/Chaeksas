@@ -4,7 +4,7 @@ OS마다 자리가 다르니 **인터페이스 뒤에 두고 구현을 나눈다
 
 | OS | 방법 | 왜 |
 | --- | --- | --- |
-| Windows | **작업 스케줄러** (`schtasks`, `ONLOGON`) | 시작 폴더·Run 키는 UAC 문제가 있다 (ADR-0023) |
+| Windows | **작업 스케줄러** (`schtasks /XML`, 이 사용자 로그온) | 시작 폴더·Run 키는 UAC 문제 (ADR-0023) |
 | Linux | `~/.config/autostart/*.desktop` (XDG) | 데스크톱 세션이 읽는 표준 자리 |
 | macOS | 아직 없다 | 지원 OS가 아니다 (launchd는 나중) |
 
@@ -13,11 +13,15 @@ OS마다 자리가 다르니 **인터페이스 뒤에 두고 구현을 나눈다
 
 from __future__ import annotations
 
+import getpass
 import logging
+import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Protocol
+from xml.sax.saxutils import escape
 
 log = logging.getLogger(__name__)
 
@@ -67,14 +71,29 @@ class NoAutostart:
         pass
 
 
+def current_user() -> str:
+    """작업의 로그온 트리거·실행 사용자로 쓸 `도메인\\사용자` (도메인이 없으면 사용자 이름만)."""
+    user = os.environ.get("USERNAME") or getpass.getuser()
+    domain = os.environ.get("USERDOMAIN")
+    return f"{domain}\\{user}" if domain else user
+
+
 class WindowsTaskScheduler:
-    """Windows 작업 스케줄러 (ADR-0023). `schtasks`를 **인자 리스트로** 부른다."""
+    """Windows 작업 스케줄러 (ADR-0023). `schtasks`를 **인자 리스트로** 부른다.
+
+    작업은 **XML로 만든다** (`schtasks /Create /XML`). `/SC ONLOGON`은 「모든 사용자의 로그온」
+    트리거를 만들어서 관리자 권한이 없으면 「액세스가 거부되었습니다」로 실패한다 (`/RU`를 줘도 같다).
+    로그온 트리거에 **이 사용자**를 적은 XML은 일반 권한으로 등록된다 (이슈 #3).
+    XML이라야 ADR-0023의 「실행 시간 제한 없음·배터리 조건 없음」도 정할 수 있다 —
+    `schtasks` 인자로 만들면 72시간 뒤 끝나고, 배터리로 돌 때는 시작하지 않는다.
+    """
 
     reason = ""
 
-    def __init__(self, task_name: str = TASK_NAME, command: list[str] | None = None) -> None:
+    def __init__(self, task_name: str = TASK_NAME, command: list[str] | None = None, user: str | None = None) -> None:
         self.task_name = task_name
         self.command = command or launch_command()
+        self.user = user or current_user()
 
     @property
     def available(self) -> bool:
@@ -90,15 +109,54 @@ class WindowsTaskScheduler:
             check=False,
         )
 
-    def create_args(self) -> list[str]:
-        """만들 때 쓰는 인자. 시험이 이것만 본다 (실제로 등록하지 않고).
+    def task_xml(self) -> str:
+        """등록할 작업 정의. 시험이 이것을 본다 (실제로 등록하지 않고).
 
-        `/RL LIMITED`: 권한을 올리지 않는다 (UAC 창이 뜨지 않게).
-        `/F`: 이미 있으면 덮어쓴다 — 명령이 바뀌었을 수 있다 (새 버전을 깔았을 때).
+        - 로그온 트리거·실행 사용자 = 이 사용자, `InteractiveToken`: 로그인 세션에서 화면과 함께 뜬다.
+        - `LeastPrivilege`: 권한을 올리지 않는다 (UAC 창이 뜨지 않게).
+        - `ExecutionTimeLimit PT0S`·배터리 조건 끔: 상주 앱이다 (ADR-0023).
+        - `IgnoreNew`: 이미 떠 있으면 하나 더 띄우지 않는다.
         """
-        # 인자가 있는 명령은 한 문자열로 묶어 넘긴다 (`/TR`는 문자열 하나를 받는다).
-        target = self.command[0] if len(self.command) == 1 else subprocess.list2cmdline(self.command)
-        return ["/Create", "/TN", self.task_name, "/TR", target, "/SC", "ONLOGON", "/RL", "LIMITED", "/F"]
+        user = escape(self.user)
+        arguments = subprocess.list2cmdline(self.command[1:])
+        # 설치본은 실행 파일 하나라 인자가 없다 — 빈 요소는 넣지 않는다.
+        arguments_line = f"\n      <Arguments>{escape(arguments)}</Arguments>" if arguments else ""
+        return f"""<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>{escape(TASK_NAME)} — 로그인할 때 자동 시작 (설정에서 끌 수 있다)</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>{user}</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>{user}</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <Enabled>true</Enabled>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>{escape(self.command[0])}</Command>{arguments_line}
+    </Exec>
+  </Actions>
+</Task>
+"""
+
+    def create_args(self, xml_path: Path) -> list[str]:
+        """만들 때 쓰는 인자. `/F`: 이미 있으면 덮어쓴다 — 명령이 바뀌었을 수 있다 (새 버전을 깔았을 때)."""
+        return ["/Create", "/TN", self.task_name, "/XML", str(xml_path), "/F"]
 
     def enabled(self) -> bool:
         if not self.available:
@@ -108,7 +166,11 @@ class WindowsTaskScheduler:
     def enable(self) -> None:
         if not self.available:  # pragma: no cover - OS 분기
             return
-        done = self._run(self.create_args())
+        with tempfile.TemporaryDirectory() as tmp:
+            xml_path = Path(tmp) / "task.xml"
+            # `schtasks /XML`은 UTF-16 파일을 기대한다 (BOM 포함 — `utf-16`이 붙여 준다).
+            xml_path.write_text(self.task_xml(), encoding="utf-16")
+            done = self._run(self.create_args(xml_path))
         if done.returncode != 0:  # pragma: no cover - 권한 문제
             raise RuntimeError(f"자동 시작을 등록하지 못했습니다: {done.stderr.strip() or done.stdout.strip()}")
 
@@ -176,5 +238,6 @@ __all__ = [
     "NoAutostart",
     "WindowsTaskScheduler",
     "autostart",
+    "current_user",
     "launch_command",
 ]

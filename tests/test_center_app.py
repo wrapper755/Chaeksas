@@ -494,3 +494,19 @@ def test_missing_package_is_404(client: TestClient) -> None:
 def test_canonical_json_is_used_for_the_hash() -> None:
     """패키지 해시는 C2 규칙을 쓴다 — 같은 내용이면 어디서 만들어도 같은 값이다."""
     assert canonical_json({"b": 1, "a": 2}) == b'{"a":2,"b":1}'
+
+
+def test_json_responses_declare_utf8(client: TestClient) -> None:
+    """charset이 없으면 Windows PowerShell 5.1이 한글을 ISO-8859-1로 읽어 깨뜨린다 (이슈 #3).
+
+    앱이 직접 만든 응답, 라우터의 응답, 오류 응답 모두 같은 `Content-Type`이어야 한다.
+    """
+    issue_key(client, name="내 Windows PC")
+    for response in (
+        client.get("/healthz"),
+        client.get("/api/v1/center-keys", headers=ADMIN),
+        client.get("/api/v1/bot-uis", headers=ADMIN),
+        client.get("/api/v1/center-keys"),  # 인증 없음 → 오류 모양
+    ):
+        assert response.headers["content-type"] == "application/json; charset=utf-8", response.request.url
+    assert "내 Windows PC" in client.get("/api/v1/center-keys", headers=ADMIN).content.decode("utf-8")
