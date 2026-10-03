@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from typing import Any
 
 import pytest
@@ -141,8 +143,18 @@ def test_the_app_font_is_unhinted(app: Any) -> None:
     """Windows에서 Pretendard의 「으·스·그」 가로획이 힌팅으로 사라졌다 (이슈 #3) — 앱 글꼴의 힌팅을 끈다."""
     from PySide6.QtGui import QFont  # noqa: PLC0415
 
+    # Windows 플랫폼은 메뉴·대화상자에 시스템 글꼴을 클래스 글꼴로 따로 준다. offscreen에는 없으니 심어 둔다.
+    for widget_class in ("QMenu", "QMessageBox"):
+        app.setFont(QFont("Malgun Gothic"), widget_class)
     apply_theme(app, choice=THEME_LIGHT)
     assert app.font().hintingPreference() == QFont.HintingPreference.PreferNoHinting
+    # 메뉴·대화상자는 클래스 글꼴을 따로 쓰고, 스타일시트가 그것을 되돌린다 — 위젯에서 확인한다.
+    from PySide6.QtWidgets import QMenu, QMessageBox  # noqa: PLC0415
+
+    for widget in (QMenu(), QMessageBox()):
+        widget.ensurePolished()
+        assert widget.font().hintingPreference() == QFont.HintingPreference.PreferNoHinting, type(widget).__name__
+        widget.deleteLater()
     original = QFont("Pretendard")
     assert unhinted(original).hintingPreference() == QFont.HintingPreference.PreferNoHinting
     assert original.hintingPreference() == QFont.HintingPreference.PreferDefaultHinting  # 사본만 바뀐다
@@ -202,3 +214,32 @@ def test_every_status_label_has_a_color() -> None:
         for label in mapping:
             for part in ("fg", "bg", "solid"):
                 assert status_color(group, label, part=part), f"{group}/{label}/{part}"
+
+
+_NATIVE_MENU_CHECK = """
+import sys
+from PySide6.QtWidgets import QApplication, QMenu, QMessageBox
+from chaeksas.qt.theme import apply_theme
+app = QApplication(sys.argv[:1])
+apply_theme(app, choice="light")
+for widget in (QMenu(), QMessageBox()):
+    widget.ensurePolished()
+    print(type(widget).__name__, widget.font().hintingPreference().name)
+"""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows 플랫폼 플러그인의 클래스 글꼴 동작")
+def test_menus_are_unhinted_on_the_native_windows_platform() -> None:
+    """Windows 플랫폼은 스타일시트를 입힐 때 메뉴·대화상자 글꼴을 시스템 값으로 되돌린다 (이슈 #3).
+
+    offscreen에는 그 동작이 없어 위 시험으로는 안 잡힌다 — 네이티브 플랫폼으로 따로 띄워 본다.
+    """
+    env = {k: v for k, v in os.environ.items() if k != "QT_QPA_PLATFORM"}
+    done = subprocess.run(
+        [sys.executable, "-c", _NATIVE_MENU_CHECK], capture_output=True, text=True, encoding="utf-8",
+        errors="replace", env={**env, "PYTHONUTF8": "1"}, timeout=60, check=False,
+    )
+    if done.returncode != 0 and "platform plugin" in done.stderr:
+        pytest.skip(f"네이티브 Qt 플랫폼을 띄울 수 없다: {done.stderr.strip()[:200]}")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.split() == ["QMenu", "PreferNoHinting", "QMessageBox", "PreferNoHinting"], done.stdout

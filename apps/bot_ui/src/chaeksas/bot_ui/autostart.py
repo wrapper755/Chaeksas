@@ -34,6 +34,12 @@ def launch_command() -> list[str]:
     """Bot UI를 띄우는 명령. 설치 파일(PyInstaller)로 묶였으면 그 실행 파일 하나다 (ADR-0024)."""
     if getattr(sys, "frozen", False):  # pragma: no cover - 묶인 뒤에만
         return [sys.executable]
+    if sys.platform == "win32":
+        # `python.exe`로 등록하면 로그온 때 콘솔 창이 같이 뜨고, 그 창을 닫으면 Bot UI도 꺼진다 (이슈 #3).
+        # 같은 폴더의 `pythonw.exe`(콘솔 없는 판)가 있으면 그것을 쓴다.
+        windowless = Path(sys.executable).with_name("pythonw.exe")
+        if windowless.exists():
+            return [str(windowless), "-m", "chaeksas.bot_ui"]
     return [sys.executable, "-m", "chaeksas.bot_ui"]
 
 

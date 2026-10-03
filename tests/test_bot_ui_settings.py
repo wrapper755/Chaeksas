@@ -148,8 +148,12 @@ def test_service_app_keys_are_kept_by_reference_name(monkeypatch: Any) -> None:
 def test_the_launch_command_can_start_the_app() -> None:
     """등록할 명령은 `python -m chaeksas.bot_ui`다 (묶으면 실행 파일 하나)."""
     command = autostart_module.launch_command()
-    assert command[0] == sys.executable
     assert command[1:] == ["-m", "chaeksas.bot_ui"]
+    if sys.platform == "win32":
+        # 콘솔 창 없이 뜨게 `pythonw.exe` (이슈 #3) — 같은 가상환경의 것이다.
+        assert command[0] == str(Path(sys.executable).with_name("pythonw.exe"))
+    else:
+        assert command[0] == sys.executable
 
 
 TASK_NS = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}

@@ -130,6 +130,11 @@ def palette(theme: str) -> QPalette:
     return pal
 
 
+#: Windows에서 Qt가 앱 글꼴과 **따로** 주는 클래스 글꼴 (시스템 메뉴·대화상자 글꼴). 앱 글꼴만 바꾸면
+#: 이 위젯들은 힌팅이 그대로라 메뉴의 「서비스」가 「서비ㅅ」로 보였다 (이슈 #3).
+CLASS_FONTS = ("QMenu", "QMenuBar", "QMessageBox", "QToolTip", "QTipLabel", "QStatusBar", "QMdiSubWindowTitleBar")
+
+
 def unhinted(font: QFont) -> QFont:
     """힌팅을 끈 사본.
 
@@ -151,9 +156,13 @@ def apply_theme(app: QApplication, *, choice: str = THEME_SYSTEM) -> str:
     """
     theme = resolve(choice, app=app)
     load_fonts()
-    app.setFont(unhinted(app.font()))
     app.setPalette(palette(theme))
     app.setStyleSheet(qss(theme))
+    # 스타일시트를 입히면 Qt가 클래스 글꼴을 시스템 기본값으로 되돌린다 — 힌팅 끄기는 그 **뒤에** 한다.
+    app.setFont(unhinted(app.font()))
+    for widget_class in CLASS_FONTS:
+        # PySide6 타입 정보는 클래스 이름 인자를 모른다 (`font(str)` 없음, `setFont`는 bytes만) — 실행은 된다.
+        app.setFont(unhinted(app.font(widget_class)), widget_class)  # type: ignore[call-overload, arg-type]
 
     if choice == THEME_SYSTEM:
         hints = app.styleHints()
