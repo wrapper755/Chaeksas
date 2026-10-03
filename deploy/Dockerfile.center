@@ -1,0 +1,48 @@
+# Center API 컨테이너 (ADR-0017 §1 — 서버는 Linux 주).
+# uv로 의존성을 받고, 워크스페이스 멤버만 설치한다 (web/·spikes/는 들어가지 않는다).
+FROM python:3.12-slim AS base
+
+# uv는 공식 이미지에서 복사한다 (버전을 고정해 재현되게).
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /usr/local/bin/uv
+
+ENV UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONUTF8=1
+
+WORKDIR /app
+
+# 잠금 파일과 멤버 선언만 먼저 복사해 레이어 캐시를 살린다.
+COPY pyproject.toml uv.lock .python-version ./
+COPY packages/contracts/pyproject.toml packages/contracts/
+COPY packages/extension_api/pyproject.toml packages/extension_api/
+COPY packages/core/pyproject.toml packages/core/
+COPY packages/qt/pyproject.toml packages/qt/
+COPY packages/service_kit/pyproject.toml packages/service_kit/
+COPY apps/center/pyproject.toml apps/center/
+COPY apps/studio/pyproject.toml apps/studio/
+COPY apps/bot_ui/pyproject.toml apps/bot_ui/
+COPY apps/server_runner/pyproject.toml apps/server_runner/
+COPY apps/admin/pyproject.toml apps/admin/
+COPY extensions/ui_automation/pyproject.toml extensions/ui_automation/
+
+# Center가 쓰는 것만 설치한다 (Qt·PySide6는 서버에 필요 없다).
+RUN uv sync --frozen --no-install-workspace --package chaeksas-center
+
+COPY packages/ packages/
+COPY apps/center/ apps/center/
+RUN uv sync --frozen --package chaeksas-center
+
+# 데이터는 볼륨에 둔다 (DB·패키지 파일).
+ENV CHK_CENTER__DATA_DIR=/data
+VOLUME ["/data"]
+EXPOSE 8800
+
+# 컨테이너 안에서는 비관리자로 돈다.
+RUN useradd --create-home --uid 10001 chaeksas && mkdir -p /data && chown -R chaeksas /data /app
+USER chaeksas
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+  CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8800/healthz')"
+
+CMD ["uv", "run", "--frozen", "--package", "chaeksas-center", "chk-center"]

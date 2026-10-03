@@ -11,6 +11,7 @@ build/
 
 # 비밀·로컬 설정
 .env
+deploy/.env
 configs/*.local.yaml
 
 # 실행 산출물
