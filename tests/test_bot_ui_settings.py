@@ -6,6 +6,7 @@ Windows CI에서도 이 파일이 돈다. **OS 전용 길은 그 OS에서만** �
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -167,9 +168,16 @@ def test_windows_arguments_quote_a_command_with_spaces() -> None:
     assert "-m" in target and "chaeksas.bot_ui" in target
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows 작업 스케줄러")
-def test_windows_autostart_really_registers() -> None:  # pragma: no cover - Windows CI에서만
-    """Windows에서는 **실제로** 등록하고 지운다 (CI가 돌린다)."""
+@pytest.mark.skipif(
+    sys.platform != "win32" or not os.environ.get("CHK_TEST_AUTOSTART"),
+    reason="Windows 실기 확인 — `CHK_TEST_AUTOSTART=1`로 켠다 (작업 스케줄러를 실제로 건드린다)",
+)
+def test_windows_autostart_really_registers() -> None:  # pragma: no cover - 실기에서만
+    """**실제로** 작업을 등록하고 지운다.
+
+    기본으로 돌리지 않는다 — CI 러너는 작업 등록이 막혀 있을 수 있고(실제로 막혔다), 시험이
+    그 PC의 설정을 바꾸게 두어서도 안 된다. Windows PC에서 확인할 때 `CHK_TEST_AUTOSTART=1`로 켠다.
+    """
     found = autostart_module.WindowsTaskScheduler(task_name="Chaeksas Bot UI 시험")
     try:
         found.enable()

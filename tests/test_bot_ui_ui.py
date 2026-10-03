@@ -40,6 +40,26 @@ def app() -> Any:
         pytest.skip(f"Qt 플랫폼 플러그인을 띄울 수 없다: {e}")
 
 
+@pytest.fixture(autouse=True)
+def _cleanup_qt(app: Any) -> Any:
+    """시험이 만든 창·트레이를 **반드시 지운다.**
+
+    남겨 두면 뒤에 도는 모듈이 앱 전체에 테마를 다시 입힐 때 그 좀비 위젯을 건드린다 —
+    Windows CI에서 `apply_theme`이 access violation으로 터졌다.
+    """
+    from PySide6.QtWidgets import QSystemTrayIcon  # noqa: PLC0415
+
+    yield
+    for tray in app.findChildren(QSystemTrayIcon):
+        tray.hide()
+        tray.setParent(None)
+        tray.deleteLater()
+    for widget in app.topLevelWidgets():
+        widget.close()
+        widget.deleteLater()
+    app.processEvents()
+
+
 @pytest.fixture
 def agent(tmp_path: Path) -> Agent:
     return Agent(
@@ -106,7 +126,7 @@ def test_tray_menu_shows_the_information_rows(app: Any, agent: Agent) -> None:
 
     agent.store.state.bot_ui_id = "bui_1"
     agent.take_job(job())
-    tray = Tray(agent)
+    tray = Tray(agent, parent=app)
     texts = [action.text() for action in tray.contextMenu().actions()]
 
     assert any("재무팀 PC-03" in text for text in texts)
@@ -123,7 +143,7 @@ def test_the_tray_menu_is_rebuilt_on_refresh(app: Any, agent: Agent) -> None:
     from chaeksas.bot_ui.tray import Tray  # noqa: PLC0415
 
     agent.store.state.bot_ui_id = "bui_1"
-    tray = Tray(agent)
+    tray = Tray(agent, parent=app)
     assert not any("대기열" in a.text() for a in tray.contextMenu().actions())
     agent.take_job(job())
     tray.refresh()

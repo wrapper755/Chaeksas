@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from PySide6.QtCore import QRectF, Qt, Signal
+from PySide6.QtCore import QObject, QRectF, Qt, Signal
 from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
 
@@ -86,10 +86,14 @@ class Tray(QSystemTrayIcon):
     open_extensions = Signal()
     quit_requested = Signal()
 
-    def __init__(self, agent: Agent, *, current_theme: str = theme.THEME_LIGHT) -> None:
-        super().__init__()
+    def __init__(
+        self, agent: Agent, *, current_theme: str = theme.THEME_LIGHT, parent: QObject | None = None
+    ) -> None:
+        # 부모를 주면 수명이 그것에 묶인다 (앱을 주면 앱이 끝날 때 함께 정리된다).
+        super().__init__(parent)
         self._agent = agent
         self._theme = current_theme
+        # 메뉴는 부모 없는 팝업이다 (QMenu는 위젯이라 QSystemTrayIcon을 부모로 삼을 수 없다).
         self._menu = QMenu()
         self.setContextMenu(self._menu)
         self.activated.connect(self._on_activated)

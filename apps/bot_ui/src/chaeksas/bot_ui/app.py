@@ -38,7 +38,7 @@ class BotUiApp:
 
         self.tray: Tray | None = None
         if QSystemTrayIcon.isSystemTrayAvailable():
-            self.tray = Tray(agent, current_theme=self.theme)
+            self.tray = Tray(agent, current_theme=self.theme, parent=app)
             self.tray.open_window.connect(self.show_window)
             self.tray.open_settings.connect(self.open_settings)
             self.tray.quit_requested.connect(self.quit)

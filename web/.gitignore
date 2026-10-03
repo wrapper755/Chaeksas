@@ -1,4 +1,7 @@
 node_modules/
 .next/
+# `next typegen`(개발)과 `next build`가 서로 다른 경로를 적는다 (`.next/dev/types` vs
+# `.next/types`) — 추적하면 CI의 「작업 트리가 깨끗한가」가 번갈아 깨진다. Next가 만드는 파일이다.
+next-env.d.ts
 out/
 *.tsbuildinfo
