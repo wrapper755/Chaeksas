@@ -2,11 +2,11 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 초안 (2026-10-01). **모델·BPMN 읽기·검사 B1~B14 구현됨** (2026-10-03, 예제 50개로 확인). **식 `chk-expr`·스크립트·템플릿도 구현됨** (2026-10-04, [ADR-0025](../decisions/0025-expression-language.md) — 예제의 식 자리 193곳·템플릿 자리 전부로 확인). 합의는 M3에서 엔진·Studio와 함께 |
+| 상태 | 초안 (2026-10-01). **모델·BPMN 읽기·검사 B1~B14 구현됨** (2026-10-03, 예제 50개로 확인). **식 `chk-expr`·스크립트·템플릿도 구현됨** (2026-10-04, [ADR-0025](../decisions/0025-expression-language.md) — 예제의 식 자리 193곳·템플릿 자리 전부로 확인). **DMN 판정·파일 목록·파일 출력·메일/웹훅·이정표도 구현됨** (2026-10-04, [ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)). 합의는 M3에서 엔진·Studio와 함께 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio(쓰기) → 패키지(C1 `process/*.bpmn`) → 실행기·서버 실행기(읽기·실행), Center(검사) |
-| 코드 위치 | `chaeksas.contracts.bpmn_ext` — 모델·`read_process()`·`validate()`. 확장 태스크의 속 내용은 각 확장의 `contracts/` |
-| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0018](../decisions/0018-extensions.md) |
+| 코드 위치 | `chaeksas.contracts.bpmn_ext` — 모델·`read_process()`·`validate()`. DMN 읽기·판정은 `chaeksas.contracts.dmn`. 확장 태스크의 속 내용은 각 확장의 `contracts/` |
+| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0018](../decisions/0018-extensions.md), [0026](../decisions/0026-file-paths-and-file-list-task.md) |
 | 관련 화면 | STU-04 속성 패널, STU-06, STU-07, STU-13, STU-14 |
 
 ## 목적
@@ -58,9 +58,10 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | 결재 | `userTask` | `chk:approval` | `title`, `description`, `show`(**변수 이름 배열** — 문자열 하나로 쓰면 검사 오류), `fields[]`(C6 Form과 같다: `{key, label, type: bool\|number\|text\|choice, choices?, required, default?}`), `location`(`follow`\|`center`\|`field`), `expires`(ISO 기간 또는 변수 이름) |
 | 수동 작업 (사람 확인) | `manualTask` | `chk:approval` | 결재와 같은 형식. 화면에는 「확인」으로 보인다. 서버 BPM 프로세스에서는 Center 결재함으로 간다 |
 | 스크립트 | `scriptTask` | 표준 `bpmn:script` (`scriptFormat="chk-expr"`) | 식 언어로 쓴 대입문. 입력은 프로세스 변수, 결과는 대입한 변수 |
-| 규칙 | `businessRuleTask` | `chk:rule` | `decision`(같은 패키지의 DMN 결정 id), `input`(`{DMN 입력 식 이름: 식}`), `output`(`{변수: DMN 출력}`). DMN은 한 건을 판정한다 — 목록은 반복(아래)으로. 적중 정책 `COLLECT`면 출력이 목록이다 (맞는 줄이 없으면 빈 목록) |
-| 메일 보내기 | `sendTask` | `chk:email` | `to[]`, `cc[]`, `subject`, `body`, `attachments[]`(변수 이름), `store_as?` |
-| 웹훅 보내기 | `sendTask` | `chk:webhook` | `url`, `method`, `body`(`all`\|`fields:[..]`\|`template:"…"`), `timeout_s`, `store_as?`. URL은 허용 호스트 규칙(C13 §4-3과 같은 해석기)을 따른다 |
+| 규칙 | `businessRuleTask` | `chk:rule` | `decision`(같은 패키지의 DMN 결정 id), `input`(`{DMN 입력 식 이름: 식}`), `output`(`{변수: DMN 출력}`). DMN은 한 건을 판정한다 — 목록은 반복(아래)으로. 적중 정책 `COLLECT`면 출력이 목록이다 (맞는 줄이 없으면 빈 목록). 아래 「규칙 태스크와 DMN」 |
+| 파일 목록 | `serviceTask` | `chk:fileList` | `folder`(템플릿 — 아래 「파일 경로」), `pattern`(glob 한 조각, 기본 `*`), `recursive`(기본 false), `sort`(`name`\|`modified`, 기본 `name`), `limit?`, `store_as`(**필수** — 파일 경로 목록), `count_as?`(개수). 디스크를 읽으므로 식의 도우미가 아니라 태스크다 ([ADR-0025](../decisions/0025-expression-language.md) §식에 두지 않는 것, [ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)) |
+| 메일 보내기 | `sendTask` | `chk:email` | `to[]`, `cc[]`, `subject`, `body`, `attachments[]`(변수 이름), `store_as?`. 아래 「보내기」 |
+| 웹훅 보내기 | `sendTask` | `chk:webhook` | `url`, `method`, `body`(`all`\|`fields:[..]`\|`template:"…"`), `timeout_s`, `store_as?`. URL은 허용 호스트 규칙(C13 §4-3과 같은 해석기)을 따른다. 아래 「보내기」 |
 | 메시지 받기 | `receiveTask` | 표준 `messageRef` + `chk:receive` | `correlation`(변수 이름 — 이 값이 같은 메시지만 받는다), `payload[]`(메시지 본문에서 변수로 들어오는 이름 — 검사 B11이 출처로 본다. 메시지 시작은 `chk:process.inputs`로 선언) |
 | 다른 BPM 프로세스 호출 | `callActivity` | 표준 `calledElement` + `chk:call` | `input`(`{호출 대상 변수: 식}`), `output`(`{내 변수: 호출 대상 변수}`). **적은 것만 오간다.** 둘 다 비면 오가는 변수 없음 (프로토타입의 "비면 전부"는 없앴다) |
 
@@ -70,13 +71,71 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 - `collect_into`는 **필수**다. 빠지면 프로토타입처럼 반복이 멈춘다.
 - 병렬(`isSequential=false`)은 서버 BPM 프로세스에서만 동시에 돈다. PC에서는 차례로 돈다 (실행 자리 하나).
 
+### 규칙 태스크와 DMN
+
+DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decision`)는 **결정표**(`dmn:decisionTable`) 하나다. 읽기·판정은 `chaeksas.contracts.dmn`이 한다 (형식 해석이므로 계약 쪽이다).
+
+- **입력 이름은 `dmn:inputExpression`의 본문**이다 (`dmn:input@label`이 아니다 — 라벨은 사람이 읽는 이름이라 「시각」과 「시」처럼 다를 수 있다). `chk:rule.input`의 열쇠가 이 이름이고, 값은 `chk-expr` 식이다.
+- **값은 `typeRef`로 맞춘다.** `number`면 숫자로, `boolean`이면 참거짓으로, `string`이면 문자열로 바꾼 뒤 견준다. 이것이 없으면 `"25" > 20`이 문자열 비교가 된다.
+- **입력 칸(unary test) 문법** — FEEL의 부분집합만 쓴다. 이 밖은 읽기 오류다.
+
+  | 적는 법 | 뜻 |
+  | --- | --- |
+  | `-` (또는 빈 칸) | 무엇이든 맞다 |
+  | `"문자열"`, `숫자`, `true`/`false` | 같다 |
+  | `"ERP","HRIS"` | 쉼표는 「또는」 |
+  | `< n`, `<= n`, `> n`, `>= n` | 견준다 |
+  | `[a..b]` `(a..b)` `[a..b)` `(a..b]` | 범위 — 대괄호는 포함, 소괄호는 제외 |
+
+- **출력 칸은 값 하나**다 (`"높음"`, `0.05`, `true`). 식은 쓸 수 없다.
+- **적중 정책:** `FIRST`(처음 맞는 줄), `UNIQUE`(맞는 줄이 하나여야 한다 — 둘 이상이면 실행 오류), `ANY`(여럿 맞아도 되지만 결과가 달라지면 실행 오류), `COLLECT`(맞는 줄을 모두 모아 **출력이 목록**이 된다). 그 밖의 정책은 schema 1에서 쓰지 않는다.
+- **맞는 줄이 없으면** `COLLECT`는 빈 목록, 나머지는 출력이 모두 `None`이다 (실패가 아니다 — 게이트웨이로 가른다).
+- 판정은 **순수하다** — 같은 입력이면 같은 결과다. 그래서 결정 수행(재생)에서도 다시 판정한다.
+
+### 파일 경로
+
+파일을 읽고 쓰는 자리(`chk:fileList`, `chk:dataOutput`)는 **실행 폴더** 둘로 묶는다 ([ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)). 실행하는 쪽(Bot UI·Studio 시험 실행·서버 실행기)이 정해서 준다.
+
+| 폴더 | 무엇 |
+| --- | --- |
+| **출력 폴더** | 실행 하나가 파일을 쓰는 곳. 상대 경로의 기준이기도 하다 |
+| **읽기 허용 폴더** | 파일 목록이 들여다볼 수 있는 곳 (여러 개). 주지 않으면 출력 폴더만 읽을 수 있다 |
+
+- **상대 경로는 출력 폴더 기준**이다. 앞에 `outputs/`를 붙이지 않는다.
+- **쓰기는 출력 폴더 안만** 된다. **읽기는 출력 폴더와 읽기 허용 폴더 안만** 된다.
+- `..`·절대 경로·심볼릭 링크로 그 밖을 가리키면 **실행 오류**다 (`path_denied`). 그림·설정이 잘못된 것이라서 **오류 경계로 받지 않는다**.
+- `pattern`에는 경로 구분자(`/`·`\`)를 쓸 수 없다 — 폴더는 `folder`로만 정한다.
+- 경로를 만들 때 `{변수}` 템플릿을 쓴다 (기본 규칙 7). 경로 구분자는 `/`로 적고, 실행하는 쪽이 그 OS의 구분자로 바꾼다.
+- **변수에 들어가는 경로는 BPM 프로세스가 적은 그대로**다 — 파일 목록(`store_as`)은 `folder`에 이어 붙인 것, 파일 출력(`store_as`)은 채운 `path` 그대로. 실행한 PC의 절대 경로를 엔진이 새로 만들어 섞지 않는다.
+- **실행 기록에는 경로를 남기지 않는다** (원칙 6 — 파일 이름에 거래처·사람 이름이 들어간다). 개수·형식·크기만 남는다.
+- 폴더가 없거나 읽을 수 없으면 **업무 실패**(`TASK_FAILED`)다 — 오류 경계로 받을 수 있다. 맞는 파일이 없으면 빈 목록이고 실패가 아니다.
+
 ### 파일 출력
 
 - `bpmn:dataObjectReference`에 `chk:dataOutput`(`path`, `format: md|xlsx|json|txt|csv`, `template?`, `variables?`, `sheet?`, `append`, `store_as`)를 둔다.
-- 쓰는 시점은 `dataOutputAssociation`으로 연결된 태스크가 끝날 때다.
-- `path`는 출력 폴더 기준 상대 경로이고, 앞에 `outputs/`를 붙이지 않는다.
+- 쓰는 시점은 `dataOutputAssociation`으로 연결된 태스크가 끝날 때다. 그 태스크가 만든 변수는 이미 있다 (결재 폼의 칸을 그 결재의 출력 파일에 넣는 것이 흔하다).
+- `path`는 「파일 경로」 규칙을 따른다.
 - `template`가 비면 `variables`의 표를 만든다. 둘 다 비면 검사 오류다. 프로토타입에서는 이때 모든 변수가 쏟아졌다.
-- **`store_as`는 필수다.** 첨부·후속 태스크가 파일 경로를 받는 유일한 길이다.
+- **`store_as`는 필수다.** 첨부·후속 태스크가 파일 경로를 받는 유일한 길이다. 들어가는 값은 **출력 폴더 기준 상대 경로**다 (실행하는 PC의 절대 경로를 업무 값에 섞지 않는다).
+- **형식마다 무엇을 쓰나** — `variables`의 값이 **사전 목록**이면 표로 본다 (열은 사전 열쇠의 합집합, 처음 나온 순서).
+
+  | `format` | `template`가 있으면 | `variables`만 있으면 |
+  | --- | --- | --- |
+  | `md`·`txt` | 채운 텍스트 그대로 | 이름마다 한 토막 — 표면 표(`md`)·`열: 값` 줄(`txt`), 아니면 `이름: 값` |
+  | `csv` | 채운 텍스트 그대로 | **이름 하나**만 쓸 수 있다. 표면 그 표, 아니면 `이름,값` 두 줄 |
+  | `json` | 채운 텍스트가 JSON이어야 한다 | `{이름: 값}` 객체 |
+  | `xlsx` | 쓸 수 없다 (검사 오류) | **이름마다 시트 하나.** 시트 이름은 `sheet`(이름이 하나일 때만) 또는 변수 이름 |
+
+- `append: true`는 `md`·`txt`·`csv`만 된다 (`json`·`xlsx`는 이어 붙일 수 없다 — 검사 오류). `csv`를 이어 쓸 때는 열 이름 줄을 다시 쓰지 않는다.
+- 파일은 **UTF-8**로 쓴다 (`csv`는 Excel이 바로 열 수 있게 BOM을 붙인다). 줄 끝은 `\n`이다.
+
+### 보내기 (메일·웹훅)
+
+- **실제로 보내는 일은 실행하는 쪽이 주는 「보내기 어댑터」가 한다.** 엔진은 받는 사람·제목·본문·본문 묶음을 만들어 넘기기만 한다. 어댑터를 주지 않으면 **보내지 않고 실패**한다 (`SEND_FAILED`) — 조용히 삼키지 않는다. Studio 시험 실행은 시험용 어댑터를 끼운다.
+- `to`·`cc`·`subject`·`body`·`url`은 템플릿(`{변수}`)이다. `attachments`는 **변수 이름**이고, 그 값은 파일 경로(대개 `dataOutput.store_as`)다.
+- `webhook.body`: `all`(변수 전부 — B13 경고), `fields:[이름, 이름]`(적은 변수만), `template:"…"`(채운 텍스트). 본문은 JSON으로 보낸다.
+- 보내기가 실패하면 `TaskFailed`로 올라가 **오류 경계가 받는다** (`SEND_FAILED`). 경계가 없으면 실행이 실패한다.
+- `store_as`가 있으면 **보낸 결과 요약**이 그 변수에 들어간다 — 메일은 `{"ok": true, "to": 받는 사람 수, "id": 보낸 쪽 id 또는 null}`, 웹훅은 `{"ok": true, "status": 200, "body": 응답 본문}`. 본문·받는 사람 같은 업무 값은 실행 기록에 남지 않는다 (원칙 6).
 
 ### 이벤트 (표준)
 
@@ -86,6 +145,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | 타이머 경계·중간 | `timeDuration`(ISO `PT30M`, `P3D`) 또는 **변수 이름** | 경계는 `cancelActivity="false"`로 비중단. 경계의 반복(`timeCycle`)은 schema 1에서 지원하지 않는다 |
 | 메시지 시작·받기·경계·중간 받기 | `messageRef` → `bpmn:message name`. 받기 태스크 외의 받기(경계·중간 받기)도 상관 키는 `chk:receive{correlation}`로 둔다 | 외부 시스템이 Center 메시지 API로 보낸다 (C12, PC는 Bot UI 메시지 수신). 상관 키가 없으면 메시지 시작만 깨운다 |
 | 신호 | `signalRef` | 한 실행 안의 가지 사이에서만 |
+| 이정표 | `intermediateThrowEvent`에 **이벤트 정의를 두지 않는다** | 지나가기만 하면서 실행 기록에 `node_state`(`task_type: milestone`)를 남긴다. 「어디까지 왔는지」를 콘솔·Studio가 이것으로 보인다. 노드 `name`이 이정표 이름이다 (id 접두어 `Ms_`) |
 | 오류 경계 | `errorRef` → `bpmn:error errorCode` | 표준 코드: `TASK_FAILED`(AI·UI·서비스 앱 태스크 실패), `SEND_FAILED`(메일·웹훅), `ESCALATED`(UI 태스크 전환을 사람 확인 대신 흐름으로 받을 때), `DELEGATION_FAILED`(예약). 오류 경로에는 `error_code`, `error_message`, `failed_task` 변수가 생긴다 |
 | 조건 시작 | `conditionalEventDefinition` | **schema 1에서 쓰지 않는다** (프로토타입의 폴더 감시). 외부 시스템 메시지나 타이머로 바꾼다 |
 
@@ -144,14 +204,14 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | B2 | `show`는 배열이고 각 이름이 변수 규칙에 맞는다 | 오류 |
 | B3 | 배타·포함 게이트웨이의 나가는 흐름 중 조건 없는 것은 `default`로 지정된다. 포함 분기는 포함 합류로 닫는다 | 오류 |
 | B4 | 반복에 `collect_into`가 있다 | 오류 |
-| B5 | 파일 출력에 `store_as`가 있고 `template`·`variables` 중 하나가 있다 | 오류 |
+| B5 | 파일 출력에 `store_as`가 있고 `template`·`variables` 중 하나가 있다. `xlsx`에 `template`를 쓰지 않고, `csv`의 `variables`는 이름 하나이며, `append`는 `md`·`txt`·`csv`에만 있다. 파일 목록에 `store_as`가 있고 `pattern`에 경로 구분자가 없다 | 오류 |
 | B6 | 실행 위치가 `server`면 UI 태스크·`web`/`desktop` 도메인 AI 태스크·`location: field` 결재가 없다 (C1 R2) | 오류 |
 | B7 | 서비스 앱 태스크의 `app_id`에 키 참조가 있다 (자기 것 또는 프로세스 `service_keys`) | 오류 |
 | B8 | 결과 필드 타입이 `string`·`int`·`number`·`bool`·`list`·`dict`·`date` 중 하나다. 번호처럼 보이는 문자열(예: 발주번호 `PO-2608-001`)을 `int`로 두면 경고 | 오류 / 경고 |
 | B9 | 연결되지 않은 노드가 없다 (들어오는 흐름·나가는 흐름) | 오류 |
 | B10 | 노드 id가 생성형(`Activity_[0-9a-z]{7}`)이면 경고 | 경고 |
 | B11 | 어떤 경로로는 만들어지지 않는 변수를 읽는다 (예: 한 가지에서만 생기는 결재 칸을 합류 뒤에 읽음, 프로세스 `inputs`에 없는 메시지 본문 변수) | 경고 |
-| B12 | 결재 칸 `type`이 C6의 `bool`·`number`·`text`·`choice` 중 하나이고, `choice`에는 `choices`가 있다. UI 태스크 스텝 `action`이 C10 동작 목록 안에 있다. 경계 이벤트는 태스크·하위 프로세스에만 붙는다 | 오류 |
+| B12 | 결재 칸 `type`이 C6의 `bool`·`number`·`text`·`choice` 중 하나이고, `choice`에는 `choices`가 있다. UI 태스크 스텝 `action`이 C10 동작 목록 안에 있다. 경계 이벤트는 태스크·하위 프로세스에만 붙는다. 파일 출력 `format`·파일 목록 `sort`가 아는 값이다 | 오류 |
 | B13 | 웹훅 `body: all` (비밀이 섞일 수 있음), `location: field` 결재에 하루 넘는 시간 제한 | 경고 |
 | B14 | 병렬 분기와 합류의 가지 수가 맞다 (오류 경계의 대체 흐름을 병렬 합류에 바로 이으면 합류가 영원히 기다린다). 규칙 태스크의 `input`·`output`이 DMN 입력·출력 이름과 맞다. 호출의 `output`이 호출 대상의 `outputs`에 있다. 타이머로 시작하는 BPM 프로세스에 기본값 없는 필수 입력이 없다 | 오류 |
 
@@ -189,4 +249,5 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 | 2026-10-01 | 1 | 초안 (프로토타입 확장 속성을 새 용어·확장 모델로 옮김) | 0018 |
 | 2026-10-03 | 1 | 구현하며 명시한 것: 엔진이 늘 주는 변수(`오늘`·`지금`·`run_id`) 표, `validate()`가 받는 인자와 건너뛰는 검사, 확장 태스크의 속은 확장이 검사한다(B12), B11이 어림인 이유, B13·B14 순서 | 0018 |
 | 2026-10-04 | 1 | 식 `chk-expr`의 문법·도우미 목록 확정, 템플릿(`{변수}`)을 식과 가름, 점이 사전 키를 읽는다고 명시, 흐름 조건식 본문을 reader가 들고 온다 ([ADR-0025](../decisions/0025-expression-language.md)) | — |
+| 2026-10-04 | 1 | **파일 목록 태스크(`chk:fileList`) 추가** — ADR-0025가 식에서 뺀 `파일목록()`의 자리. 「파일 경로」 절(출력 폴더·읽기 허용 폴더)을 새로 두고 파일 출력도 그것을 따르게 함. DMN 판정 규칙(입력 이름은 `inputExpression`, 입력 칸 문법, 적중 정책), 보내기 어댑터, 이정표(`intermediateThrowEvent`)를 적음. B5·B12를 늘림 | [0026](../decisions/0026-file-paths-and-file-list-task.md) |
 | 2026-10-01 | 1 | 업무 예제 작업 반영: `inputs[].default`, `chk:receive.payload`, 경계·중간 받기의 상관 키, 케이스 `messages`·`process`·입력 연산자(`$now_plus`, `$test_receiver`), 자동 응답 없는 결재, 기대 결과 비교 규칙, 결재 칸을 C6에 맞춤(`choices`, `date` 없음), `defaults.desktop`, 식의 None·허용 목록, 검사 B11~B14 ([08-business-examples](../08-business-examples/README.md)) | — |

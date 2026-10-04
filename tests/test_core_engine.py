@@ -12,9 +12,12 @@ from typing import Any
 import pytest
 
 from chaeksas.contracts.bpmn_ext import read_process
+from chaeksas.contracts.dmn import read_decisions
 from chaeksas.contracts.events import REQUIRED_DATA_KEYS
-from chaeksas.core.engine import DECISION_KEY, Engine, EngineError, Run, State, new_run_id
+from chaeksas.core.engine import DECISION_KEY, Engine, EngineError, Run, RunEnv, State, new_run_id
+from chaeksas.core.files import Workspace
 from chaeksas.core.run_log import RunLog, sanitize
+from chaeksas.core.senders import RecordingSender
 
 NOW = datetime(2026, 10, 4, 9, 30, tzinfo=UTC)
 
@@ -483,21 +486,35 @@ def dummy_inputs(process: Any) -> dict[str, Any]:
     return {decl.name: DUMMY_BY_TYPE.get(decl.type, "시험값") for decl in process.info.inputs}
 
 
-def test_no_example_breaks_the_engine_in_an_unexpected_way() -> None:
+def example_env(tmp_path: Path) -> RunEnv:
+    """예제를 돌릴 바깥 세계 — 임시 출력 폴더, 시험용 보내기 어댑터, 예제의 DMN 전부."""
+    outputs = tmp_path / "outputs"
+    outputs.mkdir(exist_ok=True)
+    decisions: dict[str, Any] = {}
+    for path in sorted(EXAMPLE.glob("*.dmn")):
+        decisions.update(read_decisions(path.read_text(encoding="utf-8")))
+    return RunEnv(
+        workspace=Workspace(output_dir=outputs, readable=(outputs,)),
+        sender=RecordingSender(),
+        decisions=decisions,
+    )
+
+
+def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> None:
     """예제 50개를 모두 돌려 본다 (선언한 입력에는 자리 값을 넣는다).
 
-    조각 2는 AI·서비스 앱·DMN·반복을 아직 못 하므로 **대부분 중간에 멈춘다.** 중요한 것은
-    「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
-    조각 3이 이 수를 옮겨 갈 기준점이기도 하다.
+    AI·서비스 앱(조각 3c)과 타이머·메시지·신호(조각 3d)가 아직 없어 **대부분 중간에 멈춘다.**
+    중요한 것은 「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
+    **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 조각 3b: 끝 11·대기 2).
     """
     known = {
-        "node_kind_unsupported",  # AI·서비스 앱·DMN·메일·병렬 … (조각 3)
-        "expr_error",  # ADR-0025가 식에서 뺀 도우미 (`파일목록`·`설정` …)
-        "many_outgoing",  # 병렬로 갈라지는 흐름 (조각 3)
-        "many_starts",  # 메시지·타이머 시작 (조각 3)
-        "no_outgoing",  # 경계 이벤트가 붙은 노드 (조각 3)
+        "node_kind_unsupported",  # AI·서비스 앱(3c), 호출·받기·타이머·신호(3d), UI 태스크(M4)
+        "expr_error",  # ADR-0025가 식에서 뺀 도우미 (`파일목록`·`양식`류 — 예제 수정은 조각 3f)
+        "many_starts",  # 메시지·타이머 시작 (조각 3d)
+        "no_outgoing",  # 경계 이벤트가 붙은 노드 (조각 3d)
         "no_matching_flow",  # 자리 값으로는 어느 조건도 참이 아닐 수 있다
     }
+    env = example_env(tmp_path)
     reasons: dict[str, int] = {}
     done: list[str] = []
     waiting: list[str] = []
@@ -506,7 +523,9 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way() -> None:
         log = started()
         engine = Engine()
         try:
-            run = engine.start(process, run_id=log.run_id, log=log, now=NOW, inputs=dummy_inputs(process))
+            run = engine.start(
+                process, run_id=log.run_id, log=log, now=NOW, env=env, inputs=dummy_inputs(process)
+            )
         except EngineError as e:
             reasons[e.code] = reasons.get(e.code, 0) + 1
             assert e.code in known, f"{path.name}: {e}"
@@ -523,11 +542,21 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way() -> None:
             assert run.error.code in known, f"{path.name}: {run.error}"
 
     assert len(done) + len(waiting) + sum(reasons.values()) == 50
-    # 지금 끝까지 가는 것·사람을 기다리는 것은 이것뿐이다 — 조각 3이 이 목록을 늘린다.
-    # 지금 끝까지 가는 것·사람을 기다리는 것은 이것뿐이다 (스크립트·배타 게이트웨이·확인만 쓰는
-    # 예제들이다). 조각 3이 이 목록을 늘린다 — 늘면 여기를 고쳐 적는다.
-    assert done == ["fx03b_amount_branch.bpmn", "fx11_parallel.bpmn", "fx12_daily_report.bpmn"], done
-    assert waiting == ["fx19_manual_task_pc.bpmn"], waiting
+    # 끝까지 가는 것·사람을 기다리는 것 — **다음 조각이 이 목록을 늘린다. 늘면 여기를 고쳐 적는다.**
+    assert done == [
+        "bx06_bulk_credit_check.bpmn",  # 규칙(DMN) + 반복 + xlsx 출력 + 메일
+        "bx12_shipping_fee.bpmn",  # 규칙(DMN) 공유 BPM 프로세스
+        "bx17_erp_po_entry.bpmn",
+        "fx02_business_rule.bpmn",  # 규칙(DMN)
+        "fx03b_amount_branch.bpmn",
+        "fx07_email.bpmn",  # 파일 출력 + 메일
+        "fx09_sequential_loop.bpmn",
+        "fx11_parallel.bpmn",
+        "fx12_daily_report.bpmn",
+        "fx17_webhook.bpmn",  # 웹훅
+        "fx18_parallel_loop.bpmn",
+    ], done
+    assert waiting == ["bx33_access_request.bpmn", "fx19_manual_task_pc.bpmn"], waiting
 
 
 # ─────────────── 병렬·포함 게이트웨이, 하위 프로세스, 반복, 오류 경계 ───────────────

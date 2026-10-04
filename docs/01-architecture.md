@@ -117,6 +117,7 @@ contracts ◀── extension_api ◀── core ◀── studio, bot_ui, serve
 | 서버 실행 상태 (기다리는 실행) | 서버 실행기 저장소 (SQLite로 시작) | 재시작 후 이어 가기 |
 | 재생 기억(성공 궤적) | 현장 PC / Studio 로컬 | 저장 방식은 새로 정한다 |
 | 실행 기록·보고 버퍼 | 현장 PC 로컬 큐 | 전송 후 삭제 |
+| BPM 프로세스가 만든 파일 (보고서·표) | 실행하는 쪽의 **출력 폴더** | 실행마다 하나. 쓰기는 그 안만, 읽기는 **읽기 허용 폴더**까지 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
 
 ## 8. 저장소(코드) 구조
 

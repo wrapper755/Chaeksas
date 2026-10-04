@@ -200,6 +200,51 @@ def test_b5_file_output_needs_store_as_and_content() -> None:
     assert found.count("B5") == 2  # store_as 없음 + template·variables 모두 없음
 
 
+def data_output(props: str) -> str:
+    return ('<bpmn:dataObjectReference id="D"><bpmn:extensionElements>'
+            f"<chk:dataOutput>{props}</chk:dataOutput>"
+            "</bpmn:extensionElements></bpmn:dataObjectReference>")
+
+
+def test_b5_file_output_format_rules() -> None:
+    """C14 §파일 출력 — xlsx에 template, csv에 이름 둘, 이어 쓸 수 없는 형식 (ADR-0026)."""
+    body = line('<bpmn:scriptTask id="T"><bpmn:script>a = 1</bpmn:script></bpmn:scriptTask>')
+    xlsx = '{"path": "a.xlsx", "format": "xlsx", "template": "{a}", "store_as": "경로"}'
+    assert "B5" in codes(wrap(body + data_output(xlsx)))
+    csv = '{"path": "a.csv", "format": "csv", "variables": ["가", "나"], "store_as": "경로"}'
+    assert "B5" in codes(wrap(body + data_output(csv)))
+    appended = '{"path": "a.json", "format": "json", "variables": ["가"], "append": true, "store_as": "경로"}'
+    assert "B5" in codes(wrap(body + data_output(appended)))
+    fine = '{"path": "a.md", "format": "md", "template": "{a}", "append": true, "store_as": "경로"}'
+    assert "B5" not in codes(wrap(body + data_output(fine)))
+
+
+def file_list(props: str) -> str:
+    return (f'<bpmn:serviceTask id="T"><bpmn:extensionElements><chk:fileList>{props}</chk:fileList>'
+            "</bpmn:extensionElements></bpmn:serviceTask>")
+
+
+def test_b5_and_b12_check_the_file_list_task() -> None:
+    """C14 §파일 목록 — `store_as`가 필수, `pattern`에 경로 구분자 금지 (ADR-0026)."""
+    assert "B5" in codes(wrap(line(file_list('{"folder": "/share"}'))))
+    bad_pattern = '{"folder": "/share", "pattern": "하위/*.pdf", "store_as": "파일"}'
+    assert "B5" in codes(wrap(line(file_list(bad_pattern))))
+    bad_sort = '{"folder": "/share", "sort": "크기", "store_as": "파일"}'
+    assert "B12" in codes(wrap(line(file_list(bad_sort))))
+    fine = '{"folder": "/share", "pattern": "*.pdf", "store_as": "파일", "count_as": "건수"}'
+    found = codes(wrap(line(file_list(fine))))
+    assert "B5" not in found and "B12" not in found
+
+
+def test_b11_sees_what_the_file_list_makes_and_reads() -> None:
+    """`store_as`·`count_as`는 그 뒤에서 쓸 수 있고, `folder`의 `{변수}`는 읽는 것이다."""
+    spec = '{"folder": "{감시폴더}", "store_as": "파일", "count_as": "건수"}'
+    body = line(file_list(spec), '<bpmn:scriptTask id="T2"><bpmn:script>수 = 건수</bpmn:script></bpmn:scriptTask>')
+    declared = '{"run_location": "pc", "inputs": [{"name": "감시폴더", "type": "string"}]}'
+    assert "B11" not in codes(wrap(body, process_json=declared))
+    assert "B11" in codes(wrap(body)), "선언하지 않은 `감시폴더`를 읽으면 경고한다"
+
+
 def test_b6_server_cannot_run_pc_only_things() -> None:
     xml = wrap(
         line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
