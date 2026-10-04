@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -34,9 +34,11 @@ from chaeksas.contracts.bpmn_ext import (
     Webhook,
 )
 from chaeksas.contracts.dmn import DmnError
-from chaeksas.core.agent import AgentError, run_agent
+from chaeksas.core.agent import AgentError, check_results, finish_from, run_agent
+from chaeksas.core.agent import Outcome as AgentOutcome
 from chaeksas.core.expr import Scope, evaluate, fill, run_script, truthy
 from chaeksas.core.files import FileTaskError, PathDenied, list_files
+from chaeksas.core.replay import replay_steps, to_spec
 from chaeksas.core.run_state import (
     CODE_PATH_DENIED,
     CODE_UNSUPPORTED,
@@ -353,13 +355,29 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
         run.log.emit("agent", node_id=node.id, step=step, action=action, **({"tool": tool} if tool else {}))
 
     try:
-        outcome = run_agent(spec, llm=run.env.llm, tools=run.env.tools, on_step=note)
+        outcome = _replayed(context, spec, note) or run_agent(
+            spec, llm=run.env.llm, tools=run.env.tools, on_step=note
+        )
     except AgentError as e:
         if e.business:
             raise TaskFailed(str(e), node_id=node.id) from e
         raise EngineError(str(e), node_id=node.id, code="agent_error") from e
 
     trace = outcome.trace
+    if outcome.replayed:
+        # C3 — `run_finished.replayed_tasks`가 이것을 센다.
+        run.log.emit("node_state", node_id=node.id, state="replayed", task_type="ai_task")
+    else:
+        # 자율 수행이 배운 것. **엔진은 파일을 쓰지 않는다** — Studio가 패키지에 적는다 (ADR-0028).
+        run.learned.append(
+            to_spec(
+                trace,
+                bpm_process_id=run.process.id,
+                node_id=node.id,
+                version=run.version,
+                variables=run.variables,
+            )
+        )
     if trace.model:
         run.log.emit(
             "llm_usage",
@@ -369,8 +387,36 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
             output_tokens=trace.output_tokens,
         )
     run.variables.update(outcome.results)
-    context.emit("log", level="info", message=f"AI 결과 {len(outcome.results)}개 (도구 {len(trace.steps)}회)")
+    context.emit(
+        "log", level="info",
+        message=f"AI 결과 {len(outcome.results)}개 (도구 {len(trace.steps)}회{', 재생' if outcome.replayed else ''})",
+    )
     return Go()
+
+
+def _replayed(
+    context: Context, spec: AiTask, note: Callable[[int, str, str], None]
+) -> AgentOutcome | None:
+    """결정 수행이면 기억을 되밟는다 (C14 §재생, ADR-0028). 쓸 기억이 없으면 `None`.
+
+    **명세가 없다고 실패시키지 않는다** — 처음 배포한 Bot이 멈추면 안 된다. 그냥 모델을 부른다.
+    """
+    run, node = context.run, context.node
+    if run.mode != "deterministic" or spec.replay == "none" or run.env.memory is None:
+        return None
+    remembered = run.env.memory.find(run.process.id, node.id)
+    if remembered is None:
+        context.emit("log", level="info", message="재생 명세가 없다 — 모델을 부른다")
+        return None
+
+    trace = replay_steps(remembered, tools=run.env.tools, variables=run.variables)
+    for index, step in enumerate(trace.steps, start=1):
+        note(index, "tool", step.tool)
+    if spec.replay == "full":
+        # 모델을 한 번도 부르지 않는다. 도구가 **일을 하는** 태스크의 길이다.
+        note(len(trace.steps) + 1, "finish", "")
+        return AgentOutcome(results=check_results(spec, trace.answer), trace=trace, replayed=True)
+    return finish_from(spec, trace, llm=run.env.llm, on_step=note)
 
 
 def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:

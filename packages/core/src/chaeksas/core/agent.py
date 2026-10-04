@@ -160,6 +160,36 @@ def run_agent(
     raise AgentError(f"{limit}단계 안에 끝내지 못했다 (`limits.max_steps`를 보라)")
 
 
+def finish_from(
+    spec: AiTask,
+    trace: Trace,
+    *,
+    llm: Llm,
+    on_step: Callable[[int, str, str], None] | None = None,
+) -> Outcome:
+    """`replay: plan` — 되밟은 도구 결과를 모아 **마지막 값 추출만 모델에게 한 번** 묻는다.
+
+    도구를 다시 고르지 않게 **도구를 알려 주지 않는다** — 계획은 이미 기억이 정했다.
+    """
+    messages = opening_messages(spec)
+    for index, step in enumerate(trace.steps, start=1):
+        call = ToolCall(id=f"r{index}", name=step.tool, arguments=step.arguments)
+        messages.append(_assistant_message(Reply(tool_calls=(call,))))
+        messages.append({"role": "tool", "tool_call_id": call.id, "content": step.result})
+    try:
+        reply = llm.ask(messages)
+    except LlmError as e:
+        raise AgentError(f"모델을 부르지 못했다: {e}", business=True) from e
+
+    trace.answer = reply.text
+    trace.model = reply.model or trace.model
+    trace.input_tokens += reply.input_tokens
+    trace.output_tokens += reply.output_tokens
+    if on_step is not None:
+        on_step(len(trace.steps) + 1, "extract", "")
+    return Outcome(results=check_results(spec, reply.text), trace=trace, replayed=True)
+
+
 def _assistant_message(reply: Reply) -> dict[str, Any]:
     """모델이 한 말을 그대로 되돌려 넣는다 (OpenAI 호환 모양)."""
     return {
@@ -249,6 +279,7 @@ __all__ = [
     "Tool",
     "Trace",
     "check_results",
+    "finish_from",
     "opening_messages",
     "run_agent",
     "tool_names",

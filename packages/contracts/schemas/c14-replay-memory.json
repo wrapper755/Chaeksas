@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "ReplaySpec": {
+      "additionalProperties": true,
+      "description": "AI 태스크 하나의 재생 명세.",
+      "properties": {
+        "answer": {
+          "default": "",
+          "title": "Answer",
+          "type": "string"
+        },
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "model": {
+          "default": "",
+          "title": "Model",
+          "type": "string"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/ReplayStep"
+          },
+          "title": "Steps",
+          "type": "array"
+        },
+        "version": {
+          "default": "0.0.0",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bpm_process_id",
+        "node_id"
+      ],
+      "title": "ReplaySpec",
+      "type": "object"
+    },
+    "ReplayStep": {
+      "additionalProperties": true,
+      "description": "되밟을 도구 호출 하나.",
+      "properties": {
+        "arguments": {
+          "additionalProperties": true,
+          "title": "Arguments",
+          "type": "object"
+        },
+        "tool": {
+          "title": "Tool",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool"
+      ],
+      "title": "ReplayStep",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c14-replay-memory",
+  "additionalProperties": true,
+  "description": "`memory/specs.json` 한 벌.",
+  "properties": {
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "specs": {
+      "items": {
+        "$ref": "#/$defs/ReplaySpec"
+      },
+      "title": "Specs",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "title": "ReplayMemory",
+  "type": "object"
+}

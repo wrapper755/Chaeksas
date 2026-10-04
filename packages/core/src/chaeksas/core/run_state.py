@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 from chaeksas.contracts.approvals import Form
 from chaeksas.contracts.bpmn_ext import BpmnProcess, Flow, Node
 from chaeksas.contracts.dmn import Decision
+from chaeksas.contracts.replay import ReplayMemory, ReplaySpec
 from chaeksas.core.agent import Tool
 from chaeksas.core.expr import Scope
 from chaeksas.core.files import Workspace
@@ -161,6 +162,8 @@ class RunEnv:
     llm: Llm = field(default_factory=NoLlm)
     #: AI 태스크가 빌려 쓸 도구 (`chk:aiTask.tools`의 이름 → 함수). 확장이 더한다 (M4).
     tools: Mapping[str, Tool] = field(default_factory=dict)
+    #: 패키지의 재생 명세 (`memory/specs.json`, ADR-0028). 결정 수행이 되밟는다. 없으면 그냥 돈다.
+    memory: ReplayMemory | None = None
 
 
 def utc_now() -> datetime:
@@ -200,6 +203,9 @@ class Run:
     instances: dict[str, int] = field(default_factory=dict)
     #: 노드마다 서비스 앱을 몇 번 불렀는지 (C11 멱등 키의 `call_seq`).
     call_seqs: dict[str, int] = field(default_factory=dict)
+    #: 자율 수행이 이번에 **배운 것** (ADR-0028). Studio가 실행이 끝난 뒤 패키지에 적는다 —
+    #: 엔진은 파일을 쓰지 않는다 (배포된 Bot은 기억을 읽기만 한다).
+    learned: list[ReplaySpec] = field(default_factory=list)
     helpers: Mapping[str, Callable[..., Any]] = field(default_factory=dict)
 
     # ── 자주 쓰는 것 ──

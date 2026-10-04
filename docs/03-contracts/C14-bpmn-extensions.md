@@ -51,7 +51,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 
 | 태스크 종류 (화면) | BPMN 요소 | 속성 요소 | 필드 |
 | --- | --- | --- | --- |
-| AI 태스크 | `serviceTask` | `chk:aiTask` | `goal`(Markdown — `## 상황`·`## 할 일`·`## 판단하지 않는 것`·`## 반환` 권장), `domain`(`llm`\|`api`\|`doc`\|`web`\|`desktop`), `tools[]`, `params`(업무 파라미터, 재생 때 `$param`), `results`(`{이름: 타입}`), `limits`, `forbidden_actions[]`, `confirm_triggers[]`, `web`/`desktop`(환경 설정) |
+| AI 태스크 | `serviceTask` | `chk:aiTask` | `goal`(Markdown — `## 상황`·`## 할 일`·`## 판단하지 않는 것`·`## 반환` 권장), `domain`(`llm`\|`api`\|`doc`\|`web`\|`desktop`), `tools[]`, `params`(업무 파라미터, 재생 때 그대로 쓰인다), `results`(`{이름: 타입}`), `replay`(`plan`\|`full`\|`none`, 기본 `plan` — 아래 「재생」), `limits`, `forbidden_actions[]`, `confirm_triggers[]`, `web`/`desktop`(환경 설정) |
 | UI 태스크 (UI 자동화 확장) | `serviceTask` | `chk:task` `type="ui_task"` `extension="ui-automation"` | `page_id`, `start_url?`, `steps[]`(`{key, action, value?, result?, navigates?}`), `goal?`(자율 수행 전용), `heal`(기본 true), `close_browser` |
 | 서비스 앱 태스크 | `serviceTask` | `chk:serviceCall` | `app_id`, `operation`, `input`(`{필드: 식}`), `output`(`{변수: 필드}`), `key_ref?`(없으면 프로세스의 `service_keys`를 상속), `timeout_s`, `retry`(`{max, on: [503, 429]}`) |
 | 다른 확장 태스크 | `serviceTask` | `chk:task` `type="<확장 태스크 종류>"` `extension="<id>"` | 그 확장의 계약이 정한 JSON |
@@ -128,6 +128,25 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 
 - `append: true`는 `md`·`txt`·`csv`만 된다 (`json`·`xlsx`는 이어 붙일 수 없다 — 검사 오류). `csv`를 이어 쓸 때는 열 이름 줄을 다시 쓰지 않는다.
 - 파일은 **UTF-8**로 쓴다 (`csv`는 Excel이 바로 열 수 있게 BOM을 붙인다). 줄 끝은 `\n`이다.
+
+### 재생 (결정 수행)
+
+**자율 수행**(Studio 개발 실행)은 AI 태스크가 한 일을 **재생 명세**로 적어 둔다. **결정 수행**(Bot UI 운영 실행)은 그것을 되밟아 모델을 덜 부르거나 아예 부르지 않는다 ([ADR-0010](../decisions/0010-service-apps.md) §2, [ADR-0028](../decisions/0028-replay-memory.md)).
+
+- 재생 명세는 **패키지 안 `memory/specs.json`**에 들어간다 (C1 패키지 구성). 배포된 Bot은 **읽기만** 한다 — 현장 PC마다 다르게 학습되지 않고, 서명으로 무결성이 보장되며, 「어느 판이 무엇을 재생하는가」가 분명하다.
+- 명세 하나의 열쇠는 **`(BPM 프로세스 정의 id, 노드 id)`**다. 한 노드에 하나뿐이라, 같은 노드가 한 실행에서 여러 번 돌아도(반복·BX-37) 같은 명세를 쓴다.
+- **도구 인자는 값이 아니라 템플릿으로 적는다.** 기록할 때 인자 값이 그 시점 프로세스 변수의 값과 같으면 `{변수}`로 바꿔 둔다 (기본 규칙 7의 템플릿과 같은 모양). 그래야 입력이 달라져도 같은 명세가 맞는다 — 종류에 따라 달라지는 값을 목표 문장에 넣지 말고 입력·업무 파라미터로 받으라는 것이 이 때문이다.
+
+| `replay` | 결정 수행에서 | 언제 쓰나 |
+| --- | --- | --- |
+| `plan` (**기본**) | 적어 둔 **도구 차례**를 템플릿으로 다시 채워 밟고, **마지막 값 추출만 모델에게 한 번** | 도구가 **읽어 오고** 모델이 판단하는 태스크 |
+| `full` | 도구 차례를 밟고 **마지막 답도 기억에서 쓴다** — 모델을 **한 번도 부르지 않는다** | 도구가 **일을 하는** 태스크 (입력·발행·쓰기). 답은 요약이라 재사용해도 된다 |
+| `none` | 기억을 쓰지 않고 그냥 돈다 (모델을 부른다) | 매번 판단이 달라지는 태스크 |
+
+- **도구가 없는 AI 태스크에 `full`을 쓸 수 없다** (검사 오류 B12). 아무것도 확인하지 않고 답만 복사하는 꼴이기 때문이다.
+- **명세가 없으면 `plan`·`full`도 그냥 돈다** (모델을 부른다). 없다고 실패시키지 않는다 — 처음 배포한 Bot이 멈추면 안 된다.
+- **재생이 맞지 않으면 몰래 자율 수행으로 넘어가지 않는다** ([ADR-0010](../decisions/0010-service-apps.md)). 기억에 적힌 도구가 이 PC에 없거나 도구가 실패하면 `TASK_FAILED`로 올려 **오류 경계가 받게** 한다.
+- 재생한 노드는 실행 기록에 `node_state: replayed`로 남는다 (C3 — `run_finished.replayed_tasks`가 이것을 센다).
 
 ### 보내기 (메일·웹훅)
 
@@ -211,7 +230,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | B9 | 연결되지 않은 노드가 없다 (들어오는 흐름·나가는 흐름) | 오류 |
 | B10 | 노드 id가 생성형(`Activity_[0-9a-z]{7}`)이면 경고 | 경고 |
 | B11 | 어떤 경로로는 만들어지지 않는 변수를 읽는다 (예: 한 가지에서만 생기는 결재 칸을 합류 뒤에 읽음, 프로세스 `inputs`에 없는 메시지 본문 변수) | 경고 |
-| B12 | 결재 칸 `type`이 C6의 `bool`·`number`·`text`·`choice` 중 하나이고, `choice`에는 `choices`가 있다. UI 태스크 스텝 `action`이 C10 동작 목록 안에 있다. 경계 이벤트는 태스크·하위 프로세스에만 붙는다. 파일 출력 `format`·파일 목록 `sort`가 아는 값이다 | 오류 |
+| B12 | 결재 칸 `type`이 C6의 `bool`·`number`·`text`·`choice` 중 하나이고, `choice`에는 `choices`가 있다. UI 태스크 스텝 `action`이 C10 동작 목록 안에 있다. 경계 이벤트는 태스크·하위 프로세스에만 붙는다. 파일 출력 `format`·파일 목록 `sort`·AI 태스크 `replay`가 아는 값이고, **도구 없는 AI 태스크에 `replay: full`이 없다** | 오류 |
 | B13 | 웹훅 `body: all` (비밀이 섞일 수 있음), `location: field` 결재에 하루 넘는 시간 제한 | 경고 |
 | B14 | 병렬 분기와 합류의 가지 수가 맞다 (오류 경계의 대체 흐름을 병렬 합류에 바로 이으면 합류가 영원히 기다린다). 규칙 태스크의 `input`·`output`이 DMN 입력·출력 이름과 맞다. 호출의 `output`이 호출 대상의 `outputs`에 있다. 타이머로 시작하는 BPM 프로세스에 기본값 없는 필수 입력이 없다 | 오류 |
 
@@ -249,5 +268,6 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 | 2026-10-01 | 1 | 초안 (프로토타입 확장 속성을 새 용어·확장 모델로 옮김) | 0018 |
 | 2026-10-03 | 1 | 구현하며 명시한 것: 엔진이 늘 주는 변수(`오늘`·`지금`·`run_id`) 표, `validate()`가 받는 인자와 건너뛰는 검사, 확장 태스크의 속은 확장이 검사한다(B12), B11이 어림인 이유, B13·B14 순서 | 0018 |
 | 2026-10-04 | 1 | 식 `chk-expr`의 문법·도우미 목록 확정, 템플릿(`{변수}`)을 식과 가름, 점이 사전 키를 읽는다고 명시, 흐름 조건식 본문을 reader가 들고 온다 ([ADR-0025](../decisions/0025-expression-language.md)) | — |
+| 2026-10-04 | 1 | **AI 태스크에 `replay` 추가**(`plan`\|`full`\|`none`)와 「재생」 절 — 재생 명세는 패키지 안 `memory/specs.json`이고, 도구 인자는 **값이 아니라 `{변수}` 템플릿**으로 적는다. B12를 늘림 | [0028](../decisions/0028-replay-memory.md) |
 | 2026-10-04 | 1 | **파일 목록 태스크(`chk:fileList`) 추가** — ADR-0025가 식에서 뺀 `파일목록()`의 자리. 「파일 경로」 절(출력 폴더·읽기 허용 폴더)을 새로 두고 파일 출력도 그것을 따르게 함. DMN 판정 규칙(입력 이름은 `inputExpression`, 입력 칸 문법, 적중 정책), 보내기 어댑터, 이정표(`intermediateThrowEvent`)를 적음. B5·B12를 늘림 | [0026](../decisions/0026-file-paths-and-file-list-task.md) |
 | 2026-10-01 | 1 | 업무 예제 작업 반영: `inputs[].default`, `chk:receive.payload`, 경계·중간 받기의 상관 키, 케이스 `messages`·`process`·입력 연산자(`$now_plus`, `$test_receiver`), 자동 응답 없는 결재, 기대 결과 비교 규칙, 결재 칸을 C6에 맞춤(`choices`, `date` 없음), `defaults.desktop`, 식의 None·허용 목록, 검사 B11~B14 ([08-business-examples](../08-business-examples/README.md)) | — |
