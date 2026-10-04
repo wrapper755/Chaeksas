@@ -306,6 +306,8 @@ class Flow:
     target: str
     has_condition: bool = False
     is_default: bool = False
+    #: 조건식 본문 (`chk-expr`). 검사는 있는지만 보지만 **엔진은 이것을 평가한다** (M3).
+    condition: str | None = None
 
 
 @dataclass
@@ -444,13 +446,16 @@ def _data_output_refs(el: ElementTree.Element) -> tuple[str, ...]:
 def _read_flows(scope: ElementTree.Element) -> list[Flow]:
     out = []
     for el in scope.findall(f"{_BPMN}sequenceFlow"):
+        condition_el = el.find(f"{_BPMN}conditionExpression")
         out.append(
             Flow(
                 id=el.get("id", ""),
                 source=el.get("sourceRef", ""),
                 target=el.get("targetRef", ""),
-                has_condition=el.find(f"{_BPMN}conditionExpression") is not None,
+                has_condition=condition_el is not None,
                 is_default=False,
+                # 식 본문도 들고 온다 — 엔진이 평가한다. CDATA·줄바꿈으로 들어오므로 깎는다.
+                condition=((condition_el.text or "").strip() or None) if condition_el is not None else None,
             )
         )
     return out

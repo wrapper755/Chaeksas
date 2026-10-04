@@ -1,0 +1,1208 @@
+[
+ {
+  "file": "bx01_invoice_reconciliation.bpmn",
+  "node": "Task_Collect",
+  "site": "script",
+  "text": "대상월 = 대상월 or 지난달()\n청구서파일 = 파일목록(청구서폴더 + '/' + 대상월 + '/*.pdf')\n대장파일 = 청구서폴더 + '/' + 대상월 + '/ledger_' + 대상월 + '.xlsx'"
+ },
+ {
+  "file": "bx01_invoice_reconciliation.bpmn",
+  "node": "Task_Reconcile",
+  "site": "script",
+  "text": "결과 = 대사규칙(발주목록, 청구목록)\n지급대상 = 결과.지급\n보류 = 결과.보류\n미청구 = 결과.미청구\n지급합계 = 합계(지급대상, '합계')\n보류건수 = len(보류)\n지급진행 = '지급 대상대로 진행'\n의견 = ''"
+ },
+ {
+  "file": "bx01_invoice_reconciliation.bpmn",
+  "node": "Task_Report",
+  "site": "script",
+  "text": "지급대상 = [] if 지급진행 == '이번 달 전체 보류' else 지급대상\n지급합계 = 합계(지급대상, '합계')\n보고서본문 = 대사표양식(대상월, 지급대상, 보류, 미청구, 지급합계, 의견)"
+ },
+ {
+  "file": "bx01_invoice_reconciliation.bpmn",
+  "node": "Task_MailFailed",
+  "site": "script",
+  "text": "발송오류 = error_message"
+ },
+ {
+  "file": "bx01_invoice_reconciliation.bpmn",
+  "node": "Data_Table",
+  "site": "dataOutput.path",
+  "text": "대사표/대사표_{대상월}.md"
+ },
+ {
+  "file": "bx01_invoice_reconciliation.bpmn",
+  "node": "Flow_06",
+  "site": "condition",
+  "text": "보류건수 > 0"
+ },
+ {
+  "file": "bx02_morning_fx_report.bpmn",
+  "node": "Task_Check",
+  "site": "script",
+  "text": "상한 = 상한 or {'KRW': 1400}\n하한 = 하한 or {'KRW': 1200}\n담당자 = 담당자 or 설정('재무담당자메일')\n경고 = 범위벗어남(환율, 상한, 하한)\n경고수 = len(경고)"
+ },
+ {
+  "file": "bx02_morning_fx_report.bpmn",
+  "node": "Task_Report",
+  "site": "script",
+  "text": "보고서본문 = 아침보고양식(기준일, 환율, 경고, 조치필요 if 경고수 > 0 else None)"
+ },
+ {
+  "file": "bx02_morning_fx_report.bpmn",
+  "node": "Task_SendFailed",
+  "site": "script",
+  "text": "발송오류 = error_message"
+ },
+ {
+  "file": "bx02_morning_fx_report.bpmn",
+  "node": "Data_Report",
+  "site": "dataOutput.path",
+  "text": "아침보고/아침보고_{기준일}.md"
+ },
+ {
+  "file": "bx02_morning_fx_report.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "경고수 > 0"
+ },
+ {
+  "file": "bx03_expense_approval.bpmn",
+  "node": "Task_Precheck",
+  "site": "script",
+  "text": "기한초과 = False\n승인여부 = False\n결재의견 = ''\n경로 = '사전반려' if not 영수증 else ('자동승인' if 금액 <= 자동승인한도 else '결재')"
+ },
+ {
+  "file": "bx03_expense_approval.bpmn",
+  "node": "Task_Expired",
+  "site": "script",
+  "text": "기한초과 = True"
+ },
+ {
+  "file": "bx03_expense_approval.bpmn",
+  "node": "Task_Result",
+  "site": "script",
+  "text": "결과 = '사전반려' if 경로 == '사전반려' else ('자동승인' if 경로 == '자동승인' else ('기한초과반려' if 기한초과 else ('승인' if 승인여부 else '반려')))\n보고서본문 = 지출기록양식(신청번호, 결과, 결재의견)"
+ },
+ {
+  "file": "bx03_expense_approval.bpmn",
+  "node": "Task_ReplyFailed",
+  "site": "script",
+  "text": "회신오류 = error_message"
+ },
+ {
+  "file": "bx03_expense_approval.bpmn",
+  "node": "Data_Log",
+  "site": "dataOutput.path",
+  "text": "지출결재/{신청번호}.md"
+ },
+ {
+  "file": "bx03_expense_approval.bpmn",
+  "node": "Flow_03",
+  "site": "condition",
+  "text": "경로 == '결재'"
+ },
+ {
+  "file": "bx04_tax_invoice_issue.bpmn",
+  "node": "Task_Prepare",
+  "site": "script",
+  "text": "대상월 = 대상월 or 지난달()\n최소발행금액 = 최소발행금액 or 0"
+ },
+ {
+  "file": "bx04_tax_invoice_issue.bpmn",
+  "node": "Task_Sum",
+  "site": "script",
+  "text": "건수 = len(거래내역)\n포털합계 = 합계(거래내역, '금액')\n발행대상 = 건수 > 0 and 포털합계 >= 최소발행금액"
+ },
+ {
+  "file": "bx04_tax_invoice_issue.bpmn",
+  "node": "Task_Verify",
+  "site": "script",
+  "text": "검증통과 = 시트합계 == 포털합계\n검증메모 = '' if 검증통과 else '합계가 다름'\n보고서본문 = 발행보고양식(대상월, 건수, 포털합계, 시트합계, 검증통과)"
+ },
+ {
+  "file": "bx04_tax_invoice_issue.bpmn",
+  "node": "Data_Report",
+  "site": "dataOutput.path",
+  "text": "세금계산서/{대상월}_발행보고.md"
+ },
+ {
+  "file": "bx04_tax_invoice_issue.bpmn",
+  "node": "Flow_05",
+  "site": "condition",
+  "text": "발행대상"
+ },
+ {
+  "file": "bx05_month_end_close.bpmn",
+  "node": "Task_Init",
+  "site": "script",
+  "text": "마감월 = 마감월 or 이번달()"
+ },
+ {
+  "file": "bx05_month_end_close.bpmn",
+  "node": "Data_Journal",
+  "site": "dataOutput.path",
+  "text": "마감/{마감월}_분개.json"
+ },
+ {
+  "file": "bx05_month_end_close.bpmn",
+  "node": "Flow_16",
+  "site": "condition",
+  "text": "승인"
+ },
+ {
+  "file": "bx06_bulk_credit_check.bpmn",
+  "node": "Task_Credit",
+  "site": "serviceCall.input.biz_no",
+  "text": "거래처.사업자번호"
+ },
+ {
+  "file": "bx06_bulk_credit_check.bpmn",
+  "node": "Task_Grade",
+  "site": "rule.input.score",
+  "text": "신용.score"
+ },
+ {
+  "file": "bx06_bulk_credit_check.bpmn",
+  "node": "Task_Grade",
+  "site": "rule.input.overdue",
+  "text": "신용.overdue"
+ },
+ {
+  "file": "bx06_bulk_credit_check.bpmn",
+  "node": "Task_Pick",
+  "site": "script",
+  "text": "결과표 = [dict(거래처, 등급=g) for 거래처, g in zip(거래처목록, 등급목록)]\n위험 = [x for x in 결과표 if x.등급 == '위험']\n위험수 = len(위험)"
+ },
+ {
+  "file": "bx06_bulk_credit_check.bpmn",
+  "node": "Data_Result",
+  "site": "dataOutput.path",
+  "text": "신용/{오늘}_신용조회.xlsx"
+ },
+ {
+  "file": "bx06_bulk_credit_check.bpmn",
+  "node": "Flow_05",
+  "site": "condition",
+  "text": "위험수 > 0"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Task_File",
+  "site": "script",
+  "text": "내역파일 = 내역파일 or 카드폴더 + '/' + 지난주표기() + '.csv'"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Task_Policy",
+  "site": "rule.input.요일",
+  "text": "건.요일"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Task_Policy",
+  "site": "rule.input.시",
+  "text": "건.시"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Task_Policy",
+  "site": "rule.input.업종",
+  "text": "건.업종"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Task_Policy",
+  "site": "rule.input.금액",
+  "text": "건.금액"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Task_Collect",
+  "site": "script",
+  "text": "위반 = [dict(건, 사유=s) for 건, s in zip(내역, 사유목록) if len(s) > 0]\n위반건수 = len(위반)\n인정 = None"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Task_Build",
+  "site": "script",
+  "text": "전표 = 전표자료(내역, 분류목록, 위반, 인정)"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Data_Upload",
+  "site": "dataOutput.path",
+  "text": "카드/{오늘}_전표.xlsx"
+ },
+ {
+  "file": "bx07_corporate_card_review.bpmn",
+  "node": "Flow_07",
+  "site": "condition",
+  "text": "위반건수 > 0"
+ },
+ {
+  "file": "bx08_receivable_dunning.bpmn",
+  "node": "Task_Overdue",
+  "site": "serviceCall.input.기준일",
+  "text": "오늘"
+ },
+ {
+  "file": "bx08_receivable_dunning.bpmn",
+  "node": "Task_Stage",
+  "site": "rule.input.연체일수",
+  "text": "채권.연체일수"
+ },
+ {
+  "file": "bx08_receivable_dunning.bpmn",
+  "node": "Task_Stage",
+  "site": "rule.input.금액",
+  "text": "채권.금액"
+ },
+ {
+  "file": "bx08_receivable_dunning.bpmn",
+  "node": "Task_Split",
+  "site": "script",
+  "text": "채권단계 = [dict(c, 단계=s) for c, s in zip(연체목록, 단계목록)]\n안내대상 = [x for x in 채권단계 if x.단계 in ('1차', '2차')]\n이관대상 = [x for x in 채권단계 if x.단계 == '이관검토']\n이관건수 = len(이관대상)"
+ },
+ {
+  "file": "bx08_receivable_dunning.bpmn",
+  "node": "Task_SendBulk",
+  "site": "serviceCall.input.메일",
+  "text": "메일목록"
+ },
+ {
+  "file": "bx08_receivable_dunning.bpmn",
+  "node": "Task_Transfer",
+  "site": "serviceCall.input.대상",
+  "text": "이관대상"
+ },
+ {
+  "file": "bx08_receivable_dunning.bpmn",
+  "node": "Flow_07",
+  "site": "condition",
+  "text": "len(이관대상) > 0"
+ },
+ {
+  "file": "bx08_receivable_dunning.bpmn",
+  "node": "Flow_10",
+  "site": "condition",
+  "text": "이관"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Task_Credit",
+  "site": "serviceCall.input.biz_no",
+  "text": "사업자번호"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Task_Sanction",
+  "site": "serviceCall.input.name",
+  "text": "거래처명"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Task_Summary",
+  "site": "script",
+  "text": "신용 = 신용 if 예상거래액 >= 50000000 else None\n제재 = 제재 if 해외 else []\n권고 = '반려' if (not 서류결과.충족) or len(제재) > 0 else '승인'\n거래처코드 = ''"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Task_Register",
+  "site": "serviceCall.input.name",
+  "text": "거래처명"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Task_Register",
+  "site": "serviceCall.input.biz_no",
+  "text": "사업자번호"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Flow_02",
+  "site": "condition",
+  "text": "true"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Flow_03",
+  "site": "condition",
+  "text": "예상거래액 >= 50000000"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "해외"
+ },
+ {
+  "file": "bx10_vendor_onboarding_review.bpmn",
+  "node": "Flow_11",
+  "site": "condition",
+  "text": "결정 == '승인'"
+ },
+ {
+  "file": "bx11_bid_collection.bpmn",
+  "node": "Task_Remaining",
+  "site": "script",
+  "text": "남은시간 = 기간(지금(), 마감시각)\n견적목록 = 견적목록 or []\n응찰사메일 = 응찰사메일 or []"
+ },
+ {
+  "file": "bx11_bid_collection.bpmn",
+  "node": "Task_Record",
+  "site": "script",
+  "text": "견적목록 = 견적목록 + [견적]\n응찰사메일 = 응찰사메일 + [견적.회신메일]\n응찰수 = len(견적목록)"
+ },
+ {
+  "file": "bx11_bid_collection.bpmn",
+  "node": "Task_Close",
+  "site": "script",
+  "text": "응찰수 = len(견적목록)"
+ },
+ {
+  "file": "bx11_bid_collection.bpmn",
+  "node": "Data_Compare",
+  "site": "dataOutput.path",
+  "text": "입찰/{입찰번호}_비교.md"
+ },
+ {
+  "file": "bx11_bid_collection.bpmn",
+  "node": "Flow_07",
+  "site": "condition",
+  "text": "응찰수 > 0"
+ },
+ {
+  "file": "bx12_shipping_fee.bpmn",
+  "node": "Task_Fee",
+  "site": "rule.input.지역",
+  "text": "지역"
+ },
+ {
+  "file": "bx12_shipping_fee.bpmn",
+  "node": "Task_Fee",
+  "site": "rule.input.무게",
+  "text": "무게"
+ },
+ {
+  "file": "bx12_shipping_fee.bpmn",
+  "node": "Task_Fee",
+  "site": "rule.input.등급",
+  "text": "등급"
+ },
+ {
+  "file": "bx13_return_processing.bpmn",
+  "node": "Task_Refund",
+  "site": "serviceCall.input.order_id",
+  "text": "주문번호"
+ },
+ {
+  "file": "bx13_return_processing.bpmn",
+  "node": "Task_Refund",
+  "site": "serviceCall.input.amount",
+  "text": "환불액"
+ },
+ {
+  "file": "bx13_return_processing.bpmn",
+  "node": "Task_Amount",
+  "site": "script",
+  "text": "환불액 = 금액 - (0 if 분류 in ('불량', '오배송') else 3000)"
+ },
+ {
+  "file": "bx13_return_processing.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "검수통과"
+ },
+ {
+  "file": "bx14_supplier_portal_orders.bpmn",
+  "node": "Task_Date",
+  "site": "script",
+  "text": "조회일 = 조회일 or 어제()"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Task_Price",
+  "site": "serviceCall.input.codes",
+  "text": "품목"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Task_Weight",
+  "site": "script",
+  "text": "무게 = 총무게(품목, 단가표)\n소계 = 소계(품목, 단가표)\n할인율 = 할인율 or 0\n승인 = True\n조정할인율 = None"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Call_Shipping",
+  "site": "call.input.지역",
+  "text": "고객.지역"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Call_Shipping",
+  "site": "call.input.무게",
+  "text": "무게"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Call_Shipping",
+  "site": "call.input.등급",
+  "text": "고객.등급"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Task_Total",
+  "site": "script",
+  "text": "할인율 = (조정할인율 if 조정할인율 is not None else 할인율) if 승인 else 0.1\n합계 = round(소계 * (1 - 할인율)) + 배송비"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Task_Attach",
+  "site": "serviceCall.input.request_id",
+  "text": "요청번호"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Task_Attach",
+  "site": "serviceCall.input.file",
+  "text": "견적서경로"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Data_Quote",
+  "site": "dataOutput.path",
+  "text": "견적/{요청번호}.md"
+ },
+ {
+  "file": "bx15_quotation.bpmn",
+  "node": "Flow_05",
+  "site": "condition",
+  "text": "할인율 > 0.1"
+ },
+ {
+  "file": "bx16_reorder_proposal.bpmn",
+  "node": "Task_Calc",
+  "site": "script",
+  "text": "제안 = [dict(품목=x.code, 수량=x.safety * 2 - x.qty) for x in 재고 if x.qty < x.safety]\n제안수 = len(제안)"
+ },
+ {
+  "file": "bx16_reorder_proposal.bpmn",
+  "node": "Task_Confirm",
+  "site": "script",
+  "text": "확정 = 제안"
+ },
+ {
+  "file": "bx16_reorder_proposal.bpmn",
+  "node": "Task_Dispatch",
+  "site": "serviceCall.input.bpm_process",
+  "text": "'bx17_erp_po_entry'"
+ },
+ {
+  "file": "bx16_reorder_proposal.bpmn",
+  "node": "Task_Dispatch",
+  "site": "serviceCall.input.target",
+  "text": "'group:구매-PC'"
+ },
+ {
+  "file": "bx16_reorder_proposal.bpmn",
+  "node": "Task_Dispatch",
+  "site": "serviceCall.input.inputs",
+  "text": "{'발주': 확정}"
+ },
+ {
+  "file": "bx16_reorder_proposal.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "제안수 > 0"
+ },
+ {
+  "file": "bx16_reorder_proposal.bpmn",
+  "node": "Flow_07",
+  "site": "condition",
+  "text": "승인"
+ },
+ {
+  "file": "bx20_employee_onboarding.bpmn",
+  "node": "Acc_Mail",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx20_employee_onboarding.bpmn",
+  "node": "Acc_Mail",
+  "site": "serviceCall.input.name",
+  "text": "이름"
+ },
+ {
+  "file": "bx20_employee_onboarding.bpmn",
+  "node": "Acc_Chat",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx20_employee_onboarding.bpmn",
+  "node": "Acc_Group",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx20_employee_onboarding.bpmn",
+  "node": "Acc_Group",
+  "site": "serviceCall.input.dept",
+  "text": "부서"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Call_Balance",
+  "site": "call.input.사번",
+  "text": "사번"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Task_Register",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Task_Register",
+  "site": "serviceCall.input.start",
+  "text": "시작일"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Task_Register",
+  "site": "serviceCall.input.days",
+  "text": "일수"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Task_Approved",
+  "site": "script",
+  "text": "결과 = '승인'"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Task_Reject",
+  "site": "script",
+  "text": "결과 = '반려'"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Flow_03",
+  "site": "condition",
+  "text": "잔여 >= 일수"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Flow_06",
+  "site": "condition",
+  "text": "승인 and 일수 > 3"
+ },
+ {
+  "file": "bx21_leave_request.bpmn",
+  "node": "Flow_09",
+  "site": "condition",
+  "text": "승인"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Rv_Init",
+  "site": "script",
+  "text": "메일실패 = None\nVPN실패 = None\nERP실패 = None"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Rv_Mail",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Rv_Vpn",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Rv_Erp",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Rv_MailFail",
+  "site": "script",
+  "text": "메일실패 = dict(시스템='메일', 오류=error_message)"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Rv_VpnFail",
+  "site": "script",
+  "text": "VPN실패 = dict(시스템='VPN', 오류=error_message)"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Rv_ErpFail",
+  "site": "script",
+  "text": "ERP실패 = dict(시스템='ERP', 오류=error_message)"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Task_Count",
+  "site": "script",
+  "text": "실패 = [x for x in [메일실패, VPN실패, ERP실패] if x is not None]\n실패수 = len(실패)"
+ },
+ {
+  "file": "bx22_offboarding_access.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "실패수 > 0"
+ },
+ {
+  "file": "bx23_training_reminder.bpmn",
+  "node": "Task_Level",
+  "site": "rule.input.남은일수",
+  "text": "사람.남은일수"
+ },
+ {
+  "file": "bx23_training_reminder.bpmn",
+  "node": "Task_Merge",
+  "site": "script",
+  "text": "대상목록 = [dict(p, 단계=s) for p, s in zip(미이수, 단계목록)]"
+ },
+ {
+  "file": "bx23_training_reminder.bpmn",
+  "node": "Task_Send",
+  "site": "serviceCall.input.mails",
+  "text": "메일목록"
+ },
+ {
+  "file": "bx24_leave_balance.bpmn",
+  "node": "Task_Ledger",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx24_leave_balance.bpmn",
+  "node": "Task_Calc",
+  "site": "script",
+  "text": "잔여 = 원장.발생 - 원장.사용 - 원장.예정"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Call_Damages",
+  "site": "call.input.조항",
+  "text": "손해배상조항"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Call_Damages",
+  "site": "call.input.종류",
+  "text": "'손해배상'"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Call_IP",
+  "site": "call.input.조항",
+  "text": "지재권조항"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Call_IP",
+  "site": "call.input.종류",
+  "text": "'지식재산'"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Call_Term",
+  "site": "call.input.조항",
+  "text": "해지조항"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Call_Term",
+  "site": "call.input.종류",
+  "text": "'해지'"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Task_Grade",
+  "site": "script",
+  "text": "점수 = [손해배상결과.점수, 지재권결과.점수, 해지결과.점수]\n등급 = '높음' if max(점수) >= 4 else ('보통' if max(점수) >= 2 else '낮음')"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Data_Opinion",
+  "site": "dataOutput.path",
+  "text": "계약검토/{요청번호}.md"
+ },
+ {
+  "file": "bx30_contract_review.bpmn",
+  "node": "Flow_11",
+  "site": "condition",
+  "text": "등급 == '높음'"
+ },
+ {
+  "file": "bx31_request_triage.bpmn",
+  "node": "Task_Ticket",
+  "site": "serviceCall.input.queue",
+  "text": "종류"
+ },
+ {
+  "file": "bx31_request_triage.bpmn",
+  "node": "Task_Ticket",
+  "site": "serviceCall.input.priority",
+  "text": "긴급도"
+ },
+ {
+  "file": "bx31_request_triage.bpmn",
+  "node": "Task_Ticket",
+  "site": "serviceCall.input.title",
+  "text": "요약"
+ },
+ {
+  "file": "bx31_request_triage.bpmn",
+  "node": "Task_Ticket",
+  "site": "serviceCall.input.body",
+  "text": "본문"
+ },
+ {
+  "file": "bx31_request_triage.bpmn",
+  "node": "Flow_03",
+  "site": "condition",
+  "text": "확신도 >= 0.8"
+ },
+ {
+  "file": "bx32_customer_inquiry.bpmn",
+  "node": "Task_Search",
+  "site": "serviceCall.input.query",
+  "text": "본문"
+ },
+ {
+  "file": "bx32_customer_inquiry.bpmn",
+  "node": "Task_Search",
+  "site": "serviceCall.input.top_k",
+  "text": "5"
+ },
+ {
+  "file": "bx32_customer_inquiry.bpmn",
+  "node": "Task_Post",
+  "site": "serviceCall.input.ticket_id",
+  "text": "문의번호"
+ },
+ {
+  "file": "bx32_customer_inquiry.bpmn",
+  "node": "Task_Post",
+  "site": "serviceCall.input.body",
+  "text": "최종답변"
+ },
+ {
+  "file": "bx32_customer_inquiry.bpmn",
+  "node": "Flow_05",
+  "site": "condition",
+  "text": "보내기"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Task_Risk",
+  "site": "rule.input.시스템",
+  "text": "시스템"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Task_Risk",
+  "site": "rule.input.권한",
+  "text": "권한"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Task_Grant",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Task_Grant",
+  "site": "serviceCall.input.system",
+  "text": "시스템"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Task_Grant",
+  "site": "serviceCall.input.role",
+  "text": "권한"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Task_Schedule",
+  "site": "serviceCall.input.emp_id",
+  "text": "사번"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Task_Schedule",
+  "site": "serviceCall.input.system",
+  "text": "시스템"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Task_Schedule",
+  "site": "serviceCall.input.after_days",
+  "text": "기간"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "승인 and 위험도 != '낮음'"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Flow_07",
+  "site": "condition",
+  "text": "승인 and 위험도 == '높음'"
+ },
+ {
+  "file": "bx33_access_request.bpmn",
+  "node": "Flow_10",
+  "site": "condition",
+  "text": "승인"
+ },
+ {
+  "file": "bx34_incident_alert.bpmn",
+  "node": "Task_Logs",
+  "site": "serviceCall.input.service",
+  "text": "서비스"
+ },
+ {
+  "file": "bx34_incident_alert.bpmn",
+  "node": "Task_Logs",
+  "site": "serviceCall.input.minutes",
+  "text": "15"
+ },
+ {
+  "file": "bx35_voc_weekly.bpmn",
+  "node": "Task_Range",
+  "site": "script",
+  "text": "시작일 = 날짜더하기(오늘, -7)"
+ },
+ {
+  "file": "bx35_voc_weekly.bpmn",
+  "node": "Task_Fetch",
+  "site": "serviceCall.input.since",
+  "text": "시작일"
+ },
+ {
+  "file": "bx35_voc_weekly.bpmn",
+  "node": "Task_Chunk",
+  "site": "script",
+  "text": "묶음 = 나누기(VOC, 50)"
+ },
+ {
+  "file": "bx35_voc_weekly.bpmn",
+  "node": "Task_Merge",
+  "site": "script",
+  "text": "전체 = 펼치기(분석묶음)\n주제별 = 세기(전체, '주제')\n부정비율 = 비율(전체, 감성='부정')"
+ },
+ {
+  "file": "bx35_voc_weekly.bpmn",
+  "node": "Data_Detail",
+  "site": "dataOutput.path",
+  "text": "VOC/{오늘}_상세.xlsx"
+ },
+ {
+  "file": "bx36_legacy_migration.bpmn",
+  "node": "Task_Split",
+  "site": "script",
+  "text": "카드값 = [표를사전(c) for c in 카드목록]\n정상 = [c for c in 카드값 if 빈칸없음(c, ['이름', '연락처', '주소', '등급'])]\n예외번호 = [n for n, c in zip(고객번호목록, 카드값) if not 빈칸없음(c, ['이름', '연락처', '주소', '등급'])]\n수작업 = []"
+ },
+ {
+  "file": "bx36_legacy_migration.bpmn",
+  "node": "Task_OddFail",
+  "site": "script",
+  "text": "예외카드 = []\n수작업 = 예외번호"
+ },
+ {
+  "file": "bx36_legacy_migration.bpmn",
+  "node": "Task_Import",
+  "site": "serviceCall.input.customers",
+  "text": "정상 + 예외카드"
+ },
+ {
+  "file": "bx37_clause_review.bpmn",
+  "node": "Task_Missing",
+  "site": "script",
+  "text": "결과 = dict(점수=3, 이유='조항이 없음', 제안=표준조항[종류])"
+ },
+ {
+  "file": "bx37_clause_review.bpmn",
+  "node": "Flow_02",
+  "site": "condition",
+  "text": "조항 != ''"
+ },
+ {
+  "file": "fx02_business_rule.bpmn",
+  "node": "Task_Rule",
+  "site": "rule.input.amount",
+  "text": "금액"
+ },
+ {
+  "file": "fx02_business_rule.bpmn",
+  "node": "Task_Rule",
+  "site": "rule.input.grade",
+  "text": "등급"
+ },
+ {
+  "file": "fx02_business_rule.bpmn",
+  "node": "Task_Price",
+  "site": "script",
+  "text": "최종가 = round(금액 * (1 - 할인율))"
+ },
+ {
+  "file": "fx03_call_mapping.bpmn",
+  "node": "Task_Prepare",
+  "site": "script",
+  "text": "신청자금액 = 3000000\n보증인금액 = 800000"
+ },
+ {
+  "file": "fx03_call_mapping.bpmn",
+  "node": "Call_A",
+  "site": "call.input.금액",
+  "text": "신청자금액"
+ },
+ {
+  "file": "fx03_call_mapping.bpmn",
+  "node": "Call_B",
+  "site": "call.input.금액",
+  "text": "보증인금액"
+ },
+ {
+  "file": "fx03_call_mapping.bpmn",
+  "node": "Task_Report",
+  "site": "script",
+  "text": "요약 = f'{신청자구분}/{보증인구분}'"
+ },
+ {
+  "file": "fx03b_amount_branch.bpmn",
+  "node": "Task_Big",
+  "site": "script",
+  "text": "구분 = '고액'"
+ },
+ {
+  "file": "fx03b_amount_branch.bpmn",
+  "node": "Task_Small",
+  "site": "script",
+  "text": "구분 = '소액'"
+ },
+ {
+  "file": "fx03b_amount_branch.bpmn",
+  "node": "Flow_02",
+  "site": "condition",
+  "text": "금액 >= 1000000"
+ },
+ {
+  "file": "fx04_folder_poll.bpmn",
+  "node": "Task_List",
+  "site": "script",
+  "text": "파일 = 파일목록(감시폴더 + '/*')\n건수 = len(파일)"
+ },
+ {
+  "file": "fx04_folder_poll.bpmn",
+  "node": "Flow_03",
+  "site": "condition",
+  "text": "건수 > 0"
+ },
+ {
+  "file": "fx07_email.bpmn",
+  "node": "Task_Body",
+  "site": "script",
+  "text": "본문 = '안녕하세요'\n보고 = '# 보고\\n내용'"
+ },
+ {
+  "file": "fx07_email.bpmn",
+  "node": "Data_Report",
+  "site": "dataOutput.path",
+  "text": "fx07/보고.md"
+ },
+ {
+  "file": "fx08_error_boundary.bpmn",
+  "node": "Task_Fallback",
+  "site": "script",
+  "text": "원화 = 1350\n대체 = True"
+ },
+ {
+  "file": "fx09_sequential_loop.bpmn",
+  "node": "Task_Total",
+  "site": "script",
+  "text": "승인수 = len([x for x in 판정목록 if x.승인])"
+ },
+ {
+  "file": "fx10_operator_routing.bpmn",
+  "node": "Task_Web",
+  "site": "serviceCall.input.url",
+  "text": "요청"
+ },
+ {
+  "file": "fx10_operator_routing.bpmn",
+  "node": "Task_Fail",
+  "site": "script",
+  "text": "답 = '처리하지 못했습니다: ' + error_message"
+ },
+ {
+  "file": "fx10_operator_routing.bpmn",
+  "node": "Flow_03",
+  "site": "condition",
+  "text": "intent == 'exchange_rate'"
+ },
+ {
+  "file": "fx10_operator_routing.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "intent == 'web_summary'"
+ },
+ {
+  "file": "fx11_parallel.bpmn",
+  "node": "Task_A",
+  "site": "script",
+  "text": "a = 1"
+ },
+ {
+  "file": "fx11_parallel.bpmn",
+  "node": "Task_B",
+  "site": "script",
+  "text": "b = 2"
+ },
+ {
+  "file": "fx11_parallel.bpmn",
+  "node": "Task_C",
+  "site": "script",
+  "text": "c = 3"
+ },
+ {
+  "file": "fx11_parallel.bpmn",
+  "node": "Task_Sum",
+  "site": "script",
+  "text": "합 = a + b + c"
+ },
+ {
+  "file": "fx12_daily_report.bpmn",
+  "node": "Task_Summary",
+  "site": "script",
+  "text": "요약 = f'{오늘} 요약'"
+ },
+ {
+  "file": "fx12_daily_report.bpmn",
+  "node": "Data_Report",
+  "site": "dataOutput.path",
+  "text": "일일/{오늘}.md"
+ },
+ {
+  "file": "fx13_signal.bpmn",
+  "node": "Task_Prepare",
+  "site": "script",
+  "text": "준비 = True"
+ },
+ {
+  "file": "fx13_signal.bpmn",
+  "node": "Task_Inspect",
+  "site": "script",
+  "text": "result = 검사결과"
+ },
+ {
+  "file": "fx13_signal.bpmn",
+  "node": "Task_Work",
+  "site": "script",
+  "text": "작업 = '완료'"
+ },
+ {
+  "file": "fx13_signal.bpmn",
+  "node": "Task_Cleanup",
+  "site": "script",
+  "text": "작업 = '중단'"
+ },
+ {
+  "file": "fx13_signal.bpmn",
+  "node": "Flow_08",
+  "site": "condition",
+  "text": "result != 'ok'"
+ },
+ {
+  "file": "fx14_timers.bpmn",
+  "node": "Task_Answered",
+  "site": "script",
+  "text": "결과 = '응답'"
+ },
+ {
+  "file": "fx14_timers.bpmn",
+  "node": "Task_Timeout",
+  "site": "script",
+  "text": "결과 = '보류'"
+ },
+ {
+  "file": "fx15_web_form.bpmn",
+  "node": "Task_Prepare",
+  "site": "script",
+  "text": "신청 = dict(이름='홍길동', 내용='장비 요청')"
+ },
+ {
+  "file": "fx15_web_form.bpmn",
+  "node": "Task_NotSubmitted",
+  "site": "script",
+  "text": "메모 = '제출 실패'"
+ },
+ {
+  "file": "fx15_web_form.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "'접수' in 제출메시지"
+ },
+ {
+  "file": "fx16_web_review_field.bpmn",
+  "node": "Task_Skip",
+  "site": "script",
+  "text": "메모 = '사용자 보류'"
+ },
+ {
+  "file": "fx16_web_review_field.bpmn",
+  "node": "Flow_04",
+  "site": "condition",
+  "text": "승인"
+ },
+ {
+  "file": "fx17_webhook.bpmn",
+  "node": "Task_Make",
+  "site": "script",
+  "text": "건수 = 3\n상태 = '완료'"
+ },
+ {
+  "file": "fx17_webhook.bpmn",
+  "node": "Task_Fail",
+  "site": "script",
+  "text": "실패 = error_message"
+ },
+ {
+  "file": "fx18_parallel_loop.bpmn",
+  "node": "Task_Check",
+  "site": "serviceCall.input.url",
+  "text": "주소"
+ },
+ {
+  "file": "fx18_parallel_loop.bpmn",
+  "node": "Task_Count",
+  "site": "script",
+  "text": "정상 = len([s for s in 상태목록 if s == 200])"
+ },
+ {
+  "file": "fx19_manual_task_pc.bpmn",
+  "node": "Task_Done",
+  "site": "script",
+  "text": "확인됨 = True"
+ },
+ {
+  "file": "fx20_external_adapter.bpmn",
+  "node": "Task_Lookup",
+  "site": "serviceCall.input.biz_no",
+  "text": "사업자번호"
+ }
+]
