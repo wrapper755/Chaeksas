@@ -14,6 +14,8 @@ dependencies = [
 
 [project.scripts]
 chk-bot-ui = "chaeksas.bot_ui.app:main"
+# 실행기 — Bot 하나를 돌리는 자식 프로세스 (ADR-0023). 설치 파일에서는 **같은 실행 파일**이다.
+chk-bot-runner = "chaeksas.bot_ui.runner_main:main"
 
 [tool.uv.sources]
 chaeksas-contracts = { workspace = true }
