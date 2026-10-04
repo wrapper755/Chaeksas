@@ -54,12 +54,6 @@
     <bpmn:startEvent id="Start" name="공고 발행">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Remaining" name="남은 시간" scriptFormat="chk-expr">
-      <bpmn:incoming>Flow_01</bpmn:incoming>
-      <bpmn:incoming>Flow_04</bpmn:incoming>
-      <bpmn:outgoing>Flow_02</bpmn:outgoing>
-      <bpmn:script>남은시간 = 기간(지금(), 마감시각)</bpmn:script>
-    </bpmn:scriptTask>
     <bpmn:receiveTask id="Recv_Quote" name="견적 받기" messageRef="Msg_bid_quote">
       <bpmn:extensionElements>
         <chk:receive>{
@@ -69,25 +63,26 @@
   ]
 }</chk:receive>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_02</bpmn:incoming>
-      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:receiveTask>
     <bpmn:scriptTask id="Task_Record" name="견적 기록" scriptFormat="chk-expr">
-      <bpmn:incoming>Flow_03</bpmn:incoming>
-      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>견적목록 = 견적목록 + [견적]
 응찰사메일 = 응찰사메일 + [견적.회신메일]
 응찰수 = len(견적목록)</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:scriptTask id="Task_Close" name="접수 마감" scriptFormat="chk-expr">
-      <bpmn:incoming>Flow_05</bpmn:incoming>
-      <bpmn:outgoing>Flow_06</bpmn:outgoing>
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+      <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:script>응찰수 = len(견적목록)</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:exclusiveGateway id="Gw_Any" name="응찰 있음?" default="Flow_08">
-      <bpmn:incoming>Flow_06</bpmn:incoming>
+    <bpmn:exclusiveGateway id="Gw_Any" name="응찰 있음?" default="Flow_07">
+      <bpmn:incoming>Flow_05</bpmn:incoming>
+      <bpmn:outgoing>Flow_06</bpmn:outgoing>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
-      <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Compare" name="견적 비교표">
       <bpmn:extensionElements>
@@ -102,8 +97,8 @@
   "params": {}
 }</chk:aiTask>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_07</bpmn:incoming>
-      <bpmn:outgoing>Flow_09</bpmn:outgoing>
+      <bpmn:incoming>Flow_06</bpmn:incoming>
+      <bpmn:outgoing>Flow_08</bpmn:outgoing>
       <bpmn:dataOutputAssociation id="DOA_Data_Compare">
         <bpmn:targetRef>Data_Compare</bpmn:targetRef>
       </bpmn:dataOutputAssociation>
@@ -135,8 +130,8 @@
   "location": "center"
 }</chk:approval>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_09</bpmn:incoming>
-      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:outgoing>Flow_09</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sendTask id="Task_NotifyAward" name="결과 통보">
       <bpmn:extensionElements>
@@ -150,14 +145,14 @@
   "store_as": null
 }</chk:email>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_10</bpmn:incoming>
-      <bpmn:outgoing>Flow_11</bpmn:outgoing>
+      <bpmn:incoming>Flow_09</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
     </bpmn:sendTask>
     <bpmn:endEvent id="End" name="끝">
-      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:incoming>Flow_10</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:endEvent id="End_NoBid" name="유찰">
-      <bpmn:incoming>Flow_08</bpmn:incoming>
+      <bpmn:incoming>Flow_07</bpmn:incoming>
     </bpmn:endEvent>
     <bpmn:sendTask id="Task_NotifyCancel" name="취소 통보">
       <bpmn:extensionElements>
@@ -171,17 +166,17 @@
   "store_as": null
 }</chk:email>
       </bpmn:extensionElements>
-      <bpmn:incoming>Flow_12</bpmn:incoming>
-      <bpmn:outgoing>Flow_13</bpmn:outgoing>
+      <bpmn:incoming>Flow_11</bpmn:incoming>
+      <bpmn:outgoing>Flow_12</bpmn:outgoing>
     </bpmn:sendTask>
     <bpmn:endEvent id="End_Cancel" name="취소로 끝">
-      <bpmn:incoming>Flow_13</bpmn:incoming>
+      <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:terminateEventDefinition />
     </bpmn:endEvent>
     <bpmn:boundaryEvent id="Bnd_Deadline" name="마감" attachedToRef="Recv_Quote">
-      <bpmn:outgoing>Flow_05</bpmn:outgoing>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
       <bpmn:timerEventDefinition>
-        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">남은시간</bpmn:timeDuration>
+        <bpmn:timeDuration xsi:type="bpmn:tFormalExpression">마감시각</bpmn:timeDuration>
       </bpmn:timerEventDefinition>
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="Bnd_Cancel" name="입찰 취소" attachedToRef="Recv_Quote">
@@ -190,24 +185,23 @@
   "correlation": "입찰번호"
 }</chk:receive>
       </bpmn:extensionElements>
-      <bpmn:outgoing>Flow_12</bpmn:outgoing>
+      <bpmn:outgoing>Flow_11</bpmn:outgoing>
       <bpmn:messageEventDefinition messageRef="Msg_bid_cancelled" />
     </bpmn:boundaryEvent>
-    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Remaining" />
-    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Remaining" targetRef="Recv_Quote" />
-    <bpmn:sequenceFlow id="Flow_03" sourceRef="Recv_Quote" targetRef="Task_Record" />
-    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Record" targetRef="Task_Remaining" />
-    <bpmn:sequenceFlow id="Flow_05" sourceRef="Bnd_Deadline" targetRef="Task_Close" />
-    <bpmn:sequenceFlow id="Flow_06" sourceRef="Task_Close" targetRef="Gw_Any" />
-    <bpmn:sequenceFlow id="Flow_07" name="있음" sourceRef="Gw_Any" targetRef="Task_Compare">
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Recv_Quote" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Recv_Quote" targetRef="Task_Record" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Record" targetRef="Recv_Quote" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Bnd_Deadline" targetRef="Task_Close" />
+    <bpmn:sequenceFlow id="Flow_05" sourceRef="Task_Close" targetRef="Gw_Any" />
+    <bpmn:sequenceFlow id="Flow_06" name="있음" sourceRef="Gw_Any" targetRef="Task_Compare">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">응찰수 &gt; 0</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
-    <bpmn:sequenceFlow id="Flow_08" name="없음" sourceRef="Gw_Any" targetRef="End_NoBid" />
-    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Compare" targetRef="Approve_Award" />
-    <bpmn:sequenceFlow id="Flow_10" sourceRef="Approve_Award" targetRef="Task_NotifyAward" />
-    <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_NotifyAward" targetRef="End" />
-    <bpmn:sequenceFlow id="Flow_12" sourceRef="Bnd_Cancel" targetRef="Task_NotifyCancel" />
-    <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_NotifyCancel" targetRef="End_Cancel" />
+    <bpmn:sequenceFlow id="Flow_07" name="없음" sourceRef="Gw_Any" targetRef="End_NoBid" />
+    <bpmn:sequenceFlow id="Flow_08" sourceRef="Task_Compare" targetRef="Approve_Award" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Approve_Award" targetRef="Task_NotifyAward" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_NotifyAward" targetRef="End" />
+    <bpmn:sequenceFlow id="Flow_11" sourceRef="Bnd_Cancel" targetRef="Task_NotifyCancel" />
+    <bpmn:sequenceFlow id="Flow_12" sourceRef="Task_NotifyCancel" targetRef="End_Cancel" />
     <bpmn:dataObject id="DO_Data_Compare" />
     <bpmn:dataObjectReference id="Data_Compare" name="비교표" dataObjectRef="DO_Data_Compare">
       <bpmn:extensionElements>
@@ -223,35 +217,33 @@
   <bpmndi:BPMNDiagram id="Diagram_1">
     <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_bx11_bid_collection">
       <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_Remaining_di" bpmnElement="Task_Remaining"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Recv_Quote_di" bpmnElement="Recv_Quote"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_Record_di" bpmnElement="Task_Record"><dc:Bounds x="606" y="80" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_Close_di" bpmnElement="Task_Close"><dc:Bounds x="606" y="230" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gw_Any_di" bpmnElement="Gw_Any" isMarkerVisible="true"><dc:Bounds x="776" y="245" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="299" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_Compare_di" bpmnElement="Task_Compare"><dc:Bounds x="896" y="380" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Approve_Award_di" bpmnElement="Approve_Award"><dc:Bounds x="1066" y="380" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_NotifyAward_di" bpmnElement="Task_NotifyAward"><dc:Bounds x="1236" y="380" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1406" y="402" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1386" y="442" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_NoBid_di" bpmnElement="End_NoBid"><dc:Bounds x="928" y="252" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="908" y="292" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_NotifyCancel_di" bpmnElement="Task_NotifyCancel"><dc:Bounds x="606" y="380" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="End_Cancel_di" bpmnElement="End_Cancel"><dc:Bounds x="783" y="402" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="763" y="442" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Bnd_Deadline_di" bpmnElement="Bnd_Deadline"><dc:Bounds x="496" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="492" y="180" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Bnd_Cancel_di" bpmnElement="Bnd_Cancel"><dc:Bounds x="451" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="447" y="180" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Data_Compare_di" bpmnElement="Data_Compare"><dc:Bounds x="928" y="510" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="970" y="526" width="46" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Recv_Quote_di" bpmnElement="Recv_Quote"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Record_di" bpmnElement="Task_Record"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Close_di" bpmnElement="Task_Close"><dc:Bounds x="436" y="230" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gw_Any_di" bpmnElement="Gw_Any" isMarkerVisible="true"><dc:Bounds x="606" y="245" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="586" y="299" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Compare_di" bpmnElement="Task_Compare"><dc:Bounds x="726" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Approve_Award_di" bpmnElement="Approve_Award"><dc:Bounds x="896" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyAward_di" bpmnElement="Task_NotifyAward"><dc:Bounds x="1066" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1236" y="402" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1216" y="442" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_NoBid_di" bpmnElement="End_NoBid"><dc:Bounds x="758" y="252" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="738" y="292" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyCancel_di" bpmnElement="Task_NotifyCancel"><dc:Bounds x="436" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Cancel_di" bpmnElement="End_Cancel"><dc:Bounds x="613" y="402" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="593" y="442" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Deadline_di" bpmnElement="Bnd_Deadline"><dc:Bounds x="326" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="322" y="180" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Bnd_Cancel_di" bpmnElement="Bnd_Cancel"><dc:Bounds x="281" y="142" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="277" y="180" width="44" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Compare_di" bpmnElement="Data_Compare"><dc:Bounds x="758" y="510" width="36" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="800" y="526" width="46" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="656" y="80" /><di:waypoint x="656" y="55" /><di:waypoint x="316" y="55" /><di:waypoint x="316" y="80" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="514" y="178" /><di:waypoint x="514" y="270" /><di:waypoint x="606" y="270" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="706" y="270" /><di:waypoint x="776" y="270" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="826" y="270" /><di:waypoint x="851" y="270" /><di:waypoint x="851" y="420" /><di:waypoint x="896" y="420" /><bpmndi:BPMNLabel><dc:Bounds x="855" y="402" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="826" y="270" /><di:waypoint x="928" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="830" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="486" y="80" /><di:waypoint x="486" y="55" /><di:waypoint x="316" y="55" /><di:waypoint x="316" y="80" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="344" y="178" /><di:waypoint x="344" y="270" /><di:waypoint x="436" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_05_di" bpmnElement="Flow_05"><di:waypoint x="536" y="270" /><di:waypoint x="606" y="270" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_06_di" bpmnElement="Flow_06"><di:waypoint x="656" y="270" /><di:waypoint x="681" y="270" /><di:waypoint x="681" y="420" /><di:waypoint x="726" y="420" /><bpmndi:BPMNLabel><dc:Bounds x="685" y="402" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_07_di" bpmnElement="Flow_07"><di:waypoint x="656" y="270" /><di:waypoint x="758" y="270" /><bpmndi:BPMNLabel><dc:Bounds x="660" y="252" width="24" height="14" /></bpmndi:BPMNLabel></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_08_di" bpmnElement="Flow_08"><di:waypoint x="826" y="420" /><di:waypoint x="896" y="420" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_09_di" bpmnElement="Flow_09"><di:waypoint x="996" y="420" /><di:waypoint x="1066" y="420" /></bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10"><di:waypoint x="1166" y="420" /><di:waypoint x="1236" y="420" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11"><di:waypoint x="1336" y="420" /><di:waypoint x="1406" y="420" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12"><di:waypoint x="469" y="178" /><di:waypoint x="469" y="420" /><di:waypoint x="606" y="420" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Flow_13_di" bpmnElement="Flow_13"><di:waypoint x="706" y="420" /><di:waypoint x="783" y="420" /></bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="DOA_Data_Compare_di" bpmnElement="DOA_Data_Compare"><di:waypoint x="946" y="460" /><di:waypoint x="946" y="510" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_11_di" bpmnElement="Flow_11"><di:waypoint x="299" y="178" /><di:waypoint x="299" y="420" /><di:waypoint x="436" y="420" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_12_di" bpmnElement="Flow_12"><di:waypoint x="536" y="420" /><di:waypoint x="613" y="420" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DOA_Data_Compare_di" bpmnElement="DOA_Data_Compare"><di:waypoint x="776" y="460" /><di:waypoint x="776" y="510" /></bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>

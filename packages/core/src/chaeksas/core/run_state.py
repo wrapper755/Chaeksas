@@ -221,6 +221,8 @@ class Run:
     variables: dict[str, Any] = field(default_factory=dict)
     state: State = State.READY
     tokens: list[Token] = field(default_factory=list)
+    #: 마지막으로 민 토큰 — 다음에는 **그다음 것부터** 찾는다 (가지를 번갈아 민다).
+    last_token_id: str = ""
     #: 기다리는 사람 요청 (`request_id` → 요청). 병렬 가지면 여럿일 수 있다.
     pendings: dict[str, Pending] = field(default_factory=dict)
     #: 합류 게이트웨이에 도착한 토큰 (`범위:노드` → 토큰 id 묶음).
@@ -291,7 +293,18 @@ class Run:
         return self.state in (State.DONE, State.FAILED)
 
     def runnable(self) -> Token | None:
-        return next((t for t in self.tokens if not t.waiting), None)
+        """다음에 밟을 토큰 — **번갈아** 고른다 (마지막에 민 것의 다음부터 찾는다).
+
+        늘 첫 토큰을 고르면 한 가지가 끝까지 달린다. 그러면 다른 가지가 아직 경계를 켜기 전에
+        신호가 지나가 **사라진다** (FX-13에서 실제로 그랬다). 병렬 가지는 번갈아 나아간다.
+        """
+        order = self.tokens
+        start = next((i for i, t in enumerate(order) if t.id == self.last_token_id), -1)
+        for offset in range(1, len(order) + 1):
+            found = order[(start + offset) % len(order)]
+            if not found.waiting:
+                return found
+        return None
 
     def token(self, token_id: str) -> Token | None:
         return next((t for t in self.tokens if t.id == token_id), None)

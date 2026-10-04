@@ -235,7 +235,7 @@ class Engine:
         return self._step_token(run, token)
 
     def _step_token(self, run: Run, token: Token) -> State:
-
+        run.last_token_id = token.id
         run.state = State.RUNNING
         node = run.node(token.node_id)
         handler = self.handlers.get(node.kind)
@@ -422,6 +422,10 @@ class Engine:
         token.node_id = targets[0]
         for extra in targets[1:]:
             run.tokens.append(Token(id=new_token_id(), node_id=extra, scope=token.scope))
+        if len(targets) > 1:
+            # 갈라진 가지는 **맨 앞부터** 번갈아 민다. 첫 가지가 원래 토큰을 이어 쓰므로,
+            # 그대로 두면 「방금 민 것」으로 보여 둘째 가지가 먼저 달린다 (신호가 어긋난다).
+            run.last_token_id = ""
         return run.state
 
     def pass_through(self, run: Run, token: Token) -> None:

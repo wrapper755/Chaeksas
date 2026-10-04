@@ -20,7 +20,7 @@ import pytest
 from chaeksas.contracts.bpmn_ext import AiTask, read_process
 from chaeksas.contracts.events import REQUIRED_DATA_KEYS
 from chaeksas.core.agent import AgentError, check_results, opening_messages, run_agent, tool_specs
-from chaeksas.core.engine import Engine, Run, RunEnv, State
+from chaeksas.core.engine import Context, Engine, Run, RunEnv, State
 from chaeksas.core.llm import (
     LlmError,
     NoLlm,
@@ -372,3 +372,27 @@ def test_a_model_without_a_key_sends_no_authorization_header() -> None:
     있는키 = OpenAiCompatibleLlm(base_url="http://127.0.0.1:1", api_key="sk-1", model="m")
     assert 있는키.headers()["Authorization"] == "Bearer sk-1"
     assert all(v.isascii() for v in 있는키.headers().values()), "헤더는 ASCII만 (CLAUDE.md §5)"
+
+
+def test_the_model_sees_the_values_the_goal_names() -> None:
+    """목표는 값을 적지 않고 **이름으로 가리킨다** — 그 이름에 든 값을 함께 준다 (C14).
+
+    주지 않으면 「`청구서`는 PDF 한 장의 경로다」라고 해 놓고 경로를 안 주는 꼴이다 (인수
+    시험에서 실제로 그랬다). **모든 변수를 주지는 않는다** — 목표에 쓴 것만 간다 (원칙 6).
+    """
+    from chaeksas.core.nodes import _seen_by
+
+    spec = AiTask(
+        goal="`청구서`를 읽어 금액을 꺼낸다.",
+        domain="doc",
+        results={"금액": "int"},
+        params={"서식": "세금계산서"},
+    )
+    engine, run = start(process())
+    run.variables.update({"청구서": "청구/1.pdf", "비밀스러운값": "보이면 안 된다"})
+    context = Context(engine=engine, run=run, token=run.tokens[0], node=run.node("Task_Ai"))
+
+    found = _seen_by(context, spec)
+    assert found["청구서"] == "청구/1.pdf"
+    assert found["서식"] == "세금계산서", "업무 파라미터도 함께 간다"
+    assert "비밀스러운값" not in found, "목표에 없는 변수는 가지 않는다"

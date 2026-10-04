@@ -21,7 +21,7 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -305,37 +305,35 @@ class CaseRun(QObject):
                 self.engine.answer(run, request_id, answer, answered_by="시험 케이스")
                 return True
 
-        elapsed = (datetime.now(UTC) - self._started).total_seconds()
-        if self._put_message(run, lambda m: m.after_s <= elapsed):
-            return True
-
+        # **케이스 메시지도 예정된 일이다** — 타이머와 한 줄에 세워 이른 것부터 민다.
+        # 진짜 초를 기다리지 않는다 (하루짜리 기한을 기다릴 수 없는 것과 같은 이유). 차례가
+        # 뒤집히면 결과가 달라진다 — 마감 타이머를 먼저 당기면 견적이 한 건도 안 들어온다.
+        waiting = self._next_message()
         due = run.next_due()
+        if waiting is not None:
+            index, message = waiting
+            at = self._started + timedelta(seconds=message.after_s)
+            if due is None or at <= due:
+                self._sent.add(index)
+                self.said.emit(f"[케이스] 메시지: {message.name}")
+                self.engine.deliver(
+                    run, message.name, correlation=message.correlation, payload=dict(message.payload)
+                )
+                return True
+
         if due is not None:
-            # 시험 실행은 **기다리지 않고 시계를 민다** — 하루짜리 기한을 진짜로 기다릴 수 없다.
             self.said.emit(f"[케이스] 타이머를 앞당깁니다 ({due.isoformat(timespec='seconds')})")
             self.engine.tick(run, due)
             return True
+        return False
 
-        # 아무것도 못 밀었는데 보낼 메시지가 남았다 — **앞당겨 넣는다**. 타이머와 같은 규칙이다
-        # (진짜로 4초를 기다리면 시험이 느려지기만 한다). `after_s`는 **차례**를 정하는 값이고,
-        # 다른 것이 밀릴 수 있는 동안에는 그 차례가 지켜진다.
-        return self._put_message(run, lambda m: True, early=True)
-
-    def _put_message(self, run: Run, when: Callable[[CaseMessage], bool], *, early: bool = False) -> bool:
-        """아직 안 보낸 케이스 메시지 중 조건에 맞는 **첫 번째** 하나를 넣는다."""
+    def _next_message(self) -> tuple[int, CaseMessage] | None:
+        """아직 안 보낸 케이스 메시지 중 **가장 이른** 것."""
         case = self.plan.case
         if case is None:
-            return False
-        for index, message in enumerate(case.messages):
-            if index in self._sent or not when(message):
-                continue
-            self._sent.add(index)
-            self.said.emit(f"[케이스] 메시지: {message.name}" + (" (앞당김)" if early else ""))
-            self.engine.deliver(
-                run, message.name, correlation=message.correlation, payload=dict(message.payload)
-            )
-            return True
-        return False
+            return None
+        left = [(i, m) for i, m in enumerate(case.messages) if i not in self._sent]
+        return min(left, key=lambda pair: (pair[1].after_s, pair[0])) if left else None
 
     def _settle(self, run: Run) -> None:
         case = self.plan.case

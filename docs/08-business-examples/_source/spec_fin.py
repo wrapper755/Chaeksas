@@ -120,9 +120,11 @@ EXAMPLES.append(Example(
                 "환율이 높은지 낮은지 판단하지 않는다.", "- `환율`: {KRW, EUR, JPY} (number)\n- `기준일`: string `YYYY-MM-DD`"),
            "api", {"환율": "dict", "기준일": "date"}, tools=["http_request_tool"],
            params={"조회주소": "https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW,EUR,JPY"}, limits={"max_steps": 6}),
+        # `범위벗어남`은 **값 하나**를 본다 — 통화마다 돌린다 (인수 시험이 이 어긋남을 잡았다).
         script("Task_Check", "점검",
                "상한 = 상한 or {'KRW': 1400}\n하한 = 하한 or {'KRW': 1200}\n"
-               "경고 = 범위벗어남(환율, 상한, 하한)\n경고수 = len(경고)"),
+               "경고 = [{'통화': k, '값': 환율[k], '상한': 상한[k], '하한': 하한[k]} for k in 상한 "
+               "if k in 환율 and 범위벗어남(환율[k], 하한[k], 상한[k])]\n경고수 = len(경고)"),
         xgw("Gw_Warn", "경고 있음?"),
         appr("Approve_Warn", "환율 경고 확인", "환율 경고 확인", ["기준일", "환율", "경고", "상한", "하한"],
              [fld("조치필요", "조치가 필요합니까?", "bool", True), fld("메모", "메모")], location="center"),
@@ -328,7 +330,7 @@ EXAMPLES.append(Example(
     boundaries=[bnd("Bnd_SalesLate", "Recv_Sales", "timer", "하루 지남", interrupting=False, duration="P1D")],
     data=[out("Data_Journal", "결산 분개", "Approve_Close", "마감/{마감월}_분개.json", "json", variables=["분개초안", "불일치", "승인", "메모"], store_as="분개경로")],
     variables=[("매출확정", "dict", "Recv_Sales (메시지 본문)", ""), ("매입확정", "dict", "Recv_Purchase", ""), ("재고실사", "dict", "Recv_Stock", "")],
-    cases=[Case("세 통보 모두 도착", {"마감월": "2026-09"}, {"승인": True, "분개경로": "*"}, {"Approve_Close": {"승인": True}},
+    cases=[Case("세 통보 모두 도착", {"마감월": "2026-09"}, {"승인": True, "분개경로": "*"}, {"Approve_Close": {"승인": True, "메모": "이상 없음"}},
                 messages=[dict(after_s=2, name="close_sales_done", correlation="2026-09", payload={"매출확정": {"매출": 120000000}}),
                           dict(after_s=2, name="close_purchase_done", correlation="2026-09", payload={"매입확정": {"매입": 80000000}}),
                           dict(after_s=2, name="close_stock_done", correlation="2026-09", payload={"재고실사": {"상품": 30000000}})]),

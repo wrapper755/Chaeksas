@@ -71,7 +71,7 @@
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>상한 = 상한 or {'KRW': 1400}
 하한 = 하한 or {'KRW': 1200}
-경고 = 범위벗어남(환율, 상한, 하한)
+경고 = [{'통화': k, '값': 환율[k], '상한': 상한[k], '하한': 하한[k]} for k in 상한 if k in 환율 and 범위벗어남(환율[k], 하한[k], 상한[k])]
 경고수 = len(경고)</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:exclusiveGateway id="Gw_Warn" name="경고 있음?" default="Flow_05">
