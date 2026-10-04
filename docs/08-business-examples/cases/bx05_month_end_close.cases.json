@@ -14,7 +14,8 @@
       },
       "approvals": {
         "Approve_Close": {
-          "승인": true
+          "승인": true,
+          "메모": "이상 없음"
         }
       },
       "messages": [

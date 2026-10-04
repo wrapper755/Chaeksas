@@ -341,6 +341,21 @@ def handle_service_task(context: Context) -> Outcome:
     raise EngineError("무엇을 하는 서비스 태스크인지 모른다 (`chk:*`가 없다)", node_id=node.id, code="task_empty")
 
 
+def _seen_by(context: Context, spec: AiTask) -> dict[str, Any]:
+    """모델에게 함께 줄 값 (C14 §AI 태스크가 보는 값).
+
+    **목표에 이름이 나오는 변수**와 **반복 항목**, 그리고 업무 파라미터. 모든 변수를 주지
+    않는다 — 모델에게 가는 값은 적을수록 좋고(원칙 6), 「주고 싶으면 목표에 쓴다」가 분명하다.
+    """
+    run, token = context.run, context.token
+    found = {name: value for name, value in run.variables.items() if name in spec.goal}
+    loop = token.loop
+    if loop is not None and loop.item_name in run.variables:
+        found[loop.item_name] = run.variables[loop.item_name]
+    found.update(spec.params)
+    return found
+
+
 def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
     """`chk:aiTask` — 운전사에게 목표를 주고 결과 필드를 받는다 (ADR-0008·ADR-0027).
 
@@ -363,7 +378,7 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
 
     try:
         outcome = _replayed(context, spec, note) or run_agent(
-            spec, llm=run.env.llm, tools=run.env.tools, on_step=note
+            spec, llm=run.env.llm, tools=run.env.tools, on_step=note, context=_seen_by(context, spec)
         )
     except PathDenied as e:
         # 도구가 실행 폴더 밖을 짚었다 — 고쳐야 할 설정이다 (경계로 받지 않는다).

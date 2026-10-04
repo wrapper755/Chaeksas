@@ -575,10 +575,10 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
 
     중요한 것은 「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
     **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 3b: 끝 11·대기 2 →
-    3c: 끝 19·대기 6 → 3d: 끝 20·대기 9 → 3f: 끝 22·대기 9 — 합치면 50개 중 **31개**가
+    3c: 끝 19·대기 6 → 3d: 끝 20·대기 9 → 3f: 끝 23·대기 9 — 합치면 50개 중 **32개**가
     사람이나 끝까지 간다).
 
-    남은 19개는 둘 중 하나다. **UI 자동화(M4)** 5개, 그리고 **자리 값 탓** 14개 — 선언만 보고
+    남은 18개는 둘 중 하나다. **UI 자동화(M4)** 5개, 그리고 **자리 값 탓** 13개 — 선언만 보고
     넣는 `"시험값"`으로는 점 표기·반복·기간이 성립하지 않는다. 진짜 입력은 Studio 시험 실행의
     케이스에서 온다 (인수 시험).
     """
@@ -621,7 +621,8 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
     assert len(done) + len(waiting) + sum(reasons.values()) == 50
     # 끝까지 가는 것·사람을 기다리는 것 — **다음 조각이 이 목록을 늘린다. 늘면 여기를 고쳐 적는다.**
     assert done == [
-        "bx03_expense_approval.bpmn",  # 메시지 시작 + 타이머 경계 + 웹훅 (3f가 양식 함수를 뺐다)
+        "bx02_morning_fx_report.bpmn",  # API AI 태스크 + 통화마다 범위 점검 (3f)
+        "bx03_expense_approval.bpmn",  # 메시지 시작 + 타이머 경계 + 웹훅 (3f)
         "bx06_bulk_credit_check.bpmn",  # 규칙(DMN) + 반복 + xlsx 출력 + 메일
         "bx07_corporate_card_review.bpmn",  # AI 분류 반복 + DMN COLLECT + xlsx (3f)
         "bx12_shipping_fee.bpmn",  # 규칙(DMN) 공유 BPM 프로세스

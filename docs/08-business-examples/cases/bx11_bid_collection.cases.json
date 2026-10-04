@@ -100,7 +100,7 @@
         ]
       },
       "expected": {
-        "응찰수": 0
+        "견적목록": []
       },
       "approvals": {},
       "messages": [

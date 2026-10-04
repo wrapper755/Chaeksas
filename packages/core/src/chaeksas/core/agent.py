@@ -136,11 +136,17 @@ def run_agent(
     tools: Mapping[str, Tool],
     max_steps: int | None = None,
     on_step: Callable[[int, str, str], None] | None = None,
+    context: Mapping[str, Any] | None = None,
 ) -> Outcome:
-    """자율 수행 — 모델에게 묻고, 허용된 도구를 빌려 주고, 마지막 JSON을 검증해 돌려준다."""
+    """자율 수행 — 모델에게 묻고, 허용된 도구를 빌려 주고, 마지막 JSON을 검증해 돌려준다.
+
+    `context`는 **목표가 이름으로 가리키는 값**이다 (C14 §AI 태스크가 보는 값). 주지 않으면
+    업무 파라미터만 간다 — 그러면 「`청구서`는 PDF 한 장의 경로다」라고 해 놓고 그 경로를 주지
+    않는 꼴이 된다.
+    """
     limit = max_steps or (spec.limits.max_steps if spec.limits and spec.limits.max_steps else DEFAULT_MAX_STEPS)
     available = tool_specs(spec, tools)
-    messages = opening_messages(spec)
+    messages = opening_messages(spec, context=context)
     trace = Trace()
 
     for step in range(1, limit + 1):
