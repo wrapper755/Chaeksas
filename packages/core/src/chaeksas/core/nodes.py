@@ -21,7 +21,16 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.contracts.approvals import Form, request_id_for
-from chaeksas.contracts.bpmn_ext import WEBHOOK_BODY_ALL, Email, FileList, Flow, Node, Rule, Webhook
+from chaeksas.contracts.bpmn_ext import (
+    WEBHOOK_BODY_ALL,
+    Email,
+    FileList,
+    Flow,
+    Node,
+    Rule,
+    ServiceCall,
+    Webhook,
+)
 from chaeksas.contracts.dmn import DmnError
 from chaeksas.core.expr import Scope, evaluate, fill, run_script, truthy
 from chaeksas.core.files import FileTaskError, PathDenied, list_files
@@ -42,6 +51,7 @@ from chaeksas.core.run_state import (
     new_token_id,
 )
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest
+from chaeksas.core.services import RETRYABLE_STATUS, OpCall, OpOutcome, ServiceCallError
 
 #: 웹훅 본문 적는 법 (C14 — `all` | `fields:[…]` | `template:"…"`).
 _WEBHOOK_FIELDS = re.compile(r"^fields\s*:\s*\[(.*)\]$", re.S)
@@ -293,15 +303,99 @@ def handle_rule(context: Context) -> Outcome:
 
 
 def handle_service_task(context: Context) -> Outcome:
-    """`serviceTask` — 지금은 **파일 목록**만 안다. AI·서비스 앱·UI 태스크는 뒤 조각이다."""
-    spec: FileList | None = context.node.prop("fileList")
-    if spec is None:
+    """`serviceTask` 하나에 세 가지가 올라탄다 — 무엇인지는 `chk:*`가 가린다 (C14 §태스크 종류).
+
+    | 속성 | 무엇 |
+    | --- | --- |
+    | `chk:fileList` | 파일 목록 (ADR-0026) |
+    | `chk:serviceCall` | 서비스 앱 태스크 (C11) |
+    | `chk:aiTask` | AI 태스크 — 조각 3c 뒷부분 |
+    | `chk:task` | 확장 태스크 (UI 태스크 등) — M4 |
+    """
+    node = context.node
+    files: FileList | None = node.prop("fileList")
+    if files is not None:
+        return handle_file_list(context, files)
+    call: ServiceCall | None = node.prop("serviceCall")
+    if call is not None:
+        return handle_service_call(context, call)
+    if node.prop("task") is not None:
         raise EngineError(
-            "아직 다루지 않는 서비스 태스크다 (AI·서비스 앱은 조각 3c, UI 태스크는 M4)",
-            node_id=context.node.id,
-            code=CODE_UNSUPPORTED,
+            "확장 태스크는 아직 수행하지 않는다 (UI 자동화는 M4)", node_id=node.id, code=CODE_UNSUPPORTED
         )
-    return handle_file_list(context, spec)
+    raise EngineError(
+        "아직 다루지 않는 서비스 태스크다 (AI 태스크는 조각 3c)", node_id=node.id, code=CODE_UNSUPPORTED
+    )
+
+
+def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:
+    """`chk:serviceCall` — 서비스 앱의 작업 하나를 부른다 (C11).
+
+    재시도는 **여기서** 한다 — `retry.on`에 든 상태 코드이거나 닿지 못한 것이면 `attempt`를
+    올려 다시 부른다. 멱등 키에 `attempt`가 들어가므로 같은 번호로 다시 부르면 앱이 저장된
+    결과를 돌려준다 (C11 §전송).
+
+    마지막까지 실패하면 `TaskFailed`라서 **오류 경계가 받는다** (`TASK_FAILED`). 키가 틀렸거나
+    없는 작업을 부른 것(`FATAL_CODES`)은 다시 불러도 똑같으므로 바로 그만둔다.
+    """
+    run, node = context.run, context.node
+    key_ref = spec.key_ref or run.process.info.service_keys.get(spec.app_id)
+    scope = context.scope()
+    arguments = {name: evaluate(expression, scope) for name, expression in spec.input.items()}
+
+    retry = spec.retry
+    codes = tuple(retry.on) if (retry and retry.on) else RETRYABLE_STATUS
+    attempts = (retry.max if retry else 0) + 1
+    call_seq = run.call_seqs.get(node.id, 0) + 1
+    run.call_seqs[node.id] = call_seq
+
+    last: ServiceCallError | None = None
+    for attempt in range(1, attempts + 1):
+        call = OpCall(
+            app_id=spec.app_id,
+            operation=spec.operation,
+            mode=run.mode,
+            input=arguments,
+            run_id=run.run_id,
+            node_id=node.id,
+            node_instance=context.instance(),
+            attempt=attempt,
+            call_seq=call_seq,
+            key_ref=key_ref,
+            timeout_s=spec.timeout_s,
+            bpm_process_id=run.process.id,
+            version=run.version,
+        )
+        try:
+            outcome = run.env.services.call(call)
+        except ServiceCallError as e:
+            last = e
+            # 실패도 C3에 남긴다 — 「몇 번 불렀고 왜 실패했나」가 보여야 한다.
+            run.log.emit(
+                "service_call",
+                node_id=node.id,
+                **OpOutcome(output={}, status=e.status or 0, mode_used=run.mode).event_data(call),
+                error_code=e.code or "unreachable",
+            )
+            if not (e.retryable and (e.status is None or e.status in codes)) or attempt >= attempts:
+                break
+            context.emit("log", level="warn", message=f"다시 부른다 ({attempt + 1}/{attempts})")
+            continue
+
+        run.log.emit("service_call", node_id=node.id, **outcome.event_data(call))
+        for variable, output in spec.output.items():
+            if output not in outcome.output:
+                raise EngineError(
+                    f"{spec.app_id}/{spec.operation}의 출력에 없는 것을 받는다: {output} "
+                    f"(있는 것: {', '.join(outcome.output) or '없음'})",
+                    node_id=node.id,
+                    code="service_output_missing",
+                )
+            run.variables[variable] = outcome.output[output]
+        return Go()
+
+    assert last is not None
+    raise TaskFailed(f"{spec.app_id}/{spec.operation}: {last}", node_id=node.id) from last
 
 
 def handle_file_list(context: Context, spec: FileList) -> Outcome:
@@ -461,6 +555,7 @@ __all__ = [
     "handle_rule",
     "handle_script",
     "handle_send",
+    "handle_service_call",
     "handle_service_task",
     "handle_subprocess",
 ]

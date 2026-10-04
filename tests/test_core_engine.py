@@ -18,6 +18,7 @@ from chaeksas.core.engine import DECISION_KEY, Engine, EngineError, Run, RunEnv,
 from chaeksas.core.files import Workspace
 from chaeksas.core.run_log import RunLog, sanitize
 from chaeksas.core.senders import RecordingSender
+from chaeksas.core.services import RecordingServiceCaller
 
 NOW = datetime(2026, 10, 4, 9, 30, tzinfo=UTC)
 
@@ -486,8 +487,24 @@ def dummy_inputs(process: Any) -> dict[str, Any]:
     return {decl.name: DUMMY_BY_TYPE.get(decl.type, "시험값") for decl in process.info.inputs}
 
 
+def example_service_outputs() -> dict[str, dict[str, Any]]:
+    """예제가 서비스 앱에서 **받으려는 필드**에 자리 값을 채워 둔다.
+
+    진짜 앱은 M5의 `samples/mock-*`다. 여기서는 「엔진이 어디까지 가는가」만 보므로, 각
+    `chk:serviceCall.output`이 가리키는 응답 필드를 그대로 돌려주는 시늉만 한다.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for path in sorted(EXAMPLE.glob("*.bpmn")):
+        for node in read_process(path.read_text(encoding="utf-8")).all_nodes():
+            call = node.prop("serviceCall")
+            if call is not None:
+                found = out.setdefault(f"{call.app_id}/{call.operation}", {})
+                found.update(dict.fromkeys(call.output.values(), "시험값"))
+    return out
+
+
 def example_env(tmp_path: Path) -> RunEnv:
-    """예제를 돌릴 바깥 세계 — 임시 출력 폴더, 시험용 보내기 어댑터, 예제의 DMN 전부."""
+    """예제를 돌릴 바깥 세계 — 임시 출력 폴더, 시험용 어댑터들, 예제의 DMN 전부."""
     outputs = tmp_path / "outputs"
     outputs.mkdir(exist_ok=True)
     decisions: dict[str, Any] = {}
@@ -497,6 +514,7 @@ def example_env(tmp_path: Path) -> RunEnv:
         workspace=Workspace(output_dir=outputs, readable=(outputs,)),
         sender=RecordingSender(),
         decisions=decisions,
+        services=RecordingServiceCaller(outputs=dict(example_service_outputs())),
     )
 
 
@@ -505,14 +523,16 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
 
     AI·서비스 앱(조각 3c)과 타이머·메시지·신호(조각 3d)가 아직 없어 **대부분 중간에 멈춘다.**
     중요한 것은 「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
-    **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 조각 3b: 끝 11·대기 2).
+    **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 3b: 끝 11·대기 2 →
+    3c 서비스 앱: 끝 14·대기 2).
     """
     known = {
-        "node_kind_unsupported",  # AI·서비스 앱(3c), 호출·받기·타이머·신호(3d), UI 태스크(M4)
+        "node_kind_unsupported",  # AI 태스크(3c 뒷부분), 호출·받기·타이머·신호(3d), UI 태스크(M4)
         "expr_error",  # ADR-0025가 식에서 뺀 도우미 (`파일목록`·`양식`류 — 예제 수정은 조각 3f)
         "many_starts",  # 메시지·타이머 시작 (조각 3d)
         "no_outgoing",  # 경계 이벤트가 붙은 노드 (조각 3d)
         "no_matching_flow",  # 자리 값으로는 어느 조건도 참이 아닐 수 있다
+        "loop_not_a_list",  # 자리 값이 문자열이라 반복할 목록이 아니다 (예제가 아니라 자리 값 탓)
     }
     env = example_env(tmp_path)
     reasons: dict[str, int] = {}
@@ -547,6 +567,8 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         "bx06_bulk_credit_check.bpmn",  # 규칙(DMN) + 반복 + xlsx 출력 + 메일
         "bx12_shipping_fee.bpmn",  # 규칙(DMN) 공유 BPM 프로세스
         "bx17_erp_po_entry.bpmn",
+        "bx22_offboarding_access.bpmn",  # 서비스 앱 + 반복
+        "bx36_legacy_migration.bpmn",  # 서비스 앱
         "fx02_business_rule.bpmn",  # 규칙(DMN)
         "fx03b_amount_branch.bpmn",
         "fx07_email.bpmn",  # 파일 출력 + 메일
@@ -555,6 +577,7 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         "fx12_daily_report.bpmn",
         "fx17_webhook.bpmn",  # 웹훅
         "fx18_parallel_loop.bpmn",
+        "fx20_external_adapter.bpmn",  # 서비스 앱 (외부 확장 어댑터)
     ], done
     assert waiting == ["bx33_access_request.bpmn", "fx19_manual_task_pc.bpmn"], waiting
 

@@ -27,6 +27,7 @@ from chaeksas.core.expr import Scope
 from chaeksas.core.files import Workspace
 from chaeksas.core.run_log import RunLog
 from chaeksas.core.senders import NoSender, Sender
+from chaeksas.core.services import NoServiceCaller, ServiceCaller
 
 if TYPE_CHECKING:  # `Context.engine`의 타입만 쓴다 — 실행 때는 들지 않는다 (순환 import).
     from chaeksas.core.engine import Engine
@@ -152,6 +153,8 @@ class RunEnv:
     sender: Sender = field(default_factory=NoSender)
     #: 같은 패키지의 DMN 결정 (`결정 id` → 결정). 규칙 태스크가 찾는다.
     decisions: Mapping[str, Decision] = field(default_factory=dict)
+    #: 서비스 앱 호출 (C11). 기본은 **부르지 않고 실패한다**. 키 값은 이 어댑터만 안다.
+    services: ServiceCaller = field(default_factory=NoServiceCaller)
 
 
 def utc_now() -> datetime:
@@ -181,10 +184,16 @@ class Run:
     #: 포함 분기가 실제로 띄운 가지 수 (`범위:합류` → 수). 포함 합류가 이만큼 기다린다.
     expected: dict[str, int] = field(default_factory=dict)
     mode: str = "autonomous"
+    #: 누가 돌리나 (C11 `caller.type`·C3 `run_started.executor`).
+    executor: str = "bot_ui"
+    #: 그 BPM 프로세스의 판 (C11 `caller.version`).
+    version: str = "0.0.0"
     started: datetime = field(default_factory=utc_now)
     error: EngineError | None = None
     #: 노드마다 몇 번째 수행인지 (C6 `node_instance`·C10 `business_key`).
     instances: dict[str, int] = field(default_factory=dict)
+    #: 노드마다 서비스 앱을 몇 번 불렀는지 (C11 멱등 키의 `call_seq`).
+    call_seqs: dict[str, int] = field(default_factory=dict)
     helpers: Mapping[str, Callable[..., Any]] = field(default_factory=dict)
 
     # ── 자주 쓰는 것 ──
