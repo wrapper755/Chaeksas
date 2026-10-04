@@ -25,8 +25,9 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
+from chaeksas.contracts.bpmn_ext import Case, read_process  # noqa: E402
 from chaeksas.studio.receiver import Receiver  # noqa: E402
+from chaeksas.studio.run_dialog import AUTONOMOUS, DETERMINISTIC  # noqa: E402
 from chaeksas.studio.runner import (  # noqa: E402
     NO_EXPECT,
     PASS,
@@ -303,16 +304,26 @@ def make_samples(root: Path) -> None:
     write_pdf(docs / "청구서.pdf", ["세금계산서", "합계 1,375,000원"])
 
 
+#: 같은 PDF를 예제마다 다시 만들지 않는다 (글꼴을 심는 데 시간이 든다).
+_PDFS: dict[tuple[str, ...], bytes] = {}
+
+
 def write_pdf(target: Path, lines: list[str]) -> None:
-    fpdf = pytest.importorskip("fpdf", reason="표본 PDF를 만들 fpdf2가 없다")
-    font = Path(__file__).resolve().parent.parent / "packages/qt/src/chaeksas/qt/fonts/Pretendard-Regular.otf"
-    pdf = fpdf.FPDF()
-    pdf.add_font("pretendard", "", str(font))
-    pdf.set_font("pretendard", size=12)
-    pdf.add_page()
-    for line in lines:
-        pdf.cell(0, 9, line, new_x="LMARGIN", new_y="NEXT")
-    pdf.output(str(target))
+    key = tuple(lines)
+    if key not in _PDFS:
+        fpdf = pytest.importorskip("fpdf", reason="표본 PDF를 만들 fpdf2가 없다")
+        font = (
+            Path(__file__).resolve().parent.parent
+            / "packages/qt/src/chaeksas/qt/fonts/Pretendard-Regular.otf"
+        )
+        pdf = fpdf.FPDF()
+        pdf.add_font("pretendard", "", str(font))
+        pdf.set_font("pretendard", size=12)
+        pdf.add_page()
+        for line in lines:
+            pdf.cell(0, 9, line, new_x="LMARGIN", new_y="NEXT")
+        _PDFS[key] = bytes(pdf.output())
+    target.write_bytes(_PDFS[key])
 
 
 # ─────────────────────────── 돌리기 ───────────────────────────
@@ -349,7 +360,15 @@ def drive(run: CaseRun, *, timeout_ms: int = 30_000) -> Outcome:
     return box[0]
 
 
-def run_all(tmp_path: Path, example: str, model: StubModel) -> list[tuple[Case, Outcome]]:
+def ai_tasks(example: str) -> list[str]:
+    """그 예제의 AI 태스크 노드 id — 재생이 있어야 하는 자리들."""
+    found = read_process((EXAMPLES / f"{example}.bpmn").read_text(encoding="utf-8"))
+    return [n.id for n in found.all_nodes() if n.prop("aiTask") is not None]
+
+
+def run_all(
+    tmp_path: Path, example: str, model: StubModel, *, mode: str = AUTONOMOUS
+) -> list[tuple[Case, Outcome]]:
     made, settings = studio(tmp_path, example, model)
     definition = made.entry_definition
     assert definition is not None
@@ -360,7 +379,9 @@ def run_all(tmp_path: Path, example: str, model: StubModel) -> list[tuple[Case, 
         for case in read_cases(made, definition):
             if case.manual:
                 continue  # 사람이 창을 보는 케이스 — 자동으로 돌릴 것이 아니다
-            plan = Plan(process=made, definition=definition, case=case, settings=replace(settings))
+            plan = Plan(
+                process=made, definition=definition, case=case, mode=mode, settings=replace(settings)
+            )
             out.append((case, drive(CaseRun(plan, receiver))))
     finally:
         receiver.stop()
@@ -402,3 +423,70 @@ def test_a_remaining_example_still_fails_for_the_written_reason(
     results = run_all(tmp_path, example, model)
     bad = [(c.name, o.verdict) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert bad, f"{example}: 이제 통과한다 — REMAINING에서 지운다 ({REMAINING[example]})"
+
+
+# ─────────────────────────── 결정 수행 (재생) ───────────────────────────
+
+#: AI 태스크가 있어도 **배우는 것이 없는** 예제와 그 이유.
+NO_LEARNING = {
+    "fx08_error_boundary": "AI 태스크가 실패하는 길만 시험한다 — 실패한 수행은 배우지 않는다",
+}
+
+#: AI 태스크가 있고 배울 거리도 있는 예제 — 재생을 볼 수 있다.
+WITH_AI = [one for one in GREEN if ai_tasks(one) and one not in NO_LEARNING]
+
+
+def test_some_of_the_bundle_has_ai_tasks() -> None:
+    """재생 시험이 **아무것도 안 돌리는** 일을 막는다."""
+    assert len(WITH_AI) >= 8, WITH_AI
+
+
+@pytest.mark.parametrize("example", WITH_AI)
+def test_the_same_cases_pass_again_as_a_replay(
+    app: Any, tmp_path: Path, model: StubModel, example: str
+) -> None:
+    """**자율 수행 → 결정 수행**. 로드맵 M3 인수 기준의 남은 반쪽이다.
+
+    자율 수행이 배운 것을 Studio가 패키지(`memory/specs.json`)에 적고, 결정 수행이 그것을
+    되밟는다 (ADR-0028). 보는 것 둘.
+
+    1. **판정이 같다** — 재생이 결과를 바꾸면 운영 실행이 개발 실행과 달라진다.
+    2. **정말 되밟았다** — `node_state: replayed`가 남는다 (C3 `replayed_tasks`가 센다).
+       이것을 안 보면 「재생이 안 되고 그냥 또 자율로 돌았다」를 통과로 읽는다.
+    """
+    made, settings = studio(tmp_path, example, model)
+    definition = made.entry_definition
+    assert definition is not None
+    replayed_at_least_once: list[str] = []
+    receiver = Receiver(port=0).start()
+    try:
+        for case in read_cases(made, definition):
+            if case.manual:
+                continue
+            first = drive(CaseRun(_plan(made, definition, case, settings, AUTONOMOUS), receiver))
+            again = drive(CaseRun(_plan(made, definition, case, settings, DETERMINISTIC), receiver))
+
+            assert again.verdict == first.verdict, f"{example}/{case.name}: {again.detail}"
+            # **배운 것이 있을 때만** 되밟을 거리가 있다 — 조건 때문에 AI 태스크를 지나지
+            # 않거나(BX-11 유찰·FX-09 빈 목록) 실패한 길(FX-08)은 배우는 것이 없다.
+            if first.learned:
+                assert _replayed(again) >= 1, f"{example}/{case.name}: 되밟은 AI 태스크가 없다"
+                replayed_at_least_once.append(f"{example}/{case.name}")
+    finally:
+        receiver.stop()
+    assert replayed_at_least_once, f"{example}: 되밟은 케이스가 하나도 없다 (배운 것이 없다)"
+
+
+def _plan(made: BpmProcess, definition: Any, case: Case, settings: Settings, mode: str) -> Plan:
+    return Plan(process=made, definition=definition, case=case, mode=mode, settings=replace(settings))
+
+
+def _replayed(outcome: Outcome) -> int:
+    """`node_state: replayed`가 몇 번 남았나 (C3)."""
+    if outcome.run is None:
+        return 0
+    return sum(
+        1
+        for event in outcome.run.log.events
+        if event.kind == "node_state" and event.data.get("state") == "replayed"
+    )

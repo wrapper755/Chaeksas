@@ -434,6 +434,7 @@ def _replayed(
         context.emit("log", level="info", message="재생 명세가 없다 — 모델을 부른다")
         return None
 
+    seen = _seen_by(context, spec)
     trace = replay_steps(remembered, tools=run.env.tools, variables=run.variables)
     for index, step in enumerate(trace.steps, start=1):
         note(index, "tool", step.tool)
@@ -441,7 +442,7 @@ def _replayed(
         # 모델을 한 번도 부르지 않는다. 도구가 **일을 하는** 태스크의 길이다.
         note(len(trace.steps) + 1, "finish", "")
         return AgentOutcome(results=check_results(spec, trace.answer), trace=trace, replayed=True)
-    return finish_from(spec, trace, llm=run.env.llm, on_step=note)
+    return finish_from(spec, trace, llm=run.env.llm, on_step=note, context=seen)
 
 
 def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:
