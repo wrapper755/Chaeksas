@@ -146,13 +146,15 @@
 | `입찰번호` | string | ✓ |  |  |
 | `마감시각` | string | ✓ |  | ISO 8601 시각 (예 `2026-10-15T18:00:00+09:00`) |
 | `품목` | list | ✓ |  |  |
+| `견적목록` | list |  | [] | 받은 견적 (루프가 쌓는다) |
+| `응찰사메일` | list |  | [] | 응찰사 회신 주소 (루프가 쌓는다) |
 
 **흐름 (노드)**
 
 | id | 이름 | 종류 | 핵심 속성 | 다음 |
 | --- | --- | --- | --- | --- |
 | `Start` | 공고 발행 | 시작 이벤트 | — | Task_Remaining |
-| `Task_Remaining` | 남은 시간 | 스크립트 | `남은시간 = 기간(지금(), 마감시각)` … | Recv_Quote |
+| `Task_Remaining` | 남은 시간 | 스크립트 | `남은시간 = 기간(지금(), 마감시각)` | Recv_Quote |
 | `Recv_Quote` | 견적 받기 | 메시지 받기 | 메시지 `bid_quote` · 상관 `입찰번호` · 받는 값 견적 | Task_Record |
 | `Task_Record` | 견적 기록 | 스크립트 | `견적목록 = 견적목록 + [견적]` … | Task_Remaining |
 | `Task_Close` | 접수 마감 | 스크립트 | `응찰수 = len(견적목록)` | Gw_Any |
@@ -509,7 +511,7 @@ API·계산·결재 — 서버.
 | --- | --- | --- | --- | --- |
 | `Start` | 견적 요청 | 시작 이벤트 | 메시지 `quote_request` | Task_Price |
 | `Task_Price` | 단가 조회 | 서비스 앱 태스크 | `erp`.`get_prices` · 입력 codes → 단가표 | Task_Weight |
-| `Task_Weight` | 무게·소계 | 스크립트 | `무게 = 총무게(품목, 단가표)` … | Call_Shipping |
+| `Task_Weight` | 무게·소계 | 스크립트 | `단가 = 표를사전(단가표, '코드')` … | Call_Shipping |
 | `Call_Shipping` | 배송비 (BX-12) | BPM 프로세스 호출 | `Proc_bx12_shipping_fee` · 입력 지역, 무게, 등급 · 출력 배송비 | Gw_Discount |
 | `Gw_Discount` | 할인 10% 초과? | 배타 게이트웨이 | — | Approve_Discount (`할인율 > 0.1`), Task_Total (기본) |
 | `Approve_Discount` | 할인 결재 | 결재 | 「견적 할인 승인」 · 보임 고객, 소계, 할인율, 배송비 · 칸 `승인`(bool*), `조정할인율`(number) · Center 결재함 | Task_Total |

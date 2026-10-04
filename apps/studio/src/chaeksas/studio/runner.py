@@ -21,14 +21,14 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from chaeksas.contracts.bpmn_ext import Case, CaseFile, duration_hours, matches
+from chaeksas.contracts.bpmn_ext import Case, CaseFile, CaseMessage, duration_hours, matches
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State, new_run_id
 from chaeksas.core.files import Workspace as FileSpace
 from chaeksas.core.llm import NoLlm, OpenAiCompatibleLlm
@@ -305,23 +305,35 @@ class CaseRun(QObject):
                 self.engine.answer(run, request_id, answer, answered_by="시험 케이스")
                 return True
 
-        if case is not None:
-            elapsed = (datetime.now(UTC) - self._started).total_seconds()
-            for index, message in enumerate(case.messages):
-                if index in self._sent or message.after_s > elapsed:
-                    continue
-                self._sent.add(index)
-                self.said.emit(f"[케이스] 메시지: {message.name}")
-                self.engine.deliver(
-                    run, message.name, correlation=message.correlation, payload=dict(message.payload)
-                )
-                return True
+        elapsed = (datetime.now(UTC) - self._started).total_seconds()
+        if self._put_message(run, lambda m: m.after_s <= elapsed):
+            return True
 
         due = run.next_due()
         if due is not None:
             # 시험 실행은 **기다리지 않고 시계를 민다** — 하루짜리 기한을 진짜로 기다릴 수 없다.
             self.said.emit(f"[케이스] 타이머를 앞당깁니다 ({due.isoformat(timespec='seconds')})")
             self.engine.tick(run, due)
+            return True
+
+        # 아무것도 못 밀었는데 보낼 메시지가 남았다 — **앞당겨 넣는다**. 타이머와 같은 규칙이다
+        # (진짜로 4초를 기다리면 시험이 느려지기만 한다). `after_s`는 **차례**를 정하는 값이고,
+        # 다른 것이 밀릴 수 있는 동안에는 그 차례가 지켜진다.
+        return self._put_message(run, lambda m: True, early=True)
+
+    def _put_message(self, run: Run, when: Callable[[CaseMessage], bool], *, early: bool = False) -> bool:
+        """아직 안 보낸 케이스 메시지 중 조건에 맞는 **첫 번째** 하나를 넣는다."""
+        case = self.plan.case
+        if case is None:
+            return False
+        for index, message in enumerate(case.messages):
+            if index in self._sent or not when(message):
+                continue
+            self._sent.add(index)
+            self.said.emit(f"[케이스] 메시지: {message.name}" + (" (앞당김)" if early else ""))
+            self.engine.deliver(
+                run, message.name, correlation=message.correlation, payload=dict(message.payload)
+            )
             return True
         return False
 

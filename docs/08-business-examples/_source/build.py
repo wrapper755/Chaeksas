@@ -147,6 +147,15 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
             if not node or node.kind not in ("appr", "manual"):
                 continue
             fields = {f["key"]: f for f in node.props["task"]["fields"]}
+            if not fields:
+                # **칸이 없어도 답은 비어 있지 않다** — 폼이 없는 결재의 답은 `decision`이다 (C6).
+                # 엔진의 `validate_answer`와 같은 규칙으로 본다.
+                if not c.manual and ans.get("decision") not in ("approve", "reject"):
+                    errs.append(f"{e.id}: 케이스 「{c.name}」 {nid}의 답이 없다 (`decision`: approve/reject)")
+                extra_keys = set(ans) - {"decision", "comment"}
+                if extra_keys:
+                    errs.append(f"{e.id}: 케이스 「{c.name}」 {nid}에 칸 {sorted(extra_keys)} 없음")
+                continue
             for k, v in ans.items():
                 f = fields.get(k)
                 if not f:

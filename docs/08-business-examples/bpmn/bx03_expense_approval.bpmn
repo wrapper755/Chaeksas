@@ -155,8 +155,7 @@
       <bpmn:dataOutputAssociation id="DOA_Data_Log">
         <bpmn:targetRef>Data_Log</bpmn:targetRef>
       </bpmn:dataOutputAssociation>
-      <bpmn:script>결과 = '사전반려' if 경로 == '사전반려' else ('자동승인' if 경로 == '자동승인' else ('기한초과반려' if 기한초과 else ('승인' if 승인여부 else '반려')))
-보고서본문 = 지출기록양식(신청번호, 결과, 결재의견)</bpmn:script>
+      <bpmn:script>결과 = '사전반려' if 경로 == '사전반려' else ('자동승인' if 경로 == '자동승인' else ('기한초과반려' if 기한초과 else ('승인' if 승인여부 else '반려')))</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Reply" name="신청자에게 회신">
       <bpmn:extensionElements>
@@ -218,7 +217,7 @@
   "path": "지출결재/{신청번호}.md",
   "format": "md",
   "store_as": "기록경로",
-  "template": "{보고서본문}"
+  "template": "# 지출 결재 {신청번호}\n\n- 결과: {결과}\n- 의견: {결재의견}\n"
 }</chk:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>

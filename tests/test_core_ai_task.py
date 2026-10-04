@@ -356,3 +356,19 @@ def test_tool_arguments_that_are_not_json_are_refused() -> None:
     }
     with pytest.raises(ValueError, match="도구 인자가 JSON이 아니다"):
         parse_reply(body)
+
+
+def test_a_model_without_a_key_sends_no_authorization_header() -> None:
+    """키가 필요 없는 로컬 모델(Ollama·vLLM)이 그 자리다.
+
+    `Bearer `(빈 값)는 **잘못된 헤더 값**이라 보내는 쪽 라이브러리가 요청 자체를 거부한다
+    (`LocalProtocolError`) — 인수 시험에서 모든 AI 태스크가 여기서 막혔다.
+    """
+    from chaeksas.core.llm import OpenAiCompatibleLlm
+
+    없는키 = OpenAiCompatibleLlm(base_url="http://127.0.0.1:1", api_key="", model="m")
+    assert "Authorization" not in 없는키.headers()
+
+    있는키 = OpenAiCompatibleLlm(base_url="http://127.0.0.1:1", api_key="sk-1", model="m")
+    assert 있는키.headers()["Authorization"] == "Bearer sk-1"
+    assert all(v.isascii() for v in 있는키.headers().values()), "헤더는 ASCII만 (CLAUDE.md §5)"

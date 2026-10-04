@@ -22,8 +22,9 @@ EXAMPLES.append(Example(
             ("재무팀메일", "string", False, "받는 사람", "finance@example.com")],
     nodes=[
         start("Start", "매월 1일", kind="timer", cycle="0 9 1 * *"),
-        script("Task_Collect", "자료 모으기",
-               "대상월 = 대상월 or 지난달()\n청구서파일 = 파일목록(청구서폴더 + '/' + 대상월 + '/*.pdf')\n대장파일 = 청구서폴더 + '/' + 대상월 + '/ledger_' + 대상월 + '.xlsx'"),
+        script("Task_Month", "대상월 정하기",
+               "대상월 = 대상월 or 지난달()\n대장파일 = 청구서폴더 + '/' + 대상월 + '/ledger_' + 대상월 + '.xlsx'"),
+        flist("Task_Collect", "청구서 모으기", "{청구서폴더}/{대상월}", "청구서파일", pattern="*.pdf", count_as="청구서수"),
         ai("Task_ReadLedger", "발주 대장 읽기",
            goal("`대장파일`은 이번 달 발주 대장(xlsx)이다. 한 줄이 발주 한 건이다.",
                 "모든 줄을 읽어 발주번호·공급사·공급가액·입고여부를 목록으로 돌려준다. 빈 줄과 합계 줄은 뺀다.",
@@ -37,26 +38,43 @@ EXAMPLES.append(Example(
                 "- `청구`: {공급사, 청구번호, 발주번호(string — 숫자로 바꾸지 않는다), 공급가액(int), 부가세(int), 합계(int)}"),
            "doc", {"청구": "dict"}, tools=["pdf_text_tool"],
            loop=dict(collection="청구서파일", item="청구서", result="청구", collect_into="청구목록")),
+        # 대사 규칙 6가지를 **그대로 적는다** — 판단은 사람이 읽고 감사할 수 있어야 한다 (AI가 아니라).
         script("Task_Reconcile", "대사",
-               "결과 = 대사규칙(발주목록, 청구목록)\n지급대상 = 결과.지급\n보류 = 결과.보류\n미청구 = 결과.미청구\n지급합계 = 합계(지급대상, '합계')\n보류건수 = len(보류)\n지급진행 = '지급 대상대로 진행'\n의견 = ''"),
+               "발주 = 표를사전(발주목록, '발주번호')\n"
+               "청구번호 = 열뽑기(청구목록, '발주번호')\n"
+               "중복 = [n for n in 청구번호 if len([x for x in 청구번호 if x == n]) > 1]\n"
+               "판정 = [dict(청구=c, 사유=("
+               "'미등록 발주' if c['발주번호'] not in 발주 else "
+               "('중복 청구' if c['발주번호'] in 중복 else "
+               "('금액 불일치' if c['공급가액'] != 발주[c['발주번호']]['공급가액'] else "
+               "('부가세 오류' if c['부가세'] != round(c['공급가액'] * 0.1) else "
+               "('미입고' if not 발주[c['발주번호']]['입고'] else '')))))) for c in 청구목록]\n"
+               "보류 = [x for x in 판정 if x['사유'] != '']\n"
+               "지급대상 = [x['청구'] for x in 판정 if x['사유'] == '']\n"
+               "미청구 = [o for o in 발주목록 if o['발주번호'] not in 청구번호]\n"
+               "지급합계 = 합계(지급대상, '합계')\n보류건수 = len(보류)\n지급진행 = '지급 대상대로 진행'\n의견 = ''"),
         xgw("Gw_HasHold", "보류 있음?"),
         appr("Approve_Hold", "보류 건 확인", "청구서 보류 확인",
              ["대상월", "보류", "지급대상", "지급합계"],
              [fld("지급진행", "처리", "choice", True, ["지급 대상대로 진행", "이번 달 전체 보류"]), fld("의견", "의견")],
              location="center", description="보류 사유를 확인하세요. 승인하면 지급 대상만 지급 요청합니다."),
-        script("Task_Report", "보고서 만들기", "지급대상 = [] if 지급진행 == '이번 달 전체 보류' else 지급대상\n지급합계 = 합계(지급대상, '합계')\n보고서본문 = 대사표양식(대상월, 지급대상, 보류, 미청구, 지급합계, 의견)"),
+        script("Task_Report", "보고서 만들기",
+               "지급대상 = [] if 지급진행 == '이번 달 전체 보류' else 지급대상\n지급합계 = 합계(지급대상, '합계')"),
         mail("Task_Mail", "재무팀에 보내기", ["{재무팀메일}"], "[{대상월}] 청구서 대사 결과 — 지급 {지급합계}원, 보류 {보류건수}건",
              "첨부한 대사표를 확인해 주세요.", attachments=["대사표경로"], store_as="발송결과"),
         script("Task_MailFailed", "메일 실패 기록", "발송오류 = error_message"),
         end("End", "끝"),
     ],
-    flows=[f("Start", "Task_Collect"), f("Task_Collect", "Task_ReadLedger"), f("Task_ReadLedger", "Task_ReadInvoice"),
+    flows=[f("Start", "Task_Month"), f("Task_Month", "Task_Collect"), f("Task_Collect", "Task_ReadLedger"), f("Task_ReadLedger", "Task_ReadInvoice"),
            f("Task_ReadInvoice", "Task_Reconcile"), f("Task_Reconcile", "Gw_HasHold"),
            f("Gw_HasHold", "Approve_Hold", "보류건수 > 0", "있음"), f("Gw_HasHold", "Task_Report", default=True, name="없음"),
            f("Approve_Hold", "Task_Report"), f("Task_Report", "Task_Mail"), f("Task_Mail", "End"),
            f("Bnd_MailFail", "Task_MailFailed"), f("Task_MailFailed", "End")],
     boundaries=[bnd("Bnd_MailFail", "Task_Mail", "error", "보내기 실패", error="SEND_FAILED")],
-    data=[out("Data_Table", "대사표", "Task_Report", "대사표/대사표_{대상월}.md", "md", template="{보고서본문}", store_as="대사표경로")],
+    data=[out("Data_Table", "대사표", "Task_Report", "대사표/대사표_{대상월}.md", "md",
+              template="# 청구서 대사 — {대상월}\n\n- 지급 합계: {지급합계}원\n- 지급 대상: {지급대상}\n"
+                       "- 보류 {보류건수}건: {보류}\n- 미청구 발주: {미청구}\n- 의견: {의견}\n",
+              store_as="대사표경로")],
     variables=[("발주목록", "list", "Task_ReadLedger", "발주 대장의 줄"), ("청구목록", "list", "Task_ReadInvoice (반복)", "청구서 판독 결과"),
                ("지급대상", "list", "Task_Reconcile", "문제없는 청구"), ("보류", "list", "Task_Reconcile", "{청구, 사유}"),
                ("지급합계", "int", "Task_Reconcile", "원")],
@@ -94,7 +112,7 @@ EXAMPLES.append(Example(
 """,
     why_location="외부 API와 메일뿐이다. 결재를 기다리는 동안 서버는 상태를 저장한다.",
     inputs=[("상한", "dict", False, "통화별 상한. 비우면 운영 기본값(스크립트)"), ("하한", "dict", False, "통화별 하한"),
-            ("담당자", "string", False, "받는 사람 메일")],
+            ("담당자", "string", False, "받는 사람 메일", "finance@example.com")],
     nodes=[
         start("Start", "평일 09:00", kind="timer", cycle="0 9 * * 1-5"),
         ai("Task_FetchFx", "환율 조회",
@@ -103,11 +121,13 @@ EXAMPLES.append(Example(
            "api", {"환율": "dict", "기준일": "date"}, tools=["http_request_tool"],
            params={"조회주소": "https://api.frankfurter.dev/v1/latest?base=USD&symbols=KRW,EUR,JPY"}, limits={"max_steps": 6}),
         script("Task_Check", "점검",
-               "상한 = 상한 or {'KRW': 1400}\n하한 = 하한 or {'KRW': 1200}\n담당자 = 담당자 or 설정('재무담당자메일')\n경고 = 범위벗어남(환율, 상한, 하한)\n경고수 = len(경고)"),
+               "상한 = 상한 or {'KRW': 1400}\n하한 = 하한 or {'KRW': 1200}\n"
+               "경고 = 범위벗어남(환율, 상한, 하한)\n경고수 = len(경고)"),
         xgw("Gw_Warn", "경고 있음?"),
         appr("Approve_Warn", "환율 경고 확인", "환율 경고 확인", ["기준일", "환율", "경고", "상한", "하한"],
              [fld("조치필요", "조치가 필요합니까?", "bool", True), fld("메모", "메모")], location="center"),
-        script("Task_Report", "보고서 만들기", "보고서본문 = 아침보고양식(기준일, 환율, 경고, 조치필요 if 경고수 > 0 else None)"),
+        script("Task_Report", "보고서 만들기",
+               "조치 = ('필요' if 조치필요 else '불필요') if 경고수 > 0 else '해당 없음'"),
         mail("Task_Send", "담당자에게 보내기", ["{담당자}"], "[{기준일}] 환율 점검 — 경고 {경고수}건", "보고서를 첨부합니다.",
              attachments=["보고서경로"], store_as="발송결과"),
         script("Task_SendFailed", "메일 실패 기록", "발송오류 = error_message"),
@@ -118,7 +138,9 @@ EXAMPLES.append(Example(
            f("Approve_Warn", "Task_Report"), f("Task_Report", "Task_Send"), f("Task_Send", "End"),
            f("Bnd_SendFail", "Task_SendFailed"), f("Task_SendFailed", "End")],
     boundaries=[bnd("Bnd_SendFail", "Task_Send", "error", "보내기 실패", error="SEND_FAILED")],
-    data=[out("Data_Report", "아침보고", "Task_Report", "아침보고/아침보고_{기준일}.md", template="{보고서본문}", store_as="보고서경로")],
+    data=[out("Data_Report", "아침보고", "Task_Report", "아침보고/아침보고_{기준일}.md",
+              template="# 아침 환율 점검 — {기준일}\n\n- 환율: {환율}\n- 경고 {경고수}건: {경고}\n- 조치: {조치}\n",
+              store_as="보고서경로")],
     variables=[("환율", "dict", "Task_FetchFx", ""), ("경고", "list", "Task_Check", "{통화, 값, 기준, 방향}"),
                ("경고수", "int", "Task_Check", ""), ("보고서경로", "string", "Data_Report", "첨부 파일")],
     cases=[
@@ -131,6 +153,8 @@ EXAMPLES.append(Example(
     features=["API AI 태스크 + 업무 파라미터(재생 때 `$param`)", "조건부 결재", "파일 출력 → 메일 첨부", "오류 경계로 메일 실패를 흡수", "평일 타이머"],
     lessons=["임계값은 처음에 숫자 하나였다가 통화별 dict로 바뀌었다 — 처음부터 dict로.",
              "운영 임계값은 스크립트 기본값에, 케이스는 입력으로만 덮어쓴다 (업무 파라미터는 케이스가 못 바꾼다).",
+             "받는 사람 주소는 「설정에서 읽어 오기」가 아니라 **기본값 있는 입력**이다 (ADR-0025 — 식은 순수 함수만).",
+             "보고서 모양은 스크립트가 글자를 이어 붙이지 않고 **파일 출력 템플릿**에 둔다 (같은 ADR).",
              "주소를 목표 문장에 쓰면 재생이 그 문장에 묶인다 — 업무 파라미터로.",
              "「성공했지만 결과가 틀린」 실수 4가지: 경로에 `outputs/` 두 번, 빈 템플릿, `store_as` 없음, 받는 사람 변수 없음 (C14 §파일 출력).",
              "작은 태스크는 재생해도 시간이 줄지 않았다 (LLM 7회→1회, 시간 같음) — 재생의 이득은 큰 태스크에서."],
@@ -163,7 +187,7 @@ EXAMPLES.append(Example(
         end("End_Remind", "리마인드 끝"),
         script("Task_Expired", "기한 초과", "기한초과 = True"),
         script("Task_Result", "결과 정리",
-               "결과 = '사전반려' if 경로 == '사전반려' else ('자동승인' if 경로 == '자동승인' else ('기한초과반려' if 기한초과 else ('승인' if 승인여부 else '반려')))\n보고서본문 = 지출기록양식(신청번호, 결과, 결재의견)"),
+               "결과 = '사전반려' if 경로 == '사전반려' else ('자동승인' if 경로 == '자동승인' else ('기한초과반려' if 기한초과 else ('승인' if 승인여부 else '반려')))"),
         hook("Task_Reply", "신청자에게 회신", "{회신주소}", body="fields:[신청번호, 결과, 결재의견]", store_as="회신결과"),
         script("Task_ReplyFailed", "회신 실패 기록", "회신오류 = error_message"),
         end("End"),
@@ -176,7 +200,8 @@ EXAMPLES.append(Example(
     boundaries=[bnd("Bnd_Remind", "Approve_Expense", "timer", "리마인드 기한", interrupting=False, duration="리마인드기한"),
                 bnd("Bnd_Deadline", "Approve_Expense", "timer", "마감 기한", duration="마감기한"),
                 bnd("Bnd_ReplyFail", "Task_Reply", "error", "회신 실패", error="SEND_FAILED")],
-    data=[out("Data_Log", "처리 기록", "Task_Result", "지출결재/{신청번호}.md", template="{보고서본문}", store_as="기록경로")],
+    data=[out("Data_Log", "처리 기록", "Task_Result", "지출결재/{신청번호}.md",
+              template="# 지출 결재 {신청번호}\n\n- 결과: {결과}\n- 의견: {결재의견}\n", store_as="기록경로")],
     variables=[("경로", "string", "Task_Precheck", "사전반려/자동승인/결재"), ("기한초과", "bool", "Task_Expired", ""),
                ("결과", "string", "Task_Result", "사전반려/자동승인/승인/반려/기한초과반려")],
     cases=[
@@ -222,7 +247,7 @@ EXAMPLES.append(Example(
            [dict(key="row.next", action="fill", value="{행}"), dict(key="menu.save", action="click")],
            loop=dict(collection="거래내역", item="행", result="입력결과", collect_into="입력결과목록")),
         ui("Task_ReadTotal", "시트 합계 읽기", "accounting.taxbook.sheet", [dict(key="cell.total", action="read", result="시트합계")]),
-        script("Task_Verify", "발행 검증", "검증통과 = 시트합계 == 포털합계\n검증메모 = '' if 검증통과 else '합계가 다름'\n보고서본문 = 발행보고양식(대상월, 건수, 포털합계, 시트합계, 검증통과)"),
+        script("Task_Verify", "발행 검증", "검증통과 = 시트합계 == 포털합계\n검증메모 = '' if 검증통과 else '합계가 다름'"),
         mail("Task_Notify", "담당자 통지", ["{담당자메일}"], "[{대상월}] 세금계산서 발행 {건수}건 — 검증 {검증통과}", "보고서를 첨부합니다.",
              attachments=["보고서경로"], store_as="통지결과"),
         end("End_Skip", "발행 안 함"),
@@ -231,7 +256,10 @@ EXAMPLES.append(Example(
     flows=[f("Start", "Task_Prepare"), f("Task_Prepare", "Task_ReadPortal"), f("Task_ReadPortal", "Task_Sum"), f("Task_Sum", "Gw_Issue"),
            f("Gw_Issue", "Task_EnterBook", "발행대상", "발행"), f("Gw_Issue", "End_Skip", default=True, name="대상 없음"),
            f("Task_EnterBook", "Task_ReadTotal"), f("Task_ReadTotal", "Task_Verify"), f("Task_Verify", "Task_Notify"), f("Task_Notify", "End")],
-    data=[out("Data_Report", "발행 보고", "Task_Verify", "세금계산서/{대상월}_발행보고.md", template="{보고서본문}", store_as="보고서경로")],
+    data=[out("Data_Report", "발행 보고", "Task_Verify", "세금계산서/{대상월}_발행보고.md",
+              template="# 세금계산서 발행 보고 — {대상월}\n\n- 건수: {건수}\n- 포털 합계: {포털합계}\n"
+                       "- 회계 시트 합계: {시트합계}\n- 검증: {검증통과} {검증메모}\n",
+              store_as="보고서경로")],
     service_keys={"ui-automation": "finance-tax"}, extensions=[{"id": "ui-automation", "version": ">=0.4,<0.5"}],
     defaults={"forbidden_actions": ["포털에서 수정·삭제 링크를 누르지 않는다", "발행대장의 머리글과 합계 수식 칸을 고치지 않는다"],
               "confirm_triggers": ["포털 로그인 화면이 나타남"], "web": {"profile": "supplier-portal"}},
@@ -386,7 +414,11 @@ EXAMPLES.append(Example(
         xgw("Gw_Violation", "위반 있음?"),
         appr("Approve_Explain", "팀장 소명 확인", "법인카드 정책 위반 소명", ["위반"],
              [fld("인정", "업무상 사용으로 인정합니까?", "bool", True), fld("사유", "사유", required=True)], location="center"),
-        script("Task_Build", "전표 자료 만들기", "전표 = 전표자료(내역, 분류목록, 위반, 인정)"),
+        script("Task_Build", "전표 자료 만들기",
+               "계정 = 표를사전(분류목록, '승인번호')\n"
+               "위반번호 = 열뽑기(위반, '승인번호')\n"
+               "전표 = [dict(건, 계정과목=계정[건['승인번호']]['계정과목'], "
+               "소명=('인정' if 인정 else '미인정') if 건['승인번호'] in 위반번호 else '') for 건 in 내역]"),
         end("End"),
     ],
     flows=[f("Start", "Task_File"), f("Task_File", "Task_Parse"), f("Task_Parse", "Task_Account"), f("Task_Account", "Task_Policy"),

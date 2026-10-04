@@ -69,10 +69,14 @@ EXAMPLES.append(Example(
 입찰 공고를 낸 뒤 공급사 견적을 마감 시각까지 받는다. 견적이 올 때마다 기록하고, 마감 시각이 되면 접수를 닫는다. 공고가 취소되면(구매 시스템이 이 입찰번호로 「입찰 취소」 메시지를 보냄) 접수를 멈추고 응찰사에 취소를 알린다. 마감 후 AI가 견적을 비교표로 정리하고 구매팀이 낙찰사를 고른다.
 """,
     why_location="며칠짜리 대기와 외부 메시지 수신 — 서버.",
-    inputs=[("입찰번호", "string", True, ""), ("마감시각", "string", True, "ISO 8601 시각 (예 `2026-10-15T18:00:00+09:00`)"), ("품목", "list", True, "")],
+    inputs=[("입찰번호", "string", True, ""), ("마감시각", "string", True, "ISO 8601 시각 (예 `2026-10-15T18:00:00+09:00`)"), ("품목", "list", True, ""),
+            # 루프가 쌓아 가는 변수는 **입력으로 선언해 기본값을 준다** — 스크립트가 없는 변수를
+            # 읽으려 하면 식 오류다 (ADR-0025: 읽기 전에 있어야 한다).
+            ("견적목록", "list", False, "받은 견적 (루프가 쌓는다)", []),
+            ("응찰사메일", "list", False, "응찰사 회신 주소 (루프가 쌓는다)", [])],
     nodes=[
         start("Start", "공고 발행"),
-        script("Task_Remaining", "남은 시간", "남은시간 = 기간(지금(), 마감시각)\n견적목록 = 견적목록 or []\n응찰사메일 = 응찰사메일 or []"),
+        script("Task_Remaining", "남은 시간", "남은시간 = 기간(지금(), 마감시각)"),
         recv("Recv_Quote", "견적 받기", "bid_quote", "입찰번호", payload=["견적"]),
         script("Task_Record", "견적 기록", "견적목록 = 견적목록 + [견적]\n응찰사메일 = 응찰사메일 + [견적.회신메일]\n응찰수 = len(견적목록)"),
         script("Task_Close", "접수 마감", "응찰수 = len(견적목록)"),
@@ -247,7 +251,11 @@ EXAMPLES.append(Example(
     nodes=[
         start("Start", "견적 요청", kind="message", message="quote_request"),
         svc("Task_Price", "단가 조회", "erp", "get_prices", {"codes": "품목"}, {"단가표": "prices"}),
-        script("Task_Weight", "무게·소계", "무게 = 총무게(품목, 단가표)\n소계 = 소계(품목, 단가표)\n할인율 = 할인율 or 0\n승인 = True\n조정할인율 = None"),
+        script("Task_Weight", "무게·소계",
+               "단가 = 표를사전(단가표, '코드')\n"
+               "소계 = sum(x['수량'] * 단가[x['코드']]['단가'] for x in 품목)\n"
+               "무게 = round(sum(x['수량'] * 단가[x['코드']]['무게'] for x in 품목), 2)\n"
+               "할인율 = 할인율 or 0\n승인 = True\n조정할인율 = None"),
         call("Call_Shipping", "배송비 (BX-12)", "Proc_bx12_shipping_fee", {"지역": "고객.지역", "무게": "무게", "등급": "고객.등급"}, {"배송비": "배송비"}),
         xgw("Gw_Discount", "할인 10% 초과?"),
         appr("Approve_Discount", "할인 결재", "견적 할인 승인", ["고객", "소계", "할인율", "배송비"],

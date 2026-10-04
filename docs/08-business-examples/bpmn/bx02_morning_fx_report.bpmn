@@ -31,7 +31,8 @@
       "name": "담당자",
       "type": "string",
       "required": false,
-      "description": "받는 사람 메일"
+      "description": "받는 사람 메일",
+      "default": "finance@example.com"
     }
   ]
 }</chk:process>
@@ -70,7 +71,6 @@
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>상한 = 상한 or {'KRW': 1400}
 하한 = 하한 or {'KRW': 1200}
-담당자 = 담당자 or 설정('재무담당자메일')
 경고 = 범위벗어남(환율, 상한, 하한)
 경고수 = len(경고)</bpmn:script>
     </bpmn:scriptTask>
@@ -118,7 +118,7 @@
       <bpmn:dataOutputAssociation id="DOA_Data_Report">
         <bpmn:targetRef>Data_Report</bpmn:targetRef>
       </bpmn:dataOutputAssociation>
-      <bpmn:script>보고서본문 = 아침보고양식(기준일, 환율, 경고, 조치필요 if 경고수 &gt; 0 else None)</bpmn:script>
+      <bpmn:script>조치 = ('필요' if 조치필요 else '불필요') if 경고수 &gt; 0 else '해당 없음'</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Send" name="담당자에게 보내기">
       <bpmn:extensionElements>
@@ -169,7 +169,7 @@
   "path": "아침보고/아침보고_{기준일}.md",
   "format": "md",
   "store_as": "보고서경로",
-  "template": "{보고서본문}"
+  "template": "# 아침 환율 점검 — {기준일}\n\n- 환율: {환율}\n- 경고 {경고수}건: {경고}\n- 조치: {조치}\n"
 }</chk:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>

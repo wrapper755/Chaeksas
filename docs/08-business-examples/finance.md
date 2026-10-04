@@ -52,11 +52,12 @@
 
 | id | 이름 | 종류 | 핵심 속성 | 다음 |
 | --- | --- | --- | --- | --- |
-| `Start` | 매월 1일 | 시작 이벤트 | 타이머 `0 9 1 * *` | Task_Collect |
-| `Task_Collect` | 자료 모으기 | 스크립트 | `대상월 = 대상월 or 지난달()` … | Task_ReadLedger |
+| `Start` | 매월 1일 | 시작 이벤트 | 타이머 `0 9 1 * *` | Task_Month |
+| `Task_Month` | 대상월 정하기 | 스크립트 | `대상월 = 대상월 or 지난달()` … | Task_Collect |
+| `Task_Collect` | 청구서 모으기 | 파일 목록 | `{청구서폴더}/{대상월}` · 무늬 `*.pdf` → `청구서파일` · 개수 `청구서수` | Task_ReadLedger |
 | `Task_ReadLedger` | 발주 대장 읽기 | AI 태스크 | doc · 결과 `발주목록`:list · 도구 excel_parser_tool | Task_ReadInvoice |
 | `Task_ReadInvoice` | 청구서 판독 | AI 태스크 | doc · 결과 `청구`:dict · 도구 pdf_text_tool · 반복(차례) `청구서파일`→`청구목록` | Task_Reconcile |
-| `Task_Reconcile` | 대사 | 스크립트 | `결과 = 대사규칙(발주목록, 청구목록)` … | Gw_HasHold |
+| `Task_Reconcile` | 대사 | 스크립트 | `발주 = 표를사전(발주목록, '발주번호')` … | Gw_HasHold |
 | `Gw_HasHold` | 보류 있음? | 배타 게이트웨이 | — | Approve_Hold (`보류건수 > 0`), Task_Report (기본) |
 | `Approve_Hold` | 보류 건 확인 | 결재 | 「청구서 보류 확인」 · 보임 대상월, 보류, 지급대상, 지급합계 · 칸 `지급진행`(choice*), `의견`(text) · Center 결재함 | Task_Report |
 | `Task_Report` | 보고서 만들기 | 스크립트 | `지급대상 = [] if 지급진행 == '이번 달 전체 보류' else 지급대상` … | Task_Mail |
@@ -172,7 +173,7 @@
 | --- | --- | --- | --- | --- |
 | `상한` | dict |  |  | 통화별 상한. 비우면 운영 기본값(스크립트) |
 | `하한` | dict |  |  | 통화별 하한 |
-| `담당자` | string |  |  | 받는 사람 메일 |
+| `담당자` | string |  | "finance@example.com" | 받는 사람 메일 |
 
 **흐름 (노드)**
 
@@ -183,7 +184,7 @@
 | `Task_Check` | 점검 | 스크립트 | `상한 = 상한 or {'KRW': 1400}` … | Gw_Warn |
 | `Gw_Warn` | 경고 있음? | 배타 게이트웨이 | — | Approve_Warn (`경고수 > 0`), Task_Report (기본) |
 | `Approve_Warn` | 환율 경고 확인 | 결재 | 「환율 경고 확인」 · 보임 기준일, 환율, 경고, 상한, 하한 · 칸 `조치필요`(bool*), `메모`(text) · Center 결재함 | Task_Report |
-| `Task_Report` | 보고서 만들기 | 스크립트 | `보고서본문 = 아침보고양식(기준일, 환율, 경고, 조치필요 if 경고수 > 0 else None)` | Task_Send |
+| `Task_Report` | 보고서 만들기 | 스크립트 | `조치 = ('필요' if 조치필요 else '불필요') if 경고수 > 0 else '해당 없음'` | Task_Send |
 | `Task_Send` | 담당자에게 보내기 | 메일 보내기 | 받는 사람 {담당자} · 제목 「[{기준일}] 환율 점검 — 경고 {경고수}건」 · 첨부 보고서경로 | End |
 | `Task_SendFailed` | 메일 실패 기록 | 스크립트 | `발송오류 = error_message` | End |
 | `End` | 끝 | 끝 이벤트 | — |  |
@@ -241,6 +242,8 @@
 
 - 임계값은 처음에 숫자 하나였다가 통화별 dict로 바뀌었다 — 처음부터 dict로.
 - 운영 임계값은 스크립트 기본값에, 케이스는 입력으로만 덮어쓴다 (업무 파라미터는 케이스가 못 바꾼다).
+- 받는 사람 주소는 「설정에서 읽어 오기」가 아니라 **기본값 있는 입력**이다 (ADR-0025 — 식은 순수 함수만).
+- 보고서 모양은 스크립트가 글자를 이어 붙이지 않고 **파일 출력 템플릿**에 둔다 (같은 ADR).
 - 주소를 목표 문장에 쓰면 재생이 그 문장에 묶인다 — 업무 파라미터로.
 - 「성공했지만 결과가 틀린」 실수 4가지: 경로에 `outputs/` 두 번, 빈 템플릿, `store_as` 없음, 받는 사람 변수 없음 (C14 §파일 출력).
 - 작은 태스크는 재생해도 시간이 줄지 않았다 (LLM 7회→1회, 시간 같음) — 재생의 이득은 큰 태스크에서.
@@ -657,7 +660,7 @@
 | `Task_Collect` | 위반 모으기 | 스크립트 | `위반 = [dict(건, 사유=s) for 건, s in zip(내역, 사유목록) if len(s) > 0]` … | Gw_Violation |
 | `Gw_Violation` | 위반 있음? | 배타 게이트웨이 | — | Approve_Explain (`위반건수 > 0`), Task_Build (기본) |
 | `Approve_Explain` | 팀장 소명 확인 | 결재 | 「법인카드 정책 위반 소명」 · 보임 위반 · 칸 `인정`(bool*), `사유`(text*) · Center 결재함 | Task_Build |
-| `Task_Build` | 전표 자료 만들기 | 스크립트 | `전표 = 전표자료(내역, 분류목록, 위반, 인정)` | End |
+| `Task_Build` | 전표 자료 만들기 | 스크립트 | `계정 = 표를사전(분류목록, '승인번호')` … | End |
 | `End` | 끝 | 끝 이벤트 | — |  |
 | `Data_Upload` | 전표 업로드 파일 | 파일 출력 | `카드/{오늘}_전표.xlsx` (xlsx) → `전표경로` · `Task_Build`가 끝날 때 | — |
 

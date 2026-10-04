@@ -146,6 +146,18 @@ class OpenAiCompatibleLlm:
     extra: Mapping[str, Any] = field(default_factory=dict)
     client: Any | None = None  # httpx.Client
 
+    def headers(self) -> dict[str, str]:
+        """보낼 헤더. **키가 없으면 `Authorization`을 아예 빼고 보낸다.**
+
+        `Bearer `(빈 값)는 **잘못된 헤더 값**이라 보내는 쪽 라이브러리가 요청 자체를 거부한다
+        (`LocalProtocolError`). 키가 필요 없는 로컬 모델(Ollama·vLLM)이 그 자리다 — 인수
+        시험에서 실제로 모든 AI 태스크가 여기서 막혔다. 키는 ASCII만 (CLAUDE.md §5).
+        """
+        found = {"Content-Type": "application/json"}
+        if self.api_key:
+            found["Authorization"] = f"Bearer {self.api_key}"
+        return found
+
     def ask(
         self,
         messages: Sequence[Mapping[str, Any]],
@@ -169,8 +181,7 @@ class OpenAiCompatibleLlm:
             response = client.post(
                 f"{self.base_url.rstrip('/')}/v1/chat/completions",
                 json=payload,
-                # 키는 ASCII만 (CLAUDE.md §5 — 헤더에 한글을 넣지 않는다).
-                headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                headers=self.headers(),
             )
         except httpx.HTTPError as e:
             raise LlmError(f"모델에 닿지 못했다 ({type(e).__name__})", retryable=True) from e

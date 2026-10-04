@@ -10,7 +10,9 @@
         "확인됨": true
       },
       "approvals": {
-        "Manual_Paper": {}
+        "Manual_Paper": {
+          "decision": "approve"
+        }
       },
       "manual": false
     }

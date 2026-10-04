@@ -77,8 +77,9 @@
     <bpmn:scriptTask id="Task_Weight" name="무게·소계" scriptFormat="chk-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
-      <bpmn:script>무게 = 총무게(품목, 단가표)
-소계 = 소계(품목, 단가표)
+      <bpmn:script>단가 = 표를사전(단가표, '코드')
+소계 = sum(x['수량'] * 단가[x['코드']]['단가'] for x in 품목)
+무게 = round(sum(x['수량'] * 단가[x['코드']]['무게'] for x in 품목), 2)
 할인율 = 할인율 or 0
 승인 = True
 조정할인율 = None</bpmn:script>
