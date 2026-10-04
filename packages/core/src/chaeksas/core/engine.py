@@ -558,6 +558,22 @@ class Engine:
         )
         return run.state
 
+    def cancel(self, run: Run, *, reason: str = "") -> State:
+        """실행을 **취소로 끝낸다** (사람이 중지했다 — BUI-04 「중지」, C3 `cancelled`).
+
+        실패가 아니다 — `run.error`를 두지 않는다. 쥐고 있던 결재 요청·기다림은 걷는다
+        (아무도 답할 사람이 없어진다).
+        """
+        if run.finished:
+            return run.state
+        if reason:
+            run.log.emit("log", level="warn", message=reason)
+        run.pendings.clear()
+        run.waits.clear()
+        for child in run.children.values():
+            self.cancel(child)
+        return self._finish(run, "cancelled")
+
     def _fail(self, run: Run, error: EngineError) -> State:
         run.error = error
         if error.node_id and any(n.id == error.node_id for n in run.process.all_nodes()):

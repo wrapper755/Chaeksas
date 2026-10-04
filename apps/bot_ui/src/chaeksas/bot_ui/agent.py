@@ -20,8 +20,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from chaeksas.bot_ui import machine
+from chaeksas.bot_ui.bots import find
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials
+from chaeksas.bot_ui.runner import Launcher, Running
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
 from chaeksas.contracts.bot_ui import (
@@ -105,6 +107,10 @@ class Agent:
     jobs_waiting: list[JobDispatch] = field(default_factory=list)
     #: 실행 기록 큐 (C3). 처음 쓸 때 만든다 — 설정이 가리키는 폴더를 그때 읽는다.
     _runs: RunQueue | None = None
+    #: 실행기를 띄우는 쪽 (ADR-0023). 마찬가지로 처음 쓸 때 만든다.
+    _launcher: Launcher | None = None
+    #: 종료 중이다 — **새 Bot을 띄우지 않는다** (BUI-01 종료 순서 「1. 새 요청 막기」).
+    stopping: bool = False
 
     @property
     def bot_ui_id(self) -> str | None:
@@ -234,6 +240,8 @@ class Agent:
         """
         for supervisor in self.supervisors.values():
             supervisor.tick()
+        # 돌고 있는 Bot을 들여다보고, 자리가 비면 대기열에서 다음을 올린다 (조각 4a).
+        self.pump()
 
         if not self.registered:
             try:
@@ -366,6 +374,81 @@ class Agent:
         """실행이 끝났다 (결과는 C3 `run_finished`로 따로 보낸다)."""
         self.current_run = None
         self.store.save()
+
+    # ── Bot 실행 (조각 4a — ADR-0023·0031) ──
+
+    def runner(self) -> Launcher:
+        """실행기를 띄우는 쪽. **한 번에 하나** (ADR-0014)."""
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        if self._launcher is None:
+            # 읽기 허용 폴더와 모델 주소는 **아직 설정에 없다** (BUI-03을 고쳐야 한다 — 다음
+            # 조각). 그때까지 파일 읽기와 AI 태스크는 **조용히 넘어가지 않고 실패한다**.
+            self._launcher = Launcher(data_dir=data_dir())
+        return self._launcher
+
+    def pump(self) -> None:
+        """한 주기 — 돌고 있는 것을 들여다보고, 자리가 비면 대기열에서 다음을 올린다.
+
+        **화면도 하트비트도 이것을 부른다.** 실행기를 기다리지 않으므로 어느 쪽에서 불러도
+        멈추지 않는다 (ADR-0031 — 상태는 기록 파일에서 읽는다).
+        """
+        launcher = self.runner()
+        done = launcher.tick()
+        if done is not None:
+            self._finished(done)
+        if launcher.running is not None:
+            self.current_run = launcher.running.current()
+            return
+        self._start_next()
+
+    def _finished(self, done: Running) -> None:
+        """끝난 실행 하나를 거둔다 — Center 작업이면 결과를 ack한다 (C4)."""
+        log.info("Bot %s 끝남 (%s)", done.bot.id, done.finished or "unknown")
+        if done.job_id:
+            result = "finished" if done.finished == "success" else (
+                "cancelled" if done.finished == "cancelled" else "failed"
+            )
+            self._ack_id(done.job_id, result, run_id=done.run_id)
+        self.release_slot()
+
+    def _start_next(self) -> None:
+        """대기열에서 다음을 올린다. **없는 Bot은 건너뛰지 않고 거절한다** (C4).
+
+        종료 중에는 아무것도 띄우지 않는다 — 종료 순서의 첫 걸음이 「새 요청 막기」다.
+        """
+        if self.stopping or self.disabled or self.current_run is not None:
+            return
+        item = self.next_in_queue()
+        if item is None:
+            return
+
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        bot = find(data_dir(), item.bpm_process_id, item.version)
+        if bot is None:
+            # 설치되지 않은 Bot이다 — 조용히 두면 대기열이 영원히 막힌다 (C4 `rejected`).
+            self.store.state.queue.remove(item)
+            self.store.state.inputs.pop(item.queue_id, None)
+            if item.job_id:
+                self._ack_id(item.job_id, "rejected", reason="bot_not_installed")
+            self.store.save()
+            log.warning("설치되지 않은 Bot이다: %s", item.bpm_process_id)
+            return
+
+        inputs = dict(self.store.state.inputs.get(item.queue_id) or {})
+        run = self.claim_slot(item)
+        try:
+            running = self.runner().start(
+                bot, inputs=inputs, source=item.source, job_id=item.job_id, run_id=run.run_id
+            )
+        except Exception as e:  # noqa: BLE001 — 띄우지 못한 것은 실행 실패다
+            log.exception("실행기를 띄우지 못했다")
+            if item.job_id:
+                self._ack_id(item.job_id, "failed", reason=str(e)[:200])
+            self.release_slot()
+            return
+        self.current_run = running.current()
 
     def next_in_queue(self) -> QueueItem | None:
         return self.queue[0] if self.queue else None

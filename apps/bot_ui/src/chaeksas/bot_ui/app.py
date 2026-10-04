@@ -113,7 +113,8 @@ class BotUiApp:
     def shutdown(self) -> None:
         """종료 순서 (BUI-01 10번). 화면 없이도 부를 수 있게 떼어 두었다."""
         agent = self.agent
-        # 1. 새 요청 막기 — 하트비트를 멈춘다.
+        # 1. 새 요청 막기 — 하트비트를 멈추고, **대기열에서 새 Bot을 띄우지 않는다**.
+        agent.stopping = True
         self.worker.stop()
         self.thread.quit()
         self.thread.wait(SHUTDOWN_WAIT_S * 1000)
@@ -134,7 +135,10 @@ class BotUiApp:
             except Exception as e:  # noqa: BLE001 — 종료 중이다. 막지 않는다
                 log.warning("종료 보고를 보내지 못했다 (다음에 보낸다): %s", e)
 
-        # 3·4. 실행기 취소 → Worker 프로세스 종료 (ADR-0023 — 트리째).
+        # 3. 실행기 취소 — **협조 중지를 먼저** 준다 (돌던 Bot이 `cancelled`를 남길 틈, ADR-0031).
+        if agent.runner().running is not None:
+            agent.runner().stop()
+        # 4. Worker 프로세스 종료 (ADR-0023 — 트리째).
         for supervisor in agent.supervisors.values():
             supervisor.stop()
 
