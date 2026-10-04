@@ -1,7 +1,8 @@
 """STU-01 메인 창 — 탐색기 · 캔버스 · 속성 패널 · 아래 탭 · 상태 줄.
 
-조각 3e-1은 셸과 캔버스, **3e-2는 속성 패널(STU-04)과 실행 전 검사**다. 시험 실행(STU-07~09)은
-3e-3이라 자리만 잡아 두고 「아직 없다」고 말한다 — 빈 상자를 말없이 두지 않는다.
+조각 3e-1은 셸과 캔버스, 3e-2는 속성 패널(STU-04)과 실행 전 검사, **3e-3은 시험 실행**
+(STU-08·STU-09)이다. 케이스 편집기(STU-07)와 패키지 내보내기는 3e-4라 「아직 없다」고
+말한다 — 빈 상자를 말없이 두지 않는다.
 
 제목·메뉴·단축키·닫기 보호는 `docs/06-screens/studio.md` STU-01 그대로다.
 """
@@ -32,6 +33,10 @@ from chaeksas.studio.dialogs import NewProcessDialog, pick_example
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.preflight import Preflight, inspect, summarize
 from chaeksas.studio.properties import Properties
+from chaeksas.studio.receiver import Receiver
+from chaeksas.studio.run_dialog import RunDialog
+from chaeksas.studio.runner import CaseRun, Outcome, Plan
+from chaeksas.studio.runner import summarize as summarize_runs
 from chaeksas.studio.settings import Settings
 from chaeksas.studio.workspace import BpmProcess, Workspace, WorkspaceError
 
@@ -43,8 +48,11 @@ DEFAULT_SIZE = (1400, 860)
 
 #: 아직 없는 것을 누르면 이렇게 말한다 — 조용히 아무 일도 없는 것보다 낫다.
 LATER = {
-    "run": "시험 실행은 다음 조각(3e-3)에서 붙입니다.",
-    "package": "패키지로 내보내기는 다음 조각(3e-3)에서 붙입니다.",
+    "cases": (
+        "시험 케이스 편집기(STU-07)는 다음 조각(3e-4)에서 붙입니다 — "
+        "지금은 예제에서 함께 들어온 케이스를 돌릴 수 있습니다."
+    ),
+    "package": "패키지로 내보내기는 다음 조각(3e-4)에서 붙입니다.",
     "center": "Center 올리기는 M5입니다.",
 }
 
@@ -78,6 +86,14 @@ class MainWindow(QMainWindow):
         self.preflight = Preflight(self)
         self.preflight.jumping.connect(lambda node_id: self.canvas.call("select", node_id))
 
+        self.variables_view = QPlainTextEdit(self)
+        self.variables_view.setReadOnly(True)
+        #: 돌릴 것이 남아 있는 계획과 지금까지의 결과 (「모든 케이스 차례로」).
+        self.queue: list[Plan] = []
+        self.outcomes: list[Outcome] = []
+        self.running: CaseRun | None = None
+        self.receiver = Receiver(port=settings.receiver_port)
+
         self._build_layout()
         self._build_menus()
         self.statusBar().showMessage("대기 중")
@@ -107,10 +123,10 @@ class MainWindow(QMainWindow):
         self.bottom_tabs = bottom
         bottom.addTab(self.log_view, "로그")
         bottom.addTab(self.preflight, "검사")
-        for name in ("화면", "변수"):
-            placeholder = QLabel(f"「{name}」 탭은 실행이 붙는 조각(3e-3)에서 채웁니다.", bottom)
-            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            bottom.addTab(placeholder, name)
+        screen = QLabel("「화면」 탭은 UI 태스크가 생기는 M4에서 채웁니다.", bottom)
+        screen.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        bottom.addTab(screen, "화면")
+        bottom.addTab(self.variables_view, "변수")
 
         split = QSplitter(Qt.Orientation.Vertical, self)
         split.addWidget(middle)
@@ -129,6 +145,7 @@ class MainWindow(QMainWindow):
         files = bar.addMenu("파일")
         self._add(files, "새 BPM 프로세스...", self.new_process, QKeySequence.StandardKey.New)
         self._add(files, "예제 BPM 프로세스 가져오기...", self.import_example)
+        self._add(files, "시험 케이스...", lambda: self._later("cases"))
         files.addSeparator()
         self.save_action = self._add(files, "저장", self.save, QKeySequence.StandardKey.Save)
         self._add(files, "패키지로 내보내기...", lambda: self._later("package"))
@@ -141,7 +158,9 @@ class MainWindow(QMainWindow):
         self._add(edit, "다시 실행", lambda: self.canvas.call("redo"), QKeySequence.StandardKey.Redo)
 
         run = bar.addMenu("실행")
-        self._add(run, "실행...", lambda: self._later("run"), QKeySequence("F5"))
+        self.run_action = self._add(run, "실행...", self.run_test, QKeySequence("F5"))
+        self.stop_action = self._add(run, "실행 중지", self.stop_test)
+        self.stop_action.setEnabled(False)
         self._add(run, "실행 전 검사", self.run_preflight, QKeySequence("F6"))
 
         view = bar.addMenu("보기")
@@ -279,6 +298,92 @@ class MainWindow(QMainWindow):
         self.bottom_tabs.setCurrentWidget(self.preflight)
         self.say(summarize(violations))
 
+    # ── 시험 실행 (STU-08·STU-09) ──
+
+    def run_test(self) -> None:
+        if self.process is None or self.definition is None:
+            self.say("열린 정의가 없습니다.")
+            return
+        if self.running is not None:
+            self.say("이미 실행 중입니다.")
+            return
+        # STU-08 실행 순서: 적용 안 한 편집 확인 → 저장 → 사전 점검 → 시작.
+        if not self._may_drop_edits():
+            return
+        if self.dirty and not self.save():
+            return
+        found = next((d for d in self.process.definitions if d.path == self.definition), None)
+        if found is None or found.process is None:
+            self.say("정의를 읽지 못했습니다.")
+            return
+        violations = inspect(found.process, self.process)
+        blocking = [v for v in violations if v.blocks]
+        if blocking:
+            self.preflight.show_result(found.process, violations)
+            self.bottom_tabs.setCurrentWidget(self.preflight)
+            QMessageBox.warning(self, TITLE, f"실행 전 검사가 막습니다 ({len(blocking)}개).")
+            return
+
+        plans = RunDialog.ask(self, self.process, found, self.settings)
+        if not plans:
+            return
+        self.receiver.start()
+        self.queue = plans
+        self.outcomes = []
+        self.log_view.clear()
+        self.canvas.mark({})
+        self._next_run()
+
+    def _next_run(self) -> None:
+        if not self.queue:
+            self._all_done()
+            return
+        plan = self.queue.pop(0)
+        self.running = CaseRun(plan, self.receiver, self)
+        self.running.said.connect(self.say)
+        self.running.marked.connect(self.canvas.mark)
+        self.running.varied.connect(self._show_variables)
+        self.running.ended.connect(self._one_done)
+        self.run_action.setEnabled(False)
+        self.stop_action.setEnabled(True)
+        self.statusBar().showMessage(f"실행 중: {plan.case.name if plan.case else '(케이스 없음)'}")
+        self.running.start()
+
+    def _one_done(self, outcome: Outcome) -> None:
+        self.running = None
+        self.outcomes.append(outcome)
+        name = f"[{outcome.case}] " if outcome.case else ""
+        self.say(f"{name}{outcome.detail}")
+        if self.queue:
+            self._next_run()
+            return
+        self._all_done()
+
+    def _all_done(self) -> None:
+        self.run_action.setEnabled(True)
+        self.stop_action.setEnabled(False)
+        if len(self.outcomes) > 1:
+            self.say(summarize_runs(self.outcomes))
+        last = self.outcomes[-1] if self.outcomes else None
+        self.statusBar().showMessage(last.detail if last else "대기 중")
+        if last is not None and last.run is not None and last.verdict in ("통과", "비교 안 함"):
+            self.bottom_tabs.setCurrentWidget(self.variables_view)
+
+    def stop_test(self) -> None:
+        self.queue = []
+        if self.running is not None:
+            self.running.stop()
+
+    def _show_variables(self, variables: dict[str, object]) -> None:
+        import json  # noqa: PLC0415
+
+        lines = [f"변수 {len(variables)}개", ""]
+        for name in sorted(variables):
+            value = variables[name]
+            shown = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
+            lines.append(f"{name} ({type(value).__name__}) = {shown[:200]}")
+        self.variables_view.setPlainText("\n".join(lines))
+
     # ── 열고 닫기 ──
 
     def open_definition(self, path_text: str) -> None:
@@ -354,6 +459,8 @@ class MainWindow(QMainWindow):
         if not self._may_discard():
             event.ignore()
             return
+        self.stop_test()
+        self.receiver.stop()
         if self.definition is not None:
             from dataclasses import replace  # noqa: PLC0415
 
