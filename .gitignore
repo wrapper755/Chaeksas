@@ -14,12 +14,14 @@ build/
 deploy/.env
 configs/*.local.yaml
 
-# 실행 산출물
-logs/
-runs/
-outputs/
-.cache/
-data/
+# 실행 산출물 — **맨 앞의 `/`를 지우지 않는다.** 뿌리에서만 막는다는 뜻이다.
+# (`runs/`로 적었더니 콘솔 화면 폴더 `web/.../app/runs/`까지 삼켜, 로컬에서는 돌고 CI에서만
+#  「그런 길이 없다」로 깨졌다.)
+/logs/
+/runs/
+/outputs/
+/.cache/
+/data/
 
 # 편집기·OS
 .vscode/
