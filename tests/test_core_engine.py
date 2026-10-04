@@ -471,17 +471,20 @@ EXAMPLE = Path(__file__).resolve().parent.parent / "docs" / "08-business-example
 def test_a_real_example_stops_where_the_adr_says_it_will() -> None:
     """실제 예제(bx01)를 돌려 **어디까지 가는지** 본다.
 
-    첫 스크립트가 `파일목록()`을 부르는데, ADR-0025가 그것을 식에서 뺐다 (디스크를 읽으므로).
-    그래서 지금은 거기서 멈추는 것이 **맞다** — 조각 3에서 파일 목록을 태스크로 옮기면 이 시험의
-    기대가 「더 간다」로 바뀐다.
+    예전에는 첫 스크립트의 `파일목록()`에서 멈췄다 (ADR-0025가 식에서 뺀 함수다). 조각 3f가
+    그것을 **파일 목록 태스크**로 옮겼으니 이제는 더 간다 — 스크립트를 지나 `Task_Collect`까지
+    가고, 거기서 **실행하는 쪽이 폴더를 주지 않아서** 멈춘다.
+
+    그 차이가 중요하다. 전자는 **그림이 틀린 것**이고 후자는 **환경이 빈 것**이다. 둘 다
+    `EngineError`이지만 고칠 자리가 다르다 (ADR-0026 — 기본 `RunEnv`는 아무것도 못 한다).
     """
     process = read_process((EXAMPLE / "bx01_invoice_reconciliation.bpmn").read_text(encoding="utf-8"))
     engine, run = start(process, inputs={"청구서폴더": "/share/invoices"})
     assert engine.run_until_blocked(run) is State.FAILED
 
     assert run.error is not None
-    assert run.error.code == "expr_error"
-    assert "파일목록" in str(run.error)
+    assert run.error.code == "path_denied"
+    assert run.error.node_id == "Task_Collect"
     # 거기까지 가면서 시작은 돌았고, 기록은 계약 모양이다.
     assert run.log.events[0].kind == "run_started"
     assert run.log.events[0].data["bpm_process_id"] == process.id
@@ -570,19 +573,23 @@ def example_env(tmp_path: Path) -> RunEnv:
 def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> None:
     """예제 50개를 모두 돌려 본다 (선언한 입력에는 자리 값을 넣는다).
 
-    AI·서비스 앱(조각 3c)과 타이머·메시지·신호(조각 3d)가 아직 없어 **대부분 중간에 멈춘다.**
     중요한 것은 「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
     **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 3b: 끝 11·대기 2 →
-    3c: 끝 19·대기 6 → 3d: 끝 20·대기 9 — 합치면 50개 중 **29개**가 사람이나 끝까지 간다).
+    3c: 끝 19·대기 6 → 3d: 끝 20·대기 9 → 3f: 끝 22·대기 9 — 합치면 50개 중 **31개**가
+    사람이나 끝까지 간다).
+
+    남은 19개는 둘 중 하나다. **UI 자동화(M4)** 5개, 그리고 **자리 값 탓** 14개 — 선언만 보고
+    넣는 `"시험값"`으로는 점 표기·반복·기간이 성립하지 않는다. 진짜 입력은 Studio 시험 실행의
+    케이스에서 온다 (인수 시험).
     """
     known = {
         "node_kind_unsupported",  # UI 태스크·`desktop` AI 태스크 (M4)
-        "expr_error",  # ADR-0025가 식에서 뺀 도우미 (`파일목록`·`양식`류 — 예제 수정은 조각 3f)
         "no_matching_flow",  # 자리 값으로는 어느 조건도 참이 아닐 수 있다
-        # 아래 셋은 **자리 값 탓**이다 (예제가 아니라). 진짜 입력은 조각 3f의 인수 시험에서 온다.
+        # 아래 넷은 **자리 값 탓**이다 (예제가 아니라).
+        "expr_error",  # 자리 값이 문자열이라 점 표기·`표를사전`·`기간`이 성립하지 않는다
         "loop_not_a_list",  # 자리 값이 문자열이라 반복할 목록이 아니다
         "timer_unreadable",  # 기한 변수에 자리 값(`시험값`)이 들어갔다
-        "TASK_FAILED",  # 호출한 BPM 프로세스가 자리 값 때문에 실패했다 (호출 자체는 돌았다)
+        "TASK_FAILED",  # 자리 값 폴더가 없다·호출한 BPM 프로세스가 자리 값 때문에 실패했다
     }
     env = example_env(tmp_path)
     reasons: dict[str, int] = {}
@@ -614,7 +621,9 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
     assert len(done) + len(waiting) + sum(reasons.values()) == 50
     # 끝까지 가는 것·사람을 기다리는 것 — **다음 조각이 이 목록을 늘린다. 늘면 여기를 고쳐 적는다.**
     assert done == [
+        "bx03_expense_approval.bpmn",  # 메시지 시작 + 타이머 경계 + 웹훅 (3f가 양식 함수를 뺐다)
         "bx06_bulk_credit_check.bpmn",  # 규칙(DMN) + 반복 + xlsx 출력 + 메일
+        "bx07_corporate_card_review.bpmn",  # AI 분류 반복 + DMN COLLECT + xlsx (3f)
         "bx12_shipping_fee.bpmn",  # 규칙(DMN) 공유 BPM 프로세스
         "bx17_erp_po_entry.bpmn",
         "bx22_offboarding_access.bpmn",  # 서비스 앱 + 반복

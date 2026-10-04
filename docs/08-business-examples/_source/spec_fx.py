@@ -61,15 +61,17 @@ FX("FX-03b", "fx03b_amount_branch", "금액 분기 (호출 대상)", "프로토�
 
 FX("FX-04", "fx04_folder_poll", "폴더 감시 (조건 시작 대체)", "프로토타입 example_conditional_start", "server", "타이머 — 5분마다",
    "받은 폴더에 파일이 있으면 처리한다. 프로토타입은 조건 시작 이벤트를 썼지만 엔진이 조건을 계속 평가하지 못했다 → **타이머 + 게이트웨이**로 바꾼다.", SRV,
-   [start("Start", "5분마다", kind="timer", cycle="*/5 * * * *"), script("Task_List", "파일 목록", "파일 = 파일목록(감시폴더 + '/*')\n건수 = len(파일)"),
+   [start("Start", "5분마다", kind="timer", cycle="*/5 * * * *"),
+    flist("Task_List", "파일 목록", "{감시폴더}", "파일", count_as="건수"),
     xgw("Gw_Any", "있음?"), appr("Approve_Confirm", "처리 확인", "받은 파일 처리", ["파일"], [fld("처리", "처리함", "bool", True)], location="center"),
     end("End_None", "없음"), end("End")],
    [f("Start", "Task_List"), f("Task_List", "Gw_Any"), f("Gw_Any", "Approve_Confirm", "건수 > 0", "있음"), f("Gw_Any", "End_None", default=True, name="없음"),
     f("Approve_Confirm", "End")],
    inputs=[("감시폴더", "string", False, "")],
    cases=[Case("빈 폴더", {"감시폴더": "samples/inbox-empty"}, {"건수": 0}), Case("2건", {"감시폴더": "samples/inbox"}, {"건수": 2}, {"Approve_Confirm": {"처리": True}})],
-   features=["조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링", "끝 이벤트 둘"],
-   lessons=["조건 시작은 「무엇이 바뀌면 다시 평가하나」가 정의되지 않아 프로토타입에서 한 번만 돌았다.", "폴링은 실행이 자주 생긴다 — 「없음」 실행은 이력에서 접어 보이게(CON-04 필터)."])
+   features=["조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링", "끝 이벤트 둘", "파일 목록 태스크 (`chk:fileList`)"],
+   lessons=["조건 시작은 「무엇이 바뀌면 다시 평가하나」가 정의되지 않아 프로토타입에서 한 번만 돌았다.", "폴링은 실행이 자주 생긴다 — 「없음」 실행은 이력에서 접어 보이게(CON-04 필터).",
+            "폴더를 훑는 것은 식이 아니라 태스크다 — 디스크를 읽고 실행마다 결과가 달라진다 (ADR-0025·ADR-0026)."])
 
 FX("FX-05", "fx05_desktop_autonomous", "데스크톱 AI 태스크 (자율)", "프로토타입 example_desktop", "pc", "PC Bot 수동 실행",
    "등록되지 않은 데스크톱 앱(계산기)을 AI가 보고 조작한다.", "데스크톱 화면 → PC.",
@@ -265,9 +267,11 @@ FX("FX-19", "fx19_manual_task_pc", "수동 확인 (PC)", "프로토타입 manual
    [start("Start"), appr("Manual_Paper", "용지 넣기", "프린터에 용지를 넣어 주세요", ["오늘"], [], location="field", manual=True),
     script("Task_Done", "기록", "확인됨 = True"), end("End")],
    [f("Start", "Manual_Paper"), f("Manual_Paper", "Task_Done"), f("Task_Done", "End")],
-   cases=[Case("확인", {}, {"확인됨": True}, {"Manual_Paper": {}})], 
+   cases=[Case("확인", {}, {"확인됨": True}, {"Manual_Paper": {"decision": "approve"}})],
    features=["`manualTask` + `chk:approval` (칸 없음)"],
    lessons=["수동 작업은 결재와 같은 창(C6)을 쓰되 칸이 없다 — 화면에는 「확인」 하나만. 프로토타입 시나리오 2도 실물 수령을 이렇게 확인했다.",
+            "**칸이 없어도 답은 비어 있지 않다** — 폼이 없는 결재의 답은 `decision`(`approve`/`reject`)이다 (C6). "
+            "케이스에 `{}`를 적었더니 Studio 시험 실행이 답을 거절하고 같은 자리를 되풀이했다 (조각 3e-3).",
             "PC에서 `field`로 둘 때는 몇 분 안에 끝나는 일만. 며칠 걸릴 수 있으면 서버 BPM 프로세스 + Center 결재함 (BX-20)."])
 
 FX("FX-20", "fx20_external_adapter", "외부 확장 HTTP 어댑터 호출", "새로 — ADR-0018", "server", "수동 실행",

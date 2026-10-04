@@ -33,6 +33,20 @@
       "type": "list",
       "required": true,
       "description": ""
+    },
+    {
+      "name": "견적목록",
+      "type": "list",
+      "required": false,
+      "description": "받은 견적 (루프가 쌓는다)",
+      "default": []
+    },
+    {
+      "name": "응찰사메일",
+      "type": "list",
+      "required": false,
+      "description": "응찰사 회신 주소 (루프가 쌓는다)",
+      "default": []
     }
   ]
 }</chk:process>
@@ -44,9 +58,7 @@
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
-      <bpmn:script>남은시간 = 기간(지금(), 마감시각)
-견적목록 = 견적목록 or []
-응찰사메일 = 응찰사메일 or []</bpmn:script>
+      <bpmn:script>남은시간 = 기간(지금(), 마감시각)</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:receiveTask id="Recv_Quote" name="견적 받기" messageRef="Msg_bid_quote">
       <bpmn:extensionElements>

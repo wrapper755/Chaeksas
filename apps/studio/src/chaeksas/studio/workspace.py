@@ -258,8 +258,11 @@ class Workspace:
     def import_example(self, source: Path, process_id: str, *, group: str = DEFAULT_GROUP) -> BpmProcess:
         """예제 BPM 프로세스 가져오기 (STU-01 파일 메뉴).
 
-        `source`는 업무 예제의 `bpmn/` 폴더이고, `<id>.bpmn`과 그것이 쓰는 `.dmn`·케이스를
-        함께 가져온다. **예제 폴더는 생성물이라 건드리지 않는다** (CLAUDE.md §2).
+        `source`는 업무 예제의 `bpmn/` 폴더이고, `<id>.bpmn`과 그것이 쓰는 `.dmn`·**호출 대상**·
+        케이스를 함께 가져온다. **예제 폴더는 생성물이라 건드리지 않는다** (CLAUDE.md §2).
+
+        호출 대상을 빼놓으면 돌려 보고야 안다 (「호출 대상이 패키지에 없다」) — 인수 시험에서
+        FX-03이 실제로 그렇게 걸렸다. 호출은 겹칠 수 있으므로 **따라가며** 모은다.
         """
         found = source / f"{process_id}.bpmn"
         if not found.is_file():
@@ -272,21 +275,40 @@ class Workspace:
             entry=f"{process_id}.bpmn",
         )
         self.save_definition(made, found.name, found.read_text(encoding="utf-8"))
-        for node in definition.all_nodes():
-            rule = node.prop("rule")
-            if rule is None:
-                continue
-            decision = source / f"{rule.decision}.dmn"
-            if decision.is_file():
-                (made.folder / "process" / decision.name).write_text(
-                    decision.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
-                )
+        self._bring_along(source, definition, made)
         cases = source.parent / "cases" / f"{process_id}.cases.json"
         if cases.is_file():
             (made.folder / "cases" / cases.name).write_text(
                 cases.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
             )
         return self.read(made.folder, group)
+
+    def _bring_along(self, source: Path, definition: BpmnProcess, made: BpmProcess) -> None:
+        """그 정의가 쓰는 DMN과 **호출 대상 BPM 프로세스**를 따라가며 가져온다."""
+        seen = {definition.id}
+        pending = [definition]
+        while pending:
+            current = pending.pop()
+            for node in current.all_nodes():
+                rule = node.prop("rule")
+                if rule is not None:
+                    self._copy_next_to(source / f"{rule.decision}.dmn", made)
+                called = node.called_element
+                if not called or called in seen:
+                    continue
+                seen.add(called)
+                # 예제의 호출 대상 id는 `Proc_<파일이름>`이다 (생성기가 그렇게 짓는다).
+                target = source / f"{called.removeprefix('Proc_')}.bpmn"
+                if not target.is_file():
+                    continue
+                self._copy_next_to(target, made)
+                pending.append(read_process(target.read_text(encoding="utf-8")))
+
+    def _copy_next_to(self, path: Path, made: BpmProcess) -> None:
+        if path.is_file():
+            (made.folder / "process" / path.name).write_text(
+                path.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
+            )
 
 
 __all__ = [

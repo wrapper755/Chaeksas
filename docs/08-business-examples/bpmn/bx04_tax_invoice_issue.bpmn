@@ -157,8 +157,7 @@
         <bpmn:targetRef>Data_Report</bpmn:targetRef>
       </bpmn:dataOutputAssociation>
       <bpmn:script>검증통과 = 시트합계 == 포털합계
-검증메모 = '' if 검증통과 else '합계가 다름'
-보고서본문 = 발행보고양식(대상월, 건수, 포털합계, 시트합계, 검증통과)</bpmn:script>
+검증메모 = '' if 검증통과 else '합계가 다름'</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Notify" name="담당자 통지">
       <bpmn:extensionElements>
@@ -202,7 +201,7 @@
   "path": "세금계산서/{대상월}_발행보고.md",
   "format": "md",
   "store_as": "보고서경로",
-  "template": "{보고서본문}"
+  "template": "# 세금계산서 발행 보고 — {대상월}\n\n- 건수: {건수}\n- 포털 합계: {포털합계}\n- 회계 시트 합계: {시트합계}\n- 검증: {검증통과} {검증메모}\n"
 }</chk:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>

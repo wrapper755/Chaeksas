@@ -202,15 +202,26 @@ def test_a_case_answers_the_approval_and_the_run_finishes(app: Any, tmp_path: Pa
 def test_an_answer_the_form_refuses_ends_the_run_instead_of_looping(app: Any, tmp_path: Path) -> None:
     """케이스가 틀린 답을 주면 **그 자리에서 끝낸다** — 다음 틱에 또 같은 일이 생긴다.
 
-    예제 FX-19의 케이스가 지금 이 모양이다 (폼 없는 확인에 빈 답) — 예제 쪽은 조각 3f다.
+    FX-19에서 실제로 겪었다 (폼 없는 확인에 빈 답 `{}`). 예제는 조각 3f에서 고쳤고, 여기서는
+    **고친 예제에 일부러 빈 답을 주어** 그 자리가 막혀 있는지 본다.
     """
     made, settings = studio(tmp_path, "fx19_manual_task_pc")
     definition = made.entry_definition
     assert definition is not None
-    case = read_cases(made, definition)[0]
-    assert case.approvals == {"Manual_Paper": {}}
+    case = Case(name="빈 답", inputs={}, approvals={"Manual_Paper": {}})
     found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
     assert found.verdict == ERROR and "빠진 칸" in found.detail
+
+
+def test_the_fixed_example_case_now_passes(app: Any, tmp_path: Path) -> None:
+    """**칸이 없어도 답은 비어 있지 않다** — 폼 없는 결재의 답은 `decision`이다 (C6, 조각 3f)."""
+    made, settings = studio(tmp_path, "fx19_manual_task_pc")
+    definition = made.entry_definition
+    assert definition is not None
+    case = read_cases(made, definition)[0]
+    assert case.approvals == {"Manual_Paper": {"decision": "approve"}}
+    found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
+    assert found.verdict == PASS, found.detail
 
 
 def test_an_unanswered_approval_keeps_waiting(app: Any, tmp_path: Path) -> None:

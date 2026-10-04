@@ -160,6 +160,14 @@ def rule(id, name, decision, input, output, loop=None):
     return Node(id, "rule", name, dict(task=dict(decision=decision, input=input, output=output), loop=loop))
 
 
+def flist(id, name, folder, store_as, pattern="*", recursive=False, sort="name", limit=None, count_as=None):
+    """파일 목록 태스크 (`chk:fileList`). 디스크를 읽으므로 식이 아니라 태스크다 (ADR-0026)."""
+    return Node(id, "flist", name, dict(task=dict(
+        folder=folder, pattern=pattern, recursive=recursive, sort=sort,
+        **({"limit": limit} if limit is not None else {}),
+        store_as=store_as, **({"count_as": count_as} if count_as else {}))))
+
+
 def mail(id, name, to, subject, body, attachments=None, store_as=None):
     return Node(id, "mail", name, dict(task=dict(to=to, subject=subject, body=body,
                                                   attachments=attachments or [], store_as=store_as)))
@@ -234,7 +242,7 @@ def goal(상황, 할일, 판단하지않음=None, 반환=None):
 KIND_LABEL = {
     "start": "시작 이벤트", "end": "끝 이벤트", "script": "스크립트", "ai": "AI 태스크",
     "ui": "UI 태스크", "svc": "서비스 앱 태스크", "appr": "결재", "manual": "수동 확인",
-    "rule": "규칙(DMN)", "mail": "메일 보내기", "hook": "웹훅 보내기", "recv": "메시지 받기",
+    "rule": "규칙(DMN)", "flist": "파일 목록", "mail": "메일 보내기", "hook": "웹훅 보내기", "recv": "메시지 받기",
     "call": "BPM 프로세스 호출", "xgw": "배타 게이트웨이", "igw": "포함 게이트웨이",
     "pgw": "병렬 게이트웨이", "sub": "하위 프로세스", "throw": "중간 던지기", "catch": "중간 받기",
 }
@@ -565,6 +573,8 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
             body = body.replace(f"{ind}  </bpmn:extensionElements>\n",
                                 f"{ind}    <chk:loop>{jtext(lp2)}</chk:loop>\n{ind}  </bpmn:extensionElements>\n")
         return f'{ind}<bpmn:businessRuleTask id="{n.id}" name="{nm}">\n{body}{io}{dassoc}{loop}{ind}</bpmn:businessRuleTask>\n'
+    if k == "flist":
+        return f'{ind}<bpmn:serviceTask id="{n.id}" name="{nm}">\n{ext_el("fileList", p["task"])}{io}{dassoc}{ind}</bpmn:serviceTask>\n'
     if k in ("mail", "hook"):
         return f'{ind}<bpmn:sendTask id="{n.id}" name="{nm}">\n{ext_el("email" if k == "mail" else "webhook", p["task"])}{io}{dassoc}{ind}</bpmn:sendTask>\n'
     if k == "recv":
@@ -923,6 +933,12 @@ def node_summary(n: Node) -> str:
     if k == "rule":
         t = p["task"]
         return f"DMN `{t['decision']}` → {', '.join(t['output'])}"
+    if k == "flist":
+        t = p["task"]
+        s = f"`{t['folder']}` · 무늬 `{t['pattern']}` → `{t['store_as']}`"
+        if t.get("count_as"):
+            s += f" · 개수 `{t['count_as']}`"
+        return s
     if k == "mail":
         t = p["task"]
         return f"받는 사람 {', '.join(t['to'])} · 제목 「{t['subject']}」" + (f" · 첨부 {', '.join(t['attachments'])}" if t["attachments"] else "")
@@ -1051,6 +1067,10 @@ def defined_vars(ex: Example) -> set[str]:
             d |= set(p["payload"])
         if n.kind in ("mail", "hook") and t.get("store_as"):
             d.add(t["store_as"])
+        if n.kind == "flist":
+            d.add(t["store_as"])
+            if t.get("count_as"):
+                d.add(t["count_as"])
         if p.get("loop"):
             d |= {p["loop"]["item"], p["loop"]["collect_into"]}
     d |= {x.props["store_as"] for x in ex.data}

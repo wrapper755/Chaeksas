@@ -29,12 +29,20 @@
         <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">*/5 * * * *</bpmn:timeCycle>
       </bpmn:timerEventDefinition>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_List" name="파일 목록" scriptFormat="chk-expr">
+    <bpmn:serviceTask id="Task_List" name="파일 목록">
+      <bpmn:extensionElements>
+        <chk:fileList>{
+  "folder": "{감시폴더}",
+  "pattern": "*",
+  "recursive": false,
+  "sort": "name",
+  "store_as": "파일",
+  "count_as": "건수"
+}</chk:fileList>
+      </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
-      <bpmn:script>파일 = 파일목록(감시폴더 + '/*')
-건수 = len(파일)</bpmn:script>
-    </bpmn:scriptTask>
+    </bpmn:serviceTask>
     <bpmn:exclusiveGateway id="Gw_Any" name="있음?" default="Flow_04">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>

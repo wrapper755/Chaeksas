@@ -114,7 +114,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [FX-02](feature-examples.md#fx-02-규칙-태스크-dmn) | 규칙 태스크 (DMN) | 서버 | 수동 실행 | — | `businessRuleTask` + `chk:rule` 입력·출력 매핑; 다중 출력 DMN |
 | [FX-03](feature-examples.md#fx-03-bpm-프로세스-호출과-매핑) | BPM 프로세스 호출과 매핑 | 서버 | 수동 실행 | — | `chk:call` 입력·출력 매핑; 같은 대상 두 번 호출 |
 | [FX-03b](feature-examples.md#fx-03b-금액-분기-호출-대상) | 금액 분기 (호출 대상) | 서버 | BPM 프로세스 호출 | — | 배타 게이트웨이 + 기본 흐름; 경계값 |
-| [FX-04](feature-examples.md#fx-04-폴더-감시-조건-시작-대체) | 폴더 감시 (조건 시작 대체) | 서버 | 타이머 | — | 조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링; 끝 이벤트 둘 |
+| [FX-04](feature-examples.md#fx-04-폴더-감시-조건-시작-대체) | 폴더 감시 (조건 시작 대체) | 서버 | 타이머 | — | 조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링; 끝 이벤트 둘; 파일 목록 태스크 (`chk:fileList`) |
 | [FX-05](feature-examples.md#fx-05-데스크톱-ai-태스크-자율) | 데스크톱 AI 태스크 (자율) | PC | PC Bot 수동 실행 | — | `domain: desktop` (자율); PC 전용 — 서버로 두면 B6 오류 |
 | [FX-06](feature-examples.md#fx-06-문서-ai-태스크) | 문서 AI 태스크 | 서버 | 수동 실행 | — | `domain: doc`; 도구 지정 |
 | [FX-07](feature-examples.md#fx-07-메일-보내기) | 메일 보내기 | 서버 | 수동 실행 | — | `sendTask` + `chk:email`; 파일 출력 → 첨부; `store_as` |
@@ -140,7 +140,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 시작 — 타이머 | BX-01, BX-02, BX-04, BX-05, BX-07, BX-08, BX-14, BX-16, BX-23, BX-35, FX-04, FX-12 |
 | 시작 — 메시지 | BX-03, BX-10, BX-13, BX-15, BX-20, BX-21, BX-22, BX-30, BX-31, BX-32, BX-33, BX-34, FX-10 |
 | 끝 — 종료(terminate) | BX-11 |
-| 스크립트 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-14, BX-15, BX-16, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-35, BX-36, FX-02, FX-03, FX-03b, FX-04, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19 |
+| 스크립트 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-14, BX-15, BX-16, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-35, BX-36, FX-02, FX-03, FX-03b, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19 |
 | AI 태스크 — llm | BX-05, BX-07, BX-08, BX-11, BX-13, BX-15, BX-20, BX-23, BX-30, BX-37, BX-31, BX-32, BX-34, BX-35, FX-09, FX-10 |
 | AI 태스크 — api | BX-02, FX-01, FX-08, FX-10 |
 | AI 태스크 — doc | BX-01, BX-07, BX-10, BX-14, BX-30, FX-06 |

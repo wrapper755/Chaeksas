@@ -159,7 +159,9 @@
       <bpmn:dataOutputAssociation id="DOA_Data_Upload">
         <bpmn:targetRef>Data_Upload</bpmn:targetRef>
       </bpmn:dataOutputAssociation>
-      <bpmn:script>전표 = 전표자료(내역, 분류목록, 위반, 인정)</bpmn:script>
+      <bpmn:script>계정 = 표를사전(분류목록, '승인번호')
+위반번호 = 열뽑기(위반, '승인번호')
+전표 = [dict(건, 계정과목=계정[건['승인번호']]['계정과목'], 소명=('인정' if 인정 else '미인정') if 건['승인번호'] in 위반번호 else '') for 건 in 내역]</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:endEvent id="End" name="끝">
       <bpmn:incoming>Flow_10</bpmn:incoming>
