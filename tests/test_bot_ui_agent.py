@@ -217,3 +217,63 @@ def test_an_unreachable_center_before_the_first_register_is_quiet(tmp_path: Path
     assert agent.beat() is None  # 예외를 올리지 않는다 (사람이 고칠 것이 없다)
     assert isinstance(agent.last_problem, Unreachable)
     assert agent.tray_status() == TRAY_DISCONNECTED
+
+
+# ─────────────────────────── 실행 기록 보내기 (C3, 조각 3g) ───────────────────────────
+
+
+def test_the_heartbeat_ships_the_run_log_and_counts_what_is_left(
+    center: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """쌓인 기록이 하트비트 뒤에 Center로 간다 (C3 §전송) — 콘솔 CON-01이 그것을 그린다.
+
+    **실행 중에 보내지 않는다** — 느린 Center가 업무를 붙잡으면 안 된다. 하트비트가 끝난 뒤
+    큐를 비우고, 남은 줄 수는 `unsent_events`로 알린다 (C4).
+    """
+    from chaeksas.core.run_log import RunLog, log_path
+    from chaeksas.core.run_shipping import HttpUploader
+
+    data_dir = tmp_path / "botui"
+    monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
+
+    run_id = "run_20261005_120000_abcdef"
+    log = RunLog(run_id=run_id, path=log_path(data_dir, run_id))
+    log.emit("run_started", bpm_process_id="fin.invoice", version="1.0.0", run_location="pc",
+             executor="bot_ui", mode="deterministic", source="job")
+    log.emit("run_finished", status="success", duration_s=3.0, ai_tasks=0, replayed_tasks=0,
+             ui_tasks=0, service_calls=0, human_requests=0)
+
+    key = issue_key(center)
+    agent = make_agent(center, tmp_path, key=key)
+    # 보내기도 같은 시험 전송을 쓴다 (바깥으로 나가지 않는다).
+    monkeypatch.setattr(
+        agent, "ship_runs",
+        lambda: agent.runs().ship(HttpUploader(base_url=BASE_URL, api_key=key, client=center)),
+    )
+
+    assert agent.heartbeat_request().unsent_events == 2, "보내기 전에는 두 줄이 밀려 있다"
+    agent.beat()
+
+    found = center.get(f"/api/v1/runs/{run_id}", headers={"Authorization": f"Bearer {ADMIN}"})
+    assert found.status_code == 200
+    assert found.json()["status"] == "success"
+    assert agent.heartbeat_request().unsent_events == 0
+
+
+def test_without_a_key_nothing_is_shipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """키가 없으면 보내지 않는다 — 기록은 쌓아 두고 화면이 키 문제를 말한다 (C3 §오류)."""
+    from chaeksas.core.run_log import RunLog, log_path
+
+    data_dir = tmp_path / "botui"
+    monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
+    RunLog(run_id="run_20261005_120000_abcdef", path=log_path(data_dir, "run_20261005_120000_abcdef")).emit(
+        "log", level="info", message="한 줄"
+    )
+
+    agent = Agent(
+        settings=Settings(name="키 없음", center_url=BASE_URL),
+        store=Store.load(tmp_path / "state.json"),
+        credentials=FakeCredentials(None),
+    )
+    assert agent.ship_runs().sent == 0
+    assert agent.runs().unsent_count() == 1

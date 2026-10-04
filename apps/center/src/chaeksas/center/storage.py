@@ -43,6 +43,22 @@ CREATE TABLE IF NOT EXISTS bot_uis (
   disabled    INTEGER NOT NULL DEFAULT 0,
   state_json  TEXT
 );
+CREATE TABLE IF NOT EXISTS runs (
+  run_id        TEXT PRIMARY KEY,
+  owner_key_id  TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL,
+  last_seen_at  TEXT NOT NULL,
+  summary_json  TEXT
+);
+CREATE TABLE IF NOT EXISTS run_events (
+  run_id    TEXT NOT NULL,
+  seq       INTEGER NOT NULL,
+  ts        TEXT NOT NULL,
+  kind      TEXT NOT NULL,
+  node_id   TEXT,
+  data_json TEXT,
+  PRIMARY KEY (run_id, seq)
+);
 CREATE TABLE IF NOT EXISTS packages (
   id          TEXT NOT NULL,
   version     TEXT NOT NULL,

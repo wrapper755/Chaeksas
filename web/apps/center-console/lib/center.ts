@@ -5,6 +5,9 @@ import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
+import type { RunListing } from "@chaeksas/api-types/c3-run-listing";
+import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
+import type { RunEventsResponse } from "@chaeksas/api-types/c3-run-events-response";
 import { COOKIE_NAME, open, type Session } from "./session";
 
 /**
@@ -78,6 +81,19 @@ export const center = {
   revokeCenterKey: (keyId: string) => call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}`, { method: "DELETE" }),
   unbindCenterKey: (keyId: string) =>
     call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}/unbind`, { method: "POST" }),
+
+  runs: (query: { status?: string; bpm_process_id?: string; limit?: number } = {}) => {
+    const search = new URLSearchParams(
+      Object.entries(query)
+        .filter(([, value]) => value !== undefined && value !== "")
+        .map(([key, value]) => [key, String(value)]),
+    );
+    const suffix = search.size > 0 ? `?${search}` : "";
+    return call<RunListing>(`/api/v1/runs${suffix}`);
+  },
+  run: (runId: string) => call<RunInfo>(`/api/v1/runs/${encodeURIComponent(runId)}`),
+  runEvents: (runId: string) =>
+    call<RunEventsResponse>(`/api/v1/runs/${encodeURIComponent(runId)}/events`),
 
   /** 토큰이 쓸 수 있는지 본다 (로그인에서 쓴다). 읽기 경로 하나를 불러 확인한다. */
   check: () => call<CenterKeyInfo[]>("/api/v1/center-keys"),

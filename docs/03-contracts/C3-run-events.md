@@ -82,6 +82,29 @@
 {"run_id": "run_20261001_101500_a1b2c3", "accepted": 3, "duplicates": 0, "rejected": []}
 ```
 
+## 보여 주기 (CON-01 실행 로그)
+
+콘솔이 읽는 쪽이다. **읽기 권한**으로 연다 (C5 권한표).
+
+| 경로 | 돌려주는 것 |
+| --- | --- |
+| `GET /api/v1/runs?status=&bpm_process_id=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스, `limit` 기본 50·최대 500 |
+| `GET /api/v1/runs/{run_id}` | `RunInfo` 하나. 없으면 404 `run_not_found` |
+| `GET /api/v1/runs/{run_id}/events` | `RunEventsResponse` — **`seq` 차례로** 전부 (타임라인이 순서를 만든다) |
+
+### RunInfo
+
+| 필드 | 타입 | 필수 | 뜻 |
+| --- | --- | --- | --- |
+| `run_id` | str | ✓ | |
+| `status` | str | ✓ | `running`\|`waiting`\|`success`\|`failed`\|`cancelled` (열린 문자열) |
+| `bpm_process_id`, `version`, `run_location`, `executor`, `mode`, `source` | str | | `run_started`의 `data`에서 추린 것 |
+| `started_at` | str | ✓ | 첫 이벤트의 `ts` (`run_started`가 아직 없으면 받은 시각) |
+| `finished_at`, `duration_s`, `error_code` | | | `run_finished`에서 |
+| `events` | int | ✓ | 지금까지 받은 줄 수 |
+
+**요약은 받을 때 만든다** — 목록을 그릴 때마다 줄을 다시 읽지 않는다. 늦게 온 배치가 끝난 실행을 「도는 중」으로 되돌리지 않는다 (상태는 뒤로 가지 않는다).
+
 ## 오류
 
 | 상태 코드 | 언제 | 보내는 쪽이 할 일 |

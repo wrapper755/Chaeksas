@@ -41,6 +41,8 @@ from chaeksas.contracts.bot_ui import (
     WorkerState,
 )
 from chaeksas.core.processes import Supervisor
+from chaeksas.core.run_shipping import HttpUploader, Shipment
+from chaeksas.core.run_shipping import Queue as RunQueue
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +103,8 @@ class Agent:
     last_problem: CenterProblem | None = None
     #: 마지막 하트비트 응답으로 내려온 지시 (화면이 보여 준다).
     jobs_waiting: list[JobDispatch] = field(default_factory=list)
+    #: 실행 기록 큐 (C3). 처음 쓸 때 만든다 — 설정이 가리키는 폴더를 그때 읽는다.
+    _runs: RunQueue | None = None
 
     @property
     def bot_ui_id(self) -> str | None:
@@ -183,6 +187,14 @@ class Agent:
             return "error"
         return "idle"
 
+    def runs(self) -> RunQueue:
+        """실행 기록 큐 (C3) — `runs/`에 쌓인 것을 하트비트마다 비운다."""
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        if self._runs is None:
+            self._runs = RunQueue(data_dir=data_dir())
+        return self._runs
+
     def heartbeat_request(self) -> HeartbeatRequest:
         return HeartbeatRequest(
             schema=1,
@@ -193,7 +205,27 @@ class Agent:
             versions=self.versions(),
             job_acks=list(self.store.state.pending_acks),
             extensions=list(self.extensions),
+            unsent_events=self.runs().unsent_count(),
         )
+
+    def api_key(self) -> str:
+        return self.credentials.center_api_key() or ""
+
+    def ship_runs(self) -> Shipment:
+        """쌓인 실행 기록을 Center로 보낸다 (C3 §전송).
+
+        **하트비트 뒤에 따로 돈다** — 실행 중에 보내면 느린 Center가 업무를 붙잡는다. 닿지
+        못하면 다음 주기에 **같은 배치를 그대로** 다시 보낸다 (멱등).
+        """
+        key = self.api_key()
+        if not key:
+            return Shipment()
+        found = self.runs().ship(
+            HttpUploader(base_url=self.settings.center_url, api_key=key)
+        )
+        if found.error:
+            log.warning("실행 기록을 보내지 못했다: %s", found.error)
+        return found
 
     def beat(self) -> HeartbeatResponse | None:
         """한 주기. 닿지 못하면 `None`을 돌려주고 **실행은 계속한다** (ADR-0007).
@@ -233,6 +265,8 @@ class Agent:
         self.store.ack_sent(request.job_acks)
         self.apply(response)
         self.store.save()
+        # 기록 보내기는 **하트비트가 끝난 뒤**다 — 늦어도 다음 주기에 또 보낸다.
+        self.ship_runs()
         return response
 
     # ── 지시 처리 (C4 HeartbeatResponse) ──
