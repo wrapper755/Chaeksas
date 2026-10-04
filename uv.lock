@@ -253,11 +253,15 @@ name = "chaeksas-qt"
 version = "0.1.0"
 source = { editable = "packages/qt" }
 dependencies = [
+    { name = "chaeksas-contracts" },
     { name = "pyside6-essentials" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pyside6-essentials", specifier = "==6.11.2" }]
+requires-dist = [
+    { name = "chaeksas-contracts", editable = "packages/contracts" },
+    { name = "pyside6-essentials", specifier = "==6.11.2" },
+]
 
 [[package]]
 name = "chaeksas-server-runner"

@@ -284,3 +284,88 @@ def test_a_bot_that_is_not_installed_is_rejected_not_stuck(
     agent.pump()
 
     assert not agent.queue and agent.current_run is None
+
+
+# ─────────────────────────── BUI-04 화면 ───────────────────────────
+
+
+def test_the_bot_tab_shows_what_is_installed_and_runs_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """BUI-04 — 목록·「지금 실행...」·「중지」·「결재 창 열기」가 Agent와 맞물린다."""
+    from PySide6.QtWidgets import QApplication
+
+    from chaeksas.bot_ui.agent import Agent
+    from chaeksas.bot_ui.main_window import MainWindow
+    from chaeksas.bot_ui.settings import Settings
+    from chaeksas.bot_ui.store import Store
+
+    app = QApplication.instance() or QApplication([])
+    assert app is not None
+
+    data_dir = tmp_path / "botui"
+    monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
+    bot = install(data_dir, packaged(tmp_path, MANUAL))
+
+    agent = Agent(settings=Settings(center_url="http://127.0.0.1:1"), store=Store.load(tmp_path / "s.json"))
+    window = MainWindow(agent)
+    window.refresh()
+
+    assert window.bots_table.rowCount() == 1
+    assert _cell(window, 0, 0) == bot.name
+    assert _cell(window, 0, 3) == "서명 없음"
+    assert not window.run_button.isEnabled(), "고른 Bot이 없으면 꺼져 있다"
+    assert not window.stop_button.isEnabled()
+
+    window.bots_table.selectRow(0)
+    assert window.run_button.isEnabled()
+    window.run_selected()
+
+    assert agent.current_run is not None, "자리를 차지해야 한다"
+    try:
+        # 결재를 기다리면 「결재 창 열기」가 켜진다 (BUI-04 [R]).
+        def asked() -> bool:
+            agent.pump()
+            window.refresh()
+            return window.approve_button.isEnabled()
+
+        assert wait_for(asked, timeout_s=30), "결재 요청이 올라오지 않았다"
+        assert "결재를 기다리는 중" in window.running_label.text()
+    finally:
+        agent.runner().stop()
+        agent.release_slot()
+
+
+def _cell(window: Any, row: int, column: int) -> str:
+    item = window.bots_table.item(row, column)
+    return item.text() if item is not None else ""
+
+
+def test_installing_a_broken_package_does_not_crash_the_window(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """설치가 실패해도 창은 산다 — 사람이 읽을 한 줄을 보인다."""
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    from chaeksas.bot_ui.agent import Agent
+    from chaeksas.bot_ui.main_window import MainWindow
+    from chaeksas.bot_ui.settings import Settings
+    from chaeksas.bot_ui.store import Store
+
+    app = QApplication.instance() or QApplication([])
+    assert app is not None
+
+    monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: tmp_path / "botui")
+    broken = tmp_path / "가짜.zip"
+    broken.write_text("zip이 아니다", encoding="utf-8")
+
+    said: list[str] = []
+    monkeypatch.setattr(
+        "chaeksas.bot_ui.main_window.QFileDialog.getOpenFileName",
+        staticmethod(lambda *a, **k: (str(broken), "")),
+    )
+    monkeypatch.setattr(QMessageBox, "warning", staticmethod(lambda *a, **k: said.append(a[2])))
+
+    window = MainWindow(Agent(settings=Settings(), store=Store.load(tmp_path / "s.json")))
+    window.install_package()
+    assert said and "zip" in said[0]

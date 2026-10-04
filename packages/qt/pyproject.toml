@@ -6,7 +6,11 @@ requires-python = ">=3.12,<3.13"
 # PySide6-Essentials만 쓴다 (QtWidgets·QtGui). QtWebEngine이 든 Addons는 Studio 캔버스에만
 # 필요하므로(ADR-0022) `apps/studio`가 따로 받는다 — Bot UI 설치 파일을 작게 두려는 것이다
 # (ADR-0024: Studio 551MB 중 WebEngine 194MB).
-dependencies = ["PySide6-Essentials==6.11.2"]
+# contracts: 결재 폼(C6)을 **엔진과 같은 검증기**로 본다 (CMN-01).
+dependencies = ["PySide6-Essentials==6.11.2", "chaeksas-contracts"]
+
+[tool.uv.sources]
+chaeksas-contracts = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]
