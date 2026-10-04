@@ -38,3 +38,4 @@
 | [0027](0027-llm-connection.md) | AI 태스크는 OpenAI 호환 HTTP를 **우리 루프로** 직접 부른다 (S7) | 수락 |
 | [0028](0028-replay-memory.md) | 재생 명세는 패키지 안에 넣고, 도구 인자는 `{변수}` 템플릿으로 적는다 | 수락 |
 | [0029](0029-bpmn-js-vendoring.md) | bpmn-js 배포본은 `web/`에서 버전을 고정해 복사하고, 복사본을 커밋한다 (ADR-0022의 미정 해소) | 수락 |
+| [0030](0030-ai-task-tools.md) | AI 태스크의 도구는 `core`가 가진 내장 넷으로 시작하고, PDF는 `pypdf`를 쓴다 (S8) | 수락 |

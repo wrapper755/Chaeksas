@@ -365,6 +365,9 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
         outcome = _replayed(context, spec, note) or run_agent(
             spec, llm=run.env.llm, tools=run.env.tools, on_step=note
         )
+    except PathDenied as e:
+        # 도구가 실행 폴더 밖을 짚었다 — 고쳐야 할 설정이다 (경계로 받지 않는다).
+        raise EngineError(str(e), node_id=node.id, code=CODE_PATH_DENIED) from e
     except AgentError as e:
         if e.business:
             raise TaskFailed(str(e), node_id=node.id) from e
