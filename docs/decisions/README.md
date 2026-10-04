@@ -33,3 +33,5 @@
 | [0022](0022-studio-canvas.md) | Studio 캔버스는 QtWebEngine 안의 bpmn-js 배포본, Python과는 QWebChannel로 잇는다 (S3) | 수락 |
 | [0023](0023-bot-ui-process-supervision.md) | Bot 실행은 Bot UI의 자식 프로세스(실행기)로 확정, 자식마다 Job Object, 자동 시작은 작업 스케줄러 (S4) | 수락 (Linux 미확인) |
 | [0024](0024-desktop-packaging-extensions.md) | Studio·Bot UI는 PyInstaller onedir, 확장 옵션은 엔트리 포인트에서 계산, 로컬 런타임은 같은 실행 파일로 (S5) | 수락 (설치 프로그램 미정) |
+| [0025](0025-expression-language.md) | 식 `chk-expr`는 직접 만든 AST 검사기로 돌리고, 템플릿은 `{변수}`만 둔다 (S6) | 수락 |
+| [0026](0026-file-paths-and-file-list-task.md) | 파일은 실행 폴더(출력·읽기 허용)로 묶고, 파일 목록은 식이 아니라 태스크로 둔다 | 수락 |

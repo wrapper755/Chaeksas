@@ -3,7 +3,8 @@ name = "chaeksas-core"
 version = "0.1.0"
 description = "런타임 코어 — BPMN 실행, 확장 호스트, AI 태스크, 도구, 재생 기억, 설정 로더"
 requires-python = ">=3.12,<3.13"
-dependencies = ["chaeksas-extension-api"]
+# openpyxl: 파일 출력 `format: xlsx` (C14). 순수 파이썬이라 설치 파일이 커지지 않는다.
+dependencies = ["chaeksas-extension-api", "openpyxl>=3.1"]
 
 # 설치 파일(PyInstaller)을 만들 때 확장이 함께 들어가게 하는 훅 (ADR-0024).
 # 묶는 쪽은 아무 인자도 적지 않는다 — core를 쓰면 이 훅이 딸려 온다.

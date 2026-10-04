@@ -87,6 +87,9 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 작업 | `job` | 배포된 Bot을 특정 입력으로 한 번 실행하라는 Center의 지시 |
 | 실행 | `run` | Bot 실행 한 번. `run_id`로 식별 |
 | 실행 이벤트 | `run_event` | 실행 중 일어난 일 하나. `(run_id, seq)`가 멱등 키 |
+| 이정표 | `milestone` | 이벤트 정의가 없는 중간 던지기 이벤트. 「어디까지 왔는지」를 실행 기록에 남긴다 (C14 §이벤트) |
+| 출력 폴더 | `output_dir` | 실행 하나가 파일을 쓰는 곳이자 BPM 프로세스가 적는 **상대 경로의 기준**. 쓰기는 이 안만 된다 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
+| 읽기 허용 폴더 | `readable` | 파일 목록이 들여다볼 수 있는 폴더. 실행하는 쪽(Bot UI 설정·Studio)이 정한다 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
 | 시험 케이스 | `case` | 입력 + 기대 결과 + 결재 자동 응답. Studio 시험 실행의 판정 기준 |
 | 사전 점검 | `preflight` | 실행 전에 각 노드를 ok / warning / blocked로 판정 (서비스 앱 키 참조가 이 PC에 있는지도 포함) |
 | 재생 | `replay` | 성공한 AI 태스크의 도구 순서를 LLM 없이 다시 실행 (결정 수행의 한 형태) |
@@ -101,6 +104,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | UI 태스크 | `ui_task` | ServiceTask | Worker 프로세스 (REST 요청). 화면 + 시맨틱 키 + 동작 목록 |
 | 서비스 앱 태스크 | `service_task` | ServiceTask | 서비스 앱. 앱 + 작업 + 입력·출력 매핑 (키는 BPM 프로세스의 키 참조를 상속) |
 | 결재 | `approval` | UserTask | 사람 (Center 또는 현장 PC) |
+| 파일 목록 | `file_list` | ServiceTask | 실행 엔진 내장. 폴더를 훑어 파일 경로 목록을 만든다 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
 | 스크립트·규칙·메일·웹훅 | — | ScriptTask, BusinessRuleTask(DMN), SendTask, ReceiveTask | 실행 엔진 내장 |
 
 ## 3. 사람 개입

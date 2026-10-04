@@ -64,6 +64,15 @@ APPROVAL_LOCATIONS = frozenset({"follow", "center", "field"})
 #: 파일 출력 형식.
 FILE_FORMATS = frozenset({"md", "xlsx", "json", "txt", "csv"})
 
+#: 이어 쓸 수 있는 형식 (C14 §파일 출력 — `json`·`xlsx`는 이어 붙일 수 없다).
+APPENDABLE_FORMATS = frozenset({"md", "txt", "csv"})
+
+#: 파일 목록의 차례 (기본은 이름순 — 디스크가 주는 순서는 실행마다 다르다, ADR-0026).
+FILE_SORTS = frozenset({"name", "modified"})
+
+#: 경로 구분자. `pattern`에는 쓸 수 없다 (폴더는 `folder`로만 정한다, ADR-0026).
+PATH_SEPARATORS = ("/", "\\")
+
 #: 표준 오류 코드 (오류 경계가 받는다).
 ERROR_CODES = frozenset({"TASK_FAILED", "SEND_FAILED", "ESCALATED", "DELEGATION_FAILED"})
 
@@ -276,6 +285,22 @@ class DataOutput(ContractModel):
     store_as: str | None = None
 
 
+class FileList(ContractModel):
+    """`chk:fileList` — 파일 목록 태스크 ([ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)).
+
+    디스크를 읽으므로 식의 도우미가 아니라 **태스크**다 (ADR-0025 §식에 두지 않는 것).
+    `store_as`가 **필수**다 — 결과를 받을 길이 그것뿐이다.
+    """
+
+    folder: str  # 템플릿 (`{변수}`). 상대 경로는 출력 폴더 기준 (C14 §파일 경로)
+    pattern: str = "*"  # glob 한 조각 — 경로 구분자는 쓸 수 없다
+    recursive: bool = False
+    sort: str = "name"  # FILE_SORTS
+    limit: int | None = None
+    store_as: str | None = None  # 파일 경로 목록이 들어갈 변수 (B5가 필수로 본다)
+    count_as: str | None = None  # 개수가 들어갈 변수
+
+
 #: `chk:*` 요소 이름 → 모델. 모르는 요소는 무시한다 (호환 규칙).
 ELEMENT_MODELS: dict[str, type[ContractModel]] = {
     "process": ProcessInfo,
@@ -291,6 +316,7 @@ ELEMENT_MODELS: dict[str, type[ContractModel]] = {
     "call": Call,
     "loop": Loop,
     "dataOutput": DataOutput,
+    "fileList": FileList,
 }
 
 
@@ -753,6 +779,9 @@ def produced_vars(node: Node) -> set[str]:
     data: DataOutput | None = node.prop("dataOutput")
     if data is not None and data.store_as:
         out.add(data.store_as)
+    files: FileList | None = node.prop("fileList")
+    if files is not None:
+        out |= {name for name in (files.store_as, files.count_as) if name}
     loop: Loop | None = node.prop("loop")
     if loop is not None:
         out |= {loop.item} | ({loop.collect_into} if loop.collect_into else set())
@@ -817,6 +846,9 @@ def read_vars(node: Node, flows: Sequence[Flow]) -> set[str]:
     data: DataOutput | None = node.prop("dataOutput")
     if data is not None:
         out |= set(data.variables or ()) | template_vars(data.path) | template_vars(data.template or "")
+    files: FileList | None = node.prop("fileList")
+    if files is not None:
+        out |= template_vars(files.folder)
     loop: Loop | None = node.prop("loop")
     if loop is not None:
         out.add(loop.collection)
@@ -977,6 +1009,26 @@ def _check_b4_b5(process: BpmnProcess) -> list[Violation]:
                 out.append(_error("B5", f"{node.id}의 파일 출력에 store_as가 없다 (경로를 받을 길이 없다)"))
             if not data.template and not data.variables:
                 out.append(_error("B5", f"{node.id}의 파일 출력에 template·variables가 모두 없다"))
+            if data.format == "xlsx" and data.template:
+                out.append(_error("B5", f"{node.id}: xlsx에는 template를 쓸 수 없다 (variables로 시트를 만든다)"))
+            if data.format == "csv" and data.variables and len(data.variables) > 1:
+                out.append(
+                    _error("B5", f"{node.id}: csv의 variables는 이름 하나다", items=list(data.variables))
+                )
+            if data.append and data.format not in APPENDABLE_FORMATS:
+                out.append(
+                    _error("B5", f"{node.id}: {data.format}은 이어 쓸 수 없다",
+                           items=sorted(APPENDABLE_FORMATS))
+                )
+        files: FileList | None = node.prop("fileList")
+        if files is not None:
+            if not files.store_as:
+                out.append(_error("B5", f"{node.id}의 파일 목록에 store_as가 없다 (결과를 받을 길이 없다)"))
+            if any(sep in files.pattern for sep in PATH_SEPARATORS):
+                out.append(
+                    _error("B5", f"{node.id}의 pattern에 경로 구분자가 있다 (폴더는 folder로만 정한다)",
+                           items=[files.pattern])
+                )
     return out
 
 
@@ -1109,6 +1161,9 @@ def _check_b12(process: BpmnProcess) -> list[Violation]:
         data: DataOutput | None = node.prop("dataOutput")
         if data is not None and data.format not in FILE_FORMATS:
             out.append(_error("B12", f"{node.id}의 파일 형식을 모른다: {data.format}", items=sorted(FILE_FORMATS)))
+        files: FileList | None = node.prop("fileList")
+        if files is not None and files.sort not in FILE_SORTS:
+            out.append(_error("B12", f"{node.id}의 파일 목록 sort를 모른다: {files.sort}", items=sorted(FILE_SORTS)))
     return out
 
 
