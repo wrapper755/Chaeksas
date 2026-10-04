@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Chaeksas Studio 캔버스</title>
+  <!--
+    오프라인이다 (ADR-0022·ADR-0029) — 모든 자원이 로컬 파일이고 CDN을 쓰지 않는다.
+    `vendor/`는 생성물이다 (`pnpm --filter @chaeksas/bpmn-canvas build`). 이 파일은 우리가 쓴다.
+  -->
+  <link rel="stylesheet" href="vendor/assets/diagram-js.css">
+  <link rel="stylesheet" href="vendor/assets/bpmn-js.css">
+  <link rel="stylesheet" href="vendor/assets/bpmn-font/css/bpmn-embedded.css">
+  <style>
+    /* 색은 Python 쪽이 토큰에서 넣어 준다 (`--chk-*`) — 여기 값을 적지 않는다 (ADR-0017). */
+    html, body { margin: 0; height: 100%; background: var(--chk-bg, #ffffff); }
+    #canvas { height: 100%; }
+    .djs-palette { background: var(--chk-surface, #ffffff); }
+  </style>
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script src="vendor/bpmn-modeler.production.min.js"></script>
+  <script src="chk-moddle.js"></script>
+</head>
+<body>
+<div id="canvas"></div>
+<script>
+  // Python ↔ JS는 QWebChannel 하나다 (ADR-0022).
+  //   Python → JS : window.chk(요청 id, 함수 이름, 인자 JSON)
+  //   JS → Python : bridge.result(요청 id, 결과 JSON) / bridge.changed(dirty) / bridge.picked(id)
+  // `runJavaScript`가 Promise 결과를 못 받아서 요청 id로 짝을 맞춘다.
+  async function boot() {
+    const modeler = new BpmnJS({
+      container: "#canvas",
+      // `chk:*`를 타입으로 다룬다 — 설명은 C14 모델에서 생성한다 (scripts/gen_moddle.py).
+      moddleExtensions: { chk: window.CHK_MODDLE },
+    });
+    let bridge = null;
+    let dirty = false;
+
+    modeler.on("commandStack.changed", () => {
+      dirty = true;
+      if (bridge) bridge.changed(true);
+    });
+    modeler.on("selection.changed", (e) => {
+      const one = (e.newSelection || []).length === 1 ? e.newSelection[0] : null;
+      if (bridge) bridge.picked(one ? one.id : "");
+    });
+
+    const api = {
+      async importXML(xml) {
+        const found = await modeler.importXML(xml);
+        modeler.get("canvas").zoom("fit-viewport");
+        dirty = false;
+        return { warnings: (found.warnings || []).map((w) => String(w.message || w)) };
+      },
+      async saveXML() {
+        const { xml } = await modeler.saveXML({ format: true });
+        dirty = false;
+        return { xml };
+      },
+      async createEmpty(processId, name) {
+        await modeler.createDiagram();
+        const registry = modeler.get("elementRegistry");
+        const process = registry.find((e) => e.type === "bpmn:Process");
+        if (process) {
+          modeler.get("modeling").updateProperties(process, { id: processId, name });
+        }
+        dirty = false;
+        return { ok: true };
+      },
+      async undo() { modeler.get("commandStack").undo(); return { ok: true }; },
+      async redo() { modeler.get("commandStack").redo(); return { ok: true }; },
+      async select(id) {
+        const found = modeler.get("elementRegistry").get(id);
+        if (found) modeler.get("selection").select(found);
+        return { ok: Boolean(found) };
+      },
+      async stats() {
+        return { elements: modeler.get("elementRegistry").getAll().length, dirty };
+      },
+      /** 노드에 상태 색을 입힌다 (실행 표시, STU-09). `states`는 {노드 id: 상태}. */
+      async mark(states) {
+        const canvas = modeler.get("canvas");
+        for (const element of modeler.get("elementRegistry").getAll()) {
+          for (const name of ["chk-running", "chk-done", "chk-failed", "chk-waiting"]) {
+            canvas.removeMarker(element.id, name);
+          }
+        }
+        for (const [id, state] of Object.entries(states || {})) {
+          if (modeler.get("elementRegistry").get(id)) canvas.addMarker(id, `chk-${state}`);
+        }
+        return { ok: true };
+      },
+    };
+
+    new QWebChannel(qt.webChannelTransport, (channel) => {
+      bridge = channel.objects.bridge;
+      window.chk = (requestId, name, argsJson) => {
+        const run = api[name];
+        if (!run) {
+          bridge.result(requestId, JSON.stringify({ ok: false, error: `모르는 함수다: ${name}` }));
+          return;
+        }
+        run(...JSON.parse(argsJson))
+          .then((found) => bridge.result(requestId, JSON.stringify({ ok: true, ...found })))
+          .catch((e) => bridge.result(requestId, JSON.stringify({ ok: false, error: String((e && e.message) || e) })));
+      };
+      bridge.ready();
+    });
+  }
+  boot();
+</script>
+</body>
+</html>

@@ -8,6 +8,8 @@
     "build": "pnpm --filter \"./apps/*\" build",
     "typecheck": "pnpm -r typecheck",
     "gen:api-types": "pnpm --filter @chaeksas/api-types generate",
-    "check:api-types": "pnpm --filter @chaeksas/api-types check"
+    "check:api-types": "pnpm --filter @chaeksas/api-types check",
+    "gen:bpmn-canvas": "pnpm --filter @chaeksas/bpmn-canvas build",
+    "check:bpmn-canvas": "pnpm --filter @chaeksas/bpmn-canvas check"
   }
 }

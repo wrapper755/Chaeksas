@@ -49,12 +49,16 @@ jobs:
 
       # Qt는 화면 없이 돌려도(offscreen) 시스템 그래픽 라이브러리가 필요하다. 러너 이미지에
       # 없는 것만 깐다. Windows 러너는 필요 없다 (Qt 런타임이 휠에 들어 있다).
-      - name: Qt 런타임 라이브러리 (Linux)
+      # Studio 캔버스는 QtWebEngine이다 (ADR-0022) — Chromium이 쓰는 것이 Qt보다 더 많다.
+      # 없으면 캔버스 시험이 건너뛰어지므로(조용히 안 도는 것보다 나쁘다) 여기서 깐다.
+      - name: Qt·WebEngine 런타임 라이브러리 (Linux)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libegl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libfreetype6
+            libegl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libfreetype6 \
+            libnss3 libnspr4 libasound2t64 libxcomposite1 libxdamage1 libxrandr2 \
+            libxkbfile1 libxtst6 libcups2t64 libatk1.0-0t64 libatk-bridge2.0-0t64 libgbm1
 
       - name: 테스트
         run: uv run pytest
@@ -73,6 +77,10 @@ jobs:
       # 생성물이 원본과 어긋나면 멈춘다. 둘 다 아무것도 쓰지 않고 검사만 한다.
       - name: 계약 JSON Schema 최신 여부
         run: uv run python scripts/gen_schemas.py --check
+
+      # Studio 캔버스가 `chk:*`를 타입으로 다루는 설명 (ADR-0022·0029 §3).
+      - name: bpmn-moddle 설명 최신 여부
+        run: uv run python scripts/gen_moddle.py --check
 
       - name: 업무 예제 생성물 최신 여부
         run: uv run python docs/08-business-examples/_source/build.py --check
@@ -122,6 +130,11 @@ jobs:
       # 계약 스키마에서 생성한 타입이 최신인가. 스키마 자체의 최신 여부는 Python 쪽이 본다.
       - name: 계약 타입 최신 여부
         run: pnpm check:api-types
+
+      # Studio 안으로 복사해 둔 bpmn-js 배포본이 고정한 판과 같은가 (ADR-0029).
+      # 파이썬 쪽에는 Node가 없으므로 **여기서** 본다.
+      - name: bpmn-js 배포본 최신 여부
+        run: pnpm check:bpmn-canvas
 
       - name: 타입 검사
         run: pnpm typecheck

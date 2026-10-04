@@ -6,7 +6,13 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "chaeksas-core",
     "chaeksas-qt",
+    # 캔버스는 QtWebEngine 안의 bpmn-js다 (ADR-0022). WebEngine·WebChannel은 addons에 있다 —
+    # `pyside6-essentials`만으로는 뜨지 않는다. 설치 크기는 ADR-0022가 받아들인 값이다.
+    "pyside6-addons>=6.8",
 ]
+
+[project.scripts]
+chk-studio = "chaeksas.studio.__main__:main"
 
 [tool.uv.sources]
 chaeksas-core = { workspace = true }

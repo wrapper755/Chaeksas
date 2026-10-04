@@ -1,0 +1,14 @@
+{
+  "name": "@chaeksas/bpmn-canvas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Studio 캔버스가 쓰는 bpmn-js 배포본 — 버전을 여기서 고정하고 Studio 안으로 복사한다 (ADR-0029)",
+  "scripts": {
+    "build": "node copy.mjs",
+    "check": "node copy.mjs --check"
+  },
+  "dependencies": {
+    "bpmn-js": "18.31.0"
+  }
+}
