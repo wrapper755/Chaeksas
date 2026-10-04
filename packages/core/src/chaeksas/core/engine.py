@@ -1,4 +1,4 @@
-"""BPMN 실행 (M3 조각 2~3b).
+"""BPMN 실행 — 엔진 (M3 조각 2~3b).
 
 **토큰이 여러 개일 수 있다.** 병렬·포함 게이트웨이가 갈라고 합치며, 하위 프로세스는 안쪽에
 토큰을 하나 만들어 끝날 때까지 바깥 토큰을 세워 둔다. 반복(다중 인스턴스)은 한 노드를 여러 번
@@ -7,12 +7,16 @@
 사람을 기다리면 그 토큰만 멈춘다 (`State.WAITING`). 엔진은 스레드를 만들지 않는다 — 부르는
 쪽(Bot UI·Studio)이 `step()`을 돈다.
 
-노드 종류를 더하는 자리는 `Engine.handlers`다. 수행기는 `Context`를 받아 **다음에 무엇을 할지**를
-돌려준다 (`Go`·`Wait`·`Consume`). **모르는 노드는 조용히 지나가지 않고 실행을 실패로 끝낸다.**
+세 모듈로 나뉘어 있고, **쓰는 쪽은 여기 하나만 보면 된다** (나머지를 다시 내보낸다).
 
-**바깥 세계는 `RunEnv` 한 곳으로 모은다** — 파일(`Workspace`), 보내기 어댑터(`Sender`), 같은
-패키지의 DMN 결정. 실행하는 쪽(Bot UI·Studio 시험 실행·서버 실행기)이 정해서 준다. 주지 않으면
-파일도 못 쓰고 메일도 못 보낸다 — **조용히 아무 데나 쓰거나 안 보내지 않는다** (ADR-0026).
+| 모듈 | 무엇 |
+| --- | --- |
+| `core.run_state` | 상태와 수행기 규약 (`Run`·`Token`·`RunEnv`·`Context`·`Go`/`Wait`/`Consume`) |
+| `core.nodes` | 노드마다 무엇을 하는지 (`DEFAULT_HANDLERS`) |
+| `core.engine` | 한 걸음씩 돌리는 것 — 토큰 옮기기·반복·오류 경계·끝내기 |
+
+노드 종류를 더하는 자리는 `core.nodes`이고, 엔진은 `Engine(handlers=…)`로 바꿔 끼울 수 있다.
+**모르는 노드는 조용히 지나가지 않고 실행을 실패로 끝낸다.**
 
 기록은 C3 그대로 남긴다 (`run_log.RunLog`). 업무 값은 담지 않는다 (계약 원칙 6).
 """
@@ -20,295 +24,58 @@
 from __future__ import annotations
 
 import logging
-import re
-import secrets
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from enum import StrEnum
-from pathlib import Path
+from collections.abc import Iterable, Mapping
+from datetime import datetime
 from typing import Any
 
-from chaeksas.contracts.approvals import Form, FormField, request_id_for
-from chaeksas.contracts.bpmn_ext import (
-    WEBHOOK_BODY_ALL,
-    BpmnProcess,
-    DataOutput,
-    Email,
-    FileList,
-    Flow,
-    Node,
-    Rule,
-    Webhook,
-)
-from chaeksas.contracts.dmn import Decision, DmnError
-from chaeksas.core.expr import ExprError, Scope, evaluate, fill, run_script, truthy
-from chaeksas.core.files import FileTaskError, PathDenied, Workspace, list_files, write_output
+from chaeksas.contracts.approvals import Form, FormField
+from chaeksas.contracts.bpmn_ext import BpmnProcess, DataOutput, Node
+from chaeksas.core.expr import ExprError, evaluate
+from chaeksas.core.files import FileTaskError, PathDenied, Workspace, write_output
 from chaeksas.core.helpers import bind
+from chaeksas.core.nodes import DEFAULT_HANDLERS
 from chaeksas.core.run_log import RunLog, summarize
-from chaeksas.core.senders import EmailMessage, NoSender, Sender, SendError, WebhookRequest
+from chaeksas.core.run_state import (
+    BUILTIN_NOW,
+    BUILTIN_RUN_ID,
+    BUILTIN_TODAY,
+    CODE_PATH_DENIED,
+    CODE_UNSUPPORTED,
+    DECISION_KEY,
+    ERROR_CODE_VAR,
+    ERROR_MESSAGE_VAR,
+    ERROR_SEND_FAILED,
+    ERROR_TASK_FAILED,
+    FAILED_TASK_VAR,
+    MAX_STEPS,
+    Consume,
+    Context,
+    EngineError,
+    Go,
+    Handler,
+    LoopState,
+    Outcome,
+    Pending,
+    Run,
+    RunEnv,
+    State,
+    TaskFailed,
+    Token,
+    Wait,
+    new_run_id,
+    new_token_id,
+    task_type,
+    utc_now,
+)
 
 log = logging.getLogger(__name__)
 
-#: 한 번 `run_until_blocked()`에서 밟을 노드 수 한도 (돌고 도는 그림을 막는 그물).
-MAX_STEPS = 10_000
 
-#: 엔진이 늘 주는 변수 (C14 §9). 이름이 늘면 `contracts.bpmn_ext.BUILTIN_VARS`도 함께 고친다.
-BUILTIN_TODAY = "오늘"
-BUILTIN_NOW = "지금"
-BUILTIN_RUN_ID = "run_id"
-
-#: 결재·확인에서 폼을 주지 않았을 때의 답 (C6 — 「없으면 승인 / 반려 두 단추」).
-DECISION_KEY = "decision"
-
-#: 오류 경계가 만드는 변수 (C14 §이벤트).
-ERROR_CODE_VAR = "error_code"
-ERROR_MESSAGE_VAR = "error_message"
-FAILED_TASK_VAR = "failed_task"
-
-#: 표준 오류 코드 (C14 §이벤트).
-ERROR_TASK_FAILED = "TASK_FAILED"
-ERROR_SEND_FAILED = "SEND_FAILED"
-
-#: 실행 폴더 밖을 가리켰다 (ADR-0026). **오류 경계로 받지 않는다** — 그림·설정이 잘못된 것이다.
-CODE_PATH_DENIED = "path_denied"
-#: 아직 다루지 않는 노드·태스크 (뒤 조각). 실행을 조용히 지나가지 않고 멈춘다.
-CODE_UNSUPPORTED = "node_kind_unsupported"
-
-#: 웹훅 본문 적는 법 (C14 — `all` | `fields:[…]` | `template:"…"`).
-_WEBHOOK_FIELDS = re.compile(r"^fields\s*:\s*\[(.*)\]$", re.S)
-_WEBHOOK_TEMPLATE = re.compile(r"^template\s*:\s*(.*)$", re.S)
-
-
-class State(StrEnum):
-    """실행의 지금 상태."""
-
-    READY = "ready"
-    RUNNING = "running"
-    WAITING = "waiting"  # 사람·메시지·타이머를 기다린다
-    DONE = "done"
-    FAILED = "failed"
-
-
-class EngineError(RuntimeError):
-    """실행을 멈춰야 하는 문제. 노드 id를 달고 나온다."""
-
-    def __init__(self, message: str, *, node_id: str | None = None, code: str = "engine_error") -> None:
-        self.node_id = node_id
-        self.code = code
-        super().__init__(f"[{node_id}] {message}" if node_id else message)
-
-
-class TaskFailed(EngineError):
-    """태스크가 실패했다 — **오류 경계로 받을 수 있는** 실패 (C14 `TASK_FAILED`).
-
-    그림이 잘못된 것(식 오류·흐름 없음)은 경계로 받지 않는다. 그것은 고쳐야 할 버그다.
-    """
-
-    def __init__(self, message: str, *, node_id: str, code: str = ERROR_TASK_FAILED) -> None:
-        super().__init__(message, node_id=node_id, code=code)
-
-
-# ─────────────────────────── 토큰·상태 ───────────────────────────
-
-
-@dataclass
-class LoopState:
-    """반복(다중 인스턴스) 한 묶음 (C14 §반복)."""
-
-    items: list[Any]
-    item_name: str
-    result_name: str | None
-    collect_into: str
-    index: int = 0
-    results: list[Any] = field(default_factory=list)
-    sequential: bool = True
-
-    @property
-    def finished(self) -> bool:
-        return self.index >= len(self.items)
-
-
-@dataclass
-class Token:
-    """실행 중인 자리 하나."""
-
-    id: str
-    node_id: str
-    #: 하위 프로세스 안이면 그 노드 id들 (범위 경로). 비면 맨 바깥이다.
-    scope: tuple[str, ...] = ()
-    #: 기다리는 것의 열쇠 (결재 `request_id`, 하위 프로세스 `sub:<노드>`).
-    waiting_for: str | None = None
-    loop: LoopState | None = None
-
-    @property
-    def waiting(self) -> bool:
-        return self.waiting_for is not None
-
-
-@dataclass
-class Pending:
-    """사람을 기다리는 중인 요청 (결재·확인)."""
-
-    request_id: str
-    node_id: str
-    layer: str  # approval | confirmation
-    title: str
-    form: Form | None
-    #: 결재자에게 보여 줄 값 (C6 `review` — 원칙 6의 예외다).
-    review: dict[str, Any] = field(default_factory=dict)
-    where: str = "field"  # field | center
-    node_instance: int = 1
-
-
-@dataclass(frozen=True)
-class RunEnv:
-    """실행이 **바깥 세계에 닿는 자리**. 실행하는 쪽이 정해서 준다.
-
-    기본값은 아무것도 못 하는 것이다 — 파일을 쓰려면 출력 폴더가, 메일을 보내려면 어댑터가
-    있어야 한다. 「없으면 조용히 넘어간다」로 두면 보냈는지 썼는지 아무도 모른다.
-    """
-
-    #: 파일을 읽고 쓸 수 있는 범위 (C14 §파일 경로, ADR-0026).
-    workspace: Workspace = field(default_factory=Workspace)
-    #: 메일·웹훅 보내기 (C14 §보내기). 기본은 **보내지 않고 실패한다**.
-    sender: Sender = field(default_factory=NoSender)
-    #: 같은 패키지의 DMN 결정 (`결정 id` → 결정). 규칙 태스크가 찾는다.
-    decisions: Mapping[str, Decision] = field(default_factory=dict)
-
-
-def _utc_now() -> datetime:
-    return datetime.now(UTC)
-
-
-def _new_token_id() -> str:
-    return f"t_{secrets.token_hex(3)}"
-
-
-@dataclass
-class Run:
-    """실행 하나. 토큰·변수·기록을 들고 있다."""
-
-    run_id: str
-    process: BpmnProcess
-    log: RunLog
-    #: 바깥 세계 (파일·보내기·DMN). 주지 않으면 아무것도 못 한다.
-    env: RunEnv = field(default_factory=RunEnv)
-    variables: dict[str, Any] = field(default_factory=dict)
-    state: State = State.READY
-    tokens: list[Token] = field(default_factory=list)
-    #: 기다리는 사람 요청 (`request_id` → 요청). 병렬 가지면 여럿일 수 있다.
-    pendings: dict[str, Pending] = field(default_factory=dict)
-    #: 합류 게이트웨이에 도착한 토큰 (`범위:노드` → 토큰 id 묶음).
-    arrivals: dict[str, set[str]] = field(default_factory=dict)
-    #: 포함 분기가 실제로 띄운 가지 수 (`범위:합류` → 수). 포함 합류가 이만큼 기다린다.
-    expected: dict[str, int] = field(default_factory=dict)
-    mode: str = "autonomous"
-    started: datetime = field(default_factory=_utc_now)
-    error: EngineError | None = None
-    #: 노드마다 몇 번째 수행인지 (C6 `node_instance`·C10 `business_key`).
-    instances: dict[str, int] = field(default_factory=dict)
-    helpers: Mapping[str, Callable[..., Any]] = field(default_factory=dict)
-
-    # ── 자주 쓰는 것 ──
-
-    def node(self, node_id: str) -> Node:
-        found = next((n for n in self.process.all_nodes() if n.id == node_id), None)
-        if found is None:
-            raise EngineError(f"노드를 찾지 못했다: {node_id}", code="node_missing")
-        return found
-
-    def scope(self, node_id: str | None = None, **extra: Any) -> Scope:
-        """식이 볼 것. **변수를 그대로 넘긴다** — 스크립트가 여기에 대입한다.
-
-        반복의 `item`처럼 그 노드에서만 보이는 이름은 `extra`로 얹는다.
-        """
-        found = Scope(variables=self.variables, helpers=self.helpers, where=node_id)
-        return found.child(**extra) if extra else found
-
-    def flows(self, scope: tuple[str, ...] = ()) -> list[Flow]:
-        """그 범위의 흐름 (맨 바깥이면 프로세스의 흐름, 안쪽이면 그 하위 프로세스의 흐름)."""
-        if not scope:
-            return list(self.process.flows)
-        return list(self.node(scope[-1]).child_flows)
-
-    def outgoing(self, node_id: str, scope: tuple[str, ...] = ()) -> list[Flow]:
-        return [f for f in self.flows(scope) if f.source == node_id]
-
-    def incoming(self, node_id: str, scope: tuple[str, ...] = ()) -> list[Flow]:
-        return [f for f in self.flows(scope) if f.target == node_id]
-
-    def boundaries(self, node_id: str) -> list[Node]:
-        """그 노드에 붙은 경계 이벤트."""
-        return [n for n in self.process.all_nodes() if n.attached_to == node_id]
-
-    @property
-    def pending(self) -> Pending | None:
-        """기다리는 요청 하나 (대개 하나다 — 병렬 가지면 `pendings`를 본다)."""
-        return next(iter(self.pendings.values()), None)
-
-    @property
-    def finished(self) -> bool:
-        return self.state in (State.DONE, State.FAILED)
-
-    def runnable(self) -> Token | None:
-        return next((t for t in self.tokens if not t.waiting), None)
-
-
-# ─────────────────────────── 수행기가 돌려주는 것 ───────────────────────────
-
-
-@dataclass
-class Go:
-    """다음으로 간다. `targets`가 비면 **나가는 흐름**을 따른다 (여럿이면 갈라진다)."""
-
-    targets: list[str] | None = None
-
-
-@dataclass
-class Wait:
-    """이 토큰은 멈춘다. `key`로 무엇을 기다리는지 가린다 (결재 `request_id` 등)."""
-
-    key: str
-
-
-@dataclass
-class Consume:
-    """이 토큰은 여기서 사라진다 (합류가 아직 안 찼거나, 끝났다)."""
-
-
-Outcome = Go | Wait | Consume
-
-
-@dataclass
-class Context:
-    """수행기가 받는 것 — 실행·토큰·노드."""
-
-    engine: Engine
-    run: Run
-    token: Token
-    node: Node
-
-    @property
-    def node_id(self) -> str:
-        return self.node.id
-
-    def scope(self) -> Scope:
-        """식이 볼 것.
-
-        반복의 `item`은 **프로세스 변수로 넣어 둔다** (`_prepare_iteration`) — 자식 스코프에
-        넣으면 스크립트의 대입이 사본으로 들어가 사라진다.
-        """
-        return self.run.scope(self.node.id)
-
-    def emit(self, kind: str, **data: Any) -> None:
-        self.run.log.emit(kind, node_id=self.node.id, **data)
-
-    def instance(self) -> int:
-        return self.run.instances.get(self.node.id, 1)
-
-
-Handler = Callable[[Context], Outcome]
+def _missing_fields(form: Form | None, answer: Mapping[str, Any]) -> list[str]:
+    """필수 칸이 답에 있나. 폼이 없으면 `decision` 하나를 본다 (C6)."""
+    if form is None or not form.fields:
+        return [] if DECISION_KEY in answer else [DECISION_KEY]
+    return [f.key for f in form.fields if f.required and f.key not in answer]
 
 
 # ─────────────────────────── 엔진 ───────────────────────────
@@ -338,7 +105,7 @@ class Engine:
         env: RunEnv | None = None,
     ) -> Run:
         """실행을 만들고 `run_started`를 남긴다. 토큰은 시작 이벤트에 놓인다."""
-        at = now or _utc_now()
+        at = now or utc_now()
         run = Run(
             run_id=run_id,
             process=process,
@@ -360,7 +127,7 @@ class Engine:
             source=source,
             **({"job_id": job_id} if job_id else {}),
         )
-        run.tokens = [Token(id=_new_token_id(), node_id=self._start_node(process))]
+        run.tokens = [Token(id=new_token_id(), node_id=self._start_node(process))]
         run.state = State.RUNNING
         return run
 
@@ -443,7 +210,7 @@ class Engine:
             self._prepare_loop(context)
             if token.loop is not None and token.loop.finished:
                 # 반복할 것이 없다 — 수행기를 부르지 않고 지나간다 (C3 `skipped`).
-                run.log.emit("node_state", node_id=node.id, state="skipped", task_type=_task_type(node))
+                run.log.emit("node_state", node_id=node.id, state="skipped", task_type=task_type(node))
                 run.variables[token.loop.collect_into] = []
                 token.loop = None
                 return self._move(context, None)
@@ -451,7 +218,7 @@ class Engine:
             self._prepare_iteration(context)
             if token.loop is None or token.loop.index == 0:
                 run.instances[node.id] = run.instances.get(node.id, 0) + 1
-                run.log.emit("node_state", node_id=node.id, state="started", task_type=_task_type(node))
+                run.log.emit("node_state", node_id=node.id, state="started", task_type=task_type(node))
             outcome = handler(context)
             return self._apply(context, outcome)
         except ExprError as e:
@@ -478,7 +245,7 @@ class Engine:
         run, token, node = context.run, context.token, context.node
 
         if isinstance(outcome, Wait):
-            run.log.emit("node_state", node_id=node.id, state="waiting", task_type=_task_type(node))
+            run.log.emit("node_state", node_id=node.id, state="waiting", task_type=task_type(node))
             token.waiting_for = outcome.key
             run.state = State.WAITING
             return run.state
@@ -500,7 +267,7 @@ class Engine:
         # 파일 출력은 **그 태스크가 끝날 때** 쓴다 (C14 §파일 출력) — 「완료」보다 먼저여서,
         # 쓰다 실패하면 완료로 남지 않고 오류 경계로 간다.
         self.write_data_outputs(context)
-        run.log.emit("node_state", node_id=node.id, state="completed", task_type=_task_type(node))
+        run.log.emit("node_state", node_id=node.id, state="completed", task_type=task_type(node))
         return self._move(context, outcome.targets)
 
     def write_data_outputs(self, context: Context) -> None:
@@ -546,7 +313,7 @@ class Engine:
 
         token.node_id = targets[0]
         for extra in targets[1:]:
-            run.tokens.append(Token(id=_new_token_id(), node_id=extra, scope=token.scope))
+            run.tokens.append(Token(id=new_token_id(), node_id=extra, scope=token.scope))
         return run.state
 
     def pass_through(self, run: Run, token: Token) -> None:
@@ -557,7 +324,7 @@ class Engine:
         node = run.node(token.node_id)
         context = Context(engine=self, run=run, token=token, node=node)
         self.write_data_outputs(context)
-        run.log.emit("node_state", node_id=node.id, state="completed", task_type=_task_type(node))
+        run.log.emit("node_state", node_id=node.id, state="completed", task_type=task_type(node))
         self._move(context, None)
 
     def _settle(self, run: Run) -> State:
@@ -631,7 +398,7 @@ class Engine:
             "node_state",
             node_id=node.id,
             state="failed",
-            task_type=_task_type(node),
+            task_type=task_type(node),
             error_code=error.code,
             message=str(error),
         )
@@ -649,7 +416,7 @@ class Engine:
             )
         token.node_id = flows[0].target
         for extra in flows[1:]:
-            run.tokens.append(Token(id=_new_token_id(), node_id=extra.target, scope=token.scope))
+            run.tokens.append(Token(id=new_token_id(), node_id=extra.target, scope=token.scope))
         return run.state
 
     def _error_boundary(self, run: Run, node: Node, error: EngineError) -> Node | None:
@@ -665,7 +432,7 @@ class Engine:
     # ── 끝 ──
 
     def _finish(self, run: Run, status: str, *, error: EngineError | None = None) -> State:
-        duration = max(0.0, (_utc_now() - run.started).total_seconds())
+        duration = max(0.0, (utc_now() - run.started).total_seconds())
         run.log.emit(
             "run_finished",
             status=status,
@@ -684,7 +451,7 @@ class Engine:
                 "node_state",
                 node_id=error.node_id,
                 state="failed",
-                task_type=_task_type(run.node(error.node_id)),
+                task_type=task_type(run.node(error.node_id)),
                 error_code=error.code,
                 message=str(error),
             )
@@ -740,443 +507,10 @@ class Engine:
         return self._fail(run, EngineError("결재 시간이 지났다", node_id=pending.node_id, code="human_timeout"))
 
 
-# ─────────────────────────── 노드 수행기 ───────────────────────────
-
-
-def _task_type(node: Node) -> str | None:
-    """C3 `node_state.task_type`."""
-    if node.kind == "serviceTask" and node.prop("fileList") is not None:
-        return "file_list"
-    if node.kind == "intermediateThrowEvent":
-        # 이벤트 정의가 없는 중간 던지기가 **이정표**다 (C14 §이벤트). 신호·메시지는 다른 것이다.
-        return "milestone" if not node.event_definitions else None
-    return {
-        "serviceTask": "service_task",
-        "userTask": "approval",
-        "manualTask": "confirmation",
-        "scriptTask": "script",
-        "businessRuleTask": "rule",
-        "callActivity": "call",
-        "sendTask": "send",
-        "receiveTask": "receive",
-        "subProcess": "subprocess",
-    }.get(node.kind)
-
-
-def _missing_fields(form: Form | None, answer: Mapping[str, Any]) -> list[str]:
-    """필수 칸이 답에 있나. 폼이 없으면 `decision` 하나를 본다 (C6)."""
-    if form is None or not form.fields:
-        return [] if DECISION_KEY in answer else [DECISION_KEY]
-    return [f.key for f in form.fields if f.required and f.key not in answer]
-
-
-def _join_key(token: Token, node: Node) -> str:
-    return f"{'/'.join(token.scope)}:{node.id}"
-
-
-def handle_pass(context: Context) -> Outcome:
-    """할 일이 없는 노드 (시작). 토큰만 지나간다."""
-    return Go()
-
-
-def handle_end(context: Context) -> Outcome:
-    """종료 이벤트. 하위 프로세스 안이면 **바깥 토큰을 깨워 그 노드를 지나게 한다.**"""
-    token, run = context.token, context.run
-    if token.scope:
-        parent_id = token.scope[-1]
-        key = f"sub:{parent_id}"
-        parent = next((t for t in run.tokens if t.waiting_for == key), None)
-        if parent is not None:
-            parent.waiting_for = None
-            context.engine.pass_through(run, parent)
-    return Consume()
-
-
-def handle_script(context: Context) -> Outcome:
-    """`scriptTask` — 대입문을 돌려 변수를 바꾼다 (ADR-0025)."""
-    node = context.node
-    if not node.script:
-        raise EngineError("스크립트가 비어 있다", node_id=node.id, code="script_empty")
-    changed = run_script(node.script, context.scope())
-    # **이름만** 남긴다 (값은 계약 원칙 6).
-    context.emit("log", level="info", message=f"변수 {len(changed)}개를 정했다")
-    return Go()
-
-
-def handle_exclusive(context: Context) -> Outcome:
-    """배타 게이트웨이 — **적힌 순서대로** 보고 처음 참인 길 하나로 간다 (B3가 짝을 검사한다)."""
-    run, token, node = context.run, context.token, context.node
-    flows = run.outgoing(node.id, token.scope)
-    if not flows:
-        return Go([])
-
-    default: Flow | None = None
-    for flow in flows:
-        if flow.is_default or not flow.condition:
-            default = default or flow
-            continue
-        if truthy(flow.condition, context.scope()):
-            context.emit("log", level="info", message=f"조건 참: {flow.condition}")
-            return Go([flow.target])
-    if default is not None:
-        context.emit("log", level="info", message="조건이 모두 거짓 — 기본 흐름")
-        return Go([default.target])
-    raise EngineError("조건이 모두 거짓이고 기본 흐름도 없다", node_id=node.id, code="no_matching_flow")
-
-
-def handle_parallel(context: Context) -> Outcome:
-    """병렬 게이트웨이 — 들어오는 흐름이 여럿이면 **모두 올 때까지 기다린다** (합류)."""
-    run, token, node = context.run, context.token, context.node
-    incoming = run.incoming(node.id, token.scope)
-    if len(incoming) > 1:
-        key = _join_key(token, node)
-        arrived = run.arrivals.setdefault(key, set())
-        arrived.add(token.id)
-        if len(arrived) < len(incoming):
-            context.emit("log", level="info", message=f"합류 {len(arrived)}/{len(incoming)}")
-            return Consume()
-        run.arrivals.pop(key, None)
-        context.emit("log", level="info", message="합류 완료")
-    return Go()  # 나가는 흐름이 여럿이면 `_apply`가 갈라 준다
-
-
-def handle_inclusive(context: Context) -> Outcome:
-    """포함 게이트웨이 — 참인 길 **모두**로 갈라지고, 합류는 **갈라진 수만큼** 기다린다.
-
-    「포함 분기는 포함 합류로 닫는다」(B3)를 믿는다. 몇 갈래가 올지 분기에서 적어 두지 않으면
-    합류가 영원히 기다린다.
-    """
-    run, token, node = context.run, context.token, context.node
-    incoming = run.incoming(node.id, token.scope)
-
-    if len(incoming) > 1:  # 합류
-        key = _join_key(token, node)
-        arrived = run.arrivals.setdefault(key, set())
-        arrived.add(token.id)
-        wanted = run.expected.get(key, len(incoming))
-        if len(arrived) < wanted:
-            context.emit("log", level="info", message=f"합류 {len(arrived)}/{wanted}")
-            return Consume()
-        run.arrivals.pop(key, None)
-        run.expected.pop(key, None)
-        context.emit("log", level="info", message="합류 완료")
-        return Go()
-
-    chosen: list[str] = []
-    default: Flow | None = None
-    for flow in run.outgoing(node.id, token.scope):
-        if flow.is_default or not flow.condition:
-            default = default or flow
-            continue
-        if truthy(flow.condition, context.scope()):
-            chosen.append(flow.target)
-    if not chosen and default is not None:
-        chosen = [default.target]
-    if not chosen:
-        raise EngineError("참인 길이 없고 기본 흐름도 없다", node_id=node.id, code="no_matching_flow")
-
-    join = _matching_inclusive_join(context)
-    if join is not None:
-        run.expected[f"{'/'.join(token.scope)}:{join}"] = len(chosen)
-    context.emit("log", level="info", message=f"{len(chosen)}갈래로 갈라진다")
-    return Go(chosen)
-
-
-def _matching_inclusive_join(context: Context) -> str | None:
-    """분기에서 앞으로 나아가며 처음 만나는 포함 합류 (같은 범위 안)."""
-    run, token, node = context.run, context.token, context.node
-    seen: set[str] = set()
-    frontier = [f.target for f in run.outgoing(node.id, token.scope)]
-    while frontier:
-        current = frontier.pop(0)
-        if current in seen:
-            continue
-        seen.add(current)
-        found = run.node(current)
-        if found.kind == "inclusiveGateway" and len(run.incoming(current, token.scope)) > 1:
-            return current
-        frontier.extend(f.target for f in run.outgoing(current, token.scope))
-    return None
-
-
-def handle_subprocess(context: Context) -> Outcome:
-    """하위 프로세스 — 안쪽에 토큰을 만들고 **바깥 토큰은 세워 둔다** (범위가 따로다)."""
-    run, token, node = context.run, context.token, context.node
-    starts = [n for n in node.children if n.kind == "startEvent"]
-    if not starts:
-        raise EngineError("하위 프로세스에 시작 이벤트가 없다", node_id=node.id, code="no_start")
-    if len(starts) > 1:
-        raise EngineError(
-            f"하위 프로세스의 시작 이벤트가 {len(starts)}개다", node_id=node.id, code="many_starts"
-        )
-    run.tokens.append(Token(id=_new_token_id(), node_id=starts[0].id, scope=(*token.scope, node.id)))
-    return Wait(key=f"sub:{node.id}")
-
-
-def handle_approval(context: Context) -> Outcome:
-    """`userTask`(결재)·`manualTask`(확인) — 요청을 올리고 **기다린다**.
-
-    PC Bot은 기다리는 동안에도 실행 자리를 쥔다 (ADR-0014). 어디서 답하는지(`where`)는
-    BPM 프로세스의 `location`과 Bot UI 설정이 함께 정하는데, 설정을 보는 것은 뒤 조각이다 —
-    지금은 현장(`field`)으로 둔다.
-    """
-    run, node = context.run, context.node
-    approval = node.prop("approval")
-    if approval is None:
-        raise EngineError("`chk:approval`이 없다", node_id=node.id, code="approval_missing")
-
-    instance = context.instance()
-    request_id = request_id_for(run.run_id, node.id, instance)
-    layer = "approval" if node.kind == "userTask" else "confirmation"
-    form = Form(fields=list(approval.fields)) if approval.fields else None
-    # 「표시 변수」만 담는다 (C6 `review` — 결재자가 판단할 값, 원칙 6의 예외).
-    review = {name: run.variables.get(name) for name in approval.show}
-
-    run.pendings[request_id] = Pending(
-        request_id=request_id,
-        node_id=node.id,
-        layer=layer,
-        title=fill(approval.title, context.scope()) if "{" in approval.title else approval.title,
-        form=form,
-        review=review,
-        node_instance=instance,
-    )
-    context.emit(
-        "human_requested",
-        layer=layer,
-        request_id=request_id,
-        where="field",
-        **({"form_key": ",".join(f.key for f in form.fields)} if form else {}),
-    )
-    return Wait(key=request_id)
-
-
-def handle_milestone(context: Context) -> Outcome:
-    """이정표 (`intermediateThrowEvent`, 이벤트 정의 없음) — 지나가면서 기록만 남긴다.
-
-    「어디까지 왔는지」를 콘솔·Studio가 `node_state`(`task_type: milestone`)로 보인다 (C14).
-    신호·메시지 던지기는 다른 것이라 여기서 멈춘다 (조각 3d).
-    """
-    node = context.node
-    if node.event_definitions:
-        raise EngineError(
-            f"아직 다루지 않는 중간 던지기다: {', '.join(node.event_definitions)} (조각 3d)",
-            node_id=node.id,
-            code=CODE_UNSUPPORTED,
-        )
-    context.emit("log", level="info", message=f"이정표: {node.name or node.id}")
-    return Go()
-
-
-# ─────────────────────────── 규칙 (DMN) ───────────────────────────
-
-
-def handle_rule(context: Context) -> Outcome:
-    """`businessRuleTask` — 같은 패키지의 DMN 결정으로 **한 건**을 판정한다 (C14).
-
-    표가 잘못된 것(`UNIQUE`인데 둘이 맞음, 입력이 빠짐)은 **오류 경계로 받지 않는다** — 고쳐야
-    할 그림이다. 적중한 줄이 없는 것은 실패가 아니다 (출력이 `None`·빈 목록이고, 게이트웨이로
-    가른다).
-    """
-    run, node = context.run, context.node
-    spec: Rule | None = node.prop("rule")
-    if spec is None:
-        raise EngineError("`chk:rule`이 없다", node_id=node.id, code="rule_missing")
-    decision = run.env.decisions.get(spec.decision)
-    if decision is None:
-        known = ", ".join(sorted(run.env.decisions)) or "없음"
-        raise EngineError(
-            f"DMN 결정을 찾지 못했다: {spec.decision} (패키지에 있는 것: {known})",
-            node_id=node.id,
-            code="decision_missing",
-        )
-
-    scope = context.scope()
-    values = {name: evaluate(expression, scope) for name, expression in spec.input.items()}
-    try:
-        decided = decision.decide(values)
-    except DmnError as e:
-        raise EngineError(str(e), node_id=node.id, code="dmn_error") from e
-
-    for variable, output in spec.output.items():
-        if output not in decided:
-            raise EngineError(
-                f"DMN 출력에 없는 것을 받는다: {output} (있는 것: {', '.join(decided)})",
-                node_id=node.id,
-                code="dmn_output_missing",
-            )
-        run.variables[variable] = decided[output]
-    # **값은 남기지 않는다** (원칙 6) — 어느 표로 몇 개를 정했는지만.
-    context.emit("log", level="info", message=f"규칙 {spec.decision}: 변수 {len(spec.output)}개")
-    return Go()
-
-
-# ─────────────────────────── 파일 (목록·출력) ───────────────────────────
-
-
-def handle_service_task(context: Context) -> Outcome:
-    """`serviceTask` — 지금은 **파일 목록**만 안다. AI·서비스 앱·UI 태스크는 뒤 조각이다."""
-    spec: FileList | None = context.node.prop("fileList")
-    if spec is None:
-        raise EngineError(
-            "아직 다루지 않는 서비스 태스크다 (AI·서비스 앱은 조각 3c, UI 태스크는 M4)",
-            node_id=context.node.id,
-            code=CODE_UNSUPPORTED,
-        )
-    return handle_file_list(context, spec)
-
-
-def handle_file_list(context: Context, spec: FileList) -> Outcome:
-    """`chk:fileList` — 폴더를 훑어 파일 경로 목록을 변수에 담는다 (C14, ADR-0026)."""
-    run, node = context.run, context.node
-    if not spec.store_as:
-        raise EngineError("파일 목록에 `store_as`가 없다 (B5)", node_id=node.id, code="file_list_no_store")
-    try:
-        listing = list_files(run.env.workspace, spec, context.scope())
-    except PathDenied as e:
-        raise EngineError(str(e), node_id=node.id, code=CODE_PATH_DENIED) from e
-    except FileTaskError as e:
-        raise TaskFailed(str(e), node_id=node.id) from e
-
-    run.variables[spec.store_as] = listing.paths
-    if spec.count_as:
-        run.variables[spec.count_as] = listing.count
-    context.emit("log", level="info", message=f"파일 {listing.count}건")
-    return Go()
-
-
-# ─────────────────────────── 보내기 (메일·웹훅) ───────────────────────────
-
-
-def handle_send(context: Context) -> Outcome:
-    """`sendTask` — `chk:email` 또는 `chk:webhook`. 실패는 `SEND_FAILED`로 올린다 (C14)."""
-    node = context.node
-    email: Email | None = node.prop("email")
-    if email is not None:
-        return _send_email(context, email)
-    webhook: Webhook | None = node.prop("webhook")
-    if webhook is not None:
-        return _send_webhook(context, webhook)
-    raise EngineError("`chk:email`·`chk:webhook`이 모두 없다", node_id=node.id, code="send_missing")
-
-
-def _send_email(context: Context, spec: Email) -> Outcome:
-    run, node = context.run, context.node
-    scope = context.scope()
-    message = EmailMessage(
-        to=tuple(fill(one, scope) for one in spec.to),
-        cc=tuple(fill(one, scope) for one in spec.cc),
-        subject=fill(spec.subject, scope),
-        body=fill(spec.body, scope),
-        attachments=tuple(p for name in spec.attachments for p in _attachments(context, name)),
-    )
-    try:
-        result = run.env.sender.send_email(message)
-    except SendError as e:
-        raise TaskFailed(str(e), node_id=node.id, code=ERROR_SEND_FAILED) from e
-
-    if spec.store_as:
-        run.variables[spec.store_as] = result.email_summary(recipients=len(message.to))
-    # 받는 사람·제목은 업무 값이다 — **개수만** 남긴다 (원칙 6).
-    context.emit(
-        "log", level="info",
-        message=f"메일 보냄 (받는 사람 {len(message.to)}, 첨부 {len(message.attachments)})",
-    )
-    return Go()
-
-
-def _attachments(context: Context, name: str) -> list[Path]:
-    """첨부 변수 하나가 가리키는 파일들. 값은 경로 하나이거나 경로 목록이다."""
-    run, node = context.run, context.node
-    if name not in run.variables:
-        raise EngineError(f"첨부가 가리키는 변수가 없다: {name}", node_id=node.id, code="attachment_missing")
-    value = run.variables[name]
-    raw = [value] if isinstance(value, str) else list(value or [])
-    out = []
-    for one in raw:
-        try:
-            out.append(run.env.workspace.for_read(str(one)))
-        except PathDenied as e:
-            raise EngineError(str(e), node_id=node.id, code=CODE_PATH_DENIED) from e
-    return out
-
-
-def _send_webhook(context: Context, spec: Webhook) -> Outcome:
-    run, node = context.run, context.node
-    scope = context.scope()
-    request = WebhookRequest(
-        url=fill(spec.url, scope),
-        method=spec.method,
-        body=_webhook_body(context, spec, scope),
-        timeout_s=spec.timeout_s,
-    )
-    try:
-        result = run.env.sender.send_webhook(request)
-    except SendError as e:
-        raise TaskFailed(str(e), node_id=node.id, code=ERROR_SEND_FAILED) from e
-
-    if spec.store_as:
-        run.variables[spec.store_as] = result.webhook_summary()
-    context.emit("log", level="info", message=f"웹훅 보냄 ({spec.method}, 상태 {result.status})")
-    return Go()
-
-
-def _webhook_body(context: Context, spec: Webhook, scope: Scope) -> Mapping[str, Any] | str:
-    """`all` | `fields:[이름, 이름]` | `template:"…"` (C14)."""
-    run, node = context.run, context.node
-    body = (spec.body or WEBHOOK_BODY_ALL).strip()
-    if body == WEBHOOK_BODY_ALL:
-        return dict(run.variables)  # B13이 「비밀이 섞일 수 있다」고 경고하는 자리다
-
-    found = _WEBHOOK_FIELDS.match(body)
-    if found is not None:
-        names = [one.strip() for one in found.group(1).split(",") if one.strip()]
-        missing = [one for one in names if one not in run.variables]
-        if missing:
-            raise EngineError(
-                f"웹훅이 없는 변수를 보낸다: {', '.join(missing)}", node_id=node.id, code="webhook_var_missing"
-            )
-        return {one: run.variables[one] for one in names}
-
-    found = _WEBHOOK_TEMPLATE.match(body)
-    if found is not None:
-        text = found.group(1).strip()
-        if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
-            text = text[1:-1]
-        return fill(text, scope)
-
-    raise EngineError(
-        f"웹훅 body를 모른다: {body} (`all`·`fields:[…]`·`template:\"…\"`)",
-        node_id=node.id,
-        code="webhook_body_unknown",
-    )
-
-
-#: 기본 수행기. 뒤 조각에서 AI·서비스 앱(3c)·타이머·메시지·신호(3d)가 더해진다.
-DEFAULT_HANDLERS: dict[str, Handler] = {
-    "startEvent": handle_pass,
-    "endEvent": handle_end,
-    "scriptTask": handle_script,
-    "exclusiveGateway": handle_exclusive,
-    "parallelGateway": handle_parallel,
-    "inclusiveGateway": handle_inclusive,
-    "subProcess": handle_subprocess,
-    "userTask": handle_approval,
-    "manualTask": handle_approval,
-    "businessRuleTask": handle_rule,
-    "serviceTask": handle_service_task,
-    "sendTask": handle_send,
-    "intermediateThrowEvent": handle_milestone,
-}
-
-
-def new_run_id(*, now: datetime | None = None, test: bool = False) -> str:
-    """C3 `run_id` — `run_<YYYYMMDD>_<HHMMSS>_<hex6>` (시험 실행은 `test_`)."""
-    at = (now or _utc_now()).strftime("%Y%m%d_%H%M%S")
-    return f"{'test' if test else 'run'}_{at}_{secrets.token_hex(3)}"
-
-
 __all__ = [
+    "BUILTIN_NOW",
+    "BUILTIN_RUN_ID",
+    "BUILTIN_TODAY",
     "CODE_PATH_DENIED",
     "CODE_UNSUPPORTED",
     "DECISION_KEY",
