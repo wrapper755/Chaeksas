@@ -25,6 +25,7 @@ from chaeksas.contracts.bpmn_ext import (
     PC_ONLY_DOMAINS,
     WEBHOOK_BODY_ALL,
     AiTask,
+    Call,
     Email,
     FileList,
     Flow,
@@ -43,6 +44,9 @@ from chaeksas.core.run_state import (
     CODE_PATH_DENIED,
     CODE_UNSUPPORTED,
     ERROR_SEND_FAILED,
+    WAIT_MESSAGE,
+    WAIT_SIGNAL,
+    WAIT_TIMER,
     Consume,
     Context,
     EngineError,
@@ -53,6 +57,9 @@ from chaeksas.core.run_state import (
     TaskFailed,
     Token,
     Wait,
+    Waiting,
+    correlation_of,
+    event_kind,
     new_token_id,
 )
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest
@@ -615,6 +622,104 @@ def _webhook_body(context: Context, spec: Webhook, scope: Scope) -> Mapping[str,
     )
 
 
+# ─────────────────────────── 기다리는 이벤트 (타이머·메시지·신호) ───────────────────────────
+
+
+def handle_receive(context: Context) -> Outcome:
+    """`receiveTask` — 메시지를 기다린다 (C14 §이벤트).
+
+    상관 키(`chk:receive.correlation`)가 있으면 **그 값이 같은 메시지만** 받는다. 본문에서
+    변수가 되는 것은 `payload`에 적은 이름뿐이다.
+    """
+    return _wait_for(context, WAIT_MESSAGE)
+
+
+def handle_catch(context: Context) -> Outcome:
+    """`intermediateCatchEvent` — 타이머·메시지·신호를 기다린다."""
+    kind = event_kind(context.node)
+    if kind is None:
+        raise EngineError(
+            "중간 받기에 이벤트 정의가 없다", node_id=context.node.id, code="event_undefined"
+        )
+    return _wait_for(context, kind)
+
+
+def _wait_for(context: Context, kind: str) -> Outcome:
+    engine, run, node = context.engine, context.run, context.node
+    key = f"{kind}:{node.id}:{context.token.id}"
+    engine.arm(
+        context,
+        Waiting(
+            key=key,
+            node_id=node.id,
+            kind=kind,
+            name=engine.event_name(run, node, kind),
+            correlation=correlation_of(run, node),
+            due_at=engine.due_at(run, node) if kind == WAIT_TIMER else None,
+        ),
+    )
+    return Wait(key=key)
+
+
+def handle_throw(context: Context) -> Outcome:
+    """`intermediateThrowEvent` — 신호를 보내거나(한 실행 안), 이정표로 지나간다 (C14 §이벤트)."""
+    node = context.node
+    if not node.event_definitions:
+        return handle_milestone(context)
+    if "signalEventDefinition" not in node.event_definitions:
+        raise EngineError(
+            f"아직 다루지 않는 중간 던지기다: {', '.join(node.event_definitions)}",
+            node_id=node.id,
+            code=CODE_UNSUPPORTED,
+        )
+    name = context.engine.event_name(context.run, node, WAIT_SIGNAL)
+    context.emit("log", level="info", message=f"신호를 보낸다: {name}")
+    context.engine.signal(context.run, name)
+    return Go()
+
+
+# ─────────────────────────── 다른 BPM 프로세스 호출 ───────────────────────────
+
+
+def handle_call(context: Context) -> Outcome:
+    """`callActivity` — 다른 BPM 프로세스를 **같은 실행 안에서** 돌린다 (C14).
+
+    **적은 것만 오간다** (`chk:call`의 `input`·`output`). 바깥 토큰은 안쪽이 끝날 때까지
+    세워 두고, 안쪽은 같은 `run_id`·같은 기록을 쓴다 (C3는 실행 하나에 `run_started` 하나다).
+    """
+    engine, run, node = context.engine, context.run, context.node
+    target = node.called_element
+    if not target:
+        raise EngineError("`calledElement`가 없다", node_id=node.id, code="call_target_missing")
+    found = run.env.processes.get(target)
+    if found is None:
+        known = ", ".join(sorted(run.env.processes)) or "없음"
+        raise EngineError(
+            f"호출 대상이 패키지에 없다: {target} (있는 것: {known})",
+            node_id=node.id,
+            code="call_target_missing",
+        )
+
+    spec: Call | None = node.prop("call")
+    scope = context.scope()
+    inputs = {name: evaluate(expression, scope) for name, expression in (spec.input if spec else {}).items()}
+    child = engine.start(
+        found,
+        run_id=run.run_id,
+        log=run.log,
+        env=run.env,
+        inputs=inputs,
+        mode=run.mode,
+        executor=run.executor,
+        version=run.version,
+        nested=True,
+    )
+    key = f"call:{node.id}:{context.token.id}"
+    run.children[key] = child
+    context.emit("log", level="info", message=f"호출: {target} (입력 {len(inputs)}개)")
+    return Wait(key=key)
+
+
 #: 기본 수행기. 뒤 조각에서 AI·서비스 앱(3c)·타이머·메시지·신호(3d)가 더해진다.
 DEFAULT_HANDLERS: dict[str, Handler] = {
     "startEvent": handle_pass,
@@ -629,7 +734,10 @@ DEFAULT_HANDLERS: dict[str, Handler] = {
     "businessRuleTask": handle_rule,
     "serviceTask": handle_service_task,
     "sendTask": handle_send,
-    "intermediateThrowEvent": handle_milestone,
+    "intermediateThrowEvent": handle_throw,
+    "intermediateCatchEvent": handle_catch,
+    "receiveTask": handle_receive,
+    "callActivity": handle_call,
 }
 
 
@@ -637,6 +745,8 @@ __all__ = [
     "DEFAULT_HANDLERS",
     "handle_ai_task",
     "handle_approval",
+    "handle_call",
+    "handle_catch",
     "handle_end",
     "handle_exclusive",
     "handle_file_list",
@@ -647,7 +757,9 @@ __all__ = [
     "handle_rule",
     "handle_script",
     "handle_send",
+    "handle_receive",
     "handle_service_call",
     "handle_service_task",
     "handle_subprocess",
+    "handle_throw",
 ]

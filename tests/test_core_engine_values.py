@@ -508,15 +508,17 @@ def test_a_milestone_passes_through_and_shows_in_the_log(tmp_path: Path) -> None
 
 
 def test_a_signal_throw_is_not_a_milestone(tmp_path: Path) -> None:
-    """신호 던지기는 조각 3d다 — 이정표인 척 지나가지 않는다."""
+    """신호 던지기는 이정표가 아니다 — 받는 가지가 없어도 **신호로** 다뤄진다 (조각 3d)."""
     process = straight(
         middle='<bpmn:intermediateThrowEvent id="Thr_Ready" name="ready">'
         '<bpmn:signalEventDefinition signalRef="Sig_1"/></bpmn:intermediateThrowEvent>',
         node_id="Thr_Ready",
     )
     engine, run = start(process, env_for(tmp_path))
-    assert engine.run_until_blocked(run) is State.FAILED
-    assert run.error is not None and run.error.code == "node_kind_unsupported"
+    assert engine.run_until_blocked(run) is State.DONE
+    messages = [str(e.data.get("message")) for e in run.log.events]
+    assert any("신호를 보낸다" in m for m in messages)
+    assert not any("이정표" in m for m in messages)
 
 
 # ─────────────────────────── 실행 폴더 자체 ───────────────────────────

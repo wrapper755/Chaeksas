@@ -86,6 +86,9 @@ BOUNDARY_HOSTS = frozenset(
      "callActivity", "subProcess"}
 )
 
+#: 타이머를 적는 법 (C14 §이벤트). 시작은 `timeCycle`, 경계·중간은 `timeDuration`.
+TIMER_KINDS = ("timeDate", "timeDuration", "timeCycle")
+
 #: `location: field` 결재의 시간 제한 경고 기준 (B13) — 하루.
 FIELD_APPROVAL_MAX_HOURS = 24
 
@@ -339,6 +342,19 @@ class Flow:
     condition: str | None = None
 
 
+@dataclass(frozen=True)
+class Timer:
+    """타이머 하나 (C14 §이벤트). `value`는 ISO 기간·cron, 또는 **변수 이름**이다."""
+
+    kind: str  # TIMER_KINDS
+    value: str
+
+    @property
+    def is_variable(self) -> bool:
+        """`PT30M`이 아니라 `마감기한`처럼 적혔나 — 그러면 실행 때 변수에서 읽는다."""
+        return self.kind == "timeDuration" and duration_hours(self.value) is None
+
+
 @dataclass
 class Node:
     """노드 하나. `kind`는 BPMN 요소 이름(`serviceTask`·`exclusiveGateway` …)이다."""
@@ -355,6 +371,11 @@ class Node:
     event_definitions: tuple[str, ...] = ()
     error_ref: str | None = None
     message_ref: str | None = None
+    signal_ref: str | None = None
+    #: 타이머 이벤트의 본문 (시작·경계·중간 받기).
+    timer: Timer | None = None
+    #: 경계 이벤트가 붙은 노드를 **끊는가** (`cancelActivity`, 기본 true). 비중단이면 false.
+    cancel_activity: bool = True
     is_sequential: bool | None = None  # 다중 인스턴스일 때만
     script: str | None = None
     called_element: str | None = None
@@ -377,9 +398,10 @@ class BpmnProcess:
     defaults: Defaults | None = None
     nodes: list[Node] = field(default_factory=list)
     flows: list[Flow] = field(default_factory=list)
-    #: `bpmn:error errorCode` → id, `bpmn:message name` → id (정의 수준).
+    #: `bpmn:error errorCode` → id, `bpmn:message name` → id, `bpmn:signal name` → id (정의 수준).
     errors: dict[str, str] = field(default_factory=dict)
     messages: dict[str, str] = field(default_factory=dict)
+    signals: dict[str, str] = field(default_factory=dict)
     bad_props: dict[str, str] = field(default_factory=dict)
 
     def all_nodes(self) -> Iterator[Node]:
@@ -513,11 +535,17 @@ def _read_nodes(scope: ElementTree.Element) -> list[Node]:
         )
         error_ref = None
         message_ref = None
+        signal_ref = None
+        timer = None
         for child in el:
             if child.tag == f"{_BPMN}errorEventDefinition":
                 error_ref = child.get("errorRef")
             elif child.tag == f"{_BPMN}messageEventDefinition":
                 message_ref = child.get("messageRef")
+            elif child.tag == f"{_BPMN}signalEventDefinition":
+                signal_ref = child.get("signalRef")
+            elif child.tag == f"{_BPMN}timerEventDefinition":
+                timer = _read_timer(child)
         script_el = el.find(f"{_BPMN}script")
         node = Node(
             id=el.get("id", ""),
@@ -529,6 +557,10 @@ def _read_nodes(scope: ElementTree.Element) -> list[Node]:
             event_definitions=definitions,
             error_ref=error_ref,
             message_ref=message_ref or el.get("messageRef"),
+            signal_ref=signal_ref or el.get("signalRef"),
+            timer=timer,
+            # `cancelActivity`를 적지 않으면 중단이다 (BPMN 기본값).
+            cancel_activity=el.get("cancelActivity", "true") != "false",
             is_sequential=(mi.get("isSequential") == "true") if mi is not None else None,
             script=_text(script_el) if script_el is not None else None,
             called_element=el.get("calledElement"),
@@ -540,6 +572,15 @@ def _read_nodes(scope: ElementTree.Element) -> list[Node]:
             _mark_defaults(el, node.child_flows)
         nodes.append(node)
     return nodes
+
+
+def _read_timer(element: ElementTree.Element) -> Timer | None:
+    """`timerEventDefinition` 안의 `timeDate`·`timeDuration`·`timeCycle` 중 하나."""
+    for kind in TIMER_KINDS:
+        found = element.find(f"{_BPMN}{kind}")
+        if found is not None and _text(found):
+            return Timer(kind=kind, value=_text(found))
+    return None
 
 
 def _mark_defaults(scope: ElementTree.Element, flows: list[Flow]) -> None:
@@ -581,6 +622,7 @@ def read_process(xml: str | bytes) -> BpmnProcess:
             for el in root.findall(f"{_BPMN}error")
         },
         messages={el.get("name", ""): el.get("id", "") for el in root.findall(f"{_BPMN}message")},
+        signals={el.get("name", ""): el.get("id", "") for el in root.findall(f"{_BPMN}signal")},
         bad_props=bad,
     )
     return found
