@@ -1,8 +1,8 @@
 """STU-01 메인 창 — 탐색기 · 캔버스 · 속성 패널 · 아래 탭 · 상태 줄.
 
-조각 3e-1은 셸과 캔버스, 3e-2는 속성 패널(STU-04)과 실행 전 검사, **3e-3은 시험 실행**
-(STU-08·STU-09)이다. 케이스 편집기(STU-07)와 패키지 내보내기는 3e-4라 「아직 없다」고
-말한다 — 빈 상자를 말없이 두지 않는다.
+조각 3e-1은 셸과 캔버스, 3e-2는 속성 패널(STU-04)과 실행 전 검사, 3e-3은 시험 실행
+(STU-08·STU-09), **3e-4는 케이스 편집기(STU-07)와 패키지 내보내기**다. 아직 없는 것은
+「아직 없다」고 말한다 — 빈 상자를 말없이 두지 않는다.
 
 제목·메뉴·단축키·닫기 보호는 `docs/06-screens/studio.md` STU-01 그대로다.
 """
@@ -17,6 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
+    QFileDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -29,8 +30,10 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.studio.canvas import Canvas, CanvasError
+from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.dialogs import NewProcessDialog, pick_example
 from chaeksas.studio.explorer import Explorer
+from chaeksas.studio.packaging import PackageError, default_name, export
 from chaeksas.studio.preflight import Preflight, inspect, summarize
 from chaeksas.studio.properties import Properties
 from chaeksas.studio.receiver import Receiver
@@ -38,7 +41,7 @@ from chaeksas.studio.run_dialog import RunDialog
 from chaeksas.studio.runner import CaseRun, Outcome, Plan
 from chaeksas.studio.runner import summarize as summarize_runs
 from chaeksas.studio.settings import Settings
-from chaeksas.studio.workspace import BpmProcess, Workspace, WorkspaceError
+from chaeksas.studio.workspace import BpmProcess, Definition, Workspace, WorkspaceError
 
 log = logging.getLogger(__name__)
 
@@ -48,13 +51,10 @@ DEFAULT_SIZE = (1400, 860)
 
 #: 아직 없는 것을 누르면 이렇게 말한다 — 조용히 아무 일도 없는 것보다 낫다.
 LATER = {
-    "cases": (
-        "시험 케이스 편집기(STU-07)는 다음 조각(3e-4)에서 붙입니다 — "
-        "지금은 예제에서 함께 들어온 케이스를 돌릴 수 있습니다."
-    ),
-    "package": "패키지로 내보내기는 다음 조각(3e-4)에서 붙입니다.",
     "center": "Center 올리기는 M5입니다.",
 }
+
+PACKAGE_FILTER = "패키지 (*.zip)"
 
 
 class MainWindow(QMainWindow):
@@ -145,10 +145,10 @@ class MainWindow(QMainWindow):
         files = bar.addMenu("파일")
         self._add(files, "새 BPM 프로세스...", self.new_process, QKeySequence.StandardKey.New)
         self._add(files, "예제 BPM 프로세스 가져오기...", self.import_example)
-        self._add(files, "시험 케이스...", lambda: self._later("cases"))
+        self._add(files, "시험 케이스...", self.edit_cases)
         files.addSeparator()
         self.save_action = self._add(files, "저장", self.save, QKeySequence.StandardKey.Save)
-        self._add(files, "패키지로 내보내기...", lambda: self._later("package"))
+        self._add(files, "패키지로 내보내기...", self.export_package)
         self._add(files, "Center로 올리기", lambda: self._later("center"))
         files.addSeparator()
         self._add(files, "종료", self.close)
@@ -299,6 +299,48 @@ class MainWindow(QMainWindow):
         self.say(summarize(violations))
 
     # ── 시험 실행 (STU-08·STU-09) ──
+
+    # ── 시험 케이스 · 패키지 (3e-4) ──
+
+    def opened_definition(self) -> Definition | None:
+        """지금 열린 정의 (디스크에서 읽은 것). 없으면 `None`."""
+        if self.process is None or self.definition is None:
+            return None
+        return next((d for d in self.process.definitions if d.path == self.definition), None)
+
+    def edit_cases(self) -> None:
+        """STU-07. 케이스는 **열린 정의 옆**에 있다 — 무엇의 케이스인지 모호하지 않게."""
+        found = self.opened_definition()
+        if self.process is None or found is None:
+            self.say("열린 정의가 없습니다.")
+            return
+        CaseDialog(self, self.process, found).exec()
+        self.say(f"시험 케이스: {self.process.case_file(found).name}")
+
+    def export_package(self) -> None:
+        """C1 패키지 zip. **저장하지 않은 편집은 들어가지 않는다** — 먼저 저장한다."""
+        if self.process is None:
+            self.say("열린 BPM 프로세스가 없습니다.")
+            return
+        if not self._may_drop_edits():
+            return
+        if self.dirty and not self.save():
+            return
+        target, _ = QFileDialog.getSaveFileName(
+            self,
+            "패키지로 내보내기",
+            str(self.settings.outputs_dir / default_name(self.process)),
+            PACKAGE_FILTER,
+        )
+        if not target:
+            return
+        try:
+            written = export(self.process, Path(target))
+        except PackageError as error:
+            QMessageBox.warning(self, TITLE, str(error))
+            self.say(f"패키지를 만들지 못했습니다: {error}")
+            return
+        self.say(f"패키지를 만들었습니다: {written}")
 
     def run_test(self) -> None:
         if self.process is None or self.definition is None:
