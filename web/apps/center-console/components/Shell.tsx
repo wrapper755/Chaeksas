@@ -15,11 +15,11 @@ import type { Mode } from "@/lib/session";
  * 그래야 타입 라우트(`typedRoutes`)가 없는 주소를 잡아 준다.
  */
 type NavItem =
-  | { label: string; href: "/bot-uis" | "/center-keys"; later?: never }
+  | { label: string; href: "/runs" | "/bot-uis" | "/center-keys"; later?: never }
   | { label: string; href?: never; later: string };
 
 const NAV: NavItem[] = [
-  { label: "실행 로그", later: "M3" },
+  { label: "실행 로그", href: "/runs" },
   { label: "Bot 현황", later: "M5" },
   { label: "Bot UI 현황", href: "/bot-uis" },
   { label: "결재함", later: "M5" },

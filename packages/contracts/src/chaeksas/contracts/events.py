@@ -99,3 +99,36 @@ class EventBatchResponse(ContractModel):
     accepted: int
     duplicates: int = 0
     rejected: list[RejectedLine] = Field(default_factory=list)
+
+
+class RunInfo(ContractModel):
+    """실행 하나의 요약 (CON-01 목록·상세). **받을 때 만들어 둔다** — 목록을 그릴 때마다
+    이벤트를 다시 읽지 않는다."""
+
+    run_id: str
+    status: str = "running"  # running|waiting|success|failed|cancelled (열린 문자열)
+    bpm_process_id: str | None = None
+    version: str | None = None
+    run_location: str | None = None
+    executor: str | None = None
+    mode: str | None = None
+    source: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_s: float | None = None
+    error_code: str | None = None
+    events: int = 0
+
+
+class RunListing(ContractModel):
+    """`GET /api/v1/runs`의 응답."""
+
+    runs: list[RunInfo] = Field(default_factory=list)
+    total: int = 0
+
+
+class RunEventsResponse(ContractModel):
+    """`GET /api/v1/runs/{run_id}/events`의 응답 — **`seq` 차례로** 전부."""
+
+    run_id: str
+    events: list[RunEvent] = Field(default_factory=list)

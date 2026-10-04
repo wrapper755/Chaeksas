@@ -16,7 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 
 from chaeksas.center import keys
-from chaeksas.center.api import bot_ui, packages
+from chaeksas.center.api import bot_ui, packages, runs
 from chaeksas.center.auth import Caller, caller, require_admin, require_read
 from chaeksas.center.errors import ApiError, handle
 from chaeksas.center.responses import Utf8JSONResponse
@@ -46,6 +46,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     app.state.authenticate = authenticate
     app.add_exception_handler(ApiError, handle)
     app.include_router(bot_ui.router)
+    app.include_router(runs.router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
