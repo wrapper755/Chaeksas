@@ -23,8 +23,10 @@ from typing import TYPE_CHECKING, Any
 from chaeksas.contracts.approvals import Form
 from chaeksas.contracts.bpmn_ext import BpmnProcess, Flow, Node
 from chaeksas.contracts.dmn import Decision
+from chaeksas.core.agent import Tool
 from chaeksas.core.expr import Scope
 from chaeksas.core.files import Workspace
+from chaeksas.core.llm import Llm, NoLlm
 from chaeksas.core.run_log import RunLog
 from chaeksas.core.senders import NoSender, Sender
 from chaeksas.core.services import NoServiceCaller, ServiceCaller
@@ -155,6 +157,10 @@ class RunEnv:
     decisions: Mapping[str, Decision] = field(default_factory=dict)
     #: 서비스 앱 호출 (C11). 기본은 **부르지 않고 실패한다**. 키 값은 이 어댑터만 안다.
     services: ServiceCaller = field(default_factory=NoServiceCaller)
+    #: AI 태스크의 모델 (ADR-0027). 기본은 **부르지 않고 실패한다**. 주소·키는 이 어댑터만 안다.
+    llm: Llm = field(default_factory=NoLlm)
+    #: AI 태스크가 빌려 쓸 도구 (`chk:aiTask.tools`의 이름 → 함수). 확장이 더한다 (M4).
+    tools: Mapping[str, Tool] = field(default_factory=dict)
 
 
 def utc_now() -> datetime:
@@ -302,8 +308,11 @@ Handler = Callable[[Context], Outcome]
 
 def task_type(node: Node) -> str | None:
     """C3 `node_state.task_type`."""
-    if node.kind == "serviceTask" and node.prop("fileList") is not None:
-        return "file_list"
+    if node.kind == "serviceTask":
+        if node.prop("fileList") is not None:
+            return "file_list"
+        if node.prop("aiTask") is not None:
+            return "ai_task"  # C3 `run_finished.ai_tasks`가 이것을 센다
     if node.kind == "intermediateThrowEvent":
         # 이벤트 정의가 없는 중간 던지기가 **이정표**다 (C14 §이벤트). 신호·메시지는 다른 것이다.
         return "milestone" if not node.event_definitions else None

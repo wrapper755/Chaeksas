@@ -22,7 +22,9 @@ from typing import Any
 
 from chaeksas.contracts.approvals import Form, request_id_for
 from chaeksas.contracts.bpmn_ext import (
+    PC_ONLY_DOMAINS,
     WEBHOOK_BODY_ALL,
+    AiTask,
     Email,
     FileList,
     Flow,
@@ -32,6 +34,7 @@ from chaeksas.contracts.bpmn_ext import (
     Webhook,
 )
 from chaeksas.contracts.dmn import DmnError
+from chaeksas.core.agent import AgentError, run_agent
 from chaeksas.core.expr import Scope, evaluate, fill, run_script, truthy
 from chaeksas.core.files import FileTaskError, PathDenied, list_files
 from chaeksas.core.run_state import (
@@ -309,7 +312,7 @@ def handle_service_task(context: Context) -> Outcome:
     | --- | --- |
     | `chk:fileList` | 파일 목록 (ADR-0026) |
     | `chk:serviceCall` | 서비스 앱 태스크 (C11) |
-    | `chk:aiTask` | AI 태스크 — 조각 3c 뒷부분 |
+    | `chk:aiTask` | AI 태스크 (ADR-0008 「운전사」, ADR-0027) |
     | `chk:task` | 확장 태스크 (UI 태스크 등) — M4 |
     """
     node = context.node
@@ -319,13 +322,55 @@ def handle_service_task(context: Context) -> Outcome:
     call: ServiceCall | None = node.prop("serviceCall")
     if call is not None:
         return handle_service_call(context, call)
+    ai: AiTask | None = node.prop("aiTask")
+    if ai is not None:
+        return handle_ai_task(context, ai)
     if node.prop("task") is not None:
         raise EngineError(
             "확장 태스크는 아직 수행하지 않는다 (UI 자동화는 M4)", node_id=node.id, code=CODE_UNSUPPORTED
         )
-    raise EngineError(
-        "아직 다루지 않는 서비스 태스크다 (AI 태스크는 조각 3c)", node_id=node.id, code=CODE_UNSUPPORTED
-    )
+    raise EngineError("무엇을 하는 서비스 태스크인지 모른다 (`chk:*`가 없다)", node_id=node.id, code="task_empty")
+
+
+def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
+    """`chk:aiTask` — 운전사에게 목표를 주고 결과 필드를 받는다 (ADR-0008·ADR-0027).
+
+    PC에서만 되는 환경(`web`·`desktop`)은 M4다. 그 밖(`llm`·`doc`·`api`)은 지금 돈다.
+
+    실행 기록에는 **단계와 사용량만** 남는다 (C3 `agent`·`llm_usage`) — 목표·도구 인자·결과
+    값은 업무 값이라 담지 않는다 (원칙 6).
+    """
+    run, node = context.run, context.node
+    if spec.domain in PC_ONLY_DOMAINS:
+        raise EngineError(
+            f"`domain: {spec.domain}` AI 태스크는 아직 수행하지 않는다 (UI 자동화와 함께 M4)",
+            node_id=node.id,
+            code=CODE_UNSUPPORTED,
+        )
+
+    def note(step: int, action: str, tool: str) -> None:
+        # C3 `agent` — 필수 키는 `step`·`action`. **값은 담지 않는다** (`summary`를 비워 둔다).
+        run.log.emit("agent", node_id=node.id, step=step, action=action, **({"tool": tool} if tool else {}))
+
+    try:
+        outcome = run_agent(spec, llm=run.env.llm, tools=run.env.tools, on_step=note)
+    except AgentError as e:
+        if e.business:
+            raise TaskFailed(str(e), node_id=node.id) from e
+        raise EngineError(str(e), node_id=node.id, code="agent_error") from e
+
+    trace = outcome.trace
+    if trace.model:
+        run.log.emit(
+            "llm_usage",
+            node_id=node.id,
+            model=trace.model,
+            input_tokens=trace.input_tokens,
+            output_tokens=trace.output_tokens,
+        )
+    run.variables.update(outcome.results)
+    context.emit("log", level="info", message=f"AI 결과 {len(outcome.results)}개 (도구 {len(trace.steps)}회)")
+    return Go()
 
 
 def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:
@@ -544,6 +589,7 @@ DEFAULT_HANDLERS: dict[str, Handler] = {
 
 __all__ = [
     "DEFAULT_HANDLERS",
+    "handle_ai_task",
     "handle_approval",
     "handle_end",
     "handle_exclusive",
