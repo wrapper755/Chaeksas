@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { Button } from "@chaeksas/ui";
 import { logout } from "@/app/actions";
 import type { Mode } from "@/lib/session";
@@ -15,7 +16,9 @@ import type { Mode } from "@/lib/session";
  * 그래야 타입 라우트(`typedRoutes`)가 없는 주소를 잡아 준다.
  */
 type NavItem =
-  | { label: string; href: "/runs" | "/bot-uis" | "/center-keys"; later?: never }
+  // `Route`로 적는다 — 리터럴 **합집합**을 `Link`에 넘기면 타입 라우트가 그중 하나로만
+  // 좁혀 보고 나머지를 거부한다 (화면을 더할 때마다 깨졌다).
+  | { label: string; href: Route; later?: never }
   | { label: string; href?: never; later: string };
 
 const NAV: NavItem[] = [
