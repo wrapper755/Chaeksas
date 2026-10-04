@@ -1,6 +1,6 @@
 """STU-01 메인 창 — 탐색기 · 캔버스 · 속성 패널 · 아래 탭 · 상태 줄.
 
-조각 3e-1은 **셸과 캔버스**다. 속성 패널(STU-04)·검사 화면은 3e-2, 시험 실행(STU-07~09)은
+조각 3e-1은 셸과 캔버스, **3e-2는 속성 패널(STU-04)과 실행 전 검사**다. 시험 실행(STU-07~09)은
 3e-3이라 자리만 잡아 두고 「아직 없다」고 말한다 — 빈 상자를 말없이 두지 않는다.
 
 제목·메뉴·단축키·닫기 보호는 `docs/06-screens/studio.md` STU-01 그대로다.
@@ -30,6 +30,8 @@ from PySide6.QtWidgets import (
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.dialogs import NewProcessDialog, pick_example
 from chaeksas.studio.explorer import Explorer
+from chaeksas.studio.preflight import Preflight, inspect, summarize
+from chaeksas.studio.properties import Properties
 from chaeksas.studio.settings import Settings
 from chaeksas.studio.workspace import BpmProcess, Workspace, WorkspaceError
 
@@ -41,8 +43,6 @@ DEFAULT_SIZE = (1400, 860)
 
 #: 아직 없는 것을 누르면 이렇게 말한다 — 조용히 아무 일도 없는 것보다 낫다.
 LATER = {
-    "properties": "속성 패널은 다음 조각(3e-2)에서 붙입니다.",
-    "preflight": "실행 전 검사 화면은 다음 조각(3e-2)에서 붙입니다.",
     "run": "시험 실행은 다음 조각(3e-3)에서 붙입니다.",
     "package": "패키지로 내보내기는 다음 조각(3e-3)에서 붙입니다.",
     "center": "Center 올리기는 M5입니다.",
@@ -70,9 +70,13 @@ class MainWindow(QMainWindow):
 
         self.log_view = QPlainTextEdit(self)
         self.log_view.setReadOnly(True)
-        self.properties = QLabel(LATER["properties"], self)
-        self.properties.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.properties.setWordWrap(True)
+
+        self.properties = Properties(self)
+        self.properties.applying.connect(self._apply_properties)
+        self.canvas.selected.connect(self._on_selected)
+
+        self.preflight = Preflight(self)
+        self.preflight.jumping.connect(lambda node_id: self.canvas.call("select", node_id))
 
         self._build_layout()
         self._build_menus()
@@ -100,7 +104,9 @@ class MainWindow(QMainWindow):
         middle.setStretchFactor(1, 1)
 
         bottom = QTabWidget(self)
+        self.bottom_tabs = bottom
         bottom.addTab(self.log_view, "로그")
+        bottom.addTab(self.preflight, "검사")
         for name in ("화면", "변수"):
             placeholder = QLabel(f"「{name}」 탭은 실행이 붙는 조각(3e-3)에서 채웁니다.", bottom)
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -136,7 +142,7 @@ class MainWindow(QMainWindow):
 
         run = bar.addMenu("실행")
         self._add(run, "실행...", lambda: self._later("run"), QKeySequence("F5"))
-        self._add(run, "실행 전 검사", lambda: self._later("preflight"), QKeySequence("F6"))
+        self._add(run, "실행 전 검사", self.run_preflight, QKeySequence("F6"))
 
         view = bar.addMenu("보기")
         self._add(view, "BPM 프로세스 탐색기", self.explorer.setFocus, QKeySequence("Ctrl+E"))
@@ -191,6 +197,88 @@ class MainWindow(QMainWindow):
         self.say("열린 BPM 프로세스가 없습니다 — 탐색기에서 고르거나 새로 만드세요.")
         self.explorer.setFocus()
 
+    # ── 속성 패널 (STU-04) ──
+
+    def _on_selected(self, node_id: str) -> None:
+        if not node_id:
+            self.properties.show_nothing()
+            return
+        if node_id == self.properties.node_id:
+            return
+        if not self._may_drop_edits():
+            # 머무르기 — 캔버스의 고른 것을 되돌린다.
+            self.canvas.call("select", self.properties.node_id)
+            return
+
+        def done(found: dict[str, object]) -> None:
+            if found.get("ok") and found.get("found"):
+                self.properties.show_element(found)
+            else:
+                self.properties.show_nothing()
+
+        self.canvas.call("properties", node_id, then=done)
+
+    def _apply_properties(self, node_id: str, changes: dict[str, object]) -> None:
+        def done(found: dict[str, object]) -> None:
+            if not found.get("ok"):
+                self.say(f"적용하지 못했습니다: {found.get('error')}")
+                return
+            self.say(f"적용했습니다: {node_id} ({', '.join(sorted(changes))})")
+            self.canvas.call("properties", node_id, then=lambda again: self.properties.show_element(again))
+
+        self.canvas.call("setProperties", node_id, changes, then=done)
+
+    def _may_drop_edits(self) -> bool:
+        """적용 안 한 편집이 있으면 묻는다 (STU-04). 지금 적용할 수 없으면 「적용」을 뺀다."""
+        if not self.properties.unapplied:
+            return True
+        _, problem = self.properties.patch()
+        buttons = QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
+        if problem is None:
+            buttons |= QMessageBox.StandardButton.Apply
+        box = QMessageBox(self)
+        box.setWindowTitle("적용하지 않은 변경사항")
+        box.setText(
+            "속성 패널에 적용하지 않은 변경사항이 있습니다."
+            + (f"\n\n지금 적용할 수 없습니다 — {problem}" if problem else "")
+        )
+        box.setStandardButtons(buttons)
+        box.button(QMessageBox.StandardButton.Discard).setText("버리기")
+        box.button(QMessageBox.StandardButton.Cancel).setText("머무르기")
+        if problem is None:
+            box.button(QMessageBox.StandardButton.Apply).setText("적용")
+        answer = box.exec()
+        if answer == QMessageBox.StandardButton.Cancel:
+            return False
+        if answer == QMessageBox.StandardButton.Apply:
+            return self.properties.apply()
+        return True
+
+    # ── 실행 전 검사 (B1~B14) ──
+
+    def run_preflight(self) -> None:
+        if self.process is None or self.definition is None:
+            self.say("열린 정의가 없습니다.")
+            return
+        if not self._may_drop_edits():
+            return
+        try:
+            xml = self.canvas.save_xml()
+        except CanvasError as e:
+            self.say(f"검사하지 못했습니다: {e}")
+            return
+        from chaeksas.contracts.bpmn_ext import BpmnReadError, read_process  # noqa: PLC0415
+
+        try:
+            found = read_process(xml)
+        except BpmnReadError as e:
+            self.say(f"검사하지 못했습니다: {e}")
+            return
+        violations = inspect(found, self.process)
+        self.preflight.show_result(found, violations)
+        self.bottom_tabs.setCurrentWidget(self.preflight)
+        self.say(summarize(violations))
+
     # ── 열고 닫기 ──
 
     def open_definition(self, path_text: str) -> None:
@@ -217,6 +305,8 @@ class MainWindow(QMainWindow):
             warnings = found.get("warnings")
             count = len(warnings) if isinstance(warnings, list) else 0
             self.process, self.definition, self.dirty = process, path, False
+            self.properties.show_nothing()
+            self.preflight.setRowCount(0)
             self._retitle()
             self.explorer.refresh(opened=path.as_posix())
             note = f" (경고 {count}개)" if count else ""
@@ -227,6 +317,8 @@ class MainWindow(QMainWindow):
     def save(self) -> bool:
         if self.process is None or self.definition is None:
             self.say("열린 정의가 없습니다.")
+            return False
+        if not self._may_drop_edits():
             return False
         try:
             xml = self.canvas.save_xml()
