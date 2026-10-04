@@ -25,11 +25,11 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from chaeksas.contracts.approvals import Form, FormField
-from chaeksas.contracts.bpmn_ext import BpmnProcess, DataOutput, Node
+from chaeksas.contracts.bpmn_ext import BpmnProcess, DataOutput, Node, duration_hours
 from chaeksas.core.expr import ExprError, evaluate
 from chaeksas.core.files import FileTaskError, PathDenied, Workspace, write_output
 from chaeksas.core.helpers import bind
@@ -48,6 +48,9 @@ from chaeksas.core.run_state import (
     ERROR_TASK_FAILED,
     FAILED_TASK_VAR,
     MAX_STEPS,
+    WAIT_MESSAGE,
+    WAIT_SIGNAL,
+    WAIT_TIMER,
     Consume,
     Context,
     EngineError,
@@ -62,6 +65,9 @@ from chaeksas.core.run_state import (
     TaskFailed,
     Token,
     Wait,
+    Waiting,
+    correlation_of,
+    event_kind,
     new_run_id,
     new_token_id,
     task_type,
@@ -69,6 +75,25 @@ from chaeksas.core.run_state import (
 )
 
 log = logging.getLogger(__name__)
+
+
+def _as_duration(value: str, *, node_id: str) -> timedelta:
+    """ISO 기간(`PT30M`·`P3D`) 또는 **ISO 시각**(케이스의 `$now_plus`가 주는 것)."""
+    body = value.strip()
+    hours = duration_hours(body)
+    if hours is not None:
+        return timedelta(hours=hours)
+    try:
+        at = datetime.fromisoformat(body)
+    except ValueError:
+        raise EngineError(
+            f"타이머를 읽을 수 없다: {body} (ISO 기간 `PT30M`이나 ISO 시각)",
+            node_id=node_id,
+            code="timer_unreadable",
+        ) from None
+    if at.tzinfo is None:
+        at = at.replace(tzinfo=UTC)
+    return max(timedelta(0), at - datetime.now(UTC))
 
 
 def _missing_fields(form: Form | None, answer: Mapping[str, Any]) -> list[str]:
@@ -103,8 +128,13 @@ class Engine:
         now: datetime | None = None,
         job_id: str | None = None,
         env: RunEnv | None = None,
+        nested: bool = False,
     ) -> Run:
-        """실행을 만들고 `run_started`를 남긴다. 토큰은 시작 이벤트에 놓인다."""
+        """실행을 만들고 `run_started`를 남긴다. 토큰은 시작 이벤트에 놓인다.
+
+        `nested`면 호출(`callActivity`)이 띄운 안쪽 실행이다 — 같은 `run_id`를 쓰고
+        `run_started`·`run_finished`를 남기지 않는다 (C3는 실행 하나에 하나씩만 둔다).
+        """
         at = now or utc_now()
         run = Run(
             run_id=run_id,
@@ -115,9 +145,15 @@ class Engine:
             executor=executor,
             version=version,
             started=at,
+            nested=nested,
             helpers=bind(now=at),
         )
         run.variables.update(self._seed(process, inputs or {}, run_id=run_id, now=at))
+
+        if nested:
+            run.tokens = [Token(id=new_token_id(), node_id=self._start_node(process))]
+            run.state = State.RUNNING
+            return run
 
         log.emit(
             "run_started",
@@ -188,11 +224,17 @@ class Engine:
             return run.state
         token = run.runnable()
         if token is None:
+            # 호출한 안쪽 실행이 있으면 그것을 먼저 민다 (같은 `run_id`·같은 기록).
+            if self._step_children(run):
+                return run.state
             # 밟을 토큰이 없다 — 기다리는 것이 있으면 기다리고, 없으면 끝났다.
             if any(t.waiting for t in run.tokens):
                 run.state = State.WAITING
                 return run.state
             return self._finish(run, "success")
+        return self._step_token(run, token)
+
+    def _step_token(self, run: Run, token: Token) -> State:
 
         run.state = State.RUNNING
         node = run.node(token.node_id)
@@ -228,14 +270,76 @@ class Engine:
         except EngineError as e:
             return self._handle_failure(context, e)
 
+    def blocked(self, run: Run) -> bool:
+        """더 밟을 것이 없나 — 토큰도, 호출한 안쪽 실행도.
+
+        `step()`이 아니라 이것이 「멈췄다」의 기준이다. `_apply`는 토큰 하나가 멈출 때마다
+        `WAITING`을 쓰므로, 그것만 보면 다른 토큰이 남아 있어도 멈춘 줄 안다.
+        """
+        if run.finished or run.runnable() is not None:
+            return False
+        for key, child in run.children.items():
+            if not any(t.waiting_for == key for t in run.tokens):
+                continue  # 주인 없는 자식 — `_step_children`이 걷는다
+            if child.finished or not self.blocked(child):
+                return False
+        return True
+
+    def _step_children(self, run: Run) -> bool:
+        """호출(`callActivity`)이 띄운 안쪽 실행을 한 걸음 민다. 민 것이 있으면 참.
+
+        안쪽이 끝나면 `chk:call.output`대로 값을 올려 보내고 바깥 토큰을 이어 간다.
+        안쪽이 실패하면 그 실패를 **호출 노드의 업무 실패**로 올린다 (오류 경계가 받는다).
+        """
+        for key, child in list(run.children.items()):
+            token = next((t for t in run.tokens if t.waiting_for == key), None)
+            if token is None:
+                del run.children[key]
+                continue
+            if not child.finished:
+                if child.runnable() is None and not child.children:
+                    continue  # 안쪽도 사람·메시지를 기다린다 — 바깥이 할 일은 없다
+                self.step(child)
+                return True
+
+            del run.children[key]
+            node = run.node(token.node_id)
+            token.waiting_for = None
+            self.disarm(run, token.id)
+            context = Context(engine=self, run=run, token=token, node=node)
+            if child.state is State.FAILED:
+                error = child.error or EngineError("호출한 BPM 프로세스가 실패했다", node_id=node.id)
+                self._handle_failure(context, TaskFailed(str(error), node_id=node.id))
+                return True
+            try:
+                self._collect_call(context, child)
+                self.pass_through(run, token)
+            except EngineError as e:
+                self._handle_failure(context, e)
+            return True
+        return False
+
+    def _collect_call(self, context: Context, child: Run) -> None:
+        """`chk:call.output` — **적은 것만** 올려 보낸다 (프로토타입의 「비면 전부」는 없앴다)."""
+        run, node = context.run, context.node
+        spec = node.prop("call")
+        for variable, theirs in (spec.output if spec else {}).items():
+            if theirs not in child.variables:
+                raise EngineError(
+                    f"호출 대상에 없는 변수를 받는다: {theirs}", node_id=node.id, code="call_output_missing"
+                )
+            run.variables[variable] = child.variables[theirs]
+
     def run_until_blocked(self, run: Run, *, max_steps: int = MAX_STEPS) -> State:
         """멈출 때까지 (끝·실패·기다림) 돈다."""
         for _ in range(max_steps):
             if run.finished:
                 return run.state
-            if run.runnable() is None and any(t.waiting for t in run.tokens):
-                run.state = State.WAITING
-                return run.state
+            if self.blocked(run):
+                if any(t.waiting for t in run.tokens):
+                    run.state = State.WAITING
+                    return run.state
+                return self._finish(run, "success")
             self.step(run)
         return self._fail(
             run, EngineError(f"노드를 {max_steps}번 밟았는데 끝나지 않았다 (돌고 도는 그림?)", code="too_many_steps")
@@ -249,6 +353,8 @@ class Engine:
         if isinstance(outcome, Wait):
             run.log.emit("node_state", node_id=node.id, state="waiting", task_type=task_type(node))
             token.waiting_for = outcome.key
+            # 멈춰 있는 동안에만 경계가 울릴 수 있다 (기한 초과·독촉·중단 신호).
+            self.arm_boundaries(context, token)
             run.state = State.WAITING
             return run.state
 
@@ -434,6 +540,10 @@ class Engine:
     # ── 끝 ──
 
     def _finish(self, run: Run, status: str, *, error: EngineError | None = None) -> State:
+        run.state = State.DONE if status == "success" else State.FAILED
+        run.tokens = []
+        if run.nested:
+            return run.state  # 안쪽 실행은 C3에 자기 끝을 남기지 않는다 (부르는 쪽이 이어 간다)
         duration = max(0.0, (utc_now() - run.started).total_seconds())
         run.log.emit(
             "run_finished",
@@ -442,8 +552,6 @@ class Engine:
             **summarize(run.log.events),
             **({"error_code": error.code, "error_message": str(error)} if error else {}),
         )
-        run.state = State.DONE if status == "success" else State.FAILED
-        run.tokens = []
         return run.state
 
     def _fail(self, run: Run, error: EngineError) -> State:
@@ -459,6 +567,175 @@ class Engine:
             )
         log.warning("실행 %s 실패: %s", run.run_id, error)
         return self._finish(run, "failed", error=error)
+
+    # ── 기다림 (메시지·타이머·신호) ──
+
+    def arm(self, context: Context, waiting: Waiting) -> None:
+        """기다릴 것을 등록한다. 타이머면 **지금부터** 잰다."""
+        run = context.run
+        if waiting.kind == WAIT_TIMER and waiting.due_at is None:
+            raise EngineError("타이머에 시각이 없다", node_id=waiting.node_id, code="timer_unset")
+        run.waits[waiting.key] = waiting
+
+    def arm_boundaries(self, context: Context, token: Token) -> None:
+        """그 노드에 붙은 **오류가 아닌** 경계를 켠다 (타이머·메시지·신호).
+
+        토큰이 멈출 때만 켠다 — 한 걸음에 끝나는 노드에서는 경계가 울릴 틈이 없다.
+        """
+        run, node = context.run, context.node
+        for boundary in run.boundaries(node.id):
+            kind = event_kind(boundary)
+            if kind is None:
+                continue  # 오류 경계는 `_handle_failure`가 따로 본다
+            key = f"{kind}:{boundary.id}:{token.id}"
+            self.arm(
+                context,
+                Waiting(
+                    key=key,
+                    node_id=boundary.id,
+                    kind=kind,
+                    name=self.event_name(run, boundary, kind),
+                    correlation=correlation_of(run, boundary),
+                    due_at=self.due_at(run, boundary) if kind == WAIT_TIMER else None,
+                    attached_to=node.id,
+                    interrupting=boundary.cancel_activity,
+                    token_id=token.id,
+                ),
+            )
+
+    def disarm(self, run: Run, token_id: str) -> None:
+        """그 토큰에 걸린 경계를 끈다 (호스트가 기다림을 끝냈다)."""
+        for key in [k for k, w in run.waits.items() if w.token_id == token_id and w.on_boundary]:
+            del run.waits[key]
+
+    def event_name(self, run: Run, node: Node, kind: str) -> str:
+        """메시지·신호의 **이름** (정의 수준 `bpmn:message`·`bpmn:signal`의 `name`)."""
+        if kind == WAIT_MESSAGE:
+            table, ref = run.process.messages, node.message_ref
+        elif kind == WAIT_SIGNAL:
+            table, ref = run.process.signals, node.signal_ref
+        else:
+            return ""
+        return next((name for name, id_ in table.items() if id_ == ref), ref or "")
+
+    def due_at(self, run: Run, node: Node) -> datetime:
+        """타이머가 울릴 시각. 기간(`PT30M`)이거나 **변수 이름**이다 (C14 §이벤트)."""
+        timer = node.timer
+        now = run.env.clock()
+        if timer is None:
+            raise EngineError("타이머 정의가 비어 있다", node_id=node.id, code="timer_unset")
+        if timer.kind == "timeCycle":
+            raise EngineError(
+                "경계·중간 타이머에 반복(`timeCycle`)은 schema 1에서 쓰지 않는다 (C14)",
+                node_id=node.id,
+                code="timer_cycle",
+            )
+        value = timer.value
+        if timer.is_variable:
+            if value not in run.variables:
+                raise EngineError(f"타이머가 가리키는 변수가 없다: {value}", node_id=node.id, code="timer_var")
+            value = str(run.variables[value])
+        return now + _as_duration(value, node_id=node.id)
+
+    def deliver(
+        self,
+        run: Run,
+        name: str,
+        *,
+        correlation: Any = None,
+        payload: Mapping[str, Any] | None = None,
+    ) -> State:
+        """메시지를 넣는다 (C12 Center 메시지 API·Bot UI 수신이 부른다).
+
+        **상관 키가 맞는 것만** 깨운다. 받을 곳이 없으면 아무 일도 없다 — 케이스가 `no_receiver`로
+        기록만 하고 실패시키지 않는 것과 같은 태도다 (C14 시험 케이스 형식).
+        """
+        found = next(
+            (
+                w for w in run.waits.values()
+                if w.kind == WAIT_MESSAGE and w.name == name
+                and (w.correlation is None or correlation is None or w.correlation == correlation)
+            ),
+            None,
+        )
+        if found is None:
+            run.log.emit("log", level="warn", message=f"받을 곳이 없는 메시지다: {name}")
+            return run.state
+        node = run.node(found.node_id)
+        receive = node.prop("receive")
+        if payload and receive is not None:
+            # **적은 이름만** 변수가 된다 (C14 `chk:receive.payload`).
+            run.variables.update({k: v for k, v in payload.items() if k in receive.payload})
+        return self._wake(run, found)
+
+    def signal(self, run: Run, name: str) -> State:
+        """신호를 보낸다 — **한 실행 안의 가지 사이에서만** (C14 §이벤트). 기다리는 것을 모두 깨운다."""
+        waiting = [w for w in run.waits.values() if w.kind == WAIT_SIGNAL and w.name == name]
+        if not waiting:
+            run.log.emit("log", level="info", message=f"받는 가지가 없는 신호다: {name}")
+        for found in waiting:
+            if found.key in run.waits:  # 앞 신호가 끊었을 수 있다
+                self._wake(run, found)
+        return run.state
+
+    def tick(self, run: Run, now: datetime | None = None) -> State:
+        """시간이 된 타이머를 울린다. 부르는 쪽(Bot UI·서버 실행기)이 주기적으로 부른다."""
+        at = now or run.env.clock()
+        for found in run.due(at):
+            if found.key in run.waits:
+                self._wake(run, found)
+        return self.run_until_blocked(run)
+
+    def _wake(self, run: Run, waiting: Waiting) -> State:
+        """기다리던 것이 왔다. 경계면 호스트를 끊거나(중단) 가지를 하나 띄운다(비중단)."""
+        run.waits.pop(waiting.key, None)
+        node = run.node(waiting.node_id)
+        if not waiting.on_boundary:
+            token = next((t for t in run.tokens if t.waiting_for == waiting.key), None)
+            if token is None:
+                return run.state
+            token.waiting_for = None
+            self.disarm(run, token.id)
+            run.log.emit("log", node_id=node.id, level="info", message=f"{waiting.kind}을 받았다")
+            self.pass_through(run, token)
+            return run.state
+
+        host = run.token(waiting.token_id)
+        if host is None:
+            return run.state
+        flows = run.outgoing(node.id, host.scope)
+        if not flows:
+            return self._fail(
+                run, EngineError("경계 이벤트에 나가는 흐름이 없다", node_id=node.id, code="no_outgoing")
+            )
+        run.log.emit("node_state", node_id=node.id, state="completed", task_type=None)
+
+        if not waiting.interrupting:
+            # 비중단 — 호스트는 그대로 기다리고, 가지 하나가 따로 간다.
+            for flow in flows:
+                run.tokens.append(Token(id=new_token_id(), node_id=flow.target, scope=host.scope))
+            return run.state
+
+        # 중단 — 호스트가 기다리던 것을 걷어 내고 경계 길로 보낸다.
+        self._cancel(run, host)
+        host.node_id = flows[0].target
+        for extra in flows[1:]:
+            run.tokens.append(Token(id=new_token_id(), node_id=extra.target, scope=host.scope))
+        return run.state
+
+    def _cancel(self, run: Run, host: Token) -> None:
+        """끊긴 호스트가 쥐고 있던 것을 걷는다 (결재 요청·안쪽 토큰·자기 기다림·경계)."""
+        key = host.waiting_for
+        host.waiting_for = None
+        self.disarm(run, host.id)
+        if key is None:
+            return
+        run.pendings.pop(key, None)
+        run.waits.pop(key, None)
+        if key.startswith("sub:"):
+            inside = key[len("sub:") :]
+            run.tokens = [t for t in run.tokens if inside not in t.scope]
+        run.children.pop(key, None)
 
     # ── 사람 (결재·확인) ──
 
@@ -488,6 +765,7 @@ class Engine:
         run.log.emit("human_answered", node_id=pending.node_id, request_id=request_id, answered_by=answered_by)
         del run.pendings[request_id]
         token.waiting_for = None
+        self.disarm(run, token.id)
 
         node = run.node(pending.node_id)
         context = Context(engine=self, run=run, token=token, node=node)
@@ -539,7 +817,11 @@ __all__ = [
     "State",
     "TaskFailed",
     "Token",
+    "WAIT_MESSAGE",
+    "WAIT_SIGNAL",
+    "WAIT_TIMER",
     "Wait",
+    "Waiting",
     "Workspace",
     "evaluate",
     "new_run_id",

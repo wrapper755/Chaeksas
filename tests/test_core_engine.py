@@ -221,13 +221,13 @@ def test_a_bad_expression_fails_the_run_with_the_node() -> None:
 
 
 def test_an_unsupported_node_stops_instead_of_skipping() -> None:
-    """뒤 조각에서 더할 노드를 만나면 **조용히 지나가지 않는다** (잘못된 결과보다 멈추는 게 낫다)."""
+    """schema 1에서 쓰지 않는 노드를 만나면 **조용히 지나가지 않는다** (잘못된 결과보다 멈추는 게 낫다)."""
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
-        + '<bpmn:receiveTask id="Recv_1" name="받기"/>'
+        + '<bpmn:transaction id="Tx_1" name="트랜잭션"/>'
         + '<bpmn:endEvent id="End_1"/>'
-        + flow("f1", "Start_1", "Recv_1")
-        + flow("f2", "Recv_1", "End_1")
+        + flow("f1", "Start_1", "Tx_1")
+        + flow("f2", "Tx_1", "End_1")
     )
     engine, run = start(process)
     assert engine.run_until_blocked(run) is State.FAILED
@@ -546,13 +546,19 @@ class FieldEchoLlm:
 
 
 def example_env(tmp_path: Path) -> RunEnv:
-    """예제를 돌릴 바깥 세계 — 임시 출력 폴더, 시험용 어댑터들, 예제의 DMN 전부."""
+    """예제를 돌릴 바깥 세계 — 임시 출력 폴더, 시험용 어댑터들, 예제의 DMN·정의 전부."""
     outputs = tmp_path / "outputs"
     outputs.mkdir(exist_ok=True)
     decisions: dict[str, Any] = {}
     for path in sorted(EXAMPLE.glob("*.dmn")):
         decisions.update(read_decisions(path.read_text(encoding="utf-8")))
+    # 호출(`callActivity`)이 찾을 다른 BPM 프로세스 — 예제 묶음이 한 패키지인 셈 치고 모은다.
+    processes: dict[str, Any] = {}
+    for path in sorted(EXAMPLE.glob("*.bpmn")):
+        found = read_process(path.read_text(encoding="utf-8"))
+        processes[found.id] = found
     return RunEnv(
+        processes=processes,
         workspace=Workspace(output_dir=outputs, readable=(outputs,)),
         sender=RecordingSender(),
         decisions=decisions,
@@ -567,15 +573,16 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
     AI·서비스 앱(조각 3c)과 타이머·메시지·신호(조각 3d)가 아직 없어 **대부분 중간에 멈춘다.**
     중요한 것은 「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
     **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 3b: 끝 11·대기 2 →
-    3c: 끝 19·대기 6 — 사람을 기다리는 데까지 간 것을 합치면 50개 중 25개다).
+    3c: 끝 19·대기 6 → 3d: 끝 20·대기 9 — 합치면 50개 중 **29개**가 사람이나 끝까지 간다).
     """
     known = {
-        "node_kind_unsupported",  # 호출·받기·타이머·신호(3d), UI 태스크·desktop AI 태스크(M4)
+        "node_kind_unsupported",  # UI 태스크·`desktop` AI 태스크 (M4)
         "expr_error",  # ADR-0025가 식에서 뺀 도우미 (`파일목록`·`양식`류 — 예제 수정은 조각 3f)
-        "many_starts",  # 메시지·타이머 시작 (조각 3d)
-        "no_outgoing",  # 경계 이벤트가 붙은 노드 (조각 3d)
         "no_matching_flow",  # 자리 값으로는 어느 조건도 참이 아닐 수 있다
-        "loop_not_a_list",  # 자리 값이 문자열이라 반복할 목록이 아니다 (예제가 아니라 자리 값 탓)
+        # 아래 셋은 **자리 값 탓**이다 (예제가 아니라). 진짜 입력은 조각 3f의 인수 시험에서 온다.
+        "loop_not_a_list",  # 자리 값이 문자열이라 반복할 목록이 아니다
+        "timer_unreadable",  # 기한 변수에 자리 값(`시험값`)이 들어갔다
+        "TASK_FAILED",  # 호출한 BPM 프로세스가 자리 값 때문에 실패했다 (호출 자체는 돌았다)
     }
     env = example_env(tmp_path)
     reasons: dict[str, int] = {}
@@ -616,6 +623,7 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         "bx37_clause_review.bpmn",  # 같은 AI 태스크를 한 실행에서 세 번
         "fx01_api_call.bpmn",  # AI 태스크 (`domain: api`) + 업무 파라미터
         "fx02_business_rule.bpmn",  # 규칙(DMN)
+        "fx03_call_mapping.bpmn",  # 호출 (입력·출력 매핑)
         "fx03b_amount_branch.bpmn",
         "fx06_document_read.bpmn",  # AI 태스크 (`domain: doc`)
         "fx07_email.bpmn",  # 파일 출력 + 메일
@@ -628,11 +636,14 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         "fx20_external_adapter.bpmn",  # 서비스 앱 (외부 확장 어댑터)
     ], done
     assert waiting == [
-        "bx20_employee_onboarding.bpmn",
+        "bx05_month_end_close.bpmn",  # 받기 태스크 3개 + 비중단 타이머 경계
+        "bx13_return_processing.bpmn",  # 받기 태스크
+        "bx20_employee_onboarding.bpmn",  # 하위 프로세스에 붙은 비중단 타이머 경계
         "bx32_customer_inquiry.bpmn",
         "bx33_access_request.bpmn",
-        "bx34_incident_alert.bpmn",
         "fx08_error_boundary.bpmn",
+        "fx13_signal.bpmn",  # 신호 받기
+        "fx14_timers.bpmn",  # 중간 받기 타이머 + 타이머 경계
         "fx19_manual_task_pc.bpmn",
     ], waiting
 

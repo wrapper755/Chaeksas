@@ -61,6 +61,11 @@ CODE_PATH_DENIED = "path_denied"
 #: 아직 다루지 않는 노드·태스크 (뒤 조각). 실행을 조용히 지나가지 않고 멈춘다.
 CODE_UNSUPPORTED = "node_kind_unsupported"
 
+#: 무엇을 기다리나 (C3 `run_waiting.waiting_for`와 같은 말).
+WAIT_MESSAGE = "message"
+WAIT_TIMER = "timer"
+WAIT_SIGNAL = "signal"
+
 class State(StrEnum):
     """실행의 지금 상태."""
 
@@ -128,6 +133,32 @@ class Token:
 
 
 @dataclass
+class Waiting:
+    """토큰 하나가 기다리는 것 — 메시지·타이머·신호 (C14 §이벤트).
+
+    경계 이벤트도 여기 등록된다. 그때는 `attached_to`가 붙은 노드이고 `token_id`가 **그 노드를
+    밟고 있는 토큰**이다 (경계는 토큰을 따로 쓰지 않는다).
+    """
+
+    key: str
+    node_id: str
+    kind: str  # WAIT_MESSAGE | WAIT_TIMER | WAIT_SIGNAL
+    name: str = ""  # 메시지·신호 이름
+    correlation: Any = None
+    due_at: datetime | None = None
+    #: 경계 이벤트면 붙은 노드, 아니면 `None`.
+    attached_to: str | None = None
+    #: 경계 이벤트가 붙은 노드를 끊는가 (`cancelActivity`).
+    interrupting: bool = True
+    #: 경계 이벤트면 호스트 토큰의 id.
+    token_id: str = ""
+
+    @property
+    def on_boundary(self) -> bool:
+        return self.attached_to is not None
+
+
+@dataclass
 class Pending:
     """사람을 기다리는 중인 요청 (결재·확인)."""
 
@@ -154,6 +185,10 @@ class RunEnv:
     workspace: Workspace = field(default_factory=Workspace)
     #: 메일·웹훅 보내기 (C14 §보내기). 기본은 **보내지 않고 실패한다**.
     sender: Sender = field(default_factory=NoSender)
+    #: 호출할 수 있는 다른 BPM 프로세스 (`calledElement` → 정의). 패키지의 `process/`·`libs/`.
+    processes: Mapping[str, BpmnProcess] = field(default_factory=dict)
+    #: 지금 시각. 타이머가 이것으로 잰다 — 시험이 바꿔 끼운다.
+    clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     #: 같은 패키지의 DMN 결정 (`결정 id` → 결정). 규칙 태스크가 찾는다.
     decisions: Mapping[str, Decision] = field(default_factory=dict)
     #: 서비스 앱 호출 (C11). 기본은 **부르지 않고 실패한다**. 키 값은 이 어댑터만 안다.
@@ -192,6 +227,12 @@ class Run:
     arrivals: dict[str, set[str]] = field(default_factory=dict)
     #: 포함 분기가 실제로 띄운 가지 수 (`범위:합류` → 수). 포함 합류가 이만큼 기다린다.
     expected: dict[str, int] = field(default_factory=dict)
+    #: 기다리는 메시지·타이머·신호 (`열쇠` → 기다림). 경계 이벤트도 여기 등록된다.
+    waits: dict[str, Waiting] = field(default_factory=dict)
+    #: 호출(`callActivity`)이 띄운 안쪽 실행 (`열쇠` → 실행). 같은 `run_id`를 쓴다.
+    children: dict[str, Run] = field(default_factory=dict)
+    #: 호출로 띄워진 안쪽 실행인가 — 그러면 `run_started`·`run_finished`를 남기지 않는다 (C3).
+    nested: bool = False
     mode: str = "autonomous"
     #: 누가 돌리나 (C11 `caller.type`·C3 `run_started.executor`).
     executor: str = "bot_ui"
@@ -251,6 +292,22 @@ class Run:
 
     def runnable(self) -> Token | None:
         return next((t for t in self.tokens if not t.waiting), None)
+
+    def token(self, token_id: str) -> Token | None:
+        return next((t for t in self.tokens if t.id == token_id), None)
+
+    def due(self, now: datetime) -> list[Waiting]:
+        """시간이 된 타이머 (이른 것부터). 부르는 쪽이 `Engine.tick()`으로 돌린다."""
+        found = [
+            w for w in self.waits.values()
+            if w.kind == WAIT_TIMER and w.due_at is not None and w.due_at <= now
+        ]
+        return sorted(found, key=lambda w: (w.due_at or now, w.key))
+
+    def next_due(self) -> datetime | None:
+        """가장 이른 타이머 시각 — 부르는 쪽이 얼마나 잘지 정한다."""
+        times = [w.due_at for w in self.waits.values() if w.kind == WAIT_TIMER and w.due_at is not None]
+        return min(times) if times else None
 
 
 # ─────────────────────────── 수행기가 돌려주는 것 ───────────────────────────
@@ -312,6 +369,26 @@ Handler = Callable[[Context], Outcome]
 # ─────────────────────────── 노드에 대해 아는 것 ───────────────────────────
 
 
+def event_kind(node: Node) -> str | None:
+    """이벤트 노드가 무엇을 기다리나. 오류·정의 없음이면 `None` (여기서 다루지 않는다)."""
+    for definition, kind in (
+        ("timerEventDefinition", WAIT_TIMER),
+        ("messageEventDefinition", WAIT_MESSAGE),
+        ("signalEventDefinition", WAIT_SIGNAL),
+    ):
+        if definition in node.event_definitions:
+            return kind
+    return None
+
+
+def correlation_of(run: Run, node: Node) -> Any:
+    """`chk:receive.correlation`이 가리키는 **지금 값** — 이 값이 같은 메시지만 받는다."""
+    receive = node.prop("receive")
+    if receive is None or not receive.correlation:
+        return None
+    return run.variables.get(receive.correlation)
+
+
 def task_type(node: Node) -> str | None:
     """C3 `node_state.task_type`."""
     if node.kind == "serviceTask":
@@ -367,7 +444,13 @@ __all__ = [
     "State",
     "TaskFailed",
     "Token",
+    "WAIT_MESSAGE",
+    "WAIT_SIGNAL",
+    "WAIT_TIMER",
     "Wait",
+    "Waiting",
+    "correlation_of",
+    "event_kind",
     "new_run_id",
     "new_token_id",
     "task_type",

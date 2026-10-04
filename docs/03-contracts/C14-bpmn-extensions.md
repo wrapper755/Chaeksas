@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 초안 (2026-10-01). **모델·BPMN 읽기·검사 B1~B14 구현됨** (2026-10-03, 예제 50개로 확인). **식 `chk-expr`·스크립트·템플릿도 구현됨** (2026-10-04, [ADR-0025](../decisions/0025-expression-language.md) — 예제의 식 자리 193곳·템플릿 자리 전부로 확인). **DMN 판정·파일 목록·파일 출력·메일/웹훅·이정표도 구현됨** (2026-10-04, [ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)). 합의는 M3에서 엔진·Studio와 함께 |
+| 상태 | 초안 (2026-10-01). **모델·BPMN 읽기·검사 B1~B14 구현됨** (2026-10-03, 예제 50개로 확인). **식 `chk-expr`·스크립트·템플릿도 구현됨** (2026-10-04, [ADR-0025](../decisions/0025-expression-language.md) — 예제의 식 자리 193곳·템플릿 자리 전부로 확인). **DMN 판정·파일 목록·파일 출력·메일/웹훅·이정표도 구현됨** (2026-10-04, [ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)). **AI 태스크·서비스 앱 태스크·재생** (2026-10-04, [ADR-0027](../decisions/0027-llm-connection.md)·[ADR-0028](../decisions/0028-replay-memory.md))과 **타이머·메시지·신호·호출**도 돈다. 합의는 M3에서 엔진·Studio와 함께 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio(쓰기) → 패키지(C1 `process/*.bpmn`) → 실행기·서버 실행기(읽기·실행), Center(검사) |
 | 코드 위치 | `chaeksas.contracts.bpmn_ext` — 모델·`read_process()`·`validate()`. DMN 읽기·판정은 `chaeksas.contracts.dmn`. 확장 태스크의 속 내용은 각 확장의 `contracts/` |
@@ -268,6 +268,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 | 2026-10-01 | 1 | 초안 (프로토타입 확장 속성을 새 용어·확장 모델로 옮김) | 0018 |
 | 2026-10-03 | 1 | 구현하며 명시한 것: 엔진이 늘 주는 변수(`오늘`·`지금`·`run_id`) 표, `validate()`가 받는 인자와 건너뛰는 검사, 확장 태스크의 속은 확장이 검사한다(B12), B11이 어림인 이유, B13·B14 순서 | 0018 |
 | 2026-10-04 | 1 | 식 `chk-expr`의 문법·도우미 목록 확정, 템플릿(`{변수}`)을 식과 가름, 점이 사전 키를 읽는다고 명시, 흐름 조건식 본문을 reader가 들고 온다 ([ADR-0025](../decisions/0025-expression-language.md)) | — |
+| 2026-10-04 | 1 | 읽기가 타이머 본문(`timeDate`·`timeDuration`·`timeCycle`)·`signalRef`·`cancelActivity`·정의 수준 `bpmn:signal`을 들고 온다 — §이벤트가 글로만 적어 둔 것을 엔진이 쓸 수 있게 했다 (`Node.timer`·`signal_ref`·`cancel_activity`, `BpmnProcess.signals`) | — |
 | 2026-10-04 | 1 | **AI 태스크에 `replay` 추가**(`plan`\|`full`\|`none`)와 「재생」 절 — 재생 명세는 패키지 안 `memory/specs.json`이고, 도구 인자는 **값이 아니라 `{변수}` 템플릿**으로 적는다. B12를 늘림 | [0028](../decisions/0028-replay-memory.md) |
 | 2026-10-04 | 1 | **파일 목록 태스크(`chk:fileList`) 추가** — ADR-0025가 식에서 뺀 `파일목록()`의 자리. 「파일 경로」 절(출력 폴더·읽기 허용 폴더)을 새로 두고 파일 출력도 그것을 따르게 함. DMN 판정 규칙(입력 이름은 `inputExpression`, 입력 칸 문법, 적중 정책), 보내기 어댑터, 이정표(`intermediateThrowEvent`)를 적음. B5·B12를 늘림 | [0026](../decisions/0026-file-paths-and-file-list-task.md) |
 | 2026-10-01 | 1 | 업무 예제 작업 반영: `inputs[].default`, `chk:receive.payload`, 경계·중간 받기의 상관 키, 케이스 `messages`·`process`·입력 연산자(`$now_plus`, `$test_receiver`), 자동 응답 없는 결재, 기대 결과 비교 규칙, 결재 칸을 C6에 맞춤(`choices`, `date` 없음), `defaults.desktop`, 식의 None·허용 목록, 검사 B11~B14 ([08-business-examples](../08-business-examples/README.md)) | — |
