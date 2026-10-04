@@ -184,12 +184,16 @@ def finish_from(
     *,
     llm: Llm,
     on_step: Callable[[int, str, str], None] | None = None,
+    context: Mapping[str, Any] | None = None,
 ) -> Outcome:
     """`replay: plan` — 되밟은 도구 결과를 모아 **마지막 값 추출만 모델에게 한 번** 묻는다.
 
     도구를 다시 고르지 않게 **도구를 알려 주지 않는다** — 계획은 이미 기억이 정했다.
+
+    **묻는 말은 자율 수행 때와 같아야 한다** — 목표가 이름으로 가리키는 값(C14 §AI 태스크가
+    보는 값)을 여기서 빼면, 같은 입력인데 재생만 다른 답을 낸다.
     """
-    messages = opening_messages(spec)
+    messages = opening_messages(spec, context=context)
     for index, step in enumerate(trace.steps, start=1):
         call = ToolCall(id=f"r{index}", name=step.tool, arguments=step.arguments)
         messages.append(_assistant_message(Reply(tool_calls=(call,))))
