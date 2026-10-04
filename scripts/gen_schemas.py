@@ -49,6 +49,7 @@ from chaeksas.contracts import (
     PackageInfo,
     RegisterRequest,
     RegisterResponse,
+    ReplayMemory,
     RunEvent,
     RuntimeResource,
     ServiceAppManifest,
@@ -108,6 +109,7 @@ MODELS: list[tuple[str, Any]] = [
     ("c13-extension-manifest", ExtensionManifest),
     ("c13-catalog", Catalog),
     ("c14-case-file", CaseFile),
+    ("c14-replay-memory", ReplayMemory),
 ]
 
 

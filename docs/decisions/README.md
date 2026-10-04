@@ -35,3 +35,5 @@
 | [0024](0024-desktop-packaging-extensions.md) | Studio·Bot UI는 PyInstaller onedir, 확장 옵션은 엔트리 포인트에서 계산, 로컬 런타임은 같은 실행 파일로 (S5) | 수락 (설치 프로그램 미정) |
 | [0025](0025-expression-language.md) | 식 `chk-expr`는 직접 만든 AST 검사기로 돌리고, 템플릿은 `{변수}`만 둔다 (S6) | 수락 |
 | [0026](0026-file-paths-and-file-list-task.md) | 파일은 실행 폴더(출력·읽기 허용)로 묶고, 파일 목록은 식이 아니라 태스크로 둔다 | 수락 |
+| [0027](0027-llm-connection.md) | AI 태스크는 OpenAI 호환 HTTP를 **우리 루프로** 직접 부른다 (S7) | 수락 |
+| [0028](0028-replay-memory.md) | 재생 명세는 패키지 안에 넣고, 도구 인자는 `{변수}` 템플릿으로 적는다 | 수락 |

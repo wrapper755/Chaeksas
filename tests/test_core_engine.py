@@ -5,6 +5,8 @@ C3 이벤트가 **계약대로** 남는지도 함께 본다 (`kind`·필수 `dat
 
 from __future__ import annotations
 
+import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,8 +18,10 @@ from chaeksas.contracts.dmn import read_decisions
 from chaeksas.contracts.events import REQUIRED_DATA_KEYS
 from chaeksas.core.engine import DECISION_KEY, Engine, EngineError, Run, RunEnv, State, new_run_id
 from chaeksas.core.files import Workspace
+from chaeksas.core.llm import Reply
 from chaeksas.core.run_log import RunLog, sanitize
 from chaeksas.core.senders import RecordingSender
+from chaeksas.core.services import RecordingServiceCaller
 
 NOW = datetime(2026, 10, 4, 9, 30, tzinfo=UTC)
 
@@ -217,7 +221,21 @@ def test_a_bad_expression_fails_the_run_with_the_node() -> None:
 
 
 def test_an_unsupported_node_stops_instead_of_skipping() -> None:
-    """조각 3에서 더할 노드를 만나면 **조용히 지나가지 않는다** (잘못된 결과보다 멈추는 게 낫다)."""
+    """뒤 조각에서 더할 노드를 만나면 **조용히 지나가지 않는다** (잘못된 결과보다 멈추는 게 낫다)."""
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + '<bpmn:receiveTask id="Recv_1" name="받기"/>'
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Recv_1")
+        + flow("f2", "Recv_1", "End_1")
+    )
+    engine, run = start(process)
+    assert engine.run_until_blocked(run) is State.FAILED
+    assert run.error is not None and run.error.code == "node_kind_unsupported"
+
+
+def test_a_service_task_without_any_chk_property_says_so() -> None:
+    """`serviceTask` 하나에 네 가지가 올라탄다 — 아무것도 없으면 무엇인지 알 수 없다."""
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
         + '<bpmn:serviceTask id="Task_Call" name="서비스"/>'
@@ -227,7 +245,7 @@ def test_an_unsupported_node_stops_instead_of_skipping() -> None:
     )
     engine, run = start(process)
     assert engine.run_until_blocked(run) is State.FAILED
-    assert run.error is not None and run.error.code == "node_kind_unsupported"
+    assert run.error is not None and run.error.code == "task_empty"
 
 
 def test_a_process_without_a_start_is_refused() -> None:
@@ -486,8 +504,49 @@ def dummy_inputs(process: Any) -> dict[str, Any]:
     return {decl.name: DUMMY_BY_TYPE.get(decl.type, "시험값") for decl in process.info.inputs}
 
 
+def example_service_outputs() -> dict[str, dict[str, Any]]:
+    """예제가 서비스 앱에서 **받으려는 필드**에 자리 값을 채워 둔다.
+
+    진짜 앱은 M5의 `samples/mock-*`다. 여기서는 「엔진이 어디까지 가는가」만 보므로, 각
+    `chk:serviceCall.output`이 가리키는 응답 필드를 그대로 돌려주는 시늉만 한다.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    for path in sorted(EXAMPLE.glob("*.bpmn")):
+        for node in read_process(path.read_text(encoding="utf-8")).all_nodes():
+            call = node.prop("serviceCall")
+            if call is not None:
+                found = out.setdefault(f"{call.app_id}/{call.operation}", {})
+                found.update(dict.fromkeys(call.output.values(), "시험값"))
+    return out
+
+
+#: 「다음 필드를 가진 JSON 객체 하나: 공급사(string), 금액(int)」에서 이름·타입을 뽑는다.
+WANTED = re.compile(r"JSON 객체 하나: (.+)$", re.M)
+PLACEHOLDER: dict[str, Any] = {
+    "string": "시험값", "date": "2026-10-04", "int": 1, "number": 1.0,
+    "bool": True, "list": [], "dict": {},
+}
+
+
+class FieldEchoLlm:
+    """시험용 모델 — **물음에 적힌 결과 필드대로** 자리 값을 채운 JSON을 돌려준다.
+
+    진짜 모델 대신 「형식만 맞는 답」을 내준다. 엔진이 어디까지 가는지 보는 눈금용이라
+    값의 뜻은 보지 않는다 (업무 예제의 인수 시험은 조각 3f다).
+    """
+
+    def ask(self, messages: Any, *, tools: Any = (), timeout_s: float | None = None) -> Reply:
+        found = WANTED.search(str(messages[-1].get("content", "")))
+        fields: dict[str, Any] = {}
+        for part in (found.group(1) if found else "").split(", "):
+            name, _, kind = part.partition("(")
+            if name.strip() and name.strip() != "없음":
+                fields[name.strip()] = PLACEHOLDER.get(kind.rstrip(")"), "시험값")
+        return Reply(text=json.dumps(fields, ensure_ascii=False), model="stub", input_tokens=10, output_tokens=5)
+
+
 def example_env(tmp_path: Path) -> RunEnv:
-    """예제를 돌릴 바깥 세계 — 임시 출력 폴더, 시험용 보내기 어댑터, 예제의 DMN 전부."""
+    """예제를 돌릴 바깥 세계 — 임시 출력 폴더, 시험용 어댑터들, 예제의 DMN 전부."""
     outputs = tmp_path / "outputs"
     outputs.mkdir(exist_ok=True)
     decisions: dict[str, Any] = {}
@@ -497,6 +556,8 @@ def example_env(tmp_path: Path) -> RunEnv:
         workspace=Workspace(output_dir=outputs, readable=(outputs,)),
         sender=RecordingSender(),
         decisions=decisions,
+        services=RecordingServiceCaller(outputs=dict(example_service_outputs())),
+        llm=FieldEchoLlm(),
     )
 
 
@@ -505,14 +566,16 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
 
     AI·서비스 앱(조각 3c)과 타이머·메시지·신호(조각 3d)가 아직 없어 **대부분 중간에 멈춘다.**
     중요한 것은 「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
-    **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 조각 3b: 끝 11·대기 2).
+    **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 3b: 끝 11·대기 2 →
+    3c: 끝 19·대기 6 — 사람을 기다리는 데까지 간 것을 합치면 50개 중 25개다).
     """
     known = {
-        "node_kind_unsupported",  # AI·서비스 앱(3c), 호출·받기·타이머·신호(3d), UI 태스크(M4)
+        "node_kind_unsupported",  # 호출·받기·타이머·신호(3d), UI 태스크·desktop AI 태스크(M4)
         "expr_error",  # ADR-0025가 식에서 뺀 도우미 (`파일목록`·`양식`류 — 예제 수정은 조각 3f)
         "many_starts",  # 메시지·타이머 시작 (조각 3d)
         "no_outgoing",  # 경계 이벤트가 붙은 노드 (조각 3d)
         "no_matching_flow",  # 자리 값으로는 어느 조건도 참이 아닐 수 있다
+        "loop_not_a_list",  # 자리 값이 문자열이라 반복할 목록이 아니다 (예제가 아니라 자리 값 탓)
     }
     env = example_env(tmp_path)
     reasons: dict[str, int] = {}
@@ -547,16 +610,31 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         "bx06_bulk_credit_check.bpmn",  # 규칙(DMN) + 반복 + xlsx 출력 + 메일
         "bx12_shipping_fee.bpmn",  # 규칙(DMN) 공유 BPM 프로세스
         "bx17_erp_po_entry.bpmn",
+        "bx22_offboarding_access.bpmn",  # 서비스 앱 + 반복
+        "bx31_request_triage.bpmn",  # AI 태스크 + 메일
+        "bx36_legacy_migration.bpmn",  # 서비스 앱
+        "bx37_clause_review.bpmn",  # 같은 AI 태스크를 한 실행에서 세 번
+        "fx01_api_call.bpmn",  # AI 태스크 (`domain: api`) + 업무 파라미터
         "fx02_business_rule.bpmn",  # 규칙(DMN)
         "fx03b_amount_branch.bpmn",
+        "fx06_document_read.bpmn",  # AI 태스크 (`domain: doc`)
         "fx07_email.bpmn",  # 파일 출력 + 메일
         "fx09_sequential_loop.bpmn",
+        "fx10_operator_routing.bpmn",  # AI 태스크 + 웹훅
         "fx11_parallel.bpmn",
         "fx12_daily_report.bpmn",
         "fx17_webhook.bpmn",  # 웹훅
         "fx18_parallel_loop.bpmn",
+        "fx20_external_adapter.bpmn",  # 서비스 앱 (외부 확장 어댑터)
     ], done
-    assert waiting == ["bx33_access_request.bpmn", "fx19_manual_task_pc.bpmn"], waiting
+    assert waiting == [
+        "bx20_employee_onboarding.bpmn",
+        "bx32_customer_inquiry.bpmn",
+        "bx33_access_request.bpmn",
+        "bx34_incident_alert.bpmn",
+        "fx08_error_boundary.bpmn",
+        "fx19_manual_task_pc.bpmn",
+    ], waiting
 
 
 # ─────────────── 병렬·포함 게이트웨이, 하위 프로세스, 반복, 오류 경계 ───────────────

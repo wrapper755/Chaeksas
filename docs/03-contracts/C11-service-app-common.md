@@ -5,7 +5,7 @@
 | 상태 | **합의** (2026-10-01, 독립 검토 반영) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Bot UI(실행 중 Bot)·서버 실행기·Studio·Worker 프로세스 → 모든 서비스 앱 |
-| 코드 위치 | `packages/contracts/src/chaeksas/contracts/service_app.py` (import `chaeksas.contracts.service_app`), 구현 뼈대 `packages/service_kit/` (import `chaeksas.service_kit`, [ADR-0019](../decisions/0019-package-names.md)) |
+| 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py` (import `chaeksas.contracts.service_app`), 받는 쪽 뼈대 `packages/service_kit/` (import `chaeksas.service_kit`, [ADR-0019](../decisions/0019-package-names.md)), **부르는 쪽 `chaeksas.core.services`** (서비스 앱 태스크 — 멱등 키·재시도·C3 `service_call` 기록) |
 | JSON Schema | [`c11-service-app-manifest.json`](../../packages/contracts/schemas/c11-service-app-manifest.json) · [`c11-op-request.json`](../../packages/contracts/schemas/c11-op-request.json) · [`c11-op-response.json`](../../packages/contracts/schemas/c11-op-response.json) · [`c11-health-response.json`](../../packages/contracts/schemas/c11-health-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md) |
 | 관련 화면 | STU-14, BUI-10, SVC-00~03, CON-07 |

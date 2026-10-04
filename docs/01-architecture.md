@@ -115,7 +115,7 @@ contracts ◀── extension_api ◀── core ◀── studio, bot_ui, serve
 | 서비스 앱 API 키(해시)·사용 기록 | 각 서비스 앱 | |
 | 서비스 앱 키 값, Center 키 값 | Bot UI·Studio PC의 OS 비밀 저장소, 서버 실행기는 서버의 비밀 저장소·환경변수 | |
 | 서버 실행 상태 (기다리는 실행) | 서버 실행기 저장소 (SQLite로 시작) | 재시작 후 이어 가기 |
-| 재생 기억(성공 궤적) | 현장 PC / Studio 로컬 | 저장 방식은 새로 정한다 |
+| 재생 기억(성공 궤적) | **패키지 안 `memory/specs.json`** (C1) | Studio가 자율 수행으로 만들어 넣고, 배포된 Bot은 **읽기만** 한다 ([ADR-0028](decisions/0028-replay-memory.md)) |
 | 실행 기록·보고 버퍼 | 현장 PC 로컬 큐 | 전송 후 삭제 |
 | BPM 프로세스가 만든 파일 (보고서·표) | 실행하는 쪽의 **출력 폴더** | 실행마다 하나. 쓰기는 그 안만, 읽기는 **읽기 허용 폴더**까지 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
 

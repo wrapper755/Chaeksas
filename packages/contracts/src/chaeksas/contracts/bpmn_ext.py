@@ -37,6 +37,7 @@ from chaeksas.contracts._base import (
 )
 from chaeksas.contracts.approvals import KNOWN_FIELD_TYPES, FormField
 from chaeksas.contracts.manifest import KEY_REF_PATTERN, ExtensionNeed, RunLocation
+from chaeksas.contracts.replay import REPLAY_DEFAULT, REPLAY_MODES
 
 #: 네임스페이스. 우리 속성은 전부 이 하나에 담는다.
 CHK_NS = "urn:chaeksas:bpmn:1"
@@ -174,6 +175,8 @@ class AiTask(ContractModel):
     tools: list[str] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)  # 재생 때 `$param`
     results: dict[str, str] = Field(default_factory=dict)  # {이름: 타입}
+    #: 결정 수행에서 무엇을 재사용하나 (C14 §재생, ADR-0028). REPLAY_MODES.
+    replay: str = REPLAY_DEFAULT
     limits: Limits | None = None
     forbidden_actions: list[str] = Field(default_factory=list)
     confirm_triggers: list[str] = Field(default_factory=list)
@@ -1164,6 +1167,15 @@ def _check_b12(process: BpmnProcess) -> list[Violation]:
         files: FileList | None = node.prop("fileList")
         if files is not None and files.sort not in FILE_SORTS:
             out.append(_error("B12", f"{node.id}의 파일 목록 sort를 모른다: {files.sort}", items=sorted(FILE_SORTS)))
+        ai: AiTask | None = node.prop("aiTask")
+        if ai is not None:
+            if ai.replay not in REPLAY_MODES:
+                out.append(
+                    _error("B12", f"{node.id}의 replay를 모른다: {ai.replay}", items=sorted(REPLAY_MODES))
+                )
+            elif ai.replay == "full" and not ai.tools:
+                # 되밟을 도구가 없으면 아무것도 확인하지 않고 답만 복사하는 꼴이다 (ADR-0028 §2).
+                out.append(_error("B12", f"{node.id}: 도구가 없는 AI 태스크에 replay: full을 쓸 수 없다"))
     return out
 
 

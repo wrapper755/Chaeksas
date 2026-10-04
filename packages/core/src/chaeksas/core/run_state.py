@@ -23,10 +23,14 @@ from typing import TYPE_CHECKING, Any
 from chaeksas.contracts.approvals import Form
 from chaeksas.contracts.bpmn_ext import BpmnProcess, Flow, Node
 from chaeksas.contracts.dmn import Decision
+from chaeksas.contracts.replay import ReplayMemory, ReplaySpec
+from chaeksas.core.agent import Tool
 from chaeksas.core.expr import Scope
 from chaeksas.core.files import Workspace
+from chaeksas.core.llm import Llm, NoLlm
 from chaeksas.core.run_log import RunLog
 from chaeksas.core.senders import NoSender, Sender
+from chaeksas.core.services import NoServiceCaller, ServiceCaller
 
 if TYPE_CHECKING:  # `Context.engine`의 타입만 쓴다 — 실행 때는 들지 않는다 (순환 import).
     from chaeksas.core.engine import Engine
@@ -152,6 +156,14 @@ class RunEnv:
     sender: Sender = field(default_factory=NoSender)
     #: 같은 패키지의 DMN 결정 (`결정 id` → 결정). 규칙 태스크가 찾는다.
     decisions: Mapping[str, Decision] = field(default_factory=dict)
+    #: 서비스 앱 호출 (C11). 기본은 **부르지 않고 실패한다**. 키 값은 이 어댑터만 안다.
+    services: ServiceCaller = field(default_factory=NoServiceCaller)
+    #: AI 태스크의 모델 (ADR-0027). 기본은 **부르지 않고 실패한다**. 주소·키는 이 어댑터만 안다.
+    llm: Llm = field(default_factory=NoLlm)
+    #: AI 태스크가 빌려 쓸 도구 (`chk:aiTask.tools`의 이름 → 함수). 확장이 더한다 (M4).
+    tools: Mapping[str, Tool] = field(default_factory=dict)
+    #: 패키지의 재생 명세 (`memory/specs.json`, ADR-0028). 결정 수행이 되밟는다. 없으면 그냥 돈다.
+    memory: ReplayMemory | None = None
 
 
 def utc_now() -> datetime:
@@ -181,10 +193,19 @@ class Run:
     #: 포함 분기가 실제로 띄운 가지 수 (`범위:합류` → 수). 포함 합류가 이만큼 기다린다.
     expected: dict[str, int] = field(default_factory=dict)
     mode: str = "autonomous"
+    #: 누가 돌리나 (C11 `caller.type`·C3 `run_started.executor`).
+    executor: str = "bot_ui"
+    #: 그 BPM 프로세스의 판 (C11 `caller.version`).
+    version: str = "0.0.0"
     started: datetime = field(default_factory=utc_now)
     error: EngineError | None = None
     #: 노드마다 몇 번째 수행인지 (C6 `node_instance`·C10 `business_key`).
     instances: dict[str, int] = field(default_factory=dict)
+    #: 노드마다 서비스 앱을 몇 번 불렀는지 (C11 멱등 키의 `call_seq`).
+    call_seqs: dict[str, int] = field(default_factory=dict)
+    #: 자율 수행이 이번에 **배운 것** (ADR-0028). Studio가 실행이 끝난 뒤 패키지에 적는다 —
+    #: 엔진은 파일을 쓰지 않는다 (배포된 Bot은 기억을 읽기만 한다).
+    learned: list[ReplaySpec] = field(default_factory=list)
     helpers: Mapping[str, Callable[..., Any]] = field(default_factory=dict)
 
     # ── 자주 쓰는 것 ──
@@ -293,8 +314,11 @@ Handler = Callable[[Context], Outcome]
 
 def task_type(node: Node) -> str | None:
     """C3 `node_state.task_type`."""
-    if node.kind == "serviceTask" and node.prop("fileList") is not None:
-        return "file_list"
+    if node.kind == "serviceTask":
+        if node.prop("fileList") is not None:
+            return "file_list"
+        if node.prop("aiTask") is not None:
+            return "ai_task"  # C3 `run_finished.ai_tasks`가 이것을 센다
     if node.kind == "intermediateThrowEvent":
         # 이벤트 정의가 없는 중간 던지기가 **이정표**다 (C14 §이벤트). 신호·메시지는 다른 것이다.
         return "milestone" if not node.event_definitions else None

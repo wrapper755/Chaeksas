@@ -112,6 +112,8 @@ class Engine:
             log=log,
             env=env or RunEnv(),
             mode=mode,
+            executor=executor,
+            version=version,
             started=at,
             helpers=bind(now=at),
         )

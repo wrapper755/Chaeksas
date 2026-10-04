@@ -92,7 +92,8 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 읽기 허용 폴더 | `readable` | 파일 목록이 들여다볼 수 있는 폴더. 실행하는 쪽(Bot UI 설정·Studio)이 정한다 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
 | 시험 케이스 | `case` | 입력 + 기대 결과 + 결재 자동 응답. Studio 시험 실행의 판정 기준 |
 | 사전 점검 | `preflight` | 실행 전에 각 노드를 ok / warning / blocked로 판정 (서비스 앱 키 참조가 이 PC에 있는지도 포함) |
-| 재생 | `replay` | 성공한 AI 태스크의 도구 순서를 LLM 없이 다시 실행 (결정 수행의 한 형태) |
+| 재생 | `replay` | 성공한 AI 태스크의 **도구 차례**를 다시 밟는 것 (결정 수행의 한 형태). 태스크마다 `plan`(마지막 추출만 모델) / `full`(모델 0회) / `none`을 고른다 ([ADR-0028](decisions/0028-replay-memory.md)) |
+| 재생 명세 | `replay_spec` | 자율 수행이 남긴 도구 차례와 마지막 답. 패키지 안 `memory/specs.json`에 들어가고 도구 인자는 `{변수}` 템플릿이다 |
 | 자율 수행 | `autonomous` | 수행 모드. AI가 방법을 찾아 수행하고 결과를 학습 자료로 남긴다. **Studio에서 개발 목적으로 실행할 때** |
 | 결정 수행 | `deterministic` | 수행 모드. 학습·등록된 대로 LLM 없이(또는 최소로) 수행한다. **Bot UI에서 Bot을 운영 실행할 때**, Studio의 재생 실행 |
 
