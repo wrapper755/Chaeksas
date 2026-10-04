@@ -232,15 +232,21 @@ def test_a_process_without_a_start_is_refused() -> None:
         start(make('<bpmn:endEvent id="End_1"/>'))
 
 
-def test_parallel_outgoing_flows_are_refused_for_now() -> None:
+def test_two_outgoing_flows_fork_into_two_tokens() -> None:
+    """나가는 흐름이 여럿이면 갈라진다 (병렬 분기). 둘 다 돌고 나서 끝난다."""
     process = make(
-        '<bpmn:startEvent id="Start_1"/><bpmn:endEvent id="End_1"/><bpmn:endEvent id="End_2"/>'
-        + flow("f1", "Start_1", "End_1")
-        + flow("f2", "Start_1", "End_2")
+        '<bpmn:startEvent id="Start_1"/>'
+        + script("Task_A", "가 = 1")
+        + script("Task_B", "나 = 2")
+        + '<bpmn:endEvent id="End_1"/><bpmn:endEvent id="End_2"/>'
+        + flow("f1", "Start_1", "Task_A")
+        + flow("f2", "Start_1", "Task_B")
+        + flow("f3", "Task_A", "End_1")
+        + flow("f4", "Task_B", "End_2")
     )
     engine, run = start(process)
-    assert engine.run_until_blocked(run) is State.FAILED
-    assert run.error is not None and run.error.code == "many_outgoing"
+    assert engine.run_until_blocked(run) is State.DONE
+    assert (run.variables["가"], run.variables["나"]) == (1, 2)
 
 
 # ─────────────────────────── 결재·확인 ───────────────────────────
@@ -520,5 +526,205 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way() -> None:
     # 지금 끝까지 가는 것·사람을 기다리는 것은 이것뿐이다 — 조각 3이 이 목록을 늘린다.
     # 지금 끝까지 가는 것·사람을 기다리는 것은 이것뿐이다 (스크립트·배타 게이트웨이·확인만 쓰는
     # 예제들이다). 조각 3이 이 목록을 늘린다 — 늘면 여기를 고쳐 적는다.
-    assert done == ["fx03b_amount_branch.bpmn", "fx12_daily_report.bpmn"], done
+    assert done == ["fx03b_amount_branch.bpmn", "fx11_parallel.bpmn", "fx12_daily_report.bpmn"], done
     assert waiting == ["fx19_manual_task_pc.bpmn"], waiting
+
+
+# ─────────────── 병렬·포함 게이트웨이, 하위 프로세스, 반복, 오류 경계 ───────────────
+
+
+def test_a_parallel_gateway_forks_and_joins() -> None:
+    """병렬 합류는 **두 가지가 모두 올 때까지** 기다린다 (C14)."""
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + '<bpmn:parallelGateway id="Gw_Fork"/>'
+        + script("Task_A", "가 = 1")
+        + script("Task_B", "나 = 2")
+        + '<bpmn:parallelGateway id="Gw_Join"/>'
+        + script("Task_After", "합 = 가 + 나")
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Gw_Fork")
+        + flow("f2", "Gw_Fork", "Task_A")
+        + flow("f3", "Gw_Fork", "Task_B")
+        + flow("f4", "Task_A", "Gw_Join")
+        + flow("f5", "Task_B", "Gw_Join")
+        + flow("f6", "Gw_Join", "Task_After")
+        + flow("f7", "Task_After", "End_1")
+    )
+    engine, run = start(process)
+    assert engine.run_until_blocked(run) is State.DONE
+    # 합류 뒤의 노드는 **한 번만** 돈다 (토큰이 하나로 합쳐졌다).
+    assert run.variables["합"] == 3
+    assert run.instances["Task_After"] == 1
+    joins = [e for e in run.log.events if e.data.get("message") == "합류 완료"]
+    assert len(joins) == 1
+
+
+def test_an_inclusive_gateway_takes_every_true_branch() -> None:
+    """포함 분기는 참인 길 **모두**로 갈라지고, 합류는 갈라진 수만큼 기다린다 (B3 짝)."""
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + '<bpmn:inclusiveGateway id="Gw_Which"/>'
+        + script("Task_Mail", "메일 = 1")
+        + script("Task_Hook", "훅 = 1")
+        + '<bpmn:inclusiveGateway id="Gw_Join"/>'
+        + script("Task_After", "뒤 = 1")
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Gw_Which")
+        + flow("f2", "Gw_Which", "Task_Mail", "메일보냄")
+        + flow("f3", "Gw_Which", "Task_Hook", "훅보냄")
+        + flow("f4", "Task_Mail", "Gw_Join")
+        + flow("f5", "Task_Hook", "Gw_Join")
+        + flow("f6", "Gw_Join", "Task_After")
+        + flow("f7", "Task_After", "End_1"),
+        process_props=(
+            '{"inputs": [{"name": "메일보냄", "type": "bool"}, {"name": "훅보냄", "type": "bool"}]}'
+        ),
+    )
+    # 둘 다 참 → 두 갈래, 합류는 2를 기다린다.
+    engine, run = start(process, inputs={"메일보냄": True, "훅보냄": True})
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.instances["Task_After"] == 1
+    assert run.variables["메일"] == 1 and run.variables["훅"] == 1
+
+    # 하나만 참 → 한 갈래, 합류는 **1만** 기다려야 한다 (안 그러면 영원히 기다린다).
+    engine, run = start(process, inputs={"메일보냄": True, "훅보냄": False})
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["메일"] == 1 and "훅" not in run.variables
+
+
+def test_a_subprocess_runs_inside_and_comes_back() -> None:
+    """하위 프로세스는 **범위가 따로**다. 안쪽이 끝나면 바깥 토큰이 이어 간다."""
+    inner = (
+        '<bpmn:startEvent id="Sub_Start"/>'
+        + script("Sub_Task", "안쪽 = 1")
+        + '<bpmn:endEvent id="Sub_End"/>'
+        + flow("sf1", "Sub_Start", "Sub_Task")
+        + flow("sf2", "Sub_Task", "Sub_End")
+    )
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + f'<bpmn:subProcess id="Sub_1" name="묶음">{inner}</bpmn:subProcess>'
+        + script("Task_After", "뒤 = 안쪽 + 1")
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Sub_1")
+        + flow("f2", "Sub_1", "Task_After")
+        + flow("f3", "Task_After", "End_1")
+    )
+    engine, run = start(process)
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["안쪽"] == 1 and run.variables["뒤"] == 2
+
+
+def test_a_sequential_loop_collects_results_in_order() -> None:
+    """C14 §반복 — `collect_into`에 **입력 순서대로** 모인다. PC에서는 차례로 돈다."""
+    loop = '{"collection": "줄목록", "item": "줄", "result": "값", "collect_into": "모음"}'
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + '<bpmn:scriptTask id="Task_Each" scriptFormat="chk-expr">'
+        + "<bpmn:extensionElements>"
+        + f"<chk:loop>{loop}</chk:loop>"
+        + "</bpmn:extensionElements>"
+        + "<bpmn:script>값 = 줄 * 10</bpmn:script>"
+        + '<bpmn:multiInstanceLoopCharacteristics isSequential="true"/>'
+        + "</bpmn:scriptTask>"
+        + script("Task_After", "합 = sum(모음)")
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Task_Each")
+        + flow("f2", "Task_Each", "Task_After")
+        + flow("f3", "Task_After", "End_1"),
+        process_props='{"inputs": [{"name": "줄목록", "type": "list"}]}',
+    )
+    engine, run = start(process, inputs={"줄목록": [1, 2, 3]})
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["모음"] == [10, 20, 30]
+    assert run.variables["합"] == 60
+
+
+def test_an_empty_loop_collects_an_empty_list() -> None:
+    loop = '{"collection": "줄목록", "item": "줄", "result": "값", "collect_into": "모음"}'
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + '<bpmn:scriptTask id="Task_Each" scriptFormat="chk-expr">'
+        + f"<bpmn:extensionElements><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
+        + "<bpmn:script>값 = 줄</bpmn:script>"
+        + '<bpmn:multiInstanceLoopCharacteristics isSequential="true"/>'
+        + "</bpmn:scriptTask>"
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Task_Each")
+        + flow("f2", "Task_Each", "End_1"),
+        process_props='{"inputs": [{"name": "줄목록", "type": "list", "default": []}]}',
+    )
+    engine, run = start(process)
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["모음"] == []
+
+
+def test_a_loop_over_something_that_is_not_a_list_fails() -> None:
+    loop = '{"collection": "하나", "item": "줄", "result": "값", "collect_into": "모음"}'
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + '<bpmn:scriptTask id="Task_Each" scriptFormat="chk-expr">'
+        + f"<bpmn:extensionElements><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
+        + "<bpmn:script>값 = 줄</bpmn:script>"
+        + '<bpmn:multiInstanceLoopCharacteristics isSequential="true"/>'
+        + "</bpmn:scriptTask>"
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Task_Each")
+        + flow("f2", "Task_Each", "End_1"),
+        process_props='{"inputs": [{"name": "하나", "type": "int", "default": 7}]}',
+    )
+    engine, run = start(process)
+    assert engine.run_until_blocked(run) is State.FAILED
+    assert run.error is not None and run.error.code == "loop_not_a_list"
+
+
+def test_an_error_boundary_catches_a_task_failure() -> None:
+    """C14 §이벤트 — 오류 경로에 `error_code`·`error_message`·`failed_task`가 생긴다."""
+    from chaeksas.core.engine import Context, Go, TaskFailed  # noqa: PLC0415
+
+    def failing(context: Context) -> Go:
+        raise TaskFailed("바깥 시스템이 500을 돌려줬다", node_id=context.node.id)
+
+    process = make(
+        '<bpmn:definitions-error/>'.replace("<bpmn:definitions-error/>", "")
+        + '<bpmn:startEvent id="Start_1"/>'
+        + '<bpmn:serviceTask id="Task_Call" name="바깥 호출"/>'
+        + '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_Call">'
+        + "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
+        + script("Task_Recover", "복구 = error_code + ':' + failed_task")
+        + '<bpmn:endEvent id="End_1"/><bpmn:endEvent id="End_2"/>'
+        + flow("f1", "Start_1", "Task_Call")
+        + flow("f2", "Task_Call", "End_1")
+        + flow("f3", "Bnd_Fail", "Task_Recover")
+        + flow("f4", "Task_Recover", "End_2")
+    )
+    engine = Engine(handlers={"serviceTask": failing})
+    log = started()
+    run = engine.start(process, run_id=log.run_id, log=log, now=NOW)
+
+    assert engine.run_until_blocked(run) is State.DONE, "경계로 받았으면 실행은 실패가 아니다"
+    assert run.variables["복구"] == "TASK_FAILED:Task_Call"
+    assert run.variables["error_message"].endswith("500을 돌려줬다")
+    failed = [e for e in run.log.events if e.data.get("state") == "failed"]
+    assert len(failed) == 1 and failed[0].node_id == "Task_Call"
+
+
+def test_a_broken_drawing_is_not_caught_by_an_error_boundary() -> None:
+    """식 오류는 경계로 받지 않는다 — 고쳐야 할 버그다 (업무 실패가 아니다)."""
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + script("Task_Bad", "값 = 없는변수 + 1")
+        + '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_Bad">'
+        + "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
+        + script("Task_Recover", "복구 = 1")
+        + '<bpmn:endEvent id="End_1"/><bpmn:endEvent id="End_2"/>'
+        + flow("f1", "Start_1", "Task_Bad")
+        + flow("f2", "Task_Bad", "End_1")
+        + flow("f3", "Bnd_Fail", "Task_Recover")
+        + flow("f4", "Task_Recover", "End_2")
+    )
+    engine, run = start(process)
+    assert engine.run_until_blocked(run) is State.FAILED
+    assert run.error is not None and run.error.code == "expr_error"
+    assert "복구" not in run.variables

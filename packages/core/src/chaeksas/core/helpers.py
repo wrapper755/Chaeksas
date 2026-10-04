@@ -140,6 +140,10 @@ def _date_helpers(now: datetime) -> dict[str, Callable[..., Any]]:
     def 오늘() -> str:  # noqa: N802
         return today.strftime(DATE_FORMAT)
 
+    def 지금() -> str:  # noqa: N802
+        """실행이 시작한 시각 (ISO 8601 + 시간대). 변수 `지금`과 같은 값이다 (C14 §9)."""
+        return now.isoformat()
+
     def 어제() -> str:  # noqa: N802
         return (today - timedelta(days=1)).strftime(DATE_FORMAT)
 
@@ -160,6 +164,7 @@ def _date_helpers(now: datetime) -> dict[str, Callable[..., Any]]:
 
     return {
         "오늘": 오늘,
+        "지금": 지금,
         "어제": 어제,
         "이번달": 이번달,
         "지난달": 지난달,
@@ -202,6 +207,10 @@ def _sorted(목록: Any, 열: str | None = None, *, 거꾸로: bool = False) -> 
     return sorted(items, key=lambda row: row[열] if isinstance(row, Mapping) else row, reverse=거꾸로)
 
 
+#: BPMN·JSON에서 온 소문자 이름 (ADR-0025). 흐름 조건에 `true`라고 적힌 예제가 있고,
+#: BPMN 도구·JSON을 손으로 쓰는 사람이 자연히 소문자로 적는다. 값이라 함수가 아니다.
+JSON_LITERALS: dict[str, Any] = {"true": True, "false": False, "null": None}
+
 #: 파이썬에서 그대로 쓰는 것 (ADR-0025 §도우미 함수의 「내장」).
 BUILTIN_HELPERS: dict[str, Callable[..., Any]] = {
     "len": len,
@@ -242,15 +251,16 @@ BUSINESS_HELPERS: dict[str, Callable[..., Any]] = {
 }
 
 
-def bind(*, now: datetime) -> dict[str, Callable[..., Any]]:
+def bind(*, now: datetime) -> dict[str, Any]:
     """그 실행의 도우미 묶음. 날짜 도우미가 **실행 시작 시각**에 묶인다."""
-    return {**BUILTIN_HELPERS, **BUSINESS_HELPERS, **_date_helpers(now)}
+    return {**BUILTIN_HELPERS, **BUSINESS_HELPERS, **JSON_LITERALS, **_date_helpers(now)}
 
 
 #: 시각을 주지 않았을 때 쓰는 묶음 (검사·Studio 도움말처럼 값을 내지 않는 곳).
-HELPERS: Mapping[str, Callable[..., Any]] = {
+HELPERS: Mapping[str, Any] = {
     **BUILTIN_HELPERS,
     **BUSINESS_HELPERS,
+    **JSON_LITERALS,
     **_date_helpers(datetime(2000, 1, 1)),  # noqa: DTZ001 — 자리만 채운다. `bind()`가 덮는다
 }
 
@@ -259,6 +269,7 @@ HELPER_NAMES = frozenset(HELPERS)
 
 __all__ = [
     "BUILTIN_HELPERS",
+    "JSON_LITERALS",
     "BUSINESS_HELPERS",
     "DATE_FORMAT",
     "HELPERS",
