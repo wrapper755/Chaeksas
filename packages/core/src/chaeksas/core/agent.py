@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from chaeksas.contracts.bpmn_ext import AiTask
+from chaeksas.core.files import PathDenied
 from chaeksas.core.llm import Llm, LlmError, Reply, ToolCall, ToolSpec
 
 #: 한 AI 태스크에서 모델에게 물어볼 수 있는 횟수의 기본 한도 (`limits.max_steps`가 이긴다).
@@ -95,8 +96,19 @@ class Outcome:
 
 
 def tool_specs(spec: AiTask, tools: Mapping[str, Tool]) -> list[ToolSpec]:
-    """모델에게 알려 줄 도구 — **`chk:aiTask.tools`에 적힌 것만**. 없는 도구는 알려 주지 않는다."""
-    return [ToolSpec(name=name) for name in spec.tools if name in tools]
+    """모델에게 알려 줄 도구 — **`chk:aiTask.tools`에 적힌 것만**. 없는 도구는 알려 주지 않는다.
+
+    도구가 **자기 설명과 인자 모양을 들고 있으면** 그것을 쓴다 (`core.tools.ToolDef`,
+    ADR-0030) — 이름만 알려 주면 모델이 인자를 지어낸다.
+    """
+    out = []
+    for name in spec.tools:
+        found = tools.get(name)
+        if found is None:
+            continue
+        known = getattr(found, "spec", None)
+        out.append(known if isinstance(known, ToolSpec) else ToolSpec(name=name))
+    return out
 
 
 def opening_messages(spec: AiTask, *, context: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -221,6 +233,10 @@ def _use_tool(spec: AiTask, tools: Mapping[str, Tool], call: ToolCall) -> str:
 def _call(tool: Tool, name: str, arguments: Mapping[str, Any]) -> str:
     try:
         return str(tool(**dict(arguments)))
+    except PathDenied:
+        # **실행 폴더 밖**은 업무 실패가 아니다 — 그림·설정이 잘못된 것이라 경계로 받지 않는다
+        # (ADR-0026). 엔진이 `path_denied`로 올린다.
+        raise
     except Exception as e:  # noqa: BLE001 — 도구가 무엇을 낼지 모른다
         raise AgentError(f"도구 {name}이 실패했다: {e}", business=True) from e
 

@@ -35,6 +35,7 @@ from chaeksas.core.llm import NoLlm, OpenAiCompatibleLlm
 from chaeksas.core.replay import write_memory
 from chaeksas.core.run_log import RunLog
 from chaeksas.core.senders import EmailMessage, SendError, SendResult, WebhookRequest
+from chaeksas.core.tools import builtin_tools
 from chaeksas.studio.receiver import Receiver
 from chaeksas.studio.settings import Settings
 from chaeksas.studio.workspace import BpmProcess, Definition
@@ -192,7 +193,7 @@ class CaseRun(QObject):
     # ── 바깥 세계 ──
 
     def env(self) -> RunEnv:
-        """`RunEnv` 한 벌 — 출력 폴더·읽기 허용 폴더·보내기·모델·DMN·호출 대상·재생 기억."""
+        """`RunEnv` 한 벌 — 출력 폴더·읽기 허용 폴더·보내기·모델·도구·DMN·호출 대상·재생 기억."""
         settings = self.plan.settings
         outputs = settings.outputs_dir / self.plan.process.id
         outputs.mkdir(parents=True, exist_ok=True)
@@ -205,12 +206,15 @@ class CaseRun(QObject):
             if settings.llm_base_url
             else NoLlm()
         )
+        space = FileSpace(output_dir=outputs, readable=tuple(settings.readable_dirs))
         return RunEnv(
-            workspace=FileSpace(output_dir=outputs, readable=tuple(settings.readable_dirs)),
+            workspace=space,
             sender=self.adapter,
             decisions=self.plan.process.decisions(),
             processes=self.plan.process.processes(),
             llm=model,
+            # 내장 도구 넷 (ADR-0030). 파일 도구는 **이 실행의 폴더만** 본다.
+            tools=builtin_tools(space),
             memory=self.plan.process.memory(),
         )
 
