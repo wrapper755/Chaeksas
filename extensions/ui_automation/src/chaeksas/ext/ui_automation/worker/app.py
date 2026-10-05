@@ -50,6 +50,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     ADMIN_ONLY,
     BROWSER_UNAVAILABLE,
     CALLER_REGISTRATION,
+    INSTRUCTION_NOT_ALLOWED,
     RESERVED,
     RESULT_ESCALATED,
     RESULT_FAILED,
@@ -159,6 +160,9 @@ class Session:
             steps_run=self.steps_run,
             mutating_steps_ok=self.mutating_steps_ok,
             last_step=self.last_step,
+            planned_steps=[one.to_json_dict() for one in self.plan.steps]
+            if self.plan is not None and self.request.goal
+            else [],
         )
 
     def report(self, *, duration_ms: int = 0) -> SessionReport:
@@ -247,6 +251,9 @@ class Worker:
             raise WorkerProblem(
                 409, RESERVED, "Worker가 다른 실행에 예약되어 있습니다", {"run_id": self.reserved_for}
             )
+        if request.goal and request.mode == "deterministic":
+            # 결정 수행은 **목표로 계획하지 않는다** — LLM을 몰래 부르지 않는다 (C8·ADR-0035).
+            raise WorkerProblem(422, INSTRUCTION_NOT_ALLOWED, "결정 수행 세션은 목표로 열 수 없습니다")
         if self.backend is None:
             # **없는 것을 되는 척하지 않는다** — 화면을 만질 수단이 없다.
             raise WorkerProblem(503, "browser_unavailable", "화면을 조작할 수단이 없습니다 (백엔드 없음)")
@@ -288,8 +295,11 @@ class Worker:
 
     def _fetch_plan(self, request: SessionRequest, plans: Any) -> tuple[ExecutionPlan | None, str]:
         """계획을 받아 온다 (C8). 닿지 못하고 캐시도 없으면 502 — **없는 채로 열지 않는다**."""
-        from chaeksas.ext.ui_automation.worker.plans import OpsUnreachable  # noqa: PLC0415
+        from chaeksas.ext.ui_automation.worker.plans import OpsRefused, OpsUnreachable  # noqa: PLC0415
 
+        extra: dict[str, Any] = (
+            {"goal": request.goal, "values": request.values, "results": request.results} if request.goal else {}
+        )
         try:
             found, source = plans.plan(
                 page_id=request.page_id,
@@ -297,8 +307,15 @@ class Worker:
                 platform="desktop" if request.app else "web",
                 steps=[],
                 start_url=request.start_url,
+                **extra,
             )
+        except OpsRefused as e:
+            # 앱이 거절했다 (없는 화면, 목표로 세운 계획이 거르기에 걸림 …) — 그 코드 그대로 (C8).
+            raise WorkerProblem(e.status, e.code or "plan_refused", str(e)) from e
         except OpsUnreachable as e:
+            if e.code:
+                # 앱은 답했지만 그 의존이 없다 (모델 없음 `llm_unavailable` …) — 닿지 못한 게 아니다.
+                raise WorkerProblem(503, e.code, str(e)) from e
             raise WorkerProblem(
                 502, "ui_automation_unreachable", "UI 자동화 앱에 닿지 못했고 캐시도 없습니다"
             ) from e

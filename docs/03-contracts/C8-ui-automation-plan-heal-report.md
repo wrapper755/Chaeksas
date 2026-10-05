@@ -79,7 +79,9 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | `platform` | | 기본 `web` |
 | `start_url` | | |
 | `steps` | | `[{semantic_key, action, value?, expect_navigation}]`. 동작과 값 규칙은 C10과 같다. **결정 수행에서 비우면 그 화면에 등록된 사다리 전부**를 받는다 — Worker는 세션을 열 때 계획을 받고 스텝은 그 뒤에 하나씩 오기 때문이다 (C10) |
-| `goal`, `values` | 자율 수행만 | 목표 한 줄과 쓸 값 (STU-13 「목표로 계획」) |
+| `goal` | 자율 수행만 | 목표 한 줄 (STU-13 「목표로 계획」, [ADR-0035](../decisions/0035-ui-goal-planning.md)) |
+| `values` | | 목표가 쓸 값의 **이름 목록** (`["신청.이름"]`). **값은 보내지 않는다** (원칙 6) — 모델은 스텝 값에 `{이름}` 템플릿을 쓰고 수행기가 채운다 |
+| `results` | | 읽기 스텝이 담을 결과 변수 이름 목록. 모델은 이 중에서만 고른다 |
 
 출력 (ExecutionPlan):
 
@@ -89,12 +91,33 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | `page_id`, `platform`, `start_url` | |
 | `app`, `window` | 데스크톱 화면이면 그 화면의 앱 이름·창 조건 (C9). Worker가 **이것으로 창을 찾아 붙거나 띄운다** — 그래서 Worker는 세션을 열 때 계획을 먼저 받는다 |
 | `revision` | 레지스트리 판 번호 (C9). Worker 캐시 키에 쓴다 |
-| `steps` | 확정된 스텝 (자율 수행이면 LLM이 만든 스텝) |
+| `steps` | 확정된 스텝 (자율 수행이면 LLM이 만든 스텝 — `{semantic_key, action, value?, result?}`, 값은 템플릿일 수 있다) |
 | `locators` | `{semantic_key: LocatorSpec[]}`. **스텝에 나오는 모든 요소의 사다리 전부** |
 | `elements` | `{semantic_key: {description, role}}`. 치유 프롬프트용 시맨틱 정보 (셀렉터 아님) |
 | `policy` | `{locator_timeout_ms: 2000, action_timeout_ms: 10000, navigation_timeout_ms: 30000, require_unique_match: true, max_healing_attempts: 3}` |
 
 - 스텝을 주었으면 **모든 스텝의 `semantic_key`에 사다리가 있어야 한다.** 없으면 422 `unknown_semantic_key` (C10 같은 코드). 스텝을 비웠으면 그 검사는 스텝이 올 때(Worker)로 미뤄진다 — 같은 코드로 거절한다.
+#### 목표로 계획 (자율 수행, [ADR-0035](../decisions/0035-ui-goal-planning.md))
+
+`goal`이 있으면 앱이 모델(C11 §모델 연결)에게 **한 번** 묻는다. 재료는 그 화면의 **시맨틱 정보**뿐이다: 등록된 요소의 키·이름·설명·역할·할 수 있는 동작(`catalog.actions`)·선행 입력, 그리고 `values`·`results`의 이름. 스냅샷은 쓰지 않는다 (세션을 열 때, 화면을 보기 전에 세운다).
+
+모델의 답은 JSON 하나다.
+
+```json
+{"steps": [{"semantic_key": "form.name", "action": "fill", "value": "{신청.이름}"}, {"semantic_key": "form.submit", "action": "click"}, {"semantic_key": "result.message", "action": "read", "result": "접수결과"}]}
+```
+
+앱이 거른다. 하나라도 어긋나면 **422 `goal_plan_invalid`**(`detail.reasons`)이고 수행기는 업무 실패로 올린다 (오류 경계가 받는다 — 모델은 가끔 틀린다).
+
+- 키가 그 화면에 등록돼 있다.
+- 동작이 C10의 동작이고, 그 요소의 `catalog.actions`가 적혀 있으면 그 안이다.
+- 값 규칙은 C10 `check_step`과 같다 (조작은 값이 필요하다 — `click` 빼고, 읽기는 값이 없다).
+- 값 안의 `{이름}`은 `values`에 있는 이름만 쓴다.
+- `result`는 읽기 스텝에만, `results`의 이름만 쓴다.
+- 스텝은 1개 이상 30개 이하다.
+
+통과한 계획은 그 스텝에 나오는 요소의 사다리를 함께 싣는다 (위 규칙 그대로). 모델이 없으면 503 `llm_unavailable`, 결정 수행에서 `goal`이면 422 `mode_unsupported`다.
+
 - **오프라인 캐시:** Worker는 `(page_id, platform, steps 해시, revision)`으로 계획을 캐시한다. 서버에 닿지 못하면 캐시를 쓴다 (C10 `plan_source: "cache"`). 자율 수행(`goal`)은 캐시하지 않는다.
 
 ### heal
@@ -187,6 +210,7 @@ C11 오류 형식을 따른다. 이 계약에서 더하는 코드는 다음과 �
 | 404 | `page_not_found` | 등록되지 않은 화면 | 세션 열기 실패 → C10 422 `unknown_semantic_key`와 같은 처리 (재시도하지 않음). 치유에서는 전환 |
 | 422 | `unknown_semantic_key` | 스텝 요소에 사다리가 없음 | 같음 |
 | 422 | `mode_unsupported` | 결정 수행에서 `goal` | 버그 (Studio가 막아야 함) |
+| 422 | `goal_plan_invalid` | 모델이 세운 계획이 거르기에 걸림 (`detail.reasons`) | 세션 열기 실패 → 수행기가 업무 실패로 올린다 |
 | 413 | `snapshot_too_large` | `aria_snapshot`·`sub_dom` 상한 초과 | 잘라서 다시 보낸다 |
 | 503 | `llm_unavailable` / `dependency_down` | 치유에 쓸 모델이 없거나 닿지 않음 (C11 §모델 연결) | 치유를 그만두고 전환 |
 
@@ -205,4 +229,5 @@ C11 오류 형식을 따른다. 이 계약에서 더하는 코드는 다음과 �
 | 2026-10-01 | 1 | 검토 반영: 세션 안 작업별 `call_seq`, 보고 재전송은 5xx만·4xx는 보내지 못한 보고로, 모르는 화면 보고도 받음, `origin: test`는 승격에서 제외, 치유 기본값·운영에서 막는 법 명시 | 0018 |
 | 2026-10-03 | 1 | 데스크톱 로케이터에 `class_name` 전략과 `control_type` 조건을 더했다. 기본 우선순위도 바뀐다 — `control_name`이 2에서 **3**으로 내려간다 (화면 언어에 따라 달라지므로). 구현이 아직 없어 schema는 그대로 1 | 0020 |
 | 2026-10-05 | 1 | 계획이 데스크톱 화면의 `app`·`window`(C9)를 싣는다. 더하기만이라 schema는 그대로 1 | 0033 |
+| 2026-10-05 | 1 | 목표로 계획: `values`를 **값이 아니라 이름 목록**으로 정했다(원칙 6), `results`를 더했다, 모델의 답 모양·거르기·422 `goal_plan_invalid`. 아직 아무도 쓰지 않던 칸이라 schema는 그대로 1 | 0035 |
 | 2026-10-05 | 1 | 치유가 모델에게 묻는 것·모델 답의 모양·앱이 거르는 규칙을 적었다. 요청·응답 모양은 그대로라 schema도 그대로 1 | 0034 |

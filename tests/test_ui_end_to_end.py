@@ -261,13 +261,13 @@ def test_a_trial_run_can_keep_its_hands_off_the_server(served: Any, worker: Work
     assert found.locators["order.qty"][0].status == "unverified", "통계가 움직이지 않았다"
 
 
-def test_a_goal_without_a_model_is_refused(served: Any, worker: Worker, site: str) -> None:
-    """자연어 목표로 계획을 **지어내지 않는다** — 아직 없다고 분명히 말한다."""
+def test_a_goal_in_deterministic_mode_is_refused(served: Any, worker: Worker, site: str) -> None:
+    """결정 수행은 목표로 계획하지 않는다 — LLM을 몰래 부르지 않는다 (C8, ADR-0035)."""
     from chaeksas.ext.ui_automation.client.registry_client import RegistryClient, RegistryProblem
 
     register(served, site)
     client = RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(served))
     with pytest.raises(RegistryProblem) as caught:
         client.call("plan", {"page_id": PAGE_ID, "goal": "수량을 넣고 저장"})
-    assert caught.value.code == "plan_unsupported"
+    assert caught.value.code == "mode_unsupported"
     assert caught.value.permanent

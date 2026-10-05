@@ -253,8 +253,11 @@ class UiTaskExecutor:
     def _once(self, ctx: TaskContext, *, attempt: int) -> TaskOutcome:
         worker = self.worker(ctx)
         spec = dict(ctx.properties)
+        goal = _goal_mode(spec, str(ctx.mode))
+        values = goal_values(goal, ctx.inputs) if goal else []
         # **화면에 손대기 전에** 값을 모두 채운다 — 모르는 이름이 있으면 아무것도 입력하지 않고 실패한다.
-        steps = [_rendered(raw, ctx.inputs) for raw in (spec.get("steps") or [])]
+        # 목표 모드면 스텝은 세션을 연 뒤에 온다 (앱이 세운 계획, ADR-0035).
+        steps = [] if goal else [_rendered(raw, ctx.inputs) for raw in (spec.get("steps") or [])]
         key = ctx.business_key or business_key(ctx.run_id, ctx.node_id, ctx.node_instance, attempt)
 
         info = worker.open(
@@ -276,12 +279,18 @@ class UiTaskExecutor:
                 app=_desktop_app(spec),
                 heal=bool(spec.get("heal", True)),
                 service_key=ctx.extension.secret(ctx.key_ref) if ctx.key_ref else None,
+                # 목표 모드: **이름만** 간다 — 값은 아래에서 이쪽이 채운다 (원칙 6).
+                goal=goal,
+                values=values,
+                results=[str(one) for one in (spec.get("results") or [])] if goal else [],
             )
         )
 
         outputs: dict[str, Any] = {}
         self._done = []
         try:
+            if goal:
+                steps = [_rendered(_from_plan(one), ctx.inputs) for one in info.planned_steps]
             for raw in steps:
                 result = worker.step(info.session_id, info.session_secret, _step(raw))
                 self._done.append(result)
@@ -300,6 +309,48 @@ class UiTaskExecutor:
             if closed is not None:
                 outputs.setdefault("_ui_session", closed.summary.to_json_dict())
         return TaskOutcome(outputs=outputs)
+
+
+def _goal_mode(spec: Mapping[str, Any], mode: str) -> str | None:
+    """목표로 실행할까 (C14 `goal`, ADR-0035). 자율 수행에서 목표가 있으면 목표가 이긴다.
+
+    결정 수행은 **목표로 계획하지 않는다** — 적어 둔 스텝이 있으면 그것을 돌고, 목표뿐이면 업무
+    실패다 (LLM을 몰래 부르지 않는다).
+    """
+    goal = str(spec.get("goal") or "").strip()
+    if not goal:
+        return None
+    if mode != "deterministic":
+        return goal
+    if spec.get("steps"):
+        return None
+    raise TaskFailed(
+        "ui_goal_needs_autonomous",
+        "이 UI 태스크는 목표로만 적혀 있어 결정 수행(Bot)에서 돌 수 없습니다 — 스텝을 적어 주세요",
+    )
+
+
+def goal_values(goal: str, variables: Mapping[str, Any]) -> list[str]:
+    """목표 안의 `{이름}`들 — 모델에게 갈 **이름 목록**. 지금 없는 이름이면 열기 전에 업무 실패다."""
+    names: list[str] = []
+    for match in TEMPLATE.finditer(goal):
+        name = (match.group(1) or "").strip() if match.group(1) is not None else None
+        if name is None:
+            continue
+        render("{" + name + "}", variables)  # 없으면 여기서 `TaskFailed` (화면에 손대기 전에)
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def _from_plan(step: Mapping[str, Any]) -> dict[str, Any]:
+    """앱이 세운 스텝(C10 `planned_steps`) → 이 수행기의 스텝 모양 (`key`·`action`·`value`·`result`)."""
+    made: dict[str, Any] = {"key": step.get("semantic_key"), "action": step.get("action")}
+    if step.get("value") is not None:
+        made["value"] = step["value"]
+    if step.get("result"):
+        made["result"] = step["result"]
+    return made
 
 
 def _desktop_app(spec: dict[str, Any]) -> str | None:

@@ -92,6 +92,8 @@ class PlanStep(ContractModel):
     action: str
     value: Any = None
     expect_navigation: bool = False
+    #: 목표로 계획만 — 읽은 값을 담을 결과 변수 (C8, ADR-0035). 손으로 적은 스텝은 태스크가 갖는다.
+    result: str | None = None
 
 
 class ElementInfo(ContractModel):

@@ -60,7 +60,7 @@ ACTIONS = (*MUTATING_ACTIONS, *READING_ACTIONS)
 DEFAULT_ACTION = {"control": "click", "list": "read_options", "table": "read_table", "text": "read"}
 
 #: 자연어 목표가 꺼져 있는 이유 (U3 — 왜 꺼졌는지 말한다).
-NO_GOAL = "목표로 계획을 세우는 것(자율 수행)은 모델이 붙는 다음 조각입니다."
+NO_GOAL = "셀렉터 시험은 등록된 요소의 스텝으로 합니다 — 목표로 계획은 Studio UI 태스크(STU-13)의 자율 수행에서 씁니다."
 
 PLAN_SOURCE = {"server": "서버", "cache": "로컬 캐시 (오프라인)"}
 

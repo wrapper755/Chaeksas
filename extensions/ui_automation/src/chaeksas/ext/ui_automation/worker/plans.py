@@ -112,7 +112,7 @@ class HttpOps:
         if 400 <= response.status_code < 500:
             raise OpsRefused(_message(response), status=response.status_code, code=_code(response))
         if response.status_code >= 500:
-            raise OpsUnreachable(_message(response))
+            raise OpsUnreachable(_message(response), code=_code(response))
         found = response.json()
         return dict(found.get("output") or {}) if isinstance(found, dict) else {}
 
@@ -134,7 +134,15 @@ def _message(response: Any) -> str:
 
 
 class OpsUnreachable(RuntimeError):
-    """앱에 닿지 못했다 — 계획은 캐시로, 보고는 큐로 간다."""
+    """앱에 닿지 못했다 — 계획은 캐시로, 보고는 큐로 간다.
+
+    `code`는 앱이 5xx로 **답했을 때**의 C11 코드다 (`llm_unavailable`·`dependency_down` …).
+    연결부터 실패했으면 비어 있다.
+    """
+
+    def __init__(self, message: str, *, code: str = "") -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class OpsRefused(RuntimeError):
@@ -249,6 +257,8 @@ class PlanService:
         start_url: str | None = None,
         revision: int = 1,
         goal: str | None = None,
+        values: list[str] | None = None,
+        results: list[str] | None = None,
     ) -> tuple[ExecutionPlan, str]:
         """계획을 받아 온다 → `(계획, "server" | "cache")`.
 
@@ -262,7 +272,10 @@ class PlanService:
             "steps": [one.to_json_dict() for one in steps],
         }
         if goal:
+            # **이름만** 싣는다 — 값은 수행기가 채운다 (C8, ADR-0035).
             body["goal"] = goal
+            body["values"] = list(values or [])
+            body["results"] = list(results or [])
         try:
             answer = self.ops.call(OP_PLAN, body, call_seq=self.next_seq(OP_PLAN))
         except OpsUnreachable:

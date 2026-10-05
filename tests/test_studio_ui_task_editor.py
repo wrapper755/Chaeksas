@@ -285,10 +285,26 @@ def test_an_impossible_action_is_a_warning(made: Any) -> None:
     assert any("할 수 없는 동작" in one for one in warnings)
 
 
-def test_the_goal_is_off_and_says_why(made: Any) -> None:
+def test_the_goal_mode_greys_the_steps_and_keeps_the_results(made: Any) -> None:
+    """STU-13 [G] — 목표로 실행하면 스텝 표가 흐려지고, 목표·결과 변수가 속성으로 간다 (ADR-0035)."""
     editor, _ = made
-    assert not editor.use_goal.isEnabled()
-    assert "자율 수행" in editor.goal.toolTip()
+    assert editor.use_goal.isEnabled() and "자율 수행" in editor.goal.toolTip()
+    editor.load({"page_id": "erp.order.form", "goal": "{주문.수량}을 넣고 저장", "results": ["주문번호"]})
+    assert editor.use_goal.isChecked() and not editor.steps.isEnabled()
+    out = editor.dump()
+    assert out["goal"] == "{주문.수량}을 넣고 저장" and out["results"] == ["주문번호"]
+    assert editor.valid(), "목표가 있으면 스텝이 없어도 된다"
+
+
+def test_an_empty_goal_is_an_error_and_a_goal_without_names_a_warning(made: Any) -> None:
+    editor, _ = made
+    editor.load({"page_id": "erp.order.form"})
+    editor.use_goal.setChecked(True)
+    errors, _ = editor.problems()
+    assert "목표가 비었습니다." in errors
+    editor.goal.setText("저장 단추를 누른다")
+    errors, warnings = editor.problems()
+    assert not errors and any("{이름}" in one for one in warnings)
 
 
 def test_an_impossible_action_is_kept_not_rewritten(made: Any) -> None:

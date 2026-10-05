@@ -104,6 +104,11 @@ class SessionRequest(SchemaVersioned):
     browser_profile: str | None = None
     #: 데스크톱 앱 이름 (UI 태스크의 `desktop.app`). 비우면 계획에 실린 화면의 것을 쓴다 (ADR-0033).
     app: str | None = None
+    #: 자율 수행에서만 — 스텝 대신 목표 한 줄 (C8 「목표로 계획」, ADR-0035).
+    goal: str | None = None
+    #: `goal`과 함께 — 쓸 값의 **이름**과 결과 변수 이름. 값은 싣지 않는다 (원칙 6).
+    values: list[str] = Field(default_factory=list)
+    results: list[str] = Field(default_factory=list)
     headed: bool = False
     heal: bool = True
     #: 닫을 때 보고할까 (C8). **셀렉터 시험(BUI-08)은 끈다** — 아예 보내지 않는다.
@@ -123,6 +128,9 @@ class SessionInfo(ContractModel):
     #: 성공한 **조작** 스텝 수 — Worker가 다시 떴을 때 다시 해도 되는지 가른다 (C10 §3).
     mutating_steps_ok: int = 0
     last_step: dict[str, Any] | None = None
+    #: `goal`로 열었을 때만 — 앱이 세우고 거른 스텝 `{semantic_key, action, value?, result?}`.
+    #: 값은 `{이름}` 템플릿일 수 있고 **부르는 쪽이 채워** 하나씩 보낸다 (ADR-0035).
+    planned_steps: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class StepRequest(ContractModel):
