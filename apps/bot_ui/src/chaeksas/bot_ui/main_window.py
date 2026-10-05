@@ -14,8 +14,8 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.bots import InstalledBot, InstallError, install, installed
 from chaeksas.bot_ui.runner import Running
+from chaeksas.bot_ui.runtimes import RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.contracts.approvals import Form
 from chaeksas.qt.approval import ApprovalDialog
@@ -52,6 +53,28 @@ BOT_COLUMNS = ("Bot", "버전", "출처", "서명", "상태")
 
 PACKAGE_FILTER = "패키지 (*.zip)"
 
+#: 「도구」 메뉴에 붙는 유틸리티 (C13 `bot_ui.utilities[].menu`).
+UTILITY_MENU = "tools"
+
+#: 지금 보여 주는 로컬 런타임 (BUI-09). 확장이 여럿 기여하면 칸이 여럿이 된다 — M5.
+RUNTIME_ID = "worker"
+
+#: 유틸리티 창의 처음 크기 (BUI-06의 표 둘이 들어간다).
+UTILITY_SIZE = (1100, 820)
+RUNTIME_STATE = {
+    "running": "실행 중",
+    "restarting": "다시 띄우는 중",
+    "stopped": "멈춤",
+    "off": "꺼 둠 (필요할 때 시작)",
+}
+#: 런타임이 `health`로 말하는 「지금 하는 일」 (C10 `session`).
+SESSION_LABEL = {
+    "idle": "대기",
+    "bot": "Bot 요청 처리 중",
+    "studio": "Studio 요청 처리 중",
+    "selector_registration": "셀렉터 등록 중",
+}
+
 SOURCE_LABEL = {
     "job": "Center 작업",
     "manual": "수동",
@@ -61,12 +84,44 @@ SOURCE_LABEL = {
 }
 
 
+class UtilityWindow(QWidget):
+    """확장이 기여한 유틸리티 하나의 창 (BUI-06~08은 여기 들어온다).
+
+    **별도 창이 기본**이다 (BUI-02 [K]) — 메인 창 탭으로 붙이는 선택은 M5다. 닫을 때
+    `closed()`를 불러 잡아 둔 자원(UI 세션 등)을 놓게 한다.
+    """
+
+    closed = Signal()
+
+    def __init__(self, label: str, inner: QWidget, utility: object, parent: QWidget | None = None) -> None:
+        super().__init__(parent, Qt.WindowType.Window)
+        self._utility = utility
+        self.setWindowTitle(f"{label} — {WINDOW_TITLE}")
+        self.resize(*UTILITY_SIZE)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(inner)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 — Qt 이름
+        """닫으면 유틸리티가 **자리를 놓는다** (Worker의 UI 세션은 한 번에 하나다)."""
+        closing = getattr(self._utility, "closed", None)
+        if callable(closing):
+            try:
+                closing()
+            except Exception:  # noqa: BLE001 — 닫다 실패해도 창은 닫힌다
+                log.exception("유틸리티를 닫다 실패했다")
+        self.closed.emit()
+        event.accept()
+
+
 class MainWindow(QMainWindow):
     """메인 창. 데이터는 `Agent`에서만 읽는다 (화면은 보여 주기만)."""
 
     def __init__(self, agent: Agent) -> None:
         super().__init__()
         self._agent = agent
+        #: 열려 있는 유틸리티 창 (`utility_id` → 창). 같은 것을 두 번 열지 않는다.
+        self._utilities: dict[str, UtilityWindow] = {}
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(*WINDOW_SIZE)
 
@@ -91,7 +146,19 @@ class MainWindow(QMainWindow):
         quit_action.setShortcut("Ctrl+Q")
 
         tools = self.menuBar().addMenu("도구")
-        for text, why in (("서비스 앱 키...", "BUI-10 — M4"), ("확장...", "BUI-11 — M4")):
+        # 유틸리티는 **확장이 기여한다** (ADR-0018) — Bot UI는 어느 확장인지 모른다.
+        utilities = self._agent.host.utilities() if self._agent.host is not None else []
+        for found in sorted(utilities, key=lambda c: c.value.label):
+            if found.value.menu != UTILITY_MENU:
+                continue
+            action = tools.addAction(f"{found.value.label}...")
+            action.setToolTip(f"{found.extension_id} 확장")
+            action.triggered.connect(
+                lambda _=False, e=found.extension_id, u=found.value.id: self.open_utility(e, u)
+            )
+        if tools.actions():
+            tools.addSeparator()
+        for text, why in (("서비스 앱 키...", "BUI-10 — M5"), ("확장...", "BUI-11 — M5")):
             action = tools.addAction(text)
             action.setEnabled(False)
             action.setToolTip(f"{why}에서 만듭니다.")
@@ -155,12 +222,27 @@ class MainWindow(QMainWindow):
         return page
 
     def _runtimes_tab(self) -> QWidget:
+        """BUI-09. 확장이 기여한 로컬 런타임마다 한 칸 (C13) — 지금은 Worker 하나다."""
         page = QWidget()
         layout = QVBoxLayout(page)
         self.runtime_label = QLabel()
         self.runtime_label.setWordWrap(True)
         layout.addWidget(self.runtime_label)
-        note = QLabel("Worker 프로세스를 띄우는 것은 UI 자동화 확장이 붙는 M4입니다.")
+
+        row = QHBoxLayout()
+        self.runtime_start = QPushButton("시작")
+        self.runtime_start.clicked.connect(self.start_runtime)
+        self.runtime_restart = QPushButton("다시 시작...")
+        self.runtime_restart.clicked.connect(self.restart_runtime)
+        self.runtime_log = QPushButton("로그 보기")
+        self.runtime_log.clicked.connect(self.open_runtime_log)
+        row.addWidget(self.runtime_start)
+        row.addWidget(self.runtime_restart)
+        row.addWidget(self.runtime_log)
+        row.addStretch(1)
+        layout.addLayout(row)
+
+        note = QLabel("예약·최근 UI 세션·밀린 보고는 M5입니다 (Worker 상태 API).")
         note.setEnabled(False)
         layout.addWidget(note)
         layout.addStretch(1)
@@ -211,11 +293,45 @@ class MainWindow(QMainWindow):
         self._refresh_bots()
         self._refresh_running_buttons()
 
-        state = agent.worker_state()
-        worker = agent.settings.runtime("worker")
-        port = f" (포트 {worker.port})" if worker else ""
-        self.runtime_label.setText(f"Worker: {state.state}{port} · 다시 띄운 횟수 {state.restarts}")
+        self._refresh_runtimes()
         self.statusBar().showMessage(agent.status_line())
+
+    def _refresh_runtimes(self) -> None:
+        """BUI-09 — 상태·PID·포트·가동 시간. **모르는 것은 적지 않는다** (답하지 않으면 그렇게 쓴다)."""
+        agent = self._agent
+        runtimes = agent.runtimes()
+        found = runtimes.supervisors.get(RUNTIME_ID)
+        try:
+            _, runtime = runtimes.find(RUNTIME_ID)
+        except RuntimeUnavailable:
+            self.runtime_label.setText("로컬 런타임을 기여한 확장이 없습니다.")
+            for button in (self.runtime_start, self.runtime_restart, self.runtime_log):
+                button.setEnabled(False)
+            return
+
+        port = port_for(runtime, agent.settings)
+        if found is None or found.state == "off":
+            text = f"{runtime.label}: 꺼 둠 (필요할 때 시작) · 포트 {port}"
+        else:
+            where = f"pid {found.child.pid}" if found.child.pid else "pid 모름"
+            uptime = f"{int(found.child.uptime_s)}초"
+            text = (
+                f"{runtime.label}: {RUNTIME_STATE.get(found.state, found.state)} · {where} · "
+                f"포트 {port} · 가동 {uptime} · 다시 띄운 횟수 {found.restarts}"
+            )
+            health = runtimes.health_of(RUNTIME_ID)
+            if health is None:
+                text += " · 아직 답하지 않습니다"
+            else:
+                doing = SESSION_LABEL.get(str(health.get("session") or ""), "대기")
+                text += f" · 버전 {health.get('version') or '모름'} · 지금 하는 일: {doing}"
+            if found.last_error:
+                text += f"\n{found.last_error}"
+        self.runtime_label.setText(text)
+        running = found is not None and found.state == "running"
+        self.runtime_start.setEnabled(not running)
+        self.runtime_restart.setEnabled(running)
+        self.runtime_log.setEnabled(True)
 
     def _refresh_bots(self) -> None:
         """설치된 Bot 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 준비·최근 실행은 M5."""
@@ -367,6 +483,91 @@ class MainWindow(QMainWindow):
             self._agent.cancel_queued(item.queue_id)
             self.refresh()
 
+    # ── 유틸리티 (확장이 기여한다) ──
+
+    def open_utility(self, extension_id: str, utility_id: str) -> None:
+        """「도구」의 유틸리티를 연다 (C13 `bot_ui.utilities`).
+
+        **필요한 런타임을 먼저 띄운다.** 못 띄우면 창을 열지 않고 왜 못 열었는지 말한다 —
+        빈 창을 띄워 놓고 「안 되네」 하게 두지 않는다.
+        """
+        open_already = self._utilities.get(utility_id)
+        if open_already is not None:
+            open_already.show()
+            open_already.raise_()
+            open_already.activateWindow()
+            return
+
+        agent = self._agent
+        if agent.host is None:
+            return
+        found = next((c for c in agent.host.utilities() if c.value.id == utility_id), None)
+        if found is None:
+            return
+        needs = found.value.needs_runtime
+        if needs:
+            try:
+                agent.runtimes().ensure(needs)
+            except RuntimeUnavailable as e:
+                QMessageBox.warning(self, found.value.label, str(e))
+                self.refresh()
+                return
+        try:
+            utility = agent.host.utility(utility_id)
+            context = agent.extension_context(extension_id, runtime_ids=(needs,) if needs else ())
+            widget = utility.widget(context)
+        except Exception as e:  # noqa: BLE001 — 확장이 깨져도 Bot UI는 산다
+            log.exception("유틸리티를 열지 못했다: %s", utility_id)
+            QMessageBox.warning(self, found.value.label, f"유틸리티를 열지 못했습니다 — {e}")
+            return
+        if not isinstance(widget, QWidget):
+            QMessageBox.warning(self, found.value.label, "유틸리티가 화면을 주지 않았습니다.")
+            return
+
+        window = UtilityWindow(found.value.label, widget, utility, self)
+        window.closed.connect(lambda uid=utility_id: self._utilities.pop(uid, None))
+        self._utilities[utility_id] = window
+        window.show()
+        self.refresh()
+
+    # ── 로컬 런타임 (BUI-09) ──
+
+    def start_runtime(self) -> None:
+        try:
+            self._agent.runtimes().ensure(RUNTIME_ID)
+        except RuntimeUnavailable as e:
+            QMessageBox.warning(self, WINDOW_TITLE, str(e))
+        self.refresh()
+
+    def restart_runtime(self) -> None:
+        """BUI-09 「다시 시작」 — UI 세션이 열려 있으면 확인 창, 기본 「취소」 (U4)."""
+        runtimes = self._agent.runtimes()
+        health = runtimes.health_of(RUNTIME_ID) or {}
+        busy = str(health.get("session") or "idle") != "idle"
+        if busy:
+            doing = SESSION_LABEL.get(str(health.get("session")), str(health.get("session")))
+            answer = QMessageBox.question(
+                self,
+                "다시 시작할까요?",
+                f"지금 {doing}입니다. 다시 시작하면 그 세션이 끊깁니다.",
+                QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+                QMessageBox.StandardButton.Cancel,  # 기본은 「취소」
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                return
+        found = runtimes.supervisors.get(RUNTIME_ID)
+        if found is not None:
+            found.stop()
+        self.start_runtime()
+
+    def open_runtime_log(self) -> None:
+        """BUI-09 「로그 보기」 — 폴더를 연다 (파일을 우리가 그리지 않는다)."""
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        where = data_dir() / "logs"
+        where.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(where)))
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 — Qt 이름
         """창을 닫아도 **앱은 트레이에서 계속 돈다** (BUI-02). 종료는 트레이 메뉴에서."""
         if self._agent.settings and QSystemTrayIconAvailable():
@@ -382,4 +583,14 @@ def QSystemTrayIconAvailable() -> bool:  # noqa: N802 — Qt 쪽 이름에 맞�
     return QSystemTrayIcon.isSystemTrayAvailable()
 
 
-__all__ = ["QUEUE_COLUMNS", "SOURCE_LABEL", "WINDOW_SIZE", "WINDOW_TITLE", "MainWindow"]
+__all__ = [
+    "QUEUE_COLUMNS",
+    "RUNTIME_ID",
+    "SESSION_LABEL",
+    "SOURCE_LABEL",
+    "UTILITY_MENU",
+    "WINDOW_SIZE",
+    "WINDOW_TITLE",
+    "MainWindow",
+    "UtilityWindow",
+]

@@ -4,7 +4,7 @@
 `packages/extension_api/`, 찾아 켜는 쪽은 `chaeksas.core.extensions` (확장 호스트).
 
 **플랫폼은 이 파일만 보고 기여를 끼워 넣는다.** 특정 확장 이름을 플랫폼 코드에 쓰지 않는다
-(ADR-0018). 그래서 검사 규칙 E1~E6이 여기 있고, Studio(정의 파일 열기)·Center(등록)·확장
+(ADR-0018). 그래서 검사 규칙 E1~E7이 여기 있고, Studio(정의 파일 열기)·Center(등록)·확장
 호스트(켜기)가 **같은 함수**를 쓴다.
 
 `contributes`의 열쇠는 문서 그대로 점이 든 이름(`studio.editors`)이다. 파이썬 이름만
@@ -51,6 +51,9 @@ KNOWN_PROTOCOLS = frozenset({PROTOCOL_C11, PROTOCOL_HTTP_ADAPTER})
 #: `editor.kind` — 확장이 준 편집기, 또는 입력 JSON Schema로 만드는 자동 폼.
 EDITOR_BUILTIN = "builtin"
 EDITOR_SCHEMA = "schema"
+
+#: 호스트가 소유하는 설정 키의 머리 (C13 — `runtime.<런타임 id>.port` 등). 확장이 쓰지 못한다.
+RESERVED_CONFIG_PREFIX = "runtime."
 
 #: `configuration[].scope`, `local_runtimes[].start`, `requires_keys[].purpose`.
 CONFIG_SCOPES = frozenset({"bot_ui", "studio", "server_runner"})
@@ -412,7 +415,7 @@ def definition_hash(definition: Mapping[str, Any]) -> str:
     return "sha256:" + sha256_hex(canonical_json(dict(definition)))
 
 
-# ─────────────────────────── 검사 규칙 (E1~E6) ───────────────────────────
+# ─────────────────────────── 검사 규칙 (E1~E7) ───────────────────────────
 
 
 def bad_template_vars(text: str) -> list[str]:
@@ -625,6 +628,11 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
             out.append(Violation(rule="C13", code="run_locations_missing",
                                  message=f"태스크 종류 {t.id}에 실행 위치가 없다"))
     for item in c.configuration:
+        if item.key.startswith(RESERVED_CONFIG_PREFIX):
+            # E7. 호스트가 띄운 로컬 런타임을 이 이름으로 알려 준다 (C13) — 가려지면 안 된다.
+            out.append(Violation(rule="E7", code="reserved_config_key",
+                                 message=f"설정 칸 {item.key}은 호스트가 쓰는 이름이다 "
+                                         f"({RESERVED_CONFIG_PREFIX}*)"))
         if item.scope not in CONFIG_SCOPES:
             out.append(Violation(rule="C13", code="unknown_scope",
                                  message=f"설정 칸 {item.key}의 scope를 모른다: {item.scope}",

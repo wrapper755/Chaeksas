@@ -145,6 +145,7 @@ from chaeksas.contracts.events import (
     missing_data_keys,
 )
 from chaeksas.contracts.extension import (
+    RESERVED_CONFIG_PREFIX,
     AdapterAuth,
     AdapterHealth,
     AdapterLimits,
@@ -410,6 +411,7 @@ __all__ = [
     "service_app_key_state",
     "service_app_prefix_of",
     # C13 (`ExtensionClaim`은 C2가 소유한다)
+    "RESERVED_CONFIG_PREFIX",
     "AdapterAuth",
     "AdapterHealth",
     "AdapterLimits",

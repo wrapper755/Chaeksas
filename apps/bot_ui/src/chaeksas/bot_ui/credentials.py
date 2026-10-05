@@ -30,6 +30,16 @@ LLM_API_KEY = "llm-api-key"
 ENV_LLM_API_KEY = "CHK_BOT_UI__LLM__API_KEY"
 
 
+#: 확장 설정 칸의 이름 공간 (확장마다 가른다).
+EXTENSION_PREFIX = "ext:"
+ENV_EXTENSION_PREFIX = "CHK_BOT_UI__EXT__"
+
+
+def _env_name(text: str) -> str:
+    """환경변수 이름으로 쓸 수 있게 — 영대문자·숫자·`_`."""
+    return "".join(one if one.isalnum() else "_" for one in text).upper()
+
+
 class SecretsUnavailable(RuntimeError):
     """OS 비밀 저장소를 쓸 수 없다 (설치 안 됨·잠김·헤드리스)."""
 
@@ -112,6 +122,17 @@ class Credentials:
     def set_llm_api_key(self, value: str) -> None:
         self.set(LLM_API_KEY, value.strip())
 
+    def extension_secret(self, extension_id: str, key: str) -> str | None:
+        """확장의 비밀 설정 칸 (C13 `configuration[].secret`, 예: 등록 담당자 키).
+
+        확장마다 이름 공간을 나눈다 — 다른 확장의 키를 가져가지 못한다.
+        """
+        safe = f"{EXTENSION_PREFIX}{extension_id}:{key}"
+        return self.get(safe, env=f"{ENV_EXTENSION_PREFIX}{_env_name(extension_id)}__{_env_name(key)}")
+
+    def set_extension_secret(self, extension_id: str, key: str, value: str) -> None:
+        self.set(f"{EXTENSION_PREFIX}{extension_id}:{key}", value.strip())
+
     def service_app_key(self, ref: str) -> str | None:
         """BPM 프로세스 속성의 **키 참조 이름**으로 찾는다 (ADR-0013 §3)."""
         return self.get(f"{SERVICE_APP_PREFIX}{ref}")
@@ -122,6 +143,8 @@ class Credentials:
 
 __all__ = [
     "CENTER_API_KEY",
+    "ENV_EXTENSION_PREFIX",
+    "EXTENSION_PREFIX",
     "ENV_CENTER_API_KEY",
     "ENV_LLM_API_KEY",
     "LLM_API_KEY",

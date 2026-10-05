@@ -24,6 +24,8 @@ from chaeksas.bot_ui.bots import find
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials
 from chaeksas.bot_ui.runner import Launcher, Running
+from chaeksas.bot_ui.runtimes import HostSettings
+from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
 from chaeksas.contracts.bot_ui import (
@@ -42,9 +44,11 @@ from chaeksas.contracts.bot_ui import (
     Versions,
     WorkerState,
 )
+from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.processes import Supervisor
 from chaeksas.core.run_shipping import HttpUploader, Shipment
 from chaeksas.core.run_shipping import Queue as RunQueue
+from chaeksas.extension_api import HOST_BOT_UI, ExtensionContext
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +69,20 @@ TRAY_KEY_EXPIRED = "키 만료"
 TRAY_DISABLED = "비활성"
 TRAY_ERROR = "오류"
 TRAY_IDLE = "대기"
+
+
+@dataclass(frozen=True)
+class ExtensionSecrets:
+    """`extension_api.Secrets` — 확장 하나의 비밀을 푼다 (ADR-0013).
+
+    **값을 가진 쪽은 호스트다.** 확장은 이름으로 묻고, 받은 값을 기록·템플릿에 넣지 않는다.
+    """
+
+    credentials: Credentials
+    extension_id: str
+
+    def resolve(self, ref: str) -> str | None:
+        return self.credentials.extension_secret(self.extension_id, ref)
 
 
 def now_iso() -> str:
@@ -90,9 +108,9 @@ class Agent:
     settings: Settings
     store: Store
     credentials: Credentials = field(default_factory=Credentials)
-    #: 로컬 런타임 감시자 (`runtime_id` → 감시자). 확장이 기여한다 — 지금은 Worker뿐 (M4).
-    supervisors: dict[str, Supervisor] = field(default_factory=dict)
-    #: 설치된 확장 (C13). 확장 호스트가 채운다 (M4).
+    #: 확장 호스트 (ADR-0018). 없으면 확장이 없는 Bot UI다 — 그래도 Bot은 돈다.
+    host: ExtensionHost | None = None
+    #: 설치된 확장 (C13). 확장 호스트가 채운다.
     extensions: list[ExtensionState] = field(default_factory=list)
     #: 시험에서 Center를 바꿔 끼우려고 둔 자리.
     client_factory: Callable[[str, str], CenterClient] | None = None
@@ -111,6 +129,34 @@ class Agent:
     _launcher: Launcher | None = None
     #: 종료 중이다 — **새 Bot을 띄우지 않는다** (BUI-01 종료 순서 「1. 새 요청 막기」).
     stopping: bool = False
+    #: 로컬 런타임 (C13·BUI-09). 처음 쓸 때 만든다 — 확장 호스트가 있어야 한다.
+    _runtimes: LocalRuntimes | None = None
+
+    def runtimes(self) -> LocalRuntimes:
+        """확장이 기여한 로컬 런타임들. **띄우지는 않는다** — 필요할 때 `ensure()`가 띄운다."""
+        if self._runtimes is None:
+            self._runtimes = LocalRuntimes(host=self.host or ExtensionHost(), settings=self.settings)
+        return self._runtimes
+
+    @property
+    def supervisors(self) -> dict[str, Supervisor]:
+        return self.runtimes().supervisors
+
+    def extension_context(self, extension_id: str, *, runtime_ids: tuple[str, ...] = ()) -> ExtensionContext:
+        """확장 코드에 넘길 바깥 세상 (C13).
+
+        설정은 **그 확장의 칸 + 호스트가 채우는 예약 키**(`runtime.<id>.*`)다. 비밀은 OS
+        비밀 저장소에서 확장 이름 공간으로 푼다 — 확장은 값을 묻기만 한다 (ADR-0013).
+        """
+        if self.host is None:
+            raise LookupError("확장 호스트가 없습니다")
+        values: dict[str, object] = dict(self.runtimes().host_settings(runtime_ids))
+        return self.host.context(
+            extension_id,
+            host=HOST_BOT_UI,
+            settings=HostSettings(values=values),
+            secrets=ExtensionSecrets(credentials=self.credentials, extension_id=extension_id),
+        )
 
     @property
     def bot_ui_id(self) -> str | None:
@@ -178,11 +224,13 @@ class Agent:
         worker = self.supervisors.get("worker")
         if worker is None:
             return WorkerState(state="off", restarts=0, session="idle")
+        # 「지금 무엇을 하나」는 런타임이 `health`로 말해 준다 (C13). 없으면 모른 채 둔다.
+        health = self.runtimes().health_of("worker") if worker.state == "running" else None
         return WorkerState(
             state=worker.state,
-            version=BOT_UI_VERSION if worker.state == "running" else None,
+            version=str((health or {}).get("version") or "") or None,
             restarts=worker.restarts,
-            session="idle",
+            session=str((health or {}).get("session") or "idle"),
         )
 
     def wire_status(self) -> str:
@@ -238,8 +286,7 @@ class Agent:
 
         키가 거부되면 예외를 올린다 — 트레이가 「키 폐기됨」을 보여야 하고, 사람이 고쳐야 한다.
         """
-        for supervisor in self.supervisors.values():
-            supervisor.tick()
+        self.runtimes().tick()
         # 돌고 있는 Bot을 들여다보고, 자리가 비면 대기열에서 다음을 올린다 (조각 4a).
         self.pump()
 
@@ -534,13 +581,30 @@ class Agent:
         return " · ".join(parts)
 
 
+def load_extensions() -> ExtensionHost:
+    """설치된 확장을 읽는다 (엔트리 포인트 `chaeksas.extensions`, ADR-0018).
+
+    **읽다 실패해도 Bot UI는 뜬다** — 확장 하나가 없다고 Bot을 못 돌리면 더 나쁘다. 못 읽은
+    것은 호스트가 `failures()`로 들고 있고 BUI-11이 보여 준다.
+    """
+    host = ExtensionHost()
+    try:
+        host.load_entry_points()
+    except Exception as e:  # noqa: BLE001 — 확장 때문에 Bot UI가 안 뜨면 안 된다
+        log.warning("확장을 읽지 못했다: %s", e)
+    for failure in host.failures:
+        log.warning("확장을 켜지 못했다: %s", failure)
+    return host
+
+
 def make_agent(settings: Settings | None = None, *, state_path: Path | None = None) -> Agent:
-    """평소 쓰는 조합 — 설정 파일 + 상태 파일 + OS 비밀 저장소."""
+    """평소 쓰는 조합 — 설정 파일 + 상태 파일 + OS 비밀 저장소 + 설치된 확장."""
     from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415
 
     found = settings or Settings.load()
     path = state_path or (data_dir() / "state.json")
-    return Agent(settings=found, store=Store.load(path))
+    host = load_extensions()
+    return Agent(settings=found, store=Store.load(path), host=host, extensions=host.states())
 
 
 __all__ = [
@@ -554,6 +618,8 @@ __all__ = [
     "TRAY_KEY_REVOKED",
     "TRAY_UNREGISTERED",
     "Agent",
+    "ExtensionSecrets",
+    "load_extensions",
     "make_agent",
     "new_run_id",
 ]
