@@ -64,6 +64,11 @@ def runtime_args(spec: str, *, port: int, token_dir: Path | None) -> list[str]:
     return args
 
 
+#: 예약 결과 (`Runtimes.reserve`).
+RESERVED = "reserved"
+BUSY = "busy"
+SKIPPED = "skipped"
+
 #: 런타임 폴더에 Bot UI가 남기는 자리 정보 (`{"runtime", "port"}`) — 토큰은 런타임이 쓴다.
 RUNTIME_FILE = "runtime.json"
 
@@ -183,6 +188,52 @@ class Runtimes:
         raise RuntimeUnavailable(
             f"{runtime.label}이 제때 답하지 않았습니다 (포트 {port}) — 포트가 쓰이고 있는지 보세요"
         )
+
+    def reserve(self, runtime_id: str, run_id: str) -> str:
+        """그 런타임을 이 실행에 묶는다 (C13 `reserve`, ADR-0014 §4) → `RESERVED`·`BUSY`·`SKIPPED`.
+
+        Bot UI는 런타임의 말을 모른다 — 확장 정의가 적은 경로·헤더·토큰 파일대로만 부른다.
+        `BUSY`(409)면 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중이다 — **Bot이 기다린다.**
+        닿지 못함 등은 `SKIPPED` — 기록만 하고 실행을 막지 않는다 (그 태스크가 분명히 실패한다).
+        """
+        call = self._reserve_call(runtime_id)
+        if call is None:
+            return SKIPPED
+        url, headers = call
+        try:
+            answer = httpx.post(url, json={"run_id": run_id}, headers=headers, timeout=HEALTH_TIMEOUT_S)
+        except httpx.HTTPError as e:
+            log.warning("%s을 예약하지 못했다: %s", runtime_id, type(e).__name__)
+            return SKIPPED
+        if answer.status_code == 409:
+            return BUSY
+        if answer.status_code >= 400:
+            log.warning("%s 예약이 %s로 거절됐다", runtime_id, answer.status_code)
+            return SKIPPED
+        return RESERVED
+
+    def release(self, runtime_id: str) -> None:
+        """예약을 푼다 (실행이 끝났다). 실패해도 기록만 한다 — 다시 뜨면 예약은 사라진다."""
+        call = self._reserve_call(runtime_id)
+        if call is None:
+            return
+        url, headers = call
+        try:
+            httpx.delete(url, headers=headers, timeout=HEALTH_TIMEOUT_S)
+        except httpx.HTTPError as e:
+            log.warning("%s 예약을 풀지 못했다: %s", runtime_id, type(e).__name__)
+
+    def _reserve_call(self, runtime_id: str) -> tuple[str, dict[str, str]] | None:
+        try:
+            _, runtime = self.find(runtime_id)
+        except RuntimeUnavailable:
+            return None
+        if runtime.reserve is None or not runtime.token_dir:
+            return None
+        token_file = token_dir_for(runtime.id) / runtime.reserve.token_file
+        token = token_file.read_text(encoding="utf-8").strip() if token_file.is_file() else ""
+        url = f"http://{LOCAL_HOST}:{port_for(runtime, self.settings)}{runtime.reserve.path}"
+        return url, {runtime.reserve.header: token}
 
     def health_of(self, runtime_id: str) -> dict[str, Any] | None:
         """BUI-09가 그릴 내용. 기여가 없거나 답하지 않으면 `None` — **묻는 쪽을 막지 않는다**."""
