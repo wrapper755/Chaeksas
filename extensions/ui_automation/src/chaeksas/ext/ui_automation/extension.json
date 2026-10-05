@@ -54,7 +54,7 @@
     "configuration": [
       {
         "key": "registrar_key",
-        "label": "등록 담당자 키",
+        "label": "등록 담당자 키 (registry_write 권한)",
         "scope": "bot_ui",
         "schema": {"type": "string"},
         "secret": true

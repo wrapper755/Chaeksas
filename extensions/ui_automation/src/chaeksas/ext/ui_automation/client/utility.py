@@ -15,8 +15,9 @@ from chaeksas.extension_api import ExtensionContext
 class SelectorRegistration:
     """`bot_ui.utilities` — `extension_api.BotUiUtility`.
 
-    등록 담당자 키는 설정 칸 `registrar_key`(비밀)로 받는다 (`ctx.secret("registrar_key")`) —
-    레지스트리에 쓰는 것(C9)은 다음 조각이라 아직 읽지 않는다.
+    등록 담당자 키는 설정 칸 `registrar_key`(비밀)로 받고, UI 자동화 앱 주소는 **호스트가**
+    예약 키 `service.base_url`로 알려 준다 (C13 — 주소 출처는 하나). 둘 중 하나라도 없으면
+    등록 단추가 꺼지고 왜 꺼졌는지 화면이 말한다.
     """
 
     def __init__(self) -> None:
@@ -25,10 +26,11 @@ class SelectorRegistration:
     def widget(self, ctx: ExtensionContext) -> object:
         from chaeksas.ext.ui_automation.client.registration_window import (  # noqa: PLC0415
             RegistrationWidget,
+            registry_client,
             worker_client,
         )
 
-        made = RegistrationWidget(worker_client(ctx.settings))
+        made = RegistrationWidget(worker_client(ctx.settings), registry_client(ctx))
         self._widget = made
         return made
 

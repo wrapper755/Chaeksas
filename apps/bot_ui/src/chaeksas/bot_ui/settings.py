@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -88,6 +89,17 @@ class Settings:
     runtimes: tuple[RuntimeSettings, ...] = field(
         default_factory=lambda: (RuntimeSettings(runtime_id="worker", port=DEFAULT_WORKER_PORT),)
     )
+    #: 확장별 설정 (BUI-03 「확장별 설정」, C13 `configuration`). `{확장 id: {칸: 값}}`.
+    #: **비밀 칸은 여기 들어오지 않는다** — OS 비밀 저장소로 간다 (`credentials.py`).
+    extensions: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+
+    def extension(self, extension_id: str) -> dict[str, Any]:
+        return dict(self.extensions.get(extension_id, {}))
+
+    def with_extension(self, extension_id: str, values: Mapping[str, Any]) -> Settings:
+        found = {key: dict(value) for key, value in self.extensions.items()}
+        found[extension_id] = dict(values)
+        return replace(self, extensions=found)
 
     @property
     def config_path(self) -> Path:
@@ -110,6 +122,7 @@ class Settings:
             "llm_model": self.llm_model,
             "readable_dirs": [str(one) for one in self.readable_dirs],
             "runtimes": [r.to_json_dict() for r in self.runtimes],
+            "extensions": {key: dict(value) for key, value in self.extensions.items()},
         }
 
     def save(self, path: Path | None = None) -> Path:
@@ -170,6 +183,11 @@ class Settings:
             llm_model=str(raw.get("llm_model") or base.llm_model),
             readable_dirs=tuple(Path(one) for one in raw.get("readable_dirs", [])),
             runtimes=runtimes or base.runtimes,
+            extensions={
+                str(key): dict(value)
+                for key, value in (raw.get("extensions") or {}).items()
+                if isinstance(value, dict)
+            },
         )
 
     @classmethod

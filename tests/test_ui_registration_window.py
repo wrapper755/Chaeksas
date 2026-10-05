@@ -22,16 +22,25 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from chaeksas.ext.ui_automation.client.registration_window import (  # noqa: E402
+    ELEMENT_COLUMNS,
     PORT_SETTING,
     TOKEN_DIR_SETTING,
     RegistrationWidget,
     worker_client,
 )
+from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec  # noqa: E402
 from chaeksas.ext.ui_automation.contracts.registration import (  # noqa: E402
     AnalyzeResult,
     Candidate,
     CheckRow,
     VerifyResult,
+)
+from chaeksas.ext.ui_automation.contracts.registry import (  # noqa: E402
+    CatalogEntry,
+    DeletionResult,
+    ElementHint,
+    PageRegistration,
+    RegistrationResult,
 )
 from chaeksas.ext.ui_automation.contracts.worker_local import SessionInfo  # noqa: E402
 
@@ -132,7 +141,8 @@ def test_analyze_fills_the_table_with_suggested_keys(made: Any) -> None:
     widget.analyze()
     assert widget.elements.rowCount() == 2
     assert widget.elements.item(0, 1).text() == "qty_input"
-    assert widget.elements.item(0, 8).text() == "#qty", "CSS 후보는 등록 화면에서만 보인다 (C10 §5)"
+    css = ELEMENT_COLUMNS.index("CSS 후보")
+    assert widget.elements.item(0, css).text() == "#qty", "CSS 후보는 등록 화면에서만 보인다 (C10 §5)"
 
 
 def test_an_empty_scope_does_not_widen_silently(app: Any) -> None:
@@ -234,15 +244,15 @@ def test_changing_the_table_after_verifying_needs_another_check(made: Any) -> No
     assert widget._verified is None  # noqa: SLF001
 
 
-def test_registering_is_not_pretended(made: Any) -> None:
-    """**없는 것을 되는 척하지 않는다** — 레지스트리에 올리는 것(C9)은 다음 조각이다."""
+def test_registering_without_a_key_is_not_pretended(made: Any) -> None:
+    """**없는 것을 되는 척하지 않는다** — 키가 없으면 꺼 두고 어디서 넣는지 말한다."""
     widget, _ = made
     opened(widget)
     widget.analyze()
     widget.verify()
     assert not widget.register_button.isEnabled()
-    assert "다음 조각" in widget.register_button.toolTip()
-    assert not widget.pick_button.isEnabled()
+    assert "등록 담당자 키" in widget.register_button.toolTip()
+    assert not widget.pick_button.isEnabled(), "직접 고르기는 다음 조각이다"
 
 
 # ─────────────────────────── 놓아 주기 ───────────────────────────
@@ -290,3 +300,226 @@ def test_the_worker_address_comes_from_the_host(tmp_path: Any) -> None:
     found = worker_client(Settings())
     assert found.port == 9999
     assert found.token_dir == tmp_path
+
+
+# ─────────────────────────── 레지스트리 (C9) ───────────────────────────
+
+
+class FakeRegistry:
+    """C9를 흉내 낸다. **화면이 무엇을 올렸는지**를 남긴다."""
+
+    def __init__(self, *, known: Any = None, fail: Exception | None = None) -> None:
+        self.known = known
+        self.fail = fail
+        self.registered: list[Any] = []
+        self.deleted: list[tuple[str, str | None, bool]] = []
+
+    def get_page(self, page_id: str) -> tuple[Any, list[str]]:
+        if self.fail is not None:
+            raise self.fail
+        if self.known is None:
+            raise Problem("그 화면이 없다", code="not_found", status=404)
+        return self.known, []
+
+    def register(self, page: Any) -> Any:
+        if self.fail is not None:
+            raise self.fail
+        self.registered.append(page)
+        return RegistrationResult(page_id=page.page_id, revision=2, created=[], kept=[], created_page=True)
+
+    def delete(self, page_id: str, semantic_key: str | None = None, *, force: bool = False) -> Any:
+        self.deleted.append((page_id, semantic_key, force))
+        if self.fail is not None and not force:
+            raise self.fail
+        return DeletionResult(page_id=page_id, semantic_key=semantic_key, elements=1, locators=2)
+
+
+class Problem(RuntimeError):
+    def __init__(self, message: str, *, code: str = "", status: int = 0, detail: Any = None) -> None:
+        super().__init__(message)
+        self.code, self.status, self.detail = code, status, detail or {}
+
+    @property
+    def permanent(self) -> bool:
+        return 400 <= self.status < 500
+
+
+def registered_page() -> Any:
+    return PageRegistration(
+        schema=1,
+        page_id="erp.order.form",
+        locators={"order.qty": [LocatorSpec(type="css", value="#qty")]},
+        elements={"order.qty": ElementHint(name="수량", kind="control")},
+        catalog={"order.qty": CatalogEntry(actions=["fill"], depends_on=["order.customer"])},
+        revision=4,
+    )
+
+
+def with_registry(app: Any, registry: Any) -> Any:
+    widget = RegistrationWidget(FakeWorker(), registry)
+    widget.page_id.setCurrentText("erp.order.form")
+    return widget
+
+
+def test_a_new_page_says_it_will_be_created(app: Any) -> None:
+    widget = with_registry(app, FakeRegistry())
+    widget.look_up()
+    assert "새 화면" in widget.page_state.text()
+    assert not widget.load_button.isEnabled()
+    widget.close()
+
+
+def test_an_existing_page_says_it_will_be_added_to(app: Any) -> None:
+    widget = with_registry(app, FakeRegistry(known=registered_page()))
+    widget.look_up()
+    assert "기존 화면" in widget.page_state.text() and "1개" in widget.page_state.text()
+    assert widget.load_button.isEnabled()
+    widget.close()
+
+
+def test_an_unreachable_server_is_not_guessed(app: Any) -> None:
+    """**모르는 것을 안다고 하지 않는다** (U8) — 「새 화면」으로 단정하면 덮어쓴다."""
+    widget = with_registry(app, FakeRegistry(fail=Problem("닿지 못함")))
+    widget.look_up()
+    assert "알 수 없습니다" in widget.page_state.text()
+    assert not widget.register_button.isEnabled()
+    widget.close()
+
+
+def test_loading_brings_the_registered_ladder(app: Any) -> None:
+    """불러온 줄은 **서버의 사다리를 그대로** 가진다 — 다시 등록해도 정의가 바뀌지 않는다."""
+    widget = with_registry(app, FakeRegistry(known=registered_page()))
+    widget.look_up()
+    widget.load_page()
+    assert widget.elements.rowCount() == 1
+    assert widget.elements.item(0, 1).text() == "order.qty"
+    assert [one.value for one in widget._rows[0].ladder()] == ["#qty"]  # noqa: SLF001
+    assert widget._rows[0].depends_on == ["order.customer"], "계획 정보도 함께 온다"  # noqa: SLF001
+    widget.close()
+
+
+def test_registering_needs_a_check_first(app: Any) -> None:
+    """**검증을 마쳐야 등록이 켜진다.** 그 뒤 표를 바꾸면 다시 꺼진다."""
+    registry = FakeRegistry()
+    widget = with_registry(app, registry)
+    opened(widget)
+    widget.analyze()
+    assert not widget.register_button.isEnabled()
+    widget.verify()
+    assert widget.register_button.isEnabled()
+    widget.elements.item(0, 1).setText("order.qty")
+    assert not widget.register_button.isEnabled(), "표를 바꾸면 다시 검증해야 한다"
+    widget.close()
+
+
+def test_registering_sends_only_the_chosen_rows(app: Any) -> None:
+    from PySide6.QtCore import Qt  # noqa: PLC0415
+
+    registry = FakeRegistry()
+    widget = with_registry(app, registry)
+    opened(widget)
+    widget.analyze()
+    widget.elements.item(1, 0).setCheckState(Qt.CheckState.Unchecked)
+    widget.verify()
+    widget.register()
+    sent = registry.registered[0]
+    assert list(sent.locators) == ["qty_input"], "체크하지 않은 줄은 가지 않는다"
+    assert sent.page_id == "erp.order.form"
+    assert sent.elements["qty_input"].name == "수량"
+    assert "등록했습니다" in widget.hint.text()
+    widget.close()
+
+
+def test_a_refused_registration_says_to_fix_it(app: Any) -> None:
+    """**4xx는 다시 눌러도 같은 답이다** — 보낸 내용을 고쳐야 한다고 말한다."""
+    widget = with_registry(app, FakeRegistry(fail=Problem("사다리가 없다", code="page_invalid", status=422)))
+    opened(widget)
+    widget.analyze()
+    widget.verify()
+    widget.register()
+    assert "거부했습니다" in widget.hint.text() and "고쳐야" in widget.hint.text()
+    widget.close()
+
+
+def test_an_unreachable_registration_says_to_try_again(app: Any) -> None:
+    widget = with_registry(app, FakeRegistry(fail=Problem("닿지 못함")))
+    opened(widget)
+    widget.analyze()
+    widget.verify()
+    widget.register()
+    assert "닿지 못했습니다" in widget.hint.text() and "다시 누르세요" in widget.hint.text()
+    widget.close()
+
+
+def test_deleting_a_page_asks_first(app: Any, monkeypatch: Any) -> None:
+    """**되돌릴 수 없는 일**이다 — 기본은 「취소」다 (U9)."""
+    from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
+
+    asked: list[str] = []
+
+    def answer(_parent: Any, _title: str, text: str, *_a: Any, **_k: Any) -> Any:
+        asked.append(text)
+        return QMessageBox.StandardButton.Cancel
+
+    monkeypatch.setattr(QMessageBox, "question", answer)
+    registry = FakeRegistry(known=registered_page())
+    widget = with_registry(app, registry)
+    widget.look_up()
+    widget.unregister(element=False)
+    assert registry.deleted == [], "「취소」면 지우지 않는다"
+    assert "되돌릴 수 없습니다" in asked[0]
+    widget.close()
+
+
+def test_deleting_what_others_point_at_asks_twice(app: Any, monkeypatch: Any) -> None:
+    """끊길 경로가 있으면 **두 번째 확인** 뒤에 강제로 지운다 (C9)."""
+    from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
+
+    asked: list[str] = []
+
+    def answer(_parent: Any, _title: str, text: str, *_a: Any, **_k: Any) -> Any:
+        asked.append(text)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", answer)
+    links = Problem("가리키는 곳이 있다", code="has_links", status=409,
+                    detail={"links": [{"page_id": "erp.order.list", "semantic_key": "list.new"}]})
+    registry = FakeRegistry(known=registered_page(), fail=links)
+    widget = with_registry(app, registry)
+    widget._known = registered_page()  # noqa: SLF001
+    widget.unregister(element=False)
+    assert [one[2] for one in registry.deleted] == [False, True], "두 번째는 강제로"
+    assert "경로가 끊깁니다" in asked[-1]
+    widget.close()
+
+
+# ─────────────────────────── BUI-07 계획 정보 ───────────────────────────
+
+
+def test_the_hints_go_with_the_registration(app: Any) -> None:
+    from chaeksas.ext.ui_automation.client.registration_window import HintDialog  # noqa: PLC0415
+
+    registry = FakeRegistry()
+    widget = with_registry(app, registry)
+    opened(widget)
+    widget.analyze()
+    dialog = HintDialog(widget._rows[0], widget)  # noqa: SLF001
+    dialog.depends_on.setText("order.customer, order.date")
+    dialog.concepts.setText("수량")
+    assert dialog.values() == (["order.customer", "order.date"], ["수량"])
+
+    widget._rows[0].depends_on, widget._rows[0].concepts = dialog.values()  # noqa: SLF001
+    widget.verify()
+    widget.register()
+    sent = registry.registered[0]
+    assert sent.catalog["qty_input"].depends_on == ["order.customer", "order.date"]
+    assert sent.catalog["qty_input"].concepts == ["수량"]
+    widget.close()
+
+
+def test_a_page_id_is_guessed_from_the_url() -> None:
+    """사람이 고치기 쉬운 출발점만 준다 — **C9의 모양**(영소문자·숫자·`_`·`.`)을 지킨다."""
+    from chaeksas.ext.ui_automation.client.registration_window import page_id_from  # noqa: PLC0415
+
+    assert page_id_from("https://erp.example/orders/new") == "erp.example.orders.new"
+    assert page_id_from("https://한글.example/주문") == "example"

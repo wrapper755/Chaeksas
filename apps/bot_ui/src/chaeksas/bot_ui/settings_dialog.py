@@ -46,6 +46,7 @@ from chaeksas.bot_ui.settings import (
     Settings,
     data_dir,
 )
+from chaeksas.contracts import SCOPE_BOT_UI, ConfigurationItem
 from chaeksas.contracts.center_keys import KEY_PREFIX, looks_like_key
 
 log = logging.getLogger(__name__)
@@ -68,6 +69,8 @@ class SettingsDialog(QDialog):
     def __init__(self, agent: Agent, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._agent = agent
+        #: 확장 설정 칸 — `(확장 id, 칸 이름)` → `(선언, 입력칸)`.
+        self._extension_fields: dict[tuple[str, str], tuple[ConfigurationItem, QLineEdit]] = {}
         self._autostart = autostart_module.autostart()
         self.setWindowTitle("Bot UI 설정")
         self.setMinimumWidth(560)
@@ -82,6 +85,8 @@ class SettingsDialog(QDialog):
         sections.addWidget(self._model_box())
         sections.addWidget(self._files_box())
         sections.addWidget(self._runtime_box())
+        for box in self._extension_boxes():
+            sections.addWidget(box)
         sections.addWidget(self._later_box())
         sections.addStretch(1)
 
@@ -257,11 +262,48 @@ class SettingsDialog(QDialog):
         self.worker_always.setChecked(bool(worker and worker.start == START_ALWAYS))
         form.addRow(self.worker_always)
 
-        note = QLabel("Worker 프로세스와 UI 자동화 설정은 UI 자동화 확장이 붙는 M4에 채워집니다.")
-        note.setWordWrap(True)
-        note.setEnabled(False)
-        form.addRow(note)
         return box
+
+    def _extension_boxes(self) -> list[QGroupBox]:
+        """BUI-03 「확장별 설정」 — 확장의 `configuration` 기여로 **그 자리에서** 만든다 (C13).
+
+        Bot UI는 어느 확장인지 모른다. 비밀 칸은 값을 보이지 않고 OS 비밀 저장소로 간다
+        (ADR-0013) — **설정 파일에는 들어가지 않는다.**
+        """
+        self._extension_fields = {}
+        host = self._agent.host
+        if host is None:
+            return []
+        out = []
+        for found in host.all():
+            items = [one for one in found.manifest.contributes.configuration if one.scope == SCOPE_BOT_UI]
+            if not items:
+                continue
+            box = QGroupBox(found.manifest.name)
+            form = QFormLayout(box)
+            stored = self._agent.settings.extension(found.id)
+            for item in items:
+                field = QLineEdit()
+                if item.secret:
+                    field.setEchoMode(QLineEdit.EchoMode.Password)
+                    has = bool(self._agent.credentials.extension_secret(found.id, item.key))
+                    field.setPlaceholderText(KEY_SET_PLACEHOLDER if has else KEY_EMPTY_PLACEHOLDER)
+                else:
+                    field.setText(str(stored.get(item.key, "")))
+                form.addRow(item.label, field)
+                self._extension_fields[(found.id, item.key)] = (item, field)
+            out.append(box)
+        return out
+
+    def _extension_values(self) -> dict[str, dict[str, object]]:
+        """비밀이 **아닌** 칸만 (비밀은 `save()`가 비밀 저장소로 보낸다)."""
+        out: dict[str, dict[str, object]] = {}
+        for (extension_id, key), (item, field) in self._extension_fields.items():
+            if item.secret:
+                continue
+            out.setdefault(extension_id, dict(self._agent.settings.extension(extension_id)))
+            out[extension_id][key] = field.text().strip()
+        return out
 
     def _later_box(self) -> QGroupBox:
         """아직 없는 섹션 — 끄고 이유를 적는다 (U3)."""
@@ -270,8 +312,7 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(box)
         for text in (
             "메시지 수신 포트 — 메시지 시작 이벤트를 바깥에서 받는 M5",
-            "확장별 설정 (UI 자동화 등록 담당자 키) — M4",
-            "툴팩 비밀 — M3",
+            "툴팩 비밀 — M5",
         ):
             layout.addWidget(QLabel(text))
         return box
@@ -344,6 +385,7 @@ class SettingsDialog(QDialog):
             llm_model=self.llm_model.text().strip() or self._agent.settings.llm_model,
             readable_dirs=self.readable_dirs(),
             runtimes=(worker,),
+            extensions={**self._agent.settings.extensions, **self._extension_values()},
         )
 
     def save(self) -> None:
@@ -367,6 +409,16 @@ class SettingsDialog(QDialog):
                 self._agent.credentials.set_llm_api_key(model_key)
             except SecretsUnavailable as e:
                 QMessageBox.warning(self, "모델 키를 저장하지 못했습니다", str(e))
+                return
+
+        for (extension_id, key), (item, field) in self._extension_fields.items():
+            typed_secret = field.text().strip()
+            if not item.secret or not typed_secret:
+                continue
+            try:
+                self._agent.credentials.set_extension_secret(extension_id, key, typed_secret)
+            except SecretsUnavailable as e:
+                QMessageBox.warning(self, f"{item.label}을 저장하지 못했습니다", str(e))
                 return
 
         wanted = self._pending_settings()
