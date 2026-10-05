@@ -85,11 +85,12 @@ class Package:
         return found
 
 
-def make_env(package: Package, *, output_dir: Path, readable: tuple[Path, ...], llm_url: str, llm_key: str,
+def make_env(package: Package, *, output_dir: Path, readable: tuple[Path, ...],
+             writable: tuple[Path, ...] = (), llm_url: str = "", llm_key: str = "",
              llm_model: str) -> RunEnv:
     """바깥 세계 한 벌 — **주소·키는 실행하는 쪽만 안다** (ADR-0013)."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    space = Workspace(output_dir=output_dir, readable=readable)
+    space = Workspace(output_dir=output_dir, readable=readable, writable=writable)
     model = (
         OpenAiCompatibleLlm(base_url=llm_url, api_key=llm_key, model=llm_model) if llm_url else NoLlm()
     )
@@ -214,6 +215,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--job-id", default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--readable", type=Path, action="append", default=[])
+    parser.add_argument("--writable", type=Path, action="append", default=[])
     parser.add_argument("--llm-url", default="")
     parser.add_argument("--llm-model", default="")
     found = parser.parse_args(argv)
@@ -236,6 +238,7 @@ def main(argv: list[str] | None = None) -> int:
             package,
             output_dir=output_dir,
             readable=tuple(found.readable),
+            writable=tuple(found.writable),
             llm_url=found.llm_url,
             llm_key=os.environ.get("CHK_BOT_UI__LLM__API_KEY", ""),
             llm_model=found.llm_model,

@@ -232,6 +232,31 @@ class SettingsDialog(QDialog):
         note.setWordWrap(True)
         note.setEnabled(False)
         layout.addWidget(note)
+
+        layout.addWidget(QLabel("쓰기 허용 폴더"))
+        self.writable = QListWidget()
+        for one in self._agent.settings.writable_dirs:
+            self.writable.addItem(str(one))
+        layout.addWidget(self.writable)
+
+        write_buttons = QHBoxLayout()
+        add_write = QPushButton("추가...")
+        add_write.clicked.connect(self.add_writable)
+        drop_write = QPushButton("삭제")
+        drop_write.clicked.connect(self.drop_writable)
+        write_buttons.addWidget(add_write)
+        write_buttons.addWidget(drop_write)
+        write_buttons.addStretch(1)
+        layout.addLayout(write_buttons)
+
+        # **적은 폴더 안의 파일을 Bot이 고칠 수 있다** — 넓히는 일이라 분명히 말한다 (ADR-0032).
+        warn = QLabel(
+            "비워 두면 Bot은 출력 폴더 안에만 씁니다. 폴더를 적으면 **그 안의 파일을 Bot이 "
+            "고칠 수 있습니다** (공유 장부에 덧붙이는 업무에 필요합니다)."
+        )
+        warn.setWordWrap(True)
+        warn.setEnabled(False)
+        layout.addWidget(warn)
         return box
 
     def add_readable(self) -> None:
@@ -247,6 +272,20 @@ class SettingsDialog(QDialog):
 
     def readable_dirs(self) -> tuple[Path, ...]:
         return tuple(Path(self.readable.item(i).text()) for i in range(self.readable.count()))
+
+    def add_writable(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(self, "쓰기 허용 폴더 추가")
+        if not chosen:
+            return
+        if not self.writable.findItems(chosen, Qt.MatchFlag.MatchExactly):
+            self.writable.addItem(chosen)
+
+    def drop_writable(self) -> None:
+        for item in self.writable.selectedItems():
+            self.writable.takeItem(self.writable.row(item))
+
+    def writable_dirs(self) -> tuple[Path, ...]:
+        return tuple(Path(self.writable.item(i).text()) for i in range(self.writable.count()))
 
     def _runtime_box(self) -> QGroupBox:
         box = QGroupBox("로컬 런타임")
@@ -384,6 +423,7 @@ class SettingsDialog(QDialog):
             llm_base_url=self.llm_url.text().strip(),
             llm_model=self.llm_model.text().strip() or self._agent.settings.llm_model,
             readable_dirs=self.readable_dirs(),
+            writable_dirs=self.writable_dirs(),
             runtimes=(worker,),
             extensions={**self._agent.settings.extensions, **self._extension_values()},
         )

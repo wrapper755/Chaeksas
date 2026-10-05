@@ -153,6 +153,86 @@ def _excel_parser(workspace: Workspace, path: str, sheet: str = "", max_rows: in
     return _table(page.title, raw, limit=_rows(max_rows))
 
 
+def _excel_writer(workspace: Workspace, path: str, rows: Any, sheet: str = "", key: str = "") -> str:
+    """엑셀 한 장에 줄을 **덧붙인다** (ADR-0032). 사람의 장부를 Bot이 덮지 않는다.
+
+    - **기존 줄을 고치거나 지우지 않는다.** 할 수 있는 일은 끝에 붙이는 것뿐이다.
+    - 파일이 없으면 만든다 (첫 줄은 칸 이름).
+    - `key`를 주면 **그 칸이 같은 줄은 건너뛴다** — 같은 것을 두 번 돌려도 쌓이지 않는다.
+    """
+    from openpyxl import Workbook, load_workbook
+
+    target = workspace.for_write(path)
+    wanted = _rows_in(rows)
+    if not wanted:
+        return json.dumps({"path": path, "added": 0, "skipped": 0, "note": "붙일 줄이 없다"},
+                          ensure_ascii=False)
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if target.is_file():
+        try:
+            book = load_workbook(str(target))
+        except Exception as e:  # noqa: BLE001 — 깨진 파일이 무엇을 낼지 모른다
+            raise FileTaskError(f"엑셀을 열지 못했다: {path} ({type(e).__name__})") from e
+        page = book[sheet] if sheet and sheet in book.sheetnames else book.worksheets[0]
+        columns = [str(one) for one in next(page.iter_rows(values_only=True, max_row=1), ()) if one]
+    else:
+        book = Workbook()
+        page = book.active
+        if sheet:
+            page.title = sheet
+        columns = []
+
+    if not columns:
+        columns = list(wanted[0])
+        page.append(columns)
+
+    seen: set[str] = set()
+    if key:
+        if key not in columns:
+            raise FileTaskError(f"그 칸이 없다: {key} (있는 것: {', '.join(columns)})")
+        where = columns.index(key)
+        for row in page.iter_rows(min_row=2, values_only=True):
+            if len(row) > where and row[where] is not None:
+                seen.add(str(row[where]))
+
+    added = skipped = 0
+    for one in wanted:
+        if key and str(one.get(key, "")) in seen:
+            skipped += 1
+            continue
+        page.append([one.get(name) for name in columns])
+        if key:
+            seen.add(str(one.get(key, "")))
+        added += 1
+
+    try:
+        book.save(str(target))
+    except OSError as e:
+        raise FileTaskError(f"엑셀을 쓰지 못했다: {path} ({e})") from e
+    finally:
+        book.close()
+    return json.dumps(
+        {"path": path, "sheet": page.title, "added": added, "skipped": skipped, "columns": columns},
+        ensure_ascii=False,
+    )
+
+
+def _rows_in(raw: Any) -> list[dict[str, Any]]:
+    """모델이 글로 줄 수도 있다 — JSON이면 읽고, 아니면 빈 목록이다."""
+    found = raw
+    if isinstance(found, str):
+        try:
+            found = json.loads(found)
+        except ValueError:
+            return []
+    if isinstance(found, dict):
+        found = [found]
+    if not isinstance(found, list):
+        return []
+    return [dict(one) for one in found if isinstance(one, dict)]
+
+
 def _csv_parser(workspace: Workspace, path: str, delimiter: str = "", max_rows: int = MAX_ROWS) -> str:
     """CSV를 **JSON 표**로 돌려준다. 구분자를 비우면 첫 줄을 보고 알아낸다."""
     target = workspace.for_read(path)
@@ -319,6 +399,31 @@ def builtin_tools(workspace: Workspace | None = None) -> dict[str, ToolDef]:
             ),
         ),
         run=lambda path, sheet="", max_rows=MAX_ROWS: _excel_parser(workspace, path, sheet, max_rows),
+    )
+    made["excel_writer_tool"] = ToolDef(
+        spec=ToolSpec(
+            name="excel_writer_tool",
+            description=(
+                "엑셀(.xlsx) 한 장에 줄을 **덧붙인다**. 기존 줄은 고치지도 지우지도 않는다. "
+                "파일이 없으면 만든다. `key`를 주면 그 칸이 같은 줄은 건너뛴다 (다시 돌려도 "
+                '안 쌓인다). `{"path":…, "added":…, "skipped":…}`를 돌려준다. '
+                "**쓰기 허용 폴더 안**만 쓸 수 있다."
+            ),
+            parameters=_schema(
+                {
+                    "path": _PATH,
+                    "rows": {
+                        "type": "array",
+                        "description": "붙일 줄 목록. 줄 하나는 `{칸 이름: 값}`이다",
+                        "items": {"type": "object"},
+                    },
+                    "sheet": {"type": "string", "description": "시트 이름. 비우면 첫 시트"},
+                    "key": {"type": "string", "description": "같은 값이면 건너뛸 칸 이름"},
+                },
+                ["path", "rows"],
+            ),
+        ),
+        run=lambda path, rows, sheet="", key="": _excel_writer(workspace, path, rows, sheet, key),
     )
     made["csv_parser_tool"] = ToolDef(
         spec=ToolSpec(

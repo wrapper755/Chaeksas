@@ -86,6 +86,9 @@ class Settings:
     llm_model: str = DEFAULT_LLM_MODEL
     #: Bot이 **읽을 수 있는 폴더** (BUI-03 「파일」, ADR-0026). 비어 있으면 아무것도 못 읽는다.
     readable_dirs: tuple[Path, ...] = ()
+    #: Bot이 출력 폴더 **밖에 쓸 수 있는 폴더** (BUI-03 「파일」, ADR-0032). 기본은 비어 있다 —
+    #: 적은 폴더 안의 파일은 Bot이 고칠 수 있다.
+    writable_dirs: tuple[Path, ...] = ()
     runtimes: tuple[RuntimeSettings, ...] = field(
         default_factory=lambda: (RuntimeSettings(runtime_id="worker", port=DEFAULT_WORKER_PORT),)
     )
@@ -121,6 +124,7 @@ class Settings:
             "llm_base_url": self.llm_base_url,
             "llm_model": self.llm_model,
             "readable_dirs": [str(one) for one in self.readable_dirs],
+            "writable_dirs": [str(one) for one in self.writable_dirs],
             "runtimes": [r.to_json_dict() for r in self.runtimes],
             "extensions": {key: dict(value) for key, value in self.extensions.items()},
         }
@@ -182,6 +186,7 @@ class Settings:
             llm_base_url=str(raw.get("llm_base_url") or base.llm_base_url),
             llm_model=str(raw.get("llm_model") or base.llm_model),
             readable_dirs=tuple(Path(one) for one in raw.get("readable_dirs", [])),
+            writable_dirs=tuple(Path(one) for one in raw.get("writable_dirs", [])),
             runtimes=runtimes or base.runtimes,
             extensions={
                 str(key): dict(value)
