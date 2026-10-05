@@ -35,6 +35,7 @@ export interface Operation {
   output_schema?: {
     [k: string]: unknown;
   } | null;
+  required_scopes?: string[];
   server_ok?: boolean;
   timeout_s?: number;
   [k: string]: unknown;

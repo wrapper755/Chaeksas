@@ -13,6 +13,8 @@
 
 자동화할 화면과 그 요소(시맨틱 키), 요소마다의 로케이터 사다리를 등록·조회·삭제한다. 결과물은 UI 자동화 앱이 소유한다. 통계·승격·폐기 판단이 거기 있기 때문이다 (C8).
 
+> 상태: 네 작업과 공개 카탈로그가 **돈다** (`extensions/ui_automation/service/app.py`, 저장은 SQLite 한 파일). 부르는 쪽은 `client/registry_client.py`다. 추가 권한은 작업이 `required_scopes`로 선언하고 `service_kit`이 건다 (C11).
+
 ## 전송
 
 | 경로 | 인증 | 뜻 |
