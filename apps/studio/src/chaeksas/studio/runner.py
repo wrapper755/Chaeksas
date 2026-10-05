@@ -404,10 +404,10 @@ class CaseRun(QObject):
 
 
 def _llm_key() -> str:
-    """모델 키는 **설정 파일에 두지 않는다** (CLAUDE.md §5). OS 비밀 저장소는 STU-10과 함께다."""
-    import os  # noqa: PLC0415
+    """모델 키는 **설정 파일에 두지 않는다** (CLAUDE.md §5) — 환경변수, 그다음 OS 비밀 저장소 (STU-10)."""
+    from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415
 
-    return os.environ.get("CHK_STUDIO__LLM__API_KEY", "")
+    return StudioCredentials().llm_api_key() or ""
 
 
 def summarize(outcomes: list[Outcome]) -> str:
