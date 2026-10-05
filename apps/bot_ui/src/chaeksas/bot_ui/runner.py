@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import secrets
 import sys
 import time
@@ -22,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.bot_ui.bots import InstalledBot, write_inputs
+from chaeksas.bot_ui.credentials import ENV_LLM_API_KEY
 from chaeksas.contracts.bot_ui import CurrentRun
 from chaeksas.core import control
 from chaeksas.core.processes import ChildProcess
@@ -218,6 +220,8 @@ class Launcher:
     readable: tuple[Path, ...] = ()
     llm_url: str = ""
     llm_model: str = ""
+    #: 모델 키 — 실행기에게 **환경변수로** 건넨다 (명령줄·설정 파일에 두지 않는다).
+    llm_key: str = ""
     #: 시험이 바꿔 끼운다 (진짜 프로세스를 띄우지 않고).
     make_child: Any = None
 
@@ -264,6 +268,8 @@ class Launcher:
             args=args,
             name=f"실행기 {bot.id}",
             log_path=run_dir(self.data_dir) / f"{made}.runner.log",
+            # **환경을 통째로 물려준다** — 키만 주면 PATH도 없는 자식이 된다.
+            env={**os.environ, ENV_LLM_API_KEY: self.llm_key} if self.llm_key else None,
         )
         child.start()
         self.running = Running(

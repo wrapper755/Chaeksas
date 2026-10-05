@@ -369,3 +369,54 @@ def test_installing_a_broken_package_does_not_crash_the_window(
     window = MainWindow(Agent(settings=Settings(), store=Store.load(tmp_path / "s.json")))
     window.install_package()
     assert said and "zip" in said[0]
+
+
+def test_the_settings_reach_the_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """BUI-03이 정한 것이 실행기까지 간다 — **키는 환경변수로**, 주소는 명령줄로 (조각 4c)."""
+    from dataclasses import replace as _replace
+
+    from chaeksas.bot_ui.agent import Agent
+    from chaeksas.bot_ui.credentials import ENV_LLM_API_KEY
+    from chaeksas.bot_ui.settings import Settings
+    from chaeksas.bot_ui.store import Store
+
+    data_dir = tmp_path / "botui"
+    monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
+    monkeypatch.setenv(ENV_LLM_API_KEY, "sk-시험")
+
+    shared = tmp_path / "공유"
+    shared.mkdir()
+    settings = _replace(
+        Settings(),
+        llm_base_url="http://127.0.0.1:11434",
+        llm_model="qwen2.5:7b",
+        readable_dirs=(shared,),
+    )
+    agent = Agent(settings=settings, store=Store.load(tmp_path / "s.json"))
+
+    seen: dict[str, Any] = {}
+
+    class FakeChild:
+        alive = False
+
+        def __init__(self, **kwargs: Any) -> None:
+            seen.update(kwargs)
+
+        def start(self) -> None:
+            pass
+
+        def poll(self) -> int | None:
+            return 0
+
+    launcher = agent.runner()
+    launcher.make_child = FakeChild
+    bot = install(data_dir, packaged(tmp_path, RULE))
+    launcher.start(bot)
+
+    joined = " ".join(seen["args"])
+    assert "--llm-url http://127.0.0.1:11434" in joined
+    assert "--readable" in joined and str(shared) in joined
+    # **키는 명령줄에 없다** (프로세스 목록에 뜬다) — 환경변수로 간다.
+    assert "sk-시험" not in joined
+    assert seen["env"][ENV_LLM_API_KEY] == "sk-시험"
+    assert "PATH" in seen["env"], "환경을 통째로 물려준다 — 키만 주면 PATH도 없는 자식이 된다"
