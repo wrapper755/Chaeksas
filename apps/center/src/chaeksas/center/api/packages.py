@@ -29,6 +29,10 @@ MAX_ENTRIES = 5000
 MAX_UNCOMPRESSED_MB = 1024
 
 
+#: 승인 봉투가 들어가는 자리 (C2). **해시를 셀 때는 뺀다.**
+SIGNATURE_NAME = "SIGNATURE"
+
+
 @contextmanager
 def _open_zip(path: Path) -> Iterator[zipfile.ZipFile]:
     """zip을 열고 **반드시 닫는다.**
@@ -141,6 +145,29 @@ def upload(store: Store, *, package_dir: Path, raw: bytes, actor: str) -> tuple[
         return info_of(store, manifest.id, manifest.version), True
     finally:
         staged.unlink(missing_ok=True)
+
+
+def with_signature(path: Path, envelope: Any) -> bytes:
+    """zip에 `SIGNATURE`를 넣어 돌려준다 (C2).
+
+    **`content_hash`는 `SIGNATURE`를 빼고** 세므로 넣어도 해시는 바뀌지 않는다 — 받는 쪽이
+    다시 세어 같은 값을 얻는다.
+    """
+    import io
+    import json as _json
+
+    raw = path.read_bytes()
+    out = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(raw)) as source, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as made:
+        for item in source.infolist():
+            if item.filename == SIGNATURE_NAME:
+                continue  # 옛 서명은 버리고 지금 것을 넣는다
+            made.writestr(item, source.read(item.filename))
+        made.writestr(
+            SIGNATURE_NAME,
+            _json.dumps(envelope.to_json_dict(), ensure_ascii=False, indent=2).encode("utf-8"),
+        )
+    return out.getvalue()
 
 
 def _info(row: Any) -> PackageInfo:

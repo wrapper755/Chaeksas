@@ -13,10 +13,10 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
 from chaeksas.center import keys
-from chaeksas.center.api import bot_ui, packages, runs
+from chaeksas.center.api import bot_ui, packages, runs, signing
 from chaeksas.center.auth import Caller, caller, require_admin, require_read
 from chaeksas.center.errors import ApiError, handle
 from chaeksas.center.responses import Utf8JSONResponse
@@ -157,12 +157,52 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         path, content_hash = packages.file_path(
             app.state.store, package_dir=settings.package_dir, package_id=package_id, version=version
         )
-        return FileResponse(
-            path,
+        # 승인된 패키지는 **`SIGNATURE`를 넣어** 준다 (C2). `content_hash`는 그 파일을 빼고
+        # 세므로 해시는 그대로다 — 받는 쪽이 다시 세어도 같다.
+        found = signing.signature_of(app.state.store, package_id, version)
+        if found is None:
+            return FileResponse(
+                path,
+                media_type="application/zip",
+                filename=path.name,
+                headers={"X-Content-Hash": content_hash},
+            )
+        return Response(
+            content=packages.with_signature(path, found),
             media_type="application/zip",
-            filename=path.name,
-            headers={"X-Content-Hash": content_hash},
+            headers={
+                "X-Content-Hash": content_hash,
+                "content-disposition": f'attachment; filename="{path.name}"',
+            },
         )
+
+    # ─────────────────── 서명 (C2·C5) ───────────────────
+
+    @app.put(f"{API}/packages/{{package_id}}/{{version}}/signature")
+    async def approve_package(request: Request, package_id: str, version: str) -> Any:
+        """승인 봉투. **토큰만으로는 아무것도 바뀌지 않는다** — 서명이 관문이다 (C2)."""
+        require_admin(authenticate(request))
+        return signing.approve_package(app.state.store, package_id, version, await _json(request))
+
+    @app.post(f"{API}/packages/{{package_id}}/{{version}}/revoke")
+    async def revoke_package(request: Request, package_id: str, version: str) -> Any:
+        require_admin(authenticate(request))
+        return signing.revoke_package(app.state.store, package_id, version, await _json(request))
+
+    @app.get(f"{API}/admin-keys")
+    def list_admin_keys(request: Request) -> Any:
+        require_read(authenticate(request))
+        return [one.to_json_dict() for one in signing.admin_keys(app.state.store)]
+
+    @app.post(f"{API}/admin-keys")
+    async def add_admin_key(request: Request) -> Any:
+        require_admin(authenticate(request))
+        return signing.add_admin_key(app.state.store, await _json(request)).to_json_dict()
+
+    @app.delete(f"{API}/admin-keys")
+    async def revoke_admin_key(request: Request) -> Any:
+        require_admin(authenticate(request))
+        return signing.revoke_admin_key(app.state.store, await _json(request)).to_json_dict()
 
     return app
 
