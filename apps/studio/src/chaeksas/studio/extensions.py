@@ -7,17 +7,27 @@ Studio는 **어느 확장인지 모른다.** `chk:task`의 `type`으로 기여�
 - 편집기는 **태스크 종류마다 하나**를 만들어 두고 다시 쓴다 (`load()`/`dump()`로 오간다).
 - 서버 주소는 **호스트가 예약 키로** 준다 (C13 `service.base_url`) — 확장이 설정에
   따로 두지 않는다. 출처는 하나다.
+- **시험 실행도 확장을 쓴다** (`tasks()`) — UI 태스크·데스크톱 AI 태스크는 **이 PC의 Bot UI가
+  띄운 로컬 런타임(Worker)** 을 쓴다 (STU-10 「Worker」). 자리는 Bot UI가 런타임 폴더에 남긴
+  `runtime.json`(포트)과 토큰 파일이다 — Studio가 띄우지 않는다.
+- 키 참조(ADR-0013)는 **환경변수 `CHK_STUDIO__SVC__<참조>`가 먼저**, 그다음 OS 비밀 저장소
+  (`chaeksas-studio`, `svc:<참조>`)다. 값은 개발용 키다 (STU-10 「서비스 앱 키」).
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts import SCOPE_STUDIO, SERVICE_URL_SETTING
-from chaeksas.core.extensions import ExtensionHost
-from chaeksas.extension_api import HOST_STUDIO, Settings
+import platformdirs
+
+from chaeksas.contracts import RESERVED_CONFIG_PREFIX, SCOPE_STUDIO, SERVICE_URL_SETTING
+from chaeksas.core.extensions import ExtensionHost, HostTasks
+from chaeksas.extension_api import HOST_STUDIO, ExtensionContext, Settings
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +52,52 @@ class NoSecrets:
 
     def resolve(self, ref: str) -> str | None:
         return None
+
+
+#: Studio의 키 참조 환경변수 앞부분 — `CHK_STUDIO__SVC__FINANCE_TAX` (개발·CI).
+ENV_SERVICE_KEY_PREFIX = "CHK_STUDIO__SVC__"
+#: Studio의 OS 비밀 저장소 이름 (Bot UI와 따로 — 개발용 키다, ADR-0013).
+KEYRING_SERVICE = "chaeksas-studio"
+#: Bot UI가 런타임 폴더에 남기는 자리 정보 (`{"runtime", "port"}`).
+RUNTIME_FILE = "runtime.json"
+
+
+def bot_ui_data_dir() -> Path:
+    """이 PC Bot UI의 사용자 데이터 위치 — Bot UI와 **같은 규칙**이다 (`CHK_BOT_UI__DATA_DIR`가 이긴다).
+
+    Studio는 Bot UI를 import하지 않는다 (앱끼리 import하지 않는다). 규칙이 어긋나면 시험이 잡는다.
+    """
+    override = os.environ.get("CHK_BOT_UI__DATA_DIR")
+    if override:
+        return Path(override)
+    return Path(platformdirs.user_data_dir("chaeksas", appauthor=False)) / "bot-ui"
+
+
+def _env_name(text: str) -> str:
+    return "".join(one if one.isalnum() else "_" for one in text).upper()
+
+
+@dataclass(frozen=True)
+class StudioSecrets:
+    """`extension_api.Secrets` — Studio 시험 실행의 키 참조를 푼다 (ADR-0013).
+
+    **환경변수가 먼저**(개발·CI), 그다음 OS 비밀 저장소. 없으면 `None` — 확장이 사람에게 알린다.
+    """
+
+    service: str = KEYRING_SERVICE
+
+    def resolve(self, ref: str) -> str | None:
+        found = os.environ.get(ENV_SERVICE_KEY_PREFIX + _env_name(ref))
+        if found:
+            return found
+        try:
+            import keyring  # noqa: PLC0415 — 없을 수도 있다 (헤드리스 CI)
+
+            stored = keyring.get_password(self.service, f"svc:{ref}")
+        except Exception as e:  # noqa: BLE001 — 백엔드가 어떤 예외를 낼지 모른다
+            log.debug("키 참조 %s를 비밀 저장소에서 읽지 못했다: %s", ref, type(e).__name__)
+            return None
+        return str(stored) if stored else None
 
 
 @dataclass
@@ -78,6 +134,44 @@ class Extensions:
             values[SERVICE_URL_SETTING] = service.base_url if service is not None else None
         return PlainSettings(values=values)
 
+    def runtime_settings(self, extension_id: str, *, root: Path | None = None) -> dict[str, Any]:
+        """그 확장의 로컬 런타임 자리 — **Bot UI가 띄운 것**을 가리킨다 (C13 예약 키 `runtime.<id>.*`).
+
+        포트는 Bot UI가 런타임 폴더에 남긴 `runtime.json`, 없으면 그 런타임의 설정 환경변수, 그것도
+        없으면 기여의 기본 포트다. Studio는 런타임을 띄우지 않는다.
+        """
+        where = (root or bot_ui_data_dir()) / "runtimes"
+        out: dict[str, Any] = {}
+        for found in self.host.local_runtimes():
+            if found.extension_id != extension_id:
+                continue
+            runtime = found.value
+            head = f"{RESERVED_CONFIG_PREFIX}{runtime.id}"
+            folder = where / runtime.id
+            port: Any = None
+            try:
+                port = json.loads((folder / RUNTIME_FILE).read_text(encoding="utf-8")).get("port")
+            except (OSError, ValueError):
+                port = None
+            if not port and runtime.port_setting:
+                port = os.environ.get(runtime.port_setting)
+            out[f"{head}.port"] = int(port) if port else runtime.default_port
+            if runtime.token_dir:
+                out[f"{head}.token_dir"] = str(folder)
+        return out
+
+    def tasks(self) -> HostTasks:
+        """시험 실행의 `RunEnv.extensions` — 확장 태스크와 `web`·`desktop` AI 태스크 (ADR-0018·0037)."""
+
+        def make_context(extension_id: str) -> ExtensionContext:
+            values = dict(getattr(self.settings_for(extension_id), "values", {}))
+            values.update(self.runtime_settings(extension_id))
+            return self.host.context(
+                extension_id, host=HOST_STUDIO, settings=PlainSettings(values=values), secrets=StudioSecrets()
+            )
+
+        return HostTasks(host=self.host, make_context=make_context)
+
     def editor(self, task_type: str) -> Any | None:
         """그 태스크 종류의 편집기 위젯. 없거나 깨졌으면 `None` (JSON 탭이 그 자리를 메운다)."""
         if task_type in self._editors:
@@ -103,4 +197,4 @@ class Extensions:
         return made
 
 
-__all__ = ["Extensions", "NoSecrets", "PlainSettings"]
+__all__ = ["Extensions", "NoSecrets", "PlainSettings", "StudioSecrets", "bot_ui_data_dir"]

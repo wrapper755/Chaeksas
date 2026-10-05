@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from chaeksas.ext.ui_automation.client.task import WorkerClient, read_value
+from chaeksas.ext.ui_automation.client.task import WorkerClient, WorkerUnreachable, read_value, worker_for
 from chaeksas.ext.ui_automation.contracts.plan import DESKTOP_STRATEGIES
 from chaeksas.ext.ui_automation.contracts.worker_local import (
     CALLER_BOT,
@@ -61,10 +61,7 @@ class DesktopEnvironment:
     def worker(self, ctx: TaskContext) -> WorkerClient:
         if self.client is not None:
             return self.client
-        extension = ctx.extension
-        where = self.token_dir or Path(str(extension.setting("runtime.worker.token_dir") or Path.cwd()))
-        port = self.port or int(extension.setting("runtime.worker.port") or 0)
-        return WorkerClient(token_dir=where, **({"port": port} if port else {}))
+        return worker_for(ctx, token_dir=self.token_dir, port=self.port)
 
     def open(self, ctx: TaskContext) -> DesktopSession:
         desktop = ctx.properties.get("desktop")
@@ -74,7 +71,15 @@ class DesktopEnvironment:
             raise TaskFailed("desktop_app_missing", "데스크톱 AI 태스크에 앱 이름(desktop.app)이 없습니다")
         worker = self.worker(ctx)
         studio = getattr(ctx.extension, "host", None) == HOST_STUDIO
-        info = worker.open(
+        try:
+            info = self._open(worker, ctx, app, studio=studio)
+        except WorkerUnreachable as e:
+            # Worker가 없다 (Bot UI가 띄우지 못했거나 꺼져 있다) — 다시 해 볼 만한 업무 실패다.
+            raise TaskFailed("worker_unreachable", str(e), retryable=True) from e
+        return DesktopSession(worker=worker, info=info)
+
+    def _open(self, worker: WorkerClient, ctx: TaskContext, app: str, *, studio: bool) -> SessionInfo:
+        return worker.open(
             SessionRequest(
                 schema=1,
                 caller=Caller(
@@ -92,7 +97,6 @@ class DesktopEnvironment:
                 report=False,
             )
         )
-        return DesktopSession(worker=worker, info=info)
 
 
 @dataclass

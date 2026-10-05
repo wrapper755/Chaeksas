@@ -516,6 +516,37 @@ def load_host(*, api_version: str = API_VERSION, group: str = ENTRY_POINT_GROUP)
     return host
 
 
+@dataclass
+class HostTasks:
+    """확장 호스트를 엔진의 `RunEnv.extensions`로 — 실행하는 쪽(Studio 시험 실행·Bot UI 실행기)이 꽂는다.
+
+    엔진은 확장을 모른다 (ADR-0018). 태스크 종류 이름으로 수행기를, AI 태스크 domain으로 환경을
+    묻고(ADR-0037), 그 확장의 바깥 세상(`context`)을 받을 뿐이다.
+
+    - 없는 태스크 종류는 **`None`** 이다 (엔진이 그림·설치 오류로 올린다). 호스트는 `LookupError`를 낸다.
+    - `context`의 설정·비밀은 **실행하는 쪽이** 확장마다 갈라 준다 (`make_context`) — 예약 키
+      (`runtime.<id>.*`·`service.base_url`)로 로컬 런타임과 서버 주소를 알려 준다 (C13).
+    """
+
+    host: ExtensionHost
+    make_context: Callable[[str], ExtensionContext]
+
+    def executor(self, task_type: str) -> TaskExecutor | None:
+        try:
+            return self.host.executor(task_type)
+        except LookupError:
+            return None
+
+    def environment(self, domain: str) -> AgentEnvironment | None:
+        return self.host.environment(domain)
+
+    def environment_owner(self, domain: str) -> str | None:
+        return self.host.environment_owner(domain)
+
+    def context(self, extension_id: str) -> ExtensionContext:
+        return self.make_context(extension_id)
+
+
 def summarize(host: ExtensionHost) -> dict[str, list[str]]:
     """화면·로그에 한 줄로 쓰는 요약 (`{"enabled": [...], "disabled": [...], "failed": [...]}`)."""
     return {

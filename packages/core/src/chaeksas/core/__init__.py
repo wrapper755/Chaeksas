@@ -16,6 +16,7 @@ Studio·Bot UI(실행기)·서버 실행기가 함께 쓴다. **화면(Qt)과 �
 from chaeksas.core.extensions import (
     Contribution,
     ExtensionHost,
+    HostTasks,
     LoadedExtension,
     LoadFailure,
     load_host,
@@ -25,6 +26,7 @@ from chaeksas.core.extensions import (
 __all__ = [
     "Contribution",
     "ExtensionHost",
+    "HostTasks",
     "LoadFailure",
     "LoadedExtension",
     "load_host",

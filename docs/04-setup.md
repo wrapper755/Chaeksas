@@ -125,7 +125,8 @@ sudo apt-get install -y --no-install-recommends \
 - 서비스 앱 API 키: 평소에는 OS 비밀 저장소. 개발·CI에서만 `CHK_SERVICE_APP__API_KEY`로 넣을 수 있다.
 - 서버 실행기: 들어오는 포트가 없다 (Center로 접속만). 동시 실행 상한 `CHK_SERVER_RUNNER__MAX_CONCURRENCY`(기본 10), Center API 키(서버 실행기용) `CHK_SERVER_RUNNER__CENTER_API_KEY`(개발·CI만, 평소에는 서버 비밀 저장소). 서비스 앱 키 값은 `chk-runner keys set <참조>` (가안) ([ADR-0015](decisions/0015-run-location.md)).
 - Bot UI 대기열 크기: 기본 20, `CHK_BOT_UI__QUEUE__MAX`. 실행 자리(동시 실행 Bot 수)는 1로 고정이라 설정이 없다 ([ADR-0014](decisions/0014-one-bot-per-pc.md)).
-- Worker 프로세스는 Bot UI가 띄운다. 개발 PC에도 Bot UI를 설치해 켜 두면 Studio 시험 실행이 그 Worker를 쓴다.
+- Worker 프로세스는 Bot UI가 띄운다. 개발 PC에도 Bot UI를 설치해 켜 두면 Studio 시험 실행이 그 Worker를 쓴다 — Bot UI가 `<Bot UI 데이터>/runtimes/worker/`에 남긴 `runtime.json`(포트)과 토큰 파일로 찾는다. Bot을 돌릴 때는 Bot UI가 그 Bot이 쓰는 확장의 Worker를 **먼저 띄운다**.
+- Studio 시험 실행의 서비스 앱 키(개발용): 환경변수 `CHK_STUDIO__SVC__<참조 이름>`(영대문자·숫자·`_`로 바꾼 이름, 예: `CHK_STUDIO__SVC__TEST_UI`) 또는 OS 비밀 저장소(`chaeksas-studio`, 이름 `svc:<참조 이름>`). 설정 화면(STU-10 「서비스 앱 키」)은 아직이다.
 - Center API 키: Center 콘솔(CON-11)에서 발급해 Bot UI 설정·Studio 설정에 넣는다. 개발·CI에서만 `CHK_CENTER__API_KEY`.
 - Studio: `uv run chk-studio` (캔버스는 QtWebEngine이라 `pyside6-addons`가 함께 깔린다). 작업 폴더·설정은 사용자 데이터 폴더의 `studio/`이고 환경변수로 덮어쓴다 — `CHK_STUDIO__DATA_DIR`, `CHK_STUDIO__CENTER__URL`, `CHK_STUDIO__LLM__BASE_URL`, `CHK_STUDIO__LLM__MODEL`, `CHK_STUDIO__READABLE_DIRS`.
 - Bot UI: `uv run chk-bot-ui` (트레이에 뜬다. 트레이가 없는 환경이면 메인 창으로 뜬다). 설정은 BUI-03 창에서 하고 파일은 사용자 데이터 폴더의 `settings.json`이다. 환경변수로 덮어쓸 수 있다 — `CHK_BOT_UI__CENTER__URL`, `CHK_BOT_UI__QUEUE__MAX`, `CHK_BOT_UI__WORKER__PORT`, `CHK_BOT_UI__AUTOSTART`, `CHK_BOT_UI__DATA_DIR`. **Center API 키는 OS 비밀 저장소**에 있고, 비밀 저장소가 없는 환경(헤드리스 CI)에서는 `CHK_BOT_UI__CENTER_API_KEY`로 준다.

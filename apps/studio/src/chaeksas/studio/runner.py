@@ -160,8 +160,8 @@ class Plan:
     case: Case | None
     mode: str = "autonomous"  # autonomous | deterministic
     settings: Settings = field(default_factory=Settings)
-    #: 확장 태스크를 수행할 쪽 (C13·ADR-0018). 없으면 UI 태스크를 만났을 때 분명히 실패한다 —
-    #: Studio 시험 실행이 Bot UI의 Worker를 쓰는 길(STU-08)은 아직 없다.
+    #: 확장 태스크·`web`·`desktop` AI 태스크를 수행할 쪽 (C13·ADR-0018·ADR-0037) —
+    #: `Extensions.tasks()`. 없으면 그 태스크를 만났을 때 분명히 실패한다 (그림·설치 오류).
     extensions: Any = None
 
 
