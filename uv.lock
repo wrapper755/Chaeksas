@@ -230,6 +230,7 @@ dependencies = [
     { name = "chaeksas-extension-api" },
     { name = "chaeksas-service-kit" },
     { name = "fastapi" },
+    { name = "platformdirs" },
     { name = "uvicorn" },
 ]
 
@@ -238,6 +239,7 @@ requires-dist = [
     { name = "chaeksas-extension-api", editable = "packages/extension_api" },
     { name = "chaeksas-service-kit", editable = "packages/service_kit" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "platformdirs", specifier = ">=4" },
     { name = "uvicorn", specifier = ">=0.32" },
 ]
 

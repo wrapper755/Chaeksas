@@ -66,6 +66,9 @@
 | `input_schema` / `output_schema` | JSON Schema | STU-14 입력·출력 표의 원본 |
 | `timeout_s` | int | 기본 60 |
 | `server_ok` | bool | 서버 실행기에서 불러도 되는가 (기본 true. 현장 PC에서만 의미 있는 작업은 false) |
+| `required_scopes` | str[] | 이 작업을 부르려면 키에 있어야 하는 **추가 권한** (키의 `extra_scopes`). 비어 있으면 아무 키나 부를 수 있다. 예: UI 자동화 앱의 `registry_*`는 `registry_write`를 요구한다 (C9) |
+
+**추가 권한은 작업이 선언하고 앱 뼈대가 건다** — 작업 함수가 키를 들여다보지 않는다. 없으면 403 `scope_missing`.
 
 ### `POST /v1/ops/{operation}` 요청 (OpRequest)
 
@@ -175,6 +178,7 @@ Content-Type: application/json
 | 401 | `key_missing` / `key_invalid` | 키 없음·모름 | 재시도하지 않음. 「키 참조 <이름>의 값이 틀렸습니다」 (BUI-05, STU-08) |
 | 403 | `key_revoked` / `key_expired` | 폐기·만료 | 재시도하지 않음. 키 교체 안내 |
 | 403 | `operation_not_allowed` / `mode_not_allowed` | 키 권한 밖 (예: 운영 키로 자율 수행) | 재시도하지 않음 |
+| 403 | `scope_missing` | 작업이 요구하는 추가 권한이 키에 없음 (`required_scopes`) | 재시도하지 않음. 그 권한이 있는 키로 바꾼다 |
 | 404 | `operation_not_found` | 없는 작업 | 재시도하지 않음. 「작업 정의가 바뀌었습니다」 (STU-14) |
 | 409 | `in_progress` | 같은 멱등 키가 아직 수행 중 | `Retry-After` 뒤 같은 요청을 다시 |
 | 409 | `idempotency_conflict` | 같은 멱등 키인데 본문이 다름 | 버그. 재시도하지 않음 (`node_instance`·`attempt` 관리 확인) |
@@ -198,6 +202,7 @@ Content-Type: application/json
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
 | 2026-10-03 | 1 | 관리 API(`/admin/v1/status`·`keys`·`usage`)의 경로·모델·권한을 적었다 — ADR-0017이 경로만 말하고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |
+| 2026-10-05 | 1 | `Operation.required_scopes`를 더했다 — 추가 권한을 **작업이 선언하고 뼈대가 건다** (C9의 `registry_write`를 앱마다 손으로 거는 것을 막는다). 없던 칸이라 기존 앱은 영향이 없다 | 0013 |
 | 2026-10-01 | 1 | 초안 (키는 앱 관리 콘솔 발급·자체 검증, 멱등 키, `server_ok`) | 0010, 0013, 0015 |
 | 2026-10-01 | 1 | 검토 반영: 멱등 키에 `operation`·`node_instance` 추가와 본문 충돌 409, 폴백은 키가 자율 수행을 허용할 때만, 키 앞자리 규칙, usage 이름 통일, 보관 7일 | — |
 | 2026-10-01 | 1 | 확장 반영: manifest `extension` 선택 필드 | 0018 |

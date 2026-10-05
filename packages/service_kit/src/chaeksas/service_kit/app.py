@@ -226,7 +226,9 @@ def create_app(
                 return refuse(422, "schema_unsupported", "모르는 schema다", _validation_detail(e))
             return refuse(422, "input_invalid", "요청이 계약과 맞지 않는다", _validation_detail(e))
 
-        denied = authorize(key, operation=operation, mode=req.mode, now=now())
+        denied = authorize(
+            key, operation=operation, mode=req.mode, now=now(), required_scopes=op.required_scopes
+        )
         if denied:
             first = denied[0]
             return refuse(403, first.code or "forbidden", first.message, {"items": first.items})

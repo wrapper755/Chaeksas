@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any
 
@@ -47,7 +48,7 @@ KNOWN_HEALTH_STATUSES = frozenset({"ok", "degraded"})
 #: 오류 코드 (C11 「오류」 표). 부르는 쪽의 재시도 판단이 이 값에 걸려 있다.
 NO_RETRY_CODES = frozenset(
     {"key_missing", "key_invalid", "key_revoked", "key_expired", "operation_not_allowed",
-     "mode_not_allowed", "operation_not_found", "idempotency_conflict", "input_invalid",
+     "mode_not_allowed", "scope_missing", "operation_not_found", "idempotency_conflict", "input_invalid",
      "mode_unsupported", "schema_unsupported"}
 )
 RETRY_CODES = frozenset({"in_progress", "rate_limited", "dependency_down", "timeout"})
@@ -80,6 +81,9 @@ class Operation(ContractModel):
     output_schema: dict[str, Any] | None = None
     timeout_s: int = DEFAULT_TIMEOUT_S
     server_ok: bool = True  # 서버 실행기에서 불러도 되는가 (C1 R8)
+    #: 이 작업을 부르려면 키에 있어야 하는 추가 권한 (키의 `extra_scopes`).
+    #: **작업이 선언하고 뼈대가 건다** — 작업 함수가 키를 들여다보지 않는다.
+    required_scopes: list[str] = Field(default_factory=list)
 
     def supports(self, mode: str) -> bool:
         return mode in self.modes
@@ -226,12 +230,14 @@ def authorize(
     operation: str,
     mode: str,
     now: str,
+    required_scopes: Sequence[str] = (),
 ) -> list[Violation]:
     """키가 이 작업·모드를 부를 수 있나. 비어 있으면 통과.
 
     - 폐기·만료 → `key_revoked` / `key_expired` (403)
     - 작업이 키 권한 밖 → `operation_not_allowed` (403)
     - 모드가 키 권한 밖 → `mode_not_allowed` (403). **운영 키로 자율 수행을 부르는 것을 막는다.**
+    - 작업이 요구하는 추가 권한이 없음 → `scope_missing` (403).
     """
     state = key_state(key, now=now)
     if state != "active":
@@ -253,6 +259,16 @@ def authorize(
                 code="mode_not_allowed",
                 message=f"키 「{key.name}」은 {mode} 수행을 허용하지 않는다",
                 items=sorted(key.allowed_modes),
+            )
+        )
+    missing = [one for one in required_scopes if one not in key.extra_scopes]
+    if missing:
+        out.append(
+            Violation(
+                rule="C11",
+                code="scope_missing",
+                message=f"작업 {operation}에는 {', '.join(missing)} 권한이 필요하다",
+                items=missing,
             )
         )
     return out

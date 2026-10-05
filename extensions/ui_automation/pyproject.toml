@@ -9,10 +9,16 @@ dependencies = [
     "chaeksas-service-kit",
     "fastapi>=0.115",
     "uvicorn>=0.32",
+    # 사용자·서버 데이터 위치 (CLAUDE.md §5 — OS마다 다른 자리를 직접 적지 않는다).
+    "platformdirs>=4",
 ]
 
 # 확장 호스트가 이 그룹을 읽어 확장을 찾는다 (C13, ADR-0018 §6).
 # 값은 확장의 파이썬 패키지이고, 그 안에 extension.json이 있다.
+[project.scripts]
+# UI 자동화 앱 (서버 부분, C9·C11). Worker 로컬 런타임은 Bot UI가 띄운다 (ADR-0024).
+chk-svc-uia = "chaeksas.ext.ui_automation.service.app:main"
+
 [project.entry-points."chaeksas.extensions"]
 ui-automation = "chaeksas.ext.ui_automation"
 
