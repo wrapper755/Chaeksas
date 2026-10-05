@@ -456,6 +456,7 @@ class Agent:
             self._launcher = Launcher(
                 data_dir=data_dir(),
                 readable=tuple(self.settings.readable_dirs),
+                writable=tuple(self.settings.writable_dirs),
                 llm_url=self.settings.llm_base_url,
                 llm_model=self.settings.llm_model,
                 llm_key=self.credentials.llm_api_key() or "",

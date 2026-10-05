@@ -62,6 +62,8 @@ class Settings:
     case_timeout_s: int = DEFAULT_CASE_TIMEOUT_S
     #: 파일 목록 태스크가 들여다볼 수 있는 폴더 (ADR-0026 — 주지 않으면 출력 폴더만).
     readable_dirs: tuple[Path, ...] = ()
+    #: 출력 폴더 **밖에 쓸 수 있는** 폴더 (ADR-0032). 기본은 비어 있다.
+    writable_dirs: tuple[Path, ...] = ()
     #: 마지막으로 연 정의 (STU-01 — 시작하면 다시 연다).
     last_opened: str = ""
 
@@ -103,12 +105,14 @@ class Settings:
             "last_opened": str,
         }
         values = {name: kind(raw[name]) for name, kind in known.items() if name in raw}
-        if "readable_dirs" in raw:
-            values["readable_dirs"] = tuple(Path(p) for p in raw["readable_dirs"])
+        for name in ("readable_dirs", "writable_dirs"):
+            if name in raw:
+                values[name] = tuple(Path(p) for p in raw[name])
         return replace(self, **values)
 
     def from_env(self) -> Settings:
         dirs = _env("READABLE_DIRS")
+        writable = _env("WRITABLE_DIRS")
         return replace(
             self,
             center_url=_env("CENTER__URL", self.center_url) or self.center_url,
@@ -119,13 +123,20 @@ class Settings:
             readable_dirs=(
                 tuple(Path(p) for p in dirs.split(os.pathsep) if p.strip()) if dirs else self.readable_dirs
             ),
+            writable_dirs=(
+                tuple(Path(p) for p in writable.split(os.pathsep) if p.strip())
+                if writable
+                else self.writable_dirs
+            ),
         )
 
     def save(self, path: Path | None = None) -> Path:
         file = path or self.path
         file.parent.mkdir(parents=True, exist_ok=True)
-        body = {k: v for k, v in asdict(self).items() if k not in ("data_dir", "readable_dirs")}
+        skip = ("data_dir", "readable_dirs", "writable_dirs")
+        body = {k: v for k, v in asdict(self).items() if k not in skip}
         body["readable_dirs"] = [p.as_posix() for p in self.readable_dirs]
+        body["writable_dirs"] = [p.as_posix() for p in self.writable_dirs]
         file.write_text(
             json.dumps(body, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
         )

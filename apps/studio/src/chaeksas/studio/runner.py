@@ -209,7 +209,11 @@ class CaseRun(QObject):
             if settings.llm_base_url
             else NoLlm()
         )
-        space = FileSpace(output_dir=outputs, readable=tuple(settings.readable_dirs))
+        space = FileSpace(
+            output_dir=outputs,
+            readable=tuple(settings.readable_dirs),
+            writable=tuple(settings.writable_dirs),
+        )
         return RunEnv(
             workspace=space,
             sender=self.adapter,

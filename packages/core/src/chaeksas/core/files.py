@@ -55,27 +55,43 @@ class Workspace:
     output_dir: Path | None = None
     #: 파일 목록이 들여다볼 수 있는 폴더 (출력 폴더는 늘 포함된다).
     readable: tuple[Path, ...] = ()
+    #: 출력 폴더 **밖에 쓸 수 있는** 폴더 (ADR-0032). **기본은 비어 있다** — 비면 지금까지와
+    #: 똑같이 출력 폴더 안만 쓸 수 있다. 쓸 수 있는 곳은 **읽기도 된다** (덧붙이려면 읽어야 한다).
+    writable: tuple[Path, ...] = ()
 
     def _roots(self) -> list[Path]:
-        found = [*self.readable]
+        found = [*self.readable, *self.writable]
+        if self.output_dir is not None:
+            found.append(self.output_dir)
+        return [p.resolve() for p in found]
+
+    def _write_roots(self) -> list[Path]:
+        found = [*self.writable]
         if self.output_dir is not None:
             found.append(self.output_dir)
         return [p.resolve() for p in found]
 
     def for_write(self, raw: str) -> Path:
-        """쓸 자리. **출력 폴더 안만** 된다."""
-        if self.output_dir is None:
+        """쓸 자리. 출력 폴더와 **쓰기 허용 폴더** 안만 된다 (ADR-0032).
+
+        **상대 경로의 기준은 늘 출력 폴더**다 — 쓰기 허용 폴더는 절대 경로로만 가리킨다.
+        """
+        roots = self._write_roots()
+        if not roots:
             raise PathDenied("출력 폴더가 없다 — 실행하는 쪽이 정해 주어야 파일을 쓸 수 있다")
         if _has_anchor(raw):
-            raise PathDenied(f"쓰기는 출력 폴더 안만 된다 (절대 경로다): {raw}")
-        root = self.output_dir.resolve()
-        found = (root / Path(raw)).resolve()
-        if not found.is_relative_to(root):
-            raise PathDenied(f"출력 폴더를 벗어난다: {raw}")
+            found = Path(raw).resolve()
+        elif self.output_dir is None:
+            raise PathDenied(f"상대 경로의 기준(출력 폴더)이 없다: {raw}")
+        else:
+            found = (self.output_dir.resolve() / Path(raw)).resolve()
+        if not any(found.is_relative_to(root) for root in roots):
+            allowed = ", ".join(root.as_posix() for root in roots)
+            raise PathDenied(f"쓰기 허용 폴더 밖이다: {raw} (허용: {allowed})")
         return found
 
     def for_read(self, raw: str) -> Path:
-        """읽을 자리. 출력 폴더와 **읽기 허용 폴더** 안만 된다."""
+        """읽을 자리. 출력 폴더·**읽기 허용 폴더**·쓰기 허용 폴더 안만 된다."""
         roots = self._roots()
         if not roots:
             raise PathDenied("읽기 허용 폴더가 없다 — 실행하는 쪽이 정해 주어야 파일을 읽을 수 있다")

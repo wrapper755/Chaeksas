@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import os  # noqa: E402
 import threading
 from collections.abc import Iterator
@@ -53,8 +54,9 @@ from chaeksas.studio.workspace import Workspace  # noqa: E402
 DOCS = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples"
 EXAMPLES = DOCS / "bpmn"
 
-#: 예제가 적어 둔 키 참조 이름 (`chk:process.service_keys`)과 그 값.
-KEY_REF = "test-ui"
+#: 이 PC의 키 저장소에 든 UI 자동화 앱 키. 예제마다 **참조 이름이 다르다**
+#: (`test-ui`·`purchase-portal` …) — 이름을 값으로 푸는 것은 PC의 몫이라, 시험은 어느
+#: 이름이든 같은 키를 준다 (ADR-0013 — BPM 프로세스에는 이름만 있다).
 KEY = "chk_svc_" + "m" * 40
 
 
@@ -78,8 +80,11 @@ REMAINING: dict[str, str] = {
     "bx04_tax_invoice_issue": "데스크톱 UI 태스크 — Windows UIA 백엔드가 없다 (ADR-0020)",
     "bx17_erp_po_entry": "데스크톱 UI 태스크 — Windows UIA 백엔드가 없다 (ADR-0020)",
     "fx05_desktop_autonomous": "데스크톱 AI 태스크 (`domain: desktop`) — 데스크톱을 보는 길이 없다",
-    "bx14_supplier_portal_orders": "엑셀 **쓰기** 도구가 없다 (ADR-0030이 미뤘다)",
 }
+
+#: 공유 폴더를 흉내 내는 자리 — 예제가 적은 UNC 경로 대신 시험이 쓰기 허용 폴더를 준다
+#: (ADR-0032). 경로만 그 PC의 것이고 **업무는 예제 그대로**다.
+SHARE = "주문수집.xlsx"
 
 #: 케이스가 모두 통과하는 예제. 줄어들면 회귀다.
 GREEN = [one for one in M4 if one not in REMAINING]
@@ -111,7 +116,26 @@ NOTICES = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>�
   </table>
 </body></html>"""
 
-PAGES = {"/": FORM, "/form": FORM, "/done": DONE, "/notices": NOTICES, "/notice/1": DONE}
+PORTAL = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>공급사 포털</title></head>
+<body>
+  <input id="date" aria-label="조회일" />
+  <button id="search">조회</button>
+  <table id="orders">
+    <tr><th>주문번호</th><th>공급사</th><th>금액</th></tr>
+    <tr><td>PO-1001</td><td>한빛상사</td><td>1200000</td></tr>
+    <tr><td>PO-1002</td><td>가온테크</td><td>850000</td></tr>
+    <tr><td>PO-1003</td><td>다래물산</td><td>430000</td></tr>
+  </table>
+</body></html>"""
+
+PAGES = {
+    "/": FORM,
+    "/form": FORM,
+    "/done": DONE,
+    "/notices": NOTICES,
+    "/notice/1": DONE,
+    "/portal": PORTAL,
+}
 
 
 @pytest.fixture(scope="module")
@@ -174,6 +198,22 @@ def registrations(site: str) -> list[PageRegistration]:
         ),
         PageRegistration(
             schema=1,
+            page_id="supplier.portal.orders",
+            name="공급사 포털",
+            url_pattern=f"{site}/portal",
+            locators={
+                "filter.date": [LocatorSpec(type="css", value="#date")],
+                "filter.search": [LocatorSpec(type="css", value="#search")],
+                "orders.table": [LocatorSpec(type="css", value="#orders")],
+            },
+            elements={
+                "filter.date": ElementHint(name="조회일", role="textbox"),
+                "filter.search": ElementHint(name="조회", role="button"),
+                "orders.table": ElementHint(name="주문 표", kind="table"),
+            },
+        ),
+        PageRegistration(
+            schema=1,
             page_id="intranet.notice.list",
             name="공지 목록",
             url_pattern=f"{site}/notices",
@@ -214,10 +254,13 @@ def app(tmp_path: Path, site: str) -> Any:
 
 
 class Secrets:
-    """`extension_api` 바깥 세상 — **키 참조 이름**을 값으로 푼다 (ADR-0013)."""
+    """`extension_api` 바깥 세상 — **키 참조 이름**을 값으로 푼다 (ADR-0013).
+
+    이 PC에는 UI 자동화 앱 키가 하나다. 예제가 어떤 이름으로 가리키든 그 키를 준다.
+    """
 
     def secret(self, ref: str) -> str | None:
-        return KEY if ref == KEY_REF else None
+        return KEY if ref else None
 
 
 class Direct:
@@ -278,6 +321,100 @@ def host(app: Any, tmp_path: Path) -> Iterator[Host]:
         backend.shutdown()
 
 
+# ─────────────────────────── 스텁 모델 (BX-14의 doc AI 태스크) ───────────────────────────
+
+
+class StubModel:
+    """OpenAI 호환 `/v1/chat/completions` 하나.
+
+    M3 인수 시험의 스텁과 다른 점: **도구를 진짜로 부른다.** BX-14의 일은 「시트에 덧붙이고
+    중복은 건너뛴다」라서, 모델이 답만 지어내면 시험할 것이 남지 않는다 — 엑셀 쓰기
+    도구(ADR-0032)가 실제로 돌고 그 결과를 그대로 답으로 쓴다.
+    """
+
+    def __init__(self, share: Path) -> None:
+        self.share = share
+        self.asked = 0
+        outer = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802 — http.server가 정한 이름
+                length = int(self.headers.get("content-length", "0"))
+                body = json.loads(self.rfile.read(length) or b"{}")
+                outer.asked += 1
+                raw = json.dumps(outer.reply(body)).encode("utf-8")
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+
+            def log_message(self, *_: object) -> None:
+                pass
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+
+    @property
+    def base_url(self) -> str:
+        return f"http://127.0.0.1:{self.server.server_address[1]}/v1"
+
+    def reply(self, body: dict[str, Any]) -> dict[str, Any]:
+        """처음에는 **도구를 부르고**, 도구 결과가 오면 그것을 답으로 옮긴다."""
+        messages = body.get("messages") or []
+        done = next(
+            (m for m in reversed(messages) if m.get("role") == "tool"),
+            None,
+        )
+        if done is None:
+            rows = _rows_from(messages)
+            call = {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "excel_writer_tool",
+                    "arguments": json.dumps(
+                        {"path": str(self.share), "rows": rows, "key": "주문번호"},
+                        ensure_ascii=False,
+                    ),
+                },
+            }
+            return {
+                "choices": [{"message": {"role": "assistant", "content": "", "tool_calls": [call]}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 10},
+            }
+        found = json.loads(done.get("content") or "{}")
+        answer = {"추가건수": int(found.get("added", 0)), "건너뜀": int(found.get("skipped", 0))}
+        return {
+            "choices": [{"message": {"role": "assistant", "content": json.dumps(answer, ensure_ascii=False)}}],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 10},
+        }
+
+    def __enter__(self) -> StubModel:
+        self.thread.start()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(timeout=2)
+
+
+def _rows_from(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """물음에 실려 온 `주문`(포털 표 TSV)을 줄 목록으로 — **UI 태스크가 읽어 온 그것**이다.
+
+    표는 JSON 글 안에 들어오기도 해서 (`\\t`) 둘 다 본다.
+    """
+    asked = "\n".join(str(m.get("content") or "") for m in messages)
+    body = asked.replace("\\t", "\t").replace("\\n", "\n")
+    rows = []
+    for line in body.splitlines():
+        cells = [one.strip().strip('"') for one in line.split("\t")]
+        if len(cells) >= 3 and cells[0].startswith("PO-"):
+            rows.append({"주문번호": cells[0], "공급사": cells[1], "금액": cells[2]})
+    return rows
+
+
 # ─────────────────────────── 돌리기 ───────────────────────────
 
 
@@ -313,8 +450,17 @@ def qt() -> Any:
         pytest.skip(f"Qt 플랫폼 플러그인을 띄울 수 없다: {e}")
 
 
-def run_all(tmp_path: Path, example: str, host: Host) -> list[tuple[Case, Outcome]]:
-    settings = replace(Settings(), data_dir=tmp_path / "studio", readable_dirs=())
+def run_all(
+    tmp_path: Path, example: str, host: Host, *, model: Any = None
+) -> list[tuple[Case, Outcome]]:
+    settings = replace(
+        Settings(),
+        data_dir=tmp_path / "studio",
+        readable_dirs=(),
+        writable_dirs=(tmp_path / "공유",),
+        **({"llm_base_url": model.base_url, "llm_model": "stub"} if model is not None else {}),
+    )
+    (tmp_path / "공유").mkdir(parents=True, exist_ok=True)
     made = Workspace(settings.workspace_dir).ensure().import_example(EXAMPLES, example)
     definition = made.entry_definition
     assert definition is not None
@@ -341,13 +487,19 @@ def test_the_bundle_is_read_from_the_examples() -> None:
     """묶음 목록을 사람이 옮겨 적지 않는다 — 어긋나는 순간 시험이 거짓말을 한다."""
     assert len(M4) == 6
     assert set(REMAINING) <= set(M4), "남은 목록에 묶음 밖 예제가 있다"
-    assert len(GREEN) == 2, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+    assert len(GREEN) == 3, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
 
 
 def test_every_remaining_one_says_why() -> None:
     """**막힌 것은 이유를 적는다** — 「나중에」만 적으면 무엇을 고쳐야 할지 모른다."""
     for example, why in REMAINING.items():
         assert len(why) > 10 and ("없다" in why or "미뤘다" in why), f"{example}: {why}"
+    assert set(REMAINING) == {"bx04_tax_invoice_issue", "bx17_erp_po_entry", "fx05_desktop_autonomous"}
+    assert all("데스크톱" in why for why in REMAINING.values()), "남은 셋은 모두 데스크톱이다"
+
+
+#: AI 태스크가 있어 스텁 모델이 필요한 예제.
+WITH_MODEL = {"bx14_supplier_portal_orders"}
 
 
 @pytest.mark.skipif(not available(), reason="Playwright가 없다")
@@ -356,7 +508,11 @@ def test_an_m4_example_passes_all_its_cases(
     qt: Any, tmp_path: Path, host: Host, example: str
 ) -> None:
     """케이스가 **모두 통과**한다 — UI 태스크가 진짜 브라우저에서 돈다."""
-    results = run_all(tmp_path, example, host)
+    if example in WITH_MODEL:
+        with StubModel(tmp_path / "공유" / SHARE) as model:
+            results = run_all(tmp_path, example, host, model=model)
+    else:
+        results = run_all(tmp_path, example, host)
     assert results, f"{example}: 돌릴 케이스가 없다"
     bad = [(c.name, o.verdict, o.detail) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert not bad, f"{example}: {bad}"

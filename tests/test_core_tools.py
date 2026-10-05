@@ -103,8 +103,15 @@ def sample_pdf(target: Path, lines: list[str]) -> Path:
 # ─────────────────────────── 어떤 도구가 있나 ───────────────────────────
 
 
-def test_the_four_tools_are_there(box: dict[str, ToolDef]) -> None:
-    assert sorted(box) == ["csv_parser_tool", "excel_parser_tool", "http_request_tool", "pdf_text_tool"]
+def test_the_builtin_tools_are_there(box: dict[str, ToolDef]) -> None:
+    """읽기 넷(ADR-0030) + 엑셀 쓰기 하나(ADR-0032)."""
+    assert sorted(box) == [
+        "csv_parser_tool",
+        "excel_parser_tool",
+        "excel_writer_tool",
+        "http_request_tool",
+        "pdf_text_tool",
+    ]
 
 
 def test_without_a_workspace_the_file_tools_are_absent() -> None:
@@ -330,3 +337,99 @@ def test_an_error_status_is_a_business_failure(box: dict[str, ToolDef], server: 
 def test_a_head_request_gives_the_headers(box: dict[str, ToolDef], server: str) -> None:
     found = json.loads(box["http_request_tool"](url=f"{server}/fx", method="HEAD"))
     assert found["status"] == 200 and "content-type" in found["headers"]
+
+
+# ─────────────────────────── 엑셀 쓰기 (ADR-0032) ───────────────────────────
+
+
+def writer(tmp_path: Path, **extra: Any) -> Any:
+    """쓰기 허용 폴더가 있는 도구 한 벌."""
+    space = Workspace(output_dir=tmp_path / "out", **extra)
+    (tmp_path / "out").mkdir(parents=True, exist_ok=True)
+    return builtin_tools(space)["excel_writer_tool"]
+
+
+def read_back(path: Path) -> list[tuple[Any, ...]]:
+    from openpyxl import load_workbook
+
+    book = load_workbook(str(path))
+    try:
+        return [tuple(row) for row in book.worksheets[0].iter_rows(values_only=True)]
+    finally:
+        book.close()
+
+
+def test_it_makes_the_file_with_a_header(tmp_path: Path) -> None:
+    tool = writer(tmp_path)
+    found = json.loads(tool.run(path="장부.xlsx", rows=[{"주문번호": "A1", "금액": 100}]))
+    assert found["added"] == 1 and found["skipped"] == 0
+    assert read_back(tmp_path / "out" / "장부.xlsx") == [("주문번호", "금액"), ("A1", 100)]
+
+
+def test_it_appends_without_touching_what_is_there(tmp_path: Path) -> None:
+    """**사람의 장부를 Bot이 덮지 않는다** — 할 수 있는 일은 끝에 붙이는 것뿐이다."""
+    tool = writer(tmp_path)
+    tool.run(path="장부.xlsx", rows=[{"주문번호": "A1", "금액": 100}])
+    tool.run(path="장부.xlsx", rows=[{"주문번호": "A2", "금액": 200}])
+    assert read_back(tmp_path / "out" / "장부.xlsx") == [
+        ("주문번호", "금액"), ("A1", 100), ("A2", 200)
+    ]
+
+
+def test_the_key_skips_what_is_already_there(tmp_path: Path) -> None:
+    """같은 것을 두 번 돌려도 쌓이지 않는다 (BX-14 「같은 날 다시 실행」)."""
+    tool = writer(tmp_path)
+    rows = [{"주문번호": "A1", "금액": 100}, {"주문번호": "A2", "금액": 200}]
+    first = json.loads(tool.run(path="장부.xlsx", rows=rows, key="주문번호"))
+    again = json.loads(tool.run(path="장부.xlsx", rows=rows, key="주문번호"))
+    assert (first["added"], first["skipped"]) == (2, 0)
+    assert (again["added"], again["skipped"]) == (0, 2)
+    assert len(read_back(tmp_path / "out" / "장부.xlsx")) == 3
+
+
+def test_an_unknown_key_column_says_so(tmp_path: Path) -> None:
+    tool = writer(tmp_path)
+    tool.run(path="장부.xlsx", rows=[{"주문번호": "A1"}])
+    with pytest.raises(FileTaskError, match="그 칸이 없다"):
+        tool.run(path="장부.xlsx", rows=[{"주문번호": "A2"}], key="없는칸")
+
+
+def test_rows_as_text_are_read(tmp_path: Path) -> None:
+    """모델이 글로 줄 수도 있다 — JSON이면 읽는다."""
+    tool = writer(tmp_path)
+    found = json.loads(tool.run(path="장부.xlsx", rows='[{"주문번호": "A1"}]'))
+    assert found["added"] == 1
+
+
+def test_nothing_to_append_is_said_not_crashed(tmp_path: Path) -> None:
+    tool = writer(tmp_path)
+    found = json.loads(tool.run(path="장부.xlsx", rows=[]))
+    assert found["added"] == 0 and "붙일 줄이 없다" in found["note"]
+
+
+def test_writing_outside_is_denied(tmp_path: Path) -> None:
+    """**쓰기 허용 폴더 밖은 못 쓴다** — 비어 있으면 출력 폴더 안만 (ADR-0032)."""
+    tool = writer(tmp_path)
+    with pytest.raises(PathDenied, match="쓰기 허용 폴더 밖이다"):
+        tool.run(path=str(tmp_path / "남의폴더" / "장부.xlsx"), rows=[{"가": 1}])
+
+
+def test_a_writable_dir_opens_that_one_place(tmp_path: Path) -> None:
+    """사람이 적은 폴더만 열린다 — 기본은 비어 있다."""
+    share = tmp_path / "공유"
+    share.mkdir()
+    tool = writer(tmp_path, writable=(share,))
+    found = json.loads(tool.run(path=str(share / "주문수집.xlsx"), rows=[{"주문번호": "A1"}]))
+    assert found["added"] == 1
+    assert (share / "주문수집.xlsx").is_file()
+
+
+def test_a_writable_dir_can_also_be_read(tmp_path: Path) -> None:
+    """쓸 수 있는데 읽지 못하면 **덧붙이기를 할 수 없다** (ADR-0032)."""
+    share = tmp_path / "공유"
+    share.mkdir()
+    tools = builtin_tools(Workspace(output_dir=tmp_path / "out", writable=(share,)))
+    (tmp_path / "out").mkdir(parents=True, exist_ok=True)
+    tools["excel_writer_tool"].run(path=str(share / "장부.xlsx"), rows=[{"가": 1}])
+    found = json.loads(tools["excel_parser_tool"].run(path=str(share / "장부.xlsx")))
+    assert found["rows"] == [{"가": 1}]

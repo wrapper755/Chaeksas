@@ -56,6 +56,7 @@ def runner_args(
     source: str,
     job_id: str | None,
     readable: tuple[Path, ...] = (),
+    writable: tuple[Path, ...] = (),
     llm_url: str = "",
     llm_model: str = "",
 ) -> list[str]:
@@ -81,6 +82,8 @@ def runner_args(
         args += ["--job-id", job_id]
     for one in readable:
         args += ["--readable", str(one)]
+    for one in writable:
+        args += ["--writable", str(one)]
     if llm_url:
         args += ["--llm-url", llm_url, "--llm-model", llm_model]
     return args
@@ -218,6 +221,8 @@ class Launcher:
 
     data_dir: Path
     readable: tuple[Path, ...] = ()
+    #: 출력 폴더 밖에 쓸 수 있는 폴더 (BUI-03 「파일」, ADR-0032).
+    writable: tuple[Path, ...] = ()
     llm_url: str = ""
     llm_model: str = ""
     #: 모델 키 — 실행기에게 **환경변수로** 건넨다 (명령줄·설정 파일에 두지 않는다).
@@ -260,6 +265,7 @@ class Launcher:
             source=source,
             job_id=job_id,
             readable=self.readable,
+            writable=self.writable,
             llm_url=self.llm_url,
             llm_model=self.llm_model,
         )
