@@ -219,6 +219,26 @@
       "title": "AdapterResponse",
       "type": "object"
     },
+    "AgentEnvironmentContribution": {
+      "additionalProperties": true,
+      "description": "AI 태스크 한 domain의 눈과 손 (`extension_api.AgentEnvironment`, ADR-0037).",
+      "properties": {
+        "domain": {
+          "title": "Domain",
+          "type": "string"
+        },
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        }
+      },
+      "required": [
+        "domain",
+        "entry"
+      ],
+      "title": "AgentEnvironmentContribution",
+      "type": "object"
+    },
     "ConfigurationItem": {
       "additionalProperties": true,
       "description": "설정 화면의 칸 하나 (BUI-03 「확장별 설정」, STU-10, 서버 실행기 설정).\n\n**`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에 남기지 않는다.",
@@ -283,6 +303,13 @@
       "additionalProperties": true,
       "description": "기여 지점 (ADR-0018 §2). **모르는 열쇠는 무시한다** (호환 규칙) — `extra=\"allow\"`가 보관한다.",
       "properties": {
+        "agent_environments": {
+          "items": {
+            "$ref": "#/$defs/AgentEnvironmentContribution"
+          },
+          "title": "Agent Environments",
+          "type": "array"
+        },
         "bot_ui.local_runtimes": {
           "items": {
             "$ref": "#/$defs/LocalRuntime"

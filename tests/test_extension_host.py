@@ -446,3 +446,27 @@ def test_builtin_tier_from_center_is_not_enabled() -> None:
     loaded = host.add_external(definition, envelope, keys=keys)
     assert loaded is not None and not loaded.enabled
     assert "id_conflict" in [p.code for p in loaded.problems]
+
+
+
+# ─────────────────────────── AI 환경 (ADR-0037) ───────────────────────────
+
+
+def test_the_builtin_contributes_the_desktop_environment(host: ExtensionHost) -> None:
+    from chaeksas.extension_api import AgentEnvironment  # noqa: PLC0415
+
+    found = host.environment("desktop")
+    assert isinstance(found, AgentEnvironment)
+    assert host.environment("desktop") is found, "한 번 만들면 들고 있는다"
+    assert host.environment_owner("desktop") == BUILTIN_ID
+    assert host.environment("web") is None, "웹 AI 환경은 아직 아무도 기여하지 않는다"
+
+
+def test_a_second_desktop_environment_loses(host: ExtensionHost) -> None:
+    """E8 — 한 domain의 눈과 손은 하나다. 나중에 온 확장은 켜지 않는다."""
+    clash = install(
+        host, definition(contributes={"agent_environments": [{"domain": "desktop", "entry": "doc_ocr.client:X"}]})
+    )
+    assert clash is not None and not clash.enabled
+    assert [p.code for p in clash.problems] == ["environment_conflict"]
+    assert host.environment_owner("desktop") == BUILTIN_ID

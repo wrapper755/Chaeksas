@@ -10,6 +10,7 @@
 | `bot_ui.utilities` | `BotUiUtility` |
 | `preflight` | `PreflightCheck` |
 | `bot_ui.local_runtimes` | `LocalRuntimeEntry` (자식 프로세스에서 불린다) |
+| `agent_environments` | `AgentEnvironment` → `AgentSession`·`AgentTool` (AI 태스크의 눈과 손, ADR-0037) |
 | `studio.resource_views`, `console.pages`, `resources`, `configuration` | (없음 — 선언뿐) |
 | 외부 앱 (`service.adapter`) | (없음 — `core`의 해석기가 부른다. 규격은 `http_adapter`) |
 
@@ -32,6 +33,9 @@ from chaeksas.extension_api.contributions import (
     SEVERITY_BLOCK,
     SEVERITY_INFO,
     SEVERITY_WARN,
+    AgentEnvironment,
+    AgentSession,
+    AgentTool,
     BotUiUtility,
     Finding,
     LocalRuntimeEntry,
@@ -66,6 +70,10 @@ from chaeksas.extension_api.runtime import (
 
 __all__ = [
     "API_VERSION",
+    # AI 환경
+    "AgentEnvironment",
+    "AgentSession",
+    "AgentTool",
     # 수행
     "ESCALATE_CONFIRMATION",
     "ExtensionContext",

@@ -4,7 +4,7 @@
 `packages/extension_api/`, 찾아 켜는 쪽은 `chaeksas.core.extensions` (확장 호스트).
 
 **플랫폼은 이 파일만 보고 기여를 끼워 넣는다.** 특정 확장 이름을 플랫폼 코드에 쓰지 않는다
-(ADR-0018). 그래서 검사 규칙 E1~E7이 여기 있고, Studio(정의 파일 열기)·Center(등록)·확장
+(ADR-0018). 그래서 검사 규칙 E1~E8이 여기 있고, Studio(정의 파일 열기)·Center(등록)·확장
 호스트(켜기)가 **같은 함수**를 쓴다.
 
 `contributes`의 열쇠는 문서 그대로 점이 든 이름(`studio.editors`)이다. 파이썬 이름만
@@ -80,6 +80,9 @@ KNOWN_PURPOSES = frozenset({PURPOSE_RUN, PURPOSE_UTILITY})
 
 #: 실행 위치 (C1과 같은 값).
 KNOWN_RUN_LOCATIONS = frozenset({"pc", "server"})
+
+#: 확장이 「AI 환경」을 기여할 수 있는 AI 태스크 domain (C13 `agent_environments`, ADR-0037).
+AGENT_ENVIRONMENT_DOMAINS = frozenset({"web", "desktop"})
 
 #: HTTP 어댑터 (§4).
 ADAPTER_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
@@ -203,6 +206,13 @@ class PreflightContribution(ContractModel):
     entry: str
 
 
+class AgentEnvironmentContribution(ContractModel):
+    """AI 태스크 한 domain의 눈과 손 (`extension_api.AgentEnvironment`, ADR-0037)."""
+
+    domain: str  # AGENT_ENVIRONMENT_DOMAINS
+    entry: str
+
+
 class ConsolePage(ContractModel):
     """그 서비스 앱 관리 콘솔의 고유 화면 (웹 모듈, `web/apps/svc-console`이 불러 쓴다)."""
 
@@ -229,6 +239,7 @@ class Contributes(ContractModel):
     bot_ui_local_runtimes: list[LocalRuntime] = Field(default_factory=list, alias="bot_ui.local_runtimes")
     configuration: list[ConfigurationItem] = Field(default_factory=list)
     preflight: list[PreflightContribution] = Field(default_factory=list)
+    agent_environments: list[AgentEnvironmentContribution] = Field(default_factory=list)
     console_pages: list[ConsolePage] = Field(default_factory=list, alias="console.pages")
     resources: list[ResourceContribution] = Field(default_factory=list)
 
@@ -547,6 +558,7 @@ def _check_e1(m: ExtensionManifest) -> list[Violation]:
         "bot_ui.local_runtimes": [r.id for r in c.bot_ui_local_runtimes],
         "configuration": [i.key for i in c.configuration],
         "preflight": [p.id for p in c.preflight],
+        "agent_environments": [e.domain for e in c.agent_environments],
         "console.pages": [p.id for p in c.console_pages],
     }
     items = [f"{key}:{id}" for key, ids in forbidden.items() for id in ids]
@@ -630,6 +642,11 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
                              message=f"{m.tier} 확장은 필요한 extension_api 버전 범위(api)를 적는다"))
 
     c = m.contributes
+    for e in m.contributes.agent_environments:
+        if e.domain not in AGENT_ENVIRONMENT_DOMAINS:
+            out.append(Violation(rule="C13", code="unknown_domain",
+                                 message=f"AI 환경을 기여할 수 없는 domain이다: {e.domain}"))
+
     for t in c.task_types:
         if t.editor is not None and t.editor.kind == EDITOR_BUILTIN and not t.editor.entry:
             out.append(Violation(rule="C13", code="editor_entry_missing",
@@ -732,6 +749,27 @@ def task_type_conflicts(manifests: Iterable[ExtensionManifest]) -> list[Violatio
             items=sorted(ids),
         )
         for task_type, ids in sorted(owners.items())
+        if len(ids) > 1
+    ]
+
+
+def environment_conflicts(manifests: Iterable[ExtensionManifest]) -> list[Violation]:
+    """E8. AI 환경(domain)이 확장 사이에 겹치는가 (409 `environment_conflict`, ADR-0037).
+
+    한 domain의 눈과 손은 하나다 — 둘이면 어느 Worker 세션을 열지 고를 수 없다.
+    """
+    owners: dict[str, list[str]] = {}
+    for m in manifests:
+        for e in m.contributes.agent_environments:
+            owners.setdefault(e.domain, []).append(m.id)
+    return [
+        Violation(
+            rule="E8",
+            code="environment_conflict",
+            message=f"AI 환경 {domain}을 여러 확장이 기여한다",
+            items=sorted(ids),
+        )
+        for domain, ids in sorted(owners.items())
         if len(ids) > 1
     ]
 

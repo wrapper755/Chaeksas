@@ -27,6 +27,9 @@
         "run_locations": ["pc"]
       }
     ],
+    "agent_environments": [
+      {"domain": "desktop", "entry": "ui_automation.client:DesktopEnvironment"}
+    ],
     "studio.resource_views": [
       {"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page", "creates_task_type": "ui_task"}
     ],

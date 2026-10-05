@@ -31,6 +31,7 @@ export interface ExtensionManifest {
  * 기여 지점 (ADR-0018 §2). **모르는 열쇠는 무시한다** (호환 규칙) — `extra="allow"`가 보관한다.
  */
 export interface Contributes {
+  agent_environments?: AgentEnvironmentContribution[];
   "bot_ui.local_runtimes"?: LocalRuntime[];
   "bot_ui.utilities"?: Utility[];
   configuration?: ConfigurationItem[];
@@ -40,6 +41,14 @@ export interface Contributes {
   "studio.editors"?: StudioEditorContribution[];
   "studio.resource_views"?: ResourceView[];
   task_types?: TaskTypeContribution[];
+  [k: string]: unknown;
+}
+/**
+ * AI 태스크 한 domain의 눈과 손 (`extension_api.AgentEnvironment`, ADR-0037).
+ */
+export interface AgentEnvironmentContribution {
+  domain: string;
+  entry: string;
   [k: string]: unknown;
 }
 /**

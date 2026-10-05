@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -122,3 +122,40 @@ class PreflightCheck(Protocol):
     """
 
     def check(self, target: PreflightTarget) -> Sequence[Finding]: ...
+
+
+# ─────────────────────────── AI 환경 (`agent_environments`, ADR-0037) ───────────────────────────
+
+
+@dataclass(frozen=True)
+class AgentTool:
+    """AI 태스크에 줄 도구 하나 — 모델에게 알려 줄 설명·인자 모양과, 부를 함수.
+
+    `run`은 **글을 돌려준다** (모델이 읽는다). 모델이 고칠 수 있는 실패(맞는 요소가 여럿 등)는
+    예외가 아니라 글로 알린다. 예외는 「이 도구를 더 쓸 수 없다」는 뜻이다.
+    """
+
+    name: str
+    description: str
+    parameters: Mapping[str, Any]
+    run: Callable[..., str]
+
+
+@runtime_checkable
+class AgentSession(Protocol):
+    """AI 태스크 한 번 동안의 눈과 손. 엔진이 끝나면 **반드시** `close()`한다."""
+
+    def tools(self) -> Sequence[AgentTool]: ...
+
+    def close(self) -> None: ...
+
+
+@runtime_checkable
+class AgentEnvironment(Protocol):
+    """AI 태스크 한 domain(`web`·`desktop`)의 환경 (`agent_environments[].entry`).
+
+    `ctx.properties`에 그 AI 태스크의 환경 칸(`domain`, `desktop.app`, `web.profile`)이 실린다.
+    실패는 `TaskFailed`로 알린다 (앱이 없음 등 — 오류 경계가 받는다).
+    """
+
+    def open(self, ctx: TaskContext) -> AgentSession: ...

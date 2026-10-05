@@ -223,6 +223,13 @@ class NoExtensionTasks:
     def executor(self, task_type: str) -> Any | None:
         return None
 
+    def environment(self, domain: str) -> Any | None:
+        """`web`·`desktop` AI 태스크의 환경 (`extension_api.AgentEnvironment`, ADR-0037). 없으면 `None`.
+
+        `ExtensionTasks`의 선택 칸이다 — 이것이 없는 쪽은 그 AI 태스크를 수행하지 못한다.
+        """
+        return None
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)

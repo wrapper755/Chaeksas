@@ -37,10 +37,11 @@ from chaeksas.contracts.bpmn_ext import (
     Webhook,
 )
 from chaeksas.contracts.dmn import DmnError
-from chaeksas.core.agent import AgentError, check_results, finish_from, run_agent
+from chaeksas.core.agent import DEFAULT_MAX_STEPS_SCREEN, AgentError, check_results, finish_from, run_agent
 from chaeksas.core.agent import Outcome as AgentOutcome
 from chaeksas.core.expr import Scope, evaluate, fill, run_script, truthy
 from chaeksas.core.files import FileTaskError, PathDenied, list_files
+from chaeksas.core.llm import ToolSpec
 from chaeksas.core.replay import replay_steps, to_spec
 from chaeksas.core.run_state import (
     CODE_PATH_DENIED,
@@ -68,6 +69,7 @@ from chaeksas.core.run_state import (
 )
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest
 from chaeksas.core.services import RETRYABLE_STATUS, OpCall, OpOutcome, ServiceCallError
+from chaeksas.core.tools import ToolDef
 from chaeksas.extension_api import RUN_LOCATION_PC, TaskContext
 from chaeksas.extension_api import TaskFailed as ExtensionTaskFailed
 
@@ -436,26 +438,39 @@ def _seen_by(context: Context, spec: AiTask) -> dict[str, Any]:
 def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
     """`chk:aiTask` — 운전사에게 목표를 주고 결과 필드를 받는다 (ADR-0008·ADR-0027).
 
-    PC에서만 되는 환경(`web`·`desktop`)은 M4다. 그 밖(`llm`·`doc`·`api`)은 지금 돈다.
+    PC에서만 되는 환경(`web`·`desktop`)은 그 환경을 기여한 확장이 눈과 손(도구)을 준다
+    (ADR-0037) — 태스크 동안 세션을 하나 열고, 그 도구를 허용 목록에 더하고, 끝나면 닫는다.
 
     실행 기록에는 **단계와 사용량만** 남는다 (C3 `agent`·`llm_usage`) — 목표·도구 인자·결과
     값은 업무 값이라 담지 않는다 (원칙 6).
     """
     run, node = context.run, context.node
-    if spec.domain in PC_ONLY_DOMAINS:
-        raise EngineError(
-            f"`domain: {spec.domain}` AI 태스크는 아직 수행하지 않는다 (UI 자동화와 함께 M4)",
-            node_id=node.id,
-            code=CODE_UNSUPPORTED,
-        )
+    session = _open_environment(context, spec) if spec.domain in PC_ONLY_DOMAINS else None
+    tools: Mapping[str, Any] = run.env.tools
+    if session is not None:
+        given = {
+            one.name: ToolDef(
+                spec=ToolSpec(name=one.name, description=one.description, parameters=dict(one.parameters)),
+                run=one.run,
+            )
+            for one in session.tools()
+        }
+        tools = {**run.env.tools, **given}
+        # 환경의 도구는 **저절로 허용된다** — 그 환경 자체가 눈과 손이다 (C14, ADR-0037).
+        spec = spec.model_copy(update={"tools": [*spec.tools, *(n for n in given if n not in spec.tools)]})
 
     def note(step: int, action: str, tool: str) -> None:
         # C3 `agent` — 필수 키는 `step`·`action`. **값은 담지 않는다** (`summary`를 비워 둔다).
         run.log.emit("agent", node_id=node.id, step=step, action=action, **({"tool": tool} if tool else {}))
 
     try:
-        outcome = _replayed(context, spec, note) or run_agent(
-            spec, llm=run.env.llm, tools=run.env.tools, on_step=note, context=_seen_by(context, spec)
+        outcome = _replayed(context, spec, note, tools) or run_agent(
+            spec,
+            llm=run.env.llm,
+            tools=tools,
+            on_step=note,
+            context=_seen_by(context, spec),
+            max_steps=_max_steps(run, spec),
         )
     except PathDenied as e:
         # 도구가 실행 폴더 밖을 짚었다 — 고쳐야 할 설정이다 (경계로 받지 않는다).
@@ -464,6 +479,9 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
         if e.business:
             raise TaskFailed(str(e), node_id=node.id) from e
         raise EngineError(str(e), node_id=node.id, code="agent_error") from e
+    finally:
+        if session is not None:
+            _close_environment(context, session)
 
     trace = outcome.trace
     if outcome.replayed:
@@ -496,8 +514,75 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
     return Go()
 
 
+def _max_steps(run: Run, spec: AiTask) -> int | None:
+    """단계 한도 — 태스크 > `chk:defaults.limits` > 환경 기본값 (C14 — 기본값은 모든 AI 태스크에 간다).
+
+    화면을 다루는 AI 태스크(`web`·`desktop`)는 UI 동작 하나가 한 단계라 기본이 더 크다 (ADR-0037).
+    """
+    if spec.limits is not None and spec.limits.max_steps:
+        return spec.limits.max_steps
+    defaults = run.process.defaults
+    if defaults is not None and defaults.limits is not None and defaults.limits.max_steps:
+        return defaults.limits.max_steps
+    return DEFAULT_MAX_STEPS_SCREEN if spec.domain in PC_ONLY_DOMAINS else None
+
+
+def _open_environment(context: Context, spec: AiTask) -> Any:
+    """`web`·`desktop` AI 태스크의 환경 세션을 연다 (C13 `agent_environments`, ADR-0037).
+
+    환경을 기여한 확장이 없으면 **그림·설치 오류**다 — 확장 태스크 수행기가 없을 때와 같다
+    (재시도로 풀리지 않는다). 확장의 업무 실패(앱이 없음 등)는 엔진의 `TaskFailed`로 옮긴다.
+    """
+    run, node = context.run, context.node
+    extensions = run.env.extensions
+    finder = getattr(extensions, "environment", None)
+    environment = finder(spec.domain) if callable(finder) else None
+    if environment is None:
+        raise EngineError(
+            f"이 PC에 `domain: {spec.domain}` AI 태스크의 환경(확장)이 없다",
+            node_id=node.id,
+            code=CODE_UNSUPPORTED,
+        )
+    defaults = run.process.defaults
+    places: dict[str, Any] = {"domain": spec.domain}
+    for name, own, default in (
+        ("desktop", spec.desktop, defaults.desktop if defaults else None),
+        ("web", spec.web, defaults.web if defaults else None),
+    ):
+        # **태스크에 적은 값이 이긴다** — 없을 때만 `chk:defaults`로 채운다 (C14).
+        merged = {**(default.to_json_dict() if default else {}), **(own.to_json_dict() if own else {})}
+        if merged:
+            places[name] = merged
+    owner = getattr(extensions, "environment_owner", None)
+    maker = getattr(extensions, "context", None)
+    owner_id = owner(spec.domain) if callable(owner) else None
+    task = TaskContext(
+        extension=maker(owner_id) if callable(maker) and owner_id else None,  # type: ignore[arg-type]
+        run_id=run.run_id,
+        node_id=node.id,
+        node_instance=context.instance(),
+        attempt=1,
+        mode=run.mode,
+        run_location=run.process.info.run_location or RUN_LOCATION_PC,
+        properties=places,
+        business_key=f"{run.run_id}:{node.id}:{context.instance()}:1",
+    )
+    try:
+        return environment.open(task)
+    except ExtensionTaskFailed as e:
+        raise TaskFailed(e.message or str(e), node_id=node.id, code=e.code or ERROR_TASK_FAILED) from e
+
+
+def _close_environment(context: Context, session: Any) -> None:
+    """닫는다. **닫다 실패해도 태스크 결과를 바꾸지 않는다** (Worker의 유휴 시간이 닫아 준다)."""
+    try:
+        session.close()
+    except Exception as e:  # noqa: BLE001 — 확장이 무엇을 낼지 모른다
+        context.emit("log", level="warn", message=f"AI 환경을 닫지 못했다 ({type(e).__name__})")
+
+
 def _replayed(
-    context: Context, spec: AiTask, note: Callable[[int, str, str], None]
+    context: Context, spec: AiTask, note: Callable[[int, str, str], None], tools: Mapping[str, Any]
 ) -> AgentOutcome | None:
     """결정 수행이면 기억을 되밟는다 (C14 §재생, ADR-0028). 쓸 기억이 없으면 `None`.
 
@@ -512,7 +597,7 @@ def _replayed(
         return None
 
     seen = _seen_by(context, spec)
-    trace = replay_steps(remembered, tools=run.env.tools, variables=run.variables)
+    trace = replay_steps(remembered, tools=tools, variables=run.variables)
     for index, step in enumerate(trace.steps, start=1):
         note(index, "tool", step.tool)
     if spec.replay == "full":

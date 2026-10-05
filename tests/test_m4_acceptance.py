@@ -34,6 +34,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
 from chaeksas.contracts.service_app import ServiceAppKey  # noqa: E402
+from chaeksas.ext.ui_automation.client.agent_env import DesktopEnvironment  # noqa: E402
 from chaeksas.ext.ui_automation.client.registry_client import RegistryClient  # noqa: E402
 from chaeksas.ext.ui_automation.client.task import UiTaskExecutor  # noqa: E402
 from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec, WindowSpec  # noqa: E402
@@ -46,7 +47,7 @@ from chaeksas.ext.ui_automation.service.store import Database, SqliteKeyStore  #
 from chaeksas.ext.ui_automation.worker import desktop  # noqa: E402
 from chaeksas.ext.ui_automation.worker.app import Worker  # noqa: E402
 from chaeksas.ext.ui_automation.worker.browser import BrowserBackend, available  # noqa: E402
-from chaeksas.ext.ui_automation.worker.desktop import DesktopBackend  # noqa: E402
+from chaeksas.ext.ui_automation.worker.desktop import AppLauncher, DesktopBackend  # noqa: E402
 from chaeksas.ext.ui_automation.worker.plans import (  # noqa: E402
     HttpOps,
     PlanCache,
@@ -85,14 +86,10 @@ def bundle() -> list[str]:
 M4 = bundle()
 
 #: 아직 초록이 아닌 예제와 **그 이유**. 조용히 빼면 묶음이 거짓말을 한다.
-REMAINING: dict[str, str] = {
-    "fx05_desktop_autonomous": (
-        "데스크톱 AI 태스크 (`domain: desktop`) — 데스크톱을 보는 길이 없다 (모델 연결 ADR-0034가 먼저)"
-    ),
-}
+REMAINING: dict[str, str] = {}
 
 #: 데스크톱 UI 태스크 예제 — **Windows에서만** 돈다 (UIA). 다른 OS에서는 건너뛴다.
-DESKTOP_EXAMPLES = {"bx17_erp_po_entry", "bx04_tax_invoice_issue"}
+DESKTOP_EXAMPLES = {"bx17_erp_po_entry", "bx04_tax_invoice_issue", "fx05_desktop_autonomous"}
 
 #: 공유 폴더를 흉내 내는 자리 — 예제가 적은 UNC 경로 대신 시험이 쓰기 허용 폴더를 준다
 #: (ADR-0032). 경로만 그 PC의 것이고 **업무는 예제 그대로**다.
@@ -323,15 +320,26 @@ class Direct:
     def close(self, session_id: str, secret: str) -> Any:
         return self.worker.close(session_id, secret)
 
+    def view(self, session_id: str, secret: str) -> Any:
+        return self.worker.view(session_id, secret)
+
 
 class Host:
-    """`core.run_state.ExtensionTasks` — 태스크 종류로 수행기를 준다."""
+    """`core.run_state.ExtensionTasks` — 태스크 종류로 수행기를, AI 태스크 domain으로 환경을 준다."""
 
     def __init__(self, worker: Worker) -> None:
         self._executor = UiTaskExecutor(client=Direct(worker))  # type: ignore[arg-type]
+        # 데스크톱 AI 태스크의 눈과 손 — 같은 Worker 위에서 돈다 (ADR-0037).
+        self._desktop = DesktopEnvironment(client=Direct(worker))  # type: ignore[arg-type]
 
     def executor(self, task_type: str) -> Any | None:
         return self._executor if task_type == "ui_task" else None
+
+    def environment(self, domain: str) -> Any | None:
+        return self._desktop if domain == "desktop" else None
+
+    def environment_owner(self, domain: str) -> str | None:
+        return "ui-automation" if domain == "desktop" else None
 
     def context(self, extension_id: str) -> Any:
         return Secrets()
@@ -428,6 +436,8 @@ def taxbook_page(tag: str) -> PageRegistration:
 DESKTOP: dict[str, tuple[str, Any]] = {
     "bx17_erp_po_entry": ("erp", erp_page),
     "bx04_tax_invoice_issue": ("taxbook", taxbook_page),
+    # 화면 등록이 없다 — Worker가 `desktop-apps.json`의 명령으로 띄우고 그 창 조건으로 붙는다 (ADR-0037).
+    "fx05_desktop_autonomous": ("calc", None),
 }
 #: 웹 화면도 함께 쓰는 데스크톱 예제 — Chromium이 있어야 한다.
 NEEDS_BROWSER = {"bx04_tax_invoice_issue"}
@@ -443,12 +453,15 @@ def desktop_host(request: pytest.FixtureRequest, app: Any, tmp_path: Path) -> It
         pytest.skip("Playwright가 없다 — 이 예제는 웹 화면도 쓴다")
     which, page_for = DESKTOP[example]
     tag = f" #{uuid.uuid4().hex[:8]}"
+    web = BrowserBackend(headless=True) if example in NEEDS_BROWSER else None
+    if page_for is None:
+        yield from _launched_by_worker(app, tmp_path, which, tag)
+        return
     page = page_for(tag)
     RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(app)).register(page)
     # 시험 프로세스의 offscreen을 물려주지 않는다 — 창이 보여야 UIA가 본다.
     env = {k: v for k, v in os.environ.items() if k != "QT_QPA_PLATFORM"}
     proc = subprocess.Popen([sys.executable, str(FAKE_APPS), which, tag], env=env)
-    web = BrowserBackend(headless=True) if example in NEEDS_BROWSER else None
     try:
         deadline = time.monotonic() + 20
         while not desktop.find_windows(page.window) and time.monotonic() < deadline:
@@ -460,6 +473,26 @@ def desktop_host(request: pytest.FixtureRequest, app: Any, tmp_path: Path) -> It
             web.shutdown()
         proc.kill()
         proc.wait(10)
+
+
+def _launched_by_worker(app: Any, tmp_path: Path, which: str, tag: str) -> Iterator[Host]:
+    """**창을 시험이 띄우지 않는다** — Worker가 그 PC의 앱 설정(`desktop-apps.json`)으로 띄운다 (C10)."""
+    title = "^" + re.escape("계산기" + tag) + "$"
+    apps = tmp_path / "desktop-apps.json"
+    apps.write_text(
+        json.dumps(
+            {"Calculator": {"command": [sys.executable, str(FAKE_APPS), which, tag], "window": {"title": title}}},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    try:
+        yield from _host(app, tmp_path, RoutingBackend(web=None, desktop=DesktopBackend(AppLauncher(apps))))
+    finally:
+        for window in desktop.find_windows(WindowSpec(title=title)):
+            # Worker가 띄운 앱 — 시험이 끝나면 닫는다 (실제로는 Worker의 Job과 함께 꺼진다).
+            pid = int(window.ProcessId)
+            subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, check=False)
 
 
 # ─────────────────────────── 스텁 모델 (BX-14의 doc AI 태스크) ───────────────────────────
@@ -539,6 +572,56 @@ class StubModel:
         self.server.shutdown()
         self.server.server_close()
         self.thread.join(timeout=2)
+
+
+class CalcModel(StubModel):
+    """FX-05의 운전사 — **도구를 진짜로 부른다** (`desktop_look` → 단추 → `=` → 표시 칸 읽기).
+
+    무엇을 누를지는 물음에 실려 온 `식`에서 정한다 — 시험하는 것은 모델의 똑똑함이 아니라
+    「환경 도구가 진짜 창을 보고 누르고 읽어 결과가 변수로 오는가」다.
+    """
+
+    KEYS = {**{str(n): f"key{n}" for n in range(10)}, "*": "times", "+": "plus", "-": "minus", "/": "divide"}
+    AID = "QApplication.calculator."
+
+    def __init__(self) -> None:
+        super().__init__(Path())
+        self.looked = ""
+
+    def reply(self, body: dict[str, Any]) -> dict[str, Any]:
+        messages = body.get("messages") or []
+        done = [m for m in messages if m.get("role") == "tool"]
+        offered = {one["function"]["name"] for one in body.get("tools") or []}
+        assert {"desktop_look", "desktop_act"} <= offered, f"환경 도구가 허용되지 않았다: {offered}"
+        expression = _expression(messages)
+        plan: list[tuple[str, dict[str, Any]]] = [("desktop_look", {})]
+        plan += [("desktop_act", self._press(self.KEYS[ch])) for ch in expression]
+        plan += [("desktop_act", self._press("equals"))]
+        plan += [("desktop_act", {"target": {"type": "automation_id", "value": self.AID + "display"},
+                                  "action": "read"})]
+        if len(done) == 1:
+            self.looked = str(done[0].get("content") or "")
+        if len(done) < len(plan):
+            name, arguments = plan[len(done)]
+            call = {"id": f"call_{len(done) + 1}", "type": "function",
+                    "function": {"name": name, "arguments": json.dumps(arguments, ensure_ascii=False)}}
+            return {"choices": [{"message": {"role": "assistant", "content": "", "tool_calls": [call]}}],
+                    "usage": {"prompt_tokens": 10, "completion_tokens": 10}}
+        shown = str(done[-1].get("content") or "")
+        answer = {"결과": int(shown)}
+        return {"choices": [{"message": {"role": "assistant", "content": json.dumps(answer, ensure_ascii=False)}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 10}}
+
+    def _press(self, name: str) -> dict[str, Any]:
+        return {"target": {"type": "automation_id", "value": self.AID + name}, "action": "click"}
+
+
+def _expression(messages: list[dict[str, Any]]) -> str:
+    """물음의 파라미터에 실린 `식` — 목표가 이름으로 가리킨 변수다 (C14 §AI 태스크가 보는 값)."""
+    asked = "\n".join(str(m.get("content") or "") for m in messages if m.get("role") == "user")
+    found = re.search(r'"식":\s*"([0-9+\-*/]+)"', asked)
+    assert found, "모델에게 `식`이 가지 않았다"
+    return found.group(1)
 
 
 def _rows_from(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -647,7 +730,7 @@ def test_the_bundle_is_read_from_the_examples() -> None:
     """묶음 목록을 사람이 옮겨 적지 않는다 — 어긋나는 순간 시험이 거짓말을 한다."""
     assert len(M4) == 6
     assert set(REMAINING) <= set(M4), "남은 목록에 묶음 밖 예제가 있다"
-    assert len(GREEN) == 5, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+    assert len(GREEN) == 6, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
     assert DESKTOP_EXAMPLES <= set(GREEN) and DESKTOP_EXAMPLES == set(DESKTOP)
 
 
@@ -655,8 +738,7 @@ def test_every_remaining_one_says_why() -> None:
     """**막힌 것은 이유를 적는다** — 「나중에」만 적으면 무엇을 고쳐야 할지 모른다."""
     for example, why in REMAINING.items():
         assert len(why) > 10 and ("없다" in why or "미뤘다" in why), f"{example}: {why}"
-    assert set(REMAINING) == {"fx05_desktop_autonomous"}
-    assert all("데스크톱" in why for why in REMAINING.values()), "남은 것은 데스크톱 AI 태스크다"
+    assert set(REMAINING) == set(), "M4 묶음은 모두 초록이다"
 
 
 #: AI 태스크가 있어 스텁 모델이 필요한 예제.
@@ -683,7 +765,13 @@ def test_an_m4_example_passes_all_its_cases(
 def test_a_desktop_example_passes_all_its_cases(qt: Any, tmp_path: Path, desktop_host: Host, request: Any) -> None:
     """데스크톱 예제 — **진짜 창**을 진짜 UIA로 (Windows). BX-04는 웹 포털 표를 읽어 회계 프로그램에 넣는다."""
     example = request.node.callspec.params["desktop_host"]
-    results = run_all(tmp_path, example, desktop_host)
+    if example == "fx05_desktop_autonomous":
+        calc = CalcModel()
+        with calc:
+            results = run_all(tmp_path, example, desktop_host, model=calc)
+        assert "QApplication.calculator.key1" in calc.looked, "desktop_look이 진짜 창의 트리를 보였다"
+    else:
+        results = run_all(tmp_path, example, desktop_host)
     assert results, f"{example}: 돌릴 케이스가 없다"
     bad = [(c.name, o.verdict, o.detail) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert not bad, f"{example}: {bad}"

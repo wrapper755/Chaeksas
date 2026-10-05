@@ -313,6 +313,29 @@ class AppLauncher:
             return None
         return [str(one) for one in entry["command"]], float(entry.get("start_timeout_s") or START_TIMEOUT_S)
 
+    def window(self, app: str) -> WindowSpec | None:
+        """그 앱의 창 조건 (`desktop-apps.json`의 `window`) — **계획 없는 세션**이 쓴다 (ADR-0037)."""
+        entry = self._entry(app)
+        raw = entry.get("window") if entry is not None else None
+        if not isinstance(raw, dict):
+            return None
+        try:
+            found = WindowSpec.model_validate(raw)
+        except ValueError:
+            log.warning("%s의 %s 창 조건을 읽지 못했다", APPS_FILE, app)
+            return None
+        return None if found.empty else found
+
+    def _entry(self, app: str) -> dict[str, Any] | None:
+        if self.apps_file is None or not self.apps_file.is_file():
+            return None
+        try:
+            table = json.loads(self.apps_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        entry = table.get(app) if isinstance(table, dict) else None
+        return entry if isinstance(entry, dict) else None
+
     def launch(self, command: list[str]) -> None:
         # 인자 리스트로 넘긴다 (CLAUDE.md §5). 업무 앱이라 콘솔을 띄우지 않는다.
         subprocess.Popen(command, close_fds=True)  # noqa: S603
@@ -676,11 +699,18 @@ class DesktopBackend:
         ensure_per_monitor_dpi()
 
     def open(self, request: SessionRequest, plan: Any = None) -> str:
-        window_spec: WindowSpec | None = getattr(plan, "window", None)
-        if plan is None or window_spec is None or window_spec.empty:
-            # 계획이 없으면(앱 주소·키가 없음) 어느 창인지 모른다 — 스텝이 받는 것과 같은 코드다.
-            raise DesktopProblem(422, "unknown_semantic_key", "이 세션에 계획이 없어 어느 창인지 모릅니다")
         app = request.app or getattr(plan, "app", None) or ""
+        window_spec: WindowSpec | None = getattr(plan, "window", None)
+        if plan is None:
+            # 계획 없는 세션 (데스크톱 AI 태스크, ADR-0037) — 창 조건은 그 PC의 앱 설정에서 온다.
+            window_spec = self.launcher.window(app) if app else None
+            if window_spec is None:
+                raise DesktopProblem(
+                    409, APP_NOT_RUNNING, f"「{app or '?'}」의 창 조건이 설정되어 있지 않습니다 ({APPS_FILE})",
+                    {"app": app},
+                )
+        elif window_spec is None or window_spec.empty:
+            raise DesktopProblem(422, "unknown_semantic_key", "이 화면 등록에 창 조건이 없어 어느 창인지 모릅니다")
         window = self._attach(window_spec)
         if window is None:
             window = self._launch(app, window_spec)
