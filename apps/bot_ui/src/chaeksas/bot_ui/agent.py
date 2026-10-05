@@ -28,7 +28,7 @@ from chaeksas.bot_ui.runtimes import HostSettings
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
-from chaeksas.contracts import SERVICE_URL_ENV, SERVICE_URL_SETTING
+from chaeksas.contracts import SERVICE_URL_ENV, SERVICE_URL_SETTING, STORAGE_DIR_SETTING
 from chaeksas.contracts.bot_ui import (
     DEFAULT_HEARTBEAT_S,
     CurrentRun,
@@ -163,6 +163,7 @@ class Agent:
         values: dict[str, object] = dict(self.settings.extension(extension_id))
         values.update(self.runtimes().host_settings(runtime_ids))
         values[SERVICE_URL_SETTING] = self.service_url(extension_id)
+        values[STORAGE_DIR_SETTING] = str(self.storage_dir(extension_id))
         return self.host.context(
             extension_id,
             host=HOST_BOT_UI,
@@ -179,6 +180,14 @@ class Agent:
         found = self.host.get(extension_id) if self.host is not None else None
         service = found.manifest.service if found is not None else None
         return service.base_url if service is not None else None
+
+    def storage_dir(self, extension_id: str) -> Path:
+        """확장이 자기 파일을 둘 폴더 (C13 `storage.dir`). **비밀은 여기 두지 않는다.**"""
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        found = data_dir() / "extensions" / extension_id
+        found.mkdir(parents=True, exist_ok=True)
+        return found
 
     @property
     def bot_ui_id(self) -> str | None:

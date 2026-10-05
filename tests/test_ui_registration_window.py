@@ -655,3 +655,108 @@ def test_a_row_without_css_says_it_cannot_be_shown(app: Any) -> None:
     assert "표시할 수 없습니다" in widget.hint.text()
     assert worker.highlighted == [], "부르지도 않는다"
     widget.close()
+
+
+# ─────────────────────────── 밀린 등록 (BUI-06 8번) ───────────────────────────
+
+
+def queue(tmp_path: Any) -> Any:
+    from chaeksas.ext.ui_automation.client.queue import read_queue
+
+    return read_queue(tmp_path)
+
+
+def test_an_unreachable_registration_is_queued(app: Any, tmp_path: Any) -> None:
+    """**사람이 한 일을 네트워크 때문에 잃지 않는다.**"""
+    registry = FakeRegistry(fail=Problem("닿지 못함"))
+    pending = queue(tmp_path)
+    widget = RegistrationWidget(FakeWorker(), registry, pending)
+    widget.page_id.setCurrentText("erp.order.form")
+    opened(widget)
+    widget.analyze()
+    widget.verify()
+    widget.register()
+    assert "큐에 쌓았습니다" in widget.hint.text()
+    assert pending.count() == 1
+    widget.close()
+
+
+def test_a_refused_registration_is_not_queued(app: Any, tmp_path: Any) -> None:
+    """**4xx는 쌓지 않는다** — 다시 보내도 같은 답이고 큐를 영원히 막는다."""
+    registry = FakeRegistry(fail=Problem("사다리가 없다", code="page_invalid", status=422))
+    pending = queue(tmp_path)
+    widget = RegistrationWidget(FakeWorker(), registry, pending)
+    widget.page_id.setCurrentText("erp.order.form")
+    opened(widget)
+    widget.analyze()
+    widget.verify()
+    widget.register()
+    assert pending.count() == 0
+    assert "거부했습니다" in widget.hint.text()
+    widget.close()
+
+
+def test_the_queue_goes_up_when_the_window_opens(app: Any, tmp_path: Any) -> None:
+    """서버가 돌아오면 **저절로 올라간다** (창을 열 때 민다)."""
+    pending = queue(tmp_path)
+    pending.add(registered_page())
+    registry = FakeRegistry()
+    widget = RegistrationWidget(FakeWorker(), registry, pending)
+    assert "밀린 등록 1건을 올렸습니다" in widget.hint.text()
+    assert pending.count() == 0
+    assert [one.page_id for one in registry.registered] == ["erp.order.form"]
+    widget.close()
+
+
+def test_a_still_closed_server_keeps_the_queue(app: Any, tmp_path: Any) -> None:
+    pending = queue(tmp_path)
+    pending.add(registered_page())
+    widget = RegistrationWidget(FakeWorker(), FakeRegistry(fail=Problem("닿지 못함")), pending)
+    assert pending.count() == 1, "그대로 남는다"
+    assert "아직 1건이 남아" in widget.hint.text()
+    widget.close()
+
+
+def test_deleting_a_page_drops_its_queued_registration(app: Any, tmp_path: Any, monkeypatch: Any) -> None:
+    """**지운 화면을 나중에 되살리지 않는다** (BUI-06 10번)."""
+    from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Yes)
+    pending = queue(tmp_path)
+    pending.add(registered_page())
+    registry = FakeRegistry(known=registered_page())
+    widget = RegistrationWidget(FakeWorker(), registry, pending)
+    pending.add(registered_page())  # 창이 열릴 때 올라갔으니 다시 쌓아 둔다
+    widget.page_id.setCurrentText("erp.order.form")
+    widget._known = registered_page()  # noqa: SLF001
+    widget.unregister(element=False)
+    assert pending.count() == 0
+    assert "함께 버렸습니다" in widget.hint.text()
+    widget.close()
+
+
+def test_the_same_page_takes_one_slot(tmp_path: Any) -> None:
+    """고치고 다시 누른 것이 쌓여 **옛 등록이 뒤에 올라가면** 안 된다."""
+    pending = queue(tmp_path)
+    pending.add(registered_page())
+    pending.add(registered_page())
+    assert pending.count() == 1
+
+
+def test_a_broken_file_does_not_stop_the_rest(tmp_path: Any) -> None:
+    pending = queue(tmp_path)
+    pending.add(registered_page())
+    (pending.folder / "깨진것.json").write_text("{", encoding="utf-8")
+    assert len(pending.all()) == 1, "읽지 못하는 것은 지나간다"
+
+
+def test_without_a_place_to_keep_it_nothing_is_queued(app: Any) -> None:
+    """**자리를 모르면 쌓지 않는다** — 조용히 어딘가에 쓰지 않는다 (C13 `storage.dir`)."""
+    widget = RegistrationWidget(FakeWorker(), FakeRegistry(fail=Problem("닿지 못함")), None)
+    widget.page_id.setCurrentText("erp.order.form")
+    opened(widget)
+    widget.analyze()
+    widget.verify()
+    widget.register()
+    assert "다시 누르세요" in widget.hint.text()
+    widget.close()

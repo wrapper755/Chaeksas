@@ -54,8 +54,11 @@ EDITOR_SCHEMA = "schema"
 
 #: 호스트가 소유하는 설정 키의 머리 (C13 — `runtime.<런타임 id>.port`·`service.base_url`).
 #: 확장이 같은 이름을 선언하지 못한다 (E7).
-RESERVED_CONFIG_PREFIXES = ("runtime.", "service.")
+RESERVED_CONFIG_PREFIXES = ("runtime.", "service.", "storage.")
 RESERVED_CONFIG_PREFIX = RESERVED_CONFIG_PREFIXES[0]
+
+#: 확장이 자기 파일을 둘 폴더를 알려 주는 예약 키 (호스트가 만들어 준다).
+STORAGE_DIR_SETTING = "storage.dir"
 
 #: 서버 부분 주소를 알려 주는 예약 키. **출처는 하나다** (Center 리소스 등록 > 정의).
 SERVICE_URL_SETTING = "service.base_url"
