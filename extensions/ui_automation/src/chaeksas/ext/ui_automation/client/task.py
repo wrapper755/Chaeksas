@@ -20,10 +20,17 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec
+from chaeksas.ext.ui_automation.contracts.registration import (
+    AnalyzeRequest,
+    AnalyzeResult,
+    VerifyResult,
+)
 from chaeksas.ext.ui_automation.contracts.worker_local import (
     CALLER_BOT,
     DEFAULT_PORT,
@@ -127,6 +134,31 @@ class WorkerClient:
     def close(self, session_id: str, secret: str) -> CloseResult:
         return CloseResult.model_validate(
             self.call("DELETE", f"/v1/sessions/{session_id}", secret=secret)
+        )
+
+    # ── 셀렉터 등록 (C10 §5) — **여기만 물리 정보가 넘어온다** ──
+
+    def open_registration(self, start_url: str, *, headed: bool = True) -> SessionInfo:
+        return SessionInfo.model_validate(
+            self.call("POST", "/v1/registration/browser", body={"start_url": start_url, "headed": headed})
+        )
+
+    def analyze(self, session_id: str, secret: str, request: AnalyzeRequest) -> AnalyzeResult:
+        return AnalyzeResult.model_validate(
+            self.call(
+                "POST",
+                f"/v1/registration/{session_id}/analyze",
+                body=request.to_json_dict(),
+                secret=secret,
+            )
+        )
+
+    def verify(
+        self, session_id: str, secret: str, ladders: Mapping[str, Sequence[LocatorSpec]]
+    ) -> VerifyResult:
+        body = {"ladders": {key: [one.to_json_dict() for one in value] for key, value in ladders.items()}}
+        return VerifyResult.model_validate(
+            self.call("POST", f"/v1/registration/{session_id}/verify", body=body, secret=secret)
         )
 
 

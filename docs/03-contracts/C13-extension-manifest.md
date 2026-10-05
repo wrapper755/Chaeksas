@@ -98,6 +98,16 @@
   - 자식은 그 확장의 `entry`를 풀어 부르고, 그때부터 화면 없는 서버로 돈다 (Worker는 C10).
   - 왜 명령이 아니라 진입점인가: 설치 파일로 묶은 앱 안에는 콘솔 스크립트(`chk-worker`)가 없다 (PyInstaller는 실행 파일 하나를 만든다). 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))·서명·파이썬 런타임을 그대로 함께 쓴다.
   - 작업 관리자에서는 Bot UI와 같은 이름으로 보인다. 구별은 명령줄(`--local-runtime …`)로 한다.
+- `bot_ui.utilities[].needs_runtime`: 그 유틸리티를 열기 전에 호스트가 띄워야 할 **로컬 런타임의 id**. 띄우지 못하면 유틸리티를 열지 않고 왜 못 열었는지 말한다 (「없는데 된 척」하지 않는다).
+- **호스트가 채우는 예약 설정 키** — 띄운 로컬 런타임이 어디 있는지는 **확장이 설정으로 받는다** (`ctx.setting(…)`). 확장이 포트를 다시 계산하거나 토큰 파일 자리를 추측하지 않게 한다.
+
+  | 키 | 값 |
+  | --- | --- |
+  | `runtime.<런타임 id>.port` | 호스트가 정한 포트 (int) |
+  | `runtime.<런타임 id>.token_dir` | 토큰 파일 폴더 (str). 정의에 `token_dir: true`일 때만 |
+  | `runtime.<런타임 id>.state` | `off` · `running` · `restarting` · `stopped` (C4 `WorkerState.state`와 같은 낱말) |
+
+  `runtime.`으로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7).
 - `configuration`의 `scope`: `bot_ui`, `studio`, `server_runner` 중 하나.
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.
 - **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 키(`requires_keys` `utility`)도 이 칸으로 받는다.
@@ -258,6 +268,7 @@ Operation:
 | E4 | `task_types[].id`는 확장 사이에 겹치지 않는다 | 409 `task_type_conflict` |
 | E5 | 확장 호스트는 `api` 범위가 맞지 않는 확장을 켜지 않는다 (목록에 「호환 안 됨」) | — |
 | E6 | 외부 정의의 봉투(C2 `extension`)가 검증되고 `definition_hash`가 맞는다 | 400 `bad_envelope` / `hash_mismatch` |
+| E7 | `configuration[].key`가 `runtime.`으로 시작하지 않는다 (호스트가 쓰는 이름이다) | 422 `reserved_config_key` |
 
 Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬에서 먼저 돌려 보여 준다.
 
@@ -274,6 +285,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 | 2026-10-01 | 1 | 검토 반영 (아래) | — |
 | 2026-10-02 | 1 | 구현하며 명시한 것: `entry` 형식과 그 확장 패키지 안으로 제한, 예시의 편집기·유틸리티 entry를 `client`로 (ADR-0018 §6 폴더 구성) | 0018 |
 | 2026-10-02 | 1 | 설치 파일로 묶어 보고 명시한 것: `extension.json`은 파이썬 패키지 안 | 0024 |
+| 2026-10-05 | 2 | 호스트가 채우는 **예약 설정 키**(`runtime.<id>.port`·`token_dir`·`state`)를 적었다 — 유틸리티가 띄워진 런타임을 설정으로 받는다. 같은 이름을 확장이 선언하면 거부한다 (E7). 새 칸이 아니라 호스트가 주는 값이라 schema는 그대로 | 0018, 0024 |
 | 2026-10-03 | **2** | `bot_ui.local_runtimes`의 `command`(명령 배열)를 **`entry`**(진입점 문자열)로 **바꿨다.** 명령줄은 Bot UI가 만들고, 자기 실행 파일을 자식으로 다시 띄운다. 필드의 뜻이 바뀌었으므로 schema를 올린다 | 0024 |
 
 검토 반영 내용:

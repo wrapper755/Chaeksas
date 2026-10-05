@@ -7,8 +7,10 @@ Worker 프로세스 종료 → 앱 종료.
 
 from __future__ import annotations
 
+import argparse
 import logging
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
@@ -16,6 +18,7 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 from chaeksas.bot_ui.agent import Agent, make_agent
 from chaeksas.bot_ui.heartbeat import HeartbeatWorker
 from chaeksas.bot_ui.main_window import MainWindow
+from chaeksas.bot_ui.runtimes import RUNTIME_FLAG, serve
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.bot_ui.tray import Tray
 from chaeksas.contracts.bot_ui import JobAck
@@ -138,9 +141,8 @@ class BotUiApp:
         # 3. 실행기 취소 — **협조 중지를 먼저** 준다 (돌던 Bot이 `cancelled`를 남길 틈, ADR-0031).
         if agent.runner().running is not None:
             agent.runner().stop()
-        # 4. Worker 프로세스 종료 (ADR-0023 — 트리째).
-        for supervisor in agent.supervisors.values():
-            supervisor.stop()
+        # 4. 로컬 런타임(Worker 프로세스 등) 종료 (ADR-0023 — 트리째).
+        agent.runtimes().stop_all()
 
     def run(self) -> int:
         self.start()
@@ -148,13 +150,35 @@ class BotUiApp:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`chk-bot-ui` 진입점."""
+    """`chk-bot-ui` 진입점.
+
+    `--local-runtime <확장 id>:<런타임 id>`로 불리면 **화면 없이** 그 런타임으로 돈다 —
+    Bot UI가 자기 실행 파일을 그렇게 자식으로 다시 띄운다 (C13·ADR-0024).
+    """
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    app = QApplication(argv if argv is not None else sys.argv)
+    args = list(argv if argv is not None else sys.argv)
+    if RUNTIME_FLAG in args:
+        return run_local_runtime(args)
+    app = QApplication(args)
     app.setApplicationName("Chaeksas Bot UI")
     # 창을 닫아도 트레이에서 돈다 (BUI-02).
     app.setQuitOnLastWindowClosed(False)
     return BotUiApp(app, make_agent()).run()
 
 
-__all__ = ["SHUTDOWN_WAIT_S", "BotUiApp", "main"]
+def run_local_runtime(args: list[str]) -> int:
+    """자식으로 뜬 쪽 (C13 — `--local-runtime <확장>:<런타임> --port <p> --token-dir <폴더>`).
+
+    **Qt를 띄우지 않는다.** 인자를 직접 읽는 것은 Qt가 모르는 깃발이기 때문이다.
+    """
+    parser = argparse.ArgumentParser(prog="chk-bot-ui", add_help=False)
+    parser.add_argument(RUNTIME_FLAG, dest="spec", required=True)
+    parser.add_argument("--port", type=int, required=True)
+    parser.add_argument("--token-dir", dest="token_dir", default=None)
+    found, _ = parser.parse_known_args(args[1:])
+    where = Path(found.token_dir) if found.token_dir else None
+    log.info("로컬 런타임으로 돈다: %s (포트 %s)", found.spec, found.port)
+    return serve(found.spec, port=found.port, token_dir=where)
+
+
+__all__ = ["SHUTDOWN_WAIT_S", "BotUiApp", "main", "run_local_runtime"]
