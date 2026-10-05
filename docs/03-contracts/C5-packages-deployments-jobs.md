@@ -21,6 +21,8 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 
 실행하는 쪽(Bot UI·서버 실행기)은 이 API로 패키지를 내려받는다. 배포와 작업은 하트비트 응답으로 받는다 (C4·C12).
 
+> 상태: **패키지 승인·철회와 Admin 키**(`PUT …/signature`·`POST …/revoke`·`POST/DELETE/GET /admin-keys`)가 돈다. 배포 봉투(`POST/DELETE /deployments`)와 작업 지시는 다음이다.
+
 ## 전송 공통
 
 - 기본 경로는 `/api/v1`. 본문은 JSON이고, 업로드만 multipart다.

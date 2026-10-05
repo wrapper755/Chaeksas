@@ -59,6 +59,13 @@ CREATE TABLE IF NOT EXISTS run_events (
   data_json TEXT,
   PRIMARY KEY (run_id, seq)
 );
+CREATE TABLE IF NOT EXISTS admin_keys (
+  key_id        TEXT PRIMARY KEY,
+  key_json      TEXT NOT NULL,
+  -- 받은 봉투를 **그대로** 둔다 (감사 추적). 부트스트랩 키는 봉투가 없다.
+  envelope_json TEXT,
+  at            TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS packages (
   id          TEXT NOT NULL,
   version     TEXT NOT NULL,
@@ -72,6 +79,9 @@ CREATE TABLE IF NOT EXISTS packages (
   size_bytes  INTEGER NOT NULL,
   uploaded_at TEXT NOT NULL,
   uploaded_by TEXT NOT NULL,
+  -- 승인·철회 봉투 (C2). 내려줄 때 zip의 `SIGNATURE`로 넣는다.
+  signature_json TEXT,
+  revoke_json TEXT,
   PRIMARY KEY (id, version)
 );
 """
