@@ -85,6 +85,7 @@
 - 계획의 `window`(C9 창 조건)에 맞는 최상위 창이 **하나** 있으면 그 창에 붙는다. 여럿이면 `window_ambiguous`다 — 고르지 않는다.
 - 없으면 앱 이름(`app`, 없으면 계획의 `app`)으로 **그 PC의 실행 명령**을 찾아 띄우고 창이 생길 때까지 기다린다 (기본 30초). 실행 명령은 Worker 데이터 폴더(`--token-dir`)의 `desktop-apps.json`이다: `{"ERP Client": {"command": ["C:\\ERP\\erp.exe"], "start_timeout_s": 30}}`. 경로는 PC마다 다르므로 BPM 프로세스·레지스트리에 두지 않는다.
 - 그래도 창이 없으면 `app_not_running`이다.
+- **계획 없는 데스크톱 세션** ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md), 데스크톱 AI 태스크): `page_id` 없이 `app`만 주면 창 조건을 `desktop-apps.json`의 그 앱 항목 `window`(C9 `window`와 같은 모양)에서 얻는다 — `{"Calculator": {"command": ["calc.exe"], "window": {"process": "CalculatorApp.exe"}}}`. `window`가 없으면 `app_not_running`이다 (어느 창인지 모른다).
 - 찾기·조작은 그 창 **안에서만** 한다. `current_url`은 `desktop:<앱 이름>`이다 — 창 제목에는 문서 이름 같은 업무 값이 들어 있을 수 있어 싣지 않는다.
 - 데스크톱 화면의 분석·직접 고르기·표시(§5)는 아직 없다 (503).
 
@@ -98,7 +99,11 @@
 | `value` | 조작에 필요한 값. 읽기 동작에 주면 422 |
 | `timeout_s` | 선택 |
 
-`semantic_key`와 `instruction`은 둘 중 하나만 준다.
+| `target` | 계획 없는 세션에서만 (데스크톱 AI 태스크): 로케이터 조건 `{type, value, control_type?, exact?}` (C8 데스크톱 전략). **정확히 하나**에 맞아야 조작한다 — 아니면 `ok: false`, `error_code: "target_not_unique"`, `error`에 맞은 수. 사다리·치유·보고는 없다 |
+
+`semantic_key`·`instruction`·`target`은 하나만 준다.
+
+**`GET /v1/sessions/{id}/view`** (헤더 `X-CHK-Session`) → `{text, current_url}` — 지금 화면을 줄글로 (데스크톱은 UIA 트리, 입력한 값·표 칸·창 제목을 가린 것 — C8 스냅샷과 같다). 데스크톱 AI 태스크의 `desktop_look`이 쓴다.
 
 **읽은 값이 변수가 되는 모양** ([ADR-0036](../decisions/0036-screen-read-values.md)) — 부르는 쪽(UI 태스크 수행기)이 바꾼다.
 
@@ -218,6 +223,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-05 | 1 | 계획 없는 데스크톱 세션(`desktop-apps.json`의 `window`), 스텝의 `target`, `GET …/view` — 데스크톱 AI 태스크의 눈과 손 | 0037 |
 | 2026-10-05 | 1 | `read_table`의 `data` 모양(`headers`·`rows`, 칸은 글 그대로)과, 읽은 값이 변수가 되는 규칙(표는 줄 목록, 수 모양 글은 수)을 적었다 | 0036 |
 | 2026-10-05 | 1 | 세션 열기에 `goal`·`values`·`results`, 세션 정보에 `planned_steps` — 목표로 계획([C8](C8-ui-automation-plan-heal-report.md))의 스텝을 부르는 쪽이 채워 보낸다. 더하기만이라 schema는 그대로 1 | 0035 |
 | 2026-10-01 | 1 | 초안 | 0012, 0013, 0014 |

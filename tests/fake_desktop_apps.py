@@ -1,6 +1,6 @@
 """시험이 띄우는 가짜 데스크톱 앱 — 진짜 창이라 UIA로 보인다 (데스크톱 백엔드·M4 인수 시험).
 
-    python tests/fake_desktop_apps.py erp|taxbook [제목 덧붙임]
+    python tests/fake_desktop_apps.py erp|taxbook|calc [제목 덧붙임]
 
 **제품 코드가 아니다.** 예제가 가리키는 사내 앱(「ERP Client」)을 그 자리에서 흉내 낸다 — 웹 예제가
 시험이 띄운 HTML을 쓰는 것과 같다. Qt는 `objectName` 경로를 UIA `AutomationId`로 내보낸다
@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 
 from PySide6.QtWidgets import (
@@ -126,10 +127,64 @@ def taxbook(suffix: str = "") -> QWidget:
     return window
 
 
-APPS = {"erp": erp, "taxbook": taxbook}
+#: 계산기의 창 제목 (FX-05 — 등록되지 않은 앱을 AI가 보고 조작한다).
+CALC_TITLE = "계산기"
+
+
+def calc(suffix: str = "") -> QWidget:
+    """작은 계산기 (FX-05). 단추를 눌러 식을 만들고 `=`이면 표시 칸에 결과가 나온다.
+
+    **화면 등록이 없다** — AI가 UIA 트리를 보고 단추를 고른다 (ADR-0037).
+    """
+    from PySide6.QtWidgets import QGridLayout  # noqa: PLC0415
+
+    window = QWidget()
+    window.setObjectName("calculator")
+    window.setWindowTitle(CALC_TITLE + suffix)
+    grid = QGridLayout(window)
+    display = QLineEdit("0")
+    display.setObjectName("display")
+    display.setReadOnly(True)
+    grid.addWidget(display, 0, 0, 1, 4)
+    typed: list[str] = []
+
+    def press(symbol: str) -> None:
+        if symbol == "C":
+            typed.clear()
+            display.setText("0")
+            return
+        if symbol == "=":
+            expression = "".join(typed)
+            # 숫자와 사칙연산만 — 시험용 앱이라도 `eval`에 아무것이나 넣지 않는다.
+            if expression and all(ch in "0123456789+-*/" for ch in expression):
+                value = eval(expression, {"__builtins__": {}}, {})  # noqa: S307
+                display.setText(str(int(value) if float(value).is_integer() else value))
+            typed.clear()
+            return
+        typed.append(symbol)
+        display.setText("".join(typed))
+
+    keys = [("7", "key7"), ("8", "key8"), ("9", "key9"), ("/", "divide"),
+            ("4", "key4"), ("5", "key5"), ("6", "key6"), ("*", "times"),
+            ("1", "key1"), ("2", "key2"), ("3", "key3"), ("-", "minus"),
+            ("0", "key0"), ("C", "clear"), ("=", "equals"), ("+", "plus")]
+    labels = {"*": "×", "/": "÷"}
+    for index, (symbol, name) in enumerate(keys):
+        button = QPushButton(labels.get(symbol, symbol))
+        button.setObjectName(name)
+        button.clicked.connect(lambda _=False, s=symbol: press(s))
+        grid.addWidget(button, 1 + index // 4, index % 4)
+    window.resize(280, 320)
+    return window
+
+
+APPS = {"erp": erp, "taxbook": taxbook, "calc": calc}
 
 
 def main() -> None:
+    # **늘 보이는 창으로** 뜬다 — Worker가 띄우면(desktop-apps.json) 시험 프로세스의 offscreen을
+    # 물려받는다. 보이지 않는 창은 UIA에 안 보인다.
+    os.environ.pop("QT_QPA_PLATFORM", None)
     app = QApplication(sys.argv[:1])
     which = sys.argv[1] if len(sys.argv) > 1 else "erp"
     suffix = sys.argv[2] if len(sys.argv) > 2 else ""

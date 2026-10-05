@@ -139,6 +139,9 @@ class StepRequest(ContractModel):
     semantic_key: str | None = None
     #: 자율 수행에서만. 결정 수행 세션에서 보내면 422 `instruction_not_allowed`.
     instruction: str | None = None
+    #: 계획 없는 세션에서만 — 로케이터 조건 `{type, value, control_type?, exact?}` (데스크톱 AI 태스크,
+    #: ADR-0037). **정확히 하나**에 맞아야 조작한다. 사다리·치유·보고는 없다.
+    target: dict[str, Any] | None = None
     action: str  # KNOWN_ACTIONS
     value: Any = None
     timeout_s: int | None = None
@@ -241,12 +244,13 @@ def check_step(request: StepRequest, *, deterministic: bool) -> str | None:
 
     **Worker와 부르는 쪽이 같은 함수를 본다** — 돌려 보고야 아는 일을 없앤다.
     """
-    if request.semantic_key and request.instruction:
+    given = [one for one in (request.semantic_key, request.instruction, request.target) if one]
+    if len(given) > 1:
         return INSTRUCTION_NOT_ALLOWED
     if request.instruction and deterministic:
         # 결정 수행은 **자연어로 지시하지 않는다** (ADR-0010 — 몰래 자율로 넘어가지 않는다).
         return INSTRUCTION_NOT_ALLOWED
-    if not request.semantic_key and not request.instruction:
+    if not given:
         return UNKNOWN_SEMANTIC_KEY
     if request.action in MUTATING_ACTIONS and request.action != "click" and request.value is None:
         return VALUE_REQUIRED

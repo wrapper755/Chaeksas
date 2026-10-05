@@ -29,6 +29,8 @@ from chaeksas.core.llm import Llm, LlmError, Reply, ToolCall, ToolSpec
 
 #: 한 AI 태스크에서 모델에게 물어볼 수 있는 횟수의 기본 한도 (`limits.max_steps`가 이긴다).
 DEFAULT_MAX_STEPS = 8
+#: 화면을 다루는 AI 태스크(`web`·`desktop`)의 기본 한도 — UI 동작 하나가 한 단계다 (ADR-0037).
+DEFAULT_MAX_STEPS_SCREEN = 30
 
 #: C14 `results`의 타입 → 받아도 되는 파이썬 타입 (B8의 `VALUE_TYPES`와 짝이다).
 RESULT_TYPES: dict[str, tuple[type, ...]] = {

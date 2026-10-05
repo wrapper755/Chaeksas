@@ -79,7 +79,8 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     StepResult,
     check_step,
 )
-from chaeksas.ext.ui_automation.worker.ladder import Finder, Healer, run_step
+from chaeksas.ext.ui_automation.worker.ladder import Finder, Healer, TableRead, run_step
+from chaeksas.ext.ui_automation.worker.routing import platform_of
 
 #: 최근 세션을 몇 개까지 들고 있나 (BUI-09).
 RECENT_MAX = 20
@@ -340,7 +341,7 @@ class Worker:
         if self.backend is None:  # pragma: no cover — 세션이 있으면 백엔드도 있다
             raise WorkerProblem(503, "browser_unavailable", "화면을 조작할 수단이 없습니다")
 
-        result = self._climb(found, request)
+        result = self._direct(found, request) if request.target else self._climb(found, request)
         found.steps_run += 1
         found.fallback_depth_max = max(found.fallback_depth_max, result.fallback_depth)
         found.healed = found.healed or result.healed
@@ -359,6 +360,68 @@ class Worker:
             "escalated": result.escalated,
         }
         return result
+
+    def _direct(self, found: Session, request: StepRequest) -> StepResult:
+        """로케이터 조건으로 **바로** 한다 — 계획 없는 세션만 (데스크톱 AI 태스크, C10·ADR-0037).
+
+        정확히 하나에 맞아야 조작한다. 아니면 실패를 **결과로** 돌려준다 — 모델이 조건을 고칠 수
+        있게 (예외가 아니다). 사다리·치유·보고는 없다 (등록된 화면이 아니다).
+        """
+        if found.plan is not None:
+            raise WorkerProblem(422, "target_not_allowed", "계획이 있는 세션은 시맨틱 키로 부릅니다")
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        if finder is None:  # pragma: no cover — 세션이 있으면 화면도 있다
+            raise WorkerProblem(503, BROWSER_UNAVAILABLE, "열린 화면이 없습니다")
+        locked = getattr(finder, "locked", None)
+        if callable(locked) and locked():
+            raise WorkerProblem(503, SESSION_LOCKED, "화면이 잠겨 있습니다")
+        try:
+            locator = LocatorSpec.model_validate(
+                {**dict(request.target or {}), "platform": platform_of(found.request, None)}
+            )
+        except ValueError as e:
+            raise WorkerProblem(422, "input_invalid", f"target이 로케이터 모양이 아닙니다: {e}") from e
+        started = self.clock()
+        timeout_ms = int((request.timeout_s or STEP_TIMEOUT_S) * 1000)
+        url = finder.url()
+
+        def failed(code: str, why: str) -> StepResult:
+            return StepResult(ok=False, action=request.action, error_code=code, error=why, current_url=url)
+
+        try:
+            match = finder.find(locator, timeout_ms=min(timeout_ms, 3000))
+        except ValueError as e:
+            return failed("target_invalid", str(e))
+        if not match.unique:
+            return failed("target_not_unique", f"{match.count}개가 맞습니다 — 하나여야 합니다")
+        step = PlanStep(semantic_key="", action=request.action, value=request.value)
+        try:
+            read = finder.act(match.handle, step, timeout_ms=timeout_ms)
+        except Exception as e:  # noqa: BLE001 — 화면이 무엇을 낼지 모른다
+            if callable(locked) and locked():
+                raise WorkerProblem(503, SESSION_LOCKED, "화면이 잠겨 있습니다") from e
+            return failed("action_failed", f"{type(e).__name__}: {e}")
+        text, data = (read.text, read.data()) if isinstance(read, TableRead) else (read, None)
+        return StepResult(
+            ok=True,
+            action=request.action,
+            text=text,
+            data=data,
+            current_url=url,
+            duration_ms=int((self.clock() - started) * 1000),
+        )
+
+    def view(self, session_id: str, secret: str) -> dict[str, Any]:
+        """지금 화면을 줄글로 — **가린 것** (C10 `view`, 데스크톱 AI 태스크의 `desktop_look`)."""
+        found = self.get(session_id, secret)
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        if finder is None:  # pragma: no cover
+            raise WorkerProblem(503, BROWSER_UNAVAILABLE, "열린 화면이 없습니다")
+        locked = getattr(finder, "locked", None)
+        if callable(locked) and locked():
+            raise WorkerProblem(503, SESSION_LOCKED, "화면이 잠겨 있습니다")
+        text, _ = finder.snapshot()
+        return {"text": text, "current_url": finder.url()}
 
     def _healer_for(self, found: Session) -> Healer | None:
         """이 세션의 치유 길 (C8). **세션이 끄면 없다** (C10 `heal`, STU-13 「자가 치유 사용」).
@@ -674,6 +737,11 @@ def create_app(worker: Worker) -> FastAPI:
         if wanted.timeout_s is None:
             wanted = wanted.model_copy(update={"timeout_s": STEP_TIMEOUT_S})
         return worker.step(session_id, secret_of(request), wanted)
+
+    @router.get("/sessions/{session_id}/view")
+    def view_session(session_id: str, request: Request) -> Any:
+        check_token(request)
+        return worker.view(session_id, secret_of(request))
 
     @router.post("/sessions/{session_id}/goto")
     async def goto(session_id: str, request: Request) -> Any:

@@ -37,6 +37,7 @@ from chaeksas.contracts.extension import (
     ENTRY_POINT_GROUP,
     EXTENSION_FILE,
     AdapterOperation,
+    AgentEnvironmentContribution,
     ConfigurationItem,
     ConsolePage,
     ExtensionManifest,
@@ -56,6 +57,7 @@ from chaeksas.contracts.extension import (
 from chaeksas.contracts.signing import AdminKey, Envelope
 from chaeksas.extension_api import (
     API_VERSION,
+    AgentEnvironment,
     BotUiUtility,
     EntryError,
     ExtensionContext,
@@ -131,6 +133,7 @@ class ExtensionHost:
         self._loaded: list[LoadedExtension] = []
         self._failures: list[LoadFailure] = []
         self._executors: dict[str, TaskExecutor] = {}
+        self._environments: dict[str, AgentEnvironment] = {}
 
     # ─────────────────────────── 찾기 ───────────────────────────
 
@@ -253,6 +256,17 @@ class ExtensionHost:
                     items=clashing,
                 )
             )
+        owned = {found.value.domain: found.extension_id for found in self.agent_environments()}
+        doubled = [e.domain for e in manifest.contributes.agent_environments if e.domain in owned]
+        if doubled:
+            out.append(
+                Violation(
+                    rule="E8",
+                    code="environment_conflict",
+                    message=f"AI 환경을 다른 확장이 이미 기여했다 ({', '.join(owned[d] for d in doubled)})",
+                    items=doubled,
+                )
+            )
         return out
 
     # ─────────────────────────── 목록 ───────────────────────────
@@ -296,6 +310,10 @@ class ExtensionHost:
 
     def task_type(self, task_type_id: str) -> Contribution[TaskTypeContribution] | None:
         return next((c for c in self.task_types() if c.value.id == task_type_id), None)
+
+    def agent_environments(self) -> list[Contribution[AgentEnvironmentContribution]]:
+        """AI 태스크의 `web`·`desktop` 환경 (C13 `agent_environments`, ADR-0037)."""
+        return self._gather(lambda m: m.contributes.agent_environments)
 
     def studio_editors(self) -> list[Contribution[StudioEditorContribution]]:
         return self._gather(lambda m: m.contributes.studio_editors)
@@ -393,6 +411,32 @@ class ExtensionHost:
         )
         self._executors[task_type_id] = executor
         return executor
+
+    def environment(self, domain: str) -> AgentEnvironment | None:
+        """그 domain의 AI 환경. 기여한 확장이 없으면 `None` — 엔진이 그림·설치 오류로 올린다.
+
+        한 domain은 한 확장만 기여한다 (E8 — 나중에 온 확장은 켜지 않는다).
+        """
+        found = [c for c in self.agent_environments() if c.value.domain == domain]
+        if len(found) != 1:
+            if found:
+                LOG.warning("AI 환경 %s을 여러 확장이 기여한다 (E8) — 쓰지 않는다", domain)
+            return None
+        cached = self._environments.get(domain)
+        if cached is not None:
+            return cached
+        owner = self.get(found[0].extension_id)
+        assert owner is not None
+        made: AgentEnvironment = self._instantiate(
+            owner, found[0].value.entry, expect=AgentEnvironment, what="AI 환경"
+        )
+        self._environments[domain] = made
+        return made
+
+    def environment_owner(self, domain: str) -> str | None:
+        """그 AI 환경을 기여한 확장 id — 엔진이 그 확장의 바깥 세상(`context`)을 함께 준다."""
+        found = [c for c in self.agent_environments() if c.value.domain == domain]
+        return found[0].extension_id if len(found) == 1 else None
 
     def editor(self, task_type_id: str) -> TaskEditor | None:
         """Studio 속성 패널에 붙일 편집기. `kind="schema"`면 `None` — 자동 폼을 쓴다 (STU-14).

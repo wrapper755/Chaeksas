@@ -162,7 +162,8 @@ def test_without_a_model_the_task_fails_and_the_boundary_catches_it() -> None:
     assert run.variables["복구"] == "TASK_FAILED"
 
 
-def test_a_pc_only_domain_is_not_run_yet() -> None:
+def test_a_pc_only_domain_without_an_environment_is_unsupported() -> None:
+    """`web`·`desktop`은 환경(확장)이 있어야 돈다 — 없으면 그림·설치 오류 (ADR-0037)."""
     ai = AI.replace('"domain": "doc"', '"domain": "desktop"')
     engine, run = start(process(ai), RunEnv(llm=RecordingLlm(replies=[answer()])))
     assert engine.run_until_blocked(run) is State.FAILED

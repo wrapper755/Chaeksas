@@ -161,6 +161,7 @@ def test_catalog_is_schema_versioned() -> None:
         ("bot_ui.local_runtimes", [{"id": "r", "label": "r", "entry": "x:Y"}]),
         ("configuration", [{"key": "k", "label": "k", "scope": "bot_ui"}]),
         ("preflight", [{"id": "p", "entry": "x:Y"}]),
+        ("agent_environments", [{"domain": "desktop", "entry": "x:Y"}]),
         ("console.pages", [{"id": "c", "label": "c", "module": "m"}]),
     ],
 )
@@ -496,3 +497,24 @@ def test_e6_envelope_for_another_extension_is_refused() -> None:
     other = {**definition, "id": "ext-other"}
     # 해시가 먼저 걸린다 — id를 바꾸면 내용이 달라지므로.
     assert [v.code for v in verify_external(other, envelope, keys=keys)] == ["hash_mismatch"]
+
+
+
+# ─────────────────────────── AI 환경 (ADR-0037) ───────────────────────────
+
+
+def test_an_agent_environment_needs_a_known_domain() -> None:
+    known = builtin(contributes={"agent_environments": [{"domain": "desktop", "entry": "x:Y"}]})
+    assert "unknown_domain" not in codes(known)
+    odd = builtin(contributes={"agent_environments": [{"domain": "llm", "entry": "x:Y"}]})
+    assert "unknown_domain" in codes(odd), "`llm`·`doc`·`api`는 엔진이 스스로 돈다 — 환경이 없다"
+
+
+def test_e8_one_domain_one_extension() -> None:
+    from chaeksas.contracts.extension import environment_conflicts  # noqa: PLC0415
+
+    first = parse(builtin(contributes={"agent_environments": [{"domain": "desktop", "entry": "x:Y"}]}))
+    second = parse(builtin(id="other-ui", contributes={"agent_environments": [{"domain": "desktop", "entry": "x:Z"}]}))
+    found = environment_conflicts([first, second])
+    assert [v.code for v in found] == ["environment_conflict"]
+    assert environment_conflicts([first]) == []

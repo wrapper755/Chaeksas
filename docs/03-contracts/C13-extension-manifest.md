@@ -84,6 +84,7 @@
 | `studio.resource_views` | `[{id, label, resource_type, creates_task_type?}]` | STU-03 | 가능 (선언) |
 | `bot_ui.utilities` | `[{id, label, menu: "tools", entry, needs_runtime?}]` | Bot UI 「도구」 메뉴·탭 | 불가 |
 | `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start}]` | Bot UI (BUI-09·11) | 불가 |
+| `agent_environments` | `[{domain, entry}]` | 엔진 — `domain: web`·`desktop` AI 태스크의 눈과 손 ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md)) | 불가 |
 | `configuration` | `[{key, label, scope, schema, secret}]` | 설정 화면 칸 (BUI-03 「확장별 설정」, STU-10, 서버 실행기 설정) | 불가 |
 | `preflight` | `[{id, entry}]` | Studio·Bot UI·서버 실행기 사전 점검 | 불가 |
 | `console.pages` | `[{id, label, module}]` | 서비스 앱 관리 콘솔 | 불가 (자기 콘솔 링크만) |
@@ -92,6 +93,7 @@
 필드 설명:
 
 - `run_locations`: 이 태스크 종류를 쓸 수 있는 실행 위치. `ui_task`는 `["pc"]`다.
+- `agent_environments[].entry`: `extension_api.AgentEnvironment`. 엔진이 AI 태스크마다 `open(ctx)`로 **세션 하나**를 열어 그 도구(`AgentTool` — 이름·설명·인자 스키마·부를 함수)를 허용 목록에 더해 쓰고, 끝나면 `close()`한다. 한 `domain`은 한 확장만 기여한다 (둘이면 검사 오류 E8).
 - `start`: `on_demand` 또는 `always`.
 - `bot_ui.local_runtimes[].entry`: 런타임을 **실행하는 코드**를 가리킨다 (`entry` 형식은 위와 같고, 그 확장 패키지 안만 가리킬 수 있다). **명령줄을 확장이 적지 않는다** — Bot UI가 만든다 ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md)).
   - Bot UI는 **자기 실행 파일을 자식으로 다시 띄운다**: `<Bot UI 실행 파일> --local-runtime <확장 id>:<런타임 id> --port <p> --token-dir <폴더>`. 개발 환경(소스 실행)에서는 같은 인자로 `python -m chaeksas.bot_ui`다.
@@ -273,6 +275,7 @@ Operation:
 | E5 | 확장 호스트는 `api` 범위가 맞지 않는 확장을 켜지 않는다 (목록에 「호환 안 됨」) | — |
 | E6 | 외부 정의의 봉투(C2 `extension`)가 검증되고 `definition_hash`가 맞는다 | 400 `bad_envelope` / `hash_mismatch` |
 | E7 | `configuration[].key`가 `runtime.`·`service.`·`storage.`로 시작하지 않는다 (호스트가 쓰는 이름이다) | 422 `reserved_config_key` |
+| E8 | `agent_environments[].domain`은 확장 사이에 겹치지 않는다 (한 domain의 눈과 손은 하나) | 409 `environment_conflict` |
 
 Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬에서 먼저 돌려 보여 준다.
 
@@ -285,6 +288,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-05 | 2 | `agent_environments`(AI 태스크의 `web`·`desktop` 환경)를 더했다. 모르는 열쇠는 무시하므로 기존 호스트는 영향이 없다 | 0037 |
 | 2026-10-01 | 1 | 초안 | 0018 |
 | 2026-10-01 | 1 | 검토 반영 (아래) | — |
 | 2026-10-02 | 1 | 구현하며 명시한 것: `entry` 형식과 그 확장 패키지 안으로 제한, 예시의 편집기·유틸리티 entry를 `client`로 (ADR-0018 §6 폴더 구성) | 0018 |

@@ -140,6 +140,10 @@ class WorkerClient:
     def info(self, session_id: str, secret: str) -> SessionInfo:
         return SessionInfo.model_validate(self.call("GET", f"/v1/sessions/{session_id}", secret=secret))
 
+    def view(self, session_id: str, secret: str) -> dict[str, Any]:
+        """지금 화면을 줄글로 — 가린 것 (C10 `view`, 데스크톱 AI 태스크)."""
+        return self.call("GET", f"/v1/sessions/{session_id}/view", secret=secret)
+
     def close(self, session_id: str, secret: str) -> CloseResult:
         return CloseResult.model_validate(
             self.call("DELETE", f"/v1/sessions/{session_id}", secret=secret)
