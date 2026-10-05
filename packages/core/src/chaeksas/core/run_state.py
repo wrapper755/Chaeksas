@@ -18,7 +18,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from chaeksas.contracts.approvals import Form
 from chaeksas.contracts.bpmn_ext import BpmnProcess, Flow, Node
@@ -199,6 +199,29 @@ class RunEnv:
     tools: Mapping[str, Tool] = field(default_factory=dict)
     #: 패키지의 재생 명세 (`memory/specs.json`, ADR-0028). 결정 수행이 되밟는다. 없으면 그냥 돈다.
     memory: ReplayMemory | None = None
+    #: 확장 태스크를 수행하는 쪽 (`chk:task`, C13 `task_types[].executor`). 기본은 **없다** —
+    #: 확장이 없는 곳에서 확장 태스크를 만나면 그림 오류로 멈춘다 (조용히 넘어가지 않는다).
+    extensions: ExtensionTasks = field(default_factory=lambda: NoExtensionTasks())
+
+
+@runtime_checkable
+class ExtensionTasks(Protocol):
+    """확장 태스크 수행기를 찾아 주는 쪽 (ADR-0018).
+
+    **엔진은 확장을 모른다** — 태스크 종류 이름으로 묻고, 받은 것을 부를 뿐이다. 실행하는
+    쪽(Bot UI 실행기·Studio 시험 실행)이 확장 호스트를 끼워 준다.
+    """
+
+    def executor(self, task_type: str) -> Any | None:
+        """그 태스크 종류를 수행할 것 (`extension_api.TaskExecutor`). 없으면 `None`."""
+        ...
+
+
+class NoExtensionTasks:
+    """기본값 — **아무 확장도 없다.** 확장 태스크를 만나면 그림 오류가 된다."""
+
+    def executor(self, task_type: str) -> Any | None:
+        return None
 
 
 def utc_now() -> datetime:
@@ -447,9 +470,11 @@ __all__ = [
     "Consume",
     "Context",
     "EngineError",
+    "ExtensionTasks",
     "Go",
     "Handler",
     "LoopState",
+    "NoExtensionTasks",
     "Outcome",
     "Pending",
     "Run",

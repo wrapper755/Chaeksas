@@ -27,6 +27,7 @@ from chaeksas.contracts.bpmn_ext import (
     AiTask,
     Call,
     Email,
+    ExtensionTask,
     FileList,
     Flow,
     Node,
@@ -44,6 +45,7 @@ from chaeksas.core.run_state import (
     CODE_PATH_DENIED,
     CODE_UNSUPPORTED,
     ERROR_SEND_FAILED,
+    ERROR_TASK_FAILED,
     WAIT_MESSAGE,
     WAIT_SIGNAL,
     WAIT_TIMER,
@@ -54,6 +56,7 @@ from chaeksas.core.run_state import (
     Handler,
     Outcome,
     Pending,
+    Run,
     TaskFailed,
     Token,
     Wait,
@@ -64,6 +67,8 @@ from chaeksas.core.run_state import (
 )
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest
 from chaeksas.core.services import RETRYABLE_STATUS, OpCall, OpOutcome, ServiceCallError
+from chaeksas.extension_api import RUN_LOCATION_PC, TaskContext
+from chaeksas.extension_api import TaskFailed as ExtensionTaskFailed
 
 #: 웹훅 본문 적는 법 (C14 — `all` | `fields:[…]` | `template:"…"`).
 _WEBHOOK_FIELDS = re.compile(r"^fields\s*:\s*\[(.*)\]$", re.S)
@@ -334,11 +339,67 @@ def handle_service_task(context: Context) -> Outcome:
     ai: AiTask | None = node.prop("aiTask")
     if ai is not None:
         return handle_ai_task(context, ai)
-    if node.prop("task") is not None:
-        raise EngineError(
-            "확장 태스크는 아직 수행하지 않는다 (UI 자동화는 M4)", node_id=node.id, code=CODE_UNSUPPORTED
-        )
+    extension: ExtensionTask | None = node.prop("task")
+    if extension is not None:
+        return handle_extension_task(context, extension)
     raise EngineError("무엇을 하는 서비스 태스크인지 모른다 (`chk:*`가 없다)", node_id=node.id, code="task_empty")
+
+
+def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
+    """`chk:task` — 확장이 더한 태스크 하나 (C13 `task_types[].executor`, ADR-0018).
+
+    **엔진은 그 속을 모른다.** 태스크 종류로 수행기를 찾아 넘기고, 받은 출력만 변수에 담는다.
+
+    - 수행기가 없으면 **그림·설치 오류**다 (`EngineError`) — 오류 경계로 받지 않는다. 그
+      확장이 없는 PC에서 도는 것이고, 재시도로 풀리지 않는다 (C1 `requires.extensions`).
+    - 업무 실패(`extension_api.TaskFailed`)는 **엔진의 `TaskFailed`로 옮긴다** — 둘은 다른
+      예외라, 그대로 두면 오류 경계가 받지 못하고 실행이 통째로 깨진다.
+    - **키는 참조 이름으로만** 넘긴다 (ADR-0013) — 값은 확장이 호스트에게 묻는다.
+    """
+    run, node = context.run, context.node
+    found = run.env.extensions.executor(spec.type)
+    if found is None:
+        raise EngineError(
+            f"이 PC에 {spec.extension} 확장이 없어 {spec.type} 태스크를 수행할 수 없다",
+            node_id=node.id,
+            code=CODE_UNSUPPORTED,
+        )
+
+    scope = context.scope()
+    key_ref = spec.data.get("key_ref") or run.process.info.service_keys.get(spec.extension)
+    task = TaskContext(
+        extension=_extension_context(run, spec),
+        run_id=run.run_id,
+        node_id=node.id,
+        node_instance=context.instance(),
+        attempt=1,
+        mode=run.mode,
+        run_location=run.process.info.run_location or RUN_LOCATION_PC,
+        inputs=dict(scope.variables),
+        properties=dict(spec.data),
+        business_key=f"{run.run_id}:{node.id}:{context.instance()}:1",
+        key_ref=str(key_ref) if key_ref else None,
+    )
+    try:
+        outcome = found.execute(task)
+    except ExtensionTaskFailed as e:
+        raise TaskFailed(e.message or str(e), node_id=node.id, code=e.code or ERROR_TASK_FAILED) from e
+    for name, value in dict(outcome.outputs).items():
+        run.variables[name] = value
+    context.emit(
+        "log",
+        level="info",
+        message=f"{spec.type} 태스크: 변수 {len(outcome.outputs)}개",
+    )
+    return Go()
+
+
+def _extension_context(run: Run, spec: ExtensionTask) -> Any:
+    """수행기에게 줄 확장 바깥 세상. 실행하는 쪽이 꽂아 둔 것이 있으면 그것을 쓴다."""
+    maker = getattr(run.env.extensions, "context", None)
+    if callable(maker):
+        return maker(spec.extension)
+    return None
 
 
 def _seen_by(context: Context, spec: AiTask) -> dict[str, Any]:
