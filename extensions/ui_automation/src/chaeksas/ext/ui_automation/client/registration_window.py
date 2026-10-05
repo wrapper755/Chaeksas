@@ -130,9 +130,17 @@ class Session:
 class RegistrationWidget(QWidget):
     """BUI-06의 화면. Worker를 부르는 길은 `client`(C10) 하나뿐이다."""
 
-    def __init__(self, client: Any, registry: Any = None, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        client: Any,
+        registry: Any = None,
+        pending: Any = None,
+        parent: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self._client = client
+        #: 밀린 등록 (BUI-06 8번). 없으면 쌓지 않고 「다시 누르세요」로 말한다.
+        self._pending = pending
         #: 레지스트리를 부르는 쪽 (C9). **없으면 등록할 수 없다** — 설정이 비었다는 뜻이다.
         self._registry = registry
         #: 마지막으로 조회한 화면 (`None`이면 아직 모른다).
@@ -156,6 +164,7 @@ class RegistrationWidget(QWidget):
         layout.addWidget(self._elements(), 3)
         layout.addWidget(self._checks(), 2)
         layout.addLayout(self._footer())
+        self.flush()
         self._sync()
 
     # ── 만들기 ──
@@ -468,6 +477,19 @@ class RegistrationWidget(QWidget):
 
     # ── 레지스트리 (C9) ──
 
+    def flush(self) -> None:
+        """밀린 등록을 올려 본다 (창을 열 때·등록·삭제 뒤). **조용히 실패하지 않는다.**"""
+        if self._pending is None or self._registry is None or not self._pending.count():
+            return
+        sent, problems = self._pending.flush(self._registry)
+        if sent:
+            self.say(f"밀린 등록 {sent}건을 올렸습니다.")
+        for one in problems:
+            self.say(f"밀린 등록을 올리지 못했습니다 — {one}")
+        left = self._pending.count()
+        if left:
+            self.say(f"아직 {left}건이 남아 있습니다 (서버가 돌아오면 다시 올립니다).")
+
     def look_up(self, *, force: bool = False) -> None:
         """등록 상태를 조회한다 (BUI-06 [P]).
 
@@ -545,9 +567,19 @@ class RegistrationWidget(QWidget):
             self.say("화면 ID를 적으세요.")
             return
         self.say("서버에 등록하는 중…")
+        page = self._page(page_id)
         try:
-            found = self._registry.register(self._page(page_id))
+            found = self._registry.register(page)
         except Exception as e:  # noqa: BLE001 — 거부·닿지 못함을 가려 보여 준다
+            if not getattr(e, "permanent", False) and self._pending is not None:
+                # **사람이 한 일을 네트워크 때문에 잃지 않는다** (BUI-06 8번).
+                self._pending.add(page)
+                self.say(
+                    "서버에 닿지 못해 **등록을 큐에 쌓았습니다.** 서버가 돌아오면 저절로 "
+                    f"올라갑니다 (밀린 등록 {self._pending.count()}건)."
+                )
+                self._sync()
+                return
             self.say(self._registry_why(e))
             return
         if found.unchanged:
@@ -558,6 +590,7 @@ class RegistrationWidget(QWidget):
                 f"그대로 둔 것 {len(found.kept)}개). 새 로케이터는 **검증 전**으로 들어가 "
                 f"3회 연속 성공하면 사용 중으로 올라갑니다."
             )
+        self.flush()
         self.look_up(force=True)
 
     def _page(self, page_id: str) -> PageRegistration:
@@ -622,10 +655,13 @@ class RegistrationWidget(QWidget):
                 return
             self.say(self._registry_why(e))
             return
+        # **지운 화면을 나중에 되살리지 않는다** — 큐에 남아 있던 등록을 함께 버린다.
+        dropped = self._pending.drop(page_id) if self._pending is not None and not key else False
         broken = f" · 끊긴 경로 {len(found.broken_links)}개" if found.broken_links else ""
         self.say(
             f"지웠습니다 — {found.page_id}{'·' + key if key else ''} "
             f"(요소 {found.elements}개, 로케이터 {found.locators}개){broken}."
+            + (" 큐에 남아 있던 등록도 함께 버렸습니다." if dropped else "")
         )
         self.look_up(force=True)
 

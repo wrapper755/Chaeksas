@@ -12,10 +12,21 @@ Worker가 어디 있는지는 **호스트가 설정으로 알려 준다** (C13 �
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from chaeksas.extension_api import ExtensionContext
 
 #: 등록 담당자 키를 받는 설정 칸 (C13 `configuration`, BUI-03).
 REGISTRAR_KEY = "registrar_key"
+
+
+def pending_queue(ctx: ExtensionContext) -> object | None:
+    """밀린 등록이 사는 곳 (C13 예약 키 `storage.dir`). 자리를 모르면 **쌓지 않는다**."""
+    from chaeksas.contracts import STORAGE_DIR_SETTING  # noqa: PLC0415
+    from chaeksas.ext.ui_automation.client.queue import read_queue  # noqa: PLC0415
+
+    found = ctx.setting(STORAGE_DIR_SETTING)
+    return read_queue(Path(str(found))) if found else None
 
 
 class SelectorRegistration:
@@ -44,7 +55,7 @@ class SelectorRegistration:
         registry = registry_client(ctx)
 
         made = QTabWidget()
-        register = RegistrationWidget(worker, registry)
+        register = RegistrationWidget(worker, registry, pending_queue(ctx))
         trial = TrialWidget(
             worker,
             registry,
