@@ -5,11 +5,14 @@ description = "서비스 앱 공통 뼈대 — API 키 발급·검증, 관리 AP
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "chaeksas-contracts",
+    # 모델 클라이언트 — 엔진과 같은 한 벌 (ADR-0034). 서비스 앱은 core를 쓸 수 없다.
+    "chaeksas-llm",
     "fastapi>=0.115",
 ]
 
 [tool.uv.sources]
 chaeksas-contracts = { workspace = true }
+chaeksas-llm = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

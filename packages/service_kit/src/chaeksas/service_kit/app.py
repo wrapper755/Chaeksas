@@ -10,9 +10,9 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -21,6 +21,7 @@ from pydantic import ValidationError
 from chaeksas.contracts.service_app import (
     Caller,
     CenterRegistration,
+    Dependency,
     HealthResponse,
     KeySelfResponse,
     Operation,
@@ -46,6 +47,9 @@ from chaeksas.service_kit.stores import (
     UsageLog,
     body_hash,
 )
+
+if TYPE_CHECKING:
+    from chaeksas.service_kit.llm import ServiceLlm
 
 
 class OpError(Exception):
@@ -118,6 +122,7 @@ def create_app(
     admin_token: str | None = None,
     dependencies: DependencyProbe | None = None,
     center: CenterRegistration | None = None,
+    llm: ServiceLlm | None = None,
     now: Callable[[], str] = _now,
 ) -> FastAPI:
     """계약을 지키는 앱 하나.
@@ -127,6 +132,7 @@ def create_app(
     `admin_token`을 주면 관리 API(`/admin/v1/*`, SVC-00~03)가 열린다. 주지 않으면 그 경로는
     503이다 — **빈 토큰으로 열리지 않는다** (C11).
     `dependencies`는 앱이 자기 바깥 의존(Neo4j·LLM …)의 상태를 돌려주는 함수다 (SVC-01).
+    `llm`(모델 연결, C11 §모델 연결)을 주면 관리 상태에 `llm` 한 줄이 저절로 붙는다.
     """
     declared = {op.name for op in manifest.operations}
     if set(handlers) != declared:
@@ -144,14 +150,20 @@ def create_app(
     app.state.idempotency = idem
     app.state.usage_log = log
     app.state.admin_token = admin_token
+    app.state.llm = llm
     started_at = now()
+
+    def probe() -> Sequence[Dependency]:
+        found = list(dependencies()) if dependencies else []
+        return [*found, llm.dependency()] if llm is not None else found
+
     app.include_router(
         create_admin_router(
             manifest,
             keys=keys,
             usage_log=log,
             started_at=started_at,
-            dependencies=dependencies,
+            dependencies=probe,
             center=center,
             now=now,
         )

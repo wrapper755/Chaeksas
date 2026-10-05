@@ -308,12 +308,14 @@ version = "0.1.0"
 source = { editable = "packages/service_kit" }
 dependencies = [
     { name = "chaeksas-contracts" },
+    { name = "chaeksas-llm" },
     { name = "fastapi" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "chaeksas-contracts", editable = "packages/contracts" },
+    { name = "chaeksas-llm", editable = "packages/llm" },
     { name = "fastapi", specifier = ">=0.115" },
 ]
 

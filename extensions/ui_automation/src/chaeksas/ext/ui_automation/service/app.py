@@ -39,7 +39,7 @@ from chaeksas.ext.ui_automation.contracts.plan import ElementInfo, ExecutionPlan
 from chaeksas.ext.ui_automation.contracts.registry import PageRegistration
 from chaeksas.ext.ui_automation.service.registry import HasLinks, Registry, RegistryError
 from chaeksas.ext.ui_automation.service.store import Database, RegistryStore, SqliteKeyStore
-from chaeksas.service_kit import OpError, create_app
+from chaeksas.service_kit import OpError, ServiceLlm, create_app
 
 log = logging.getLogger(__name__)
 
@@ -266,8 +266,13 @@ def create(
     db_path: Path | None = None,
     admin_token: str | None = None,
     console_url: str = "",
+    llm: ServiceLlm | None = None,
 ) -> FastAPI:
-    """앱 하나. `admin_token`이 없으면 관리 API는 503이다 (C11)."""
+    """앱 하나. `admin_token`이 없으면 관리 API는 503이다 (C11).
+
+    모델(`CHK_SVC_UI_AUTOMATION__LLM__*`, C11 §모델 연결)은 치유·목표로 계획이 쓸 자리다. 지금은
+    관리 상태에 연결 여부만 보인다 — 그 작업들은 아직 선언하지 않았다.
+    """
     database = Database(path=db_path or (data_dir() / "ui-automation.sqlite3"))
     service = Service.open(database)
     keys = SqliteKeyStore(db=database)
@@ -284,6 +289,7 @@ def create(
         },
         keys=keys,
         admin_token=admin_token or _env("ADMIN_TOKEN"),
+        llm=llm if llm is not None else ServiceLlm.from_env(ENV_PREFIX),
     )
     app.state.service = service
 
