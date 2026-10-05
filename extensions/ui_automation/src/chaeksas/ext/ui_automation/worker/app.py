@@ -63,6 +63,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     STEP_TIMEOUT_S,
     TOKEN_HEADER,
     TOKEN_INVALID,
+    UNKNOWN_SEMANTIC_KEY,
     WORKER_BUSY,
     Caller,
     CloseResult,
@@ -136,6 +137,8 @@ class Session:
     #: 이 세션의 계획 (C8). 없으면 스텝을 밟을 수 없다.
     plan: ExecutionPlan | None = None
     plan_source: str = "server"
+    #: 이 세션이 쓰는 계획·보고 길 (C8). **키가 세션마다 다르다** (C10 `service_key`).
+    plans: Any = None
     #: 보고 재료 (C8 §report) — **업무 값은 담지 않는다**.
     attempts: list[AttemptReport] = field(default_factory=list)
     healed_locators: list[HealedReport] = field(default_factory=list)
@@ -206,6 +209,8 @@ class Worker:
     backend: Backend | None = None
     #: 계획을 받아 오고 보고를 보내는 쪽 (C8). 없으면 스텝을 밟을 수 없다.
     plans: Any = None
+    #: 세션마다 그 길을 만드는 함수 (키가 세션마다 다르다). 있으면 `plans`보다 먼저 쓴다.
+    plans_factory: Callable[[SessionRequest], Any] | None = None
     #: 치유를 묻는 길 (C8). 없으면 사다리가 다 실패했을 때 바로 전환이다.
     healer: Healer | None = None
     idle_s: float = SESSION_IDLE_S
@@ -254,17 +259,24 @@ class Worker:
             touched_at=self.clock(),
         )
         made.current_url = self.backend.open(request)
-        if self.plans is not None and request.page_id:
-            made.plan, made.plan_source = self._fetch_plan(request)
+        made.plans = self._plans_for(request)
+        if made.plans is not None and request.page_id:
+            made.plan, made.plan_source = self._fetch_plan(request, made.plans)
         self.session = made
         return made.info(), True
 
-    def _fetch_plan(self, request: SessionRequest) -> tuple[ExecutionPlan | None, str]:
+    def _plans_for(self, request: SessionRequest) -> Any:
+        """이 세션의 계획·보고 길. **키는 세션이 준다** (ADR-0013)."""
+        if self.plans_factory is not None:
+            return self.plans_factory(request)
+        return self.plans
+
+    def _fetch_plan(self, request: SessionRequest, plans: Any) -> tuple[ExecutionPlan | None, str]:
         """계획을 받아 온다 (C8). 닿지 못하고 캐시도 없으면 502 — **없는 채로 열지 않는다**."""
         from chaeksas.ext.ui_automation.worker.plans import OpsUnreachable  # noqa: PLC0415
 
         try:
-            found, source = self.plans.plan(
+            found, source = plans.plan(
                 page_id=request.page_id,
                 platform="web",
                 steps=[],
@@ -328,6 +340,11 @@ class Worker:
             action=request.action,
             value=request.value,
         )
+        if not found.plan.ladder(step.semantic_key):
+            # 계획에 없는 요소다 — 등록하지 않았거나 모두 `deprecated`다 (C8·C10 같은 코드).
+            raise WorkerProblem(
+                422, UNKNOWN_SEMANTIC_KEY, f"계획에 없는 요소입니다: {step.semantic_key}"
+            )
         attempt = run_step(step, found.plan, finder, heal=self.healer)
         self._remember(found, attempt)
         return StepResult(
@@ -391,8 +408,9 @@ class Worker:
         self.session = None
         summary = found.summary()
         sent = "queued"
-        if self.plans is not None:
-            sent = self.plans.report(found.report(duration_ms=_ms(self.clock() - found.opened_at)))
+        plans = found.plans if found.plans is not None else self.plans
+        if plans is not None:
+            sent = plans.report(found.report(duration_ms=_ms(self.clock() - found.opened_at)))
         self.recent.insert(
             0,
             SessionBrief(

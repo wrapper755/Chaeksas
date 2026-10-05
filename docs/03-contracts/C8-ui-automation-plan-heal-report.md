@@ -78,7 +78,7 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | `page_id` | ✓ | |
 | `platform` | | 기본 `web` |
 | `start_url` | | |
-| `steps` | 결정 수행 ✓ | `[{semantic_key, action, value?, expect_navigation}]`. 동작과 값 규칙은 C10과 같다 |
+| `steps` | | `[{semantic_key, action, value?, expect_navigation}]`. 동작과 값 규칙은 C10과 같다. **결정 수행에서 비우면 그 화면에 등록된 사다리 전부**를 받는다 — Worker는 세션을 열 때 계획을 받고 스텝은 그 뒤에 하나씩 오기 때문이다 (C10) |
 | `goal`, `values` | 자율 수행만 | 목표 한 줄과 쓸 값 (STU-13 「목표로 계획」) |
 
 출력 (ExecutionPlan):
@@ -93,7 +93,7 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | `elements` | `{semantic_key: {description, role}}`. 치유 프롬프트용 시맨틱 정보 (셀렉터 아님) |
 | `policy` | `{locator_timeout_ms: 2000, action_timeout_ms: 10000, navigation_timeout_ms: 30000, require_unique_match: true, max_healing_attempts: 3}` |
 
-- 모든 스텝의 `semantic_key`에 사다리가 있어야 한다. 없으면 422 `unknown_semantic_key` (C10 같은 코드).
+- 스텝을 주었으면 **모든 스텝의 `semantic_key`에 사다리가 있어야 한다.** 없으면 422 `unknown_semantic_key` (C10 같은 코드). 스텝을 비웠으면 그 검사는 스텝이 올 때(Worker)로 미뤄진다 — 같은 코드로 거절한다.
 - **오프라인 캐시:** Worker는 `(page_id, platform, steps 해시, revision)`으로 계획을 캐시한다. 서버에 닿지 못하면 캐시를 쓴다 (C10 `plan_source: "cache"`). 자율 수행(`goal`)은 캐시하지 않는다.
 
 ### heal

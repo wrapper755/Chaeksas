@@ -108,6 +108,8 @@
   | `runtime.<런타임 id>.state` | `off` · `running` · `restarting` · `stopped` (C4 `WorkerState.state`와 같은 낱말) |
   | `service.base_url` | 이 확장의 **서버 부분 주소**. **출처는 하나다** — Center 리소스 등록(C7)에 있으면 그것을, 없으면 정의의 `service.base_url`을 쓴다. 확장이 설정 칸으로 따로 받지 않는다 |
 
+  로컬 런타임 자식에게는 같은 주소를 환경변수 **`CHK_RUNTIME__SERVICE_URL`**로 물려준다 (이름은 플랫폼이 정한다 — 호스트가 확장 이름을 모르고 넣을 수 있어야 한다). **비밀은 물려주지 않는다** — 키는 부르는 쪽이 세션마다 준다 (C10 `service_key`, ADR-0013).
+
   `runtime.`·`service.`로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7).
 - `configuration`의 `scope`: `bot_ui`, `studio`, `server_runner` 중 하나.
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.

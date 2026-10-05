@@ -10,11 +10,48 @@ import하지 않는다 — HTTP로만 부른다 (`tests/test_import_direction.py
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
+
+from chaeksas.contracts import SERVICE_URL_ENV
 
 #: 포트를 쓸 수 없을 때의 종료 코드 — Bot UI가 「포트 <p> 사용 중」으로 바꿔 보인다 (ADR-0023).
 EXIT_PORT_IN_USE = 2
+
+
+
+
+def plans_for(token_dir: Path, base_url: str) -> object:
+    """세션 하나의 계획·보고 길을 만드는 함수 (C8).
+
+    **키는 세션이 준다** (C10 `service_key`) — Worker는 키를 저장하지 않는다. 주소가
+    비어 있으면 `None`이라 계획을 받아 올 수 없다 (「없는데 된 척」하지 않는다).
+    """
+    from chaeksas.ext.ui_automation.contracts.worker_local import SessionRequest  # noqa: PLC0415
+    from chaeksas.ext.ui_automation.worker.plans import (  # noqa: PLC0415
+        QUEUE_DIR,
+        HttpOps,
+        PlanCache,
+        PlanService,
+        ReportQueue,
+    )
+
+    def make(request: SessionRequest) -> object | None:
+        if not base_url or not request.service_key:
+            return None
+        return PlanService(
+            ops=HttpOps(
+                base_url=base_url,
+                api_key=request.service_key,
+                business_key=request.business_key,
+                mode=request.mode,
+            ),
+            cache=PlanCache(folder=token_dir / "plans"),
+            queue=ReportQueue(folder=token_dir / QUEUE_DIR),
+        )
+
+    return make
 
 
 def backend() -> object | None:
@@ -38,6 +75,9 @@ def serve(*, port: int, token_dir: Path | None = None) -> int:
 
     브라우저 백엔드는 Playwright가 깔려 있을 때만 붙는다. 없으면 세션을 열 때 503
     `browser_unavailable`이다 — **없는 것을 되는 척하지 않는다.**
+
+    계획·보고(C8)는 UI 자동화 앱 주소(`CHK_WORKER__SERVICE_URL`)와 **세션이 준 키**가 함께
+    있을 때만 돈다.
     """
     import uvicorn  # noqa: PLC0415 — 띄울 때만 든다
 
@@ -47,7 +87,14 @@ def serve(*, port: int, token_dir: Path | None = None) -> int:
     where = token_dir or Path.cwd()
     token, admin = write_tokens(where)
     found = backend()
-    app = create_app(Worker(token=token, admin_token=admin, backend=cast("Backend | None", found)))
+    app = create_app(
+        Worker(
+            token=token,
+            admin_token=admin,
+            backend=cast("Backend | None", found),
+            plans_factory=cast("Any", plans_for(where, os.environ.get(SERVICE_URL_ENV, ""))),
+        )
+    )
 
     try:
         uvicorn.run(app, host=LOCAL_HOST, port=port, log_level="warning")

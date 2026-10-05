@@ -36,6 +36,9 @@ OP_PLAN = "plan"
 OP_HEAL = "heal"
 OP_REPORT = "report"
 
+#: 앱이 **이미 받은** 보고 (C11). 다시 보낸 것이니 버려도 된다.
+IDEMPOTENCY_CONFLICT = "idempotency_conflict"
+
 #: 보고를 쌓아 두는 곳과, 다시 보내도 소용없는 것을 옮기는 곳 (BUI-09 「밀린 보고」).
 QUEUE_DIR = "reports"
 DEAD_DIR = "reports-rejected"
@@ -47,6 +50,89 @@ class Ops(Protocol):
     def call(self, operation: str, body: dict[str, Any], *, call_seq: int) -> dict[str, Any]: ...
 
 
+@dataclass
+class HttpOps:
+    """C11로 UI 자동화 앱을 부른다 (Worker 쪽).
+
+    - **키는 세션이 준다** (C10 `service_key` — 부르는 쪽이 키 참조를 풀어 넣는다, ADR-0013).
+      Worker는 세션 동안 메모리에만 두고 디스크·로그에 남기지 않는다.
+    - 멱등 키는 `(run_id, node_id, node_instance, attempt, call_seq)`다 (C11). UI 세션
+      하나가 한 `business_key`를 쓰므로 그것을 `run_id`·`node_id`로 쪼개 싣는다.
+    - **5xx·연결 실패는 `OpsUnreachable`**(캐시·큐로 간다), **4xx는 `OpsRefused`**(다시
+      보내도 소용없다).
+    """
+
+    base_url: str
+    api_key: str
+    business_key: str
+    mode: str = "deterministic"
+    caller_version: str | None = None
+    timeout_s: float = 30.0
+    client: Any = None  # httpx.Client (시험이 끼운다)
+
+    def ids(self) -> tuple[str, str, int, int]:
+        """`<run_id>:<node_id>:<node_instance>:<attempt>` (C10 `business_key`)."""
+        parts = self.business_key.split(":")
+        run_id = parts[0] if parts else self.business_key
+        node_id = parts[1] if len(parts) > 1 else "ui"
+        instance = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 1
+        attempt = int(parts[3]) if len(parts) > 3 and parts[3].isdigit() else 1
+        return run_id, node_id, instance, attempt
+
+    def call(self, operation: str, body: dict[str, Any], *, call_seq: int) -> dict[str, Any]:
+        import httpx  # noqa: PLC0415 — 부를 때만 든다
+
+        run_id, node_id, instance, attempt = self.ids()
+        payload = {
+            "schema": 1,
+            "mode": self.mode,
+            "run_id": run_id,
+            "node_id": node_id,
+            "node_instance": instance,
+            "attempt": attempt,
+            "call_seq": call_seq,
+            "caller": {"type": "worker", "version": self.caller_version},
+            "business_key": self.business_key,
+            "input": body,
+        }
+        own = self.client is None
+        client = self.client or httpx.Client(timeout=self.timeout_s)
+        try:
+            response = client.post(
+                f"{self.base_url.rstrip('/')}/v1/ops/{operation}",
+                json=payload,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+            )
+        except httpx.HTTPError as e:
+            raise OpsUnreachable(f"UI 자동화 앱에 닿지 못했다 ({type(e).__name__})") from e
+        finally:
+            if own:
+                client.close()
+
+        if 400 <= response.status_code < 500:
+            raise OpsRefused(_message(response), status=response.status_code, code=_code(response))
+        if response.status_code >= 500:
+            raise OpsUnreachable(_message(response))
+        found = response.json()
+        return dict(found.get("output") or {}) if isinstance(found, dict) else {}
+
+
+def _code(response: Any) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
+    return str(body.get("code") or "")
+
+
+def _message(response: Any) -> str:
+    try:
+        body = response.json()
+    except ValueError:
+        return f"앱이 {response.status_code}로 답했다"
+    return str(body.get("message") or f"앱이 {response.status_code}로 답했다")
+
+
 class OpsUnreachable(RuntimeError):
     """앱에 닿지 못했다 — 계획은 캐시로, 보고는 큐로 간다."""
 
@@ -54,9 +140,10 @@ class OpsUnreachable(RuntimeError):
 class OpsRefused(RuntimeError):
     """앱이 4xx로 거부했다 — **다시 보내도 소용없다**."""
 
-    def __init__(self, message: str, *, status: int = 400) -> None:
+    def __init__(self, message: str, *, status: int = 400, code: str = "") -> None:
         super().__init__(message)
         self.status = status
+        self.code = code
 
 
 def plan_key(page_id: str, platform: str, steps: list[PlanStep], revision: int) -> str:
@@ -208,7 +295,12 @@ class PlanService:
         path = self.queue.add(report)
         try:
             self.ops.call(OP_REPORT, report.to_json_dict(), call_seq=self.next_seq(OP_REPORT))
-        except OpsRefused:
+        except OpsRefused as e:
+            if e.code == IDEMPOTENCY_CONFLICT:
+                # **앱이 이미 받은 것이다** (같은 멱등 키). 보고는 들어갔으니 버린다 —
+                # 「보내지 못한 보고」로 쌓아 두면 사람이 없는 문제를 쫓는다.
+                path.unlink(missing_ok=True)
+                return "sent"
             self.queue.dead.mkdir(parents=True, exist_ok=True)
             path.replace(self.queue.dead / path.name)
             return "queued"
@@ -224,6 +316,7 @@ __all__ = [
     "OP_PLAN",
     "OP_REPORT",
     "QUEUE_DIR",
+    "HttpOps",
     "Ops",
     "OpsRefused",
     "OpsUnreachable",

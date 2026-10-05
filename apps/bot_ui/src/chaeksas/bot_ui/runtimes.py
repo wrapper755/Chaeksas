@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from collections.abc import Callable, Mapping
@@ -103,6 +104,8 @@ class Runtimes:
     host: ExtensionHost
     settings: Settings
     supervisors: dict[str, Supervisor] = field(default_factory=dict)
+    #: 자식에게 물려줄 환경변수 (`확장 id` → `{이름: 값}`). **비밀은 넣지 않는다.**
+    environment: Callable[[str], Mapping[str, str]] | None = None
     #: 시험에서 자식 프로세스를 바꿔 끼우는 자리.
     supervisor_factory: Callable[[str, LocalRuntime, int, Path | None], Supervisor] | None = None
     sleep: Callable[[float], None] = time.sleep
@@ -130,11 +133,14 @@ class Runtimes:
         if self.supervisor_factory is not None:
             made = self.supervisor_factory(extension_id, runtime, port, where)
         else:
+            extra = dict(self.environment(extension_id)) if self.environment is not None else {}
             made = Supervisor(
                 child=ChildProcess(
                     args=runtime_args(f"{extension_id}:{runtime.id}", port=port, token_dir=where),
                     log_path=data_dir() / "logs" / f"{runtime.id}.log",
                     name=runtime.label,
+                    # 자식은 부모 환경을 물려받는다 — 여기에 주소 같은 **비밀 아닌 것만** 더한다.
+                    env={**os.environ, **extra} if extra else None,
                 )
             )
         self.supervisors[runtime_id] = made
