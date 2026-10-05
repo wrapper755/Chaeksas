@@ -20,12 +20,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from chaeksas.bot_ui import machine
-from chaeksas.bot_ui.bots import find
+from chaeksas.bot_ui.bots import InstalledBot, find
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials
 from chaeksas.bot_ui.deploy import Deployer
 from chaeksas.bot_ui.runner import Launcher, Running
-from chaeksas.bot_ui.runtimes import HostSettings
+from chaeksas.bot_ui.runtimes import HostSettings, RuntimeUnavailable, runtime_ids_of
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
@@ -161,16 +161,47 @@ class Agent:
         """
         if self.host is None:
             raise LookupError("확장 호스트가 없습니다")
+        return self.host.context(
+            extension_id,
+            host=HOST_BOT_UI,
+            settings=HostSettings(values=self.extension_values(extension_id, runtime_ids=runtime_ids)),
+            secrets=ExtensionSecrets(credentials=self.credentials, extension_id=extension_id),
+        )
+
+    def extension_values(self, extension_id: str, *, runtime_ids: tuple[str, ...] = ()) -> dict[str, object]:
+        """확장에게 줄 설정 — **그 확장의 칸 + 호스트가 채우는 예약 키** (C13). 비밀은 없다."""
         values: dict[str, object] = dict(self.settings.extension(extension_id))
         values.update(self.runtimes().host_settings(runtime_ids))
         values[SERVICE_URL_SETTING] = self.service_url(extension_id)
         values[STORAGE_DIR_SETTING] = str(self.storage_dir(extension_id))
-        return self.host.context(
-            extension_id,
-            host=HOST_BOT_UI,
-            settings=HostSettings(values=values),
-            secrets=ExtensionSecrets(credentials=self.credentials, extension_id=extension_id),
-        )
+        return values
+
+    def run_extensions(self, bot: InstalledBot) -> dict[str, dict[str, object]]:
+        """실행기에게 넘길 확장별 설정. **그 Bot이 쓰는 확장의 로컬 런타임은 먼저 띄운다**.
+
+        쓰는 확장은 매니페스트에서 온다 (C1): `requires.extensions`, 그리고 `requires.domains`의
+        `web`·`desktop` AI 태스크 — 그 환경을 기여한 확장이다 (ADR-0037, 그림에 확장을 적지 않아도 된다).
+
+        UI 태스크·데스크톱 AI 태스크는 Worker가 떠 있어야 돈다 — 실행기가 띄우지 않는다 (Bot은
+        Worker를 띄우거나 끄지 않는다, CLAUDE.md §5). 못 띄우면 기록만 하고 실행은 보낸다 —
+        그 태스크가 「Worker에 닿지 못했다」로 분명히 실패한다 (조용히 넘어가지 않는다).
+        """
+        if self.host is None:
+            return {}
+        requires = bot.manifest.requires
+        needed = {need.id for need in requires.extensions}
+        needed |= {owner for owner in map(self.host.environment_owner, requires.domains) if owner}
+        table: dict[str, dict[str, object]] = {}
+        for found in self.host.enabled():
+            runtime_ids = runtime_ids_of(self.host, found.id)
+            if found.id in needed:
+                for runtime_id in runtime_ids:
+                    try:
+                        self.runtimes().ensure(runtime_id)
+                    except RuntimeUnavailable as e:
+                        log.warning("Bot %s이 쓰는 %s을 띄우지 못했다: %s", bot.id, runtime_id, e)
+            table[found.id] = self.extension_values(found.id, runtime_ids=runtime_ids)
+        return table
 
     def service_url(self, extension_id: str) -> str | None:
         """확장의 서버 부분 주소. **출처는 하나다** (C13) — Center 리소스 등록이 있으면 그것,
@@ -563,7 +594,12 @@ class Agent:
         run = self.claim_slot(item)
         try:
             running = self.runner().start(
-                bot, inputs=inputs, source=item.source, job_id=item.job_id, run_id=run.run_id
+                bot,
+                inputs=inputs,
+                source=item.source,
+                job_id=item.job_id,
+                run_id=run.run_id,
+                extensions=self.run_extensions(bot),
             )
         except Exception as e:  # noqa: BLE001 — 띄우지 못한 것은 실행 실패다
             log.exception("실행기를 띄우지 못했다")

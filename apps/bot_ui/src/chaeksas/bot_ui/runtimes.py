@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sys
@@ -61,6 +62,15 @@ def runtime_args(spec: str, *, port: int, token_dir: Path | None) -> list[str]:
     if token_dir is not None:
         args += ["--token-dir", str(token_dir)]
     return args
+
+
+#: 런타임 폴더에 Bot UI가 남기는 자리 정보 (`{"runtime", "port"}`) — 토큰은 런타임이 쓴다.
+RUNTIME_FILE = "runtime.json"
+
+
+def runtime_ids_of(host: ExtensionHost, extension_id: str) -> tuple[str, ...]:
+    """그 확장이 기여한 로컬 런타임들."""
+    return tuple(c.value.id for c in host.local_runtimes() if c.extension_id == extension_id)
 
 
 def token_dir_for(runtime_id: str, *, root: Path | None = None) -> Path:
@@ -130,6 +140,10 @@ class Runtimes:
         where = token_dir_for(runtime.id) if runtime.token_dir else None
         if where is not None:
             where.mkdir(parents=True, exist_ok=True)
+            # **포트를 남긴다** — 같은 PC의 Studio가 이 런타임을 찾는다 (C13 `token_dir`, STU-10 「Worker」).
+            (where / RUNTIME_FILE).write_text(
+                json.dumps({"runtime": f"{extension_id}:{runtime.id}", "port": port}), encoding="utf-8"
+            )
         if self.supervisor_factory is not None:
             made = self.supervisor_factory(extension_id, runtime, port, where)
         else:

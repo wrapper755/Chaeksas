@@ -102,7 +102,12 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
   - 스텁 모델이 진짜 트리를 보고 단추를 눌러 `408`을 읽는다.
   - 고치며 찾은 것: 화면을 다루는 AI 태스크에는 단계 한도 8이 모자란다(기본 30), `chk:defaults.limits`가 AI 태스크에 가지 않고 있었다.
   - **M4 묶음 6개가 모두 초록**이다 (`REMAINING`이 비었다). 웹 셋은 Chromium이 있는 PC에서, 데스크톱 셋은 Windows에서 돈다 (CI는 둘 다 건너뛴다).
-  - 남은 것: 실제 Studio·Bot UI 실행기가 `RunEnv.extensions`에 확장 호스트를 꽂는 일 (지금은 인수 시험만 꽂는다). BX-14는 **쓰기 허용 폴더**([ADR-0032](decisions/0032-writable-dirs.md))와 **엑셀 쓰기 도구**로 뚫었다 — 스텁 모델이 도구를 **진짜로 불러** 시트에 덧붙이고, 두 번째 실행에서 **정말 건너뛴다**. 고치며 찾은 것: 브라우저가 안 뜨면 **500이 아니라 503 `browser_unavailable`**이어야 하고, Worker 기본은 **안 보이게** 돌아야 한다(세션이 `headed`로 고른다)
+  - **실제 Studio·Bot UI 실행기도 확장을 꽂는다** (조각 25, `core.extensions.HostTasks`):
+    - **Bot UI**는 Bot을 시작하기 전에 그 Bot이 쓰는 확장(`requires.extensions` + `requires.domains`의 환경)의 Worker를 띄운다. 실행기(자식)에게 확장별 설정(Worker 자리 등, 비밀 없음)을 파일로 넘긴다. 실행기는 키 참조를 BUI-10의 서비스 앱 키로 푼다.
+    - **Studio**는 Bot UI가 런타임 폴더에 남긴 `runtime.json`·토큰 파일로 그 Worker를 찾는다. 키 참조는 `CHK_STUDIO__SVC__<참조>` → OS 비밀 저장소 순이다.
+    - **진짜 자식 프로세스와 HTTP로 한 바퀴**를 시험한다 (Windows): Bot UI → Worker(자식)·실행기(자식) → HTTP → 계산기 창 `408`, Studio 시험 실행 → Bot UI가 띄운 Worker.
+    - 고치며 찾은 것: 입력 없는 Bot에서 `runs/` 폴더가 없어 실행기를 못 띄웠다. Worker에 닿지 못하면 실행기가 기록 없이 죽었다(이제 `worker_unreachable` 업무 실패). 그림에 확장을 적지 않은 데스크톱 AI 태스크(FX-05)는 Worker가 뜨지 않았다(이제 domain으로 찾는다).
+    - 남은 것: STU-10 「Worker」·「서비스 앱 키」 화면, Bot UI의 Worker 실행 예약(C10 `reserve`). BX-14는 **쓰기 허용 폴더**([ADR-0032](decisions/0032-writable-dirs.md))와 **엑셀 쓰기 도구**로 뚫었다 — 스텁 모델이 도구를 **진짜로 불러** 시트에 덧붙이고, 두 번째 실행에서 **정말 건너뛴다**. 고치며 찾은 것: 브라우저가 안 뜨면 **500이 아니라 503 `browser_unavailable`**이어야 하고, Worker 기본은 **안 보이게** 돌아야 한다(세션이 `headed`로 고른다)
 
 ## M5. 배포·결재·서비스 앱
 

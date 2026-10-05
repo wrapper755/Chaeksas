@@ -301,3 +301,15 @@ def modal_boxes(monkeypatch: Any) -> list[tuple[str, str]]:
     monkeypatch.setattr(QMessageBox, "warning", warning)
     monkeypatch.setattr(QMessageBox, "question", warning)
     return shown
+
+
+def test_the_runtime_leaves_its_port_for_studio(monkeypatch: Any) -> None:
+    """같은 PC의 Studio가 Bot UI가 띄운 런타임을 찾는다 (STU-10 「Worker」) — 포트를 런타임 폴더에 남긴다."""
+    import json  # noqa: PLC0415
+
+    from chaeksas.bot_ui.runtimes import RUNTIME_FILE, token_dir_for  # noqa: PLC0415
+
+    found = make(monkeypatch=monkeypatch)
+    found.supervisor("helper")
+    left = json.loads((token_dir_for("helper") / RUNTIME_FILE).read_text(encoding="utf-8"))
+    assert left == {"runtime": "demo:helper", "port": 9911}

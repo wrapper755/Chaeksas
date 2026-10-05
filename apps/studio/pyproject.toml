@@ -9,6 +9,8 @@ dependencies = [
     # 캔버스는 QtWebEngine 안의 bpmn-js다 (ADR-0022). WebEngine·WebChannel은 addons에 있다 —
     # `pyside6-essentials`만으로는 뜨지 않는다. 설치 크기는 ADR-0022가 받아들인 값이다.
     "pyside6-addons>=6.8",
+    "platformdirs>=4.3",  # 사용자 데이터 위치 (이 PC Bot UI의 Worker 자리도 같은 규칙으로 찾는다)
+    "keyring>=25.4",      # 키 참조를 OS 비밀 저장소에서 푼다 (ADR-0013 — 개발용 키)
 ]
 
 [project.scripts]

@@ -60,4 +60,6 @@
 - 쉬워지는 것: 엔진은 여전히 확장을 모른다. 데스크톱의 손은 Worker 하나라 세션 하나 규칙·창 안에서만 찾기·잠금 처리·입력 확인이 그대로 적용된다. 웹 AI 태스크도 같은 자리(`agent_environments`의 `web`)에 붙는다.
 - 어려워지는 것: 등록되지 않은 앱은 `desktop-apps.json`에 창 조건(`window`)이 있어야 붙는다. 모델이 고른 로케이터 조건이 실행마다 하나에 맞는다는 보장은 없다 — 재생이 깨지면 `TaskFailed`로 올라간다 (ADR-0028, 몰래 자율로 넘어가지 않는다).
 - 다시 볼 조건: UIA 트리로는 보이지 않는 앱(그림으로만 그리는 앱) — 화면 캡처를 눈으로 더할지 본다 (ADR-0021).
-- 아직 아닌 것: 실제 Studio·Bot UI 실행기가 `RunEnv.extensions`에 확장 호스트를 꽂는 일. 지금은 인수 시험만 꽂는다 (확장 태스크와 같은 상태다).
+- 실제 Studio·Bot UI 실행기는 `core.extensions.HostTasks`로 확장 호스트를 꽂는다.
+  - Bot UI는 Bot의 `requires.domains`(`desktop`)로 그 환경의 확장을 찾아 Worker를 먼저 띄운다 (그림에 확장을 적지 않아도 된다).
+  - Studio는 Bot UI가 띄운 Worker를 `runtime.json`으로 찾는다.

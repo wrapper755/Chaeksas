@@ -234,8 +234,7 @@ class UiTaskExecutor:
     def worker(self, ctx: TaskContext) -> WorkerClient:
         if self.client is not None:
             return self.client
-        where = self.token_dir or Path.cwd()
-        return WorkerClient(token_dir=where, port=self.port)
+        return worker_for(ctx, token_dir=self.token_dir, port=self.port)
 
     def execute(self, ctx: TaskContext) -> TaskOutcome:
         """UI 태스크 한 번. **다시 할지 말지는 C10 §3이 정한다.**"""
@@ -355,6 +354,25 @@ def read_value(result: StepResult) -> Any:
     if result.action in ("read_options", "read_selection"):
         return result.text
     return screen_value(result.text or "")
+
+
+#: 호스트가 알려 주는 Worker 자리 (C13 예약 키 — Bot UI가 띄운 로컬 런타임 `worker`).
+WORKER_PORT_SETTING = "runtime.worker.port"
+WORKER_TOKEN_DIR_SETTING = "runtime.worker.token_dir"
+
+
+def worker_for(ctx: Any, *, token_dir: Path | None = None, port: int | None = None) -> WorkerClient:
+    """이 실행의 Worker. **호스트가 알려 준 자리가 먼저다** (C13 `runtime.worker.*`).
+
+    Bot UI 실행기와 Studio는 Bot UI가 띄운 Worker를 쓴다 — 포트·토큰 폴더를 추측하지 않는다.
+    호스트가 알려 주지 않으면(시험) 넘겨받은 값, 그것도 없으면 기본 포트와 지금 폴더다.
+    """
+    extension = getattr(ctx, "extension", None)
+    setting = getattr(extension, "setting", None)
+    told_dir = setting(WORKER_TOKEN_DIR_SETTING) if callable(setting) else None
+    told_port = setting(WORKER_PORT_SETTING) if callable(setting) else None
+    where = Path(str(told_dir)) if told_dir else (token_dir or Path.cwd())
+    return WorkerClient(token_dir=where, port=int(told_port) if told_port else (port or DEFAULT_PORT))
 
 
 def _goal_mode(spec: Mapping[str, Any], mode: str) -> str | None:

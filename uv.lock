@@ -326,6 +326,8 @@ source = { editable = "apps/studio" }
 dependencies = [
     { name = "chaeksas-core" },
     { name = "chaeksas-qt" },
+    { name = "keyring" },
+    { name = "platformdirs" },
     { name = "pyside6-addons" },
 ]
 
@@ -333,6 +335,8 @@ dependencies = [
 requires-dist = [
     { name = "chaeksas-core", editable = "packages/core" },
     { name = "chaeksas-qt", editable = "packages/qt" },
+    { name = "keyring", specifier = ">=25.4" },
+    { name = "platformdirs", specifier = ">=4.3" },
     { name = "pyside6-addons", specifier = ">=6.8" },
 ]
 

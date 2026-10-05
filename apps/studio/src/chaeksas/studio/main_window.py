@@ -371,6 +371,10 @@ class MainWindow(QMainWindow):
         plans = RunDialog.ask(self, self.process, found, self.settings)
         if not plans:
             return
+        # 확장 태스크·데스크톱 AI 태스크가 이 PC Bot UI의 Worker를 쓴다 (STU-10 「Worker」).
+        tasks = self.extensions.tasks()
+        for plan in plans:
+            plan.extensions = tasks
         self.receiver.start()
         self.queue = plans
         self.outcomes = []

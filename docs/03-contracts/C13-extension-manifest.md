@@ -100,6 +100,8 @@
   - 자식은 그 확장의 `entry`를 풀어 부르고, 그때부터 화면 없는 서버로 돈다 (Worker는 C10).
   - 왜 명령이 아니라 진입점인가: 설치 파일로 묶은 앱 안에는 콘솔 스크립트(`chk-worker`)가 없다 (PyInstaller는 실행 파일 하나를 만든다). 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))·서명·파이썬 런타임을 그대로 함께 쓴다.
   - 작업 관리자에서는 Bot UI와 같은 이름으로 보인다. 구별은 명령줄(`--local-runtime …`)로 한다.
+  - `token_dir: true`면 Bot UI가 그 폴더(`<Bot UI 데이터>/runtimes/<런타임 id>`)에 **`runtime.json`**(`{runtime, port}`)을 남긴다. 같은 PC의 Studio가 이것과 토큰 파일로 그 런타임을 찾는다 — Studio는 런타임을 띄우지 않는다.
+  - **실행에 쓰는 런타임:** Bot UI는 Bot을 시작하기 전에 그 Bot이 쓰는 확장의 런타임을 띄운다. 쓰는 확장은 매니페스트의 `requires.extensions`와, `requires.domains`의 `web`·`desktop`을 기여한 확장(`agent_environments`)이다. 실행기(자식)에게는 확장별 설정(그 칸 + 예약 키)을 **파일로** 넘긴다 — 비밀은 싣지 않는다.
 - `bot_ui.utilities[].needs_runtime`: 그 유틸리티를 열기 전에 호스트가 띄워야 할 **로컬 런타임의 id**. 띄우지 못하면 유틸리티를 열지 않고 왜 못 열었는지 말한다 (「없는데 된 척」하지 않는다).
 - **호스트가 채우는 예약 설정 키** — 띄운 로컬 런타임이 어디 있는지는 **확장이 설정으로 받는다** (`ctx.setting(…)`). 확장이 포트를 다시 계산하거나 토큰 파일 자리를 추측하지 않게 한다.
 

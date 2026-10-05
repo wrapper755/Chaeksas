@@ -18,22 +18,26 @@ import json
 import logging
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from chaeksas.bot_ui.credentials import Credentials
+from chaeksas.bot_ui.runtimes import HostSettings
 from chaeksas.contracts.bpmn_ext import BpmnProcess, read_process
 from chaeksas.contracts.dmn import Decision, DmnReadError, read_decisions
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.core import control
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State
+from chaeksas.core.extensions import ExtensionHost, HostTasks, load_host
 from chaeksas.core.files import Workspace
 from chaeksas.core.llm import NoLlm, OpenAiCompatibleLlm
 from chaeksas.core.replay import read_memory
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.core.senders import NoSender
 from chaeksas.core.tools import builtin_tools
+from chaeksas.extension_api import HOST_BOT_UI
 
 log = logging.getLogger(__name__)
 
@@ -85,16 +89,46 @@ class Package:
         return found
 
 
+@dataclass(frozen=True)
+class RunnerSecrets:
+    """`extension_api.Secrets` — 실행기에서 확장이 묻는 이름을 푼다 (ADR-0013).
+
+    태스크의 **서비스 앱 키 참조**(BUI-10)가 먼저, 아니면 그 확장의 비밀 칸이다.
+    """
+
+    credentials: Credentials
+    extension_id: str
+
+    def resolve(self, ref: str) -> str | None:
+        return self.credentials.service_app_key(ref) or self.credentials.extension_secret(self.extension_id, ref)
+
+
+def extension_tasks(values: dict[str, dict[str, Any]], *, host: ExtensionHost | None = None) -> HostTasks:
+    """이 실행의 확장 — 설치된 것을 읽고, Bot UI가 넘긴 확장별 설정(Worker 자리 등)을 붙인다."""
+    loaded = host if host is not None else load_host()
+    credentials = Credentials()
+
+    def make_context(extension_id: str) -> Any:
+        return loaded.context(
+            extension_id,
+            host=HOST_BOT_UI,
+            settings=HostSettings(values=dict(values.get(extension_id) or {})),
+            secrets=RunnerSecrets(credentials=credentials, extension_id=extension_id),
+        )
+
+    return HostTasks(host=loaded, make_context=make_context)
+
+
 def make_env(package: Package, *, output_dir: Path, readable: tuple[Path, ...],
              writable: tuple[Path, ...] = (), llm_url: str = "", llm_key: str = "",
-             llm_model: str) -> RunEnv:
+             llm_model: str, extensions: HostTasks | None = None) -> RunEnv:
     """바깥 세계 한 벌 — **주소·키는 실행하는 쪽만 안다** (ADR-0013)."""
     output_dir.mkdir(parents=True, exist_ok=True)
     space = Workspace(output_dir=output_dir, readable=readable, writable=writable)
     model = (
         OpenAiCompatibleLlm(base_url=llm_url, api_key=llm_key, model=llm_model) if llm_url else NoLlm()
     )
-    return RunEnv(
+    made = RunEnv(
         workspace=space,
         # 보내기 어댑터는 조각 4b다 — **없으면 보내지 않고 실패한다** (조용히 넘어가지 않는다).
         sender=NoSender(),
@@ -104,6 +138,10 @@ def make_env(package: Package, *, output_dir: Path, readable: tuple[Path, ...],
         tools=builtin_tools(space),
         memory=read_memory(package.folder),
     )
+    if extensions is not None:
+        # 확장 태스크·`web`·`desktop` AI 태스크 (ADR-0018·ADR-0037) — 없으면 그림·설치 오류가 된다.
+        made = replace(made, extensions=extensions)
+    return made
 
 
 @dataclass
@@ -218,6 +256,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--writable", type=Path, action="append", default=[])
     parser.add_argument("--llm-url", default="")
     parser.add_argument("--llm-model", default="")
+    # 확장별 설정 (그 칸 + 예약 키 — Worker 자리). **비밀은 없다** (키는 참조 이름으로 푼다).
+    parser.add_argument("--extensions", type=Path, default=None, help="확장별 설정 JSON 파일")
     found = parser.parse_args(argv)
 
     package = Package.read(found.package)
@@ -242,6 +282,9 @@ def main(argv: list[str] | None = None) -> int:
             llm_url=found.llm_url,
             llm_key=os.environ.get("CHK_BOT_UI__LLM__API_KEY", ""),
             llm_model=found.llm_model,
+            extensions=extension_tasks(
+                json.loads(found.extensions.read_text(encoding="utf-8")) if found.extensions else {}
+            ),
         ),
     )
     state = runner.drive()
