@@ -21,7 +21,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 
 실행하는 쪽(Bot UI·서버 실행기)은 이 API로 패키지를 내려받는다. 배포와 작업은 하트비트 응답으로 받는다 (C4·C12).
 
-> 상태: **패키지 승인·철회와 Admin 키**(`PUT …/signature`·`POST …/revoke`·`POST/DELETE/GET /admin-keys`)가 돈다. 배포 봉투(`POST/DELETE /deployments`)와 작업 지시는 다음이다.
+> 상태: **패키지 승인·철회, Admin 키, 배포**(`POST/DELETE/GET /deployments`)가 돈다 — 하트비트가 활성 배포 봉투와 Admin 키를 내려 주고 Bot UI가 설치한다 (C2 V1~V7). 작업 지시(`/jobs`)는 다음이다.
 
 ## 전송 공통
 

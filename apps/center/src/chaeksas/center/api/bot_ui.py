@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from chaeksas.center import keys
+from chaeksas.center.api import deployments, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import MAX_REQUEST_KB, ONLINE_WITHIN_S
@@ -165,7 +166,11 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
     return HeartbeatResponse(
         server_time=now_iso(),
         next_heartbeat_s=heartbeat_interval_s,
-        deployments=[],
+        # **저장된 JSON 그대로** 내려 준다 — 모델로 바꿔 다시 쓰면 서명이 깨진다 (C4).
+        deployments=deployments.envelopes_for(
+            store, target_type="bot_ui", target_id=str(found["bot_ui_id"])
+        ),
+        admin_keys=signing.admin_keys(store),
         jobs=[],
         cancel_jobs=[],
         approvals=[],

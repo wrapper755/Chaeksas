@@ -3,8 +3,8 @@
 - 푸는 곳은 `bots/<id>/<버전>/`이다. **같은 판을 다시 설치하면 덮어쓴다** (받은 것이 옳다).
 - **푸는 것은 Center가 먼저 본 zip이라도 다시 본다** — 경로 탈출은 푸는 쪽에서 막아야 한다
   (C5가 Center에서 막는 것과 같은 검사. 수동 설치는 Center를 거치지 않는다).
-- **서명 확인은 M5다** (C2) — 지금은 「서명 없음」으로 둔다. 모르는 것을 「확인됨」이라고 하지
-  않는다.
+- **서명은 설치할 때 본다** (`deploy.py`, C2 V1~V7). 여기 「서명」 칸은 설치된 패키지 안의
+  봉투를 읽어 보일 뿐이다 — 모르는 것을 「확인됨」이라고 하지 않는다.
 """
 
 from __future__ import annotations
@@ -16,9 +16,12 @@ from pathlib import Path
 
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.manifest import Manifest
+from chaeksas.contracts.signing import Envelope
 
 #: 설치된 Bot이 사는 곳 (`data_dir()/bots/<id>/<버전>/`).
 BOTS_DIR = "bots"
+#: 패키지 안의 승인 봉투 (C2) — 설치하면 폴더에 그대로 남는다.
+SIGNATURE_NAME = "SIGNATURE"
 
 #: 푸는 쪽 한도 (C5의 Center 쪽 검사와 같은 뜻).
 MAX_ENTRIES = 5000
@@ -56,8 +59,19 @@ class InstalledBot:
 
     @property
     def signature(self) -> str:
-        """서명 상태 (BUI-04 「서명」). M5 전까지는 모두 「서명 없음」이다."""
-        return "서명 없음"
+        """서명 상태 (BUI-04 「서명」, C2).
+
+        **설치된 것에서 읽는다** — 설치할 때 검증을 통과한 봉투가 그대로 들어 있다. 서명을
+        여기서 다시 검증하지는 않는다 (그것은 설치할 때 `deploy.py`가 한다).
+        """
+        found = self.folder / SIGNATURE_NAME
+        if not found.is_file():
+            return "서명 없음"
+        try:
+            envelope = Envelope.model_validate_json(found.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return "서명 읽지 못함"
+        return f"승인됨 ({envelope.key_id[:8]}…)"
 
 
 def bots_dir(data_dir: Path) -> Path:

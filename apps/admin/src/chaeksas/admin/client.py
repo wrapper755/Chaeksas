@@ -80,6 +80,21 @@ class Center:
             self.call("POST", f"/packages/{package_id}/{version}/revoke", body=envelope.to_json_dict())
         )
 
+    def deploy(self, envelope: Envelope) -> dict[str, Any]:
+        return dict(self.call("POST", "/deployments", body=envelope.to_json_dict()))
+
+    def revoke_deployment(self, envelope: Envelope) -> dict[str, Any]:
+        return dict(self.call("DELETE", "/deployments", body=envelope.to_json_dict()))
+
+    def deployments(self, *, bot_ui: str | None = None, active: bool = True) -> list[dict[str, Any]]:
+        query = f"?active={'true' if active else 'false'}" + (f"&bot_ui={bot_ui}" if bot_ui else "")
+        found = self.call("GET", f"/deployments{query}")
+        return list(found) if isinstance(found, list) else []
+
+    def bot_uis(self) -> list[dict[str, Any]]:
+        found = self.call("GET", "/bot-uis")
+        return list(found) if isinstance(found, list) else []
+
     def admin_keys(self) -> list[AdminKey]:
         found = self.call("GET", "/admin-keys")
         return [AdminKey.model_validate(one) for one in found] if isinstance(found, list) else []

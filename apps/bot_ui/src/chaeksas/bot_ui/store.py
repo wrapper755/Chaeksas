@@ -22,7 +22,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts.bot_ui import JobAck, QueueItem
+from chaeksas.contracts.bot_ui import DeploymentResult, JobAck, QueueItem
+from chaeksas.contracts.signing import AdminKey
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +42,10 @@ class State:
     inputs: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: 아직 Center가 확인하지 않은 ack. 하트비트마다 다시 보낸다.
     pending_acks: list[JobAck] = field(default_factory=list)
+    #: 아직 못 보낸 배포 적용 결정 (C4 `deployment_results`).
+    pending_deployments: list[DeploymentResult] = field(default_factory=list)
+    #: 마지막으로 받은 Admin 공개키 (C2 검증용). 하트비트에 없으면 **그대로 쓴다**.
+    admin_keys: list[AdminKey] = field(default_factory=list)
     #: 이미 본 `job_id` → 마지막으로 보낸 ack (같은 작업이 다시 오면 이것을 되돌려 보낸다).
     seen_jobs: dict[str, JobAck] = field(default_factory=dict)
 
@@ -50,6 +55,8 @@ class State:
             "queue": [item.to_json_dict() for item in self.queue],
             "inputs": self.inputs,
             "pending_acks": [ack.to_json_dict() for ack in self.pending_acks],
+            "pending_deployments": [one.to_json_dict() for one in self.pending_deployments],
+            "admin_keys": [one.to_json_dict() for one in self.admin_keys],
             "seen_jobs": {job_id: ack.to_json_dict() for job_id, ack in self.seen_jobs.items()},
         }
 
@@ -60,6 +67,10 @@ class State:
             queue=[QueueItem.model_validate(item) for item in raw.get("queue", [])],
             inputs=dict(raw.get("inputs", {})),
             pending_acks=[JobAck.model_validate(ack) for ack in raw.get("pending_acks", [])],
+            pending_deployments=[
+                DeploymentResult.model_validate(one) for one in raw.get("pending_deployments", [])
+            ],
+            admin_keys=[AdminKey.model_validate(one) for one in raw.get("admin_keys", [])],
             seen_jobs={
                 job_id: JobAck.model_validate(ack) for job_id, ack in (raw.get("seen_jobs") or {}).items()
             },
@@ -97,6 +108,20 @@ class Store:
         staged.replace(self.path)
 
     # ── ack 다루기 ──
+
+    def remember_deployments(self, found: list[DeploymentResult]) -> None:
+        """보낼 결정을 쌓는다. 같은 배포는 **마지막 것만** 남긴다."""
+        for one in found:
+            self.state.pending_deployments = [
+                x for x in self.state.pending_deployments if x.deployment_id != one.deployment_id
+            ]
+            self.state.pending_deployments.append(one)
+
+    def deployments_sent(self, sent: list[DeploymentResult]) -> None:
+        ids = {one.deployment_id for one in sent}
+        self.state.pending_deployments = [
+            one for one in self.state.pending_deployments if one.deployment_id not in ids
+        ]
 
     def remember_ack(self, ack: JobAck) -> None:
         """ack를 기억하고 보낼 목록에 넣는다. 같은 작업의 옛 ack는 **마지막 것으로 덮는다.**"""

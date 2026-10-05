@@ -23,6 +23,7 @@ from chaeksas.bot_ui import machine
 from chaeksas.bot_ui.bots import find
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials
+from chaeksas.bot_ui.deploy import Deployer
 from chaeksas.bot_ui.runner import Launcher, Running
 from chaeksas.bot_ui.runtimes import HostSettings
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
@@ -289,6 +290,7 @@ class Agent:
             worker=self.worker_state(),
             versions=self.versions(),
             job_acks=list(self.store.state.pending_acks),
+            deployment_results=list(self.store.state.pending_deployments),
             extensions=list(self.extensions),
             unsent_events=self.runs().unsent_count(),
         )
@@ -349,6 +351,7 @@ class Agent:
         self.disabled = response.disabled
         # 보낸 ack는 Center가 받았다 (같은 요청에 실어 보냈으므로).
         self.store.ack_sent(request.job_acks)
+        self.store.deployments_sent(request.deployment_results)
         self.apply(response)
         self.store.save()
         # 기록 보내기는 **하트비트가 끝난 뒤**다 — 늦어도 다음 주기에 또 보낸다.
@@ -360,9 +363,44 @@ class Agent:
     def apply(self, response: HeartbeatResponse) -> None:
         """내려온 지시를 반영한다. 순서가 중요하다 — **취소를 먼저** 본다."""
         self.cancel_jobs(response.cancel_jobs)
+        self.apply_deployments(response)
         self.jobs_waiting = list(response.jobs)
         for job in response.jobs:
             self.take_job(job)
+
+    def apply_deployments(self, response: HeartbeatResponse) -> None:
+        """배포를 적용한다 (C2 V1~V7). **서명이 유일한 관문**이다.
+
+        Admin 키는 바뀌었을 때만 내려온다 (C4) — 없으면 들고 있던 것을 쓴다.
+        """
+        if response.admin_keys is not None:
+            self.store.state.admin_keys = list(response.admin_keys)
+        if not response.deployments:
+            return
+        found = self.deployer().apply(response.deployments)
+        if found:
+            self.store.remember_deployments(found)
+
+    def deployer(self) -> Deployer:
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        return Deployer(
+            data_dir=data_dir(),
+            bot_ui_id=self.bot_ui_id or "",
+            keys=list(self.store.state.admin_keys),
+            signed_only=self.settings.signed_only,
+            fetch=self.fetch_package,
+        )
+
+    def fetch_package(self, package_id: str, version: str) -> Path:
+        """패키지를 내려받아 임시 파일로 (C5). **키가 없으면 받지 못한다.**"""
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        where = data_dir() / "downloads"
+        where.mkdir(parents=True, exist_ok=True)
+        target = where / f"{package_id}-{version}.zip"
+        target.write_bytes(self.client().download_package(package_id, version))
+        return target
 
     def take_job(self, job: JobDispatch) -> JobAck:
         """작업 하나를 받는다 (C4 작업 상태 흐름).
