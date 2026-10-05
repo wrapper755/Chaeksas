@@ -133,6 +133,8 @@
 | `POST /v1/registration/browser` | 브라우저 열기 `{start_url, headed}` → `SessionInfo` (§2와 같은 모양) |
 | `POST /v1/registration/{session_id}/analyze` | 화면 분석 `{scope_css?, max, include_read}` → 요소 후보 목록 |
 | `POST /v1/registration/{session_id}/pick` / `DELETE …/pick` | 직접 고르기 시작·끝. 고른 요소는 `GET …/pick/events`로 받는다 |
+| `GET /v1/registration/{session_id}/pick/events` | **고른 것을 비워 가져온다** (한 번 준 것은 다시 주지 않는다) |
+| `POST /v1/registration/{session_id}/highlight` | `{locators: [로케이터…]}` → 그 요소를 화면에 표시 (BUI-06 5번) |
 | `POST /v1/registration/{session_id}/verify` | `{ladders: {시맨틱 키: [로케이터…]}}` → 칸별 통과·실패 |
 
 **`business_key`는 Worker가 짓는다** (`reg_<hex8>`) — 등록 화면이 실행 키를 흉내 낼 일이 없다. 등록 세션은 `page_id`가 없어 계획(C8)을 받아 오지 않는다.
@@ -148,9 +150,13 @@
 
 `suggested_key`는 `test_id` → `id` → `name` → **영문** 접근성 이름 → 역할 순으로 짓는다. **한글 이름은 음역하지 않는다** — `고객명`을 `gogaegmyeong`으로 바꾸면 사람도 기계도 못 읽는다. 어차피 사람이 고치는 자리다 (BUI-06 4번).
 
+`pick/events` 응답: `{candidates: [Candidate…], picking: bool}`. `picking`이 `false`면 사람이 화면에서 끝낸 것이다(Esc) — 화면도 토글을 내린다. **고르는 동안 링크 이동과 폼 제출은 막는다** (누르면 다른 화면으로 가 버린다).
+
+`highlight` 응답: `{found: int}`. **하나가 아니면 그렇게 말한다** — 0이면 「찾지 못했습니다」, 여럿이면 「N개가 잡힙니다 — 모호해서 실패합니다」.
+
 `verify` 응답은 사다리 한 칸에 한 줄(`{semantic_key, rank, strategy, selector, passed, matched, reason}`)이다. **하나에 맞아야 통과**다 — 여럿이 잡히면 실행에서 엉뚱한 것을 누른다. 검증 결과는 **등록을 막지 않는다**: 사람이 보고 정한다.
 
-> 상태: `pick`(직접 고르기)은 BUI-06~08 화면 조각에서 붙인다. `analyze`는 **브라우저 백엔드에서만** 된다 — 데스크톱(UIA) 백엔드가 없으면 503 `browser_unavailable`이다.
+> 상태: `analyze`·`pick`·`highlight`는 **브라우저 백엔드에서만** 된다 — 데스크톱(UIA) 백엔드가 없으면 503 `browser_unavailable`이다.
 
 ## 오류
 
@@ -189,5 +195,6 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 | 2026-10-01 | 1 | 검토 반영: 토큰은 파일로만 넘기고 사용·관리 토큰으로 나눔, `session_secret`, 실행 예약과 유휴 시간 제한·강제 닫기, `caller.attempt`와 4단 `business_key`, 셀렉터 등록 caller, 재시작 시 조작 스텝이 있었으면 자동으로 다시 하지 않음 | — |
 | 2026-10-01 | 1 | 확장 검토 반영: `registration/submit` 없앰 (레지스트리는 확장 유틸리티가 직접), 등록 세션은 `service_key` 불필요 | 0018 |
 | 2026-10-03 | 1 | 잠금 화면 오류 `session_locked`(503, 재시도 가능) 추가. 잠긴 동안 조작·캡처를 하지 않고, 부르는 쪽은 스텝 시간 제한 안에서 기다린다 | 0023 |
+| 2026-10-05 | 1 | §5에 `pick/events`(비워 가져오기·`picking`)와 `highlight`를 적었다 | — |
 | 2026-10-05 | 1 | §5 셀렉터 등록의 요청·응답을 확정했다 — `analyze`·`verify`는 세션 경로 아래(`/v1/registration/{session_id}/…`)로 두어 나머지 세션 경로와 모양을 맞췄고, `business_key`는 Worker가 짓는다. 등록 세션이 아니면 403 | 0018 |
 | 2026-10-03 | 1 | 기동 절차의 2단계를 고쳤다 — `chk-worker` 명령이 아니라 Bot UI가 자기 실행 파일을 `--local-runtime`으로 다시 띄운다 (묶인 앱에는 콘솔 스크립트가 없다). 주고받는 API는 그대로라 schema는 1 | 0024 |

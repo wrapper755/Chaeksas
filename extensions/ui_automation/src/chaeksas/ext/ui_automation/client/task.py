@@ -29,6 +29,7 @@ from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec
 from chaeksas.ext.ui_automation.contracts.registration import (
     AnalyzeRequest,
     AnalyzeResult,
+    Candidate,
     VerifyResult,
 )
 from chaeksas.ext.ui_automation.contracts.worker_local import (
@@ -152,6 +153,28 @@ class WorkerClient:
                 secret=secret,
             )
         )
+
+    def pick(self, session_id: str, secret: str, *, on: bool) -> None:
+        self.call(
+            "POST" if on else "DELETE", f"/v1/registration/{session_id}/pick", secret=secret
+        )
+
+    def picked(self, session_id: str, secret: str) -> tuple[list[Candidate], bool]:
+        """담은 것을 **비워** 가져온다 (C10 §5)."""
+        found = self.call("GET", f"/v1/registration/{session_id}/pick/events", secret=secret)
+        return (
+            [Candidate.model_validate(one) for one in found.get("candidates", [])],
+            bool(found.get("picking")),
+        )
+
+    def highlight(self, session_id: str, secret: str, locators: Sequence[LocatorSpec]) -> int:
+        found = self.call(
+            "POST",
+            f"/v1/registration/{session_id}/highlight",
+            body={"locators": [one.to_json_dict() for one in locators]},
+            secret=secret,
+        )
+        return int(found.get("found") or 0)
 
     def verify(
         self, session_id: str, secret: str, ladders: Mapping[str, Sequence[LocatorSpec]]

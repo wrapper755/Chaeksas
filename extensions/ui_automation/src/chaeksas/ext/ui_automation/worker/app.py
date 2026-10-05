@@ -450,6 +450,31 @@ class Worker:
         found = self._registering(session_id, secret)
         return analyze(self._surface(found), request)
 
+    def pick(self, session_id: str, secret: str, *, on: bool) -> None:
+        """직접 고르기를 켜고 끈다 (BUI-06 3번)."""
+        from chaeksas.ext.ui_automation.worker import registration  # noqa: PLC0415
+
+        found = self._registering(session_id, secret)
+        page = self._surface(found)
+        registration.start_pick(page) if on else registration.stop_pick(page)
+
+    def picked(self, session_id: str, secret: str) -> dict[str, Any]:
+        """담은 것을 **비워** 가져온다. 한 번 준 것은 다시 주지 않는다."""
+        from chaeksas.ext.ui_automation.worker import registration  # noqa: PLC0415
+
+        found = self._registering(session_id, secret)
+        candidates, picking = registration.drain_pick(self._surface(found))
+        return {
+            "candidates": [one.to_json_dict() for one in candidates],
+            "picking": picking,
+        }
+
+    def highlight(self, session_id: str, secret: str, locators: list[LocatorSpec]) -> dict[str, Any]:
+        from chaeksas.ext.ui_automation.worker import registration  # noqa: PLC0415
+
+        found = self._registering(session_id, secret)
+        return {"found": registration.highlight(self._surface(found), locators)}
+
     def verify(
         self, session_id: str, secret: str, ladders: dict[str, list[LocatorSpec]]
     ) -> VerifyResult:
@@ -610,6 +635,33 @@ def create_app(worker: Worker) -> FastAPI:
         except ValueError as e:
             raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
         return worker.analyze(session_id, secret_of(request), wanted)
+
+    @router.post("/registration/{session_id}/pick")
+    def registration_pick(session_id: str, request: Request) -> Any:
+        check_token(request)
+        worker.pick(session_id, secret_of(request), on=True)
+        return {"picking": True}
+
+    @router.delete("/registration/{session_id}/pick")
+    def registration_unpick(session_id: str, request: Request) -> Any:
+        check_token(request)
+        worker.pick(session_id, secret_of(request), on=False)
+        return {"picking": False}
+
+    @router.get("/registration/{session_id}/pick/events")
+    def registration_picked(session_id: str, request: Request) -> Any:
+        check_token(request)
+        return worker.picked(session_id, secret_of(request))
+
+    @router.post("/registration/{session_id}/highlight")
+    async def registration_highlight(session_id: str, request: Request) -> Any:
+        check_token(request)
+        body = await request.json()
+        try:
+            locators = [LocatorSpec.model_validate(one) for one in (body.get("locators") or [])]
+        except ValueError as e:
+            raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
+        return worker.highlight(session_id, secret_of(request), locators)
 
     @router.post("/registration/{session_id}/verify")
     async def registration_verify(session_id: str, request: Request) -> Any:

@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -56,6 +56,7 @@ from chaeksas.ext.ui_automation.contracts.registration import (
     Candidate,
     VerifyResult,
     ladder_for,
+    suggest_key,
 )
 from chaeksas.ext.ui_automation.contracts.registry import (
     WEB,
@@ -79,6 +80,9 @@ KIND_LABEL = {"control": "조작", "list": "목록", "table": "표", "text": "�
 
 #: 분석 「최대」 칸의 눈금 (BUI-06 — 10~2000, 50 단위).
 MAX_STEP = 50
+
+#: 고른 것을 받아 오는 주기 (ms). **밀려 있는 것을 비워 가져온다** — 하나씩 기다리지 않는다.
+PICK_POLL_MS = 400
 
 #: 호스트가 채워 주는 예약 설정 키 (C13).
 PORT_SETTING = "runtime.worker.port"
@@ -138,6 +142,10 @@ class RegistrationWidget(QWidget):
         self._rows: list[Row] = []
         self._verified: VerifyResult | None = None
         self._filling = False
+        #: 고른 것을 받아 오는 타이머 (BUI-06 3번). **스레드를 만들지 않는다.**
+        self._picking = QTimer(self)
+        self._picking.setInterval(PICK_POLL_MS)
+        self._picking.timeout.connect(self._collect_picked)
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._page_row())
@@ -191,8 +199,8 @@ class RegistrationWidget(QWidget):
         self.open_button = QPushButton("브라우저 열기")
         self.open_button.clicked.connect(self.open_browser)
         self.pick_button = QPushButton("직접 고르기")
-        self.pick_button.setEnabled(False)
-        self.pick_button.setToolTip("직접 고르기는 다음 조각입니다 (C10 §5 `pick`).")
+        self.pick_button.setCheckable(True)
+        self.pick_button.clicked.connect(self.toggle_pick)
         self.analyze_button = QPushButton("분석")
         self.analyze_button.clicked.connect(self.analyze)
         self.close_button = QPushButton("브라우저 닫기")
@@ -227,7 +235,7 @@ class RegistrationWidget(QWidget):
         self.elements.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.elements.itemChanged.connect(self._element_edited)
         self.elements.itemDoubleClicked.connect(lambda item: self.open_hints(item.row()))
-        self.elements.itemSelectionChanged.connect(self._sync)
+        self.elements.itemSelectionChanged.connect(self._selection_changed)
         layout.addWidget(self.elements)
 
         row = QHBoxLayout()
@@ -368,6 +376,95 @@ class RegistrationWidget(QWidget):
         self._fill_checks(result)
         self.say(summary_of(result))
         self._sync()
+
+    # ── 직접 고르기 (BUI-06 3번) ──
+
+    def toggle_pick(self) -> None:
+        """브라우저에서 사람이 누른 요소를 표에 담는다. 다시 누르거나 Esc로 끝난다."""
+        found = self._session
+        if found is None:
+            self.pick_button.setChecked(False)
+            return
+        on = self.pick_button.isChecked()
+        try:
+            self._client.pick(found.session_id, found.secret, on=on)
+        except Exception as e:  # noqa: BLE001
+            self.pick_button.setChecked(False)
+            self._picking.stop()
+            self.say(self._why(e))
+            return
+        if on:
+            self._picking.start()
+            self.say("고르는 중… 브라우저에서 요소를 누르세요 (Shift+클릭은 둘러싼 표, Esc로 끝).")
+        else:
+            self._picking.stop()
+            self.say(f"고르기를 끝냈습니다 — 담은 요소 {len(self._rows)}개.")
+        self._sync()
+
+    def _collect_picked(self) -> None:
+        """담긴 것을 **비워** 가져온다 — 한 번 받은 것은 다시 오지 않는다 (C10 §5)."""
+        found = self._session
+        if found is None:
+            self._picking.stop()
+            return
+        try:
+            candidates, picking = self._client.picked(found.session_id, found.secret)
+        except Exception as e:  # noqa: BLE001 — 화면이 사라졌을 수 있다
+            self._picking.stop()
+            self.pick_button.setChecked(False)
+            self.say(self._why(e))
+            self._sync()
+            return
+
+        for one in candidates:
+            self._add_picked(one)
+        if not picking:
+            # 사람이 화면에서 Esc로 끝냈다 — 토글도 내린다.
+            self._picking.stop()
+            self.pick_button.setChecked(False)
+            self.say(f"고르기를 끝냈습니다 — 담은 요소 {len(self._rows)}개.")
+            self._sync()
+
+    def _add_picked(self, candidate: Candidate) -> None:
+        """고른 것 하나를 표에 더한다. **이미 있으면 더하지 않는다.**"""
+        where = _same_as(candidate, self._rows)
+        if where is not None:
+            self.say(f"이미 표에 있습니다 — {candidate.name or candidate.tag}")
+            self.elements.selectRow(where)
+            return
+        key = suggest_key(candidate, {row.key for row in self._rows if row.key})
+        self._rows.append(Row(candidate=candidate, key=key))
+        self._verified = None
+        self._fill_elements()
+        self.elements.selectRow(len(self._rows) - 1)
+        self.say(f"골랐습니다 — {candidate.name or candidate.tag} → `{key}`")
+        self._sync()
+
+    def show_selected(self) -> None:
+        """BUI-06 5번 「표시」 — 고른 줄을 화면에서 파란 테두리로 보인다."""
+        found = self._session
+        rows = {index.row() for index in self.elements.selectedIndexes()}
+        if found is None or len(rows) != 1:
+            return
+        row = rows.pop()
+        if not (0 <= row < len(self._rows)):
+            return
+        ladder = self._rows[row].ladder()
+        if not any(one.type == "css" for one in ladder):
+            # **못 하는 것을 못 찾았다고 하지 않는다** — 표시는 CSS로만 한다.
+            self.say("CSS 후보가 없어 화면에 표시할 수 없습니다.")
+            return
+        try:
+            count = self._client.highlight(found.session_id, found.secret, ladder)
+        except Exception as e:  # noqa: BLE001
+            self.say(self._why(e))
+            return
+        if count == 1:
+            self.say("화면에 표시했습니다.")
+        elif count == 0:
+            self.say("화면에서 찾지 못했습니다.")
+        else:
+            self.say(f"**{count}개가 잡힙니다** — 모호해서 실패합니다.")
 
     # ── 레지스트리 (C9) ──
 
@@ -576,6 +673,8 @@ class RegistrationWidget(QWidget):
             self._client.close(found.session_id, found.secret)
         except Exception as e:  # noqa: BLE001 — 이미 닫혔을 수 있다. 화면은 놓아 준다
             log.debug("세션을 닫지 못했다: %s", e)
+        self._picking.stop()
+        self.pick_button.setChecked(False)
         self._session = None
         self.say("브라우저를 닫았습니다. 담아 둔 요소는 그대로입니다.")
         self._sync()
@@ -651,6 +750,11 @@ class RegistrationWidget(QWidget):
             self._filling = False
         self._mark_duplicates()
 
+    def _selection_changed(self) -> None:
+        self._sync()
+        if self._session is not None:
+            self.show_selected()
+
     def _element_edited(self, item: QTableWidgetItem) -> None:
         if self._filling or not (0 <= item.row() < len(self._rows)):
             return
@@ -705,6 +809,8 @@ class RegistrationWidget(QWidget):
         open_now = self._session is not None
         self.open_button.setText("주소로 이동" if open_now else "브라우저 열기")
         self.analyze_button.setEnabled(open_now)
+        self.pick_button.setEnabled(open_now)
+        self.pick_button.setText("고르는 중… (누르면 종료)" if self.pick_button.isChecked() else "직접 고르기")
         self.close_button.setEnabled(open_now)
         has_rows = bool(self._rows)
         self.delete_selected.setEnabled(has_rows)
@@ -796,6 +902,19 @@ def _candidate_of(key: str, page: PageRegistration) -> Candidate:
     )
 
 
+def _same_as(candidate: Candidate, rows: list[Row]) -> int | None:
+    """표에 이미 있는 줄인가 — **같은 요소를 두 번 담지 않는다** (BUI-06 3번)."""
+    for index, row in enumerate(rows):
+        one = row.candidate
+        if candidate.test_id and candidate.test_id == one.test_id:
+            return index
+        if candidate.element_id and candidate.element_id == one.element_id:
+            return index
+        if candidate.css and candidate.css == one.css:
+            return index
+    return None
+
+
 def page_id_from(url: str) -> str:
     """주소에서 화면 ID를 지어 본다 (BUI-06 2번 — 사람이 고친다).
 
@@ -848,6 +967,7 @@ __all__ = [
     "CHECK_COLUMNS",
     "ELEMENT_COLUMNS",
     "NO_REGISTRY",
+    "PICK_POLL_MS",
     "KIND_LABEL",
     "PORT_SETTING",
     "TOKEN_DIR_SETTING",
