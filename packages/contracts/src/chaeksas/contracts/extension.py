@@ -59,6 +59,9 @@ RESERVED_CONFIG_PREFIX = RESERVED_CONFIG_PREFIXES[0]
 
 #: 서버 부분 주소를 알려 주는 예약 키. **출처는 하나다** (Center 리소스 등록 > 정의).
 SERVICE_URL_SETTING = "service.base_url"
+#: 로컬 런타임 자식에게 같은 값을 물려주는 환경변수 (C13). 이름은 **플랫폼이 정한다** —
+#: 호스트가 확장 이름을 모르고 넣을 수 있어야 한다. **비밀은 넣지 않는다** (키는 세션이 준다).
+SERVICE_URL_ENV = "CHK_RUNTIME__SERVICE_URL"
 
 #: `configuration[].scope`, `local_runtimes[].start`, `requires_keys[].purpose`.
 SCOPE_BOT_UI = "bot_ui"

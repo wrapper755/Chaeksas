@@ -28,7 +28,7 @@ from chaeksas.bot_ui.runtimes import HostSettings
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
-from chaeksas.contracts import SERVICE_URL_SETTING
+from chaeksas.contracts import SERVICE_URL_ENV, SERVICE_URL_SETTING
 from chaeksas.contracts.bot_ui import (
     DEFAULT_HEARTBEAT_S,
     CurrentRun,
@@ -136,8 +136,17 @@ class Agent:
     def runtimes(self) -> LocalRuntimes:
         """확장이 기여한 로컬 런타임들. **띄우지는 않는다** — 필요할 때 `ensure()`가 띄운다."""
         if self._runtimes is None:
-            self._runtimes = LocalRuntimes(host=self.host or ExtensionHost(), settings=self.settings)
+            self._runtimes = LocalRuntimes(
+                host=self.host or ExtensionHost(),
+                settings=self.settings,
+                environment=self._runtime_env,
+            )
         return self._runtimes
+
+    def _runtime_env(self, extension_id: str) -> dict[str, str]:
+        """로컬 런타임 자식에게 물려줄 것 — **주소뿐이다** (키는 세션이 준다, ADR-0013)."""
+        found = self.service_url(extension_id)
+        return {SERVICE_URL_ENV: found} if found else {}
 
     @property
     def supervisors(self) -> dict[str, Supervisor]:

@@ -10,8 +10,9 @@
   나가지 않는다.
 - 저장은 SQLite 한 파일 (`store.py`). 레지스트리는 메모리에서 돌고 바뀌면 통째로 쓴다.
 
-> 상태: `plan`·`heal`(C8)은 아직 없다 — 선언하지 않으니 부르면 404다. **없는 것을 되는 척
-> 하지 않는다.** 계획 생성은 다음 조각이다.
+> 상태: `plan`은 **결정 수행만** 한다 — 등록된 사다리를 모아 준다. 자연어 목표(`goal`)로
+> 스텝을 지어내는 것과 `heal`(C8)은 모델이 하는 일이라 아직 없다. 받으면 422로 **분명히
+> 거절한다** (「없는데 된 척」하지 않는다).
 """
 
 from __future__ import annotations
@@ -34,7 +35,7 @@ from chaeksas.contracts.service_app import (
     OpRequest,
     ServiceAppManifest,
 )
-from chaeksas.ext.ui_automation.contracts.plan import SessionReport
+from chaeksas.ext.ui_automation.contracts.plan import ElementInfo, ExecutionPlan, PlanStep, SessionReport
 from chaeksas.ext.ui_automation.contracts.registry import PageRegistration
 from chaeksas.ext.ui_automation.service.registry import HasLinks, Registry, RegistryError
 from chaeksas.ext.ui_automation.service.store import Database, RegistryStore, SqliteKeyStore
@@ -77,6 +78,11 @@ OPERATIONS = (
         description="화면·요소 삭제 (되돌릴 수 없다)",
         modes=[MODE_DETERMINISTIC, MODE_AUTONOMOUS],
         required_scopes=[REGISTRY_WRITE],
+    ),
+    Operation(
+        name="plan",
+        description="등록된 사다리로 실행 계획을 만든다 (결정 수행)",
+        modes=[MODE_DETERMINISTIC],
     ),
     Operation(
         name="report",
@@ -187,6 +193,60 @@ class Service:
         self.flush()
         return found.to_json_dict()
 
+    def plan(self, request: OpRequest, mode: str) -> Mapping[str, Any]:
+        """C8 `plan` — **등록된 사다리를 모아 준다** (결정 수행).
+
+        **스텝을 비워 보내면 그 화면의 사다리 전부**를 준다 — Worker는 세션을 열 때 계획을
+        받고 스텝은 그 뒤에 하나씩 오기 때문이다 (C10).
+
+        자연어 목표(`goal`)로 스텝을 **지어내지 않는다** — 그것은 모델이 하는 일이고 아직
+        없다. 받으면 분명히 거절한다 (「없는데 된 척」하지 않는다).
+        """
+        if request.input.get("goal"):
+            raise OpError(
+                "plan_unsupported",
+                "목표로 계획을 세우는 것(자율 수행)은 아직 없습니다 — 스텝을 주세요",
+                status=422,
+            )
+        page_id = str(request.input.get("page_id") or "")
+        try:
+            page = self.registry.page(page_id)
+        except RegistryError as e:
+            raise OpError("not_found", str(e), status=404) from e
+
+        try:
+            steps = [PlanStep.model_validate(one) for one in (request.input.get("steps") or [])]
+        except ValueError as e:
+            raise OpError("input_invalid", f"스텝이 계약과 맞지 않는다: {e}", status=422) from e
+        made = ExecutionPlan(
+            schema=1,
+            plan_id=f"plan_{page.page_id}_{page.revision}",
+            page_id=page.page_id,
+            platform=page.platform,
+            start_url=request.input.get("start_url") or page.url_pattern,
+            revision=page.revision,
+            steps=steps,
+            # **스텝에 나오는 모든 요소의 사다리 전부** (C8) — 폴백은 Worker가 로컬에서 탄다.
+            # 스텝을 비워 보냈으면 그 화면의 사다리 전부를 준다 (세션을 열 때 받는 계획이다).
+            locators={key: list(ladder) for key, ladder in page.locators.items()}
+            if not steps
+            else {step.semantic_key: list(page.locators.get(step.semantic_key, [])) for step in steps},
+            elements={
+                key: ElementInfo(description=hint.description or hint.name, role=hint.role)
+                for key, hint in page.elements.items()
+            },
+        )
+        missing = made.missing_keys()
+        if missing:
+            # 등록되지 않은 요소를 가리켰다 — C10과 같은 코드로 올린다.
+            raise OpError(
+                "unknown_semantic_key",
+                f"사다리가 없는 요소가 있다: {', '.join(missing)}",
+                status=422,
+                detail={"items": missing},
+            )
+        return made.to_json_dict()
+
     def report(self, request: OpRequest, mode: str) -> Mapping[str, Any]:
         """C8 보고 — 통계를 갱신하고 승격을 결정한다. **`test` 보고는 통계에 넣지 않는다.**"""
         try:
@@ -216,6 +276,7 @@ def create(
             "registry_get_page": service.get_page,
             "registry_register": service.register,
             "registry_delete": service.delete,
+            "plan": service.plan,
             "report": service.report,
         },
         keys=keys,

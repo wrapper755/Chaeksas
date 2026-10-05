@@ -280,9 +280,12 @@ def test_the_manifest_is_open(served: Any) -> None:
     assert body["app_id"] == "ui-automation"
     names = {one["name"] for one in body["operations"]}
     assert names == {
-        "registry_list_pages", "registry_get_page", "registry_register", "registry_delete", "report"
+        "registry_list_pages", "registry_get_page", "registry_register", "registry_delete",
+        "plan", "report",
     }
-    assert "plan" not in names, "계획 생성(C8)은 아직 없다 — 되는 척하지 않는다"
+    assert "heal" not in names, "치유(C8)는 모델이 하는 일이라 아직 없다 — 되는 척하지 않는다"
+    plan = next(one for one in body["operations"] if one["name"] == "plan")
+    assert plan["modes"] == ["deterministic"], "자연어 목표(자율)는 아직 없다"
 
 
 # ─────────────────────────── 멱등 (C11) ───────────────────────────
