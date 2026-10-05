@@ -52,7 +52,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | 태스크 종류 (화면) | BPMN 요소 | 속성 요소 | 필드 |
 | --- | --- | --- | --- |
 | AI 태스크 | `serviceTask` | `chk:aiTask` | `goal`(Markdown — `## 상황`·`## 할 일`·`## 판단하지 않는 것`·`## 반환` 권장), `domain`(`llm`\|`api`\|`doc`\|`web`\|`desktop`), `tools[]`, `params`(업무 파라미터, 재생 때 그대로 쓰인다), `results`(`{이름: 타입}`), `replay`(`plan`\|`full`\|`none`, 기본 `plan` — 아래 「재생」), `limits`, `forbidden_actions[]`, `confirm_triggers[]`, `web`/`desktop`(환경 설정) |
-| UI 태스크 (UI 자동화 확장) | `serviceTask` | `chk:task` `type="ui_task"` `extension="ui-automation"` | `page_id`, `start_url?`, `steps[]`(`{key, action, value?, result?, navigates?}`), `goal?`(자율 수행 전용 — 스텝 대신 목표 한 줄. 쓸 값은 목표 안에 `{이름}`으로 적고 **이름만** 모델에 간다, [ADR-0035](../decisions/0035-ui-goal-planning.md)), `results?`(목표 모드: 읽은 값을 담을 변수 이름들), `heal`(기본 true), `close_browser`. 스텝 `value`의 `{변수}`·`{변수.키}`(사전 안의 값)는 **수행기가 실행 시점의 변수로 채운다** — 사전·목록 값은 JSON으로, `{{`·`}}`는 중괄호 글자. 모르는 이름이면 업무 실패다 (글자 그대로 입력하지 않는다, [ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
+| UI 태스크 (UI 자동화 확장) | `serviceTask` | `chk:task` `type="ui_task"` `extension="ui-automation"` | `page_id`, `start_url?`, `steps[]`(`{key, action, value?, result?, navigates?}`), `goal?`(자율 수행 전용 — 스텝 대신 목표 한 줄. 쓸 값은 목표 안에 `{이름}`으로 적고 **이름만** 모델에 간다, [ADR-0035](../decisions/0035-ui-goal-planning.md)), `results?`(목표 모드: 읽은 값을 담을 변수 이름들), `heal`(기본 true). 읽기 스텝의 `result` 변수: `read_table`은 **줄 목록**(`[{머리글: 값}]`), `read`와 표의 칸은 **수 모양이면 수**다 ([ADR-0036](../decisions/0036-screen-read-values.md), C10), `close_browser`. 스텝 `value`의 `{변수}`·`{변수.키}`(사전 안의 값)는 **수행기가 실행 시점의 변수로 채운다** — 사전·목록 값은 JSON으로, `{{`·`}}`는 중괄호 글자. 모르는 이름이면 업무 실패다 (글자 그대로 입력하지 않는다, [ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 | 서비스 앱 태스크 | `serviceTask` | `chk:serviceCall` | `app_id`, `operation`, `input`(`{필드: 식}`), `output`(`{변수: 필드}`), `key_ref?`(없으면 프로세스의 `service_keys`를 상속), `timeout_s`, `retry`(`{max, on: [503, 429]}`) |
 | 다른 확장 태스크 | `serviceTask` | `chk:task` `type="<확장 태스크 종류>"` `extension="<id>"` | 그 확장의 계약이 정한 JSON |
 | 결재 | `userTask` | `chk:approval` | `title`, `description`, `show`(**변수 이름 배열** — 문자열 하나로 쓰면 검사 오류), `fields[]`(C6 Form과 같다: `{key, label, type: bool\|number\|text\|choice, choices?, required, default?}`), `location`(`follow`\|`center`\|`field`), `expires`(ISO 기간 또는 변수 이름) |
@@ -271,6 +271,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-05 | 1 | UI 태스크 읽기 결과의 모양: `read_table`은 줄 목록, `read`·표의 칸은 수 모양이면 수 | 0036 |
 | 2026-10-05 | 1 | UI 태스크 목표 모드: `goal`의 `{이름}`은 이름만 모델에 가고 수행기가 채운다, `results?`를 더했다. 결정 수행에서 목표만 있으면 업무 실패(`ui_goal_needs_autonomous`) | 0035 |
 | 2026-10-01 | 1 | 초안 (프로토타입 확장 속성을 새 용어·확장 모델로 옮김) | 0018 |
 | 2026-10-03 | 1 | 구현하며 명시한 것: 엔진이 늘 주는 변수(`오늘`·`지금`·`run_id`) 표, `validate()`가 받는 인자와 건너뛰는 검사, 확장 태스크의 속은 확장이 검사한다(B12), B11이 어림인 이유, B13·B14 순서 | 0018 |

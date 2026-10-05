@@ -86,16 +86,13 @@ M4 = bundle()
 
 #: 아직 초록이 아닌 예제와 **그 이유**. 조용히 빼면 묶음이 거짓말을 한다.
 REMAINING: dict[str, str] = {
-    "bx04_tax_invoice_issue": (
-        "데스크톱 표를 읽어 줄 목록 변수로 받는 길이 없다 — 표 읽기가 글(TSV)만 돌려준다 (C10 `data`)"
-    ),
     "fx05_desktop_autonomous": (
         "데스크톱 AI 태스크 (`domain: desktop`) — 데스크톱을 보는 길이 없다 (모델 연결 ADR-0034가 먼저)"
     ),
 }
 
 #: 데스크톱 UI 태스크 예제 — **Windows에서만** 돈다 (UIA). 다른 OS에서는 건너뛴다.
-DESKTOP = {"bx17_erp_po_entry"}
+DESKTOP_EXAMPLES = {"bx17_erp_po_entry", "bx04_tax_invoice_issue"}
 
 #: 공유 폴더를 흉내 내는 자리 — 예제가 적은 UNC 경로 대신 시험이 쓰기 허용 폴더를 준다
 #: (ADR-0032). 경로만 그 PC의 것이고 **업무는 예제 그대로**다.
@@ -103,7 +100,7 @@ SHARE = "주문수집.xlsx"
 
 #: 케이스가 모두 통과하는 예제. 줄어들면 회귀다.
 GREEN = [one for one in M4 if one not in REMAINING]
-WEB = [one for one in GREEN if one not in DESKTOP]
+WEB = [one for one in GREEN if one not in DESKTOP_EXAMPLES]
 
 
 # ─────────────────────────── 시험이 띄우는 화면 ───────────────────────────
@@ -144,6 +141,20 @@ PORTAL = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>�
   </table>
 </body></html>"""
 
+#: BX-04의 공급사 포털 거래 내역 — 4건, 합계 251,000 (예제의 「정상 발행」·「발행 대상 없음」이 갈린다).
+TRANSACTIONS = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>거래 내역</title></head>
+<body>
+  <input id="month" aria-label="대상월" />
+  <button id="search">조회</button>
+  <table id="transactions">
+    <tr><th>번호</th><th>거래처</th><th>금액</th></tr>
+    <tr><td>1</td><td>한빛상사</td><td>120,000</td></tr>
+    <tr><td>2</td><td>가온테크</td><td>85,000</td></tr>
+    <tr><td>3</td><td>다래물산</td><td>43,000</td></tr>
+    <tr><td>4</td><td>누리상회</td><td>3,000</td></tr>
+  </table>
+</body></html>"""
+
 PAGES = {
     "/": FORM,
     "/form": FORM,
@@ -151,6 +162,7 @@ PAGES = {
     "/notices": NOTICES,
     "/notice/1": DONE,
     "/portal": PORTAL,
+    "/transactions": TRANSACTIONS,
 }
 
 
@@ -226,6 +238,22 @@ def registrations(site: str) -> list[PageRegistration]:
                 "filter.date": ElementHint(name="조회일", role="textbox"),
                 "filter.search": ElementHint(name="조회", role="button"),
                 "orders.table": ElementHint(name="주문 표", kind="table"),
+            },
+        ),
+        PageRegistration(
+            schema=1,
+            page_id="supplier.portal.transactions",
+            name="공급사 포털 거래 내역",
+            url_pattern=f"{site}/transactions",
+            locators={
+                "filter.month": [LocatorSpec(type="css", value="#month")],
+                "filter.search": [LocatorSpec(type="css", value="#search")],
+                "result.table": [LocatorSpec(type="css", value="#transactions")],
+            },
+            elements={
+                "filter.month": ElementHint(name="대상월", role="textbox"),
+                "filter.search": ElementHint(name="조회", role="button"),
+                "result.table": ElementHint(name="거래 내역", kind="table"),
             },
         ),
         PageRegistration(
@@ -341,18 +369,17 @@ def _host(app: Any, tmp_path: Path, backend: Any) -> Iterator[Host]:
         backend.shutdown()
 
 
-# ─────────────────────────── 데스크톱 (BX-17) ───────────────────────────
+# ─────────────────────────── 데스크톱 (BX-17·BX-04) ───────────────────────────
 
 FAKE_APPS = Path(__file__).resolve().parent / "fake_desktop_apps.py"
-#: Qt가 내보내는 AutomationId의 앞부분 (`QApplication.<창>.<위젯>`).
-AID = "QApplication.poEntry."
 
 
-def desktop_page(tag: str) -> PageRegistration:
+def erp_page(tag: str) -> PageRegistration:
     """BX-17의 `erp.desktop.po_entry` — 사람이 사다리를 적어 넣는 자리를 시험이 한다 (ADR-0033).
 
     창 조건에 시험마다 다른 꼬리표를 붙여 **이 시험이 띄운 창만** 맞게 한다.
     """
+    aid = "QApplication.poEntry."  # Qt가 내보내는 AutomationId (`QApplication.<창>.<위젯>`)
     return PageRegistration(
         schema=1,
         page_id="erp.desktop.po_entry",
@@ -361,10 +388,10 @@ def desktop_page(tag: str) -> PageRegistration:
         app="ERP Client",
         window=WindowSpec(title="^" + re.escape("ERP Client - 발주 입력" + tag) + "$"),
         locators={
-            "po.item": [LocatorSpec(type="automation_id", value=AID + "itemCode", platform="desktop")],
-            "po.qty": [LocatorSpec(type="automation_id", value=AID + "quantity", platform="desktop")],
-            "po.save": [LocatorSpec(type="automation_id", value=AID + "saveButton", platform="desktop")],
-            "po.number": [LocatorSpec(type="automation_id", value=AID + "poNumber", platform="desktop")],
+            "po.item": [LocatorSpec(type="automation_id", value=aid + "itemCode", platform="desktop")],
+            "po.qty": [LocatorSpec(type="automation_id", value=aid + "quantity", platform="desktop")],
+            "po.save": [LocatorSpec(type="automation_id", value=aid + "saveButton", platform="desktop")],
+            "po.number": [LocatorSpec(type="automation_id", value=aid + "poNumber", platform="desktop")],
         },
         elements={
             "po.item": ElementHint(name="품목", role="textbox"),
@@ -375,25 +402,62 @@ def desktop_page(tag: str) -> PageRegistration:
     )
 
 
+def taxbook_page(tag: str) -> PageRegistration:
+    """BX-04의 `accounting.taxbook.sheet` — 앱 이름 없이 화면(창 조건)만 가리키는 예제다 (ADR-0033)."""
+    aid = "QApplication.taxbook."
+    return PageRegistration(
+        schema=1,
+        page_id="accounting.taxbook.sheet",
+        platform="desktop",
+        name="세금계산서 발행대장",
+        window=WindowSpec(title="^" + re.escape("회계 프로그램 - 세금계산서 발행대장" + tag) + "$"),
+        locators={
+            "row.next": [LocatorSpec(type="automation_id", value=aid + "nextRow", platform="desktop")],
+            "menu.save": [LocatorSpec(type="automation_id", value=aid + "saveMenu", platform="desktop")],
+            "cell.total": [LocatorSpec(type="automation_id", value=aid + "total", platform="desktop")],
+        },
+        elements={
+            "row.next": ElementHint(name="다음 줄", role="textbox"),
+            "menu.save": ElementHint(name="저장", role="button"),
+            "cell.total": ElementHint(name="합계", kind="text"),
+        },
+    )
+
+
+#: 데스크톱 예제마다 띄울 가짜 앱과 그 화면 등록 — **Windows에서만** 돈다 (UIA).
+DESKTOP: dict[str, tuple[str, Any]] = {
+    "bx17_erp_po_entry": ("erp", erp_page),
+    "bx04_tax_invoice_issue": ("taxbook", taxbook_page),
+}
+#: 웹 화면도 함께 쓰는 데스크톱 예제 — Chromium이 있어야 한다.
+NEEDS_BROWSER = {"bx04_tax_invoice_issue"}
+
+
 @pytest.fixture
-def desktop_host(app: Any, tmp_path: Path) -> Iterator[Host]:
-    """가짜 ERP 창을 띄우고, Worker는 **경로 백엔드**(데스크톱 쪽만)로 그 창에 붙는다."""
+def desktop_host(request: pytest.FixtureRequest, app: Any, tmp_path: Path) -> Iterator[Host]:
+    """그 예제의 가짜 앱 창을 띄우고, Worker는 **경로 백엔드**로 웹·데스크톱을 함께 쓴다 (ADR-0033)."""
+    example = str(request.param)
     if not desktop.available():
         pytest.skip("Windows UIA가 없다 — 데스크톱 예제는 Windows에서만 돈다")
+    if example in NEEDS_BROWSER and not available():
+        pytest.skip("Playwright가 없다 — 이 예제는 웹 화면도 쓴다")
+    which, page_for = DESKTOP[example]
     tag = f" #{uuid.uuid4().hex[:8]}"
-    RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(app)).register(desktop_page(tag))
+    page = page_for(tag)
+    RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(app)).register(page)
     # 시험 프로세스의 offscreen을 물려주지 않는다 — 창이 보여야 UIA가 본다.
     env = {k: v for k, v in os.environ.items() if k != "QT_QPA_PLATFORM"}
-    proc = subprocess.Popen([sys.executable, str(FAKE_APPS), "erp", tag], env=env)
+    proc = subprocess.Popen([sys.executable, str(FAKE_APPS), which, tag], env=env)
+    web = BrowserBackend(headless=True) if example in NEEDS_BROWSER else None
     try:
-        spec = desktop_page(tag).window
-        assert spec is not None
         deadline = time.monotonic() + 20
-        while not desktop.find_windows(spec) and time.monotonic() < deadline:
+        while not desktop.find_windows(page.window) and time.monotonic() < deadline:
             time.sleep(0.2)
-        assert desktop.find_windows(spec), "가짜 ERP 창이 뜨지 않았다"
-        yield from _host(app, tmp_path, RoutingBackend(web=None, desktop=DesktopBackend()))
+        assert desktop.find_windows(page.window), f"가짜 앱 창({which})이 뜨지 않았다"
+        yield from _host(app, tmp_path, RoutingBackend(web=web, desktop=DesktopBackend()))
     finally:
+        if web is not None:
+            web.shutdown()
         proc.kill()
         proc.wait(10)
 
@@ -483,12 +547,31 @@ def _rows_from(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     표는 JSON 글 안에 들어오기도 해서 (`\\t`) 둘 다 본다.
     """
     asked = "\n".join(str(m.get("content") or "") for m in messages)
+    found = _json_rows(asked)
+    if found:
+        return found
     body = asked.replace("\\t", "\t").replace("\\n", "\n")
     rows = []
     for line in body.splitlines():
         cells = [one.strip().strip('"') for one in line.split("\t")]
         if len(cells) >= 3 and cells[0].startswith("PO-"):
             rows.append({"주문번호": cells[0], "공급사": cells[1], "금액": cells[2]})
+    return rows
+
+
+def _json_rows(text: str) -> list[dict[str, Any]]:
+    """표가 **줄 목록**(ADR-0036)으로 실려 왔으면 그 사전들을 꺼낸다 — 글 안 어디에 있든."""
+    decoder = json.JSONDecoder()
+    rows: list[dict[str, Any]] = []
+    for at, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _ = decoder.raw_decode(text, at)
+        except ValueError:
+            continue
+        if isinstance(value, dict) and str(value.get("주문번호", "")).startswith("PO-"):
+            rows.append({"주문번호": value["주문번호"], "공급사": value.get("공급사"), "금액": value.get("금액")})
     return rows
 
 
@@ -564,16 +647,16 @@ def test_the_bundle_is_read_from_the_examples() -> None:
     """묶음 목록을 사람이 옮겨 적지 않는다 — 어긋나는 순간 시험이 거짓말을 한다."""
     assert len(M4) == 6
     assert set(REMAINING) <= set(M4), "남은 목록에 묶음 밖 예제가 있다"
-    assert len(GREEN) == 4, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
-    assert DESKTOP <= set(GREEN)
+    assert len(GREEN) == 5, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+    assert DESKTOP_EXAMPLES <= set(GREEN) and DESKTOP_EXAMPLES == set(DESKTOP)
 
 
 def test_every_remaining_one_says_why() -> None:
     """**막힌 것은 이유를 적는다** — 「나중에」만 적으면 무엇을 고쳐야 할지 모른다."""
     for example, why in REMAINING.items():
         assert len(why) > 10 and ("없다" in why or "미뤘다" in why), f"{example}: {why}"
-    assert set(REMAINING) == {"bx04_tax_invoice_issue", "fx05_desktop_autonomous"}
-    assert all("데스크톱" in why for why in REMAINING.values()), "남은 둘은 모두 데스크톱이다"
+    assert set(REMAINING) == {"fx05_desktop_autonomous"}
+    assert all("데스크톱" in why for why in REMAINING.values()), "남은 것은 데스크톱 AI 태스크다"
 
 
 #: AI 태스크가 있어 스텁 모델이 필요한 예제.
@@ -596,12 +679,14 @@ def test_an_m4_example_passes_all_its_cases(
     assert not bad, f"{example}: {bad}"
 
 
-def test_a_desktop_example_passes_all_its_cases(qt: Any, tmp_path: Path, desktop_host: Host) -> None:
-    """BX-17 — 발주 두 건을 **진짜 창**에 입력하고 발주번호를 읽어 온다 (Windows UIA)."""
-    results = run_all(tmp_path, "bx17_erp_po_entry", desktop_host)
-    assert results, "돌릴 케이스가 없다"
+@pytest.mark.parametrize("desktop_host", sorted(DESKTOP), indirect=True)
+def test_a_desktop_example_passes_all_its_cases(qt: Any, tmp_path: Path, desktop_host: Host, request: Any) -> None:
+    """데스크톱 예제 — **진짜 창**을 진짜 UIA로 (Windows). BX-04는 웹 포털 표를 읽어 회계 프로그램에 넣는다."""
+    example = request.node.callspec.params["desktop_host"]
+    results = run_all(tmp_path, example, desktop_host)
+    assert results, f"{example}: 돌릴 케이스가 없다"
     bad = [(c.name, o.verdict, o.detail) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
-    assert not bad, bad
+    assert not bad, f"{example}: {bad}"
 
 
 @pytest.mark.skipif(not available(), reason="Playwright가 없다")

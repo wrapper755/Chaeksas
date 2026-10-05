@@ -1,6 +1,6 @@
 """시험이 띄우는 가짜 데스크톱 앱 — 진짜 창이라 UIA로 보인다 (데스크톱 백엔드·M4 인수 시험).
 
-    python tests/fake_desktop_apps.py erp [제목 덧붙임]
+    python tests/fake_desktop_apps.py erp|taxbook [제목 덧붙임]
 
 **제품 코드가 아니다.** 예제가 가리키는 사내 앱(「ERP Client」)을 그 자리에서 흉내 낸다 — 웹 예제가
 시험이 띄운 HTML을 쓰는 것과 같다. Qt는 `objectName` 경로를 UIA `AutomationId`로 내보낸다
@@ -74,7 +74,59 @@ def erp(suffix: str = "") -> QWidget:
     return window
 
 
-APPS = {"erp": erp}
+#: 회계 프로그램의 창 제목 (BX-04 `accounting.taxbook.sheet`).
+TAXBOOK_TITLE = "회계 프로그램 - 세금계산서 발행대장"
+
+
+def taxbook(suffix: str = "") -> QWidget:
+    """세금계산서 발행대장 (BX-04). 「다음 줄」 칸에 줄 하나(JSON 사전)를 넣고 저장하면 시트에 붙는다.
+
+    합계 칸은 **계산된 값**을 보인다 (예제의 교훈 — 셀 읽기가 수식을 돌려주면 안 된다).
+    """
+    import json  # noqa: PLC0415
+
+    window = QWidget()
+    window.setObjectName("taxbook")
+    window.setWindowTitle(TAXBOOK_TITLE + suffix)
+    form = QFormLayout(window)
+
+    next_row = QLineEdit()
+    next_row.setObjectName("nextRow")
+    save = QPushButton("저장")
+    save.setObjectName("saveMenu")
+    sheet = QTableWidget(0, 0)
+    sheet.setObjectName("sheet")
+    total = QLineEdit("0")
+    total.setObjectName("total")
+    total.setReadOnly(True)
+    state: dict[str, list[str]] = {"columns": []}
+
+    def on_save() -> None:
+        row = json.loads(next_row.text())
+        if not state["columns"]:
+            state["columns"] = [str(one) for one in row]
+            sheet.setColumnCount(len(state["columns"]))
+            sheet.setHorizontalHeaderLabels(state["columns"])
+        at = sheet.rowCount()
+        sheet.insertRow(at)
+        for column, name in enumerate(state["columns"]):
+            sheet.setItem(at, column, QTableWidgetItem(str(row.get(name, ""))))
+        amount = state["columns"].index("금액") if "금액" in state["columns"] else -1
+        if amount >= 0:
+            found = (sheet.item(r, amount) for r in range(sheet.rowCount()))
+            total.setText(str(sum(int(item.text()) for item in found if item is not None and item.text())))
+        next_row.clear()
+
+    save.clicked.connect(on_save)
+    form.addRow("다음 줄", next_row)
+    form.addRow(save)
+    form.addRow("발행대장", sheet)
+    form.addRow("합계", total)
+    window.resize(560, 420)
+    return window
+
+
+APPS = {"erp": erp, "taxbook": taxbook}
 
 
 def main() -> None:

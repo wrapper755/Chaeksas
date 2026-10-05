@@ -37,6 +37,7 @@ from chaeksas.ext.ui_automation.worker.desktop import (
     matches,
     window_matches,
 )
+from chaeksas.ext.ui_automation.worker.ladder import TableRead
 from chaeksas.ext.ui_automation.worker.routing import BackendUnavailable, RoutingBackend, platform_of
 
 FAKE = Path(__file__).with_name("fake_desktop_apps.py")
@@ -294,8 +295,10 @@ def test_click_then_read_the_number_the_app_made(opened: tuple[DesktopBackend, A
     table = find_one(
         finder, LocatorSpec(type="automation_id", value=AID + "history", control_type="Table", platform="desktop")
     )
-    rows = str(finder.act(table, step("read_table"), timeout_ms=3000)).splitlines()
-    assert [row.split("\t")[-1] for row in rows[-2:]] == ["PO-0001", "PO-0002"]
+    found = finder.act(table, step("read_table"), timeout_ms=3000)
+    assert isinstance(found, TableRead)
+    assert found.data()["headers"] == ["품목", "수량", "발주번호"], "머리글은 표 패턴의 열 머리글에서"
+    assert [row[-1] for row in found.data()["rows"][-2:]] == ["PO-0001", "PO-0002"]
 
 
 @needs_desktop

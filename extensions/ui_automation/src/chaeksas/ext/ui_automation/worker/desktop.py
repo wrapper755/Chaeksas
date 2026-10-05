@@ -28,7 +28,7 @@ from typing import Any
 
 from chaeksas.ext.ui_automation.contracts.plan import MASK, LocatorSpec, PlanStep, WindowSpec, masked
 from chaeksas.ext.ui_automation.contracts.worker_local import SessionRequest
-from chaeksas.ext.ui_automation.worker.ladder import Match
+from chaeksas.ext.ui_automation.worker.ladder import Match, TableRead
 
 log = logging.getLogger(__name__)
 
@@ -405,7 +405,7 @@ class DesktopFinder:
 
     # ── 조작 ──
 
-    def act(self, handle: Any, step: PlanStep, *, timeout_ms: int) -> str | None:
+    def act(self, handle: Any, step: PlanStep, *, timeout_ms: int) -> str | TableRead | None:
         """조작하거나 읽는다. **읽기 결과만** 글로 돌려준다 (C10 `text`)."""
         if screen_locked():
             raise ScreenLocked("화면이 잠겨 있습니다")
@@ -574,21 +574,30 @@ class DesktopFinder:
             return str(text.DocumentRange.GetText(-1))
         return str(handle.Name or "")
 
-    def _table(self, handle: Any) -> str:
-        """표는 **TSV**로 (C10). 격자 패턴이 있으면 칸으로, 없으면 줄(자식)로."""
+    def _table(self, handle: Any) -> TableRead:
+        """표는 칸 글 그대로 — 첫 줄이 머리글이다 (C10 `data`, ADR-0036).
+
+        격자 패턴이 있으면 칸으로 읽는다. 격자의 줄에는 머리글이 없어(Qt) 머리글은 표 패턴의 열
+        머리글에서 얻는다 — 없으면 격자의 첫 줄이 머리글이 된다. 격자가 없으면 줄(자식)로 읽는다.
+        """
         import uiautomation as auto  # noqa: PLC0415
 
         grid = handle.GetPattern(auto.PatternId.GridPattern)
-        rows: list[str] = []
+        rows: list[tuple[str, ...]] = []
         if grid is not None:
+            table = handle.GetPattern(auto.PatternId.TablePattern)
+            heads = table.GetColumnHeaders() if table is not None else []
+            names = tuple(str(one.Name or "").strip() for one in heads or [])
+            if any(names):
+                rows.append(names)
             for r in range(grid.RowCount):
                 cells = [grid.GetItem(r, c) for c in range(grid.ColumnCount)]
-                rows.append("\t".join(self.read_value(cell).strip() for cell in cells if cell is not None))
-            return "\n".join(rows)
+                rows.append(tuple(self.read_value(cell).strip() for cell in cells if cell is not None))
+            return TableRead(rows=tuple(rows))
         for row in handle.GetChildren():
             cells = row.GetChildren()
-            rows.append("\t".join(self.read_value(c).strip() for c in cells) if cells else self.read_value(row))
-        return "\n".join(rows)
+            rows.append(tuple(self.read_value(c).strip() for c in cells) if cells else (self.read_value(row),))
+        return TableRead(rows=tuple(rows))
 
     def _options(self, handle: Any) -> list[str]:
         import uiautomation as auto  # noqa: PLC0415
