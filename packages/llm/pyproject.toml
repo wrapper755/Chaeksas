@@ -1,0 +1,16 @@
+[project]
+name = "chaeksas-llm"
+version = "0.1.0"
+description = "모델 클라이언트 — OpenAI 호환 /v1/chat/completions 어댑터와 그 모양 (ADR-0027·ADR-0034). 맨 아래 패키지"
+requires-python = ">=3.12,<3.13"
+# 맨 아래 패키지다 — chaeksas의 어느 멤버도 의존하지 않는다 (contracts도 모른다, ADR-0034).
+# core와 service_kit이 함께 쓴다.
+dependencies = ["httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# chaeksas는 PEP 420 네임스페이스 — src/chaeksas 밑에 __init__.py를 두지 않는다
+packages = ["src/chaeksas"]

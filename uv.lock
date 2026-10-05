@@ -11,6 +11,7 @@ members = [
     "chaeksas-core",
     "chaeksas-ext-ui-automation",
     "chaeksas-extension-api",
+    "chaeksas-llm",
     "chaeksas-qt",
     "chaeksas-server-runner",
     "chaeksas-service-kit",
@@ -215,6 +216,7 @@ version = "0.1.0"
 source = { editable = "packages/core" }
 dependencies = [
     { name = "chaeksas-extension-api" },
+    { name = "chaeksas-llm" },
     { name = "httpx" },
     { name = "openpyxl" },
     { name = "pypdf" },
@@ -223,6 +225,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "chaeksas-extension-api", editable = "packages/extension_api" },
+    { name = "chaeksas-llm", editable = "packages/llm" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pypdf", specifier = ">=5.1" },
@@ -261,6 +264,17 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "chaeksas-contracts", editable = "packages/contracts" }]
+
+[[package]]
+name = "chaeksas-llm"
+version = "0.1.0"
+source = { editable = "packages/llm" }
+dependencies = [
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "httpx", specifier = ">=0.27" }]
 
 [[package]]
 name = "chaeksas-qt"

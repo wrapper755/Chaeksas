@@ -33,6 +33,7 @@
 | 런타임 코어 (`core`) | 패키지 | Studio, Bot UI(실행기), 서버 실행기 | BPMN 실행, **확장 호스트**(확장을 찾아 기여 등록), HTTP 어댑터 해석기, AI 태스크(에이전트 루프), 도구, 재생 기억, 설정 로더 | 화면(Qt), 서버 통신 |
 | 확장 API (`extension_api`) | 패키지 | 모든 클라이언트·실행하는 쪽 | 확장이 구현하는 안정 인터페이스: 태스크 종류·수행기, Studio 편집기, Bot UI 유틸리티, 로컬 런타임, 사전 점검, HTTP 어댑터 해석 규격 ([ADR-0018](decisions/0018-extensions.md)) | 특정 확장의 로직 |
 | 확장 (`extensions/*`, 외부 정의) | 확장 | 곳곳 (기여 지점) | BPM 프로세스에 공통 기능을 더함. 서버 부분(서비스 앱) + 클라이언트 기여. 확장 정의 C13 | 플랫폼 흐름 |
+| 모델 클라이언트 (`llm`) | 패키지 | 모델을 부르는 모든 곳 (`core`, 서비스 앱) | OpenAI 호환 `/v1/chat/completions` 어댑터와 그 모양(`Reply`·`ToolSpec`·`LlmError`). **맨 아래** — 우리 멤버를 하나도 모른다 ([ADR-0034](decisions/0034-service-app-model-connection.md)) | 도구 루프·결과 검증·궤적(`core.agent`), 주소·키 보관 |
 | 서비스 앱 뼈대 (`service_kit`) | 패키지 | 서비스 앱 | API 키 발급·검증, 관리 API(상태·키·사용 기록 — 화면은 `web/apps/svc-console`), `/healthz`, `/manifest`, 작업 호출 틀(수행 모드), 로깅 | 업무 로직 |
 | Studio | 화면 | 설계자 PC | BPM 프로세스 편집(BPMN), 시험 실행(자율 수행·재생), 학습, 패키지 빌드·업로드 | 배포 결정 |
 | **Bot UI** | 화면 (트레이) | 현장 PC, 설계자 PC | Center 등록·하트비트(Center API 키), **Bot 다운로드·설치·실행**(결정 수행, 실행 자리 하나 + 대기열), **Worker 프로세스 시작·감시·재시작**, **UI 셀렉터 등록**, 로컬 결재·확인 창, 서비스 앱 키 값 보관 | 셀렉터 보관, 화면 조작 자체 |
@@ -80,6 +81,8 @@ contracts ◀── extension_api ◀── core ◀── studio, bot_ui, serve
     ├── extensions/<id>/worker  (로컬 런타임)
     ├── center
     └── admin
+
+llm ◀── core, service_kit   (맨 아래 — chaeksas의 아무것도 import하지 않는다, ADR-0034)
 ```
 
 - **플랫폼은 특정 확장을 import하지 않는다.** `core`·`apps/*`는 `extension_api`를 통해서만 확장을 부르고, 확장은 엔트리 포인트 `chaeksas.extensions`로 찾는다. 확장끼리도 import하지 않는다 ([ADR-0018](decisions/0018-extensions.md)).
@@ -132,6 +135,7 @@ Chaeksas/
 │  ├─ contracts/           # 공통 계약
 │  ├─ extension_api/       # 확장이 구현하는 인터페이스 (ADR-0018)
 │  ├─ core/                # 런타임 코어 + 확장 호스트
+│  ├─ llm/                 # 모델 클라이언트 (맨 아래, ADR-0034)
 │  ├─ qt/                  # 공용 PySide6 위젯·테마·결재 창
 │  └─ service_kit/         # 서비스 앱 공통 뼈대 + 관리 API
 ├─ apps/
@@ -153,6 +157,6 @@ Chaeksas/
 └─ docs/
 ```
 
-> 상태: 위 Python 멤버 11개와 `tests/`는 M1에서 만들어졌다 (`uv sync --all-packages` → `uv run pytest`). `web/`도 뼈대가 있다 (pnpm 워크스페이스: `apps/center-console`·`apps/svc-console`, `packages/ui`·`api-types`·`config`). 화면 내용은 M2다.
+> 상태: 위 Python 멤버 12개(`llm`은 M4에 더했다)와 `tests/`는 M1에서 만들어졌다 (`uv sync --all-packages` → `uv run pytest`). `web/`도 뼈대가 있다 (pnpm 워크스페이스: `apps/center-console`·`apps/svc-console`, `packages/ui`·`api-types`·`config`). 화면 내용은 M2다.
 
 근거: [ADR-0018](decisions/0018-extensions.md), [ADR-0017](decisions/0017-web-nextjs-design-system.md), [ADR-0015](decisions/0015-run-location.md), [ADR-0004](decisions/0004-monorepo-uv-workspace.md), [ADR-0010](decisions/0010-service-apps.md), [ADR-0012](decisions/0012-bot-ui.md), [ADR-0013](decisions/0013-api-keys.md).
