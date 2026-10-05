@@ -119,6 +119,37 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | `reasoning` | 한두 문장 |
 
 - Worker는 제안된 로케이터가 **지금 화면에서 정확히 1개**에 맞는지 확인한 뒤에만 쓴다. 맞지 않으면 다음 시도로 넘어간다. 한도를 넘으면 **전환**(escalation)이다.
+- 응답의 `usage`(C11)에 모델이 쓴 양이 실린다.
+
+#### 앱이 모델에게 묻는 것
+
+앱은 모델을 C11 §모델 연결로 부른다 ([ADR-0034](../decisions/0034-service-app-model-connection.md)). 한 번 치유에 **한 번** 묻는다 (다시 묻는 것은 Worker의 `heal_attempt`다).
+
+모델에게 주는 것:
+
+| 무엇 | 출처 |
+| --- | --- |
+| 화면 `page_id`·`platform`, 요소의 `semantic_key`·`description`·`role`, 등록된 요소 이름 | 요청 + 레지스트리 (시맨틱 정보) |
+| 쓸 수 있는 전략 | 화면의 `platform`에 맞는 것만 (웹 `role`·`test_id`·`css`·`xpath`, 데스크톱 `automation_id`·`class_name`·`control_name`) |
+| 이미 실패한 로케이터 | 그 요소의 사다리와 `failure.tried` — **같은 것을 다시 내지 말라**고 함께 준다. 셀렉터는 앱 안에서만 오간다 |
+| 실패 이유·주소 | `failure.reasons`, `failure.url` |
+| 화면 | `aria_snapshot`·`sub_dom` 그대로 (Worker가 **가린 것**) |
+
+모델의 답은 JSON 하나다.
+
+```json
+{"locator": {"type": "role", "value": "button", "name": "저장"}, "reasoning": "저장 버튼의 접근성 이름이 같다"}
+```
+
+- `locator`는 `type`·`value`와 전략에 따라 `name`(`role`이면 필수)·`exact`·`control_type`(데스크톱)만 받는다. 제안할 것이 없으면 `null`이다.
+- 앱은 답을 그대로 넘기지 않고 거른다. 아래에 걸리면 **`locator: null`과 그 이유**를 돌려준다 (200 — 정상적인 분기다. Worker는 다음 시도로 넘어간다).
+  - JSON이 아니다, 모양이 다르다
+  - 화면의 `platform`에 없는 전략이다
+  - `role`인데 `name`이 없다
+  - 이미 실패했거나 사다리에 있는 열쇠다
+- 거르고 남은 제안은 `status: unverified`, `platform`은 화면의 것으로 채운다. 우선순위는 비운다(전략 기본값).
+- `reasoning`은 400자에서 자른다.
+- 모델이 없거나 부르다 실패하면 C11 오류다 (503 `llm_unavailable`·`dependency_down`). Worker는 그때 치유를 그만두고 전환한다 (닿지 못한 것과 같다).
 
 ### report (UI 세션 하나의 최종 보고)
 
@@ -153,10 +184,11 @@ C11 오류 형식을 따른다. 이 계약에서 더하는 코드는 다음과 �
 
 | 상태 코드 | `code` | 언제 | Worker가 할 일 |
 | --- | --- | --- | --- |
-| 404 | `page_not_found` | 등록되지 않은 화면 | 세션 열기 실패 → C10 422 `unknown_semantic_key`와 같은 처리 (재시도하지 않음) |
+| 404 | `page_not_found` | 등록되지 않은 화면 | 세션 열기 실패 → C10 422 `unknown_semantic_key`와 같은 처리 (재시도하지 않음). 치유에서는 전환 |
 | 422 | `unknown_semantic_key` | 스텝 요소에 사다리가 없음 | 같음 |
 | 422 | `mode_unsupported` | 결정 수행에서 `goal` | 버그 (Studio가 막아야 함) |
 | 413 | `snapshot_too_large` | `aria_snapshot`·`sub_dom` 상한 초과 | 잘라서 다시 보낸다 |
+| 503 | `llm_unavailable` / `dependency_down` | 치유에 쓸 모델이 없거나 닿지 않음 (C11 §모델 연결) | 치유를 그만두고 전환 |
 
 보고(`report`)는 모르는 화면·요소에도 200 + `{accepted, ignored}`를 돌려준다 (위 재전송 규칙).
 
@@ -173,3 +205,4 @@ C11 오류 형식을 따른다. 이 계약에서 더하는 코드는 다음과 �
 | 2026-10-01 | 1 | 검토 반영: 세션 안 작업별 `call_seq`, 보고 재전송은 5xx만·4xx는 보내지 못한 보고로, 모르는 화면 보고도 받음, `origin: test`는 승격에서 제외, 치유 기본값·운영에서 막는 법 명시 | 0018 |
 | 2026-10-03 | 1 | 데스크톱 로케이터에 `class_name` 전략과 `control_type` 조건을 더했다. 기본 우선순위도 바뀐다 — `control_name`이 2에서 **3**으로 내려간다 (화면 언어에 따라 달라지므로). 구현이 아직 없어 schema는 그대로 1 | 0020 |
 | 2026-10-05 | 1 | 계획이 데스크톱 화면의 `app`·`window`(C9)를 싣는다. 더하기만이라 schema는 그대로 1 | 0033 |
+| 2026-10-05 | 1 | 치유가 모델에게 묻는 것·모델 답의 모양·앱이 거르는 규칙을 적었다. 요청·응답 모양은 그대로라 schema도 그대로 1 | 0034 |

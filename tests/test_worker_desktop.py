@@ -174,6 +174,16 @@ def test_a_missing_backend_is_a_503_not_a_pretend() -> None:
     assert caught.value.status == 503 and caught.value.code == "browser_unavailable"
 
 
+def test_a_snapshot_line_hides_table_cells_and_the_window_title() -> None:
+    def line(depth: int, kind: str, name: str) -> str:
+        return desktop.snapshot_line(depth, control_type=kind, name=name, automation_id="a", class_name="c")
+
+    assert '"•••"' in line(0, "WindowControl", "ERP Client - 거래처 한빛상사.xlsx")
+    assert '"•••"' in line(3, "DataItemControl", "PO-0001")
+    assert '"저장"' in line(2, "ButtonControl", "저장")
+    assert '""' in line(3, "DataItemControl", ""), "빈 이름은 빈 채로 (가린 척하지 않는다)"
+
+
 # ─────────────────────────── 진짜 창 (Windows) ───────────────────────────
 
 needs_desktop = pytest.mark.skipif(
@@ -306,8 +316,13 @@ def test_the_snapshot_hides_what_was_typed_and_the_url_hides_the_title(opened: t
     _, finder = opened
     item = find_one(finder, LocatorSpec(type="automation_id", value=AID + "itemCode", platform="desktop"))
     finder.act(item, step("fill", "비밀품목-7731"), timeout_ms=3000)
+    save = find_one(finder, LocatorSpec(type="automation_id", value=AID + "saveButton", platform="desktop"))
+    finder.act(save, step("click"), timeout_ms=3000)
     tree, _ = finder.snapshot()
     assert "itemCode" in tree and "비밀품목-7731" not in tree
+    assert "PO-0001" not in tree, "표 칸의 글은 업무 값이다 (C8)"
+    assert "발주 입력" not in tree, "창 제목에는 업무 값이 있을 수 있다"
+    assert '"저장"' in tree, "버튼 이름(라벨)은 남는다 — 치유가 그것으로 찾는다"
     # 창 제목에는 업무 값이 있을 수 있다 — 주소는 앱 이름뿐이다 (C10).
     assert finder.url() == "desktop:ERP Client"
 

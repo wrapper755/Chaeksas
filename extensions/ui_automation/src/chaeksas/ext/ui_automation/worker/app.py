@@ -343,6 +343,18 @@ class Worker:
         }
         return result
 
+    def _healer_for(self, found: Session) -> Healer | None:
+        """이 세션의 치유 길 (C8). **세션이 끄면 없다** (C10 `heal`, STU-13 「자가 치유 사용」).
+
+        시험이 끼운 `healer`가 먼저이고, 없으면 세션의 계획 서비스(그 세션의 키로 부른다)다.
+        """
+        if not found.request.heal:
+            return None
+        if self.healer is not None:
+            return self.healer
+        heal = getattr(found.plans, "heal", None)
+        return heal if callable(heal) else None
+
     def _climb(self, found: Session, request: StepRequest) -> StepResult:
         """계획의 사다리를 **로컬에서** 탄다 (C8) — 보고 재료도 여기서 모은다."""
         if found.plan is None:
@@ -365,7 +377,7 @@ class Worker:
             raise WorkerProblem(
                 422, UNKNOWN_SEMANTIC_KEY, f"계획에 없는 요소입니다: {step.semantic_key}"
             )
-        attempt = run_step(step, found.plan, finder, heal=self.healer)
+        attempt = run_step(step, found.plan, finder, heal=self._healer_for(found))
         if not attempt.ok and callable(locked) and locked():
             # 스텝 도중에 잠겼다 — 조작은 잠금을 먼저 보고 멈췄다. 실패가 아니라 기다릴 일이다.
             raise WorkerProblem(503, SESSION_LOCKED, "화면이 잠겨 있습니다")

@@ -10,9 +10,10 @@
   나가지 않는다.
 - 저장은 SQLite 한 파일 (`store.py`). 레지스트리는 메모리에서 돌고 바뀌면 통째로 쓴다.
 
+- 치유(`heal`, C8)는 모델에게 묻고 답을 **거른다** (`healing.py`). 모델은 C11 §모델 연결로 받는다.
+
 > 상태: `plan`은 **결정 수행만** 한다 — 등록된 사다리를 모아 준다. 자연어 목표(`goal`)로
-> 스텝을 지어내는 것과 `heal`(C8)은 모델이 하는 일이라 아직 없다. 받으면 422로 **분명히
-> 거절한다** (「없는데 된 척」하지 않는다).
+> 스텝을 지어내는 것은 아직 없다. 받으면 422로 **분명히 거절한다** (「없는데 된 척」하지 않는다).
 """
 
 from __future__ import annotations
@@ -35,11 +36,18 @@ from chaeksas.contracts.service_app import (
     OpRequest,
     ServiceAppManifest,
 )
-from chaeksas.ext.ui_automation.contracts.plan import ElementInfo, ExecutionPlan, PlanStep, SessionReport
+from chaeksas.ext.ui_automation.contracts.plan import (
+    ElementInfo,
+    ExecutionPlan,
+    HealRequest,
+    PlanStep,
+    SessionReport,
+)
 from chaeksas.ext.ui_automation.contracts.registry import PageRegistration
+from chaeksas.ext.ui_automation.service import healing
 from chaeksas.ext.ui_automation.service.registry import HasLinks, Registry, RegistryError
 from chaeksas.ext.ui_automation.service.store import Database, RegistryStore, SqliteKeyStore
-from chaeksas.service_kit import OpError, ServiceLlm, create_app
+from chaeksas.service_kit import OpError, OpResult, ServiceLlm, create_app, usage_of
 
 log = logging.getLogger(__name__)
 
@@ -85,6 +93,13 @@ OPERATIONS = (
         modes=[MODE_DETERMINISTIC],
     ),
     Operation(
+        name="heal",
+        description="사다리가 모두 실패한 요소의 대체 로케이터를 모델에게 묻는다 (C8)",
+        # 치유는 폴백이 아니라 확장의 정해진 기능이다 — 결정 수행에서도 된다 (C8 수행 모드 표).
+        # 운영에서 막으려면 운영 키의 허용 작업에서 heal을 뺀다.
+        modes=[MODE_DETERMINISTIC, MODE_AUTONOMOUS],
+    ),
+    Operation(
         name="report",
         description="UI 세션 보고 — 통계·승격 (C8)",
         modes=[MODE_DETERMINISTIC, MODE_AUTONOMOUS],
@@ -122,12 +137,18 @@ class Service:
 
     store: RegistryStore
     registry: Registry = field(default_factory=Registry)
+    #: 치유가 묻는 모델 (C11 §모델 연결). 없으면 치유는 503 `llm_unavailable`이다.
+    llm: ServiceLlm = field(default_factory=ServiceLlm)
 
     @classmethod
-    def open(cls, db: Database) -> Service:
+    def open(cls, db: Database, llm: ServiceLlm | None = None) -> Service:
         store = RegistryStore(db=db)
         pages, stats, revision = store.load()
-        return cls(store=store, registry=Registry(pages=pages, stats=stats, revision=revision))
+        return cls(
+            store=store,
+            registry=Registry(pages=pages, stats=stats, revision=revision),
+            llm=llm if llm is not None else ServiceLlm(),
+        )
 
     def flush(self) -> None:
         self.store.save(self.registry.pages, self.registry.stats, self.registry.revision)
@@ -250,6 +271,35 @@ class Service:
             )
         return made.to_json_dict()
 
+    def heal(self, request: OpRequest, mode: str) -> OpResult:
+        """C8 `heal` — 모델에게 **한 번** 묻고 답을 **걸러서** 준다 (`service/healing.py`).
+
+        쓸 수 없는 제안은 `locator: null`과 이유다 (200 — 정상적인 분기). 모델이 없거나 닿지
+        않으면 C11 오류(503)이고 Worker는 전환한다.
+        """
+        try:
+            asked = HealRequest.model_validate(request.input)
+        except ValueError as e:
+            raise OpError("input_invalid", f"치유 요청이 계약과 맞지 않는다: {e}", status=422) from e
+        try:
+            healing.check_size(asked)
+        except healing.SnapshotTooLarge as e:
+            raise OpError("snapshot_too_large", str(e), status=413) from e
+        try:
+            page = self.registry.page(asked.page_id)
+        except RegistryError as e:
+            raise OpError("page_not_found", str(e), status=404) from e
+        if asked.semantic_key not in page.locators and asked.semantic_key not in page.elements:
+            raise OpError(
+                "unknown_semantic_key",
+                f"등록되지 않은 요소다: {asked.semantic_key}",
+                status=422,
+                detail={"items": [asked.semantic_key]},
+            )
+        reply = self.llm.ask(healing.messages_for(asked, page))
+        answer = healing.answer_from(reply.text, asked, page)
+        return OpResult(answer.to_json_dict(), usage=usage_of([reply]))
+
     def report(self, request: OpRequest, mode: str) -> Mapping[str, Any]:
         """C8 보고 — 통계를 갱신하고 승격을 결정한다. **`test` 보고는 통계에 넣지 않는다.**"""
         try:
@@ -270,11 +320,12 @@ def create(
 ) -> FastAPI:
     """앱 하나. `admin_token`이 없으면 관리 API는 503이다 (C11).
 
-    모델(`CHK_SVC_UI_AUTOMATION__LLM__*`, C11 §모델 연결)은 치유·목표로 계획이 쓸 자리다. 지금은
-    관리 상태에 연결 여부만 보인다 — 그 작업들은 아직 선언하지 않았다.
+    모델(`CHK_SVC_UI_AUTOMATION__LLM__*`, C11 §모델 연결)은 치유(`heal`)가 쓴다. 없으면 치유만
+    503 `llm_unavailable`이고 나머지 작업은 돈다.
     """
     database = Database(path=db_path or (data_dir() / "ui-automation.sqlite3"))
-    service = Service.open(database)
+    model = llm if llm is not None else ServiceLlm.from_env(ENV_PREFIX)
+    service = Service.open(database, model)
     keys = SqliteKeyStore(db=database)
 
     app = create_app(
@@ -285,11 +336,12 @@ def create(
             "registry_register": service.register,
             "registry_delete": service.delete,
             "plan": service.plan,
+            "heal": service.heal,
             "report": service.report,
         },
         keys=keys,
         admin_token=admin_token or _env("ADMIN_TOKEN"),
-        llm=llm if llm is not None else ServiceLlm.from_env(ENV_PREFIX),
+        llm=model,
     )
     app.state.service = service
 
