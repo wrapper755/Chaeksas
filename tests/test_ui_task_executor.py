@@ -26,6 +26,7 @@ from chaeksas.ext.ui_automation.client.task import (
     UiTaskExecutor,
     WorkerClient,
     WorkerUnreachable,
+    render,
     session_event,
 )
 from chaeksas.ext.ui_automation.contracts.plan import ExecutionPlan, LocatorSpec
@@ -44,12 +45,15 @@ class Screen:
     def __init__(self, *, missing: set[str] | None = None) -> None:
         self.missing = missing or set()
         self.acted: list[str] = []
+        self.filled: list[Any] = []
 
     def find(self, locator: LocatorSpec, *, timeout_ms: int) -> Match:
         return Match(count=0) if locator.value in self.missing else Match(count=1, handle=locator.value)
 
     def act(self, handle: object, step: Any, *, timeout_ms: int) -> str | None:
         self.acted.append(f"{step.semantic_key}:{step.action}")
+        if step.action == "fill":
+            self.filled.append(step.value)
         return "한빛상사" if step.action.startswith("read") else None
 
     def snapshot(self) -> tuple[str, str]:
@@ -63,7 +67,7 @@ class Backend:
     def __init__(self, screen: Screen) -> None:
         self.screen = screen
 
-    def open(self, request: Any) -> str:
+    def open(self, request: Any, plan: Any = None) -> str:
         return "https://erp.example/orders"
 
     def finder(self, business_key: str) -> Screen:
@@ -152,6 +156,35 @@ def context(**extra: Any) -> TaskContext:
         properties=properties,
         **extra,
     )
+
+
+# ─────────────────────────── 스텝 값의 템플릿 (ADR-0033) ───────────────────────────
+
+
+def test_a_template_is_filled_from_the_variables() -> None:
+    variables = {"수량": 3, "건": {"품목": "A-100", "메모": None}, "행": {"금액": 1200}}
+    assert render("{수량}", variables) == "3"
+    assert render("품목 {건.품목} / {건.메모}", variables) == "품목 A-100 / "
+    assert render("{행}", variables) == '{"금액": 1200}', "사전은 JSON으로 들어간다"
+    assert render("{{그대로}}", variables) == "{그대로}"
+    assert render(5, variables) == 5, "글이 아닌 값은 그대로"
+
+
+@pytest.mark.parametrize("value", ["{없는것}", "{건.없는키}", "{수량.키}", "{}", "{건.}"])
+def test_an_unknown_or_broken_template_fails_the_task(value: str) -> None:
+    with pytest.raises(TaskFailed):
+        render(value, {"수량": 3, "건": {"품목": "A-100"}})
+
+
+def test_the_executor_fills_step_values_before_sending(
+    tmp_path: Path, worker: tuple[Worker, TestClient, Screen, Plans]
+) -> None:
+    _, http, screen, _ = worker
+    steps = [{"key": "주문.수량", "action": "fill", "value": "{주문.수량}개"}]
+    UiTaskExecutor(client=client_for(tmp_path, http)).execute(
+        context(properties={"steps": steps}, inputs={"주문": {"수량": 7}})
+    )
+    assert screen.filled == ["7개"], "글자 그대로가 아니라 변수 값이 입력된다"
 
 
 # ─────────────────────────── 한 바퀴 ───────────────────────────

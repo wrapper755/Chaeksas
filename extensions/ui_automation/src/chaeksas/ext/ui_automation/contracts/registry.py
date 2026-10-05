@@ -28,6 +28,7 @@ from chaeksas.ext.ui_automation.contracts.plan import (
     WEB,
     WEB_STRATEGIES,
     LocatorSpec,
+    WindowSpec,
 )
 from chaeksas.ext.ui_automation.contracts.worker_local import KNOWN_ACTIONS
 
@@ -76,6 +77,10 @@ class PageRegistration(SchemaVersioned):
     platform: str = WEB
     name: str = ""
     url_pattern: str | None = None
+    #: 데스크톱만 — 앱 이름. 실행 파일 경로는 두지 않는다 (PC마다 다르다, ADR-0033).
+    app: str | None = None
+    #: 데스크톱만 — 이 화면인 창의 조건. **데스크톱이면 필수**다.
+    window: WindowSpec | None = None
     locators: dict[str, list[LocatorSpec]] = Field(default_factory=dict)
     elements: dict[str, ElementHint] = Field(default_factory=dict)
     catalog: dict[str, CatalogEntry] = Field(default_factory=dict)
@@ -149,6 +154,20 @@ def validate(page: PageRegistration) -> list[Violation]:
         out.append(Violation(rule="C9", code="platform_invalid", message=f"모르는 플랫폼이다: {page.platform}"))
     if not page.locators:
         out.append(Violation(rule="C9", code="no_locators", message="요소가 하나도 없다"))
+
+    if page.platform == DESKTOP:
+        # 어느 창인지 모르면 Worker가 앞에 있는 아무 창에나 입력하게 된다 (ADR-0033).
+        if page.window is None or page.window.empty:
+            out.append(
+                Violation(rule="C9", code="window_required", message="데스크톱 화면에는 창 조건(window)이 있어야 한다")
+            )
+        elif page.window.title:
+            try:
+                re.compile(page.window.title)
+            except re.error as e:
+                out.append(
+                    Violation(rule="C9", code="window_title_invalid", message=f"창 제목 정규식이 틀렸다: {e}")
+                )
 
     allowed = WEB_STRATEGIES if page.platform == WEB else DESKTOP_STRATEGIES
     for key, ladder in page.locators.items():

@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | UI 자동화 확장의 Bot UI 유틸리티 「UI 셀렉터 등록」(직접 호출) → UI 자동화 앱, UI 자동화 앱 관리 콘솔(UIA-02) → UI 자동화 앱, Center(공개 카탈로그 읽기) → UI 자동화 앱 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (registry.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
-| 관련 ADR | [0010](../decisions/0010-service-apps.md) §5, [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md) |
+| 관련 ADR | [0010](../decisions/0010-service-apps.md) §5, [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
 | 관련 화면 | BUI-06·07·08, UIA-02, CON-07 「UI 화면」, STU-03·13 |
 
 ## 목적
@@ -48,13 +48,27 @@
 | `platform` | | `web`(기본) \| `desktop` |
 | `name` | | 사람이 읽는 이름 |
 | `url_pattern` | | 이 화면을 알아보는 주소 패턴 (웹) |
+| `app` | | 데스크톱만. **앱 이름** (예: `ERP Client`). Worker가 이 이름으로 그 PC의 실행 명령을 찾는다 — 실행 파일 경로는 여기 두지 않는다 (PC마다 다르다, [ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
+| `window` | 데스크톱이면 ✓ | 데스크톱만. **이 화면인 창을 알아보는 조건** (WindowSpec, 아래). Worker는 이 창 **안에서만** 찾는다 |
 | `locators` | ✓ | `{semantic_key: LocatorSpec[]}` (C8). 요소마다 1개 이상 |
 | `elements` | | `{semantic_key: ElementHint}` — `{description, role, name, kind}`. `kind`: `control` \| `list` \| `table` \| `text` (BUI-06 「종류」). 치유·계획에 쓴다 |
 | `catalog` | | `{semantic_key: CatalogEntry}` — `{actions[], depends_on[], concepts[], navigates_to?}`. 설계할 때만 쓴다 (STU-13 요소 목록, LLM 계획) |
 
+#### WindowSpec (데스크톱 창 조건)
+
+| 필드 | 뜻 |
+| --- | --- |
+| `title` | 창 제목 **정규식** (부분 일치). 예: `^ERP Client` |
+| `class_name` | 창 클래스 이름 (정확히). 예: `XLMAIN` |
+| `process` | 실행 파일 이름 (대소문자 무시). 예: `erp.exe` |
+
+- **하나 이상** 있어야 한다. 주어진 것을 **모두** 만족하는 최상위 창이 이 화면이다.
+- 맞는 창이 여럿이면 Worker는 고르지 않는다 (C10 `window_ambiguous`) — 엉뚱한 창에 입력하지 않게.
+
 검사:
 
 - `elements`·`catalog`의 키는 모두 `locators`에 있어야 한다. 사다리 없는 정보는 거부한다.
+- `platform`이 `desktop`이면 `window`가 있어야 하고(조건 하나 이상), 로케이터는 데스크톱 전략(C8)이어야 한다. `title`은 정규식으로 읽혀야 한다.
 - `depends_on`에 자기 자신이 있으면 거부한다.
 - `actions`는 C10 동작 목록 안에서만 쓴다.
 
@@ -67,6 +81,7 @@
 - **기존 것을 지우지 않는다.** 같은 요소에 새 로케이터를 더하고, 이미 있는 로케이터(`locator_key`가 같음)는 그대로 둔다.
 - 보낸 `status`는 무시하고 새 로케이터는 **`unverified`** 로 넣는다. 사람이 화면에서 검증을 통과시켰어도 그건 "그 순간 그 화면"에서만 참이다. `active` 승격은 실행 통계로만 한다 (C8).
 - **실제로 바뀐 것이 있을 때만**(`created`가 비어 있지 않을 때) 화면의 `revision`을 1 올린다. 같은 것을 다시 올려도 Worker 계획 캐시가 버려지지 않는다.
+- `name`·`url_pattern`·`app`·`window`는 **보낸 것만 바꾼다** (안 보내면 그대로). `app`·`window`가 바뀌면 `revision`도 올린다 — 캐시된 계획이 옛 창 조건을 쥐고 있지 않게.
 
 출력 (RegistrationResult):
 
@@ -140,6 +155,24 @@
 }
 ```
 
+데스크톱 화면:
+
+```json
+{
+  "schema": 1, "mode": "deterministic",
+  "run_id": "reg_0b9d4e17", "node_id": "registry", "node_instance": 1, "attempt": 1, "call_seq": 1,
+  "caller": {"type": "bot_ui", "host": "bui_a81c22d0"},
+  "input": {"page": {
+    "page_id": "erp.desktop.po_entry", "platform": "desktop", "name": "ERP 발주 입력",
+    "app": "ERP Client", "window": {"title": "^ERP Client", "process": "erp.exe"},
+    "locators": {"po.item": [
+      {"type": "automation_id", "value": "txtItem", "platform": "desktop"},
+      {"type": "control_name", "value": "품목", "control_type": "Edit", "platform": "desktop"}]},
+    "elements": {"po.item": {"description": "발주 품목 코드", "role": "textbox", "kind": "control"}}
+  }}
+}
+```
+
 - 셀렉터 등록은 실행이 아니므로, C11 멱등 키를 만들기 위해 `run_id`에 **동작마다 새로 만든** `reg_<hex8>`를 넣는다.
 
 ## 오류
@@ -149,7 +182,7 @@
 | 403 | `scope_required` | `registry_write` 없는 키 | 「등록 권한이 있는 키가 아닙니다 — 설정 → UI 셀렉터 등록」 |
 | 404 | `page_not_found` | | 「새 화면 — 등록하면 만들어집니다」 |
 | 409 | `has_links` (`detail.broken_links`) | 다른 화면이 가리키는 것 삭제 | 두 번째 확인 창 → `force=true` |
-| 422 | `invalid_page` (`detail` 규칙별) | 이름 규칙, 사다리 없는 요소, 자기 의존 | 칸마다 표시 |
+| 422 | `invalid_page` (`detail` 규칙별) | 이름 규칙, 사다리 없는 요소, 자기 의존, 데스크톱인데 창 조건 없음·웹 전략 | 칸마다 표시 |
 | 503 | `registry_unavailable` | 그래프 저장소(Neo4j)가 내려감 | 「서버에 닿지 못해 등록을 큐에 쌓았습니다」(BUI-06, 4xx는 큐에 쌓지 않음) |
 
 ## 호환 규칙
@@ -163,3 +196,4 @@
 | --- | --- | --- | --- |
 | 2026-10-01 | 1 | 초안. 프로토타입 화면 등록을 C11 작업으로 옮겼다. 그 과정에서 바뀐 것: `registry_write` 권한, 셀렉터 없는 공개 카탈로그, `revision`, 삭제 때 끊길 경로를 확인하는 단계 | 0010, 0012, 0013 |
 | 2026-10-01 | 1 | 검토 반영: 레지스트리는 확장의 Bot UI 유틸리티가 직접 부름(Worker 경유 아님), 동작마다 새 `reg_` id, 바뀔 때만 `revision` 증가, 삭제 전 Center `used_by` 확인, 카탈로그를 C13 공통 형식으로·서버망 한정 | 0018 |
+| 2026-10-05 | 1 | 데스크톱 화면: `app`(앱 이름)·`window`(창 조건 `title`·`class_name`·`process`), 데스크톱이면 `window` 필수. 등록은 보낸 칸만 바꾸고 `app`·`window`가 바뀌면 `revision`을 올린다. 더하기만이라 schema는 그대로 1 | 0033 |

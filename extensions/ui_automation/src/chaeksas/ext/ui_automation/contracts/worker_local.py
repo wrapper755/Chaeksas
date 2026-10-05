@@ -102,6 +102,8 @@ class SessionRequest(SchemaVersioned):
     page_id: str | None = None
     start_url: str | None = None
     browser_profile: str | None = None
+    #: 데스크톱 앱 이름 (UI 태스크의 `desktop.app`). 비우면 계획에 실린 화면의 것을 쓴다 (ADR-0033).
+    app: str | None = None
     headed: bool = False
     heal: bool = True
     #: 닫을 때 보고할까 (C8). **셀렉터 시험(BUI-08)은 끈다** — 아예 보내지 않는다.

@@ -101,6 +101,24 @@ class ElementInfo(ContractModel):
     role: str = ""
 
 
+class WindowSpec(ContractModel):
+    """데스크톱 화면인 창을 알아보는 조건 (C9 `window`, ADR-0033).
+
+    **하나 이상** 있어야 하고, 주어진 것을 **모두** 만족하는 최상위 창이 그 화면이다.
+    """
+
+    #: 창 제목 **정규식** (부분 일치).
+    title: str | None = None
+    #: 창 클래스 이름 (정확히).
+    class_name: str | None = None
+    #: 실행 파일 이름 (대소문자 무시). 예: `erp.exe`.
+    process: str | None = None
+
+    @property
+    def empty(self) -> bool:
+        return not (self.title or self.class_name or self.process)
+
+
 class ExecutionPlan(SchemaVersioned):
     """`POST /v1/ops/plan`의 결과 — **사다리 전부**가 여기 있다."""
 
@@ -110,6 +128,9 @@ class ExecutionPlan(SchemaVersioned):
     page_id: str
     platform: str = WEB
     start_url: str | None = None
+    #: 데스크톱 화면의 앱 이름·창 조건 (C9). Worker가 이것으로 창을 찾아 붙거나 띄운다.
+    app: str | None = None
+    window: WindowSpec | None = None
     #: 레지스트리 판 번호 (C9). Worker 캐시 열쇠에 쓴다.
     revision: int = 1
     steps: list[PlanStep] = Field(default_factory=list)
@@ -255,6 +276,7 @@ __all__ = [
     "UNVERIFIED",
     "WEB",
     "WEB_STRATEGIES",
+    "WindowSpec",
     "ElementInfo",
     "ExecutionPlan",
     "Failure",

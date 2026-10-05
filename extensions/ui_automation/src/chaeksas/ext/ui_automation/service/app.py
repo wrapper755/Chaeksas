@@ -224,6 +224,9 @@ class Service:
             page_id=page.page_id,
             platform=page.platform,
             start_url=request.input.get("start_url") or page.url_pattern,
+            # 데스크톱이면 Worker가 이것으로 창을 찾아 붙거나 띄운다 (C8, ADR-0033).
+            app=page.app,
+            window=page.window,
             revision=page.revision,
             steps=steps,
             # **스텝에 나오는 모든 요소의 사다리 전부** (C8) — 폴백은 Worker가 로컬에서 탄다.

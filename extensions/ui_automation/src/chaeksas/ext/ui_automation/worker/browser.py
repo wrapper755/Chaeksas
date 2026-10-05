@@ -152,7 +152,7 @@ class BrowserBackend:
     _browser: Any = None
     _finders: dict[str, BrowserFinder] = field(default_factory=dict)
 
-    def open(self, request: SessionRequest) -> str:
+    def open(self, request: SessionRequest, plan: Any = None) -> str:
         from playwright.sync_api import sync_playwright  # noqa: PLC0415 — 열 때만 든다
 
         if self._playwright is None:

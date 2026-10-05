@@ -70,6 +70,10 @@ class Registry:
 
     def register(self, page: PageRegistration) -> RegistrationResult:
         """등록·추가 (C9 `registry_register`). **기존 것을 지우지 않는다.**"""
+        known = self.pages.get(page.page_id)
+        if known is not None and page.window is None and known.window is not None:
+            # 「보낸 칸만 바꾼다」 — 로케이터만 더하러 온 데스크톱 등록이 창 조건 검사에 걸리지 않게.
+            page = page.model_copy(update={"window": known.window})
         problems = validate(page)
         if problems:
             raise RegistryError(problems[0].message)
@@ -101,8 +105,15 @@ class Registry:
             made.name = page.name
         if page.url_pattern:
             made.url_pattern = page.url_pattern
+        # 데스크톱 창 조건 (C9, ADR-0033) — **보낸 것만** 바꾼다. 바뀌면 계획 캐시가 옛 창을 쥐지
+        # 않게 `revision`도 올린다.
+        window_changed = False
+        if page.app is not None and page.app != made.app:
+            made.app, window_changed = page.app, True
+        if page.window is not None and page.window != made.window:
+            made.window, window_changed = page.window, True
 
-        if found.created or before is None:
+        if found.created or before is None or window_changed:
             # **바뀐 것이 있을 때만** 올린다 — 같은 것을 다시 올려도 캐시가 살아 있게.
             made.revision = (before.revision + 1) if before else 1
             made.updated_at = now_iso()

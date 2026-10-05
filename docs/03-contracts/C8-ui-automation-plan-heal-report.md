@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Worker 프로세스 → UI 자동화 앱 (실행 중 Bot·Studio를 대신해서) |
 | 코드 위치 | `extensions/ui_automation/contracts/` (plan.py, healing.py, report.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
-| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0010](../decisions/0010-service-apps.md) §5, [0013](../decisions/0013-api-keys.md) |
+| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0010](../decisions/0010-service-apps.md) §5, [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
 | 관련 화면 | STU-13, BUI-07·08, UIA-02·03, CON-01 「UI 태스크」 |
 
 ## 목적
@@ -87,6 +87,7 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | --- | --- |
 | `plan_id` | |
 | `page_id`, `platform`, `start_url` | |
+| `app`, `window` | 데스크톱 화면이면 그 화면의 앱 이름·창 조건 (C9). Worker가 **이것으로 창을 찾아 붙거나 띄운다** — 그래서 Worker는 세션을 열 때 계획을 먼저 받는다 |
 | `revision` | 레지스트리 판 번호 (C9). Worker 캐시 키에 쓴다 |
 | `steps` | 확정된 스텝 (자율 수행이면 LLM이 만든 스텝) |
 | `locators` | `{semantic_key: LocatorSpec[]}`. **스텝에 나오는 모든 요소의 사다리 전부** |
@@ -171,3 +172,4 @@ C11 오류 형식을 따른다. 이 계약에서 더하는 코드는 다음과 �
 | 2026-10-01 | 1 | 초안. 프로토타입의 계획·치유·보고를 C11 작업으로 옮겼다. 그 과정에서 바뀐 것: 작업 임차 없앰, `business_key`·수행 모드 필수, 보고에서 읽은 값 제거, 스냅샷의 업무 값 가리기, `revision`으로 캐시 | 0008, 0010, 0013 |
 | 2026-10-01 | 1 | 검토 반영: 세션 안 작업별 `call_seq`, 보고 재전송은 5xx만·4xx는 보내지 못한 보고로, 모르는 화면 보고도 받음, `origin: test`는 승격에서 제외, 치유 기본값·운영에서 막는 법 명시 | 0018 |
 | 2026-10-03 | 1 | 데스크톱 로케이터에 `class_name` 전략과 `control_type` 조건을 더했다. 기본 우선순위도 바뀐다 — `control_name`이 2에서 **3**으로 내려간다 (화면 언어에 따라 달라지므로). 구현이 아직 없어 schema는 그대로 1 | 0020 |
+| 2026-10-05 | 1 | 계획이 데스크톱 화면의 `app`·`window`(C9)를 싣는다. 더하기만이라 schema는 그대로 1 | 0033 |
