@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec, PlanStep, WindowSpec, masked
+from chaeksas.ext.ui_automation.contracts.plan import MASK, LocatorSpec, PlanStep, WindowSpec, masked
 from chaeksas.ext.ui_automation.contracts.worker_local import SessionRequest
 from chaeksas.ext.ui_automation.worker.ladder import Match
 
@@ -343,6 +343,17 @@ def matches(locator: LocatorSpec, *, automation_id: str, class_name: str, name: 
     raise ValueError(f"데스크톱에서 쓸 수 없는 전략이다: {locator.type}")
 
 
+#: 이름에 **업무 값**이 담기는 컨트롤 — 스냅샷에서 이름을 가린다 (C8 「표 셀 글자」, 원칙 6).
+#: 표 칸은 그 글이 이름이다. 입력칸·버튼·라벨의 이름은 라벨이라 남긴다 (치유가 그것으로 찾는다).
+MASKED_NAMES = frozenset({"DataItemControl"})
+
+
+def snapshot_line(depth: int, *, control_type: str, name: str, automation_id: str, class_name: str) -> str:
+    """스냅샷 한 줄. **창 제목**(문서 이름 같은 업무 값이 있을 수 있다)과 표 칸의 이름은 가린다."""
+    shown = MASK if (depth == 0 or control_type in MASKED_NAMES) and name else name
+    return f'{"  " * depth}{control_type} "{shown}" aid={automation_id} class={class_name}'
+
+
 @dataclass
 class DesktopFinder:
     """붙은 창 하나에서 찾고 조작한다 (C8 `Finder`)."""
@@ -614,8 +625,13 @@ class DesktopFinder:
         try:
             for control, depth in auto.WalkControl(self.window, includeTop=True, maxDepth=12):
                 lines.append(
-                    f'{"  " * depth}{control.ControlTypeName} "{control.Name}"'
-                    f" aid={control.AutomationId} class={control.ClassName}"
+                    snapshot_line(
+                        depth,
+                        control_type=control.ControlTypeName,
+                        name=control.Name,
+                        automation_id=control.AutomationId,
+                        class_name=control.ClassName,
+                    )
                 )
                 if sum(len(one) for one in lines) > SNAPSHOT_MAX:
                     break
