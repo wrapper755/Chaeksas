@@ -68,6 +68,7 @@
 | `browser_profile` | str | | |
 | `headed` | bool | | 기본 false. Studio 시험은 true 권장 |
 | `heal` | bool | | 자가 치유 사용. 기본 true |
+| `report` | bool | | 닫을 때 UI 자동화 앱에 보고할까 (C8). 기본 true. **셀렉터 시험(BUI-08)에서 끈다** — 통계에 넣지 않을 뿐 아니라 아예 보내지 않는다 |
 | `service_key` | str | Bot·Studio만 ✓ | **UI 자동화 앱 API 키 값.** 부르는 쪽이 BPM 프로세스의 키 참조를 풀어 넣는다 (ADR-0013). Worker는 이 값을 세션 동안 메모리에만 두고, 디스크·로그에 남기지 않는다 |
 
 → 201 SessionInfo `{session_id, session_secret, page_id, current_url, plan_source: "server" | "cache", steps_run: 0, mutating_steps_ok: 0}`
@@ -195,6 +196,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 | 2026-10-01 | 1 | 검토 반영: 토큰은 파일로만 넘기고 사용·관리 토큰으로 나눔, `session_secret`, 실행 예약과 유휴 시간 제한·강제 닫기, `caller.attempt`와 4단 `business_key`, 셀렉터 등록 caller, 재시작 시 조작 스텝이 있었으면 자동으로 다시 하지 않음 | — |
 | 2026-10-01 | 1 | 확장 검토 반영: `registration/submit` 없앰 (레지스트리는 확장 유틸리티가 직접), 등록 세션은 `service_key` 불필요 | 0018 |
 | 2026-10-03 | 1 | 잠금 화면 오류 `session_locked`(503, 재시도 가능) 추가. 잠긴 동안 조작·캡처를 하지 않고, 부르는 쪽은 스텝 시간 제한 안에서 기다린다 | 0023 |
+| 2026-10-05 | 1 | `SessionRequest.report`를 더했다 — 셀렉터 시험이 보고를 끌 수 있게 (BUI-08 「결과를 서버에 보고」) | — |
 | 2026-10-05 | 1 | §5에 `pick/events`(비워 가져오기·`picking`)와 `highlight`를 적었다 | — |
 | 2026-10-05 | 1 | §5 셀렉터 등록의 요청·응답을 확정했다 — `analyze`·`verify`는 세션 경로 아래(`/v1/registration/{session_id}/…`)로 두어 나머지 세션 경로와 모양을 맞췄고, `business_key`는 Worker가 짓는다. 등록 세션이 아니면 403 | 0018 |
 | 2026-10-03 | 1 | 기동 절차의 2단계를 고쳤다 — `chk-worker` 명령이 아니라 Bot UI가 자기 실행 파일을 `--local-runtime`으로 다시 띄운다 (묶인 앱에는 콘솔 스크립트가 없다). 주고받는 API는 그대로라 schema는 1 | 0024 |

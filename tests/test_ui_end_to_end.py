@@ -237,6 +237,30 @@ def test_three_runs_promote_through_the_whole_chain(served: Any, worker: Worker,
     assert found.locators["order.save"][0].status == "unverified", "쓰지 않은 것은 그대로다"
 
 
+def test_a_trial_run_can_keep_its_hands_off_the_server(served: Any, worker: Worker, site: str) -> None:
+    """BUI-08의 「결과를 서버에 보고」가 꺼져 있으면 **아예 보내지 않는다** (C10 `report`)."""
+    from chaeksas.ext.ui_automation.client.registry_client import RegistryClient
+
+    register(served, site)
+    request = SessionRequest(
+        schema=1,
+        caller=Caller(type="selector_registration"),
+        mode="deterministic",
+        business_key="reg_abcd1234",
+        page_id=PAGE_ID,
+        start_url=site,
+        report=False,
+        service_key=KEY,
+    )
+    info, _ = worker.open(request)
+    worker.step(info.session_id, info.session_secret, StepRequest(semantic_key="order.qty", action="fill", value="7"))
+    closed = worker.close(info.session_id, info.session_secret)
+    assert closed.report == "queued", "보내지 않았다 — 디스크 큐에만 남는다"
+
+    found, _ = RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(served)).get_page(PAGE_ID)
+    assert found.locators["order.qty"][0].status == "unverified", "통계가 움직이지 않았다"
+
+
 def test_a_goal_without_a_model_is_refused(served: Any, worker: Worker, site: str) -> None:
     """자연어 목표로 계획을 **지어내지 않는다** — 아직 없다고 분명히 말한다."""
     from chaeksas.ext.ui_automation.client.registry_client import RegistryClient, RegistryProblem

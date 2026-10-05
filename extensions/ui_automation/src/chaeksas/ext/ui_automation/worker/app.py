@@ -409,7 +409,7 @@ class Worker:
         summary = found.summary()
         sent = "queued"
         plans = found.plans if found.plans is not None else self.plans
-        if plans is not None:
+        if plans is not None and found.request.report:
             sent = plans.report(found.report(duration_ms=_ms(self.clock() - found.opened_at)))
         self.recent.insert(
             0,
