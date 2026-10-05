@@ -71,6 +71,34 @@ CREATE TABLE IF NOT EXISTS deployments (
   revoked_json   TEXT,
   at             TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS jobs (
+  job_id           TEXT PRIMARY KEY,
+  bpm_process_id   TEXT NOT NULL,
+  version          TEXT,
+  target_type      TEXT NOT NULL,
+  target_id        TEXT,
+  inputs_json      TEXT NOT NULL,
+  expires_at       TEXT,
+  note             TEXT,
+  -- 멱등 키의 범위이자 「자기 것」 판정 기준 (C5 — 부른 쪽 키 또는 행위자마다 따로).
+  owner            TEXT NOT NULL,
+  idempotency_key  TEXT,
+  body_hash        TEXT NOT NULL,
+  requested_by     TEXT NOT NULL,
+  requested_at     TEXT NOT NULL,
+  state            TEXT NOT NULL,
+  state_reason     TEXT,
+  cancel_requested INTEGER NOT NULL DEFAULT 0,
+  cancel_result    TEXT,
+  queue_position   INTEGER,
+  dispatched_at    TEXT,
+  run_id           TEXT,
+  run_status       TEXT,
+  -- 실행하는 쪽이 마지막 말을 했다 — 더 내려보내지도, 맞추기(C4)로 건드리지도 않는다.
+  settled          INTEGER NOT NULL DEFAULT 0,
+  -- 맞추기 규칙: 하트비트에 연속으로 보이지 않은 횟수 (C4 `bot_ui_lost`).
+  misses           INTEGER NOT NULL DEFAULT 0
+);
 CREATE TABLE IF NOT EXISTS admin_keys (
   key_id        TEXT PRIMARY KEY,
   key_json      TEXT NOT NULL,

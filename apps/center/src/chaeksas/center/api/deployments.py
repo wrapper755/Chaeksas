@@ -150,6 +150,23 @@ def envelopes_for(store: Store, *, target_type: str, target_id: str) -> list[dic
     return [json.loads(one["body"]) for one in rows]
 
 
+def versions_for(store: Store, *, target_type: str, target_id: str, bpm_process_id: str) -> list[str]:
+    """그 대상에 **활성으로 배포된** 버전들 (C5 작업 만들기가 `version`을 푸는 데 쓴다).
+
+    고르는 기준은 `envelopes_for`와 **같다** — 내려가는 것과 돌릴 수 있는 것이 어긋나면
+    「배포는 됐는데 작업이 안 된다」가 된다. `not_before`·`expires_at`은 여기서 보지 않는다
+    (C2 V5b — 때를 보는 것은 실행하는 쪽이다).
+    """
+    rows = store.rows(
+        "SELECT d.version AS version FROM deployments d "
+        "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
+        "WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ? "
+        "AND (d.target_id = ? OR d.target_id = '*') AND d.bpm_process_id = ? ORDER BY d.at",
+        (STATUS_APPROVED, target_type, target_id, bpm_process_id),
+    )
+    return [str(one["version"]) for one in rows]
+
+
 def _row(row: Any) -> dict[str, Any]:
     return {
         "deployment_id": row["deployment_id"],
@@ -162,4 +179,4 @@ def _row(row: Any) -> dict[str, Any]:
     }
 
 
-__all__ = ["TARGET_FOR", "create", "envelopes_for", "listing", "revoke"]
+__all__ = ["TARGET_FOR", "create", "envelopes_for", "listing", "revoke", "versions_for"]

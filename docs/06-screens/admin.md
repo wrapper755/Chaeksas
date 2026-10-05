@@ -22,7 +22,9 @@ Admin은 서명 키를 가지고 패키지 승인·배포·철회에 서명한�
 | `chk-admin sign-extension <정의 파일>` | 외부 확장 정의 승인 서명 (C2 `extension`) → 봉투 파일. 운영자가 CON-07에 함께 올린다 | 정의의 허용 호스트·작업·결정 수행 허용 여부를 보이고 「서명할까요?」 |
 | `chk-admin revoke-extension <id> <버전>` | 외부 확장 승인 철회 서명 → 봉투 파일. 운영자가 CON-07 「해제...」에 올린다 | 「이 정의를 쓰는 Bot N개가 실행 불가가 됩니다」 |
 | `chk-admin deprecate <id> <버전>` | 지원 종료 표시 (서명 없음, 새 배포만 막음) | |
-| `chk-admin job new ...` | 작업 만들기 (콘솔 CON-05와 같은 일) | |
+| `chk-admin job new <id> --bot-ui <Bot UI> [--version] [--input 이름=값] [--inputs <JSON>] [--until] [--note] [--idempotency-key]` | 작업 만들기 (콘솔 CON-05와 같은 일). **서명이 없다** — 이미 배포된 것을 돌릴 뿐이라 토큰 권한이 관문이다 (C5 권한표) | 대상 Bot UI·입력 개수·만료를 보이고 「작업을 보낼까요?」 |
+| `chk-admin job list [--state] [--bot-ui] [--bpm-process]` / `show <작업 id>` | 작업 목록 / 하나 (실행 상태 포함) | |
+| `chk-admin job cancel <작업 id>` | 작업 취소. **시작된 것은 멈추지 않는다** (C5) — 「취소를 요청했습니다」로 끝나면 현장의 답을 기다리는 중이다 | 「작업 <id>를 취소할까요?」 |
 
 명령 이름 접두사 `chk-`는 환경변수 접두사(`CHK_`)와 맞춘 가안이다.
 
