@@ -29,6 +29,7 @@ from chaeksas.ext.ui_automation.worker.browser import (
     BrowserFinder,
     available,
 )
+from chaeksas.ext.ui_automation.worker.ladder import TableRead
 
 pytestmark = pytest.mark.skipif(not available(), reason="Playwright가 없다 (브라우저 백엔드 시험)")
 
@@ -159,14 +160,15 @@ def test_fill_and_read_back(opened: tuple[BrowserBackend, BrowserFinder]) -> Non
     assert finder.act(handle, PlanStep(semantic_key="수량", action="read_selection"), timeout_ms=2000) == "3"
 
 
-def test_a_table_comes_back_as_tsv(opened: tuple[BrowserBackend, BrowserFinder]) -> None:
-    """표는 TSV다 (C10 — 사람이 읽는 형태)."""
+def test_a_table_comes_back_as_headers_and_rows(opened: tuple[BrowserBackend, BrowserFinder]) -> None:
+    """표는 머리글과 줄, 칸은 글 그대로 (C10 `data`). `text`는 사람이 읽는 TSV다 (ADR-0036)."""
     _, finder = opened
     handle = finder.find(locator("css", "#lines"), timeout_ms=2000).handle
     found = finder.act(handle, PlanStep(semantic_key="줄", action="read_table"), timeout_ms=2000)
-    assert found is not None
-    assert found.splitlines()[0] == "거래처\t금액"
-    assert found.splitlines()[1] == "한빛상사\t1,250,000"
+    assert isinstance(found, TableRead)
+    assert found.data()["headers"] == ["거래처", "금액"]
+    assert found.data()["rows"][0] == ["한빛상사", "1,250,000"], "수 규칙은 부르는 쪽이 쓴다"
+    assert found.text.splitlines()[1] == "한빛상사\t1,250,000"
 
 
 def test_an_unknown_action_says_so(opened: tuple[BrowserBackend, BrowserFinder]) -> None:

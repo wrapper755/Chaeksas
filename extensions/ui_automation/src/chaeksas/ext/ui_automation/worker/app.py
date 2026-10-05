@@ -404,6 +404,7 @@ class Worker:
             semantic_key=attempt.semantic_key,
             action=attempt.action,
             text=attempt.text,
+            data=attempt.data,
             fallback_depth=attempt.fallback_depth,
             healed=attempt.healed,
             escalated=attempt.escalated,

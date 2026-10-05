@@ -26,11 +26,14 @@ from chaeksas.ext.ui_automation.client.task import (
     UiTaskExecutor,
     WorkerClient,
     WorkerUnreachable,
+    read_value,
     render,
+    screen_value,
     session_event,
+    table_rows,
 )
 from chaeksas.ext.ui_automation.contracts.plan import ExecutionPlan, LocatorSpec
-from chaeksas.ext.ui_automation.contracts.worker_local import CloseResult, SessionSummary
+from chaeksas.ext.ui_automation.contracts.worker_local import CloseResult, SessionSummary, StepResult
 from chaeksas.ext.ui_automation.worker.app import Worker, create_app, write_tokens
 from chaeksas.ext.ui_automation.worker.ladder import Match
 from chaeksas.extension_api import ExtensionContext, TaskContext, TaskFailed
@@ -359,3 +362,51 @@ def test_the_session_event_carries_no_values() -> None:
         "fallback_depth_max": 1,
         "healed": True,
     }
+
+
+# ─────────────────────────── 읽은 값의 모양 (ADR-0036) ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("text", "value"),
+    [
+        ("251", 251),
+        (" 1,200,000 ", 1200000),
+        ("-3.5", -3.5),
+        ("0", 0),
+        ("0.25", 0.25),
+        ("007", "007"),
+        ("02-1234-5678", "02-1234-5678"),
+        ("1,23", "1,23"),
+        ("12%", "12%"),
+        ("₩1,000", "₩1,000"),
+        ("1.2.3", "1.2.3"),
+        ("PO-0001", "PO-0001"),
+        ("", ""),
+    ],
+)
+def test_a_screen_value_is_a_number_only_when_it_looks_like_one(text: str, value: Any) -> None:
+    assert screen_value(text) == value
+    assert type(screen_value(text)) is type(value)
+
+
+def test_a_table_becomes_rows_keyed_by_the_header() -> None:
+    rows = table_rows(
+        {
+            "headers": ["거래처", "", "금액", "금액"],
+            "rows": [["한빛상사", "x", "1,250,000", "3"], ["가온테크"], ["다래", "y", "7", "8", "남는 칸"]],
+        }
+    )
+    assert rows[0] == {"거래처": "한빛상사", "열2": "x", "금액": 1250000, "금액_2": 3}
+    assert rows[1] == {"거래처": "가온테크", "열2": "", "금액": "", "금액_2": ""}, "모자란 칸은 빈 글"
+    assert len(rows[2]) == 4, "남는 칸은 버린다"
+
+
+def test_read_results_become_variables_by_action() -> None:
+    def result(action: str, text: str, data: Any = None) -> StepResult:
+        return StepResult(ok=True, action=action, text=text, data=data)
+
+    assert read_value(result("read", "1,000")) == 1000
+    assert read_value(result("read_options", "1\n2")) == "1\n2", "고를 거리의 이름은 글"
+    table = result("read_table", "a\tb\n1\t2", {"headers": ["a", "b"], "rows": [["1", "2"]]})
+    assert read_value(table) == [{"a": 1, "b": 2}]

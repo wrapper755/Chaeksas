@@ -18,7 +18,7 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from chaeksas.ext.ui_automation.contracts.plan import (
     ExecutionPlan,
@@ -31,6 +31,27 @@ from chaeksas.ext.ui_automation.contracts.plan import (
 )
 
 log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TableRead:
+    """표 읽기 (`read_table`) — 칸은 **보이는 글 그대로**다. 첫 줄이 머리글이다 (C10 `data`).
+
+    사전 목록으로 바꾸고 수 규칙을 쓰는 일은 부르는 쪽이 한다 (ADR-0036).
+    """
+
+    rows: tuple[tuple[str, ...], ...]
+
+    @property
+    def text(self) -> str:
+        """사람이 읽는 형태 (C10 `text` — TSV)."""
+        return "\n".join("\t".join(row) for row in self.rows)
+
+    def data(self) -> dict[str, Any]:
+        return {
+            "headers": list(self.rows[0]) if self.rows else [],
+            "rows": [list(row) for row in self.rows[1:]],
+        }
 
 
 @dataclass(frozen=True)
@@ -54,8 +75,8 @@ class Finder(Protocol):
 
     def find(self, locator: LocatorSpec, *, timeout_ms: int) -> Match: ...
 
-    def act(self, handle: object, step: PlanStep, *, timeout_ms: int) -> str | None:
-        """조작하거나 읽는다. 읽기면 글을 돌려준다."""
+    def act(self, handle: object, step: PlanStep, *, timeout_ms: int) -> str | TableRead | None:
+        """조작하거나 읽는다. 읽기면 글을, 표 읽기면 `TableRead`를 돌려준다."""
         ...
 
     def snapshot(self) -> tuple[str, str]:
@@ -77,6 +98,8 @@ class Attempt:
     semantic_key: str = ""
     action: str = ""
     text: str | None = None
+    #: 읽기 결과 구조 (C10 `data` — 표면 `{headers, rows}`). **보고에는 싣지 않는다.**
+    data: dict[str, Any] | None = None
     #: 몇 번째 로케이터로 성공했나. **0이 건강한 상태**다.
     fallback_depth: int = 0
     healed: bool = False
@@ -128,7 +151,11 @@ def run_step(
 
     found.fallback_depth = depth
     try:
-        found.text = finder.act(match.handle, step, timeout_ms=policy.action_timeout_ms)
+        read = finder.act(match.handle, step, timeout_ms=policy.action_timeout_ms)
+        if isinstance(read, TableRead):
+            found.text, found.data = read.text, read.data()
+        else:
+            found.text = read
     except Exception as e:  # noqa: BLE001 — 화면이 무엇을 낼지 모른다
         found.error_code = "action_failed"
         found.error = f"{type(e).__name__}: {e}"
@@ -209,4 +236,4 @@ def _ms(seconds: float) -> int:
     return int(seconds * 1000)
 
 
-__all__ = ["Attempt", "Finder", "Healer", "Match", "run_step"]
+__all__ = ["Attempt", "Finder", "Healer", "Match", "TableRead", "run_step"]

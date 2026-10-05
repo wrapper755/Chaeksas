@@ -18,7 +18,7 @@ from typing import Any
 
 from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec, PlanStep, masked
 from chaeksas.ext.ui_automation.contracts.worker_local import SessionRequest, StepRequest, StepResult
-from chaeksas.ext.ui_automation.worker.ladder import Match
+from chaeksas.ext.ui_automation.worker.ladder import Match, TableRead
 
 log = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class BrowserFinder:
             return self.page.locator(f"xpath={locator.value}")
         raise ValueError(f"웹에서 쓸 수 없는 전략이다: {locator.type}")
 
-    def act(self, handle: Any, step: PlanStep, *, timeout_ms: int) -> str | None:
+    def act(self, handle: Any, step: PlanStep, *, timeout_ms: int) -> str | TableRead | None:
         """조작하거나 읽는다. **읽기 결과만** 글로 돌려준다 (C10 `text`)."""
         action = step.action
         if action == "fill":
@@ -109,13 +109,13 @@ class BrowserFinder:
             return str(handle.input_value(timeout=timeout_ms))
         raise ValueError(f"모르는 동작이다: {action}")
 
-    def _table(self, handle: Any, timeout_ms: int) -> str:
-        """표는 **TSV**로 돌려준다 (C10 — 사람이 읽는 형태)."""
+    def _table(self, handle: Any, timeout_ms: int) -> TableRead:
+        """표는 칸 글 그대로 — 첫 줄이 머리글이다 (C10 `data`, ADR-0036). `text`는 TSV다."""
         rows = []
         for row in handle.locator("tr").all():
             cells = row.locator("th, td").all()
-            rows.append("\t".join(str(cell.inner_text(timeout=timeout_ms)).strip() for cell in cells))
-        return "\n".join(rows)
+            rows.append(tuple(str(cell.inner_text(timeout=timeout_ms)).strip() for cell in cells))
+        return TableRead(rows=tuple(rows))
 
     def snapshot(self) -> tuple[str, str]:
         """치유에 보낼 `(aria, sub_dom)` — **값을 가리고 잘라서** 준다 (C8·원칙 6)."""

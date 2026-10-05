@@ -70,6 +70,9 @@ ESCALATE_CONFIRMATION = "confirmation"
 #: 스텝 값의 템플릿 — `{{`·`}}`는 중괄호 글자, `{이름}`·`{이름.키}`는 변수 (C14).
 TEMPLATE = re.compile(r"\{\{|\}\}|\{([^{}]*)\}")
 
+#: 수 규칙 (ADR-0036) — 앞의 0·전화번호·백분율·통화 기호는 글로 남는다.
+NUMBER = re.compile(r"-?(?:0|[1-9]\d{0,2}(?:,\d{3})+|[1-9]\d*)(?:\.\d+)?")
+
 
 class WorkerUnreachable(RuntimeError):
     """Worker에 닿지 못했다 — Bot UI가 띄우지 못했거나 죽었다."""
@@ -303,12 +306,51 @@ class UiTaskExecutor:
                     raise TaskFailed(result.error_code or "ui_step_failed", result.error or "스텝 실패")
                 # 읽은 값은 **BPM 프로세스 변수로** 간다 (기록에는 남지 않는다 — 원칙 6).
                 if raw.get("result") and result.text is not None:
-                    outputs[str(raw["result"])] = result.text
+                    outputs[str(raw["result"])] = read_value(result)
         finally:
             closed = _closed(worker, info)
             if closed is not None:
                 outputs.setdefault("_ui_session", closed.summary.to_json_dict())
         return TaskOutcome(outputs=outputs)
+
+
+def screen_value(text: str) -> Any:
+    """화면 글 하나 → 변수 값 (ADR-0036). **수 모양이면 수**, 아니면 글 그대로."""
+    cleaned = text.strip()
+    if not NUMBER.fullmatch(cleaned):
+        return text
+    plain = cleaned.replace(",", "")
+    return float(plain) if "." in plain else int(plain)
+
+
+def table_rows(data: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """C10 표 `data`(`headers`·`rows`) → 줄 목록 `[{머리글: 값}]` (ADR-0036).
+
+    빈 머리글은 `열1`…, 겹치는 머리글은 `_2`…. 모자란 칸은 빈 글, 남는 칸은 버린다.
+    """
+    names: list[str] = []
+    for index, raw in enumerate(data.get("headers") or [], start=1):
+        name = str(raw).strip() or f"열{index}"
+        base, n = name, 2
+        while name in names:
+            name = f"{base}_{n}"
+            n += 1
+        names.append(name)
+    out = []
+    for row in data.get("rows") or []:
+        cells = [str(one) for one in row][: len(names)]
+        cells += [""] * (len(names) - len(cells))
+        out.append({name: screen_value(cell) for name, cell in zip(names, cells, strict=True)})
+    return out
+
+
+def read_value(result: StepResult) -> Any:
+    """읽기 스텝의 결과 → 변수 값 (C10 「읽은 값이 변수가 되는 모양」)."""
+    if result.action == "read_table" and result.data is not None:
+        return table_rows(result.data)
+    if result.action in ("read_options", "read_selection"):
+        return result.text
+    return screen_value(result.text or "")
 
 
 def _goal_mode(spec: Mapping[str, Any], mode: str) -> str | None:
