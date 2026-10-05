@@ -3,9 +3,12 @@ name = "chaeksas-ext-ui-automation"
 version = "0.1.0"
 description = "UI 자동화 확장 (첫 내장 확장) — 서버 부분·Worker 로컬 런타임·클라이언트 기여"
 requires-python = ">=3.12,<3.13"
+# fastapi·uvicorn: Worker 로컬 API (C10). 서비스 앱(service_kit)과 같은 것을 쓴다.
 dependencies = [
     "chaeksas-extension-api",
     "chaeksas-service-kit",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
 ]
 
 # 확장 호스트가 이 그룹을 읽어 확장을 찾는다 (C13, ADR-0018 §6).

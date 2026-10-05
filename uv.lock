@@ -229,12 +229,16 @@ source = { editable = "extensions/ui_automation" }
 dependencies = [
     { name = "chaeksas-extension-api" },
     { name = "chaeksas-service-kit" },
+    { name = "fastapi" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "chaeksas-extension-api", editable = "packages/extension_api" },
     { name = "chaeksas-service-kit", editable = "packages/service_kit" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "uvicorn", specifier = ">=0.32" },
 ]
 
 [[package]]

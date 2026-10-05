@@ -12,14 +12,30 @@ from __future__ import annotations
 
 from pathlib import Path
 
+#: 포트를 쓸 수 없을 때의 종료 코드 — Bot UI가 「포트 <p> 사용 중」으로 바꿔 보인다 (ADR-0023).
+EXIT_PORT_IN_USE = 2
+
 
 def serve(*, port: int, token_dir: Path | None = None) -> int:
-    """`bot_ui.local_runtimes[].entry` — `extension_api.LocalRuntimeEntry`.
+    """`bot_ui.local_runtimes[].entry` — `extension_api.LocalRuntimeEntry` (C10 기동 절차).
 
-    > 상태: **뼈대만.** 실제 로컬 API(C10)와 UI 세션은 M4다.
+    **127.0.0.1에만 바인드한다** — 다른 PC에서 닿으면 안 된다. 토큰 파일을 먼저 쓰고(다시
+    띄울 때마다 바뀐다) `/v1/health`에 답하기 시작한다.
 
-    할 일은 C10 「기동 절차」에 있다. 127.0.0.1에만 바인드하고, 토큰 파일을 `token_dir`에 쓴 뒤
-    `/v1/health`에 답하기 시작한다. 포트를 쓸 수 없으면 종료 코드 2로 끝낸다 (Bot UI가
-    「포트 <p> 사용 중」으로 바꿔 보인다, ADR-0023).
+    **화면을 만지는 백엔드는 아직 없다** (Windows UIA·브라우저는 다음 조각) — 세션을 열면
+    503 `browser_unavailable`이다. 「없는데 된 척」하지 않는다.
     """
-    raise NotImplementedError("Worker 로컬 API(C10)는 M4다")
+    import uvicorn  # noqa: PLC0415 — 띄울 때만 든다
+
+    from chaeksas.ext.ui_automation.contracts.worker_local import LOCAL_HOST
+    from chaeksas.ext.ui_automation.worker.app import Worker, create_app, write_tokens
+
+    where = token_dir or Path.cwd()
+    token, admin = write_tokens(where)
+    app = create_app(Worker(token=token, admin_token=admin))
+
+    try:
+        uvicorn.run(app, host=LOCAL_HOST, port=port, log_level="warning")
+    except OSError:
+        return EXIT_PORT_IN_USE
+    return 0
