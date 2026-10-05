@@ -169,6 +169,31 @@ Content-Type: application/json
  "usage": {"model": "local-7b", "input_tokens": 0, "output_tokens": 0}}
 ```
 
+## 모델 연결
+
+모델(LLM)이 필요한 작업이 있는 앱은 `service_kit`이 주는 모델 연결을 쓴다 ([ADR-0034](../decisions/0034-service-app-model-connection.md)). 클라이언트는 `chaeksas.llm`(OpenAI 호환 `/v1/chat/completions`) 하나다.
+
+| 환경변수 | 뜻 |
+| --- | --- |
+| `CHK_SVC_<APP>__LLM__BASE_URL` | 모델 주소 (`/v1/chat/completions` 앞까지) |
+| `CHK_SVC_<APP>__LLM__MODEL` | 모델 이름 |
+| `CHK_SVC_<APP>__LLM__API_KEY` | 키 (선택 — 키가 필요 없는 로컬 모델이면 비운다). **비밀이라 환경변수로만** 준다 |
+| `CHK_SVC_<APP>__LLM__TIMEOUT_S` | 한 번 물을 때 기다리는 시간 (기본 120) |
+
+- 주소와 모델 이름이 **둘 다** 있어야 연결된 것이다. 하나만 있으면 설정이 덜 된 것이고 연결되지 않은 것으로 본다 (관리 상태에 그렇게 보인다).
+- 연결되지 않았는데 모델이 필요한 작업이 불리면 **503 `llm_unavailable`** 이다. 모델 없이 지어낸 답을 돌려주지 않는다.
+- 모델을 부르다 실패하면, 잠깐 막힌 것(닿지 못함·408·429·5xx)은 503 `dependency_down`(다시 시도할 만함)이다. 그 밖(키·모델 이름이 틀림 등)은 503 `llm_unavailable`(설정 문제)이다.
+- 관리 상태(`/admin/v1/status`)의 `dependencies`에 `name: "llm"` 한 줄이 생긴다.
+  - 설정 없음·덜 됨: `unknown`
+  - 설정됨, 아직 부른 적 없음: `unknown` (`detail`에 모델 이름)
+  - 마지막 호출 성공: `ok`
+  - 마지막 호출이 닿지 못함: `unreachable`
+  - 마지막 호출이 그 밖의 오류: `degraded`
+
+  **키 값·주소는 보이지 않는다.**
+- 쓴 양은 작업 응답의 `usage`(`model`·`input_tokens`·`output_tokens`)로 돌려준다. 한 작업에서 여러 번 물었으면 더한다. **금액은 넣지 않는다.**
+- 모델에 보내는 화면 정보는 부르는 쪽이 **가린 것**만이다 (원칙 6). 앱은 받은 입력을 저장하지 않는다.
+
 ## 오류
 
 모든 오류 본문: `{"code": "<기계용 코드>", "message": "<사람용 한 줄>", "detail": {…}}`
@@ -185,6 +210,7 @@ Content-Type: application/json
 | 422 | `input_invalid` / `mode_unsupported` / `schema_unsupported` | 입력이 스키마와 다름, 작업이 그 모드를 지원 안 함 | 재시도하지 않음. 실행 실패 (또는 오류 경계 이벤트) |
 | 429 | `rate_limited` | 너무 많음 | `Retry-After` 뒤 같은 요청 |
 | 503 | `dependency_down` | 앱의 의존(LLM·DB)이 죽음 | 태스크 재시도 정책대로 `attempt`를 올려 다시 |
+| 503 | `llm_unavailable` | 모델이 필요한 작업인데 앱에 모델이 설정되지 않음 (또는 키·모델 이름이 틀림) | 재시도해도 풀리지 않는다. 앱 운영자가 `CHK_SVC_<APP>__LLM__*`를 고친다 |
 | 504 | `timeout` | `timeout_s` 초과 | 같은 `attempt`로 한 번 다시 (멱등이라 안전), 그 뒤 실패 |
 
 ## 호환 규칙
@@ -195,13 +221,14 @@ Content-Type: application/json
 
 ## `service_kit`이 제공하는 것
 
-새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: `/healthz`, `/manifest`(작업 함수의 타입에서 생성), 키 검증·권한·멱등 저장소, 오류 형식, 사용 기록, 관리 콘솔 공통 화면(SVC-00~03), 설정(`CHK_SVC_<APP>__…`), 포트(API 8000·8010…, 콘솔 +1).
+새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: `/healthz`, `/manifest`(작업 함수의 타입에서 생성), 키 검증·권한·멱등 저장소, 오류 형식, 사용 기록, 관리 콘솔 공통 화면(SVC-00~03), 모델 연결(`CHK_SVC_<APP>__LLM__*`), 설정(`CHK_SVC_<APP>__…`), 포트(API 8000·8010…, 콘솔 +1).
 
 ## 변경 이력
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
 | 2026-10-03 | 1 | 관리 API(`/admin/v1/status`·`keys`·`usage`)의 경로·모델·권한을 적었다 — ADR-0017이 경로만 말하고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |
+| 2026-10-05 | 1 | 모델 연결(`CHK_SVC_<APP>__LLM__*`)과 503 `llm_unavailable`, 관리 상태의 `llm` 의존 줄을 적었다 — 서비스 앱은 `core`를 쓸 수 없어 모델 클라이언트를 `chaeksas.llm`으로 내렸다. 모델 칸은 새로 생긴 것이라 기존 앱은 영향이 없다 | 0034 |
 | 2026-10-05 | 1 | `Operation.required_scopes`를 더했다 — 추가 권한을 **작업이 선언하고 뼈대가 건다** (C9의 `registry_write`를 앱마다 손으로 거는 것을 막는다). 없던 칸이라 기존 앱은 영향이 없다 | 0013 |
 | 2026-10-01 | 1 | 초안 (키는 앱 관리 콘솔 발급·자체 검증, 멱등 키, `server_ok`) | 0010, 0013, 0015 |
 | 2026-10-01 | 1 | 검토 반영: 멱등 키에 `operation`·`node_instance` 추가와 본문 충돌 409, 폴백은 키가 자율 수행을 허용할 때만, 키 앞자리 규칙, usage 이름 통일, 보관 7일 | — |
