@@ -63,6 +63,10 @@ class FakeWorker:
         self.analyzed: list[Any] = []
         self.verified: list[dict[str, Any]] = []
         self.closed: list[str] = []
+        self.picking = False
+        self.to_pick: list[Candidate] = []
+        self.highlighted: list[Any] = []
+        self.found = 1
 
     def open_registration(self, start_url: str, *, headed: bool = True) -> SessionInfo:
         if self.refuse is not None:
@@ -87,6 +91,19 @@ class FakeWorker:
     def close(self, session_id: str, secret: str) -> dict[str, Any]:
         self.closed.append(session_id)
         return {}
+
+    # ── 직접 고르기 ──
+
+    def pick(self, session_id: str, secret: str, *, on: bool) -> None:
+        self.picking = on
+
+    def picked(self, session_id: str, secret: str) -> tuple[list[Candidate], bool]:
+        taken, self.to_pick = self.to_pick, []
+        return taken, self.picking
+
+    def highlight(self, session_id: str, secret: str, locators: Any) -> int:
+        self.highlighted.append(list(locators))
+        return self.found
 
 
 @pytest.fixture(scope="session")
@@ -252,7 +269,6 @@ def test_registering_without_a_key_is_not_pretended(made: Any) -> None:
     widget.verify()
     assert not widget.register_button.isEnabled()
     assert "등록 담당자 키" in widget.register_button.toolTip()
-    assert not widget.pick_button.isEnabled(), "직접 고르기는 다음 조각이다"
 
 
 # ─────────────────────────── 놓아 주기 ───────────────────────────
@@ -523,3 +539,119 @@ def test_a_page_id_is_guessed_from_the_url() -> None:
 
     assert page_id_from("https://erp.example/orders/new") == "erp.example.orders.new"
     assert page_id_from("https://한글.example/주문") == "example"
+
+
+# ─────────────────────────── 직접 고르기 (BUI-06 3번) ───────────────────────────
+
+
+def picked_one(name: str = "메모", element_id: str = "memo") -> Candidate:
+    return Candidate(
+        tag="input", role="textbox", name=name, element_id=element_id,
+        css=[f"#{element_id}"], suggested_key="",
+    )
+
+
+def test_picking_needs_an_open_browser(made: Any) -> None:
+    widget, worker = made
+    assert not widget.pick_button.isEnabled()
+    widget.pick_button.setChecked(True)
+    widget.toggle_pick()
+    assert not widget.pick_button.isChecked()
+    assert worker.picking is False
+
+
+def test_a_picked_element_lands_in_the_table(made: Any) -> None:
+    widget, worker = made
+    opened(widget)
+    widget.pick_button.setChecked(True)
+    widget.toggle_pick()
+    assert worker.picking and "고르는 중" in widget.hint.text()
+
+    worker.to_pick = [picked_one()]
+    widget._collect_picked()  # noqa: SLF001 — 타이머가 부르는 것을 직접 민다
+    assert widget.elements.rowCount() == 1
+    assert "골랐습니다" in widget.hint.text()
+    assert widget.elements.item(0, 1).text() == "memo", "시맨틱 키를 제안한다"
+
+
+def test_the_same_element_is_not_taken_twice(made: Any) -> None:
+    """**같은 것을 두 번 담지 않는다** — 담은 줄을 골라 보여 준다 (BUI-06 3번)."""
+    widget, worker = made
+    opened(widget)
+    widget.pick_button.setChecked(True)
+    widget.toggle_pick()
+    worker.to_pick = [picked_one()]
+    widget._collect_picked()  # noqa: SLF001
+    worker.to_pick = [picked_one()]
+    widget._collect_picked()  # noqa: SLF001
+    assert widget.elements.rowCount() == 1
+    assert "이미 표에 있습니다" in widget.hint.text()
+
+
+def test_escape_in_the_browser_lowers_the_toggle(made: Any) -> None:
+    """사람이 화면에서 끝냈으면(Esc) **화면도 따라 내린다**."""
+    widget, worker = made
+    opened(widget)
+    widget.pick_button.setChecked(True)
+    widget.toggle_pick()
+    worker.picking = False  # 브라우저에서 Esc
+    widget._collect_picked()  # noqa: SLF001
+    assert not widget.pick_button.isChecked()
+    assert "끝냈습니다" in widget.hint.text()
+
+
+def test_closing_the_browser_stops_picking(made: Any) -> None:
+    widget, worker = made
+    opened(widget)
+    widget.pick_button.setChecked(True)
+    widget.toggle_pick()
+    widget.close_browser()
+    assert not widget.pick_button.isChecked()
+
+
+# ─────────────────────────── 표시 (BUI-06 5번) ───────────────────────────
+
+
+def test_selecting_a_row_shows_it(made: Any) -> None:
+    widget, worker = made
+    opened(widget)
+    widget.analyze()
+    widget.elements.selectRow(0)
+    assert worker.highlighted, "고른 줄의 사다리를 보낸다"
+    assert "화면에 표시했습니다" in widget.hint.text()
+
+
+def test_an_ambiguous_row_says_how_many(made: Any) -> None:
+    """**여럿이 잡히면 그렇게 말한다** — 실행에서 엉뚱한 것을 누른다."""
+    widget, worker = made
+    worker.found = 3
+    opened(widget)
+    widget.analyze()
+    widget.elements.selectRow(0)
+    assert "3개가 잡힙니다" in widget.hint.text()
+
+
+def test_a_missing_row_says_so(made: Any) -> None:
+    widget, worker = made
+    worker.found = 0
+    opened(widget)
+    widget.analyze()
+    widget.elements.selectRow(1)
+    assert "찾지 못했습니다" in widget.hint.text()
+
+
+def test_a_row_without_css_says_it_cannot_be_shown(app: Any) -> None:
+    """**못 하는 것을 못 찾았다고 하지 않는다** — 표시는 CSS로만 한다."""
+    worker = FakeWorker(
+        result=AnalyzeResult(
+            candidates=[Candidate(tag="button", role="button", name="저장", suggested_key="save")],
+            total=1,
+        )
+    )
+    widget = RegistrationWidget(worker)
+    opened(widget)
+    widget.analyze()
+    widget.elements.selectRow(0)
+    assert "표시할 수 없습니다" in widget.hint.text()
+    assert worker.highlighted == [], "부르지도 않는다"
+    widget.close()

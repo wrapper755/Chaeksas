@@ -81,6 +81,147 @@ ROLE_BY_INPUT_TYPE: dict[str, str] = {
 }
 
 
+#: 읽기 대상인가 (테두리 색을 가른다 — 조작은 빨강, 읽기는 주황).
+READ_KINDS_JS = "['table','grid','list','listbox','heading','paragraph','cell']"
+
+#: 직접 고르기 (BUI-06 3번). 화면에 덧씌워 **누른 것을 담는다**.
+#:
+#: - **링크 이동과 폼 제출을 막는다** — 누르면 다른 화면으로 가 버린다.
+#: - Shift+클릭은 둘러싼 표. Esc로 끝.
+#: - 담은 것은 `window.__chk.picked`에 쌓이고 `pick/events`가 **비워 가져간다**.
+PICK_JS = """
+(collectSource) => {
+  if (window.__chk && window.__chk.picking) return true;
+  const collect = eval(collectSource);
+  const readish = """ + READ_KINDS_JS + """;
+  const state = { picking: true, picked: [], collect };
+  window.__chk = state;
+
+  const mark = (element, color) => {
+    if (!element || !element.style) return;
+    element.dataset.chkOutline = element.style.outline || "";
+    element.style.outline = `2px solid ${color}`;
+    element.style.outlineOffset = "1px";
+  };
+  const unmark = (element) => {
+    if (!element || !element.style) return;
+    element.style.outline = element.dataset.chkOutline || "";
+    delete element.dataset.chkOutline;
+  };
+  const isRead = (element) => {
+    const role = (element.getAttribute("role") || "").toLowerCase();
+    const tag = element.tagName.toLowerCase();
+    return readish.includes(role) || ["table", "ul", "ol", "h1", "h2", "h3", "td", "th", "p"].includes(tag);
+  };
+
+  let hovered = null;
+  const over = (event) => {
+    if (!state.picking) return;
+    if (hovered) unmark(hovered);
+    hovered = event.target;
+    mark(hovered, isRead(hovered) ? "#e8810c" : "#d93025");
+  };
+  const out = () => { if (hovered) { unmark(hovered); hovered = null; } };
+
+  const take = (event) => {
+    if (!state.picking) return;
+    // **이동·제출을 막는다** — 고르는 중에 화면이 바뀌면 담던 것이 날아간다.
+    event.preventDefault();
+    event.stopPropagation();
+    let element = event.target;
+    if (event.shiftKey) element = element.closest("table, [role=table], [role=grid]") || element;
+    state.picked.push(state.collect(element));
+  };
+  const key = (event) => {
+    if (event.key === "Escape") stop();
+  };
+  const stop = () => {
+    state.picking = false;
+    out();
+    document.removeEventListener("mouseover", over, true);
+    document.removeEventListener("mouseout", out, true);
+    document.removeEventListener("click", take, true);
+    document.removeEventListener("submit", take, true);
+    document.removeEventListener("keydown", key, true);
+  };
+  state.stop = stop;
+
+  document.addEventListener("mouseover", over, true);
+  document.addEventListener("mouseout", out, true);
+  document.addEventListener("click", take, true);
+  document.addEventListener("keydown", key, true);
+  return true;
+}
+"""
+
+#: 담은 것을 **비워** 가져온다 (한 번 준 것은 다시 주지 않는다).
+DRAIN_JS = """
+() => {
+  const state = window.__chk;
+  if (!state) return { candidates: [], picking: false };
+  const taken = state.picked;
+  state.picked = [];
+  return { candidates: taken, picking: !!state.picking };
+}
+"""
+
+STOP_JS = """
+() => {
+  const state = window.__chk;
+  if (state && state.stop) state.stop();
+  return true;
+}
+"""
+
+#: 표시 (BUI-06 5번) — 고른 줄을 **파란 테두리**로 잠깐 보인다.
+HIGHLIGHT_JS = """
+(selector) => {
+  document.querySelectorAll("[data-chk-shown]").forEach((one) => {
+    one.style.outline = one.dataset.chkShown === "-" ? "" : one.dataset.chkShown;
+    delete one.dataset.chkShown;
+  });
+  const found = document.querySelectorAll(selector);
+  found.forEach((one) => {
+    one.dataset.chkShown = one.style.outline || "-";
+    one.style.outline = "3px solid #1a73e8";
+    one.style.outlineOffset = "1px";
+  });
+  if (found.length) found[0].scrollIntoView({ block: "center" });
+  return found.length;
+}
+"""
+
+
+def start_pick(page: Any) -> None:
+    """직접 고르기를 켠다 (BUI-06 3번). **다시 켜도 두 번 걸리지 않는다**."""
+    page.evaluate(PICK_JS, COLLECT_JS)
+
+
+def drain_pick(page: Any) -> tuple[list[Candidate], bool]:
+    """담은 것을 비워 가져온다. 두 번째 값은 **아직 고르는 중인가** (Esc로 끝났을 수 있다)."""
+    raw = page.evaluate(DRAIN_JS)
+    taken: set[str] = set()
+    found = [_candidate(dict(one), taken) for one in (raw.get("candidates") or [])]
+    for one in found:
+        taken.add(one.suggested_key)
+    return found, bool(raw.get("picking"))
+
+
+def stop_pick(page: Any) -> None:
+    page.evaluate(STOP_JS)
+
+
+def highlight(page: Any, locators: list[LocatorSpec]) -> int:
+    """사다리의 CSS로 화면에 표시한다 (BUI-06 5번) → 몇 개가 잡혔나.
+
+    **하나가 아니면 그렇게 말한다** — 여럿이 잡히면 실행에서 엉뚱한 것을 누른다.
+    """
+    css = [one.value for one in locators if one.type == "css"]
+    if not css:
+        return 0
+    return int(page.evaluate(HIGHLIGHT_JS, ", ".join(css)))
+
+
 def analyze(page: Any, request: AnalyzeRequest) -> AnalyzeResult:
     """지금 열린 화면에서 요소 후보를 모은다 (BUI-06 「분석」)."""
     wanted = READ_SELECTOR if request.include_read else CONTROL_SELECTOR
@@ -182,10 +323,18 @@ def summarize(result: VerifyResult) -> str:
 __all__ = [
     "COLLECT_JS",
     "CONTROL_SELECTOR",
+    "DRAIN_JS",
+    "HIGHLIGHT_JS",
+    "PICK_JS",
     "READ_SELECTOR",
     "ROLE_BY_INPUT_TYPE",
     "ROLE_BY_TAG",
+    "STOP_JS",
     "analyze",
+    "drain_pick",
+    "highlight",
+    "start_pick",
+    "stop_pick",
     "summarize",
     "verify",
 ]

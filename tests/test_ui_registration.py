@@ -33,7 +33,15 @@ from chaeksas.ext.ui_automation.contracts.registration import (
     suggest_key,
 )
 from chaeksas.ext.ui_automation.worker.browser import BrowserFinder, available
-from chaeksas.ext.ui_automation.worker.registration import analyze, summarize, verify
+from chaeksas.ext.ui_automation.worker.registration import (
+    analyze,
+    drain_pick,
+    highlight,
+    start_pick,
+    stop_pick,
+    summarize,
+    verify,
+)
 
 PAGE = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>주문</title></head>
 <body>
@@ -45,6 +53,7 @@ PAGE = """<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>주�
     <input class="dup" /><input class="dup" />
   </form>
   <div id="side"><button id="help">도움말</button></div>
+  <a id="away" href="/다른곳">다른 화면으로</a>
   <table id="lines"><tr><th>거래처</th></tr><tr><td>한빛상사</td></tr></table>
 </body></html>"""
 
@@ -261,6 +270,82 @@ def test_an_analyzed_element_verifies(page: Any) -> None:
     one = next(candidate for candidate in found.candidates if candidate.element_id == "qty")
     checked = verify(BrowserFinder(page=page), {"수량": ladder_for(one)})
     assert checked.unreachable == [], [row.reason for row in checked.rows]
+
+
+# ─────────────────────────── 직접 고르기·표시 (진짜 화면) ───────────────────────────
+
+
+@pytestmark_browser
+def test_a_click_is_taken_instead_of_pressed(page: Any) -> None:
+    """고른 것이 담기고, **누른 효과는 나지 않는다** (BUI-06 3번)."""
+    start_pick(page)
+    page.click("#save")
+    found, picking = drain_pick(page)
+    assert picking, "아직 고르는 중이다"
+    assert [one.element_id for one in found] == ["save"]
+    assert found[0].suggested_key == "save"
+
+
+@pytestmark_browser
+def test_what_was_taken_is_not_given_twice(page: Any) -> None:
+    """**비워 가져간다** — 다시 물으면 빈 손이다 (C10 §5)."""
+    start_pick(page)
+    page.click("#save")
+    drain_pick(page)
+    again, _ = drain_pick(page)
+    assert again == []
+
+
+@pytestmark_browser
+def test_picking_does_not_let_the_page_go_away(page: Any) -> None:
+    """**이동을 막는다** — 고르는 중에 화면이 바뀌면 담던 것이 날아간다."""
+    before = page.url
+    start_pick(page)
+    page.click("#away")
+    found, _ = drain_pick(page)
+    assert page.url == before, "링크를 눌러도 그 자리다"
+    assert [one.element_id for one in found] == ["away"]
+
+
+@pytestmark_browser
+def test_shift_click_takes_the_table(page: Any) -> None:
+    start_pick(page)
+    page.click("#lines td", modifiers=["Shift"])
+    found, _ = drain_pick(page)
+    assert [one.element_id for one in found] == ["lines"], "둘러싼 표를 담는다"
+
+
+@pytestmark_browser
+def test_escape_ends_picking(page: Any) -> None:
+    start_pick(page)
+    page.keyboard.press("Escape")
+    _, picking = drain_pick(page)
+    assert not picking, "사람이 끝냈다 — 화면이 토글을 내린다"
+    page.click("#save")
+    found, _ = drain_pick(page)
+    assert found == [], "끝난 뒤에는 담지 않는다"
+
+
+@pytestmark_browser
+def test_stopping_twice_is_fine(page: Any) -> None:
+    start_pick(page)
+    stop_pick(page)
+    stop_pick(page)
+    start_pick(page)
+    page.click("#save")
+    found, _ = drain_pick(page)
+    assert len(found) == 1, "다시 켤 수 있다"
+
+
+@pytestmark_browser
+def test_highlight_counts_what_it_found(page: Any) -> None:
+    """**하나가 아니면 그렇게 말한다** (BUI-06 5번)."""
+    assert highlight(page, [LocatorSpec(type="css", value="#qty")]) == 1
+    assert highlight(page, [LocatorSpec(type="css", value=".dup")]) == 2
+    assert highlight(page, [LocatorSpec(type="css", value="#없음")]) == 0
+    assert highlight(page, [LocatorSpec(type="role", value="button", name="저장")]) == 0, (
+        "CSS가 없으면 표시할 수 없다 — 0으로 말한다"
+    )
 
 
 # ─────────────────────────── 경로 (C10 §5) ───────────────────────────
