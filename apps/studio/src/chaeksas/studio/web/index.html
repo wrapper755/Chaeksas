@@ -81,7 +81,19 @@
         const bo = element.businessObject;
         const chk = {};
         for (const one of (bo.extensionElements && bo.extensionElements.values) || []) {
-          if (String(one.$type).startsWith("chk:")) chk[toName(one.$type)] = one.value || "";
+          if (!String(one.$type).startsWith("chk:")) continue;
+          const name = toName(one.$type);
+          if (name === "task") {
+            // `chk:task`만 `type`·`extension`이 XML 속성이다 (C14) — 본문과 함께 싣는다.
+            let data = {};
+            try { data = JSON.parse(one.value || "{}"); } catch (e) { data = one.value || {}; }
+            chk[name] = JSON.stringify(
+              { type: one.type || "", extension: one.extension || "", data },
+              null, 2,
+            );
+          } else {
+            chk[name] = one.value || "";
+          }
         }
         return {
           found: true,
@@ -136,10 +148,21 @@
               }
               continue;
             }
+            // `chk:task`는 속성과 본문으로 갈라 쓴다 (C14).
+            let attrs = { value: String(text) };
+            if (name === "task") {
+              let whole = {};
+              try { whole = JSON.parse(String(text)); } catch (e) { whole = {}; }
+              attrs = {
+                type: String(whole.type || ""),
+                extension: String(whole.extension || ""),
+                value: JSON.stringify(whole.data || {}, null, 2),
+              };
+            }
             if (found) {
-              modeling.updateModdleProperties(element, found, { value: String(text) });
+              modeling.updateModdleProperties(element, found, attrs);
             } else {
-              const made = moddle.create(type, { value: String(text) });
+              const made = moddle.create(type, attrs);
               modeling.updateModdleProperties(element, holder, {
                 values: [...(holder.values || []), made],
               });

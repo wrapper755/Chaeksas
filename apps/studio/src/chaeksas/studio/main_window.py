@@ -33,6 +33,7 @@ from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.dialogs import NewProcessDialog, pick_example
 from chaeksas.studio.explorer import Explorer
+from chaeksas.studio.extensions import Extensions
 from chaeksas.studio.packaging import PackageError, default_name, export
 from chaeksas.studio.preflight import Preflight, inspect, summarize
 from chaeksas.studio.properties import Properties
@@ -79,7 +80,8 @@ class MainWindow(QMainWindow):
         self.log_view = QPlainTextEdit(self)
         self.log_view.setReadOnly(True)
 
-        self.properties = Properties(self)
+        self.extensions = Extensions.load()
+        self.properties = Properties(self, extensions=self.extensions)
         self.properties.applying.connect(self._apply_properties)
         self.canvas.selected.connect(self._on_selected)
 
