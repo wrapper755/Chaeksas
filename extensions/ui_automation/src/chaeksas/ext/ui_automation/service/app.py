@@ -12,8 +12,8 @@
 
 - 치유(`heal`, C8)는 모델에게 묻고 답을 **거른다** (`healing.py`). 모델은 C11 §모델 연결로 받는다.
 
-> 상태: `plan`은 **결정 수행만** 한다 — 등록된 사다리를 모아 준다. 자연어 목표(`goal`)로
-> 스텝을 지어내는 것은 아직 없다. 받으면 422로 **분명히 거절한다** (「없는데 된 척」하지 않는다).
+- 목표로 계획(`plan`의 `goal`, 자율 수행만)은 모델이 스텝을 세우고 `planning.py`가 거른다 (ADR-0035).
+  모델은 **값의 이름만** 본다.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ from chaeksas.ext.ui_automation.contracts.plan import (
     SessionReport,
 )
 from chaeksas.ext.ui_automation.contracts.registry import PageRegistration
-from chaeksas.ext.ui_automation.service import healing
+from chaeksas.ext.ui_automation.service import healing, planning
 from chaeksas.ext.ui_automation.service.registry import HasLinks, Registry, RegistryError
 from chaeksas.ext.ui_automation.service.store import Database, RegistryStore, SqliteKeyStore
 from chaeksas.service_kit import OpError, OpResult, ServiceLlm, create_app, usage_of
@@ -89,8 +89,8 @@ OPERATIONS = (
     ),
     Operation(
         name="plan",
-        description="등록된 사다리로 실행 계획을 만든다 (결정 수행)",
-        modes=[MODE_DETERMINISTIC],
+        description="실행 계획 — 결정 수행은 등록된 사다리, 자율 수행은 목표로 모델이 스텝을 세운다 (C8)",
+        modes=[MODE_DETERMINISTIC, MODE_AUTONOMOUS],
     ),
     Operation(
         name="heal",
@@ -214,31 +214,44 @@ class Service:
         self.flush()
         return found.to_json_dict()
 
-    def plan(self, request: OpRequest, mode: str) -> Mapping[str, Any]:
-        """C8 `plan` — **등록된 사다리를 모아 준다** (결정 수행).
+    def plan(self, request: OpRequest, mode: str) -> OpResult:
+        """C8 `plan` — 결정 수행은 **등록된 사다리를 모아 주고**, 자율 수행은 목표로 스텝을 세운다.
 
         **스텝을 비워 보내면 그 화면의 사다리 전부**를 준다 — Worker는 세션을 열 때 계획을
         받고 스텝은 그 뒤에 하나씩 오기 때문이다 (C10).
 
-        자연어 목표(`goal`)로 스텝을 **지어내지 않는다** — 그것은 모델이 하는 일이고 아직
-        없다. 받으면 분명히 거절한다 (「없는데 된 척」하지 않는다).
+        목표(`goal`)는 **자율 수행에서만** 받는다 — 결정 수행은 LLM을 몰래 부르지 않는다. 모델이
+        세운 스텝은 `planning.py`가 거르고, 어긋나면 422 `goal_plan_invalid`다 (ADR-0035).
         """
-        if request.input.get("goal"):
-            raise OpError(
-                "plan_unsupported",
-                "목표로 계획을 세우는 것(자율 수행)은 아직 없습니다 — 스텝을 주세요",
-                status=422,
-            )
+        goal = str(request.input.get("goal") or "").strip()
+        if goal and mode == MODE_DETERMINISTIC:
+            raise OpError("mode_unsupported", "결정 수행은 목표로 계획하지 않는다 — 스텝을 주세요", status=422)
         page_id = str(request.input.get("page_id") or "")
         try:
             page = self.registry.page(page_id)
         except RegistryError as e:
             raise OpError("not_found", str(e), status=404) from e
 
-        try:
-            steps = [PlanStep.model_validate(one) for one in (request.input.get("steps") or [])]
-        except ValueError as e:
-            raise OpError("input_invalid", f"스텝이 계약과 맞지 않는다: {e}", status=422) from e
+        usage = None
+        if goal:
+            values = [str(one) for one in (request.input.get("values") or [])]
+            results = [str(one) for one in (request.input.get("results") or [])]
+            reply = self.llm.ask(planning.messages_for(goal, page, values, results))
+            usage = usage_of([reply])
+            try:
+                steps = planning.steps_from(reply.text, page, values, results)
+            except planning.GoalPlanInvalid as e:
+                raise OpError(
+                    "goal_plan_invalid",
+                    f"모델이 세운 계획을 쓸 수 없다: {e}",
+                    status=422,
+                    detail={"reasons": e.reasons},
+                ) from e
+        else:
+            try:
+                steps = [PlanStep.model_validate(one) for one in (request.input.get("steps") or [])]
+            except ValueError as e:
+                raise OpError("input_invalid", f"스텝이 계약과 맞지 않는다: {e}", status=422) from e
         made = ExecutionPlan(
             schema=1,
             plan_id=f"plan_{page.page_id}_{page.revision}",
@@ -269,7 +282,7 @@ class Service:
                 status=422,
                 detail={"items": missing},
             )
-        return made.to_json_dict()
+        return OpResult(made.to_json_dict(), usage=usage)
 
     def heal(self, request: OpRequest, mode: str) -> OpResult:
         """C8 `heal` — 모델에게 **한 번** 묻고 답을 **걸러서** 준다 (`service/healing.py`).

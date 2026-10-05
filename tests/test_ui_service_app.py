@@ -284,7 +284,7 @@ def test_the_manifest_is_open(served: Any) -> None:
         "plan", "heal", "report",
     }
     plan = next(one for one in body["operations"] if one["name"] == "plan")
-    assert plan["modes"] == ["deterministic"], "자연어 목표(자율)는 아직 없다"
+    assert plan["modes"] == ["deterministic", "autonomous"], "자율 수행은 목표로 계획한다 (ADR-0035)"
 
 
 # ─────────────────────────── 멱등 (C11) ───────────────────────────

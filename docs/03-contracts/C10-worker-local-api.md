@@ -67,12 +67,16 @@
 | `start_url` | str | | 비우면 화면의 기본 주소, 또는 이미 열린 화면에서 이어서 |
 | `browser_profile` | str | | |
 | `app` | str | | 데스크톱 앱 이름 (UI 태스크의 `desktop.app`, C14). 비우면 계획에 실린 화면의 `app`을 쓴다 (C8·C9) |
+| `goal` | str | | 자율 수행에서만: 스텝 대신 목표 한 줄. Worker가 계획을 받을 때 싣는다 (C8 「목표로 계획」, **캐시하지 않는다**). 세운 스텝은 `planned_steps`로 돌려준다 ([ADR-0035](../decisions/0035-ui-goal-planning.md)). 결정 수행 세션이면 422 `instruction_not_allowed` |
+| `values`, `results` | str[] | | `goal`과 함께: 쓸 값의 **이름**·결과 변수 이름 (C8). 값은 싣지 않는다 |
 | `headed` | bool | | 기본 false. Studio 시험은 true 권장 |
 | `heal` | bool | | 자가 치유 사용. 기본 true |
 | `report` | bool | | 닫을 때 UI 자동화 앱에 보고할까 (C8). 기본 true. **셀렉터 시험(BUI-08)에서 끈다** — 통계에 넣지 않을 뿐 아니라 아예 보내지 않는다 |
 | `service_key` | str | Bot·Studio만 ✓ | **UI 자동화 앱 API 키 값.** 부르는 쪽이 BPM 프로세스의 키 참조를 풀어 넣는다 (ADR-0013). Worker는 이 값을 세션 동안 메모리에만 두고, 디스크·로그에 남기지 않는다 |
 
-→ 201 SessionInfo `{session_id, session_secret, page_id, current_url, plan_source: "server" | "cache", steps_run: 0, mutating_steps_ok: 0}`
+→ 201 SessionInfo `{session_id, session_secret, page_id, current_url, plan_source: "server" | "cache", steps_run: 0, mutating_steps_ok: 0, planned_steps}`
+
+- `planned_steps`: `goal`로 열었을 때만 — 모델이 세우고 앱이 거른 스텝 `[{semantic_key, action, value?, result?}]`. 값은 `{이름}` 템플릿일 수 있고 **부르는 쪽이 채워** 스텝을 하나씩 보낸다 (손으로 적은 스텝과 같은 길). 계획이 거르기에 걸리면 세션을 열지 않고 422 `goal_plan_invalid`(C8)를 그대로 돌려준다.
 
 **여는 순서** ([ADR-0033](../decisions/0033-desktop-app-and-window.md)): `page_id`가 있고 계획을 받을 수 있으면 **계획을 먼저** 받고, 계획의 `platform`으로 브라우저·데스크톱을 고른 뒤 연다. 계획이 없으면(셀렉터 등록 등) 브라우저다.
 
@@ -205,6 +209,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-05 | 1 | 세션 열기에 `goal`·`values`·`results`, 세션 정보에 `planned_steps` — 목표로 계획([C8](C8-ui-automation-plan-heal-report.md))의 스텝을 부르는 쪽이 채워 보낸다. 더하기만이라 schema는 그대로 1 | 0035 |
 | 2026-10-01 | 1 | 초안 | 0012, 0013, 0014 |
 | 2026-10-01 | 1 | 검토 반영: 토큰은 파일로만 넘기고 사용·관리 토큰으로 나눔, `session_secret`, 실행 예약과 유휴 시간 제한·강제 닫기, `caller.attempt`와 4단 `business_key`, 셀렉터 등록 caller, 재시작 시 조작 스텝이 있었으면 자동으로 다시 하지 않음 | — |
 | 2026-10-01 | 1 | 확장 검토 반영: `registration/submit` 없앰 (레지스트리는 확장 유틸리티가 직접), 등록 세션은 `service_key` 불필요 | 0018 |

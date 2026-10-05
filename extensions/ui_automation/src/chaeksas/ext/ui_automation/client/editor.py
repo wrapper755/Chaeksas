@@ -51,7 +51,11 @@ NEEDS_VALUE = ("fill", "press", "select")
 NEEDS_RESULT = ("read", "read_table", "read_options", "read_selection")
 
 #: 자율 수행이 꺼져 있는 이유 (U3 — 왜 꺼졌는지 말한다).
-NO_GOAL = "목표로 계획을 세우는 것(자율 수행)은 모델이 붙는 다음 조각입니다."
+#: 목표로 계획의 도움말 (STU-13 [G], ADR-0035).
+GOAL_HELP = (
+    "자율 수행(Studio 시험)에서만 돕니다. Bot(결정 수행)에서는 실패합니다. "
+    "쓸 값은 목표 안에 {이름}으로 적습니다 — 그 이름만 모델에 갑니다."
+)
 
 
 def _row_steps(raw: Any) -> list[dict[str, Any]]:
@@ -105,6 +109,7 @@ class UiTaskEditor(QWidget):
         self.heal.setChecked(bool(found.get("heal", True)))
         self.close_browser.setChecked(bool(found.get("close_browser", False)))
         self.goal.setText(str(found.get("goal") or ""))
+        self.results.setText(", ".join(str(one) for one in (found.get("results") or [])))
         self.use_goal.setChecked(bool(found.get("goal")))
 
         self.steps.setRowCount(0)
@@ -128,6 +133,9 @@ class UiTaskEditor(QWidget):
         out["steps"] = self.step_rows()
         if self.use_goal.isChecked() and self.goal.text().strip():
             out["goal"] = self.goal.text().strip()
+            results = self.result_names()
+            if results:
+                out["results"] = results
         out["heal"] = self.heal.isChecked()
         out["close_browser"] = self.close_browser.isChecked()
         return out
@@ -212,15 +220,23 @@ class UiTaskEditor(QWidget):
         box = QGroupBox("목표로 계획")
         row = QHBoxLayout(box)
         self.use_goal = QCheckBox("스텝 대신 목표로 실행")
-        self.use_goal.setEnabled(False)
-        self.use_goal.setToolTip(NO_GOAL)
+        self.use_goal.setToolTip(GOAL_HELP)
         self.goal = QLineEdit()
-        self.goal.setEnabled(False)
-        self.goal.setPlaceholderText(NO_GOAL)
-        self.goal.setToolTip(NO_GOAL)
+        self.goal.setPlaceholderText("목표 (예: {신청.등록번호}를 넣고 상신한 뒤 접수번호를 읽는다)")
+        self.goal.setToolTip(GOAL_HELP)
+        self.results = QLineEdit()
+        self.results.setPlaceholderText("결과 변수 (쉼표로 여럿)")
+        self.results.setToolTip("읽은 값을 담을 변수 이름. 모델은 이 중에서만 고릅니다.")
         row.addWidget(self.use_goal)
-        row.addWidget(self.goal, 1)
+        row.addWidget(self.goal, 3)
+        row.addWidget(self.results, 1)
+        self.use_goal.toggled.connect(lambda *_: self._sync())
+        self.goal.textChanged.connect(lambda *_: self._sync())
+        self.results.textChanged.connect(lambda *_: self._sync())
         return box
+
+    def result_names(self) -> list[str]:
+        return [one.strip() for one in self.results.text().split(",") if one.strip()]
 
     # ── 동작 ──
 
@@ -397,7 +413,14 @@ class UiTaskEditor(QWidget):
                     )
             seen.append(key)
 
-        if not self.step_rows() and not self.use_goal.isChecked():
+        if self.use_goal.isChecked():
+            goal = self.goal.text().strip()
+            if not goal:
+                errors.append("목표가 비었습니다.")
+            elif "{" not in goal:
+                # 값을 넣는 스텝을 세울 수 없다 — 모델은 이름만 받는다 (ADR-0035).
+                warnings.append("목표에 {이름}이 없습니다 — 값을 넣는 스텝을 세울 수 없습니다.")
+        elif not self.step_rows():
             errors.append("스텝이 없습니다.")
         return errors, warnings
 
@@ -410,6 +433,11 @@ class UiTaskEditor(QWidget):
         lines = [f"오류: {one}" for one in errors] + [f"경고: {one}" for one in warnings]
         self.warnings.setText("\n".join(lines))
         self.warnings.setProperty("role", "error" if errors else "")
+        goal_mode = self.use_goal.isChecked()
+        # 목표로 실행하면 스텝 표는 흐려진다 — 실행 때 앱이 세운 스텝을 쓴다 (STU-13 [G]).
+        self.steps.setEnabled(not goal_mode)
+        self.goal.setEnabled(goal_mode)
+        self.results.setEnabled(goal_mode)
         rows = self.steps.rowCount()
         self.drop_button.setEnabled(bool(rows))
         self.up_button.setEnabled(bool(rows))
@@ -417,4 +445,4 @@ class UiTaskEditor(QWidget):
         self.changed.emit()
 
 
-__all__ = ["NEEDS_RESULT", "NEEDS_VALUE", "NO_GOAL", "STEP_COLUMNS", "UiTaskEditor"]
+__all__ = ["GOAL_HELP", "NEEDS_RESULT", "NEEDS_VALUE", "STEP_COLUMNS", "UiTaskEditor"]
