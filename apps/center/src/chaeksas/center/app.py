@@ -16,12 +16,13 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
 from chaeksas.center import keys
-from chaeksas.center.api import bot_ui, deployments, packages, runs, signing
+from chaeksas.center.api import bot_ui, deployments, jobs, packages, runs, signing
 from chaeksas.center.auth import Caller, caller, require_admin, require_read
 from chaeksas.center.errors import ApiError, handle
 from chaeksas.center.responses import Utf8JSONResponse
 from chaeksas.center.settings import Settings
 from chaeksas.center.storage import Store, now_iso
+from chaeksas.contracts.center_api import LIST_LIMIT_DEFAULT
 from chaeksas.contracts.center_keys import CenterKeyCreated, CenterKeyCreateRequest
 from chaeksas.contracts.center_keys import validate_create as validate_key_create
 
@@ -204,6 +205,45 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def list_deployments(request: Request, bot_ui: str | None = None, active: bool = False) -> Any:
         require_read(authenticate(request))
         return deployments.listing(app.state.store, target_id=bot_ui, active_only=active)
+
+    # ─────────────────── 작업 (C5·CON-05) ───────────────────
+
+    @app.post(f"{API}/jobs")
+    async def create_job(request: Request) -> Any:
+        """작업 지시. **서명이 없다** — 배포와 달리 「언제 돌려라」일 뿐이다 (C5 권한표)."""
+        info, created = jobs.create(app.state.store, authenticate(request), await _json(request))
+        return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
+
+    @app.get(f"{API}/jobs")
+    def list_jobs(
+        request: Request,
+        state: str | None = None,
+        target_type: str | None = None,
+        target_id: str | None = None,
+        bpm_process_id: str | None = None,
+        limit: int = LIST_LIMIT_DEFAULT,
+        offset: int = 0,
+    ) -> Any:
+        return jobs.listing(
+            app.state.store,
+            authenticate(request),
+            state=state,
+            target_type=target_type,
+            target_id=target_id,
+            bpm_process_id=bpm_process_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    @app.get(f"{API}/jobs/{{job_id}}")
+    def get_job(request: Request, job_id: str) -> Any:
+        return jobs.get(app.state.store, authenticate(request), job_id)
+
+    @app.delete(f"{API}/jobs/{{job_id}}")
+    def cancel_job(request: Request, job_id: str) -> Any:
+        """취소. **202면 아직 끝난 것이 아니다** — 현장의 ack를 기다린다 (C5 「취소」 표)."""
+        info, status = jobs.cancel(app.state.store, authenticate(request), job_id)
+        return Utf8JSONResponse(status_code=status, content=info.to_json_dict())
 
     @app.get(f"{API}/admin-keys")
     def list_admin_keys(request: Request) -> Any:

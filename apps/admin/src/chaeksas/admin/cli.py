@@ -240,6 +240,106 @@ def revoke_deploy(args: argparse.Namespace, center: Center) -> int:
     return 0
 
 
+# ─────────────────────────── 작업 (C5 `/jobs`) ───────────────────────────
+
+
+def _inputs(args: argparse.Namespace) -> dict[str, Any]:
+    """`--input k=v`와 `--inputs <JSON>`을 합친다. 값은 JSON으로 읽고, 안 되면 문자열이다."""
+    import json  # noqa: PLC0415 — 입력을 받을 때만 든다
+
+    made: dict[str, Any] = {}
+    if args.inputs:
+        try:
+            parsed = json.loads(args.inputs)
+        except ValueError as e:
+            raise CenterProblem(f"--inputs가 JSON이 아닙니다: {e}") from e
+        if not isinstance(parsed, dict):
+            raise CenterProblem("--inputs는 JSON 객체여야 합니다")
+        made.update(parsed)
+    for one in args.input or []:
+        name, sep, value = one.partition("=")
+        if not sep:
+            raise CenterProblem(f"--input은 `이름=값` 모양입니다 (받은 것 {one!r})")
+        try:
+            made[name] = json.loads(value)
+        except ValueError:
+            made[name] = value  # 따옴표 없는 글자는 그대로 문자열
+    return made
+
+
+def job_new(args: argparse.Namespace, center: Center) -> int:
+    """작업 지시 (ADM, 콘솔 CON-05와 같은 일). **서명이 없다** — 이미 배포된 것을 돌릴 뿐이다."""
+    inputs = _inputs(args)
+    print(f"{args.id}{'@' + args.version if args.version else ''} → Bot UI {args.bot_ui}")
+    print(f"  입력: {len(inputs)}개" + (f" ({', '.join(sorted(inputs))})" if inputs else ""))
+    print(f"  만료: {args.until or '없음'}")
+    if not _ask("작업을 보낼까요?", assume_yes=args.yes):
+        print("취소했습니다.")
+        return 1
+
+    body: dict[str, Any] = {
+        "bpm_process_id": args.id,
+        "target": {"type": "bot_ui", "id": args.bot_ui},
+        "inputs": inputs,
+        "version": args.version,
+        "expires_at": args.until,
+        "note": args.note,
+        "idempotency_key": args.idempotency_key,
+    }
+    found = center.create_job({k: v for k, v in body.items() if v is not None})
+    print(
+        f"작업을 만들었습니다 — {found.get('job_id')} "
+        f"({found.get('bpm_process_id')}@{found.get('version')}, {found.get('state')})"
+    )
+    return 0
+
+
+def job_list(args: argparse.Namespace, center: Center) -> int:
+    found = center.jobs(state=args.state, bot_ui=args.bot_ui, bpm_process_id=args.bpm_process)
+    if not found:
+        print("작업이 없습니다.")
+        return 0
+    for one in found:
+        reason = one.get("state_reason") or one.get("cancel_result") or ""
+        target = one.get("target", {})
+        print(
+            f"{one.get('job_id')}  {one.get('state')}{'(' + reason + ')' if reason else ''}  "
+            f"{target.get('id')}  {one.get('bpm_process_id')}@{one.get('version')}  "
+            f"{one.get('requested_by')}  {one.get('requested_at', '')[:19]}"
+        )
+    return 0
+
+
+def job_show(args: argparse.Namespace, center: Center) -> int:
+    one = center.job(args.job_id)
+    print(f"{one.get('job_id')}  {one.get('state')}  {one.get('state_reason') or ''}")
+    print(f"  Bot: {one.get('bpm_process_id')}@{one.get('version')} → {one.get('target', {}).get('id')}")
+    print(f"  지시: {one.get('requested_by')} {one.get('requested_at')}")
+    print(f"  입력: {sorted(one.get('inputs') or {})}")
+    if one.get("run_id"):
+        print(f"  실행: {one.get('run_id')} ({one.get('run_status') or '진행 중'})")
+    if one.get("cancel_requested"):
+        print(f"  취소: 요청됨 ({one.get('cancel_result') or '답 기다리는 중'})")
+    return 0
+
+
+def job_cancel(args: argparse.Namespace, center: Center) -> int:
+    """취소. **현장이 이미 시작했으면 멈추지 않는다** (C5) — 그때는 거절이 돌아온다."""
+    if not _ask(f"작업 {args.job_id}를 취소할까요?", assume_yes=args.yes):
+        print("취소하지 않았습니다.")
+        return 1
+    found = center.cancel_job(args.job_id)
+    if found.get("state") == "cancelled":
+        print(f"취소했습니다 — {found.get('job_id')}")
+    else:
+        # 202 — 현장에 물어본 상태다. 그사이 시작했으면 `accepted`로 남는다 (C5).
+        print(
+            f"취소를 요청했습니다 — {found.get('job_id')} (지금 {found.get('state')}). "
+            "다음 하트비트에 현장이 답합니다"
+        )
+    return 0
+
+
 # ─────────────────────────── 명령줄 ───────────────────────────
 
 
@@ -292,6 +392,34 @@ def parser() -> argparse.ArgumentParser:
     undo.add_argument("--reason", default="관리자 철회")
     undo.set_defaults(run=revoke_deploy)
 
+    job = subs.add_parser("job", help="작업 지시 (C5 — 서명 없음)").add_subparsers(
+        dest="sub", required=True
+    )
+    made_job = job.add_parser("new", help="작업 만들기 (콘솔 CON-05와 같은 일)")
+    made_job.add_argument("id", help="BPM 프로세스 id")
+    made_job.add_argument("--bot-ui", dest="bot_ui", required=True, help="대상 Bot UI id")
+    made_job.add_argument("--version", help="비우면 그 Bot UI에 배포된 버전")
+    made_job.add_argument("--input", action="append", metavar="이름=값", help="입력 (여러 번)")
+    made_job.add_argument("--inputs", help="입력 전체를 JSON 객체로")
+    made_job.add_argument("--until", help="이때까지 시작하지 못하면 만료 (ISO 8601)")
+    made_job.add_argument("--note", help="메모 (500자 이내)")
+    made_job.add_argument("--idempotency-key", dest="idempotency_key", help="다시 보낼 때 (멱등)")
+    made_job.set_defaults(run=job_new)
+
+    listed_jobs = job.add_parser("list", help="작업 목록")
+    listed_jobs.add_argument("--state", help="pending·dispatched·queued·accepted·…")
+    listed_jobs.add_argument("--bot-ui", dest="bot_ui")
+    listed_jobs.add_argument("--bpm-process", dest="bpm_process")
+    listed_jobs.set_defaults(run=job_list)
+
+    shown_job = job.add_parser("show", help="작업 하나 (실행 상태 포함)")
+    shown_job.add_argument("job_id")
+    shown_job.set_defaults(run=job_show)
+
+    stopped = job.add_parser("cancel", help="작업 취소")
+    stopped.add_argument("job_id")
+    stopped.set_defaults(run=job_cancel)
+
     drop = subs.add_parser("revoke-package", help="패키지 승인 철회 서명")
     drop.add_argument("id")
     drop.add_argument("version")
@@ -312,4 +440,17 @@ def main(argv: list[str] | None = None, *, center: Center | None = None) -> int:
         return 2
 
 
-__all__ = ["CANDIDATE", "YES", "deploy", "deployments", "approve", "main", "parser", "pending"]
+__all__ = [
+    "CANDIDATE",
+    "YES",
+    "approve",
+    "deploy",
+    "deployments",
+    "job_cancel",
+    "job_list",
+    "job_new",
+    "job_show",
+    "main",
+    "parser",
+    "pending",
+]

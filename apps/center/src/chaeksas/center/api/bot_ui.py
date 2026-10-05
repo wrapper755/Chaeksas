@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from chaeksas.center import keys
-from chaeksas.center.api import deployments, signing
+from chaeksas.center.api import deployments, jobs, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import MAX_REQUEST_KB, ONLINE_WITHIN_S
@@ -129,7 +129,7 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
 def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_interval_s: int) -> HeartbeatResponse:
     """30초마다. 상태를 덮어쓰고, 내려줄 지시를 응답에 싣는다.
 
-    지금 내려줄 것은 `disabled`뿐이다 — 배포·작업·결재는 M5다. 그때 이 응답에 실린다.
+    배포 봉투와 작업이 여기 실려 내려간다. 결재(C6)는 아직이다.
     """
     key = require_key_type(caller, KEY_TYPE)
     try:
@@ -163,6 +163,11 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
             (now_iso(), dumps(state), found["bot_ui_id"]),
         )
 
+    disabled = bool(found["disabled"])
+    # 작업은 ack 반영 → 만료 → 맞추기 → 고르기 순이다 (C4·C5, `api/jobs.py`).
+    dispatch, cancels = jobs.heartbeat(
+        store, bot_ui_id=str(found["bot_ui_id"]), request=request, disabled=disabled
+    )
     return HeartbeatResponse(
         server_time=now_iso(),
         next_heartbeat_s=heartbeat_interval_s,
@@ -171,10 +176,10 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
             store, target_type="bot_ui", target_id=str(found["bot_ui_id"])
         ),
         admin_keys=signing.admin_keys(store),
-        jobs=[],
-        cancel_jobs=[],
+        jobs=dispatch,
+        cancel_jobs=cancels,
         approvals=[],
-        disabled=bool(found["disabled"]),
+        disabled=disabled,
     )
 
 

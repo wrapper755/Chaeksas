@@ -91,6 +91,25 @@ class Center:
         found = self.call("GET", f"/deployments{query}")
         return list(found) if isinstance(found, list) else []
 
+    # ── 작업 (C5 — 봉투가 없다, 토큰 권한으로 한다) ──
+
+    def create_job(self, body: dict[str, Any]) -> dict[str, Any]:
+        return dict(self.call("POST", "/jobs", body=body))
+
+    def jobs(
+        self, *, state: str | None = None, bot_ui: str | None = None, bpm_process_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        asked = {"state": state, "target_id": bot_ui, "bpm_process_id": bpm_process_id}
+        query = "&".join(f"{k}={v}" for k, v in asked.items() if v)
+        found = self.call("GET", f"/jobs{'?' + query if query else ''}")
+        return list(found) if isinstance(found, list) else []
+
+    def job(self, job_id: str) -> dict[str, Any]:
+        return dict(self.call("GET", f"/jobs/{job_id}"))
+
+    def cancel_job(self, job_id: str) -> dict[str, Any]:
+        return dict(self.call("DELETE", f"/jobs/{job_id}"))
+
     def bot_uis(self) -> list[dict[str, Any]]:
         found = self.call("GET", "/bot-uis")
         return list(found) if isinstance(found, list) else []
