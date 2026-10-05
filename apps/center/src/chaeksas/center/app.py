@@ -16,7 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
 from chaeksas.center import keys
-from chaeksas.center.api import bot_ui, packages, runs, signing
+from chaeksas.center.api import bot_ui, deployments, packages, runs, signing
 from chaeksas.center.auth import Caller, caller, require_admin, require_read
 from chaeksas.center.errors import ApiError, handle
 from chaeksas.center.responses import Utf8JSONResponse
@@ -188,6 +188,22 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     async def revoke_package(request: Request, package_id: str, version: str) -> Any:
         require_admin(authenticate(request))
         return signing.revoke_package(app.state.store, package_id, version, await _json(request))
+
+    @app.post(f"{API}/deployments")
+    async def create_deployment(request: Request) -> Any:
+        """배포 봉투 (C5). Center는 배포를 **짓지 않는다** — 받아 두었다가 그대로 내려 준다."""
+        require_admin(authenticate(request))
+        return deployments.create(app.state.store, await _json(request))
+
+    @app.delete(f"{API}/deployments")
+    async def revoke_deployment(request: Request) -> Any:
+        require_admin(authenticate(request))
+        return deployments.revoke(app.state.store, await _json(request))
+
+    @app.get(f"{API}/deployments")
+    def list_deployments(request: Request, bot_ui: str | None = None, active: bool = False) -> Any:
+        require_read(authenticate(request))
+        return deployments.listing(app.state.store, target_id=bot_ui, active_only=active)
 
     @app.get(f"{API}/admin-keys")
     def list_admin_keys(request: Request) -> Any:

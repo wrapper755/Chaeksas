@@ -59,6 +59,18 @@ CREATE TABLE IF NOT EXISTS run_events (
   data_json TEXT,
   PRIMARY KEY (run_id, seq)
 );
+CREATE TABLE IF NOT EXISTS deployments (
+  deployment_id  TEXT PRIMARY KEY,
+  target_type    TEXT NOT NULL,
+  target_id      TEXT NOT NULL,
+  bpm_process_id TEXT NOT NULL,
+  version        TEXT NOT NULL,
+  content_hash   TEXT NOT NULL,
+  -- 봉투는 **저장된 JSON 그대로** 내려 준다 (재직렬화하면 서명이 깨진다, C4).
+  envelope_json  TEXT NOT NULL,
+  revoked_json   TEXT,
+  at             TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS admin_keys (
   key_id        TEXT PRIMARY KEY,
   key_json      TEXT NOT NULL,

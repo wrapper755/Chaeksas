@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import argparse
+import secrets
 import sys
 from datetime import UTC, datetime
 from typing import Any
@@ -178,6 +179,67 @@ def revoke_package(args: argparse.Namespace, center: Center) -> int:
     return 0
 
 
+# ─────────────────────────── 배포 (ADM-03) ───────────────────────────
+
+
+def deploy(args: argparse.Namespace, center: Center) -> int:
+    """배포 서명 → Center (C2 `deployment`). **대상과 유효 기간을 보여 주고 묻는다.**"""
+    info = center.package(args.id, args.version)
+    if info.get("status") != "approved":
+        print(f"승인되지 않은 패키지입니다 (지금 {info.get('status')}) — 먼저 `chk-admin approve`")
+        return 2
+    print(f"{args.id}@{args.version} → Bot UI {args.bot_ui}")
+    print(f"  해시: {info.get('content_hash')}")
+    print(f"  유효: {args.start or '즉시'} ~ {args.until or '무기한'}")
+    if not _ask("배포할까요?", assume_yes=args.yes):
+        print("취소했습니다.")
+        return 1
+
+    payload: dict[str, Any] = {
+        "kind": "deployment",
+        "deployment_id": args.deployment_id or f"dep_{secrets.token_hex(4)}",
+        "target": {"type": "bot_ui", "id": args.bot_ui},
+        "bpm_process_id": args.id,
+        "version": args.version,
+        "content_hash": info.get("content_hash"),
+        "not_before": args.start,
+        "expires_at": args.until,
+    }
+    found = center.deploy(_sign(args, payload))
+    print(f"배포했습니다 — {found.get('deployment_id')} → {found.get('target', {}).get('id')}")
+    return 0
+
+
+def deployments(args: argparse.Namespace, center: Center) -> int:
+    found = center.deployments(bot_ui=args.bot_ui, active=not args.all)
+    if not found:
+        print("배포가 없습니다.")
+        return 0
+    for one in found:
+        state = "철회됨" if one.get("revoked") else "활성"
+        target = one.get("target", {})
+        print(
+            f"{one.get('deployment_id')}  {state}  {target.get('type')}:{target.get('id')}  "
+            f"{one.get('bpm_process_id')}@{one.get('version')}"
+        )
+    return 0
+
+
+def revoke_deploy(args: argparse.Namespace, center: Center) -> int:
+    if not _ask(f"배포 {args.deployment_id}를 철회할까요? (되살릴 수 없습니다)", assume_yes=args.yes):
+        print("취소했습니다.")
+        return 1
+    payload = {
+        "kind": "revoke",
+        "deployment_id": args.deployment_id,
+        "reason": args.reason,
+        "revoked_at": now_iso(),
+    }
+    found = center.revoke_deployment(_sign(args, payload))
+    print(f"철회했습니다 — {found.get('deployment_id')}")
+    return 0
+
+
 # ─────────────────────────── 명령줄 ───────────────────────────
 
 
@@ -211,6 +273,25 @@ def parser() -> argparse.ArgumentParser:
     ok.add_argument("version")
     ok.set_defaults(run=approve)
 
+    sent = subs.add_parser("deploy", help="배포 서명 (ADM-03)")
+    sent.add_argument("id")
+    sent.add_argument("version")
+    sent.add_argument("--bot-ui", dest="bot_ui", required=True, help="대상 Bot UI id")
+    sent.add_argument("--from", dest="start", help="이때부터 (ISO 8601)")
+    sent.add_argument("--until", dest="until", help="이때까지 (ISO 8601)")
+    sent.add_argument("--deployment-id", dest="deployment_id", help="다시 올릴 때 (멱등)")
+    sent.set_defaults(run=deploy)
+
+    shown_deploys = subs.add_parser("deployments", help="배포 목록")
+    shown_deploys.add_argument("--bot-ui", dest="bot_ui")
+    shown_deploys.add_argument("--all", action="store_true", help="철회된 것까지")
+    shown_deploys.set_defaults(run=deployments)
+
+    undo = subs.add_parser("revoke-deploy", help="배포 철회 서명")
+    undo.add_argument("deployment_id")
+    undo.add_argument("--reason", default="관리자 철회")
+    undo.set_defaults(run=revoke_deploy)
+
     drop = subs.add_parser("revoke-package", help="패키지 승인 철회 서명")
     drop.add_argument("id")
     drop.add_argument("version")
@@ -231,4 +312,4 @@ def main(argv: list[str] | None = None, *, center: Center | None = None) -> int:
         return 2
 
 
-__all__ = ["CANDIDATE", "YES", "approve", "main", "parser", "pending"]
+__all__ = ["CANDIDATE", "YES", "deploy", "deployments", "approve", "main", "parser", "pending"]
