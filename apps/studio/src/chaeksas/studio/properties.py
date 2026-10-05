@@ -96,14 +96,15 @@ def check_chk(text: str) -> tuple[dict[str, str], str | None]:
         if model is None:
             known = ", ".join(sorted(ELEMENT_MODELS))
             return {}, f"모르는 `chk:` 요소입니다: {name} (쓸 수 있는 것: {known})"
-        payload = value.get("data", value) if name == "task" and isinstance(value, dict) else value
         try:
             model.model_validate(_for_model(name, value))
         except ValidationError as e:
             first = e.errors()[0] if e.errors() else {"loc": (), "msg": "?"}
             where = ".".join(str(p) for p in first["loc"])
             return {}, f"chk:{name} — {where}: {first['msg']}" if where else f"chk:{name} — {first['msg']}"
-        out[name] = json.dumps(payload if name == "task" else value, ensure_ascii=False, indent=2)
+        # **`chk:task`는 통째로 오간다** — `type`·`extension`은 XML 속성이지만 그것까지
+        # 함께 보내야 캔버스가 속성에 쓸 수 있다 (안 그러면 고칠 때마다 종류가 날아간다).
+        out[name] = json.dumps(value, ensure_ascii=False, indent=2)
     return out, None
 
 
@@ -116,6 +117,18 @@ def _for_model(name: str, value: Any) -> Any:
         "extension": value.get("extension", ""),
         "data": value.get("data", {}),
     }
+
+
+def _task_of(chk: dict[str, str]) -> dict[str, Any] | None:
+    """`chk:task` 본문 글 → `{type, extension, data}`. 읽지 못하면 `None`."""
+    raw = chk.get("task")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        found = json.loads(raw)
+    except ValueError:
+        return None
+    return found if isinstance(found, dict) else None
 
 
 def as_text(chk: dict[str, str]) -> str:
@@ -137,10 +150,15 @@ class Properties(QWidget):
     #: `(노드 id, 고칠 것)` — 메인 창이 캔버스에 넘긴다.
     applying = Signal(str, dict)
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: QWidget | None = None, extensions: Any = None) -> None:
         super().__init__(parent)
         self.node_id = ""
         self.loaded: dict[str, Any] = {}
+        #: 확장이 기여한 편집기를 찾는 쪽 (C13). 없으면 JSON 탭이 그 자리를 메운다.
+        self.extensions = extensions
+        #: 지금 붙어 있는 확장 편집기와 붙일 때의 값 (바뀐 것만 보내려고).
+        self._editor: Any = None
+        self._editor_baseline: dict[str, Any] = {}
 
         self.head = QLabel(EMPTY_TEXT, self)
         self.head.setWordWrap(True)
@@ -196,6 +214,7 @@ class Properties(QWidget):
     # ── 보이기 ──
 
     def show_nothing(self) -> None:
+        self._detach_editor()
         self.node_id = ""
         self.loaded = {}
         self.head.setText(EMPTY_TEXT)
@@ -218,11 +237,71 @@ class Properties(QWidget):
         self.condition_box.setText(str(found.get("condition") or ""))
         self.script_box.setPlainText(str(found.get("script") or ""))
         self.json_box.setPlainText(as_text(dict(found.get("chk") or {})))
+        self._show_editor(dict(found.get("chk") or {}))
 
         self._show_row(self.condition_row, bpmn_type in CONDITION_KINDS)
         self._show_row(self.script_row, bpmn_type in SCRIPT_KINDS)
         self.error.setText("")
         self.apply_button.setEnabled(False)
+
+    def _show_editor(self, chk: dict[str, Any]) -> None:
+        """확장 태스크면 그 편집기를 탭으로 끼운다 (C13 `task_types[].editor`, STU-13).
+
+        **Studio는 어느 확장인지 모른다** — `type`으로 찾아 붙일 뿐이다 (ADR-0018).
+        """
+        self._detach_editor()
+        if self.extensions is None:
+            return
+        task = _task_of(chk)
+        if task is None:
+            return
+        task_type = str(task.get("type") or "")
+        if not task_type:
+            return
+        found = self.extensions.editor(task_type)
+        if found is None:
+            return
+        data = task.get("data")
+        found.load(dict(data) if isinstance(data, dict) else {})
+        self._editor = found
+        self._editor_baseline = dict(found.dump())
+        changed = getattr(found, "changed", None)
+        if changed is not None:
+            changed.connect(self._refresh_apply)
+        self.tabs.insertTab(1, found, self.extensions.label(task_type))
+        self.tabs.setCurrentIndex(1)
+
+    def _detach_editor(self) -> None:
+        found = self._editor
+        if found is None:
+            return
+        changed = getattr(found, "changed", None)
+        if changed is not None:
+            try:
+                changed.disconnect(self._refresh_apply)
+            except (RuntimeError, TypeError):  # pragma: no cover — 이미 끊겼다
+                pass
+        index = self.tabs.indexOf(found)
+        if index >= 0:
+            self.tabs.removeTab(index)
+        found.setParent(None)
+        self._editor = None
+        self._editor_baseline = {}
+
+    def _editor_patch(self) -> tuple[dict[str, Any] | None, str | None]:
+        """편집기가 바꾼 것 → `chk.task.data`. 오류가 있으면 **「적용」을 막는다**."""
+        found = self._editor
+        if found is None:
+            return None, None
+        wanted = dict(found.dump())
+        if wanted == self._editor_baseline:
+            return None, None
+        valid = getattr(found, "problems", None)
+        if callable(valid):
+            errors, _ = valid()
+            if errors:
+                return None, errors[0]
+        return wanted, None
 
     def _show_row(self, row: tuple[str, QWidget], visible: bool) -> None:
         label, widget = row
@@ -245,6 +324,15 @@ class Properties(QWidget):
             changes["condition"] = self.condition_box.text()
         if bpmn_type in SCRIPT_KINDS and self.script_box.toPlainText() != (self.loaded.get("script") or ""):
             changes["script"] = self.script_box.toPlainText()
+
+        data, problem = self._editor_patch()
+        if problem is not None:
+            return {}, problem
+        if data is not None:
+            task = _task_of(dict(self.loaded.get("chk") or {})) or {}
+            whole = {**task, "data": data}
+            changes["chk"] = {"task": json.dumps(whole, ensure_ascii=False, indent=2)}
+            return changes, None
 
         text = self.json_box.toPlainText()
         if text.strip() != as_text(dict(self.loaded.get("chk") or {})).strip():

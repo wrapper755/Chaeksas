@@ -10,6 +10,7 @@ WebEngine이 뜨지 않는 환경(그래픽 라이브러리가 없는 최소 컨
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -129,3 +130,42 @@ def test_a_bad_xml_comes_back_as_an_error_not_a_crash(canvas: Any) -> None:
 def test_an_unknown_function_says_so(canvas: Any) -> None:
     with pytest.raises(CanvasError, match="모르는 함수"):
         canvas.call_sync("없는함수")
+
+
+def test_an_extension_task_keeps_its_kind_through_an_edit(canvas: Any) -> None:
+    """`chk:task`의 `type`·`extension`은 **XML 속성**이다 (C14) — 고쳐도 날아가면 안 된다.
+
+    날아가면 패키지가 그 확장을 요구하지 않게 되고(C1), 실행할 때 「모르는 태스크」가 된다.
+    """
+    canvas.create_empty("Proc_ui", "UI 업무")
+    made = canvas.call_sync(
+        "setProperties",
+        "Proc_ui",
+        {
+            "chk": {
+                "task": json.dumps(
+                    {"type": "ui_task", "extension": "ui-automation", "data": {"page_id": "erp.order.form"}},
+                    ensure_ascii=False,
+                )
+            }
+        },
+    )
+    assert made.get("found") is True
+
+    found = canvas.call_sync("properties", "Proc_ui")
+    body = json.loads(found["chk"]["task"])
+    assert body["type"] == "ui_task" and body["extension"] == "ui-automation"
+    assert body["data"] == {"page_id": "erp.order.form"}
+
+    # 한 번 더 고쳐도 종류가 남는다 (STU-13이 `data`만 바꿔 보낸다).
+    canvas.call_sync(
+        "setProperties",
+        "Proc_ui",
+        {"chk": {"task": json.dumps({**body, "data": {"page_id": "erp.order.list"}}, ensure_ascii=False)}},
+    )
+    again = json.loads(canvas.call_sync("properties", "Proc_ui")["chk"]["task"])
+    assert again["type"] == "ui_task", "고쳐도 종류가 그대로다"
+    assert again["data"]["page_id"] == "erp.order.list"
+
+    xml = canvas.save_xml()
+    assert 'type="ui_task"' in xml and 'extension="ui-automation"' in xml, "XML 속성으로 남는다"

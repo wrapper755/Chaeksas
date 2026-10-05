@@ -70,7 +70,11 @@ def test_an_extension_task_keeps_its_xml_attributes_apart() -> None:
         '{"task": {"type": "ui_task", "extension": "ui-automation", "data": {"page_id": "p"}}}'
     )
     assert problem is None
-    assert json.loads(found["task"]) == {"page_id": "p"}, "본문에는 data만 간다"
+    assert json.loads(found["task"]) == {
+        "type": "ui_task",
+        "extension": "ui-automation",
+        "data": {"page_id": "p"},
+    }, "종류까지 함께 간다 — 캔버스가 XML 속성에 쓴다"
 
 
 def test_unreadable_stored_text_is_shown_not_hidden() -> None:
