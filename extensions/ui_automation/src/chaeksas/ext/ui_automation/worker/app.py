@@ -36,12 +36,19 @@ from chaeksas.ext.ui_automation.contracts.plan import (
     Escalation,
     ExecutionPlan,
     HealedReport,
+    LocatorSpec,
     PlanStep,
     SessionReport,
+)
+from chaeksas.ext.ui_automation.contracts.registration import (
+    AnalyzeRequest,
+    AnalyzeResult,
+    VerifyResult,
 )
 from chaeksas.ext.ui_automation.contracts.worker_local import (
     ADMIN_HEADER,
     ADMIN_ONLY,
+    BROWSER_UNAVAILABLE,
     CALLER_REGISTRATION,
     RESERVED,
     RESULT_ESCALATED,
@@ -50,12 +57,14 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     SCHEMA_UNSUPPORTED,
     SESSION_HEADER,
     SESSION_IDLE_S,
+    SESSION_LOCKED,
     SESSION_NOT_FOUND,
     SESSION_SECRET_INVALID,
     STEP_TIMEOUT_S,
     TOKEN_HEADER,
     TOKEN_INVALID,
     WORKER_BUSY,
+    Caller,
     CloseResult,
     Health,
     Holder,
@@ -398,6 +407,60 @@ class Worker:
         del self.recent[RECENT_MAX:]
         return CloseResult(steps_run=summary.steps, summary=summary, report=sent)
 
+    # ── 셀렉터 등록 (C10 §5) ──
+
+    def registration_open(self, start_url: str, *, headed: bool = True) -> tuple[SessionInfo, bool]:
+        """등록용 세션을 연다 (BUI-06 「브라우저 열기」).
+
+        `business_key`는 **Worker가 짓는다** (`reg_<hex8>`, C10 §2) — 등록 화면이 실행 키를
+        흉내 낼 일이 없다. `page_id`를 비워 두니 계획도 받아 오지 않는다 (아직 없는 쪽이다).
+        """
+        return self.open(
+            SessionRequest(
+                schema=1,
+                caller=Caller(type=CALLER_REGISTRATION),
+                mode="autonomous",
+                business_key=f"reg_{secrets.token_hex(4)}",
+                start_url=start_url or None,
+                headed=headed,
+                heal=False,
+            )
+        )
+
+    def _registering(self, session_id: str, secret: str) -> Session:
+        """등록 세션이어야 한다 — 실행 중인 Bot의 화면을 등록 화면이 헤집지 못하게."""
+        found = self.get(session_id, secret)
+        if found.request.caller.type != CALLER_REGISTRATION:
+            raise WorkerProblem(403, SESSION_LOCKED, "등록용 세션이 아닙니다")
+        return found
+
+    def _surface(self, found: Session) -> Any:
+        """분석이 들여다볼 화면. **없으면 없다고 말한다** — 데스크톱 백엔드는 아직 없다."""
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        page = getattr(finder, "page", None)
+        if page is None:
+            raise WorkerProblem(
+                503, BROWSER_UNAVAILABLE, "이 백엔드는 화면 분석을 지원하지 않습니다"
+            )
+        return page
+
+    def analyze(self, session_id: str, secret: str, request: AnalyzeRequest) -> AnalyzeResult:
+        from chaeksas.ext.ui_automation.worker.registration import analyze  # noqa: PLC0415
+
+        found = self._registering(session_id, secret)
+        return analyze(self._surface(found), request)
+
+    def verify(
+        self, session_id: str, secret: str, ladders: dict[str, list[LocatorSpec]]
+    ) -> VerifyResult:
+        from chaeksas.ext.ui_automation.worker.registration import verify  # noqa: PLC0415
+
+        found = self._registering(session_id, secret)
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        if finder is None:  # pragma: no cover — 세션이 있으면 화면도 있다
+            raise WorkerProblem(503, BROWSER_UNAVAILABLE, "열린 화면이 없습니다")
+        return verify(finder, ladders)
+
     # ── 관리 (Bot UI만) ──
 
     def reserve(self, run_id: str) -> None:
@@ -526,6 +589,40 @@ def create_app(worker: Worker) -> FastAPI:
     def close_session(session_id: str, request: Request) -> Any:
         check_token(request)
         return worker.close(session_id, secret_of(request))
+
+    # ── 셀렉터 등록 (C10 §5) — **여기만 물리 정보가 나간다** ──
+
+    @router.post("/registration/browser", status_code=201)
+    async def registration_browser(request: Request) -> Any:
+        check_token(request)
+        body = await request.json()
+        info, fresh = worker.registration_open(
+            str(body.get("start_url") or ""), headed=bool(body.get("headed", True))
+        )
+        return JSONResponse(status_code=201 if fresh else 200, content=info.to_json_dict())
+
+    @router.post("/registration/{session_id}/analyze")
+    async def registration_analyze(session_id: str, request: Request) -> Any:
+        check_token(request)
+        body = await request.json()
+        try:
+            wanted = AnalyzeRequest.model_validate(body)
+        except ValueError as e:
+            raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
+        return worker.analyze(session_id, secret_of(request), wanted)
+
+    @router.post("/registration/{session_id}/verify")
+    async def registration_verify(session_id: str, request: Request) -> Any:
+        check_token(request)
+        body = await request.json()
+        try:
+            ladders = {
+                str(key): [LocatorSpec.model_validate(one) for one in value]
+                for key, value in (body.get("ladders") or {}).items()
+            }
+        except (AttributeError, ValueError) as e:
+            raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
+        return worker.verify(session_id, secret_of(request), ladders)
 
     @router.post("/admin/reserve")
     async def reserve(request: Request) -> Any:
