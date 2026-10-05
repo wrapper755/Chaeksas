@@ -28,6 +28,7 @@ from chaeksas.bot_ui.runtimes import HostSettings
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
+from chaeksas.contracts import SERVICE_URL_SETTING
 from chaeksas.contracts.bot_ui import (
     DEFAULT_HEARTBEAT_S,
     CurrentRun,
@@ -150,13 +151,25 @@ class Agent:
         """
         if self.host is None:
             raise LookupError("확장 호스트가 없습니다")
-        values: dict[str, object] = dict(self.runtimes().host_settings(runtime_ids))
+        values: dict[str, object] = dict(self.settings.extension(extension_id))
+        values.update(self.runtimes().host_settings(runtime_ids))
+        values[SERVICE_URL_SETTING] = self.service_url(extension_id)
         return self.host.context(
             extension_id,
             host=HOST_BOT_UI,
             settings=HostSettings(values=values),
             secrets=ExtensionSecrets(credentials=self.credentials, extension_id=extension_id),
         )
+
+    def service_url(self, extension_id: str) -> str | None:
+        """확장의 서버 부분 주소. **출처는 하나다** (C13) — Center 리소스 등록이 있으면 그것,
+        없으면 정의의 `service.base_url`.
+
+        > 상태: Center 리소스 목록(C7)은 M5다. 그때까지는 정의의 값을 쓴다.
+        """
+        found = self.host.get(extension_id) if self.host is not None else None
+        service = found.manifest.service if found is not None else None
+        return service.base_url if service is not None else None
 
     @property
     def bot_ui_id(self) -> str | None:

@@ -194,6 +194,7 @@ def validate(page: PageRegistration) -> list[Violation]:
 
 
 __all__ = [
+    "WEB",
     "KINDS",
     "PAGE_ID",
     "SEMANTIC_KEY",

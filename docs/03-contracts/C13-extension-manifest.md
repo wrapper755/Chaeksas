@@ -106,8 +106,9 @@
   | `runtime.<런타임 id>.port` | 호스트가 정한 포트 (int) |
   | `runtime.<런타임 id>.token_dir` | 토큰 파일 폴더 (str). 정의에 `token_dir: true`일 때만 |
   | `runtime.<런타임 id>.state` | `off` · `running` · `restarting` · `stopped` (C4 `WorkerState.state`와 같은 낱말) |
+  | `service.base_url` | 이 확장의 **서버 부분 주소**. **출처는 하나다** — Center 리소스 등록(C7)에 있으면 그것을, 없으면 정의의 `service.base_url`을 쓴다. 확장이 설정 칸으로 따로 받지 않는다 |
 
-  `runtime.`으로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7).
+  `runtime.`·`service.`로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7).
 - `configuration`의 `scope`: `bot_ui`, `studio`, `server_runner` 중 하나.
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.
 - **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 키(`requires_keys` `utility`)도 이 칸으로 받는다.
@@ -268,7 +269,7 @@ Operation:
 | E4 | `task_types[].id`는 확장 사이에 겹치지 않는다 | 409 `task_type_conflict` |
 | E5 | 확장 호스트는 `api` 범위가 맞지 않는 확장을 켜지 않는다 (목록에 「호환 안 됨」) | — |
 | E6 | 외부 정의의 봉투(C2 `extension`)가 검증되고 `definition_hash`가 맞는다 | 400 `bad_envelope` / `hash_mismatch` |
-| E7 | `configuration[].key`가 `runtime.`으로 시작하지 않는다 (호스트가 쓰는 이름이다) | 422 `reserved_config_key` |
+| E7 | `configuration[].key`가 `runtime.`·`service.`로 시작하지 않는다 (호스트가 쓰는 이름이다) | 422 `reserved_config_key` |
 
 Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬에서 먼저 돌려 보여 준다.
 
@@ -285,6 +286,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 | 2026-10-01 | 1 | 검토 반영 (아래) | — |
 | 2026-10-02 | 1 | 구현하며 명시한 것: `entry` 형식과 그 확장 패키지 안으로 제한, 예시의 편집기·유틸리티 entry를 `client`로 (ADR-0018 §6 폴더 구성) | 0018 |
 | 2026-10-02 | 1 | 설치 파일로 묶어 보고 명시한 것: `extension.json`은 파이썬 패키지 안 | 0024 |
+| 2026-10-05 | 2 | 예약 설정 키에 `service.base_url`을 더했다 — 서버 주소의 출처를 하나로 (Center 리소스 등록 > 정의) | 0013, 0018 |
 | 2026-10-05 | 2 | 호스트가 채우는 **예약 설정 키**(`runtime.<id>.port`·`token_dir`·`state`)를 적었다 — 유틸리티가 띄워진 런타임을 설정으로 받는다. 같은 이름을 확장이 선언하면 거부한다 (E7). 새 칸이 아니라 호스트가 주는 값이라 schema는 그대로 | 0018, 0024 |
 | 2026-10-03 | **2** | `bot_ui.local_runtimes`의 `command`(명령 배열)를 **`entry`**(진입점 문자열)로 **바꿨다.** 명령줄은 Bot UI가 만들고, 자기 실행 파일을 자식으로 다시 띄운다. 필드의 뜻이 바뀌었으므로 schema를 올린다 | 0024 |
 

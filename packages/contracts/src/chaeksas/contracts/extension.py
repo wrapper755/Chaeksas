@@ -52,11 +52,19 @@ KNOWN_PROTOCOLS = frozenset({PROTOCOL_C11, PROTOCOL_HTTP_ADAPTER})
 EDITOR_BUILTIN = "builtin"
 EDITOR_SCHEMA = "schema"
 
-#: 호스트가 소유하는 설정 키의 머리 (C13 — `runtime.<런타임 id>.port` 등). 확장이 쓰지 못한다.
-RESERVED_CONFIG_PREFIX = "runtime."
+#: 호스트가 소유하는 설정 키의 머리 (C13 — `runtime.<런타임 id>.port`·`service.base_url`).
+#: 확장이 같은 이름을 선언하지 못한다 (E7).
+RESERVED_CONFIG_PREFIXES = ("runtime.", "service.")
+RESERVED_CONFIG_PREFIX = RESERVED_CONFIG_PREFIXES[0]
+
+#: 서버 부분 주소를 알려 주는 예약 키. **출처는 하나다** (Center 리소스 등록 > 정의).
+SERVICE_URL_SETTING = "service.base_url"
 
 #: `configuration[].scope`, `local_runtimes[].start`, `requires_keys[].purpose`.
-CONFIG_SCOPES = frozenset({"bot_ui", "studio", "server_runner"})
+SCOPE_BOT_UI = "bot_ui"
+SCOPE_STUDIO = "studio"
+SCOPE_SERVER_RUNNER = "server_runner"
+CONFIG_SCOPES = frozenset({SCOPE_BOT_UI, SCOPE_STUDIO, SCOPE_SERVER_RUNNER})
 START_ON_DEMAND = "on_demand"
 START_ALWAYS = "always"
 KNOWN_STARTS = frozenset({START_ON_DEMAND, START_ALWAYS})
@@ -628,11 +636,11 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
             out.append(Violation(rule="C13", code="run_locations_missing",
                                  message=f"태스크 종류 {t.id}에 실행 위치가 없다"))
     for item in c.configuration:
-        if item.key.startswith(RESERVED_CONFIG_PREFIX):
-            # E7. 호스트가 띄운 로컬 런타임을 이 이름으로 알려 준다 (C13) — 가려지면 안 된다.
+        if item.key.startswith(RESERVED_CONFIG_PREFIXES):
+            # E7. 호스트가 띄운 런타임·서버 주소를 이 이름으로 알려 준다 (C13) — 가려지면 안 된다.
             out.append(Violation(rule="E7", code="reserved_config_key",
                                  message=f"설정 칸 {item.key}은 호스트가 쓰는 이름이다 "
-                                         f"({RESERVED_CONFIG_PREFIX}*)"))
+                                         f"({', '.join(one + '*' for one in RESERVED_CONFIG_PREFIXES)})"))
         if item.scope not in CONFIG_SCOPES:
             out.append(Violation(rule="C13", code="unknown_scope",
                                  message=f"설정 칸 {item.key}의 scope를 모른다: {item.scope}",

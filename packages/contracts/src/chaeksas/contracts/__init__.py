@@ -146,6 +146,9 @@ from chaeksas.contracts.events import (
 )
 from chaeksas.contracts.extension import (
     RESERVED_CONFIG_PREFIX,
+    RESERVED_CONFIG_PREFIXES,
+    SCOPE_BOT_UI,
+    SERVICE_URL_SETTING,
     AdapterAuth,
     AdapterHealth,
     AdapterLimits,
@@ -412,6 +415,9 @@ __all__ = [
     "service_app_prefix_of",
     # C13 (`ExtensionClaim`은 C2가 소유한다)
     "RESERVED_CONFIG_PREFIX",
+    "RESERVED_CONFIG_PREFIXES",
+    "SCOPE_BOT_UI",
+    "SERVICE_URL_SETTING",
     "AdapterAuth",
     "AdapterHealth",
     "AdapterLimits",
