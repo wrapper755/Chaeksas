@@ -26,9 +26,23 @@ from typing import Any, Protocol
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from chaeksas.ext.ui_automation.contracts.plan import (
+    ORIGIN_RUN,
+    ORIGIN_TEST,
+    STATUS_ESCALATED,
+    STATUS_FAILED,
+    STATUS_SUCCEEDED,
+    AttemptReport,
+    Escalation,
+    ExecutionPlan,
+    HealedReport,
+    PlanStep,
+    SessionReport,
+)
 from chaeksas.ext.ui_automation.contracts.worker_local import (
     ADMIN_HEADER,
     ADMIN_ONLY,
+    CALLER_REGISTRATION,
     RESERVED,
     RESULT_ESCALATED,
     RESULT_FAILED,
@@ -54,6 +68,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     StepResult,
     check_step,
 )
+from chaeksas.ext.ui_automation.worker.ladder import Finder, Healer, run_step
 
 #: 최근 세션을 몇 개까지 들고 있나 (BUI-09).
 RECENT_MAX = 20
@@ -74,13 +89,18 @@ class Backend(Protocol):
     """화면을 실제로 만지는 쪽 (브라우저·Windows UIA).
 
     **여기가 바깥 세계다.** 주지 않으면 세션을 열 수 없다 — 「없는데 된 척」하지 않는다.
+
+    **사다리는 여기서 타지 않는다** — 세션이 계획을 들고 `ladder.run_step()`을 부르고, 이쪽은
+    `finder()`가 주는 찾기·조작만 한다 (C8: 폴백은 로컬에서).
     """
 
     def open(self, request: SessionRequest) -> str:
         """화면을 열고 지금 주소를 돌려준다."""
         ...
 
-    def step(self, session_id: str, request: StepRequest) -> StepResult: ...
+    def finder(self, business_key: str) -> Finder | None:
+        """그 세션의 화면 — 사다리가 이것으로 찾고 조작한다."""
+        ...
 
     def goto(self, session_id: str, url: str) -> str: ...
 
@@ -104,6 +124,13 @@ class Session:
     failed: bool = False
     last_step: dict[str, Any] | None = None
     touched_at: float = 0.0
+    #: 이 세션의 계획 (C8). 없으면 스텝을 밟을 수 없다.
+    plan: ExecutionPlan | None = None
+    plan_source: str = "server"
+    #: 보고 재료 (C8 §report) — **업무 값은 담지 않는다**.
+    attempts: list[AttemptReport] = field(default_factory=list)
+    healed_locators: list[HealedReport] = field(default_factory=list)
+    escalation: Escalation | None = None
 
     @property
     def holder(self) -> Holder:
@@ -116,9 +143,34 @@ class Session:
             session_secret=self.secret,
             page_id=self.request.page_id,
             current_url=self.current_url,
+            plan_source=self.plan_source,
             steps_run=self.steps_run,
             mutating_steps_ok=self.mutating_steps_ok,
             last_step=self.last_step,
+        )
+
+    def report(self, *, duration_ms: int = 0) -> SessionReport:
+        """C8 보고 — **읽은 값은 들어가지 않는다** (원칙 6)."""
+        summary = self.summary()
+        status = {
+            RESULT_SUCCESS: STATUS_SUCCEEDED,
+            RESULT_ESCALATED: STATUS_ESCALATED,
+            RESULT_FAILED: STATUS_FAILED,
+        }[summary.result]
+        return SessionReport(
+            schema=1,
+            business_key=self.request.business_key,
+            page_id=self.request.page_id or "",
+            plan_id=self.plan.plan_id if self.plan else None,
+            revision=self.plan.revision if self.plan else 1,
+            origin=ORIGIN_TEST if self.request.caller.type == CALLER_REGISTRATION else ORIGIN_RUN,
+            status=status,
+            steps_completed=self.mutating_steps_ok + sum(1 for a in self.attempts if a.succeeded),
+            steps_total=len(self.plan.steps) if self.plan else self.steps_run,
+            attempts=list(self.attempts),
+            healed=list(self.healed_locators),
+            escalation=self.escalation,
+            duration_ms=duration_ms,
         )
 
     def summary(self) -> SessionSummary:
@@ -143,6 +195,10 @@ class Worker:
     token: str
     admin_token: str
     backend: Backend | None = None
+    #: 계획을 받아 오고 보고를 보내는 쪽 (C8). 없으면 스텝을 밟을 수 없다.
+    plans: Any = None
+    #: 치유를 묻는 길 (C8). 없으면 사다리가 다 실패했을 때 바로 전환이다.
+    healer: Healer | None = None
     idle_s: float = SESSION_IDLE_S
     clock: Callable[[], float] = time.monotonic
     version: str = "0.1.0"
@@ -189,8 +245,27 @@ class Worker:
             touched_at=self.clock(),
         )
         made.current_url = self.backend.open(request)
+        if self.plans is not None and request.page_id:
+            made.plan, made.plan_source = self._fetch_plan(request)
         self.session = made
         return made.info(), True
+
+    def _fetch_plan(self, request: SessionRequest) -> tuple[ExecutionPlan | None, str]:
+        """계획을 받아 온다 (C8). 닿지 못하고 캐시도 없으면 502 — **없는 채로 열지 않는다**."""
+        from chaeksas.ext.ui_automation.worker.plans import OpsUnreachable  # noqa: PLC0415
+
+        try:
+            found, source = self.plans.plan(
+                page_id=request.page_id,
+                platform="web",
+                steps=[],
+                start_url=request.start_url,
+            )
+        except OpsUnreachable as e:
+            raise WorkerProblem(
+                502, "ui_automation_unreachable", "UI 자동화 앱에 닿지 못했고 캐시도 없습니다"
+            ) from e
+        return found, str(source)
 
     def get(self, session_id: str, secret: str) -> Session:
         found = self.session
@@ -211,7 +286,7 @@ class Worker:
         if self.backend is None:  # pragma: no cover — 세션이 있으면 백엔드도 있다
             raise WorkerProblem(503, "browser_unavailable", "화면을 조작할 수단이 없습니다")
 
-        result = self.backend.step(session_id, request)
+        result = self._climb(found, request)
         found.steps_run += 1
         found.fallback_depth_max = max(found.fallback_depth_max, result.fallback_depth)
         found.healed = found.healed or result.healed
@@ -231,6 +306,63 @@ class Worker:
         }
         return result
 
+    def _climb(self, found: Session, request: StepRequest) -> StepResult:
+        """계획의 사다리를 **로컬에서** 탄다 (C8) — 보고 재료도 여기서 모은다."""
+        if found.plan is None:
+            raise WorkerProblem(422, "unknown_semantic_key", "이 세션에 계획이 없습니다")
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        if finder is None:  # pragma: no cover — 세션이 있으면 화면도 있다
+            raise WorkerProblem(503, "browser_unavailable", "열린 화면이 없습니다")
+
+        step = PlanStep(
+            semantic_key=request.semantic_key or "",
+            action=request.action,
+            value=request.value,
+        )
+        attempt = run_step(step, found.plan, finder, heal=self.healer)
+        self._remember(found, attempt)
+        return StepResult(
+            ok=attempt.ok,
+            semantic_key=attempt.semantic_key,
+            action=attempt.action,
+            text=attempt.text,
+            fallback_depth=attempt.fallback_depth,
+            healed=attempt.healed,
+            escalated=attempt.escalated,
+            error_code=attempt.error_code,
+            error=attempt.error,
+            current_url=finder.url(),
+            duration_ms=attempt.duration_ms,
+        )
+
+    def _remember(self, found: Session, attempt: Any) -> None:
+        """보고 재료 (C8 §report). **읽은 값은 담지 않는다** (원칙 6)."""
+        for index, key in enumerate(attempt.tried):
+            last = index == len(attempt.tried) - 1
+            found.attempts.append(
+                AttemptReport(
+                    semantic_key=attempt.semantic_key,
+                    locator_key=key,
+                    succeeded=attempt.ok and last,
+                    elapsed_ms=attempt.duration_ms if last else 0,
+                    failure_reason=None if (attempt.ok and last) else attempt.error_code,
+                )
+            )
+        if attempt.healed and attempt.used is not None:
+            found.healed_locators.append(
+                HealedReport(
+                    semantic_key=attempt.semantic_key,
+                    locator=attempt.used,
+                    supersedes=[k for k in attempt.tried if k != attempt.used.key],
+                )
+            )
+        if attempt.escalated:
+            found.escalation = Escalation(
+                semantic_key=attempt.semantic_key,
+                reason=attempt.error or "",
+                attempts=len(attempt.tried),
+            )
+
     def goto(self, session_id: str, secret: str, url: str) -> SessionInfo:
         found = self.get(session_id, secret)
         if self.backend is None:  # pragma: no cover
@@ -249,6 +381,9 @@ class Worker:
             self.backend.close(found.session_id)
         self.session = None
         summary = found.summary()
+        sent = "queued"
+        if self.plans is not None:
+            sent = self.plans.report(found.report(duration_ms=_ms(self.clock() - found.opened_at)))
         self.recent.insert(
             0,
             SessionBrief(
@@ -261,8 +396,7 @@ class Worker:
             ),
         )
         del self.recent[RECENT_MAX:]
-        # 보고는 UI 자동화 앱으로 간다 (C8) — 아직 보낼 길이 없으니 **쌓아 둔다고 말한다**.
-        return CloseResult(steps_run=summary.steps, summary=summary, report="queued")
+        return CloseResult(steps_run=summary.steps, summary=summary, report=sent)
 
     # ── 관리 (Bot UI만) ──
 
@@ -313,6 +447,10 @@ class Worker:
 
 
 # ─────────────────────────── HTTP ───────────────────────────
+
+
+def _ms(seconds: float) -> int:
+    return int(seconds * 1000)
 
 
 def create_app(worker: Worker) -> FastAPI:

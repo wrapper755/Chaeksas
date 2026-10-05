@@ -160,6 +160,71 @@ class HealResponse(ContractModel):
     reasoning: str = ""
 
 
+#: 보고의 출처 — **`test`는 승격 통계에 넣지 않는다** (셀렉터 시험, BUI-08).
+ORIGIN_RUN = "run"
+ORIGIN_TEST = "test"
+
+#: 보고의 결말 (열린 문자열).
+STATUS_SUCCEEDED = "succeeded"
+STATUS_ESCALATED = "escalated"
+STATUS_FAILED = "failed"
+
+
+class AttemptReport(ContractModel):
+    """로케이터 하나를 시도한 결과 — 서버가 이것으로 통계를 갱신한다 (C8 §승격 규칙)."""
+
+    semantic_key: str
+    locator_key: str
+    succeeded: bool
+    elapsed_ms: int = 0
+    matched_count: int | None = None
+    failure_reason: str | None = None
+
+
+class HealedReport(ContractModel):
+    """치유로 찾아 **로컬 검증을 통과한** 로케이터 (그것만 보낸다)."""
+
+    semantic_key: str
+    locator: LocatorSpec
+    heal_attempt: int = 1
+    #: 이 로케이터가 밀어내는 것들 — 승격될 때 함께 `deprecated`가 된다.
+    supersedes: list[str] = Field(default_factory=list)
+    reasoning: str = ""
+
+
+class Escalation(ContractModel):
+    """사람에게 넘긴 자리 (UIA-03 「전환」). 서버는 **기록만** 한다."""
+
+    semantic_key: str
+    reason: str = ""
+    attempts: int = 0
+    url: str | None = None
+
+
+class SessionReport(SchemaVersioned):
+    """`POST /v1/ops/report` — UI 세션 하나의 최종 보고.
+
+    **업무 값은 보내지 않는다.** 읽기 결과(`text`·`data`)는 들어가지 않는다 — 모니터링은
+    진행·폴백·치유만 보면 된다 (원칙 6).
+    """
+
+    SCHEMA: ClassVar[int] = 1
+
+    business_key: str
+    page_id: str
+    plan_id: str | None = None
+    revision: int = 1
+    origin: str = ORIGIN_RUN
+    status: str = STATUS_SUCCEEDED
+    steps_completed: int = 0
+    steps_total: int = 0
+    attempts: list[AttemptReport] = Field(default_factory=list)
+    healed: list[HealedReport] = Field(default_factory=list)
+    escalation: Escalation | None = None
+    error: dict[str, str] | None = None
+    duration_ms: int = 0
+
+
 def masked(text: str, values: list[str]) -> str:
     """업무 값을 `•••`로 바꾼다 (원칙 6) — 구조와 라벨만 남긴다.
 
@@ -173,6 +238,15 @@ def masked(text: str, values: list[str]) -> str:
 
 __all__ = [
     "ACTIVE",
+    "ORIGIN_RUN",
+    "ORIGIN_TEST",
+    "STATUS_ESCALATED",
+    "STATUS_FAILED",
+    "STATUS_SUCCEEDED",
+    "AttemptReport",
+    "Escalation",
+    "HealedReport",
+    "SessionReport",
     "DEFAULT_PRIORITY",
     "DEPRECATED",
     "DESKTOP",

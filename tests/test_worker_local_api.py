@@ -21,6 +21,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from chaeksas.ext.ui_automation.contracts.plan import ExecutionPlan, LocatorSpec, PlanStep
 from chaeksas.ext.ui_automation.contracts.worker_local import (
     ADMIN_HEADER,
     ADMIN_TOKEN_FILE,
@@ -30,51 +31,59 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     SessionInfo,
     SessionRequest,
     StepRequest,
-    StepResult,
     business_key,
     can_retry_whole_task,
     check_step,
 )
 from chaeksas.ext.ui_automation.worker.app import (
-    Backend,
     Worker,
     create_app,
     read_token,
     write_tokens,
 )
+from chaeksas.ext.ui_automation.worker.ladder import Match
 
 TOKEN = "t-use"
 ADMIN = "t-admin"
 RUN = "run_20261005_120000_abcdef"
 
 
-class FakeScreen:
-    """시험용 백엔드 — 화면을 만지는 척하고 무엇을 시켰는지 적어 둔다."""
+class FakeFinder:
+    """시험용 화면 — 로케이터는 늘 하나에 맞는다 (사다리 규칙은 따로 본다)."""
 
     def __init__(self, *, escalate: bool = False, fail: bool = False) -> None:
-        self.calls: list[StepRequest] = []
-        self.closed: list[str] = []
         self.escalate = escalate
         self.fail = fail
+        self.acted: list[PlanStep] = []
+
+    def find(self, locator: Any, *, timeout_ms: int) -> Match:
+        return Match(count=0) if self.escalate else Match(count=1, handle="el")
+
+    def act(self, handle: object, step: PlanStep, *, timeout_ms: int) -> str | None:
+        if self.fail:
+            raise RuntimeError("시간이 지났다")
+        self.acted.append(step)
+        return "한빛상사" if step.action.startswith("read") else None
+
+    def snapshot(self) -> tuple[str, str]:
+        return ("", "")
+
+    def url(self) -> str:
+        return "https://erp.example/orders"
+
+
+class FakeScreen:
+    """시험용 백엔드 — 화면을 만지는 척한다. **사다리는 세션이 돌린다**."""
+
+    def __init__(self, *, escalate: bool = False, fail: bool = False) -> None:
+        self.closed: list[str] = []
+        self._finder = FakeFinder(escalate=escalate, fail=fail)
 
     def open(self, request: SessionRequest) -> str:
         return request.start_url or "https://erp.example/orders"
 
-    def step(self, session_id: str, request: StepRequest) -> StepResult:
-        self.calls.append(request)
-        if self.escalate:
-            return StepResult(ok=False, escalated=True, semantic_key=request.semantic_key,
-                              action=request.action, error_code="element_not_found")
-        if self.fail:
-            return StepResult(ok=False, semantic_key=request.semantic_key, action=request.action,
-                              error_code="timeout", error="시간이 지났다")
-        return StepResult(
-            ok=True,
-            semantic_key=request.semantic_key,
-            action=request.action,
-            text="한빛상사" if request.action.startswith("read") else None,
-            data={"rows": [["한빛상사"]]} if request.action == "read_table" else None,
-        )
+    def finder(self, business_key: str) -> FakeFinder:
+        return self._finder
 
     def goto(self, session_id: str, url: str) -> str:
         return url
@@ -83,8 +92,34 @@ class FakeScreen:
         self.closed.append(session_id)
 
 
-def make(backend: Backend | None = None, **kwargs: Any) -> tuple[Worker, TestClient]:
-    worker = Worker(token=TOKEN, admin_token=ADMIN, backend=backend or FakeScreen(), **kwargs)
+class FakePlans:
+    """시험용 계획 — 스텝마다 로케이터 하나짜리 사다리를 준다."""
+
+    def __init__(self, keys: tuple[str, ...] = ("주문.수량", "주문.공급사", "줄")) -> None:
+        self.reports: list[Any] = []
+        self.plan_value = ExecutionPlan(
+            schema=1,
+            plan_id="plan_1",
+            page_id="erp.order.form",
+            locators={key: [LocatorSpec(type="css", value=f"#{index}")] for index, key in enumerate(keys)},
+        )
+
+    def plan(self, **kwargs: Any) -> tuple[ExecutionPlan, str]:
+        return self.plan_value, "server"
+
+    def report(self, report: Any) -> str:
+        self.reports.append(report)
+        return "sent"
+
+
+def make(backend: Any = None, *, plans: Any = None, **kwargs: Any) -> tuple[Worker, TestClient]:
+    worker = Worker(
+        token=TOKEN,
+        admin_token=ADMIN,
+        backend=backend or FakeScreen(),
+        plans=plans if plans is not None else FakePlans(),
+        **kwargs,
+    )
     return worker, TestClient(create_app(worker))
 
 
@@ -150,14 +185,46 @@ def test_tokens_are_files_and_change_every_time(tmp_path: Path) -> None:
 
 def test_a_session_opens_and_closes() -> None:
     screen = FakeScreen()
-    _, client = make(screen)
+    plans = FakePlans()
+    _, client = make(screen, plans=plans)
     session_id, secret = opened(client)
 
     found = client.delete(f"/v1/sessions/{session_id}", headers=head(secret))
     assert found.status_code == 200
     assert found.json()["summary"]["result"] == "success"
-    assert found.json()["report"] == "queued", "보낼 길이 없으면 쌓아 둔다고 말한다 (C8)"
+    assert found.json()["report"] == "sent", "보고를 보냈다 (C8)"
     assert screen.closed == [session_id]
+    assert plans.reports[0].business_key == business_key(RUN, "Task_Fill")
+
+
+def test_the_report_carries_no_business_values() -> None:
+    """원칙 6 — 읽은 값이 UI 자동화 앱으로 나가면 안 된다 (C8 §report)."""
+    plans = FakePlans()
+    _, client = make(plans=plans)
+    session_id, secret = opened(client)
+    client.post(
+        f"/v1/sessions/{session_id}/steps",
+        json={"semantic_key": "주문.공급사", "action": "read"},
+        headers=head(secret),
+    )
+    client.delete(f"/v1/sessions/{session_id}", headers=head(secret))
+
+    raw = json.dumps(plans.reports[0].to_json_dict(), ensure_ascii=False)
+    assert "한빛상사" not in raw
+    assert "주문.공급사" in raw, "무엇을 시도했는지는 남는다 (통계가 쓴다)"
+
+
+def test_a_session_without_a_plan_cannot_step() -> None:
+    """계획이 없으면 사다리가 없다 — 조용히 넘어가지 않는다."""
+    worker = Worker(token=TOKEN, admin_token=ADMIN, backend=FakeScreen(), plans=None)
+    client = TestClient(create_app(worker))
+    session_id, secret = opened(client)
+    found = client.post(
+        f"/v1/sessions/{session_id}/steps",
+        json={"semantic_key": "주문.수량", "action": "fill", "value": "3"},
+        headers=head(secret),
+    )
+    assert found.status_code == 422 and found.json()["code"] == "unknown_semantic_key"
 
 
 def test_only_one_session_at_a_time() -> None:
@@ -221,7 +288,7 @@ def test_a_step_runs_and_counts() -> None:
         headers=head(secret),
     )
     assert found.status_code == 200 and found.json()["ok"] is True
-    assert screen.calls[0].timeout_s == 60, "시간 제한의 기본값은 Worker가 채운다"
+    assert screen.finder("").acted[0].action == "fill", "사다리를 거쳐 조작까지 갔다"
 
     info = client.get(f"/v1/sessions/{session_id}", headers=head(secret)).json()
     assert info["steps_run"] == 1 and info["mutating_steps_ok"] == 1
