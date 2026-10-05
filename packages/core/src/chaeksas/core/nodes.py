@@ -26,6 +26,7 @@ from chaeksas.contracts.bpmn_ext import (
     WEBHOOK_BODY_ALL,
     AiTask,
     Call,
+    Defaults,
     Email,
     ExtensionTask,
     FileList,
@@ -376,7 +377,7 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
         mode=run.mode,
         run_location=run.process.info.run_location or RUN_LOCATION_PC,
         inputs=dict(scope.variables),
-        properties=dict(spec.data),
+        properties=_with_defaults(spec.data, run.process.defaults),
         business_key=f"{run.run_id}:{node.id}:{context.instance()}:1",
         key_ref=str(key_ref) if key_ref else None,
     )
@@ -392,6 +393,21 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
         message=f"{spec.type} 태스크: 변수 {len(outcome.outputs)}개",
     )
     return Go()
+
+
+def _with_defaults(data: dict[str, Any], defaults: Defaults | None) -> dict[str, Any]:
+    """확장 태스크 속성 + `chk:defaults`의 `web`·`desktop` (C14, ADR-0033).
+
+    **태스크에 적은 값이 이긴다** — 같은 이름이 없을 때만 채운다. 그 속은 보지 않는다
+    (플랫폼은 확장 태스크의 속을 모른다, ADR-0018). UI 태스크가 띄울 앱 이름을 여기서 받는다.
+    """
+    merged = dict(data)
+    if defaults is None:
+        return merged
+    for name, value in (("web", defaults.web), ("desktop", defaults.desktop)):
+        if name not in merged and value is not None:
+            merged[name] = value.to_json_dict()
+    return merged
 
 
 def _extension_context(run: Run, spec: ExtensionTask) -> Any:

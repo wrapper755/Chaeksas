@@ -79,7 +79,7 @@ class FakeScreen:
         self.closed: list[str] = []
         self._finder = FakeFinder(escalate=escalate, fail=fail)
 
-    def open(self, request: SessionRequest) -> str:
+    def open(self, request: SessionRequest, plan: Any = None) -> str:
         return request.start_url or "https://erp.example/orders"
 
     def finder(self, business_key: str) -> FakeFinder:

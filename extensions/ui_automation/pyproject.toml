@@ -11,6 +11,8 @@ dependencies = [
     "uvicorn>=0.32",
     # 사용자·서버 데이터 위치 (CLAUDE.md §5 — OS마다 다른 자리를 직접 적지 않는다).
     "platformdirs>=4",
+    # Windows 데스크톱 백엔드 (ADR-0020·0033). Windows에서만 깔린다 — 다른 OS는 데스크톱 세션이 503.
+    "uiautomation>=2.0.29; sys_platform == 'win32'",
 ]
 
 # 확장 호스트가 이 그룹을 읽어 확장을 찾는다 (C13, ADR-0018 §6).

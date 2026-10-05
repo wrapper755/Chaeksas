@@ -113,6 +113,24 @@ def events(tmp_path: Path) -> list[dict[str, Any]]:
 # ─────────────────────────── 수행 ───────────────────────────
 
 
+def test_defaults_web_and_desktop_reach_the_task_and_the_task_wins(tmp_path: Path) -> None:
+    """`chk:defaults`의 `web`·`desktop`은 확장 태스크 속성의 기본값이다 — **태스크에 적은 값이 이긴다**
+    (C14, ADR-0033). UI 태스크가 띄울 앱 이름을 이렇게 받는다."""
+    with_defaults = PROCESS.replace(
+        '<chk:process>{"run_location": "pc", "service_keys": {"demo": "demo-key"}}</chk:process>',
+        '<chk:process>{"run_location": "pc", "service_keys": {"demo": "demo-key"}}</chk:process>'
+        '<chk:defaults>{"desktop": {"app": "ERP Client"}, "web": {"profile": "업무"}}</chk:defaults>',
+    ).replace('{"page_id": "p", "steps": []}', '{"page_id": "p", "steps": [], "web": {"profile": "태스크"}}')
+    executor = FakeExecutor()
+    run = run_it(tmp_path, with_defaults, Host({"demo_task": executor}))
+    assert run.state == State.DONE
+    seen = executor.seen[0].properties
+    assert seen["desktop"] == {"app": "ERP Client"}
+    assert seen["web"] == {"profile": "태스크"}
+    assert seen["page_id"] == "p"
+
+
+
 def test_the_outputs_become_variables(tmp_path: Path) -> None:
     executor = FakeExecutor(outputs={"제출메시지": "접수되었습니다", "번호": 7})
     run = run_it(tmp_path, PROCESS, Host({"demo_task": executor}))

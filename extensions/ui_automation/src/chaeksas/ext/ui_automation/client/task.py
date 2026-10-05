@@ -19,7 +19,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -64,6 +66,9 @@ ESCALATED_MESSAGE = "화면에서 요소를 찾지 못했습니다. 화면을 �
 
 #: C13 §4의 「결과를 모른다」 — 실행기가 확인(CMN-01)으로 넘긴다.
 ESCALATE_CONFIRMATION = "confirmation"
+
+#: 스텝 값의 템플릿 — `{{`·`}}`는 중괄호 글자, `{이름}`·`{이름.키}`는 변수 (C14).
+TEMPLATE = re.compile(r"\{\{|\}\}|\{([^{}]*)\}")
 
 
 class WorkerUnreachable(RuntimeError):
@@ -248,7 +253,8 @@ class UiTaskExecutor:
     def _once(self, ctx: TaskContext, *, attempt: int) -> TaskOutcome:
         worker = self.worker(ctx)
         spec = dict(ctx.properties)
-        steps = list(spec.get("steps") or [])
+        # **화면에 손대기 전에** 값을 모두 채운다 — 모르는 이름이 있으면 아무것도 입력하지 않고 실패한다.
+        steps = [_rendered(raw, ctx.inputs) for raw in (spec.get("steps") or [])]
         key = ctx.business_key or business_key(ctx.run_id, ctx.node_id, ctx.node_instance, attempt)
 
         info = worker.open(
@@ -266,6 +272,8 @@ class UiTaskExecutor:
                 business_key=key,
                 page_id=str(spec.get("page_id") or ""),
                 start_url=spec.get("start_url"),
+                # 데스크톱 앱 이름 — `chk:defaults.desktop`이 엔진을 거쳐 속성 기본값으로 온다 (ADR-0033).
+                app=_desktop_app(spec),
                 heal=bool(spec.get("heal", True)),
                 service_key=ctx.extension.secret(ctx.key_ref) if ctx.key_ref else None,
             )
@@ -292,6 +300,55 @@ class UiTaskExecutor:
             if closed is not None:
                 outputs.setdefault("_ui_session", closed.summary.to_json_dict())
         return TaskOutcome(outputs=outputs)
+
+
+def _desktop_app(spec: dict[str, Any]) -> str | None:
+    """UI 태스크 속성의 `desktop.app` (C14). 없으면 `None` — Worker가 계획의 화면 것을 쓴다."""
+    desktop = spec.get("desktop")
+    app = desktop.get("app") if isinstance(desktop, dict) else None
+    return str(app) if app else None
+
+
+def render(value: Any, variables: Mapping[str, Any]) -> Any:
+    """스텝 값의 `{이름}`·`{이름.키}`를 실행 시점의 변수로 채운다 (C14, ADR-0033).
+
+    - `{{`·`}}`는 중괄호 글자다.
+    - 사전 안의 값은 점으로 따라간다 (`{건.품목}` — 반복 항목). 식은 아니다.
+    - 사전·목록 값은 JSON으로 넣는다. `None`은 빈 글이다.
+    - **모르는 이름이면 업무 실패**다 — 글자 그대로 입력하지 않는다.
+    """
+    if not isinstance(value, str) or ("{" not in value and "}" not in value):
+        return value
+
+    def one(match: re.Match[str]) -> str:
+        if match.group(0) == "{{":
+            return "{"
+        if match.group(0) == "}}":
+            return "}"
+        path = (match.group(1) or "").strip()
+        names = path.split(".")
+        if not path or not all(name.strip() for name in names):
+            raise TaskFailed("ui_value_invalid", f"스텝 값의 템플릿이 비어 있습니다: {{{path}}}")
+        if names[0] not in variables:
+            raise TaskFailed("ui_value_unknown", f"모르는 변수입니다: {{{path}}}")
+        found: Any = variables[names[0]]
+        for key in names[1:]:
+            if not isinstance(found, Mapping) or key not in found:
+                raise TaskFailed("ui_value_unknown", f"모르는 값입니다: {{{path}}}")
+            found = found[key]
+        if found is None:
+            return ""
+        if isinstance(found, (Mapping, list, tuple)):
+            return json.dumps(found, ensure_ascii=False)
+        return str(found)
+
+    return TEMPLATE.sub(one, value)
+
+
+def _rendered(raw: dict[str, Any], variables: Mapping[str, Any]) -> dict[str, Any]:
+    if "value" not in raw:
+        return dict(raw)
+    return {**raw, "value": render(raw["value"], variables)}
 
 
 def _step(raw: dict[str, Any]) -> StepRequest:

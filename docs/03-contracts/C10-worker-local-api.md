@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 실행 중 Bot(Bot UI의 실행기)·Studio·Bot UI(셀렉터 등록, Worker 관리) → Worker 프로세스 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (worker_local.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
-| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md) |
+| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
 | 관련 화면 | STU-08·13, BUI-06~09 |
 
 ## 목적
@@ -66,12 +66,23 @@
 | `page_id` | str | Bot·Studio만 ✓ | 시작 화면 |
 | `start_url` | str | | 비우면 화면의 기본 주소, 또는 이미 열린 화면에서 이어서 |
 | `browser_profile` | str | | |
+| `app` | str | | 데스크톱 앱 이름 (UI 태스크의 `desktop.app`, C14). 비우면 계획에 실린 화면의 `app`을 쓴다 (C8·C9) |
 | `headed` | bool | | 기본 false. Studio 시험은 true 권장 |
 | `heal` | bool | | 자가 치유 사용. 기본 true |
 | `report` | bool | | 닫을 때 UI 자동화 앱에 보고할까 (C8). 기본 true. **셀렉터 시험(BUI-08)에서 끈다** — 통계에 넣지 않을 뿐 아니라 아예 보내지 않는다 |
 | `service_key` | str | Bot·Studio만 ✓ | **UI 자동화 앱 API 키 값.** 부르는 쪽이 BPM 프로세스의 키 참조를 풀어 넣는다 (ADR-0013). Worker는 이 값을 세션 동안 메모리에만 두고, 디스크·로그에 남기지 않는다 |
 
 → 201 SessionInfo `{session_id, session_secret, page_id, current_url, plan_source: "server" | "cache", steps_run: 0, mutating_steps_ok: 0}`
+
+**여는 순서** ([ADR-0033](../decisions/0033-desktop-app-and-window.md)): `page_id`가 있고 계획을 받을 수 있으면 **계획을 먼저** 받고, 계획의 `platform`으로 브라우저·데스크톱을 고른 뒤 연다. 계획이 없으면(셀렉터 등록 등) 브라우저다.
+
+**데스크톱 세션:**
+
+- 계획의 `window`(C9 창 조건)에 맞는 최상위 창이 **하나** 있으면 그 창에 붙는다. 여럿이면 `window_ambiguous`다 — 고르지 않는다.
+- 없으면 앱 이름(`app`, 없으면 계획의 `app`)으로 **그 PC의 실행 명령**을 찾아 띄우고 창이 생길 때까지 기다린다 (기본 30초). 실행 명령은 Worker 데이터 폴더(`--token-dir`)의 `desktop-apps.json`이다: `{"ERP Client": {"command": ["C:\\ERP\\erp.exe"], "start_timeout_s": 30}}`. 경로는 PC마다 다르므로 BPM 프로세스·레지스트리에 두지 않는다.
+- 그래도 창이 없으면 `app_not_running`이다.
+- 찾기·조작은 그 창 **안에서만** 한다. `current_url`은 `desktop:<앱 이름>`이다 — 창 제목에는 문서 이름 같은 업무 값이 들어 있을 수 있어 싣지 않는다.
+- 데스크톱 화면의 분석·직접 고르기·표시(§5)는 아직 없다 (503).
 
 **`POST /v1/sessions/{id}/steps` — 스텝 하나** (헤더 `X-CHK-Session`)
 
@@ -157,7 +168,7 @@
 
 `verify` 응답은 사다리 한 칸에 한 줄(`{semantic_key, rank, strategy, selector, passed, matched, reason}`)이다. **하나에 맞아야 통과**다 — 여럿이 잡히면 실행에서 엉뚱한 것을 누른다. 검증 결과는 **등록을 막지 않는다**: 사람이 보고 정한다.
 
-> 상태: `analyze`·`pick`·`highlight`는 **브라우저 백엔드에서만** 된다 — 데스크톱(UIA) 백엔드가 없으면 503 `browser_unavailable`이다.
+> 상태: `analyze`·`pick`·`highlight`는 **브라우저 백엔드에서만** 된다 — 데스크톱(UIA) 세션이면 503 `browser_unavailable`이다 (데스크톱 화면 등록은 사다리를 적어 넣는다, ADR-0033).
 
 ## 오류
 
@@ -171,7 +182,9 @@
 | 409 | `worker_busy` (`detail.holder`) / `reserved` (`detail.run_id`) | 다른 쪽이 세션을 쥐었거나 Worker가 다른 실행에 예약됨 | Studio: STU-08 「Worker 사용 중」. 셀렉터 등록: BUI-06 「Bot 실행 중」 |
 | 422 | `instruction_not_allowed` / `value_required` / `value_not_allowed` / `unknown_semantic_key` | 요청 모양이 틀림 | 재시도하지 않음 |
 | 502 | `ui_automation_unreachable` | UI 자동화 앱에 닿지 못하고 캐시도 없음 | 태스크 재시도 정책을 따른다 |
-| 503 | `browser_unavailable` | 브라우저를 띄우지 못함 | Bot UI에 알리고 확인으로 넘긴다 |
+| 409 | `app_not_running` (`detail.app`) | 데스크톱 화면의 창이 없고 띄우는 방법도 설정돼 있지 않음 (`desktop-apps.json`에 그 이름이 없거나 띄워도 창이 안 생김) | 재시도하지 않는다. 확인(CMN-01) — 「<앱>을 띄운 뒤 계속」 |
+| 409 | `window_ambiguous` (`detail.count`) | 창 조건에 맞는 창이 여럿 | 재시도하지 않는다. 창 조건(C9 `window`)을 좁힌다 |
+| 503 | `browser_unavailable` | 브라우저를 띄우지 못함 (데스크톱이면 UIA를 쓸 수 없는 PC) | Bot UI에 알리고 확인으로 넘긴다 |
 | 503 | `session_locked` | **화면이 잠겨 있다.** 잠긴 동안 Worker는 화면 조작·캡처를 하지 않는다 | **재시도 가능.** 풀리거나 스텝 시간 제한에 닿을 때까지 기다린다 (아래) |
 
 ### `session_locked` (잠금 화면)
@@ -200,3 +213,4 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 | 2026-10-05 | 1 | §5에 `pick/events`(비워 가져오기·`picking`)와 `highlight`를 적었다 | — |
 | 2026-10-05 | 1 | §5 셀렉터 등록의 요청·응답을 확정했다 — `analyze`·`verify`는 세션 경로 아래(`/v1/registration/{session_id}/…`)로 두어 나머지 세션 경로와 모양을 맞췄고, `business_key`는 Worker가 짓는다. 등록 세션이 아니면 403 | 0018 |
 | 2026-10-03 | 1 | 기동 절차의 2단계를 고쳤다 — `chk-worker` 명령이 아니라 Bot UI가 자기 실행 파일을 `--local-runtime`으로 다시 띄운다 (묶인 앱에는 콘솔 스크립트가 없다). 주고받는 API는 그대로라 schema는 1 | 0024 |
+| 2026-10-05 | 1 | 데스크톱 세션: `SessionRequest.app`, 계획을 먼저 받아 백엔드를 고르는 여는 순서, 창에 붙거나 `desktop-apps.json`으로 띄우기, 오류 `app_not_running`·`window_ambiguous`(409), `current_url = desktop:<앱>` | 0033 |

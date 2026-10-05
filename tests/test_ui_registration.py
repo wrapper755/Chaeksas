@@ -357,7 +357,7 @@ class Screen:
     def __init__(self, *, has_page: bool = True) -> None:
         self.finder_value = BrowserFinder(page=object()) if has_page else NoPage()
 
-    def open(self, request: Any) -> str:
+    def open(self, request: Any, plan: Any = None) -> str:
         return request.start_url or "about:blank"
 
     def finder(self, business_key: str) -> Any:

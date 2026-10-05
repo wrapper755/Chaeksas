@@ -45,14 +45,14 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | 요소 | JSON 필드 | 뜻 |
 | --- | --- | --- |
 | `chk:process` | `run_location`(`server`\|`pc`), `service_keys`(`{app_id: key_ref}`), `extensions`(`[{id, version}]`), `inputs`(`[{name, type, required, description, default?}]` — 메시지 본문으로 들어오는 값도 여기에 선언), `outputs`(`[name]`) | BPM 프로세스 정보 (STU-06). 패키지 매니페스트(C1)는 빌드 때 이것을 모아 만든다 |
-| `chk:defaults` | `limits`(`{timeout_s, max_steps}`), `forbidden_actions[]`, `confirm_triggers[]`, `web`(`{profile, session}`), `desktop`(`{app}` — 띄울 앱 이름) | 모든 AI·UI 태스크의 기본값. 태스크에 적은 값이 이긴다 |
+| `chk:defaults` | `limits`(`{timeout_s, max_steps}`), `forbidden_actions[]`, `confirm_triggers[]`, `web`(`{profile, session}`), `desktop`(`{app}` — 띄울 앱 이름) | 모든 AI·UI 태스크의 기본값. 태스크에 적은 값이 이긴다. 확장 태스크(`chk:task`)에는 `web`·`desktop`이 **속성의 기본값**으로 넘어간다 — 태스크 속성에 같은 이름이 없을 때만 엔진이 채운다 ([ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 
 ## 태스크 종류와 속성
 
 | 태스크 종류 (화면) | BPMN 요소 | 속성 요소 | 필드 |
 | --- | --- | --- | --- |
 | AI 태스크 | `serviceTask` | `chk:aiTask` | `goal`(Markdown — `## 상황`·`## 할 일`·`## 판단하지 않는 것`·`## 반환` 권장), `domain`(`llm`\|`api`\|`doc`\|`web`\|`desktop`), `tools[]`, `params`(업무 파라미터, 재생 때 그대로 쓰인다), `results`(`{이름: 타입}`), `replay`(`plan`\|`full`\|`none`, 기본 `plan` — 아래 「재생」), `limits`, `forbidden_actions[]`, `confirm_triggers[]`, `web`/`desktop`(환경 설정) |
-| UI 태스크 (UI 자동화 확장) | `serviceTask` | `chk:task` `type="ui_task"` `extension="ui-automation"` | `page_id`, `start_url?`, `steps[]`(`{key, action, value?, result?, navigates?}`), `goal?`(자율 수행 전용), `heal`(기본 true), `close_browser` |
+| UI 태스크 (UI 자동화 확장) | `serviceTask` | `chk:task` `type="ui_task"` `extension="ui-automation"` | `page_id`, `start_url?`, `steps[]`(`{key, action, value?, result?, navigates?}`), `goal?`(자율 수행 전용), `heal`(기본 true), `close_browser`. 스텝 `value`의 `{변수}`·`{변수.키}`(사전 안의 값)는 **수행기가 실행 시점의 변수로 채운다** — 사전·목록 값은 JSON으로, `{{`·`}}`는 중괄호 글자. 모르는 이름이면 업무 실패다 (글자 그대로 입력하지 않는다, [ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 | 서비스 앱 태스크 | `serviceTask` | `chk:serviceCall` | `app_id`, `operation`, `input`(`{필드: 식}`), `output`(`{변수: 필드}`), `key_ref?`(없으면 프로세스의 `service_keys`를 상속), `timeout_s`, `retry`(`{max, on: [503, 429]}`) |
 | 다른 확장 태스크 | `serviceTask` | `chk:task` `type="<확장 태스크 종류>"` `extension="<id>"` | 그 확장의 계약이 정한 JSON |
 | 결재 | `userTask` | `chk:approval` | `title`, `description`, `show`(**변수 이름 배열** — 문자열 하나로 쓰면 검사 오류), `fields[]`(C6 Form과 같다: `{key, label, type: bool\|number\|text\|choice, choices?, required, default?}`), `location`(`follow`\|`center`\|`field`), `expires`(ISO 기간 또는 변수 이름) |
@@ -279,3 +279,5 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 | 2026-10-05 | 1 | **쓰기 허용 폴더**를 두었다 — 출력 폴더 밖에 쓰는 유일한 길이고 기본은 비어 있다. 업무 예제 BX-14(공유 xlsx에 덧붙이기)가 공백을 드러냈다 | [0032](../decisions/0032-writable-dirs.md) |
 | 2026-10-04 | 1 | **파일 목록 태스크(`chk:fileList`) 추가** — ADR-0025가 식에서 뺀 `파일목록()`의 자리. 「파일 경로」 절(출력 폴더·읽기 허용 폴더)을 새로 두고 파일 출력도 그것을 따르게 함. DMN 판정 규칙(입력 이름은 `inputExpression`, 입력 칸 문법, 적중 정책), 보내기 어댑터, 이정표(`intermediateThrowEvent`)를 적음. B5·B12를 늘림 | [0026](../decisions/0026-file-paths-and-file-list-task.md) |
 | 2026-10-01 | 1 | 업무 예제 작업 반영: `inputs[].default`, `chk:receive.payload`, 경계·중간 받기의 상관 키, 케이스 `messages`·`process`·입력 연산자(`$now_plus`, `$test_receiver`), 자동 응답 없는 결재, 기대 결과 비교 규칙, 결재 칸을 C6에 맞춤(`choices`, `date` 없음), `defaults.desktop`, 식의 None·허용 목록, 검사 B11~B14 ([08-business-examples](../08-business-examples/README.md)) | — |
+| 2026-10-05 | 1 | `chk:defaults`의 `web`·`desktop`이 확장 태스크 속성의 기본값으로 넘어간다 (UI 태스크가 띄울 앱 이름을 받는다) | 0033 |
+| 2026-10-05 | 1 | UI 태스크 스텝 `value`의 `{변수}`·`{변수.키}`를 수행기가 채운다고 적었다 — 채우지 않아 `{신청.이름}`이 글자 그대로 입력되고 있었다 (M4 인수 시험에서 발견) | 0033 |

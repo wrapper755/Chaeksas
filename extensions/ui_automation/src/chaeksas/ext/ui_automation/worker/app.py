@@ -104,8 +104,8 @@ class Backend(Protocol):
     `finder()`가 주는 찾기·조작만 한다 (C8: 폴백은 로컬에서).
     """
 
-    def open(self, request: SessionRequest) -> str:
-        """화면을 열고 지금 주소를 돌려준다."""
+    def open(self, request: SessionRequest, plan: ExecutionPlan | None = None) -> str:
+        """화면을 열고 지금 주소를 돌려준다. 데스크톱은 계획의 창 조건으로 창을 찾는다 (ADR-0033)."""
         ...
 
     def finder(self, business_key: str) -> Finder | None:
@@ -258,19 +258,25 @@ class Worker:
             opened_at=self.clock(),
             touched_at=self.clock(),
         )
+        # **계획을 먼저** 받는다 (ADR-0033) — 데스크톱은 계획의 창 조건이 있어야 열 수 있고, 어느
+        # 백엔드인지도 계획(화면 등록의 `platform`)이 정한다.
+        made.plans = self._plans_for(request)
+        if made.plans is not None and request.page_id:
+            made.plan, made.plan_source = self._fetch_plan(request, made.plans)
+        # 주소를 비워 보냈으면 **화면의 기본 주소**로 연다 (C10 `start_url`).
+        opening = request
+        if not request.start_url and made.plan is not None and made.plan.start_url:
+            opening = request.model_copy(update={"start_url": made.plan.start_url})
         try:
-            made.current_url = self.backend.open(request)
+            made.current_url = self.backend.open(opening, made.plan)
         except Exception as e:  # noqa: BLE001 — 브라우저가 안 뜰 수 있다 (바이너리 없음·화면 없음)
+            if isinstance(getattr(e, "status", None), int) and getattr(e, "code", None):
+                # 백엔드가 C10 코드로 말한 실패 (앱 없음·창 여럿·잠금 …) — 그대로 옮긴다.
+                raise WorkerProblem(e.status, e.code, str(e), dict(getattr(e, "detail", {}) or {})) from e  # type: ignore[attr-defined]
             # **「없는데 된 척」하지 않는다.** 500으로 흘리면 부르는 쪽이 버그로 읽는다.
             raise WorkerProblem(
                 503, BROWSER_UNAVAILABLE, f"화면을 열지 못했습니다 ({type(e).__name__})"
             ) from e
-        made.plans = self._plans_for(request)
-        if made.plans is not None and request.page_id:
-            made.plan, made.plan_source = self._fetch_plan(request, made.plans)
-            # 주소를 비워 보냈으면 **화면의 기본 주소**로 간다 (C10 `start_url`).
-            if not request.start_url and made.plan is not None and made.plan.start_url:
-                made.current_url = self.backend.goto(made.session_id, made.plan.start_url)
         self.session = made
         return made.info(), True
 
@@ -287,7 +293,8 @@ class Worker:
         try:
             found, source = plans.plan(
                 page_id=request.page_id,
-                platform="web",
+                # 힌트일 뿐이다 — 플랫폼은 화면 등록이 정하고 계획에 실려 온다 (C8·C9).
+                platform="desktop" if request.app else "web",
                 steps=[],
                 start_url=request.start_url,
             )
@@ -343,6 +350,10 @@ class Worker:
         finder = self.backend.finder(found.request.business_key) if self.backend else None
         if finder is None:  # pragma: no cover — 세션이 있으면 화면도 있다
             raise WorkerProblem(503, "browser_unavailable", "열린 화면이 없습니다")
+        locked = getattr(finder, "locked", None)
+        if callable(locked) and locked():
+            # 잠긴 화면에는 손대지 않는다 — 부르는 쪽이 기다렸다 다시 부른다 (C10, ADR-0023).
+            raise WorkerProblem(503, SESSION_LOCKED, "화면이 잠겨 있습니다")
 
         step = PlanStep(
             semantic_key=request.semantic_key or "",
@@ -355,6 +366,9 @@ class Worker:
                 422, UNKNOWN_SEMANTIC_KEY, f"계획에 없는 요소입니다: {step.semantic_key}"
             )
         attempt = run_step(step, found.plan, finder, heal=self.healer)
+        if not attempt.ok and callable(locked) and locked():
+            # 스텝 도중에 잠겼다 — 조작은 잠금을 먼저 보고 멈췄다. 실패가 아니라 기다릴 일이다.
+            raise WorkerProblem(503, SESSION_LOCKED, "화면이 잠겨 있습니다")
         self._remember(found, attempt)
         return StepResult(
             ok=attempt.ok,
@@ -462,7 +476,7 @@ class Worker:
         return found
 
     def _surface(self, found: Session) -> Any:
-        """분석이 들여다볼 화면. **없으면 없다고 말한다** — 데스크톱 백엔드는 아직 없다."""
+        """분석이 들여다볼 화면. **없으면 없다고 말한다** — 데스크톱(UIA) 세션은 아직 분석하지 않는다 (ADR-0033)."""
         finder = self.backend.finder(found.request.business_key) if self.backend else None
         page = getattr(finder, "page", None)
         if page is None:

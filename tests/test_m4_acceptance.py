@@ -1,7 +1,8 @@
 """M4 인수 시험 — 업무 예제의 M4 묶음을 **Studio 시험 실행**으로 돌린다 (조각 15).
 
 로드맵의 M4 기준이다. M3과 다른 점은 **UI 태스크가 진짜로 돈다**는 것이다 — 진짜 UI 자동화
-앱(in-process), 진짜 Worker, 진짜 Chromium, 시험이 띄운 진짜 화면.
+앱(in-process), 진짜 Worker, 진짜 Chromium, 시험이 띄운 진짜 화면. 데스크톱 예제는 Windows에서
+진짜 UIA로 시험이 띄운 진짜 창(`fake_desktop_apps.py`)을 만진다.
 
 **바깥에 나가지 않는다.** 앱도 화면도 127.0.0.1이고, 예제가 가리키는 화면은 시험이 그 자리에서
 만들어 레지스트리에 등록한다 (사람이 BUI-06에서 하는 일을 시험이 대신한다).
@@ -13,7 +14,12 @@ from __future__ import annotations
 
 import json
 import os  # noqa: E402
+import re
+import subprocess
+import sys
 import threading
+import time
+import uuid
 from collections.abc import Iterator
 from dataclasses import replace
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -30,21 +36,24 @@ from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
 from chaeksas.contracts.service_app import ServiceAppKey  # noqa: E402
 from chaeksas.ext.ui_automation.client.registry_client import RegistryClient  # noqa: E402
 from chaeksas.ext.ui_automation.client.task import UiTaskExecutor  # noqa: E402
-from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec  # noqa: E402
+from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec, WindowSpec  # noqa: E402
 from chaeksas.ext.ui_automation.contracts.registry import (  # noqa: E402
     ElementHint,
     PageRegistration,
 )
 from chaeksas.ext.ui_automation.service.app import REGISTRY_WRITE, create  # noqa: E402
 from chaeksas.ext.ui_automation.service.store import Database, SqliteKeyStore  # noqa: E402
+from chaeksas.ext.ui_automation.worker import desktop  # noqa: E402
 from chaeksas.ext.ui_automation.worker.app import Worker  # noqa: E402
 from chaeksas.ext.ui_automation.worker.browser import BrowserBackend, available  # noqa: E402
+from chaeksas.ext.ui_automation.worker.desktop import DesktopBackend  # noqa: E402
 from chaeksas.ext.ui_automation.worker.plans import (  # noqa: E402
     HttpOps,
     PlanCache,
     PlanService,
     ReportQueue,
 )
+from chaeksas.ext.ui_automation.worker.routing import RoutingBackend  # noqa: E402
 from chaeksas.service_kit import hash_key  # noqa: E402
 from chaeksas.studio.run_dialog import AUTONOMOUS  # noqa: E402
 from chaeksas.studio.runner import NO_EXPECT, PASS, CaseRun, Outcome, Plan, read_cases  # noqa: E402
@@ -77,10 +86,16 @@ M4 = bundle()
 
 #: 아직 초록이 아닌 예제와 **그 이유**. 조용히 빼면 묶음이 거짓말을 한다.
 REMAINING: dict[str, str] = {
-    "bx04_tax_invoice_issue": "데스크톱 UI 태스크 — Windows UIA 백엔드가 없다 (ADR-0020)",
-    "bx17_erp_po_entry": "데스크톱 UI 태스크 — Windows UIA 백엔드가 없다 (ADR-0020)",
-    "fx05_desktop_autonomous": "데스크톱 AI 태스크 (`domain: desktop`) — 데스크톱을 보는 길이 없다",
+    "bx04_tax_invoice_issue": (
+        "데스크톱 표를 읽어 줄 목록 변수로 받는 길이 없다 — 표 읽기가 글(TSV)만 돌려준다 (C10 `data`)"
+    ),
+    "fx05_desktop_autonomous": (
+        "데스크톱 AI 태스크 (`domain: desktop`) — 데스크톱을 보는 길이 없다 (모델 연결 ADR-0034가 먼저)"
+    ),
 }
+
+#: 데스크톱 UI 태스크 예제 — **Windows에서만** 돈다 (UIA). 다른 OS에서는 건너뛴다.
+DESKTOP = {"bx17_erp_po_entry"}
 
 #: 공유 폴더를 흉내 내는 자리 — 예제가 적은 UNC 경로 대신 시험이 쓰기 허용 폴더를 준다
 #: (ADR-0032). 경로만 그 PC의 것이고 **업무는 예제 그대로**다.
@@ -88,6 +103,7 @@ SHARE = "주문수집.xlsx"
 
 #: 케이스가 모두 통과하는 예제. 줄어들면 회귀다.
 GREEN = [one for one in M4 if one not in REMAINING]
+WEB = [one for one in GREEN if one not in DESKTOP]
 
 
 # ─────────────────────────── 시험이 띄우는 화면 ───────────────────────────
@@ -298,6 +314,10 @@ def host(app: Any, tmp_path: Path) -> Iterator[Host]:
     if not available():
         pytest.skip("Playwright가 없다")
     backend = BrowserBackend(headless=True)
+    yield from _host(app, tmp_path, backend)
+
+
+def _host(app: Any, tmp_path: Path, backend: Any) -> Iterator[Host]:
     client = TestClient(app)
 
     def plans(request: Any) -> PlanService:
@@ -319,6 +339,63 @@ def host(app: Any, tmp_path: Path) -> Iterator[Host]:
         if worker.session is not None:
             worker.force_close(worker.session.session_id)
         backend.shutdown()
+
+
+# ─────────────────────────── 데스크톱 (BX-17) ───────────────────────────
+
+FAKE_APPS = Path(__file__).resolve().parent / "fake_desktop_apps.py"
+#: Qt가 내보내는 AutomationId의 앞부분 (`QApplication.<창>.<위젯>`).
+AID = "QApplication.poEntry."
+
+
+def desktop_page(tag: str) -> PageRegistration:
+    """BX-17의 `erp.desktop.po_entry` — 사람이 사다리를 적어 넣는 자리를 시험이 한다 (ADR-0033).
+
+    창 조건에 시험마다 다른 꼬리표를 붙여 **이 시험이 띄운 창만** 맞게 한다.
+    """
+    return PageRegistration(
+        schema=1,
+        page_id="erp.desktop.po_entry",
+        platform="desktop",
+        name="ERP 발주 입력",
+        app="ERP Client",
+        window=WindowSpec(title="^" + re.escape("ERP Client - 발주 입력" + tag) + "$"),
+        locators={
+            "po.item": [LocatorSpec(type="automation_id", value=AID + "itemCode", platform="desktop")],
+            "po.qty": [LocatorSpec(type="automation_id", value=AID + "quantity", platform="desktop")],
+            "po.save": [LocatorSpec(type="automation_id", value=AID + "saveButton", platform="desktop")],
+            "po.number": [LocatorSpec(type="automation_id", value=AID + "poNumber", platform="desktop")],
+        },
+        elements={
+            "po.item": ElementHint(name="품목", role="textbox"),
+            "po.qty": ElementHint(name="수량", role="spinbutton"),
+            "po.save": ElementHint(name="저장", role="button"),
+            "po.number": ElementHint(name="발주번호", kind="text"),
+        },
+    )
+
+
+@pytest.fixture
+def desktop_host(app: Any, tmp_path: Path) -> Iterator[Host]:
+    """가짜 ERP 창을 띄우고, Worker는 **경로 백엔드**(데스크톱 쪽만)로 그 창에 붙는다."""
+    if not desktop.available():
+        pytest.skip("Windows UIA가 없다 — 데스크톱 예제는 Windows에서만 돈다")
+    tag = f" #{uuid.uuid4().hex[:8]}"
+    RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(app)).register(desktop_page(tag))
+    # 시험 프로세스의 offscreen을 물려주지 않는다 — 창이 보여야 UIA가 본다.
+    env = {k: v for k, v in os.environ.items() if k != "QT_QPA_PLATFORM"}
+    proc = subprocess.Popen([sys.executable, str(FAKE_APPS), "erp", tag], env=env)
+    try:
+        spec = desktop_page(tag).window
+        assert spec is not None
+        deadline = time.monotonic() + 20
+        while not desktop.find_windows(spec) and time.monotonic() < deadline:
+            time.sleep(0.2)
+        assert desktop.find_windows(spec), "가짜 ERP 창이 뜨지 않았다"
+        yield from _host(app, tmp_path, RoutingBackend(web=None, desktop=DesktopBackend()))
+    finally:
+        proc.kill()
+        proc.wait(10)
 
 
 # ─────────────────────────── 스텁 모델 (BX-14의 doc AI 태스크) ───────────────────────────
@@ -487,15 +564,16 @@ def test_the_bundle_is_read_from_the_examples() -> None:
     """묶음 목록을 사람이 옮겨 적지 않는다 — 어긋나는 순간 시험이 거짓말을 한다."""
     assert len(M4) == 6
     assert set(REMAINING) <= set(M4), "남은 목록에 묶음 밖 예제가 있다"
-    assert len(GREEN) == 3, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+    assert len(GREEN) == 4, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+    assert DESKTOP <= set(GREEN)
 
 
 def test_every_remaining_one_says_why() -> None:
     """**막힌 것은 이유를 적는다** — 「나중에」만 적으면 무엇을 고쳐야 할지 모른다."""
     for example, why in REMAINING.items():
         assert len(why) > 10 and ("없다" in why or "미뤘다" in why), f"{example}: {why}"
-    assert set(REMAINING) == {"bx04_tax_invoice_issue", "bx17_erp_po_entry", "fx05_desktop_autonomous"}
-    assert all("데스크톱" in why for why in REMAINING.values()), "남은 셋은 모두 데스크톱이다"
+    assert set(REMAINING) == {"bx04_tax_invoice_issue", "fx05_desktop_autonomous"}
+    assert all("데스크톱" in why for why in REMAINING.values()), "남은 둘은 모두 데스크톱이다"
 
 
 #: AI 태스크가 있어 스텁 모델이 필요한 예제.
@@ -503,7 +581,7 @@ WITH_MODEL = {"bx14_supplier_portal_orders"}
 
 
 @pytest.mark.skipif(not available(), reason="Playwright가 없다")
-@pytest.mark.parametrize("example", GREEN)
+@pytest.mark.parametrize("example", WEB)
 def test_an_m4_example_passes_all_its_cases(
     qt: Any, tmp_path: Path, host: Host, example: str
 ) -> None:
@@ -516,6 +594,14 @@ def test_an_m4_example_passes_all_its_cases(
     assert results, f"{example}: 돌릴 케이스가 없다"
     bad = [(c.name, o.verdict, o.detail) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert not bad, f"{example}: {bad}"
+
+
+def test_a_desktop_example_passes_all_its_cases(qt: Any, tmp_path: Path, desktop_host: Host) -> None:
+    """BX-17 — 발주 두 건을 **진짜 창**에 입력하고 발주번호를 읽어 온다 (Windows UIA)."""
+    results = run_all(tmp_path, "bx17_erp_po_entry", desktop_host)
+    assert results, "돌릴 케이스가 없다"
+    bad = [(c.name, o.verdict, o.detail) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
+    assert not bad, bad
 
 
 @pytest.mark.skipif(not available(), reason="Playwright가 없다")

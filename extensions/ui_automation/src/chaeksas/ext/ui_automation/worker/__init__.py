@@ -54,18 +54,23 @@ def plans_for(token_dir: Path, base_url: str) -> object:
     return make
 
 
-def backend() -> object | None:
-    """화면을 만지는 쪽. **없으면 `None`** — 세션을 열면 503이다 (「없는데 된 척」하지 않는다).
+def backend(data_dir: Path | None = None) -> object | None:
+    """화면을 만지는 쪽. **둘 다 없으면 `None`** — 세션을 열면 503이다 (「없는데 된 척」하지 않는다).
 
-    지금은 브라우저(Playwright)뿐이다. Windows 데스크톱(UIA)은 ADR-0020이 올 자리다.
+    브라우저(Playwright)와 Windows 데스크톱(UIA)을 하나로 묶어, 세션의 화면이 웹이냐 데스크톱이냐에
+    따라 보낸다 (ADR-0033). 데스크톱 앱의 실행 명령은 `data_dir`의 `desktop-apps.json`이다 (C10).
     """
-    from chaeksas.ext.ui_automation.worker.browser import BrowserBackend, available  # noqa: PLC0415
+    from chaeksas.ext.ui_automation.worker import browser, desktop  # noqa: PLC0415
+    from chaeksas.ext.ui_automation.worker.routing import RoutingBackend  # noqa: PLC0415
 
-    if not available():
-        return None
-    # **기본은 안 보이게** 돈다 (서버·CI에는 화면이 없다). 사람이 봐야 하는 세션은
+    # 브라우저는 **기본으로 안 보이게** 돈다 (서버·CI에는 화면이 없다). 사람이 봐야 하는 세션은
     # `SessionRequest.headed`로 켠다 (등록·시험이 그렇게 연다, C10).
-    return BrowserBackend(headless=True)
+    web = browser.BrowserBackend(headless=True) if browser.available() else None
+    apps_file = (data_dir / desktop.APPS_FILE) if data_dir else None
+    screen = desktop.DesktopBackend(launcher=desktop.AppLauncher(apps_file=apps_file)) if desktop.available() else None
+    if web is None and screen is None:
+        return None
+    return RoutingBackend(web=web, desktop=screen)
 
 
 def serve(*, port: int, token_dir: Path | None = None) -> int:
@@ -87,7 +92,7 @@ def serve(*, port: int, token_dir: Path | None = None) -> int:
 
     where = token_dir or Path.cwd()
     token, admin = write_tokens(where)
-    found = backend()
+    found = backend(where)
     app = create_app(
         Worker(
             token=token,
