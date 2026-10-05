@@ -25,6 +25,10 @@ ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
 #: 서비스 앱 키는 **참조 이름**으로 저장한다 (BUI-10, ADR-0013 §3).
 SERVICE_APP_PREFIX = "svc:"
 
+#: 모델 키 (ADR-0027). 실행기에게는 **환경변수로** 건넨다 (명령줄에 두지 않는다).
+LLM_API_KEY = "llm-api-key"
+ENV_LLM_API_KEY = "CHK_BOT_UI__LLM__API_KEY"
+
 
 class SecretsUnavailable(RuntimeError):
     """OS 비밀 저장소를 쓸 수 없다 (설치 안 됨·잠김·헤드리스)."""
@@ -101,6 +105,13 @@ class Credentials:
     def set_center_api_key(self, value: str) -> None:
         self.set(CENTER_API_KEY, value.strip())
 
+    def llm_api_key(self) -> str | None:
+        """모델 키 (ADR-0027). **키가 필요 없는 로컬 모델이면 비어 있다** — 그러면 보내지 않는다."""
+        return self.get(LLM_API_KEY, env=ENV_LLM_API_KEY)
+
+    def set_llm_api_key(self, value: str) -> None:
+        self.set(LLM_API_KEY, value.strip())
+
     def service_app_key(self, ref: str) -> str | None:
         """BPM 프로세스 속성의 **키 참조 이름**으로 찾는다 (ADR-0013 §3)."""
         return self.get(f"{SERVICE_APP_PREFIX}{ref}")
@@ -112,6 +123,8 @@ class Credentials:
 __all__ = [
     "CENTER_API_KEY",
     "ENV_CENTER_API_KEY",
+    "ENV_LLM_API_KEY",
+    "LLM_API_KEY",
     "SERVICE",
     "SERVICE_APP_PREFIX",
     "Credentials",

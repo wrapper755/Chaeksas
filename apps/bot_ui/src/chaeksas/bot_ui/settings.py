@@ -21,6 +21,9 @@ DEFAULT_WEBHOOK_PORT = 8790
 #: 대기열 크기 (ADR-0014 — 실행 자리는 1로 고정이라 설정이 없다).
 DEFAULT_QUEUE_MAX = 20
 
+#: 모델 이름의 기본값 (주소는 비어 있다 — 사람이 넣어야 AI 태스크가 돈다).
+DEFAULT_LLM_MODEL = "qwen2.5:7b"
+
 ENV_PREFIX = "CHK_BOT_UI__"
 
 #: 로컬 런타임 시작 방식 (BUI-03 「로컬 런타임」).
@@ -76,6 +79,12 @@ class Settings:
     queue_max: int = DEFAULT_QUEUE_MAX
     webhook_port: int = DEFAULT_WEBHOOK_PORT
     webhook_external: bool = False
+    #: 모델 (BUI-03 「모델」, ADR-0027). **비우면 AI 태스크가 돌지 않는다** — 키는 설정 파일이
+    #: 아니라 OS 비밀 저장소에 둔다 (CLAUDE.md §5).
+    llm_base_url: str = ""
+    llm_model: str = DEFAULT_LLM_MODEL
+    #: Bot이 **읽을 수 있는 폴더** (BUI-03 「파일」, ADR-0026). 비어 있으면 아무것도 못 읽는다.
+    readable_dirs: tuple[Path, ...] = ()
     runtimes: tuple[RuntimeSettings, ...] = field(
         default_factory=lambda: (RuntimeSettings(runtime_id="worker", port=DEFAULT_WORKER_PORT),)
     )
@@ -97,6 +106,9 @@ class Settings:
             "queue_max": self.queue_max,
             "webhook_port": self.webhook_port,
             "webhook_external": self.webhook_external,
+            "llm_base_url": self.llm_base_url,
+            "llm_model": self.llm_model,
+            "readable_dirs": [str(one) for one in self.readable_dirs],
             "runtimes": [r.to_json_dict() for r in self.runtimes],
         }
 
@@ -128,6 +140,8 @@ class Settings:
             queue_max=int(_env("QUEUE__MAX") or self.queue_max),
             webhook_port=int(_env("WEBHOOK__PORT") or self.webhook_port),
             webhook_external=_env_bool("WEBHOOK__EXTERNAL", self.webhook_external),
+            llm_base_url=_env("LLM__BASE_URL") or self.llm_base_url,
+            llm_model=_env("LLM__MODEL") or self.llm_model,
             runtimes=tuple(runtimes),
         )
 
@@ -152,6 +166,9 @@ class Settings:
             queue_max=int(raw.get("queue_max", base.queue_max)),
             webhook_port=int(raw.get("webhook_port", base.webhook_port)),
             webhook_external=bool(raw.get("webhook_external", base.webhook_external)),
+            llm_base_url=str(raw.get("llm_base_url") or base.llm_base_url),
+            llm_model=str(raw.get("llm_model") or base.llm_model),
+            readable_dirs=tuple(Path(one) for one in raw.get("readable_dirs", [])),
             runtimes=runtimes or base.runtimes,
         )
 
@@ -171,6 +188,7 @@ class Settings:
 
 __all__ = [
     "DEFAULT_CENTER_URL",
+    "DEFAULT_LLM_MODEL",
     "DEFAULT_QUEUE_MAX",
     "DEFAULT_WEBHOOK_PORT",
     "DEFAULT_WORKER_PORT",

@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import sys
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -242,3 +243,40 @@ def test_the_os_picker_gives_something_that_answers(monkeypatch: Any) -> None:
     # 어느 OS에서든 물어볼 수 있다 (모르는 OS면 「할 수 없다」고 답한다).
     assert isinstance(found.enabled(), bool)
     assert found.available == (sys.platform == "win32" or sys.platform.startswith("linux"))
+
+
+# ─────────────────────── 모델·파일 (BUI-03, 조각 4c) ───────────────────────
+
+
+def test_the_model_address_is_saved_but_the_key_is_not(tmp_path: Path) -> None:
+    """**키는 설정 파일에 들어가지 않는다** (CLAUDE.md §5) — OS 비밀 저장소로 간다."""
+    settings = replace(Settings(), llm_base_url="http://localhost:11434", llm_model="qwen2.5:7b")
+    path = settings.save(tmp_path / "settings.json")
+    raw = path.read_text(encoding="utf-8")
+
+    assert "localhost:11434" in raw and "qwen2.5:7b" in raw
+    assert "api_key" not in raw and "llm_api_key" not in raw
+
+
+def test_readable_dirs_survive_a_restart(tmp_path: Path) -> None:
+    """Bot이 읽을 수 있는 곳은 **여기 적은 폴더뿐**이다 (ADR-0026)."""
+    folders = (tmp_path / "공유", tmp_path / "청구서")
+    path = replace(Settings(), readable_dirs=folders).save(tmp_path / "settings.json")
+
+    again = Settings.load(path)
+    assert again.readable_dirs == folders
+
+
+def test_without_a_model_address_the_default_is_empty() -> None:
+    """**비우면 AI 태스크가 돌지 않는다** — 주소를 지어내지 않는다 (ADR-0027)."""
+    assert Settings().llm_base_url == ""
+
+
+def test_the_model_key_goes_to_the_secret_store_and_an_env_var_wins(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """읽기는 환경변수가 먼저다 (개발·CI). 실행기에는 환경변수로 건넨다."""
+    from chaeksas.bot_ui.credentials import ENV_LLM_API_KEY, Credentials
+
+    monkeypatch.setenv(ENV_LLM_API_KEY, "sk-from-env")
+    assert Credentials().llm_api_key() == "sk-from-env"

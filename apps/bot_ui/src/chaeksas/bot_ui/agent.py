@@ -382,9 +382,15 @@ class Agent:
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 
         if self._launcher is None:
-            # 읽기 허용 폴더와 모델 주소는 **아직 설정에 없다** (BUI-03을 고쳐야 한다 — 다음
-            # 조각). 그때까지 파일 읽기와 AI 태스크는 **조용히 넘어가지 않고 실패한다**.
-            self._launcher = Launcher(data_dir=data_dir())
+            # 읽기 허용 폴더·모델은 BUI-03이 정한다. **비어 있으면 그 태스크는 실패한다** —
+            # 조용히 넘어가지 않는다 (ADR-0026·ADR-0027).
+            self._launcher = Launcher(
+                data_dir=data_dir(),
+                readable=tuple(self.settings.readable_dirs),
+                llm_url=self.settings.llm_base_url,
+                llm_model=self.settings.llm_model,
+                llm_key=self.credentials.llm_api_key() or "",
+            )
         return self._launcher
 
     def pump(self) -> None:

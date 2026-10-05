@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import replace
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
@@ -18,11 +19,14 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QFrame,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -35,7 +39,13 @@ from chaeksas.bot_ui import autostart as autostart_module
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.center_client import CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import SecretsUnavailable
-from chaeksas.bot_ui.settings import START_ALWAYS, START_WHEN_NEEDED, RuntimeSettings, Settings
+from chaeksas.bot_ui.settings import (
+    START_ALWAYS,
+    START_WHEN_NEEDED,
+    RuntimeSettings,
+    Settings,
+    data_dir,
+)
 from chaeksas.contracts.center_keys import KEY_PREFIX, looks_like_key
 
 log = logging.getLogger(__name__)
@@ -49,6 +59,7 @@ KEY_SHAPE_MESSAGE = (
 #: 키를 넣었는지 사람에게 알려 주는 자리 글. **값은 보이지 않는다.**
 KEY_SET_PLACEHOLDER = "저장된 키가 있습니다 (바꾸려면 새로 붙여 넣으세요)"
 KEY_EMPTY_PLACEHOLDER = "Center 콘솔 「Center API 키」에서 발급한 키"
+LLM_KEY_PLACEHOLDER = "키가 필요 없으면 비워 두세요"
 
 
 class SettingsDialog(QDialog):
@@ -68,6 +79,8 @@ class SettingsDialog(QDialog):
         sections.setContentsMargins(0, 0, 0, 0)
         sections.addWidget(self._center_box())
         sections.addWidget(self._run_box())
+        sections.addWidget(self._model_box())
+        sections.addWidget(self._files_box())
         sections.addWidget(self._runtime_box())
         sections.addWidget(self._later_box())
         sections.addStretch(1)
@@ -160,6 +173,76 @@ class SettingsDialog(QDialog):
         form.addRow("대기열 크기", self.queue_max)
         return box
 
+    def _model_box(self) -> QGroupBox:
+        """BUI-03 「모델」 (ADR-0027). **주소·키는 여기만 안다** — BPM 프로세스에 들어가지 않는다."""
+        box = QGroupBox("모델")
+        form = QFormLayout(box)
+
+        self.llm_url = QLineEdit(self._agent.settings.llm_base_url)
+        self.llm_url.setPlaceholderText("http://localhost:11434 (OpenAI 호환 주소. 비우면 AI 태스크가 돌지 않습니다)")
+        form.addRow("주소", self.llm_url)
+
+        self.llm_model = QLineEdit(self._agent.settings.llm_model)
+        form.addRow("모델 이름", self.llm_model)
+
+        self.llm_key = QLineEdit()
+        self.llm_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.llm_key.setPlaceholderText(
+            KEY_SET_PLACEHOLDER if self._agent.credentials.llm_api_key() else LLM_KEY_PLACEHOLDER
+        )
+        form.addRow("API 키", self.llm_key)
+
+        note = QLabel("키가 필요 없는 로컬 모델(Ollama·vLLM)이면 비워 두세요 — 비우면 보내지 않습니다.")
+        note.setWordWrap(True)
+        note.setEnabled(False)
+        form.addRow("", note)
+        return box
+
+    def _files_box(self) -> QGroupBox:
+        """BUI-03 「파일」 (ADR-0026). **여기 적은 폴더만** Bot이 읽을 수 있다."""
+        box = QGroupBox("파일")
+        layout = QVBoxLayout(box)
+
+        self.readable = QListWidget()
+        for one in self._agent.settings.readable_dirs:
+            self.readable.addItem(str(one))
+        layout.addWidget(self.readable)
+
+        buttons = QHBoxLayout()
+        add = QPushButton("추가...")
+        add.clicked.connect(self.add_readable)
+        drop = QPushButton("삭제")
+        drop.clicked.connect(self.drop_readable)
+        buttons.addWidget(add)
+        buttons.addWidget(drop)
+        buttons.addStretch(1)
+        layout.addLayout(buttons)
+
+        where = QLabel(f"출력 폴더: {data_dir() / 'outputs'}/<Bot> (고정)")
+        where.setWordWrap(True)
+        where.setEnabled(False)
+        layout.addWidget(where)
+
+        note = QLabel("읽기 허용 폴더가 비어 있으면 파일을 읽는 태스크는 실패합니다 (조용히 넘어가지 않습니다).")
+        note.setWordWrap(True)
+        note.setEnabled(False)
+        layout.addWidget(note)
+        return box
+
+    def add_readable(self) -> None:
+        chosen = QFileDialog.getExistingDirectory(self, "읽기 허용 폴더 추가")
+        if not chosen:
+            return
+        if not self.readable.findItems(chosen, Qt.MatchFlag.MatchExactly):
+            self.readable.addItem(chosen)
+
+    def drop_readable(self) -> None:
+        for item in self.readable.selectedItems():
+            self.readable.takeItem(self.readable.row(item))
+
+    def readable_dirs(self) -> tuple[Path, ...]:
+        return tuple(Path(self.readable.item(i).text()) for i in range(self.readable.count()))
+
     def _runtime_box(self) -> QGroupBox:
         box = QGroupBox("로컬 런타임")
         form = QFormLayout(box)
@@ -186,7 +269,7 @@ class SettingsDialog(QDialog):
         box.setEnabled(False)
         layout = QVBoxLayout(box)
         for text in (
-            "메시지 수신 포트 — ReceiveTask·메시지 시작 이벤트가 생기는 M3",
+            "메시지 수신 포트 — 메시지 시작 이벤트를 바깥에서 받는 M5",
             "확장별 설정 (UI 자동화 등록 담당자 키) — M4",
             "툴팩 비밀 — M3",
         ):
@@ -257,6 +340,9 @@ class SettingsDialog(QDialog):
             remote_approval=self.remote_approval.isChecked(),
             signed_only=self.signed_only.isChecked(),
             queue_max=self.queue_max.value(),
+            llm_base_url=self.llm_url.text().strip(),
+            llm_model=self.llm_model.text().strip() or self._agent.settings.llm_model,
+            readable_dirs=self.readable_dirs(),
             runtimes=(worker,),
         )
 
@@ -273,6 +359,14 @@ class SettingsDialog(QDialog):
                 self._agent.credentials.set_center_api_key(typed)
             except SecretsUnavailable as e:
                 QMessageBox.warning(self, "키를 저장하지 못했습니다", str(e))
+                return
+
+        model_key = self.llm_key.text().strip()
+        if model_key:
+            try:
+                self._agent.credentials.set_llm_api_key(model_key)
+            except SecretsUnavailable as e:
+                QMessageBox.warning(self, "모델 키를 저장하지 못했습니다", str(e))
                 return
 
         wanted = self._pending_settings()
@@ -293,4 +387,10 @@ class SettingsDialog(QDialog):
         self.accept()
 
 
-__all__ = ["KEY_EMPTY_PLACEHOLDER", "KEY_SET_PLACEHOLDER", "KEY_SHAPE_MESSAGE", "SettingsDialog"]
+__all__ = [
+    "KEY_EMPTY_PLACEHOLDER",
+    "KEY_SET_PLACEHOLDER",
+    "KEY_SHAPE_MESSAGE",
+    "LLM_KEY_PLACEHOLDER",
+    "SettingsDialog",
+]
