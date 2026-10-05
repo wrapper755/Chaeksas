@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) — 셀렉터 등록용 엔드포인트(§5)의 요청·응답 세부는 C9와 함께 확정 |
+| 상태 | **합의** (2026-10-05) — 셀렉터 등록용 엔드포인트(§5)의 요청·응답까지 확정 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 실행 중 Bot(Bot UI의 실행기)·Studio·Bot UI(셀렉터 등록, Worker 관리) → Worker 프로세스 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (worker_local.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
@@ -124,16 +124,33 @@
 | `DELETE /v1/admin/sessions/{id}` | 세션 강제 닫기 (실행기가 죽었을 때 정리) |
 | `POST /v1/admin/shutdown` | 열린 세션을 닫고 보고를 저장한 뒤 종료 (Bot UI 종료 순서, BUI-01) |
 
-### 5. 셀렉터 등록 (Bot UI의 유틸리티, 요청·응답 세부는 C9와 함께)
+### 5. 셀렉터 등록 (Bot UI의 유틸리티)
 
-`caller.type = "selector_registration"`으로 연 세션에서만 쓸 수 있다. **레지스트리 등록·삭제는 Worker가 하지 않는다.** UI 자동화 확장의 Bot UI 유틸리티가 UI 자동화 앱을 직접 부른다 (C9). 등록 화면에 필요하므로 **CSS 후보 같은 물리 정보가 응답에 포함된다** (예외).
+`caller.type = "selector_registration"`으로 연 세션에서만 쓸 수 있다 — 아니면 403 `session_locked`. **레지스트리 등록·삭제는 Worker가 하지 않는다.** UI 자동화 확장의 Bot UI 유틸리티가 UI 자동화 앱을 직접 부른다 (C9). 등록 화면에 필요하므로 **CSS 후보 같은 물리 정보가 응답에 포함된다** (예외).
 
 | 경로 | 뜻 (BUI-06) |
 | --- | --- |
-| `POST /v1/registration/browser` | 브라우저 열기 `{start_url}` |
-| `POST /v1/registration/analyze` | 화면 분석 `{scope_css?, max, include_read}` → 요소 후보 목록 |
-| `POST /v1/registration/pick` / `DELETE …/pick` | 직접 고르기 시작·끝. 고른 요소는 `GET …/pick/events`로 받는다 |
-| `POST /v1/registration/verify` | 요소들의 사다리 검증 → 칸별 통과·실패 |
+| `POST /v1/registration/browser` | 브라우저 열기 `{start_url, headed}` → `SessionInfo` (§2와 같은 모양) |
+| `POST /v1/registration/{session_id}/analyze` | 화면 분석 `{scope_css?, max, include_read}` → 요소 후보 목록 |
+| `POST /v1/registration/{session_id}/pick` / `DELETE …/pick` | 직접 고르기 시작·끝. 고른 요소는 `GET …/pick/events`로 받는다 |
+| `POST /v1/registration/{session_id}/verify` | `{ladders: {시맨틱 키: [로케이터…]}}` → 칸별 통과·실패 |
+
+**`business_key`는 Worker가 짓는다** (`reg_<hex8>`) — 등록 화면이 실행 키를 흉내 낼 일이 없다. 등록 세션은 `page_id`가 없어 계획(C8)을 받아 오지 않는다.
+
+`analyze` 응답:
+
+| 칸 | 타입 | 뜻 |
+| --- | --- | --- |
+| `candidates` | array | 후보 하나마다 `{tag, role, name, element_id, field_name, test_id, css[], kind, actions[], suggested_key}`. `name`은 접근성 이름, `field_name`은 HTML `name` 속성 |
+| `total` | int | 범위 안에서 찾은 전체 수 (자르기 전) |
+| `truncated` | bool | `max`에 걸려 잘렸다. **잘렸으면 잘렸다고 말한다** — 조용히 자르면 없는 것을 없다고 단정한다 |
+| `scope_empty` | bool | `scope_css`가 아무것도 못 찾았다. **전체로 몰래 넓히지 않는다** — 범위를 잘못 적은 것을 알아야 한다 |
+
+`suggested_key`는 `test_id` → `id` → `name` → **영문** 접근성 이름 → 역할 순으로 짓는다. **한글 이름은 음역하지 않는다** — `고객명`을 `gogaegmyeong`으로 바꾸면 사람도 기계도 못 읽는다. 어차피 사람이 고치는 자리다 (BUI-06 4번).
+
+`verify` 응답은 사다리 한 칸에 한 줄(`{semantic_key, rank, strategy, selector, passed, matched, reason}`)이다. **하나에 맞아야 통과**다 — 여럿이 잡히면 실행에서 엉뚱한 것을 누른다. 검증 결과는 **등록을 막지 않는다**: 사람이 보고 정한다.
+
+> 상태: `pick`(직접 고르기)은 BUI-06~08 화면 조각에서 붙인다. `analyze`는 **브라우저 백엔드에서만** 된다 — 데스크톱(UIA) 백엔드가 없으면 503 `browser_unavailable`이다.
 
 ## 오류
 
@@ -172,4 +189,5 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 | 2026-10-01 | 1 | 검토 반영: 토큰은 파일로만 넘기고 사용·관리 토큰으로 나눔, `session_secret`, 실행 예약과 유휴 시간 제한·강제 닫기, `caller.attempt`와 4단 `business_key`, 셀렉터 등록 caller, 재시작 시 조작 스텝이 있었으면 자동으로 다시 하지 않음 | — |
 | 2026-10-01 | 1 | 확장 검토 반영: `registration/submit` 없앰 (레지스트리는 확장 유틸리티가 직접), 등록 세션은 `service_key` 불필요 | 0018 |
 | 2026-10-03 | 1 | 잠금 화면 오류 `session_locked`(503, 재시도 가능) 추가. 잠긴 동안 조작·캡처를 하지 않고, 부르는 쪽은 스텝 시간 제한 안에서 기다린다 | 0023 |
+| 2026-10-05 | 1 | §5 셀렉터 등록의 요청·응답을 확정했다 — `analyze`·`verify`는 세션 경로 아래(`/v1/registration/{session_id}/…`)로 두어 나머지 세션 경로와 모양을 맞췄고, `business_key`는 Worker가 짓는다. 등록 세션이 아니면 403 | 0018 |
 | 2026-10-03 | 1 | 기동 절차의 2단계를 고쳤다 — `chk-worker` 명령이 아니라 Bot UI가 자기 실행 파일을 `--local-runtime`으로 다시 띄운다 (묶인 앱에는 콘솔 스크립트가 없다). 주고받는 API는 그대로라 schema는 1 | 0024 |
