@@ -497,14 +497,19 @@ def test_the_worker_really_comes_up_on_loopback(tmp_path: Path) -> None:
         # 토큰 파일이 먼저 쓰였다 (C10 기동 절차 1).
         assert read_token(tmp_path, TOKEN_FILE) and read_token(tmp_path, ADMIN_TOKEN_FILE)
 
-        # 백엔드가 없으니 세션은 **열리지 않는다** — 「없는데 된 척」하지 않는다.
+        # 세션은 **열리거나, 왜 못 여는지 말하거나**다 — 500으로 흘리지 않는다.
+        # (브라우저가 깔린 PC에서는 열리고, 없는 PC에서는 503 `browser_unavailable`이다.)
         answer = httpx.post(
             f"http://127.0.0.1:{port}/v1/sessions",
             json=session_body(),
             headers={TOKEN_HEADER: read_token(tmp_path, TOKEN_FILE)},
-            timeout=5.0,
+            timeout=20.0,
         )
-        assert answer.status_code == 503 and answer.json()["code"] == "browser_unavailable"
+        if answer.status_code >= 400:
+            assert answer.status_code == 503, answer.text
+            assert answer.json()["code"] == "browser_unavailable"
+        else:
+            assert answer.json()["session_id"], answer.text
     finally:
         child.terminate()
         child.wait(timeout=10)

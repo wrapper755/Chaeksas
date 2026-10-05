@@ -160,6 +160,9 @@ class Plan:
     case: Case | None
     mode: str = "autonomous"  # autonomous | deterministic
     settings: Settings = field(default_factory=Settings)
+    #: 확장 태스크를 수행할 쪽 (C13·ADR-0018). 없으면 UI 태스크를 만났을 때 분명히 실패한다 —
+    #: Studio 시험 실행이 Bot UI의 Worker를 쓰는 길(STU-08)은 아직 없다.
+    extensions: Any = None
 
 
 class CaseRun(QObject):
@@ -216,6 +219,7 @@ class CaseRun(QObject):
             # 내장 도구 넷 (ADR-0030). 파일 도구는 **이 실행의 폴더만** 본다.
             tools=builtin_tools(space),
             memory=self.plan.process.memory(),
+            **({"extensions": self.plan.extensions} if self.plan.extensions is not None else {}),
         )
 
     # ── 돌리기 ──

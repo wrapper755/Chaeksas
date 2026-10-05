@@ -63,8 +63,9 @@ def backend() -> object | None:
 
     if not available():
         return None
-    # 등록·시험에서 사람이 화면을 봐야 한다 (BUI-06). 세션마다 `headed`로 다시 고른다.
-    return BrowserBackend(headless=False)
+    # **기본은 안 보이게** 돈다 (서버·CI에는 화면이 없다). 사람이 봐야 하는 세션은
+    # `SessionRequest.headed`로 켠다 (등록·시험이 그렇게 연다, C10).
+    return BrowserBackend(headless=True)
 
 
 def serve(*, port: int, token_dir: Path | None = None) -> int:

@@ -258,10 +258,19 @@ class Worker:
             opened_at=self.clock(),
             touched_at=self.clock(),
         )
-        made.current_url = self.backend.open(request)
+        try:
+            made.current_url = self.backend.open(request)
+        except Exception as e:  # noqa: BLE001 — 브라우저가 안 뜰 수 있다 (바이너리 없음·화면 없음)
+            # **「없는데 된 척」하지 않는다.** 500으로 흘리면 부르는 쪽이 버그로 읽는다.
+            raise WorkerProblem(
+                503, BROWSER_UNAVAILABLE, f"화면을 열지 못했습니다 ({type(e).__name__})"
+            ) from e
         made.plans = self._plans_for(request)
         if made.plans is not None and request.page_id:
             made.plan, made.plan_source = self._fetch_plan(request, made.plans)
+            # 주소를 비워 보냈으면 **화면의 기본 주소**로 간다 (C10 `start_url`).
+            if not request.start_url and made.plan is not None and made.plan.start_url:
+                made.current_url = self.backend.goto(made.session_id, made.plan.start_url)
         self.session = made
         return made.info(), True
 
