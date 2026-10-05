@@ -28,6 +28,7 @@ import platformdirs
 from chaeksas.contracts import RESERVED_CONFIG_PREFIX, SCOPE_STUDIO, SERVICE_URL_SETTING
 from chaeksas.core.extensions import ExtensionHost, HostTasks
 from chaeksas.extension_api import HOST_STUDIO, ExtensionContext, Settings
+from chaeksas.studio.credentials import StudioCredentials
 
 log = logging.getLogger(__name__)
 
@@ -54,10 +55,6 @@ class NoSecrets:
         return None
 
 
-#: Studio의 키 참조 환경변수 앞부분 — `CHK_STUDIO__SVC__FINANCE_TAX` (개발·CI).
-ENV_SERVICE_KEY_PREFIX = "CHK_STUDIO__SVC__"
-#: Studio의 OS 비밀 저장소 이름 (Bot UI와 따로 — 개발용 키다, ADR-0013).
-KEYRING_SERVICE = "chaeksas-studio"
 #: Bot UI가 런타임 폴더에 남기는 자리 정보 (`{"runtime", "port"}`).
 RUNTIME_FILE = "runtime.json"
 
@@ -73,31 +70,18 @@ def bot_ui_data_dir() -> Path:
     return Path(platformdirs.user_data_dir("chaeksas", appauthor=False)) / "bot-ui"
 
 
-def _env_name(text: str) -> str:
-    return "".join(one if one.isalnum() else "_" for one in text).upper()
-
-
 @dataclass(frozen=True)
 class StudioSecrets:
     """`extension_api.Secrets` — Studio 시험 실행의 키 참조를 푼다 (ADR-0013).
 
-    **환경변수가 먼저**(개발·CI), 그다음 OS 비밀 저장소. 없으면 `None` — 확장이 사람에게 알린다.
+    **환경변수가 먼저**(개발·CI), 그다음 OS 비밀 저장소 — STU-10 「서비스 앱 키」가 넣은 곳이다.
+    없으면 `None` — 확장이 사람에게 알린다.
     """
 
-    service: str = KEYRING_SERVICE
+    credentials: StudioCredentials = field(default_factory=StudioCredentials)
 
     def resolve(self, ref: str) -> str | None:
-        found = os.environ.get(ENV_SERVICE_KEY_PREFIX + _env_name(ref))
-        if found:
-            return found
-        try:
-            import keyring  # noqa: PLC0415 — 없을 수도 있다 (헤드리스 CI)
-
-            stored = keyring.get_password(self.service, f"svc:{ref}")
-        except Exception as e:  # noqa: BLE001 — 백엔드가 어떤 예외를 낼지 모른다
-            log.debug("키 참조 %s를 비밀 저장소에서 읽지 못했다: %s", ref, type(e).__name__)
-            return None
-        return str(stored) if stored else None
+        return self.credentials.service_key(ref)
 
 
 @dataclass
@@ -159,6 +143,15 @@ class Extensions:
             if runtime.token_dir:
                 out[f"{head}.token_dir"] = str(folder)
         return out
+
+    def service_url(self, app_id: str) -> str | None:
+        """그 서비스 앱의 주소 — 그 앱을 서버 부분으로 가진 확장의 `service.base_url` (C13).
+
+        > 상태: Center 리소스 목록(C7)의 주소는 M5다. 확장이 아닌 서비스 앱은 아직 주소를 모른다.
+        """
+        found = self.host.get(app_id)
+        service = found.manifest.service if found is not None else None
+        return service.base_url if service is not None else None
 
     def tasks(self) -> HostTasks:
         """시험 실행의 `RunEnv.extensions` — 확장 태스크와 `web`·`desktop` AI 태스크 (ADR-0018·0037)."""

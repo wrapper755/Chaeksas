@@ -51,6 +51,14 @@ def data_dir() -> Path:
 
 
 @dataclass(frozen=True)
+class ServiceKeyRef:
+    """STU-10 「서비스 앱 키」의 한 줄 — **이름만**이다. 값은 OS 비밀 저장소에 있다 (ADR-0013)."""
+
+    ref: str
+    app_id: str = ""
+
+
+@dataclass(frozen=True)
 class Settings:
     """STU-10. 환경변수가 **파일보다 세다** (개발·CI에서 덮어쓰기 쉬우라고)."""
 
@@ -66,6 +74,8 @@ class Settings:
     writable_dirs: tuple[Path, ...] = ()
     #: 마지막으로 연 정의 (STU-01 — 시작하면 다시 연다).
     last_opened: str = ""
+    #: STU-10 「서비스 앱 키」의 줄들 (참조 이름·서비스 앱). **값은 여기 없다.**
+    service_keys: tuple[ServiceKeyRef, ...] = ()
 
     @property
     def workspace_dir(self) -> Path:
@@ -108,6 +118,12 @@ class Settings:
         for name in ("readable_dirs", "writable_dirs"):
             if name in raw:
                 values[name] = tuple(Path(p) for p in raw[name])
+        if isinstance(raw.get("service_keys"), list):
+            values["service_keys"] = tuple(
+                ServiceKeyRef(ref=str(one.get("ref") or ""), app_id=str(one.get("app_id") or ""))
+                for one in raw["service_keys"]
+                if isinstance(one, dict) and one.get("ref")
+            )
         return replace(self, **values)
 
     def from_env(self) -> Settings:
@@ -133,8 +149,9 @@ class Settings:
     def save(self, path: Path | None = None) -> Path:
         file = path or self.path
         file.parent.mkdir(parents=True, exist_ok=True)
-        skip = ("data_dir", "readable_dirs", "writable_dirs")
+        skip = ("data_dir", "readable_dirs", "writable_dirs", "service_keys")
         body = {k: v for k, v in asdict(self).items() if k not in skip}
+        body["service_keys"] = [{"ref": one.ref, "app_id": one.app_id} for one in self.service_keys]
         body["readable_dirs"] = [p.as_posix() for p in self.readable_dirs]
         body["writable_dirs"] = [p.as_posix() for p in self.writable_dirs]
         file.write_text(

@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
+from chaeksas.studio.checks import refs_in
 from chaeksas.studio.dialogs import NewProcessDialog, pick_example
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extensions import Extensions
@@ -42,6 +43,7 @@ from chaeksas.studio.run_dialog import RunDialog
 from chaeksas.studio.runner import CaseRun, Outcome, Plan
 from chaeksas.studio.runner import summarize as summarize_runs
 from chaeksas.studio.settings import Settings
+from chaeksas.studio.settings_dialog import StudioSettingsDialog
 from chaeksas.studio.workspace import BpmProcess, Definition, Workspace, WorkspaceError
 
 log = logging.getLogger(__name__)
@@ -165,11 +167,22 @@ class MainWindow(QMainWindow):
         self.stop_action.setEnabled(False)
         self._add(run, "실행 전 검사", self.run_preflight, QKeySequence("F6"))
 
+        settings = bar.addMenu("설정")
+        self._add(settings, "설정...", self.open_settings, QKeySequence("Ctrl+,"))
+
         view = bar.addMenu("보기")
         self._add(view, "BPM 프로세스 탐색기", self.explorer.setFocus, QKeySequence("Ctrl+E"))
 
         tools = bar.addMenu("도구")
         self._add(tools, "로그 지우기", self.log_view.clear, QKeySequence("Ctrl+L"))
+
+    def open_settings(self) -> None:
+        """STU-10. 저장하면 이 창의 설정도 바뀐다 (다음 시험 실행부터 쓴다)."""
+        refs = refs_in(self.process.definitions) if self.process is not None else []
+        dialog = StudioSettingsDialog(self.settings, self.extensions, refs=refs, parent=self)
+        if dialog.exec() and dialog.saved is not None:
+            self.settings = dialog.saved
+            self.say("설정을 저장했습니다.")
 
     def _add(
         self,
