@@ -22,6 +22,7 @@ COPY pyproject.toml uv.lock .python-version ./
 COPY packages/contracts/pyproject.toml packages/contracts/
 COPY packages/extension_api/pyproject.toml packages/extension_api/
 COPY packages/core/pyproject.toml packages/core/
+COPY packages/llm/pyproject.toml packages/llm/
 COPY packages/qt/pyproject.toml packages/qt/
 COPY packages/service_kit/pyproject.toml packages/service_kit/
 COPY apps/center/pyproject.toml apps/center/

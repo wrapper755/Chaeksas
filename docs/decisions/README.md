@@ -42,4 +42,4 @@
 | [0031](0031-runner-control-file.md) | Bot UI와 실행기는 파일 한 벌로 주고받는다 — 올라오는 것은 실행 기록, 내려가는 것은 제어 파일 (ADR-0023의 stdin을 바꿈) | 수락 |
 | [0032](0032-writable-dirs.md) | 쓰기 허용 폴더를 둔다 (출력 폴더 밖에 쓰는 유일한 길) | 수락 |
 | [0033](0033-desktop-app-and-window.md) | 데스크톱 화면은 앱 이름과 창 조건으로 찾고, Worker는 계획을 먼저 받아 백엔드를 고른다 | 제안 |
-| [0034](0034-service-app-model-connection.md) | 서비스 앱의 모델 연결 — 모델 클라이언트를 맨 아래 패키지(`chaeksas.llm`)로 내리고, 주소·키는 서비스 앱 설정이 갖는다 | 제안 |
+| [0034](0034-service-app-model-connection.md) | 서비스 앱의 모델 연결 — 모델 클라이언트를 맨 아래 패키지(`chaeksas.llm`)로 내리고, 주소·키는 서비스 앱 설정이 갖는다 | 수락 |

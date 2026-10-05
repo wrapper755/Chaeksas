@@ -15,6 +15,7 @@ MEMBERS = {
     "packages/contracts": "chaeksas.contracts",
     "packages/extension_api": "chaeksas.extension_api",
     "packages/core": "chaeksas.core",
+    "packages/llm": "chaeksas.llm",
     "packages/qt": "chaeksas.qt",
     "packages/service_kit": "chaeksas.service_kit",
     "apps/studio": "chaeksas.studio",

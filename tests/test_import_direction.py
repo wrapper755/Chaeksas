@@ -63,6 +63,12 @@ FORBIDDEN_DEPS = [
 ]
 
 
+def test_llm_is_the_bottom() -> None:
+    """ADR-0034 — 모델 클라이언트는 맨 아래다. 어느 멤버도 의존하지 않는다 (`contracts`도)."""
+    graph = members()
+    assert graph["chaeksas-llm"]["deps"] == [], graph["chaeksas-llm"]["deps"]
+
+
 @pytest.mark.parametrize(("member", "forbidden", "why"), FORBIDDEN_DEPS)
 def test_forbidden_dependency(member: str, forbidden: str, why: str) -> None:
     graph = members()
@@ -95,6 +101,7 @@ FORBIDDEN_IMPORTS = [
     ("apps/admin", "chaeksas.core", "§5"),
     ("extensions/*", "chaeksas.core", "§5 — 확장의 service·worker는 core를 모른다"),
     ("packages/core", "PySide6", "§5 — core는 Qt를 import하지 않는다"),
+    ("packages/llm", "chaeksas.", "ADR-0034 — llm은 맨 아래다 (chaeksas의 아무것도 모른다)"),
     ("apps/server_runner", "PySide6", "§2 — 화면 없음"),
     ("apps/center", "PySide6", "§2 — 서버"),
     ("packages/*", "spikes", "CLAUDE.md §3 — 제품 코드는 spikes를 import하지 않는다"),

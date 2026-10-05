@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 제안 |
+| 상태 | 수락 |
 | 날짜 | 2026-10-05 |
 | 관련 | [ADR-0027](0027-llm-connection.md)(모델 연결), [ADR-0018](0018-extensions.md)(확장), [ADR-0033](0033-desktop-app-and-window.md)(데스크톱 화면), 계약 C8·C11, CLAUDE.md §5, 인수 시험 FX-05 |
 
@@ -37,7 +37,7 @@ UI 자동화 앱(서비스 앱)에는 모델이 하는 일이 둘 있다. 지금
 
 ## 결정
 
-**A + E.** (제안 — 구현할 때 확정한다)
+**A + E.**
 
 1. **`packages/llm`(`chaeksas.llm`)** 을 맨 아래에 둔다. `core.llm`의 `LlmError`·`ToolSpec`·`ToolCall`·응답 모양·`OpenAiCompatibleLlm`·`NoLlm`을 옮긴다. 의존은 `httpx`뿐이고 **`contracts`도 모른다** (모델 대화는 계약이 아니다). `core.llm`은 그것을 다시 내보내고 **도구 루프·결과 검증·궤적(ADR-0027 §3~5)은 `core`에 남긴다** — 그것은 BPMN 실행의 일이다.
 2. **`service_kit`이 모델 설정을 준다.** `CHK_SVC_<앱>__LLM__BASE_URL`·`__MODEL`·`__API_KEY`(비밀은 환경변수만, §5). 설정이 없으면 어댑터는 `NoLlm`이고 모델이 필요한 작업은 **503 `llm_unavailable`** 로 분명히 막는다 (422 `mode_unsupported`는 결정 수행에서 `goal`을 보낸 경우로만 남긴다). 관리 콘솔 상태(`/admin/v1/status`)에 모델 연결 여부를 보인다 (키 값은 보이지 않는다).
