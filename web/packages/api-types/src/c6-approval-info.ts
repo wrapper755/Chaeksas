@@ -33,6 +33,7 @@ export interface ApprovalInfo {
    */
   schema: number;
   state: string;
+  title?: string | null;
   version: string;
   withdraw_reason?: string | null;
   [k: string]: unknown;

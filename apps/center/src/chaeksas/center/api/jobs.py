@@ -373,7 +373,7 @@ def _reconcile(store: Store, *, bot_ui_id: str, seen: set[str]) -> None:
     하트비트에서 대기열·실행 자리에 보이지 않고 ack도 없으면 `rejected` + `bot_ui_lost`다.
     """
     for row in store.rows(
-        "SELECT job_id, misses FROM jobs WHERE target_id = ? AND settled = 0 AND state IN (?, ?)",
+        "SELECT job_id, misses, run_id FROM jobs WHERE target_id = ? AND settled = 0 AND state IN (?, ?)",
         (bot_ui_id, QUEUED, ACCEPTED),
     ):
         if row["job_id"] in seen:
@@ -391,6 +391,11 @@ def _reconcile(store: Store, *, bot_ui_id: str, seen: set[str]) -> None:
                 )
             else:
                 cur.execute("UPDATE jobs SET misses = ? WHERE job_id = ?", (misses, row["job_id"]))
+        if misses >= LOST_AFTER and row["run_id"]:
+            # 대기열을 잃었으면 그 실행의 결재도 전달될 곳이 없다 (C6 `host_lost`).
+            from chaeksas.center.api import approvals  # noqa: PLC0415 — 순환 import를 피한다
+
+            approvals.withdraw_for_run(store, str(row["run_id"]), event="bot_ui_lost")
 
 
 def _to_dispatch(store: Store, *, bot_ui_id: str, disabled: bool) -> list[JobDispatch]:

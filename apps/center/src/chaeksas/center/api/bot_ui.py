@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from chaeksas.center import keys
-from chaeksas.center.api import deployments, jobs, signing
+from chaeksas.center.api import approvals, deployments, jobs, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import MAX_REQUEST_KB, ONLINE_WITHIN_S
@@ -182,7 +182,10 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
         admin_keys=signing.admin_keys(store),
         jobs=dispatch,
         cancel_jobs=cancels,
-        approvals=[],
+        # 답이 정해진 결재 (C6). ack가 올 때까지 내려간다 — 거절하면 다시 `open`이 된다.
+        approvals=approvals.heartbeat(
+            store, bot_ui_id=str(found["bot_ui_id"]), acks=request.approval_acks
+        ),
         disabled=disabled,
     )
 

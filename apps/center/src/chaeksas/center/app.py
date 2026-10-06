@@ -16,7 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
 from chaeksas.center import keys
-from chaeksas.center.api import bot_ui, deployments, jobs, packages, runs, signing
+from chaeksas.center.api import approvals, bot_ui, deployments, jobs, packages, runs, signing
 from chaeksas.center.auth import Caller, caller, require_admin, require_read
 from chaeksas.center.errors import ApiError, handle
 from chaeksas.center.responses import Utf8JSONResponse
@@ -205,6 +205,43 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def list_deployments(request: Request, bot_ui: str | None = None, active: bool = False) -> Any:
         require_read(authenticate(request))
         return deployments.listing(app.state.store, target_id=bot_ui, active_only=active)
+
+    # ─────────────────── 결재 (C6·CON-04) ───────────────────
+
+    @app.post(f"{API}/approvals")
+    async def create_approval(request: Request) -> Any:
+        """실행하는 쪽이 결재를 올린다. **확인(`confirmation`)은 올라오지 않는다** (C6)."""
+        info, created = approvals.create(app.state.store, authenticate(request), await _json(request))
+        return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
+
+    @app.get(f"{API}/approvals")
+    def list_approvals(
+        request: Request,
+        state: str | None = None,
+        bpm_process_id: str | None = None,
+        host: str | None = None,
+    ) -> Any:
+        require_read(authenticate(request))
+        return approvals.listing(
+            app.state.store, state=state, bpm_process_id=bpm_process_id, host=host
+        )
+
+    @app.get(f"{API}/approvals/{{request_id}}")
+    def get_approval(request: Request, request_id: str) -> Any:
+        require_read(authenticate(request))
+        return approvals.get(app.state.store, request_id)
+
+    @app.post(f"{API}/approvals/{{request_id}}/answer")
+    async def answer_approval(request: Request, request_id: str) -> Any:
+        """답하기. **Center가 폼으로 검증한다** — 틀리면 422 `answer_invalid` (C6)."""
+        return approvals.answer(
+            app.state.store, authenticate(request), request_id, await _json(request)
+        )
+
+    @app.delete(f"{API}/approvals/{{request_id}}")
+    async def withdraw_approval(request: Request, request_id: str, reason: str = "") -> Any:
+        """회수. 올린 쪽은 현장·실행 사유로, 관리자는 `admin_withdraw`로 (C6)."""
+        return approvals.withdraw(app.state.store, authenticate(request), request_id, reason)
 
     # ─────────────────── 작업 (C5·CON-05) ───────────────────
 

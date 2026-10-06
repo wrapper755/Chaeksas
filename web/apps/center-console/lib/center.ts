@@ -3,6 +3,7 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
+import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
@@ -69,6 +70,26 @@ export const center = {
   botUis: () => call<BotUiInfo[]>("/api/v1/bot-uis"),
   disableBotUi: (id: string) => call<unknown>(`/api/v1/bot-uis/${id}/disable`, { method: "POST" }),
   enableBotUi: (id: string) => call<unknown>(`/api/v1/bot-uis/${id}/enable`, { method: "POST" }),
+
+  /** 결재함 (C6·CON-04). */
+  approvals: (query: { state?: string; bpm_process_id?: string; host?: string } = {}) => {
+    const search = new URLSearchParams(
+      Object.entries(query).filter(([, value]) => Boolean(value)) as [string, string][],
+    );
+    const suffix = search.size > 0 ? `?${search}` : "";
+    return call<ApprovalInfo[]>(`/api/v1/approvals${suffix}`);
+  },
+  approval: (requestId: string) =>
+    call<ApprovalInfo>(`/api/v1/approvals/${encodeURIComponent(requestId)}`),
+  /** 답하기. 행위자는 BFF가 `X-CHK-Actor`로 싣는다 (C6) — 본문에 없다. */
+  answerApproval: (requestId: string, answer: Record<string, unknown>, actor: string) =>
+    call<ApprovalInfo>(`/api/v1/approvals/${encodeURIComponent(requestId)}/answer`, {
+      method: "POST",
+      body: JSON.stringify({ answer }),
+      headers: { "X-CHK-Actor": encodeURIComponent(actor) },
+    }),
+  withdrawApproval: (requestId: string) =>
+    call<ApprovalInfo>(`/api/v1/approvals/${encodeURIComponent(requestId)}`, { method: "DELETE" }),
 
   /** 배포 목록 (C5). `botUi`를 주면 그 PC에 걸린 것만 — `*` 배포도 함께 온다. */
   deployments: (query: { botUi?: string; active?: boolean } = {}) => {
