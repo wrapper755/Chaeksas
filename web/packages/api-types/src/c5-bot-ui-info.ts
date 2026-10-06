@@ -11,6 +11,7 @@
 export interface BotUiInfo {
   bot_ui_id: string;
   current_run?: CurrentRun | null;
+  deployment_results?: DeploymentResult[];
   disabled?: boolean;
   extensions?: ExtensionState[];
   key?: BotUiKey | null;
@@ -39,6 +40,18 @@ export interface CurrentRun {
   source: string;
   started_at: string;
   state: string;
+  version: string;
+  [k: string]: unknown;
+}
+/**
+ * 배포 적용 결정 (CON-03 「최근 배치 결정」). 실행이 아니므로 C3로 보내지 않는다.
+ */
+export interface DeploymentResult {
+  at: string;
+  bpm_process_id: string;
+  deployment_id: string;
+  reason?: string | null;
+  result: string;
   version: string;
   [k: string]: unknown;
 }

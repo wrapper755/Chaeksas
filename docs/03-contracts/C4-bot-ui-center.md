@@ -114,6 +114,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 ### 작업이 사라지지 않게 (맞추기 규칙)
 
 - **Bot UI:** 받은 `job_id`와 아직 Center가 확인하지 않은 ack를 디스크에 저장한다. 이미 받은(대기열에 있거나, 실행했거나, 실행 중인) `job_id`가 다시 오면 무시하고 마지막 ack를 다시 보낸다. 대기열 자체도 디스크에 저장해, Bot UI를 다시 켜면 이어 간다.
+- **Center:** 받은 `deployment_results`를 **쌓아 둔다** (CON-03 「최근 배치 결정」, C5 `BotUiInfo.deployment_results`). 하트비트 한 주기만 올라오는 값이라 흘려보내면 「왜 설치가 안 됐나」가 영영 남지 않는다. 같은 `(deployment_id, at)`은 **한 번만** 반영한다 (Bot UI가 다시 보내도 쌓이지 않게).
 - **Center:** 하트비트마다 자기 기록의 `queued`·`accepted`(실행 중) 작업을 `queue.items`·`current_run`과 비교한다. 두 번 연속 하트비트에서 보이지 않고 ack도 없으면 `rejected` + `bot_ui_lost`로 바꾼다 (Bot UI가 비정상 종료로 대기열을 잃은 경우). 실행 결과는 C3 `run_finished`로 따로 확정된다.
 
 ## 예시
@@ -189,3 +190,4 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 | 2026-10-01 | 1 | 확장 반영: `runtimes.extensions` | 0018 |
 | 2026-10-01 | 1 | 확장 검토 반영: 하트비트 `extensions` | 0018 |
 | 2026-10-01 | 1 | 화면 검토 반영: Worker `off`·`reserved_for`, 현장 취소 `cancelled_on_pc` | — |
+| 2026-10-06 | 1 | Center가 `deployment_results`를 쌓아 둔다고 적었다 (멱등은 `(deployment_id, at)`) — CON-03을 붙이다 Center가 그것을 버리고 있는 것이 드러났다 | — |

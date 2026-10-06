@@ -12,11 +12,14 @@ Center는 배포를 **짓지 않는다.** Admin이 서명한 것을 받아 두�
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from typing import Any
 
 from chaeksas.center.api.signing import STATUS_APPROVED, admin_keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
+from chaeksas.contracts.bot_ui import DeploymentResult
+from chaeksas.contracts.center_api import RECENT_RESULTS, DeploymentInfo
 from chaeksas.contracts.signing import Envelope, verify, verify_time
 
 #: `run_location` → 배포 대상 종류 (C2 §배포 대상 규칙).
@@ -42,7 +45,7 @@ def _refuse(problems: list[Any]) -> None:
     )
 
 
-def create(store: Store, raw: Any) -> dict[str, Any]:
+def create(store: Store, raw: Any) -> DeploymentInfo:
     """`deployment` 봉투를 받아 둔다 (C5 `POST /deployments`)."""
     envelope = _envelope(raw)
     keys = admin_keys(store)
@@ -61,7 +64,7 @@ def create(store: Store, raw: Any) -> dict[str, Any]:
             raise ApiError(409, "deployment_revoked", f"{deployment_id}은 철회됐다")
         if found["envelope_json"] != body:
             raise ApiError(409, "deployment_conflict", f"{deployment_id}에 다른 내용이 왔다")
-        return _row(found)  # 멱등
+        return _row(store, found)  # 멱등
 
     package = store.row(
         "SELECT status, content_hash, run_location FROM packages WHERE id = ? AND version = ?",
@@ -104,10 +107,10 @@ def create(store: Store, raw: Any) -> dict[str, Any]:
                 now_iso(),
             ),
         )
-    return _row(store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)))
+    return _row(store, store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)))
 
 
-def revoke(store: Store, raw: Any) -> dict[str, Any]:
+def revoke(store: Store, raw: Any) -> DeploymentInfo:
     """`revoke` 봉투 (C5 `DELETE /deployments`). **되살릴 수 없다.**"""
     envelope = _envelope(raw)
     _refuse(verify(envelope, keys=admin_keys(store), expect_kind="revoke"))
@@ -116,22 +119,26 @@ def revoke(store: Store, raw: Any) -> dict[str, Any]:
     if found is None:
         raise ApiError(404, "not_found", f"그 배포가 없다: {deployment_id}")
     if found["revoked_json"]:
-        return _row(found)  # 멱등
+        return _row(store, found)  # 멱등
     with store.tx() as cur:
         cur.execute(
             "UPDATE deployments SET revoked_json = ? WHERE deployment_id = ?",
             (json.dumps(envelope.to_json_dict(), ensure_ascii=False), deployment_id),
         )
-    return _row(store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)))
+    return _row(store, store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)))
 
 
-def listing(store: Store, *, target_id: str | None = None, active_only: bool = False) -> list[dict[str, Any]]:
+def listing(
+    store: Store, *, target_id: str | None = None, active_only: bool = False
+) -> list[DeploymentInfo]:
+    """`GET /deployments` (C5). 철회된 것도 **행이 남으므로** 목록에 보인다."""
     rows = store.rows("SELECT * FROM deployments ORDER BY at DESC")
-    out = [_row(one) for one in rows]
+    out = [_row(store, one) for one in rows]
     if target_id:
-        out = [one for one in out if one["target"]["id"] in (target_id, "*")]
+        # `*` 배포는 모든 대상에 걸린다 — 그 Bot UI를 물어도 보여야 한다.
+        out = [one for one in out if one.target.get("id") in (target_id, "*")]
     if active_only:
-        out = [one for one in out if not one["revoked"]]
+        out = [one for one in out if one.revoked_at is None]
     return out
 
 
@@ -167,16 +174,94 @@ def versions_for(store: Store, *, target_type: str, target_id: str, bpm_process_
     return [str(one["version"]) for one in rows]
 
 
-def _row(row: Any) -> dict[str, Any]:
-    return {
-        "deployment_id": row["deployment_id"],
-        "target": {"type": row["target_type"], "id": row["target_id"]},
-        "bpm_process_id": row["bpm_process_id"],
-        "version": row["version"],
-        "content_hash": row["content_hash"],
-        "revoked": bool(row["revoked_json"]),
-        "at": row["at"],
-    }
+def results_of(store: Store, *, bot_ui_id: str, limit: int = RECENT_RESULTS) -> list[DeploymentResult]:
+    """그 Bot UI가 보고한 **최근 배치 결정** (C5 `BotUiInfo.deployment_results`, CON-03)."""
+    rows = store.rows(
+        "SELECT * FROM deployment_results WHERE bot_ui_id = ? ORDER BY at DESC LIMIT ?",
+        (bot_ui_id, limit),
+    )
+    return [
+        DeploymentResult(
+            deployment_id=row["deployment_id"],
+            bpm_process_id=row["bpm_process_id"],
+            version=row["version"],
+            result=row["result"],
+            reason=row["reason"],
+            at=row["at"],
+        )
+        for row in rows
+    ]
 
 
-__all__ = ["TARGET_FOR", "create", "envelopes_for", "listing", "revoke", "versions_for"]
+def remember_results(store: Store, *, bot_ui_id: str, results: Sequence[DeploymentResult]) -> None:
+    """하트비트가 실어 온 배치 결정을 쌓는다 (C4).
+
+    **같은 `(deployment_id, at)`은 한 번만** — Bot UI가 보내 놓고 응답을 못 받아 다시 보내도
+    목록이 부풀지 않는다.
+    """
+    for one in results:
+        found = store.row(
+            "SELECT 1 FROM deployment_results WHERE bot_ui_id = ? AND deployment_id = ? AND at = ?",
+            (bot_ui_id, one.deployment_id, one.at),
+        )
+        if found is not None:
+            continue
+        with store.tx() as cur:
+            cur.execute(
+                "INSERT INTO deployment_results (bot_ui_id, deployment_id, bpm_process_id, version,"
+                " result, reason, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    bot_ui_id,
+                    one.deployment_id,
+                    one.bpm_process_id,
+                    one.version,
+                    one.result,
+                    one.reason,
+                    one.at,
+                ),
+            )
+
+
+def _last_result(store: Store, deployment_id: str) -> str | None:
+    found = store.row(
+        "SELECT result FROM deployment_results WHERE deployment_id = ? ORDER BY at DESC LIMIT 1",
+        (deployment_id,),
+    )
+    return str(found["result"]) if found is not None else None
+
+
+def _row(store: Store, row: Any) -> DeploymentInfo:
+    """저장된 봉투에서 C5 `DeploymentInfo`를 짓는다.
+
+    서명자·유효 기간은 **봉투에서 읽는다** — Center가 따로 짓지 않는다 (C5). 철회 시각은
+    철회 봉투에서 온다 (행은 지우지 않는다).
+    """
+    envelope = json.loads(row["envelope_json"])
+    claim = envelope.get("payload") or {}
+    revoked = json.loads(row["revoked_json"]) if row["revoked_json"] else None
+    return DeploymentInfo(
+        deployment_id=row["deployment_id"],
+        target={"type": row["target_type"], "id": row["target_id"]},
+        bpm_process_id=row["bpm_process_id"],
+        version=row["version"],
+        content_hash=row["content_hash"],
+        signed_by=str(envelope.get("key_id") or ""),
+        signed_at=str(envelope.get("signed_at") or row["at"]),
+        max_concurrency=claim.get("max_concurrency"),
+        not_before=claim.get("not_before"),
+        expires_at=claim.get("expires_at"),
+        revoked_at=(revoked.get("payload") or {}).get("revoked_at") if revoked else None,
+        last_result=_last_result(store, str(row["deployment_id"])),
+    )
+
+
+__all__ = [
+    "TARGET_FOR",
+    "create",
+    "envelopes_for",
+    "listing",
+    "remember_results",
+    "results_of",
+    "revoke",
+    "versions_for",
+]

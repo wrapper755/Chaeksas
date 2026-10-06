@@ -99,6 +99,18 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- 맞추기 규칙: 하트비트에 연속으로 보이지 않은 횟수 (C4 `bot_ui_lost`).
   misses           INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS deployment_results (
+  -- 배치 결정은 하트비트 한 주기만 올라온다 (C4). 흘려보내면 「왜 설치가 안 됐나」가
+  -- 영영 남지 않아서 쌓아 둔다 (CON-03 「최근 배치 결정」).
+  bot_ui_id      TEXT NOT NULL,
+  deployment_id  TEXT NOT NULL,
+  bpm_process_id TEXT NOT NULL,
+  version        TEXT NOT NULL,
+  result         TEXT NOT NULL,
+  reason         TEXT,
+  at             TEXT NOT NULL,
+  PRIMARY KEY (bot_ui_id, deployment_id, at)
+);
 CREATE TABLE IF NOT EXISTS admin_keys (
   key_id        TEXT PRIMARY KEY,
   key_json      TEXT NOT NULL,

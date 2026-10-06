@@ -285,6 +285,60 @@ def test_disabled_bot_ui_still_heartbeats(client: TestClient) -> None:
     assert client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=auth).json()["disabled"] is False
 
 
+def test_deployment_results_are_kept_not_thrown_away(client: TestClient) -> None:
+    """배치 결정은 **한 주기만 올라온다** (C4) — 흘려보내면 「왜 설치가 안 됐나」가 안 남는다.
+
+    CON-03 「최근 배치 결정」이 읽는 자리다 (C5 `BotUiInfo.deployment_results`).
+    """
+    _key_id, raw = issue_key(client)
+    auth = {"Authorization": f"Bearer {raw}"}
+    client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
+
+    refused = {
+        "deployment_id": "dep_3f9a1c07",
+        "bpm_process_id": "erp.order-entry",
+        "version": "2.1.0",
+        "result": "rejected",
+        "reason": "unsigned_package",
+        "at": "2026-10-06T09:00:00+09:00",
+    }
+    client.post(
+        "/api/v1/bot-ui/heartbeat", json=heartbeat_body(deployment_results=[refused]), headers=auth
+    )
+    # 다음 주기에는 보내지 않는다 (Bot UI는 보낸 것을 지운다) — 그래도 남아 있어야 한다.
+    client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=auth)
+
+    found = client.get("/api/v1/bot-uis", headers=READ).json()[0]
+    assert [one["reason"] for one in found["deployment_results"]] == ["unsigned_package"]
+
+
+def test_the_same_result_twice_is_recorded_once(client: TestClient) -> None:
+    """보내 놓고 응답을 못 받아 다시 보내도 목록이 부풀지 않는다 (C4 멱등)."""
+    _key_id, raw = issue_key(client)
+    auth = {"Authorization": f"Bearer {raw}"}
+    client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
+
+    one = {
+        "deployment_id": "dep_3f9a1c07",
+        "bpm_process_id": "erp.order-entry",
+        "version": "2.1.0",
+        "result": "applied",
+        "at": "2026-10-06T09:00:00+09:00",
+    }
+    body = heartbeat_body(deployment_results=[one])
+    client.post("/api/v1/bot-ui/heartbeat", json=body, headers=auth)
+    client.post("/api/v1/bot-ui/heartbeat", json=body, headers=auth)
+
+    found = client.get("/api/v1/bot-uis", headers=READ).json()[0]
+    assert len(found["deployment_results"]) == 1
+
+    # 같은 배포라도 **다른 시각**이면 새 결정이다 (다시 배치했다).
+    later = {**one, "at": "2026-10-06T10:00:00+09:00", "result": "rejected", "reason": "expired"}
+    client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(deployment_results=[later]), headers=auth)
+    found = client.get("/api/v1/bot-uis", headers=READ).json()[0]
+    assert [one["at"][11:16] for one in found["deployment_results"]] == ["10:00", "09:00"], "최신순"
+
+
 def test_heartbeat_that_breaks_the_contract_is_refused(client: TestClient) -> None:
     _key_id, raw = issue_key(client)
     auth = {"Authorization": f"Bearer {raw}"}

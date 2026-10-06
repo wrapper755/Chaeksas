@@ -55,7 +55,8 @@ export async function setBotUiDisabled(botUiId: string, disabled: boolean): Prom
   } catch (cause) {
     return { error: message(cause) };
   }
-  revalidatePath("/bot-uis");
+  // 목록과 상세가 **둘 다** 이 값을 보인다 — `layout`이라야 아래 경로까지 함께 새로 그린다.
+  revalidatePath("/bot-uis", "layout");
   return {};
 }
 
