@@ -164,6 +164,18 @@ class Utility(ContractModel):
     needs_runtime: str | None = None  # 열어 둘 때 띄워야 하는 로컬 런타임 id
 
 
+class RuntimeReserve(ContractModel):
+    """실행 예약 방법 — Bot UI가 런타임의 계약을 모른 채 실행 동안 그 런타임을 묶는다 (ADR-0014 §4).
+
+    `POST <path>` `{run_id}`로 예약하고 `DELETE <path>`로 푼다. 관리 토큰은 런타임 폴더의
+    `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — Bot은 기다린다.
+    """
+
+    path: str
+    header: str
+    token_file: str
+
+
 class LocalRuntime(ContractModel):
     """Bot UI가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).
 
@@ -183,6 +195,8 @@ class LocalRuntime(ContractModel):
     health: str | None = None  # 상태 확인 경로 (예: /v1/health)
     token_dir: bool = False  # 로컬 토큰 파일을 둘 폴더가 필요한가
     start: str = START_ON_DEMAND
+    #: 실행 예약 방법 (선택). `token_dir`가 있어야 토큰 파일을 읽는다.
+    reserve: RuntimeReserve | None = None
 
 
 class ConfigurationItem(ContractModel):
@@ -668,6 +682,11 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
             out.append(Violation(rule="C13", code="unknown_scope",
                                  message=f"설정 칸 {item.key}의 scope를 모른다: {item.scope}",
                                  items=sorted(CONFIG_SCOPES)))
+    for r in m.contributes.bot_ui_local_runtimes:
+        if r.reserve is not None and (not r.token_dir or not r.reserve.path.startswith("/")):
+            out.append(Violation(rule="C13", code="reserve_invalid",
+                                 message=f"런타임 {r.id}의 예약은 token_dir가 있고 경로가 /로 시작해야 한다"))
+
     for rt in c.bot_ui_local_runtimes:
         if rt.start not in KNOWN_STARTS:
             out.append(Violation(rule="C13", code="unknown_start",

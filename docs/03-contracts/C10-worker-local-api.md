@@ -149,7 +149,7 @@
 
 | 경로 | 뜻 |
 | --- | --- |
-| `POST /v1/admin/reserve` `{run_id}` | 실행 예약. 이미 다른 세션이 열려 있으면 409 `worker_busy`. 이때 Bot UI는 그 세션을 강제로 닫을지 정한다 (셀렉터 등록 중이면 Bot이 기다린다, ADR-0014 §4) |
+| `POST /v1/admin/reserve` `{run_id}` | 실행 예약. 이미 다른 세션이 열려 있으면 409 `worker_busy` — **Bot UI는 Bot을 시작하지 않고 대기열 맨 앞에서 기다린다** (셀렉터 등록·Studio 시험이 끝나면 다음 주기에 다시 묻는다, ADR-0014 §4). Bot UI는 이 경로를 UI 자동화 확장 정의의 `reserve` 선언(C13)으로 안다 |
 | `DELETE /v1/admin/reserve` | 예약 풀기 (실행이 끝났을 때. 열린 세션도 닫는다) |
 | `DELETE /v1/admin/sessions/{id}` | 세션 강제 닫기 (실행기가 죽었을 때 정리) |
 | `POST /v1/admin/shutdown` | 열린 세션을 닫고 보고를 저장한 뒤 종료 (Bot UI 종료 순서, BUI-01) |
@@ -223,6 +223,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-06 | 1 | 예약이 409면 Bot UI가 강제로 닫지 않고 **기다린다**는 것을 적었다 (ADR-0014 §4 그대로). Bot UI는 C13 `reserve` 선언으로 이 경로를 부른다 | 0014 |
 | 2026-10-05 | 1 | 계획 없는 데스크톱 세션(`desktop-apps.json`의 `window`), 스텝의 `target`, `GET …/view` — 데스크톱 AI 태스크의 눈과 손 | 0037 |
 | 2026-10-05 | 1 | `read_table`의 `data` 모양(`headers`·`rows`, 칸은 글 그대로)과, 읽은 값이 변수가 되는 규칙(표는 줄 목록, 수 모양 글은 수)을 적었다 | 0036 |
 | 2026-10-05 | 1 | 세션 열기에 `goal`·`values`·`results`, 세션 정보에 `planned_steps` — 목표로 계획([C8](C8-ui-automation-plan-heal-report.md))의 스텝을 부르는 쪽이 채워 보낸다. 더하기만이라 schema는 그대로 1 | 0035 |

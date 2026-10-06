@@ -83,7 +83,7 @@
 | `studio.editors` | `[{task_type, entry}]` | Studio | 불가 (자동 폼) |
 | `studio.resource_views` | `[{id, label, resource_type, creates_task_type?}]` | STU-03 | 가능 (선언) |
 | `bot_ui.utilities` | `[{id, label, menu: "tools", entry, needs_runtime?}]` | Bot UI 「도구」 메뉴·탭 | 불가 |
-| `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start}]` | Bot UI (BUI-09·11) | 불가 |
+| `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start, reserve?}]` | Bot UI (BUI-09·11) | 불가 |
 | `agent_environments` | `[{domain, entry}]` | 엔진 — `domain: web`·`desktop` AI 태스크의 눈과 손 ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md)) | 불가 |
 | `configuration` | `[{key, label, scope, schema, secret}]` | 설정 화면 칸 (BUI-03 「확장별 설정」, STU-10, 서버 실행기 설정) | 불가 |
 | `preflight` | `[{id, entry}]` | Studio·Bot UI·서버 실행기 사전 점검 | 불가 |
@@ -101,6 +101,8 @@
   - 왜 명령이 아니라 진입점인가: 설치 파일로 묶은 앱 안에는 콘솔 스크립트(`chk-worker`)가 없다 (PyInstaller는 실행 파일 하나를 만든다). 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))·서명·파이썬 런타임을 그대로 함께 쓴다.
   - 작업 관리자에서는 Bot UI와 같은 이름으로 보인다. 구별은 명령줄(`--local-runtime …`)로 한다.
   - `token_dir: true`면 Bot UI가 그 폴더(`<Bot UI 데이터>/runtimes/<런타임 id>`)에 **`runtime.json`**(`{runtime, port}`)을 남긴다. 같은 PC의 Studio가 이것과 토큰 파일로 그 런타임을 찾는다 — Studio는 런타임을 띄우지 않는다.
+  - `reserve`(선택): **실행 예약** 방법 — `{path, header, token_file}`. Bot UI는 그 런타임을 쓰는 Bot을 시작하기 전에 `POST <path>` `{run_id}`(헤더 `<header>: <token_dir의 token_file 내용>`)로 예약하고, 실행이 끝나면 `DELETE <path>`로 푼다 (ADR-0014 §4). Bot UI는 런타임의 말(C10 등)을 모르고 이 선언대로만 부른다.
+    - 2xx: 예약됨. **409: 다른 쪽이 쓰는 중** — Bot은 시작하지 않고 대기열 맨 앞에서 기다린다(다음 주기에 다시 묻는다, 트레이 「Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다」). 닿지 못함·그 밖의 실패는 기록만 하고 실행을 보낸다 (그 태스크가 분명히 실패한다).
   - **실행에 쓰는 런타임:** Bot UI는 Bot을 시작하기 전에 그 Bot이 쓰는 확장의 런타임을 띄운다. 쓰는 확장은 매니페스트의 `requires.extensions`와, `requires.domains`의 `web`·`desktop`을 기여한 확장(`agent_environments`)이다. 실행기(자식)에게는 확장별 설정(그 칸 + 예약 키)을 **파일로** 넘긴다 — 비밀은 싣지 않는다.
 - `bot_ui.utilities[].needs_runtime`: 그 유틸리티를 열기 전에 호스트가 띄워야 할 **로컬 런타임의 id**. 띄우지 못하면 유틸리티를 열지 않고 왜 못 열었는지 말한다 (「없는데 된 척」하지 않는다).
 - **호스트가 채우는 예약 설정 키** — 띄운 로컬 런타임이 어디 있는지는 **확장이 설정으로 받는다** (`ctx.setting(…)`). 확장이 포트를 다시 계산하거나 토큰 파일 자리를 추측하지 않게 한다.
@@ -290,6 +292,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-06 | 2 | `bot_ui.local_runtimes[].reserve`(실행 예약 방법)를 더했다 — Bot UI가 런타임의 계약을 모른 채 실행 동안 런타임을 그 실행에 묶는다. 선택 칸이라 기존 확장은 영향이 없다 | 0014 |
 | 2026-10-05 | 2 | `agent_environments`(AI 태스크의 `web`·`desktop` 환경)를 더했다. 모르는 열쇠는 무시하므로 기존 호스트는 영향이 없다 | 0037 |
 | 2026-10-01 | 1 | 초안 | 0018 |
 | 2026-10-01 | 1 | 검토 반영 (아래) | — |

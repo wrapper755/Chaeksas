@@ -25,7 +25,7 @@ from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyReject
 from chaeksas.bot_ui.credentials import Credentials
 from chaeksas.bot_ui.deploy import Deployer
 from chaeksas.bot_ui.runner import Launcher, Running
-from chaeksas.bot_ui.runtimes import HostSettings, RuntimeUnavailable, runtime_ids_of
+from chaeksas.bot_ui.runtimes import BUSY, RESERVED, HostSettings, RuntimeUnavailable, runtime_ids_of
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
@@ -71,6 +71,8 @@ TRAY_KEY_EXPIRED = "키 만료"
 TRAY_DISABLED = "비활성"
 TRAY_ERROR = "오류"
 TRAY_IDLE = "대기"
+#: Bot 차례인데 Worker를 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중 (ADR-0014 §4).
+TRAY_WORKER_BUSY = "Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다"
 
 
 @dataclass(frozen=True)
@@ -133,6 +135,10 @@ class Agent:
     stopping: bool = False
     #: 로컬 런타임 (C13·BUI-09). 처음 쓸 때 만든다 — 확장 호스트가 있어야 한다.
     _runtimes: LocalRuntimes | None = None
+    #: 차례가 왔는데 Worker 예약이 409였다 — 대기열 맨 앞에서 기다린다 (ADR-0014 §4).
+    worker_busy: bool = False
+    #: 이 실행에 묶은 로컬 런타임 — 끝나면 푼다.
+    _reserved: list[str] = field(default_factory=list)
 
     def runtimes(self) -> LocalRuntimes:
         """확장이 기여한 로컬 런타임들. **띄우지는 않는다** — 필요할 때 `ensure()`가 띄운다."""
@@ -176,6 +182,37 @@ class Agent:
         values[STORAGE_DIR_SETTING] = str(self.storage_dir(extension_id))
         return values
 
+    def needed_extensions(self, bot: InstalledBot) -> set[str]:
+        """그 Bot이 쓰는 확장 — `requires.extensions` + `requires.domains`의 환경을 기여한 확장 (ADR-0037)."""
+        if self.host is None:
+            return set()
+        requires = bot.manifest.requires
+        needed = {need.id for need in requires.extensions}
+        needed |= {owner for owner in map(self.host.environment_owner, requires.domains) if owner}
+        return needed
+
+    def reserve_runtimes(self, bot: InstalledBot, run_id: str) -> list[str] | None:
+        """그 Bot이 쓰는 런타임을 이 실행에 묶는다 (ADR-0014 §4). **하나라도 바쁘면 `None`** —
+        이미 묶은 것은 풀고, Bot은 대기열 맨 앞에서 기다린다."""
+        if self.host is None:
+            return []
+        held: list[str] = []
+        for extension_id in sorted(self.needed_extensions(bot)):
+            for runtime_id in runtime_ids_of(self.host, extension_id):
+                found = self.runtimes().reserve(runtime_id, run_id)
+                if found == BUSY:
+                    for one in held:
+                        self.runtimes().release(one)
+                    return None
+                if found == RESERVED:
+                    held.append(runtime_id)
+        return held
+
+    def release_runtimes(self) -> None:
+        for runtime_id in self._reserved:
+            self.runtimes().release(runtime_id)
+        self._reserved = []
+
     def run_extensions(self, bot: InstalledBot) -> dict[str, dict[str, object]]:
         """실행기에게 넘길 확장별 설정. **그 Bot이 쓰는 확장의 로컬 런타임은 먼저 띄운다**.
 
@@ -188,9 +225,7 @@ class Agent:
         """
         if self.host is None:
             return {}
-        requires = bot.manifest.requires
-        needed = {need.id for need in requires.extensions}
-        needed |= {owner for owner in map(self.host.environment_owner, requires.domains) if owner}
+        needed = self.needed_extensions(bot)
         table: dict[str, dict[str, object]] = {}
         for found in self.host.enabled():
             runtime_ids = runtime_ids_of(self.host, found.id)
@@ -495,14 +530,14 @@ class Agent:
 
     # ── 실행 자리 (ADR-0014 — 하나다) ──
 
-    def claim_slot(self, item: QueueItem) -> CurrentRun:
-        """대기열에서 하나를 꺼내 실행 자리에 올린다. 엔진(M3)이 부른다."""
+    def claim_slot(self, item: QueueItem, *, run_id: str | None = None) -> CurrentRun:
+        """대기열에서 하나를 꺼내 실행 자리에 올린다. `run_id`는 예약에 쓴 것을 그대로 받는다."""
         if self.current_run is not None:
             raise RuntimeError("실행 자리가 이미 차 있다 (PC 한 대에 실행 중 Bot은 하나다)")
         if item in self.store.state.queue:
             self.store.state.queue.remove(item)
         run = CurrentRun(
-            run_id=new_run_id(),
+            run_id=run_id or new_run_id(),
             bpm_process_id=item.bpm_process_id,
             version=item.version or "0.0.0",
             state="running",
@@ -564,6 +599,7 @@ class Agent:
                 "cancelled" if done.finished == "cancelled" else "failed"
             )
             self._ack_id(done.job_id, result, run_id=done.run_id)
+        self.release_runtimes()
         self.release_slot()
 
     def _start_next(self) -> None:
@@ -591,7 +627,17 @@ class Agent:
             return
 
         inputs = dict(self.store.state.inputs.get(item.queue_id) or {})
-        run = self.claim_slot(item)
+        extensions = self.run_extensions(bot)
+        run_id = new_run_id()
+        held = self.reserve_runtimes(bot, run_id)
+        if held is None:
+            # 다른 쪽(셀렉터 등록·Studio 시험)이 Worker를 쓰는 중 — **강제로 닫지 않고 기다린다**
+            # (ADR-0014 §4). 항목은 대기열 맨 앞에 그대로 있고 다음 주기에 다시 묻는다.
+            self.worker_busy = True
+            return
+        self.worker_busy = False
+        self._reserved = held
+        run = self.claim_slot(item, run_id=run_id)
         try:
             running = self.runner().start(
                 bot,
@@ -599,12 +645,13 @@ class Agent:
                 source=item.source,
                 job_id=item.job_id,
                 run_id=run.run_id,
-                extensions=self.run_extensions(bot),
+                extensions=extensions,
             )
         except Exception as e:  # noqa: BLE001 — 띄우지 못한 것은 실행 실패다
             log.exception("실행기를 띄우지 못했다")
             if item.job_id:
                 self._ack_id(item.job_id, "failed", reason=str(e)[:200])
+            self.release_runtimes()
             self.release_slot()
             return
         self.current_run = running.current()
@@ -668,6 +715,8 @@ class Agent:
 
         run = self.current_run
         waiting = len(self.queue)
+        if run is None and waiting and self.worker_busy:
+            return TRAY_WORKER_BUSY
         if run is None:
             return f"{TRAY_IDLE} · 대기 {waiting}건" if waiting else TRAY_IDLE
         if run.state == "waiting_approval":

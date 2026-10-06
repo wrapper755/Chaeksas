@@ -67,8 +67,21 @@ export interface LocalRuntime {
   id: string;
   label: string;
   port_setting?: string | null;
+  reserve?: RuntimeReserve | null;
   start?: string;
   token_dir?: boolean;
+  [k: string]: unknown;
+}
+/**
+ * 실행 예약 방법 — Bot UI가 런타임의 계약을 모른 채 실행 동안 그 런타임을 묶는다 (ADR-0014 §4).
+ *
+ * `POST <path>` `{run_id}`로 예약하고 `DELETE <path>`로 푼다. 관리 토큰은 런타임 폴더의
+ * `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — Bot은 기다린다.
+ */
+export interface RuntimeReserve {
+  header: string;
+  path: string;
+  token_file: string;
   [k: string]: unknown;
 }
 /**
