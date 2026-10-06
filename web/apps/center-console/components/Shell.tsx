@@ -25,7 +25,7 @@ const NAV: NavItem[] = [
   { label: "실행 로그", href: "/runs" },
   { label: "Bot 현황", later: "M5" },
   { label: "Bot UI 현황", href: "/bot-uis" },
-  { label: "결재함", later: "M5" },
+  { label: "결재함", href: "/approvals" },
   { label: "작업 지시", later: "M5" },
   { label: "공통 패키지", later: "M5" },
   { label: "리소스", later: "M5" },

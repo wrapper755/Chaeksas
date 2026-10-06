@@ -25,6 +25,7 @@ export interface ApprovalCreateRequest {
    * 이 계약의 schema 번호
    */
   schema: number;
+  title?: string | null;
   version: string;
   [k: string]: unknown;
 }

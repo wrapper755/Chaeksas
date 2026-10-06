@@ -118,6 +118,13 @@ def accept(store: Store, caller: Caller, run_id: str, lines: list[Any]) -> Event
                 duplicates += 1
         _update_run(cur, run_id, summary)
 
+    if summary.get("finished_at"):
+        # 실행이 끝났으면 그 실행의 `open` 결재를 거둔다 (C6 `run_ended`) — 답할 수는 있는데
+        # 전달될 곳이 없는 결재가 결재함에 남지 않게.
+        from chaeksas.center.api import approvals  # noqa: PLC0415 — 순환 import를 피한다
+
+        approvals.withdraw_for_run(store, run_id, event="run_finished")
+
     return EventBatchResponse(
         run_id=run_id, accepted=accepted, duplicates=duplicates, rejected=rejected
     )

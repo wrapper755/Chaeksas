@@ -24,6 +24,14 @@ const BANNER = [
 ].join("\n");
 
 /**
+ * 열쇠가 **이름의 모음**인 자리. 이 한 겹은 스키마가 아니라 「이름 → 스키마」 표다.
+ *
+ * 여기를 스키마로 착각하면 `title`이라는 **필드**를 스키마의 `title`로 보고 지운다 —
+ * C6 `ApprovalInfo.title`이 생성된 타입에서 조용히 사라져 있었다.
+ */
+const NAME_MAPS = new Set(["properties", "$defs", "definitions", "patternProperties"]);
+
+/**
  * 필드에 붙은 `title`을 떼어 낸다.
  *
  * pydantic은 필드마다 `"title": "Content Hash"`를 넣는데, 생성기가 그것을 보고 필드마다 타입
@@ -38,9 +46,11 @@ function stripFieldTitles(node, keepTitle) {
   if (node === null || typeof node !== "object") return node;
   if (!keepTitle) delete node.title;
   for (const [key, value] of Object.entries(node)) {
-    // `$defs`의 열쇠는 모델 이름이다 — 그 한 겹만 title을 남긴다.
-    if (key === "$defs" && value && typeof value === "object") {
-      for (const def of Object.values(value)) stripFieldTitles(def, true);
+    if (NAME_MAPS.has(key) && value && typeof value === "object" && !Array.isArray(value)) {
+      // 이 한 겹의 열쇠는 이름이다 — 표 자체의 `title`을 지우지 않는다.
+      // `$defs`의 열쇠는 모델 이름이라 그 스키마의 title은 남긴다 (인터페이스 이름이 된다).
+      const keep = key === "$defs" || key === "definitions";
+      for (const inner of Object.values(value)) stripFieldTitles(inner, keep);
       continue;
     }
     stripFieldTitles(value, false);

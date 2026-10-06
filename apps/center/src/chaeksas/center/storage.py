@@ -99,6 +99,36 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- 맞추기 규칙: 하트비트에 연속으로 보이지 않은 횟수 (C4 `bot_ui_lost`).
   misses           INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS approvals (
+  request_id       TEXT PRIMARY KEY,
+  -- 올린 키. **답은 이 키에게만** 내려간다 (C6 §소유).
+  owner_key_id     TEXT NOT NULL,
+  host_type        TEXT NOT NULL,
+  host_id          TEXT NOT NULL,
+  run_id           TEXT NOT NULL,
+  node_id          TEXT NOT NULL,
+  node_instance    INTEGER NOT NULL,
+  bpm_process_id   TEXT NOT NULL,
+  version          TEXT NOT NULL,
+  title            TEXT,
+  description      TEXT,
+  form_json        TEXT,
+  -- 업무 값이다 (원칙 6의 예외) — 끝난 뒤 VALUE_RETENTION_DAYS가 지나면 지운다.
+  review_json      TEXT,
+  answer_json      TEXT,
+  expires_at       TEXT,
+  body_hash        TEXT NOT NULL,
+  created_at       TEXT NOT NULL,
+  state            TEXT NOT NULL,
+  answered_by      TEXT,
+  answered_at      TEXT,
+  withdraw_reason  TEXT,
+  delivered        INTEGER NOT NULL DEFAULT 0,
+  delivery_accepted INTEGER,
+  delivery_reason  TEXT,
+  -- 값을 지운 시각. 지운 뒤에도 누가·언제·결과는 남는다 (C6).
+  values_purged_at TEXT
+);
 CREATE TABLE IF NOT EXISTS deployment_results (
   -- 배치 결정은 하트비트 한 주기만 올라온다 (C4). 흘려보내면 「왜 설치가 안 됐나」가
   -- 영영 남지 않아서 쌓아 둔다 (CON-03 「최근 배치 결정」).
