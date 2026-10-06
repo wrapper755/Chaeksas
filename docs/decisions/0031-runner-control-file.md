@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락. **「올라오는 길은 하나」에 [ADR-0038](0038-approval-request-channel.md)이 예외를 더함** (값이 필요한 결재 요청은 요청 파일로) |
 | 날짜 | 2026-10-05 |
 | 관련 | [ADR-0023](0023-bot-ui-process-supervision.md)(실행기 = 자식 프로세스, 「stdin으로 stop」을 이 ADR이 바꾼다), [ADR-0014](0014-one-bot-per-pc.md)(PC 한 대에 Bot 하나), [C3](../03-contracts/C3-run-events.md)(실행 이벤트), [C6](../03-contracts/C6-approvals.md)(결재), 화면 BUI-04·CMN-01, M3 조각 4a |
 

@@ -56,7 +56,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | 서비스 앱 태스크 | `serviceTask` | `chk:serviceCall` | `app_id`, `operation`, `input`(`{필드: 식}`), `output`(`{변수: 필드}`), `key_ref?`(없으면 프로세스의 `service_keys`를 상속), `timeout_s`, `retry`(`{max, on: [503, 429]}`) |
 | 다른 확장 태스크 | `serviceTask` | `chk:task` `type="<확장 태스크 종류>"` `extension="<id>"` | 그 확장의 계약이 정한 JSON |
 | 결재 | `userTask` | `chk:approval` | `title`, `description`, `show`(**변수 이름 배열** — 문자열 하나로 쓰면 검사 오류), `fields[]`(C6 Form과 같다: `{key, label, type: bool\|number\|text\|choice, choices?, required, default?}`), `location`(`follow`\|`center`\|`field`), `expires`(ISO 기간 또는 변수 이름) |
-| 수동 작업 (사람 확인) | `manualTask` | `chk:approval` | 결재와 같은 형식. 화면에는 「확인」으로 보인다. 서버 BPM 프로세스에서는 Center 결재함으로 간다 |
+| 수동 작업 (사람 확인) | `manualTask` | `chk:approval` | 결재와 같은 형식. 화면에는 「확인」으로 보인다. **늘 현장에서 답한다** (화면 앞 사람만 답할 수 있다, C6) — `location`에 `center`를 적으면 **B12 경고**다. **서버 BPM 프로세스에는 넣을 수 없다** (C1 R2 `human.confirmation=false`) |
 | 스크립트 | `scriptTask` | 표준 `bpmn:script` (`scriptFormat="chk-expr"`) | 식 언어로 쓴 대입문. 입력은 프로세스 변수, 결과는 대입한 변수 |
 | 규칙 | `businessRuleTask` | `chk:rule` | `decision`(같은 패키지의 DMN 결정 id), `input`(`{DMN 입력 식 이름: 식}`), `output`(`{변수: DMN 출력}`). DMN은 한 건을 판정한다 — 목록은 반복(아래)으로. 적중 정책 `COLLECT`면 출력이 목록이다 (맞는 줄이 없으면 빈 목록). 아래 「규칙 태스크와 DMN」 |
 | 파일 목록 | `serviceTask` | `chk:fileList` | `folder`(템플릿 — 아래 「파일 경로」), `pattern`(glob 한 조각, 기본 `*`), `recursive`(기본 false), `sort`(`name`\|`modified`, 기본 `name`), `limit?`, `store_as`(**필수** — 파일 경로 목록), `count_as?`(개수). 디스크를 읽으므로 식의 도우미가 아니라 태스크다 ([ADR-0025](../decisions/0025-expression-language.md) §식에 두지 않는 것, [ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)) |
@@ -286,3 +286,4 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 | 2026-10-01 | 1 | 업무 예제 작업 반영: `inputs[].default`, `chk:receive.payload`, 경계·중간 받기의 상관 키, 케이스 `messages`·`process`·입력 연산자(`$now_plus`, `$test_receiver`), 자동 응답 없는 결재, 기대 결과 비교 규칙, 결재 칸을 C6에 맞춤(`choices`, `date` 없음), `defaults.desktop`, 식의 None·허용 목록, 검사 B11~B14 ([08-business-examples](../08-business-examples/README.md)) | — |
 | 2026-10-05 | 1 | `chk:defaults`의 `web`·`desktop`이 확장 태스크 속성의 기본값으로 넘어간다 (UI 태스크가 띄울 앱 이름을 받는다) | 0033 |
 | 2026-10-05 | 1 | UI 태스크 스텝 `value`의 `{변수}`·`{변수.키}`를 수행기가 채운다고 적었다 — 채우지 않아 `{신청.이름}`이 글자 그대로 입력되고 있었다 (M4 인수 시험에서 발견) | 0033 |
+| 2026-10-07 | 1 | 수동 작업(확인)은 **늘 현장**이고 서버 BPM 프로세스에 넣을 수 없다고 바로잡았다 — 「서버에서는 Center 결재함으로 간다」가 C1 R2(`human.confirmation=false`)·C6(확인은 올리지 않는다)와 어긋나 있었다. 결재 현장 연결을 설계하다 드러났다 | [0038](../decisions/0038-approval-request-channel.md) |
