@@ -216,11 +216,12 @@ def deployments(args: argparse.Namespace, center: Center) -> int:
         print("배포가 없습니다.")
         return 0
     for one in found:
-        state = "철회됨" if one.get("revoked") else "활성"
+        state = "철회됨" if one.get("revoked_at") else "활성"
         target = one.get("target", {})
+        window = f"{one.get('not_before') or '즉시'} ~ {one.get('expires_at') or '무기한'}"
         print(
             f"{one.get('deployment_id')}  {state}  {target.get('type')}:{target.get('id')}  "
-            f"{one.get('bpm_process_id')}@{one.get('version')}"
+            f"{one.get('bpm_process_id')}@{one.get('version')}  {window}"
         )
     return 0
 

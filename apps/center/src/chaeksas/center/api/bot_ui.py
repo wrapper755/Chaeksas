@@ -162,6 +162,10 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
             "UPDATE bot_uis SET last_seen_at = ?, state_json = ? WHERE bot_ui_id = ?",
             (now_iso(), dumps(state), found["bot_ui_id"]),
         )
+    # 배치 결정은 **한 주기만 올라온다** — 흘려보내면 「왜 설치가 안 됐나」가 남지 않는다 (C4).
+    deployments.remember_results(
+        store, bot_ui_id=str(found["bot_ui_id"]), results=request.deployment_results
+    )
 
     disabled = bool(found["disabled"])
     # 작업은 ack 반영 → 만료 → 맞추기 → 고르기 순이다 (C4·C5, `api/jobs.py`).
@@ -218,6 +222,8 @@ def bot_ui_listing(store: Store) -> list[BotUiInfo]:
                 worker=WorkerState.model_validate(state["worker"]) if state.get("worker") else None,
                 readiness=[Readiness.model_validate(r) for r in state.get("readiness", [])],
                 extensions=[ExtensionState.model_validate(e) for e in state.get("extensions", [])],
+                # 마지막 하트비트가 아니라 **Center가 쌓아 둔 것**이다 (C5 — CON-03이 읽는다).
+                deployment_results=deployments.results_of(store, bot_ui_id=str(row["bot_ui_id"])),
                 key=BotUiKey(
                     prefix=record.prefix,
                     expires_at=record.expires_at,

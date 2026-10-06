@@ -19,6 +19,7 @@ from pydantic import Field, model_validator
 from chaeksas.contracts._base import ContractModel, Sha256, Timestamp, Violation
 from chaeksas.contracts.bot_ui import (
     CurrentRun,
+    DeploymentResult,
     ExtensionState,
     Queue,
     Readiness,
@@ -48,6 +49,9 @@ MAX_PACKAGE_MB = 50
 #: 작업 메모 길이, 멱등 키 기억 기간.
 MAX_NOTE_CHARS = 500
 IDEMPOTENCY_WINDOW_DAYS = 7
+
+#: `BotUiInfo.deployment_results`에 싣는 최근 배치 결정 건수 (CON-03).
+RECENT_RESULTS = 20
 
 # 아래는 모두 **열린 문자열**의 알려진 값이다 (README 원칙 10).
 KNOWN_PACKAGE_STATUSES = frozenset({"candidate", "approved", "deprecated", "revoked"})
@@ -147,6 +151,9 @@ class BotUiInfo(ContractModel):
     worker: WorkerState | None = None
     readiness: list[Readiness] = Field(default_factory=list)
     extensions: list[ExtensionState] = Field(default_factory=list)
+    #: 최근 배치 결정 (CON-03). **Center가 쌓아 둔 것**이다 — 하트비트 한 주기만 올라오는
+    #: 값이라 흘려보내면 「왜 설치가 안 됐나」가 남지 않는다. 최신순 최대 `RECENT_RESULTS`건.
+    deployment_results: list[DeploymentResult] = Field(default_factory=list)
     key: BotUiKey | None = None
 
 

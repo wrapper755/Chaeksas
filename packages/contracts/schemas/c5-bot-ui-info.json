@@ -96,6 +96,53 @@
       "title": "CurrentRun",
       "type": "object"
     },
+    "DeploymentResult": {
+      "additionalProperties": true,
+      "description": "배포 적용 결정 (CON-03 「최근 배치 결정」). 실행이 아니므로 C3로 보내지 않는다.",
+      "properties": {
+        "at": {
+          "title": "At",
+          "type": "string"
+        },
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "deployment_id": {
+          "title": "Deployment Id",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "title": "Result",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "deployment_id",
+        "bpm_process_id",
+        "version",
+        "result",
+        "at"
+      ],
+      "title": "DeploymentResult",
+      "type": "object"
+    },
     "ExtensionState": {
       "additionalProperties": true,
       "description": "설치된 확장 하나 (C13).",
@@ -398,6 +445,13 @@
         }
       ],
       "default": null
+    },
+    "deployment_results": {
+      "items": {
+        "$ref": "#/$defs/DeploymentResult"
+      },
+      "title": "Deployment Results",
+      "type": "array"
     },
     "disabled": {
       "default": false,

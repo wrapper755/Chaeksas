@@ -218,6 +218,42 @@ def test_a_pc_package_cannot_go_to_a_server_runner(center: Center) -> None:
     assert caught.value.code == "wrong_target"
 
 
+def test_the_listing_answers_in_the_contract_shape(center: Center) -> None:
+    """`GET /deployments`는 C5 `DeploymentInfo`다 — **서명자·유효 기간은 봉투에서 읽는다**.
+
+    CON-03 「배포」가 유효 기간을 그리려면 이것이 있어야 한다.
+    """
+    from chaeksas.contracts.center_api import DeploymentInfo
+
+    key = admin_key(center)
+    info = approved(center, key)
+    until = "2027-01-01T00:00:00+09:00"
+    center.deploy(deployment(key, info, expires_at=until))
+
+    found = DeploymentInfo.model_validate(center.deployments()[0])
+    assert found.signed_by == key.key_id, "서명한 Admin 키"
+    assert found.signed_at == AT
+    assert found.expires_at == until and found.not_before is None
+    assert found.revoked_at is None and found.last_result is None
+
+
+def test_a_revoked_deployment_keeps_its_row_with_a_time(center: Center) -> None:
+    """철회해도 **행은 남는다** — 「언제 철회됐나」가 콘솔에 보여야 한다 (C5)."""
+    key = admin_key(center)
+    info = approved(center, key)
+    center.deploy(deployment(key, info))
+    center.revoke_deployment(
+        sign(
+            {"kind": "revoke", "deployment_id": "dep_3f9a1c07", "reason": "잘못", "revoked_at": AT},
+            keystore.load(key, passphrase=PASS),
+            signed_at=AT,
+        )
+    )
+    assert center.deployments(active=True) == []
+    [one] = center.deployments(active=False)
+    assert one["revoked_at"] == AT
+
+
 # ─────────────────────────── Bot UI 설치 (C2 V1~V7) ───────────────────────────
 
 
@@ -394,7 +430,7 @@ def _all_envelopes(center: Center) -> list[dict[str, Any]]:
     out = []
     for one in listing(store):
         row = store.row(
-            "SELECT envelope_json FROM deployments WHERE deployment_id = ?", (one["deployment_id"],)
+            "SELECT envelope_json FROM deployments WHERE deployment_id = ?", (one.deployment_id,)
         )
         out.append(json.loads(row["envelope_json"]))
     return out
