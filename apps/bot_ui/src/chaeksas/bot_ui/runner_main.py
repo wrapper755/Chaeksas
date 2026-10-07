@@ -18,7 +18,7 @@ import json
 import logging
 import sys
 import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -28,8 +28,8 @@ from chaeksas.bot_ui.runtimes import HostSettings
 from chaeksas.contracts.bpmn_ext import BpmnProcess, read_process
 from chaeksas.contracts.dmn import Decision, DmnReadError, read_decisions
 from chaeksas.contracts.manifest import Manifest
-from chaeksas.core import control
-from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State
+from chaeksas.core import control, requests
+from chaeksas.core.engine import WHERE_CENTER, WHERE_FIELD, Engine, EngineError, Run, RunEnv, State
 from chaeksas.core.extensions import ExtensionHost, HostTasks, load_host
 from chaeksas.core.files import Workspace
 from chaeksas.core.llm import NoLlm, OpenAiCompatibleLlm
@@ -121,7 +121,8 @@ def extension_tasks(values: dict[str, dict[str, Any]], *, host: ExtensionHost | 
 
 def make_env(package: Package, *, output_dir: Path, readable: tuple[Path, ...],
              writable: tuple[Path, ...] = (), llm_url: str = "", llm_key: str = "",
-             llm_model: str, extensions: HostTasks | None = None) -> RunEnv:
+             llm_model: str, extensions: HostTasks | None = None,
+             approval_where: str = WHERE_FIELD) -> RunEnv:
     """바깥 세계 한 벌 — **주소·키는 실행하는 쪽만 안다** (ADR-0013)."""
     output_dir.mkdir(parents=True, exist_ok=True)
     space = Workspace(output_dir=output_dir, readable=readable, writable=writable)
@@ -137,6 +138,8 @@ def make_env(package: Package, *, output_dir: Path, readable: tuple[Path, ...],
         llm=model,
         tools=builtin_tools(space),
         memory=read_memory(package.folder),
+        # `location: follow` 결재를 어디서 답하나 — BUI-03 「원격 결재」 (ADR-0038).
+        approval_where=approval_where,
     )
     if extensions is not None:
         # 확장 태스크·`web`·`desktop` AI 태스크 (ADR-0018·ADR-0037) — 없으면 그림·설치 오류가 된다.
@@ -161,6 +164,8 @@ class Runner:
     engine: Engine = None  # type: ignore[assignment]
     run: Run | None = None
     stopping: bool = False
+    #: 요청 파일에 이미 쓴 결재 — 두 번 올리지 않는다.
+    _posted: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.engine = Engine()
@@ -168,6 +173,18 @@ class Runner:
     @property
     def control(self) -> Path:
         return control.control_path(self.data_dir, self.run_id)
+
+    @property
+    def requests(self) -> Path:
+        return requests.requests_path(self.data_dir, self.run_id)
+
+    def _post_requests(self, run: Run) -> None:
+        """`where=center`인 새 결재를 요청 파일에 쓴다 (ADR-0038) — Bot UI가 나른다."""
+        for pending in list(run.pendings.values()):
+            if pending.where != WHERE_CENTER or pending.request_id in self._posted:
+                continue
+            requests.append(self.requests, requests.create_request(run, pending).to_json_dict())
+            self._posted.add(pending.request_id)
 
     def start(self) -> Run:
         log_file = log_path(self.data_dir, self.run_id)
@@ -203,6 +220,7 @@ class Runner:
                 if run.finished or self.engine.blocked(run):
                     break
                 self.engine.step(run)
+            self._post_requests(run)
         return run.state
 
     def _obey(self, run: Run) -> bool:
@@ -224,6 +242,14 @@ class Runner:
                 except EngineError as e:
                     # 답이 폼에 안 맞는다 — **실행을 죽이지 않는다**. 화면이 다시 묻는다.
                     run.log.emit("log", level="warn", message=f"답을 받지 못했다: {e}")
+                acted = True
+            if command.kind == control.WITHDRAW:
+                try:
+                    # 답 없이 끝남 — 오류 경계가 있으면 그리로, 없으면 실패 (C6, ADR-0038).
+                    self.engine.withdraw(run, command.request_id, reason=command.reason or "admin_withdraw")
+                except EngineError as e:
+                    # 이미 현장에서 답했다 — 그 결재는 끝났다. 할 일이 없다.
+                    run.log.emit("log", level="info", message=f"회수할 결재가 없다: {e}")
                 acted = True
         return acted
 
@@ -256,6 +282,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--writable", type=Path, action="append", default=[])
     parser.add_argument("--llm-url", default="")
     parser.add_argument("--llm-model", default="")
+    # `location: follow` 결재를 어디서 답하나 (BUI-03 「원격 결재」, ADR-0038).
+    parser.add_argument("--approval-where", default=WHERE_FIELD, choices=(WHERE_FIELD, WHERE_CENTER))
     # 확장별 설정 (그 칸 + 예약 키 — Worker 자리). **비밀은 없다** (키는 참조 이름으로 푼다).
     parser.add_argument("--extensions", type=Path, default=None, help="확장별 설정 JSON 파일")
     found = parser.parse_args(argv)
@@ -285,10 +313,12 @@ def main(argv: list[str] | None = None) -> int:
             extensions=extension_tasks(
                 json.loads(found.extensions.read_text(encoding="utf-8")) if found.extensions else {}
             ),
+            approval_where=found.approval_where,
         ),
     )
     state = runner.drive()
     control.clear(runner.control)
+    requests.clear(runner.requests)
     # 끝난 방식을 종료 코드로도 알린다 (ADR-0023 — 실행 기록과 함께 본다).
     return 0 if state is State.DONE else 1
 

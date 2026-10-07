@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts.bot_ui import DeploymentResult, JobAck, QueueItem
+from chaeksas.contracts.bot_ui import ApprovalAck, DeploymentResult, JobAck, QueueItem
 from chaeksas.contracts.signing import AdminKey
 
 log = logging.getLogger(__name__)
@@ -44,6 +44,8 @@ class State:
     pending_acks: list[JobAck] = field(default_factory=list)
     #: 아직 못 보낸 배포 적용 결정 (C4 `deployment_results`).
     pending_deployments: list[DeploymentResult] = field(default_factory=list)
+    #: 아직 못 보낸 결재 ack (C4 `approval_acks`) — 내려온 답·회수를 받아 갔는지.
+    pending_approval_acks: list[ApprovalAck] = field(default_factory=list)
     #: 마지막으로 받은 Admin 공개키 (C2 검증용). 하트비트에 없으면 **그대로 쓴다**.
     admin_keys: list[AdminKey] = field(default_factory=list)
     #: 이미 본 `job_id` → 마지막으로 보낸 ack (같은 작업이 다시 오면 이것을 되돌려 보낸다).
@@ -56,6 +58,7 @@ class State:
             "inputs": self.inputs,
             "pending_acks": [ack.to_json_dict() for ack in self.pending_acks],
             "pending_deployments": [one.to_json_dict() for one in self.pending_deployments],
+            "pending_approval_acks": [one.to_json_dict() for one in self.pending_approval_acks],
             "admin_keys": [one.to_json_dict() for one in self.admin_keys],
             "seen_jobs": {job_id: ack.to_json_dict() for job_id, ack in self.seen_jobs.items()},
         }
@@ -69,6 +72,9 @@ class State:
             pending_acks=[JobAck.model_validate(ack) for ack in raw.get("pending_acks", [])],
             pending_deployments=[
                 DeploymentResult.model_validate(one) for one in raw.get("pending_deployments", [])
+            ],
+            pending_approval_acks=[
+                ApprovalAck.model_validate(one) for one in raw.get("pending_approval_acks", [])
             ],
             admin_keys=[AdminKey.model_validate(one) for one in raw.get("admin_keys", [])],
             seen_jobs={
@@ -121,6 +127,19 @@ class Store:
         ids = {one.deployment_id for one in sent}
         self.state.pending_deployments = [
             one for one in self.state.pending_deployments if one.deployment_id not in ids
+        ]
+
+    def remember_approval_ack(self, ack: ApprovalAck) -> None:
+        """같은 결재의 옛 ack는 **마지막 것으로 덮는다**."""
+        self.state.pending_approval_acks = [
+            one for one in self.state.pending_approval_acks if one.request_id != ack.request_id
+        ]
+        self.state.pending_approval_acks.append(ack)
+
+    def approval_acks_sent(self, sent: list[ApprovalAck]) -> None:
+        ids = {one.request_id for one in sent}
+        self.state.pending_approval_acks = [
+            one for one in self.state.pending_approval_acks if one.request_id not in ids
         ]
 
     def remember_ack(self, ack: JobAck) -> None:

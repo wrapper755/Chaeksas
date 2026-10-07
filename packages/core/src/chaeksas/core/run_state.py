@@ -55,6 +55,12 @@ FAILED_TASK_VAR = "failed_task"
 #: 표준 오류 코드 (C14 §이벤트).
 ERROR_TASK_FAILED = "TASK_FAILED"
 ERROR_SEND_FAILED = "SEND_FAILED"
+#: Center 결재가 답 없이 끝남 — 관리자 회수·만료 (C14·C6, ADR-0038). 오류 경계가 받는다.
+ERROR_APPROVAL_WITHDRAWN = "APPROVAL_WITHDRAWN"
+ERROR_APPROVAL_EXPIRED = "APPROVAL_EXPIRED"
+#: 결재를 어디서 답하나 (C3 `human_requested.where`).
+WHERE_FIELD = "field"
+WHERE_CENTER = "center"
 
 #: 실행 폴더 밖을 가리켰다 (ADR-0026). **오류 경계로 받지 않는다** — 그림·설정이 잘못된 것이다.
 CODE_PATH_DENIED = "path_denied"
@@ -171,6 +177,9 @@ class Pending:
     review: dict[str, Any] = field(default_factory=dict)
     where: str = "field"  # field | center
     node_instance: int = 1
+    #: C6 `description`·`expires_at` — Center로 올릴 때 쓴다.
+    description: str | None = None
+    expires_at: str | None = None
 
 
 @dataclass(frozen=True)
@@ -202,6 +211,9 @@ class RunEnv:
     #: 확장 태스크를 수행하는 쪽 (`chk:task`, C13 `task_types[].executor`). 기본은 **없다** —
     #: 확장이 없는 곳에서 확장 태스크를 만나면 그림 오류로 멈춘다 (조용히 넘어가지 않는다).
     extensions: ExtensionTasks = field(default_factory=lambda: NoExtensionTasks())
+    #: `location: follow` 결재를 어디서 답하나 — **실행하는 쪽의 기본값** (ADR-0038). Bot UI는
+    #: BUI-03 「원격 결재」, 서버 실행기는 `center`. 엔진은 설정 파일을 읽지 않는다. 기본은 현장.
+    approval_where: str = "field"
 
 
 @runtime_checkable
@@ -462,6 +474,10 @@ def new_run_id(*, now: datetime | None = None, test: bool = False) -> str:
 
 
 __all__ = [
+    "ERROR_APPROVAL_EXPIRED",
+    "ERROR_APPROVAL_WITHDRAWN",
+    "WHERE_CENTER",
+    "WHERE_FIELD",
     "BUILTIN_NOW",
     "BUILTIN_RUN_ID",
     "BUILTIN_TODAY",

@@ -14,7 +14,12 @@
 
 BPM 프로세스의 결재(UserTask)를 Center 결재함으로 올린다. 결재자가 콘솔에서 답하면, 실행하는 쪽이 그 답을 받아 실행을 이어 간다.
 
-> 상태: **Center 쪽과 결재함(CON-04)이 돈다** — 올리기·목록·하나·답하기·회수, 자동 회수(`run_ended`·`host_lost`), 값 30일 보관, 하트비트의 `approvals[]`·`approval_acks`까지. **현장 연결은 아직이다** — 엔진이 `where`를 고르고(지금은 `field` 고정) 실행기가 올리는 길이 없다. 그때까지 결재는 `POST /approvals`로만 들어온다.
+> 상태: **Center 쪽·결재함(CON-04)·현장 연결이 돈다** ([ADR-0038](../decisions/0038-approval-request-channel.md)).
+> - 엔진이 `where`를 고른다 (`location` + 실행하는 쪽의 기본값 — Bot UI는 BUI-03 「원격 결재」).
+> - `center`면 실행기가 요청 파일(`runs/<run_id>.requests.jsonl`)에 이 계약의 `ApprovalCreateRequest`를 그대로 쓰고, Bot UI가 하트비트 뒤에 올린다.
+> - 답·회수·만료는 하트비트(`approvals[]`)로 내려와 제어 파일을 거쳐 실행기에 간다. 받아 간 것은 `approval_acks`로 알린다 — 지금 기다리지 않는 결재의 답은 `accepted: false`(`not_waiting`)다.
+> - 회수·만료는 실행하는 쪽에 **답 없이 끝남**(`TaskFailed` `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`)으로 간다. 오류 경계가 있으면 그리로, 없으면 실행이 실패로 끝난다.
+> - 현장에서 먼저 답하면 Bot UI가 `DELETE …?reason=answered_in_field`로 거둔다.
 
 - **Center로 올라가는 것은 결재(`approval`)뿐이다.** 확인(실행 중 막힘, `confirmation`)은 화면 앞 사람만 답할 수 있으므로 올리지 않는다 (용어집 §3). 서버 Bot에는 확인이 없다 (C1 R2).
 - PC Bot은 답이 올 때까지 실행 자리를 쥐고 기다린다 (ADR-0014 §5). 서버 Bot은 상태를 저장하고 기다린다 (ADR-0015).
@@ -147,5 +152,6 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-07 | 1 | 현장 연결 — 요청 파일로 올리고 하트비트로 내려받는다. 회수·만료는 실행하는 쪽에 `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`로 간다 | 0038 |
 | 2026-10-01 | 1 | 초안 (확인은 올리지 않음, Center가 답 검증, `review` 보관 기한, 서버 실행기도 올림) | 0014, 0015 |
 | 2026-10-01 | 1 | 검토 반영: `layer` 필드, `run_id` 소유·멱등 충돌, `rejected_by_host` → `open` 복귀, 자동 회수(`run_ended`·`host_lost`), 관리자 회수의 효과, 행위자는 `X-CHK-Actor`, `answer` 값도 30일 뒤 삭제 | 0017 |

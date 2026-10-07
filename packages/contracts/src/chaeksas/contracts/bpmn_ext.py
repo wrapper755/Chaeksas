@@ -1187,6 +1187,12 @@ def _check_b12(process: BpmnProcess) -> list[Violation]:
                     _error("B12", f"{node.id}의 결재 location을 모른다: {approval.location}",
                            items=sorted(APPROVAL_LOCATIONS))
                 )
+            elif node.kind == "manualTask" and approval.location == "center":
+                # 확인은 화면 앞 사람만 답한다 (C6) — 적어 둔 것을 말없이 바꾸지 않고 알린다 (ADR-0038).
+                out.append(
+                    _warn("B12", f"{node.id}는 확인(수동 작업)이라 늘 현장에서 답한다 — "
+                                 "location: center는 쓰이지 않는다")
+                )
             for field_ in approval.fields:
                 if field_.type not in KNOWN_FIELD_TYPES:
                     out.append(
