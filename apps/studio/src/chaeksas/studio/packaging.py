@@ -24,6 +24,7 @@ from chaeksas.contracts.manifest import (
     ExtensionNeed,
     HumanNeeds,
     Manifest,
+    ManifestInput,
     Requires,
     ServiceAppNeed,
     TaskTypeNeed,
@@ -158,6 +159,17 @@ def build_manifest(process: BpmProcess, *, by: str = "studio", core: str = "0.1.
         triggers=collect_triggers(entry),
         requires=collect_requires(process),
         human=collect_human(process),
+        # 작업 지시 화면(CON-05)이 입력 칸을 그린다 — 사람이 두 번 적지 않게 그림에서 옮긴다.
+        inputs=[
+            ManifestInput(
+                name=one.name,
+                type=one.type,
+                required=one.required,
+                description=one.description,
+                default=one.default,
+            )
+            for one in entry.process.info.inputs
+        ],
         outputs=list(entry.process.info.outputs),
         built=Built(
             by=by, at=datetime.now(UTC).isoformat(timespec="seconds"), core=core, spec_version=SPEC_VERSION

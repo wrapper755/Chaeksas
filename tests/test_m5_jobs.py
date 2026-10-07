@@ -562,3 +562,20 @@ def test_the_command_says_when_the_answer_has_to_wait(world: World, capsys: Any)
     world.beat()
     assert admin_main(["-y", "job", "cancel", made["job_id"]], center=world.center) == 0
     assert "취소를 요청했습니다" in capsys.readouterr().out
+
+
+def test_the_listing_takes_several_states(world: World) -> None:
+    """CON-05의 상태 필터는 여러 개를 고른다 — `state`는 쉼표로 여럿 (C5)."""
+    kept = world.new_job()
+    gone = world.new_job()
+    assert world.cancel(gone["job_id"]).status_code == 200
+
+    def listed(query: str) -> set[str]:
+        found = world.client.get(f"/api/v1/jobs?{query}", headers=ADMIN_AUTH)
+        assert found.status_code == 200, found.text
+        return {row["job_id"] for row in found.json()}
+
+    assert listed("state=pending,cancelled") == {kept["job_id"], gone["job_id"]}
+    assert listed("state=cancelled") == {gone["job_id"]}
+    assert listed("state=pending,%20accepted") == {kept["job_id"]}, "빈칸은 무시한다"
+    assert len(listed("limit=1")) == 1

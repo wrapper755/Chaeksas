@@ -4,6 +4,9 @@ import { cookies } from "next/headers";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
+import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
+import type { JobCreateRequest } from "@chaeksas/api-types/c5-job-create-request";
+import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
@@ -99,6 +102,29 @@ export const center = {
     const suffix = search.size > 0 ? `?${search}` : "";
     return call<DeploymentInfo[]>(`/api/v1/deployments${suffix}`);
   },
+
+  /** 작업 지시 (C5·CON-05). `state`는 쉼표로 여럿. */
+  jobs: (query: { state?: string; target_id?: string; limit?: number } = {}) => {
+    const search = new URLSearchParams(
+      Object.entries(query)
+        .filter(([, value]) => value !== undefined && value !== "")
+        .map(([key, value]) => [key, String(value)]),
+    );
+    const suffix = search.size > 0 ? `?${search}` : "";
+    return call<JobInfo[]>(`/api/v1/jobs${suffix}`);
+  },
+  job: (jobId: string) => call<JobInfo>(`/api/v1/jobs/${encodeURIComponent(jobId)}`),
+  /** 만들기. 요청자는 BFF가 `X-CHK-Actor`로 싣는다 (C5 — 본문에 없다). */
+  createJob: (body: JobCreateRequest) =>
+    call<JobInfo>("/api/v1/jobs", { method: "POST", body: JSON.stringify(body) }),
+  /** 취소. 200이면 끝, 202면 `cancel_requested` — 현장의 다음 하트비트를 기다린다 (C5). */
+  cancelJob: (jobId: string) =>
+    call<JobInfo>(`/api/v1/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" }),
+  /** 패키지 정보 — 매니페스트의 `inputs`로 「새 작업」의 입력 칸을 그린다 (C1). */
+  packageInfo: (packageId: string, version: string) =>
+    call<PackageInfo>(
+      `/api/v1/packages/${encodeURIComponent(packageId)}/${encodeURIComponent(version)}/info`,
+    ),
 
   centerKeys: (query: { type?: string; state?: string } = {}) => {
     const search = new URLSearchParams(

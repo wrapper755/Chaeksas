@@ -150,3 +150,13 @@ def test_a_missing_entry_file_blocks_the_export(tmp_path: Path) -> None:
     manifest = build_manifest(made)
     blocking = [v for v in check(made, manifest, {}) if v.blocks]
     assert blocking and "진입 정의가 패키지에 없다" in blocking[0].message
+
+
+def test_the_inputs_go_into_the_manifest(tmp_path: Path) -> None:
+    """작업 지시 화면(CON-05)이 입력 칸을 그린다 — `chk:process.inputs`를 그대로 옮긴다 (C1)."""
+    made = build_manifest(imported(tmp_path, RECONCILIATION))
+    names = [one.name for one in made.inputs]
+    assert names[:2] == ["대상월", "청구서폴더"]
+    first = made.inputs[0]
+    assert (first.type, first.required) == ("string", False)
+    assert first.description and "지난달" in first.description

@@ -52,10 +52,21 @@
 | `triggers` | Trigger[] | | 시작 방법 | 1 |
 | `requires` | Requires | ✓ | 실행에 필요한 것 (아래) | 1 |
 | `human` | HumanNeeds | ✓ | 사람 개입 종류 (서버 검사에 씀) | 1 |
+| `inputs` | ManifestInput[] | | 진입 정의가 받는 입력 (`chk:process.inputs`를 그대로 옮긴 것). 작업을 만드는 화면(CON-05)이 입력 칸을 그린다. 실행하는 쪽은 이것이 아니라 BPMN을 본다 | 1 |
 | `outputs` | str[] | | 실행이 끝나면 만드는 변수 이름 | 1 |
 | `provides` | Provides | `process_lib`·`toolpack`만 | 제공하는 BPM 프로세스·도구 목록 | 1 |
 | `built` | Built | ✓ | 누가 언제 무엇으로 빌드했나 | 1 |
 | `content_hash` | str | ✓ | `sha256:<hex>`. 계산 규칙은 C2 (SIGNATURE와 이 필드 자신은 제외) | 1 |
+
+### ManifestInput
+
+| 필드 | 타입 | 뜻 |
+| --- | --- | --- |
+| `name` | str | 입력 변수 이름 |
+| `type` | str | 값 타입 (C14 `VALUE_TYPES`) |
+| `required` | bool | 주지 않으면 실행이 시작되지 않는다. 기본 `false` |
+| `description` | str? | 화면 안내 |
+| `default` | any? | 주지 않았을 때의 값. **업무 값을 넣지 않는다** (패키지는 서명되어 여러 PC로 간다) |
 
 ### Requires
 
@@ -149,6 +160,7 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
     "os": []
   },
   "human": {"approval_center": true, "approval_field": false, "confirmation": false},
+  "inputs": [{"name": "대상월", "type": "string", "required": false, "description": "비우면 지난달"}],
   "outputs": ["invoice_no"],
   "built": {"by": "studio", "at": "2026-10-01T10:00:00+09:00", "core": "0.3.0", "spec_version": 1},
   "content_hash": "sha256:9f2c…"
@@ -212,6 +224,7 @@ PC Bot (UI 태스크가 있음):
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
 | 2026-10-01 | 1 | 초안 | 0013, 0015, 0016 |
+| 2026-10-07 | 1 | `inputs`(ManifestInput[])를 더했다 — 작업 지시 화면(CON-05)이 Bot이 받는 입력을 알 길이 없었다. Studio가 그림에서 모은다. 없으면 빈 목록 (옛 패키지와 호환) | — |
 | 2026-10-01 | 1 | 검토 반영: `key_ref` 규칙 하나로(40자), 같은 해시 재업로드 200, R8 서버 작업 검사 | — |
 | 2026-10-01 | 1 | 확장 반영: `requires.extensions`, R2를 확장 정의의 `run_locations`로 판정 | 0018 |
 | 2026-10-01 | 1 | 확장 검토 반영: `ui_pages` → `resources{type,id}`, `task_types{id, extension, run_locations}`로 R2 판정, 외부 확장 `definition_hash` 고정 | 0018 |

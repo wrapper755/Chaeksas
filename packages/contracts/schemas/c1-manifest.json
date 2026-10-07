@@ -85,6 +85,47 @@
       "title": "HumanNeeds",
       "type": "object"
     },
+    "ManifestInput": {
+      "additionalProperties": true,
+      "description": "진입 정의가 받는 입력 하나 — `chk:process.inputs`를 옮긴 것 (C1). 작업 지시 화면이 칸을 그린다.",
+      "properties": {
+        "default": {
+          "default": null,
+          "title": "Default"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "required": {
+          "default": false,
+          "title": "Required",
+          "type": "boolean"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "type"
+      ],
+      "title": "ManifestInput",
+      "type": "object"
+    },
     "ProvidedProcess": {
       "additionalProperties": true,
       "description": "`process_lib`이 제공하는 공유 BPM 프로세스 하나.",
@@ -523,6 +564,13 @@
       "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$",
       "title": "Id",
       "type": "string"
+    },
+    "inputs": {
+      "items": {
+        "$ref": "#/$defs/ManifestInput"
+      },
+      "title": "Inputs",
+      "type": "array"
     },
     "kind": {
       "enum": [
