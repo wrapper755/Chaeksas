@@ -14,6 +14,7 @@ import argparse
 import secrets
 import sys
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from chaeksas.admin import keys as keystore
@@ -241,6 +242,124 @@ def revoke_deploy(args: argparse.Namespace, center: Center) -> int:
     return 0
 
 
+# ─────────────────────────── 외부 확장 (C13·C2, ADM-04) ───────────────────────────
+
+
+def _read_definition(path: str) -> dict[str, Any]:
+    import json  # noqa: PLC0415
+
+    found = Path(path)
+    if not found.is_file():
+        raise CenterProblem(f"정의 파일이 없습니다: {path}")
+    try:
+        body = json.loads(found.read_text(encoding="utf-8"))
+    except ValueError as e:
+        raise CenterProblem(f"정의 파일이 JSON이 아닙니다: {e}") from e
+    if not isinstance(body, dict):
+        raise CenterProblem("정의 파일의 최상위가 객체가 아닙니다")
+    return body
+
+
+def sign_extension(args: argparse.Namespace, center: Center) -> int:
+    """외부 확장 정의에 승인 서명 → **봉투 파일** (C2 `extension`).
+
+    **E1·E3을 먼저 로컬에서 돌려 보여 준다** — 서명한 뒤에 Center가 거부하면 늦다.
+    정의가 Bot의 키를 어느 주소로 보낼지 정하므로, 허용 호스트와 결정 수행 허용을 눈으로
+    확인하고 묻는다 (ADM-04).
+    """
+    from chaeksas.contracts.extension import (  # noqa: PLC0415
+        ExtensionManifest,
+        definition_hash,
+        validate,
+    )
+
+    definition = _read_definition(args.path)
+    try:
+        manifest = ExtensionManifest.model_validate(definition)
+    except ValueError as e:
+        print(f"정의가 C13과 맞지 않습니다: {str(e).splitlines()[0]}", file=sys.stderr)
+        return 2
+
+    problems = validate(manifest, from_center=True)
+    if problems:
+        print("정의에 문제가 있습니다 — 서명하지 않았습니다:")
+        for one in problems:
+            print(f"  [{one.rule}/{one.code}] {one.message}")
+        return 2
+
+    adapter = manifest.service.adapter if manifest.service else None
+    print(f"{manifest.id}@{manifest.version} · {manifest.name} · 등급 {manifest.tier}")
+    print(f"  해시: {definition_hash(definition)}")
+    if adapter is not None:
+        print(f"  허용 호스트: {', '.join(adapter.allowed_hosts) or '(없음)'}")
+        print(f"  사설망 허용: {'예' if adapter.allow_private_network else '아니오'}")
+        for op in adapter.operations:
+            modes = ", ".join(op.modes)
+            print(f"  작업 {op.name}: {modes}{' · 멱등' if op.idempotent else ''}")
+    if not _ask("서명할까요?", assume_yes=args.yes):
+        print("취소했습니다.")
+        return 1
+
+    envelope = _sign(
+        args,
+        {
+            "kind": "extension",
+            "id": manifest.id,
+            "version": manifest.version,
+            "definition_hash": definition_hash(definition),
+        },
+    )
+    return _write_envelope(
+        args,
+        envelope,
+        default=f"{manifest.id}-{manifest.version}.envelope.json",
+        next_step="콘솔의 「리소스 → 확장」에서 정의 파일과 이 봉투를 함께 올리세요.",
+    )
+
+
+def revoke_extension(args: argparse.Namespace, center: Center) -> int:
+    """외부 확장 승인 철회 서명 → 봉투 파일. 운영자가 CON-07 「해제」에 올린다."""
+    if not _ask(
+        f"{args.id}@{args.version}의 승인을 철회하면 이 정의를 쓰는 Bot이 실행 불가가 됩니다. 계속할까요?",
+        assume_yes=args.yes,
+    ):
+        print("취소했습니다.")
+        return 1
+    envelope = _sign(
+        args,
+        {
+            "kind": "extension_revoke",
+            "id": args.id,
+            "version": args.version,
+            "reason": args.reason,
+            "revoked_at": now_iso(),
+        },
+    )
+    return _write_envelope(
+        args,
+        envelope,
+        default=f"{args.id}-{args.version}.revoke.json",
+        next_step="콘솔의 「리소스 → 확장 → 그 확장」에서 이 봉투를 올려 해제하세요.",
+    )
+
+
+def _write_envelope(args: argparse.Namespace, envelope: Envelope, *, default: str, next_step: str) -> int:
+    """봉투를 파일로 쓴다. **Center로 바로 보내지 않는다** — 운영자가 콘솔에 올린다 (C13).
+
+    `next_step`은 다음에 할 일 한 줄이다 — 등록과 해제가 올릴 것이 다르다 (등록은 정의
+    파일까지, 해제는 봉투만).
+    """
+    import json  # noqa: PLC0415
+
+    target = Path(getattr(args, "out", None) or default)
+    target.write_text(
+        json.dumps(envelope.to_json_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"봉투를 썼습니다 — {target}")
+    print(f"  {next_step}")
+    return 0
+
+
 # ─────────────────────────── 작업 (C5 `/jobs`) ───────────────────────────
 
 
@@ -421,6 +540,18 @@ def parser() -> argparse.ArgumentParser:
     stopped.add_argument("job_id")
     stopped.set_defaults(run=job_cancel)
 
+    signed_ext = subs.add_parser("sign-extension", help="외부 확장 정의 승인 서명 → 봉투 파일 (ADM-04)")
+    signed_ext.add_argument("path", help="확장 정의 파일 (extension.json)")
+    signed_ext.add_argument("--out", help="봉투를 쓸 파일 (기본: <id>-<버전>.envelope.json)")
+    signed_ext.set_defaults(run=sign_extension)
+
+    dropped_ext = subs.add_parser("revoke-extension", help="외부 확장 승인 철회 서명 → 봉투 파일")
+    dropped_ext.add_argument("id")
+    dropped_ext.add_argument("version")
+    dropped_ext.add_argument("--reason", default="관리자 철회")
+    dropped_ext.add_argument("--out", help="봉투를 쓸 파일")
+    dropped_ext.set_defaults(run=revoke_extension)
+
     drop = subs.add_parser("revoke-package", help="패키지 승인 철회 서명")
     drop.add_argument("id")
     drop.add_argument("version")
@@ -454,4 +585,6 @@ __all__ = [
     "main",
     "parser",
     "pending",
+    "revoke_extension",
+    "sign_extension",
 ]

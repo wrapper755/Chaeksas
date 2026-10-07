@@ -229,6 +229,80 @@ export async function cancelJob(jobId: string): Promise<ActionResult> {
   return {};
 }
 
+/** 올린 파일을 JSON으로 읽는다. 사람이 고른 파일이라 **왜 안 되는지 한 줄로** 말한다. */
+async function jsonFile(form: FormData, field: string, label: string): Promise<unknown> {
+  const found = form.get(field);
+  if (!(found instanceof File) || found.size === 0) {
+    throw new Error(`${label}을 고르세요.`);
+  }
+  try {
+    return JSON.parse(await found.text());
+  } catch {
+    throw new Error(`${label}이 JSON이 아닙니다 (${found.name}).`);
+  }
+}
+
+/**
+ * 외부 확장 등록 (CON-07 「확장 추가」).
+ *
+ * **정의 파일과 Admin 서명 봉투를 함께** 올린다 — 서명 없이는 등록되지 않는다 (C2).
+ * 봉투는 `chk-admin sign-extension`이 만든다. C13 검사 결과는 Center가 칸별 사유와 함께
+ * 돌려주므로 그것을 그대로 보인다.
+ */
+export async function registerExtension(form: FormData): Promise<void> {
+  const back = (query: string): Route => `/resources?${query}` as Route;
+  let definition: unknown;
+  let envelope: unknown;
+  try {
+    definition = await jsonFile(form, "definition", "확장 정의 파일");
+    envelope = await jsonFile(form, "envelope", "서명 봉투 파일");
+  } catch (cause) {
+    const said = cause instanceof Error ? cause.message : "파일을 읽지 못했습니다.";
+    redirect(back(`tab=extension&error=${encodeURIComponent(said)}`));
+  }
+
+  try {
+    await center.registerExtension(definition, envelope);
+  } catch (cause) {
+    redirect(back(`tab=extension&error=${encodeURIComponent(violations(cause))}`));
+  }
+  revalidatePath("/resources", "layout");
+  redirect(back("tab=extension&extension=1"));
+}
+
+/** 등록 해제 — **봉투가 필요하다** (`extension_revoke`, `chk-admin revoke-extension`). */
+export async function revokeExtension(form: FormData): Promise<void> {
+  const extensionId = String(form.get("extension_id") ?? "");
+  const back = (query: string): Route =>
+    `/resources/extensions/${encodeURIComponent(extensionId)}?${query}` as Route;
+  let envelope: unknown;
+  try {
+    envelope = await jsonFile(form, "envelope", "해제 봉투 파일");
+  } catch (cause) {
+    const said = cause instanceof Error ? cause.message : "파일을 읽지 못했습니다.";
+    redirect(back(`error=${encodeURIComponent(said)}`));
+  }
+  try {
+    await center.revokeExtension(envelope);
+  } catch (cause) {
+    redirect(back(`error=${encodeURIComponent(violations(cause))}`));
+  }
+  revalidatePath("/resources", "layout");
+  redirect("/resources?tab=extension&revoked=1" as Route);
+}
+
+/** C13 검사 위반을 **칸별 사유까지** 한 줄로 (E3은 어디가 틀렸는지가 요점이다). */
+function violations(cause: unknown): string {
+  if (!(cause instanceof CenterError)) return message(cause);
+  const found = cause.body?.detail?.violations;
+  if (!Array.isArray(found) || found.length === 0) return cause.message;
+  const said = (found as Array<{ rule?: string; message?: string }>)
+    .slice(0, 5)
+    .map((one) => `[${one.rule ?? "?"}] ${one.message ?? ""}`)
+    .join(" · ");
+  return `${cause.message} — ${said}`;
+}
+
 /**
  * 서비스 앱 등록 (CON-07). **일반 `<form>`이 부른다** — JS 없이도 등록된다.
  *

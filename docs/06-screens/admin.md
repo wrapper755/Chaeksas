@@ -19,8 +19,8 @@ Admin은 서명 키를 가지고 패키지 승인·배포·철회에 서명한�
 | `chk-admin deployments [--bot-ui <이름>] [--bpm-process <id>]` | 활성 배포 목록 (배포 id, 대상, Bot, 버전, 유효 기간). CON-03 「배포」의 배포 id와 같다 | |
 | `chk-admin revoke-deploy <배포 id>` | 배포 철회 서명 | |
 | `chk-admin revoke-package <id> <버전>` | 패키지 승인 철회 서명 (C2 `package_revoke`) — 그 패키지의 배포가 모두 무효 | 「배포 N개가 무효가 됩니다」 |
-| `chk-admin sign-extension <정의 파일>` | 외부 확장 정의 승인 서명 (C2 `extension`) → 봉투 파일. 운영자가 CON-07에 함께 올린다 | 정의의 허용 호스트·작업·결정 수행 허용 여부를 보이고 「서명할까요?」 |
-| `chk-admin revoke-extension <id> <버전>` | 외부 확장 승인 철회 서명 → 봉투 파일. 운영자가 CON-07 「해제...」에 올린다 | 「이 정의를 쓰는 Bot N개가 실행 불가가 됩니다」 |
+| `chk-admin sign-extension <정의 파일> [--out]` | 외부 확장 정의 승인 서명 (C2 `extension`) → 봉투 파일. 운영자가 CON-07에 함께 올린다. **E1·E3을 먼저 로컬에서 돌려** 문제가 있으면 서명하지 않는다 | 해시·허용 호스트·사설망 허용·작업별 수행 모드를 보이고 「서명할까요?」 |
+| `chk-admin revoke-extension <id> <버전> [--out]` | 외부 확장 승인 철회 서명 → 봉투 파일. 운영자가 CON-07 상세의 「등록 해제」에 올린다 | 「이 정의를 쓰는 Bot이 실행 불가가 됩니다. 계속할까요?」 |
 | `chk-admin deprecate <id> <버전>` | 지원 종료 표시 (서명 없음, 새 배포만 막음) | |
 | `chk-admin job new <id> --bot-ui <Bot UI> [--version] [--input 이름=값] [--inputs <JSON>] [--until] [--note] [--idempotency-key]` | 작업 만들기 (콘솔 CON-05와 같은 일). **서명이 없다** — 이미 배포된 것을 돌릴 뿐이라 토큰 권한이 관문이다 (C5 권한표) | 대상 Bot UI·입력 개수·만료를 보이고 「작업을 보낼까요?」 |
 | `chk-admin job list [--state] [--bot-ui] [--bpm-process]` / `show <작업 id>` | 작업 목록 / 하나 (실행 상태 포함) | |

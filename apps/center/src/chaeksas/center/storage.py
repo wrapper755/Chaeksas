@@ -102,6 +102,21 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- 맞추기 규칙: 하트비트에 연속으로 보이지 않은 횟수 (C4 `bot_ui_lost`).
   misses           INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS extensions (
+  -- Center에 **외부로 등록된** 확장 정의 (C13, tier=external만). 내장·사내는 설치 파일에
+  -- 든 것만 쓴다 (E2) — 여기 들어오지 않는다.
+  id              TEXT NOT NULL,
+  version         TEXT NOT NULL,
+  -- 정의와 봉투를 **그대로** 둔다 — 실행하는 쪽이 받아 다시 검증한다 (C13 전송, E6).
+  -- 모델로 바꿔 다시 쓰면 `definition_hash`가 달라져 서명이 깨진다.
+  definition_json TEXT NOT NULL,
+  envelope_json   TEXT NOT NULL,
+  definition_hash TEXT NOT NULL,
+  revoked_json    TEXT,
+  at              TEXT NOT NULL,
+  registered_by   TEXT NOT NULL,
+  PRIMARY KEY (id, version)
+);
 CREATE TABLE IF NOT EXISTS service_apps (
   -- 등록된 서비스 앱 (C7). **주소의 유일한 출처**다 (C13 Service).
   app_id         TEXT PRIMARY KEY,
