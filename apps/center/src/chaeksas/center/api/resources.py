@@ -7,19 +7,25 @@
 | 서비스 앱 | 운영자가 등록한 주소 + Center가 읽은 C11 `/manifest`·`/healthz` |
 | 툴팩 | `packages` 표의 `kind=toolpack` (C5) |
 | 런타임 | `bot_uis`가 등록·하트비트로 보고한 것 (C4) |
-| 확장 | 실행하는 쪽의 보고 + 서비스 앱 manifest의 `extension` |
+| 확장 | 실행하는 쪽의 보고 + 서비스 앱 manifest의 `extension` + **외부로 등록된 정의**(C13) |
 
 **Center는 서비스 앱 키를 갖지 않는다** (ADR-0013) — 읽는 것은 인증이 필요 없는 공개
 정보뿐이다 (`/healthz`·`/manifest`).
 
-> 확장이 기여한 자원(「UI 화면」)은 아직이다 — `catalog_url`을 읽는 일이 C13 외부 확장
-> 등록(서명 봉투)에 딸려 있어서 그것과 함께 한다. 그때까지 `contributed`는 빈 목록이고,
-> 누락 검사도 그 종류를 **거부 사유로 쓰지 않는다** (C7 §누락 검사 — 배포를 막는 것은
-> 확장 누락·해시 불일치와 R8뿐이다).
+외부 확장은 **서명 봉투로만** 등록·해제된다 (C2 `extension`·`extension_revoke`, C13 E6) —
+정의가 Bot의 키를 어느 주소로 보낼지 정하므로 배포와 같은 관문을 둔다. 내장·사내 확장은
+설치 파일에 든 것만 쓰고 여기 들어오지 않는다 (E2).
+
+> 확장이 기여한 자원(「UI 화면」)은 아직이다 — 정의의 `resources[].catalog_url`을 읽어야
+> 하는데 **내장 확장의 정의가 Center에 없다** (보고와 C11 manifest는 `{id, version}`만
+> 나른다). C11에 카탈로그 칸을 더하는 것이 다음 조각이다. 그때까지 `contributed`는 빈
+> 목록이고, 누락 검사도 그 종류를 **거부 사유로 쓰지 않는다** (C7 §누락 검사 — 배포를
+> 막는 것은 확장 누락·해시 불일치와 R8뿐이다).
 """
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from chaeksas.center.auth import Caller
@@ -400,35 +406,250 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
     # 2) 서비스 앱 manifest의 `extension` — 서버 부분이 있는 확장은 여기서 이름·버전이 온다.
     apps = {one.extension_id: one for one in service_apps(store, probe=probe) if one.extension_id}
 
+    # 3) Center에 **외부로 등록된** 정의 (C13) — 이름·등급·어댑터는 정의가 원본이다.
+    external = _external_rows(store)
+
     out = []
-    for key in sorted(set(found) | set(apps)):
+    for key in sorted(set(found) | set(apps) | set(external)):
         slot = found.get(key, {"versions": {}, "hosts": 0, "hash": None})
         app = apps.get(key)
+        registered = external.get(key)
+        definition = json.loads(registered["definition_json"]) if registered is not None else None
         versions = slot["versions"]
         out.append(
             ExtensionResource(
                 id=key,
-                # 보고된 판이 여럿이면 가장 많이 깔린 것을 적는다 (분포는 `installed_on`에 있다).
-                version=max(versions, key=lambda v: versions[v]) if versions else (app.version or "" if app else ""),
-                name=app.name if app else None,
-                tier="builtin",  # 외부 확장 등록(C13)이 붙으면 거기서 온다
-                definition_hash=slot["hash"],
-                protocol="chk-c11" if app else None,
+                # 등록된 정의가 있으면 그것이 원본이다. 없으면 보고된 판 중 **가장 많이
+                # 깔린 것**을 적는다 (분포는 `installed_on`에 있다).
+                version=(
+                    str(definition["version"])
+                    if definition
+                    else (max(versions, key=lambda v: versions[v]) if versions else (app.version or "" if app else ""))
+                ),
+                name=(definition.get("name") if definition else None) or (app.name if app else None),
+                publisher=definition.get("publisher") if definition else None,
+                # 등록된 것은 외부뿐이다 (E2) — 보고만 있는 것은 설치 파일에 든 내장이다.
+                tier=str(definition["tier"]) if definition else "builtin",
+                definition_hash=(
+                    str(registered["definition_hash"]) if registered is not None else slot["hash"]
+                ),
+                protocol=_protocol_of(definition, app),
+                contributes_summary=_contributes_of(definition),
                 service_app_id=app.app_id if app else None,
                 installed_on=InstalledOn(hosts=int(slot["hosts"]), by_version=dict(versions)),
                 status=app.status if app else "n/a",
+                definition=definition,
+                envelope=json.loads(registered["envelope_json"]) if registered is not None else None,
             )
         )
     return out
 
 
+def _protocol_of(definition: dict[str, Any] | None, app: ServiceAppResource | None) -> str | None:
+    """연결 방식 (C7). 정의가 있으면 그것이, 없으면 서버 부분이 있는지가 정한다."""
+    if definition:
+        found = (definition.get("service") or {}).get("protocol")
+        return str(found) if found else None
+    return "chk-c11" if app else None
+
+
+def _contributes_of(definition: dict[str, Any] | None) -> dict[str, list[str]]:
+    """기여 지점별 이름 (C7 `contributes_summary`). Center는 뜻을 해석하지 않는다."""
+    if not definition:
+        return {}
+    out: dict[str, list[str]] = {}
+    for where, items in (definition.get("contributes") or {}).items():
+        if isinstance(items, list):
+            names = [str(one.get("id") or one.get("type") or "") for one in items if isinstance(one, dict)]
+            out[str(where)] = [one for one in names if one]
+    return out
+
+
 def contributed(store: Store) -> list[ContributedResource]:
-    """확장이 기여한 자원 — **아직 모으지 않는다** (C13 외부 확장 등록과 함께 온다).
+    """확장이 기여한 자원 — **아직 모으지 않는다.**
+
+    정의의 `resources[].catalog_url`을 읽어야 하는데(C13 §5), **내장 확장의 정의가
+    Center에 없다** — Bot UI 보고와 서비스 앱 manifest는 `{id, version}`만 나르고 C11
+    manifest에 카탈로그 칸이 없다. 그 칸을 더하는 것이 다음 조각이다.
 
     빈 목록을 주는 것이 「없다」는 뜻은 아니다. 그래서 누락 검사에서 이 종류를 거부
     사유로 쓰지 않는다 (C7 §누락 검사).
     """
     return []
+
+
+# ─────────────────────────── 외부 확장 등록 (C13·C2) ───────────────────────────
+
+
+def _envelope_of(raw: Any) -> Any:
+    from chaeksas.contracts.signing import Envelope  # noqa: PLC0415
+
+    try:
+        return Envelope.model_validate(raw)
+    except ValueError as e:
+        raise ApiError(400, "bad_envelope", f"봉투가 계약과 맞지 않는다: {e}") from e
+
+
+def _refuse(problems: list[Any], *, status: int = 422) -> None:
+    if not problems:
+        return
+    first = problems[0]
+    raise ApiError(
+        status,
+        first.code or "input_invalid",
+        first.message,
+        detail={
+            "violations": [
+                {"rule": p.rule, "code": p.code, "message": p.message, "items": list(p.items or [])}
+                for p in problems
+            ]
+        },
+    )
+
+
+def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ExtensionResource, bool]:
+    """`POST /resources/extensions` — 정의와 **서명 봉투**를 함께 받는다 (C13 E6).
+
+    **서명이 관문이다** (C2). 관리자 토큰만으로는 등록되지 않는다 — 정의가 Bot의 키를 어느
+    주소로 보낼지 정하므로 배포와 같은 관문을 둔다.
+    """
+    from chaeksas.center.api.signing import admin_keys  # noqa: PLC0415 — 순환 import를 피한다
+    from chaeksas.contracts.extension import (  # noqa: PLC0415
+        ExtensionManifest,
+        check_size,
+        definition_hash,
+        environment_conflicts,
+        task_type_conflicts,
+        validate,
+        verify_external,
+    )
+
+    definition = raw.get("definition")
+    if not isinstance(definition, dict):
+        raise ApiError(422, "input_invalid", "`definition`에 확장 정의를 보내세요")
+    envelope = _envelope_of(raw.get("envelope"))
+
+    _refuse(check_size(json.dumps(definition, ensure_ascii=False).encode("utf-8")), status=413)
+    try:
+        manifest = ExtensionManifest.model_validate(definition)
+    except ValueError as e:
+        raise ApiError(
+            422, "input_invalid", "확장 정의가 C13과 맞지 않는다", {"error": str(e).splitlines()[0]}
+        ) from e
+
+    # E1·E2·E3 — 외부 확장에 코드 기여가 없고, 등급이 external이고, 어댑터 선언이 안전한가.
+    _refuse(validate(manifest, from_center=True))
+    # E6 — 봉투가 **이 정의**에 대한 것인가 (해시·id·버전).
+    _refuse(verify_external(definition, envelope, keys=admin_keys(store)), status=400)
+
+    # E4·E8 — 이미 등록된 **다른** 확장들과 겹치지 않는가.
+    others = [one for one in _registered_manifests(store) if one.id != manifest.id]
+    _refuse(task_type_conflicts([*others, manifest]), status=409)
+    _refuse(environment_conflicts([*others, manifest]), status=409)
+
+    computed = definition_hash(definition)
+    body = json.dumps(definition, ensure_ascii=False, sort_keys=True)
+    envelope_body = json.dumps(envelope.to_json_dict(), ensure_ascii=False)
+
+    before = store.row(
+        "SELECT * FROM extensions WHERE id = ? AND version = ?", (manifest.id, manifest.version)
+    )
+    if before is not None:
+        if before["revoked_json"]:
+            # **철회된 판은 되살아나지 않는다** (배포·패키지와 같은 규칙, C2).
+            raise ApiError(409, "extension_revoked", f"{manifest.id}@{manifest.version}은 철회됐다")
+        if before["definition_hash"] != computed:
+            raise ApiError(409, "id_conflict", f"{manifest.id}@{manifest.version}에 다른 정의가 왔다")
+        return extension(store, manifest.id), False
+
+    with store.tx() as cur:
+        cur.execute(
+            "INSERT INTO extensions (id, version, definition_json, envelope_json, definition_hash,"
+            " revoked_json, at, registered_by) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
+            (manifest.id, manifest.version, body, envelope_body, computed, now_iso(), found.actor),
+        )
+    return extension(store, manifest.id), True
+
+
+def revoke_extension(store: Store, raw: dict[str, Any]) -> ExtensionResource:
+    """`DELETE /resources/extensions` — `extension_revoke` 봉투 (C13·C2). **되살릴 수 없다.**
+
+    **쓰는 Bot이 있어도 막지 않는다** — 정의에 문제가 있어 거두는 일이라, 쓰는 쪽이 있다고
+    남겨 두면 그게 더 위험하다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).
+    """
+    from chaeksas.center.api.signing import admin_keys  # noqa: PLC0415
+    from chaeksas.contracts.signing import verify  # noqa: PLC0415
+
+    envelope = _envelope_of(raw.get("envelope") if "envelope" in raw else raw)
+    _refuse(verify(envelope, keys=admin_keys(store), expect_kind="extension_revoke"), status=403)
+
+    claim = envelope.payload
+    found = store.row(
+        "SELECT * FROM extensions WHERE id = ? AND version = ?",
+        (claim.get("id"), claim.get("version")),
+    )
+    if found is None:
+        raise ApiError(404, "not_found", f"등록된 확장이 없다: {claim.get('id')}@{claim.get('version')}")
+    if not found["revoked_json"]:
+        with store.tx() as cur:
+            cur.execute(
+                "UPDATE extensions SET revoked_json = ? WHERE id = ? AND version = ?",
+                (
+                    json.dumps(envelope.to_json_dict(), ensure_ascii=False),
+                    claim.get("id"),
+                    claim.get("version"),
+                ),
+            )
+    # **철회된 것은 목록에서 빠지므로** `extension()`으로는 찾을 수 없다 — 저장된 줄에서 짓는다.
+    return _revoked_info(store, str(claim.get("id")), str(claim.get("version")))
+
+
+def _revoked_info(store: Store, extension_id: str, version: str) -> ExtensionResource:
+    """철회된 확장 하나 (철회 응답에만 쓴다 — 목록에는 뜨지 않는다)."""
+    row = store.row(
+        "SELECT * FROM extensions WHERE id = ? AND version = ?", (extension_id, version)
+    )
+    if row is None:  # pragma: no cover — 방금 본 줄이다
+        raise ApiError(404, "not_found", f"등록된 확장이 없다: {extension_id}@{version}")
+    definition = json.loads(row["definition_json"])
+    return ExtensionResource(
+        id=extension_id,
+        version=version,
+        name=definition.get("name"),
+        publisher=definition.get("publisher"),
+        tier=str(definition["tier"]),
+        definition_hash=str(row["definition_hash"]),
+        protocol=_protocol_of(definition, None),
+        contributes_summary=_contributes_of(definition),
+        status="n/a",
+        definition=definition,
+        envelope=json.loads(row["envelope_json"]),
+    )
+
+
+def _registered_manifests(store: Store) -> list[Any]:
+    """등록돼 있고 **철회되지 않은** 외부 확장 정의들 (E4·E8 대조에 쓴다)."""
+    from chaeksas.contracts.extension import ExtensionManifest  # noqa: PLC0415
+
+    out = []
+    for row in store.rows(
+        "SELECT definition_json FROM extensions WHERE revoked_json IS NULL ORDER BY id, version"
+    ):
+        try:
+            out.append(ExtensionManifest.model_validate(json.loads(row["definition_json"])))
+        except ValueError:  # pragma: no cover — 등록할 때 검증했다
+            continue
+    return out
+
+
+def _external_rows(store: Store) -> dict[str, Any]:
+    """id → 가장 최근에 등록된(철회되지 않은) 외부 확장 줄."""
+    out: dict[str, Any] = {}
+    for row in store.rows(
+        "SELECT * FROM extensions WHERE revoked_json IS NULL ORDER BY id, at"
+    ):
+        out[str(row["id"])] = row  # 같은 id는 나중 것이 이긴다
+    return out
 
 
 def index(store: Store, *, probe: bool = False) -> Any:
@@ -490,6 +711,8 @@ __all__ = [
     "read_public",
     "refresh",
     "register",
+    "register_extension",
+    "revoke_extension",
     "runtimes",
     "service_app",
     "service_apps",

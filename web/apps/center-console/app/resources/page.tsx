@@ -8,7 +8,7 @@ import type { RuntimeResource } from "@chaeksas/api-types/c7-runtime-resource";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import { CENTER_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
-import { registerServiceApp } from "@/app/actions";
+import { registerExtension, registerServiceApp } from "@/app/actions";
 import { RefreshResources } from "./tools";
 
 /**
@@ -17,8 +17,9 @@ import { RefreshResources } from "./tools";
  * 고정 탭 넷(확장·서비스 앱·툴팩·런타임). **키는 다루지 않는다** (C7 — 서비스 앱 키는 각
  * 앱의 관리 콘솔에서 발급한다, ADR-0013).
  *
- * 확장이 기여한 자원(「UI 화면」)은 아직 모으지 않는다 — C13 외부 확장 등록과 함께 온다.
- * 그래서 그 탭을 **끄고 이유를 보인다** (U3 — 없는 것을 빈 탭으로 두지 않는다).
+ * 확장이 기여한 자원(「UI 화면」)은 아직 모으지 않는다 — 내장 확장의 정의가 Center에 없어
+ * `catalog_url`을 찾을 길이 없다 (C11 manifest에 카탈로그 칸을 더해야 한다). 그래서 그 탭을
+ * **끄고 이유를 보인다** (U3 — 없는 것을 빈 탭으로 두지 않는다).
  */
 
 /** C7 상태 → `status_map` 「서비스 앱」 묶음의 표기. 모르는 값은 그대로 (원칙 10). */
@@ -61,7 +62,13 @@ export function appStatus(value: string): string {
 export default async function ResourcesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; error?: string; registered?: string }>;
+  searchParams: Promise<{
+    tab?: string;
+    error?: string;
+    registered?: string;
+    extension?: string;
+    revoked?: string;
+  }>;
 }) {
   const found = await session();
   if (!found) redirect("/login");
@@ -119,7 +126,7 @@ export default async function ResourcesPage({
         {/* 아직 없는 탭은 **끄고 이유를 보인다** (U3). */}
         <span
           className="cursor-not-allowed border border-border-default px-3 py-1 text-body text-text-muted"
-          title="확장이 올린 카탈로그를 Center가 읽는 일은 외부 확장 등록과 함께 옵니다"
+          title="내장 확장의 카탈로그 주소를 Center가 아직 알 수 없습니다 (C11 manifest에 칸을 더해야 합니다)"
         >
           UI 화면 (M5에서 만듭니다)
         </span>
@@ -130,13 +137,22 @@ export default async function ResourcesPage({
       {asked.registered ? (
         <p className="mb-4 text-body text-status-completed-fg">서비스 앱을 등록했습니다.</p>
       ) : null}
+      {asked.extension ? (
+        <p className="mb-4 text-body text-status-completed-fg">확장을 등록했습니다.</p>
+      ) : null}
       {shortfall.length > 0 ? (
         <div className="mb-4">
           <ErrorBanner message={`Bot이 요구하지만 없는 리소스: ${shortfall.join(" · ")}`} />
         </div>
       ) : null}
 
-      {tab === "extension" ? <Extensions items={items as ExtensionResource[]} /> : null}
+      {asked.revoked ? (
+        <p className="mb-4 text-body text-status-completed-fg">확장 등록을 해제했습니다.</p>
+      ) : null}
+
+      {tab === "extension" ? (
+        <Extensions items={items as ExtensionResource[]} admin={found.mode === "admin"} />
+      ) : null}
       {tab === "service_app" ? (
         <ServiceApps items={items as ServiceAppResource[]} admin={found.mode === "admin"} />
       ) : null}
@@ -146,9 +162,21 @@ export default async function ResourcesPage({
   );
 }
 
-function Extensions({ items }: { items: ExtensionResource[] }) {
+function Extensions({ items, admin }: { items: ExtensionResource[]; admin: boolean }) {
   const columns: Array<Column<ExtensionResource>> = [
-    { key: "name", header: "이름", cell: (row) => row.name ?? "—" },
+    {
+      key: "name",
+      header: "이름",
+      cell: (row) =>
+        // 외부 확장만 상세가 있다 — 정의·봉투가 Center에 있는 것이 그것뿐이다.
+        row.tier === "external" ? (
+          <Link className="underline" href={`/resources/extensions/${encodeURIComponent(row.id)}`}>
+            {row.name ?? row.id}
+          </Link>
+        ) : (
+          (row.name ?? "—")
+        ),
+    },
     { key: "id", header: "id", mono: true },
     { key: "tier", header: "등급", width: "10ch", cell: (row) => TIER[row.tier] ?? row.tier },
     { key: "version", header: "버전", width: "12ch", mono: true },
@@ -168,11 +196,15 @@ function Extensions({ items }: { items: ExtensionResource[] }) {
     {
       key: "service_app_id",
       header: "서버 부분",
+      // HTTP 어댑터 확장도 **서버 부분이 있다** (바깥 앱) — C11 서비스 앱이 아닐 뿐이다.
+      // 「없음」이라고 적으면 키를 어디로 보내는지 모르는 것처럼 읽힌다.
       cell: (row) =>
         row.service_app_id ? (
           <Link className="underline" href={`/resources/service-apps/${encodeURIComponent(row.service_app_id)}`}>
             {row.service_app_id}
           </Link>
+        ) : row.protocol === "http-adapter" ? (
+          "외부 앱 (어댑터)"
         ) : (
           "없음 (클라이언트 기여만)"
         ),
@@ -185,10 +217,44 @@ function Extensions({ items }: { items: ExtensionResource[] }) {
         row.status === "n/a" ? "—" : <StatusBadge group="서비스 앱" label={appStatus(row.status ?? "")} />,
     },
   ];
-  if (items.length === 0) {
-    return <EmptyState title="설치·등록된 확장이 없습니다." />;
-  }
-  return <DataTable columns={columns} rows={items} rowKey={(row) => row.id} caption="확장" />;
+  return (
+    <div className="flex flex-col gap-6">
+      {items.length === 0 ? (
+        <EmptyState
+          title="설치·등록된 확장이 없습니다."
+          hint="내장 확장은 Bot UI가 보고하면 나타납니다. 외부 확장은 아래에서 등록하세요."
+        />
+      ) : (
+        <DataTable columns={columns} rows={items} rowKey={(row) => row.id} caption="확장" />
+      )}
+
+      {admin ? (
+        <section className="flex flex-col gap-2">
+          <h2 className="text-h2 font-semibold">확장 추가 (외부)</h2>
+          <p className="text-body-sm text-text-muted">
+            정의 파일과 <strong>Admin 서명 봉투</strong>를 함께 올리세요 — 서명 없이는 등록되지
+            않습니다. 봉투는 관리자 PC에서 <code>chk-admin sign-extension &lt;정의 파일&gt;</code>로
+            만듭니다. 내장·사내 확장은 설치 파일에 든 것만 쓰므로 여기서 등록할 수 없습니다.
+          </p>
+          <form action={registerExtension} className="flex max-w-2xl flex-col gap-2">
+            <label className="flex flex-col gap-1 text-body-sm">
+              <span className="text-text-muted">확장 정의 파일 (extension.json) *</span>
+              <input type="file" name="definition" accept=".json,application/json" required className="text-body" />
+            </label>
+            <label className="flex flex-col gap-1 text-body-sm">
+              <span className="text-text-muted">서명 봉투 파일 *</span>
+              <input type="file" name="envelope" accept=".json,application/json" required className="text-body" />
+            </label>
+            <div>
+              <Button type="submit" variant="primary">
+                등록
+              </Button>
+            </div>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  );
 }
 
 function ServiceApps({ items, admin }: { items: ServiceAppResource[]; admin: boolean }) {

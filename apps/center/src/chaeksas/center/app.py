@@ -242,6 +242,19 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         require_read(authenticate(request))
         return resources.service_app(app.state.store, app_id)
 
+    @app.post(f"{API}/resources/extensions")
+    async def register_extension(request: Request) -> Any:
+        """외부 확장 등록. **서명이 관문이다** (C2 `extension` 봉투, C13 E6)."""
+        found = require_admin(authenticate(request))
+        info, created = resources.register_extension(app.state.store, found, await _json(request))
+        return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
+
+    @app.delete(f"{API}/resources/extensions")
+    async def revoke_extension(request: Request) -> Any:
+        """등록 해제. `extension_revoke` 봉투 (C13). **되살릴 수 없다.**"""
+        require_admin(authenticate(request))
+        return resources.revoke_extension(app.state.store, await _json(request))
+
     @app.post(f"{API}/resources/service-apps")
     async def register_service_app(request: Request) -> Any:
         """주소를 등록한다 — Center가 **바로 manifest를 읽어 본다** (C7)."""

@@ -9,6 +9,10 @@
 | 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md) |
 | 관련 화면 | BUI-01·03·11, STU-03·14·15, CON-07 |
 
+> 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`가 **서명 봉투로만** 받고(C2 `extension`·`extension_revoke`, E6), E1·E2·E3을 검사하며, 정의와 봉투를 **그대로** 보관해 실행하는 쪽이 다시 검증할 수 있게 한다. `chk-admin sign-extension`·`revoke-extension`이 봉투 파일을 만들고, CON-07 「확장」 탭에서 올린다. **E4·E8은 외부 확장으로 띄울 수 없다** — `task_types`·`agent_environments`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
+>
+> `contributes.resources[].catalog_url`을 Center가 읽는 일은 아직이다 — **내장 확장의 정의가 Center에 없다** (C7 상태줄).
+
 ## 목적
 
 확장 하나가 무엇을 더하는지 선언한다. 플랫폼은 이 파일만 보고 기여를 끼워 넣는다. 특정 확장 이름을 플랫폼 코드에 쓰지 않는다.

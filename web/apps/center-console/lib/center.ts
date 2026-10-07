@@ -5,6 +5,7 @@ import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
+import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { JobCreateRequest } from "@chaeksas/api-types/c5-job-create-request";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
@@ -81,6 +82,20 @@ export const center = {
   /** 리소스 목록 (C7·CON-07). `{items, fetched_at}` 그대로 돌려준다. */
   resources: <T>(type?: string) =>
     call<{ items: T[]; fetched_at: string }>(`/api/v1/resources${type ? `?type=${type}` : ""}`),
+  extension: (extensionId: string) =>
+    call<ExtensionResource>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}`),
+  /** 외부 확장 등록 — 정의와 **서명 봉투**를 함께 보낸다 (C2 `extension`, C13 E6). */
+  registerExtension: (definition: unknown, envelope: unknown) =>
+    call<ExtensionResource>("/api/v1/resources/extensions", {
+      method: "POST",
+      body: JSON.stringify({ definition, envelope }),
+    }),
+  revokeExtension: (envelope: unknown) =>
+    call<ExtensionResource>("/api/v1/resources/extensions", {
+      method: "DELETE",
+      body: JSON.stringify(envelope),
+    }),
+
   serviceApp: (appId: string) =>
     call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
   registerServiceApp: (baseUrl: string) =>
