@@ -139,6 +139,24 @@ def test_a_key_bound_to_another_pc_is_refused(center: TestClient, tmp_path: Path
     assert other.tray_status() == TRAY_UNREGISTERED
 
 
+def test_a_second_key_on_the_same_pc_is_refused(center: TestClient, tmp_path: Path) -> None:
+    """이 PC가 이미 다른 키로 등록돼 있으면 거부다 (C4 「키 묶기」 — PC → 키 방향).
+
+    운영자가 같은 PC에 키를 한 번 더 발급해 넣은 경우다. 지나가면 CON-03에 같은 PC가 두 줄로
+    보인다. 트레이는 「등록 전」이고 BUI-03이 Center가 준 말을 그대로 보인다.
+    """
+    make_agent(center, tmp_path, key=issue_key(center)).register()
+
+    second = make_agent(center, tmp_path / "second", key=issue_key(center, name="두 번째 키"))
+    with pytest.raises(MachineMismatch) as problem:
+        second.register()
+    assert "이미 다른 키로 등록" in str(problem.value)
+    assert second.tray_status() == TRAY_UNREGISTERED
+
+    listing = center.get("/api/v1/bot-uis", headers={"Authorization": f"Bearer {ADMIN}"}).json()
+    assert len(listing) == 1
+
+
 def test_studio_key_cannot_register_as_a_bot_ui(center: TestClient, tmp_path: Path) -> None:
     agent = make_agent(center, tmp_path, key=issue_key(center, key_type="studio"))
     with pytest.raises(KeyRejected) as problem:

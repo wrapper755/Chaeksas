@@ -29,7 +29,7 @@
   - `POST /api/v1/server-runner/register`
   - `POST /api/v1/server-runner/heartbeat` — 기본 10초 (응답의 `next_heartbeat_s`를 따른다)
 - 인증: Center API 키 (종류 「서버 실행기용」, CON-11). 다른 종류의 키는 403 `wrong_key_type`.
-- 키는 처음 등록한 서버(`machine_id`)에 묶인다 (C4와 같다).
+- 키 묶기는 C4와 같다 — 키 하나 ↔ 서버 하나 ↔ 실행기 행 하나이고, 같은 `machine_id`를 다른 키가 등록하면 409 `machine_already_registered`다 (C4 「키 묶기」).
 - 이벤트(C3)와 결재(C6)는 Bot UI와 같은 API를 쓴다.
 
 **운영 API (콘솔 CON-12, 관리자 토큰):**
@@ -124,7 +124,7 @@ Center는 메시지를 이렇게 처리한다.
 
 ## 오류
 
-C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `key_bound_elsewhere`, 422, 5xx). 메시지 API에는 다음이 더 있다.
+C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·`machine_already_registered`·`not_registered`, 422, 5xx). 메시지 API에는 다음이 더 있다.
 
 - 422 `no_receiver`
 - 409 `idempotency_conflict`

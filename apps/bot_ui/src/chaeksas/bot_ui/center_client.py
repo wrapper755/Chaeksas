@@ -39,6 +39,8 @@ DEFAULT_TIMEOUT_S = 10.0
 
 #: 키가 거부되는 코드 (C4·C5). 이 코드가 오면 **다시 시도해도 똑같다** — 사람이 고쳐야 한다.
 KEY_REJECTED_CODES = frozenset({"key_invalid", "key_revoked", "key_expired", "wrong_key_type", "token_missing"})
+#: 키 묶기가 어긋난 코드 (C4 409 — 키 → PC, PC → 키). 운영자가 콘솔에서 묶음을 풀어야 한다.
+BINDING_CODES = frozenset({"machine_mismatch", "machine_already_registered"})
 
 
 class CenterProblem(RuntimeError):
@@ -59,7 +61,11 @@ class KeyRejected(CenterProblem):
 
 
 class MachineMismatch(CenterProblem):
-    """이 키는 다른 PC에 묶여 있다 (C4 409). 콘솔에서 「PC 묶음 풀기」."""
+    """키 묶기가 어긋났다 (C4 409 — 두 방향 모두). 콘솔에서 「PC 묶음 풀기」.
+
+    `machine_mismatch`는 이 키가 다른 PC에 묶인 것이고, `machine_already_registered`는 이 PC가
+    이미 다른 키로 등록된 것이다. **둘 다 다시 시도해도 같다** — 운영자가 고쳐야 한다.
+    """
 
 
 def _problem(response: httpx.Response) -> CenterProblem:
@@ -72,7 +78,7 @@ def _problem(response: httpx.Response) -> CenterProblem:
     except ValueError:
         pass
     shown = message or f"Center가 {response.status_code}를 돌려줬습니다"
-    if response.status_code == 409 and code == "machine_mismatch":
+    if response.status_code == 409 and code in BINDING_CODES:
         return MachineMismatch(shown, code=code, status=response.status_code)
     if code in KEY_REJECTED_CODES:
         return KeyRejected(shown, code=code, status=response.status_code)
