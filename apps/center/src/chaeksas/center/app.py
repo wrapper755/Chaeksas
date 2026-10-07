@@ -16,7 +16,16 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
 from chaeksas.center import keys
-from chaeksas.center.api import approvals, bot_ui, deployments, jobs, packages, runs, signing
+from chaeksas.center.api import (
+    approvals,
+    bot_ui,
+    deployments,
+    jobs,
+    packages,
+    resources,
+    runs,
+    signing,
+)
 from chaeksas.center.auth import Caller, caller, require_admin, require_read
 from chaeksas.center.errors import ApiError, handle
 from chaeksas.center.responses import Utf8JSONResponse
@@ -145,12 +154,21 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         request: Request, kind: str | None = None, status: str | None = None, id: str | None = None
     ) -> Any:
         require_read(authenticate(request))
-        return packages.listing(app.state.store, kind=kind, status=status, package_id=id)
+        # 누락 리소스는 **읽을 때** 리소스 목록과 대조해 센다 (C5 `missing_resources`).
+        return packages.listing(
+            app.state.store,
+            kind=kind,
+            status=status,
+            package_id=id,
+            index=resources.index(app.state.store),
+        )
 
     @app.get(f"{API}/packages/{{package_id}}/{{version}}/info")
     def package_info(request: Request, package_id: str, version: str) -> Any:
         require_read(authenticate(request))
-        return packages.info_of(app.state.store, package_id, version)
+        return packages.info_of(
+            app.state.store, package_id, version, index=resources.index(app.state.store)
+        )
 
     @app.get(f"{API}/packages/{{package_id}}/{{version}}")
     def download_package(request: Request, package_id: str, version: str) -> Any:
@@ -205,6 +223,50 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def list_deployments(request: Request, bot_ui: str | None = None, active: bool = False) -> Any:
         require_read(authenticate(request))
         return deployments.listing(app.state.store, target_id=bot_ui, active_only=active)
+
+    # ─────────────────── 리소스 (C7·CON-07) ───────────────────
+
+    @app.get(f"{API}/resources")
+    def list_resources(request: Request, type: str | None = None) -> Any:
+        """리소스 목록. 읽기·관리자 토큰과 Studio·Bot UI·서버 실행기 키가 읽는다 (C7)."""
+        require_read(authenticate(request))
+        return resources.listing(app.state.store, type=type)
+
+    @app.get(f"{API}/resources/extensions/{{extension_id}}")
+    def get_extension(request: Request, extension_id: str) -> Any:
+        require_read(authenticate(request))
+        return resources.extension(app.state.store, extension_id)
+
+    @app.get(f"{API}/resources/service-apps/{{app_id}}")
+    def get_service_app(request: Request, app_id: str) -> Any:
+        require_read(authenticate(request))
+        return resources.service_app(app.state.store, app_id)
+
+    @app.post(f"{API}/resources/service-apps")
+    async def register_service_app(request: Request) -> Any:
+        """주소를 등록한다 — Center가 **바로 manifest를 읽어 본다** (C7)."""
+        found = require_admin(authenticate(request))
+        info, created = resources.register(app.state.store, found, await _json(request))
+        return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
+
+    @app.put(f"{API}/resources/service-apps/{{app_id}}")
+    async def put_service_app(request: Request, app_id: str) -> Any:
+        """주소 바꾸기 — **환경별 주소의 유일한 출처**다 (C7)."""
+        require_admin(authenticate(request))
+        return resources.set_base_url(app.state.store, app_id, await _json(request))
+
+    @app.delete(f"{API}/resources/service-apps/{{app_id}}", status_code=204)
+    def delete_service_app(request: Request, app_id: str) -> Response:
+        require_admin(authenticate(request))
+        resources.unregister(app.state.store, app_id)
+        return Response(status_code=204)
+
+    @app.post(f"{API}/resources/refresh")
+    async def refresh_resources(request: Request) -> Any:
+        """간격을 무시하고 바로 다시 읽는다 (C7 「새로 고침」)."""
+        require_admin(authenticate(request))
+        found = resources.refresh(app.state.store, await _json(request))
+        return {"items": [one.to_json_dict() for one in found], "fetched_at": now_iso()}
 
     # ─────────────────── 결재 (C6·CON-04) ───────────────────
 

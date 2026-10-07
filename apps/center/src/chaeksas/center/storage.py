@@ -99,6 +99,19 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- 맞추기 규칙: 하트비트에 연속으로 보이지 않은 횟수 (C4 `bot_ui_lost`).
   misses           INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS service_apps (
+  -- 등록된 서비스 앱 (C7). **주소의 유일한 출처**다 (C13 Service).
+  app_id         TEXT PRIMARY KEY,
+  base_url       TEXT NOT NULL,
+  -- 마지막으로 읽은 C11 manifest 그대로. 모르는 필드도 보관한다 (호환 규칙).
+  manifest_json  TEXT,
+  manifest_at    TEXT,
+  status         TEXT NOT NULL DEFAULT 'unknown',
+  status_reasons TEXT,
+  checked_at     TEXT,
+  registered_at  TEXT NOT NULL,
+  registered_by  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS approvals (
   request_id       TEXT PRIMARY KEY,
   -- 올린 키. **답은 이 키에게만** 내려간다 (C6 §소유).

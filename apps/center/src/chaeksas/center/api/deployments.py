@@ -67,7 +67,8 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
         return _row(store, found)  # 멱등
 
     package = store.row(
-        "SELECT status, content_hash, run_location FROM packages WHERE id = ? AND version = ?",
+        "SELECT status, content_hash, run_location, manifest_json FROM packages"
+        " WHERE id = ? AND version = ?",
         (claim.get("bpm_process_id"), claim.get("version")),
     )
     if package is None:
@@ -92,6 +93,8 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
             f"실행 위치 {package['run_location']}는 {wanted}에 배포한다 (받은 것 {target.get('type')})",
         )
 
+    _refuse_missing_resources(store, package)
+
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO deployments (deployment_id, target_type, target_id, bpm_process_id, "
@@ -108,6 +111,33 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
             ),
         )
     return _row(store, store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)))
+
+
+def _refuse_missing_resources(store: Store, package: Any) -> None:
+    """배포를 막는 누락만 거부한다 (C7 §누락 검사).
+
+    **서비스 앱이 잠시 응답이 없다고 배포를 막지 않는다** — 막는 것은 확장 누락·해시
+    불일치와 C1 R8(서버 BPM 프로세스의 작업)뿐이다. 그래서 여기서는 **두드리지 않는다**
+    (`probe=False`) — 배포가 느린 앱을 기다리게 할 이유가 없다.
+    """
+    from chaeksas.center.api import resources  # noqa: PLC0415 — 순환 import를 피한다
+    from chaeksas.contracts.manifest import Manifest  # noqa: PLC0415
+    from chaeksas.contracts.resources import blocking_at_deploy, missing  # noqa: PLC0415
+
+    try:
+        manifest = Manifest.model_validate(json.loads(package["manifest_json"]))
+    except ValueError:  # pragma: no cover — 올릴 때 검증했다
+        return
+    blocked = blocking_at_deploy(missing(manifest, resources.index(store, probe=False)))
+    if not blocked:
+        return
+    first = blocked[0]
+    raise ApiError(
+        422,
+        f"{first.type}_{first.reason}",
+        f"필요한 리소스가 Center에 없다: {first.type} {first.id} ({first.reason})",
+        {"missing_resources": [one.to_json_dict() for one in blocked]},
+    )
 
 
 def revoke(store: Store, raw: Any) -> DeploymentInfo:

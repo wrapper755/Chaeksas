@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
+import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { JobCreateRequest } from "@chaeksas/api-types/c5-job-create-request";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
@@ -73,6 +74,29 @@ export const center = {
   botUis: () => call<BotUiInfo[]>("/api/v1/bot-uis"),
   disableBotUi: (id: string) => call<unknown>(`/api/v1/bot-uis/${id}/disable`, { method: "POST" }),
   enableBotUi: (id: string) => call<unknown>(`/api/v1/bot-uis/${id}/enable`, { method: "POST" }),
+
+  /** 패키지 목록 (C5). `missing_resources`는 Center가 **읽을 때** 세어 준다 (C7). */
+  packages: () => call<PackageInfo[]>("/api/v1/packages"),
+
+  /** 리소스 목록 (C7·CON-07). `{items, fetched_at}` 그대로 돌려준다. */
+  resources: <T>(type?: string) =>
+    call<{ items: T[]; fetched_at: string }>(`/api/v1/resources${type ? `?type=${type}` : ""}`),
+  serviceApp: (appId: string) =>
+    call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
+  registerServiceApp: (baseUrl: string) =>
+    call<ServiceAppResource>("/api/v1/resources/service-apps", {
+      method: "POST",
+      body: JSON.stringify({ base_url: baseUrl }),
+    }),
+  setServiceAppUrl: (appId: string, baseUrl: string) =>
+    call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ base_url: baseUrl }),
+    }),
+  unregisterServiceApp: (appId: string) =>
+    call<void>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`, { method: "DELETE" }),
+  refreshResources: () =>
+    call<unknown>("/api/v1/resources/refresh", { method: "POST", body: JSON.stringify({}) }),
 
   /** 결재함 (C6·CON-04). */
   approvals: (query: { state?: string; bpm_process_id?: string; host?: string } = {}) => {
