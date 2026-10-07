@@ -20,6 +20,13 @@ ONLINE_WITHIN_S = 90
 MAX_REQUEST_KB = 256
 MAX_PACKAGE_MB = 200
 
+#: 서비스 앱 상태·manifest를 다시 읽는 간격 (C7 §리소스 모으는 방식).
+#: 「새로 고침」은 이것을 무시하고 바로 읽는다.
+RESOURCE_STATUS_S = 60
+RESOURCE_MANIFEST_S = 600
+#: Center가 서비스 앱을 읽을 때 기다리는 시간. 짧게 — 한 앱이 느려도 목록이 멈추면 안 된다.
+RESOURCE_TIMEOUT_S = 5.0
+
 ENV_PREFIX = "CHK_CENTER__"
 
 

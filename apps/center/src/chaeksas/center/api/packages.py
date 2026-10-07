@@ -170,8 +170,9 @@ def with_signature(path: Path, envelope: Any) -> bytes:
     return out.getvalue()
 
 
-def _info(row: Any) -> PackageInfo:
+def _info(row: Any, index: Any = None) -> PackageInfo:
     # `size_bytes`는 C5 `PackageInfo`에 없다 — DB에만 둔다 (운영용). 화면이 필요하면 계약 먼저 고친다.
+    manifest = Manifest.model_validate(loads(row["manifest_json"], {}))
     return PackageInfo(
         id=row["id"],
         version=row["version"],
@@ -180,24 +181,40 @@ def _info(row: Any) -> PackageInfo:
         status=row["status"],
         run_location=row["run_location"],
         content_hash=row["content_hash"],
-        manifest=Manifest.model_validate(loads(row["manifest_json"], {})),
+        manifest=manifest,
         uploaded_at=row["uploaded_at"],
         uploaded_by=row["uploaded_by"],
+        # **읽을 때 리소스 목록과 대조한다** (C5·C7) — 저장해 두면 리소스가 바뀌어도 낡은다.
+        missing_resources=_missing(manifest, index),
     )
 
 
-def info_of(store: Store, package_id: str, version: str) -> PackageInfo:
+def _missing(manifest: Manifest, index: Any) -> list[Any]:
+    """C1 `requires`를 리소스 목록과 대조한다 (C7 §누락 검사). 목록이 없으면 비운다."""
+    if index is None:
+        return []
+    from chaeksas.contracts.resources import missing  # noqa: PLC0415 — 순환 import를 피한다
+
+    return missing(manifest, index)
+
+
+def info_of(store: Store, package_id: str, version: str, index: Any = None) -> PackageInfo:
     row = store.row("SELECT * FROM packages WHERE id = ? AND version = ?", (package_id, version))
     if row is None:
         raise ApiError(404, "not_found", f"{package_id}@{version}이 없다")
-    return _info(row)
+    return _info(row, index)
 
 
 def listing(
-    store: Store, *, kind: str | None = None, status: str | None = None, package_id: str | None = None
+    store: Store,
+    *,
+    kind: str | None = None,
+    status: str | None = None,
+    package_id: str | None = None,
+    index: Any = None,
 ) -> list[PackageInfo]:
     rows = store.rows("SELECT * FROM packages ORDER BY id, version")
-    found = [_info(r) for r in rows]
+    found = [_info(r, index) for r in rows]
     if kind:
         found = [p for p in found if p.kind == kind]
     if status:

@@ -21,6 +21,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
   - `POST /api/v1/bot-ui/heartbeat` — 30초마다 (응답의 `next_heartbeat_s`를 따름).
 - 인증: `Authorization: Bearer <Center API 키>` (종류 「Bot UI용」, CON-11). **Bot UI의 신원은 키로 정한다.** 경로·본문에 `bot_ui_id`를 넣지 않는다.
 - 키 묶기: 키는 처음 `register`한 PC(`machine_id`)에 묶인다. 다른 `machine_id`로 같은 키를 쓰면 409. PC를 다시 설치해 `machine_id`가 바뀌면 운영자가 CON-11에서 「PC 묶음 풀기」를 한다.
+  > 미정: 지금 보는 것은 **키 → PC** 방향뿐이다. 같은 `machine_id`를 **다른 키**가 등록하면 막지 않아 Bot UI 행이 둘 생긴다 (CON-03에 같은 PC가 두 줄, C7 「런타임」·`installed_on.hosts` 과대 집계). 409로 막고 「PC 묶음 풀기」를 먼저 하게 할지, 기존 행을 새 키로 옮길지 정해야 한다. C7 리소스를 붙이다 드러났다.
 - 키 종류: 「Bot UI용」 키만 받는다. Studio용·서버 실행기용 키로 부르면 403 `wrong_key_type`.
 - 키 형식: `chk_ctr_<무작위 40자>`, 앞자리 16자만 화면에 (C11과 같은 규칙).
 - 멱등성: `register`는 같은 키·같은 `machine_id`면 같은 `bot_ui_id`를 돌려준다 (정보만 갱신). `heartbeat`는 매번 상태를 덮어쓴다. `job_acks`·`approval_acks`는 같은 것을 다시 보내도 한 번만 반영한다.
