@@ -229,6 +229,69 @@ export async function cancelJob(jobId: string): Promise<ActionResult> {
   return {};
 }
 
+/**
+ * 서비스 앱 등록 (CON-07). **일반 `<form>`이 부른다** — JS 없이도 등록된다.
+ *
+ * `app_id`를 사람이 적지 않는다 — **앱이 자기 manifest로 정한다** (C11). 주소만 받는다.
+ */
+export async function registerServiceApp(form: FormData): Promise<void> {
+  const baseUrl = String(form.get("base_url") ?? "").trim();
+  const back = (query: string): Route => `/resources?${query}` as Route;
+  if (!baseUrl) {
+    redirect(back(`tab=service_app&error=${encodeURIComponent("API 주소를 적으세요.")}`));
+  }
+  try {
+    await center.registerServiceApp(baseUrl);
+  } catch (cause) {
+    redirect(back(`tab=service_app&error=${encodeURIComponent(message(cause))}`));
+  }
+  revalidatePath("/resources", "layout");
+  redirect(back("tab=service_app&registered=1"));
+}
+
+/** 주소 바꾸기 — **환경별 주소의 유일한 출처**다 (C7 `PUT`). */
+export async function setServiceAppUrl(form: FormData): Promise<void> {
+  const appId = String(form.get("app_id") ?? "");
+  const baseUrl = String(form.get("base_url") ?? "").trim();
+  const back = (query: string): Route =>
+    `/resources/service-apps/${encodeURIComponent(appId)}?${query}` as Route;
+  if (!baseUrl) {
+    redirect(back(`error=${encodeURIComponent("API 주소를 적으세요.")}`));
+  }
+  try {
+    await center.setServiceAppUrl(appId, baseUrl);
+  } catch (cause) {
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
+  }
+  revalidatePath("/resources", "layout");
+  redirect(back("moved=1"));
+}
+
+export async function unregisterServiceApp(appId: string): Promise<ActionResult> {
+  try {
+    await center.unregisterServiceApp(appId);
+  } catch (cause) {
+    // 「쓰는 Bot이 있다」면 그 목록까지 보여 준다 (C7 `in_use`).
+    if (cause instanceof CenterError && Array.isArray(cause.body?.detail?.used_by)) {
+      const used = (cause.body.detail.used_by as string[]).join(", ");
+      return { error: `${cause.message} — ${used}` };
+    }
+    return { error: message(cause) };
+  }
+  revalidatePath("/resources", "layout");
+  return {};
+}
+
+export async function refreshResources(): Promise<ActionResult> {
+  try {
+    await center.refreshResources();
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/resources", "layout");
+  return {};
+}
+
 export async function createCenterKey(_previous: ActionResult, form: FormData): Promise<ActionResult> {
   const name = String(form.get("name") ?? "").trim();
   const type = String(form.get("type") ?? "bot_ui");

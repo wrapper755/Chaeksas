@@ -28,7 +28,7 @@ const NAV: NavItem[] = [
   { label: "결재함", href: "/approvals" },
   { label: "작업 지시", href: "/jobs" },
   { label: "공통 패키지", later: "M5" },
-  { label: "리소스", later: "M5" },
+  { label: "리소스", href: "/resources" },
   { label: "Center API 키", href: "/center-keys" },
 ];
 
