@@ -119,7 +119,7 @@ DeploymentInfo 필드: `deployment_id`, `target{type,id}`, `bpm_process_id`, `ve
 | 메서드·경로 | 뜻 | 성공 |
 | --- | --- | --- |
 | `POST /jobs` | 작업 만들기 | 201 JobInfo / 200 같은 `idempotency_key` |
-| `GET /jobs?state=&target_type=&target_id=&bpm_process_id=` | 목록 | 200 |
+| `GET /jobs?state=&target_type=&target_id=&bpm_process_id=&limit=` | 목록 (최신순). `state`는 쉼표로 여럿 (`pending,dispatched`) | 200 |
 | `GET /jobs/{id}` | 하나 (연결된 실행 상태 포함) | 200 |
 | `DELETE /jobs/{id}` | 취소 (아래 표) | 200 / 202 / 409 |
 
@@ -226,6 +226,7 @@ BotUiInfo 필드:
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
 | 2026-10-01 | 1 | 초안 | 0013~0016 |
+| 2026-10-07 | 1 | `GET /jobs`의 `state`가 쉼표로 여럿을 받는다 — CON-05의 상태 필터가 여러 개를 고른다 | 0017 |
 | 2026-10-06 | 1 | `BotUiInfo.deployment_results`를 더했다 — 배치 결정은 하트비트 한 주기만 올라오고 Center가 버리고 있어서, CON-03 「최근 배치 결정」이 그릴 것이 없었다. `DeploymentInfo`의 봉투 유래 칸(`signed_by`·`signed_at`·`not_before`·`expires_at`·`revoked_at`)을 어디서 읽는지 적었다 | 0017 |
 | 2026-10-03 | 1 | `X-CHK-Actor`는 UTF-8 퍼센트 인코딩으로 보낸다 — 한글 이름을 그대로 실으면 HTTP 헤더에 넣을 수 없어 요청이 나가지 않는다 (콘솔을 붙이다 드러났다) | 0017 |
 | 2026-10-03 | 1 | `GET /bot-uis`(CON-03)의 응답 모델 `BotUiInfo`를 적었다 — 엔드포인트만 권한표에 있고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |

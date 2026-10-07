@@ -136,6 +136,99 @@ export async function withdrawApproval(requestId: string): Promise<ActionResult>
   return {};
 }
 
+/**
+ * 작업 지시 만들기 (CON-05 「새 작업」). **일반 `<form>`이 부른다** — JS 없이도 만든다.
+ *
+ * 입력 칸의 타입은 **Center에 올라간 매니페스트**(C1 `inputs`)를 다시 읽어 맞춘다 (브라우저가
+ * 보낸 글자로 타입을 정하지 않는다). 매니페스트에 없는 입력은 「이름 = 값」 줄로 받는다.
+ */
+export async function createJob(form: FormData): Promise<void> {
+  const bot = String(form.get("bot") ?? "");
+  const botUi = String(form.get("bot_ui") ?? "");
+  const version = String(form.get("version") ?? "");
+  const picked = `bot=${encodeURIComponent(bot)}&bot_ui=${encodeURIComponent(botUi)}&version=${encodeURIComponent(version)}`;
+  const back = (query: string): Route => `/jobs/new?${picked}&${query}` as Route;
+
+  let inputs: Record<string, unknown>;
+  try {
+    // 입력 칸은 **그 Bot UI에 배포된 버전**의 매니페스트로 그렸다 (`version`을 비워 보내도).
+    const shown = String(form.get("inputs_from") ?? "") || version;
+    const declared = shown ? ((await center.packageInfo(bot, shown)).manifest?.inputs ?? []) : [];
+    inputs = readInputs(declared, form);
+  } catch (cause) {
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
+  }
+
+  const expires = String(form.get("expires_at") ?? "").trim();
+  const note = String(form.get("note") ?? "").trim();
+  let made: string;
+  try {
+    const job = await center.createJob({
+      bpm_process_id: bot,
+      target: { type: "bot_ui", id: botUi },
+      inputs,
+      // 비우면 그 Bot UI에 배포된 버전으로 Center가 채운다 (C5).
+      version: version || null,
+      // `datetime-local`은 시간대가 없다 — 콘솔 서버의 시간대로 읽어 ISO로 보낸다.
+      expires_at: expires ? new Date(expires).toISOString() : null,
+      note: note || null,
+    });
+    made = job.job_id;
+  } catch (cause) {
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
+  }
+  revalidatePath("/jobs", "layout");
+  redirect(`/jobs/${encodeURIComponent(made)}?created=1` as Route);
+}
+
+/** 입력을 매니페스트의 **타입대로** 읽는다. 「그 밖의 입력」은 `이름 = 값` 줄 (글자 그대로). */
+function readInputs(
+  declared: Array<{ name: string; type: string }>,
+  form: FormData,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const one of declared) {
+    const raw = form.get(`input:${one.name}`);
+    if (one.type === "bool") {
+      if (raw === "true" || raw === "false") out[one.name] = raw === "true";
+      continue; // 「(주지 않음)」 — 빠진 것이다. 필수면 실행하는 쪽이 막는다
+    }
+    const text = String(raw ?? "").trim();
+    if (text === "") continue;
+    if (one.type === "int" || one.type === "number") {
+      const value = Number(text);
+      if (Number.isNaN(value)) throw new CenterError(422, null, `입력 ${one.name}은 수여야 합니다`);
+      out[one.name] = value;
+    } else if (one.type === "list" || one.type === "dict") {
+      try {
+        out[one.name] = JSON.parse(text);
+      } catch {
+        throw new CenterError(422, null, `입력 ${one.name}은 JSON이어야 합니다 (${one.type})`);
+      }
+    } else {
+      out[one.name] = text;
+    }
+  }
+  for (const line of String(form.get("extra") ?? "").split("\n")) {
+    const at = line.indexOf("=");
+    if (at <= 0) continue;
+    const name = line.slice(0, at).trim();
+    if (name && !(name in out)) out[name] = line.slice(at + 1).trim();
+  }
+  return out;
+}
+
+/** 작업 취소 (CON-05). 202면 **아직 끝나지 않았다** — 화면이 「취소 요청함」으로 보인다. */
+export async function cancelJob(jobId: string): Promise<ActionResult> {
+  try {
+    await center.cancelJob(jobId);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/jobs", "layout");
+  return {};
+}
+
 export async function createCenterKey(_previous: ActionResult, form: FormData): Promise<ActionResult> {
   const name = String(form.get("name") ?? "").trim();
   const type = String(form.get("type") ?? "bot_ui");

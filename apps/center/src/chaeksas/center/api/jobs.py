@@ -224,12 +224,14 @@ def listing(
     offset: int = 0,
 ) -> list[JobInfo]:
     scope = _scope(found, write=False)
+    # 상태는 쉼표로 여럿 (C5 — CON-05의 상태 필터가 여러 개를 고른다).
+    states = {one.strip() for one in state.split(",") if one.strip()} if state else None
     rows = store.rows("SELECT * FROM jobs ORDER BY requested_at DESC, job_id DESC")
     picked = [
         row
         for row in rows
         if (scope is None or row["owner"] == scope)
-        and (state is None or row["state"] == state)
+        and (not states or row["state"] in states)
         and (target_type is None or row["target_type"] == target_type)
         and (target_id is None or row["target_id"] == target_id)
         and (bpm_process_id is None or row["bpm_process_id"] == bpm_process_id)
