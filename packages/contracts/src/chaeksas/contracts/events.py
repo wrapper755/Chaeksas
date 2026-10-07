@@ -36,6 +36,7 @@ REQUIRED_DATA_KEYS: dict[str, frozenset[str]] = {
     "human_requested": frozenset({"layer", "request_id", "where"}),
     "human_answered": frozenset({"request_id", "answered_by"}),
     "human_timeout": frozenset({"request_id"}),
+    "human_withdrawn": frozenset({"request_id", "reason"}),
     "run_waiting": frozenset({"waiting_for"}),
     "run_resumed": frozenset({"after_s"}),
     "run_finished": frozenset(

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,8 @@ from chaeksas.contracts.bpmn_ext import (
     Rule,
     ServiceCall,
     Webhook,
+    duration_hours,
+    is_var_name,
 )
 from chaeksas.contracts.dmn import DmnError
 from chaeksas.core.agent import DEFAULT_MAX_STEPS_SCREEN, AgentError, check_results, finish_from, run_agent
@@ -51,6 +54,8 @@ from chaeksas.core.run_state import (
     WAIT_MESSAGE,
     WAIT_SIGNAL,
     WAIT_TIMER,
+    WHERE_CENTER,
+    WHERE_FIELD,
     Consume,
     Context,
     EngineError,
@@ -225,8 +230,8 @@ def handle_approval(context: Context) -> Outcome:
     """`userTask`(결재)·`manualTask`(확인) — 요청을 올리고 **기다린다**.
 
     PC Bot은 기다리는 동안에도 실행 자리를 쥔다 (ADR-0014). 어디서 답하는지(`where`)는
-    BPM 프로세스의 `location`과 Bot UI 설정이 함께 정하는데, 설정을 보는 것은 뒤 조각이다 —
-    지금은 현장(`field`)으로 둔다.
+    `location`과 실행하는 쪽의 기본값(`RunEnv.approval_where`)이 정한다 (ADR-0038). **확인은 늘
+    현장이다** — 화면 앞 사람만 답할 수 있다 (C6).
     """
     run, node = context.run, context.node
     approval = node.prop("approval")
@@ -239,6 +244,8 @@ def handle_approval(context: Context) -> Outcome:
     form = Form(fields=list(approval.fields)) if approval.fields else None
     # 「표시 변수」만 담는다 (C6 `review` — 결재자가 판단할 값, 원칙 6의 예외).
     review = {name: run.variables.get(name) for name in approval.show}
+    where = _approval_where(layer, approval.location, run.env.approval_where)
+    expires_at = _expires_at(approval.expires, run.variables, run.env.clock())
 
     run.pendings[request_id] = Pending(
         request_id=request_id,
@@ -248,15 +255,49 @@ def handle_approval(context: Context) -> Outcome:
         form=form,
         review=review,
         node_instance=instance,
+        where=where,
+        description=approval.description or None,
+        expires_at=expires_at,
     )
     context.emit(
         "human_requested",
         layer=layer,
         request_id=request_id,
-        where="field",
+        where=where,
         **({"form_key": ",".join(f.key for f in form.fields)} if form else {}),
+        **({"expires_at": expires_at} if expires_at else {}),
     )
     return Wait(key=request_id)
+
+
+def _approval_where(layer: str, location: str, default: str) -> str:
+    """어디서 답하나 (ADR-0038). `follow`는 실행하는 쪽의 기본값, 확인은 늘 현장."""
+    if layer == "confirmation":
+        return WHERE_FIELD
+    if location in (WHERE_FIELD, WHERE_CENTER):
+        return location
+    return WHERE_CENTER if default == WHERE_CENTER else WHERE_FIELD
+
+
+def _expires_at(expires: str | None, variables: Mapping[str, Any], now: datetime) -> str | None:
+    """C6 `expires_at` — `expires`는 ISO 기간(`PT4H`) 또는 **그 값을 가진 변수 이름**이다 (C14).
+
+    변수의 값이 시각이면 그대로, 기간이면 지금부터 더한다. 읽을 수 없으면 기한이 없다 —
+    기한을 지어내지 않는다 (B13이 그림을 볼 때 알린다).
+    """
+    if not expires:
+        return None
+    raw = variables.get(expires, expires) if is_var_name(expires) else expires
+    if isinstance(raw, datetime):
+        return raw.astimezone(UTC).isoformat()
+    text = str(raw).strip()
+    hours = duration_hours(text)
+    if hours is not None:
+        return (now.astimezone(UTC) + timedelta(hours=hours)).isoformat()
+    try:
+        return datetime.fromisoformat(text).astimezone(UTC).isoformat()
+    except ValueError:
+        return None
 
 
 def handle_milestone(context: Context) -> Outcome:

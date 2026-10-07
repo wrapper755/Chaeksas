@@ -42,6 +42,8 @@ from chaeksas.core.run_state import (
     CODE_PATH_DENIED,
     CODE_UNSUPPORTED,
     DECISION_KEY,
+    ERROR_APPROVAL_EXPIRED,
+    ERROR_APPROVAL_WITHDRAWN,
     ERROR_CODE_VAR,
     ERROR_MESSAGE_VAR,
     ERROR_SEND_FAILED,
@@ -51,6 +53,8 @@ from chaeksas.core.run_state import (
     WAIT_MESSAGE,
     WAIT_SIGNAL,
     WAIT_TIMER,
+    WHERE_CENTER,
+    WHERE_FIELD,
     Consume,
     Context,
     EngineError,
@@ -797,6 +801,29 @@ class Engine:
             # 답 뒤에 쓰는 파일이 실패할 수 있다 — 그것도 오류 경계가 받는다.
             return self._handle_failure(context, e)
 
+    def withdraw(self, run: Run, request_id: str, *, reason: str) -> State:
+        """Center 결재가 **답 없이 끝났다** — 관리자 회수·만료 (C6, ADR-0038).
+
+        답이 아니다. 그 노드에 오류 경계가 있으면 그리로 가고(`APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`),
+        없으면 실행이 실패로 끝난다. 기록에는 사유만 남긴다 (C3 `human_withdrawn`).
+        """
+        pending = run.pendings.get(request_id)
+        token = next((t for t in run.tokens if t.waiting_for == request_id), None)
+        if pending is None or token is None:
+            raise EngineError(f"기다리는 요청이 아니다: {request_id}", code="not_waiting")
+        run.log.emit("human_withdrawn", node_id=pending.node_id, request_id=request_id, reason=reason)
+        del run.pendings[request_id]
+        token.waiting_for = None
+        self.disarm(run, token.id)
+        expired = reason == "expired"
+        error = TaskFailed(
+            "결재 기한이 지났습니다" if expired else f"결재가 회수되었습니다 ({reason})",
+            node_id=pending.node_id,
+            code=ERROR_APPROVAL_EXPIRED if expired else ERROR_APPROVAL_WITHDRAWN,
+        )
+        node = run.node(pending.node_id)
+        return self._handle_failure(Context(engine=self, run=run, token=token, node=node), error)
+
     def timeout(self, run: Run, request_id: str) -> State:
         """시간 초과 (C3 `human_timeout`). 실행은 실패로 끝낸다 — 되돌릴 길은 M5다."""
         pending = run.pendings.get(request_id)
@@ -817,6 +844,8 @@ __all__ = [
     "DEFAULT_HANDLERS",
     "ERROR_CODE_VAR",
     "ERROR_MESSAGE_VAR",
+    "ERROR_APPROVAL_EXPIRED",
+    "ERROR_APPROVAL_WITHDRAWN",
     "ERROR_SEND_FAILED",
     "ERROR_TASK_FAILED",
     "FAILED_TASK_VAR",
@@ -840,6 +869,8 @@ __all__ = [
     "WAIT_MESSAGE",
     "WAIT_SIGNAL",
     "WAIT_TIMER",
+    "WHERE_CENTER",
+    "WHERE_FIELD",
     "Wait",
     "Waiting",
     "Workspace",

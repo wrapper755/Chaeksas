@@ -32,6 +32,8 @@ from chaeksas.bot_ui.store import Store
 from chaeksas.contracts import SERVICE_URL_ENV, SERVICE_URL_SETTING, STORAGE_DIR_SETTING
 from chaeksas.contracts.bot_ui import (
     DEFAULT_HEARTBEAT_S,
+    ApprovalAck,
+    ApprovalDispatch,
     CurrentRun,
     ExtensionState,
     HeartbeatRequest,
@@ -46,6 +48,7 @@ from chaeksas.contracts.bot_ui import (
     Versions,
     WorkerState,
 )
+from chaeksas.core import requests
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.processes import Supervisor
 from chaeksas.core.run_shipping import HttpUploader, Shipment
@@ -357,6 +360,7 @@ class Agent:
             versions=self.versions(),
             job_acks=list(self.store.state.pending_acks),
             deployment_results=list(self.store.state.pending_deployments),
+            approval_acks=list(self.store.state.pending_approval_acks),
             extensions=list(self.extensions),
             unsent_events=self.runs().unsent_count(),
         )
@@ -418,10 +422,12 @@ class Agent:
         # 보낸 ack는 Center가 받았다 (같은 요청에 실어 보냈으므로).
         self.store.ack_sent(request.job_acks)
         self.store.deployments_sent(request.deployment_results)
+        self.store.approval_acks_sent(request.approval_acks)
         self.apply(response)
         self.store.save()
         # 기록 보내기는 **하트비트가 끝난 뒤**다 — 늦어도 다음 주기에 또 보낸다.
         self.ship_runs()
+        self.ship_approvals()
         return response
 
     # ── 지시 처리 (C4 HeartbeatResponse) ──
@@ -433,6 +439,69 @@ class Agent:
         self.jobs_waiting = list(response.jobs)
         for job in response.jobs:
             self.take_job(job)
+        self.apply_approvals(response.approvals)
+
+    # ── 결재 (C6, ADR-0038) ──
+
+    def apply_approvals(self, found: list[ApprovalDispatch]) -> list[ApprovalAck]:
+        """Center에서 정해진 결재를 실행기로 내려보낸다 — **제어 파일로** (ADR-0031).
+
+        - 답: 지금 기다리는 것이면 넘기고 받았다고 한다. 아니면 `accepted: false`(`not_waiting`)
+          — Center가 다시 열어 결재자가 안다 (조용히 버리지 않는다).
+        - 회수·만료: 기다리는 것이면 「답 없이 끝남」으로 넘긴다. 아니면(현장에서 먼저 답해
+          거둔 것 등) 할 일이 없으니 받았다고만 한다.
+        """
+        running = self.runner().running
+        waiting = {one.request_id: one for one in running.pendings} if running is not None else {}
+        made: list[ApprovalAck] = []
+        for one in found:
+            here = running is not None and one.request_id in waiting
+            if one.state == "answered":
+                if here and running is not None:
+                    running.answer(one.request_id, dict(one.answer or {}), answered_by=one.answered_by or "")
+                    ack = ApprovalAck(request_id=one.request_id, accepted=True)
+                else:
+                    ack = ApprovalAck(request_id=one.request_id, accepted=False, reason="not_waiting")
+            else:
+                if here and running is not None:
+                    running.withdraw(
+                        one.request_id, reason="expired" if one.state == "expired" else "admin_withdraw"
+                    )
+                ack = ApprovalAck(request_id=one.request_id, accepted=True)
+            self.store.remember_approval_ack(ack)
+            made.append(ack)
+        return made
+
+    def ship_approvals(self) -> None:
+        """올릴 결재와 거둘 결재를 Center로 (ADR-0038). **하트비트 뒤에** 돈다 — 실행 기록처럼.
+
+        닿지 못하면 멈추고 다음 주기에 그 자리부터. **4xx는 다시 보내지 않는다** — 한 줄이
+        큐를 영원히 막는다 (거부된 결재는 현장에서 답할 수 있다 — CMN-01이 그대로 있다).
+        """
+        running = self.runner().running
+        if running is None or not self.api_key():
+            return
+        path = running.requests_path
+        for number, body in requests.unsent(path):
+            try:
+                self.client().create_approval(body)
+            except (Unreachable, KeyRejected) as e:
+                log.warning("결재를 올리지 못했다 — 다음 주기에 다시: %s", e)
+                return
+            except CenterProblem as e:
+                log.warning("Center가 결재 %s를 받지 않았다 — 현장에서 답해야 한다: %s", body.get("request_id"), e)
+            requests.mark_sent(path, number)
+        while running.field_answered:
+            request_id = running.field_answered[0]
+            try:
+                self.client().withdraw_approval(request_id, reason="answered_in_field")
+            except (Unreachable, KeyRejected) as e:
+                log.warning("현장에서 답한 결재를 거두지 못했다 — 다음 주기에 다시: %s", e)
+                return
+            except CenterProblem as e:
+                # 409 — 이미 답했거나 닫혔다. 거둘 것이 없다.
+                log.info("결재 %s는 거둘 수 없다: %s", request_id, e)
+            running.field_answered.pop(0)
 
     def apply_deployments(self, response: HeartbeatResponse) -> None:
         """배포를 적용한다 (C2 V1~V7). **서명이 유일한 관문**이다.
@@ -646,6 +715,8 @@ class Agent:
                 job_id=item.job_id,
                 run_id=run.run_id,
                 extensions=extensions,
+                # `location: follow` 결재를 어디서 답하나 — BUI-03 「원격 결재」 (ADR-0038).
+                approval_where="center" if self.settings.remote_approval else "field",
             )
         except Exception as e:  # noqa: BLE001 — 띄우지 못한 것은 실행 실패다
             log.exception("실행기를 띄우지 못했다")

@@ -50,6 +50,7 @@
 | `human_requested` | 결재·확인 요청 | `layer`(`approval`\|`confirmation`), `request_id`(C6과 같은 id), `where`(`center`\|`field`) | `form_key`, `expires_at` |
 | `human_answered` | 답을 받음 (값 없음) | `request_id`, `answered_by` | |
 | `human_timeout` | 시간 초과 | `request_id` | |
+| `human_withdrawn` | 답 없이 끝남 — Center에서 회수되었거나 만료됨 (C6, [ADR-0038](../decisions/0038-approval-request-channel.md)) | `request_id`, `reason`(`admin_withdraw`\|`expired`\|`host_lost`, 열린 문자열) | |
 | `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`, 예약: `delegation`) | `request_id`, `until` |
 | `run_resumed` | (서버) 저장된 실행을 이어 감 | `after_s` | `reason`(`answer`\|`message`\|`timer`\|`restart`) |
 | `run_finished` | 실행 끝 (항상 마지막) | `status`(`success`\|`failed`\|`cancelled`), `duration_s`, `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | `error_code`, `error_message`(한 줄) |
@@ -128,6 +129,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-07 | 1 | `human_withdrawn`을 더했다 — Center 결재가 답 없이 끝난 것(회수·만료)을 실행하는 쪽이 받았다는 표시. 값은 없다 | 0038 |
 | 2026-10-01 | 1 | 초안 (프로토타입 이벤트에서 `hitl_*` → `human_*`, `ui_session`·`service_call`·`run_waiting` 추가, 보낸 쪽은 키로 식별) | 0013, 0014, 0015 |
 | 2026-10-01 | 1 | 검토 반영: `trigger` → `source`, `test_` 실행 id, 배포 결정은 C4로, 줄 단위 거부, `run_id` 소유, `service_call.mode_used`·토큰 이름 통일 | — |
 | 2026-10-01 | 1 | C10 검토 반영: `business_key` 4단 형식 | — |

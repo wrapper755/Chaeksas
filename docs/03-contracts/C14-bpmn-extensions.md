@@ -173,7 +173,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | 메시지 시작·받기·경계·중간 받기 | `messageRef` → `bpmn:message name`. 받기 태스크 외의 받기(경계·중간 받기)도 상관 키는 `chk:receive{correlation}`로 둔다 | 외부 시스템이 Center 메시지 API로 보낸다 (C12, PC는 Bot UI 메시지 수신). 상관 키가 없으면 메시지 시작만 깨운다 |
 | 신호 | `signalRef` | 한 실행 안의 가지 사이에서만 |
 | 이정표 | `intermediateThrowEvent`에 **이벤트 정의를 두지 않는다** | 지나가기만 하면서 실행 기록에 `node_state`(`task_type: milestone`)를 남긴다. 「어디까지 왔는지」를 콘솔·Studio가 이것으로 보인다. 노드 `name`이 이정표 이름이다 (id 접두어 `Ms_`) |
-| 오류 경계 | `errorRef` → `bpmn:error errorCode` | 표준 코드: `TASK_FAILED`(AI·UI·서비스 앱 태스크 실패), `SEND_FAILED`(메일·웹훅), `ESCALATED`(UI 태스크 전환을 사람 확인 대신 흐름으로 받을 때), `DELEGATION_FAILED`(예약). 오류 경로에는 `error_code`, `error_message`, `failed_task` 변수가 생긴다 |
+| 오류 경계 | `errorRef` → `bpmn:error errorCode` | 표준 코드: `TASK_FAILED`(AI·UI·서비스 앱 태스크 실패), `SEND_FAILED`(메일·웹훅), `ESCALATED`(UI 태스크 전환을 사람 확인 대신 흐름으로 받을 때), `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`(Center 결재가 답 없이 끝남 — 관리자 회수·만료, C6·[ADR-0038](../decisions/0038-approval-request-channel.md)), `DELEGATION_FAILED`(예약). 오류 경로에는 `error_code`, `error_message`, `failed_task` 변수가 생긴다 |
 | 조건 시작 | `conditionalEventDefinition` | **schema 1에서 쓰지 않는다** (프로토타입의 폴더 감시). 외부 시스템 메시지나 타이머로 바꾼다 |
 
 ## 시험 케이스 형식 (Studio, 패키지에 넣지 않음)
@@ -238,7 +238,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | B9 | 연결되지 않은 노드가 없다 (들어오는 흐름·나가는 흐름) | 오류 |
 | B10 | 노드 id가 생성형(`Activity_[0-9a-z]{7}`)이면 경고 | 경고 |
 | B11 | 어떤 경로로는 만들어지지 않는 변수를 읽는다 (예: 한 가지에서만 생기는 결재 칸을 합류 뒤에 읽음, 프로세스 `inputs`에 없는 메시지 본문 변수) | 경고 |
-| B12 | 결재 칸 `type`이 C6의 `bool`·`number`·`text`·`choice` 중 하나이고, `choice`에는 `choices`가 있다. UI 태스크 스텝 `action`이 C10 동작 목록 안에 있다. 경계 이벤트는 태스크·하위 프로세스에만 붙는다. 파일 출력 `format`·파일 목록 `sort`·AI 태스크 `replay`가 아는 값이고, **도구 없는 AI 태스크에 `replay: full`이 없다** | 오류 |
+| B12 | 결재 칸 `type`이 C6의 `bool`·`number`·`text`·`choice` 중 하나이고, `choice`에는 `choices`가 있다. UI 태스크 스텝 `action`이 C10 동작 목록 안에 있다. 경계 이벤트는 태스크·하위 프로세스에만 붙는다. 파일 출력 `format`·파일 목록 `sort`·AI 태스크 `replay`가 아는 값이고, **도구 없는 AI 태스크에 `replay: full`이 없다**. (같은 규칙의 **경고**: 수동 작업(확인)에 `location: center` — 확인은 늘 현장에서 답한다) | 오류 |
 | B13 | 웹훅 `body: all` (비밀이 섞일 수 있음), `location: field` 결재에 하루 넘는 시간 제한 | 경고 |
 | B14 | 병렬 분기와 합류의 가지 수가 맞다 (오류 경계의 대체 흐름을 병렬 합류에 바로 이으면 합류가 영원히 기다린다). 규칙 태스크의 `input`·`output`이 DMN 입력·출력 이름과 맞다. 호출의 `output`이 호출 대상의 `outputs`에 있다. 타이머로 시작하는 BPM 프로세스에 기본값 없는 필수 입력이 없다 | 오류 |
 
@@ -273,6 +273,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-07 | 1 | 오류 경계 표준 코드에 `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`를 더했다 (Center 결재가 답 없이 끝남). B12에 「수동 작업 + `location: center`」 경고를 적었다 | 0038 |
 | 2026-10-05 | 1 | `web`·`desktop` AI 태스크의 도구는 환경을 기여한 확장이 주고 허용 목록에 저절로 더해진다 (`desktop_look`·`desktop_act`) | 0037 |
 | 2026-10-05 | 1 | UI 태스크 읽기 결과의 모양: `read_table`은 줄 목록, `read`·표의 칸은 수 모양이면 수 | 0036 |
 | 2026-10-05 | 1 | UI 태스크 목표 모드: `goal`의 `{이름}`은 이름만 모델에 가고 수행기가 채운다, `results?`를 더했다. 결정 수행에서 목표만 있으면 업무 실패(`ui_goal_needs_autonomous`) | 0035 |

@@ -26,7 +26,7 @@ from typing import Any
 from chaeksas.bot_ui.bots import InstalledBot, write_inputs
 from chaeksas.bot_ui.credentials import ENV_LLM_API_KEY
 from chaeksas.contracts.bot_ui import CurrentRun
-from chaeksas.core import control
+from chaeksas.core import control, requests
 from chaeksas.core.processes import ChildProcess
 from chaeksas.core.run_log import RunLog, log_path, run_dir
 
@@ -61,6 +61,7 @@ def runner_args(
     llm_url: str = "",
     llm_model: str = "",
     extensions_path: Path | None = None,
+    approval_where: str = "field",
 ) -> list[str]:
     """실행기 명령줄. **업무 값은 싣지 않는다** — 입력은 파일로 준다 (원칙 6)."""
     args = [
@@ -90,6 +91,8 @@ def runner_args(
         args += ["--llm-url", llm_url, "--llm-model", llm_model]
     if extensions_path is not None:
         args += ["--extensions", str(extensions_path)]
+    if approval_where != "field":
+        args += ["--approval-where", approval_where]
     return args
 
 
@@ -125,6 +128,8 @@ class Running:
     _node_id: str | None = None
     _pendings: dict[str, Request] = field(default_factory=dict)
     _finished: str = ""
+    #: 현장에서 먼저 답한 Center 결재 — Bot UI가 Center에서 거둔다 (`answered_in_field`, ADR-0038).
+    field_answered: list[str] = field(default_factory=list)
 
     @property
     def control_path(self) -> Path:
@@ -133,6 +138,11 @@ class Running:
     @property
     def log_path(self) -> Path:
         return log_path(self.data_dir, self.run_id)
+
+    @property
+    def requests_path(self) -> Path:
+        """올라갈 결재 요청 (ADR-0038) — 실행기가 쓰고 Bot UI가 나른다."""
+        return requests.requests_path(self.data_dir, self.run_id)
 
     @property
     def alive(self) -> bool:
@@ -172,7 +182,7 @@ class Running:
                 where=str(data.get("where") or "field"),
                 at=ts,
             )
-        elif kind in ("human_answered", "human_timeout"):
+        elif kind in ("human_answered", "human_timeout", "human_withdrawn"):
             self._pendings.pop(str(data.get("request_id") or ""), None)
         elif kind == "run_finished":
             self._finished = str(data.get("status") or "success")
@@ -197,6 +207,14 @@ class Running:
     def answer(self, request_id: str, body: dict[str, Any], *, answered_by: str) -> None:
         """결재·확인 답 (CMN-01). **값은 제어 파일에만** 있다 (원칙 6, ADR-0031)."""
         control.answer(self.control_path, request_id, body, answered_by=answered_by)
+        asked = self._pendings.get(request_id)
+        if asked is not None and asked.where == "center" and request_id not in self.field_answered:
+            # Center 결재함에도 올라가 있다 — 거두지 않으면 결재자가 끝난 것에 또 답한다.
+            self.field_answered.append(request_id)
+
+    def withdraw(self, request_id: str, *, reason: str) -> None:
+        """Center 결재가 답 없이 끝났다 — 회수·만료 (ADR-0038). **답이 아니다.**"""
+        control.withdraw(self.control_path, request_id, reason=reason)
 
     def stop(self, *, grace_s: float = STOP_GRACE_S) -> int | None:
         """협조 중지 → 유예 → Job 나무째 (ADR-0023).
@@ -215,8 +233,12 @@ class Running:
         return self.child.stop(timeout_s=1.0)
 
     def cleanup(self) -> None:
-        """끝난 뒤 치운다. **실행 기록은 남긴다** (Center로 가야 한다)."""
+        """끝난 뒤 치운다. **실행 기록은 남긴다** (Center로 가야 한다).
+
+        요청 파일도 지운다 — 실행기가 죽으면 스스로 못 지우고, **검토 자료에는 업무 값이 있다**.
+        """
         control.clear(self.control_path)
+        requests.clear(self.requests_path)
 
 
 @dataclass
@@ -250,6 +272,7 @@ class Launcher:
         job_id: str | None = None,
         run_id: str | None = None,
         extensions: dict[str, dict[str, Any]] | None = None,
+        approval_where: str = "field",
     ) -> Running:
         """Bot 하나를 띄운다. 이미 돌고 있으면 거절한다 — 대기열은 부르는 쪽이 본다.
 
@@ -283,6 +306,7 @@ class Launcher:
             llm_url=self.llm_url,
             llm_model=self.llm_model,
             extensions_path=extensions_path,
+            approval_where=approval_where,
         )
         factory = self.make_child or ChildProcess
         child = factory(

@@ -1,7 +1,7 @@
 """실행기에게 내려보내는 길 — 제어 파일 한 벌 ([ADR-0031](../../../../docs/decisions/0031-runner-control-file.md)).
 
-올라오는 것은 **실행 기록**(C3 `runs/<run_id>.jsonl`)이 그대로 쓰인다. 내려가는 것만 여기
-있다: 중지와 **결재 답**.
+올라오는 것은 **실행 기록**(C3 `runs/<run_id>.jsonl`)이 그대로 쓰인다 (결재 요청만 예외 — 요청
+파일, ADR-0038). 내려가는 것만 여기 있다: 중지, **결재 답**, **회수**(답 없이 끝남).
 
 - 한 줄에 하나씩 **덧붙인다** (JSON Lines). 읽는 쪽은 읽은 자리를 `.sent`에 남겨 **두 번
   답하지 않는다** (실행 기록 보내기와 같은 수법).
@@ -25,6 +25,8 @@ READ_SUFFIX = ".read"
 
 STOP = "stop"
 ANSWER = "answer"
+#: Center 결재가 답 없이 끝났다 — 관리자 회수·만료 (ADR-0038). **답이 아니다.**
+WITHDRAW = "withdraw"
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,7 @@ class Command:
     request_id: str = ""
     answer: dict[str, Any] = field(default_factory=dict)
     answered_by: str = ""
+    reason: str = ""
 
     @property
     def is_stop(self) -> bool:
@@ -59,6 +62,8 @@ def send(path: Path, command: Command) -> None:
             "answer": command.answer,
             "answered_by": command.answered_by,
         }
+    if command.kind == WITHDRAW:
+        body |= {"request_id": command.request_id, "reason": command.reason}
     with path.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(body, ensure_ascii=False) + "\n")
 
@@ -69,6 +74,10 @@ def stop(path: Path) -> None:
 
 def answer(path: Path, request_id: str, body: Mapping[str, Any], *, answered_by: str) -> None:
     send(path, Command(kind=ANSWER, request_id=request_id, answer=dict(body), answered_by=answered_by))
+
+
+def withdraw(path: Path, request_id: str, *, reason: str) -> None:
+    send(path, Command(kind=WITHDRAW, request_id=request_id, reason=reason))
 
 
 def take(path: Path) -> list[Command]:
@@ -96,6 +105,7 @@ def take(path: Path) -> list[Command]:
                 request_id=str(found.get("request_id") or ""),
                 answer=dict(found.get("answer") or {}),
                 answered_by=str(found.get("answered_by") or ""),
+                reason=str(found.get("reason") or ""),
             )
         )
     if out:
@@ -114,6 +124,7 @@ __all__ = [
     "CONTROL_SUFFIX",
     "READ_SUFFIX",
     "STOP",
+    "WITHDRAW",
     "Command",
     "answer",
     "clear",
@@ -121,4 +132,5 @@ __all__ = [
     "send",
     "stop",
     "take",
+    "withdraw",
 ]

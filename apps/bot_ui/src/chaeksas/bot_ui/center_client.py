@@ -19,6 +19,7 @@ from typing import Any
 
 import httpx
 
+from chaeksas.contracts.approvals import ApprovalInfo
 from chaeksas.contracts.bot_ui import (
     HeartbeatRequest,
     HeartbeatResponse,
@@ -29,6 +30,8 @@ from chaeksas.contracts.bot_ui import (
 log = logging.getLogger(__name__)
 
 API = "/api/v1/bot-ui"
+#: 결재는 Bot UI 경로가 아니라 C6 경로다 (올린 쪽 키로).
+APPROVALS = "/api/v1/approvals"
 #: 요청 크기 한도 (C4 — 256 KB). 넘으면 보내기 전에 막는다.
 MAX_REQUEST_KB = 256
 #: 한 번의 요청을 기다리는 시간. 하트비트 주기(30초)보다 넉넉히 짧게.
@@ -85,8 +88,16 @@ class CenterClient:
     timeout_s: float = DEFAULT_TIMEOUT_S
     client: httpx.Client | None = None
 
-    def _send(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
-        body = httpx.Request("POST", "http://x", json=payload).content
+    def _send(
+        self,
+        path: str,
+        payload: dict[str, Any] | None,
+        *,
+        method: str = "POST",
+        api: str = API,
+        params: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        body = httpx.Request("POST", "http://x", json=payload).content if payload is not None else b""
         if len(body) > MAX_REQUEST_KB * 1024:
             # 보내 봐야 413이다. 무엇이 큰지 말해 준다 (대개 대기열·준비 상태가 늘어난 경우).
             raise CenterProblem(
@@ -96,8 +107,10 @@ class CenterClient:
         own = self.client is None
         client = self.client or httpx.Client(timeout=self.timeout_s)
         try:
-            response = client.post(
-                f"{self.base_url.rstrip('/')}{API}{path}",
+            response = client.request(
+                method,
+                f"{self.base_url.rstrip('/')}{api}{path}",
+                params=params,
                 content=body,
                 headers={
                     # 토큰·키는 ASCII만 (CLAUDE.md §5 — 헤더에 한글을 넣지 않는다).
@@ -125,6 +138,19 @@ class CenterClient:
     def heartbeat(self, request: HeartbeatRequest) -> HeartbeatResponse:
         """30초마다. 응답의 `next_heartbeat_s`를 따른다."""
         return HeartbeatResponse.model_validate(self._send("/heartbeat", request.to_json_dict()))
+
+    def create_approval(self, body: dict[str, Any]) -> ApprovalInfo:
+        """결재를 Center 결재함에 올린다 (C6 `POST /approvals`). **본문은 실행기가 쓴 그대로**다.
+
+        멱등 — 같은 `request_id`·같은 본문이면 기존 결재를 돌려준다 (200).
+        """
+        return ApprovalInfo.model_validate(self._send("", body, api=APPROVALS))
+
+    def withdraw_approval(self, request_id: str, *, reason: str) -> ApprovalInfo:
+        """올린 결재를 거둔다 (C6 `DELETE /approvals/{id}?reason=`) — 현장에서 먼저 답했을 때."""
+        return ApprovalInfo.model_validate(
+            self._send(f"/{request_id}", None, method="DELETE", api=APPROVALS, params={"reason": reason})
+        )
 
     def download_package(self, package_id: str, version: str) -> bytes:
         """패키지 zip (C5 `GET /packages/{id}/{v}`). 승인된 것이면 `SIGNATURE`가 들어 있다.
