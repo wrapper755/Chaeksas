@@ -4,7 +4,10 @@
 실려 내려간다 — Center가 현장 PC로 먼저 연결하지 않는다.
 
 신원은 키로 정한다 (C4): 경로·본문에 `bot_ui_id`를 넣지 않는다. 키는 처음 등록한 PC에 묶이고,
-다른 PC에서 쓰면 409 — 키가 새어도 다른 Bot UI를 사칭할 수 없다.
+다른 PC에서 쓰면 409 — 키가 새어도 다른 Bot UI를 사칭할 수 없다. **묶기는 두 방향 모두 하나씩**
+이라 같은 PC를 다른 키가 등록하는 것도 409다 (C4 「키 묶기」) — 그러지 않으면 PC 하나에 Bot UI
+행이 둘 생겨 CON-03에 두 줄로 보이고, C7 리소스의 PC 수가 부풀고, 작업이 하트비트를 보내지
+않는 쪽으로 간다.
 """
 
 from __future__ import annotations
@@ -49,16 +52,9 @@ def new_bot_ui_id() -> str:
     return f"bui_{secrets.token_hex(4)}"
 
 
-def _bound_or_bind(store: Store, key: keys.KeyRecord, *, machine_id: str, name: str) -> None:
-    """키 묶기 — 처음이면 묶고, 다른 PC면 409 (C4 「키 묶기」)."""
-    if key.bound_to is None:
-        keys.bind(
-            store,
-            key.key_id,
-            BoundTo(type=KEY_TYPE, id=machine_id, name=name, first_seen=now_iso()),
-        )
-        return
-    if key.bound_to.id != machine_id:
+def _refuse_if_bound_elsewhere(key: keys.KeyRecord, machine_id: str) -> None:
+    """키 → PC: 키는 처음 등록한 PC에 묶인다 (C4 「키 묶기」)."""
+    if key.bound_to is not None and key.bound_to.id != machine_id:
         raise ApiError(
             409,
             "machine_mismatch",
@@ -66,6 +62,41 @@ def _bound_or_bind(store: Store, key: keys.KeyRecord, *, machine_id: str, name: 
             "PC를 다시 설치했다면 콘솔에서 「PC 묶음 풀기」를 하세요",
             {"bound_to": key.bound_to.to_json_dict()},
         )
+
+
+def _adopt_or_refuse(store: Store, key: keys.KeyRecord, *, machine_id: str, own: Any | None) -> Any | None:
+    """PC → 키: `machine_id` 하나에 Bot UI 행도 하나다 (C4 「키 묶기」).
+
+    돌려주는 것은 **이어받을 자리**다 (그 PC가 비어 있으면 `None`). 묶음이 풀린 키의 자리는
+    놓인 자리라 새 키가 이어받는다 — 새 행을 만들면 배포·작업·결재가 가리키는 `bot_ui_id`를
+    버리게 되고 CON-03에 유령 한 줄이 남는다.
+    """
+    other = store.row(
+        "SELECT * FROM bot_uis WHERE machine_id = ? AND key_id <> ?", (machine_id, key.key_id)
+    )
+    if other is None:
+        return None
+    detail = {"bot_ui_id": str(other["bot_ui_id"]), "name": str(other["name"])}
+    owner = keys.get(store, str(other["key_id"]))
+    if owner is not None and owner.bound_to is not None:
+        # 키 하나가 혼자서 남의 PC 자리를 가져가지 못한다 — 관문은 운영자다.
+        raise ApiError(
+            409,
+            "machine_already_registered",
+            f"이 PC는 이미 다른 키로 등록되어 있다 (「{other['name']}」). "
+            "키를 바꾸려면 콘솔에서 옛 키의 「PC 묶음 풀기」를 먼저 하세요",
+            {**detail, "reason": "bound_elsewhere"},
+        )
+    if own is not None:
+        # 이어받기는 행이 없는 키만 한다 — 어느 쪽 이력을 버릴지 짐작하지 않는다.
+        raise ApiError(
+            409,
+            "machine_already_registered",
+            f"이 키는 이미 다른 PC로 등록되어 있어 이 PC(「{other['name']}」)의 자리를 "
+            "이어받을 수 없다. 이 PC에는 새 키를 발급하세요",
+            {**detail, "reason": "key_has_another_pc"},
+        )
+    return other
 
 
 def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_interval_s: int) -> RegisterResponse:
@@ -76,20 +107,23 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
     except ValueError as e:
         raise ApiError(422, "input_invalid", "등록 요청이 계약과 맞지 않는다", {"error": str(e).splitlines()[0]}) from e
 
-    _bound_or_bind(store, key, machine_id=request.machine_id, name=request.name)
-
     existing = store.row("SELECT * FROM bot_uis WHERE key_id = ?", (key.key_id,))
-    if existing is not None and existing["machine_id"] != request.machine_id:
-        # 묶음을 풀고 다른 PC에서 다시 등록한 경우 — 그 키의 Bot UI를 새 PC로 옮긴다.
-        bot_ui_id = existing["bot_ui_id"]
-    elif existing is not None:
-        bot_ui_id = existing["bot_ui_id"]
-    else:
-        bot_ui_id = new_bot_ui_id()
+    # **묶기 전에 두 방향을 다 본다** — 막힌 등록이 키를 묶으면 운영자가 그 묶음까지 풀어야 한다 (C4).
+    _refuse_if_bound_elsewhere(key, request.machine_id)
+    adopted = _adopt_or_refuse(store, key, machine_id=request.machine_id, own=existing)
+    if key.bound_to is None:
+        keys.bind(
+            store,
+            key.key_id,
+            BoundTo(type=KEY_TYPE, id=request.machine_id, name=request.name, first_seen=now_iso()),
+        )
+
+    row = existing if existing is not None else adopted
+    bot_ui_id = str(row["bot_ui_id"]) if row is not None else new_bot_ui_id()
 
     runtimes = request.runtimes.to_json_dict() if request.runtimes else None
     with store.tx() as cur:
-        if existing is None:
+        if row is None:
             cur.execute(
                 "INSERT INTO bot_uis (bot_ui_id, key_id, machine_id, name, os, versions_json,"
                 " runtimes_json, registered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -102,6 +136,21 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
                     dumps(request.versions.to_json_dict()),
                     dumps(runtimes) if runtimes else None,
                     now_iso(),
+                ),
+            )
+        elif adopted is not None:
+            # 이어받은 자리의 **상태는 비운다** — 옛 키가 보고한 것이다 (C4). 다음 하트비트가 채운다.
+            cur.execute(
+                "UPDATE bot_uis SET key_id = ?, machine_id = ?, name = ?, os = ?, versions_json = ?,"
+                " runtimes_json = ?, last_seen_at = NULL, state_json = NULL WHERE bot_ui_id = ?",
+                (
+                    key.key_id,
+                    request.machine_id,
+                    request.name,
+                    request.os,
+                    dumps(request.versions.to_json_dict()),
+                    dumps(runtimes) if runtimes else None,
+                    bot_ui_id,
                 ),
             )
         else:

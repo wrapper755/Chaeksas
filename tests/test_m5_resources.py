@@ -322,6 +322,33 @@ def test_extensions_merge_reports_and_manifests(client: TestClient, app_url: str
     assert one["status"] == "n/a", "서버 부분이 없는 확장이다"
 
 
+def test_a_pc_is_counted_once_even_if_a_second_key_tries_to_register(client: TestClient) -> None:
+    """PC 하나는 한 번만 세어진다 — 같은 `machine_id`를 다른 키가 등록하면 409다 (C4 「키 묶기」).
+
+    PC 하나에 Bot UI 행이 둘 생기면 「확장이 깔린 PC 수」와 런타임 수가 함께 부푼다.
+    """
+    register_bot_ui(client)
+    made = client.post("/api/v1/center-keys", json={"name": "같은 PC 두 번째 키", "type": "bot_ui"}, headers=ADMIN)
+    second = client.post(
+        "/api/v1/bot-ui/register",
+        json={
+            "schema": 1,
+            "machine_id": hashlib.sha256(b"pc1").hexdigest(),
+            "name": "현장 PC 1",
+            "os": "windows-11-23H2",
+            "versions": {"bot_ui": "0.1.0", "core": "0.1.0", "worker": "0.3.0"},
+        },
+        headers={"Authorization": f"Bearer {made.json()['key']}"},
+    )
+    assert second.status_code == 409 and second.json()["code"] == "machine_already_registered"
+
+    runtimes = client.get("/api/v1/resources?type=runtime", headers=READ_AUTH).json()
+    assert len(runtimes["items"]) == 1, "같은 PC가 런타임 두 줄로 세어지면 안 된다"
+    extensions = client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()
+    one = next(x for x in extensions["items"] if x["id"] == "ui-automation")
+    assert one["installed_on"] == {"hosts": 1, "by_version": {"0.1.0": 1}}
+
+
 def test_an_app_without_an_extension_is_not_an_extension(client: TestClient, app_url: str) -> None:
     """서비스 앱이 `extension`을 적지 않으면 **확장 목록에 끼지 않는다** (C11 manifest).
 

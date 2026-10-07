@@ -32,6 +32,9 @@ CREATE TABLE IF NOT EXISTS center_keys (
 );
 CREATE TABLE IF NOT EXISTS bot_uis (
   bot_ui_id   TEXT PRIMARY KEY,
+  -- `key_id`·`machine_id`는 둘 다 한 행에만 있다 (C4 「키 묶기」). UNIQUE를 걸지 않은 것은
+  -- `CREATE TABLE IF NOT EXISTS`가 이미 만들어진 DB를 고치지 않아서다 (옮기기 수단이 없다) —
+  -- 지키는 것은 `api/bot_ui.py`의 `register`다.
   key_id      TEXT NOT NULL,
   machine_id  TEXT NOT NULL,
   name        TEXT NOT NULL,

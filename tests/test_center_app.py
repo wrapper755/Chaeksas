@@ -228,6 +228,109 @@ def test_unbinding_lets_a_reinstalled_pc_register(client: TestClient) -> None:
     assert client.post(f"/api/v1/center-keys/{key_id}/unbind", headers=ADMIN).status_code == 200
 
 
+def test_a_second_key_cannot_register_the_same_pc(client: TestClient) -> None:
+    """**PC → 키 방향도 하나다** (C4 「키 묶기」).
+
+    같은 PC에 두 번째 키를 발급해 등록하면 Bot UI 행이 둘 생겼다 — CON-03에 같은 PC가 두
+    줄로 보이고, C7 리소스의 PC 수가 부풀고, 작업이 하트비트를 보내지 않는 쪽으로 갔다.
+    """
+    _a_id, key_a = issue_key(client)
+    _b_id, key_b = issue_key(client, name="현장 PC 1 (키 두 번째)")
+    machine = machine_id("pc1")
+    first = client.post(
+        "/api/v1/bot-ui/register", json=register_body(machine=machine), headers={"Authorization": f"Bearer {key_a}"}
+    )
+    assert first.status_code == 200
+
+    second = client.post(
+        "/api/v1/bot-ui/register",
+        json=register_body(machine=machine, name="같은 PC, 다른 키"),
+        headers={"Authorization": f"Bearer {key_b}"},
+    )
+    assert second.status_code == 409, second.text
+    body = second.json()
+    assert body["code"] == "machine_already_registered"
+    assert body["detail"]["reason"] == "bound_elsewhere"
+    assert body["detail"]["bot_ui_id"] == first.json()["bot_ui_id"]
+
+    listed = client.get("/api/v1/bot-uis", headers=READ).json()
+    assert len(listed) == 1, "같은 PC가 두 줄로 보이면 안 된다"
+    assert listed[0]["name"] == "현장 PC 1"
+
+
+def test_a_refused_registration_does_not_bind_the_key(client: TestClient) -> None:
+    """거부된 등록은 키를 묶지 않는다 (C4) — 그러면 운영자가 새 키의 묶음까지 풀어야 한다."""
+    _a_id, key_a = issue_key(client)
+    key_b_id, key_b = issue_key(client, name="두 번째 키")
+    machine = machine_id("pc1")
+    client.post(
+        "/api/v1/bot-ui/register", json=register_body(machine=machine), headers={"Authorization": f"Bearer {key_a}"}
+    )
+    refused = client.post(
+        "/api/v1/bot-ui/register", json=register_body(machine=machine), headers={"Authorization": f"Bearer {key_b}"}
+    )
+    assert refused.status_code == 409
+
+    keys = {k["key_id"]: k for k in client.get("/api/v1/center-keys", headers=READ).json()}
+    assert keys[key_b_id]["bound_to"] is None, "막힌 키는 CON-11에서 「등록 전」이다"
+
+
+def test_unbinding_lets_a_new_key_take_over_the_pc(client: TestClient) -> None:
+    """키를 잃어 새 키를 발급한 경우 — 묶음을 풀면 새 키가 **그 자리를 이어받는다** (C4)."""
+    key_a_id, key_a = issue_key(client)
+    _b_id, key_b = issue_key(client, name="다시 발급한 키")
+    auth_a = {"Authorization": f"Bearer {key_a}"}
+    auth_b = {"Authorization": f"Bearer {key_b}"}
+    machine = machine_id("pc1")
+    first = client.post("/api/v1/bot-ui/register", json=register_body(machine=machine), headers=auth_a).json()
+    beat = client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(status="running"), headers=auth_a)
+    assert beat.status_code == 200
+
+    assert client.post(f"/api/v1/center-keys/{key_a_id}/unbind", headers=ADMIN).status_code == 200
+    again = client.post(
+        "/api/v1/bot-ui/register", json=register_body(machine=machine, name="같은 PC"), headers=auth_b
+    )
+    assert again.status_code == 200, again.text
+    assert again.json()["bot_ui_id"] == first["bot_ui_id"], "배포·작업·결재가 가리키는 자리를 그대로 쓴다"
+
+    listed = client.get("/api/v1/bot-uis", headers=READ).json()
+    assert len(listed) == 1
+    assert listed[0]["key"]["prefix"] == key_b[:16], "이제 새 키의 Bot UI다"
+    # 이어받은 자리의 상태는 비운다 — 옛 키가 보고한 것이다 (C4).
+    assert listed[0]["status"] is None and listed[0]["online"] is False
+
+    # 옛 키는 자리를 잃었다 — 하트비트는 409 `not_registered`.
+    lost = client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=auth_a)
+    assert lost.status_code == 409 and lost.json()["code"] == "not_registered"
+
+
+def test_a_key_that_still_has_its_own_pc_cannot_take_over_another(client: TestClient) -> None:
+    """이어받기는 **행이 없는 키만** 한다 (C4) — 어느 쪽 이력을 버릴지 짐작하지 않는다."""
+    key_a_id, key_a = issue_key(client)
+    key_b_id, key_b = issue_key(client, name="현장 PC 2")
+    pc1, pc2 = machine_id("pc1"), machine_id("pc2")
+    a = client.post(
+        "/api/v1/bot-ui/register", json=register_body(machine=pc1), headers={"Authorization": f"Bearer {key_a}"}
+    ).json()
+    b = client.post(
+        "/api/v1/bot-ui/register",
+        json=register_body(machine=pc2, name="현장 PC 2"),
+        headers={"Authorization": f"Bearer {key_b}"},
+    ).json()
+    for key_id in (key_a_id, key_b_id):
+        assert client.post(f"/api/v1/center-keys/{key_id}/unbind", headers=ADMIN).status_code == 200
+
+    moved = client.post(
+        "/api/v1/bot-ui/register", json=register_body(machine=pc1), headers={"Authorization": f"Bearer {key_b}"}
+    )
+    assert moved.status_code == 409, moved.text
+    assert moved.json()["detail"]["reason"] == "key_has_another_pc"
+
+    by_id = {row["bot_ui_id"]: row for row in client.get("/api/v1/bot-uis", headers=READ).json()}
+    assert by_id[a["bot_ui_id"]]["machine_id"] == pc1
+    assert by_id[b["bot_ui_id"]]["machine_id"] == pc2
+
+
 def test_wrong_key_type_is_refused(client: TestClient) -> None:
     """Bot UI용 키만 받는다 (C4). Studio용 키로 부르면 403."""
     _key_id, raw = issue_key(client, name="설계자 PC", key_type="studio")

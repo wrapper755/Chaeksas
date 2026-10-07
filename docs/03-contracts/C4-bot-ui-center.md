@@ -20,14 +20,36 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
   - `POST /api/v1/bot-ui/register` — 처음 한 번, 그리고 정보(이름·버전)가 바뀔 때.
   - `POST /api/v1/bot-ui/heartbeat` — 30초마다 (응답의 `next_heartbeat_s`를 따름).
 - 인증: `Authorization: Bearer <Center API 키>` (종류 「Bot UI용」, CON-11). **Bot UI의 신원은 키로 정한다.** 경로·본문에 `bot_ui_id`를 넣지 않는다.
-- 키 묶기: 키는 처음 `register`한 PC(`machine_id`)에 묶인다. 다른 `machine_id`로 같은 키를 쓰면 409. PC를 다시 설치해 `machine_id`가 바뀌면 운영자가 CON-11에서 「PC 묶음 풀기」를 한다.
-  > 미정: 지금 보는 것은 **키 → PC** 방향뿐이다. 같은 `machine_id`를 **다른 키**가 등록하면 막지 않아 Bot UI 행이 둘 생긴다 (CON-03에 같은 PC가 두 줄, C7 「런타임」·`installed_on.hosts` 과대 집계). 409로 막고 「PC 묶음 풀기」를 먼저 하게 할지, 기존 행을 새 키로 옮길지 정해야 한다. C7 리소스를 붙이다 드러났다.
+- 키 묶기: **키 하나 ↔ PC 하나 ↔ Bot UI 행 하나**다 (아래 [키 묶기](#키-묶기)).
 - 키 종류: 「Bot UI용」 키만 받는다. Studio용·서버 실행기용 키로 부르면 403 `wrong_key_type`.
 - 키 형식: `chk_ctr_<무작위 40자>`, 앞자리 16자만 화면에 (C11과 같은 규칙).
 - 멱등성: `register`는 같은 키·같은 `machine_id`면 같은 `bot_ui_id`를 돌려준다 (정보만 갱신). `heartbeat`는 매번 상태를 덮어쓴다. `job_acks`·`approval_acks`는 같은 것을 다시 보내도 한 번만 반영한다.
 - 크기 한도: 요청 256 KB.
 - **`current_run`은 비어 있어도 `null`로 싣는다.** 「필수이지만 비어 있을 수 있는」 필드라서, `None`인 선택 필드처럼 빼 버리면 받는 쪽이 「필수 필드 누락」으로 422를 돌려준다 (`ContractModel.to_json_dict()`가 필수 필드의 `null`은 남긴다).
 - 온라인 판정: 마지막 하트비트가 90초 이내면 「● 온라인」 (CON-03).
+
+## 키 묶기
+
+**`machine_id` 하나에 Bot UI 행도 하나다.** 두 방향을 모두 본다.
+
+- **키 → PC.** 키는 처음 `register`한 PC(`machine_id`)에 묶인다. 묶인 키를 다른 `machine_id`로 쓰면 409 `machine_mismatch` — 키가 새어도 다른 Bot UI를 사칭할 수 없다.
+- **PC → 키.** 같은 `machine_id`를 다른 키가 등록하면 409 `machine_already_registered`. **키가 혼자서 남의 PC 자리를 가져가지 못한다** — 관문은 운영자다. 옛 키의 「PC 묶음 풀기」(CON-11, C7 `POST /center-keys/{id}/unbind`)를 먼저 해야 한다.
+- **묶음을 풀면 그 Bot UI 자리도 놓인다.** 새 키가 같은 `machine_id`로 등록하면 그 `bot_ui_id`를 **이어받는다** — 배포·작업·결재·배치 결정이 그 id를 가리키고 있어서, 새 행을 만들면 CON-03에 유령 한 줄이 남고 C7 리소스의 PC 수가 부푼다. 이어받은 자리의 **상태는 비운다** (`status`·`current_run`·`queue`·`worker`·`readiness`는 옛 키가 보고한 것이다 — 다음 하트비트가 채운다). 옛 키는 그 자리를 잃어, 그 키의 `heartbeat`는 409 `not_registered`가 된다.
+- **이어받기는 행이 없는 키만 한다.** 이미 다른 PC로 등록된 키(묶음을 푼 뒤 아직 그 행을 가진 키)가 남의 놓인 자리를 가져가려 하면 409 `machine_already_registered` + `detail.reason`=`key_has_another_pc`. 어느 쪽 이력을 버릴지 Center가 짐작하지 않는다 — 그 PC에는 새 키를 발급한다.
+
+`register`가 보는 순서와 결과:
+
+| 부르는 키 | 보낸 `machine_id` | 결과 |
+| --- | --- | --- |
+| 묶인 키 | 묶인 PC와 다르다 | 409 `machine_mismatch` (`detail.bound_to`) |
+| 아무 키 | **묶여 있는** 다른 키의 PC | 409 `machine_already_registered` (`reason`=`bound_elsewhere`) |
+| 행이 **없는** 키 | 묶음이 **풀린** 키의 PC | 200 — 그 `bot_ui_id`를 이어받고 상태를 비운다 |
+| 행이 **있는** 키 (묶음을 푼 키) | 묶음이 **풀린** 다른 키의 PC | 409 `machine_already_registered` (`reason`=`key_has_another_pc`) |
+| 묶음을 푼 키 | 아무도 안 쓰는 PC | 200 — 그 키의 Bot UI가 새 PC로 옮겨진다 (PC를 다시 설치한 경우) |
+| 묶인 키 | 묶인 PC와 같다 | 200 — 같은 `bot_ui_id`, 정보만 갱신 (멱등) |
+| 새 키 | 아무도 안 쓰는 PC | 200 — 새 `bot_ui_id` |
+
+**거부된 등록은 키를 묶지 않는다.** 409로 막힌 키는 CON-11에서 「등록 전」으로 남는다 — 실패한 등록이 키를 묶어 버리면 운영자가 그 키의 묶음까지 풀어야 한다.
 
 ## 모델
 
@@ -160,7 +182,9 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 | --- | --- | --- |
 | 401 | 키 없음·틀림 | 트레이 「등록 전」, BUI-03 「키가 거부되었습니다」. 실행 중 Bot은 계속, 기록은 쌓음 |
 | 403 | 키 폐기·만료 (`detail.code`=`key_revoked`\|`key_expired`), 키 종류가 다름 (`wrong_key_type`) | 알림 「Center가 이 PC의 키를 거부했습니다」. 하트비트 간격을 5분으로 늘림. 실행 중 Bot은 끝까지, 기록은 쌓음 |
-| 409 | 키가 다른 PC에 묶여 있음 (`key_bound_elsewhere`, `detail.machine_name`) | BUI-03에 「이 키는 <PC>에서 쓰고 있습니다」 |
+| 409 | 키가 다른 PC에 묶여 있음 (`machine_mismatch`, `detail.bound_to`) | BUI-03에 「이 키는 <PC>에서 쓰고 있습니다」. 트레이 「등록 전」 |
+| 409 | 이 PC가 이미 다른 키로 등록돼 있음 (`machine_already_registered`, `detail.reason`·`bot_ui_id`·`name`) | BUI-03에 Center가 준 말 그대로. 트레이 「등록 전」. **다시 시도해도 같다** — 운영자가 CON-11에서 옛 키의 「PC 묶음 풀기」를 해야 한다 |
+| 409 | 등록하기 전에 `heartbeat` (`not_registered`) | `register`를 먼저 부른다 (자리를 다른 키가 이어받은 경우도 이 코드다) |
 | 422 | 필수 필드 누락, 더 높은 `schema` | Bot UI 업데이트 필요 안내 |
 | 5xx / 연결 실패 | | 트레이 「연결 끊김」. 30초 간격 재시도 (최대 5분까지 늘림). 실행·대기열은 계속 |
 
@@ -192,3 +216,4 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 | 2026-10-01 | 1 | 확장 검토 반영: 하트비트 `extensions` | 0018 |
 | 2026-10-01 | 1 | 화면 검토 반영: Worker `off`·`reserved_for`, 현장 취소 `cancelled_on_pc` | — |
 | 2026-10-06 | 1 | Center가 `deployment_results`를 쌓아 둔다고 적었다 (멱등은 `(deployment_id, at)`) — CON-03을 붙이다 Center가 그것을 버리고 있는 것이 드러났다 | — |
+| 2026-10-08 | 1 | 키 묶기를 **두 방향**으로 적었다 (`machine_already_registered`·놓인 자리 이어받기) — 키 → PC만 보던 탓에 같은 PC에 두 번째 키를 발급하면 Bot UI 행이 둘 생겨 CON-03·C7 집계가 부풀고 작업이 조용한 쪽으로 갈 수 있었다. 409 코드 이름도 코드에 맞췄다 (`key_bound_elsewhere` → `machine_mismatch`) | — |

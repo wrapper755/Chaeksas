@@ -64,7 +64,7 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 ## M2. Center 최소 + Bot UI 연결
 
 - [x] Linux 서버에 Center가 뜨고, 콘솔에서 발급한 Center API 키를 Windows Bot UI에 넣으면 등록 → 하트비트 (C4, CON-11, BUI-03) — **Windows 11 실기에서 확인했다** (일반 권한, 한국어, 확인 목록은 [이슈 #3](https://github.com/wrapper755/Chaeksas/issues/3)). 트레이·메뉴·설정 창, 자격 증명 관리자, 작업 스케줄러 자동 시작(로그오프→로그인), Job Object로 손자까지 종료, 잠금 중 하트비트 유지, 로그오프 94초 뒤 Center에서 오프라인까지 봤다. 실기에서 나온 결함 9건은 [#4](https://github.com/wrapper755/Chaeksas/pull/4)·[#5](https://github.com/wrapper755/Chaeksas/pull/5)에서 고치고 같은 PC에서 다시 확인했다 — 일반 권한 자동 시작(작업 XML), 글꼴 힌팅, QSS 그룹 상자·숫자 칸, 150% 배율 창 크기, Center 응답 charset, 시험 격리
-- [x] Bot UI별 Center API 키로 다른 Bot UI를 사칭할 수 없음 — 키는 처음 등록한 PC(`machine_id`)에 묶이고 다른 PC에서 쓰면 409 `machine_mismatch`. 운영자가 「PC 묶음 풀기」로 되돌린다
+- [x] Bot UI별 Center API 키로 다른 Bot UI를 사칭할 수 없음 — 키는 처음 등록한 PC(`machine_id`)에 묶이고 다른 PC에서 쓰면 409 `machine_mismatch`. **거꾸로도 하나다** — 같은 PC를 다른 키가 등록하면 409 `machine_already_registered`라서 PC 하나에 Bot UI 행이 둘 생기지 않는다 (C4 「키 묶기」). 운영자가 「PC 묶음 풀기」로 되돌리고, 풀린 자리는 새 키가 이어받는다
 - [x] 패키지 업로드·목록·다운로드, 해시 검증 (C1, C5 일부) — **보낸 해시를 믿지 않고 파일에서 다시 계산해** 매니페스트와 대조한다 (R6). zip 경로 탈출·크기도 Center가 먼저 막는다
 - [x] Center 콘솔(Next.js): 공통 틀(CON-00), 관리자 로그인 세션(BFF), Bot UI 현황(CON-03), Center API 키(CON-11) — 토큰은 암호화된 httpOnly 쿠키에 담겨 **브라우저에 내려가지 않는다**(HTML에 새지 않는 것을 확인). 실제로 띄운 Center에 붙여 두 화면이 실 데이터를 그리는 것까지 봤다. 아직 없는 화면은 탐색에서 끄고 이유를 보인다
 - [x] 서비스 앱 관리 콘솔(Next.js): SVC-00~03 + `service_kit`의 관리 API(`/admin/v1/status`·`keys`·`usage`, C11) — 콘솔 **한 벌**이 모든 서비스 앱을 그린다(`CHK_SVC_CONSOLE__APP_URL`로 어느 앱인지 정하고, 고유 메뉴는 `app_id`로 고른다). 관리 API는 **관리자 토큰으로만** 열리고 업무 키로는 403, 토큰을 설정하지 않으면 경로 전체가 503이다. 발급 원문은 한 번만 보이고 목록에는 앞자리 16자만 남는다. 실제로 띄운 앱(UI 자동화 데모)에 붙여 세 화면이 실 데이터를 그리는 것과, 토큰·업무 값이 HTML에 새지 않는 것을 봤다. 좁히기·「키별 합계」와 UIA 고유 화면은 M4
