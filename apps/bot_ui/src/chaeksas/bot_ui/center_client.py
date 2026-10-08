@@ -26,12 +26,15 @@ from chaeksas.contracts.bot_ui import (
     RegisterRequest,
     RegisterResponse,
 )
+from chaeksas.contracts.resources import ExtensionResource, ServiceAppResource
 
 log = logging.getLogger(__name__)
 
 API = "/api/v1/bot-ui"
 #: 결재는 Bot UI 경로가 아니라 C6 경로다 (올린 쪽 키로).
 APPROVALS = "/api/v1/approvals"
+#: 리소스 목록도 C7 경로다 — 주소와 외부 확장 정의를 읽는다 (Bot UI 키로, C5 권한표).
+RESOURCES = "/api/v1/resources"
 #: 요청 크기 한도 (C4 — 256 KB). 넘으면 보내기 전에 막는다.
 MAX_REQUEST_KB = 256
 #: 한 번의 요청을 기다리는 시간. 하트비트 주기(30초)보다 넉넉히 짧게.
@@ -158,6 +161,25 @@ class CenterClient:
             self._send(f"/{request_id}", None, method="DELETE", api=APPROVALS, params={"reason": reason})
         )
 
+    def service_apps(self) -> list[ServiceAppResource]:
+        """서비스 앱 리소스 목록 (C7 `GET /resources?type=service_app`) — **주소의 유일한 출처**다.
+
+        Bot UI 키로 읽는다 (C5 권한표). **앱을 깨우지 않는다** — Center가 들고 있는 것을 준다.
+        """
+        found = self._send(
+            "", None, method="GET", api=RESOURCES, params={"type": "service_app"}
+        )
+        return [ServiceAppResource.model_validate(one) for one in found.get("items") or []]
+
+    def extension(self, extension_id: str) -> ExtensionResource:
+        """확장 하나 (C7 `GET /resources/extensions/{id}`). 외부면 **정의와 봉투**가 함께 온다.
+
+        철회된 확장은 404다 — 받지 못한 것은 쓰지 않는다 (C13).
+        """
+        return ExtensionResource.model_validate(
+            self._send(f"/extensions/{extension_id}", None, method="GET", api=RESOURCES)
+        )
+
     def download_package(self, package_id: str, version: str) -> bytes:
         """패키지 zip (C5 `GET /packages/{id}/{v}`). 승인된 것이면 `SIGNATURE`가 들어 있다.
 
@@ -184,6 +206,7 @@ class CenterClient:
 
 __all__ = [
     "API",
+    "RESOURCES",
     "DEFAULT_TIMEOUT_S",
     "KEY_REJECTED_CODES",
     "MAX_REQUEST_KB",

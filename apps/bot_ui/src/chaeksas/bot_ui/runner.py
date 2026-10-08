@@ -61,6 +61,7 @@ def runner_args(
     llm_url: str = "",
     llm_model: str = "",
     extensions_path: Path | None = None,
+    services_path: Path | None = None,
     approval_where: str = "field",
 ) -> list[str]:
     """실행기 명령줄. **업무 값은 싣지 않는다** — 입력은 파일로 준다 (원칙 6)."""
@@ -91,6 +92,8 @@ def runner_args(
         args += ["--llm-url", llm_url, "--llm-model", llm_model]
     if extensions_path is not None:
         args += ["--extensions", str(extensions_path)]
+    if services_path is not None:
+        args += ["--services", str(services_path)]
     if approval_where != "field":
         args += ["--approval-where", approval_where]
     return args
@@ -272,12 +275,16 @@ class Launcher:
         job_id: str | None = None,
         run_id: str | None = None,
         extensions: dict[str, dict[str, Any]] | None = None,
+        services_path: Path | None = None,
         approval_where: str = "field",
     ) -> Running:
         """Bot 하나를 띄운다. 이미 돌고 있으면 거절한다 — 대기열은 부르는 쪽이 본다.
 
         `extensions`는 확장별 설정(그 칸 + 예약 키 — Worker 자리)이다. **비밀은 없다** — 키는
         실행기가 OS 비밀 저장소에서 참조 이름으로 푼다 (ADR-0013).
+
+        `services_path`는 바깥 앱 명부다 (C7 주소 + 외부 확장 정의·봉투, C13 「전송」) — 부르는
+        쪽이 Center에서 받아 써 둔다. **봉투는 실행기가 다시 검증한다.**
         """
         if self.busy:
             raise RuntimeError("이미 실행 중입니다 (PC 한 대에 Bot 하나, ADR-0014)")
@@ -306,6 +313,7 @@ class Launcher:
             llm_url=self.llm_url,
             llm_model=self.llm_model,
             extensions_path=extensions_path,
+            services_path=services_path,
             approval_where=approval_where,
         )
         factory = self.make_child or ChildProcess
