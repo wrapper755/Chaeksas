@@ -28,7 +28,7 @@ from collections.abc import Iterable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from chaeksas.contracts.approvals import Form, FormField
+from chaeksas.contracts.approvals import Form, FormField, answer_variables
 from chaeksas.contracts.bpmn_ext import BpmnProcess, DataOutput, Node, duration_hours
 from chaeksas.core.expr import ExprError, evaluate
 from chaeksas.core.files import FileTaskError, PathDenied, Workspace, write_output
@@ -766,8 +766,11 @@ class Engine:
     def answer(self, run: Run, request_id: str, answer: Mapping[str, Any], *, answered_by: str) -> State:
         """결재·확인의 답을 받아 이어 간다 (C6).
 
-        답의 칸은 **변수로 들어간다** (폼이 없으면 `decision` 하나). 답 **값은 기록에 남기지
-        않는다** (C3 `human_answered`는 값이 없다).
+        답의 칸은 **변수로 들어간다** (폼이 없으면 `decision` 하나). **답하지 않은 칸은 폼의
+        `default`로, 그것도 없으면 `None`으로 채운다** — 결재 창이 보내는 것과 같은 값이다
+        (C6 `answer_variables`). **지나지 않은 결재의 칸은 채우지 않으므로** 그것을 가리키는
+        식은 그대로 실패한다 (조용히 도우미로 떨어지지 않는다, `expr._Name`). 답 **값은 기록에
+        남기지 않는다** (C3 `human_answered`는 값이 없다).
         """
         pending = run.pendings.get(request_id)
         token = next((t for t in run.tokens if t.waiting_for == request_id), None)
@@ -785,7 +788,8 @@ class Engine:
                 code="answer_incomplete",
             )
 
-        run.variables.update(dict(answer))
+        # **폼의 칸은 모두 변수가 된다** — 기본값, 없으면 `None` (C6 `answer_variables`).
+        run.variables.update(answer_variables(pending.form, answer))
         run.log.emit("human_answered", node_id=pending.node_id, request_id=request_id, answered_by=answered_by)
         del run.pendings[request_id]
         token.waiting_for = None

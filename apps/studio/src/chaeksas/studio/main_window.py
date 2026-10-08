@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from chaeksas.studio import services
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.checks import refs_in
@@ -386,8 +387,15 @@ class MainWindow(QMainWindow):
             return
         # 확장 태스크·데스크톱 AI 태스크가 이 PC Bot UI의 Worker를 쓴다 (STU-10 「Worker」).
         tasks = self.extensions.tasks()
+        # 바깥 앱 한 벌 — **실행마다 한 번** 받는다 (케이스마다 Center를 두드리지 않게).
+        # 받지 못한 것은 로그에 적고 그 앱을 부르는 순간 분명히 실패한다 (C7·C13 「전송」).
+        found_apps = services.from_settings(self.settings)
+        directory = found_apps.directory()
+        for why in found_apps.problems:
+            self.log_view.appendPlainText(f"바깥 앱: {why}")
         for plan in plans:
             plan.extensions = tasks
+            plan.apps = directory
         self.receiver.start()
         self.queue = plans
         self.outcomes = []

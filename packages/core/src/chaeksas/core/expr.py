@@ -206,10 +206,23 @@ class _Walker:
         return node.value
 
     def _Name(self, node: ast.Name) -> Any:  # noqa: N802
+        """변수가 먼저고, 그다음 **값인** 도우미(`true`·`false`·`null`)뿐이다.
+
+        **호출형 도우미는 이름만으로 잡히지 않는다.** 잡히게 두면 변수 이름이 비었을 때
+        `기간`·`합계`처럼 도우미와 같은 이름이 조용히 **함수**로 평가되고, 그것이 서비스 앱
+        본문·파일에 실려 나간다 (BX-33에서 실제로 그랬다 — httpx가 「함수는 JSON이 아니다」로
+        죽었다). 비었으면 **비었다고 말하는 것**이 맞다.
+
+        날짜(`오늘`·`지금`)는 도우미가 아니라 **실행이 심는 변수**라 여기서 걸리지 않는다.
+        """
         if node.id in self.scope.variables:
             return self.scope.variables[node.id]
+        # `.get()`으로 보지 않는다 — `null`은 값이 `None`이라 「없음」과 구별되지 않는다.
         if node.id in self.scope.helpers:
-            return self.scope.helpers[node.id]
+            found = self.scope.helpers[node.id]
+            if not callable(found):
+                return found
+            raise self.fail(f"도우미 {node.id}는 불러서 쓴다 (`{node.id}(…)`) — 변수가 아니다")
         raise self.fail(f"모르는 변수다: {node.id}")
 
     def _List(self, node: ast.List) -> Any:  # noqa: N802

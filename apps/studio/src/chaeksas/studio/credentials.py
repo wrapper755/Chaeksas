@@ -1,4 +1,4 @@
-"""Studio의 비밀 — 모델 키와 서비스 앱 키(개발용) (STU-10, ADR-0013).
+"""Studio의 비밀 — 모델 키·Center API 키·서비스 앱 키(개발용) (STU-10, ADR-0013).
 
 **설정 파일에 넣지 않는다** (CLAUDE.md §5). OS 비밀 저장소(`keyring`)의 `chaeksas-studio`에 두고,
 읽기는 **환경변수가 먼저**다 (개발·CI). 저장소가 없으면 저장이 **분명히 실패한다** — 평문으로
@@ -19,6 +19,10 @@ SERVICE = "chaeksas-studio"
 #: 모델 키.
 LLM_KEY_NAME = "llm"
 ENV_LLM_API_KEY = "CHK_STUDIO__LLM__API_KEY"
+#: Center API 키 (`studio` 종류) — 시험 실행이 리소스 목록에서 **앱 주소를 읽는 데만** 쓴다.
+#: 읽기 전용이다 (Studio는 Center에 쓰지 않는다).
+CENTER_KEY_NAME = "center"
+ENV_CENTER_API_KEY = "CHK_STUDIO__CENTER_API_KEY"
 #: 서비스 앱 키 — 참조 이름마다 하나 (`svc:<참조>`).
 SERVICE_KEY_PREFIX = "svc:"
 ENV_SERVICE_KEY_PREFIX = "CHK_STUDIO__SVC__"
@@ -111,6 +115,12 @@ class StudioCredentials:
     def set_llm_api_key(self, value: str) -> None:
         self.set(LLM_KEY_NAME, value.strip())
 
+    def center_api_key(self) -> str | None:
+        return self.get(CENTER_KEY_NAME, env=ENV_CENTER_API_KEY)
+
+    def set_center_api_key(self, value: str) -> None:
+        self.set(CENTER_KEY_NAME, value.strip())
+
     def service_key(self, ref: str) -> str | None:
         return self.get(f"{SERVICE_KEY_PREFIX}{ref}", env=service_key_env(ref))
 
@@ -125,6 +135,7 @@ class StudioCredentials:
 
 
 __all__ = [
+    "ENV_CENTER_API_KEY",
     "ENV_LLM_API_KEY",
     "ENV_SERVICE_KEY_PREFIX",
     "SERVICE",

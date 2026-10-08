@@ -29,6 +29,7 @@ from typing import Any
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from chaeksas.contracts.bpmn_ext import Case, CaseFile, CaseMessage, duration_hours, matches
+from chaeksas.core.app_directory import AppDirectory
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State, new_run_id
 from chaeksas.core.files import Workspace as FileSpace
 from chaeksas.core.llm import NoLlm, OpenAiCompatibleLlm
@@ -163,6 +164,10 @@ class Plan:
     #: 확장 태스크·`web`·`desktop` AI 태스크를 수행할 쪽 (C13·ADR-0018·ADR-0037) —
     #: `Extensions.tasks()`. 없으면 그 태스크를 만났을 때 분명히 실패한다 (그림·설치 오류).
     extensions: Any = None
+    #: 바깥 앱 한 벌 (`studio.services.Services.directory()`) — 주소는 Center 리소스 등록,
+    #: 외부 확장은 검증된 정의다 (C7·C13 「전송」). 없으면 서비스 앱 태스크가 **분명히
+    #: 실패한다** — 조용히 지나가지 않는다 (`NoServiceCaller`).
+    apps: AppDirectory | None = None
 
 
 class CaseRun(QObject):
@@ -214,6 +219,14 @@ class CaseRun(QObject):
             readable=tuple(settings.readable_dirs),
             writable=tuple(settings.writable_dirs),
         )
+        # 주지 않으면 `RunEnv`의 기본값이 남는다 — 기본값은 **부르지 않고 실패한다**.
+        extra: dict[str, Any] = {}
+        if self.plan.extensions is not None:
+            extra["extensions"] = self.plan.extensions
+        if self.plan.apps is not None:
+            # 외부 확장은 어댑터로, 서비스 앱은 C11로 (`RoutedCaller`) — **엔진은 어느 쪽인지
+            # 모른다** (C13 §4).
+            extra["services"] = self.plan.apps.caller(caller_type="studio")
         return RunEnv(
             workspace=space,
             sender=self.adapter,
@@ -223,7 +236,7 @@ class CaseRun(QObject):
             # 내장 도구 넷 (ADR-0030). 파일 도구는 **이 실행의 폴더만** 본다.
             tools=builtin_tools(space),
             memory=self.plan.process.memory(),
-            **({"extensions": self.plan.extensions} if self.plan.extensions is not None else {}),
+            **extra,
         )
 
     # ── 돌리기 ──

@@ -514,3 +514,35 @@ def test_every_example_template_uses_only_names(file: str, node: str, site: str,
     names = template_names(source)
     filled = fill(source, Scope(variables=dict.fromkeys(names, "값"), helpers=bind(now=NOW), where=node))
     assert "{" not in filled.replace("{{", "").replace("}}", "") or not names
+
+
+# ─────────────────── 도우미와 변수가 겹칠 때 (M5 조각 14에서 드러났다) ───────────────────
+
+
+def test_a_helper_cannot_be_grabbed_as_a_value() -> None:
+    """**호출형 도우미는 이름만으로 잡히지 않는다.**
+
+    잡히게 두면 변수가 비었을 때 `기간`·`합계`처럼 도우미와 같은 이름이 조용히 **함수**로
+    평가되고, 그것이 서비스 앱 본문에 실려 나간다 (BX-33에서 실제로 그랬다 — httpx가
+    「함수는 JSON이 아니다」로 죽었다). 비었으면 **비었다고 말해야** 한다.
+    """
+    with pytest.raises(ExprError, match="도우미 기간는 불러서 쓴다"):
+        evaluate("기간", Scope(variables={}))
+    with pytest.raises(ExprError, match="도우미 합계는 불러서 쓴다"):
+        evaluate("합계", Scope(variables={}))
+
+
+def test_a_variable_still_wins_over_a_helper_with_the_same_name() -> None:
+    """같은 이름의 변수가 있으면 그것이 답이다 — 업무 값이 식의 주인이다."""
+    assert evaluate("기간", Scope(variables={"기간": 30})) == 30
+
+
+def test_json_literals_are_still_plain_names() -> None:
+    """`true`·`false`·`null`은 값인 도우미라 이름만으로 쓴다."""
+    assert evaluate("true", Scope(variables={})) is True
+    assert evaluate("null", Scope(variables={})) is None
+
+
+def test_calling_a_helper_still_works() -> None:
+    표 = [{"금액": 1}, {"금액": 2}]
+    assert evaluate("합계(표, '금액')", Scope(variables={"표": 표})) == 3

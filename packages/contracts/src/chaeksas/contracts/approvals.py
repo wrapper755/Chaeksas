@@ -200,6 +200,26 @@ def _field_violation(key: str, message: str) -> Violation:
     return Violation(rule="C6", code="answer_invalid", message=message, items=[key])
 
 
+def answer_variables(form: Form | None, answer: Mapping[str, Any]) -> dict[str, Any]:
+    """답 → **실행하는 쪽의 변수** (C6). `apply_defaults` + 남은 칸은 `None`이다.
+
+    `apply_defaults`와 나누어 둔 것은 하는 일이 다르기 때문이다 — 저쪽은 **검증 전에** 빈 칸을
+    기본값으로 채우는 것이고, 이쪽은 **답을 변수로 옮기는** 것이다.
+
+    폼의 칸은 **모두 변수가 된다.** 답하지 않은 선택 칸을 빼면 BPM 프로세스가 그 이름을 쓸 수
+    없고(BX-10의 웹훅이 `의견`을 보낸다), 더 나쁘게는 **이름이 식 도우미로 떨어진다** — `기간`·
+    `합계`처럼 겹치는 이름이면 변수가 아니라 함수가 잡힌다.
+
+    빈 칸은 `None`이다 — 결재 창(CMN-01)이 보내는 것과 같은 값이다. **그 폼의 칸만** 채운다:
+    지나지 않은 결재의 칸은 애초에 없으므로 그것을 가리키는 식은 그대로 실패해야 한다.
+    """
+    filled = apply_defaults(form, answer)
+    if form is not None:
+        for field in form.fields:
+            filled.setdefault(field.key, None)
+    return filled
+
+
 def apply_defaults(form: Form | None, answer: Mapping[str, Any]) -> dict[str, Any]:
     """답하지 않은 칸을 폼의 `default`로 채운다 (검증 전에 쓴다)."""
     if form is None:
