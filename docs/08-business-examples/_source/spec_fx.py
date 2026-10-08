@@ -218,7 +218,7 @@ FX("FX-15", "fx15_web_form", "웹 양식 제출 (PC)", "프로토타입 example_
    [f("Start", "Task_Prepare"), f("Task_Prepare", "Task_Submit"), f("Task_Submit", "Gw_Submitted"),
     f("Gw_Submitted", "Task_Lookup", "'접수' in 제출메시지", "예"), f("Gw_Submitted", "Task_NotSubmitted", default=True, name="아니오"),
     f("Task_Lookup", "End"), f("Task_NotSubmitted", "End")],
-   service_keys={"ui-automation": "test-ui"}, extensions=[{"id": "ui-automation", "version": ">=0.4,<0.5"}], 
+   service_keys={"ui-automation": "test-ui"}, extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}], 
    cases=[Case("시험 페이지", {}, {"제출메시지": "*", "연락처": "*"})],
    features=["UI 태스크 fill/click/read (C10 동작)", "화면 이동(`navigates`)", "읽은 문구로 분기"],
    lessons=["프로토타입은 WEB AI 태스크(자율)였다 — 등록 화면이면 UI 태스크로."])
@@ -234,7 +234,7 @@ FX("FX-16", "fx16_web_review_field", "현장 확인 (PC 결재 위치)", "프로
     script("Task_Skip", "건너뜀", "메모 = '사용자 보류'"), end("End")],
    [f("Start", "Task_Collect"), f("Task_Collect", "Approve_Review"), f("Approve_Review", "Gw_Ok"),
     f("Gw_Ok", "Task_Follow", "승인", "예"), f("Gw_Ok", "Task_Skip", default=True, name="아니오"), f("Task_Follow", "End"), f("Task_Skip", "End")],
-   service_keys={"ui-automation": "test-ui"}, extensions=[{"id": "ui-automation", "version": ">=0.4,<0.5"}], 
+   service_keys={"ui-automation": "test-ui"}, extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}], 
    cases=[Case("승인", {}, {"승인": True}, {"Approve_Review": {"승인": True}}), Case("사람이 확인", {}, {}, manual=True)],
    features=["결재 위치 `field` (BUI-04 창)", "확인 중에도 실행 자리 유지"],
    lessons=["며칠 걸릴 수 있는 결재는 `field`로 두지 않는다 — 서버 BPM 프로세스로 옮기고 `center`. 실행 전 검사가 `field` + 긴 시간 제한을 경고한다."])

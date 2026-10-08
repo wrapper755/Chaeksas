@@ -262,7 +262,7 @@ EXAMPLES.append(Example(
               template="# 세금계산서 발행 보고 — {대상월}\n\n- 건수: {건수}\n- 포털 합계: {포털합계}\n"
                        "- 회계 시트 합계: {시트합계}\n- 검증: {검증통과} {검증메모}\n",
               store_as="보고서경로")],
-    service_keys={"ui-automation": "finance-tax"}, extensions=[{"id": "ui-automation", "version": ">=0.4,<0.5"}],
+    service_keys={"ui-automation": "finance-tax"}, extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}],
     defaults={"forbidden_actions": ["포털에서 수정·삭제 링크를 누르지 않는다", "발행대장의 머리글과 합계 수식 칸을 고치지 않는다"],
               "confirm_triggers": ["포털 로그인 화면이 나타남"], "web": {"profile": "supplier-portal"}},
     variables=[("거래내역", "list", "Task_ReadPortal", "표의 줄"), ("포털합계", "int", "Task_Sum", ""), ("시트합계", "int", "Task_ReadTotal", ""),

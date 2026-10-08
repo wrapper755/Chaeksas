@@ -16,7 +16,7 @@
   "extensions": [
     {
       "id": "ui-automation",
-      "version": "&gt;=0.4,&lt;0.5"
+      "version": "&gt;=0.1,&lt;0.2"
     }
   ],
   "outputs": [],
