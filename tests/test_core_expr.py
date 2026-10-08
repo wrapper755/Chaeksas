@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.core.expr import (
     ExprError,
     Scope,
+    check_calls,
     evaluate,
     fill,
     parse,
@@ -24,10 +26,12 @@ from chaeksas.core.expr import (
     template_names,
     truthy,
 )
-from chaeksas.core.helpers import HELPER_NAMES, bind
+from chaeksas.core.expr_check import check_expressions, expression_sites
+from chaeksas.core.helpers import HELPER_NAMES, HELPERS, bind
 
 NOW = datetime(2026, 10, 4, 9, 30)
-BPMN_DIR = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
+ROOT = Path(__file__).resolve().parent.parent
+BPMN_DIR = ROOT / "docs" / "08-business-examples" / "bpmn"
 
 
 def scope(where: str | None = "Task_X", **variables: Any) -> Scope:
@@ -267,6 +271,151 @@ def test_a_bad_date_says_the_shape() -> None:
         ev("기간('2026-10-31', '2026-10-01')")
 
 
+def test_split_helper_chunks_a_list() -> None:
+    """`쪼개기`는 `펼치기`의 반대다 — 묶음 단위 반복에 쓴다 (BX-35가 VOC를 50건씩)."""
+    assert ev("쪼개기(목록, 2)", 목록=[1, 2, 3, 4, 5]) == [[1, 2], [3, 4], [5]]
+    assert ev("쪼개기(목록, 10)", 목록=[1, 2]) == [[1, 2]], "크기보다 짧으면 묶음 하나"
+    assert ev("쪼개기(목록, 2)", 목록=[]) == []
+    assert ev("펼치기(쪼개기(목록, 2))", 목록=[1, 2, 3]) == [1, 2, 3]
+    with pytest.raises(ExprError, match="1보다 작을 수 없다"):
+        ev("쪼개기(목록, 0)", 목록=[1])
+
+
+# ─────────────── 도우미 호출 모양 (C14 B15) ───────────────
+
+
+def load_exdsl() -> Any:
+    """예제 생성기를 모듈로 읽는다 — 그쪽은 **표준 라이브러리만** 쓰므로 패키지가 아니다."""
+    import importlib.util
+    import sys
+
+    source = ROOT / "docs" / "08-business-examples" / "_source" / "exdsl.py"
+    spec = importlib.util.spec_from_file_location("exdsl_for_test", source)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    # `dataclass`가 `sys.modules[cls.__module__]`을 본다 — 먼저 꽂아야 읽힌다.
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    ("source", "says"),
+    [
+        ("세기(전체, '주제')", "too many"),  # BX-35가 들고 있던 것
+        ("비율(전체, 감성='부정')", "missing a required argument"),  # BX-35 (`감성`은 받지도 않는다)
+        ("표를사전(카드)", "missing a required argument"),  # BX-36
+        ("합계()", "missing a required argument"),
+        ("기간('2026-10-01')", "missing a required argument"),
+        ("오늘(1)", "too many"),
+        ("합계(목록, '값', '덤')", "too many"),
+        ("합계(목록, 열='값', 목록=[])", "multiple values"),
+        ("sorted(목록, '열', 뒤집기=true)", "unexpected keyword"),
+    ],
+)
+def test_a_wrong_helper_call_is_refused_before_it_runs(source: str, says: str) -> None:
+    """**값 없이** 잡는다 — 실행할 때가 아니라 검사·시험·Studio에서 보여야 한다 (C14 B15)."""
+    with pytest.raises(ExprError) as problem:
+        parse(source, where="Task_X")
+    assert "그렇게 부를 수 없다" in str(problem.value)
+    assert says in str(problem.value)
+    assert "쓰는 법" in str(problem.value), "어떻게 부르는지 알려 준다"
+    # 스크립트 자리도 같다 (예제의 74곳이 스크립트다).
+    with pytest.raises(ExprError, match="그렇게 부를 수 없다"):
+        parse_script(f"값 = {source}", where="Task_X")
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "세기(전체)",
+        "합계(목록, '값')",
+        "합계(목록, 열='값')",
+        "sorted(목록, '열', 거꾸로=true)",
+        "비율(세기(가), 세기(나))",
+        "{주제: 세기(골라내기(전체, '주제', 주제)) for 주제 in 묶기(전체, '주제')}",
+        "len(목록) + sum(값들)",
+        "min(값들)",  # 서명을 들여다볼 수 없는 내장 — 건너뛴다
+        "zip(가, 나)",  # `*args`를 받는다
+        "툴팩함수(가, 나, 다)",  # 허용 목록에 없는 이름 — 부를 때 막는다
+    ],
+)
+def test_a_callable_helper_call_passes(source: str) -> None:
+    """건너뛰는 것(허용 목록 밖·서명 없는 내장·`*args`)을 포함해 지나가야 한다."""
+    parse(source, where="Task_X")
+
+
+def test_unpacking_arguments_is_refused() -> None:
+    """식에 펼치기는 없다 — 몇 개를 넘기는지 글로 셀 수 없으면 B15가 볼 수 없다.
+
+    `*`는 허용 목록이 막고 있었지만 `**`는 지나가서 `_Call`이 **조용히 버렸다**.
+    """
+    with pytest.raises(ExprError, match="쓸 수 없는 문법이다: Starred"):
+        parse("합계(*인자들)")
+    with pytest.raises(ExprError, match=r"사전 펼치기"):
+        parse("합계(목록, **덤)")
+    with pytest.raises(ExprError, match=r"사전 펼치기"):
+        parse_script("값 = 합계(목록, **덤)")
+
+
+def test_an_unknown_function_is_still_refused_when_it_runs() -> None:
+    """정적 검사는 모르는 이름을 지나치지만 **부를 때** 막는다 (허용 목록이 관문이다)."""
+    parse("툴팩함수(1)")
+    with pytest.raises(ExprError, match="쓸 수 없는 함수다: 툴팩함수"):
+        ev("툴팩함수(1)")
+
+
+def test_check_calls_takes_a_different_helper_set() -> None:
+    """도우미는 바꿔 끼울 수 있다 (시험·툴팩) — 그 묶음의 서명으로 본다."""
+    tree = parse("두칸(가, 나)", where="Task_X")  # 허용 목록에 없어 파싱은 지나간다
+    check_calls(tree, helpers={"두칸": lambda a, b: None})
+    with pytest.raises(ExprError, match="그렇게 부를 수 없다"):
+        check_calls(tree, helpers={"두칸": lambda a: None})
+
+
+def test_the_example_arity_table_matches_the_helpers() -> None:
+    """예제 생성기의 인자 표와 구현의 서명이 같아야 한다 (ADR-0025 §도우미 함수).
+
+    생성기는 **표준 라이브러리만** 쓰므로 `core.helpers`를 import하지 못해 표를 베껴 둔다
+    (CLAUDE.md §3). 베낀 것이 낡으면 B15가 거짓말을 하므로 여기서 대조한다.
+    """
+    exdsl = load_exdsl()
+
+    table: dict[str, tuple[tuple[str, ...], int, tuple[str, ...]]] = exdsl.HELPER_ARITY
+    any_args: frozenset[str] = exdsl.HELPER_ANY_ARGS
+    assert not (set(table) & any_args), "한 도우미가 두 쪽에 있다"
+    for name in set(table) | any_args:
+        assert name in HELPER_NAMES, f"없는 도우미가 표에 있다: {name}"
+
+    for name, helper in HELPERS.items():
+        if not callable(helper):
+            continue  # `true`·`false`·`null`은 값이다
+        try:
+            signature = inspect.signature(helper)
+        except (TypeError, ValueError):
+            assert name in any_args, f"서명을 볼 수 없으니 생성기가 건너뛰어야 한다: {name}"
+            continue
+        kinds = [p.kind for p in signature.parameters.values()]
+        if inspect.Parameter.VAR_POSITIONAL in kinds or inspect.Parameter.VAR_KEYWORD in kinds:
+            assert name in any_args, f"`*`를 받으니 생성기가 건너뛰어야 한다: {name}"
+            continue
+        if name in any_args:
+            continue  # 파이썬 내장은 파이썬이 말해 준다 (표에 베끼지 않는다)
+        assert name in table, f"생성기의 인자 표에 없는 도우미다: {name}"
+        params = tuple(
+            p.name for p in signature.parameters.values() if p.kind is not inspect.Parameter.KEYWORD_ONLY
+        )
+        required = sum(
+            1
+            for p in signature.parameters.values()
+            if p.kind is not inspect.Parameter.KEYWORD_ONLY and p.default is inspect.Parameter.empty
+        )
+        kwonly = tuple(
+            p.name for p in signature.parameters.values() if p.kind is inspect.Parameter.KEYWORD_ONLY
+        )
+        assert table[name] == (params, required, kwonly), f"{name}의 인자 모양이 다르다"
+
+
 def test_the_helper_list_is_the_adr_list() -> None:
     """ADR-0025의 표와 코드가 같아야 한다 — 늘릴 때 둘을 함께 고친다."""
     adr = (Path(__file__).resolve().parent.parent / "docs" / "decisions" / "0025-expression-language.md").read_text(
@@ -282,30 +431,17 @@ def test_the_helper_list_is_the_adr_list() -> None:
 # ─────────────────────── 업무 예제 50개의 식 전부 ───────────────────────
 
 
-def expression_sites() -> list[tuple[str, str, str, str]]:
+def example_sites() -> list[tuple[str, str, str, str]]:
     """예제가 식을 쓰는 자리 — (파일, 노드, 자리, 본문).
 
+    자리를 세는 일은 `core.expr_check`가 한다 — **Studio 실행 전 검사와 같은 목록**이어야
+    한다 (여기서 따로 세면 검사가 보지 않는 자리를 시험만 보게 된다).
     `dataOutput.path`·`template`는 **템플릿**이라 식 자리가 아니다 (ADR-0025 §1).
     """
     found: list[tuple[str, str, str, str]] = []
     for path in sorted(BPMN_DIR.glob("*.bpmn")):
         process = read_process(path.read_text(encoding="utf-8"))
-        for node in process.all_nodes():
-            if node.script:
-                found.append((path.name, node.id, "script", node.script))
-            for name in ("serviceCall", "rule", "call"):
-                holder = node.prop(name)
-                if holder is None:
-                    continue
-                for field, source in (holder.input or {}).items():
-                    found.append((path.name, node.id, f"{name}.input.{field}", source))
-            loop = node.prop("loop")
-            if loop is not None and getattr(loop, "over", None):
-                found.append((path.name, node.id, "loop.over", loop.over))
-        flows = list(process.flows) + [f for n in process.all_nodes() for f in n.child_flows]
-        for flow in flows:
-            if flow.condition:
-                found.append((path.name, flow.id, "condition", flow.condition))
+        found += [(path.name, where, site, source) for where, site, source in expression_sites(process)]
     return found
 
 
@@ -332,7 +468,7 @@ def template_sites() -> list[tuple[str, str, str, str]]:
     return found
 
 
-EXPRESSION_SITES = expression_sites()
+EXPRESSION_SITES = example_sites()
 TEMPLATE_SITES = template_sites()
 
 
@@ -348,11 +484,26 @@ def test_the_examples_actually_use_expressions() -> None:
     ("file", "node", "site", "source"), EXPRESSION_SITES, ids=[f"{s[0]}:{s[1]}:{s[2]}" for s in EXPRESSION_SITES]
 )
 def test_every_example_expression_parses(file: str, node: str, site: str, source: str) -> None:
-    """업무 예제 50개의 식 자리 전부가 `chk-expr` 문법 안에 있어야 한다."""
+    """업무 예제 50개의 식 자리 전부가 `chk-expr` 문법 안에 있어야 한다.
+
+    **문법만 보지 않는다** — `parse()`가 도우미 호출의 인자 모양도 본다 (C14 B15). 문법만 보던
+    때 BX-35가 `세기(전체, '주제')`를 들고 여기를 지나갔다.
+    """
     if site == "script":
         parse_script(source, where=node)
     else:
         parse(source, where=node)
+
+
+@pytest.mark.parametrize("path", sorted(BPMN_DIR.glob("*.bpmn")), ids=lambda p: p.name)
+def test_no_example_calls_a_helper_the_wrong_way(path: Path) -> None:
+    """B15를 **Studio가 보는 길 그대로** 한 번 더 본다 (`check_expressions`).
+
+    위의 자리별 시험과 겹치지만 겹치는 것이 요점이다 — 예제가 아니라 **검사 자체**가 도는지를
+    본다 (자리 세기가 비면 위 시험은 조용히 0건을 통과한다).
+    """
+    process = read_process(path.read_text(encoding="utf-8"))
+    assert [str(v) for v in check_expressions(process)] == []
 
 
 @pytest.mark.parametrize(

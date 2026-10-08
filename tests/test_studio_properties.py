@@ -129,6 +129,30 @@ def test_errors_and_warnings_are_counted_apart() -> None:
     assert "막는 것" in summarize(found) and "경고" in summarize(found)
 
 
+def test_a_helper_called_the_wrong_way_shows_up_as_b15() -> None:
+    """B15 — 작성자가 **실행할 때가 아니라 검사 탭에서** 본다 (C14).
+
+    `validate()`는 도우미 함수를 모른다 (구현이 `core`에 있다) — Studio가 두 검사를 이어 붙인다.
+    """
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+  <bpmn:process id="t">
+    <bpmn:startEvent id="Start"/>
+    <bpmn:scriptTask id="Task_Merge"><bpmn:script>주제별 = 세기(전체, '주제')</bpmn:script></bpmn:scriptTask>
+    <bpmn:endEvent id="End"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="Task_Merge" />
+    <bpmn:sequenceFlow id="f2" sourceRef="Task_Merge" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>"""
+    process = read_process(xml)
+    found = [v for v in inspect(process) if v.rule == "B15"]
+    assert len(found) == 1, found
+    assert found[0].blocks, "부를 수 없는 호출은 경고가 아니라 막는 것이다"
+    assert "그렇게 부를 수 없다" in found[0].message
+    assert node_of(process, found[0]) == "Task_Merge", "검사 탭에서 그 노드로 뛴다"
+
+
 def test_a_violation_points_at_a_node_so_the_canvas_can_jump() -> None:
     xml = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"

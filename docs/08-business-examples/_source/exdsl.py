@@ -1098,3 +1098,115 @@ def used_template_vars(ex: Example) -> set[tuple[str, str]]:
 def var_warnings(ex: Example) -> list[str]:
     d = defined_vars(ex)
     return sorted(f"{nid}: `{v}` 출처 없음" for nid, v in used_template_vars(ex) if v not in d)
+
+
+# ──────────────────── 도우미 호출 인자 모양 (B15) ────────────────────
+
+import ast as _ast
+
+#: 도우미 함수의 인자 모양 — `(인자 이름, 그중 필수 개수, 키워드로만 주는 이름)`.
+#:
+#: **`core.helpers`의 서명과 같아야 한다.** 생성기는 표준 라이브러리만 쓰므로(CLAUDE.md §3)
+#: 구현을 import하지 못해 여기 베껴 둔다. 둘이 어긋나면
+#: `tests/test_core_expr.py::test_the_example_arity_table_matches_the_helpers`가 잡는다.
+#: 도우미를 늘릴 때 고치는 곳은 셋이다 — ADR-0025의 표, `core.helpers`, 이 표.
+HELPER_ARITY: dict[str, tuple[tuple[str, ...], int, tuple[str, ...]]] = {
+    "sorted": (("목록", "열"), 1, ("거꾸로",)),
+    "합계": (("목록", "열"), 2, ()),
+    "평균": (("목록", "열"), 2, ()),
+    "세기": (("목록",), 1, ()),
+    "열뽑기": (("목록", "열"), 2, ()),
+    "골라내기": (("목록", "열", "값"), 3, ()),
+    "표를사전": (("목록", "열"), 2, ()),
+    "묶기": (("목록", "열"), 2, ()),
+    "펼치기": (("목록",), 1, ()),
+    "쪼개기": (("목록", "크기"), 2, ()),
+    "나누기": (("a", "b"), 2, ()),
+    "비율": (("a", "b"), 2, ()),
+    "빈칸없음": (("줄", "열목록"), 2, ()),
+    "범위벗어남": (("값", "아래", "위"), 3, ()),
+    "날짜더하기": (("날짜", "일수"), 2, ()),
+    "달더하기": (("달", "개월"), 2, ()),
+    "기간": (("시작", "끝"), 2, ()),
+    "오늘": ((), 0, ()),
+    "지금": ((), 0, ()),
+    "어제": ((), 0, ()),
+    "이번달": ((), 0, ()),
+    "지난달": ((), 0, ()),
+    "이번주표기": ((), 0, ()),
+    "지난주표기": ((), 0, ()),
+}
+
+#: 인자 수를 보지 않는 도우미 — 파이썬 내장이라 **인자를 몇 개든 받거나**(`min`·`zip`)
+#: CPython이 서명을 내주지 않는다. 틀려도 파이썬이 부를 때 말해 주는 것들이다.
+HELPER_ANY_ARGS = frozenset(
+    {"len", "sum", "min", "max", "round", "abs", "zip", "dict", "list", "set", "str", "int", "float", "bool"}
+)
+
+
+def _call_problem(name: str, args: int, kwargs: list[str]) -> str | None:
+    """그 호출을 그렇게 부를 수 있나. 부를 수 있으면 `None`."""
+    params, required, kwonly = HELPER_ARITY[name]
+    if args > len(params):
+        return f"인자를 {len(params)}개까지 받는데 {args}개를 줬다"
+    given = list(params[:args])
+    for kw in kwargs:
+        if kw in given:
+            return f"같은 인자를 두 번 줬다: `{kw}`"
+        if kw in params:
+            given.append(kw)
+        elif kw not in kwonly:
+            return f"받지 않는 키워드 인자다: `{kw}`"
+    missing = [p for p in params[:required] if p not in given]
+    if missing:
+        return f"필수 인자를 주지 않았다: {', '.join(missing)}"
+    return None
+
+
+def _call_errors(source: str, *, script: bool) -> list[str]:
+    """식 하나(또는 스크립트 한 덩어리)의 도우미 호출을 본다.
+
+    `*목록`·`**사전` 펼치기는 건너뛴다 — 몇 개를 넘기는지 글로는 알 수 없다. 문법이 틀린 것은
+    여기서 말하지 않는다 (`tests/test_core_expr.py`가 예제의 모든 식을 파싱한다).
+    """
+    try:
+        tree = _ast.parse((source or "").strip(), mode="exec" if script else "eval")
+    except SyntaxError:
+        return []
+    out = []
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.Call) or not isinstance(node.func, _ast.Name):
+            continue
+        name = node.func.id
+        if name not in HELPER_ARITY:
+            continue  # 모르는 이름은 보지 않는다 (툴팩이 더할 수 있다)
+        if any(isinstance(a, _ast.Starred) for a in node.args) or any(k.arg is None for k in node.keywords):
+            continue
+        problem = _call_problem(name, len(node.args), [k.arg for k in node.keywords if k.arg])
+        if problem:
+            out.append(f"`{name}(…)`을 그렇게 부를 수 없다: {problem}")
+    return out
+
+
+def helper_call_errors(ex: Example) -> list[str]:
+    """B15 — 예제가 식·스크립트에서 도우미를 **부를 수 있게** 불렀나.
+
+    이름만 맞으면 지나가던 자리다. BX-35가 `세기(전체, '주제')`·`비율(전체, 감성='부정')`을
+    들고 있었고 생성·검사·시험을 모두 지나 **실행할 때야** 터졌다 (C14 B15).
+    """
+    errs = []
+    for n in all_nodes(ex.nodes):
+        if n.kind == "script":
+            errs += [f"{n.id}: {m}" for m in _call_errors(n.props["code"], script=True)]
+        task = n.props.get("task") or {}
+        if n.kind in ("svc", "rule", "call"):
+            for field, source in (task.get("input") or {}).items():
+                errs += [f"{n.id}: input.{field} — {m}" for m in _call_errors(source, script=False)]
+        loop = n.props.get("loop")
+        if loop and loop.get("collection"):
+            errs += [f"{n.id}: loop.collection — {m}" for m in _call_errors(loop["collection"], script=False)]
+    flows = list(ex.flows) + [fl for n in all_nodes(ex.nodes) if n.kind == "sub" for fl in n.flows]
+    for fl in flows:
+        if fl.cond:
+            errs += [f"{fl.src}→{fl.dst}: 조건 — {m}" for m in _call_errors(fl.cond, script=False)]
+    return errs

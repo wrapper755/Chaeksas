@@ -1,4 +1,4 @@
-"""실행 전 검사 화면 — C14 B1~B14를 아래 탭에 보인다 (STU-01 「실행 전 검사」, F6).
+"""실행 전 검사 화면 — C14 B1~B15를 아래 탭에 보인다 (STU-01 「실행 전 검사」, F6).
 
 `validate()`는 계약 쪽에 있고 여기서는 **보여 주는 일만** 한다. 오류와 경고를 **함께** 내고
 (`Violation.severity`), **오류만 실행을 막는다** (`blocking()`) — 경고는 보여 주고 사람이
@@ -6,6 +6,10 @@
 
 **혼자서는 할 수 없는 검사는 인자로 받는다** — DMN 결정과 호출 대상은 작업 폴더가 준다.
 주지 않으면 그 부분을 건너뛰므로, Studio는 늘 준다 (그래야 B14가 돈다).
+
+**B15는 `validate()`가 하지 않는다** — 도우미 함수의 인자 모양을 아는 것은 구현(`core`)뿐이다.
+그래서 식 자리는 `core.expr_check`가 보고, 여기서 두 결과를 이어 붙인다. 그래야 틀린 호출을
+**실행할 때가 아니라 검사 탭에서** 본다.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from PySide6.QtWidgets import QHeaderView, QTableWidget, QTableWidgetItem, QWidg
 from chaeksas.contracts import SEVERITY_ERROR, Violation
 from chaeksas.contracts.bpmn_ext import BpmnProcess
 from chaeksas.contracts.bpmn_ext import validate as validate_bpmn
+from chaeksas.core.expr_check import check_expressions
 from chaeksas.studio.workspace import BpmProcess
 
 HEADERS = ("", "규칙", "무엇", "어디")
@@ -28,16 +33,18 @@ _NODE_HINT = ("items", "message")
 
 
 def inspect(process: BpmnProcess, owner: BpmProcess | None = None) -> list[Violation]:
-    """B1~B14. 작업 폴더가 있으면 DMN·호출 대조까지 한다 (B14)."""
+    """B1~B15. 작업 폴더가 있으면 DMN·호출 대조까지 한다 (B14)."""
     if owner is None:
-        return validate_bpmn(process)
-    return validate_bpmn(
-        process,
-        dmn_decisions={decision_id: found.io for decision_id, found in owner.decisions().items()},
-        called_processes={
-            other.id: list(other.info.outputs) for other in owner.processes().values()
-        },
-    )
+        violations = validate_bpmn(process)
+    else:
+        violations = validate_bpmn(
+            process,
+            dmn_decisions={decision_id: found.io for decision_id, found in owner.decisions().items()},
+            called_processes={
+                other.id: list(other.info.outputs) for other in owner.processes().values()
+            },
+        )
+    return violations + check_expressions(process)
 
 
 def summarize(violations: Sequence[Violation]) -> str:

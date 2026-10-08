@@ -18,7 +18,17 @@ if hasattr(sys.stdout, "reconfigure"):
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from exdsl import Example, all_nodes, to_bpmn, to_card, to_cases, to_dmn, validate, var_warnings  # noqa: E402
+from exdsl import (  # noqa: E402
+    Example,
+    all_nodes,
+    helper_call_errors,
+    to_bpmn,
+    to_card,
+    to_cases,
+    to_dmn,
+    validate,
+    var_warnings,
+)
 
 import spec_fin, spec_fx, spec_hr, spec_ops, spec_scm  # noqa: E402,E401
 
@@ -66,7 +76,11 @@ def cross_check(examples: list[Example]) -> list[str]:
 
 
 def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
-    """C14 검사 중 정의만 보고 할 수 있는 것 (B3 짝, B11 일부, B12, 케이스·호출·DMN 대조)."""
+    """C14 검사 중 정의만 보고 할 수 있는 것 (B3 짝, B11 일부, B12, 케이스·호출·DMN 대조).
+
+    도우미 호출의 인자 모양(B15)은 `helper_call_errors()`가 따로 본다 — 식을 파싱하는 일이라
+    노드 대조와 섞지 않는다.
+    """
     from exdsl import defined_vars
 
     errs = []
@@ -331,6 +345,7 @@ def main() -> int:
     for e in examples:
         errs += [f"{e.id}: {m}" for m in validate(e)]
         errs += [f"{e.id}: {m} (B11)" for m in var_warnings(e)]
+        errs += [f"{e.id}: {m} (B15)" for m in helper_call_errors(e)]
     errs += cross_check(examples)
     if errs:
         print("검사 실패:")
