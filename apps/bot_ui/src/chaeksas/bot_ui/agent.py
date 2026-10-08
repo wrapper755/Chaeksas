@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from chaeksas.bot_ui import machine
-from chaeksas.bot_ui.bots import InstalledBot, find
+from chaeksas.bot_ui.bots import InstalledBot, find, installed
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials
 from chaeksas.bot_ui.deploy import Deployer
@@ -43,6 +43,7 @@ from chaeksas.contracts.bot_ui import (
     JobDispatch,
     Queue,
     QueueItem,
+    Readiness,
     RegisterRequest,
     RegisterResponse,
     Runtimes,
@@ -51,6 +52,8 @@ from chaeksas.contracts.bot_ui import (
 )
 from chaeksas.core import requests
 from chaeksas.core.extensions import ExtensionHost
+from chaeksas.core.preflight import Preflight
+from chaeksas.core.preflight import check as run_preflight
 from chaeksas.core.processes import Supervisor
 from chaeksas.core.run_log import run_dir
 from chaeksas.core.run_shipping import HttpUploader, Shipment
@@ -78,6 +81,9 @@ TRAY_ERROR = "오류"
 TRAY_IDLE = "대기"
 #: Bot 차례인데 Worker를 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중 (ADR-0014 §4).
 TRAY_WORKER_BUSY = "Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다"
+
+#: 사전 점검이 키가 없다고 할 때 「어떻게 고치나」 (BUI-10). 화면 이름은 **부르는 쪽이** 적는다.
+KEY_FIX_HINT = "「도구」 → 「서비스 앱 키...」에서 등록하세요 (BUI-10)"
 
 
 @dataclass(frozen=True)
@@ -142,6 +148,9 @@ class Agent:
     _runtimes: LocalRuntimes | None = None
     #: 차례가 왔는데 Worker 예약이 409였다 — 대기열 맨 앞에서 기다린다 (ADR-0014 §4).
     worker_busy: bool = False
+    #: 사전 점검 결과 (BUI-04 「준비」·C4 `readiness`). **설치·키·확장이 바뀌면 비운다** —
+    #: 하트비트마다 OS 비밀 저장소를 두드리면 주기가 느려진다 (C4 「바뀌었을 때만 보내도 됨」).
+    _preflights: dict[tuple[str, str], Preflight] = field(default_factory=dict)
     #: 이 실행에 묶은 로컬 런타임 — 끝나면 푼다.
     _reserved: list[str] = field(default_factory=list)
 
@@ -195,6 +204,58 @@ class Agent:
         needed = {need.id for need in requires.extensions}
         needed |= {owner for owner in map(self.host.environment_owner, requires.domains) if owner}
         return needed
+
+    # ── 사전 점검 (ADR-0013 §사전 점검, C4 `readiness`) ──
+
+    def preflight(self, bot: InstalledBot) -> Preflight:
+        """그 Bot을 **지금 이 PC에서** 돌릴 수 있나. 결과는 캐시한다.
+
+        확장이 기여한 점검도 함께 돈다 (C13) — 호스트가 없으면 플랫폼 점검만 한다.
+        """
+        key = (bot.id, bot.version)
+        found = self._preflights.get(key)
+        if found is None:
+            found = run_preflight(
+                bot.manifest,
+                key_value=self.credentials.service_app_key,
+                host=self.host,
+                context=self.extension_context if self.host is not None else None,
+                fix_hint=KEY_FIX_HINT,
+            )
+            for why in found.skipped:
+                log.warning("Bot %s의 사전 점검 하나를 돌리지 못했다: %s", bot.id, why)
+            self._preflights[key] = found
+        return found
+
+    def invalidate_preflight(self) -> None:
+        """키·설치·확장이 바뀌었다 — 다음에 묻는 쪽이 다시 점검한다.
+
+        BUI-10에서 키를 넣거나 지웠을 때, 배포를 적용했을 때 부른다. **빠진 키를 등록하면 다음
+        하트비트에 「준비됨」이 올라가야 한다** — 캐시가 그것을 막으면 안 된다.
+        """
+        self._preflights.clear()
+
+    def readiness(self) -> list[Readiness]:
+        """설치된 Bot별 준비 상태 (C4). 사전 점검 결과를 그대로 옮긴다.
+
+        `blocked`에는 **막은 점검의 코드**가 간다 (C4 — 열린 문자열이다). 사람이 읽을 문구는
+        BUI-04가 `Finding`에서 만든다 — Center로는 코드만 보낸다 (원칙 6: 업무 값을 올리지 않는다).
+        """
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        out = []
+        for bot in installed(data_dir()):
+            found = self.preflight(bot)
+            out.append(
+                Readiness(
+                    bpm_process_id=bot.id,
+                    version=bot.version,
+                    ready=not found.blocks,
+                    missing_key_refs=list(found.missing_key_refs),
+                    blocked=list(found.blocked),
+                )
+            )
+        return out
 
     def reserve_runtimes(self, bot: InstalledBot, run_id: str) -> list[str] | None:
         """그 Bot이 쓰는 런타임을 이 실행에 묶는다 (ADR-0014 §4). **하나라도 바쁘면 `None`** —
@@ -389,6 +450,7 @@ class Agent:
             queue=Queue(max=self.settings.queue_max, items=list(self.queue)),
             worker=self.worker_state(),
             versions=self.versions(),
+            readiness=self.readiness(),
             job_acks=list(self.store.state.pending_acks),
             deployment_results=list(self.store.state.pending_deployments),
             approval_acks=list(self.store.state.pending_approval_acks),
@@ -546,6 +608,8 @@ class Agent:
         found = self.deployer().apply(response.deployments)
         if found:
             self.store.remember_deployments(found)
+            # 설치된 것이 바뀌었다 — 새 Bot의 준비 상태를 다음 하트비트가 알려야 한다.
+            self.invalidate_preflight()
 
     def deployer(self) -> Deployer:
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
@@ -724,6 +788,18 @@ class Agent:
                 self._ack_id(item.job_id, "rejected", reason="bot_not_installed")
             self.store.save()
             log.warning("설치되지 않은 Bot이다: %s", item.bpm_process_id)
+            return
+
+        ready = self.preflight(bot)
+        if ready.blocks:
+            # 키·확장이 빠졌다 — 띄우면 그 태스크에서 죽는다. **띄우기 전에** 거절한다
+            # (ADR-0013 §사전 점검, C4 `not_ready`). 자리를 쥐지 않았으니 대기열은 계속 돈다.
+            self.store.state.queue.remove(item)
+            self.store.state.inputs.pop(item.queue_id, None)
+            if item.job_id:
+                self._ack_id(item.job_id, "rejected", reason="not_ready")
+            self.store.save()
+            log.warning("Bot %s은 준비되지 않았다: %s", bot.id, ", ".join(ready.blocked))
             return
 
         inputs = dict(self.store.state.inputs.get(item.queue_id) or {})

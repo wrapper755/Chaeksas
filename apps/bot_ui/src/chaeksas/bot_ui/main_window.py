@@ -6,7 +6,8 @@
 **화면은 Agent에서만 읽는다.** 상태는 실행기가 쓴 기록 파일에서 오고(ADR-0031), 화면은 그것을
 그릴 뿐이다 — 느린 실행기가 화면을 붙잡지 않는다.
 
-Center 배포로 Bot을 받는 것은 M5다 — 지금은 「패키지 파일에서 설치...」로 넣는다.
+「준비」 열은 **사전 점검**(`core.preflight`)이 말하는 것이고, 표기는 `status_map`의 「Bot 준비」에
+있는 것만 쓴다 (`docs/07-style-guide.md`). 키가 없으면 그 줄에서 바로 BUI-10으로 갈 수 있다.
 """
 
 from __future__ import annotations
@@ -15,7 +16,7 @@ import logging
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QUrl, Signal
-from PySide6.QtGui import QCloseEvent, QDesktopServices
+from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -34,10 +35,18 @@ from PySide6.QtWidgets import (
 
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.bots import InstalledBot, InstallError, install, installed
+from chaeksas.bot_ui.keys_dialog import KeysDialog
 from chaeksas.bot_ui.runner import Running
 from chaeksas.bot_ui.runtimes import RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.contracts.approvals import Form
+from chaeksas.core.preflight import (
+    EXTENSIONS_UNUSABLE,
+    MISSING_ENVIRONMENT,
+    TASK_TYPES_UNSUPPORTED,
+    Preflight,
+)
+from chaeksas.qt import theme
 from chaeksas.qt.approval import ApprovalDialog
 
 log = logging.getLogger(__name__)
@@ -48,8 +57,33 @@ WINDOW_SIZE = (1000, 720)
 #: BUI-04 대기열 표의 열 (「입력 키」의 값은 접는다 — U10).
 QUEUE_COLUMNS = ("#", "Bot", "출처", "요청 시각", "만료", "입력 키")
 
-#: BUI-04 설치된 Bot 표의 열. 「준비」·「최근 실행」은 M5다 — 모르는 것을 적지 않는다.
-BOT_COLUMNS = ("Bot", "버전", "출처", "서명", "상태")
+#: BUI-04 설치된 Bot 표의 열. 「최근 실행」은 아직 없다 — 모르는 것을 적지 않는다.
+BOT_COLUMNS = ("Bot", "버전", "출처", "서명", "준비", "상태")
+READY_COLUMN = BOT_COLUMNS.index("준비")
+
+#: 「준비」의 표기 — `status_map`의 「Bot 준비」에 있는 것만 쓴다 (`docs/07-style-guide.md`).
+READY = "준비됨"
+NO_KEYS = "서비스 앱 키 없음"
+NO_EXTENSION = "확장 없음"
+PREFLIGHT_BLOCKED = "사전 점검 실행 불가"
+
+
+def readiness_label(found: Preflight) -> tuple[str, str, str]:
+    """사전 점검 결과 → `(status_map 표기, 줄에 보일 글, 툴팁)`.
+
+    표기는 색을 고르는 데 쓰므로 **표에 있는 값이어야 한다**. 보일 글에는 빠진 참조 이름을 붙인다
+    (BUI-04 「서비스 앱 키 없음: <참조>」) — 무엇이 빠졌는지 모르면 고칠 수 없다.
+    """
+    if not found.blocks:
+        return READY, READY, ""
+    first = next(f for f in found.findings if f.blocks)
+    tip = "\n".join([first.message, *first.items, *([first.fix_hint] if first.fix_hint else [])])
+    if found.missing_key_refs:
+        return NO_KEYS, f"{NO_KEYS}: {', '.join(found.missing_key_refs)}", tip
+    if set(found.blocked) & {TASK_TYPES_UNSUPPORTED, EXTENSIONS_UNUSABLE, MISSING_ENVIRONMENT}:
+        return NO_EXTENSION, NO_EXTENSION, tip
+    # 확장이 기여한 점검이 막았다 — 플랫폼은 그것이 무엇인지 모른다 (C13).
+    return PREFLIGHT_BLOCKED, PREFLIGHT_BLOCKED, tip
 
 PACKAGE_FILTER = "패키지 (*.zip)"
 
@@ -158,10 +192,10 @@ class MainWindow(QMainWindow):
             )
         if tools.actions():
             tools.addSeparator()
-        for text, why in (("서비스 앱 키...", "BUI-10 — M5"), ("확장...", "BUI-11 — M5")):
-            action = tools.addAction(text)
-            action.setEnabled(False)
-            action.setToolTip(f"{why}에서 만듭니다.")
+        tools.addAction("서비스 앱 키...", self.open_keys)
+        later = tools.addAction("확장...")
+        later.setEnabled(False)
+        later.setToolTip("BUI-11에서 만듭니다.")
 
     # ── 탭 ──
 
@@ -334,7 +368,7 @@ class MainWindow(QMainWindow):
         self.runtime_log.setEnabled(True)
 
     def _refresh_bots(self) -> None:
-        """설치된 Bot 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 준비·최근 실행은 M5."""
+        """설치된 Bot 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 「최근 실행」은 아직 없다."""
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 
         self._bots = installed(data_dir())
@@ -342,7 +376,7 @@ class MainWindow(QMainWindow):
         self.bots_title.setText(
             f"설치된 Bot {len(self._bots)}개"
             if self._bots
-            else "설치된 Bot이 없습니다. 「패키지 파일에서 설치...」로 설치하세요 (Center 배포는 M5)."
+            else "설치된 Bot이 없습니다. Center에서 이 PC에 배포하거나 「패키지 파일에서 설치...」로 설치하세요."
         )
         self.bots_table.setRowCount(len(self._bots))
         for row, bot in enumerate(self._bots):
@@ -353,8 +387,23 @@ class MainWindow(QMainWindow):
                 state = f"대기열 {queued[0] + 1}번째"
             else:
                 state = "대기"
-            for column, text in enumerate((bot.name, bot.version, "수동 설치", bot.signature, state)):
-                self.bots_table.setItem(row, column, QTableWidgetItem(text))
+            found = self._agent.preflight(bot)
+            token, shown, tip = readiness_label(found)
+            for column, text in enumerate((bot.name, bot.version, "수동 설치", bot.signature, shown, state)):
+                item = QTableWidgetItem(text)
+                if column == READY_COLUMN:
+                    color = theme.status_color("Bot 준비", token, part="fg")
+                    if color is not None:
+                        item.setForeground(QColor(color))
+                    item.setToolTip(tip)
+                self.bots_table.setItem(row, column, item)
+            # 키가 없으면 그 자리에서 BUI-10으로 간다 (BUI-04 — 「키 등록...」).
+            self.bots_table.removeCellWidget(row, READY_COLUMN)
+            if found.missing_key_refs:
+                button = QPushButton(f"{shown} — 키 등록...")
+                button.setToolTip(tip)
+                button.clicked.connect(self.open_keys)
+                self.bots_table.setCellWidget(row, READY_COLUMN, button)
         self._bots_changed()
 
     def _bots_changed(self) -> None:
@@ -463,6 +512,11 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self._agent, self)
         if dialog.exec():
             self.refresh()
+
+    def open_keys(self) -> None:
+        """BUI-10. 창이 **그 자리에서** 키를 바꾸므로, 닫히면 「준비」를 다시 그린다."""
+        KeysDialog(self._agent, self).exec()
+        self.refresh()
 
     def cancel_selected(self) -> None:
         """대기열 항목 취소 (BUI-04). Center 작업이면 그렇게 알린다고 먼저 말한다."""
