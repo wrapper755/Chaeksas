@@ -1,10 +1,11 @@
-"""STU-10 설정 — 「LLM」·「Worker」·「서비스 앱 키」 (M4 조각 26).
+"""STU-10 설정 — 「LLM」·「Center」·「Worker」·「서비스 앱 키」 (M4 조각 26, Center는 M5).
 
 보는 것:
 
-1. **키는 설정 파일에 들어가지 않는다** — 이름은 파일에, 값은 OS 비밀 저장소에 (ADR-0013).
+1. **키는 설정 파일에 들어가지 않는다** — 이름·주소는 파일에, 값은 OS 비밀 저장소에 (ADR-0013).
 2. **「저장」을 누를 때까지 아무것도 바뀌지 않는다**, 비밀 저장소가 없으면 **창을 닫지 않는다**.
-3. 「연결 테스트」는 진짜 모양으로 묻는다 — 키 상태는 **진짜 UI 자동화 앱**(`/v1/keys/self`)에 대고.
+3. 「연결 테스트」는 진짜 모양으로 묻는다 — 키 상태는 **진짜 UI 자동화 앱**(`/v1/keys/self`), Center는
+   **진짜 Center**의 리소스 목록(C7 `GET /resources?type=service_app`)에 대고.
 4. 시험 실행이 같은 비밀 창고를 쓴다 (`StudioSecrets`·모델 키).
 """
 
@@ -26,8 +27,19 @@ from chaeksas.contracts.service_app import ServiceAppKey  # noqa: E402
 from chaeksas.ext.ui_automation.service.app import create  # noqa: E402
 from chaeksas.ext.ui_automation.service.store import Database, SqliteKeyStore  # noqa: E402
 from chaeksas.service_kit import hash_key  # noqa: E402
-from chaeksas.studio.checks import WorkerPlace, key_status, llm_status, refs_in, worker_status  # noqa: E402
-from chaeksas.studio.credentials import StudioCredentials  # noqa: E402
+from chaeksas.studio.checks import (  # noqa: E402
+    WorkerPlace,
+    center_status,
+    key_status,
+    llm_status,
+    refs_in,
+    worker_status,
+)
+from chaeksas.studio.credentials import (  # noqa: E402
+    CENTER_KEY_NAME,
+    ENV_CENTER_API_KEY,
+    StudioCredentials,
+)
 from chaeksas.studio.extensions import Extensions, StudioSecrets  # noqa: E402
 from chaeksas.studio.settings import ServiceKeyRef, Settings  # noqa: E402
 from chaeksas.studio.settings_dialog import CATEGORIES, LATER, StudioSettingsDialog  # noqa: E402
@@ -102,7 +114,8 @@ def test_every_category_is_listed_and_the_unbuilt_ones_say_why(
     found = dialog(settings, extensions, Vault())
     labels = [found.categories.item(i).text() for i in range(found.categories.count())]
     assert len(labels) == len(CATEGORIES) == 8
-    assert sum(label.endswith("(아직)") for label in labels) == len(LATER) == 5
+    assert sum(label.endswith("(아직)") for label in labels) == len(LATER) == 4
+    assert "Center" in labels, "M5 조각 14 — Center가 켜졌다 (「(아직)」이 붙지 않는다)"
     assert found.categories.currentItem().text() == "LLM", "처음에는 받쳐 주는 첫 분류를 연다"
 
 
@@ -120,14 +133,96 @@ def test_the_llm_key_goes_to_the_vault_not_the_file(qt: Any, settings: Settings,
     assert dialog(settings, extensions, vault).llm_key.placeholderText().startswith("저장됨"), "값은 보이지 않는다"
 
 
+@pytest.mark.parametrize("field", ["llm_key", "center_key"])
 def test_without_a_vault_saving_fails_and_the_window_stays(
-    qt: Any, settings: Settings, extensions: Extensions
+    qt: Any, settings: Settings, extensions: Extensions, field: str
 ) -> None:
     found = dialog(settings, extensions, None)
-    found.llm_key.setText("sk-1")
+    getattr(found, field).setText("sk-1")
     found.save()
     assert found.saved is None and "저장하지 못했습니다" in found.error.text()
     assert not settings.path.exists(), "평문으로 흘리지 않는다 — 아무것도 쓰지 않았다"
+
+
+def test_the_center_key_goes_to_the_vault_and_the_address_to_the_file(
+    qt: Any, settings: Settings, extensions: Extensions
+) -> None:
+    vault = Vault()
+    found = dialog(settings, extensions, vault)
+    found.center_url.setText("http://center.example.com:8800")
+    found.center_key.setText("chk_ctr_개발용")
+    found.save()
+    assert found.saved is not None and found.saved.center_url == "http://center.example.com:8800"
+    assert vault.values[("chaeksas-studio", CENTER_KEY_NAME)] == "chk_ctr_개발용"
+    raw = settings.path.read_text(encoding="utf-8")
+    assert "chk_ctr_개발용" not in raw, "키는 설정 파일에 들어가지 않는다"
+    assert "http://center.example.com:8800" in raw
+    assert Settings.load(settings.path).center_url == "http://center.example.com:8800"
+    again = dialog(settings, extensions, vault)
+    assert again.center_key.text() == "" and again.center_key.placeholderText().startswith("저장됨")
+
+
+def test_an_empty_center_address_blocks_saving(qt: Any, settings: Settings, extensions: Extensions) -> None:
+    found = dialog(settings, extensions, Vault())
+    found.center_url.setText("   ")
+    found.save()
+    assert found.saved is None and "Center 주소가 비었습니다" in found.error.text()
+    assert not settings.path.exists()
+
+
+def test_the_center_key_env_var_wins(monkeypatch: pytest.MonkeyPatch) -> None:
+    vault = Vault()
+    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_stored")
+    monkeypatch.delenv(ENV_CENTER_API_KEY, raising=False)
+    assert Credentials(vault).center_api_key() == "chk_ctr_stored"
+    monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_env")
+    assert Credentials(vault).center_api_key() == "chk_ctr_env"
+    assert Credentials(vault).stored_center_api_key() == "chk_ctr_stored", "자리 글은 저장된 것만 본다"
+
+
+def test_the_center_test_asks_the_real_center(
+    qt: Any, settings: Settings, extensions: Extensions, tmp_path: Path
+) -> None:
+    """Center 상태는 **진짜 Center**의 리소스 목록에 묻는다 (C7 — Studio용 키가 읽는다)."""
+    from chaeksas.center.app import create_app  # noqa: PLC0415
+    from chaeksas.center.settings import Settings as CenterSettings  # noqa: PLC0415
+    from chaeksas.center.storage import Store  # noqa: PLC0415
+
+    store = Store(tmp_path / "center.sqlite3")
+    center = create_app(
+        CenterSettings(
+            db_path=tmp_path / "center.sqlite3",
+            package_dir=tmp_path / "packages",
+            admin_token="t-admin",
+        ),
+        store=store,
+    )
+    try:
+        with TestClient(center) as client:
+            made = client.post(
+                "/api/v1/center-keys",
+                json={"name": "설계자 PC", "type": "studio"},
+                headers={"Authorization": "Bearer t-admin"},
+            )
+            assert made.status_code == 201, made.text
+            key = made.json()["key"]
+            found = dialog(settings, extensions, Vault(), client=client)
+            found.center_url.setText("http://center.test")
+
+            found.center_key.setText(key)
+            found.test_center()
+            assert found.center_result.text() == "연결됨 — 서비스 앱 0개를 읽었습니다"
+
+            found.center_key.setText("chk_ctr_" + "x" * 40)
+            found.test_center()
+            assert found.center_result.text() == "키가 거부되었습니다 (401)"
+            assert "x" * 40 not in found.center_result.text()
+
+            found.center_key.setText("")
+            found.test_center()
+            assert found.center_result.text() == "Center API 키가 없습니다."
+    finally:
+        store.close()
 
 
 def test_service_keys_names_in_the_file_values_in_the_vault(
@@ -211,6 +306,37 @@ def test_the_key_header_carries_the_key_and_the_result_never_does() -> None:
 
     shown = llm_status("http://m", "sk-123", client=mock(answer))
     assert seen == ["Bearer sk-123"] and "sk-123" not in shown
+
+
+def test_center_status_says_what_happened() -> None:
+    listing = mock(lambda r: httpx.Response(200, json={"items": [{"id": "a"}, {"id": "b"}]}))
+    assert center_status("http://c/", "k", client=listing) == "연결됨 — 서비스 앱 2개를 읽었습니다"
+    assert center_status("", "k") == "Center 주소가 없습니다."
+    assert center_status("http://c", None) == "Center API 키가 없습니다.", "키 없이는 묻지 않는다"
+    assert center_status("http://c", "k", client=mock(lambda r: httpx.Response(403))) == (
+        "키가 거부되었습니다 (403)"
+    )
+    assert center_status("http://c", "k", client=mock(lambda r: httpx.Response(500))) == (
+        "Center가 500로 답했습니다"
+    )
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("거부", request=request)
+
+    assert center_status("http://c", "k", client=mock(refuse)).startswith("닿지 못함")
+
+
+def test_the_center_probe_carries_the_key_and_asks_only_for_service_apps() -> None:
+    """키는 헤더로만 가고 결과 글에는 **들어가지 않는다**. 앱을 깨우지 않는 자리를 본다 (C7)."""
+    seen: list[tuple[str, str]] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append((str(request.url), request.headers.get("authorization", "")))
+        return httpx.Response(200, json={"items": []})
+
+    shown = center_status("http://c", "chk_ctr_123", client=mock(answer))
+    assert seen == [("http://c/api/v1/resources?type=service_app", "Bearer chk_ctr_123")]
+    assert "chk_ctr_123" not in shown
 
 
 def test_worker_status() -> None:
