@@ -15,7 +15,7 @@ from typing import TypedDict
 import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
-MEMBER_GLOBS = ("packages/*", "apps/*", "extensions/*")
+MEMBER_GLOBS = ("packages/*", "apps/*", "extensions/*", "samples/*")
 
 
 class Member(TypedDict):
@@ -60,6 +60,8 @@ FORBIDDEN_DEPS = [
     ("chaeksas-service-kit", "chaeksas-qt", "§2 — 서비스 앱은 화면이 없다"),
     ("chaeksas-server-runner", "chaeksas-qt", "§2 — 서버 실행기는 화면이 없다"),
     ("chaeksas-core", "chaeksas-qt", "§5 — core는 Qt를 import하지 않는다"),
+    ("chaeksas-mock-apps", "chaeksas-core", "§5 — 모의 앱도 서비스 앱이다 (core를 모른다)"),
+    ("chaeksas-mock-apps", "chaeksas-qt", "§2 — 서비스 앱은 화면이 없다"),
 ]
 
 
@@ -83,6 +85,16 @@ def test_platform_does_not_depend_on_extensions() -> None:
     for m in platform:
         bad = {d for d in reachable(m, graph) if d.startswith("chaeksas-ext-")}
         assert not bad, f"{m}이 확장 {sorted(bad)}를 의존한다 (ADR-0018)"
+
+
+def test_nothing_depends_on_the_samples() -> None:
+    """`samples/`는 제품이 아니다 — 아무 멤버도 의존하지 않는다 (01-architecture §8).
+
+    쓰는 쪽은 `tests/`와 사람이 띄우는 `chk-mock-apps`뿐이다.
+    """
+    graph = members()
+    bad = {name for name in graph if name != "chaeksas-mock-apps" and "chaeksas-mock-apps" in reachable(name, graph)}
+    assert not bad, f"{sorted(bad)}가 모의 앱을 의존한다"
 
 
 def test_extensions_do_not_depend_on_each_other() -> None:

@@ -1,0 +1,27 @@
+[project]
+name = "chaeksas-mock-apps"
+version = "0.1.0"
+description = "업무 예제가 부르는 모의 서비스 앱·모의 외부 앱 (개발·시험용. 제품에 들어가지 않는다)"
+requires-python = ">=3.12,<3.13"
+# service_kit: C11을 지키는 앱 뼈대. core는 쓰지 않는다 (서비스 앱이다, 01-architecture §5).
+dependencies = [
+    "chaeksas-service-kit",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    # center-jobs 앱이 Center의 작업 지시 API를 부른다 (C5).
+    "httpx>=0.27",
+]
+
+[project.scripts]
+chk-mock-apps = "chaeksas.mock_apps.cli:main"
+
+[tool.uv.sources]
+chaeksas-service-kit = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# chaeksas는 PEP 420 네임스페이스 — src/chaeksas 밑에 __init__.py를 두지 않는다
+packages = ["src/chaeksas"]
