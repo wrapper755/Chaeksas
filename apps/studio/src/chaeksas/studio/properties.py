@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts.bpmn_ext import ELEMENT_MODELS
+from chaeksas.studio.service_catalog import Catalog
 
 EMPTY_TEXT = "캔버스에서 요소를 선택하면 속성을 편집할 수 있습니다."
 
@@ -119,9 +120,12 @@ def _for_model(name: str, value: Any) -> Any:
     }
 
 
-def _task_of(chk: dict[str, str]) -> dict[str, Any] | None:
-    """`chk:task` 본문 글 → `{type, extension, data}`. 읽지 못하면 `None`."""
-    raw = chk.get("task")
+def _body_of(chk: dict[str, str], name: str) -> dict[str, Any] | None:
+    """`chk:<name>`의 본문 글 → 사전. 읽지 못하면 `None`.
+
+    **캔버스는 `{요소: JSON 글}`을 준다** — 사전이 아니다. 글로 받은 것을 여기서 한 번만 읽는다.
+    """
+    raw = chk.get(name)
     if not isinstance(raw, str) or not raw.strip():
         return None
     try:
@@ -129,6 +133,11 @@ def _task_of(chk: dict[str, str]) -> dict[str, Any] | None:
     except ValueError:
         return None
     return found if isinstance(found, dict) else None
+
+
+def _task_of(chk: dict[str, str]) -> dict[str, Any] | None:
+    """`chk:task` 본문 글 → `{type, extension, data}`. 읽지 못하면 `None`."""
+    return _body_of(chk, "task")
 
 
 def as_text(chk: dict[str, str]) -> str:
@@ -156,9 +165,16 @@ class Properties(QWidget):
         self.loaded: dict[str, Any] = {}
         #: 확장이 기여한 편집기를 찾는 쪽 (C13). 없으면 JSON 탭이 그 자리를 메운다.
         self.extensions = extensions
-        #: 지금 붙어 있는 확장 편집기와 붙일 때의 값 (바뀐 것만 보내려고).
+        #: 지금 붙어 있는 편집기와 붙일 때의 값 (바뀐 것만 보내려고).
         self._editor: Any = None
         self._editor_baseline: dict[str, Any] = {}
+        #: 그 편집기가 고치는 자리 — `"task"`(STU-13) 또는 `"serviceCall"`(STU-14).
+        self._editor_key = ""
+        #: STU-14가 고를 거리 (Center 리소스 목록). 메인 창이 실행·선택 전에 채운다.
+        self.catalog: Catalog = Catalog()
+        #: BPM 프로세스가 적어 둔 키 참조 `{app_id: 참조}` (`chk:process.service_keys`) —
+        #: STU-14가 「프로세스 설정을 따름 (<참조>)」에 보인다. **값은 없다** (ADR-0013).
+        self.service_keys: dict[str, str] = {}
 
         self.head = QLabel(EMPTY_TEXT, self)
         self.head.setWordWrap(True)
@@ -245,11 +261,19 @@ class Properties(QWidget):
         self.apply_button.setEnabled(False)
 
     def _show_editor(self, chk: dict[str, Any]) -> None:
-        """확장 태스크면 그 편집기를 탭으로 끼운다 (C13 `task_types[].editor`, STU-13).
+        """태스크에 맞는 편집기를 탭으로 끼운다.
 
-        **Studio는 어느 확장인지 모른다** — `type`으로 찾아 붙일 뿐이다 (ADR-0018).
+        둘이 있고 **규약은 하나다** (`load`/`dump`/`problems`/`changed`) — 여기서는 어느 쪽인지
+        신경 쓰지 않는다.
+
+        - `chk:serviceCall` → **플랫폼이 가진** STU-14 편집기 (`service_editor`).
+        - `chk:task` → **확장이 기여한** 편집기 (STU-13). **Studio는 어느 확장인지 모른다** —
+          `type`으로 찾아 붙일 뿐이다 (ADR-0018).
         """
         self._detach_editor()
+        if "serviceCall" in chk:
+            self._attach_service_editor(chk)
+            return
         if self.extensions is None:
             return
         task = _task_of(chk)
@@ -263,12 +287,24 @@ class Properties(QWidget):
             return
         data = task.get("data")
         found.load(dict(data) if isinstance(data, dict) else {})
+        self._attach(found, self.extensions.label(task_type), key="task")
+
+    def _attach_service_editor(self, chk: dict[str, Any]) -> None:
+        """STU-14. 고를 거리가 **Center에서** 온다 (`catalog`) — 없으면 편집기가 그렇게 말한다."""
+        from chaeksas.studio.service_editor import TAB_LABEL, ServiceTaskEditor  # noqa: PLC0415
+
+        made = ServiceTaskEditor(self.catalog, self, inherited=self.service_keys)
+        made.load(_body_of(chk, "serviceCall") or {})
+        self._attach(made, TAB_LABEL, key="serviceCall")
+
+    def _attach(self, found: Any, label: str, *, key: str) -> None:
         self._editor = found
+        self._editor_key = key
         self._editor_baseline = dict(found.dump())
         changed = getattr(found, "changed", None)
         if changed is not None:
             changed.connect(self._refresh_apply)
-        self.tabs.insertTab(1, found, self.extensions.label(task_type))
+        self.tabs.insertTab(1, found, label)
         self.tabs.setCurrentIndex(1)
 
     def _detach_editor(self) -> None:
@@ -286,6 +322,7 @@ class Properties(QWidget):
             self.tabs.removeTab(index)
         found.setParent(None)
         self._editor = None
+        self._editor_key = ""
         self._editor_baseline = {}
 
     def _editor_patch(self) -> tuple[dict[str, Any] | None, str | None]:
@@ -329,6 +366,12 @@ class Properties(QWidget):
         if problem is not None:
             return {}, problem
         if data is not None:
+            if self._editor_key == "serviceCall":
+                # STU-14는 `chk:serviceCall` **통째로** 쓴다 (`data` 같은 포장이 없다).
+                changes["chk"] = {"serviceCall": json.dumps(data, ensure_ascii=False, indent=2)}
+                return changes, None
+            # `chk:task`는 `{type, extension, data}` **통째로** 오간다 — 본문만 보내면
+            # 고칠 때마다 `type`·`extension`이 날아간다 (C1 — 패키지가 그 확장을 요구하지 않게 된다).
             task = _task_of(dict(self.loaded.get("chk") or {})) or {}
             whole = {**task, "data": data}
             changes["chk"] = {"task": json.dumps(whole, ensure_ascii=False, indent=2)}
