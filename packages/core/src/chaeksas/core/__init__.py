@@ -14,6 +14,8 @@ Studio·Bot UI(실행기)·서버 실행기가 함께 쓴다. **화면(Qt)과 �
 | 바깥 세계 — 파일, 보내기, 서비스 앱 호출 | `files`, `senders`, `services` |
 | 외부 앱 — HTTP 어댑터 해석기, 바깥 앱 한 벌 (C13 §4) | `http_adapter`, `app_directory` |
 | 확장 호스트 — 확장을 찾아 기여 등록 (ADR-0018, C13) | `extensions` |
+| 사전 점검 — Bot을 띄우기 전, **서버를 부르지 않고** 본다 (ADR-0013, C4 `Readiness`) | `preflight` |
+| 서비스 앱 키 상태 — 설정 화면이 누를 때 앱에 묻는다 (C11, BUI-10·STU-10) | `key_check` |
 | 실행 기록과 전송 — 파일이 원본이다 (C3) | `run_log`, `run_shipping` |
 | 올라가는 결재 요청(ADR-0038), 내려가는 제어 파일(ADR-0031) | `requests`, `control` |
 | 자식 프로세스 — Worker·실행기를 띄우고 끈다 (ADR-0023) | `processes` |
