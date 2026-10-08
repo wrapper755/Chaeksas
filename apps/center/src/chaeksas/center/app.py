@@ -268,6 +268,14 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         require_admin(authenticate(request))
         return resources.revoke_extension(app.state.store, await _json(request))
 
+    @app.delete(f"{API}/resources/extensions/{{extension_id}}")
+    async def revoke_extension_by_id(request: Request, extension_id: str) -> Any:
+        """같은 일 — 경로에 id를 적는 꼴 (C13). **봉투가 원본**이고 경로는 거들 뿐이다."""
+        require_admin(authenticate(request))
+        return resources.revoke_extension(
+            app.state.store, await _json(request), expect_id=extension_id
+        )
+
     @app.post(f"{API}/resources/service-apps")
     async def register_service_app(request: Request) -> Any:
         """주소를 등록한다 — Center가 **바로 manifest를 읽어 본다** (C7)."""
