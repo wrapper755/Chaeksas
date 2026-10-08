@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from chaeksas.studio import services
+from chaeksas.studio import service_catalog, services
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.checks import refs_in
@@ -48,6 +48,18 @@ from chaeksas.studio.settings_dialog import StudioSettingsDialog
 from chaeksas.studio.workspace import BpmProcess, Definition, Workspace, WorkspaceError
 
 log = logging.getLogger(__name__)
+
+
+def _inherited_keys(process: BpmProcess) -> dict[str, str]:
+    """그 BPM 프로세스가 적어 둔 키 참조 `{app_id: 참조}` (`chk:process.service_keys`).
+
+    STU-14가 「프로세스 설정을 따름 (<참조>)」에 보인다. **값은 담지 않는다** (ADR-0013).
+    """
+    found: dict[str, str] = {}
+    for definition in process.definitions:
+        if definition.process is not None:
+            found.update(definition.process.info.service_keys)
+    return found
 
 TITLE = "Chaeksas Studio"
 NO_PROCESS = "(BPM 프로세스를 선택하거나 새로 만드세요)"
@@ -177,6 +189,17 @@ class MainWindow(QMainWindow):
         tools = bar.addMenu("도구")
         self._add(tools, "로그 지우기", self.log_view.clear, QKeySequence("Ctrl+L"))
 
+    def refresh_catalog(self) -> None:
+        """STU-14가 고를 거리를 Center에서 받아 속성 패널에 준다 (C7 리소스 목록).
+
+        **열 때마다 Center를 두드리지 않는다** — 정의를 열 때와 설정을 저장한 뒤에만 받는다.
+        받지 못하면 로그에 적고 편집기가 「등록된 서비스 앱이 없습니다」라고 말한다.
+        """
+        found = services.from_settings(self.settings)
+        self.properties.catalog = service_catalog.from_center(found.reader)
+        for why in self.properties.catalog.problems:
+            self.say(f"서비스 앱 목록: {why}")
+
     def open_settings(self) -> None:
         """STU-10. 저장하면 이 창의 설정도 바뀐다 (다음 시험 실행부터 쓴다)."""
         refs = refs_in(self.process.definitions) if self.process is not None else []
@@ -184,6 +207,7 @@ class MainWindow(QMainWindow):
         if dialog.exec() and dialog.saved is not None:
             self.settings = dialog.saved
             self.say("설정을 저장했습니다.")
+            self.refresh_catalog()  # Center 주소·키가 바뀌었을 수 있다
 
     def _add(
         self,
@@ -485,6 +509,9 @@ class MainWindow(QMainWindow):
             self.explorer.refresh(opened=path.as_posix())
             note = f" (경고 {count}개)" if count else ""
             self.say(f"열었습니다: {process.display} / {path.name}{note}")
+            # STU-14가 고를 거리는 **정의를 열 때** 받는다 (노드를 고를 때마다 두드리지 않게).
+            self.refresh_catalog()
+            self.properties.service_keys = _inherited_keys(process)
 
         self.canvas.load_xml(path.read_text(encoding="utf-8"), then=done)
 
