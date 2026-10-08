@@ -103,7 +103,7 @@
   "app_id": "center-jobs",
   "operation": "create_job",
   "input": {
-    "bpm_process": "'bx17_erp_po_entry'",
+    "bpm_process": "'bx17-erp-po-entry'",
     "target": "'group:구매-PC'",
     "inputs": "{'발주': 확정}"
   },

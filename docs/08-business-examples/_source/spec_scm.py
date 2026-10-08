@@ -302,7 +302,7 @@ EXAMPLES.append(Example(
         xgw("Gw_Order", "발주?"),
         script("Task_Confirm", "확정", "확정 = 제안"),
         svc("Task_Dispatch", "ERP 입력 작업 지시", "center-jobs", "create_job",
-            {"bpm_process": "'bx17_erp_po_entry'", "target": "'group:구매-PC'", "inputs": "{'발주': 확정}"}, {"작업번호": "job_id"}),
+            {"bpm_process": "'bx17-erp-po-entry'", "target": "'group:구매-PC'", "inputs": "{'발주': 확정}"}, {"작업번호": "job_id"}),
         end("End"),
     ],
     flows=[f("Start", "Task_Stock"), f("Task_Stock", "Task_Calc"), f("Task_Calc", "Gw_Any"),
@@ -314,7 +314,8 @@ EXAMPLES.append(Example(
     features=["서버 + PC 두 BPM 프로세스로 쪼개기", "작업 지시를 사내 확장 서비스 앱으로 (PC 위임의 공백 표시)", "결재 반려 시 발주 안 함"],
     lessons=["한 BPM 프로세스 안에 서버 일과 PC 일을 섞지 않는다 — 실행 위치는 BPM 프로세스 단위다 (ADR-0015).",
              "웹훅 태스크로 Center API를 직접 부르면 키를 붙일 방법이 없다 (웹훅은 인증 헤더를 갖지 않음, 비밀을 BPMN에 둘 수 없음) — 그래서 서비스 앱으로 감쌌다.",
-             "PC 위임이 확정되면(ADR-0016 §3, M7) 이 서비스 앱 태스크를 BX-17을 부르는 Call Activity로 바꾼다. 결과·실패는 Call Activity 출력과 오류 경계로 돌아온다."],
+             "PC 위임이 확정되면(ADR-0016 §3, M7) 이 서비스 앱 태스크를 BX-17을 부르는 Call Activity로 바꾼다. 결과·실패는 Call Activity 출력과 오류 경계로 돌아온다.",
+             "`bpm_process`에 적는 것은 **패키지 id**다 (C1 `id`) — 예제 파일 이름이 아니다. 밑줄은 들어갈 수 없어(`^[a-z0-9][a-z0-9._-]{0,99}$`) BX-17의 패키지 id는 `bx17-erp-po-entry`다. 처음에는 파일 이름을 그대로 적어 두었는데, Center가 `no_deployment`로 거절해서야 드러났다 — **글자로만 가리키는 자리는 시험이 돌려 봐야 안다** (M5 인수 시험이 잡았다)."],
 ))
 
 # ───────────────────────────── BX-17 ─────────────────────────────
