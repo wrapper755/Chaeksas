@@ -21,7 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from chaeksas.bot_ui.bots import InstallError, install, installed
+from chaeksas.bot_ui.bots import CENTER, InstallError, install, installed, write_source
 from chaeksas.contracts.bot_ui import DeploymentResult
 from chaeksas.contracts.hashing import content_hash_zip
 from chaeksas.contracts.signing import (
@@ -171,10 +171,12 @@ class Deployer:
             return self._refused(made, problems[0])
 
         try:
-            install(self.data_dir, package)
+            bot = install(self.data_dir, package)
         except InstallError as e:
             made.reason = str(e)
             return made
+        # **배포로 온 것은 배포가 적는다** (BUI-04 「출처」) — 푸는 쪽은 알 수 없다.
+        write_source(bot.folder, CENTER)
         made.result = APPLIED
         made.reason = None
         return made
