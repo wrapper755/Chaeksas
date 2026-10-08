@@ -102,6 +102,28 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- 맞추기 규칙: 하트비트에 연속으로 보이지 않은 횟수 (C4 `bot_ui_lost`).
   misses           INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS contributed_resources (
+  -- 확장이 기여한 자원 (C7·C13 §5). Center는 `data`를 **해석하지 않고** 그대로 넘긴다.
+  resource_type  TEXT NOT NULL,
+  id             TEXT NOT NULL,
+  extension_id   TEXT,
+  name           TEXT,
+  summary        TEXT,
+  updated_at     TEXT,
+  revision       INTEGER,
+  data_json      TEXT,
+  at             TEXT NOT NULL,
+  PRIMARY KEY (resource_type, id)
+);
+CREATE TABLE IF NOT EXISTS catalog_reads (
+  -- 카탈로그를 어디서 언제 읽었나. `revision`이 같으면 **항목을 다시 쓰지 않는다** (C7).
+  source         TEXT PRIMARY KEY,
+  resource_type  TEXT NOT NULL,
+  extension_id   TEXT,
+  revision       INTEGER,
+  read_at        TEXT,
+  error          TEXT
+);
 CREATE TABLE IF NOT EXISTS extensions (
   -- Center에 **외부로 등록된** 확장 정의 (C13, tier=external만). 내장·사내는 설치 파일에
   -- 든 것만 쓴다 (E2) — 여기 들어오지 않는다.

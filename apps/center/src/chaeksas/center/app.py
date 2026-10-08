@@ -227,10 +227,23 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     # ─────────────────── 리소스 (C7·CON-07) ───────────────────
 
     @app.get(f"{API}/resources")
-    def list_resources(request: Request, type: str | None = None) -> Any:
+    def list_resources(
+        request: Request, type: str | None = None, resource_type: str | None = None
+    ) -> Any:
         """리소스 목록. 읽기·관리자 토큰과 Studio·Bot UI·서버 실행기 키가 읽는다 (C7)."""
         require_read(authenticate(request))
-        return resources.listing(app.state.store, type=type)
+        return resources.listing(app.state.store, type=type, resource_type=resource_type)
+
+    @app.get(f"{API}/resources/contributed-kinds")
+    def list_contributed_kinds(request: Request) -> Any:
+        """확장이 기여한 자원 **종류** 목록 (CON-07 탭 하나씩). 읽기 실패도 함께 온다."""
+        require_read(authenticate(request))
+        return {"items": resources.catalog_kinds(app.state.store), "fetched_at": now_iso()}
+
+    @app.get(f"{API}/resources/contributed/{{resource_type}}/{{resource_id}}")
+    def get_contributed(request: Request, resource_type: str, resource_id: str) -> Any:
+        require_read(authenticate(request))
+        return resources.contributed_resource(app.state.store, resource_type, resource_id)
 
     @app.get(f"{API}/resources/extensions/{{extension_id}}")
     def get_extension(request: Request, extension_id: str) -> Any:

@@ -24,6 +24,8 @@ MAX_PACKAGE_MB = 200
 #: 「새로 고침」은 이것을 무시하고 바로 읽는다.
 RESOURCE_STATUS_S = 60
 RESOURCE_MANIFEST_S = 600
+#: 확장 기여 자원 카탈로그를 다시 읽는 간격 (C7 — 5분).
+RESOURCE_CATALOG_S = 300
 #: Center가 서비스 앱을 읽을 때 기다리는 시간. 짧게 — 한 앱이 느려도 목록이 멈추면 안 된다.
 RESOURCE_TIMEOUT_S = 5.0
 

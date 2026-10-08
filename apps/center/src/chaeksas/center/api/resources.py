@@ -1,6 +1,6 @@
 """리소스 목록 — Bot이 실행에 필요로 하는 바깥 자원 (C7, CON-07).
 
-네 종류를 모은다. **셋은 Center가 이미 가진 것에서 계산한다** — 따로 등록받지 않는다.
+다섯 종류를 모은다. **넷은 Center가 이미 가진 것에서 계산한다** — 따로 등록받지 않는다.
 
 | 종류 | 어디서 |
 | --- | --- |
@@ -8,19 +8,20 @@
 | 툴팩 | `packages` 표의 `kind=toolpack` (C5) |
 | 런타임 | `bot_uis`가 등록·하트비트로 보고한 것 (C4) |
 | 확장 | 실행하는 쪽의 보고 + 서비스 앱 manifest의 `extension` + **외부로 등록된 정의**(C13) |
+| 확장 기여 자원 | 카탈로그를 읽어 쌓은 것 (C13 §5) |
+
+기여 자원의 **출처는 둘이고 모양은 같다** — 내장·사내는 C11 manifest의 `resources`,
+외부는 등록된 정의의 `contributes.resources`다.
 
 **Center는 서비스 앱 키를 갖지 않는다** (ADR-0013) — 읽는 것은 인증이 필요 없는 공개
-정보뿐이다 (`/healthz`·`/manifest`).
+정보뿐이다 (`/healthz`·`/manifest`·카탈로그).
 
 외부 확장은 **서명 봉투로만** 등록·해제된다 (C2 `extension`·`extension_revoke`, C13 E6) —
 정의가 Bot의 키를 어느 주소로 보낼지 정하므로 배포와 같은 관문을 둔다. 내장·사내 확장은
 설치 파일에 든 것만 쓰고 여기 들어오지 않는다 (E2).
 
-> 확장이 기여한 자원(「UI 화면」)은 아직이다 — 정의의 `resources[].catalog_url`을 읽어야
-> 하는데 **내장 확장의 정의가 Center에 없다** (보고와 C11 manifest는 `{id, version}`만
-> 나른다). C11에 카탈로그 칸을 더하는 것이 다음 조각이다. 그때까지 `contributed`는 빈
-> 목록이고, 누락 검사도 그 종류를 **거부 사유로 쓰지 않는다** (C7 §누락 검사 — 배포를
-> 막는 것은 확장 누락·해시 불일치와 R8뿐이다).
+**기여 자원의 `data`는 해석하지 않는다** (C13 §5) — 그 모양은 확장이 정하고 Center는 그대로
+넘긴다. 그래서 플랫폼 코드에 「UI 화면」이라는 말이 없다 (ADR-0018).
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from typing import Any
 from chaeksas.center.auth import Caller
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import (
+    RESOURCE_CATALOG_S,
     RESOURCE_MANIFEST_S,
     RESOURCE_STATUS_S,
     RESOURCE_TIMEOUT_S,
@@ -164,6 +166,9 @@ def register(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ServiceA
                     app_id,
                 ),
             )
+    # manifest를 읽은 그 자리에서 **카탈로그도 읽는다** — 등록하자마자 기여 자원이 보여야
+    # 「등록했는데 왜 경고가 그대로인가」가 생기지 않는다 (C7 누락 검사).
+    refresh_catalogs(store, force=True)
     return service_app(store, app_id), before is None
 
 
@@ -200,6 +205,7 @@ def set_base_url(store: Store, app_id: str, raw: dict[str, Any]) -> ServiceAppRe
                 "UPDATE service_apps SET manifest_json = ?, manifest_at = ? WHERE app_id = ?",
                 (dumps(probed["manifest"]), now, app_id),
             )
+    refresh_catalogs(store, force=True)
     return service_app(store, app_id)
 
 
@@ -228,6 +234,8 @@ def refresh(store: Store, raw: dict[str, Any]) -> list[ServiceAppResource]:
     )
     for row in rows:
         _probe_into(store, row, force=True)
+    # 카탈로그도 함께 — 「새로 고침」은 **간격을 무시한다** (C7).
+    refresh_catalogs(store, force=True)
     return [service_app(store, str(row["app_id"])) for row in rows]
 
 
@@ -465,17 +473,226 @@ def _contributes_of(definition: dict[str, Any] | None) -> dict[str, list[str]]:
     return out
 
 
-def contributed(store: Store) -> list[ContributedResource]:
-    """확장이 기여한 자원 — **아직 모으지 않는다.**
+# ─────────────────────────── 확장 기여 자원 (C7·C13 §5) ───────────────────────────
 
-    정의의 `resources[].catalog_url`을 읽어야 하는데(C13 §5), **내장 확장의 정의가
-    Center에 없다** — Bot UI 보고와 서비스 앱 manifest는 `{id, version}`만 나르고 C11
-    manifest에 카탈로그 칸이 없다. 그 칸을 더하는 것이 다음 조각이다.
 
-    빈 목록을 주는 것이 「없다」는 뜻은 아니다. 그래서 누락 검사에서 이 종류를 거부
-    사유로 쓰지 않는다 (C7 §누락 검사).
+def _catalog_sources(store: Store, *, probe: bool) -> list[dict[str, Any]]:
+    """읽을 카탈로그들 — **출처가 둘**이고 모양은 같다 (C7 §리소스 모으는 방식).
+
+    | 출처 | 어디서 |
+    | --- | --- |
+    | 서비스 앱 manifest의 `resources` (C11) | 내장·사내 확장. **정의가 Center에 없어서** 서버 부분이 알린다 |
+    | 등록된 외부 정의의 `contributes.resources` (C13) | 외부 확장. 정의가 Center에 있다 |
+
+    주소는 **Center의 리소스 등록(`base_url`)이 이긴다** — 환경별 주소의 유일한 출처다
+    (C13 `service.base_url`). 등록이 없으면 정의의 `base_url`을 쓴다.
     """
-    return []
+    out: list[dict[str, Any]] = []
+    apps = {one.app_id: one for one in service_apps(store, probe=probe)}
+
+    for row in store.rows("SELECT app_id, base_url, manifest_json FROM service_apps ORDER BY app_id"):
+        found = _manifest_of(row["manifest_json"])
+        if found is None:
+            continue
+        for one in found.resources:
+            out.append(
+                {
+                    "source": f"app:{row['app_id']}:{one.type}",
+                    "resource_type": one.type,
+                    "label": one.label or one.type,
+                    "extension_id": found.extension.id if found.extension else None,
+                    "url": f"{str(row['base_url']).rstrip('/')}{one.catalog_url}",
+                }
+            )
+
+    for row in store.rows(
+        "SELECT id, definition_json FROM extensions WHERE revoked_json IS NULL ORDER BY id"
+    ):
+        definition = json.loads(row["definition_json"])
+        service = definition.get("service") or {}
+        declared = (definition.get("contributes") or {}).get("resources") or []
+        for one in declared:
+            if not isinstance(one, dict) or not one.get("catalog_url"):
+                continue
+            # 등록된 서비스 앱이 있으면 그 주소가 이긴다 (출처는 하나다).
+            app = apps.get(str(service.get("app_id") or ""))
+            base = (app.base_url if app else None) or str(service.get("base_url") or "")
+            if not base:
+                continue
+            out.append(
+                {
+                    "source": f"ext:{row['id']}:{one.get('type')}",
+                    "resource_type": str(one.get("type") or ""),
+                    "label": str(one.get("label") or one.get("type") or ""),
+                    "extension_id": str(row["id"]),
+                    "url": f"{base.rstrip('/')}{one['catalog_url']}",
+                }
+            )
+    return out
+
+
+def read_catalog(url: str, *, timeout_s: float = RESOURCE_TIMEOUT_S) -> dict[str, Any]:
+    """카탈로그 하나를 읽는다 (C13 §5). 닿지 못하면 `error`를 담아 돌려준다 — 올리지 않는다."""
+    import httpx  # noqa: PLC0415
+
+    try:
+        with httpx.Client(timeout=timeout_s, follow_redirects=False) as client:
+            answer = client.get(url)
+        if answer.status_code >= 400:
+            return {"error": f"http_{answer.status_code}"}
+        return {"body": answer.json() if answer.content else {}}
+    except Exception as e:  # noqa: BLE001 — 앱이 꺼져 있을 수 있다
+        return {"error": type(e).__name__}
+
+
+def refresh_catalogs(store: Store, *, force: bool = False, probe: bool = False) -> int:
+    """카탈로그들을 **때가 됐으면** 다시 읽는다 (C7 — 5분). 돌려주는 것은 갱신한 수다.
+
+    **`revision`이 같으면 항목을 다시 쓰지 않는다** (C7) — 같은 것을 다시 쓰면 Studio·Worker의
+    계획 캐시가 공연히 버려진다. 닿지 못한 것은 **들고 있던 항목을 지우지 않고** 사유만 남긴다.
+    """
+    from chaeksas.contracts.extension import Catalog  # noqa: PLC0415
+
+    now = now_iso()
+    changed = 0
+    for source in _catalog_sources(store, probe=probe):
+        before = store.row("SELECT * FROM catalog_reads WHERE source = ?", (source["source"],))
+        if not force and before is not None and not _due(before["read_at"], now, RESOURCE_CATALOG_S):
+            continue
+
+        got = read_catalog(source["url"])
+        if "error" in got:
+            _note_read(store, source, revision=before["revision"] if before else None, at=now, error=got["error"])
+            continue
+        try:
+            catalog = Catalog.model_validate(got["body"])
+        except ValueError as e:
+            _note_read(store, source, revision=None, at=now, error=f"invalid:{type(e).__name__}")
+            continue
+
+        same = before is not None and before["revision"] is not None and before["revision"] == catalog.revision
+        _note_read(store, source, revision=catalog.revision, at=now, error=None)
+        if same:
+            continue  # 판이 그대로다 — 항목을 다시 쓰지 않는다
+        _store_items(store, source, catalog, at=now)
+        changed += 1
+    return changed
+
+
+def _note_read(store: Store, source: dict[str, Any], *, revision: Any, at: str, error: str | None) -> None:
+    with store.tx() as cur:
+        cur.execute("DELETE FROM catalog_reads WHERE source = ?", (source["source"],))
+        cur.execute(
+            "INSERT INTO catalog_reads (source, resource_type, extension_id, revision, read_at, error)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (source["source"], source["resource_type"], source["extension_id"], revision, at, error),
+        )
+
+
+def _store_items(store: Store, source: dict[str, Any], catalog: Any, *, at: str) -> None:
+    """그 종류의 항목을 **이 출처가 준 것으로 맞춘다** (없어진 것은 지운다)."""
+    kept = {str(one.id) for one in catalog.items if one.type == source["resource_type"]}
+    with store.tx() as cur:
+        for row in store.rows(
+            "SELECT id FROM contributed_resources WHERE resource_type = ?", (source["resource_type"],)
+        ):
+            if str(row["id"]) not in kept:
+                cur.execute(
+                    "DELETE FROM contributed_resources WHERE resource_type = ? AND id = ?",
+                    (source["resource_type"], row["id"]),
+                )
+        for one in catalog.items:
+            if one.type != source["resource_type"]:
+                continue  # 카탈로그가 남의 종류를 담아 보내도 받지 않는다
+            cur.execute(
+                "DELETE FROM contributed_resources WHERE resource_type = ? AND id = ?",
+                (one.type, one.id),
+            )
+            cur.execute(
+                "INSERT INTO contributed_resources (resource_type, id, extension_id, name, summary,"
+                " updated_at, revision, data_json, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    one.type,
+                    one.id,
+                    source["extension_id"],
+                    one.name,
+                    one.summary,
+                    one.updated_at,
+                    catalog.revision,
+                    dumps(one.data) if one.data else None,
+                    at,
+                ),
+            )
+
+
+def contributed(store: Store, *, resource_type: str | None = None, probe: bool = False) -> list[ContributedResource]:
+    """확장이 기여한 자원 (C7). **Center는 `data`를 해석하지 않는다** (C13 §5).
+
+    읽는 쪽이 부를 때 **때가 됐으면** 다시 읽는다 (5분) — 콘솔을 새로 고칠 때마다 모든
+    카탈로그를 두드리지 않는다.
+    """
+    refresh_catalogs(store, probe=probe)
+    rows = store.rows(
+        "SELECT * FROM contributed_resources ORDER BY resource_type, id"
+        if resource_type is None
+        else "SELECT * FROM contributed_resources WHERE resource_type = ? ORDER BY id",
+        () if resource_type is None else (resource_type,),
+    )
+    return [
+        ContributedResource(
+            resource_type=str(row["resource_type"]),
+            id=str(row["id"]),
+            name=row["name"],
+            summary=row["summary"],
+            updated_at=row["updated_at"],
+            extension_id=row["extension_id"],
+            revision=row["revision"],
+            data=loads(row["data_json"], {}) or {},
+            used_by=_resource_used_by(store, str(row["resource_type"]), str(row["id"])),
+        )
+        for row in rows
+    ]
+
+
+def _resource_used_by(store: Store, resource_type: str, resource_id: str) -> list[str]:
+    """그 자원을 `requires.resources`에 적은 BPM 프로세스들 (C1)."""
+    out = []
+    for manifest in _approved_manifests(store):
+        found = (manifest.get("requires") or {}).get("resources") or []
+        if any(
+            str((one or {}).get("type")) == resource_type and str((one or {}).get("id")) == resource_id
+            for one in found
+            if isinstance(one, dict)
+        ):
+            out.append(str(manifest["__ref"]))
+    return out
+
+
+def catalog_kinds(store: Store) -> list[dict[str, Any]]:
+    """지금 알고 있는 기여 자원 종류들 (CON-07 탭 하나씩). 읽기 실패도 함께 보인다.
+
+    **때가 됐으면 먼저 읽는다** — 아직 한 번도 읽지 않은 종류를 「항목 0개」로 보이면
+    「없다」로 읽힌다.
+    """
+    refresh_catalogs(store)
+    out: dict[str, dict[str, Any]] = {}
+    for source in _catalog_sources(store, probe=False):
+        slot = out.setdefault(
+            source["resource_type"],
+            {"resource_type": source["resource_type"], "label": source["label"], "extensions": [], "errors": []},
+        )
+        if source["extension_id"] and source["extension_id"] not in slot["extensions"]:
+            slot["extensions"].append(source["extension_id"])
+        read = store.row("SELECT error FROM catalog_reads WHERE source = ?", (source["source"],))
+        if read is not None and read["error"]:
+            slot["errors"].append(f"{source['source']}: {read['error']}")
+    for one in out.values():
+        one["count"] = len(
+            store.rows(
+                "SELECT id FROM contributed_resources WHERE resource_type = ?", (one["resource_type"],)
+            )
+        )
+    return sorted(out.values(), key=lambda one: str(one["resource_type"]))
 
 
 # ─────────────────────────── 외부 확장 등록 (C13·C2) ───────────────────────────
@@ -662,13 +879,16 @@ def index(store: Store, *, probe: bool = False) -> Any:
     return ResourceIndex(
         extensions=extensions(store, probe=probe),
         service_apps=service_apps(store, probe=probe),
-        contributed=contributed(store),
+        # 누락 검사는 **카탈로그를 두드리지 않는다** — 들고 있는 것으로 센다.
+        contributed=contributed(store, probe=probe) if probe else _cached_contributed(store),
         toolpacks=toolpacks(store),
     )
 
 
-def listing(store: Store, *, type: str | None = None) -> dict[str, Any]:
-    """`GET /resources?type=` (C7 §목록 응답 공통 — `{items, fetched_at}`)."""
+def listing(
+    store: Store, *, type: str | None = None, resource_type: str | None = None
+) -> dict[str, Any]:
+    """`GET /resources?type=[&resource_type=]` (C7 §목록 응답 공통 — `{items, fetched_at}`)."""
     if type is not None and type not in KNOWN_TYPES:
         raise ApiError(422, "input_invalid", f"모르는 리소스 종류다: {type}")
     picked = (type,) if type else KNOWN_TYPES
@@ -683,7 +903,7 @@ def listing(store: Store, *, type: str | None = None) -> dict[str, Any]:
         elif one == "extension":
             items += extensions(store)
         elif one == "contributed":
-            items += contributed(store)
+            items += contributed(store, resource_type=resource_type)
     return {"items": [one.to_json_dict() for one in items], "fetched_at": now_iso()}
 
 
@@ -697,13 +917,47 @@ def extension(store: Store, extension_id: str) -> ExtensionResource:
     return ExtensionResource.model_validate(extra)
 
 
+def _cached_contributed(store: Store) -> list[ContributedResource]:
+    """들고 있는 기여 자원 (두드리지 않는다) — 누락 검사·배포가 쓴다."""
+    return [
+        ContributedResource(
+            resource_type=str(row["resource_type"]),
+            id=str(row["id"]),
+            name=row["name"],
+            summary=row["summary"],
+            updated_at=row["updated_at"],
+            extension_id=row["extension_id"],
+            revision=row["revision"],
+            data=loads(row["data_json"], {}) or {},
+        )
+        for row in store.rows("SELECT * FROM contributed_resources ORDER BY resource_type, id")
+    ]
+
+
+def contributed_resource(store: Store, resource_type: str, resource_id: str) -> ContributedResource:
+    """`GET /resources/contributed/{type}/{id}` (C7)."""
+    found = next(
+        (
+            one
+            for one in contributed(store, resource_type=resource_type)
+            if one.id == resource_id
+        ),
+        None,
+    )
+    if found is None:
+        raise ApiError(404, "not_found", f"기여 자원이 없다: {resource_type}/{resource_id}")
+    return found
+
+
 __all__ = [
     "DEGRADED",
     "KNOWN_TYPES",
     "OK",
     "UNKNOWN",
     "UNREACHABLE",
+    "catalog_kinds",
     "contributed",
+    "contributed_resource",
     "extension",
     "extensions",
     "index",

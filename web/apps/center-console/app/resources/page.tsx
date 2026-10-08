@@ -6,7 +6,8 @@ import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-reso
 import type { ToolpackResource } from "@chaeksas/api-types/c7-toolpack-resource";
 import type { RuntimeResource } from "@chaeksas/api-types/c7-runtime-resource";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
-import { CENTER_URL, CenterError, center, session } from "@/lib/center";
+import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
+import { CENTER_URL, CenterError, center, session, type ContributedKind } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { registerExtension, registerServiceApp } from "@/app/actions";
 import { RefreshResources } from "./tools";
@@ -17,9 +18,9 @@ import { RefreshResources } from "./tools";
  * 고정 탭 넷(확장·서비스 앱·툴팩·런타임). **키는 다루지 않는다** (C7 — 서비스 앱 키는 각
  * 앱의 관리 콘솔에서 발급한다, ADR-0013).
  *
- * 확장이 기여한 자원(「UI 화면」)은 아직 모으지 않는다 — 내장 확장의 정의가 Center에 없어
- * `catalog_url`을 찾을 길이 없다 (C11 manifest에 카탈로그 칸을 더해야 한다). 그래서 그 탭을
- * **끄고 이유를 보인다** (U3 — 없는 것을 빈 탭으로 두지 않는다).
+ * 고정 탭 뒤에 **확장이 기여한 자원 종류마다 탭 하나**가 붙는다 (C7). 그 탭의 칸은 카탈로그의
+ * **공통 칸**(id·이름·요약·갱신)뿐이다 — `data`는 확장 고유 내용이라 Center도 콘솔도 해석하지
+ * 않는다 (C13 §5, ADR-0018). 그래서 이 파일에 「UI 화면」이라는 말이 없다.
  */
 
 /** C7 상태 → `status_map` 「서비스 앱」 묶음의 표기. 모르는 값은 그대로 (원칙 10). */
@@ -73,14 +74,25 @@ export default async function ResourcesPage({
   const found = await session();
   if (!found) redirect("/login");
   const asked = await searchParams;
-  const tab = TABS.some((one) => one.key === asked.tab) ? asked.tab! : "extension";
-
   let items: unknown[] = [];
   let fetchedAt = "";
   let packages: PackageInfo[] = [];
+  let kinds: ContributedKind[] = [];
   let failure: string | null = null;
+  // 어떤 탭이 있는지는 **Center가 안다** (확장이 기여한 종류). 탭 이름을 화면이 짓지 않는다.
   try {
-    const got = await center.resources<unknown>(tab);
+    kinds = (await center.contributedKinds()).items;
+  } catch {
+    kinds = []; // 종류를 못 읽어도 고정 탭은 보여야 한다
+  }
+  const fixed = TABS.some((one) => one.key === asked.tab);
+  const contributedTab = kinds.find((one) => one.resource_type === asked.tab);
+  const tab = fixed ? asked.tab! : contributedTab ? asked.tab! : "extension";
+
+  try {
+    const got = contributedTab
+      ? await center.contributed(contributedTab.resource_type)
+      : await center.resources<unknown>(tab);
     items = got.items;
     fetchedAt = got.fetched_at;
     // 경고 띠는 **패키지가 요구하는데 없는 것**에서 온다 (C7 누락 검사).
@@ -123,13 +135,21 @@ export default async function ResourcesPage({
             {one.label}
           </Link>
         ))}
-        {/* 아직 없는 탭은 **끄고 이유를 보인다** (U3). */}
-        <span
-          className="cursor-not-allowed border border-border-default px-3 py-1 text-body text-text-muted"
-          title="내장 확장의 카탈로그 주소를 Center가 아직 알 수 없습니다 (C11 manifest에 칸을 더해야 합니다)"
-        >
-          UI 화면 (M5에서 만듭니다)
-        </span>
+        {/* 확장이 기여한 자원 종류마다 탭 하나 (C7) — 플랫폼은 그 뜻을 모른다. */}
+        {kinds.map((one) => (
+          <Link
+            key={one.resource_type}
+            href={`/resources?tab=${encodeURIComponent(one.resource_type)}`}
+            aria-current={tab === one.resource_type ? "page" : undefined}
+            className={
+              tab === one.resource_type
+                ? "border border-border-strong bg-bg-subtle px-3 py-1 text-body"
+                : "border border-border-default px-3 py-1 text-body text-text-secondary"
+            }
+          >
+            {one.label} ({one.count})
+          </Link>
+        ))}
       </nav>
 
       {failure ? <ErrorBanner message={failure} /> : null}
@@ -158,6 +178,9 @@ export default async function ResourcesPage({
       ) : null}
       {tab === "toolpack" ? <Toolpacks items={items as ToolpackResource[]} /> : null}
       {tab === "runtime" ? <Runtimes items={items as RuntimeResource[]} /> : null}
+      {contributedTab ? (
+        <Contributed kind={contributedTab} items={items as ContributedResource[]} />
+      ) : null}
     </Shell>
   );
 }
@@ -428,4 +451,53 @@ function Runtimes({ items }: { items: RuntimeResource[] }) {
     );
   }
   return <DataTable columns={columns} rows={items} rowKey={(row) => row.host.id} caption="런타임" />;
+}
+
+/**
+ * 확장이 기여한 자원 하나의 종류 (CON-07 탭).
+ *
+ * **공통 칸만 그린다** — `data`는 확장 고유 내용이라 콘솔이 해석하지 않는다 (C13 §5). 자원의
+ * 자세한 모습은 그 확장의 관리 콘솔에서 본다 (예: UI 자동화 앱의 UIA-02).
+ */
+function Contributed({ kind, items }: { kind: ContributedKind; items: ContributedResource[] }) {
+  const columns: Array<Column<ContributedResource>> = [
+    { key: "id", header: "자원 id", mono: true },
+    { key: "name", header: "이름", cell: (row) => row.name ?? "—" },
+    { key: "summary", header: "요약", cell: (row) => row.summary ?? "—" },
+    { key: "extension_id", header: "기여한 확장", width: "18ch", cell: (row) => row.extension_id ?? "—" },
+    { key: "updated_at", header: "마지막 갱신", width: "16ch", cell: (row) => time(row.updated_at) },
+    {
+      key: "used_by",
+      header: "쓰는 Bot",
+      cell: (row) => ((row.used_by ?? []).length > 0 ? (row.used_by ?? []).join(", ") : "—"),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* 읽기 실패를 **조용히 빈 목록으로 보이지 않는다** — 「없다」와 「못 읽었다」는 다르다. */}
+      {kind.errors.length > 0 ? (
+        <ErrorBanner
+          message={`카탈로그를 읽지 못했습니다 — 아래는 마지막으로 읽은 것입니다: ${kind.errors.join(" · ")}`}
+        />
+      ) : null}
+      {items.length === 0 ? (
+        <EmptyState
+          title={`${kind.label}이 아직 없습니다.`}
+          hint={
+            kind.extensions.length > 0
+              ? `${kind.extensions.join(", ")}이 올린 것이 없습니다.`
+              : undefined
+          }
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(row) => `${row.resource_type}:${row.id}`}
+          caption={kind.label}
+        />
+      )}
+    </div>
+  );
 }
