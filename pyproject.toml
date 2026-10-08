@@ -2,7 +2,10 @@
 # 멤버는 packages/*, apps/*, extensions/* 각각의 pyproject.toml에 있다.
 
 [tool.uv.workspace]
-members = ["packages/*", "apps/*", "extensions/*"]
+members = ["packages/*", "apps/*", "extensions/*", "samples/*"]
+# samples/는 제품이 아니다 — 업무 예제가 부르는 모의 앱이다 (01-architecture §8).
+#   멤버로 둔 것은 `uv run chk-mock-apps`로 띄우고 `tests/`가 import하기 때문이다.
+#   제품 코드는 samples/를 import하지 않는다 (test_import_direction.py가 막는다).
 # spikes/는 멤버가 아니다 — 제품 코드가 import하지 않는다 (CLAUDE.md §3).
 # web/은 pnpm 워크스페이스다 (ADR-0017).
 
@@ -65,7 +68,8 @@ mypy_path = [
     "apps/admin/src",
     "apps/center/src",
     "extensions/ui_automation/src",
+    "samples/mock_apps/src",
 ]
-files = ["tests", "scripts", "packages/*/src", "apps/*/src", "extensions/*/src"]
+files = ["tests", "scripts", "packages/*/src", "apps/*/src", "extensions/*/src", "samples/*/src"]
 # PyInstaller 훅은 모듈 이름 규칙 밖이다 (위 ruff 설명과 같은 이유).
 exclude = ["/__pyinstaller/"]

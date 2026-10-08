@@ -12,6 +12,7 @@ members = [
     "chaeksas-ext-ui-automation",
     "chaeksas-extension-api",
     "chaeksas-llm",
+    "chaeksas-mock-apps",
     "chaeksas-qt",
     "chaeksas-server-runner",
     "chaeksas-service-kit",
@@ -275,6 +276,25 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [{ name = "httpx", specifier = ">=0.27" }]
+
+[[package]]
+name = "chaeksas-mock-apps"
+version = "0.1.0"
+source = { editable = "samples/mock_apps" }
+dependencies = [
+    { name = "chaeksas-service-kit" },
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chaeksas-service-kit", editable = "packages/service_kit" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "uvicorn", specifier = ">=0.32" },
+]
 
 [[package]]
 name = "chaeksas-qt"
