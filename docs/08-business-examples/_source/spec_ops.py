@@ -307,7 +307,7 @@ API도 내보내기 기능도 없는 오래된 사내 데스크톱 프로그램�
     flows=[f("Start", "Task_Read"), f("Task_Read", "Task_Split"), f("Task_Split", "Task_ReadOdd"), f("Task_ReadOdd", "Task_Import"), f("Task_Import", "End"),
            f("Bnd_OddFail", "Task_OddFail"), f("Task_OddFail", "Task_Import")],
     boundaries=[bnd("Bnd_OddFail", "Task_ReadOdd", "error", "재생 실패", error="TASK_FAILED")],
-    service_keys={"ui-automation": "it-legacy-ui", "crm": "it-crm"}, extensions=[{"id": "ui-automation", "version": ">=0.4,<0.5"}, {"id": "crm", "version": ">=1,<2"}],
+    service_keys={"ui-automation": "it-legacy-ui", "crm": "it-crm"}, extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}, {"id": "crm", "version": ">=1,<2"}],
     defaults={"forbidden_actions": ["저장·삭제 버튼을 누르지 않는다"], "desktop": {"app": "CustomerManager"}},
     cases=[Case("5건 묶음", {"고객번호목록": ["C001", "C002", "C003", "C004", "C005"]}, {"넣음": {"count": 5}, "수작업": []})],
     features=["UI 태스크(등록 화면)와 AI 데스크톱 자율 태스크를 한 BPM 프로세스에", "PC BPM 프로세스에서 서비스 앱 호출", "upsert로 재실행 안전"],
