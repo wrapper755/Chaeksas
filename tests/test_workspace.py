@@ -24,7 +24,12 @@ MEMBERS = {
     "apps/admin": "chaeksas.admin",
     "apps/center": "chaeksas.center",
     "extensions/ui_automation": "chaeksas.ext.ui_automation",
+    # 제품이 아니다 — 업무 예제가 부르는 모의 앱 (01-architecture §8).
+    "samples/mock_apps": "chaeksas.mock_apps",
 }
+
+#: 멤버를 찾는 자리. `pyproject.toml`의 `[tool.uv.workspace].members`와 같아야 한다.
+MEMBER_GLOBS = ("packages/*", "apps/*", "extensions/*", "samples/*")
 
 
 def test_interpreter_is_312() -> None:
@@ -37,10 +42,16 @@ def test_workspace_members_match_disk() -> None:
     # as_posix(): Windows에서 `str()`은 `apps\admin`을 주므로 표와 비교할 수 없다.
     found = {
         p.parent.relative_to(ROOT).as_posix()
-        for pattern in ("packages/*", "apps/*", "extensions/*")
+        for pattern in MEMBER_GLOBS
         for p in ROOT.glob(f"{pattern}/pyproject.toml")
     }
     assert found == set(MEMBERS), f"표에 없음: {found - set(MEMBERS)}, 디스크에 없음: {set(MEMBERS) - found}"
+
+
+def test_workspace_globs_match_the_root_pyproject() -> None:
+    """위 표와 루트의 멤버 글롭이 어긋나면 새 멤버가 조용히 빠진다."""
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert set(data["tool"]["uv"]["workspace"]["members"]) == set(MEMBER_GLOBS)
 
 
 @pytest.mark.parametrize("module", sorted(MEMBERS.values()))
@@ -55,7 +66,7 @@ def test_chaeksas_is_namespace_package() -> None:
 
     assert chaeksas.__file__ is None, "chaeksas/__init__.py가 생겼다 — 지워야 한다"
     assert chaeksas.ext.__file__ is None, "chaeksas/ext/__init__.py가 생겼다 — 지워야 한다"
-    # 멤버 11개가 모두 src/chaeksas를 하나씩 더한다 (확장도 chaeksas/ext/를 담고 있으므로 포함).
+    # 멤버마다 src/chaeksas를 하나씩 더한다 (확장도 chaeksas/ext/를 담고 있으므로 포함).
     assert len(chaeksas.__path__) == len(MEMBERS)
 
 

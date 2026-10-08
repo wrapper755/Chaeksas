@@ -93,6 +93,7 @@ llm ◀── core, service_kit   (맨 아래 — chaeksas의 아무것도 impor
 - 서비스 앱끼리 서로 import하지 않는다. 필요하면 HTTP로 부른다.
 - `core`는 Qt를 import하지 않는다. 화면은 `studio`, `bot_ui`의 몫. `worker`는 화면이 없다.
 - 제품 코드는 `spikes/`를 import하지 않는다.
+- **아무 멤버도 `samples/`를 의존하지 않는다.** `samples/mock_apps`는 업무 예제가 부르는 모의 앱이고(`samples/README.md`), 쓰는 쪽은 `tests/`와 사람이 띄우는 `chk-mock-apps`뿐이다. 그 안의 C11 앱도 서비스 앱이라 `core`를 import하지 않는다.
 - 위 규칙은 `tests/test_import_direction.py`가 강제한다 (**있음**). 두 가지를 본다: 선언한 의존(`pyproject.toml`, 전이 포함)과 실제 import(AST). 규칙을 더하려면 그 파일의 `FORBIDDEN_DEPS`·`FORBIDDEN_IMPORTS` 표에 줄을 더한다.
 
 ## 6. OS별로 갈리는 지점 (인터페이스 뒤에 둔다)
@@ -152,6 +153,8 @@ Chaeksas/
 │  ├─ apps/svc-console/    # 서비스 앱 관리 콘솔 (앱마다 하나씩 띄움)
 │  └─ packages/            # ui(구성요소+토큰 CSS), api-types(계약에서 생성), config
 ├─ design/                 # tokens.json (디자인 토큰 원본), preview.html
+├─ samples/                # 제품이 아니다 — 업무 예제가 부르는 모의 앱 (워크스페이스 멤버)
+│  └─ mock_apps/           # C11 앱 14 + 외부 앱 2 + 그 C13 어댑터 정의. chk-mock-apps
 ├─ spikes/                 # 실험 (제품 코드에서 import 금지, 워크스페이스 멤버 아님)
 ├─ tests/                  # 앱 간 통합·계약 테스트 + 의존 방향 검사(§5)
 └─ docs/
