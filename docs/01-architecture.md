@@ -90,6 +90,7 @@ llm ◀── core, service_kit   (맨 아래 — chaeksas의 아무것도 impor
 
 - `web/`은 Python 코드를 import하지 않는다. HTTP로만 부르고, 타입은 `contracts`의 JSON Schema에서 생성한다. 브라우저는 서버 API를 직접 부르지 않는다 (콘솔 서버가 중계, [ADR-0017](decisions/0017-web-nextjs-design-system.md)).
 - `center`, `extensions/*/service`, `extensions/*/worker`는 `core`를 import하지 않는다.
+- **Studio는 Center를 읽는다** (`studio/services.py` — C7 리소스 목록·Admin 공개키). 쓰지 않는다. 실행기는 Center를 부르지 않는다 ([ADR-0031](decisions/0031-runner-control-file.md)) — Studio는 실행기가 아니라 제 안에서 엔진을 돌리는 쪽이라 다르다.
 - 서비스 앱끼리 서로 import하지 않는다. 필요하면 HTTP로 부른다.
 - `core`는 Qt를 import하지 않는다. 화면은 `studio`, `bot_ui`의 몫. `worker`는 화면이 없다.
 - 제품 코드는 `spikes/`를 import하지 않는다.

@@ -110,6 +110,10 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 | `answer` | object | ✓ | 폼이 있으면 `{key: value}`. 없으면 `{"decision": "approve" \| "reject", "comment"?}` |
 
 - **Center가 폼으로 답을 검증한다** (필수·타입·선택지, `contracts.approvals.validate_answer`). 틀리면 422로 콘솔에 바로 보인다. 실행하는 쪽도 같은 함수로 한 번 더 검증한다.
+- **검증 전에 빈 칸을 기본값으로 채운다** (`contracts.approvals.apply_defaults`) — 콘솔 폼이 안 보낸 칸이 「필수인데 비었다」가 되지 않게.
+- **폼의 칸은 모두 변수가 된다** (`contracts.approvals.answer_variables`) — 실행하는 쪽이 답을 변수로 옮길 때 기본값으로, 그것도 없으면 **`None`**으로 채운다. 결재 창(CMN-01)이 빈 칸에 보내는 것과 같은 값이다.
+  - 빼 두면 BPM 프로세스가 그 칸의 이름을 쓸 수 없고(웹훅 `fields:[…]`·스크립트), 더 나쁘게는 **이름이 식 도우미로 떨어진다** — `기간`·`합계`처럼 겹치는 이름이면 변수가 아니라 **함수**가 잡혀 나간다. 식 쪽에서도 막는다 (호출형 도우미는 이름만으로 잡히지 않는다, [ADR-0025](../decisions/0025-expression-language.md)).
+  - **지나지 않은 결재의 칸은 채우지 않는다.** 그 칸은 애초에 없었으므로 그것을 가리키는 식은 그대로 실패해야 한다.
 
 ## 예시
 

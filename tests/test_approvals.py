@@ -16,6 +16,7 @@ from chaeksas.contracts import (
     ApprovalInfo,
     Form,
     FormField,
+    answer_variables,
     apply_defaults,
     request_id_for,
     validate_answer,
@@ -225,3 +226,40 @@ def test_apply_defaults_without_a_form_is_a_copy() -> None:
     answer = {"decision": "approve"}
     assert apply_defaults(None, answer) == answer
     assert apply_defaults(None, answer) is not answer
+
+
+
+# ─────────────────── 답을 변수로 (C6 — M5 조각 14에서 드러났다) ───────────────────
+
+
+def test_answer_variables_fills_every_field_of_the_form() -> None:
+    """폼의 칸은 **모두** 변수가 된다 — 기본값, 그것도 없으면 `None`이다.
+
+    빼 두면 BPM 프로세스가 그 이름을 쓸 수 없고, 더 나쁘게는 이름이 식 도우미로 떨어져
+    **함수**가 서비스 앱 본문에 실린다.
+    """
+    form = Form(fields=[
+        FormField(key="결정", label="결정", type="choice", required=True, choices=["승인", "반려"]),
+        FormField(key="의견", label="의견", type="text"),
+        FormField(key="기간", label="기간", type="number", default=90),
+    ])
+    found = answer_variables(form, {"결정": "승인"})
+    assert found == {"결정": "승인", "의견": None, "기간": 90}
+
+
+def test_answer_variables_does_not_touch_what_was_answered() -> None:
+    form = Form(fields=[FormField(key="기간", label="기간", type="number", default=90)])
+    assert answer_variables(form, {"기간": 30}) == {"기간": 30}
+    # **거짓 같은 값도 답이다** — 0이나 빈 글자를 기본값으로 덮지 않는다.
+    assert answer_variables(form, {"기간": 0}) == {"기간": 0}
+
+
+def test_answer_variables_without_a_form_is_a_copy() -> None:
+    """폼이 없으면 「승인 / 반려」 하나뿐이다 — 채울 칸이 없다."""
+    assert answer_variables(None, {"decision": "approve"}) == {"decision": "approve"}
+
+
+def test_a_filled_none_still_passes_validation_for_optional_fields() -> None:
+    """채운 `None`이 검증을 깨지 않는다 — 결재 창도 빈 칸을 `None`으로 보낸다 (CMN-01)."""
+    form = Form(fields=[FormField(key="의견", label="의견", type="text")])
+    assert validate_answer(form, answer_variables(form, {})) == []

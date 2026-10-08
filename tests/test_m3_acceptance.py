@@ -11,17 +11,15 @@
 
 from __future__ import annotations
 
-import json
 import os
 import re
-import threading
 from collections.abc import Iterator
 from dataclasses import replace
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
 import pytest
+from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -170,83 +168,9 @@ def _number(path: str) -> int:
     return int(found[0]) if found else 1
 
 
-def answer_for(wanted: dict[str, str]) -> dict[str, Any]:
-    """`results: {이름: 타입}`에 맞는 **아무 값** — 짜 둔 답이 없는 자리에서 쓴다."""
-    by_type: dict[str, Any] = {
-        "string": "스텁 답",
-        "number": 1,
-        "int": 1,
-        "bool": True,
-        "date": "2026-09-30",
-        "list": [],
-        "dict": {},
-    }
-    return {name: by_type.get(kind, "스텁 답") for name, kind in wanted.items()}
-
-
-class StubModel:
-    """OpenAI 호환 `/v1/chat/completions` 하나. **도구는 부르지 않고** 최종 JSON만 답한다."""
-
-    def __init__(self) -> None:
-        self.asked = 0
-        outer = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_POST(self) -> None:  # noqa: N802 — http.server가 정한 이름
-                length = int(self.headers.get("content-length", "0"))
-                body = json.loads(self.rfile.read(length) or b"{}")
-                outer.asked += 1
-                raw = json.dumps({
-                    "choices": [{"message": {"role": "assistant", "content": outer.reply(body)}}],
-                    "usage": {"prompt_tokens": 10, "completion_tokens": 10},
-                }).encode("utf-8")
-                self.send_response(200)
-                self.send_header("content-type", "application/json")
-                self.send_header("content-length", str(len(raw)))
-                self.end_headers()
-                self.wfile.write(raw)
-
-            def log_message(self, *_: object) -> None:
-                pass
-
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-
-    def reply(self, body: dict[str, Any]) -> str:
-        """물음에서 **받을 필드**와 **함께 온 값**을 읽어 답을 만든다."""
-        asked = "\n".join(m.get("content") or "" for m in body.get("messages", []))
-        line = re.search(r"JSON 객체 하나: (.+)", asked)
-        wanted = {}
-        for part in (line.group(1) if line else "").split(", "):
-            found = re.match(r"(.+?)\((.+?)\)$", part.strip())
-            if found:
-                wanted[found.group(1)] = found.group(2)
-        body_line = re.search(r"## 파라미터\n(.+)", asked)
-        try:
-            given = json.loads(body_line.group(1)) if body_line else {}
-        except ValueError:
-            given = {}
-        made = canned(wanted, given if isinstance(given, dict) else {})
-        return json.dumps(made if made is not None else answer_for(wanted), ensure_ascii=False)
-
-    def __enter__(self) -> StubModel:
-        self.thread.start()
-        return self
-
-    def __exit__(self, *_: object) -> None:
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=2)
-
-    @property
-    def base_url(self) -> str:
-        # `/v1/chat/completions`는 어댑터가 붙인다 (ADR-0027) — 여기는 주소 뿌리만.
-        return f"http://127.0.0.1:{self.server.server_address[1]}"
-
-
 @pytest.fixture(scope="module")
 def model() -> Iterator[StubModel]:
-    with StubModel() as made:
+    with StubModel(canned) as made:
         yield made
 
 

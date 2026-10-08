@@ -121,6 +121,53 @@ def test_the_engine_picks_where_to_answer(location: str, default: str, where: st
     assert requested(run)["where"] == where
 
 
+def form_process(fields: list[dict[str, Any]]) -> Any:
+    """결재 뒤에 그 칸 이름을 쓰는 그림 — 답하지 않은 칸이 변수가 되는지 본다."""
+    props = json.dumps({"title": "폼", "show": [], "fields": fields}, ensure_ascii=False)
+    return read_process(SHELL.format(body=(
+        '<bpmn:startEvent id="Start_1"/>'
+        f'<bpmn:userTask id="Approve"><bpmn:extensionElements><chk:approval>{props}</chk:approval>'
+        "</bpmn:extensionElements></bpmn:userTask>"
+        '<bpmn:scriptTask id="Task_Use" scriptFormat="chk-expr">'
+        "<bpmn:script>본 = 기간</bpmn:script></bpmn:scriptTask>"
+        '<bpmn:endEvent id="End_1"/>'
+        '<bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Approve"/>'
+        '<bpmn:sequenceFlow id="f2" sourceRef="Approve" targetRef="Task_Use"/>'
+        '<bpmn:sequenceFlow id="f3" sourceRef="Task_Use" targetRef="End_1"/>'
+    )))
+
+
+#: 답하지 않아도 되는 칸 하나 — 기본값이 있는 쪽과 없는 쪽.
+WITH_DEFAULT = [{"key": "기간", "label": "기간", "type": "number", "required": False, "default": 90}]
+WITHOUT_DEFAULT = [{"key": "기간", "label": "기간", "type": "number", "required": False}]
+
+
+def test_an_unanswered_field_with_a_default_becomes_a_variable() -> None:
+    """**Center와 같은 `apply_defaults`**를 엔진도 쓴다 (C6) — 두 쪽이 다른 값을 보지 않게."""
+    engine, run = waiting(form_process(WITH_DEFAULT))
+    (request_id,) = run.pendings
+    engine.answer(run, request_id, {}, answered_by="사람")
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["기간"] == 90
+    assert run.variables["본"] == 90
+
+
+def test_an_unanswered_field_without_a_default_becomes_none() -> None:
+    """기본값이 없는 선택 칸도 **변수가 된다** (`None`) — 결재 창이 보내는 것과 같은 값이다.
+
+    빼 두면 BPM 프로세스가 그 이름을 쓸 수 없고(BX-10의 웹훅이 `의견`을 보낸다), 더 나쁘게는
+    이름이 식 도우미로 떨어져 **함수**가 서비스 앱 본문에 실린다 (M5 조각 14).
+
+    **지나지 않은 결재의 칸은 채우지 않는다** — 그쪽은 그대로 실패해야 한다 (BX-33).
+    """
+    engine, run = waiting(form_process(WITHOUT_DEFAULT))
+    (request_id,) = run.pendings
+    engine.answer(run, request_id, {}, answered_by="사람")
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["기간"] is None
+    assert run.variables["본"] is None
+
+
 def test_a_confirmation_is_always_answered_in_the_field() -> None:
     """확인은 화면 앞 사람만 답한다 (C6) — `location: center`여도 현장이고, 검사가 알린다 (B12)."""
     process = approval_process(kind="manualTask", location="center")
