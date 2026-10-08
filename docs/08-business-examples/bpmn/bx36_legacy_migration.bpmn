@@ -83,7 +83,7 @@
     <bpmn:scriptTask id="Task_Split" name="예외 카드 고르기" scriptFormat="chk-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
-      <bpmn:script>카드값 = [표를사전(c) for c in 카드목록]
+      <bpmn:script>카드값 = [{r['항목']: r['값'] for r in c} for c in 카드목록]
 정상 = [c for c in 카드값 if 빈칸없음(c, ['이름', '연락처', '주소', '등급'])]
 예외번호 = [n for n, c in zip(고객번호목록, 카드값) if not 빈칸없음(c, ['이름', '연락처', '주소', '등급'])]
 수작업 = []</bpmn:script>

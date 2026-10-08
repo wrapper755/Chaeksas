@@ -99,6 +99,18 @@ def 펼치기(목록: Any) -> list[Any]:  # noqa: N802
     return out
 
 
+def 쪼개기(목록: Any, 크기: Any) -> list[list[Any]]:  # noqa: N802, N803
+    """목록을 `크기`씩 묶음으로 쪼갠다 (`펼치기`의 반대). 묶음 단위 반복에 쓴다.
+
+    마지막 묶음은 남은 만큼이고, 빈 목록은 빈 목록이다.
+    """
+    items = list(_rows(목록, what="쪼개기"))
+    size = int(크기)
+    if size < 1:
+        raise ValueError(f"쪼갤 크기는 1보다 작을 수 없다: {크기}")
+    return [items[start : start + size] for start in range(0, len(items), size)]
+
+
 # ─────────────────────────── 수 ───────────────────────────
 
 
@@ -241,6 +253,7 @@ BUSINESS_HELPERS: dict[str, Callable[..., Any]] = {
     "표를사전": 표를사전,
     "묶기": 묶기,
     "펼치기": 펼치기,
+    "쪼개기": 쪼개기,
     "나누기": 나누기,
     "비율": 비율,
     "빈칸없음": 빈칸없음,

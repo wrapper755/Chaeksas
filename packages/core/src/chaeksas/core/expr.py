@@ -4,20 +4,24 @@
 
 | | 어디에 쓰나 | 모양 |
 | --- | --- | --- |
-| `evaluate()` | 흐름 조건, `serviceCall.input`, `rule.input`, `call.input`, `loop.over` | 값 하나를 내는 식 |
+| `evaluate()` | 흐름 조건, `serviceCall.input`, `rule.input`, `call.input`, `loop.collection` | 값 하나를 내는 식 |
 | `run_script()` | `scriptTask`의 본문 | `변수 = 식` 여러 줄 (**대입문만**) |
 | `fill()` | `dataOutput.path`·`template`, `email.to`·`subject`·`body` | 텍스트 + `{변수}` (이름 하나만) |
 
 `eval`·`exec`을 쓰지 않는다. `ast`로 파싱해 **허용한 노드만** 통과시킨 뒤 직접 걸어 값을 낸다.
 점(`결과.지급`)은 **사전의 키**를 읽는다 — 파이썬 객체의 속성은 읽을 수 없다.
+
+파싱은 문법만 보지 않는다 — **도우미 호출의 인자 모양도 값 없이 본다** (`check_calls`, C14 B15).
 """
 
 from __future__ import annotations
 
 import ast
+import inspect
 import re
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 from chaeksas.core.helpers import HELPERS
@@ -109,6 +113,58 @@ def _check(tree: ast.AST, *, where: str | None, source: str) -> None:
             raise ExprError(f"밑줄로 시작하는 이름은 읽을 수 없다: {node.attr}", where=where, source=source)
         if isinstance(node, ast.Name) and node.id.startswith("__"):
             raise ExprError(f"쓸 수 없는 이름이다: {node.id}", where=where, source=source)
+        if isinstance(node, ast.keyword) and node.arg is None:
+            # `*`는 `Starred`가 허용 목록에 없어 이미 막힌다. `**`는 문법상 지나가므로 여기서 막는다 —
+            # 그냥 두면 `_Call`이 **조용히 버린다** (`if k.arg is not None`).
+            raise ExprError("사전 펼치기(`**`)는 쓸 수 없다", where=where, source=source)
+
+
+@lru_cache(maxsize=256)
+def _signature(helper: Callable[..., Any]) -> inspect.Signature | None:
+    """도우미의 서명. 들여다볼 수 없으면 `None` (C 내장은 `ValueError`를 낸다)."""
+    try:
+        return inspect.signature(helper)
+    except (TypeError, ValueError):
+        return None
+
+
+def check_calls(
+    tree: ast.AST,
+    *,
+    where: str | None = None,
+    source: str = "",
+    helpers: Mapping[str, Any] = HELPERS,
+) -> None:
+    """도우미 호출의 **인자 모양**을 값 없이 본다 (C14 B15).
+
+    이름만 맞으면 지나가던 자리다 — `세기(전체, '주제')`·`비율(전체, 감성='부정')`처럼 **부를 수
+    없는 호출**이 문법 검사와 시험을 모두 지나 실행할 때야 터졌다 (BX-35).
+
+    세 가지는 보지 않는다.
+
+    1. **허용 목록에 없는 이름** — 툴팩이 도우미를 더할 수 있다. 부를 때 `_Call`이 막는다.
+    2. **인자를 몇 개든 받거나 서명을 들여다볼 수 없는 도우미** (`min`·`zip` 같은 파이썬 내장).
+    3. **펼치기(`*`·`**`)가 있는 호출** — 몇 개를 넘기는지 글로 셀 수 없다. 식 문법에는 아예
+       없으니(`_check`가 막는다) 날 AST를 주는 다른 부르는 쪽을 위한 대비다.
+    """
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            continue
+        name = node.func.id
+        helper = helpers.get(name)
+        signature = _signature(helper) if callable(helper) else None
+        if signature is None:
+            continue
+        if any(isinstance(a, ast.Starred) for a in node.args) or any(k.arg is None for k in node.keywords):
+            continue
+        try:
+            signature.bind(*[None] * len(node.args), **{k.arg: None for k in node.keywords if k.arg})
+        except TypeError as e:
+            raise ExprError(
+                f"`{name}(…)`을 그렇게 부를 수 없다: {e} (쓰는 법: `{name}({', '.join(signature.parameters)})`)",
+                where=where,
+                source=source,
+            ) from e
 
 
 @dataclass
@@ -362,7 +418,7 @@ class _Walker:
 
 
 def parse(source: str, *, where: str | None = None) -> ast.Expression:
-    """식을 파싱하고 허용 목록으로 검사한다 (값은 내지 않는다 — 검사·Studio용)."""
+    """식을 파싱하고 허용 목록·도우미 호출 모양으로 검사한다 (값은 내지 않는다 — 검사·Studio용)."""
     text = source.strip()
     if not text:
         raise ExprError("식이 비어 있다", where=where)
@@ -371,6 +427,7 @@ def parse(source: str, *, where: str | None = None) -> ast.Expression:
     except SyntaxError as e:
         raise ExprError(f"식 문법이 틀렸다: {e.msg}", where=where, source=source) from e
     _check(tree, where=where, source=source)
+    check_calls(tree, where=where, source=source)
     return tree
 
 
@@ -395,6 +452,7 @@ def parse_script(source: str, *, where: str | None = None) -> list[ast.Assign]:
     except SyntaxError as e:
         raise ExprError(f"스크립트 문법이 틀렸다: {e.msg}", where=where, source=source) from e
     _check(tree, where=where, source=source)
+    check_calls(tree, where=where, source=source)
 
     out: list[ast.Assign] = []
     for statement in tree.body:
@@ -474,6 +532,7 @@ __all__ = [
     "TEMPLATE_RE",
     "ExprError",
     "Scope",
+    "check_calls",
     "evaluate",
     "fill",
     "parse",

@@ -288,7 +288,7 @@ class MainWindow(QMainWindow):
             return self.properties.apply()
         return True
 
-    # ── 실행 전 검사 (B1~B14) ──
+    # ── 실행 전 검사 (B1~B15) ──
 
     def run_preflight(self) -> None:
         if self.process is None or self.definition is None:

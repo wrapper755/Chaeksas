@@ -572,7 +572,7 @@ AI·메시지 — 서버.
 | `Start` | 매주 월요일 | 시작 이벤트 | 타이머 `0 7 * * 1` | Task_Range |
 | `Task_Range` | 기간 정하기 | 스크립트 | `시작일 = 날짜더하기(오늘, -7)` | Task_Fetch |
 | `Task_Fetch` | 지난주 VOC | 서비스 앱 태스크 | `ext-helpdesk`.`export_tickets` · 입력 since → VOC | Task_Chunk |
-| `Task_Chunk` | 50건씩 묶기 | 스크립트 | `묶음 = 나누기(VOC, 50)` | Task_Analyze |
+| `Task_Chunk` | 50건씩 묶기 | 스크립트 | `묶음 = 쪼개기(VOC, 50)` | Task_Analyze |
 | `Task_Analyze` | 묶음 분석 | AI 태스크 | llm · 결과 `분석`:list · 반복(병렬) `묶음`→`분석묶음` | Task_Merge |
 | `Task_Merge` | 합치고 세기 | 스크립트 | `전체 = 펼치기(분석묶음)` … | Task_Brief |
 | `Task_Brief` | 경영진 요약 | AI 태스크 | llm · 결과 `요약`:string | Task_Send |
@@ -668,7 +668,7 @@ API도 내보내기 기능도 없는 오래된 사내 데스크톱 프로그램�
 | --- | --- | --- | --- | --- |
 | `Start` | 묶음 시작 | 시작 이벤트 | — | Task_Read |
 | `Task_Read` | 카드 읽기 | UI 태스크 | 화면 `legacy.customer.card` · fill `search.no`, click `search.go`, read_table `card.fields` · 반복 `고객번호목록` | Task_Split |
-| `Task_Split` | 예외 카드 고르기 | 스크립트 | `카드값 = [표를사전(c) for c in 카드목록]` … | Task_ReadOdd |
+| `Task_Split` | 예외 카드 고르기 | 스크립트 | `카드값 = [{r['항목']: r['값'] for r in c} for c in 카드목록]` … | Task_ReadOdd |
 | `Task_ReadOdd` | 예외 카드 읽기 (자율) | AI 태스크 | desktop · 결과 `카드`:dict · 반복(차례) `예외번호`→`예외카드` | Task_Import |
 | `Task_OddFail` | 예외는 사람에게 | 스크립트 | `예외카드 = []` … | Task_Import |
 | `Task_Import` | CRM에 넣기 | 서비스 앱 태스크 | `crm`.`upsert_customers` · 입력 customers → 넣음 | End |

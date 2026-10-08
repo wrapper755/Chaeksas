@@ -63,7 +63,7 @@
     <bpmn:scriptTask id="Task_Chunk" name="50건씩 묶기" scriptFormat="chk-expr">
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
-      <bpmn:script>묶음 = 나누기(VOC, 50)</bpmn:script>
+      <bpmn:script>묶음 = 쪼개기(VOC, 50)</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Analyze" name="묶음 분석">
       <bpmn:extensionElements>
@@ -94,8 +94,8 @@
         <bpmn:targetRef>Data_Detail</bpmn:targetRef>
       </bpmn:dataOutputAssociation>
       <bpmn:script>전체 = 펼치기(분석묶음)
-주제별 = 세기(전체, '주제')
-부정비율 = 비율(전체, 감성='부정')</bpmn:script>
+주제별 = {주제: 세기(골라내기(전체, '주제', 주제)) for 주제 in 묶기(전체, '주제')}
+부정비율 = 비율(세기(골라내기(전체, '감성', '부정')), 세기(전체))</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Brief" name="경영진 요약">
       <bpmn:extensionElements>
