@@ -788,11 +788,16 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
     return extension(store, manifest.id), True
 
 
-def revoke_extension(store: Store, raw: dict[str, Any]) -> ExtensionResource:
-    """`DELETE /resources/extensions` — `extension_revoke` 봉투 (C13·C2). **되살릴 수 없다.**
+def revoke_extension(
+    store: Store, raw: dict[str, Any], *, expect_id: str | None = None
+) -> ExtensionResource:
+    """`DELETE /resources/extensions[/{id}]` — `extension_revoke` 봉투 (C13·C2).
 
-    **쓰는 Bot이 있어도 막지 않는다** — 정의에 문제가 있어 거두는 일이라, 쓰는 쪽이 있다고
-    남겨 두면 그게 더 위험하다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).
+    **쓰는 Bot이 있어도 막지 않는다** (C13) — 서비스 앱 등록 해제(`in_use`)와 다르다. 그쪽은
+    장부 정리지만 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라, 쓰는 쪽이 있을 때
+    더 거둬야 한다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).
+
+    경로에 `{id}`를 적었으면 봉투와 맞는지 본다 — **봉투가 원본**이고 경로는 거들 뿐이다.
     """
     from chaeksas.center.api.signing import admin_keys  # noqa: PLC0415
     from chaeksas.contracts.signing import verify  # noqa: PLC0415
@@ -801,6 +806,12 @@ def revoke_extension(store: Store, raw: dict[str, Any]) -> ExtensionResource:
     _refuse(verify(envelope, keys=admin_keys(store), expect_kind="extension_revoke"), status=403)
 
     claim = envelope.payload
+    if expect_id is not None and str(claim.get("id")) != expect_id:
+        raise ApiError(
+            400,
+            "bad_envelope",
+            f"경로의 확장({expect_id})과 봉투의 확장({claim.get('id')})이 다르다",
+        )
     found = store.row(
         "SELECT * FROM extensions WHERE id = ? AND version = ?",
         (claim.get("id"), claim.get("version")),

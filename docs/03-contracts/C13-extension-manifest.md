@@ -11,7 +11,9 @@
 
 > 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`가 **서명 봉투로만** 받고(C2 `extension`·`extension_revoke`, E6), E1·E2·E3을 검사하며, 정의와 봉투를 **그대로** 보관해 실행하는 쪽이 다시 검증할 수 있게 한다. `chk-admin sign-extension`·`revoke-extension`이 봉투 파일을 만들고, CON-07 「확장」 탭에서 올린다. **E4·E8은 외부 확장으로 띄울 수 없다** — `task_types`·`agent_environments`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
 >
-> `contributes.resources[].catalog_url`을 Center가 읽는 일은 아직이다 — **내장 확장의 정의가 Center에 없다** (C7 상태줄).
+> `contributes.resources[].catalog_url`은 Center가 읽어 쌓는다 (M5 조각 10) — 내장 확장의 정의가 Center에 없어 `catalog_url`을 찾을 길이 없던 구멍은 **C11에 카탈로그 칸을 더해** 메웠다 (C11 §모델 연결 아래 `resources`).
+>
+> **HTTP 어댑터 해석기(§4-2·§4-3)가 돈다** (M5 조각 11) — `chaeksas.core.http_adapter`. 템플릿은 위치마다 다르게 채우고(경로는 조각 하나로 퍼센트 인코딩, 헤더는 제어 문자·`Authorization`/`Host`/`Cookie` 거부, 본문은 **칸 전체가 슬롯이면 값 그대로**), 나가기 전에 `allowed_hosts` → **DNS 한 번 풀어 그 IP로** → 사설·루프백 → https를 본다. 리다이렉트를 따라가지 않고, `max_response_kb`는 **읽는 동안** 끊는다. 키는 참조 이름으로 받아 이 PC에서 풀고 **ASCII가 아니면 거절한다**(헤더에 넣을 수 없다). `AdapterCaller`가 `ServiceCaller` 자리에 들어가므로 **엔진은 서비스 앱인지 외부 앱인지 모른다**. 실행하는 쪽이 정의를 어디서 얻는지(C7 `GET /resources/extensions/{id}` + 봉투 재검증)는 다음 조각이다.
 
 ## 목적
 
@@ -42,9 +44,11 @@
 | `POST /api/v1/resources/extensions` `{definition, envelope}` | 관리자 토큰 + **C2 `extension` 봉투** | 외부 확장 등록 |
 | `GET /api/v1/resources?type=extension` | 읽기·관리자 토큰, Studio·Bot UI·서버 실행기 키 (C5 권한표) | 목록 |
 | `GET /api/v1/resources/extensions/{id}` | 같음 | 하나 (외부면 정의와 봉투 포함) |
-| `DELETE /api/v1/resources/extensions/{id}` | 관리자 토큰 + C2 `extension_revoke` 봉투 | 해제. 쓰는 Bot이 있으면 409 `in_use` |
+| `DELETE /api/v1/resources/extensions[/{id}]` | 관리자 토큰 + C2 `extension_revoke` 봉투 | 해제. **쓰는 Bot이 있어도 막지 않는다** (아래) |
 
 - **실행하는 쪽은 받은 외부 정의의 봉투를 다시 검증한다** (C2 V1~V3, `definition_hash` 일치). 검증되지 않은 정의는 쓰지 않는다.
+- **해제는 쓰는 Bot이 있어도 막지 않는다.** 서비스 앱 등록 해제(C7 `in_use`)와 다르다 — 그쪽은 운영자의 장부 정리지만, 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이다 (Admin 서명이 필요한 이유도 그것이다). 쓰는 Bot이 있다고 남겨 두면 그게 더 위험하다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07). 철회된 `id`·`version`은 **되살아나지 않는다** — 고치려면 버전을 올린다.
+- 봉투에 `id`·`version`이 들어 있으므로 경로의 `{id}`는 **적어도 되고 안 적어도 된다**. 적었는데 봉투와 다르면 거부한다.
 - 같은 `id`·`version`·같은 내용이면 200, 같은 `id`·`version`인데 내용이 다르면 409 `version_conflict`. 내용을 바꾸려면 버전을 올린다.
 - **이름 공간은 하나다.** 확장 `id`는 서비스 앱 `app_id`와 같은 공간을 쓴다. 이미 있는 확장·서비스 앱과 `id`가 같으면 409 `id_conflict`.
 - BPM 프로세스 매니페스트(C1)의 `requires.extensions[]`는 외부 확장이면 `definition_hash`까지 고정한다. 정의가 바뀌면 Bot을 다시 승인·배포해야 한다.
@@ -300,6 +304,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 | 2026-10-05 | 2 | `agent_environments`(AI 태스크의 `web`·`desktop` 환경)를 더했다. 모르는 열쇠는 무시하므로 기존 호스트는 영향이 없다 | 0037 |
 | 2026-10-01 | 1 | 초안 | 0018 |
 | 2026-10-01 | 1 | 검토 반영 (아래) | — |
+| 2026-10-08 | 2 | 외부 확장 **해제가 `in_use`로 막히지 않는다**고 바로잡았다 — 정의에 문제가 있어 거두는 보안 동작이라 쓰는 Bot이 있을 때 더 거둬야 한다. 해제 경로의 `{id}`는 선택이다 (봉투가 원본). 구현하며 드러났다 | 0018 |
 | 2026-10-02 | 1 | 구현하며 명시한 것: `entry` 형식과 그 확장 패키지 안으로 제한, 예시의 편집기·유틸리티 entry를 `client`로 (ADR-0018 §6 폴더 구성) | 0018 |
 | 2026-10-02 | 1 | 설치 파일로 묶어 보고 명시한 것: `extension.json`은 파이썬 패키지 안 | 0024 |
 | 2026-10-05 | 2 | 예약 설정 키에 `storage.dir`을 더했다 — 확장이 자기 파일을 둘 폴더 (밀린 등록 큐 등) | 0018 |
