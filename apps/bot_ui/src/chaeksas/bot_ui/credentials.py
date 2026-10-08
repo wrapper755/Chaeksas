@@ -24,6 +24,8 @@ ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
 
 #: 서비스 앱 키는 **참조 이름**으로 저장한다 (BUI-10, ADR-0013 §3).
 SERVICE_APP_PREFIX = "svc:"
+#: 서비스 앱 키를 환경변수로도 읽는다 (개발·CI). Studio의 `CHK_STUDIO__SVC__…`와 같은 규칙.
+ENV_SERVICE_APP_PREFIX = "CHK_BOT_UI__SVC__"
 
 #: 모델 키 (ADR-0027). 실행기에게는 **환경변수로** 건넨다 (명령줄에 두지 않는다).
 LLM_API_KEY = "llm-api-key"
@@ -134,8 +136,13 @@ class Credentials:
         self.set(f"{EXTENSION_PREFIX}{extension_id}:{key}", value.strip())
 
     def service_app_key(self, ref: str) -> str | None:
-        """BPM 프로세스 속성의 **키 참조 이름**으로 찾는다 (ADR-0013 §3)."""
-        return self.get(f"{SERVICE_APP_PREFIX}{ref}")
+        """BPM 프로세스 속성의 **키 참조 이름**으로 찾는다 (ADR-0013 §3).
+
+        읽기는 **환경변수가 먼저다** — `CHK_BOT_UI__SVC__<참조>` (개발·CI). Studio와 같은 규칙.
+        """
+        return self.get(
+            f"{SERVICE_APP_PREFIX}{ref}", env=f"{ENV_SERVICE_APP_PREFIX}{_env_name(ref)}"
+        )
 
     def set_service_app_key(self, ref: str, value: str) -> None:
         self.set(f"{SERVICE_APP_PREFIX}{ref}", value.strip())
@@ -143,6 +150,7 @@ class Credentials:
 
 __all__ = [
     "CENTER_API_KEY",
+    "ENV_SERVICE_APP_PREFIX",
     "ENV_EXTENSION_PREFIX",
     "EXTENSION_PREFIX",
     "ENV_CENTER_API_KEY",

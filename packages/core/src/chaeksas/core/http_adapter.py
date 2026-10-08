@@ -501,10 +501,28 @@ def _idempotency_key(call: OpCall) -> str:
     return f"{call.operation}:{call.run_id}:{call.node_id}:{call.node_instance}:{call.attempt}:{call.call_seq}"
 
 
+@dataclass(frozen=True)
+class RoutedCaller:
+    """외부 확장은 어댑터로, 나머지는 C11로 보낸다.
+
+    **엔진은 어느 쪽인지 모른다** — `chk:serviceCall`은 `app_id`만 적고, 이름 공간이 하나라
+    (C13 「전송」) 그 id가 어느 길로 가는지는 여기서 갈린다.
+    """
+
+    adapter: AdapterCaller
+    others: Any  # ServiceCaller (C11 `HttpServiceCaller`)
+
+    def call(self, request: OpCall) -> OpOutcome:
+        side = self.adapter if self.adapter.knows(request.app_id) else self.others
+        found: OpOutcome = side.call(request)
+        return found
+
+
 __all__ = [
     "AdapterCaller",
     "AdapterError",
     "Resolved",
+    "RoutedCaller",
     "fill_body",
     "fill_header",
     "fill_path",

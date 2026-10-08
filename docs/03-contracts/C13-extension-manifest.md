@@ -13,7 +13,9 @@
 >
 > `contributes.resources[].catalog_url`은 Center가 읽어 쌓는다 (M5 조각 10) — 내장 확장의 정의가 Center에 없어 `catalog_url`을 찾을 길이 없던 구멍은 **C11에 카탈로그 칸을 더해** 메웠다 (C11 §모델 연결 아래 `resources`).
 >
-> **HTTP 어댑터 해석기(§4-2·§4-3)가 돈다** (M5 조각 11) — `chaeksas.core.http_adapter`. 템플릿은 위치마다 다르게 채우고(경로는 조각 하나로 퍼센트 인코딩, 헤더는 제어 문자·`Authorization`/`Host`/`Cookie` 거부, 본문은 **칸 전체가 슬롯이면 값 그대로**), 나가기 전에 `allowed_hosts` → **DNS 한 번 풀어 그 IP로** → 사설·루프백 → https를 본다. 리다이렉트를 따라가지 않고, `max_response_kb`는 **읽는 동안** 끊는다. 키는 참조 이름으로 받아 이 PC에서 풀고 **ASCII가 아니면 거절한다**(헤더에 넣을 수 없다). `AdapterCaller`가 `ServiceCaller` 자리에 들어가므로 **엔진은 서비스 앱인지 외부 앱인지 모른다**. 실행하는 쪽이 정의를 어디서 얻는지(C7 `GET /resources/extensions/{id}` + 봉투 재검증)는 다음 조각이다.
+> **HTTP 어댑터 해석기(§4-2·§4-3)가 돈다** (M5 조각 11) — `chaeksas.core.http_adapter`. 템플릿은 위치마다 다르게 채우고(경로는 조각 하나로 퍼센트 인코딩, 헤더는 제어 문자·`Authorization`/`Host`/`Cookie` 거부, 본문은 **칸 전체가 슬롯이면 값 그대로**), 나가기 전에 `allowed_hosts` → **DNS 한 번 풀어 그 IP로** → 사설·루프백 → https를 본다. 리다이렉트를 따라가지 않고, `max_response_kb`는 **읽는 동안** 끊는다. 키는 참조 이름으로 받아 이 PC에서 풀고 **ASCII가 아니면 거절한다**(헤더에 넣을 수 없다). `AdapterCaller`가 `ServiceCaller` 자리에 들어가므로 **엔진은 서비스 앱인지 외부 앱인지 모른다**.
+>
+> **실행하는 쪽의 연결도 돈다** (M5 조각 12) — Bot UI가 Bot을 띄우기 **전에** `GET /resources?type=service_app`(주소)와 `GET /resources/extensions/{id}`(정의·봉투)를 읽어 **파일로** 실행기에 넘기고(`apps/bot_ui/services.py`), 실행기가 `chaeksas.core.app_directory`로 **봉투를 다시 검증한다**(E6 — 검증되지 않은 정의는 쓰지 않고 사유를 남긴다). **패키지가 고정한 `definition_hash`와 대조해**(C1) 다르면 **시작조차 하지 않는다** — 중간에 알면 이미 한 일을 되돌릴 수 없고, 정의가 바뀌었으면 승인·배포를 다시 받아야 한다. **닿지 못하면 들고 있던 것을 쓰고**(ADR-0007), **404는 버린다**(철회는 보안 동작이라 모르고 멈추는 것보다 철회된 정의로 도는 것이 나쁘다). 실행기는 Center를 부르지 않는다 (ADR-0031).
 
 ## 목적
 

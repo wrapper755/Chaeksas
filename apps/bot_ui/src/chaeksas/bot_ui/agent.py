@@ -27,6 +27,7 @@ from chaeksas.bot_ui.deploy import Deployer
 from chaeksas.bot_ui.runner import Launcher, Running
 from chaeksas.bot_ui.runtimes import BUSY, RESERVED, HostSettings, RuntimeUnavailable, runtime_ids_of
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
+from chaeksas.bot_ui.services import Services
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
 from chaeksas.contracts import SERVICE_URL_ENV, SERVICE_URL_SETTING, STORAGE_DIR_SETTING
@@ -51,6 +52,7 @@ from chaeksas.contracts.bot_ui import (
 from chaeksas.core import requests
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.processes import Supervisor
+from chaeksas.core.run_log import run_dir
 from chaeksas.core.run_shipping import HttpUploader, Shipment
 from chaeksas.core.run_shipping import Queue as RunQueue
 from chaeksas.extension_api import HOST_BOT_UI, ExtensionContext
@@ -241,14 +243,43 @@ class Agent:
             table[found.id] = self.extension_values(found.id, runtime_ids=runtime_ids)
         return table
 
+    def run_services(self, bot: InstalledBot, run_id: str) -> Path | None:
+        """실행기에게 줄 **바깥 앱 명부** (C7 주소 + 외부 확장 정의·봉투, C13 「전송」).
+
+        Bot을 띄우기 **전에** 받는다 — 실행기는 Center를 부르지 않는다 (ADR-0031). 닿지 못하면
+        들고 있던 것을 쓰고(ADR-0007), 받지 못한 사유는 기록에 남는다. **봉투 검증은 실행기가**
+        한다 (C13 — 파일이 손을 타도 검증되지 않은 정의는 쓰이지 않는다).
+        """
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        try:
+            client = self.client()
+        except KeyRejected:
+            # 키가 없다 — **들고 있던 것으로 간다.** 키 문제는 트레이·BUI-03이 이미 말한다.
+            client = None
+        found = Services(data_dir=data_dir(), client=client)
+        made = found.write_for(
+            bot.manifest,
+            path=run_dir(data_dir()) / f"{run_id}.services.json",
+            # Admin 공개키는 하트비트로 온 것이다 (C4 `admin_keys`) — 배포 검증과 같은 창고.
+            keys=list(self.store.state.admin_keys),
+        )
+        for why in found.problems:
+            log.warning("바깥 앱 명부: %s", why)
+        return made
+
     def service_url(self, extension_id: str) -> str | None:
         """확장의 서버 부분 주소. **출처는 하나다** (C13) — Center 리소스 등록이 있으면 그것,
         없으면 정의의 `service.base_url`.
-
-        > 상태: Center 리소스 목록(C7)은 M5다. 그때까지는 정의의 값을 쓴다.
         """
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
         found = self.host.get(extension_id) if self.host is not None else None
         service = found.manifest.service if found is not None else None
+        # 들고 있는 명부를 먼저 본다 — **Center를 여기서 부르지 않는다** (화면마다 묻지 않게).
+        registered = Services(data_dir=data_dir()).base_url_of(extension_id=extension_id)
+        if registered:
+            return registered
         return service.base_url if service is not None else None
 
     def storage_dir(self, extension_id: str) -> Path:
@@ -698,6 +729,7 @@ class Agent:
         inputs = dict(self.store.state.inputs.get(item.queue_id) or {})
         extensions = self.run_extensions(bot)
         run_id = new_run_id()
+        services_path = self.run_services(bot, run_id)
         held = self.reserve_runtimes(bot, run_id)
         if held is None:
             # 다른 쪽(셀렉터 등록·Studio 시험)이 Worker를 쓰는 중 — **강제로 닫지 않고 기다린다**
@@ -715,6 +747,7 @@ class Agent:
                 job_id=item.job_id,
                 run_id=run.run_id,
                 extensions=extensions,
+                services_path=services_path,
                 # `location: follow` 결재를 어디서 답하나 — BUI-03 「원격 결재」 (ADR-0038).
                 approval_where="center" if self.settings.remote_approval else "field",
             )
