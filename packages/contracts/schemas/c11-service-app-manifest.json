@@ -102,6 +102,38 @@
       ],
       "title": "Operation",
       "type": "object"
+    },
+    "ResourceCatalog": {
+      "additionalProperties": true,
+      "description": "이 앱이 **자기 기여 자원 카탈로그**를 어디서 주는지 (C7 §리소스 모으는 방식).\n\n확장 정의(C13 `contributes.resources`)에도 같은 것이 있지만, **내장·사내 확장의 정의는\nCenter에 없다** — 설치 파일에 들어 있고 Center는 실행하는 쪽의 보고로 `{id, version}`만\n안다. 그래서 **서버 부분이 자기 카탈로그를 알린다**: 서버 쪽 자원을 가장 잘 아는 것이\n서버 부분이고, Center는 이미 `/manifest`를 읽고 있어 길을 새로 내지 않는다.\n\n`catalog_url`은 이 앱의 `base_url` 기준 상대 경로다 (주소의 유일한 출처는 Center의 리소스\n등록이다 — C13 `service.base_url`). 응답 형식은 C13 §5 `Catalog`다.",
+      "properties": {
+        "catalog_url": {
+          "title": "Catalog Url",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "catalog_url"
+      ],
+      "title": "ResourceCatalog",
+      "type": "object"
     }
   },
   "$id": "urn:chaeksas:contracts:c11-service-app-manifest",
@@ -140,6 +172,13 @@
         "$ref": "#/$defs/Operation"
       },
       "title": "Operations",
+      "type": "array"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/ResourceCatalog"
+      },
+      "title": "Resources",
       "type": "array"
     },
     "schema": {

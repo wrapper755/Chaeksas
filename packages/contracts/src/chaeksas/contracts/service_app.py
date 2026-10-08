@@ -96,6 +96,23 @@ class ExtensionRef(ContractModel):
     version: str
 
 
+class ResourceCatalog(ContractModel):
+    """이 앱이 **자기 기여 자원 카탈로그**를 어디서 주는지 (C7 §리소스 모으는 방식).
+
+    확장 정의(C13 `contributes.resources`)에도 같은 것이 있지만, **내장·사내 확장의 정의는
+    Center에 없다** — 설치 파일에 들어 있고 Center는 실행하는 쪽의 보고로 `{id, version}`만
+    안다. 그래서 **서버 부분이 자기 카탈로그를 알린다**: 서버 쪽 자원을 가장 잘 아는 것이
+    서버 부분이고, Center는 이미 `/manifest`를 읽고 있어 길을 새로 내지 않는다.
+
+    `catalog_url`은 이 앱의 `base_url` 기준 상대 경로다 (주소의 유일한 출처는 Center의 리소스
+    등록이다 — C13 `service.base_url`). 응답 형식은 C13 §5 `Catalog`다.
+    """
+
+    type: str  # 자원 종류 (예: ui_page). 확장이 정한다
+    catalog_url: str  # `base_url` 기준 상대 경로 (`/`로 시작)
+    label: str | None = None  # 화면에 보일 이름 (CON-07 탭 제목)
+
+
 class ServiceAppManifest(SchemaVersioned):
     """`GET /manifest` — 인증 없음 (비밀이 없다). Center가 리소스 목록에 쓴다 (C7)."""
 
@@ -106,6 +123,8 @@ class ServiceAppManifest(SchemaVersioned):
     console_url: str
     operations: list[Operation] = Field(default_factory=list)
     extension: ExtensionRef | None = None
+    #: 이 앱이 주는 기여 자원 카탈로그 (C7 — Center가 읽어 리소스 목록에 싣는다).
+    resources: list[ResourceCatalog] = Field(default_factory=list)
 
     def operation(self, name: str) -> Operation | None:
         return next((o for o in self.operations if o.name == name), None)

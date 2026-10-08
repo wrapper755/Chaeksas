@@ -56,6 +56,15 @@
 | `console_url` | str | ✓ | 관리 콘솔 주소 (CON-07 링크) |
 | `extension` | object | | `{id, version}`. 이 서비스 앱이 어느 확장의 서버 부분인가 (C13). 내장·사내 확장이면 넣는다 |
 | `operations` | Operation[] | ✓ | 작업 목록 |
+| `resources` | ResourceCatalog[] | | 이 앱이 주는 **기여 자원 카탈로그** (C7). 아래 |
+
+| ResourceCatalog 필드 | 타입 | 뜻 |
+| --- | --- | --- |
+| `type` | str | 자원 종류 (예: `ui_page`). 확장이 정한다 |
+| `catalog_url` | str | 이 앱의 `base_url` 기준 **상대 경로** (`/`로 시작). 응답 형식은 C13 §5 `Catalog` |
+| `label` | str | 화면에 보일 이름 (CON-07 탭 제목). 없으면 `type`을 쓴다 |
+
+**왜 manifest가 이것을 알리나.** 확장 정의(C13 `contributes.resources`)에도 같은 것이 있지만 **내장·사내 확장의 정의는 Center에 없다** — 설치 파일에 들어 있고 Center는 실행하는 쪽의 보고로 `{id, version}`만 안다 (C7 §리소스 모으는 방식). 서버 쪽 자원을 가장 잘 아는 것은 서버 부분이고, Center는 이미 `/manifest`를 읽으므로 길을 새로 내지 않는다. 외부 확장은 정의가 Center에 있으니 거기서 읽는다 — 두 출처가 같은 모양이다.
 
 | Operation 필드 | 타입 | 뜻 |
 | --- | --- | --- |
@@ -233,4 +242,5 @@ Content-Type: application/json
 | 2026-10-01 | 1 | 초안 (키는 앱 관리 콘솔 발급·자체 검증, 멱등 키, `server_ok`) | 0010, 0013, 0015 |
 | 2026-10-01 | 1 | 검토 반영: 멱등 키에 `operation`·`node_instance` 추가와 본문 충돌 409, 폴백은 키가 자율 수행을 허용할 때만, 키 앞자리 규칙, usage 이름 통일, 보관 7일 | — |
 | 2026-10-01 | 1 | 확장 반영: manifest `extension` 선택 필드 | 0018 |
+| 2026-10-08 | 1 | manifest에 `resources`(기여 자원 카탈로그)를 더했다 — **내장 확장의 정의가 Center에 없어** `catalog_url`을 찾을 길이 없었다 (C7 「UI 화면」 탭에 데이터가 닿지 못했다). 선택 칸이라 기존 앱은 영향이 없다 | 0018 |
 | 2026-10-01 | 1 | 확장 검토 반영: 멱등 키에 `call_seq` | 0018 |

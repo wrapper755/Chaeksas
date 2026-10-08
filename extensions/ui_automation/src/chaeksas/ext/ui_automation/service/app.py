@@ -34,6 +34,7 @@ from chaeksas.contracts.service_app import (
     ExtensionRef,
     Operation,
     OpRequest,
+    ResourceCatalog,
     ServiceAppManifest,
 )
 from chaeksas.ext.ui_automation.contracts.plan import (
@@ -62,6 +63,10 @@ DEFAULT_CONSOLE_PORT = 8001
 
 #: 셀렉터가 나가는 작업 (C9) — 이 권한이 없으면 403.
 REGISTRY_WRITE = "registry_write"
+
+#: 공개 카탈로그 경로 (C13 §5). **manifest가 알리는 것과 실제 경로가 한 상수에서 온다** —
+#: 두 곳에 적으면 어긋나고, 어긋나면 Center가 404를 받는다.
+CATALOG_PATH = "/v1/catalog"
 
 OPERATIONS = (
     Operation(
@@ -128,6 +133,10 @@ def manifest(console_url: str = "") -> ServiceAppManifest:
         console_url=console_url or _env("CONSOLE_URL") or f"http://localhost:{DEFAULT_CONSOLE_PORT}",
         operations=list(OPERATIONS),
         extension=ExtensionRef(id=APP_ID, version=VERSION),
+        # **우리 카탈로그를 알린다** (C11 `resources`, C7) — 내장 확장의 정의는 Center에
+        # 없으니 서버 부분이 자기 자원을 알려야 CON-07 「UI 화면」 탭에 뜬다. 아래
+        # `/v1/catalog`가 그 응답이다 (C13 §5, 셀렉터 없음).
+        resources=[ResourceCatalog(type="ui_page", catalog_url=CATALOG_PATH, label="UI 화면")],
     )
 
 
@@ -358,7 +367,7 @@ def create(
     )
     app.state.service = service
 
-    @app.get("/v1/catalog")
+    @app.get(CATALOG_PATH)
     def catalog() -> Any:
         """C13 §5 공통 카탈로그. **인증 없음, 셀렉터 없음** (C9)."""
         return service.registry.catalog()
