@@ -537,3 +537,74 @@ def test_available_vars_covers_every_example_without_crashing() -> None:
         process = read_process(path.read_bytes())
         found = available_vars(process)
         assert set(found) == {n.id for n in process.all_nodes()}
+
+
+# ─────────────────── B11을 흘려보내지 않는다 (ADR-0039) ───────────────────
+
+#: 업무 예제 50개에 **지금 떠 있는** B11 경고. `(예제, 노드, 변수들)`.
+#:
+#: 갈래는 둘뿐이다 — **일부러 남긴 것**(그 예제의 「배운 것」이 적고 있다)과 **아직 가려내지
+#: 않은 것**. 둘째는 줄여 가야 하는 빚이다: 하나씩 보아 거짓 양성이면 `available_vars`를
+#: 고치고, 진짜면 예제를 고치거나 「배운 것」에 적어 첫째로 옮긴다.
+#:
+#: **목록에 없는 경고가 생기면 이 시험이 깨진다.** BX-33이 그렇게 새어 나갔다 — 생성기의
+#: 좁은 검사(템플릿 `{변수}`만 본다)를 지나 M5 인수 시험에서야 드러났다 (ADR-0039).
+KNOWN_B11: dict[tuple[str, str], tuple[str, ...]] = {
+    # 일부러 남긴 것 — 검사가 도는 것을 보여 주는 예제다.
+    ("bx33_access_request", "Task_Schedule"): ("기간",),
+    ("bx03_expense_approval", "Task_Result"): ("결재의견", "경로", "승인여부"),
+    # 아직 가려내지 않은 것.
+    ("bx02_morning_fx_report", "Task_Report"): ("조치필요",),
+    ("bx10_vendor_onboarding_review", "Task_Summary"): ("서류결과", "신용", "제재"),
+    ("bx10_vendor_onboarding_review", "Approve_Vendor"): ("서류결과",),
+    ("bx32_customer_inquiry", "Approve_Check"): ("최종답변",),
+    ("bx34_incident_alert", "Approve_Ack2"): ("요약", "원인후보"),
+    ("bx34_incident_alert", "Task_Lead"): ("요약",),
+    ("bx36_legacy_migration", "Task_OddFail"): ("예외번호",),
+    ("bx36_legacy_migration", "Task_Import"): ("정상",),
+    ("fx08_error_boundary", "Approve_Check"): ("대체",),
+}
+
+
+def _b11_in_examples() -> dict[tuple[str, str], tuple[str, ...]]:
+    from pathlib import Path  # noqa: PLC0415
+
+    folder = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
+    found: dict[tuple[str, str], tuple[str, ...]] = {}
+    for path in sorted(folder.glob("*.bpmn")):
+        for one in validate(read_process(path.read_text(encoding="utf-8"))):
+            if one.rule != "B11":
+                continue
+            node = one.message.split(":", 1)[0].strip()
+            found[(path.stem, node)] = tuple(sorted(one.items))
+    return found
+
+
+def test_no_new_b11_warning_slips_into_the_examples() -> None:
+    """**적어 둔 것과 똑같아야 한다** (ADR-0039) — 새 경고도, 사라진 경고도 알려 준다.
+
+    사라졌으면 좋은 일이다 — `KNOWN_B11`에서 지운다. 생긴 것은 보고 갈래를 정한다.
+    """
+    found = _b11_in_examples()
+    new = {k: v for k, v in found.items() if k not in KNOWN_B11}
+    gone = {k: v for k, v in KNOWN_B11.items() if k not in found}
+    changed = {k: (KNOWN_B11[k], v) for k, v in found.items() if k in KNOWN_B11 and v != KNOWN_B11[k]}
+    assert not new, f"새 B11 경고다 — 보고 ADR-0039의 갈래를 정한 뒤 KNOWN_B11에 적는다: {new}"
+    assert not gone, f"사라진 B11 경고다 — KNOWN_B11에서 지운다: {gone}"
+    assert not changed, f"변수 목록이 달라졌다: {changed}"
+
+
+def test_b11_sees_through_a_subprocess() -> None:
+    """**하위 프로세스가 안에서 만든 변수는 바깥에도 있다** (ADR-0039).
+
+    엔진의 변수 공간은 하나다 (`Run.variables`). 분석이 범위에서 끊기면 하위 프로세스 뒤를
+    모두 「출처 없음」이라고 한다 — BX-22의 거짓 경고 셋이 그 때문이었다.
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    folder = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
+    found = read_process((folder / "bx22_offboarding_access.bpmn").read_text(encoding="utf-8"))
+    available = available_vars(found)
+    # `Rv_Init`이 하위 프로세스 안에서 두는 값들을 바깥의 `Task_Count`가 읽는다.
+    assert {"메일실패", "VPN실패", "ERP실패"} <= available["Task_Count"]
+    assert not [one for one in validate(found) if one.rule == "B11"]

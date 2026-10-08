@@ -960,6 +960,8 @@ def available_vars(
 
     produced = {n.id: made(n) for n in nodes}
     declared = {i.name for i in process.info.inputs}
+    #: 하위 프로세스 → 그 안의 노드 (안에서 만든 변수를 **바깥으로 내보내려고**).
+    inside = {n.id: list(n.children) for n in nodes if n.children}
     universe = set(declared)
     for names in produced.values():
         universe |= names
@@ -974,6 +976,26 @@ def available_vars(
     changed = True
     while changed:
         changed = False
+        # **하위 프로세스가 안에서 만든 변수는 바깥에도 있다** — 엔진의 변수 공간은 하나다
+        # (`Run.variables`). 안으로 내려간 토큰이 만든 것을 바깥에서 읽을 수 있으므로, 하위
+        # 프로세스 노드가 「만드는 것」은 **그 안의 끝에서 확실히 있는 것**이다. 이것을 하지
+        # 않으면 B11이 하위 프로세스 뒤를 모두 「출처 없음」이라고 한다 (BX-22·BX-36에서
+        # 거짓 경고 열한 개가 그 때문이었다).
+        for parent, children in inside.items():
+            holder = process.node(parent)
+            if holder is None:  # pragma: no cover — `inside`는 노드에서 만들었다
+                continue
+            ends = [one for one in children if not process.outgoing(one.id, holder.child_flows)]
+            if not ends:
+                continue
+            reaching = [available[one.id] | produced[one.id] for one in ends if one.id in available]
+            if not reaching:
+                continue
+            born = set().union(*(made(one) for one in children))
+            wanted = produced[parent] | (set.intersection(*reaching) & born)
+            if wanted != produced[parent]:
+                produced[parent] = wanted
+                changed = True
         for _scope, scope_nodes, scope_flows in process.scopes():
             for node in scope_nodes:
                 incoming = process.incoming(node.id, scope_flows)

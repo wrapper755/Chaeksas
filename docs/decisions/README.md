@@ -47,3 +47,4 @@
 | [0036](0036-screen-read-values.md) | 화면에서 읽은 값의 모양 — 표는 머리글을 열쇠로 하는 줄 목록, 수 모양 글은 수 | 수락 |
 | [0037](0037-desktop-ai-task-environment.md) | 데스크톱 AI 태스크의 눈과 손 — 확장이 「AI 환경」을 기여하고, 도구는 Worker 세션 위에서 돈다 | 수락 |
 | [0038](0038-approval-request-channel.md) | 결재 요청은 요청 파일로 올라오고 Bot UI가 Center로 올린다 (ADR-0031의 「올라오는 길은 하나」에 예외) | 수락 |
+| [0039](0039-optional-variables-and-b11.md) | 한 가지에서만 생기는 값은 공통 경로에서 초기값을 두고, B11은 경고로 남긴다 (거짓 양성을 줄인다) | 수락 |

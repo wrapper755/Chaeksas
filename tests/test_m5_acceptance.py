@@ -473,23 +473,40 @@ REMAINING: dict[str, str] = {
         "TestClient라 소켓이 없고, 작업을 만들려면 배포된 BX-17과 등록된 Bot UI도 있어야 한다. "
         "PC 예제 재통과(Center 배포 → Bot UI) 쪽에서 같이 다룬다"
     ),
-    "bx33_access_request": (
-        "`Task_Schedule`이 `기간`을 쓰는데 그 칸은 **보안팀 결재에만** 있다 (위험 「높음」 갈래). "
-        "「위키 읽기」(낮음)에서는 그 결재를 지나지 않아 이름이 비고 expr_error다. 예제·계약 쪽 "
-        "공백이다 — 비틀지 않고 적어 둔다 (CLAUDE.md §3-6)"
-    ),
     "bx36_legacy_migration": "`desktop` AI 태스크 — Windows 몫이다 (M4 인수 시험과 같은 자리)",
 }
 
+#: BX-33은 **일부러** B11 경고를 남긴 교육 예제다 (ADR-0039) — 「낮음」 갈래가 실행에서 죽는 것이
+#: 그 예제의 요점이라 「아직 안 되는 것」이 아니다. 아래에서 **그 의도된 동작을** 시험한다.
+BY_DESIGN = "bx33_access_request"
+
 #: 케이스가 모두 통과하는 예제. 줄어들면 회귀다.
-GREEN = [one for one in M5 if one not in REMAINING]
+GREEN = [one for one in M5 if one not in REMAINING and one != BY_DESIGN]
 
 
 def test_the_bundle_is_read_from_the_examples() -> None:
     """묶음 목록을 사람이 옮겨 적지 않는다 — 어긋나는 순간 시험이 거짓말을 한다."""
     assert len(M5) == 20
     assert set(REMAINING) <= set(M5), f"남은 목록에 묶음 밖 예제가 있다: {set(REMAINING) - set(M5)}"
+    assert BY_DESIGN in M5 and BY_DESIGN not in REMAINING
     assert len(GREEN) == 17, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+
+
+def test_bx33_fails_on_the_branch_it_is_meant_to_fail_on(
+    app: Any, tmp_path: Path, directory: AppDirectory, model: StubModel, mock_apps: dict[str, str]
+) -> None:
+    """BX-33은 **일부러** 그렇게 두었다 (ADR-0039, 그 예제의 「배운 것」).
+
+    `Task_Schedule`이 `기간`을 쓰는데 그 칸은 **보안팀 결재에만** 있다. 「ERP 쓰기」(높음)는
+    그 결재를 지나 끝까지 가고, 「위키 읽기」(낮음)는 이름이 비어 **식 오류로 멈춘다** —
+    실행 전 검사 B11이 미리 경고하는 바로 그 자리다. 둘 다 그렇게 되어야 한다.
+    """
+    by_name = {case.name: outcome for case, outcome in run_all(tmp_path, BY_DESIGN, directory, model, mock_apps)}
+    assert set(by_name) == {"위키 읽기", "ERP 쓰기"}, sorted(by_name)
+    assert by_name["ERP 쓰기"].verdict in (PASS, NO_EXPECT), by_name["ERP 쓰기"].detail
+    낮음 = by_name["위키 읽기"]
+    assert 낮음.verdict not in (PASS, NO_EXPECT), "낮음 갈래가 통과한다 — 예제의 요점이 사라졌다"
+    assert "기간" in (낮음.detail or ""), 낮음.detail
 
 
 def test_the_model_is_really_asked(
