@@ -24,6 +24,7 @@ from chaeksas.contracts.bpmn_ext import (
     is_var_name,
     matches,
     read_process,
+    read_vars,
     script_vars,
     validate,
 )
@@ -543,26 +544,16 @@ def test_available_vars_covers_every_example_without_crashing() -> None:
 
 #: 업무 예제 50개에 **지금 떠 있는** B11 경고. `(예제, 노드, 변수들)`.
 #:
-#: 갈래는 둘뿐이다 — **일부러 남긴 것**(그 예제의 「배운 것」이 적고 있다)과 **아직 가려내지
-#: 않은 것**. 둘째는 줄여 가야 하는 빚이다: 하나씩 보아 거짓 양성이면 `available_vars`를
-#: 고치고, 진짜면 예제를 고치거나 「배운 것」에 적어 첫째로 옮긴다.
+#: **비어 가는 것이 좋다.** 한때 열둘이었고 열하나가 거짓 양성이었다 (ADR-0039) — 하위 프로세스,
+#: 경계 이벤트, 포함 합류, 조건식의 지연 평가, 결재의 `show`를 분석이 못 보던 것이 원인이었다.
+#: 지금 남은 것은 **일부러 남긴 하나**뿐이다.
 #:
 #: **목록에 없는 경고가 생기면 이 시험이 깨진다.** BX-33이 그렇게 새어 나갔다 — 생성기의
 #: 좁은 검사(템플릿 `{변수}`만 본다)를 지나 M5 인수 시험에서야 드러났다 (ADR-0039).
 KNOWN_B11: dict[tuple[str, str], tuple[str, ...]] = {
-    # 일부러 남긴 것 — 검사가 도는 것을 보여 주는 예제다.
+    # **하나뿐이고, 일부러 남긴 것이다** — BX-33의 「배운 것」이 해법까지 적고 있다.
+    # 검사가 도는 것을 보여 주는 예제이므로 고치지 않는다 (ADR-0039).
     ("bx33_access_request", "Task_Schedule"): ("기간",),
-    ("bx03_expense_approval", "Task_Result"): ("결재의견", "경로", "승인여부"),
-    # 아직 가려내지 않은 것.
-    ("bx02_morning_fx_report", "Task_Report"): ("조치필요",),
-    ("bx10_vendor_onboarding_review", "Task_Summary"): ("서류결과", "신용", "제재"),
-    ("bx10_vendor_onboarding_review", "Approve_Vendor"): ("서류결과",),
-    ("bx32_customer_inquiry", "Approve_Check"): ("최종답변",),
-    ("bx34_incident_alert", "Approve_Ack2"): ("요약", "원인후보"),
-    ("bx34_incident_alert", "Task_Lead"): ("요약",),
-    ("bx36_legacy_migration", "Task_OddFail"): ("예외번호",),
-    ("bx36_legacy_migration", "Task_Import"): ("정상",),
-    ("fx08_error_boundary", "Approve_Check"): ("대체",),
 }
 
 
@@ -607,4 +598,75 @@ def test_b11_sees_through_a_subprocess() -> None:
     available = available_vars(found)
     # `Rv_Init`이 하위 프로세스 안에서 두는 값들을 바깥의 `Task_Count`가 읽는다.
     assert {"메일실패", "VPN실패", "ERP실패"} <= available["Task_Count"]
+    assert not [one for one in validate(found) if one.rule == "B11"]
+
+
+# ─────────────── B11의 정확도 (ADR-0039 — 거짓 양성 열하나를 없앤 자리) ───────────────
+
+
+def _process(stem: str) -> Any:
+    from pathlib import Path  # noqa: PLC0415
+
+    folder = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
+    return read_process((folder / f"{stem}.bpmn").read_text(encoding="utf-8"))
+
+
+def test_a_boundary_event_carries_the_variables_of_the_node_it_is_on() -> None:
+    """경계 이벤트는 붙은 노드 자리에서 떠난다 — **고정점 안에서** 그래야 한다.
+
+    뒤로 미루면 경계 뒤의 노드가 **낡은 값**으로 계산되어, 선행 노드에 값이 있는데도 경고가
+    떴다 (BX-32·BX-34·BX-36이 그랬다).
+    """
+    found = _process("bx32_customer_inquiry")
+    available = available_vars(found)
+    assert "최종답변" in available["Approve_Check"]
+    assert not [one for one in validate(found) if one.rule == "B11"]
+
+
+def test_an_inclusive_join_counts_the_branches_that_always_run() -> None:
+    """포함 합류 — **조건 없는(또는 `true`인) 가지는 늘 지나간다** (BX-10의 서류 확인).
+
+    조건이 붙은 가지는 세지 않는다 (`신용`·`제재`는 그래서 보장되지 않는다).
+    """
+    found = _process("bx10_vendor_onboarding_review")
+    available = available_vars(found)
+    assert "서류결과" in available["Task_Summary"], "늘 지나가는 가지가 만든 값이다"
+    assert not [one for one in validate(found) if one.rule == "B11"]
+
+
+def test_a_default_flow_is_not_always_taken() -> None:
+    """기본 흐름은 **다른 조건이 하나도 맞지 않을 때만** 지나간다 — 보장이 아니다."""
+    from chaeksas.contracts.bpmn_ext import ALWAYS_TRUE, _always_taken  # noqa: PLC0415
+
+    assert "true" in ALWAYS_TRUE
+    found = _process("bx10_vendor_onboarding_review")
+    by_target = {f.target: f for f in found.outgoing("Gw_Checks", found.flows)}
+    # `true`는 조건 없음과 같다. 조건이 붙은 가지는 아니다.
+    assert _always_taken(found, by_target["Task_Docs"], found.flows)
+    assert not _always_taken(found, by_target["Task_Credit"], found.flows)
+
+
+def test_a_name_only_inside_a_conditional_branch_is_not_definitely_read() -> None:
+    """`a if c else b`는 **고른 가지만** 평가한다 — 예제가 일부러 쓰는 꼴이다 (BX-10·BX-02).
+
+    조건 자리의 이름은 늘 읽는다. 중첩이면 안쪽 조건도 바깥 가지에 들어 있어 함께 지연된다.
+    """
+    assert expression_vars("신용 if 예상거래액 >= 50000000 else None") == {"예상거래액"}
+    assert expression_vars("('필요' if 조치필요 else '불필요') if 경고수 > 0 else '없음'") == {"경고수"}
+    # 가지 **밖에서도** 읽히면 늘 읽는 것이다 (`가`). 가지에만 있으면 아니다 (`다`).
+    assert expression_vars("가 + (가 if 나 else 다)") == {"가", "나"}
+    assert expression_vars("가 if 나 else 다") == {"나"}
+
+
+def test_what_an_approval_shows_is_not_a_read() -> None:
+    """`show`는 읽기가 아니다 — 엔진이 `.get()`으로 가져가 없으면 `None`이다 (FX-08).
+
+    B11은 「읽으면 실행 오류」를 잡는 검사다. 멈추지 않는 것을 넣으면 범주가 어긋난다.
+    """
+    found = _process("fx08_error_boundary")
+    node = found.node("Approve_Check")
+    assert node is not None
+    approval = node.prop("approval")
+    assert approval is not None and "대체" in approval.show
+    assert "대체" not in read_vars(node, found.flows)
     assert not [one for one in validate(found) if one.rule == "B11"]

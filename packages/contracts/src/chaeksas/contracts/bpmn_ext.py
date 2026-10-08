@@ -733,6 +733,43 @@ _RESERVED = frozenset(
 _TEMPLATE_SLOT = re.compile(r"\{([^{}:!]+)")
 
 
+def _lazy_branch_vars(expression: str) -> set[str]:
+    """조건식 `a if c else b`의 **가지에서만** 읽히는 이름들.
+
+    파이썬은 조건을 먼저 보고 **고른 가지만** 평가한다. 그래서
+    `신용 = 신용 if 예상거래액 >= 50000000 else None`은 조건이 거짓이면 `신용`을 **읽지 않는다** —
+    예제가 「없을 수도 있는 값」을 다루는 자리에서 일부러 쓰는 꼴이다 (BX-10·BX-02).
+
+    「가지 안에 있다」가 아니라 **「가지 밖에서는 안 읽힌다」**로 센다. 조건 자리나 가지 밖에
+    한 번이라도 나오면 그 이름은 **늘 읽는** 것이다. 중첩 조건식에서는 안쪽 조건도 바깥
+    가지에 들어 있으므로 함께 지연된다.
+    """
+    import ast as _tree  # noqa: PLC0415 — 이 함수만 쓴다
+
+    try:
+        # **앞뒤 공백을 떼고 넘긴다** — `eval` 모드는 앞 공백을 들여쓰기로 보고 거부한다
+        # (`IndentationError`는 `SyntaxError`라 조용히 빈 것이 됐다).
+        parsed = _tree.parse((expression or "").strip(), mode="eval")
+    except SyntaxError:
+        return set()
+
+    def names(node: _tree.AST) -> set[str]:
+        return {one.id for one in _tree.walk(node) if isinstance(one, _tree.Name)}
+
+    def eager(node: _tree.AST) -> set[str]:
+        """가지로 들어가지 않고 모은 이름 — 이것은 늘 읽는다."""
+        if isinstance(node, _tree.IfExp):
+            return eager(node.test)
+        out: set[str] = set()
+        if isinstance(node, _tree.Name):
+            out.add(node.id)
+        for child in _tree.iter_child_nodes(node):
+            out |= eager(child)
+        return out
+
+    return names(parsed) - eager(parsed)
+
+
 def expression_vars(expression: str) -> set[str]:
     """식에서 **변수로 보이는 이름**을 뽑는다.
 
@@ -760,7 +797,8 @@ def expression_vars(expression: str) -> set[str]:
         if suffix or name in _RESERVED or name in bound:
             continue
         out.add(name)
-    return out
+    # **조건식의 가지는 읽는다고 단정하지 않는다** — 파이썬이 고른 가지만 평가한다.
+    return out - _lazy_branch_vars(expression)
 
 
 def template_vars(text: str) -> set[str]:
@@ -869,7 +907,9 @@ def read_vars(node: Node, flows: Sequence[Flow]) -> set[str]:
     out: set[str] = set()
     approval: Approval | None = node.prop("approval")
     if approval is not None:
-        out |= set(approval.show)
+        # **`show`는 읽기가 아니다.** 엔진이 `run.variables.get(name)`으로 가져가므로 없으면
+        # `None`이고 실행이 멈추지 않는다 (검토 자료는 있는 것만 보인다). B11은 「읽으면 실행
+        # 오류」를 잡는 검사라 여기 넣으면 범주가 어긋난다 (FX-08이 그 경고를 받고 있었다).
         if approval.expires and is_var_name(approval.expires):
             out.add(approval.expires)
     call: ServiceCall | None = node.prop("serviceCall")
@@ -939,6 +979,40 @@ def _error(rule: str, message: str, *, code: str | None = None, items: Sequence[
     return Violation(rule=rule, code=code, message=message, items=list(items))
 
 
+#: 「늘 참」인 조건 — 예제가 포함 게이트웨이의 늘 지나가는 가지를 이렇게 적는다 (BX-10).
+#: 임의의 항진식을 풀지 않는다. 글자 그대로인 것만 본다.
+ALWAYS_TRUE = frozenset({"true", "True", "1"})
+
+
+def _always_taken(process: BpmnProcess, flow: Flow, flows: Sequence[Flow]) -> bool:
+    """이 흐름으로 오는 길이 **조건 없이** 지나가나 (포함 합류에서 쓴다).
+
+    가지를 거꾸로 짚어 올라가며 **조건이 붙은 흐름이나 기본 흐름을 만나면 아니다**. 갈림이
+    여러 갈래면(합류를 거슬러 오르면) 거기서 멈춘다 — 단정할 수 없으면 아니라고 한다.
+
+    조건이 글자 그대로 `true`면 조건이 없는 것과 같다 (`ALWAYS_TRUE`). **기본 흐름은 아니다** —
+    다른 조건이 하나도 맞지 않을 때만 지나간다.
+    """
+    seen: set[str] = set()
+    current = flow
+    for _ in range(len(flows) + 1):
+        said = (current.condition or "").strip()
+        conditional = bool(said) and said not in ALWAYS_TRUE
+        if conditional or current.is_default:
+            return False
+        source = process.node(current.source)
+        if source is None or source.id in seen:
+            return False
+        seen.add(source.id)
+        if source.kind in ("inclusiveGateway", "exclusiveGateway", "parallelGateway"):
+            return True  # 갈림 자리에 닿았다 — 여기까지 조건이 없었다
+        back = process.incoming(source.id, flows)
+        if len(back) != 1:
+            return False
+        current = back[0]
+    return False
+
+
 def available_vars(
     process: BpmnProcess,
     *,
@@ -996,6 +1070,16 @@ def available_vars(
             if wanted != produced[parent]:
                 produced[parent] = wanted
                 changed = True
+        # **경계 이벤트는 붙은 노드 자리에서 떠난다** — 그 자리의 변수를 들고 나간다.
+        # 이것을 고정점 **안에서** 해야 한다: 뒤로 미루면 경계 뒤의 노드들이 **낡은 값**으로
+        # 계산되어, 선행 노드에 값이 있는데도 경고가 떴다 (BX-32·BX-34가 그랬다).
+        for node in nodes:
+            if not node.attached_to or node.attached_to not in available:
+                continue
+            wanted = set(available[node.attached_to])
+            if wanted != available[node.id]:
+                available[node.id] = wanted
+                changed = True
         for _scope, scope_nodes, scope_flows in process.scopes():
             for node in scope_nodes:
                 incoming = process.incoming(node.id, scope_flows)
@@ -1011,14 +1095,21 @@ def available_vars(
                     merged = set().union(*reaching)
                 else:
                     merged = set.intersection(*reaching)
+                    # **포함 합류의 조건 없는 가지는 늘 지나간다** — 그 가지가 만든 것은
+                    # 확실히 있다 (BPMN: 조건 없는 흐름은 평가 없이 지난다). 이것을 세지
+                    # 않으면 포함 게이트웨이 뒤가 모두 「출처 없음」이 된다 (BX-10).
+                    if node.kind == "inclusiveGateway" and len(incoming) > 1:
+                        sure = [
+                            available[f.source] | produced[f.source]
+                            for f in incoming
+                            if f.source in available and _always_taken(process, f, scope_flows)
+                        ]
+                        if sure:
+                            merged |= set().union(*sure)
                 # 경계 이벤트가 붙은 노드의 변수도 그 뒤로 이어진다.
                 if len(merged) != len(available[node.id]) or merged != available[node.id]:
                     available[node.id] = merged
                     changed = True
-    # 경계 이벤트는 붙은 노드 자리에서 떠난다.
-    for node in nodes:
-        if node.attached_to and node.attached_to in available:
-            available[node.id] = set(available[node.attached_to])
     return available
 
 
