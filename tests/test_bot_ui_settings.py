@@ -23,6 +23,7 @@ from chaeksas.bot_ui.settings import (
     DEFAULT_WORKER_PORT,
     START_ALWAYS,
     RuntimeSettings,
+    ServiceKeyRef,
     Settings,
 )
 
@@ -77,8 +78,17 @@ def test_environment_variables_win(monkeypatch: Any, tmp_path: Path) -> None:
 
 
 def test_saving_never_writes_a_secret(tmp_path: Path) -> None:
-    path = Settings().save(tmp_path / "settings.json")
-    assert "key" not in path.read_text(encoding="utf-8").lower()
+    """설정 파일에는 **값이 없다**. 키 참조 이름(BUI-10)은 비밀이 아니다 (ADR-0013 §3).
+
+    이름은 들어가야 한다 — 그것으로 OS 비밀 저장소를 찾는다. 들어가면 안 되는 것은 값이다.
+    """
+    made = replace(Settings(), service_keys=(ServiceKeyRef(ref="finance-invoice", app_id="erp-finance"),))
+    path = made.save(tmp_path / "settings.json")
+    text = path.read_text(encoding="utf-8")
+    assert "finance-invoice" in text
+    assert "chk_" not in text
+    for word in ("api_key", "secret", "token", "password"):
+        assert word not in text.lower()
 
 
 # ─────────────────────────── PC 고유값 ───────────────────────────

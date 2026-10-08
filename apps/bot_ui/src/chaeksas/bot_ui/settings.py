@@ -52,6 +52,22 @@ def data_dir() -> Path:
 
 
 @dataclass(frozen=True)
+class ServiceKeyRef:
+    """BUI-10에 등록한 키 참조 하나 — **이름만** 둔다 (값은 OS 비밀 저장소다, ADR-0013).
+
+    설치된 Bot의 매니페스트에서도 참조를 읽을 수 있지만(C1 `requires.service_apps`), 그것만으로는
+    부족하다: 비밀 저장소는 **목록을 뽑을 수 없어서** 쓰는 Bot이 없는 참조는 화면에 뜨지 않고,
+    지울 수도 없게 된다 (보이지 않는 키가 남는다). Studio의 `Settings.service_keys`와 같은 꼴이다.
+    """
+
+    ref: str
+    app_id: str = ""
+
+    def to_json_dict(self) -> dict[str, Any]:
+        return {"ref": self.ref, "app_id": self.app_id}
+
+
+@dataclass(frozen=True)
 class RuntimeSettings:
     """로컬 런타임 하나의 설정 (BUI-03). 지금은 Worker 프로세스뿐이다 (확장이 기여한다)."""
 
@@ -89,6 +105,8 @@ class Settings:
     #: Bot이 출력 폴더 **밖에 쓸 수 있는 폴더** (BUI-03 「파일」, ADR-0032). 기본은 비어 있다 —
     #: 적은 폴더 안의 파일은 Bot이 고칠 수 있다.
     writable_dirs: tuple[Path, ...] = ()
+    #: BUI-10에 등록한 서비스 앱 키 참조 (**이름만** — 값은 OS 비밀 저장소다).
+    service_keys: tuple[ServiceKeyRef, ...] = ()
     runtimes: tuple[RuntimeSettings, ...] = field(
         default_factory=lambda: (RuntimeSettings(runtime_id="worker", port=DEFAULT_WORKER_PORT),)
     )
@@ -125,6 +143,7 @@ class Settings:
             "llm_model": self.llm_model,
             "readable_dirs": [str(one) for one in self.readable_dirs],
             "writable_dirs": [str(one) for one in self.writable_dirs],
+            "service_keys": [one.to_json_dict() for one in self.service_keys],
             "runtimes": [r.to_json_dict() for r in self.runtimes],
             "extensions": {key: dict(value) for key, value in self.extensions.items()},
         }
@@ -187,6 +206,11 @@ class Settings:
             llm_model=str(raw.get("llm_model") or base.llm_model),
             readable_dirs=tuple(Path(one) for one in raw.get("readable_dirs", [])),
             writable_dirs=tuple(Path(one) for one in raw.get("writable_dirs", [])),
+            service_keys=tuple(
+                ServiceKeyRef(ref=str(one["ref"]), app_id=str(one.get("app_id") or ""))
+                for one in raw.get("service_keys", [])
+                if isinstance(one, dict) and one.get("ref")
+            ),
             runtimes=runtimes or base.runtimes,
             extensions={
                 str(key): dict(value)
@@ -218,6 +242,7 @@ __all__ = [
     "START_ALWAYS",
     "START_WHEN_NEEDED",
     "RuntimeSettings",
+    "ServiceKeyRef",
     "Settings",
     "data_dir",
 ]

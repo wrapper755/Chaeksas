@@ -2,7 +2,8 @@
 
 - 모델: `GET <주소>/v1/models` — 닿는지, 키가 맞는지 (ADR-0027 — OpenAI 호환).
 - Worker: `GET http://127.0.0.1:<포트>/v1/health` — 토큰 없이 답하는 유일한 자리 (C10).
-- 서비스 앱 키: `GET <앱 주소>/v1/keys/self` — 키가 살아 있고 무엇을 허용하는지 (C11).
+- 서비스 앱 키: `core.key_check.key_status` — **Bot UI(BUI-10)와 같은 함수**를 쓴다. 두 화면이
+  같은 말을 해야 하고, 앱끼리 import할 수 없어 `core`에 두었다.
 
 키 값은 결과 글에 **들어가지 않는다**. `client`는 시험이 끼운다 (httpx와 같은 모양).
 """
@@ -13,12 +14,11 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from chaeksas.core.key_check import key_status
+
 #: Worker는 이 PC에만 바인드한다 (C10).
 LOCAL_HOST = "127.0.0.1"
 TIMEOUT_S = 5.0
-
-#: 수행 모드를 사람 말로 (C11 `allowed_modes`).
-MODE_WORDS = {"autonomous": "자율", "deterministic": "결정"}
 
 
 def _get(url: str, *, headers: Mapping[str, str] | None = None, client: Any = None) -> Any:
@@ -90,34 +90,6 @@ def worker_status(place: WorkerPlace, *, client: Any = None) -> str:
         body = {}
     version = body.get("version") if isinstance(body, dict) else None
     return f"실행 중 — Worker {version}" if version else "실행 중"
-
-
-def key_status(base_url: str | None, key: str | None, *, client: Any = None) -> str:
-    """서비스 앱 키 하나의 상태 (STU-10 「서비스 앱 키」 「상태」 열)."""
-    if not key:
-        return "없음"
-    if not base_url:
-        return "주소를 모름"
-    try:
-        answer = _get(f"{base_url.rstrip('/')}/v1/keys/self", headers={"Authorization": f"Bearer {key}"}, client=client)
-    except Exception as e:  # noqa: BLE001
-        if _reachable(e):
-            raise
-        return "앱에 닿지 못함"
-    if answer.status_code == 401:
-        return "키가 틀림"
-    if answer.status_code == 403:
-        try:
-            code = str(answer.json().get("code") or "")
-        except ValueError:
-            code = ""
-        return "만료됨" if code == "key_expired" else "폐기됨"
-    if answer.status_code >= 400:
-        return f"앱이 {answer.status_code}로 답했습니다"
-    body = answer.json()
-    modes = "·".join(MODE_WORDS.get(str(m), str(m)) for m in body.get("allowed_modes") or []) or "없음"
-    expires = body.get("expires_at")
-    return f"정상 — 허용: {modes}" + (f", 만료 {str(expires)[:10]}" if expires else "")
 
 
 def refs_in(definitions: Iterable[Any]) -> list[tuple[str, str]]:

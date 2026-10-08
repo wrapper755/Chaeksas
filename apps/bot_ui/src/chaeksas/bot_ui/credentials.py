@@ -42,6 +42,11 @@ def _env_name(text: str) -> str:
     return "".join(one if one.isalnum() else "_" for one in text).upper()
 
 
+def service_key_env(ref: str) -> str:
+    """그 키 참조를 개발·CI에서 줄 환경변수 이름 (BUI-10이 사람에게 보여 준다)."""
+    return f"{ENV_SERVICE_APP_PREFIX}{_env_name(ref)}"
+
+
 class SecretsUnavailable(RuntimeError):
     """OS 비밀 저장소를 쓸 수 없다 (설치 안 됨·잠김·헤드리스)."""
 
@@ -140,12 +145,22 @@ class Credentials:
 
         읽기는 **환경변수가 먼저다** — `CHK_BOT_UI__SVC__<참조>` (개발·CI). Studio와 같은 규칙.
         """
-        return self.get(
-            f"{SERVICE_APP_PREFIX}{ref}", env=f"{ENV_SERVICE_APP_PREFIX}{_env_name(ref)}"
-        )
+        return self.get(f"{SERVICE_APP_PREFIX}{ref}", env=service_key_env(ref))
+
+    def stored_service_app_key(self, ref: str) -> str | None:
+        """**비밀 저장소에 들어 있는** 값만 (환경변수는 보지 않는다).
+
+        BUI-10이 「저장됨」과 「환경변수」를 가려 말하는 데 쓴다 — 환경변수로 도는 PC에서 「저장됨」
+        이라고 하면, 환경변수를 지운 다음에 왜 안 되는지 알 수 없다.
+        """
+        return self.get(f"{SERVICE_APP_PREFIX}{ref}")
 
     def set_service_app_key(self, ref: str, value: str) -> None:
         self.set(f"{SERVICE_APP_PREFIX}{ref}", value.strip())
+
+    def delete_service_app_key(self, ref: str) -> None:
+        """BUI-10에서 줄을 지웠다 — 저장소에 남겨 두면 보이지 않는 키가 계속 쓰인다."""
+        self.delete(f"{SERVICE_APP_PREFIX}{ref}")
 
 
 __all__ = [
@@ -160,4 +175,5 @@ __all__ = [
     "SERVICE_APP_PREFIX",
     "Credentials",
     "SecretsUnavailable",
+    "service_key_env",
 ]
