@@ -26,16 +26,17 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 import time
 from collections.abc import Iterator
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 import uvicorn
-from fastapi.testclient import TestClient
 from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -71,8 +72,6 @@ ADMIN_TOKEN = "t-admin"
 ADMIN = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 SIGN_PASS = "열쇠말"
 SIGNED_AT = "2026-10-07T09:00:00+09:00"
-#: Center를 TestClient로 부르므로 주소는 이것이다 (httpx의 규약).
-CENTER_URL = "http://testserver"
 
 
 def bundle() -> list[str]:
@@ -175,11 +174,26 @@ def admin_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
             os.environ[name] = value
 
 
+@dataclass(frozen=True)
+class Center:
+    """시험이 띄운 Center 하나.
+
+    **진짜 소켓이다** (TestClient가 아니다) — `center-jobs` 모의 앱이 BX-16을 위해 제 스레드에서
+    `httpx`로 `POST /jobs`를 부르기 때문이다 (C5). TestClient에는 소켓이 없어 그 길이 막혔다.
+    """
+
+    url: str
+    client: httpx.Client
+    studio_key: str
+    #: Admin 서명 키 — 승인·배포 봉투를 만든다 (C2).
+    signing_key: Any
+
+
 @pytest.fixture(scope="session")
 def center(
     tmp_path_factory: pytest.TempPathFactory, mock_apps: dict[str, str], admin_home: Path
-) -> Iterator[tuple[TestClient, str]]:
-    """진짜 Center + 등록된 모의 앱들. `(client, studio 키)`를 준다.
+) -> Iterator[Center]:
+    """진짜 Center + 등록된 모의 앱들.
 
     여기서 운영자가 하는 일을 시험이 그대로 한다 — **주소를 넣고**(C7), 외부 확장 정의에
     **서명해 등록한다**(C13 E6). 둘 다 하지 않으면 Studio가 그 앱을 부를 수 없다.
@@ -189,7 +203,8 @@ def center(
     settings = CenterSettings(
         db_path=root / "center.sqlite3", package_dir=root / "packages", admin_token=ADMIN_TOKEN
     )
-    with TestClient(create_app(settings, store=store)) as client:
+    url, server, thread = serve(create_app(settings, store=store))
+    with httpx.Client(base_url=url, timeout=30.0) as client:
         signing_key = keystore.create(label="M5 인수 시험")
         bootstrap_key(store, public_key=signing_key.public_bytes(), label="M5 인수 시험")
 
@@ -223,16 +238,17 @@ def center(
         studio_key = client.post(
             "/api/v1/center-keys", json={"name": "Studio", "type": "studio"}, headers=ADMIN
         ).json()["key"]
-        yield client, studio_key
+        yield Center(url=url, client=client, studio_key=studio_key, signing_key=signing_key)
+    server.should_exit = True
+    thread.join(timeout=10)
     store.close()
 
 
 @pytest.fixture(scope="session")
-def directory(center: tuple[TestClient, str]) -> AppDirectory:
+def directory(center: Center) -> AppDirectory:
     """Studio가 받아 든 바깥 앱 한 벌 — **봉투를 다시 검증한 것**만 들어 있다."""
-    client, studio_key = center
     found = Services(
-        reader=CenterReader(base_url=CENTER_URL, api_key=studio_key, client=client),
+        reader=CenterReader(base_url=center.url, api_key=center.studio_key, client=center.client),
         # 그림의 키 참조는 모두 모의 앱의 개발 키로 풀린다 (ADR-0013 — 값은 그림에 없다).
         secrets=lambda ref: DEV_KEY,
     )
@@ -251,6 +267,187 @@ def test_both_external_definitions_survive_re_verification(directory: AppDirecto
     assert set(directory.externals) == set(external_defs.BUILDERS)
     assert not directory.problems
 
+
+# ─────────────────────────── BX-16: 작업 지시를 만들 수 있는 Center ───────────────────────────
+
+#: BX-16의 `Task_Dispatch`가 적은 대상 그룹과 **패키지 id** (`scm.md`). 그림에서 온 값이다.
+#:
+#: 패키지 id는 예제 **파일 이름이 아니다** — C1 `id`에는 밑줄이 들어갈 수 없어 `-`다. BX-16이
+#: 처음에 파일 이름(`bx17_erp_po_entry`)을 적어 두었고, Center가 `no_deployment`로 거절해서야
+#: 드러났다 (그 예제의 「배운 것」에 적어 두었다).
+BX16_GROUP = "구매-PC"
+BX16_TARGET = "bx17-erp-po-entry"
+BX16_TARGET_EXAMPLE = "bx17_erp_po_entry"
+
+
+def bot_ui_that_reports_its_extensions(center: Center) -> str:
+    """등록된 Bot UI 하나를 만든다 — 작업 대상이 될 PC다 (C4 「키 묶기」).
+
+    **하트비트까지 보낸다.** 확장을 보고하지 않으면 Center가 `ui-automation`을 모르고, 그것을
+    요구하는 BX-17은 **배포가 막힌다** (C7 누락 검사 — 확장 누락은 배포를 막는 셋 중 하나다).
+    `Agent`를 쓰지 않고 C4를 직접 부른다 — 여기서 보는 것은 Bot UI가 아니라 **작업이 만들어지나**다.
+    """
+    from chaeksas.core.extensions import load_host  # noqa: PLC0415
+
+    key = center.client.post(
+        "/api/v1/center-keys", json={"name": "BX-16 대상 PC", "type": "bot_ui"}, headers=ADMIN
+    ).json()["key"]
+    auth = {"Authorization": f"Bearer {key}"}
+    versions = {"bot_ui": "0.1.0", "core": "0.1.0"}
+    answer = center.client.post(
+        "/api/v1/bot-ui/register",
+        json={
+            "schema": 1,
+            # C4 — PC 고유값의 SHA-256만 보낸다 (원값은 보내지 않는다).
+            "machine_id": "b" * 64,
+            "name": "구매 PC-01",
+            "os": "Windows 11",
+            "versions": versions,
+        },
+        headers=auth,
+    )
+    assert answer.status_code < 400, answer.text
+    bot_ui_id = str(answer.json()["bot_ui_id"])
+
+    beat = center.client.post(
+        "/api/v1/bot-ui/heartbeat",
+        json={
+            "schema": 1,
+            "status": "idle",
+            "current_run": None,
+            "queue": {"max": 20, "items": []},
+            "worker": {"state": "off", "version": "0.1.0", "restarts": 0, "session": "idle"},
+            "versions": versions,
+            "extensions": [one.to_json_dict() for one in load_host().states()],
+        },
+        headers=auth,
+    )
+    assert beat.status_code < 400, beat.text
+    return bot_ui_id
+
+
+def deploy_to(center: Center, bot_ui_id: str, example: str, tmp_path: Path) -> None:
+    """예제 하나를 **승인 서명 → 배포 서명**으로 그 PC에 배포한다 (C2 — 서명이 유일한 관문이다).
+
+    설치까지는 가지 않는다. `POST /jobs`가 보는 것은 **Center의 배포**이고(`no_deployment`),
+    설치는 하트비트 뒤의 일이다 — Bot UI 쪽 한 바퀴는 `test_m5_pc_rerun.py`가 본다.
+    """
+    space = Workspace(tmp_path / "bx16-target").ensure()
+    made = space.import_example(EXAMPLES, example)
+    from chaeksas.studio.packaging import default_name, export  # noqa: PLC0415
+
+    package = export(made, tmp_path / default_name(made))
+    answer = center.client.post(
+        "/api/v1/packages",
+        files={"file": (package.name, package.read_bytes(), "application/zip")},
+        headers=ADMIN,
+    )
+    assert answer.status_code in (200, 201), answer.text
+    info = dict(answer.json())
+
+    signer = keystore.load(center.signing_key, passphrase=SIGN_PASS)
+    approve = sign(
+        {
+            "kind": "package",
+            "id": info["id"],
+            "version": info["version"],
+            "content_hash": info["content_hash"],
+        },
+        signer,
+        signed_at=SIGNED_AT,
+    )
+    answer = center.client.put(
+        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
+        json=approve.to_json_dict(),
+        headers=ADMIN,
+    )
+    assert answer.status_code < 400, answer.text
+
+    envelope = sign(
+        {
+            "kind": "deployment",
+            "deployment_id": "dep_" + re.sub(r"[^0-9a-f]", "", info["content_hash"])[:8],
+            "target": {"type": "bot_ui", "id": bot_ui_id},
+            "bpm_process_id": info["id"],
+            "version": info["version"],
+            "content_hash": info["content_hash"],
+        },
+        signer,
+        signed_at=SIGNED_AT,
+    )
+    answer = center.client.post("/api/v1/deployments", json=envelope.to_json_dict(), headers=ADMIN)
+    assert answer.status_code < 400, answer.text
+
+
+@pytest.fixture(scope="session")
+def center_jobs(center: Center, tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    """BX-16의 `center-jobs` 앱이 **진짜 작업을 만들 수 있게** 한다. `bot_ui_id`를 준다.
+
+    그 앱은 모의가 아니라 Center의 `POST /jobs`를 부른다 (`samples/.../center_jobs.py`) —
+    BX-16이 메우려는 공백이 「서버 BPM 프로세스가 PC에 일을 넘기는 요소가 없다」이고, 그 자리를
+    **Center 연동용 키를 가진 서비스 앱**으로 메우는 것이 예제의 설계다 (ADR-0016 §3).
+
+    그래서 셋이 있어야 한다 (C5).
+
+    1. **연동용 키** — 작업을 만드는 관문이다 (배포와 달리 봉투가 없다, C5 권한표).
+    2. **등록된 Bot UI** — `group:구매-PC`를 어느 PC로 보낼지 그 앱이 안다 (그룹은 Center에 없다).
+    3. **배포된 BX-17** — 배포되지 않은 것은 돌릴 수 없다 (`no_deployment`).
+
+    설정은 환경변수로만 준다 (CLAUDE.md §5). 앱이 **부를 때마다 읽으므로**(`_env()`) 앱을 띄운
+    뒤에 넣어도 된다 — 모의 앱 fixture는 Center보다 먼저 뜬다.
+    """
+    from chaeksas.mock_apps.apps.center_jobs import ENV_PREFIX  # noqa: PLC0415
+
+    bot_ui_id = bot_ui_that_reports_its_extensions(center)
+    deploy_to(center, bot_ui_id, BX16_TARGET_EXAMPLE, tmp_path_factory.mktemp("bx16"))
+    token = center.client.post(
+        "/api/v1/center-keys",
+        json={"name": "center-jobs 앱", "type": "integration"},
+        headers=ADMIN,
+    ).json()["key"]
+
+    names = {
+        f"{ENV_PREFIX}CENTER__BASE_URL": center.url,
+        f"{ENV_PREFIX}CENTER__TOKEN": token,
+        f"{ENV_PREFIX}GROUPS": f'{{"{BX16_GROUP}": "{bot_ui_id}"}}',
+    }
+    before = {name: os.environ.get(name) for name in names}
+    os.environ.update(names)
+    yield bot_ui_id
+    for name, value in before.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
+def test_the_job_target_is_deployed_so_jobs_can_be_created(center: Center, center_jobs: str) -> None:
+    """BX-16이 돌기 전에 판이 맞는지 본다 — 아니면 실패 사유가 「Center가 거부했다」로 뭉개진다.
+
+    **그림이 적은 id가 정말 배포된 id인가**를 여기서 본다. 글자로만 가리키는 자리라 틀려도
+    실행할 때까지 숨는다 — 처음에 실제로 숨어 있었다.
+    """
+    rows = [
+        one
+        for one in center.client.get("/api/v1/deployments", headers=ADMIN).json()
+        if one["bpm_process_id"] == BX16_TARGET
+    ]
+    assert rows, f"{BX16_TARGET}이 배포되지 않았다"
+    assert rows[0]["target"]["id"] == center_jobs
+
+    wanted = dispatch_target_in_the_drawing()
+    assert wanted == BX16_TARGET, (
+        f"BX-16이 `{wanted}`로 작업을 만든다 — 배포된 것은 `{BX16_TARGET}`이다 "
+        "(예제를 고치려면 `_source/spec_scm.py` → `build.py`)"
+    )
+
+
+def dispatch_target_in_the_drawing() -> str:
+    """BX-16의 `Task_Dispatch`가 적은 `bpm_process`를 **그림에서** 읽는다 (옮겨 적지 않는다)."""
+    body = (EXAMPLES / "bx16_reorder_proposal.bpmn").read_text(encoding="utf-8")
+    found = re.search(r'"bpm_process":\s*"\'([^\']+)\'"', body)
+    assert found, "BX-16의 `bpm_process`를 그림에서 찾지 못했다"
+    return found.group(1)
 
 
 # ─────────────────────────── 스텁 모델 ───────────────────────────
@@ -394,12 +591,15 @@ def app() -> Any:
 # ─────────────────────────── 돌리기 ───────────────────────────
 
 
-def studio(tmp_path: Path, example: str, model: StubModel) -> tuple[BpmProcess, Settings]:
+def studio(tmp_path: Path, example: str, model: StubModel, center_url: str) -> tuple[BpmProcess, Settings]:
     data = tmp_path / "studio"
     settings = replace(
         Settings(),
         data_dir=data,
-        center_url=CENTER_URL,
+        # 실제 Studio는 이 주소로 리소스 목록을 읽는다 (`studio.services.reader_for`). 이 시험은
+        # `CenterReader`를 직접 끼우지만, 기본값(`localhost:8800`)을 남겨 두면 나중에 그 길로
+        # 바뀌는 순간 **아무도 듣지 않는 포트**를 조용히 가리킨다.
+        center_url=center_url,
         llm_base_url=model.base_url,
         llm_model="stub",
         readable_dirs=(),
@@ -437,9 +637,10 @@ def run_all(
     model: StubModel,
     apps: dict[str, str],
     *,
+    center_url: str,
     mode: str = AUTONOMOUS,
 ) -> list[tuple[Case, Outcome]]:
-    made, settings = studio(tmp_path, example, model)
+    made, settings = studio(tmp_path, example, model, center_url)
     definition = made.entry_definition
     assert definition is not None
     receiver = Receiver(port=0).start()
@@ -468,11 +669,6 @@ def run_all(
 #:
 #: 하나라도 새로 막히면 여기에 **이유를 적고** 넣는다. 조용히 빼면 묶음이 거짓말을 한다.
 REMAINING: dict[str, str] = {
-    "bx16_reorder_proposal": (
-        "`center-jobs`가 **진짜 Center**의 `/jobs`를 부른다 (예제의 설계다) — 이 시험의 Center는 "
-        "TestClient라 소켓이 없고, 작업을 만들려면 배포된 BX-17과 등록된 Bot UI도 있어야 한다. "
-        "PC 예제 재통과(Center 배포 → Bot UI) 쪽에서 같이 다룬다"
-    ),
     "bx36_legacy_migration": "`desktop` AI 태스크 — Windows 몫이다 (M4 인수 시험과 같은 자리)",
 }
 
@@ -489,11 +685,16 @@ def test_the_bundle_is_read_from_the_examples() -> None:
     assert len(M5) == 20
     assert set(REMAINING) <= set(M5), f"남은 목록에 묶음 밖 예제가 있다: {set(REMAINING) - set(M5)}"
     assert BY_DESIGN in M5 and BY_DESIGN not in REMAINING
-    assert len(GREEN) == 17, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+    assert len(GREEN) == 18, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
 
 
 def test_bx33_fails_on_the_branch_it_is_meant_to_fail_on(
-    app: Any, tmp_path: Path, directory: AppDirectory, model: StubModel, mock_apps: dict[str, str]
+    app: Any,
+    tmp_path: Path,
+    center: Center,
+    directory: AppDirectory,
+    model: StubModel,
+    mock_apps: dict[str, str],
 ) -> None:
     """BX-33은 **일부러** 그렇게 두었다 (ADR-0039, 그 예제의 「배운 것」).
 
@@ -501,7 +702,8 @@ def test_bx33_fails_on_the_branch_it_is_meant_to_fail_on(
     그 결재를 지나 끝까지 가고, 「위키 읽기」(낮음)는 이름이 비어 **식 오류로 멈춘다** —
     실행 전 검사 B11이 미리 경고하는 바로 그 자리다. 둘 다 그렇게 되어야 한다.
     """
-    by_name = {case.name: outcome for case, outcome in run_all(tmp_path, BY_DESIGN, directory, model, mock_apps)}
+    found = run_all(tmp_path, BY_DESIGN, directory, model, mock_apps, center_url=center.url)
+    by_name = {case.name: outcome for case, outcome in found}
     assert set(by_name) == {"위키 읽기", "ERP 쓰기"}, sorted(by_name)
     assert by_name["ERP 쓰기"].verdict in (PASS, NO_EXPECT), by_name["ERP 쓰기"].detail
     낮음 = by_name["위키 읽기"]
@@ -510,11 +712,16 @@ def test_bx33_fails_on_the_branch_it_is_meant_to_fail_on(
 
 
 def test_the_model_is_really_asked(
-    app: Any, tmp_path: Path, directory: AppDirectory, mock_apps: dict[str, str], model: StubModel
+    app: Any,
+    tmp_path: Path,
+    center: Center,
+    directory: AppDirectory,
+    mock_apps: dict[str, str],
+    model: StubModel,
 ) -> None:
     """정해 둔 답이 **정말 모델을 거쳐** 오는가 — 스텁이 안 불리면 시험이 거짓말을 한다."""
     before = model.asked
-    results = run_all(tmp_path, "bx13_return_processing", directory, model, mock_apps)
+    results = run_all(tmp_path, "bx13_return_processing", directory, model, mock_apps, center_url=center.url)
     assert results
     assert model.asked > before, "AI 태스크가 모델을 부르지 않았다"
 
@@ -523,13 +730,18 @@ def test_the_model_is_really_asked(
 def test_an_m5_example_passes_all_its_cases(
     app: Any,
     tmp_path: Path,
+    center: Center,
+    center_jobs: str,
     directory: AppDirectory,
     mock_apps: dict[str, str],
     model: StubModel,
     example: str,
 ) -> None:
-    """케이스가 **모두 통과**한다 — 서비스 앱은 진짜로 불린다."""
-    results = run_all(tmp_path, example, directory, model, mock_apps)
+    """케이스가 **모두 통과**한다 — 서비스 앱은 진짜로 불린다.
+
+    `center_jobs`는 BX-16 몫이다 (작업을 만들 수 있는 판). 묶음 하나에 Center 하나라 한 번만 선다.
+    """
+    results = run_all(tmp_path, example, directory, model, mock_apps, center_url=center.url)
     assert results, f"{example}: 돌릴 케이스가 없다"
     bad = [(c.name, o.verdict, o.detail) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert not bad, f"{example}: {bad}"
@@ -539,6 +751,7 @@ def test_an_m5_example_passes_all_its_cases(
 def test_a_remaining_example_still_fails_for_the_written_reason(
     app: Any,
     tmp_path: Path,
+    center: Center,
     directory: AppDirectory,
     model: StubModel,
     mock_apps: dict[str, str],
@@ -547,6 +760,6 @@ def test_a_remaining_example_still_fails_for_the_written_reason(
     """아직 안 되는 것은 **안 된다고 적어 둔다** — 조용히 초록이 되면 목록이 썩는다."""
     if example == "bx36_legacy_migration":
         pytest.skip("데스크톱 예제 — Windows 몫이다")
-    results = run_all(tmp_path, example, directory, model, mock_apps)
+    results = run_all(tmp_path, example, directory, model, mock_apps, center_url=center.url)
     bad = [(c.name, o.verdict) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert bad, f"{example}: 이제 통과한다 — REMAINING에서 지운다 ({REMAINING[example]})"
