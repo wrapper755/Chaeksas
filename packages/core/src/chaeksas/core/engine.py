@@ -829,7 +829,12 @@ class Engine:
         return self._handle_failure(Context(engine=self, run=run, token=token, node=node), error)
 
     def timeout(self, run: Run, request_id: str) -> State:
-        """시간 초과 (C3 `human_timeout`). 실행은 실패로 끝낸다 — 되돌릴 길은 M5다."""
+        """시간 초과 (C3 `human_timeout`). **실행을 바로 실패로 끝낸다.**
+
+        `withdraw(reason="expired")`와 다르다 — 그쪽은 오류 경계를 거친다
+        (`APPROVAL_EXPIRED`, ADR-0038). 여기는 경계를 보지 않고 `_fail`로 간다.
+        **되돌아가 다시 묻는 길은 없다.**
+        """
         pending = run.pendings.get(request_id)
         if pending is None:
             raise EngineError(f"기다리는 요청이 아니다: {request_id}", code="not_waiting")

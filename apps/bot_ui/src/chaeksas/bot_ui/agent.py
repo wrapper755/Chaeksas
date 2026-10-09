@@ -6,8 +6,8 @@
 실행 자리는 **하나**다 (ADR-0014). 자리가 비어 있으면 Center 작업을 바로 시작한 것으로 ack하고,
 차 있으면 대기열에 넣는다. 대기열이 가득 차면 거절한다 (`queue_full`).
 
-실제로 Bot을 실행하는 일(BPMN 엔진)은 M3이다. 지금은 **자리와 대기열만** 관리한다 — 그래서
-`claim_slot()`·`release_slot()`을 엔진이 나중에 부르게 두었다.
+Bot을 실제로 돌리는 것은 자식 프로세스(`chk-bot-runner`, ADR-0023)다. 이 모듈은 **자리와
+대기열만** 관리하고 `claim_slot()`·`release_slot()`으로 자리를 쥐고 놓는다.
 """
 
 from __future__ import annotations

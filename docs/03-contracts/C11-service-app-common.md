@@ -40,7 +40,7 @@
 
 | 필드 | 타입 | 뜻 |
 | --- | --- | --- |
-| `status` | `ok` \| `degraded` | `degraded`면 `reasons`에 이유 (예: `neo4j_unreachable`) |
+| `status` | `ok` \| `degraded` | `degraded`면 `reasons`에 이유 (예: `llm_unreachable`) |
 | `version` | str | |
 | `reasons` | str[] | |
 
@@ -141,7 +141,7 @@ AdminStatus:
 | `app_id`, `name`, `version`, `category`, `console_url` | manifest와 같은 값 (C11 `/manifest`) |
 | `started_at`, `uptime_s` | 가동 시간 |
 | `operations` | 작업마다 `{name, description, modes, fallback, server_ok, calls_24h, errors_24h, error_rate}` — 수는 **앱 안의 사용 기록**에서 센다 |
-| `dependencies` | 바깥 의존마다 `{name, status, detail?}` (예: Neo4j, LLM 게이트웨이). `status`는 `ok`·`degraded`·`unreachable`·`unknown` |
+| `dependencies` | 바깥 의존마다 `{name, status, detail?}` (예: LLM 게이트웨이, DB). `status`는 `ok`·`degraded`·`unreachable`·`unknown` |
 | `center` | `{registered, base_url?, last_reported_at?}` — Center 리소스 목록(C7)에 올라가 있는지 |
 
 AdminKeyInfo: `ServiceAppKey`에서 **`hash`를 뺀 것** + `state`(`active`·`expired`·`revoked`).

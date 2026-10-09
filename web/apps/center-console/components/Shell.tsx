@@ -12,8 +12,11 @@ import type { Mode } from "@/lib/session";
  */
 
 /**
- * 탐색 한 줄. **아직 없는 화면에는 `href`가 없다** — 끄고 이유(`later`)를 보인다 (U3).
+ * 탐색 한 줄. **아직 없는 화면에는 `href`가 없다** — 끄고 이유(`later`)를 말풍선에 보인다 (U3).
  * 그래야 타입 라우트(`typedRoutes`)가 없는 주소를 잡아 준다.
+ *
+ * **`later`에 마일스톤 이름을 적지 않는다** — 지나간 마일스톤을 가리키면 다음 사람이 「그쪽
+ * 몫이구나」로 읽고 넘어간다. 공백 번호(`docs/09-gaps.md`)를 적는다.
  */
 type NavItem =
   // `Route`로 적는다 — 리터럴 **합집합**을 `Link`에 넘기면 타입 라우트가 그중 하나로만
@@ -21,13 +24,16 @@ type NavItem =
   | { label: string; href: Route; later?: never }
   | { label: string; href?: never; later: string };
 
+/** 꺼진 줄에 붙는 짧은 표시. 이유는 말풍선에 있다. */
+const LATER_BADGE = "아직";
+
 const NAV: NavItem[] = [
   { label: "실행 로그", href: "/runs" },
-  { label: "Bot 현황", later: "M5" },
+  { label: "Bot 현황", later: "CON-02는 아직 없습니다 (docs/09-gaps.md §4-9)." },
   { label: "Bot UI 현황", href: "/bot-uis" },
   { label: "결재함", href: "/approvals" },
   { label: "작업 지시", href: "/jobs" },
-  { label: "공통 패키지", later: "M5" },
+  { label: "공통 패키지", later: "CON-06은 아직 없습니다 (docs/09-gaps.md §4-10)." },
   { label: "리소스", href: "/resources" },
   { label: "Center API 키", href: "/center-keys" },
 ];
@@ -59,10 +65,10 @@ export function Shell({
               {item.later ? (
                 <span
                   className="flex items-center justify-between rounded-md px-3 py-2 text-body text-text-muted"
-                  title={`${item.later}에서 만듭니다.`}
+                  title={item.later}
                 >
                   {item.label}
-                  <span className="text-caption">{item.later}</span>
+                  <span className="text-caption">{LATER_BADGE}</span>
                 </span>
               ) : (
                 <Link

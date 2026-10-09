@@ -204,10 +204,10 @@ BotUiInfo 필드:
 
 | 상태 코드 | `code` | 언제 |
 | --- | --- | --- |
-| 400 | `bad_zip` / `no_manifest` / `bad_envelope` | 형식 오류 |
+| 400 | `bad_envelope` | 봉투 형식 오류 |
 | 401 / 403 | `key_invalid` / `forbidden` | 인증 실패, 권한 밖 (예: Bot UI가 자기에게 배포되지 않은 패키지를 요청) |
 | 404 | `not_found` | |
-| 409 | `version_exists` | 같은 버전인데 내용이 다름 |
+| 409 | `version_conflict` | 같은 버전인데 내용이 다름 |
 | 409 | `in_use` | 참조 중인 패키지 삭제 |
 | 409 | `already_started` / `not_cancellable` | 취소할 수 없는 작업 |
 | 409 | `deployment_conflict` / `deployment_revoked` | C2 |
@@ -215,6 +215,7 @@ BotUiInfo 필드:
 | 410 | `revoked` | 철회된 패키지 내려받기 |
 | 413 | `too_large` | 패키지 50 MB 초과 |
 | 422 | C1 규칙 코드, `not_approved`, `deprecated`, `hash_mismatch`, `target_mismatch`, `server_runner_not_available`, `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패 |
+| 422 | `not_a_zip`, `manifest_missing`, `manifest_invalid`, `zip_too_many_entries`, `zip_unsafe_path`, `zip_too_large` | 업로드한 zip의 형식 오류. **400이 아니라 422다** — 본문은 읽혔고 내용이 계약과 맞지 않는다 |
 
 ## 호환 규칙
 

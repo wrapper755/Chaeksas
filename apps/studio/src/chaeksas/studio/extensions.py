@@ -147,7 +147,7 @@ class Extensions:
     def service_url(self, app_id: str) -> str | None:
         """그 서비스 앱의 주소 — 그 앱을 서버 부분으로 가진 확장의 `service.base_url` (C13).
 
-        > 상태: Center 리소스 목록(C7)의 주소는 M5다. 확장이 아닌 서비스 앱은 아직 주소를 모른다.
+        > 상태: 확장의 서버 부분 주소는 Center 리소스 목록(C7)에서 온다 (`services.py`).
         """
         found = self.host.get(app_id)
         service = found.manifest.service if found is not None else None
