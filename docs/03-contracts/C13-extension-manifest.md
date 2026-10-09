@@ -6,8 +6,8 @@
 | schema | 2 (1은 `local_runtimes.command`를 쓰던 것 — 아래 변경 이력) |
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·Bot UI·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
 | 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |
-| 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md) |
-| 관련 화면 | BUI-01·03·11, STU-03·14·15, CON-07 |
+| 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md), [0042](../decisions/0042-extension-contributed-panels.md) |
+| 관련 화면 | BUI-01·03·09·11, STU-03·14·15, CON-07, SVC-00 |
 
 > 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`가 **서명 봉투로만** 받고(C2 `extension`·`extension_revoke`, E6), E1·E2·E3을 검사하며, 정의와 봉투를 **그대로** 보관해 실행하는 쪽이 다시 검증할 수 있게 한다. `chk-admin sign-extension`·`revoke-extension`이 봉투 파일을 만들고, CON-07 「확장」 탭에서 올린다. **E4·E8은 외부 확장으로 띄울 수 없다** — `task_types`·`agent_environments`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
 >
@@ -93,6 +93,7 @@
 | `studio.editors` | `[{task_type, entry}]` | Studio | 불가 (자동 폼) |
 | `studio.resource_views` | `[{id, label, resource_type, creates_task_type?}]` | STU-03 | 가능 (선언) |
 | `bot_ui.utilities` | `[{id, label, menu: "tools", entry, needs_runtime?}]` | Bot UI 「도구」 메뉴·탭 | 불가 |
+| `bot_ui.panels` | `[{id, label, surface, runtime?, entry}]` | Bot UI 화면의 **한 칸** (BUI-09, [ADR-0042](../decisions/0042-extension-contributed-panels.md)) | 불가 |
 | `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start, reserve?, status?, shutdown?}]` | Bot UI (BUI-09·11) | 불가 |
 | `agent_environments` | `[{domain, entry}]` | 엔진 — `domain: web`·`desktop` AI 태스크의 눈과 손 ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md)) | 불가 |
 | `configuration` | `[{key, label, scope, schema, secret}]` | 설정 화면 칸 (BUI-03 「확장별 설정」, STU-10, 서버 실행기 설정) | 불가 |
@@ -113,11 +114,16 @@
   - `token_dir: true`면 Bot UI가 그 폴더(`<Bot UI 데이터>/runtimes/<런타임 id>`)에 **`runtime.json`**(`{runtime, port}`)을 남긴다. 같은 PC의 Studio가 이것과 토큰 파일로 그 런타임을 찾는다 — Studio는 런타임을 띄우지 않는다.
   - `reserve`(선택): **실행 예약** 방법 — `{path, header, token_file}`. Bot UI는 그 런타임을 쓰는 Bot을 시작하기 전에 `POST <path>` `{run_id}`(헤더 `<header>: <token_dir의 token_file 내용>`)로 예약하고, 실행이 끝나면 `DELETE <path>`로 푼다 (ADR-0014 §4). Bot UI는 런타임의 말(C10 등)을 모르고 이 선언대로만 부른다.
     - 2xx: 예약됨. **409: 다른 쪽이 쓰는 중** — Bot은 시작하지 않고 대기열 맨 앞에서 기다린다(다음 주기에 다시 묻는다, 트레이 「Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다」). 닿지 못함·그 밖의 실패는 기록만 하고 실행을 보낸다 (그 태스크가 분명히 실패한다).
-  - `status`(선택): **상태를 묻는 방법** — `{path, header, token_file}`. `GET <path>`로 받은 것을 BUI-09가 보인다. **본문은 런타임의 말이고 호스트는 뜻을 아는 칸만 읽는다** — `reserved_for`(실행 id. C4 하트비트 `worker.reserved_for`로도 올라간다)와 `unsent_reports`(보내지 못한 보고 수) 둘이다. 나머지 칸은 **해석하지 않는다** ([ADR-0018](../decisions/0018-extensions.md)) — 「최근 UI 세션」처럼 확장의 말로 된 것을 플랫폼이 그리면 Bot UI가 UI 자동화를 알게 된다 ([09-gaps](../09-gaps.md) §4-2).
+  - `status`(선택): **상태를 묻는 방법** — `{path, header, token_file}`. `GET <path>`로 받은 것을 BUI-09가 보인다. **본문은 런타임의 말이고 호스트는 뜻을 아는 칸만 읽는다** — `reserved_for`(실행 id. C4 하트비트 `worker.reserved_for`로도 올라간다)와 `unsent_reports`(보내지 못한 보고 수) 둘이다. 나머지 칸은 **해석하지 않는다** ([ADR-0018](../decisions/0018-extensions.md)) — 「최근 UI 세션」처럼 확장의 말로 된 것은 **확장이 `bot_ui.panels`로 그린다** ([ADR-0042](../decisions/0042-extension-contributed-panels.md)).
   - `shutdown`(선택): **곱게 끄는 방법** — `{path, header, token_file}`. `POST <path>`. Bot UI 종료 순서(BUI-01 10번)가 프로세스를 끄기 **전에** 한 번 부른다 — 런타임이 열린 세션을 닫고 밀린 보고를 저장할 틈을 준다. **답하지 않아도 기다리지 않는다**(짧은 제한 시간 뒤 그대로 끈다) — 끄는 길은 `core.processes`가 늘 쥐고 있다 (ADR-0023).
   - 관리 호출 셋(`reserve`·`status`·`shutdown`)은 **같은 모양**이다: 경로는 `/`로 시작하고 `token_dir: true`여야 한다 (아니면 검사 오류 `reserve_invalid`·`status_invalid`·`shutdown_invalid`). 토큰은 **부를 때마다** 파일에서 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다.
   - **실행에 쓰는 런타임:** Bot UI는 Bot을 시작하기 전에 그 Bot이 쓰는 확장의 런타임을 띄운다. 쓰는 확장은 매니페스트의 `requires.extensions`와, `requires.domains`의 `web`·`desktop`을 기여한 확장(`agent_environments`)이다. 실행기(자식)에게는 확장별 설정(그 칸 + 예약 키)을 **파일로** 넘긴다 — 비밀은 싣지 않는다.
 - `bot_ui.utilities[].needs_runtime`: 그 유틸리티를 열기 전에 호스트가 띄워야 할 **로컬 런타임의 id**. 띄우지 못하면 유틸리티를 열지 않고 왜 못 열었는지 말한다 (「없는데 된 척」하지 않는다).
+- `bot_ui.panels`: 플랫폼 화면의 한 칸을 **확장이 그린다** ([ADR-0042](../decisions/0042-extension-contributed-panels.md)). 「최근 UI 세션」처럼 열 이름·단위가 **확장의 말**인 표가 여기로 온다 — 플랫폼이 그리면 Bot UI가 그 확장을 알게 된다 ([ADR-0018](../decisions/0018-extensions.md)).
+  - `surface`: **플랫폼이 미리 정한 자리 이름.** 지금 있는 것은 `bot_ui.runtimes`(BUI-09 런타임 칸 아래) 하나다. **모르는 `surface`는 조용히 무시한다** — 새 확장이 가리키는 자리를 옛 Bot UI가 모를 수 있고, 반대로 옛 자리가 사라졌을 수도 있다. (`surface` 값은 열린 문자열이다 — README 원칙 10.)
+  - `entry`: `extension_api.BotUiPanel`. `widget(ctx)`와 `refresh()` 둘이고 **규약은 STU-13·14 편집기와 같다**. `refresh()`는 **플랫폼이 주기마다** 부른다 — 패널이 자기 타이머를 만들지 않는다 (화면 스레드를 쥐는 쪽은 호스트다).
+  - **플랫폼은 칸 안을 모른다.** 만들다·그리다 실패하면 그 칸만 접고 사유를 보인다 — 화면 전체가 깨지지 않는다.
+  - `runtime`(선택): 그 **로컬 런타임이 떠 있을 때만** 칸을 보인다. 꺼져 있을 때 빈 표를 보이는 것보다 칸이 없는 것이 정직하다.
 - **호스트가 채우는 예약 설정 키** — 띄운 로컬 런타임이 어디 있는지는 **확장이 설정으로 받는다** (`ctx.setting(…)`). 확장이 포트를 다시 계산하거나 토큰 파일 자리를 추측하지 않게 한다.
 
   | 키 | 값 |
@@ -141,6 +147,10 @@
   - **실행 기록에 남기려면 `TaskOutcome.events[]`에 담는다** (C3 §확장이 남기는 이벤트, [ADR-0041](../decisions/0041-extension-run-events.md)). 확장은 `ExtensionEvent{kind, data}`만 주고 **줄은 엔진이 쓴다** — `run_id`·`seq`·`ts`·`node_id`는 엔진이 붙이고, `data`는 엔진이 거른다(원칙 6). 실패했을 때 남길 것은 `TaskFailed(…, events=[…])`에 싣는다. 알려진 `kind`인데 필수 키가 빠지면 **그 줄만 버려진다** (업무는 깨지지 않는다). 확장이 파일이나 `seq`를 만지는 길은 없다.
 - **`entry` 형식: `"<모듈>:<이름>"`.** 모듈은 확장 이름 공간(`chaeksas.ext`) 밑에서 찾는다 — `ui_automation.client:UiTaskExecutor`는 `chaeksas.ext.ui_automation.client.UiTaskExecutor`다 ([ADR-0019](../decisions/0019-package-names.md)). 가리키는 것은 **인자 없이 만들 수 있는 클래스**(또는 이미 만들어진 객체)이고, 확장 호스트가 만들어 `extension_api`의 모양인지 확인한 뒤 켠다.
   - 확장 호스트는 **그 확장의 패키지 안**만 허용한다. 정의가 다른 모듈(`os:getcwd` 같은 것)을 가리켜 import시킬 수 없다.
+- `console.pages`: 그 서비스 앱 관리 콘솔(SVC-00 왼쪽 탐색)에 붙는 **앱 고유 화면**이다. 콘솔은 접속한 앱의 `app_id`(C11 `/admin/v1/status`)로 어느 확장의 기여인지 고른다 — 콘솔 한 벌이 모든 서비스 앱을 그리기 때문이다.
+  - `module`: **`web/` 워크스페이스 안의 화면 모듈 이름.** 콘솔이 **빌드 시점 레지스트리**로 잇는다 (바깥 주소로 동적 `import()`를 열지 않는다 — [ADR-0017](../decisions/0017-web-nextjs-design-system.md)의 「브라우저가 토큰·주소를 모른다」).
+  - 그래서 화면 모듈은 **모노레포 안 내장·사내 확장만** 올릴 수 있다 (Next.js 번들에 들어가야 한다). 외부 확장은 코드를 기여할 수 없고(E1) 자기 콘솔 **링크만** CON-07에 보인다.
+  - 레지스트리에 그 `module`이 없으면 콘솔은 **줄을 끄고 이유를 가까이에 적는다** (U3 — 없는 것은 끈다). 줄 자체는 기여에서 오므로 **확장을 더하면 줄이 생긴다.**
 - `resources[].catalog_url`: 상대 경로(서버 부분 기준) 또는 `allowed_hosts` 안의 주소. 응답은 §5 공통 카탈로그 형식이다.
 
 ### KeyNeed
@@ -244,6 +254,8 @@ Operation:
     "studio.resource_views": [{"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page", "creates_task_type": "ui_task"}],
     "bot_ui.utilities": [{"id": "selector-registration", "label": "UI 셀렉터 등록", "menu": "tools",
                           "entry": "ui_automation.client:SelectorRegistration", "needs_runtime": "worker"}],
+    "bot_ui.panels": [{"id": "recent-ui-sessions", "label": "최근 UI 세션", "surface": "bot_ui.runtimes",
+                       "runtime": "worker", "entry": "ui_automation.client:RecentSessionsPanel"}],
     "bot_ui.local_runtimes": [{"id": "worker", "label": "Worker 프로세스", "entry": "ui_automation.worker:serve",
                                "port_setting": "CHK_WORKER__LOCAL_API__PORT", "default_port": 8899,
                                "health": "/v1/health", "token_dir": true, "start": "on_demand"}],
@@ -306,6 +318,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 2 | `bot_ui.panels`(플랫폼 화면의 한 칸)를 더하고 `console.pages[].module`이 어떻게 화면이 되는지 적었다 — `extension_api` **1.3**. 기여 지점 추가라 기존 확장은 영향이 없다 | 0042 |
 | 2026-10-09 | 2 | 태스크 수행기가 **실행 기록에 남기는 길**을 적었다 (`TaskOutcome.events[]`) — `extension_api` **1.2**. 정의(`extension.json`)는 바뀌지 않으므로 `api: ">=1,<2"`인 확장은 그대로 돈다 | 0041 |
 | 2026-10-09 | 2 | `bot_ui.local_runtimes[].status`·`shutdown`(상태 묻기·곱게 끄기)을 더했다 — Bot UI가 BUI-09의 「예약」·「밀린 보고」를 보이고 종료 순서에서 런타임에게 닫을 틈을 준다. 선택 칸이라 기존 확장은 영향이 없다 | 0018, 0023 |
 | 2026-10-06 | 2 | `bot_ui.local_runtimes[].reserve`(실행 예약 방법)를 더했다 — Bot UI가 런타임의 계약을 모른 채 실행 동안 런타임을 그 실행에 묶는다. 선택 칸이라 기존 확장은 영향이 없다 | 0014 |

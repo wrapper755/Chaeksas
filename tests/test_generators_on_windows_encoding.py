@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 GENERATORS = [
     "scripts/gen_schemas.py",
     "scripts/gen_tokens.py",
+    "scripts/gen_console_pages.py",
     "docs/08-business-examples/_source/build.py",
 ]
 

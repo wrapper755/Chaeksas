@@ -73,6 +73,27 @@ class BotUiUtility(Protocol):
 
 
 @runtime_checkable
+class BotUiPanel(Protocol):
+    """플랫폼 화면의 **한 칸** (`bot_ui.panels`, BUI-09의 「최근 UI 세션」 — ADR-0042).
+
+    `BotUiUtility`와 다른 것은 「창이 아니라 남의 화면 안의 칸」이라는 점이다. 그래서 둘이
+    더 있다.
+
+    - **`refresh()`는 호스트가 부른다** — 패널이 자기 타이머를 만들지 않는다 (화면 스레드를
+      쥔 쪽이 주기를 정한다). 느린 일(서버·런타임 호출)은 호스트의 주기 안에 끝나야 한다.
+    - **못 그리면 그 칸만 접힌다.** 호스트는 예외를 잡아 사유를 보이고 화면을 이어 그린다.
+    """
+
+    def widget(self, ctx: ExtensionContext) -> object:
+        """칸에 붙일 위젯 (Qt). 호스트가 자기 화면에 끼운다."""
+        ...
+
+    def refresh(self) -> None:
+        """보일 것을 다시 읽는다. 호스트가 주기마다 부른다."""
+        ...
+
+
+@runtime_checkable
 class LocalRuntimeEntry(Protocol):
     """로컬 런타임의 진입점 (`bot_ui.local_runtimes[].entry`, ADR-0024).
 

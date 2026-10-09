@@ -324,6 +324,23 @@ def test_generated_json_schemas_are_current() -> None:
     assert r.returncode == 0, f"스키마가 모델과 다르다 — gen_schemas.py를 다시 돌려라\n{r.stdout}{r.stderr}"
 
 
+def test_generated_console_pages_are_current() -> None:
+    """확장 정의의 `console.pages`를 고치고 `scripts/gen_console_pages.py`를 다시 돌리지 않으면
+    여기가 깨진다 (ADR-0042 §2 — 콘솔이 손으로 베낀 목록을 쓰지 않는다)."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    r = subprocess.run(
+        [sys.executable, str(root / "scripts" / "gen_console_pages.py"), "--check"],
+        capture_output=True, text=True, cwd=root,
+    )
+    assert r.returncode == 0, (
+        f"콘솔 화면 목록이 확장 정의와 다르다 — gen_console_pages.py를 다시 돌려라\n{r.stdout}{r.stderr}"
+    )
+
+
 def test_generated_design_tokens_are_current() -> None:
     """토큰을 고치고 `scripts/gen_tokens.py`를 다시 돌리지 않으면 여기가 깨진다.
 

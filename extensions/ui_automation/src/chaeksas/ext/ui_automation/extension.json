@@ -42,6 +42,15 @@
         "needs_runtime": "worker"
       }
     ],
+    "bot_ui.panels": [
+      {
+        "id": "recent-ui-sessions",
+        "label": "최근 UI 세션",
+        "surface": "bot_ui.runtimes",
+        "runtime": "worker",
+        "entry": "ui_automation.client:RecentSessionsPanel"
+      }
+    ],
     "bot_ui.local_runtimes": [
       {
         "id": "worker",
@@ -70,7 +79,9 @@
       {"id": "pages-registered", "entry": "ui_automation.client:PagesRegisteredCheck"}
     ],
     "console.pages": [
-      {"id": "overview", "label": "개요", "module": "ui-automation/overview"}
+      {"id": "overview", "label": "개요", "module": "ui-automation/overview"},
+      {"id": "selectors", "label": "셀렉터", "module": "ui-automation/selectors"},
+      {"id": "monitoring", "label": "모니터링", "module": "ui-automation/monitoring"}
     ],
     "resources": [
       {"type": "ui_page", "label": "UI 화면", "catalog_url": "/v1/catalog"}

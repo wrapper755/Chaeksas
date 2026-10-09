@@ -28,10 +28,10 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C7 | 구현됨 | `contracts.resources`·`center_keys` | 외부 확장 앱의 `health`를 **보지 않는다** (§3-7) |
 | C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
 | C9 | **구현됨** | **`ext.ui_automation.contracts.registry`** | — ([ADR-0040](decisions/0040-registry-storage-sqlite.md)이 저장소를 적었다) |
-| C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`shutdown`을 더했다) |
+| C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
 | C12 | 초안 (M7) | **없다** (`apps/server_runner`는 docstring뿐) | M7 전부. **M6 기준의 「모든 계약」에서 빼야 하는가는 사람이 정한다** (§2-4) |
-| C13 | 합의 (모델·검사 구현됨) | `contracts.extension`·`core.extensions` | `console.pages`를 **아무도 그리지 않는다** (§4-7). `studio.resource_views`도 (§4-4) |
+| C13 | 합의 (모델·검사 구현됨) | `contracts.extension`·`core.extensions` | `studio.resource_views`를 **아무도 읽지 않는다** (§4-4). `console.pages`는 콘솔이 **읽는다** — 화면 셋만 남았다 (§4-7) |
 | C14 | 초안 (B1~**B15** 구현됨) | `contracts.bpmn_ext` B1~B15 | 「합의」로 올릴지는 M3 엔진·Studio와 함께 정한다 (문서가 그렇게 적는다) |
 
 굵게 적은 셋(C8·C9·C10)은 **확장이 소유한 계약**이라 `extensions/ui_automation/…/contracts/`에
@@ -92,22 +92,6 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 ## 4. 화면 쪽 기능 공백
 
-### 4-2. BUI-09 「최근 UI 세션」
-
-「예약」·「밀린 보고」는 **닫았다** — Bot UI가 C13 `status` 선언대로 런타임의 상태를 묻는다.
-남은 것은 **「최근 UI 세션」 표 하나**다.
-
-- **문서:** `bot-ui.md` 264~267줄 — 시각 / 요청한 쪽 / **화면** / 결과 / **폴백 깊이** / **치유**.
-- **코드:** Worker의 `GET /v1/status`가 `recent_sessions[]`로 준다. Bot UI는 **읽지 않는다.**
-- **없는 것:** 그 표를 그리는 쪽.
-- **막는 것:** 없다 — [ADR-0042](decisions/0042-extension-contributed-panels.md)가 정했다.
-  굵게 적은 열은 **UI 자동화의 말**이라 플랫폼이 그릴 수 없다 (ADR-0018) — 그래서 `status`의
-  **뜻을 아는 칸만**(`reserved_for`·`unsent_reports`) 읽게 두었다. **확장이 위젯을 기여한다**:
-  C13에 `bot_ui.panels`(`{id, label, surface, runtime?, entry}`)를 더하고, `surface`는 플랫폼이
-  미리 정한 자리 이름(`bot_ui.runtimes`)이며 **모르는 `surface`는 조용히 무시한다**. 규약은
-  STU-13·14 편집기와 같고 `refresh()`만 더 받는다. 남은 일: C13 문서 → 모델·검사 → Bot UI가
-  칸을 끼우는 길 → 확장의 패널. §4-7과 **같은 결정**을 쓴다.
-
 ### 4-4. STU-03 리소스 탐색기 (C13 `studio.resource_views`)
 
 - **문서:** `studio.md` 110~121줄 — 고정 뿌리 셋(「공유 BPM 프로세스」·「서비스 앱」·「툴팩」) + **확장이 기여하는 뿌리**(「UI 화면」). 끌어다 놓으면 Call Activity·UI 태스크·서비스 앱 태스크가 생긴다. STU-01 「보기 → 리소스」(Ctrl+Shift+E).
@@ -134,10 +118,10 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 ### 4-7. UIA-01·02·03 — 확장이 기여하는 콘솔 화면 (C13 `console.pages`)
 
 - **문서:** `service-app-console.md` 63~101줄. UI 자동화 앱 콘솔의 개요·셀렉터·모니터링.
-- **코드:** `ExtensionHost.console_pages()`가 있고 `ui-automation/extension.json`이 **선언한다** — **호출자가 `tests/`뿐이다.** 콘솔(`svc-console/components/Shell.tsx`)에는 세 줄이 **손으로 베껴** 꺼진 채 들어 있다(`APP_PAGES`) — 기여에서 읽은 것이 아니라서 **확장을 더해도 줄이 생기지 않는다.** `href` 타입도 `"/status" | "/keys" | "/usage"` 고정 셋이다.
-- **없는 것:** 콘솔이 `console_pages()` 기여를 읽는 길(+`href` 타입 풀기) + 화면 셋.
-- **크기:** 큼. 데이터는 레지스트리에 있다 (`service/registry.py`가 `active`·`unverified`·실패율까지 센다).
-- **막는 것:** 없다 — ADR 둘이 풀었다. [ADR-0040](decisions/0040-registry-storage-sqlite.md)이 저장소를 적어 「저장소 표시」를 없애고 통계 열을 **늘 있는 것**으로 만들었고(경로 탐색은 앱이 너비 우선으로 찾는다), [ADR-0042](decisions/0042-extension-contributed-panels.md)가 **콘솔이 `console.pages` 기여를 읽는 길**을 정했다(모노레포 안 내장·사내 확장만, 빌드 시점 레지스트리). 손으로 베낀 `APP_PAGES`를 버리고 `href` 타입을 푼다.
+- **코드:** **읽는 길은 닫았다** ([ADR-0042](decisions/0042-extension-contributed-panels.md) §2) — 콘솔이 확장 정의의 `console.pages`를 빌드 시점 레지스트리(`scripts/gen_console_pages.py` → `lib/console-pages.generated.ts`)로 읽고 접속한 앱의 `extension.id`(C11)로 고른다. 손으로 베낀 `APP_PAGES`를 버렸고 `href` 타입도 풀었다(`Route`). 그래서 **확장을 더하면 줄이 생긴다.**
+- **없는 것:** **화면 셋 자체.** 지금은 세 줄이 보이지만 모듈 레지스트리(`lib/console-modules.ts`)가 비어 있어 **꺼진 채**이고 이유가 붙는다 (U3).
+- **크기:** 큼. 데이터는 레지스트리에 있다 (`service/registry.py`가 `active`·`unverified`·실패율까지 센다). 화면 하나를 만들면 `app/`에 경로를 더하고 모듈 레지스트리에 한 줄을 적는다 — 그 줄은 `Route`라서 **없는 경로를 적으면 타입 검사가 잡는다.**
+- **막는 것:** 없다. [ADR-0040](decisions/0040-registry-storage-sqlite.md)이 저장소를 적어 「저장소 표시」를 없애고 통계 열을 **늘 있는 것**으로 만들었다(경로 탐색은 앱이 너비 우선으로 찾는다). UIA-03의 재료는 C8 보고와 **C3 `ui_session`**([ADR-0041](decisions/0041-extension-run-events.md)) 둘이다.
 
 ### 4-8. BUI-11 확장 · BUI-05 알림
 

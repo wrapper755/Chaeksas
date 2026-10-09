@@ -95,7 +95,9 @@ def test_builtin_declares_the_worker_as_a_local_runtime(host: ExtensionHost) -> 
 def test_other_contribution_points(host: ExtensionHost) -> None:
     assert [c.value.resource_type for c in host.resource_views()] == ["ui_page"]
     assert [c.value.type for c in host.resources()] == ["ui_page"]
-    assert [c.value.id for c in host.console_pages()] == ["overview"]
+    # 화면 설계서가 적은 셋이다 (UIA-01~03). 콘솔은 이 기여를 읽어 탐색 줄을 만든다 (ADR-0042).
+    assert [c.value.id for c in host.console_pages()] == ["overview", "selectors", "monitoring"]
+    assert [c.value.id for c in host.panels("bot_ui.runtimes")] == ["recent-ui-sessions"]
     assert [c.value.id for c in host.preflight()] == ["pages-registered"]
     assert [c.value.key for c in host.configuration(scope="bot_ui")] == ["registrar_key"]
     assert host.configuration(scope="server_runner") == []

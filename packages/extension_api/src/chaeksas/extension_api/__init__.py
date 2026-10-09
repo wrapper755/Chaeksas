@@ -8,6 +8,7 @@
 | `task_types[].executor` | `TaskExecutor` |
 | `task_types[].editor`, `studio.editors` | `TaskEditor` (`kind="schema"`면 필요 없다) |
 | `bot_ui.utilities` | `BotUiUtility` |
+| `bot_ui.panels` | `BotUiPanel` (플랫폼 화면의 한 칸, ADR-0042) |
 | `preflight` | `PreflightCheck` |
 | `bot_ui.local_runtimes` | `LocalRuntimeEntry` (자식 프로세스에서 불린다) |
 | `agent_environments` | `AgentEnvironment` → `AgentSession`·`AgentTool` (AI 태스크의 눈과 손, ADR-0037) |
@@ -36,6 +37,7 @@ from chaeksas.extension_api.contributions import (
     AgentEnvironment,
     AgentSession,
     AgentTool,
+    BotUiPanel,
     BotUiUtility,
     Finding,
     LocalRuntimeEntry,
@@ -91,6 +93,7 @@ __all__ = [
     "TaskFailed",
     "TaskOutcome",
     # 기여
+    "BotUiPanel",
     "BotUiUtility",
     "Finding",
     "LocalRuntimeEntry",

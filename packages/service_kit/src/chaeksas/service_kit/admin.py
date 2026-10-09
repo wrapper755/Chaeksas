@@ -136,6 +136,7 @@ def create_router(
             version=manifest.version,
             category=manifest.category,
             console_url=manifest.console_url,
+            extension=manifest.extension,
             started_at=started_at,
             uptime_s=max(uptime, 0),
             operations=operation_stats(manifest, usage_log, now=at),

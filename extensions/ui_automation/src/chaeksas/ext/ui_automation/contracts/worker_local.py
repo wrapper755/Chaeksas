@@ -196,13 +196,25 @@ class Holder(ContractModel):
 
 
 class SessionBrief(ContractModel):
-    """최근 세션 한 줄 (BUI-09)."""
+    """최근 세션 한 줄 (BUI-09 「최근 UI 세션」).
+
+    표의 열이 **다 여기 있다** — 시각(`at`)·요청한 쪽(`caller`)·화면(`page_id`)·결과(`result`)·
+    폴백 깊이(`fallback_depth_max`)·치유(`healed`). **그 표를 그리는 것은 이 확장이 기여한
+    칸이다** (`bot_ui.panels`, ADR-0042) — 플랫폼은 이 본문을 해석하지 않는다 (ADR-0018).
+
+    **업무 값은 없다** (원칙 6) — 무엇을 입력했는지·읽었는지는 담지 않는다.
+    """
 
     session_id: str
     business_key: str
+    #: 요청한 쪽 (`caller.type` — `bot`·`studio`·`selector_registration`, 열린 문자열).
+    caller: str = CALLER_BOT
     page_id: str | None = None
     result: str = RESULT_SUCCESS
     steps: int = 0
+    #: 사다리에서 가장 깊이 내려간 칸 (C8). 0이면 첫 로케이터로 됐다는 뜻이다.
+    fallback_depth_max: int = 0
+    healed: bool = False
     at: Timestamp | None = None
 
 

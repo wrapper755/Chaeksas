@@ -69,6 +69,26 @@
       "title": "Dependency",
       "type": "object"
     },
+    "ExtensionRef": {
+      "additionalProperties": true,
+      "description": "이 서비스 앱이 어느 확장의 서버 부분인가 (C13). 내장·사내 확장이면 넣는다.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionRef",
+      "type": "object"
+    },
     "OperationStatus": {
       "additionalProperties": true,
       "description": "작업 하나의 선언 + 최근 통계 (SVC-01 「작업」). 수는 앱 안의 사용 기록에서 센다.",
@@ -162,6 +182,17 @@
       },
       "title": "Dependencies",
       "type": "array"
+    },
+    "extension": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExtensionRef"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "name": {
       "title": "Name",
