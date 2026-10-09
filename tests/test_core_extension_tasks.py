@@ -3,13 +3,15 @@
 **엔진은 확장을 모른다** — 태스크 종류 이름으로 수행기를 찾아 넘기고 출력만 받는다.
 그래서 여기 시험도 가짜 확장 하나로 돈다 (UI 자동화를 들이지 않는다).
 
-거듭 보는 것 다섯.
+거듭 보는 것 여섯.
 
 1. **출력은 변수로** 들어간다.
 2. 업무 실패는 **오류 경계가 받는다** — 확장의 `TaskFailed`를 엔진의 것으로 옮긴다.
 3. 확장이 없으면 **그림·설치 오류**다 (경계로 받지 않는다) — 재시도로 풀리지 않는다.
 4. 수행기가 받는 것은 C14 속성과 **키 참조 이름**이다 (값이 아니다, ADR-0013).
 5. **값은 기록에 남지 않는다** (원칙 6).
+6. 확장이 남기고 싶다고 한 줄은 **엔진이 쓴다** (C3, ADR-0041) — 칸을 붙이고, 거르고,
+   어긋난 줄만 버린다.
 """
 
 from __future__ import annotations
@@ -22,8 +24,8 @@ import pytest
 
 from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.core.engine import Engine, RunEnv, State
-from chaeksas.core.run_log import RunLog
-from chaeksas.extension_api import TaskContext, TaskFailed, TaskOutcome
+from chaeksas.core.run_log import RunLog, summarize
+from chaeksas.extension_api import ExtensionEvent, TaskContext, TaskFailed, TaskOutcome
 
 RUN = "run_20261005_120000_abcdef"
 
@@ -63,16 +65,23 @@ WITH_BOUNDARY = PROCESS.replace(
 class FakeExecutor:
     """`extension_api.TaskExecutor` — 받은 것을 남기고 정해진 답을 준다."""
 
-    def __init__(self, *, outputs: dict[str, Any] | None = None, fail: Exception | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        outputs: dict[str, Any] | None = None,
+        fail: Exception | None = None,
+        events: list[ExtensionEvent] | None = None,
+    ) -> None:
         self.outputs = outputs or {}
         self.fail = fail
+        self.events = events or []
         self.seen: list[TaskContext] = []
 
     def execute(self, ctx: TaskContext) -> TaskOutcome:
         self.seen.append(ctx)
         if self.fail is not None:
             raise self.fail
-        return TaskOutcome(outputs=self.outputs)
+        return TaskOutcome(outputs=self.outputs, events=self.events)
 
 
 class Host:
@@ -203,6 +212,124 @@ def test_the_values_do_not_reach_the_log(tmp_path: Path) -> None:
     raw = (tmp_path / "run.jsonl").read_text(encoding="utf-8")
     assert "010-1234-5678" not in raw, "업무 값은 기록에 남지 않는다 (원칙 6)"
     assert "demo_task" in raw, "무엇을 했는지는 남는다"
+
+
+# ──────────────── 확장이 남기는 실행 기록 (C3, ADR-0041) ────────────────
+
+
+def ui_session(**extra: Any) -> dict[str, Any]:
+    """C3 `ui_session`의 `data` — 필수 키 여섯 (C3 48줄)."""
+    return {
+        "business_key": f"{RUN}:Task_Ext:1:1",
+        "page_id": "erp.order.form",
+        "result": "success",
+        "steps": 6,
+        "fallback_depth_max": 1,
+        "healed": False,
+        **extra,
+    }
+
+
+def kinds(tmp_path: Path) -> list[str]:
+    return [one["kind"] for one in events(tmp_path)]
+
+
+def test_the_engine_writes_the_line_and_adds_its_own_fields(tmp_path: Path) -> None:
+    """확장은 `{kind, data}`만 준다 — `run_id`·`seq`·`ts`·`node_id`는 **엔진이 붙인다**."""
+    executor = FakeExecutor(events=[ExtensionEvent(kind="ui_session", data=ui_session())])
+    run = run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
+    assert run.state == State.DONE
+    line = [one for one in events(tmp_path) if one["kind"] == "ui_session"]
+    assert len(line) == 1
+    assert line[0]["run_id"] == RUN
+    assert line[0]["node_id"] == "Task_Ext", "어느 노드였나는 엔진만 안다"
+    assert line[0]["seq"] >= 1 and line[0]["ts"], "번호와 시각도 엔진이 붙인다"
+    assert line[0]["data"]["page_id"] == "erp.order.form", "확장이 준 내용은 그대로 간다"
+
+
+def test_the_summary_counts_the_line(tmp_path: Path) -> None:
+    """`run_finished.ui_tasks`가 이제 센다 — 이 줄이 없을 때는 영원히 0이었다."""
+    executor = FakeExecutor(events=[ExtensionEvent(kind="ui_session", data=ui_session())])
+    run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
+    finished = [one for one in events(tmp_path) if one["kind"] == "run_finished"][-1]
+    assert finished["data"]["ui_tasks"] == 1
+    assert summarize(list(RunLog.read(tmp_path / "run.jsonl")))["ui_tasks"] == 1
+
+
+def test_the_engine_filters_what_the_extension_gave(tmp_path: Path) -> None:
+    """**확장을 믿고 통과시키지 않는다** — `sanitize()`를 그대로 거친다 (원칙 6).
+
+    거르는 자리가 하나여야 지켜진다. 확장이 실수로 업무 값을 실어도 파일에 남지 않는다.
+    """
+    executor = FakeExecutor(
+        events=[
+            ExtensionEvent(
+                kind="ui_session",
+                data=ui_session(읽은값={"고객명": "홍길동"}, 메모="적어 둔 말 " * 60),
+            )
+        ]
+    )
+    run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
+    raw = (tmp_path / "run.jsonl").read_text(encoding="utf-8")
+    line = [one for one in events(tmp_path) if one["kind"] == "ui_session"][0]
+    assert line["data"]["읽은값"] == {"개수": 1}, "사전은 개수만 남는다"
+    assert len(line["data"]["메모"]) <= 201, "긴 글은 잘린다"
+    assert "홍길동" not in raw, "사전 안의 값은 아예 나가지 않는다"
+
+
+def test_the_extension_cannot_set_the_engines_fields(tmp_path: Path) -> None:
+    """확장이 `data`에 `seq`·`run_id`를 적어 보내도 **우리 것이 이긴다** — 두 수가 어긋나면
+    그 실행의 기록이 영원히 막힌다 (C3 멱등은 `(run_id, seq)`다)."""
+    executor = FakeExecutor(
+        events=[
+            ExtensionEvent(
+                kind="ui_session", data=ui_session(seq=999, run_id="run_20200101_000000_ffffff")
+            )
+        ]
+    )
+    run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
+    line = [one for one in events(tmp_path) if one["kind"] == "ui_session"][0]
+    assert line["run_id"] == RUN
+    assert line["seq"] != 999 and "seq" not in line["data"]
+
+
+def test_a_line_missing_a_required_key_is_dropped_and_the_run_goes_on(tmp_path: Path) -> None:
+    """알려진 `kind`인데 필수 키가 빠지면 **그 줄만 버린다** — 업무 실패가 아니다.
+    기록 한 줄 때문에 다 된 업무를 깨지 않는다 (C3 「받는 쪽은 관대하게」)."""
+    broken = ui_session()
+    del broken["healed"]
+    executor = FakeExecutor(events=[ExtensionEvent(kind="ui_session", data=broken)])
+    run = run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
+    assert run.state == State.DONE, "실행은 이어 간다"
+    assert "ui_session" not in kinds(tmp_path)
+    warned = [
+        one for one in events(tmp_path)
+        if one["kind"] == "log" and one["data"]["level"] == "warn" and "healed" in one["data"]["message"]
+    ]
+    assert warned, "왜 버렸는지는 남는다"
+
+
+def test_an_unknown_kind_is_written_as_is(tmp_path: Path) -> None:
+    """`kind`는 **열린 문자열**이다 (C3) — 엔진이 종류를 제한하지 않는다."""
+    executor = FakeExecutor(events=[ExtensionEvent(kind="demo_thing", data={"무엇": 3})])
+    run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
+    line = [one for one in events(tmp_path) if one["kind"] == "demo_thing"]
+    assert line and line[0]["data"] == {"무엇": 3}
+
+
+def test_a_failed_task_still_leaves_its_line(tmp_path: Path) -> None:
+    """**실패한 태스크도 남긴다** — 전환으로 끝난 UI 태스크가 CON-01에서 가장 보고 싶은 줄이다."""
+    executor = FakeExecutor(
+        fail=TaskFailed(
+            "ui_escalated",
+            "화면을 확인해 주세요",
+            events=[ExtensionEvent(kind="ui_session", data=ui_session(result="escalated"))],
+        )
+    )
+    run = run_it(tmp_path, WITH_BOUNDARY, Host({"demo_task": executor}))
+    assert run.state == State.DONE, "경계가 받아 다른 길로 끝났다"
+    line = [one for one in events(tmp_path) if one["kind"] == "ui_session"]
+    assert line and line[0]["data"]["result"] == "escalated"
 
 
 @pytest.mark.parametrize("mode", ["autonomous", "deterministic"])

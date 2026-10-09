@@ -144,6 +144,7 @@ from chaeksas.contracts.events import (
     RunInfo,
     RunListing,
     missing_data_keys,
+    missing_keys,
 )
 from chaeksas.contracts.extension import (
     RESERVED_CONFIG_PREFIX,
@@ -327,6 +328,7 @@ __all__ = [
     "RunInfo",
     "RunListing",
     "missing_data_keys",
+    "missing_keys",
     # C4 (`AdminKey`는 C2가 소유한다)
     "ApprovalAck",
     "ApprovalDispatch",

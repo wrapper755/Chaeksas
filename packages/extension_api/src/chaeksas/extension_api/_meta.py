@@ -12,4 +12,6 @@
 from __future__ import annotations
 
 #: 이 `extension_api`가 제공하는 인터페이스 버전 (SemVer).
-API_VERSION = "1.1.0"  # 1.1: `agent_environments` (ADR-0037)
+# 1.2: `ExtensionEvent`·`TaskOutcome.events`·`TaskFailed(events=…)` (ADR-0041)
+# 1.1: `agent_environments` (ADR-0037)
+API_VERSION = "1.2.0"

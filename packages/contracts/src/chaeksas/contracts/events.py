@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -74,16 +75,24 @@ class RunEvent(SchemaVersioned):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+def missing_keys(kind: str, data: Mapping[str, Any]) -> list[str]:
+    """줄이 되기 **전에** 보는 것 — 알려진 `kind`인데 빠진 `data` 필수 키들.
+
+    확장이 준 `{kind, data}`를 엔진이 이것으로 본다 (ADR-0041) — 어긋나면 그 줄만 버린다.
+    """
+    required = REQUIRED_DATA_KEYS.get(kind)
+    if required is None:
+        return []
+    return sorted(required - set(data))
+
+
 def missing_data_keys(event: RunEvent) -> list[str]:
     """알려진 `kind`인데 `data` 필수 키가 빠졌으면 그 이름들. 모르는 `kind`면 빈 목록.
 
     Center는 이것으로 **줄 단위** 거부를 만든다 (`200` + `rejected: [{seq, code}]`).
     한 줄 때문에 배치 전체를 거부하지 않는다.
     """
-    required = REQUIRED_DATA_KEYS.get(event.kind)
-    if required is None:
-        return []
-    return sorted(required - set(event.data))
+    return missing_keys(event.kind, event.data)
 
 
 class RejectedLine(ContractModel):

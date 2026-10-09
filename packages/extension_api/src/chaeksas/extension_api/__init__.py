@@ -60,6 +60,7 @@ from chaeksas.extension_api.runtime import (
     RUN_LOCATION_PC,
     RUN_LOCATION_SERVER,
     ExtensionContext,
+    ExtensionEvent,
     Mode,
     Secrets,
     Settings,
@@ -77,6 +78,7 @@ __all__ = [
     # 수행
     "ESCALATE_CONFIRMATION",
     "ExtensionContext",
+    "ExtensionEvent",
     "Mode",
     "RUN_LOCATION_PC",
     "RUN_LOCATION_SERVER",

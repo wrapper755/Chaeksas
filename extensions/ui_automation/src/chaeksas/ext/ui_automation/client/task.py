@@ -5,7 +5,8 @@
 1. `chk:task`의 UI 태스크 속성(C14)과 `key_ref`로 푼 서비스 앱 키를 들고
 2. 127.0.0.1의 Worker에 세션을 열고 (`business_key`가 세션을 잇는다)
 3. 스텝을 하나씩 보낸다 — **사다리는 Worker가 로컬에서** 탄다 (C8)
-4. 닫으면서 받은 요약으로 C3 `ui_session`을 만든다
+4. 닫으면서 받은 요약으로 C3 `ui_session` 한 줄을 만들어 **엔진에게 준다** — 줄을 쓰는 것은
+   엔진이다 (`TaskOutcome.events`, ADR-0041)
 
 지키는 것 넷.
 
@@ -54,7 +55,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     business_key,
     can_retry_whole_task,
 )
-from chaeksas.extension_api import TaskContext, TaskFailed, TaskOutcome
+from chaeksas.extension_api import ExtensionEvent, TaskContext, TaskFailed, TaskOutcome
 
 log = logging.getLogger(__name__)
 
@@ -265,6 +266,7 @@ class UiTaskExecutor:
         # 목표 모드면 스텝은 세션을 연 뒤에 온다 (앱이 세운 계획, ADR-0035).
         steps = [] if goal else [_rendered(raw, ctx.inputs) for raw in (spec.get("steps") or [])]
         key = ctx.business_key or business_key(ctx.run_id, ctx.node_id, ctx.node_instance, attempt)
+        page_id = str(spec.get("page_id") or "")
 
         info = worker.open(
             SessionRequest(
@@ -279,7 +281,7 @@ class UiTaskExecutor:
                 ),
                 mode=str(ctx.mode),
                 business_key=key,
-                page_id=str(spec.get("page_id") or ""),
+                page_id=page_id,
                 start_url=spec.get("start_url"),
                 # 데스크톱 앱 이름 — `chk:defaults.desktop`이 엔진을 거쳐 속성 기본값으로 온다 (ADR-0033).
                 app=_desktop_app(spec),
@@ -293,28 +295,46 @@ class UiTaskExecutor:
         )
 
         outputs: dict[str, Any] = {}
+        # C3 `ui_session` 한 줄 — **엔진이 쓴다** (ADR-0041). 전환·실패로 끝나도 남긴다.
+        made: list[ExtensionEvent] = []
         self._done = []
         try:
-            if goal:
-                steps = [_rendered(_from_plan(one), ctx.inputs) for one in info.planned_steps]
-            for raw in steps:
-                result = worker.step(info.session_id, info.session_secret, _step(raw))
-                self._done.append(result)
-                if result.escalated:
-                    # **실패가 아니다** — 사람이 화면을 보고 정한다 (CMN-01).
-                    raise TaskFailed(
-                        "ui_escalated", ESCALATED_MESSAGE, escalate=ESCALATE_CONFIRMATION
+            try:
+                if goal:
+                    steps = [_rendered(_from_plan(one), ctx.inputs) for one in info.planned_steps]
+                for raw in steps:
+                    result = worker.step(info.session_id, info.session_secret, _step(raw))
+                    self._done.append(result)
+                    if result.escalated:
+                        # **실패가 아니다** — 사람이 화면을 보고 정한다 (CMN-01).
+                        raise TaskFailed(
+                            "ui_escalated", ESCALATED_MESSAGE, escalate=ESCALATE_CONFIRMATION
+                        )
+                    if not result.ok:
+                        raise TaskFailed(
+                            result.error_code or "ui_step_failed", result.error or "스텝 실패"
+                        )
+                    # 읽은 값은 **BPM 프로세스 변수로** 간다 (기록에는 남지 않는다 — 원칙 6).
+                    if raw.get("result") and result.text is not None:
+                        outputs[str(raw["result"])] = read_value(result)
+            finally:
+                closed = _closed(worker, info)
+                if closed is not None:
+                    made.append(
+                        ExtensionEvent(
+                            kind="ui_session",
+                            data=session_event(
+                                closed,
+                                business_key_=key,
+                                page_id=page_id,
+                                session_id=info.session_id,
+                            ),
+                        )
                     )
-                if not result.ok:
-                    raise TaskFailed(result.error_code or "ui_step_failed", result.error or "스텝 실패")
-                # 읽은 값은 **BPM 프로세스 변수로** 간다 (기록에는 남지 않는다 — 원칙 6).
-                if raw.get("result") and result.text is not None:
-                    outputs[str(raw["result"])] = read_value(result)
-        finally:
-            closed = _closed(worker, info)
-            if closed is not None:
-                outputs.setdefault("_ui_session", closed.summary.to_json_dict())
-        return TaskOutcome(outputs=outputs)
+        except TaskFailed as e:
+            e.events = (*e.events, *made)
+            raise
+        return TaskOutcome(outputs=outputs, events=made)
 
 
 def screen_value(text: str) -> Any:
@@ -483,13 +503,16 @@ def _closed(worker: WorkerClient, info: SessionInfo) -> CloseResult | None:
         return None
 
 
-def session_event(closed: CloseResult, *, business_key_: str, page_id: str) -> dict[str, Any]:
-    """C3 `ui_session`의 `data` — 부르는 쪽이 이것으로 이벤트를 만든다.
+def session_event(
+    closed: CloseResult, *, business_key_: str, page_id: str, session_id: str | None = None
+) -> dict[str, Any]:
+    """C3 `ui_session`의 `data` — 이것을 `ExtensionEvent`에 담아 주면 **엔진이 줄을 쓴다**
+    (ADR-0041 — `run_id`·`seq`·`ts`·`node_id`는 엔진이 붙인다).
 
     **값은 담지 않는다** (원칙 6) — 진행·폴백·치유만.
     """
     summary = closed.summary
-    return {
+    data = {
         "business_key": business_key_,
         "page_id": page_id,
         "result": summary.result,
@@ -497,6 +520,10 @@ def session_event(closed: CloseResult, *, business_key_: str, page_id: str) -> d
         "fallback_depth_max": summary.fallback_depth_max,
         "healed": summary.healed,
     }
+    if session_id:
+        # C3 선택 키 — UIA-03에서 그 세션을 찾아가는 길이다.
+        data["session_id"] = session_id
+    return data
 
 
 __all__ = [
