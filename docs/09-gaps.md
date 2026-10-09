@@ -27,7 +27,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
 | C7 | 구현됨 | `contracts.resources`·`center_keys` | 외부 확장 앱의 `health`를 **보지 않는다** (§3-7) |
 | C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
-| C9 | 합의 | **`ext.ui_automation.contracts.registry`** | 문서가 저장소를 **Neo4j**라고 한다, 코드는 SQLite (§2-3) |
+| C9 | **구현됨** | **`ext.ui_automation.contracts.registry`** | — ([ADR-0040](decisions/0040-registry-storage-sqlite.md)이 저장소를 적었다) |
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`shutdown`을 더했다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
 | C12 | 초안 (M7) | **없다** (`apps/server_runner`는 docstring뿐) | M7 전부. **M6 기준의 「모든 계약」에서 빼야 하는가는 사람이 정한다** (§2-4) |
@@ -39,19 +39,6 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 **C8~C10은 있다** — 없는 것은 C12 하나다. (이 줄은 이 작업에서 고쳤다.)
 
 ## 2. 문서가 코드와 어긋난 자리 (코드를 고치는 일이 아니다)
-
-### 2-3. C9·01-architecture가 저장소를 Neo4j라고 한다
-
-코드는 **SQLite 한 파일**이다 (`service/store.py` — 「표준 라이브러리 `sqlite3`만」).
-C9의 `> 상태:` 줄은 이미 SQLite라고 적는데, 같은 문서 §오류(`registry_unavailable` 「그래프
-저장소(Neo4j)가 내려감」)와 §호환 규칙(「그래프 저장소(Neo4j)와 YAML 폴백」)은 그대로다.
-`01-architecture.md` 11줄(구성도)·119줄(저장소 표)과 `06-screens/service-app-console.md`
-33·72·85줄(UIA-01 「저장소 표시」, UIA-02 「통계 열은 그래프 저장소에서만」)도 그대로다.
-
-- **크기:** 문서는 작다. **ADR은 따로다.**
-- **ADR 거리다.** 「지식 그래프 → SQLite」는 **결정을 뒤집은 것**인데 ADR이 없다 (CLAUDE.md §3).
-  통계·승격·화면 간 경로 탐색을 그래프 없이 어떻게 할 것인지가 ADR이 답할 거리다 — UIA-01·02가
-  그래프를 전제로 쓰여 있다(§4-7). **문서만 고치고 ADR을 미루면 UIA 화면을 만들 때 또 막힌다.**
 
 ### 2-4. C12는 M7이다 — M6 기준에서 뺄 것인가
 
@@ -75,7 +62,7 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **코드:** `REQUIRED_DATA_KEYS["ui_session"]`, `run_log.py:152`의 요약 집계, C3 문서 예시까지 다 있다.
 - **없는 것:** **내보내는 쪽.** UI 태스크 수행기(`ext.ui_automation.client.task`)는 UI 자동화 앱에 C8 보고를 보내지만 C3 이벤트를 쓰지 않는다. 그리고 **쓸 길이 없다** — `TaskOutcome`에는 `usage`(→ `llm_usage`)만 있고 확장이 실행 기록에 한 줄 남길 칸이 없다.
 - **크기:** 중간. `extension_api`에 칸을 더해야 한다.
-- **막는 것:** 자기가 막는 쪽이다 — **ADR 거리다.** 확장이 C3에 이벤트를 남기는 길을 여는 것은 경계 변경이다(C3 + C13 + `extension_api` API 버전). 「`TaskOutcome.events[]`를 더할까, 수행기에 `RunLog`를 넘길까」가 ADR이 답할 거리다. 원칙 6(값을 기록하지 않는다)을 어기지 않게 **모양을 계약이 정해야** 한다.
+- **막는 것:** 없다 — [ADR-0041](decisions/0041-extension-run-events.md)이 모양을 정했다. **`TaskOutcome.events[]`**(`{kind, data}`)를 더하고 **줄을 쓰는 것은 엔진**이다(`run_id`·`seq`·`ts`를 붙이고 `sanitize()`로 거른다, 원칙 6). 어긋난 줄은 **그 줄만 버린다**. 남은 일: C3·C13 문서 → `extension_api` 1.2 → 엔진 → UI 태스크 수행기.
 
 ### 3-3. C3 `run_started`의 선택 칸 `case_id`·`queued_s`
 
@@ -121,11 +108,13 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **문서:** `bot-ui.md` 264~267줄 — 시각 / 요청한 쪽 / **화면** / 결과 / **폴백 깊이** / **치유**.
 - **코드:** Worker의 `GET /v1/status`가 `recent_sessions[]`로 준다. Bot UI는 **읽지 않는다.**
 - **없는 것:** 그 표를 그리는 쪽.
-- **막는 것:** **경계다.** 굵게 적은 열은 **UI 자동화의 말**이고, 플랫폼 코드와 콘솔에는
-  「UI 화면」이라는 말이 없다 ([ADR-0018](decisions/0018-extensions.md)). Bot UI가 그 열을
-  그리면 Bot UI가 이 확장을 알게 된다 — 그래서 `status`의 **뜻을 아는 칸만**(`reserved_for`·
-  `unsent_reports`) 읽게 두었다. **확장이 그려야 하는 자리다** — BUI-09 칸을 기여로 받는 길
-  (`bot_ui.utilities`처럼)을 열 것인지가 ADR 거리다. §4-7(확장이 기여하는 콘솔 화면)과 같은 꼴이다.
+- **막는 것:** 없다 — [ADR-0042](decisions/0042-extension-contributed-panels.md)가 정했다.
+  굵게 적은 열은 **UI 자동화의 말**이라 플랫폼이 그릴 수 없다 (ADR-0018) — 그래서 `status`의
+  **뜻을 아는 칸만**(`reserved_for`·`unsent_reports`) 읽게 두었다. **확장이 위젯을 기여한다**:
+  C13에 `bot_ui.panels`(`{id, label, surface, runtime?, entry}`)를 더하고, `surface`는 플랫폼이
+  미리 정한 자리 이름(`bot_ui.runtimes`)이며 **모르는 `surface`는 조용히 무시한다**. 규약은
+  STU-13·14 편집기와 같고 `refresh()`만 더 받는다. 남은 일: C13 문서 → 모델·검사 → Bot UI가
+  칸을 끼우는 길 → 확장의 패널. §4-7과 **같은 결정**을 쓴다.
 
 ### 4-4. STU-03 리소스 탐색기 (C13 `studio.resource_views`)
 
@@ -133,7 +122,7 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **코드:** `ExtensionHost.resource_views()`가 있고 `ui-automation`이 「UI 화면」을 **선언한다** — 호출자가 `tests/`뿐이다. Studio에는 「리소스 탐색기는 M4입니다」 라벨 하나.
 - **없는 것:** 화면 전부. 재료는 있다 — 서비스 앱 작업은 `service_catalog.from_center()`가 이미 가져오고(STU-14가 쓴다), UI 화면은 C9 공개 카탈로그에 있다.
 - **크기:** 큼 (나무·끌어다 놓기·문맥 메뉴·오프라인 표시).
-- **막는 것:** 「공유 BPM 프로세스」 뿌리는 §4-5(STU-11·12)가 없으면 늘 비어 있다. **뿌리별로 쪼갤 수 있다** — 「서비스 앱」·「UI 화면」만 먼저 하면 재료가 다 있다.
+- **막는 것:** 「공유 BPM 프로세스」 뿌리는 §4-5(STU-11·12)가 없으면 늘 비어 있다. **뿌리별로 쪼갤 수 있다** — 「서비스 앱」·「UI 화면」만 먼저 하면 재료가 다 있다. 여기는 **코드 기여가 필요 없다** — 기여가 선언(`{id, label, resource_type, creates_task_type}`)이고 목록은 C7에서 와서 모양이 하나다 ([ADR-0042](decisions/0042-extension-contributed-panels.md) §3).
 
 ### 4-5. STU-06·STU-11·STU-12·STU-15가 없다
 
@@ -156,7 +145,7 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **코드:** `ExtensionHost.console_pages()`가 있고 `ui-automation/extension.json`이 **선언한다** — **호출자가 `tests/`뿐이다.** 콘솔(`svc-console/components/Shell.tsx`)에는 세 줄이 **손으로 베껴** 꺼진 채 들어 있다(`APP_PAGES`) — 기여에서 읽은 것이 아니라서 **확장을 더해도 줄이 생기지 않는다.** `href` 타입도 `"/status" | "/keys" | "/usage"` 고정 셋이다.
 - **없는 것:** 콘솔이 `console_pages()` 기여를 읽는 길(+`href` 타입 풀기) + 화면 셋.
 - **크기:** 큼. 데이터는 레지스트리에 있다 (`service/registry.py`가 `active`·`unverified`·실패율까지 센다).
-- **막는 것:** **§2-3(Neo4j → SQLite ADR)이 막는다.** UIA-01은 「저장소 표시」로 「지식 그래프 (Neo4j)」/「YAML 레지스트리」를 보이고, UIA-02는 「그래프가 없으면 통계 열을 빼고…」라고 적는다 — 지금 저장소에 그 구분이 없다. **ADR 없이 만들면 화면이 거짓말을 한다.**
+- **막는 것:** 없다 — ADR 둘이 풀었다. [ADR-0040](decisions/0040-registry-storage-sqlite.md)이 저장소를 적어 「저장소 표시」를 없애고 통계 열을 **늘 있는 것**으로 만들었고(경로 탐색은 앱이 너비 우선으로 찾는다), [ADR-0042](decisions/0042-extension-contributed-panels.md)가 **콘솔이 `console.pages` 기여를 읽는 길**을 정했다(모노레포 안 내장·사내 확장만, 빌드 시점 레지스트리). 손으로 베낀 `APP_PAGES`를 버리고 `href` 타입을 푼다.
 
 ### 4-8. BUI-11 확장 · BUI-05 알림
 
