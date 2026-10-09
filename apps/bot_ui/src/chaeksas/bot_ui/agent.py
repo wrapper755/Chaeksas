@@ -16,7 +16,7 @@ import logging
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +103,20 @@ class ExtensionSecrets:
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def waited(item: QueueItem, *, now: datetime | None = None) -> float | None:
+    """대기열에서 기다린 초 (C3 `run_started.queued_s`).
+
+    **모르면 `None`**이다 — 요청 시각이 깨져 있으면 0을 넣지 않는다 (0은 「기다리지 않고 바로
+    돌았다」는 뜻이고, 둘을 같은 값으로 적으면 CON-01이 거짓말을 한다). 시계가 거꾸로 간
+    경우(음수)도 0으로 깎는다.
+    """
+    try:
+        asked = datetime.fromisoformat(item.requested_at)
+    except ValueError:  # pragma: no cover - 깨진 기록
+        return None
+    return max((now or datetime.now(UTC)) - asked, timedelta(0)).total_seconds()
 
 
 def new_queue_id() -> str:
@@ -836,6 +850,8 @@ class Agent:
                 inputs=inputs,
                 source=item.source,
                 job_id=item.job_id,
+                # C3 `run_started.queued_s` — **여기만 안다** (요청 시각과 지금 사이).
+                queued_s=waited(item),
                 run_id=run.run_id,
                 extensions=extensions,
                 services_path=services_path,

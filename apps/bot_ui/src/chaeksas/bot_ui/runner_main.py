@@ -185,6 +185,8 @@ class Runner:
     mode: str = "deterministic"
     source: str = "manual"
     job_id: str | None = None
+    #: 대기열에서 기다린 초 (C3 `run_started.queued_s`). 모르면 `None` — 0과 다르다.
+    queued_s: float | None = None
     tick_s: float = TICK_S
     env: RunEnv | None = None
 
@@ -227,6 +229,7 @@ class Runner:
             source=self.source,
             version=self.package.manifest.version,
             job_id=self.job_id,
+            queued_s=self.queued_s,
         )
         return self.run
 
@@ -304,6 +307,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", default="deterministic", choices=("deterministic", "autonomous"))
     parser.add_argument("--source", default="manual")
     parser.add_argument("--job-id", default=None)
+    # C3 `run_started.queued_s` — Bot UI가 대기열에서 기다린 초를 알려 준다 (모르면 안 준다).
+    parser.add_argument("--queued-s", type=float, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--readable", type=Path, action="append", default=[])
     parser.add_argument("--writable", type=Path, action="append", default=[])
@@ -337,6 +342,7 @@ def main(argv: list[str] | None = None) -> int:
         mode=found.mode,
         source=found.source,
         job_id=found.job_id,
+        queued_s=found.queued_s,
         env=make_env(
             package,
             output_dir=output_dir,

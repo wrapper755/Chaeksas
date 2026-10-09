@@ -21,7 +21,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | --- | --- | --- | --- |
 | C1 | 합의 | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | `Provides`를 **아무도 채우지 않는다** (§3-1) |
 | C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
-| C3 | 합의 | `contracts.events`·`core.run_log` | `case_id`·`queued_s`를 **아무도 넣지 않는다** (§3-3). `ui_session`은 **닫았다** ([ADR-0041](decisions/0041-extension-run-events.md)) |
+| C3 | **구현됨** | `contracts.events`·`core.run_log` | — (닫았다: `ui_session`은 [ADR-0041](decisions/0041-extension-run-events.md), `case_id`·`queued_s`는 아는 쪽이 넣는다) |
 | C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠다) |
 | C5 | 합의 | `contracts.center_api`, Center 전부 | `deprecated`로 **만들 길이 없다** (§3-5). `dependents`·`DELETE /packages` 없음 (§3-6) |
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
@@ -55,17 +55,6 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **없는 것:** Studio 패키지 내보내기(`apps/studio/packaging.py`)가 `provides`를 **아예 만들지 않는다.** 읽는 쪽(CON-06)도 없다.
 - **크기:** 중간 — `reads`/`writes`는 `available_vars()`가 이미 아는 것이라 그림에서 모을 수 있다.
 - **막는 것:** 쓸 자리가 **CON-06뿐이다**(§4-10). CON-06 없이 채우면 아무도 안 본다 — **묶어서 할 일이다.**
-
-### 3-3. C3 `run_started`의 선택 칸 `case_id`·`queued_s`
-
-- **문서:** C3 43줄 — `case_id`(Studio 시험 실행이 어느 케이스였나), `queued_s`(PC 대기열에서 기다린 초).
-- **코드:** 선택 칸이라 모델에 따로 없고(`data`에 들어간다) 아무도 넣지 않는다.
-- **없는 것:** Studio 러너가 `case_id`를, Bot UI가 `queued_s`를 싣는 일. 둘 다 그 자리에서 안다.
-- **크기:** 아주 작다 (각각 한 줄).
-- **막는 것:** 없다. 쓰는 화면은 CON-01 목록·상세다.
-
-> `run_waiting`·`run_resumed`도 내보내는 쪽이 없지만 **공백이 아니다** — C3 60줄이 「서버만 쓴다」고
-> 적어 두었다 (PC Bot은 실행 자리를 쥐고 있으므로 `node_state: waiting`만 남긴다). M7 몫이다.
 
 ### 3-5. C5 `deprecated`로 만들 길이 없다
 
@@ -152,6 +141,7 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 ## 5. 공백은 아니지만 적어 둘 것
 
+- **C3 `run_waiting`·`run_resumed`는 내보내는 쪽이 없다** — 공백이 아니다. C3가 「서버만 쓴다」고 적어 두었다 (PC Bot은 실행 자리를 쥐고 있어 `node_state: waiting`만 남긴다). M7 몫이다. (§3-3이 닫히면서 이 줄이 여기로 왔다.)
 - **쓰지 않는 편의 접근자 셋** — `ExtensionHost.studio_editors()`(호출자 **아예 없음**, Studio는 단수 `editor(task_type)`를 쓴다), `adapter_operations()`(`AdapterCaller`가 `definitions`를 직접 본다), `secret_config_keys()`(`credentials.py`가 `configuration()`을 제 손으로 거른다). 기능 공백이 아니다 — **지울지 쓸지만 정하면 된다.**
 - `extension_api`의 `HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`는 M7이 쓸 상수다 (지금 호출자 없음, 정상).
 - `SEVERITY_INFO`는 아무도 쓰지 않는다 (`SEVERITY_BLOCK`·`SEVERITY_WARN`만 쓴다).

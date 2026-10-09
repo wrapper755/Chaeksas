@@ -420,3 +420,33 @@ def test_the_settings_reach_the_runner(tmp_path: Path, monkeypatch: pytest.Monke
     assert "sk-시험" not in joined
     assert seen["env"][ENV_LLM_API_KEY] == "sk-시험"
     assert "PATH" in seen["env"], "환경을 통째로 물려준다 — 키만 주면 PATH도 없는 자식이 된다"
+
+
+def test_the_runner_is_told_how_long_the_item_waited() -> None:
+    """C3 `run_started.queued_s` — **Bot UI만 안다** (요청 시각과 띄우는 시각 사이)."""
+    args = runner_args(
+        package=Path("/tmp/pkg"),
+        run_id="run_20261009_101500_abcdef",
+        data_dir=Path("/tmp/data"),
+        inputs_path=None,
+        mode="deterministic",
+        source="job",
+        job_id="job_1",
+        queued_s=42.4567,
+    )
+    assert "--queued-s" in args
+    assert args[args.index("--queued-s") + 1] == "42.457", "소수 셋째 자리까지"
+
+
+def test_a_runner_that_does_not_know_the_wait_says_nothing() -> None:
+    """**모르면 넣지 않는다** — 0을 넣으면 「기다리지 않았다」가 된다."""
+    args = runner_args(
+        package=Path("/tmp/pkg"),
+        run_id="run_20261009_101500_abcdef",
+        data_dir=Path("/tmp/data"),
+        inputs_path=None,
+        mode="deterministic",
+        source="manual",
+        job_id=None,
+    )
+    assert "--queued-s" not in args
