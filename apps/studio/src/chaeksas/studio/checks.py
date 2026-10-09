@@ -1,6 +1,7 @@
 """STU-10의 「연결 테스트」 — 화면과 떼어 둔 확인들. **결과는 사람이 읽는 한 줄**이다.
 
 - 모델: `GET <주소>/v1/models` — 닿는지, 키가 맞는지 (ADR-0027 — OpenAI 호환).
+- Center: `GET <주소>/api/v1/resources?type=service_app` — 닿는지, Studio용 키가 맞는지 (C7).
 - Worker: `GET http://127.0.0.1:<포트>/v1/health` — 토큰 없이 답하는 유일한 자리 (C10).
 - 서비스 앱 키: `core.key_check.key_status` — **Bot UI(BUI-10)와 같은 함수**를 쓴다. 두 화면이
   같은 말을 해야 하고, 앱끼리 import할 수 없어 `core`에 두었다.
@@ -19,6 +20,9 @@ from chaeksas.core.key_check import key_status
 #: Worker는 이 PC에만 바인드한다 (C10).
 LOCAL_HOST = "127.0.0.1"
 TIMEOUT_S = 5.0
+
+#: Center에 묻는 가장 싼 자리 — 읽기 권한만 필요하고 **앱을 깨우지 않는다** (C7 `index(probe=False)`).
+CENTER_PROBE_PATH = "/api/v1/resources?type=service_app"
 
 
 def _get(url: str, *, headers: Mapping[str, str] | None = None, client: Any = None) -> Any:
@@ -57,6 +61,38 @@ def llm_status(base_url: str, api_key: str | None, *, client: Any = None) -> str
         names = []
     shown = ", ".join(names[:3]) + (" …" if len(names) > 3 else "")
     return f"연결됨 — 모델 {len(names)}개" + (f" ({shown})" if names else "")
+
+
+def center_status(base_url: str, api_key: str | None, *, client: Any = None) -> str:
+    """Center에 닿는가, Studio용 키가 맞는가 (STU-10 「Center」).
+
+    리소스 목록을 읽어 본다 — 읽기 권한만 쓰고(C5 권한표) 서비스 앱을 깨우지 않는다.
+    **키 없이 묻지 않는다** — Center는 토큰 없는 요청을 401로 돌려보내므로 「키가 거부되었다」로
+    읽혀 사람을 헷갈리게 한다.
+    """
+    if not base_url.strip():
+        return "Center 주소가 없습니다."
+    if not api_key:
+        return "Center API 키가 없습니다."
+    try:
+        answer = _get(
+            f"{base_url.rstrip('/')}{CENTER_PROBE_PATH}",
+            headers={"Authorization": f"Bearer {api_key}"},
+            client=client,
+        )
+    except Exception as e:  # noqa: BLE001 — 닿지 못한 모든 경우
+        if _reachable(e):
+            raise
+        return f"닿지 못함 — {type(e).__name__}"
+    if answer.status_code in (401, 403):
+        return f"키가 거부되었습니다 ({answer.status_code})"
+    if answer.status_code >= 400:
+        return f"Center가 {answer.status_code}로 답했습니다"
+    try:
+        items = answer.json().get("items") or []
+    except ValueError:
+        items = []
+    return f"연결됨 — 서비스 앱 {len(items)}개를 읽었습니다"
 
 
 @dataclass(frozen=True)
@@ -114,6 +150,7 @@ def refs_in(definitions: Iterable[Any]) -> list[tuple[str, str]]:
 
 __all__ = [
     "WorkerPlace",
+    "center_status",
     "key_status",
     "llm_status",
     "refs_in",

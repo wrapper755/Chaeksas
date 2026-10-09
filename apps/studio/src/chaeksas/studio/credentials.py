@@ -20,7 +20,7 @@ SERVICE = "chaeksas-studio"
 LLM_KEY_NAME = "llm"
 ENV_LLM_API_KEY = "CHK_STUDIO__LLM__API_KEY"
 #: Center API 키 (`studio` 종류) — 시험 실행이 리소스 목록에서 **앱 주소를 읽는 데만** 쓴다.
-#: 읽기 전용이다 (Studio는 Center에 쓰지 않는다).
+#: 읽기 전용이고, **Studio용**으로 따로 발급받은 것이다 (Bot UI의 것과 값이 다르다).
 CENTER_KEY_NAME = "center"
 ENV_CENTER_API_KEY = "CHK_STUDIO__CENTER_API_KEY"
 #: 서비스 앱 키 — 참조 이름마다 하나 (`svc:<참조>`).
@@ -118,6 +118,10 @@ class StudioCredentials:
     def center_api_key(self) -> str | None:
         return self.get(CENTER_KEY_NAME, env=ENV_CENTER_API_KEY)
 
+    def stored_center_api_key(self) -> str | None:
+        """비밀 저장소에 **저장된 것만** — STU-10이 「저장됨」과 「환경변수」를 가려 말한다."""
+        return self.stored(CENTER_KEY_NAME)
+
     def set_center_api_key(self, value: str) -> None:
         self.set(CENTER_KEY_NAME, value.strip())
 
@@ -135,6 +139,7 @@ class StudioCredentials:
 
 
 __all__ = [
+    "CENTER_KEY_NAME",
     "ENV_CENTER_API_KEY",
     "ENV_LLM_API_KEY",
     "ENV_SERVICE_KEY_PREFIX",
