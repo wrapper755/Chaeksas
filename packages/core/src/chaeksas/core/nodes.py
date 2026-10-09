@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -40,6 +40,7 @@ from chaeksas.contracts.bpmn_ext import (
     is_var_name,
 )
 from chaeksas.contracts.dmn import DmnError
+from chaeksas.contracts.events import missing_keys
 from chaeksas.core.agent import DEFAULT_MAX_STEPS_SCREEN, AgentError, check_results, finish_from, run_agent
 from chaeksas.core.agent import Outcome as AgentOutcome
 from chaeksas.core.expr import Scope, evaluate, fill, run_script, truthy
@@ -75,7 +76,7 @@ from chaeksas.core.run_state import (
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest
 from chaeksas.core.services import RETRYABLE_STATUS, OpCall, OpOutcome, ServiceCallError
 from chaeksas.core.tools import ToolDef
-from chaeksas.extension_api import RUN_LOCATION_PC, TaskContext
+from chaeksas.extension_api import RUN_LOCATION_PC, ExtensionEvent, TaskContext
 from chaeksas.extension_api import TaskFailed as ExtensionTaskFailed
 
 #: 웹훅 본문 적는 법 (C14 — `all` | `fields:[…]` | `template:"…"`).
@@ -427,7 +428,10 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
     try:
         outcome = found.execute(task)
     except ExtensionTaskFailed as e:
+        # **실패한 태스크도 남긴다** (ADR-0041) — 전환으로 끝난 UI 태스크가 가장 보고 싶은 줄이다.
+        write_extension_events(context, e.events)
         raise TaskFailed(e.message or str(e), node_id=node.id, code=e.code or ERROR_TASK_FAILED) from e
+    write_extension_events(context, outcome.events)
     for name, value in dict(outcome.outputs).items():
         run.variables[name] = value
     context.emit(
@@ -436,6 +440,42 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
         message=f"{spec.type} 태스크: 변수 {len(outcome.outputs)}개",
     )
     return Go()
+
+
+#: 엔진이 붙이는 C3 칸 — 확장이 `data`에 적어 보내도 쓰지 않는다 (ADR-0041).
+ENGINE_OWNED_FIELDS = frozenset({"schema", "run_id", "seq", "ts", "kind", "node_id"})
+
+
+def write_extension_events(context: Context, events: Sequence[ExtensionEvent]) -> None:
+    """확장이 남기고 싶다고 한 줄을 실행 기록에 쓴다 (C3, ADR-0041).
+
+    **확장은 `{kind, data}`만 준다** — `run_id`·`seq`·`ts`·`node_id`는 여기서 붙는다 (확장은
+    실행의 구조를 모른다). `data`는 `RunLog.emit()`의 `sanitize()`를 **그대로** 거친다 —
+    거르는 자리가 하나여야 원칙 6이 지켜진다 (확장을 믿고 통과시키지 않는다).
+
+    **어긋난 줄은 떨어뜨리고 실행은 이어 간다.** 알려진 `kind`인데 `data` 필수 키가 빠지면
+    그 줄만 버리고 경고로 남긴다 — 기록 한 줄 때문에 다 된 업무를 깨지 않는다.
+    """
+    for event in events:
+        kind = str(getattr(event, "kind", "") or "")
+        if not kind:
+            context.emit("log", level="warn", message="확장이 종류 없는 실행 기록 줄을 주었다")
+            continue
+        # **엔진이 붙이는 칸은 `data`에서 떼어 낸다** — 확장이 적어 보냈어도 우리 것이 이긴다.
+        data = {
+            str(name): value
+            for name, value in (getattr(event, "data", None) or {}).items()
+            if str(name) not in ENGINE_OWNED_FIELDS
+        }
+        missing = missing_keys(kind, data)
+        if missing:
+            context.emit(
+                "log",
+                level="warn",
+                message=f"확장의 {kind} 기록 줄을 버렸다 — 빠진 칸: {', '.join(missing)}",
+            )
+            continue
+        context.emit(kind, **data)
 
 
 def _with_defaults(data: dict[str, Any], defaults: Defaults | None) -> dict[str, Any]:
@@ -611,6 +651,7 @@ def _open_environment(context: Context, spec: AiTask) -> Any:
     try:
         return environment.open(task)
     except ExtensionTaskFailed as e:
+        write_extension_events(context, e.events)  # 열지 못한 것도 남길 수 있다 (ADR-0041)
         raise TaskFailed(e.message or str(e), node_id=node.id, code=e.code or ERROR_TASK_FAILED) from e
 
 

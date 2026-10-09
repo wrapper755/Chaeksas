@@ -20,6 +20,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from chaeksas.contracts.events import missing_keys
 from chaeksas.ext.ui_automation.client.task import (
     ESCALATE_CONFIRMATION,
     SessionGone,
@@ -201,7 +202,8 @@ def test_a_ui_task_runs_its_steps_and_returns_what_it_read(
 
     assert screen.acted == ["주문.수량:fill", "주문.공급사:read", "주문.저장:click"]
     assert found.outputs["공급사"] == "한빛상사", "읽은 값은 BPM 프로세스 변수로 간다"
-    assert found.outputs["_ui_session"]["result"] == "success"
+    assert [one.kind for one in found.events] == ["ui_session"], "C3 한 줄은 엔진에게 준다 (ADR-0041)"
+    assert found.events[0].data["result"] == "success"
     assert plans.reports, "끝나면 보고가 간다 (C8)"
 
 
@@ -362,6 +364,29 @@ def test_the_session_event_carries_no_values() -> None:
         "fallback_depth_max": 1,
         "healed": True,
     }
+
+
+def test_the_line_has_the_required_keys_the_contract_asks_for() -> None:
+    """엔진이 **그 줄만 버리는** 조건이다 (ADR-0041) — 빠지면 CON-01에 아무것도 안 남는다."""
+    closed = CloseResult(summary=SessionSummary(result="success"))
+    data = session_event(closed, business_key_=f"{RUN}:Task_Fill:1:1", page_id=PAGE)
+    assert missing_keys("ui_session", data) == []
+
+
+def test_an_escalated_task_still_leaves_its_line(
+    tmp_path: Path, worker: tuple[Worker, TestClient, Screen, Plans]
+) -> None:
+    """**전환으로 끝난 것이 가장 보고 싶은 줄이다** — `TaskFailed`에 실어 보낸다 (ADR-0041)."""
+    _, http, screen, _ = worker
+    screen.missing = {"#주문.저장"}
+
+    with pytest.raises(TaskFailed) as caught:
+        UiTaskExecutor(client=client_for(tmp_path, http)).execute(context())
+
+    assert [one.kind for one in caught.value.events] == ["ui_session"]
+    data = caught.value.events[0].data
+    assert data["result"] == "escalated" and data["page_id"] == PAGE
+    assert missing_keys("ui_session", data) == []
 
 
 # ─────────────────────────── 읽은 값의 모양 (ADR-0036) ───────────────────────────

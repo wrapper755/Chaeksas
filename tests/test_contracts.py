@@ -23,6 +23,7 @@ from chaeksas.contracts import (
     ToolpackRef,
     WorkerState,
     missing_data_keys,
+    missing_keys,
     validate,
 )
 
@@ -126,6 +127,15 @@ def test_known_kind_with_all_keys_passes() -> None:
               "ui_tasks": 0, "service_calls": 2, "human_requests": 0},
     )
     assert missing_data_keys(e) == []
+
+
+def test_missing_keys_looks_at_a_line_before_it_is_one() -> None:
+    """엔진이 확장의 `{kind, data}`를 **줄이 되기 전에** 본다 (ADR-0041) — 같은 규칙이다."""
+    assert missing_keys("something_new_in_v2", {}) == []
+    assert missing_keys("ui_session", {"business_key": "k", "page_id": "p"}) == [
+        "fallback_depth_max", "healed", "result", "steps"
+    ]
+    assert missing_keys("log", {"level": "warn", "message": "한 줄"}) == []
 
 
 # ─────────────── C4: 열린 상태 값, 실행 자리 1건 ───────────────

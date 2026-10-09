@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from logging import Logger
 from typing import Any, Protocol, runtime_checkable
@@ -92,12 +92,31 @@ class TaskContext:
 
 
 @dataclass(frozen=True)
+class ExtensionEvent:
+    """확장이 실행 기록(C3)에 남기고 싶은 것 한 줄 (ADR-0041).
+
+    **확장은 `kind`와 `data`만 준다.** `run_id`·`seq`·`ts`·`node_id`는 **엔진이 붙인다** — 확장이
+    실행의 구조(토큰이 여럿일 수 있다)를 알 필요가 없다.
+
+    - `kind`는 **열린 문자열**이다 (C3). 다만 **알려진 종류라면 그 `data` 필수 키를 채워야**
+      하고, 빠지면 엔진이 **그 줄만 버린다** (업무 실패가 아니다).
+    - `data`에 **업무 값·결재 답·비밀을 넣지 않는다** (원칙 6). 엔진이 `sanitize()`로 다시
+      거르지만, 거기에 기대지 않는다.
+    """
+
+    kind: str
+    data: Mapping[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class TaskOutcome:
     """태스크가 성공했을 때. `outputs`는 BPM 프로세스 변수로 들어간다."""
 
     outputs: Mapping[str, Any] = field(default_factory=dict)
     #: LLM을 쓴 경우만 (C3 `llm_usage`·C11과 같은 모양). **금액은 넣지 않는다.**
     usage: Usage | None = None
+    #: 실행 기록에 남길 줄 (C3, ADR-0041). 엔진이 쓴다 — 확장은 파일도 `seq`도 모른다.
+    events: Sequence[ExtensionEvent] = ()
 
 
 class TaskFailed(Exception):
@@ -106,11 +125,22 @@ class TaskFailed(Exception):
     - `retryable=False`(기본)면 다시 부르지 않는다.
     - `escalate=ESCALATE_CONFIRMATION`은 "결과를 모른다 — 사람이 봐야 한다"는 뜻이다
       (C13 §4의 `idempotent: false` 처리). 서버 실행에서는 오류 경계로 간다.
+    - `events`는 **실패해도 남길 줄**이다 (ADR-0041) — UI 태스크가 전환(사람에게 넘김)으로
+      끝난 것이 CON-01에서 가장 보고 싶은 줄이다.
     """
 
-    def __init__(self, code: str, message: str, *, retryable: bool = False, escalate: str | None = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        retryable: bool = False,
+        escalate: str | None = None,
+        events: Sequence[ExtensionEvent] = (),
+    ):
         super().__init__(message)
         self.code = code
         self.message = message
         self.retryable = retryable
         self.escalate = escalate
+        self.events: tuple[ExtensionEvent, ...] = tuple(events)

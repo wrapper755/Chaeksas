@@ -137,6 +137,8 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 - [ ] 모든 계약 문서 상태가 "구현됨", 모든 화면이 `06-screens`와 일치 — **남은 공백은 [09-gaps](09-gaps.md)에 적혀 있다** (계약 열넷·화면 전부를 코드와 대조했다. C12는 M7이라 이 기준에서 뺄지 사람이 정한다, §2-4)
   - **계약 일곱이 「구현됨」이다** (조각 1): C2·C4·C6·C7·C8·C10·C11 — C4는 `reserved_for`를, C10은 곱게 끄기(`POST /v1/admin/shutdown`)를 채워 닫았다. 남은 것은 C1·C3·C5·C9·C13·C14와 C12(M7)다.
   - **화면 셋이 문서와 맞았다** (조각 1): BUI-02 「실행 기록」(`runs/*.jsonl`을 읽어 그린다), BUI-09 「예약」·「밀린 보고」(C13 `status` 선언대로 묻는다), BUI-01 트레이 「도구」(메인 창과 같은 유틸리티). BUI-09 「최근 UI 세션」은 **확장이 그려야 하는 자리**라 남겼다 (09-gaps §4-2).
+  - **경계 결정 셋을 적었다** (조각 2, 코드 없음): [ADR-0040](decisions/0040-registry-storage-sqlite.md) 레지스트리 저장소, [ADR-0041](decisions/0041-extension-run-events.md) 확장이 실행 기록에 남기는 길, [ADR-0042](decisions/0042-extension-contributed-panels.md) 확장이 화면에 칸을 기여하는 길.
+  - **확장이 실행 기록에 남긴다** (조각 3, [ADR-0041](decisions/0041-extension-run-events.md)): `extension_api` **1.2**(`ExtensionEvent`·`TaskOutcome.events`·`TaskFailed(events=…)`)와 엔진이 쓰는 자리 하나(`run_id`·`seq`·`ts`·`node_id`를 붙이고 `sanitize()`로 거르고 어긋난 줄만 버린다). UI 태스크 수행기가 **C3 `ui_session`을 남긴다** — 전환·실패로 끝난 것도. 09-gaps §3-2를 닫았고 CON-01 「UI 태스크」 섹션(§4-11)이 읽을 것을 갖췄다.
 
 ## M7. 서버 실행
 

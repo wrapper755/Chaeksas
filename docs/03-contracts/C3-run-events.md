@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Bot UI(실행 중 Bot)·서버 실행기·Studio(선택) → Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/events.py` (import `chaeksas.contracts.events`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c3-run-event.json`](../../packages/contracts/schemas/c3-run-event.json) · [`c3-event-batch-response.json`](../../packages/contracts/schemas/c3-event-batch-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0041](../decisions/0041-extension-run-events.md) |
 
 ## 목적
 
@@ -59,6 +59,22 @@
 - `kind`와 `data`의 값 목록(`state`, `source`, `layer`, `status` 등)은 모두 **열린 문자열**이다 (README 원칙 10).
 - PC Bot은 결재·확인을 기다리는 동안 `node_state: waiting`만 남긴다 (`run_waiting`은 서버만 쓴다 — 실행 자리를 쥐고 있으므로).
 - 업무 값 기록은 기본으로 끈다. 실행 설정에서 명시적으로 켠 경우에만 `kind: "data"`(`data.vars`: 이름→값)를 보낸다 (principle 6).
+
+## 확장이 남기는 이벤트
+
+`ui_session`처럼 **뜻을 확장이 아는** 줄은 확장이 만들고, **줄을 쓰는 것은 엔진이다** ([ADR-0041](../decisions/0041-extension-run-events.md)).
+
+| 누가 | 무엇을 |
+| --- | --- |
+| 확장 (태스크 수행기) | `{kind, data}`만 준다 — `extension_api`의 `ExtensionEvent`를 `TaskOutcome.events[]`에 담는다. 실패했을 때는 `TaskFailed(…, events=[…])`에 싣는다 |
+| 엔진 (`core.nodes.write_extension_events`) | `schema`·`run_id`·`seq`·`ts`·`node_id`를 **붙이고**, `data`를 거르고, 줄을 파일에 쓴다 |
+
+- **확장은 실행의 구조를 모른다.** `seq`는 실행 하나에서 단조라서 토큰이 여럿일 때 확장이 매길 수 없고, 어느 노드였나도 엔진만 안다. 확장이 `data`에 이 칸들을 적어 보내도 **엔진 것이 이긴다** (떼어 내고 쓴다).
+- **거르는 자리는 하나다.** 엔진이 `data`에 `sanitize()`를 걸어 원칙 6을 지킨다 — 수·참거짓·짧은 글은 그대로, 긴 글은 잘라서, 목록·사전은 개수만. 확장을 믿고 통과시키지 않는다.
+- **어긋난 줄은 떨어뜨리고 실행은 이어 간다.** 알려진 `kind`인데 `data` 필수 키가 빠지면(`contracts.events.missing_keys()`) **그 줄만 버리고** `log`(`level: warn`)로 왜 버렸는지 남긴다. 업무 실패가 아니다 — 기록 한 줄 때문에 다 된 업무를 깨지 않는다 (위의 호환 규칙, C4 실행 기록 전송이 거부된 줄을 지나간 것으로 치는 것과 같은 결).
+- **실패한 태스크도 남긴다.** UI 태스크가 전환(사람에게 넘김)으로 끝난 것이 CON-01에서 가장 보고 싶은 줄이다.
+- **진행 중에는 남기지 않는다** — 태스크가 끝날 때 한 번이다. 오래 도는 태스크의 중간 상태는 확장 쪽 길(C8 보고 → UIA-03)이 본다.
+- 지금 이 길로 오는 것은 `ui_session` 하나다 (UI 자동화 확장의 UI 태스크 수행기).
 
 ## 예시
 
@@ -129,6 +145,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 1 | 「확장이 남기는 이벤트」를 적었다 — 확장은 `{kind, data}`만 주고 엔진이 줄을 쓴다. 형식은 그대로다 (`ui_session`을 이제 내보내는 쪽이 있다) | 0041 |
 | 2026-10-07 | 1 | `human_withdrawn`을 더했다 — Center 결재가 답 없이 끝난 것(회수·만료)을 실행하는 쪽이 받았다는 표시. 값은 없다 | 0038 |
 | 2026-10-01 | 1 | 초안 (프로토타입 이벤트에서 `hitl_*` → `human_*`, `ui_session`·`service_call`·`run_waiting` 추가, 보낸 쪽은 키로 식별) | 0013, 0014, 0015 |
 | 2026-10-01 | 1 | 검토 반영: `trigger` → `source`, `test_` 실행 id, 배포 결정은 C4로, 줄 단위 거부, `run_id` 소유, `service_call.mode_used`·토큰 이름 통일 | — |

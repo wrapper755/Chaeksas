@@ -6,7 +6,7 @@
 | schema | 2 (1은 `local_runtimes.command`를 쓰던 것 — 아래 변경 이력) |
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·Bot UI·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
 | 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |
-| 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md) |
+| 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md) |
 | 관련 화면 | BUI-01·03·11, STU-03·14·15, CON-07 |
 
 > 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`가 **서명 봉투로만** 받고(C2 `extension`·`extension_revoke`, E6), E1·E2·E3을 검사하며, 정의와 봉투를 **그대로** 보관해 실행하는 쪽이 다시 검증할 수 있게 한다. `chk-admin sign-extension`·`revoke-extension`이 봉투 파일을 만들고, CON-07 「확장」 탭에서 올린다. **E4·E8은 외부 확장으로 띄울 수 없다** — `task_types`·`agent_environments`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
@@ -138,6 +138,7 @@
   - `{"kind": "builtin", "entry": "…"}`: 확장이 준 편집기.
   - `{"kind": "schema"}`: 입력 JSON Schema로 만든 자동 폼 (STU-14 방식).
 - `executor`: `{"entry": "…"}`. `extension_api.TaskExecutor`를 구현한다.
+  - **실행 기록에 남기려면 `TaskOutcome.events[]`에 담는다** (C3 §확장이 남기는 이벤트, [ADR-0041](../decisions/0041-extension-run-events.md)). 확장은 `ExtensionEvent{kind, data}`만 주고 **줄은 엔진이 쓴다** — `run_id`·`seq`·`ts`·`node_id`는 엔진이 붙이고, `data`는 엔진이 거른다(원칙 6). 실패했을 때 남길 것은 `TaskFailed(…, events=[…])`에 싣는다. 알려진 `kind`인데 필수 키가 빠지면 **그 줄만 버려진다** (업무는 깨지지 않는다). 확장이 파일이나 `seq`를 만지는 길은 없다.
 - **`entry` 형식: `"<모듈>:<이름>"`.** 모듈은 확장 이름 공간(`chaeksas.ext`) 밑에서 찾는다 — `ui_automation.client:UiTaskExecutor`는 `chaeksas.ext.ui_automation.client.UiTaskExecutor`다 ([ADR-0019](../decisions/0019-package-names.md)). 가리키는 것은 **인자 없이 만들 수 있는 클래스**(또는 이미 만들어진 객체)이고, 확장 호스트가 만들어 `extension_api`의 모양인지 확인한 뒤 켠다.
   - 확장 호스트는 **그 확장의 패키지 안**만 허용한다. 정의가 다른 모듈(`os:getcwd` 같은 것)을 가리켜 import시킬 수 없다.
 - `resources[].catalog_url`: 상대 경로(서버 부분 기준) 또는 `allowed_hosts` 안의 주소. 응답은 §5 공통 카탈로그 형식이다.
@@ -305,6 +306,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 2 | 태스크 수행기가 **실행 기록에 남기는 길**을 적었다 (`TaskOutcome.events[]`) — `extension_api` **1.2**. 정의(`extension.json`)는 바뀌지 않으므로 `api: ">=1,<2"`인 확장은 그대로 돈다 | 0041 |
 | 2026-10-09 | 2 | `bot_ui.local_runtimes[].status`·`shutdown`(상태 묻기·곱게 끄기)을 더했다 — Bot UI가 BUI-09의 「예약」·「밀린 보고」를 보이고 종료 순서에서 런타임에게 닫을 틈을 준다. 선택 칸이라 기존 확장은 영향이 없다 | 0018, 0023 |
 | 2026-10-06 | 2 | `bot_ui.local_runtimes[].reserve`(실행 예약 방법)를 더했다 — Bot UI가 런타임의 계약을 모른 채 실행 동안 런타임을 그 실행에 묶는다. 선택 칸이라 기존 확장은 영향이 없다 | 0014 |
 | 2026-10-05 | 2 | `agent_environments`(AI 태스크의 `web`·`desktop` 환경)를 더했다. 모르는 열쇠는 무시하므로 기존 호스트는 영향이 없다 | 0037 |

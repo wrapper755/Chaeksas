@@ -21,7 +21,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | --- | --- | --- | --- |
 | C1 | 합의 | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | `Provides`를 **아무도 채우지 않는다** (§3-1) |
 | C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
-| C3 | 합의 | `contracts.events`·`core.run_log` | `ui_session`을 **아무도 내보내지 않는다** (§3-2). `case_id`·`queued_s`도 (§3-3) |
+| C3 | 합의 | `contracts.events`·`core.run_log` | `case_id`·`queued_s`를 **아무도 넣지 않는다** (§3-3). `ui_session`은 **닫았다** ([ADR-0041](decisions/0041-extension-run-events.md)) |
 | C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠다) |
 | C5 | 합의 | `contracts.center_api`, Center 전부 | `deprecated`로 **만들 길이 없다** (§3-5). `dependents`·`DELETE /packages` 없음 (§3-6) |
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
@@ -55,14 +55,6 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **없는 것:** Studio 패키지 내보내기(`apps/studio/packaging.py`)가 `provides`를 **아예 만들지 않는다.** 읽는 쪽(CON-06)도 없다.
 - **크기:** 중간 — `reads`/`writes`는 `available_vars()`가 이미 아는 것이라 그림에서 모을 수 있다.
 - **막는 것:** 쓸 자리가 **CON-06뿐이다**(§4-10). CON-06 없이 채우면 아무도 안 본다 — **묶어서 할 일이다.**
-
-### 3-2. C3 `ui_session`을 내보내는 쪽이 없다
-
-- **문서:** C3 48줄 — UI 태스크 한 번이 끝나면 `business_key`·`page_id`·`result`·`steps`·`fallback_depth_max`·`healed`를 남긴다. CON-01 「UI 태스크」 섹션과 UIA-03이 읽는다. `run_log.summarize()`가 이미 센다.
-- **코드:** `REQUIRED_DATA_KEYS["ui_session"]`, `run_log.py:152`의 요약 집계, C3 문서 예시까지 다 있다.
-- **없는 것:** **내보내는 쪽.** UI 태스크 수행기(`ext.ui_automation.client.task`)는 UI 자동화 앱에 C8 보고를 보내지만 C3 이벤트를 쓰지 않는다. 그리고 **쓸 길이 없다** — `TaskOutcome`에는 `usage`(→ `llm_usage`)만 있고 확장이 실행 기록에 한 줄 남길 칸이 없다.
-- **크기:** 중간. `extension_api`에 칸을 더해야 한다.
-- **막는 것:** 없다 — [ADR-0041](decisions/0041-extension-run-events.md)이 모양을 정했다. **`TaskOutcome.events[]`**(`{kind, data}`)를 더하고 **줄을 쓰는 것은 엔진**이다(`run_id`·`seq`·`ts`를 붙이고 `sanitize()`로 거른다, 원칙 6). 어긋난 줄은 **그 줄만 버린다**. 남은 일: C3·C13 문서 → `extension_api` 1.2 → 엔진 → UI 태스크 수행기.
 
 ### 3-3. C3 `run_started`의 선택 칸 `case_id`·`queued_s`
 
@@ -175,9 +167,9 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 - **문서:** `center-console.md` 32~51줄. 목록 열에 「UI 태스크」, 필터에 「실행 위치」·「Bot UI」·「최근 n건」. 상세에 「UI 태스크」 섹션(노드/화면/스텝 수/폴백 깊이/치유/전환 → UIA-03 링크).
 - **코드:** 요약·노드 타임라인·AI 태스크 단계·사람 개입·로그·원본 이벤트는 **돈다.** 「UI 태스크」는 주석에 「M4」, 필터는 「M5(배포)와 함께」 — **둘 다 지났다.**
-- **없는 것:** 필터 셋(값은 이제 쌓인다). 「UI 태스크」 섹션은 **§3-2가 막는다** — 읽을 이벤트가 없다. UIA-03 링크는 §4-7이 막는다.
-- **크기:** 필터는 작다. 「UI 태스크」 섹션은 §3-2 뒤에 작다.
-- **막는 것:** 필터는 없다. 섹션은 **§3-2 → §4-7 순서다.**
+- **없는 것:** 필터 셋(값은 이제 쌓인다)과 「UI 태스크」 섹션. UIA-03 링크는 §4-7이 막는다.
+- **크기:** 둘 다 작다. **읽을 이벤트는 이제 있다** — UI 태스크 수행기가 C3 `ui_session`을 남긴다 ([ADR-0041](decisions/0041-extension-run-events.md), 전환·실패로 끝난 것도). 상세의 열(노드/화면/스텝 수/폴백 깊이/치유/전환)이 그 `data`에 그대로 있다.
+- **막는 것:** 섹션의 **UIA-03 링크만** §4-7에 걸린다 (링크 없이 먼저 그릴 수 있다). 필터는 막는 것이 없다.
 
 ### 4-12. CON-00 탐색에 「서버 실행」(M7)이 없다
 
