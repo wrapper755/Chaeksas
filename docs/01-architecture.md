@@ -116,7 +116,7 @@ llm ◀── core, service_kit   (맨 아래 — chaeksas의 아무것도 impor
 | --- | --- | --- |
 | 패키지 파일 (zip) | Center 파일 저장소 | DB에는 메타데이터만. 비밀 없음 |
 | Bot UI·배포·작업·결재·실행 이력·리소스·Center API 키(해시) | Center DB | SQLite로 시작, PostgreSQL 호환 |
-| 화면·요소·로케이터·인텐트 | UI 자동화 앱의 SQLite 한 파일 (`service/store.py`) | 화면 하나를 JSON 한 덩이로, 성적만 따로. 애초 계획은 지식 그래프(Neo4j)였고 **그 뒤집기에 ADR이 없다** ([09-gaps](09-gaps.md) §2-3) |
+| 화면·요소·로케이터·인텐트 | UI 자동화 앱의 SQLite 한 파일 (`service/store.py`) | 화면 하나를 JSON 한 덩이로, 성적만 따로. **그래프 저장소를 두지 않는다** ([ADR-0040](decisions/0040-registry-storage-sqlite.md)) |
 | 서비스 앱 API 키(해시)·사용 기록 | 각 서비스 앱 | |
 | 서비스 앱 키 값, Center 키 값 | Bot UI·Studio PC의 OS 비밀 저장소, 서버 실행기는 서버의 비밀 저장소·환경변수 | |
 | 서버 실행 상태 (기다리는 실행) | 서버 실행기 저장소 (SQLite로 시작) | 재시작 후 이어 가기 |

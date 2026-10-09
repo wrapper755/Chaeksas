@@ -8,7 +8,7 @@
 | PC 역할 | OS | 필요한 것 |
 | --- | --- | --- |
 | 클라이언트 개발 (Studio·Bot UI·Worker 프로세스) | **Windows 10/11 (주)**, Linux | Git, uv, Python, Playwright 브라우저 |
-| 서버 개발 (Center·서버 실행기·서비스 앱) | **Linux (주)**, Windows | Git, uv, Python, Docker (Neo4j용), Ollama |
+| 서버 개발 (Center·서버 실행기·서비스 앱) | **Linux (주)**, Windows | Git, uv, Python, Docker, Ollama |
 | 한 대로 전부 | Windows 또는 Linux | 위 둘 다 |
 
 ## 2. 공통 도구
@@ -18,7 +18,7 @@
 | Git | 최신 | 소스 관리 |
 | uv | 최신 | Python 설치·가상환경·의존성 (pip·venv 직접 사용 안 함) |
 | Python | **3.12** ([ADR-0005](decisions/0005-python-version.md)) | **직접 깔지 않는다 — uv가 내려받는다.** 시스템 Python 버전은 상관없다 |
-| Docker | 최신 | 서버 쪽 Neo4j (선택: PostgreSQL) |
+| Docker | 최신 | 서버 구성(`deploy/compose.yaml`) — Center·콘솔·서비스 앱 (선택: PostgreSQL) |
 | Ollama | 최신 | 로컬 LLM (외부 API를 쓰면 생략) |
 | Node.js | LTS | 웹 화면(Next.js) 개발·빌드 ([ADR-0017](decisions/0017-web-nextjs-design-system.md)). 웹 화면을 만지지 않는 PC는 생략 |
 | pnpm | 최신 (corepack으로) | `web/` 의존성 |
@@ -99,14 +99,10 @@ git clone https://github.com/wrapper755/Chaeksas.git ~/dev/Chaeksas && cd ~/dev/
 uv sync --all-packages
 uv run pytest
 
-# 3) Neo4j (UI 자동화 앱용)
-docker run -d --name chaeksas-neo4j -p 7474:7474 -p 7687:7687 \
-  -e NEO4J_AUTH=neo4j/<비밀번호> neo4j:5
-
-# 4) Ollama (로컬 LLM을 쓸 때)
+# 3) Ollama (로컬 LLM을 쓸 때)
 curl -fsSL https://ollama.com/install.sh | sh
 
-# 5) Qt 테스트를 돌릴 때만 (화면 없이 돌려도 그래픽 라이브러리가 필요하다)
+# 4) Qt 테스트를 돌릴 때만 (화면 없이 돌려도 그래픽 라이브러리가 필요하다)
 sudo apt-get install -y --no-install-recommends \
   libegl1 libxkbcommon0 libdbus-1-3 libfontconfig1 libfreetype6
 ```
@@ -114,7 +110,7 @@ sudo apt-get install -y --no-install-recommends \
 - **Qt 테스트는 화면이 없어도 돈다** — `QT_QPA_PLATFORM=offscreen`을 테스트가 스스로 켠다. 위 라이브러리가 없으면 그 테스트만 건너뛴다 (CI는 깔고 돌린다).
 - PySide6는 `uv sync`가 받는다. `packages/qt`는 **Essentials만** 쓰고, QtWebEngine이 든 Addons는 Studio가 따로 받는다 ([ADR-0022](decisions/0022-studio-canvas.md)·[ADR-0024](decisions/0024-desktop-packaging-extensions.md) — Bot UI 설치 파일을 작게 두려는 것이다).
 
-> 제안: M2에서 서버 쪽 구성(Center, 서비스 앱, Neo4j)을 `docker compose` 파일 하나로 묶는다. 그러면 Windows에서도 Docker Desktop으로 같은 서버를 띄울 수 있다.
+서버 쪽 구성(Center·Center 콘솔·서비스 앱과 그 관리 콘솔)은 `deploy/compose.yaml` **한 번으로** 뜬다 — Windows에서도 Docker Desktop으로 같은 서버를 띄운다. 레지스트리는 서비스 앱 안의 SQLite 한 파일이라 따로 세울 DB가 없다 ([ADR-0040](decisions/0040-registry-storage-sqlite.md)).
 
 ## 5. 설정과 비밀
 
@@ -148,7 +144,6 @@ sudo apt-get install -y --no-install-recommends \
 | Worker 로컬 API | 8899 | 127.0.0.1 고정 | `CHK_WORKER__LOCAL_API__PORT` |
 | Bot UI 메시지 수신 (ReceiveTask·메시지 시작 이벤트) | 8790 | 127.0.0.1 기본 | `CHK_BOT_UI__WEBHOOK__PORT` |
 | UI 자동화 앱 관리 콘솔 | 8001 | 서버 | `CHK_SVC_UI_AUTOMATION__CONSOLE_PORT` |
-| Neo4j | 7474 (HTTP) / 7687 (Bolt) | 서버 | `CHK_SVC_UI_AUTOMATION__NEO4J__URI` |
 | Ollama | 11434 | 로컬 또는 서버 | `CHK_LLM__BASE_URL` |
 
 > 주의: 프로토타입과 같은 기본 포트다. 한 PC에서 프로토타입과 새 구성요소를 동시에 띄우면 충돌하므로, 그때는 환경변수로 한쪽을 옮긴다.
