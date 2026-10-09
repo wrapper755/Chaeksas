@@ -45,6 +45,10 @@ CODE_RUN_MISMATCH = "run_id_mismatch"
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 500
 
+#: `run_finished`가 세어 보낸 것 — 요약에 그대로 둔다 (CON-01 목록 열, C3 `RunInfo`).
+#: **줄을 다시 읽어 세지 않는다** — 보낸 쪽이 센 것이 원본이다.
+COUNTS = ("ai_tasks", "replayed_tasks", "ui_tasks", "service_calls", "human_requests")
+
 
 def owner_of(store: Store, run_id: str) -> str | None:
     found = store.row("SELECT owner_key_id FROM runs WHERE run_id = ?", (run_id,))
@@ -152,6 +156,8 @@ def _note(summary: dict[str, Any], event: RunEvent) -> None:
                 "finished_at": event.ts,
                 "duration_s": event.data.get("duration_s"),
                 "error_code": event.data.get("error_code"),
+                # 셈은 **보낸 쪽이 센 것**을 그대로 둔다 (C3) — 줄을 다시 읽어 세지 않는다.
+                **{name: event.data.get(name) for name in COUNTS},
             }
         )
     elif event.kind == "run_waiting":
@@ -211,6 +217,7 @@ def info_of(store: Store, run_id: str) -> RunInfo:
 def _info(row: Any, store: Store) -> RunInfo:
     summary = loads(row["summary_json"], {}) or {}
     counted = store.row("SELECT COUNT(*) AS n FROM run_events WHERE run_id = ?", (row["run_id"],))
+    tallies = {name: summary.get(name) for name in COUNTS}
     return RunInfo(
         run_id=row["run_id"],
         status=summary.get("status") or "running",
@@ -224,6 +231,7 @@ def _info(row: Any, store: Store) -> RunInfo:
         finished_at=summary.get("finished_at"),
         duration_s=summary.get("duration_s"),
         error_code=summary.get("error_code"),
+        **tallies,
         events=int(counted["n"]) if counted else 0,
     )
 
@@ -233,9 +241,14 @@ def listing(
     *,
     status: str | None = None,
     bpm_process_id: str | None = None,
+    run_location: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> RunListing:
-    """최근 실행부터 (CON-01 목록). 좁히기는 상태·BPM 프로세스뿐이다."""
+    """최근 실행부터 (CON-01 목록). 좁히기는 상태·BPM 프로세스·실행 위치다.
+
+    **「Bot UI」로는 아직 좁히지 못한다** — C3 `RunInfo`에 어느 Bot UI였나가 없다 (Center는
+    `run_id`를 보낸 **키**에 묶어 두지만 그것을 실행 요약에 적지 않는다, docs/09-gaps.md §4-11).
+    """
     rows = store.rows(
         "SELECT run_id, first_seen_at, last_seen_at, summary_json FROM runs "
         "ORDER BY first_seen_at DESC, run_id DESC"
@@ -245,6 +258,8 @@ def listing(
         found = [one for one in found if one.status == status]
     if bpm_process_id:
         found = [one for one in found if one.bpm_process_id == bpm_process_id]
+    if run_location:
+        found = [one for one in found if one.run_location == run_location]
     return RunListing(runs=found[: max(1, min(limit, MAX_LIMIT))], total=len(found))
 
 
@@ -272,11 +287,16 @@ def get_runs(
     request: Request,
     status: str | None = None,
     bpm_process_id: str | None = None,
+    run_location: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> Any:
     require_read(request.app.state.authenticate(request))
     return listing(
-        request.app.state.store, status=status, bpm_process_id=bpm_process_id, limit=limit
+        request.app.state.store,
+        status=status,
+        bpm_process_id=bpm_process_id,
+        run_location=run_location,
+        limit=limit,
     )
 
 

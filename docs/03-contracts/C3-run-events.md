@@ -105,7 +105,7 @@
 
 | 경로 | 돌려주는 것 |
 | --- | --- |
-| `GET /api/v1/runs?status=&bpm_process_id=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스, `limit` 기본 50·최대 500 |
+| `GET /api/v1/runs?status=&bpm_process_id=&run_location=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스·**실행 위치**, `limit` 기본 50·최대 500 |
 | `GET /api/v1/runs/{run_id}` | `RunInfo` 하나. 없으면 404 `run_not_found` |
 | `GET /api/v1/runs/{run_id}/events` | `RunEventsResponse` — **`seq` 차례로** 전부 (타임라인이 순서를 만든다) |
 
@@ -118,9 +118,10 @@
 | `bpm_process_id`, `version`, `run_location`, `executor`, `mode`, `source` | str | | `run_started`의 `data`에서 추린 것 |
 | `started_at` | str | ✓ | 첫 이벤트의 `ts` (`run_started`가 아직 없으면 받은 시각) |
 | `finished_at`, `duration_s`, `error_code` | | | `run_finished`에서 |
+| `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | int | | `run_finished`의 셈 그대로 (CON-01 목록 열). **끝나지 않은 실행은 없다** — 줄을 다시 읽어 세지 않는다 |
 | `events` | int | ✓ | 지금까지 받은 줄 수 |
 
-**요약은 받을 때 만든다** — 목록을 그릴 때마다 줄을 다시 읽지 않는다. 늦게 온 배치가 끝난 실행을 「도는 중」으로 되돌리지 않는다 (상태는 뒤로 가지 않는다).
+**요약은 받을 때 만든다** — 목록을 그릴 때마다 줄을 다시 읽지 않는다. 그래서 셈 다섯은 `run_finished`가 와야 채워진다 (도는 중에는 비어 있고 화면이 「—」로 보인다). 늦게 온 배치가 끝난 실행을 「도는 중」으로 되돌리지 않는다 (상태는 뒤로 가지 않는다).
 
 ## 오류
 
@@ -145,6 +146,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 1 | `RunInfo`에 `run_finished`의 셈 다섯을 담고 목록 좁히기에 `run_location`을 더했다 — CON-01 목록 열이 읽을 자리가 없었다. 선택 칸이라 받는 쪽은 그대로 돈다 | — |
 | 2026-10-09 | 1 | 「확장이 남기는 이벤트」를 적었다 — 확장은 `{kind, data}`만 주고 엔진이 줄을 쓴다. 형식은 그대로다 (`ui_session`을 이제 내보내는 쪽이 있다) | 0041 |
 | 2026-10-07 | 1 | `human_withdrawn`을 더했다 — Center 결재가 답 없이 끝난 것(회수·만료)을 실행하는 쪽이 받았다는 표시. 값은 없다 | 0038 |
 | 2026-10-01 | 1 | 초안 (프로토타입 이벤트에서 `hitl_*` → `human_*`, `ui_session`·`service_call`·`run_waiting` 추가, 보낸 쪽은 키로 식별) | 0013, 0014, 0015 |

@@ -3,6 +3,18 @@
   "additionalProperties": true,
   "description": "실행 하나의 요약 (CON-01 목록·상세). **받을 때 만들어 둔다** — 목록을 그릴 때마다\n이벤트를 다시 읽지 않는다.",
   "properties": {
+    "ai_tasks": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ai Tasks"
+    },
     "bpm_process_id": {
       "anyOf": [
         {
@@ -68,6 +80,18 @@
       "default": null,
       "title": "Finished At"
     },
+    "human_requests": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Human Requests"
+    },
     "mode": {
       "anyOf": [
         {
@@ -79,6 +103,18 @@
       ],
       "default": null,
       "title": "Mode"
+    },
+    "replayed_tasks": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Replayed Tasks"
     },
     "run_id": {
       "title": "Run Id",
@@ -95,6 +131,18 @@
       ],
       "default": null,
       "title": "Run Location"
+    },
+    "service_calls": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Service Calls"
     },
     "source": {
       "anyOf": [
@@ -124,6 +172,18 @@
       "default": "running",
       "title": "Status",
       "type": "string"
+    },
+    "ui_tasks": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ui Tasks"
     },
     "version": {
       "anyOf": [

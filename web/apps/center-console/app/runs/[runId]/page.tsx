@@ -13,11 +13,25 @@ import { LABEL, seconds, time, where } from "../page";
  * **이벤트가 원본이다** — 요약·타임라인·단계 표는 모두 같은 줄에서 만든다. 값은 애초에 오지
  * 않는다 (원칙 6 — 보내는 쪽이 `sanitize()`로 걸렀다).
  *
- * 화면 설계서의 섹션 중 지금 채우는 것은 요약·노드 타임라인·AI 태스크 단계·사람 개입·로그·
- * 원본 이벤트다. 「UI 태스크」는 **아무도 C3 `ui_session`을 내보내지 않아** 비어 있고
- * (docs/09-gaps.md §3-2), 「이어 돈 기록」은 `run_waiting`·`run_resumed`를 쓰는 서버 실행(M7)
- * 몫이다 — **빈 섹션은 「<종류> 이벤트가 없습니다」 한 줄**이다.
+ * 화면 설계서의 섹션 중 지금 채우는 것은 요약·노드 타임라인·AI 태스크 단계·**UI 태스크**·
+ * 사람 개입·로그·원본 이벤트다. 「이어 돈 기록」은 `run_waiting`·`run_resumed`를 쓰는 서버
+ * 실행(M7) 몫이다 — **빈 섹션은 「<종류> 이벤트가 없습니다」 한 줄**이다.
+ *
+ * 「UI 태스크」는 C3 `ui_session` 줄을 읽는다 (확장이 남기고 엔진이 쓴 것, ADR-0041). **UIA-03
+ * 링크는 아직 걸지 않는다** — Center 콘솔은 그 앱의 관리 콘솔 주소를 모른다 (C7 리소스의
+ * `console_url`을 읽어 올지 정해야 한다, docs/09-gaps.md §4-11).
  */
+
+/** C3 `ui_session.result` → `status_map`의 「UI 세션」 표기 (그 표에 있는 것만 쓴다). */
+const UI_RESULT: Record<string, string> = {
+  success: "성공",
+  escalated: "전환",
+  failed: "실패",
+};
+
+/** **없는 것은 끄고 이유를 가까이 적는다** (U3) — 여기서는 링크가 없는 이유다. */
+const UIA_LINK_LATER =
+  "UI 자동화 앱 관리 콘솔(UIA-03) 링크는 아직 없습니다 — Center 콘솔이 그 앱의 콘솔 주소를 모릅니다.";
 
 const NODE_STATE: Record<string, string> = {
   started: "실행 중",
@@ -102,6 +116,8 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
   const agent = events.filter((e) => e.kind === "agent");
   const human = events.filter((e) => e.kind.startsWith("human_"));
   const logs = events.filter((e) => e.kind === "log");
+  // C3 `ui_session` — 확장이 남기고 엔진이 쓴 줄 (ADR-0041). 전환·실패로 끝난 것도 있다.
+  const ui = events.filter((e) => e.kind === "ui_session");
 
   const nodeColumns: Array<Column<NodeRow>> = [
     { key: "node_id", header: "노드", mono: true },
@@ -130,6 +146,33 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
     { key: "kind", header: "무엇", width: "16ch" },
     { key: "node_id", header: "노드", mono: true, cell: (row) => row.node_id ?? "—" },
     { key: "layer", header: "종류", width: "10ch", cell: (row) => String(row.data?.layer ?? "—") },
+  ];
+
+  const uiColumns: Array<Column<RunEvent>> = [
+    { key: "node_id", header: "노드", mono: true, cell: (row) => row.node_id ?? "—" },
+    { key: "page_id", header: "화면", mono: true, cell: (row) => String(row.data?.page_id ?? "—") },
+    {
+      key: "result",
+      header: "결과",
+      width: "14ch",
+      cell: (row) => (
+        <StatusBadge group="UI 세션" label={UI_RESULT[String(row.data?.result ?? "")] ?? "—"} />
+      ),
+    },
+    { key: "steps", header: "스텝 수", width: "10ch", align: "right", cell: (row) => String(row.data?.steps ?? 0) },
+    {
+      key: "fallback_depth_max",
+      header: "폴백 깊이 최대",
+      width: "14ch",
+      align: "right",
+      cell: (row) => String(row.data?.fallback_depth_max ?? 0),
+    },
+    {
+      key: "healed",
+      header: "치유",
+      width: "8ch",
+      cell: (row) => (row.data?.healed ? "예" : "아니오"),
+    },
   ];
 
   const logColumns: Array<Column<RunEvent>> = [
@@ -179,6 +222,10 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
               <dd>{seconds(info.duration_s)}</dd>
               <dt className="text-text-muted">AI 태스크 단계</dt>
               <dd>{seen.agent ?? 0}</dd>
+              <dt className="text-text-muted">UI 태스크</dt>
+              <dd>{ui.length}</dd>
+              <dt className="text-text-muted">결재·확인</dt>
+              <dd>{seen.human_requested ?? 0}</dd>
               <dt className="text-text-muted">이벤트</dt>
               <dd>{info.events}</dd>
             </dl>
@@ -198,6 +245,22 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
               <Empty kind="AI 태스크" />
             ) : (
               <DataTable columns={agentColumns} rows={agent} rowKey={(row) => String(row.seq)} caption="AI 단계" />
+            )}
+          </Section>
+
+          <Section title="UI 태스크">
+            {ui.length === 0 ? (
+              <Empty kind="UI 세션" />
+            ) : (
+              <>
+                <DataTable
+                  columns={uiColumns}
+                  rows={ui}
+                  rowKey={(row) => String(row.seq)}
+                  caption="UI 세션 (UI 태스크 한 번)"
+                />
+                <p className="text-body-sm text-text-muted">{UIA_LINK_LATER}</p>
+              </>
             )}
           </Section>
 

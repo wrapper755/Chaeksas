@@ -7,18 +7,23 @@
  * 이벤트를 다시 읽지 않는다.
  */
 export interface RunInfo {
+  ai_tasks?: number | null;
   bpm_process_id?: string | null;
   duration_s?: number | null;
   error_code?: string | null;
   events?: number;
   executor?: string | null;
   finished_at?: string | null;
+  human_requests?: number | null;
   mode?: string | null;
+  replayed_tasks?: number | null;
   run_id: string;
   run_location?: string | null;
+  service_calls?: number | null;
   source?: string | null;
   started_at?: string | null;
   status?: string;
+  ui_tasks?: number | null;
   version?: string | null;
   [k: string]: unknown;
 }
