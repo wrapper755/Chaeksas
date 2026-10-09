@@ -11,6 +11,7 @@ import하지 않는다 — HTTP로만 부른다 (`tests/test_import_direction.py
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
@@ -54,6 +55,17 @@ def plans_for(token_dir: Path, base_url: str) -> object:
     return make
 
 
+def unsent_counter(token_dir: Path) -> Callable[[], int]:
+    """밀린 보고를 세는 함수 (C10 `/v1/status`의 `unsent_reports`, BUI-09).
+
+    큐는 `plans` 쪽에 있고 세션마다 새로 만들어지므로, **세는 일만** 떼어 Worker에 준다.
+    """
+    from chaeksas.ext.ui_automation.worker.plans import QUEUE_DIR, ReportQueue  # noqa: PLC0415
+
+    queue = ReportQueue(folder=token_dir / QUEUE_DIR)
+    return lambda: len(queue.waiting())
+
+
 def backend(data_dir: Path | None = None) -> object | None:
     """화면을 만지는 쪽. **둘 다 없으면 `None`** — 세션을 열면 503이다 (「없는데 된 척」하지 않는다).
 
@@ -93,17 +105,21 @@ def serve(*, port: int, token_dir: Path | None = None) -> int:
     where = token_dir or Path.cwd()
     token, admin = write_tokens(where)
     found = backend(where)
-    app = create_app(
-        Worker(
-            token=token,
-            admin_token=admin,
-            backend=cast("Backend | None", found),
-            plans_factory=cast("Any", plans_for(where, os.environ.get(SERVICE_URL_ENV, ""))),
-        )
+    worker = Worker(
+        token=token,
+        admin_token=admin,
+        backend=cast("Backend | None", found),
+        plans_factory=cast("Any", plans_for(where, os.environ.get(SERVICE_URL_ENV, ""))),
+        unsent=unsent_counter(where),
     )
+    app = create_app(worker)
 
+    # **`uvicorn.run`이 아니라 `Server`다** — `POST /v1/admin/shutdown`(C10)이 멈출 것을 쥐어야
+    # 한다. 그냥 끄면 열린 세션의 보고를 저장할 틈이 없다 (C13 `shutdown`).
+    server = uvicorn.Server(uvicorn.Config(app, host=LOCAL_HOST, port=port, log_level="warning"))
+    worker.stopper = lambda: setattr(server, "should_exit", True)
     try:
-        uvicorn.run(app, host=LOCAL_HOST, port=port, log_level="warning")
+        server.run()
     except OSError:
         return EXIT_PORT_IN_USE
     return 0

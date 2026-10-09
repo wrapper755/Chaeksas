@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Bot UI(실행 중 Bot)·서버 실행기·Studio·Worker 프로세스 → 모든 서비스 앱 |
 | 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py` (import `chaeksas.contracts.service_app`), 받는 쪽 뼈대 `packages/service_kit/` (import `chaeksas.service_kit`, [ADR-0019](../decisions/0019-package-names.md)), **부르는 쪽 `chaeksas.core.services`** (서비스 앱 태스크 — 멱등 키·재시도·C3 `service_call` 기록). 보기: 진짜 앱은 `extensions/ui_automation/.../service/app.py`, 업무 예제가 부르는 **모의 앱 열넷**은 [`samples/`](../../samples/README.md) |

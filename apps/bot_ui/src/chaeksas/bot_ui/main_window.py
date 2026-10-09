@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QUrl, Signal
+from PySide6.QtCore import QPoint, Qt, QUrl, Signal
 from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -33,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from chaeksas.bot_ui import run_log_view
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.bots import (
     MANUAL,
@@ -53,6 +55,7 @@ from chaeksas.core.preflight import (
     TASK_TYPES_UNSUPPORTED,
     Preflight,
 )
+from chaeksas.core.run_log import run_dir
 from chaeksas.qt import theme
 from chaeksas.qt.approval import ApprovalDialog
 
@@ -103,13 +106,9 @@ RUNTIME_ID = "worker"
 #: 유틸리티 창의 처음 크기 (BUI-06의 표 둘이 들어간다).
 UTILITY_SIZE = (1100, 820)
 
-#: BUI-02 「실행 기록」 탭·「로그 폴더 열기」가 아직 없다는 말 (docs/09-gaps.md §4-1).
-#: 원본은 `runs/<run_id>.jsonl`에 **이미 쌓인다** — 읽어 그리는 쪽이 없다.
-RUN_LOG_LATER = "실행 기록 탭은 아직 없습니다 (docs/09-gaps.md §4-1)."
-
-#: BUI-09에서 아직 못 보이는 칸들 (docs/09-gaps.md §4-2). Worker의 `GET /v1/status`가
-#: 이미 준다 — Bot UI가 `health`만 읽는다.
-RUNTIME_STATUS_LATER = "예약·최근 UI 세션·밀린 보고는 아직 없습니다 (Worker 상태 API를 읽지 않습니다)."
+#: BUI-09에서 아직 못 보이는 칸 (docs/09-gaps.md §4-2). 「최근 UI 세션」의 열(화면·폴백
+#: 깊이·치유)은 **확장의 말**이라 플랫폼이 그리면 Bot UI가 UI 자동화를 알게 된다 (ADR-0018).
+RUNTIME_STATUS_LATER = "「최근 UI 세션」은 아직 없습니다 — 확장이 그려야 하는 자리입니다 (docs/09-gaps.md §4-2)."
 RUNTIME_STATE = {
     "running": "실행 중",
     "restarting": "다시 띄우는 중",
@@ -171,13 +170,15 @@ class MainWindow(QMainWindow):
         self._agent = agent
         #: 열려 있는 유틸리티 창 (`utility_id` → 창). 같은 것을 두 번 열지 않는다.
         self._utilities: dict[str, UtilityWindow] = {}
+        #: 「실행 기록」에 마지막으로 쓴 글 — 같으면 다시 쓰지 않는다 (선택이 날아간다).
+        self._run_log_text = ""
         self.setWindowTitle(WINDOW_TITLE)
         self.resize(*WINDOW_SIZE)
 
         self._build_menu()
         tabs = QTabWidget()
         tabs.addTab(self._bots_tab(), "Bot")
-        tabs.addTab(self._later_tab(RUN_LOG_LATER), "실행 기록")
+        tabs.addTab(self._run_log_tab(), "실행 기록")
         tabs.addTab(self._runtimes_tab(), "로컬 런타임")
         self.setCentralWidget(tabs)
 
@@ -187,9 +188,7 @@ class MainWindow(QMainWindow):
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("파일")
         file_menu.addAction("설정...", self.open_settings)
-        later = file_menu.addAction("로그 폴더 열기")
-        later.setEnabled(False)
-        later.setToolTip(RUN_LOG_LATER)
+        file_menu.addAction("로그 폴더 열기", self.open_log_folder)
         file_menu.addSeparator()
         quit_action = file_menu.addAction("종료", self.close)
         quit_action.setShortcut("Ctrl+Q")
@@ -297,14 +296,38 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
         return page
 
-    def _later_tab(self, why: str) -> QWidget:
+    def _run_log_tab(self) -> QWidget:
+        """BUI-02 「실행 기록」. 원본은 `runs/<run_id>.jsonl`이고 화면은 **읽을 뿐이다**.
+
+        「화면 지우기」는 **화면만** 비운다 — 파일을 지우면 Center로 보낼 기록이 사라진다 (C3).
+        """
         page = QWidget()
         layout = QVBoxLayout(page)
-        label = QLabel(why)
-        label.setEnabled(False)
-        layout.addWidget(label)
-        layout.addStretch(1)
+        self.run_log_text = QPlainTextEdit()
+        self.run_log_text.setReadOnly(True)
+        self.run_log_text.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
+        self.run_log_text.setMaximumBlockCount(run_log_view.MAX_LINES)
+        self.run_log_text.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.run_log_text.customContextMenuRequested.connect(self._run_log_menu)
+        layout.addWidget(self.run_log_text)
+
+        row = QHBoxLayout()
+        refresh = QPushButton("새로 고침")
+        refresh.clicked.connect(self.refresh_run_log)
+        clear = QPushButton("화면 지우기")
+        clear.clicked.connect(self.run_log_text.clear)
+        row.addWidget(refresh)
+        row.addWidget(clear)
+        row.addStretch(1)
+        layout.addLayout(row)
         return page
+
+    def _run_log_menu(self, where: QPoint) -> None:
+        """문맥 메뉴 — 복사·화면 지우기 (BUI-02)."""
+        menu = self.run_log_text.createStandardContextMenu()
+        menu.addSeparator()
+        menu.addAction("화면 지우기", self.run_log_text.clear)
+        menu.exec(self.run_log_text.mapToGlobal(where))
 
     # ── 보여 주기 ──
 
@@ -343,6 +366,7 @@ class MainWindow(QMainWindow):
         self._refresh_running_buttons()
 
         self._refresh_runtimes()
+        self.refresh_run_log()
         self.statusBar().showMessage(agent.status_line())
 
     def _refresh_runtimes(self) -> None:
@@ -374,6 +398,18 @@ class MainWindow(QMainWindow):
             else:
                 doing = SESSION_LABEL.get(str(health.get("session") or ""), "대기")
                 text += f" · 버전 {health.get('version') or '모름'} · 지금 하는 일: {doing}"
+                # 「예약」·「밀린 보고」는 런타임의 **상태**가 말해 준다 (C13 `status`). 본문의
+                # 나머지는 확장의 말이라 읽지 않는다 (ADR-0018). **Agent가 하트비트에서 물어
+                # 둔 것**을 읽는다 — 화면이 제 손으로 묻으면 GUI가 그만큼 멈춘다.
+                status = agent.worker_status
+                if status is None:
+                    text += "\n예약·밀린 보고: 아직 묻지 않았습니다"
+                elif not status:
+                    text += "\n예약·밀린 보고: 상태를 받지 못했습니다"
+                else:
+                    held = str(status.get("reserved_for") or "")
+                    text += f"\n예약: {self._reserved_label(held)}"
+                    text += f" · 밀린 보고 {int(status.get('unsent_reports') or 0)}건"
             if found.last_error:
                 text += f"\n{found.last_error}"
         self.runtime_label.setText(text)
@@ -381,6 +417,15 @@ class MainWindow(QMainWindow):
         self.runtime_start.setEnabled(not running)
         self.runtime_restart.setEnabled(running)
         self.runtime_log.setEnabled(True)
+
+    def _reserved_label(self, run_id: str) -> str:
+        """BUI-09 「예약」 — 「예약됨 — <Bot> (<실행 id>)」. **Bot 이름을 모르면 적지 않는다.**"""
+        if not run_id:
+            return "예약 없음"
+        run = self._agent.current_run
+        if run is not None and run.run_id == run_id:
+            return f"예약됨 — {run.bpm_process_id} ({run_id})"
+        return f"예약됨 — {run_id}"
 
     def _refresh_bots(self) -> None:
         """설치된 Bot 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 「최근 실행」은 아직 없다."""
@@ -534,6 +579,33 @@ class MainWindow(QMainWindow):
         """BUI-10. 창이 **그 자리에서** 키를 바꾸므로, 닫히면 「준비」를 다시 그린다."""
         KeysDialog(self._agent, self).exec()
         self.refresh()
+
+    def open_log_folder(self) -> None:
+        """`runs/`를 탐색기로 연다 (BUI-02 「파일」). 아직 없으면 만들어 준다 — 빈 폴더가 답이다."""
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        folder = run_dir(data_dir())
+        folder.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
+
+    def refresh_run_log(self) -> None:
+        """BUI-02 「실행 기록」을 다시 읽는다. **파일이 원본이다** — 화면은 그릴 뿐이다.
+
+        스크롤이 맨 아래가 아니면(사람이 위를 보고 있으면) **자리를 지킨다.**
+        """
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        found = run_log_view.lines(data_dir())
+        text = "\n".join(found) if found else run_log_view.EMPTY
+        if text == self._run_log_text:
+            # **바뀐 것이 없으면 손대지 않는다** — 하트비트마다 다시 쓰면 사람이 긁어 둔
+            # 선택(복사하려던 것)이 사라진다.
+            return
+        self._run_log_text = text
+        bar = self.run_log_text.verticalScrollBar()
+        keep = bar.value() if bar.value() != bar.maximum() else None
+        self.run_log_text.setPlainText(text)
+        bar.setValue(keep if keep is not None else bar.minimum())
 
     def cancel_selected(self) -> None:
         """대기열 항목 취소 (BUI-04). Center 작업이면 그렇게 알린다고 먼저 말한다."""

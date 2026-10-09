@@ -224,16 +224,61 @@ class Runtimes:
             log.warning("%s 예약을 풀지 못했다: %s", runtime_id, type(e).__name__)
 
     def _reserve_call(self, runtime_id: str) -> tuple[str, dict[str, str]] | None:
+        return self._call(runtime_id, "reserve")
+
+    def _call(self, runtime_id: str, which: str) -> tuple[str, dict[str, str]] | None:
+        """관리 호출 하나의 `(주소, 헤더)` — 선언이 없으면 `None` (C13 `reserve`·`status`·`shutdown`).
+
+        **토큰은 부를 때마다 읽는다** — 런타임이 다시 뜨면 토큰이 바뀐다 (ADR-0023).
+        """
         try:
             _, runtime = self.find(runtime_id)
         except RuntimeUnavailable:
             return None
-        if runtime.reserve is None or not runtime.token_dir:
+        call = getattr(runtime, which, None)
+        if call is None or not runtime.token_dir:
             return None
-        token_file = token_dir_for(runtime.id) / runtime.reserve.token_file
+        token_file = token_dir_for(runtime.id) / call.token_file
         token = token_file.read_text(encoding="utf-8").strip() if token_file.is_file() else ""
-        url = f"http://{LOCAL_HOST}:{port_for(runtime, self.settings)}{runtime.reserve.path}"
-        return url, {runtime.reserve.header: token}
+        url = f"http://{LOCAL_HOST}:{port_for(runtime, self.settings)}{call.path}"
+        return url, {call.header: token}
+
+    def status_of(self, runtime_id: str) -> dict[str, Any] | None:
+        """런타임이 스스로 말하는 상태 (C13 `status`). 선언이 없거나 답하지 않으면 `None`.
+
+        **본문은 런타임의 말이다** — 부르는 쪽이 뜻을 아는 칸만 읽는다 (ADR-0018).
+        """
+        call = self._call(runtime_id, "status")
+        if call is None:
+            return None
+        url, headers = call
+        try:
+            answer = httpx.get(url, headers=headers, timeout=HEALTH_TIMEOUT_S)
+        except httpx.HTTPError:
+            return None
+        if answer.status_code != 200:
+            return None
+        try:
+            body = answer.json()
+        except ValueError:
+            return None
+        return body if isinstance(body, dict) else None
+
+    def shutdown(self, runtime_id: str) -> bool:
+        """곱게 끄기 (C13 `shutdown`) — 열린 세션을 닫고 보고를 저장할 틈을 준다.
+
+        **기다리지 않는다**: 답하지 않아도 부르는 쪽이 곧 프로세스를 끈다 (ADR-0023).
+        """
+        call = self._call(runtime_id, "shutdown")
+        if call is None:
+            return False
+        url, headers = call
+        try:
+            answer = httpx.post(url, headers=headers, timeout=HEALTH_TIMEOUT_S)
+        except httpx.HTTPError as e:
+            log.info("%s을 곱게 끄지 못했다 (그대로 끈다): %s", runtime_id, type(e).__name__)
+            return False
+        return answer.status_code < 400
 
     def health_of(self, runtime_id: str) -> dict[str, Any] | None:
         """BUI-09가 그릴 내용. 기여가 없거나 답하지 않으면 `None` — **묻는 쪽을 막지 않는다**."""
@@ -246,8 +291,14 @@ class Runtimes:
         return healthy(port_for(runtime, self.settings), runtime.health)
 
     def stop_all(self) -> None:
-        """종료 순서의 마지막 (BUI-01 10번) — 트리째 끈다 (ADR-0023)."""
-        for supervisor in self.supervisors.values():
+        """종료 순서의 마지막 (BUI-01 10번) — **곱게 끄기를 먼저 부르고** 트리째 끈다 (ADR-0023).
+
+        `shutdown` 선언이 있으면 런타임이 열린 세션을 닫고 보고를 저장할 틈을 준다 (C13).
+        답하지 않아도 기다리지 않는다 — 끄는 길은 우리가 쥐고 있다.
+        """
+        for runtime_id, supervisor in self.supervisors.items():
+            if supervisor.state == "running":
+                self.shutdown(runtime_id)
             supervisor.stop()
 
     def tick(self) -> None:

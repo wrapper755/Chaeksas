@@ -68,7 +68,9 @@ export interface LocalRuntime {
   label: string;
   port_setting?: string | null;
   reserve?: RuntimeReserve | null;
+  shutdown?: RuntimeCall | null;
   start?: string;
+  status?: RuntimeCall | null;
   token_dir?: boolean;
   [k: string]: unknown;
 }
@@ -79,6 +81,18 @@ export interface LocalRuntime {
  * `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — Bot은 기다린다.
  */
 export interface RuntimeReserve {
+  header: string;
+  path: string;
+  token_file: string;
+  [k: string]: unknown;
+}
+/**
+ * 런타임에 보내는 관리 호출 하나 — `{path, header, token_file}`.
+ *
+ * Bot UI는 런타임의 계약(C10 등)을 **모르고** 이 선언대로만 부른다. 토큰은 런타임 폴더의
+ * `token_file`에서 **부를 때마다** 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다 (ADR-0023).
+ */
+export interface RuntimeCall {
   header: string;
   path: string;
   token_file: string;

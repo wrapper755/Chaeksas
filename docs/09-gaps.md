@@ -20,51 +20,25 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | 계약 | 문서 머리말 | 코드 | 「구현됨」까지 남은 것 |
 | --- | --- | --- | --- |
 | C1 | 합의 | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | `Provides`를 **아무도 채우지 않는다** (§3-1) |
-| C2 | 합의 | `contracts.hashing`·`signing` V1~V8 | 없다 — 상태만 올리면 된다 |
+| C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
 | C3 | 합의 | `contracts.events`·`core.run_log` | `ui_session`을 **아무도 내보내지 않는다** (§3-2). `case_id`·`queued_s`도 (§3-3) |
-| C4 | 합의 | `contracts.bot_ui`, Center·Bot UI 양쪽 | `WorkerState.reserved_for`를 **아무도 채우지 않는다** (§3-4) |
-| C5 | 합의 | `contracts.center_api`, Center 전부 | `deprecated`로 **만들 길이 없다** (§3-5). `dependents`·`DELETE /packages` 없음 (§3-6). 오류 코드 이름·상태 코드가 코드와 다르다 (§2-1) |
-| C6 | 구현됨 | `contracts.approvals`, Center·현장 | 없다 |
+| C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠다) |
+| C5 | 합의 | `contracts.center_api`, Center 전부 | `deprecated`로 **만들 길이 없다** (§3-5). `dependents`·`DELETE /packages` 없음 (§3-6) |
+| C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
 | C7 | 구현됨 | `contracts.resources`·`center_keys` | 외부 확장 앱의 `health`를 **보지 않는다** (§3-7) |
-| C8 | 합의 | **`ext.ui_automation.contracts.plan`** | 없다 — 상태만 올리면 된다 (§2-2) |
-| C9 | 구현됨 | **`ext.ui_automation.contracts.registry`** | 문서가 저장소를 **Neo4j**라고 한다, 코드는 SQLite (§2-3). 오류 코드 이름 하나 (§2-1) |
-| C10 | 합의 | **`ext.ui_automation.contracts.worker_local`** | `POST /v1/admin/shutdown` 없음 (§3-8) |
-| C11 | 합의 | `contracts.service_app`·`service_kit` | 없다 — 상태만 올리면 된다 |
+| C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
+| C9 | 합의 | **`ext.ui_automation.contracts.registry`** | 문서가 저장소를 **Neo4j**라고 한다, 코드는 SQLite (§2-3) |
+| C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`shutdown`을 더했다) |
+| C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
 | C12 | 초안 (M7) | **없다** (`apps/server_runner`는 docstring뿐) | M7 전부. **M6 기준의 「모든 계약」에서 빼야 하는가는 사람이 정한다** (§2-4) |
 | C13 | 합의 (모델·검사 구현됨) | `contracts.extension`·`core.extensions` | `console.pages`를 **아무도 그리지 않는다** (§4-7). `studio.resource_views`도 (§4-4) |
-| C14 | 초안 (B1~**B14** 구현됨) | `contracts.bpmn_ext` B1~**B15** | **머리말이 낡았다** — B15도 돈다 (§2-5) |
+| C14 | 초안 (B1~**B15** 구현됨) | `contracts.bpmn_ext` B1~B15 | 「합의」로 올릴지는 M3 엔진·Studio와 함께 정한다 (문서가 그렇게 적는다) |
 
 굵게 적은 셋(C8·C9·C10)은 **확장이 소유한 계약**이라 `extensions/ui_automation/…/contracts/`에
 있다 (계약 README 원칙 1). CLAUDE.md §7이 「계약 코드 C8~C10·C12가 없다」고 적어 두었는데
 **C8~C10은 있다** — 없는 것은 C12 하나다. (이 줄은 이 작업에서 고쳤다.)
 
 ## 2. 문서가 코드와 어긋난 자리 (코드를 고치는 일이 아니다)
-
-### 2-1. 오류 코드 이름이 코드와 다르다
-
-| 문서 | 문서가 적은 것 | 코드가 쓰는 것 |
-| --- | --- | --- |
-| C5 §오류 400 | `bad_zip` / `no_manifest` | `not_a_zip` / `manifest_missing` |
-| C5 §오류 409 | `version_exists` | `version_conflict` |
-| C9 §오류 403 | `scope_required` | `scope_missing` (C11 §오류와도 어긋난다) |
-
-C5의 zip 형식 오류는 코드가 **422**로 돌려준다 (문서는 400이라고 적었다) — 본문은 읽혔고 내용이
-계약과 맞지 않는 쪽이라 422가 맞다. 400으로 남는 것은 `bad_envelope` 하나다.
-
-> **f-문자열로 만드는 코드는 `grep`에 안 걸린다.** C1 R8의 `operation_not_server_ok`·
-> `operation_not_deterministic`은 **문서가 맞다** — `deployments.py:137`이 `f"{type}_{reason}"`으로
-> 짓는다. `auth.py:80`의 `f"key_{state}"`도 같은 꼴이다. 호출자를 셀 때 이 둘을 기억할 것.
-
-- **크기:** 아주 작다 (문서 네 줄).
-- **막는 것:** 없다.
-- 선례가 있다 — C4 변경 이력 2026-10-08이 같은 일을 했다 (`key_bound_elsewhere` → `machine_mismatch`,
-  「409 코드 이름도 코드에 맞췄다」). 오류 코드는 **받는 쪽이 글자로 보는 값**이라 코드가 원본에
-  가깝고, 문서를 맞추는 쪽이 맞다.
-
-### 2-2. C8에는 `> 상태:` 줄이 없다
-
-사다리·치유·보고·목표로 계획이 모두 도는데(ADR-0035) 문서는 「합의」에서 멈춰 있다.
-**크기:** 아주 작다. **막는 것:** 없다.
 
 ### 2-3. C9·01-architecture가 저장소를 Neo4j라고 한다
 
@@ -84,37 +58,6 @@ C9의 `> 상태:` 줄은 이미 SQLite라고 적는데, 같은 문서 §오류(`
 C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 「초안 (M7에서 구현)」이라고
 스스로 적는다. M6 기준의 「모든 계약 문서 상태가 「구현됨」」을 글자대로 읽으면 C12 때문에 M6가
 닫히지 않는다. **사람이 정할 거리다** — 기준 문구를 「M6 범위의 계약」으로 좁히는 쪽이 자연스럽다.
-
-### 2-5. C14 머리말이 B14에서 멈춰 있다
-
-B15(도우미 호출 인자 모양)가 `core.expr.check_calls`로 돌고 Studio 실행 전 검사가 보인다.
-문서 §검사 규칙 표에는 B15가 있는데 **머리말만 낡았다.** (이 작업에서 고쳤다.)
-
-### 2-6. 코드 주석·화면 글의 낡은 마일스톤 표시
-
-지나간 마일스톤을 「앞으로」라고 가리키는 자리가 **열다섯 군데** 있다. 공백은 진짜인데
-**이름이 틀렸다** — 「M3에서 채웁니다」라고 적힌 것이 M5가 끝난 지금도 비어 있다.
-
-| 자리 | 적힌 것 |
-| --- | --- |
-| `bot_ui/main_window.py:172,184` | 「실행 기록은 BPMN 엔진이 도는 M3에서 채워집니다」 (§4-1) |
-| `bot_ui/main_window.py:286` | 「예약·최근 UI 세션·밀린 보고는 M5입니다」 (§4-2) |
-| `bot_ui/main_window.py:100,131` | 「런타임 칸이 여럿 — M5」, 「메인 창 탭으로 붙이는 선택은 M5다」 |
-| `bot_ui/tray.py:162,167` | 「확장이 더한 유틸리티가 없습니다 (M4)」, 「확장 목록(BUI-11)은 M4에서」 (§4-3·4-8) |
-| `bot_ui/agent.py:9` | 「실제로 Bot을 실행하는 일(BPMN 엔진)은 M3이다」 |
-| `bot_ui/settings_dialog.py:7` | 「확장 호스트가 설정 칸을 기여하는 것은 M4다」 (지금 돈다) |
-| `center/__init__.py:11` | 「아직 없는 것: 배포·작업·결재·실행 이력·리소스 목록 (M5)」 (전부 돈다) |
-| `center/api/bot_ui.py:172`, `api/packages.py:24` | 「서명·배포는 M5다」, 「승인은 Admin 서명으로, M5」 (돈다) |
-| `studio/main_window.py:70,127,143` | 「Center 올리기는 M5입니다」, 「리소스 탐색기는 M4입니다」, 「「화면」 탭은 M4에서」 |
-| `studio/extensions.py:150` | 「Center 리소스 목록(C7)의 주소는 M5다」 (돈다) |
-| `studio/run_dialog.py:9,39` | 「감시 모드는 배포·작업(M5)과 함께다」 |
-| `studio/settings_dialog.py:65` | 「툴팩이 쓰는 비밀은 툴팩과 함께 옵니다 (M5)」 |
-| `web/…/center-console/components/Shell.tsx:26,30` | 「Bot 현황」·「공통 패키지」에 `later: "M5"` (§4-9·4-10) |
-| `web/…/runs/[runId]/page.tsx:17` | 「UI 태스크는 M4」 (§4-11) |
-| `web/…/runs/page.tsx:14` | 「실행 위치·Bot UI로 좁히는 것은 M5(배포)와 함께」 (§4-11) |
-
-- **크기:** 작다 — 사실인 것은 지우고, 아직 아닌 것은 **마일스톤 이름을 떼고** 공백 번호를 가리킨다.
-- **막는 것:** 없다. 다만 **고치지 않으면 다음 사람이 또 「이건 M5 몫이구나」로 읽고 넘어간다.**
 
 ## 3. 계약 쪽 기능 공백
 
@@ -145,14 +88,6 @@ B15(도우미 호출 인자 모양)가 `core.expr.check_calls`로 돌고 Studio 
 > `run_waiting`·`run_resumed`도 내보내는 쪽이 없지만 **공백이 아니다** — C3 60줄이 「서버만 쓴다」고
 > 적어 두었다 (PC Bot은 실행 자리를 쥐고 있으므로 `node_state: waiting`만 남긴다). M7 몫이다.
 
-### 3-4. C4 `WorkerState.reserved_for`를 채우는 쪽이 없다
-
-- **문서:** C4 97줄 — 하트비트의 `worker.reserved_for`는 C10 예약 `run_id`다. BUI-09 「예약」과 CON-03이 보인다.
-- **코드:** 계약 모델·JSON Schema·TypeScript 타입이 다 있고, **Worker 쪽 `POST /v1/admin/reserve`와 `GET /v1/status`의 `reserved_for`도 돈다.** Bot UI도 Bot을 띄우기 전에 **실제로 예약한다** (`agent.py:809`, 그 자리에서 `run_id`를 안다).
-- **없는 것:** `Agent.worker_state()`가 `reserved_for`를 넣지 않는다 (`health`만 읽고, `health`에는 그 칸이 없다). CON-03 상세도 보이지 않는다.
-- **크기:** 작다 — 예약한 `run_id`를 쥐고 있으니 한 줄이다. 콘솔 한 줄 더.
-- **막는 것:** 없다. **C4 `readiness`가 비어 있던 것과 똑같은 꼴이다.**
-
 ### 3-5. C5 `deprecated`로 만들 길이 없다
 
 - **문서:** C5 75줄 `PUT /packages/{id}/{version}/status {status:"deprecated"}`(「서명이 필요 없다 — 막는 쪽이라서」), `06-screens/admin.md`의 `chk-admin deprecate <id> <버전>`. STU-11·CON-02가 「지원 종료」로 보인다.
@@ -176,39 +111,21 @@ B15(도우미 호출 인자 모양)가 `core.expr.check_calls`로 돌고 Studio 
 - **크기:** 작다.
 - **막는 것:** 없다. 다만 **외부 앱에 Center가 나가는 일이라** 허용 호스트·사설망 규칙을 어댑터와 같게 지켜야 한다 (C13 §4).
 
-### 3-8. C10 `POST /v1/admin/shutdown`이 없다
-
-- **문서:** C10 155줄 — 「열린 세션을 닫고 보고를 저장한 뒤 종료 (Bot UI 종료 순서, BUI-01)」. BUI-01 메뉴 10번의 종료 순서에 「Worker 프로세스 종료」가 있다.
-- **코드:** Worker에 `/admin/reserve`(POST·DELETE)·`/admin/sessions/{id}`(DELETE)는 있는데 `/admin/shutdown`이 없다. Bot UI는 `core.processes`로 **프로세스를 끈다** — 보고를 저장할 틈 없이 죽는다.
-- **없는 것:** 엔드포인트와, Bot UI 종료 순서가 그것을 먼저 부르는 일.
-- **크기:** 작다.
-- **막는 것:** 없다. 「밀린 보고」(§4-2)와 같은 자리를 본다 — **묶으면 싸다.**
-
 ## 4. 화면 쪽 기능 공백
 
-### 4-1. BUI-02 「실행 기록」 탭이 비어 있다
+### 4-2. BUI-09 「최근 UI 세션」
 
-- **문서:** `bot-ui.md` 72줄 — 최대 5000줄, 「<시각> [<Bot>] <노드> <내용>」, 실패는 한 줄 요약 먼저(U13), 문맥 메뉴(복사·화면 지우기). BUI-02 [S] 상태 줄의 「밀린 기록 N건」도 같은 자리를 본다.
-- **코드:** 자리표시 탭 하나 (`_later_tab("…M3에서 채워집니다")`). 원본인 `runs/<run_id>.jsonl`과 `run_log.RunLog.read()`·`unsent_count()`는 **다 있다.**
-- **없는 것:** 그 파일을 읽어 줄로 그리는 것.
-- **크기:** 중간 (읽기·꼬리 자르기·문맥 메뉴).
-- **막는 것:** 없다. **Bot UI에서 「방금 실행이 왜 실패했나」를 볼 수 있는 자리가 지금 하나도 없다** — 이 목록에서 현장 영향이 가장 큰 항목이다.
+「예약」·「밀린 보고」는 **닫았다** — Bot UI가 C13 `status` 선언대로 런타임의 상태를 묻는다.
+남은 것은 **「최근 UI 세션」 표 하나**다.
 
-### 4-2. BUI-09 「예약」·「최근 UI 세션」·「밀린 보고」
-
-- **문서:** `bot-ui.md` 264~267줄. `> 상태:` 줄이 「C10 `/v1/status`를 봐야 해서 **M5**」라고 적는다 — **M5는 끝났다.**
-- **코드:** **Worker 쪽은 다 있다** — `GET /v1/status`가 `pid`·`uptime_s`·`reserved_for`·`holder`·`recent_sessions[]`·`unsent_reports`를 준다. Bot UI는 `health`만 읽는다.
-- **없는 것:** Bot UI가 `/v1/status`를 부르고 세 칸을 그리는 일. **부르는 쪽이 없는 전형**이다 (`unsent_reports`·`recent_sessions`는 호출자가 Worker 자신뿐).
-- **크기:** 작다~중간. 사용 토큰으로 부르면 되고(C10) 토큰은 Bot UI가 이미 쥔다.
-- **막는 것:** 없다. §3-4(C4 `reserved_for`)와 **같은 값을 본다 — 묶으면 싸다.**
-
-### 4-3. BUI-01 트레이가 도구 유틸리티를 열지 못한다
-
-- **문서:** `bot-ui.md` 41줄 — 트레이 「도구」 ▸ 확장이 기여한 유틸리티 목록(확장 이름순) · 구분선 · 「확장...」.
-- **코드:** 메뉴 항목은 만들지만 **전부 `setEnabled(False)`**이고, 하나도 없으면 「…없습니다 (M4)」를 보인다. **메인 창의 같은 메뉴는 돈다** (`main_window.py:195`) — 트레이만 끊겼다.
-- **없는 것:** 트레이 항목이 `MainWindow.open_utility`를 부르게 잇는 일. 이름도 `found.id`(id 그대로)이고 문서는 유틸리티 **이름**을 쓰라고 한다.
-- **크기:** 작다.
-- **막는 것:** 없다. **트레이가 Bot UI의 주 진입점이다** (창을 닫아도 트레이에 남는다) — 현장에서는 이것만 보인다.
+- **문서:** `bot-ui.md` 264~267줄 — 시각 / 요청한 쪽 / **화면** / 결과 / **폴백 깊이** / **치유**.
+- **코드:** Worker의 `GET /v1/status`가 `recent_sessions[]`로 준다. Bot UI는 **읽지 않는다.**
+- **없는 것:** 그 표를 그리는 쪽.
+- **막는 것:** **경계다.** 굵게 적은 열은 **UI 자동화의 말**이고, 플랫폼 코드와 콘솔에는
+  「UI 화면」이라는 말이 없다 ([ADR-0018](decisions/0018-extensions.md)). Bot UI가 그 열을
+  그리면 Bot UI가 이 확장을 알게 된다 — 그래서 `status`의 **뜻을 아는 칸만**(`reserved_for`·
+  `unsent_reports`) 읽게 두었다. **확장이 그려야 하는 자리다** — BUI-09 칸을 기여로 받는 길
+  (`bot_ui.utilities`처럼)을 열 것인지가 ADR 거리다. §4-7(확장이 기여하는 콘솔 화면)과 같은 꼴이다.
 
 ### 4-4. STU-03 리소스 탐색기 (C13 `studio.resource_views`)
 
@@ -283,4 +200,3 @@ B15(도우미 호출 인자 모양)가 `core.expr.check_calls`로 돌고 Studio 
 - `extension_api`의 `HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`는 M7이 쓸 상수다 (지금 호출자 없음, 정상).
 - `SEVERITY_INFO`는 아무도 쓰지 않는다 (`SEVERITY_BLOCK`·`SEVERITY_WARN`만 쓴다).
 - C13 `docs_url`·`owners`, C11 `Operation.json_schema`는 콘솔이 보이지 않는 선택 칸이다. 작고 급하지 않다.
-- `apps/center/src/chaeksas/center/__init__.py`의 모듈 표가 M2에서 멈춰 있다 (§2-6).

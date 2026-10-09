@@ -21,16 +21,16 @@
 | # | 계약 | 누가 → 누구 | 상태 | 프로토타입 참고 ([대응표](../reference/README.md)) |
 | --- | --- | --- | --- | --- |
 | [C1](C1-package-manifest.md) | 패키지 매니페스트 (실행 위치 `run_location` 기본 `server`, 서비스 앱 키 참조 포함, 키 값 없음) | Studio → Center → Bot UI·서버 실행기 | **합의** | Studio·Bot `packages/protocol/…/manifest.py` |
-| [C2](C2-signing-envelope.md) | 해시·서명 봉투 | Admin → Center → Bot UI | **합의** | Studio·Bot `packages/protocol/…/hashing.py`, `signing.py` |
+| [C2](C2-signing-envelope.md) | 해시·서명 봉투 | Admin → Center → Bot UI | **구현됨** | Studio·Bot `packages/protocol/…/hashing.py`, `signing.py` |
 | [C3](C3-run-events.md) | 실행 이벤트 (실행 위치 포함) | Bot UI(실행 중 Bot)·서버 실행기 → Center | **합의** | Studio·Bot `packages/protocol/…/events.py` |
 | [C4](C4-bot-ui-center.md) | Center API: Bot UI (Center API 키 인증·등록·하트비트 — 실행 중 Bot 1건과 대기열 보고) | Bot UI ↔ Center | **합의** | Center `api/bots.py`, `schemas/api.py` |
 | [C5](C5-packages-deployments-jobs.md) | Center API: 패키지·배포·작업 (배포 대상 Bot UI / 서버 실행기, 서버 배포의 동시 실행 상한, 작업 상태에 「대기열」, 거절 사유 「대기열 가득」) | Studio·Admin·Bot UI·서버 실행기 ↔ Center | **합의** | Center `api/packages.py`, `deployments.py`, `jobs.py` |
-| [C6](C6-approvals.md) | Center API: 결재 | Bot UI·서버 실행기 ↔ Center ↔ 콘솔 | **합의** | Center `api/hitl.py` |
+| [C6](C6-approvals.md) | Center API: 결재 | Bot UI·서버 실행기 ↔ Center ↔ 콘솔 | **구현됨** | Center `api/hitl.py` |
 | [C7](C7-resources-center-keys.md) | Center API: 리소스 (서비스 앱·UI 화면·툴팩·런타임) + Center API 키 관리 | 서비스 앱·Bot UI·Studio ↔ Center | **합의** | 없음 |
-| [C8](C8-ui-automation-plan-heal-report.md) | UI 자동화 앱: 계획·치유·보고 (데스크톱 로케이터 `class_name`·`control_type`) | Worker ↔ UI 자동화 앱 | **합의** | Worker `src/contracts/plan.py`, `healing.py`, `report.py` |
+| [C8](C8-ui-automation-plan-heal-report.md) | UI 자동화 앱: 계획·치유·보고 (데스크톱 로케이터 `class_name`·`control_type`) | Worker ↔ UI 자동화 앱 | **구현됨** | Worker `src/contracts/plan.py`, `healing.py`, `report.py` |
 | [C9](C9-ui-page-registry.md) | UI 자동화 앱: 화면 레지스트리 | Bot UI 셀렉터 등록(Worker 경유) ↔ UI 자동화 앱 | **합의** | Worker `src/contracts/registry.py` |
-| [C10](C10-worker-local-api.md) | Worker 로컬 API (UI 세션, 셀렉터 등록용 분석·선택·검증, 상태, 잠금 화면 `session_locked`) | 실행 중 Bot·Studio·Bot UI → Worker 프로세스 | **합의** | Worker `src/local_api/` |
-| [C11](C11-service-app-common.md) | 서비스 앱 공통 (healthz·manifest·작업 호출·수행 모드·자체 API 키, 관리 콘솔 최소 기능) | Bot UI(실행 중 Bot)·서버 실행기·Studio·Worker → 모든 서비스 앱 | **합의** | 없음 ([ADR-0010](../decisions/0010-service-apps.md), [ADR-0013](../decisions/0013-api-keys.md)) |
+| [C10](C10-worker-local-api.md) | Worker 로컬 API (UI 세션, 셀렉터 등록용 분석·선택·검증, 상태, 잠금 화면 `session_locked`) | 실행 중 Bot·Studio·Bot UI → Worker 프로세스 | **구현됨** | Worker `src/local_api/` |
+| [C11](C11-service-app-common.md) | 서비스 앱 공통 (healthz·manifest·작업 호출·수행 모드·자체 API 키, 관리 콘솔 최소 기능) | Bot UI(실행 중 Bot)·서버 실행기·Studio·Worker → 모든 서비스 앱 | **구현됨** | 없음 ([ADR-0010](../decisions/0010-service-apps.md), [ADR-0013](../decisions/0013-api-keys.md)) |
 | [C12](C12-server-runner-center.md) | Center API: 서버 실행기 (Center API 키 인증·등록·하트비트, 실행 중·기다리는 실행·대기열 보고, 일시 중지, PC 위임 요청·결과(제안)) | 서버 실행기 ↔ Center | 초안 (M7) | 없음 ([ADR-0015](../decisions/0015-run-location.md)) |
 | [C13](C13-extension-manifest.md) | 확장 정의 (`extension.json`: 등급, 서버 부분, 기여 지점, 외부 앱 HTTP 어댑터) | 확장 → Studio·Bot UI·실행기·서버 실행기·Center | **합의** (모델·검사 구현됨) | 없음 ([ADR-0018](../decisions/0018-extensions.md)) |
 | [C14](C14-bpmn-extensions.md) | BPMN 확장 속성 (`chk:*` — 태스크 종류별 속성, 반복·파일 출력·이벤트 규칙, 시험 케이스 형식·비교 규칙, 실행 전 검사 B1~B14) | Studio → 패키지 → 실행기·서버 실행기, Center 업로드 검사 | 초안 (모델·검사 구현됨) | Studio `agentworks:*` 확장 속성 ([업무 예제](../08-business-examples/README.md)가 이 형식으로 쓰였다) |

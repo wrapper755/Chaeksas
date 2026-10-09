@@ -44,6 +44,8 @@ class BotUiApp:
             self.tray = Tray(agent, current_theme=self.theme, parent=app)
             self.tray.open_window.connect(self.show_window)
             self.tray.open_settings.connect(self.open_settings)
+            # 트레이에서 고른 유틸리티도 **메인 창이 연다** — 같은 것을 두 번 열지 않는 자리가 거기다.
+            self.tray.open_utility.connect(self.open_utility)
             self.tray.quit_requested.connect(self.quit)
             self.tray.show()
         else:
@@ -69,6 +71,11 @@ class BotUiApp:
         dialog = SettingsDialog(self.agent, self.window if self.window.isVisible() else None)
         if dialog.exec():
             self.refresh()
+
+    def open_utility(self, extension_id: str, utility_id: str) -> None:
+        """트레이 「도구」가 고른 유틸리티 (BUI-01). **창을 띄우지 않고도** 열 수 있다 —
+        유틸리티는 별도 창이 기본이라 메인 창은 그대로 둔다 (BUI-02 [K])."""
+        self.window.open_utility(extension_id, utility_id)
 
     def refresh(self) -> None:
         """하트비트가 끝났다 — **GUI 스레드에서** 다시 그린다."""

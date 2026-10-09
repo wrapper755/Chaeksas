@@ -93,7 +93,7 @@
 | `studio.editors` | `[{task_type, entry}]` | Studio | 불가 (자동 폼) |
 | `studio.resource_views` | `[{id, label, resource_type, creates_task_type?}]` | STU-03 | 가능 (선언) |
 | `bot_ui.utilities` | `[{id, label, menu: "tools", entry, needs_runtime?}]` | Bot UI 「도구」 메뉴·탭 | 불가 |
-| `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start, reserve?}]` | Bot UI (BUI-09·11) | 불가 |
+| `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start, reserve?, status?, shutdown?}]` | Bot UI (BUI-09·11) | 불가 |
 | `agent_environments` | `[{domain, entry}]` | 엔진 — `domain: web`·`desktop` AI 태스크의 눈과 손 ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md)) | 불가 |
 | `configuration` | `[{key, label, scope, schema, secret}]` | 설정 화면 칸 (BUI-03 「확장별 설정」, STU-10, 서버 실행기 설정) | 불가 |
 | `preflight` | `[{id, entry}]` | Studio·Bot UI·서버 실행기 사전 점검 | 불가 |
@@ -113,6 +113,9 @@
   - `token_dir: true`면 Bot UI가 그 폴더(`<Bot UI 데이터>/runtimes/<런타임 id>`)에 **`runtime.json`**(`{runtime, port}`)을 남긴다. 같은 PC의 Studio가 이것과 토큰 파일로 그 런타임을 찾는다 — Studio는 런타임을 띄우지 않는다.
   - `reserve`(선택): **실행 예약** 방법 — `{path, header, token_file}`. Bot UI는 그 런타임을 쓰는 Bot을 시작하기 전에 `POST <path>` `{run_id}`(헤더 `<header>: <token_dir의 token_file 내용>`)로 예약하고, 실행이 끝나면 `DELETE <path>`로 푼다 (ADR-0014 §4). Bot UI는 런타임의 말(C10 등)을 모르고 이 선언대로만 부른다.
     - 2xx: 예약됨. **409: 다른 쪽이 쓰는 중** — Bot은 시작하지 않고 대기열 맨 앞에서 기다린다(다음 주기에 다시 묻는다, 트레이 「Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다」). 닿지 못함·그 밖의 실패는 기록만 하고 실행을 보낸다 (그 태스크가 분명히 실패한다).
+  - `status`(선택): **상태를 묻는 방법** — `{path, header, token_file}`. `GET <path>`로 받은 것을 BUI-09가 보인다. **본문은 런타임의 말이고 호스트는 뜻을 아는 칸만 읽는다** — `reserved_for`(실행 id. C4 하트비트 `worker.reserved_for`로도 올라간다)와 `unsent_reports`(보내지 못한 보고 수) 둘이다. 나머지 칸은 **해석하지 않는다** ([ADR-0018](../decisions/0018-extensions.md)) — 「최근 UI 세션」처럼 확장의 말로 된 것을 플랫폼이 그리면 Bot UI가 UI 자동화를 알게 된다 ([09-gaps](../09-gaps.md) §4-2).
+  - `shutdown`(선택): **곱게 끄는 방법** — `{path, header, token_file}`. `POST <path>`. Bot UI 종료 순서(BUI-01 10번)가 프로세스를 끄기 **전에** 한 번 부른다 — 런타임이 열린 세션을 닫고 밀린 보고를 저장할 틈을 준다. **답하지 않아도 기다리지 않는다**(짧은 제한 시간 뒤 그대로 끈다) — 끄는 길은 `core.processes`가 늘 쥐고 있다 (ADR-0023).
+  - 관리 호출 셋(`reserve`·`status`·`shutdown`)은 **같은 모양**이다: 경로는 `/`로 시작하고 `token_dir: true`여야 한다 (아니면 검사 오류 `reserve_invalid`·`status_invalid`·`shutdown_invalid`). 토큰은 **부를 때마다** 파일에서 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다.
   - **실행에 쓰는 런타임:** Bot UI는 Bot을 시작하기 전에 그 Bot이 쓰는 확장의 런타임을 띄운다. 쓰는 확장은 매니페스트의 `requires.extensions`와, `requires.domains`의 `web`·`desktop`을 기여한 확장(`agent_environments`)이다. 실행기(자식)에게는 확장별 설정(그 칸 + 예약 키)을 **파일로** 넘긴다 — 비밀은 싣지 않는다.
 - `bot_ui.utilities[].needs_runtime`: 그 유틸리티를 열기 전에 호스트가 띄워야 할 **로컬 런타임의 id**. 띄우지 못하면 유틸리티를 열지 않고 왜 못 열었는지 말한다 (「없는데 된 척」하지 않는다).
 - **호스트가 채우는 예약 설정 키** — 띄운 로컬 런타임이 어디 있는지는 **확장이 설정으로 받는다** (`ctx.setting(…)`). 확장이 포트를 다시 계산하거나 토큰 파일 자리를 추측하지 않게 한다.
@@ -302,6 +305,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 2 | `bot_ui.local_runtimes[].status`·`shutdown`(상태 묻기·곱게 끄기)을 더했다 — Bot UI가 BUI-09의 「예약」·「밀린 보고」를 보이고 종료 순서에서 런타임에게 닫을 틈을 준다. 선택 칸이라 기존 확장은 영향이 없다 | 0018, 0023 |
 | 2026-10-06 | 2 | `bot_ui.local_runtimes[].reserve`(실행 예약 방법)를 더했다 — Bot UI가 런타임의 계약을 모른 채 실행 동안 런타임을 그 실행에 묶는다. 선택 칸이라 기존 확장은 영향이 없다 | 0014 |
 | 2026-10-05 | 2 | `agent_environments`(AI 태스크의 `web`·`desktop` 환경)를 더했다. 모르는 열쇠는 무시하므로 기존 호스트는 영향이 없다 | 0037 |
 | 2026-10-01 | 1 | 초안 | 0018 |
