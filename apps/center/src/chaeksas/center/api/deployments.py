@@ -15,6 +15,7 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
+from chaeksas.center.api.packages import STATUS_DEPRECATED
 from chaeksas.center.api.signing import STATUS_APPROVED, admin_keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
@@ -73,6 +74,10 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
     )
     if package is None:
         raise ApiError(404, "not_found", f"{claim.get('bpm_process_id')}@{claim.get('version')}이 없다")
+    if package["status"] == STATUS_DEPRECATED:
+        # **지원 종료는 따로 알린다** (C5 `check_deployment`) — 「승인되지 않았다」고 하면
+        # 운영자가 승인 봉투를 찾아 헤맨다. 승인은 되어 있고 **새 배포만** 막힌 것이다.
+        raise ApiError(409, "deprecated", "지원 종료된 패키지에는 새로 배포하지 않는다")
     if package["status"] != STATUS_APPROVED:
         # **승인이 먼저다** — 서명 없는 것을 배포하면 받는 쪽이 어차피 거부한다 (V7).
         raise ApiError(

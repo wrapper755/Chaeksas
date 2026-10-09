@@ -856,3 +856,34 @@ def test_a_broken_drawing_is_not_caught_by_an_error_boundary() -> None:
     assert engine.run_until_blocked(run) is State.FAILED
     assert run.error is not None and run.error.code == "expr_error"
     assert "복구" not in run.variables
+
+
+def test_run_started_carries_the_optional_fields_only_when_known() -> None:
+    """C3 `run_started`의 선택 칸은 **아는 쪽이** 준다 — 모르면 **넣지 않는다**.
+
+    0·빈 글을 넣으면 「대기 없이 바로 돌았다」와 「모른다」가 같은 값이 된다 (CON-01이 그것을
+    「—」로 가른다).
+    """
+    process = make('<bpmn:startEvent id="Start_1"/><bpmn:endEvent id="End_1"/>'
+                   + flow("f1", "Start_1", "End_1"))
+    bare = started()
+    start(process, bare)
+    assert set(bare.events[0].data) == {
+        "bpm_process_id", "version", "run_location", "executor", "mode", "source"
+    }
+
+    told = started()
+    start(process, told, job_id="job_8f3e", case_id="정상 건", queued_s=42.4567)
+    data = told.events[0].data
+    assert data["job_id"] == "job_8f3e"
+    assert data["case_id"] == "정상 건", "Studio 시험 실행이 어느 케이스였나 (C3)"
+    assert data["queued_s"] == 42.457, "소수 셋째 자리까지"
+
+
+def test_a_run_that_waited_nothing_says_zero_not_nothing() -> None:
+    """0초는 **값이다** — 「모른다」와 다르다."""
+    process = make('<bpmn:startEvent id="Start_1"/><bpmn:endEvent id="End_1"/>'
+                   + flow("f1", "Start_1", "End_1"))
+    told = started()
+    start(process, told, queued_s=0)
+    assert told.events[0].data["queued_s"] == 0

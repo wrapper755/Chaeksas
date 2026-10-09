@@ -21,7 +21,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 
 실행하는 쪽(Bot UI·서버 실행기)은 이 API로 패키지를 내려받는다. 배포와 작업은 하트비트 응답으로 받는다 (C4·C12).
 
-> 상태: **패키지 승인·철회, Admin 키, 배포**(`POST/DELETE/GET /deployments`)가 돈다 — 하트비트가 활성 배포 봉투와 Admin 키를 내려 주고 Bot UI가 설치한다 (C2 V1~V7). **작업 지시(`/jobs`)도 돈다** — 만들기·목록·하나·취소와 하트비트의 `jobs`·`cancel_jobs`·`job_acks`, 맞추기 규칙(`bot_ui_lost`)까지. 서버 실행기 대상은 422 `server_runner_not_available`이다 (M7). 다음은 콘솔 화면(CON-05)이다.
+> 상태: **패키지 승인·철회·지원 종료(`PUT …/status`), Admin 키, 배포**(`POST/DELETE/GET /deployments`)가 돈다 — 하트비트가 활성 배포 봉투와 Admin 키를 내려 주고 Bot UI가 설치한다 (C2 V1~V7). **작업 지시(`/jobs`)도 돈다** — 만들기·목록·하나·취소와 하트비트의 `jobs`·`cancel_jobs`·`job_acks`, 맞추기 규칙(`bot_ui_lost`)까지. 서버 실행기 대상은 422 `server_runner_not_available`이다 (M7). 콘솔 화면(CON-05)도 돈다. 남은 것은 `GET …/dependents`와 `DELETE /packages/{id}/{version}`이고 CON-06과 한 덩이다 ([09-gaps](../09-gaps.md) §3-6).
 
 ## 전송 공통
 
@@ -75,6 +75,13 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `PUT /packages/{id}/{version}/status` `{status: "deprecated"}` | 지원 종료 표시. 새 배포를 막는다. 서명이 필요 없다 (실행을 허용하는 쪽이 아니라 막는 쪽이라서) | 200 |
 | `GET /packages/{id}/{version}/dependents` | 이 패키지를 `requires`로 쓰는 패키지 | 200 |
 | `DELETE /packages/{id}/{version}` | 삭제. 배포나 다른 패키지가 참조하면 409 | 204 |
+
+지원 종료(`PUT …/status`) 규칙:
+
+- **받는 값은 `deprecated` 하나뿐이다.** 되돌리는 것은 「다시 허용」이라 서명이 필요하고, 그 길은 승인(`PUT …/signature`)이다. 다른 값을 주면 422 `input_invalid`.
+- **`revoked`는 끝이다** — 철회된 것은 되살아나지 않고 더 막을 것도 없다 (409 `package_revoked`).
+- 어느 상태에서든 지원 종료로 갈 수 있고(`candidate`도 — 새 배포를 막는 뜻이다), **두 번 해도 같은 답**이다.
+- **이미 배포된 것은 그대로 돈다** — 내려받기도 그대로 된다 (철회면 410이다). 돌고 있는 것을 세우는 것은 배포 철회이고 그쪽은 서명이 필요하다.
 
 PackageInfo 필드:
 
@@ -211,10 +218,12 @@ BotUiInfo 필드:
 | 409 | `in_use` | 참조 중인 패키지 삭제 |
 | 409 | `already_started` / `not_cancellable` | 취소할 수 없는 작업 |
 | 409 | `deployment_conflict` / `deployment_revoked` | C2 |
+| 409 | `not_approved` / `deprecated` / `hash_mismatch` / `wrong_target` | 배포가 가리키는 **패키지의 상태**가 요청과 어긋난다. 「본문이 잘못됐다」가 아니라 **상태 충돌**이라 409다 (`deployment_conflict`과 같은 결). 지원 종료는 `not_approved`로 뭉개지 않는다 — 승인은 되어 있고 새 배포만 막힌 것이다 |
+| 409 | `package_revoked` | 철회된 패키지를 지원 종료로 바꾸려 함 (끝난 일이다) |
 | 409 | `idempotency_conflict` | 같은 `idempotency_key`에 다른 본문 |
 | 410 | `revoked` | 철회된 패키지 내려받기 |
 | 413 | `too_large` | 패키지 50 MB 초과 |
-| 422 | C1 규칙 코드, `not_approved`, `deprecated`, `hash_mismatch`, `target_mismatch`, `server_runner_not_available`, `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패 |
+| 422 | C1 규칙 코드, `target_mismatch`, `server_runner_not_available`, `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
 | 422 | `not_a_zip`, `manifest_missing`, `manifest_invalid`, `zip_too_many_entries`, `zip_unsafe_path`, `zip_too_large` | 업로드한 zip의 형식 오류. **400이 아니라 422다** — 본문은 읽혔고 내용이 계약과 맞지 않는다 |
 
 ## 호환 규칙
@@ -226,6 +235,8 @@ BotUiInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 1 | 배포 쪽 상태 충돌(`not_approved`·`deprecated`·`hash_mismatch`·`wrong_target`)을 **409**로 적었다 — 코드가 처음부터 그렇게 답했고 표만 422로 남아 있었다. `package_revoked`도 더했다 | — |
+| 2026-10-09 | 1 | 지원 종료(`PUT …/status`)에 규칙을 적고 구현했다 — `deprecated`만 받고, 철회된 것은 거부하고, 두 번 해도 같은 답이며 내려받기는 그대로 된다 | — |
 | 2026-10-01 | 1 | 초안 | 0013~0016 |
 | 2026-10-07 | 1 | `GET /jobs`의 `state`가 쉼표로 여럿을 받는다 — CON-05의 상태 필터가 여러 개를 고른다 | 0017 |
 | 2026-10-06 | 1 | `BotUiInfo.deployment_results`를 더했다 — 배치 결정은 하트비트 한 주기만 올라오고 Center가 버리고 있어서, CON-03 「최근 배치 결정」이 그릴 것이 없었다. `DeploymentInfo`의 봉투 유래 칸(`signed_by`·`signed_at`·`not_before`·`expires_at`·`revoked_at`)을 어디서 읽는지 적었다 | 0017 |

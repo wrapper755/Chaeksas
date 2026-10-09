@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **구현됨** (2026-10-09). 모델·전송·보여 주기와 선택 칸까지 부르는 쪽이 있다 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Bot UI(실행 중 Bot)·서버 실행기·Studio(선택) → Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/events.py` (import `chaeksas.contracts.events`, [ADR-0019](../decisions/0019-package-names.md)) |
@@ -40,7 +40,7 @@
 
 | kind | 언제 | `data` 필수 키 | `data` 선택 키 |
 | --- | --- | --- | --- |
-| `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`, `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`\|`message`\|`test`, 예약: `delegation`) | `job_id`, `parent_run_id`(예약 — PC 위임, ADR-0016 §3 제안), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio) |
+| `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`, `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`\|`message`\|`test`, 예약: `delegation`) | `job_id`, `parent_run_id`(예약 — PC 위임, ADR-0016 §3 제안), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio 시험 실행의 케이스 이름) |
 | `node_state` | 노드 상태가 바뀜 | `state`(`started`\|`completed`\|`failed`\|`skipped`\|`replayed`\|`waiting`) | `task_type`(`ai_task`\|`ui_task`\|`service_task`\|`approval`\|…), `error_code`, `message`(한 줄) |
 | `log` | 사람이 읽는 한 줄 | `level`(`info`\|`warn`\|`error`), `message` | |
 | `agent` | AI 태스크의 단계 하나 | `step`, `action`(`plan`\|`tool`\|`extract`\|`finish`) | `tool`, `summary`(값 제외) |
@@ -59,6 +59,7 @@
 - `kind`와 `data`의 값 목록(`state`, `source`, `layer`, `status` 등)은 모두 **열린 문자열**이다 (README 원칙 10).
 - PC Bot은 결재·확인을 기다리는 동안 `node_state: waiting`만 남긴다 (`run_waiting`은 서버만 쓴다 — 실행 자리를 쥐고 있으므로).
 - 업무 값 기록은 기본으로 끈다. 실행 설정에서 명시적으로 켠 경우에만 `kind: "data"`(`data.vars`: 이름→값)를 보낸다 (principle 6).
+- **선택 칸은 아는 쪽이 준다** — `job_id`·`queued_s`는 Bot UI(작업 지시와 대기열을 그쪽만 안다), `case_id`는 Studio다. **모르면 넣지 않는다**: 0·빈 글을 넣으면 「대기 없이 바로 돌았다」와 「모른다」가 같은 값이 되고, 화면이 둘을 가를 수 없다. `queued_s`는 소수 셋째 자리까지이고 **음수를 적지 않는다** (시계가 거꾸로 가면 0).
 
 ## 확장이 남기는 이벤트
 
@@ -146,6 +147,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 1 | 상태를 **구현됨**으로. 선택 칸 `case_id`(Studio)·`queued_s`(Bot UI 대기열)를 넣는 쪽이 생겼다 — 모르면 넣지 않는다는 규칙도 적었다 | — |
 | 2026-10-09 | 1 | `RunInfo`에 `run_finished`의 셈 다섯을 담고 목록 좁히기에 `run_location`을 더했다 — CON-01 목록 열이 읽을 자리가 없었다. 선택 칸이라 받는 쪽은 그대로 돈다 | — |
 | 2026-10-09 | 1 | 「확장이 남기는 이벤트」를 적었다 — 확장은 `{kind, data}`만 주고 엔진이 줄을 쓴다. 형식은 그대로다 (`ui_session`을 이제 내보내는 쪽이 있다) | 0041 |
 | 2026-10-07 | 1 | `human_withdrawn`을 더했다 — Center 결재가 답 없이 끝난 것(회수·만료)을 실행하는 쪽이 받았다는 표시. 값은 없다 | 0038 |

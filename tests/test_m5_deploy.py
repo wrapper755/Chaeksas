@@ -180,6 +180,19 @@ def test_an_unapproved_package_cannot_be_deployed(center: Center) -> None:
     assert caught.value.code == "not_approved"
 
 
+def test_a_deprecated_package_cannot_be_deployed_again(center: Center) -> None:
+    """지원 종료가 **새 배포를 막는다** (C5) — 서명은 멀쩡한데도 거부다.
+
+    막는 일에는 봉투가 없다 — 관리자 토큰으로 상태만 옮긴다.
+    """
+    key = admin_key(center)
+    info = approved(center, key)
+    center.deprecate(info["id"], info["version"])
+    with pytest.raises(CenterProblem) as caught:
+        center.deploy(deployment(key, info))
+    assert caught.value.code == "deprecated"
+
+
 def test_the_same_envelope_twice_is_idempotent(center: Center) -> None:
     key = admin_key(center)
     info = approved(center, key)

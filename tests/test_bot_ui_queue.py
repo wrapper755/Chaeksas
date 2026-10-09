@@ -207,3 +207,21 @@ def test_apply_handles_cancel_before_new_jobs(tmp_path: Path) -> None:
     found.apply(HeartbeatResponse(server_time=AT, jobs=[job("job_new")], cancel_jobs=["job_old"]))
     assert [item.job_id for item in found.queue] == ["job_new"]
     assert found.store.state.seen_jobs["job_old"].result == "cancelled"
+
+
+def test_the_wait_is_measured_from_the_request() -> None:
+    """C3 `run_started.queued_s` — 요청 시각부터 띄우는 시각까지 (`waited()`)."""
+    from datetime import UTC, datetime, timedelta
+
+    from chaeksas.bot_ui.agent import waited
+    from chaeksas.contracts.bot_ui import QueueItem
+
+    asked = datetime(2026, 10, 9, 10, 15, tzinfo=UTC)
+    item = QueueItem(
+        queue_id="q1", source="job", bpm_process_id="erp.order-entry", requested_at=asked.isoformat()
+    )
+    assert waited(item, now=asked + timedelta(seconds=42.5)) == 42.5
+    # 시계가 거꾸로 간 경우도 음수를 적지 않는다.
+    assert waited(item, now=asked - timedelta(seconds=5)) == 0
+    # **모르면 `None`** — 0을 넣으면 「기다리지 않았다」가 된다.
+    assert waited(item.model_copy(update={"requested_at": "깨진 값"})) is None

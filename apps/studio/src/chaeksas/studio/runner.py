@@ -266,6 +266,8 @@ class CaseRun(QObject):
                 executor="studio",
                 source="test",
                 version=self.plan.process.version,
+                # C3 `case_id` — 어느 케이스로 돌렸나 (CON-01이 보인다). 케이스 이름이 그 id다.
+                case_id=case.name if case else None,
             )
         except EngineError as e:
             self._finish(Outcome(case=case.name if case else "", verdict=ERROR, detail=str(e)))

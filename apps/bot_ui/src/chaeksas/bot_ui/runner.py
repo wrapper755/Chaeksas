@@ -56,6 +56,7 @@ def runner_args(
     mode: str,
     source: str,
     job_id: str | None,
+    queued_s: float | None = None,
     readable: tuple[Path, ...] = (),
     writable: tuple[Path, ...] = (),
     llm_url: str = "",
@@ -84,6 +85,9 @@ def runner_args(
         args += ["--inputs", str(inputs_path)]
     if job_id:
         args += ["--job-id", job_id]
+    if queued_s is not None:
+        # C3 `run_started.queued_s` — **모르면 넣지 않는다** (0은 「기다리지 않았다」는 뜻이다).
+        args += ["--queued-s", f"{queued_s:.3f}"]
     for one in readable:
         args += ["--readable", str(one)]
     for one in writable:
@@ -273,6 +277,7 @@ class Launcher:
         mode: str = "deterministic",
         source: str = "manual",
         job_id: str | None = None,
+        queued_s: float | None = None,
         run_id: str | None = None,
         extensions: dict[str, dict[str, Any]] | None = None,
         services_path: Path | None = None,
@@ -308,6 +313,7 @@ class Launcher:
             mode=mode,
             source=source,
             job_id=job_id,
+            queued_s=queued_s,
             readable=self.readable,
             writable=self.writable,
             llm_url=self.llm_url,

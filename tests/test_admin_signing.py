@@ -381,3 +381,70 @@ def test_a_problem_is_one_line_not_a_traceback(center: Center, capsys: Any) -> N
     """**왜 안 되는지 한 줄로** — 추적을 쏟지 않는다."""
     assert admin_main(["-y", "approve", "없는것", "1.0.0"], center=center) == 2
     assert "오류:" in capsys.readouterr().err
+
+
+# ─────────────────── 지원 종료 (C5 — 서명이 없다) ───────────────────
+
+
+def test_deprecate_needs_no_signature(center: Center) -> None:
+    """**막는 쪽이라 토큰 권한으로 한다** (C5) — 승인·배포와 다른 결이다."""
+    info = upload(center, package_zip())
+    assert admin_main(["-y", "deprecate", info["id"], info["version"]], center=center) == 0
+    assert center.package(info["id"], info["version"])["status"] == "deprecated"
+
+
+def test_deprecate_asks_first(center: Center, monkeypatch: Any) -> None:
+    """`-y` 없이는 묻고 **기본은 「아니오」**다 (U9) — 되돌리려면 승인 봉투가 필요한 일이다."""
+    info = upload(center, package_zip())
+    monkeypatch.setattr("builtins.input", lambda *_: "")
+    assert admin_main(["deprecate", info["id"], info["version"]], center=center) == 1
+    assert center.package(info["id"], info["version"])["status"] == "candidate"
+
+
+def test_a_revoked_package_cannot_be_deprecated(center: Center) -> None:
+    """**철회가 끝이다** — 더 막을 것이 없고 되살아나지도 않는다."""
+    key = first_key(center)
+    info = upload(center, package_zip())
+    center.approve(
+        info["id"],
+        info["version"],
+        sign(
+            {"kind": "package", "id": info["id"], "version": info["version"],
+             "content_hash": info["content_hash"]},
+            keystore.load(key, passphrase=PASS),
+            signed_at="2026-10-05T09:00:00+09:00",
+        ),
+    )
+    center.revoke_package(
+        info["id"],
+        info["version"],
+        sign(
+            {"kind": "package_revoke", "id": info["id"], "version": info["version"],
+             "reason": "잘못 만든 것", "revoked_at": "2026-10-05T10:00:00+09:00"},
+            keystore.load(key, passphrase=PASS),
+            signed_at="2026-10-05T10:00:00+09:00",
+        ),
+    )
+    with pytest.raises(CenterProblem, match="철회"):
+        center.deprecate(info["id"], info["version"])
+
+
+def test_an_approved_package_can_be_deprecated_and_stays_downloadable(center: Center) -> None:
+    """지원 종료는 **새 배포만** 막는다 — 이미 배포된 것이 돌 수 있어야 한다."""
+    key = first_key(center)
+    info = upload(center, package_zip())
+    center.approve(
+        info["id"],
+        info["version"],
+        sign(
+            {"kind": "package", "id": info["id"], "version": info["version"],
+             "content_hash": info["content_hash"]},
+            keystore.load(key, passphrase=PASS),
+            signed_at="2026-10-05T09:00:00+09:00",
+        ),
+    )
+    assert center.deprecate(info["id"], info["version"])["status"] == "deprecated"
+    # 내려받기는 그대로 된다 (철회면 410이다).
+    assert center.client.get(f"/api/v1/packages/{info['id']}/{info['version']}", headers={
+        "Authorization": f"Bearer {TOKEN}"
+    }).status_code == 200

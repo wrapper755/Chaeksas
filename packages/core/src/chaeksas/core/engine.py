@@ -131,10 +131,15 @@ class Engine:
         version: str = "0.0.0",
         now: datetime | None = None,
         job_id: str | None = None,
+        case_id: str | None = None,
+        queued_s: float | None = None,
         env: RunEnv | None = None,
         nested: bool = False,
     ) -> Run:
         """실행을 만들고 `run_started`를 남긴다. 토큰은 시작 이벤트에 놓인다.
+
+        `job_id`·`case_id`·`queued_s`는 C3 `run_started`의 선택 칸이다 — **그 자리에서 아는
+        쪽이** 준다 (작업 지시는 Bot UI, 케이스는 Studio, 대기열에서 기다린 초는 Bot UI).
 
         `nested`면 호출(`callActivity`)이 띄운 안쪽 실행이다 — 같은 `run_id`를 쓰고
         `run_started`·`run_finished`를 남기지 않는다 (C3는 실행 하나에 하나씩만 둔다).
@@ -159,6 +164,15 @@ class Engine:
             run.state = State.RUNNING
             return run
 
+        # C3 `run_started`의 선택 칸 — **아는 쪽이 준다.** 모르면 넣지 않는다 (0·빈 글을 넣으면
+        # 「대기 없이 바로 돌았다」와 「모른다」가 같아진다).
+        extra: dict[str, Any] = {}
+        if job_id:
+            extra["job_id"] = job_id
+        if case_id:
+            extra["case_id"] = case_id
+        if queued_s is not None:
+            extra["queued_s"] = round(queued_s, 3)
         log.emit(
             "run_started",
             bpm_process_id=process.id,
@@ -167,7 +181,7 @@ class Engine:
             executor=executor,
             mode=mode,
             source=source,
-            **({"job_id": job_id} if job_id else {}),
+            **extra,
         )
         run.tokens = [Token(id=new_token_id(), node_id=self._start_node(process))]
         run.state = State.RUNNING
