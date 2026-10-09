@@ -43,7 +43,12 @@ from chaeksas.ext.ui_automation.contracts.console import (
     ConsoleOverview,
     DeployCheck,
     LlmInfo,
+    PageBriefRow,
+    PageDetail,
+    PageListing,
+    PathResult,
     SessionCounts,
+    SessionPage,
 )
 from chaeksas.ext.ui_automation.contracts.plan import (
     ElementInfo,
@@ -356,7 +361,16 @@ class Service:
         promoted = self.registry.apply(found)
         self.flush()
         if self.sessions is not None:
-            self.sessions.record(found, at=now_iso())
+            # 봉투가 말해 주는 것도 함께 적는다 (UIA-03의 「Bot」·「Bot UI」·「요청 쪽」·「수행 모드」) —
+            # C8 보고에는 없고 C11 호출에는 있다.
+            self.sessions.record(
+                found,
+                at=now_iso(),
+                caller=request.caller.type,
+                mode=mode,
+                bpm_process_id=request.caller.bpm_process_id,
+                host=request.caller.host,
+            )
         return {"accepted": True, "promoted": promoted}
 
     # ── 관리 콘솔이 읽는 것 (C9 §관리 콘솔이 읽는 길) ──
@@ -379,6 +393,34 @@ class Service:
             checks=checks,
             revision=self.registry.revision,
             generated_at=at,
+        )
+
+    def page_listing(self) -> PageListing:
+        """UIA-02 화면 고르기 목록 — C9 `registry_list_pages`와 **같은 칸**이다."""
+        return PageListing(
+            schema=1,
+            pages=[PageBriefRow.model_validate(one.to_json_dict()) for one in self.registry.pages_list()],
+        )
+
+    def page_detail(self, page_id: str) -> PageDetail:
+        """UIA-02 화면 하나. 치유 표시는 **세션 기록에서** 모아 넣는다 (레지스트리에 없다)."""
+        marks = self.sessions.healed_marks(page_id) if self.sessions is not None else {}
+        return self.registry.detail(page_id, healed=marks)
+
+    def page_path(self, start: str, goal: str) -> PathResult:
+        """UIA-02 「화면 간 경로 탐색」 — 앱이 너비 우선으로 찾는다 (ADR-0040)."""
+        found = self.registry.path(start, goal)
+        return PathResult(schema=1, start=start, goal=goal, path=found, found=bool(found))
+
+    def session_page(self, *, limit: int = 100) -> SessionPage:
+        """UIA-03 한 벌 — 이력·요약·폴백 분포. 기록이 없으면 비어 있다."""
+        if self.sessions is None:
+            return SessionPage(schema=1)
+        return SessionPage(
+            schema=1,
+            rows=self.sessions.rows(limit=limit),
+            counts=self.sessions.counts(today=now_iso()[:10]),
+            fallback=self.sessions.fallback(),
         )
 
     def checks(self) -> list[DeployCheck]:

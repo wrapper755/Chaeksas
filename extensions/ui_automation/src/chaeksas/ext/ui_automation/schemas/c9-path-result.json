@@ -1,0 +1,39 @@
+{
+  "$id": "urn:chaeksas:contracts:c9-path-result",
+  "additionalProperties": true,
+  "description": "`GET /admin/v1/path?start=&goal=` — UIA-02 「화면 간 경로 탐색」.\n\n간선은 요소의 `navigates_to`이고 **최단 하나**를 앱이 너비 우선으로 찾는다 (ADR-0040 —\nSQL에 밀어 넣지 않는다). 길이 없으면 `found: false`이고 **지어내지 않는다**.",
+  "properties": {
+    "found": {
+      "default": false,
+      "title": "Found",
+      "type": "boolean"
+    },
+    "goal": {
+      "title": "Goal",
+      "type": "string"
+    },
+    "path": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Path",
+      "type": "array"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "start": {
+      "title": "Start",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "start",
+    "goal"
+  ],
+  "title": "PathResult",
+  "type": "object"
+}

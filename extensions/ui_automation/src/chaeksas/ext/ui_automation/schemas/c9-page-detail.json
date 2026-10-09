@@ -1,0 +1,334 @@
+{
+  "$defs": {
+    "ElementRow": {
+      "additionalProperties": true,
+      "description": "UIA-02 「선행 조건·화면 이동」 한 줄 — 요소 하나가 아는 것 (C9 `catalog`·`elements`).",
+      "properties": {
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Actions",
+          "type": "array"
+        },
+        "concepts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Concepts",
+          "type": "array"
+        },
+        "depends_on": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Depends On",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kind"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "navigates_to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Navigates To"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        },
+        "semantic_key": {
+          "title": "Semantic Key",
+          "type": "string"
+        }
+      },
+      "required": [
+        "semantic_key"
+      ],
+      "title": "ElementRow",
+      "type": "object"
+    },
+    "LocatorRow": {
+      "additionalProperties": true,
+      "description": "UIA-02 표의 한 줄 — 로케이터 하나와 그 성적.\n\n**셀렉터(물리 정보)가 나간다** — 관리자 토큰으로만 오는 길이다 (C9 §관리 콘솔이 읽는 길).",
+      "properties": {
+        "control_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Control Type"
+        },
+        "fail": {
+          "default": 0,
+          "title": "Fail",
+          "type": "integer"
+        },
+        "healed": {
+          "default": false,
+          "title": "Healed",
+          "type": "boolean"
+        },
+        "last_success_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Success At"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Name"
+        },
+        "rank": {
+          "title": "Rank",
+          "type": "integer"
+        },
+        "semantic_key": {
+          "title": "Semantic Key",
+          "type": "string"
+        },
+        "status": {
+          "default": "unverified",
+          "title": "Status",
+          "type": "string"
+        },
+        "streak": {
+          "default": 0,
+          "title": "Streak",
+          "type": "integer"
+        },
+        "success": {
+          "default": 0,
+          "title": "Success",
+          "type": "integer"
+        },
+        "success_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Success Rate"
+        },
+        "supersedes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Supersedes",
+          "type": "array"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "semantic_key",
+        "rank",
+        "type",
+        "value"
+      ],
+      "title": "LocatorRow",
+      "type": "object"
+    },
+    "StrategyStat": {
+      "additionalProperties": true,
+      "description": "UIA-02 「전략별 성공·실패」 — 전략 하나의 합.",
+      "properties": {
+        "fail": {
+          "default": 0,
+          "title": "Fail",
+          "type": "integer"
+        },
+        "success": {
+          "default": 0,
+          "title": "Success",
+          "type": "integer"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "StrategyStat",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c9-page-detail",
+  "additionalProperties": true,
+  "description": "`GET /admin/v1/pages/{page_id}` — UIA-02 화면 하나 (대체된 것 포함).",
+  "properties": {
+    "app": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "App"
+    },
+    "elements": {
+      "items": {
+        "$ref": "#/$defs/ElementRow"
+      },
+      "title": "Elements",
+      "type": "array"
+    },
+    "locators": {
+      "items": {
+        "$ref": "#/$defs/LocatorRow"
+      },
+      "title": "Locators",
+      "type": "array"
+    },
+    "name": {
+      "default": "",
+      "title": "Name",
+      "type": "string"
+    },
+    "page_id": {
+      "title": "Page Id",
+      "type": "string"
+    },
+    "platform": {
+      "default": "web",
+      "title": "Platform",
+      "type": "string"
+    },
+    "revision": {
+      "default": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "strategies": {
+      "items": {
+        "$ref": "#/$defs/StrategyStat"
+      },
+      "title": "Strategies",
+      "type": "array"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    },
+    "url_pattern": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Url Pattern"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "page_id"
+  ],
+  "title": "PageDetail",
+  "type": "object"
+}

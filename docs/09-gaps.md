@@ -31,7 +31,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
 | C12 | 초안 (M7) | **없다** (`apps/server_runner`는 docstring뿐) | M7 전부. **M6 기준의 「모든 계약」에서 빼야 하는가는 사람이 정한다** (§2-4) |
-| C13 | 합의 (모델·검사 구현됨) | `contracts.extension`·`core.extensions` | `studio.resource_views`를 **아무도 읽지 않는다** (§4-4). `console.pages`는 콘솔이 **읽는다** — 화면 셋만 남았다 (§4-7) |
+| C13 | 합의 (모델·검사 구현됨) | `contracts.extension`·`core.extensions` | `studio.resource_views`를 **아무도 읽지 않는다** (§4-4). `console.pages`는 **닫았다** (콘솔이 읽고 화면 셋이 돈다) |
 | C14 | 초안 (B1~**B15** 구현됨) | `contracts.bpmn_ext` B1~B15 | 「합의」로 올릴지는 M3 엔진·Studio와 함께 정한다 (문서가 그렇게 적는다) |
 
 굵게 적은 셋(C8·C9·C10)은 **확장이 소유한 계약**이라 `extensions/ui_automation/…/contracts/`에
@@ -115,18 +115,6 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **없는 것:** 무엇을 보일지가 **문서에도 없다** (배치도에 이름만 있다).
 - **크기:** 모른다. **먼저 `06-screens/studio.md`에 무엇을 보일지 적어야 한다** (CLAUDE.md §3-4: 화면이 바뀌면 문서를 먼저).
 
-### 4-7. UIA-02·03 — 확장이 기여하는 콘솔 화면 (C13 `console.pages`)
-
-**읽는 길과 UIA-01 개요는 닫았다.** 콘솔이 기여를 읽고(`gen_console_pages.py` → 생성 레지스트리),
-앱 고유 관리 경로(C9 §관리 콘솔이 읽는 길, `GET /admin/v1/overview`)로 자료를 받는다. **UI 세션
-기록도 쌓인다** (C8 보고가 도착할 때 한 줄). 남은 것은 **화면 둘**이다.
-
-- **문서:** `service-app-console.md` UIA-02(셀렉터)·UIA-03(모니터링).
-- **코드:** 재료가 다 있다 — UIA-02는 `registry_get_page`가 주는 로케이터·통계(`LocatorStats`가 성공·실패·연속 성공을 들고 있다), UIA-03은 **세션 기록**(`SessionStore.recent()`)과 C3 `ui_session`([ADR-0041](decisions/0041-extension-run-events.md))이다. 읽는 경로는 **아직 `overview` 하나뿐이다**.
-- **없는 것:** 화면 둘과 그것이 읽을 경로 둘(`/admin/v1/pages…`·`/admin/v1/sessions…`).
-- **크기:** 둘 다 중간~큼 (UIA-02는 표 열 열하나·경고 띠·좁히기·차트·경로 탐색, UIA-03은 이력 표·상세·폴백 깊이 분포).
-- **막는 것:** 없다. 화면을 만들면 `app/`에 경로를 더하고 `lib/console-modules.ts`에 한 줄을 적는다 — 값이 `Route`라서 **없는 경로를 적으면 타입 검사가 잡는다.**
-
 ### 4-8. BUI-11 확장 · BUI-05 알림
 
 - **문서:** `bot-ui.md` 300~318(BUI-11: 목록·등급·기여·상태·쓰는 Bot, 상세, 끄기/켜기/새로 고침)·128~142(BUI-05: 알림 13줄 표).
@@ -155,9 +143,9 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 - **문서:** `center-console.md` 32~51줄. 목록 열에 「UI 태스크」, 필터에 「실행 위치」·「Bot UI」·「최근 n건」. 상세에 「UI 태스크」 섹션(노드/화면/스텝 수/폴백 깊이/치유/전환 → UIA-03 링크).
 - **코드:** 요약·노드 타임라인·AI 태스크 단계·사람 개입·로그·원본 이벤트는 **돈다.** 「UI 태스크」는 주석에 「M4」, 필터는 「M5(배포)와 함께」 — **둘 다 지났다.**
-- **없는 것:** 필터 셋(값은 이제 쌓인다)과 「UI 태스크」 섹션. UIA-03 링크는 §4-7이 막는다.
+- **없는 것:** 필터 셋(값은 이제 쌓인다)과 「UI 태스크」 섹션.
 - **크기:** 둘 다 작다. **읽을 이벤트는 이제 있다** — UI 태스크 수행기가 C3 `ui_session`을 남긴다 ([ADR-0041](decisions/0041-extension-run-events.md), 전환·실패로 끝난 것도). 상세의 열(노드/화면/스텝 수/폴백 깊이/치유/전환)이 그 `data`에 그대로 있다.
-- **막는 것:** 섹션의 **UIA-03 링크만** §4-7에 걸린다 (링크 없이 먼저 그릴 수 있다). 필터는 막는 것이 없다.
+- **막는 것:** 없다. UIA-03은 이제 **있지만** 두 콘솔이 서로의 주소를 모른다 — 링크를 걸려면 Center 콘솔이 서비스 앱 콘솔 주소를 어디서 받을지(C7 리소스의 `console_url`) 정해야 한다. 링크 없이 섹션만 먼저 그릴 수 있다.
 
 ### 4-12. CON-00 탐색에 「서버 실행」(M7)이 없다
 

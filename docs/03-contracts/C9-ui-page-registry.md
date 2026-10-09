@@ -13,7 +13,7 @@
 
 자동화할 화면과 그 요소(시맨틱 키), 요소마다의 로케이터 사다리를 등록·조회·삭제한다. 결과물은 UI 자동화 앱이 소유한다. 통계·승격·폐기 판단이 거기 있기 때문이다 (C8).
 
-> 상태: 네 작업과 공개 카탈로그가 **돈다** (`extensions/ui_automation/service/app.py`, 저장은 SQLite 한 파일). 부르는 쪽은 `client/registry_client.py`다. 추가 권한은 작업이 `required_scopes`로 선언하고 `service_kit`이 건다 (C11). **관리 콘솔이 읽는 길도 돈다** — `GET /admin/v1/overview`(UIA-01)와 UI 세션 기록이다 (아래).
+> 상태: 네 작업과 공개 카탈로그가 **돈다** (`extensions/ui_automation/service/app.py`, 저장은 SQLite 한 파일). 부르는 쪽은 `client/registry_client.py`다. 추가 권한은 작업이 `required_scopes`로 선언하고 `service_kit`이 건다 (C11). **관리 콘솔이 읽는 길도 돈다** — 경로 다섯(UIA-01~03)과 UI 세션 기록이다 (아래).
 
 ## 전송
 
@@ -144,10 +144,18 @@
 | 경로 | 인증 | 뜻 |
 | --- | --- | --- |
 | `GET /admin/v1/overview` | **관리자 토큰** | UIA-01 개요 — 셀렉터 셈·모델·세션 셈·배포 전 확인 |
+| `GET /admin/v1/pages` | 같음 | UIA-02 화면 고르기 목록. **셀렉터는 없다** (`registry_list_pages`와 같은 칸) |
+| `GET /admin/v1/pages/{page_id}` | 같음 | UIA-02 화면 하나 — 로케이터·성적·요소·전략별 합·경고. **셀렉터가 나간다.** 없으면 404 `not_found` |
+| `GET /admin/v1/path?start=&goal=` | 같음 | UIA-02 「화면 간 경로 탐색」. 둘 중 하나가 비면 422 `input_invalid` |
+| `GET /admin/v1/sessions?limit=` | 같음 | UIA-03 — 이력·요약·폴백 깊이 분포. `limit` 기본 100·최대 1000 |
 
 - **관문은 C11 관리 API와 같다** (`service_kit.admin_guard`) — 관리자 토큰이 없으면 503 `admin_disabled`, 없는 토큰은 401, 틀린 토큰은 403이다. **업무 키로는 못 부른다** (`registry_write` 키여도 403).
 - 왜 관리자 토큰인가: **콘솔은 서비스 앱 키를 갖지 않는다** ([ADR-0013](../decisions/0013-api-keys.md)). 셀렉터를 보는 작업(`registry_get_page`)은 `registry_write` 키의 일이고, 콘솔이 그 키를 들고 있으면 「키를 발급하는 화면이 키를 쓰는」 꼴이 된다. 관리자 토큰은 키를 발급하는 토큰이라 이미 더 강하다.
 - **읽기만 한다.** 등록·삭제는 §전송의 작업(`/v1/ops/registry_*`)이고 Bot UI 유틸리티(BUI-06)의 일이다.
+- **대체된 것(`deprecated`)도 준다** — 무엇이 밀려났는지 보는 화면이다 (UIA-02).
+- **「치유가 더했다」는 표시는 레지스트리에 없다** — 보고가 적어 둔 것(`healed[].locator`·`supersedes`)에서 모은다. 그래서 화면의 「자가 치유」 열과 「대체 관계」는 **세션 기록이 있어야** 보인다.
+- 「화면 간 경로 탐색」은 **최단 하나**를 앱이 **너비 우선**으로 찾는다 ([ADR-0040](../decisions/0040-registry-storage-sqlite.md)) — 길이 없으면 빈 목록이고 **지어내지 않는다**.
+- 성공률은 **센 적이 없으면 `null`**이다 — 0%와 다르다 (아직 안 돌았다는 뜻).
 - 모델은 JSON Schema로 내보낸다 (`…/ui_automation/schemas/c9-console-overview.json`, `uv run python scripts/gen_schemas.py`) — 콘솔 타입이 거기서 생성된다. **확장이 소유한 계약이라 확장 폴더에 둔다** (계약 README 원칙 1).
 
 ### UI 세션 기록
@@ -159,6 +167,8 @@
 - 같은 `business_key`가 다시 오면 **나중 것이 이긴다** (재시도는 `attempt`가 달라 다른 키다).
 - **업무 값은 없다** — C8 보고 자체가 읽은 값·입력한 글자를 담지 않는다 (원칙 6).
 - **최근 5000줄까지** 들고 오래된 것부터 버린다. 모니터링 자료라 영원히 쌓을 이유가 없다.
+- **봉투가 말해 주는 것도 함께 적는다** — `caller.type`(요청 쪽)·`mode`(수행 모드)·`caller.bpm_process_id`(Bot)·`caller.host`(Bot UI). C8 보고에는 없고 C11 호출(`OpRequest`)에는 있다. UIA-03 표의 그 네 열이 여기서 온다.
+- 「폴백 깊이 분포」는 `attempts`를 요소별로 세어 만든다 — `0`이 **1순위 로케이터로 바로 성공**한 것이고, **끝까지 실패한 요소는 깊이가 아니다** (전환·실패로 센다).
 
 ### 배포 전 확인 (UIA-01)
 
@@ -227,6 +237,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 1 | 「관리 콘솔이 읽는 길」에 UIA-02·03의 경로 넷(`pages`·`pages/{id}`·`path`·`sessions`)을 더했다. 세션 기록이 **봉투의 `caller`·`mode`도** 적는다 (UIA-03 표의 네 열). 치유 표시·대체 관계는 보고에서 모은다 | 0042 |
 | 2026-10-09 | 1 | 「관리 콘솔이 읽는 길」을 적었다 — `GET /admin/v1/overview`(UIA-01), UI 세션 기록(보고가 도착한 것만·시험은 따로·5000줄), 「배포 전 확인」. 관문은 C11 관리 API와 같은 관리자 토큰이다 | 0042 |
 | 2026-10-01 | 1 | 초안. 프로토타입 화면 등록을 C11 작업으로 옮겼다. 그 과정에서 바뀐 것: `registry_write` 권한, 셀렉터 없는 공개 카탈로그, `revision`, 삭제 때 끊길 경로를 확인하는 단계 | 0010, 0012, 0013 |
 | 2026-10-01 | 1 | 검토 반영: 레지스트리는 확장의 Bot UI 유틸리티가 직접 부름(Worker 경유 아님), 동작마다 새 `reg_` id, 바뀔 때만 `revision` 증가, 삭제 전 Center `used_by` 확인, 카탈로그를 C13 공통 형식으로·서버망 한정 | 0018 |
