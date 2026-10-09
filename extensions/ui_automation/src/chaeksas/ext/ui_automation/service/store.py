@@ -18,6 +18,14 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from chaeksas.contracts.service_app import ServiceAppKey
+from chaeksas.ext.ui_automation.contracts.console import SessionCounts
+from chaeksas.ext.ui_automation.contracts.plan import (
+    ORIGIN_TEST,
+    STATUS_ESCALATED,
+    STATUS_FAILED,
+    STATUS_SUCCEEDED,
+    SessionReport,
+)
 from chaeksas.ext.ui_automation.contracts.registry import LocatorStats, PageRegistration
 
 SCHEMA = """
@@ -36,11 +44,25 @@ CREATE TABLE IF NOT EXISTS app_keys (
   key_hash   TEXT PRIMARY KEY,
   key_json   TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sessions (
+  business_key TEXT PRIMARY KEY,
+  at           TEXT NOT NULL,
+  page_id      TEXT NOT NULL,
+  origin       TEXT NOT NULL,
+  status       TEXT NOT NULL,
+  healed       INTEGER NOT NULL DEFAULT 0,
+  report_json  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_at ON sessions (at DESC);
 CREATE TABLE IF NOT EXISTS meta (
   name  TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
 """
+
+#: 세션 기록을 몇 줄까지 들고 있을까 (UIA-01·03). 넘으면 **오래된 것부터 버린다** —
+#: 모니터링 자료라 영원히 쌓을 이유가 없고, 지우는 쪽이 커지는 쪽보다 안전하다 (C9).
+MAX_SESSIONS = 5000
 
 
 @dataclass
@@ -145,4 +167,86 @@ class RegistryStore:
             )
 
 
-__all__ = ["SCHEMA", "Database", "RegistryStore", "SqliteKeyStore"]
+@dataclass
+class SessionStore:
+    """UI 세션 기록 (C8 보고 → UIA-01 「최근 UI 세션」·UIA-03).
+
+    **보고가 도착한 것만** 들어온다 — 세션이 끝날 때 한 번이다 (도는 세션은 모른다).
+    집계에 쓰는 칸은 열로 빼 두고(세는 데 JSON을 다 풀지 않게) 본문은 그대로 둔다.
+
+    **업무 값은 없다** — C8 `SessionReport`가 읽은 값·입력한 글자를 담지 않는다 (원칙 6).
+    같은 `business_key`가 다시 오면 **나중 것이 이긴다** (재시도는 `attempt`가 달라 다른 키다).
+    """
+
+    db: Database
+
+    def record(self, report: SessionReport, *, at: str) -> None:
+        with self.db.connect() as found:
+            found.execute(
+                "INSERT INTO sessions (business_key, at, page_id, origin, status, healed, report_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT (business_key) DO UPDATE SET at = excluded.at, page_id = excluded.page_id, "
+                "origin = excluded.origin, status = excluded.status, healed = excluded.healed, "
+                "report_json = excluded.report_json",
+                (
+                    report.business_key,
+                    at,
+                    report.page_id,
+                    report.origin,
+                    report.status,
+                    1 if report.healed else 0,
+                    report.model_dump_json(),
+                ),
+            )
+            # 오래된 것부터 버린다 (`MAX_SESSIONS`).
+            found.execute(
+                "DELETE FROM sessions WHERE business_key IN ("
+                "  SELECT business_key FROM sessions ORDER BY at DESC LIMIT -1 OFFSET ?"
+                ")",
+                (MAX_SESSIONS,),
+            )
+
+    def counts(self, *, today: str) -> SessionCounts:
+        """UIA-01 「최근 UI 세션」·UIA-03 요약. `today`는 `YYYY-MM-DD`(앱 서버 기준)다.
+
+        **시험 보고는 따로 센다** — 운영 통계를 흔들지 않는다 (C8 `origin: test`).
+        """
+        with self.db.connect() as found:
+            rows = found.execute(
+                "SELECT origin, status, healed, substr(at, 1, 10) AS day FROM sessions"
+            ).fetchall()
+        made = SessionCounts()
+        for row in rows:
+            if row["origin"] == ORIGIN_TEST:
+                made.test += 1
+                continue
+            made.total += 1
+            if row["status"] == STATUS_SUCCEEDED:
+                made.succeeded += 1
+            elif row["status"] == STATUS_ESCALATED:
+                made.escalated += 1
+            elif row["status"] == STATUS_FAILED:
+                made.failed += 1
+            if row["healed"]:
+                made.healed += 1
+            if row["day"] == today:
+                made.today += 1
+        return made
+
+    def recent(self, *, limit: int = 100) -> list[SessionReport]:
+        """최근 보고부터 (UIA-03 「UI 세션 이력」). **시험도 들어간다** — 거르는 것은 화면이다."""
+        with self.db.connect() as found:
+            rows = found.execute(
+                "SELECT report_json FROM sessions ORDER BY at DESC LIMIT ?", (max(limit, 0),)
+            ).fetchall()
+        return [SessionReport.model_validate_json(row["report_json"]) for row in rows]
+
+
+__all__ = [
+    "MAX_SESSIONS",
+    "SCHEMA",
+    "Database",
+    "RegistryStore",
+    "SessionStore",
+    "SqliteKeyStore",
+]

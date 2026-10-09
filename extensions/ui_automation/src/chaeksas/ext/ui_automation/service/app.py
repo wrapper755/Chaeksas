@@ -37,17 +37,31 @@ from chaeksas.contracts.service_app import (
     ResourceCatalog,
     ServiceAppManifest,
 )
+from chaeksas.ext.ui_automation.contracts.console import (
+    CHECK_OK,
+    CHECK_WARN,
+    ConsoleOverview,
+    DeployCheck,
+    LlmInfo,
+    SessionCounts,
+)
 from chaeksas.ext.ui_automation.contracts.plan import (
     ElementInfo,
     ExecutionPlan,
     HealRequest,
     PlanStep,
+    Policy,
     SessionReport,
 )
 from chaeksas.ext.ui_automation.contracts.registry import PageRegistration
-from chaeksas.ext.ui_automation.service import healing, planning
-from chaeksas.ext.ui_automation.service.registry import HasLinks, Registry, RegistryError
-from chaeksas.ext.ui_automation.service.store import Database, RegistryStore, SqliteKeyStore
+from chaeksas.ext.ui_automation.service import console, healing, planning
+from chaeksas.ext.ui_automation.service.registry import HasLinks, Registry, RegistryError, now_iso
+from chaeksas.ext.ui_automation.service.store import (
+    Database,
+    RegistryStore,
+    SessionStore,
+    SqliteKeyStore,
+)
 from chaeksas.service_kit import OpError, OpResult, ServiceLlm, create_app, usage_of
 
 log = logging.getLogger(__name__)
@@ -148,6 +162,10 @@ class Service:
     registry: Registry = field(default_factory=Registry)
     #: 치유가 묻는 모델 (C11 §모델 연결). 없으면 치유는 503 `llm_unavailable`이다.
     llm: ServiceLlm = field(default_factory=ServiceLlm)
+    #: UI 세션 기록 (C8 보고 → UIA-01·03). 없으면 남기지 않는다 (시험).
+    sessions: SessionStore | None = None
+    #: 키 저장소 — 「배포 전 확인」이 `registry_write` 키가 있나 본다 (C11은 해시만 들고 있다).
+    keys: SqliteKeyStore | None = None
 
     @classmethod
     def open(cls, db: Database, llm: ServiceLlm | None = None) -> Service:
@@ -157,6 +175,8 @@ class Service:
             store=store,
             registry=Registry(pages=pages, stats=stats, revision=revision),
             llm=llm if llm is not None else ServiceLlm(),
+            sessions=SessionStore(db=db),
+            keys=SqliteKeyStore(db=db),
         )
 
     def flush(self) -> None:
@@ -323,14 +343,86 @@ class Service:
         return OpResult(answer.to_json_dict(), usage=usage_of([reply]))
 
     def report(self, request: OpRequest, mode: str) -> Mapping[str, Any]:
-        """C8 보고 — 통계를 갱신하고 승격을 결정한다. **`test` 보고는 통계에 넣지 않는다.**"""
+        """C8 보고 — 통계를 갱신하고 승격을 결정한다. **`test` 보고는 통계에 넣지 않는다.**
+
+        보고는 **기록으로도 남는다** (UIA-01 「최근 UI 세션」·UIA-03) — 세션이 끝날 때 오는
+        유일한 소식이라 여기서 남기지 않으면 모니터링이 영원히 빈다. 업무 값은 보고 자체에
+        없다 (C8, 원칙 6).
+        """
         try:
             found = SessionReport.model_validate(request.input)
         except ValueError as e:
             raise OpError("input_invalid", f"보고가 계약과 맞지 않는다: {e}", status=422) from e
         promoted = self.registry.apply(found)
         self.flush()
+        if self.sessions is not None:
+            self.sessions.record(found, at=now_iso())
         return {"accepted": True, "promoted": promoted}
+
+    # ── 관리 콘솔이 읽는 것 (C9 §관리 콘솔이 읽는 길) ──
+
+    def overview(self) -> ConsoleOverview:
+        """UIA-01 개요 한 벌. **관리자 토큰으로만** 오는 길이다 (`console.py`가 관문을 건다)."""
+        at = now_iso()
+        counts = self.registry.counts()
+        checks = self.checks()
+        return ConsoleOverview(
+            schema=1,
+            counts=counts,
+            llm=LlmInfo(
+                configured=self.llm.configured,
+                model=self.llm.model,
+                last_status=self.llm.last_status,
+                max_healing_attempts=Policy().max_healing_attempts,
+            ),
+            sessions=self.sessions.counts(today=at[:10]) if self.sessions else SessionCounts(),
+            checks=checks,
+            revision=self.registry.revision,
+            generated_at=at,
+        )
+
+    def checks(self) -> list[DeployCheck]:
+        """「배포 전 확인」 — **이 앱이 자기 힘으로 볼 수 있는 것만** (C9).
+
+        허용 주소·인증 설정은 외부 확장 어댑터의 개념이고(C13 §4) C11 앱에는 없다. 그래서
+        모델 연결·등록 담당자 키·등록된 화면 셋을 본다 — 셋 다 **없으면 무엇이 안 되는지**가
+        분명하다. **막는 것이 아니라 알려 주는 것이다** (경고만).
+        """
+        made = [
+            DeployCheck(
+                id="llm",
+                label="모델 연결",
+                level=CHECK_OK if self.llm.configured else CHECK_WARN,
+                detail=None if self.llm.configured else "치유·목표로 계획이 503이 됩니다 (C11 §모델 연결)",
+            )
+        ]
+        writers = [
+            key
+            for key in (self.keys.all_keys() if self.keys is not None else [])
+            if REGISTRY_WRITE in key.extra_scopes and not key.revoked_at
+        ]
+        made.append(
+            DeployCheck(
+                id="registrar_key",
+                label="등록 담당자 키",
+                level=CHECK_OK if writers else CHECK_WARN,
+                detail=f"{len(writers)}개"
+                if writers
+                else f"{REGISTRY_WRITE} 권한이 있는 키가 없어 BUI-06에서 등록할 수 없습니다",
+            )
+        )
+        pages = len(self.registry.pages)
+        made.append(
+            DeployCheck(
+                id="pages",
+                label="등록된 화면",
+                level=CHECK_OK if pages else CHECK_WARN,
+                detail=f"{pages}개"
+                if pages
+                else "Bot UI 「도구」 → 「UI 셀렉터 등록」(BUI-06)으로 등록하세요",
+            )
+        )
+        return made
 
 
 def create(
@@ -348,7 +440,7 @@ def create(
     database = Database(path=db_path or (data_dir() / "ui-automation.sqlite3"))
     model = llm if llm is not None else ServiceLlm.from_env(ENV_PREFIX)
     service = Service.open(database, model)
-    keys = SqliteKeyStore(db=database)
+    keys = service.keys or SqliteKeyStore(db=database)
 
     app = create_app(
         manifest(console_url),
@@ -366,6 +458,8 @@ def create(
         llm=model,
     )
     app.state.service = service
+    # 앱 고유 관리 경로 (UIA-01~03) — 관문은 C11과 같은 `admin_guard` 하나다.
+    app.include_router(console.create_router(service))
 
     @app.get(CATALOG_PATH)
     def catalog() -> Any:

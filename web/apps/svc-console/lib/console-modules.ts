@@ -17,7 +17,7 @@ import { CONSOLE_PAGES } from "./console-pages.generated";
  * 링크를 화면에 내보내지 않는다.
  */
 export const CONSOLE_MODULES: Record<string, Route> = {
-  // 예: "ui-automation/overview": "/ext/ui-automation/overview",
+  "ui-automation/overview": "/ext/ui-automation/overview",
 };
 
 /** 아직 화면이 없는 줄에 붙일 사유 (U3 — 없는 것은 끄고 이유를 가까이 적는다). */

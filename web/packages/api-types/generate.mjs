@@ -6,6 +6,10 @@
 // 원본은 `packages/contracts/schemas/*.json`이고, 그것도 생성물이다
 // (`uv run python scripts/gen_schemas.py`). **손으로 타입을 쓰지 않는다.**
 //
+// **확장이 소유한 계약도 읽는다** — `extensions/*/src/chaeksas/ext/*/schemas/*.json`.
+// 확장의 콘솔 화면(C13 `console.pages`)이 그 앱의 모양을 알아야 하고, 계약은 그 확장 폴더에
+// 있어야 한다 (ADR-0018, 계약 README 원칙 1). 폴더를 훑으므로 **확장 이름이 여기 없다**.
+//
 // 열쇠 이름이 겹치는 타입이 있어(C5·C7의 `MissingResource`) 묶음 하나로 내보내지 않는다.
 // 쓰는 쪽은 계약별 경로로 가져온다: `import type { Manifest } from "@chaeksas/api-types/c1-manifest"`.
 
@@ -15,10 +19,12 @@ import { fileURLToPath } from "node:url";
 import { compile } from "json-schema-to-typescript";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const SCHEMA_DIR = resolve(HERE, "../../../packages/contracts/schemas");
+const REPO = resolve(HERE, "../../..");
+const SCHEMA_DIR = join(REPO, "packages/contracts/schemas");
+const EXTENSIONS_DIR = join(REPO, "extensions");
 const OUT_DIR = join(HERE, "src");
 const BANNER = [
-  "/* 생성 파일: packages/contracts/schemas에서 만든다. 직접 고치지 말고",
+  "/* 생성 파일: 계약 스키마에서 만든다 (플랫폼 + 확장이 소유한 것). 직접 고치지 말고",
   "   계약 모델을 고친 뒤 `uv run python scripts/gen_schemas.py`,",
   "   그다음 `pnpm --filter @chaeksas/api-types generate`. */",
 ].join("\n");
@@ -66,16 +72,61 @@ function moduleName(stem) {
     .join("");
 }
 
+/** 확장이 소유한 계약 스키마 폴더들 (`extensions/<id>/src/chaeksas/ext/<pkg>/schemas`). */
+async function extensionSchemaDirs() {
+  const out = [];
+  let members = [];
+  try {
+    members = await readdir(EXTENSIONS_DIR, { withFileTypes: true });
+  } catch {
+    return out; // 확장이 없는 작업 트리
+  }
+  for (const member of members.filter((one) => one.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+    const root = join(EXTENSIONS_DIR, member.name, "src/chaeksas/ext");
+    let packages = [];
+    try {
+      packages = await readdir(root, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const pkg of packages.filter((one) => one.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+      const where = join(root, pkg.name, "schemas");
+      try {
+        if ((await readdir(where)).some((f) => f.endsWith(".json"))) out.push(where);
+      } catch {
+        /* 스키마를 내보내지 않는 확장 */
+      }
+    }
+  }
+  return out;
+}
+
+/** 읽을 스키마 파일 전부 — `{dir, file}`. 이름이 겹치면 **멈춘다** (조용히 덮어쓰지 않는다). */
+async function schemaFiles() {
+  const dirs = [SCHEMA_DIR, ...(await extensionSchemaDirs())];
+  const out = [];
+  const seen = new Map();
+  for (const dir of dirs) {
+    for (const file of (await readdir(dir)).filter((f) => f.endsWith(".json")).sort()) {
+      const already = seen.get(file);
+      if (already) throw new Error(`계약 스키마 이름이 겹친다: ${file} (${already}, ${dir})`);
+      seen.set(file, dir);
+      out.push({ dir, file });
+    }
+  }
+  if (out.length === 0) throw new Error(`계약 스키마가 없다: ${SCHEMA_DIR}`);
+  return out.sort((a, b) => a.file.localeCompare(b.file));
+}
+
 async function outputs() {
-  const files = (await readdir(SCHEMA_DIR)).filter((f) => f.endsWith(".json")).sort();
-  if (files.length === 0) throw new Error(`계약 스키마가 없다: ${SCHEMA_DIR}`);
+  const found = await schemaFiles();
 
   const out = new Map();
   const stems = [];
-  for (const file of files) {
+  for (const { dir, file } of found) {
     const stem = file.replace(/\.json$/, "");
     stems.push(stem);
-    const schema = JSON.parse(await readFile(join(SCHEMA_DIR, file), "utf8"));
+    const schema = JSON.parse(await readFile(join(dir, file), "utf8"));
     // 이름은 모델 이름(`title`)을 쓴다 — 계약 문서·파이썬 모델과 같은 이름이어야 찾기 쉽다.
     const name = schema.title ?? moduleName(stem);
     stripFieldTitles(schema, true);

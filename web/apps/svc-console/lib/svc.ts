@@ -5,6 +5,7 @@ import type { AdminStatus } from "@chaeksas/api-types/c11-admin-status";
 import type { AdminKeyCreated } from "@chaeksas/api-types/c11-admin-key-created";
 import type { AdminKeyInfo } from "@chaeksas/api-types/c11-admin-key-info";
 import type { UsagePage } from "@chaeksas/api-types/c11-usage-page";
+import type { ConsoleOverview } from "@chaeksas/api-types/c9-console-overview";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
 import { COOKIE_NAME, open, type Session } from "./session";
 
@@ -79,4 +80,7 @@ export const svc = {
   // 이름에 한글·공백이 올 수 있다 — 경로에 넣기 전에 인코딩한다.
   revokeKey: (name: string) => call<AdminKeyInfo>(`/admin/v1/keys/${encodeURIComponent(name)}`, { method: "DELETE" }),
   usage: (limit = 100) => call<UsagePage>(`/admin/v1/usage?limit=${limit}`),
+  // 앱 고유 관리 경로 (확장이 기여한 화면이 읽는다 — C9 §관리 콘솔이 읽는 길).
+  // 모든 앱에 있는 길이 아니다: 그 확장의 화면에서만 부른다 (`console.pages`, ADR-0042).
+  uiAutomationOverview: () => call<ConsoleOverview>("/admin/v1/overview"),
 };
