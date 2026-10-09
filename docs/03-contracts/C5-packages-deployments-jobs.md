@@ -2,11 +2,11 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio·Admin·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py` (import `chaeksas.contracts.center_api`, [ADR-0019](../decisions/0019-package-names.md)) |
-| JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
+| JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md) |
 | 관련 화면 | STU-01(올리기), CON-02·05·06·11·12, ADM |
 
@@ -21,7 +21,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 
 실행하는 쪽(Bot UI·서버 실행기)은 이 API로 패키지를 내려받는다. 배포와 작업은 하트비트 응답으로 받는다 (C4·C12).
 
-> 상태: **패키지 승인·철회·지원 종료(`PUT …/status`), Admin 키, 배포**(`POST/DELETE/GET /deployments`)가 돈다 — 하트비트가 활성 배포 봉투와 Admin 키를 내려 주고 Bot UI가 설치한다 (C2 V1~V7). **작업 지시(`/jobs`)도 돈다** — 만들기·목록·하나·취소와 하트비트의 `jobs`·`cancel_jobs`·`job_acks`, 맞추기 규칙(`bot_ui_lost`)까지. 서버 실행기 대상은 422 `server_runner_not_available`이다 (M7). 콘솔 화면(CON-05)도 돈다. 남은 것은 `GET …/dependents`와 `DELETE /packages/{id}/{version}`이고 CON-06과 한 덩이다 ([09-gaps](../09-gaps.md) §3-6).
+> 상태: **돈다 — 남은 기능이 없다.** 패키지 승인·철회·지원 종료(`PUT …/status`), Admin 키, 배포(`POST/DELETE/GET /deployments`)가 돈다 — 하트비트가 활성 배포 봉투와 Admin 키를 내려 주고 Bot UI가 설치한다 (C2 V1~V7). **작업 지시(`/jobs`)도 돈다** — 만들기·목록·하나·취소와 하트비트의 `jobs`·`cancel_jobs`·`job_acks`, 맞추기 규칙(`bot_ui_lost`)까지. **참조·삭제(`GET …/dependents`·`DELETE /packages/…`)도 돈다** — CON-06이 읽고 지운다. 콘솔 화면(CON-05·CON-06)도 돈다. 서버 실행기 대상은 422 `server_runner_not_available`이다 (M7).
 
 ## 전송 공통
 
@@ -73,8 +73,8 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `PUT /packages/{id}/{version}/signature` | 승인 봉투(C2 `package`). 상태가 `approved`가 된다 | 200 |
 | `POST /packages/{id}/{version}/revoke` | 승인 철회 봉투(C2 `package_revoke`). 상태가 `revoked`가 되고 배포가 모두 무효가 된다 | 200 |
 | `PUT /packages/{id}/{version}/status` `{status: "deprecated"}` | 지원 종료 표시. 새 배포를 막는다. 서명이 필요 없다 (실행을 허용하는 쪽이 아니라 막는 쪽이라서) | 200 |
-| `GET /packages/{id}/{version}/dependents` | 이 패키지를 `requires`로 쓰는 패키지 | 200 |
-| `DELETE /packages/{id}/{version}` | 삭제. 배포나 다른 패키지가 참조하면 409 | 204 |
+| `GET /packages/{id}/{version}/dependents` | 이 패키지를 `requires`로 쓰는 패키지 | 200 DependentInfo[] |
+| `DELETE /packages/{id}/{version}` | 삭제. 배포나 다른 패키지가 참조하면 409 `in_use` | 204 |
 
 지원 종료(`PUT …/status`) 규칙:
 
@@ -96,6 +96,35 @@ PackageInfo 필드:
 | `preflight` | `{warnings, blocked}` |
 | `manifest` | C1 매니페스트 |
 | `missing_resources` | `[{type: toolpack \| ui_page \| service_app \| operation, id, reason}]`. 읽을 때 C7과 대조해 계산한다 |
+
+### 참조하는 패키지 (`dependents`)
+
+DependentInfo 필드:
+
+| 필드 | 뜻 |
+| --- | --- |
+| `id`, `version`, `kind`, `name` | 참조하는 쪽 패키지 |
+| `status` | 그 패키지의 상태 |
+| `relation` | 어느 칸으로 참조하나 — `lib`(C1 `requires.libs`) / `toolpack`(C1 `requires.toolpacks`) (열린 문자열) |
+| `pinned_hash` | 참조하는 쪽이 **고정한** 해시. `toolpack`만 있다 (R7) — `lib`은 `<id>@<version>`으로만 가리키므로 `null` |
+
+- **읽을 때 센다.** 참조 그래프를 따로 저장하지 않는다 — 저장해 두면 패키지가 올라오고 지워질 때마다 낡는다 (`missing_resources`와 같은 결).
+- 참조는 **버전까지 같아야** 센다. `requires.libs`의 `<id>@<version>`, `requires.toolpacks[].{id, version}`을 그대로 맞춰 본다.
+- `pinned_hash`가 이 패키지의 `content_hash`와 다르면 **그래도 센다** — 참조하는 쪽이 낡은 해시를 고정해 둔 것이고, 그 패키지의 실행은 C1 R7·설치 검사에서 걸린다. 삭제를 막는 쪽에서는 「쓰는 데가 있다」가 맞다.
+- 자기 자신은 세지 않는다.
+
+### 삭제 (`DELETE`)
+
+참조가 있으면 **아무것도 지우지 않고** 409 `in_use`를 돌려준다. `detail`에 막은 것을 담는다:
+
+| `detail` 칸 | 뜻 |
+| --- | --- |
+| `deployments` | 이 패키지를 가리키는 배포 id 목록. **철회된 배포는 세지 않는다** (행은 남지만 실행을 허용하지 않는다) |
+| `dependents` | `<id>@<version>` 목록 (위 `dependents`와 같은 셈) |
+
+- 승인 봉투·철회 봉투가 붙어 있는 것은 **막지 않는다** — 봉투는 그 패키지에 딸린 것이라 함께 지운다.
+- 지우는 것은 패키지 행·봉투·zip 파일이다. 그 패키지로 돌았던 **실행 기록은 지우지 않는다** (C3가 원본이고 패키지를 가리키는 이름만 남는다).
+- 없는 패키지는 404. 되돌릴 수 없으므로 화면은 확인 창을 먼저 띄운다 (CON-06).
 
 ## 배포
 
@@ -239,6 +268,7 @@ BotUiInfo 필드:
 | 2026-10-09 | 1 | 지원 종료(`PUT …/status`)에 규칙을 적고 구현했다 — `deprecated`만 받고, 철회된 것은 거부하고, 두 번 해도 같은 답이며 내려받기는 그대로 된다 | — |
 | 2026-10-01 | 1 | 초안 | 0013~0016 |
 | 2026-10-07 | 1 | `GET /jobs`의 `state`가 쉼표로 여럿을 받는다 — CON-05의 상태 필터가 여러 개를 고른다 | 0017 |
+| 2026-10-10 | 1 | `GET …/dependents`의 응답 모양(DependentInfo)과 `DELETE /packages/…`의 409 `in_use` `detail`을 적었다 — 표에 줄만 있고 모양이 없어 CON-06을 만들 수 없었다 | — |
 | 2026-10-06 | 1 | `BotUiInfo.deployment_results`를 더했다 — 배치 결정은 하트비트 한 주기만 올라오고 Center가 버리고 있어서, CON-03 「최근 배치 결정」이 그릴 것이 없었다. `DeploymentInfo`의 봉투 유래 칸(`signed_by`·`signed_at`·`not_before`·`expires_at`·`revoked_at`)을 어디서 읽는지 적었다 | 0017 |
 | 2026-10-03 | 1 | `X-CHK-Actor`는 UTF-8 퍼센트 인코딩으로 보낸다 — 한글 이름을 그대로 실으면 HTTP 헤더에 넣을 수 없어 요청이 나가지 않는다 (콘솔을 붙이다 드러났다) | 0017 |
 | 2026-10-03 | 1 | `GET /bot-uis`(CON-03)의 응답 모델 `BotUiInfo`를 적었다 — 엔드포인트만 권한표에 있고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |

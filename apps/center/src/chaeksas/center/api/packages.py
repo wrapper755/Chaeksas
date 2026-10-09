@@ -17,7 +17,7 @@ from chaeksas.center.api.signing import STATUS_REVOKED
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import MAX_PACKAGE_MB
 from chaeksas.center.storage import Store, dumps, loads, now_iso
-from chaeksas.contracts.center_api import PackageInfo
+from chaeksas.contracts.center_api import DependentInfo, PackageInfo
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.manifest import validate as validate_manifest
@@ -258,6 +258,83 @@ def set_status(store: Store, package_id: str, version: str, raw: Any) -> Package
                 (STATUS_DEPRECATED, package_id, version),
             )
     return info_of(store, package_id, version)
+
+
+def dependents(store: Store, package_id: str, version: str) -> list[DependentInfo]:
+    """이 패키지를 `requires`로 쓰는 패키지 (C5 `dependents`).
+
+    **읽을 때 센다** — 참조 그래프를 저장하지 않는다 (`missing_resources`와 같은 결: 저장하면
+    패키지가 올라오고 지워질 때마다 낡는다).
+
+    버전까지 같아야 센다. `pinned_hash`가 이 패키지의 해시와 달라도 **센다** — 낡은 해시를
+    고정해 둔 것이고, 삭제를 막는 쪽에서는 「쓰는 데가 있다」가 맞다 (실행은 R7이 막는다).
+    """
+    if store.row("SELECT 1 FROM packages WHERE id = ? AND version = ?", (package_id, version)) is None:
+        raise ApiError(404, "not_found", f"{package_id}@{version}이 없다")
+
+    pin = f"{package_id}@{version}"
+    out: list[DependentInfo] = []
+    for row in store.rows("SELECT * FROM packages ORDER BY id, version"):
+        if row["id"] == package_id and row["version"] == version:
+            continue  # 자기 자신은 세지 않는다
+        manifest = Manifest.model_validate(loads(row["manifest_json"], {}))
+        # 한 패키지가 두 칸으로 가리킬 수도 있다 — **관계마다 한 줄**이다 (화면의 「관계」 열이
+        # 값 하나라서, 합치면 어느 칸으로 쓰는지를 잃는다).
+        relations: list[tuple[str, str | None]] = []
+        if pin in manifest.requires.libs:
+            relations.append(("lib", None))
+        relations += [
+            ("toolpack", ref.content_hash)
+            for ref in manifest.requires.toolpacks
+            if ref.id == package_id and ref.version == version
+        ]
+        out += [
+            DependentInfo(
+                id=row["id"],
+                version=row["version"],
+                kind=row["kind"],
+                name=row["name"],
+                status=row["status"],
+                relation=relation,
+                pinned_hash=pinned,
+            )
+            for relation, pinned in relations
+        ]
+    return out
+
+
+def remove(store: Store, *, package_dir: Path, package_id: str, version: str) -> None:
+    """삭제 (C5). 참조가 있으면 **아무것도 지우지 않고** 409 `in_use`다.
+
+    지우는 것은 패키지 행(승인·철회 봉투가 그 안에 있다)과 zip 파일이다. **실행 기록은 지우지
+    않는다** — C3가 원본이고 거기에는 패키지를 가리키는 이름만 남는다.
+    """
+    row = store.row("SELECT * FROM packages WHERE id = ? AND version = ?", (package_id, version))
+    if row is None:
+        raise ApiError(404, "not_found", f"{package_id}@{version}이 없다")
+
+    # **철회된 배포는 세지 않는다** — 행은 남지만 실행을 허용하지 않는다.
+    blocking_deployments = [
+        found["deployment_id"]
+        for found in store.rows(
+            "SELECT deployment_id FROM deployments"
+            " WHERE bpm_process_id = ? AND version = ? AND revoked_json IS NULL"
+            " ORDER BY deployment_id",
+            (package_id, version),
+        )
+    ]
+    users = sorted({f"{d.id}@{d.version}" for d in dependents(store, package_id, version)})
+    if blocking_deployments or users:
+        raise ApiError(
+            409,
+            "in_use",
+            f"{package_id}@{version}을 쓰는 데가 있어 지울 수 없다",
+            {"deployments": blocking_deployments, "dependents": users},
+        )
+
+    with store.tx() as cur:
+        cur.execute("DELETE FROM packages WHERE id = ? AND version = ?", (package_id, version))
+    (package_dir / row["file_name"]).unlink(missing_ok=True)
 
 
 def file_path(store: Store, *, package_dir: Path, package_id: str, version: str) -> tuple[Path, str]:

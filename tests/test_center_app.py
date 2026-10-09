@@ -454,27 +454,42 @@ def test_heartbeat_that_breaks_the_contract_is_refused(client: TestClient) -> No
 
 
 def build_package(
-    *, package_id: str = "invoice-check", version: str = "1.0.0", extra: dict[str, str] | None = None
+    *,
+    package_id: str = "invoice-check",
+    version: str = "1.0.0",
+    extra: dict[str, str] | None = None,
+    kind: str = "bpm_process",
+    requires: dict[str, Any] | None = None,
+    provides: dict[str, Any] | None = None,
 ) -> bytes:
-    """C1 매니페스트가 든 작은 패키지 zip. 해시는 실제로 계산해 넣는다."""
+    """C1 매니페스트가 든 작은 패키지 zip. 해시는 실제로 계산해 넣는다.
+
+    `kind`를 바꾸면 `bpm_process`만의 칸(`run_location`·`entry`·`process_id`)을 뺀다 — R1은
+    그 종류에만 묻는다. 공통 패키지(CON-06)는 그 모양으로 올라온다.
+    """
     files = {
         "process/main.bpmn": "<definitions />",
         **(extra or {}),
     }
     manifest: dict[str, Any] = {
         "schema": 1,
-        "kind": "bpm_process",
+        "kind": kind,
         "id": package_id,
         "version": version,
         "name": "세금계산서 확인",
-        "run_location": "server",
-        "entry": "process/main.bpmn",
-        "process_id": "Proc_invoice",
-        "requires": {},
+        "requires": requires or {},
         "human": {},
         "built": {"by": "studio", "at": "2026-10-03T09:00:00+09:00", "core": "0.1.0", "spec_version": 1},
         "content_hash": "sha256:" + "0" * 64,
     }
+    if kind == "bpm_process":
+        manifest |= {
+            "run_location": "server",
+            "entry": "process/main.bpmn",
+            "process_id": "Proc_invoice",
+        }
+    if provides is not None:
+        manifest["provides"] = provides
 
     def zip_bytes(manifest_json: str) -> bytes:
         buffer = io.BytesIO()
@@ -646,6 +661,182 @@ def test_bot_ui_key_can_download_but_not_upload(client: TestClient) -> None:
 def test_missing_package_is_404(client: TestClient) -> None:
     response = client.get("/api/v1/packages/없는것/1.0.0/info", headers=READ)
     assert response.status_code == 404 and response.json()["code"] == "not_found"
+
+
+# ─────────────────── C5 참조·삭제 (CON-06) ───────────────────
+
+TOOLPACK_HASH_KEY = "content_hash"
+
+
+def upload_common(client: TestClient, **over: Any) -> Any:
+    """공통 패키지 하나를 올리고 그 정보를 돌려준다 (CON-06이 다루는 종류)."""
+    response = upload(client, build_package(**over))
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def test_dependents_counts_libs_and_toolpacks(client: TestClient) -> None:
+    """참조하는 쪽이 **어느 칸으로** 쓰는지까지 돌려준다 (C5 `relation`).
+
+    `requires.libs`는 `<id>@<version>`뿐이라 `pinned_hash`가 없고, `requires.toolpacks`는
+    해시로 고정하므로 있다 (R7).
+    """
+    lib = upload_common(client, package_id="shared.approval", version="1.0.0", kind="process_lib")
+    pack = upload_common(client, package_id="excel-tools", version="2.0.0", kind="toolpack")
+    upload_common(
+        client,
+        package_id="erp.order-entry",
+        version="3.0.0",
+        requires={
+            "libs": [f"{lib['id']}@{lib['version']}"],
+            "toolpacks": [
+                {"id": pack["id"], "version": pack["version"], TOOLPACK_HASH_KEY: pack["content_hash"]}
+            ],
+        },
+    )
+
+    users = client.get(f"/api/v1/packages/{lib['id']}/1.0.0/dependents", headers=READ).json()
+    assert [(one["id"], one["relation"], one["pinned_hash"]) for one in users] == [
+        ("erp.order-entry", "lib", None)
+    ]
+    assert users[0]["kind"] == "bpm_process" and users[0]["status"] == "candidate"
+
+    users = client.get(f"/api/v1/packages/{pack['id']}/2.0.0/dependents", headers=READ).json()
+    assert [(one["id"], one["relation"]) for one in users] == [("erp.order-entry", "toolpack")]
+    assert users[0]["pinned_hash"] == pack["content_hash"]
+
+
+def test_dependents_needs_the_version_to_match(client: TestClient) -> None:
+    """버전까지 같아야 센다 — 다른 버전을 쓰는 것은 이 판의 참조가 아니다."""
+    upload_common(client, package_id="shared.approval", version="1.0.0", kind="process_lib")
+    upload_common(client, package_id="shared.approval", version="2.0.0", kind="process_lib")
+    upload_common(
+        client,
+        package_id="erp.order-entry",
+        version="3.0.0",
+        requires={"libs": ["shared.approval@2.0.0"]},
+    )
+    assert client.get("/api/v1/packages/shared.approval/1.0.0/dependents", headers=READ).json() == []
+    found = client.get("/api/v1/packages/shared.approval/2.0.0/dependents", headers=READ).json()
+    assert [one["id"] for one in found] == ["erp.order-entry"]
+
+
+def test_dependents_with_a_stale_pinned_hash_still_counts(client: TestClient) -> None:
+    """낡은 해시를 고정해 두어도 **쓰는 데가 있다** — 삭제를 막는 쪽에서는 그게 맞다 (실행은 R7이 막는다)."""
+    pack = upload_common(client, package_id="excel-tools", version="2.0.0", kind="toolpack")
+    upload_common(
+        client,
+        package_id="erp.order-entry",
+        version="3.0.0",
+        requires={
+            "toolpacks": [
+                {"id": pack["id"], "version": pack["version"], TOOLPACK_HASH_KEY: "sha256:" + "ab" * 32}
+            ]
+        },
+    )
+    found = client.get("/api/v1/packages/excel-tools/2.0.0/dependents", headers=READ).json()
+    assert [(one["id"], one["pinned_hash"]) for one in found] == [
+        ("erp.order-entry", "sha256:" + "ab" * 32)
+    ]
+
+
+def test_dependents_of_a_missing_package_is_404(client: TestClient) -> None:
+    response = client.get("/api/v1/packages/없는것/1.0.0/dependents", headers=READ)
+    assert response.status_code == 404 and response.json()["code"] == "not_found"
+
+
+def test_delete_removes_the_row_and_the_file(client: TestClient, packages_dir: Path) -> None:
+    upload_common(client, package_id="shared.approval", version="1.0.0", kind="process_lib")
+    assert list(packages_dir.glob("*.zip")), "zip이 저장되지 않았다"
+
+    response = client.delete("/api/v1/packages/shared.approval/1.0.0", headers=ADMIN)
+    assert response.status_code == 204, response.text
+    assert client.get("/api/v1/packages", headers=READ).json() == []
+    assert not list(packages_dir.glob("*.zip")), "파일이 남았다"
+    # 두 번째는 404다 — 지워진 것을 또 지우지 않는다.
+    assert client.delete("/api/v1/packages/shared.approval/1.0.0", headers=ADMIN).status_code == 404
+
+
+def test_delete_is_refused_while_another_package_uses_it(client: TestClient, packages_dir: Path) -> None:
+    """참조가 있으면 **아무것도 지우지 않는다** — 막은 것을 `detail`에 담아 돌려준다 (C5 `in_use`)."""
+    upload_common(client, package_id="shared.approval", version="1.0.0", kind="process_lib")
+    upload_common(
+        client,
+        package_id="erp.order-entry",
+        version="3.0.0",
+        requires={"libs": ["shared.approval@1.0.0"]},
+    )
+    response = client.delete("/api/v1/packages/shared.approval/1.0.0", headers=ADMIN)
+    assert response.status_code == 409 and response.json()["code"] == "in_use"
+    assert response.json()["detail"]["dependents"] == ["erp.order-entry@3.0.0"]
+    assert len(list(packages_dir.glob("*.zip"))) == 2, "거부했는데 파일이 지워졌다"
+    assert len(client.get("/api/v1/packages", headers=READ).json()) == 2
+
+
+def test_delete_is_refused_while_a_deployment_points_at_it(client: TestClient) -> None:
+    """배포가 가리키면 막는다. **철회된 배포는 세지 않는다** — 행은 남지만 실행을 허용하지 않는다.
+
+    배포 행을 바로 넣는다 — 진짜 배포에는 Admin 키와 등록된 Bot UI가 필요하고 그 길은 C2
+    시험이 이미 지킨다. 여기서 보는 것은 **삭제가 무엇을 보고 막는가**다.
+    """
+    info = upload_common(client, package_id="shared.approval", version="1.0.0", kind="process_lib")
+
+    def add_deployment(deployment_id: str, *, revoked: str | None) -> None:
+        with client.app.state.store.tx() as cur:  # type: ignore[attr-defined]
+            cur.execute(
+                "INSERT INTO deployments (deployment_id, target_type, target_id, bpm_process_id,"
+                " version, content_hash, envelope_json, revoked_json, at)"
+                " VALUES (?, 'bot_ui', 'bui_1', ?, ?, ?, '{}', ?, '2026-10-03T09:00:00+09:00')",
+                (deployment_id, info["id"], info["version"], info["content_hash"], revoked),
+            )
+
+    # 철회된 배포 하나만 있을 때는 막지 않는다.
+    add_deployment("dep_00000001", revoked='{"revoked_at": "2026-10-04T09:00:00+09:00"}')
+    # 살아 있는 배포가 생기면 막는다 — **그것만** `detail`에 담긴다.
+    add_deployment("dep_00000002", revoked=None)
+    response = client.delete("/api/v1/packages/shared.approval/1.0.0", headers=ADMIN)
+    assert response.status_code == 409 and response.json()["code"] == "in_use"
+    assert response.json()["detail"]["deployments"] == ["dep_00000002"]
+
+    with client.app.state.store.tx() as cur:  # type: ignore[attr-defined]
+        cur.execute("UPDATE deployments SET revoked_json = '{}' WHERE deployment_id = 'dep_00000002'")
+    assert client.delete("/api/v1/packages/shared.approval/1.0.0", headers=ADMIN).status_code == 204
+
+
+def test_delete_needs_the_admin_token(client: TestClient) -> None:
+    """서명은 필요 없지만 **읽기 토큰으로는 안 된다** (C5 권한표 — 막는 쪽이라 관리자 토큰이다)."""
+    upload_common(client, package_id="shared.approval", version="1.0.0", kind="process_lib")
+    denied = client.delete("/api/v1/packages/shared.approval/1.0.0", headers=READ)
+    assert denied.status_code == 403 and denied.json()["code"] == "admin_only"
+    assert len(client.get("/api/v1/packages", headers=READ).json()) == 1
+
+
+def test_provides_travels_in_the_manifest(client: TestClient) -> None:
+    """CON-06 「제공 정의」·「제공 도구」가 읽는 것은 **올라온 매니페스트**다 (C1 — Center가 짓지 않는다)."""
+    body = upload_common(
+        client,
+        package_id="shared.approval",
+        version="1.0.0",
+        kind="process_lib",
+        provides={
+            "processes": [
+                {
+                    "process_id": "Proc_approval",
+                    "file": "process/main.bpmn",
+                    "name": "공통 결재",
+                    "reads": ["금액"],
+                    "writes": ["결과"],
+                    "run_location": "server",
+                    "ai_tasks": 0,
+                    "human": {"approval_center": True},
+                }
+            ]
+        },
+    )
+    found = client.get(f"/api/v1/packages/{body['id']}/1.0.0/info", headers=READ).json()
+    one = found["manifest"]["provides"]["processes"][0]
+    assert (one["process_id"], one["reads"], one["writes"]) == ("Proc_approval", ["금액"], ["결과"])
+    assert one["human"]["approval_center"] is True
 
 
 def test_canonical_json_is_used_for_the_hash() -> None:

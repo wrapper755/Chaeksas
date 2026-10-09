@@ -1,0 +1,60 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-dependent-info",
+  "additionalProperties": true,
+  "description": "`GET /packages/{id}/{version}/dependents`의 한 줄 — 이 패키지를 쓰는 패키지 하나.\n\n**읽을 때 센다** (참조 그래프를 저장하지 않는다 — `missing_resources`와 같은 결).",
+  "properties": {
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "kind": {
+      "title": "Kind",
+      "type": "string"
+    },
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    },
+    "pinned_hash": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pinned Hash"
+    },
+    "relation": {
+      "title": "Relation",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "version",
+    "kind",
+    "status",
+    "relation"
+  ],
+  "title": "DependentInfo",
+  "type": "object"
+}

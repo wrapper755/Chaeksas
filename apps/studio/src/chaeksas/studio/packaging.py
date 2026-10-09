@@ -14,10 +14,12 @@ from __future__ import annotations
 
 import json
 import zipfile
+from collections.abc import Collection, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
 from chaeksas.contracts import Violation
+from chaeksas.contracts.bpmn_ext import BpmnProcess
 from chaeksas.contracts.hashing import content_hash_from_files
 from chaeksas.contracts.manifest import (
     Built,
@@ -25,6 +27,8 @@ from chaeksas.contracts.manifest import (
     HumanNeeds,
     Manifest,
     ManifestInput,
+    ProvidedProcess,
+    Provides,
     Requires,
     ServiceAppNeed,
     TaskTypeNeed,
@@ -53,16 +57,26 @@ def _entry(process: BpmProcess) -> Definition:
     return found
 
 
-def collect_requires(process: BpmProcess) -> Requires:
-    """그림에서 「무엇이 필요한가」를 모은다 (C1 `requires`)."""
+def collect_requires(
+    process: BpmProcess,
+    *,
+    definitions: Sequence[Definition] | None = None,
+    inside: Collection[str] | None = None,
+) -> Requires:
+    """그림에서 「무엇이 필요한가」를 모은다 (C1 `requires`).
+
+    `definitions`를 주면 **그 정의들만** 본다 (공유 BPM 프로세스 패키지는 고른 정의만 담는다).
+    `inside`는 「이 패키지 안에 있는 정의 id」로, 그 밖을 부르면 `libs`가 된다.
+    """
     domains: set[str] = set()
     tools: set[str] = set()
     apps: dict[str, ServiceAppNeed] = {}
     task_types: dict[str, TaskTypeNeed] = {}
     extensions: dict[str, ExtensionNeed] = {}
     libs: set[str] = set()
+    within = set(process.processes()) if inside is None else set(inside)
 
-    for definition in process.definitions:
+    for definition in process.definitions if definitions is None else definitions:
         found = definition.process
         if found is None:
             continue
@@ -93,7 +107,7 @@ def collect_requires(process: BpmProcess) -> Requires:
                 task_types[task.type] = TaskTypeNeed(
                     id=task.type, extension=task.extension, run_locations=[]
                 )
-            if node.called_element and node.called_element not in process.processes():
+            if node.called_element and node.called_element not in within:
                 libs.add(node.called_element)
 
     return Requires(
@@ -106,23 +120,65 @@ def collect_requires(process: BpmProcess) -> Requires:
     )
 
 
-def collect_human(process: BpmProcess) -> HumanNeeds:
-    """사람 개입 종류 (C1 `human`) — 서버 검사가 쓴다."""
+def human_of(found: BpmnProcess) -> HumanNeeds:
+    """정의 하나의 사람 개입 종류. 공유 정의마다도 적는다 (C1 `provides.processes[].human`)."""
     center = field = confirmation = False
-    for definition in process.definitions:
+    for node in found.all_nodes():
+        approval = node.prop("approval")
+        if approval is None:
+            continue
+        if node.kind == "manualTask":
+            confirmation = True
+        elif approval.location == "field":
+            field = True
+        else:
+            center = True
+    return HumanNeeds(approval_center=center, approval_field=field, confirmation=confirmation)
+
+
+def collect_human(process: BpmProcess, *, definitions: Sequence[Definition] | None = None) -> HumanNeeds:
+    """사람 개입 종류 (C1 `human`) — 서버 검사가 쓴다. 정의마다 합친다."""
+    out = HumanNeeds()
+    for definition in process.definitions if definitions is None else definitions:
         if definition.process is None:
             continue
-        for node in definition.process.all_nodes():
-            approval = node.prop("approval")
-            if approval is None:
-                continue
-            if node.kind == "manualTask":
-                confirmation = True
-            elif approval.location == "field":
-                field = True
-            else:
-                center = True
-    return HumanNeeds(approval_center=center, approval_field=field, confirmation=confirmation)
+        here = human_of(definition.process)
+        out = HumanNeeds(
+            approval_center=out.approval_center or here.approval_center,
+            approval_field=out.approval_field or here.approval_field,
+            confirmation=out.confirmation or here.confirmation,
+        )
+    return out
+
+
+def collect_provides(definitions: Sequence[Definition]) -> Provides:
+    """공유 BPM 프로세스 패키지가 제공하는 정의들 (C1 `provides.processes`). CON-06이 읽는다.
+
+    **`reads`·`writes`는 선언한 것이다** — `chk:process.inputs`·`outputs`를 그대로 옮긴다.
+    그림에서 어림하지 않는다: 확장 태스크가 만드는 변수는 플랫폼이 모르고(ADR-0018) 어림한 값을
+    「부르는 쪽이 줘야 하는 것」으로 보이면 거짓말이 된다. 호출(`chk:call`)의 받는 값을 검사하는
+    B14도 **선언한 `outputs`**와 맞춰 보니 약속은 거기에 있다.
+
+    `description`은 비운다 — 정의에 설명 칸이 없다 (C14 `chk:process`).
+    """
+    out = []
+    for definition in definitions:
+        found = definition.process
+        if found is None:
+            continue
+        out.append(
+            ProvidedProcess(
+                process_id=found.id,
+                file=f"process/{definition.path.name}",
+                name=found.name or found.id,
+                reads=[one.name for one in found.info.inputs],
+                writes=list(found.info.outputs),
+                run_location=found.info.run_location,
+                ai_tasks=sum(1 for node in found.all_nodes() if node.prop("aiTask") is not None),
+                human=human_of(found),
+            )
+        )
+    return Provides(processes=out)
 
 
 def collect_triggers(entry: Definition) -> list[Trigger]:
@@ -178,6 +234,91 @@ def build_manifest(process: BpmProcess, *, by: str = "studio", core: str = "0.1.
     )
 
 
+def build_lib_manifest(
+    process: BpmProcess,
+    definitions: Sequence[Definition],
+    *,
+    by: str = "studio",
+    core: str = "0.1.0",
+) -> Manifest:
+    """공유 BPM 프로세스 패키지의 매니페스트 (C1 `kind=process_lib`, STU-12).
+
+    **`entry`·`process_id`·`run_location`·`inputs`가 없다** — 이 패키지는 스스로 돌지 않고 남이
+    부르는 정의를 담는다 (R1은 `bpm_process`에만 묻는다). 실행 위치는 정의마다 `provides`에 있다.
+    """
+    chosen = [d for d in definitions if d.process is not None]
+    if not chosen:
+        raise PackageError("공유할 정의를 하나 이상 고르세요 — 읽지 못한 정의는 담을 수 없습니다.")
+    within = {d.process.id for d in chosen if d.process is not None}
+    return Manifest(
+        schema=1,
+        kind="process_lib",
+        id=process.id,
+        version=process.version,
+        name=process.name or process.id,
+        requires=collect_requires(process, definitions=chosen, inside=within),
+        human=collect_human(process, definitions=chosen),
+        provides=collect_provides(chosen),
+        built=Built(
+            by=by, at=datetime.now(UTC).isoformat(timespec="seconds"), core=core, spec_version=SPEC_VERSION
+        ),
+        content_hash="sha256:" + "0" * 64,
+    )
+
+
+def gather_lib(process: BpmProcess, definitions: Sequence[Definition]) -> dict[str, bytes]:
+    """공유 BPM 프로세스 패키지에 들어갈 파일 — **고른 BPMN**과 `memory`·`libs`, 그리고 DMN 전부.
+
+    결정(DMN)은 가려내지 않고 모두 담는다. 어느 결정을 쓰는지 골라내다 하나를 빠뜨리면 **부르는
+    쪽이 실행 때** 깨지는데, 결정 파일은 작아서 함께 담는 값이 더 싸다.
+    """
+    keep = {d.path.name for d in definitions}
+    out: dict[str, bytes] = {}
+    for name, body in gather(process).items():
+        path = Path(name)
+        if path.parts[0] == "process" and path.suffix == ".bpmn" and path.name not in keep:
+            continue
+        out[name] = body
+    return out
+
+
+def check_lib(process: BpmProcess, manifest: Manifest, files: dict[str, bytes]) -> list[Violation]:
+    """C1 검사 + **담은 정의가 패키지 안에 있는지**와 **고르지 않은 형제를 부르지 않는지**.
+
+    형제를 부르면 `requires.libs`에 그 id가 들어가 「바깥 패키지」로 적히는데, 실은 같은 작업
+    폴더의 정의다. 그대로 올리면 받는 쪽이 없는 패키지를 찾는다 — 여기서 말해 주는 쪽이 낫다.
+    """
+    out = list(validate(manifest))
+    for one in manifest.provides.processes if manifest.provides else []:
+        if one.file not in files:
+            out.append(
+                Violation(rule="R1", message=f"공유할 정의가 패키지에 없다: {one.file}", items=[one.file])
+            )
+    siblings = set(process.processes())
+    outside = sorted(set(manifest.requires.libs) & siblings)
+    if outside:
+        out.append(
+            Violation(
+                rule="R1",
+                message="고르지 않은 정의를 부른다 — 함께 공유할 정의로 고르세요",
+                items=outside,
+            )
+        )
+    return out
+
+
+def export_lib(
+    process: BpmProcess, definitions: Sequence[Definition], target: Path, *, by: str = "studio"
+) -> Path:
+    """공유 BPM 프로세스 패키지 zip 하나 (STU-12 「내보내기」)."""
+    manifest = build_lib_manifest(process, definitions, by=by)
+    files = gather_lib(process, definitions)
+    blocking = [v for v in check_lib(process, manifest, files) if v.blocks]
+    if blocking:
+        raise PackageError("패키지 검사가 막습니다: " + "; ".join(v.message for v in blocking))
+    return _write(manifest, files, target)
+
+
 def gather(process: BpmProcess) -> dict[str, bytes]:
     """패키지에 들어갈 파일 (`경로 → 내용`). **케이스·실행 기록은 뺀다** (C1)."""
     out: dict[str, bytes] = {}
@@ -214,6 +355,10 @@ def export(process: BpmProcess, target: Path, *, by: str = "studio") -> Path:
     if blocking:
         raise PackageError("패키지 검사가 막습니다: " + "; ".join(v.message for v in blocking))
 
+    return _write(manifest, files, target)
+
+
+def _write(manifest: Manifest, files: dict[str, bytes], target: Path) -> Path:
     files[MANIFEST_NAME] = _as_bytes(manifest)
     # 해시는 **파일에서** 계산한다 (C2·R6). `manifest.json` 자신의 `content_hash`는 빠진다.
     manifest = manifest.model_copy(update={"content_hash": content_hash_from_files(files)})
@@ -235,18 +380,30 @@ def default_name(process: BpmProcess) -> str:
     return f"{process.id}-{process.version}.zip"
 
 
+def default_lib_name(process: BpmProcess) -> str:
+    """공유 BPM 프로세스 패키지의 기본 파일 이름 — Bot 패키지와 **한 폴더에서 구별되게**."""
+    return f"{process.id}-lib-{process.version}.zip"
+
+
 __all__ = [
     "EXCLUDED",
     "INCLUDED",
     "MANIFEST_NAME",
     "SPEC_VERSION",
     "PackageError",
+    "build_lib_manifest",
     "build_manifest",
     "check",
+    "check_lib",
     "collect_human",
+    "collect_provides",
     "collect_requires",
     "collect_triggers",
+    "default_lib_name",
     "default_name",
     "export",
+    "export_lib",
     "gather",
+    "gather_lib",
+    "human_of",
 ]

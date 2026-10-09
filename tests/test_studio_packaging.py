@@ -17,20 +17,24 @@ from pathlib import Path
 import pytest
 
 from chaeksas.contracts.hashing import content_hash_zip
-from chaeksas.contracts.manifest import Manifest
+from chaeksas.contracts.manifest import Manifest, validate
 from chaeksas.studio.packaging import (
     EXCLUDED,
     MANIFEST_NAME,
     PackageError,
+    build_lib_manifest,
     build_manifest,
     check,
     collect_human,
     collect_requires,
+    default_lib_name,
     default_name,
     export,
+    export_lib,
     gather,
+    gather_lib,
 )
-from chaeksas.studio.workspace import BpmProcess, Workspace
+from chaeksas.studio.workspace import BpmProcess, Definition, Workspace
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
 
@@ -160,3 +164,92 @@ def test_the_inputs_go_into_the_manifest(tmp_path: Path) -> None:
     first = made.inputs[0]
     assert (first.type, first.required) == ("string", False)
     assert first.description and "지난달" in first.description
+
+
+# ─────────── 공유 BPM 프로세스 패키지 (STU-12·C1 `provides`) ───────────
+
+#: 호출(`callActivity`)이 있는 예제 — 가져오면 호출 대상까지 두 정의가 된다.
+CALLER = "fx03_call_mapping"
+CALLER_FILE = f"{CALLER}.bpmn"
+CALLEE_FILE = "fx03b_amount_branch.bpmn"
+
+
+def picked(made: BpmProcess, *names: str) -> list[Definition]:
+    return [d for d in made.definitions if d.path.name in names]
+
+
+def test_a_shared_package_is_not_a_bot(tmp_path: Path) -> None:
+    """`process_lib`에는 진입이 없다 — 스스로 돌지 않고 남이 부르는 정의를 담는다 (C1 R1)."""
+    made = imported(tmp_path, CALLER)
+    manifest = build_lib_manifest(made, picked(made, CALLEE_FILE))
+    assert manifest.kind == "process_lib"
+    assert (manifest.entry, manifest.process_id, manifest.run_location) == (None, None, None)
+    assert not [v for v in validate(manifest) if v.blocks], "C1이 막는다"
+
+
+def test_a_shared_package_says_what_it_provides(tmp_path: Path) -> None:
+    """CON-06 「제공 정의」가 읽는 칸을 **그림에서** 채운다 — 사람이 두 번 적지 않는다."""
+    made = imported(tmp_path, CALLER)
+    manifest = build_lib_manifest(made, picked(made, CALLEE_FILE))
+    assert manifest.provides is not None
+    (one,) = manifest.provides.processes
+    assert one.process_id == "Proc_fx03b_amount_branch"
+    assert one.file == f"process/{CALLEE_FILE}"
+    assert one.ai_tasks == 0 and one.human is not None
+
+
+def test_reads_and_writes_are_what_the_definition_declared(tmp_path: Path) -> None:
+    """**선언한 것**을 옮긴다 (`chk:process.inputs`·`outputs`) — 그림에서 어림하지 않는다.
+
+    호출(`chk:call`)의 받는 값을 보는 B14도 선언한 `outputs`와 맞춰 보니 약속은 거기에 있다.
+    확장 태스크가 만드는 변수는 플랫폼이 모르므로(ADR-0018) 어림한 값을 「부르는 쪽이 줘야
+    하는 것」으로 보이면 거짓말이 된다.
+    """
+    made = imported(tmp_path, CALLER)
+    callee = picked(made, CALLEE_FILE)[0]
+    assert callee.process is not None
+    manifest = build_lib_manifest(made, [callee])
+    assert manifest.provides is not None
+    (one,) = manifest.provides.processes
+    assert one.reads == [decl.name for decl in callee.process.info.inputs]
+    assert one.writes == list(callee.process.info.outputs)
+    assert one.reads, "이 예제는 입력을 선언한다 (시험이 빈 목록을 통과시키지 않게)"
+
+
+def test_only_the_picked_definitions_go_in(tmp_path: Path) -> None:
+    """고르지 않은 BPMN은 빠지고, 결정(DMN)은 **가려내지 않고 모두** 담는다."""
+    made = imported(tmp_path, CALLER)
+    files = gather_lib(made, picked(made, CALLEE_FILE))
+    assert f"process/{CALLEE_FILE}" in files
+    assert f"process/{CALLER_FILE}" not in files
+    assert [name for name in gather(made) if name.endswith(".dmn")] == [
+        name for name in files if name.endswith(".dmn")
+    ]
+
+
+def test_calling_a_definition_you_did_not_pick_is_blocked(tmp_path: Path) -> None:
+    """그대로 두면 같은 작업 폴더의 id가 `requires.libs`에 「바깥 패키지」로 적힌다 — 받는 쪽이 없는 것을 찾는다."""
+    made = imported(tmp_path, CALLER)
+    with pytest.raises(PackageError, match="고르지 않은 정의를 부른다"):
+        export_lib(made, picked(made, CALLER_FILE), tmp_path / "lib.zip")
+
+
+def test_picking_the_caller_and_the_callee_together_works(tmp_path: Path) -> None:
+    made = imported(tmp_path, CALLER)
+    both = picked(made, CALLER_FILE, CALLEE_FILE)
+    written = export_lib(made, both, tmp_path / "밖" / default_lib_name(made))
+    assert written.is_file()
+    manifest = Manifest.model_validate_json(
+        zipfile.ZipFile(written).read(MANIFEST_NAME).decode("utf-8")
+    )
+    assert manifest.provides is not None
+    assert len(manifest.provides.processes) == 2
+    assert manifest.requires.libs == [], "안에 있는 것을 바깥 패키지로 적지 않는다"
+    # 받는 쪽이 다시 계산해 맞아야 한다 (C2·R6).
+    assert manifest.content_hash == content_hash_zip(written)
+
+
+def test_a_shared_package_needs_at_least_one_definition(tmp_path: Path) -> None:
+    made = imported(tmp_path, CALLER)
+    with pytest.raises(PackageError, match="하나 이상"):
+        build_lib_manifest(made, [])

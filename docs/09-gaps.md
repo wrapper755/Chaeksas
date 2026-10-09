@@ -19,11 +19,11 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 | 계약 | 문서 머리말 | 코드 | 「구현됨」까지 남은 것 |
 | --- | --- | --- | --- |
-| C1 | 합의 | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | `Provides`를 **아무도 채우지 않는다** (§3-1) |
+| C1 | **구현됨** | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | — (닫았다 — Studio가 `Provides`를 짓고 CON-06이 읽는다) |
 | C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
 | C3 | **구현됨** | `contracts.events`·`core.run_log` | — (닫았다: `ui_session`은 [ADR-0041](decisions/0041-extension-run-events.md), `case_id`·`queued_s`는 아는 쪽이 넣는다) |
 | C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠다) |
-| C5 | 합의 | `contracts.center_api`, Center 전부 | `dependents`·`DELETE /packages`가 없다 (§3-6 — CON-06과 한 덩이다) |
+| C5 | **구현됨** | `contracts.center_api`, Center 전부 | — (닫았다 — 지원 종료·참조·삭제까지) |
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
 | C7 | 구현됨 | `contracts.resources`·`center_keys` | 외부 확장 앱의 `health`를 **보지 않는다** (§3-7) |
 | C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
@@ -48,21 +48,6 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 ## 3. 계약 쪽 기능 공백
 
-### 3-1. C1 `Provides`를 채우는 쪽이 없다
-
-- **문서:** C1 112줄 — `provides.processes[]{process_id, file, name, description, reads[], writes[], run_location, ai_tasks, human}`, `provides.tools[]`. CON-06 「제공 정의」·「제공 도구」가 읽는다.
-- **코드:** `contracts.manifest`에 모델이 있다 (`provides: Provides | None = None`, 선택 칸).
-- **없는 것:** Studio 패키지 내보내기(`apps/studio/packaging.py`)가 `provides`를 **아예 만들지 않는다.** 읽는 쪽(CON-06)도 없다.
-- **크기:** 중간 — `reads`/`writes`는 `available_vars()`가 이미 아는 것이라 그림에서 모을 수 있다.
-- **막는 것:** 쓸 자리가 **CON-06뿐이다**(§4-10). CON-06 없이 채우면 아무도 안 본다 — **묶어서 할 일이다.**
-
-### 3-6. C5 `GET …/dependents`와 `DELETE /packages/{id}/{version}`
-
-- **문서:** C5 76·77줄. CON-06 「이 패키지를 쓰는 패키지」와 CON-02·CON-06 관리자 「삭제...」(참조되면 409 `in_use`)가 쓴다.
-- **코드:** 없다. `in_use` 코드도 문서에만 있다.
-- **크기:** 중간 — 참조 그래프를 패키지 표에서 세어야 한다.
-- **막는 것:** 쓸 자리가 CON-02·CON-06이다(§4-9·4-10). **묶어서 할 일이다.**
-
 ### 3-7. C7이 외부 확장 앱의 `health`를 보지 않는다
 
 - **문서:** C13 165줄 — 외부 확장은 `adapter.health {path, expect_status}`를 선언할 수 있고 「없으면 Center는 상태를 「확인 전」으로 둔다」. 있으면 보라는 뜻이다.
@@ -81,13 +66,13 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **크기:** 큼 (나무·끌어다 놓기·문맥 메뉴·오프라인 표시).
 - **막는 것:** 「공유 BPM 프로세스」 뿌리는 §4-5(STU-11·12)가 없으면 늘 비어 있다. **뿌리별로 쪼갤 수 있다** — 「서비스 앱」·「UI 화면」만 먼저 하면 재료가 다 있다. 여기는 **코드 기여가 필요 없다** — 기여가 선언(`{id, label, resource_type, creates_task_type}`)이고 목록은 C7에서 와서 모양이 하나다 ([ADR-0042](decisions/0042-extension-contributed-panels.md) §3).
 
-### 4-5. STU-06·STU-11·STU-12·STU-15가 없다
+### 4-5. STU-06·STU-11·STU-15가 없다 (STU-12는 「내보내기」만 있다)
 
 - **문서:** `studio.md` 186(STU-06 BPM 프로세스 정보)·269(STU-11 Center 공유 자원)·283(STU-12 공유 BPM 프로세스 내보내기·올리기)·349(STU-15 확장). STU-01 메뉴 표가 넷 다 가리킨다.
-- **코드:** **없다.** 메뉴 항목도 없다 (「Center로 올리기」만 `LATER` 말풍선).
-- **없는 것:** 네 창과, STU-01 메뉴에서 빠진 항목들 — 「BPM 프로세스 정보...」·「정의 추가...」·「이 정의를 진입으로 지정」·「다른 이름으로 저장...」·「Center 공유 자원...」·「공유 BPM 프로세스로 내보내기/올리기」·「결정 수행 (재생)...」(Ctrl+F5)·「감시 모드 시작」·「리소스」(Ctrl+Shift+E)·「확장...」·「속성 패널 접기」·「레이아웃 초기화」.
-- **크기:** STU-15는 작다 (`ExtensionHost.states()`가 이미 목록을 준다). STU-06도 작다. STU-11·12는 중간 — **Center에 공유 패키지 길이 필요하다** (§3-6, CON-06).
-- **막는 것:** STU-11·12는 **공유 BPM 프로세스 패키지 쪽(C5·CON-06)에 걸린다.** STU-06·STU-15는 막는 것이 없다.
+- **코드:** STU-06·STU-11·STU-15는 **없다.** STU-12는 **「공유 BPM 프로세스로 내보내기...」가 돈다** (`ShareDefinitionsDialog`) — 「올리기」 둘은 `LATER` 말풍선이다.
+- **없는 것:** 세 창과, STU-01 메뉴에서 빠진 항목들 — 「BPM 프로세스 정보...」·「정의 추가...」·「이 정의를 진입으로 지정」·「다른 이름으로 저장...」·「Center 공유 자원...」·「결정 수행 (재생)...」(Ctrl+F5)·「감시 모드 시작」·「리소스」(Ctrl+Shift+E)·「확장...」·「속성 패널 접기」·「레이아웃 초기화」.
+- **크기:** STU-15는 작다 (`ExtensionHost.states()`가 이미 목록을 준다). STU-06도 작다. STU-11은 중간. **STU-12의 「내보내기」는 생겼다** (`ShareDefinitionsDialog` + `packaging.export_lib`) — 남은 것은 「올리기」이고 그것은 「Center로 올리기」와 **같은 거리**다 (Studio에 패키지 올리는 길이 없다).
+- **막는 것:** 없다. STU-11은 Center 리소스 목록(C7)을, STU-12 「올리기」는 Studio의 패키지 업로드를 먼저 붙이면 된다.
 
 ### 4-6. Studio 「화면」 탭 (STU-01 아래 탭)
 
@@ -108,17 +93,9 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 - **문서:** `center-console.md` 53~62줄. Bot·버전별 준비도(최근 20회), 경고 띠(사전 점검 실행 불가·리소스 누락), 관리자 「삭제...」.
 - **코드:** 탐색에 `later: "M5"`로 박혀 있다 — **M5는 끝났다.** 재료는 상당히 있다 — 실행 기록(C3)·`readiness`(C4)·`missing_resources`(C5)가 Center에 다 있다.
-- **없는 것:** 화면과, 집계(성공률·재생률·확인률·표본 수)와 `DELETE /packages`(§3-6).
+- **없는 것:** 화면과, 집계(성공률·재생률·확인률·표본 수). **`DELETE /packages`는 생겼다** — CON-06의 「삭제...」(`app/packages/tools.tsx`)를 그대로 쓸 수 있다.
 - **크기:** 중간~큼.
-- **막는 것:** 「삭제...」는 §3-6에 걸린다. 나머지는 없다.
-
-### 4-10. CON-06 공통 패키지
-
-- **문서:** `center-console.md` 116~127줄. 공유 BPM 프로세스·툴팩 목록과 상세(「제공 도구」·「제공 정의」·「이 패키지를 쓰는 패키지」), 관리자 「삭제...」.
-- **코드:** 탐색에 `later: "M5"`. 패키지 표는 Bot이 아닌 종류도 담는다 (`kind=toolpack`이 C7 툴팩 리소스의 출처다).
-- **없는 것:** 화면 + §3-1(`Provides`) + §3-6(`dependents`·`DELETE`).
-- **크기:** 중간.
-- **막는 것:** **셋이 서로를 막는다** (§3-1·§3-6·여기). 하나만 해도 쓸 데가 없다 — **한 덩이로 보는 쪽이 맞다.** STU-11·12(§4-5)도 이 덩이에 붙는다.
+- **막는 것:** 없다.
 
 ### 4-11. CON-01 「Bot UI」 필터와 UIA-03 링크
 
@@ -129,7 +106,7 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 ### 4-12. CON-00 탐색에 「서버 실행」(M7)이 없다
 
-문서는 탐색에 「서버 실행」(M7)을 둔다. 코드에는 항목 자체가 없다. **M7 몫이라 공백으로 세지 않는다** — 다만 CON-02·CON-06처럼 **꺼진 항목으로 두는 쪽이 문서와 맞다** (U3: 없는 것은 끄고 이유를 적는다).
+문서는 탐색에 「서버 실행」(M7)을 둔다. 코드에는 항목 자체가 없다. **M7 몫이라 공백으로 세지 않는다** — 다만 CON-02처럼 **꺼진 항목으로 두는 쪽이 문서와 맞다** (U3: 없는 것은 끄고 이유를 적는다).
 
 ## 5. 공백은 아니지만 적어 둘 것
 

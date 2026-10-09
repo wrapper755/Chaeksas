@@ -356,6 +356,30 @@ export async function unregisterServiceApp(appId: string): Promise<ActionResult>
   return {};
 }
 
+/**
+ * 패키지 삭제 (CON-06 「삭제...」). **되돌릴 수 없다** — 확인 창을 거쳐서만 온다.
+ *
+ * 409 `in_use`면 **아무것도 지워지지 않았다** — 막은 배포·패키지를 그대로 보여 준다 (C5).
+ * 성공하면 그 상세 주소가 404가 되므로 목록으로 돌아간다.
+ */
+export async function deletePackage(packageId: string, version: string): Promise<ActionResult> {
+  try {
+    await center.deletePackage(packageId, version);
+  } catch (cause) {
+    if (cause instanceof CenterError && cause.status === 409) {
+      const detail = cause.body?.detail ?? {};
+      const said = [
+        ...(Array.isArray(detail.deployments) ? (detail.deployments as string[]) : []),
+        ...(Array.isArray(detail.dependents) ? (detail.dependents as string[]) : []),
+      ].join(", ");
+      return { error: said ? `${cause.message} — ${said}` : cause.message };
+    }
+    return { error: message(cause) };
+  }
+  revalidatePath("/packages", "layout");
+  return {};
+}
+
 export async function refreshResources(): Promise<ActionResult> {
   try {
     await center.refreshResources();

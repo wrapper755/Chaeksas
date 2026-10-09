@@ -34,10 +34,16 @@ from chaeksas.studio import service_catalog, services
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.checks import refs_in
-from chaeksas.studio.dialogs import NewProcessDialog, pick_example
+from chaeksas.studio.dialogs import NewProcessDialog, ShareDefinitionsDialog, pick_example
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extensions import Extensions
-from chaeksas.studio.packaging import PackageError, default_name, export
+from chaeksas.studio.packaging import (
+    PackageError,
+    default_lib_name,
+    default_name,
+    export,
+    export_lib,
+)
 from chaeksas.studio.preflight import Preflight, inspect, readiness, summarize
 from chaeksas.studio.properties import Properties
 from chaeksas.studio.receiver import Receiver
@@ -167,7 +173,9 @@ class MainWindow(QMainWindow):
         files.addSeparator()
         self.save_action = self._add(files, "저장", self.save, QKeySequence.StandardKey.Save)
         self._add(files, "패키지로 내보내기...", self.export_package)
+        self._add(files, "공유 BPM 프로세스로 내보내기...", self.export_shared)
         self._add(files, "Center로 올리기", lambda: self._later("center"))
+        self._add(files, "공유 BPM 프로세스 Center로 올리기", lambda: self._later("center"))
         files.addSeparator()
         self._add(files, "종료", self.close)
 
@@ -400,6 +408,38 @@ class MainWindow(QMainWindow):
             self.say(f"패키지를 만들지 못했습니다: {error}")
             return
         self.say(f"패키지를 만들었습니다: {written}")
+
+    def export_shared(self) -> None:
+        """STU-12. 고른 정의를 공유 BPM 프로세스 패키지(`process_lib`)로 내보낸다.
+
+        **저장하지 않은 편집은 들어가지 않는다** — 담는 것은 디스크의 파일이다 (`export_package`와
+        같은 관문을 쓴다).
+        """
+        if self.process is None:
+            self.say("열린 BPM 프로세스가 없습니다.")
+            return
+        if not self._may_drop_edits():
+            return
+        if self.dirty and not self.save():
+            return
+        picked = ShareDefinitionsDialog.ask(self, self.process)
+        if not picked:
+            return
+        target, _ = QFileDialog.getSaveFileName(
+            self,
+            "공유 BPM 프로세스로 내보내기",
+            str(self.settings.outputs_dir / default_lib_name(self.process)),
+            PACKAGE_FILTER,
+        )
+        if not target:
+            return
+        try:
+            written = export_lib(self.process, picked, Path(target))
+        except PackageError as error:
+            QMessageBox.warning(self, TITLE, str(error))
+            self.say(f"공유 BPM 프로세스 패키지를 만들지 못했습니다: {error}")
+            return
+        self.say(f"공유 BPM 프로세스 패키지를 만들었습니다: {written}")
 
     def run_test(self) -> None:
         if self.process is None or self.definition is None:

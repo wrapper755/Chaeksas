@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — `Provides`를 Studio가 짓고 CON-06이 읽는다) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio(빌드) → Center(업로드·검사·보관) → Bot UI·서버 실행기(설치·사전 점검) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/manifest.py` (import `chaeksas.contracts.manifest`, [ADR-0019](../decisions/0019-package-names.md)) |

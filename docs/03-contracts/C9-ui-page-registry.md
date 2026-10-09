@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 레지스트리·공개 카탈로그와 관리 콘솔이 읽는 길까지 돈다) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | UI 자동화 확장의 Bot UI 유틸리티 「UI 셀렉터 등록」(직접 호출) → UI 자동화 앱, UI 자동화 앱 관리 콘솔(UIA-02) → UI 자동화 앱, Center(공개 카탈로그 읽기) → UI 자동화 앱 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (registry.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
