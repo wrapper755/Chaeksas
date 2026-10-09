@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Admin(서명) → Center(검증·보관) → Bot UI·서버 실행기(다시 검증) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/signing.py`, `…/hashing.py` (import `chaeksas.contracts.signing`, [ADR-0019](../decisions/0019-package-names.md)) |

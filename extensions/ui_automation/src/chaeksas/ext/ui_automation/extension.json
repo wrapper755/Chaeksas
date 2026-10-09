@@ -52,7 +52,9 @@
         "health": "/v1/health",
         "token_dir": true,
         "start": "on_demand",
-        "reserve": {"path": "/v1/admin/reserve", "header": "X-CHK-Local-Admin", "token_file": "worker.admin.token"}
+        "reserve": {"path": "/v1/admin/reserve", "header": "X-CHK-Local-Admin", "token_file": "worker.admin.token"},
+        "status": {"path": "/v1/status", "header": "X-CHK-Local-Token", "token_file": "worker.token"},
+        "shutdown": {"path": "/v1/admin/shutdown", "header": "X-CHK-Local-Admin", "token_file": "worker.admin.token"}
       }
     ],
     "configuration": [

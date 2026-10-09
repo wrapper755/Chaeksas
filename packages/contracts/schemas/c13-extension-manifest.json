@@ -615,10 +615,32 @@
           ],
           "default": null
         },
+        "shutdown": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeCall"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "start": {
           "default": "on_demand",
           "title": "Start",
           "type": "string"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeCall"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "token_dir": {
           "default": false,
@@ -714,6 +736,31 @@
         "resource_type"
       ],
       "title": "ResourceView",
+      "type": "object"
+    },
+    "RuntimeCall": {
+      "additionalProperties": true,
+      "description": "런타임에 보내는 관리 호출 하나 — `{path, header, token_file}`.\n\nBot UI는 런타임의 계약(C10 등)을 **모르고** 이 선언대로만 부른다. 토큰은 런타임 폴더의\n`token_file`에서 **부를 때마다** 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다 (ADR-0023).",
+      "properties": {
+        "header": {
+          "title": "Header",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "token_file": {
+          "title": "Token File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "header",
+        "token_file"
+      ],
+      "title": "RuntimeCall",
       "type": "object"
     },
     "RuntimeReserve": {

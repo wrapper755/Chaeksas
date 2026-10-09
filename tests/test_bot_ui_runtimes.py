@@ -273,6 +273,31 @@ def test_the_tools_menu_comes_from_the_extensions(window: Any) -> None:
     assert "요소 담기..." in menu_texts(window)
 
 
+def test_the_tray_tools_menu_opens_the_same_utilities(app: Any, window: Any) -> None:
+    """BUI-01 — **트레이가 주 진입점**이다 (창을 닫아도 트레이에 남는다). docs/09-gaps.md §4-3.
+
+    붙이기 전까지 트레이 항목은 전부 `setEnabled(False)`였고 이름도 확장 id였다 — 같은 메뉴가
+    메인 창에서는 돌고 있었다. 창은 **메인 창이 쥔다** (같은 것을 두 번 열지 않는 자리다).
+    """
+    from PySide6.QtWidgets import QMenu, QSystemTrayIcon  # noqa: PLC0415
+
+    from chaeksas.bot_ui.tray import Tray  # noqa: PLC0415
+
+    if not QSystemTrayIcon.isSystemTrayAvailable():
+        pytest.skip("이 환경에는 시스템 트레이가 없다")
+    tray = Tray(window._agent, parent=app)  # noqa: SLF001
+    asked: list[tuple[str, str]] = []
+    tray.open_utility.connect(lambda e, u: asked.append((e, u)))
+    tray.refresh()
+    tools = next(one for one in tray.contextMenu().findChildren(QMenu) if one.title() == "도구")
+    actions = [one for one in tools.actions() if one.text() == "요소 담기..."]
+    assert actions and actions[0].isEnabled(), "이름은 기여의 label이고, 눌릴 수 있어야 한다"
+    actions[0].trigger()
+    assert asked == [("demo", "pick-things")]
+    tray.hide()
+    tray.setParent(None)
+
+
 def test_a_utility_that_cannot_start_its_runtime_does_not_open(
     window: Any, monkeypatch: Any, modal_boxes: list[tuple[str, str]]
 ) -> None:

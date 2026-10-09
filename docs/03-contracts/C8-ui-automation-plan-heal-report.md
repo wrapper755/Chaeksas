@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Worker 프로세스 → UI 자동화 앱 (실행 중 Bot·Studio를 대신해서) |
 | 코드 위치 | `extensions/ui_automation/contracts/plan.py` — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)). 계획·치유·보고가 한 파일에 있다 |

@@ -216,6 +216,8 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
                   "—"
                 )}
               </dd>
+              <dt className="text-text-muted">Worker 예약</dt>
+              <dd className="font-mono">{info.worker?.reserved_for ?? "—"}</dd>
               <dt className="text-text-muted">OS</dt>
               <dd>{info.os}</dd>
               <dt className="text-text-muted">버전</dt>

@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from chaeksas.bot_ui import machine
 from chaeksas.bot_ui.bots import InstalledBot, find, installed
@@ -138,6 +139,10 @@ class Agent:
     last_problem: CenterProblem | None = None
     #: 마지막 하트비트 응답으로 내려온 지시 (화면이 보여 준다).
     jobs_waiting: list[JobDispatch] = field(default_factory=list)
+    #: 런타임이 마지막으로 말한 상태 (C13 `status`). BUI-09가 **이것을 읽는다** — 화면이 제
+    #: 손으로 묻지 않는다(GUI 스레드에서 2초씩 멈춘다). `None`은 아직 묻지 않은 것,
+    #: 빈 사전은 **물었는데 못 받은 것**이다 (둘은 화면에서 다르게 말한다).
+    worker_status: dict[str, Any] | None = None
     #: 실행 기록 큐 (C3). 처음 쓸 때 만든다 — 설정이 가리키는 폴더를 그때 읽는다.
     _runs: RunQueue | None = None
     #: 실행기를 띄우는 쪽 (ADR-0023). 마찬가지로 처음 쓸 때 만든다.
@@ -413,17 +418,27 @@ class Agent:
         return found
 
     def worker_state(self) -> WorkerState:
-        """C4 `worker`. 감시자가 없으면 「꺼 둠」(`off`)이다 — 확장이 아직 없는 PC."""
+        """C4 `worker`. 감시자가 없으면 「꺼 둠」(`off`)이다 — 확장이 아직 없는 PC.
+
+        **예약은 런타임이 말하는 것을 싣는다** (C13 `status` → C10 `reserved_for`) — 우리가 예약을
+        걸어 두었더라도 런타임이 다시 떴으면 예약은 사라진다. 상태를 못 받으면 **비운다**
+        (모르는 것을 적지 않는다, CON-03 「예약」).
+        """
         worker = self.supervisors.get("worker")
         if worker is None:
             return WorkerState(state="off", restarts=0, session="idle")
         # 「지금 무엇을 하나」는 런타임이 `health`로 말해 준다 (C13). 없으면 모른 채 둔다.
-        health = self.runtimes().health_of("worker") if worker.state == "running" else None
+        running = worker.state == "running"
+        health = self.runtimes().health_of("worker") if running else None
+        status = self.runtimes().status_of("worker") if running else None
+        # 화면이 같은 것을 또 묻지 않게 들고 있는다 (BUI-09는 Agent에서만 읽는다).
+        self.worker_status = (status or {}) if running else None
         return WorkerState(
             state=worker.state,
             version=str((health or {}).get("version") or "") or None,
             restarts=worker.restarts,
             session=str((health or {}).get("session") or "idle"),
+            reserved_for=str((status or {}).get("reserved_for") or "") or None,
         )
 
     def wire_status(self) -> str:

@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 import time
@@ -81,6 +82,8 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
 )
 from chaeksas.ext.ui_automation.worker.ladder import Finder, Healer, TableRead, run_step
 from chaeksas.ext.ui_automation.worker.routing import platform_of
+
+log = logging.getLogger(__name__)
 
 #: 최근 세션을 몇 개까지 들고 있나 (BUI-09).
 RECENT_MAX = 20
@@ -221,6 +224,11 @@ class Worker:
     idle_s: float = SESSION_IDLE_S
     clock: Callable[[], float] = time.monotonic
     version: str = "0.1.0"
+    #: 아직 못 보낸 보고가 몇 건인가 (C10 `/v1/status`의 `unsent_reports`, BUI-09가 보인다).
+    #: 큐는 `plans` 쪽에 있으므로 **띄우는 쪽이** 세는 함수를 준다 (`serve()`는 늘 준다).
+    unsent: Callable[[], int] | None = None
+    #: 곱게 끄는 길 (C10 `POST /v1/admin/shutdown`). 띄우는 쪽이 서버를 멈추는 함수를 준다.
+    stopper: Callable[[], None] | None = None
 
     session: Session | None = None
     reserved_for: str | None = None
@@ -664,8 +672,35 @@ class Worker:
             reserved_for=self.reserved_for,
             holder=self.session.holder if self.session else None,
             recent_sessions=list(self.recent),
-            unsent_reports=0,
+            unsent_reports=self._unsent_count(),
         )
+
+    def _unsent_count(self) -> int:
+        """밀린 보고 수. **세다 실패해도 상태를 못 주는 일은 없다** (0으로 답한다)."""
+        if self.unsent is None:
+            return 0
+        try:
+            return int(self.unsent())
+        except Exception:  # noqa: BLE001 — 디스크를 읽는 일이다
+            log.exception("밀린 보고를 세다 실패했다")
+            return 0
+
+    # ── 끄기 ──
+
+    def shutdown(self) -> dict[str, Any]:
+        """C10 `POST /v1/admin/shutdown` — **닫고 나서** 끈다 (Bot UI 종료 순서, BUI-01 10번).
+
+        열린 세션을 닫으면 그 보고가 큐에 저장된다 (`_end`) — 그래서 프로세스를 그냥 죽이는
+        것과 다르다. 큐를 **비우려 들지는 않는다**: 네트워크를 타는 일이라 종료를 붙잡는다.
+        다시 떴을 때 보낸다.
+        """
+        closed = self.session is not None
+        if closed:
+            self.unreserve()
+        left = self._unsent_count()
+        if self.stopper is not None:
+            self.stopper()
+        return {"closed_session": closed, "unsent_reports": left}
 
 
 # ─────────────────────────── HTTP ───────────────────────────
@@ -832,6 +867,11 @@ def create_app(worker: Worker) -> FastAPI:
     def force_close(session_id: str, request: Request) -> Any:
         check_admin(request)
         return {"closed": worker.force_close(session_id)}
+
+    @router.post("/admin/shutdown")
+    def shutdown(request: Request) -> Any:
+        check_admin(request)
+        return worker.shutdown()
 
     app.include_router(router)
     return app
