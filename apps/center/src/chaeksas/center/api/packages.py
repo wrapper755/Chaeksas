@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
+from chaeksas.center.api.signing import STATUS_REVOKED
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import MAX_PACKAGE_MB
 from chaeksas.center.storage import Store, dumps, loads, now_iso
@@ -23,6 +24,8 @@ from chaeksas.contracts.manifest import validate as validate_manifest
 
 #: 업로드된 패키지의 처음 상태 (C5 — 승인은 Admin 서명 봉투로만 올라간다, C2).
 STATUS_CANDIDATE = "candidate"
+#: 지원 종료 (C5 `PUT …/status`) — **막는 쪽이라 서명이 없다**. 철회(`revoked`)는 서명이 있다.
+STATUS_DEPRECATED = "deprecated"
 
 #: zip 안전 검사 한도. 푸는 쪽(현장 PC)을 지키려고 Center가 먼저 본다.
 MAX_ENTRIES = 5000
@@ -222,6 +225,39 @@ def listing(
     if package_id:
         found = [p for p in found if p.id == package_id]
     return found
+
+
+def set_status(store: Store, package_id: str, version: str, raw: Any) -> PackageInfo:
+    """`PUT /packages/{id}/{version}/status` — 지원 종료 표시 (C5).
+
+    **서명이 없다.** 실행을 허용하는 쪽(승인·배포)이 아니라 **막는 쪽**이라서 토큰 권한으로
+    한다 (C5 §패키지). 그래서 **받는 값은 `deprecated` 하나뿐이다** — 되돌리는 것은 「다시
+    허용」이라 서명이 필요하고, 그 길은 승인(`PUT …/signature`)이다.
+
+    - `revoked`는 **끝이다** — 철회된 것은 되살아나지 않고 더 막을 것도 없다 (409).
+    - 이미 `deprecated`면 그대로 돌려준다 (멱등).
+    - 어느 상태에서든 지원 종료로 갈 수 있다 (`candidate`도 — 새 배포를 막는 뜻이다).
+    """
+    asked = raw if isinstance(raw, dict) else {}
+    status = str(asked.get("status") or "")
+    if status != STATUS_DEPRECATED:
+        raise ApiError(
+            422,
+            "input_invalid",
+            f"이 길로는 {STATUS_DEPRECATED}만 둘 수 있다 (되돌리려면 승인 봉투를 다시 올린다)",
+        )
+    row = store.row("SELECT status FROM packages WHERE id = ? AND version = ?", (package_id, version))
+    if row is None:
+        raise ApiError(404, "package_not_found", f"그 패키지가 없다: {package_id}@{version}")
+    if row["status"] == STATUS_REVOKED:
+        raise ApiError(409, "package_revoked", f"{package_id}@{version}은 승인이 철회됐다")
+    if row["status"] != STATUS_DEPRECATED:
+        with store.tx() as cur:
+            cur.execute(
+                "UPDATE packages SET status = ? WHERE id = ? AND version = ?",
+                (STATUS_DEPRECATED, package_id, version),
+            )
+    return info_of(store, package_id, version)
 
 
 def file_path(store: Store, *, package_dir: Path, package_id: str, version: str) -> tuple[Path, str]:

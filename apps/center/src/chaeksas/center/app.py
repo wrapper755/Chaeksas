@@ -195,6 +195,12 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             },
         )
 
+    @app.put(f"{API}/packages/{{package_id}}/{{version}}/status")
+    async def set_package_status(request: Request, package_id: str, version: str) -> Any:
+        """지원 종료 표시 (C5). **서명이 없다** — 허용하는 쪽이 아니라 막는 쪽이라서다."""
+        require_admin(authenticate(request))
+        return packages.set_status(app.state.store, package_id, version, await _json(request))
+
     # ─────────────────── 서명 (C2·C5) ───────────────────
 
     @app.put(f"{API}/packages/{{package_id}}/{{version}}/signature")

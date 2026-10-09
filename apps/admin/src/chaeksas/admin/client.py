@@ -80,6 +80,12 @@ class Center:
             self.call("POST", f"/packages/{package_id}/{version}/revoke", body=envelope.to_json_dict())
         )
 
+    def deprecate(self, package_id: str, version: str) -> dict[str, Any]:
+        """지원 종료 표시 (C5 — **서명이 없다**, 막는 쪽이라서 토큰 권한으로 한다)."""
+        return dict(
+            self.call("PUT", f"/packages/{package_id}/{version}/status", body={"status": "deprecated"})
+        )
+
     def deploy(self, envelope: Envelope) -> dict[str, Any]:
         return dict(self.call("POST", "/deployments", body=envelope.to_json_dict()))
 

@@ -180,6 +180,24 @@ def revoke_package(args: argparse.Namespace, center: Center) -> int:
     return 0
 
 
+def deprecate(args: argparse.Namespace, center: Center) -> int:
+    """지원 종료 표시 (C5 — **서명이 없다**, 막는 쪽이라서 토큰 권한으로 한다).
+
+    **이미 배포된 것은 그대로 돈다** — 새 배포만 막는다. 돌고 있는 Bot을 세우려면 배포 철회
+    (`revoke-deploy`)이고, 그쪽은 서명이 필요하다.
+    """
+    if not _ask(
+        f"{args.id}@{args.version}을 지원 종료로 표시하면 **새 배포**가 막힙니다 "
+        "(이미 배포된 것은 그대로 돕니다). 계속할까요?",
+        assume_yes=args.yes,
+    ):
+        print("취소했습니다.")
+        return 1
+    found = center.deprecate(args.id, args.version)
+    print(f"지원 종료로 표시했습니다 — {found.get('id')}@{found.get('version')} ({found.get('status')})")
+    return 0
+
+
 # ─────────────────────────── 배포 (ADM-03) ───────────────────────────
 
 
@@ -552,6 +570,11 @@ def parser() -> argparse.ArgumentParser:
     dropped_ext.add_argument("--out", help="봉투를 쓸 파일")
     dropped_ext.set_defaults(run=revoke_extension)
 
+    stop = subs.add_parser("deprecate", help="지원 종료 표시 (서명 없음 — 새 배포만 막는다)")
+    stop.add_argument("id")
+    stop.add_argument("version")
+    stop.set_defaults(run=deprecate)
+
     drop = subs.add_parser("revoke-package", help="패키지 승인 철회 서명")
     drop.add_argument("id")
     drop.add_argument("version")
@@ -578,6 +601,7 @@ __all__ = [
     "approve",
     "deploy",
     "deployments",
+    "deprecate",
     "job_cancel",
     "job_list",
     "job_new",

@@ -667,3 +667,58 @@ def test_json_responses_declare_utf8(client: TestClient) -> None:
     ):
         assert response.headers["content-type"] == "application/json; charset=utf-8", response.request.url
     assert "내 Windows PC" in client.get("/api/v1/center-keys", headers=ADMIN).content.decode("utf-8")
+
+
+# ─────────────────── 지원 종료 (C5 `PUT …/status`) ───────────────────
+
+
+def test_deprecating_moves_the_status_but_is_not_a_revoke(client: TestClient) -> None:
+    """**막는 쪽이라 서명이 없다** (C5) — 토큰 권한으로 한다. 내려받기는 그대로 된다.
+
+    새 배포가 정말 막히는지는 `test_m5_deploy.py`가 봉투까지 갖춰 본다.
+    """
+    upload(client, build_package())
+    response = client.put(
+        "/api/v1/packages/invoice-check/1.0.0/status", json={"status": "deprecated"}, headers=ADMIN
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "deprecated"
+    assert client.get("/api/v1/packages/invoice-check/1.0.0/info", headers=READ).json()["status"] == (
+        "deprecated"
+    )
+    # **철회가 아니다** — 이미 배포된 것이 돌 수 있어야 하므로 내려받기는 410이 아니다.
+    assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=READ).status_code == 200
+
+
+def test_deprecating_twice_is_the_same_answer(client: TestClient) -> None:
+    upload(client, build_package())
+    for _ in range(2):
+        response = client.put(
+            "/api/v1/packages/invoice-check/1.0.0/status", json={"status": "deprecated"}, headers=ADMIN
+        )
+        assert (response.status_code, response.json()["status"]) == (200, "deprecated")
+
+
+def test_this_path_cannot_un_deprecate_or_approve(client: TestClient) -> None:
+    """**허용하는 쪽은 서명이다** — 이 길로는 `deprecated`만 둘 수 있다 (C5)."""
+    upload(client, build_package())
+    for asked in ("approved", "candidate", "revoked", ""):
+        response = client.put(
+            "/api/v1/packages/invoice-check/1.0.0/status", json={"status": asked}, headers=ADMIN
+        )
+        assert response.status_code == 422, asked
+        assert response.json()["code"] == "input_invalid"
+
+
+def test_deprecating_needs_the_admin_token(client: TestClient) -> None:
+    upload(client, build_package())
+    assert client.put(
+        "/api/v1/packages/invoice-check/1.0.0/status", json={"status": "deprecated"}, headers=READ
+    ).status_code == 403
+
+
+def test_deprecating_a_package_we_do_not_have_is_404(client: TestClient) -> None:
+    response = client.put(
+        "/api/v1/packages/없는것/1.0.0/status", json={"status": "deprecated"}, headers=ADMIN
+    )
+    assert response.status_code == 404 and response.json()["code"] == "package_not_found"

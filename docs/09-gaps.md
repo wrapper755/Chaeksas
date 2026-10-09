@@ -23,7 +23,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
 | C3 | **구현됨** | `contracts.events`·`core.run_log` | — (닫았다: `ui_session`은 [ADR-0041](decisions/0041-extension-run-events.md), `case_id`·`queued_s`는 아는 쪽이 넣는다) |
 | C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠다) |
-| C5 | 합의 | `contracts.center_api`, Center 전부 | `deprecated`로 **만들 길이 없다** (§3-5). `dependents`·`DELETE /packages` 없음 (§3-6) |
+| C5 | 합의 | `contracts.center_api`, Center 전부 | `dependents`·`DELETE /packages`가 없다 (§3-6 — CON-06과 한 덩이다) |
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
 | C7 | 구현됨 | `contracts.resources`·`center_keys` | 외부 확장 앱의 `health`를 **보지 않는다** (§3-7) |
 | C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
@@ -55,14 +55,6 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **없는 것:** Studio 패키지 내보내기(`apps/studio/packaging.py`)가 `provides`를 **아예 만들지 않는다.** 읽는 쪽(CON-06)도 없다.
 - **크기:** 중간 — `reads`/`writes`는 `available_vars()`가 이미 아는 것이라 그림에서 모을 수 있다.
 - **막는 것:** 쓸 자리가 **CON-06뿐이다**(§4-10). CON-06 없이 채우면 아무도 안 본다 — **묶어서 할 일이다.**
-
-### 3-5. C5 `deprecated`로 만들 길이 없다
-
-- **문서:** C5 75줄 `PUT /packages/{id}/{version}/status {status:"deprecated"}`(「서명이 필요 없다 — 막는 쪽이라서」), `06-screens/admin.md`의 `chk-admin deprecate <id> <버전>`. STU-11·CON-02가 「지원 종료」로 보인다.
-- **코드:** `KNOWN_PACKAGE_STATUSES`에 `deprecated`가 있고, **배포 검사가 그것을 막는다** (`center_api.py:205`).
-- **없는 것:** Center에 그 엔드포인트가 없고 `chk-admin deprecate`도 없다. **상태는 닿을 수 없는 값이다.**
-- **크기:** 작다 (엔드포인트 하나 + CLI 한 줄).
-- **막는 것:** 없다.
 
 ### 3-6. C5 `GET …/dependents`와 `DELETE /packages/{id}/{version}`
 
