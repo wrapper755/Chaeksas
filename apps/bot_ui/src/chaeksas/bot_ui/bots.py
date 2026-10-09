@@ -5,11 +5,15 @@
   (C5가 Center에서 막는 것과 같은 검사. 수동 설치는 Center를 거치지 않는다).
 - **서명은 설치할 때 본다** (`deploy.py`, C2 V1~V7). 여기 「서명」 칸은 설치된 패키지 안의
   봉투를 읽어 보일 뿐이다 — 모르는 것을 「확인됨」이라고 하지 않는다.
+- **「출처」도 설치할 때 남긴다** (`write_source`) — 푸는 것만으로는 Center 배포인지 사람이 고른
+  파일인지 알 수 없다. 표식이 없는 폴더는 「알 수 없음」이다 (같은 이유로 「수동 설치」라고
+  단정하지 않는다 — 표식을 남기기 전에 설치된 것일 수 있다).
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,10 +22,22 @@ from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.signing import Envelope
 
+log = logging.getLogger(__name__)
+
 #: 설치된 Bot이 사는 곳 (`data_dir()/bots/<id>/<버전>/`).
 BOTS_DIR = "bots"
 #: 패키지 안의 승인 봉투 (C2) — 설치하면 폴더에 그대로 남는다.
 SIGNATURE_NAME = "SIGNATURE"
+#: 「출처」 표식 — 패키지에 들어 있는 것이 아니라 **설치하는 쪽이** 봉투 옆에 쓴다.
+INSTALL_SOURCE_NAME = "INSTALL_SOURCE"
+
+#: 표식에 적는 값. 파일에는 ASCII로 적고, 화면 표기는 `SOURCE_LABELS`가 준다.
+CENTER = "center"
+MANUAL = "manual"
+
+#: BUI-04 「출처」의 표기. **모르는 것은 둘 중 하나라고 하지 않는다.**
+SOURCE_LABELS = {CENTER: "Center 배포", MANUAL: "수동 설치"}
+SOURCE_UNKNOWN = "알 수 없음"
 
 #: 푸는 쪽 한도 (C5의 Center 쪽 검사와 같은 뜻).
 MAX_ENTRIES = 5000
@@ -73,9 +89,45 @@ class InstalledBot:
             return "서명 읽지 못함"
         return f"승인됨 ({envelope.key_id[:8]}…)"
 
+    @property
+    def source(self) -> str:
+        """어디서 왔나 (BUI-04 「출처」).
+
+        **모르는 것은 「수동 설치」라고 하지 않는다** — 표식은 설치하는 쪽이 남기므로
+        (`write_source`), 표식이 없으면 그 폴더가 배포로 온 것인지 사람이 고른 파일인지
+        알 길이 없다 (표식을 남기기 전에 설치된 것일 수 있다). 그때는 「알 수 없음」이다.
+        """
+        found = self.folder / INSTALL_SOURCE_NAME
+        if not found.is_file():
+            return SOURCE_UNKNOWN
+        try:
+            raw = json.loads(found.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return SOURCE_UNKNOWN
+        if not isinstance(raw, dict):
+            return SOURCE_UNKNOWN
+        return SOURCE_LABELS.get(str(raw.get("source") or ""), SOURCE_UNKNOWN)
+
 
 def bots_dir(data_dir: Path) -> Path:
     return data_dir / BOTS_DIR
+
+
+def write_source(folder: Path, source: str) -> None:
+    """설치한 쪽이 「출처」를 남긴다 (BUI-04).
+
+    **`install()`이 쓰지 않는 것은 일부러다** — 푸는 것만으로는 어느 쪽인지 알 수 없다.
+    아는 쪽이 적는다: `deploy.py`는 `CENTER`, BUI-04 「패키지 파일에서 설치...」는 `MANUAL`.
+
+    쓰지 못하면 **기록만 남긴다** — 설치는 이미 됐고, 그 폴더의 「출처」가 「알 수 없음」이
+    되는 것은 거짓이 아니다 (설치 자체를 실패로 만들 일은 아니다).
+    """
+    try:
+        (folder / INSTALL_SOURCE_NAME).write_text(
+            json.dumps({"source": source}, ensure_ascii=False), encoding="utf-8", newline="\n"
+        )
+    except OSError as e:
+        log.warning("「출처」 표식을 남기지 못했다 (%s): %s", folder, e)
 
 
 def check_zip(path: Path) -> None:
@@ -183,8 +235,13 @@ def write_inputs(path: Path, inputs: dict[str, object]) -> None:
 
 __all__ = [
     "BOTS_DIR",
+    "CENTER",
+    "INSTALL_SOURCE_NAME",
+    "MANUAL",
     "MAX_ENTRIES",
     "MAX_UNCOMPRESSED_MB",
+    "SOURCE_LABELS",
+    "SOURCE_UNKNOWN",
     "InstallError",
     "InstalledBot",
     "bots_dir",
@@ -194,4 +251,5 @@ __all__ = [
     "installed",
     "read_manifest",
     "write_inputs",
+    "write_source",
 ]

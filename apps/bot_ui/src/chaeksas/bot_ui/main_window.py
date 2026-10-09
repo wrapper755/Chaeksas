@@ -34,7 +34,14 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.bot_ui.agent import Agent
-from chaeksas.bot_ui.bots import InstalledBot, InstallError, install, installed
+from chaeksas.bot_ui.bots import (
+    MANUAL,
+    InstalledBot,
+    InstallError,
+    install,
+    installed,
+    write_source,
+)
 from chaeksas.bot_ui.keys_dialog import KeysDialog
 from chaeksas.bot_ui.runner import Running
 from chaeksas.bot_ui.runtimes import RuntimeUnavailable, port_for
@@ -389,7 +396,7 @@ class MainWindow(QMainWindow):
                 state = "대기"
             found = self._agent.preflight(bot)
             token, shown, tip = readiness_label(found)
-            for column, text in enumerate((bot.name, bot.version, "수동 설치", bot.signature, shown, state)):
+            for column, text in enumerate((bot.name, bot.version, bot.source, bot.signature, shown, state)):
                 item = QTableWidgetItem(text)
                 if column == READY_COLUMN:
                     color = theme.status_color("Bot 준비", token, part="fg")
@@ -441,6 +448,8 @@ class MainWindow(QMainWindow):
         except InstallError as e:
             QMessageBox.warning(self, WINDOW_TITLE, str(e))
             return
+        # **사람이 고른 파일은 이 자리가 적는다** (BUI-04 「출처」) — 적지 않으면 「알 수 없음」이다.
+        write_source(bot.folder, MANUAL)
         self.refresh()
         self.statusBar().showMessage(f"{bot.name} {bot.version}을 설치했습니다.")
 

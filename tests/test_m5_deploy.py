@@ -27,7 +27,16 @@ from fastapi.testclient import TestClient
 from chaeksas.admin import keys as keystore
 from chaeksas.admin.cli import main as admin_main
 from chaeksas.admin.client import Center, CenterProblem
-from chaeksas.bot_ui.bots import installed
+from chaeksas.bot_ui.bots import (
+    CENTER,
+    INSTALL_SOURCE_NAME,
+    MANUAL,
+    SIGNATURE_NAME,
+    SOURCE_UNKNOWN,
+    install,
+    installed,
+    write_source,
+)
 from chaeksas.bot_ui.deploy import APPLIED, REJECTED, Deployer, read_signature
 from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
@@ -378,6 +387,119 @@ def test_a_download_failure_is_not_a_refusal(center: Center, tmp_path: Path) -> 
     one = deployer(center, tmp_path)
     one.fetch = broken
     assert one.apply(_envelopes(center)) == [], "기다림이다 (거부로 보고하지 않는다)"
+
+
+# ─────────────────────────── BUI-04 「출처」 ───────────────────────────
+#
+# 표식은 **설치하는 쪽이** 남긴다 (`write_source`) — 푸는 것만으로는 배포로 온 것인지
+# 사람이 고른 파일인지 알 수 없다. 그래서 표식이 없으면 「알 수 없음」이다.
+
+
+def _manual(data_dir: Path, tmp_path: Path, name: str = "manual.zip") -> Any:
+    """BUI-04 「패키지 파일에서 설치...」가 하는 그대로 — 설치하고 **그 자리가** 적는다."""
+    package = tmp_path / name
+    package.write_bytes(package_zip())
+    bot = install(data_dir, package)
+    write_source(bot.folder, MANUAL)
+    return bot
+
+
+def test_a_deployed_bot_says_it_came_from_center(center: Center, tmp_path: Path) -> None:
+    """배포로 설치된 것은 「Center 배포」다 — 표식이 봉투 옆에 남는다 (BUI-04)."""
+    key = admin_key(center)
+    info = approved(center, key)
+    center.deploy(deployment(key, info))
+
+    assert [one.result for one in deployer(center, tmp_path).apply(_envelopes(center))] == [APPLIED]
+    [bot] = installed(tmp_path / "botui")
+    assert bot.source == "Center 배포"
+    assert (bot.folder / INSTALL_SOURCE_NAME).is_file(), "표식은 봉투 옆에 있다"
+    assert (bot.folder / SIGNATURE_NAME).is_file(), "봉투는 그대로 남는다"
+    assert json.loads((bot.folder / INSTALL_SOURCE_NAME).read_text(encoding="utf-8")) == {
+        "source": CENTER
+    }
+
+
+def test_a_manually_installed_bot_says_so(tmp_path: Path) -> None:
+    """사람이 고른 파일은 「수동 설치」다."""
+    data_dir = tmp_path / "botui"
+    _manual(data_dir, tmp_path)
+    [bot] = installed(data_dir)
+    assert bot.source == "수동 설치"
+
+
+def test_an_unmarked_folder_is_not_called_a_manual_install(tmp_path: Path) -> None:
+    """**모르는 것은 「수동 설치」라고 하지 않는다** (`bots.py`의 원칙).
+
+    `install()`만 거친 폴더 — 표식을 남기기 전에 설치된 Bot이 이 꼴이다. 배포로 온 것일
+    수도 있으므로 둘 중 하나로 단정하지 않는다.
+    """
+    data_dir = tmp_path / "botui"
+    package = tmp_path / "bare.zip"
+    package.write_bytes(package_zip())
+    bot = install(data_dir, package)
+
+    assert not (bot.folder / INSTALL_SOURCE_NAME).exists(), "`install()`은 적지 않는다"
+    assert bot.source == SOURCE_UNKNOWN == "알 수 없음"
+    assert installed(data_dir)[0].source == SOURCE_UNKNOWN, "목록에서도 같다"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["", "{", "[]", "null", '{"source": ""}', '{"source": "somewhere"}', '"center"'],
+    ids=["빈 파일", "깨진 JSON", "목록", "null", "빈 값", "모르는 값", "글자"],
+)
+def test_a_marker_it_cannot_read_is_unknown_too(tmp_path: Path, raw: str) -> None:
+    """읽지 못하는 표식으로 **단정하지 않는다** — 「서명」 칸과 같은 태도다."""
+    data_dir = tmp_path / "botui"
+    package = tmp_path / "bare.zip"
+    package.write_bytes(package_zip())
+    bot = install(data_dir, package)
+    (bot.folder / INSTALL_SOURCE_NAME).write_text(raw, encoding="utf-8")
+    assert bot.source == SOURCE_UNKNOWN
+
+
+def test_installing_over_a_deployed_bot_rewrites_the_mark(center: Center, tmp_path: Path) -> None:
+    """같은 판을 사람이 다시 넣으면 「수동 설치」다 — **폴더에 있는 것은 그 파일이다**."""
+    key = admin_key(center)
+    info = approved(center, key)
+    center.deploy(deployment(key, info))
+    data_dir = tmp_path / "botui"
+    deployer(center, tmp_path).apply(_envelopes(center))
+    assert installed(data_dir)[0].source == "Center 배포"
+
+    _manual(data_dir, tmp_path)  # 같은 id·버전 → 덮어쓴다 (`install`이 먼저 비운다)
+    [bot] = installed(data_dir)
+    assert bot.source == "수동 설치", "표식도 덮어써야 한다 (옛 표식이 남으면 거짓이 된다)"
+
+
+def test_a_skipped_deployment_leaves_the_mark_alone(center: Center, tmp_path: Path) -> None:
+    """이미 그 판이 있으면 배포는 **조용히 지나간다** — 표식도 그대로다.
+
+    사람이 넣은 파일이 그 폴더에 있는 것이니 「수동 설치」가 맞다 (설치하지 않았으므로).
+    """
+    key = admin_key(center)
+    info = approved(center, key)
+    center.deploy(deployment(key, info))
+    data_dir = tmp_path / "botui"
+    _manual(data_dir, tmp_path)
+
+    assert deployer(center, tmp_path).apply(_envelopes(center)) == [], "이미 그 판이 있다"
+    assert installed(data_dir)[0].source == "수동 설치"
+
+
+def test_the_mark_does_not_make_the_bot_unreadable(tmp_path: Path) -> None:
+    """표식은 패키지 안이 아니라 **푼 폴더**에 있다 — 해시·매니페스트를 건드리지 않는다."""
+    data_dir = tmp_path / "botui"
+    package = tmp_path / "one.zip"
+    package.write_bytes(package_zip())
+    bot = install(data_dir, package)
+    before = bot.content_hash
+    write_source(bot.folder, MANUAL)
+
+    [again] = installed(data_dir)
+    assert again.id == bot.id and again.version == bot.version
+    assert content_hash_zip(package) == before, "zip은 그대로다"
 
 
 # ─────────────────────────── 명령줄 ───────────────────────────
