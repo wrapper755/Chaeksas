@@ -20,14 +20,27 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.contracts.service_app import ServiceAppKey
-from chaeksas.ext.ui_automation.contracts.console import CHECK_OK, CHECK_WARN, ConsoleOverview
+from chaeksas.contracts.service_app import Caller, OpRequest, ServiceAppKey
+from chaeksas.ext.ui_automation.contracts.console import (
+    CHECK_OK,
+    CHECK_WARN,
+    ConsoleOverview,
+    PageDetail,
+    PathResult,
+    SessionPage,
+)
 from chaeksas.ext.ui_automation.contracts.plan import (
+    AttemptReport,
     HealedReport,
     LocatorSpec,
     SessionReport,
 )
-from chaeksas.ext.ui_automation.contracts.registry import ElementHint, PageRegistration
+from chaeksas.ext.ui_automation.contracts.registry import (
+    CatalogEntry,
+    ElementHint,
+    LocatorStats,
+    PageRegistration,
+)
 from chaeksas.ext.ui_automation.service.app import REGISTRY_WRITE, Service, create
 from chaeksas.ext.ui_automation.service.store import MAX_SESSIONS, Database, SessionStore
 from chaeksas.service_kit import ServiceLlm, issue
@@ -270,3 +283,274 @@ def test_a_revoked_registrar_key_does_not_count(made: tuple[TestClient, Service]
         )
     )
     assert {one.id: one.level for one in overview(client).checks}["registrar_key"] == CHECK_WARN
+
+
+# ─────────── UIA-02 셀렉터 (화면 목록·화면 하나·경로) ───────────
+
+
+def with_pages(service: Service) -> None:
+    """두 화면 — 주문 입력(요소 둘, 저장이 완료 화면으로 이동)과 주문 완료."""
+    service.registry.register(
+        PageRegistration(
+            schema=1,
+            page_id="erp.order.form",
+            name="ERP 주문 입력",
+            platform="web",
+            url_pattern="https://erp.example.com/order/*",
+            elements={
+                "order.qty": ElementHint(name="수량", role="textbox", description="주문 수량", kind="control"),
+                "order.save": ElementHint(name="저장", role="button", kind="control"),
+            },
+            catalog={
+                "order.qty": CatalogEntry(actions=["fill", "read"], concepts=["수량"]),
+                "order.save": CatalogEntry(
+                    actions=["click"], depends_on=["order.qty"], navigates_to="erp.order.done"
+                ),
+            },
+            locators={
+                "order.qty": [LocatorSpec(type="test_id", value="qty"), LocatorSpec(type="css", value="#qty")],
+                "order.save": [LocatorSpec(type="role", value="button", name="저장")],
+            },
+        )
+    )
+    service.registry.register(
+        PageRegistration(
+            schema=1,
+            page_id="erp.order.done",
+            name="ERP 주문 완료",
+            platform="web",
+            locators={"done.msg": [LocatorSpec(type="css", value=".done")]},
+        )
+    )
+    service.flush()
+
+
+def test_the_page_listing_has_no_selectors(made: tuple[TestClient, Service]) -> None:
+    """고르기 목록이다 — **셀렉터는 화면 하나를 열 때만** 나간다 (C9)."""
+    client, service = made
+    with_pages(service)
+    response = client.get("/admin/v1/pages", headers=ADMIN)
+    assert response.status_code == 200
+    body = response.text
+    assert "erp.order.form" in body and "ERP 주문 입력" in body
+    assert "#qty" not in body and "test_id" not in body
+
+
+def test_the_page_detail_carries_locators_stats_and_elements(made: tuple[TestClient, Service]) -> None:
+    client, service = made
+    with_pages(service)
+    service.registry.stats[("erp.order.form", "order.qty", "test_id|qty|")] = LocatorStats(
+        success=12, fail=9, streak=0
+    )
+    found = PageDetail.model_validate(
+        client.get("/admin/v1/pages/erp.order.form", headers=ADMIN).json()
+    )
+    assert [one.semantic_key for one in found.locators] == ["order.qty", "order.qty", "order.save"]
+    first = found.locators[0]
+    assert (first.type, first.value, first.rank) == ("test_id", "qty", 2), "사다리 순서대로 (rank)"
+    assert (first.success, first.fail) == (12, 9)
+    assert first.success_rate == round(12 / 21, 4)
+    # **센 적이 없으면 `None`** — 0%와 다르다.
+    assert found.locators[1].success_rate is None
+    assert [one.type for one in found.strategies] == ["css", "role", "test_id"]
+    keys = {one.semantic_key: one for one in found.elements}
+    assert keys["order.save"].navigates_to == "erp.order.done"
+    assert keys["order.save"].depends_on == ["order.qty"]
+    assert keys["order.qty"].concepts == ["수량"]
+
+
+def test_a_page_we_do_not_have_is_404(made: tuple[TestClient, Service]) -> None:
+    client, _ = made
+    response = client.get("/admin/v1/pages/nope", headers=ADMIN)
+    assert response.status_code == 404
+    assert response.json()["code"] == "not_found"
+
+
+def test_the_warning_band_comes_from_the_demotion_rule(made: tuple[TestClient, Service]) -> None:
+    """C8 강등 규칙 — 최근 실패율이 높은 `active`를 **경고만** 한다 (자동 강등은 없다)."""
+    client, service = made
+    with_pages(service)
+    page = service.registry.page("erp.order.form")
+    page.locators["order.save"][0] = page.locators["order.save"][0].model_copy(update={"status": "active"})
+    service.registry.stats[("erp.order.form", "order.save", "role|button|저장")] = LocatorStats(
+        success=2, fail=9, streak=0
+    )
+    found = PageDetail.model_validate(
+        client.get("/admin/v1/pages/erp.order.form", headers=ADMIN).json()
+    )
+    assert found.warnings and "order.save" in found.warnings[0]
+    assert [one.status for one in found.locators if one.semantic_key == "order.save"] == ["active"]
+
+
+def test_the_path_is_the_shortest_one_breadth_first(made: tuple[TestClient, Service]) -> None:
+    """간선은 요소의 `navigates_to`다 (ADR-0040) — SQL에 밀어 넣지 않는다."""
+    client, service = made
+    with_pages(service)
+    found = PathResult.model_validate(
+        client.get("/admin/v1/path?start=erp.order.form&goal=erp.order.done", headers=ADMIN).json()
+    )
+    assert found.found and found.path == ["erp.order.form", "erp.order.done"]
+
+
+def test_no_path_says_so_instead_of_pretending(made: tuple[TestClient, Service]) -> None:
+    client, service = made
+    with_pages(service)
+    found = PathResult.model_validate(
+        client.get("/admin/v1/path?start=erp.order.done&goal=erp.order.form", headers=ADMIN).json()
+    )
+    assert found.found is False and found.path == []
+    # 등록되지 않은 화면도 「없다」다 (지어내지 않는다).
+    assert service.registry.path("nope", "erp.order.form") == []
+    assert service.registry.path("erp.order.form", "erp.order.form") == ["erp.order.form"]
+
+
+def test_the_path_needs_both_ends(made: tuple[TestClient, Service]) -> None:
+    client, _ = made
+    response = client.get("/admin/v1/path?start=erp.order.form", headers=ADMIN)
+    assert response.status_code == 422 and response.json()["code"] == "input_invalid"
+
+
+# ─────────── UIA-03 모니터링 (이력·폴백 분포) ───────────
+
+
+def op(report: SessionReport, *, host: str = "재무팀 PC-03") -> dict[str, Any]:
+    """C11 봉투에 보고를 실어 보내는 모양 — `caller`·`mode`가 여기 있다."""
+    return OpRequest(
+        schema=1,
+        mode="deterministic",
+        run_id="run_20261009_101500_aaaaaa",
+        node_id="Task_Fill",
+        node_instance=1,
+        attempt=1,
+        caller=Caller(type="bot_ui", host=host, bpm_process_id="erp.order-entry", version="2.1.0"),
+        input=report.to_json_dict(),
+    ).to_json_dict()
+
+
+def test_the_report_path_writes_what_the_envelope_said(made: tuple[TestClient, Service]) -> None:
+    """UIA-03의 「Bot」·「Bot UI」·「요청 쪽」·「수행 모드」는 **봉투에서** 온다 (C8 보고에 없다)."""
+    client, service = made
+    with_pages(service)
+    request = OpRequest.model_validate(op(report("run_20261009_101500_aaaaaa:Task_Fill:1:1")))
+    service.report(request, "deterministic")
+    row = SessionPage.model_validate(client.get("/admin/v1/sessions", headers=ADMIN).json()).rows[0]
+    assert (row.caller, row.mode) == ("bot_ui", "deterministic")
+    assert (row.bpm_process_id, row.host) == ("erp.order-entry", "재무팀 PC-03")
+    assert row.report["business_key"] == "run_20261009_101500_aaaaaa:Task_Fill:1:1"
+
+
+def test_a_healed_locator_is_marked_in_the_selector_table(made: tuple[TestClient, Service]) -> None:
+    """레지스트리에는 「치유로 들어왔다」는 표시가 없다 — **보고에서** 모은다 (UIA-02)."""
+    client, service = made
+    with_pages(service)
+    healed = report(
+        "run_20261009_111500_bbbbbb:Task_Fill:1:1",
+        healed=[
+            HealedReport(
+                semantic_key="order.qty",
+                locator=LocatorSpec(type="css", value="#qty-new"),
+                supersedes=["test_id|qty|"],
+                reasoning="테스트 id가 사라졌다",
+            ).to_json_dict()
+        ],
+    )
+    service.report(OpRequest.model_validate(op(healed)), "deterministic")
+    found = PageDetail.model_validate(
+        client.get("/admin/v1/pages/erp.order.form", headers=ADMIN).json()
+    )
+    marked = [one for one in found.locators if one.healed]
+    assert [one.value for one in marked] == ["#qty-new"], "사다리에 더해지고 치유 표시가 붙는다"
+    assert marked[0].supersedes == ["test_id|qty|"]
+    assert marked[0].status == "unverified", "치유가 찾은 것도 검증 전이다 (C8)"
+
+
+def test_the_fallback_spread_counts_how_deep_we_went(made: tuple[TestClient, Service]) -> None:
+    """`0`이 **1순위로 바로 성공**한 것이다. 끝까지 실패한 요소는 깊이가 아니다."""
+    client, service = made
+    assert service.sessions is not None
+    service.sessions.record(
+        report(
+            "run_20261009_101500_aaaaaa:T:1:1",
+            attempts=[
+                AttemptReport(semantic_key="order.qty", locator_key="test_id|qty|", succeeded=True).to_json_dict(),
+                AttemptReport(semantic_key="order.save", locator_key="role|button|저장", succeeded=True).to_json_dict(),
+            ],
+        ),
+        at=AT,
+    )
+    service.sessions.record(
+        report(
+            "run_20261009_111500_bbbbbb:T:1:1",
+            attempts=[
+                AttemptReport(
+                    semantic_key="order.qty", locator_key="test_id|qty|", succeeded=False, failure_reason="not_found"
+                ).to_json_dict(),
+                AttemptReport(semantic_key="order.qty", locator_key="css|#qty|", succeeded=True).to_json_dict(),
+                AttemptReport(
+                    semantic_key="order.save", locator_key="role|button|저장", succeeded=False
+                ).to_json_dict(),
+            ],
+        ),
+        at=AT,
+    )
+    found = SessionPage.model_validate(client.get("/admin/v1/sessions", headers=ADMIN).json()).fallback
+    assert found.depths == {"0": 2, "1": 1}, "성공한 요소만 센다 (끝까지 실패한 것은 빠진다)"
+    assert (found.first_hit, found.counted) == (2, 3)
+
+
+def test_the_history_is_newest_first_and_bounded(made: tuple[TestClient, Service]) -> None:
+    client, service = made
+    assert service.sessions is not None
+    for n in range(3):
+        service.sessions.record(
+            report(f"run_20261009_1015{n:02d}_aaaaaa:T:1:1"), at=f"2026-10-09T10:1{n}:00+00:00"
+        )
+    found = SessionPage.model_validate(client.get("/admin/v1/sessions?limit=2", headers=ADMIN).json())
+    assert len(found.rows) == 2, "`limit`을 지킨다"
+    assert found.rows[0].at and found.rows[0].at > (found.rows[1].at or ""), "새 것이 위"
+    assert found.counts.total == 3, "요약은 기록 전부를 센다 (`limit`과 무관하다)"
+
+
+def test_the_history_has_no_business_values(made: tuple[TestClient, Service]) -> None:
+    """원칙 6 — 보고에 읽은 값이 없으니 이력에도 없다."""
+    client, service = made
+    assert service.sessions is not None
+    service.sessions.record(report("run_20261009_101500_aaaaaa:T:1:1"), at=AT)
+    raw = client.get("/admin/v1/sessions", headers=ADMIN).text
+    assert "주식회사" not in raw and "010-" not in raw
+
+
+def test_the_console_paths_need_the_admin_token(made: tuple[TestClient, Service]) -> None:
+    """UIA-02·03도 같은 문이다 — 열어 둔 구멍이 없다."""
+    client, _ = made
+    for path in ("/admin/v1/pages", "/admin/v1/pages/x", "/admin/v1/path?start=a&goal=b", "/admin/v1/sessions"):
+        assert client.get(path).status_code == 401, path
+
+
+def test_an_old_database_gets_the_new_columns(tmp_path: Path) -> None:
+    """이미 있는 파일에 **열만 더한다** — 기존 기록을 버리지 않는다."""
+    import sqlite3
+
+    path = tmp_path / "old.sqlite3"
+    with sqlite3.connect(path) as db:
+        db.executescript(
+            "CREATE TABLE sessions (business_key TEXT PRIMARY KEY, at TEXT NOT NULL, page_id TEXT NOT NULL, "
+            "origin TEXT NOT NULL, status TEXT NOT NULL, healed INTEGER NOT NULL DEFAULT 0, "
+            "report_json TEXT NOT NULL);"
+        )
+        db.execute(
+            "INSERT INTO sessions VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("run_20261008_101500_aaaaaa:T:1:1", AT, "erp.order.form", "run", "succeeded", 0,
+             report("run_20261008_101500_aaaaaa:T:1:1").model_dump_json()),
+        )
+    sessions = SessionStore(db=Database(path=path))
+    rows = sessions.rows(limit=9)
+    assert len(rows) == 1, "옛 기록이 남아 있다"
+    assert (rows[0].caller, rows[0].mode) == ("", ""), "모르는 것은 비어 있다 (화면이 「—」로 보인다)"
+    sessions.record(
+        report("run_20261009_101500_bbbbbb:T:1:1"),
+        at="2026-10-09T11:00:00+00:00",
+        caller="studio",
+        mode="autonomous",
+    )
+    assert [one.caller for one in sessions.rows(limit=9)] == ["studio", ""], "새 것이 위"

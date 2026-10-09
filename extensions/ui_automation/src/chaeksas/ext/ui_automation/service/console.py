@@ -14,8 +14,20 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
 
+from chaeksas.ext.ui_automation.service.registry import RegistryError
 from chaeksas.service_kit import admin_guard
+
+#: UIA-03 이력 기본·최대 개수 (C11 사용 기록과 같은 결 — 한도 안으로 자른다).
+DEFAULT_LIMIT = 100
+MAX_LIMIT = 1000
+
+
+def _error(status: int, code: str, message: str) -> JSONResponse:
+    """C11·C5와 같은 오류 본문."""
+    return JSONResponse(status_code=status, content={"code": code, "message": message, "detail": {}})
+
 
 if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (app.py가 이 모듈을 쓴다)
     from chaeksas.ext.ui_automation.service.app import Service
@@ -33,7 +45,44 @@ def create_router(service: Service) -> APIRouter:
             return refused
         return service.overview().to_json_dict()
 
+    @router.get("/pages")
+    def pages(request: Request) -> Any:
+        """UIA-02 화면 고르기 목록. **셀렉터는 나가지 않는다** (목록이다)."""
+        refused = admin_guard(request)
+        if refused is not None:
+            return refused
+        return service.page_listing().to_json_dict()
+
+    @router.get("/pages/{page_id}")
+    def page(request: Request, page_id: str) -> Any:
+        """UIA-02 화면 하나 — **셀렉터가 나간다** (관리자 토큰으로만 오는 길이다)."""
+        refused = admin_guard(request)
+        if refused is not None:
+            return refused
+        try:
+            return service.page_detail(page_id).to_json_dict()
+        except RegistryError as e:
+            return _error(404, "not_found", str(e))
+
+    @router.get("/path")
+    def path(request: Request, start: str = "", goal: str = "") -> Any:
+        """UIA-02 「화면 간 경로 탐색」. 둘 중 하나가 비면 422 — 화면이 묻기 전이다."""
+        refused = admin_guard(request)
+        if refused is not None:
+            return refused
+        if not start or not goal:
+            return _error(422, "input_invalid", "출발·도착 화면을 모두 적어야 한다")
+        return service.page_path(start, goal).to_json_dict()
+
+    @router.get("/sessions")
+    def sessions(request: Request, limit: int = DEFAULT_LIMIT) -> Any:
+        """UIA-03 — 이력·요약·폴백 분포. `limit`은 **한도 안으로 자른다** (C11 사용 기록과 같은 결)."""
+        refused = admin_guard(request)
+        if refused is not None:
+            return refused
+        return service.session_page(limit=min(max(limit, 1), MAX_LIMIT)).to_json_dict()
+
     return router
 
 
-__all__ = ["create_router"]
+__all__ = ["DEFAULT_LIMIT", "MAX_LIMIT", "create_router"]

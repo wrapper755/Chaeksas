@@ -11,17 +11,21 @@ import { CONSOLE_PAGES } from "./console-pages.generated";
  * 화면을 올릴 수 있다 (외부 확장은 코드 기여 금지, C13 E1).
  *
  * 화면을 하나 만들면 `app/`에 경로를 더하고 여기 한 줄을 적는다. **목록 자체는 손으로 적지
- * 않는다** — `console-pages.generated.ts`가 확장 정의에서 온다.
+ * 않는다** — `console-pages.generated.ts`가 확장 정의에서 온다. 지금은 UI 자동화 확장의 셋
+ * (UIA-01~03)이 다 열려 있다.
  *
  * 값이 `Route`라서 **없는 경로를 적으면 타입 검사에서 걸린다** (Next의 typedRoutes) — 끊긴
  * 링크를 화면에 내보내지 않는다.
  */
 export const CONSOLE_MODULES: Record<string, Route> = {
   "ui-automation/overview": "/ext/ui-automation/overview",
+  "ui-automation/selectors": "/ext/ui-automation/selectors",
+  "ui-automation/monitoring": "/ext/ui-automation/monitoring",
 };
 
 /** 아직 화면이 없는 줄에 붙일 사유 (U3 — 없는 것은 끄고 이유를 가까이 적는다). */
-export const NO_MODULE = "이 화면은 아직 없습니다 (docs/09-gaps.md §4-7).";
+export const NO_MODULE =
+  "이 화면은 아직 없습니다 — 화면을 만들고 모듈 레지스트리(console-modules.ts)에 경로를 적으면 열립니다.";
 
 export interface PageLink {
   label: string;

@@ -13,10 +13,18 @@
 from __future__ import annotations
 
 import logging
+from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from chaeksas.ext.ui_automation.contracts.console import SelectorCounts
+from chaeksas.ext.ui_automation.contracts.console import (
+    ElementRow,
+    LocatorRow,
+    PageDetail,
+    SelectorCounts,
+    StrategyStat,
+)
 from chaeksas.ext.ui_automation.contracts.plan import (
     ACTIVE,
     DEPRECATED,
@@ -281,6 +289,102 @@ class Registry:
                 if total >= WARN_WINDOW and stats.fail / total > WARN_RATE:
                     out.append(f"{key}: {locator.key} (최근 실패 {stats.fail}/{total})")
         return out
+
+    # ── 관리 콘솔이 읽는 것 (C9 §관리 콘솔이 읽는 길, UIA-02) ──
+
+    def detail(self, page_id: str, *, healed: Mapping[str, list[str]] | None = None) -> PageDetail:
+        """화면 하나 전부 — 로케이터·성적·요소·전략별 합·경고 (UIA-02).
+
+        **대체된 것(`deprecated`)도 준다** — 무엇이 밀려났는지 보는 화면이다.
+        `healed`는 `{locator_key: [밀어낸 것들]}`이고 **보고가 적어 둔 것**이다 (레지스트리에는
+        치유로 들어왔다는 표시가 없다) — 부르는 쪽이 세션 기록에서 모아 준다.
+        """
+        page = self.page(page_id)
+        marks = dict(healed or {})
+        rows: list[LocatorRow] = []
+        totals: dict[str, StrategyStat] = {}
+        for key in sorted(page.locators):
+            for locator in sorted(page.locators[key], key=lambda one: one.rank):
+                stats = self.stats.get((page_id, key, locator.key))
+                tried = (stats.success + stats.fail) if stats else 0
+                rows.append(
+                    LocatorRow(
+                        semantic_key=key,
+                        rank=locator.rank,
+                        type=locator.type,
+                        value=locator.value,
+                        name=locator.name,
+                        control_type=locator.control_type,
+                        status=locator.status,
+                        success=stats.success if stats else 0,
+                        fail=stats.fail if stats else 0,
+                        # **센 적이 없으면 `None`** — 0%와 다르다 (아직 안 돌았다는 뜻).
+                        success_rate=round(stats.success / tried, 4) if stats and tried else None,
+                        streak=stats.streak if stats else 0,
+                        last_success_at=stats.last_success_at if stats else None,
+                        healed=locator.key in marks,
+                        supersedes=list(marks.get(locator.key, [])),
+                    )
+                )
+                slot = totals.setdefault(locator.type, StrategyStat(type=locator.type))
+                slot.success += stats.success if stats else 0
+                slot.fail += stats.fail if stats else 0
+
+        elements = [
+            ElementRow(
+                semantic_key=key,
+                name=page.elements[key].name if key in page.elements else None,
+                role=page.elements[key].role if key in page.elements else None,
+                description=page.elements[key].description if key in page.elements else None,
+                kind=page.elements[key].kind if key in page.elements else None,
+                actions=list(page.catalog[key].actions) if key in page.catalog else [],
+                depends_on=list(page.catalog[key].depends_on) if key in page.catalog else [],
+                concepts=list(page.catalog[key].concepts) if key in page.catalog else [],
+                navigates_to=page.catalog[key].navigates_to if key in page.catalog else None,
+            )
+            for key in sorted(page.locators)
+        ]
+        return PageDetail(
+            schema=1,
+            page_id=page.page_id,
+            name=page.name,
+            platform=page.platform,
+            revision=page.revision,
+            updated_at=page.updated_at,
+            url_pattern=page.url_pattern,
+            app=page.app,
+            locators=rows,
+            elements=elements,
+            strategies=[totals[name] for name in sorted(totals)],
+            warnings=self.warnings(page_id),
+        )
+
+    def path(self, start: str, goal: str) -> list[str]:
+        """두 화면을 잇는 **최단 하나** — 간선은 요소의 `navigates_to`다 (ADR-0040).
+
+        **너비 우선으로 앱이 찾는다** (재귀 CTE로 SQL에 밀어 넣지 않는다). 길이 없으면 빈 목록,
+        출발이 곧 도착이면 그 하나다. 등록되지 않은 화면에서 출발하면 빈 목록이다.
+        """
+        if start not in self.pages or goal not in self.pages:
+            return []
+        if start == goal:
+            return [start]
+        queue: deque[list[str]] = deque([[start]])
+        seen = {start}
+        while queue:
+            trail = queue.popleft()
+            page = self.pages.get(trail[-1])
+            if page is None:
+                continue
+            for entry in page.catalog.values():
+                next_id = entry.navigates_to
+                if not next_id or next_id in seen:
+                    continue
+                if next_id == goal:
+                    return [*trail, next_id]
+                seen.add(next_id)
+                queue.append([*trail, next_id])
+        return []
 
     # ── 공개 카탈로그 (C9 §공개 카탈로그) ──
 

@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "PageBriefRow": {
+      "additionalProperties": true,
+      "description": "UIA-02 화면 고르기 한 줄 (C9 `PageBrief`와 같은 칸).",
+      "properties": {
+        "element_count": {
+          "default": 0,
+          "title": "Element Count",
+          "type": "integer"
+        },
+        "name": {
+          "default": "",
+          "title": "Name",
+          "type": "string"
+        },
+        "page_id": {
+          "title": "Page Id",
+          "type": "string"
+        },
+        "platform": {
+          "default": "web",
+          "title": "Platform",
+          "type": "string"
+        },
+        "revision": {
+          "default": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        }
+      },
+      "required": [
+        "page_id"
+      ],
+      "title": "PageBriefRow",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c9-page-listing",
+  "additionalProperties": true,
+  "description": "`GET /admin/v1/pages` — 화면 고르기 목록.",
+  "properties": {
+    "pages": {
+      "items": {
+        "$ref": "#/$defs/PageBriefRow"
+      },
+      "title": "Pages",
+      "type": "array"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "title": "PageListing",
+  "type": "object"
+}

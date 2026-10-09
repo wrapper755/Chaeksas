@@ -8,11 +8,21 @@
 오가므로 스키마를 만들지 않는다 — 쓰는 쪽이 없는 생성물은 두지 않는다.
 """
 
-from chaeksas.ext.ui_automation.contracts.console import ConsoleOverview
+from chaeksas.ext.ui_automation.contracts.console import (
+    ConsoleOverview,
+    PageDetail,
+    PageListing,
+    PathResult,
+    SessionPage,
+)
 
 #: 파일 이름 → 모델. 이름 앞에 계약 번호를 붙여 문서에서 찾기 쉽게 한다.
 SCHEMA_MODELS = {
     "c9-console-overview": ConsoleOverview,
+    "c9-page-detail": PageDetail,
+    "c9-page-listing": PageListing,
+    "c9-path-result": PathResult,
+    "c9-session-page": SessionPage,
 }
 
 __all__ = ["SCHEMA_MODELS"]
