@@ -5,12 +5,20 @@
 
 다른 언어 도구(웹 화면의 `api-types` 등)가 같은 명세를 쓰도록 내보낸다.
 브라우저 쪽 타입은 이 스키마에서 생성한다 (ADR-0017).
+
+**확장이 소유한 계약도 내보낸다** — 확장마다 `<패키지>.contracts.SCHEMA_MODELS`를 읽어 **그
+확장의 `schemas/`**에 쓴다. 찾는 길은 확장 호스트와 같은 엔트리 포인트이고, 그래서 **이 생성기에
+확장 이름이 나오지 않는다** (ADR-0018). 확장이 소유한 계약은 그 확장 폴더에 있어야 한다
+(계약 README 원칙 1).
 """
 
 from __future__ import annotations
 
 import json
 import sys
+from importlib import import_module
+from importlib.metadata import entry_points
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -69,6 +77,11 @@ if hasattr(sys.stdout, "reconfigure"):
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = ROOT / "packages" / "contracts" / "schemas"
 
+#: 확장을 찾는 엔트리 포인트 (확장 호스트와 같은 것).
+EXTENSION_GROUP = "chaeksas.extensions"
+#: 확장 패키지 안에서 스키마를 둘 폴더 이름.
+EXTENSION_SCHEMA_DIR = "schemas"
+
 # (파일 이름, 모델) — 이름 앞에 계약 번호를 붙여 문서에서 찾기 쉽게 한다.
 MODELS: list[tuple[str, Any]] = [
     ("c1-manifest", Manifest),
@@ -119,20 +132,54 @@ MODELS: list[tuple[str, Any]] = [
 ]
 
 
+def rendered(name: str, model: Any) -> str:
+    schema = model.model_json_schema(by_alias=True)
+    schema["$id"] = f"urn:chaeksas:contracts:{name}"
+    return json.dumps(schema, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+
+
+def extension_models() -> list[tuple[Path, str, Any]]:
+    """설치된 확장이 내보낼 계약 — `(폴더, 이름, 모델)`.
+
+    확장을 **엔트리 포인트로** 찾는다 (호스트와 같은 길). `contracts.SCHEMA_MODELS`가 없거나
+    읽을 수 없으면 **그 확장만 건너뛰고 말한다** — 생성기가 멈추지 않는다.
+    """
+    out: list[tuple[Path, str, Any]] = []
+    for ep in sorted(entry_points(group=EXTENSION_GROUP), key=lambda e: e.name):
+        module = f"{ep.value}.contracts"
+        try:
+            found = getattr(import_module(module), "SCHEMA_MODELS", None)
+        except ModuleNotFoundError:
+            continue
+        if not found:
+            continue
+        try:
+            where = Path(str(files(ep.value))) / EXTENSION_SCHEMA_DIR
+        except (ModuleNotFoundError, TypeError) as e:  # pragma: no cover - 설치가 깨진 경우
+            print(f"경고: {ep.name}의 패키지 자리를 찾지 못했다 ({e}) — 건너뛴다")
+            continue
+        out += [(where, name, model) for name, model in found.items()]
+    return out
+
+
 def outputs() -> dict[Path, str]:
     out: dict[Path, str] = {}
     for name, model in MODELS:
-        schema = model.model_json_schema(by_alias=True)
-        schema["$id"] = f"urn:chaeksas:contracts:{name}"
-        text = json.dumps(schema, indent=2, ensure_ascii=False, sort_keys=True)
-        out[OUT_DIR / f"{name}.json"] = text + "\n"
+        out[OUT_DIR / f"{name}.json"] = rendered(name, model)
+    for where, name, model in extension_models():
+        out[where / f"{name}.json"] = rendered(name, model)
     return out
+
+
+def schema_dirs() -> list[Path]:
+    """생성물이 사는 폴더들 — 버려진 파일을 찾을 때 쓴다."""
+    return [OUT_DIR, *sorted({where for where, _, _ in extension_models()})]
 
 
 def main() -> int:
     check = "--check" in sys.argv
     out = outputs()
-    existing = {p for p in OUT_DIR.glob("*.json")} if OUT_DIR.exists() else set()
+    existing = {p for where in schema_dirs() if where.exists() for p in where.glob("*.json")}
     orphans = sorted(existing - set(out))
 
     if check:
@@ -141,13 +188,15 @@ def main() -> int:
             print("다름:", p.relative_to(ROOT))
         return 1 if (stale or orphans) else 0
 
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    for where in schema_dirs():
+        where.mkdir(parents=True, exist_ok=True)
     for p in orphans:
         p.unlink()
         print("지움:", p.relative_to(ROOT))
     for p, text in out.items():
         p.write_text(text, encoding="utf-8", newline="\n")
-    print(f"스키마 {len(out)}개 → {OUT_DIR.relative_to(ROOT)}")
+    places = ", ".join(sorted(where.relative_to(ROOT).as_posix() for where in schema_dirs()))
+    print(f"스키마 {len(out)}개 → {places}")
     return 0
 
 

@@ -6,14 +6,14 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | UI 자동화 확장의 Bot UI 유틸리티 「UI 셀렉터 등록」(직접 호출) → UI 자동화 앱, UI 자동화 앱 관리 콘솔(UIA-02) → UI 자동화 앱, Center(공개 카탈로그 읽기) → UI 자동화 앱 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (registry.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
-| 관련 ADR | [0010](../decisions/0010-service-apps.md) §5, [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
-| 관련 화면 | BUI-06·07·08, UIA-02, CON-07 「UI 화면」, STU-03·13 |
+| 관련 ADR | [0010](../decisions/0010-service-apps.md) §5, [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0042](../decisions/0042-extension-contributed-panels.md)(콘솔 화면) |
+| 관련 화면 | BUI-06·07·08, UIA-01·02·03, CON-07 「UI 화면」, STU-03·13 |
 
 ## 목적
 
 자동화할 화면과 그 요소(시맨틱 키), 요소마다의 로케이터 사다리를 등록·조회·삭제한다. 결과물은 UI 자동화 앱이 소유한다. 통계·승격·폐기 판단이 거기 있기 때문이다 (C8).
 
-> 상태: 네 작업과 공개 카탈로그가 **돈다** (`extensions/ui_automation/service/app.py`, 저장은 SQLite 한 파일). 부르는 쪽은 `client/registry_client.py`다. 추가 권한은 작업이 `required_scopes`로 선언하고 `service_kit`이 건다 (C11).
+> 상태: 네 작업과 공개 카탈로그가 **돈다** (`extensions/ui_automation/service/app.py`, 저장은 SQLite 한 파일). 부르는 쪽은 `client/registry_client.py`다. 추가 권한은 작업이 `required_scopes`로 선언하고 `service_kit`이 건다 (C11). **관리 콘솔이 읽는 길도 돈다** — `GET /admin/v1/overview`(UIA-01)와 UI 세션 기록이다 (아래).
 
 ## 전송
 
@@ -137,6 +137,35 @@
 - 들어가는 것: 요소 이름·종류·동작·관계·로케이터 상태 개수.
 - 들어가지 않는 것: 셀렉터, `description` 원문(치유 프롬프트용), 통계 세부.
 
+## 관리 콘솔이 읽는 길 (UIA-01~03)
+
+관리 콘솔의 **앱 고유 화면**(C13 `console.pages`, [ADR-0042](../decisions/0042-extension-contributed-panels.md))이 읽는 경로다. 코드 위치는 `extensions/ui_automation/…/service/console.py`이고 모델은 `…/contracts/console.py`다.
+
+| 경로 | 인증 | 뜻 |
+| --- | --- | --- |
+| `GET /admin/v1/overview` | **관리자 토큰** | UIA-01 개요 — 셀렉터 셈·모델·세션 셈·배포 전 확인 |
+
+- **관문은 C11 관리 API와 같다** (`service_kit.admin_guard`) — 관리자 토큰이 없으면 503 `admin_disabled`, 없는 토큰은 401, 틀린 토큰은 403이다. **업무 키로는 못 부른다** (`registry_write` 키여도 403).
+- 왜 관리자 토큰인가: **콘솔은 서비스 앱 키를 갖지 않는다** ([ADR-0013](../decisions/0013-api-keys.md)). 셀렉터를 보는 작업(`registry_get_page`)은 `registry_write` 키의 일이고, 콘솔이 그 키를 들고 있으면 「키를 발급하는 화면이 키를 쓰는」 꼴이 된다. 관리자 토큰은 키를 발급하는 토큰이라 이미 더 강하다.
+- **읽기만 한다.** 등록·삭제는 §전송의 작업(`/v1/ops/registry_*`)이고 Bot UI 유틸리티(BUI-06)의 일이다.
+- 모델은 JSON Schema로 내보낸다 (`…/ui_automation/schemas/c9-console-overview.json`, `uv run python scripts/gen_schemas.py`) — 콘솔 타입이 거기서 생성된다. **확장이 소유한 계약이라 확장 폴더에 둔다** (계약 README 원칙 1).
+
+### UI 세션 기록
+
+`report`(C8)가 도착하면 **한 줄 남긴다** — UIA-01 「최근 UI 세션」과 UIA-03이 읽는다.
+
+- **보고가 도착한 것만** 안다. C8 보고는 세션이 **끝날 때** 오므로 **「진행 중」은 없다** — 도는 세션은 현장의 BUI-09가 보여 준다. 없는 수를 0으로 보이면 「아무것도 안 돈다」로 읽히므로 칸 자체를 두지 않는다.
+- **시험 보고(`origin: test`)는 따로 센다** — 승격 통계와 같은 규칙이다 (C8).
+- 같은 `business_key`가 다시 오면 **나중 것이 이긴다** (재시도는 `attempt`가 달라 다른 키다).
+- **업무 값은 없다** — C8 보고 자체가 읽은 값·입력한 글자를 담지 않는다 (원칙 6).
+- **최근 5000줄까지** 들고 오래된 것부터 버린다. 모니터링 자료라 영원히 쌓을 이유가 없다.
+
+### 배포 전 확인 (UIA-01)
+
+**이 앱이 자기 힘으로 볼 수 있는 것만** 본다: 모델 연결, 등록 담당자 키(`registry_write` 권한이 살아 있는 키), 등록된 화면. 등급은 `ok`·`warn`이고 **막지 않는다** — 무엇이 안 되는지 알려 주는 줄이다.
+
+허용 주소·인증 설정은 **외부 확장 어댑터의 개념**(C13 §4)이고 C11을 따르는 이 앱에는 없다.
+
 ## 예시 (등록)
 
 ```json
@@ -198,6 +227,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 1 | 「관리 콘솔이 읽는 길」을 적었다 — `GET /admin/v1/overview`(UIA-01), UI 세션 기록(보고가 도착한 것만·시험은 따로·5000줄), 「배포 전 확인」. 관문은 C11 관리 API와 같은 관리자 토큰이다 | 0042 |
 | 2026-10-01 | 1 | 초안. 프로토타입 화면 등록을 C11 작업으로 옮겼다. 그 과정에서 바뀐 것: `registry_write` 권한, 셀렉터 없는 공개 카탈로그, `revision`, 삭제 때 끊길 경로를 확인하는 단계 | 0010, 0012, 0013 |
 | 2026-10-01 | 1 | 검토 반영: 레지스트리는 확장의 Bot UI 유틸리티가 직접 부름(Worker 경유 아님), 동작마다 새 `reg_` id, 바뀔 때만 `revision` 증가, 삭제 전 Center `used_by` 확인, 카탈로그를 C13 공통 형식으로·서버망 한정 | 0018 |
 | 2026-10-05 | 1 | 데스크톱 화면: `app`(앱 이름)·`window`(창 조건 `title`·`class_name`·`process`), 데스크톱이면 `window` 필수. 등록은 보낸 칸만 바꾸고 `app`·`window`가 바뀌면 `revision`을 올린다. 더하기만이라 schema는 그대로 1 | 0033 |

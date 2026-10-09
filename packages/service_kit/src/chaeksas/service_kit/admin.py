@@ -49,8 +49,12 @@ def _error(status: int, code: str, message: str, detail: dict[str, Any] | None =
     return JSONResponse(status_code=status, content={"code": code, "message": message, "detail": detail or {}})
 
 
-def _authorized(request: Request) -> JSONResponse | None:
-    """관리자 토큰인가. 설정되지 않았으면 **열지 않는다.**"""
+def admin_guard(request: Request) -> JSONResponse | None:
+    """관리자 토큰인가. 설정되지 않았으면 **열지 않는다.** 통과면 `None`.
+
+    **앱 고유 관리 경로도 이것을 쓴다** (C11 — 관문은 하나다). 확장의 서버 부분이 자기 콘솔
+    화면을 위해 `/admin/v1/<무엇>`을 더할 때, 토큰을 제 손으로 보지 않고 이 함수를 부른다.
+    """
     expected: str | None = getattr(request.app.state, "admin_token", None)
     if not expected:
         return _error(
@@ -124,7 +128,7 @@ def create_router(
 
     @router.get("/status")
     def status(request: Request) -> Any:
-        refused = _authorized(request)
+        refused = admin_guard(request)
         if refused is not None:
             return refused
         at = now()
@@ -147,7 +151,7 @@ def create_router(
     @router.get("/keys")
     def list_keys(request: Request) -> Any:
         """**원문·해시는 돌려주지 않는다** (C11)."""
-        refused = _authorized(request)
+        refused = admin_guard(request)
         if refused is not None:
             return refused
         at = now()
@@ -155,7 +159,7 @@ def create_router(
 
     @router.post("/keys", status_code=201)
     async def create_key(request: Request) -> Any:
-        refused = _authorized(request)
+        refused = admin_guard(request)
         if refused is not None:
             return refused
         try:
@@ -186,7 +190,7 @@ def create_router(
     @router.delete("/keys/{name}")
     def revoke_key(request: Request, name: str) -> Any:
         """폐기. **지우지 않는다** — 사용 기록이 가리키는 이름을 남겨 둔다."""
-        refused = _authorized(request)
+        refused = admin_guard(request)
         if refused is not None:
             return refused
         found: ServiceAppKey | None = next((k for k in keys.all_keys() if k.name == name), None)
@@ -200,7 +204,7 @@ def create_router(
     @router.get("/usage")
     def usage(request: Request, limit: int = USAGE_DEFAULT_LIMIT) -> Any:
         """사용 기록 (최근 것부터). **입력·출력 값은 없다** (계약 원칙 6)."""
-        refused = _authorized(request)
+        refused = admin_guard(request)
         if refused is not None:
             return refused
         entries = list(getattr(usage_log, "entries", []) or [])

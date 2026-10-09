@@ -1,0 +1,198 @@
+{
+  "$defs": {
+    "DeployCheck": {
+      "additionalProperties": true,
+      "description": "「배포 전 확인」 한 줄 (UIA-01).\n\n**C11 앱이 자기 힘으로 볼 수 있는 것만** 둔다 — 모델 연결, 등록 담당자 키(`registry_write`),\n등록된 화면. (허용 주소·인증 설정은 외부 확장 어댑터의 개념이고(C13 §4) 이 앱에는 없다.)\n\n**막는 것이 아니라 알려 주는 것이다** — `warn`이어도 앱은 돈다.",
+      "properties": {
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "level": {
+          "default": "ok",
+          "title": "Level",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label"
+      ],
+      "title": "DeployCheck",
+      "type": "object"
+    },
+    "LlmInfo": {
+      "additionalProperties": true,
+      "description": "「LLM」 (UIA-01). **주소·키는 보이지 않는다** (C11 §모델 연결).\n\n계획과 치유가 **같은 모델 하나**를 쓴다 (앱 설정이 하나다) — 둘을 따로 적지 않는다.",
+      "properties": {
+        "configured": {
+          "default": false,
+          "title": "Configured",
+          "type": "boolean"
+        },
+        "last_status": {
+          "default": "unknown",
+          "title": "Last Status",
+          "type": "string"
+        },
+        "max_healing_attempts": {
+          "default": 3,
+          "title": "Max Healing Attempts",
+          "type": "integer"
+        },
+        "model": {
+          "default": "",
+          "title": "Model",
+          "type": "string"
+        }
+      },
+      "title": "LlmInfo",
+      "type": "object"
+    },
+    "SelectorCounts": {
+      "additionalProperties": true,
+      "description": "「관리 중인 셀렉터」 (UIA-01) — 레지스트리를 센 것.",
+      "properties": {
+        "active": {
+          "default": 0,
+          "title": "Active",
+          "type": "integer"
+        },
+        "deprecated": {
+          "default": 0,
+          "title": "Deprecated",
+          "type": "integer"
+        },
+        "elements": {
+          "default": 0,
+          "title": "Elements",
+          "type": "integer"
+        },
+        "locators": {
+          "default": 0,
+          "title": "Locators",
+          "type": "integer"
+        },
+        "pages": {
+          "default": 0,
+          "title": "Pages",
+          "type": "integer"
+        },
+        "unverified": {
+          "default": 0,
+          "title": "Unverified",
+          "type": "integer"
+        }
+      },
+      "title": "SelectorCounts",
+      "type": "object"
+    },
+    "SessionCounts": {
+      "additionalProperties": true,
+      "description": "「최근 UI 세션」 (UIA-01)과 UIA-03 요약 — **보고가 도착한 것만** 센다.\n\n**「진행 중」은 없다.** C8 보고는 세션이 **끝날 때** 한 번 오므로 앱은 도는 세션을 모른다\n(지금 무엇이 도는지는 현장의 BUI-09가 안다). 없는 수를 0으로 보이면 「아무것도 안 돈다」로\n읽히므로 칸 자체를 두지 않는다.\n\n`test`는 셀렉터 시험(BUI-08, C8 `origin: test`)이고 **나머지 수에 들어가지 않는다** —\n시험이 운영 통계를 흔들지 않는다 (C8·C9).",
+      "properties": {
+        "escalated": {
+          "default": 0,
+          "title": "Escalated",
+          "type": "integer"
+        },
+        "failed": {
+          "default": 0,
+          "title": "Failed",
+          "type": "integer"
+        },
+        "healed": {
+          "default": 0,
+          "title": "Healed",
+          "type": "integer"
+        },
+        "succeeded": {
+          "default": 0,
+          "title": "Succeeded",
+          "type": "integer"
+        },
+        "test": {
+          "default": 0,
+          "title": "Test",
+          "type": "integer"
+        },
+        "today": {
+          "default": 0,
+          "title": "Today",
+          "type": "integer"
+        },
+        "total": {
+          "default": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "title": "SessionCounts",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c9-console-overview",
+  "additionalProperties": true,
+  "description": "`GET /admin/v1/overview` — UIA-01 개요 한 벌.",
+  "properties": {
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/DeployCheck"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "counts": {
+      "$ref": "#/$defs/SelectorCounts"
+    },
+    "generated_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Generated At"
+    },
+    "llm": {
+      "$ref": "#/$defs/LlmInfo"
+    },
+    "revision": {
+      "default": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "sessions": {
+      "$ref": "#/$defs/SessionCounts"
+    }
+  },
+  "required": [
+    "schema"
+  ],
+  "title": "ConsoleOverview",
+  "type": "object"
+}

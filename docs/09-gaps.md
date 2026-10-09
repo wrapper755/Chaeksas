@@ -27,7 +27,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
 | C7 | 구현됨 | `contracts.resources`·`center_keys` | 외부 확장 앱의 `health`를 **보지 않는다** (§3-7) |
 | C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
-| C9 | **구현됨** | **`ext.ui_automation.contracts.registry`** | — ([ADR-0040](decisions/0040-registry-storage-sqlite.md)이 저장소를 적었다) |
+| C9 | **구현됨** | **`ext.ui_automation.contracts.registry`·`console`** | — (관리 콘솔이 읽는 길도 돈다) |
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
 | C12 | 초안 (M7) | **없다** (`apps/server_runner`는 docstring뿐) | M7 전부. **M6 기준의 「모든 계약」에서 빼야 하는가는 사람이 정한다** (§2-4) |
@@ -115,13 +115,17 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **없는 것:** 무엇을 보일지가 **문서에도 없다** (배치도에 이름만 있다).
 - **크기:** 모른다. **먼저 `06-screens/studio.md`에 무엇을 보일지 적어야 한다** (CLAUDE.md §3-4: 화면이 바뀌면 문서를 먼저).
 
-### 4-7. UIA-01·02·03 — 확장이 기여하는 콘솔 화면 (C13 `console.pages`)
+### 4-7. UIA-02·03 — 확장이 기여하는 콘솔 화면 (C13 `console.pages`)
 
-- **문서:** `service-app-console.md` 63~101줄. UI 자동화 앱 콘솔의 개요·셀렉터·모니터링.
-- **코드:** **읽는 길은 닫았다** ([ADR-0042](decisions/0042-extension-contributed-panels.md) §2) — 콘솔이 확장 정의의 `console.pages`를 빌드 시점 레지스트리(`scripts/gen_console_pages.py` → `lib/console-pages.generated.ts`)로 읽고 접속한 앱의 `extension.id`(C11)로 고른다. 손으로 베낀 `APP_PAGES`를 버렸고 `href` 타입도 풀었다(`Route`). 그래서 **확장을 더하면 줄이 생긴다.**
-- **없는 것:** **화면 셋 자체.** 지금은 세 줄이 보이지만 모듈 레지스트리(`lib/console-modules.ts`)가 비어 있어 **꺼진 채**이고 이유가 붙는다 (U3).
-- **크기:** 큼. 데이터는 레지스트리에 있다 (`service/registry.py`가 `active`·`unverified`·실패율까지 센다). 화면 하나를 만들면 `app/`에 경로를 더하고 모듈 레지스트리에 한 줄을 적는다 — 그 줄은 `Route`라서 **없는 경로를 적으면 타입 검사가 잡는다.**
-- **막는 것:** 없다. [ADR-0040](decisions/0040-registry-storage-sqlite.md)이 저장소를 적어 「저장소 표시」를 없애고 통계 열을 **늘 있는 것**으로 만들었다(경로 탐색은 앱이 너비 우선으로 찾는다). UIA-03의 재료는 C8 보고와 **C3 `ui_session`**([ADR-0041](decisions/0041-extension-run-events.md)) 둘이다.
+**읽는 길과 UIA-01 개요는 닫았다.** 콘솔이 기여를 읽고(`gen_console_pages.py` → 생성 레지스트리),
+앱 고유 관리 경로(C9 §관리 콘솔이 읽는 길, `GET /admin/v1/overview`)로 자료를 받는다. **UI 세션
+기록도 쌓인다** (C8 보고가 도착할 때 한 줄). 남은 것은 **화면 둘**이다.
+
+- **문서:** `service-app-console.md` UIA-02(셀렉터)·UIA-03(모니터링).
+- **코드:** 재료가 다 있다 — UIA-02는 `registry_get_page`가 주는 로케이터·통계(`LocatorStats`가 성공·실패·연속 성공을 들고 있다), UIA-03은 **세션 기록**(`SessionStore.recent()`)과 C3 `ui_session`([ADR-0041](decisions/0041-extension-run-events.md))이다. 읽는 경로는 **아직 `overview` 하나뿐이다**.
+- **없는 것:** 화면 둘과 그것이 읽을 경로 둘(`/admin/v1/pages…`·`/admin/v1/sessions…`).
+- **크기:** 둘 다 중간~큼 (UIA-02는 표 열 열하나·경고 띠·좁히기·차트·경로 탐색, UIA-03은 이력 표·상세·폴백 깊이 분포).
+- **막는 것:** 없다. 화면을 만들면 `app/`에 경로를 더하고 `lib/console-modules.ts`에 한 줄을 적는다 — 값이 `Route`라서 **없는 경로를 적으면 타입 검사가 잡는다.**
 
 ### 4-8. BUI-11 확장 · BUI-05 알림
 

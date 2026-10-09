@@ -16,6 +16,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+from chaeksas.ext.ui_automation.contracts.console import SelectorCounts
 from chaeksas.ext.ui_automation.contracts.plan import (
     ACTIVE,
     DEPRECATED,
@@ -282,6 +283,25 @@ class Registry:
         return out
 
     # ── 공개 카탈로그 (C9 §공개 카탈로그) ──
+
+    def counts(self) -> SelectorCounts:
+        """「관리 중인 셀렉터」 (UIA-01) — 화면·요소·로케이터를 상태별로 센다.
+
+        공개 카탈로그의 화면별 셈(`catalog()`)과 **같은 규칙**이고 전부를 더한 것이다.
+        """
+        made = SelectorCounts(pages=len(self.pages))
+        for page in self.pages.values():
+            made.elements += len(page.locators)
+            for ladder in page.locators.values():
+                for locator in ladder:
+                    made.locators += 1
+                    if locator.status == ACTIVE:
+                        made.active += 1
+                    elif locator.status == UNVERIFIED:
+                        made.unverified += 1
+                    elif locator.status == DEPRECATED:
+                        made.deprecated += 1
+        return made
 
     def catalog(self) -> dict[str, object]:
         """`GET /v1/catalog` — **셀렉터는 나가지 않는다** (C13 §5).
