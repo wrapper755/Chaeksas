@@ -200,7 +200,9 @@ export const center = {
   unbindCenterKey: (keyId: string) =>
     call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}/unbind`, { method: "POST" }),
 
-  runs: (query: { status?: string; bpm_process_id?: string; limit?: number } = {}) => {
+  runs: (
+    query: { status?: string; bpm_process_id?: string; run_location?: string; limit?: number } = {},
+  ) => {
     const search = new URLSearchParams(
       Object.entries(query)
         .filter(([, value]) => value !== undefined && value !== "")

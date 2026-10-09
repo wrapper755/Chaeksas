@@ -177,6 +177,32 @@ def test_the_listing_can_be_narrowed(client: Any) -> None:
     assert read(client, "/api/v1/runs?bpm_process_id=fin.invoice").json()["total"] == 2
 
 
+def test_the_listing_can_be_narrowed_by_run_location(client: Any) -> None:
+    """CON-01 「실행 위치」 좁히기 — 값은 `run_started`에서 온다."""
+    other = "run_20261005_101600_b2c3d4"
+    post(client, [started()])  # server
+    post(client, [{**started(), "run_id": other, "data": {**started()["data"], "run_location": "pc"}}], run_id=other)
+    assert read(client, "/api/v1/runs?run_location=pc").json()["total"] == 1
+    assert read(client, "/api/v1/runs?run_location=server").json()["total"] == 1
+    assert read(client, "/api/v1/runs?run_location=nowhere").json()["total"] == 0, "모르는 값은 0건이다"
+
+
+def test_the_listing_keeps_the_counts_the_sender_counted(client: Any) -> None:
+    """CON-01 목록의 셈 열 — **보낸 쪽이 센 것**을 그대로 둔다 (줄을 다시 읽어 세지 않는다)."""
+    post(client, [started(), event(2, "ui_session", business_key=f"{RUN}:T:1:1", page_id="p",
+                                   result="success", steps=3, fallback_depth_max=1, healed=False)])
+    running = read(client, f"/api/v1/runs/{RUN}").json()
+    # **도는 중에는 비어 있다** — 0으로 보이면 「아무것도 없었다」로 읽힌다.
+    assert running["ui_tasks"] is None and running["ai_tasks"] is None
+
+    post(client, [event(3, "run_finished", status="success", duration_s=2, ai_tasks=2,
+                        replayed_tasks=1, ui_tasks=1, service_calls=4, human_requests=0)])
+    found = read(client, f"/api/v1/runs/{RUN}").json()
+    assert (found["ai_tasks"], found["replayed_tasks"], found["ui_tasks"]) == (2, 1, 1)
+    assert (found["service_calls"], found["human_requests"]) == (4, 0)
+    assert read(client, "/api/v1/runs").json()["runs"][0]["ui_tasks"] == 1, "목록에도 실린다"
+
+
 def test_an_unknown_run_is_404(client: Any) -> None:
     assert read(client, "/api/v1/runs/run_20261005_000000_000000").status_code == 404
 

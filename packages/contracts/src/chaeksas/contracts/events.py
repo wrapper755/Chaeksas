@@ -127,6 +127,13 @@ class RunInfo(ContractModel):
     finished_at: str | None = None
     duration_s: float | None = None
     error_code: str | None = None
+    #: `run_finished`의 셈 그대로 (CON-01 목록 열). **끝나지 않은 실행은 `None`**이다 —
+    #: 줄을 다시 읽어 세지 않는다 (요약은 받을 때 만든다).
+    ai_tasks: int | None = None
+    replayed_tasks: int | None = None
+    ui_tasks: int | None = None
+    service_calls: int | None = None
+    human_requests: int | None = None
     events: int = 0
 
 
