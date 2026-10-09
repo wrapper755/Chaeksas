@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from chaeksas.contracts import Violation
 from chaeksas.studio import service_catalog, services
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
@@ -37,7 +38,7 @@ from chaeksas.studio.dialogs import NewProcessDialog, pick_example
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extensions import Extensions
 from chaeksas.studio.packaging import PackageError, default_name, export
-from chaeksas.studio.preflight import Preflight, inspect, summarize
+from chaeksas.studio.preflight import Preflight, inspect, readiness, summarize
 from chaeksas.studio.properties import Properties
 from chaeksas.studio.receiver import Receiver
 from chaeksas.studio.run_dialog import RunDialog
@@ -313,7 +314,25 @@ class MainWindow(QMainWindow):
             return self.properties.apply()
         return True
 
-    # ── 실행 전 검사 (B1~B15) ──
+    # ── 실행 전 검사 (B1~B15 + 사전 점검) ──
+
+    def _readiness(self) -> list[Violation]:
+        """사전 점검 — **이 PC에서 돌 수 있나** (`core.preflight`, ADR-0013).
+
+        키 값은 Studio 비밀 저장소에서, 확장은 호스트에서 온다. 시험 실행과 **같은 것을 본다**
+        (`Extensions.context`) — 점검이 다른 설정을 보면 「점검은 통과했는데 실행이 안 된다」가 된다.
+        """
+        from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 - 누를 때만 든다
+
+        if self.process is None:
+            return []
+        return readiness(
+            self.process,
+            key_value=StudioCredentials().service_key,
+            host=self.extensions.host,
+            context=self.extensions.context,
+            dirty=self.dirty,
+        )
 
     def run_preflight(self) -> None:
         if self.process is None or self.definition is None:
@@ -333,7 +352,7 @@ class MainWindow(QMainWindow):
         except BpmnReadError as e:
             self.say(f"검사하지 못했습니다: {e}")
             return
-        violations = inspect(found, self.process)
+        violations = inspect(found, self.process) + self._readiness()
         self.preflight.show_result(found, violations)
         self.bottom_tabs.setCurrentWidget(self.preflight)
         self.say(summarize(violations))
@@ -398,7 +417,8 @@ class MainWindow(QMainWindow):
         if found is None or found.process is None:
             self.say("정의를 읽지 못했습니다.")
             return
-        violations = inspect(found.process, self.process)
+        # 그림 검사(B1~B15)와 **사전 점검**(이 PC에서 돌 수 있나)이 같은 관문이다.
+        violations = inspect(found.process, self.process) + self._readiness()
         blocking = [v for v in violations if v.blocks]
         if blocking:
             self.preflight.show_result(found.process, violations)

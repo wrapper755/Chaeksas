@@ -153,17 +153,21 @@ class Extensions:
         service = found.manifest.service if found is not None else None
         return service.base_url if service is not None else None
 
+    def context(self, extension_id: str) -> ExtensionContext:
+        """확장 코드에 넘길 바깥 세상 — 그 확장의 설정 + 호스트가 채우는 예약 키 (C13).
+
+        시험 실행(`tasks()`)과 **사전 점검**이 같은 것을 쓴다 — 점검이 다른 설정을 보면
+        「점검은 통과했는데 실행이 안 된다」가 된다.
+        """
+        values = dict(getattr(self.settings_for(extension_id), "values", {}))
+        values.update(self.runtime_settings(extension_id))
+        return self.host.context(
+            extension_id, host=HOST_STUDIO, settings=PlainSettings(values=values), secrets=StudioSecrets()
+        )
+
     def tasks(self) -> HostTasks:
         """시험 실행의 `RunEnv.extensions` — 확장 태스크와 `web`·`desktop` AI 태스크 (ADR-0018·0037)."""
-
-        def make_context(extension_id: str) -> ExtensionContext:
-            values = dict(getattr(self.settings_for(extension_id), "values", {}))
-            values.update(self.runtime_settings(extension_id))
-            return self.host.context(
-                extension_id, host=HOST_STUDIO, settings=PlainSettings(values=values), secrets=StudioSecrets()
-            )
-
-        return HostTasks(host=self.host, make_context=make_context)
+        return HostTasks(host=self.host, make_context=self.context)
 
     def editor(self, task_type: str) -> Any | None:
         """그 태스크 종류의 편집기 위젯. 없거나 깨졌으면 `None` (JSON 탭이 그 자리를 메운다)."""

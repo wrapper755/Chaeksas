@@ -183,6 +183,137 @@ def test_the_workspace_feeds_b14_with_dmn_and_call_targets(tmp_path: Path) -> No
     assert [v.rule for v in inspect(entry.process, made) if v.rule == "B14"] == []
 
 
+# ─────────────────────────── 사전 점검 (이 PC에서 돌 수 있나) ───────────────────────────
+#
+# 그림 검사(B 규칙)와 **같은 관문**에 들어간다 — 용어집이 사전 점검에 「서비스 앱 키 참조가 이 PC에
+# 있는지」를 넣어 두었다. 「실행 전 검사」 하나만 보면 돌릴 수 있는지 알 수 있어야 한다.
+
+
+def opened(tmp_path: Path, example: str) -> Any:
+    from chaeksas.studio.workspace import Workspace  # noqa: PLC4015,PLC0415
+
+    return Workspace(tmp_path / "w").ensure().import_example(EXAMPLES, example)
+
+
+def studio_extensions() -> Any:
+    from chaeksas.studio.extensions import Extensions  # noqa: PLC0415
+
+    return Extensions.load()
+
+
+def test_a_missing_service_app_key_blocks_the_run(tmp_path: Path) -> None:
+    """ADR-0013 §사전 점검 — 키가 없으면 그 태스크에서 죽는다. **시작하기 전에** 막는다."""
+    from chaeksas.core.preflight import MISSING_KEYS  # noqa: PLC0415
+    from chaeksas.studio.preflight import KEY_FIX_HINT, PREFLIGHT_RULE, readiness  # noqa: PLC0415
+
+    found = readiness(opened(tmp_path, "bx36_legacy_migration"), key_value=lambda _ref: None)
+
+    assert [v.code for v in found] == [MISSING_KEYS]
+    only = found[0]
+    assert only.blocks
+    assert only.rule == PREFLIGHT_RULE, "B 규칙과 갈라 보여야 한다 (그림의 흠이 아니다)"
+    assert only.items == ["it-crm"], "무엇이 빠졌는지 말해야 고칠 수 있다"
+    assert KEY_FIX_HINT in only.message, "어디서 고치는지도 말한다 (STU-10)"
+
+
+def test_registering_the_key_clears_it(tmp_path: Path) -> None:
+    from chaeksas.studio.preflight import readiness  # noqa: PLC0415
+
+    found = readiness(opened(tmp_path, "bx36_legacy_migration"), key_value=lambda _ref: "chk_svc_x")
+    assert not [v for v in found if v.blocks]
+
+
+def test_a_diagram_that_calls_nothing_says_nothing(tmp_path: Path) -> None:
+    """**거짓 경고를 막는 자리다.** 서비스 앱도 UI도 쓰지 않는 그림에는 할 말이 없다.
+
+    조건 없이 한마디씩 하면 B11에서 겪은 일이 되풀이된다 — 거짓 경고가 쌓여 아무도 읽지 않는다.
+    """
+    from chaeksas.studio.preflight import readiness  # noqa: PLC0415
+
+    ext = studio_extensions()
+    found = readiness(
+        opened(tmp_path, "fx19_manual_task_pc"),
+        key_value=lambda _ref: None,
+        host=ext.host,
+        context=ext.context,
+    )
+    assert found == [], [str(v) for v in found]
+
+
+def test_unsaved_edits_are_admitted_not_hidden(tmp_path: Path) -> None:
+    """요구 사항은 **저장된 파일**에서 모은다 — 방금 더한 키 참조를 「없다」고 하면 엉뚱한 데를 고친다."""
+    from chaeksas.studio.preflight import UNSAVED, readiness  # noqa: PLC0415
+
+    found = readiness(opened(tmp_path, "fx19_manual_task_pc"), key_value=lambda _ref: None, dirty=True)
+
+    assert [v.message for v in found] == [UNSAVED]
+    assert not found[0].blocks, "저장하지 않았다는 것으로 실행을 막지는 않는다"
+
+
+def test_a_broken_extension_check_warns_without_blocking(tmp_path: Path) -> None:
+    """`PreflightCheck` 규약 — **점검이 실행을 막지 않는다.** 다만 조용히 넘어가지도 않는다."""
+    from chaeksas.core.extensions import Contribution, ExtensionHost  # noqa: PLC0415
+    from chaeksas.studio.preflight import readiness  # noqa: PLC0415
+
+    class Broken:
+        def check(self, target: Any) -> Any:
+            raise NotImplementedError("아직 못 만들었다")
+
+    class Host(ExtensionHost):
+        def preflight_checks(self) -> Any:
+            return [Contribution(extension_id="x", extension_version="1.0.0", value=Broken())]
+
+    found = readiness(
+        opened(tmp_path, "fx19_manual_task_pc"),
+        key_value=lambda _ref: None,
+        host=Host(),
+        context=lambda _id: object(),  # type: ignore[arg-type,return-value]
+    )
+    assert [v.code for v in found] == ["check_skipped"]
+    assert not found[0].blocks
+    assert "아직 못 만들었다" in found[0].message
+
+
+def test_the_ui_page_check_is_quiet_when_no_page_is_used() -> None:
+    """확장의 점검도 **쓰는 것이 없으면 아무 말도 하지 않는다** (거짓 경고 방지).
+
+    아직 레지스트리(C9)를 부를 수 없어 「모른다」밖에 할 말이 없는데, 그것을 조건 없이 내면
+    UI를 쓰지 않는 그림 전부에 경고가 뜬다.
+    """
+    from chaeksas.ext.ui_automation.client.preflight import (  # noqa: PLC0415
+        UNVERIFIED,
+        PagesRegisteredCheck,
+    )
+    from chaeksas.extension_api import PreflightTarget  # noqa: PLC0415
+
+    none = _manifest_requiring()
+    assert PagesRegisteredCheck().check(PreflightTarget(extension=None, manifest=none)) == ()  # type: ignore[arg-type]
+
+    some = _manifest_requiring({"type": "ui_page", "id": "erp.order.form"})
+    (told,) = PagesRegisteredCheck().check(PreflightTarget(extension=None, manifest=some))  # type: ignore[arg-type]
+    assert told.id == UNVERIFIED and told.items == ("erp.order.form",)
+    assert not told.blocks, "「모른다」로 실행을 막지 않는다"
+
+
+def _manifest_requiring(*resources: dict[str, str]) -> Any:
+    from chaeksas.contracts.manifest import Manifest  # noqa: PLC0415
+
+    return Manifest.model_validate(
+        {
+            "schema": 1,
+            "kind": "bpm_process",
+            "id": "t.one",
+            "version": "1.0.0",
+            "run_location": "pc",
+            "entry": "main.bpmn",
+            "content_hash": "sha256:" + "0" * 64,
+            "human": {"approval_center": False, "approval_field": False, "confirmation": False},
+            "built": {"by": "studio", "at": "2026-10-09T00:00:00+09:00", "core": "0.1.0", "spec_version": 1},
+            "requires": {"resources": list(resources)},
+        }
+    )
+
+
 # ─────────────────────────── 캔버스 왕복 (진짜 bpmn-js) ───────────────────────────
 
 
