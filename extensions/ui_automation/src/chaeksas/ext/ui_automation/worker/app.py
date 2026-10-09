@@ -540,9 +540,12 @@ class Worker:
             SessionBrief(
                 session_id=found.session_id,
                 business_key=found.request.business_key,
+                caller=found.request.caller.type,
                 page_id=found.request.page_id,
                 result=summary.result,
                 steps=summary.steps,
+                fallback_depth_max=summary.fallback_depth_max,
+                healed=summary.healed,
                 at=datetime.now(UTC).isoformat(),
             ),
         )

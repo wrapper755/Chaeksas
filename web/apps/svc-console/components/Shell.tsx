@@ -1,18 +1,28 @@
+import type { Route } from "next";
 import Link from "next/link";
 import { Button, StatusBadge } from "@chaeksas/ui";
 import type { AdminStatus } from "@chaeksas/api-types/c11-admin-status";
 import { logout } from "@/app/actions";
+import { NO_MODULE, pagesOf } from "@/lib/console-modules";
 import { Refresh } from "./Refresh";
 
 /**
  * SVC-00 공통 틀 — 왼쪽 탐색 + 위 막대(앱 이름·버전·상태·새로 고침) + 본문.
  *
- * 탐색은 **공통 세 화면 + 접속한 앱의 고유 메뉴**다. 고유 메뉴는 `app_id`로 고른다 — 콘솔 한 벌이
- * 모든 서비스 앱을 그리기 때문이다. 아직 없는 화면은 **끄고 이유를 가까이에 적는다** (U3).
+ * 탐색은 **공통 세 화면 + 접속한 앱의 고유 메뉴**다. 고유 메뉴는 **확장이 기여한 것**이고
+ * (C13 `console.pages`, ADR-0042) 어느 확장인지는 `/admin/v1/status`의 `extension.id`가 말해
+ * 준다 — 콘솔 한 벌이 모든 서비스 앱을 그리기 때문이다. 아직 화면이 없는 줄은 **끄고 이유를
+ * 가까이에 적는다** (U3).
+ *
+ * **여기 목록을 손으로 적지 않는다** — 줄은 `console-pages.generated.ts`(확장 정의에서 생성)에서
+ * 오고, 열리는지는 `console-modules.ts`가 정한다. 그래서 확장을 더하면 줄이 생긴다.
+ *
+ * **`later`에 마일스톤 이름을 적지 않는다** — 지나간 마일스톤을 가리키면 다음 사람이
+ * 「그쪽 몫이구나」로 읽고 넘어간다.
  */
 
 type NavItem =
-  | { label: string; href: "/status" | "/keys" | "/usage"; later?: never }
+  | { label: string; href: Route; later?: never }
   | { label: string; href?: never; later: string };
 
 const COMMON: NavItem[] = [
@@ -24,24 +34,12 @@ const COMMON: NavItem[] = [
 /** 꺼진 줄에 붙는 짧은 표시. 이유는 말풍선에 있다. */
 const LATER_BADGE = "아직";
 
-/**
- * 앱 고유 메뉴. 확장이 기여하는 화면이고(`console.pages`, ADR-0018) **아직 없다** —
- * 지금은 어떤 메뉴가 생길지만 보인다.
- *
- * 여기 적은 것은 **손으로 베낀 목록**이다. `ExtensionHost.console_pages()`가 기여를 주는데
- * 콘솔이 그것을 읽지 않는다 (docs/09-gaps.md §4-7) — 그래서 확장을 더해도 이 줄이 안 생긴다.
- * `href` 타입이 고정 셋만 받는 것도 함께 풀어야 한다.
- *
- * **`later`에 마일스톤 이름을 적지 않는다** — 지나간 마일스톤을 가리키면 다음 사람이
- * 「그쪽 몫이구나」로 읽고 넘어간다.
- */
-const APP_PAGES: Record<string, NavItem[]> = {
-  "ui-automation": [
-    { label: "개요", later: "UIA-01은 아직 없습니다 (docs/09-gaps.md §4-7)." },
-    { label: "셀렉터", later: "UIA-02는 아직 없습니다 (docs/09-gaps.md §4-7)." },
-    { label: "모니터링", later: "UIA-03은 아직 없습니다 (docs/09-gaps.md §4-7)." },
-  ],
-};
+/** 확장이 기여한 화면 → 탐색 줄. 레지스트리에 모듈이 없으면 **꺼진 줄**이다. */
+function appPages(status: AdminStatus | null): NavItem[] {
+  return pagesOf(status?.extension?.id).map((page) =>
+    page.href ? { label: page.label, href: page.href } : { label: page.label, later: NO_MODULE },
+  );
+}
 
 /** 앱 상태 한 마디 (status_map 「서비스 앱」). 의존이 하나라도 성치 않으면 「저하」다. */
 export function appState(status: AdminStatus | null): string {
@@ -63,7 +61,7 @@ export function Shell({
   current: string;
   children: React.ReactNode;
 }) {
-  const nav = [...COMMON, ...(status ? (APP_PAGES[status.app_id] ?? []) : [])];
+  const nav = [...COMMON, ...appPages(status)];
   return (
     <div className="flex min-h-screen">
       <nav

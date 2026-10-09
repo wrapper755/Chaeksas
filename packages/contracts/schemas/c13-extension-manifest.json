@@ -317,6 +317,13 @@
           "title": "Bot Ui.Local Runtimes",
           "type": "array"
         },
+        "bot_ui.panels": {
+          "items": {
+            "$ref": "#/$defs/Panel"
+          },
+          "title": "Bot Ui.Panels",
+          "type": "array"
+        },
         "bot_ui.utilities": {
           "items": {
             "$ref": "#/$defs/Utility"
@@ -654,6 +661,48 @@
         "entry"
       ],
       "title": "LocalRuntime",
+      "type": "object"
+    },
+    "Panel": {
+      "additionalProperties": true,
+      "description": "플랫폼 화면의 한 칸을 **확장이 그린다** (BUI-09, ADR-0042).\n\n열 이름·단위가 **확장의 말**인 표가 여기로 온다 — 플랫폼이 그리면 그 확장을 알게 된다\n(ADR-0018). `entry`는 `extension_api.BotUiPanel`이다.",
+      "properties": {
+        "entry": {
+          "title": "Entry",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "runtime": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Runtime"
+        },
+        "surface": {
+          "title": "Surface",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "surface",
+        "entry"
+      ],
+      "title": "Panel",
       "type": "object"
     },
     "PreflightContribution": {

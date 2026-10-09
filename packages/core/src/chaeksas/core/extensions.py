@@ -42,6 +42,7 @@ from chaeksas.contracts.extension import (
     ConsolePage,
     ExtensionManifest,
     LocalRuntime,
+    Panel,
     PreflightContribution,
     ResourceContribution,
     ResourceView,
@@ -58,6 +59,7 @@ from chaeksas.contracts.signing import AdminKey, Envelope
 from chaeksas.extension_api import (
     API_VERSION,
     AgentEnvironment,
+    BotUiPanel,
     BotUiUtility,
     EntryError,
     ExtensionContext,
@@ -326,6 +328,14 @@ class ExtensionHost:
         """Bot UI 「도구」 메뉴·탭."""
         return self._gather(lambda m: m.contributes.bot_ui_utilities)
 
+    def panels(self, surface: str) -> list[Contribution[Panel]]:
+        """그 자리에 낼 칸들 (`bot_ui.panels`, ADR-0042).
+
+        **자리 이름으로만 고른다** — 호스트는 자기가 아는 자리를 묻고, **모르는 자리를 가리키는
+        칸은 조용히 사라진다** (새 확장이 가리키는 자리를 옛 Bot UI가 모를 수 있다).
+        """
+        return [c for c in self._gather(lambda m: m.contributes.bot_ui_panels) if c.value.surface == surface]
+
     def local_runtimes(self) -> list[Contribution[LocalRuntime]]:
         """Bot UI가 띄우고 감시할 로컬 프로세스 (BUI-09·11). **선언뿐이다.**"""
         return self._gather(lambda m: m.contributes.bot_ui_local_runtimes)
@@ -470,6 +480,20 @@ class ExtensionHost:
         assert owner is not None
         utility: BotUiUtility = self._instantiate(owner, found.value.entry, expect=BotUiUtility, what="유틸리티")
         return utility
+
+    def panel(self, extension_id: str, panel_id: str) -> BotUiPanel:
+        """플랫폼 화면의 한 칸을 그릴 것 (`bot_ui.panels`, ADR-0042).
+
+        화면을 만들 때 한 번 만들고 호스트가 들고 있는다 (`refresh()`를 주기마다 부른다).
+        """
+        owner = self.get(extension_id)
+        if owner is None or not owner.enabled:
+            raise LookupError(f"켜진 확장이 아니다: {extension_id}")
+        declared = next((p for p in owner.manifest.contributes.bot_ui_panels if p.id == panel_id), None)
+        if declared is None:
+            raise LookupError(f"확장 {extension_id}에 기여된 화면 칸이 아니다: {panel_id}")
+        made: BotUiPanel = self._instantiate(owner, declared.entry, expect=BotUiPanel, what="화면 칸")
+        return made
 
     def local_runtime(self, extension_id: str, runtime_id: str) -> LocalRuntimeEntry:
         """로컬 런타임의 진입점 (`<확장 id>:<런타임 id>`).

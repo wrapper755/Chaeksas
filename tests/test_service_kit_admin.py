@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from chaeksas.contracts.service_app import (
     CenterRegistration,
     Dependency,
+    ExtensionRef,
     Operation,
     ServiceAppManifest,
     UsageRecord,
@@ -31,6 +32,7 @@ def manifest() -> ServiceAppManifest:
         version="0.1.0",
         category="system",
         console_url="http://localhost:8001",
+        extension=ExtensionRef(id="ui-automation", version="0.4.0"),
         operations=[
             Operation(name="plan", description="화면 계획", modes=["autonomous", "deterministic"]),
             Operation(name="heal", description="치유 제안", modes=["autonomous"], fallback="none"),
@@ -105,6 +107,8 @@ def test_status_carries_the_manifest_dependencies_and_center(client: TestClient)
     ]
     assert [(d["name"], d["status"]) for d in body["dependencies"]] == [("neo4j", "ok"), ("llm", "degraded")]
     assert body["center"]["registered"] is True
+    # 콘솔이 이것으로 그 확장의 고유 화면(C13 `console.pages`)을 고른다 (ADR-0042).
+    assert body["extension"] == {"id": "ui-automation", "version": "0.4.0"}
 
 
 def test_status_counts_calls_and_errors_in_the_last_24h(client: TestClient, log: InMemoryUsageLog) -> None:

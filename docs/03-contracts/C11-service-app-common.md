@@ -139,6 +139,7 @@ AdminStatus:
 | 필드 | 뜻 |
 | --- | --- |
 | `app_id`, `name`, `version`, `category`, `console_url` | manifest와 같은 값 (C11 `/manifest`) |
+| `extension` | `{id, version}` — 이 앱이 **어느 확장의 서버 부분인가** (manifest와 같은 값). 관리 콘솔이 이것으로 그 확장의 고유 화면(C13 `console.pages`)을 고른다 — 콘솔 한 벌이 모든 앱을 그리기 때문이다 ([ADR-0042](../decisions/0042-extension-contributed-panels.md)). 확장의 서버 부분이 아니면 없다 |
 | `started_at`, `uptime_s` | 가동 시간 |
 | `operations` | 작업마다 `{name, description, modes, fallback, server_ok, calls_24h, errors_24h, error_rate}` — 수는 **앱 안의 사용 기록**에서 센다 |
 | `dependencies` | 바깥 의존마다 `{name, status, detail?}` (예: LLM 게이트웨이, DB). `status`는 `ok`·`degraded`·`unreachable`·`unknown` |

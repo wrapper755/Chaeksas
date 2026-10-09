@@ -50,7 +50,7 @@
 | `pid`, `uptime_s` | |
 | `reserved_for`? | 예약된 `run_id` |
 | `holder`? | 지금 세션을 쥔 쪽: `{type, run_id?, bpm_process_id?}` |
-| `recent_sessions[]` | 최근 20개 요약 |
+| `recent_sessions[]` | 최근 20개 요약 — `{session_id, business_key, caller, page_id?, result, steps, fallback_depth_max, healed, at?}`. BUI-09 「최근 UI 세션」 표의 열이 그대로 여기 있다 (시각·요청한 쪽·화면·결과·폴백 깊이·치유). **그 표를 그리는 것은 이 확장이 기여한 칸이다** — 플랫폼은 이 본문을 해석하지 않는다 ([ADR-0042](../decisions/0042-extension-contributed-panels.md)) |
 | `unsent_reports` | UI 자동화 앱에 아직 못 보낸 보고 수 |
 
 ### 2. UI 세션 (Bot·Studio)
@@ -223,6 +223,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-09 | 1 | `recent_sessions[]`의 칸을 적고 `caller`·`fallback_depth_max`·`healed`를 더했다 — BUI-09 「최근 UI 세션」 표의 열이 다 있어야 그 칸을 그릴 수 있다 (더하기만이라 schema는 그대로) | 0042 |
 | 2026-10-06 | 1 | 예약이 409면 Bot UI가 강제로 닫지 않고 **기다린다**는 것을 적었다 (ADR-0014 §4 그대로). Bot UI는 C13 `reserve` 선언으로 이 경로를 부른다 | 0014 |
 | 2026-10-05 | 1 | 계획 없는 데스크톱 세션(`desktop-apps.json`의 `window`), 스텝의 `target`, `GET …/view` — 데스크톱 AI 태스크의 눈과 손 | 0037 |
 | 2026-10-05 | 1 | `read_table`의 `data` 모양(`headers`·`rows`, 칸은 글 그대로)과, 읽은 값이 변수가 되는 규칙(표는 줄 목록, 수 모양 글은 수)을 적었다 | 0036 |

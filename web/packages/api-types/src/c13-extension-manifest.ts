@@ -33,6 +33,7 @@ export interface ExtensionManifest {
 export interface Contributes {
   agent_environments?: AgentEnvironmentContribution[];
   "bot_ui.local_runtimes"?: LocalRuntime[];
+  "bot_ui.panels"?: Panel[];
   "bot_ui.utilities"?: Utility[];
   configuration?: ConfigurationItem[];
   "console.pages"?: ConsolePage[];
@@ -96,6 +97,20 @@ export interface RuntimeCall {
   header: string;
   path: string;
   token_file: string;
+  [k: string]: unknown;
+}
+/**
+ * 플랫폼 화면의 한 칸을 **확장이 그린다** (BUI-09, ADR-0042).
+ *
+ * 열 이름·단위가 **확장의 말**인 표가 여기로 온다 — 플랫폼이 그리면 그 확장을 알게 된다
+ * (ADR-0018). `entry`는 `extension_api.BotUiPanel`이다.
+ */
+export interface Panel {
+  entry: string;
+  id: string;
+  label: string;
+  runtime?: string | null;
+  surface: string;
   [k: string]: unknown;
 }
 /**

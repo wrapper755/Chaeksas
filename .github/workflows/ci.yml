@@ -82,6 +82,10 @@ jobs:
       - name: bpmn-moddle 설명 최신 여부
         run: uv run python scripts/gen_moddle.py --check
 
+      # 확장이 기여한 콘솔 화면 목록 (ADR-0042 §2 — 콘솔이 손으로 베끼지 않는다).
+      - name: 콘솔 화면 기여 목록 최신 여부
+        run: uv run python scripts/gen_console_pages.py --check
+
       - name: 업무 예제 생성물 최신 여부
         run: uv run python docs/08-business-examples/_source/build.py --check
 

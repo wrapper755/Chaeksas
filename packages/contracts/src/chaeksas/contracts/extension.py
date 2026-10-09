@@ -84,6 +84,12 @@ KNOWN_RUN_LOCATIONS = frozenset({"pc", "server"})
 #: 확장이 「AI 환경」을 기여할 수 있는 AI 태스크 domain (C13 `agent_environments`, ADR-0037).
 AGENT_ENVIRONMENT_DOMAINS = frozenset({"web", "desktop"})
 
+#: 확장이 칸을 낼 수 있는 **플랫폼이 미리 정한 자리** (C13 `bot_ui.panels[].surface`, ADR-0042).
+#: BUI-09 런타임 칸 아래가 지금 하나뿐이다. **열린 문자열이다** — 모르는 자리는 호스트가
+#: 조용히 무시한다 (새 확장이 가리키는 자리를 옛 Bot UI가 모를 수 있다).
+SURFACE_BOT_UI_RUNTIMES = "bot_ui.runtimes"
+PANEL_SURFACES = frozenset({SURFACE_BOT_UI_RUNTIMES})
+
 #: HTTP 어댑터 (§4).
 ADAPTER_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
 #: 템플릿으로 쓸 수 없는 헤더 — 키·주소를 바꿔치기할 수 있다 (§4-2).
@@ -162,6 +168,23 @@ class Utility(ContractModel):
     menu: str = "tools"
     entry: str
     needs_runtime: str | None = None  # 열어 둘 때 띄워야 하는 로컬 런타임 id
+
+
+class Panel(ContractModel):
+    """플랫폼 화면의 한 칸을 **확장이 그린다** (BUI-09, ADR-0042).
+
+    열 이름·단위가 **확장의 말**인 표가 여기로 온다 — 플랫폼이 그리면 그 확장을 알게 된다
+    (ADR-0018). `entry`는 `extension_api.BotUiPanel`이다.
+    """
+
+    id: str
+    label: str
+    #: 플랫폼이 미리 정한 자리 이름 (`PANEL_SURFACES`). **모르는 자리는 호스트가 조용히 무시한다.**
+    surface: str
+    #: `"<모듈>:<이름>"` — 위젯을 만드는 것. 그 확장 패키지 안만 가리킬 수 있다.
+    entry: str
+    #: 이 로컬 런타임이 **떠 있을 때만** 칸을 보인다 (선택).
+    runtime: str | None = None
 
 
 class RuntimeCall(ContractModel):
@@ -263,6 +286,7 @@ class Contributes(ContractModel):
     studio_editors: list[StudioEditorContribution] = Field(default_factory=list, alias="studio.editors")
     studio_resource_views: list[ResourceView] = Field(default_factory=list, alias="studio.resource_views")
     bot_ui_utilities: list[Utility] = Field(default_factory=list, alias="bot_ui.utilities")
+    bot_ui_panels: list[Panel] = Field(default_factory=list, alias="bot_ui.panels")
     bot_ui_local_runtimes: list[LocalRuntime] = Field(default_factory=list, alias="bot_ui.local_runtimes")
     configuration: list[ConfigurationItem] = Field(default_factory=list)
     preflight: list[PreflightContribution] = Field(default_factory=list)
@@ -426,6 +450,7 @@ class ExtensionManifest(SchemaVersioned):
             "studio.editors": [e.task_type for e in c.studio_editors],
             "studio.resource_views": [v.id for v in c.studio_resource_views],
             "bot_ui.utilities": [u.id for u in c.bot_ui_utilities],
+            "bot_ui.panels": [p.id for p in c.bot_ui_panels],
             "bot_ui.local_runtimes": [r.id for r in c.bot_ui_local_runtimes],
             "configuration": [i.key for i in c.configuration],
             "preflight": [p.id for p in c.preflight],
@@ -582,6 +607,7 @@ def _check_e1(m: ExtensionManifest) -> list[Violation]:
         "task_types": [t.id for t in c.task_types],
         "studio.editors": [e.task_type for e in c.studio_editors],
         "bot_ui.utilities": [u.id for u in c.bot_ui_utilities],
+        "bot_ui.panels": [p.id for p in c.bot_ui_panels],
         "bot_ui.local_runtimes": [r.id for r in c.bot_ui_local_runtimes],
         "configuration": [i.key for i in c.configuration],
         "preflight": [p.id for p in c.preflight],
@@ -702,6 +728,23 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
                 out.append(Violation(rule="C13", code=f"{what}_invalid",
                                      message=f"런타임 {r.id}의 {what}은 token_dir가 있고 "
                                              f"경로가 /로 시작해야 한다"))
+
+    runtime_ids = {rt.id for rt in c.bot_ui_local_runtimes}
+    for panel in c.bot_ui_panels:
+        if not panel.entry:
+            out.append(Violation(rule="C13", code="entry_missing",
+                                 message=f"화면 칸 {panel.id}에 진입점(entry)이 없다"))
+        if panel.surface not in PANEL_SURFACES:
+            # 열린 문자열이라 **거부가 아니다** — 호스트가 모르는 자리를 조용히 무시하므로
+            # 칸이 조용히 사라진다. 정의를 쓰는 사람이 미리 알아야 한다 (ADR-0042).
+            out.append(Violation(rule="C13", code="unknown_surface",
+                                 message=f"화면 칸 {panel.id}의 자리를 이 판은 모른다: {panel.surface}",
+                                 items=sorted(PANEL_SURFACES)))
+        if panel.runtime is not None and panel.runtime not in runtime_ids:
+            # 그 런타임이 떠 있을 때만 보이는 칸인데 런타임이 없으면 **영원히 안 보인다**.
+            out.append(Violation(rule="C13", code="panel_runtime_not_found",
+                                 message=f"화면 칸 {panel.id}이 기다리는 런타임이 이 확장에 없다: {panel.runtime}",
+                                 items=sorted(runtime_ids)))
 
     for rt in c.bot_ui_local_runtimes:
         if rt.start not in KNOWN_STARTS:

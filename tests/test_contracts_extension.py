@@ -162,6 +162,7 @@ def test_catalog_is_schema_versioned() -> None:
         ("configuration", [{"key": "k", "label": "k", "scope": "bot_ui"}]),
         ("preflight", [{"id": "p", "entry": "x:Y"}]),
         ("agent_environments", [{"domain": "desktop", "entry": "x:Y"}]),
+        ("bot_ui.panels", [{"id": "p", "label": "p", "surface": "bot_ui.runtimes", "entry": "x:Y"}]),
         ("console.pages", [{"id": "c", "label": "c", "module": "m"}]),
     ],
 )
@@ -395,6 +396,39 @@ def test_utility_key_must_land_in_a_secret_config_field() -> None:
 def test_local_runtime_needs_an_entry() -> None:
     definition = builtin(contributes={"bot_ui.local_runtimes": [{"id": "r", "label": "r", "entry": ""}]})
     assert "entry_missing" in codes(definition)
+
+
+# ─────────────────────────── 화면 칸 (ADR-0042) ───────────────────────────
+
+
+def panel(**over: Any) -> dict[str, Any]:
+    base = {"id": "recent", "label": "최근", "surface": "bot_ui.runtimes", "entry": "x:Y"}
+    return base | over
+
+
+def test_a_panel_needs_an_entry_and_a_known_surface() -> None:
+    """**모르는 자리는 거부가 아니라 알려 주기다** — 호스트가 조용히 무시하므로 칸이 사라진다."""
+    assert "entry_missing" in codes(builtin(contributes={"bot_ui.panels": [panel(entry="")]}))
+    assert "unknown_surface" in codes(builtin(contributes={"bot_ui.panels": [panel(surface="nowhere")]}))
+    assert validate_extension(parse(builtin(contributes={"bot_ui.panels": [panel()]}))) == []
+
+
+def test_a_panel_waiting_for_a_runtime_that_is_not_there_is_caught() -> None:
+    """그 런타임이 떠 있을 때만 보이는 칸인데 런타임이 없으면 **영원히 안 보인다.**"""
+    one = builtin(contributes={"bot_ui.panels": [panel(runtime="worker")]})
+    assert "panel_runtime_not_found" in codes(one)
+    both = builtin(
+        contributes={
+            "bot_ui.panels": [panel(runtime="worker")],
+            "bot_ui.local_runtimes": [{"id": "worker", "label": "W", "entry": "x:Serve"}],
+        }
+    )
+    assert validate_extension(parse(both)) == []
+
+
+def test_panels_are_listed_for_c7() -> None:
+    found = parse(builtin(contributes={"bot_ui.panels": [panel()]})).contributes_summary()
+    assert found["bot_ui.panels"] == ["recent"]
 
 
 def test_old_command_field_is_refused_not_ignored() -> None:

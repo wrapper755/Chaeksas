@@ -11,6 +11,7 @@ export interface AdminStatus {
   center?: CenterRegistration;
   console_url?: string | null;
   dependencies?: Dependency[];
+  extension?: ExtensionRef | null;
   name: string;
   operations?: OperationStatus[];
   /**
@@ -38,6 +39,14 @@ export interface Dependency {
   detail?: string | null;
   name: string;
   status: string;
+  [k: string]: unknown;
+}
+/**
+ * 이 서비스 앱이 어느 확장의 서버 부분인가 (C13). 내장·사내 확장이면 넣는다.
+ */
+export interface ExtensionRef {
+  id: string;
+  version: string;
   [k: string]: unknown;
 }
 /**

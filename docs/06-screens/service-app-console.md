@@ -63,6 +63,8 @@ Center 콘솔은 서비스 앱 키를 다루지 않는다. Center 리소스 목�
 ## UI 자동화 앱 고유 화면 (UIA)
 
 > UI 자동화 확장이 기여하는 콘솔 화면이다 (`console.pages`, [ADR-0018](../decisions/0018-extensions.md)). 화면에서 읽어 온 업무 값은 보고에 없으므로(C8) 여기에도 보이지 않는다. 「셀렉터 시험」(BUI-08) 보고는 「시험」으로 따로 표시하고 승격 통계에 넣지 않는다. 코드는 `extensions/ui_automation/console/`. 외부 확장(외부 앱)은 이 콘솔을 쓰지 않고 자기 콘솔 링크만 CON-07에 보인다.
+>
+> 상태: **탐색 줄은 기여에서 온다** — 콘솔이 확장 정의의 `console.pages`를 읽어(빌드 시점 레지스트리, [ADR-0042](../decisions/0042-extension-contributed-panels.md) §2) 접속한 앱의 `extension.id`(C11 `/admin/v1/status`)로 고른다. 손으로 베낀 목록은 없앴다. **화면 셋은 아직 없다** — 줄은 보이지만 **꺼져 있고 이유가 붙는다**(U3, [09-gaps](../09-gaps.md) §4-7). 화면을 만들면 `app/`에 경로를 더하고 모듈 레지스트리에 한 줄을 적는다.
 
 ### UIA-01 개요
 

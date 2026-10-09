@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, Qt, QUrl, Signal
@@ -20,6 +21,7 @@ from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -49,6 +51,7 @@ from chaeksas.bot_ui.runner import Running
 from chaeksas.bot_ui.runtimes import RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.contracts.approvals import Form
+from chaeksas.contracts.extension import SURFACE_BOT_UI_RUNTIMES
 from chaeksas.core.preflight import (
     EXTENSIONS_UNUSABLE,
     MISSING_ENVIRONMENT,
@@ -106,9 +109,9 @@ RUNTIME_ID = "worker"
 #: 유틸리티 창의 처음 크기 (BUI-06의 표 둘이 들어간다).
 UTILITY_SIZE = (1100, 820)
 
-#: BUI-09에서 아직 못 보이는 칸 (docs/09-gaps.md §4-2). 「최근 UI 세션」의 열(화면·폴백
-#: 깊이·치유)은 **확장의 말**이라 플랫폼이 그리면 Bot UI가 UI 자동화를 알게 된다 (ADR-0018).
-RUNTIME_STATUS_LATER = "「최근 UI 세션」은 아직 없습니다 — 확장이 그려야 하는 자리입니다 (docs/09-gaps.md §4-2)."
+#: 확장이 낸 칸을 만들지 못했을 때 (ADR-0042) — **그 칸만 접고 사유를 보인다**.
+PANEL_BROKEN = "이 칸을 그리지 못했습니다 —"
+PANEL_NO_WIDGET = "이 칸이 화면을 주지 않았습니다."
 RUNTIME_STATE = {
     "running": "실행 중",
     "restarting": "다시 띄우는 중",
@@ -162,6 +165,19 @@ class UtilityWindow(QWidget):
         event.accept()
 
 
+@dataclass
+class ContributedPanel:
+    """확장이 낸 칸 하나 (C13 `bot_ui.panels`) — 상자·그린 쪽·기다리는 런타임.
+
+    **주기를 정하는 쪽은 호스트다** (ADR-0042) — 새로 고침마다 `refresh()`를 부른다. `runtime`을
+    적은 칸은 그 런타임이 떠 있을 때만 보인다.
+    """
+
+    box: QWidget
+    panel: object
+    runtime: str | None = None
+
+
 class MainWindow(QMainWindow):
     """메인 창. 데이터는 `Agent`에서만 읽는다 (화면은 보여 주기만)."""
 
@@ -170,6 +186,8 @@ class MainWindow(QMainWindow):
         self._agent = agent
         #: 열려 있는 유틸리티 창 (`utility_id` → 창). 같은 것을 두 번 열지 않는다.
         self._utilities: dict[str, UtilityWindow] = {}
+        #: 확장이 낸 칸들 (만든 순서대로). 새로 고침마다 이쪽의 `refresh()`를 부른다.
+        self._panels: list[ContributedPanel] = []
         #: 「실행 기록」에 마지막으로 쓴 글 — 같으면 다시 쓰지 않는다 (선택이 날아간다).
         self._run_log_text = ""
         self.setWindowTitle(WINDOW_TITLE)
@@ -270,7 +288,11 @@ class MainWindow(QMainWindow):
         return page
 
     def _runtimes_tab(self) -> QWidget:
-        """BUI-09. 확장이 기여한 로컬 런타임마다 한 칸 (C13) — 지금은 Worker 하나다."""
+        """BUI-09. 확장이 기여한 로컬 런타임마다 한 칸 (C13) — 지금은 Worker 하나다.
+
+        런타임 칸 아래는 **확장이 그리는 자리**다 (`bot_ui.panels`, `surface: bot_ui.runtimes`,
+        ADR-0042) — 「최근 UI 세션」처럼 열이 확장의 말인 표가 거기 들어온다.
+        """
         page = QWidget()
         layout = QVBoxLayout(page)
         self.runtime_label = QLabel()
@@ -290,11 +312,45 @@ class MainWindow(QMainWindow):
         row.addStretch(1)
         layout.addLayout(row)
 
-        note = QLabel(RUNTIME_STATUS_LATER)
-        note.setEnabled(False)
-        layout.addWidget(note)
+        for box in self._panel_boxes(SURFACE_BOT_UI_RUNTIMES):
+            layout.addWidget(box)
         layout.addStretch(1)
         return page
+
+    def _panel_boxes(self, surface: str) -> list[QWidget]:
+        """그 자리에 확장이 낸 칸들 (C13 `bot_ui.panels`, ADR-0042).
+
+        **플랫폼은 칸 안을 모른다.** 만들다 실패하면 그 칸만 접고 사유를 보인다 — 화면 전체가
+        깨지지 않는다. 자리를 모르는 칸은 `panels()`가 아예 주지 않는다 (조용히 무시).
+        """
+        agent = self._agent
+        if agent.host is None:
+            return []
+        made: list[QWidget] = []
+        for found in sorted(agent.host.panels(surface), key=lambda c: c.value.label):
+            box = QGroupBox(found.value.label)
+            inner = QVBoxLayout(box)
+            runtime = found.value.runtime
+            try:
+                panel = agent.host.panel(found.extension_id, found.value.id)
+                context = agent.extension_context(
+                    found.extension_id, runtime_ids=(runtime,) if runtime else ()
+                )
+                widget = panel.widget(context)
+            except Exception as e:  # noqa: BLE001 — 확장이 깨져도 Bot UI는 산다
+                log.exception("화면 칸을 만들지 못했다: %s", found.value.id)
+                inner.addWidget(QLabel(f"{PANEL_BROKEN} {e}"))
+                made.append(box)
+                continue
+            if not isinstance(widget, QWidget):
+                inner.addWidget(QLabel(PANEL_NO_WIDGET))
+                made.append(box)
+                continue
+            inner.addWidget(widget)
+            # `runtime`을 적은 칸은 **그 런타임이 떠 있을 때만** 보인다 (ADR-0042).
+            self._panels.append(ContributedPanel(box=box, panel=panel, runtime=runtime))
+            made.append(box)
+        return made
 
     def _run_log_tab(self) -> QWidget:
         """BUI-02 「실행 기록」. 원본은 `runs/<run_id>.jsonl`이고 화면은 **읽을 뿐이다**.
@@ -366,8 +422,33 @@ class MainWindow(QMainWindow):
         self._refresh_running_buttons()
 
         self._refresh_runtimes()
+        self._refresh_panels()
         self.refresh_run_log()
         self.statusBar().showMessage(agent.status_line())
+
+    def _refresh_panels(self) -> None:
+        """확장이 낸 칸을 다시 재게 한다 (ADR-0042).
+
+        **주기는 호스트가 정한다** — 패널이 자기 타이머를 만들지 않는다. `runtime`을 적은 칸은
+        그 런타임이 떠 있을 때만 보인다 (꺼져 있을 때 빈 표를 보이는 것보다 칸이 없는 것이
+        정직하다). **한 칸이 터져도 화면은 이어 그린다.**
+        """
+        runtimes = self._agent.runtimes() if self._agent.host is not None else None
+        for found in self._panels:
+            up = True
+            if found.runtime and runtimes is not None:
+                supervisor = runtimes.supervisors.get(found.runtime)
+                up = supervisor is not None and supervisor.state == "running"
+            found.box.setVisible(up)
+            if not up:
+                continue
+            refresh = getattr(found.panel, "refresh", None)
+            if not callable(refresh):
+                continue
+            try:
+                refresh()
+            except Exception:  # noqa: BLE001 — 확장이 깨져도 Bot UI는 산다
+                log.exception("화면 칸을 다시 그리지 못했다")
 
     def _refresh_runtimes(self) -> None:
         """BUI-09 — 상태·PID·포트·가동 시간. **모르는 것은 적지 않는다** (답하지 않으면 그렇게 쓴다)."""

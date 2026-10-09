@@ -362,6 +362,9 @@ class AdminStatus(SchemaVersioned):
     version: str
     category: str
     console_url: str | None = None
+    #: 어느 확장의 서버 부분인가 (manifest와 같은 값). **관리 콘솔이 이것으로 그 확장의 고유
+    #: 화면(C13 `console.pages`)을 고른다** — 콘솔 한 벌이 모든 앱을 그린다 (ADR-0042).
+    extension: ExtensionRef | None = None
     started_at: Timestamp
     uptime_s: int = 0
     operations: list[OperationStatus] = Field(default_factory=list)
