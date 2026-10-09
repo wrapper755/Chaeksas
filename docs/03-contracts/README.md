@@ -37,7 +37,12 @@
 
 새 계약 문서는 [template.md](template.md)를 복사해 `C<번호>-<이름>.md`로 만든다.
 
+**M6의 셋째 기준은 이 표의 「상태」가 모두 「구현됨」이 되는 것이다** ([05-roadmap](../05-roadmap.md) M6).
+무엇이 남았는지는 [09-gaps](../09-gaps.md) §1에 계약마다 적혀 있다 — 상태를 올릴 때 그쪽도 함께 지운다.
+
 ### 코드로 있는 것
+
+C8·C9·C10은 **확장이 소유한 계약**이라 모듈이 `extensions/ui_automation/…/contracts/`에 있다 (원칙 1).
 
 | 계약 | 모듈 | 검사 함수 | 문서 예시 시험 |
 | --- | --- | --- | --- |
@@ -53,6 +58,9 @@
 | C11 | `chaeksas.contracts.service_app` | `authorize()`(키 권한), `resolve_mode()`(폴백 규칙), `idempotency_key()`, `key_state()` | (문서 예시는 HTTP라 모델 시험은 `tests/test_service_kit.py`) |
 | C11 | **`chaeksas.service_kit`** | 계약을 지키는 FastAPI 앱 하나(`create_app`) — `/healthz`·`/manifest`·`POST /v1/ops/{작업}`·`/v1/keys/self`, 키 검증·권한, 멱등, 오류 형식, 사용 기록 | 같음 |
 | C13 | `chaeksas.contracts.extension` | `validate()` — E1·E2·E3 + 모양. `task_type_conflicts()`(E4), `check_api()`(E5), `verify_external()`(E6), `check_size()`, `definition_hash()` | `tests/test_contract_examples.py` |
+| C8 | `chaeksas.ext.ui_automation.contracts.plan` | 계획·치유·보고 모델 (한 파일). 사다리는 `worker/ladder.py`, 부르는 쪽은 `worker/plans.py`, 서버는 `service/app.py`·`healing.py`·`planning.py` | `tests/test_worker_ladder.py` 등 |
+| C9 | `chaeksas.ext.ui_automation.contracts.registry` | 화면 레지스트리 모델. 서버는 `service/registry.py`(승격 규칙)·`service/store.py`(SQLite), 부르는 쪽은 `client/registry_client.py` | `tests/test_contract_examples.py` |
+| C10 | `chaeksas.ext.ui_automation.contracts.worker_local` | Worker 로컬 API 모델 + `check_step()` (부르는 쪽과 받는 쪽이 **같이 쓴다**). 셀렉터 등록용 모양은 `contracts/registration.py` | 같음 |
 | C13 | **`chaeksas.core.extensions`** | 확장 호스트 — 엔트리 포인트로 찾기, 검사 규칙 적용, 기여 지점별 목록, `entry` 해석(그 확장 패키지 안으로 제한). 인터페이스는 `chaeksas.extension_api` | `tests/test_extension_host.py` |
 | C14 | `chaeksas.contracts.bpmn_ext` | `read_process()`(BPMN 읽기, 표준 라이브러리만), `validate()` — B1~B14(오류·경고), `matches()` — 기대 결과 비교, `available_vars()` — 변수 흐름 | `tests/test_contracts_bpmn_ext.py` (업무 예제 50개를 읽고 검사한다) |
 

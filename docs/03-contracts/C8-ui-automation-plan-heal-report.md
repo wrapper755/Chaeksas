@@ -5,9 +5,15 @@
 | 상태 | **합의** (2026-10-01, 독립 검토 반영) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Worker 프로세스 → UI 자동화 앱 (실행 중 Bot·Studio를 대신해서) |
-| 코드 위치 | `extensions/ui_automation/contracts/` (plan.py, healing.py, report.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
-| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0010](../decisions/0010-service-apps.md) §5, [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
+| 코드 위치 | `extensions/ui_automation/contracts/plan.py` — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)). 계획·치유·보고가 한 파일에 있다 |
+| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0010](../decisions/0010-service-apps.md) §5, [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0035](../decisions/0035-ui-goal-planning.md)(목표로 계획) |
 | 관련 화면 | STU-13, BUI-07·08, UIA-02·03, CON-01 「UI 태스크」 |
+
+> 상태: **셋 다 돈다** — 계획(`service/app.py`의 `plan`, 결정 수행만)·치유(`service/healing.py`)·보고와
+> **목표로 계획**(`service/planning.py`, 자율 수행만 — [ADR-0035](../decisions/0035-ui-goal-planning.md)).
+> 사다리는 Worker가 로컬에서 돈다 (`worker/ladder.py`), 앱을 부르는 쪽은 `worker/plans.py`다.
+> 계획은 `(page_id, platform, steps 해시, revision)`으로 캐시하고 **자율 수행은 캐시하지 않는다**.
+> 모델이 없으면 치유·계획이 503 `llm_unavailable`이고 Worker는 전환한다.
 
 ## 목적
 

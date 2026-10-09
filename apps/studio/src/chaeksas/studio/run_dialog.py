@@ -6,7 +6,7 @@
 | 끄는 것 | 이유 |
 | --- | --- |
 | 결정 수행 (재생) | 학습 안 된 AI 태스크가 있다 (`memory/specs.json`에 명세가 없다) |
-| 감시 모드 | 트리거를 기다려 되풀이하는 일은 배포·작업(M5)과 함께다 |
+| 감시 모드 | 트리거를 기다려 되풀이하는 일은 아직 없다 (docs/09-gaps.md §4-5) |
 
 Worker·서비스 앱 줄은 M4·M5에 그 쪽이 생기면 채운다 — 지금 없는 것을 「정상」이라고 하지 않는다.
 """
@@ -36,7 +36,7 @@ ALL_CASES = "(모든 케이스 차례로)"
 AUTONOMOUS = "autonomous"
 DETERMINISTIC = "deterministic"
 
-WATCH_LATER = "감시 모드(트리거를 기다렸다 되풀이)는 배포·작업(M5)과 함께 붙입니다."
+WATCH_LATER = "감시 모드(트리거를 기다렸다 되풀이)는 아직 없습니다 (docs/09-gaps.md §4-5)."
 
 
 @dataclass(frozen=True)

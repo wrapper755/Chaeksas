@@ -169,7 +169,7 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
 
     return RegisterResponse(
         bot_ui_id=BotUiId(bot_ui_id),
-        admin_keys=[],  # 배포 서명 검증용 Admin 공개키 — 서명·배포는 M5다
+        admin_keys=[],  # 배포 서명 검증용 Admin 공개키 — 등록 응답에는 싣지 않는다 (하트비트가 준다)
         heartbeat_interval_s=heartbeat_interval_s,
         server_time=now_iso(),
     )

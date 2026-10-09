@@ -21,6 +21,7 @@ BPMN = 지도, AI = 운전사. **Bot = BPM 프로세스**(업무, Center가 배�
 | 결정과 이유 | `docs/decisions/NNNN-*.md` |
 | 환경 구성·포트 | `docs/04-setup.md` |
 | 단계·완료 기준 | `docs/05-roadmap.md` |
+| 남은 공백 (M6 셋째 기준) | `docs/09-gaps.md` — 계약·화면을 코드와 대조한 목록. 무엇을 만들지 고를 때 먼저 읽는다 |
 | BPM 업무 예제·시험 묶음 | `docs/08-business-examples/` — `bpmn/`·`cases/`·`README.md`·`{finance,scm,hr,ops,feature-examples}.md`는 **생성물이다. 직접 고치지 않는다.** 원본은 `_source/spec_*.py`(예제 정의)와 `_source/exdsl.py`(DSL·생성기). 손으로 쓰는 것은 `writing-guide.md`뿐 |
 | 프로토타입 참고 | `docs/reference/` |
 | 예제가 부르는 모의 앱 | `samples/README.md` — 제품이 아니다. 거짓 데이터의 값은 **케이스가 정한다** |
@@ -180,4 +181,4 @@ M3 끝, **M4 인수 묶음 6개가 모두 초록**(웹은 Chromium이 있는 PC,
   - **「저장」 전에는 아무것도 바뀌지 않는다.** 키는 `studio/credentials.py`(`StudioCredentials` — 환경변수가 먼저, 저장소가 없으면 **분명히 실패**하고 창을 닫지 않는다)로 OS 비밀 저장소에 가고, 설정 파일에는 **주소·참조 이름·서비스 앱만** 간다(`Settings.center_url`·`service_keys`). 지운 줄은 비밀 저장소에서도 지운다. Studio용 Center API 키는 `center_api_key`(환경변수 `CHK_STUDIO__CENTER_API_KEY`)이고 **Bot UI의 것과 값이 다르다** (ADR-0013).
   - 「연결 테스트」는 `studio/checks.py`다 (모델 `/v1/models`, **Center C7 `/resources?type=service_app`** — 읽기만 하고 서비스 앱을 깨우지 않는다, Worker `/v1/health`, 서비스 앱 키 C11 `/v1/keys/self`). 결과는 한 줄이고 **키 값은 들어가지 않는다**. Center는 **키 없이 묻지 않는다** (토큰 없는 요청은 401이라 「키가 거부되었다」로 읽혀 헷갈린다). 앱 주소는 그 앱을 서버 부분으로 가진 확장의 `service.base_url`이다(Center 리소스 목록은 M5). 시험 실행의 모델 키·키 참조도 같은 창고를 쓴다.
 - **데스크톱 백엔드(UIA)는 `worker/desktop.py`**다 (ADR-0033) — Worker가 **계획을 먼저** 받아 `platform`으로 고르고(`worker/routing.py`), 창은 C9 `window` 조건으로 **붙거나** `desktop-apps.json`(Worker 데이터 폴더)의 명령으로 띄운다. 찾기는 **붙은 창 안에서만**, 입력·고르기는 **다시 읽어 확인**하고 다르면 실패다(들어갔다고 치지 않는다). 좌표로 누를 때는 그 점이 **같은 앱 프로세스**인지 먼저 본다. 시험은 `tests/fake_desktop_apps.py`의 Qt 창을 쓰고 Windows에서만 돈다. UI 스텝 값의 `{변수}`는 **수행기가** 채운다(모르는 이름은 업무 실패). **읽은 값의 모양**([ADR-0036](docs/decisions/0036-screen-read-values.md)): Worker는 표를 칸 글 그대로 `data{headers, rows}`(`TableRead`)로 주고, 수행기가 **줄 목록**(`[{머리글: 값}]`)으로 바꾸며 `read`와 표의 칸에 **수 규칙**(수 모양이면 수 — 앞의 0·전화번호·백분율은 글)을 쓴다 (`screen_value`·`table_rows`).
-- 아직 없는 것: 데스크톱 화면 분석·직접 고르기, OCR 도구(ADR-0030이 미룬 것), Studio 감시 모드, **BUI-11 확장 화면**과 **BUI-05 알림**, BUI-04 「출처」·「최근 실행」, Qt 공용 위젯, 계약 코드 C8~C10·C12, Playwright. 남은 M1 기준은 `docs/05-roadmap.md`.
+- 아직 없는 것: 데스크톱 화면 분석·직접 고르기, OCR 도구(ADR-0030이 미룬 것), Studio 감시 모드, **BUI-11 확장 화면**과 **BUI-05 알림**, BUI-04 「최근 실행」, Qt 공용 위젯, **계약 코드 C12**(C8~C10은 **있다** — 확장이 소유해서 `extensions/ui_automation/…/contracts/`에 있다), Playwright. **M6 셋째 기준(계약 상태·화면 일치)의 공백 목록은 `docs/09-gaps.md`에 있다** — 계약 열넷·화면 전부를 코드와 대조한 것이고, 「문서는 돈다는데 부르는 쪽이 없는」 자리가 거기 모여 있다. 남은 완료 기준은 `docs/05-roadmap.md`.

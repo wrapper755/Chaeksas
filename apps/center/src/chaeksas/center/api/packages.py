@@ -21,7 +21,7 @@ from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.manifest import validate as validate_manifest
 
-#: 업로드된 패키지의 처음 상태 (C5 — 승인은 Admin 서명으로, M5).
+#: 업로드된 패키지의 처음 상태 (C5 — 승인은 Admin 서명 봉투로만 올라간다, C2).
 STATUS_CANDIDATE = "candidate"
 
 #: zip 안전 검사 한도. 푸는 쪽(현장 PC)을 지키려고 Center가 먼저 본다.

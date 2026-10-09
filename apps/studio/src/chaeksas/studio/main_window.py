@@ -68,7 +68,7 @@ DEFAULT_SIZE = (1400, 860)
 
 #: 아직 없는 것을 누르면 이렇게 말한다 — 조용히 아무 일도 없는 것보다 낫다.
 LATER = {
-    "center": "Center 올리기는 M5입니다.",
+    "center": "Center 올리기는 아직 없습니다 (docs/09-gaps.md §4-5).",
 }
 
 PACKAGE_FILTER = "패키지 (*.zip)"
@@ -125,7 +125,7 @@ class MainWindow(QMainWindow):
         dock.setObjectName("explorerDock")
         tabs = QTabWidget(dock)
         tabs.addTab(self.explorer, "BPM 프로세스")
-        later = QLabel("리소스 탐색기는 M4입니다.", tabs)
+        later = QLabel("리소스 탐색기(STU-03)는 아직 없습니다 (docs/09-gaps.md §4-4).", tabs)
         later.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tabs.addTab(later, "리소스")
         dock.setWidget(tabs)
@@ -141,7 +141,7 @@ class MainWindow(QMainWindow):
         self.bottom_tabs = bottom
         bottom.addTab(self.log_view, "로그")
         bottom.addTab(self.preflight, "검사")
-        screen = QLabel("「화면」 탭은 UI 태스크가 생기는 M4에서 채웁니다.", bottom)
+        screen = QLabel("「화면」 탭은 아직 비어 있습니다 (docs/09-gaps.md §4-6).", bottom)
         screen.setAlignment(Qt.AlignmentFlag.AlignCenter)
         bottom.addTab(screen, "화면")
         bottom.addTab(self.variables_view, "변수")

@@ -14,8 +14,9 @@ import { LABEL, seconds, time, where } from "../page";
  * 않는다 (원칙 6 — 보내는 쪽이 `sanitize()`로 걸렀다).
  *
  * 화면 설계서의 섹션 중 지금 채우는 것은 요약·노드 타임라인·AI 태스크 단계·사람 개입·로그·
- * 원본 이벤트다. UI 태스크는 M4, 이어 돈 기록은 서버 실행(M7)과 함께 온다 — **빈 섹션은
- * 「<종류> 이벤트가 없습니다」 한 줄**이다.
+ * 원본 이벤트다. 「UI 태스크」는 **아무도 C3 `ui_session`을 내보내지 않아** 비어 있고
+ * (docs/09-gaps.md §3-2), 「이어 돈 기록」은 `run_waiting`·`run_resumed`를 쓰는 서버 실행(M7)
+ * 몫이다 — **빈 섹션은 「<종류> 이벤트가 없습니다」 한 줄**이다.
  */
 
 const NODE_STATE: Record<string, string> = {

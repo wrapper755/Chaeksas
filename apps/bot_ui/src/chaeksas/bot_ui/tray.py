@@ -159,12 +159,12 @@ class Tray(QSystemTrayIcon):
                 entry = tools.addAction(found.id)
                 entry.setEnabled(False)
         else:
-            empty = tools.addAction("확장이 더한 유틸리티가 없습니다 (M4)")
+            empty = tools.addAction("확장이 더한 유틸리티가 없습니다")
             empty.setEnabled(False)
         tools.addSeparator()
         extensions = tools.addAction("확장...")
         extensions.setEnabled(False)
-        extensions.setToolTip("확장 목록(BUI-11)은 M4에서 만듭니다.")
+        extensions.setToolTip("확장 목록(BUI-11)은 아직 없습니다 (docs/09-gaps.md §4-8).")
 
         self._menu.addAction("설정...", self.open_settings.emit)
         self._menu.addSeparator()

@@ -21,15 +21,25 @@ const COMMON: NavItem[] = [
   { label: "사용 기록", href: "/usage" },
 ];
 
+/** 꺼진 줄에 붙는 짧은 표시. 이유는 말풍선에 있다. */
+const LATER_BADGE = "아직";
+
 /**
- * 앱 고유 메뉴. 확장이 기여하는 화면이고(`console.pages`, ADR-0018) 실제 구현은 M4다 —
+ * 앱 고유 메뉴. 확장이 기여하는 화면이고(`console.pages`, ADR-0018) **아직 없다** —
  * 지금은 어떤 메뉴가 생길지만 보인다.
+ *
+ * 여기 적은 것은 **손으로 베낀 목록**이다. `ExtensionHost.console_pages()`가 기여를 주는데
+ * 콘솔이 그것을 읽지 않는다 (docs/09-gaps.md §4-7) — 그래서 확장을 더해도 이 줄이 안 생긴다.
+ * `href` 타입이 고정 셋만 받는 것도 함께 풀어야 한다.
+ *
+ * **`later`에 마일스톤 이름을 적지 않는다** — 지나간 마일스톤을 가리키면 다음 사람이
+ * 「그쪽 몫이구나」로 읽고 넘어간다.
  */
 const APP_PAGES: Record<string, NavItem[]> = {
   "ui-automation": [
-    { label: "개요", later: "M4" },
-    { label: "셀렉터", later: "M4" },
-    { label: "모니터링", later: "M4" },
+    { label: "개요", later: "UIA-01은 아직 없습니다 (docs/09-gaps.md §4-7)." },
+    { label: "셀렉터", later: "UIA-02는 아직 없습니다 (docs/09-gaps.md §4-7)." },
+    { label: "모니터링", later: "UIA-03은 아직 없습니다 (docs/09-gaps.md §4-7)." },
   ],
 };
 
@@ -68,10 +78,10 @@ export function Shell({
               {item.later ? (
                 <span
                   className="flex items-center justify-between rounded-md px-3 py-2 text-body text-text-muted"
-                  title={`${item.later}에서 만듭니다.`}
+                  title={item.later}
                 >
                   {item.label}
-                  <span className="text-caption">{item.later}</span>
+                  <span className="text-caption">{LATER_BADGE}</span>
                 </span>
               ) : (
                 <Link

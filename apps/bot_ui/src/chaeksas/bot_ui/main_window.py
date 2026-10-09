@@ -97,11 +97,19 @@ PACKAGE_FILTER = "패키지 (*.zip)"
 #: 「도구」 메뉴에 붙는 유틸리티 (C13 `bot_ui.utilities[].menu`).
 UTILITY_MENU = "tools"
 
-#: 지금 보여 주는 로컬 런타임 (BUI-09). 확장이 여럿 기여하면 칸이 여럿이 된다 — M5.
+#: 지금 보여 주는 로컬 런타임 (BUI-09). 확장이 여럿 기여하면 칸이 여럿이 된다 — 아직 하나다.
 RUNTIME_ID = "worker"
 
 #: 유틸리티 창의 처음 크기 (BUI-06의 표 둘이 들어간다).
 UTILITY_SIZE = (1100, 820)
+
+#: BUI-02 「실행 기록」 탭·「로그 폴더 열기」가 아직 없다는 말 (docs/09-gaps.md §4-1).
+#: 원본은 `runs/<run_id>.jsonl`에 **이미 쌓인다** — 읽어 그리는 쪽이 없다.
+RUN_LOG_LATER = "실행 기록 탭은 아직 없습니다 (docs/09-gaps.md §4-1)."
+
+#: BUI-09에서 아직 못 보이는 칸들 (docs/09-gaps.md §4-2). Worker의 `GET /v1/status`가
+#: 이미 준다 — Bot UI가 `health`만 읽는다.
+RUNTIME_STATUS_LATER = "예약·최근 UI 세션·밀린 보고는 아직 없습니다 (Worker 상태 API를 읽지 않습니다)."
 RUNTIME_STATE = {
     "running": "실행 중",
     "restarting": "다시 띄우는 중",
@@ -128,7 +136,7 @@ SOURCE_LABEL = {
 class UtilityWindow(QWidget):
     """확장이 기여한 유틸리티 하나의 창 (BUI-06~08은 여기 들어온다).
 
-    **별도 창이 기본**이다 (BUI-02 [K]) — 메인 창 탭으로 붙이는 선택은 M5다. 닫을 때
+    **별도 창이 기본**이다 (BUI-02 [K]) — 메인 창 탭으로 붙이는 선택은 아직 없다. 닫을 때
     `closed()`를 불러 잡아 둔 자원(UI 세션 등)을 놓게 한다.
     """
 
@@ -169,7 +177,7 @@ class MainWindow(QMainWindow):
         self._build_menu()
         tabs = QTabWidget()
         tabs.addTab(self._bots_tab(), "Bot")
-        tabs.addTab(self._later_tab("실행 기록은 BPMN 엔진이 도는 M3에서 채워집니다."), "실행 기록")
+        tabs.addTab(self._later_tab(RUN_LOG_LATER), "실행 기록")
         tabs.addTab(self._runtimes_tab(), "로컬 런타임")
         self.setCentralWidget(tabs)
 
@@ -181,7 +189,7 @@ class MainWindow(QMainWindow):
         file_menu.addAction("설정...", self.open_settings)
         later = file_menu.addAction("로그 폴더 열기")
         later.setEnabled(False)
-        later.setToolTip("실행 기록이 생기는 M3에서 켭니다.")
+        later.setToolTip(RUN_LOG_LATER)
         file_menu.addSeparator()
         quit_action = file_menu.addAction("종료", self.close)
         quit_action.setShortcut("Ctrl+Q")
@@ -283,7 +291,7 @@ class MainWindow(QMainWindow):
         row.addStretch(1)
         layout.addLayout(row)
 
-        note = QLabel("예약·최근 UI 세션·밀린 보고는 M5입니다 (Worker 상태 API).")
+        note = QLabel(RUNTIME_STATUS_LATER)
         note.setEnabled(False)
         layout.addWidget(note)
         layout.addStretch(1)
