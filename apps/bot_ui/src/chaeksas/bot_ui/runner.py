@@ -139,6 +139,8 @@ class Running:
     _node_id: str | None = None
     _pendings: dict[str, Request] = field(default_factory=dict)
     _finished: str = ""
+    #: 실패로 끝났을 때 기록에 적힌 한 줄 (C3 `run_finished`의 `message`·`code`).
+    _failure: str = ""
     #: 현장에서 먼저 답한 Center 결재 — Bot UI가 Center에서 거둔다 (`answered_in_field`, ADR-0038).
     field_answered: list[str] = field(default_factory=list)
 
@@ -163,6 +165,11 @@ class Running:
     def finished(self) -> str:
         """끝났으면 `success`·`failed`·`cancelled`, 아직이면 빈 글."""
         return self._finished
+
+    @property
+    def failure(self) -> str:
+        """실패 사유 한 줄 (BUI-05 알림·U13). **기록에 적힌 것만** 쓴다 — 없으면 빈 글이다."""
+        return self._failure
 
     @property
     def pendings(self) -> list[Request]:
@@ -197,6 +204,8 @@ class Running:
             self._pendings.pop(str(data.get("request_id") or ""), None)
         elif kind == "run_finished":
             self._finished = str(data.get("status") or "success")
+            # **업무 값은 없다** — `sanitize()`를 지난 `message`·`code`뿐이다 (C3, 원칙 6).
+            self._failure = str(data.get("message") or data.get("code") or "")
             self._state = "완료"
             self._pendings.clear()
 

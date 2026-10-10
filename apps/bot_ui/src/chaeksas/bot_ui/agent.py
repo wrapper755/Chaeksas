@@ -24,7 +24,8 @@ from chaeksas.bot_ui import machine
 from chaeksas.bot_ui.bots import InstalledBot, find, installed
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials
-from chaeksas.bot_ui.deploy import Deployer
+from chaeksas.bot_ui.deploy import APPLIED, Deployer
+from chaeksas.bot_ui.notices import Notices
 from chaeksas.bot_ui.runner import Launcher, Running
 from chaeksas.bot_ui.runtimes import BUSY, RESERVED, HostSettings, RuntimeUnavailable, runtime_ids_of
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
@@ -37,6 +38,7 @@ from chaeksas.contracts.bot_ui import (
     ApprovalAck,
     ApprovalDispatch,
     CurrentRun,
+    DeploymentResult,
     ExtensionState,
     HeartbeatRequest,
     HeartbeatResponse,
@@ -119,6 +121,20 @@ def waited(item: QueueItem, *, now: datetime | None = None) -> float | None:
     return max((now or datetime.now(UTC)) - asked, timedelta(0)).total_seconds()
 
 
+def _past(when: str | None, now: datetime) -> bool:
+    """그 시각이 지났나. **읽을 수 없으면 지나지 않은 것으로 본다** (모르는 것으로 버리지 않는다)."""
+    if not when:
+        return False
+    try:
+        found = datetime.fromisoformat(when)
+    except (TypeError, ValueError):  # pragma: no cover - C4 모델이 ISO가 아닌 값을 받지 않는다
+        return False
+    if found.tzinfo is None:
+        # C4는 시간대가 붙은 시각을 보낸다 — 없으면 이 PC의 시간대로 읽는다 (버리지 않으려고).
+        found = found.astimezone()
+    return found <= now
+
+
 def new_queue_id() -> str:
     return f"q_{secrets.token_hex(3)}"
 
@@ -146,6 +162,8 @@ class Agent:
     client_factory: Callable[[str, str], CenterClient] | None = None
     #: 확장을 다시 읽는 길 (BUI-11이 끄고 켠 뒤). 시험이 바꿔 끼운다 — 기본은 엔트리 포인트다.
     extension_loader: Callable[[Iterable[str]], ExtensionHost] | None = None
+    #: 띄울 알림 (BUI-05). **여기는 넣기만 하고** 화면이 `take()`로 거둬 간다 — Agent는 Qt를 모른다.
+    notices: Notices = field(default_factory=Notices)
 
     # ── 지금 상태 (디스크에 남기지 않는 것) ──
     current_run: CurrentRun | None = None
@@ -184,6 +202,23 @@ class Agent:
                 environment=self._runtime_env,
             )
         return self._runtimes
+
+    def _tell_runtimes(self) -> None:
+        """런타임이 멈췄거나 그만뒀으면 알린다 (BUI-05).
+
+        **이름은 확장이 준 `label`**이다 (C13) — 플랫폼 코드에 「Worker」라고 적지 않는다
+        (ADR-0018). 아직 띄우지 않은 것(`off`)은 알릴 거리가 아니다.
+        """
+        runtimes = self.runtimes()
+        labels = {runtime.id: runtime.label for _owner, runtime in runtimes.contributions()}
+        for runtime_id, found in runtimes.supervisors.items():
+            self.notices.runtime(
+                runtime_id,
+                label=labels.get(runtime_id, runtime_id),
+                state=found.state,
+                restarts=found.restarts,
+                why=found.last_error or "",
+            )
 
     def _runtime_env(self, extension_id: str) -> dict[str, str]:
         """로컬 런타임 자식에게 물려줄 것 — **주소뿐이다** (키는 세션이 준다, ADR-0013)."""
@@ -532,6 +567,7 @@ class Agent:
         키가 거부되면 예외를 올린다 — 트레이가 「키 폐기됨」을 보여야 하고, 사람이 고쳐야 한다.
         """
         self.runtimes().tick()
+        self._tell_runtimes()
         # 돌고 있는 Bot을 들여다보고, 자리가 비면 대기열에서 다음을 올린다 (조각 4a).
         self.pump()
 
@@ -543,6 +579,7 @@ class Agent:
                 # (사람이 고칠 것이 없으므로 알림을 띄우지 않는다.)
                 self.last_problem = e
                 log.warning("%s", e)
+                self.notices.connection(online=False)
                 return None
 
         request = self.heartbeat_request()
@@ -552,9 +589,13 @@ class Agent:
             # 닿지 못한 것은 **오류 상태가 아니다** — 대기열·실행은 그대로 간다.
             self.last_problem = e
             log.warning("%s", e)
+            self.notices.connection(online=False)
             return None
         except CenterProblem as e:
             self.last_problem = e
+            if isinstance(e, KeyRejected):
+                # 키를 고치는 것은 **사람의 일**이다 (C4 403) — 지나가게 두지 않는다.
+                self.notices.key_rejected()
             raise
 
         self.last_problem = None
@@ -568,7 +609,9 @@ class Agent:
         self.apply(response)
         self.store.save()
         # 기록 보내기는 **하트비트가 끝난 뒤**다 — 늦어도 다음 주기에 또 보낸다.
-        self.ship_runs()
+        shipped = self.ship_runs()
+        # 「복구」는 **보낸 것까지** 말한다 — 끊겨 있던 동안 쌓인 기록이 나갔다는 뜻이다 (BUI-05).
+        self.notices.connection(online=True, shipped=shipped.sent)
         self.ship_approvals()
         return response
 
@@ -632,6 +675,10 @@ class Agent:
                 return
             except CenterProblem as e:
                 log.warning("Center가 결재 %s를 받지 않았다 — 현장에서 답해야 한다: %s", body.get("request_id"), e)
+            else:
+                # 올라갔다 — **현장에서도 답할 수 있다**고 알린다 (BUI-05·ADR-0038). 올리기
+                # 전에 알리면 못 올렸는데 「올라갔습니다」가 뜬다.
+                self.notices.sent_to_center(bot=running.bot.name)
             requests.mark_sent(path, number)
         while running.field_answered:
             request_id = running.field_answered[0]
@@ -659,6 +706,26 @@ class Agent:
             self.store.remember_deployments(found)
             # 설치된 것이 바뀌었다 — 새 Bot의 준비 상태를 다음 하트비트가 알려야 한다.
             self.invalidate_preflight()
+            self._tell_deployments(found)
+
+    def _tell_deployments(self, found: list[DeploymentResult]) -> None:
+        """배치 결정을 사람에게 알린다 (BUI-05). **거부는 지나가게 두지 않는다** (sticky).
+
+        설치는 됐는데 **키가 빠져 있으면 그것을 말한다** — 그 Bot은 사전 점검에서 막혀 돌지
+        않으므로, 「설치했습니다」만 띄우면 왜 안 도는지 모른다 (BUI-10으로 보낸다).
+        """
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        for one in found:
+            if one.result != APPLIED:
+                # 기다리는 것(`not_before`·내려받기 실패)은 **보고조차 오지 않는다** (C2 — 거부가
+                # 아니라 기다림이다). 여기 오는 나머지는 거부뿐이다.
+                self.notices.deploy_refused(why=one.reason or "사유를 모릅니다")
+                continue
+            bot = find(data_dir(), one.bpm_process_id, one.version)
+            name = bot.name if bot is not None else one.bpm_process_id
+            missing = self.preflight(bot).missing_key_refs if bot is not None else ()
+            self.notices.deployed(bot=name, version=one.version, missing_keys=missing)
 
     def deployer(self) -> Deployer:
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
@@ -695,6 +762,9 @@ class Agent:
             # 비활성이면 새 작업을 받지 않는다 (C4 `disabled`).
             return self._ack(job, "rejected", reason="bot_ui_shutdown")
         if len(self.queue) >= self.settings.queue_max:
+            # 받지 않은 요청은 **현장 사람도 알아야 한다** (BUI-05) — Center만 알면 PC 앞에서는
+            # 「왜 안 도나」가 된다.
+            self.notices.queue_full(bot=job.bpm_process_id, limit=self.settings.queue_max)
             return self._ack(job, "rejected", reason="queue_full")
 
         item = QueueItem(
@@ -800,6 +870,8 @@ class Agent:
         if done is not None:
             self._finished(done)
         if launcher.running is not None:
+            # 기다리는 결재·확인마다 알림 하나 (BUI-05) — **현장에서 답할 것만** 여기서 알린다.
+            self.notices.requests(launcher.running.pendings, bot=launcher.running.bot.name)
             self.current_run = launcher.running.current()
             return
         self._start_next()
@@ -807,6 +879,9 @@ class Agent:
     def _finished(self, done: Running) -> None:
         """끝난 실행 하나를 거둔다 — Center 작업이면 결과를 ack한다 (C4)."""
         log.info("Bot %s 끝남 (%s)", done.bot.id, done.finished or "unknown")
+        if done.finished == "failed":
+            # 실패는 사람이 알아야 한다 (BUI-05). 사유는 **기록에 적힌 한 줄**이다 (C3).
+            self.notices.run_failed(bot=done.bot.name, why=done.failure)
         if done.job_id:
             result = "finished" if done.finished == "success" else (
                 "cancelled" if done.finished == "cancelled" else "failed"
@@ -822,6 +897,7 @@ class Agent:
         """
         if self.stopping or self.disabled or self.current_run is not None:
             return
+        self.drop_expired()
         item = self.next_in_queue()
         if item is None:
             return
@@ -892,6 +968,32 @@ class Agent:
     def next_in_queue(self) -> QueueItem | None:
         return self.queue[0] if self.queue else None
 
+    def drop_expired(self, *, now: datetime | None = None) -> list[JobAck]:
+        """기다리는 동안 유효 시간이 지난 작업을 버린다 (C4 `expired`).
+
+        **지난 것을 돌리지 않는다** — 작업에 `expires_at`을 적는 뜻이 그것이다(「이 시간 뒤에는
+        하지 마라」). 버린 것은 Center에 `expired`로 알리고 현장에도 알린다 (BUI-05).
+
+        **모르면 버리지 않는다** — 시각을 읽을 수 없으면 그대로 둔다 (`expires_at`이 없는 수동
+        실행은 여기 걸리지 않는다).
+        """
+        at = now or datetime.now(UTC)
+        made: list[JobAck] = []
+        dropped = False
+        for item in list(self.queue):
+            if not _past(item.expires_at, at):
+                continue
+            dropped = True
+            self.store.state.queue.remove(item)
+            self.store.state.inputs.pop(item.queue_id, None)
+            if item.job_id:
+                made.append(self._ack_id(item.job_id, "expired"))
+            self.notices.queue_expired(bot=item.bpm_process_id)
+            log.warning("작업 %s이 기다리는 동안 만료됐다", item.job_id or item.queue_id)
+        if dropped:
+            self.store.save()
+        return made
+
     def enqueue_manual(self, bpm_process_id: str, *, version: str | None = None, front: bool = False) -> QueueItem:
         """수동 실행 (BUI-04 「지금 실행...」). 맨 앞에 넣을 수 있다."""
         if len(self.queue) >= self.settings.queue_max:
@@ -905,6 +1007,13 @@ class Agent:
         )
         self.store.state.queue.insert(0 if front else len(self.queue), item)
         self.store.save()
+        if self.current_run is not None:
+            # 바로 돌지 않는다 — **무엇 때문에 기다리나**까지 말한다 (BUI-05).
+            self.notices.queued(
+                bot=bpm_process_id,
+                position=self.queue.index(item) + 1,
+                running=self.current_run.bpm_process_id,
+            )
         return item
 
     def cancel_queued(self, queue_id: str) -> JobAck | None:
