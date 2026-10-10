@@ -449,3 +449,158 @@ def test_the_revoke_command_writes_an_envelope(tmp_path: Path, key: Any, capsys:
     )
     assert code == 0
     assert json.loads(out.read_text(encoding="utf-8"))["payload"]["kind"] == "extension_revoke"
+
+
+# ─────────── 외부 확장의 상태 (C7 — 어댑터 `health`, 09-gaps §3-7) ───────────
+
+
+class _HealthServer:
+    """`health.path`에 정해진 코드를 돌려주는 작은 서버. **몇 번 두드렸는지 센다.**"""
+
+    def __init__(self, *, code: int = 200, path: str = "/health") -> None:
+        import http.server  # noqa: PLC0415
+        import threading  # noqa: PLC0415
+
+        self.hits = 0
+        outer = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:  # noqa: N802 — http.server의 이름이다
+                if self.path != path:
+                    self.send_response(404)
+                    self.end_headers()
+                    return
+                outer.hits += 1
+                self.send_response(code)
+                self.end_headers()
+
+            def log_message(self, *args: Any) -> None:
+                pass  # 시험 출력에 접근 기록을 찍지 않는다
+
+        self._server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self._server.server_address[1]
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+
+    def close(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+        self._thread.join(timeout=5)
+
+
+@pytest.fixture
+def health_server() -> Iterator[_HealthServer]:
+    made = _HealthServer()
+    yield made
+    made.close()
+
+
+def local_definition(port: int, **adapter_over: Any) -> dict[str, Any]:
+    """127.0.0.1에 뜬 서버를 가리키는 외부 확장 정의.
+
+    사설 주소라 **`allow_private_network`를 켜야** 관문을 지난다 (C13 §4-3) — 그 규칙이
+    Center에도 그대로 적용된다는 것을 시험이 본다.
+    """
+    found = definition()
+    adapter = found["service"]["adapter"]
+    found["service"]["base_url"] = f"http://127.0.0.1:{port}"
+    adapter["allowed_hosts"] = ["127.0.0.1"]
+    adapter["allow_private_network"] = True
+    adapter.update(adapter_over)
+    return found
+
+
+def extension_row(client: TestClient, extension_id: str = "ext-ocr") -> Any:
+    answer = client.get(f"/api/v1/resources/extensions/{extension_id}", headers=READ_AUTH)
+    assert answer.status_code == 200, answer.text
+    return answer.json()
+
+
+def test_an_extension_without_health_stays_unchecked(client: TestClient, key: Any) -> None:
+    """선언이 없으면 **두드리지 않는다** — 「확인 전」이지 「응답 없음」이 아니다 (C7).
+
+    C11의 `/healthz`를 외부 앱에 들이대지 않는다 — 어디를 봐야 하는지는 정의가 말한다.
+    """
+    found = definition()
+    del found["service"]["adapter"]["health"]
+    assert register(client, found, envelope_for(key, found)).status_code == 201
+
+    row = extension_row(client)
+    assert row["status"] == "unknown"
+    assert row["status_reasons"] == [] and row["checked_at"] is None
+
+
+def test_a_declared_health_is_probed(client: TestClient, key: Any, health_server: Any) -> None:
+    """선언된 경로·기대 코드로 두드린다. 맞으면 `ok`이고 본 때가 남는다."""
+    found = local_definition(health_server.port)
+    assert register(client, found, envelope_for(key, found)).status_code == 201
+
+    row = extension_row(client)
+    assert row["status"] == "ok" and row["status_reasons"] == []
+    assert row["checked_at"], "본 때가 없다"
+    assert health_server.hits == 1
+
+
+def test_a_different_status_code_is_unreachable(client: TestClient, key: Any) -> None:
+    """**기대 코드와 다르면** 응답 없음이다 — 200이라고 넘겨짚지 않는다 (C13 `expect_status`)."""
+    server = _HealthServer(code=500)
+    try:
+        found = local_definition(server.port)
+        assert register(client, found, envelope_for(key, found)).status_code == 201
+        row = extension_row(client)
+        assert row["status"] == "unreachable"
+        assert row["status_reasons"] == ["health_500"]
+    finally:
+        server.close()
+
+
+def test_a_host_outside_allowed_hosts_never_registers(client: TestClient, key: Any) -> None:
+    """허용 호스트 밖은 **등록에서 막힌다** (E3) — 상태 점검까지 갈 일이 없다.
+
+    관문이 둘인 셈이다: 선언이 들어올 때 E3가 보고, 나갈 때 §4-3이 본다.
+    """
+    found = definition()
+    found["service"]["base_url"] = "https://다른곳.example.com"
+    answer = register(client, found, envelope_for(key, found))
+    assert answer.status_code == 422
+    assert any("allowed_hosts" in str(v) for v in answer.json()["detail"]["violations"])
+
+
+def test_an_allowed_name_that_resolves_private_is_refused(
+    client: TestClient, key: Any, health_server: Any
+) -> None:
+    """**허용된 이름이 사설 IP로 풀리면 나가지 않는다** (C13 §4-3 4번).
+
+    E3는 이것을 못 본다 — 이름만 보고 어디로 풀리는지는 모른다. 이 관문이 없으면 서명된
+    정의 하나로 Center가 내부망·메타데이터 주소를 두드리게 된다. `https`라서 E3의 스킴
+    검사도 지나간다.
+    """
+    found = local_definition(health_server.port, allow_private_network=False)
+    found["service"]["base_url"] = f"https://127.0.0.1:{health_server.port}"
+    assert register(client, found, envelope_for(key, found)).status_code == 201
+
+    row = extension_row(client)
+    assert row["status"] == "unreachable"
+    assert row["status_reasons"] == ["host_not_allowed"]
+    assert health_server.hits == 0, "관문에 걸렸는데 두드렸다"
+
+
+def test_the_probe_keeps_its_interval(client: TestClient, key: Any, health_server: Any) -> None:
+    """목록을 읽을 때마다 바깥으로 나가지 않는다 — 서비스 앱과 **같은 간격**이다 (C7 60초)."""
+    found = local_definition(health_server.port)
+    assert register(client, found, envelope_for(key, found)).status_code == 201
+
+    for _ in range(3):
+        assert client.get("/api/v1/resources?type=extension", headers=READ_AUTH).status_code == 200
+    assert health_server.hits == 1, f"간격을 지키지 않았다 ({health_server.hits}번)"
+
+
+def test_refresh_ignores_the_interval(client: TestClient, key: Any, health_server: Any) -> None:
+    """「새로 고침」만 간격을 무시한다 (C7)."""
+    found = local_definition(health_server.port)
+    assert register(client, found, envelope_for(key, found)).status_code == 201
+    extension_row(client)
+    before = health_server.hits
+
+    assert client.post("/api/v1/resources/refresh", json={}, headers=ADMIN).status_code == 200
+    assert health_server.hits == before + 1

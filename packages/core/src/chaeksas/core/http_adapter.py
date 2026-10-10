@@ -22,7 +22,6 @@
 
 from __future__ import annotations
 
-import ipaddress
 import json
 import re
 import socket
@@ -35,8 +34,10 @@ from chaeksas.contracts.extension import (
     FORBIDDEN_HEADERS,
     AdapterOperation,
     ExtensionManifest,
+    HostRefused,
     HttpAdapter,
     is_restricted_jsonpath,
+    resolve_host,
 )
 from chaeksas.core.services import OpCall, OpOutcome, ServiceCallError
 
@@ -190,14 +191,6 @@ def read_path(body: Any, path: str) -> Any:
 # ─────────────────────────── 주소와 IP (§4-3) ───────────────────────────
 
 
-def _is_private(ip: str) -> bool:
-    """루프백·사설·링크 로컬인가 (§4-3 4번). 이 규칙이 같은 PC의 Worker도 막는다."""
-    found = ipaddress.ip_address(ip)
-    return bool(
-        found.is_loopback or found.is_private or found.is_link_local or found.is_reserved
-    )
-
-
 def resolve(
     *,
     base_url: str,
@@ -213,36 +206,17 @@ def resolve(
     if not path.startswith("/"):
         raise AdapterError(f"경로가 `/`로 시작하지 않는다: {request.path}", code="adapter_invalid")
 
-    parts = urlsplit(base_url)
-    host = parts.hostname
-    if not host or parts.scheme not in ("http", "https"):
-        raise AdapterError(f"주소가 http(s)가 아니다: {base_url}", code="adapter_invalid")
-
-    # 3) 허용 호스트 — **정확히** 있어야 한다 (와일드카드 없음).
-    if host not in adapter.allowed_hosts:
-        raise AdapterError(
-            f"허용 호스트 밖이다: {host} (허용 {sorted(adapter.allowed_hosts)})",
-            code="host_not_allowed",
-        )
-
-    # 4) DNS를 한 번 풀고 그 IP를 본다.
+    # §4-3 1~4는 **계약이 들고 있다** — Center의 외부 확장 상태 점검(C7)도 같은 함수를 쓴다.
     try:
-        found = (resolver or _getaddrinfo)(host)
-    except OSError as e:
-        raise AdapterError(f"{host}의 주소를 풀지 못했다 ({type(e).__name__})", retryable=True) from e
-    if not found:
-        raise AdapterError(f"{host}의 주소를 풀지 못했다", retryable=True)
-    ip = found[0]
-    private = _is_private(ip)
-    if private and not adapter.allow_private_network:
-        raise AdapterError(
-            f"사설·루프백 주소다: {host} → {ip} (정의가 `allow_private_network`를 켜야 한다)",
-            code="host_not_allowed",
+        checked = resolve_host(
+            base_url,
+            allowed_hosts=adapter.allowed_hosts,
+            allow_private_network=adapter.allow_private_network,
+            lookup=resolver or _getaddrinfo,
         )
-
-    # 2) https만 — 사설망을 허용한 사설 주소만 http가 된다.
-    if parts.scheme == "http" and not (adapter.allow_private_network and private):
-        raise AdapterError(f"https만 쓴다: {base_url}", code="host_not_allowed")
+    except HostRefused as e:
+        raise AdapterError(str(e), code=e.code, retryable=e.retryable) from e
+    parts = urlsplit(base_url)
 
     query = "&".join(
         f"{quote(name, safe='')}={fill_query(value, call, idempotency_key=idempotency_key)}"
@@ -253,10 +227,7 @@ def resolve(
         for name, value in (request.headers or {}).items()
     }
     # **IP로 접속하고 Host는 원래 이름**이다 (DNS 고정). TLS SNI도 원래 이름으로 보낸다.
-    netloc = f"[{ip}]" if ":" in ip else ip
-    if parts.port:
-        netloc = f"{netloc}:{parts.port}"
-    url = urlunsplit((parts.scheme, netloc, path, query, ""))
+    url = urlunsplit((checked.scheme, checked.netloc, path, query, ""))
     headers["Host"] = parts.netloc
 
     body = (
@@ -267,8 +238,8 @@ def resolve(
     return Resolved(
         method=request.method.upper(),
         url=url,
-        host=host,
-        ip=ip,
+        host=checked.host,
+        ip=checked.ip,
         headers=headers,
         body=body,
         timeout_s=float(call.timeout_s or adapter.limits.timeout_s),

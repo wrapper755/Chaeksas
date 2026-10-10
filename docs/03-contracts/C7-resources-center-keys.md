@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 외부 확장은 어댑터 `health`로 본다) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Center ↔ 서비스 앱(공개 정보 읽기), Studio·Bot UI·서버 실행기·Center 콘솔 → Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/resources.py`, `…/center_keys.py` (import `chaeksas.contracts.resources`, [ADR-0019](../decisions/0019-package-names.md)) |
@@ -31,6 +31,8 @@
 **2. Center API 키 관리** (CON-11).
 
 > 상태: **고정 네 종류와 CON-07이 돈다** (M5 조각 8) — 서비스 앱 등록·주소 바꾸기·해제·새로 고침, `GET /resources`의 확장·서비스 앱·툴팩·런타임, 누락 검사를 패키지 정보(`missing_resources`)와 배포 거부에 이었다. **툴팩·런타임·확장은 따로 등록받지 않는다** — Center가 이미 가진 것(패키지 표, C4 보고, 서비스 앱 manifest)에서 모은다. **외부 확장 등록·해제도 돈다** (조각 9, 서명 봉투로만 — C13 E6). Center API 키 관리는 M2부터 돈다.
+>
+> **외부 확장의 상태도 돈다** — 어댑터 `health`를 선언한 대로(`{path, expect_status}`) 두드리고, **선언이 없으면 두드리지 않고 「확인 전」으로 둔다** (C11의 `/healthz`를 외부 앱에 들이대지 않는다). 나갈 때는 **어댑터와 같은 관문**(C13 §4-3 1~4)을 지난다 — Center는 `core`를 import할 수 없어 `contracts`의 `resolve_host`를 양쪽이 함께 쓴다. 등록 때 E3가 「허용 호스트 밖·http」를 이미 막으므로, 이 관문이 실제로 잡는 것은 **허용된 이름이 사설 IP로 풀리는 경우**다.
 >
 > **확장이 기여한 자원도 돈다** (조각 10) — Center가 카탈로그를 읽어 쌓고 CON-07에 종류마다 탭이 생긴다. **출처는 둘이고 모양은 같다**: 내장·사내는 C11 manifest의 `resources`(그 칸을 이 조각에서 더했다 — 정의가 Center에 없기 때문이다), 외부는 등록된 정의의 `contributes.resources`. **`revision`이 같으면 항목을 다시 쓰지 않고**(계획 캐시를 공연히 버리지 않게), **닿지 못하면 들고 있던 것을 지우지 않는다**(사유만 남긴다). 서비스 앱을 등록·주소 변경하는 그 자리에서 카탈로그도 읽는다 — 그래야 「등록했는데 왜 경고가 그대로인가」가 생기지 않는다. `requires.resources` 누락 검사가 이제 실제로 돈다 (배포는 막지 않는다).
 
@@ -83,8 +85,11 @@
 | `contributes_summary` | 기여 지점별 이름 (예: `task_types: [ui_task]`) |
 | `service_app_id`? | 서버 부분 |
 | `installed_on` | 이 확장을 가진 Bot UI·서버 실행기 수와 버전 분포 (C4·C12 보고. Studio는 세지 않음) |
-| `status` | 서버 부분 상태 (없으면 `n/a`) |
+| `status` | 서버 부분 상태. 값은 `ServiceAppResource.status`와 같고 **서버 부분이 아예 없으면 `n/a`**다. C11 앱은 그 앱의 `/healthz`, 외부 확장은 **어댑터 `health`**(C13 §4-1)로 본다 — 선언이 없으면 `unknown`(「확인 전」)이다 |
+| `status_reasons`, `checked_at`? | 상태의 사유와 마지막으로 본 때. 서버 부분이 없으면 비어 있다 |
 | `definition`, `envelope` | 외부 확장만. 실행하는 쪽이 받아 검증한다 |
+
+외부 확장의 상태를 볼 때 Center는 **어댑터와 같은 관문을 지난다** (C13 §4-3 1~4 — 허용 호스트·사설망·https·DNS 고정). 규칙이 갈라지지 않게 `contracts`의 같은 함수(`resolve_host`)를 쓴다. 관문에 걸리면 두드리지 않고 `unreachable`에 사유를 남긴다 — **정의가 적은 주소라고 해서 Center가 아무 데나 나가지 않는다.**
 
 ### ServiceAppResource
 

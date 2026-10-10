@@ -13,8 +13,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Annotated, Any, ClassVar
 from urllib.parse import urlsplit
 
@@ -927,3 +928,90 @@ def verify_external(
     if mismatched:
         return [Violation(rule="E6", code="bad_envelope", message="봉투와 정의가 다른 확장이다", items=mismatched)]
     return []
+
+
+# ─────────────────── 어댑터 호스트 관문 (C13 §4-3 1~4) ───────────────────
+
+
+class HostRefused(ValueError):
+    """어댑터 주소가 §4-3에 걸렸다. **요청을 내기 전에** 걸린다.
+
+    `retryable`이면 규칙 위반이 아니라 **주소를 풀지 못한 것**뿐이다 (잠시 뒤 다시 된다).
+    """
+
+    def __init__(self, message: str, *, code: str = "host_not_allowed", retryable: bool = False) -> None:
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+
+
+class ResolvedHost(ContractModel):
+    """관문을 지난 주소. **IP로 접속하고 `Host`는 원래 이름**이다 (DNS 고정)."""
+
+    scheme: str
+    #: 원래 이름 — `Host` 헤더와 TLS SNI에 쓴다.
+    host: str
+    port: int | None = None
+    ip: str
+    #: 접속할 자리 (`IP` 또는 `[IPv6]`, 포트가 있으면 붙는다).
+    netloc: str
+    private: bool = False
+
+    @property
+    def origin(self) -> str:
+        """`scheme://netloc` — 뒤에 경로를 붙여 쓴다."""
+        return f"{self.scheme}://{self.netloc}"
+
+
+def is_private_ip(ip: str) -> bool:
+    """루프백·사설·링크 로컬·예약 주소인가 (§4-3 4번). 같은 PC의 Worker도 이 규칙이 막는다."""
+    found = ipaddress.ip_address(ip)
+    return bool(found.is_loopback or found.is_private or found.is_link_local or found.is_reserved)
+
+
+def resolve_host(
+    base_url: str,
+    *,
+    allowed_hosts: Sequence[str],
+    allow_private_network: bool,
+    lookup: Callable[[str], Sequence[str]],
+) -> ResolvedHost:
+    """§4-3 1~4를 본다. 걸리면 `HostRefused`다 — **요청은 나가지 않는다.**
+
+    **부르는 쪽이 둘이라 여기 둔다** — 어댑터(`core.http_adapter`)와 Center의 외부 확장
+    상태 점검(C7)이다. Center는 `core`를 import할 수 없어(01-architecture §5) 베끼면 두
+    규칙이 갈라진다. DNS 조회만 `lookup`으로 받아 이 함수 자체는 순수하게 둔다.
+    """
+    parts = urlsplit(base_url)
+    host = parts.hostname
+    if not host or parts.scheme not in ("http", "https"):
+        raise HostRefused(f"주소가 http(s)가 아니다: {base_url}", code="adapter_invalid")
+
+    # 3) 허용 호스트 — **정확히** 있어야 한다 (와일드카드 없음).
+    if host not in allowed_hosts:
+        raise HostRefused(f"허용 호스트 밖이다: {host} (허용 {sorted(allowed_hosts)})")
+
+    # 4) DNS를 한 번 풀고 **그 IP로** 간다 (재바인딩 방지).
+    try:
+        found = list(lookup(host))
+    except OSError as e:
+        raise HostRefused(f"{host}의 주소를 풀지 못했다 ({type(e).__name__})", retryable=True) from e
+    if not found:
+        raise HostRefused(f"{host}의 주소를 풀지 못했다", retryable=True)
+    ip = str(found[0])
+    private = is_private_ip(ip)
+    if private and not allow_private_network:
+        raise HostRefused(
+            f"사설·루프백 주소다: {host} → {ip} (정의가 `allow_private_network`를 켜야 한다)"
+        )
+
+    # 2) https만 — 사설망을 허용한 사설 주소만 http가 된다.
+    if parts.scheme == "http" and not (allow_private_network and private):
+        raise HostRefused(f"https만 쓴다: {base_url}")
+
+    netloc = f"[{ip}]" if ":" in ip else ip
+    if parts.port:
+        netloc = f"{netloc}:{parts.port}"
+    return ResolvedHost(
+        scheme=parts.scheme, host=host, port=parts.port, ip=ip, netloc=netloc, private=private
+    )

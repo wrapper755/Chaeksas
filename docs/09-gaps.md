@@ -25,7 +25,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠다) |
 | C5 | **구현됨** | `contracts.center_api`, Center 전부 | — (닫았다 — 지원 종료·참조·삭제까지) |
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
-| C7 | 구현됨 | `contracts.resources`·`center_keys` | 외부 확장 앱의 `health`를 **보지 않는다** (§3-7) |
+| C7 | **구현됨** | `contracts.resources`·`center_keys` | — (닫았다 — 외부 확장은 어댑터 `health`로 본다) |
 | C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
 | C9 | **구현됨** | **`ext.ui_automation.contracts.registry`·`console`** | — (관리 콘솔이 읽는 길도 돈다) |
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
@@ -48,13 +48,7 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 ## 3. 계약 쪽 기능 공백
 
-### 3-7. C7이 외부 확장 앱의 `health`를 보지 않는다
-
-- **문서:** C13 165줄 — 외부 확장은 `adapter.health {path, expect_status}`를 선언할 수 있고 「없으면 Center는 상태를 「확인 전」으로 둔다」. 있으면 보라는 뜻이다.
-- **코드:** Center는 **C11 `/healthz` 고정 경로만** 두드린다 (`api/resources.py:91`). `expect_status`를 읽는 코드가 없다.
-- **없는 것:** 외부 확장 주소를 선언된 경로·기대 코드로 두드리는 일. 그래서 CON-07의 외부 확장 상태는 늘 「확인 전」이다.
-- **크기:** 작다.
-- **막는 것:** 없다. 다만 **외부 앱에 Center가 나가는 일이라** 허용 호스트·사설망 규칙을 어댑터와 같게 지켜야 한다 (C13 §4).
+**닫았다 — 남은 것이 없다.** 계약 열넷의 상태는 §1 표에 있다.
 
 ## 4. 화면 쪽 기능 공백
 
