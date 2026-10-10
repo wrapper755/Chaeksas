@@ -31,7 +31,13 @@
       {"domain": "desktop", "entry": "ui_automation.client:DesktopEnvironment"}
     ],
     "studio.resource_views": [
-      {"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page", "creates_task_type": "ui_task"}
+      {
+        "id": "ui-pages",
+        "label": "UI 화면",
+        "resource_type": "ui_page",
+        "creates_task_type": "ui_task",
+        "creates_task_field": "page_id"
+      }
     ],
     "bot_ui.utilities": [
       {

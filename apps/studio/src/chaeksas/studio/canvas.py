@@ -183,6 +183,20 @@ class Canvas(QWebEngineView):
     def create_empty(self, process_id: str, name: str) -> None:
         self.call_sync("createEmpty", process_id, name)
 
+    def create_task(
+        self,
+        bpmn: str,
+        name: str,
+        chk: dict[str, str],
+        *,
+        then: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
+        """STU-03 「캔버스에 추가」 — 노드 하나를 만든다. **실행 취소는 한 걸음**이다.
+
+        `chk`는 `properties`·`setProperties`와 같은 **`{요소 이름: JSON 글}`**이다.
+        """
+        self.call("createTask", {"bpmn": bpmn, "name": name, "chk": chk}, then=then)
+
     def mark(self, states: dict[str, str]) -> None:
         """실행 중 노드 색 (STU-09). `states`는 `{노드 id: running|done|failed|waiting}`."""
         self.call("mark", states)

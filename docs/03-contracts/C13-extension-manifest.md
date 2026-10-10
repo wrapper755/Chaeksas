@@ -91,7 +91,7 @@
 | --- | --- | --- | --- |
 | `task_types` | `[{id, label, icon, bpmn: "serviceTask", editor, executor, run_locations}]` | Studio 팔레트·속성 패널, 실행기 | 불가 (서비스 앱 태스크로 씀) |
 | `studio.editors` | `[{task_type, entry}]` | Studio | 불가 (자동 폼) |
-| `studio.resource_views` | `[{id, label, resource_type, creates_task_type?}]` | STU-03 | 가능 (선언) |
+| `studio.resource_views` | `[{id, label, resource_type, creates_task_type?, creates_task_field?}]` | STU-03 | 가능 (선언) |
 | `bot_ui.utilities` | `[{id, label, menu: "tools", entry, needs_runtime?}]` | Bot UI 「도구」 메뉴·탭 | 불가 |
 | `bot_ui.panels` | `[{id, label, surface, runtime?, entry}]` | Bot UI 화면의 **한 칸** (BUI-09, [ADR-0042](../decisions/0042-extension-contributed-panels.md)) | 불가 |
 | `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start, reserve?, status?, shutdown?}]` | Bot UI (BUI-09·11) | 불가 |
@@ -104,6 +104,9 @@
 필드 설명:
 
 - `run_locations`: 이 태스크 종류를 쓸 수 있는 실행 위치. `ui_task`는 `["pc"]`다.
+- `studio.resource_views`: 리소스 탐색기(STU-03)의 뿌리 하나. 목록은 **C7 기여 자원**(`resource_type`)에서 오고, Studio는 항목의 `name`·`summary`만 그린다 — **`data`를 해석하지 않는다** (§5). 그래서 기여 뿌리는 **한 단계**다.
+  - `creates_task_type`(선택): 「캔버스에 추가」(끌어다 놓기)가 만들 **태스크 종류 id**. 없으면 그 뿌리에서 태스크를 만들 수 없다.
+  - `creates_task_field`(선택): 새 태스크의 `data`에서 **자원 id를 받을 칸 이름**. 선언하면 Studio가 `{"<creates_task_field>": "<자원 id>"}`만 넣고 그 밖은 비운다 — 선언이 없으면 `data`를 비운 채 만들고 사람이 편집기에서 고른다. **플랫폼은 `data`의 모양을 모른다** — 선언대로만 넣는다.
 - `agent_environments[].entry`: `extension_api.AgentEnvironment`. 엔진이 AI 태스크마다 `open(ctx)`로 **세션 하나**를 열어 그 도구(`AgentTool` — 이름·설명·인자 스키마·부를 함수)를 허용 목록에 더해 쓰고, 끝나면 `close()`한다. 한 `domain`은 한 확장만 기여한다 (둘이면 검사 오류 E8).
 - `start`: `on_demand` 또는 `always`.
 - `bot_ui.local_runtimes[].entry`: 런타임을 **실행하는 코드**를 가리킨다 (`entry` 형식은 위와 같고, 그 확장 패키지 안만 가리킬 수 있다). **명령줄을 확장이 적지 않는다** — Bot UI가 만든다 ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md)).
@@ -251,7 +254,8 @@ Operation:
     "task_types": [{"id": "ui_task", "label": "UI 태스크", "icon": "mouse-pointer-click", "bpmn": "serviceTask",
                     "editor": {"kind": "builtin", "entry": "ui_automation.client:UiTaskEditor"},
                     "executor": {"entry": "ui_automation.client:UiTaskExecutor"}, "run_locations": ["pc"]}],
-    "studio.resource_views": [{"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page", "creates_task_type": "ui_task"}],
+    "studio.resource_views": [{"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page",
+                               "creates_task_type": "ui_task", "creates_task_field": "page_id"}],
     "bot_ui.utilities": [{"id": "selector-registration", "label": "UI 셀렉터 등록", "menu": "tools",
                           "entry": "ui_automation.client:SelectorRegistration", "needs_runtime": "worker"}],
     "bot_ui.panels": [{"id": "recent-ui-sessions", "label": "최근 UI 세션", "surface": "bot_ui.runtimes",

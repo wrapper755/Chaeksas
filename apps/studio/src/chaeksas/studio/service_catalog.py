@@ -76,11 +76,20 @@ class App:
     status: str = UNKNOWN
     tier: str = ""
     operations: tuple[Operation, ...] = ()
+    #: 그 앱을 서버 부분으로 가진 확장 (C7) — STU-03이 기여 뿌리와 짝지을 때 쓴다.
+    extension_id: str = ""
+    #: 관리 콘솔 주소 (C7). 없으면 「관리 콘솔에서 보기」를 띄우지 않는다.
+    console_url: str = ""
+
+    @property
+    def status_text(self) -> str:
+        """「정상」·「응답 없음」 — 스타일 가이드의 말 그대로 (STU-03·14가 같이 쓴다)."""
+        return _status_text(self.status)
 
     @property
     def label(self) -> str:
         """콤보에 보일 한 줄 — 「<앱 이름> (<구분>) — <상태>」 (STU-14)."""
-        return f"{self.name} ({self.kind}) — {_status_text(self.status)}"
+        return f"{self.name} ({self.kind}) — {self.status_text}"
 
     @property
     def healthy(self) -> bool:
@@ -158,6 +167,8 @@ def _from_service_app(found: ServiceAppResource) -> App:
         status=found.status or UNKNOWN,
         tier="",
         operations=operations,
+        extension_id=found.extension_id or "",
+        console_url=found.console_url or "",
     )
 
 
@@ -187,6 +198,8 @@ def _from_external(found: ExtensionManifest) -> App | None:
         status=UNKNOWN,
         tier=found.tier,
         operations=operations,
+        # 외부 앱은 확장 그 자체다 — 관리 콘솔은 우리 것이 아니라 주소를 모른다 (C13 E1).
+        extension_id=found.id,
     )
 
 

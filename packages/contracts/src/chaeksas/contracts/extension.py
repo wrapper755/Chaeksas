@@ -159,6 +159,9 @@ class ResourceView(ContractModel):
     label: str
     resource_type: str
     creates_task_type: str | None = None
+    #: 「캔버스에 추가」가 **자원 id를 넣을 `data`의 칸 이름**. 없으면 빈 `data`로 만들고
+    #: 사람이 편집기에서 고른다 — 플랫폼은 `data`의 모양을 모른다 (C13 §5, ADR-0018).
+    creates_task_field: str | None = None
 
 
 class Utility(ContractModel):

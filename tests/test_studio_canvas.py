@@ -169,3 +169,79 @@ def test_an_extension_task_keeps_its_kind_through_an_edit(canvas: Any) -> None:
 
     xml = canvas.save_xml()
     assert 'type="ui_task"' in xml and 'extension="ui-automation"' in xml, "XML 속성으로 남는다"
+
+
+def added(canvas: Any, chk: dict[str, str], name: str = "주문 등록") -> str:
+    """STU-03 「캔버스에 추가」를 한 번 — 만들어진 노드 id (답이 올 때까지 기다린다)."""
+    from PySide6.QtCore import QEventLoop
+
+    loop = QEventLoop()
+    box: dict[str, Any] = {}
+
+    def done(found: dict[str, Any]) -> None:
+        box.update(found)
+        loop.quit()
+
+    canvas.create_task("bpmn:ServiceTask", name, chk, then=done)
+    loop.exec()
+    assert box.get("ok"), box
+    return str(box["id"])
+
+
+def test_a_resource_becomes_a_node_in_one_undo_step(canvas: Any) -> None:
+    """STU-03 「캔버스에 추가」 — `chk:*`를 달고 **한 번에** 만든다.
+
+    만든 뒤에 고치면 실행 취소가 두 걸음이 되어 사람이 한 번 되돌렸는데 빈 태스크가 남는다.
+    """
+    canvas.create_empty("Proc_add", "추가 시험")
+    before = canvas.call_sync("stats")["elements"]
+    body = {"type": "ui_task", "extension": "ui-automation", "data": {"page_id": "erp.order.form"}}
+    node_id = added(canvas, {"task": json.dumps(body, ensure_ascii=False)})
+
+    found = read_process(canvas.save_xml())
+    node = next(n for n in found.all_nodes() if n.id == node_id)
+    assert node.kind == "serviceTask" and node.name == "주문 등록"
+    task = node.prop("task")
+    assert task is not None
+    assert (task.type, task.extension) == ("ui_task", "ui-automation")
+    assert task.data == {"page_id": "erp.order.form"}
+
+    canvas.call_sync("undo")
+    assert canvas.call_sync("stats")["elements"] == before, "한 번 되돌리면 흔적이 없다"
+    assert node_id not in [n.id for n in read_process(canvas.save_xml()).all_nodes()]
+
+
+def test_a_service_app_operation_becomes_a_service_call(canvas: Any) -> None:
+    """서비스 앱 작업은 `chk:serviceCall`이다 (C14) — 같은 명령이 둘 다 만든다."""
+    canvas.create_empty("Proc_call", "호출 시험")
+    body = {"app_id": "svc-invoice", "operation": "issue"}
+    node_id = added(canvas, {"serviceCall": json.dumps(body, ensure_ascii=False)}, name="세금계산서 issue")
+    call = next(n for n in read_process(canvas.save_xml()).all_nodes() if n.id == node_id).prop("serviceCall")
+    assert call is not None
+    assert (call.app_id, call.operation) == ("svc-invoice", "issue")
+    assert call.key_ref is None, "키 참조는 BPM 프로세스에서 상속한다 (ADR-0013)"
+
+
+def shape_at(xml_text: str, node_id: str) -> tuple[str | None, str | None] | None:
+    """저장된 XML의 DI에서 그 노드가 놓인 자리 (시험만 쓴다 — 캔버스에 길을 더하지 않는다)."""
+    import xml.etree.ElementTree as ET  # noqa: N817
+
+    di = "{http://www.omg.org/spec/BPMN/20100524/DI}"
+    dc = "{http://www.omg.org/spec/DD/20100524/DC}"
+    for shape in ET.fromstring(xml_text).iter(f"{di}BPMNShape"):
+        if shape.get("bpmnElement") != node_id:
+            continue
+        bounds = shape.find(f"{dc}Bounds")
+        return (bounds.get("x"), bounds.get("y")) if bounds is not None else None
+    return None
+
+
+def test_two_added_nodes_do_not_land_on_the_same_spot(canvas: Any) -> None:
+    """잇달아 더해도 한 점에 쌓이지 않는다 — 겹치면 사람이 하나만 있는 줄 안다."""
+    canvas.create_empty("Proc_two", "둘 시험")
+    body = json.dumps({"app_id": "svc-invoice", "operation": "issue"}, ensure_ascii=False)
+    first = added(canvas, {"serviceCall": body}, name="하나")
+    second = added(canvas, {"serviceCall": body}, name="둘")
+    xml = canvas.save_xml()
+    assert shape_at(xml, first) is not None
+    assert shape_at(xml, first) != shape_at(xml, second)

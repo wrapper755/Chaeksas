@@ -754,6 +754,18 @@
       "additionalProperties": true,
       "description": "Studio 리소스 탐색기(STU-03)의 한 갈래. **선언뿐이라 외부 확장도 쓸 수 있다.**",
       "properties": {
+        "creates_task_field": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Creates Task Field"
+        },
         "creates_task_type": {
           "anyOf": [
             {

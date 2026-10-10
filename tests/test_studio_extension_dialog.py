@@ -254,7 +254,7 @@ def test_detail_shows_the_five_contribution_points() -> None:
     assert "문서 인식 (ocr_task)" in shown
     assert "실행 위치 pc, server" in shown
     assert "아이콘 scan" in shown
-    assert "서식 (ocr_form) → 끌어다 놓으면 ocr_task" in shown
+    assert "서식 (ocr_form) → 캔버스에 추가하면 ocr_task" in shown
 
 
 def test_c11_service_app_does_not_invent_an_operation_list() -> None:

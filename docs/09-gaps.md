@@ -31,7 +31,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
 | C12 | 초안 (M7) | **없다** (`apps/server_runner`는 docstring뿐) | M7 전부. **M6 기준의 「모든 계약」에서 빼야 하는가는 사람이 정한다** (§2-4) |
-| C13 | 합의 (모델·검사 구현됨) | `contracts.extension`·`core.extensions` | `studio.resource_views`를 **아무도 읽지 않는다** (§4-4). `console.pages`는 **닫았다** (콘솔이 읽고 화면 셋이 돈다) |
+| C13 | 합의 (모델·검사 구현됨) | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다. `studio.resource_views`는 STU-03이, `console.pages`는 콘솔이 읽는다). 「구현됨」으로 올릴지는 사람이 정한다 |
 | C14 | 초안 (B1~**B15** 구현됨) | `contracts.bpmn_ext` B1~B15 | 「합의」로 올릴지는 M3 엔진·Studio와 함께 정한다 (문서가 그렇게 적는다) |
 
 굵게 적은 셋(C8·C9·C10)은 **확장이 소유한 계약**이라 `extensions/ui_automation/…/contracts/`에
@@ -52,19 +52,20 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 ## 4. 화면 쪽 기능 공백
 
-### 4-4. STU-03 리소스 탐색기 (C13 `studio.resource_views`)
+### 4-4. STU-03 리소스 탐색기 — 끌어다 놓기만 남았다
 
-- **문서:** `studio.md` 110~121줄 — 고정 뿌리 셋(「공유 BPM 프로세스」·「서비스 앱」·「툴팩」) + **확장이 기여하는 뿌리**(「UI 화면」). 끌어다 놓으면 Call Activity·UI 태스크·서비스 앱 태스크가 생긴다. STU-01 「보기 → 리소스」(Ctrl+Shift+E).
-- **코드:** `ExtensionHost.resource_views()`가 있고 `ui-automation`이 「UI 화면」을 **선언한다** — 호출자가 `tests/`뿐이다. Studio에는 「리소스 탐색기는 M4입니다」 라벨 하나.
-- **없는 것:** 화면 전부. 재료는 있다 — 서비스 앱 작업은 `service_catalog.from_center()`가 이미 가져오고(STU-14가 쓴다), UI 화면은 C9 공개 카탈로그에 있다.
-- **크기:** 큼 (나무·끌어다 놓기·문맥 메뉴·오프라인 표시).
-- **막는 것:** 「공유 BPM 프로세스」 뿌리는 §4-5(STU-11·12)가 없으면 늘 비어 있다. **뿌리별로 쪼갤 수 있다** — 「서비스 앱」·「UI 화면」만 먼저 하면 재료가 다 있다. 여기는 **코드 기여가 필요 없다** — 기여가 선언(`{id, label, resource_type, creates_task_type}`)이고 목록은 C7에서 와서 모양이 하나다 ([ADR-0042](decisions/0042-extension-contributed-panels.md) §3).
+**뿌리 넷·둘째 단계·문맥 메뉴·「캔버스에 추가」는 닫았다** (`apps/studio/resources.py` + 캔버스 명령 `createTask`). C13 `studio.resource_views`를 읽는 쪽이 생겼다.
+
+- **없는 것:** Qt → QtWebEngine **드래그**. 지금은 문맥 메뉴 「캔버스에 추가」·더블클릭이고 화면 문서가 그렇게 적는다.
+- **없는 것 둘:** 기여 뿌리의 **둘째 단계**(「UI 화면 → 요소」)와 「요소 보기」·「요소를 끌어다 스텝 추가」. 항목의 `data`를 플랫폼이 해석하지 않기 때문이다 (C13 §5) — 하려면 C13에 **자식 선언**(`children_key`·`child_label_key` 같은 것)을 더해 「선언대로 걷게」 해야 한다. 요소를 고르는 일은 STU-13이 이미 한다.
+- **크기:** 드래그는 중간, 자식 선언은 계약·생성물이 붙는다.
+- **막는 것:** 「공유 BPM 프로세스」 뿌리와 툴팩 「설치...」·「제거...」는 §4-5(STU-11·12 「올리기」)가 없어 **꺼진 줄 + 까닭**이다.
 
 ### 4-5. STU-06·STU-11이 없다 (STU-12는 「내보내기」만 있다)
 
 - **문서:** `studio.md` 186(STU-06 BPM 프로세스 정보)·269(STU-11 Center 공유 자원)·283(STU-12 공유 BPM 프로세스 내보내기·올리기). STU-01 메뉴 표가 셋 다 가리킨다.
 - **코드:** STU-06·STU-11은 **없다.** STU-12는 **「공유 BPM 프로세스로 내보내기...」가 돈다** (`ShareDefinitionsDialog`) — 「올리기」 둘은 `LATER` 말풍선이다. **STU-15는 닫았다** (`extension_dialog.py` — 끄고 켜기까지, [ADR-0043](decisions/0043-turned-off-extensions.md)).
-- **없는 것:** 두 창과, STU-01 메뉴에서 빠진 항목들 — 「BPM 프로세스 정보...」·「정의 추가...」·「이 정의를 진입으로 지정」·「다른 이름으로 저장...」·「Center 공유 자원...」·「결정 수행 (재생)...」(Ctrl+F5)·「감시 모드 시작」·「리소스」(Ctrl+Shift+E)·「속성 패널 접기」·「레이아웃 초기화」.
+- **없는 것:** 두 창과, STU-01 메뉴에서 빠진 항목들 — 「BPM 프로세스 정보...」·「정의 추가...」·「이 정의를 진입으로 지정」·「다른 이름으로 저장...」·「Center 공유 자원...」·「결정 수행 (재생)...」(Ctrl+F5)·「감시 모드 시작」·「속성 패널 접기」·「레이아웃 초기화」.
 - **크기:** STU-06은 작다. STU-11은 중간. **STU-12의 「내보내기」는 생겼다** (`ShareDefinitionsDialog` + `packaging.export_lib`) — 남은 것은 「올리기」이고 그것은 「Center로 올리기」와 **같은 거리**다 (Studio에 패키지 올리는 길이 없다).
 - **막는 것:** 없다. STU-11은 Center 리소스 목록(C7)을, STU-12 「올리기」는 Studio의 패키지 업로드를 먼저 붙이면 된다.
 

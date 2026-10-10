@@ -184,7 +184,8 @@ def detail_sections(loaded: LoadedExtension) -> list[tuple[str, list[str]]]:
 
     views = [
         f"{v.label} ({v.resource_type})"
-        + (f" → 끌어다 놓으면 {v.creates_task_type}" if v.creates_task_type else " · 태스크를 만들지 않음")
+        + (f" → 캔버스에 추가하면 {v.creates_task_type}" if v.creates_task_type else " · 태스크를 만들지 않음")
+        + (f" (자원 id는 {v.creates_task_field})" if v.creates_task_field else "")
         for v in m.contributes.studio_resource_views
     ]
     out.append(("리소스 탐색기 뿌리", views or [NOTHING]))

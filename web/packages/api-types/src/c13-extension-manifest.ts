@@ -177,6 +177,7 @@ export interface StudioEditorContribution {
  * Studio 리소스 탐색기(STU-03)의 한 갈래. **선언뿐이라 외부 확장도 쓸 수 있다.**
  */
 export interface ResourceView {
+  creates_task_field?: string | null;
   creates_task_type?: string | null;
   id: string;
   label: string;

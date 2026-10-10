@@ -32,6 +32,39 @@
   const toName = (type) => { const n = String(type).slice(4); return n[0].toLowerCase() + n.slice(1); };
   const toType = (name) => `chk:${name[0].toUpperCase()}${name.slice(1)}`;
 
+  /**
+   * `chk:*` 하나의 속성 — `chk:task`만 `type`·`extension`이 XML 속성이고 나머지는 본문뿐이다
+   * (C14). 만들 때(`createTask`)와 고칠 때(`setProperties`)가 **같은 함수**를 써야 한쪽만
+   * 고쳐져 종류가 날아가는 일이 없다.
+   */
+  const chkAttrs = (name, text) => {
+    if (name !== "task") return { value: String(text) };
+    let whole = {};
+    try { whole = JSON.parse(String(text)); } catch (e) { whole = {}; }
+    return {
+      type: String(whole.type || ""),
+      extension: String(whole.extension || ""),
+      value: JSON.stringify(whole.data || {}, null, 2),
+    };
+  };
+
+  /**
+   * 새 노드를 놓을 자리 — 보이는 자리의 가운데에서 시작해 **겹치지 않을 때까지** 비낀다.
+   * 여러 개를 잇달아 더해도 한 점에 쌓이지 않는다.
+   */
+  const freeSpot = (canvas, registry, shape) => {
+    const box = canvas.viewbox();
+    let x = Math.round(box.x + box.width / 2);
+    let y = Math.round(box.y + box.height / 2);
+    const taken = (px, py) => registry.getAll().some((e) => (
+      e.parent && e.width && e.height
+      && e.x < px + shape.width / 2 && px - shape.width / 2 < e.x + e.width
+      && e.y < py + shape.height / 2 && py - shape.height / 2 < e.y + e.height
+    ));
+    for (let i = 0; i < 40 && taken(x, y); i += 1) { x += 40; y += 40; }
+    return { x, y };
+  };
+
   async function boot() {
     const modeler = new BpmnJS({
       container: "#canvas",
@@ -149,16 +182,7 @@
               continue;
             }
             // `chk:task`는 속성과 본문으로 갈라 쓴다 (C14).
-            let attrs = { value: String(text) };
-            if (name === "task") {
-              let whole = {};
-              try { whole = JSON.parse(String(text)); } catch (e) { whole = {}; }
-              attrs = {
-                type: String(whole.type || ""),
-                extension: String(whole.extension || ""),
-                value: JSON.stringify(whole.data || {}, null, 2),
-              };
-            }
+            const attrs = chkAttrs(name, text);
             if (found) {
               modeling.updateModdleProperties(element, found, attrs);
             } else {
@@ -170,6 +194,31 @@
           }
         }
         return { found: true };
+      },
+      /**
+       * STU-03 「캔버스에 추가」 — 리소스 탐색기가 고른 것으로 노드 하나를 만든다.
+       *
+       * **`chk:*`를 businessObject에 미리 달고 한 번에 만든다** — 만든 뒤에 고치면
+       * 실행 취소가 두 걸음이 된다 (`setProperties`가 지키는 규칙과 같다).
+       */
+      async createTask(spec) {
+        const bpmnFactory = modeler.get("bpmnFactory");
+        const type = String((spec && spec.bpmn) || "bpmn:ServiceTask");
+        const bo = bpmnFactory.create(type, { name: String((spec && spec.name) || "") });
+        const entries = Object.entries((spec && spec.chk) || {});
+        if (entries.length) {
+          const values = entries.map(([name, text]) => bpmnFactory.create(toType(name), chkAttrs(name, text)));
+          const holder = bpmnFactory.create("bpmn:ExtensionElements", { values });
+          for (const one of values) one.$parent = holder;
+          holder.$parent = bo;
+          bo.extensionElements = holder;
+        }
+        const canvas = modeler.get("canvas");
+        const shape = modeler.get("elementFactory").createShape({ type, businessObject: bo });
+        const at = freeSpot(canvas, modeler.get("elementRegistry"), shape);
+        const made = modeler.get("modeling").createShape(shape, at, canvas.getRootElement());
+        modeler.get("selection").select(made);
+        return { id: made.id };
       },
       async select(id) {
         const found = modeler.get("elementRegistry").get(id);

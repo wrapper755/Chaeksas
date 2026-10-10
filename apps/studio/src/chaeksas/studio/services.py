@@ -11,8 +11,9 @@ C13으로 등록된 정의와 봉투다. 그래서 Studio 시험 실행과 배�
   (ADR-0007의 「들고 있던 것을 쓴다」는 현장 쪽 규칙이다).
 - **키는 Studio의 비밀 저장소에서** 푼다 (`StudioCredentials.service_key`, STU-10 「서비스 앱 키」).
 
-Center를 부르는 것은 **읽기 세 번**이고 쓰지 않는다. 외부 확장의 정의·봉투는 리소스 목록이
-이미 싣고 오므로 확장마다 따로 묻지 않는다 (C7 `ExtensionResource`).
+Center를 부르는 것은 **읽기만**이고 쓰지 않는다 (명부는 세 번, STU-03 리소스 탐색기가 뿌리마다
+한 번 더). 외부 확장의 정의·봉투는 리소스 목록이 이미 싣고 오므로 확장마다 따로 묻지 않는다
+(C7 `ExtensionResource`).
 """
 
 from __future__ import annotations
@@ -21,9 +22,15 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import quote
 
 from chaeksas.contracts.extension import TIER_EXTERNAL
-from chaeksas.contracts.resources import ExtensionResource, ServiceAppResource
+from chaeksas.contracts.resources import (
+    ContributedResource,
+    ExtensionResource,
+    ServiceAppResource,
+    ToolpackResource,
+)
 from chaeksas.contracts.signing import AdminKey
 from chaeksas.core.app_directory import AppDirectory, build, to_json_dict
 
@@ -80,6 +87,16 @@ class CenterReader:
         """등록된 확장들. 외부 확장은 **정의와 봉투를 싣고 온다** (C7)."""
         found = self._get(f"{RESOURCES}?type=extension") or {}
         return [ExtensionResource.model_validate(one) for one in found.get("items") or []]
+
+    def contributed(self, resource_type: str) -> list[ContributedResource]:
+        """확장이 기여한 자원들 (C7, STU-03 뿌리 하나). **`data`는 해석하지 않는다** (C13 §5)."""
+        found = self._get(f"{RESOURCES}?type=contributed&resource_type={quote(resource_type)}") or {}
+        return [ContributedResource.model_validate(one) for one in found.get("items") or []]
+
+    def toolpacks(self) -> list[ToolpackResource]:
+        """툴팩들 (C7 — Center가 `kind=toolpack` 패키지에서 모은다). STU-03 「툴팩」 뿌리."""
+        found = self._get(f"{RESOURCES}?type=toolpack") or {}
+        return [ToolpackResource.model_validate(one) for one in found.get("items") or []]
 
     def admin_keys(self) -> list[AdminKey]:
         """봉투를 검증할 Admin **공개**키 (C2). 비밀이 아니라 읽기 토큰으로 읽는다."""

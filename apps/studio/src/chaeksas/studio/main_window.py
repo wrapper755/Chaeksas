@@ -30,7 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts import Violation
-from chaeksas.studio import service_catalog, services
+from chaeksas.studio import resources, service_catalog, services
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.checks import refs_in
@@ -100,6 +100,12 @@ class MainWindow(QMainWindow):
         self.explorer = Explorer(self.workspace, self)
         self.explorer.opening.connect(self.open_definition)
 
+        # STU-03. **받는 일은 이 창이 한다** — 탐색기는 돌아온 것을 그리기만 한다.
+        self.resource_tree = resources.ResourceExplorer(self)
+        self.resource_tree.reloading.connect(self.refresh_catalog)
+        self.resource_tree.adding.connect(self.add_to_canvas)
+        self.resource_tree.said.connect(self.say)
+
         self.log_view = QPlainTextEdit(self)
         self.log_view.setReadOnly(True)
 
@@ -121,6 +127,9 @@ class MainWindow(QMainWindow):
 
         self._build_layout()
         self._build_menus()
+        # 뿌리는 선언에서 오므로 **Center 없이도** 바로 그린다 (빈 상자를 말없이 두지 않는다).
+        # 목록은 정의를 열 때·「새로 고침」에 채운다 — 뜨면서 Center를 두드리지 않는다.
+        self.refresh_resources(reader=None)
         self.statusBar().showMessage("대기 중")
         self._retitle()
         self.canvas.boot()
@@ -131,10 +140,9 @@ class MainWindow(QMainWindow):
         dock = QDockWidget("BPM 프로세스", self)
         dock.setObjectName("explorerDock")
         tabs = QTabWidget(dock)
+        self.explorer_tabs = tabs
         tabs.addTab(self.explorer, "BPM 프로세스")
-        later = QLabel("리소스 탐색기(STU-03)는 아직 없습니다 (docs/09-gaps.md §4-4).", tabs)
-        later.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tabs.addTab(later, "리소스")
+        tabs.addTab(self.resource_tree, "리소스")
         dock.setWidget(tabs)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
 
@@ -194,22 +202,65 @@ class MainWindow(QMainWindow):
         self._add(settings, "설정...", self.open_settings, QKeySequence("Ctrl+,"))
 
         view = bar.addMenu("보기")
-        self._add(view, "BPM 프로세스 탐색기", self.explorer.setFocus, QKeySequence("Ctrl+E"))
+        self._add(view, "BPM 프로세스 탐색기", self.show_explorer, QKeySequence("Ctrl+E"))
+        self._add(view, "리소스", self.show_resources, QKeySequence("Ctrl+Shift+E"))
 
         tools = bar.addMenu("도구")
         self._add(tools, "확장...", self.open_extensions)
         self._add(tools, "로그 지우기", self.log_view.clear, QKeySequence("Ctrl+L"))
 
     def refresh_catalog(self) -> None:
-        """STU-14가 고를 거리를 Center에서 받아 속성 패널에 준다 (C7 리소스 목록).
+        """Center 리소스 목록(C7)을 받아 **STU-14와 STU-03이 같은 것을 본다**.
 
-        **열 때마다 Center를 두드리지 않는다** — 정의를 열 때와 설정을 저장한 뒤에만 받는다.
-        받지 못하면 로그에 적고 편집기가 「등록된 서비스 앱이 없습니다」라고 말한다.
+        **열 때마다 Center를 두드리지 않는다** — 정의를 열 때, 설정을 저장한 뒤, 리소스
+        탐색기의 「새로 고침」을 누를 때만 받는다. 받지 못하면 로그에 적고 편집기가 「등록된
+        서비스 앱이 없습니다」, 탐색기가 까닭 한 줄을 보인다 (**들고 있지 않는다**).
         """
         found = services.from_settings(self.settings)
         self.properties.catalog = service_catalog.from_center(found.reader)
         for why in self.properties.catalog.problems:
             self.say(f"서비스 앱 목록: {why}")
+        self.refresh_resources(reader=found.reader)
+
+    def refresh_resources(self, *, reader: services.CenterReader | None) -> None:
+        """STU-03 — 뿌리는 **확장 선언**에서, 목록은 C7에서. 서비스 앱은 이미 받아 둔 것을 쓴다.
+
+        `reader`가 `None`이면 **Center를 두드리지 않는다** — 뿌리만 그리고 까닭을 적는다.
+        부르는 쪽이 그때그때 줄지 말지 정하므로 이 함수가 몰래 네트워크를 타지 않는다.
+        """
+        self.resource_tree.show_tree(
+            resources.collect(
+                self.extensions.host.resource_views(),
+                catalog=self.properties.catalog,
+                reader=reader,
+            )
+        )
+
+    def add_to_canvas(self, create: object) -> None:
+        """STU-03 「캔버스에 추가」 — 캔버스 명령 하나가 만든다 (XML을 파이썬이 만지지 않는다)."""
+        if not isinstance(create, resources.Create):
+            return
+        if self.definition is None:
+            self.say("열린 정의가 없습니다 — 먼저 BPM 프로세스를 여세요.")
+            return
+
+        def done(found: dict[str, object]) -> None:
+            if not found.get("ok"):
+                self.say(f"캔버스에 추가하지 못했습니다: {found.get('error')}")
+                return
+            self.say(f"캔버스에 추가했습니다: {create.name} ({found.get('id')})")
+
+        self.canvas.create_task(create.bpmn, create.name, create.chk, then=done)
+
+    def show_explorer(self) -> None:
+        """보기 → 「BPM 프로세스 탐색기」 (Ctrl+E). 독의 탭을 앞으로 내고 포커스를 준다."""
+        self.explorer_tabs.setCurrentWidget(self.explorer)
+        self.explorer.setFocus()
+
+    def show_resources(self) -> None:
+        """보기 → 「리소스」 (Ctrl+Shift+E)."""
+        self.explorer_tabs.setCurrentWidget(self.resource_tree)
+        self.resource_tree.setFocus()
 
     def open_settings(self) -> None:
         """STU-10. 저장하면 이 창의 설정도 바뀐다 (다음 시험 실행부터 쓴다)."""
@@ -235,6 +286,8 @@ class MainWindow(QMainWindow):
         self.properties.show_nothing()
         if node_id:
             self.canvas.call("properties", node_id, then=lambda found: self.properties.show_element(found))
+        # 리소스 탐색기의 뿌리도 기여다 — 끈 확장의 뿌리가 남아 있으면 안 된다 (ADR-0043).
+        self.refresh_resources(reader=services.from_settings(self.settings).reader)
         self.say("확장을 바꿨습니다 — 「실행 전 검사」로 확인하세요.")
 
     def _add(
