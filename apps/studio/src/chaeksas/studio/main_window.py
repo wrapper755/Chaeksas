@@ -36,6 +36,7 @@ from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.checks import refs_in
 from chaeksas.studio.dialogs import NewProcessDialog, ShareDefinitionsDialog, pick_example
 from chaeksas.studio.explorer import Explorer
+from chaeksas.studio.extension_dialog import StudioExtensionsDialog
 from chaeksas.studio.extensions import Extensions
 from chaeksas.studio.packaging import (
     PackageError,
@@ -196,6 +197,7 @@ class MainWindow(QMainWindow):
         self._add(view, "BPM 프로세스 탐색기", self.explorer.setFocus, QKeySequence("Ctrl+E"))
 
         tools = bar.addMenu("도구")
+        self._add(tools, "확장...", self.open_extensions)
         self._add(tools, "로그 지우기", self.log_view.clear, QKeySequence("Ctrl+L"))
 
     def refresh_catalog(self) -> None:
@@ -217,6 +219,10 @@ class MainWindow(QMainWindow):
             self.settings = dialog.saved
             self.say("설정을 저장했습니다.")
             self.refresh_catalog()  # Center 주소·키가 바뀌었을 수 있다
+
+    def open_extensions(self) -> None:
+        """STU-15. **읽기만 한다** — 이 창이 설정·확장 호스트를 바꾸지 않는다."""
+        StudioExtensionsDialog(self.settings, self.extensions, parent=self).exec()
 
     def _add(
         self,
