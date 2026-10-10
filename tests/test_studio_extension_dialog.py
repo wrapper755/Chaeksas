@@ -5,8 +5,8 @@
 1. **목록은 정의에서 온다** — 이 창에 확장 이름이 없다 (ADR-0018). 설치된 확장을 그대로 그린다.
 2. **켜지지 않은 확장도 사라지지 않는다** — 상태는 `status_map`의 표기, 까닭은 상세 맨 위.
    정의를 **읽지도 못한** 것은 id가 없어 표 아래 한 줄로 말한다.
-3. **「켜기/끄기」는 꺼져 있고 이유가 붙어 있다** (U3) — 「사람이 껐다」를 어디에 둘지 아직
-   정하지 않았다.
+3. **「사람이 껐다」는 「흠이 있다」와 다르다** (ADR-0043) — 표기도 상세도 갈라지고, 끄면
+   기여가 한꺼번에 빠지며, 끈 목록은 **Studio 설정**에 그 자리에서 저장된다.
 4. **「새로 고침」은 봉투를 다시 검증한다** (C13 E6) — 서명이 맞지 않는 정의는 켜지지 않고,
    받아 온 것이 **설치된 확장 호스트를 건드리지 않는다**(팔레트·시험 실행이 보는 것).
    닿지 못하면 **그 자리에서 말한다** (Studio는 현장이 아니다).
@@ -18,6 +18,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -39,10 +40,11 @@ from chaeksas.core.extensions import ExtensionHost  # noqa: E402
 from chaeksas.qt.theme import tokens  # noqa: E402
 from chaeksas.studio import services  # noqa: E402
 from chaeksas.studio.extension_dialog import (  # noqa: E402
-    LATER_TOGGLE,
     NAME,
+    NO_TOGGLE_EXTERNAL,
     STATE,
     STATE_BROKEN,
+    STATE_OFF,
     STATE_ON,
     STATUS_GROUP,
     SUMMARY,
@@ -171,15 +173,37 @@ def resource(definition: dict[str, Any], envelope: dict[str, Any] | None) -> Ext
     )
 
 
-def host_with(*definitions: dict[str, Any], api_version: str = "1.0.0") -> ExtensionHost:
-    host = ExtensionHost(api_version=api_version)
+def host_with(
+    *definitions: dict[str, Any], api_version: str = "1.0.0", off: tuple[str, ...] = ()
+) -> ExtensionHost:
+    host = ExtensionHost(api_version=api_version, off=off)
     for one in definitions:
         host.add_installed(json.dumps(one).encode("utf-8"), origin="test", root="chaeksas.ext.ui_automation")
     return host
 
 
-def dialog(host: ExtensionHost, *, reader: services.CenterReader | None = None) -> StudioExtensionsDialog:
-    return StudioExtensionsDialog(Settings(), Extensions(host=host), reader=reader)
+def studio_with(*definitions: dict[str, Any], off: tuple[str, ...] = ()) -> Extensions:
+    """시험용 `Extensions` — **다시 읽는 길도 시험의 것**이다.
+
+    기본 `loader`는 엔트리 포인트를 읽어 진짜 설치본(`ui-automation`)을 들여온다. 끄고 켜기는
+    호스트를 다시 읽으므로 그 길을 바꿔 끼워야 손으로 지은 확장이 그대로 남는다.
+    """
+
+    def build(ids: Iterable[str]) -> ExtensionHost:
+        return host_with(*definitions, off=tuple(ids))
+
+    return Extensions(host=build(off), loader=build)
+
+
+def dialog(
+    host: ExtensionHost,
+    *,
+    reader: services.CenterReader | None = None,
+    settings: Settings | None = None,
+    extensions: Extensions | None = None,
+) -> StudioExtensionsDialog:
+    made = settings or Settings(disabled_extensions=tuple(sorted(host.off)))
+    return StudioExtensionsDialog(made, extensions or Extensions(host=host), reader=reader)
 
 
 def cell(window: StudioExtensionsDialog, row: int, column: int) -> QTableWidgetItem:
@@ -217,6 +241,7 @@ def test_state_labels_come_only_from_the_status_map() -> None:
     """상태 표기는 `status_map`의 「확장」에 있는 것만 쓴다 (스타일 가이드 §2-2)."""
     allowed = tokens.STATUS_MAP[STATUS_GROUP]
     assert STATE_ON in allowed
+    assert STATE_OFF in allowed
     assert STATE_BROKEN in allowed
 
 
@@ -285,13 +310,15 @@ def test_no_rows_says_so_instead_of_an_empty_detail() -> None:
 # ─────────────────────────── 단추 ───────────────────────────
 
 
-def test_toggle_is_off_with_the_reason_in_reach() -> None:
-    """「켜기/끄기」는 아직이다 — 끄고 이유를 가까이에 적는다 (U3)."""
+def test_only_the_possible_side_of_the_toggle_is_on() -> None:
+    """켜져 있으면 「끄기」만, 꺼져 있으면 「켜기」만 (U3 — 못 하는 쪽은 끄고 이유를 붙인다)."""
     window = dialog(host_with(builtin()))
-    for button in (window.enable_button, window.disable_button):
-        assert not button.isEnabled()
-        assert button.toolTip() == LATER_TOGGLE
-    assert "docs/09-gaps.md" in LATER_TOGGLE
+    assert window.disable_button.isEnabled()
+    assert not window.enable_button.isEnabled()
+
+    window = dialog(host_with(builtin(), off=("doc-ocr",)))
+    assert window.enable_button.isEnabled()
+    assert not window.disable_button.isEnabled()
 
 
 def test_refresh_verifies_the_envelope_again() -> None:
@@ -426,3 +453,97 @@ def test_cancelling_the_file_dialog_changes_nothing(monkeypatch: pytest.MonkeyPa
     window.open_definition()
     assert window.detail.toPlainText() == before
     assert window.note.text() == ""
+
+
+# ─────────────────────────── 끄고 켜기 (ADR-0043) ───────────────────────────
+
+
+def test_turned_off_is_not_the_same_as_broken() -> None:
+    """꺼 둔 것은 **흠이 아니라 뜻이다** — 표기도 상세도 갈라진다."""
+    window = dialog(host_with(builtin(), off=("doc-ocr",)))
+    row = window.rows[0]
+    assert row.off and not row.problems  # 흠으로 적지 않는다
+    assert state_of(row) == STATE_OFF
+    assert cell(window, 0, STATE).text() == STATE_OFF
+    assert detail_sections(row)[0][0] == "꺼 둠"
+
+
+def test_turning_off_takes_every_contribution_with_it() -> None:
+    """끄면 태스크 종류·편집기·리소스 뿌리가 **한꺼번에** 빠진다 — 늦게 죽지 않는다."""
+    on = host_with(builtin())
+    assert [c.value.id for c in on.task_types()] == ["ocr_task"]
+
+    off = host_with(builtin(), off=("doc-ocr",))
+    assert off.task_types() == []
+    assert off.resource_views() == []
+    assert off.enabled() == []
+    assert [one.id for one in off.turned_off()] == ["doc-ocr"]
+
+
+def test_a_turned_off_extension_does_not_hold_its_task_type_name() -> None:
+    """꺼진 것은 이름을 쥐고 있지 않다 (E4는 켜진 것들 사이에서만) — 기여를 내지 않으니까."""
+    other = builtin(id="doc-ocr-2", name="문서 인식 2")
+    clashing = host_with(builtin(), other)
+    assert [v.code for v in clashing.all()[1].problems] == ["task_type_conflict"]
+
+    with_first_off = host_with(builtin(), other, off=("doc-ocr",))
+    assert with_first_off.all()[1].problems == ()
+    assert [c.extension_id for c in with_first_off.task_types()] == ["doc-ocr-2"]
+
+
+def test_toggling_writes_the_setting_and_reloads_in_place(tmp_path: Path) -> None:
+    """「저장」이 없다 — 누르는 그 자리에서 설정에 적고 호스트를 다시 읽는다 (BUI-10과 같은 결)."""
+    settings = Settings(data_dir=tmp_path)
+    window = dialog(host_with(builtin()), settings=settings, extensions=studio_with(builtin()))
+    window.set_off(True)
+
+    assert window.settings.disabled_extensions == ("doc-ocr",)
+    assert Settings.load(tmp_path / "settings.json").disabled_extensions == ("doc-ocr",)
+    assert window.extensions.host.task_types() == []  # 호스트가 다시 읽혔다
+    assert cell(window, 0, STATE).text() == STATE_OFF
+    assert window.changed
+
+    window.set_off(False)
+    assert not window.settings.disabled_extensions
+    assert Settings.load(tmp_path / "settings.json").disabled_extensions == ()
+
+
+def test_toggling_keeps_the_row_selected(tmp_path: Path) -> None:
+    """끄고 나서도 같은 줄이 골라져 있다 — 상세가 엉뚱한 확장으로 튀지 않는다."""
+    two = (builtin(), builtin(id="doc-ocr-2", name="둘"))
+    window = dialog(
+        host_with(*two), settings=Settings(data_dir=tmp_path), extensions=studio_with(*two)
+    )
+    window._select("doc-ocr-2")
+    window.set_off(True)
+    chosen = window.selected()
+    assert chosen is not None and chosen.id == "doc-ocr-2"
+
+
+def test_external_rows_cannot_be_toggled_here() -> None:
+    """외부 확장은 Center에 등록된 정의다 — 끄고 켜는 일은 그쪽이다 (C13 E6)."""
+    definition = external()
+    envelope, keys = signed(definition)
+    window = dialog(host_with(), reader=FakeCenter([resource(definition, envelope)], keys))
+    window.refresh_external()
+    assert window.selected() is not None
+    for button in (window.enable_button, window.disable_button):
+        assert not button.isEnabled()
+        assert button.toolTip() == NO_TOGGLE_EXTERNAL
+
+    window.set_off(True)  # 눌러도 아무 일이 없다
+    assert window.settings.disabled_extensions == ()
+
+
+def test_each_state_gets_its_own_colour() -> None:
+    """「꺼짐」에 「호환 안 됨」의 색을 쓰면 꺼 둔 것이 고장처럼 보인다 (스타일 가이드 §2-2)."""
+    from chaeksas.qt.theme import status_color  # noqa: PLC0415
+
+    off = dialog(host_with(builtin(), off=("doc-ocr",)))
+    broken = dialog(host_with(builtin(api=">=1,<2"), api_version="2.0.0"))
+    shown = cell(off, 0, STATE).foreground().color().name().lower()  # Qt는 소문자로 준다
+    wanted = status_color(STATUS_GROUP, STATE_OFF, part="fg")
+    assert wanted is not None and shown == wanted.lower()
+    assert shown != cell(broken, 0, STATE).foreground().color().name().lower()
+    # 꺼 둔 줄에는 `problems`가 없다 — 빈 말풍선을 달지 않는다.
+    assert "사람이 껐습니다" in cell(off, 0, STATE).toolTip()

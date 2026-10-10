@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -84,23 +85,43 @@ class StudioSecrets:
         return self.credentials.service_key(ref)
 
 
+def installed_host(off: Iterable[str] = ()) -> ExtensionHost:
+    """설치된 확장(엔트리 포인트)을 읽은 호스트 하나. `off`는 **사람이 꺼 둔** id다 (ADR-0043)."""
+    host = ExtensionHost(off=off)
+    try:
+        host.load_entry_points()
+    except Exception as e:  # noqa: BLE001 — 확장 때문에 Studio가 안 뜨면 안 된다
+        log.warning("확장을 읽지 못했다: %s", e)
+    for failure in host.failures:
+        log.warning("확장을 켜지 못했다: %s", failure)
+    return host
+
+
 @dataclass
 class Extensions:
     """실은 확장들과 만들어 둔 편집기."""
 
     host: ExtensionHost = field(default_factory=ExtensionHost)
+    #: 호스트를 **다시 읽는 길** — 끈 목록이 바뀔 때 부른다 (STU-15). 시험이 바꿔 끼운다.
+    loader: Callable[[Iterable[str]], ExtensionHost] = field(default_factory=lambda: installed_host)
     _editors: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def load(cls) -> Extensions:
-        host = ExtensionHost()
-        try:
-            host.load_entry_points()
-        except Exception as e:  # noqa: BLE001 — 확장 때문에 Studio가 안 뜨면 안 된다
-            log.warning("확장을 읽지 못했다: %s", e)
-        for failure in host.failures:
-            log.warning("확장을 켜지 못했다: %s", failure)
-        return cls(host=host)
+    def load(cls, *, off: Iterable[str] = ()) -> Extensions:
+        """설치된 확장을 읽는다. `off`는 **사람이 꺼 둔** id다 (STU-15, ADR-0043).
+
+        꺼 둔 것은 기여를 내지 않으므로 팔레트·편집기·시험 실행에서 한꺼번에 사라진다.
+        """
+        return cls(host=installed_host(off))
+
+    def reload(self, *, off: Iterable[str]) -> None:
+        """끈 목록이 바뀌었다 — 호스트를 다시 읽고 **만들어 둔 편집기를 버린다**.
+
+        편집기는 켜져 있던 확장이 준 위젯이라 그대로 두면 꺼진 확장의 화면이 속성 패널에 남는다.
+        속성 패널은 고를 때마다 `editor()`를 다시 묻는다 (`properties.py`).
+        """
+        self.host = self.loader(off)
+        self._editors.clear()
 
     def label(self, task_type: str) -> str:
         found = self.host.task_type(task_type)
@@ -194,4 +215,4 @@ class Extensions:
         return made
 
 
-__all__ = ["Extensions", "NoSecrets", "PlainSettings", "StudioSecrets", "bot_ui_data_dir"]
+__all__ = ["Extensions", "NoSecrets", "PlainSettings", "StudioSecrets", "bot_ui_data_dir", "installed_host"]

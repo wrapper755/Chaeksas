@@ -76,6 +76,10 @@ class Settings:
     last_opened: str = ""
     #: STU-10 「서비스 앱 키」의 줄들 (참조 이름·서비스 앱). **값은 여기 없다.**
     service_keys: tuple[ServiceKeyRef, ...] = ()
+    #: STU-15에서 **사람이 꺼 둔** 확장 id ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)).
+    #: **Studio의 것이다** — Bot UI는 제 설정에 따로 둔다 (개발 도구의 실험이 현장 실행을 멈추지
+    #: 않는다). 판은 적지 않는다 — 올려도 꺼 둔 채로 있는 것이 사람의 뜻이다.
+    disabled_extensions: tuple[str, ...] = ()
 
     @property
     def workspace_dir(self) -> Path:
@@ -118,6 +122,10 @@ class Settings:
         for name in ("readable_dirs", "writable_dirs"):
             if name in raw:
                 values[name] = tuple(Path(p) for p in raw[name])
+        if isinstance(raw.get("disabled_extensions"), list):
+            values["disabled_extensions"] = tuple(
+                str(one) for one in raw["disabled_extensions"] if isinstance(one, str) and one
+            )
         if isinstance(raw.get("service_keys"), list):
             values["service_keys"] = tuple(
                 ServiceKeyRef(ref=str(one.get("ref") or ""), app_id=str(one.get("app_id") or ""))

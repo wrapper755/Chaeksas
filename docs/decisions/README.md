@@ -51,3 +51,4 @@
 | [0040](0040-registry-storage-sqlite.md) | UI 자동화 레지스트리는 SQLite 한 파일에 둔다 (그래프 저장소를 두지 않는다 — 문서에 남아 있던 Neo4j 전제를 걷었다) | 수락 |
 | [0041](0041-extension-run-events.md) | 확장은 `TaskOutcome.events[]`로 실행 기록에 남기고, 줄을 쓰는 것은 엔진이다 (원칙 6을 거르는 자리를 하나로) | 수락 |
 | [0042](0042-extension-contributed-panels.md) | 확장이 플랫폼 화면에 칸을 기여한다 — 데스크톱은 위젯(`bot_ui.panels`), 웹 콘솔은 화면(`console.pages`), 선언으로 되는 자리는 선언만 | 수락 |
+| [0043](0043-turned-off-extensions.md) | 사람이 끈 확장은 앱마다 제 설정에 두고(Studio ↔ Bot UI 따로) 「흠이 있다」와 다르게 적는다 — 꺼지면 기여를 하나도 내지 않는다 | 수락 |

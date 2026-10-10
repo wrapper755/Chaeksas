@@ -23,6 +23,19 @@ def _bot_ui_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monk
     yield path
 
 
+@pytest.fixture(autouse=True)
+def _studio_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monkeypatch: Any) -> Iterator[Path]:
+    """**어느 시험도 개발 PC의 Studio 데이터 폴더를 쓰지 않는다.** (위 Bot UI와 같은 까닭)
+
+    STU-15가 끈 확장 목록을 `settings.json`에 **그 자리에서** 저장하면서 시험이 설정 파일을 쓰게
+    됐다 (ADR-0043). 막지 않으면 그 PC에서 진짜 Studio를 띄웠을 때 시험이 꺼 둔 확장이 빠진 채로
+    뜬다 — Bot UI에서 이미 겪은 이슈 #3과 같은 꼴이다.
+    """
+    path = tmp_path_factory.mktemp("studio-data")
+    monkeypatch.setenv("CHK_STUDIO__DATA_DIR", str(path))
+    yield path
+
+
 class FakeAutostart:
     """작업 스케줄러·`.desktop` 대신 기록만. 시험이 그 PC의 자동 시작을 바꾸지 않게.
 

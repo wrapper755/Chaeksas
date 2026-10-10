@@ -62,7 +62,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | `name` | str | ✓ | 표시 이름 (기본: PC 이름) |
 | `os` | str | ✓ | 예: `windows-11-23H2`, `ubuntu-24.04` |
 | `versions` | object | ✓ | `{bot_ui, core, worker}` |
-| `runtimes` | object | | `{browsers: ["chromium-130"], desktop_backend: "uia", extensions: [{id, version, enabled}]}` — 설치된 확장 (C13) |
+| `runtimes` | object | | `{browsers: ["chromium-130"], desktop_backend: "uia", extensions: [{id, version, enabled, off}]}` — 설치된 확장 (C13) |
 
 ### RegisterResponse
 
@@ -86,7 +86,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | `readiness` | Readiness[] | | 설치된 Bot별 준비 상태 (바뀌었을 때만 보내도 됨) |
 | `job_acks` | JobAck[] | | 이번 주기에 처리한 작업 |
 | `deployment_results` | DeploymentResult[] | | 배포 적용 결정 (CON-03 「최근 배치 결정」) |
-| `extensions` | `{id, version, definition_hash, enabled}`[] | | 설치된 확장. 바뀌었을 때만 (C13) |
+| `extensions` | `{id, version, definition_hash, enabled, off}`[] | | 설치된 확장. 바뀌었을 때만 (C13) |
 | `approval_acks` | ApprovalAck[] | | 받아 간 결재 답 |
 | `unsent_events` | int | | 아직 못 보낸 실행 이벤트 줄 수 (C3) |
 
@@ -216,4 +216,5 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 | 2026-10-01 | 1 | 확장 검토 반영: 하트비트 `extensions` | 0018 |
 | 2026-10-01 | 1 | 화면 검토 반영: Worker `off`·`reserved_for`, 현장 취소 `cancelled_on_pc` | — |
 | 2026-10-06 | 1 | Center가 `deployment_results`를 쌓아 둔다고 적었다 (멱등은 `(deployment_id, at)`) — CON-03을 붙이다 Center가 그것을 버리고 있는 것이 드러났다 | — |
+| 2026-10-10 | 1 | `ExtensionState.off`를 더했다 — 「사람이 껐다」와 「흠이 있다」가 `enabled` 한 칸에 뭉쳐 있어 CON-03·CON-07이 「꺼짐」과 「호환 안 됨」을 가르지 못했다 ([ADR-0043](../decisions/0043-turned-off-extensions.md)) | 0043 |
 | 2026-10-08 | 1 | 키 묶기를 **두 방향**으로 적었다 (`machine_already_registered`·놓인 자리 이어받기) — 키 → PC만 보던 탓에 같은 PC에 두 번째 키를 발급하면 Bot UI 행이 둘 생겨 CON-03·C7 집계가 부풀고 작업이 조용한 쪽으로 갈 수 있었다. 409 코드 이름도 코드에 맞췄다 (`key_bound_elsewhere` → `machine_mismatch`) | — |

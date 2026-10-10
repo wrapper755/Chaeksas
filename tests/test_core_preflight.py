@@ -261,3 +261,59 @@ def test_a_real_example_is_blocked_by_the_key_and_nothing_else(example: str, tmp
     host = load_host()
     assert preflight.check(m, key_value=never, host=host).blocked == (preflight.MISSING_KEYS,)
     assert not preflight.check(m, key_value=always, host=host).blocks
+
+
+# ─────────────────────────── 사람이 끈 확장 (ADR-0043) ───────────────────────────
+
+
+def _host_with(definition: dict[str, Any], *, off: tuple[str, ...] = ()) -> ExtensionHost:
+    import json  # noqa: PLC0415
+
+    host = ExtensionHost(off=off)
+    host.add_installed(json.dumps(definition).encode("utf-8"), origin="test", root="chaeksas.ext.ui_automation")
+    return host
+
+
+OCR = {
+    "schema": 2,
+    "id": "doc-ocr",
+    "version": "1.0.0",
+    "name": "문서 인식",
+    "publisher": "Chaeksas",
+    "tier": "builtin",
+    "api": ">=1,<2",
+    "contributes": {
+        "task_types": [
+            {
+                "id": "ocr_task",
+                "label": "문서 인식",
+                "executor": {"entry": "doc_ocr.client:X"},
+                "run_locations": ["pc"],
+            }
+        ]
+    },
+}
+
+
+def test_a_turned_off_extension_gets_its_own_finding() -> None:
+    """**고치는 길이 다르다** — 깔려 있는데 꺼 둔 것은 켜면 되고, 없는 것은 판을 올려야 한다.
+
+    한 칸으로 뭉치면 켜면 될 일에 「Bot UI를 다시 깔라」고 안내하게 된다 (ADR-0043).
+    """
+    m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
+
+    on = preflight.check(m, key_value=never, host=_host_with(OCR))
+    assert not on.blocks
+
+    off = preflight.check(m, key_value=never, host=_host_with(OCR, off=("doc-ocr",)))
+    assert off.blocked == (preflight.EXTENSION_TURNED_OFF,)
+    assert off.findings[0].items == ("ocr_task (문서 인식 확장)",)
+    assert off.findings[0].fix_hint == "확장 목록에서 그 확장을 켜세요"
+
+
+def test_a_missing_extension_still_says_install_it() -> None:
+    """꺼 둔 것이 아니면 안내가 그대로다 — 깔려 있지 않으면 켤 수가 없다."""
+    m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
+    found = preflight.check(m, key_value=never, host=ExtensionHost())
+    assert found.blocked == (preflight.TASK_TYPES_UNSUPPORTED,)
+    assert "판으로 올리세요" in (found.findings[0].fix_hint or "")

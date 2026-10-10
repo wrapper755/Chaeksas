@@ -107,12 +107,17 @@ def test_other_contribution_points(host: ExtensionHost) -> None:
 
 
 def test_states_report_what_center_asks_for(host: ExtensionHost) -> None:
-    """C4 하트비트·C12 등록에 싣는 `{id, version, definition_hash, enabled}`."""
+    """C4 하트비트·C12 등록에 싣는 `{id, version, definition_hash, enabled, off}`.
+
+    `off`는 **사람이 껐다**이고 `enabled=false`는 **흠이 있다**다 — Center가 「꺼짐」과
+    「호환 안 됨」을 가르는 자리다 (ADR-0043).
+    """
     state = host.states()[0]
     assert state.id == BUILTIN_ID
     assert state.enabled is True
     assert state.definition_hash == host.states()[0].definition_hash
-    assert set(state.to_json_dict()) == {"id", "version", "definition_hash", "enabled"}
+    assert set(state.to_json_dict()) == {"id", "version", "definition_hash", "enabled", "off"}
+    assert state.off is False
 
 
 def test_pyinstaller_hook_is_shipped_with_core() -> None:
@@ -472,3 +477,73 @@ def test_a_second_desktop_environment_loses(host: ExtensionHost) -> None:
     assert clash is not None and not clash.enabled
     assert [p.code for p in clash.problems] == ["environment_conflict"]
     assert host.environment_owner("desktop") == BUILTIN_ID
+
+
+# ─────────────────────────── 사람이 껐다 (ADR-0043) ───────────────────────────
+
+
+def test_turned_off_is_not_a_problem() -> None:
+    """**흠과 섞이지 않는다** — 꺼 둔 것은 고칠 거리가 아니라 사람의 뜻이다."""
+    host = ExtensionHost(off=["doc-ocr"])
+    loaded = install(host, definition())
+    assert loaded is not None
+    assert loaded.off and loaded.problems == () and not loaded.enabled
+    assert [one.id for one in host.turned_off()] == ["doc-ocr"]
+    assert host.enabled() == []
+
+
+def test_a_turned_off_extension_contributes_nothing() -> None:
+    """기여가 **한꺼번에** 빠진다 — 늦게(실행할 때) 죽지 않는다."""
+    contributes = {
+        "task_types": [
+            {"id": "ocr_task", "label": "OCR", "executor": {"entry": "x:Y"}, "run_locations": ["pc"]}
+        ],
+        "studio.resource_views": [{"id": "v", "label": "서식", "resource_type": "ocr_form"}],
+        "configuration": [{"key": "k", "label": "k", "scope": "studio"}],
+    }
+    on = ExtensionHost()
+    install(on, definition(contributes=contributes))
+    assert [c.value.id for c in on.task_types()] == ["ocr_task"]
+
+    off = ExtensionHost(off=["doc-ocr"])
+    install(off, definition(contributes=contributes))
+    assert off.task_types() == []
+    assert off.resource_views() == []
+    assert off.configuration() == []
+
+
+def test_a_turned_off_extension_does_not_hold_the_task_type_name() -> None:
+    """겹침(E4)은 **꺼지지 않은 것들 사이에서만** 본다 — 꺼진 것은 이름을 쥐고 있지 않다."""
+    task = {
+        "task_types": [
+            {"id": "ocr_task", "label": "OCR", "executor": {"entry": "x:Y"}, "run_locations": ["pc"]}
+        ]
+    }
+    clashing = ExtensionHost()
+    install(clashing, definition(contributes=task))
+    second = install(clashing, definition(id="doc-ocr-2", contributes=task))
+    assert second is not None and [p.code for p in second.problems] == ["task_type_conflict"]
+
+    freed = ExtensionHost(off=["doc-ocr"])
+    install(freed, definition(contributes=task))
+    other = install(freed, definition(id="doc-ocr-2", contributes=task))
+    assert other is not None and other.problems == () and other.enabled
+
+
+def test_the_report_tells_center_which_of_the_two_it_is() -> None:
+    """C4 `ExtensionState` — `off`가 있어야 CON-03이 「꺼짐」과 「호환 안 됨」을 가른다."""
+    host = ExtensionHost(api_version="1.0.0", off=["doc-ocr"])
+    install(host, definition())
+    install(host, definition(id="doc-ocr-2", api=">=9,<10"))
+    states = {one.id: one for one in host.states()}
+    assert states["doc-ocr"].off and not states["doc-ocr"].enabled
+    assert not states["doc-ocr-2"].off and not states["doc-ocr-2"].enabled
+
+
+def test_summarize_keeps_the_off_ones_out_of_the_fix_list(host: ExtensionHost) -> None:
+    """로그를 보는 사람이 꺼 둔 것을 고칠 거리로 읽지 않게."""
+    install(host, definition(api=">=9"))
+    off_host = ExtensionHost(off=["doc-ocr"])
+    install(off_host, definition())
+    assert summarize(off_host) == {"enabled": [], "off": ["doc-ocr@1.0.0"], "disabled": [], "failed": []}
+    assert summarize(host)["off"] == []
