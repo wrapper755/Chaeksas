@@ -6,6 +6,7 @@
  * 확장 하나 (C13 정의에서 모은 것).
  */
 export interface ExtensionResource {
+  checked_at?: string | null;
   contributes_summary?: {
     [k: string]: string[];
   };
@@ -23,6 +24,7 @@ export interface ExtensionResource {
   publisher?: string | null;
   service_app_id?: string | null;
   status?: string;
+  status_reasons?: string[];
   tier: string;
   version: string;
   [k: string]: unknown;

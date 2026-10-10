@@ -25,6 +25,18 @@
   "additionalProperties": true,
   "description": "확장 하나 (C13 정의에서 모은 것).",
   "properties": {
+    "checked_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Checked At"
+    },
     "contributes_summary": {
       "additionalProperties": {
         "items": {
@@ -132,6 +144,13 @@
       "default": "n/a",
       "title": "Status",
       "type": "string"
+    },
+    "status_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Status Reasons",
+      "type": "array"
     },
     "tier": {
       "title": "Tier",

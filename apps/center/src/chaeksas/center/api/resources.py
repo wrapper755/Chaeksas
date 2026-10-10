@@ -38,6 +38,7 @@ from chaeksas.center.settings import (
     RESOURCE_TIMEOUT_S,
 )
 from chaeksas.center.storage import Store, dumps, loads, now_iso
+from chaeksas.contracts.extension import HostRefused, resolve_host
 from chaeksas.contracts.resources import (
     ContributedResource,
     ExtensionResource,
@@ -102,6 +103,102 @@ def read_public(base_url: str, *, timeout_s: float = RESOURCE_TIMEOUT_S) -> dict
     except Exception as e:  # noqa: BLE001 — 주소가 틀렸거나 꺼져 있다
         out["status"] = UNREACHABLE
         out["reasons"] = [type(e).__name__]
+    return out
+
+
+def read_adapter_health(definition: dict[str, Any], *, timeout_s: float = RESOURCE_TIMEOUT_S) -> dict[str, Any]:
+    """외부 확장의 어댑터 `health`를 두드린다 (C7, C13 §4-1). `{status, reasons}`.
+
+    **선언이 없으면 두드리지 않는다** — `unknown`(「확인 전」)으로 둔다. 「어디를 봐야 하나」를
+    Center가 지어내지 않는다 (C11의 `/healthz`를 외부 앱에 들이대지 않는다).
+
+    **어댑터와 같은 관문을 지난다** (C13 §4-3 1~4 — 허용 호스트·사설망·https·DNS 고정).
+    규칙이 갈라지지 않게 `contracts`의 `resolve_host`를 그대로 쓴다. 걸리면 두드리지 않고
+    사유만 남긴다 — 정의가 적은 주소라고 Center가 아무 데나 나가지 않는다.
+
+    **예외를 올리지 않는다** — 확장 하나가 꺼져 있다고 리소스 목록이 멈추면 안 된다.
+    """
+    import httpx  # noqa: PLC0415 — 부를 때만 든다
+
+    service = (definition.get("service") or {}) if isinstance(definition, dict) else {}
+    adapter_raw = service.get("adapter") or {}
+    health = adapter_raw.get("health") or {}
+    base_url = str(service.get("base_url") or "").strip()
+    if not health or not health.get("path") or not base_url:
+        # **보지 않았다**는 뜻이다 — 부르는 쪽이 「본 때」를 찍지 않게 `declared`로 갈라 준다.
+        return {"status": UNKNOWN, "reasons": [], "declared": False}
+
+    expect = int(health.get("expect_status") or 200)
+    try:
+        checked = resolve_host(
+            base_url,
+            allowed_hosts=[str(one) for one in (adapter_raw.get("allowed_hosts") or [])],
+            allow_private_network=bool(adapter_raw.get("allow_private_network")),
+            lookup=_getaddrinfo,
+        )
+    except HostRefused as e:
+        return {"status": UNREACHABLE, "reasons": [e.code], "declared": True}
+
+    url = f"{checked.origin}{health['path']}"
+    try:
+        # **리다이렉트를 따라가지 않는다** (§4-3 5번) — 따라가면 관문을 우회한다.
+        with httpx.Client(timeout=timeout_s, follow_redirects=False) as client:
+            answer = client.get(url, headers={"Host": checked.host})
+    except Exception as e:  # noqa: BLE001 — 꺼져 있거나 주소가 틀렸다
+        return {"status": UNREACHABLE, "reasons": [type(e).__name__], "declared": True}
+    if answer.status_code != expect:
+        return {"status": UNREACHABLE, "reasons": [f"health_{answer.status_code}"], "declared": True}
+    return {"status": OK, "reasons": [], "declared": True}
+
+
+def _getaddrinfo(host: str) -> list[str]:
+    """DNS 한 번. `resolve_host`가 이것을 받아 그 IP로 고정한다 (§4-3 4번)."""
+    import socket  # noqa: PLC0415
+
+    out: list[str] = []
+    for one in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM):
+        address = str(one[4][0])
+        if address not in out:
+            out.append(address)
+    return out
+
+
+def _extension_health(store: Store, rows: dict[str, Any], *, probe: bool) -> dict[str, dict[str, Any]]:
+    """외부 확장마다 `{status, reasons, checked_at}`. 때가 됐으면 다시 두드린다 (60초).
+
+    서비스 앱과 **같은 간격**이다 — 목록을 읽을 때마다 바깥으로 나가지 않는다.
+    """
+    out: dict[str, dict[str, Any]] = {}
+    now = now_iso()
+    stored = {
+        str(row["id"]): row for row in store.rows("SELECT * FROM extension_health")
+    }
+    for key, registered in rows.items():
+        was = stored.get(key)
+        if probe and (was is None or _due(was["checked_at"], now, RESOURCE_STATUS_S)):
+            found = read_adapter_health(json.loads(registered["definition_json"]))
+            if not found["declared"]:
+                # 선언이 없으면 **본 적이 없다** — 「본 때」를 찍으면 확인한 것처럼 보인다.
+                out[key] = {"status": UNKNOWN, "reasons": [], "checked_at": None}
+                continue
+            with store.tx() as cur:
+                cur.execute(
+                    "INSERT INTO extension_health (id, status, status_reasons, checked_at)"
+                    " VALUES (?, ?, ?, ?)"
+                    " ON CONFLICT(id) DO UPDATE SET status = excluded.status,"
+                    " status_reasons = excluded.status_reasons, checked_at = excluded.checked_at",
+                    (key, found["status"], dumps(found["reasons"]), now),
+                )
+            out[key] = {"status": found["status"], "reasons": found["reasons"], "checked_at": now}
+        elif was is not None:
+            out[key] = {
+                "status": str(was["status"]),
+                "reasons": loads(was["status_reasons"], []) or [],
+                "checked_at": str(was["checked_at"]),
+            }
+        else:
+            # 아직 한 번도 못 봤다 — 「확인 전」이고 **「응답 없음」이 아니다.**
+            out[key] = {"status": UNKNOWN, "reasons": [], "checked_at": None}
     return out
 
 
@@ -234,7 +331,11 @@ def refresh(store: Store, raw: dict[str, Any]) -> list[ServiceAppResource]:
     )
     for row in rows:
         _probe_into(store, row, force=True)
-    # 카탈로그도 함께 — 「새로 고침」은 **간격을 무시한다** (C7).
+    # 외부 확장의 `health`와 카탈로그도 함께 — 「새로 고침」은 **간격을 무시한다** (C7).
+    if not app_id:
+        with store.tx() as cur:
+            cur.execute("DELETE FROM extension_health")
+        _extension_health(store, _external_rows(store), probe=True)
     refresh_catalogs(store, force=True)
     return [service_app(store, str(row["app_id"])) for row in rows]
 
@@ -416,6 +517,8 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
 
     # 3) Center에 **외부로 등록된** 정의 (C13) — 이름·등급·어댑터는 정의가 원본이다.
     external = _external_rows(store)
+    # 외부 확장의 상태는 **어댑터 `health`**로 본다 (C7) — C11 `/healthz`를 들이대지 않는다.
+    health = _extension_health(store, external, probe=probe)
 
     out = []
     for key in sorted(set(found) | set(apps) | set(external)):
@@ -445,7 +548,15 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
                 contributes_summary=_contributes_of(definition),
                 service_app_id=app.app_id if app else None,
                 installed_on=InstalledOn(hosts=int(slot["hosts"]), by_version=dict(versions)),
-                status=app.status if app else "n/a",
+                # C11 앱이 있으면 그 앱의 `/healthz`가, 외부 확장이면 어댑터 `health`가 말한다.
+                # 둘 다 없으면 서버 부분이 없는 것이라 `n/a`다.
+                status=app.status if app else (health[key]["status"] if key in health else "n/a"),
+                status_reasons=(
+                    app.status_reasons if app else (health[key]["reasons"] if key in health else [])
+                ),
+                checked_at=(
+                    app.checked_at if app else (health[key]["checked_at"] if key in health else None)
+                ),
                 definition=definition,
                 envelope=json.loads(registered["envelope_json"]) if registered is not None else None,
             )

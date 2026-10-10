@@ -5,7 +5,7 @@ import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resourc
 import { CENTER_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { revokeExtension } from "@/app/actions";
-import { appStatus } from "../../page";
+import { appStatus, time } from "../../page";
 
 /**
  * CON-07 「확장」 상세 — 외부 확장의 정의·허용 호스트·이 확장을 쓰는 Bot.
@@ -132,9 +132,17 @@ export default async function ExtensionPage({
                 )}
               </dd>
               <dt className="text-text-muted">상태</dt>
-              <dd>
+              <dd className="flex flex-wrap items-center gap-2">
                 {info.status === "n/a" ? "—" : <StatusBadge group="서비스 앱" label={appStatus(info.status ?? "")} />}
+                {(info.status_reasons ?? []).length > 0 ? (
+                  <span className="text-body-sm text-text-muted">
+                    {(info.status_reasons ?? []).join(", ")}
+                  </span>
+                ) : null}
               </dd>
+              {/* 외부 확장은 어댑터 `health`가 말한다 (C7) — 선언이 없으면 늘 「확인 전」이다. */}
+              <dt className="text-text-muted">마지막 확인</dt>
+              <dd>{info.checked_at ? time(info.checked_at) : "—"}</dd>
               <dt className="text-text-muted">설치된 Bot UI</dt>
               <dd>{info.installed_on?.hosts ?? 0}대</dd>
               <dt className="text-text-muted">정의 해시</dt>

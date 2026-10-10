@@ -139,6 +139,15 @@ CREATE TABLE IF NOT EXISTS extensions (
   registered_by   TEXT NOT NULL,
   PRIMARY KEY (id, version)
 );
+CREATE TABLE IF NOT EXISTS extension_health (
+  -- 외부 확장의 어댑터 `health` 점검 결과 (C7·C13 §4-1). **`extensions`에 열을 더하지 않고
+  -- 표를 따로 둔다** — `CREATE TABLE IF NOT EXISTS`는 이미 만들어진 DB의 표를 고치지 않아
+  -- 열을 더하면 돌던 Center가 조용히 깨진다 (표를 새로 만드는 것은 된다).
+  id              TEXT PRIMARY KEY,
+  status          TEXT NOT NULL,
+  status_reasons  TEXT,
+  checked_at      TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS service_apps (
   -- 등록된 서비스 앱 (C7). **주소의 유일한 출처**다 (C13 Service).
   app_id         TEXT PRIMARY KEY,

@@ -71,7 +71,11 @@ class ExtensionResource(ContractModel):
     contributes_summary: dict[str, list[str]] = Field(default_factory=dict)
     service_app_id: str | None = None
     installed_on: InstalledOn = Field(default_factory=InstalledOn)
-    status: str = "n/a"  # 서버 부분 상태 (없으면 n/a)
+    # 서버 부분 상태. C11 앱은 `/healthz`, 외부 확장은 **어댑터 `health`**(C13 §4-1)로 본다 —
+    # 선언이 없으면 `unknown`(「확인 전」)이고, 서버 부분이 아예 없으면 `n/a`다.
+    status: str = "n/a"  # KNOWN_SERVICE_APP_STATUSES + n/a
+    status_reasons: list[str] = Field(default_factory=list)
+    checked_at: Timestamp | None = None
     # 외부 확장만 — 실행하는 쪽이 받아 검증한다 (C2 `extension` 봉투).
     definition: dict[str, Any] | None = None
     envelope: dict[str, Any] | None = None
