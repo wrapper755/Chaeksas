@@ -17,6 +17,10 @@ import type { Mode } from "@/lib/session";
  *
  * **`later`에 마일스톤 이름을 적지 않는다** — 지나간 마일스톤을 가리키면 다음 사람이 「그쪽
  * 몫이구나」로 읽고 넘어간다. 공백 번호(`docs/09-gaps.md`)를 적는다.
+ *
+ * **아직 오지 않은 마일스톤은 예외다.** 「서버 실행」(CON-12)은 C12·서버 실행기가 통째로 M7
+ * 몫이라 공백 목록에 줄이 없다 — 가리킬 공백 번호가 없으니 마일스톤을 적는다. 규칙이 막으려던
+ * 것은 **끝난** 마일스톤을 가리켜 「남의 몫」으로 읽히는 쪽이다.
  */
 type NavItem =
   // `Route`로 적는다 — 리터럴 **합집합**을 `Link`에 넘기면 타입 라우트가 그중 하나로만
@@ -31,6 +35,7 @@ const NAV: NavItem[] = [
   { label: "실행 로그", href: "/runs" },
   { label: "Bot 현황", later: "CON-02는 아직 없습니다 (docs/09-gaps.md §4-9)." },
   { label: "Bot UI 현황", href: "/bot-uis" },
+  { label: "서버 실행", later: "CON-12는 M7에서 옵니다 — 서버 실행기(C12)가 아직 없습니다." },
   { label: "결재함", href: "/approvals" },
   { label: "작업 지시", href: "/jobs" },
   { label: "공통 패키지", href: "/packages" },
