@@ -21,12 +21,20 @@ from chaeksas.center.api import (
     bot_ui,
     deployments,
     jobs,
+    package_access,
     packages,
     resources,
     runs,
     signing,
 )
-from chaeksas.center.auth import Caller, caller, require_admin, require_read
+from chaeksas.center.auth import (
+    Caller,
+    caller,
+    require_admin,
+    require_package_read,
+    require_read,
+    require_upload,
+)
 from chaeksas.center.errors import ApiError, handle
 from chaeksas.center.responses import Utf8JSONResponse
 from chaeksas.center.settings import Settings
@@ -138,7 +146,11 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.post(f"{API}/packages")
     async def upload_package(request: Request) -> Any:
-        found = require_admin(authenticate(request))
+        """업로드 (C5). **Studio용 키로도 된다** — 올리는 쪽이 Studio다 (ADR-0013).
+
+        올라간 것은 **후보**다. 승인·배포는 서명이 관문이라(C2) 키로는 할 수 없다.
+        """
+        found = require_upload(authenticate(request))
         form = await request.form()
         uploaded = form.get("file")
         if uploaded is None or isinstance(uploaded, str):
@@ -153,7 +165,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def list_packages(
         request: Request, kind: str | None = None, status: str | None = None, id: str | None = None
     ) -> Any:
-        require_read(authenticate(request))
+        require_package_read(authenticate(request))
         # 누락 리소스는 **읽을 때** 리소스 목록과 대조해 센다 (C5 `missing_resources`).
         return packages.listing(
             app.state.store,
@@ -165,7 +177,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.get(f"{API}/packages/{{package_id}}/{{version}}/info")
     def package_info(request: Request, package_id: str, version: str) -> Any:
-        require_read(authenticate(request))
+        require_package_read(authenticate(request))
         return packages.info_of(
             app.state.store, package_id, version, index=resources.index(app.state.store)
         )
@@ -173,7 +185,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     @app.get(f"{API}/packages/{{package_id}}/{{version}}/dependents")
     def package_dependents(request: Request, package_id: str, version: str) -> Any:
         """이 패키지를 쓰는 패키지 (C5·CON-06 「이 패키지를 쓰는 패키지」)."""
-        require_read(authenticate(request))
+        require_package_read(authenticate(request))
         return packages.dependents(app.state.store, package_id, version)
 
     @app.delete(f"{API}/packages/{{package_id}}/{{version}}")
@@ -187,7 +199,10 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.get(f"{API}/packages/{{package_id}}/{{version}}")
     def download_package(request: Request, package_id: str, version: str) -> Any:
-        require_read(authenticate(request))
+        """내려받기 (C5). **실행하는 쪽은 자기 배포분만** — 관문은 `package_access`다."""
+        package_access.guard_download(
+            app.state.store, authenticate(request), package_id=package_id, version=version
+        )
         path, content_hash = packages.file_path(
             app.state.store, package_dir=settings.package_dir, package_id=package_id, version=version
         )

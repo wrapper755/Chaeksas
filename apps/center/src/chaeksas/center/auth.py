@@ -6,6 +6,10 @@
 | 콘솔 「관리자」·Admin | 관리자 토큰 | 쓰기 전부 (서명이 필요한 것은 봉투도 함께) |
 | Bot UI·Studio·서버 실행기 | Center API 키 (종류별) | 자기 일만 |
 
+**「자기 일만」은 키 종류로 가른다.** 토큰이 맞는지만 보는 `require_read`로는 C5 권한표를
+지킬 수 없다 — 패키지 쪽은 종류를 보는 관문(`require_upload`·`require_package_read`)과,
+배포 표까지 대조하는 관문(`api.package_access.guard_download`)이 따로 있다.
+
 **행위자 이름은 본문에서 받지 않는다** (C5). 키로 부르면 키 이름, 콘솔에서 부르면 BFF가 실어
 보내는 `X-CHK-Actor` 헤더를 쓴다 — 그 헤더는 **관리자·읽기 토큰으로 부를 때만** 믿는다.
 """
@@ -24,6 +28,12 @@ from chaeksas.center.storage import Store, now_iso
 
 #: 콘솔(BFF)이 로그인한 사용자 이름을 싣는 헤더. **값은 UTF-8 퍼센트 인코딩** (C5).
 ACTOR_HEADER = "X-CHK-Actor"
+
+#: 패키지를 올리고 목록·정보를 볼 수 있는 Center API 키 종류 (C5 권한표).
+#:
+#: **Studio만이다.** 실행하는 쪽(Bot UI·서버 실행기)은 배포를 하트비트로 받으므로 목록을 볼
+#: 일이 없고(내려받기만 한다), 연동용 키는 작업만 만든다.
+PACKAGE_KEY_TYPE = "studio"
 
 
 @dataclass(frozen=True)
@@ -94,6 +104,39 @@ def require_read(found: Caller) -> Caller:
     if found.kind in ("admin", "read", "key"):
         return found
     raise ApiError(403, "forbidden", "읽을 권한이 없다")  # pragma: no cover - 방어
+
+
+def _package_key(found: Caller) -> bool:
+    return found.key is not None and found.key.type == PACKAGE_KEY_TYPE
+
+
+def require_upload(found: Caller) -> Caller:
+    """`POST /packages`에 필요한 권한 — 관리자 토큰 **또는 Studio용 키** (C5 권한표).
+
+    관리자 토큰만으로 막지 않는다. 올리는 쪽은 Studio이고, 관리자 토큰을 관문으로 삼으면
+    **설계자 PC에 관리자 토큰을 두게 된다** — ADR-0013이 피한 것이다. 승인·배포는 그대로
+    서명이 관문이라(C2) 올린 것은 후보로만 앉는다.
+    """
+    if found.is_admin or _package_key(found):
+        return found
+    raise ApiError(
+        403, "forbidden", "패키지 업로드는 관리자 토큰이나 Studio용 Center API 키로만 된다"
+    )
+
+
+def require_package_read(found: Caller) -> Caller:
+    """패키지 목록·정보·참조에 필요한 권한 — 콘솔 토큰 또는 **Studio용 키만** (C5 권한표).
+
+    `require_read`와 다른 것은 **키 종류를 본다**는 점이다. Bot UI 키로 패키지 표 전체를
+    읽을 수 있으면 「무엇이 올라와 있나」가 현장 PC에 다 보인다.
+    """
+    if found.kind in ("admin", "read") or _package_key(found):
+        return found
+    raise ApiError(
+        403,
+        "forbidden",
+        "패키지 목록·정보는 콘솔 토큰이나 Studio용 Center API 키로만 볼 수 있다",
+    )
 
 
 def require_key_type(found: Caller, wanted: str) -> keys.KeyRecord:

@@ -18,9 +18,10 @@ from typing import Any
 from chaeksas.center.api.packages import STATUS_DEPRECATED
 from chaeksas.center.api.signing import STATUS_APPROVED, admin_keys
 from chaeksas.center.errors import ApiError
-from chaeksas.center.storage import Store, now_iso
+from chaeksas.center.storage import Store, loads, now_iso
 from chaeksas.contracts.bot_ui import DeploymentResult
 from chaeksas.contracts.center_api import RECENT_RESULTS, DeploymentInfo
+from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.signing import Envelope, verify, verify_time
 
 #: `run_location` → 배포 대상 종류 (C2 §배포 대상 규칙).
@@ -207,6 +208,32 @@ def versions_for(store: Store, *, target_type: str, target_id: str, bpm_process_
         (STATUS_APPROVED, target_type, target_id, bpm_process_id),
     )
     return [str(one["version"]) for one in rows]
+
+
+def downloadable_by(store: Store, *, target_type: str, target_id: str) -> set[tuple[str, str]]:
+    """그 대상이 **내려받을 수 있는** 패키지 `{(id, 버전)}` (C5 권한표).
+
+    고르는 기준은 `envelopes_for`와 **같다** — 내려가는 배포와 받을 수 있는 파일이 어긋나면
+    「배포는 됐는데 설치가 안 된다」가 된다. 거기에 그 패키지가 요구하는
+    툴팩(`requires.toolpacks`)을 더한다 (C5 — 실행하는 쪽은 툴팩도 따로 내려받는다).
+
+    **공유 BPM 프로세스(`requires.libs`)는 더하지 않는다** — 그것은 패키지 안
+    `libs/`로 **복사해 넣은** 것이라(C1 §패키지 구성) 실행하는 쪽이 따로 받을 것이 없다.
+    """
+    rows = store.rows(
+        "SELECT d.bpm_process_id AS id, d.version AS version, p.manifest_json AS manifest_json"
+        " FROM deployments d"
+        " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
+        " WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ?"
+        " AND (d.target_id = ? OR d.target_id = '*')",
+        (STATUS_APPROVED, target_type, target_id),
+    )
+    out: set[tuple[str, str]] = set()
+    for one in rows:
+        out.add((str(one["id"]), str(one["version"])))
+        manifest = Manifest.model_validate(loads(one["manifest_json"], {}))
+        out |= {(ref.id, ref.version) for ref in manifest.requires.toolpacks}
+    return out
 
 
 def results_of(store: Store, *, bot_ui_id: str, limit: int = RECENT_RESULTS) -> list[DeploymentResult]:

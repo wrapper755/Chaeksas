@@ -25,6 +25,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import Qt  # noqa: E402
 
+from chaeksas.contracts.center_api import PackageInfo  # noqa: E402
 from chaeksas.contracts.extension import ResourceView  # noqa: E402
 from chaeksas.contracts.resources import (  # noqa: E402
     ContributedResource,
@@ -111,21 +112,65 @@ def toolpack(**over: Any) -> ToolpackResource:
     return ToolpackResource.model_validate(base)
 
 
+def shared_lib(**over: Any) -> PackageInfo:
+    """공유 BPM 프로세스 패키지 하나 (C5 `PackageInfo`). 「공유 BPM 프로세스」 뿌리가 읽는다."""
+    base: dict[str, Any] = {
+        "id": "shared.approval",
+        "version": "1.1.0",
+        "kind": "process_lib",
+        "name": "공통 결재",
+        "status": "approved",
+        "content_hash": "sha256:" + "b" * 64,
+        "uploaded_by": "설계자 PC",
+        "uploaded_at": "2026-10-11T09:00:00+09:00",
+        "manifest": {
+            "schema": 1,
+            "kind": "process_lib",
+            "id": "shared.approval",
+            "version": "1.1.0",
+            "name": "공통 결재",
+            "requires": {},
+            "human": {},
+            "provides": {
+                "processes": [
+                    {
+                        "process_id": "Proc_approve",
+                        "file": "process/approve.bpmn",
+                        "name": "팀장 결재",
+                        "reads": ["금액"],
+                        "writes": ["승인"],
+                    }
+                ]
+            },
+            "built": {"by": "studio", "at": "2026-10-11T09:00:00+09:00", "core": "0.1.0",
+                      "spec_version": 1},
+            "content_hash": "sha256:" + "b" * 64,
+        },
+    }
+    base.update(over)
+    return PackageInfo.model_validate(base)
+
+
 class FakeCenter(services.CenterReader):
-    """Center를 읽는 척 — C7 세 갈래만 준다 (`contributed`·`toolpack`·`service_app`)."""
+    """Center를 읽는 척 — C7 세 갈래와 C5 패키지 표를 준다."""
 
     def __init__(
         self,
         *,
         pages: list[ContributedResource] | None = None,
         packs: list[ToolpackResource] | None = None,
+        libs: list[PackageInfo] | None = None,
         unreachable: str | None = None,
     ) -> None:
         super().__init__(base_url="http://center.test", api_key="chk_studio_" + "a" * 40)
         self.pages = pages if pages is not None else [page()]
         self.packs = packs if packs is not None else [toolpack()]
+        self.libs = libs if libs is not None else [shared_lib()]
         self.unreachable = unreachable
+        #: 기여 뿌리가 물어본 자원 갈래들 (C7).
         self.asked: list[str] = []
+        #: 패키지 표에 물어본 갈래들 (C5).
+        self.asked_kinds: list[str] = []
 
     def contributed(self, resource_type: str) -> list[ContributedResource]:
         self.asked.append(resource_type)
@@ -137,6 +182,12 @@ class FakeCenter(services.CenterReader):
         if self.unreachable:
             raise services.CenterUnreachable(self.unreachable)
         return self.packs
+
+    def packages(self, kind: str) -> list[PackageInfo]:
+        self.asked_kinds.append(kind)
+        if self.unreachable:
+            raise services.CenterUnreachable(self.unreachable)
+        return [one for one in self.libs if one.kind == kind]
 
 
 def catalog_with(*apps: ServiceAppResource, problems: tuple[str, ...] = ()) -> service_catalog.Catalog:
@@ -190,6 +241,8 @@ def test_a_contributed_root_asks_center_for_its_own_resource_type() -> None:
     reader = FakeCenter()
     tree_with(reader=reader)
     assert reader.asked == ["ocr_form"]
+    # 공유 뿌리는 **패키지 표**에 묻는다 (C5) — 리소스 목록이 아니다.
+    assert reader.asked_kinds == [resources.KIND_LIB]
 
 
 def test_contributed_roots_are_drawn_in_label_order() -> None:
@@ -203,11 +256,39 @@ def test_contributed_roots_are_drawn_in_label_order() -> None:
     assert [one.label for one in tree.roots[1:3]] == ["가 보기", "하 보기"]
 
 
-def test_the_shared_process_root_stays_but_says_why_it_is_off() -> None:
-    """올리는 길이 없어 늘 비어 있다 — **뿌리를 지우지 않고** 까닭을 적는다 (U3)."""
+def test_the_shared_process_root_lists_center_libs_and_their_definitions() -> None:
+    """뿌리는 **C5 패키지 표**에서 온다 (`?kind=process_lib`) — C7에 그 갈래가 없다.
+
+    둘째 단계는 **매니페스트의 `provides.processes`**다 (C1) — Center가 짓는 값이 아니다.
+    """
     found = root_of(tree_with(), resources.ROOT_SHARED)
-    assert found.items == ()
-    assert "§4-5" in found.off
+    [one] = found.items
+    assert (one.label, one.kind) == ("공통 결재", "1.1.0")
+    assert one.note == "approved · 정의 1개"
+    [definition] = one.children
+    assert definition.label == "팀장 결재"
+    assert definition.note == "받는 것: 금액 / 내놓는 것: 승인"
+
+
+def test_the_shared_process_root_cannot_make_a_call_activity_yet() -> None:
+    """설치가 없으니 **Call Activity를 만들지 않고 까닭을 말한다** (U3).
+
+    만들어 두면 시험 실행이 그 공유 BPM 프로세스를 못 찾아 「왜 안 되나」가 된다.
+    """
+    found = root_of(tree_with(), resources.ROOT_SHARED)
+    assert all(one.create is None for one in found.items)
+    assert "§4-5" in found.items[0].no_create
+    assert [label for label, _ in found.blocked] == ["설치...", "제거..."]
+    assert found.opens_center, "문맥 메뉴에서 STU-11로 갈 수 있어야 한다"
+
+
+def test_a_lib_without_provides_says_so_instead_of_zero() -> None:
+    """**없는 것과 비어 있는 것은 다르다** — 0으로 적으면 「정의가 없다」로 읽힌다 (CON-06과 같다)."""
+    bare = shared_lib(manifest=None)
+    found = root_of(tree_with(reader=FakeCenter(libs=[bare])), resources.ROOT_SHARED)
+    [one] = found.items
+    assert one.children == ()
+    assert "`provides`가 없습니다" in one.note
 
 
 def test_no_center_means_no_knocking_and_a_reason() -> None:
@@ -411,12 +492,18 @@ def test_the_window_draws_the_roots_and_their_children() -> None:
 
 
 def test_a_root_that_is_off_is_drawn_disabled_with_its_reason() -> None:
+    """지금 꺼지는 뿌리는 없다 — 그려 보고 **`off`를 적은 뿌리만** 꺼지는지 본다 (U3)."""
     window = explorer()
     model = window.view.model()
     first = model.index(0, 0)
     assert model.data(first) == "공유 BPM 프로세스"
-    assert not model.flags(first) & Qt.ItemFlag.ItemIsEnabled
-    assert "§4-5" in str(model.data(first, Qt.ItemDataRole.ToolTipRole))
+    assert model.flags(first) & Qt.ItemFlag.ItemIsEnabled
+
+    off = resources.Tree(roots=(resources.Root(id="x", label="실험", off="까닭 한 줄"),))
+    window.show_tree(off)
+    row = model.index(0, 0)
+    assert not model.flags(row) & Qt.ItemFlag.ItemIsEnabled
+    assert "까닭 한 줄" == str(model.data(row, Qt.ItemDataRole.ToolTipRole))
 
 
 def test_the_note_line_carries_the_problems() -> None:

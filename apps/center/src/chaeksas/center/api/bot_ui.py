@@ -52,6 +52,16 @@ def new_bot_ui_id() -> str:
     return f"bui_{secrets.token_hex(4)}"
 
 
+def id_for_key(store: Store, key: keys.KeyRecord) -> str | None:
+    """그 키로 등록된 Bot UI의 `bot_ui_id` (C4 — **키가 신원이다**). 등록 전이면 `None`.
+
+    `bot_uis` 표를 아는 자리를 하나로 둔다 — 내려받기 관문도 이 길로 묻는다
+    (`api.package_access`). 베껴 두면 키 묶기 규칙이 두 군데로 갈라진다.
+    """
+    found = store.row("SELECT bot_ui_id FROM bot_uis WHERE key_id = ?", (key.key_id,))
+    return str(found["bot_ui_id"]) if found is not None else None
+
+
 def _refuse_if_bound_elsewhere(key: keys.KeyRecord, machine_id: str) -> None:
     """키 → PC: 키는 처음 등록한 PC에 묶인다 (C4 「키 묶기」)."""
     if key.bound_to is not None and key.bound_to.id != machine_id:

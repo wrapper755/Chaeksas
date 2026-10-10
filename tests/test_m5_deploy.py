@@ -64,9 +64,12 @@ def center(tmp_path: Path) -> Any:
     return Center(base_url="http://center", token=TOKEN, client=TestClient(create_app(settings)))
 
 
-def package_zip(package_id: str = "erp.order-entry", version: str = "2.1.0") -> bytes:
-    import tempfile
-
+def package_zip(
+    package_id: str = "erp.order-entry",
+    version: str = "2.1.0",
+    *,
+    requires: dict[str, Any] | None = None,
+) -> bytes:
     manifest: dict[str, Any] = {
         "schema": 1,
         "kind": "bpm_process",
@@ -76,16 +79,40 @@ def package_zip(package_id: str = "erp.order-entry", version: str = "2.1.0") -> 
         "run_location": "pc",
         "entry": "process/main.bpmn",
         "process_id": "Proc_order",
-        "requires": {},
+        "requires": requires or {},
         "human": {},
         "built": {"by": "studio", "at": AT, "core": "0.1.0", "spec_version": 1},
         "content_hash": "sha256:" + "0" * 64,
     }
+    return _zipped(manifest, {"process/main.bpmn": "<definitions />"})
+
+
+def toolpack_zip(package_id: str = "ops.excel-tools", version: str = "2.0.0") -> bytes:
+    """툴팩 하나 (C1 `kind=toolpack`). 내려받기 관문이 BPM 프로세스 말고도 센다."""
+    manifest: dict[str, Any] = {
+        "schema": 1,
+        "kind": "toolpack",
+        "id": package_id,
+        "version": version,
+        "name": "엑셀 도구",
+        "requires": {},
+        "human": {},
+        "provides": {"tools": [{"name": "xlsx_read", "domain": "doc"}]},
+        "built": {"by": "studio", "at": AT, "core": "0.1.0", "spec_version": 1},
+        "content_hash": "sha256:" + "0" * 64,
+    }
+    return _zipped(manifest, {"tools/xlsx.py": "# 도구"})
+
+
+def _zipped(manifest: dict[str, Any], files: dict[str, str]) -> bytes:
+    """`content_hash`는 **자기 자신을 뺀** 내용의 해시다 (C2) — 두 번 만들어 채운다."""
+    import tempfile
 
     def made(body: str) -> bytes:
         out = io.BytesIO()
         with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
-            archive.writestr("process/main.bpmn", "<definitions />")
+            for name, text in files.items():
+                archive.writestr(name, text)
             archive.writestr("manifest.json", body)
         return out.getvalue()
 
@@ -274,6 +301,106 @@ def test_a_revoked_deployment_keeps_its_row_with_a_time(center: Center) -> None:
     assert center.deployments(active=True) == []
     [one] = center.deployments(active=False)
     assert one["revoked_at"] == AT
+
+
+def test_a_bot_ui_key_downloads_only_what_is_deployed_to_it(center: Center) -> None:
+    """내려받기 관문 (C5 권한표) — **자기 배포분만**이다.
+
+    배포를 철회하면 **그 자리에서 닫힌다** — 키는 그대로인데 받을 수 있는 것이 달라진다.
+    """
+    key = admin_key(center)
+    mine = approved(center, key)
+    other = approved(center, key, package_id="erp.payment")
+
+    created = center.client.post(
+        "/api/v1/center-keys",
+        json={"name": "현장 PC 1", "type": "bot_ui"},
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    assert created.status_code == 201, created.text
+    auth = {"Authorization": f"Bearer {created.json()['key']}"}
+    registered = center.client.post(
+        "/api/v1/bot-ui/register",
+        json={
+            "schema": 1,
+            "machine_id": "9" * 64,
+            "name": "현장 PC 1",
+            "os": "windows-11-23H2",
+            "versions": {"bot_ui": "0.1.0", "core": "0.1.0"},
+        },
+        headers=auth,
+    )
+    assert registered.status_code < 400, registered.text
+    bot_ui_id = registered.json()["bot_ui_id"]
+
+    center.deploy(deployment(key, mine, target=bot_ui_id))
+    for info, expected in ((mine, 200), (other, 403)):
+        answer = center.client.get(
+            f"/api/v1/packages/{info['id']}/{info['version']}", headers=auth
+        )
+        assert answer.status_code == expected, (info["id"], answer.text)
+
+    center.revoke_deployment(
+        sign(
+            {"kind": "revoke", "deployment_id": "dep_3f9a1c07", "reason": "잘못", "revoked_at": AT},
+            keystore.load(key, passphrase=PASS),
+            signed_at=AT,
+        )
+    )
+    closed = center.client.get(f"/api/v1/packages/{mine['id']}/{mine['version']}", headers=auth)
+    assert closed.status_code == 403
+
+
+def test_a_bot_ui_key_also_gets_the_toolpacks_its_bot_requires(center: Center) -> None:
+    """**그 패키지가 요구하는 툴팩도** 받는다 (C5 권한표) — 따로 배포하지 않는다."""
+    key = admin_key(center)
+    pack = upload(center, toolpack_zip())
+    info = upload(
+        center,
+        package_zip(
+            requires={
+                "toolpacks": [
+                    {
+                        "id": pack["id"],
+                        "version": pack["version"],
+                        "content_hash": pack["content_hash"],
+                    }
+                ]
+            }
+        ),
+    )
+    center.approve(
+        info["id"],
+        info["version"],
+        sign(
+            {"kind": "package", "id": info["id"], "version": info["version"],
+             "content_hash": info["content_hash"]},
+            keystore.load(key, passphrase=PASS),
+            signed_at=AT,
+        ),
+    )
+
+    created = center.client.post(
+        "/api/v1/center-keys",
+        json={"name": "현장 PC 2", "type": "bot_ui"},
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    auth = {"Authorization": f"Bearer {created.json()['key']}"}
+    registered = center.client.post(
+        "/api/v1/bot-ui/register",
+        json={
+            "schema": 1,
+            "machine_id": "8" * 64,
+            "name": "현장 PC 2",
+            "os": "windows-11-23H2",
+            "versions": {"bot_ui": "0.1.0", "core": "0.1.0"},
+        },
+        headers=auth,
+    )
+    center.deploy(deployment(key, info, target=registered.json()["bot_ui_id"]))
+    # 툴팩은 **승인되지 않아도** 받는다 — 서명을 보는 것은 설치하는 쪽이다 (C2 V7).
+    answer = center.client.get(f"/api/v1/packages/{pack['id']}/{pack['version']}", headers=auth)
+    assert answer.status_code == 200, answer.text
 
 
 # ─────────────────────────── Bot UI 설치 (C2 V1~V7) ───────────────────────────

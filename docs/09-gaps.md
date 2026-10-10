@@ -23,7 +23,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
 | C3 | **구현됨** | `contracts.events`·`core.run_log` | — (닫았다: `ui_session`은 [ADR-0041](decisions/0041-extension-run-events.md), `case_id`·`queued_s`는 아는 쪽이 넣는다) |
 | C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠다) |
-| C5 | **구현됨** | `contracts.center_api`, Center 전부 | — (닫았다 — 지원 종료·참조·삭제까지) |
+| C5 | **구현됨** | `contracts.center_api`, Center 전부 | — (닫았다 — 지원 종료·참조·삭제, 그리고 **권한표**까지. 패키지 쪽은 키 종류를 보는 관문이 따로 있다: `auth.require_upload`·`require_package_read`·`api.package_access.guard_download`) |
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
 | C7 | **구현됨** | `contracts.resources`·`center_keys` | — (닫았다 — 외부 확장은 어댑터 `health`로 본다) |
 | C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
@@ -59,15 +59,17 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 - **없는 것:** Qt → QtWebEngine **드래그**. 지금은 문맥 메뉴 「캔버스에 추가」·더블클릭이고 화면 문서가 그렇게 적는다.
 - **없는 것 둘:** 기여 뿌리의 **둘째 단계**(「UI 화면 → 요소」)와 「요소 보기」·「요소를 끌어다 스텝 추가」. 항목의 `data`를 플랫폼이 해석하지 않기 때문이다 (C13 §5) — 하려면 C13에 **자식 선언**(`children_key`·`child_label_key` 같은 것)을 더해 「선언대로 걷게」 해야 한다. 요소를 고르는 일은 STU-13이 이미 한다.
 - **크기:** 드래그는 중간, 자식 선언은 계약·생성물이 붙는다.
-- **막는 것:** 「공유 BPM 프로세스」 뿌리와 툴팩 「설치...」·「제거...」는 §4-5(STU-11·12 「올리기」)가 없어 **꺼진 줄 + 까닭**이다.
+- **막는 것:** 「공유 BPM 프로세스」·「툴팩」의 「설치...」·「제거...」와 공유 BPM 프로세스의 「캔버스에 추가」는 **받은 패키지를 둘 자리**가 없어 꺼진 줄 + 까닭이다 (§4-5의 남은 것). 목록은 둘 다 Center에서 온다.
 
-### 4-5. STU-06·STU-11이 없다 (STU-12는 「내보내기」만 있다)
+### 4-5. 「설치」와 STU-06 (올리기·STU-11 읽기는 닫았다)
 
-- **문서:** `studio.md` 186(STU-06 BPM 프로세스 정보)·269(STU-11 Center 공유 자원)·283(STU-12 공유 BPM 프로세스 내보내기·올리기). STU-01 메뉴 표가 셋 다 가리킨다.
-- **코드:** STU-06·STU-11은 **없다.** STU-12는 **「공유 BPM 프로세스로 내보내기...」가 돈다** (`ShareDefinitionsDialog`) — 「올리기」 둘은 `LATER` 말풍선이다. **STU-15는 닫았다** (`extension_dialog.py` — 끄고 켜기까지, [ADR-0043](decisions/0043-turned-off-extensions.md)).
-- **없는 것:** 두 창과, STU-01 메뉴에서 빠진 항목들 — 「BPM 프로세스 정보...」·「정의 추가...」·「이 정의를 진입으로 지정」·「다른 이름으로 저장...」·「Center 공유 자원...」·「결정 수행 (재생)...」(Ctrl+F5)·「감시 모드 시작」·「속성 패널 접기」·「레이아웃 초기화」.
-- **크기:** STU-06은 작다. STU-11은 중간. **STU-12의 「내보내기」는 생겼다** (`ShareDefinitionsDialog` + `packaging.export_lib`) — 남은 것은 「올리기」이고 그것은 「Center로 올리기」와 **같은 거리**다 (Studio에 패키지 올리는 길이 없다).
-- **막는 것:** 없다. STU-11은 Center 리소스 목록(C7)을, STU-12 「올리기」는 Studio의 패키지 업로드를 먼저 붙이면 된다.
+**올리기 둘과 STU-11 읽기는 닫았다** (`apps/studio/upload.py` + `center_resources.py`, Center 쪽 권한 관문은 `center/auth.py`·`api/package_access.py`). Studio 키로 올리고, 올라온 공유 BPM 프로세스·툴팩을 STU-11과 STU-03이 **같은 출처**(C5 패키지 표)에서 본다. **STU-15도 닫았다** ([ADR-0043](decisions/0043-turned-off-extensions.md)).
+
+- **없는 것 하나 — 「설치」:** STU-11의 「설치」·「갱신」·「제거」와 STU-03의 같은 항목, 그리고 공유 BPM 프로세스의 「캔버스에 추가」(Call Activity)·「열기 (읽기 전용)」·「내 BPM 프로세스로 복사」. 「설치본」 칸과 「로컬만」 상태도 그때 채워진다.
+- **먼저 정할 것:** **받은 패키지를 어디에 풀 것인가.** `<data_dir>/libs/<id>@<version>/`? 작업 폴더 안? 시험 실행의 `callActivity` 해결(`requires.libs`)을 어디까지 넓히나? 툴팩은 도구를 어떻게 싣나? **ADR 하나가 먼저다** — 자리가 정해지지 않은 채 단추만 켜면 「눌렀는데 아무 일도 없다」가 된다. 지금은 **끄고 까닭을 적는다** (U3).
+- **없는 것 둘 — STU-06 BPM 프로세스 정보:** `studio.md` STU-06. 창 하나이고 Center와 무관하다 — `workspace.BpmProcess`(id·name·version·entry·group)와 `chk:process`의 `service_keys`를 읽고 쓴다. 「실행 위치」는 [ADR-0015](decisions/0015-run-location.md), 키 참조 표는 STU-10의 것과 같은 모양이다. **크기: 작다.** 막는 것 없다.
+- **없는 것 셋 — STU-01 메뉴에서 빠진 항목들:** 「정의 추가...」·「이 정의를 진입으로 지정」·「다른 이름으로 저장...」·「결정 수행 (재생)...」(Ctrl+F5)·「감시 모드 시작」·「속성 패널 접기」·「레이아웃 초기화」.
+- **크기:** 「설치」는 중간~큼 (ADR 먼저). 나머지는 작다.
 
 ### 4-6. Studio 「화면」 탭 (STU-01 아래 탭)
 

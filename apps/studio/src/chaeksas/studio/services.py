@@ -11,9 +11,10 @@ C13으로 등록된 정의와 봉투다. 그래서 Studio 시험 실행과 배�
   (ADR-0007의 「들고 있던 것을 쓴다」는 현장 쪽 규칙이다).
 - **키는 Studio의 비밀 저장소에서** 푼다 (`StudioCredentials.service_key`, STU-10 「서비스 앱 키」).
 
-Center를 부르는 것은 **읽기만**이고 쓰지 않는다 (명부는 세 번, STU-03 리소스 탐색기가 뿌리마다
+이 모듈이 Center를 부르는 것은 **읽기만**이다 (명부는 세 번, STU-03 리소스 탐색기가 뿌리마다
 한 번 더). 외부 확장의 정의·봉투는 리소스 목록이 이미 싣고 오므로 확장마다 따로 묻지 않는다
-(C7 `ExtensionResource`).
+(C7 `ExtensionResource`). **쓰는 쪽은 `upload.py` 하나다** — 그래서 「Center로 올리기」를
+붙여도 이 길이 쓰는 길로 바뀌지 않는다.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
 
+from chaeksas.contracts.center_api import PackageInfo
 from chaeksas.contracts.extension import TIER_EXTERNAL
 from chaeksas.contracts.resources import (
     ContributedResource,
@@ -39,6 +41,7 @@ log = logging.getLogger(__name__)
 #: Center API 경로 (C5·C7).
 RESOURCES = "/api/v1/resources"
 ADMIN_KEYS = "/api/v1/admin-keys"
+PACKAGES = "/api/v1/packages"
 
 #: 읽기 타임아웃 (초). 사람이 「시험 실행」을 누른 뒤 기다리는 자리다.
 TIMEOUT_S = 10
@@ -53,7 +56,7 @@ class CenterReader:
     """Center를 **읽기만** 하는 작은 클라이언트.
 
     Bot UI의 `CenterClient`를 쓰지 않는다 — 앱끼리 import하지 않는다 (01-architecture §5).
-    여기서 필요한 것은 두 경로뿐이라 따로 두는 쪽이 싸다.
+    여기서 필요한 것은 몇 경로뿐이라 따로 두는 쪽이 싸다.
     """
 
     base_url: str
@@ -92,6 +95,17 @@ class CenterReader:
         """확장이 기여한 자원들 (C7, STU-03 뿌리 하나). **`data`는 해석하지 않는다** (C13 §5)."""
         found = self._get(f"{RESOURCES}?type=contributed&resource_type={quote(resource_type)}") or {}
         return [ContributedResource.model_validate(one) for one in found.get("items") or []]
+
+    def packages(self, kind: str) -> list[PackageInfo]:
+        """그 갈래의 패키지들 (C5 `GET /packages?kind=`). STU-11과 STU-03의 공유 뿌리.
+
+        **C7이 아니라 C5를 읽는다** — C7 리소스 목록에는 `process_lib` 갈래가 없고, STU-11이
+        보여야 하는 「상태」(후보·승인됨·지원 종료·철회)는 **패키지 상태**라서다 (CON-06이
+        같은 것을 읽는다). 툴팩은 두 길이 다 있는데, **STU-03의 뿌리는 C7을 쓴다**(도구 목록이
+        거기 있다) — 쓰는 데가 다르면 읽는 길도 다르다.
+        """
+        found = self._get(f"{PACKAGES}?kind={quote(kind)}") or []
+        return [PackageInfo.model_validate(one) for one in found]
 
     def toolpacks(self) -> list[ToolpackResource]:
         """툴팩들 (C7 — Center가 `kind=toolpack` 패키지에서 모은다). STU-03 「툴팩」 뿌리."""
@@ -184,6 +198,7 @@ def from_settings(settings: Any) -> Services:
 
 __all__ = [
     "ADMIN_KEYS",
+    "PACKAGES",
     "RESOURCES",
     "TIMEOUT_S",
     "CenterReader",

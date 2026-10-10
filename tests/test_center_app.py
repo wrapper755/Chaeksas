@@ -530,7 +530,9 @@ def test_upload_list_info_and_download(client: TestClient) -> None:
     info = client.get("/api/v1/packages/invoice-check/1.0.0/info", headers=READ).json()
     assert info["manifest"]["process_id"] == "Proc_invoice"
 
-    downloaded = client.get("/api/v1/packages/invoice-check/1.0.0", headers=READ)
+    # 내려받기는 **읽기 토큰으로 안 된다** (C5 권한표) — 콘솔은 목록·정보까지다.
+    assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=READ).status_code == 403
+    downloaded = client.get("/api/v1/packages/invoice-check/1.0.0", headers=ADMIN)
     assert downloaded.status_code == 200
     assert downloaded.headers["x-content-hash"] == body["content_hash"]
     # 내려받은 것이 올린 것과 같은가 (해시로 확인한다).
@@ -632,30 +634,90 @@ def test_actor_header_is_ignored_for_key_callers(client: TestClient) -> None:
     _key_id, raw = issue_key(client, name="현장 PC 1")
     auth = {"Authorization": f"Bearer {raw}", "X-CHK-Actor": quote("관리자인 척")}
     client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
-    # 키로는 업로드할 수 없으니, 행위자가 쓰이는 길(업로드)은 막혀 있다.
+    # Bot UI 키로는 올릴 수 없으니, 행위자가 쓰이는 길(업로드)은 막혀 있다. Studio 키가
+    # 올릴 때도 행위자는 **키 이름**이다 — `test_studio_key_uploads_and_reads…`가 본다.
     denied = client.post(
         "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=auth
     )
     assert denied.status_code == 403
 
 
-def test_upload_needs_the_admin_token(client: TestClient) -> None:
+def test_read_token_cannot_upload(client: TestClient) -> None:
+    """읽기 토큰은 **GET만**이다 (C5 권한표)."""
     response = client.post(
         "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=READ
     )
-    assert response.status_code == 403 and response.json()["code"] == "admin_only"
+    assert response.status_code == 403 and response.json()["code"] == "forbidden"
 
 
-def test_bot_ui_key_can_download_but_not_upload(client: TestClient) -> None:
-    """Bot UI는 자기 배포분을 내려받는다 (C5 권한표). 올리지는 못한다."""
+def test_studio_key_uploads_and_reads_but_bot_ui_key_does_not(client: TestClient) -> None:
+    """올리는 쪽은 Studio다 (C5 권한표) — **관리자 토큰을 설계자 PC에 두지 않는다** (ADR-0013).
+
+    Bot UI 키는 패키지 표를 보지 못한다 — 배포는 하트비트로 받고 내려받기만 한다.
+    """
+    _key_id, studio = issue_key(client, name="설계자 PC", key_type="studio")
+    studio_auth = {"Authorization": f"Bearer {studio}"}
+    created = client.post(
+        "/api/v1/packages",
+        files={"file": ("p.zip", build_package(), "application/zip")},
+        headers=studio_auth,
+    )
+    assert created.status_code == 201, created.text
+    # 올린 것은 **후보**다 — 키로는 승인할 수 없다 (C2).
+    assert created.json()["status"] == "candidate"
+    # 행위자는 **키 이름**이다 (C5 — 키로 부를 때 `X-CHK-Actor`를 믿지 않는다).
+    assert created.json()["uploaded_by"] == "설계자 PC"
+    assert len(client.get("/api/v1/packages", headers=studio_auth).json()) == 1
+    assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=studio_auth).status_code == 200
+
+    _again, bot = issue_key(client)
+    bot_auth = {"Authorization": f"Bearer {bot}"}
+    for path in ("/api/v1/packages", "/api/v1/packages/invoice-check/1.0.0/info"):
+        denied = client.get(path, headers=bot_auth)
+        assert denied.status_code == 403 and denied.json()["code"] == "forbidden", path
+    uploading = client.post(
+        "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=bot_auth
+    )
+    assert uploading.status_code == 403
+
+
+def test_bot_ui_key_cannot_download_what_is_not_deployed_to_it(client: TestClient) -> None:
+    """**자기 배포분만**이다 (C5 권한표). 배포된 것을 받는 길은 `test_m5_deploy.py`가 본다.
+
+    등록 전에도 403이다 — 키는 있지만 아직 어느 Bot UI인지 모른다 (C4).
+    """
     assert upload(client, build_package()).status_code == 201
     _key_id, raw = issue_key(client)
     auth = {"Authorization": f"Bearer {raw}"}
-    assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=auth).status_code == 200
-    denied = client.post(
-        "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=auth
+    before = client.get("/api/v1/packages/invoice-check/1.0.0", headers=auth)
+    assert before.status_code == 403 and before.json()["code"] == "forbidden"
+
+    client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
+    denied = client.get("/api/v1/packages/invoice-check/1.0.0", headers=auth)
+    assert denied.status_code == 403 and denied.json()["code"] == "forbidden"
+    # **없는 패키지도 같은 답이다** — 404로 가르면 그것이 곧 목록이 된다.
+    missing = client.get("/api/v1/packages/없는것/1.0.0", headers=auth)
+    assert missing.status_code == 403
+
+
+def test_a_server_runner_key_has_nothing_deployed_to_it_yet(client: TestClient) -> None:
+    """서버 실행기는 등록받는 자리가 **아직 없다** (C12·M7) — 흉내 내지 않고 그렇게 말한다."""
+    assert upload(client, build_package()).status_code == 201
+    _key_id, raw = issue_key(client, name="서버 1", key_type="server_runner")
+    denied = client.get(
+        "/api/v1/packages/invoice-check/1.0.0", headers={"Authorization": f"Bearer {raw}"}
     )
     assert denied.status_code == 403
+    assert "서버 실행기 등록은 M7부터다" in denied.json()["message"]
+
+
+def test_integration_key_cannot_touch_packages(client: TestClient) -> None:
+    """연동용 키는 작업만 만든다 (C5 권한표)."""
+    assert upload(client, build_package()).status_code == 201
+    _key_id, raw = issue_key(client, name="ERP", key_type="integration")
+    auth = {"Authorization": f"Bearer {raw}"}
+    assert client.get("/api/v1/packages", headers=auth).status_code == 403
+    assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=auth).status_code == 403
 
 
 def test_missing_package_is_404(client: TestClient) -> None:
@@ -878,7 +940,7 @@ def test_deprecating_moves_the_status_but_is_not_a_revoke(client: TestClient) ->
         "deprecated"
     )
     # **철회가 아니다** — 이미 배포된 것이 돌 수 있어야 하므로 내려받기는 410이 아니다.
-    assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=READ).status_code == 200
+    assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=ADMIN).status_code == 200
 
 
 def test_deprecating_twice_is_the_same_answer(client: TestClient) -> None:

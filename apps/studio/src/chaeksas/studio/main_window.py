@@ -30,9 +30,10 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts import Violation
-from chaeksas.studio import resources, service_catalog, services
+from chaeksas.studio import resources, service_catalog, services, upload
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
+from chaeksas.studio.center_resources import CenterResourcesDialog
 from chaeksas.studio.checks import refs_in
 from chaeksas.studio.dialogs import NewProcessDialog, ShareDefinitionsDialog, pick_example
 from chaeksas.studio.explorer import Explorer
@@ -73,12 +74,12 @@ TITLE = "Chaeksas Studio"
 NO_PROCESS = "(BPM 프로세스를 선택하거나 새로 만드세요)"
 DEFAULT_SIZE = (1400, 860)
 
-#: 아직 없는 것을 누르면 이렇게 말한다 — 조용히 아무 일도 없는 것보다 낫다.
-LATER = {
-    "center": "Center 올리기는 아직 없습니다 (docs/09-gaps.md §4-5).",
-}
-
 PACKAGE_FILTER = "패키지 (*.zip)"
+
+#: Center가 필요한 동작을 설정 없이 눌렀을 때 (STU-10 맨 아래).
+NO_CENTER_SETTINGS = (
+    "Center 주소와 Center API 키가 아직 없습니다.\n\n지금 설정 → Center를 열까요?"
+)
 
 
 class MainWindow(QMainWindow):
@@ -104,6 +105,7 @@ class MainWindow(QMainWindow):
         self.resource_tree = resources.ResourceExplorer(self)
         self.resource_tree.reloading.connect(self.refresh_catalog)
         self.resource_tree.adding.connect(self.add_to_canvas)
+        self.resource_tree.opening_center.connect(self.open_center_resources)
         self.resource_tree.said.connect(self.say)
 
         self.log_view = QPlainTextEdit(self)
@@ -183,8 +185,9 @@ class MainWindow(QMainWindow):
         self.save_action = self._add(files, "저장", self.save, QKeySequence.StandardKey.Save)
         self._add(files, "패키지로 내보내기...", self.export_package)
         self._add(files, "공유 BPM 프로세스로 내보내기...", self.export_shared)
-        self._add(files, "Center로 올리기", lambda: self._later("center"))
-        self._add(files, "공유 BPM 프로세스 Center로 올리기", lambda: self._later("center"))
+        self._add(files, "Center로 올리기", self.upload_package)
+        self._add(files, "공유 BPM 프로세스 Center로 올리기", self.upload_shared)
+        self._add(files, "Center 공유 자원...", self.open_center_resources)
         files.addSeparator()
         self._add(files, "종료", self.close)
 
@@ -311,9 +314,6 @@ class MainWindow(QMainWindow):
         self.log_view.appendPlainText(message)
         self.statusBar().showMessage(message)
 
-    def _later(self, what: str) -> None:
-        QMessageBox.information(self, TITLE, LATER[what])
-
     def _retitle(self) -> None:
         if self.process is None or self.definition is None:
             self.setWindowTitle(f"{TITLE} - {NO_PROCESS}")
@@ -367,6 +367,15 @@ class MainWindow(QMainWindow):
             self.canvas.call("properties", node_id, then=lambda again: self.properties.show_element(again))
 
         self.canvas.call("setProperties", node_id, changes, then=done)
+
+    def _saved(self) -> bool:
+        """「내보내기」·「올리기」의 공통 관문 — 적용 안 한 편집을 확인하고 저장한다.
+
+        **담는 것은 디스크의 파일이다** — 저장하지 않은 편집은 패키지에 들어가지 않는다.
+        """
+        if not self._may_drop_edits():
+            return False
+        return not self.dirty or self.save()
 
     def _may_drop_edits(self) -> bool:
         """적용 안 한 편집이 있으면 묻는다 (STU-04). 지금 적용할 수 없으면 「적용」을 뺀다."""
@@ -461,9 +470,7 @@ class MainWindow(QMainWindow):
         if self.process is None:
             self.say("열린 BPM 프로세스가 없습니다.")
             return
-        if not self._may_drop_edits():
-            return
-        if self.dirty and not self.save():
+        if not self._saved():
             return
         target, _ = QFileDialog.getSaveFileName(
             self,
@@ -490,9 +497,7 @@ class MainWindow(QMainWindow):
         if self.process is None:
             self.say("열린 BPM 프로세스가 없습니다.")
             return
-        if not self._may_drop_edits():
-            return
-        if self.dirty and not self.save():
+        if not self._saved():
             return
         picked = ShareDefinitionsDialog.ask(self, self.process)
         if not picked:
@@ -512,6 +517,96 @@ class MainWindow(QMainWindow):
             self.say(f"공유 BPM 프로세스 패키지를 만들지 못했습니다: {error}")
             return
         self.say(f"공유 BPM 프로세스 패키지를 만들었습니다: {written}")
+
+    # ── Center로 올리기 · Center 공유 자원 (STU-11·STU-12, C5) ──
+
+    def uploader(self) -> upload.CenterUploader | None:
+        """올릴 자리. 설정이 없으면 **STU-10을 열어 주고 다시 본다** (STU-10 맨 아래).
+
+        사람이 「아니오」를 고르거나 저장하지 않으면 `None`이다 — 그때는 부르는 쪽이 조용히
+        그만둔다 (이미 창으로 말했다).
+        """
+        found = upload.from_settings(self.settings)
+        if found is not None:
+            return found
+        answer = QMessageBox.question(
+            self,
+            TITLE,
+            NO_CENTER_SETTINGS,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return None
+        self.open_settings()
+        return upload.from_settings(self.settings)
+
+    def upload_package(self) -> None:
+        """STU-12 「Center로 올리기」 — **내보내는 것과 같은 zip**을 올린다 (C5).
+
+        파일을 남기지 않는다 — 올리기는 내보내기가 아니다. 사람이 파일을 보고 싶으면
+        「패키지로 내보내기...」가 그 일을 한다 (같은 `export`를 쓰므로 내용이 같다).
+        """
+        process = self.process
+        if process is None:
+            self.say("열린 BPM 프로세스가 없습니다.")
+            return
+        if not self._saved():
+            return
+        self._upload("패키지", lambda where: export(process, where / default_name(process)))
+
+    def upload_shared(self) -> None:
+        """STU-12 「공유 BPM 프로세스 Center로 올리기」 — 고른 정의만 담아 올린다."""
+        process = self.process
+        if process is None:
+            self.say("열린 BPM 프로세스가 없습니다.")
+            return
+        if not self._saved():
+            return
+        picked = ShareDefinitionsDialog.ask(self, process)
+        if not picked:
+            return
+        self._upload(
+            "공유 BPM 프로세스 패키지",
+            lambda where: export_lib(process, picked, where / default_lib_name(process)),
+        )
+
+    def _upload(self, what: str, make: Callable[[Path], Path]) -> None:
+        """만들어서 올린다 — 담는 것은 **저장된 파일**이다 (부르는 쪽이 `_saved()`를 지났다).
+
+        순서가 중요하다 — **설정을 먼저 묻는다.** 패키지를 만들고 나서 「Center 설정이
+        없습니다」라고 하면 사람이 한 일이 버려진다.
+        """
+        import tempfile  # noqa: PLC0415 — 올릴 때만 든다
+
+        uploader = self.uploader()
+        if uploader is None:
+            return
+
+        with tempfile.TemporaryDirectory() as folder:
+            try:
+                made = make(Path(folder))
+            except PackageError as error:
+                QMessageBox.warning(self, TITLE, str(error))
+                self.say(f"{what}를 만들지 못했습니다: {error}")
+                return
+            self.say(f"{what}를 만들었습니다 — Center에 올립니다...")
+            try:
+                found = uploader.upload(made)
+            except upload.UploadFailed as error:
+                QMessageBox.warning(self, TITLE, str(error))
+                self.say(f"올리지 못했습니다: {error}")
+                return
+        QMessageBox.information(self, TITLE, found.message)
+        self.say(found.message)
+
+    def open_center_resources(self) -> None:
+        """STU-11. 파일 메뉴와 STU-03 문맥 메뉴가 **같은 창**을 연다.
+
+        창이 제 손으로 Center를 읽는다 — 설정이 없으면 창 안에서 그렇게 말하므로(U3) 여기서
+        미리 묻지 않는다 (읽기만 하는 자리다).
+        """
+        reader = services.from_settings(self.settings).reader
+        CenterResourcesDialog(reader, self).exec()
 
     def run_test(self) -> None:
         if self.process is None or self.definition is None:
@@ -734,4 +829,4 @@ class MainWindow(QMainWindow):
             self.open_definition(entry.path.as_posix())
 
 
-__all__ = ["DEFAULT_SIZE", "LATER", "NO_PROCESS", "TITLE", "MainWindow"]
+__all__ = ["DEFAULT_SIZE", "NO_CENTER_SETTINGS", "NO_PROCESS", "TITLE", "MainWindow"]

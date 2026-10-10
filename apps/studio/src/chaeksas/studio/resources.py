@@ -2,9 +2,10 @@
 
 지키는 것 다섯.
 
-- **목록은 Center 리소스 목록(C7)에서 온다.** 서비스 앱은 STU-14가 이미 받아 둔 고를 거리를
-  그대로 쓰고(`service_catalog.Catalog` — 같은 것을 두 번 받지 않는다), 기여 자원과 툴팩은
-  `CenterReader`가 뿌리마다 한 번씩 읽는다.
+- **목록은 Center에서 온다.** 서비스 앱은 STU-14가 이미 받아 둔 고를 거리를 그대로 쓰고
+  (`service_catalog.Catalog` — 같은 것을 두 번 받지 않는다), 기여 자원과 툴팩은 리소스
+  목록(C7)을, **공유 BPM 프로세스는 패키지 표(C5 `?kind=process_lib`)**를 뿌리마다 한 번씩
+  읽는다 — C7에 그 갈래가 없다.
 - **들고 있지 않는다.** 닿지 못하면 그 자리에서 말하고 「새로 고침」을 둔다 — Studio는 현장이
   아니라 개발 도구다 (`services.py`·STU-15와 같은 결, ADR-0007은 현장 쪽 규칙이다).
 - **뿌리의 일부는 확장이 선언한다** (`studio.resource_views`) — 이 파일에 확장 이름이 없다
@@ -40,7 +41,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from chaeksas.contracts.center_api import PackageInfo
 from chaeksas.contracts.extension import ResourceView
+from chaeksas.contracts.manifest import ProvidedProcess
 from chaeksas.contracts.resources import ContributedResource, ToolpackResource
 from chaeksas.studio import service_catalog
 from chaeksas.studio.services import CenterReader, CenterUnreachable
@@ -48,6 +51,9 @@ from chaeksas.studio.services import CenterReader, CenterUnreachable
 log = logging.getLogger(__name__)
 
 HEADERS = ("리소스", "구분", "설명")
+
+#: 공유 BPM 프로세스 패키지 갈래 (C1). 뿌리의 목록을 C5에서 읽을 때 쓴다.
+KIND_LIB = "process_lib"
 
 #: 고정 뿌리 셋 (STU-03 표). 그 밖의 뿌리는 확장이 선언한다.
 ROOT_SHARED = "shared-processes"
@@ -59,11 +65,20 @@ SERVICE_LABEL = "서비스 앱"
 TOOLPACK_LABEL = "툴팩"
 
 #: 쓸 수 없는 줄의 까닭 (U3 — 끄고 **가까이에** 적는다).
-NO_SHARED = "Studio에서 Center로 올리는 길이 아직 없습니다 (docs/09-gaps.md §4-5)."
-NO_TOOLPACK_INSTALL = "툴팩 설치·제거는 STU-11 「Center 공유 자원」이 할 일입니다 (docs/09-gaps.md §4-5)."
+NO_INSTALL = (
+    "설치·제거는 아직 없습니다 — 받은 패키지를 둘 자리를 정해야 합니다 (docs/09-gaps.md §4-5)."
+)
+NO_CALL = (
+    "이 PC에 설치되지 않아 Call Activity를 만들지 않습니다 — 설치가 생기면 켜집니다 "
+    "(docs/09-gaps.md §4-5)."
+)
 NO_CENTER = "Center 주소·Studio 키가 설정되지 않았습니다 — 설정 → 「Center」 (STU-10)."
 
+#: 「Center 공유 자원...」 — STU-11을 연다 (문맥 메뉴와 파일 메뉴가 **같은 창**이다).
+OPEN_CENTER_RESOURCES = "Center 공유 자원..."
+
 #: 비어 있을 때 할 말 (빈 뿌리를 말없이 두지 않는다).
+EMPTY_SHARED = "Center에 올라온 공유 BPM 프로세스가 없습니다."
 EMPTY_SERVICE = "Center에 등록된 서비스 앱이 없습니다."
 EMPTY_TOOLPACK = "Center에 올라온 툴팩이 없습니다."
 EMPTY_VIEW = "Center에 등록된 항목이 없습니다."
@@ -108,6 +123,8 @@ class Item:
     tip: str = ""
     #: 「캔버스에 추가」가 만들 것. 없으면 그 항목으로는 노드를 만들 수 없다.
     create: Create | None = None
+    #: 만들 수 없는 **까닭** (U3). 비면 그 자리의 기본 한 줄을 쓴다.
+    no_create: str = ""
     #: 「작업 설명 보기」가 띄울 글. 비면 그 항목이 메뉴에 없다.
     detail: str = ""
     #: 「관리 콘솔에서 보기」가 열 주소 (C7 `console_url`). 비면 메뉴에 없다.
@@ -128,6 +145,8 @@ class Root:
     empty: str = ""
     #: 이 뿌리의 항목에 걸 수 있는데 지금은 할 수 없는 일 (U3 — 끄고 이유를 붙인다).
     blocked: tuple[tuple[str, str], ...] = ()
+    #: 문맥 메뉴에 「Center 공유 자원...」(STU-11)을 두나. 파일 메뉴와 **같은 창**이다.
+    opens_center: bool = False
 
 
 @dataclass(frozen=True)
@@ -142,9 +161,67 @@ class Tree:
 # ─────────────────────────── 모으기 ───────────────────────────
 
 
-def shared_root() -> Root:
-    """「공유 BPM 프로세스」 — **올리는 길이 없어 늘 비어 있다**. 뿌리는 두고 까닭을 적는다."""
-    return Root(id=ROOT_SHARED, label=SHARED_LABEL, off=NO_SHARED)
+def shared_root(found: Iterable[PackageInfo] = ()) -> Root:
+    """「공유 BPM 프로세스」 — 공유 BPM 프로세스 → 정의 (STU-03 표).
+
+    목록은 **C5 패키지 표**에서 온다 (`?kind=process_lib`) — C7에는 이 갈래가 없다. 둘째
+    단계는 **매니페스트의 `provides.processes`**이고(C1) Center가 짓는 값이 아니다 — STU-11과
+    CON-06이 같은 것을 읽는다.
+
+    **「캔버스에 추가」는 없다** — Call Activity를 만들어도 그 공유 BPM 프로세스가 이 PC에
+    없어 시험 실행이 부를 수 없다. 설치가 생길 때 켜진다 (`NO_CALL`, docs/09-gaps.md §4-5).
+    """
+    items = []
+    for one in found:
+        provides = one.manifest.provides if one.manifest is not None else None
+        processes = provides.processes if provides is not None else []
+        children = tuple(
+            Item(
+                id=f"{one.id}@{one.version}/{process.process_id}",
+                label=process.name or process.process_id,
+                kind=process.run_location or "",
+                note=_shared_note(process),
+                tip=process.process_id,
+                no_create=NO_CALL,
+            )
+            for process in processes
+        )
+        count = f"정의 {len(children)}개" if provides is not None else "매니페스트에 `provides`가 없습니다"
+        items.append(
+            Item(
+                id=f"{one.id}@{one.version}",
+                label=one.name or one.id,
+                kind=one.version,
+                note=f"{one.status} · {count}",
+                tip=one.id,
+                no_create=NO_CALL,
+                children=children,
+            )
+        )
+    return Root(
+        id=ROOT_SHARED,
+        label=SHARED_LABEL,
+        items=tuple(items),
+        empty=EMPTY_SHARED,
+        blocked=(("설치...", NO_INSTALL), ("제거...", NO_INSTALL)),
+        opens_center=True,
+    )
+
+
+def _shared_note(process: ProvidedProcess) -> str:
+    """정의 한 줄의 「설명」 — **선언한 것**만 쓴다 (`chk:process.inputs`·`outputs`, C1).
+
+    그림에서 어림하지 않는다 — 확장 태스크가 만드는 변수를 플랫폼이 모르므로(ADR-0018)
+    「부르는 쪽이 줘야 하는 것」이 거짓이 된다.
+    """
+    if process.description:
+        return process.description
+    parts = []
+    if process.reads:
+        parts.append(f"받는 것: {', '.join(process.reads)}")
+    if process.writes:
+        parts.append(f"내놓는 것: {', '.join(process.writes)}")
+    return " / ".join(parts)
 
 
 def _operation_detail(app: service_catalog.App, operation: service_catalog.Operation) -> str:
@@ -249,7 +326,8 @@ def toolpack_root(found: Iterable[ToolpackResource]) -> Root:
         label=TOOLPACK_LABEL,
         items=tuple(items),
         empty=EMPTY_TOOLPACK,
-        blocked=(("설치...", NO_TOOLPACK_INSTALL), ("제거...", NO_TOOLPACK_INSTALL)),
+        blocked=(("설치...", NO_INSTALL), ("제거...", NO_INSTALL)),
+        opens_center=True,
     )
 
 
@@ -309,7 +387,17 @@ def collect(
     실리는 순서에 흔들리지 않게 한다. **한 뿌리를 못 받아도 나머지는 그린다.**
     """
     problems: list[str] = list(catalog.problems if catalog is not None else ())
-    roots: list[Root] = [shared_root()]
+
+    shared = shared_root()
+    if reader is None:
+        shared = replace(shared, empty=NO_CENTER)
+    else:
+        try:
+            shared = shared_root(reader.packages(KIND_LIB))
+        except CenterUnreachable as e:
+            problems.append(f"공유 BPM 프로세스 목록을 받지 못했습니다 — {e}")
+            shared = replace(shared, empty=f"받지 못했습니다 — {e}")
+    roots: list[Root] = [shared]
     for one in sorted(views, key=lambda c: c.value.label):
         view: ResourceView = one.value
         items: tuple[Item, ...] = ()
@@ -379,6 +467,8 @@ class ResourceExplorer(QWidget):
     reloading = Signal()
     #: 「캔버스에 추가」 — `Create` 하나 (Qt 신호는 자료형을 모른다).
     adding = Signal(object)
+    #: 「Center 공유 자원...」 — STU-11을 띄우는 일은 메인 창이 한다 (창을 쥐는 쪽이 하나다).
+    opening_center = Signal()
     #: 로그 한 줄 (STU-09 「로그」).
     said = Signal(str)
 
@@ -477,7 +567,8 @@ class ResourceExplorer(QWidget):
         if item is None:
             return
         if item.create is None:
-            self.said.emit(f"{item.label}: 이 항목으로는 태스크를 만들 수 없습니다.")
+            why = item.no_create or "이 항목으로는 태스크를 만들 수 없습니다."
+            self.said.emit(f"{item.label}: {why}")
             return
         self.adding.emit(item.create)
 
@@ -519,6 +610,8 @@ class ResourceExplorer(QWidget):
             blocked = menu.addAction(label)
             blocked.setEnabled(False)
             blocked.setToolTip(why)
+        if root is not None and root.opens_center:
+            menu.addAction(OPEN_CENTER_RESOURCES).triggered.connect(self.opening_center)
         menu.addSeparator()
         menu.addAction("새로 고침").triggered.connect(self.reloading)
         menu.exec(self.view.viewport().mapToGlobal(where))
@@ -555,14 +648,17 @@ def _find_item(items: Iterable[Item], item_id: str) -> Item | None:
 
 __all__ = [
     "BPMN_SERVICE_TASK",
+    "KIND_LIB",
     "EMPTY_SERVICE",
+    "EMPTY_SHARED",
     "EMPTY_TOOLPACK",
     "EMPTY_TREE",
     "EMPTY_VIEW",
     "HEADERS",
+    "NO_CALL",
     "NO_CENTER",
-    "NO_SHARED",
-    "NO_TOOLPACK_INSTALL",
+    "NO_INSTALL",
+    "OPEN_CENTER_RESOURCES",
     "ROOT_SERVICE",
     "ROOT_SHARED",
     "ROOT_TOOLPACK",
