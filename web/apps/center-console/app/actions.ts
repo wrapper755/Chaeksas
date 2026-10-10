@@ -377,6 +377,8 @@ export async function deletePackage(packageId: string, version: string): Promise
     return { error: message(cause) };
   }
   revalidatePath("/packages", "layout");
+  // CON-02도 같은 패키지 표를 읽는다 (Bot·버전별 준비도) — 지운 줄이 그대로 남으면 안 된다.
+  revalidatePath("/bots", "layout");
   return {};
 }
 
