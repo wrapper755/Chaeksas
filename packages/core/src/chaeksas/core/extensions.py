@@ -327,6 +327,19 @@ class ExtensionHost:
         found = [e for e in self._loaded if e.manifest.task_type(task_type_id) is not None]
         return next((e for e in found if e.enabled), found[0] if found else None)
 
+    def environment_provider(self, domain: str) -> LoadedExtension | None:
+        """그 AI 환경을 기여한 확장 — **꺼 둔 것·흠이 있는 것까지** 본다 (`provider_of`와 같은 결).
+
+        `environment_owner()`는 **지금 쓸 수 있는** 것만 주므로 「없다」와 「꺼 뒀다」를 가르지
+        못한다. 사전 점검이 그 둘에 다른 고치는 길을 안내하려고 쓴다 (ADR-0043).
+        """
+        found = [
+            e
+            for e in self._loaded
+            if any(c.domain == domain for c in e.manifest.contributes.agent_environments)
+        ]
+        return next((e for e in found if e.enabled), found[0] if found else None)
+
     @property
     def failures(self) -> list[LoadFailure]:
         """정의를 읽지도 못한 것들."""
@@ -577,9 +590,14 @@ class ExtensionHost:
         return out
 
 
-def load_host(*, api_version: str = API_VERSION, group: str = ENTRY_POINT_GROUP) -> ExtensionHost:
-    """설치된 확장을 모두 읽은 호스트 하나 — 실행하는 쪽이 시작할 때 부르는 길."""
-    host = ExtensionHost(api_version=api_version)
+def load_host(
+    *, api_version: str = API_VERSION, group: str = ENTRY_POINT_GROUP, off: Iterable[str] = ()
+) -> ExtensionHost:
+    """설치된 확장을 모두 읽은 호스트 하나 — 실행하는 쪽이 시작할 때 부르는 길.
+
+    끌 id는 **부르는 쪽이 준다** (ADR-0043 — 그 앱의 설정에서 온다).
+    """
+    host = ExtensionHost(api_version=api_version, off=off)
     host.load_entry_points(group=group)
     return host
 

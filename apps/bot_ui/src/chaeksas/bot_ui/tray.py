@@ -169,9 +169,8 @@ class Tray(QSystemTrayIcon):
             empty = tools.addAction("확장이 더한 유틸리티가 없습니다")
             empty.setEnabled(False)
         tools.addSeparator()
-        extensions = tools.addAction("확장...")
-        extensions.setEnabled(False)
-        extensions.setToolTip("확장 목록(BUI-11)은 아직 없습니다 (docs/09-gaps.md §4-8).")
+        # 창은 **메인 창이 쥔다** (BUI-02 [K] — 같은 것을 두 번 열지 않는 자리가 거기다).
+        tools.addAction("확장...", self.open_extensions.emit)
 
         self._menu.addAction("설정...", self.open_settings.emit)
         self._menu.addSeparator()

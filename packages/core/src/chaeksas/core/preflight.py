@@ -192,6 +192,22 @@ def _check_environments(manifest: Manifest, host: ExtensionHost) -> Finding | No
     ]
     if not missing:
         return None
+
+    # **꺼 둔 것을 먼저 가른다** (ADR-0043) — 태스크 종류와 같은 까닭이다. 환경을 주는 확장이
+    # 깔려 있는데 꺼져 있으면 고치는 길은 「켜세요」이고, 「설치하세요」는 틀린 안내다.
+    off = [
+        f"{domain} ({owner.manifest.name} 확장)"
+        for domain in missing
+        if (owner := host.environment_provider(domain)) is not None and owner.off
+    ]
+    if off:
+        return Finding(
+            id=EXTENSION_TURNED_OFF,
+            severity=SEVERITY_BLOCK,
+            message="화면을 다루는 AI 태스크의 환경을 주는 확장이 꺼져 있습니다",
+            items=tuple(off),
+            fix_hint="확장 목록에서 그 확장을 켜세요",
+        )
     return Finding(
         id=MISSING_ENVIRONMENT,
         severity=SEVERITY_BLOCK,

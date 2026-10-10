@@ -46,13 +46,15 @@ from chaeksas.bot_ui.bots import (
     installed,
     write_source,
 )
+from chaeksas.bot_ui.extension_dialog import ExtensionsDialog
 from chaeksas.bot_ui.keys_dialog import KeysDialog
 from chaeksas.bot_ui.runner import Running
-from chaeksas.bot_ui.runtimes import RuntimeUnavailable, port_for
+from chaeksas.bot_ui.runtimes import STATE_LABELS, RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.contracts.approvals import Form
 from chaeksas.contracts.extension import SURFACE_BOT_UI_RUNTIMES
 from chaeksas.core.preflight import (
+    EXTENSION_TURNED_OFF,
     EXTENSIONS_UNUSABLE,
     MISSING_ENVIRONMENT,
     TASK_TYPES_UNSUPPORTED,
@@ -78,6 +80,9 @@ READY_COLUMN = BOT_COLUMNS.index("준비")
 READY = "준비됨"
 NO_KEYS = "서비스 앱 키 없음"
 NO_EXTENSION = "확장 없음"
+#: 확장이 **깔려 있는데 사람이 껐다** (ADR-0043). 「확장 없음」과 섞지 않는다 — 고치는 길이
+#: 「다시 깔기」가 아니라 **BUI-11에서 켜기**다. 색도 다르다 (neutral — 고장이 아니다).
+EXTENSION_OFF = "확장 꺼짐"
 PREFLIGHT_BLOCKED = "사전 점검 실행 불가"
 
 
@@ -93,6 +98,10 @@ def readiness_label(found: Preflight) -> tuple[str, str, str]:
     tip = "\n".join([first.message, *first.items, *([first.fix_hint] if first.fix_hint else [])])
     if found.missing_key_refs:
         return NO_KEYS, f"{NO_KEYS}: {', '.join(found.missing_key_refs)}", tip
+    if EXTENSION_TURNED_OFF in found.blocked:
+        # **「확장 없음」보다 먼저 본다** — 꺼진 것과 없는 것이 함께 걸렸으면 켜는 쪽이 먼저
+        # 할 수 있는 일이다 (ADR-0043 — 「다시 깔기」로 안내하면 할 수 없는 일을 시킨다).
+        return EXTENSION_OFF, EXTENSION_OFF, tip
     if set(found.blocked) & {TASK_TYPES_UNSUPPORTED, EXTENSIONS_UNUSABLE, MISSING_ENVIRONMENT}:
         return NO_EXTENSION, NO_EXTENSION, tip
     # 확장이 기여한 점검이 막았다 — 플랫폼은 그것이 무엇인지 모른다 (C13).
@@ -112,12 +121,8 @@ UTILITY_SIZE = (1100, 820)
 #: 확장이 낸 칸을 만들지 못했을 때 (ADR-0042) — **그 칸만 접고 사유를 보인다**.
 PANEL_BROKEN = "이 칸을 그리지 못했습니다 —"
 PANEL_NO_WIDGET = "이 칸이 화면을 주지 않았습니다."
-RUNTIME_STATE = {
-    "running": "실행 중",
-    "restarting": "다시 띄우는 중",
-    "stopped": "멈춤",
-    "off": "꺼 둠 (필요할 때 시작)",
-}
+#: 런타임 상태 표기는 `runtimes.STATE_LABELS` **한 자리**에서 온다 (BUI-09·BUI-11이 같은 말을 쓴다).
+RUNTIME_STATE = STATE_LABELS
 #: 런타임이 `health`로 말하는 「지금 하는 일」 (C10 `session`).
 SESSION_LABEL = {
     "idle": "대기",
@@ -175,6 +180,7 @@ class ContributedPanel:
 
     box: QWidget
     panel: object
+    extension_id: str = ""
     runtime: str | None = None
 
 
@@ -211,7 +217,17 @@ class MainWindow(QMainWindow):
         quit_action = file_menu.addAction("종료", self.close)
         quit_action.setShortcut("Ctrl+Q")
 
-        tools = self.menuBar().addMenu("도구")
+        self._tools_menu = self.menuBar().addMenu("도구")
+        self._fill_tools()
+
+    def _fill_tools(self) -> None:
+        """「도구」를 채운다 — **BUI-11이 확장을 끄고 켜면 다시 부른다** (ADR-0043).
+
+        메뉴를 통째로 다시 만들지 않고 이 메뉴만 비우고 채운다 — 메뉴 막대를 비우면 쓰지 않는
+        옛 메뉴가 자식으로 남아 같은 이름이 둘이 된다.
+        """
+        tools = self._tools_menu
+        tools.clear()
         # 유틸리티는 **확장이 기여한다** (ADR-0018) — Bot UI는 어느 확장인지 모른다.
         utilities = self._agent.host.utilities() if self._agent.host is not None else []
         for found in sorted(utilities, key=lambda c: c.value.label):
@@ -225,9 +241,7 @@ class MainWindow(QMainWindow):
         if tools.actions():
             tools.addSeparator()
         tools.addAction("서비스 앱 키...", self.open_keys)
-        later = tools.addAction("확장...")
-        later.setEnabled(False)
-        later.setToolTip("BUI-11에서 만듭니다.")
+        tools.addAction("확장...", self.open_extensions)
 
     # ── 탭 ──
 
@@ -348,7 +362,9 @@ class MainWindow(QMainWindow):
                 continue
             inner.addWidget(widget)
             # `runtime`을 적은 칸은 **그 런타임이 떠 있을 때만** 보인다 (ADR-0042).
-            self._panels.append(ContributedPanel(box=box, panel=panel, runtime=runtime))
+            self._panels.append(
+                ContributedPanel(box=box, panel=panel, extension_id=found.extension_id, runtime=runtime)
+            )
             made.append(box)
         return made
 
@@ -432,11 +448,16 @@ class MainWindow(QMainWindow):
         **주기는 호스트가 정한다** — 패널이 자기 타이머를 만들지 않는다. `runtime`을 적은 칸은
         그 런타임이 떠 있을 때만 보인다 (꺼져 있을 때 빈 표를 보이는 것보다 칸이 없는 것이
         정직하다). **한 칸이 터져도 화면은 이어 그린다.**
+
+        **사람이 그 확장을 끄면 칸도 접는다** (ADR-0043 — 꺼진 확장은 기여를 하나도 내지 않는다).
+        칸을 버리지는 않는다 — 다시 켜면 그대로 돌아온다.
         """
-        runtimes = self._agent.runtimes() if self._agent.host is not None else None
+        host = self._agent.host
+        runtimes = self._agent.runtimes() if host is not None else None
         for found in self._panels:
-            up = True
-            if found.runtime and runtimes is not None:
+            owner = host.get(found.extension_id) if host is not None and found.extension_id else None
+            up = owner is None or owner.enabled
+            if up and found.runtime and runtimes is not None:
                 supervisor = runtimes.supervisors.get(found.runtime)
                 up = supervisor is not None and supervisor.state == "running"
             found.box.setVisible(up)
@@ -659,6 +680,18 @@ class MainWindow(QMainWindow):
     def open_keys(self) -> None:
         """BUI-10. 창이 **그 자리에서** 키를 바꾸므로, 닫히면 「준비」를 다시 그린다."""
         KeysDialog(self._agent, self).exec()
+        self.refresh()
+
+    def open_extensions(self) -> None:
+        """BUI-11. 창이 **그 자리에서** 확장을 끄고 켜므로, 끈 것이 있으면 메뉴를 다시 만든다.
+
+        「도구」의 유틸리티 목록이 기여에서 오기 때문이다 (꺼진 확장은 기여를 내지 않는다,
+        ADR-0043). 확장이 낸 칸은 `_refresh_panels`가 다음 주기에 접는다.
+        """
+        dialog = ExtensionsDialog(self._agent, self)
+        dialog.exec()
+        if dialog.changed:
+            self._fill_tools()
         self.refresh()
 
     def open_log_folder(self) -> None:

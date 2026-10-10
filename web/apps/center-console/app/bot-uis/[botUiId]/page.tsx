@@ -60,6 +60,17 @@ function validity(row: DeploymentInfo): string {
 }
 
 /**
+ * 보고된 확장 하나의 상태 (C4 `ExtensionState` → `status_map` 「확장」, ADR-0043).
+ *
+ * **`off`가 참이면 「꺼짐」, 아니면 「호환 안 됨」이다** — `enabled`는 「지금 쓰이는가」라서 둘을
+ * 가르지 못한다. 옛 Bot UI는 `off`를 보내지 않으므로 없으면 흠으로 읽는다 (원칙 3).
+ */
+function extensionState(row: NonNullable<BotUiInfo["extensions"]>[number]): string {
+  if (row.enabled !== false) return "켜짐";
+  return row.off ? "꺼짐" : "호환 안 됨";
+}
+
+/**
  * 그 배포가 이 PC에서 **돌 준비가 됐는가** — Bot UI가 보고한 `readiness`에서 찾는다 (C4).
  * 아직 보고가 없으면 「확인 전」이 아니라 **없는 것으로 둔다** (모르는 것을 안다고 하지 않는다).
  */
@@ -70,6 +81,9 @@ function readinessOf(row: DeploymentInfo, info: BotUiInfo): string | null {
   if (!found) return null;
   if (found.ready) return "준비됨";
   if ((found.missing_key_refs ?? []).length > 0) return "서비스 앱 키 없음";
+  // **「꺼 뒀다」와 「없다」는 다른 말이다** (ADR-0043) — 운영자가 판을 올리러 가는 대신 현장에
+  // 「BUI-11에서 켜 주세요」라고 하면 될 일이다. BUI-04와 **같은 순서로** 가른다.
+  if ((found.blocked ?? []).includes("extension_turned_off")) return "확장 꺼짐";
   if ((found.blocked ?? []).some((code) => code.includes("extension"))) return "확장 없음";
   return "사전 점검 실행 불가";
 }
@@ -143,7 +157,10 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
       key: "enabled",
       header: "상태",
       width: "12ch",
-      cell: (row) => <StatusBadge group="확장" label={row.enabled === false ? "꺼짐" : "켜짐"} />,
+      // **「꺼짐」과 「호환 안 됨」을 가른다** (ADR-0043) — `off`는 사람이 껐다는 뜻이고,
+      // `enabled: false`에 `off`가 없으면 고쳐야 할 흠이다 (E1·E3~E6). 뭉치면 운영자가
+      // 「켜세요」와 「고치세요」 중 틀린 쪽을 안내한다.
+      cell: (row) => <StatusBadge group="확장" label={extensionState(row)} />,
     },
   ];
 

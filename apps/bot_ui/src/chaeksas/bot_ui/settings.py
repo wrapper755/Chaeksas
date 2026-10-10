@@ -113,6 +113,10 @@ class Settings:
     #: 확장별 설정 (BUI-03 「확장별 설정」, C13 `configuration`). `{확장 id: {칸: 값}}`.
     #: **비밀 칸은 여기 들어오지 않는다** — OS 비밀 저장소로 간다 (`credentials.py`).
     extensions: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    #: 사람이 꺼 둔 확장 id (BUI-11, [ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)).
+    #: **Studio의 것과 다른 자리다** — 개발 도구에서 끈 것이 현장 Bot을 멈추면 안 된다. 판은
+    #: 적지 않는다 (올려도 꺼 둔 채로 있는 것이 사람의 뜻이다).
+    disabled_extensions: tuple[str, ...] = ()
 
     def extension(self, extension_id: str) -> dict[str, Any]:
         return dict(self.extensions.get(extension_id, {}))
@@ -146,6 +150,7 @@ class Settings:
             "service_keys": [one.to_json_dict() for one in self.service_keys],
             "runtimes": [r.to_json_dict() for r in self.runtimes],
             "extensions": {key: dict(value) for key, value in self.extensions.items()},
+            "disabled_extensions": list(self.disabled_extensions),
         }
 
     def save(self, path: Path | None = None) -> Path:
@@ -217,6 +222,9 @@ class Settings:
                 for key, value in (raw.get("extensions") or {}).items()
                 if isinstance(value, dict)
             },
+            disabled_extensions=tuple(
+                str(one) for one in (raw.get("disabled_extensions") or []) if isinstance(one, str) and one
+            ),
         )
 
     @classmethod
