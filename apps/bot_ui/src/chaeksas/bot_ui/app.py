@@ -15,9 +15,10 @@ from pathlib import Path
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
+from chaeksas.bot_ui import notices
 from chaeksas.bot_ui.agent import Agent, make_agent
 from chaeksas.bot_ui.heartbeat import HeartbeatWorker
-from chaeksas.bot_ui.main_window import MainWindow
+from chaeksas.bot_ui.main_window import WINDOW_TITLE, MainWindow
 from chaeksas.bot_ui.runtimes import RUNTIME_FLAG, serve
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.bot_ui.tray import Tray
@@ -29,6 +30,17 @@ log = logging.getLogger(__name__)
 #: 종료할 때 실행 중 Bot을 기다리는 시간 (BUI-01 — 최대 20초).
 SHUTDOWN_WAIT_S = 20
 
+#: 알림 등급 → 트레이 아이콘 (BUI-05).
+NOTICE_ICONS = {
+    "info": QSystemTrayIcon.MessageIcon.Information,
+    "warning": QSystemTrayIcon.MessageIcon.Warning,
+    "error": QSystemTrayIcon.MessageIcon.Critical,
+}
+
+#: 「사람이 볼 때까지」에 주는 밀리초. **참고값이다** — Windows는 표시 시간을 제 설정대로 쓰고
+#: 지나간 알림은 알림 센터에 남는다. 그래서 급한 알림은 **거기서 다시 볼 수 있는 것**으로 지킨다.
+STICKY_MS = 60_000
+
 
 class BotUiApp:
     """앱 한 벌. `run()`이 Qt 이벤트 고리를 돈다."""
@@ -38,11 +50,14 @@ class BotUiApp:
         self.agent = agent
         self.theme = theme.apply_theme(app)
         self.window = MainWindow(agent)
+        #: 마지막으로 띄운 알림이 가리키는 자리 (BUI-05 — 풍선을 누르면 간다).
+        self._clicked = ""
 
         self.tray: Tray | None = None
         if QSystemTrayIcon.isSystemTrayAvailable():
             self.tray = Tray(agent, current_theme=self.theme, parent=app)
             self.tray.open_window.connect(self.show_window)
+            self.tray.messageClicked.connect(self.on_notice_clicked)
             self.tray.open_settings.connect(self.open_settings)
             # 트레이에서 고른 유틸리티도 **메인 창이 연다** — 같은 것을 두 번 열지 않는 자리가 거기다.
             self.tray.open_utility.connect(self.open_utility)
@@ -90,13 +105,57 @@ class BotUiApp:
             self.tray.refresh()
         if self.window.isVisible():
             self.window.refresh()
+        self.show_notices()
+
+    # ── 알림 (BUI-05) ──
+
+    def show_notices(self) -> None:
+        """Agent가 쌓아 둔 알림을 띄운다 — **GUI 스레드에서** (`refresh`가 부른다).
+
+        **고르지 않고 쌓인 것을 다 띄운다** — 거둬 가는 쪽에서 추리면 어느 것이 사라졌는지
+        아무도 모른다. 같은 알림을 두 번 넣지 않는 일은 `Notices`가 한다.
+
+        누르면 할 일은 **마지막으로 띄운 것**의 것이다 — Qt의 `messageClicked`는 어느 알림을
+        눌렀는지 알려 주지 않는다 (운영체제가 마지막 풍선만 보여 준다).
+        """
+        for notice in self.agent.notices.take():
+            log.info("알림: %s", notice.text)
+            if notice.action:
+                self._clicked = notice.action
+            if self.tray is None:
+                # 트레이가 없는 환경 (U15) — 창의 상태 줄이 알림 자리다.
+                self.window.statusBar().showMessage(notice.text, notice.seconds * 1000)
+                continue
+            self.tray.showMessage(
+                WINDOW_TITLE,
+                notice.text,
+                NOTICE_ICONS.get(notice.level, QSystemTrayIcon.MessageIcon.Information),
+                STICKY_MS if notice.sticky else notice.seconds * 1000,
+            )
+
+    def on_notice_clicked(self) -> None:
+        """알림 풍선을 눌렀다 — 그 알림이 가리키는 자리를 연다 (BUI-05).
+
+        **창을 먼저 띄운다** — 결재 창도 키 창도 메인 창이 쥔다 (BUI-02 [K]).
+        """
+        action = self._clicked
+        self._clicked = ""
+        self.show_window()
+        if action == notices.ACTION_APPROVAL:
+            self.window.open_approval()
+        elif action == notices.ACTION_KEYS:
+            self.window.open_keys()
+        elif action == notices.ACTION_SETTINGS:
+            self.open_settings()
 
     def on_problem(self, message: str) -> None:
-        if not message:
-            return
-        log.warning("Center: %s", message)
-        if self.tray is not None:
-            self.tray.showMessage("Chaeksas Bot UI", message, QSystemTrayIcon.MessageIcon.Warning)
+        """하트비트가 올린 문제 — **알림은 Agent가 낸다** (BUI-05). 여기서는 기록만 한다.
+
+        전에는 이 자리에서 풍선을 띄웠는데, 그러면 닿지 못할 때마다 같은 말이 주기마다 떴다
+        (키 거부·연결 끊김은 `Notices`가 **바뀔 때만** 낸다).
+        """
+        if message:
+            log.warning("Center: %s", message)
 
     # ── 생애 ──
 
