@@ -40,6 +40,8 @@ LOG = logging.getLogger(__name__)
 #: 플랫폼 점검 코드. C4 `Readiness.blocked`와 BUI-04 「준비」가 이 이름을 쓴다.
 MISSING_KEYS = "missing_service_app_keys"
 TASK_TYPES_UNSUPPORTED = "task_types_unsupported"
+#: 그 종류의 확장이 **깔려 있는데 사람이 꺼 뒀다** (ADR-0043). 고치는 길이 위와 다르다 — 켜면 된다.
+EXTENSION_TURNED_OFF = "extension_turned_off"
 EXTENSIONS_UNUSABLE = "extensions_unusable"
 MISSING_ENVIRONMENT = "missing_agent_environment"
 
@@ -116,18 +118,30 @@ def _check_task_types(manifest: Manifest, host: ExtensionHost) -> Finding | None
     종류가 없으면 엔진이 `node_kind_unsupported`로 끝낸다 — 재시도로 풀리지 않는 설치 오류라
     오류 경계도 받지 않는다 (`core.nodes`). 그러니 **시작하기 전에** 말한다.
     """
-    missing = [
-        f"{need.id} ({need.extension} 확장)"
-        for need in manifest.requires.task_types
-        if host.task_type(need.id) is None
-    ]
+    missing = [need for need in manifest.requires.task_types if host.task_type(need.id) is None]
     if not missing:
         return None
+
+    # **꺼 둔 것을 먼저 가른다** (ADR-0043) — 켜면 될 일에 「Bot UI를 다시 깔라」고 하면
+    # 사람이 할 수 없는 일을 시키는 셈이다. 주인이 깔려 있는데 꺼져 있으면 고치는 길이 다르다.
+    off = [
+        f"{need.id} ({owner.manifest.name} 확장)"
+        for need in missing
+        if (owner := host.provider_of(need.id)) is not None and owner.off
+    ]
+    if off:
+        return Finding(
+            id=EXTENSION_TURNED_OFF,
+            severity=SEVERITY_BLOCK,
+            message=f"그림이 쓰는 태스크 종류 {len(off)}개의 확장이 꺼져 있습니다",
+            items=tuple(off),
+            fix_hint="확장 목록에서 그 확장을 켜세요",
+        )
     return Finding(
         id=TASK_TYPES_UNSUPPORTED,
         severity=SEVERITY_BLOCK,
         message=f"그림이 쓰는 태스크 종류 {len(missing)}개를 이 PC에서 수행할 수 없습니다",
-        items=tuple(missing),
+        items=tuple(f"{need.id} ({need.extension} 확장)" for need in missing),
         fix_hint="그 종류를 기여하는 확장이 깔린 Bot UI 판으로 올리세요",
     )
 

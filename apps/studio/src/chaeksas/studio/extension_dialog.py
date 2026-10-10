@@ -2,8 +2,10 @@
 
 - **Studio는 어느 확장인지 모른다** — 표와 상세의 글은 모두 정의(`extension.json`)에서 온다.
   이 파일에 확장 이름이 없다 (`tests/test_import_direction.py`가 막는다).
-- **읽기만 한다.** 「켜기/끄기」는 아직이다 — 「사람이 껐다」는 `LoadedExtension.enabled`(흠이
-  없나)와 **다른 세 번째 상태**라서 어디에 저장할지부터 정해야 한다. 끄고 이유를 적는다 (U3).
+- **끄고 켜는 것 말고는 읽기만 한다.** 끈 목록은 **Studio 설정**에 있다 (ADR-0043) — Bot UI는 제
+  설정에 따로 둔다. 개발 도구에서 끈 것이 그 PC의 현장 Bot을 멈추면 안 된다.
+- **끄면 그 자리에서 사라진다** — 호스트를 다시 읽어 기여(태스크 종류·편집기·런타임·점검)가
+  한꺼번에 빠진다. 다음 「실행 전 검사」가 「확장이 꺼져 있습니다」로 막는다 (`core.preflight`).
 - **켜지지 않은 확장도 조용히 사라지지 않는다** — 사유(`problems`)를 상세에 그대로 보인다.
   정의를 **읽지도 못한** 것은 id가 없어 표에 줄을 만들 수 없으니 표 아래 한 줄로 말한다.
 - 「새로 고침」은 Center의 **외부 확장 정의**를 다시 받아 보인다 — 받은 것은 **이 창만 쓰는
@@ -15,6 +17,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -67,13 +70,12 @@ TIER_LABEL = {TIER_BUILTIN: "내장", TIER_INTERNAL: "사내", TIER_EXTERNAL: "�
 #: `status_map`의 묶음과 표기. **이 표에 있는 것만 쓴다** — 색을 그 표에서 가져온다.
 STATUS_GROUP = "확장"
 STATE_ON = "켜짐"
+STATE_OFF = "꺼짐"
 STATE_BROKEN = "호환 안 됨"
 
-#: 아직인 단추와 그 이유 (U3 — 끄고 가까이에 적는다).
-LATER_TOGGLE = (
-    "「켜기/끄기」는 아직입니다 — 「사람이 껐다」를 어디에 저장할지 정해야 합니다 "
-    "(docs/09-gaps.md §4-5)."
-)
+#: 끄고 켤 수 없는 줄의 까닭 (U3 — 끄고 가까이에 적는다).
+NO_TOGGLE_EXTERNAL = "외부 확장은 Center에 등록된 정의입니다 — 끄고 켜는 일은 Center에서 합니다 (C13 E6)."
+NO_TOGGLE_NOTHING = "확장을 고르세요."
 
 #: 기여 지점 이름 (C13 `contributes_summary()`의 열쇠) → 사람 말.
 POINT_LABEL = {
@@ -100,10 +102,19 @@ DEFINITION_FILTER = "확장 정의 (extension.json *.json)"
 def state_of(loaded: LoadedExtension) -> str:
     """`status_map` 「확장」의 표기 하나.
 
-    **「꺼짐」은 아직 쓰지 않는다** — 사람이 끄는 길이 없다(위 docstring). 지금 「켜짐」이 아닌
-    것은 모두 정의·설치가 걸린 경우다.
+    **「꺼짐」과 「호환 안 됨」은 다른 것이다** (ADR-0043) — 앞은 사람이 껐다는 뜻이고 뒤는
+    고쳐야 할 흠이다. 섞으면 화면이 「켜세요」와 「고치세요」 중 틀린 쪽을 안내한다.
     """
+    if loaded.off:
+        return STATE_OFF
     return STATE_ON if loaded.enabled else STATE_BROKEN
+
+
+def _state_tip(loaded: LoadedExtension) -> str:
+    """「상태」 칸의 말풍선 — **빈 말풍선을 달지 않는다**(꺼 둔 줄에는 `problems`가 없다)."""
+    if loaded.off:
+        return "사람이 껐습니다 (STU-15). 「켜기」로 되돌립니다."
+    return "; ".join(str(p) for p in loaded.problems)
 
 
 def summary_of(manifest: ExtensionManifest) -> str:
@@ -131,8 +142,10 @@ def detail_sections(loaded: LoadedExtension) -> list[tuple[str, list[str]]]:
     m = loaded.manifest
     out: list[tuple[str, list[str]]] = []
 
-    if loaded.problems:
-        # 맨 위다 — 켜지지 않은 까닭을 보려고 고른 것이다.
+    if loaded.off:
+        # 맨 위다 — 왜 안 보이나 하고 고른 것이다. **흠이 아니라 뜻이다** (ADR-0043).
+        out.append(("꺼 둠", ["사람이 껐습니다 — 기여가 하나도 들어오지 않습니다. 「켜기」로 되돌립니다."]))
+    elif loaded.problems:
         out.append(("켜지지 않은 까닭", _lines(list(loaded.problems))))
 
     head = [
@@ -250,6 +263,8 @@ class StudioExtensionsDialog(QDialog):
         self.reader = reader
         #: Center에서 받아 **이 창만 쓰는** 외부 확장들 (설치된 호스트를 건드리지 않는다).
         self.external: list[LoadedExtension] = []
+        #: 끄거나 켠 적이 있나 — 부른 쪽(STU-01)이 속성 패널을 다시 그릴지 판단한다.
+        self.changed = False
         #: 표의 줄 순서 그대로.
         self.rows: list[LoadedExtension] = []
 
@@ -278,10 +293,9 @@ class StudioExtensionsDialog(QDialog):
         self.note.setWordWrap(True)
 
         self.enable_button = QPushButton("켜기")
+        self.enable_button.clicked.connect(lambda: self.set_off(False))
         self.disable_button = QPushButton("끄기")
-        for one in (self.enable_button, self.disable_button):
-            one.setEnabled(False)
-            one.setToolTip(LATER_TOGGLE)
+        self.disable_button.clicked.connect(lambda: self.set_off(True))
         self.refresh_button = QPushButton("새로 고침")
         self.refresh_button.setToolTip("Center에 등록된 외부 확장 정의를 다시 받습니다.")
         self.refresh_button.clicked.connect(self.refresh_external)
@@ -317,7 +331,6 @@ class StudioExtensionsDialog(QDialog):
         host = self.extensions.host
         self.rows = [*host.all(), *self.external]
         self.table.setRowCount(len(self.rows))
-        broken = status_color(STATUS_GROUP, STATE_BROKEN, part="fg")
         for at, loaded in enumerate(self.rows):
             m = loaded.manifest
             state = state_of(loaded)
@@ -326,9 +339,13 @@ class StudioExtensionsDialog(QDialog):
                 item = QTableWidgetItem(text)
                 if column == NAME:
                     item.setToolTip(m.id)
-                if column == STATE and state != STATE_ON and broken is not None:
-                    item.setForeground(QColor(broken))
-                    item.setToolTip("; ".join(str(p) for p in loaded.problems))
+                if column == STATE:
+                    # 색은 **그 표기의 것**을 찾는다 — 「꺼짐」에 「호환 안 됨」의 색을 쓰면
+                    # 꺼 둔 것이 고장처럼 보인다 (`status_map` 「확장」, 스타일 가이드 §2-2).
+                    color = status_color(STATUS_GROUP, state, part="fg")
+                    if color is not None:
+                        item.setForeground(QColor(color))
+                    item.setToolTip(_state_tip(loaded))
                 self.table.setItem(at, column, item)
         self._say_failures()
         if self.rows and not self.table.selectedItems():
@@ -353,10 +370,51 @@ class StudioExtensionsDialog(QDialog):
 
     def _show_selected(self) -> None:
         found = self.selected()
+        self._refresh_toggle(found)
         if found is None:
             self.detail.setPlainText(NO_SELECTION)
             return
         self.detail.setPlainText(render(detail_sections(found)))
+
+    def _refresh_toggle(self, found: LoadedExtension | None) -> None:
+        """「켜기」/「끄기」 중 **할 수 있는 쪽만** 켠다. 못 하면 이유가 말풍선에 있다 (U3).
+
+        외부 확장은 여기서 끄지 않는다 — 설치된 것이 아니라 Center에 등록된 정의다 (C13 E6).
+        """
+        why = NO_TOGGLE_NOTHING if found is None else ""
+        if found is not None and found.manifest.is_external:
+            why = NO_TOGGLE_EXTERNAL
+        for button, wants_off in ((self.enable_button, False), (self.disable_button, True)):
+            can = not why and found is not None and found.off != wants_off
+            button.setEnabled(can)
+            button.setToolTip(why if why else "")
+
+    def set_off(self, off: bool) -> None:
+        """고른 확장을 끄거나 켠다 — **설정에 적고 호스트를 다시 읽는다** (ADR-0043).
+
+        설정은 **그 자리에서** 저장한다 (이 창에는 「저장」이 없다 — BUI-10과 같은 결이다).
+        """
+        found = self.selected()
+        if found is None or found.manifest.is_external:
+            return
+        kept = tuple(one for one in self.settings.disabled_extensions if one != found.id)
+        self.settings = replace(
+            self.settings, disabled_extensions=(*kept, found.id) if off else kept
+        )
+        self.settings.save()
+        self.extensions.reload(off=self.settings.disabled_extensions)
+        self.changed = True
+        self.refresh()
+        self._select(found.id)
+        self.note.setText(
+            f"{found.manifest.name}을 {'껐습니다' if off else '켰습니다'}."
+            + (" 그 확장의 태스크가 있는 BPM 프로세스는 실행 전 검사에서 막힙니다." if off else "")
+        )
+
+    def _select(self, extension_id: str) -> None:
+        at = next((i for i, one in enumerate(self.rows) if one.id == extension_id), None)
+        if at is not None:
+            self.table.selectRow(at)
 
     # ── 단추 ──
 
@@ -438,8 +496,9 @@ def _center_key() -> str | None:
 __all__ = [
     "COLUMNS",
     "DEFAULT_SIZE",
-    "LATER_TOGGLE",
+    "NO_TOGGLE_EXTERNAL",
     "STATE_BROKEN",
+    "STATE_OFF",
     "STATE_ON",
     "TIER_LABEL",
     "StudioExtensionsDialog",

@@ -103,7 +103,7 @@ class MainWindow(QMainWindow):
         self.log_view = QPlainTextEdit(self)
         self.log_view.setReadOnly(True)
 
-        self.extensions = Extensions.load()
+        self.extensions = Extensions.load(off=settings.disabled_extensions)
         self.properties = Properties(self, extensions=self.extensions)
         self.properties.applying.connect(self._apply_properties)
         self.canvas.selected.connect(self._on_selected)
@@ -221,8 +221,21 @@ class MainWindow(QMainWindow):
             self.refresh_catalog()  # Center 주소·키가 바뀌었을 수 있다
 
     def open_extensions(self) -> None:
-        """STU-15. **읽기만 한다** — 이 창이 설정·확장 호스트를 바꾸지 않는다."""
-        StudioExtensionsDialog(self.settings, self.extensions, parent=self).exec()
+        """STU-15. 끄고 켠 것이 있으면 **속성 패널을 다시 그린다** (ADR-0043).
+
+        꺼진 확장의 편집기가 패널에 남아 있으면 안 된다 — 창이 호스트를 다시 읽어 두었으니
+        지금 고른 요소를 다시 보이면 패널이 새 호스트에게 묻는다.
+        """
+        dialog = StudioExtensionsDialog(self.settings, self.extensions, parent=self)
+        dialog.exec()
+        if not dialog.changed:
+            return
+        self.settings = dialog.settings
+        node_id = self.properties.node_id
+        self.properties.show_nothing()
+        if node_id:
+            self.canvas.call("properties", node_id, then=lambda found: self.properties.show_element(found))
+        self.say("확장을 바꿨습니다 — 「실행 전 검사」로 확인하세요.")
 
     def _add(
         self,

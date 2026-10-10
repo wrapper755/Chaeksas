@@ -17,6 +17,16 @@
 2. `api` 범위가 이 호스트의 `extension_api`와 맞지 않는다 (E5).
 3. 이미 있는 확장과 `id`가 겹치거나, 태스크 종류가 겹친다 (E4).
 
+**그리고 네 번째가 있다 — 사람이 껐다** ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)).
+위 셋은 **흠**이고(`problems`), 이것은 멀쩡한데 **일부러 안 쓰는 것**이다(`off`). 둘을 섞으면
+화면이 「고치세요」와 「켜세요」 중 틀린 쪽을 안내한다. 끌 id는 **부르는 쪽이 준다**
+(`ExtensionHost(off=[...])`) — 플랫폼 코드가 확장 이름을 알지 않는다.
+
+    host = ExtensionHost(off=settings.disabled_extensions)
+
+**꺼진 확장은 기여를 하나도 내지 않는다** — 태스크 종류·편집기·런타임·점검이 한꺼번에 사라진다.
+늦게(실행할 때) 죽는 것보다 낫다. 그래서 겹침(E4·E8)도 **꺼지지 않은 것들 사이에서만** 본다.
+
 **코드는 설치 파일에 든 확장(내장·사내)에서만 돌린다** (ADR-0018 §3). 외부 확장의 정의에 `entry`가
 있으면 E1에 걸려 켜지지 않고, 켜진 확장의 `entry`도 그 확장의 패키지 안만 가리킬 수 있다.
 """
@@ -94,8 +104,10 @@ class LoadedExtension:
     origin: str
     #: 코드 기여를 찾을 파이썬 패키지. 외부 확장은 `None` (코드가 없다).
     root: str | None = None
-    #: 비어 있지 않으면 켜지 않는다.
+    #: 비어 있지 않으면 켜지 않는다. **흠이다** — 고쳐야 할 것.
     problems: tuple[Violation, ...] = ()
+    #: **사람이 껐다** (ADR-0043). 흠이 아니라 뜻이다 — `problems`와 섞지 않는다.
+    off: bool = False
 
     @property
     def id(self) -> str:
@@ -107,12 +119,17 @@ class LoadedExtension:
 
     @property
     def enabled(self) -> bool:
-        return not self.problems
+        """**지금 쓰이는가** — 흠이 없고 꺼지지도 않았다. 부르는 쪽의 뜻은 그대로다."""
+        return not self.problems and not self.off
 
     def state(self) -> ExtensionState:
-        """C4·C12 보고용 (`{id, version, definition_hash, enabled}`)."""
+        """C4·C12 보고용 (`{id, version, definition_hash, enabled, off}`)."""
         return ExtensionState(
-            id=self.id, version=self.version, definition_hash=self.definition_hash, enabled=self.enabled
+            id=self.id,
+            version=self.version,
+            definition_hash=self.definition_hash,
+            enabled=self.enabled,
+            off=self.off,
         )
 
 
@@ -130,8 +147,10 @@ class LoadFailure:
 class ExtensionHost:
     """확장 목록과 기여 지점. 실행하는 쪽마다 하나씩 만든다."""
 
-    def __init__(self, *, api_version: str = API_VERSION) -> None:
+    def __init__(self, *, api_version: str = API_VERSION, off: Iterable[str] = ()) -> None:
         self.api_version = api_version
+        #: 사람이 꺼 둔 확장 id (ADR-0043). **부르는 쪽이 준다** — 플랫폼은 어느 확장인지 모른다.
+        self.off = frozenset(off)
         self._loaded: list[LoadedExtension] = []
         self._failures: list[LoadFailure] = []
         self._executors: dict[str, TaskExecutor] = {}
@@ -215,16 +234,24 @@ class ExtensionHost:
             self._failures.append(LoadFailure(origin=origin, message=f"정의가 C13과 맞지 않는다: {summary}"))
             return None
 
-        problems = [
-            *extra,
-            *validate(manifest, from_center=from_center),
-            *check_api(manifest, api_version=self.api_version),
-            *self._conflicts(manifest),
-        ]
+        turned_off = manifest.id in self.off
+        problems = (
+            []
+            if turned_off
+            # 꺼 둔 것은 **검사하지 않는다** — 기여를 내지 않으니 겹칠 일도 없고, 흠을 함께
+            # 적으면 화면이 「꺼짐」과 「호환 안 됨」 중 무엇을 보일지 다투게 된다 (ADR-0043).
+            else [
+                *extra,
+                *validate(manifest, from_center=from_center),
+                *check_api(manifest, api_version=self.api_version),
+                *self._conflicts(manifest),
+            ]
+        )
         loaded = LoadedExtension(
             manifest=manifest,
             definition_hash=definition_hash(definition),
             origin=origin,
+            off=turned_off,
             root=root if manifest.can_contribute_code else None,
             problems=tuple(problems),
         )
@@ -237,6 +264,9 @@ class ExtensionHost:
         """이미 켠 확장과 겹치는가 (E4, 그리고 하나뿐인 이름 공간).
 
         **나중에 온 쪽이 진다.** 먼저 켜진 확장이 계속 돌아야 한다 (실행 중인 Bot이 쓰고 있다).
+
+        **꺼 둔 확장은 세지 않는다** (`enabled()`가 이미 거른다, ADR-0043) — 기여를 내지 않으니
+        이름을 쥐고 있지 않다. 껐던 것을 다시 켜서 겹치면 그때 **그쪽이** 켜지지 않는다.
         """
         out: list[Violation] = []
         if any(e.id == manifest.id for e in self.enabled()):
@@ -281,7 +311,21 @@ class ExtensionHost:
         return [e for e in self._loaded if e.enabled]
 
     def disabled(self) -> list[LoadedExtension]:
+        """지금 쓰이지 않는 것 — **흠이 있는 것과 꺼 둔 것이 함께** 온다 (`off`로 가른다)."""
         return [e for e in self._loaded if not e.enabled]
+
+    def turned_off(self) -> list[LoadedExtension]:
+        """사람이 꺼 둔 것만 (ADR-0043)."""
+        return [e for e in self._loaded if e.off]
+
+    def provider_of(self, task_type_id: str) -> LoadedExtension | None:
+        """그 태스크 종류를 기여한 확장 — **꺼 둔 것·흠이 있는 것까지** 본다.
+
+        `task_type()`은 **지금 쓸 수 있는** 것만 주므로 「없다」와 「꺼 뒀다」를 가르지 못한다.
+        사전 점검이 그 둘에 **다른 고치는 길**을 안내하려고 쓴다 (`core.preflight`).
+        """
+        found = [e for e in self._loaded if e.manifest.task_type(task_type_id) is not None]
+        return next((e for e in found if e.enabled), found[0] if found else None)
 
     @property
     def failures(self) -> list[LoadFailure]:
@@ -572,9 +616,17 @@ class HostTasks:
 
 
 def summarize(host: ExtensionHost) -> dict[str, list[str]]:
-    """화면·로그에 한 줄로 쓰는 요약 (`{"enabled": [...], "disabled": [...], "failed": [...]}`)."""
+    """화면·로그에 한 줄로 쓰는 요약 (`{"enabled", "off", "disabled", "failed"}`).
+
+    **꺼 둔 것을 「disabled」에 섞지 않는다** — 로그를 보는 사람이 고칠 거리로 읽는다 (ADR-0043).
+    """
     return {
         "enabled": [f"{e.id}@{e.version}" for e in host.enabled()],
-        "disabled": [f"{e.id}@{e.version}: {'; '.join(str(p) for p in e.problems)}" for e in host.disabled()],
+        "off": [f"{e.id}@{e.version}" for e in host.turned_off()],
+        "disabled": [
+            f"{e.id}@{e.version}: {'; '.join(str(p) for p in e.problems)}"
+            for e in host.disabled()
+            if not e.off
+        ],
         "failed": [f"{f.origin}: {f.message}" for f in host.failures],
     }
