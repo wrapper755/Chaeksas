@@ -72,6 +72,15 @@ SKIPPED = "skipped"
 #: 런타임 폴더에 Bot UI가 남기는 자리 정보 (`{"runtime", "port"}`) — 토큰은 런타임이 쓴다.
 RUNTIME_FILE = "runtime.json"
 
+#: 감시자 상태 → 화면 표기. **한 자리에만 둔다** — BUI-09와 BUI-11이 같은 말을 써야 한다
+#: (`status_map` 「Worker 프로세스」의 표기에 「필요할 때 시작」만 덧붙인다).
+STATE_LABELS = {
+    "running": "실행 중",
+    "restarting": "다시 띄우는 중",
+    "stopped": "멈춤",
+    "off": "꺼 둠 (필요할 때 시작)",
+}
+
 
 def runtime_ids_of(host: ExtensionHost, extension_id: str) -> tuple[str, ...]:
     """그 확장이 기여한 로컬 런타임들."""
@@ -358,6 +367,7 @@ __all__ = [
     "LOCAL_HOST",
     "READY_TIMEOUT_S",
     "RUNTIME_FLAG",
+    "STATE_LABELS",
     "HostSettings",
     "RuntimeUnavailable",
     "Runtimes",

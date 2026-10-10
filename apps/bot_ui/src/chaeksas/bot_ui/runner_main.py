@@ -18,6 +18,7 @@ import json
 import logging
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -104,9 +105,18 @@ class RunnerSecrets:
         return self.credentials.service_app_key(ref) or self.credentials.extension_secret(self.extension_id, ref)
 
 
-def extension_tasks(values: dict[str, dict[str, Any]], *, host: ExtensionHost | None = None) -> HostTasks:
-    """이 실행의 확장 — 설치된 것을 읽고, Bot UI가 넘긴 확장별 설정(Worker 자리 등)을 붙인다."""
-    loaded = host if host is not None else load_host()
+def extension_tasks(
+    values: dict[str, dict[str, Any]],
+    *,
+    host: ExtensionHost | None = None,
+    off: Sequence[str] = (),
+) -> HostTasks:
+    """이 실행의 확장 — 설치된 것을 읽고, Bot UI가 넘긴 확장별 설정(Worker 자리 등)을 붙인다.
+
+    **사람이 BUI-11에서 끈 확장은 여기서도 기여를 내지 않는다** (ADR-0043) — 끌 id는 Bot UI가
+    넘긴다(`--off`). 그런 Bot은 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
+    """
+    loaded = host if host is not None else load_host(off=off)
     credentials = Credentials()
 
     def make_context(extension_id: str) -> Any:
@@ -318,6 +328,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--approval-where", default=WHERE_FIELD, choices=(WHERE_FIELD, WHERE_CENTER))
     # 확장별 설정 (그 칸 + 예약 키 — Worker 자리). **비밀은 없다** (키는 참조 이름으로 푼다).
     parser.add_argument("--extensions", type=Path, default=None, help="확장별 설정 JSON 파일")
+    # 사람이 BUI-11에서 끈 확장 (ADR-0043) — 끌 id는 Bot UI가 준다.
+    parser.add_argument("--off", action="append", default=[], help="끈 확장 id (여러 번)")
     # 부를 수 있는 바깥 앱 — 주소·Admin 공개키·외부 확장 정의와 봉투 (C13 「전송」).
     parser.add_argument("--services", type=Path, default=None, help="바깥 앱 명부 JSON 파일")
     found = parser.parse_args(argv)
@@ -352,7 +364,8 @@ def main(argv: list[str] | None = None) -> int:
             llm_key=os.environ.get("CHK_BOT_UI__LLM__API_KEY", ""),
             llm_model=found.llm_model,
             extensions=extension_tasks(
-                json.loads(found.extensions.read_text(encoding="utf-8")) if found.extensions else {}
+                json.loads(found.extensions.read_text(encoding="utf-8")) if found.extensions else {},
+                off=list(found.off),
             ),
             approval_where=found.approval_where,
             directory=directory,

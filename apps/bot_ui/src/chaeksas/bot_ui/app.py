@@ -46,6 +46,7 @@ class BotUiApp:
             self.tray.open_settings.connect(self.open_settings)
             # 트레이에서 고른 유틸리티도 **메인 창이 연다** — 같은 것을 두 번 열지 않는 자리가 거기다.
             self.tray.open_utility.connect(self.open_utility)
+            self.tray.open_extensions.connect(self.open_extensions)
             self.tray.quit_requested.connect(self.quit)
             self.tray.show()
         else:
@@ -71,6 +72,12 @@ class BotUiApp:
         dialog = SettingsDialog(self.agent, self.window if self.window.isVisible() else None)
         if dialog.exec():
             self.refresh()
+
+    def open_extensions(self) -> None:
+        """트레이 「도구」 → 「확장...」 (BUI-11). **메인 창이 연다** — 끄고 켠 뒤 「도구」 메뉴를
+        다시 만드는 자리가 거기다."""
+        self.window.open_extensions()
+        self.refresh()
 
     def open_utility(self, extension_id: str, utility_id: str) -> None:
         """트레이 「도구」가 고른 유틸리티 (BUI-01). **창을 띄우지 않고도** 열 수 있다 —

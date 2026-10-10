@@ -438,6 +438,31 @@ def test_the_runner_is_told_how_long_the_item_waited() -> None:
     assert args[args.index("--queued-s") + 1] == "42.457", "소수 셋째 자리까지"
 
 
+def test_the_runner_turns_off_the_same_extensions_as_the_bot_ui() -> None:
+    """ADR-0043 — 사람이 BUI-11에서 끈 확장은 **자식에서도** 기여를 내지 않는다.
+
+    그런 Bot은 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
+    """
+    from chaeksas.bot_ui.runner_main import extension_tasks
+
+    common: dict[str, Any] = {
+        "package": Path("/tmp/pkg"),
+        "run_id": "run_20261010_101500_abcdef",
+        "data_dir": Path("/tmp/data"),
+        "inputs_path": None,
+        "mode": "deterministic",
+        "source": "manual",
+        "job_id": None,
+    }
+    assert "--off" not in runner_args(**common)
+    args = runner_args(**common, off_extensions=("ui-automation", "doc-ocr"))
+    assert args[args.index("--off") :] == ["--off", "ui-automation", "--off", "doc-ocr"]
+
+    # 실행기 쪽 — 끈 확장은 수행기를 내지 않는다 (「없는 태스크 종류」와 같은 자리로 떨어진다).
+    assert extension_tasks({}).executor("ui_task") is not None
+    assert extension_tasks({}, off=["ui-automation"]).executor("ui_task") is None
+
+
 def test_a_runner_that_does_not_know_the_wait_says_nothing() -> None:
     """**모르면 넣지 않는다** — 0을 넣으면 「기다리지 않았다」가 된다."""
     args = runner_args(

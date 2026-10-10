@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -144,6 +144,8 @@ class Agent:
     extensions: list[ExtensionState] = field(default_factory=list)
     #: 시험에서 Center를 바꿔 끼우려고 둔 자리.
     client_factory: Callable[[str, str], CenterClient] | None = None
+    #: 확장을 다시 읽는 길 (BUI-11이 끄고 켠 뒤). 시험이 바꿔 끼운다 — 기본은 엔트리 포인트다.
+    extension_loader: Callable[[Iterable[str]], ExtensionHost] | None = None
 
     # ── 지금 상태 (디스크에 남기지 않는 것) ──
     current_run: CurrentRun | None = None
@@ -214,6 +216,24 @@ class Agent:
         values[SERVICE_URL_SETTING] = self.service_url(extension_id)
         values[STORAGE_DIR_SETTING] = str(self.storage_dir(extension_id))
         return values
+
+    def reload_extensions(self) -> ExtensionHost:
+        """확장을 **다시 읽는다** — BUI-11이 끄고 켠 뒤에 부른다 (ADR-0043).
+
+        꺼진 확장은 기여를 하나도 내지 않으므로 태스크 종류·유틸리티·칸·점검이 한꺼번에 빠진다.
+        **띄워 둔 런타임은 건드리지 않는다** — 감시자를 버리면 돌고 있는 자식 프로세스를 놓친다
+        (종료 때 끌 길이 없어진다). 새 호스트만 꽂아 준다.
+
+        사전 점검 캐시도 비운다 — 안 비우면 꺼도 「준비됨」이 하트비트로 계속 올라간다.
+        """
+        load = self.extension_loader or load_extensions
+        host = load(self.settings.disabled_extensions)
+        self.host = host
+        self.extensions = host.states()
+        if self._runtimes is not None:
+            self._runtimes.host = host
+        self.invalidate_preflight()
+        return host
 
     def needed_extensions(self, bot: InstalledBot) -> set[str]:
         """그 Bot이 쓰는 확장 — `requires.extensions` + `requires.domains`의 환경을 기여한 확장 (ADR-0037)."""
@@ -857,6 +877,8 @@ class Agent:
                 services_path=services_path,
                 # `location: follow` 결재를 어디서 답하나 — BUI-03 「원격 결재」 (ADR-0038).
                 approval_where="center" if self.settings.remote_approval else "field",
+                # 사람이 BUI-11에서 끈 확장 — 자식도 같은 것을 끈다 (ADR-0043).
+                off_extensions=tuple(self.settings.disabled_extensions),
             )
         except Exception as e:  # noqa: BLE001 — 띄우지 못한 것은 실행 실패다
             log.exception("실행기를 띄우지 못했다")
@@ -947,13 +969,16 @@ class Agent:
         return " · ".join(parts)
 
 
-def load_extensions() -> ExtensionHost:
+def load_extensions(off: Iterable[str] = ()) -> ExtensionHost:
     """설치된 확장을 읽는다 (엔트리 포인트 `chaeksas.extensions`, ADR-0018).
 
     **읽다 실패해도 Bot UI는 뜬다** — 확장 하나가 없다고 Bot을 못 돌리면 더 나쁘다. 못 읽은
     것은 호스트가 `failures()`로 들고 있고 BUI-11이 보여 준다.
+
+    끌 id는 **부르는 쪽이 준다** (ADR-0043 — 여기서는 Bot UI 설정의 `disabled_extensions`).
+    꺼진 확장은 기여를 하나도 내지 않는다.
     """
-    host = ExtensionHost()
+    host = ExtensionHost(off=off)
     try:
         host.load_entry_points()
     except Exception as e:  # noqa: BLE001 — 확장 때문에 Bot UI가 안 뜨면 안 된다
@@ -969,7 +994,7 @@ def make_agent(settings: Settings | None = None, *, state_path: Path | None = No
 
     found = settings or Settings.load()
     path = state_path or (data_dir() / "state.json")
-    host = load_extensions()
+    host = load_extensions(found.disabled_extensions)
     return Agent(settings=found, store=Store.load(path), host=host, extensions=host.states())
 
 

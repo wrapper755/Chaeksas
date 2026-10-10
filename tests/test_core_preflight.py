@@ -274,6 +274,18 @@ def _host_with(definition: dict[str, Any], *, off: tuple[str, ...] = ()) -> Exte
     return host
 
 
+#: 같은 확장이 AI 환경만 기여한 꼴 (ADR-0037 — 그림에는 `requires.domains`만 적힌다).
+DESKTOP_ENV: dict[str, Any] = {
+    "schema": 2,
+    "id": "doc-ocr",
+    "version": "1.0.0",
+    "name": "문서 인식",
+    "publisher": "Chaeksas",
+    "tier": "builtin",
+    "api": ">=1,<2",
+    "contributes": {"agent_environments": [{"domain": "desktop", "entry": "doc_ocr.client:Desktop"}]},
+}
+
 OCR = {
     "schema": 2,
     "id": "doc-ocr",
@@ -317,3 +329,26 @@ def test_a_missing_extension_still_says_install_it() -> None:
     found = preflight.check(m, key_value=never, host=ExtensionHost())
     assert found.blocked == (preflight.TASK_TYPES_UNSUPPORTED,)
     assert "판으로 올리세요" in (found.findings[0].fix_hint or "")
+
+
+def test_a_turned_off_ai_environment_says_turn_it_on() -> None:
+    """**그림에 확장을 적지 않는 길도 같이 가른다** (ADR-0037·ADR-0043).
+
+    `desktop` AI 태스크는 매니페스트에 `requires.domains`만 적는다 — 환경을 주는 확장이 꺼져
+    있는데 「환경을 기여하는 확장을 설치하세요」라고 하면, 이미 깔린 것을 또 깔라는 말이 된다.
+    """
+    m = manifest(domains=["desktop"])
+
+    on = preflight.check(m, key_value=never, host=_host_with(DESKTOP_ENV))
+    assert not on.blocks
+
+    off = preflight.check(m, key_value=never, host=_host_with(DESKTOP_ENV, off=("doc-ocr",)))
+    assert off.blocked == (preflight.EXTENSION_TURNED_OFF,)
+    assert off.findings[0].items == ("desktop (문서 인식 확장)",)
+    assert off.findings[0].fix_hint == "확장 목록에서 그 확장을 켜세요"
+
+
+def test_an_absent_ai_environment_still_says_install_it() -> None:
+    found = preflight.check(manifest(domains=["desktop"]), key_value=never, host=ExtensionHost())
+    assert found.blocked == (preflight.MISSING_ENVIRONMENT,)
+    assert "설치하세요" in (found.findings[0].fix_hint or "")
