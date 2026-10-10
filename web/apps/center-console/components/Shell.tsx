@@ -33,7 +33,7 @@ const NAV: NavItem[] = [
   { label: "Bot UI 현황", href: "/bot-uis" },
   { label: "결재함", href: "/approvals" },
   { label: "작업 지시", href: "/jobs" },
-  { label: "공통 패키지", later: "CON-06은 아직 없습니다 (docs/09-gaps.md §4-10)." },
+  { label: "공통 패키지", href: "/packages" },
   { label: "리소스", href: "/resources" },
   { label: "Center API 키", href: "/center-keys" },
 ];

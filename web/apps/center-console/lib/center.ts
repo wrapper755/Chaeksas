@@ -22,6 +22,7 @@ export interface ContributedKind {
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { JobCreateRequest } from "@chaeksas/api-types/c5-job-create-request";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
+import type { DependentInfo } from "@chaeksas/api-types/c5-dependent-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
@@ -90,7 +91,20 @@ export const center = {
   enableBotUi: (id: string) => call<unknown>(`/api/v1/bot-uis/${id}/enable`, { method: "POST" }),
 
   /** 패키지 목록 (C5). `missing_resources`는 Center가 **읽을 때** 세어 준다 (C7). */
-  packages: () => call<PackageInfo[]>("/api/v1/packages"),
+  packages: (query: { kind?: string } = {}) =>
+    call<PackageInfo[]>(`/api/v1/packages${query.kind ? `?kind=${encodeURIComponent(query.kind)}` : ""}`),
+
+  /** 이 패키지를 쓰는 패키지 (C5·CON-06). Center가 **읽을 때** 센다. */
+  dependents: (packageId: string, version: string) =>
+    call<DependentInfo[]>(
+      `/api/v1/packages/${encodeURIComponent(packageId)}/${encodeURIComponent(version)}/dependents`,
+    ),
+  /** 삭제 (C5). 배포나 다른 패키지가 참조하면 409 `in_use`다 — 아무것도 지워지지 않는다. */
+  deletePackage: (packageId: string, version: string) =>
+    call<void>(
+      `/api/v1/packages/${encodeURIComponent(packageId)}/${encodeURIComponent(version)}`,
+      { method: "DELETE" },
+    ),
 
   /** 리소스 목록 (C7·CON-07). `{items, fetched_at}` 그대로 돌려준다. */
   resources: <T>(type?: string) =>

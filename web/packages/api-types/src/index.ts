@@ -32,6 +32,7 @@ export const CONTRACT_MODULES = [
   "c4-register-request",
   "c4-register-response",
   "c5-bot-ui-info",
+  "c5-dependent-info",
   "c5-deployment-info",
   "c5-error-body",
   "c5-job-create-request",

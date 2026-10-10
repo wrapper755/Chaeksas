@@ -55,6 +55,8 @@ RECENT_RESULTS = 20
 
 # 아래는 모두 **열린 문자열**의 알려진 값이다 (README 원칙 10).
 KNOWN_PACKAGE_STATUSES = frozenset({"candidate", "approved", "deprecated", "revoked"})
+#: `DependentInfo.relation` — C1 `requires`의 어느 칸으로 참조하나.
+KNOWN_DEPENDENT_RELATIONS = frozenset({"lib", "toolpack"})
 KNOWN_JOB_STATES = frozenset({"pending", "dispatched", "queued", "accepted", "rejected", "expired", "cancelled"})
 KNOWN_REJECT_REASONS = frozenset(
     {"queue_full", "no_deployment", "not_ready", "bot_ui_shutdown", "bot_ui_lost",
@@ -116,6 +118,23 @@ class PackageInfo(ContractModel):
     preflight: PreflightSummary = Field(default_factory=PreflightSummary)
     manifest: Manifest | None = None
     missing_resources: list[MissingResource] = Field(default_factory=list)
+
+
+class DependentInfo(ContractModel):
+    """`GET /packages/{id}/{version}/dependents`의 한 줄 — 이 패키지를 쓰는 패키지 하나.
+
+    **읽을 때 센다** (참조 그래프를 저장하지 않는다 — `missing_resources`와 같은 결).
+    """
+
+    id: str
+    version: str
+    kind: str
+    name: str | None = None
+    status: str  # 열린 문자열 (KNOWN_PACKAGE_STATUSES)
+    #: 어느 칸으로 참조하나 (열린 문자열 — `KNOWN_DEPENDENT_RELATIONS`).
+    relation: str
+    #: 참조하는 쪽이 고정한 해시. `toolpack`만 있다 (C1 R7) — `lib`은 `<id>@<version>`뿐이다.
+    pinned_hash: str | None = None
 
 
 class BotUiKey(ContractModel):

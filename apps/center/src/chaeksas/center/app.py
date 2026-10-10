@@ -170,6 +170,21 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             app.state.store, package_id, version, index=resources.index(app.state.store)
         )
 
+    @app.get(f"{API}/packages/{{package_id}}/{{version}}/dependents")
+    def package_dependents(request: Request, package_id: str, version: str) -> Any:
+        """이 패키지를 쓰는 패키지 (C5·CON-06 「이 패키지를 쓰는 패키지」)."""
+        require_read(authenticate(request))
+        return packages.dependents(app.state.store, package_id, version)
+
+    @app.delete(f"{API}/packages/{{package_id}}/{{version}}")
+    def delete_package(request: Request, package_id: str, version: str) -> Any:
+        """삭제 (C5). 서명이 필요 없다 — 막는 쪽이라서 관리자 토큰이 관문이다."""
+        require_admin(authenticate(request))
+        packages.remove(
+            app.state.store, package_dir=settings.package_dir, package_id=package_id, version=version
+        )
+        return Response(status_code=204)
+
     @app.get(f"{API}/packages/{{package_id}}/{{version}}")
     def download_package(request: Request, package_id: str, version: str) -> Any:
         require_read(authenticate(request))
