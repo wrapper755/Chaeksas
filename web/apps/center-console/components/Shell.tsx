@@ -33,7 +33,7 @@ const LATER_BADGE = "아직";
 
 const NAV: NavItem[] = [
   { label: "실행 로그", href: "/runs" },
-  { label: "Bot 현황", later: "CON-02는 아직 없습니다 (docs/09-gaps.md §4-9)." },
+  { label: "Bot 현황", href: "/bots" },
   { label: "Bot UI 현황", href: "/bot-uis" },
   { label: "서버 실행", later: "CON-12는 M7에서 옵니다 — 서버 실행기(C12)가 아직 없습니다." },
   { label: "결재함", href: "/approvals" },
