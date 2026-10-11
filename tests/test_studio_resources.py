@@ -34,7 +34,7 @@ from chaeksas.contracts.resources import (  # noqa: E402
 )
 from chaeksas.contracts.service_app import Operation as C11Operation  # noqa: E402
 from chaeksas.core.extensions import Contribution  # noqa: E402
-from chaeksas.studio import resources, service_catalog, services  # noqa: E402
+from chaeksas.studio import center_actions, resources, service_catalog, services  # noqa: E402
 
 NOW = "2026-10-10T09:00:00+09:00"
 
@@ -641,5 +641,7 @@ def test_the_roots_are_drawn_without_knocking_on_center(window: Any) -> None:
 
 def test_adding_without_an_open_definition_says_so(window: Any) -> None:
     """열린 정의가 없으면 캔버스를 부르지 않고 말한다 (조용히 아무 일도 없지 않다)."""
-    window.add_to_canvas(resources.Create(bpmn=resources.BPMN_SERVICE_TASK, name="X", chk={}))
+    center_actions.add_to_canvas(
+        window, resources.Create(bpmn=resources.BPMN_SERVICE_TASK, name="X", chk={})
+    )
     assert "열린 정의가 없습니다" in window.log_view.toPlainText()

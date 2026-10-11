@@ -1,10 +1,13 @@
 """STU-01 메인 창 — 탐색기 · 캔버스 · 속성 패널 · 아래 탭 · 상태 줄.
 
-조각 3e-1은 셸과 캔버스, 3e-2는 속성 패널(STU-04)과 실행 전 검사, 3e-3은 시험 실행
-(STU-08·STU-09), **3e-4는 케이스 편집기(STU-07)와 패키지 내보내기**다. 아직 없는 것은
-「아직 없다」고 말한다 — 빈 상자를 말없이 두지 않는다.
+**창이 쥐는 것**은 열린 BPM 프로세스·정의 하나, 캔버스, 돌고 있는 시험 실행이다. 제목·메뉴·
+단축키·닫기 보호는 `docs/06-screens/studio.md` STU-01 그대로다. 아직 없는 것은 「아직 없다」고
+말한다 — 빈 상자를 말없이 두지 않는다.
 
-제목·메뉴·단축키·닫기 보호는 `docs/06-screens/studio.md` STU-01 그대로다.
+**메뉴 동작 중 큰 두 묶음은 떼어 냈다** (이 파일이 500줄 선을 넘어서다, CLAUDE.md §4):
+`export_actions`(내보내기·올리기 넷)와 `run_actions`(시험 실행 몰이). 둘은 창을 받아 쓰고,
+창은 그들이 쓰는 **작은 길**만 공개한다 — `saved_to_disk()`·`readiness()`·`say()`·
+`show_preflight()`·`show_variables()`. 창이 그 일의 속을 알지는 않는다.
 """
 
 from __future__ import annotations
@@ -17,7 +20,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
-    QFileDialog,
     QLabel,
     QMainWindow,
     QMenu,
@@ -30,46 +32,32 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts import Violation
-from chaeksas.studio import resources, service_catalog, services, upload
+from chaeksas.contracts.bpmn_ext import BpmnProcess
+from chaeksas.studio import (
+    center_actions,
+    export_actions,
+    file_actions,
+    resources,
+    run_actions,
+    services,
+)
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
-from chaeksas.studio.center_resources import CenterResourcesDialog
 from chaeksas.studio.checks import refs_in
-from chaeksas.studio.dialogs import NewProcessDialog, ShareDefinitionsDialog, pick_example
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extension_dialog import StudioExtensionsDialog
 from chaeksas.studio.extensions import Extensions
-from chaeksas.studio.packaging import (
-    PackageError,
-    default_lib_name,
-    default_name,
-    export,
-    export_lib,
-)
 from chaeksas.studio.preflight import Preflight, inspect, readiness, summarize
 from chaeksas.studio.process_dialog import ProcessInfoDialog
 from chaeksas.studio.properties import Properties
 from chaeksas.studio.receiver import Receiver
-from chaeksas.studio.run_dialog import RunDialog
 from chaeksas.studio.runner import CaseRun, Outcome, Plan
-from chaeksas.studio.runner import summarize as summarize_runs
 from chaeksas.studio.settings import Settings
 from chaeksas.studio.settings_dialog import StudioSettingsDialog
-from chaeksas.studio.workspace import BpmProcess, Definition, Workspace, WorkspaceError
+from chaeksas.studio.workspace import BpmProcess, Definition, Workspace
 
 log = logging.getLogger(__name__)
 
-
-def _inherited_keys(process: BpmProcess) -> dict[str, str]:
-    """그 BPM 프로세스가 적어 둔 키 참조 `{app_id: 참조}` (`chk:process.service_keys`).
-
-    STU-14가 「프로세스 설정을 따름 (<참조>)」에 보인다. **값은 담지 않는다** (ADR-0013).
-    """
-    found: dict[str, str] = {}
-    for definition in process.definitions:
-        if definition.process is not None:
-            found.update(definition.process.info.service_keys)
-    return found
 
 TITLE = "Chaeksas Studio"
 NO_PROCESS = "(BPM 프로세스를 선택하거나 새로 만드세요)"
@@ -105,8 +93,10 @@ class MainWindow(QMainWindow):
         # STU-03. **받는 일은 이 창이 한다** — 탐색기는 돌아온 것을 그리기만 한다.
         self.resource_tree = resources.ResourceExplorer(self)
         self.resource_tree.reloading.connect(self.refresh_catalog)
-        self.resource_tree.adding.connect(self.add_to_canvas)
-        self.resource_tree.opening_center.connect(self.open_center_resources)
+        self.resource_tree.adding.connect(lambda create: center_actions.add_to_canvas(self, create))
+        self.resource_tree.opening_center.connect(
+            lambda: center_actions.open_center_resources(self)
+        )
         self.resource_tree.said.connect(self.say)
 
         self.log_view = QPlainTextEdit(self)
@@ -134,7 +124,7 @@ class MainWindow(QMainWindow):
         # 목록은 정의를 열 때·「새로 고침」에 채운다 — 뜨면서 Center를 두드리지 않는다.
         self.refresh_resources(reader=None)
         self.statusBar().showMessage("대기 중")
-        self._retitle()
+        self.retitle()
         self.canvas.boot()
 
     # ── 짜기 ──
@@ -185,11 +175,13 @@ class MainWindow(QMainWindow):
         self._add(files, "시험 케이스...", self.edit_cases)
         files.addSeparator()
         self.save_action = self._add(files, "저장", self.save, QKeySequence.StandardKey.Save)
-        self._add(files, "패키지로 내보내기...", self.export_package)
-        self._add(files, "공유 BPM 프로세스로 내보내기...", self.export_shared)
-        self._add(files, "Center로 올리기", self.upload_package)
-        self._add(files, "공유 BPM 프로세스 Center로 올리기", self.upload_shared)
-        self._add(files, "Center 공유 자원...", self.open_center_resources)
+        self._add(files, "패키지로 내보내기...", lambda: export_actions.export_package(self))
+        self._add(files, "공유 BPM 프로세스로 내보내기...", lambda: export_actions.export_shared(self))
+        self._add(files, "Center로 올리기", lambda: export_actions.upload_package(self))
+        self._add(
+            files, "공유 BPM 프로세스 Center로 올리기", lambda: export_actions.upload_shared(self)
+        )
+        self._add(files, "Center 공유 자원...", lambda: center_actions.open_center_resources(self))
         files.addSeparator()
         self._add(files, "종료", self.close)
 
@@ -198,8 +190,8 @@ class MainWindow(QMainWindow):
         self._add(edit, "다시 실행", lambda: self.canvas.call("redo"), QKeySequence.StandardKey.Redo)
 
         run = bar.addMenu("실행")
-        self.run_action = self._add(run, "실행...", self.run_test, QKeySequence("F5"))
-        self.stop_action = self._add(run, "실행 중지", self.stop_test)
+        self.run_action = self._add(run, "실행...", lambda: run_actions.run_test(self), QKeySequence("F5"))
+        self.stop_action = self._add(run, "실행 중지", lambda: run_actions.stop_test(self))
         self.stop_action.setEnabled(False)
         self._add(run, "실행 전 검사", self.run_preflight, QKeySequence("F6"))
 
@@ -215,47 +207,12 @@ class MainWindow(QMainWindow):
         self._add(tools, "로그 지우기", self.log_view.clear, QKeySequence("Ctrl+L"))
 
     def refresh_catalog(self) -> None:
-        """Center 리소스 목록(C7)을 받아 **STU-14와 STU-03이 같은 것을 본다**.
-
-        **열 때마다 Center를 두드리지 않는다** — 정의를 열 때, 설정을 저장한 뒤, 리소스
-        탐색기의 「새로 고침」을 누를 때만 받는다. 받지 못하면 로그에 적고 편집기가 「등록된
-        서비스 앱이 없습니다」, 탐색기가 까닭 한 줄을 보인다 (**들고 있지 않는다**).
-        """
-        found = services.from_settings(self.settings)
-        self.properties.catalog = service_catalog.from_center(found.reader)
-        for why in self.properties.catalog.problems:
-            self.say(f"서비스 앱 목록: {why}")
-        self.refresh_resources(reader=found.reader)
+        """Center 리소스 목록을 받아 꽂는다 — 하는 일은 `center_actions`에 있다."""
+        center_actions.refresh_catalog(self)
 
     def refresh_resources(self, *, reader: services.CenterReader | None) -> None:
-        """STU-03 — 뿌리는 **확장 선언**에서, 목록은 C7에서. 서비스 앱은 이미 받아 둔 것을 쓴다.
-
-        `reader`가 `None`이면 **Center를 두드리지 않는다** — 뿌리만 그리고 까닭을 적는다.
-        부르는 쪽이 그때그때 줄지 말지 정하므로 이 함수가 몰래 네트워크를 타지 않는다.
-        """
-        self.resource_tree.show_tree(
-            resources.collect(
-                self.extensions.host.resource_views(),
-                catalog=self.properties.catalog,
-                reader=reader,
-            )
-        )
-
-    def add_to_canvas(self, create: object) -> None:
-        """STU-03 「캔버스에 추가」 — 캔버스 명령 하나가 만든다 (XML을 파이썬이 만지지 않는다)."""
-        if not isinstance(create, resources.Create):
-            return
-        if self.definition is None:
-            self.say("열린 정의가 없습니다 — 먼저 BPM 프로세스를 여세요.")
-            return
-
-        def done(found: dict[str, object]) -> None:
-            if not found.get("ok"):
-                self.say(f"캔버스에 추가하지 못했습니다: {found.get('error')}")
-                return
-            self.say(f"캔버스에 추가했습니다: {create.name} ({found.get('id')})")
-
-        self.canvas.create_task(create.bpmn, create.name, create.chk, then=done)
+        """받아 둔 것으로 STU-03을 그린다 (`reader`가 `None`이면 두드리지 않는다)."""
+        center_actions.refresh_resources(self, reader=reader)
 
     def show_explorer(self) -> None:
         """보기 → 「BPM 프로세스 탐색기」 (Ctrl+E). 독의 탭을 앞으로 내고 포커스를 준다."""
@@ -316,7 +273,7 @@ class MainWindow(QMainWindow):
         self.log_view.appendPlainText(message)
         self.statusBar().showMessage(message)
 
-    def _retitle(self) -> None:
+    def retitle(self) -> None:
         if self.process is None or self.definition is None:
             self.setWindowTitle(f"{TITLE} - {NO_PROCESS}")
             return
@@ -327,7 +284,7 @@ class MainWindow(QMainWindow):
 
     def _on_dirty(self, dirty: bool) -> None:
         self.dirty = dirty
-        self._retitle()
+        self.retitle()
 
     def _on_canvas_ready(self) -> None:
         self.say("캔버스를 띄웠습니다.")
@@ -347,7 +304,7 @@ class MainWindow(QMainWindow):
             return
         if node_id == self.properties.node_id:
             return
-        if not self._may_drop_edits():
+        if not self.may_drop_edits():
             # 머무르기 — 캔버스의 고른 것을 되돌린다.
             self.canvas.call("select", self.properties.node_id)
             return
@@ -370,16 +327,17 @@ class MainWindow(QMainWindow):
 
         self.canvas.call("setProperties", node_id, changes, then=done)
 
-    def _saved(self) -> bool:
-        """「내보내기」·「올리기」의 공통 관문 — 적용 안 한 편집을 확인하고 저장한다.
+    def saved_to_disk(self) -> bool:
+        """「내보내기」·「올리기」·「실행」의 공통 관문 — 적용 안 한 편집을 확인하고 저장한다.
 
-        **담는 것은 디스크의 파일이다** — 저장하지 않은 편집은 패키지에 들어가지 않는다.
+        **담는 것은 디스크의 파일이다** — 저장하지 않은 편집은 패키지에도 시험 실행에도
+        들어가지 않는다. 떼어 낸 모듈(`export_actions`·`run_actions`)이 이것을 쓴다.
         """
-        if not self._may_drop_edits():
+        if not self.may_drop_edits():
             return False
         return not self.dirty or self.save()
 
-    def _may_drop_edits(self) -> bool:
+    def may_drop_edits(self) -> bool:
         """적용 안 한 편집이 있으면 묻는다 (STU-04). 지금 적용할 수 없으면 「적용」을 뺀다."""
         if not self.properties.unapplied:
             return True
@@ -407,7 +365,7 @@ class MainWindow(QMainWindow):
 
     # ── 실행 전 검사 (B1~B15 + 사전 점검) ──
 
-    def _readiness(self) -> list[Violation]:
+    def readiness(self) -> list[Violation]:
         """사전 점검 — **이 PC에서 돌 수 있나** (`core.preflight`, ADR-0013).
 
         키 값은 Studio 비밀 저장소에서, 확장은 호스트에서 온다. 시험 실행과 **같은 것을 본다**
@@ -429,7 +387,7 @@ class MainWindow(QMainWindow):
         if self.process is None or self.definition is None:
             self.say("열린 정의가 없습니다.")
             return
-        if not self._may_drop_edits():
+        if not self.may_drop_edits():
             return
         try:
             xml = self.canvas.save_xml()
@@ -443,14 +401,28 @@ class MainWindow(QMainWindow):
         except BpmnReadError as e:
             self.say(f"검사하지 못했습니다: {e}")
             return
-        violations = inspect(found, self.process) + self._readiness()
+        violations = inspect(found, self.process) + self.readiness()
         self.preflight.show_result(found, violations)
         self.bottom_tabs.setCurrentWidget(self.preflight)
         self.say(summarize(violations))
 
     # ── 시험 실행 (STU-08·STU-09) ──
 
-    # ── 시험 케이스 · 패키지 (3e-4) ──
+    # ── 떼어 낸 모듈이 쓰는 길 (`export_actions`·`run_actions`) ──
+
+    def show_preflight(self, process: BpmnProcess, violations: list[Violation]) -> None:
+        """검사 결과를 「검사」 탭에 보이고 그 탭을 앞으로 낸다 (STU-09)."""
+        self.preflight.show_result(process, violations)
+        self.bottom_tabs.setCurrentWidget(self.preflight)
+
+    def show_variables(self, text: str) -> None:
+        """「변수」 탭의 글. **글은 `run_actions.format_variables`가 짓는다** (Qt를 모르는 자리)."""
+        self.variables_view.setPlainText(text)
+
+    def show_variables_tab(self) -> None:
+        self.bottom_tabs.setCurrentWidget(self.variables_view)
+
+    # ── 시험 케이스 · BPM 프로세스 정보 ──
 
     def opened_definition(self) -> Definition | None:
         """지금 열린 정의 (디스크에서 읽은 것). 없으면 `None`."""
@@ -470,7 +442,7 @@ class MainWindow(QMainWindow):
             return
         entry = self.process.entry_definition
         editable = entry is not None and self.definition == entry.path
-        if editable and not self._may_drop_edits():
+        if editable and not self.may_drop_edits():
             return
         from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 — 순환 피함
 
@@ -485,7 +457,7 @@ class MainWindow(QMainWindow):
         if not dialog.exec() or dialog.saved is None:
             return
         self.process = dialog.saved
-        self._retitle()
+        self.retitle()
         self.explorer.refresh(opened=self.definition.name if self.definition else "")
         self.say(f"BPM 프로세스 정보를 저장했습니다: {dialog.saved.display} (v{dialog.saved.version})")
         if dialog.process_patch is None or entry is None or entry.process is None:
@@ -504,368 +476,30 @@ class MainWindow(QMainWindow):
         CaseDialog(self, self.process, found).exec()
         self.say(f"시험 케이스: {self.process.case_file(found).name}")
 
-    def export_package(self) -> None:
-        """C1 패키지 zip. **저장하지 않은 편집은 들어가지 않는다** — 먼저 저장한다."""
-        if self.process is None:
-            self.say("열린 BPM 프로세스가 없습니다.")
-            return
-        if not self._saved():
-            return
-        target, _ = QFileDialog.getSaveFileName(
-            self,
-            "패키지로 내보내기",
-            str(self.settings.outputs_dir / default_name(self.process)),
-            PACKAGE_FILTER,
-        )
-        if not target:
-            return
-        try:
-            written = export(self.process, Path(target))
-        except PackageError as error:
-            QMessageBox.warning(self, TITLE, str(error))
-            self.say(f"패키지를 만들지 못했습니다: {error}")
-            return
-        self.say(f"패키지를 만들었습니다: {written}")
-
-    def export_shared(self) -> None:
-        """STU-12. 고른 정의를 공유 BPM 프로세스 패키지(`process_lib`)로 내보낸다.
-
-        **저장하지 않은 편집은 들어가지 않는다** — 담는 것은 디스크의 파일이다 (`export_package`와
-        같은 관문을 쓴다).
-        """
-        if self.process is None:
-            self.say("열린 BPM 프로세스가 없습니다.")
-            return
-        if not self._saved():
-            return
-        picked = ShareDefinitionsDialog.ask(self, self.process)
-        if not picked:
-            return
-        target, _ = QFileDialog.getSaveFileName(
-            self,
-            "공유 BPM 프로세스로 내보내기",
-            str(self.settings.outputs_dir / default_lib_name(self.process)),
-            PACKAGE_FILTER,
-        )
-        if not target:
-            return
-        try:
-            written = export_lib(self.process, picked, Path(target))
-        except PackageError as error:
-            QMessageBox.warning(self, TITLE, str(error))
-            self.say(f"공유 BPM 프로세스 패키지를 만들지 못했습니다: {error}")
-            return
-        self.say(f"공유 BPM 프로세스 패키지를 만들었습니다: {written}")
-
-    # ── Center로 올리기 · Center 공유 자원 (STU-11·STU-12, C5) ──
-
-    def uploader(self) -> upload.CenterUploader | None:
-        """올릴 자리. 설정이 없으면 **STU-10을 열어 주고 다시 본다** (STU-10 맨 아래).
-
-        사람이 「아니오」를 고르거나 저장하지 않으면 `None`이다 — 그때는 부르는 쪽이 조용히
-        그만둔다 (이미 창으로 말했다).
-        """
-        found = upload.from_settings(self.settings)
-        if found is not None:
-            return found
-        answer = QMessageBox.question(
-            self,
-            TITLE,
-            NO_CENTER_SETTINGS,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return None
-        self.open_settings()
-        return upload.from_settings(self.settings)
-
-    def upload_package(self) -> None:
-        """STU-12 「Center로 올리기」 — **내보내는 것과 같은 zip**을 올린다 (C5).
-
-        파일을 남기지 않는다 — 올리기는 내보내기가 아니다. 사람이 파일을 보고 싶으면
-        「패키지로 내보내기...」가 그 일을 한다 (같은 `export`를 쓰므로 내용이 같다).
-        """
-        process = self.process
-        if process is None:
-            self.say("열린 BPM 프로세스가 없습니다.")
-            return
-        if not self._saved():
-            return
-        self._upload("패키지", lambda where: export(process, where / default_name(process)))
-
-    def upload_shared(self) -> None:
-        """STU-12 「공유 BPM 프로세스 Center로 올리기」 — 고른 정의만 담아 올린다."""
-        process = self.process
-        if process is None:
-            self.say("열린 BPM 프로세스가 없습니다.")
-            return
-        if not self._saved():
-            return
-        picked = ShareDefinitionsDialog.ask(self, process)
-        if not picked:
-            return
-        self._upload(
-            "공유 BPM 프로세스 패키지",
-            lambda where: export_lib(process, picked, where / default_lib_name(process)),
-        )
-
-    def _upload(self, what: str, make: Callable[[Path], Path]) -> None:
-        """만들어서 올린다 — 담는 것은 **저장된 파일**이다 (부르는 쪽이 `_saved()`를 지났다).
-
-        순서가 중요하다 — **설정을 먼저 묻는다.** 패키지를 만들고 나서 「Center 설정이
-        없습니다」라고 하면 사람이 한 일이 버려진다.
-        """
-        import tempfile  # noqa: PLC0415 — 올릴 때만 든다
-
-        uploader = self.uploader()
-        if uploader is None:
-            return
-
-        with tempfile.TemporaryDirectory() as folder:
-            try:
-                made = make(Path(folder))
-            except PackageError as error:
-                QMessageBox.warning(self, TITLE, str(error))
-                self.say(f"{what}를 만들지 못했습니다: {error}")
-                return
-            self.say(f"{what}를 만들었습니다 — Center에 올립니다...")
-            try:
-                found = uploader.upload(made)
-            except upload.UploadFailed as error:
-                QMessageBox.warning(self, TITLE, str(error))
-                self.say(f"올리지 못했습니다: {error}")
-                return
-        QMessageBox.information(self, TITLE, found.message)
-        self.say(found.message)
-
-    def open_center_resources(self) -> None:
-        """STU-11. 파일 메뉴와 STU-03 문맥 메뉴가 **같은 창**을 연다.
-
-        창이 제 손으로 Center를 읽는다 — 설정이 없으면 창 안에서 그렇게 말하므로(U3) 여기서
-        미리 묻지 않는다 (읽기만 하는 자리다).
-        """
-        reader = services.from_settings(self.settings).reader
-        CenterResourcesDialog(reader, self).exec()
-
-    def run_test(self) -> None:
-        if self.process is None or self.definition is None:
-            self.say("열린 정의가 없습니다.")
-            return
-        if self.running is not None:
-            self.say("이미 실행 중입니다.")
-            return
-        # STU-08 실행 순서: 적용 안 한 편집 확인 → 저장 → 사전 점검 → 시작.
-        if not self._may_drop_edits():
-            return
-        if self.dirty and not self.save():
-            return
-        found = next((d for d in self.process.definitions if d.path == self.definition), None)
-        if found is None or found.process is None:
-            self.say("정의를 읽지 못했습니다.")
-            return
-        # 그림 검사(B1~B15)와 **사전 점검**(이 PC에서 돌 수 있나)이 같은 관문이다.
-        violations = inspect(found.process, self.process) + self._readiness()
-        blocking = [v for v in violations if v.blocks]
-        if blocking:
-            self.preflight.show_result(found.process, violations)
-            self.bottom_tabs.setCurrentWidget(self.preflight)
-            QMessageBox.warning(self, TITLE, f"실행 전 검사가 막습니다 ({len(blocking)}개).")
-            return
-
-        plans = RunDialog.ask(self, self.process, found, self.settings)
-        if not plans:
-            return
-        # 확장 태스크·데스크톱 AI 태스크가 이 PC Bot UI의 Worker를 쓴다 (STU-10 「Worker」).
-        tasks = self.extensions.tasks()
-        # 바깥 앱 한 벌 — **실행마다 한 번** 받는다 (케이스마다 Center를 두드리지 않게).
-        # 받지 못한 것은 로그에 적고 그 앱을 부르는 순간 분명히 실패한다 (C7·C13 「전송」).
-        found_apps = services.from_settings(self.settings)
-        directory = found_apps.directory()
-        for why in found_apps.problems:
-            self.log_view.appendPlainText(f"바깥 앱: {why}")
-        for plan in plans:
-            plan.extensions = tasks
-            plan.apps = directory
-        self.receiver.start()
-        self.queue = plans
-        self.outcomes = []
-        self.log_view.clear()
-        self.canvas.mark({})
-        self._next_run()
-
-    def _next_run(self) -> None:
-        if not self.queue:
-            self._all_done()
-            return
-        plan = self.queue.pop(0)
-        self.running = CaseRun(plan, self.receiver, self)
-        self.running.said.connect(self.say)
-        self.running.marked.connect(self.canvas.mark)
-        self.running.varied.connect(self._show_variables)
-        self.running.ended.connect(self._one_done)
-        self.run_action.setEnabled(False)
-        self.stop_action.setEnabled(True)
-        self.statusBar().showMessage(f"실행 중: {plan.case.name if plan.case else '(케이스 없음)'}")
-        self.running.start()
-
-    def _one_done(self, outcome: Outcome) -> None:
-        self.running = None
-        self.outcomes.append(outcome)
-        name = f"[{outcome.case}] " if outcome.case else ""
-        self.say(f"{name}{outcome.detail}")
-        if self.queue:
-            self._next_run()
-            return
-        self._all_done()
-
-    def _all_done(self) -> None:
-        self.run_action.setEnabled(True)
-        self.stop_action.setEnabled(False)
-        if len(self.outcomes) > 1:
-            self.say(summarize_runs(self.outcomes))
-        last = self.outcomes[-1] if self.outcomes else None
-        self.statusBar().showMessage(last.detail if last else "대기 중")
-        if last is not None and last.run is not None and last.verdict in ("통과", "비교 안 함"):
-            self.bottom_tabs.setCurrentWidget(self.variables_view)
-
-    def stop_test(self) -> None:
-        self.queue = []
-        if self.running is not None:
-            self.running.stop()
-
-    def _show_variables(self, variables: dict[str, object]) -> None:
-        import json  # noqa: PLC0415
-
-        lines = [f"변수 {len(variables)}개", ""]
-        for name in sorted(variables):
-            value = variables[name]
-            shown = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
-            lines.append(f"{name} ({type(value).__name__}) = {shown[:200]}")
-        self.variables_view.setPlainText("\n".join(lines))
-
-    # ── 열고 닫기 ──
+    # ── 열고 닫기 (하는 일은 `file_actions`에 있다) ──
 
     def open_definition(self, path_text: str) -> None:
-        if not self._may_discard():
-            return
-        path = Path(path_text)
-        process = next(
-            (
-                p
-                for group in self.workspace.groups()
-                for p in group.processes
-                if any(d.path == path for d in p.definitions)
-            ),
-            None,
-        )
-        if process is None or not path.is_file():
-            self.say(f"정의를 찾지 못했습니다: {path.name}")
-            return
-
-        def done(found: dict[str, object]) -> None:
-            if not found.get("ok"):
-                self.say(f"열지 못했습니다: {found.get('error')}")
-                return
-            warnings = found.get("warnings")
-            count = len(warnings) if isinstance(warnings, list) else 0
-            self.process, self.definition, self.dirty = process, path, False
-            self.properties.show_nothing()
-            self.preflight.setRowCount(0)
-            self._retitle()
-            self.explorer.refresh(opened=path.as_posix())
-            note = f" (경고 {count}개)" if count else ""
-            self.say(f"열었습니다: {process.display} / {path.name}{note}")
-            # STU-14가 고를 거리는 **정의를 열 때** 받는다 (노드를 고를 때마다 두드리지 않게).
-            self.refresh_catalog()
-            self.properties.service_keys = _inherited_keys(process)
-
-        self.canvas.load_xml(path.read_text(encoding="utf-8"), then=done)
+        file_actions.open_definition(self, path_text)
 
     def save(self) -> bool:
-        if self.process is None or self.definition is None:
-            self.say("열린 정의가 없습니다.")
-            return False
-        if not self._may_drop_edits():
-            return False
-        try:
-            xml = self.canvas.save_xml()
-        except CanvasError as e:
-            self.say(f"저장하지 못했습니다: {e}")
-            return False
-        self.workspace.save_definition(self.process, self.definition.name, xml)
-        self.dirty = False
-        self._retitle()
-        self.say(f"저장했습니다: {self.definition.name}")
-        return True
-
-    def _may_discard(self) -> bool:
-        """저장 안 한 변경이 있으면 묻는다 (STU-01 U11)."""
-        if not self.dirty:
-            return True
-        answer = QMessageBox.question(
-            self,
-            "저장하지 않은 변경사항",
-            "저장하지 않은 변경사항이 있습니다. 저장할까요?",
-            QMessageBox.StandardButton.Save
-            | QMessageBox.StandardButton.Discard
-            | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Save,
-        )
-        if answer == QMessageBox.StandardButton.Cancel:
-            return False
-        if answer == QMessageBox.StandardButton.Save:
-            return self.save()
-        return True
-
-    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 — Qt 이름 그대로
-        if not self._may_discard():
-            event.ignore()
-            return
-        self.stop_test()
-        self.receiver.stop()
-        if self.definition is not None:
-            from dataclasses import replace  # noqa: PLC0415
-
-            replace(self.settings, last_opened=self.definition.as_posix()).save()
-        event.accept()
-
-    # ── 만들기·가져오기 ──
+        return file_actions.save(self)
 
     def new_process(self) -> None:
-        """STU-05. 만든 뒤 빈 정의를 캔버스에 띄우고 바로 저장한다."""
-        if not self._may_discard():
-            return
-        made = NewProcessDialog.ask(self, self.workspace)
-        if made is None:
-            return
-        try:
-            self.canvas.create_empty(f"Proc_{made.id.replace('-', '_')}", made.display)
-            xml = self.canvas.save_xml()
-        except CanvasError as e:
-            self.say(f"빈 정의를 만들지 못했습니다: {e}")
-            return
-        path = self.workspace.save_definition(made, made.entry, xml)
-        self.explorer.refresh(opened=path.as_posix())
-        self.open_definition(path.as_posix())
+        file_actions.new_process(self)
 
     def import_example(self) -> None:
-        """예제 BPM 프로세스 가져오기 (STU-01 파일 메뉴). 예제 폴더는 **읽기만** 한다."""
-        if not self._may_discard():
+        file_actions.import_example(self)
+
+    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 — Qt 이름 그대로
+        """닫기 보호 (U11) → **돌던 것 멈추기** → 마지막 정의 기억하기."""
+        if not file_actions.may_discard(self):
+            event.ignore()
             return
-        picked = pick_example(self)
-        if picked is None:
-            return
-        source, example_id = picked
-        try:
-            made = self.workspace.import_example(source, example_id)
-        except (WorkspaceError, OSError) as e:
-            QMessageBox.warning(self, TITLE, f"가져오지 못했습니다: {e}")
-            return
-        entry = made.entry_definition
-        self.explorer.refresh()
-        self.say(f"가져왔습니다: {made.display}")
-        if entry is not None:
-            self.open_definition(entry.path.as_posix())
+        # 창이 없어진 뒤 타이머가 깨어나면 안 된다.
+        run_actions.stop_test(self)
+        self.receiver.stop()
+        file_actions.remember_last_opened(self)
+        event.accept()
 
 
 __all__ = ["DEFAULT_SIZE", "NO_CENTER_SETTINGS", "NO_PROCESS", "TITLE", "MainWindow"]

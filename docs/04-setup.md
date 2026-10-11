@@ -152,7 +152,22 @@ sudo apt-get install -y --no-install-recommends \
 >
 > `docker compose`로 띄울 때는 `.env`의 `CHK_CENTER__HOST_PORT`·`CHK_CONSOLE__HOST_PORT`가 **호스트 쪽 포트만** 옮긴다 (컨테이너 안의 포트는 위 표 그대로다).
 
-## 7. 확인 체크리스트 (M1 완료 시 채움)
+## 7. 시험 돌리기와 **건너뛰는 것**
+
+`uv sync --all-packages` → `uv run pytest`. `addopts`에 `-q`가 있으니 **`-q`를 또 주면 셈이 안 보인다**. 왜 건너뛰는지는 `uv run pytest -rs`가 말해 준다.
+
+건너뛰는 것은 두 갈래다.
+
+| 갈래 | 무엇 | 어디서 도나 |
+| --- | --- | --- |
+| **OS 전용** | 네이티브 메뉴 글꼴, 데스크톱 UIA 백엔드와 그것을 쓰는 예제(BX-17·BX-04·FX-05·BX-36), Bot UI·Studio 확장 연결 한 바퀴 | Windows에서만 |
+| **CI에 없는 조건** | Playwright 브라우저(바이너리를 내려받지 않는다), `CHK_TEST_AUTOSTART=1` 작업 스케줄러, **트레이가 있는 데스크톱 세션** | 개발 PC에서 조건을 갖추면 |
+
+트레이가 필요한 BUI-01 「도구」·BUI-11 「확장...」은 그래서 **양쪽 모두** 건너뛴다. 거꾸로 트레이가 **없어야** 도는 U15 알림 자리 시험은 양쪽에서 돈다.
+
+그래서 **CI의 Windows가 Linux보다 열넷을 더 돈다** (건너뛰는 것이 44개 ↔ 58개). 양쪽의 「통과 + 건너뜀」 합은 모은 시험 수로 같다 — 셈을 적을 때 그것으로 맞춰 본다.
+
+## 8. 확인 체크리스트 (M1 완료 시 채움)
 
 - [x] Windows에서 clone → `uv sync` → 테스트 통과 (CI `windows-latest` = Windows Server. **Windows 11 데스크톱은 아직 확인 안 됨**)
 - [x] Linux에서 clone → `uv sync` → 테스트 통과 (CI `ubuntu-latest` x86_64 + 개발 PC aarch64)

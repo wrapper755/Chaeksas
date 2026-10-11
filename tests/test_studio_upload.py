@@ -32,7 +32,7 @@ from chaeksas.center.settings import Settings as CenterSettings  # noqa: E402
 from chaeksas.center.storage import Store  # noqa: E402
 from chaeksas.contracts.center_api import PackageInfo  # noqa: E402
 from chaeksas.contracts.hashing import content_hash_zip  # noqa: E402
-from chaeksas.studio import center_resources, services, upload  # noqa: E402
+from chaeksas.studio import center_resources, export_actions, services, upload  # noqa: E402
 
 ADMIN = {"Authorization": "Bearer t-admin"}
 AT = "2026-10-11T09:00:00+09:00"
@@ -376,17 +376,15 @@ def test_the_file_menu_no_longer_says_later(window: Any) -> None:
 
 def test_uploading_without_an_open_process_says_so(window: Any) -> None:
     """열린 BPM 프로세스가 없으면 **Center를 두드리지 않고** 말한다."""
-    window.upload_package()
+    export_actions.upload_package(window)
     assert "열린 BPM 프로세스가 없습니다" in window.log_view.toPlainText()
-    window.upload_shared()
+    export_actions.upload_shared(window)
     assert window.log_view.toPlainText().count("열린 BPM 프로세스가 없습니다") == 2
 
 
 def test_no_center_settings_means_no_uploader(window: Any, monkeypatch: Any) -> None:
     """설정이 없으면 **묻고**, 사람이 「아니오」면 `None`이다 (STU-10 맨 아래)."""
     from PySide6.QtWidgets import QMessageBox
-
-    from chaeksas.studio.main_window import NO_CENTER_SETTINGS
 
     asked: list[str] = []
 
@@ -395,8 +393,8 @@ def test_no_center_settings_means_no_uploader(window: Any, monkeypatch: Any) -> 
         return QMessageBox.StandardButton.No
 
     monkeypatch.setattr(QMessageBox, "question", staticmethod(no))
-    assert window.uploader() is None
-    assert asked == [NO_CENTER_SETTINGS]
+    assert export_actions.uploader(window) is None
+    assert asked == [export_actions.NO_CENTER_SETTINGS]
 
 
 def test_the_center_resources_dialog_opens_from_the_explorer(window: Any, monkeypatch: Any) -> None:

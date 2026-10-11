@@ -27,6 +27,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest  # noqa: E402
 from chaeksas.studio.receiver import Receiver  # noqa: E402
+from chaeksas.studio.run_actions import MAX_VALUE, format_variables  # noqa: E402
 from chaeksas.studio.run_dialog import describe, unlearned  # noqa: E402
 from chaeksas.studio.runner import (  # noqa: E402
     ERROR,
@@ -337,3 +338,23 @@ def test_the_dialog_describes_the_case_in_one_line() -> None:
     assert describe(None) == "기대 결과를 비교하지 않습니다"
     assert describe(Case(name="x", inputs={"a": 1}, expected={})) == "입력 1개 · 기대 결과 없음 — 비교하지 않습니다"
     assert describe(Case(name="x", inputs={}, expected={"b": 1})) == "입력 0개 · 기대 결과 1개"
+
+
+# ─────────────────────────── 「변수」 탭의 글 (Qt 없음) ───────────────────────────
+
+
+def test_the_variables_tab_text_is_sorted_and_typed() -> None:
+    """STU-09 「변수」 탭 — **Qt를 모르는 자리**라 글만 본다 (`run_actions.format_variables`)."""
+    found = format_variables({"나중": 2, "먼저": "값", "목록": [1, 2]})
+    lines = found.splitlines()
+    assert lines[0] == "변수 3개"
+    assert [one.split(" ")[0] for one in lines[2:]] == ["나중", "먼저", "목록"], "이름순이다"
+    assert lines[2].startswith("나중 (int) = 2"), lines
+    assert lines[3].startswith("먼저 (str) = 값"), "글자는 그대로 (JSON 따옴표를 더하지 않는다)"
+    assert lines[4].startswith("목록 (list) = [1, 2]"), "글자 아닌 것은 JSON으로"
+
+
+def test_a_long_value_is_cut_so_one_variable_does_not_fill_the_tab() -> None:
+    found = format_variables({"긴것": "가" * 500})
+    assert len(found.splitlines()[2]) < MAX_VALUE + 40
+    assert "가" * MAX_VALUE in found
