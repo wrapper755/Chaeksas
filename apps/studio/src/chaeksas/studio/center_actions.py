@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from chaeksas.studio import resources, service_catalog, services
@@ -23,6 +24,8 @@ from chaeksas.studio.center_resources import CenterResourcesDialog
 
 if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (창이 이 모듈을 부른다)
     from chaeksas.studio.main_window import MainWindow
+
+log = logging.getLogger(__name__)
 
 NO_DEFINITION = "열린 정의가 없습니다 — 먼저 BPM 프로세스를 여세요."
 
@@ -54,8 +57,14 @@ def refresh_resources(window: MainWindow, *, reader: services.CenterReader | Non
     )
 
 
-def add_to_canvas(window: MainWindow, create: object) -> None:
-    """STU-03 「캔버스에 추가」 — 캔버스 명령 하나가 만든다 (XML을 파이썬이 만지지 않는다)."""
+def add_to_canvas(
+    window: MainWindow, create: object, *, at: tuple[int, int] | None = None
+) -> None:
+    """STU-03 「캔버스에 추가」 — 캔버스 명령 하나가 만든다 (XML을 파이썬이 만지지 않는다).
+
+    `at`은 **끌어다 놓은 자리**다 (ADR-0044) — 문맥 메뉴·더블클릭은 주지 않아 캔버스가 빈
+    곳을 찾는다. **두 길이 같은 명령을 쓰므로** 실행 취소가 양쪽에서 한 걸음이다.
+    """
     if not isinstance(create, resources.Create):
         return
     if window.definition is None:
@@ -68,7 +77,20 @@ def add_to_canvas(window: MainWindow, create: object) -> None:
             return
         window.say(f"캔버스에 추가했습니다: {create.name} ({found.get('id')})")
 
-    window.canvas.create_task(create.bpmn, create.name, create.chk, then=done)
+    window.canvas.create_task(create.bpmn, create.name, create.chk, at=at, then=done)
+
+
+def drop_on_canvas(window: MainWindow, payload: str, x: int, y: int) -> None:
+    """STU-03 → 캔버스 끌어다 놓기 (ADR-0044). **뜻을 푸는 것은 여기다** — 캔버스는 모른다.
+
+    모양이 아니면 **조용히 버린다** — 우리 MIME 형식만 캔버스가 받으므로 여기 오는 것은
+    우리가 실은 것이고, 그래도 깨졌으면 사람에게 할 말이 없다 (로그만 남긴다).
+    """
+    create = resources.from_payload(payload)
+    if create is None:
+        log.warning("캔버스에 떨어진 것을 읽지 못했다: %r", payload[:200])
+        return
+    add_to_canvas(window, create, at=(x, y))
 
 
 def open_center_resources(window: MainWindow) -> None:
@@ -84,6 +106,7 @@ def open_center_resources(window: MainWindow) -> None:
 __all__ = [
     "NO_DEFINITION",
     "add_to_canvas",
+    "drop_on_canvas",
     "open_center_resources",
     "refresh_catalog",
     "refresh_resources",

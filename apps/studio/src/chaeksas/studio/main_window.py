@@ -86,6 +86,12 @@ class MainWindow(QMainWindow):
         self.canvas = Canvas(self)
         self.canvas.dirtied.connect(self._on_dirty)
         self.canvas.opened.connect(self._on_canvas_ready)
+        # STU-03 끌어다 놓기 (ADR-0044) — **캔버스는 무엇이 떨어졌는지 모른다.** 받을 형식을
+        # 알려 주고, 뜻은 이 창이 푼다 (「캔버스에 추가」와 같은 길로 보낸다).
+        self.canvas.accept_drops_of(resources.MIME_TYPE)
+        self.canvas.dropped.connect(
+            lambda payload, x, y: center_actions.drop_on_canvas(self, payload, x, y)
+        )
 
         self.explorer = Explorer(self.workspace, self)
         self.explorer.opening.connect(self.open_definition)

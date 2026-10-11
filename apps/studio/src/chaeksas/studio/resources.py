@@ -16,7 +16,9 @@
 - **쓸 수 없는 뿌리·항목도 사라지지 않는다** — 줄을 끄고 까닭을 적는다 (U3).
 
 「캔버스에 추가」가 만드는 것은 `Create` 하나로 모아 둔다 — 캔버스 명령 하나(`createTask`)가
-노드를 만들고 **실행 취소도 한 걸음**이다. 끌어다 놓기는 아직이다 (STU-03 `> 상태:`).
+노드를 만들고 **실행 취소도 한 걸음**이다. **끌어다 놓기도 같은 `Create`를 싣는다**
+([ADR-0044](../../../../../docs/decisions/0044-canvas-drag-and-drop.md)) — 다른 것은 **자리뿐**
+이고, 뜻을 푸는 것은 `as_payload()`·`from_payload()` 둘(Qt 없이 시험한다)이다.
 """
 
 from __future__ import annotations
@@ -87,6 +89,10 @@ EMPTY_TREE = "뿌리를 고르면 그 아래를 봅니다."
 #: 만들 노드의 BPMN 종류 — 확장 태스크·서비스 앱 태스크는 둘 다 `serviceTask`다 (C14).
 BPMN_SERVICE_TASK = "bpmn:ServiceTask"
 
+#: 끌어다 놓기가 쓰는 MIME 형식 (ADR-0044). **우리 것만** 캔버스가 받는다 — 페이지 안의
+#: bpmn-js 팔레트 드래그와 바깥에서 끌어 온 파일은 그대로 Chromium으로 간다.
+MIME_TYPE = "application/x-chaeksas-resource"
+
 OPERATION_KIND = "작업"
 TOOL_KIND = "도구"
 
@@ -110,6 +116,36 @@ class Create:
     bpmn: str
     name: str
     chk: dict[str, str] = field(default_factory=dict)
+
+
+def as_payload(create: Create) -> str:
+    """끌 때 싣는 글 (ADR-0044). **캔버스는 이것을 해석하지 않는다** — 글과 자리만 올려 준다."""
+    return json.dumps(
+        {"bpmn": create.bpmn, "name": create.name, "chk": create.chk}, ensure_ascii=False
+    )
+
+
+def from_payload(text: str) -> Create | None:
+    """놓은 것을 되돌린다. **모양이 아니면 `None`**이다 (남이 끌어 온 것일 수 있다).
+
+    `bpmn`이 비면 만들 수 없다 — 그것만 보고 나머지는 모양만 맞으면 받는다.
+    """
+    try:
+        found = json.loads(text)
+    except ValueError:
+        return None
+    if not isinstance(found, dict):
+        return None
+    bpmn = found.get("bpmn")
+    chk = found.get("chk")
+    if not isinstance(bpmn, str) or not bpmn:
+        return None
+    if not isinstance(chk, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in chk.items()
+    ):
+        chk = {}
+    name = found.get("name")
+    return Create(bpmn=bpmn, name=name if isinstance(name, str) else "", chk=dict(chk))
 
 
 @dataclass(frozen=True)
@@ -457,10 +493,40 @@ class DetailDialog(QDialog):
         layout.addLayout(row)
 
 
+class _DragModel(QStandardItemModel):
+    """끌 수 있는 줄만 끌리게 한다 (ADR-0044).
+
+    **만들 것이 없는 줄은 `mimeData()`가 `None`**이라 드래그가 시작되지 않는다 — 끌고 가서
+    놓았는데 아무 일도 없는 것보다 아예 끌리지 않는 쪽이 낫다 (뿌리 줄·둘째 단계가 없는
+    항목·설치되지 않은 공유 BPM 프로세스가 그렇다).
+    """
+
+    def __init__(self, owner: ResourceExplorer, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._owner = owner
+
+    def mimeTypes(self) -> list[str]:  # noqa: N802 — Qt 이름 그대로
+        return [MIME_TYPE]
+
+    def mimeData(self, indexes: Any) -> Any:  # noqa: N802 — Qt 이름 그대로
+        from PySide6.QtCore import QMimeData  # noqa: PLC0415
+
+        found = [self._owner.item_at(one) for one in indexes if one.column() == 0]
+        create = next((one.create for one in found if one is not None and one.create), None)
+        if create is None:
+            return None
+        data = QMimeData()
+        data.setData(MIME_TYPE, as_payload(create).encode("utf-8"))
+        return data
+
+
 class ResourceExplorer(QWidget):
     """STU-03. 그리기만 하고 **Center를 직접 부르지 않는다** — 받는 일은 메인 창이 한다.
 
     그래서 「새로 고침」은 `reloading`으로 올라가고, 창은 돌아온 `Tree`를 그린다.
+
+    **끌어다 놓기는 「캔버스에 추가」와 같은 `Create`를 싣는다** (ADR-0044) — 받는 쪽은
+    캔버스이고, 뜻을 푸는 것은 메인 창이다 (캔버스는 리소스를 모른다).
     """
 
     #: 「새로 고침」 — 메인 창이 Center에서 다시 받아 `show_tree()`로 돌려준다.
@@ -483,11 +549,15 @@ class ResourceExplorer(QWidget):
         top.addStretch(1)
 
         self.view = QTreeView(self)
-        self._model = QStandardItemModel(self)
+        self._model = _DragModel(self, self)
         self._model.setHorizontalHeaderLabels(list(HEADERS))
         self.view.setModel(self._model)
         self.view.setAlternatingRowColors(True)
         self.view.setSelectionBehavior(QTreeView.SelectionBehavior.SelectRows)
+        # 끌어다 놓기 (ADR-0044) — 받는 쪽은 캔버스다. 트리는 **놓는 자리가 아니다**.
+        self.view.setDragEnabled(True)
+        self.view.setAcceptDrops(False)
+        self.view.setDragDropMode(QTreeView.DragDropMode.DragOnly)
         self.view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.view.customContextMenuRequested.connect(self._menu)
         self.view.doubleClicked.connect(lambda _: self._double_clicked())
@@ -547,11 +617,20 @@ class ResourceExplorer(QWidget):
         return next((one for one in self.tree.roots if one.id == found[1]), None)
 
     def selected_item(self) -> Item | None:
-        found = self.selection()
-        if found is None or found[0] != ROW_ITEM:
+        indexes = self.view.selectedIndexes()
+        return self.item_at(indexes[0]) if indexes else None
+
+    def item_at(self, index: Any) -> Item | None:
+        """그 줄의 `Item` — **고른 줄이든 끌고 있는 줄이든** 같은 길로 찾는다.
+
+        뿌리 줄이면 `None`이다 (뿌리로는 만들지 않는다).
+        """
+        found = self._model.itemFromIndex(index.siblingAtColumn(0))
+        if found is None or str(found.data(_KIND) or "") != ROW_ITEM:
             return None
-        root = self.selected_root()
-        return _find_item(root.items if root else (), found[2])
+        root_id, _, item_id = str(found.data(_PAYLOAD) or "").partition("\n")
+        root = next((one for one in self.tree.roots if one.id == root_id), None)
+        return _find_item(root.items if root else (), item_id)
 
     # ── 하는 일 ──
 

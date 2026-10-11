@@ -27,6 +27,9 @@ from chaeksas.studio.canvas import WEB_DIR, Canvas, CanvasError  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
 
+#: 드롭 뒤 캔버스가 답할 때까지 기다릴 시간 (ms) — 답하지 않아도 멈추지 않게 상한을 둔다.
+DROP_TIMEOUT_MS = 15_000
+
 #: 왕복시켜 볼 예제 — `chk:*` 13종이 골고루 들어가게 고른다.
 SAMPLES = (
     "fx02_business_rule",  # chk:rule
@@ -243,6 +246,97 @@ def test_a_resource_becomes_a_node_in_one_undo_step(canvas: Any) -> None:
     canvas.call_sync("undo")
     assert canvas.call_sync("stats")["elements"] == before, "한 번 되돌리면 흔적이 없다"
     assert node_id not in [n.id for n in read_process(canvas.save_xml()).all_nodes()]
+
+
+def test_a_real_drop_makes_a_node_where_it_landed(canvas: Any) -> None:
+    """STU-03 끌어다 놓기 ([ADR-0044](../docs/decisions/0044-canvas-drag-and-drop.md)).
+
+    **진짜 드롭 이벤트를 보낸다.** 「필터를 달았다」까지만 보면 PySide6가 내부 위젯을 다르게
+    만들었을 때 드롭이 **조용히** 안 되는 것을 놓친다 — 그래서 뷰가 아니라 그 자식에게 보내고,
+    노드가 **놓은 자리에** 생기는 것까지 본다.
+    """
+    from PySide6.QtCore import QEventLoop, QMimeData, QPoint, Qt, QTimer
+    from PySide6.QtGui import QDragEnterEvent, QDropEvent
+    from PySide6.QtWidgets import QApplication
+
+    from chaeksas.studio import resources
+
+    canvas.create_empty("Proc_drop", "드롭 시험")
+    canvas.resize(900, 700)
+    canvas.accept_drops_of(resources.MIME_TYPE)
+    before = canvas.call_sync("stats")["elements"]
+
+    create = resources.Create(
+        bpmn="bpmn:ServiceTask",
+        name="끌어 온 화면",
+        chk={"task": json.dumps(
+            {"type": "ui_task", "extension": "ui-automation", "data": {"page_id": "erp.order.form"}},
+            ensure_ascii=False,
+        )},
+    )
+    data = QMimeData()
+    data.setData(resources.MIME_TYPE, resources.as_payload(create).encode("utf-8"))
+
+    got: list[tuple[str, int, int]] = []
+    canvas.dropped.connect(lambda payload, x, y: got.append((payload, x, y)))
+
+    target = canvas.focusProxy()
+    assert target is not None, "내부 렌더 위젯이 없다 — 드롭은 그쪽으로 간다 (ADR-0044)"
+    at = QPoint(420, 310)
+    for kind in (QDragEnterEvent, QDropEvent):
+        event = kind(at, Qt.DropAction.CopyAction, data, Qt.MouseButton.LeftButton,
+                     Qt.KeyboardModifier.NoModifier)
+        QApplication.sendEvent(target, event)
+        assert event.isAccepted(), f"{kind.__name__}을 받지 않았다"
+
+    assert len(got) == 1, "드롭이 한 번 올라와야 한다"
+    assert resources.from_payload(got[0][0]) == create, "실은 것이 그대로 오지 않았다"
+    assert got[0][1:] == (at.x(), at.y())
+
+    # 올라온 자리로 **노드를 만든다** — 「캔버스에 추가」와 같은 명령이다 (실행 취소도 한 걸음).
+    loop = QEventLoop()
+    box: dict[str, Any] = {}
+
+    def done(found: dict[str, Any]) -> None:
+        box.update(found)
+        loop.quit()
+
+    canvas.create_task(create.bpmn, create.name, create.chk, at=got[0][1:], then=done)
+    QTimer.singleShot(DROP_TIMEOUT_MS, loop.quit)
+    loop.exec()
+    assert box.get("ok"), box
+
+    # 놓은 자리가 노드의 가운데다 (처음 축척은 1, 뷰박스는 왼쪽 위에서 시작한다).
+    assert abs(float(box["x"]) - at.x()) <= 2, box
+    assert abs(float(box["y"]) - at.y()) <= 2, box
+
+    found = read_process(canvas.save_xml())
+    node = next(n for n in found.all_nodes() if n.id == box["id"])
+    task = node.prop("task")
+    assert task is not None and task.data == {"page_id": "erp.order.form"}
+
+    canvas.call_sync("undo")
+    assert canvas.call_sync("stats")["elements"] == before, "한 번 되돌리면 흔적이 없다"
+
+
+def test_a_drop_of_something_else_is_left_to_the_page(canvas: Any) -> None:
+    """우리 형식이 아니면 **가던 길로 보낸다** — 페이지 안 bpmn-js 팔레트 드래그가 산다."""
+    from PySide6.QtCore import QMimeData, QPoint, Qt
+    from PySide6.QtGui import QDropEvent
+    from PySide6.QtWidgets import QApplication
+
+    from chaeksas.studio import resources
+
+    canvas.accept_drops_of(resources.MIME_TYPE)
+    got: list[Any] = []
+    canvas.dropped.connect(lambda *a: got.append(a))
+
+    data = QMimeData()
+    data.setText("그냥 글")
+    event = QDropEvent(QPoint(10, 10), Qt.DropAction.CopyAction, data,
+                       Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+    QApplication.sendEvent(canvas.focusProxy(), event)
+    assert got == [], "우리 것이 아닌 드롭을 가로챘다"
 
 
 def test_a_service_app_operation_becomes_a_service_call(canvas: Any) -> None:

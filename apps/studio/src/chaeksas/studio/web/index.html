@@ -65,6 +65,20 @@
     return { x, y };
   };
 
+  /**
+   * 끌어다 놓은 **화면 자리**(캔버스 위젯의 CSS 픽셀)를 다이어그램 좌표로 바꾼다 (ADR-0044).
+   * 축척·스크롤을 아는 쪽이 하나여야 하므로 **여기서** 바꾼다 (Qt는 그것을 모른다).
+   * 놓은 점이 노드의 **가운데**가 된다 — 사람이 그렇게 기대한다.
+   */
+  const spotAt = (canvas, at) => {
+    const box = canvas.viewbox();
+    const rect = document.querySelector("#canvas").getBoundingClientRect();
+    return {
+      x: Math.round(box.x + (Number(at.x) - rect.left) / box.scale),
+      y: Math.round(box.y + (Number(at.y) - rect.top) / box.scale),
+    };
+  };
+
   async function boot() {
     const modeler = new BpmnJS({
       container: "#canvas",
@@ -215,10 +229,13 @@
         }
         const canvas = modeler.get("canvas");
         const shape = modeler.get("elementFactory").createShape({ type, businessObject: bo });
-        const at = freeSpot(canvas, modeler.get("elementRegistry"), shape);
+        const at = (spec && spec.at)
+          ? spotAt(canvas, spec.at)
+          : freeSpot(canvas, modeler.get("elementRegistry"), shape);
         const made = modeler.get("modeling").createShape(shape, at, canvas.getRootElement());
         modeler.get("selection").select(made);
-        return { id: made.id };
+        // 가운데를 함께 돌려준다 — 끌어다 놓은 자리에 **정말** 생겼는지 시험이 본다.
+        return { id: made.id, x: made.x + made.width / 2, y: made.y + made.height / 2 };
       },
       async select(id) {
         const found = modeler.get("elementRegistry").get(id);

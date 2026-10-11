@@ -565,6 +565,57 @@ def test_the_selected_row_is_found_by_root_and_item() -> None:
     assert window.selected_root().id == resources.ROOT_SERVICE  # type: ignore[union-attr]
 
 
+#  ─────────────────────── 끌어다 놓기 (ADR-0044) ───────────────────────
+
+
+def test_the_payload_survives_a_round_trip() -> None:
+    """실은 것과 푼 것이 같다 — 끌 때와 놓을 때가 **같은 `Create`**여야 한다."""
+    create = root_of(tree_with(), "forms").items[0].create
+    assert create is not None
+    again = resources.from_payload(resources.as_payload(create))
+    assert again == create
+
+
+def test_rubbish_dropped_on_the_canvas_is_not_a_create() -> None:
+    """남이 끌어 온 것일 수 있다 — **모양이 아니면 `None`**이고 터지지 않는다."""
+    for bad in ("", "{", "[]", '"글"', "null", "{}", '{"name": "이름만"}', '{"bpmn": ""}'):
+        assert resources.from_payload(bad) is None, bad
+
+    # `chk`가 우리 모양이 아니면 **버리고 나머지로 만든다** (JSON 글의 사전이어야 한다).
+    found = resources.from_payload('{"bpmn": "bpmn:ServiceTask", "chk": {"task": 7}}')
+    assert found is not None and found.chk == {}
+    assert resources.from_payload('{"bpmn": "bpmn:Task"}') == resources.Create(
+        bpmn="bpmn:Task", name="", chk={}
+    )
+
+
+def test_only_a_row_that_makes_something_can_be_dragged() -> None:
+    """끌고 가서 놓았는데 아무 일도 없는 것보다 **아예 끌리지 않는** 쪽이 낫다."""
+    window = explorer()
+    model = window.view.model()
+    assert model.mimeTypes() == [resources.MIME_TYPE]
+
+    # 만들 수 있는 줄 — 「서식」 → 「주문 등록」.
+    form = model.index(0, 0, model.index(1, 0))
+    data = model.mimeData([form])
+    assert data is not None and data.hasFormat(resources.MIME_TYPE)
+    carried = resources.from_payload(bytes(data.data(resources.MIME_TYPE).data()).decode("utf-8"))
+    assert carried is not None
+    assert body_of(carried, "task")["data"] == {"form_id": "erp.order.form"}
+
+    # 만들 것이 없는 줄들 — 끌리지 않는다 (STU-03 표의 「—」와 §4-5의 꺼진 줄들).
+    nothing = {
+        "뿌리": model.index(1, 0),
+        "앱 (자식이 있다)": model.index(0, 0, model.index(2, 0)),
+        "툴팩": model.index(0, 0, model.index(3, 0)),
+        "도구 (허용 목록에서 고른다)": model.index(0, 0, model.index(0, 0, model.index(3, 0))),
+        "공유 BPM 프로세스 (설치가 없다)": model.index(0, 0, model.index(0, 0)),
+    }
+    for what, index in nothing.items():
+        assert model.data(index), f"{what} 줄을 찾지 못했다"
+        assert model.mimeData([index]) is None, f"{what}이 끌렸다"
+
+
 def test_the_detail_window_only_reads() -> None:
     window = explorer()
     pick(window, 2, 0, 0)
@@ -645,3 +696,33 @@ def test_adding_without_an_open_definition_says_so(window: Any) -> None:
         window, resources.Create(bpmn=resources.BPMN_SERVICE_TASK, name="X", chk={})
     )
     assert "열린 정의가 없습니다" in window.log_view.toPlainText()
+
+
+def test_dropping_without_an_open_definition_says_the_same_thing(window: Any) -> None:
+    """끌어다 놓기도 **같은 관문**이다 (ADR-0044) — 한쪽만 통과하면 사람이 혼란스럽다."""
+    create = resources.Create(bpmn=resources.BPMN_SERVICE_TASK, name="X", chk={})
+    center_actions.drop_on_canvas(window, resources.as_payload(create), 10, 20)
+    assert "열린 정의가 없습니다" in window.log_view.toPlainText()
+
+
+def test_a_broken_payload_is_dropped_quietly(window: Any) -> None:
+    """사람에게 할 말이 없다 — 우리 형식만 받으므로 여기 오면 우리 쪽 흠이다 (로그만)."""
+    center_actions.drop_on_canvas(window, "{망가진", 10, 20)
+    assert window.log_view.toPlainText() == ""
+
+
+def test_the_canvas_is_told_which_format_to_accept(window: Any) -> None:
+    """**캔버스는 무엇이 떨어졌는지 모른다** (ADR-0044) — 형식은 창이 알려 준다."""
+    assert window.canvas.acceptDrops()
+    assert window.canvas._drop_format == resources.MIME_TYPE  # noqa: SLF001 — 알려 준 것을 본다
+
+    from pathlib import Path  # noqa: PLC0415
+
+    window.definition = Path("열린.bpmn")  # 관문을 지난다 (위 시험이 그 관문을 본다)
+    got: list[Any] = []
+    window.canvas.create_task = lambda *a, **kw: got.append((a, kw))
+    create = resources.Create(bpmn=resources.BPMN_SERVICE_TASK, name="끌어 온 것", chk={})
+    window.canvas.dropped.emit(resources.as_payload(create), 321, 234)
+    assert len(got) == 1, "드롭이 「캔버스에 추가」로 이어지지 않았다"
+    assert got[0][0][:2] == (create.bpmn, create.name)
+    assert got[0][1]["at"] == (321, 234), "놓은 자리가 캔버스로 가지 않았다"
