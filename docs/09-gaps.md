@@ -52,17 +52,9 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 ## 4. 화면 쪽 기능 공백
 
-### 4-4. STU-03 리소스 탐색기 — 기여 뿌리의 둘째 단계만 남았다
+### 4-5. 「설치」 (올리기·STU-11 읽기·STU-06·STU-03은 닫았다)
 
-**뿌리 넷·둘째 단계·문맥 메뉴·「캔버스에 추가」·끌어다 놓기는 닫았다** (`apps/studio/resources.py` + 캔버스 명령 `createTask`, 드래그는 [ADR-0044](decisions/0044-canvas-drag-and-drop.md)). C13 `studio.resource_views`를 읽는 쪽이 생겼다.
-
-- **없는 것:** 기여 뿌리의 **둘째 단계**(「UI 화면 → 요소」)와 「요소 보기」·「요소를 끌어다 스텝 추가」. 항목의 `data`를 플랫폼이 해석하지 않기 때문이다 (C13 §5) — 하려면 C13에 **자식 선언**(`children_key`·`child_label_key` 같은 것)을 더해 「선언대로 걷게」 해야 한다. 요소를 고르는 일은 STU-13이 이미 한다.
-- **먼저 정할 것:** C13에 자식 선언을 더할지. 계약·생성물이 붙는다.
-- **막는 것:** 「공유 BPM 프로세스」·「툴팩」의 「설치...」·「제거...」와 공유 BPM 프로세스의 「캔버스에 추가」는 **받은 패키지를 둘 자리**가 없어 꺼진 줄 + 까닭이다 (§4-5의 남은 것). 목록은 둘 다 Center에서 온다.
-
-### 4-5. 「설치」 (올리기·STU-11 읽기·STU-06은 닫았다)
-
-**올리기 둘과 STU-11 읽기는 닫았다** (`apps/studio/upload.py` + `center_resources.py`, Center 쪽 권한 관문은 `center/auth.py`·`api/package_access.py`). Studio 키로 올리고, 올라온 공유 BPM 프로세스·툴팩을 STU-11과 STU-03이 **같은 출처**(C5 패키지 표)에서 본다. **STU-06도 닫았다** (`process_dialog.py` — 그림 쪽은 캔버스를 거친다. 확장 태스크의 실행 위치는 확장 호스트의 표로 센다 — F6·매니페스트가 같은 표를 쓴다). **STU-15도 닫았다** ([ADR-0043](decisions/0043-turned-off-extensions.md)).
+**올리기 둘과 STU-11 읽기는 닫았다** (`apps/studio/upload.py` + `center_resources.py`, Center 쪽 권한 관문은 `center/auth.py`·`api/package_access.py`). Studio 키로 올리고, 올라온 공유 BPM 프로세스·툴팩을 STU-11과 STU-03이 **같은 출처**(C5 패키지 표)에서 본다. **STU-06도 닫았다** (`process_dialog.py` — 그림 쪽은 캔버스를 거친다. 확장 태스크의 실행 위치는 확장 호스트의 표로 센다 — F6·매니페스트가 같은 표를 쓴다). **STU-15도 닫았다** ([ADR-0043](decisions/0043-turned-off-extensions.md)). **STU-03도 닫았다** (`resources.py` — 뿌리 넷·둘째 단계·문맥 메뉴·「캔버스에 추가」·끌어다 놓기. 드래그는 [ADR-0044](decisions/0044-canvas-drag-and-drop.md), 기여 뿌리의 둘째 단계를 **두지 않기로** 한 것은 [ADR-0045](decisions/0045-contributed-resource-children.md)다).
 
 - **없는 것 하나 — 「설치」:** STU-11의 「설치」·「갱신」·「제거」와 STU-03의 같은 항목, 그리고 공유 BPM 프로세스의 「캔버스에 추가」(Call Activity)·「열기 (읽기 전용)」·「내 BPM 프로세스로 복사」. 「설치본」 칸과 「로컬만」 상태도 그때 채워진다.
 - **먼저 정할 것:** **받은 패키지를 어디에 풀 것인가.** `<data_dir>/libs/<id>@<version>/`? 작업 폴더 안? 시험 실행의 `callActivity` 해결(`requires.libs`)을 어디까지 넓히나? 툴팩은 도구를 어떻게 싣나? **ADR 하나가 먼저다** — 자리가 정해지지 않은 채 단추만 켜면 「눌렀는데 아무 일도 없다」가 된다. 지금은 **끄고 까닭을 적는다** (U3).

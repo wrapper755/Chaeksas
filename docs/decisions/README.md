@@ -52,3 +52,5 @@
 | [0041](0041-extension-run-events.md) | 확장은 `TaskOutcome.events[]`로 실행 기록에 남기고, 줄을 쓰는 것은 엔진이다 (원칙 6을 거르는 자리를 하나로) | 수락 |
 | [0042](0042-extension-contributed-panels.md) | 확장이 플랫폼 화면에 칸을 기여한다 — 데스크톱은 위젯(`bot_ui.panels`), 웹 콘솔은 화면(`console.pages`), 선언으로 되는 자리는 선언만 | 수락 |
 | [0043](0043-turned-off-extensions.md) | 사람이 끈 확장은 앱마다 제 설정에 두고(Studio ↔ Bot UI 따로) 「흠이 있다」와 다르게 적는다 — 꺼지면 기여를 하나도 내지 않는다 | 수락 |
+| [0044](0044-canvas-drag-and-drop.md) | 캔버스 드롭은 내부 렌더 위젯에서 가로채고, 자리만 캔버스에 넘긴다 (만드는 길은 「캔버스에 추가」와 하나다) | 수락 |
+| [0045](0045-contributed-resource-children.md) | 기여 자원의 둘째 단계를 선언으로 걷지 않는다 — 요소는 그 확장의 편집기에 둔다 (C13에 자식 선언을 더하지 않는다) | 수락 |
