@@ -1190,10 +1190,15 @@ def _check_b4_b5(process: BpmnProcess) -> list[Violation]:
     return out
 
 
-def _check_b6(process: BpmnProcess, task_type_locations: Mapping[str, Sequence[str]] | None) -> list[Violation]:
-    """실행 위치가 server면 PC에서만 되는 것이 없어야 한다 (C1 R2와 같은 판정)."""
-    if process.info.run_location != "server":
-        return []
+def server_blockers(
+    process: BpmnProcess, task_type_locations: Mapping[str, Sequence[str]] | None = None
+) -> list[str]:
+    """서버에서 할 수 없는 것들 (ADR-0015·0016) — 노드마다 한 줄.
+
+    **`run_location`을 보지 않는다.** 「서버로 바꾸면 무엇이 걸리나」를 미리 세는 쪽(STU-06)과
+    「지금 걸려 있다」고 말하는 쪽(B6)이 **같은 판정**을 써야 하기 때문이다 — 베껴 두면 화면이
+    「바꿔도 된다」고 하고 검사가 막는 일이 생긴다.
+    """
     items: list[str] = []
     for node in process.all_nodes():
         ai: AiTask | None = node.prop("aiTask")
@@ -1207,6 +1212,14 @@ def _check_b6(process: BpmnProcess, task_type_locations: Mapping[str, Sequence[s
             locations = task_type_locations.get(task.type)
             if locations is not None and "server" not in locations:
                 items.append(f"{node.id}: 태스크 종류 {task.type} (실행 위치 {list(locations)})")
+    return items
+
+
+def _check_b6(process: BpmnProcess, task_type_locations: Mapping[str, Sequence[str]] | None) -> list[Violation]:
+    """실행 위치가 server면 PC에서만 되는 것이 없어야 한다 (C1 R2와 같은 판정)."""
+    if process.info.run_location != "server":
+        return []
+    items = server_blockers(process, task_type_locations)
     if not items:
         return []
     return [

@@ -96,6 +96,7 @@ from chaeksas.contracts.bpmn_ext import (
     expression_vars,
     is_var_name,
     read_process,
+    server_blockers,
 )
 from chaeksas.contracts.bpmn_ext import Flow as BpmnFlow
 from chaeksas.contracts.bpmn_ext import Node as BpmnNode
@@ -510,5 +511,6 @@ __all__ = [
     "matches_expected",
     "read_decisions",
     "read_process",
+    "server_blockers",
     "validate_bpmn",
 ]

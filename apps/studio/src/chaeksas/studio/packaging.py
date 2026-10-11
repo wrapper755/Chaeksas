@@ -159,7 +159,8 @@ def collect_provides(definitions: Sequence[Definition]) -> Provides:
     「부르는 쪽이 줘야 하는 것」으로 보이면 거짓말이 된다. 호출(`chk:call`)의 받는 값을 검사하는
     B14도 **선언한 `outputs`**와 맞춰 보니 약속은 거기에 있다.
 
-    `description`은 비운다 — 정의에 설명 칸이 없다 (C14 `chk:process`).
+    `description`은 비운다 — **정의마다** 설명 칸이 없다 (C14 `chk:process`). BPM 프로세스 전체의
+    설명은 작업 폴더 기록에 있고 `build_manifest`가 그것을 싣는다 (STU-06).
     """
     out = []
     for definition in definitions:
@@ -208,6 +209,9 @@ def build_manifest(process: BpmProcess, *, by: str = "studio", core: str = "0.1.
         id=process.id,
         version=process.version,
         name=process.name or process.id,
+        # 사람이 STU-06에 적은 설명 (작업 폴더 기록). **비면 넣지 않는다** — 빈 글을 적으면
+        # 콘솔이 「설명이 있다」로 읽는다.
+        description=process.description or None,
         # 실행 위치는 **처음부터** 들어간다. 생략하면 서버다 (C1 R1·ADR-0016).
         run_location=entry.process.info.run_location or "server",
         entry=f"process/{entry.path.name}",

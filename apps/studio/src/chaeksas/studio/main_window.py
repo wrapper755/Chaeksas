@@ -47,6 +47,7 @@ from chaeksas.studio.packaging import (
     export_lib,
 )
 from chaeksas.studio.preflight import Preflight, inspect, readiness, summarize
+from chaeksas.studio.process_dialog import ProcessInfoDialog
 from chaeksas.studio.properties import Properties
 from chaeksas.studio.receiver import Receiver
 from chaeksas.studio.run_dialog import RunDialog
@@ -180,6 +181,7 @@ class MainWindow(QMainWindow):
         files = bar.addMenu("파일")
         self._add(files, "새 BPM 프로세스...", self.new_process, QKeySequence.StandardKey.New)
         self._add(files, "예제 BPM 프로세스 가져오기...", self.import_example)
+        self._add(files, "BPM 프로세스 정보...", self.edit_info)
         self._add(files, "시험 케이스...", self.edit_cases)
         files.addSeparator()
         self.save_action = self._add(files, "저장", self.save, QKeySequence.StandardKey.Save)
@@ -455,6 +457,43 @@ class MainWindow(QMainWindow):
         if self.process is None or self.definition is None:
             return None
         return next((d for d in self.process.definitions if d.path == self.definition), None)
+
+    def edit_info(self) -> None:
+        """STU-06. 기록은 창이 쓰고, **그림은 캔버스가** 쓴다 (XML을 파이썬이 만지지 않는다).
+
+        그래서 실행 위치·키 참조는 **진입 정의가 열려 있을 때만** 켜진다 — 창이 그 까닭을
+        적는다 (U3). 열려 있으면 「저장」이 `chk:process`를 한 걸음으로 적용해 **실행 취소도
+        한 걸음**이다.
+        """
+        if self.process is None:
+            self.say("열린 BPM 프로세스가 없습니다.")
+            return
+        entry = self.process.entry_definition
+        editable = entry is not None and self.definition == entry.path
+        if editable and not self._may_drop_edits():
+            return
+        from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 — 순환 피함
+
+        store = StudioCredentials()
+        dialog = ProcessInfoDialog(
+            self.process,
+            self.workspace,
+            has_value=lambda ref: bool(ref) and store.service_key(ref) is not None,
+            editable=editable,
+            parent=self,
+        )
+        if not dialog.exec() or dialog.saved is None:
+            return
+        self.process = dialog.saved
+        self._retitle()
+        self.explorer.refresh(opened=self.definition.name if self.definition else "")
+        self.say(f"BPM 프로세스 정보를 저장했습니다: {dialog.saved.display} (v{dialog.saved.version})")
+        if dialog.process_patch is None or entry is None or entry.process is None:
+            return
+        # 그림은 **캔버스에만** 반영된다 — 파일로 가는 것은 「저장」(Ctrl+S)이다 (STU-04의 「적용」과
+        # 같은 결). 그렇게 말해 둬야 「저장했다는데 패키지에 안 들어갔다」가 생기지 않는다.
+        self._apply_properties(entry.process.id, {"chk": {"process": dialog.process_patch}})
+        self.say("실행 위치·키 참조는 그림에 적용했습니다 — 「저장」(Ctrl+S)으로 파일에 씁니다.")
 
     def edit_cases(self) -> None:
         """STU-07. 케이스는 **열린 정의 옆**에 있다 — 무엇의 케이스인지 모호하지 않게."""

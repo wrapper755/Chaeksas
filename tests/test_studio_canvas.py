@@ -171,6 +171,40 @@ def test_an_extension_task_keeps_its_kind_through_an_edit(canvas: Any) -> None:
     assert 'type="ui_task"' in xml and 'extension="ui-automation"' in xml, "XML 속성으로 남는다"
 
 
+def test_the_process_info_round_trips_through_the_canvas(canvas: Any) -> None:
+    """STU-06이 쓰는 길 — `chk:process`는 **그림**이라 캔버스를 거친다 (ADR-0022).
+
+    창이 다루지 않는 칸(`inputs`)까지 통째로 되돌려 쓰므로, 왕복해도 그것이 남아야 한다.
+    """
+    from chaeksas.contracts.bpmn_ext import ProcessInfo
+
+    canvas.create_empty("Proc_info", "청구서 점검")
+    info = ProcessInfo(
+        run_location="pc",
+        service_keys={"ext-credit": "finance-credit"},
+        inputs=[{"name": "금액", "type": "number", "required": True}],  # type: ignore[list-item]
+        outputs=["승인"],
+    )
+    made = canvas.call_sync(
+        "setProperties",
+        "Proc_info",
+        {"chk": {"process": json.dumps(info.to_json_dict(), ensure_ascii=False)}},
+    )
+    assert made.get("found") is True
+
+    body = json.loads(canvas.call_sync("properties", "Proc_info")["chk"]["process"])
+    assert body["run_location"] == "pc"
+    assert body["service_keys"] == {"ext-credit": "finance-credit"}
+    assert [one["name"] for one in body["inputs"]] == ["금액"], "창이 모르는 칸도 남는다"
+
+    # 저장한 XML을 계약이 다시 읽어도 같다 (글자가 아니라 **뜻**으로 본다).
+    again = read_process(canvas.save_xml())
+    assert again.info.run_location == "pc"
+    assert again.info.service_keys == {"ext-credit": "finance-credit"}
+    assert [one.name for one in again.info.inputs] == ["금액"]
+    assert again.info.outputs == ["승인"]
+
+
 def added(canvas: Any, chk: dict[str, str], name: str = "주문 등록") -> str:
     """STU-03 「캔버스에 추가」를 한 번 — 만들어진 노드 id (답이 올 때까지 기다린다)."""
     from PySide6.QtCore import QEventLoop

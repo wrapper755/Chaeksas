@@ -6,7 +6,7 @@
 <작업 폴더>/
 └─ <그룹>/                     「기본」은 항상 있고 지울 수 없다 (STU-02)
    └─ <BPM 프로세스 id>/
-      ├─ process.json          이름·버전·진입 정의 (Studio 안에서만 쓴다)
+      ├─ process.json          이름·버전·진입 정의·설명·담당자·태그 (Studio 안에서만 쓴다)
       ├─ process/*.bpmn        정의들 (C1 `process/`와 같은 이름)
       ├─ process/*.dmn         규칙 태스크가 쓰는 결정표
       ├─ cases/*.cases.json    시험 케이스 (패키지에는 넣지 않는다, C1)
@@ -73,6 +73,11 @@ class BpmProcess:
     version: str = "0.1.0"
     #: 진입 정의의 **파일 이름** (`main.bpmn`). 비면 첫 정의를 진입으로 본다.
     entry: str = ""
+    #: 사람이 적는 것 (STU-06). **설명만 패키지로 간다** (C1 `description`) — 담당자·태그는
+    #: 매니페스트에 칸이 없어 작업 폴더 기록에만 남는다 (설계자가 보는 메모다).
+    description: str = ""
+    owner: str = ""
+    tags: tuple[str, ...] = ()
     definitions: list[Definition] = field(default_factory=list)
 
     @property
@@ -118,6 +123,13 @@ def _record_path(folder: Path) -> Path:
     return folder / RECORD_NAME
 
 
+def _tags(raw: object) -> tuple[str, ...]:
+    """태그 목록. **모양이 틀리면 버린다** — 기록 하나 때문에 탐색기가 뜨지 않으면 안 된다."""
+    if not isinstance(raw, list):
+        return ()
+    return tuple(str(one).strip() for one in raw if str(one).strip())
+
+
 def read_record(folder: Path) -> dict[str, object]:
     found = _record_path(folder)
     if not found.is_file():
@@ -140,6 +152,10 @@ def write_record(process: BpmProcess) -> Path:
                 "name": process.name,
                 "version": process.version,
                 "entry": process.entry,
+                # **빈 값은 적지 않는다** — 기록이 「아직 안 적었다」와 「비웠다」로 갈리지 않게.
+                **({"description": process.description} if process.description else {}),
+                **({"owner": process.owner} if process.owner else {}),
+                **({"tags": list(process.tags)} if process.tags else {}),
             },
             ensure_ascii=False,
             indent=2,
@@ -190,6 +206,9 @@ class Workspace:
             name=str(record.get("name") or ""),
             version=str(record.get("version") or "0.1.0"),
             entry=str(record.get("entry") or ""),
+            description=str(record.get("description") or ""),
+            owner=str(record.get("owner") or ""),
+            tags=_tags(record.get("tags")),
         )
         process.definitions = list(self._definitions(folder))
         return process
