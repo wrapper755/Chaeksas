@@ -111,6 +111,7 @@ def send_run(
     ai_tasks: int = 0,
     replayed: int = 0,
     human: int = 0,
+    confirmations: int | None = None,
 ) -> None:
     """실행 하나를 C3로 올린다. `status=None`이면 **아직 도는 중**이다 (셈이 없다)."""
     lines = [
@@ -140,6 +141,8 @@ def send_run(
                 ui_tasks=0,
                 service_calls=0,
                 human_requests=human,
+                # 선택 칸 — CON-02 「확인률」이 읽는다. **안 보내면 분모에서 빠진다** (C3).
+                **({"confirmations": confirmations} if confirmations is not None else {}),
             )
         )
     answer = client.post(f"/api/v1/runs/{run_id}/events", json=lines, headers=ADMIN)
@@ -252,6 +255,21 @@ def test_the_run_listing_comes_newest_first_with_the_counts(client: TestClient) 
         2,
     )
     assert newest["finished_at"], "「최근 성공」에 쓸 시각이 있다"
+
+
+def test_the_confirmation_count_comes_through_for_the_rate(client: TestClient) -> None:
+    """CON-02 「확인률」의 재료 (C3 `confirmations`) — **보낸 실행만** 분모에 든다.
+
+    콘솔의 `summarize()`가 이 값을 묶는다. 안 보낸 실행을 0으로 세면 확인률이 조용히 낮아지므로
+    **`null`과 0을 가른다**.
+    """
+    send_run(client, "run_20261010_140000_eeeeee", human=3, confirmations=1)
+    send_run(client, "run_20261010_150000_ffffff", human=2)  # 옛 Bot UI — 안 보냈다
+    found = client.get(f"/api/v1/runs?bpm_process_id={BOT}&limit=200", headers=READ).json()["runs"]
+    by_id = {one["run_id"]: one for one in found}
+    assert by_id["run_20261010_140000_eeeeee"]["confirmations"] == 1
+    assert by_id["run_20261010_150000_ffffff"]["confirmations"] is None
+    assert by_id["run_20261010_150000_ffffff"]["human_requests"] == 2, "합은 그대로 남는다"
 
 
 def test_a_running_run_has_no_counts_to_average(client: TestClient) -> None:

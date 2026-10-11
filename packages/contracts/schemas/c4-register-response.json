@@ -66,6 +66,18 @@
       "title": "Heartbeat Interval S",
       "type": "integer"
     },
+    "key_expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Expires At"
+    },
     "server_time": {
       "title": "Server Time",
       "type": "string"

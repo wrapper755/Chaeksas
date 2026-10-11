@@ -218,6 +218,18 @@
       "title": "Jobs",
       "type": "array"
     },
+    "key_expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Expires At"
+    },
     "next_heartbeat_s": {
       "default": 30,
       "title": "Next Heartbeat S",

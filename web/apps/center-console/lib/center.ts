@@ -215,7 +215,14 @@ export const center = {
     call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}/unbind`, { method: "POST" }),
 
   runs: (
-    query: { status?: string; bpm_process_id?: string; run_location?: string; limit?: number } = {},
+    query: {
+      status?: string;
+      bpm_process_id?: string;
+      run_location?: string;
+      /** 어느 PC가 보낸 기록인가 (C3 — Center가 보낸 키로 푼다). */
+      bot_ui_id?: string;
+      limit?: number;
+    } = {},
   ) => {
     const search = new URLSearchParams(
       Object.entries(query)

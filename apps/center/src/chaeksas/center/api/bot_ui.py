@@ -52,13 +52,13 @@ def new_bot_ui_id() -> str:
     return f"bui_{secrets.token_hex(4)}"
 
 
-def id_for_key(store: Store, key: keys.KeyRecord) -> str | None:
-    """그 키로 등록된 Bot UI의 `bot_ui_id` (C4 — **키가 신원이다**). 등록 전이면 `None`.
+def id_for_key(store: Store, key_id: str) -> str | None:
+    """그 키 id로 등록된 Bot UI의 `bot_ui_id` (C4 — **키가 신원이다**). 등록 전이면 `None`.
 
-    `bot_uis` 표를 아는 자리를 하나로 둔다 — 내려받기 관문도 이 길로 묻는다
-    (`api.package_access`). 베껴 두면 키 묶기 규칙이 두 군데로 갈라진다.
+    `bot_uis` 표를 아는 자리를 하나로 둔다 — 내려받기 관문(`api.package_access`)과 실행
+    기록의 「Bot UI」 열(`api.runs`)이 같은 길로 묻는다. 베껴 두면 키 묶기 규칙이 갈라진다.
     """
-    found = store.row("SELECT bot_ui_id FROM bot_uis WHERE key_id = ?", (key.key_id,))
+    found = store.row("SELECT bot_ui_id FROM bot_uis WHERE key_id = ?", (key_id,))
     return str(found["bot_ui_id"]) if found is not None else None
 
 
@@ -182,6 +182,8 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
         admin_keys=[],  # 배포 서명 검증용 Admin 공개키 — 등록 응답에는 싣지 않는다 (하트비트가 준다)
         heartbeat_interval_s=heartbeat_interval_s,
         server_time=now_iso(),
+        # **만료일은 Center만 안다** — 내려 줘야 현장이 BUI-05로 미리 알릴 수 있다 (C4).
+        key_expires_at=key.expires_at,
     )
 
 
@@ -246,6 +248,8 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
             store, bot_ui_id=str(found["bot_ui_id"]), acks=request.approval_acks
         ),
         disabled=disabled,
+        # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4).
+        key_expires_at=key.expires_at,
     )
 
 

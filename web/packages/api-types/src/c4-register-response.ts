@@ -6,6 +6,7 @@ export interface RegisterResponse {
   admin_keys?: AdminKey[];
   bot_ui_id: string;
   heartbeat_interval_s?: number;
+  key_expires_at?: string | null;
   server_time: string;
   [k: string]: unknown;
 }

@@ -94,6 +94,9 @@ class RegisterResponse(ContractModel):
     admin_keys: list[AdminKey] = Field(default_factory=list)
     heartbeat_interval_s: int = DEFAULT_HEARTBEAT_S
     server_time: Timestamp
+    #: 이 키의 만료 (C7). **없으면 「만료 없음」**이고 「모른다」가 아니다 — 만료일은
+    #: Center만 알아서 내려 준다 (BUI-05 「Center API 키 만료 임박」).
+    key_expires_at: Timestamp | None = None
 
 
 class CurrentRun(ContractModel):
@@ -227,3 +230,6 @@ class HeartbeatResponse(ContractModel):
     cancel_jobs: list[str] = Field(default_factory=list)
     approvals: list[ApprovalDispatch] = Field(default_factory=list)
     disabled: bool = False
+    #: 이 키의 만료 (C7). **주기마다 싣는다** — 「생략 = 그대로」로 두면 운영자가 기간을
+    #: 늘려 줘도 Bot UI가 그것을 모른다.
+    key_expires_at: Timestamp | None = None

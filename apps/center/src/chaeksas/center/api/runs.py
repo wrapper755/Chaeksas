@@ -47,7 +47,17 @@ MAX_LIMIT = 500
 
 #: `run_finished`가 세어 보낸 것 — 요약에 그대로 둔다 (CON-01 목록 열, C3 `RunInfo`).
 #: **줄을 다시 읽어 세지 않는다** — 보낸 쪽이 센 것이 원본이다.
-COUNTS = ("ai_tasks", "replayed_tasks", "ui_tasks", "service_calls", "human_requests")
+#:
+#: `confirmations`는 **선택 칸**이다 — 넣지 않은 쪽이 보낸 기록에는 `None`으로 남는다
+#: (0으로 채우면 「확인이 없었다」와 「세지 않았다」가 같아진다, C3).
+COUNTS = (
+    "ai_tasks",
+    "replayed_tasks",
+    "ui_tasks",
+    "service_calls",
+    "human_requests",
+    "confirmations",
+)
 
 
 def owner_of(store: Store, run_id: str) -> str | None:
@@ -206,7 +216,8 @@ def events_of(store: Store, run_id: str) -> list[RunEvent]:
 
 def info_of(store: Store, run_id: str) -> RunInfo:
     found = store.row(
-        "SELECT run_id, first_seen_at, last_seen_at, summary_json FROM runs WHERE run_id = ?",
+        "SELECT run_id, owner_key_id, first_seen_at, last_seen_at, summary_json FROM runs "
+        "WHERE run_id = ?",
         (run_id,),
     )
     if found is None:
@@ -214,11 +225,28 @@ def info_of(store: Store, run_id: str) -> RunInfo:
     return _info(found, store)
 
 
+def bot_ui_of(store: Store, owner_key_id: str | None) -> str | None:
+    """그 기록을 보낸 키가 묶인 Bot UI (C3 `RunInfo.bot_ui_id`, CON-01).
+
+    **읽을 때 찾는다** — 요약에 적어 두지 않는다 (`missing_resources`·`dependents`와 같은 결).
+    키를 다시 묶으면 적어 둔 값은 낡고, 어느 쪽이 원본인지 흐려진다.
+
+    Studio 키나 관리자·읽기 토큰이 보낸 기록에는 **없다** — 그 키에 묶인 PC가 없다
+    (`_owner_key`가 `token:<종류>`로 적어 두므로 찾아도 안 나온다).
+    """
+    if not owner_key_id:
+        return None
+    from chaeksas.center.api import bot_ui  # noqa: PLC0415 — 순환 import를 피한다
+
+    return bot_ui.id_for_key(store, owner_key_id)
+
+
 def _info(row: Any, store: Store) -> RunInfo:
     summary = loads(row["summary_json"], {}) or {}
     counted = store.row("SELECT COUNT(*) AS n FROM run_events WHERE run_id = ?", (row["run_id"],))
     tallies = {name: summary.get(name) for name in COUNTS}
     return RunInfo(
+        bot_ui_id=bot_ui_of(store, row["owner_key_id"]),
         run_id=row["run_id"],
         status=summary.get("status") or "running",
         bpm_process_id=summary.get("bpm_process_id"),
@@ -242,15 +270,16 @@ def listing(
     status: str | None = None,
     bpm_process_id: str | None = None,
     run_location: str | None = None,
+    bot_ui_id: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> RunListing:
-    """최근 실행부터 (CON-01 목록). 좁히기는 상태·BPM 프로세스·실행 위치다.
+    """최근 실행부터 (CON-01 목록). 좁히기는 상태·BPM 프로세스·실행 위치·**Bot UI**다.
 
-    **「Bot UI」로는 아직 좁히지 못한다** — C3 `RunInfo`에 어느 Bot UI였나가 없다 (Center는
-    `run_id`를 보낸 **키**에 묶어 두지만 그것을 실행 요약에 적지 않는다, docs/09-gaps.md §4-11).
+    「Bot UI」는 **보낸 키가 묶인 PC**다 (C3 소유 → C4 키 묶기) — 요약에 적어 둔 값이 아니라
+    읽을 때 찾는다. Studio가 보낸 기록은 그 좁히기에 걸리지 않는다 (묶인 PC가 없다).
     """
     rows = store.rows(
-        "SELECT run_id, first_seen_at, last_seen_at, summary_json FROM runs "
+        "SELECT run_id, owner_key_id, first_seen_at, last_seen_at, summary_json FROM runs "
         "ORDER BY first_seen_at DESC, run_id DESC"
     )
     found = [_info(row, store) for row in rows]
@@ -260,6 +289,8 @@ def listing(
         found = [one for one in found if one.bpm_process_id == bpm_process_id]
     if run_location:
         found = [one for one in found if one.run_location == run_location]
+    if bot_ui_id:
+        found = [one for one in found if one.bot_ui_id == bot_ui_id]
     return RunListing(runs=found[: max(1, min(limit, MAX_LIMIT))], total=len(found))
 
 
@@ -288,6 +319,7 @@ def get_runs(
     status: str | None = None,
     bpm_process_id: str | None = None,
     run_location: str | None = None,
+    bot_ui_id: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> Any:
     require_read(request.app.state.authenticate(request))
@@ -296,6 +328,7 @@ def get_runs(
         status=status,
         bpm_process_id=bpm_process_id,
         run_location=run_location,
+        bot_ui_id=bot_ui_id,
         limit=limit,
     )
 

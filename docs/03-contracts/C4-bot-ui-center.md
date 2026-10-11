@@ -72,6 +72,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | `admin_keys` | AdminKey[] | 배포 서명 검증용 Admin 공개키 (C2). 철회된 키도 `revoked_at`과 함께 |
 | `heartbeat_interval_s` | int | 기본 30 |
 | `server_time` | str | 시계 차이 확인용 |
+| `key_expires_at` | str? | **이 키가 언제 만료되나** (C7). 없으면 만료가 없는 키다 — 「모른다」가 아니다 |
 
 ### HeartbeatRequest
 
@@ -114,6 +115,9 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | `cancel_jobs` | str[] | 콘솔에서 취소된 작업 id. 대기열에 있으면 빼고 `cancelled`로 ack. **이미 시작했으면 멈추지 않고** `cancel_refused` + `already_started`로 ack. 작업은 Center에서 `accepted` 그대로 남는다 (C5, 실행 중 Bot을 멈추는 것은 schema 1 범위 밖) |
 | `approvals` | ApprovalDispatch[] | 답이 정해졌고 아직 ack되지 않은 결재 (C6) |
 | `disabled` | bool | true면 Bot UI는 새 작업·배포를 받지 않는다. 하트비트는 계속 받으므로 실행 중 Bot과 대기열은 콘솔에 계속 보인다 (CON-03 「비활성화」) |
+| `key_expires_at` | str? | 등록 응답과 같은 값. **주기마다 싣는다** — 운영자가 키 기간을 늘려 주면 다음 주기에 바로 안다 (「생략 = 그대로」로 두면 늘어난 것을 모른다) |
+
+**키 만료일은 Center만 안다** — 그래서 내려 준다. 받는 쪽은 그것으로 BUI-05 「Center API 키 만료 임박」을 띄우고(14일 전부터 **하루 한 번** — 주기마다 띄우면 30초에 한 번 같은 말을 한다), 이미 만료된 키는 **알리지 않는다**(그때는 Center가 거부하고 「키 거부」가 말한다). 값이 **없는 것은 「만료가 없다」는 뜻**이고 「모른다」가 아니다 — Center는 만료 없는 키도 발급한다 (C7).
 
 | 모델 | 필드 |
 | --- | --- |
@@ -209,6 +213,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-11 | 1 | 등록·하트비트 응답에 **`key_expires_at`**을 더했다 — 키 만료일은 Center만 알아 BUI-05 「Center API 키 만료 임박」이 띄울 값이 없었다 (09-gaps §4-8). 선택 칸이고 **주기마다 싣는다**(늘어난 기간을 바로 알게). 없으면 「만료 없음」이다 | 0013 |
 | 2026-10-01 | 1 | 초안 | 0012, 0013, 0014 |
 | 2026-10-01 | 1 | 검토 반영: 맞추기 규칙(`bot_ui_lost`), 시작한 작업 취소 거절, `disabled`는 200으로만, 모든 값 목록 열린 문자열, `deployment_results`, `wrong_key_type`, PC 묶음 풀기 | — |
 | 2026-10-01 | 1 | C5 검토 반영: 시작된 작업의 취소 거절은 `cancel_refused`(작업은 `accepted` 유지), 예시 봉투를 C2 필드로 | — |

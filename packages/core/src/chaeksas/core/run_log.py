@@ -144,8 +144,21 @@ def log_path(data_dir: Path, run_id: str) -> Path:
 
 
 def summarize(events: Iterable[RunEvent]) -> dict[str, Any]:
-    """`run_finished`의 셈 (C3 — `ai_tasks`·`service_calls` …)."""
-    counts = {"ai_tasks": 0, "replayed_tasks": 0, "ui_tasks": 0, "service_calls": 0, "human_requests": 0}
+    """`run_finished`의 셈 (C3 — `ai_tasks`·`service_calls` …).
+
+    **`human_requests`는 결재와 확인의 합이고 `confirmations`가 확인만 센다** (C3) — 가르는
+    것은 **세는 쪽의 일**이다. Center는 줄을 다시 읽어 세지 않으므로(요약은 받을 때 만든다)
+    여기서 넣지 않으면 CON-02가 「확인률」을 영영 모른다. 결재 수는 둘의 차다 — 칸을 둘
+    두지 않는다.
+    """
+    counts = {
+        "ai_tasks": 0,
+        "replayed_tasks": 0,
+        "ui_tasks": 0,
+        "service_calls": 0,
+        "human_requests": 0,
+        "confirmations": 0,
+    }
     for event in events:
         if event.kind == "service_call":
             counts["service_calls"] += 1
@@ -153,6 +166,9 @@ def summarize(events: Iterable[RunEvent]) -> dict[str, Any]:
             counts["ui_tasks"] += 1
         elif event.kind == "human_requested":
             counts["human_requests"] += 1
+            # `layer`는 **열린 문자열**이다 — 모르는 값은 확인으로 세지 않는다 (C3).
+            if event.data.get("layer") == "confirmation":
+                counts["confirmations"] += 1
         elif event.kind == "node_state":
             if event.data.get("task_type") == "ai_task" and event.data.get("state") == "completed":
                 counts["ai_tasks"] += 1

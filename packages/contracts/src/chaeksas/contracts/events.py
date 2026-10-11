@@ -134,6 +134,13 @@ class RunInfo(ContractModel):
     ui_tasks: int | None = None
     service_calls: int | None = None
     human_requests: int | None = None
+    #: `human_requests` 중 **확인**(`layer: confirmation`)의 수 (CON-02 「확인률」).
+    #: **보낸 쪽이 넣었을 때만** 있다 — 없으면 「확인만은 모른다」다(0이 아니다). 결재 수는
+    #: `human_requests - confirmations`다.
+    confirmations: int | None = None
+    #: 어느 PC가 보냈나 (CON-01 「Bot UI」 필터·열). **Center가 읽을 때 채운다** —
+    #: 보내는 쪽은 적지 않는다(신원은 키다, C4). Studio·토큰이 보낸 기록에는 없다.
+    bot_ui_id: str | None = None
     events: int = 0
 
 

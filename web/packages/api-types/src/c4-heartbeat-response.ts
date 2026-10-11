@@ -17,6 +17,7 @@ export interface HeartbeatResponse {
   }[];
   disabled?: boolean;
   jobs?: JobDispatch[];
+  key_expires_at?: string | null;
   next_heartbeat_s?: number;
   server_time: string;
   [k: string]: unknown;

@@ -39,7 +39,7 @@ from chaeksas.contracts.bot_ui import ApprovalDispatch  # noqa: E402
 from chaeksas.contracts.bpmn_ext import read_process, validate  # noqa: E402
 from chaeksas.core import control, requests  # noqa: E402
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State  # noqa: E402
-from chaeksas.core.run_log import RunLog, log_path  # noqa: E402
+from chaeksas.core.run_log import RunLog, log_path, summarize  # noqa: E402
 from chaeksas.studio.packaging import default_name, export  # noqa: E402
 from chaeksas.studio.workspace import Workspace  # noqa: E402
 
@@ -177,6 +177,37 @@ def test_a_confirmation_is_always_answered_in_the_field() -> None:
     warned = [v for v in validate(process) if v.rule == "B12"]
     assert warned and all(v.severity == "warning" for v in warned), warned
     assert "현장" in warned[0].message
+
+
+def test_the_finish_counts_split_approvals_from_confirmations() -> None:
+    """CON-02 「확인률」 — `run_finished`가 **가른 셈을 보낸다** (C3 `confirmations`).
+
+    가르는 것은 **세는 쪽의 일**이다 — Center는 줄을 다시 읽어 세지 않으므로(요약은 받을 때
+    만든다) 엔진이 넣지 않으면 확인률을 영영 모른다. 결재 수는 둘의 차다.
+    """
+    # 폼이 없으면 답은 「승인 / 반려」 하나다 (C6) — 확인도 같다.
+    for kind, confirmations in (("userTask", 0), ("manualTask", 1)):
+        engine, run = waiting(approval_process(kind=kind))
+        assert run.pending is not None
+        engine.answer(run, run.pending.request_id, {"decision": "approve"}, answered_by="사람")
+        assert engine.run_until_blocked(run) is State.DONE
+        finished = next(e.data for e in run.log.events if e.kind == "run_finished")
+        assert finished["human_requests"] == 1, kind
+        assert finished["confirmations"] == confirmations, kind
+
+
+def test_a_run_without_people_counts_zero_not_nothing() -> None:
+    """**0과 「세지 않았다」는 다르다** — 센 쪽은 0을 보낸다 (받는 쪽이 `None`과 가른다, C3)."""
+    found = summarize([])
+    assert found["human_requests"] == 0 and found["confirmations"] == 0
+
+
+def test_an_unknown_human_layer_is_not_counted_as_a_confirmation() -> None:
+    """`layer`는 **열린 문자열**이다 (C3 원칙 10) — 모르는 값을 확인으로 세지 않는다."""
+    log = RunLog(run_id=RUN_ID)
+    log.emit("human_requested", layer="위임", request_id="req_1", where="field")
+    found = summarize(log.events)
+    assert (found["human_requests"], found["confirmations"]) == (1, 0)
 
 
 def test_a_duration_becomes_a_deadline_from_the_run_clock() -> None:

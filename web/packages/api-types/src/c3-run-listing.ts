@@ -16,7 +16,9 @@ export interface RunListing {
  */
 export interface RunInfo {
   ai_tasks?: number | null;
+  bot_ui_id?: string | null;
   bpm_process_id?: string | null;
+  confirmations?: number | null;
   duration_s?: number | null;
   error_code?: string | null;
   events?: number;

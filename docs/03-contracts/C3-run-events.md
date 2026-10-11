@@ -53,8 +53,9 @@
 | `human_withdrawn` | 답 없이 끝남 — Center에서 회수되었거나 만료됨 (C6, [ADR-0038](../decisions/0038-approval-request-channel.md)) | `request_id`, `reason`(`admin_withdraw`\|`expired`\|`host_lost`, 열린 문자열) | |
 | `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`, 예약: `delegation`) | `request_id`, `until` |
 | `run_resumed` | (서버) 저장된 실행을 이어 감 | `after_s` | `reason`(`answer`\|`message`\|`timer`\|`restart`) |
-| `run_finished` | 실행 끝 (항상 마지막) | `status`(`success`\|`failed`\|`cancelled`), `duration_s`, `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | `error_code`, `error_message`(한 줄) |
+| `run_finished` | 실행 끝 (항상 마지막) | `status`(`success`\|`failed`\|`cancelled`), `duration_s`, `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | `error_code`, `error_message`(한 줄), `confirmations` |
 
+- **`human_requests`는 결재와 확인을 합친 수**다. 확인만 따로 세는 `confirmations`는 **선택 칸**이다 — 아는 쪽(보내는 쪽)이 `human_requested`의 `layer`로 센다. **옛 Bot UI는 넣지 않고**, 받는 쪽은 그때 「확인만은 모른다」로 다룬다(0으로 보지 않는다 — 「확인이 없었다」와 「세지 않았다」는 다르다). 결재 수는 `human_requests - confirmations`다 (칸을 둘 두지 않는다).
 - 배포 적용 결정은 실행이 아니므로 실행 이벤트로 보내지 않는다 → C4 하트비트의 `deployment_results` (CON-03 「최근 배치 결정」).
 - `kind`와 `data`의 값 목록(`state`, `source`, `layer`, `status` 등)은 모두 **열린 문자열**이다 (README 원칙 10).
 - PC Bot은 결재·확인을 기다리는 동안 `node_state: waiting`만 남긴다 (`run_waiting`은 서버만 쓴다 — 실행 자리를 쥐고 있으므로).
@@ -106,7 +107,7 @@
 
 | 경로 | 돌려주는 것 |
 | --- | --- |
-| `GET /api/v1/runs?status=&bpm_process_id=&run_location=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스·**실행 위치**, `limit` 기본 50·최대 500 |
+| `GET /api/v1/runs?status=&bpm_process_id=&run_location=&bot_ui_id=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스·**실행 위치**·**Bot UI**, `limit` 기본 50·최대 500 |
 | `GET /api/v1/runs/{run_id}` | `RunInfo` 하나. 없으면 404 `run_not_found` |
 | `GET /api/v1/runs/{run_id}/events` | `RunEventsResponse` — **`seq` 차례로** 전부 (타임라인이 순서를 만든다) |
 
@@ -119,10 +120,13 @@
 | `bpm_process_id`, `version`, `run_location`, `executor`, `mode`, `source` | str | | `run_started`의 `data`에서 추린 것 |
 | `started_at` | str | ✓ | 첫 이벤트의 `ts` (`run_started`가 아직 없으면 받은 시각) |
 | `finished_at`, `duration_s`, `error_code` | | | `run_finished`에서 |
-| `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | int | | `run_finished`의 셈 그대로 (CON-01 목록 열). **끝나지 않은 실행은 없다** — 줄을 다시 읽어 세지 않는다 |
+| `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests`, `confirmations` | int | | `run_finished`의 셈 그대로 (CON-01 목록 열). **끝나지 않은 실행은 없다** — 줄을 다시 읽어 세지 않는다. `confirmations`는 보낸 쪽이 넣었을 때만 있다 |
+| `bot_ui_id` | str | | **어느 PC가 보냈나.** Center가 **읽을 때 채운다** — 보내는 쪽은 적지 않는다 |
 | `events` | int | ✓ | 지금까지 받은 줄 수 |
 
-**요약은 받을 때 만든다** — 목록을 그릴 때마다 줄을 다시 읽지 않는다. 그래서 셈 다섯은 `run_finished`가 와야 채워진다 (도는 중에는 비어 있고 화면이 「—」로 보인다). 늦게 온 배치가 끝난 실행을 「도는 중」으로 되돌리지 않는다 (상태는 뒤로 가지 않는다).
+**요약은 받을 때 만든다** — 목록을 그릴 때마다 줄을 다시 읽지 않는다. 그래서 셈은 `run_finished`가 와야 채워진다 (도는 중에는 비어 있고 화면이 「—」로 보인다). 늦게 온 배치가 끝난 실행을 「도는 중」으로 되돌리지 않는다 (상태는 뒤로 가지 않는다).
+
+**`bot_ui_id`는 본문에서 받지 않는다.** 신원은 키다 (C4) — 보내는 쪽이 제 id를 적으면 남의 PC를 사칭할 수 있다. Center는 `run_id`를 **보낸 키**에 묶어 두므로(C3 소유) 읽을 때 그 키가 묶인 Bot UI를 찾아 채운다 (`missing_resources`·`dependents`와 같은 결 — **읽을 때 센다**. 저장하면 키를 다시 묶을 때 낡는다). Studio나 토큰이 보낸 기록에는 **없다** (그 키에 묶인 PC가 없다).
 
 ## 오류
 
@@ -147,6 +151,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-11 | 1 | `run_finished`에 선택 칸 **`confirmations`**(결재와 확인을 가르는 셈)를, `RunInfo`에 **`confirmations`·`bot_ui_id`**와 목록 좁히기 `bot_ui_id`를 더했다 — CON-02 「확인률」과 CON-01 「Bot UI」 필터가 읽을 자리가 없었다 (09-gaps §4-9·§4-11). 셈은 **보내는 쪽**이 세고, `bot_ui_id`는 **Center가 읽을 때** 채운다(본문으로 받지 않는다 — 신원은 키다). 둘 다 선택 칸이라 받는 쪽·보내는 쪽 모두 그대로 돈다 | — |
 | 2026-10-09 | 1 | 상태를 **구현됨**으로. 선택 칸 `case_id`(Studio)·`queued_s`(Bot UI 대기열)를 넣는 쪽이 생겼다 — 모르면 넣지 않는다는 규칙도 적었다 | — |
 | 2026-10-09 | 1 | `RunInfo`에 `run_finished`의 셈 다섯을 담고 목록 좁히기에 `run_location`을 더했다 — CON-01 목록 열이 읽을 자리가 없었다. 선택 칸이라 받는 쪽은 그대로 돈다 | — |
 | 2026-10-09 | 1 | 「확장이 남기는 이벤트」를 적었다 — 확장은 `{kind, data}`만 주고 엔진이 줄을 쓴다. 형식은 그대로다 (`ui_session`을 이제 내보내는 쪽이 있다) | 0041 |

@@ -9,6 +9,8 @@
 4. **알릴 거리가 생기는 자리가 Agent에 붙어 있다** — 실패·배포·만료·키 거부·대기열.
 5. **기다리는 동안 만료된 작업은 버린다** (C4 `expired`) — 붙이기 전까지 `expires_at`을 아무도
    보지 않아 지난 작업이 그대로 돌았다.
+6. **Center API 키 만료는 Center가 말해 준 값으로** 알린다 (C4 `key_expires_at`) — 14일 전부터
+   **하루 한 번**이고, 이미 만료된 키는 「거부」가 말한다.
 """
 
 from __future__ import annotations
@@ -34,6 +36,7 @@ from chaeksas.contracts.manifest import Manifest
 from chaeksas.core.processes import ChildProcess
 
 NOW = "2026-10-10T09:00:00+09:00"
+BOT_UI_ID = "bui_a81c22d0"
 
 
 # ─────────────────────────── 모으는 쪽 (Qt 없음) ───────────────────────────
@@ -223,7 +226,8 @@ class FakeCenter:
         self.beats = 0
 
     def register(self, _request: Any) -> RegisterResponse:
-        return RegisterResponse(bot_ui_id="bui_1", heartbeat_interval_s=30, server_time=NOW)
+        # `bot_ui_id`는 C4 모양을 지킨다 (`bui_<hex8>`) — 등록을 거치는 시험이 있다.
+        return RegisterResponse(bot_ui_id=BOT_UI_ID, heartbeat_interval_s=30, server_time=NOW)
 
     def heartbeat(self, _request: Any) -> HeartbeatResponse:
         self.beats += 1
@@ -243,6 +247,69 @@ def test_an_unreachable_center_is_told_once(tmp_path: Path) -> None:
 
     assert agent.beat() is None
     assert not agent.notices.take(), "같은 말을 두 번 하지 않는다"
+
+
+# ─────────────────────────── Center API 키 만료 (C4 `key_expires_at`) ───────────────────────────
+
+
+def test_an_expiring_center_key_is_told_once_a_day() -> None:
+    """14일 전부터 **하루 한 번** (BUI-05) — 주기마다 띄우면 30초에 한 번 같은 말을 한다."""
+    found = Notices()
+    soon = "2026-10-20T09:00:00+09:00"  # 열흘 뒤
+    found.center_key_expiring(expires_at=soon, now=NOW)
+    [one] = found.take()
+    assert one.kind == module.KEY_EXPIRING
+    assert one.text == "Center API 키가 2026-10-20에 만료됩니다 — 운영자에게 새 키를 요청하세요"
+    assert (one.action, one.level) == (module.ACTION_SETTINGS, "warning")
+
+    found.center_key_expiring(expires_at=soon, now="2026-10-10T09:00:30+09:00")
+    assert not found.take(), "같은 날에는 다시 알리지 않는다"
+    found.center_key_expiring(expires_at=soon, now="2026-10-11T09:00:00+09:00")
+    assert [one.kind for one in found.take()] == [module.KEY_EXPIRING], "날이 바뀌면 다시"
+
+
+def test_a_key_that_is_not_near_its_end_is_not_told() -> None:
+    """**없으면 「만료 없음」**이다 (C4) — 「모른다」가 아니므로 알릴 거리도 없다."""
+    found = Notices()
+    found.center_key_expiring(expires_at=None, now=NOW)
+    found.center_key_expiring(expires_at="2027-10-10T09:00:00+09:00", now=NOW)
+    assert not found.take()
+
+
+def test_an_already_expired_key_is_left_to_the_rejection_notice() -> None:
+    """만료된 키는 Center가 거부한다 — 「미리 알림」이 할 일이 아니다 (할 말이 다르다)."""
+    found = Notices()
+    found.center_key_expiring(expires_at="2026-10-01T09:00:00+09:00", now=NOW)
+    assert not found.take()
+
+
+def test_a_longer_key_period_can_be_told_again_later() -> None:
+    """운영자가 기간을 늘려 주면 **들고 있던 「알렸다」를 버린다** — 다음에 또 알린다."""
+    found = Notices()
+    found.center_key_expiring(expires_at="2026-10-20T09:00:00+09:00", now=NOW)
+    assert found.take()
+    found.center_key_expiring(expires_at="2027-10-10T09:00:00+09:00", now=NOW)  # 늘어났다
+    found.center_key_expiring(expires_at="2027-10-10T09:00:00+09:00", now="2027-10-01T09:00:00+09:00")
+    assert [one.kind for one in found.take()] == [module.KEY_EXPIRING]
+
+
+def test_the_agent_tells_it_from_what_center_sent(tmp_path: Path) -> None:
+    """**만료일은 Center만 안다** (C4) — 등록·하트비트 응답에서 와야 알릴 수 있다."""
+    soon = "2026-10-20T09:00:00+09:00"
+
+    class WithExpiry(FakeCenter):
+        def register(self, _request: Any) -> RegisterResponse:
+            return RegisterResponse(
+                bot_ui_id=BOT_UI_ID, heartbeat_interval_s=30, server_time=NOW, key_expires_at=soon
+            )
+
+        def heartbeat(self, _request: Any) -> HeartbeatResponse:
+            self.beats += 1
+            return HeartbeatResponse(server_time=NOW, key_expires_at=soon)
+
+    agent = agent_with(tmp_path, client=WithExpiry())
+    assert agent.beat() is not None
+    assert module.KEY_EXPIRING in [one.kind for one in agent.notices.take()]
 
 
 def test_a_rejected_key_is_told_with_what_to_do(tmp_path: Path) -> None:

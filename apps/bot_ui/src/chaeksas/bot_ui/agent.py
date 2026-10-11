@@ -483,6 +483,8 @@ class Agent:
         self.store.state.bot_ui_id = str(found.bot_ui_id)
         self.store.save()
         self.heartbeat_interval_s = found.heartbeat_interval_s
+        # 키 만료일은 **Center만 안다** (C4 `key_expires_at`) — 받은 자리에서 바로 재 둔다.
+        self.notices.center_key_expiring(expires_at=found.key_expires_at, now=now_iso())
         log.info("등록됨: %s (하트비트 %d초)", found.bot_ui_id, found.heartbeat_interval_s)
         return found
 
@@ -602,6 +604,8 @@ class Agent:
         self.last_beat_at = now_iso()
         self.heartbeat_interval_s = response.next_heartbeat_s
         self.disabled = response.disabled
+        # **주기마다 재지만 알림은 하루 한 번**이다 (BUI-05) — 그 판단은 `notices`가 쥔다.
+        self.notices.center_key_expiring(expires_at=response.key_expires_at, now=self.last_beat_at)
         # 보낸 ack는 Center가 받았다 (같은 요청에 실어 보냈으므로).
         self.store.ack_sent(request.job_acks)
         self.store.deployments_sent(request.deployment_results)

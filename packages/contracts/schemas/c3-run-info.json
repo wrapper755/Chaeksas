@@ -15,6 +15,18 @@
       "default": null,
       "title": "Ai Tasks"
     },
+    "bot_ui_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Bot Ui Id"
+    },
     "bpm_process_id": {
       "anyOf": [
         {
@@ -26,6 +38,18 @@
       ],
       "default": null,
       "title": "Bpm Process Id"
+    },
+    "confirmations": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confirmations"
     },
     "duration_s": {
       "anyOf": [

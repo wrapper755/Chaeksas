@@ -37,7 +37,7 @@ def _target(store: Store, key: Any) -> tuple[str | None, str]:
     이름을 대상 id로 흉내 내지 않는다. 그 자리가 생기면 여기 한 줄이 늘어난다.
     """
     if key.type == "bot_ui":
-        found = bot_ui.id_for_key(store, key)
+        found = bot_ui.id_for_key(store, key.key_id)
         return found, "이 키로 등록된 Bot UI가 없다 — 먼저 register를 부르세요"
     return None, "서버 실행기 등록은 M7부터다 (C12) — 배포될 수 있는 대상이 아직 없다"
 

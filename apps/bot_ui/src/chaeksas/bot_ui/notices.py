@@ -14,8 +14,9 @@
 - 문구는 `06-screens/bot-ui.md`의 BUI-05 표가 원본이다. **런타임 이름은 확장이 준 `label`**을
   쓴다 — 플랫폼 코드에 「Worker」라고 적으면 Bot UI가 어느 확장인지 아는 셈이다 (ADR-0018).
 
-아직 알릴 수 없는 두 줄은 `docs/09-gaps.md` §4-8에 **왜**와 함께 남겼다 (Center API 키 만료
-임박, 서비스 앱 키 만료 임박·거부) — 둘 다 **이 PC가 그 값을 모른다**.
+아직 알릴 수 없는 한 줄은 `docs/09-gaps.md` §4-8에 **왜**와 함께 남겼다 (서비스 앱 키 만료
+임박·거부) — **이 PC가 그 값을 모르고**, 물어보려면 「사전 점검은 서버를 부르지 않는다」
+(ADR-0013)를 어디까지 지킬지 먼저 정해야 한다.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from chaeksas.bot_ui.runner import Request
+from chaeksas.contracts.center_keys import expires_soon
 
 #: 누르면 할 일. 화면이 이 글로 창을 고른다 (여기서 Qt를 부르지 않는다).
 ACTION_APPROVAL = "approval"
@@ -42,6 +44,7 @@ DEPLOYED_NEEDS_KEY = "deployed_needs_key"
 CENTER_OFFLINE = "center_offline"
 CENTER_BACK = "center_back"
 KEY_REJECTED = "key_rejected"
+KEY_EXPIRING = "key_expiring"
 RUNTIME_RESTARTED = "runtime_restarted"
 RUNTIME_GAVE_UP = "runtime_gave_up"
 QUEUED = "queued"
@@ -88,6 +91,8 @@ class Notices:
     _online: bool | None = None
     #: 런타임마다 지난 `(상태, 연속 실패 수)`.
     _runtimes: dict[str, tuple[str, int]] = field(default_factory=dict)
+    #: 키 만료를 알린 **날짜**(`YYYY-MM-DD`). 하루 한 번만 알리는 자리다.
+    _key_told_on: str = ""
 
     # ── 넣기·거두기 ──
 
@@ -219,6 +224,33 @@ class Notices:
             return
         more = f" — 기록 {shipped}건 보냄" if shipped else ""
         self.add(Notice(kind=CENTER_BACK, text=f"Center 연결 복구{more}"))
+
+    def center_key_expiring(self, *, expires_at: str | None, now: str) -> None:
+        """Center API 키 만료가 가까웠다 (C4 `key_expires_at`, BUI-05).
+
+        **14일 전부터 하루 한 번**이다 — 주기마다 넣으면 30초에 한 번 같은 말을 한다. 그래서
+        알린 **날짜**를 들고 있다가 날이 바뀔 때만 다시 넣는다 (`_online`과 같은 결).
+
+        **이미 만료된 키는 여기서 알리지 않는다** — 그때는 Center가 거부하고 `key_rejected()`가
+        할 일을 말한다. 값이 **없으면 만료가 없는 키**다 (C4 — 「모른다」가 아니다).
+        """
+        if not expires_soon(now=now, expires_at=expires_at):
+            self._key_told_on = ""  # 기간이 늘어났다 — 다음에 가까워지면 다시 알린다
+            return
+        today = now[:10]
+        if self._key_told_on == today:
+            return
+        self._key_told_on = today
+        self.add(
+            Notice(
+                kind=KEY_EXPIRING,
+                # 날짜만 말한다 — 시각·시간대는 할 일을 바꾸지 않는다 (BUI-05 표).
+                text=f"Center API 키가 {(expires_at or '')[:10]}에 만료됩니다 — 운영자에게 새 키를 요청하세요",
+                action=ACTION_SETTINGS,
+                seconds=LONG_S,
+                level="warning",
+            )
+        )
 
     def key_rejected(self) -> None:
         """Center가 키를 거부했다 (C4 403). 사람이 설정에서 새 키를 넣어야 한다.

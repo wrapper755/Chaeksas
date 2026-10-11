@@ -185,6 +185,30 @@ def test_register_then_heartbeat(client: TestClient) -> None:
     assert set(listed[0]["key"]) == {"prefix", "expires_at", "state"}
 
 
+def test_the_responses_carry_the_key_expiry(client: TestClient) -> None:
+    """**만료일은 Center만 안다** (C4 `key_expires_at`) — 내려 줘야 BUI-05가 미리 알린다.
+
+    **주기마다 싣는다** — 「생략 = 그대로」로 두면 기간을 늘려 줘도 현장이 모른다.
+    """
+    at = datetime(2026, 12, 31, tzinfo=UTC).isoformat()
+    created = client.post(
+        "/api/v1/center-keys", json={"name": "현장 PC 1", "type": "bot_ui", "expires_at": at}, headers=ADMIN
+    )
+    auth = {"Authorization": f"Bearer {created.json()['key']}"}
+    registered = client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
+    assert registered.json()["key_expires_at"] == at
+    beat = client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=auth)
+    assert beat.json()["key_expires_at"] == at
+
+
+def test_a_key_without_an_expiry_says_nothing(client: TestClient) -> None:
+    """**없으면 「만료 없음」**이다 (C4) — 「모른다」가 아니다."""
+    _key_id, raw = issue_key(client)
+    auth = {"Authorization": f"Bearer {raw}"}
+    registered = client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
+    assert registered.json()["key_expires_at"] is None
+
+
 def test_register_is_idempotent(client: TestClient) -> None:
     _key_id, raw = issue_key(client)
     auth = {"Authorization": f"Bearer {raw}"}

@@ -7,6 +7,8 @@
 2. **줄 하나가 틀려도 나머지는 받는다** (`200` + `rejected[]`).
 3. **같은 줄을 다시 보내면 무시한다** — 보내는 쪽이 같은 배치를 그대로 또 보낼 수 있다.
 4. **남의 실행 기록을 덮지 못한다** (`run_owner_mismatch`).
+5. **셈은 보낸 쪽이 센 것이고, 「어느 PC였나」는 Center가 읽을 때 채운다** — 보내는 쪽이 제
+   id를 적지 않는다 (신원은 키다, C4).
 """
 
 from __future__ import annotations
@@ -201,6 +203,67 @@ def test_the_listing_keeps_the_counts_the_sender_counted(client: Any) -> None:
     assert (found["ai_tasks"], found["replayed_tasks"], found["ui_tasks"]) == (2, 1, 1)
     assert (found["service_calls"], found["human_requests"]) == (4, 0)
     assert read(client, "/api/v1/runs").json()["runs"][0]["ui_tasks"] == 1, "목록에도 실린다"
+
+
+def test_the_confirmation_count_is_optional_and_kept_as_sent(client: Any) -> None:
+    """CON-02 「확인률」 — **보낸 쪽이 가른 셈**을 그대로 둔다 (C3 `confirmations`).
+
+    **옛 Bot UI가 안 보내면 `None`**이다 — 0으로 채우면 「확인이 없었다」와 「세지 않았다」가
+    같아져 확인률이 조용히 낮아진다.
+    """
+    post(client, [started(), event(2, "run_finished", status="success", duration_s=2, ai_tasks=0,
+                                   replayed_tasks=0, ui_tasks=0, service_calls=0,
+                                   human_requests=3, confirmations=1)])
+    found = read(client, f"/api/v1/runs/{RUN}").json()
+    assert (found["human_requests"], found["confirmations"]) == (3, 1)
+
+    old = "run_20261005_101600_b2c3d4"
+    post(client, [{**started(), "run_id": old},
+                  {**event(2, "run_finished", status="success", duration_s=1, ai_tasks=0,
+                           replayed_tasks=0, ui_tasks=0, service_calls=0, human_requests=2),
+                   "run_id": old}], run_id=old)
+    without = read(client, f"/api/v1/runs/{old}").json()
+    assert without["human_requests"] == 2
+    assert without["confirmations"] is None, "안 보낸 것은 0이 아니라 모르는 것이다"
+
+
+def test_the_run_says_which_pc_sent_it(client: Any) -> None:
+    """CON-01 「Bot UI」 — **Center가 읽을 때 채운다** (보낸 키 → C4 키 묶기).
+
+    보내는 쪽이 제 id를 적지 않는다 (신원은 키다, C4) — 그래서 본문에 없는 값이 나온다.
+    """
+    created = client.post(
+        "/api/v1/center-keys",
+        json={"name": "현장 PC 1", "type": "bot_ui"},
+        headers={"Authorization": f"Bearer {ADMIN}"},
+    )
+    assert created.status_code == 201, created.text
+    raw = created.json()["key"]
+    registered = client.post(
+        "/api/v1/bot-ui/register",
+        json={
+            "schema": 1,
+            "machine_id": "7" * 64,
+            "name": "현장 PC 1",
+            "os": "windows-11-23H2",
+            "versions": {"bot_ui": "0.1.0", "core": "0.1.0"},
+        },
+        headers={"Authorization": f"Bearer {raw}"},
+    )
+    assert registered.status_code < 400, registered.text
+    bot_ui_id = registered.json()["bot_ui_id"]
+
+    post(client, [started()], token=raw)
+    found = read(client, f"/api/v1/runs/{RUN}").json()
+    assert found["bot_ui_id"] == bot_ui_id
+    assert read(client, f"/api/v1/runs?bot_ui_id={bot_ui_id}").json()["total"] == 1
+    assert read(client, "/api/v1/runs?bot_ui_id=bui_00000000").json()["total"] == 0
+
+    # 토큰·Studio 키가 보낸 기록에는 **없다** — 그 키에 묶인 PC가 없다.
+    other = "run_20261005_101600_b2c3d4"
+    post(client, [{**started(), "run_id": other}], run_id=other)
+    assert read(client, f"/api/v1/runs/{other}").json()["bot_ui_id"] is None
+    assert read(client, f"/api/v1/runs?bot_ui_id={bot_ui_id}").json()["total"] == 1, "그 PC 것만"
 
 
 def test_an_unknown_run_is_404(client: Any) -> None:
