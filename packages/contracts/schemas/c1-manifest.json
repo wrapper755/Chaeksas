@@ -453,17 +453,24 @@
           "type": "string"
         },
         "run_locations": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Run Locations",
-          "type": "array"
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Locations"
         }
       },
       "required": [
         "id",
-        "extension",
-        "run_locations"
+        "extension"
       ],
       "title": "TaskTypeNeed",
       "type": "object"

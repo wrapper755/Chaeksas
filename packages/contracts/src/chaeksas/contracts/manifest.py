@@ -78,7 +78,11 @@ class TaskTypeNeed(ContractModel):
 
     id: str
     extension: str
-    run_locations: list[str]
+    #: **아는 쪽이 준다 — 모르면 넣지 않는다** (C3 `queued_s`·C4 `key_expires_at`과 같은 결).
+    #: 실행 위치는 **확장 정의만** 안다 (C13 `task_types[].run_locations`, ADR-0018). 패키지를
+    #: 만드는 PC에 그 확장이 깔려 있지 않거나 꺼져 있으면(ADR-0043) 적을 것이 없다 — 그때 빈
+    #: 목록을 적으면 R2가 「서버에서 안 된다」로 읽어 **올바른 패키지를 거부한다**.
+    run_locations: list[str] | None = None
 
 
 class ToolpackRef(ContractModel):
@@ -198,8 +202,13 @@ def _check_r2(m: Manifest) -> list[Violation]:
         return []
     items = []
     items += [f"domains:{d}" for d in m.requires.domains if d in PC_ONLY_DOMAINS]
+    # **선언된 것이 `server`를 빼놓았을 때만** 막는다. 비어 있거나 없는 것은 「모른다」는 뜻이고
+    # (`TaskTypeNeed.run_locations`), 모르는 것을 막으면 확장을 깔지 않은 PC에서 만든 올바른
+    # 패키지가 거부된다. 그 확장이 **정말 없는** 경우는 배포 때 확장 누락이 막는다 (C7).
     items += [
-        f"task_types:{t.id}" for t in m.requires.task_types if "server" not in t.run_locations
+        f"task_types:{t.id}"
+        for t in m.requires.task_types
+        if t.run_locations and "server" not in t.run_locations
     ]
     if m.human.approval_field:
         items.append("human.approval_field")

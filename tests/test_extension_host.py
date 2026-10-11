@@ -82,6 +82,19 @@ def test_builtin_contributes_task_type_and_utility(host: ExtensionHost) -> None:
     assert utilities["selector-registration"].needs_runtime == "worker"
 
 
+def test_the_run_location_table_only_holds_task_types_that_are_turned_on(host: ExtensionHost) -> None:
+    """C14 B6·C1 R2가 묻는 표다. **꺼 둔 확장의 종류는 없다** (ADR-0043 — 기여를 내지 않는다).
+
+    그래서 받는 쪽은 **표에 없는 종류를 막지 않는다** — 막으면 그 확장을 끈 PC에서 올바른
+    그림이 「서버에서 안 된다」가 된다.
+    """
+    assert host.task_type_locations() == {"ui_task": ["pc"]}
+
+    off = ExtensionHost(off=[BUILTIN_ID])
+    off.load_entry_points()
+    assert off.task_type_locations() == {}, "꺼 둔 확장의 태스크 종류가 표에 남았다"
+
+
 def test_builtin_declares_the_worker_as_a_local_runtime(host: ExtensionHost) -> None:
     """Worker는 플랫폼의 구성요소가 아니라 확장이 선언한 로컬 런타임이다 (ADR-0018)."""
     runtimes = {c.value.id: c.value for c in host.local_runtimes()}

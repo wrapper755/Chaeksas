@@ -71,7 +71,9 @@ def run_test(window: MainWindow) -> None:
         return
 
     # 그림 검사(B1~B15)와 **사전 점검**(이 PC에서 돌 수 있나)이 같은 관문이다.
-    violations = inspect(found.process, process) + window.readiness()
+    violations = inspect(
+        found.process, process, task_type_locations=window.task_type_locations()
+    ) + window.readiness()
     blocking = [v for v in violations if v.blocks]
     if blocking:
         window.show_preflight(found.process, violations)

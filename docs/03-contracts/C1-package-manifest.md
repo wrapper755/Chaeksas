@@ -80,7 +80,7 @@
 | `service_apps` | ServiceAppNeed[] | 부르는 서비스 앱과 **키 참조** (아래). UI 태스크가 있으면 `ui-automation`이 들어간다 |
 | `resources` | `{type, id}`[] | 확장이 기여한 자원 중 쓰는 것 (예: `{type: "ui_page", id: "erp.order.form"}`). Center 리소스 목록(C7 확장 기여 자원)과 대조 |
 | `extensions` | `{id, version, definition_hash?}`[] | 쓰는 확장과 버전 범위 (C13). 외부 확장이면 `definition_hash`로 정의를 고정한다. Studio가 채운다 |
-| `task_types` | `{id, extension, run_locations}`[] | 쓰는 태스크 종류 중 **확장이 기여한 것**과, 그 확장 정의에 적힌 실행 위치. Studio가 빌드할 때 확장 정의에서 옮겨 적는다. Center는 이것으로 R2를 판정하고, 실행하는 쪽은 자기 확장 정의로 다시 확인한다 |
+| `task_types` | `{id, extension, run_locations?}`[] | 쓰는 태스크 종류 중 **확장이 기여한 것**과, 그 확장 정의에 적힌 실행 위치. Studio가 빌드할 때 확장 정의에서 옮겨 적는다. Center는 이것으로 R2를 판정하고, 실행하는 쪽은 자기 확장 정의로 다시 확인한다. **`run_locations`는 아는 쪽이 준다 — 모르면 넣지 않는다**: 빌드하는 PC에 그 확장이 깔려 있지 않거나 꺼져 있으면(ADR-0043) 적을 값이 없다 |
 | `libs` | str[] | 복사해 넣은 공유 BPM 프로세스 `<id>@<version>` |
 | `toolpacks` | ToolpackRef[] | 쓰는 툴팩 `{id, version, content_hash}` (해시로 고정) |
 | `runtimes` | str[] | 예: `node>=20`, `chromium` |
@@ -119,13 +119,23 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 | # | 규칙 | 위반 시 |
 | --- | --- | --- |
 | R1 | `kind=bpm_process`면 `run_location`, `entry`, `process_id`가 있다 (`run_location`은 생략 시 `server`로 채움) | 422 |
-| R2 | `run_location=server`면: `requires.domains`에 `web`·`desktop` 없음, `requires.task_types[]`가 모두 `run_locations`에 `server`를 가짐 (예: `ui_task`는 `pc`만이라 불가), `human.approval_field=false`, `human.confirmation=false` | 422 `server_incompatible` + 걸린 항목 목록 |
+| R2 | `run_location=server`면: `requires.domains`에 `web`·`desktop` 없음, `requires.task_types[]`가 **`run_locations`를 적었으면** 거기에 `server`가 있음 (예: `ui_task`는 `pc`만이라 불가), `human.approval_field=false`, `human.confirmation=false` | 422 `server_incompatible` + 걸린 항목 목록 |
 | R3 | `run_location=server`인 BPM 프로세스가 `run_location=pc`인 공유 BPM 프로세스를 부르면 PC 위임이다 → schema 1에서는 **거부** (PC 위임은 ADR-0016 §3 제안, 확정되면 필드를 추가) | 422 `delegation_not_supported` |
 | R8 | (Center, 배포 때) `run_location=server`면 `requires.service_apps[].operations`가 모두 C11 manifest에서 `server_ok=true`이고 결정 수행을 지원한다 (리소스 목록 C7과 대조). 업로드 때는 경고만 | 배포 422 `operation_not_server_ok` / `operation_not_deterministic` |
 | R4 | `key_ref`·`task_key_refs`는 이름 규칙을 따른다. 규칙상 `_`가 없어 키 값(`chk_…`)은 들어갈 수 없다 | 422 `invalid_key_ref` |
 | R5 | `manifest.json`·BPMN 어디에도 키 값·비밀 값이 없다 (Studio 빌드가 보장, Center는 R4만 검사) | — |
 | R6 | `content_hash`가 실제 내용과 같다 (C2) | 422 `hash_mismatch` |
 | R7 | `requires.toolpacks[].content_hash`가 비어 있지 않다 (로컬 개발용 툴팩은 업로드 불가) | 422 |
+
+**R2는 모르는 것을 막지 않는다.** 태스크 종류의 실행 위치는 **확장 정의만** 안다 (C13
+`task_types[].run_locations`, ADR-0018) — 빌드하는 PC에 그 확장이 없거나 꺼져 있으면 Studio가
+적을 값이 없다. 그래서 `run_locations`가 **없거나 비어 있으면 「모른다」**로 읽고 R2는
+**선언된 것이 `server`를 빼놓았을 때만** 막는다. 모르는 것까지 막으면 확장을 깔지 않은
+PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드에서 거부된다**. 확장이 **정말 없는**
+경우는 따로 막힌다 — 배포 때 그 확장이 Center에 없으면 거부하고 (C7 `blocking_at_deploy`),
+실행하는 쪽의 사전 점검도 `task_types_unsupported`로 시작 전에 말한다. C13은 확장이
+`run_locations`를 비워 두는 것을 이미 금지하므로(`run_locations_missing`) 빈 목록이 선언에서
+올 일은 없다.
 
 ## 예시
 
@@ -224,6 +234,7 @@ PC Bot (UI 태스크가 있음):
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
 | 2026-10-01 | 1 | 초안 | 0013, 0015, 0016 |
+| 2026-10-11 | 1 | `requires.task_types[].run_locations`를 **선택 칸**으로 바꿨다 — 「모른다」를 적을 자리가 없어 Studio가 빈 목록을 썼고, `"server" not in []`이 참이라 **서버 Bot에 확장 태스크가 하나라도 있으면 업로드가 422**였다(그 확장이 서버를 지원해도). R2는 이제 **선언된 것이 `server`를 빼놓았을 때만** 막는다 | 0018, 0043 |
 | 2026-10-07 | 1 | `inputs`(ManifestInput[])를 더했다 — 작업 지시 화면(CON-05)이 Bot이 받는 입력을 알 길이 없었다. Studio가 그림에서 모은다. 없으면 빈 목록 (옛 패키지와 호환) | — |
 | 2026-10-01 | 1 | 검토 반영: `key_ref` 규칙 하나로(40자), 같은 해시 재업로드 200, R8 서버 작업 검사 | — |
 | 2026-10-01 | 1 | 확장 반영: `requires.extensions`, R2를 확장 정의의 `run_locations`로 판정 | 0018 |

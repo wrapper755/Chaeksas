@@ -14,7 +14,8 @@
 
 - **「서버로 바꾸면 무엇이 걸리나」는 검사와 같은 함수로 센다** (`contracts.server_blockers`) —
   베껴 두면 창이 「바꿔도 된다」고 하고 F6이 막는 일이 생긴다. **저장을 막지는 않는다**
-  (화면 설계서 STU-06) — 사람이 고칠 거리를 알려 줄 뿐이다.
+  (화면 설계서 STU-06) — 사람이 고칠 거리를 알려 줄 뿐이다. 확장 태스크는 실행 위치를
+  **확장 정의만** 아니(C13·ADR-0018) 부르는 쪽이 표를 넘긴다 — F6이 쓰는 것과 같은 표다.
 - **키 값은 여기 넣지 않는다** (ADR-0013) — 참조 이름만이다. 「이 PC의 값」은 Studio 설정에
   그 값이 있나를 **읽어서** 보이고, 넣는 자리는 STU-10이다.
 - **읽고 쓰는 것은 진입 정의 하나다.** 하위 정의가 적은 `service_keys`를 섞어 보이면 저장이
@@ -27,7 +28,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
@@ -224,12 +225,16 @@ class ProcessInfoDialog(QDialog):
         *,
         has_value: Callable[[str], bool],
         editable: bool = True,
+        task_type_locations: Mapping[str, Sequence[str]] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.process = process
         self.workspace = workspace
         self.has_value = has_value
+        #: 확장 태스크 종류 → 실행 위치 (확장 호스트가 C13에서 읽어 준다). **F6과 같은 표**여야
+        #: 한다 — 창이 세지 못하는 것을 검사가 막으면 사람이 영문을 모른다.
+        self.task_type_locations = task_type_locations
         #: 진입 정의가 열려 있나 — **그림을 고칠 수 있는가**다 (아니면 두 칸이 꺼진다).
         self.editable = editable
         #: 「저장」을 눌러 바뀐 것. 부르는 쪽이 캔버스에 넘길 `chk:process`가 여기 있다.
@@ -392,12 +397,13 @@ class ProcessInfoDialog(QDialog):
     def blockers(self) -> list[str]:
         """서버에서 걸리는 것들 — **검사와 같은 함수**다 (`contracts.server_blockers`).
 
-        확장 태스크의 실행 위치는 보지 않는다 — Studio의 F6도 그 표를 넘기지 않으므로 둘이
-        **같은 것을 말한다** (어긋나면 「검사는 통과했는데 창이 막는다」가 된다).
+        확장 태스크도 센다 — 부르는 쪽이 넘긴 표로 본다 (`task_type_locations`). F6이 **같은
+        표**를 쓰므로 둘이 같은 것을 말한다 (어긋나면 「검사는 통과했는데 창이 막는다」가 된다).
+        **표에 없는 종류는 세지 않는다** — 그 확장이 깔려 있지 않으면 실행 위치를 모른다.
         """
         if self.entry is None or self.entry.process is None:
             return []
-        return server_blockers(self.entry.process)
+        return server_blockers(self.entry.process, self.task_type_locations)
 
     def _refresh_warning(self) -> None:
         """「서버」일 때만 센다. **저장을 막지 않는다** (화면 설계서 STU-06)."""

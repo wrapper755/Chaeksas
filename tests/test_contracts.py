@@ -221,6 +221,38 @@ def test_r2_server_with_pc_only_things_is_caught() -> None:
     assert v[0].items == ["domains:web", "task_types:ui_task", "human.approval_field", "human.confirmation"]
 
 
+def test_r2_does_not_block_a_task_type_whose_run_locations_are_unknown() -> None:
+    """**모르는 것을 막지 않는다** — 실행 위치는 확장 정의만 안다 (C13·ADR-0018).
+
+    확장이 깔려 있지 않은(또는 꺼 둔) PC에서 패키지를 만들면 Studio가 적을 값이 없다. 그때 빈
+    목록을 적으면 「서버에서 안 된다」로 읽혀 **올바른 패키지가 업로드에서 422**를 받는다.
+    그 확장이 **정말 없는** 경우는 배포 때 확장 누락이 막는다 (C7).
+    """
+    unknowns: list[list[str] | None] = [None, []]
+    for unknown in unknowns:
+        m = manifest(
+            run_location="server",
+            requires=Requires(
+                task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=unknown)]
+            ),
+        )
+        assert validate(m) == [], f"모르는 실행 위치({unknown!r})를 막았다"
+
+
+def test_r2_blocks_only_when_the_declaration_leaves_server_out() -> None:
+    """선언된 것이 `server`를 가지면 통과다 — 「확장 태스크가 있다」만으로 막지 않는다."""
+    def made(where: list[str]) -> Manifest:
+        return manifest(
+            run_location="server",
+            requires=Requires(
+                task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=where)]
+            ),
+        )
+
+    assert validate(made(["pc", "server"])) == []
+    assert [x.code for x in validate(made(["pc"]))] == ["server_incompatible"]
+
+
 def test_r2_pc_location_allows_everything() -> None:
     m = manifest(
         run_location="pc",

@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHeaderView, QTableWidget, QTableWidgetItem, QWidget
@@ -54,10 +54,20 @@ UNSAVED = (
 )
 
 
-def inspect(process: BpmnProcess, owner: BpmProcess | None = None) -> list[Violation]:
-    """B1~B15. 작업 폴더가 있으면 DMN·호출 대조까지 한다 (B14)."""
+def inspect(
+    process: BpmnProcess,
+    owner: BpmProcess | None = None,
+    *,
+    task_type_locations: Mapping[str, Sequence[str]] | None = None,
+) -> list[Violation]:
+    """B1~B15. 작업 폴더가 있으면 DMN·호출 대조까지 한다 (B14).
+
+    `task_type_locations`는 확장 호스트가 주는 `{종류: [실행 위치]}`다 — B6이 **확장 태스크를**
+    서버에서 되는지 보는 데 쓴다. 주지 않으면 B6이 확장 태스크를 건너뛰므로 Studio는 늘 준다
+    (STU-06의 셈과 **같은 표**여야 한다 — 어긋나면 창이 「바꿔도 된다」고 하고 F6이 막는다).
+    """
     if owner is None:
-        violations = validate_bpmn(process)
+        violations = validate_bpmn(process, task_type_locations=task_type_locations)
     else:
         violations = validate_bpmn(
             process,
@@ -65,6 +75,7 @@ def inspect(process: BpmnProcess, owner: BpmProcess | None = None) -> list[Viola
             called_processes={
                 other.id: list(other.info.outputs) for other in owner.processes().values()
             },
+            task_type_locations=task_type_locations,
         )
     return violations + check_expressions(process)
 
@@ -95,7 +106,11 @@ def readiness(
     if dirty:
         out.append(Violation(rule=PREFLIGHT_RULE, code="unsaved", message=UNSAVED, severity=SEVERITY_WARNING))
     try:
-        manifest = build_manifest(owner)
+        # 확장 태스크의 실행 위치는 **호스트만** 안다 (C13) — 매니페스트에 진짜 값이 들어가야
+        # R2가 거짓으로 막지 않는다. 호스트가 없으면 넣지 않는다 (「모른다」).
+        manifest = build_manifest(
+            owner, task_type_locations=None if host is None else host.task_type_locations()
+        )
     except (PackageError, AssertionError, ValueError) as e:
         # 시작 정의가 없거나 읽히지 않는다 — B 규칙이 이미 말하고 있을 것이다. 덮어쓰지 않는다.
         out.append(

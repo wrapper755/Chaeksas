@@ -370,6 +370,15 @@ class ExtensionHost:
     def task_type(self, task_type_id: str) -> Contribution[TaskTypeContribution] | None:
         return next((c for c in self.task_types() if c.value.id == task_type_id), None)
 
+    def task_type_locations(self) -> dict[str, list[str]]:
+        """`{태스크 종류: [실행 위치]}` — C14 B6·C1 R2가 「서버에서 되나」를 묻는 표다.
+
+        **여기 없는 종류는 「모른다」**다 (꺼 둔 확장은 기여를 하나도 내지 않는다 — ADR-0043).
+        받는 쪽은 모르는 것을 막지 않는다: 모르는 것을 막으면 확장을 깔지 않은 PC에서 만든
+        올바른 그림·패키지가 거부된다.
+        """
+        return {c.value.id: list(c.value.run_locations) for c in self.task_types()}
+
     def agent_environments(self) -> list[Contribution[AgentEnvironmentContribution]]:
         """AI 태스크의 `web`·`desktop` 환경 (C13 `agent_environments`, ADR-0037)."""
         return self._gather(lambda m: m.contributes.agent_environments)

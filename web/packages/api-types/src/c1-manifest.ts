@@ -146,7 +146,7 @@ export interface ServiceAppNeed {
 export interface TaskTypeNeed {
   extension: string;
   id: string;
-  run_locations: string[];
+  run_locations?: string[] | null;
   [k: string]: unknown;
 }
 /**

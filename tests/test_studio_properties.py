@@ -129,6 +129,62 @@ def test_errors_and_warnings_are_counted_apart() -> None:
     assert "막는 것" in summarize(found) and "경고" in summarize(found)
 
 
+def test_f6_counts_extension_tasks_only_with_the_table() -> None:
+    """B6 — 확장 태스크의 실행 위치는 **확장 정의만** 안다 (C13·ADR-0018).
+
+    F6이 표를 넘겨야 센다. 표가 없으면 건너뛴다 — 확장을 깔지 않은(꺼 둔) PC에서 올바른
+    그림을 「서버에서 안 된다」고 막으면 안 된다. **STU-06의 창과 같은 표**를 쓴다.
+    """
+    xml = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+  <bpmn:process id="t"><bpmn:extensionElements>
+    <chk:process>{"run_location": "server"}</chk:process>
+  </bpmn:extensionElements>
+    <bpmn:startEvent id="Start"/>
+    <bpmn:serviceTask id="T"><bpmn:extensionElements>
+      <chk:task type="ocr_task" extension="doc-ocr">{}</chk:task>
+    </bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:endEvent id="End"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="T" />
+    <bpmn:sequenceFlow id="f2" sourceRef="T" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>"""
+    process = read_process(xml)
+    assert [v.rule for v in inspect(process) if v.rule == "B6"] == []
+
+    told = inspect(process, task_type_locations={"ocr_task": ["pc"]})
+    found = [v for v in told if v.rule == "B6"]
+    assert found and found[0].code == "server_incompatible"
+    assert found[0].items == ["T: 태스크 종류 ocr_task (실행 위치 ['pc'])"]
+
+    allowed = inspect(process, task_type_locations={"ocr_task": ["pc", "server"]})
+    assert [v.rule for v in allowed if v.rule == "B6"] == []
+
+
+def test_no_example_breaks_f6_with_the_real_extension_table() -> None:
+    """예제 묶음을 **설치된 확장의 진짜 표로** F6에 다시 건다 (CLAUDE.md §3-6).
+
+    `test_contracts_bpmn_ext`의 예제 시험은 표를 주지 않아 확장 태스크를 건너뛴다. 이제
+    Studio가 표를 넘기므로 걸리는 예제가 생기면 **설계자 화면에 오류로 뜬다** — 그때는 예제를
+    비틀지 말고 그림의 실행 위치를 고친다.
+    """
+    from chaeksas.core.extensions import ExtensionHost  # noqa: PLC0415
+
+    host = ExtensionHost()
+    host.load_entry_points()
+    table = host.task_type_locations()
+    assert table, f"설치된 확장의 태스크 종류를 찾지 못했다: {table}"
+
+    caught = {}
+    for path in sorted(EXAMPLES.glob("*.bpmn")):
+        found = inspect(read_process(path.read_bytes()), task_type_locations=table)
+        blocking = [str(v) for v in found if v.rule == "B6"]
+        if blocking:
+            caught[path.stem] = blocking
+    assert caught == {}
+
+
 def test_a_helper_called_the_wrong_way_shows_up_as_b15() -> None:
     """B15 — 작성자가 **실행할 때가 아니라 검사 탭에서** 본다 (C14).
 

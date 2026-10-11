@@ -42,6 +42,10 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-exampl
 RECONCILIATION = "bx01_invoice_reconciliation"
 CREDIT = "bx06_bulk_credit_check"
 EXPENSE = "bx03_expense_approval"
+#: **확장 태스크**(UI 태스크)가 있는 예제 — 실행 위치는 확장 정의만 안다 (C13).
+EXTENSION = "bx04_tax_invoice_issue"
+#: 확장 호스트가 주는 표 (`ExtensionHost.task_type_locations()`).
+UI_TASK_ON_PC = {"ui_task": ["pc"]}
 
 
 def imported(tmp_path: Path, example: str) -> BpmProcess:
@@ -65,6 +69,52 @@ def test_a_service_app_call_becomes_a_requirement_with_a_key_reference(tmp_path:
     assert app.app_id == "ext-credit"
     assert app.operations == ["lookup"]
     assert app.key_ref == "finance-credit"
+
+
+def test_a_task_types_run_locations_come_from_the_extension_table(tmp_path: Path) -> None:
+    """실행 위치는 **확장 정의만** 안다 (C13 `task_types[].run_locations`, ADR-0018).
+
+    표에 없으면 **넣지 않는다** — 빈 목록을 적으면 C1 R2가 「서버에서 안 된다」로 읽는다
+    (C3 `queued_s`·C4 `key_expires_at`과 같은 결: 아는 쪽이 주고, 모르면 넣지 않는다).
+    """
+    made = imported(tmp_path, EXTENSION)
+    (need,) = collect_requires(made).task_types
+    assert (need.id, need.extension) == ("ui_task", "ui-automation")
+    assert need.run_locations is None, "모르는 것을 빈 목록으로 적었다"
+
+    (told,) = collect_requires(made, task_type_locations=UI_TASK_ON_PC).task_types
+    assert told.run_locations == ["pc"]
+
+
+def test_a_server_process_with_an_extension_task_is_not_falsely_rejected(tmp_path: Path) -> None:
+    """**올리기가 막히던 버그** (C1 R2) — 「확장 태스크가 있다」만으로 422를 받으면 안 된다.
+
+    빈 목록은 `"server" not in []`이라 참이어서, 실행 위치가 server인 Bot에 확장 태스크가
+    하나라도 있으면 **그 확장이 서버를 지원하든 말든** Center 업로드가 거부했다. 설계자가
+    보는 것은 `manifest_invalid` + 태스크 종류 이름뿐이라 고칠 데를 알 수 없다.
+    """
+    made = imported(tmp_path, EXTENSION)
+    entry = made.entry_definition
+    assert entry is not None
+    entry.path.write_text(
+        entry.path.read_text(encoding="utf-8").replace(
+            '"run_location": "pc"', '"run_location": "server"'
+        ),
+        encoding="utf-8",
+    )
+    server = Workspace(tmp_path / "작업").read(made.folder, made.group)
+    assert build_manifest(server).run_location == "server"
+
+    # 모를 때: 막지 않는다 (확장을 깔지 않은 PC에서도 패키지를 만들 수 있다).
+    unknown = build_manifest(server)
+    assert [v.code for v in validate(unknown)] == []
+    # 서버를 지원한다고 선언했을 때: 막지 않는다.
+    ok = build_manifest(server, task_type_locations={"ui_task": ["pc", "server"]})
+    assert [v.code for v in validate(ok)] == []
+    # PC 전용이라고 선언했을 때: **막는다.** 그래야 설계자가 Studio에서 안다.
+    caught = validate(build_manifest(server, task_type_locations=UI_TASK_ON_PC))
+    assert [v.code for v in caught] == ["server_incompatible"]
+    assert "task_types:ui_task" in caught[0].items
 
 
 def test_approvals_say_what_kind_of_human_is_needed(tmp_path: Path) -> None:

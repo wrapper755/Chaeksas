@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import zipfile
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -62,11 +62,16 @@ def collect_requires(
     *,
     definitions: Sequence[Definition] | None = None,
     inside: Collection[str] | None = None,
+    task_type_locations: Mapping[str, Sequence[str]] | None = None,
 ) -> Requires:
     """그림에서 「무엇이 필요한가」를 모은다 (C1 `requires`).
 
     `definitions`를 주면 **그 정의들만** 본다 (공유 BPM 프로세스 패키지는 고른 정의만 담는다).
     `inside`는 「이 패키지 안에 있는 정의 id」로, 그 밖을 부르면 `libs`가 된다.
+
+    `task_type_locations`는 확장 호스트가 주는 `{종류: [실행 위치]}`다
+    (`ExtensionHost.task_type_locations()`). **표에 없는 종류는 넣지 않는다** — 그림은 태스크
+    종류의 실행 위치를 모르고, 확장 정의만 안다 (ADR-0018).
     """
     domains: set[str] = set()
     tools: set[str] = set()
@@ -103,9 +108,13 @@ def collect_requires(
                 )
             task = node.prop("task")
             if task is not None:
-                # **어느 실행 위치에서 되는지는 확장이 안다** (ADR-0018) — 모르면 비워 둔다.
+                # **어느 실행 위치에서 되는지는 확장이 안다** (ADR-0018) — 호스트가 준 표에
+                # 없으면 **넣지 않는다**. 빈 목록을 적으면 R2가 「서버에서 안 된다」로 읽는다.
+                where = None if task_type_locations is None else task_type_locations.get(task.type)
                 task_types[task.type] = TaskTypeNeed(
-                    id=task.type, extension=task.extension, run_locations=[]
+                    id=task.type,
+                    extension=task.extension,
+                    run_locations=None if where is None else list(where),
                 )
             if node.called_element and node.called_element not in within:
                 libs.add(node.called_element)
@@ -199,7 +208,13 @@ def collect_triggers(entry: Definition) -> list[Trigger]:
     return out
 
 
-def build_manifest(process: BpmProcess, *, by: str = "studio", core: str = "0.1.0") -> Manifest:
+def build_manifest(
+    process: BpmProcess,
+    *,
+    by: str = "studio",
+    core: str = "0.1.0",
+    task_type_locations: Mapping[str, Sequence[str]] | None = None,
+) -> Manifest:
     """C1 매니페스트 (`content_hash`는 아직 비어 있다 — 파일을 모은 뒤 채운다)."""
     entry = _entry(process)
     assert entry.process is not None
@@ -217,7 +232,7 @@ def build_manifest(process: BpmProcess, *, by: str = "studio", core: str = "0.1.
         entry=f"process/{entry.path.name}",
         process_id=entry.process.id,
         triggers=collect_triggers(entry),
-        requires=collect_requires(process),
+        requires=collect_requires(process, task_type_locations=task_type_locations),
         human=collect_human(process),
         # 작업 지시 화면(CON-05)이 입력 칸을 그린다 — 사람이 두 번 적지 않게 그림에서 옮긴다.
         inputs=[
@@ -244,6 +259,7 @@ def build_lib_manifest(
     *,
     by: str = "studio",
     core: str = "0.1.0",
+    task_type_locations: Mapping[str, Sequence[str]] | None = None,
 ) -> Manifest:
     """공유 BPM 프로세스 패키지의 매니페스트 (C1 `kind=process_lib`, STU-12).
 
@@ -260,7 +276,9 @@ def build_lib_manifest(
         id=process.id,
         version=process.version,
         name=process.name or process.id,
-        requires=collect_requires(process, definitions=chosen, inside=within),
+        requires=collect_requires(
+            process, definitions=chosen, inside=within, task_type_locations=task_type_locations
+        ),
         human=collect_human(process, definitions=chosen),
         provides=collect_provides(chosen),
         built=Built(
@@ -312,10 +330,17 @@ def check_lib(process: BpmProcess, manifest: Manifest, files: dict[str, bytes]) 
 
 
 def export_lib(
-    process: BpmProcess, definitions: Sequence[Definition], target: Path, *, by: str = "studio"
+    process: BpmProcess,
+    definitions: Sequence[Definition],
+    target: Path,
+    *,
+    by: str = "studio",
+    task_type_locations: Mapping[str, Sequence[str]] | None = None,
 ) -> Path:
     """공유 BPM 프로세스 패키지 zip 하나 (STU-12 「내보내기」)."""
-    manifest = build_lib_manifest(process, definitions, by=by)
+    manifest = build_lib_manifest(
+        process, definitions, by=by, task_type_locations=task_type_locations
+    )
     files = gather_lib(process, definitions)
     blocking = [v for v in check_lib(process, manifest, files) if v.blocks]
     if blocking:
@@ -351,9 +376,15 @@ def check(process: BpmProcess, manifest: Manifest, files: dict[str, bytes] | Non
     return out
 
 
-def export(process: BpmProcess, target: Path, *, by: str = "studio") -> Path:
+def export(
+    process: BpmProcess,
+    target: Path,
+    *,
+    by: str = "studio",
+    task_type_locations: Mapping[str, Sequence[str]] | None = None,
+) -> Path:
     """패키지 zip 하나를 만든다. `content_hash`는 **파일에서 계산한다** (C2·R6)."""
-    manifest = build_manifest(process, by=by)
+    manifest = build_manifest(process, by=by, task_type_locations=task_type_locations)
     files = gather(process)
     blocking = [v for v in check(process, manifest, files) if v.blocks]
     if blocking:

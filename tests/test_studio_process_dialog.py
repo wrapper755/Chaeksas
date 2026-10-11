@@ -42,11 +42,14 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-exampl
 
 #: 서비스 앱을 키 참조로 부르는 예제 (`ext-credit` / `finance-credit`).
 CREDIT = "bx06_bulk_credit_check"
-#: **데스크톱 AI 태스크**가 있어 서버에서 돌 수 없는 예제 (`PC_ONLY_DOMAINS`).
-#:
-#: UI 태스크(확장 태스크)가 있는 예제를 쓰지 않는다 — 확장 태스크의 실행 위치는 Studio가
-#: 아직 모르고(아래 시험이 그것을 적어 둔다) 그래서 세지 못한다.
+#: **데스크톱 AI 태스크**가 있어 서버에서 돌 수 없는 예제 (`PC_ONLY_DOMAINS`) — 플랫폼이
+#: 혼자 아는 것들이다.
 PC_EXAMPLE = "fx05_desktop_autonomous"
+#: **확장 태스크**(UI 태스크)가 있는 예제. 실행 위치는 플랫폼이 모르고 **확장 정의만** 안다
+#: (C13·ADR-0018) — 부르는 쪽이 넘긴 표로 센다.
+EXTENSION_EXAMPLE = "bx04_tax_invoice_issue"
+#: 그 표 (`ExtensionHost.task_type_locations()`가 주는 모양). UI 태스크는 PC에서만 돈다.
+UI_TASK_ON_PC = {"ui_task": ["pc"]}
 
 
 @pytest.fixture
@@ -143,6 +146,40 @@ def test_the_window_and_the_check_count_the_same_things(space: Workspace) -> Non
     assert found and sorted(found[0].items) == sorted(blockers)
 
 
+def test_the_window_counts_extension_tasks_from_the_table_it_is_given(space: Workspace) -> None:
+    """확장 태스크도 센다 — **표를 받아서** (C13 `task_types[].run_locations`, ADR-0018).
+
+    표를 주지 않으면 세지 않는다. 「모른다」와 「서버에서 안 된다」를 가르는 자리다 — 확장을
+    깔지 않은(꺼 둔) PC에서 올바른 그림을 막으면 안 된다.
+    """
+    process = imported(space, EXTENSION_EXAMPLE)
+    assert dialog(space, process).blockers() == [], "표가 없으면 확장 태스크를 모른다"
+
+    found = dialog(space, process, task_type_locations=UI_TASK_ON_PC).blockers()
+    assert found, "UI 태스크가 있는데 세지 못했다"
+    assert all("ui_task" in one for one in found)
+
+    allowed = dialog(space, process, task_type_locations={"ui_task": ["pc", "server"]}).blockers()
+    assert allowed == [], "확장이 server를 선언했으면 걸리지 않는다"
+
+
+def test_the_window_and_b6_use_the_same_table_for_extension_tasks(space: Workspace) -> None:
+    """**셋이 같은 표를 쓴다** — 창·F6·매니페스트. 어긋나면 한쪽이 거짓말을 한다."""
+    process = imported(space, EXTENSION_EXAMPLE)
+    entry = process.entry_definition
+    assert entry is not None and entry.process is not None
+    blockers = dialog(space, process, task_type_locations=UI_TASK_ON_PC).blockers()
+
+    xml = entry.path.read_text(encoding="utf-8")
+    as_server = read_process(xml.replace('"run_location": "pc"', '"run_location": "server"'))
+    found = [
+        v
+        for v in validate_bpmn(as_server, task_type_locations=UI_TASK_ON_PC)
+        if v.rule == "B6"
+    ]
+    assert found and sorted(found[0].items) == sorted(blockers)
+
+
 def test_the_check_says_the_first_problem_only() -> None:
     rows = [KeyRow(app_id="a", ref="ok-ref", has_value=False)]
     assert check(name="이름", version="1.0.0", rows=rows, taken=[]) == ""
@@ -162,9 +199,19 @@ def test_the_check_says_the_first_problem_only() -> None:
 # ─────────────────────────── 창 ───────────────────────────
 
 
-def dialog(space: Workspace, process: BpmProcess, *, editable: bool = True) -> ProcessInfoDialog:
+def dialog(
+    space: Workspace,
+    process: BpmProcess,
+    *,
+    editable: bool = True,
+    task_type_locations: dict[str, list[str]] | None = None,
+) -> ProcessInfoDialog:
     return ProcessInfoDialog(
-        process, space, has_value=lambda ref: ref == "finance-credit", editable=editable
+        process,
+        space,
+        has_value=lambda ref: ref == "finance-credit",
+        editable=editable,
+        task_type_locations=task_type_locations,
     )
 
 

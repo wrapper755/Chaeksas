@@ -365,6 +365,15 @@ class MainWindow(QMainWindow):
 
     # ── 실행 전 검사 (B1~B15 + 사전 점검) ──
 
+    def task_type_locations(self) -> dict[str, list[str]]:
+        """확장 태스크 종류 → 실행 위치 (C13). **F6·STU-06·매니페스트가 같은 표를 쓴다.**
+
+        베껴 두면 셋이 서로 다른 말을 한다 — 창이 「서버로 바꿔도 된다」고 하고 F6이 막거나,
+        올리기가 거짓으로 422를 받는다. **꺼 둔 확장은 표에 없다** (ADR-0043) — 받는 쪽은
+        모르는 종류를 막지 않는다.
+        """
+        return self.extensions.host.task_type_locations()
+
     def readiness(self) -> list[Violation]:
         """사전 점검 — **이 PC에서 돌 수 있나** (`core.preflight`, ADR-0013).
 
@@ -401,7 +410,9 @@ class MainWindow(QMainWindow):
         except BpmnReadError as e:
             self.say(f"검사하지 못했습니다: {e}")
             return
-        violations = inspect(found, self.process) + self.readiness()
+        violations = inspect(
+            found, self.process, task_type_locations=self.task_type_locations()
+        ) + self.readiness()
         self.preflight.show_result(found, violations)
         self.bottom_tabs.setCurrentWidget(self.preflight)
         self.say(summarize(violations))
@@ -452,6 +463,8 @@ class MainWindow(QMainWindow):
             self.workspace,
             has_value=lambda ref: bool(ref) and store.service_key(ref) is not None,
             editable=editable,
+            # 창은 호스트를 들고 있지 않다 — **F6과 같은 표**를 여기서 넘긴다 (C13).
+            task_type_locations=self.task_type_locations(),
             parent=self,
         )
         if not dialog.exec() or dialog.saved is None:

@@ -63,7 +63,7 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 
 ### 4-5. 「설치」 (올리기·STU-11 읽기·STU-06은 닫았다)
 
-**올리기 둘과 STU-11 읽기는 닫았다** (`apps/studio/upload.py` + `center_resources.py`, Center 쪽 권한 관문은 `center/auth.py`·`api/package_access.py`). Studio 키로 올리고, 올라온 공유 BPM 프로세스·툴팩을 STU-11과 STU-03이 **같은 출처**(C5 패키지 표)에서 본다. **STU-06도 닫았다** (`process_dialog.py` — 그림 쪽은 캔버스를 거친다) — 붙이다 §4-12가 드러났다. **STU-15도 닫았다** ([ADR-0043](decisions/0043-turned-off-extensions.md)).
+**올리기 둘과 STU-11 읽기는 닫았다** (`apps/studio/upload.py` + `center_resources.py`, Center 쪽 권한 관문은 `center/auth.py`·`api/package_access.py`). Studio 키로 올리고, 올라온 공유 BPM 프로세스·툴팩을 STU-11과 STU-03이 **같은 출처**(C5 패키지 표)에서 본다. **STU-06도 닫았다** (`process_dialog.py` — 그림 쪽은 캔버스를 거친다. 확장 태스크의 실행 위치는 확장 호스트의 표로 센다 — F6·매니페스트가 같은 표를 쓴다). **STU-15도 닫았다** ([ADR-0043](decisions/0043-turned-off-extensions.md)).
 
 - **없는 것 하나 — 「설치」:** STU-11의 「설치」·「갱신」·「제거」와 STU-03의 같은 항목, 그리고 공유 BPM 프로세스의 「캔버스에 추가」(Call Activity)·「열기 (읽기 전용)」·「내 BPM 프로세스로 복사」. 「설치본」 칸과 「로컬만」 상태도 그때 채워진다.
 - **먼저 정할 것:** **받은 패키지를 어디에 풀 것인가.** `<data_dir>/libs/<id>@<version>/`? 작업 폴더 안? 시험 실행의 `callActivity` 해결(`requires.libs`)을 어디까지 넓히나? 툴팩은 도구를 어떻게 싣나? **ADR 하나가 먼저다** — 자리가 정해지지 않은 채 단추만 켜면 「눌렀는데 아무 일도 없다」가 된다. 지금은 **끄고 까닭을 적는다** (U3).
@@ -98,14 +98,6 @@ C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 
 **필터 다섯·목록 열·「UI 태스크」 섹션은 닫았다.** 「Bot UI」 필터·열은 C3 `RunInfo.bot_ui_id`로 닫았다 — **Center가 읽을 때** 보낸 키(C3 소유)에서 C4 키 묶기로 찾는다. 본문으로 받지 않는다(신원은 키다) 저장하지도 않는다(키를 다시 묶으면 낡는다).
 
 - **UIA-03 링크:** 상세의 「UI 태스크」 줄에서 그 앱의 관리 콘솔로 가는 링크. Center 콘솔은 **그 주소를 모른다** — C7 서비스 앱 리소스의 `console_url`을 BFF가 읽어 와야 한다. **크기:** 작다. **막는 것:** 어느 앱의 콘솔인지 고르는 길(실행 기록에는 `page_id`만 있고 어느 UI 자동화 앱인지는 없다)을 정해야 한다.
-
-### 4-12. 확장 태스크의 실행 위치를 Studio가 모른다
-
-**STU-06을 붙이다 드러났다.** 「서버에서 실행할 수 없는 태스크」를 세는 자리(C14 B6·`server_blockers`)는 확장 태스크를 `task_type_locations` 표로 판단하는데, **Studio는 그 표를 넘기지 않는다** — 그래서 UI 태스크가 있는 BPM 프로세스를 「서버」로 바꿔도 창도 F6도 아무 말을 하지 않는다. 배포할 때 Center가 C1 R2로 막으므로 **틀린 패키지가 돌지는 않지만**, 설계자가 그것을 Studio에서 알 수 없다.
-
-- **코드:** `studio/preflight.py`의 `inspect()`가 `validate_bpmn(process)`를 표 없이 부르고, `studio/packaging.py`의 `collect_requires`도 `run_locations=[]`로 비워 둔다. 창과 F6이 **같은 블라인드**라 서로 어긋나지는 않는다 (STU-06 시험이 그것을 지킨다).
-- **없는 것:** 확장 정의(C13)의 태스크 종류별 실행 위치를 `ExtensionHost`에서 모아 `{종류: [실행 위치]}`로 넘기는 한 걸음. 넘기면 B6·STU-06·`collect_requires`가 함께 좋아진다.
-- **크기:** 작다. **막는 것:** 없다 — 다만 고치면 **지금 통과하던 그림이 오류가 될 수 있어**(서버로 적어 둔 BPM 프로세스에 UI 태스크가 있으면) 업무 예제 50개를 함께 돌려야 한다.
 
 ## 5. 공백은 아니지만 적어 둘 것
 
