@@ -1,11 +1,10 @@
 """리소스 목록 — Bot이 실행에 필요로 하는 바깥 자원 (C7, CON-07).
 
-다섯 종류를 모은다. **넷은 Center가 이미 가진 것에서 계산한다** — 따로 등록받지 않는다.
+네 종류를 모은다. **셋은 Center가 이미 가진 것에서 계산한다** — 따로 등록받지 않는다.
 
 | 종류 | 어디서 |
 | --- | --- |
 | 서비스 앱 | 운영자가 등록한 주소 + Center가 읽은 C11 `/manifest`·`/healthz` |
-| 툴팩 | `packages` 표의 `kind=toolpack` (C5) |
 | 런타임 | `bot_uis`가 등록·하트비트로 보고한 것 (C4) |
 | 확장 | 실행하는 쪽의 보고 + 서비스 앱 manifest의 `extension` + **외부로 등록된 정의**(C13) |
 | 확장 기여 자원 | 카탈로그를 읽어 쌓은 것 (C13 §5) |
@@ -46,7 +45,6 @@ from chaeksas.contracts.resources import (
     RuntimeHost,
     RuntimeResource,
     ServiceAppResource,
-    ToolpackResource,
 )
 from chaeksas.contracts.service_app import ServiceAppManifest
 
@@ -57,10 +55,7 @@ UNREACHABLE = "unreachable"
 UNKNOWN = "unknown"
 
 #: `GET /resources?type=`로 물을 수 있는 종류.
-KNOWN_TYPES = ("extension", "service_app", "contributed", "toolpack", "runtime")
-
-#: 툴팩 패키지의 `kind` (C5).
-TOOLPACK = "toolpack"
+KNOWN_TYPES = ("extension", "service_app", "contributed", "runtime")
 
 
 # ─────────────────────────── 서비스 앱 등록 ───────────────────────────
@@ -445,29 +440,6 @@ def service_apps(store: Store, *, probe: bool = True) -> list[ServiceAppResource
             _probe_into(store, row)
         rows = store.rows("SELECT * FROM service_apps ORDER BY app_id")
     return [_service_app_of(store, row) for row in rows]
-
-
-def toolpacks(store: Store) -> list[ToolpackResource]:
-    """툴팩 (C5 `kind=toolpack` 패키지에서 — 따로 등록받지 않는다)."""
-    rows = store.rows(
-        "SELECT id, version, status, content_hash, manifest_json FROM packages WHERE kind = ?"
-        " ORDER BY id, version",
-        (TOOLPACK,),
-    )
-    out = []
-    for row in rows:
-        manifest = loads(row["manifest_json"], {}) or {}
-        tools = manifest.get("provides", {}).get("tools") or manifest.get("tools") or []
-        out.append(
-            ToolpackResource(
-                id=str(row["id"]),
-                version=str(row["version"]),
-                status=str(row["status"]),
-                content_hash=str(row["content_hash"]),
-                tools=[one for one in tools if isinstance(one, dict)],
-            )
-        )
-    return out
 
 
 def runtimes(store: Store) -> list[RuntimeResource]:
@@ -1003,7 +975,6 @@ def index(store: Store, *, probe: bool = False) -> Any:
         service_apps=service_apps(store, probe=probe),
         # 누락 검사는 **카탈로그를 두드리지 않는다** — 들고 있는 것으로 센다.
         contributed=contributed(store, probe=probe) if probe else _cached_contributed(store),
-        toolpacks=toolpacks(store),
     )
 
 
@@ -1018,8 +989,6 @@ def listing(
     for one in picked:
         if one == "service_app":
             items += service_apps(store)
-        elif one == "toolpack":
-            items += toolpacks(store)
         elif one == "runtime":
             items += runtimes(store)
         elif one == "extension":
@@ -1093,6 +1062,5 @@ __all__ = [
     "service_app",
     "service_apps",
     "set_base_url",
-    "toolpacks",
     "unregister",
 ]

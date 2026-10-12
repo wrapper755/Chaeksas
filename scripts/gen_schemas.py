@@ -66,7 +66,6 @@ from chaeksas.contracts import (
     RuntimeResource,
     ServiceAppManifest,
     ServiceAppResource,
-    ToolpackResource,
     UsagePage,
 )
 
@@ -113,7 +112,6 @@ MODELS: list[tuple[str, Any]] = [
     ("c7-extension-resource", ExtensionResource),
     ("c7-service-app-resource", ServiceAppResource),
     ("c7-contributed-resource", ContributedResource),
-    ("c7-toolpack-resource", ToolpackResource),
     ("c7-runtime-resource", RuntimeResource),
     ("c7-center-key-create-request", CenterKeyCreateRequest),
     ("c7-center-key-info", CenterKeyInfo),

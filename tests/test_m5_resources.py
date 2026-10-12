@@ -283,23 +283,6 @@ def test_refresh_reads_again_right_away(client: TestClient, app_url: str, store:
 # ─────────────────────────── 모으는 종류 (C7) ───────────────────────────
 
 
-def test_toolpacks_come_from_uploaded_packages(client: TestClient) -> None:
-    """툴팩은 **따로 등록받지 않는다** — 올라온 `kind=toolpack` 패키지에서 모은다."""
-    upload(
-        client,
-        package_zip(
-            "ops.excel-tools",
-            "2.0.0",
-            kind="toolpack",
-            extra={"provides": {"tools": [{"name": "xlsx_read", "domain": "doc"}]}},
-        ),
-    )
-    found = client.get("/api/v1/resources?type=toolpack", headers=READ_AUTH).json()
-    assert [one["id"] for one in found["items"]] == ["ops.excel-tools"]
-    assert found["items"][0]["status"] == "candidate"
-    assert [one["name"] for one in found["items"][0]["tools"]] == ["xlsx_read"]
-
-
 def test_runtimes_come_from_bot_ui_reports(client: TestClient) -> None:
     """런타임은 C4가 보고한 그대로다."""
     bot_ui_id = register_bot_ui(client)
@@ -362,17 +345,16 @@ def test_an_app_without_an_extension_is_not_an_extension(client: TestClient, app
 def test_the_whole_list_has_every_kind(client: TestClient, app_url: str) -> None:
     register_bot_ui(client)
     client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
-    upload(client, package_zip("ops.tools", "1.0.0", kind="toolpack"))
 
     found = client.get("/api/v1/resources", headers=READ_AUTH).json()
     assert found["fetched_at"]
     kinds = {
         "extension" if "installed_on" in one else
         "service_app" if "app_id" in one else
-        "runtime" if "host" in one else "toolpack"
+        "runtime" if "host" in one else "contributed"
         for one in found["items"]
     }
-    assert kinds == {"extension", "service_app", "runtime", "toolpack"}, "네 종류가 다 온다"
+    assert kinds == {"extension", "service_app", "runtime"}, "고정 종류가 다 온다"
 
 
 def test_an_unknown_type_is_refused(client: TestClient) -> None:

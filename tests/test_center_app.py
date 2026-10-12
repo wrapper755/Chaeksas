@@ -751,9 +751,6 @@ def test_missing_package_is_404(client: TestClient) -> None:
 
 # ─────────────────── C5 참조·삭제 (CON-06) ───────────────────
 
-TOOLPACK_HASH_KEY = "content_hash"
-
-
 def upload_common(client: TestClient, **over: Any) -> Any:
     """공통 패키지 하나를 올리고 그 정보를 돌려준다 (CON-06이 다루는 종류)."""
     response = upload(client, build_package(**over))
@@ -761,24 +758,18 @@ def upload_common(client: TestClient, **over: Any) -> Any:
     return response.json()
 
 
-def test_dependents_counts_libs_and_toolpacks(client: TestClient) -> None:
+def test_dependents_counts_libs(client: TestClient) -> None:
     """참조하는 쪽이 **어느 칸으로** 쓰는지까지 돌려준다 (C5 `relation`).
 
-    `requires.libs`는 `<id>@<version>`뿐이라 `pinned_hash`가 없고, `requires.toolpacks`는
-    해시로 고정하므로 있다 (R7).
+    지금 세는 칸은 `requires.libs` 하나이고 `<id>@<version>`뿐이라 `pinned_hash`는 없다
+    (ADR-0050 — 해시로 고정하던 `requires.toolpacks`가 사라졌다).
     """
     lib = upload_common(client, package_id="shared.approval", version="1.0.0", kind="process_lib")
-    pack = upload_common(client, package_id="excel-tools", version="2.0.0", kind="toolpack")
     upload_common(
         client,
         package_id="erp.order-entry",
         version="3.0.0",
-        requires={
-            "libs": [f"{lib['id']}@{lib['version']}"],
-            "toolpacks": [
-                {"id": pack["id"], "version": pack["version"], TOOLPACK_HASH_KEY: pack["content_hash"]}
-            ],
-        },
+        requires={"libs": [f"{lib['id']}@{lib['version']}"]},
     )
 
     users = client.get(f"/api/v1/packages/{lib['id']}/1.0.0/dependents", headers=READ).json()
@@ -786,10 +777,6 @@ def test_dependents_counts_libs_and_toolpacks(client: TestClient) -> None:
         ("erp.order-entry", "lib", None)
     ]
     assert users[0]["kind"] == "bpm_process" and users[0]["status"] == "candidate"
-
-    users = client.get(f"/api/v1/packages/{pack['id']}/2.0.0/dependents", headers=READ).json()
-    assert [(one["id"], one["relation"]) for one in users] == [("erp.order-entry", "toolpack")]
-    assert users[0]["pinned_hash"] == pack["content_hash"]
 
 
 def test_dependents_needs_the_version_to_match(client: TestClient) -> None:
@@ -805,25 +792,6 @@ def test_dependents_needs_the_version_to_match(client: TestClient) -> None:
     assert client.get("/api/v1/packages/shared.approval/1.0.0/dependents", headers=READ).json() == []
     found = client.get("/api/v1/packages/shared.approval/2.0.0/dependents", headers=READ).json()
     assert [one["id"] for one in found] == ["erp.order-entry"]
-
-
-def test_dependents_with_a_stale_pinned_hash_still_counts(client: TestClient) -> None:
-    """낡은 해시를 고정해 두어도 **쓰는 데가 있다** — 삭제를 막는 쪽에서는 그게 맞다 (실행은 R7이 막는다)."""
-    pack = upload_common(client, package_id="excel-tools", version="2.0.0", kind="toolpack")
-    upload_common(
-        client,
-        package_id="erp.order-entry",
-        version="3.0.0",
-        requires={
-            "toolpacks": [
-                {"id": pack["id"], "version": pack["version"], TOOLPACK_HASH_KEY: "sha256:" + "ab" * 32}
-            ]
-        },
-    )
-    found = client.get("/api/v1/packages/excel-tools/2.0.0/dependents", headers=READ).json()
-    assert [(one["id"], one["pinned_hash"]) for one in found] == [
-        ("erp.order-entry", "sha256:" + "ab" * 32)
-    ]
 
 
 def test_dependents_of_a_missing_package_is_404(client: TestClient) -> None:

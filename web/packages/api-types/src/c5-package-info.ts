@@ -35,7 +35,7 @@ export interface Manifest {
   human: HumanNeeds;
   id: string;
   inputs?: ManifestInput[];
-  kind: "bpm_process" | "process_lib" | "toolpack";
+  kind: "bpm_process" | "process_lib";
   name?: string | null;
   outputs?: string[];
   process_id?: string | null;
@@ -84,7 +84,6 @@ export interface ManifestInput {
 }
 export interface Provides {
   processes?: ProvidedProcess[];
-  tools?: ProvidedTool[];
   [k: string]: unknown;
 }
 /**
@@ -103,18 +102,6 @@ export interface ProvidedProcess {
   [k: string]: unknown;
 }
 /**
- * 툴팩이 제공하는 도구 하나. `args`는 JSON Schema.
- */
-export interface ProvidedTool {
-  args?: {
-    [k: string]: unknown;
-  };
-  description?: string | null;
-  domain: string;
-  name: string;
-  [k: string]: unknown;
-}
-/**
  * 실행에 필요한 것. 모두 선택이고, 없으면 "제한 없음"이다.
  */
 export interface Requires {
@@ -125,11 +112,9 @@ export interface Requires {
   os?: string[];
   resources?: ResourceRef[];
   runtimes?: string[];
-  secrets?: string[];
   service_apps?: ServiceAppNeed[];
   settings?: string[];
   task_types?: TaskTypeNeed[];
-  toolpacks?: ToolpackRef[];
   tools?: string[];
   [k: string]: unknown;
 }
@@ -167,15 +152,6 @@ export interface TaskTypeNeed {
   extension: string;
   id: string;
   run_locations?: string[] | null;
-  [k: string]: unknown;
-}
-/**
- * 쓰는 툴팩. 해시로 고정한다 (R7).
- */
-export interface ToolpackRef {
-  content_hash: string;
-  id: string;
-  version: string;
   [k: string]: unknown;
 }
 /**

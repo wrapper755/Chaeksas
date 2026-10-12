@@ -38,7 +38,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | 읽기 토큰 | 콘솔 「보기 전용」 | **GET만** |
 | 관리자 토큰 | 콘솔 「관리자」 모드, Admin 명령 | 쓰기 전부. 단 서명이 필요한 동작은 봉투도 함께 (C2) |
 | Center API 키 — Studio용 | Studio | 패키지 업로드, 패키지·리소스 읽기 |
-| Center API 키 — Bot UI용 / 서버 실행기용 | 실행하는 쪽 | **자기에게 배포된** BPM 프로세스 패키지와, 그 패키지의 `requires.toolpacks`만 내려받기 |
+| Center API 키 — Bot UI용 / 서버 실행기용 | 실행하는 쪽 | **자기에게 배포된** BPM 프로세스 패키지만 내려받기 (공유 BPM 프로세스는 그 안 `libs/`에 들어 있다) |
 | Center API 키 — 연동용 (신규, CON-11) | 외부 시스템 | 작업 만들기(`POST /jobs`)와 자기가 만든 작업 읽기·취소 |
 
 ### 엔드포인트별 권한
@@ -66,7 +66,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 
 | 메서드·경로 | 뜻 | 성공 |
 | --- | --- | --- |
-| `POST /packages` (multipart `file`) | 업로드. Center가 zip 안전 검사(경로 탈출·크기), C1 검사 R1~R7, 해시 재계산을 한다 | 201 새로 / 200 같은 id·버전·해시 (재시도) |
+| `POST /packages` (multipart `file`) | 업로드. Center가 zip 안전 검사(경로 탈출·크기), C1 검사(R1~R6·R9), 해시 재계산을 한다 | 201 새로 / 200 같은 id·버전·해시 (재시도) |
 | `GET /packages?kind=&status=&id=` | 목록 | 200 PackageInfo[] |
 | `GET /packages/{id}/{version}/info` | 정보 (매니페스트, 상태, 사전 점검 요약, 누락 리소스) | 200 |
 | `GET /packages/{id}/{version}` | 내려받기. 승인된 패키지면 zip에 `SIGNATURE`를 넣어 준다 (C2). 헤더 `X-Content-Hash` | 200 zip / 410 철회됨 |
@@ -95,7 +95,7 @@ PackageInfo 필드:
 | `signed_by`?, `signed_at`? | 승인 서명 |
 | `preflight` | `{warnings, blocked}` |
 | `manifest` | C1 매니페스트 |
-| `missing_resources` | `[{type: toolpack \| ui_page \| service_app \| operation, id, reason}]`. 읽을 때 C7과 대조해 계산한다 |
+| `missing_resources` | `[{type: extension \| service_app \| operation \| resource, id, reason}]`. 읽을 때 C7과 대조해 계산한다 (확장 기여 자원은 `resource`이고 id가 `<종류>:<id>`다 — 예: `ui_page:erp.order.form`) |
 
 ### 참조하는 패키지 (`dependents`)
 
@@ -105,11 +105,11 @@ DependentInfo 필드:
 | --- | --- |
 | `id`, `version`, `kind`, `name` | 참조하는 쪽 패키지 |
 | `status` | 그 패키지의 상태 |
-| `relation` | 어느 칸으로 참조하나 — `lib`(C1 `requires.libs`) / `toolpack`(C1 `requires.toolpacks`) (열린 문자열) |
-| `pinned_hash` | 참조하는 쪽이 **고정한** 해시. `toolpack`만 있다 (R7) — `lib`은 `<id>@<version>`으로만 가리키므로 `null` |
+| `relation` | 어느 칸으로 참조하나 — 지금은 `lib`(C1 `requires.libs`)뿐이다 (열린 문자열) |
+| `pinned_hash` | 참조하는 쪽이 **고정한** 해시. `lib`은 `<id>@<version>`으로만 가리키므로 **늘 `null`**이다 |
 
 - **읽을 때 센다.** 참조 그래프를 따로 저장하지 않는다 — 저장해 두면 패키지가 올라오고 지워질 때마다 낡는다 (`missing_resources`와 같은 결).
-- 참조는 **버전까지 같아야** 센다. `requires.libs`의 `<id>@<version>`, `requires.toolpacks[].{id, version}`을 그대로 맞춰 본다.
+- 참조는 **버전까지 같아야** 센다. `requires.libs`의 `<id>@<version>`을 그대로 맞춰 본다.
 - `pinned_hash`가 이 패키지의 `content_hash`와 다르면 **그래도 센다** — 참조하는 쪽이 낡은 해시를 고정해 둔 것이고, 그 패키지의 실행은 C1 R7·설치 검사에서 걸린다. 삭제를 막는 쪽에서는 「쓰는 데가 있다」가 맞다.
 - 자기 자신은 세지 않는다.
 
@@ -276,6 +276,7 @@ BotUiInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-12 | 1 | **툴팩 갈래가 사라졌다** ([ADR-0050](../decisions/0050-no-toolpack-kind.md)) — 내려받기 범위에서 `requires.toolpacks`가 빠지고(공유 BPM 프로세스는 패키지 안 `libs/`로 오므로 **따로 받는 것이 없다**), `dependents.relation`은 `lib` 하나이고 `pinned_hash`는 늘 `null`이다 | 0050 |
 | 2026-10-12 | 1 | **배포 대상은 등록된 PC여야 한다** (404 `target_not_found`). 「대상이 존재한다」를 어느 쪽도 보지 않아 **오타 하나가 201을 받고** 아무에게도 가지 않는 배포로 남았다 — `envelopes_for`는 `target_id`로 맞추고 CON-03에는 그 PC 줄이 없어 보여 줄 자리도 없다. 미리 배포해 두는 길이 막히는 것이 아니다: `bot_ui_id`는 Center가 **첫 등록에서 만들어** 등록 전에는 적을 id가 없다. 읽는 것은 Center, 판정은 계약이다 (ADR-0047 §다시 볼 조건 ②). **작업 지시의 같은 404도 `target_not_found`로 바꿨다** — 같은 조건에 두 이름을 두지 않는다 | 0049 |
 | 2026-10-12 | 1 | **배포 관문을 하나로 모았다.** 같은 검사가 계약(`validate_deployment()`)과 Center에 두 벌 있었고 **답이 갈려 있었다** — 대상 어긋남이 계약에서 `target_mismatch`(422), Center에서 `wrong_target`(409)이었고, 서버 배포를 막는 `server_runner_not_available`은 **계약에만** 있어서 Center가 M7 배포를 받아 두고 있었다. 이제 Center가 그 함수를 부르고 코드마다 상태는 `DEPLOYMENT_REFUSAL_STATUS` 한 표에 있다. **배포 쪽 `target_mismatch`는 없어졌다** — 대상이 틀린 것은 `wrong_target`(409) 하나다 | 0047 |
 | 2026-10-11 | 1 | **PC 배포의 `"*"`를 적어 막았다.** C2는 `"*"`를 서버 배포에만 주고 V6도 그랬는데, Center가 네 자리에서 대상 종류를 가리지 않고 `"*"`를 풀어 **모든 PC가 거부할 봉투를 내려줄 수 있었다**. `POST /deployments`가 409 `wrong_target`으로 거절하고 고르는 조건은 한 함수가 짓는다. CON-02의 「배포된 Bot UI」가 이 덕에 **정확한 PC 수**로 닫혔다 | 0046 |

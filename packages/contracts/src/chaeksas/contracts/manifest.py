@@ -13,7 +13,7 @@ from pydantic import Field, model_validator
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Sha256, Timestamp, Violation
 
-PackageKind = Literal["bpm_process", "process_lib", "toolpack"]
+PackageKind = Literal["bpm_process", "process_lib"]
 RunLocation = Literal["server", "pc"]
 
 KNOWN_TRIGGER_KINDS = frozenset({"none", "message", "timer", "conditional", "signal"})
@@ -98,14 +98,6 @@ class TaskTypeNeed(ContractModel):
     run_locations: list[str] | None = None
 
 
-class ToolpackRef(ContractModel):
-    """쓰는 툴팩. 해시로 고정한다 (R7)."""
-
-    id: str
-    version: str
-    content_hash: str
-
-
 class Requires(ContractModel):
     """실행에 필요한 것. 모두 선택이고, 없으면 "제한 없음"이다."""
 
@@ -113,13 +105,11 @@ class Requires(ContractModel):
     tools: list[str] = Field(default_factory=list)
     domains: list[str] = Field(default_factory=list)
     settings: list[str] = Field(default_factory=list)
-    secrets: list[str] = Field(default_factory=list)
     service_apps: list[ServiceAppNeed] = Field(default_factory=list)
     resources: list[ResourceRef] = Field(default_factory=list)
     extensions: list[ExtensionNeed] = Field(default_factory=list)
     task_types: list[TaskTypeNeed] = Field(default_factory=list)
     libs: list[str] = Field(default_factory=list)
-    toolpacks: list[ToolpackRef] = Field(default_factory=list)
     runtimes: list[str] = Field(default_factory=list)
     os: list[str] = Field(default_factory=list)
 
@@ -155,18 +145,8 @@ class ProvidedProcess(ContractModel):
     human: HumanNeeds | None = None
 
 
-class ProvidedTool(ContractModel):
-    """툴팩이 제공하는 도구 하나. `args`는 JSON Schema."""
-
-    name: str
-    domain: str
-    description: str | None = None
-    args: dict[str, Any] = Field(default_factory=dict)
-
-
 class Provides(ContractModel):
     processes: list[ProvidedProcess] = Field(default_factory=list)
-    tools: list[ProvidedTool] = Field(default_factory=list)
 
 
 class Manifest(SchemaVersioned):
@@ -307,19 +287,6 @@ def _check_r6(m: Manifest, computed_hash: str | None) -> list[Violation]:
     ]
 
 
-def _check_r7(m: Manifest) -> list[Violation]:
-    bad = [t.id for t in m.requires.toolpacks if not t.content_hash]
-    if not bad:
-        return []
-    return [
-        Violation(
-            rule="R7",
-            message="툴팩의 content_hash가 비어 있다 (로컬 개발용 툴팩은 업로드 불가)",
-            items=bad,
-        )
-    ]
-
-
 def validate(
     m: Manifest,
     *,
@@ -345,6 +312,5 @@ def validate(
         *_check_r3(m, lib_locations or {}),
         *_check_r4(m),
         *_check_r6(m, computed_hash),
-        *_check_r7(m),
         *_check_r9(m),
     ]

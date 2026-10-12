@@ -21,7 +21,6 @@ from chaeksas.contracts import (
     RunEvent,
     ServiceAppNeed,
     TaskTypeNeed,
-    ToolpackRef,
     Trigger,
     WorkerState,
     missing_data_keys,
@@ -200,9 +199,9 @@ def test_r1_missing_entry_is_caught() -> None:
     assert v[0].items == ["entry", "process_id"]
 
 
-def test_r1_run_location_on_toolpack_is_caught() -> None:
+def test_r1_run_location_on_a_shared_process_package_is_caught() -> None:
     m = Manifest.model_validate(
-        {"schema": 1, "kind": "toolpack", "id": "a", "version": "1.0.0", "run_location": "pc",
+        {"schema": 1, "kind": "process_lib", "id": "a", "version": "1.0.0", "run_location": "pc",
          "requires": {}, "human": {}, "built": {"by": "studio", "at": TS, "core": "0.3.0", "spec_version": 1},
          "content_hash": HASH}
     )
@@ -317,11 +316,6 @@ def test_r6_with_real_package_hash(tmp_path: Any) -> None:
     (root / "process" / "main.bpmn").write_bytes(b"<definitions changed=''/>")
     v = validate(m, computed_hash=content_hash_dir(root))
     assert [x.code for x in v] == ["hash_mismatch"]
-
-
-def test_r7_empty_toolpack_hash_is_caught() -> None:
-    m = manifest(requires=Requires(toolpacks=[ToolpackRef(id="tp", version="1.0.0", content_hash="")]))
-    assert [x.rule for x in validate(m)] == ["R7"]
 
 
 def test_r9_a_trigger_kind_outside_the_contract_is_caught() -> None:

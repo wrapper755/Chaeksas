@@ -302,7 +302,7 @@ def test_a_catalog_that_sends_another_kind_is_ignored(
     state.revision = 3
     state.items = [
         {"type": "ui_page", "id": "a", "name": "A"},
-        {"type": "toolpack", "id": "b", "name": "B"},
+        {"type": "report", "id": "b", "name": "B"},
     ]
     resources.refresh_catalogs(store, force=True)
     found = client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()["items"]
