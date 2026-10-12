@@ -81,8 +81,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 동시 실행 상한 | `max_concurrency` | 서버 실행에만 있다. 서버 실행기 전체(기본 10) + BPM 프로세스별(배포 때, 기본 5) |
 | 진입 정의 | `entry` | BPM 프로세스를 시작할 때 처음 실행하는 정의 |
 | 공유 BPM 프로세스 | `process_lib` | 여러 BPM 프로세스가 Call Activity로 부르는 재사용 BPMN. 패키지에 복사되어 들어간다 |
-| 툴팩 | `toolpack` | 코드 없이 선언한 도구 묶음(MCP 서버, HTTP 템플릿). 비밀은 이름만 |
-| 패키지 | `package` | BPM 프로세스·공유 BPM 프로세스·툴팩을 담은 서명 가능한 zip. 종류(`kind`)를 가진다. **비밀(키 값)은 넣지 않는다** |
+| 패키지 | `package` | BPM 프로세스·공유 BPM 프로세스를 담은 서명 가능한 zip. 종류(`kind`)를 가진다. **비밀(키 값)은 넣지 않는다**. 도구 묶음(툴팩)은 패키지가 아니다 — 도구는 확장이 기여한다 ([ADR-0050](decisions/0050-no-toolpack-kind.md)) |
 | 태스크 | `task` | BPMN 노드 하나 |
 | 배포 | `deployment` | "이 Bot UI(또는 서버 실행기)에서 이 BPM 프로세스의 이 버전을 쓴다"는 Admin 서명 봉투. 서버 배포에는 동시 실행 상한이 들어간다 |
 | 작업 | `job` | 배포된 Bot을 특정 입력으로 한 번 실행하라는 Center의 지시 |
@@ -140,7 +139,6 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 확장 | `extension` | 확장 정의, 등급, 상태, 기여 요약. 서버 부분이 있으면 서비스 앱 항목과 이어짐 |
 | 서비스 앱 | `service_app` | 주소·상태·작업 목록·관리 콘솔 주소 (키는 두지 않음) |
 | UI 화면 | `ui_page` | UI 자동화 앱에 등록된 화면 |
-| 툴팩 | `toolpack` | 사내 API 도구 묶음 |
 | 런타임 | `runtime` | Bot UI가 가진 실행 능력 (Worker 버전, 브라우저, 데스크톱 백엔드) |
 
 ## 6. 키와 설정 ([ADR-0013](decisions/0013-api-keys.md))

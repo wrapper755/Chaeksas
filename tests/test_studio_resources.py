@@ -2,13 +2,12 @@
 
 보는 것:
 
-1. **뿌리는 선언에서 온다** — 고정 셋(공유 BPM 프로세스·서비스 앱·툴팩)과 확장이 선언한 것
+1. **뿌리는 선언에서 온다** — 고정 둘(공유 BPM 프로세스·서비스 앱)과 확장이 선언한 것
    (`studio.resource_views`). 이 파일에 쓴 라벨은 **시험이 지은 확장의 것**이고 코드에는 없다.
 2. **쓸 수 없는 뿌리도 사라지지 않는다** — 줄을 끄고 까닭을 적는다 (U3).
 3. **들고 있지 않는다** — Center에 닿지 못하면 그 자리에서 말하고, 다음 번에도 낡은 목록을
    보이지 않는다 (ADR-0007은 현장 쪽 규칙이다 — Studio는 개발 도구다).
 4. **`data`를 해석하지 않는다** (C13 §5) — 기여 뿌리는 **한 단계**다. 「서비스 앱 → 작업」·
-   「툴팩 → 도구」는 플랫폼이 아는 것이라 둘째 단계를 그린다.
 5. **「캔버스에 추가」는 선언대로만 만든다** — 자원 id는 `creates_task_field`가 가리키는 칸에만
    들어가고, 선언이 없으면 `data`를 비운 채 만든다.
 """
@@ -237,20 +236,18 @@ def _app() -> Any:
 # ─────────────────────────── 뿌리 ───────────────────────────
 
 
-def test_the_roots_are_the_four_the_screen_doc_lists() -> None:
+def test_the_roots_are_the_ones_the_screen_doc_lists() -> None:
     """고정 셋 + 확장이 선언한 것. 순서는 STU-03 표 그대로다."""
     tree = tree_with()
     assert [one.id for one in tree.roots] == [
         resources.ROOT_SHARED,
         "forms",
         resources.ROOT_SERVICE,
-        resources.ROOT_TOOLPACK,
     ]
     assert [one.label for one in tree.roots] == [
         "공유 BPM 프로세스",
         "서식",  # **선언에서 온 말이다** — 코드에 없다
         "서비스 앱",
-        "툴팩",
     ]
 
 
@@ -383,10 +380,9 @@ def test_a_lib_without_provides_says_so_instead_of_zero() -> None:
 def test_no_center_means_no_knocking_and_a_reason() -> None:
     """주소·키가 없으면 **두드리지 않는다** — 뿌리는 그리고 까닭 한 줄을 남긴다."""
     tree = resources.collect([contributed(view())], catalog=None, reader=None)
-    assert len(tree.roots) == 4
+    assert len(tree.roots) == 3
     assert resources.NO_CENTER in tree.problems
     assert root_of(tree, "forms").empty == resources.NO_CENTER
-    assert root_of(tree, resources.ROOT_TOOLPACK).empty == resources.NO_CENTER
 
 
 def test_unreachable_center_says_so_and_holds_nothing() -> None:
@@ -397,9 +393,7 @@ def test_unreachable_center_says_so_and_holds_nothing() -> None:
     broken = FakeCenter(unreachable="Center에 닿지 못했습니다 (ConnectError)")
     tree = tree_with(reader=broken)
     assert root_of(tree, "forms").items == ()
-    assert root_of(tree, resources.ROOT_TOOLPACK).items == ()
     assert any("서식을 받지 못했습니다" in one for one in tree.problems)
-    assert any("툴팩 목록을 받지 못했습니다" in one for one in tree.problems)
 
 
 def test_one_root_failing_does_not_take_the_others() -> None:
@@ -483,16 +477,6 @@ def test_a_service_operation_becomes_a_service_call_without_a_key_ref() -> None:
     assert "key_ref" not in operation.create.chk["serviceCall"]
 
 
-def test_a_toolpack_tool_is_not_dragged_onto_the_canvas() -> None:
-    """툴팩의 도구는 AI 태스크의 **허용 도구**에서 고르는 것이다 (STU-03 표 — 「—」)."""
-    pack = root_of(tree_with(), resources.ROOT_TOOLPACK).items[0]
-    assert pack.create is None
-    assert pack.children[0].create is None
-
-
-# ─────────────────────────── 둘째 단계 (플랫폼이 아는 것) ───────────────────────────
-
-
 def test_the_service_app_root_draws_apps_and_their_operations() -> None:
     app = root_of(tree_with(), resources.ROOT_SERVICE).items[0]
     assert (app.label, app.note) == ("세금계산서", "정상")
@@ -532,24 +516,9 @@ def test_without_a_schema_the_detail_says_the_person_must_write_it() -> None:
     assert "입력:" not in operation.tip, "없는 칸을 「(없음)」으로도 말하지 않는다"
 
 
-def test_the_toolpack_root_draws_packs_and_their_tools() -> None:
-    pack = root_of(tree_with(), resources.ROOT_TOOLPACK).items[0]
-    assert (pack.label, pack.kind) == ("finance-tools", "1.2.0")
-    assert "도구 1개" in pack.note
-    assert [one.label for one in pack.children] == ["vat_lookup"]
-
-
-def test_toolpack_install_is_blocked_with_a_reason() -> None:
-    """설치·제거는 STU-11의 일이다 — 메뉴에 두고 끄고 이유를 붙인다 (U3)."""
-    found = root_of(tree_with(), resources.ROOT_TOOLPACK)
-    assert [label for label, _ in found.blocked] == ["설치...", "제거..."]
-    assert all("§4-5" in why for _, why in found.blocked)
-
-
 def test_empty_roots_say_so_instead_of_staying_blank() -> None:
     tree = tree_with(catalog=catalog_with(), reader=FakeCenter(pages=[], packs=[]))
     assert root_of(tree, resources.ROOT_SERVICE).empty == resources.EMPTY_SERVICE
-    assert root_of(tree, resources.ROOT_TOOLPACK).empty == resources.EMPTY_TOOLPACK
     assert root_of(tree, "forms").empty == resources.EMPTY_VIEW
 
 
@@ -573,7 +542,7 @@ def pick(window: resources.ResourceExplorer, *path: int) -> None:
 def test_the_window_draws_the_roots_and_their_children() -> None:
     window = explorer()
     model = window.view.model()
-    assert model.rowCount() == 4
+    assert model.rowCount() == 3
     service = model.index(2, 0)
     assert model.data(service) == "서비스 앱"
     assert model.rowCount(service) == 1
@@ -699,7 +668,6 @@ def test_only_a_row_that_makes_something_can_be_dragged() -> None:
     nothing = {
         "뿌리": model.index(1, 0),
         "앱 (자식이 있다)": model.index(0, 0, model.index(2, 0)),
-        "툴팩": model.index(0, 0, model.index(3, 0)),
         "도구 (허용 목록에서 고른다)": model.index(0, 0, model.index(0, 0, model.index(3, 0))),
         "공유 BPM 프로세스 (설치가 없다)": model.index(0, 0, model.index(0, 0)),
     }
@@ -842,7 +810,6 @@ def test_the_roots_are_drawn_without_knocking_on_center(window: Any) -> None:
         resources.ROOT_SHARED,
         "ui-pages",  # 설치된 UI 자동화 확장이 **선언한** 뿌리다
         resources.ROOT_SERVICE,
-        resources.ROOT_TOOLPACK,
     ]
     assert resources.NO_CENTER in window.resource_tree.note.text()
 

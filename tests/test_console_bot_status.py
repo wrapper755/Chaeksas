@@ -257,17 +257,12 @@ def test_the_version_rows_come_from_the_package_listing(client: TestClient) -> N
 def test_a_missing_resource_is_counted_when_read(client: TestClient) -> None:
     """경고 띠의 둘째 줄 — **배포 때 거부될** 버전이다 (C5 `missing_resources`, C7)."""
     upload(client, package(
-            requires={
-                "toolpacks": [
-                    # 해시로 고정한다 (C1 R7) — 고정 없는 툴팩은 업로드 자체가 막힌다.
-                    {"id": "excel-tools", "version": "2.0.0", "content_hash": "sha256:" + "1" * 64}
-                ]
-            }
+            requires={"resources": [{"type": "ui_page", "id": "erp.order.form"}]}
         ))
     rows = client.get("/api/v1/packages?kind=bpm_process", headers=READ).json()
     missing = rows[0]["missing_resources"]
-    # `id`에 판이 붙어 온다 — 화면은 사유(`reason`)까지 툴팁에 적는다.
-    assert [(one["type"], one["id"]) for one in missing] == [("toolpack", "excel-tools@2.0.0")]
+    # `id`에 갈래가 붙어 온다 — 화면은 사유(`reason`)까지 툴팁에 적는다.
+    assert [(one["type"], one["id"]) for one in missing] == [("resource", "ui_page:erp.order.form")]
     assert missing[0]["reason"]
 
 

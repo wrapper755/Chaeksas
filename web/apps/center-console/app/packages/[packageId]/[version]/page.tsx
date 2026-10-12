@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { DependentInfo } from "@chaeksas/api-types/c5-dependent-info";
-import type { ProvidedProcess, ProvidedTool } from "@chaeksas/api-types/c1-manifest";
+import type { ProvidedProcess } from "@chaeksas/api-types/c1-manifest";
 import { CENTER_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { DeletePackage } from "../../tools";
@@ -12,7 +12,7 @@ import { KIND_LABEL, STATUS_LABEL, packageHref, time } from "../../page";
 /**
  * CON-06 공통 패키지 (상세).
  *
- * 「제공 도구」·「제공 정의」는 **매니페스트의 `provides`**(C1)를 그린다 — Center가 짓지 않는다.
+ * 「제공 정의」는 **매니페스트의 `provides`**(C1)를 그린다 — Center가 짓지 않는다.
  * `provides`가 아예 없으면 **빈 표로 두지 않고** 「매니페스트에 없습니다」라고 말한다:
  * 「제공하는 것이 없다」와 「적히지 않았다」는 다르다.
  */
@@ -20,7 +20,6 @@ import { KIND_LABEL, STATUS_LABEL, packageHref, time } from "../../page";
 /** `relation` → 사람 말 (C5). 모르는 값은 그대로 보인다 (원칙 10). */
 const RELATION_LABEL: Record<string, string> = {
   lib: "공유 BPM 프로세스",
-  toolpack: "툴팩",
 };
 
 const LOCATION_LABEL: Record<string, string> = { pc: "PC", server: "서버" };
@@ -34,12 +33,10 @@ function requirements(info: PackageInfo): Array<[string, string]> {
     ["AI 환경", (requires.domains ?? []).join(", ")],
     ["도구", (requires.tools ?? []).join(", ")],
     ["설정", (requires.settings ?? []).join(", ")],
-    ["비밀 이름", (requires.secrets ?? []).join(", ")],
     ["서비스 앱", (requires.service_apps ?? []).map((one) => one.app_id).join(", ")],
     ["확장", (requires.extensions ?? []).map((one) => `${one.id} ${one.version}`).join(", ")],
     ["태스크 종류", (requires.task_types ?? []).map((one) => one.id).join(", ")],
     ["공유 BPM 프로세스", (requires.libs ?? []).join(", ")],
-    ["툴팩", (requires.toolpacks ?? []).map((one) => `${one.id}@${one.version}`).join(", ")],
     ["런타임", (requires.runtimes ?? []).join(", ")],
     ["OS", (requires.os ?? []).join(", ")],
   ];
@@ -55,12 +52,6 @@ function human(found: ProvidedProcess["human"]): string {
     found.confirmation ? "확인" : "",
   ].filter(Boolean);
   return said.length > 0 ? said.join(", ") : "없음";
-}
-
-/** 인자 이름만 보인다 — `args`는 JSON Schema다 (값은 없다). */
-function argNames(schema: ProvidedTool["args"]): string {
-  const found = (schema as { properties?: Record<string, unknown> } | undefined)?.properties;
-  return found ? Object.keys(found).join(", ") || "—" : "—";
 }
 
 export default async function PackagePage({
@@ -85,13 +76,6 @@ export default async function PackagePage({
   }
 
   const provides = info?.manifest?.provides ?? null;
-
-  const toolColumns: Array<Column<ProvidedTool>> = [
-    { key: "name", header: "이름", mono: true },
-    { key: "domain", header: "환경", width: "10ch" },
-    { key: "description", header: "설명", cell: (row) => row.description ?? "—" },
-    { key: "args", header: "인자", cell: (row) => argNames(row.args) },
-  ];
 
   const processColumns: Array<Column<ProvidedProcess>> = [
     { key: "process_id", header: "정의 id", mono: true },
@@ -210,24 +194,6 @@ export default async function PackagePage({
               </dl>
             )}
           </section>
-
-          {info.kind === "toolpack" ? (
-            <section className="flex flex-col gap-2">
-              <h2 className="text-h2 font-semibold">제공 도구</h2>
-              {!provides ? (
-                <p className="text-body-sm text-text-muted">매니페스트에 `provides`가 없습니다.</p>
-              ) : (provides.tools ?? []).length === 0 ? (
-                <p className="text-body-sm text-text-muted">제공하는 도구가 없습니다.</p>
-              ) : (
-                <DataTable
-                  columns={toolColumns}
-                  rows={provides.tools ?? []}
-                  rowKey={(row) => row.name}
-                  caption="제공 도구"
-                />
-              )}
-            </section>
-          ) : null}
 
           {info.kind === "process_lib" ? (
             <section className="flex flex-col gap-2">

@@ -665,17 +665,6 @@ def test_the_dialog_turns_install_off_without_an_open_process(
         assert center_resources.NO_PROCESS in window.install_button.toolTip()
 
 
-def test_the_toolpack_tab_still_says_why_it_is_off(
-    qt_app: Any, workspace: Workspace, process: BpmProcess
-) -> None:
-    """툴팩은 **자리가 아니라 싣는 길**이 없다 (ADR-0048 §왜 툴팩을 가르나)."""
-    with dialog(reader=FakeReader({}), workspace=workspace, process=process) as window:
-        window.tabs.setCurrentWidget(window.toolpacks)
-        window.update_buttons()
-        assert not window.install_button.isEnabled()
-        assert center_resources.NO_TOOLPACK_INSTALL in window.install_button.toolTip()
-
-
 def test_a_lib_that_center_no_longer_has_is_local_only(
     workspace: Workspace, process: BpmProcess
 ) -> None:
@@ -685,7 +674,7 @@ def test_a_lib_that_center_no_longer_has_is_local_only(
     after = workspace.read(process.folder, process.group)
 
     gone = FakeReader({})  # Center에서 지워졌다
-    found = center_resources.listing(gone, center_resources.KIND_LIB, after)
+    found = center_resources.listing(gone, after)
     assert [(one.package_id, one.status, one.installed) for one in found.rows] == [
         (LIB_ID, center_resources.LOCAL_ONLY, LIB_VERSION)
     ]

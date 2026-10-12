@@ -9,16 +9,15 @@ import { Shell } from "@/components/Shell";
 /**
  * CON-06 공통 패키지 (목록).
  *
- * **Bot이 아닌 패키지만** 둔다 — `bpm_process`는 Bot이라 CON-02의 몫이다. 종류 두 가지를
- * 한 목록에 섞는 것은 「Bot 아닌 것」이 운영자에게 한 덩이로 보이기 때문이다 (C5 `kind`).
+ * **Bot이 아닌 패키지만** 둔다 — `bpm_process`는 Bot이라 CON-02의 몫이다. 지금 그런 종류는
+ * 공유 BPM 프로세스 하나다 (C5 `kind` — 도구 묶음은 패키지가 아니다, ADR-0050).
  */
 
 /** 이 화면이 다루는 종류 (C1 `kind`). 순서가 목록의 묶음 순서다. */
-export const COMMON_KINDS = ["process_lib", "toolpack"] as const;
+export const COMMON_KINDS = ["process_lib"] as const;
 
 export const KIND_LABEL: Record<string, string> = {
   process_lib: "공유 BPM 프로세스",
-  toolpack: "툴팩",
   bpm_process: "Bot",
 };
 
@@ -98,14 +97,14 @@ export default async function PackagesPage() {
       <header className="mb-4">
         <h1 className="text-h1 font-bold">공통 패키지</h1>
         <p className="text-body text-text-secondary">
-          Bot이 아닌 패키지 — 여러 Bot이 가져다 쓰는 공유 BPM 프로세스와 툴팩입니다.
+          Bot이 아닌 패키지 — 여러 Bot이 가져다 쓰는 공유 BPM 프로세스입니다.
         </p>
       </header>
 
       {failure ? (
         <ErrorBanner message={failure} />
       ) : rows.length === 0 ? (
-        <EmptyState title="올라온 공통 패키지가 없습니다." hint="Studio의 「공유 BPM 프로세스로 내보내기...」로 만든 패키지나 툴팩을 올리세요." />
+        <EmptyState title="올라온 공통 패키지가 없습니다." hint="Studio의 「공유 BPM 프로세스로 내보내기...」로 만든 패키지를 올리세요." />
       ) : (
         <DataTable
           columns={columns}
