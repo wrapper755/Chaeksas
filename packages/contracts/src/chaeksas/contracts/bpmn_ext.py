@@ -36,7 +36,13 @@ from chaeksas.contracts._base import (
     Violation,
 )
 from chaeksas.contracts.approvals import KNOWN_FIELD_TYPES, FormField
-from chaeksas.contracts.manifest import KEY_REF_PATTERN, ExtensionNeed, RunLocation
+from chaeksas.contracts.manifest import (
+    KEY_REF_PATTERN,
+    KNOWN_DOMAINS,
+    PC_ONLY_DOMAINS,
+    ExtensionNeed,
+    RunLocation,
+)
 from chaeksas.contracts.replay import REPLAY_DEFAULT, REPLAY_MODES
 
 #: 네임스페이스. 우리 속성은 전부 이 하나에 담는다.
@@ -51,10 +57,6 @@ _VAR = re.compile(VAR_PATTERN)
 
 #: 생성형 노드 id (bpmn-js 기본값). 읽을 수 없어 경고한다 (B10).
 GENERATED_ID_PATTERN = re.compile(r"^(Activity|Gateway|Event|Flow)_[0-9a-z]{7}$")
-
-#: AI 태스크의 대상 환경. `web`·`desktop`은 PC에서만 돈다 (C1 R2).
-DOMAINS = frozenset({"llm", "api", "doc", "web", "desktop"})
-PC_ONLY_DOMAINS = frozenset({"web", "desktop"})
 
 #: 결과 필드·프로세스 입력의 타입 (B8).
 VALUE_TYPES = frozenset({"string", "int", "number", "bool", "list", "dict", "date"})
@@ -174,7 +176,7 @@ class AiTask(ContractModel):
     """`chk:aiTask` — AI = 운전사 (ADR-0008). `goal`은 Markdown이다."""
 
     goal: str
-    domain: str  # DOMAINS
+    domain: str  # KNOWN_DOMAINS (정의는 C1 쪽 하나다 — `manifest.py`)
     tools: list[str] = Field(default_factory=list)
     params: dict[str, Any] = Field(default_factory=dict)  # 재생 때 `$param`
     results: dict[str, str] = Field(default_factory=dict)  # {이름: 타입}
@@ -342,6 +344,13 @@ class Flow:
     condition: str | None = None
 
 
+def _event_name(table: Mapping[str, str], ref: str | None) -> str | None:
+    """`이름 → id` 표를 거꾸로 본다 (`BpmnProcess.message_name`·`signal_name`이 쓴다)."""
+    if ref is None:
+        return None
+    return next((name for name, id_ in table.items() if id_ == ref), ref)
+
+
 @dataclass(frozen=True)
 class Timer:
     """타이머 하나 (C14 §이벤트). `value`는 ISO 기간·cron, 또는 **변수 이름**이다."""
@@ -416,6 +425,19 @@ class BpmnProcess:
 
     def node(self, node_id: str) -> Node | None:
         return next((n for n in self.all_nodes() if n.id == node_id), None)
+
+    def message_name(self, ref: str | None) -> str | None:
+        """`messageRef`(정의 수준 id) → `bpmn:message name`.
+
+        **밖으로 나가는 값은 이름이다** — C12 메시지 API와 C1 `triggers[].name`이 이 이름으로
+        말한다. id를 그대로 내보내면 외부 시스템이 보낸 메시지가 **기다리는 실행을 깨우지
+        못한다**. 찾지 못하면 적힌 그대로 돌려준다 (`bpmn:message`가 없는 그림).
+        """
+        return _event_name(self.messages, ref)
+
+    def signal_name(self, ref: str | None) -> str | None:
+        """`signalRef` → `bpmn:signal name` (`message_name`과 같은 규칙)."""
+        return _event_name(self.signals, ref)
 
     def of_kind(self, *kinds: str) -> list[Node]:
         return [n for n in self.all_nodes() if n.kind in kinds]
@@ -1250,8 +1272,8 @@ def _check_b8(process: BpmnProcess) -> list[Violation]:
         ai: AiTask | None = node.prop("aiTask")
         if ai is None:
             continue
-        if ai.domain not in DOMAINS:
-            out.append(_error("B8", f"{node.id}의 domain을 모른다: {ai.domain}", items=sorted(DOMAINS)))
+        if ai.domain not in KNOWN_DOMAINS:
+            out.append(_error("B8", f"{node.id}의 domain을 모른다: {ai.domain}", items=sorted(KNOWN_DOMAINS)))
         for name, kind in ai.results.items():
             if kind not in VALUE_TYPES:
                 out.append(_error("B8", f"{node.id}의 결과 {name} 타입을 모른다: {kind}", items=sorted(VALUE_TYPES)))

@@ -202,19 +202,34 @@ def collect_provides(definitions: Sequence[Definition]) -> Provides:
 
 
 def collect_triggers(entry: Definition) -> list[Trigger]:
-    """시작 방법 (C1 `triggers`) — 시작 이벤트의 정의에서 읽는다."""
+    """시작 방법 (C1 `triggers`) — 시작 이벤트의 정의에서 읽는다.
+
+    **`kind`는 C1의 다섯(`KNOWN_TRIGGER_KINDS`)만 쓴다** — 여기서 지어낸 이름을 쓰면 R9가
+    막고, 막지 않았던 동안에는 읽는 쪽이 `timer`를 기다리며 영영 못 만났다.
+
+    조건·신호 시작은 schema 1의 범위 밖이지만(C14 §이벤트) **`none`으로 뭉개지 않고 그린 대로
+    적는다** — 「작업 지시로 시작한다」고 적어 주면 왜 안 도는지 아무도 모른다.
+    """
     if entry.process is None:
         return []
+    process = entry.process
     out = []
-    for node in entry.process.nodes:
+    for node in process.nodes:
         if node.kind != "startEvent":
             continue
         if "timerEventDefinition" in node.event_definitions:
-            out.append(Trigger(kind="schedule", name=node.timer.value if node.timer else None))
+            # 타이머 식은 `name`이 아니라 `expression`이다 — `name`은 이벤트 이름 자리다 (C12).
+            out.append(Trigger(kind="timer", expression=node.timer.value if node.timer else None))
         elif "messageEventDefinition" in node.event_definitions:
-            out.append(Trigger(kind="message", name=node.message_ref))
+            # **id가 아니라 이름이다** — 외부 시스템은 `bpmn:message name`으로 보낸다 (C12).
+            # id(`Msg_expense_request`)를 싣고 있던 동안에는 그 이름으로 깨울 수 없었다.
+            out.append(Trigger(kind="message", name=process.message_name(node.message_ref)))
+        elif "conditionalEventDefinition" in node.event_definitions:
+            out.append(Trigger(kind="conditional"))
+        elif "signalEventDefinition" in node.event_definitions:
+            out.append(Trigger(kind="signal", name=process.signal_name(node.signal_ref)))
         else:
-            out.append(Trigger(kind="manual"))
+            out.append(Trigger(kind="none"))
     return out
 
 
@@ -372,7 +387,7 @@ def gather(process: BpmProcess) -> dict[str, bytes]:
 
 
 def check(process: BpmProcess, manifest: Manifest, files: dict[str, bytes] | None = None) -> list[Violation]:
-    """C1 검사 (R1~R7) + **매니페스트와 파일이 맞는지**.
+    """C1 검사 (R1~R7·R9) + **매니페스트와 파일이 맞는지**.
 
     매니페스트만 보는 `validate()`는 「`entry`가 실제로 들어 있는가」를 모른다. 패키지를 만드는
     쪽에서만 아는 것이니 여기서 본다 — 받는 쪽(Center)이 거부하기 전에.

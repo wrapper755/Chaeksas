@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -293,6 +294,52 @@ def test_b8_result_types_and_code_like_names() -> None:
     found = validate(read_process(warn))
     assert [v.severity for v in found if v.rule == "B8"] == ["warning"]
     assert blocking(found) == []
+
+
+def test_the_domain_lists_are_defined_in_one_place_only() -> None:
+    """C14 B8과 C1 R2가 **같은 목록**을 본다 — 두 벌이 되면 조용히 갈라진다.
+
+    `triggers[].kind`가 그렇게 갈라졌었다 (C1 R9). 정의는 `manifest.py` 하나이고
+    `bpmn_ext`·`core`가 import해 쓴다 (`bpmn_ext`가 `manifest`를 import하므로 거꾸로는 순환이다).
+    베껴 쓰면 **여기가 깨진다** — mypy도 막는다(`bpmn_ext`는 이 이름을 다시 내보내지 않는다).
+    """
+    from chaeksas.contracts.manifest import KNOWN_DOMAINS, PC_ONLY_DOMAINS
+
+    src = ROOT / "packages" / "contracts" / "src" / "chaeksas" / "contracts"
+    where = {p.name: p.read_text(encoding="utf-8") for p in sorted(src.glob("*.py"))}
+    for name in ("KNOWN_DOMAINS", "PC_ONLY_DOMAINS"):
+        files = [f for f, text in where.items() if re.search(rf"^{name} = ", text, re.M)]
+        assert files == ["manifest.py"], f"{name}이 {files}에 있다 (정의는 한 곳이다)"
+
+    assert PC_ONLY_DOMAINS < KNOWN_DOMAINS
+    # B8이 알려 주는 목록도 그 하나에서 온다 (손으로 적은 목록이 아니다).
+    bad = wrap(line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
+                    '<chk:aiTask>{"goal": "x", "domain": "Web"}</chk:aiTask>'
+                    "</bpmn:extensionElements></bpmn:serviceTask>"))
+    found = [v for v in validate(read_process(bad)) if v.rule == "B8"]
+    assert [v.items for v in found] == [sorted(KNOWN_DOMAINS)]
+
+
+def test_the_domain_list_is_the_one_the_contract_documents_list() -> None:
+    """**문서가 원본이다** (CLAUDE.md §3-3) — C14와 C1의 두 줄을 같은 목록과 대조한다.
+
+    두 문서가 같은 값을 적고 있으니 한쪽만 늘리는 것도 갈라짐이다.
+    """
+    from chaeksas.contracts.manifest import KNOWN_DOMAINS
+
+    docs = Path(__file__).resolve().parent.parent / "docs" / "03-contracts"
+    c14 = next(
+        line for line in (docs / "C14-bpmn-extensions.md").read_text(encoding="utf-8").splitlines()
+        if line.startswith("| AI 태스크 |")
+    )
+    said = c14.split("`domain`(")[1].split(")")[0]
+    assert set(re.findall(r"`([a-z]+)`", said)) == set(KNOWN_DOMAINS)
+
+    c1 = next(
+        line for line in (docs / "C1-package-manifest.md").read_text(encoding="utf-8").splitlines()
+        if line.startswith("| `domains` |")
+    )
+    assert set(re.findall(r"`([a-z]+)`", c1.split("합:")[1])) == set(KNOWN_DOMAINS)
 
 
 def test_b9_unconnected_nodes() -> None:

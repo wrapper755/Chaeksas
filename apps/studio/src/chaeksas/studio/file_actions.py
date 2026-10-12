@@ -20,16 +20,22 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from chaeksas.studio.canvas import CanvasError
 from chaeksas.studio.dialogs import NewProcessDialog, pick_example
-from chaeksas.studio.workspace import BpmProcess, WorkspaceError
+from chaeksas.studio.workspace import (
+    BpmProcess,
+    WorkspaceError,
+    check_definition_name,
+    definition_process_id,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (창이 이 모듈을 부른다)
     from chaeksas.studio.main_window import MainWindow
 
 NO_DEFINITION = "열린 정의가 없습니다."
+NO_PROCESS = "열린 BPM 프로세스가 없습니다."
 DISCARD_TITLE = "저장하지 않은 변경사항"
 DISCARD_TEXT = "저장하지 않은 변경사항이 있습니다. 저장할까요?"
 
@@ -142,6 +148,87 @@ def new_process(window: MainWindow) -> None:
     open_definition(window, path.as_posix())
 
 
+def add_definition(window: MainWindow) -> None:
+    """STU-01 파일 → 「정의 추가...」 — 빈 하위 정의 하나를 만들고 **그것을 연다**.
+
+    캔버스가 비는 일이라 전환과 **같은 관문**(`may_discard`)을 지난다. 이름 규칙은 작업 폴더가
+    안다 (`check_definition_name` — 경로를 받지 않고, 대소문자만 다른 이름도 거부한다).
+    """
+    process = window.process
+    if process is None:
+        window.say(NO_PROCESS)
+        return
+    if not may_discard(window):
+        return
+    raw, ok = QInputDialog.getText(window, "정의 추가", "정의 이름 (.bpmn)")
+    if not ok:
+        return
+    try:
+        file_name = check_definition_name(process, raw)
+    except WorkspaceError as e:
+        QMessageBox.warning(window, "정의 추가", str(e))
+        return
+    try:
+        window.canvas.create_empty(definition_process_id(file_name), Path(file_name).stem)
+        xml = window.canvas.save_xml()
+    except CanvasError as e:
+        window.say(f"빈 정의를 만들지 못했습니다: {e}")
+        return
+    path = window.workspace.save_definition(process, file_name, xml)
+    window.explorer.refresh(opened=path.as_posix())
+    # **디스크에서 다시 읽어 연다** — 그래야 창이 쥔 BPM 프로세스에 새 정의가 들어 있다.
+    open_definition(window, path.as_posix())
+
+
+def make_entry(window: MainWindow) -> None:
+    """STU-01 파일 → 「이 정의를 진입으로 지정」 — **기록만** 바뀐다 (그림은 그대로다).
+
+    진입이 무엇인지는 작업 폴더의 기록이고(계약이 아니다) 패키지의 `entry`는 내보낼 때 거기서
+    온다 (C1 R1). 그림을 고치지 않으니 캔버스를 거칠 일도 없다 (ADR-0022).
+    """
+    process, found = window.process, window.opened_definition()
+    if process is None or found is None:
+        window.say(NO_DEFINITION)
+        return
+    entry = process.entry_definition
+    if entry is not None and entry.path == found.path:
+        window.say(f"이미 진입 정의입니다: {found.path.name}")
+        return
+    try:
+        window.process = window.workspace.set_entry(process, found.path.name)
+    except WorkspaceError as e:
+        QMessageBox.warning(window, "진입 정의", str(e))
+        return
+    window.retitle()
+    window.explorer.refresh(opened=found.path.as_posix())
+    window.say(f"진입 정의로 지정했습니다: {found.path.name}")
+
+
+def save_process_as(window: MainWindow) -> None:
+    """STU-01 파일 → 「다른 이름으로 저장...」 (Ctrl+Shift+S) — BPM 프로세스 **한 벌**을 복사한다.
+
+    **정의 하나가 아니다.** 파일 메뉴의 단위가 BPM 프로세스이고(U1 — 파일을 직접 여는 메뉴가
+    없다), 정의 하나만 복사하면 그림 안의 BPMN process id가 겹쳐 `callActivity`가 어느 것을
+    부를지 모호해진다 — 고치려면 XML을 파이썬이 만져야 하고 그것은 ADR-0022가 막는다.
+
+    **옮기는 것은 디스크의 것이다** — 그래서 먼저 저장을 거친다 (`saved_to_disk`).
+    """
+    process = window.process
+    if process is None:
+        window.say(NO_PROCESS)
+        return
+    if not window.saved_to_disk():
+        return
+    made = NewProcessDialog.ask(window, window.workspace, source=process)
+    if made is None:
+        return
+    window.explorer.refresh()
+    window.say(f"복사했습니다: {made.display} (v{made.version}) — 이제 복사한 쪽을 편집합니다.")
+    entry = made.entry_definition
+    if entry is not None:
+        open_definition(window, entry.path.as_posix())
+
+
 def import_example(window: MainWindow) -> None:
     """예제 BPM 프로세스 가져오기 (STU-01 파일 메뉴). 예제 폴더는 **읽기만** 한다."""
     if not may_discard(window):
@@ -172,11 +259,15 @@ __all__ = [
     "DISCARD_TEXT",
     "DISCARD_TITLE",
     "NO_DEFINITION",
+    "NO_PROCESS",
+    "add_definition",
     "import_example",
     "inherited_keys",
+    "make_entry",
     "may_discard",
     "new_process",
     "open_definition",
     "remember_last_opened",
     "save",
+    "save_process_as",
 ]

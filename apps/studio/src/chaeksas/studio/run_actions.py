@@ -53,8 +53,13 @@ def format_variables(variables: dict[str, object]) -> str:
     return "\n".join(lines)
 
 
-def run_test(window: MainWindow) -> None:
-    """STU-08 「실행...」 (F5). 관문을 다 지나야 창이 뜨고, 창이 고른 계획을 차례로 몬다."""
+def run_test(window: MainWindow, *, mode: str | None = None) -> None:
+    """STU-08 「실행...」 (F5). 관문을 다 지나야 창이 뜨고, 창이 고른 계획을 차례로 몬다.
+
+    `mode`는 **창에서 미리 골라 둘 수행 모드**다 — 「결정 수행 (재생)...」(Ctrl+F5)이 그것으로
+    들어온다. **고르는 자리는 그대로 STU-08이다**: 할 수 없으면 창이 그 모드를 끄고 까닭을
+    보이므로(U3) 메뉴가 「되는지」를 미리 판단하지 않는다.
+    """
     process, definition = window.process, window.definition
     if process is None or definition is None:
         window.say(NO_DEFINITION)
@@ -80,7 +85,7 @@ def run_test(window: MainWindow) -> None:
         QMessageBox.warning(window, window.windowTitle(), f"실행 전 검사가 막습니다 ({len(blocking)}개).")
         return
 
-    plans = RunDialog.ask(window, process, found, window.settings)
+    plans = RunDialog.ask(window, process, found, window.settings, prefer=mode)
     if not plans:
         return
 
@@ -117,6 +122,7 @@ def next_run(window: MainWindow) -> None:
     running.varied.connect(lambda found: window.show_variables(format_variables(found)))
     running.ended.connect(lambda outcome: one_done(window, outcome))
     window.run_action.setEnabled(False)
+    window.replay_action.setEnabled(False)
     window.stop_action.setEnabled(True)
     window.statusBar().showMessage(f"실행 중: {plan.case.name if plan.case else '(케이스 없음)'}")
     running.start()
@@ -133,6 +139,7 @@ def one_done(window: MainWindow, outcome: Outcome) -> None:
 def all_done(window: MainWindow) -> None:
     """다 돌았다. **여럿이면 묶어 한 줄** 더 말한다 (STU-09 「모든 케이스 차례로」)."""
     window.run_action.setEnabled(True)
+    window.replay_action.setEnabled(True)
     window.stop_action.setEnabled(False)
     if len(window.outcomes) > 1:
         window.say(summarize_runs(window.outcomes))

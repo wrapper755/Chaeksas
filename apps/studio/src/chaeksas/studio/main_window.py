@@ -39,6 +39,7 @@ from chaeksas.studio import (
     file_actions,
     resources,
     run_actions,
+    run_dialog,
     services,
 )
 from chaeksas.studio.canvas import Canvas, CanvasError
@@ -178,9 +179,21 @@ class MainWindow(QMainWindow):
         self._add(files, "새 BPM 프로세스...", self.new_process, QKeySequence.StandardKey.New)
         self._add(files, "예제 BPM 프로세스 가져오기...", self.import_example)
         self._add(files, "BPM 프로세스 정보...", self.edit_info)
+        self.add_definition_action = self._add(
+            files, "정의 추가...", lambda: file_actions.add_definition(self)
+        )
+        self.entry_action = self._add(
+            files, "이 정의를 진입으로 지정", lambda: file_actions.make_entry(self)
+        )
         self._add(files, "시험 케이스...", self.edit_cases)
         files.addSeparator()
         self.save_action = self._add(files, "저장", self.save, QKeySequence.StandardKey.Save)
+        self.save_as_action = self._add(
+            files,
+            "다른 이름으로 저장...",
+            lambda: file_actions.save_process_as(self),
+            QKeySequence("Ctrl+Shift+S"),
+        )
         self._add(files, "패키지로 내보내기...", lambda: export_actions.export_package(self))
         self._add(files, "공유 BPM 프로세스로 내보내기...", lambda: export_actions.export_shared(self))
         self._add(files, "Center로 올리기", lambda: export_actions.upload_package(self))
@@ -197,6 +210,14 @@ class MainWindow(QMainWindow):
 
         run = bar.addMenu("실행")
         self.run_action = self._add(run, "실행...", lambda: run_actions.run_test(self), QKeySequence("F5"))
+        # **끄지 않는다** (STU-01 「항상 켜짐») — 학습 안 된 AI 태스크가 있으면 **창이** 그
+        # 수행 모드를 끄고 이유를 보인다 (U3). 여기서 끄면 왜 못 하는지 말할 자리가 없다.
+        self.replay_action = self._add(
+            run,
+            "결정 수행 (재생)...",
+            lambda: run_actions.run_test(self, mode=run_dialog.DETERMINISTIC),
+            QKeySequence("Ctrl+F5"),
+        )
         self.stop_action = self._add(run, "실행 중지", lambda: run_actions.stop_test(self))
         self.stop_action.setEnabled(False)
         self._add(run, "실행 전 검사", self.run_preflight, QKeySequence("F6"))
@@ -282,10 +303,29 @@ class MainWindow(QMainWindow):
     def retitle(self) -> None:
         if self.process is None or self.definition is None:
             self.setWindowTitle(f"{TITLE} - {NO_PROCESS}")
+            self.refresh_menus()
             return
         mark = " *" if self.dirty else ""
         self.setWindowTitle(
             f"{TITLE} - {self.process.display} (v{self.process.version}) - {self.definition.stem}{mark}"
+        )
+        # 제목과 메뉴는 **같은 상태**에서 온다 — 열고·지정하고·복사할 때마다 함께 바뀐다.
+        self.refresh_menus()
+
+    def refresh_menus(self) -> None:
+        """STU-01 「켜지는 조건」 — 지금 할 수 없는 메뉴를 끈다.
+
+        **까닭을 말할 자리가 없는 것만 끈다** (U3): 「이 정의를 진입으로 지정」은 이미 진입이면
+        할 일이 없고, 나머지 둘은 BPM 프로세스가 열려 있어야 한다. 실행 쪽은 끄지 않는다 —
+        「결정 수행 (재생)」은 **항상 켜져 있고** 못 하는 까닭을 STU-08이 말한다.
+        """
+        open_process = self.process is not None
+        self.add_definition_action.setEnabled(open_process)
+        self.save_as_action.setEnabled(open_process)
+        found = self.opened_definition()
+        entry = self.process.entry_definition if self.process is not None else None
+        self.entry_action.setEnabled(
+            found is not None and (entry is None or entry.path != found.path)
         )
 
     def _on_dirty(self, dirty: bool) -> None:

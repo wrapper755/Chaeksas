@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,6 +46,15 @@ SCHEMA = 1
 #: **패키지와 같은 이름이고 실행기가 이미 읽는 자리다** (`bot_ui/runner_main.py`가
 #: `libs/*.bpmn`을 글롭한다) — 그래서 내보내기도 실행기도 바뀌지 않는다.
 LIBS_DIR = "libs"
+
+#: 「다른 이름으로 저장...」이 함께 가져가는 폴더 (STU-01).
+#:
+#: **실행 기록(`runs/`)·산출물(`outputs/`)은 두고 간다** — 그 실행의 것이지 BPM 프로세스의
+#: 것이 아니다 (`packaging.EXCLUDED`와 결이 같다). 케이스·학습은 설계자가 만든 것이라 간다.
+COPIED_DIRS = ("process", "cases", "memory", LIBS_DIR)
+
+#: 파일 이름에 쓸 수 없는 글자 (Windows가 거부하는 것 + 경로 구분자).
+BAD_NAME_CHARS = '<>:"/\\|?*'
 
 
 class WorkspaceError(ValueError):
@@ -225,6 +235,36 @@ def _libs(raw: object) -> tuple[InstalledLib, ...]:
     return tuple(out)
 
 
+def check_definition_name(process: BpmProcess, raw: str) -> str:
+    """사람이 적은 정의 이름 → 쓸 수 있는 파일 이름 (`<이름>.bpmn`). 아니면 `WorkspaceError`.
+
+    **경로를 받지 않는다** — `..`·`/`로 작업 폴더를 벗어날 수 없다 (파일 이름 한 조각이다).
+    **대소문자만 다른 이름도 거부한다** — Windows 파일 시스템은 그 둘을 같은 파일로 보므로
+    Linux에서 만든 BPM 프로세스가 Windows에서 하나를 잃는다.
+    """
+    cleaned = raw.strip()
+    if cleaned.lower().endswith(".bpmn"):
+        cleaned = cleaned[: -len(".bpmn")].strip()
+    if not cleaned:
+        raise WorkspaceError("정의 이름이 비어 있다")
+    if cleaned in (".", "..") or any(ch in cleaned for ch in BAD_NAME_CHARS):
+        raise WorkspaceError(f"파일 이름으로 쓸 수 없다: {raw}")
+    file_name = f"{cleaned}.bpmn"
+    if any(d.path.name.lower() == file_name.lower() for d in process.definitions):
+        raise WorkspaceError(f"같은 이름의 정의가 있다: {file_name}")
+    return file_name
+
+
+def definition_process_id(file_name: str) -> str:
+    """정의 파일 이름 → BPMN process id (`Proc_<파일>` — C14 케이스 형식과 같은 규칙).
+
+    id는 XML 이름이라 **공백·점이 들어갈 수 없다** (한글은 된다). 앞에 `Proc_`가 붙으니
+    숫자로 시작하는 파일 이름도 괜찮다.
+    """
+    stem = re.sub(r"[^0-9A-Za-z가-힣_]", "_", Path(file_name).stem)
+    return f"Proc_{stem or 'definition'}"
+
+
 def read_record(folder: Path) -> dict[str, object]:
     found = _record_path(folder)
     if not found.is_file():
@@ -373,6 +413,55 @@ class Workspace:
         path.write_text(xml, encoding="utf-8", newline="\n")
         return path
 
+    def set_entry(self, process: BpmProcess, file_name: str) -> BpmProcess:
+        """진입 정의를 바꾼다 (STU-01 「이 정의를 진입으로 지정」).
+
+        **기록(`process.json`)만 바뀐다** — 진입이 무엇인지는 작업 폴더의 기록이고(계약이
+        아니다) 그림에는 적혀 있지 않다. 패키지의 `entry`·`process_id`는 내보낼 때 여기서 온다
+        (C1 R1). 없는 정의를 가리키면 거부한다 — 그러면 `entry_definition`이 첫 정의로
+        **조용히** 떨어져 내보낸 패키지가 엉뚱한 것을 진입으로 담는다.
+        """
+        if not any(d.path.name == file_name for d in process.definitions):
+            raise WorkspaceError(f"그 BPM 프로세스에 없는 정의다: {file_name}")
+        process.entry = file_name
+        write_record(process)
+        return process
+
+    def copy(
+        self,
+        process: BpmProcess,
+        new_id: str,
+        *,
+        name: str = "",
+        version: str = "",
+        group: str = "",
+    ) -> BpmProcess:
+        """BPM 프로세스 한 벌을 새 id로 복사한다 (STU-01 「다른 이름으로 저장...」).
+
+        **그림은 손대지 않는다** — 정의 파일을 그대로 옮기므로 BPMN process id도 그대로다.
+        폴더가 다르면 패키지가 다르니 겹치지 않고, 바꾸려면 XML을 파이썬이 만져야 한다
+        ([ADR-0022](../../../../docs/decisions/0022-studio-canvas.md)가 막는 일이다).
+
+        케이스·학습(`memory/`)·받아 둔 공유 BPM 프로세스는 함께 간다 (`COPIED_DIRS`) —
+        **실행 기록은 두고 간다.** 담당자·태그·설명도 옮긴다 (복사한 사람이 다시 적지 않는다).
+        """
+        target_group = group or process.group
+        made = self.create(
+            new_id,
+            name=name or process.name,
+            version=version or process.version,
+            group=target_group,
+            entry=process.entry,
+        )
+        for folder in COPIED_DIRS:
+            source = process.folder / folder
+            if source.is_dir():
+                shutil.copytree(source, made.folder / folder, dirs_exist_ok=True)
+        made.description, made.owner = process.description, process.owner
+        made.tags, made.libs = process.tags, process.libs
+        write_record(made)
+        return self.read(made.folder, target_group)
+
     # ── 받아 둔 공유 BPM 프로세스 (ADR-0048) ──
 
     def install_lib(
@@ -492,6 +581,8 @@ class Workspace:
 
 
 __all__ = [
+    "BAD_NAME_CHARS",
+    "COPIED_DIRS",
     "DEFAULT_GROUP",
     "ID_PATTERN",
     "LIBS_DIR",
@@ -502,6 +593,8 @@ __all__ = [
     "InstalledLib",
     "Workspace",
     "WorkspaceError",
+    "check_definition_name",
+    "definition_process_id",
     "read_record",
     "write_record",
 ]

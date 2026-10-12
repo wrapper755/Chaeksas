@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import pytest
@@ -21,11 +22,13 @@ from chaeksas.contracts import (
     ServiceAppNeed,
     TaskTypeNeed,
     ToolpackRef,
+    Trigger,
     WorkerState,
     missing_data_keys,
     missing_keys,
     validate,
 )
+from chaeksas.contracts.manifest import KNOWN_TRIGGER_KINDS
 
 HASH = "sha256:" + "ab" * 32
 TS = "2026-10-01T10:00:00+09:00"
@@ -319,6 +322,47 @@ def test_r6_with_real_package_hash(tmp_path: Any) -> None:
 def test_r7_empty_toolpack_hash_is_caught() -> None:
     m = manifest(requires=Requires(toolpacks=[ToolpackRef(id="tp", version="1.0.0", content_hash="")]))
     assert [x.rule for x in validate(m)] == ["R7"]
+
+
+def test_r9_a_trigger_kind_outside_the_contract_is_caught() -> None:
+    """실제로 났던 일 — Studio가 `schedule`·`manual`을 올렸고 **아무도 몰랐다**.
+
+    읽는 쪽은 `timer`를 기다리며 영영 못 만났다. 경고가 아니라 막는다 (C1 R9).
+    """
+    v = validate(manifest(triggers=[Trigger(kind="schedule"), Trigger(kind="manual")]))
+    assert [x.rule for x in v] == ["R9"]
+    assert v[0].code == "unknown_trigger_kind"
+    assert v[0].items == ["manual", "schedule"]
+    assert v[0].blocks
+
+
+def test_r9_passes_every_kind_the_contract_lists() -> None:
+    kinds = [Trigger(kind=k) for k in sorted(KNOWN_TRIGGER_KINDS)]
+    assert validate(manifest(triggers=kinds)) == []
+
+
+def test_the_trigger_kinds_are_the_ones_the_contract_document_lists() -> None:
+    """**문서가 원본이다** (CLAUDE.md §3-3) — C1의 표와 `KNOWN_TRIGGER_KINDS`를 대조한다.
+
+    한쪽만 늘리면 여기가 깨진다. 갈라졌던 것을 다시 갈라지게 두지 않는다.
+    """
+    from pathlib import Path
+
+    doc = (Path(__file__).resolve().parent.parent / "docs" / "03-contracts"
+           / "C1-package-manifest.md").read_text(encoding="utf-8")
+    row = next(line for line in doc.splitlines() if line.startswith("| Trigger |"))
+    listed = set(re.findall(r"`([a-z]+)`", row.split("`kind`:")[1].split(", `name`")[0]))
+    assert listed == set(KNOWN_TRIGGER_KINDS)
+
+    # 칸마다 뜻이 다르다 — 표가 `name`·`expression`을 가르고 있는가 (타이머 식은 `name`이 아니다).
+    assert {"`name`", "`expression`"} <= set(row.replace("(", " ").replace(")", " ").split())
+
+
+def test_a_timer_expression_does_not_land_in_the_message_name_field() -> None:
+    """C12 메시지 API가 `triggers[].name`을 메시지 이름으로 읽는다 — 식을 거기 담지 않는다."""
+    timer = Trigger(kind="timer", expression="0 9 1 * *")
+    assert timer.name is None
+    assert timer.to_json_dict() == {"kind": "timer", "expression": "0 9 1 * *"}
 
 
 def test_bad_semver_and_id_are_rejected_by_the_type() -> None:

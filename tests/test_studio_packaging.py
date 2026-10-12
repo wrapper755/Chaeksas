@@ -16,8 +16,9 @@ from pathlib import Path
 
 import pytest
 
+from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.contracts.hashing import content_hash_zip
-from chaeksas.contracts.manifest import Manifest, validate
+from chaeksas.contracts.manifest import KNOWN_TRIGGER_KINDS, Manifest, validate
 from chaeksas.studio.packaging import (
     EXCLUDED,
     MANIFEST_NAME,
@@ -27,6 +28,7 @@ from chaeksas.studio.packaging import (
     check,
     collect_human,
     collect_requires,
+    collect_triggers,
     default_lib_name,
     default_name,
     export,
@@ -46,6 +48,30 @@ EXPENSE = "bx03_expense_approval"
 EXTENSION = "bx04_tax_invoice_issue"
 #: 확장 호스트가 주는 표 (`ExtensionHost.task_type_locations()`).
 UI_TASK_ON_PC = {"ui_task": ["pc"]}
+
+#: 시작 이벤트 다섯을 한 그림에 — C1 `triggers[].kind`가 BPMN 이벤트 정의와 1:1인지 본다.
+#: 메시지·신호는 **id가 아니라 `name`**이 나가야 한다 (C12).
+FIVE_START_EVENTS = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Defs">
+  <bpmn:message id="Msg_order" name="order_arrived" />
+  <bpmn:signal id="Sig_branch" name="branch_done" />
+  <bpmn:process id="starts" name="시작 이벤트 다섯">
+    <bpmn:startEvent id="S_plain" />
+    <bpmn:startEvent id="S_message">
+      <bpmn:messageEventDefinition messageRef="Msg_order" />
+    </bpmn:startEvent>
+    <bpmn:startEvent id="S_timer">
+      <bpmn:timerEventDefinition><bpmn:timeCycle>0 9 * * 1-5</bpmn:timeCycle></bpmn:timerEventDefinition>
+    </bpmn:startEvent>
+    <bpmn:startEvent id="S_conditional">
+      <bpmn:conditionalEventDefinition />
+    </bpmn:startEvent>
+    <bpmn:startEvent id="S_signal">
+      <bpmn:signalEventDefinition signalRef="Sig_branch" />
+    </bpmn:startEvent>
+  </bpmn:process>
+</bpmn:definitions>
+"""
 
 
 def imported(tmp_path: Path, example: str) -> BpmProcess:
@@ -129,9 +155,55 @@ def test_the_run_location_is_in_the_manifest_from_the_start(tmp_path: Path) -> N
     assert manifest.entry and manifest.process_id
 
 
-def test_a_timer_start_event_is_a_schedule_trigger(tmp_path: Path) -> None:
+def test_a_timer_start_event_is_a_timer_trigger(tmp_path: Path) -> None:
+    """`schedule`이 아니라 **C1에 적힌 `timer`**다 — 읽는 쪽이 `timer`를 기다린다.
+
+    타이머 식은 `name`이 아니라 `expression`에 있다 (`name`은 메시지 이름 자리 — C12).
+    """
     manifest = build_manifest(imported(tmp_path, RECONCILIATION))
-    assert [t.kind for t in manifest.triggers] == ["schedule"]
+    assert [t.kind for t in manifest.triggers] == ["timer"]
+    assert manifest.triggers[0].expression == "0 9 1 * *"
+    assert manifest.triggers[0].name is None
+    assert validate(manifest) == []
+
+
+def test_a_message_start_event_carries_the_name_the_sender_uses(tmp_path: Path) -> None:
+    """**id가 아니라 이름이다** — 외부 시스템은 `bpmn:message name`으로 보낸다 (C12).
+
+    그림에는 `messageRef="Msg_expense_request"`로 적혀 있지만, 그 id를 매니페스트에 싣고
+    있던 동안에는 그것을 보고 보낸 메시지가 **기다리는 실행을 깨우지 못했다**.
+    """
+    manifest = build_manifest(imported(tmp_path, EXPENSE))
+    assert [(t.kind, t.name) for t in manifest.triggers] == [("message", "expense_request")]
+    assert manifest.triggers[0].expression is None
+
+
+def test_every_start_event_maps_to_a_kind_the_contract_lists() -> None:
+    """다섯을 한 그림에 두고 본다 — **옮기는 쪽이 지어낸 이름을 쓰지 않는다** (C1 R9).
+
+    조건·신호 시작은 schema 1의 범위 밖이지만(C14) `none`으로 뭉개지 않는다 — 「작업 지시로
+    시작한다」고 적어 주면 왜 안 도는지 아무도 모른다.
+    """
+    read = Definition(path=Path("starts.bpmn"), process=read_process(FIVE_START_EVENTS))
+    found = collect_triggers(read)
+    assert [(t.kind, t.name, t.expression) for t in found] == [
+        ("none", None, None),
+        ("message", "order_arrived", None),
+        ("timer", None, "0 9 * * 1-5"),
+        ("conditional", None, None),
+        ("signal", "branch_done", None),
+    ]
+    assert {t.kind for t in found} <= KNOWN_TRIGGER_KINDS
+
+
+def test_no_example_produces_a_trigger_kind_outside_the_contract() -> None:
+    """예제 50개를 옮겨 본다 — 갈라지면 여기가 먼저 깨진다 (올라간 뒤에 알면 늦다)."""
+    seen = set()
+    for bpmn in sorted(EXAMPLES.glob("*.bpmn")):
+        read = Definition(path=bpmn, process=read_process(bpmn.read_text(encoding="utf-8")))
+        seen |= {t.kind for t in collect_triggers(read)}
+    assert seen, "예제를 하나도 읽지 못했다"
+    assert seen <= KNOWN_TRIGGER_KINDS
 
 
 # ─────────────────────────── 무엇이 들어가는가 ───────────────────────────

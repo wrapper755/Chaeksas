@@ -3,6 +3,9 @@
 **고를 수 없는 것은 끄고 바로 아래에 이유를 보인다** (U3) — 조용히 안 되는 것보다 낫다.
 지금 끄는 것은 둘이다.
 
+실행 메뉴의 「결정 수행 (재생)...」(Ctrl+F5)은 `prefer`로 들어와 그 모드를 **미리 골라 둔다**
+— 할 수 없으면 골라 두지 않는다 (끈 라디오를 고르면 어느 모드도 아니게 된다).
+
 | 끄는 것 | 이유 |
 | --- | --- |
 | 결정 수행 (재생) | 학습 안 된 AI 태스크가 있다 (`memory/specs.json`에 명세가 없다) |
@@ -77,6 +80,8 @@ class RunDialog(QDialog):
         process: BpmProcess,
         definition: Definition,
         settings: Settings,
+        *,
+        prefer: str | None = None,
     ) -> None:
         super().__init__(parent)
         self.process = process
@@ -116,6 +121,10 @@ class RunDialog(QDialog):
         self.watch.setEnabled(False)
         missing = unlearned(process, definition)
         self.deterministic.setEnabled(not missing)
+        # 「결정 수행 (재생)...」(Ctrl+F5)로 들어오면 그것을 미리 골라 둔다 — **할 수 있을
+        # 때만**이다. 끈 라디오를 고르면 사람이 「실행」을 눌러도 아무 모드가 아니다.
+        if prefer == DETERMINISTIC and self.deterministic.isEnabled():
+            self.deterministic.setChecked(True)
         reason = QLabel(
             f"학습 안 된 AI 태스크가 있습니다: {', '.join(missing)}" if missing else WATCH_LATER, self
         )
@@ -185,8 +194,10 @@ class RunDialog(QDialog):
         process: BpmProcess,
         definition: Definition,
         settings: Settings,
+        *,
+        prefer: str | None = None,
     ) -> list[Plan]:
-        dialog = cls(parent, process, definition, settings)
+        dialog = cls(parent, process, definition, settings, prefer=prefer)
         return dialog.plans() if dialog.exec() == QDialog.DialogCode.Accepted else []
 
 

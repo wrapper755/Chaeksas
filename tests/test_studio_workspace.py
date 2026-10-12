@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -15,7 +16,10 @@ from chaeksas.studio.workspace import (
     DEFAULT_GROUP,
     Workspace,
     WorkspaceError,
+    check_definition_name,
+    definition_process_id,
     read_record,
+    write_record,
 )
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
@@ -110,6 +114,114 @@ def test_a_duplicate_group_is_refused(tmp_path: Path) -> None:
     found.create_group("재무")
     with pytest.raises(WorkspaceError, match="같은 이름의 그룹"):
         found.create_group("재무")
+
+
+# ─────────── 정의 추가 · 진입 지정 · 다른 이름으로 저장 (STU-01 파일 메뉴) ───────────
+
+
+def with_definitions(tmp_path: Path, *names: str) -> tuple[Workspace, Any]:
+    """정의 몇 개를 가진 BPM 프로세스 하나 (첫 이름이 진입이다)."""
+    found = workspace(tmp_path)
+    made = found.create("a.b", name="한글 이름", entry=names[0])
+    for name in names:
+        found.save_definition(
+            made, name, MINIMAL.format(process_id=definition_process_id(name), name=name)
+        )
+    again = found.find("a.b")
+    assert again is not None
+    return found, again
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("sub", "sub.bpmn"), (" sub.bpmn ", "sub.bpmn"), ("하위 흐름", "하위 흐름.bpmn"), ("a.b", "a.b.bpmn")],
+)
+def test_a_definition_name_becomes_a_bpmn_file_name(tmp_path: Path, raw: str, expected: str) -> None:
+    _, made = with_definitions(tmp_path, "main.bpmn")
+    assert check_definition_name(made, raw) == expected
+
+
+@pytest.mark.parametrize("bad", ["", "   ", "..", "sub/other", "sub\\other", "a?b", "C:x"])
+def test_a_definition_name_that_is_a_path_or_empty_is_refused(tmp_path: Path, bad: str) -> None:
+    """**경로를 받지 않는다** — `..`·`/`로 작업 폴더를 벗어날 수 없다."""
+    _, made = with_definitions(tmp_path, "main.bpmn")
+    with pytest.raises(WorkspaceError):
+        check_definition_name(made, bad)
+
+
+def test_a_definition_name_that_differs_only_in_case_is_refused(tmp_path: Path) -> None:
+    """Windows 파일 시스템은 둘을 같은 파일로 본다 — Linux에서 만들면 거기서 하나를 잃는다."""
+    _, made = with_definitions(tmp_path, "main.bpmn")
+    with pytest.raises(WorkspaceError, match="같은 이름"):
+        check_definition_name(made, "MAIN")
+
+
+def test_the_process_id_of_a_new_definition_is_an_xml_name() -> None:
+    """`Proc_<파일>` (C14 케이스 형식과 같은 규칙) — 점·공백은 XML id에 못 들어간다."""
+    assert definition_process_id("sub.bpmn") == "Proc_sub"
+    assert definition_process_id("하위 흐름.bpmn") == "Proc_하위_흐름"
+    assert definition_process_id("a.b.bpmn") == "Proc_a_b"
+
+
+def test_setting_the_entry_only_changes_the_record(tmp_path: Path) -> None:
+    """「이 정의를 진입으로 지정」 — 그림은 그대로다 (패키지의 `entry`가 여기서 온다, C1)."""
+    found, made = with_definitions(tmp_path, "main.bpmn", "sub.bpmn")
+    before = (made.folder / "process" / "sub.bpmn").read_text(encoding="utf-8")
+
+    again = found.set_entry(made, "sub.bpmn")
+    assert read_record(made.folder)["entry"] == "sub.bpmn"
+    entry = again.entry_definition
+    assert entry is not None and entry.path.name == "sub.bpmn"
+    assert (made.folder / "process" / "sub.bpmn").read_text(encoding="utf-8") == before
+
+
+def test_setting_the_entry_to_something_that_is_not_there_is_refused(tmp_path: Path) -> None:
+    """**조용히 첫 정의로 떨어지면** 내보낸 패키지가 엉뚱한 것을 진입으로 담는다 (C1 R1)."""
+    found, made = with_definitions(tmp_path, "main.bpmn")
+    with pytest.raises(WorkspaceError, match="없는 정의"):
+        found.set_entry(made, "없다.bpmn")
+    assert read_record(made.folder)["entry"] == "main.bpmn"
+
+
+def test_saving_as_copies_the_whole_bpm_process(tmp_path: Path) -> None:
+    """「다른 이름으로 저장...」 — 정의·케이스·학습이 함께 가고 **그림은 그대로다**."""
+    found, made = with_definitions(tmp_path, "main.bpmn", "sub.bpmn")
+    found.set_entry(made, "sub.bpmn")
+    (made.folder / "cases" / "main.cases.json").write_text(
+        '{"schema": 1, "cases": []}', encoding="utf-8"
+    )
+    (made.folder / "memory").mkdir()
+    (made.folder / "memory" / "specs.json").write_text(
+        '{"schema": 1, "specs": []}', encoding="utf-8"
+    )
+    (made.folder / "runs").mkdir()
+    (made.folder / "runs" / "run_20261012_090000_abc123.jsonl").write_text("{}\n", encoding="utf-8")
+
+    copy = found.copy(made, "a.c", name="사본", version="2.0.0")
+    assert copy.folder == found.root / DEFAULT_GROUP / "a.c"
+    assert [d.path.name for d in copy.definitions] == ["main.bpmn", "sub.bpmn"]
+    assert copy.entry == "sub.bpmn", "진입도 따라간다"
+    assert (copy.folder / "cases" / "main.cases.json").is_file()
+    assert (copy.folder / "memory" / "specs.json").is_file()
+    assert not (copy.folder / "runs").exists(), "실행 기록은 그 실행의 것이다 — 두고 간다"
+    # 그림은 손대지 않는다 (ADR-0022) — BPMN process id도 그대로다.
+    assert [d.id for d in copy.definitions] == [d.id for d in made.definitions]
+    assert read_record(copy.folder)["name"] == "사본"
+    assert read_record(copy.folder)["version"] == "2.0.0"
+    # 원본은 그대로 있다 (복사이지 이동이 아니다).
+    assert found.find("a.b") is not None
+
+
+def test_saving_as_keeps_the_memo_fields_and_refuses_a_used_id(tmp_path: Path) -> None:
+    found, made = with_definitions(tmp_path, "main.bpmn")
+    made.description, made.owner, made.tags = "설명", "담당자", ("태그",)
+    write_record(made)
+
+    copy = found.copy(made, "a.c")
+    assert (copy.description, copy.owner, copy.tags) == ("설명", "담당자", ("태그",))
+    assert copy.name == "한글 이름" and copy.version == "0.1.0", "비워 두면 원본을 따른다"
+    with pytest.raises(WorkspaceError, match="같은 id"):
+        found.copy(made, "a.c")
 
 
 # ─────────────────────────── 예제 가져오기 ───────────────────────────

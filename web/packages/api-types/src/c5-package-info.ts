@@ -179,9 +179,17 @@ export interface ToolpackRef {
   [k: string]: unknown;
 }
 /**
- * 시작 방법. `kind`는 열린 문자열 (알려진 값은 `KNOWN_TRIGGER_KINDS`).
+ * 시작 방법 — 진입 정의의 시작 이벤트 하나를 옮긴 것.
+ *
+ * `kind`는 `KNOWN_TRIGGER_KINDS` 중 하나다. 타입이 아니라 **R9**가 검사한다 — 위반에
+ * `unknown_trigger_kind` 코드를 붙여 Studio·Center가 같은 문구로 말하려고 (R4와 같은 결).
+ *
+ * **이름과 식은 다른 칸이다** — `name`은 이벤트 이름(C12 메시지 API가 이 이름으로 보낸다),
+ * `expression`은 타이머 식(`timeCycle`의 cron·ISO)이다. 한 칸에 담으면 읽는 쪽이 타이머
+ * 트리거의 `name`을 메시지 이름으로 읽는다.
  */
 export interface Trigger {
+  expression?: string | null;
   kind: string;
   name?: string | null;
   [k: string]: unknown;
