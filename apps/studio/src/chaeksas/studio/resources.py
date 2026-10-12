@@ -67,8 +67,17 @@ SERVICE_LABEL = "서비스 앱"
 TOOLPACK_LABEL = "툴팩"
 
 #: 쓸 수 없는 줄의 까닭 (U3 — 끄고 **가까이에** 적는다).
+#:
+#: 설치는 **열린 BPM 프로세스 하나에** 하는 일이라 (ADR-0048) 「Center 공유 자원」 창에서
+#: 한다 — 뿌리 문맥 메뉴의 그 줄이 같은 창을 연다. 여기서 또 하지 않는다.
 NO_INSTALL = (
-    "설치·제거는 아직 없습니다 — 받은 패키지를 둘 자리를 정해야 합니다 (docs/09-gaps.md §4-5)."
+    "설치·제거는 「Center 공유 자원...」 창에서 합니다 — 설치는 열린 BPM 프로세스 하나에 "
+    "하는 일입니다 (ADR-0048)."
+)
+#: 툴팩은 자리가 아니라 **싣는 길**이 없다 (ADR-0048 §왜 툴팩을 가르나).
+NO_TOOLPACK_INSTALL = (
+    "툴팩 설치는 아직 없습니다 — 받은 도구를 싣는 길을 먼저 정해야 합니다 "
+    "(docs/09-gaps.md §4-5)."
 )
 NO_CALL = (
     "이 PC에 설치되지 않아 Call Activity를 만들지 않습니다 — 설치가 생기면 켜집니다 "
@@ -362,7 +371,7 @@ def toolpack_root(found: Iterable[ToolpackResource]) -> Root:
         label=TOOLPACK_LABEL,
         items=tuple(items),
         empty=EMPTY_TOOLPACK,
-        blocked=(("설치...", NO_INSTALL), ("제거...", NO_INSTALL)),
+        blocked=(("설치...", NO_TOOLPACK_INSTALL), ("제거...", NO_TOOLPACK_INSTALL)),
         opens_center=True,
     )
 
@@ -737,6 +746,7 @@ __all__ = [
     "NO_CALL",
     "NO_CENTER",
     "NO_INSTALL",
+    "NO_TOOLPACK_INSTALL",
     "OPEN_CENTER_RESOURCES",
     "ROOT_SERVICE",
     "ROOT_SHARED",

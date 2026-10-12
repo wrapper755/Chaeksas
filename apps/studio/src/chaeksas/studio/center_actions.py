@@ -98,9 +98,19 @@ def open_center_resources(window: MainWindow) -> None:
 
     창이 제 손으로 Center를 읽는다 — 설정이 없으면 창 안에서 그렇게 말하므로(U3) 여기서 미리
     묻지 않는다 (읽기만 하는 자리다).
+
+    **열린 BPM 프로세스와 작업 폴더를 함께 넘긴다** — 설치는 그 BPM 프로세스의 `libs/`에 푸는
+    일이라 (ADR-0048) 대상이 없으면 창이 단추를 끄고 까닭을 적는다. 창을 닫고 나면 받아 둔
+    것이 탐색기·검사에 보여야 하므로 **다시 읽는다**.
     """
     reader = services.from_settings(window.settings).reader
-    CenterResourcesDialog(reader, window).exec()
+    CenterResourcesDialog(
+        reader, window, workspace=window.workspace, process=window.process
+    ).exec()
+    if window.process is not None:
+        # 설치가 `process.json`과 `libs/`를 바꿨다 — 창이 들고 있는 것을 **디스크에서** 다시 읽는다.
+        window.process = window.workspace.read(window.process.folder, window.process.group)
+        window.explorer.refresh(opened=window.process.id)
 
 
 __all__ = [
