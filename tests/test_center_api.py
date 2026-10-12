@@ -116,6 +116,22 @@ def test_target_type_must_match_run_location() -> None:
     assert codes == ["target_mismatch"]
 
 
+def test_a_pc_deployment_cannot_target_everything() -> None:
+    """**`"*"`는 서버 실행기만** (C2 §배포 대상 규칙, ADR-0046).
+
+    `DeploymentTarget.matches`가 그렇게 맞추니 PC 쪽 `"*"`는 **모든 PC가 V6으로 거부할** 봉투다.
+    받아 두면 CON-03이 거짓 ⛔로 차고 운영자는 승인·해시·키를 뒤진다(막은 것은 대상인데).
+    """
+    private, key = admin()
+    env = deployment_envelope(private, target={"type": "bot_ui", "id": "*"})
+    codes = [v.code for v in validate_deployment(env, package=package(), keys=[key], now=NOW)]
+    assert codes == ["wrong_target"]
+
+    # PC를 하나 적으면 통과한다 — 막는 것은 `"*"`뿐이다.
+    one = deployment_envelope(private, target={"type": "bot_ui", "id": "bui_a81c22d0"})
+    assert validate_deployment(one, package=package(), keys=[key], now=NOW) == []
+
+
 def test_server_deployment_is_refused_until_m7() -> None:
     private, key = admin()
     env = deployment_envelope(private, target={"type": "server_runner", "id": "*"})

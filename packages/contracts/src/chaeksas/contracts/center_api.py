@@ -29,7 +29,7 @@ from chaeksas.contracts.bot_ui import (
 )
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.resources import MissingResource
-from chaeksas.contracts.signing import AdminKey, Envelope, verify, verify_time
+from chaeksas.contracts.signing import TARGET_ANY, AdminKey, Envelope, verify, verify_time
 
 #: 헤더 이름 — 문자열을 코드 곳곳에 흩어 두지 않는다 (프로토타입에서 문서의 `X-Bot-Id`와
 #: 코드의 `?bot_id=`가 어긋났다).
@@ -213,6 +213,8 @@ def validate_deployment(
     - 패키지가 `approved`다 (`not_approved`) — `deprecated`는 따로 알린다 (`deprecated`).
     - 봉투의 해시가 패키지와 같다 (`hash_mismatch`).
     - `target.type`이 패키지의 `run_location`과 맞다 (`target_mismatch`).
+    - **PC 배포의 `target.id`가 `"*"`가 아니다** (`wrong_target`, ADR-0046) — `"*"`는 서버
+      실행기만 쓴다 (C2 §배포 대상 규칙). 받아 두면 **모든 PC가 V6으로 거부한다**.
     - M6까지 서버 실행기 배포는 받지 않는다 (`server_runner_not_available`, ADR-0016).
 
     여기서 하지 않는 것: **대상이 존재하는지**(Center 저장소), **같은 `deployment_id`의 충돌**
@@ -246,6 +248,20 @@ def validate_deployment(
                 rule="C5",
                 code="target_mismatch",
                 message=f"run_location={package.run_location}이면 대상은 {expected}다 (받은 값 {target_type})",
+            )
+        )
+    if (
+        str(envelope.payload.get("target", {}).get("id") or "") == TARGET_ANY
+        and target_type != "server_runner"
+    ):
+        # **`"*"`는 서버 실행기만** (C2, ADR-0046) — `DeploymentTarget.matches`가 그렇게 맞추므로
+        # PC 쪽 `"*"`는 **모든 PC가 V6 `wrong_target`으로 거부할** 봉투다. 받아 두면 CON-03이
+        # 거짓 ⛔로 찬다.
+        out.append(
+            Violation(
+                rule="C5",
+                code="wrong_target",
+                message=f'{target_type} 배포에는 전체 대상("{TARGET_ANY}")이 없다 — 대상을 하나 적는다',
             )
         )
     if target_type == "server_runner" and not server_runner_available:

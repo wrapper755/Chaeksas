@@ -14,8 +14,9 @@ import { createJob } from "@/app/actions";
  * **두 걸음이고 둘 다 JS 없이 돈다.** 먼저 GET 폼으로 Bot → Bot UI → 버전을 고르면(주소에
  * 남는다), 그 버전의 매니페스트(C1 `inputs`)로 입력 칸을 그린 POST 폼이 나온다.
  *
- * - Bot UI는 **그 Bot이 배포된 곳만** 고를 수 있다 (`*` 배포면 전부). 고를 곳이 없으면
- *   「이 Bot UI에 유효한 배포가 없습니다」 — 만들어 봐야 422 `no_deployment`다.
+ * - Bot UI는 **그 Bot이 배포된 곳만** 고를 수 있다. 고를 곳이 없으면 「이 Bot UI에 유효한
+ *   배포가 없습니다」 — 만들어 봐야 422 `no_deployment`다. **PC 배포는 전체(`*`) 대상이 없다**
+ *   (ADR-0046) — 봉투 하나가 PC 하나를 가리키므로 여기서 풀 것이 없다.
  * - 같은 Bot UI에 그 Bot의 배포가 둘 이상이면 **버전을 고르게 한다** (`version_ambiguous`).
  *   하나면 비워 보낸다 — Center가 배포된 버전으로 채운다 (C5).
  */
@@ -27,16 +28,17 @@ function pcDeployments(all: DeploymentInfo[]): DeploymentInfo[] {
   return all.filter((one) => one.target.type === "bot_ui");
 }
 
+/** 그 Bot이 배포된 Bot UI들. **PC 배포는 대상이 하나씩**이라 풀 것이 없다 (ADR-0046). */
 function deployedTo(deployments: DeploymentInfo[], bot: string, botUis: BotUiInfo[]): BotUiInfo[] {
-  const mine = deployments.filter((one) => one.bpm_process_id === bot);
-  if (mine.some((one) => one.target.id === "*")) return botUis;
-  const ids = new Set(mine.map((one) => String(one.target.id)));
+  const ids = new Set(
+    deployments.filter((one) => one.bpm_process_id === bot).map((one) => String(one.target.id)),
+  );
   return botUis.filter((one) => ids.has(one.bot_ui_id));
 }
 
 function versionsFor(deployments: DeploymentInfo[], bot: string, botUi: string): string[] {
   const found = deployments
-    .filter((one) => one.bpm_process_id === bot && (one.target.id === botUi || one.target.id === "*"))
+    .filter((one) => one.bpm_process_id === bot && one.target.id === botUi)
     .map((one) => one.version);
   return [...new Set(found)];
 }

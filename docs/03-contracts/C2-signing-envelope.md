@@ -77,6 +77,7 @@
 
 - `target.type`은 패키지의 `run_location`과 맞아야 한다: `pc`면 `bot_ui`, `server`면 `server_runner`.
 - 서버 배포는 `id`에 `"*"`를 쓸 수 있다. 뜻은 Center가 관리하는 모든 서버 실행기다.
+- **PC 배포에는 `"*"`가 없다** — 봉투 하나는 **PC 하나**를 가리킨다 ([ADR-0046](../decisions/0046-no-wildcard-pc-deployment.md)). `{bot_ui, "*"}`는 V6이 `wrong_target`으로 거부하고, **Center도 받아 두지 않는다**(409 `wrong_target` — 받아 두면 모든 PC가 거부해 CON-03이 거짓 ⛔로 찬다). 한쪽만 적어 두면 「적지 않았을 뿐」으로 읽히므로 **없다는 것을 적는다**.
 - 공유 BPM 프로세스는 패키지 안 `libs/`에 복사되어 들어가므로 따로 배포하지 않는다 (C1).
 - 툴팩도 따로 배포하지 않는다. BPM 프로세스 패키지가 `requires.toolpacks[].content_hash`로 해시를 고정하고, 실행하는 쪽이 그 해시로 내려받아 승인 서명을 확인한다.
 
@@ -144,6 +145,7 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-11 | 1 | **PC 배포에 `"*"`가 없다는 것을 적었다.** 규칙은 처음부터 「서버 배포는 쓸 수 있다」뿐이었고 V6·`matches`도 그랬지만, 없다는 것을 적지 않아 Center·콘솔이 **PC 쪽 `"*"`를 풀고 있었다**. 한쪽만 적으면 「적지 않았을 뿐」으로 읽힌다 | 0046 |
 | 2026-10-01 | 1 | 초안 (배포 대상 `target{type,id}`, 서버 배포의 `max_concurrency`) | 0015 |
 | 2026-10-01 | 1 | 검토 반영: Admin 키 추가·철회도 서명으로 (부트스트랩은 서버 명령), `not_before`는 실행하는 쪽만 검사, `SIGNATURE`는 Center가 내려줄 때 넣음, 툴팩만 해시 고정, 철회된 배포는 되살리지 않음, `package_revoke`, 서명 대상에 실수 금지 | — |
 | 2026-10-01 | 1 | 확장 반영: `extension`·`extension_revoke` claim | 0018 |

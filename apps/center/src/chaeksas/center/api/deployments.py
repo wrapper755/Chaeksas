@@ -7,6 +7,7 @@ Center는 배포를 **짓지 않는다.** Admin이 서명한 것을 받아 두�
 - 같은 id에 다른 내용이 오면 409 `deployment_conflict`.
 - 승인되지 않은 패키지는 배포할 수 없다 — **승인이 먼저**다.
 - `target.type`은 패키지의 `run_location`과 맞아야 한다 (`pc`→`bot_ui`, `server`→`server_runner`).
+- **`"*"`는 서버 실행기 배포만 쓴다** (ADR-0046). PC 배포 봉투 하나는 **PC 하나**를 가리킨다.
 """
 
 from __future__ import annotations
@@ -22,10 +23,34 @@ from chaeksas.center.storage import Store, loads, now_iso
 from chaeksas.contracts.bot_ui import DeploymentResult
 from chaeksas.contracts.center_api import RECENT_RESULTS, DeploymentInfo
 from chaeksas.contracts.manifest import Manifest
-from chaeksas.contracts.signing import Envelope, verify, verify_time
+from chaeksas.contracts.signing import TARGET_ANY, Envelope, verify, verify_time
 
 #: `run_location` → 배포 대상 종류 (C2 §배포 대상 규칙).
 TARGET_FOR = {"pc": "bot_ui", "server": "server_runner"}
+
+#: `id`에 `"*"`로 **모두**를 가리킬 수 있는 대상 종류 (C2 §배포 대상 규칙, ADR-0046).
+#:
+#: **PC(`bot_ui`)는 들어 있지 않다** — `DeploymentTarget.matches`가 `*`를 서버 실행기에만
+#: 주므로(V6) `{bot_ui, "*"}` 봉투는 **모든 PC가 `wrong_target`으로 거부한다**. 그런 것을
+#: Center가 풀어 내려 주면 CON-03이 거짓 ⛔로 차고 운영자는 승인·해시·키를 뒤진다.
+WILDCARD_TARGETS = frozenset({"server_runner"})
+
+
+def _target_sql(target_type: str, target_id: str) -> tuple[str, tuple[str, ...]]:
+    """`d.target_type`·`d.target_id`를 맞추는 WHERE 조각과 인자.
+
+    **고르는 기준이 네 자리에서 같아야 한다** — `envelopes_for`(내려 주는 것)·
+    `versions_for`(돌릴 수 있는 것)·`downloadable_by`(받을 수 있는 것)·`listing`(보이는 것)이
+    어긋나면 「배포는 됐는데 설치가 안 된다」·「배포는 됐는데 작업이 안 된다」가 된다. 그래서
+    **말로 적어 두지 않고 한 함수로** 짓는다.
+    """
+    if target_type in WILDCARD_TARGETS:
+        return "d.target_type = ? AND (d.target_id = ? OR d.target_id = ?)", (
+            target_type,
+            target_id,
+            TARGET_ANY,
+        )
+    return "d.target_type = ? AND d.target_id = ?", (target_type, target_id)
 
 
 def _envelope(raw: Any) -> Envelope:
@@ -98,6 +123,15 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
             "wrong_target",
             f"실행 위치 {package['run_location']}는 {wanted}에 배포한다 (받은 것 {target.get('type')})",
         )
+    if target.get("id") == TARGET_ANY and str(target.get("type") or "") not in WILDCARD_TARGETS:
+        # **받아 두지 않는다** (ADR-0046) — 실행하는 쪽의 V6이 전부 `wrong_target`으로 거부할
+        # 봉투다. 받아 두면 CON-03이 거짓 ⛔로 차고 운영자는 승인·해시·키를 뒤진다(막은 것은
+        # 대상인데). 「받아는 줬다」가 가장 나쁜 답이다.
+        raise ApiError(
+            409,
+            "wrong_target",
+            f"{target.get('type')} 배포에는 전체 대상(\"{TARGET_ANY}\")이 없다 — PC를 하나 적는다",
+        )
 
     _refuse_missing_resources(store, package)
 
@@ -165,14 +199,23 @@ def revoke(store: Store, raw: Any) -> DeploymentInfo:
 
 
 def listing(
-    store: Store, *, target_id: str | None = None, active_only: bool = False
+    store: Store,
+    *,
+    target_id: str | None = None,
+    target_type: str = "bot_ui",
+    active_only: bool = False,
 ) -> list[DeploymentInfo]:
-    """`GET /deployments` (C5). 철회된 것도 **행이 남으므로** 목록에 보인다."""
+    """`GET /deployments` (C5). 철회된 것도 **행이 남으므로** 목록에 보인다.
+
+    좁히는 기준은 `envelopes_for`와 **같다** (ADR-0046) — 보이는 것과 내려가는 것이 어긋나면
+    CON-03의 「배포」가 그 PC가 받지 못할 것을 보인다. 묻는 쪽이 종류를 적지 않으면 **PC**다
+    (`GET /deployments?target_id=`는 Bot UI id를 받는다).
+    """
     rows = store.rows("SELECT * FROM deployments ORDER BY at DESC")
     out = [_row(store, one) for one in rows]
     if target_id:
-        # `*` 배포는 모든 대상에 걸린다 — 그 Bot UI를 물어도 보여야 한다.
-        out = [one for one in out if one.target.get("id") in (target_id, "*")]
+        wanted = {target_id} | ({TARGET_ANY} if target_type in WILDCARD_TARGETS else set())
+        out = [one for one in out if one.target.get("id") in wanted]
     if active_only:
         out = [one for one in out if one.revoked_at is None]
     return out
@@ -183,12 +226,12 @@ def envelopes_for(store: Store, *, target_type: str, target_id: str) -> list[dic
 
     **승인이 철회된 패키지의 배포는 빼고 준다** — 받는 쪽이 어차피 거부한다 (C2).
     """
+    where, target = _target_sql(target_type, target_id)
     rows = store.rows(
         "SELECT d.envelope_json AS body FROM deployments d "
         "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
-        "WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ? "
-        "AND (d.target_id = ? OR d.target_id = '*') ORDER BY d.at",
-        (STATUS_APPROVED, target_type, target_id),
+        f"WHERE d.revoked_json IS NULL AND p.status = ? AND {where} ORDER BY d.at",
+        (STATUS_APPROVED, *target),
     )
     return [json.loads(one["body"]) for one in rows]
 
@@ -196,16 +239,17 @@ def envelopes_for(store: Store, *, target_type: str, target_id: str) -> list[dic
 def versions_for(store: Store, *, target_type: str, target_id: str, bpm_process_id: str) -> list[str]:
     """그 대상에 **활성으로 배포된** 버전들 (C5 작업 만들기가 `version`을 푸는 데 쓴다).
 
-    고르는 기준은 `envelopes_for`와 **같다** — 내려가는 것과 돌릴 수 있는 것이 어긋나면
-    「배포는 됐는데 작업이 안 된다」가 된다. `not_before`·`expires_at`은 여기서 보지 않는다
-    (C2 V5b — 때를 보는 것은 실행하는 쪽이다).
+    고르는 기준은 `envelopes_for`와 **같다** (`_target_sql`) — 내려가는 것과 돌릴 수 있는 것이
+    어긋나면 「배포는 됐는데 작업이 안 된다」가 된다. `not_before`·`expires_at`은 여기서 보지
+    않는다 (C2 V5b — 때를 보는 것은 실행하는 쪽이다).
     """
+    where, target = _target_sql(target_type, target_id)
     rows = store.rows(
         "SELECT d.version AS version FROM deployments d "
         "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
-        "WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ? "
-        "AND (d.target_id = ? OR d.target_id = '*') AND d.bpm_process_id = ? ORDER BY d.at",
-        (STATUS_APPROVED, target_type, target_id, bpm_process_id),
+        f"WHERE d.revoked_json IS NULL AND p.status = ? AND {where} "
+        "AND d.bpm_process_id = ? ORDER BY d.at",
+        (STATUS_APPROVED, *target, bpm_process_id),
     )
     return [str(one["version"]) for one in rows]
 
@@ -213,20 +257,20 @@ def versions_for(store: Store, *, target_type: str, target_id: str, bpm_process_
 def downloadable_by(store: Store, *, target_type: str, target_id: str) -> set[tuple[str, str]]:
     """그 대상이 **내려받을 수 있는** 패키지 `{(id, 버전)}` (C5 권한표).
 
-    고르는 기준은 `envelopes_for`와 **같다** — 내려가는 배포와 받을 수 있는 파일이 어긋나면
-    「배포는 됐는데 설치가 안 된다」가 된다. 거기에 그 패키지가 요구하는
+    고르는 기준은 `envelopes_for`와 **같다** (`_target_sql`) — 내려가는 배포와 받을 수 있는
+    파일이 어긋나면 「배포는 됐는데 설치가 안 된다」가 된다. 거기에 그 패키지가 요구하는
     툴팩(`requires.toolpacks`)을 더한다 (C5 — 실행하는 쪽은 툴팩도 따로 내려받는다).
 
     **공유 BPM 프로세스(`requires.libs`)는 더하지 않는다** — 그것은 패키지 안
     `libs/`로 **복사해 넣은** 것이라(C1 §패키지 구성) 실행하는 쪽이 따로 받을 것이 없다.
     """
+    where, target = _target_sql(target_type, target_id)
     rows = store.rows(
         "SELECT d.bpm_process_id AS id, d.version AS version, p.manifest_json AS manifest_json"
         " FROM deployments d"
         " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
-        " WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ?"
-        " AND (d.target_id = ? OR d.target_id = '*')",
-        (STATUS_APPROVED, target_type, target_id),
+        f" WHERE d.revoked_json IS NULL AND p.status = ? AND {where}",
+        (STATUS_APPROVED, *target),
     )
     out: set[tuple[str, str]] = set()
     for one in rows:
@@ -319,6 +363,7 @@ def _row(store: Store, row: Any) -> DeploymentInfo:
 
 __all__ = [
     "TARGET_FOR",
+    "WILDCARD_TARGETS",
     "create",
     "envelopes_for",
     "listing",

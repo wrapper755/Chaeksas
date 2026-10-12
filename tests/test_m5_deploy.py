@@ -239,6 +239,81 @@ def test_a_different_body_on_the_same_id_conflicts(center: Center) -> None:
     assert caught.value.code == "deployment_conflict"
 
 
+def test_a_wildcard_pc_deployment_is_not_even_kept(center: Center) -> None:
+    """**PC 배포에 전체(`*`) 대상은 없다** (ADR-0046) — 받아 두지도 않는다.
+
+    받아 두면 Center가 모든 PC에 내려 주고 **모든 PC가 V6 `wrong_target`으로 거부해** CON-03이
+    거짓 ⛔로 찬다. 그때 운영자가 뒤지는 것은 승인·해시·키인데 **막은 것은 대상**이다.
+    """
+    key = admin_key(center)
+    info = approved(center, key)
+    with pytest.raises(CenterProblem) as caught:
+        center.deploy(deployment(key, info, target="*"))
+    assert caught.value.code == "wrong_target"
+    assert center.deployments() == [], "행조차 남지 않는다"
+
+
+def test_a_wildcard_row_already_in_the_database_still_goes_nowhere(
+    center: Center, tmp_path: Path
+) -> None:
+    """**관문이 둘이다** — 옛 DB에 `*` PC 배포 행이 있어도 내려가지 않는다 (ADR-0046).
+
+    `create`가 막기 전에 들어간 행이 있을 수 있다. 고르는 네 자리가 **같은 `_target_sql`**을
+    쓰므로 하나만 새 보다가 어긋나는 일이 없다 — 여기서 그 셋을 함께 본다.
+    """
+    from chaeksas.center.api.deployments import downloadable_by, envelopes_for, versions_for
+
+    key = admin_key(center)
+    info = approved(center, key)
+    store = center.client.app.state.store
+    # `create`를 거치지 않고 **손으로** 넣는다 (옛 DB에 들어 있던 꼴).
+    with store.tx() as cur:
+        cur.execute(
+            "INSERT INTO deployments (deployment_id, target_type, target_id, bpm_process_id,"
+            " version, content_hash, envelope_json, revoked_json, at) VALUES"
+            " (?, 'bot_ui', '*', ?, ?, ?, ?, NULL, ?)",
+            (
+                "dep_old00001",
+                info["id"],
+                info["version"],
+                info["content_hash"],
+                json.dumps(deployment(key, info, target="*").to_json_dict(), ensure_ascii=False),
+                AT,
+            ),
+        )
+
+    assert envelopes_for(store, target_type="bot_ui", target_id=BOT_UI) == [], "내려가지 않는다"
+    assert versions_for(
+        store, target_type="bot_ui", target_id=BOT_UI, bpm_process_id=info["id"]
+    ) == [], "작업을 만들 수도 없다"
+    assert downloadable_by(store, target_type="bot_ui", target_id=BOT_UI) == set(), "받을 수도 없다"
+    assert [one.target["id"] for one in listing_of(center, BOT_UI)] == [], "CON-03에도 안 보인다"
+
+
+def test_the_server_runner_still_matches_everything_with_a_wildcard(center: Center) -> None:
+    """**`*`는 서버 실행기 배포에 그대로 있다** (C2 §배포 대상 규칙·V6).
+
+    서버 배포는 M7이라 `create`로는 만들 수 없다 — 그래서 고르는 조건 자체를 본다. 이것이
+    깨지면 ADR-0046이 지우려던 것보다 많이 지운 것이다.
+    """
+    from chaeksas.center.api.deployments import WILDCARD_TARGETS, _target_sql
+
+    assert WILDCARD_TARGETS == {"server_runner"}
+    where, args = _target_sql("server_runner", "srv_1")
+    assert where.count("?") == len(args) == 3
+    assert args[-1] == "*"
+    where, args = _target_sql("bot_ui", BOT_UI)
+    assert where.count("?") == len(args) == 2
+    assert "*" not in args
+
+
+def listing_of(center: Center, target_id: str) -> list[Any]:
+    """`GET /deployments?target_id=` — CON-03의 「배포」가 읽는 것."""
+    from chaeksas.center.api.deployments import listing
+
+    return listing(center.client.app.state.store, target_id=target_id)
+
+
 def test_a_revoked_deployment_never_comes_back(center: Center) -> None:
     """**철회된 것은 영구히 철회 상태**다 (C2)."""
     key = admin_key(center)

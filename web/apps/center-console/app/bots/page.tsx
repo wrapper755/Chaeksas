@@ -73,7 +73,14 @@ export interface BotRow {
   blocked: number;
   /** 그 PC들이 말한 막은 점검 코드 (툴팁). */
   blocked_codes: string[];
-  /** 살아 있는 배포 수 (C5). 그룹·전체 배포는 **대상을 풀지 않는다** — 건수로 센다. */
+  /**
+   * 이 판이 배포된 **Bot UI(PC) 수** — 살아 있는 PC 배포의 `target.id`를 겹치지 않게 센다.
+   *
+   * **PC 배포에는 전체(`*`) 대상이 없다** (ADR-0046) — 봉투 하나가 PC 하나를 가리키므로 풀
+   * 것이 없고, 이 수는 어림이 아니라 정확하다. 서버 배포(M7)는 PC가 아니라 세지 않는다.
+   */
+  pcs: number;
+  /** 살아 있는 PC 배포 **건수** (툴팁). 같은 PC에 옛 배포가 살아 있으면 `pcs`보다 크다. */
   deployments: number;
   /** 필요한 서비스 앱 키 참조 (C1 `requires.service_apps`). */
   key_refs: string[];
@@ -116,9 +123,39 @@ function Rate({ part, whole, token }: { part: number; whole: number; token: stri
   );
 }
 
+/**
+ * `summarize`가 채우는 칸 — **실행 요약(C3)에서 오는 것뿐**이다.
+ *
+ * **세는 쪽은 제가 세지 않은 칸을 들고 다니지 않는다.** 전에는 반환 타입이 「패키지에서 오는
+ * 칸만 뺀 나머지」였던 탓에 `summarize`가 `blocked`·`deployments`까지 **0으로 들고** 돌아왔고,
+ * 줄을 짓는 자리에서 그것을 **나중에 펼쳐** 실제 값을 덮었다 — 끝난 실행이 있는 판은
+ * 「실행 불가」·「배포된 Bot UI」가 늘 0이고 경고 띠도 뜨지 않았다.
+ */
+export type RunFields = Pick<
+  BotRow,
+  | "sample"
+  | "successes"
+  | "ai_tasks"
+  | "replayed"
+  | "confirmations"
+  | "confirm_sample"
+  | "last_success"
+>;
+
+/** 표본이 없는 판 — **0%가 아니라 「—」**로 그려진다 (`percent`가 `null`을 준다). */
+export const NO_RUNS: RunFields = {
+  sample: 0,
+  successes: 0,
+  ai_tasks: 0,
+  replayed: 0,
+  confirmations: 0,
+  confirm_sample: 0,
+  last_success: null,
+};
+
 /** 실행 요약들을 (Bot, 버전)으로 묶어 **최근 20회만** 센다. */
-export function summarize(runs: RunInfo[]): Map<string, Omit<BotRow, keyof PackageFields>> {
-  const out = new Map<string, Omit<BotRow, keyof PackageFields>>();
+export function summarize(runs: RunInfo[]): Map<string, RunFields> {
+  const out = new Map<string, RunFields>();
   const counted = new Map<string, number>();
   for (const run of runs) {
     const id = run.bpm_process_id;
@@ -128,20 +165,7 @@ export function summarize(runs: RunInfo[]): Map<string, Omit<BotRow, keyof Packa
     const seen = counted.get(key) ?? 0;
     if (seen >= SAMPLE) continue; // 목록은 **새것부터** 온다 (C3 — 최근 20회가 앞쪽이다)
     counted.set(key, seen + 1);
-    const found =
-      out.get(key) ??
-      ({
-        sample: 0,
-        successes: 0,
-        ai_tasks: 0,
-        replayed: 0,
-        confirmations: 0,
-        confirm_sample: 0,
-        last_success: null,
-        blocked: 0,
-        blocked_codes: [],
-        deployments: 0,
-      } as Omit<BotRow, keyof PackageFields>);
+    const found = out.get(key) ?? { ...NO_RUNS };
     found.sample += 1;
     if (run.status === "success") {
       found.successes += 1;
@@ -160,11 +184,30 @@ export function summarize(runs: RunInfo[]): Map<string, Omit<BotRow, keyof Packa
   return out;
 }
 
-/** 패키지에서 오는 칸들 — `summarize`가 채우지 않는 것. */
-type PackageFields = Pick<
-  BotRow,
-  "id" | "version" | "name" | "status" | "run_location" | "key_refs" | "missing"
->;
+/**
+ * 「배포된 Bot UI」 — 그 판이 **살아 있는 PC 배포로 걸린 PC 수**와 그 건수 (C5).
+ *
+ * **PC 배포는 대상이 `bot_ui_id` 하나씩이다** (ADR-0046) — 그래서 `target.id`를 겹치지 않게
+ * 세면 끝이고, Center가 대상을 풀어 줄 필요가 없다. 겹침을 지우는 까닭은 같은 판을 같은 PC에
+ * 두 번 배포할 수 있어서다(옛 배포가 살아 있는 채) — 그때 **건수는 PC 수보다 크다**.
+ *
+ * `target.type`이 `bot_ui`인 것만 센다 — 열의 이름이 「배포된 **Bot UI**」다 (서버 배포는 M7).
+ *
+ * **등록된 Bot UI와 맞춰 보지 않는다.** 세는 것은 「배포가 가리키는 PC」이고, 가리킨 PC가 아직
+ * 등록하지 않았으면 그것은 **보여야 하는 어긋남**이다 (잘못 서명한 배포가 0대로 숨으면
+ * 아무도 못 찾는다). 어느 PC가 정말 있는지는 CON-03이 말한다.
+ */
+export function deployedPcs(
+  all: DeploymentInfo[],
+  bot: string,
+  version: string,
+): { pcs: number; deployments: number } {
+  const mine = all.filter(
+    (one) =>
+      one.target.type === "bot_ui" && one.bpm_process_id === bot && one.version === version,
+  );
+  return { pcs: new Set(mine.map((one) => String(one.target.id))).size, deployments: mine.length };
+}
 
 /** C1 `requires.service_apps` — 상속 참조와 태스크가 따로 적은 참조를 **함께** 센다. */
 export function keyRefsOf(one: PackageInfo): string[] {
@@ -216,19 +259,10 @@ export default async function BotsPage() {
           blocked_codes: [
             ...new Set(unusable.flatMap((ready) => ready.blocked ?? [])),
           ],
-          deployments: (deployments as DeploymentInfo[]).filter(
-            (one_deployment) =>
-              one_deployment.bpm_process_id === one.id && one_deployment.version === one.version,
-          ).length,
-          ...(counts.get(key) ?? {
-            sample: 0,
-            successes: 0,
-            ai_tasks: 0,
-            replayed: 0,
-            confirmations: 0,
-            confirm_sample: 0,
-            last_success: null,
-          }),
+          ...deployedPcs(deployments as DeploymentInfo[], one.id, one.version),
+          // **실행 요약은 제 칸만 덮는다** (`RunFields`) — 위에서 센 「실행 불가」·「배포된
+          // Bot UI」가 살아 있어야 한다.
+          ...(counts.get(key) ?? NO_RUNS),
         } as BotRow;
       })
       .sort((a, b) => a.id.localeCompare(b.id) || a.version.localeCompare(b.version));
@@ -325,11 +359,20 @@ export default async function BotsPage() {
     },
     { key: "last_success", header: "최근 성공", width: "18ch", cell: (row) => time(row.last_success) },
     {
-      key: "deployments",
-      header: "배포",
-      width: "9ch",
+      key: "pcs",
+      header: "배포된 Bot UI",
+      width: "14ch",
       align: "right",
-      cell: (row) => (row.deployments === 0 ? <span className="text-text-muted">—</span> : `${row.deployments}건`),
+      // **건수가 아니라 PC 수**다 (ADR-0046). 건수는 툴팁에 — 같은 PC에 옛 배포가 살아 있으면
+      // 둘이 다르고, 그때 「왜 수가 적나」의 답이 그 자리에 있어야 한다.
+      cell: (row) =>
+        row.pcs === 0 ? (
+          <span className="text-text-muted">—</span>
+        ) : (
+          <span className="tabular-nums" title={`살아 있는 배포 ${row.deployments}건`}>
+            {row.pcs}대
+          </span>
+        ),
     },
     {
       key: "key_refs",

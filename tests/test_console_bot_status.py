@@ -149,6 +149,44 @@ def send_run(
     assert answer.status_code == 200, answer.text
 
 
+def deploy_row(client: TestClient, *, deployment_id: str, bot_ui: str) -> None:
+    """살아 있는 PC 배포 한 줄.
+
+    **서명을 거치지 않고 행을 직접 넣는다** — 이 묶음이 보는 것은 「재료가 콘솔에 오는가」이고,
+    서명 관문(`*` 거절까지)은 `tests/test_m5_deploy.py`가 진짜 `chk-admin`으로 본다.
+    """
+    store = client.app.state.store  # type: ignore[attr-defined]
+    envelope = {
+        "schema": 1,
+        "kind": "deployment",
+        "key_id": "adm_test0001",
+        "signed_at": "2026-10-10T09:00:00+09:00",
+        "payload": {
+            "kind": "deployment",
+            "deployment_id": deployment_id,
+            "target": {"type": "bot_ui", "id": bot_ui},
+            "bpm_process_id": BOT,
+            "version": VERSION,
+        },
+        "signature": "x",
+    }
+    with store.tx() as cur:
+        cur.execute(
+            "INSERT INTO deployments (deployment_id, target_type, target_id, bpm_process_id,"
+            " version, content_hash, envelope_json, revoked_json, at)"
+            " VALUES (?, 'bot_ui', ?, ?, ?, ?, ?, NULL, ?)",
+            (
+                deployment_id,
+                bot_ui,
+                BOT,
+                VERSION,
+                "sha256:" + "0" * 64,
+                json.dumps(envelope, ensure_ascii=False),
+                "2026-10-10T09:00:00+09:00",
+            ),
+        )
+
+
 def register(client: TestClient, *, readiness: list[dict[str, Any]]) -> None:
     """Bot UI 하나가 등록하고 **준비 상태를 보고한다** (C4 `readiness`)."""
     made = client.post("/api/v1/center-keys", json={"name": "현장 PC", "type": "bot_ui"}, headers=ADMIN)
@@ -289,6 +327,79 @@ def test_runs_of_another_bot_do_not_leak_into_the_sample(client: TestClient) -> 
 
 
 # ─────────────────────────── 보고된 준비 상태 (C4) ───────────────────────────
+
+
+def test_deployment_rows_carry_the_pc_the_version_went_to(client: TestClient) -> None:
+    """「배포된 Bot UI」의 재료 (C5 `DeploymentInfo.target`) — **PC 하나씩** 온다.
+
+    **PC 배포에 전체(`*`) 대상은 없다** (ADR-0046) — 그래서 콘솔은 `target.id`를 겹치지 않게
+    세면 끝이고 Center가 대상을 풀어 줄 필요가 없다. 같은 PC에 배포가 둘이면 **건수는 2,
+    PC 수는 1**이고 화면은 수를 보이고 건수를 툴팁에 둔다.
+    """
+    upload(client, package())
+    rows = [
+        ("dep_11111111", "bui_aaaa1111"),
+        ("dep_22222222", "bui_bbbb2222"),
+        ("dep_33333333", "bui_bbbb2222"),  # 같은 PC에 또 — 건수는 늘고 PC 수는 그대로다
+    ]
+    for deployment_id, bot_ui in rows:
+        deploy_row(client, deployment_id=deployment_id, bot_ui=bot_ui)
+
+    found = client.get("/api/v1/deployments?active=true", headers=READ).json()
+    mine = [
+        one
+        for one in found
+        if one["target"]["type"] == "bot_ui"
+        and one["bpm_process_id"] == BOT
+        and one["version"] == VERSION
+    ]
+    assert len(mine) == 3, "건수"
+    assert {one["target"]["id"] for one in mine} == {"bui_aaaa1111", "bui_bbbb2222"}, "PC 수는 2"
+    assert "*" not in {one["target"]["id"] for one in mine}
+
+
+def test_the_column_counts_pcs_and_does_not_resolve_a_wildcard(client: TestClient) -> None:
+    """화면이 **수를 센다** — 「배포」(건수)가 아니라 「배포된 Bot UI」다 (ADR-0046).
+
+    집계는 TypeScript라 파이썬이 돌려 보지 못한다 (`web`에 단위 시험 판이 없다 — §4-9). 그래서
+    **글로** 본다: 열 이름이 바뀌었는가, `*`를 푸는 코드가 사라졌는가.
+    """
+    page = (CONSOLE / "app" / "bots" / "page.tsx").read_text(encoding="utf-8")
+    assert 'header: "배포된 Bot UI"' in page
+    assert 'header: "배포"' not in page, "건수로 보이던 열은 없다"
+    assert "deployedPcs" in page
+
+    # CON-05 「새 작업」도 PC 쪽 `*`를 풀지 않는다 — 봉투 하나가 PC 하나를 가리킨다.
+    jobs = (CONSOLE / "app" / "jobs" / "new" / "page.tsx").read_text(encoding="utf-8")
+    assert '=== "*"' not in jobs
+    assert 'target.id === "*"' not in jobs
+
+
+def test_the_run_summary_does_not_overwrite_the_deployment_and_blocked_counts(
+    client: TestClient,
+) -> None:
+    """**세는 쪽은 제가 세지 않은 칸을 들고 다니지 않는다** (`RunFields`).
+
+    전에는 `summarize`가 `blocked`·`deployments`까지 0으로 들고 돌아왔고 줄을 짓는 자리에서
+    그것을 나중에 펼쳐 실제 값을 덮었다 — **끝난 실행이 있는 판은 「실행 불가」가 늘 0**이고
+    경고 띠도 뜨지 않았다. 재료가 함께 온다는 것을 보고, 덮지 않는다는 것은 글로 본다.
+    """
+    upload(client, package())
+    send_run(client, "run_20261010_160000_999999", status="success")
+    register(
+        client,
+        readiness=[{"bpm_process_id": BOT, "version": VERSION, "ready": False, "blocked": ["x"]}],
+    )
+    deploy_row(client, deployment_id="dep_44444444", bot_ui="bui_cccc3333")
+
+    # 같은 (Bot, 버전)에 대해 셋이 **함께** 온다 — 그래서 한 줄에 다 들어가야 한다.
+    assert client.get(f"/api/v1/runs?bpm_process_id={BOT}", headers=READ).json()["runs"]
+    assert client.get("/api/v1/bot-uis", headers=READ).json()[0]["readiness"]
+    assert client.get("/api/v1/deployments?active=true", headers=READ).json()
+
+    page = (CONSOLE / "app" / "bots" / "page.tsx").read_text(encoding="utf-8")
+    assert "export type RunFields" in page, "세는 쪽의 반환 칸을 못 박는다"
+    assert "Omit<BotRow" not in page, "「나머지 전부」로 돌려주면 다시 덮는다"
 
 
 def test_readiness_reports_say_which_version_is_blocked(client: TestClient) -> None:
