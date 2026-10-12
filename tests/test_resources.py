@@ -17,7 +17,6 @@ from chaeksas.contracts import (
     ResourceIndex,
     ResourceList,
     ServiceAppResource,
-    ToolpackResource,
     blocking_at_deploy,
     missing,
 )
@@ -179,21 +178,6 @@ def test_contributed_resource_found() -> None:
     assert missing(m, have) == []
 
 
-def test_toolpack_checks() -> None:
-    m = manifest(requires={"toolpacks": [{"id": "doc", "version": "1.0.0", "content_hash": HASH}]})
-    assert [x.reason for x in missing(m, index())] == ["not_found"]
-
-    other = "sha256:" + "cd" * 32
-    have = index(toolpacks=[ToolpackResource(id="doc", version="1.0.0", status="approved", content_hash=other)])
-    assert [x.reason for x in missing(m, have)] == ["hash_mismatch"]
-
-    have = index(toolpacks=[ToolpackResource(id="doc", version="1.0.0", status="candidate", content_hash=HASH)])
-    assert [x.reason for x in missing(m, have)] == ["not_approved"]
-
-    have = index(toolpacks=[ToolpackResource(id="doc", version="1.0.0", status="approved", content_hash=HASH)])
-    assert missing(m, have) == []
-
-
 def test_several_misses_are_all_reported() -> None:
     m = manifest(requires={
         "extensions": [{"id": "ui-automation", "version": ">=0.4,<0.5"}],
@@ -232,9 +216,12 @@ def test_only_some_misses_block_deployment() -> None:
 
 
 def test_hash_mismatch_always_blocks() -> None:
-    m = manifest(requires={"toolpacks": [{"id": "doc", "version": "1.0.0", "content_hash": HASH}]})
-    other = "sha256:" + "cd" * 32
-    have = index(toolpacks=[ToolpackResource(id="doc", version="1.0.0", status="approved", content_hash=other)])
+    """해시 불일치는 배포를 막는다 — 지금 그것을 내는 검사는 외부 확장 정의 하나다 (C13)."""
+    m = manifest(requires={"extensions": [
+        {"id": "ext-ocr", "version": ">=1,<2", "definition_hash": "sha256:aaa"}]})
+    have = index(extensions=[ExtensionResource(
+        id="ext-ocr", version="1.2.0", tier="external", protocol="http-adapter",
+        definition_hash="sha256:bbb")])
     assert [x.reason for x in blocking_at_deploy(missing(m, have))] == ["hash_mismatch"]
 
 

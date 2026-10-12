@@ -41,7 +41,7 @@
 | 필드 | 타입 | 필수 | 뜻 | 추가된 schema |
 | --- | --- | --- | --- | --- |
 | `schema` | int | ✓ | 이 계약의 schema 번호. 지금 1 | 1 |
-| `kind` | `"bpm_process"` \| `"process_lib"` \| `"toolpack"` | ✓ | 패키지 종류. 운영 화면에서 `bpm_process`가 Bot / 서버 Bot이다 | 1 |
+| `kind` | `"bpm_process"` \| `"process_lib"` | ✓ | 패키지 종류. 운영 화면에서 `bpm_process`가 Bot / 서버 Bot이다. **도구 묶음(툴팩)은 패키지가 아니다** — 도구는 확장이 기여한다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)) | 1 |
 | `id` | str | ✓ | 소문자·숫자·`.` `_` `-`, 1~100자, 첫 글자는 소문자·숫자 | 1 |
 | `version` | str | ✓ | SemVer (`1.2.0`, `1.2.0-rc.1`) | 1 |
 | `name` | str | | 화면 표시 이름 | 1 |
@@ -54,7 +54,7 @@
 | `human` | HumanNeeds | ✓ | 사람 개입 종류 (서버 검사에 씀) | 1 |
 | `inputs` | ManifestInput[] | | 진입 정의가 받는 입력 (`chk:process.inputs`를 그대로 옮긴 것). 작업을 만드는 화면(CON-05)이 입력 칸을 그린다. 실행하는 쪽은 이것이 아니라 BPMN을 본다 | 1 |
 | `outputs` | str[] | | 실행이 끝나면 만드는 변수 이름 | 1 |
-| `provides` | Provides | `process_lib`·`toolpack`만 | 제공하는 BPM 프로세스·도구 목록 | 1 |
+| `provides` | Provides | `process_lib`만 | 제공하는 BPM 프로세스 목록 | 1 |
 | `built` | Built | ✓ | 누가 언제 무엇으로 빌드했나 | 1 |
 | `content_hash` | str | ✓ | `sha256:<hex>`. 계산 규칙은 C2 (SIGNATURE와 이 필드 자신은 제외) | 1 |
 
@@ -76,13 +76,11 @@
 | `tools` | str[] | 쓰는 도구 이름 전체 (AI 태스크의 허용 도구 합) |
 | `domains` | str[] | AI 태스크 대상 환경 합: `llm` `api` `doc` `web` `desktop` |
 | `settings` | str[] | 실행하는 쪽이 갖춰야 할 설정 이름: `llm` `vlm` `smtp` |
-| `secrets` | str[] | 툴팩이 쓰는 비밀 **이름**만 |
 | `service_apps` | ServiceAppNeed[] | 부르는 서비스 앱과 **키 참조** (아래). UI 태스크가 있으면 `ui-automation`이 들어간다 |
 | `resources` | `{type, id}`[] | 확장이 기여한 자원 중 쓰는 것 (예: `{type: "ui_page", id: "erp.order.form"}`). Center 리소스 목록(C7 확장 기여 자원)과 대조 |
 | `extensions` | `{id, version, definition_hash?}`[] | 쓰는 확장과 버전 범위 (C13). 외부 확장이면 `definition_hash`로 정의를 고정한다. Studio가 채운다 |
 | `task_types` | `{id, extension, run_locations?}`[] | 쓰는 태스크 종류 중 **확장이 기여한 것**과, 그 확장 정의에 적힌 실행 위치. Studio가 빌드할 때 확장 정의에서 옮겨 적는다. Center는 이것으로 R2를 판정하고, 실행하는 쪽은 자기 확장 정의로 다시 확인한다. **`run_locations`는 아는 쪽이 준다 — 모르면 넣지 않는다**: 빌드하는 PC에 그 확장이 깔려 있지 않거나 꺼져 있으면(ADR-0043) 적을 값이 없다 |
 | `libs` | str[] | 복사해 넣은 공유 BPM 프로세스 `<id>@<version>` |
-| `toolpacks` | ToolpackRef[] | 쓰는 툴팩 `{id, version, content_hash}` (해시로 고정) |
 | `runtimes` | str[] | 예: `node>=20`, `chromium` |
 | `os` | str[] | `windows` `linux`. 비면 제한 없음 |
 
@@ -108,8 +106,7 @@
 | 모델 | 필드 |
 | --- | --- |
 | Trigger | `kind`: `none` \| `message` \| `timer` \| `conditional` \| `signal`, `name`(이벤트 이름 — 메시지·신호), `expression`(타이머 식) |
-| ToolpackRef | `id`, `version`, `content_hash` |
-| Provides | `processes`: `{process_id, file, name, description, reads[], writes[], run_location, ai_tasks, human}`[] · `tools`: `{name, domain, description, args(JSON Schema)}`[] |
+| Provides | `processes`: `{process_id, file, name, description, reads[], writes[], run_location, ai_tasks, human}`[] |
 | Built | `by`: `studio` \| `cli`, `at`(ISO 8601), `core`(버전), `spec_version`(재생 명세 버전) |
 
 **`triggers`는 진입 정의의 시작 이벤트를 그대로 옮긴 것이다** — `kind`는 BPMN 시작 이벤트의
@@ -147,7 +144,8 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 | R4 | `key_ref`·`task_key_refs`는 이름 규칙을 따른다. 규칙상 `_`가 없어 키 값(`chk_…`)은 들어갈 수 없다 | 422 `invalid_key_ref` |
 | R5 | `manifest.json`·BPMN 어디에도 키 값·비밀 값이 없다 (Studio 빌드가 보장, Center는 R4만 검사) | — |
 | R6 | `content_hash`가 실제 내용과 같다 (C2) | 422 `hash_mismatch` |
-| R7 | `requires.toolpacks[].content_hash`가 비어 있지 않다 (로컬 개발용 툴팩은 업로드 불가) | 422 |
+
+**R7은 없어졌다** — 툴팩 해시를 검사하던 규칙이고 툴팩 갈래가 사라졌다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)). **번호는 다시 쓰지 않는다** (오류 코드는 사람이 기억한다).
 | R9 | `triggers[].kind`가 위 다섯 중 하나다 | 422 `unknown_trigger_kind` + 걸린 값 목록 |
 
 **R2는 모르는 것을 막지 않는다.** 태스크 종류의 실행 위치는 **확장 정의만** 안다 (C13
@@ -186,7 +184,6 @@ PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드�
     "tools": ["doc.read_pdf"],
     "domains": ["llm", "doc"],
     "settings": ["llm"],
-    "secrets": [],
     "service_apps": [
       {"app_id": "tax-invoice", "operations": ["issue"], "key_ref": "finance-invoice"}
     ],
@@ -194,7 +191,6 @@ PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드�
     "task_types": [],
     "extensions": [],
     "libs": [],
-    "toolpacks": [],
     "runtimes": [],
     "os": []
   },
@@ -241,7 +237,7 @@ PC Bot (UI 태스크가 있음):
 | 400 | zip이 깨짐, `manifest.json` 없음, JSON 아님 | 다시 빌드 |
 | 200 | 같은 `id`+`version`이고 `content_hash`도 같음 (재시도한 업로드) | 성공으로 본다 |
 | 409 | 같은 `id`+`version`인데 내용이 다름 (C5) | 버전을 올린다 |
-| 422 | 검사 규칙 R1~R7·R9 위반, 모르는(더 높은) `schema` | 응답 `detail[]`의 규칙 코드를 Studio 「실행 전 검사」와 같은 문구로 보인다 |
+| 422 | 검사 규칙 위반(R1~R6·R9), 모르는(더 높은) `schema` | 응답 `detail[]`의 규칙 코드를 Studio 「실행 전 검사」와 같은 문구로 보인다 |
 
 ## 호환 규칙
 
@@ -254,7 +250,7 @@ PC Bot (UI 태스크가 있음):
 
 | 프로토타입 | 여기 |
 | --- | --- |
-| `kind`: `employee` / `process-lib` / `toolpack` / `template` | `bpm_process` / `process_lib` / `toolpack` (template 없음) |
+| `kind`: `employee` / `process-lib` / `toolpack` / `template` | `bpm_process` / `process_lib` (`toolpack`·`template` 없음 — 도구는 확장이 기여한다, [ADR-0050](../decisions/0050-no-toolpack-kind.md)) |
 | 실행 위치 없음 (전부 PC) | `run_location` (기본 `server`) |
 | `hitl.business` / `hitl.execution` | `human.approval_center` / `approval_field` / `confirmation` (서버 검사에 필요) |
 | 서비스 앱·화면 의존 없음 | `requires.service_apps`(키 참조 포함), `requires.extensions`·`task_types`·`resources` |
@@ -263,6 +259,7 @@ PC Bot (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-12 | 1 | **툴팩 갈래를 뺐다** — `kind=toolpack`·`provides.tools`(`ProvidedTool`)·`requires.toolpacks`(`ToolpackRef`)·`requires.secrets`·**R7**. 툴팩은 처음부터 코드가 아니었고(용어집) 선언을 담을 자리가 계약에 없어 **이름표만 든 zip**이었다 — 도구는 확장이 기여하고 코드 있는 도구는 설치 파일로만 온다. **번호는 비워 둔다**(R8·R9는 그대로다 — 적어 둔 규칙 번호를 밀면 옛 응답의 `rule`이 다른 규칙을 가리킨다) | 0050 |
 | 2026-10-12 | 1 | **`triggers`의 `kind`를 쓰는 쪽과 맞췄다.** 적어 둔 다섯(`none`·`message`·`timer`·`conditional`·`signal`)은 그대로 두고, 그림에서 옮기는 쪽(Studio)이 쓰던 `schedule`·`manual`을 `timer`·`none`으로 바꿨다 — 아무도 `kind`를 검사하지 않아 **올라간 모든 패키지가 계약에 없는 값을 담고 있었다**. 함께: 타이머 식을 `name`에 싣던 것을 **`expression` 칸**으로 갈랐고(`name`은 C12가 메시지 이름으로 읽는다), 조건·신호 시작을 `manual`로 뭉개던 것을 그린 대로 적게 했고, **R9**를 더해 다시 갈라지지 못하게 했다 | — |
 | 2026-10-12 | 1 | **`libs/`에 결정표(.dmn)도 들어간다**고 적었다 — 정의만 복사하면 규칙 태스크를 쓰는 공유 BPM 프로세스가 **설치해도 돌지 않는다**(읽는 쪽이 `process/*.dmn`만 보고 있었다). 모양이 바뀐 것이 아니라 **적지 않았던 것을 적은 것**이다 (`libs/`는 처음부터 「복사해 넣은 공유 BPM 프로세스」였다) | 0048 |
 | 2026-10-01 | 1 | 초안 | 0013, 0015, 0016 |

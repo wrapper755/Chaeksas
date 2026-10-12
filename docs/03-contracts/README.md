@@ -26,7 +26,7 @@
 | [C4](C4-bot-ui-center.md) | Center API: Bot UI (Center API 키 인증·등록·하트비트 — 실행 중 Bot 1건과 대기열 보고) | Bot UI ↔ Center | **합의** | Center `api/bots.py`, `schemas/api.py` |
 | [C5](C5-packages-deployments-jobs.md) | Center API: 패키지·배포·작업 (배포 대상 Bot UI / 서버 실행기, 서버 배포의 동시 실행 상한, 작업 상태에 「대기열」, 거절 사유 「대기열 가득」) | Studio·Admin·Bot UI·서버 실행기 ↔ Center | **합의** | Center `api/packages.py`, `deployments.py`, `jobs.py` |
 | [C6](C6-approvals.md) | Center API: 결재 | Bot UI·서버 실행기 ↔ Center ↔ 콘솔 | **구현됨** | Center `api/hitl.py` |
-| [C7](C7-resources-center-keys.md) | Center API: 리소스 (서비스 앱·UI 화면·툴팩·런타임) + Center API 키 관리 | 서비스 앱·Bot UI·Studio ↔ Center | **합의** | 없음 |
+| [C7](C7-resources-center-keys.md) | Center API: 리소스 (확장·서비스 앱·확장 기여 자원·런타임) + Center API 키 관리 | 서비스 앱·Bot UI·Studio ↔ Center | **합의** | 없음 |
 | [C8](C8-ui-automation-plan-heal-report.md) | UI 자동화 앱: 계획·치유·보고 (데스크톱 로케이터 `class_name`·`control_type`) | Worker ↔ UI 자동화 앱 | **구현됨** | Worker `src/contracts/plan.py`, `healing.py`, `report.py` |
 | [C9](C9-ui-page-registry.md) | UI 자동화 앱: 화면 레지스트리 | Bot UI 셀렉터 등록(Worker 경유) ↔ UI 자동화 앱 | **합의** | Worker `src/contracts/registry.py` |
 | [C10](C10-worker-local-api.md) | Worker 로컬 API (UI 세션, 셀렉터 등록용 분석·선택·검증, 상태, 잠금 화면 `session_locked`) | 실행 중 Bot·Studio·Bot UI → Worker 프로세스 | **구현됨** | Worker `src/local_api/` |

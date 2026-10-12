@@ -278,16 +278,11 @@ def dependents(store: Store, package_id: str, version: str) -> list[DependentInf
         if row["id"] == package_id and row["version"] == version:
             continue  # 자기 자신은 세지 않는다
         manifest = Manifest.model_validate(loads(row["manifest_json"], {}))
-        # 한 패키지가 두 칸으로 가리킬 수도 있다 — **관계마다 한 줄**이다 (화면의 「관계」 열이
-        # 값 하나라서, 합치면 어느 칸으로 쓰는지를 잃는다).
+        # 참조 칸이 늘면 **관계마다 한 줄**이다 (화면의 「관계」 열이 값 하나라서, 합치면 어느
+        # 칸으로 쓰는지를 잃는다). 지금 세는 칸은 `requires.libs` 하나다 (ADR-0050).
         relations: list[tuple[str, str | None]] = []
         if pin in manifest.requires.libs:
             relations.append(("lib", None))
-        relations += [
-            ("toolpack", ref.content_hash)
-            for ref in manifest.requires.toolpacks
-            if ref.id == package_id and ref.version == version
-        ]
         out += [
             DependentInfo(
                 id=row["id"],

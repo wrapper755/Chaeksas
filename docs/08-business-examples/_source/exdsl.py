@@ -1179,7 +1179,7 @@ def _call_errors(source: str, *, script: bool) -> list[str]:
             continue
         name = node.func.id
         if name not in HELPER_ARITY:
-            continue  # 모르는 이름은 보지 않는다 (툴팩이 더할 수 있다)
+            continue  # 모르는 이름은 보지 않는다 (부를 때 「쓸 수 없는 함수다」로 막는다)
         if any(isinstance(a, _ast.Starred) for a in node.args) or any(k.arg is None for k in node.keywords):
             continue
         problem = _call_problem(name, len(node.args), [k.arg for k in node.keywords if k.arg])

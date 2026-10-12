@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Center ↔ 서비스 앱(공개 정보 읽기), Studio·Bot UI·서버 실행기·Center 콘솔 → Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/resources.py`, `…/center_keys.py` (import `chaeksas.contracts.resources`, [ADR-0019](../decisions/0019-package-names.md)) |
-| JSON Schema | 리소스 [`c7-extension-resource.json`](../../packages/contracts/schemas/c7-extension-resource.json) · [`c7-service-app-resource.json`](../../packages/contracts/schemas/c7-service-app-resource.json) · [`c7-contributed-resource.json`](../../packages/contracts/schemas/c7-contributed-resource.json) · [`c7-toolpack-resource.json`](../../packages/contracts/schemas/c7-toolpack-resource.json) · [`c7-runtime-resource.json`](../../packages/contracts/schemas/c7-runtime-resource.json) / 키 [`c7-center-key-create-request.json`](../../packages/contracts/schemas/c7-center-key-create-request.json) · [`c7-center-key-info.json`](../../packages/contracts/schemas/c7-center-key-info.json) · [`c7-center-key-created.json`](../../packages/contracts/schemas/c7-center-key-created.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
+| JSON Schema | 리소스 [`c7-extension-resource.json`](../../packages/contracts/schemas/c7-extension-resource.json) · [`c7-service-app-resource.json`](../../packages/contracts/schemas/c7-service-app-resource.json) · [`c7-contributed-resource.json`](../../packages/contracts/schemas/c7-contributed-resource.json) · [`c7-runtime-resource.json`](../../packages/contracts/schemas/c7-runtime-resource.json) / 키 [`c7-center-key-create-request.json`](../../packages/contracts/schemas/c7-center-key-create-request.json) · [`c7-center-key-info.json`](../../packages/contracts/schemas/c7-center-key-info.json) · [`c7-center-key-created.json`](../../packages/contracts/schemas/c7-center-key-created.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md) |
 | 관련 화면 | CON-07 리소스, CON-11 Center API 키, STU-03 리소스 탐색기, STU-13·14·15, BUI-06·11 |
 
@@ -19,7 +19,6 @@
 - 확장
 - 서비스 앱(확장의 서버 부분)과 그 작업
 - **확장이 기여한 자원** (예: UI 화면)
-- 툴팩
 - 런타임
 
 이 목록은 세 곳에서 쓴다.
@@ -30,7 +29,7 @@
 
 **2. Center API 키 관리** (CON-11).
 
-> 상태: **고정 네 종류와 CON-07이 돈다** (M5 조각 8) — 서비스 앱 등록·주소 바꾸기·해제·새로 고침, `GET /resources`의 확장·서비스 앱·툴팩·런타임, 누락 검사를 패키지 정보(`missing_resources`)와 배포 거부에 이었다. **툴팩·런타임·확장은 따로 등록받지 않는다** — Center가 이미 가진 것(패키지 표, C4 보고, 서비스 앱 manifest)에서 모은다. **외부 확장 등록·해제도 돈다** (조각 9, 서명 봉투로만 — C13 E6). Center API 키 관리는 M2부터 돈다.
+> 상태: **고정 네 종류와 CON-07이 돈다** (M5 조각 8) — 서비스 앱 등록·주소 바꾸기·해제·새로 고침, `GET /resources`의 확장·서비스 앱·확장 기여 자원·런타임, 누락 검사를 패키지 정보(`missing_resources`)와 배포 거부에 이었다. **런타임·확장은 따로 등록받지 않는다** — Center가 이미 가진 것(C4 보고, 서비스 앱 manifest)에서 모은다. **외부 확장 등록·해제도 돈다** (조각 9, 서명 봉투로만 — C13 E6). Center API 키 관리는 M2부터 돈다.
 >
 > **외부 확장의 상태도 돈다** — 어댑터 `health`를 선언한 대로(`{path, expect_status}`) 두드리고, **선언이 없으면 두드리지 않고 「확인 전」으로 둔다** (C11의 `/healthz`를 외부 앱에 들이대지 않는다). 나갈 때는 **어댑터와 같은 관문**(C13 §4-3 1~4)을 지난다 — Center는 `core`를 import할 수 없어 `contracts`의 `resolve_host`를 양쪽이 함께 쓴다. 등록 때 E3가 「허용 호스트 밖·http」를 이미 막으므로, 이 관문이 실제로 잡는 것은 **허용된 이름이 사설 IP로 풀리는 경우**다.
 >
@@ -51,7 +50,6 @@
 | 확장 | 내장·사내: 서비스 앱 `/manifest`의 `extension` 필드와 실행하는 쪽의 보고(C4·C12 `extensions`). 외부: 서명된 정의 등록(C13) | 등록·보고 때 |
 | 서비스 앱 | 내장·사내: 운영자가 CON-07에서 주소를 등록하고 Center가 `/manifest`·`/healthz`를 읽는다. 외부: 외부 확장 등록과 함께 생기고, 상태는 어댑터 `health`로 본다 (없으면 「확인 전」) | 상태 60초, manifest 10분, 「새로 고침」 즉시 (`CHK_CENTER__RESOURCE__POLL_S`) |
 | 확장 기여 자원 | 확장 정의의 `resources[].catalog_url` (C13 §5) | 5분마다, 「새로 고침」. `revision`이 같으면 건너뛴다 |
-| 툴팩 | Center에 올라온 `kind=toolpack` 패키지 (C5) | 업로드·승인 때 |
 | 런타임 | Bot UI 등록·하트비트(C4), 서버 실행기(C12) | 하트비트 때 |
 
 - 서버끼리의 연결(Center → 서비스 앱)은 서버망 안의 일이라 ADR-0007(현장 PC → 서버)과 부딪히지 않는다.
@@ -63,7 +61,7 @@
 
 | 메서드·경로 | 인증 | 뜻 |
 | --- | --- | --- |
-| `GET /resources?type=extension\|service_app\|contributed\|toolpack\|runtime[&resource_type=ui_page]` | 읽기 | 목록 |
+| `GET /resources?type=extension\|service_app\|contributed\|runtime[&resource_type=ui_page]` | 읽기 | 목록 |
 | `GET /resources/extensions/{id}` | 읽기 | 확장 하나 (C13) |
 | `GET /resources/service-apps/{app_id}` | 읽기 | 서비스 앱 하나 (manifest 전체) |
 | `GET /resources/contributed/{resource_type}/{id}` | 읽기 | 확장 기여 자원 하나 |
@@ -136,7 +134,6 @@
 | `requires.service_apps[].app_id`가 등록되어 있나 | `service_app` / `not_registered` |
 | 그 작업이 있나, 결정 수행을 지원하나, 서버 BPM 프로세스면 `server_ok`인가 | `operation` / `not_found` / `not_deterministic` / `not_server_ok` |
 | `requires.resources[]` (`{type, id}`)가 확장 기여 자원에 있나 | `resource` / `not_found` |
-| `requires.toolpacks[]`의 해시가 Center의 승인된 툴팩과 같나 | `toolpack` / `not_found` / `hash_mismatch` / `not_approved` |
 
 - 업로드할 때는 경고만 한다 (CON-02 띠).
 - **배포할 때는** C1 R8에 걸리는 것(서버 BPM 프로세스의 작업)과 확장 누락·해시 불일치만 거부한다. 서비스 앱이 잠시 응답이 없다고 배포를 막지는 않는다.
@@ -185,6 +182,7 @@ CenterKeyInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-12 | 1 | **툴팩 리소스를 뺐다** (`ToolpackResource`·`?type=toolpack`·누락 검사의 `toolpack`) — 툴팩이라는 패키지 갈래가 사라졌다. 고정 종류는 **넷**이다 (확장·서비스 앱·확장 기여 자원·런타임). 도구는 확장이 기여한다 | 0050 |
 | 2026-10-01 | 1 | 초안 | 0010, 0013, 0015 |
 | 2026-10-01 | 1 | 확장 반영·검토 반영 (아래) | 0018 |
 

@@ -26,14 +26,14 @@ MANIFEST_POLL_S = 600
 CATALOG_POLL_S = 300
 
 # 열린 문자열의 알려진 값 (README 원칙 10).
-KNOWN_RESOURCE_TYPES = frozenset({"extension", "service_app", "contributed", "toolpack", "runtime"})
+KNOWN_RESOURCE_TYPES = frozenset({"extension", "service_app", "contributed", "runtime"})
 KNOWN_SERVICE_APP_STATUSES = frozenset({"ok", "degraded", "unreachable", "unknown"})
 KNOWN_EXTENSION_TIERS = frozenset({"builtin", "internal", "external"})  # C13
 KNOWN_PROTOCOLS = frozenset({"chk-c11", "http-adapter"})  # 없으면 클라이언트 기여만
 # 수행 모드 값은 C11이 소유한다 (`service_app.MODES`).
 
 #: 누락 검사 결과의 `type`·`reason` (C7 「누락 검사」 표).
-KNOWN_MISSING_TYPES = frozenset({"extension", "service_app", "operation", "resource", "toolpack"})
+KNOWN_MISSING_TYPES = frozenset({"extension", "service_app", "operation", "resource"})
 KNOWN_MISSING_REASONS = frozenset(
     {"not_found", "not_registered", "version_mismatch", "hash_mismatch",
      "not_deterministic", "not_server_ok", "not_approved"}
@@ -116,14 +116,6 @@ class ContributedResource(ContractModel):
     used_by: list[str] = Field(default_factory=list)
 
 
-class ToolpackResource(ContractModel):
-    id: str
-    version: str
-    status: str  # C5 패키지 상태와 같은 값 (candidate/approved/…)
-    content_hash: str
-    tools: list[dict[str, Any]] = Field(default_factory=list)  # [{name, domain, description}]
-
-
 class RuntimeHost(ContractModel):
     type: str  # bot_ui | server_runner
     id: str
@@ -158,7 +150,6 @@ class ResourceIndex(ContractModel):
     extensions: list[ExtensionResource] = Field(default_factory=list)
     service_apps: list[ServiceAppResource] = Field(default_factory=list)
     contributed: list[ContributedResource] = Field(default_factory=list)
-    toolpacks: list[ToolpackResource] = Field(default_factory=list)
 
     def extension(self, id: str) -> ExtensionResource | None:
         return next((e for e in self.extensions if e.id == id), None)
@@ -168,10 +159,6 @@ class ResourceIndex(ContractModel):
 
     def contributed_resource(self, type: str, id: str) -> ContributedResource | None:
         return next((c for c in self.contributed if c.resource_type == type and c.id == id), None)
-
-    def toolpack(self, id: str, version: str) -> ToolpackResource | None:
-        return next((t for t in self.toolpacks if t.id == id and t.version == version), None)
-
 
 # ─────────────────────────── 누락 검사 ───────────────────────────
 
@@ -225,21 +212,6 @@ def _check_contributed(m: Manifest, index: ResourceIndex) -> list[MissingResourc
     ]
 
 
-def _check_toolpacks(m: Manifest, index: ResourceIndex) -> list[MissingResource]:
-    out = []
-    for need in m.requires.toolpacks:
-        have = index.toolpack(need.id, need.version)
-        tp_id = f"{need.id}@{need.version}"
-        if have is None:
-            out.append(MissingResource(type="toolpack", id=tp_id, reason="not_found"))
-            continue
-        if have.content_hash != need.content_hash:
-            out.append(MissingResource(type="toolpack", id=tp_id, reason="hash_mismatch"))
-        elif have.status != "approved":
-            out.append(MissingResource(type="toolpack", id=tp_id, reason="not_approved"))
-    return out
-
-
 def missing(manifest: Manifest, resources: ResourceIndex) -> list[MissingResource]:
     """C1 `requires`를 리소스 목록과 대조한다. **확장 종류를 가리지 않는 같은 규칙이다.**
 
@@ -250,7 +222,6 @@ def missing(manifest: Manifest, resources: ResourceIndex) -> list[MissingResourc
         *_check_extensions(manifest, resources),
         *_check_service_apps(manifest, resources),
         *_check_contributed(manifest, resources),
-        *_check_toolpacks(manifest, resources),
     ]
 
 

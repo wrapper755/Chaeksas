@@ -48,7 +48,6 @@ export const CONTRACT_MODULES = [
   "c7-extension-resource",
   "c7-runtime-resource",
   "c7-service-app-resource",
-  "c7-toolpack-resource",
   "c9-console-overview",
   "c9-page-detail",
   "c9-page-listing",

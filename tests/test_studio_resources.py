@@ -29,7 +29,6 @@ from chaeksas.contracts.extension import ResourceView  # noqa: E402
 from chaeksas.contracts.resources import (  # noqa: E402
     ContributedResource,
     ServiceAppResource,
-    ToolpackResource,
 )
 from chaeksas.contracts.service_app import Operation as C11Operation  # noqa: E402
 from chaeksas.core.extensions import Contribution  # noqa: E402
@@ -100,18 +99,6 @@ def service_app(**over: Any) -> ServiceAppResource:
     return ServiceAppResource.model_validate(base)
 
 
-def toolpack(**over: Any) -> ToolpackResource:
-    base: dict[str, Any] = {
-        "id": "finance-tools",
-        "version": "1.2.0",
-        "status": "approved",
-        "content_hash": "sha256:" + "a" * 64,
-        "tools": [{"name": "vat_lookup", "domain": "api", "description": "부가세율"}],
-    }
-    base.update(over)
-    return ToolpackResource.model_validate(base)
-
-
 def shared_lib(**over: Any) -> PackageInfo:
     """공유 BPM 프로세스 패키지 하나 (C5 `PackageInfo`). 「공유 BPM 프로세스」 뿌리가 읽는다."""
     base: dict[str, Any] = {
@@ -158,13 +145,11 @@ class FakeCenter(services.CenterReader):
         self,
         *,
         pages: list[ContributedResource] | None = None,
-        packs: list[ToolpackResource] | None = None,
         libs: list[PackageInfo] | None = None,
         unreachable: str | None = None,
     ) -> None:
         super().__init__(base_url="http://center.test", api_key="chk_studio_" + "a" * 40)
         self.pages = pages if pages is not None else [page()]
-        self.packs = packs if packs is not None else [toolpack()]
         self.libs = libs if libs is not None else [shared_lib()]
         self.unreachable = unreachable
         #: 기여 뿌리가 물어본 자원 갈래들 (C7).
@@ -177,11 +162,6 @@ class FakeCenter(services.CenterReader):
         if self.unreachable:
             raise services.CenterUnreachable(self.unreachable)
         return [one for one in self.pages if one.resource_type == resource_type]
-
-    def toolpacks(self) -> list[ToolpackResource]:
-        if self.unreachable:
-            raise services.CenterUnreachable(self.unreachable)
-        return self.packs
 
     def packages(self, kind: str) -> list[PackageInfo]:
         self.asked_kinds.append(kind)
@@ -517,7 +497,7 @@ def test_without_a_schema_the_detail_says_the_person_must_write_it() -> None:
 
 
 def test_empty_roots_say_so_instead_of_staying_blank() -> None:
-    tree = tree_with(catalog=catalog_with(), reader=FakeCenter(pages=[], packs=[]))
+    tree = tree_with(catalog=catalog_with(), reader=FakeCenter(pages=[]))
     assert root_of(tree, resources.ROOT_SERVICE).empty == resources.EMPTY_SERVICE
     assert root_of(tree, "forms").empty == resources.EMPTY_VIEW
 

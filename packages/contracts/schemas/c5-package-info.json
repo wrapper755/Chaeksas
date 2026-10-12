@@ -139,8 +139,7 @@
         "kind": {
           "enum": [
             "bpm_process",
-            "process_lib",
-            "toolpack"
+            "process_lib"
           ],
           "title": "Kind",
           "type": "string"
@@ -422,43 +421,6 @@
       "title": "ProvidedProcess",
       "type": "object"
     },
-    "ProvidedTool": {
-      "additionalProperties": true,
-      "description": "툴팩이 제공하는 도구 하나. `args`는 JSON Schema.",
-      "properties": {
-        "args": {
-          "additionalProperties": true,
-          "title": "Args",
-          "type": "object"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Description"
-        },
-        "domain": {
-          "title": "Domain",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "domain"
-      ],
-      "title": "ProvidedTool",
-      "type": "object"
-    },
     "Provides": {
       "additionalProperties": true,
       "properties": {
@@ -467,13 +429,6 @@
             "$ref": "#/$defs/ProvidedProcess"
           },
           "title": "Processes",
-          "type": "array"
-        },
-        "tools": {
-          "items": {
-            "$ref": "#/$defs/ProvidedTool"
-          },
-          "title": "Tools",
           "type": "array"
         }
       },
@@ -538,13 +493,6 @@
           "title": "Runtimes",
           "type": "array"
         },
-        "secrets": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Secrets",
-          "type": "array"
-        },
         "service_apps": {
           "items": {
             "$ref": "#/$defs/ServiceAppNeed"
@@ -564,13 +512,6 @@
             "$ref": "#/$defs/TaskTypeNeed"
           },
           "title": "Task Types",
-          "type": "array"
-        },
-        "toolpacks": {
-          "items": {
-            "$ref": "#/$defs/ToolpackRef"
-          },
-          "title": "Toolpacks",
           "type": "array"
         },
         "tools": {
@@ -672,31 +613,6 @@
         "extension"
       ],
       "title": "TaskTypeNeed",
-      "type": "object"
-    },
-    "ToolpackRef": {
-      "additionalProperties": true,
-      "description": "쓰는 툴팩. 해시로 고정한다 (R7).",
-      "properties": {
-        "content_hash": {
-          "title": "Content Hash",
-          "type": "string"
-        },
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "version": {
-          "title": "Version",
-          "type": "string"
-        }
-      },
-      "required": [
-        "id",
-        "version",
-        "content_hash"
-      ],
-      "title": "ToolpackRef",
       "type": "object"
     },
     "Trigger": {

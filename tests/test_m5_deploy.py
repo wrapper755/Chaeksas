@@ -132,21 +132,21 @@ def package_zip(
     return _zipped(manifest, {"process/main.bpmn": "<definitions />"})
 
 
-def toolpack_zip(package_id: str = "ops.excel-tools", version: str = "2.0.0") -> bytes:
-    """툴팩 하나 (C1 `kind=toolpack`). 내려받기 관문이 BPM 프로세스 말고도 센다."""
+def lib_zip(package_id: str = "shared.approval", version: str = "1.1.0") -> bytes:
+    """공유 BPM 프로세스 패키지 하나 (C1 `kind=process_lib`)."""
     manifest: dict[str, Any] = {
         "schema": 1,
-        "kind": "toolpack",
+        "kind": "process_lib",
         "id": package_id,
         "version": version,
-        "name": "엑셀 도구",
+        "name": "공통 결재",
         "requires": {},
         "human": {},
-        "provides": {"tools": [{"name": "xlsx_read", "domain": "doc"}]},
+        "provides": {"processes": [{"process_id": "Proc_approval", "file": "process/approval.bpmn"}]},
         "built": {"by": "studio", "at": AT, "core": "0.1.0", "spec_version": 1},
         "content_hash": "sha256:" + "0" * 64,
     }
-    return _zipped(manifest, {"tools/xlsx.py": "# 도구"})
+    return _zipped(manifest, {"process/approval.bpmn": "<definitions />"})
 
 
 def _zipped(manifest: dict[str, Any], files: dict[str, str]) -> bytes:
@@ -571,23 +571,17 @@ def test_a_bot_ui_key_downloads_only_what_is_deployed_to_it(center: Center) -> N
     assert closed.status_code == 403
 
 
-def test_a_bot_ui_key_also_gets_the_toolpacks_its_bot_requires(center: Center) -> None:
-    """**그 패키지가 요구하는 툴팩도** 받는다 (C5 권한표) — 따로 배포하지 않는다."""
+def test_a_bot_ui_key_gets_only_the_package_deployed_to_it(center: Center) -> None:
+    """실행하는 쪽이 받는 것은 **자기에게 배포된 BPM 프로세스 패키지뿐**이다 (C5 권한표).
+
+    쓰는 공유 BPM 프로세스도 따로 받지 않는다 — 그것은 패키지 안 `libs/`로 **복사해 넣은**
+    것이다 (C1 §패키지 구성). 도구 묶음은 패키지로 오지 않는다 (ADR-0050).
+    """
     key = admin_key(center)
-    pack = upload(center, toolpack_zip())
+    lib = upload(center, lib_zip())
     info = upload(
         center,
-        package_zip(
-            requires={
-                "toolpacks": [
-                    {
-                        "id": pack["id"],
-                        "version": pack["version"],
-                        "content_hash": pack["content_hash"],
-                    }
-                ]
-            }
-        ),
+        package_zip(requires={"libs": [f"{lib['id']}@{lib['version']}"]}),
     )
     center.approve(
         info["id"],
@@ -618,9 +612,13 @@ def test_a_bot_ui_key_also_gets_the_toolpacks_its_bot_requires(center: Center) -
         headers=auth,
     )
     center.deploy(deployment(key, info, target=registered.json()["bot_ui_id"]))
-    # 툴팩은 **승인되지 않아도** 받는다 — 서명을 보는 것은 설치하는 쪽이다 (C2 V7).
-    answer = center.client.get(f"/api/v1/packages/{pack['id']}/{pack['version']}", headers=auth)
-    assert answer.status_code == 200, answer.text
+    assert center.client.get(
+        f"/api/v1/packages/{info['id']}/{info['version']}", headers=auth
+    ).status_code == 200
+    # 「없다」와 「내 것이 아니다」는 같은 403이다 — 404로 가르면 그것이 곧 목록이 된다.
+    assert center.client.get(
+        f"/api/v1/packages/{lib['id']}/{lib['version']}", headers=auth
+    ).status_code == 403
 
 
 # ─────────────────────────── Bot UI 설치 (C2 V1~V7) ───────────────────────────

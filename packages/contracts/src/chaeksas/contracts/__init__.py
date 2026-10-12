@@ -212,7 +212,6 @@ from chaeksas.contracts.manifest import (
     ResourceRef,
     ServiceAppNeed,
     TaskTypeNeed,
-    ToolpackRef,
     Trigger,
     validate,
 )
@@ -233,7 +232,6 @@ from chaeksas.contracts.resources import (
     RuntimeHost,
     RuntimeResource,
     ServiceAppResource,
-    ToolpackResource,
     blocking_at_deploy,
     missing,
 )
@@ -301,7 +299,6 @@ __all__ = [
     "ResourceRef",
     "ServiceAppNeed",
     "TaskTypeNeed",
-    "ToolpackRef",
     "Trigger",
     "Violation",
     "validate",
@@ -400,7 +397,6 @@ __all__ = [
     "RuntimeHost",
     "RuntimeResource",
     "ServiceAppResource",
-    "ToolpackResource",
     "blocking_at_deploy",
     "center_key_prefix_of",
     "center_key_state",

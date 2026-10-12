@@ -56,7 +56,7 @@ RECENT_RESULTS = 20
 # 아래는 모두 **열린 문자열**의 알려진 값이다 (README 원칙 10).
 KNOWN_PACKAGE_STATUSES = frozenset({"candidate", "approved", "deprecated", "revoked"})
 #: `DependentInfo.relation` — C1 `requires`의 어느 칸으로 참조하나.
-KNOWN_DEPENDENT_RELATIONS = frozenset({"lib", "toolpack"})
+KNOWN_DEPENDENT_RELATIONS = frozenset({"lib"})
 KNOWN_JOB_STATES = frozenset({"pending", "dispatched", "queued", "accepted", "rejected", "expired", "cancelled"})
 KNOWN_REJECT_REASONS = frozenset(
     {"queue_full", "no_deployment", "not_ready", "bot_ui_shutdown", "bot_ui_lost",
@@ -157,7 +157,7 @@ class DependentInfo(ContractModel):
     status: str  # 열린 문자열 (KNOWN_PACKAGE_STATUSES)
     #: 어느 칸으로 참조하나 (열린 문자열 — `KNOWN_DEPENDENT_RELATIONS`).
     relation: str
-    #: 참조하는 쪽이 고정한 해시. `toolpack`만 있다 (C1 R7) — `lib`은 `<id>@<version>`뿐이다.
+    #: 참조하는 쪽이 고정한 해시. `lib`은 `<id>@<version>`으로만 가리키므로 **늘 `None`**이다.
     pinned_hash: str | None = None
 
 
