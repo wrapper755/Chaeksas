@@ -135,6 +135,7 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 | 400 | V1~V5a, V8 실패 (`detail.code`) | 키·시각을 확인하고 다시 서명한다 |
 | 409 | `deployment_conflict` (같은 id, 다른 내용), `deployment_revoked`, `last_admin_key` | 새 id로 서명한다, 또는 다른 키를 먼저 추가한다 |
 | 409 | `not_approved` (패키지가 승인 상태가 아님), `deprecated`, `hash_mismatch`, `wrong_target` (`target.type` ↔ `run_location`, 또는 **PC 배포의 `"*"`** — ADR-0046) | 봉투가 아니라 **가리키는 패키지·대상의 상태**가 어긋난다. 승인·버전·대상을 보고 다시 서명한다 |
+| 404 | `not_found` (가리키는 패키지가 Center에 없다), `target_not_found` (**등록되지 않은 PC**, [ADR-0049](../decisions/0049-deployment-target-must-exist.md)) | 패키지를 먼저 올린다 / 대상 id를 확인한다 — **`bot_ui_id`는 그 PC가 한 번 등록한 뒤에 생긴다**(C4). 미리 배포해 둘 수는 없다 |
 | 422 | `server_runner_not_available` (M7 전 서버 배포), `float_in_payload` | 메시지대로 고친다 |
 
 ## 호환 규칙
@@ -146,6 +147,7 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-12 | 1 | **404 행을 적었다** — 배포 봉투가 없는 패키지(`not_found`)나 **등록되지 않은 PC**(`target_not_found`)를 가리킬 때 받는 답이다. 뒤쪽은 받아 두고 있었다 | 0049 |
 | 2026-10-12 | 1 | **배포 봉투를 거절하는 코드·상태를 C5와 맞췄다.** 여기 422 행에 `not_approved`·`hash_mismatch`·`target_mismatch`가 있었는데 Center는 처음부터 409 `not_approved`·`hash_mismatch`·`wrong_target`으로 답했다 (C5는 2026-10-09에 409로 고쳤고 이 표만 남아 있었다). 대상 어긋남의 이름은 **V6과 같은 `wrong_target`**이다 | 0047 |
 | 2026-10-11 | 1 | **PC 배포에 `"*"`가 없다는 것을 적었다.** 규칙은 처음부터 「서버 배포는 쓸 수 있다」뿐이었고 V6·`matches`도 그랬지만, 없다는 것을 적지 않아 Center·콘솔이 **PC 쪽 `"*"`를 풀고 있었다**. 한쪽만 적으면 「적지 않았을 뿐」으로 읽힌다 | 0046 |
 | 2026-10-01 | 1 | 초안 (배포 대상 `target{type,id}`, 서버 배포의 `max_concurrency`) | 0015 |

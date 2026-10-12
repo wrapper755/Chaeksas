@@ -227,9 +227,13 @@ def test_a_job_needs_a_deployment(world: World) -> None:
 
 
 def test_an_unknown_bot_ui_is_not_found(world: World) -> None:
+    """**배포와 같은 코드다** (`target_not_found`, ADR-0049) — 같은 조건에 두 이름을 두지 않는다.
+
+    `not_found`는 이 길에서 「그 작업이 없다」로 쓴다.
+    """
     with pytest.raises(CenterProblem) as caught:
         world.new_job(target={"type": "bot_ui", "id": "bui_00000000"})
-    assert caught.value.status == 404
+    assert (caught.value.status, caught.value.code) == (404, "target_not_found")
 
 
 def test_the_version_comes_from_the_deployment(world: World) -> None:

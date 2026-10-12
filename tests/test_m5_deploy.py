@@ -57,11 +57,55 @@ def _admin_home(monkeypatch: Any, tmp_path: Path) -> None:
 
 
 @pytest.fixture
-def center(tmp_path: Path) -> Any:
+def center(tmp_path: Path, monkeypatch: Any) -> Any:
     settings = Settings(
         db_path=tmp_path / "center.sqlite3", package_dir=tmp_path / "packages", admin_token=TOKEN
     )
-    return Center(base_url="http://center", token=TOKEN, client=TestClient(create_app(settings)))
+    made = Center(base_url="http://center", token=TOKEN, client=TestClient(create_app(settings)))
+    # 그 PC의 키는 내려받기 관문을 보는 시험이 쓴다 (C5 권한표).
+    made.client.app.state.bot_ui_key = register_pc(made, monkeypatch, BOT_UI, machine="9" * 64)
+    return made
+
+
+def register_pc(
+    center: Center, monkeypatch: Any, bot_ui_id: str, *, machine: str, name: str = "현장 PC 1"
+) -> str:
+    """등록된 PC 하나 — **배포 대상은 등록되어 있어야 한다** (ADR-0049). 그 PC의 키를 준다.
+
+    `bot_ui_id`는 Center가 등록에서 만들어(`api.bot_ui.new_bot_ui_id`) 시험이 미리 알 수 없다.
+    그래서 **만드는 자리만 고정하고** 등록은 진짜 길로 한다 — 키를 발급받아 `POST
+    /bot-ui/register`를 부른다. 고정하지 않으면 봉투에 적을 id를 아래 모든 시험에 실어
+    날라야 한다.
+    """
+    from chaeksas.center.api import bot_ui as bot_ui_api
+
+    # **이번 등록에만** 고정한다 — 뒤에 다른 PC가 등록하면 진짜 길로 제 id를 받는다
+    # (하나로 고정해 두면 둘째 PC가 같은 id로 들어온다).
+    original = bot_ui_api.new_bot_ui_id
+    pinned = [bot_ui_id]
+    monkeypatch.setattr(
+        bot_ui_api, "new_bot_ui_id", lambda: pinned.pop() if pinned else original()
+    )
+    created = center.client.post(
+        "/api/v1/center-keys",
+        json={"name": name, "type": "bot_ui"},
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    assert created.status_code == 201, created.text
+    registered = center.client.post(
+        "/api/v1/bot-ui/register",
+        json={
+            "schema": 1,
+            "machine_id": machine,
+            "name": name,
+            "os": "windows-11-23H2",
+            "versions": {"bot_ui": "0.1.0", "core": "0.1.0"},
+        },
+        headers={"Authorization": f"Bearer {created.json()['key']}"},
+    )
+    assert registered.status_code < 400, registered.text
+    assert registered.json()["bot_ui_id"] == bot_ui_id
+    return str(created.json()["key"])
 
 
 def package_zip(
@@ -364,6 +408,38 @@ def test_a_server_deployment_is_refused_until_m7(center: Center) -> None:
     assert center.deployments(active=False) == [], "행조차 남지 않는다"
 
 
+def test_an_unregistered_pc_cannot_be_deployed_to(center: Center) -> None:
+    """**등록되지 않은 PC에는 배포하지 않는다** (ADR-0049) — 404 `target_not_found`.
+
+    받아 두면 **아무에게도 가지 않는 배포**가 표에 남는다 — `envelopes_for`는 `target_id`로
+    맞추고, CON-03에는 그 PC 줄이 없어 보여 줄 자리조차 없다. 「미리 배포해 두기」를 막는 것이
+    아니다: `bot_ui_id`는 Center가 등록에서 만들어 등록 전에는 봉투에 적을 id가 없다.
+    """
+    key = admin_key(center)
+    info = approved(center, key)
+    with pytest.raises(CenterProblem) as caught:
+        center.deploy(deployment(key, info, target="bui_00000000"))
+    assert (caught.value.status, caught.value.code) == (404, "target_not_found")
+    assert center.deployments(active=False) == [], "행조차 남지 않는다"
+
+    # 등록된 PC에는 그대로 간다 — 막는 것은 **명부에 없는 id**뿐이다.
+    center.deploy(deployment(key, info, target=BOT_UI))
+    assert [one["target"]["id"] for one in center.deployments(active=True)] == [BOT_UI]
+
+
+def test_a_wrong_target_is_answered_before_a_missing_one(center: Center) -> None:
+    """**「대상이 틀렸다」가 「대상이 없다」를 이긴다** (ADR-0049).
+
+    PC 배포의 `"*"`는 등록된 id가 아니지만, 운영자가 할 일은 「대상을 하나 적는다」다 (ADR-0046)
+    — 404로 답하면 있지도 않은 「`*`라는 PC」를 찾는다.
+    """
+    key = admin_key(center)
+    info = approved(center, key)
+    with pytest.raises(CenterProblem) as caught:
+        center.deploy(deployment(key, info, target="*"))
+    assert (caught.value.status, caught.value.code) == (409, "wrong_target")
+
+
 def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> None:
     """**관문이 하나다** (ADR-0047) — Center의 `(상태, 코드)`가 계약의 것과 **규칙마다** 같다.
 
@@ -371,6 +447,7 @@ def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> Non
     이었고 서버 배포 관문은 계약에만 있었다. 베낀 것이 아니라 **같은 함수**를 부르는지 보려고
     같은 봉투를 계약에게도 물어 본다.
     """
+    from chaeksas.center.api import bot_ui as bot_ui_api
     from chaeksas.contracts.center_api import (
         DEPLOYMENT_REFUSAL_STATUS,
         PackageInfo,
@@ -396,15 +473,25 @@ def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> Non
                         deployment_id="dep_00000005")),
         (server, deployment(key, server, target_type="server_runner", target="srv_1",
                             deployment_id="dep_00000006")),
+        (pc, deployment(key, pc, target="bui_00000000", deployment_id="dep_00000007")),
     )
+    store = center.client.app.state.store
     seen = set()
     for info, envelope in tried:
+        # 대상이 등록됐나는 **Center가 읽어 계약에 넘긴다** (ADR-0049) — 여기서도 같은 길로
+        # 묻는다. SQL을 베껴 두면 「같은 함수를 부르는가」가 아니라 베낀 것을 보게 된다.
+        target = envelope.payload["target"]
         said = deployment_refusal(
             validate_deployment(
                 envelope,
                 package=PackageInfo.model_validate(center.package(info["id"], info["version"])),
                 keys=keys,
                 now=AT,
+                target_registered=(
+                    bot_ui_api.exists(store, str(target.get("id") or ""))
+                    if target.get("type") == "bot_ui"
+                    else None
+                ),
             )
         )
         assert said is not None, f"계약이 거절하지 않았다: {envelope.payload['deployment_id']}"
@@ -464,28 +551,9 @@ def test_a_bot_ui_key_downloads_only_what_is_deployed_to_it(center: Center) -> N
     mine = approved(center, key)
     other = approved(center, key, package_id="erp.payment")
 
-    created = center.client.post(
-        "/api/v1/center-keys",
-        json={"name": "현장 PC 1", "type": "bot_ui"},
-        headers={"Authorization": f"Bearer {TOKEN}"},
-    )
-    assert created.status_code == 201, created.text
-    auth = {"Authorization": f"Bearer {created.json()['key']}"}
-    registered = center.client.post(
-        "/api/v1/bot-ui/register",
-        json={
-            "schema": 1,
-            "machine_id": "9" * 64,
-            "name": "현장 PC 1",
-            "os": "windows-11-23H2",
-            "versions": {"bot_ui": "0.1.0", "core": "0.1.0"},
-        },
-        headers=auth,
-    )
-    assert registered.status_code < 400, registered.text
-    bot_ui_id = registered.json()["bot_ui_id"]
+    auth = {"Authorization": f"Bearer {center.client.app.state.bot_ui_key}"}
 
-    center.deploy(deployment(key, mine, target=bot_ui_id))
+    center.deploy(deployment(key, mine, target=BOT_UI))
     for info, expected in ((mine, 200), (other, 403)):
         answer = center.client.get(
             f"/api/v1/packages/{info['id']}/{info['version']}", headers=auth
@@ -602,10 +670,20 @@ def test_an_unsigned_package_is_refused(center: Center, tmp_path: Path) -> None:
     assert installed(tmp_path / "botui") == []
 
 
-def test_someone_elses_deployment_is_refused(center: Center, tmp_path: Path) -> None:
+def test_someone_elses_deployment_is_refused(
+    center: Center, tmp_path: Path, monkeypatch: Any
+) -> None:
+    """**남의 배포는 받지 않는다** (V6) — 대상이 나여야 한다.
+
+    남의 것도 **등록된 PC**다 (ADR-0049) — 등록되지 않은 id로는 배포 자체가 404라서, 이 시험이
+    보려는 「설치하는 쪽이 대상을 본다」를 Center가 먼저 가로챈다.
+    """
     key = admin_key(center)
     info = approved(center, key)
-    center.deploy(deployment(key, info, target="bui_다른곳"))
+    other_pc = "bui_b70d1104"
+    register_pc(center, monkeypatch, other_pc, machine="7" * 64, name="현장 PC 2")
+
+    center.deploy(deployment(key, info, target=other_pc))
     found = deployer(center, tmp_path).apply(_all_envelopes(center))
     assert [one.reason for one in found] == ["wrong_target"]
     assert installed(tmp_path / "botui") == []

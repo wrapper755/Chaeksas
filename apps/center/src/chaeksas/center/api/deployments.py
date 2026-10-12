@@ -59,6 +59,22 @@ def _target_sql(target_type: str, target_id: str) -> tuple[str, tuple[str, ...]]
     return "d.target_type = ? AND d.target_id = ?", (target_type, target_id)
 
 
+def _registered(store: Store, target: Any) -> bool | None:
+    """그 대상이 Center에 있나 — **읽는 것은 Center, 판정은 계약이다** (ADR-0049·0047 ②).
+
+    `None`은 **「묻지 않았다」**다. PC(`bot_ui`)만 명부(`bot_uis`)가 있으므로 나머지 종류는
+    묻지 않고 넘긴다 — 서버 실행기는 M7이고(그쪽은 `server_runner_not_available`이 막는다)
+    `False`를 주면 **없는 규칙으로** 막게 된다.
+
+    **`bot_uis`를 아는 자리는 `api.bot_ui`다** — 키 묶기 규칙이 갈라지지 않게 거기로 묻는다.
+    """
+    if not isinstance(target, dict) or str(target.get("type") or "") != "bot_ui":
+        return None
+    from chaeksas.center.api import bot_ui  # noqa: PLC0415 — 순환 import를 피한다
+
+    return bot_ui.exists(store, str(target.get("id") or ""))
+
+
 def _envelope(raw: Any) -> Envelope:
     try:
         return Envelope.model_validate(raw)
@@ -109,7 +125,15 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
     package = packages.info_of(
         store, str(claim.get("bpm_process_id") or ""), str(claim.get("version") or "")
     )
-    _refuse(validate_deployment(envelope, package=package, keys=keys, now=now_iso()))
+    _refuse(
+        validate_deployment(
+            envelope,
+            package=package,
+            keys=keys,
+            now=now_iso(),
+            target_registered=_registered(store, claim.get("target") or {}),
+        )
+    )
 
     _refuse_missing_resources(package.manifest, store)
     target = claim.get("target") or {}
