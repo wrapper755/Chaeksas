@@ -19,13 +19,18 @@
 노드를 만들고 **실행 취소도 한 걸음**이다. **끌어다 놓기도 같은 `Create`를 싣는다**
 ([ADR-0044](../../../../../docs/decisions/0044-canvas-drag-and-drop.md)) — 다른 것은 **자리뿐**
 이고, 뜻을 푸는 것은 `as_payload()`·`from_payload()` 둘(Qt 없이 시험한다)이다.
+
+**공유 BPM 프로세스 뿌리의 셋**(부르기·보기·복사)은 **설치된 판에서만** 켜진다
+([ADR-0051](../../../../../docs/decisions/0051-shared-process-conveniences.md)) — 줄은 Center
+목록 그대로이고 「받아 둔 판」만 덧붙는다. 받아 둔 것을 말해 주는 함수는 **STU-11과 하나**
+(`install.installed_of`)이고, 이 파일은 그 결과를 **받아서** 쓴다 (여기서 디스크를 보지 않는다).
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
@@ -49,6 +54,7 @@ from chaeksas.contracts.manifest import ProvidedProcess
 from chaeksas.contracts.resources import ContributedResource, ToolpackResource
 from chaeksas.studio import service_catalog
 from chaeksas.studio.services import CenterReader, CenterUnreachable
+from chaeksas.studio.workspace import InstalledLib
 
 log = logging.getLogger(__name__)
 
@@ -79,11 +85,25 @@ NO_TOOLPACK_INSTALL = (
     "툴팩 설치는 아직 없습니다 — 받은 도구를 싣는 길을 먼저 정해야 합니다 "
     "(docs/09-gaps.md §4-5)."
 )
-NO_CALL = (
-    "이 PC에 설치되지 않아 Call Activity를 만들지 않습니다 — 설치가 생기면 켜집니다 "
-    "(docs/09-gaps.md §4-5)."
-)
 NO_CENTER = "Center 주소·Studio 키가 설정되지 않았습니다 — 설정 → 「Center」 (STU-10)."
+
+#: 공유 BPM 프로세스로 **셋을 할 수 없는 까닭** (ADR-0051 — 끄고 적고 **STU-11로 보낸다**).
+#:
+#: 설치되지 않은 것으로 Call Activity를 만들어 주지 않는다 — C14 B14가 그 그림을 막고 시험
+#: 실행이 부를 수 없어 「왜 안 되나」가 된다.
+NOT_INSTALLED = (
+    "이 BPM 프로세스에 설치되지 않았습니다 — 「Center 공유 자원...」(STU-11)에서 설치합니다."
+)
+#: 받아 둔 판이 그 줄의 판과 다르다. **설치된 판을 적는다** (「갱신하세요」로는 무엇을 쓰는지 모른다).
+OTHER_VERSION = "다른 판이 설치되어 있습니다 ({version}) — STU-11에서 갱신합니다."
+#: 판은 맞는데 그 정의가 없다 — 설치할 때 읽지 못한 정의다 (실행 전 검사가 그 말을 한다).
+NOT_PROVIDED = "설치된 판이 이 정의를 주지 않습니다 — 실행 전 검사(F6)가 까닭을 말합니다."
+#: 공유 BPM 프로세스 줄(첫 단계)에서는 무엇을 부를지 모른다.
+PICK_DEFINITION = "정의를 고르면 Call Activity를 만듭니다."
+
+#: 「설명」 끝에 덧붙는 말 — **받아 둔 것이 있을 때만** 붙는다 (없음이 그 뜻이다).
+INSTALLED_MARK = "설치됨"
+OTHER_VERSION_MARK = "다른 판 설치됨 ({version})"
 
 #: 「Center 공유 자원...」 — STU-11을 연다 (문맥 메뉴와 파일 메뉴가 **같은 창**이다).
 OPEN_CENTER_RESOURCES = "Center 공유 자원..."
@@ -97,6 +117,8 @@ EMPTY_TREE = "뿌리를 고르면 그 아래를 봅니다."
 
 #: 만들 노드의 BPMN 종류 — 확장 태스크·서비스 앱 태스크는 둘 다 `serviceTask`다 (C14).
 BPMN_SERVICE_TASK = "bpmn:ServiceTask"
+#: 공유 BPM 프로세스를 부르는 노드 (C14 `chk:call`이 붙는 자리).
+BPMN_CALL_ACTIVITY = "bpmn:CallActivity"
 
 #: 끌어다 놓기가 쓰는 MIME 형식 (ADR-0044). **우리 것만** 캔버스가 받는다 — 페이지 안의
 #: bpmn-js 팔레트 드래그와 바깥에서 끌어 온 파일은 그대로 Chromium으로 간다.
@@ -120,17 +142,26 @@ class Create:
     """「캔버스에 추가」로 만들 노드 하나.
 
     `chk`는 캔버스의 규약 그대로 **`{요소 이름: JSON 글}`**이다 (`setProperties`와 같다).
+    `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `chk:*`가 아니라
+    요소 자신의 칸이라 만들 때 함께 들어간다.
     """
 
     bpmn: str
     name: str
     chk: dict[str, str] = field(default_factory=dict)
+    attrs: dict[str, str] = field(default_factory=dict)
 
 
 def as_payload(create: Create) -> str:
     """끌 때 싣는 글 (ADR-0044). **캔버스는 이것을 해석하지 않는다** — 글과 자리만 올려 준다."""
     return json.dumps(
-        {"bpmn": create.bpmn, "name": create.name, "chk": create.chk}, ensure_ascii=False
+        {
+            "bpmn": create.bpmn,
+            "name": create.name,
+            "chk": create.chk,
+            "attrs": create.attrs,
+        },
+        ensure_ascii=False,
     )
 
 
@@ -146,15 +177,36 @@ def from_payload(text: str) -> Create | None:
     if not isinstance(found, dict):
         return None
     bpmn = found.get("bpmn")
-    chk = found.get("chk")
     if not isinstance(bpmn, str) or not bpmn:
         return None
-    if not isinstance(chk, dict) or not all(
-        isinstance(k, str) and isinstance(v, str) for k, v in chk.items()
-    ):
-        chk = {}
     name = found.get("name")
-    return Create(bpmn=bpmn, name=name if isinstance(name, str) else "", chk=dict(chk))
+    return Create(
+        bpmn=bpmn,
+        name=name if isinstance(name, str) else "",
+        chk=_text_map(found.get("chk")),
+        attrs=_text_map(found.get("attrs")),
+    )
+
+
+def _text_map(raw: object) -> dict[str, str]:
+    """`{글: 글}`만 받는다 — 모양이 아니면 **비운다** (지어내지 않는다)."""
+    if not isinstance(raw, dict):
+        return {}
+    return {k: v for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
+
+
+@dataclass(frozen=True)
+class Shared:
+    """공유 BPM 프로세스 **정의** 한 줄이 가리키는 것 — 「열기 (읽기 전용)」·「복사」가 쓴다.
+
+    `off`가 비면 **그 판이 설치돼 있고 그 정의를 준다**는 뜻이다 (ADR-0051). 비지 않으면 그
+    줄에서 셋을 할 수 없고, 그 글이 **그대로 말풍선**이 된다 (U3).
+    """
+
+    package_id: str
+    version: str
+    process_id: str
+    off: str = ""
 
 
 @dataclass(frozen=True)
@@ -174,6 +226,9 @@ class Item:
     detail: str = ""
     #: 「관리 콘솔에서 보기」가 열 주소 (C7 `console_url`). 비면 메뉴에 없다.
     console_url: str = ""
+    #: 공유 BPM 프로세스 정의 줄이면 그것이 가리키는 것 (ADR-0051). 아니면 `None`이고
+    #: 「열기 (읽기 전용)」·「내 BPM 프로세스로 복사」가 **메뉴에 없다**.
+    shared: Shared | None = None
     children: tuple[Item, ...] = ()
 
 
@@ -206,40 +261,38 @@ class Tree:
 # ─────────────────────────── 모으기 ───────────────────────────
 
 
-def shared_root(found: Iterable[PackageInfo] = ()) -> Root:
+def shared_root(
+    found: Iterable[PackageInfo] = (),
+    *,
+    installed: Mapping[str, InstalledLib] | None = None,
+) -> Root:
     """「공유 BPM 프로세스」 — 공유 BPM 프로세스 → 정의 (STU-03 표).
 
     목록은 **C5 패키지 표**에서 온다 (`?kind=process_lib`) — C7에는 이 갈래가 없다. 둘째
     단계는 **매니페스트의 `provides.processes`**이고(C1) Center가 짓는 값이 아니다 — STU-11과
     CON-06이 같은 것을 읽는다.
 
-    **「캔버스에 추가」는 없다** — Call Activity를 만들어도 그 공유 BPM 프로세스가 이 PC에
-    없어 시험 실행이 부를 수 없다. 설치가 생길 때 켜진다 (`NO_CALL`, docs/09-gaps.md §4-5).
+    `installed`는 **열린 BPM 프로세스가 받아 둔 판**이다 (`install.installed_of`, ADR-0051) —
+    **줄을 늘리거나 줄이지 않고** 「설명」에 덧붙고 셋의 관문이 된다. Center 목록에 없는데
+    설치된 것(「로컬만」)은 **여기 그리지 않는다** — STU-11의 일이다.
     """
+    held = installed or {}
     items = []
     for one in found:
+        lib = held.get(one.id)
+        why = _why_off(lib, one.version)
         provides = one.manifest.provides if one.manifest is not None else None
         processes = provides.processes if provides is not None else []
-        children = tuple(
-            Item(
-                id=f"{one.id}@{one.version}/{process.process_id}",
-                label=process.name or process.process_id,
-                kind=process.run_location or "",
-                note=_shared_note(process),
-                tip=process.process_id,
-                no_create=NO_CALL,
-            )
-            for process in processes
-        )
+        children = tuple(_shared_child(one, process, lib, why) for process in processes)
         count = f"정의 {len(children)}개" if provides is not None else "매니페스트에 `provides`가 없습니다"
         items.append(
             Item(
                 id=f"{one.id}@{one.version}",
                 label=one.name or one.id,
                 kind=one.version,
-                note=f"{one.status} · {count}",
+                note=f"{one.status} · {count}{_shared_mark(lib, one.version)}",
                 tip=one.id,
-                no_create=NO_CALL,
+                no_create=PICK_DEFINITION,
                 children=children,
             )
         )
@@ -250,6 +303,65 @@ def shared_root(found: Iterable[PackageInfo] = ()) -> Root:
         empty=EMPTY_SHARED,
         blocked=(("설치...", NO_INSTALL), ("제거...", NO_INSTALL)),
         opens_center=True,
+    )
+
+
+def _why_off(lib: InstalledLib | None, version: str) -> str:
+    """그 **판**으로 셋을 할 수 없는 까닭. 비면 그 판이 받아져 있다 (ADR-0051)."""
+    if lib is None:
+        return NOT_INSTALLED
+    if lib.version != version:
+        return OTHER_VERSION.format(version=lib.version)
+    return ""
+
+
+def _shared_mark(lib: InstalledLib | None, version: str) -> str:
+    """「설명」에 덧붙는 말 — **받아 둔 것이 있을 때만** 붙는다 (없음이 그 뜻이다)."""
+    if lib is None:
+        return ""
+    if lib.version == version:
+        return f" · {INSTALLED_MARK}"
+    return f" · {OTHER_VERSION_MARK.format(version=lib.version)}"
+
+
+def _shared_child(
+    info: PackageInfo, process: ProvidedProcess, lib: InstalledLib | None, why: str
+) -> Item:
+    """정의 한 줄 — 설치된 판의 정의에서만 셋이 켜진다 (ADR-0051).
+
+    판은 맞는데 그 정의가 **설치 기록에 없으면** 읽지 못한 정의다 — 부를 수도 볼 수도 없다
+    (`NOT_PROVIDED`, B14가 같은 말을 한다).
+    """
+    off = why
+    if not off and (lib is None or process.process_id not in lib.processes):
+        off = NOT_PROVIDED
+    return Item(
+        id=f"{info.id}@{info.version}/{process.process_id}",
+        label=process.name or process.process_id,
+        kind=process.run_location or "",
+        note=_shared_note(process),
+        tip=process.process_id,
+        create=None if off else _call_activity(process),
+        no_create=off,
+        shared=Shared(
+            package_id=info.id,
+            version=info.version,
+            process_id=process.process_id,
+            off=off,
+        ),
+    )
+
+
+def _call_activity(process: ProvidedProcess) -> Create:
+    """Call Activity 하나 (STU-03 「캔버스에 추가」).
+
+    **만드는 것은 `calledElement`뿐이다** (ADR-0051) — `chk:call`의 입력·출력 짝은 **내 변수
+    이름**을 알아야 하는 일이라 지어내지 않는다 (속성 패널에서 적는다).
+    """
+    return Create(
+        bpmn=BPMN_CALL_ACTIVITY,
+        name=process.name or process.process_id,
+        attrs={"calledElement": process.process_id},
     )
 
 
@@ -425,11 +537,15 @@ def collect(
     *,
     catalog: service_catalog.Catalog | None = None,
     reader: CenterReader | None = None,
+    installed: Mapping[str, InstalledLib] | None = None,
 ) -> Tree:
     """뿌리는 선언에서, 목록은 C7에서 (STU-03).
 
     `views`는 `ExtensionHost.resource_views()`의 기여들이다 — **라벨 순**으로 그려 확장이
     실리는 순서에 흔들리지 않게 한다. **한 뿌리를 못 받아도 나머지는 그린다.**
+
+    `installed`는 **열린 BPM 프로세스가 받아 둔 공유 BPM 프로세스**다 (ADR-0051) — 받는 일은
+    부르는 쪽이 한다 (`install.installed_of`, STU-11과 같은 함수다).
     """
     problems: list[str] = list(catalog.problems if catalog is not None else ())
 
@@ -438,7 +554,7 @@ def collect(
         shared = replace(shared, empty=NO_CENTER)
     else:
         try:
-            shared = shared_root(reader.packages(KIND_LIB))
+            shared = shared_root(reader.packages(KIND_LIB), installed=installed)
         except CenterUnreachable as e:
             problems.append(f"공유 BPM 프로세스 목록을 받지 못했습니다 — {e}")
             shared = replace(shared, empty=f"받지 못했습니다 — {e}")
@@ -544,6 +660,10 @@ class ResourceExplorer(QWidget):
     adding = Signal(object)
     #: 「Center 공유 자원...」 — STU-11을 띄우는 일은 메인 창이 한다 (창을 쥐는 쪽이 하나다).
     opening_center = Signal()
+    #: 「열기 (읽기 전용)」 — `Shared` 하나. 파일을 읽어 띄우는 일은 메인 창이 한다.
+    viewing = Signal(object)
+    #: 「내 BPM 프로세스로 복사」 — `Shared` 하나 (묻고 쓰고 여는 것은 메인 창이다).
+    copying = Signal(object)
     #: 로그 한 줄 (STU-09 「로그」).
     said = Signal(str)
 
@@ -660,6 +780,23 @@ class ResourceExplorer(QWidget):
             return
         self.adding.emit(item.create)
 
+    def view_selected(self) -> None:
+        """「열기 (읽기 전용)」 — 할 수 없으면 **까닭을 말한다** (조용히 넘기지 않는다)."""
+        self._shared_action(self.viewing)
+
+    def copy_selected(self) -> None:
+        """「내 BPM 프로세스로 복사」 — 묻고 쓰고 여는 것은 메인 창이다."""
+        self._shared_action(self.copying)
+
+    def _shared_action(self, signal: Any) -> None:
+        item = self.selected_item()
+        if item is None or item.shared is None:
+            return
+        if item.shared.off:
+            self.said.emit(f"{item.label}: {item.shared.off}")
+            return
+        signal.emit(item.shared)
+
     def show_detail(self) -> None:
         item = self.selected_item()
         if item is None or not item.detail:
@@ -682,11 +819,25 @@ class ResourceExplorer(QWidget):
         if found is None:
             return
         menu = QMenu(self)
+        # 끈 줄의 까닭을 말풍선으로 보인다 — 안 켜면 Qt가 꺼진 항목의 말풍선을 숨긴다 (U3).
+        menu.setToolTipsVisible(True)
         item = self.selected_item()
         if item is not None:
             add = menu.addAction("캔버스에 추가")
             add.setEnabled(item.create is not None)
+            # 끌 때는 **까닭을 말풍선에** 붙인다 (U3) — 눌러 보면 로그에도 한 줄 남는다.
+            add.setToolTip("" if item.create is not None else item.no_create)
             add.triggered.connect(self.add_selected)
+            if item.shared is not None:
+                # 공유 BPM 프로세스 정의 (ADR-0051) — **설치된 판에서만** 켜진다.
+                for label, then in (
+                    ("열기 (읽기 전용)", self.view_selected),
+                    ("내 BPM 프로세스로 복사", self.copy_selected),
+                ):
+                    one = menu.addAction(label)
+                    one.setEnabled(not item.shared.off)
+                    one.setToolTip(item.shared.off)
+                    one.triggered.connect(then)
             if item.detail:
                 menu.addAction("작업 설명 보기").triggered.connect(self.show_detail)
             if item.console_url:
@@ -735,19 +886,25 @@ def _find_item(items: Iterable[Item], item_id: str) -> Item | None:
 
 
 __all__ = [
+    "BPMN_CALL_ACTIVITY",
     "BPMN_SERVICE_TASK",
-    "KIND_LIB",
     "EMPTY_SERVICE",
     "EMPTY_SHARED",
     "EMPTY_TOOLPACK",
     "EMPTY_TREE",
     "EMPTY_VIEW",
     "HEADERS",
-    "NO_CALL",
+    "INSTALLED_MARK",
+    "KIND_LIB",
+    "NOT_INSTALLED",
+    "NOT_PROVIDED",
     "NO_CENTER",
     "NO_INSTALL",
     "NO_TOOLPACK_INSTALL",
     "OPEN_CENTER_RESOURCES",
+    "OTHER_VERSION",
+    "OTHER_VERSION_MARK",
+    "PICK_DEFINITION",
     "ROOT_SERVICE",
     "ROOT_SHARED",
     "ROOT_TOOLPACK",
@@ -758,6 +915,7 @@ __all__ = [
     "Item",
     "ResourceExplorer",
     "Root",
+    "Shared",
     "Tree",
     "collect",
     "service_root",

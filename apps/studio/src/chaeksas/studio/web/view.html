@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>Chaeksas Studio 다이어그램 보기</title>
+  <!--
+    읽기 전용 다이어그램 보기 (STU-03 「열기 (읽기 전용)」, ADR-0051).
+
+    **모델러가 아니라 뷰어다** — 팔레트를 가린 편집기가 아니라 편집 기능이 **그 배포본에
+    아예 없다**. 끌어 옮기기·라벨 고치기·삭제가 되는 창에 「읽기 전용」이라 적는 것은 거짓이다.
+
+    오프라인이다 (ADR-0022·ADR-0029) — 모든 자원이 로컬 파일이고 CDN을 쓰지 않는다.
+    `vendor/`는 생성물이다 (`pnpm --filter @chaeksas/bpmn-canvas build`). 이 파일은 우리가 쓴다.
+
+    **다리는 모델러 페이지와 같다** — QWebChannel 하나, 요청 id로 짝. 모델러에게만 있는
+    것(`saveXML`·`createTask`)을 물으면 그 길이 이미 「모르는 함수다」로 답한다.
+  -->
+  <link rel="stylesheet" href="vendor/assets/diagram-js.css">
+  <link rel="stylesheet" href="vendor/assets/bpmn-js.css">
+  <link rel="stylesheet" href="vendor/assets/bpmn-font/css/bpmn-embedded.css">
+  <style>
+    /* 색은 Python 쪽이 토큰에서 넣어 준다 (`--chk-*`) — 여기 값을 적지 않는다 (ADR-0017). */
+    html, body { margin: 0; height: 100%; background: var(--chk-bg, #ffffff); }
+    #canvas { height: 100%; }
+  </style>
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script src="vendor/bpmn-navigated-viewer.production.min.js"></script>
+  <script src="chk-moddle.js"></script>
+</head>
+<body>
+<div id="canvas"></div>
+<script>
+  async function boot() {
+    const viewer = new BpmnJS({
+      container: "#canvas",
+      // `chk:*`를 타입으로 읽는다 — 없으면 우리 요소가 「모르는 것」 경고로 쏟아진다.
+      moddleExtensions: { chk: window.CHK_MODDLE },
+    });
+    let bridge = null;
+
+    const api = {
+      async importXML(xml) {
+        const found = await viewer.importXML(xml);
+        viewer.get("canvas").zoom("fit-viewport");
+        return { warnings: (found.warnings || []).map((w) => String(w.message || w)) };
+      },
+      /** 시험이 「정말 그 그림이 떴나」를 보는 자리 (모델러 쪽과 같은 이름이다). */
+      async stats() {
+        return { elements: viewer.get("elementRegistry").getAll().length, dirty: false };
+      },
+    };
+
+    new QWebChannel(qt.webChannelTransport, (channel) => {
+      bridge = channel.objects.bridge;
+      window.chk = (requestId, name, argsJson) => {
+        const run = api[name];
+        if (!run) {
+          bridge.result(requestId, JSON.stringify({ ok: false, error: `모르는 함수다: ${name}` }));
+          return;
+        }
+        run(...JSON.parse(argsJson))
+          .then((found) => bridge.result(requestId, JSON.stringify({ ok: true, ...found })))
+          .catch((e) => bridge.result(requestId, JSON.stringify({ ok: false, error: String((e && e.message) || e) })));
+      };
+      bridge.ready();
+    });
+  }
+  boot();
+</script>
+</body>
+</html>

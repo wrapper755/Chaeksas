@@ -1,5 +1,10 @@
 """공유 BPM 프로세스를 받아 작업 폴더의 `libs/`에 푼다 (STU-11 「설치」, ADR-0048).
 
+**「설치돼 있나」를 답하는 자리도 여기다** (`installed_of`) — STU-11의 「설치본」 열과 STU-03의
+셋(부르기·보기·복사)이 **그 하나**를 쓴다
+([ADR-0051](../../../../../docs/decisions/0051-shared-process-conveniences.md)). 베끼면 한
+화면은 「설치됨」이라 하고 다른 화면은 「—」라 하는 날이 온다.
+
 지키는 것 다섯.
 
 - **자리는 작업 폴더의 `libs/`다.** PC 공용 저장소를 두지 않는다 — 패키지와 같은 자리라
@@ -22,9 +27,16 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from chaeksas.contracts.bpmn_ext import BpmnReadError, read_process
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.studio.services import CenterReader, CenterUnreachable
-from chaeksas.studio.workspace import BpmProcess, InstalledLib, Workspace, WorkspaceError
+from chaeksas.studio.workspace import (
+    LIBS_DIR,
+    BpmProcess,
+    InstalledLib,
+    Workspace,
+    WorkspaceError,
+)
 
 log = logging.getLogger(__name__)
 
@@ -38,6 +50,8 @@ SUFFIXES = (".bpmn", ".dmn")
 
 NO_PROCESS = "열린 BPM 프로세스가 없습니다 — 설치는 BPM 프로세스 하나에 하는 일입니다."
 NO_CENTER = "Center 주소·Studio 키가 설정되지 않았습니다 — 설정 → 「Center」 (STU-10)."
+#: 받아 둔 판이 그 정의를 주지 않는다 (읽지 못한 정의일 수 있다 — B14가 그 말을 한다).
+NOT_PROVIDED = "설치된 판이 이 정의를 주지 않습니다 (읽지 못한 정의일 수 있습니다)."
 
 
 class InstallFailed(RuntimeError):
@@ -133,6 +147,96 @@ def remove(workspace: Workspace, process: BpmProcess | None, *, package_id: str)
     return f"{found.ref}을 제거했습니다."
 
 
+def installed_of(process: BpmProcess | None) -> dict[str, InstalledLib]:
+    """열린 BPM 프로세스에 받아 둔 판들 `{패키지 id: 받아 둔 것}` (ADR-0048 — 설치는 Bot마다다).
+
+    **「설치돼 있나」를 묻는 자리는 이 함수 하나다** (ADR-0051) — STU-11의 「설치본」 열과
+    STU-03의 부르기·보기·복사가 같은 것을 본다.
+    """
+    if process is None:
+        return {}
+    return {one.package_id: one for one in process.libs}
+
+
+def definition_file(process: BpmProcess, lib: InstalledLib, process_id: str) -> Path | None:
+    """그 BPMN 프로세스 id를 담은 `libs/` 파일 — 「열기 (읽기 전용)」·「복사」가 읽는 자리.
+
+    **기록이 적어 둔 파일만** 본다 — `libs/`가 평평해서 다른 판이 같은 이름을 들고 있을 수
+    있다 (설치가 파일 이름에 패키지 id를 붙이는 까닭이다). 읽지 못한 정의는 `None`이다.
+    """
+    folder = process.folder / LIBS_DIR
+    for name in lib.files:
+        if not name.endswith(".bpmn"):
+            continue  # 결정표는 호출 대상이 아니다
+        path = folder / name
+        try:
+            found = read_process(path.read_text(encoding="utf-8"))
+        except (BpmnReadError, OSError):
+            continue  # 읽지 못한 정의는 보여 줄 수도 복사할 수도 없다 (B14가 말한다)
+        if found.id == process_id:
+            return path
+    return None
+
+
+@dataclass(frozen=True)
+class Copy:
+    """「내 BPM 프로세스로 복사」가 할 일 — **묻기 전에** 셈한다 (STU-03).
+
+    창이 `file_name`을 적어 보이므로 사람이 **무엇이 생기는지 알고** 고른다 (U9의 결).
+    """
+
+    source: Path
+    #: `process/` 안에 만들 이름. **겹치면 새 이름이고 덮어쓰지 않는다** (ADR-0051).
+    file_name: str
+    xml: str
+
+
+def plan_copy(process: BpmProcess, lib: InstalledLib, process_id: str) -> Copy:
+    """복사할 것을 셈한다. 할 수 없으면 `InstallFailed`로 **까닭 한 줄**이다.
+
+    **같은 BPMN 프로세스 id의 정의가 이미 있으면 복사하지 않는다** — 한 패키지에 같은 id가
+    둘이면 `BpmProcess.processes()`가 조용히 하나를 가린다.
+    """
+    found = definition_file(process, lib, process_id)
+    if found is None:
+        raise InstallFailed(f"{lib.ref}: {NOT_PROVIDED}")
+    if any(one.id == process_id for one in process.definitions):
+        raise InstallFailed(f"같은 id의 정의가 이미 있습니다: {process_id}")
+    return Copy(
+        source=found,
+        file_name=_free_name(process, lib, found.name),
+        xml=found.read_text(encoding="utf-8"),
+    )
+
+
+def _free_name(process: BpmProcess, lib: InstalledLib, file_name: str) -> str:
+    """`process/`에 쓸 이름 — 설치가 붙인 패키지 id를 떼고, **겹치면 비낀다**."""
+    head = f"{lib.package_id}__"
+    bare = file_name[len(head) :] if file_name.startswith(head) else file_name
+    stem = Path(bare).stem or lib.package_id
+    folder = process.folder / "process"
+    name = f"{stem}.bpmn"
+    for number in range(2, 100):
+        if not (folder / name).exists():
+            return name
+        name = f"{stem}-{number}.bpmn"
+    return name
+
+
+def copy_into(workspace: Workspace, process: BpmProcess, plan: Copy) -> Path:
+    """셈한 것을 **내 정의로** 쓴다 (STU-03 「내 BPM 프로세스로 복사」).
+
+    그때부터 **내 것이 이기고**(`processes()`) 내보낼 때 `requires.libs`에서 저절로 빠진다
+    (`packaging.collect_requires`가 「내 정의만 패키지 안」이라고 적어 둔 그대로다).
+    """
+    try:
+        path = workspace.save_definition(process, plan.file_name, plan.xml)
+    except WorkspaceError as e:
+        raise InstallFailed(f"복사하지 못했습니다: {e}") from e
+    log.info("공유 BPM 프로세스 정의를 복사했다: %s → %s", plan.source.name, path.name)
+    return path
+
+
 def callers_of(process: BpmProcess, lib: InstalledLib) -> list[str]:
     """그 공유 BPM 프로세스를 **부르는 노드** — 제거하기 전에 묻는 데 쓴다 (STU-11).
 
@@ -151,13 +255,19 @@ def callers_of(process: BpmProcess, lib: InstalledLib) -> list[str]:
 
 __all__ = [
     "KIND_LIB",
+    "NOT_PROVIDED",
     "NO_CENTER",
     "NO_PROCESS",
     "SUFFIXES",
+    "Copy",
     "InstallFailed",
     "Installed",
     "callers_of",
+    "copy_into",
+    "definition_file",
     "definitions_in",
     "install",
+    "installed_of",
+    "plan_copy",
     "remove",
 ]

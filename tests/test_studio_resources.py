@@ -35,6 +35,7 @@ from chaeksas.contracts.resources import (  # noqa: E402
 from chaeksas.contracts.service_app import Operation as C11Operation  # noqa: E402
 from chaeksas.core.extensions import Contribution  # noqa: E402
 from chaeksas.studio import center_actions, resources, service_catalog, services  # noqa: E402
+from chaeksas.studio.workspace import InstalledLib  # noqa: E402
 
 NOW = "2026-10-10T09:00:00+09:00"
 
@@ -190,6 +191,23 @@ class FakeCenter(services.CenterReader):
         return [one for one in self.libs if one.kind == kind]
 
 
+def held(
+    version: str = "1.1.0", processes: tuple[str, ...] = ("Proc_approve",)
+) -> dict[str, InstalledLib]:
+    """**열린 BPM 프로세스가 받아 둔 판** 하나 (`install.installed_of`가 주는 모양, ADR-0051).
+
+    STU-03은 이것을 **받아서** 쓴다 — 여기서 디스크를 보지 않는다.
+    """
+    return {
+        "shared.approval": InstalledLib(
+            package_id="shared.approval",
+            version=version,
+            files=("shared.approval__approve.bpmn",),
+            processes=processes,
+        )
+    }
+
+
 def catalog_with(*apps: ServiceAppResource, problems: tuple[str, ...] = ()) -> service_catalog.Catalog:
     return service_catalog.build(apps, problems=problems)
 
@@ -270,16 +288,87 @@ def test_the_shared_process_root_lists_center_libs_and_their_definitions() -> No
     assert definition.note == "받는 것: 금액 / 내놓는 것: 승인"
 
 
-def test_the_shared_process_root_cannot_make_a_call_activity_yet() -> None:
-    """설치가 없으니 **Call Activity를 만들지 않고 까닭을 말한다** (U3).
+def test_an_installed_definition_becomes_a_call_activity() -> None:
+    """설치된 판의 정의로 **Call Activity를 만든다**
+    ([ADR-0051](../docs/decisions/0051-shared-process-conveniences.md)).
 
-    만들어 두면 시험 실행이 그 공유 BPM 프로세스를 못 찾아 「왜 안 되나」가 된다.
+    만드는 것은 **`calledElement`뿐**이다 — `chk:call`의 입력·출력 짝은 내 변수 이름을 알아야
+    하는 일이라 지어내지 않는다 (속성 패널에서 적는다).
+    """
+    found = root_of(tree_with(installed=held()), resources.ROOT_SHARED)
+    [definition] = found.items[0].children
+    assert definition.create == resources.Create(
+        bpmn=resources.BPMN_CALL_ACTIVITY,
+        name="팀장 결재",
+        attrs={"calledElement": "Proc_approve"},
+    )
+    assert definition.create.chk == {}, "입력·출력 짝은 지어내지 않는다"
+    assert definition.shared == resources.Shared(
+        package_id="shared.approval", version="1.1.0", process_id="Proc_approve"
+    )
+
+
+def test_without_the_install_there_is_no_call_and_the_reason_sends_you_to_stu_11() -> None:
+    """**설치되지 않은 것으로 만들어 주지 않는다** — B14가 막고 시험 실행이 부를 수 없다.
+
+    그래도 줄은 그대로 있고(목록은 Center의 것이다) 셋은 끄고 **까닭을 적는다** (U3).
     """
     found = root_of(tree_with(), resources.ROOT_SHARED)
-    assert all(one.create is None for one in found.items)
-    assert "§4-5" in found.items[0].no_create
+    [definition] = found.items[0].children
+    assert definition.create is None
+    assert definition.no_create == resources.NOT_INSTALLED
+    assert definition.shared is not None
+    assert definition.shared.off == resources.NOT_INSTALLED
+    assert "STU-11" in definition.shared.off, "할 수 있는 자리를 가리킨다"
     assert [label for label, _ in found.blocked] == ["설치...", "제거..."]
     assert found.opens_center, "문맥 메뉴에서 STU-11로 갈 수 있어야 한다"
+
+
+def test_another_held_version_says_which_one_is_held() -> None:
+    """「갱신하세요」로는 **무엇을 쓰고 있는지** 모른다 — 받아 둔 판을 적는다."""
+    found = root_of(tree_with(installed=held(version="1.0.0")), resources.ROOT_SHARED)
+    [definition] = found.items[0].children
+    assert definition.create is None
+    assert definition.no_create == resources.OTHER_VERSION.format(version="1.0.0")
+    assert found.items[0].note.endswith("· 다른 판 설치됨 (1.0.0)")
+
+
+def test_a_held_version_that_does_not_bring_the_definition_says_so() -> None:
+    """판은 맞는데 그 정의가 기록에 없다 — 설치할 때 **읽지 못한** 정의다 (F6이 까닭을 말한다)."""
+    found = root_of(tree_with(installed=held(processes=())), resources.ROOT_SHARED)
+    [definition] = found.items[0].children
+    assert definition.create is None
+    assert definition.no_create == resources.NOT_PROVIDED
+    assert found.items[0].note.endswith("· 설치됨"), "판은 받아져 있다"
+
+
+def test_the_package_row_tells_you_to_pick_a_definition() -> None:
+    """첫 단계로는 **무엇을 부를지 모른다** — 조용히 끄지 않고 그 말을 한다."""
+    found = root_of(tree_with(installed=held()), resources.ROOT_SHARED)
+    assert found.items[0].create is None
+    assert found.items[0].no_create == resources.PICK_DEFINITION
+    assert found.items[0].shared is None, "패키지 줄로는 보기·복사를 하지 않는다"
+
+
+def test_the_install_mark_only_shows_up_when_something_is_held() -> None:
+    """받아 둔 것이 없으면 **아무 말도 붙지 않는다** (없음이 그 뜻이다)."""
+    assert root_of(tree_with(), resources.ROOT_SHARED).items[0].note == "approved · 정의 1개"
+    marked = root_of(tree_with(installed=held()), resources.ROOT_SHARED)
+    assert marked.items[0].note == "approved · 정의 1개 · 설치됨"
+
+
+def test_the_root_lists_exactly_what_center_has() -> None:
+    """**멤버십은 Center 목록 그대로다** (ADR-0051) — 설치는 줄을 늘리거나 줄이지 않는다.
+
+    Center에 없는데 설치된 것(「로컬만」)은 **STU-11의 일이다** — 둘째 단계와 「받는 것·
+    내놓는 것」은 매니페스트의 `provides`가 주는 것이라 지어낼 수 없다.
+    """
+    gone = {
+        "shared.gone": InstalledLib(package_id="shared.gone", version="3.0.0"),
+        **held(),
+    }
+    found = root_of(tree_with(installed=gone), resources.ROOT_SHARED)
+    assert [one.id for one in found.items] == ["shared.approval@1.1.0"]
 
 
 def test_a_lib_without_provides_says_so_instead_of_zero() -> None:
@@ -585,8 +674,11 @@ def test_rubbish_dropped_on_the_canvas_is_not_a_create() -> None:
     found = resources.from_payload('{"bpmn": "bpmn:ServiceTask", "chk": {"task": 7}}')
     assert found is not None and found.chk == {}
     assert resources.from_payload('{"bpmn": "bpmn:Task"}') == resources.Create(
-        bpmn="bpmn:Task", name="", chk={}
+        bpmn="bpmn:Task", name="", chk={}, attrs={}
     )
+    # `attrs`도 **글만** 받는다 (수를 넣으면 bpmn-js가 속성에 수를 쓴다).
+    found = resources.from_payload('{"bpmn": "bpmn:CallActivity", "attrs": {"calledElement": 7}}')
+    assert found is not None and found.attrs == {}
 
 
 def test_only_a_row_that_makes_something_can_be_dragged() -> None:
@@ -614,6 +706,71 @@ def test_only_a_row_that_makes_something_can_be_dragged() -> None:
     for what, index in nothing.items():
         assert model.data(index), f"{what} 줄을 찾지 못했다"
         assert model.mimeData([index]) is None, f"{what}이 끌렸다"
+
+
+def test_an_installed_shared_definition_drags_its_called_element() -> None:
+    """설치하면 그 줄도 끌린다 (ADR-0051) — **끌어다 놓기와 메뉴가 같은 `Create`**다.
+
+    `calledElement`는 `chk:*`가 아니라 그냥 BPMN 속성이라 **실린 글에 `attrs`로** 간다.
+    """
+    window = explorer(tree_with(installed=held()))
+    model = window.view.model()
+    definition = model.index(0, 0, model.index(0, 0, model.index(0, 0)))
+    assert model.data(definition) == "팀장 결재"
+
+    data = model.mimeData([definition])
+    assert data is not None and data.hasFormat(resources.MIME_TYPE)
+    carried = resources.from_payload(bytes(data.data(resources.MIME_TYPE).data()).decode("utf-8"))
+    assert carried is not None
+    assert carried.bpmn == resources.BPMN_CALL_ACTIVITY
+    assert carried.attrs == {"calledElement": "Proc_approve"}
+    assert carried.chk == {}
+
+
+def test_viewing_and_copying_send_the_ref_up_not_the_file() -> None:
+    """창은 디스크를 모른다 (ADR-0051) — 가리키는 것만 올리고 읽고 쓰는 일은 메인 창이 한다."""
+    window = explorer(tree_with(installed=held()))
+    seen: list[Any] = []
+    copied: list[Any] = []
+    window.viewing.connect(seen.append)
+    window.copying.connect(copied.append)
+
+    pick(window, 0, 0, 0)  # 공유 BPM 프로세스 → 공통 결재 → 팀장 결재
+    window.view_selected()
+    window.copy_selected()
+    assert seen == copied
+    assert seen[0] == resources.Shared(
+        package_id="shared.approval", version="1.1.0", process_id="Proc_approve"
+    )
+
+
+def test_viewing_something_that_is_not_installed_says_why() -> None:
+    """꺼진 줄을 눌러도 **조용히 아무 일도 없지 않다** — 까닭 한 줄이다 (U3)."""
+    window = explorer()
+    said: list[str] = []
+    seen: list[Any] = []
+    window.said.connect(said.append)
+    window.viewing.connect(seen.append)
+
+    pick(window, 0, 0, 0)
+    window.view_selected()
+    assert seen == [], "할 수 없는 일을 올려 보내지 않는다"
+    assert said and resources.NOT_INSTALLED in said[0]
+
+
+def test_a_row_that_is_not_a_shared_definition_has_nothing_to_view() -> None:
+    """서비스 앱 작업 줄에는 보기·복사가 **메뉴에 없다** (`shared`가 `None`이다)."""
+    window = explorer(tree_with(installed=held()))
+    said: list[str] = []
+    seen: list[Any] = []
+    window.said.connect(said.append)
+    window.viewing.connect(seen.append)
+
+    pick(window, 2, 0, 0)  # 서비스 앱 → 세금계산서 → issue
+    assert window.selected_item() is not None
+    assert window.selected_item().shared is None  # type: ignore[union-attr]
+    window.view_selected()
+    assert (said, seen) == ([], [])
 
 
 def test_the_detail_window_only_reads() -> None:
@@ -726,3 +883,61 @@ def test_the_canvas_is_told_which_format_to_accept(window: Any) -> None:
     assert len(got) == 1, "드롭이 「캔버스에 추가」로 이어지지 않았다"
     assert got[0][0][:2] == (create.bpmn, create.name)
     assert got[0][1]["at"] == (321, 234), "놓은 자리가 캔버스로 가지 않았다"
+
+
+def test_viewing_or_copying_without_an_open_process_says_so(window: Any) -> None:
+    """받아 둔 공유 BPM 프로세스는 **BPM 프로세스마다**다 (ADR-0048) — 열린 것이 없으면 말한다."""
+    shared = resources.Shared(
+        package_id="shared.approval", version="1.1.0", process_id="Proc_approve"
+    )
+    center_actions.view_shared(window, shared)
+    center_actions.copy_shared(window, shared)
+    assert window.log_view.toPlainText().count(center_actions.NO_PROCESS) == 2
+
+
+def test_something_that_is_not_a_shared_ref_is_ignored(window: Any) -> None:
+    """신호는 자료형을 모른다 — 우리 것이 아니면 **조용히** 아무 일도 하지 않는다."""
+    center_actions.view_shared(window, "쓰레기")
+    center_actions.copy_shared(window, {"package_id": "x"})
+    assert window.log_view.toPlainText() == ""
+
+
+def test_the_read_only_window_draws_the_diagram_and_says_it_cannot_be_edited(
+    webengine: Any,
+) -> None:
+    """STU-03 「열기 (읽기 전용)」의 창 (ADR-0051) — **정말 못 고치는 페이지**를 띄운다.
+
+    머리 한 줄이 **어디서 온 것인지와 못 고친다는 것**을 함께 말하고, 그림이 들어가면 경고
+    줄은 비어 있다 (`chk:*`를 뷰어도 moddle 설명으로 읽는다).
+    """
+    from pathlib import Path as _Path
+
+    from PySide6.QtCore import QEventLoop, QTimer
+
+    from chaeksas.studio.canvas import VIEW_PAGE
+    from chaeksas.studio.viewer import DiagramViewer
+
+    examples = _Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
+    xml = (examples / "fx02_business_rule.bpmn").read_text(encoding="utf-8")
+
+    dialog = DiagramViewer("shared.approval@1.1.0 / Proc_approve", xml)
+    assert "읽기 전용입니다" in dialog.header.text()
+    assert "shared.approval@1.1.0 / Proc_approve" in dialog.header.text()
+
+    loop = QEventLoop()
+    dialog.canvas.opened.connect(loop.quit)
+    QTimer.singleShot(30_000, loop.quit)
+    loop.exec()
+    if not dialog.canvas.live:
+        dialog.close()
+        _PROBE.append(dialog)
+        pytest.skip("뷰어가 30초 안에 뜨지 않았다 (WebEngine이 이 환경에서 막혀 있다)")
+
+    assert dialog.canvas.url().fileName() == VIEW_PAGE, "모델러 페이지가 아니다"
+    # 그림을 넣는 것은 비동기다 — `stats`를 묻는 동안 안쪽 루프가 그것을 끝낸다.
+    assert dialog.canvas.call_sync("stats")["elements"] > 4
+    assert dialog.note.text() == "", "우리 예제는 경고 없이 들어간다"
+    dialog.close()
+    # **치우지 않고 들고 있는다** — `_PROBE`와 같은 까닭이다 (끝날 때 Qt가 프로필을 두고
+    # 투덜대고, 뒤 시험이 도는 중에 Qt 객체가 죽으면 더 나쁜 꼴로 터진다, 04-setup §7).
+    _PROBE.append(dialog)

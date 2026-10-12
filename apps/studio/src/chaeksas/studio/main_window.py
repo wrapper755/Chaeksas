@@ -104,6 +104,13 @@ class MainWindow(QMainWindow):
         self.resource_tree.opening_center.connect(
             lambda: center_actions.open_center_resources(self)
         )
+        # 공유 BPM 프로세스 정의 보기·복사 (ADR-0051) — **창을 쥐는 쪽이 하나**라 여기서 받는다.
+        self.resource_tree.viewing.connect(
+            lambda shared: center_actions.view_shared(self, shared)
+        )
+        self.resource_tree.copying.connect(
+            lambda shared: center_actions.copy_shared(self, shared)
+        )
         self.resource_tree.said.connect(self.say)
 
         self.log_view = QPlainTextEdit(self)

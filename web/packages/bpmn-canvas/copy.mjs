@@ -17,9 +17,17 @@ const OUT = join(ROOT, "apps/studio/src/chaeksas/studio/web/vendor");
 const require = createRequire(import.meta.url);
 const DIST = join(dirname(require.resolve("bpmn-js/package.json")), "dist");
 
-/** 가져올 것 — 모델러 한 벌과 그것이 쓰는 CSS·글꼴. 소스맵은 빼고 가져온다 (크기). */
+/**
+ * 가져올 것 — 모델러 한 벌, **읽기 전용 뷰어 한 벌**, 그것들이 쓰는 CSS·글꼴.
+ * 소스맵은 빼고 가져온다 (크기).
+ *
+ * 뷰어는 STU-03 「열기 (읽기 전용)」이 쓴다 ([ADR-0051](../../../docs/decisions/0051-shared-process-conveniences.md)) —
+ * 모델러의 팔레트를 가려 흉내 내지 않고 **정말 못 고치는 배포본**을 싣는다. 같은 npm
+ * 패키지가 주므로 판은 아래 package.json 한 곳에 그대로 있다.
+ */
 const FILES = [
   "bpmn-modeler.production.min.js",
+  "bpmn-navigated-viewer.production.min.js",
   "assets/diagram-js.css",
   "assets/bpmn-js.css",
   "assets/bpmn-font/css/bpmn-embedded.css",

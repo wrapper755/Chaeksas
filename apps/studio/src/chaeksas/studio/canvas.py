@@ -31,8 +31,13 @@ from PySide6.QtWidgets import QWidget
 
 log = logging.getLogger(__name__)
 
-#: 캔버스가 사는 곳 (`index.html`·`chk-moddle.js`는 우리 것, `vendor/`는 생성물이다).
+#: 캔버스가 사는 곳 (`index.html`·`view.html`·`chk-moddle.js`는 우리 것, `vendor/`는 생성물이다).
 WEB_DIR = Path(__file__).resolve().parent / "web"
+
+#: 편집하는 페이지 (bpmn-js **모델러**).
+EDIT_PAGE = "index.html"
+#: 읽기 전용으로 보는 페이지 (bpmn-js **뷰어** — 편집 기능이 아예 없다, ADR-0051).
+VIEW_PAGE = "view.html"
 
 #: 한 번의 부름을 기다리는 기본 시간 (ms). bpmn-js가 큰 그림을 읽을 때를 넉넉히 잡는다.
 DEFAULT_TIMEOUT_MS = 15_000
@@ -156,14 +161,19 @@ class Canvas(QWebEngineView):
             return True
         return super().eventFilter(watched, event)
 
-    def boot(self, web_dir: Path | None = None) -> None:
-        """`index.html`을 띄운다. 끝나면 `opened`가 울린다."""
-        page = (web_dir or WEB_DIR) / "index.html"
-        if not page.is_file():
+    def boot(self, web_dir: Path | None = None, *, page: str = EDIT_PAGE) -> None:
+        """페이지를 띄운다. 끝나면 `opened`가 울린다.
+
+        `page`를 `VIEW_PAGE`로 주면 **읽기 전용 뷰어**다 (ADR-0051) — 다리 규약은 같고,
+        모델러에게만 있는 것을 물으면 그 페이지가 「모르는 함수다」로 답한다.
+        """
+        page_path = (web_dir or WEB_DIR) / page
+        if not page_path.is_file():
             raise CanvasError(
-                f"캔버스 파일이 없다: {page} — `pnpm --filter @chaeksas/bpmn-canvas build` (ADR-0029)"
+                f"캔버스 파일이 없다: {page_path} — "
+                "`pnpm --filter @chaeksas/bpmn-canvas build` (ADR-0029)"
             )
-        self.load(QUrl.fromLocalFile(str(page)))
+        self.load(QUrl.fromLocalFile(str(page_path)))
 
     # ── 부르기 ──
 
@@ -236,6 +246,7 @@ class Canvas(QWebEngineView):
         name: str,
         chk: dict[str, str],
         *,
+        attrs: dict[str, str] | None = None,
         at: tuple[int, int] | None = None,
         then: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
@@ -243,12 +254,17 @@ class Canvas(QWebEngineView):
 
         `chk`는 `properties`·`setProperties`와 같은 **`{요소 이름: JSON 글}`**이다.
 
+        `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `chk:*`가 아니라
+        요소 자신의 칸이라 만들 때 함께 넣는다.
+
         `at`은 **화면 자리**(캔버스 위젯의 CSS 픽셀)다 — 끌어다 놓은 자리다 (ADR-0044).
         다이어그램 좌표로 바꾸는 일은 **JS가** 한다(축척·스크롤을 아는 쪽이 하나다). 주지
         않으면 지금처럼 보이는 자리의 빈 곳을 찾는다 — **만드는 길은 하나**여서 실행 취소가
         양쪽에서 한 걸음이다.
         """
         spec: dict[str, Any] = {"bpmn": bpmn, "name": name, "chk": chk}
+        if attrs:
+            spec["attrs"] = attrs
         if at is not None:
             spec["at"] = {"x": at[0], "y": at[1]}
         self.call("createTask", spec, then=then)
@@ -258,4 +274,12 @@ class Canvas(QWebEngineView):
         self.call("mark", states)
 
 
-__all__ = ["DEFAULT_TIMEOUT_MS", "WEB_DIR", "Bridge", "Canvas", "CanvasError"]
+__all__ = [
+    "DEFAULT_TIMEOUT_MS",
+    "EDIT_PAGE",
+    "VIEW_PAGE",
+    "WEB_DIR",
+    "Bridge",
+    "Canvas",
+    "CanvasError",
+]
