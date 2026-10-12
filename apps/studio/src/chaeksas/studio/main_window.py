@@ -7,7 +7,8 @@
 **메뉴 동작 중 큰 두 묶음은 떼어 냈다** (이 파일이 500줄 선을 넘어서다, CLAUDE.md §4):
 `export_actions`(내보내기·올리기 넷)와 `run_actions`(시험 실행 몰이). 둘은 창을 받아 쓰고,
 창은 그들이 쓰는 **작은 길**만 공개한다 — `saved_to_disk()`·`readiness()`·`say()`·
-`show_preflight()`·`show_variables()`. 창이 그 일의 속을 알지는 않는다.
+`show_preflight()`·`show_variables()`·`reset_ui_sessions()`·`show_ui_session()`. 창이 그 일의
+속을 알지는 않는다 — 아래 탭의 글·줄은 떼어 낸 모듈과 `ui_sessions.py`가 짓는다.
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
-    QLabel,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -55,6 +55,8 @@ from chaeksas.studio.receiver import Receiver
 from chaeksas.studio.runner import CaseRun, Outcome, Plan
 from chaeksas.studio.settings import Settings
 from chaeksas.studio.settings_dialog import StudioSettingsDialog
+from chaeksas.studio.ui_sessions import Row as UiSessionRow
+from chaeksas.studio.ui_sessions import UiSessions
 from chaeksas.studio.workspace import BpmProcess, Definition, Workspace
 
 log = logging.getLogger(__name__)
@@ -124,6 +126,10 @@ class MainWindow(QMainWindow):
         self.preflight = Preflight(self)
         self.preflight.jumping.connect(lambda node_id: self.canvas.call("select", node_id))
 
+        # STU-09 「UI 태스크」. 재료는 C3 `ui_session`이라 **플랫폼이 그린다** (ADR-0042 — 확장이
+        # 기여한 칸이 아니다. BUI-09는 재료가 C10이라 그쪽이 그린다).
+        self.ui_sessions = UiSessions(self)
+
         self.variables_view = QPlainTextEdit(self)
         self.variables_view.setReadOnly(True)
         #: 돌릴 것이 남아 있는 계획과 지금까지의 결과 (「모든 케이스 차례로」).
@@ -163,9 +169,7 @@ class MainWindow(QMainWindow):
         self.bottom_tabs = bottom
         bottom.addTab(self.log_view, "로그")
         bottom.addTab(self.preflight, "검사")
-        screen = QLabel("「화면」 탭은 아직 비어 있습니다 (docs/09-gaps.md §4-6).", bottom)
-        screen.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        bottom.addTab(screen, "화면")
+        bottom.addTab(self.ui_sessions, "UI 태스크")
         bottom.addTab(self.variables_view, "변수")
 
         split = QSplitter(Qt.Orientation.Vertical, self)
@@ -482,6 +486,14 @@ class MainWindow(QMainWindow):
     def show_variables(self, text: str) -> None:
         """「변수」 탭의 글. **글은 `run_actions.format_variables`가 짓는다** (Qt를 모르는 자리)."""
         self.variables_view.setPlainText(text)
+
+    def reset_ui_sessions(self) -> None:
+        """「UI 태스크」 탭을 비운다 — 실행 하나가 시작할 때 (STU-09)."""
+        self.ui_sessions.reset_rows()
+
+    def show_ui_session(self, row: UiSessionRow) -> None:
+        """UI 세션 한 줄을 더한다. **줄은 `ui_sessions.row_of`가 짓는다** (Qt를 모르는 자리)."""
+        self.ui_sessions.add(row)
 
     def show_variables_tab(self) -> None:
         self.bottom_tabs.setCurrentWidget(self.variables_view)
