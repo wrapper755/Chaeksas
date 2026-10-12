@@ -56,9 +56,8 @@ DEFAULT_SIZE = (760, 460)
 COLUMNS = ("이름", "Center 버전", "상태", "설치본", "개수")
 NAME, VERSION, STATUS, INSTALLED, COUNT = range(len(COLUMNS))
 
-#: 패키지 갈래 (C1) — 탭 하나가 갈래 하나다.
+#: 패키지 갈래 (C1). **하나다** — 도구 묶음은 패키지가 아니다 (ADR-0050).
 KIND_LIB = "process_lib"
-KIND_TOOLPACK = "toolpack"
 
 #: `status_map`의 묶음. **이 표에 있는 표기만 쓴다** (스타일 가이드 §2-2).
 STATUS_GROUP = "패키지"
@@ -78,10 +77,6 @@ NEWER = "(갱신 있음)"
 LOCAL_ONLY = "로컬만"
 
 #: 끄고 적는 까닭 (U3 — 끄고 **가까이에** 적는다).
-NO_TOOLPACK_INSTALL = (
-    "툴팩 설치는 아직 없습니다 — 받은 도구를 **싣는 길**이 아직 없습니다 "
-    "(docs/09-gaps.md §4-5)."
-)
 NO_PROCESS = "열린 BPM 프로세스가 없습니다 — 설치는 BPM 프로세스 하나에 하는 일입니다 (ADR-0048)."
 NO_SELECTION = "설치할 줄을 고르세요."
 NO_CENTER = "Center 주소·Studio 키가 설정되지 않았습니다 — 설정 → 「Center」 (STU-10)."
@@ -92,13 +87,7 @@ LIB_NOTE = (
     "「설치」는 **열린 BPM 프로세스**의 `libs/`에 풀어, 그 BPM 프로세스가 Call Activity로 "
     "부를 수 있게 합니다 (시험 실행도 현장과 같은 파일을 봅니다)."
 )
-TOOLPACK_NOTE = (
-    "Center에 올라온 툴팩입니다. AI 태스크의 허용 도구에서 그 도구들을 고릅니다. "
-    "「설치」는 아직 없습니다 — 받은 도구를 싣는 길을 먼저 정해야 합니다."
-)
-
 EMPTY_LIB = "Center에 올라온 공유 BPM 프로세스가 없습니다."
-EMPTY_TOOLPACK = "Center에 올라온 툴팩이 없습니다."
 NO_PROVIDES = "매니페스트에 없음"
 READY = "Center에서 읽었습니다."
 
@@ -151,53 +140,47 @@ class Listing:
     note: str = ""
 
 
-def count_of(info: PackageInfo, kind: str) -> int | None:
-    """「개수」 — 정의 수(`process_lib`) 또는 도구 수(`toolpack`).
+def count_of(info: PackageInfo) -> int | None:
+    """「개수」 — 그 공유 BPM 프로세스가 주는 **정의 수** (C1 `provides.processes`).
 
     **`provides`가 없으면 `None`이다** — 0으로 적으면 「아무것도 제공하지 않는다」로 읽힌다.
     """
     manifest = info.manifest
     if manifest is None or manifest.provides is None:
         return None
-    provides = manifest.provides
-    return len(provides.processes if kind == KIND_LIB else provides.tools)
+    return len(manifest.provides.processes)
 
 
-def row_of(
-    info: PackageInfo, kind: str, installed: Mapping[str, InstalledLib] | None = None
-) -> Row:
+def row_of(info: PackageInfo, installed: Mapping[str, InstalledLib] | None = None) -> Row:
     found = (installed or {}).get(info.id)
     return Row(
         package_id=info.id,
         version=info.version,
         status=info.status,
-        count=count_of(info, kind),
+        count=count_of(info),
         name=info.name or "",
         installed=found.version if found is not None else "",
     )
 
 
-def listing(
-    reader: CenterReader | None, kind: str, process: BpmProcess | None = None
-) -> Listing:
-    """그 갈래 한 탭. **Center가 없으면 두드리지 않는다** (STU-03과 같은 규칙).
+def listing(reader: CenterReader | None, process: BpmProcess | None = None) -> Listing:
+    """표가 그릴 것. **Center가 없으면 두드리지 않는다** (STU-03과 같은 규칙).
 
     설치된 것이 Center 목록에 없으면 **「로컬만」 줄로 남긴다** (STU-11) — 지워진 패키지를
     쓰고 있다는 것을 사람이 알아야 하고, 그 줄에서 「제거」도 할 수 있어야 한다.
     """
-    empty = EMPTY_LIB if kind == KIND_LIB else EMPTY_TOOLPACK
-    installed = installer.installed_of(process) if kind == KIND_LIB else {}
+    installed = installer.installed_of(process)
     if reader is None:
         return Listing(rows=tuple(_local_only(installed, set())), note=NO_CENTER)
     try:
-        found = reader.packages(kind)
+        found = reader.packages(KIND_LIB)
     except CenterUnreachable as e:
         return Listing(
             rows=tuple(_local_only(installed, set())), note=f"받지 못했습니다 — {e}"
         )
-    rows = [row_of(one, kind, installed) for one in found]
+    rows = [row_of(one, installed) for one in found]
     rows += _local_only(installed, {one.package_id for one in rows})
-    return Listing(rows=tuple(sorted(rows, key=_order)), note="" if rows else empty)
+    return Listing(rows=tuple(sorted(rows, key=_order)), note="" if rows else EMPTY_LIB)
 
 
 def _local_only(installed: Mapping[str, InstalledLib], seen: Collection[str]) -> list[Row]:
@@ -227,18 +210,20 @@ def _order(row: Row) -> tuple[str, str]:
 
 
 class _Tab(QWidget):
-    """탭 하나 — 설명 한 줄 + 표. 「새로 고침」·단추는 창이 들고 있다."""
+    """표 한 벌 — 설명 한 줄 + 표. 「새로 고침」·단추는 창이 들고 있다.
 
-    def __init__(self, kind: str, note: str, parent: QWidget | None = None) -> None:
+    **갈래를 모른다** — 패키지 갈래가 공유 BPM 프로세스 하나뿐이라(ADR-0050) 가릴 것이 없다.
+    """
+
+    def __init__(self, note: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.kind = kind
         self.rows: list[Row] = []
 
         self.description = QLabel(note, self)
         self.description.setWordWrap(True)
 
         self.table = QTableWidget(0, len(COLUMNS), self)
-        self.table.setObjectName(f"packages-{kind}")
+        self.table.setObjectName(f"packages-{KIND_LIB}")
         self.table.setHorizontalHeaderLabels(list(COLUMNS))
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -307,10 +292,8 @@ class CenterResourcesDialog(QDialog):
         self.resize(*DEFAULT_SIZE)
 
         self.tabs = QTabWidget(self)
-        self.libs = _Tab(KIND_LIB, LIB_NOTE, self)
-        self.toolpacks = _Tab(KIND_TOOLPACK, TOOLPACK_NOTE, self)
+        self.libs = _Tab(LIB_NOTE, self)
         self.tabs.addTab(self.libs, "공유 BPM 프로세스")
-        self.tabs.addTab(self.toolpacks, "툴팩")
 
         #: 아래 한 줄 (STU-11 「아래 상태 줄」).
         self.note = QLabel("", self)
@@ -337,20 +320,18 @@ class CenterResourcesDialog(QDialog):
         layout.addLayout(buttons)
 
         self.tabs.currentChanged.connect(lambda _: self.update_buttons())
-        for tab in (self.libs, self.toolpacks):
-            tab.table.itemSelectionChanged.connect(self.update_buttons)
+        self.libs.table.itemSelectionChanged.connect(self.update_buttons)
         self.refresh()
 
     # ── 읽기 ──
 
     def refresh(self) -> None:
-        """두 탭을 다시 받는다. **한 탭을 못 받아도 나머지는 그린다.**"""
+        """표를 다시 받는다. 못 받으면 **사유를 아래 한 줄에** 적는다."""
         self.problems = []
-        for tab in (self.libs, self.toolpacks):
-            found = listing(self.reader, tab.kind, self.process)
-            tab.show_listing(found)
-            if found.note and not found.rows:
-                self.problems.append(f"{self.tabs.tabText(self.tabs.indexOf(tab))}: {found.note}")
+        found = listing(self.reader, self.process)
+        self.libs.show_listing(found)
+        if found.note and not found.rows:
+            self.problems.append(found.note)
         self.note.setText(" / ".join(self.problems) if self.problems else READY)
         self.update_buttons()
 
@@ -362,9 +343,7 @@ class CenterResourcesDialog(QDialog):
         """**할 수 없으면 끄고 까닭을 붙인다** (U3) — 까닭이 넷이라 하나씩 가른다."""
         tab = self.current_tab()
         row = tab.selected()
-        if tab.kind != KIND_LIB:
-            why = NO_TOOLPACK_INSTALL
-        elif self.process is None or self.workspace is None:
+        if self.process is None or self.workspace is None:
             why = NO_PROCESS
         elif row is None:
             why = NO_SELECTION
@@ -435,9 +414,7 @@ __all__ = [
     "COLUMNS",
     "DEFAULT_SIZE",
     "EMPTY_LIB",
-    "EMPTY_TOOLPACK",
     "KIND_LIB",
-    "KIND_TOOLPACK",
     "LOCAL_ONLY",
     "NEWER",
     "NOT_INSTALLED",
@@ -445,7 +422,6 @@ __all__ = [
     "NO_PROCESS",
     "NO_PROVIDES",
     "NO_SELECTION",
-    "NO_TOOLPACK_INSTALL",
     "READY",
     "STATUS_GROUP",
     "STATUS_LABEL",

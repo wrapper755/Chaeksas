@@ -31,7 +31,6 @@ from chaeksas.contracts.resources import (
     ContributedResource,
     ExtensionResource,
     ServiceAppResource,
-    ToolpackResource,
 )
 from chaeksas.contracts.signing import AdminKey
 from chaeksas.core.app_directory import AppDirectory, build, to_json_dict
@@ -101,8 +100,7 @@ class CenterReader:
 
         **C7이 아니라 C5를 읽는다** — C7 리소스 목록에는 `process_lib` 갈래가 없고, STU-11이
         보여야 하는 「상태」(후보·승인됨·지원 종료·철회)는 **패키지 상태**라서다 (CON-06이
-        같은 것을 읽는다). 툴팩은 두 길이 다 있는데, **STU-03의 뿌리는 C7을 쓴다**(도구 목록이
-        거기 있다) — 쓰는 데가 다르면 읽는 길도 다르다.
+        같은 것을 읽는다).
         """
         found = self._get(f"{PACKAGES}?kind={quote(kind)}") or []
         return [PackageInfo.model_validate(one) for one in found]
@@ -131,11 +129,6 @@ class CenterReader:
                 f"Center가 {response.status_code}로 답했습니다 ({package_id} {version})"
             )
         return bytes(response.content)
-
-    def toolpacks(self) -> list[ToolpackResource]:
-        """툴팩들 (C7 — Center가 `kind=toolpack` 패키지에서 모은다). STU-03 「툴팩」 뿌리."""
-        found = self._get(f"{RESOURCES}?type=toolpack") or {}
-        return [ToolpackResource.model_validate(one) for one in found.get("items") or []]
 
     def admin_keys(self) -> list[AdminKey]:
         """봉투를 검증할 Admin **공개**키 (C2). 비밀이 아니라 읽기 토큰으로 읽는다."""

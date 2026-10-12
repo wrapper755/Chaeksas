@@ -3,7 +3,7 @@
 지키는 것 다섯.
 
 - **목록은 Center에서 온다.** 서비스 앱은 STU-14가 이미 받아 둔 고를 거리를 그대로 쓰고
-  (`service_catalog.Catalog` — 같은 것을 두 번 받지 않는다), 기여 자원과 툴팩은 리소스
+  (`service_catalog.Catalog` — 같은 것을 두 번 받지 않는다), 기여 자원은 리소스
   목록(C7)을, **공유 BPM 프로세스는 패키지 표(C5 `?kind=process_lib`)**를 뿌리마다 한 번씩
   읽는다 — C7에 그 갈래가 없다.
 - **들고 있지 않는다.** 닿지 못하면 그 자리에서 말하고 「새로 고침」을 둔다 — Studio는 현장이
@@ -11,7 +11,7 @@
 - **뿌리의 일부는 확장이 선언한다** (`studio.resource_views`) — 이 파일에 확장 이름이 없다
   (ADR-0018). 뿌리 이름·자원 갈래·만들 태스크 종류가 모두 선언에서 온다.
 - **`data`를 해석하지 않는다** (C13 §5). 그래서 기여 뿌리는 **한 단계**다 — 항목의 `name`과
-  `summary`만 그린다. 「서비스 앱 → 작업」·「툴팩 → 도구」는 **플랫폼이 아는 것**이라(C11
+  `summary`만 그린다. 「서비스 앱 → 작업」은 **플랫폼이 아는 것**이라(C11
   manifest·C7 `tools`) 둘째 단계를 그린다.
 - **쓸 수 없는 뿌리·항목도 사라지지 않는다** — 줄을 끄고 까닭을 적는다 (U3).
 
@@ -51,7 +51,7 @@ from PySide6.QtWidgets import (
 from chaeksas.contracts.center_api import PackageInfo
 from chaeksas.contracts.extension import ResourceView
 from chaeksas.contracts.manifest import ProvidedProcess
-from chaeksas.contracts.resources import ContributedResource, ToolpackResource
+from chaeksas.contracts.resources import ContributedResource
 from chaeksas.studio import service_catalog
 from chaeksas.studio.services import CenterReader, CenterUnreachable
 from chaeksas.studio.workspace import InstalledLib
@@ -66,11 +66,9 @@ KIND_LIB = "process_lib"
 #: 고정 뿌리 셋 (STU-03 표). 그 밖의 뿌리는 확장이 선언한다.
 ROOT_SHARED = "shared-processes"
 ROOT_SERVICE = "service-apps"
-ROOT_TOOLPACK = "toolpacks"
 
 SHARED_LABEL = "공유 BPM 프로세스"
 SERVICE_LABEL = "서비스 앱"
-TOOLPACK_LABEL = "툴팩"
 
 #: 쓸 수 없는 줄의 까닭 (U3 — 끄고 **가까이에** 적는다).
 #:
@@ -79,11 +77,6 @@ TOOLPACK_LABEL = "툴팩"
 NO_INSTALL = (
     "설치·제거는 「Center 공유 자원...」 창에서 합니다 — 설치는 열린 BPM 프로세스 하나에 "
     "하는 일입니다 (ADR-0048)."
-)
-#: 툴팩은 자리가 아니라 **싣는 길**이 없다 (ADR-0048 §왜 툴팩을 가르나).
-NO_TOOLPACK_INSTALL = (
-    "툴팩 설치는 아직 없습니다 — 받은 도구를 싣는 길을 먼저 정해야 합니다 "
-    "(docs/09-gaps.md §4-5)."
 )
 NO_CENTER = "Center 주소·Studio 키가 설정되지 않았습니다 — 설정 → 「Center」 (STU-10)."
 
@@ -111,7 +104,6 @@ OPEN_CENTER_RESOURCES = "Center 공유 자원..."
 #: 비어 있을 때 할 말 (빈 뿌리를 말없이 두지 않는다).
 EMPTY_SHARED = "Center에 올라온 공유 BPM 프로세스가 없습니다."
 EMPTY_SERVICE = "Center에 등록된 서비스 앱이 없습니다."
-EMPTY_TOOLPACK = "Center에 올라온 툴팩이 없습니다."
 EMPTY_VIEW = "Center에 등록된 항목이 없습니다."
 EMPTY_TREE = "뿌리를 고르면 그 아래를 봅니다."
 
@@ -455,39 +447,6 @@ def service_root(catalog: service_catalog.Catalog | None) -> Root:
     return Root(id=ROOT_SERVICE, label=SERVICE_LABEL, items=tuple(items), empty=EMPTY_SERVICE)
 
 
-def toolpack_root(found: Iterable[ToolpackResource]) -> Root:
-    """「툴팩」 — 툴팩 → 도구. 끌어다 놓는 자리가 없다 (AI 태스크의 허용 도구에서 고른다)."""
-    items = []
-    for one in found:
-        tools = tuple(
-            Item(
-                id=f"{one.id}/{tool.get('name') or ''}",
-                label=str(tool.get("name") or "(이름 없음)"),
-                kind=str(tool.get("domain") or TOOL_KIND),
-                note=str(tool.get("description") or ""),
-            )
-            for tool in one.tools
-        )
-        items.append(
-            Item(
-                id=f"{one.id}@{one.version}",
-                label=one.id,
-                kind=one.version,
-                note=f"{one.status} · 도구 {len(tools)}개",
-                tip=one.content_hash,
-                children=tools,
-            )
-        )
-    return Root(
-        id=ROOT_TOOLPACK,
-        label=TOOLPACK_LABEL,
-        items=tuple(items),
-        empty=EMPTY_TOOLPACK,
-        blocked=(("설치...", NO_TOOLPACK_INSTALL), ("제거...", NO_TOOLPACK_INSTALL)),
-        opens_center=True,
-    )
-
-
 def view_create(view: ResourceView, extension_id: str, resource_id: str, label: str) -> Create | None:
     """기여 뿌리의 「캔버스에 추가」 — **선언대로만** 만든다 (C13 `creates_task_*`).
 
@@ -578,17 +537,6 @@ def collect(
         roots.append(Root(id=view.id, label=view.label, items=items, empty=empty))
 
     roots.append(service_root(catalog))
-
-    toolpack = toolpack_root(())
-    if reader is None:
-        toolpack = replace(toolpack, empty=NO_CENTER)
-    else:
-        try:
-            toolpack = toolpack_root(reader.toolpacks())
-        except CenterUnreachable as e:
-            problems.append(f"툴팩 목록을 받지 못했습니다 — {e}")
-            toolpack = replace(toolpack, empty=f"받지 못했습니다 — {e}")
-    roots.append(toolpack)
 
     if reader is None:
         problems.append(NO_CENTER)
@@ -890,7 +838,6 @@ __all__ = [
     "BPMN_SERVICE_TASK",
     "EMPTY_SERVICE",
     "EMPTY_SHARED",
-    "EMPTY_TOOLPACK",
     "EMPTY_TREE",
     "EMPTY_VIEW",
     "HEADERS",
@@ -900,14 +847,12 @@ __all__ = [
     "NOT_PROVIDED",
     "NO_CENTER",
     "NO_INSTALL",
-    "NO_TOOLPACK_INSTALL",
     "OPEN_CENTER_RESOURCES",
     "OTHER_VERSION",
     "OTHER_VERSION_MARK",
     "PICK_DEFINITION",
     "ROOT_SERVICE",
     "ROOT_SHARED",
-    "ROOT_TOOLPACK",
     "ROW_ITEM",
     "ROW_ROOT",
     "Create",
@@ -920,7 +865,6 @@ __all__ = [
     "collect",
     "service_root",
     "shared_root",
-    "toolpack_root",
     "view_create",
     "view_item",
 ]

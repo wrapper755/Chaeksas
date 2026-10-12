@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
-import type { ToolpackResource } from "@chaeksas/api-types/c7-toolpack-resource";
 import type { RuntimeResource } from "@chaeksas/api-types/c7-runtime-resource";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
@@ -15,7 +14,7 @@ import { RefreshResources } from "./tools";
 /**
  * CON-07 리소스.
  *
- * 고정 탭 넷(확장·서비스 앱·툴팩·런타임). **키는 다루지 않는다** (C7 — 서비스 앱 키는 각
+ * 고정 탭 셋(확장·서비스 앱·런타임). **키는 다루지 않는다** (C7 — 서비스 앱 키는 각
  * 앱의 관리 콘솔에서 발급한다, ADR-0013).
  *
  * 고정 탭 뒤에 **확장이 기여한 자원 종류마다 탭 하나**가 붙는다 (C7). 그 탭의 칸은 카탈로그의
@@ -35,17 +34,9 @@ const TIER: Record<string, string> = { builtin: "내장", internal: "사내", ex
 
 const PROTOCOL: Record<string, string> = { "chk-c11": "C11", "http-adapter": "HTTP 어댑터" };
 
-const PACKAGE_STATUS: Record<string, string> = {
-  candidate: "후보",
-  approved: "승인됨",
-  deprecated: "지원 종료",
-  revoked: "철회",
-};
-
 const TABS = [
   { key: "extension", label: "확장" },
   { key: "service_app", label: "서비스 앱" },
-  { key: "toolpack", label: "툴팩" },
   { key: "runtime", label: "런타임" },
 ] as const;
 
@@ -176,7 +167,6 @@ export default async function ResourcesPage({
       {tab === "service_app" ? (
         <ServiceApps items={items as ServiceAppResource[]} admin={found.mode === "admin"} />
       ) : null}
-      {tab === "toolpack" ? <Toolpacks items={items as ToolpackResource[]} /> : null}
       {tab === "runtime" ? <Runtimes items={items as RuntimeResource[]} /> : null}
       {contributedTab ? (
         <Contributed kind={contributedTab} items={items as ContributedResource[]} />
@@ -355,38 +345,6 @@ function ServiceApps({ items, admin }: { items: ServiceAppResource[]; admin: boo
         </section>
       ) : null}
     </div>
-  );
-}
-
-function Toolpacks({ items }: { items: ToolpackResource[] }) {
-  const columns: Array<Column<ToolpackResource>> = [
-    { key: "id", header: "id", mono: true },
-    { key: "version", header: "버전", width: "12ch", mono: true },
-    {
-      key: "status",
-      header: "상태",
-      width: "12ch",
-      cell: (row) => <StatusBadge group="패키지" label={PACKAGE_STATUS[row.status] ?? row.status} />,
-    },
-    {
-      key: "tools",
-      header: "도구",
-      cell: (row) =>
-        (row.tools ?? []).length > 0
-          ? (row.tools ?? []).map((one) => String((one as { name?: unknown }).name ?? "")).join(", ")
-          : "—",
-    },
-  ];
-  if (items.length === 0) {
-    return (
-      <EmptyState
-        title="올라온 툴팩이 없습니다."
-        hint="툴팩은 따로 등록하지 않습니다 — 패키지로 올리면 여기에 나타납니다."
-      />
-    );
-  }
-  return (
-    <DataTable columns={columns} rows={items} rowKey={(row) => `${row.id}@${row.version}`} caption="툴팩" />
   );
 }
 

@@ -230,22 +230,17 @@ def test_no_address_or_key_means_no_uploader() -> None:
 # ─────────────────────────── STU-11 (읽기 전용) ───────────────────────────
 
 
-def test_the_dialog_lists_both_kinds_from_the_package_table(
+def test_the_dialog_lists_shared_processes_from_the_package_table(
     center: TestClient, studio_key: str, tmp_path: Path
 ) -> None:
-    """두 탭은 **C5 패키지 표**에서 온다 — 「개수」는 매니페스트의 `provides`다 (C1)."""
+    """목록은 **C5 패키지 표**에서 온다 — 「개수」는 매니페스트의 `provides`다 (C1).
+
+    **갈래가 하나다** — 도구 묶음은 패키지가 아니다 (ADR-0050).
+    """
     key = studio_key
     uploader(center, key).upload(written(tmp_path, lib_bytes()))
-    pack = package_bytes(
-        "ops.excel-tools",
-        "2.0.0",
-        kind="toolpack",
-        extra={"provides": {"tools": [{"name": "xlsx_read", "domain": "doc"}]}},
-        files={"tools/xlsx.py": "# 도구"},
-    )
-    uploader(center, key).upload(written(tmp_path, pack, "pack.zip"))
 
-    libs = center_resources.listing(reader(center, key), center_resources.KIND_LIB)
+    libs = center_resources.listing(reader(center, key))
     [one] = libs.rows
     assert (one.label, one.version, one.status_text, one.count_text) == (
         "공통 결재",
@@ -254,9 +249,6 @@ def test_the_dialog_lists_both_kinds_from_the_package_table(
         "1",
     )
     assert one.installed == "", "받아 둘 자리가 아직 없다"
-
-    packs = center_resources.listing(reader(center, key), center_resources.KIND_TOOLPACK)
-    assert [(r.package_id, r.count_text) for r in packs.rows] == [("ops.excel-tools", "1")]
 
 
 def test_a_package_without_provides_says_so_instead_of_zero() -> None:
@@ -272,10 +264,8 @@ def test_a_package_without_provides_says_so_instead_of_zero() -> None:
             "uploaded_at": AT,
         }
     )
-    assert center_resources.count_of(bare, center_resources.KIND_LIB) is None
-    assert center_resources.row_of(bare, center_resources.KIND_LIB).count_text == (
-        center_resources.NO_PROVIDES
-    )
+    assert center_resources.count_of(bare) is None
+    assert center_resources.row_of(bare).count_text == center_resources.NO_PROVIDES
 
 
 def test_an_unknown_status_is_shown_as_it_came() -> None:
@@ -286,7 +276,7 @@ def test_an_unknown_status_is_shown_as_it_came() -> None:
 
 def test_no_center_means_no_knocking() -> None:
     """주소·키가 없으면 **두드리지 않는다** — 까닭 한 줄을 보인다 (STU-03과 같은 규칙)."""
-    found = center_resources.listing(None, center_resources.KIND_LIB)
+    found = center_resources.listing(None)
     assert found.rows == () and found.note == center_resources.NO_CENTER
 
 
@@ -297,13 +287,13 @@ def test_an_unreachable_center_says_so_and_holds_nothing() -> None:
         def packages(self, kind: str) -> list[PackageInfo]:
             raise services.CenterUnreachable("Center에 닿지 못했습니다 (ConnectError)")
 
-    found = center_resources.listing(Dead(base_url="http://x", api_key="k"), center_resources.KIND_LIB)
+    found = center_resources.listing(Dead(base_url="http://x", api_key="k"))
     assert found.rows == ()
     assert "닿지 못했습니다" in found.note
 
 
 def test_an_empty_center_says_it_is_empty(center: TestClient, studio_key: str) -> None:
-    found = center_resources.listing(reader(center, studio_key), center_resources.KIND_LIB)
+    found = center_resources.listing(reader(center, studio_key))
     assert found.note == center_resources.EMPTY_LIB
 
 
@@ -334,12 +324,11 @@ def test_the_dialog_keeps_install_and_remove_but_turns_them_off(
     assert window.note.text() != ""
 
 
-def test_the_dialog_says_why_a_tab_is_empty(qt_app: Any) -> None:
-    """한 탭을 못 받아도 **나머지는 그린다** — 아래 한 줄이 둘을 다 말한다."""
+def test_the_dialog_says_why_the_table_is_empty(qt_app: Any) -> None:
+    """빈 표를 말없이 두지 않는다 — 아래 한 줄이 까닭을 말한다."""
     window = center_resources.CenterResourcesDialog(None)
     assert window.libs.table.rowCount() == 0
     assert center_resources.NO_CENTER in window.note.text()
-    assert "공유 BPM 프로세스" in window.note.text() and "툴팩" in window.note.text()
 
 
 # ─────────────────────────── 메인 창에 붙은 자리 (STU-01 메뉴) ───────────────────────────
