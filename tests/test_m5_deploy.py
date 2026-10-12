@@ -69,6 +69,7 @@ def package_zip(
     version: str = "2.1.0",
     *,
     requires: dict[str, Any] | None = None,
+    run_location: str = "pc",
 ) -> bytes:
     manifest: dict[str, Any] = {
         "schema": 1,
@@ -76,7 +77,7 @@ def package_zip(
         "id": package_id,
         "version": version,
         "name": "주문 입력",
-        "run_location": "pc",
+        "run_location": run_location,
         "entry": "process/main.bpmn",
         "process_id": "Proc_order",
         "requires": requires or {},
@@ -140,9 +141,11 @@ def admin_key(center: Center) -> Any:
     return made
 
 
-def approved(center: Center, key: Any, *, package_id: str = "erp.order-entry") -> dict[str, Any]:
+def approved(
+    center: Center, key: Any, *, package_id: str = "erp.order-entry", run_location: str = "pc"
+) -> dict[str, Any]:
     """업로드 → 승인까지."""
-    info = upload(center, package_zip(package_id))
+    info = upload(center, package_zip(package_id, run_location=run_location))
     center.approve(
         info["id"],
         info["version"],
@@ -334,12 +337,86 @@ def test_a_revoked_deployment_never_comes_back(center: Center) -> None:
 
 
 def test_a_pc_package_cannot_go_to_a_server_runner(center: Center) -> None:
-    """`run_location`과 대상이 맞아야 한다 (C2 §배포 대상 규칙)."""
+    """`run_location`과 대상이 맞아야 한다 (C2 §배포 대상 규칙).
+
+    코드는 **`wrong_target`(409) 하나**다 (ADR-0047) — 계약도 그 이름으로 말한다.
+    `target_mismatch`는 작업 쪽(모르는 대상 종류)에만 남았다.
+    """
     key = admin_key(center)
     info = approved(center, key)
     with pytest.raises(CenterProblem) as caught:
         center.deploy(deployment(key, info, target_type="server_runner", target="*"))
-    assert caught.value.code == "wrong_target"
+    assert (caught.value.status, caught.value.code) == (409, "wrong_target")
+
+
+def test_a_server_deployment_is_refused_until_m7(center: Center) -> None:
+    """**서버 실행기 배포는 M7까지 받지 않는다** (ADR-0016, C5) — 422다.
+
+    문서는 두 곳에 적었는데 Center는 작업 만들기(`/jobs`)에서만 막고 있었다. 받아 두면 내려
+    줄 서버 실행기가 없는 배포가 표에 남고, `GET /deployments`를 보는 운영자는 돌 것이라고
+    읽는다. 계약 하나를 부르게 하면서 닫혔다 (ADR-0047).
+    """
+    key = admin_key(center)
+    info = approved(center, key, package_id="erp.night-close", run_location="server")
+    with pytest.raises(CenterProblem) as caught:
+        center.deploy(deployment(key, info, target_type="server_runner", target="srv_1"))
+    assert (caught.value.status, caught.value.code) == (422, "server_runner_not_available")
+    assert center.deployments(active=False) == [], "행조차 남지 않는다"
+
+
+def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> None:
+    """**관문이 하나다** (ADR-0047) — Center의 `(상태, 코드)`가 계약의 것과 **규칙마다** 같다.
+
+    두 벌이던 때 대상 어긋남이 한쪽에서 `target_mismatch`(422), 다른 쪽에서 `wrong_target`(409)
+    이었고 서버 배포 관문은 계약에만 있었다. 베낀 것이 아니라 **같은 함수**를 부르는지 보려고
+    같은 봉투를 계약에게도 물어 본다.
+    """
+    from chaeksas.contracts.center_api import (
+        DEPLOYMENT_REFUSAL_STATUS,
+        PackageInfo,
+        deployment_refusal,
+        validate_deployment,
+    )
+
+    key = admin_key(center)
+    keys = center.admin_keys()
+    pc = approved(center, key)
+    server = approved(center, key, package_id="erp.night-close", run_location="server")
+    other = upload(center, package_zip("erp.not-approved"))  # 승인하지 않는다
+    old = approved(center, key, package_id="erp.old")
+    center.deprecate(old["id"], old["version"])
+
+    tried = (
+        (other, deployment(key, other, deployment_id="dep_00000001")),
+        (old, deployment(key, old, deployment_id="dep_00000002")),
+        (pc, deployment(key, pc, target="*", deployment_id="dep_00000003")),
+        (pc, deployment(key, pc, target_type="server_runner", target="srv_1",
+                        deployment_id="dep_00000004")),
+        (pc, deployment(key, pc, content_hash="sha256:" + "99" * 32,
+                        deployment_id="dep_00000005")),
+        (server, deployment(key, server, target_type="server_runner", target="srv_1",
+                            deployment_id="dep_00000006")),
+    )
+    seen = set()
+    for info, envelope in tried:
+        said = deployment_refusal(
+            validate_deployment(
+                envelope,
+                package=PackageInfo.model_validate(center.package(info["id"], info["version"])),
+                keys=keys,
+                now=AT,
+            )
+        )
+        assert said is not None, f"계약이 거절하지 않았다: {envelope.payload['deployment_id']}"
+        with pytest.raises(CenterProblem) as caught:
+            center.deploy(envelope)
+        assert (caught.value.status, caught.value.code) == (said[0], said[1].code), (
+            envelope.payload["deployment_id"]
+        )
+        seen.add(caught.value.code)
+    # **규칙마다** 봤다는 것까지 — 하나로 뭉쳐도 통과하면 「맞물린다」를 증명하지 못한다.
+    assert seen == set(DEPLOYMENT_REFUSAL_STATUS)
+    assert center.deployments(active=False) == [], "거절한 것은 하나도 남지 않는다"
 
 
 def test_the_listing_answers_in_the_contract_shape(center: Center) -> None:

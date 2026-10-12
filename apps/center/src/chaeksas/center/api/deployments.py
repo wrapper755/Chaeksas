@@ -3,11 +3,16 @@
 Center는 배포를 **짓지 않는다.** Admin이 서명한 것을 받아 두었다가 하트비트로 그대로 내려
 줄 뿐이다 (C4) — 재직렬화하면 서명이 깨지므로 **저장된 JSON 그대로** 다룬다.
 
+**무엇을 받아들이나는 계약이 정한다** (ADR-0047) —
+`contracts.center_api.validate_deployment()`가 규칙(서명·승인 상태·해시·대상·M7)을 모두 보고,
+상태 코드는 `deployment_refusal()`이 고른다. 여기서 규칙을 다시 적지 않는다 — 두 벌로 두었을
+때 대상 어긋남이 한쪽에서 `target_mismatch`(422), 다른 쪽에서 `wrong_target`(409)이었다.
+
+Center만 아는 것(저장소를 봐야 하는 것)이 여기 남는다:
+
 - **철회된 `deployment_id`는 영구히 철회 상태**다. 같은 봉투를 다시 올려도 되살아나지 않는다.
 - 같은 id에 다른 내용이 오면 409 `deployment_conflict`.
-- 승인되지 않은 패키지는 배포할 수 없다 — **승인이 먼저**다.
-- `target.type`은 패키지의 `run_location`과 맞아야 한다 (`pc`→`bot_ui`, `server`→`server_runner`).
-- **`"*"`는 서버 실행기 배포만 쓴다** (ADR-0046). PC 배포 봉투 하나는 **PC 하나**를 가리킨다.
+- 그 패키지가 Center에 있나 (404), 그리고 배포를 막는 리소스 누락(C7·C1 R8).
 """
 
 from __future__ import annotations
@@ -16,17 +21,18 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
-from chaeksas.center.api.packages import STATUS_DEPRECATED
 from chaeksas.center.api.signing import STATUS_APPROVED, admin_keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, loads, now_iso
 from chaeksas.contracts.bot_ui import DeploymentResult
-from chaeksas.contracts.center_api import RECENT_RESULTS, DeploymentInfo
+from chaeksas.contracts.center_api import (
+    RECENT_RESULTS,
+    DeploymentInfo,
+    deployment_refusal,
+    validate_deployment,
+)
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.signing import TARGET_ANY, Envelope, verify, verify_time
-
-#: `run_location` → 배포 대상 종류 (C2 §배포 대상 규칙).
-TARGET_FOR = {"pc": "bot_ui", "server": "server_runner"}
 
 #: `id`에 `"*"`로 **모두**를 가리킬 수 있는 대상 종류 (C2 §배포 대상 규칙, ADR-0046).
 #:
@@ -60,12 +66,14 @@ def _envelope(raw: Any) -> Envelope:
         raise ApiError(422, "input_invalid", f"봉투가 계약과 맞지 않는다: {e}") from e
 
 
-def _refuse(problems: list[Any]) -> None:
-    if not problems:
+def _refuse(problems: Sequence[Any]) -> None:
+    """위반 하나로 답한다 — **상태는 계약이 고른다** (C5 `deployment_refusal`, ADR-0047)."""
+    picked = deployment_refusal(problems)
+    if picked is None:
         return
-    first = problems[0]
+    status, first = picked
     raise ApiError(
-        403,
+        status,
         first.code or "bad_signature",
         first.message,
         detail={"violations": [{"rule": p.rule, "code": p.code, "message": p.message} for p in problems]},
@@ -76,9 +84,11 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
     """`deployment` 봉투를 받아 둔다 (C5 `POST /deployments`)."""
     envelope = _envelope(raw)
     keys = admin_keys(store)
-    _refuse(verify(envelope, keys=keys, expect_kind="deployment"))
-    # **예약 배포는 받아 둔다** — `not_before`는 실행하는 쪽이 적용할 때 본다 (C2 V5b).
-    _refuse(verify_time(envelope, now=now_iso(), check_not_before=False))
+    # **봉투를 먼저 본다** — 패키지를 찾기 전에 막아야 없는 패키지의 404로 봉투의 진위가 새지
+    # 않는다. 아래 `validate_deployment`가 같은 검사를 다시 하지만 **같은 계약 함수**라 답이
+    # 갈리지 않는다 (순서만 당긴 것이다). **예약 배포는 받아 둔다** (C2 V5b는 실행하는 쪽).
+    _refuse([*verify(envelope, keys=keys, expect_kind="deployment"),
+             *verify_time(envelope, now=now_iso(), check_not_before=False)])
 
     claim = envelope.payload
     deployment_id = str(claim.get("deployment_id") or "")
@@ -93,47 +103,16 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
             raise ApiError(409, "deployment_conflict", f"{deployment_id}에 다른 내용이 왔다")
         return _row(store, found)  # 멱등
 
-    package = store.row(
-        "SELECT status, content_hash, run_location, manifest_json FROM packages"
-        " WHERE id = ? AND version = ?",
-        (claim.get("bpm_process_id"), claim.get("version")),
-    )
-    if package is None:
-        raise ApiError(404, "not_found", f"{claim.get('bpm_process_id')}@{claim.get('version')}이 없다")
-    if package["status"] == STATUS_DEPRECATED:
-        # **지원 종료는 따로 알린다** (C5 `check_deployment`) — 「승인되지 않았다」고 하면
-        # 운영자가 승인 봉투를 찾아 헤맨다. 승인은 되어 있고 **새 배포만** 막힌 것이다.
-        raise ApiError(409, "deprecated", "지원 종료된 패키지에는 새로 배포하지 않는다")
-    if package["status"] != STATUS_APPROVED:
-        # **승인이 먼저다** — 서명 없는 것을 배포하면 받는 쪽이 어차피 거부한다 (V7).
-        raise ApiError(
-            409, "not_approved", f"승인되지 않은 패키지다 (지금 {package['status']})"
-        )
-    if claim.get("content_hash") != package["content_hash"]:
-        raise ApiError(
-            409,
-            "hash_mismatch",
-            f"해시가 다르다 (봉투 {claim.get('content_hash')}, 실제 {package['content_hash']})",
-        )
-    target = claim.get("target") or {}
-    wanted = TARGET_FOR.get(str(package["run_location"] or ""))
-    if wanted and target.get("type") != wanted:
-        raise ApiError(
-            409,
-            "wrong_target",
-            f"실행 위치 {package['run_location']}는 {wanted}에 배포한다 (받은 것 {target.get('type')})",
-        )
-    if target.get("id") == TARGET_ANY and str(target.get("type") or "") not in WILDCARD_TARGETS:
-        # **받아 두지 않는다** (ADR-0046) — 실행하는 쪽의 V6이 전부 `wrong_target`으로 거부할
-        # 봉투다. 받아 두면 CON-03이 거짓 ⛔로 차고 운영자는 승인·해시·키를 뒤진다(막은 것은
-        # 대상인데). 「받아는 줬다」가 가장 나쁜 답이다.
-        raise ApiError(
-            409,
-            "wrong_target",
-            f"{target.get('type')} 배포에는 전체 대상(\"{TARGET_ANY}\")이 없다 — PC를 하나 적는다",
-        )
+    from chaeksas.center.api import packages  # noqa: PLC0415 — 순환 import를 피한다
 
-    _refuse_missing_resources(store, package)
+    # 없으면 404 (같은 메시지다) — 그다음은 **계약이 본다**: 승인 상태·지원 종료·해시·대상·M7.
+    package = packages.info_of(
+        store, str(claim.get("bpm_process_id") or ""), str(claim.get("version") or "")
+    )
+    _refuse(validate_deployment(envelope, package=package, keys=keys, now=now_iso()))
+
+    _refuse_missing_resources(package.manifest, store)
+    target = claim.get("target") or {}
 
     with store.tx() as cur:
         cur.execute(
@@ -153,7 +132,7 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
     return _row(store, store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)))
 
 
-def _refuse_missing_resources(store: Store, package: Any) -> None:
+def _refuse_missing_resources(manifest: Manifest | None, store: Store) -> None:
     """배포를 막는 누락만 거부한다 (C7 §누락 검사).
 
     **서비스 앱이 잠시 응답이 없다고 배포를 막지 않는다** — 막는 것은 확장 누락·해시
@@ -161,12 +140,9 @@ def _refuse_missing_resources(store: Store, package: Any) -> None:
     (`probe=False`) — 배포가 느린 앱을 기다리게 할 이유가 없다.
     """
     from chaeksas.center.api import resources  # noqa: PLC0415 — 순환 import를 피한다
-    from chaeksas.contracts.manifest import Manifest  # noqa: PLC0415
     from chaeksas.contracts.resources import blocking_at_deploy, missing  # noqa: PLC0415
 
-    try:
-        manifest = Manifest.model_validate(json.loads(package["manifest_json"]))
-    except ValueError:  # pragma: no cover — 올릴 때 검증했다
+    if manifest is None:  # pragma: no cover — 올릴 때 검증했다
         return
     blocked = blocking_at_deploy(missing(manifest, resources.index(store, probe=False)))
     if not blocked:
@@ -362,7 +338,7 @@ def _row(store: Store, row: Any) -> DeploymentInfo:
 
 
 __all__ = [
-    "TARGET_FOR",
+    # `run_location` → 대상 종류 표는 **계약에 하나**다 (`TARGET_TYPE_FOR_RUN_LOCATION`, ADR-0047).
     "WILDCARD_TARGETS",
     "create",
     "envelopes_for",

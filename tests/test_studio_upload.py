@@ -317,7 +317,12 @@ def qt_app() -> Iterator[Any]:
 def test_the_dialog_keeps_install_and_remove_but_turns_them_off(
     qt_app: Any, center: TestClient, studio_key: str, tmp_path: Path
 ) -> None:
-    """**끄고 까닭을 적는다** (U3) — 단추를 지우면 「어디서 설치하나」가 된다."""
+    """**끄고 까닭을 적는다** (U3) — 단추를 지우면 「어디서 설치하나」가 된다.
+
+    여기서는 **작업 폴더를 주지 않았다** — 설치는 열린 BPM 프로세스 하나에 하는 일이라
+    (ADR-0048) 대상이 없으면 읽기만 되는 자리다. 설치가 **되는** 쪽은
+    `tests/test_studio_install.py`가 본다.
+    """
     uploader(center, studio_key).upload(written(tmp_path, lib_bytes()))
     window = center_resources.CenterResourcesDialog(reader(center, studio_key))
     assert window.libs.table.rowCount() == 1
@@ -325,7 +330,7 @@ def test_the_dialog_keeps_install_and_remove_but_turns_them_off(
     assert cell(window.libs, 0, center_resources.INSTALLED) == center_resources.NOT_INSTALLED
     for one in (window.install_button, window.remove_button):
         assert not one.isEnabled()
-        assert "§4-5" in one.toolTip()
+        assert center_resources.NO_PROCESS in one.toolTip()
     assert window.note.text() != ""
 
 

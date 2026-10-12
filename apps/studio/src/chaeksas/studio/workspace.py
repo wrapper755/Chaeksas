@@ -10,6 +10,7 @@
       ├─ process/*.bpmn        정의들 (C1 `process/`와 같은 이름)
       ├─ process/*.dmn         규칙 태스크가 쓰는 결정표
       ├─ cases/*.cases.json    시험 케이스 (패키지에는 넣지 않는다, C1)
+      ├─ libs/*.bpmn           받아 둔 공유 BPM 프로세스 (ADR-0048 — 편집 대상이 아니다)
       └─ memory/specs.json     재생 명세 (ADR-0028)
 ```
 
@@ -39,9 +40,45 @@ ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,99}$")
 RECORD_NAME = "process.json"
 SCHEMA = 1
 
+#: 받아 둔 공유 BPM 프로세스가 사는 폴더 (ADR-0048).
+#:
+#: **패키지와 같은 이름이고 실행기가 이미 읽는 자리다** (`bot_ui/runner_main.py`가
+#: `libs/*.bpmn`을 글롭한다) — 그래서 내보내기도 실행기도 바뀌지 않는다.
+LIBS_DIR = "libs"
+
 
 class WorkspaceError(ValueError):
     """작업 폴더에서 할 수 없는 일 (이름이 겹친다·규칙에 맞지 않는다)."""
+
+
+@dataclass(frozen=True)
+class InstalledLib:
+    """받아 둔 공유 BPM 프로세스 하나 (ADR-0048).
+
+    파일은 `libs/` 안에 **평평하게** 둔다 — 실행기가 `libs/*.bpmn`만 글롭하므로 하위 폴더를
+    쓰면 현장에서 못 찾는다. 그래서 **어느 파일이 어느 판의 것인지는 기록이 안다**(제거가 그것만
+    지운다). `processes`는 내보내기가 `requires.libs`에 **판을 붙이는 데** 쓴다 (C1).
+    """
+
+    package_id: str
+    version: str
+    #: `libs/` 안 파일 이름들.
+    files: tuple[str, ...] = ()
+    #: 그 파일들이 주는 BPMN 프로세스 id (`calledElement`가 가리키는 것).
+    processes: tuple[str, ...] = ()
+
+    @property
+    def ref(self) -> str:
+        """C1 `requires.libs`의 한 줄 — `<id>@<version>`."""
+        return f"{self.package_id}@{self.version}"
+
+    def to_json(self) -> dict[str, object]:
+        return {
+            "id": self.package_id,
+            "version": self.version,
+            "files": list(self.files),
+            "processes": list(self.processes),
+        }
 
 
 @dataclass
@@ -79,6 +116,8 @@ class BpmProcess:
     owner: str = ""
     tags: tuple[str, ...] = ()
     definitions: list[Definition] = field(default_factory=list)
+    #: 받아 둔 공유 BPM 프로세스 (ADR-0048). **편집 대상이 아니라** `definitions`에 없다.
+    libs: tuple[InstalledLib, ...] = ()
 
     @property
     def display(self) -> str:
@@ -90,9 +129,20 @@ class BpmProcess:
         return found or (self.definitions[0] if self.definitions else None)
 
     def decisions(self) -> dict[str, Decision]:
-        """같은 패키지의 DMN 결정 — 규칙 태스크가 찾는 것 (`RunEnv.decisions`)."""
+        """같은 패키지의 DMN 결정 — 규칙 태스크가 찾는 것 (`RunEnv.decisions`).
+
+        **받아 둔 `libs/`의 결정표도 읽는다** (ADR-0048) — 공유 BPM 프로세스 안의 규칙 태스크가
+        돌아야 하고, **실행기도 같은 둘을 읽는다**(`bot_ui/runner_main.py`). 한쪽만 읽으면
+        「Studio에서는 되는데 현장에서 안 된다」가 된다.
+
+        **받은 것을 먼저 읽고 내 것으로 덮는다** — 같은 결정 id면 내 `process/`가 이긴다
+        (`processes()`와 같은 결).
+        """
         found: dict[str, Decision] = {}
-        for path in sorted((self.folder / "process").glob("*.dmn")):
+        for path in [
+            *sorted((self.folder / LIBS_DIR).glob("*.dmn")),
+            *sorted((self.folder / "process").glob("*.dmn")),
+        ]:
             try:
                 found.update(read_decisions(path.read_text(encoding="utf-8")))
             except DmnReadError:
@@ -100,8 +150,28 @@ class BpmProcess:
         return found
 
     def processes(self) -> dict[str, BpmnProcess]:
-        """호출(`callActivity`)이 찾을 다른 정의 — `RunEnv.processes`."""
-        return {d.process.id: d.process for d in self.definitions if d.process is not None}
+        """호출(`callActivity`)이 찾을 다른 정의 — `RunEnv.processes`.
+
+        **`process/`와 `libs/`를 함께 본다** (ADR-0048) — 실행기(`bot_ui/runner_main.py`)와 같은
+        규칙이라 시험 실행과 현장이 같은 것을 부른다. 같은 사전이 C14 B14의 `called_processes`로
+        가므로 **설치한 뒤에는 검사도 그 호출을 받아들인다**.
+
+        **내 정의가 이긴다** — 받은 것과 id가 겹치면 내 `process/`의 것을 쓴다(남의 판이 내
+        정의를 조용히 가리면 안 된다). 깨진 lib 하나가 시험 실행을 막지는 않는다 — 읽지 못한
+        것은 호출할 수 없고, 그 말은 실행 전 검사가 한다 (B14).
+        """
+        out = {d.process.id: d.process for d in self.definitions if d.process is not None}
+        for path in sorted((self.folder / LIBS_DIR).glob("*.bpmn")):
+            try:
+                found = read_process(path.read_text(encoding="utf-8"))
+            except (BpmnReadError, OSError):
+                continue
+            out.setdefault(found.id, found)
+        return out
+
+    def lib_of(self, process_id: str) -> InstalledLib | None:
+        """그 `calledElement`를 주는 공유 BPM 프로세스 — 내보내기가 판을 붙이는 데 쓴다."""
+        return next((one for one in self.libs if process_id in one.processes), None)
 
     def memory(self) -> ReplayMemory:
         """재생 명세 (ADR-0028). 없으면 빈 기억이다."""
@@ -130,6 +200,31 @@ def _tags(raw: object) -> tuple[str, ...]:
     return tuple(str(one).strip() for one in raw if str(one).strip())
 
 
+def _libs(raw: object) -> tuple[InstalledLib, ...]:
+    """설치 기록. **모양이 틀린 줄은 버린다** — 기록 하나 때문에 탐색기가 뜨지 않으면 안 된다.
+
+    id·버전이 없는 줄은 쓸 수 없다(제거도 내보내기도 그 둘로 말한다).
+    """
+    if not isinstance(raw, list):
+        return ()
+    out = []
+    for one in raw:
+        if not isinstance(one, dict):
+            continue
+        package_id, version = str(one.get("id") or ""), str(one.get("version") or "")
+        if not package_id or not version:
+            continue
+        out.append(
+            InstalledLib(
+                package_id=package_id,
+                version=version,
+                files=tuple(str(f) for f in one.get("files") or [] if str(f)),
+                processes=tuple(str(p) for p in one.get("processes") or [] if str(p)),
+            )
+        )
+    return tuple(out)
+
+
 def read_record(folder: Path) -> dict[str, object]:
     found = _record_path(folder)
     if not found.is_file():
@@ -156,6 +251,9 @@ def write_record(process: BpmProcess) -> Path:
                 **({"description": process.description} if process.description else {}),
                 **({"owner": process.owner} if process.owner else {}),
                 **({"tags": list(process.tags)} if process.tags else {}),
+                # 받아 둔 공유 BPM 프로세스 (ADR-0048). **패키지로 가지 않는다** — 계약이
+                # 아니라 Studio 기록이다 (패키지에는 `libs/` 파일과 `requires.libs`가 간다).
+                **({"libs": [one.to_json() for one in process.libs]} if process.libs else {}),
             },
             ensure_ascii=False,
             indent=2,
@@ -209,6 +307,7 @@ class Workspace:
             description=str(record.get("description") or ""),
             owner=str(record.get("owner") or ""),
             tags=_tags(record.get("tags")),
+            libs=_libs(record.get("libs")),
         )
         process.definitions = list(self._definitions(folder))
         return process
@@ -274,6 +373,68 @@ class Workspace:
         path.write_text(xml, encoding="utf-8", newline="\n")
         return path
 
+    # ── 받아 둔 공유 BPM 프로세스 (ADR-0048) ──
+
+    def install_lib(
+        self,
+        process: BpmProcess,
+        *,
+        package_id: str,
+        version: str,
+        definitions: dict[str, str],
+    ) -> InstalledLib:
+        """공유 BPM 프로세스 하나를 그 BPM 프로세스의 `libs/`에 푼다 (STU-11 「설치」).
+
+        **같은 패키지가 이미 있으면 갈아 치운다** — 「갱신」이 그 길이다(옛 판의 파일을 먼저
+        지운다. 남겨 두면 `libs/*.bpmn`을 글롭하는 쪽이 **두 판을 함께** 읽는다).
+
+        파일 이름에 **패키지 id를 붙인다** — `libs/`가 평평해서 서로 다른 패키지가 같은
+        `main.bpmn`을 들고 올 수 있다. 읽는 쪽은 파일 이름이 아니라 **BPMN 프로세스 id**(호출)와
+        **결정 id**(규칙 태스크)로 찾으므로 이름을 바꿔도 그대로다.
+
+        **정의(.bpmn)와 결정표(.dmn)를 함께** 받는다 (ADR-0048) — 규칙 태스크를 쓰는 공유 BPM
+        프로세스가 돌아야 하고, `decisions()`와 실행기가 `libs/*.dmn`을 읽는다.
+        """
+        if not definitions:
+            raise WorkspaceError(f"{package_id}에 정의가 없다 (풀 것이 없다)")
+        self.remove_lib(process, package_id)
+        folder = process.folder / LIBS_DIR
+        folder.mkdir(parents=True, exist_ok=True)
+        files, provided = [], []
+        for name, text in sorted(definitions.items()):
+            file_name = f"{package_id}__{Path(name).name}"
+            (folder / file_name).write_text(text, encoding="utf-8", newline="\n")
+            files.append(file_name)
+            if not file_name.endswith(".bpmn"):
+                continue  # 결정표는 호출 대상이 아니다 (`decisions()`가 읽는다)
+            try:
+                provided.append(read_process(text).id)
+            except BpmnReadError:
+                continue  # 읽지 못한 정의는 호출할 수 없다 — 파일은 그대로 둔다 (B14가 말한다)
+        made = InstalledLib(
+            package_id=package_id,
+            version=version,
+            files=tuple(files),
+            processes=tuple(sorted(set(provided))),
+        )
+        process.libs = (*process.libs, made)
+        write_record(process)
+        return made
+
+    def remove_lib(self, process: BpmProcess, package_id: str) -> bool:
+        """그 공유 BPM 프로세스를 지운다 (STU-11 「제거」). 있었으면 `True`.
+
+        **기록이 적어 둔 파일만** 지운다 — `libs/`를 통째로 비우면 다른 판까지 날아간다.
+        """
+        found = next((one for one in process.libs if one.package_id == package_id), None)
+        if found is None:
+            return False
+        for name in found.files:
+            (process.folder / LIBS_DIR / name).unlink(missing_ok=True)
+        process.libs = tuple(one for one in process.libs if one.package_id != package_id)
+        write_record(process)
+        return True
+
     def import_example(self, source: Path, process_id: str, *, group: str = DEFAULT_GROUP) -> BpmProcess:
         """예제 BPM 프로세스 가져오기 (STU-01 파일 메뉴).
 
@@ -333,10 +494,12 @@ class Workspace:
 __all__ = [
     "DEFAULT_GROUP",
     "ID_PATTERN",
+    "LIBS_DIR",
     "RECORD_NAME",
     "BpmProcess",
     "Definition",
     "Group",
+    "InstalledLib",
     "Workspace",
     "WorkspaceError",
     "read_record",

@@ -167,6 +167,28 @@ sudo apt-get install -y --no-install-recommends \
 
 그래서 **CI의 Windows가 Linux보다 열넷을 더 돈다** (건너뛰는 것이 44개 ↔ 58개). 양쪽의 「통과 + 건너뜀」 합은 모은 시험 수로 같다 — 셈을 적을 때 그것으로 맞춰 본다.
 
+### Qt 창 시험에 `TestClient`를 붙이지 않는다
+
+**창을 띄운 채 `fastapi.testclient.TestClient`를 들고 있으면 안 된다.** 그러면 anyio 포털
+스레드와 QtWebEngine 스레드가 한 프로세스에 쌓이고, **ubuntu x86_64 CI에서 실행이 통째로
+죽는다** (`SIGSEGV`, exit 139). 죽는 자리는 **돌던 시험과 무관한 곳**이라 — 우리 때는 한참
+뒤의 업로드 시험 안이었다 — 로그만 보고는 원인을 찾을 수 없다. 개발 PC(aarch64)와 Windows
+러너에서는 **재현되지 않았다.**
+
+- 창은 **가짜 읽기 클라이언트**로 시험한다 (`CenterReader`를 상속해 메모리에서 답한다 —
+  `tests/test_studio_install.py`의 `FakeReader`). 창이 아니라 **담는 것**(목록·줄 계산)은
+  애초에 Qt 없이 도는 함수로 갈라져 있다.
+- 진짜 Center로 보는 것은 **Qt 없는 시험**에 둔다 (설치·제거·내보내기처럼 값이 큰 길).
+- 창을 띄웠으면 그 시험 안에서 **닫고 `deleteLater()`**로 치운다 — 뒤 시험이 도는 중에 Qt
+  객체가 죽으면 같은 꼴로 터진다.
+
+**그리고 시험은 안 듣는 포트로 전화하지 않는다.** 같은 병의 다른 얼굴을 Windows에서 봤다 —
+STU-13 편집기가 열릴 때 공개 카탈로그(C9)를 읽는데 주소는 **확장 정의**가 주므로 Qt 단위
+시험에서도 값이 차 있어, 창을 띄우는 시험마다 **진짜 TCP 연결을 시도**하고 있었다. 거기서
+`Fatal Python error: Aborted` (exit 1)로 죽었다. `tests/conftest.py`의 autouse 가드가
+**주소는 있는데 클라이언트를 끼우지 않은** 조합만 「오프라인」으로 떨어뜨린다 — 가짜를 준
+시험은 진짜 코드를 그대로 돌고, 주소가 없는 길도 그대로다.
+
 ## 8. 확인 체크리스트 (M1 완료 시 채움)
 
 - [x] Windows에서 clone → `uv sync` → 테스트 통과 (CI `windows-latest` = Windows Server. **Windows 11 데스크톱은 아직 확인 안 됨**)

@@ -51,7 +51,7 @@ C8·C9·C10은 **확장이 소유한 계약**이라 모듈이 `extensions/ui_aut
 | C2 | `chaeksas.contracts.signing` | `sign()`, `verify()`(V1~V4), `verify_time()`(V5), `verify_target()`(V6), `verify_package()`(V7), `verify_admin_key_addition()`(V8) | 같음 |
 | C3 | `chaeksas.contracts.events` | `missing_data_keys()` — 줄 단위 거부용 | 같음 |
 | C4 | `chaeksas.contracts.bot_ui` | (모델 검증만) | 같음 |
-| C5 | `chaeksas.contracts.center_api` | `validate_deployment()`, `validate_job_create()`, `cancel_outcome()` | (문서에 JSON 예시 없음) |
+| C5 | `chaeksas.contracts.center_api` | `validate_deployment()` — **Center `POST /deployments`가 이것을 부른다** (ADR-0047), 상태는 `deployment_refusal()`이 고른다. `validate_job_create()`, `cancel_outcome()` | (문서에 JSON 예시 없음) |
 | C6 | `chaeksas.contracts.approvals` | `validate_answer()` — Center와 실행하는 쪽이 **같이 쓴다**. `validate_create()`, `request_id_for()`, `apply_defaults()` | `tests/test_contract_examples.py` |
 | C7 | `chaeksas.contracts.resources` | `missing()` — C1 `requires` ↔ 리소스 목록 대조. `blocking_at_deploy()`가 배포를 막을 것만 고른다 | (문서에 JSON 예시 없음) |
 | C7 | `chaeksas.contracts.center_keys` | `key_state()`, `expires_soon()`, `prefix_of()`, `validate_create()` | 같음 |

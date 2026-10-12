@@ -389,3 +389,72 @@ def test_the_real_ui_automation_app_is_read(client: TestClient, tmp_path: Path) 
     assert [one.catalog_url for one in found.resources] == [CATALOG_PATH]
     assert [one.type for one in found.resources] == ["ui_page"]
     assert found.extension is not None and found.extension.id == "ui-automation"
+
+
+# ──────── CON-01 「UI 태스크」 → 관리 콘솔 링크 (C3 ↔ C7, `06-screens/center-console.md`) ────────
+
+
+def console_of(client: TestClient) -> dict[str, str]:
+    """콘솔의 `consoleOf`와 **같은 조인** — `page_id` → 그 앱의 관리 콘솔 주소 (두 걸음).
+
+    콘솔이 읽는 것과 같은 두 경로를 읽는다. 이것이 비면 화면에 링크가 없다.
+    """
+    pages = client.get(
+        "/api/v1/resources?type=contributed&resource_type=ui_page", headers=READ_AUTH
+    ).json()["items"]
+    apps = client.get("/api/v1/resources?type=service_app", headers=READ_AUTH).json()["items"]
+    url_of = {one["extension_id"]: one["console_url"] for one in apps if one["extension_id"]}
+    return {
+        one["id"]: url_of[one["extension_id"]] for one in pages if one["extension_id"] in url_of
+    }
+
+
+def test_a_page_id_leads_to_the_console_url(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
+    """**`page_id`에서 관리 콘솔 주소까지 이어진다** (CON-01 「UI 태스크」의 UIA-03 링크).
+
+    실행 기록에는 앱이 없다 — C3 `ui_session`은 `page_id`만 가진다. 이을 수 있는 것은 C7의
+    **두 모양이 같은 `extension_id`를 들고 있어서**다. 콘솔이 그 조인을 하므로, 여기서는
+    **재료가 정말 오는지**를 본다 (오지 않으면 콘솔은 링크를 못 만든다).
+    """
+    base, _state = app_url
+    register_app(client, base)
+    # C3 `ui_session.page_id`가 가리키는 그 화면이다.
+    assert console_of(client)["erp.order.form"] == "http://127.0.0.1:8599"
+
+
+def test_an_unregistered_page_simply_has_no_link(
+    client: TestClient, store: Store, app_url: tuple[str, Catalogue]
+) -> None:
+    """**못 이으면 링크만 없다** (U3) — 줄은 그대로 보인다.
+
+    실행은 남았는데 그 화면이 레지스트리에서 지워졌거나(옛 실행) 아직 등록되지 않은 경우다.
+    조인이 **조용히 비는** 것이 중요하다 — 터지면 실행 상세에 볼 것이 아무것도 없다.
+    """
+    base, state = app_url
+    register_app(client, base)
+    assert "erp.order.form" in console_of(client)
+
+    state.items = []
+    state.revision = 2
+    resources.refresh_catalogs(store, force=True)
+    assert console_of(client) == {}, "그 화면이 없어지면 링크도 없다 (줄은 실행 기록이 들고 있다)"
+
+
+def test_the_console_links_to_the_app_not_to_one_of_its_pages() -> None:
+    """**확장 화면 경로를 플랫폼이 적지 않는다** (ADR-0042) — 콘솔 주소 그대로 보낸다.
+
+    집계·그리기는 TypeScript라 파이썬이 돌려 보지 못한다 (`web`에 단위 시험 판이 없다 — §4-9).
+    그래서 **글로** 본다: 조인이 있는가, 새 탭으로 여는가, 그리고 UI 자동화의 화면 경로가
+    **들어오지 않았는가**.
+    """
+    page = (
+        Path(__file__).resolve().parent.parent
+        / "web" / "apps" / "center-console" / "app" / "runs" / "[runId]" / "page.tsx"
+    ).read_text(encoding="utf-8")
+
+    assert "consoleOf" in page, "`page_id` → 콘솔 주소 조인"
+    assert 'center.contributed("ui_page")' in page
+    assert 'rel="noreferrer noopener"' in page and 'target="_blank"' in page
+    # 확장 고유 경로·이름이 플랫폼 화면에 들어오면 안 된다 (ADR-0042 — `console.pages`의 일이다).
+    assert "monitoring" not in page
+    assert "ui-automation" not in page

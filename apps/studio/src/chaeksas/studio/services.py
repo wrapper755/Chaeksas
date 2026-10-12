@@ -107,6 +107,31 @@ class CenterReader:
         found = self._get(f"{PACKAGES}?kind={quote(kind)}") or []
         return [PackageInfo.model_validate(one) for one in found]
 
+    def package_zip(self, package_id: str, version: str) -> bytes:
+        """패키지 파일 하나 (C5 `GET /packages/{id}/{version}`) — STU-11 「설치」가 받는 것.
+
+        **읽기다** — 내려받기는 C5 권한표에서 Studio 키에 열려 있다(쓰는 길은 `upload.py`
+        하나다). 철회된 패키지는 Center가 410으로 막는다.
+        """
+        import httpx  # noqa: PLC0415 — 부를 때만 든다
+
+        url = f"{self.base_url.rstrip('/')}{PACKAGES}/{quote(package_id)}/{quote(version)}"
+        own = self.client is None
+        # 패키지는 최대 50 MB라 목록 읽기(10초)보다 넉넉히 둔다 (`upload.py`와 같은 결).
+        client = self.client or httpx.Client(timeout=60)
+        try:
+            response = client.get(url, headers={"Authorization": f"Bearer {self.api_key}"})
+        except httpx.HTTPError as e:
+            raise CenterUnreachable(f"Center에 닿지 못했습니다 ({type(e).__name__})") from e
+        finally:
+            if own:
+                client.close()
+        if response.status_code >= 400:
+            raise CenterUnreachable(
+                f"Center가 {response.status_code}로 답했습니다 ({package_id} {version})"
+            )
+        return bytes(response.content)
+
     def toolpacks(self) -> list[ToolpackResource]:
         """툴팩들 (C7 — Center가 `kind=toolpack` 패키지에서 모은다). STU-03 「툴팩」 뿌리."""
         found = self._get(f"{RESOURCES}?type=toolpack") or {}

@@ -103,6 +103,9 @@ from chaeksas.contracts.bpmn_ext import Node as BpmnNode
 from chaeksas.contracts.bpmn_ext import matches as matches_expected
 from chaeksas.contracts.bpmn_ext import validate as validate_bpmn
 from chaeksas.contracts.center_api import (
+    DEPLOYMENT_REFUSAL_STATUS,
+    ENVELOPE_REFUSAL_STATUS,
+    SERVER_RUNNER_AVAILABLE,
     BotUiInfo,
     BotUiKey,
     DependentInfo,
@@ -115,6 +118,7 @@ from chaeksas.contracts.center_api import (
     PackageInfo,
     PreflightSummary,
     cancel_outcome,
+    deployment_refusal,
     validate_deployment,
     validate_job_create,
 )
@@ -352,6 +356,9 @@ __all__ = [
     "Versions",
     "WorkerState",
     # C5
+    "DEPLOYMENT_REFUSAL_STATUS",
+    "ENVELOPE_REFUSAL_STATUS",
+    "SERVER_RUNNER_AVAILABLE",
     "BotUiInfo",
     "BotUiKey",
     "DependentInfo",
@@ -364,6 +371,7 @@ __all__ = [
     "PackageInfo",  # `MissingResource`는 C7이 소유한다
     "PreflightSummary",
     "cancel_outcome",
+    "deployment_refusal",
     "validate_deployment",
     "validate_job_create",
     # C6

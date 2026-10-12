@@ -73,6 +73,28 @@ KNOWN_AUTH_KINDS = frozenset(
 #: 실행 위치 → 배포·작업 대상 종류 (C2 "배포 대상 규칙").
 TARGET_TYPE_FOR_RUN_LOCATION = {"pc": "bot_ui", "server": "server_runner"}
 
+#: 서버 실행기 대상을 받아도 되나 (ADR-0016 — 서버 실행은 M7부터).
+#:
+#: **M7에서 바꿀 자리는 여기 하나다** — 배포(`validate_deployment`)와 작업 만들기가 같은 값을
+#: 본다. 두 자리에 적어 두면 한쪽만 켜져 「작업은 만들어지는데 배포가 없다」가 된다.
+SERVER_RUNNER_AVAILABLE = False
+
+#: `POST /deployments` 거절의 HTTP 상태 — **코드마다 한 자리에서** 정한다 (C5 §오류).
+#:
+#: 배포 쪽 규칙은 「본문이 잘못됐다」가 아니라 **상태 충돌**이라 409다 (`deployment_conflict`와
+#: 같은 결). 예외는 `server_runner_not_available` — 상태가 아니라 **아직 없는 기능**이라 422다.
+#: 부르는 쪽이 상태를 따로 고르면 문서의 표와 갈라지므로 `cancel_outcome()`처럼 계약이 쥔다.
+DEPLOYMENT_REFUSAL_STATUS = {
+    "not_approved": 409,
+    "deprecated": 409,
+    "hash_mismatch": 409,
+    "wrong_target": 409,
+    "server_runner_not_available": 422,
+}
+
+#: 봉투·시간 위반(C2 V1~V5a)으로 거절할 때의 상태. 규칙 이름이 `V…`인 것이 여기로 온다.
+ENVELOPE_REFUSAL_STATUS = 403
+
 JobId = Annotated[str, Field(pattern=r"^job_[0-9a-f]{8}$")]
 
 
@@ -205,17 +227,21 @@ def validate_deployment(
     package: PackageInfo,
     keys: Sequence[AdminKey],
     now: str,
-    server_runner_available: bool = False,
+    server_runner_available: bool = SERVER_RUNNER_AVAILABLE,
 ) -> list[Violation]:
-    """`POST /deployments`에서 Center가 하는 검사.
+    """`POST /deployments`에서 Center가 하는 검사. **Center가 이 함수를 부른다** (ADR-0047).
 
     - 서명 C2 V1~V4와 V5a(`expired`). **`not_before`가 미래인 예약 배포도 받는다** (V5b는 실행하는 쪽).
     - 패키지가 `approved`다 (`not_approved`) — `deprecated`는 따로 알린다 (`deprecated`).
     - 봉투의 해시가 패키지와 같다 (`hash_mismatch`).
-    - `target.type`이 패키지의 `run_location`과 맞다 (`target_mismatch`).
-    - **PC 배포의 `target.id`가 `"*"`가 아니다** (`wrong_target`, ADR-0046) — `"*"`는 서버
-      실행기만 쓴다 (C2 §배포 대상 규칙). 받아 두면 **모든 PC가 V6으로 거부한다**.
-    - M6까지 서버 실행기 배포는 받지 않는다 (`server_runner_not_available`, ADR-0016).
+    - **대상이 틀렸다 — `wrong_target` 하나다** (C2 V6과 같은 이름이다):
+      `target.type`이 패키지의 `run_location`과 맞지 않거나, **PC 배포의 `target.id`가 `"*"`**
+      (ADR-0046 — `"*"`는 서버 실행기만 쓴다, C2 §배포 대상 규칙). 둘 다 받아 두면 **모든 PC가
+      V6으로 거부할** 봉투라 결과가 같다. `target_mismatch`는 **작업 쪽 코드**다 (모르는 대상 종류).
+    - M7까지 서버 실행기 배포는 받지 않는다 (`server_runner_not_available`, ADR-0016).
+
+    규칙마다 답할 HTTP 상태는 `DEPLOYMENT_REFUSAL_STATUS`에 있다 — 고르는 것은
+    `deployment_refusal()`이다.
 
     여기서 하지 않는 것: **대상이 존재하는지**(Center 저장소), **같은 `deployment_id`의 충돌**
     (`deployment_conflict`·`deployment_revoked`, C2 멱등성), **C1 R8**(C11 manifest·C7 대조).
@@ -246,7 +272,7 @@ def validate_deployment(
         out.append(
             Violation(
                 rule="C5",
-                code="target_mismatch",
+                code="wrong_target",
                 message=f"run_location={package.run_location}이면 대상은 {expected}다 (받은 값 {target_type})",
             )
         )
@@ -273,6 +299,24 @@ def validate_deployment(
             )
         )
     return out
+
+
+def deployment_refusal(problems: Sequence[Violation]) -> tuple[int, Violation] | None:
+    """위반 목록 → `(HTTP 상태, 답할 위반)`. 아무것도 없으면 `None` (C5 §오류, ADR-0047).
+
+    **앞의 것이 이긴다** — `validate_deployment()`가 서명·시간을 먼저 담으므로 봉투가 틀린 것은
+    상태 충돌보다 먼저 답한다 (키가 거부됐는데 「승인되지 않았다」고 하면 엉뚱한 곳을 뒤진다).
+
+    상태는 규칙 이름으로 가른다 — `V…`는 C2 봉투(`ENVELOPE_REFUSAL_STATUS`), 나머지는
+    `DEPLOYMENT_REFUSAL_STATUS`다. **배포 규칙을 더하면 그 표에 적는다** (적지 않으면 지금까지
+    모두 그러했듯 상태 충돌 409로 답한다 — `tests/test_center_api.py`가 표와 규칙을 대조한다).
+    """
+    if not problems:
+        return None
+    first = problems[0]
+    if first.rule.startswith("V"):
+        return ENVELOPE_REFUSAL_STATUS, first
+    return DEPLOYMENT_REFUSAL_STATUS.get(first.code or "", 409), first
 
 
 # ─────────────────────────── 작업 ───────────────────────────

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { RunEvent } from "@chaeksas/api-types/c3-run-event";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
+import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
+import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
 import { CENTER_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { LABEL, seconds, time, where } from "../page";
@@ -17,9 +19,13 @@ import { LABEL, seconds, time, where } from "../page";
  * 사람 개입·로그·원본 이벤트다. 「이어 돈 기록」은 `run_waiting`·`run_resumed`를 쓰는 서버
  * 실행(M7) 몫이다 — **빈 섹션은 「<종류> 이벤트가 없습니다」 한 줄**이다.
  *
- * 「UI 태스크」는 C3 `ui_session` 줄을 읽는다 (확장이 남기고 엔진이 쓴 것, ADR-0041). **UIA-03
- * 링크는 아직 걸지 않는다** — Center 콘솔은 그 앱의 관리 콘솔 주소를 모른다 (C7 리소스의
- * `console_url`을 읽어 올지 정해야 한다, docs/09-gaps.md §4-11).
+ * 「UI 태스크」는 C3 `ui_session` 줄을 읽는다 (확장이 남기고 엔진이 쓴 것, ADR-0041). 「화면」
+ * 칸이 **그 앱의 관리 콘솔로 가는 링크**다 — 실행 기록에는 앱이 없고(`page_id`만 있다) C7이
+ * 둘을 잇는 칸을 들고 있어, 여기서 리소스 목록 둘을 읽어 맞춘다 (`consoleOf`).
+ *
+ * **콘솔 주소 그대로 보낸다** — UIA-03으로 바로 보내려면 어느 화면이 「모니터링」인지 알아야
+ * 하고, 그것은 **그 확장의 `console.pages`가 아는 것**이다 (ADR-0042). 플랫폼 화면에 확장
+ * 이름을 적지 않는다.
  */
 
 /** C3 `ui_session.result` → `status_map`의 「UI 세션」 표기 (그 표에 있는 것만 쓴다). */
@@ -29,9 +35,32 @@ const UI_RESULT: Record<string, string> = {
   failed: "실패",
 };
 
-/** **없는 것은 끄고 이유를 가까이 적는다** (U3) — 여기서는 링크가 없는 이유다. */
-const UIA_LINK_LATER =
-  "UI 자동화 앱 관리 콘솔(UIA-03) 링크는 아직 없습니다 — Center 콘솔이 그 앱의 콘솔 주소를 모릅니다.";
+/** **못 이은 줄이 있을 때** 가까이 적는 이유 (U3) — 줄은 보이고 링크만 없다. */
+const NO_LINK =
+  "링크가 없는 화면은 그 화면이 리소스 목록에 없거나(아직 등록되지 않음), 그 확장의 서버 부분이 Center에 등록되지 않았거나, 관리 콘솔 주소가 비어 있는 것입니다.";
+
+/**
+ * `page_id` → 그 화면을 가진 앱의 관리 콘솔 주소 (C7, CON-01).
+ *
+ * **두 걸음이다**: 기여 자원(`ui_page`)의 `extension_id`로 어느 확장인지 알고, 같은
+ * `extension_id`를 가진 서비스 앱의 `console_url`을 쓴다. 둘 중 하나가 없으면 **그 화면만**
+ * 링크가 없다 (`undefined`).
+ */
+export function consoleOf(
+  pages: ContributedResource[],
+  apps: ServiceAppResource[],
+): Map<string, string> {
+  const urlOf = new Map<string, string>();
+  for (const app of apps) {
+    if (app.extension_id && app.console_url) urlOf.set(app.extension_id, app.console_url);
+  }
+  const out = new Map<string, string>();
+  for (const page of pages) {
+    const url = page.extension_id ? urlOf.get(page.extension_id) : undefined;
+    if (url) out.set(page.id, url);
+  }
+  return out;
+}
 
 const NODE_STATE: Record<string, string> = {
   started: "실행 중",
@@ -119,6 +148,21 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
   // C3 `ui_session` — 확장이 남기고 엔진이 쓴 줄 (ADR-0041). 전환·실패로 끝난 것도 있다.
   const ui = events.filter((e) => e.kind === "ui_session");
 
+  // UI 태스크가 없으면 **리소스 목록을 두드리지 않는다.** 읽지 못해도 실행 상세는 그려야 하니
+  // (여기서 실패하면 운영자가 볼 것이 아무것도 없다) 못 읽으면 링크만 없다.
+  let consoles = new Map<string, string>();
+  if (ui.length > 0) {
+    try {
+      const [pages, apps] = await Promise.all([
+        center.contributed("ui_page"),
+        center.resources<ServiceAppResource>("service_app"),
+      ]);
+      consoles = consoleOf(pages.items ?? [], apps.items ?? []);
+    } catch {
+      consoles = new Map();
+    }
+  }
+
   const nodeColumns: Array<Column<NodeRow>> = [
     { key: "node_id", header: "노드", mono: true },
     {
@@ -150,7 +194,24 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
 
   const uiColumns: Array<Column<RunEvent>> = [
     { key: "node_id", header: "노드", mono: true, cell: (row) => row.node_id ?? "—" },
-    { key: "page_id", header: "화면", mono: true, cell: (row) => String(row.data?.page_id ?? "—") },
+    {
+      key: "page_id",
+      header: "화면",
+      mono: true,
+      // **글자는 늘 보이고 링크만 붙는다** (U3) — 못 이은 까닭은 표 아래 한 줄이다.
+      cell: (row) => {
+        const pageId = String(row.data?.page_id ?? "");
+        const url = consoles.get(pageId);
+        if (!pageId) return "—";
+        return url ? (
+          <a className="underline" href={url} target="_blank" rel="noreferrer noopener">
+            {pageId}
+          </a>
+        ) : (
+          pageId
+        );
+      },
+    },
     {
       key: "result",
       header: "결과",
@@ -259,7 +320,11 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
                   rowKey={(row) => String(row.seq)}
                   caption="UI 세션 (UI 태스크 한 번)"
                 />
-                <p className="text-body-sm text-text-muted">{UIA_LINK_LATER}</p>
+                <p className="text-body-sm text-text-muted">
+                  「화면」을 누르면 그 화면을 가진 앱의 관리 콘솔이 새 탭에서 열립니다 (UI 세션
+                  기록은 그 콘솔의 「모니터링」입니다).
+                  {ui.some((row) => !consoles.get(String(row.data?.page_id ?? ""))) ? ` ${NO_LINK}` : ""}
+                </p>
               </>
             )}
           </Section>

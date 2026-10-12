@@ -55,3 +55,5 @@
 | [0044](0044-canvas-drag-and-drop.md) | 캔버스 드롭은 내부 렌더 위젯에서 가로채고, 자리만 캔버스에 넘긴다 (만드는 길은 「캔버스에 추가」와 하나다) | 수락 |
 | [0045](0045-contributed-resource-children.md) | 기여 자원의 둘째 단계를 선언으로 걷지 않는다 — 요소는 그 확장의 편집기에 둔다 (C13에 자식 선언을 더하지 않는다) | 수락 |
 | [0046](0046-no-wildcard-pc-deployment.md) | PC 배포에 전체(`*`) 대상을 두지 않는다 — 봉투 하나는 PC 하나를 가리킨다 (`*`는 서버 실행기만, CON-02가 PC 수를 센다) | 수락 |
+| [0047](0047-one-deployment-gate.md) | 배포 관문은 하나다 — Center가 계약의 `validate_deployment()`를 부르고, 코드마다 상태는 계약의 표가 준다 (배포 쪽 `target_mismatch`는 `wrong_target`으로) | 수락 |
+| [0048](0048-installing-shared-packages.md) | 받은 공유 BPM 프로세스는 작업 폴더의 `libs/`에 푼다 (패키지와 같은 자리 — 실행기가 이미 읽는다). 툴팩 설치는 「받은 코드를 돌려도 되나」라 따로 정한다 | 수락 |

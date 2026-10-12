@@ -79,7 +79,13 @@ def collect_requires(
     task_types: dict[str, TaskTypeNeed] = {}
     extensions: dict[str, ExtensionNeed] = {}
     libs: set[str] = set()
-    within = set(process.processes()) if inside is None else set(inside)
+    # **내 정의만** 「패키지 안」이다 — `processes()`는 받아 둔 `libs/`까지 주므로(ADR-0048)
+    # 그것을 쓰면 설치한 호출이 「안쪽 호출」로 보여 `requires.libs`가 빈다.
+    within = (
+        {d.process.id for d in process.definitions if d.process is not None}
+        if inside is None
+        else set(inside)
+    )
 
     for definition in process.definitions if definitions is None else definitions:
         found = definition.process
@@ -117,7 +123,11 @@ def collect_requires(
                     run_locations=None if where is None else list(where),
                 )
             if node.called_element and node.called_element not in within:
-                libs.add(node.called_element)
+                # **설치한 것은 판까지 적는다** (C1 `<id>@<version>`, ADR-0048) — 설치 기록이
+                # 어느 패키지가 그 정의를 주는지 안다. 설치되지 않은 호출은 id만 적히는데,
+                # 그 그림은 **C14 B14가 이미 막는다**(호출 대상이 패키지에 없다).
+                installed = process.lib_of(node.called_element)
+                libs.add(installed.ref if installed is not None else node.called_element)
 
     return Requires(
         domains=sorted(domains),

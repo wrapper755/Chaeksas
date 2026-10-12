@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Admin(서명) → Center(검증·보관) → Bot UI·서버 실행기(다시 검증) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/signing.py`, `…/hashing.py` (import `chaeksas.contracts.signing`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c2-envelope.json`](../../packages/contracts/schemas/c2-envelope.json) · [`c2-claim-deployment.json`](../../packages/contracts/schemas/c2-claim-deployment.json) · [`c2-claim-package.json`](../../packages/contracts/schemas/c2-claim-package.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0015](../decisions/0015-run-location.md) |
+| 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0015](../decisions/0015-run-location.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md) |
 | 관련 화면 | ADM(명령), CON-02·CON-03 「최근 배치 결정」, CON-06 |
 
 ## 목적
@@ -134,7 +134,8 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 | --- | --- | --- |
 | 400 | V1~V5a, V8 실패 (`detail.code`) | 키·시각을 확인하고 다시 서명한다 |
 | 409 | `deployment_conflict` (같은 id, 다른 내용), `deployment_revoked`, `last_admin_key` | 새 id로 서명한다, 또는 다른 키를 먼저 추가한다 |
-| 422 | `not_approved` (패키지가 승인 상태가 아님), `hash_mismatch`, `target_mismatch` (`target.type` ↔ `run_location`), `server_runner_not_available` (M7 전 서버 배포), `float_in_payload` | 메시지대로 고친다 |
+| 409 | `not_approved` (패키지가 승인 상태가 아님), `deprecated`, `hash_mismatch`, `wrong_target` (`target.type` ↔ `run_location`, 또는 **PC 배포의 `"*"`** — ADR-0046) | 봉투가 아니라 **가리키는 패키지·대상의 상태**가 어긋난다. 승인·버전·대상을 보고 다시 서명한다 |
+| 422 | `server_runner_not_available` (M7 전 서버 배포), `float_in_payload` | 메시지대로 고친다 |
 
 ## 호환 규칙
 
@@ -145,6 +146,7 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-12 | 1 | **배포 봉투를 거절하는 코드·상태를 C5와 맞췄다.** 여기 422 행에 `not_approved`·`hash_mismatch`·`target_mismatch`가 있었는데 Center는 처음부터 409 `not_approved`·`hash_mismatch`·`wrong_target`으로 답했다 (C5는 2026-10-09에 409로 고쳤고 이 표만 남아 있었다). 대상 어긋남의 이름은 **V6과 같은 `wrong_target`**이다 | 0047 |
 | 2026-10-11 | 1 | **PC 배포에 `"*"`가 없다는 것을 적었다.** 규칙은 처음부터 「서버 배포는 쓸 수 있다」뿐이었고 V6·`matches`도 그랬지만, 없다는 것을 적지 않아 Center·콘솔이 **PC 쪽 `"*"`를 풀고 있었다**. 한쪽만 적으면 「적지 않았을 뿐」으로 읽힌다 | 0046 |
 | 2026-10-01 | 1 | 초안 (배포 대상 `target{type,id}`, 서버 배포의 `max_concurrency`) | 0015 |
 | 2026-10-01 | 1 | 검토 반영: Admin 키 추가·철회도 서명으로 (부트스트랩은 서버 명령), `not_before`는 실행하는 쪽만 검사, `SIGNATURE`는 Center가 내려줄 때 넣음, 툴팩만 해시 고정, 철회된 배포는 되살리지 않음, `package_revoke`, 서명 대상에 실수 금지 | — |
