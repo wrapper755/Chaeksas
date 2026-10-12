@@ -45,7 +45,7 @@ from chaeksas.contracts.center_api import PackageInfo
 from chaeksas.qt.theme import status_color
 from chaeksas.studio import install as installer
 from chaeksas.studio.services import CenterReader, CenterUnreachable
-from chaeksas.studio.workspace import BpmProcess, Workspace
+from chaeksas.studio.workspace import BpmProcess, InstalledLib, Workspace
 
 log = logging.getLogger(__name__)
 
@@ -163,22 +163,18 @@ def count_of(info: PackageInfo, kind: str) -> int | None:
     return len(provides.processes if kind == KIND_LIB else provides.tools)
 
 
-def row_of(info: PackageInfo, kind: str, installed: Mapping[str, str] | None = None) -> Row:
+def row_of(
+    info: PackageInfo, kind: str, installed: Mapping[str, InstalledLib] | None = None
+) -> Row:
+    found = (installed or {}).get(info.id)
     return Row(
         package_id=info.id,
         version=info.version,
         status=info.status,
         count=count_of(info, kind),
         name=info.name or "",
-        installed=(installed or {}).get(info.id, ""),
+        installed=found.version if found is not None else "",
     )
-
-
-def installed_of(process: BpmProcess | None) -> dict[str, str]:
-    """열린 BPM 프로세스에 받아 둔 판들 `{패키지 id: 버전}` (ADR-0048 — 설치는 Bot마다다)."""
-    if process is None:
-        return {}
-    return {one.package_id: one.version for one in process.libs}
 
 
 def listing(
@@ -190,7 +186,7 @@ def listing(
     쓰고 있다는 것을 사람이 알아야 하고, 그 줄에서 「제거」도 할 수 있어야 한다.
     """
     empty = EMPTY_LIB if kind == KIND_LIB else EMPTY_TOOLPACK
-    installed = installed_of(process) if kind == KIND_LIB else {}
+    installed = installer.installed_of(process) if kind == KIND_LIB else {}
     if reader is None:
         return Listing(rows=tuple(_local_only(installed, set())), note=NO_CENTER)
     try:
@@ -204,11 +200,21 @@ def listing(
     return Listing(rows=tuple(sorted(rows, key=_order)), note="" if rows else empty)
 
 
-def _local_only(installed: Mapping[str, str], seen: Collection[str]) -> list[Row]:
-    """Center 목록에 없는데 설치되어 있는 것 (STU-11 「로컬만」)."""
+def _local_only(installed: Mapping[str, InstalledLib], seen: Collection[str]) -> list[Row]:
+    """Center 목록에 없는데 설치되어 있는 것 (STU-11 「로컬만」).
+
+    **STU-03은 이 줄을 그리지 않는다** (ADR-0051) — 둘째 단계와 「받는 것·내놓는 것」은
+    매니페스트의 `provides`가 주는 것이고 Center 목록에서 빠진 패키지는 그것을 주지 않는다.
+    """
     return [
-        Row(package_id=package_id, version="", status=LOCAL_ONLY, count=None, installed=version)
-        for package_id, version in sorted(installed.items())
+        Row(
+            package_id=package_id,
+            version="",
+            status=LOCAL_ONLY,
+            count=None,
+            installed=lib.version,
+        )
+        for package_id, lib in sorted(installed.items())
         if package_id not in seen
     ]
 
@@ -448,7 +454,6 @@ __all__ = [
     "Listing",
     "Row",
     "count_of",
-    "installed_of",
     "listing",
     "row_of",
 ]

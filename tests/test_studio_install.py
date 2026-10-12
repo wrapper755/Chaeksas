@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store
+from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.contracts.hashing import content_hash_zip
 from chaeksas.studio import center_resources, install, packaging, services, upload
 from chaeksas.studio.workspace import LIBS_DIR, BpmProcess, Workspace
@@ -437,6 +438,130 @@ def test_the_runner_reads_the_same_two_places(
     package = Package.read(unpacked)
     assert "grade" in package.decisions(), "현장에서도 규칙 태스크가 결정을 찾는다"
     assert CALLED in package.processes(), "호출 대상도 그대로다"
+
+
+# ───────────────────── STU-03의 셋: 부르기·보기·복사 (ADR-0051) ─────────────────────
+#
+# **Center를 타지 않는다** — 받아 둔 뒤의 일이라 `libs/`와 작업 폴더만 본다 (그래서 여기에
+# `TestClient`가 없다).
+
+
+def held(
+    workspace: Workspace,
+    process: BpmProcess,
+    *,
+    package_id: str = LIB_ID,
+    version: str = LIB_VERSION,
+    definitions: dict[str, str] | None = None,
+) -> Any:
+    """설치해 둔 판 하나 (STU-11 「설치」가 하는 그 일만)."""
+    return workspace.install_lib(
+        process,
+        package_id=package_id,
+        version=version,
+        definitions=definitions
+        or {"approve.bpmn": DEFINITION.format(process_id=CALLED, name="팀장 결재", body="")},
+    )
+
+
+def test_the_file_is_found_by_its_process_id_not_by_its_name(
+    workspace: Workspace, process: BpmProcess
+) -> None:
+    """`libs/`는 **평평하다** — 두 패키지가 같은 `approve.bpmn`을 들고 와도 섞이지 않는다.
+
+    설치가 파일 이름에 패키지 id를 붙이는 까닭이고, 찾는 쪽은 **기록이 적어 둔 파일만** 본다.
+    """
+    mine = held(workspace, process)
+    other = held(
+        workspace,
+        process,
+        package_id="shared.other",
+        version="2.0.0",
+        definitions={"approve.bpmn": DEFINITION.format(process_id="Proc_other", name="남의 것", body="")},
+    )
+
+    found = install.definition_file(process, mine, CALLED)
+    assert found is not None and found.name.startswith(f"{LIB_ID}__")
+    assert read_process(found.read_text(encoding="utf-8")).id == CALLED
+
+    assert install.definition_file(process, other, "Proc_other") is not None
+    assert install.definition_file(process, other, CALLED) is None, "남의 판에서 찾지 않는다"
+
+
+def test_a_definition_the_installed_version_did_not_bring_is_not_found(
+    workspace: Workspace, process: BpmProcess
+) -> None:
+    """읽지 못한·없는 정의는 **보여 줄 수도 복사할 수도 없다** (`NOT_PROVIDED`)."""
+    lib = held(workspace, process)
+    assert install.definition_file(process, lib, "Proc_nope") is None
+    with pytest.raises(install.InstallFailed, match="주지 않습니다"):
+        install.plan_copy(process, lib, "Proc_nope")
+
+
+def test_a_copy_becomes_my_definition_and_drops_the_lib_requirement(
+    workspace: Workspace, process: BpmProcess
+) -> None:
+    """복사하면 **내 것이 된다** (ADR-0051) — 그때부터 내 정의가 이기고 `requires.libs`에서 빠진다.
+
+    「패키지 안」을 **내 정의로만** 세기 때문에(`collect_requires`) 저절로 그렇게 된다 — 그
+    규칙을 복사가 다시 적지 않는다.
+    """
+    lib = held(workspace, process)
+    before = workspace.read(process.folder, process.group)
+    assert packaging.collect_requires(before).libs == [f"{LIB_ID}@{LIB_VERSION}"]
+
+    plan = install.plan_copy(before, lib, CALLED)
+    assert plan.file_name == "approve.bpmn", "설치가 붙인 패키지 id는 뗀다"
+    made = install.copy_into(workspace, before, plan)
+
+    after = workspace.read(process.folder, process.group)
+    assert made.parent.name == "process" and made.is_file()
+    assert CALLED in [one.id for one in after.definitions], "편집 대상이 되었다"
+    assert packaging.collect_requires(after).libs == [], "더 이상 바깥 패키지가 아니다"
+    assert [one.ref for one in after.libs] == [f"{LIB_ID}@{LIB_VERSION}"], "받아 둔 것은 그대로다"
+
+
+def test_a_copy_never_overwrites_a_file_that_is_there(
+    workspace: Workspace, process: BpmProcess
+) -> None:
+    """**덮어쓰지 않는다** — 비낀 이름이 `Copy.file_name`이고 창이 그것을 적어 보인다."""
+    workspace.save_definition(
+        process, "approve.bpmn", DEFINITION.format(process_id="Proc_mine", name="내 것", body="")
+    )
+    lib = held(workspace, process)
+    mid = workspace.read(process.folder, process.group)
+
+    plan = install.plan_copy(mid, lib, CALLED)
+    assert plan.file_name == "approve-2.bpmn"
+    install.copy_into(workspace, mid, plan)
+
+    after = workspace.read(process.folder, process.group)
+    assert read_process(
+        (process.folder / "process" / "approve.bpmn").read_text(encoding="utf-8")
+    ).id == "Proc_mine", "있던 파일은 그대로다"
+    assert sorted(one.id for one in after.definitions) == [CALLED, "Proc_main", "Proc_mine"]
+
+
+def test_a_copy_refuses_when_the_same_id_is_already_mine(
+    workspace: Workspace, process: BpmProcess
+) -> None:
+    """같은 id가 둘이면 `processes()`가 **조용히 하나를 가린다** — 그래서 복사하지 않는다."""
+    workspace.save_definition(
+        process, "mine.bpmn", DEFINITION.format(process_id=CALLED, name="내가 쓴 것", body="")
+    )
+    lib = held(workspace, process)
+    mid = workspace.read(process.folder, process.group)
+
+    with pytest.raises(install.InstallFailed, match="같은 id의 정의가 이미 있습니다"):
+        install.plan_copy(mid, lib, CALLED)
+
+
+def test_what_is_held_is_answered_in_one_place(workspace: Workspace, process: BpmProcess) -> None:
+    """「설치돼 있나」를 묻는 함수는 하나다 (ADR-0051) — STU-11과 STU-03이 그것을 쓴다."""
+    assert install.installed_of(None) == {}
+    assert install.installed_of(process) == {}
+    lib = held(workspace, process)
+    assert install.installed_of(process) == {LIB_ID: lib}
 
 
 # ─────────────────────────── STU-11 화면 ───────────────────────────

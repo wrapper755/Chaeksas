@@ -58,3 +58,4 @@
 | [0047](0047-one-deployment-gate.md) | 배포 관문은 하나다 — Center가 계약의 `validate_deployment()`를 부르고, 코드마다 상태는 계약의 표가 준다 (배포 쪽 `target_mismatch`는 `wrong_target`으로) | 수락 |
 | [0048](0048-installing-shared-packages.md) | 받은 공유 BPM 프로세스는 작업 폴더의 `libs/`에 푼다 (패키지와 같은 자리 — 실행기가 이미 읽는다). 툴팩 설치는 「받은 코드를 돌려도 되나」라 따로 정한다 | 수락 |
 | [0049](0049-deployment-target-must-exist.md) | 배포 대상은 등록된 PC여야 한다 — 404 `target_not_found`. 등록 전에는 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다 (읽는 것은 Center, 판정은 계약) | 수락 |
+| [0051](0051-shared-process-conveniences.md) | STU-03의 공유 BPM 프로세스 뿌리는 Center 목록이고 설치 여부를 줄에 덧붙인다 — 부르기·보기·복사는 설치된 판에서만, 읽기 전용은 뷰어 한 벌을 더 실어 지킨다 | 수락 |

@@ -218,7 +218,13 @@
       async createTask(spec) {
         const bpmnFactory = modeler.get("bpmnFactory");
         const type = String((spec && spec.bpmn) || "bpmn:ServiceTask");
-        const bo = bpmnFactory.create(type, { name: String((spec && spec.name) || "") });
+        // `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `chk:*`가
+        // 아니라 요소 자신의 칸이라 만들 때 함께 넣는다. 글만 받는다.
+        const attrs = {};
+        for (const [name, value] of Object.entries((spec && spec.attrs) || {})) {
+          if (typeof value === "string" && value) attrs[name] = value;
+        }
+        const bo = bpmnFactory.create(type, { name: String((spec && spec.name) || ""), ...attrs });
         const entries = Object.entries((spec && spec.chk) || {});
         if (entries.length) {
           const values = entries.map(([name, text]) => bpmnFactory.create(toType(name), chkAttrs(name, text)));
