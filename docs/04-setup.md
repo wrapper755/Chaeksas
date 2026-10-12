@@ -182,6 +182,13 @@ sudo apt-get install -y --no-install-recommends \
 - 창을 띄웠으면 그 시험 안에서 **닫고 `deleteLater()`**로 치운다 — 뒤 시험이 도는 중에 Qt
   객체가 죽으면 같은 꼴로 터진다.
 
+**그리고 시험은 안 듣는 포트로 전화하지 않는다.** 같은 병의 다른 얼굴을 Windows에서 봤다 —
+STU-13 편집기가 열릴 때 공개 카탈로그(C9)를 읽는데 주소는 **확장 정의**가 주므로 Qt 단위
+시험에서도 값이 차 있어, 창을 띄우는 시험마다 **진짜 TCP 연결을 시도**하고 있었다. 거기서
+`Fatal Python error: Aborted` (exit 1)로 죽었다. `tests/conftest.py`의 autouse 가드가
+**주소는 있는데 클라이언트를 끼우지 않은** 조합만 「오프라인」으로 떨어뜨린다 — 가짜를 준
+시험은 진짜 코드를 그대로 돌고, 주소가 없는 길도 그대로다.
+
 ## 8. 확인 체크리스트 (M1 완료 시 채움)
 
 - [x] Windows에서 clone → `uv sync` → 테스트 통과 (CI `windows-latest` = Windows Server. **Windows 11 데스크톱은 아직 확인 안 됨**)
