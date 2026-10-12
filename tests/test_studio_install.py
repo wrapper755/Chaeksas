@@ -16,6 +16,7 @@ import io
 import json
 import zipfile
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -359,6 +360,51 @@ def test_a_lib_with_a_rule_task_says_the_decision_is_missing(
 
 
 # ─────────────────────────── STU-11 화면 ───────────────────────────
+#
+# **창에는 진짜 Center를 붙이지 않는다.** `center_resources.py`가 「담는 것」을 Qt 없이
+# 시험하도록 갈라 둔 그 결이고(그 파일의 §담는 것), 여기에는 까닭이 하나 더 있다 — Qt가 떠
+# 있는 채로 `TestClient`를 들고 있으면 anyio 포털 스레드와 QtWebEngine 스레드가 같은
+# 프로세스에 쌓여 **ubuntu x86_64 CI에서 실행이 통째로 죽었다**(SIGSEGV, 돌던 시험과
+# 무관한 자리에서). 위의 설치 시험들이 **진짜 Center로** 그 길을 이미 다 본다.
+
+
+class FakeReader(services.CenterReader):
+    """목록과 패키지 파일을 **메모리에서** 주는 읽기 전용 클라이언트 (스레드가 없다)."""
+
+    def __init__(self, packages: dict[tuple[str, str], bytes]) -> None:
+        super().__init__(base_url="http://center.test", api_key="k")
+        self.files = packages
+
+    def packages(self, kind: str) -> list[Any]:
+        from chaeksas.contracts.center_api import PackageInfo
+        from chaeksas.contracts.manifest import Manifest
+
+        out = []
+        for (package_id, version), raw in sorted(self.files.items()):
+            with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+                manifest = Manifest.model_validate_json(archive.read("manifest.json"))
+            if manifest.kind != kind:
+                continue
+            out.append(
+                PackageInfo(
+                    id=package_id,
+                    version=version,
+                    kind=manifest.kind,
+                    name=manifest.name,
+                    status="approved",
+                    content_hash=manifest.content_hash,
+                    uploaded_by="studio-key",
+                    uploaded_at="2026-10-12T09:00:00+09:00",
+                    manifest=manifest,
+                )
+            )
+        return out
+
+    def package_zip(self, package_id: str, version: str) -> bytes:
+        found = self.files.get((package_id, version))
+        if found is None:
+            raise services.CenterUnreachable("Center가 404로 답했습니다")
+        return found
 
 
 @pytest.fixture
@@ -368,64 +414,73 @@ def qt_app() -> Iterator[Any]:
     yield QApplication.instance() or QApplication([])
 
 
+@contextmanager
+def dialog(**extra: Any) -> Iterator[Any]:
+    """창 하나를 열고 **반드시 닫는다** — 뒤 시험이 도는 중에 Qt 객체가 죽으면 안 된다."""
+    window = center_resources.CenterResourcesDialog(**extra)
+    try:
+        yield window
+    finally:
+        window.close()
+        window.deleteLater()
+
+
 def test_the_dialog_installs_into_the_open_process(
-    qt_app: Any, center: TestClient, studio_key: str, reader: services.CenterReader,
-    workspace: Workspace, process: BpmProcess, tmp_path: Path,
+    qt_app: Any, workspace: Workspace, process: BpmProcess
 ) -> None:
     """STU-11 — 고르고 「설치」를 누르면 「설치본」이 채워지고 단추가 「갱신」이 된다."""
-    upload_lib(center, studio_key, lib_zip(), tmp_path)
-    window = center_resources.CenterResourcesDialog(
-        reader, workspace=workspace, process=process
-    )
-    assert window.libs.table.rowCount() == 1
-    window.libs.table.selectRow(0)
-    assert window.install_button.isEnabled() and window.install_button.text() == "설치"
-    assert not window.remove_button.isEnabled()
+    reader = FakeReader({(LIB_ID, LIB_VERSION): lib_zip()})
+    with dialog(reader=reader, workspace=workspace, process=process) as window:
+        assert window.libs.table.rowCount() == 1
+        window.libs.table.selectRow(0)
+        assert window.install_button.isEnabled() and window.install_button.text() == "설치"
+        assert not window.remove_button.isEnabled()
 
-    window.install_selected()
-    assert LIB_VERSION in window.note.text()
-    assert cell(window.libs, 0, center_resources.INSTALLED) == LIB_VERSION
-    window.libs.table.selectRow(0)
-    assert window.install_button.text() == "갱신"
-    assert window.remove_button.isEnabled()
+        window.install_selected()
+        assert LIB_VERSION in window.note.text()
+        assert cell(window.libs, 0, center_resources.INSTALLED) == LIB_VERSION
+        window.libs.table.selectRow(0)
+        assert window.install_button.text() == "갱신"
+        assert window.remove_button.isEnabled()
+
+    # 디스크가 원본이다 — 창이 아니라 작업 폴더에 남는다.
+    assert [one.ref for one in workspace.read(process.folder, process.group).libs] == [
+        f"{LIB_ID}@{LIB_VERSION}"
+    ]
 
 
 def test_the_dialog_turns_install_off_without_an_open_process(
-    qt_app: Any, center: TestClient, studio_key: str, reader: services.CenterReader,
-    workspace: Workspace, tmp_path: Path,
+    qt_app: Any, workspace: Workspace
 ) -> None:
     """**끄고 까닭을 적는다** (U3) — 열린 BPM 프로세스가 없으면 읽기만 되는 자리다."""
-    upload_lib(center, studio_key, lib_zip(), tmp_path)
-    window = center_resources.CenterResourcesDialog(reader, workspace=workspace, process=None)
-    window.libs.table.selectRow(0)
-    assert not window.install_button.isEnabled()
-    assert center_resources.NO_PROCESS in window.install_button.toolTip()
+    reader = FakeReader({(LIB_ID, LIB_VERSION): lib_zip()})
+    with dialog(reader=reader, workspace=workspace, process=None) as window:
+        window.libs.table.selectRow(0)
+        assert not window.install_button.isEnabled()
+        assert center_resources.NO_PROCESS in window.install_button.toolTip()
 
 
 def test_the_toolpack_tab_still_says_why_it_is_off(
-    qt_app: Any, reader: services.CenterReader, workspace: Workspace, process: BpmProcess
+    qt_app: Any, workspace: Workspace, process: BpmProcess
 ) -> None:
     """툴팩은 **자리가 아니라 싣는 길**이 없다 (ADR-0048 §왜 툴팩을 가르나)."""
-    window = center_resources.CenterResourcesDialog(
-        reader, workspace=workspace, process=process
-    )
-    window.tabs.setCurrentWidget(window.toolpacks)
-    window.update_buttons()
-    assert not window.install_button.isEnabled()
-    assert center_resources.NO_TOOLPACK_INSTALL in window.install_button.toolTip()
+    with dialog(reader=FakeReader({}), workspace=workspace, process=process) as window:
+        window.tabs.setCurrentWidget(window.toolpacks)
+        window.update_buttons()
+        assert not window.install_button.isEnabled()
+        assert center_resources.NO_TOOLPACK_INSTALL in window.install_button.toolTip()
 
 
 def test_a_lib_that_center_no_longer_has_is_local_only(
-    reader: services.CenterReader, workspace: Workspace, process: BpmProcess,
-    center: TestClient, studio_key: str, tmp_path: Path,
+    workspace: Workspace, process: BpmProcess
 ) -> None:
     """설치해 둔 것이 Center에 없으면 **「로컬만」 줄로 남는다** (STU-11) — 제거할 수 있어야 한다."""
-    upload_lib(center, studio_key, lib_zip(), tmp_path)
+    reader = FakeReader({(LIB_ID, LIB_VERSION): lib_zip()})
     install.install(workspace, process, reader, package_id=LIB_ID, version=LIB_VERSION)
     after = workspace.read(process.folder, process.group)
-    center.delete(f"/api/v1/packages/{LIB_ID}/{LIB_VERSION}", headers=ADMIN)
 
-    found = center_resources.listing(reader, center_resources.KIND_LIB, after)
+    gone = FakeReader({})  # Center에서 지워졌다
+    found = center_resources.listing(gone, center_resources.KIND_LIB, after)
     assert [(one.package_id, one.status, one.installed) for one in found.rows] == [
         (LIB_ID, center_resources.LOCAL_ONLY, LIB_VERSION)
     ]
