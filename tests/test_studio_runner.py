@@ -28,7 +28,7 @@ from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest  # noqa: E402
 from chaeksas.studio.receiver import Receiver  # noqa: E402
 from chaeksas.studio.run_actions import MAX_VALUE, format_variables  # noqa: E402
-from chaeksas.studio.run_dialog import describe, unlearned  # noqa: E402
+from chaeksas.studio.run_dialog import AUTONOMOUS, describe, unlearned  # noqa: E402
 from chaeksas.studio.runner import (  # noqa: E402
     ERROR,
     FAIL,
@@ -332,6 +332,32 @@ def test_the_run_dialog_turns_off_replay_when_nothing_was_learned(tmp_path: Path
     other = rules.entry_definition
     assert other is not None
     assert unlearned(rules, other) == [], "AI 태스크가 없으면 끌 이유도 없다"
+
+
+def test_the_replay_menu_preselects_the_mode_only_when_it_can_be_chosen(
+    tmp_path: Path, app: Any
+) -> None:
+    """실행 → 「결정 수행 (재생)...」(Ctrl+F5)은 STU-08을 그 모드로 열어 준다.
+
+    **끈 라디오는 고르지 않는다** — 고르면 「실행」을 눌러도 어느 모드도 아니게 된다. 메뉴를
+    끄지 않는 까닭이 여기 있다: 못 하는 사정은 창이 말한다 (U3).
+    """
+    from chaeksas.studio.run_dialog import DETERMINISTIC, RunDialog
+
+    rules, settings = studio(tmp_path, "fx02_business_rule")  # AI 태스크가 없다 — 끌 이유가 없다
+    definition = rules.entry_definition
+    assert definition is not None
+    chosen = RunDialog(None, rules, definition, settings, prefer=DETERMINISTIC)
+    assert chosen.deterministic.isChecked() and not chosen.autonomous.isChecked()
+    assert chosen.picked().mode == DETERMINISTIC
+
+    unlearnt, settings = studio(tmp_path / "other", "fx06_document_read")  # 학습 안 된 AI 태스크
+    other = unlearnt.entry_definition
+    assert other is not None
+    refused = RunDialog(None, unlearnt, other, settings, prefer=DETERMINISTIC)
+    assert not refused.deterministic.isEnabled()
+    assert refused.autonomous.isChecked(), "고를 수 없으면 자율 수행이 그대로 남는다"
+    assert refused.picked().mode == AUTONOMOUS
 
 
 def test_the_dialog_describes_the_case_in_one_line() -> None:

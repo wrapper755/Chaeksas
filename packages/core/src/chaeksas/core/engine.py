@@ -647,14 +647,16 @@ class Engine:
             del run.waits[key]
 
     def event_name(self, run: Run, node: Node, kind: str) -> str:
-        """메시지·신호의 **이름** (정의 수준 `bpmn:message`·`bpmn:signal`의 `name`)."""
+        """메시지·신호의 **이름** (정의 수준 `bpmn:message`·`bpmn:signal`의 `name`).
+
+        푸는 것은 계약 쪽 하나다 (`BpmnProcess.message_name`) — 매니페스트의 `triggers[].name`도
+        같은 이름이어야 밖에서 보낸 메시지가 기다리는 실행을 깨운다 (C1·C12).
+        """
         if kind == WAIT_MESSAGE:
-            table, ref = run.process.messages, node.message_ref
-        elif kind == WAIT_SIGNAL:
-            table, ref = run.process.signals, node.signal_ref
-        else:
-            return ""
-        return next((name for name, id_ in table.items() if id_ == ref), ref or "")
+            return run.process.message_name(node.message_ref) or ""
+        if kind == WAIT_SIGNAL:
+            return run.process.signal_name(node.signal_ref) or ""
+        return ""
 
     def due_at(self, run: Run, node: Node) -> datetime:
         """타이머가 울릴 시각. 기간(`PT30M`)이거나 **변수 이름**이다 (C14 §이벤트)."""

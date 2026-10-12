@@ -23,7 +23,6 @@ from typing import Any
 
 from chaeksas.contracts.approvals import Form, request_id_for
 from chaeksas.contracts.bpmn_ext import (
-    PC_ONLY_DOMAINS,
     WEBHOOK_BODY_ALL,
     AiTask,
     Call,
@@ -41,6 +40,7 @@ from chaeksas.contracts.bpmn_ext import (
 )
 from chaeksas.contracts.dmn import DmnError
 from chaeksas.contracts.events import missing_keys
+from chaeksas.contracts.manifest import PC_ONLY_DOMAINS
 from chaeksas.core.agent import DEFAULT_MAX_STEPS_SCREEN, AgentError, check_results, finish_from, run_agent
 from chaeksas.core.agent import Outcome as AgentOutcome
 from chaeksas.core.expr import Scope, evaluate, fill, run_script, truthy

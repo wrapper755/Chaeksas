@@ -1,6 +1,6 @@
 """C1. 패키지 매니페스트 — 패키지 zip 루트의 `manifest.json`.
 
-단일 원본: `docs/03-contracts/C1-package-manifest.md`. 검사 규칙 R1~R8은 `validate()`에 있고,
+단일 원본: `docs/03-contracts/C1-package-manifest.md`. 검사 규칙은 `validate()`에 있고,
 Studio(빌드)·Center(업로드)·Bot UI·서버 실행기(설치)가 **같은 함수**를 쓴다.
 """
 
@@ -17,11 +17,15 @@ PackageKind = Literal["bpm_process", "process_lib", "toolpack"]
 RunLocation = Literal["server", "pc"]
 
 KNOWN_TRIGGER_KINDS = frozenset({"none", "message", "timer", "conditional", "signal"})
-KNOWN_DOMAINS = frozenset({"llm", "api", "doc", "web", "desktop"})
 KNOWN_SETTINGS = frozenset({"llm", "vlm", "smtp"})
 KNOWN_BUILT_BY = frozenset({"studio", "cli"})
 
-#: 서버에서 돌 수 없는 AI 태스크 대상 환경 (R2).
+#: AI 태스크의 대상 환경 — C14 `chk:aiTask.domain`과 C1 `requires.domains`가 **같은 목록**이다.
+#: 거르는 자리는 둘이지만(C14 B8이 그림에서, R2가 매니페스트에서) **정의는 여기 하나**다.
+#: 자리가 C1 쪽인 것은 층 때문이다 — `bpmn_ext`가 이 모듈을 import한다 (거꾸로는 순환이다).
+KNOWN_DOMAINS = frozenset({"llm", "api", "doc", "web", "desktop"})
+
+#: 서버에서 돌 수 없는 AI 태스크 대상 환경 (R2·C14 B6, `core`의 사전 점검·AI 태스크도 본다).
 PC_ONLY_DOMAINS = frozenset({"web", "desktop"})
 
 #: `key_ref` 이름 규칙 (R4). `_`가 없으므로 키 값(`chk_…`)은 들어갈 수 없다.
@@ -32,10 +36,19 @@ SemVer = Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[
 
 
 class Trigger(ContractModel):
-    """시작 방법. `kind`는 열린 문자열 (알려진 값은 `KNOWN_TRIGGER_KINDS`)."""
+    """시작 방법 — 진입 정의의 시작 이벤트 하나를 옮긴 것.
+
+    `kind`는 `KNOWN_TRIGGER_KINDS` 중 하나다. 타입이 아니라 **R9**가 검사한다 — 위반에
+    `unknown_trigger_kind` 코드를 붙여 Studio·Center가 같은 문구로 말하려고 (R4와 같은 결).
+
+    **이름과 식은 다른 칸이다** — `name`은 이벤트 이름(C12 메시지 API가 이 이름으로 보낸다),
+    `expression`은 타이머 식(`timeCycle`의 cron·ISO)이다. 한 칸에 담으면 읽는 쪽이 타이머
+    트리거의 `name`을 메시지 이름으로 읽는다.
+    """
 
     kind: str
-    name: str | None = None  # 메시지 이름
+    name: str | None = None  # 이벤트 이름 (`message`는 메시지 이름, `signal`은 신호 이름)
+    expression: str | None = None  # 타이머 식 (`timer`만)
 
 
 class ManifestInput(ContractModel):
@@ -261,6 +274,27 @@ def _check_r4(m: Manifest) -> list[Violation]:
     return out
 
 
+def _check_r9(m: Manifest) -> list[Violation]:
+    """시작 방법의 `kind`가 계약에 적힌 다섯 중 하나인가 (C1 R9).
+
+    **「모르는 것」으로 보고 넘기지 않는다** — 시작 방법은 사람이 적는 값이 아니라 그림에서
+    기계가 옮기는 값이라, 모르는 이름이 들어왔다면 옮기는 쪽의 흠이다. 경고로 두면 읽는 쪽이
+    `timer`를 기다리며 아무 말 없이 영영 못 만난다.
+    """
+    bad = sorted({t.kind for t in m.triggers if t.kind not in KNOWN_TRIGGER_KINDS})
+    if not bad:
+        return []
+    return [
+        Violation(
+            rule="R9",
+            code="unknown_trigger_kind",
+            message="triggers[].kind가 계약에 없는 값이다 "
+            f"(아는 값: {', '.join(sorted(KNOWN_TRIGGER_KINDS))})",
+            items=bad,
+        )
+    ]
+
+
 def _check_r6(m: Manifest, computed_hash: str | None) -> list[Violation]:
     if computed_hash is None or computed_hash == m.content_hash:
         return []
@@ -312,4 +346,5 @@ def validate(
         *_check_r4(m),
         *_check_r6(m, computed_hash),
         *_check_r7(m),
+        *_check_r9(m),
     ]

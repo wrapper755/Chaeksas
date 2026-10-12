@@ -29,13 +29,24 @@ HINT = "id는 소문자·숫자·`.`·`_`·`-`만 쓰고 소문자나 숫자로 
 
 
 class NewProcessDialog(QDialog):
-    """STU-05. id·이름·버전·그룹을 받는다. 정의 파일은 캔버스가 저장할 때 생긴다."""
+    """STU-05. id·이름·버전·그룹을 받는다. 정의 파일은 캔버스가 저장할 때 생긴다.
 
-    def __init__(self, parent: QWidget | None, workspace: Workspace) -> None:
+    **「다른 이름으로 저장...」(STU-01)도 이 창이다** — 받는 칸이 같고 다른 것은 「만든다」와
+    「복사한다」뿐이다 (`source`). 그래서 그룹 만들기·오류 보이기가 한 자리에 있다.
+    """
+
+    def __init__(
+        self,
+        parent: QWidget | None,
+        workspace: Workspace,
+        *,
+        source: BpmProcess | None = None,
+    ) -> None:
         super().__init__(parent)
         self.workspace = workspace
+        self.source = source
         self.made: BpmProcess | None = None
-        self.setWindowTitle("새 BPM 프로세스")
+        self.setWindowTitle("다른 이름으로 저장" if source else "새 BPM 프로세스")
 
         self.id_box = QLineEdit(self)
         self.id_box.setPlaceholderText("finance.invoice-reconcile")
@@ -43,6 +54,12 @@ class NewProcessDialog(QDialog):
         self.name_box.setPlaceholderText("청구서 대사")
         self.version_box = QLineEdit("0.1.0", self)
         self.group_box = QLineEdit(DEFAULT_GROUP, self)
+        if source is not None:
+            # **베껴 온 값으로 채운다** — 복사하는 사람이 버전·그룹을 다시 적지 않는다.
+            # id는 비워 둔다 (겹치면 안 되는 유일한 칸이다).
+            self.name_box.setText(source.display)
+            self.version_box.setText(source.version)
+            self.group_box.setText(source.group)
 
         form = QFormLayout()
         form.addRow("id", self.id_box)
@@ -67,23 +84,35 @@ class NewProcessDialog(QDialog):
             try:
                 self.workspace.create_group(group)
             except WorkspaceError as e:
-                QMessageBox.warning(self, "새 BPM 프로세스", str(e))
+                QMessageBox.warning(self, self.windowTitle(), str(e))
                 return
+        process_id = self.id_box.text().strip()
+        name = self.name_box.text().strip()
+        version = self.version_box.text().strip() or "0.1.0"
         try:
-            self.made = self.workspace.create(
-                self.id_box.text().strip(),
-                name=self.name_box.text().strip(),
-                version=self.version_box.text().strip() or "0.1.0",
-                group=group,
-            )
-        except WorkspaceError as e:
-            QMessageBox.warning(self, "새 BPM 프로세스", str(e))
+            if self.source is not None:
+                self.made = self.workspace.copy(
+                    self.source, process_id, name=name, version=version, group=group
+                )
+            else:
+                self.made = self.workspace.create(
+                    process_id, name=name, version=version, group=group
+                )
+        except (WorkspaceError, OSError) as e:
+            # **창을 닫지 않는다** — 적은 것을 버리지 않고 고칠 기회를 준다 (STU-05).
+            QMessageBox.warning(self, self.windowTitle(), str(e))
             return
         super().accept()
 
     @classmethod
-    def ask(cls, parent: QWidget | None, workspace: Workspace) -> BpmProcess | None:
-        dialog = cls(parent, workspace)
+    def ask(
+        cls,
+        parent: QWidget | None,
+        workspace: Workspace,
+        *,
+        source: BpmProcess | None = None,
+    ) -> BpmProcess | None:
+        dialog = cls(parent, workspace, source=source)
         return dialog.made if dialog.exec() == QDialog.DialogCode.Accepted else None
 
 

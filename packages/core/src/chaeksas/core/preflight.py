@@ -25,8 +25,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from chaeksas.contracts._semver import InvalidVersion, satisfies
-from chaeksas.contracts.bpmn_ext import PC_ONLY_DOMAINS
-from chaeksas.contracts.manifest import Manifest
+from chaeksas.contracts.manifest import PC_ONLY_DOMAINS, Manifest
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.extension_api import (
     SEVERITY_BLOCK,

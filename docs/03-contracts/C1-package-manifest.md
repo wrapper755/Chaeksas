@@ -107,10 +107,32 @@
 
 | 모델 | 필드 |
 | --- | --- |
-| Trigger | `kind`: `none` \| `message` \| `timer` \| `conditional` \| `signal`, `name`(메시지 이름) |
+| Trigger | `kind`: `none` \| `message` \| `timer` \| `conditional` \| `signal`, `name`(이벤트 이름 — 메시지·신호), `expression`(타이머 식) |
 | ToolpackRef | `id`, `version`, `content_hash` |
 | Provides | `processes`: `{process_id, file, name, description, reads[], writes[], run_location, ai_tasks, human}`[] · `tools`: `{name, domain, description, args(JSON Schema)}`[] |
 | Built | `by`: `studio` \| `cli`, `at`(ISO 8601), `core`(버전), `spec_version`(재생 명세 버전) |
+
+**`triggers`는 진입 정의의 시작 이벤트를 그대로 옮긴 것이다** — `kind`는 BPMN 시작 이벤트의
+이벤트 정의와 1:1이고, 값은 이 다섯뿐이다 (R9가 검사한다).
+
+| `kind` | 시작 이벤트 | `name` | `expression` |
+| --- | --- | --- | --- |
+| `none` | 이벤트 정의 없음 | — | — |
+| `message` | `messageEventDefinition` | `messageRef`가 가리키는 `bpmn:message name` | — |
+| `timer` | `timerEventDefinition` | — | `timeCycle` 본문 (5필드 cron 또는 ISO `R/…`) |
+| `conditional` | `conditionalEventDefinition` | — | — |
+| `signal` | `signalEventDefinition` | `signalRef`가 가리키는 `bpmn:signal name` | — |
+
+- **이름과 식은 다른 칸이다.** `name`은 이벤트 **이름**이고(C12 메시지 API가 이 이름으로 보낸다),
+  타이머 식은 `expression`에 싣는다. 한 칸에 둘을 담으면 `timer` 트리거의 `name`을 메시지
+  이름으로 읽어 **영원히 오지 않는 메시지를 보낸다**.
+- **`none`은 「시작 이벤트에 정의가 없다」는 뜻**이다. 그 Bot은 작업 지시(C5 `/jobs`)나 수동
+  실행으로만 시작한다.
+- **`conditional`·`signal`로 시작하는 그림은 schema 1의 범위 밖이다** (C14 §이벤트 — 조건 시작은
+  쓰지 않고, 신호는 한 실행 안의 가지 사이에서만 간다). 그래도 **`none`으로 뭉개지 않고 그린 대로
+  적는다** — 「작업 지시로 시작한다」고 적어 주면 왜 안 도는지 아무도 모른다.
+- **실행하는 쪽은 `triggers`로 일정을 잡지 않는다.** 타이머 일정은 BPMN의 `timeCycle`을 읽고
+  (C14 §이벤트), 메시지는 상관 키까지 봐야 한다 (C12). `triggers`는 **보여 주고 고르는 값**이다.
 
 ## 검사 규칙
 
@@ -126,6 +148,7 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 | R5 | `manifest.json`·BPMN 어디에도 키 값·비밀 값이 없다 (Studio 빌드가 보장, Center는 R4만 검사) | — |
 | R6 | `content_hash`가 실제 내용과 같다 (C2) | 422 `hash_mismatch` |
 | R7 | `requires.toolpacks[].content_hash`가 비어 있지 않다 (로컬 개발용 툴팩은 업로드 불가) | 422 |
+| R9 | `triggers[].kind`가 위 다섯 중 하나다 | 422 `unknown_trigger_kind` + 걸린 값 목록 |
 
 **R2는 모르는 것을 막지 않는다.** 태스크 종류의 실행 위치는 **확장 정의만** 안다 (C13
 `task_types[].run_locations`, ADR-0018) — 빌드하는 PC에 그 확장이 없거나 꺼져 있으면 Studio가
@@ -136,6 +159,12 @@ PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드�
 실행하는 쪽의 사전 점검도 `task_types_unsupported`로 시작 전에 말한다. C13은 확장이
 `run_locations`를 비워 두는 것을 이미 금지하므로(`run_locations_missing`) 빈 목록이 선언에서
 올 일은 없다.
+
+**R9는 막는다 — 「모르는 것」이 아니라 빌드한 쪽의 흠이다.** 시작 방법은 그림에서 기계가
+옮기는 값이라 사람이 적어 틀릴 자리가 없다. 모르는 값이 들어왔다면 **옮기는 쪽이 계약에 없는
+이름을 쓴 것**이다. 경고로 두면 **올라간 뒤에 아무도 모르고**, 나중에 `triggers`를 읽는 화면이
+`timer`를 기다리며 영영 못 만난다 — 실제로 그렇게 갈라져 있었다. 값이 늘어야 할 때는 이 문서의
+다섯을 먼저 늘린다 — 뜻이 바뀌는 변경이라 `schema`도 함께 본다 (README 원칙 2).
 
 ## 예시
 
@@ -188,6 +217,7 @@ PC Bot (UI 태스크가 있음):
   "run_location": "pc",
   "entry": "process/main.bpmn",
   "process_id": "order_entry",
+  "triggers": [{"kind": "timer", "expression": "0 9 1 * *"}],
   "requires": {
     "domains": ["llm"],
     "service_apps": [
@@ -211,7 +241,7 @@ PC Bot (UI 태스크가 있음):
 | 400 | zip이 깨짐, `manifest.json` 없음, JSON 아님 | 다시 빌드 |
 | 200 | 같은 `id`+`version`이고 `content_hash`도 같음 (재시도한 업로드) | 성공으로 본다 |
 | 409 | 같은 `id`+`version`인데 내용이 다름 (C5) | 버전을 올린다 |
-| 422 | 검사 규칙 R1~R7 위반, 모르는(더 높은) `schema` | 응답 `detail[]`의 규칙 코드를 Studio 「실행 전 검사」와 같은 문구로 보인다 |
+| 422 | 검사 규칙 R1~R7·R9 위반, 모르는(더 높은) `schema` | 응답 `detail[]`의 규칙 코드를 Studio 「실행 전 검사」와 같은 문구로 보인다 |
 
 ## 호환 규칙
 
@@ -233,6 +263,7 @@ PC Bot (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-12 | 1 | **`triggers`의 `kind`를 쓰는 쪽과 맞췄다.** 적어 둔 다섯(`none`·`message`·`timer`·`conditional`·`signal`)은 그대로 두고, 그림에서 옮기는 쪽(Studio)이 쓰던 `schedule`·`manual`을 `timer`·`none`으로 바꿨다 — 아무도 `kind`를 검사하지 않아 **올라간 모든 패키지가 계약에 없는 값을 담고 있었다**. 함께: 타이머 식을 `name`에 싣던 것을 **`expression` 칸**으로 갈랐고(`name`은 C12가 메시지 이름으로 읽는다), 조건·신호 시작을 `manual`로 뭉개던 것을 그린 대로 적게 했고, **R9**를 더해 다시 갈라지지 못하게 했다 | — |
 | 2026-10-12 | 1 | **`libs/`에 결정표(.dmn)도 들어간다**고 적었다 — 정의만 복사하면 규칙 태스크를 쓰는 공유 BPM 프로세스가 **설치해도 돌지 않는다**(읽는 쪽이 `process/*.dmn`만 보고 있었다). 모양이 바뀐 것이 아니라 **적지 않았던 것을 적은 것**이다 (`libs/`는 처음부터 「복사해 넣은 공유 BPM 프로세스」였다) | 0048 |
 | 2026-10-01 | 1 | 초안 | 0013, 0015, 0016 |
 | 2026-10-11 | 1 | `requires.task_types[].run_locations`를 **선택 칸**으로 바꿨다 — 「모른다」를 적을 자리가 없어 Studio가 빈 목록을 썼고, `"server" not in []`이 참이라 **서버 Bot에 확장 태스크가 하나라도 있으면 업로드가 422**였다(그 확장이 서버를 지원해도). R2는 이제 **선언된 것이 `server`를 빼놓았을 때만** 막는다 | 0018, 0043 |
