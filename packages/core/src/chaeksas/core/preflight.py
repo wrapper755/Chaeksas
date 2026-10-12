@@ -69,14 +69,26 @@ class Preflight:
         return found.items if found else ()
 
 
-def key_refs_of(manifest: Manifest) -> tuple[str, ...]:
-    """그 Bot이 쓰는 서비스 앱 키 참조 이름 모두 (C1 `requires.service_apps`).
+def key_apps_of(manifest: Manifest) -> dict[str, str]:
+    """그 Bot이 쓰는 `서비스 앱 키 참조 → 앱 id` (C1 `requires.service_apps`).
 
     BPM 프로세스가 상속하는 `key_ref`와 태스크가 따로 적은 `task_key_refs`를 함께 센다 — 둘 다
     실행 중에 풀어야 하므로 **하나만 없어도 그 태스크가 죽는다**. 적힌 순서를 지키고 중복은 뺀다.
+
+    **참조를 세는 자리는 하나다** — 점검(값이 있나)·BUI-10(표)·만료 묻기(ADR-0052)가 모두
+    이것을 쓴다. 어긋나면 「점검은 통과했는데 창에는 없는 키」가 생긴다.
     """
-    refs = [ref for need in manifest.requires.service_apps for ref in (need.key_ref, *need.task_key_refs)]
-    return tuple(dict.fromkeys(ref for ref in refs if ref))
+    out: dict[str, str] = {}
+    for need in manifest.requires.service_apps:
+        for ref in (need.key_ref, *need.task_key_refs):
+            if ref:
+                out.setdefault(ref, need.app_id)
+    return out
+
+
+def key_refs_of(manifest: Manifest) -> tuple[str, ...]:
+    """그 Bot이 쓰는 서비스 앱 키 참조 이름 모두 — `key_apps_of()`의 이름들이다."""
+    return tuple(key_apps_of(manifest))
 
 
 def _check_keys(

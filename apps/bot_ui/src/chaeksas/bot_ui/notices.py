@@ -14,9 +14,9 @@
 - 문구는 `06-screens/bot-ui.md`의 BUI-05 표가 원본이다. **런타임 이름은 확장이 준 `label`**을
   쓴다 — 플랫폼 코드에 「Worker」라고 적으면 Bot UI가 어느 확장인지 아는 셈이다 (ADR-0018).
 
-아직 알릴 수 없는 한 줄은 `docs/09-gaps.md` §4-8에 **왜**와 함께 남겼다 (서비스 앱 키 만료
-임박·거부) — **이 PC가 그 값을 모르고**, 물어보려면 「사전 점검은 서버를 부르지 않는다」
-(ADR-0013)를 어디까지 지킬지 먼저 정해야 한다.
+**서비스 앱 키는 반쪽이 둘이고 묻는 때가 다르다** (ADR-0052) — 거부는 **실행 기록에서
+읽고**(실행이 이미 물었다), 만료 임박만 부르는 쪽이 하루 한 번 묻는다. 둘 다 **알릴지는
+여기서** 정한다.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
-from chaeksas.bot_ui.runner import Request
+from chaeksas.bot_ui.runner import KeyRefusal, Request
 from chaeksas.contracts.center_keys import expires_soon
 
 #: 누르면 할 일. 화면이 이 글로 창을 고른다 (여기서 Qt를 부르지 않는다).
@@ -45,6 +45,8 @@ CENTER_OFFLINE = "center_offline"
 CENTER_BACK = "center_back"
 KEY_REJECTED = "key_rejected"
 KEY_EXPIRING = "key_expiring"
+SERVICE_KEY_REFUSED = "service_key_refused"
+SERVICE_KEY_EXPIRING = "service_key_expiring"
 RUNTIME_RESTARTED = "runtime_restarted"
 RUNTIME_GAVE_UP = "runtime_gave_up"
 QUEUED = "queued"
@@ -79,6 +81,11 @@ def _bot(name: str) -> str:
     return name or "Bot"
 
 
+def _app(app_id: str) -> str:
+    """앱 id를 그대로 쓴다 (BUI-10과 같다 — 화면이 이름을 짓지 않는다)."""
+    return app_id or "서비스 앱"
+
+
 @dataclass
 class Notices:
     """아직 띄우지 않은 알림과, 「바뀌었나」를 보려고 들고 있는 지난 값."""
@@ -93,6 +100,10 @@ class Notices:
     _runtimes: dict[str, tuple[str, int]] = field(default_factory=dict)
     #: 키 만료를 알린 **날짜**(`YYYY-MM-DD`). 하루 한 번만 알리는 자리다.
     _key_told_on: str = ""
+    #: 서비스 앱 키 참조마다 만료를 알린 날짜 (위와 같은 결 — 키가 여럿이라 참조별이다).
+    _service_key_told_on: dict[str, str] = field(default_factory=dict)
+    #: 이미 알린 키 거부 `(실행, 앱/참조)` — 같은 실행의 재시도에 두 번 알리지 않는다.
+    _refusals_told: set[str] = field(default_factory=set)
 
     # ── 넣기·거두기 ──
 
@@ -268,6 +279,63 @@ class Notices:
             )
         )
 
+    # ── 서비스 앱 키 (ADR-0052) ──
+
+    def service_keys_refused(self, refusals: Iterable[KeyRefusal], *, bot: str, run_id: str) -> None:
+        """앱이 키를 거부했다 — **실행 기록에서 읽은 것**이다 (C3 `service_call`의 401·403).
+
+        **묻지 않고 안다.** 실행이 이미 그 앱에 물었고 거부당했으므로, 알리려고 다시 부를 것이
+        없다. 값이 이 PC에 없는 것은 여기 오지 않는다 (사전 점검의 「서비스 앱 키 없음」이다).
+
+        **같은 실행에서는 한 번**이다 — 재시도가 `service_call` 줄을 여럿 남긴다. 실행이 바뀌면
+        들고 있던 것을 버려 **다시 알린다**: 지난 알림이 아니라 방금 실패한 업무다.
+        """
+        found = list(refusals)  # 두 번 돈다 — 흘러가는 것을 받으면 둘째 바퀴가 빈다
+        here = {f"{run_id}:{one.app_id}/{one.key_ref}" for one in found}
+        for one in found:
+            told = f"{run_id}:{one.app_id}/{one.key_ref}"
+            if told in self._refusals_told:
+                continue
+            self._refusals_told.add(told)
+            self.add(
+                Notice(
+                    kind=SERVICE_KEY_REFUSED,
+                    # **까닭(만료·폐기·틀림)은 넣지 않는다** — 어느 쪽이든 할 일이 같고(새 키),
+                    # 어느 쪽인지는 BUI-10 「확인」이 말한다 (`key_rejected()`와 같은 결).
+                    text=f"{_app(one.app_id)}이 키 {one.key_ref}를 거부했습니다 — 새 키를 넣으세요",
+                    action=ACTION_KEYS,
+                    sticky=True,
+                    level="error",
+                )
+            )
+        # 다른 실행의 것은 잊는다 (집합이 PC 수명만큼 자라지 않게).
+        self._refusals_told &= here
+
+    def service_key_expiring(self, *, ref: str, expires_at: str | None, now: str) -> None:
+        """서비스 앱 키 만료가 가까웠다 (C11 `expires_at`, BUI-05).
+
+        **Center 키와 같은 규칙이다** — 14일 전부터 **하루 한 번**이고, 이미 만료된 키는 여기서
+        알리지 않는다(그때는 앱이 거부하고 `service_keys_refused()`가 할 일을 말한다). 값이
+        **없으면 만료 없는 키**다. 묻는 때·범위를 정하는 것은 부르는 쪽이고, **알릴지는 여기서**
+        정한다 (`center_key_expiring()`과 같은 자리).
+        """
+        if not expires_soon(now=now, expires_at=expires_at):
+            self._service_key_told_on.pop(ref, None)  # 기간이 늘었다 — 다음에 가까워지면 다시
+            return
+        today = now[:10]
+        if self._service_key_told_on.get(ref) == today:
+            return
+        self._service_key_told_on[ref] = today
+        self.add(
+            Notice(
+                kind=SERVICE_KEY_EXPIRING,
+                text=f"서비스 앱 키 {ref}가 {(expires_at or '')[:10]}에 만료됩니다",
+                action=ACTION_KEYS,
+                seconds=LONG_S,
+                level="warning",
+            )
+        )
+
     # ── 로컬 런타임 (C13 — 이름은 확장이 준다) ──
 
     def runtime(self, runtime_id: str, *, label: str, state: str, restarts: int, why: str = "") -> None:
@@ -352,6 +420,8 @@ __all__ = [
     "RUNTIME_GAVE_UP",
     "RUNTIME_RESTARTED",
     "RUN_FAILED",
+    "SERVICE_KEY_EXPIRING",
+    "SERVICE_KEY_REFUSED",
     "SHORT_S",
     "Notice",
     "Notices",

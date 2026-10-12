@@ -55,7 +55,8 @@ from chaeksas.contracts.bot_ui import (
 )
 from chaeksas.core import requests
 from chaeksas.core.extensions import ExtensionHost
-from chaeksas.core.preflight import Preflight
+from chaeksas.core.key_check import key_facts
+from chaeksas.core.preflight import Preflight, key_apps_of
 from chaeksas.core.preflight import check as run_preflight
 from chaeksas.core.processes import Supervisor
 from chaeksas.core.run_log import run_dir
@@ -87,6 +88,10 @@ TRAY_WORKER_BUSY = "Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합�
 
 #: 사전 점검이 키가 없다고 할 때 「어떻게 고치나」 (BUI-10). 화면 이름은 **부르는 쪽이** 적는다.
 KEY_FIX_HINT = "「도구」 → 「서비스 앱 키...」에서 등록하세요 (BUI-10)"
+
+#: 서비스 앱 키 만료를 묻는 제한 시간 (ADR-0052). **BUI-10 「확인」보다 짧다** — 하트비트는
+#: 화면과 같은 자리에서 돌아, 기다리는 만큼 창이 멈춘다.
+KEY_ASK_TIMEOUT_S = 3.0
 
 
 @dataclass(frozen=True)
@@ -192,6 +197,9 @@ class Agent:
     _preflights: dict[tuple[str, str], Preflight] = field(default_factory=dict)
     #: 이 실행에 묶은 로컬 런타임 — 끝나면 푼다.
     _reserved: list[str] = field(default_factory=list)
+    #: 서비스 앱 키 참조마다 만료를 **물어본 날짜** (ADR-0052 — 하루 한 번, 주기마다 하나).
+    #: 알린 날짜는 `notices`가 따로 쥔다 (묻는 것과 알리는 것은 다른 일이다).
+    _keys_asked_on: dict[str, str] = field(default_factory=dict)
 
     def runtimes(self) -> LocalRuntimes:
         """확장이 기여한 로컬 런타임들. **띄우지는 않는다** — 필요할 때 `ensure()`가 띄운다."""
@@ -563,6 +571,48 @@ class Agent:
             log.warning("실행 기록을 보내지 못했다: %s", found.error)
         return found
 
+    def ask_service_key(self) -> str | None:
+        """서비스 앱 키 **하나**에게 만료를 묻는다 (C11 `GET /v1/keys/self`, ADR-0052).
+
+        **점검 밖이다** — `core.preflight`는 그대로 서버를 부르지 않는다. 좁히는 것 다섯:
+
+        - **설치된 Bot이 실제로 쓰는 참조만** (BUI-10에 등록만 해 둔 키는 묻지 않는다).
+        - **들고 있는 주소만** (`Services.base_url_of`) — 이것 때문에 Center를 두드리지 않는다.
+        - **주기마다 많아야 하나**, 참조마다 하루 한 번. 하트비트는 화면과 같은 자리에서 돈다.
+        - **닿지 못한 것은 알릴 거리가 아니다** (ADR-0007) — 조용히 다음 날 다시 묻는다.
+        - **거부는 여기서 말하지 않는다** — 실행 기록이 말한다 (목소리를 둘 두지 않는다).
+
+        물어본 참조를 돌려준다 (없으면 `None`). 알릴지는 `notices`가 정한다.
+        """
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        now = now_iso()
+        today = now[:10]
+        held = Services(data_dir=data_dir())
+        for bot in installed(data_dir()):
+            for ref, app_id in key_apps_of(bot.manifest).items():
+                if self._keys_asked_on.get(ref) == today:
+                    continue
+                base_url = held.base_url_of(app_id=app_id) if app_id else None
+                try:
+                    key = self.credentials.service_app_key(ref)
+                except Exception as e:  # noqa: BLE001 - 비밀 저장소가 없는 PC도 있다
+                    log.warning("키 참조 %s를 풀지 못했다: %s", ref, e)
+                    key = None
+                if not key or not base_url:
+                    # 값·주소가 없는 것은 **여기서 알릴 거리가 아니다** (사전 점검·BUI-10의 일).
+                    continue
+                self._keys_asked_on[ref] = today
+                try:
+                    facts = key_facts(base_url, key, timeout_s=KEY_ASK_TIMEOUT_S)
+                except Exception as e:  # noqa: BLE001 - 주기를 깨뜨리지 않는다
+                    log.warning("서비스 앱 키 %s의 만료를 묻지 못했다: %s", ref, e)
+                    return ref
+                if facts.answered and not facts.refused:
+                    self.notices.service_key_expiring(ref=ref, expires_at=facts.expires_at, now=now)
+                return ref
+        return None
+
     def beat(self) -> HeartbeatResponse | None:
         """한 주기. 닿지 못하면 `None`을 돌려주고 **실행은 계속한다** (ADR-0007).
 
@@ -572,6 +622,8 @@ class Agent:
         self._tell_runtimes()
         # 돌고 있는 Bot을 들여다보고, 자리가 비면 대기열에서 다음을 올린다 (조각 4a).
         self.pump()
+        # **Center보다 먼저 묻는다** — Center가 꺼져 있어도 서비스 앱 키는 만료된다 (ADR-0052).
+        self.ask_service_key()
 
         if not self.registered:
             try:
@@ -876,13 +928,25 @@ class Agent:
         if launcher.running is not None:
             # 기다리는 결재·확인마다 알림 하나 (BUI-05) — **현장에서 답할 것만** 여기서 알린다.
             self.notices.requests(launcher.running.pendings, bot=launcher.running.bot.name)
+            self._tell_key_refusals(launcher.running)
             self.current_run = launcher.running.current()
             return
         self._start_next()
 
+    def _tell_key_refusals(self, running: Running) -> None:
+        """앱이 키를 거부했으면 알린다 (BUI-05, ADR-0052).
+
+        **묻지 않고 기록에서 읽은 것이다** — 실행이 이미 그 앱에 물었다. 돌고 있을 때와 거둘 때
+        둘 다 부른다: 한 틱 안에 거부당하고 끝난 실행은 `pump()`이 못 보고 지나간다.
+
+        **비어 있어도 부른다** — `notices`가 그때 지난 실행의 것을 잊는다 (`requests()`와 같은 결).
+        """
+        self.notices.service_keys_refused(running.key_refusals, bot=running.bot.name, run_id=running.run_id)
+
     def _finished(self, done: Running) -> None:
         """끝난 실행 하나를 거둔다 — Center 작업이면 결과를 ack한다 (C4)."""
         log.info("Bot %s 끝남 (%s)", done.bot.id, done.finished or "unknown")
+        self._tell_key_refusals(done)
         if done.finished == "failed":
             # 실패는 사람이 알아야 한다 (BUI-05). 사유는 **기록에 적힌 한 줄**이다 (C3).
             self.notices.run_failed(bot=done.bot.name, why=done.failure)
