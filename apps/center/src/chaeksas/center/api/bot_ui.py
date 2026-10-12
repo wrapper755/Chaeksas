@@ -62,6 +62,16 @@ def id_for_key(store: Store, key_id: str) -> str | None:
     return str(found["bot_ui_id"]) if found is not None else None
 
 
+def exists(store: Store, bot_ui_id: str) -> bool:
+    """등록된 PC인가 (C5 — 배포·작업 지시의 대상 검사, [ADR-0049]).
+
+    **`bot_ui_id`는 등록에서 우리가 만든다**(`new_bot_ui_id()`) — 등록 전에는 아무도 그 id를
+    모르므로, 명부에 없는 id는 **미리 배포해 둔 것이 아니라 오타이거나 낡은 id**다. 행은
+    지우지 않으니(「PC 묶음 풀기」는 키만 푼다) 한번 참이면 영원히 참이다.
+    """
+    return store.row("SELECT 1 FROM bot_uis WHERE bot_ui_id = ?", (bot_ui_id,)) is not None
+
+
 def _refuse_if_bound_elsewhere(key: keys.KeyRecord, machine_id: str) -> None:
     """키 → PC: 키는 처음 등록한 PC에 묶인다 (C4 「키 묶기」)."""
     if key.bound_to is not None and key.bound_to.id != machine_id:

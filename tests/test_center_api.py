@@ -139,6 +139,49 @@ def test_a_pc_deployment_cannot_target_everything() -> None:
     assert validate_deployment(one, package=package(), keys=[key], now=NOW) == []
 
 
+def test_an_unregistered_target_is_refused() -> None:
+    """**등록되지 않은 PC에는 배포하지 않는다** (ADR-0049) — 404 `target_not_found`.
+
+    찾아보는 것은 Center이고 여기로는 **이미 읽어 온 사실**이 온다 (`package`와 같은 결,
+    ADR-0047 §다시 볼 조건 ②). 등록 전에는 `bot_ui_id`가 없으니(Center가 등록에서 만든다)
+    명부에 없는 id는 **미리 배포해 둔 것이 아니라 오타**다.
+    """
+    private, key = admin()
+    env = deployment_envelope(private)
+    codes = [
+        v.code
+        for v in validate_deployment(
+            env, package=package(), keys=[key], now=NOW, target_registered=False
+        )
+    ]
+    assert codes == ["target_not_found"]
+
+    assert (
+        validate_deployment(env, package=package(), keys=[key], now=NOW, target_registered=True) == []
+    )
+    # **`None`은 「묻지 않았다」**다 — 찾아볼 표가 없는 대상 종류를 없는 규칙으로 막지 않는다.
+    assert (
+        validate_deployment(env, package=package(), keys=[key], now=NOW, target_registered=None) == []
+    )
+
+
+def test_a_wrong_target_wins_over_a_missing_one() -> None:
+    """**「대상이 틀렸다」가 「대상이 없다」를 이긴다** (ADR-0049).
+
+    PC 배포의 `"*"`는 그 id도 등록되어 있지 않지만, 운영자가 할 일은 「대상을 하나 적는다」다 —
+    「`*`라는 PC가 없다」고 하면 없는 PC를 찾아 헤맨다.
+    """
+    private, key = admin()
+    env = deployment_envelope(private, target={"type": "bot_ui", "id": "*"})
+    problems = validate_deployment(
+        env, package=package(), keys=[key], now=NOW, target_registered=False
+    )
+    assert [v.code for v in problems] == ["wrong_target", "target_not_found"]
+    picked = deployment_refusal(problems)
+    assert picked is not None
+    assert (picked[0], picked[1].code) == (409, "wrong_target")
+
+
 def test_server_deployment_is_refused_until_m7() -> None:
     private, key = admin()
     env = deployment_envelope(private, target={"type": "server_runner", "id": "*"})
@@ -158,18 +201,21 @@ def test_every_deployment_rule_has_a_status_in_the_table() -> None:
     """
     private, key = admin()
     tried = (
-        (deployment_envelope(private), package(status="candidate")),
-        (deployment_envelope(private), package(status="deprecated")),
-        (deployment_envelope(private, content_hash=OTHER_HASH), package()),
-        (deployment_envelope(private, target={"type": "bot_ui", "id": "*"}), package()),
-        (deployment_envelope(private), package(run_location="server")),
+        (deployment_envelope(private), package(status="candidate"), None),
+        (deployment_envelope(private), package(status="deprecated"), None),
+        (deployment_envelope(private, content_hash=OTHER_HASH), package(), None),
+        (deployment_envelope(private, target={"type": "bot_ui", "id": "*"}), package(), None),
+        (deployment_envelope(private), package(run_location="server"), None),
         (deployment_envelope(private, target={"type": "server_runner", "id": "srv_1"}),
-         package(run_location="server")),
+         package(run_location="server"), None),
+        (deployment_envelope(private), package(), False),
     )
     found = {
         v.code
-        for env, pkg in tried
-        for v in validate_deployment(env, package=pkg, keys=[key], now=NOW)
+        for env, pkg, registered in tried
+        for v in validate_deployment(
+            env, package=pkg, keys=[key], now=NOW, target_registered=registered
+        )
         if v.rule == "C5"
     }
     assert found == set(DEPLOYMENT_REFUSAL_STATUS), "규칙과 표가 어긋났다"

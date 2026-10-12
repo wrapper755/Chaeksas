@@ -82,13 +82,15 @@ SERVER_RUNNER_AVAILABLE = False
 #: `POST /deployments` 거절의 HTTP 상태 — **코드마다 한 자리에서** 정한다 (C5 §오류).
 #:
 #: 배포 쪽 규칙은 「본문이 잘못됐다」가 아니라 **상태 충돌**이라 409다 (`deployment_conflict`와
-#: 같은 결). 예외는 `server_runner_not_available` — 상태가 아니라 **아직 없는 기능**이라 422다.
+#: 같은 결). 예외가 둘이다 — `server_runner_not_available`은 상태가 아니라 **아직 없는 기능**이라
+#: 422이고, `target_not_found`는 **가리키는 것이 없는** 것이라 404다 (ADR-0049).
 #: 부르는 쪽이 상태를 따로 고르면 문서의 표와 갈라지므로 `cancel_outcome()`처럼 계약이 쥔다.
 DEPLOYMENT_REFUSAL_STATUS = {
     "not_approved": 409,
     "deprecated": 409,
     "hash_mismatch": 409,
     "wrong_target": 409,
+    "target_not_found": 404,
     "server_runner_not_available": 422,
 }
 
@@ -227,6 +229,7 @@ def validate_deployment(
     package: PackageInfo,
     keys: Sequence[AdminKey],
     now: str,
+    target_registered: bool | None = None,
     server_runner_available: bool = SERVER_RUNNER_AVAILABLE,
 ) -> list[Violation]:
     """`POST /deployments`에서 Center가 하는 검사. **Center가 이 함수를 부른다** (ADR-0047).
@@ -238,13 +241,18 @@ def validate_deployment(
       `target.type`이 패키지의 `run_location`과 맞지 않거나, **PC 배포의 `target.id`가 `"*"`**
       (ADR-0046 — `"*"`는 서버 실행기만 쓴다, C2 §배포 대상 규칙). 둘 다 받아 두면 **모든 PC가
       V6으로 거부할** 봉투라 결과가 같다. `target_mismatch`는 **작업 쪽 코드**다 (모르는 대상 종류).
+    - **대상 PC가 등록되어 있지 않다** (`target_not_found`, ADR-0049) — 찾아보는 것은 Center이고
+      여기로는 `target_registered`로 **이미 읽어 온 사실**이 온다 (`package`와 같은 결,
+      ADR-0047 §다시 볼 조건 ②). **`None`은 「묻지 않았다」**라 거절하지 않는다 — 서버 실행기
+      대상처럼 찾아볼 표가 없는 것을 막지 않으려고다.
     - M7까지 서버 실행기 배포는 받지 않는다 (`server_runner_not_available`, ADR-0016).
 
     규칙마다 답할 HTTP 상태는 `DEPLOYMENT_REFUSAL_STATUS`에 있다 — 고르는 것은
     `deployment_refusal()`이다.
 
-    여기서 하지 않는 것: **대상이 존재하는지**(Center 저장소), **같은 `deployment_id`의 충돌**
-    (`deployment_conflict`·`deployment_revoked`, C2 멱등성), **C1 R8**(C11 manifest·C7 대조).
+    여기서 하지 않는 것: **저장소를 읽는 일**(대상을 찾는 것·`package`를 읽는 것은 Center다),
+    **같은 `deployment_id`의 충돌**(`deployment_conflict`·`deployment_revoked`, C2 멱등성),
+    **C1 R8**(C11 manifest·C7 대조).
     """
     out = [*verify(envelope, keys=keys, expect_kind="deployment")]
     out += verify_time(envelope, now=now, check_not_before=False)
@@ -288,6 +296,18 @@ def validate_deployment(
                 rule="C5",
                 code="wrong_target",
                 message=f'{target_type} 배포에는 전체 대상("{TARGET_ANY}")이 없다 — 대상을 하나 적는다',
+            )
+        )
+    if target_registered is False:
+        # **「대상이 틀렸다」가 「대상이 없다」를 이긴다** (ADR-0049) — PC 배포의 `"*"`는 그 id도
+        # 등록되어 있지 않지만 답은 `wrong_target`이다(할 일이 「대상을 하나 적는다」이고
+        # 「`*`라는 PC가 없다」는 엉뚱한 말이다). 그래서 **대상 검사 뒤에** 담는다 —
+        # `deployment_refusal()`은 앞의 것으로 답하고 나머지는 `detail`에 남는다.
+        out.append(
+            Violation(
+                rule="C5",
+                code="target_not_found",
+                message=f"등록되지 않은 PC다: {envelope.payload.get('target', {}).get('id')}",
             )
         )
     if target_type == "server_runner" and not server_runner_available:

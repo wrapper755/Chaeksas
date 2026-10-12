@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Studio·Admin·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py` (import `chaeksas.contracts.center_api`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md) |
 | 관련 화면 | STU-01(올리기), CON-02·05·06·11·12, ADM |
 
 ## 목적
@@ -144,12 +144,14 @@ DependentInfo 필드:
 | 봉투의 해시가 패키지와 같다 | `hash_mismatch` | 409 |
 | `target.type`이 패키지의 `run_location`과 맞다 | `wrong_target` | 409 |
 | **PC 배포의 `target.id`가 `"*"`가 아니다** ([ADR-0046](../decisions/0046-no-wildcard-pc-deployment.md)). `"*"`는 서버 실행기 배포만 쓴다 (C2 §배포 대상 규칙) | `wrong_target` | 409 |
+| **대상 PC가 등록되어 있다** ([ADR-0049](../decisions/0049-deployment-target-must-exist.md)) — `bot_uis`를 **Center가 읽어** 계약에 넘긴다 | `target_not_found` | 404 |
 | 서버 실행기 대상이 아니다 (M7까지, ADR-0016) | `server_runner_not_available` | 422 |
 
 - **대상이 틀린 두 가지는 코드가 하나다** (`wrong_target`) — C2 V6이 같은 조건에 쓰는 이름이고, 둘 다 받아 두면 **모든 PC가 V6으로 거부할** 봉투라 운영자가 할 일도 같다(대상을 하나 제대로 적는다). `target_mismatch`는 **작업 지시 쪽 코드**다 (모르는 대상 종류, 422).
-- Center가 자기 저장소를 봐야 하는 것은 계약이 하지 않는다: 그 패키지가 있나(404 `not_found`), 같은 `deployment_id`의 충돌(409 `deployment_conflict`·`deployment_revoked`), 그리고 배포를 막는 리소스 누락과 C1 R8(422, C7 §누락 검사).
-
-> 미정: 「대상이 존재한다」는 아직 어느 쪽도 보지 않는다 — 등록되지 않은 PC에도 배포해 둘 수 있다(새 PC를 먼저 준비하는 길). 막을 것인지는 [09-gaps](../09-gaps.md) §3-9에 적었다. 작업 지시(`POST /jobs`)는 404로 막는다.
+- **「대상이 틀렸다」가 「대상이 없다」를 이긴다** — PC 배포에 `"*"`가 오면 그 id도 등록되어 있지 않지만 답은 `wrong_target`이다 (운영자가 할 일은 「대상을 하나 적는다」이고, 「`*`라는 PC가 없다」는 엉뚱한 말이다). 그래서 등록 검사는 **대상 검사 뒤에** 온다.
+- **`target_not_found`는 `not_found`와 다른 코드다** — 한 요청에서 없을 수 있는 것이 둘(패키지·PC)이라 뭉치면 운영자가 어느 쪽을 고칠지 모른다. **작업 지시도 같은 코드로 답한다** — 같은 조건에 두 이름을 두는 것이 ADR-0047이 고친 흠이다.
+- Center가 자기 저장소를 봐야 하는 **읽기**는 계약이 하지 않는다. 읽어서 **넘기는** 것은 계약이 판정한다 (지금 `package`와 대상 등록 여부가 그렇다, [ADR-0047](../decisions/0047-one-deployment-gate.md) §다시 볼 조건 ②). 계약이 판정하지 않고 Center에 남은 것: 그 패키지가 있나(404 `not_found`), 같은 `deployment_id`의 충돌(409 `deployment_conflict`·`deployment_revoked`), 그리고 배포를 막는 리소스 누락과 C1 R8(422, C7 §누락 검사).
+- **등록되지 않은 PC에 미리 배포해 두는 길은 없다** — `bot_ui_id`는 Center가 **첫 등록에서 만든다**(C4 「키 묶기」). 등록 전에는 봉투에 적을 id가 없으므로, 등록되지 않은 id가 오면 오타이거나 낡은 id다. 행은 지워지지 않으니(「PC 묶음 풀기」는 키만 푼다) **한번 통과한 배포의 대상은 사라지지 않는다**.
 
 DeploymentInfo 필드: `deployment_id`, `target{type,id}`, `bpm_process_id`, `version`, `content_hash`, `max_concurrency`?, `signed_by`, `signed_at`, `not_before`?, `expires_at`?, `revoked_at`?, `last_result`?. `last_result`는 C4 `deployment_results`의 마지막 값이다.
 
@@ -251,6 +253,7 @@ BotUiInfo 필드:
 | 400 | `bad_envelope` | 봉투 형식 오류 |
 | 401 / 403 | `key_invalid` / `forbidden` | 인증 실패, 권한 밖 (예: Bot UI가 자기에게 배포되지 않은 패키지를 요청) |
 | 404 | `not_found` | |
+| 404 | `target_not_found` | 배포·작업 지시의 대상 PC가 **등록되어 있지 않다** (ADR-0049). `not_found`(패키지가 없다)와 **가른다** — 한 요청에서 없을 수 있는 것이 둘이라 뭉치면 어느 쪽을 고칠지 모른다 |
 | 409 | `version_conflict` | 같은 버전인데 내용이 다름 |
 | 409 | `in_use` | 참조 중인 패키지 삭제 |
 | 409 | `already_started` / `not_cancellable` | 취소할 수 없는 작업 |
@@ -273,6 +276,7 @@ BotUiInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-12 | 1 | **배포 대상은 등록된 PC여야 한다** (404 `target_not_found`). 「대상이 존재한다」를 어느 쪽도 보지 않아 **오타 하나가 201을 받고** 아무에게도 가지 않는 배포로 남았다 — `envelopes_for`는 `target_id`로 맞추고 CON-03에는 그 PC 줄이 없어 보여 줄 자리도 없다. 미리 배포해 두는 길이 막히는 것이 아니다: `bot_ui_id`는 Center가 **첫 등록에서 만들어** 등록 전에는 적을 id가 없다. 읽는 것은 Center, 판정은 계약이다 (ADR-0047 §다시 볼 조건 ②). **작업 지시의 같은 404도 `target_not_found`로 바꿨다** — 같은 조건에 두 이름을 두지 않는다 | 0049 |
 | 2026-10-12 | 1 | **배포 관문을 하나로 모았다.** 같은 검사가 계약(`validate_deployment()`)과 Center에 두 벌 있었고 **답이 갈려 있었다** — 대상 어긋남이 계약에서 `target_mismatch`(422), Center에서 `wrong_target`(409)이었고, 서버 배포를 막는 `server_runner_not_available`은 **계약에만** 있어서 Center가 M7 배포를 받아 두고 있었다. 이제 Center가 그 함수를 부르고 코드마다 상태는 `DEPLOYMENT_REFUSAL_STATUS` 한 표에 있다. **배포 쪽 `target_mismatch`는 없어졌다** — 대상이 틀린 것은 `wrong_target`(409) 하나다 | 0047 |
 | 2026-10-11 | 1 | **PC 배포의 `"*"`를 적어 막았다.** C2는 `"*"`를 서버 배포에만 주고 V6도 그랬는데, Center가 네 자리에서 대상 종류를 가리지 않고 `"*"`를 풀어 **모든 PC가 거부할 봉투를 내려줄 수 있었다**. `POST /deployments`가 409 `wrong_target`으로 거절하고 고르는 조건은 한 함수가 짓는다. CON-02의 「배포된 Bot UI」가 이 덕에 **정확한 PC 수**로 닫혔다 | 0046 |
 | 2026-10-11 | 1 | **권한표를 코드가 따라갔다** (문서는 그대로다). 업로드가 `require_admin`이어서 Studio 키로는 403이었고, 패키지 목록·정보·내려받기가 「키면 무엇이든」이라 Bot UI 키가 전부 받고 연동용 키도 목록을 봤다. 이제 올리기·목록·정보는 **Studio 키만**이고, 내려받기는 **읽기 토큰 없음·실행하는 쪽은 자기 배포분과 그 패키지의 `requires.toolpacks`만**이다. 「없다」와 「내 것이 아니다」는 **같은 403 `forbidden`**이다 — 404로 가르면 그것이 곧 목록이 된다 | 0013 |

@@ -180,9 +180,13 @@ def _resolved_version(store: Store, request: JobCreateRequest) -> str:
     if target.type != "bot_ui":
         raise ApiError(422, "target_mismatch", f"모르는 대상 종류다: {target.type}")
 
+    from chaeksas.center.api import bot_ui  # noqa: PLC0415 — 순환 import를 피한다
+
     target_id = str(target.id or "")
-    if store.row("SELECT bot_ui_id FROM bot_uis WHERE bot_ui_id = ?", (target_id,)) is None:
-        raise ApiError(404, "not_found", f"Bot UI {target_id}가 없다")
+    if not bot_ui.exists(store, target_id):
+        # **배포와 같은 코드다** (`target_not_found`, ADR-0049) — 같은 조건에 두 이름을 두는 것이
+        # ADR-0047이 고친 흠이다. `not_found`는 이 길에서 「그 작업이 없다」로 쓴다.
+        raise ApiError(404, "target_not_found", f"등록되지 않은 PC다: {target_id}")
 
     deployed = deployments.versions_for(
         store, target_type="bot_ui", target_id=target_id, bpm_process_id=request.bpm_process_id
