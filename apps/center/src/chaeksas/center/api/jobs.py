@@ -28,6 +28,7 @@ from chaeksas.contracts.center_api import (
     IDEMPOTENCY_WINDOW_DAYS,
     LIST_LIMIT_DEFAULT,
     LIST_LIMIT_MAX,
+    SERVER_RUNNER_AVAILABLE,
     JobCreateRequest,
     JobInfo,
     JobTarget,
@@ -172,8 +173,9 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[JobInfo, b
 def _resolved_version(store: Store, request: JobCreateRequest) -> str:
     """어느 버전을 돌릴지 정한다 — 대상이 있는지, 배포돼 있는지까지 본다 (C5)."""
     target = request.target
-    if target.type == "server_runner":
-        # 서버 실행은 M7부터다 (ADR-0016) — 배포와 같은 사유로 막는다.
+    if target.type == "server_runner" and not SERVER_RUNNER_AVAILABLE:
+        # 서버 실행은 M7부터다 (ADR-0016) — **배포와 같은 스위치를 본다** (ADR-0047). 두 자리에
+        # 적어 두면 한쪽만 켜져 「작업은 만들어지는데 배포가 없다」가 된다.
         raise ApiError(422, "server_runner_not_available", "서버 실행은 M7부터다 (ADR-0016)")
     if target.type != "bot_ui":
         raise ApiError(422, "target_mismatch", f"모르는 대상 종류다: {target.type}")

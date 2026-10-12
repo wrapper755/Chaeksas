@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Studio·Admin·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py` (import `chaeksas.contracts.center_api`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md) |
 | 관련 화면 | STU-01(올리기), CON-02·05·06·11·12, ADM |
 
 ## 목적
@@ -134,22 +134,29 @@ DependentInfo 필드:
 | `DELETE /deployments/{id}` (본문 = C2 `revoke` 봉투) | 철회. 행은 지우지 않고 `revoked_at`을 찍는다 | 200 |
 | `GET /deployments?target_type=&target_id=&bpm_process_id=&active=` | 목록 | 200 DeploymentInfo[] |
 
-배포할 때 Center가 검사하는 것:
+배포할 때 Center가 검사하는 것 — **규칙은 계약의 `validate_deployment()` 하나이고 Center가 그것을 부른다** ([ADR-0047](../decisions/0047-one-deployment-gate.md)). 상태 코드는 같은 자리의 `DEPLOYMENT_REFUSAL_STATUS` 표가 정한다:
 
-- 서명 (C2 V1~V5a). `not_before`가 미래인 예약 배포도 받는다.
-- 패키지가 `approved`이고 `deprecated`가 아니다.
-- 봉투의 해시가 패키지와 같다.
-- 대상이 존재한다.
-- `target.type`이 패키지의 `run_location`과 맞다.
-- **PC 배포의 `target.id`가 `"*"`가 아니다** — 409 `wrong_target` ([ADR-0046](../decisions/0046-no-wildcard-pc-deployment.md)). `"*"`는 서버 실행기 배포만 쓴다 (C2 §배포 대상 규칙).
-- 서버 배포면 C1 R8을 통과한다.
+| 검사 | 거절 | 상태 |
+| --- | --- | --- |
+| 서명 (C2 V1~V5a). `not_before`가 미래인 예약 배포도 받는다 | C2의 사유 코드 | 403 |
+| 패키지가 `approved`다 | `not_approved` | 409 |
+| 지원 종료가 아니다 — **따로 알린다**, 승인은 되어 있고 새 배포만 막힌 것이다 | `deprecated` | 409 |
+| 봉투의 해시가 패키지와 같다 | `hash_mismatch` | 409 |
+| `target.type`이 패키지의 `run_location`과 맞다 | `wrong_target` | 409 |
+| **PC 배포의 `target.id`가 `"*"`가 아니다** ([ADR-0046](../decisions/0046-no-wildcard-pc-deployment.md)). `"*"`는 서버 실행기 배포만 쓴다 (C2 §배포 대상 규칙) | `wrong_target` | 409 |
+| 서버 실행기 대상이 아니다 (M7까지, ADR-0016) | `server_runner_not_available` | 422 |
+
+- **대상이 틀린 두 가지는 코드가 하나다** (`wrong_target`) — C2 V6이 같은 조건에 쓰는 이름이고, 둘 다 받아 두면 **모든 PC가 V6으로 거부할** 봉투라 운영자가 할 일도 같다(대상을 하나 제대로 적는다). `target_mismatch`는 **작업 지시 쪽 코드**다 (모르는 대상 종류, 422).
+- Center가 자기 저장소를 봐야 하는 것은 계약이 하지 않는다: 그 패키지가 있나(404 `not_found`), 같은 `deployment_id`의 충돌(409 `deployment_conflict`·`deployment_revoked`), 그리고 배포를 막는 리소스 누락과 C1 R8(422, C7 §누락 검사).
+
+> 미정: 「대상이 존재한다」는 아직 어느 쪽도 보지 않는다 — 등록되지 않은 PC에도 배포해 둘 수 있다(새 PC를 먼저 준비하는 길). 막을 것인지는 [09-gaps](../09-gaps.md) §3-9에 적었다. 작업 지시(`POST /jobs`)는 404로 막는다.
 
 DeploymentInfo 필드: `deployment_id`, `target{type,id}`, `bpm_process_id`, `version`, `content_hash`, `max_concurrency`?, `signed_by`, `signed_at`, `not_before`?, `expires_at`?, `revoked_at`?, `last_result`?. `last_result`는 C4 `deployment_results`의 마지막 값이다.
 
 - `signed_by`·`signed_at`·`not_before`·`expires_at`·`max_concurrency`는 **봉투에서 읽는다** (Center가 따로 짓지 않는다). `signed_by`는 서명한 Admin 키의 `key_id`다.
 - `revoked_at`은 철회 봉투의 `revoked_at`이다. 행은 지우지 않으므로 철회된 배포도 목록에 남는다 (`active=true`로 거른다).
 
-- **M6까지:** `target.type=server_runner` 배포는 422 `server_runner_not_available` (서버 실행은 M7부터, ADR-0016).
+- **M6까지:** `target.type=server_runner` 배포는 422 `server_runner_not_available` (서버 실행은 M7부터, ADR-0016). 작업 지시도 같은 코드로 막고 **스위치는 한 자리다** (`SERVER_RUNNER_AVAILABLE` — 한쪽만 켜면 「작업은 만들어지는데 배포가 없다」가 된다).
 
 ## 작업 (job)
 
@@ -248,12 +255,13 @@ BotUiInfo 필드:
 | 409 | `in_use` | 참조 중인 패키지 삭제 |
 | 409 | `already_started` / `not_cancellable` | 취소할 수 없는 작업 |
 | 409 | `deployment_conflict` / `deployment_revoked` | C2 |
-| 409 | `not_approved` / `deprecated` / `hash_mismatch` / `wrong_target` | 배포가 가리키는 **패키지의 상태**가 요청과 어긋난다. 「본문이 잘못됐다」가 아니라 **상태 충돌**이라 409다 (`deployment_conflict`과 같은 결). 지원 종료는 `not_approved`로 뭉개지 않는다 — 승인은 되어 있고 새 배포만 막힌 것이다. `wrong_target`은 **PC 배포에 `"*"`를 쓴 것도** 받는다 (ADR-0046) |
+| 409 | `not_approved` / `deprecated` / `hash_mismatch` / `wrong_target` | 배포가 가리키는 **패키지의 상태**가 요청과 어긋난다. 「본문이 잘못됐다」가 아니라 **상태 충돌**이라 409다 (`deployment_conflict`과 같은 결). 지원 종료는 `not_approved`로 뭉개지 않는다 — 승인은 되어 있고 새 배포만 막힌 것이다. `wrong_target`은 **대상이 틀린 것 전부**다 — `target.type` ↔ `run_location` 어긋남과 **PC 배포의 `"*"`** (ADR-0046·0047) |
 | 409 | `package_revoked` | 철회된 패키지를 지원 종료로 바꾸려 함 (끝난 일이다) |
 | 409 | `idempotency_conflict` | 같은 `idempotency_key`에 다른 본문 |
 | 410 | `revoked` | 철회된 패키지 내려받기 |
 | 413 | `too_large` | 패키지 50 MB 초과 |
-| 422 | C1 규칙 코드, `target_mismatch`, `server_runner_not_available`, `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
+| 422 | C1 규칙 코드, `target_mismatch`(모르는 대상 종류), `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
+| 422 | `server_runner_not_available` | 서버 실행기 대상 (M7까지, ADR-0016). **배포와 작업 지시가 같다** — 상태 충돌이 아니라 **아직 없는 기능**이라 배포 쪽에서도 422다 |
 | 422 | `not_a_zip`, `manifest_missing`, `manifest_invalid`, `zip_too_many_entries`, `zip_unsafe_path`, `zip_too_large` | 업로드한 zip의 형식 오류. **400이 아니라 422다** — 본문은 읽혔고 내용이 계약과 맞지 않는다 |
 
 ## 호환 규칙
@@ -265,6 +273,7 @@ BotUiInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-12 | 1 | **배포 관문을 하나로 모았다.** 같은 검사가 계약(`validate_deployment()`)과 Center에 두 벌 있었고 **답이 갈려 있었다** — 대상 어긋남이 계약에서 `target_mismatch`(422), Center에서 `wrong_target`(409)이었고, 서버 배포를 막는 `server_runner_not_available`은 **계약에만** 있어서 Center가 M7 배포를 받아 두고 있었다. 이제 Center가 그 함수를 부르고 코드마다 상태는 `DEPLOYMENT_REFUSAL_STATUS` 한 표에 있다. **배포 쪽 `target_mismatch`는 없어졌다** — 대상이 틀린 것은 `wrong_target`(409) 하나다 | 0047 |
 | 2026-10-11 | 1 | **PC 배포의 `"*"`를 적어 막았다.** C2는 `"*"`를 서버 배포에만 주고 V6도 그랬는데, Center가 네 자리에서 대상 종류를 가리지 않고 `"*"`를 풀어 **모든 PC가 거부할 봉투를 내려줄 수 있었다**. `POST /deployments`가 409 `wrong_target`으로 거절하고 고르는 조건은 한 함수가 짓는다. CON-02의 「배포된 Bot UI」가 이 덕에 **정확한 PC 수**로 닫혔다 | 0046 |
 | 2026-10-11 | 1 | **권한표를 코드가 따라갔다** (문서는 그대로다). 업로드가 `require_admin`이어서 Studio 키로는 403이었고, 패키지 목록·정보·내려받기가 「키면 무엇이든」이라 Bot UI 키가 전부 받고 연동용 키도 목록을 봤다. 이제 올리기·목록·정보는 **Studio 키만**이고, 내려받기는 **읽기 토큰 없음·실행하는 쪽은 자기 배포분과 그 패키지의 `requires.toolpacks`만**이다. 「없다」와 「내 것이 아니다」는 **같은 403 `forbidden`**이다 — 404로 가르면 그것이 곧 목록이 된다 | 0013 |
 | 2026-10-09 | 1 | 배포 쪽 상태 충돌(`not_approved`·`deprecated`·`hash_mismatch`·`wrong_target`)을 **409**로 적었다 — 코드가 처음부터 그렇게 답했고 표만 422로 남아 있었다. `package_revoked`도 더했다 | — |

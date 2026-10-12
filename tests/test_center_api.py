@@ -13,6 +13,8 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from pydantic import ValidationError
 
 from chaeksas.contracts import (
+    DEPLOYMENT_REFUSAL_STATUS,
+    ENVELOPE_REFUSAL_STATUS,
     AdminKey,
     JobCreateRequest,
     JobInfo,
@@ -20,6 +22,7 @@ from chaeksas.contracts import (
     ListParams,
     PackageInfo,
     cancel_outcome,
+    deployment_refusal,
     key_id_for,
     sign,
     validate_deployment,
@@ -105,15 +108,19 @@ def test_hash_must_match_the_package() -> None:
 
 
 def test_target_type_must_match_run_location() -> None:
-    """PC 패키지를 서버 실행기에 배포하거나 그 반대를 막는다."""
+    """PC 패키지를 서버 실행기에 배포하거나 그 반대를 막는다.
+
+    **코드는 `wrong_target` 하나다** (ADR-0047) — C2 V6이 같은 조건에 쓰는 이름이고 Center가
+    답하는 이름이다. `target_mismatch`는 **작업 쪽**(모르는 대상 종류)에만 남는다.
+    """
     private, key = admin()
     env = deployment_envelope(private, target={"type": "server_runner", "id": "srv_1"})
     codes = [v.code for v in validate_deployment(env, package=package(run_location="pc"), keys=[key], now=NOW)]
-    assert codes == ["target_mismatch", "server_runner_not_available"]
+    assert codes == ["wrong_target", "server_runner_not_available"]
 
     env = deployment_envelope(private)  # bot_ui 대상
     codes = [v.code for v in validate_deployment(env, package=package(run_location="server"), keys=[key], now=NOW)]
-    assert codes == ["target_mismatch"]
+    assert codes == ["wrong_target"]
 
 
 def test_a_pc_deployment_cannot_target_everything() -> None:
@@ -140,6 +147,63 @@ def test_server_deployment_is_refused_until_m7() -> None:
     assert codes == ["server_runner_not_available"]
     # M7에서 켜면 통과한다
     assert validate_deployment(env, package=pkg, keys=[key], now=NOW, server_runner_available=True) == []
+
+
+def test_every_deployment_rule_has_a_status_in_the_table() -> None:
+    """**규칙과 상태 표가 맞물린다** (ADR-0047, C5 §오류).
+
+    상태를 고르는 자리가 `deployment_refusal()` 하나이므로, 규칙을 더하고
+    `DEPLOYMENT_REFUSAL_STATUS`에 적지 않으면 그 함수가 409로 **어림한다**. 어림이 문서의 표와
+    갈라지는 것이 이 작업에서 고친 바로 그 병이라 여기서 막는다.
+    """
+    private, key = admin()
+    tried = (
+        (deployment_envelope(private), package(status="candidate")),
+        (deployment_envelope(private), package(status="deprecated")),
+        (deployment_envelope(private, content_hash=OTHER_HASH), package()),
+        (deployment_envelope(private, target={"type": "bot_ui", "id": "*"}), package()),
+        (deployment_envelope(private), package(run_location="server")),
+        (deployment_envelope(private, target={"type": "server_runner", "id": "srv_1"}),
+         package(run_location="server")),
+    )
+    found = {
+        v.code
+        for env, pkg in tried
+        for v in validate_deployment(env, package=pkg, keys=[key], now=NOW)
+        if v.rule == "C5"
+    }
+    assert found == set(DEPLOYMENT_REFUSAL_STATUS), "규칙과 표가 어긋났다"
+
+
+def test_the_contract_picks_the_status_not_the_caller() -> None:
+    """상태는 **계약이** 고른다 (`cancel_outcome`과 같은 결) — 부르는 쪽이 고르면 표와 갈라진다.
+
+    배포 규칙은 **상태 충돌이라 409**, 봉투·시간(C2 `V…`)은 403, 「아직 없는 기능」은 422다.
+    """
+    private, key = admin()
+    assert deployment_refusal([]) is None
+
+    picked = deployment_refusal(validate_deployment(
+        deployment_envelope(private), package=package(status="candidate"), keys=[key], now=NOW
+    ))
+    assert picked is not None
+    assert (picked[0], picked[1].code) == (409, "not_approved")
+
+    env = deployment_envelope(private, target={"type": "server_runner", "id": "srv_1"})
+    picked = deployment_refusal(validate_deployment(
+        env, package=package(run_location="server"), keys=[key], now=NOW
+    ))
+    assert picked is not None
+    assert (picked[0], picked[1].code) == (422, "server_runner_not_available")
+
+    # **봉투가 틀린 것이 먼저다** — 키가 거부됐는데 「승인되지 않았다」고 하면 엉뚱한 곳을 뒤진다.
+    other, _ = admin()
+    picked = deployment_refusal(validate_deployment(
+        deployment_envelope(other), package=package(status="candidate"), keys=[key], now=NOW
+    ))
+    assert picked is not None
+    assert picked[0] == ENVELOPE_REFUSAL_STATUS
+    assert picked[1].rule.startswith("V")
 
 
 def test_scheduled_deployment_is_accepted_but_expired_is_not() -> None:
