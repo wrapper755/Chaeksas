@@ -16,13 +16,14 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from waiting import wait_for  # noqa: E402
 
 from chaeksas.bot_ui.bots import InstallError, find, install, installed  # noqa: E402
 from chaeksas.bot_ui.runner import Launcher, new_run_id, runner_args  # noqa: E402
@@ -43,16 +44,6 @@ def packaged(tmp_path: Path, example: str) -> Path:
     """Studio가 하는 일 그대로 — 예제를 가져와 C1 패키지로 내보낸다."""
     made = Workspace(tmp_path / "studio").ensure().import_example(EXAMPLES, example)
     return export(made, tmp_path / default_name(made))
-
-
-def wait_for(check: Any, *, timeout_s: float = 30.0, every_s: float = 0.1) -> bool:
-    """자식 프로세스를 기다린다 — 조건이 참이 되면 바로 돌아온다."""
-    until = time.monotonic() + timeout_s
-    while time.monotonic() < until:
-        if check():
-            return True
-        time.sleep(every_s)
-    return False
 
 
 # ─────────────────────────── 설치 (BUI-04) ───────────────────────────
@@ -150,7 +141,7 @@ def test_an_approval_is_asked_through_the_log_and_answered_through_the_control_f
     launcher = Launcher(data_dir=data_dir)
     running = launcher.start(bot)
 
-    assert wait_for(lambda: bool(_read(running))), "결재 요청이 기록에 올라오지 않았다"
+    assert wait_for(lambda: bool(_read(running)), child=running.child), "결재 요청이 기록에 올라오지 않았다"
     (asked,) = running.pendings
     assert asked.layer == "confirmation", "`manualTask`는 확인이다 (C6)"
 
@@ -181,7 +172,7 @@ def test_stopping_a_waiting_bot_ends_it_as_cancelled(tmp_path: Path) -> None:
     launcher = Launcher(data_dir=data_dir)
     running = launcher.start(bot)
 
-    assert wait_for(lambda: bool(_read(running))), "결재 요청을 기다렸다"
+    assert wait_for(lambda: bool(_read(running)), child=running.child), "결재 요청을 기다렸다"
     launcher.stop()
 
     assert launcher.running is None
@@ -266,7 +257,7 @@ def test_the_queue_starts_the_next_bot_and_frees_the_slot(
         agent.pump()
         return agent.current_run is None
 
-    assert wait_for(swept, timeout_s=30)
+    assert wait_for(swept)
     assert agent.runner().running is None
 
 
@@ -329,7 +320,7 @@ def test_the_bot_tab_shows_what_is_installed_and_runs_it(
             window.refresh()
             return window.approve_button.isEnabled()
 
-        assert wait_for(asked, timeout_s=30), "결재 요청이 올라오지 않았다"
+        assert wait_for(asked), "결재 요청이 올라오지 않았다"
         assert "결재를 기다리는 중" in window.running_label.text()
     finally:
         agent.runner().stop()

@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -25,6 +24,8 @@ from conftest import FakeCredentials
 from fastapi.testclient import TestClient
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from waiting import wait_for  # noqa: E402
 
 from chaeksas.bot_ui.agent import Agent  # noqa: E402
 from chaeksas.bot_ui.bots import install  # noqa: E402
@@ -351,22 +352,15 @@ def agent(center: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         launcher.stop(grace_s=2.0)
 
 
-def wait_for(check: Any, *, timeout_s: float = 30.0) -> bool:
-    until = time.monotonic() + timeout_s
-    while time.monotonic() < until:
-        if check():
-            return True
-        time.sleep(0.1)
-    return False
-
-
 def raised(agent: Agent, center: TestClient) -> dict[str, Any]:
     """실행기가 요청 파일에 쓰면 Bot UI가 하트비트 뒤에 올린다 — 결재함(CON-04)에 보인다."""
     assert agent.beat() is not None  # 등록하고 실행기를 띄운다
     running = agent.runner().running
     assert running is not None
-    assert wait_for(lambda: bool(requests.unsent(running.requests_path))), "요청 파일에 올라오지 않았다"
-    assert wait_for(lambda: bool(seen(running))), "기록에 결재 요청이 없다"
+    assert wait_for(
+        lambda: bool(requests.unsent(running.requests_path)), child=running.child
+    ), "요청 파일에 올라오지 않았다"
+    assert wait_for(lambda: bool(seen(running)), child=running.child), "기록에 결재 요청이 없다"
     (asked,) = running.pendings
     assert asked.where == "center", "「원격 결재」가 켜져 있으면 「따름」 결재는 Center로 간다"
 

@@ -39,6 +39,8 @@ from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from waiting import wait_for  # noqa: E402
+
 from chaeksas.admin import keys as keystore  # noqa: E402
 from chaeksas.bot_ui.agent import Agent, load_extensions  # noqa: E402
 from chaeksas.bot_ui.bots import installed  # noqa: E402
@@ -210,15 +212,6 @@ def agent(
     launcher = made.runner()
     if launcher.running is not None:
         launcher.stop(grace_s=2.0)
-
-
-def wait_for(check: Any, *, timeout_s: float = 60.0) -> bool:
-    until = time.monotonic() + timeout_s
-    while time.monotonic() < until:
-        if check():
-            return True
-        time.sleep(0.1)
-    return False
 
 
 # ─────────────────────────── 배포 (C2·C5) ───────────────────────────
