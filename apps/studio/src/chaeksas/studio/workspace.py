@@ -129,9 +129,20 @@ class BpmProcess:
         return found or (self.definitions[0] if self.definitions else None)
 
     def decisions(self) -> dict[str, Decision]:
-        """같은 패키지의 DMN 결정 — 규칙 태스크가 찾는 것 (`RunEnv.decisions`)."""
+        """같은 패키지의 DMN 결정 — 규칙 태스크가 찾는 것 (`RunEnv.decisions`).
+
+        **받아 둔 `libs/`의 결정표도 읽는다** (ADR-0048) — 공유 BPM 프로세스 안의 규칙 태스크가
+        돌아야 하고, **실행기도 같은 둘을 읽는다**(`bot_ui/runner_main.py`). 한쪽만 읽으면
+        「Studio에서는 되는데 현장에서 안 된다」가 된다.
+
+        **받은 것을 먼저 읽고 내 것으로 덮는다** — 같은 결정 id면 내 `process/`가 이긴다
+        (`processes()`와 같은 결).
+        """
         found: dict[str, Decision] = {}
-        for path in sorted((self.folder / "process").glob("*.dmn")):
+        for path in [
+            *sorted((self.folder / LIBS_DIR).glob("*.dmn")),
+            *sorted((self.folder / "process").glob("*.dmn")),
+        ]:
             try:
                 found.update(read_decisions(path.read_text(encoding="utf-8")))
             except DmnReadError:
@@ -378,8 +389,11 @@ class Workspace:
         지운다. 남겨 두면 `libs/*.bpmn`을 글롭하는 쪽이 **두 판을 함께** 읽는다).
 
         파일 이름에 **패키지 id를 붙인다** — `libs/`가 평평해서 서로 다른 패키지가 같은
-        `main.bpmn`을 들고 올 수 있다. 읽는 쪽은 파일 이름이 아니라 **BPMN 프로세스 id**로
-        찾으므로(`processes()`) 이름을 바꿔도 호출은 그대로다.
+        `main.bpmn`을 들고 올 수 있다. 읽는 쪽은 파일 이름이 아니라 **BPMN 프로세스 id**(호출)와
+        **결정 id**(규칙 태스크)로 찾으므로 이름을 바꿔도 그대로다.
+
+        **정의(.bpmn)와 결정표(.dmn)를 함께** 받는다 (ADR-0048) — 규칙 태스크를 쓰는 공유 BPM
+        프로세스가 돌아야 하고, `decisions()`와 실행기가 `libs/*.dmn`을 읽는다.
         """
         if not definitions:
             raise WorkspaceError(f"{package_id}에 정의가 없다 (풀 것이 없다)")
@@ -387,12 +401,14 @@ class Workspace:
         folder = process.folder / LIBS_DIR
         folder.mkdir(parents=True, exist_ok=True)
         files, provided = [], []
-        for name, xml in sorted(definitions.items()):
+        for name, text in sorted(definitions.items()):
             file_name = f"{package_id}__{Path(name).name}"
-            (folder / file_name).write_text(xml, encoding="utf-8", newline="\n")
+            (folder / file_name).write_text(text, encoding="utf-8", newline="\n")
             files.append(file_name)
+            if not file_name.endswith(".bpmn"):
+                continue  # 결정표는 호출 대상이 아니다 (`decisions()`가 읽는다)
             try:
-                provided.append(read_process(xml).id)
+                provided.append(read_process(text).id)
             except BpmnReadError:
                 continue  # 읽지 못한 정의는 호출할 수 없다 — 파일은 그대로 둔다 (B14가 말한다)
         made = InstalledLib(

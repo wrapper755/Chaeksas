@@ -82,8 +82,14 @@ class Package:
         return out
 
     def decisions(self) -> dict[str, Decision]:
+        """규칙 태스크가 찾을 결정 — `process/`와 **`libs/`** (ADR-0048).
+
+        공유 BPM 프로세스가 제 결정표를 들고 오므로 그것도 읽는다 — Studio가 읽는 둘과 **같다**
+        (`studio/workspace.py`). **받은 것을 먼저 읽고 패키지 제 것으로 덮는다**(같은 id면
+        `process/`가 이긴다 — `processes()`와 같은 결).
+        """
         found: dict[str, Decision] = {}
-        for path in sorted(self.folder.glob("process/*.dmn")):
+        for path in [*sorted(self.folder.glob("libs/*.dmn")), *sorted(self.folder.glob("process/*.dmn"))]:
             try:
                 found.update(read_decisions(path.read_text(encoding="utf-8")))
             except DmnReadError:

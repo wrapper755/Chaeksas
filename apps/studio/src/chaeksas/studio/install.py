@@ -9,9 +9,9 @@
 - **Center를 읽기만 한다** (C5 `GET /packages/{id}/{version}`). 쓰는 길은 `upload.py` 하나다.
 - **아무 패키지나 풀지 않는다** — `kind=process_lib`이고 id·버전이 받으려던 것과 같아야 한다
   (`bpm_process` 패키지를 lib으로 풀면 진입 정의가 남의 `libs/`에서 돌게 된다).
-- **결정표(DMN)는 함께 설치되지 않는다** — 읽는 쪽이 `process/*.dmn`만 글롭한다(Studio도
-  실행기도). 그래서 규칙 태스크를 쓰는 공유 BPM 프로세스는 **설치해도 그 태스크가 돌지
-  않는다**. 조용히 두지 않고 설치 결과에 그렇게 적는다 (U3).
+- **정의와 결정표를 함께 푼다** (`process/*.bpmn`·`process/*.dmn`) — 규칙 태스크를 쓰는 공유
+  BPM 프로세스가 돌아야 한다. 읽는 쪽은 **Studio와 실행기 둘 다** `libs/`를 보고(C1), 한쪽만
+  읽으면 「Studio에서는 되는데 현장에서 안 된다」가 된다.
 """
 
 from __future__ import annotations
@@ -19,10 +19,9 @@ from __future__ import annotations
 import io
 import logging
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
-from chaeksas.contracts.bpmn_ext import BpmnReadError, read_process
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.studio.services import CenterReader, CenterUnreachable
 from chaeksas.studio.workspace import BpmProcess, InstalledLib, Workspace, WorkspaceError
@@ -32,17 +31,13 @@ log = logging.getLogger(__name__)
 #: 받을 수 있는 갈래 (C1). 「설치」는 공유 BPM 프로세스만 한다.
 KIND_LIB = "process_lib"
 
-#: 패키지 안에서 정의가 사는 곳 (C1 §패키지 구성).
+#: 패키지 안에서 정의·결정표가 사는 곳 (C1 §패키지 구성).
 PROCESS_DIR = "process/"
+#: 푸는 것 — 정의와 그것이 쓰는 결정표 (ADR-0048). 그 밖(케이스·기록)은 lib에 없다.
+SUFFIXES = (".bpmn", ".dmn")
 
 NO_PROCESS = "열린 BPM 프로세스가 없습니다 — 설치는 BPM 프로세스 하나에 하는 일입니다."
 NO_CENTER = "Center 주소·Studio 키가 설정되지 않았습니다 — 설정 → 「Center」 (STU-10)."
-
-#: 규칙 태스크가 있는 lib을 설치했을 때 (§다섯).
-RULE_WARNING = (
-    "이 공유 BPM 프로세스는 결정표(DMN)를 쓰는데 결정표는 함께 설치되지 않습니다 — "
-    "규칙 태스크는 실행되지 않습니다."
-)
 
 
 class InstallFailed(RuntimeError):
@@ -54,18 +49,17 @@ class Installed:
     """설치한 결과."""
 
     lib: InstalledLib
-    #: 사람에게 더 할 말 (없으면 비어 있다).
-    warnings: tuple[str, ...] = field(default_factory=tuple)
+    #: 함께 푼 결정표 수 (C1 `libs/`) — 0이면 그 말을 하지 않는다.
+    decisions: int = 0
 
     @property
     def message(self) -> str:
-        count = len(self.lib.processes)
-        head = f"{self.lib.ref}을 설치했습니다 (정의 {count}개)."
-        return " ".join([head, *self.warnings])
+        head = f"{self.lib.ref}을 설치했습니다 (정의 {len(self.lib.processes)}개"
+        return f"{head}, 결정표 {self.decisions}개)." if self.decisions else f"{head})."
 
 
 def definitions_in(raw: bytes, *, package_id: str, version: str) -> dict[str, str]:
-    """패키지 zip에서 **정의만** 꺼낸다 (`process/*.bpmn`).
+    """패키지 zip에서 **정의와 결정표**를 꺼낸다 (`process/*.bpmn`·`process/*.dmn`).
 
     매니페스트를 먼저 보고 **갈래·id·버전이 맞는지** 확인한다 — 받으려던 것과 다른 것이 오면
     풀지 않는다. 폴더 구조는 C1이 정한 그대로를 믿지 않고 **이름으로** 고른다.
@@ -90,23 +84,11 @@ def definitions_in(raw: bytes, *, package_id: str, version: str) -> dict[str, st
         found = {
             Path(name).name: archive.read(name).decode("utf-8")
             for name in sorted(archive.namelist())
-            if name.startswith(PROCESS_DIR) and name.endswith(".bpmn")
+            if name.startswith(PROCESS_DIR) and name.endswith(SUFFIXES)
         }
-    if not found:
+    if not any(name.endswith(".bpmn") for name in found):
         raise InstallFailed(f"{package_id} {version}: 패키지에 정의가 없습니다")
     return found
-
-
-def _warnings(definitions: dict[str, str]) -> tuple[str, ...]:
-    """설치는 하되 **할 말이 있는 것** — 지금은 결정표 하나다 (§다섯)."""
-    for xml in definitions.values():
-        try:
-            found = read_process(xml)
-        except BpmnReadError:
-            continue
-        if any(node.prop("rule") is not None for node in found.all_nodes()):
-            return (RULE_WARNING,)
-    return ()
 
 
 def install(
@@ -137,7 +119,7 @@ def install(
     except WorkspaceError as e:
         raise InstallFailed(f"{package_id} {version}: {e}") from e
     log.info("공유 BPM 프로세스를 설치했다: %s → %s", made.ref, process.id)
-    return Installed(lib=made, warnings=_warnings(definitions))
+    return Installed(lib=made, decisions=sum(1 for name in definitions if name.endswith(".dmn")))
 
 
 def remove(workspace: Workspace, process: BpmProcess | None, *, package_id: str) -> str:
@@ -171,7 +153,7 @@ __all__ = [
     "KIND_LIB",
     "NO_CENTER",
     "NO_PROCESS",
-    "RULE_WARNING",
+    "SUFFIXES",
     "InstallFailed",
     "Installed",
     "callers_of",

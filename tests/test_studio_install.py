@@ -7,7 +7,8 @@
 2. **편집 대상이 아니다** — `definitions`(탐색기·저장)에는 들어가지 않는다.
 3. **내보내기가 판을 붙인다** — `requires.libs`가 C1대로 `<id>@<version>`이다.
 4. **갱신은 갈아 치운다** — 옛 판의 파일이 남으면 `libs/*.bpmn`을 글롭하는 쪽이 둘을 읽는다.
-5. **아무 패키지나 풀지 않는다** — 갈래·id·버전이 받으려던 것과 같아야 한다.
+5. **결정표도 함께 온다** — 규칙 태스크를 쓰는 lib이 **진짜로 돈다** (Studio·실행기 양쪽).
+6. **아무 패키지나 풀지 않는다** — 갈래·id·버전이 받으려던 것과 같아야 한다.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import json
 import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -65,12 +67,46 @@ CALLER = """<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>
 """
 
-#: 규칙 태스크가 있는 정의 — 결정표가 함께 설치되지 않는다는 말을 보려고 (§다섯).
+#: 규칙 태스크가 있는 정의 — 결정표가 함께 와야 도는 자리다 (§다섯).
 RULE_BODY = (
     '<bpmn:businessRuleTask id="Rule_1" name="등급">'
-    '<bpmn:extensionElements><chk:rule>{"decision": "grade", "input": {}, "output": {}}'
+    '<bpmn:extensionElements><chk:rule>'
+    '{"decision": "grade", "input": {"score": "점수"}, "output": {"등급": "grade"}}'
     "</chk:rule></bpmn:extensionElements></bpmn:businessRuleTask>"
 )
+
+#: 그 규칙 태스크가 찾는 결정표 (C1 — lib 패키지의 `process/*.dmn`).
+DECISION = """<?xml version="1.0" encoding="UTF-8"?>
+<dmn:definitions xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Defs_grade"
+                 name="등급" namespace="urn:chaeksas:test">
+  <dmn:decision id="{decision_id}" name="등급">
+    <dmn:decisionTable id="DT_grade" hitPolicy="FIRST">
+      <dmn:input id="In_0" label="점수">
+        <dmn:inputExpression id="InE_0" typeRef="number"><dmn:text>score</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:output id="Out_0" name="grade" typeRef="string" />
+      <dmn:rule id="Rule_0">
+        <dmn:inputEntry id="R0_I0"><dmn:text>&gt;= 600</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R0_O0"><dmn:text>"{high}"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_1">
+        <dmn:inputEntry id="R1_I0"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R1_O0"><dmn:text>"위험"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+</dmn:definitions>
+"""
+
+
+def rule_lib(*, decision_id: str = "grade", high: str = "정상") -> dict[str, str]:
+    """규칙 태스크를 쓰는 공유 BPM 프로세스 한 벌 — 정의 + 결정표."""
+    return {
+        "process/approve.bpmn": DEFINITION.format(
+            process_id=CALLED, name="팀장 결재", body=RULE_BODY
+        ),
+        "process/grade.dmn": DECISION.format(decision_id=decision_id, high=high),
+    }
 
 
 def lib_zip(
@@ -197,7 +233,7 @@ def test_an_installed_lib_can_be_called_and_is_not_editable(
 
     assert done.lib.ref == f"{LIB_ID}@{LIB_VERSION}"
     assert done.lib.processes == (CALLED,)
-    assert done.warnings == ()
+    assert done.decisions == 0, "이 lib은 결정표를 쓰지 않는다"
     # 파일은 **평평하게** `libs/`에 (실행기가 `libs/*.bpmn`을 글롭한다).
     assert [p.name for p in sorted((process.folder / LIBS_DIR).glob("*.bpmn"))] == list(done.lib.files)
 
@@ -344,19 +380,63 @@ def test_no_open_process_means_no_install(
         install.install(workspace, None, reader, package_id=LIB_ID, version=LIB_VERSION)
 
 
-def test_a_lib_with_a_rule_task_says_the_decision_is_missing(
+def test_a_libs_decision_table_comes_along_and_is_found(
     center: TestClient, studio_key: str, reader: services.CenterReader,
     workspace: Workspace, process: BpmProcess, tmp_path: Path,
 ) -> None:
-    """**결정표는 함께 설치되지 않는다** — 읽는 쪽이 `process/*.dmn`만 글롭한다.
+    """**결정표도 함께 푼다** (ADR-0048) — 규칙 태스크를 쓰는 lib이 돌아야 한다.
 
-    조용히 두면 「왜 규칙 태스크에서 멈추나」가 된다. 설치는 하고 **그렇게 말한다** (U3).
+    전에는 정의만 받아 가서 설치해도 그 태스크가 멈췄다(읽는 쪽이 `process/*.dmn`만 봤다).
     """
-    with_rule = DEFINITION.format(process_id=CALLED, name="팀장 결재", body=RULE_BODY)
-    upload_lib(center, studio_key, lib_zip(files={"process/approve.bpmn": with_rule}), tmp_path)
+    upload_lib(center, studio_key, lib_zip(files=rule_lib()), tmp_path)
     done = install.install(workspace, process, reader, package_id=LIB_ID, version=LIB_VERSION)
-    assert done.warnings == (install.RULE_WARNING,)
-    assert install.RULE_WARNING in done.message
+
+    assert done.decisions == 1
+    assert "결정표 1개" in done.message
+    assert [one for one in done.lib.files if one.endswith(".dmn")], "기록이 결정표도 들고 있다"
+
+    after = workspace.read(process.folder, process.group)
+    assert "grade" in after.decisions(), "규칙 태스크가 찾을 자리에 있다"
+
+
+def test_my_own_decision_wins_over_a_libs(
+    center: TestClient, studio_key: str, reader: services.CenterReader,
+    workspace: Workspace, process: BpmProcess, tmp_path: Path,
+) -> None:
+    """**내 것이 이긴다** — 같은 결정 id면 내 `process/`를 쓴다 (`processes()`와 같은 결)."""
+    upload_lib(center, studio_key, lib_zip(files=rule_lib(high="lib의 것")), tmp_path)
+    install.install(workspace, process, reader, package_id=LIB_ID, version=LIB_VERSION)
+    (process.folder / "process" / "grade.dmn").write_text(
+        DECISION.format(decision_id="grade", high="내 것"), encoding="utf-8"
+    )
+
+    after = workspace.read(process.folder, process.group)
+    found = after.decisions()["grade"]
+    assert found.rules[0].values == ("내 것",)
+
+
+def test_the_runner_reads_the_same_two_places(
+    center: TestClient, studio_key: str, reader: services.CenterReader,
+    workspace: Workspace, process: BpmProcess, tmp_path: Path,
+) -> None:
+    """**실행기도 `libs/`를 읽는다** — 한쪽만 고치면 「Studio에서는 되는데 현장에서 안 된다」다.
+
+    내보낸 패키지를 **실행기 쪽 코드로** 읽어 본다 (`bot_ui.runner_main.Package`).
+    """
+    from chaeksas.bot_ui.runner_main import Package
+
+    upload_lib(center, studio_key, lib_zip(files=rule_lib()), tmp_path)
+    install.install(workspace, process, reader, package_id=LIB_ID, version=LIB_VERSION)
+    after = workspace.read(process.folder, process.group)
+
+    made = packaging.export(after, tmp_path / "out.zip")
+    unpacked = tmp_path / "installed"
+    with zipfile.ZipFile(made) as archive:
+        archive.extractall(unpacked)
+
+    package = Package.read(unpacked)
+    assert "grade" in package.decisions(), "현장에서도 규칙 태스크가 결정을 찾는다"
+    assert CALLED in package.processes(), "호출 대상도 그대로다"
 
 
 # ─────────────────────────── STU-11 화면 ───────────────────────────
@@ -484,3 +564,123 @@ def test_a_lib_that_center_no_longer_has_is_local_only(
     assert [(one.package_id, one.status, one.installed) for one in found.rows] == [
         (LIB_ID, center_resources.LOCAL_ONLY, LIB_VERSION)
     ]
+
+
+# ─────────── 진짜로 도나 (엔진) ───────────
+#
+# 설치가 「파일을 옮겼다」로 끝나면 안 된다 — **규칙 태스크가 결정을 찾아 도는지**를 엔진으로
+# 본다. Qt도 Center도 끼우지 않는다 (가짜 읽기 클라이언트 + 엔진).
+
+RULE_FLOW = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+  <bpmn:process id="{process_id}" name="등급 매기기">
+    <bpmn:extensionElements>
+      <chk:process>{{"inputs": [{{"name": "점수", "type": "number"}}]}}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start_1"/>
+    <bpmn:businessRuleTask id="Rule_1" name="등급">
+      <bpmn:extensionElements><chk:rule>
+        {{"decision": "grade", "input": {{"score": "점수"}}, "output": {{"등급": "grade"}}}}
+      </chk:rule></bpmn:extensionElements>
+    </bpmn:businessRuleTask>
+    <bpmn:endEvent id="End_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Rule_1" />
+    <bpmn:sequenceFlow id="f2" sourceRef="Rule_1" targetRef="End_1" />
+  </bpmn:process>
+</bpmn:definitions>
+"""
+
+CALLER_WITH_INPUT = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+  <bpmn:process id="Proc_main" name="주문">
+    <bpmn:extensionElements>
+      <chk:process>{{"inputs": [{{"name": "점수", "type": "number"}}]}}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start_1"/>
+    <bpmn:callActivity id="Call_1" name="등급" calledElement="{called}">
+      <bpmn:extensionElements>
+        <chk:call>{{"input": {{"점수": "점수"}}, "output": {{}}}}</chk:call>
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="End_1"/>
+    <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Call_1" />
+    <bpmn:sequenceFlow id="f2" sourceRef="Call_1" targetRef="End_1" />
+  </bpmn:process>
+</bpmn:definitions>
+"""
+
+
+def run_it(found: BpmProcess) -> Any:
+    """진입 정의를 끝까지 민다 — `RunEnv`는 **작업 폴더가 주는 것**이다 (시험 실행과 같은 둘)."""
+    from chaeksas.core.engine import Engine, RunEnv
+    from chaeksas.core.run_log import RunLog
+
+    entry = found.definitions[0].process
+    assert entry is not None
+    engine = Engine()
+    log = RunLog(run_id="test_20261012_090000_abc123")
+    run = engine.start(
+        entry,
+        run_id=log.run_id,
+        log=log,
+        now=datetime(2026, 10, 12, 9, 0, tzinfo=UTC),
+        env=RunEnv(processes=found.processes(), decisions=found.decisions()),
+        inputs={"점수": 700},
+    )
+    return engine.run_until_blocked(run), run
+
+
+def test_a_rule_task_inside_a_lib_really_runs(workspace: Workspace) -> None:
+    """**설치하면 lib의 규칙 태스크가 돈다** (ADR-0048) — 결정표가 함께 왔기 때문이다."""
+    from chaeksas.core.run_state import State
+
+    made = workspace.create("erp.grade", name="등급")
+    workspace.save_definition(made, "main.bpmn", CALLER_WITH_INPUT.format(called=CALLED))
+    process = workspace.read(made.folder, made.group)
+    reader = FakeReader(
+        {
+            (LIB_ID, LIB_VERSION): lib_zip(
+                files={
+                    "process/approve.bpmn": RULE_FLOW.format(process_id=CALLED),
+                    "process/grade.dmn": DECISION.format(decision_id="grade", high="정상"),
+                }
+            )
+        }
+    )
+    install.install(workspace, process, reader, package_id=LIB_ID, version=LIB_VERSION)
+
+    state, run = run_it(workspace.read(made.folder, made.group))
+    assert state is State.DONE, run.error
+    assert run.error is None
+
+
+def test_without_the_decision_table_the_rule_task_fails(workspace: Workspace) -> None:
+    """**결정표가 빠지면 멈춘다** — 이 시험이 위의 시험이 공짜가 아님을 말해 준다.
+
+    결정표만 지우고 같은 그림을 돌린다 (전에는 설치가 늘 이 꼴이었다).
+    """
+    from chaeksas.core.run_state import State
+
+    made = workspace.create("erp.grade", name="등급")
+    workspace.save_definition(made, "main.bpmn", CALLER_WITH_INPUT.format(called=CALLED))
+    process = workspace.read(made.folder, made.group)
+    reader = FakeReader(
+        {
+            (LIB_ID, LIB_VERSION): lib_zip(
+                files={
+                    "process/approve.bpmn": RULE_FLOW.format(process_id=CALLED),
+                    "process/grade.dmn": DECISION.format(decision_id="grade", high="정상"),
+                }
+            )
+        }
+    )
+    done = install.install(workspace, process, reader, package_id=LIB_ID, version=LIB_VERSION)
+    for name in done.lib.files:
+        if name.endswith(".dmn"):
+            (process.folder / LIBS_DIR / name).unlink()
+
+    state, run = run_it(workspace.read(made.folder, made.group))
+    assert state is not State.DONE
+    assert run.error is not None
