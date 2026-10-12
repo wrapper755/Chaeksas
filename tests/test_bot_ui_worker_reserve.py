@@ -185,5 +185,9 @@ def test_the_queue_waits_while_the_worker_is_busy_and_releases_after(
     assert agent.current_run.run_id == asked[-1], "예약한 그 run_id로 돈다"
     assert agent.tray_status() != TRAY_WORKER_BUSY
 
-    agent._finished(SimpleNamespace(bot=bot, job_id=None, finished="success", run_id=agent.current_run.run_id))
+    agent._finished(
+        SimpleNamespace(
+            bot=bot, job_id=None, finished="success", run_id=agent.current_run.run_id, key_refusals=[]
+        )
+    )
     assert released == ["worker"] and agent.current_run is None, "끝나면 예약을 푼다"

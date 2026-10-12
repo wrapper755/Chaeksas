@@ -47,6 +47,7 @@ from chaeksas.bot_ui.credentials import Credentials, SecretsUnavailable, service
 from chaeksas.bot_ui.settings import ServiceKeyRef, data_dir
 from chaeksas.contracts.manifest import KEY_REF_PATTERN, Manifest
 from chaeksas.core.key_check import key_status
+from chaeksas.core.preflight import key_apps_of
 from chaeksas.qt import theme
 
 log = logging.getLogger(__name__)
@@ -105,15 +106,9 @@ class KeyRow:
 def refs_of(manifest: Manifest) -> dict[str, str]:
     """그 Bot이 쓰는 `참조 → 서비스 앱 id` (C1 `requires.service_apps`).
 
-    BPM 프로세스가 상속하는 `key_ref`와 태스크가 따로 적은 `task_key_refs`를 함께 센다 — 둘 다
-    실행 중에 풀어야 한다 (`core.preflight.key_refs_of`가 같은 것을 센다).
+    **세는 자리는 하나다** — 사전 점검도, 만료를 묻는 주기도(ADR-0052) 같은 함수를 쓴다.
     """
-    out: dict[str, str] = {}
-    for need in manifest.requires.service_apps:
-        for ref in (need.key_ref, *need.task_key_refs):
-            if ref:
-                out.setdefault(ref, need.app_id)
-    return out
+    return key_apps_of(manifest)
 
 
 def collect(
