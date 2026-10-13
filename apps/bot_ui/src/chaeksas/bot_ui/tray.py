@@ -119,7 +119,7 @@ class Tray(QSystemTrayIcon):
         self._menu.addAction(action)
 
     def _rebuild(self, status: str) -> None:
-        from chaeksas.bot_ui import machine  # noqa: PLC0415 — PC 이름만 쓴다
+        from chaeksas.core import machine  # noqa: PLC0415 — PC 이름만 쓴다
 
         self._menu.clear()
         agent = self._agent

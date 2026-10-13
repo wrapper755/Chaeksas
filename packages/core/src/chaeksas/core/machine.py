@@ -1,6 +1,10 @@
-"""이 PC를 가리키는 값 — `machine_id`·OS 표시·PC 이름 (C4 `RegisterRequest`).
+"""이 기계를 가리키는 값 — `machine_id`·OS 표시·이름 (C4·C12 `RegisterRequest`).
 
-**원값은 보내지 않는다.** PC 고유값의 SHA-256만 보낸다 (C4) — Center 데이터가 새도 PC를
+**Bot UI와 서버 실행기가 같은 규칙을 쓴다.** 둘의 키 묶기가 같은 뜻이어야 하므로(키 하나 ↔
+기계 하나) 규칙이 두 군데 있으면 안 된다 — 앱끼리 import할 수 없어 여기 `core`에 둔다
+(`core.key_check`가 같은 까닭으로 올라온 자리다).
+
+**원값은 보내지 않는다.** 고유값의 SHA-256만 보낸다 (C4) — Center 데이터가 새도 그 기계를
 되짚을 수 없게.
 
 | | 고유값 출처 |
@@ -80,7 +84,7 @@ def _macos_platform_uuid() -> str | None:  # pragma: no cover - OS 분기
 
 
 def raw_machine_value(data_dir: Path) -> str:
-    """이 PC의 고유값 (해시 전). **밖으로 내보내지 않는다.**"""
+    """이 기계의 고유값 (해시 전). **밖으로 내보내지 않는다.**"""
     found = None
     if sys.platform == "win32":  # pragma: no cover - OS 분기
         found = _windows_machine_guid()
@@ -107,12 +111,12 @@ def raw_machine_value(data_dir: Path) -> str:
 
 
 def machine_id(data_dir: Path) -> str:
-    """C4 `machine_id` — 고유값의 SHA-256 (64자 16진수)."""
+    """C4·C12 `machine_id` — 고유값의 SHA-256 (64자 16진수)."""
     return hashlib.sha256(raw_machine_value(data_dir).encode("utf-8")).hexdigest()
 
 
 def os_label() -> str:
-    """C4 `os` — 예: `windows-11-23H2`, `ubuntu-24.04`, `linux-6.18`."""
+    """C4·C12 `os` — 예: `windows-11-23H2`, `ubuntu-24.04`, `linux-6.18`."""
     if sys.platform == "win32":  # pragma: no cover - OS 분기
         release = platform.win32_ver()[0] or platform.release()
         build = platform.win32_edition() if hasattr(platform, "win32_edition") else ""
@@ -130,7 +134,7 @@ def os_label() -> str:
 
 
 def pc_name() -> str:
-    """표시 이름의 기본값 (C4 `name`). 못 읽으면 `unknown-pc`."""
+    """표시 이름의 기본값 (C4·C12 `name`). 못 읽으면 `unknown-pc`."""
     try:
         found = socket.gethostname().strip()
     except OSError:  # pragma: no cover - 방어

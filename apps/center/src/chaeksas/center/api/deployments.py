@@ -275,11 +275,34 @@ def downloadable_by(store: Store, *, target_type: str, target_id: str) -> set[tu
     return {(str(one["id"]), str(one["version"])) for one in rows}
 
 
-def results_of(store: Store, *, bot_ui_id: str, limit: int = RECENT_RESULTS) -> list[DeploymentResult]:
-    """그 Bot UI가 보고한 **최근 배치 결정** (C5 `BotUiInfo.deployment_results`, CON-03)."""
+def max_concurrency_for(store: Store, *, bpm_process_id: str) -> int | None:
+    """그 Bot의 **동시 실행 상한** — 서명된 배포 봉투가 정한다 (C2 `max_concurrency`, C12 §3).
+
+    Center가 짓지 않는다 — 봉투에 적힌 값이고, 없으면 `None`이라 부르는 쪽이 계약의 기본값
+    (5)을 쓴다. 활성 배포가 여럿이면 **가장 작은 값**이다 (가장 조심스러운 쪽을 따른다).
+    """
+    found: list[int] = []
+    for row in store.rows(
+        "SELECT envelope_json AS body FROM deployments"
+        " WHERE revoked_json IS NULL AND target_type = ? AND bpm_process_id = ?",
+        ("server_runner", bpm_process_id),
+    ):
+        claim = (json.loads(row["body"]) or {}).get("payload") or {}
+        value = claim.get("max_concurrency")
+        if isinstance(value, int) and value > 0:
+            found.append(value)
+    return min(found) if found else None
+
+
+def results_of(store: Store, *, host_id: str, limit: int = RECENT_RESULTS) -> list[DeploymentResult]:
+    """그 **보고한 쪽**의 최근 배치 결정 (C5 `BotUiInfo.deployment_results`, CON-03·CON-12).
+
+    `host_id`는 PC(`bui_…`)이거나 서버 실행기(`srv_…`)다 — 열 이름이 `bot_ui_id`로 남은 까닭은
+    `storage.SCHEMA`에 적어 두었다.
+    """
     rows = store.rows(
         "SELECT * FROM deployment_results WHERE bot_ui_id = ? ORDER BY at DESC LIMIT ?",
-        (bot_ui_id, limit),
+        (host_id, limit),
     )
     return [
         DeploymentResult(
@@ -294,7 +317,7 @@ def results_of(store: Store, *, bot_ui_id: str, limit: int = RECENT_RESULTS) -> 
     ]
 
 
-def remember_results(store: Store, *, bot_ui_id: str, results: Sequence[DeploymentResult]) -> None:
+def remember_results(store: Store, *, host_id: str, results: Sequence[DeploymentResult]) -> None:
     """하트비트가 실어 온 배치 결정을 쌓는다 (C4).
 
     **같은 `(deployment_id, at)`은 한 번만** — Bot UI가 보내 놓고 응답을 못 받아 다시 보내도
@@ -303,7 +326,7 @@ def remember_results(store: Store, *, bot_ui_id: str, results: Sequence[Deployme
     for one in results:
         found = store.row(
             "SELECT 1 FROM deployment_results WHERE bot_ui_id = ? AND deployment_id = ? AND at = ?",
-            (bot_ui_id, one.deployment_id, one.at),
+            (host_id, one.deployment_id, one.at),
         )
         if found is not None:
             continue
@@ -312,7 +335,7 @@ def remember_results(store: Store, *, bot_ui_id: str, results: Sequence[Deployme
                 "INSERT INTO deployment_results (bot_ui_id, deployment_id, bpm_process_id, version,"
                 " result, reason, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
-                    bot_ui_id,
+                    host_id,
                     one.deployment_id,
                     one.bpm_process_id,
                     one.version,

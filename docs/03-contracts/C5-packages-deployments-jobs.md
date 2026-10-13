@@ -206,8 +206,11 @@ JobInfo는 위 필드에 다음을 더한다.
 | `expired` | 만료 | `expires_at`까지 시작하지 못함 |
 | `cancelled` | 취소됨 | 취소 완료 |
 
-`rejected`의 `state_reason`: `queue_full`, `no_deployment`, `not_ready`, `bot_ui_shutdown`, `bot_ui_lost`, `server_location`, `cancelled_on_pc`(현장 Bot UI에서 취소).
+`rejected`의 `state_reason`: `queue_full`, `no_deployment`, `not_ready`, `bot_ui_shutdown`, `bot_ui_lost`, `server_location`, `cancelled_on_pc`(현장 Bot UI에서 취소), **`runner_lost`**(서버 실행기를 잃음 — 맞추기 규칙이나 CON-12 「유실 처리」, C12).
+
 `queued`(서버)의 `state_reason`: `global_limit`(서버 실행기 빈자리 없음), `per_bot_limit`(BPM 프로세스별 상한), `paused` (C12).
+
+**맞추기 규칙의 사유는 호스트마다 다르다** — PC는 `bot_ui_lost`, 서버 실행기는 `runner_lost`다. 뭉개면 CON-12가 서버에 「bot_ui_lost」라고 적어 운영자가 PC를 찾아 헤맨다.
 
 ### 취소
 

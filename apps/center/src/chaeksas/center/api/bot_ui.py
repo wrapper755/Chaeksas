@@ -19,7 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from chaeksas.center import keys
+from chaeksas.center import host_keys, keys
 from chaeksas.center.api import approvals, deployments, jobs, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
@@ -40,12 +40,13 @@ from chaeksas.contracts.bot_ui import (
     WorkerState,
 )
 from chaeksas.contracts.center_api import BotUiInfo, BotUiKey
-from chaeksas.contracts.center_keys import BoundTo
 
 router = APIRouter(prefix="/api/v1/bot-ui", tags=["bot-ui"])
 
 #: 키 종류 (C4 — Bot UI용 키만 받는다).
 KEY_TYPE = "bot_ui"
+#: 키 묶기를 지킬 표 (C4 「키 묶기」 — 규칙은 `center.host_keys`에 하나다).
+TABLE = host_keys.BOT_UI
 
 
 def new_bot_ui_id() -> str:
@@ -58,65 +59,12 @@ def id_for_key(store: Store, key_id: str) -> str | None:
     `bot_uis` 표를 아는 자리를 하나로 둔다 — 내려받기 관문(`api.package_access`)과 실행
     기록의 「Bot UI」 열(`api.runs`)이 같은 길로 묻는다. 베껴 두면 키 묶기 규칙이 갈라진다.
     """
-    found = store.row("SELECT bot_ui_id FROM bot_uis WHERE key_id = ?", (key_id,))
-    return str(found["bot_ui_id"]) if found is not None else None
+    return host_keys.id_for_key(store, TABLE, key_id)
 
 
 def exists(store: Store, bot_ui_id: str) -> bool:
-    """등록된 PC인가 (C5 — 배포·작업 지시의 대상 검사, [ADR-0049]).
-
-    **`bot_ui_id`는 등록에서 우리가 만든다**(`new_bot_ui_id()`) — 등록 전에는 아무도 그 id를
-    모르므로, 명부에 없는 id는 **미리 배포해 둔 것이 아니라 오타이거나 낡은 id**다. 행은
-    지우지 않으니(「PC 묶음 풀기」는 키만 푼다) 한번 참이면 영원히 참이다.
-    """
-    return store.row("SELECT 1 FROM bot_uis WHERE bot_ui_id = ?", (bot_ui_id,)) is not None
-
-
-def _refuse_if_bound_elsewhere(key: keys.KeyRecord, machine_id: str) -> None:
-    """키 → PC: 키는 처음 등록한 PC에 묶인다 (C4 「키 묶기」)."""
-    if key.bound_to is not None and key.bound_to.id != machine_id:
-        raise ApiError(
-            409,
-            "machine_mismatch",
-            f"이 키는 다른 PC에 묶여 있다 (「{key.bound_to.name}」). "
-            "PC를 다시 설치했다면 콘솔에서 「PC 묶음 풀기」를 하세요",
-            {"bound_to": key.bound_to.to_json_dict()},
-        )
-
-
-def _adopt_or_refuse(store: Store, key: keys.KeyRecord, *, machine_id: str, own: Any | None) -> Any | None:
-    """PC → 키: `machine_id` 하나에 Bot UI 행도 하나다 (C4 「키 묶기」).
-
-    돌려주는 것은 **이어받을 자리**다 (그 PC가 비어 있으면 `None`). 묶음이 풀린 키의 자리는
-    놓인 자리라 새 키가 이어받는다 — 새 행을 만들면 배포·작업·결재가 가리키는 `bot_ui_id`를
-    버리게 되고 CON-03에 유령 한 줄이 남는다.
-    """
-    other = store.row(
-        "SELECT * FROM bot_uis WHERE machine_id = ? AND key_id <> ?", (machine_id, key.key_id)
-    )
-    if other is None:
-        return None
-    detail = {"bot_ui_id": str(other["bot_ui_id"]), "name": str(other["name"])}
-    owner = keys.get(store, str(other["key_id"]))
-    if owner is not None and owner.bound_to is not None:
-        # 키 하나가 혼자서 남의 PC 자리를 가져가지 못한다 — 관문은 운영자다.
-        raise ApiError(
-            409,
-            "machine_already_registered",
-            f"이 PC는 이미 다른 키로 등록되어 있다 (「{other['name']}」). "
-            "키를 바꾸려면 콘솔에서 옛 키의 「PC 묶음 풀기」를 먼저 하세요",
-            {**detail, "reason": "bound_elsewhere"},
-        )
-    if own is not None:
-        # 이어받기는 행이 없는 키만 한다 — 어느 쪽 이력을 버릴지 짐작하지 않는다.
-        raise ApiError(
-            409,
-            "machine_already_registered",
-            f"이 키는 이미 다른 PC로 등록되어 있어 이 PC(「{other['name']}」)의 자리를 "
-            "이어받을 수 없다. 이 PC에는 새 키를 발급하세요",
-            {**detail, "reason": "key_has_another_pc"},
-        )
-    return other
+    """등록된 PC인가 (C5 — 배포·작업 지시의 대상 검사, [ADR-0049])."""
+    return host_keys.exists(store, TABLE, bot_ui_id)
 
 
 def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_interval_s: int) -> RegisterResponse:
@@ -127,16 +75,10 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
     except ValueError as e:
         raise ApiError(422, "input_invalid", "등록 요청이 계약과 맞지 않는다", {"error": str(e).splitlines()[0]}) from e
 
-    existing = store.row("SELECT * FROM bot_uis WHERE key_id = ?", (key.key_id,))
-    # **묶기 전에 두 방향을 다 본다** — 막힌 등록이 키를 묶으면 운영자가 그 묶음까지 풀어야 한다 (C4).
-    _refuse_if_bound_elsewhere(key, request.machine_id)
-    adopted = _adopt_or_refuse(store, key, machine_id=request.machine_id, own=existing)
-    if key.bound_to is None:
-        keys.bind(
-            store,
-            key.key_id,
-            BoundTo(type=KEY_TYPE, id=request.machine_id, name=request.name, first_seen=now_iso()),
-        )
+    # 키 묶기는 **C12와 같은 규칙**이다 (`center.host_keys`) — 베끼면 두 길이 갈라진다.
+    existing, adopted = host_keys.claim(
+        store, TABLE, key, machine_id=request.machine_id, name=request.name, key_type=KEY_TYPE
+    )
 
     row = existing if existing is not None else adopted
     bot_ui_id = str(row["bot_ui_id"]) if row is not None else new_bot_ui_id()
@@ -235,7 +177,7 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
         )
     # 배치 결정은 **한 주기만 올라온다** — 흘려보내면 「왜 설치가 안 됐나」가 남지 않는다 (C4).
     deployments.remember_results(
-        store, bot_ui_id=str(found["bot_ui_id"]), results=request.deployment_results
+        store, host_id=str(found["bot_ui_id"]), results=request.deployment_results
     )
 
     disabled = bool(found["disabled"])
@@ -255,7 +197,7 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
         cancel_jobs=cancels,
         # 답이 정해진 결재 (C6). ack가 올 때까지 내려간다 — 거절하면 다시 `open`이 된다.
         approvals=approvals.heartbeat(
-            store, bot_ui_id=str(found["bot_ui_id"]), acks=request.approval_acks
+            store, host_id=str(found["bot_ui_id"]), acks=request.approval_acks
         ),
         disabled=disabled,
         # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4).
@@ -299,7 +241,7 @@ def bot_ui_listing(store: Store) -> list[BotUiInfo]:
                 readiness=[Readiness.model_validate(r) for r in state.get("readiness", [])],
                 extensions=[ExtensionState.model_validate(e) for e in state.get("extensions", [])],
                 # 마지막 하트비트가 아니라 **Center가 쌓아 둔 것**이다 (C5 — CON-03이 읽는다).
-                deployment_results=deployments.results_of(store, bot_ui_id=str(row["bot_ui_id"])),
+                deployment_results=deployments.results_of(store, host_id=str(row["bot_ui_id"])),
                 key=BotUiKey(
                     prefix=record.prefix,
                     expires_at=record.expires_at,

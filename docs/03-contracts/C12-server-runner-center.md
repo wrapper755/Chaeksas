@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-13) — 모델·검사는 코드로 있다. 부르는 쪽(서버 실행기·Center)은 M7에서 온다 |
+| 상태 | **합의** (2026-10-13) — **등록·하트비트는 양쪽이 돌고 시험이 지킨다** (`apps/server_runner` ↔ Center). 남은 것은 메시지 API와 실행(작업·배포를 **받아 두고 돌리지 않는다** — `SERVER_RUNNER_AVAILABLE`이 꺼져 있다) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
@@ -29,8 +29,15 @@
   - `POST /api/v1/server-runner/register`
   - `POST /api/v1/server-runner/heartbeat` — 기본 10초 (응답의 `next_heartbeat_s`를 따른다)
 - 인증: Center API 키 (종류 「서버 실행기용」, CON-11). 다른 종류의 키는 403 `wrong_key_type`.
-- 키 묶기는 C4와 같다 — 키 하나 ↔ 서버 하나 ↔ 실행기 행 하나이고, 같은 `machine_id`를 다른 키가 등록하면 409 `machine_already_registered`다 (C4 「키 묶기」).
+- 키 묶기는 C4와 같다 — 키 하나 ↔ 서버 하나 ↔ 실행기 행 하나이고, 같은 `machine_id`를 다른 키가 등록하면 409 `machine_already_registered`다 (C4 「키 묶기」). **규칙은 코드로도 한 자리다** (`center/host_keys.py`) — C4와 C12가 같은 함수를 쓴다. `machine_id`를 만드는 쪽도 하나다 (`core.machine`).
+- 등록은 **멱등**이고, 등록·하트비트가 오면 운영자가 해 둔 「유실 처리」를 지운다 — 돌아온 실행기를 오프라인으로 보이게 두지 않는다 (CON-12).
 - 이벤트(C3)와 결재(C6)는 Bot UI와 같은 API를 쓴다.
+
+**지금 도는 것**: 등록·하트비트·운영 API 셋과, 하트비트 응답의 `deployments`·`jobs`·
+`cancel_jobs`·`approvals`·`paused`·`key_expires_at`. 실행기는 **지시를 받아 두고 돌리지
+않는다** (M7 기준 둘째) — 그래서 `started` ack를 보내지 않고 `capacity.running`은 0이다.
+`messages[]`는 늘 비어 있다 (메시지 API가 아직 없다). 서버 대상 작업·배포를 **만들 수** 없게
+막는 스위치(`SERVER_RUNNER_AVAILABLE`)는 그대로 꺼져 있다 — 켜는 것은 실행이 붙는 조각이다.
 
 **운영 API (콘솔 CON-12, 관리자 토큰):**
 
@@ -134,6 +141,10 @@ Center는 메시지를 이렇게 처리한다.
   Center 결재함에 `open`으로 떠 있는 동안에도 마감이 지나면 실행기가 혼자 닫는다
   (기한은 업무 규칙이지 전송 규칙이 아니다). 그때 갈 곳 없이 남은 결재는 C6의 `run_ended`
   자동 회수가 받는다.
+- **맞추기 규칙은 C4와 같고 사유만 다르다** — 두 주기 연속 `running[]`·`waiting[]`에 보이지
+  않고 ack도 없는 작업은 `rejected`이고, 그 `state_reason`은 **`runner_lost`**다 (C4의
+  `bot_ui_lost`가 아니다 — 뭉개면 CON-12가 서버에 「bot_ui_lost」라고 적는다). 그 실행의
+  결재는 회수된다 (C6 `host_lost`).
 - 하트비트가 3분 동안 없으면 Center는 그 실행기를 「오프라인」으로 표시한다. 실행은 유실로 보지 않고 기다린다. 운영자가 CON-12에서 「유실 처리」를 하면 그때 그 실행기의 실행을 `failed`(`runner_lost`)로 닫고, 결재를 회수한다 (C6 `host_lost`).
 
 ## 예시
@@ -169,3 +180,4 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 | 2026-10-01 | 1 | 초안 (M7) | 0015, 0016 |
 | 2026-10-01 | 1 | 화면 검토 반영: 운영 API(목록·일시 중지·유실 처리), `readiness` | — |
 | 2026-10-13 | 1 | 스파이크 s10 뒤 **합의**로 올림. 모델·검사가 코드로 생겼다(`validate_heartbeat`·`free_slots`·`pick_jobs`·`restorable`). §재시작과 유실을 다시 썼다 — 적는 때 둘·그림은 담지 않음·마지막 기다림 이후를 다시 함(멱등 키가 같은 값으로 다시 만들어지므로 호출 전 저장이 필요 없다)·기다린 적 없는 실행은 되살리지 않음·**기한은 Center가 꺼져 있어도 간다** | 0054 |
+| 2026-10-13 | 1 | **등록·하트비트가 양쪽에서 돈다** — `apps/server_runner`(등록·하트비트·SIGTERM)와 Center(`api/server_runner.py` + 운영 API 셋). 키 묶기 규칙을 C4와 **한 코드로** 모았고(`center/host_keys.py`), `machine_id`도 한 자리다(`core.machine`). 작업 나누기(`free_slots`·`pick_jobs`)가 붙었고 **`waiting[]`의 작업은 `run_id`로 되짚는다**(그 칸에 `job_id`가 없다 — 안 되짚으면 결재를 기다리는 실행을 `runner_lost`로 닫는다). 남은 것은 메시지 API와 실행이다 | 0054 |

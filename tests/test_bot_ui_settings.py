@@ -16,7 +16,6 @@ from typing import Any
 import pytest
 
 from chaeksas.bot_ui import autostart as autostart_module
-from chaeksas.bot_ui import machine
 from chaeksas.bot_ui.credentials import ENV_CENTER_API_KEY, Credentials, SecretsUnavailable
 from chaeksas.bot_ui.settings import (
     DEFAULT_QUEUE_MAX,
@@ -26,6 +25,7 @@ from chaeksas.bot_ui.settings import (
     ServiceKeyRef,
     Settings,
 )
+from chaeksas.core import machine
 
 # ─────────────────────────── 설정 ───────────────────────────
 

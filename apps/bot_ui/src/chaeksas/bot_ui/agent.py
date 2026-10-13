@@ -20,7 +20,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from chaeksas.bot_ui import machine
 from chaeksas.bot_ui.bots import InstalledBot, find, installed
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials
@@ -53,7 +52,7 @@ from chaeksas.contracts.bot_ui import (
     Versions,
     WorkerState,
 )
-from chaeksas.core import requests
+from chaeksas.core import machine, requests
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.key_check import key_facts
 from chaeksas.core.preflight import Preflight, key_apps_of

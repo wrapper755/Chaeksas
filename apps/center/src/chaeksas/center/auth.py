@@ -106,6 +106,20 @@ def require_read(found: Caller) -> Caller:
     raise ApiError(403, "forbidden", "읽을 권한이 없다")  # pragma: no cover - 방어
 
 
+def require_console(found: Caller) -> Caller:
+    """콘솔 토큰만 (관리자·읽기). **Center API 키는 안 된다** — C5 권한표가 「—」인 자리다.
+
+    `require_read`와 다른 것은 **키를 막는다**는 점이다. 현황 목록(CON-03·CON-12)은 다른
+    기계들의 이름·용량·도는 실행 id를 함께 보여 주므로, 현장 키 하나로 **남의 현황**을 읽을
+    수 있으면 「자기 일만」이 깨진다. 패키지 쪽의 `require_package_read`와 같은 결이다.
+    """
+    if found.kind in ("admin", "read"):
+        return found
+    raise ApiError(
+        403, "forbidden", "현황 목록은 콘솔 토큰(관리자·읽기)으로만 볼 수 있다"
+    )
+
+
 def _package_key(found: Caller) -> bool:
     return found.key is not None and found.key.type == PACKAGE_KEY_TYPE
 

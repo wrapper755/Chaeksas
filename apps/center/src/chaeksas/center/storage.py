@@ -46,6 +46,26 @@ CREATE TABLE IF NOT EXISTS bot_uis (
   disabled    INTEGER NOT NULL DEFAULT 0,
   state_json  TEXT
 );
+CREATE TABLE IF NOT EXISTS server_runners (
+  server_runner_id TEXT PRIMARY KEY,
+  -- `bot_uis`와 **같은 묶기 규칙**이다 (C12 「키 묶기는 C4와 같다」) — 지키는 것은
+  -- `center/host_keys.py` 하나다. UNIQUE를 걸지 않은 까닭도 그쪽과 같다.
+  key_id        TEXT NOT NULL,
+  machine_id    TEXT NOT NULL,
+  name          TEXT NOT NULL,
+  os            TEXT NOT NULL,
+  versions_json TEXT NOT NULL,
+  -- 실행기가 설정값으로 정한 동시 실행 상한 (C12 `max_concurrency`, 기본 10).
+  max_concurrency INTEGER NOT NULL,
+  extensions_json TEXT,
+  registered_at TEXT NOT NULL,
+  last_seen_at  TEXT,
+  -- CON-12 「일시 중지」. 켜 두면 **새 작업을 받지 않고** 도는 것은 끝까지 간다 (C12).
+  paused        INTEGER NOT NULL DEFAULT 0,
+  -- 운영자가 「유실 처리」한 시각 (C12 — 오프라인인 실행기만). 비어 있으면 멀쩡하다.
+  lost_at       TEXT,
+  state_json    TEXT
+);
 CREATE TABLE IF NOT EXISTS runs (
   run_id        TEXT PRIMARY KEY,
   owner_key_id  TEXT NOT NULL,
@@ -192,8 +212,12 @@ CREATE TABLE IF NOT EXISTS approvals (
   values_purged_at TEXT
 );
 CREATE TABLE IF NOT EXISTS deployment_results (
-  -- 배치 결정은 하트비트 한 주기만 올라온다 (C4). 흘려보내면 「왜 설치가 안 됐나」가
-  -- 영영 남지 않아서 쌓아 둔다 (CON-03 「최근 배치 결정」).
+  -- 배치 결정은 하트비트 한 주기만 올라온다 (C4·C12). 흘려보내면 「왜 설치가 안 됐나」가
+  -- 영영 남지 않아서 쌓아 둔다 (CON-03·CON-12 「최근 배치 결정」).
+  --
+  -- **이 칸은 「보고한 쪽」이다** — PC(`bui_…`)이거나 서버 실행기(`srv_…`)다. 이름이 `bot_ui_id`로
+  -- 남은 것은 `CREATE TABLE IF NOT EXISTS`가 이미 만들어진 DB의 열 이름을 고치지 못해서다
+  -- (옮기기 수단이 없다). 부르는 쪽은 `host_id`라고 쓴다.
   bot_ui_id      TEXT NOT NULL,
   deployment_id  TEXT NOT NULL,
   bpm_process_id TEXT NOT NULL,

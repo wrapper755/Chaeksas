@@ -25,12 +25,14 @@ from chaeksas.center.api import (
     packages,
     resources,
     runs,
+    server_runner,
     signing,
 )
 from chaeksas.center.auth import (
     Caller,
     caller,
     require_admin,
+    require_console,
     require_package_read,
     require_read,
     require_upload,
@@ -64,6 +66,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     app.state.authenticate = authenticate
     app.add_exception_handler(ApiError, handle)
     app.include_router(bot_ui.router)
+    app.include_router(server_runner.router)
     app.include_router(runs.router)
 
     @app.get("/healthz")
@@ -125,7 +128,8 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.get(f"{API}/bot-uis")
     def list_bot_uis(request: Request) -> Any:
-        require_read(authenticate(request))
+        # **콘솔 토큰만** (C5 권한표) — 현장 키로 남의 PC 현황을 읽지 못한다.
+        require_console(authenticate(request))
         return bot_ui.bot_ui_listing(app.state.store)
 
     @app.post(f"{API}/bot-uis/{{bot_ui_id}}/disable")
@@ -141,6 +145,32 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         if not bot_ui.set_disabled(app.state.store, bot_ui_id, disabled=False):
             raise ApiError(404, "not_found", f"Bot UI {bot_ui_id}가 없다")
         return {"bot_ui_id": bot_ui_id, "disabled": False}
+
+    # ─────────────────── 서버 실행기 (C12·CON-12) ───────────────────
+
+    @app.get(f"{API}/server-runners")
+    def list_server_runners(request: Request) -> Any:
+        require_console(authenticate(request))  # 위와 같다 (C5 권한표)
+        return server_runner.runner_listing(app.state.store)
+
+    @app.post(f"{API}/server-runners/{{runner_id}}/pause")
+    def pause_runner(request: Request, runner_id: str) -> Any:
+        require_admin(authenticate(request))
+        if not server_runner.set_paused(app.state.store, runner_id, paused=True):
+            raise ApiError(404, "not_found", f"서버 실행기 {runner_id}가 없다")
+        return {"server_runner_id": runner_id, "paused": True}
+
+    @app.post(f"{API}/server-runners/{{runner_id}}/resume")
+    def resume_runner(request: Request, runner_id: str) -> Any:
+        require_admin(authenticate(request))
+        if not server_runner.set_paused(app.state.store, runner_id, paused=False):
+            raise ApiError(404, "not_found", f"서버 실행기 {runner_id}가 없다")
+        return {"server_runner_id": runner_id, "paused": False}
+
+    @app.post(f"{API}/server-runners/{{runner_id}}/mark-lost")
+    def mark_runner_lost(request: Request, runner_id: str) -> Any:
+        require_admin(authenticate(request))
+        return server_runner.mark_lost(app.state.store, runner_id)
 
     # ─────────────────── 패키지 (C5) ───────────────────
 

@@ -16,6 +16,9 @@ DEFAULT_PORT = 8800
 #: 하트비트 주기와 온라인 판정 (C4).
 DEFAULT_HEARTBEAT_S = 30
 ONLINE_WITHIN_S = 90
+#: 서버 실행기의 주기 — **더 촘촘하다** (C12 기본 10초). 오프라인 판정은 계약이 쥔다
+#: (`contracts.server_runner.OFFLINE_AFTER_S`) — 두 자리에 적으면 갈라진다.
+DEFAULT_RUNNER_HEARTBEAT_S = 10
 #: 요청 크기 한도 (C4 — 256 KB), 패키지 zip 한도.
 MAX_REQUEST_KB = 256
 MAX_PACKAGE_MB = 200
@@ -54,6 +57,8 @@ class Settings:
     #: 패키지 zip을 두는 곳. **DB에는 메타데이터만** 둔다 (01-architecture §7).
     package_dir: Path = field(default_factory=lambda: data_dir() / "packages")
     heartbeat_interval_s: int = DEFAULT_HEARTBEAT_S
+    #: 서버 실행기에게 내려 줄 주기 (C12 — `next_heartbeat_s`).
+    runner_heartbeat_s: int = DEFAULT_RUNNER_HEARTBEAT_S
     #: 관리자·읽기 토큰. **비어 있으면 그 권한으로 부를 수 없다** (C5 권한표).
     #: 코드·설정 파일에 넣지 않고 환경변수로 준다 (CLAUDE.md §5).
     admin_token: str | None = None
@@ -70,6 +75,7 @@ class Settings:
             db_path=Path(db) if db else data_dir() / "center.sqlite3",
             package_dir=Path(packages) if packages else data_dir() / "packages",
             heartbeat_interval_s=int(_env("HEARTBEAT_INTERVAL_S") or DEFAULT_HEARTBEAT_S),
+            runner_heartbeat_s=int(_env("RUNNER_HEARTBEAT_S") or DEFAULT_RUNNER_HEARTBEAT_S),
             admin_token=_env("ADMIN_TOKEN"),
             read_token=_env("READ_TOKEN"),
         )

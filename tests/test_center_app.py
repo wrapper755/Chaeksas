@@ -967,3 +967,15 @@ def test_deprecating_a_package_we_do_not_have_is_404(client: TestClient) -> None
         "/api/v1/packages/없는것/1.0.0/status", json={"status": "deprecated"}, headers=ADMIN
     )
     assert response.status_code == 404 and response.json()["code"] == "package_not_found"
+
+
+def test_a_bot_ui_key_cannot_read_the_bot_ui_listing(client: TestClient) -> None:
+    """CON-03 현황도 **콘솔 토큰만**이다 (C5 권한표) — 키로는 남의 PC를 보지 못한다."""
+    _, raw = issue_key(client)
+    client.post(
+        "/api/v1/bot-ui/register",
+        json=register_body(machine=machine_id("pc1")),
+        headers={"Authorization": f"Bearer {raw}"},
+    )
+    response = client.get("/api/v1/bot-uis", headers={"Authorization": f"Bearer {raw}"})
+    assert response.status_code == 403 and response.json()["code"] == "forbidden"
