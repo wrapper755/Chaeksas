@@ -1,13 +1,17 @@
 """`chk-mock-apps` — 모의 앱을 띄우고, 외부 확장 정의 파일을 쓴다.
 
     chk-mock-apps list                         # 무엇이 있나, 기본 포트는 몇인가
-    chk-mock-apps serve                        # 전부 한 포트에 (/<app_id> 밑에)
+    chk-mock-apps serve                        # 전부 한 포트에 (/<app_id> 밑에, 웹 화면은 /site 밑에)
     chk-mock-apps serve --app erp              # 하나만, 그 앱의 기본 포트에
     chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
 
 `serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다. 서비스 앱 주소에 경로가
 붙어도 되므로(`{base_url}/v1/ops/…`) Center 리소스 등록에 `http://127.0.0.1:8010/erp`를
 그대로 넣을 수 있다. 앱 열여섯 개를 따로 띄우지 않아도 된다.
+
+예제가 가리키는 **웹 화면**(공급사 포털·사내 신청서·공지)도 같은 포트의 `/site` 밑에 뜬다
+(`sites.py`) — M4 인수 시험이 쓰는 HTML과 **같은 것**이라 현장 PC에서 BUI-06으로 등록하고 Bot이
+읽을 수 있다 (예: `http://127.0.0.1:8010/site/transactions`).
 """
 
 from __future__ import annotations
@@ -22,7 +26,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from chaeksas.mock_apps import catalog
+from chaeksas.mock_apps import catalog, sites
 from chaeksas.mock_apps.c11 import SHARED_KEY_ENV, build
 from chaeksas.mock_apps.external import apps as external_apps
 from chaeksas.mock_apps.external import definitions
@@ -79,21 +83,32 @@ def _serve(app_id: str | None, port: int | None, host: str) -> int:
         uvicorn.run(app, host=host, port=chosen, log_level="info")
         return 0
 
-    root = FastAPI(title="모의 앱 (전부)")
     chosen = port or catalog.ALL_IN_ONE_PORT
     if os.environ.get(SHARED_KEY_ENV, "").strip():
         _say(f"키는 {SHARED_KEY_ENV}로 받은 것을 쓴다 (앱마다 다르게: CHK_SVC_<앱>__DEV_KEY).")
+    root, keys = all_in_one()
+    for one, key in keys.items():
+        _say(f"{one:<15} → http://{host}:{chosen}/{one}" + (f"   키: {key}" if key else ""))
+    _say(f"{'웹 화면':<13} → http://{host}:{chosen}{sites.MOUNT}/  (" + ", ".join(sorted(sites.PAGES)) + ")")
+    uvicorn.run(root, host=host, port=chosen, log_level="info")
+    return 0
+
+
+def all_in_one() -> tuple[FastAPI, dict[str, str]]:
+    """앱 전부 + 웹 화면을 한 앱에 붙인다. 두 번째 값은 앱마다 그 키 (`serve`가 찍는다)."""
+    root = FastAPI(title="모의 앱 (전부)")
+    keys: dict[str, str] = {}
     for one in catalog.ids():
         app, key = _one(one)
         root.mount(f"/{one}", app)
-        _say(f"{one:<15} → http://{host}:{chosen}/{one}" + (f"   키: {key}" if key else ""))
+        keys[one] = key
+    root.mount(sites.MOUNT, sites.site_app())
 
     @root.get("/")
     def index() -> dict[str, Any]:
-        return {"apps": list(catalog.ids())}
+        return {"apps": list(catalog.ids()), "site": sites.MOUNT}
 
-    uvicorn.run(root, host=host, port=chosen, log_level="info")
-    return 0
+    return root, keys
 
 
 def _definition(app_id: str, base_url: str, out: Path | None) -> int:
