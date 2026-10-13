@@ -61,3 +61,4 @@
 | [0050](0050-no-toolpack-kind.md) | 툴팩이라는 패키지 갈래를 두지 않는다 — 도구는 확장이 기여하고, 코드는 설치 파일로만 온다 (`provides.tools`·`requires.toolpacks`·`requires.secrets`도 함께 빠진다) | 수락 |
 | [0051](0051-shared-process-conveniences.md) | STU-03의 공유 BPM 프로세스 뿌리는 Center 목록이고 설치 여부를 줄에 덧붙인다 — 부르기·보기·복사는 설치된 판에서만, 읽기 전용은 뷰어 한 벌을 더 실어 지킨다 | 수락 |
 | [0052](0052-service-app-key-notices.md) | 서비스 앱 키의 「거부」는 실행 기록에서 읽고(묻지 않는다), 「만료 임박」만 쓰는 키에 하루 한 번 묻는다 — 사전 점검은 그대로 서버를 부르지 않는다 | 수락 |
+| [0053](0053-no-watch-mode-in-studio.md) | Studio에 감시 모드를 두지 않는다 — 일정(cron)을 읽는 자리는 현장 하나이고, 트리거가 깨우는 그림은 시험 케이스의 `messages`로 본다 | 수락 |

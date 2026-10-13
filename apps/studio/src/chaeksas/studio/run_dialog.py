@@ -39,8 +39,6 @@ ALL_CASES = "(모든 케이스 차례로)"
 AUTONOMOUS = "autonomous"
 DETERMINISTIC = "deterministic"
 
-WATCH_LATER = "감시 모드(트리거를 기다렸다 되풀이)는 아직 없습니다 (docs/09-gaps.md §4-5)."
-
 
 @dataclass(frozen=True)
 class Choice:
@@ -117,8 +115,6 @@ class RunDialog(QDialog):
         self.deterministic = QRadioButton(
             "결정 수행 (재생) — 학습된 대로 LLM 없이 수행한다. Bot과 같은 방식", self
         )
-        self.watch = QRadioButton("감시 모드 — 트리거를 기다렸다 되풀이 실행", self)
-        self.watch.setEnabled(False)
         missing = unlearned(process, definition)
         self.deterministic.setEnabled(not missing)
         # 「결정 수행 (재생)...」(Ctrl+F5)로 들어오면 그것을 미리 골라 둔다 — **할 수 있을
@@ -126,8 +122,9 @@ class RunDialog(QDialog):
         if prefer == DETERMINISTIC and self.deterministic.isEnabled():
             self.deterministic.setChecked(True)
         reason = QLabel(
-            f"학습 안 된 AI 태스크가 있습니다: {', '.join(missing)}" if missing else WATCH_LATER, self
+            f"학습 안 된 AI 태스크가 있습니다: {', '.join(missing)}" if missing else "", self
         )
+        reason.setVisible(bool(missing))
         reason.setProperty("role", "error")
         reason.setWordWrap(True)
 
@@ -145,7 +142,7 @@ class RunDialog(QDialog):
         layout.addWidget(self.case_box)
         layout.addWidget(self.case_note)
         layout.addWidget(QLabel("수행 모드", self))
-        for radio in (self.autonomous, self.deterministic, self.watch):
+        for radio in (self.autonomous, self.deterministic):
             layout.addWidget(radio)
         layout.addWidget(reason)
         layout.addWidget(buttons)
@@ -206,7 +203,6 @@ __all__ = [
     "AUTONOMOUS",
     "DETERMINISTIC",
     "NO_CASE",
-    "WATCH_LATER",
     "Choice",
     "RunDialog",
     "describe",
