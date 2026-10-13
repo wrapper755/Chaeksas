@@ -1,0 +1,426 @@
+"""서버 실행기가 작업을 받아 **한 건을 끝까지 돌린다** (C12·C3·C5, M7 조각 4-①).
+
+**한 줄로 본다**: Admin 서명 → Center 배포 → 실행기 설치 → **Center 작업 지시** → 실행기가
+스레드로 돌림 → 실행 기록이 Center에 닿고 작업의 `run_status`가 찬다.
+
+그림은 업무 예제 **FX-03b**다 (`fx03b_amount_branch`) — 실행 위치가 `server`이고 입력 하나로
+갈라져 **사람 없이 끝까지 간다**. 사람을 기다리는 실행은 조각 4-②의 일이다.
+
+`tests/test_m5_pc_rerun.py`가 PC 쪽에서 같은 꼴을 보므로, 여기서 보는 것은 **서버에서만 다른
+것**이다: 스레드로 돌고, 자리 셈이 기다리는 실행을 빼고, 기록을 하트비트 뒤에 보낸다.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import tempfile
+import zipfile
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from chaeksas.admin import keys as keystore
+from chaeksas.center.api.signing import bootstrap_key
+from chaeksas.center.app import create_app
+from chaeksas.center.settings import Settings as CenterSettings
+from chaeksas.center.storage import Store, now_iso
+from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
+from chaeksas.contracts.signing import sign
+from chaeksas.core.run_log import RunLog, log_path
+from chaeksas.server_runner import agent as agent_mod
+from chaeksas.server_runner.center_client import CenterClient
+from chaeksas.server_runner.settings import Settings
+
+ADMIN = {"Authorization": "Bearer t-admin"}
+READ = {"Authorization": "Bearer t-read"}
+PASS = "열쇠말"
+AT = "2026-10-13T09:00:00+09:00"
+
+#: 업무 예제 FX-03b — 실행 위치 `server`, 입력 하나, 사람 없이 끝까지 간다.
+EXAMPLE = Path("docs/08-business-examples/bpmn/fx03b_amount_branch.bpmn")
+BOT = "fx.amount-branch"
+VERSION = "1.0.0"
+#: 한 실행이 끝나기를 기다리는 한도 (초). 스레드가 도는 것을 기다린다.
+WAIT_S = 20.0
+
+
+@pytest.fixture(autouse=True)
+def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
+    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
+
+
+@pytest.fixture
+def store() -> Iterator[Store]:
+    found = Store(Path(":memory:"))
+    yield found
+    found.close()
+
+
+@pytest.fixture
+def center(store: Store, tmp_path: Path) -> Iterator[TestClient]:
+    settings = CenterSettings(
+        admin_token="t-admin", read_token="t-read", package_dir=tmp_path / "pkg"
+    )
+    with TestClient(create_app(settings, store=store)) as found:
+        yield found
+
+
+@pytest.fixture
+def key(center: TestClient) -> str:
+    response = center.post(
+        "/api/v1/center-keys", json={"name": "서버 1", "type": "server_runner"}, headers=ADMIN
+    )
+    assert response.status_code == 201, response.text
+    return str(response.json()["key"])
+
+
+@pytest.fixture
+def runner(tmp_path: Path, key: str, center: TestClient) -> agent_mod.Agent:
+    settings = Settings(
+        center_url="http://center", name="서버 1", max_concurrency=3, data_path=tmp_path / "runner"
+    )
+    settings.data_path.mkdir(parents=True, exist_ok=True)
+    settings.runs_dir.mkdir(parents=True, exist_ok=True)
+    return agent_mod.Agent(
+        settings=settings,
+        client=CenterClient(base_url="http://center", api_key=key, client=center),
+    )
+
+
+# ─────────────────────────── 거리 ───────────────────────────
+
+
+def package_zip() -> bytes:
+    """업무 예제 하나를 C1 패키지로 싼다 (Studio가 내보내는 것과 같은 모양)."""
+    manifest: dict[str, Any] = {
+        "schema": 1,
+        "kind": "bpm_process",
+        "id": BOT,
+        "version": VERSION,
+        "name": "금액 갈래",
+        "run_location": "server",
+        "entry": "process/main.bpmn",
+        "process_id": "Proc_fx03b_amount_branch",
+        "requires": {},
+        "human": {},
+        "built": {"by": "studio", "at": AT, "core": "0.1.0", "spec_version": 1},
+        "content_hash": "sha256:" + "0" * 64,
+    }
+    files = {"process/main.bpmn": EXAMPLE.read_text(encoding="utf-8")}
+
+    def made(body: str) -> bytes:
+        out = io.BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name, text in files.items():
+                archive.writestr(name, text)
+            archive.writestr(MANIFEST_NAME, body)
+        return out.getvalue()
+
+    with tempfile.TemporaryDirectory() as folder:
+        staged = Path(folder) / "p.zip"
+        staged.write_bytes(made(json.dumps(manifest, ensure_ascii=False)))
+        manifest["content_hash"] = content_hash_zip(staged)
+    return made(json.dumps(manifest, ensure_ascii=False))
+
+
+def ready_runner(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
+    """등록 → 승인 → 배포 → 설치까지 세워 둔다 (앞 조각들이 보는 길이다)."""
+    runner.tick()  # 등록
+    signer = keystore.create(label="첫 키")
+    bootstrap_key(store, public_key=signer.public_bytes(), label="첫 키")
+
+    uploaded = center.post(
+        "/api/v1/packages",
+        files={"file": ("p.zip", package_zip(), "application/zip")},
+        headers=ADMIN,
+    )
+    assert uploaded.status_code in (200, 201), uploaded.text
+    info = dict(uploaded.json())
+    approved = center.put(
+        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
+        json=sign(
+            {
+                "kind": "package",
+                "id": info["id"],
+                "version": info["version"],
+                "content_hash": info["content_hash"],
+            },
+            keystore.load(signer, passphrase=PASS),
+            signed_at=AT,
+        ).to_json_dict(),
+        headers=ADMIN,
+    )
+    assert approved.status_code == 200, approved.text
+
+    deployed = center.post(
+        "/api/v1/deployments",
+        json=sign(
+            {
+                "kind": "deployment",
+                "deployment_id": "dep_3f9a1c07",
+                "target": {"type": "server_runner", "id": runner.server_runner_id},
+                "bpm_process_id": info["id"],
+                "version": info["version"],
+                "content_hash": info["content_hash"],
+            },
+            keystore.load(signer, passphrase=PASS),
+            signed_at=now_iso(),
+        ).to_json_dict(),
+        headers=ADMIN,
+    )
+    assert deployed.status_code in (200, 201), deployed.text
+
+    runner.tick()  # 공개키·배포를 받아 설치한다
+    assert [b.id for b in runner.installed_bots()] == [BOT]
+
+
+def make_job(center: TestClient, *, amount: int = 2_000_000, **extra: Any) -> dict[str, Any]:
+    """Center에 서버 대상 작업을 만든다 (C5 — `id`를 비우면 Center가 고른다)."""
+    response = center.post(
+        "/api/v1/jobs",
+        json={
+            "bpm_process_id": BOT,
+            "target": {"type": "server_runner"},
+            "inputs": {"금액": amount},
+            **extra,
+        },
+        headers=ADMIN,
+    )
+    assert response.status_code in (200, 201), response.text
+    return dict(response.json())
+
+
+def drain(runner: agent_mod.Agent, *, rounds: int = 40) -> None:
+    """실행이 끝날 때까지 하트비트를 돌린다. **스레드를 기다려 준다.**"""
+    import time
+
+    deadline = time.monotonic() + WAIT_S
+    for _ in range(rounds):
+        runner.tick()
+        if not runner.workers and not runner.pending_acks:
+            return
+        if time.monotonic() > deadline:
+            raise AssertionError("실행이 끝나지 않았다")
+        time.sleep(0.05)
+
+
+# ─────────────────────────── 한 줄 ───────────────────────────
+
+
+def test_a_job_runs_to_the_end_and_center_knows(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """작업 지시 → 실행 → **기록과 `run_status`가 Center에 닿는다** (C3·C5)."""
+    ready_runner(center, store, runner)
+    job = make_job(center)
+
+    runner.tick()  # 작업을 받아 스레드를 띄운다
+    assert len(runner.workers) == 1
+    started = next(iter(runner.workers.values()))
+    assert started.join(WAIT_S), "실행 스레드가 끝나지 않았다"
+
+    runner.tick()  # 끝난 것을 거두고 ack·기록을 올린다
+    runner.tick()
+
+    found = center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()
+    assert found["state"] == "accepted", "시작된 작업은 accepted로 남는다 (C5)"
+    # **실행의 성패는 작업 상태가 아니다** (C5) — `run_status`에만 적는다. 값은 **C3의 말**이다
+    # (`run_finished.status` = `success`) — ack의 `finished`는 거들 뿐이다.
+    assert found["run_status"] == "success"
+    assert found["run_id"] == started.run_id
+
+    # 실행 기록이 Center에 닿았다 (C3 §전송 — 파일이 원본이고 하트비트 뒤에 보낸다).
+    events = center.get(f"/api/v1/runs/{started.run_id}/events", headers=READ).json()
+    kinds = [one["kind"] for one in events["events"]]
+    assert kinds[0] == "run_started" and kinds[-1] == "run_finished"
+    first = events["events"][0]["data"]
+    assert first["run_location"] == "server" and first["executor"] == "server_runner"
+    assert first["job_id"] == job["job_id"]
+    assert events["events"][-1]["data"]["status"] == "success"
+
+
+def test_the_run_log_file_is_the_original(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """**파일이 원본이다** (C3) — Center로 보내는 것은 그 파일에서 읽은 줄이다."""
+    ready_runner(center, store, runner)
+    make_job(center)
+    runner.tick()
+    found = next(iter(runner.workers.values()))
+    assert found.join(WAIT_S)
+
+    path = log_path(runner.settings.data_path, found.run_id)
+    assert path.is_file()
+    kinds = [one.kind for one in RunLog.read(path)]
+    assert kinds[0] == "run_started" and kinds[-1] == "run_finished"
+
+
+def test_a_failing_run_says_why(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
+    """실패도 **기록으로** 올라간다 — 작업은 `accepted`로 남고 `run_status`가 `failed`다 (C5).
+
+    입력을 선언하지 않은 이름으로 주면 엔진이 거부한다 (C14 §6 — 조용히 흘리지 않는다).
+    """
+    ready_runner(center, store, runner)
+    response = center.post(
+        "/api/v1/jobs",
+        json={
+            "bpm_process_id": BOT,
+            "target": {"type": "server_runner"},
+            "inputs": {"없는이름": 1},
+        },
+        headers=ADMIN,
+    )
+    assert response.status_code in (200, 201), response.text
+    job = dict(response.json())
+
+    runner.tick()
+    found = next(iter(runner.workers.values()))
+    assert found.join(WAIT_S)
+    runner.tick()
+    runner.tick()
+
+    info = center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()
+    assert info["run_status"] == "failed"
+    events = center.get(f"/api/v1/runs/{found.run_id}/events", headers=READ).json()
+    # 시작조차 못 했으므로 `run_started`가 없다 — **사유는 로그 줄에 있다**.
+    assert [one["kind"] for one in events["events"]] == ["log", "run_finished"]
+    assert "선언하지 않은 입력" in events["events"][0]["data"]["message"]
+
+
+# ─────────────────────────── 자리 셈 (C12) ───────────────────────────
+
+
+def test_only_as_many_as_the_limit_run_at_once(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """상한을 넘겨 받지 않는다 — Center가 빈자리만큼 싣지만 **이쪽에서도 다시 센다**."""
+    ready_runner(center, store, runner)
+    jobs = [make_job(center, idempotency_key=f"k{n}")["job_id"] for n in range(5)]
+    assert len(set(jobs)) == 5
+
+    runner.tick()
+    assert len(runner.workers) <= runner.settings.max_concurrency == 3
+    drain(runner)
+
+    states = {
+        one["job_id"]: center.get(f"/api/v1/jobs/{one['job_id']}", headers=READ).json()["run_status"]
+        for one in [{"job_id": job_id} for job_id in jobs]
+    }
+    assert all(found == "success" for found in states.values()), states
+
+
+def test_a_paused_runner_refuses_new_jobs(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """일시 중지 중에는 **새 작업을 받지 않는다** (C12 `paused`) — 거절하고 그렇게 말한다."""
+    ready_runner(center, store, runner)
+    center.post(f"/api/v1/server-runners/{runner.server_runner_id}/pause", headers=ADMIN)
+    runner.tick()  # `paused`를 듣는다
+    assert runner.paused is True
+
+    job = make_job(center)
+    runner.tick()
+    assert runner.workers == {}, "일시 중지 중에는 돌리지 않는다"
+    # **Center가 애초에 싣지 않는다** (`free_slots`가 0이다) — 그래서 ack도 없고 작업은
+    # `pending`으로 기다린다. 실행기 쪽 거절(`paused`)은 혹시 실려 왔을 때의 그물이다.
+    assert runner.pending_acks == []
+    assert runner.last_response is not None and runner.last_response.jobs == []
+    info = center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()
+    assert info["state"] == "pending"
+
+    center.post(f"/api/v1/server-runners/{runner.server_runner_id}/resume", headers=ADMIN)
+    runner.tick()  # 다시 시작 — **그 주기에 바로 받는다**
+    drain(runner)
+    # 거절이 `seen_jobs`에 남아 있었으면 이 작업은 영원히 돌지 않는다 (C4 멱등) —
+    # 「일시 중지」를 작업보다 먼저 반영하는 까닭이다.
+    assert center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()["run_status"] == "success"
+
+
+def test_the_same_job_is_not_run_twice(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """**이미 본 작업이면 마지막 ack를 되돌려 보낸다** (C4 멱등) — 두 번 돌리지 않는다."""
+    ready_runner(center, store, runner)
+    make_job(center)
+    runner.tick()
+    first = next(iter(runner.workers))
+    assert next(iter(runner.workers.values())).join(WAIT_S)
+
+    # ack를 올리기 전에 같은 작업이 또 내려온다 (C4 — ack가 올 때까지 매번 실린다).
+    runner.tick()
+    runner.tick()
+    run_ids = {one.run_id for one in runner.seen_jobs.values() if one.run_id}
+    assert run_ids == {first}, "같은 작업에 실행이 둘 생기면 안 된다"
+
+
+def test_cancel_stops_the_run(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
+    """취소는 **유예를 기다려 준다** — 그래야 `cancelled`가 기록에 남는다 (ADR-0031과 같은 결)."""
+    ready_runner(center, store, runner)
+    job = make_job(center)
+    runner.tick()
+    found = next(iter(runner.workers.values()))
+    assert found.join(WAIT_S)  # 이 예제는 금세 끝난다
+
+    center.post(f"/api/v1/jobs/{job['job_id']}/cancel", headers=ADMIN)
+    runner.tick()
+    runner.tick()
+    info = center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()
+    # 이미 끝났으면 **그대로 둔다** — 끝난 것을 취소했다고 하지 않는다 (C3가 원본이다).
+    assert info["run_status"] == "success"
+
+
+def test_once_does_not_take_jobs(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
+    """`--once`는 **작업을 받지 않는다** — 그 프로세스는 곧 끝난다 (진짜 소켓으로 발견했다).
+
+    받으면 띄운 스레드를 버리게 되고, 다음 `--once`가 **같은 작업을 또** 띄운다(새 프로세스는
+    `seen_jobs`가 비어 있다). 받지 않은 작업은 `dispatched`로 남아 다음에 다시 실린다 (C4) —
+    그래서 잃는 것이 없고 거짓 `started`도 없다.
+    """
+    ready_runner(center, store, runner)
+    job = make_job(center)
+
+    runner.once()
+    assert runner.workers == {}, "띄우지 않았다"
+    assert runner.pending_acks == [], "ack도 보내지 않는다 (거절로 닫지 않는다)"
+    assert runner.last_response is not None and runner.last_response.jobs, "받기는 했다"
+
+    info = center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()
+    assert info["state"] == "dispatched" and info["run_id"] is None
+
+    # 상주 루프는 그 작업을 그대로 집어 돌린다 — 잃은 것이 없다.
+    runner.accepts_jobs = True
+    drain(runner)
+    assert center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()["run_status"] == "success"
+
+
+def test_asking_while_it_runs_does_not_touch_the_run(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """도는 실행을 **들여다보다 터지지 않는다** — 모습은 그 스레드가 찍어 둔 것이다.
+
+    처음에는 `snapshot()`이 `Run`을 그 자리에서 읽었다. 그것은 경쟁이다 — 엔진이 토큰을 지우는
+    사이에 `run.tokens[0]`을 읽으면 `IndexError`이고, `pendings`·`waits`를 훑는 동안 엔진이
+    그 사전을 고치면 「크기가 바뀌었다」로 터진다. 드물게 나고 **실행기가 죽는다**.
+
+    여기서는 한 실행이 도는 동안 **수없이 물어 본다** — 찍어 두는 쪽이면 아무 일도 없다.
+    """
+    ready_runner(center, store, runner)
+    make_job(center)
+    runner.tick()
+    found = next(iter(runner.workers.values()))
+
+    seen = []
+    for _ in range(3000):
+        shot = found.snapshot()
+        seen.append(shot.state)
+        if shot.done:
+            break
+    assert found.join(WAIT_S)
+    # 마지막으로 찍힌 것은 끝난 모습이다 — 스레드가 끝내며 한 번 더 찍는다.
+    assert found.snapshot().done and found.snapshot().finished == "success"
+    assert seen, "한 번도 묻지 못했다"

@@ -422,9 +422,9 @@ def test_the_runner_reads_the_same_two_places(
 ) -> None:
     """**실행기도 `libs/`를 읽는다** — 한쪽만 고치면 「Studio에서는 되는데 현장에서 안 된다」다.
 
-    내보낸 패키지를 **실행기 쪽 코드로** 읽어 본다 (`bot_ui.runner_main.Package`).
+    내보낸 패키지를 **실행기 쪽 코드로** 읽어 본다 (`core.packages.InstalledBot`).
     """
-    from chaeksas.bot_ui.runner_main import Package
+    from chaeksas.core.packages import InstalledBot
 
     upload_lib(center, studio_key, lib_zip(files=rule_lib()), tmp_path)
     install.install(workspace, process, reader, package_id=LIB_ID, version=LIB_VERSION)
@@ -435,7 +435,7 @@ def test_the_runner_reads_the_same_two_places(
     with zipfile.ZipFile(made) as archive:
         archive.extractall(unpacked)
 
-    package = Package.read(unpacked)
+    package = InstalledBot.read(unpacked)
     assert "grade" in package.decisions(), "현장에서도 규칙 태스크가 결정을 찾는다"
     assert CALLED in package.processes(), "호출 대상도 그대로다"
 

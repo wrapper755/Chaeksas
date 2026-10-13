@@ -254,6 +254,23 @@ def versions_for(store: Store, *, target_type: str, target_id: str, bpm_process_
     return [str(one["version"]) for one in rows]
 
 
+def server_versions(store: Store, *, bpm_process_id: str) -> list[str]:
+    """그 Bot이 **어느 서버 실행기에든** 활성으로 배포된 버전들 (C5 작업 만들기).
+
+    `id`를 비운 서버 작업은 Center가 실행기를 고르므로(C5 `JobTarget`) 「어느 서버에
+    배포됐나」가 아니라 **어디든 배포돼 있나**를 묻는다. `"*"` 배포도 센다 (ADR-0046).
+    고르는 기준은 `envelopes_for`와 같다 — 승인된 패키지의 철회되지 않은 배포다.
+    """
+    rows = store.rows(
+        "SELECT DISTINCT d.version AS version FROM deployments d "
+        "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
+        "WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ? "
+        "AND d.bpm_process_id = ? ORDER BY d.version",
+        (STATUS_APPROVED, "server_runner", bpm_process_id),
+    )
+    return [str(one["version"]) for one in rows]
+
+
 def downloadable_by(store: Store, *, target_type: str, target_id: str) -> set[tuple[str, str]]:
     """그 대상이 **내려받을 수 있는** 패키지 `{(id, 버전)}` (C5 권한표).
 
@@ -382,6 +399,7 @@ def _row(store: Store, row: Any) -> DeploymentInfo:
 __all__ = [
     # `run_location` → 대상 종류 표는 **계약에 하나**다 (`TARGET_TYPE_FOR_RUN_LOCATION`, ADR-0047).
     "WILDCARD_TARGETS",
+    "server_versions",
     "create",
     "envelopes_for",
     "listing",

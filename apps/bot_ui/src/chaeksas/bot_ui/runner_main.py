@@ -19,26 +19,20 @@ import logging
 import sys
 import time
 from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from chaeksas.bot_ui.credentials import Credentials
 from chaeksas.bot_ui.runtimes import HostSettings
-from chaeksas.contracts.bpmn_ext import BpmnProcess, read_process
-from chaeksas.contracts.dmn import Decision, DmnReadError, read_decisions
-from chaeksas.contracts.manifest import Manifest
 from chaeksas.core import control, requests
 from chaeksas.core.app_directory import AppDirectory, read_directory
 from chaeksas.core.engine import WHERE_CENTER, WHERE_FIELD, Engine, EngineError, Run, RunEnv, State
 from chaeksas.core.extensions import ExtensionHost, HostTasks, load_host
-from chaeksas.core.files import Workspace
-from chaeksas.core.llm import NoLlm, OpenAiCompatibleLlm
-from chaeksas.core.replay import read_memory
+from chaeksas.core.packages import InstalledBot
+from chaeksas.core.run_env import make_env
 from chaeksas.core.run_log import RunLog, log_path
-from chaeksas.core.senders import NoSender
-from chaeksas.core.tools import builtin_tools
 from chaeksas.extension_api import HOST_BOT_UI
 
 log = logging.getLogger(__name__)
@@ -48,54 +42,6 @@ TICK_S = 0.2
 
 #: 한 번 깨어날 때 밟는 노드 수 — 멈춤 신호를 자주 본다.
 STEPS_PER_TICK = 50
-
-MANIFEST_NAME = "manifest.json"
-
-
-@dataclass
-class Package:
-    """풀어 놓은 패키지 하나 (C1)."""
-
-    folder: Path
-    manifest: Manifest
-
-    @classmethod
-    def read(cls, folder: Path) -> Package:
-        raw = (folder / MANIFEST_NAME).read_text(encoding="utf-8")
-        return cls(folder=folder, manifest=Manifest.model_validate_json(raw))
-
-    def entry(self) -> BpmnProcess:
-        if not self.manifest.entry:
-            raise EngineError("매니페스트에 진입 정의가 없다", code="package_no_entry")
-        return read_process((self.folder / self.manifest.entry).read_text(encoding="utf-8"))
-
-    def processes(self) -> dict[str, BpmnProcess]:
-        """호출(`callActivity`)이 찾을 다른 정의 — `process/`와 `libs/`."""
-        out: dict[str, BpmnProcess] = {}
-        for path in sorted([*self.folder.glob("process/*.bpmn"), *self.folder.glob("libs/*.bpmn")]):
-            try:
-                found = read_process(path.read_text(encoding="utf-8"))
-            except Exception:  # noqa: BLE001 — 깨진 정의 하나가 실행을 막지 않게
-                log.warning("정의를 읽지 못했다: %s", path.name)
-                continue
-            out[found.id] = found
-        return out
-
-    def decisions(self) -> dict[str, Decision]:
-        """규칙 태스크가 찾을 결정 — `process/`와 **`libs/`** (ADR-0048).
-
-        공유 BPM 프로세스가 제 결정표를 들고 오므로 그것도 읽는다 — Studio가 읽는 둘과 **같다**
-        (`studio/workspace.py`). **받은 것을 먼저 읽고 패키지 제 것으로 덮는다**(같은 id면
-        `process/`가 이긴다 — `processes()`와 같은 결).
-        """
-        found: dict[str, Decision] = {}
-        for path in [*sorted(self.folder.glob("libs/*.dmn")), *sorted(self.folder.glob("process/*.dmn"))]:
-            try:
-                found.update(read_decisions(path.read_text(encoding="utf-8")))
-            except DmnReadError:
-                log.warning("DMN을 읽지 못했다: %s", path.name)
-        return found
-
 
 @dataclass(frozen=True)
 class RunnerSecrets:
@@ -145,7 +91,7 @@ def app_directory(path: Path | None) -> AppDirectory:
     return read_directory(path, secrets=Credentials().service_app_key)
 
 
-def refuse_unusable(package: Package, directory: AppDirectory) -> None:
+def refuse_unusable(package: InstalledBot, directory: AppDirectory) -> None:
     """매니페스트가 요구하는 외부 확장을 쓸 수 없으면 **시작하지 않는다** (C1·C13).
 
     중간에 알면 이미 한 일을 되돌릴 수 없다. 정의가 바뀌었으면 그 Bot은 승인·배포를 다시
@@ -159,43 +105,12 @@ def refuse_unusable(package: Package, directory: AppDirectory) -> None:
         )
 
 
-def make_env(package: Package, *, output_dir: Path, readable: tuple[Path, ...],
-             writable: tuple[Path, ...] = (), llm_url: str = "", llm_key: str = "",
-             llm_model: str, extensions: HostTasks | None = None,
-             approval_where: str = WHERE_FIELD, directory: AppDirectory | None = None) -> RunEnv:
-    """바깥 세계 한 벌 — **주소·키는 실행하는 쪽만 안다** (ADR-0013)."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    space = Workspace(output_dir=output_dir, readable=readable, writable=writable)
-    model = (
-        OpenAiCompatibleLlm(base_url=llm_url, api_key=llm_key, model=llm_model) if llm_url else NoLlm()
-    )
-    made = RunEnv(
-        workspace=space,
-        # 보내기 어댑터는 조각 4b다 — **없으면 보내지 않고 실패한다** (조용히 넘어가지 않는다).
-        sender=NoSender(),
-        processes=package.processes(),
-        decisions=package.decisions(),
-        llm=model,
-        tools=builtin_tools(space),
-        memory=read_memory(package.folder),
-        # `location: follow` 결재를 어디서 답하나 — BUI-03 「원격 결재」 (ADR-0038).
-        approval_where=approval_where,
-    )
-    if extensions is not None:
-        # 확장 태스크·`web`·`desktop` AI 태스크 (ADR-0018·ADR-0037) — 없으면 그림·설치 오류가 된다.
-        made = replace(made, extensions=extensions)
-    if directory is not None:
-        # `chk:serviceCall` — 서비스 앱(C11)과 외부 앱(C13 어댑터)이 **같은 자리**로 간다.
-        made = replace(made, services=directory.caller())
-    return made
-
-
 @dataclass
 class Runner:
     """실행 하나를 끝까지 민다. **부르는 쪽이 `drive()`를 부른다** (스레드 없음)."""
 
     run_id: str
-    package: Package
+    package: InstalledBot
     data_dir: Path
     inputs: dict[str, Any]
     mode: str = "deterministic"
@@ -340,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--services", type=Path, default=None, help="바깥 앱 명부 JSON 파일")
     found = parser.parse_args(argv)
 
-    package = Package.read(found.package)
+    package = InstalledBot.read(found.package)
     inputs = json.loads(found.inputs.read_text(encoding="utf-8")) if found.inputs else {}
     output_dir = found.output_dir or (found.data_dir / "outputs" / package.manifest.id)
     # 모델 키는 **환경변수로** 받는다 (설정 파일·명령줄에 두지 않는다, CLAUDE.md §5).
