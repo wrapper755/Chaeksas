@@ -280,6 +280,10 @@ def runner_listing(store: Store) -> list[ServerRunnerInfo]:
                 running=[RunningRun.model_validate(r) for r in state.get("running", [])],
                 waiting=[WaitingRun.model_validate(w) for w in state.get("waiting", [])],
                 queued=jobs.queued_count(store, runner_id=runner_id),
+                readiness=[Readiness.model_validate(r) for r in state.get("readiness", [])],
+                extensions=extensions_of(store, runner_id),
+                # 마지막 하트비트가 아니라 **Center가 쌓아 둔 것**이다 (CON-12가 읽는다).
+                deployment_results=deployments.results_of(store, host_id=runner_id),
                 versions=RunnerVersions.model_validate(loads(row["versions_json"], {})),
                 last_heartbeat_at=row["last_seen_at"],
                 registered_at=str(row["registered_at"]),

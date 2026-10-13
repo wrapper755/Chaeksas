@@ -28,7 +28,6 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from waiting import wait_for  # noqa: E402
 
 from chaeksas.bot_ui.agent import Agent  # noqa: E402
-from chaeksas.bot_ui.bots import install  # noqa: E402
 from chaeksas.bot_ui.center_client import CenterClient  # noqa: E402
 from chaeksas.bot_ui.runner import runner_args  # noqa: E402
 from chaeksas.bot_ui.settings import Settings  # noqa: E402
@@ -40,6 +39,7 @@ from chaeksas.contracts.bot_ui import ApprovalDispatch  # noqa: E402
 from chaeksas.contracts.bpmn_ext import read_process, validate  # noqa: E402
 from chaeksas.core import control, requests  # noqa: E402
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State  # noqa: E402
+from chaeksas.core.packages import install  # noqa: E402
 from chaeksas.core.run_log import RunLog, log_path, summarize  # noqa: E402
 from chaeksas.studio.packaging import default_name, export  # noqa: E402
 from chaeksas.studio.workspace import Workspace  # noqa: E402

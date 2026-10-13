@@ -149,6 +149,28 @@ class CenterClient:
             self._send("/heartbeat", request.to_json_dict())
         )
 
+    def download_package(self, package_id: str, version: str) -> bytes:
+        """패키지 zip (C5 `GET /packages/{id}/{v}`). 승인된 것이면 `SIGNATURE`가 들어 있다.
+
+        **실행기 경로가 아니라 C5 경로**다 — 자기에게 배포된 것만 받을 수 있다 (C5 권한표의
+        `guard_download`가 배포 표까지 대조한다).
+        """
+        own = self.client is None
+        client = self.client or httpx.Client(timeout=self.timeout_s)
+        try:
+            response = client.get(
+                f"{self.base_url.rstrip('/')}/api/v1/packages/{package_id}/{version}",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+            )
+        except httpx.HTTPError as e:
+            raise Unreachable(f"패키지를 받지 못했습니다 ({type(e).__name__})") from e
+        finally:
+            if own:
+                client.close()
+        if response.status_code >= 400:
+            raise _problem(response)
+        return bytes(response.content)
+
 
 __all__ = [
     "API",

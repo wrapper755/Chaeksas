@@ -25,9 +25,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from waiting import wait_for  # noqa: E402
 
-from chaeksas.bot_ui.bots import InstallError, find, install, installed  # noqa: E402
 from chaeksas.bot_ui.runner import Launcher, new_run_id, runner_args  # noqa: E402
 from chaeksas.core import control  # noqa: E402
+from chaeksas.core.packages import InstallError, find, install, installed  # noqa: E402
 from chaeksas.core.run_log import RunLog, log_path  # noqa: E402
 from chaeksas.studio.packaging import default_name, export  # noqa: E402
 from chaeksas.studio.workspace import Workspace  # noqa: E402

@@ -27,7 +27,13 @@ from fastapi.testclient import TestClient
 from chaeksas.admin import keys as keystore
 from chaeksas.admin.cli import main as admin_main
 from chaeksas.admin.client import Center, CenterProblem
-from chaeksas.bot_ui.bots import (
+from chaeksas.center.api.signing import bootstrap_key
+from chaeksas.center.app import create_app
+from chaeksas.center.settings import Settings
+from chaeksas.contracts.hashing import content_hash_zip
+from chaeksas.contracts.signing import sign
+from chaeksas.core.deploy import APPLIED, REJECTED, Deployer, read_signature
+from chaeksas.core.packages import (
     CENTER,
     INSTALL_SOURCE_NAME,
     MANUAL,
@@ -37,12 +43,6 @@ from chaeksas.bot_ui.bots import (
     installed,
     write_source,
 )
-from chaeksas.bot_ui.deploy import APPLIED, REJECTED, Deployer, read_signature
-from chaeksas.center.api.signing import bootstrap_key
-from chaeksas.center.app import create_app
-from chaeksas.center.settings import Settings
-from chaeksas.contracts.hashing import content_hash_zip
-from chaeksas.contracts.signing import sign
 
 TOKEN = "t-admin"
 PASS = "열쇠말"
@@ -234,7 +234,7 @@ def deployer(center: Center, tmp_path: Path, **extra: Any) -> Deployer:
 
     return Deployer(
         data_dir=tmp_path / "botui",
-        bot_ui_id=BOT_UI,
+        host_id=BOT_UI,
         keys=center.admin_keys(),
         fetch=fetch,
         clock=lambda: AT,

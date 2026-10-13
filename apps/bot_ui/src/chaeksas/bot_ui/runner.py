@@ -23,10 +23,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from chaeksas.bot_ui.bots import InstalledBot, write_inputs
 from chaeksas.bot_ui.credentials import ENV_LLM_API_KEY
 from chaeksas.contracts.bot_ui import CurrentRun
 from chaeksas.core import control, requests
+from chaeksas.core.packages import InstalledBot, write_inputs
 from chaeksas.core.processes import ChildProcess
 from chaeksas.core.run_log import RunLog, log_path, run_dir
 

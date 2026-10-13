@@ -32,7 +32,6 @@ from conftest import FakeCredentials
 from chaeksas.bot_ui import agent as module_agent
 from chaeksas.bot_ui import notices as module
 from chaeksas.bot_ui.agent import Agent
-from chaeksas.bot_ui.bots import InstalledBot
 from chaeksas.bot_ui.center_client import KeyRejected, Unreachable
 from chaeksas.bot_ui.notices import Notice, Notices
 from chaeksas.bot_ui.runner import Request, Running
@@ -41,6 +40,7 @@ from chaeksas.bot_ui.store import Store
 from chaeksas.contracts.bot_ui import DeploymentResult, HeartbeatResponse, JobDispatch, QueueItem, RegisterResponse
 from chaeksas.contracts.manifest import Manifest, ServiceAppNeed
 from chaeksas.core.key_check import KeyFacts
+from chaeksas.core.packages import InstalledBot
 from chaeksas.core.processes import ChildProcess
 
 NOW = "2026-10-10T09:00:00+09:00"

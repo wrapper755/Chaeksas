@@ -724,15 +724,39 @@ def test_bot_ui_key_cannot_download_what_is_not_deployed_to_it(client: TestClien
     assert missing.status_code == 403
 
 
-def test_a_server_runner_key_has_nothing_deployed_to_it_yet(client: TestClient) -> None:
-    """서버 실행기는 등록받는 자리가 **아직 없다** (C12·M7) — 흉내 내지 않고 그렇게 말한다."""
+def test_an_unregistered_server_runner_key_downloads_nothing(client: TestClient) -> None:
+    """등록 전에는 **받을 수 있는 배포가 없다** (C12) — 키 이름을 대상 id로 흉내 내지 않는다."""
     assert upload(client, build_package()).status_code == 201
     _key_id, raw = issue_key(client, name="서버 1", key_type="server_runner")
     denied = client.get(
         "/api/v1/packages/invoice-check/1.0.0", headers={"Authorization": f"Bearer {raw}"}
     )
     assert denied.status_code == 403
-    assert "서버 실행기 등록은 M7부터다" in denied.json()["message"]
+    assert "등록된 서버 실행기가 없다" in denied.json()["message"]
+
+
+def test_a_registered_server_runner_downloads_only_its_own(client: TestClient) -> None:
+    """등록해도 **자기에게 배포된 것만** 받는다 (C5 권한표 — `envelopes_for`와 같은 기준)."""
+    assert upload(client, build_package()).status_code == 201
+    _key_id, raw = issue_key(client, name="서버 1", key_type="server_runner")
+    auth = {"Authorization": f"Bearer {raw}"}
+    registered = client.post(
+        "/api/v1/server-runner/register",
+        json={
+            "schema": 1,
+            "machine_id": machine_id("srv1"),
+            "name": "서버 1",
+            "os": "ubuntu-24.04",
+            "versions": {"server_runner": "0.1.0", "core": "0.1.0"},
+        },
+        headers=auth,
+    )
+    assert registered.status_code == 200, registered.text
+
+    denied = client.get("/api/v1/packages/invoice-check/1.0.0", headers=auth)
+    assert denied.status_code == 403
+    # **「없다」와 「내 것이 아니다」는 같은 403이다** — 404로 가르면 그것이 곧 목록이 된다.
+    assert "배포되지 않았다" in denied.json()["message"]
 
 
 def test_integration_key_cannot_touch_packages(client: TestClient) -> None:

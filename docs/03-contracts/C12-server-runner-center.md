@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-13) — **등록·하트비트는 양쪽이 돌고 시험이 지킨다** (`apps/server_runner` ↔ Center). 남은 것은 메시지 API와 실행(작업·배포를 **받아 두고 돌리지 않는다** — `SERVER_RUNNER_AVAILABLE`이 꺼져 있다) |
+| 상태 | **합의** (2026-10-13) — **등록·하트비트·배포 설치·준비 상태가 양쪽에서 돌고 시험이 지킨다** (`apps/server_runner` ↔ Center). 남은 것은 메시지 API와 **실행**(작업을 받아 두고 돌리지 않는다 — `SERVER_RUNNER_AVAILABLE`이 꺼져 있다) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
@@ -33,17 +33,25 @@
 - 등록은 **멱등**이고, 등록·하트비트가 오면 운영자가 해 둔 「유실 처리」를 지운다 — 돌아온 실행기를 오프라인으로 보이게 두지 않는다 (CON-12).
 - 이벤트(C3)와 결재(C6)는 Bot UI와 같은 API를 쓴다.
 
-**지금 도는 것**: 등록·하트비트·운영 API 셋과, 하트비트 응답의 `deployments`·`jobs`·
-`cancel_jobs`·`approvals`·`paused`·`key_expires_at`. 실행기는 **지시를 받아 두고 돌리지
-않는다** (M7 기준 둘째) — 그래서 `started` ack를 보내지 않고 `capacity.running`은 0이다.
-`messages[]`는 늘 비어 있다 (메시지 API가 아직 없다). 서버 대상 작업·배포를 **만들 수** 없게
-막는 스위치(`SERVER_RUNNER_AVAILABLE`)는 그대로 꺼져 있다 — 켜는 것은 실행이 붙는 조각이다.
+**지금 도는 것**: 등록·하트비트·운영 API 셋, **배포 설치**(C2 V1~V7 — Bot UI와 `core.deploy`를
+같이 쓴다)와 `deployment_results`·`readiness` 보고, 그리고 하트비트 응답의 `deployments`·
+`jobs`·`cancel_jobs`·`approvals`·`paused`·`key_expires_at`.
+
+**작업은 받아 두고 돌리지 않는다** (M7 기준 둘째) — 그래서 `started` ack를 보내지 않고
+`capacity.running`은 0이다. `messages[]`는 늘 비어 있다 (메시지 API가 아직 없다). 서버 대상
+작업·배포를 **만들 수** 없게 막는 스위치(`SERVER_RUNNER_AVAILABLE`)도 그대로 꺼져 있다 —
+켜는 것은 실행이 붙는 조각이다.
+
+**설치는 Bot UI와 같은 코드다** (`core.deploy`·`core.packages`) — 다른 것은 `host_kind`뿐이고,
+그래서 서버는 `"*"` 대상 배포도 받는다 (ADR-0046). **Admin 공개키가 아직 없으면 설치하지
+않고 기다린다** — 서명을 볼 수 없는데 설치하면 관문이 없는 것과 같고, 거부로 보고하면 멀쩡한
+배포가 영원히 닫힌다 (공개키는 하트비트가 준다).
 
 **운영 API (콘솔 CON-12, 관리자 토큰):**
 
 | 경로 | 뜻 |
 | --- | --- |
-| `GET /api/v1/server-runners` | 목록 (상태·용량·실행 중·기다리는 실행·대기열) |
+| `GET /api/v1/server-runners` | 목록 (상태·용량·실행 중·기다리는 실행·대기열·준비 상태·확장·최근 배치 결정). **콘솔 토큰만** — Center API 키로는 볼 수 없다 (C5 권한표) |
 | `POST /api/v1/server-runners/{id}/pause` / `resume` | 일시 중지·다시 시작. 다음 하트비트 응답의 `paused`로 전달된다 |
 | `POST /api/v1/server-runners/{id}/mark-lost` | 유실 처리. 오프라인인 실행기만 (온라인이면 409 `runner_online`). 그 실행기의 실행을 `failed`(`runner_lost`)로 닫고 결재를 회수한다 (C6 `host_lost`) |
 
@@ -181,3 +189,4 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 | 2026-10-01 | 1 | 화면 검토 반영: 운영 API(목록·일시 중지·유실 처리), `readiness` | — |
 | 2026-10-13 | 1 | 스파이크 s10 뒤 **합의**로 올림. 모델·검사가 코드로 생겼다(`validate_heartbeat`·`free_slots`·`pick_jobs`·`restorable`). §재시작과 유실을 다시 썼다 — 적는 때 둘·그림은 담지 않음·마지막 기다림 이후를 다시 함(멱등 키가 같은 값으로 다시 만들어지므로 호출 전 저장이 필요 없다)·기다린 적 없는 실행은 되살리지 않음·**기한은 Center가 꺼져 있어도 간다** | 0054 |
 | 2026-10-13 | 1 | **등록·하트비트가 양쪽에서 돈다** — `apps/server_runner`(등록·하트비트·SIGTERM)와 Center(`api/server_runner.py` + 운영 API 셋). 키 묶기 규칙을 C4와 **한 코드로** 모았고(`center/host_keys.py`), `machine_id`도 한 자리다(`core.machine`). 작업 나누기(`free_slots`·`pick_jobs`)가 붙었고 **`waiting[]`의 작업은 `run_id`로 되짚는다**(그 칸에 `job_id`가 없다 — 안 되짚으면 결재를 기다리는 실행을 `runner_lost`로 닫는다). 남은 것은 메시지 API와 실행이다 | 0054 |
+| 2026-10-13 | 1 | **배포 설치와 준비 상태가 돈다** — 설치는 Bot UI와 **같은 코드**로 모았고(`core.deploy`·`core.packages` — `host_kind`만 다르다) 실행기가 `deployment_results`·`readiness`를 보고한다. `ServerRunnerInfo`에 그 셋(+확장)이 생겨 CON-12가 읽을 자리가 찼다. **내려받기 관문이 서버 실행기를 알아본다** — 「등록은 M7부터다」로 막고 있었는데 등록은 지난 조각에서 생겼다 | 0054 |
