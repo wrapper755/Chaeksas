@@ -324,14 +324,17 @@ def pumping(agent: Agent, check: Any, *, timeout_s: float = 60.0) -> bool:
     return False
 
 
-def answer_everything(agent: Agent, answers: dict[str, dict[str, Any]], *, timeout_s: float = 60.0) -> int:
+def answer_everything(
+    agent: Agent, running: Any, answers: dict[str, dict[str, Any]], *, timeout_s: float = 60.0
+) -> int:
     """현장 결재·확인에 답한다 — **제어 파일로** (ADR-0031).
 
     케이스가 노드 id로 적어 둔 답을 쓴다. 폼이 없는 확인은 `{"decision": "approve"}`다.
+
+    **실행 손잡이를 받아 쓴다** — 여기서 다시 꺼내면 안 된다. `pump()`가 끝난 실행을 거두면
+    `agent.runner().running`이 `None`이 되어, 빨리 끝나는 예제에서 손잡이를 잃는다.
     """
     given = 0
-    running = agent.runner().running
-    assert running is not None
     until = time.monotonic() + timeout_s
     while time.monotonic() < until and running.alive:
         agent.pump()
@@ -343,12 +346,14 @@ def answer_everything(agent: Agent, answers: dict[str, dict[str, Any]], *, timeo
     return given
 
 
-def finished(agent: Agent, *, timeout_s: float = 90.0) -> tuple[str, list[Any]]:
-    """실행기가 끝날 때까지 기다리고 `(끝 상태, 실행 기록)`."""
+def finished(agent: Agent, running: Any, *, timeout_s: float = 90.0) -> tuple[str, list[Any]]:
+    """실행기가 끝날 때까지 기다리고 `(끝 상태, 실행 기록)`.
+
+    **손잡이를 부르는 쪽이 준다** — 여기서 `agent.runner().running`을 다시 꺼내면 이미 거둬진
+    실행에서 `None`을 받는다 (답하는 동안 `pump()`가 거둔다). CI의 Linux가 FX-19에서 잡았다.
+    """
     from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415
 
-    running = agent.runner().running
-    assert running is not None
     assert wait_for(lambda: not running.alive, timeout_s=timeout_s), "실행기가 끝나지 않았다"
     agent.pump()
     return running.finished, list(RunLog.read(log_path(data_dir(), running.run_id)))
@@ -446,8 +451,8 @@ def test_a_pc_example_deploys_and_runs(
 
     running = agent.runner().running
     assert running is not None, "실행기가 뜨지 않았다"
-    answer_everything(agent, field_answers(example))
-    status, events = finished(agent)
+    answer_everything(agent, running, field_answers(example))
+    status, events = finished(agent, running)
     # 실행기가 쓰는 말은 `success`다 — Bot UI가 그것을 작업 결과 `finished`로 옮긴다 (C4).
     assert status == "success", f"{example}: {status} (기록: {[e.kind for e in events]})"
 
@@ -482,5 +487,5 @@ def test_a_confirmation_is_answered_in_the_field(
     assert not client.get("/api/v1/approvals", headers=ADMIN).json(), "확인은 Center로 올라가지 않는다"
 
     running.answer(asked.request_id, {"decision": "approve"}, answered_by="시험")
-    status, _ = finished(agent)
+    status, _ = finished(agent, running)
     assert status == "success"

@@ -16,9 +16,9 @@ C4와 **다른 것 셋**이 여기 있다 (C12 표·ADR-0054 —
 `api.deployments`, 결재는 `api.approvals`가 C4와 **같은 함수**로 다룬다. 베끼면 한쪽만 고쳐져
 「PC에서는 되는데 서버에서 안 된다」가 된다.
 
-**작업과 배포는 아직 내려가지 않는다** — `SERVER_RUNNER_AVAILABLE`이 꺼져 있어 서버 대상
-작업·배포를 만들 수 없다 (ADR-0016). 고르는 길은 여기 다 있고, 그 스위치를 켜는 것은 실행기가
-**정말 돌리는** 조각의 일이다 (M7 기준 둘째).
+**내려가는 것은 넷이다** — 배포 봉투·작업·결재 답·**메시지**. 메시지는 `api.messages`가 고르고
+(C12 §메시지), 나머지 셋은 C4와 같은 함수들이 고른다. 서버 대상 배포·작업을 막던 스위치
+(`SERVER_RUNNER_AVAILABLE`)는 켜져 있다.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from typing import Any
 from fastapi import APIRouter, Request
 
 from chaeksas.center import host_keys
-from chaeksas.center.api import approvals, deployments, jobs, signing
+from chaeksas.center.api import approvals, deployments, jobs, messages, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
@@ -237,8 +237,8 @@ def heartbeat(
         cancel_jobs=cancels,
         # 답이 정해진 결재 (C6) — **C4와 같은 함수**다. 결재 창구는 Center만이다 (C12).
         approvals=approvals.heartbeat(store, host_id=runner_id, acks=request.approval_acks),
-        # 메시지는 아직 없다 (C12 §메시지 — `POST /api/v1/messages`는 다음 조각이다).
-        messages=[],
+        # 받을 곳이 이 실행기인 메시지 (C12 §메시지) — **ack가 올 때까지 매번 다시 싣는다**.
+        messages=messages.heartbeat(store, runner_id=runner_id, acks=request.message_acks),
         paused=paused,
         # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4·C12).
         key_expires_at=key.expires_at,
@@ -356,12 +356,20 @@ def mark_lost(store: Store, runner_id: str) -> dict[str, Any]:
     # 남기지 않는다. 작업은 유실로 닫는다 (`runner_lost`).
     reclaimed = approvals.reclaim_host(store, host_id=runner_id, reason="host_lost")
     closed = jobs.fail_host_jobs(store, target_type="server_runner", target_id=runner_id)
+    # 내려가지 못한 메시지도 닫는다 (C12 §메시지) — 그냥 두면 그 실행기가 **다시 등록하는
+    # 날** 이미 닫힌 실행에 내려간다.
+    dropped = messages.fail_runner_messages(store, runner_id=runner_id)
     with store.tx() as cur:
         cur.execute(
             "UPDATE server_runners SET lost_at = ?, state_json = NULL WHERE server_runner_id = ?",
             (now_iso(), runner_id),
         )
-    return {"server_runner_id": runner_id, "approvals_reclaimed": reclaimed, "jobs_closed": closed}
+    return {
+        "server_runner_id": runner_id,
+        "approvals_reclaimed": reclaimed,
+        "jobs_closed": closed,
+        "messages_dropped": dropped,
+    }
 
 
 # ─────────────────────────── HTTP ───────────────────────────

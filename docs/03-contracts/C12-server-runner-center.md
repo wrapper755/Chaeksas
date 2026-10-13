@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-13) — 등록·하트비트·운영 API·배포 설치·작업 실행·**기다리는 실행의 저장·재개와 결재**가 양쪽에서 돌고 시험이 지킨다. **남은 것은 §메시지 하나다** (`POST /api/v1/messages`·`messages[]`·`message_acks[]` — 양쪽에 코드가 없다) |
+| 상태 | **구현됨** (2026-10-14) — 등록·하트비트·운영 API·배포 설치·작업 실행·기다리는 실행의 저장·재개·결재·**메시지**가 양쪽에서 돌고 시험이 지킨다 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
@@ -43,8 +43,10 @@
 같은 저장소가 넘긴다** — 다시 뜨면 담아 둔 것을 훑어 되살리고 `restored[]`로 알린다.
 되살리지 않는 둘은 `restorable()`이 가른다 (판이 다름·기다린 적 없음).
 
-**아직 없는 것은 §메시지 하나다** — `messages[]`는 늘 비어 있고 `POST /api/v1/messages`가
-없다. 그것이 붙으면 C12가 「구현됨」이 된다.
+**메시지도 돈다** (§메시지) — 외부 시스템이 `POST /api/v1/messages`로 넣으면 Center가 받는
+곳을 찾아 하트비트 `messages[]`로 내려 주고, 기다리던 실행이 이어 가거나 새 작업이 생긴다.
+**받는 곳을 Center가 고르지만 실행기가 다시 찾는다** — 둘 사이에 하트비트 한 주기가 있어
+그동안 그 실행이 타이머로 지나갔을 수 있다 (그때는 `no_receiver`로 돌려보낸다).
 
 **설치는 Bot UI와 같은 코드다** (`core.deploy`·`core.packages`) — 다른 것은 `host_kind`뿐이고,
 그래서 서버는 `"*"` 대상 배포도 받는다 (ADR-0046). **Admin 공개키가 아직 없으면 설치하지
@@ -100,7 +102,7 @@
 | `jobs[]` | **빈자리만큼만** 싣는다. C4 JobDispatch와 같은 모양 |
 | `cancel_jobs[]` | |
 | `approvals[]` | 답이 정해진 결재. 기다리던 실행이 이어 간다 |
-| `messages[]` | `{message_id, name, correlation?, payload, received_at}` — 기다리는 실행을 깨우거나 메시지 시작 이벤트로 새 실행을 만든다 |
+| `messages[]` | `{message_id, name, correlation?, payload, received_at}` — **기다리는 실행에 넣을 것만** 내려온다. 메시지 시작은 Center가 작업으로 바꿔 `jobs[]`로 보낸다 (§메시지) |
 | `paused` | true면 새 작업을 받지 않는다 (CON-12 「일시 중지」). 실행 중인 것은 끝까지 간다 |
 
 ### Center가 작업을 나누는 규칙
@@ -132,6 +134,39 @@ Center는 메시지를 이렇게 처리한다.
 - 없고, `name`이 어떤 서버 Bot의 메시지 시작 트리거면 새 작업을 만든다.
 - 둘 다 아니면 422 `no_receiver`.
 - 응답: `{message_id, delivered_to: "run" | "new_job", run_id?, job_id?}`.
+
+**받는 곳을 고르는 규칙은 엔진의 것이다** (C14 — 이름이 같고, 둘 중 한쪽이라도 상관 키가
+없으면 맞는 것으로 본다). Center는 보고된 `waiting[]` 줄에 **같은 규칙**을 적용하고, 실행기는
+그 실행의 `waits`에 적용한다 — 베끼지 않도록 판정은 계약의 `message_matches()` 하나이고,
+엔진의 `Engine.message_target()`과 **같은 답을 내는지** 시험이 대조한다. 어긋나면 Center가
+「전달했다」고 하고 실행기가 `no_receiver`로 돌려보낸다.
+
+- **`correlation`이 없는 메시지는 기다리는 실행을 찾지 않는다** (위 표) — 메시지 시작만이다.
+  이것은 *고를 것인가*의 규칙이라 **Center에 있고 판정 함수에는 없다** — 넣으면 엔진과 규칙이
+  갈라져 Center가 고른 실행에 실행기가 넣지 못한다. 상관 키 없이 고르면 같은 이름을 기다리는
+  실행이 여럿일 때 **엉뚱한 실행**이 깨어난다 (주문 번호 없는 「입금됐다」가 아무 주문이나
+  깨우는 꼴이다).
+- **기다리는 실행이 여럿 맞으면 가장 오래 기다린 것**에 준다 (`since`가 이른 것). 한 메시지는
+  **한 실행에만** 간다.
+- 메시지 시작 트리거가 **서버 Bot 둘 이상**에 걸리면 422 `receiver_ambiguous`다 — Center가
+  고르지 않는다 (C5의 `version_ambiguous`와 같은 결). 부르는 쪽이 `POST /jobs`로 어느 Bot을
+  돌릴지 정하면 된다.
+- **메시지 시작은 작업을 거친다** — Center가 `POST /jobs`와 **같은 함수**로 작업을 만들므로
+  배포되지 않은 Bot은 메시지로도 돌지 않고, 빈자리·Bot별 상한도 그대로 지켜진다. `payload`가
+  그 작업의 `inputs`가 된다.
+- 멱등은 C5와 같다 — 같은 주인이 같은 `idempotency_key`로 7일 안에 다시 부르면 **같은 응답**
+  (200)이고, 다른 본문이면 409 `idempotency_conflict`다.
+
+**내려 주기와 ack** (실행으로 가는 메시지만 — 새 작업으로 간 것은 그 자리에서 끝난다):
+
+- 작업과 같다 (ADR-0007) — **ack가 올 때까지 매번 다시 싣는다.** 그래서 실행기는 **지금 넣을
+  수 없는 메시지를 ack하지 않고 그냥 둔다** (빈자리가 없거나 아직 되살리지 못했다) — 다음
+  주기에 다시 온다. 거절로 적으면 멀쩡한 메시지가 버려진다.
+- `accepted: true`면 끝이다 (`run_id`를 함께 싣는다 — Center가 고른 실행과 다를 수 있다).
+- `accepted: false`는 **다시 보내지 않는다.** 사유는 `no_receiver`(그 사이 지나갔다)·
+  `run_ended`·`not_waiting`·`duplicate`다. 여기서 다시 싣기로 하면 영원히 도는 메시지가 된다.
+- 받을 실행기가 **유실 처리**되면 그 실행기로 가던 메시지는 `host_lost`로 닫는다 (결재가
+  회수되는 것과 같은 자리다 — C6 `host_lost`).
 
 ### 재시작과 유실
 
@@ -171,11 +206,24 @@ Center는 메시지를 이렇게 처리한다.
 }
 ```
 
+메시지를 넣는 쪽 (`POST /api/v1/messages` — 외부 시스템).
+
+```json
+{
+  "schema": 1,
+  "name": "bid_quote",
+  "correlation": "BID-2610-01",
+  "payload": {"견적": {"공급사": "가나상사", "단가": 1002, "회신메일": "q2@example.com"}},
+  "idempotency_key": "po-77"
+}
+```
+
 ## 오류
 
 C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·`machine_already_registered`·`not_registered`, 422, 5xx). 메시지 API에는 다음이 더 있다.
 
 - 422 `no_receiver`
+- 422 `receiver_ambiguous` — 메시지 시작 트리거가 서버 Bot 둘 이상에 걸렸다
 - 409 `idempotency_conflict`
 
 되살리지 못한 실행의 사유는 오류가 아니라 **C5 `run_status`의 `error_code`**로 간다 —
@@ -195,4 +243,5 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 | 2026-10-13 | 1 | **등록·하트비트가 양쪽에서 돈다** — `apps/server_runner`(등록·하트비트·SIGTERM)와 Center(`api/server_runner.py` + 운영 API 셋). 키 묶기 규칙을 C4와 **한 코드로** 모았고(`center/host_keys.py`), `machine_id`도 한 자리다(`core.machine`). 작업 나누기(`free_slots`·`pick_jobs`)가 붙었고 **`waiting[]`의 작업은 `run_id`로 되짚는다**(그 칸에 `job_id`가 없다 — 안 되짚으면 결재를 기다리는 실행을 `runner_lost`로 닫는다). 남은 것은 메시지 API와 실행이다 | 0054 |
 | 2026-10-13 | 1 | **배포 설치와 준비 상태가 돈다** — 설치는 Bot UI와 **같은 코드**로 모았고(`core.deploy`·`core.packages` — `host_kind`만 다르다) 실행기가 `deployment_results`·`readiness`를 보고한다. `ServerRunnerInfo`에 그 셋(+확장)이 생겨 CON-12가 읽을 자리가 찼다. **내려받기 관문이 서버 실행기를 알아본다** — 「등록은 M7부터다」로 막고 있었는데 등록은 지난 조각에서 생겼다 | 0054 |
 | 2026-10-13 | 1 | **작업 실행이 돈다** — 받은 작업을 스레드 하나로 돌려(ADR-0054 §5) 실행 기록을 하트비트 뒤에 보낸다. **`SERVER_RUNNER_AVAILABLE`을 켰다** — 서버 대상 배포·작업이 만들어진다. `id`를 비운 작업은 Center가 고르고(`server_versions`) 고른 뒤엔 그 실행기에 머문다 | 0054 |
+| 2026-10-14 | 1 | **메시지가 돈다 → 「구현됨」** — `POST /api/v1/messages`(`center/api/messages.py`)·하트비트 `messages[]`·`message_acks[]`가 양쪽에 생겼다. 받는 곳을 고르는 규칙은 **엔진의 것 하나**이고(`message_matches()` ↔ `Engine.message_target()`, 시험이 대조한다) **상관 키가 없으면 찾지 않는 것**은 *고를 것인가*의 판단이라 Center에 둔다. 메시지 시작은 **`POST /jobs`와 같은 함수**로 작업이 되고(배포 검사·상한이 한 자리에 남는다), 둘 이상이면 422 `receiver_ambiguous`다. 작업과 같이 **ack가 올 때까지 다시 싣고** 실행기는 넣을 수 없는 것을 **ack하지 않고 둔다**. 거절은 다시 싣지 않는다. 「유실 처리」가 가던 메시지도 닫는다 | 0054 |
 | 2026-10-13 | 1 | **기다리는 실행을 담고 되살리고 결재로 이어 간다** (M7 기준 셋째) — 담는 길은 `core.run_snapshot`(칸을 셋으로 가르고 **칸이 늘면 시험이 묻는다**), 저장소는 실행기의 SQLite 한 파일. 결재를 C6으로 올리고 하트비트 답으로 잇는다. 붙이다 드러난 것 둘: **`_host_of`가 서버 실행기를 몰라** 답이 영영 내려가지 않았고(`host_id`가 키 id였다), 하트비트의 `running[]`·`waiting[]`이 **빈 채로 나가고 있었다**(#109) — 그러면 CON-12가 못 보이고 Center가 상한을 넘겨 보내고 맞추기가 멀쩡한 실행을 닫는다. 남은 것은 §메시지 하나다 | 0054 |

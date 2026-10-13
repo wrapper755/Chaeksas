@@ -262,7 +262,9 @@ from chaeksas.contracts.server_runner import (
     ServerRunnerRegisterResponse,
     WaitingRun,
     free_slots,
+    message_matches,
     pick_jobs,
+    pick_message_target,
     restorable,
 )
 from chaeksas.contracts.server_runner import validate_heartbeat as validate_runner_heartbeat
@@ -486,7 +488,9 @@ __all__ = [
     "ServerRunnerRegisterResponse",
     "WaitingRun",
     "free_slots",
+    "message_matches",
     "pick_jobs",
+    "pick_message_target",
     "restorable",
     "validate_runner_heartbeat",
     # C13 (`ExtensionClaim`은 C2가 소유한다)

@@ -343,6 +343,39 @@ def restorable(
     return True, None
 
 
+def message_matches(waiting: WaitingRun, *, name: str, correlation: Any = None) -> bool:
+    """그 메시지를 **이 실행이 받나** (C12 §메시지).
+
+    규칙은 **엔진의 것을 그대로 옮긴 것이다** (C14 메시지 상관, `Engine.message_target()`) —
+    이름이 같고, **둘 중 한쪽이라도 상관 키가 없으면** 맞는 것으로 본다. 양쪽에 있으면 같아야
+    한다. 두 함수가 **같은 답을 내는지 시험이 대조한다** — 어긋나면 Center가 「전달했다」고 하고
+    실행기가 `no_receiver`로 돌려보낸다.
+
+    **「상관 키 없는 메시지는 기다리는 실행을 찾지 않는다」는 여기 없다** (C12 §메시지) — 그것은
+    *고를 것인가*의 규칙이라 부르는 쪽(Center)에 있다. 여기 넣으면 엔진과 규칙이 갈라져,
+    Center가 고른 실행에 실행기가 넣지 못하는 일이 생긴다.
+    """
+    if waiting.waiting_for != "message" or waiting.message_name != name:
+        return False
+    if waiting.correlation is None or correlation is None:
+        return True
+    return bool(waiting.correlation == correlation)
+
+
+def pick_message_target(
+    waiting: Sequence[WaitingRun], *, name: str, correlation: Any = None
+) -> WaitingRun | None:
+    """받을 실행 하나 — 여럿이면 **가장 오래 기다린 것** (C12 §메시지).
+
+    한 메시지는 **한 실행에만** 간다. 오래 기다린 쪽부터 주는 것은 사람이 보는 순서와 같다
+    (CON-12 「기다리는 실행」이 기다린 시간으로 줄을 세운다).
+    """
+    found = [one for one in waiting if message_matches(one, name=name, correlation=correlation)]
+    if not found:
+        return None
+    return sorted(found, key=lambda one: (one.since, one.run_id))[0]
+
+
 def pick_jobs(
     queued: Sequence[tuple[str, str]],
     *,
@@ -400,6 +433,8 @@ __all__ += [
     "ServerRunnerRegisterResponse",
     "WaitingRun",
     "free_slots",
+    "message_matches",
+    "pick_message_target",
     "pick_jobs",
     "restorable",
     "validate_heartbeat",

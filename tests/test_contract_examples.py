@@ -26,6 +26,7 @@ from chaeksas.contracts import (
     HeartbeatRequest,
     HeartbeatResponse,
     Manifest,
+    MessageRequest,
     RunEvent,
     ServerRunnerHeartbeatRequest,
     validate_runner_heartbeat,
@@ -44,6 +45,7 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C4-bot-ui-center", 1, HeartbeatResponse),
     ("C6-approvals", 0, ApprovalCreateRequest),
     ("C12-server-runner-center", 0, ServerRunnerHeartbeatRequest),
+    ("C12-server-runner-center", 1, MessageRequest),  # 외부 시스템이 넣는 메시지
     ("C13-extension-manifest", 0, Catalog),  # 공통 카탈로그 형식
     ("C13-extension-manifest", 1, ExtensionManifest),  # 내장 확장
     ("C13-extension-manifest", 2, ExtensionManifest),  # 외부 확장
