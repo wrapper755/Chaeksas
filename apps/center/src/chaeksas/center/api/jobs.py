@@ -16,6 +16,7 @@ from __future__ import annotations
 import hashlib
 import json
 import secrets
+from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -35,6 +36,12 @@ from chaeksas.contracts.center_api import (
     cancel_outcome,
     validate_job_create,
 )
+from chaeksas.contracts.server_runner import (
+    ServerRunnerHeartbeatRequest,
+    free_slots,
+    pick_jobs,
+)
+from chaeksas.contracts.signing import TARGET_ANY
 
 #: 작업 상태 (C5 「작업 상태」). 열린 문자열이지만 Center가 **짓는** 것은 이 넷뿐이다.
 PENDING = "pending"
@@ -281,18 +288,192 @@ def heartbeat(
     **순서가 중요하다.** ack를 먼저 반영해야 맞추기가 방금 온 소식을 못 봤다고 오해하지 않고,
     만료를 그다음에 봐야 이미 끝난 것을 다시 만료시키지 않는다.
     """
-    acked = _apply_acks(store, bot_ui_id=bot_ui_id, acks=request.job_acks)
-    _expire_due(store, bot_ui_id=bot_ui_id, now=now_iso())
+    acked = _apply_acks(store, host_id=bot_ui_id, acks=request.job_acks)
+    _expire_due(store, host_id=bot_ui_id, now=now_iso())
 
     seen = {item.job_id for item in request.queue.items if item.job_id}
     if request.current_run is not None and request.current_run.job_id:
         seen.add(request.current_run.job_id)
-    _reconcile(store, bot_ui_id=bot_ui_id, seen=seen | acked)
+    _reconcile(store, host_id=bot_ui_id, seen=seen | acked)
 
-    return _to_dispatch(store, bot_ui_id=bot_ui_id, disabled=disabled), _to_cancel(store, bot_ui_id=bot_ui_id)
+    return _to_dispatch(store, host_id=bot_ui_id, disabled=disabled), _to_cancel(store, host_id=bot_ui_id)
 
 
-def _apply_acks(store: Store, *, bot_ui_id: str, acks: list[JobAck]) -> set[str]:
+# ─────────────────────────── 하트비트 (C12 서버 실행기) ───────────────────────────
+
+#: 서버 작업의 **아직 아무 실행기에도 가지 않은** 대상 (C5 — `id`를 비우거나 `"*"`).
+UNASSIGNED = ""
+
+
+def server_heartbeat(
+    store: Store, *, runner_id: str, request: ServerRunnerHeartbeatRequest, paused: bool
+) -> tuple[list[JobDispatch], list[str]]:
+    """하트비트 한 번 (C12). **대기열은 Center가 가지므로** 빈자리만큼만 골라 보낸다.
+
+    C4와 순서는 같다 (ack → 만료 → 맞추기 → 고르기). 다른 것은 **무엇을 「보았다」고 할
+    것인가**다 — Bot UI는 대기열을 올려 주지만 실행기는 `running[]`·`waiting[]`을 올린다.
+    """
+    acked = _apply_acks(store, host_id=runner_id, acks=request.job_acks)
+    _expire_due(store, host_id=runner_id, now=now_iso())
+    _expire_due(store, host_id=UNASSIGNED, now=now_iso())  # 아직 아무에게도 안 간 것도 만료된다
+    _reconcile(
+        store, host_id=runner_id, seen=_server_seen(store, request) | acked, lost_reason=LOST_RUNNER
+    )
+    return (
+        _server_dispatch(store, runner_id=runner_id, request=request, paused=paused),
+        _to_cancel(store, host_id=runner_id),
+    )
+
+
+def _server_seen(store: Store, request: ServerRunnerHeartbeatRequest) -> set[str]:
+    """이번 하트비트에 **소식이 온** 작업들 (맞추기 규칙이 쓴다).
+
+    **`waiting[]`에는 `job_id`가 없다** (C12) — 결재를 기다리는 실행의 작업을 「사라졌다」고
+    보면 멀쩡한 실행을 `runner_lost`로 닫는다. 그래서 `run_id`로 되짚는다.
+    """
+    seen = {r.job_id for r in request.running if r.job_id}
+    run_ids = {r.run_id for r in request.running} | {w.run_id for w in request.waiting}
+    for run_id in run_ids:
+        row = store.row("SELECT job_id FROM jobs WHERE run_id = ?", (run_id,))
+        if row is not None:
+            seen.add(str(row["job_id"]))
+    return seen
+
+
+def _per_bot_limits(store: Store, bots: Iterable[str]) -> dict[str, int]:
+    """BPM 프로세스별 동시 실행 상한 — **배포 봉투가 정한다** (C2 `max_concurrency`, 기본 5).
+
+    봉투에 없으면 계약의 기본값이다. 상한을 Center가 짓지 않는다 — 서명된 값이다.
+    """
+    out: dict[str, int] = {}
+    for bot in bots:
+        found = deployments.max_concurrency_for(store, bpm_process_id=bot)
+        if found is not None:
+            out[bot] = found
+    return out
+
+
+def _running_per_bot(store: Store) -> dict[str, int]:
+    """지금 서버에서 도는 수 (BPM 프로세스별) — **실행기 전부를 합쳐** 센다.
+
+    상한은 「이 서버에서 n건」이 아니라 「이 Bot이 한 번에 n건」이다 (C12 §3). 한 실행기만
+    보면 실행기를 늘릴 때마다 상한이 같이 늘어난다.
+    """
+    out: dict[str, int] = {}
+    for row in store.rows(
+        "SELECT bpm_process_id, COUNT(*) AS n FROM jobs"
+        " WHERE target_type = ? AND settled = 0 AND state = ? GROUP BY bpm_process_id",
+        ("server_runner", ACCEPTED),
+    ):
+        out[str(row["bpm_process_id"])] = int(row["n"])
+    return out
+
+
+def _server_candidates(store: Store, *, runner_id: str) -> list[Any]:
+    """고를 수 있는 작업 — 이 실행기에 넘긴 것과 **아직 아무에게도 안 간 것**, 들어온 순서.
+
+    `"*"`·빈 `id`로 만든 작업은 Center가 고른다 (C5 `JobTarget`). 이미 넘긴 것(`dispatched`)이
+    먼저다 — ack가 올 때까지 매번 다시 실어야 하므로 (C4).
+    """
+    return list(
+        store.rows(
+            "SELECT * FROM jobs WHERE target_type = ? AND settled = 0 AND cancel_requested = 0"
+            " AND state IN (?, ?) AND (target_id = ? OR target_id = ? OR target_id = ?)"
+            " ORDER BY requested_at, job_id",
+            ("server_runner", PENDING, DISPATCHED, runner_id, UNASSIGNED, TARGET_ANY),
+        )
+    )
+
+
+def _server_dispatch(
+    store: Store, *, runner_id: str, request: ServerRunnerHeartbeatRequest, paused: bool
+) -> list[JobDispatch]:
+    """내려줄 작업 — **빈자리만큼만** (C12 §Center가 작업을 나누는 규칙).
+
+    고르는 것은 계약의 `pick_jobs()`다 — **건너뛰고 다음을 본다**(막아 세우면 상한에 걸린 Bot
+    하나가 대기열 전체를 멈춘다). 건너뛴 까닭은 `state_reason`에 적어 CON-12가 보인다.
+
+    고른 작업은 **이 실행기에 묶는다** — 한 실행은 시작한 실행기에 끝까지 머문다 (상태가 그
+    실행기 저장소에 있다, ADR-0054).
+    """
+    rows = _server_candidates(store, runner_id=runner_id)
+    if not rows:
+        return []
+    queued = [(str(row["job_id"]), str(row["bpm_process_id"])) for row in rows]
+    taken, skipped = pick_jobs(
+        queued,
+        slots=free_slots(request.capacity, paused=paused),
+        running_per_bot=_running_per_bot(store),
+        per_bot_limit=_per_bot_limits(store, {bot for _, bot in queued}),
+    )
+
+    with store.tx() as cur:
+        for job_id, reason in skipped.items():
+            cur.execute("UPDATE jobs SET state_reason = ? WHERE job_id = ?", (reason, job_id))
+    out = []
+    by_id = {str(row["job_id"]): row for row in rows}
+    for job_id in taken:
+        row = by_id[job_id]
+        with store.tx() as cur:
+            cur.execute(
+                "UPDATE jobs SET state = ?, state_reason = NULL, target_id = ?, dispatched_at = ?"
+                " WHERE job_id = ?",
+                (DISPATCHED, runner_id, now_iso(), job_id),
+            )
+        out.append(
+            JobDispatch(
+                job_id=job_id,
+                bpm_process_id=row["bpm_process_id"],
+                version=row["version"],
+                inputs=loads(row["inputs_json"], {}) or {},
+                requested_by=row["requested_by"],
+                requested_at=row["requested_at"],
+                expires_at=row["expires_at"],
+                note=row["note"],
+            )
+        )
+    return out
+
+
+def queued_count(store: Store, *, runner_id: str) -> int:
+    """CON-12 「대기열」 — 아직 내려가지 않은 서버 작업 수.
+
+    **아직 아무에게도 안 간 것까지 센다** (대기열은 Center가 가진다, C12).
+    """
+    row = store.row(
+        "SELECT COUNT(*) AS n FROM jobs WHERE target_type = ? AND settled = 0 AND state = ?"
+        " AND (target_id = ? OR target_id = ? OR target_id = ?)",
+        ("server_runner", PENDING, runner_id, UNASSIGNED, TARGET_ANY),
+    )
+    return int(row["n"]) if row is not None else 0
+
+
+def fail_host_jobs(store: Store, *, target_type: str, target_id: str) -> int:
+    """그 실행기에 넘긴 작업을 **유실로 닫는다** (C12 「유실 처리」 — CON-12).
+
+    아직 시작하지 않은 것(`pending`)은 **놓아 준다** — 다른 실행기가 받으면 된다. 닫는 것은
+    이미 넘어가 버린 것(`dispatched`·`queued`·`accepted`)이다.
+    """
+    rows = store.rows(
+        "SELECT job_id FROM jobs WHERE target_type = ? AND target_id = ? AND settled = 0"
+        " AND state IN (?, ?, ?)",
+        (target_type, target_id, DISPATCHED, QUEUED, ACCEPTED),
+    )
+    with store.tx() as cur:
+        for row in rows:
+            cur.execute(
+                "UPDATE jobs SET state = ?, state_reason = ?, settled = 1 WHERE job_id = ?",
+                (REJECTED, "runner_lost", row["job_id"]),
+            )
+        cur.execute(
+            "UPDATE jobs SET target_id = ? WHERE target_type = ? AND target_id = ?"
+            " AND settled = 0 AND state = ?",
+            (UNASSIGNED, target_type, target_id, PENDING),
+        )
+    return len(rows)
+
+
+def _apply_acks(store: Store, *, host_id: str, acks: list[JobAck]) -> set[str]:
     """받은 ack를 반영한다 (C4 `JobAck.result`). 돌려주는 것은 이번에 소식이 온 작업들이다.
 
     **같은 ack를 다시 보내도 한 번만 반영한다** (C4 멱등성) — 값을 덮어쓸 뿐이라 저절로 그렇다.
@@ -300,7 +481,7 @@ def _apply_acks(store: Store, *, bot_ui_id: str, acks: list[JobAck]) -> set[str]
     touched: set[str] = set()
     for ack in acks:
         row = store.row(
-            "SELECT * FROM jobs WHERE job_id = ? AND target_id = ?", (ack.job_id, bot_ui_id)
+            "SELECT * FROM jobs WHERE job_id = ? AND target_id = ?", (ack.job_id, host_id)
         )
         if row is None:
             # 모르는 작업이거나 **남의 작업**이다 — 다른 PC의 작업을 ack하지 못한다.
@@ -355,7 +536,7 @@ def _ack_changes(row: Any, ack: JobAck) -> dict[str, Any]:
     return {"cancel_requested": 1, "cancel_result": CANCEL_REFUSED, "misses": 0}
 
 
-def _expire_due(store: Store, *, bot_ui_id: str, now: str) -> None:
+def _expire_due(store: Store, *, host_id: str, now: str) -> None:
     """`expires_at`까지 시작하지 못한 것은 `expired`다 (C5).
 
     **실행 중인 것(`accepted`)은 건드리지 않는다** — 이미 시작했으면 만료가 아니다.
@@ -364,7 +545,7 @@ def _expire_due(store: Store, *, bot_ui_id: str, now: str) -> None:
     for row in store.rows(
         "SELECT job_id, expires_at FROM jobs WHERE target_id = ? AND settled = 0"
         " AND state IN (?, ?, ?) AND expires_at IS NOT NULL",
-        (bot_ui_id, PENDING, DISPATCHED, QUEUED),
+        (host_id, PENDING, DISPATCHED, QUEUED),
     ):
         if datetime.fromisoformat(row["expires_at"]) > edge:
             continue
@@ -374,15 +555,24 @@ def _expire_due(store: Store, *, bot_ui_id: str, now: str) -> None:
             )
 
 
-def _reconcile(store: Store, *, bot_ui_id: str, seen: set[str]) -> None:
-    """맞추기 규칙 (C4) — 넘겨준 작업이 **소리 없이 사라지지 않게** 한다.
+#: 맞추기 규칙이 적는 사유 — **호스트마다 다르다**. PC는 C4의 값, 서버 실행기는 C12의 값이다.
+#: 뭉개면 CON-12가 서버 실행기에 「bot_ui_lost」라고 적어 운영자가 PC를 찾아 헤맨다.
+LOST_BOT_UI = "bot_ui_lost"
+LOST_RUNNER = "runner_lost"
 
-    Bot UI가 비정상 종료로 대기열을 잃으면 작업은 영원히 `queued`로 남는다. 두 번 연속
-    하트비트에서 대기열·실행 자리에 보이지 않고 ack도 없으면 `rejected` + `bot_ui_lost`다.
+
+def _reconcile(store: Store, *, host_id: str, seen: set[str], lost_reason: str = LOST_BOT_UI) -> None:
+    """맞추기 규칙 (C4·C12) — 넘겨준 작업이 **소리 없이 사라지지 않게** 한다.
+
+    실행하는 쪽이 비정상 종료로 쥔 것을 잃으면 작업은 영원히 `queued`로 남는다. 두 번 연속
+    하트비트에서 보이지 않고 ack도 없으면 `rejected` + `lost_reason`이다.
+
+    **무엇을 「보았다」고 할지는 부르는 쪽이 정한다** (`seen`) — Bot UI는 대기열·실행 자리로,
+    서버 실행기는 `running[]`·`waiting[]`으로 말한다 (C12).
     """
     for row in store.rows(
         "SELECT job_id, misses, run_id FROM jobs WHERE target_id = ? AND settled = 0 AND state IN (?, ?)",
-        (bot_ui_id, QUEUED, ACCEPTED),
+        (host_id, QUEUED, ACCEPTED),
     ):
         if row["job_id"] in seen:
             if row["misses"]:
@@ -395,7 +585,7 @@ def _reconcile(store: Store, *, bot_ui_id: str, seen: set[str]) -> None:
                 cur.execute(
                     "UPDATE jobs SET state = ?, state_reason = ?, settled = 1, misses = ?"
                     " WHERE job_id = ?",
-                    (REJECTED, "bot_ui_lost", misses, row["job_id"]),
+                    (REJECTED, lost_reason, misses, row["job_id"]),
                 )
             else:
                 cur.execute("UPDATE jobs SET misses = ? WHERE job_id = ?", (misses, row["job_id"]))
@@ -403,10 +593,12 @@ def _reconcile(store: Store, *, bot_ui_id: str, seen: set[str]) -> None:
             # 대기열을 잃었으면 그 실행의 결재도 전달될 곳이 없다 (C6 `host_lost`).
             from chaeksas.center.api import approvals  # noqa: PLC0415 — 순환 import를 피한다
 
-            approvals.withdraw_for_run(store, str(row["run_id"]), event="bot_ui_lost")
+            # `event`는 **계약의 열쇠**라 그대로 둔다 (`AUTO_WITHDRAW_REASONS`) — 저장되는
+            # 사유는 호스트를 가리지 않는 `host_lost`다 (C6).
+            approvals.withdraw_for_run(store, str(row["run_id"]), event=LOST_BOT_UI)
 
 
-def _to_dispatch(store: Store, *, bot_ui_id: str, disabled: bool) -> list[JobDispatch]:
+def _to_dispatch(store: Store, *, host_id: str, disabled: bool) -> list[JobDispatch]:
     """내려줄 작업 (C4 `jobs`) — **ack가 올 때까지 매번 실린다**.
 
     비활성화된 Bot UI에는 **새 작업을 보내지 않는다** (C5 CON-03). 작업은 `pending`으로 남아
@@ -418,7 +610,7 @@ def _to_dispatch(store: Store, *, bot_ui_id: str, disabled: bool) -> list[JobDis
     for row in store.rows(
         "SELECT * FROM jobs WHERE target_id = ? AND settled = 0 AND cancel_requested = 0"
         " AND state IN (?, ?) ORDER BY requested_at",
-        (bot_ui_id, PENDING, DISPATCHED),
+        (host_id, PENDING, DISPATCHED),
     ):
         if row["state"] == PENDING:
             with store.tx() as cur:
@@ -441,7 +633,7 @@ def _to_dispatch(store: Store, *, bot_ui_id: str, disabled: bool) -> list[JobDis
     return out
 
 
-def _to_cancel(store: Store, *, bot_ui_id: str) -> list[str]:
+def _to_cancel(store: Store, *, host_id: str) -> list[str]:
     """취소 지시 (C4 `cancel_jobs`) — 아직 답을 듣지 못한 것만.
 
     **`accepted`도 보낸다.** 취소 요청과 `started` ack는 엇갈리기 마련이고, 그때 「이미
@@ -453,7 +645,7 @@ def _to_cancel(store: Store, *, bot_ui_id: str) -> list[str]:
         for row in store.rows(
             "SELECT job_id FROM jobs WHERE target_id = ? AND settled = 0 AND cancel_requested = 1"
             " AND cancel_result IS NULL AND state IN (?, ?, ?) ORDER BY requested_at",
-            (bot_ui_id, DISPATCHED, QUEUED, ACCEPTED),
+            (host_id, DISPATCHED, QUEUED, ACCEPTED),
         )
     ]
 

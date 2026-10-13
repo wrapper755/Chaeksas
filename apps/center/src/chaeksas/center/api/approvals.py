@@ -282,6 +282,21 @@ def withdraw_for_run(store: Store, run_id: str, *, event: str) -> int:
     return len(rows)
 
 
+def reclaim_host(store: Store, *, host_id: str, reason: str) -> int:
+    """그 **올린 쪽**이 사라졌다 — 기다리는 결재를 모두 거둔다 (C6 `host_lost`).
+
+    CON-12 「유실 처리」가 부른다 (C12). 실행마다 거두는 `withdraw_for_run`과 달리 **그 호스트가
+    올린 것 전부**를 본다 — 유실 처리는 「이 실행기의 실행을 다 닫는다」이고, 작업과 짝이 맞지
+    않는 결재(수동 실행·메시지 시작)도 전달될 곳이 없다.
+    """
+    rows = store.rows(
+        "SELECT request_id FROM approvals WHERE host_id = ? AND state = ?", (host_id, OPEN)
+    )
+    for row in rows:
+        _set_withdrawn(store, str(row["request_id"]), reason)
+    return len(rows)
+
+
 def expire_due(store: Store, *, now: str | None = None) -> int:
     """시한이 지난 `open` 결재를 만료로 바꾼다 — 그래야 실행하는 쪽이 기다림을 멈춘다."""
     edge = datetime.fromisoformat(now or now_iso())
@@ -329,23 +344,23 @@ def purge_values(store: Store, *, now: str | None = None, days: int = VALUE_RETE
 
 
 def heartbeat(
-    store: Store, *, bot_ui_id: str, acks: list[ApprovalAck]
+    store: Store, *, host_id: str, acks: list[ApprovalAck]
 ) -> list[ApprovalDispatch]:
     """받은 ack를 반영하고, 내려줄 결재를 고른다.
 
     **ack를 먼저** 본다 — 방금 받아 간 것을 다시 내려보내지 않게.
     """
-    _apply_acks(store, bot_ui_id=bot_ui_id, acks=acks)
+    _apply_acks(store, host_id=host_id, acks=acks)
     expire_due(store)
     purge_values(store)
-    return _to_dispatch(store, bot_ui_id=bot_ui_id)
+    return _to_dispatch(store, host_id=host_id)
 
 
-def _apply_acks(store: Store, *, bot_ui_id: str, acks: list[ApprovalAck]) -> None:
+def _apply_acks(store: Store, *, host_id: str, acks: list[ApprovalAck]) -> None:
     """`approval_acks` (C4). **거절은 `open`으로 되돌린다** (C6)."""
     for ack in acks:
         row = store.row(
-            "SELECT * FROM approvals WHERE request_id = ? AND host_id = ?", (ack.request_id, bot_ui_id)
+            "SELECT * FROM approvals WHERE request_id = ? AND host_id = ?", (ack.request_id, host_id)
         )
         if row is None:
             continue  # 모르는 결재이거나 **남의 것**이다
@@ -366,12 +381,12 @@ def _apply_acks(store: Store, *, bot_ui_id: str, acks: list[ApprovalAck]) -> Non
                 )
 
 
-def _to_dispatch(store: Store, *, bot_ui_id: str) -> list[ApprovalDispatch]:
+def _to_dispatch(store: Store, *, host_id: str) -> list[ApprovalDispatch]:
     """답이 정해졌고 아직 ack되지 않은 결재 (C4 `approvals[]`)."""
     rows = store.rows(
         "SELECT * FROM approvals WHERE host_id = ? AND delivered = 0 AND state IN (?, ?, ?)"
         " ORDER BY created_at",
-        (bot_ui_id, ANSWERED, EXPIRED, WITHDRAWN),
+        (host_id, ANSWERED, EXPIRED, WITHDRAWN),
     )
     return [
         ApprovalDispatch(

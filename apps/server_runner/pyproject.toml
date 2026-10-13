@@ -3,9 +3,19 @@ name = "chaeksas-server-runner"
 version = "0.1.0"
 description = "서버 실행기 — 실행 위치 「서버」 BPM 프로세스 동시 실행, 상태 저장·재개 (화면 없음, C12)"
 requires-python = ">=3.12,<3.13"
-dependencies = ["chaeksas-core"]
+dependencies = [
+    "chaeksas-contracts",
+    "chaeksas-core",
+    "httpx>=0.27",        # Center 호출 (C12)
+    "keyring>=25.4",      # OS 비밀 저장소 — Center API 키 (CLAUDE.md §5)
+    "platformdirs>=4.3",  # 데이터 위치
+]
+
+[project.scripts]
+chk-server-runner = "chaeksas.server_runner.main:main"
 
 [tool.uv.sources]
+chaeksas-contracts = { workspace = true }
 chaeksas-core = { workspace = true }
 
 [build-system]
