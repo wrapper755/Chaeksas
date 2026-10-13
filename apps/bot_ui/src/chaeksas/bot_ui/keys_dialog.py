@@ -42,11 +42,11 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.bot_ui.agent import Agent
-from chaeksas.bot_ui.bots import InstalledBot, installed
 from chaeksas.bot_ui.credentials import Credentials, SecretsUnavailable, service_key_env
 from chaeksas.bot_ui.settings import ServiceKeyRef, data_dir
 from chaeksas.contracts.manifest import KEY_REF_PATTERN, Manifest
 from chaeksas.core.key_check import key_status
+from chaeksas.core.packages import InstalledBot, installed
 from chaeksas.core.preflight import key_apps_of
 from chaeksas.qt import theme
 

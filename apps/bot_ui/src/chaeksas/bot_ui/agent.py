@@ -20,10 +20,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from chaeksas.bot_ui.bots import InstalledBot, find, installed
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials
-from chaeksas.bot_ui.deploy import APPLIED, Deployer
 from chaeksas.bot_ui.notices import Notices
 from chaeksas.bot_ui.runner import Launcher, Running
 from chaeksas.bot_ui.runtimes import BUSY, RESERVED, HostSettings, RuntimeUnavailable, runtime_ids_of
@@ -53,8 +51,10 @@ from chaeksas.contracts.bot_ui import (
     WorkerState,
 )
 from chaeksas.core import machine, requests
+from chaeksas.core.deploy import APPLIED, Deployer
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.key_check import key_facts
+from chaeksas.core.packages import InstalledBot, find, installed
 from chaeksas.core.preflight import Preflight, key_apps_of
 from chaeksas.core.preflight import check as run_preflight
 from chaeksas.core.processes import Supervisor
@@ -787,7 +787,7 @@ class Agent:
 
         return Deployer(
             data_dir=data_dir(),
-            bot_ui_id=self.bot_ui_id or "",
+            host_id=self.bot_ui_id or "",
             keys=list(self.store.state.admin_keys),
             signed_only=self.settings.signed_only,
             fetch=self.fetch_package,

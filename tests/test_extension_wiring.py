@@ -214,10 +214,10 @@ def model() -> Iterator[CalcModel]:
 def test_the_bot_ui_starts_the_worker_and_the_runner_uses_it(tmp_path: Path, model: CalcModel) -> None:
     """Bot UI → (자식) Worker, Bot UI → (자식) 실행기 → HTTP → Worker → 진짜 창. **가짜가 없다** (모델 빼고)."""
     from chaeksas.bot_ui.agent import Agent  # noqa: PLC0415
-    from chaeksas.bot_ui.bots import install  # noqa: PLC0415
     from chaeksas.bot_ui.runtimes import token_dir_for  # noqa: PLC0415
     from chaeksas.bot_ui.settings import RuntimeSettings, Settings, data_dir  # noqa: PLC0415
     from chaeksas.bot_ui.store import Store  # noqa: PLC0415
+    from chaeksas.core.packages import install  # noqa: PLC0415
     from chaeksas.core.run_log import RunLog, log_path  # noqa: PLC0415
     from chaeksas.studio.packaging import default_name, export  # noqa: PLC0415
     from chaeksas.studio.workspace import Workspace  # noqa: PLC0415
@@ -309,10 +309,10 @@ def test_the_bot_ui_starts_the_runtime_of_the_environment_a_domain_needs(
 ) -> None:
     """FX-05는 그림에 확장을 적지 않았다 — `requires.domains`의 `desktop`으로 그 환경의 확장을 찾는다."""
     from chaeksas.bot_ui.agent import Agent  # noqa: PLC0415
-    from chaeksas.bot_ui.bots import install  # noqa: PLC0415
     from chaeksas.bot_ui.runtimes import Runtimes  # noqa: PLC0415
     from chaeksas.bot_ui.settings import Settings, data_dir  # noqa: PLC0415
     from chaeksas.bot_ui.store import Store  # noqa: PLC0415
+    from chaeksas.core.packages import install  # noqa: PLC0415
     from chaeksas.studio.packaging import default_name, export  # noqa: PLC0415
     from chaeksas.studio.workspace import Workspace  # noqa: PLC0415
 

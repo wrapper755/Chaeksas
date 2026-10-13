@@ -42,7 +42,6 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.bot_ui.agent import Agent
-from chaeksas.bot_ui.bots import InstalledBot, installed
 from chaeksas.bot_ui.center_client import KeyRejected
 from chaeksas.bot_ui.runtimes import STATE_LABELS, RuntimeUnavailable, port_for
 from chaeksas.bot_ui.services import Services, external_ids
@@ -57,6 +56,7 @@ from chaeksas.contracts.extension import (
 )
 from chaeksas.contracts.signing import AdminKey, Envelope
 from chaeksas.core.extensions import ExtensionHost, LoadedExtension
+from chaeksas.core.packages import InstalledBot, installed
 from chaeksas.extension_api import API_VERSION
 from chaeksas.qt import theme
 

@@ -10,6 +10,8 @@
  */
 export interface ServerRunnerInfo {
   capacity: Capacity;
+  deployment_results?: DeploymentResult[];
+  extensions?: ExtensionState[];
   key_expires_at?: string | null;
   last_heartbeat_at?: string | null;
   name: string;
@@ -17,6 +19,7 @@ export interface ServerRunnerInfo {
   os: string;
   paused?: boolean;
   queued?: number;
+  readiness?: Readiness[];
   registered_at?: string | null;
   running?: RunningRun[];
   server_runner_id: string;
@@ -34,6 +37,45 @@ export interface ServerRunnerInfo {
 export interface Capacity {
   max: number;
   running: number;
+  [k: string]: unknown;
+}
+/**
+ * 배포 적용 결정 (CON-03 「최근 배치 결정」). 실행이 아니므로 C3로 보내지 않는다.
+ */
+export interface DeploymentResult {
+  at: string;
+  bpm_process_id: string;
+  deployment_id: string;
+  reason?: string | null;
+  result: string;
+  version: string;
+  [k: string]: unknown;
+}
+/**
+ * 설치된 확장 하나 (C13).
+ *
+ * **`enabled`와 `off`는 다른 것을 말한다** ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)):
+ * `off`는 **사람이 껐다**(멀쩡한데 일부러 안 쓴다), `enabled=false`인데 `off`가 아니면 **흠이
+ * 있다**(정의·판이 맞지 않는다). 화면이 「꺼짐」과 「호환 안 됨」을 가르는 자리다. 뜻을 바꾸지
+ * 않고 칸을 더한 것이라 옛 Bot UI가 보낸 값(`off` 없음)도 그대로 읽힌다.
+ */
+export interface ExtensionState {
+  definition_hash?: string | null;
+  enabled?: boolean;
+  id: string;
+  off?: boolean;
+  version: string;
+  [k: string]: unknown;
+}
+/**
+ * 설치된 Bot 하나의 준비 상태.
+ */
+export interface Readiness {
+  blocked?: string[];
+  bpm_process_id: string;
+  missing_key_refs?: string[];
+  ready: boolean;
+  version: string;
   [k: string]: unknown;
 }
 /**

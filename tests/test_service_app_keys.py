@@ -26,13 +26,13 @@ import uvicorn
 from conftest import FakeCredentials
 
 from chaeksas.bot_ui.agent import Agent
-from chaeksas.bot_ui.bots import InstalledBot, install
 from chaeksas.bot_ui.keys_dialog import NEEDS_KEY, NOT_CHECKED, KeysDialog, collect, refs_of
 from chaeksas.bot_ui.main_window import NO_KEYS, READY, readiness_label
 from chaeksas.bot_ui.settings import ServiceKeyRef, Settings, data_dir
 from chaeksas.bot_ui.store import Store
 from chaeksas.core.extensions import load_host
 from chaeksas.core.key_check import NO_ADDRESS, key_status
+from chaeksas.core.packages import InstalledBot, install
 from chaeksas.mock_apps import catalog
 from chaeksas.mock_apps.c11 import build as build_mock
 

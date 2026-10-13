@@ -43,7 +43,6 @@ from waiting import wait_for  # noqa: E402
 
 from chaeksas.admin import keys as keystore  # noqa: E402
 from chaeksas.bot_ui.agent import Agent, load_extensions  # noqa: E402
-from chaeksas.bot_ui.bots import installed  # noqa: E402
 from chaeksas.bot_ui.center_client import CenterClient  # noqa: E402
 from chaeksas.bot_ui.settings import Settings as BotUiSettings  # noqa: E402
 from chaeksas.bot_ui.store import Store as BotUiStore  # noqa: E402
@@ -53,6 +52,7 @@ from chaeksas.center.settings import Settings as CenterSettings  # noqa: E402
 from chaeksas.center.storage import Store  # noqa: E402
 from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
 from chaeksas.contracts.signing import sign  # noqa: E402
+from chaeksas.core.packages import installed  # noqa: E402
 from chaeksas.core.run_log import RunLog, log_path  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
 from chaeksas.mock_apps.c11 import SHARED_KEY_ENV  # noqa: E402

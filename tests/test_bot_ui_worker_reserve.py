@@ -149,9 +149,9 @@ def test_the_queue_waits_while_the_worker_is_busy_and_releases_after(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from chaeksas.bot_ui.agent import TRAY_WORKER_BUSY, Agent  # noqa: PLC0415
-    from chaeksas.bot_ui.bots import install  # noqa: PLC0415
     from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415
     from chaeksas.bot_ui.store import Store  # noqa: PLC0415
+    from chaeksas.core.packages import install  # noqa: PLC0415
     from chaeksas.studio.packaging import default_name, export  # noqa: PLC0415
     from chaeksas.studio.workspace import Workspace  # noqa: PLC0415
 

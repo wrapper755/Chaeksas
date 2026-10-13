@@ -1,6 +1,9 @@
-"""배포를 받아 Bot을 설치한다 (C2 V1~V7, C4·C5).
+"""배포를 받아 Bot을 설치한다 (C2 V1~V7, C4·C5·C12).
 
-하트비트로 내려온 **배포 봉투**를 보고, 이 PC 것이면 패키지를 내려받아 설치한다.
+하트비트로 내려온 **배포 봉투**를 보고, 이 기계 것이면 패키지를 내려받아 설치한다.
+
+**Bot UI와 서버 실행기가 같은 코드를 쓴다** — 다른 것은 `host_kind`·`host_id`뿐이다 (C2 V6의
+대상 검사에 들어간다). 규칙이 두 군데 있으면 「PC는 거부하는데 서버는 설치한다」가 된다.
 
 지키는 것 다섯.
 
@@ -21,7 +24,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from chaeksas.bot_ui.bots import CENTER, InstallError, install, installed, write_source
 from chaeksas.contracts.bot_ui import DeploymentResult
 from chaeksas.contracts.hashing import content_hash_zip
 from chaeksas.contracts.signing import (
@@ -32,6 +34,7 @@ from chaeksas.contracts.signing import (
     verify_target,
     verify_time,
 )
+from chaeksas.core.packages import CENTER, InstallError, install, installed, write_source
 
 log = logging.getLogger(__name__)
 
@@ -87,10 +90,16 @@ class Outcome:
 
 @dataclass
 class Deployer:
-    """배포를 적용하는 쪽. **설치만 한다** — 실행은 대기열이 정한다 (ADR-0014)."""
+    """배포를 적용하는 쪽. **설치만 한다** — 돌리는 것은 부르는 쪽이 정한다.
+
+    PC는 대기열이(ADR-0014), 서버는 Center가 빈자리만큼 보낸 작업이 정한다 (C12).
+    """
 
     data_dir: Path
-    bot_ui_id: str
+    #: 이 기계가 누구인가 — C2 V6이 봉투의 `target`과 맞춰 본다.
+    host_id: str
+    #: `bot_ui` 또는 `server_runner` (C2 §배포 대상 규칙). 서버는 `"*"` 대상도 받는다.
+    host_kind: str = "bot_ui"
     keys: list[AdminKey] = field(default_factory=list)
     #: 서명 없는 패키지를 설치하지 않는다 (BUI-03 「서명된 패키지만」, 기본 켬).
     signed_only: bool = True
@@ -127,7 +136,7 @@ class Deployer:
         if problems:
             return self._refused(made, problems[0])
         # V6 — 남의 배포는 받지 않는다.
-        problems = verify_target(envelope, runner_kind="bot_ui", runner_id=self.bot_ui_id)
+        problems = verify_target(envelope, runner_kind=self.host_kind, runner_id=self.host_id)
         if problems:
             return self._refused(made, problems[0])
         # V5 — 만료는 거부, `not_before`는 **기다림**이다.

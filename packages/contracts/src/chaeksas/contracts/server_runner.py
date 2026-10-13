@@ -250,6 +250,12 @@ class ServerRunnerInfo(ContractModel):
     running: list[RunningRun] = Field(default_factory=list)
     waiting: list[WaitingRun] = Field(default_factory=list)
     queued: int = 0
+    #: 배포된 서버 Bot별 준비 상태 — 실행기가 보고한 것 그대로 (CON-12 「Bot별 상한」).
+    readiness: list[Readiness] = Field(default_factory=list)
+    #: 이 서버에 깔린 확장 (C12 — 등록·하트비트가 보고한다).
+    extensions: list[ExtensionState] = Field(default_factory=list)
+    #: **Center가 쌓아 둔** 최근 배치 결정 (C4·C12 — 한 주기만 올라오는 값이라 받아 둔다).
+    deployment_results: list[DeploymentResult] = Field(default_factory=list)
     versions: RunnerVersions | None = None
     last_heartbeat_at: Timestamp | None = None
     registered_at: Timestamp | None = None

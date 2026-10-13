@@ -38,14 +38,6 @@ from PySide6.QtWidgets import (
 
 from chaeksas.bot_ui import run_log_view
 from chaeksas.bot_ui.agent import Agent
-from chaeksas.bot_ui.bots import (
-    MANUAL,
-    InstalledBot,
-    InstallError,
-    install,
-    installed,
-    write_source,
-)
 from chaeksas.bot_ui.extension_dialog import ExtensionsDialog
 from chaeksas.bot_ui.keys_dialog import KeysDialog
 from chaeksas.bot_ui.runner import Running
@@ -53,6 +45,14 @@ from chaeksas.bot_ui.runtimes import STATE_LABELS, RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.contracts.approvals import Form
 from chaeksas.contracts.extension import SURFACE_BOT_UI_RUNTIMES
+from chaeksas.core.packages import (
+    MANUAL,
+    InstalledBot,
+    InstallError,
+    install,
+    installed,
+    write_source,
+)
 from chaeksas.core.preflight import (
     EXTENSION_TURNED_OFF,
     EXTENSIONS_UNUSABLE,

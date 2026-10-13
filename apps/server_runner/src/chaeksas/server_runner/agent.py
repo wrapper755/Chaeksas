@@ -1,9 +1,12 @@
 """실행기의 심장 — 등록하고 주기마다 하트비트를 보낸다 (C12).
 
-**아직 Bot을 돌리지 않는다** (M7 조각 2). 올리는 것은 「나는 살아 있고 자리가 N개 비어 있다」
-뿐이고, 내려온 작업·배포는 **받아서 기록만 한다** — 돌리는 것은 다음 조각이다. 그래서
-`capacity.running`은 늘 0이고 `running[]`·`waiting[]`은 비어 있다. **없는 것을 있는 척하지
-않는다**: 작업을 받고도 `started` ack를 보내면 Center는 도는 줄 알고 기다린다.
+**배포를 설치하고 준비 상태를 보고한다** (M7 조각 3). 설치는 Bot UI와 **같은 코드**
+(`core.deploy`·`core.packages`)이고 다른 것은 `host_kind`뿐이다 — 서버는 `"*"` 대상 배포도
+받는다 (ADR-0046).
+
+**아직 Bot을 돌리지 않는다** — 내려온 작업은 **받아서 기록만 한다**. 그래서 `capacity.running`은
+늘 0이고 `running[]`·`waiting[]`은 비어 있다. **없는 것을 있는 척하지 않는다**: 작업을 받고도
+`started` ack를 보내면 Center는 도는 줄 알고 기다린다.
 
 한 걸음은 `tick()` 하나다 — **스레드를 만들지 않는다** (엔진과 같은 태도다). 부르는 쪽(`main`)이
 돌리고, 시험은 `tick()`을 직접 민다.
@@ -13,8 +16,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
+from chaeksas.contracts.bot_ui import DeploymentResult, Readiness
 from chaeksas.contracts.server_runner import (
     Capacity,
     RunnerVersions,
@@ -23,7 +28,11 @@ from chaeksas.contracts.server_runner import (
     ServerRunnerRegisterRequest,
     validate_heartbeat,
 )
+from chaeksas.contracts.signing import AdminKey
 from chaeksas.core import machine
+from chaeksas.core.deploy import Deployer
+from chaeksas.core.packages import InstalledBot, installed
+from chaeksas.core.preflight import check as run_preflight
 from chaeksas.server_runner.center_client import (
     CenterClient,
     CenterProblem,
@@ -32,6 +41,7 @@ from chaeksas.server_runner.center_client import (
     NotRegistered,
     Unreachable,
 )
+from chaeksas.server_runner.credentials import Credentials
 from chaeksas.server_runner.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -45,6 +55,11 @@ STATUS_RUNNING = "running"
 STATUS_PAUSED = "paused"
 STATUS_ERROR = "error"
 
+#: 배포 대상 종류 (C2 §배포 대상 규칙) — 서버는 `"*"`도 받는다 (ADR-0046).
+HOST_KIND = "server_runner"
+#: 키가 없을 때 「어떻게 고치나」 한 줄 (사전 점검이 사람에게 보여 준다).
+KEY_FIX_HINT = "환경변수 CHK_SERVER_RUNNER__SVC__<참조>로 키를 주세요"
+
 
 @dataclass
 class Agent:
@@ -52,6 +67,8 @@ class Agent:
 
     settings: Settings
     client: CenterClient
+    #: 비밀 창고 — 서비스 앱 키 참조를 푼다 (사전 점검이 「값이 있나」를 묻는다).
+    credentials: Credentials = field(default_factory=Credentials)
     #: Center가 준 신원 (C12). 등록 전에는 비어 있다.
     server_runner_id: str = ""
     #: 다음 하트비트까지 기다릴 초. 응답의 `next_heartbeat_s`를 따른다 (C12).
@@ -62,10 +79,20 @@ class Agent:
     blocked_by: str = ""
     #: 지난 주기에 올리지 못해 **들고 있는** 것 (ADR-0007 — 부르는 쪽이 다시 온다).
     restored: list[str] = field(default_factory=list)
+    #: 배포 서명을 검증할 Admin 공개키 (C2) — 하트비트로 온다. **없으면 아무것도 설치하지 않는다.**
+    admin_keys: list[AdminKey] = field(default_factory=list)
+    #: 아직 올리지 못한 배치 결정 (C4·C12 `deployment_results`). **올릴 때까지 들고 있는다** —
+    #: 한 주기만 올라가는 값이라 흘려보내면 「왜 설치가 안 됐나」가 영영 남지 않는다.
+    pending_results: list[DeploymentResult] = field(default_factory=list)
+    #: 서명 없는 패키지를 설치하지 않는다 (C2 V7). 서버에서는 **끌 길을 두지 않는다**.
+    signed_only: bool = True
     #: 마지막 하트비트에서 받은 지시 — 다음 조각이 읽는 자리다.
     last_response: ServerRunnerHeartbeatResponse | None = None
     #: 연결이 끊겼나 (로그를 주기마다 찍지 않으려고 바뀔 때만 본다 — BUI-05와 같은 결).
     online: bool = True
+
+    #: 사전 점검 결과 캐시 — **설치가 바뀌면 비운다** (안 비우면 키를 넣어도 영원히 막힌다).
+    _readiness: dict[tuple[str, str], Readiness] = field(default_factory=dict)
 
     @property
     def registered(self) -> bool:
@@ -169,6 +196,80 @@ class Agent:
         self._apply(answer)
         return True
 
+    # ── 배포 설치 (C2 V1~V7, C12) ──
+
+    def deployer(self) -> Deployer:
+        """배포를 적용하는 쪽. **Bot UI와 같은 코드**이고 다른 것은 `host_kind`뿐이다."""
+        return Deployer(
+            data_dir=self.settings.data_path,
+            host_id=self.server_runner_id,
+            host_kind=HOST_KIND,
+            keys=list(self.admin_keys),
+            signed_only=self.signed_only,
+            fetch=self.fetch_package,
+        )
+
+    def fetch_package(self, package_id: str, version: str) -> Path:
+        """패키지를 내려받아 파일로 (C5). **자기에게 배포된 것만** 받을 수 있다 (권한표)."""
+        where = self.settings.data_path / "downloads"
+        where.mkdir(parents=True, exist_ok=True)
+        target = where / f"{package_id}-{version}.zip"
+        target.write_bytes(self.client.download_package(package_id, version))
+        return target
+
+    def install_deployments(self, envelopes: list[dict[str, Any]]) -> list[DeploymentResult]:
+        """내려온 배포를 적용한다. **거부도 보고하고**(사유와 함께) 기다림은 보고하지 않는다.
+
+        설치가 바뀌면 사전 점검 캐시를 비운다 — 새로 깔린 Bot의 준비 상태를 다음 하트비트가
+        올려야 한다.
+        """
+        if not envelopes:
+            return []
+        if not self.admin_keys:
+            # **공개키가 없으면 서명을 볼 수 없다** — 설치하지 않고 다음 주기를 기다린다
+            # (하트비트가 `admin_keys`를 준다). 거부로 보고하면 멀쩡한 배포가 영원히 닫힌다.
+            log.info("Admin 공개키가 아직 없다 — 배포 %d건을 다음 주기에 본다", len(envelopes))
+            return []
+        found = self.deployer().apply(envelopes)
+        if found:
+            self._readiness.clear()
+            for one in found:
+                log.info("배포 %s: %s (%s)", one.deployment_id, one.result, one.reason or "-")
+        return found
+
+    # ── 준비 상태 (C12 `readiness`) ──
+
+    def installed_bots(self) -> list[InstalledBot]:
+        return installed(self.settings.data_path)
+
+    def readiness(self) -> list[Readiness]:
+        """설치된 Bot별 준비 상태 (C12 — C4와 같은 모양).
+
+        **서버를 부르지 않는다** (ADR-0013 — 하트비트마다 돈다). 키는 「값이 있나」까지만 본다.
+        확장 점검은 아직 없다 — 실행기가 확장을 싣는 것은 다음 조각이다 (`host=None`이면
+        플랫폼 점검만 돈다).
+        """
+        out = []
+        for bot in self.installed_bots():
+            key = (bot.id, bot.version)
+            found = self._readiness.get(key)
+            if found is None:
+                checked = run_preflight(
+                    bot.manifest,
+                    key_value=self.credentials.service_app_key,
+                    fix_hint=KEY_FIX_HINT,
+                )
+                found = Readiness(
+                    bpm_process_id=bot.id,
+                    version=bot.version,
+                    ready=not checked.blocks,
+                    missing_key_refs=list(checked.missing_key_refs),
+                    blocked=list(checked.blocked),
+                )
+                self._readiness[key] = found
+            out.append(found)
+        return out
+
     def _heartbeat_request(self) -> ServerRunnerHeartbeatRequest:
         """지금 상태 (C12 `HeartbeatRequest`).
 
@@ -183,24 +284,28 @@ class Agent:
             running=[],
             waiting=[],
             versions=self.versions(),
+            # **설치된 Bot별 준비 상태** (C12) — 캐시하고 설치·키가 바뀌면 비운다.
+            readiness=self.readiness(),
+            deployment_results=list(self.pending_results),
             restored=list(self.restored),
         )
 
     def _apply(self, answer: ServerRunnerHeartbeatResponse) -> None:
-        """응답을 반영한다. **지시를 돌리는 것은 다음 조각이다** — 지금은 받아 두고 적는다."""
+        """응답을 반영한다 — **배포는 설치하고**, 작업은 받아 두고 적는다 (돌리지 않는다)."""
         self.restored.clear()  # 올렸다
+        self.pending_results.clear()  # 올렸다
         self.next_in_s = answer.next_heartbeat_s
+        if answer.admin_keys is not None:
+            # **생략 = 그대로**다 (C4·C12) — `None`이면 들고 있던 것을 지우지 않는다.
+            self.admin_keys = list(answer.admin_keys)
+        self.pending_results.extend(self.install_deployments(answer.deployments))
         if answer.paused != self.paused:
             log.info("Center가 %s라고 한다", "일시 중지" if answer.paused else "다시 시작")
         self.paused = answer.paused
         self.last_response = answer
-        if answer.jobs or answer.deployments:
+        if answer.jobs:
             # **받고도 돌리지 않는다**는 것을 분명히 남긴다 (조용히 버리면 「왜 안 도나」가 된다).
-            log.info(
-                "지시를 받았으나 아직 돌리지 않는다 (작업 %d건·배포 %d건) — M7 다음 조각이다",
-                len(answer.jobs),
-                len(answer.deployments),
-            )
+            log.info("작업 %d건을 받았으나 아직 돌리지 않는다 — M7 다음 조각이다", len(answer.jobs))
 
     # ── 연결 (로그는 바뀔 때만) ──
 
@@ -239,6 +344,8 @@ def build(settings: Settings, api_key: str, *, client: Any | None = None) -> Age
 
 __all__ = [
     "CORE_VERSION",
+    "HOST_KIND",
+    "KEY_FIX_HINT",
     "RUNNER_VERSION",
     "STATUS_ERROR",
     "STATUS_PAUSED",
