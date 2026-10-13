@@ -37,6 +37,7 @@ from chaeksas.studio import (
     center_actions,
     export_actions,
     file_actions,
+    layout,
     resources,
     run_actions,
     run_dialog,
@@ -140,6 +141,7 @@ class MainWindow(QMainWindow):
 
         self._build_layout()
         self._build_menus()
+        self._restore_layout()
         # 뿌리는 선언에서 오므로 **Center 없이도** 바로 그린다 (빈 상자를 말없이 두지 않는다).
         # 목록은 정의를 열 때·「새로 고침」에 채운다 — 뜨면서 Center를 두드리지 않는다.
         self.refresh_resources(reader=None)
@@ -159,9 +161,12 @@ class MainWindow(QMainWindow):
         dock.setWidget(tabs)
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
 
+        self.explorer_dock = dock
         middle = QSplitter(Qt.Orientation.Horizontal, self)
+        self.middle = middle
         middle.addWidget(self.canvas)
         middle.addWidget(self.properties)
+        middle.setObjectName("middleSplit")
         middle.setStretchFactor(0, 3)  # 캔버스와 속성 패널은 3:1 (STU-01)
         middle.setStretchFactor(1, 1)
 
@@ -173,16 +178,56 @@ class MainWindow(QMainWindow):
         bottom.addTab(self.variables_view, "변수")
 
         split = QSplitter(Qt.Orientation.Vertical, self)
+        self.split = split
         split.addWidget(middle)
         split.addWidget(bottom)
+        split.setObjectName("bottomSplit")
         split.setStretchFactor(0, 4)
         split.setStretchFactor(1, 1)
 
         holder = QWidget(self)
-        layout = QVBoxLayout(holder)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(split)
+        box = QVBoxLayout(holder)
+        box.setContentsMargins(0, 0, 0, 0)
+        box.addWidget(split)
         self.setCentralWidget(holder)
+
+    # ── 배치 기억 (STU-01 — 「크기·위치를 기억한다」) ──
+
+    def layout_path(self) -> Path:
+        return layout.layout_path(self.settings.data_dir)
+
+    def _restore_layout(self) -> None:
+        """담아 둔 배치로 되돌린다. **없으면 기본 배치 그대로** 둔다."""
+        found = layout.read(self.layout_path())
+        if found is None:
+            return
+        layout.apply(found, self, self.middle, self.split)
+        self.collapse_action.setChecked(found.properties_collapsed)
+        self.properties.setVisible(not found.properties_collapsed)
+
+    def toggle_properties(self) -> None:
+        """도구 → 「속성 패널 접기」 (Ctrl+Shift+P). 체크가 곧 접힌 상태다."""
+        collapsed = self.collapse_action.isChecked()
+        self.properties.setVisible(not collapsed)
+        self.say("속성 패널을 접었습니다." if collapsed else "속성 패널을 펼쳤습니다.")
+
+    def reset_layout(self) -> None:
+        """도구 → 「레이아웃 초기화」 — 담아 둔 것을 **지우고** 기본 배치로 돌린다.
+
+        지우기만 하면 다음에 뜰 때나 돌아오므로, 지금 창도 함께 되돌린다.
+        """
+        layout.clear(self.layout_path())
+        self.resize(*DEFAULT_SIZE)
+        self.explorer_dock.setFloating(False)
+        self.explorer_dock.show()
+        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.explorer_dock)
+        self.collapse_action.setChecked(False)
+        self.properties.setVisible(True)
+        # 3:1·4:1은 짤 때의 비율 그대로다 (STU-01).
+        width, height = self.middle.width(), self.split.height()
+        self.middle.setSizes([width * 3 // 4, width // 4])
+        self.split.setSizes([height * 4 // 5, height // 5])
+        self.say("레이아웃을 기본으로 돌렸습니다.")
 
     def _build_menus(self) -> None:
         bar = self.menuBar()
@@ -242,6 +287,11 @@ class MainWindow(QMainWindow):
 
         tools = bar.addMenu("도구")
         self._add(tools, "확장...", self.open_extensions)
+        self.collapse_action = self._add(
+            tools, "속성 패널 접기", self.toggle_properties, QKeySequence("Ctrl+Shift+P")
+        )
+        self.collapse_action.setCheckable(True)
+        self._add(tools, "레이아웃 초기화", self.reset_layout)
         self._add(tools, "로그 지우기", self.log_view.clear, QKeySequence("Ctrl+L"))
 
     def refresh_catalog(self) -> None:
@@ -577,6 +627,12 @@ class MainWindow(QMainWindow):
         run_actions.stop_test(self)
         self.receiver.stop()
         file_actions.remember_last_opened(self)
+        layout.write(
+            self.layout_path(),
+            layout.capture(
+                self, self.middle, self.split, collapsed=self.collapse_action.isChecked()
+            ),
+        )
         event.accept()
 
 
