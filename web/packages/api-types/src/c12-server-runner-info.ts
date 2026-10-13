@@ -13,6 +13,7 @@ export interface ServerRunnerInfo {
   deployment_results?: DeploymentResult[];
   extensions?: ExtensionState[];
   key_expires_at?: string | null;
+  key_prefix?: string | null;
   last_heartbeat_at?: string | null;
   name: string;
   online: boolean;

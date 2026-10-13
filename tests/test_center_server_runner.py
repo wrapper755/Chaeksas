@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -290,6 +291,27 @@ def test_key_expiry_is_sent_every_cycle(client: TestClient) -> None:
 
 
 # ─────────────────────────── 운영 API (CON-12) ───────────────────────────
+
+
+def test_the_listing_carries_the_key_prefix_and_expiry(client: TestClient) -> None:
+    """CON-12 「Center API 키」는 **앞자리와 만료**를 함께 보인다 (C12).
+
+    만료만 주면 운영자가 CON-11의 어느 줄인지 못 찾는다 — 키가 여럿이면 만료일이 겹친다.
+    **원문·해시는 주지 않는다** (앞자리까지다).
+    """
+    later = (datetime.now(UTC) + timedelta(days=30)).isoformat()
+    raw = client.post(
+        "/api/v1/center-keys",
+        json={"name": "서버 키", "type": "server_runner", "expires_at": later},
+        headers=ADMIN,
+    ).json()["key"]
+    register(client, raw)
+
+    row = client.get("/api/v1/server-runners", headers=READ).json()[0]
+    assert row["key_expires_at"] == later
+    assert row["key_prefix"] and raw.startswith(row["key_prefix"])
+    # 원문이 새어 나가지 않는다.
+    assert raw not in json.dumps(row, ensure_ascii=False)
 
 
 def test_pause_is_told_in_the_next_heartbeat(client: TestClient) -> None:

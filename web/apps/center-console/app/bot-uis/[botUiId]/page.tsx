@@ -4,6 +4,7 @@ import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@c
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import { CENTER_URL, CenterError, center, session } from "@/lib/center";
+import { readinessLabel } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { BotUiActions } from "../actions-ui";
 import { CopyButton } from "../copy";
@@ -73,19 +74,15 @@ function extensionState(row: NonNullable<BotUiInfo["extensions"]>[number]): stri
 /**
  * 그 배포가 이 PC에서 **돌 준비가 됐는가** — Bot UI가 보고한 `readiness`에서 찾는다 (C4).
  * 아직 보고가 없으면 「확인 전」이 아니라 **없는 것으로 둔다** (모르는 것을 안다고 하지 않는다).
+ *
+ * 가르는 것은 `lib/summary.ts`의 `readinessLabel` **하나**다 — CON-12가 같은 일을 하므로
+ * 베끼면 갈라진다 (점검 코드를 이름으로 어림하다 「확장 없음」을 놓친 적이 있다).
  */
 function readinessOf(row: DeploymentInfo, info: BotUiInfo): string | null {
   const found = (info.readiness ?? []).find(
     (one) => one.bpm_process_id === row.bpm_process_id && one.version === row.version,
   );
-  if (!found) return null;
-  if (found.ready) return "준비됨";
-  if ((found.missing_key_refs ?? []).length > 0) return "서비스 앱 키 없음";
-  // **「꺼 뒀다」와 「없다」는 다른 말이다** (ADR-0043) — 운영자가 판을 올리러 가는 대신 현장에
-  // 「BUI-11에서 켜 주세요」라고 하면 될 일이다. BUI-04와 **같은 순서로** 가른다.
-  if ((found.blocked ?? []).includes("extension_turned_off")) return "확장 꺼짐";
-  if ((found.blocked ?? []).some((code) => code.includes("extension"))) return "확장 없음";
-  return "사전 점검 실행 불가";
+  return readinessLabel(found)?.label ?? null;
 }
 
 export default async function BotUiPage({ params }: { params: Promise<{ botUiId: string }> }) {

@@ -287,18 +287,25 @@ def runner_listing(store: Store) -> list[ServerRunnerInfo]:
                 versions=RunnerVersions.model_validate(loads(row["versions_json"], {})),
                 last_heartbeat_at=row["last_seen_at"],
                 registered_at=str(row["registered_at"]),
-                key_expires_at=_key_expiry(store, str(row["key_id"])),
+                **_key_of(store, str(row["key_id"])),
                 unsent_events=state.get("unsent_events"),
             )
         )
     return out
 
 
-def _key_expiry(store: Store, key_id: str) -> str | None:
+def _key_of(store: Store, key_id: str) -> dict[str, str | None]:
+    """그 실행기가 쓰는 키의 **앞자리와 만료** (C12 — 원문·해시는 주지 않는다).
+
+    둘을 **한 자리에서** 읽는다 — 앞자리만 있고 만료가 없으면 CON-12가 「무기한」을 거짓으로
+    말한다 (키 행이 없는 것과 만료가 없는 것은 다르다).
+    """
     from chaeksas.center import keys  # noqa: PLC0415 — 순환 import를 피한다
 
     record = keys.get(store, key_id)
-    return record.expires_at if record else None
+    if record is None:
+        return {"key_prefix": None, "key_expires_at": None}
+    return {"key_prefix": record.prefix, "key_expires_at": record.expires_at}
 
 
 def readiness_of(store: Store, runner_id: str) -> list[Readiness]:

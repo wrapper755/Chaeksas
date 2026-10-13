@@ -333,6 +333,18 @@
       "default": null,
       "title": "Key Expires At"
     },
+    "key_prefix": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Prefix"
+    },
     "last_heartbeat_at": {
       "anyOf": [
         {
