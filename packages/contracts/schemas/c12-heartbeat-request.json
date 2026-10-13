@@ -1,0 +1,544 @@
+{
+  "$defs": {
+    "ApprovalAck": {
+      "additionalProperties": true,
+      "properties": {
+        "accepted": {
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "accepted"
+      ],
+      "title": "ApprovalAck",
+      "type": "object"
+    },
+    "Capacity": {
+      "additionalProperties": true,
+      "description": "자리 셈. **`running`은 기다리는 실행을 뺀 수**다 (ADR-0054 §5).\n\nCenter가 빈자리를 `max - running`으로 계산한다 (C12 §Center가 작업을 나누는 규칙).",
+      "properties": {
+        "max": {
+          "minimum": 1,
+          "title": "Max",
+          "type": "integer"
+        },
+        "running": {
+          "minimum": 0,
+          "title": "Running",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max",
+        "running"
+      ],
+      "title": "Capacity",
+      "type": "object"
+    },
+    "DeploymentResult": {
+      "additionalProperties": true,
+      "description": "배포 적용 결정 (CON-03 「최근 배치 결정」). 실행이 아니므로 C3로 보내지 않는다.",
+      "properties": {
+        "at": {
+          "title": "At",
+          "type": "string"
+        },
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "deployment_id": {
+          "title": "Deployment Id",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "title": "Result",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "deployment_id",
+        "bpm_process_id",
+        "version",
+        "result",
+        "at"
+      ],
+      "title": "DeploymentResult",
+      "type": "object"
+    },
+    "ExtensionState": {
+      "additionalProperties": true,
+      "description": "설치된 확장 하나 (C13).\n\n**`enabled`와 `off`는 다른 것을 말한다** ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)):\n`off`는 **사람이 껐다**(멀쩡한데 일부러 안 쓴다), `enabled=false`인데 `off`가 아니면 **흠이\n있다**(정의·판이 맞지 않는다). 화면이 「꺼짐」과 「호환 안 됨」을 가르는 자리다. 뜻을 바꾸지\n않고 칸을 더한 것이라 옛 Bot UI가 보낸 값(`off` 없음)도 그대로 읽힌다.",
+      "properties": {
+        "definition_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition Hash"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "off": {
+          "default": false,
+          "title": "Off",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionState",
+      "type": "object"
+    },
+    "JobAck": {
+      "additionalProperties": true,
+      "description": "이번 주기에 처리한 작업 하나.",
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Position"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "title": "Result",
+          "type": "string"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        }
+      },
+      "required": [
+        "job_id",
+        "result"
+      ],
+      "title": "JobAck",
+      "type": "object"
+    },
+    "MessageAck": {
+      "additionalProperties": true,
+      "description": "내려온 메시지 하나를 어떻게 했나 (C12 §메시지).",
+      "properties": {
+        "accepted": {
+          "title": "Accepted",
+          "type": "boolean"
+        },
+        "message_id": {
+          "title": "Message Id",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        }
+      },
+      "required": [
+        "message_id",
+        "accepted"
+      ],
+      "title": "MessageAck",
+      "type": "object"
+    },
+    "Readiness": {
+      "additionalProperties": true,
+      "description": "설치된 Bot 하나의 준비 상태.",
+      "properties": {
+        "blocked": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Blocked",
+          "type": "array"
+        },
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "missing_key_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Key Refs",
+          "type": "array"
+        },
+        "ready": {
+          "title": "Ready",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "bpm_process_id",
+        "version",
+        "ready"
+      ],
+      "title": "Readiness",
+      "type": "object"
+    },
+    "RunnerVersions": {
+      "additionalProperties": true,
+      "description": "C4 `Versions`와 **칸이 다르다** — 서버에는 Worker가 없다.",
+      "properties": {
+        "core": {
+          "title": "Core",
+          "type": "string"
+        },
+        "server_runner": {
+          "title": "Server Runner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server_runner",
+        "core"
+      ],
+      "title": "RunnerVersions",
+      "type": "object"
+    },
+    "RunningRun": {
+      "additionalProperties": true,
+      "description": "지금 도는 실행 하나 — 스레드를 쥐고 있다.",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node Id"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "bpm_process_id",
+        "version",
+        "started_at"
+      ],
+      "title": "RunningRun",
+      "type": "object"
+    },
+    "WaitingRun": {
+      "additionalProperties": true,
+      "description": "상태만 남고 **일꾼을 놓은** 실행 (ADR-0054 §1·§3).\n\n`waiting_for`에 따라 **짝이 되는 칸이 있어야 한다** — 결재는 `request_id`, 메시지는\n`message_name`, 타이머는 `until`. `validate_heartbeat()`가 그것을 본다.",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "correlation": {
+          "default": null,
+          "title": "Correlation"
+        },
+        "message_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message Name"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "since": {
+          "title": "Since",
+          "type": "string"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Until"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "waiting_for": {
+          "title": "Waiting For",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "bpm_process_id",
+        "version",
+        "waiting_for",
+        "since"
+      ],
+      "title": "WaitingRun",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c12-heartbeat-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/server-runner/heartbeat` — 기본 10초.\n\n**`restored[]`는 재시작 직후 첫 하트비트에만** 싣는다 — 저장소에서 되살려 **정말 이어 가는**\n실행만이다. 되살리지 못한 것은 여기 넣지 않고 C5 `run_status`에 사유와 함께 적는다\n(ADR-0054 §4 — `runner_restarted`·`runner_version_changed`).",
+  "properties": {
+    "approval_acks": {
+      "items": {
+        "$ref": "#/$defs/ApprovalAck"
+      },
+      "title": "Approval Acks",
+      "type": "array"
+    },
+    "capacity": {
+      "$ref": "#/$defs/Capacity"
+    },
+    "deployment_results": {
+      "items": {
+        "$ref": "#/$defs/DeploymentResult"
+      },
+      "title": "Deployment Results",
+      "type": "array"
+    },
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/ExtensionState"
+      },
+      "title": "Extensions",
+      "type": "array"
+    },
+    "job_acks": {
+      "items": {
+        "$ref": "#/$defs/JobAck"
+      },
+      "title": "Job Acks",
+      "type": "array"
+    },
+    "message_acks": {
+      "items": {
+        "$ref": "#/$defs/MessageAck"
+      },
+      "title": "Message Acks",
+      "type": "array"
+    },
+    "readiness": {
+      "items": {
+        "$ref": "#/$defs/Readiness"
+      },
+      "title": "Readiness",
+      "type": "array"
+    },
+    "restored": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Restored",
+      "type": "array"
+    },
+    "running": {
+      "items": {
+        "$ref": "#/$defs/RunningRun"
+      },
+      "title": "Running",
+      "type": "array"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "unsent_events": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unsent Events"
+    },
+    "versions": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunnerVersions"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "waiting": {
+      "items": {
+        "$ref": "#/$defs/WaitingRun"
+      },
+      "title": "Waiting",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "status",
+    "capacity"
+  ],
+  "title": "ServerRunnerHeartbeatRequest",
+  "type": "object"
+}

@@ -27,6 +27,8 @@ from chaeksas.contracts import (
     HeartbeatResponse,
     Manifest,
     RunEvent,
+    ServerRunnerHeartbeatRequest,
+    validate_runner_heartbeat,
 )
 
 DOCS = Path(__file__).resolve().parent.parent / "docs" / "03-contracts"
@@ -41,6 +43,7 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C4-bot-ui-center", 0, HeartbeatRequest),
     ("C4-bot-ui-center", 1, HeartbeatResponse),
     ("C6-approvals", 0, ApprovalCreateRequest),
+    ("C12-server-runner-center", 0, ServerRunnerHeartbeatRequest),
     ("C13-extension-manifest", 0, Catalog),  # 공통 카탈로그 형식
     ("C13-extension-manifest", 1, ExtensionManifest),  # 내장 확장
     ("C13-extension-manifest", 2, ExtensionManifest),  # 외부 확장
@@ -110,6 +113,16 @@ def test_c13_examples_pass_validate() -> None:
     for m in (builtin, external):
         assert validate_extension(m) == [], f"{m.id}: {[str(v) for v in validate_extension(m)]}"
     assert check_extension_api(builtin, api_version=API_VERSION) == []
+
+
+def test_c12_example_heartbeat_is_self_consistent() -> None:
+    """C12의 하트비트 예시가 **스스로 앞뒤가 맞나** — 자리 셈과 `waiting[]`의 짝 칸.
+
+    예시가 읽기 쉽게 줄여 쓰다 `capacity.running`과 `running[]` 길이가 어긋나면, 그것을 베낀
+    구현이 자리 셈을 틀리게 한다.
+    """
+    payload = json.loads(expand_abbreviations(json_blocks("C12-server-runner-center")[0]))
+    assert validate_runner_heartbeat(ServerRunnerHeartbeatRequest.model_validate(payload)) == []
 
 
 def test_c3_example_data_keys_are_complete() -> None:
