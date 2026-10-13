@@ -201,7 +201,12 @@ def make_job(center: TestClient, **extra: Any) -> dict[str, Any]:
 
 
 def until_waiting(runner: agent_mod.Agent) -> str:
-    """결재 앞에서 멈출 때까지 민다. 돌려주는 것은 그 `run_id`다."""
+    """결재 앞에서 멈출 때까지 민다. 돌려주는 것은 그 `run_id`다.
+
+    **멈춘 것을 Center에 알린 뒤에 돌려준다** — 기다림을 알아차린 그 주기의 하트비트는 멈추기
+    **전에** 나갔으므로, 한 번 더 밀지 않으면 Center가 아직 `running`으로 안다 (CI의 Windows가
+    `capacity.running == 1`로 잡았다).
+    """
     import time
 
     deadline = time.monotonic() + WAIT_S
@@ -211,6 +216,7 @@ def until_waiting(runner: agent_mod.Agent) -> str:
             shot = found.snapshot()
             if shot.waiting is not None:
                 found.join(WAIT_S)  # 담기까지 기다린다
+                runner.tick()  # 기다린다고 보고한다
                 return run_id
         time.sleep(0.05)
     raise AssertionError("결재 앞에서 멈추지 않았다")

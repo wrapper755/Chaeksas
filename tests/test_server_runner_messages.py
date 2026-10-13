@@ -231,7 +231,12 @@ def make_job(center: TestClient) -> dict[str, Any]:
 
 
 def until_waiting_for_message(runner: agent_mod.Agent) -> str:
-    """메시지를 기다릴 때까지 민다. 돌려주는 것은 그 `run_id`다."""
+    """메시지를 기다릴 때까지 민다. 돌려주는 것은 그 `run_id`다.
+
+    **멈춘 것을 Center에 알린 뒤에 돌려준다** — 기다림을 알아차린 그 주기의 하트비트는 멈추기
+    **전에** 나갔으므로, 한 번 더 밀지 않으면 Center의 `waiting[]`이 비어 있다. 그러면 메시지가
+    받을 곳을 못 찾고(`no_receiver`) 시험이 Windows에서만 깨진다 (CI가 잡았다).
+    """
     deadline = time.monotonic() + WAIT_S
     while time.monotonic() < deadline:
         runner.tick()
@@ -239,13 +244,18 @@ def until_waiting_for_message(runner: agent_mod.Agent) -> str:
             shot = found.snapshot()
             if shot.waiting is not None and shot.waiting.waiting_for == "message":
                 found.join(WAIT_S)  # 담기까지 기다린다
+                runner.tick()  # 기다린다고 보고한다
                 return run_id
         time.sleep(0.05)
     raise AssertionError("메시지를 기다리지 않았다")
 
 
 def put_message(center: TestClient, **body: Any) -> Any:
-    return center.post("/api/v1/messages", json={"schema": 1, **body}, headers=ADMIN)
+    """메시지를 넣는다. **받아들여졌는지 여기서 본다** — 조용한 422가 숨으면 뒤에서 「왜 안
+    들어갔나」가 되고, 그것이 이 시험 묶음이 Windows에서 깨진 까닭이었다."""
+    response = center.post("/api/v1/messages", json={"schema": 1, **body}, headers=ADMIN)
+    assert response.status_code == 201, response.text
+    return response
 
 
 def settle(runner: agent_mod.Agent) -> None:
@@ -276,8 +286,6 @@ def test_a_message_continues_the_waiting_run(
     run_id = until_waiting_for_message(runner)
 
     # ① 기다리는 줄에 Center가 고를 거리가 있다 (C12 `waiting[]`).
-    # **멈춘 뒤 한 주기가 더 필요하다** — 하트비트가 보고해야 Center가 안다.
-    runner.tick()
     listed = center.get("/api/v1/server-runners", headers=ADMIN).json()
     row = listed[0]["waiting"][0]
     assert (row["waiting_for"], row["message_name"], row["correlation"]) == (
