@@ -64,7 +64,7 @@ BPM 프로세스가 호출하는 서버 기능은 **서비스 앱**으로 늘려
 
 > 제안: 아래는 첫 릴리스(M6) 기준이다. 숫자는 논의로 확정한다.
 
-- 시나리오 1~4가 Windows 현장 PC에서 Center 배포를 거쳐 끝까지 돈다.
+- 시나리오 3이 Windows 현장 PC에서 Center 배포를 거쳐 끝까지 돈다. 서버 Bot인 1·2·4는 서버 실행기(M7)에서 끝까지 돈다 ([ADR-0055](decisions/0055-m6-field-scenario-is-scenario-3.md)).
 - 등록된 화면에서 셀렉터가 깨지면 사람 개입 없이 치유되고, 3회 성공 후 승격된다.
 - 새 개발자가 Windows PC에서 `docs/04-setup.md`만 보고 1시간 안에 Studio·Bot UI(+ Worker 프로세스)를 띄운다.
 - 모든 구성요소 간 통신이 `docs/03-contracts/`의 명세와 일치한다 (계약 테스트로 확인).
