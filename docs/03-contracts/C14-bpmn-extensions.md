@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 초안 (2026-10-01). **모델·BPMN 읽기·검사 B1~B15 구현됨** (2026-10-03, 예제 50개로 확인. B15는 2026-10-08, `core.expr.check_calls` — 계약이 아니라 도우미 구현이 있는 쪽이 한다). **식 `chk-expr`·스크립트·템플릿도 구현됨** (2026-10-04, [ADR-0025](../decisions/0025-expression-language.md) — 예제의 식 자리 193곳·템플릿 자리 전부로 확인). **DMN 판정·파일 목록·파일 출력·메일/웹훅·이정표도 구현됨** (2026-10-04, [ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)). **AI 태스크·서비스 앱 태스크·재생** (2026-10-04, [ADR-0027](../decisions/0027-llm-connection.md)·[ADR-0028](../decisions/0028-replay-memory.md))과 **타이머·메시지·신호·호출**도 돈다. 합의는 M3에서 엔진·Studio와 함께 |
+| 상태 | **구현됨** (2026-10-12). 모델·BPMN 읽기·검사 B1~B15, DMN 읽기·판정이 `contracts.bpmn_ext`·`contracts.dmn`에 있고 **쓰는 쪽이 셋**이다 — 엔진이 `chk:*`를 수행하고(`core.nodes`), Studio가 그 모델로 편집·검사하고(STU-04·실행 전 검사), 업무 예제 50개가 이 형식으로 쓰여 시험이 읽고 검사한다. schema 1에서 **쓰지 않기로 적은 것**(조건 시작 이벤트, 경계 타이머 반복)은 범위 결정이고 빠진 구현이 아니다 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio(쓰기) → 패키지(C1 `process/*.bpmn`) → 실행기·서버 실행기(읽기·실행), Center(검사) |
 | 코드 위치 | `chaeksas.contracts.bpmn_ext` — 모델·`read_process()`·`validate()`. DMN 읽기·판정은 `chaeksas.contracts.dmn`. 확장 태스크의 속 내용은 각 확장의 `contracts/` |
