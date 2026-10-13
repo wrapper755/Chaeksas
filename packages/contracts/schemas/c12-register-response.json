@@ -1,0 +1,92 @@
+{
+  "$defs": {
+    "AdminKey": {
+      "additionalProperties": true,
+      "description": "Admin 공개키 하나. 철회된 키도 `revoked_at`과 함께 내려온다 (C4로 배포된다).",
+      "properties": {
+        "key_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Key Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "public_key": {
+          "title": "Public Key",
+          "type": "string"
+        },
+        "revoked_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revoked At"
+        }
+      },
+      "required": [
+        "key_id",
+        "public_key"
+      ],
+      "title": "AdminKey",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c12-register-response",
+  "additionalProperties": true,
+  "properties": {
+    "admin_keys": {
+      "items": {
+        "$ref": "#/$defs/AdminKey"
+      },
+      "title": "Admin Keys",
+      "type": "array"
+    },
+    "heartbeat_interval_s": {
+      "default": 10,
+      "title": "Heartbeat Interval S",
+      "type": "integer"
+    },
+    "key_expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Expires At"
+    },
+    "server_runner_id": {
+      "pattern": "^srv_[0-9a-f]{8}$",
+      "title": "Server Runner Id",
+      "type": "string"
+    },
+    "server_time": {
+      "title": "Server Time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "server_runner_id",
+    "server_time"
+  ],
+  "title": "ServerRunnerRegisterResponse",
+  "type": "object"
+}

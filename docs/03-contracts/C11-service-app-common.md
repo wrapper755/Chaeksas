@@ -30,7 +30,7 @@
   - `node_instance`: 같은 노드가 한 실행 안에서 몇 번째로 실행되는가 (BPMN 반복·다중 인스턴스). 1부터.
   - `attempt`: 같은 노드 인스턴스의 재시도 번호. 1부터.
   - `call_seq`: 한 노드 인스턴스·시도 안에서 같은 작업을 여러 번 부를 때의 일련번호 (기본 1). 예: UI 세션 안의 치유 호출들 (C8).
-  - **부르는 쪽은 `node_instance`·`attempt`·`call_seq`를 호출 전에 저장한다.** 그래야 서버 실행기가 재시작 후 같은 키로 다시 불러 한 번만 수행된다 (contracts README 원칙 9).
+  - **부르는 쪽은 재시작 뒤에도 `node_instance`·`attempt`·`call_seq`를 같은 값으로 다시 만들 수 있어야 한다.** 그래야 같은 키로 다시 불러 한 번만 수행된다 (contracts README 원칙 9). 서버 실행기는 **기다릴 때 상태를 담고 되살려** 이 셋이 저절로 같은 값이 되게 한다 — 호출마다 따로 적어 두지 않는다 ([ADR-0054](../decisions/0054-server-run-state-and-concurrency.md)).
 - 시간 제한: 작업마다 manifest의 `timeout_s` (기본 60). schema 1은 동기 호출만. 더 긴 작업은 나중에 비동기 방식을 추가한다.
 - 크기 한도: 요청·응답 각 1 MB (서비스 앱 설정 `CHK_SVC_<APP>__MAX_BODY_MB`).
 

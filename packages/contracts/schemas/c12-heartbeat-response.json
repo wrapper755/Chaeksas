@@ -1,0 +1,289 @@
+{
+  "$defs": {
+    "AdminKey": {
+      "additionalProperties": true,
+      "description": "Admin 공개키 하나. 철회된 키도 `revoked_at`과 함께 내려온다 (C4로 배포된다).",
+      "properties": {
+        "key_id": {
+          "pattern": "^[0-9a-f]{16}$",
+          "title": "Key Id",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "public_key": {
+          "title": "Public Key",
+          "type": "string"
+        },
+        "revoked_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revoked At"
+        }
+      },
+      "required": [
+        "key_id",
+        "public_key"
+      ],
+      "title": "AdminKey",
+      "type": "object"
+    },
+    "ApprovalDispatch": {
+      "additionalProperties": true,
+      "description": "답이 정해진 결재 (C6).",
+      "properties": {
+        "answer": {
+          "default": null,
+          "title": "Answer"
+        },
+        "answered_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answered At"
+        },
+        "answered_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answered By"
+        },
+        "request_id": {
+          "title": "Request Id",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "request_id",
+        "state"
+      ],
+      "title": "ApprovalDispatch",
+      "type": "object"
+    },
+    "JobDispatch": {
+      "additionalProperties": true,
+      "description": "내려온 작업 하나. ack가 올 때까지 매번 실린다.",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "inputs": {
+          "additionalProperties": true,
+          "title": "Inputs",
+          "type": "object"
+        },
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "requested_at": {
+          "title": "Requested At",
+          "type": "string"
+        },
+        "requested_by": {
+          "title": "Requested By",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "job_id",
+        "bpm_process_id",
+        "requested_by",
+        "requested_at"
+      ],
+      "title": "JobDispatch",
+      "type": "object"
+    },
+    "MessageDispatch": {
+      "additionalProperties": true,
+      "description": "내려온 메시지 하나 — 기다리는 실행을 깨우거나 메시지 시작으로 새 실행을 만든다.",
+      "properties": {
+        "correlation": {
+          "default": null,
+          "title": "Correlation"
+        },
+        "message_id": {
+          "title": "Message Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "title": "Payload",
+          "type": "object"
+        },
+        "received_at": {
+          "title": "Received At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "message_id",
+        "name",
+        "received_at"
+      ],
+      "title": "MessageDispatch",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c12-heartbeat-response",
+  "additionalProperties": true,
+  "description": "지시는 모두 여기 실려 내려온다 (ADR-0007).\n\n`deployments`는 **저장된 JSON 그대로** 다룬다 — C2 봉투를 모델로 바꿔 다시 직렬화하면\n서명이 깨진다 (C4와 같은 이유로 `dict`다).\n\n`jobs`는 **빈자리만큼만** 실린다 (C12 §Center가 작업을 나누는 규칙).",
+  "properties": {
+    "admin_keys": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/AdminKey"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Admin Keys"
+    },
+    "approvals": {
+      "items": {
+        "$ref": "#/$defs/ApprovalDispatch"
+      },
+      "title": "Approvals",
+      "type": "array"
+    },
+    "cancel_jobs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Cancel Jobs",
+      "type": "array"
+    },
+    "deployments": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Deployments",
+      "type": "array"
+    },
+    "jobs": {
+      "items": {
+        "$ref": "#/$defs/JobDispatch"
+      },
+      "title": "Jobs",
+      "type": "array"
+    },
+    "key_expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Expires At"
+    },
+    "messages": {
+      "items": {
+        "$ref": "#/$defs/MessageDispatch"
+      },
+      "title": "Messages",
+      "type": "array"
+    },
+    "next_heartbeat_s": {
+      "default": 10,
+      "title": "Next Heartbeat S",
+      "type": "integer"
+    },
+    "paused": {
+      "default": false,
+      "title": "Paused",
+      "type": "boolean"
+    },
+    "server_time": {
+      "title": "Server Time",
+      "type": "string"
+    }
+  },
+  "required": [
+    "server_time"
+  ],
+  "title": "ServerRunnerHeartbeatResponse",
+  "type": "object"
+}

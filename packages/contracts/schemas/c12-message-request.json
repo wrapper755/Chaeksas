@@ -1,0 +1,43 @@
+{
+  "$id": "urn:chaeksas:contracts:c12-message-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/messages` — 연동용 키 또는 관리자 토큰.\n\n`correlation`이 없으면 **메시지 시작만** 된다 (기다리는 실행을 찾을 열쇠가 없다).",
+  "properties": {
+    "correlation": {
+      "default": null,
+      "title": "Correlation"
+    },
+    "idempotency_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Idempotency Key"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema",
+    "name"
+  ],
+  "title": "MessageRequest",
+  "type": "object"
+}

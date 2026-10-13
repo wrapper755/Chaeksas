@@ -1,0 +1,44 @@
+{
+  "$id": "urn:chaeksas:contracts:c12-message-response",
+  "additionalProperties": true,
+  "properties": {
+    "delivered_to": {
+      "title": "Delivered To",
+      "type": "string"
+    },
+    "job_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Id"
+    },
+    "message_id": {
+      "title": "Message Id",
+      "type": "string"
+    },
+    "run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Run Id"
+    }
+  },
+  "required": [
+    "message_id",
+    "delivered_to"
+  ],
+  "title": "MessageResponse",
+  "type": "object"
+}

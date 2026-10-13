@@ -228,8 +228,9 @@ IdempotencyKey = tuple[str, str, str, int, int, int]
 def idempotency_key(operation: str, req: OpRequest) -> IdempotencyKey:
     """멱등 키. 같은 키로 다시 오면 수행하지 않고 저장된 결과를 돌려준다 (`replayed: true`).
 
-    **부르는 쪽은 `node_instance`·`attempt`·`call_seq`를 호출 전에 저장한다.** 그래야 서버
-    실행기가 재시작한 뒤 같은 키로 다시 불러도 한 번만 수행된다 (README 원칙 9).
+    **부르는 쪽은 재시작 뒤에도 `node_instance`·`attempt`·`call_seq`를 같은 값으로 다시 만들
+    수 있어야 한다.** 그래야 같은 키로 다시 불러도 한 번만 수행된다 (README 원칙 9). 서버
+    실행기는 기다릴 때 실행 상태를 담고 되살려 셋이 **저절로** 같은 값이 되게 한다 (ADR-0054).
     """
     return (operation, req.run_id, req.node_id, req.node_instance, req.attempt, req.call_seq)
 

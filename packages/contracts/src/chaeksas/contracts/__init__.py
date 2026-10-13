@@ -15,6 +15,7 @@
 | C6 | `approvals` | 결재 요청·답 + 폼으로 답 검증 |
 | C7 | `resources`, `center_keys` | 리소스 목록 + 누락 검사, Center API 키 |
 | C11 | `service_app` | 서비스 앱 공통 (manifest·작업 호출·키·멱등). 뼈대는 `chaeksas.service_kit` |
+| C12 | `server_runner` | 서버 실행기 등록·하트비트·메시지 + 자리 셈·작업 고르기·되살리기 판정 |
 | C13 | `extension` | 확장 정의 + 검사 규칙 E1~E6. 호스트는 `chaeksas.core.extensions` |
 | C14 | `bpmn_ext` | BPMN 확장 속성(`chk:*`) 모델 + BPMN 읽기 + 검사 B1~B14 + 시험 케이스 형식 |
 | C14 | `dmn` | 규칙 태스크가 쓰는 DMN 결정표 읽기·판정 |
@@ -235,6 +236,36 @@ from chaeksas.contracts.resources import (
     blocking_at_deploy,
     missing,
 )
+from chaeksas.contracts.server_runner import DEFAULT_HEARTBEAT_S as RUNNER_HEARTBEAT_S
+from chaeksas.contracts.server_runner import (
+    DEFAULT_MAX_CONCURRENCY,
+    DEFAULT_PER_BOT_CONCURRENCY,
+    KNOWN_MESSAGE_ACK_REASONS,
+    KNOWN_MESSAGE_TARGETS,
+    KNOWN_RESTORE_REFUSALS,
+    KNOWN_RUNNER_STATUSES,
+    KNOWN_WAITING_FOR,
+    OFFLINE_AFTER_S,
+    WAITING_REQUIRES,
+    Capacity,
+    MessageAck,
+    MessageDispatch,
+    MessageRequest,
+    MessageResponse,
+    RunnerVersions,
+    RunningRun,
+    ServerRunnerHeartbeatRequest,
+    ServerRunnerHeartbeatResponse,
+    ServerRunnerId,
+    ServerRunnerInfo,
+    ServerRunnerRegisterRequest,
+    ServerRunnerRegisterResponse,
+    WaitingRun,
+    free_slots,
+    pick_jobs,
+    restorable,
+)
+from chaeksas.contracts.server_runner import validate_heartbeat as validate_runner_heartbeat
 from chaeksas.contracts.service_app import (
     AdminKeyCreated,
     AdminKeyCreateRequest,
@@ -429,6 +460,35 @@ __all__ = [
     "resolve_mode",
     "service_app_key_state",
     "service_app_prefix_of",
+    # C12 (ack·배포·준비 모양은 C4가, `AdminKey`는 C2가 소유한다)
+    "DEFAULT_MAX_CONCURRENCY",
+    "DEFAULT_PER_BOT_CONCURRENCY",
+    "KNOWN_MESSAGE_ACK_REASONS",
+    "KNOWN_MESSAGE_TARGETS",
+    "KNOWN_RESTORE_REFUSALS",
+    "KNOWN_RUNNER_STATUSES",
+    "KNOWN_WAITING_FOR",
+    "OFFLINE_AFTER_S",
+    "RUNNER_HEARTBEAT_S",
+    "WAITING_REQUIRES",
+    "Capacity",
+    "MessageAck",
+    "MessageDispatch",
+    "MessageRequest",
+    "MessageResponse",
+    "RunnerVersions",
+    "RunningRun",
+    "ServerRunnerHeartbeatRequest",
+    "ServerRunnerHeartbeatResponse",
+    "ServerRunnerId",
+    "ServerRunnerInfo",
+    "ServerRunnerRegisterRequest",
+    "ServerRunnerRegisterResponse",
+    "WaitingRun",
+    "free_slots",
+    "pick_jobs",
+    "restorable",
+    "validate_runner_heartbeat",
     # C13 (`ExtensionClaim`은 C2가 소유한다)
     "RESERVED_CONFIG_PREFIX",
     "RESERVED_CONFIG_PREFIXES",

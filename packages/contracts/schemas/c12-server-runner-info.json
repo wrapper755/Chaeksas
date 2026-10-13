@@ -1,0 +1,297 @@
+{
+  "$defs": {
+    "Capacity": {
+      "additionalProperties": true,
+      "description": "자리 셈. **`running`은 기다리는 실행을 뺀 수**다 (ADR-0054 §5).\n\nCenter가 빈자리를 `max - running`으로 계산한다 (C12 §Center가 작업을 나누는 규칙).",
+      "properties": {
+        "max": {
+          "minimum": 1,
+          "title": "Max",
+          "type": "integer"
+        },
+        "running": {
+          "minimum": 0,
+          "title": "Running",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max",
+        "running"
+      ],
+      "title": "Capacity",
+      "type": "object"
+    },
+    "RunnerVersions": {
+      "additionalProperties": true,
+      "description": "C4 `Versions`와 **칸이 다르다** — 서버에는 Worker가 없다.",
+      "properties": {
+        "core": {
+          "title": "Core",
+          "type": "string"
+        },
+        "server_runner": {
+          "title": "Server Runner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server_runner",
+        "core"
+      ],
+      "title": "RunnerVersions",
+      "type": "object"
+    },
+    "RunningRun": {
+      "additionalProperties": true,
+      "description": "지금 도는 실행 하나 — 스레드를 쥐고 있다.",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "job_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Job Id"
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node Id"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "started_at": {
+          "title": "Started At",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "bpm_process_id",
+        "version",
+        "started_at"
+      ],
+      "title": "RunningRun",
+      "type": "object"
+    },
+    "WaitingRun": {
+      "additionalProperties": true,
+      "description": "상태만 남고 **일꾼을 놓은** 실행 (ADR-0054 §1·§3).\n\n`waiting_for`에 따라 **짝이 되는 칸이 있어야 한다** — 결재는 `request_id`, 메시지는\n`message_name`, 타이머는 `until`. `validate_heartbeat()`가 그것을 본다.",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "correlation": {
+          "default": null,
+          "title": "Correlation"
+        },
+        "message_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message Name"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "since": {
+          "title": "Since",
+          "type": "string"
+        },
+        "until": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Until"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        },
+        "waiting_for": {
+          "title": "Waiting For",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "bpm_process_id",
+        "version",
+        "waiting_for",
+        "since"
+      ],
+      "title": "WaitingRun",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c12-server-runner-info",
+  "additionalProperties": true,
+  "description": "`GET /api/v1/server-runners` 한 줄 (CON-12).\n\n`queued`는 **Center의 대기열**이다 — 실행기가 보내는 값이 아니라 Center가 센 것이다\n(C12 — 서버 쪽 대기열은 Center가 가진다).",
+  "properties": {
+    "capacity": {
+      "$ref": "#/$defs/Capacity"
+    },
+    "key_expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Expires At"
+    },
+    "last_heartbeat_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Heartbeat At"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "online": {
+      "title": "Online",
+      "type": "boolean"
+    },
+    "os": {
+      "title": "Os",
+      "type": "string"
+    },
+    "paused": {
+      "default": false,
+      "title": "Paused",
+      "type": "boolean"
+    },
+    "queued": {
+      "default": 0,
+      "title": "Queued",
+      "type": "integer"
+    },
+    "registered_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Registered At"
+    },
+    "running": {
+      "items": {
+        "$ref": "#/$defs/RunningRun"
+      },
+      "title": "Running",
+      "type": "array"
+    },
+    "server_runner_id": {
+      "pattern": "^srv_[0-9a-f]{8}$",
+      "title": "Server Runner Id",
+      "type": "string"
+    },
+    "status": {
+      "title": "Status",
+      "type": "string"
+    },
+    "unsent_events": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Unsent Events"
+    },
+    "versions": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RunnerVersions"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "waiting": {
+      "items": {
+        "$ref": "#/$defs/WaitingRun"
+      },
+      "title": "Waiting",
+      "type": "array"
+    }
+  },
+  "required": [
+    "server_runner_id",
+    "name",
+    "os",
+    "status",
+    "online",
+    "capacity"
+  ],
+  "title": "ServerRunnerInfo",
+  "type": "object"
+}
