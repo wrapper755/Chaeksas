@@ -676,3 +676,34 @@ def test_handlers_take_the_request_and_the_scenario() -> None:
     from chaeksas.mock_apps.c11 import Scenario  # noqa: PLC0415
 
     assert found.answer(request, Scenario())["items"]
+
+
+# ─────────────────────────── 웹 화면 (`/site`) ───────────────────────────
+
+
+def test_the_web_pages_ride_the_all_in_one_port() -> None:
+    """현장 PC의 사람이 BX-04의 공급사 포털을 열 수 있다 — 시험이 쓰는 것과 **같은 HTML**이다 (09-gaps §6)."""
+    from chaeksas.mock_apps import sites  # noqa: PLC0415
+    from chaeksas.mock_apps.cli import all_in_one  # noqa: PLC0415
+
+    root, _ = all_in_one()
+    client = TestClient(root)
+    assert client.get("/").json()["site"] == sites.MOUNT
+
+    found = client.get(f"{sites.MOUNT}/transactions")
+    assert found.status_code == 200
+    assert found.headers["content-type"].startswith("text/html")
+    assert found.text == sites.PAGES["/transactions"]
+    # 예제가 등록하는 시맨틱 키의 자리 (`filter.month`·`filter.search`·`result.table`).
+    for anchor in ('id="month"', 'id="search"', 'id="transactions"'):
+        assert anchor in found.text
+    # 모르는 경로는 공지 목록 — 시험 서버와 같은 규칙.
+    assert client.get(f"{sites.MOUNT}/notice/2").text == sites.PAGES["/notices"]
+
+
+def test_links_on_the_pages_stay_under_the_mount() -> None:
+    """화면 안의 이동은 **상대 경로**다 — `/done`이면 `/site` 밑에서 띄웠을 때 밖으로 샌다."""
+    from chaeksas.mock_apps import sites  # noqa: PLC0415
+
+    for path, html in sites.PAGES.items():
+        assert 'href="/' not in html and 'action="/' not in html, path

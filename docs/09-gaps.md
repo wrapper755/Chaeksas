@@ -82,14 +82,8 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 - **도메인 목록의 정의는 `manifest.py` 하나다** — `KNOWN_DOMAINS`·`PC_ONLY_DOMAINS`를 `bpmn_ext`(C14 B8·B6)와 `core`(사전 점검·AI 태스크)가 import해 쓴다. 자리가 C1 쪽인 것은 층 때문이다 (`bpmn_ext`가 `manifest`를 import하므로 거꾸로는 순환이다). **두 벌로 되돌리지 않는다** — 값이 같고 거르는 자리만 다른 목록이 둘이면 조용히 갈라진다(`triggers[].kind`가 그랬다). `tests/test_contracts_bpmn_ext.py`가 **같은 객체인지**(`is`) 본다.
 - C13 `docs_url`·`owners`, C11 `Operation.json_schema`는 콘솔이 보이지 않는 선택 칸이다. 작고 급하지 않다.
 
-## 6. M6 첫째 — Windows 현장 PC에서 막힌 것 (CI가 못 보는 자리)
+## 6. M6 첫째 — 현장 시나리오 3은 사람이 할 차례다 (CI가 못 보는 자리)
 
-M6의 첫째 기준(「**시나리오 3**(BX-04)이 Windows 현장 PC에서 Center 배포를 거쳐 통과」)은 **사람이 현장 PC에서** 한다. 서버 Bot인 시나리오 1·2·4는 M7 인수 시험으로 넘겼다 ([ADR-0055](decisions/0055-m6-field-scenario-is-scenario-3.md)). 해 보기 전에 그 PC(Windows 11, 일반 사용자)에서 무엇이 필요한지 대 보니 **하나가 막혀 있다** (2026-10-13).
+M6의 첫째 기준(「**시나리오 3**(BX-04)이 Windows 현장 PC에서 Center 배포를 거쳐 통과」)은 **사람이 현장 PC에서** 한다. 서버 Bot인 시나리오 1·2·4는 M7 인수 시험으로 넘겼다 ([ADR-0055](decisions/0055-m6-field-scenario-is-scenario-3.md)). **막힌 것은 없다** — 공급사 포털이 시험 안에만 있던 것은 `chk-mock-apps serve`가 `/site` 밑에 같은 HTML로 내주어 닫았다 (`samples/README.md` §웹 화면).
 
-### 6-1. 시나리오 3(BX-04)의 공급사 포털이 시험 안에만 있다
-
-BX-04는 **공급사 웹 포털**(화면 `supplier.portal.transactions`)을 읽어 **회계 프로그램**(화면 `accounting.taxbook.sheet`)에 적는다. 회계 프로그램은 사람이 띄울 수 있다 — `uv run python tests/fake_desktop_apps.py taxbook`. 그러나 **포털 HTML은 M4 인수 시험이 그 자리에서 띄우는 것뿐**이다(`tests/test_m4_acceptance.py`의 시험 서버) — 현장 PC의 사람이 열 주소가 없다. 그래서 그 화면을 BUI-06으로 등록할 수도, Bot이 읽을 수도 없다.
-
-닫는 길: 포털 한 장을 **사람이 띄울 수 있는 자리**로 옮긴다 — 모의 앱 서버(`samples/mock_apps`, `chk-mock-apps serve`)가 `/supplier-portal/transactions`처럼 함께 내준다. 시험과 사람이 **같은 HTML**을 보게 해야 「시험은 되는데 현장은 안 된다」가 생기지 않는다. 회계 프로그램도 시험 폴더(`tests/`)가 아니라 `samples/` 쪽에 진입점이 있는 편이 현장 PC에 맞다 (지금은 저장소를 통째로 받아야 띄울 수 있다).
-
-나머지는 막힌 것이 아니라 **사람이 할 차례**다 — Center(그리고 콘솔), Admin 서명 키, UI 자동화 앱과 그 키(`finance-tax`), Bot UI 설치·키 등록, 두 화면의 BUI-06 등록, 배포, 작업 지시. 각 단계는 이미 돌고(M4·M5 인수 시험), **한 PC에서 사람 손으로 이어 본 적이 없다**는 것이 이 기준이 보려는 것이다.
+화면 둘: 포털 `http://127.0.0.1:8010/site/transactions`(`supplier.portal.transactions`), 회계 프로그램 `uv run python tests/fake_desktop_apps.py taxbook`(`accounting.taxbook.sheet`). 그 밖은 **사람이 할 차례**다 — Center(그리고 콘솔), Admin 서명 키, UI 자동화 앱과 그 키(`finance-tax`), Bot UI 설치·키 등록, 두 화면의 BUI-06 등록, 배포, 작업 지시. 각 단계는 이미 돌고(M4·M5 인수 시험), **한 PC에서 사람 손으로 이어 본 적이 없다**는 것이 이 기준이 보려는 것이다. 그 PC에서 막히면 까닭을 여기와 `04-setup` §7에 적는다.

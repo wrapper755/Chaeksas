@@ -31,13 +31,25 @@
 
 ```bash
 uv run chk-mock-apps list                 # 무엇이 있나, 기본 포트는 몇인가
-uv run chk-mock-apps serve                # 전부 한 포트(8010)에, /<app_id> 밑에
+uv run chk-mock-apps serve                # 전부 한 포트(8010)에, /<app_id> 밑에 (웹 화면은 /site 밑에)
 uv run chk-mock-apps serve --app erp      # 하나만, 그 앱의 기본 포트에
 ```
 
 `serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다. 서비스 앱 주소에 경로가
 붙어도 되므로(`{base_url}/v1/ops/…`) Center 리소스 등록에 `http://127.0.0.1:8010/erp`를
 그대로 넣을 수 있다. 앱 열여섯 개를 따로 띄우지 않아도 된다.
+
+### 웹 화면 (`/site`)
+
+예제가 가리키는 **웹 화면**도 같은 포트에 뜬다 — 공급사 포털(BX-04 `/site/transactions`,
+BX-14 `/site/portal`), 사내 신청서(`/site/form` → `/site/done`), 공지(`/site/notices`).
+**M4 인수 시험이 쓰는 HTML과 같은 것**이다(`sites.py`의 `PAGES` 하나를 둘이 쓴다) — 현장 PC에서
+BUI-06으로 등록하고 Bot이 읽는 화면이 시험이 본 화면과 다르면 「시험은 되는데 현장은 안 된다」가
+생긴다. 화면은 조회 조건을 보지 않는다(대상월을 넣어도 표는 그대로다 — 케이스가 기대하는 값이다).
+화면 안의 이동은 상대 경로라 `/site` 밑에서도 밖으로 새지 않는다.
+
+BX-04의 다른 한쪽인 **회계 프로그램**(데스크톱)은 `uv run python tests/fake_desktop_apps.py taxbook`
+으로 띄운다 (Windows — UIA로 보이는 진짜 창이다).
 
 기본 포트는 `docs/04-setup.md` §6의 「다음 서비스 앱: 8010부터 10씩」을 따른다
 (`catalog.port_of`가 유일한 자리다, ADR-0011). 옮기려면 `CHK_SVC_<앱 id>__PORT`.
@@ -127,6 +139,7 @@ samples/mock_apps/src/chaeksas/mock_apps/
 ├─ catalog.py      # 무엇이 있나, 기본 포트
 ├─ cli.py          # chk-mock-apps
 ├─ fixtures.py     # 앱 경계를 넘는 거짓 데이터 (사람·거래처)
+├─ sites.py        # 예제가 가리키는 웹 화면 (/site — M4 인수 시험과 같은 HTML)
 ├─ apps/           # C11 앱 하나 = 모듈 하나 (APP 하나를 내보낸다)
 └─ external/
    ├─ apps.py        # 남의 API 흉내 둘 (service_kit을 쓰지 않는다)
