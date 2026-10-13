@@ -10,8 +10,9 @@
 1. **실행 목록은 새것부터 온다** — 「최근 20회」를 앞에서 끊어 센다.
 2. **셈은 끝난 실행에만 있다** — 도는 중인 실행은 `null`이라 표본에 들어가지 않는다.
 
-타입·빌드는 `web`의 `pnpm typecheck`·`pnpm build`가 본다. **집계 함수(`summarize`)는 TypeScript라
-파이썬이 시험하지 못한다** — `web`에 단위 시험 판이 없다 (`docs/09-gaps.md` §4-9).
+타입·빌드는 `web`의 `pnpm typecheck`·`pnpm build`가 보고, **집계 함수의 셈은 `web`의 vitest가
+잰다** (`apps/center-console/lib/summary.test.ts` — §4-9를 그렇게 닫았다). 여기서 보는 것은
+**재료가 오는가**와 파이썬이 볼 수 있는 글 몇 줄이다.
 """
 
 from __future__ import annotations
@@ -356,8 +357,8 @@ def test_deployment_rows_carry_the_pc_the_version_went_to(client: TestClient) ->
 def test_the_column_counts_pcs_and_does_not_resolve_a_wildcard(client: TestClient) -> None:
     """화면이 **수를 센다** — 「배포」(건수)가 아니라 「배포된 Bot UI」다 (ADR-0046).
 
-    집계는 TypeScript라 파이썬이 돌려 보지 못한다 (`web`에 단위 시험 판이 없다 — §4-9). 그래서
-    **글로** 본다: 열 이름이 바뀌었는가, `*`를 푸는 코드가 사라졌는가.
+    **셈 자체는 이제 `web`의 vitest가 잰다** (`lib/summary.test.ts`) — 여기서는 파이썬이 볼 수
+    있는 것만 본다: 열 이름이 바뀌었는가, 화면이 그 함수를 쓰는가, `*`를 푸는 코드가 사라졌는가.
     """
     page = (CONSOLE / "app" / "bots" / "page.tsx").read_text(encoding="utf-8")
     assert 'header: "배포된 Bot UI"' in page
@@ -392,9 +393,16 @@ def test_the_run_summary_does_not_overwrite_the_deployment_and_blocked_counts(
     assert client.get("/api/v1/bot-uis", headers=READ).json()[0]["readiness"]
     assert client.get("/api/v1/deployments?active=true", headers=READ).json()
 
-    page = (CONSOLE / "app" / "bots" / "page.tsx").read_text(encoding="utf-8")
-    assert "export type RunFields" in page, "세는 쪽의 반환 칸을 못 박는다"
-    assert "Omit<BotRow" not in page, "「나머지 전부」로 돌려주면 다시 덮는다"
+    # 세는 코드는 **화면을 모르는 모듈**에 있다 (§4-9 — vitest가 그 셈을 잰다).
+    summary = (CONSOLE / "lib" / "summary.ts").read_text(encoding="utf-8")
+    assert "export type RunFields" in summary, "세는 쪽의 반환 칸을 못 박는다"
+    assert "Omit<BotRow" not in summary, "「나머지 전부」로 돌려주면 다시 덮는다"
+    # **import 줄만** 본다 — 머리말은 그 이름들을 「들이지 않는다」는 설명으로 쓴다.
+    brought = [one for one in summary.splitlines() if one.startswith("import ")]
+    assert brought, "타입이라도 들여온다"
+    assert not [one for one in brought if "server-only" in one or "lib/center" in one or "next/" in one], (
+        f"순수 함수 자리다 — 서버 호출·화면을 들이면 단위 시험이 못 부른다: {brought}"
+    )
 
 
 def test_readiness_reports_say_which_version_is_blocked(client: TestClient) -> None:

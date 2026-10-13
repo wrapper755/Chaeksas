@@ -153,7 +153,7 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 
 - [ ] 시나리오 1~4(`00-vision`)가 Windows 현장 PC에서 Center 배포를 거쳐 통과
 - [ ] 새 개발자가 `04-setup`만 보고 1시간 안에 환경 구성 (실제로 한 번 해 본다)
-- [x] **M6 범위의** 계약 문서 상태가 "구현됨"(C12는 M7이다 — 서버 실행기가 거기서 구현된다), 모든 화면이 `06-screens`와 일치 — **남은 공백은 [09-gaps](09-gaps.md)에 적혀 있다**. 계약 열넷 중 **열셋이 「구현됨」**이고(상태 셋의 뜻은 [03-contracts/README](03-contracts/README.md) §상태), 화면 쪽에 남은 것은 CON-02 집계 시험 하나다 (STU-01 「감시 모드 시작」은 [ADR-0053](decisions/0053-no-watch-mode-in-studio.md)으로 **두지 않기로** 닫았다)
+- [x] **M6 범위의** 계약 문서 상태가 "구현됨"(C12는 M7이다 — 서버 실행기가 거기서 구현된다), 모든 화면이 `06-screens`와 일치 — **남은 공백은 [09-gaps](09-gaps.md)에 적혀 있다**. 계약 열넷 중 **열셋이 「구현됨」**이고(상태 셋의 뜻은 [03-contracts/README](03-contracts/README.md) §상태), 화면 쪽에 남은 것이 **없다** (STU-01 「감시 모드 시작」은 [ADR-0053](decisions/0053-no-watch-mode-in-studio.md)으로 **두지 않기로**, CON-02 집계 시험은 `web`에 vitest를 들여 닫았다)
   - **계약 일곱이 「구현됨」이다** (조각 1): C2·C4·C6·C7·C8·C10·C11 — C4는 `reserved_for`를, C10은 곱게 끄기(`POST /v1/admin/shutdown`)를 채워 닫았다. 남은 것은 C1·C3·C5·C9·C13·C14와 C12(M7)였다 (C9는 조각 5·6, C3는 조각 8에서 닫혔다).
   - **화면 셋이 문서와 맞았다** (조각 1): BUI-02 「실행 기록」(`runs/*.jsonl`을 읽어 그린다), BUI-09 「예약」·「밀린 보고」(C13 `status` 선언대로 묻는다), BUI-01 트레이 「도구」(메인 창과 같은 유틸리티). BUI-09 「최근 UI 세션」은 **확장이 그려야 하는 자리**라 조각 4로 넘겼다.
   - **경계 결정 셋을 적었다** (조각 2, 코드 없음): [ADR-0040](decisions/0040-registry-storage-sqlite.md) 레지스트리 저장소, [ADR-0041](decisions/0041-extension-run-events.md) 확장이 실행 기록에 남기는 길, [ADR-0042](decisions/0042-extension-contributed-panels.md) 확장이 화면에 칸을 기여하는 길.

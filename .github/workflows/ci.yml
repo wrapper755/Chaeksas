@@ -143,6 +143,10 @@ jobs:
       - name: 타입 검사
         run: pnpm typecheck
 
+      # 콘솔 집계(CON-02)의 셈 — 화면을 모르는 함수만 잰다 (브라우저·React를 띄우지 않는다).
+      - name: 단위 시험
+        run: pnpm test
+
       - name: 빌드
         run: pnpm build
 
