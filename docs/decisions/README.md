@@ -64,3 +64,4 @@
 | [0053](0053-no-watch-mode-in-studio.md) | Studio에 감시 모드를 두지 않는다 — 일정(cron)을 읽는 자리는 현장 하나이고, 트리거가 깨우는 그림은 시험 케이스의 `messages`로 본다 | 수락 |
 | [0054](0054-server-run-state-and-concurrency.md) | 서버 실행기는 기다리는 실행의 `Run`을 JSON 한 덩이로 SQLite에 담고(그림·기록·바깥 세계·도우미는 다시 꽂는다), 도는 실행은 한 프로세스 안에서 실행마다 스레드 하나로 돈다 (s10) | 수락 |
 | [0055](0055-m6-field-scenario-is-scenario-3.md) | M6의 현장 기준은 시나리오 3(BX-04) 하나다 — 서버 Bot인 1·2·4는 M7 인수 시험이 덮는다 | 수락 |
+| [0056](0056-bounded-seen-maps.md) | 멱등 기억(`seen_jobs`·메시지)은 ack가 Center에 닿은 뒤 두 주기에 잊는다 — 닿지 않은 ack는 버리지 않고(업무가 두 번 일어난다), 작업과 메시지가 한 자리를 쓴다 | 수락 |

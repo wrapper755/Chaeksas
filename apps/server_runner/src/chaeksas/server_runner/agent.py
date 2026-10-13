@@ -65,6 +65,7 @@ from chaeksas.server_runner.center_client import (
     Unreachable,
 )
 from chaeksas.server_runner.credentials import Credentials
+from chaeksas.server_runner.seen import Seen
 from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Saved, Store
 from chaeksas.server_runner.worker import ACK_STARTED, EMPTY_COUNTS, Worker, reopen_log
@@ -130,7 +131,9 @@ class Agent:
     #: 한 주기만 올라가는 값이라 흘려보내면 Center가 영영 모른다.
     pending_acks: list[JobAck] = field(default_factory=list)
     #: 이미 받은 작업 (`job_id` → 마지막 ack). **두 번 돌리지 않는다** (C4 멱등).
-    seen_jobs: dict[str, JobAck] = field(default_factory=dict)
+    #: **무한히 자라지 않는다** — ack가 Center에 닿고 몇 주기가 지나면 잊는다 (`seen.py`,
+    #: ADR-0056). 메시지도 같은 것을 쓴다 (C12 §메시지 — 규칙이 갈라지면 한쪽만 고친다).
+    seen_jobs: Seen[JobAck] = field(default_factory=Seen)
     #: 기다리는 실행을 담아 두는 곳 (ADR-0054 §3). 없으면 담지 않는다 (시험·한 번 돌리기).
     store: Store | None = None
     #: 아직 올리지 못한 결재 ack (C4·C6). 올릴 때까지 들고 있는다.
@@ -142,7 +145,9 @@ class Agent:
     pending_message_acks: list[MessageAck] = field(default_factory=list)
     #: 이미 다룬 메시지 (`message_id` → 마지막 ack). **두 번 넣지 않는다** — ack가 올라가기
     #: 전에 같은 메시지가 또 내려오므로(C12), 들고 있지 않으면 한 메시지로 두 번 깨운다.
-    seen_messages: dict[str, MessageAck] = field(default_factory=dict)
+    #: **무한히 자라지 않는다** — `seen_jobs`와 **같은 규칙**이다 (`seen.py`, ADR-0056).
+    #: 바깥 시스템이 밀어 넣는 것이라 수가 커서 여기가 더 급하다 (BX-11·BX-13).
+    seen_messages: Seen[MessageAck] = field(default_factory=Seen)
 
     @property
     def registered(self) -> bool:
@@ -444,7 +449,7 @@ class Agent:
         return JobAck(job_id=job.job_id, result=ACK_STARTED, run_id=found.run_id)
 
     def _remember_ack(self, ack: JobAck) -> None:
-        self.seen_jobs[ack.job_id] = ack
+        self.seen_jobs.remember(ack.job_id, ack)
         self.pending_acks = [one for one in self.pending_acks if one.job_id != ack.job_id]
         self.pending_acks.append(ack)
 
@@ -623,7 +628,7 @@ class Agent:
             log.info("메시지 %s를 실행 %s에 넣었다 (%s)", one.message_id, worker.run_id, one.name)
 
     def _remember_message_ack(self, ack: MessageAck) -> None:
-        self.seen_messages[ack.message_id] = ack
+        self.seen_messages.remember(ack.message_id, ack)
         self.pending_message_acks = [
             one for one in self.pending_message_acks if one.message_id != ack.message_id
         ]
@@ -711,6 +716,17 @@ class Agent:
             unsent_events=self.unsent_events(),
         )
 
+    def _acks_delivered(self) -> None:
+        """실어 올린 ack가 Center에 닿았다 — 멱등 기억이 **그때부터** 잊을 준비를 한다.
+
+        **멱등 기억을 늘리면 여기 한 줄을 더한다** (ADR-0056) — 부르는 자리를 갈라 두면
+        한쪽만 고치는 일이 생긴다(작업과 메시지는 같은 까닭으로 있다).
+
+        **한 번 부르는 것이 한 주기다** — 그래서 이 함수는 하트비트가 성공했을 때만 불린다.
+        """
+        self.seen_jobs.delivered(one.job_id for one in self.pending_acks)
+        self.seen_messages.delivered(one.message_id for one in self.pending_message_acks)
+
     def _apply(self, answer: ServerRunnerHeartbeatResponse) -> None:
         """응답을 반영한다 — 배포는 설치하고 작업은 돌린다.
 
@@ -718,7 +734,12 @@ class Agent:
         시작한 바로 그 주기에 들고 있던 옛 값으로 작업을 거절하고, 그 거절이 `seen_jobs`에
         남아 **그 작업은 영원히 돌지 않는다** (C4 멱등 — 이미 본 작업은 마지막 ack를 되돌려
         보낸다). 시험이 그것을 잡았다.
+
+        **여기가 「ack가 닿았다」를 아는 유일한 자리다** (ADR-0056) — 이 함수는 하트비트가
+        성공해 응답이 돌아왔을 때만 불리고, Center는 **그 요청에서** ack를 반영한다
+        (`center/api/jobs.py` `_apply_acks`). 그래서 비우기 **전에** 멱등 기억에게 알린다.
         """
+        self._acks_delivered()  # **비우기 전에** — 무엇이 실려 올라갔는지는 여기서만 안다
         self.restored.clear()  # 올렸다
         self.pending_results.clear()  # 올렸다
         self.pending_acks.clear()  # 올렸다

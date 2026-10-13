@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0038](../decisions/0038-approval-request-channel.md), [0054](../decisions/0054-server-run-state-and-concurrency.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0038](../decisions/0038-approval-request-channel.md), [0054](../decisions/0054-server-run-state-and-concurrency.md), [0056](../decisions/0056-bounded-seen-maps.md) |
 | 관련 화면 | CON-12 서버 실행, CON-05, CON-04, CON-11 |
 
 ## 목적
@@ -193,6 +193,12 @@ Center는 메시지를 이렇게 처리한다.
   `bot_ui_lost`가 아니다 — 뭉개면 CON-12가 서버에 「bot_ui_lost」라고 적는다). 그 실행의
   결재는 회수된다 (C6 `host_lost`).
 - 하트비트가 3분 동안 없으면 Center는 그 실행기를 「오프라인」으로 표시한다. 실행은 유실로 보지 않고 기다린다. 운영자가 CON-12에서 「유실 처리」를 하면 그때 그 실행기의 실행을 `failed`(`runner_lost`)로 닫고, 결재를 회수한다 (C6 `host_lost`).
+- **「이미 봤다」를 들고 있는 동안은 정해져 있다** ([ADR-0056](../decisions/0056-bounded-seen-maps.md)) —
+  받는 쪽은 작업·메시지의 마지막 ack를 기억해 **같은 지시가 다시 와도 두 번 돌리지 않고 그
+  ack를 되돌려 보낸다**(C4 멱등). 그 기억은 **ack가 닿은 뒤 두 주기**까지이고, **닿지 않은
+  ack는 버리지 않는다** — 버리면 다시 내려온 지시가 「처음 본 것」이 되어 메시지가 실행에
+  두 번 들어가거나 같은 작업으로 실행이 둘 생긴다. 「닿았다」는 **그 ack를 실은 하트비트가
+  200을 받은 것**이다 (Center가 같은 요청에서 반영한다).
 
 ## 예시
 
@@ -243,5 +249,6 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 | 2026-10-13 | 1 | **등록·하트비트가 양쪽에서 돈다** — `apps/server_runner`(등록·하트비트·SIGTERM)와 Center(`api/server_runner.py` + 운영 API 셋). 키 묶기 규칙을 C4와 **한 코드로** 모았고(`center/host_keys.py`), `machine_id`도 한 자리다(`core.machine`). 작업 나누기(`free_slots`·`pick_jobs`)가 붙었고 **`waiting[]`의 작업은 `run_id`로 되짚는다**(그 칸에 `job_id`가 없다 — 안 되짚으면 결재를 기다리는 실행을 `runner_lost`로 닫는다). 남은 것은 메시지 API와 실행이다 | 0054 |
 | 2026-10-13 | 1 | **배포 설치와 준비 상태가 돈다** — 설치는 Bot UI와 **같은 코드**로 모았고(`core.deploy`·`core.packages` — `host_kind`만 다르다) 실행기가 `deployment_results`·`readiness`를 보고한다. `ServerRunnerInfo`에 그 셋(+확장)이 생겨 CON-12가 읽을 자리가 찼다. **내려받기 관문이 서버 실행기를 알아본다** — 「등록은 M7부터다」로 막고 있었는데 등록은 지난 조각에서 생겼다 | 0054 |
 | 2026-10-13 | 1 | **작업 실행이 돈다** — 받은 작업을 스레드 하나로 돌려(ADR-0054 §5) 실행 기록을 하트비트 뒤에 보낸다. **`SERVER_RUNNER_AVAILABLE`을 켰다** — 서버 대상 배포·작업이 만들어진다. `id`를 비운 작업은 Center가 고르고(`server_versions`) 고른 뒤엔 그 실행기에 머문다 | 0054 |
-| 2026-10-14 | 1 | **메시지가 돈다 → 「구현됨」** — `POST /api/v1/messages`(`center/api/messages.py`)·하트비트 `messages[]`·`message_acks[]`가 양쪽에 생겼다. 받는 곳을 고르는 규칙은 **엔진의 것 하나**이고(`message_matches()` ↔ `Engine.message_target()`, 시험이 대조한다) **상관 키가 없으면 찾지 않는 것**은 *고를 것인가*의 판단이라 Center에 둔다. 메시지 시작은 **`POST /jobs`와 같은 함수**로 작업이 되고(배포 검사·상한이 한 자리에 남는다), 둘 이상이면 422 `receiver_ambiguous`다. 작업과 같이 **ack가 올 때까지 다시 싣고** 실행기는 넣을 수 없는 것을 **ack하지 않고 둔다**. 거절은 다시 싣지 않는다. 「유실 처리」가 가던 메시지도 닫는다 | 0054 |
 | 2026-10-13 | 1 | **기다리는 실행을 담고 되살리고 결재로 이어 간다** (M7 기준 셋째) — 담는 길은 `core.run_snapshot`(칸을 셋으로 가르고 **칸이 늘면 시험이 묻는다**), 저장소는 실행기의 SQLite 한 파일. 결재를 C6으로 올리고 하트비트 답으로 잇는다. 붙이다 드러난 것 둘: **`_host_of`가 서버 실행기를 몰라** 답이 영영 내려가지 않았고(`host_id`가 키 id였다), 하트비트의 `running[]`·`waiting[]`이 **빈 채로 나가고 있었다**(#109) — 그러면 CON-12가 못 보이고 Center가 상한을 넘겨 보내고 맞추기가 멀쩡한 실행을 닫는다. 남은 것은 §메시지 하나다 | 0054 |
+| 2026-10-14 | 1 | **메시지가 돈다 → 「구현됨」** — `POST /api/v1/messages`(`center/api/messages.py`)·하트비트 `messages[]`·`message_acks[]`가 양쪽에 생겼다. 받는 곳을 고르는 규칙은 **엔진의 것 하나**이고(`message_matches()` ↔ `Engine.message_target()`, 시험이 대조한다) **상관 키가 없으면 찾지 않는 것**은 *고를 것인가*의 판단이라 Center에 둔다. 메시지 시작은 **`POST /jobs`와 같은 함수**로 작업이 되고(배포 검사·상한이 한 자리에 남는다), 둘 이상이면 422 `receiver_ambiguous`다. 작업과 같이 **ack가 올 때까지 다시 싣고** 실행기는 넣을 수 없는 것을 **ack하지 않고 둔다**. 거절은 다시 싣지 않는다. 「유실 처리」가 가던 메시지도 닫는다 | 0054 |
+| 2026-10-14 | 1 | **멱등 기억이 무한히 자라지 않는다** ([ADR-0056](../decisions/0056-bounded-seen-maps.md)) — 이미 본 작업·메시지의 마지막 ack는 **닿은 뒤 두 주기**까지 들고 있다가 잊고, **닿지 않은 ack는 버리지 않는다**(버리면 다시 내려온 지시가 「처음 본 것」이 되어 업무가 두 번 일어난다). 자리는 하나다(`seen.py`) — 작업과 메시지가 같은 까닭으로 있으므로 규칙을 갈라 두면 한쪽만 고친다 | 0056 |

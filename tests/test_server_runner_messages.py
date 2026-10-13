@@ -42,6 +42,8 @@ from chaeksas.contracts.server_runner import MessageDispatch
 from chaeksas.contracts.signing import sign
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.server_runner import agent as agent_mod
+from chaeksas.server_runner import seen as seen_mod
+from chaeksas.server_runner.center_client import Unreachable
 from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Store
 
@@ -395,6 +397,83 @@ def test_the_same_message_is_only_put_once(
 
     assert len(quotes(runner, run_id)) == 1, "같은 메시지로 두 번 나아갔다"
     assert [found.message_id for found in runner.pending_message_acks] == ["msg_1a2b3c4d"]
+
+
+def test_the_message_memory_does_not_grow_forever(
+    center: TestClient, center_store: CenterStore, runner: agent_mod.Agent
+) -> None:
+    """ack가 Center에 닿고 몇 주기가 지나면 **잊는다** (ADR-0056).
+
+    메시지는 바깥 시스템이 밀어 넣는 것이라 수가 크다 — 잊지 않으면 몇 주 떠 있는 실행기가
+    끝없이 커진다. 규칙은 `seen.py`가 쥐고 셈은 `tests/test_server_runner_seen.py`가 잰다.
+    """
+    ready(center, center_store, runner)
+    make_job(center)
+    until_waiting_for_message(runner)
+
+    runner.apply_messages(
+        [
+            MessageDispatch(
+                message_id="msg_1a2b3c4d",
+                name="bid_quote",
+                correlation=BID,
+                payload=quote("가나상사"),
+                received_at=now_iso(),
+            )
+        ]
+    )
+    settle(runner)
+    assert "msg_1a2b3c4d" in runner.seen_messages
+    runner.tick()  # ack가 올라간다
+    assert "msg_1a2b3c4d" in runner.seen_messages, "닿은 그 주기에는 아직 들고 있다"
+
+    for _ in range(seen_mod.GRACE_CYCLES + 1):
+        runner.tick()
+    assert "msg_1a2b3c4d" not in runner.seen_messages
+    assert len(runner.seen_messages) == 0
+
+
+def test_an_unacked_message_is_not_put_twice_however_long_it_waits(
+    center: TestClient,
+    center_store: CenterStore,
+    runner: agent_mod.Agent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**올리지 못한 ack는 잊지 않는다** — 잊으면 한 메시지로 견적이 **두 번** 들어간다.
+
+    Center는 ack가 올 때까지 매번 다시 싣는다 (C12). 그 동안 기억을 버리면 같은 메시지가
+    「처음 본 것」이 되어 실행에 두 번 들어간다 — 입찰 견적이 두 번 접수되는 꼴이다.
+
+    그물(`grace`)을 걷고 본다: 평상시에는 `pending_message_acks`가 **매 주기 다시 실려**
+    나이를 0으로 되돌리므로, 「닿았다」를 보낼 때 적어도 드러나지 않는다 (ADR-0056).
+    """
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting_for_message(runner)
+    runner.seen_messages = seen_mod.Seen(grace=0)  # 그물을 걷는다 — 자리가 드러난다
+
+    one = MessageDispatch(
+        message_id="msg_1a2b3c4d",
+        name="bid_quote",
+        correlation=BID,
+        payload=quote("가나상사"),
+        received_at=now_iso(),
+    )
+    runner.apply_messages([one])
+    settle(runner)
+
+    def unreachable(_request: Any) -> Any:
+        raise Unreachable("Center에 닿지 못한다")
+
+    monkeypatch.setattr(runner.client, "heartbeat", unreachable)
+    for _ in range(seen_mod.GRACE_CYCLES + 5):
+        runner.tick()
+        runner.apply_messages([one])  # ack가 안 갔으니 Center가 또 싣는다
+        settle(runner)
+
+    assert len(quotes(runner, run_id)) == 1, "한 메시지로 견적이 두 번 들어갔다"
+    kept = runner.seen_messages.get("msg_1a2b3c4d")
+    assert kept is not None and kept.accepted is True
 
 
 def test_a_message_waits_when_there_is_no_slot(
