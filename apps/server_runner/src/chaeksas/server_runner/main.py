@@ -5,7 +5,10 @@
 
 `--once`는 **등록하고 하트비트까지 한 번** 해 보고 상태 한 줄을 찍는다 (설치·설정을 확인할 때,
 그리고 CI). 끝 코드는 0(됐다)·1(사람이 고쳐야 한다)·3(닿지 못했다)이다 — 셋을 가르는 까닭은
-`systemd`·설치 스크립트가 **무엇을 할지가 다르기** 때문이다.
+`systemd`·설치 스크립트가 **무엇을 할지가 다르기** 때문이다. **작업은 받지 않는다** (곧 끝나는
+프로세스가 실행 스레드를 버리면 안 된다).
+
+기다리는 실행은 **다시 떠도 이어진다** (ADR-0054) — 담아 둔 것을 등록 직후에 훑어 되살린다.
 """
 
 from __future__ import annotations
@@ -85,7 +88,12 @@ def _loop(found: agent_mod.Agent, settings: Settings) -> int:
     for one in (signal.SIGTERM, signal.SIGINT):
         signal.signal(one, _asked_to_stop)
 
-    log.info("서버 실행기를 시작한다 (Center %s, 상한 %d)", settings.center_url, settings.max_concurrency)
+    log.info(
+        "서버 실행기를 시작한다 (Center %s, 상한 %d, 저장소 %s)",
+        settings.center_url,
+        settings.max_concurrency,
+        settings.state_db,
+    )
     while not stop.is_set():
         found.tick()
         if found.blocked_by:

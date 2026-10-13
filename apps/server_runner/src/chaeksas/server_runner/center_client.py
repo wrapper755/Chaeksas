@@ -28,6 +28,8 @@ from chaeksas.contracts.server_runner import (
 log = logging.getLogger(__name__)
 
 API = "/api/v1/server-runner"
+#: 결재는 실행기 경로가 아니라 **C6 경로**다 (올린 쪽 키로 — 답은 올린 키에게만 내려간다).
+APPROVALS = "/api/v1/approvals"
 #: 요청 크기 한도 (C4와 같다 — 256 KB). 넘으면 보내기 전에 막는다.
 MAX_REQUEST_KB = 256
 #: 한 번의 요청을 기다리는 시간. 주기(10초)보다 넉넉히 짧게.
@@ -101,7 +103,7 @@ class CenterClient:
     timeout_s: float = DEFAULT_TIMEOUT_S
     client: httpx.Client | None = None
 
-    def _send(self, path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def _send(self, path: str, payload: dict[str, Any], *, api: str | None = None) -> dict[str, Any]:
         body = httpx.Request("POST", "http://x", json=payload).content
         if len(body) > MAX_REQUEST_KB * 1024:
             # 보내 봐야 413이다. 무엇이 큰지 말해 준다 (대개 `waiting[]`이 늘어난 경우).
@@ -114,7 +116,7 @@ class CenterClient:
         client = self.client or httpx.Client(timeout=self.timeout_s)
         try:
             response = client.post(
-                f"{self.base_url.rstrip('/')}{API}{path}",
+                f"{self.base_url.rstrip('/')}{api or API}{path}",
                 content=body,
                 headers={
                     # 토큰·키는 ASCII만 (CLAUDE.md §5 — 헤더에 한글을 넣지 않는다).
@@ -149,6 +151,14 @@ class CenterClient:
             self._send("/heartbeat", request.to_json_dict())
         )
 
+    def create_approval(self, body: dict[str, Any]) -> dict[str, Any]:
+        """결재를 Center 결재함에 올린다 (C6 `POST /approvals`). **서버의 창구는 Center만**이다.
+
+        멱등 — 같은 `request_id`·같은 본문이면 기존 결재를 돌려준다 (200). **4xx는 다시 보내지
+        않는다** (부르는 쪽이 그렇게 다룬다 — 한 번 거부된 것이 큐를 영원히 막는다).
+        """
+        return self._send("", body, api=APPROVALS)
+
     def download_package(self, package_id: str, version: str) -> bytes:
         """패키지 zip (C5 `GET /packages/{id}/{v}`). 승인된 것이면 `SIGNATURE`가 들어 있다.
 
@@ -174,6 +184,7 @@ class CenterClient:
 
 __all__ = [
     "API",
+    "APPROVALS",
     "DEFAULT_TIMEOUT_S",
     "KEY_REJECTED_CODES",
     "MAX_REQUEST_KB",

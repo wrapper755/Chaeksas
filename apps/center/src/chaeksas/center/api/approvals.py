@@ -132,12 +132,32 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ApprovalIn
 
 
 def _host_of(store: Store, key: Any) -> ApprovalHost:
-    """올린 쪽 (C6 `host`). Bot UI는 키로 찾는다 — 신원은 키가 정한다 (C4)."""
+    """올린 쪽 (C6 `host`). **신원은 키가 정한다** (C4·C12) — 등록한 쪽에게 묻는다.
+
+    **`host_id`가 맞아야 답이 내려간다** — 하트비트가 `host_id`로 고르므로(`_to_dispatch`)
+    여기서 키 이름을 적어 두면 **올린 쪽이 그 답을 영영 못 받는다**. 서버 실행기를 붙이다
+    실제로 그랬다.
+    """
+    from chaeksas.center.api import bot_ui, server_runner  # noqa: PLC0415 — 순환 import를 피한다
+
     if key.type == "bot_ui":
-        found = store.row("SELECT bot_ui_id, name FROM bot_uis WHERE key_id = ?", (key.key_id,))
+        found = bot_ui.id_for_key(store, key.key_id)
         if found is not None:
-            return ApprovalHost(type="bot_ui", id=str(found["bot_ui_id"]), name=str(found["name"]))
-    # 등록 전이거나 서버 실행기 — 키 이름으로 적는다 (모르는 것을 지어내지 않는다).
+            row = store.row("SELECT name FROM bot_uis WHERE bot_ui_id = ?", (found,))
+            return ApprovalHost(
+                type="bot_ui", id=found, name=str(row["name"]) if row else key.name
+            )
+    elif key.type == "server_runner":
+        found = server_runner.id_for_key(store, key.key_id)
+        if found is not None:
+            row = store.row(
+                "SELECT name FROM server_runners WHERE server_runner_id = ?", (found,)
+            )
+            return ApprovalHost(
+                type="server_runner", id=found, name=str(row["name"]) if row else key.name
+            )
+    # 등록 전이다 — 키 이름으로 적는다 (모르는 것을 지어내지 않는다). 그 결재의 답은
+    # 등록하기 전까지 내려가지 않는다.
     return ApprovalHost(type=key.type, id=key.key_id, name=key.name)
 
 

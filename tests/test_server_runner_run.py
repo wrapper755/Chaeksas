@@ -424,3 +424,30 @@ def test_asking_while_it_runs_does_not_touch_the_run(
     # 마지막으로 찍힌 것은 끝난 모습이다 — 스레드가 끝내며 한 번 더 찍는다.
     assert found.snapshot().done and found.snapshot().finished == "success"
     assert seen, "한 번도 묻지 못했다"
+
+
+def test_a_running_run_is_reported_with_its_node(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """도는 실행이 **`running[]`에 내용으로** 올라간다 (C12) — 비워 올리면 셋이 깨진다.
+
+    조각 4-①이 이 자리를 빈 채로 냈다(#109). CON-12가 아무것도 못 보이고,
+    `capacity.running`이 늘 0이라 Center가 **상한을 넘겨 보내고**, 맞추기 규칙이 멀쩡한 실행을
+    두 주기 뒤 `runner_lost`로 닫는다. **길이만 보는 시험은 그것을 잡지 못한다** — 여기서는
+    `run_id`·`bpm_process_id`·`job_id`까지 본다.
+    """
+    ready_runner(center, store, runner)
+    job = make_job(center)
+    runner.tick()
+    found = next(iter(runner.workers.values()))
+
+    request = runner._heartbeat_request()  # noqa: SLF001 — 올리는 본문을 그 자리에서 본다
+    assert request.capacity.running == len(request.running), "C12가 요구하는 짝이다"
+    if request.running:  # 금세 끝나는 그림이라 이미 끝났을 수도 있다
+        one = request.running[0]
+        assert one.run_id == found.run_id
+        # **패키지 id다** (C1) — 그림의 `process.id`를 올리면 배포·작업과 이름이 갈라진다.
+        assert one.bpm_process_id == BOT
+        assert one.job_id == job["job_id"]
+    assert found.join(WAIT_S)
+    drain(runner)

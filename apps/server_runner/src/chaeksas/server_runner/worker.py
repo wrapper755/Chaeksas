@@ -15,14 +15,16 @@ PC와 **모양이 다르다**: Bot UI는 Bot 하나마다 **자식 프로세스*
 엔진이 그 사전을 고치면 「크기가 바뀌었다」로 터진다. 드물게 나고 **도는 실행을 들여다보다
 실행기가 죽는다** — 그래서 찍어 두는 쪽으로 바꿨다.
 
-**아직 사람을 기다리는 실행을 이어 가지 못한다** (M7 조각 4-②) — 멈추면 `waiting[]`으로
-보고하고 **자리를 놓지만**, 답을 받아 이어 가는 길과 재시작을 넘기는 저장소는 다음 조각이다.
+**멈추면 상태를 담고 스레드를 놓는다** (ADR-0054 §3) — 그러면 그 실행은 `waiting[]`로 보고되고
+**자리를 쥐지 않는다**. 답(결재)·메시지·타이머가 오면 부르는 쪽이 `resume()`으로 되살려 다시
+민다. 재시작을 넘기는 것도 같은 저장소다.
 """
 
 from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +34,8 @@ from chaeksas.contracts.server_runner import RunningRun, WaitingRun
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State
 from chaeksas.core.packages import InstalledBot, UnusablePackage
 from chaeksas.core.run_log import RunLog, log_path
+from chaeksas.core.run_shipping import read_sent
+from chaeksas.core.run_snapshot import SnapshotMismatch, dump, restore
 from chaeksas.core.run_state import WAIT_MESSAGE, new_run_id
 
 log = logging.getLogger(__name__)
@@ -64,6 +68,18 @@ ACK_CANCELLED = "cancelled"
 
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+def reopen_log(run_id: str, path: Path) -> RunLog:
+    """**파일이 원본이다** (C3) — 되살릴 때 jsonl을 다시 읽어 `seq`를 잇는다.
+
+    보낸 자리도 파일에서 읽는다 (`runs/<run_id>.sent`) — 메모리의 `sent_through`는 다시 뜨면
+    0이라, 읽지 않으면 보낸 줄을 또 보낸다.
+    """
+    found = RunLog(run_id=run_id, path=path)
+    found.events = list(RunLog.read(path)) if path.exists() else []
+    found.sent_through = read_sent(path)
+    return found
 
 
 @dataclass(frozen=True)
@@ -117,6 +133,8 @@ class Worker:
     source: str = "job"
     #: 대기열에서 기다린 초 (C3 `run_started.queued_s`). **모르면 `None`** — 0과 다르다.
     queued_s: float | None = None
+    #: 멈출 때 상태를 담아 둘 곳 (ADR-0054 §3). 없으면 담지 않는다 (시험·한 번 돌리기).
+    store: Any | None = None
 
     engine: Engine = field(default_factory=Engine)
     run: Run | None = None
@@ -158,10 +176,84 @@ class Worker:
     def alive(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
+    def resume(self, snapshot: dict[str, Any]) -> None:
+        """담아 둔 것을 되살려 **다시 민다** (ADR-0054 §2).
+
+        그림·기록·바깥 세계는 **밖에서 꽂는다** — 그림은 설치된 패키지에서 다시 읽고(`bot`),
+        기록은 파일에서 줄과 보낸 자리를 함께 읽는다. 빈 기록으로 되살리면 `seq`가 1부터
+        다시 시작해 C3 멱등이 겹치고 **Center가 이어 돈 줄을 버린다** (스파이크 장면 E).
+        """
+        self._thread = threading.Thread(
+            target=self._resumed_body, args=(snapshot,), name=f"run-{self.run_id}", daemon=True
+        )
+        self._thread.start()
+
+    def _resumed_body(self, snapshot: dict[str, Any]) -> None:
+        try:
+            run = restore(
+                snapshot,
+                process=self.bot.entry(),
+                log=reopen_log(self.run_id, log_path(self.data_dir, self.run_id)),
+                env=self.env,
+            )
+        except (SnapshotMismatch, EngineError, UnusablePackage, OSError, ValueError) as e:
+            # 되살리지 못했다 — **그 실행을 실패로 닫는다** (사유는 기록에 남는다).
+            self._failure = str(e)
+            log.error("실행 %s를 되살리지 못했다: %s", self.run_id, e)
+            found = reopen_log(self.run_id, log_path(self.data_dir, self.run_id))
+            found.emit("log", level="error", message=f"되살리지 못했다: {e}")
+            found.emit("run_finished", status="failed", duration_s=0.0, error_message=str(e), **EMPTY_COUNTS)
+            if self.store is not None:
+                self.store.forget(self.run_id)
+            return
+
+        with self._lock:
+            self.run = run
+        self._publish(run)
+        self._drive(run)
+        self._publish(run)
+        self._settle(run)
+
+    def answer(self, request_id: str, found: Mapping[str, Any], *, answered_by: str) -> None:
+        """결재·확인의 답을 넣는다 (C6). **되살린 실행이 이 자리에서 이어 간다.**
+
+        답을 넣고 **다시 민다** — 넣기만 하면 그 실행은 멈춘 채 남는다. 미는 것은 새 스레드다
+        (`Run` 하나는 한 스레드만 만진다).
+        """
+        run = self.run
+        if run is None:  # pragma: no cover - 부르는 쪽이 먼저 되살린다
+            raise RuntimeError("되살리지 않은 실행에 답할 수 없다")
+        self.engine.answer(run, request_id, found, answered_by=answered_by)
+        self._continue(run)
+
+    def withdraw(self, request_id: str, *, reason: str) -> None:
+        """Center 결재가 **답 없이 끝났다** (회수·만료, C6·ADR-0038).
+
+        답이 아니다 — 오류 경계가 받거나 실행이 실패한다 (`APPROVAL_WITHDRAWN`·`_EXPIRED`).
+        """
+        run = self.run
+        if run is None:  # pragma: no cover
+            raise RuntimeError("되살리지 않은 실행의 결재를 거둘 수 없다")
+        self.engine.withdraw(run, request_id, reason=reason)
+        self._continue(run)
+
+    def _continue(self, run: Run) -> None:
+        """멈춰 있던 실행을 **다시 민다** — 새 스레드가 이어서 돈다."""
+        self._publish(run)
+        self._thread = threading.Thread(
+            target=self._continued_body, args=(run,), name=f"run-{self.run_id}", daemon=True
+        )
+        self._thread.start()
+
+    def _continued_body(self, run: Run) -> None:
+        self._drive(run)
+        self._publish(run)
+        self._settle(run)
+
     # ── 스레드가 도는 자리 ──
 
     def _body(self) -> None:
-        found = RunLog(run_id=self.run_id, path=log_path(self.data_dir, self.run_id))
+        found = reopen_log(self.run_id, log_path(self.data_dir, self.run_id))
         try:
             run = self.engine.start(
                 self.bot.entry(),
@@ -192,8 +284,30 @@ class Worker:
         with self._lock:
             self.run = run
         self._publish(run)
+        if self.store is not None:
+            # **시작했다는 것부터 적는다** — 이것이 없으면 다시 뜬 실행기가 죽은 실행을 모른다.
+            self.store.mark_running(
+                self.run_id,
+                # **패키지 id다** (C1 — Bot의 신원). 그림의 `process.id`가 아니다 — 되살릴 때
+                # `find()`가, Center의 Bot별 상한이 이 이름으로 찾는다.
+                bpm_process_id=self.bot.id,
+                version=run.version,
+                job_id=self.job_id,
+                started_at=run.started.isoformat(),
+            )
         self._drive(run)
         self._publish(run)
+        self._settle(run)
+
+    def _settle(self, run: Run) -> None:
+        """스레드가 끝나며 저장소를 맞춘다 — 끝났으면 지우고, 멈췄으면 **담는다**."""
+        if self.store is None:
+            return
+        if run.finished:
+            self.store.forget(self.run_id)
+            return
+        size = self.store.save_waiting(self.run_id, dump(run))
+        log.info("실행 %s를 담았다 (%d바이트) — 자리를 놓는다", self.run_id, size)
 
     def _drive(self, run: Run) -> None:
         """끝날 때까지 민다. **중지를 자주 본다** — 그래야 `cancelled`가 기록에 남는다."""
@@ -264,11 +378,15 @@ class Worker:
         )
 
     def _measure(self, run: Run) -> Snapshot:
-        """`Run`을 읽어 모습 하나를 만든다. **도는 스레드에서만 부른다.**"""
+        """`Run`을 읽어 모습 하나를 만든다. **도는 스레드에서만 부른다.**
+
+        `bpm_process_id`는 **패키지 id**다 (C1 — Bot의 신원). 그림의 `process.id`를 올리면
+        배포·작업·Bot별 상한이 쓰는 이름과 갈라져 CON-12가 다른 이름을 보인다.
+        """
         return Snapshot(
             run_id=self.run_id,
-            bpm_process_id=run.process.id,
-            version=run.version,
+            bpm_process_id=self.bot.id,
+            version=self.bot.version,
             started_at=run.started.isoformat(),
             job_id=self.job_id,
             node_id=self._node_id(run),
@@ -343,6 +461,7 @@ class Worker:
 
 __all__ = [
     "ACK_CANCELLED",
+    "reopen_log",
     "EMPTY_COUNTS",
     "ACK_FAILED",
     "ACK_FINISHED",
