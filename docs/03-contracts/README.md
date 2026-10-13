@@ -45,13 +45,13 @@
 | [C9](C9-ui-page-registry.md) | UI 자동화 앱: 화면 레지스트리 | Bot UI 셀렉터 등록(Worker 경유) ↔ UI 자동화 앱 | **구현됨** | Worker `src/contracts/registry.py` |
 | [C10](C10-worker-local-api.md) | Worker 로컬 API (UI 세션, 셀렉터 등록용 분석·선택·검증, 상태, 잠금 화면 `session_locked`) | 실행 중 Bot·Studio·Bot UI → Worker 프로세스 | **구현됨** | Worker `src/local_api/` |
 | [C11](C11-service-app-common.md) | 서비스 앱 공통 (healthz·manifest·작업 호출·수행 모드·자체 API 키, 관리 콘솔 최소 기능) | Bot UI(실행 중 Bot)·서버 실행기·Studio·Worker → 모든 서비스 앱 | **구현됨** | 없음 ([ADR-0010](../decisions/0010-service-apps.md), [ADR-0013](../decisions/0013-api-keys.md)) |
-| [C12](C12-server-runner-center.md) | Center API: 서버 실행기 (Center API 키 인증·등록·하트비트, 실행 중·기다리는 실행·대기열 보고, 일시 중지, PC 위임 요청·결과(제안)) | 서버 실행기 ↔ Center | **합의** (M7 — 등록·하트비트·배포 설치·작업 실행이 양쪽이 돈다) | 없음 ([ADR-0015](../decisions/0015-run-location.md)) |
+| [C12](C12-server-runner-center.md) | Center API: 서버 실행기 (Center API 키 인증·등록·하트비트, 실행 중·기다리는 실행·대기열 보고, 일시 중지, PC 위임 요청·결과(제안)) | 서버 실행기 ↔ Center | **합의** (M7 — 메시지만 남았다) | 없음 ([ADR-0015](../decisions/0015-run-location.md)) |
 | [C13](C13-extension-manifest.md) | 확장 정의 (`extension.json`: 등급, 서버 부분, 기여 지점, 외부 앱 HTTP 어댑터) | 확장 → Studio·Bot UI·실행기·서버 실행기·Center | **구현됨** | 없음 ([ADR-0018](../decisions/0018-extensions.md)) |
 | [C14](C14-bpmn-extensions.md) | BPMN 확장 속성 (`chk:*` — 태스크 종류별 속성, 반복·파일 출력·이벤트 규칙, 시험 케이스 형식·비교 규칙, 실행 전 검사 B1~B14) | Studio → 패키지 → 실행기·서버 실행기, Center 업로드 검사 | **구현됨** | Studio `agentworks:*` 확장 속성 ([업무 예제](../08-business-examples/README.md)가 이 형식으로 쓰였다) |
 
 새 계약 문서는 [template.md](template.md)를 복사해 `C<번호>-<이름>.md`로 만든다.
 
-**M6의 셋째 기준은 이 표에서 `M6 범위의` 계약이 모두 「구현됨」이 되는 것이다** ([05-roadmap](../05-roadmap.md) M6). **C12는 M7이다** — 서버 실행기가 M7의 일이라 그 계약도 거기서 구현된다. 기준을 글자대로 「모두」로 읽으면 M6가 M7 없이는 닫히지 않는다. C12는 M7 첫 조각에서 **합의**가 되었고, 둘째~넷째 조각에서 **등록·하트비트·배포 설치·작업 실행이 양쪽에서 돌기 시작했다** — 남은 것은 메시지 API와 기다리는 실행의 저장·재개다.
+**M6의 셋째 기준은 이 표에서 `M6 범위의` 계약이 모두 「구현됨」이 되는 것이다** ([05-roadmap](../05-roadmap.md) M6). **C12는 M7이다** — 서버 실행기가 M7의 일이라 그 계약도 거기서 구현된다. 기준을 글자대로 「모두」로 읽으면 M6가 M7 없이는 닫히지 않는다. C12는 M7 첫 조각에서 **합의**가 되었고, 둘째~넷째 조각에서 등록·하트비트·배포 설치·작업 실행·**저장·재개와 결재**가 양쪽에서 돌기 시작했다 — 남은 것은 **메시지 하나**다.
 무엇이 남았는지는 [09-gaps](../09-gaps.md) §1에 계약마다 적혀 있다 — 상태를 올릴 때 그쪽도 함께 지운다.
 
 ### 코드로 있는 것
@@ -71,7 +71,8 @@ C8·C9·C10은 **확장이 소유한 계약**이라 모듈이 `extensions/ui_aut
 | C7 | `chaeksas.contracts.center_keys` | `key_state()`, `expires_soon()`, `prefix_of()`, `validate_create()` | 같음 |
 | C11 | `chaeksas.contracts.service_app` | `authorize()`(키 권한), `resolve_mode()`(폴백 규칙), `idempotency_key()`, `key_state()` | (문서 예시는 HTTP라 모델 시험은 `tests/test_service_kit.py`) |
 | C12 | `chaeksas.contracts.server_runner` | `validate_heartbeat()`(자리 셈·`waiting[]` 짝 칸 — 보내는 쪽과 받는 쪽이 **같이 쓴다**), `free_slots()`·`pick_jobs()`(작업 나누기), `restorable()`(되살리기 판정, ADR-0054) | `tests/test_contracts_server_runner.py`·`tests/test_contract_examples.py` |
-| C12 | **`chaeksas.center.api.server_runner`** + **`chaeksas.server_runner`** | 받는 쪽(등록·하트비트·운영 API 셋·작업 나누기)과 보내는 쪽(`agent.tick()` — 배포 설치·준비 상태·**작업 실행**까지. 실행 하나는 `worker.Worker` 스레드 하나다). 키 묶기는 C4와 **한 코드**(`center.host_keys`), `machine_id`·설치·배포 적용·`RunEnv` 짓기도 하나(`core.machine`·`core.packages`·`core.deploy`·`core.run_env`). 현황 목록은 **콘솔 토큰만**(`auth.require_console` — CON-03도 같이 좁혔다) | `tests/test_center_server_runner.py`·`tests/test_server_runner_agent.py`·`tests/test_server_runner_deploy.py` |
+| C12 | **`chaeksas.core.run_snapshot`** | 기다리는 실행을 담고 되살린다 (ADR-0054 §1~§2) — `Run`의 칸을 **셋으로 가르고**(담는다/다시 꽂는다/버린다) `audit_fields()`가 **칸이 늘면 묻는다** | `tests/test_core_run_snapshot.py` |
+| C12 | **`chaeksas.center.api.server_runner`** + **`chaeksas.server_runner`** | 받는 쪽(등록·하트비트·운영 API 셋·작업 나누기)과 보내는 쪽(`agent.tick()` — 배포 설치·준비 상태·작업 실행·**저장·재개·결재**까지. 실행 하나는 `worker.Worker` 스레드 하나이고, 기다리는 실행은 `store.Store`(SQLite)에 담긴다). 키 묶기는 C4와 **한 코드**(`center.host_keys`), `machine_id`·설치·배포 적용·`RunEnv` 짓기·**담고 되살리기**도 하나(`core.machine`·`core.packages`·`core.deploy`·`core.run_env`·`core.run_snapshot`). 현황 목록은 **콘솔 토큰만**(`auth.require_console` — CON-03도 같이 좁혔다) | `tests/test_center_server_runner.py`·`tests/test_server_runner_agent.py`·`tests/test_server_runner_deploy.py` |
 | C11 | **`chaeksas.service_kit`** | 계약을 지키는 FastAPI 앱 하나(`create_app`) — `/healthz`·`/manifest`·`POST /v1/ops/{작업}`·`/v1/keys/self`, 키 검증·권한, 멱등, 오류 형식, 사용 기록 | 같음 |
 | C13 | `chaeksas.contracts.extension` | `validate()` — E1·E2·E3 + 모양. `task_type_conflicts()`(E4), `check_api()`(E5), `verify_external()`(E6), `check_size()`, `definition_hash()` | `tests/test_contract_examples.py` |
 | C8 | `chaeksas.ext.ui_automation.contracts.plan` | 계획·치유·보고 모델 (한 파일). 사다리는 `worker/ladder.py`, 부르는 쪽은 `worker/plans.py`, 서버는 `service/app.py`·`healing.py`·`planning.py` | `tests/test_worker_ladder.py` 등 |

@@ -8,8 +8,9 @@ Bot UI와 **같은 코드**(`core.deploy`·`core.packages`)이고 다른 것은 
 빼고** 센다 (C12 — PC와 거꾸로다). 기록은 **파일이 원본이고**(C3) 하트비트 뒤에 `core.run_shipping`이
 묶어 보낸다 — 실행 중에 보내지 않는다 (느린 Center가 업무를 붙잡는다).
 
-**사람을 기다리는 실행은 아직 이어 가지 못한다** (조각 4-②) — `waiting[]`로 보고하고 자리를
-놓지만, 답을 받아 이어 가는 길과 재시작을 넘기는 저장소는 다음 조각이다.
+**기다리는 실행은 담아 두고 자리를 놓는다** (ADR-0054 §3, `store.py`) — 결재를 Center 결재함에
+올리고(C6 — 서버의 창구는 Center만이다), 하트비트로 내려온 답으로 **되살려 이어 간다**.
+**재시작도 같은 저장소가 넘긴다** — 다시 뜨면 담아 둔 것을 훑어 되살리고 `restored[]`로 알린다.
 
 한 걸음은 `tick()` 하나다 — **스레드를 만들지 않는다** (엔진과 같은 태도다). 부르는 쪽(`main`)이
 돌리고, 시험은 `tick()`을 직접 민다.
@@ -22,22 +23,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts.bot_ui import DeploymentResult, JobAck, JobDispatch, Readiness
+from chaeksas.contracts.bot_ui import (
+    ApprovalAck,
+    ApprovalDispatch,
+    DeploymentResult,
+    JobAck,
+    JobDispatch,
+    Readiness,
+)
 from chaeksas.contracts.server_runner import (
     Capacity,
     RunnerVersions,
     ServerRunnerHeartbeatRequest,
     ServerRunnerHeartbeatResponse,
     ServerRunnerRegisterRequest,
+    restorable,
     validate_heartbeat,
 )
 from chaeksas.contracts.signing import AdminKey
 from chaeksas.core import machine
+from chaeksas.core import requests as approval_requests
 from chaeksas.core.deploy import Deployer
-from chaeksas.core.engine import WHERE_CENTER, RunEnv
+from chaeksas.core.engine import WHERE_CENTER, EngineError, RunEnv
 from chaeksas.core.packages import InstalledBot, find, installed
 from chaeksas.core.preflight import check as run_preflight
 from chaeksas.core.run_env import make_env
+from chaeksas.core.run_log import log_path
 from chaeksas.core.run_shipping import HttpUploader, Queue, ShipError
 from chaeksas.server_runner.center_client import (
     CenterClient,
@@ -49,7 +60,8 @@ from chaeksas.server_runner.center_client import (
 )
 from chaeksas.server_runner.credentials import Credentials
 from chaeksas.server_runner.settings import Settings
-from chaeksas.server_runner.worker import ACK_STARTED, Worker
+from chaeksas.server_runner.store import Saved, Store
+from chaeksas.server_runner.worker import ACK_STARTED, EMPTY_COUNTS, Worker, reopen_log
 
 log = logging.getLogger(__name__)
 
@@ -97,6 +109,8 @@ class Agent:
     last_response: ServerRunnerHeartbeatResponse | None = None
     #: 연결이 끊겼나 (로그를 주기마다 찍지 않으려고 바뀔 때만 본다 — BUI-05와 같은 결).
     online: bool = True
+    #: 담아 둔 것을 이미 훑었나 — 등록한 뒤 **한 번만** 한다.
+    _restored_once: bool = False
     #: 작업을 받아도 되나. **`--once`는 받지 않는다** — 그 프로세스는 곧 끝나므로 받으면
     #: 띄운 스레드를 버리게 되고, 다음 `--once`가 **같은 작업을 또** 띄운다(새 프로세스는
     #: `seen_jobs`가 비어 있다). 진짜 소켓으로 돌려 보고 발견한 자리다.
@@ -111,6 +125,13 @@ class Agent:
     pending_acks: list[JobAck] = field(default_factory=list)
     #: 이미 받은 작업 (`job_id` → 마지막 ack). **두 번 돌리지 않는다** (C4 멱등).
     seen_jobs: dict[str, JobAck] = field(default_factory=dict)
+    #: 기다리는 실행을 담아 두는 곳 (ADR-0054 §3). 없으면 담지 않는다 (시험·한 번 돌리기).
+    store: Store | None = None
+    #: 아직 올리지 못한 결재 ack (C4·C6). 올릴 때까지 들고 있는다.
+    pending_approval_acks: list[ApprovalAck] = field(default_factory=list)
+    #: 이미 Center에 올린 결재 — **두 번 올리지 않는다**. 4xx로 거부된 것도 여기 넣는다
+    #: (한 번 거부된 것을 주기마다 다시 올리면 Center 로그만 쌓인다).
+    _posted: set[str] = field(default_factory=set)
 
     @property
     def registered(self) -> bool:
@@ -187,6 +208,11 @@ class Agent:
         self.server_runner_id = str(answer.server_runner_id)
         self.next_in_s = answer.heartbeat_interval_s
         log.info("등록했다: %s (주기 %d초)", self.server_runner_id, self.next_in_s)
+        if not self._restored_once:
+            # **등록한 뒤에 되살린다** — 되살리기가 `run_env`를 쓰고, 되살린 것은 첫 하트비트의
+            # `restored[]`로 올라간다 (C12).
+            self._restored_once = True
+            self.restore_saved()
         return True
 
     def _heartbeat(self) -> bool:
@@ -217,7 +243,9 @@ class Agent:
 
         self._came_online()
         self._apply(answer)
-        # **하트비트 뒤에** 보낸다 (C3 §전송) — 실행 중에 보내면 느린 Center가 업무를 붙잡는다.
+        # **하트비트 뒤에** 한다 (C3 §전송·ADR-0038) — 실행 중에 보내면 느린 Center가 업무를
+        # 붙잡는다. 결재를 먼저 올려야 다음 주기에 답이 내려올 수 있다.
+        self.post_approvals()
         self.ship_events()
         return True
 
@@ -295,6 +323,64 @@ class Agent:
             out.append(found)
         return out
 
+    # ── 다시 떴다 (ADR-0054 §2·§4) ──
+
+    def restore_saved(self) -> None:
+        """담아 둔 것을 훑어 **되살린다**. 되살린 것은 `restored[]`로 알린다 (C12).
+
+        **되살리지 못하는 것이 둘**이다 (`restorable()` — 판정은 계약이 쥔다):
+        판이 다르거나(`runner_version_changed`), **기다린 적이 없는 실행**
+        (`runner_restarted` — 처음부터 다시 돌리면 메일·웹훅을 두 번 보낸다).
+        그런 것은 **닫고 사유를 기록에 남긴다** — 다시 돌릴지는 운영자가 작업을 다시 내 정한다.
+        """
+        if self.store is None:
+            return
+        for saved in self.store.all():
+            self._restore_one(saved)
+
+    def _restore_one(self, saved: Saved) -> None:
+        bot = find(self.settings.data_path, saved.bpm_process_id, saved.version)
+        ok, why = restorable(
+            saved.bpm_process_id,
+            saved.version,
+            installed_process_id=bot.id if bot is not None else None,
+            installed_version=bot.version if bot is not None else None,
+            had_wait=saved.had_wait,
+        )
+        if not ok or bot is None or saved.snapshot is None:
+            self._close_unrestored(saved, why or "snapshot_unreadable")
+            return
+
+        found = Worker(
+            bot=bot,
+            data_dir=self.settings.data_path,
+            env=self.run_env(bot),
+            run_id=saved.run_id,
+            job_id=saved.job_id,
+            store=self.store,
+        )
+        self.workers[saved.run_id] = found
+        found.resume(saved.snapshot)
+        self.restored.append(saved.run_id)
+        log.info("실행 %s를 되살렸다 (%s)", saved.run_id, saved.bpm_process_id)
+
+    def _close_unrestored(self, saved: Saved, why: str) -> None:
+        """되살리지 못한 실행을 **닫는다** — 사유는 실행 기록에 남고 작업 ack로도 간다.
+
+        기록에 남겨야 Center가 안다 (C3가 유일한 길이다). 작업이 딸려 있으면 그 작업도
+        닫는다 — 안 하면 `accepted`로 영원히 남는다.
+        """
+        log.warning("실행 %s를 되살리지 않는다: %s", saved.run_id, why)
+        found = reopen_log(saved.run_id, log_path(self.settings.data_path, saved.run_id))
+        found.emit("log", level="warn", message=f"실행기가 다시 떠서 이어 가지 않는다: {why}")
+        found.emit(
+            "run_finished", status="failed", duration_s=0.0, error_code=why, **EMPTY_COUNTS
+        )
+        if saved.job_id:
+            self._remember_ack(JobAck(job_id=saved.job_id, result="failed", reason=why))
+        if self.store is not None:
+            self.store.forget(saved.run_id)
+
     # ── 작업 (C12 §Center가 작업을 나누는 규칙, C4 ack) ──
 
     def take_jobs(self, jobs: list[JobDispatch]) -> None:
@@ -339,6 +425,7 @@ class Agent:
             job_id=job.job_id,
             inputs=dict(job.inputs),
             source="job",
+            store=self.store,
         )
         self.workers[found.run_id] = found
         found.start()
@@ -413,6 +500,76 @@ class Agent:
         # 모르는 작업이다 — 받은 적이 없으면 **취소된 것으로** 답한다 (두 번 돌지 않게).
         self._remember_ack(JobAck(job_id=job_id, result="cancelled"))
 
+    # ── 결재 (C6 — 서버의 창구는 Center만이다) ──
+
+    def post_approvals(self) -> None:
+        """기다리는 결재를 Center 결재함에 올린다 (C6 `POST /approvals`).
+
+        **두 번 올리지 않는다.** **4xx는 다시 보내지 않는다** — 한 번 거부된 것을 주기마다
+        다시 올리면 Center 로그만 쌓이고 진짜 문제가 묻힌다 (ADR-0038과 같은 결).
+        """
+        for found in list(self.workers.values()):
+            run = found.run
+            if run is None:
+                continue
+            for pending in list(run.pendings.values()):
+                if pending.request_id in self._posted:
+                    continue
+                body = approval_requests.create_request(run, pending).to_json_dict()
+                try:
+                    self.client.create_approval(body)
+                except CenterProblem as e:
+                    if e.status is not None and 400 <= e.status < 500:
+                        self._posted.add(pending.request_id)  # 다시 보내지 않는다
+                        log.error("결재 %s를 Center가 거부했다: %s", pending.request_id, e)
+                    else:
+                        log.info("결재 %s를 올리지 못했다 — 다음 주기에 (%s)", pending.request_id, e)
+                    continue
+                self._posted.add(pending.request_id)
+                log.info("결재 %s를 Center 결재함에 올렸다", pending.request_id)
+
+    def apply_approvals(self, found: list[ApprovalDispatch]) -> None:
+        """답이 정해진 결재를 실행에 넣는다 (C6) — **기다리던 실행이 이어 간다**.
+
+        **지금 기다리지 않는 답은 `not_waiting`으로 돌려보낸다** (C6 — Center가 다시 연다).
+        회수·만료는 **답이 아니다** — 오류 경계로 간다 (ADR-0038).
+        """
+        for one in found:
+            worker = self._waiting_for(one.request_id)
+            if worker is None:
+                self.pending_approval_acks.append(
+                    ApprovalAck(request_id=one.request_id, accepted=False, reason="not_waiting")
+                )
+                continue
+            try:
+                if one.state == "answered":
+                    worker.answer(
+                        one.request_id,
+                        dict(one.answer or {}),
+                        answered_by=one.answered_by or "Center",
+                    )
+                else:
+                    # `expired`·`withdrawn` — 답이 아니다 (C6·ADR-0038).
+                    worker.withdraw(one.request_id, reason=one.state)
+            except EngineError as e:
+                # 폼에 맞지 않는 답이거나 이미 지나간 자리다 — **받아들이지 못했다고 말한다**.
+                self.pending_approval_acks.append(
+                    ApprovalAck(request_id=one.request_id, accepted=False, reason=str(e)[:200])
+                )
+                continue
+            self.pending_approval_acks.append(
+                ApprovalAck(request_id=one.request_id, accepted=True)
+            )
+            self._posted.discard(one.request_id)
+
+    def _waiting_for(self, request_id: str) -> Worker | None:
+        """그 결재를 기다리는 일꾼. 없으면 `None` (지나갔거나 남의 것이다)."""
+        for found in self.workers.values():
+            run = found.run
+            if run is not None and request_id in run.pendings:
+                return found
+        return None
+
     # ── 실행 기록 보내기 (C3 §전송) ──
 
     def ship_events(self) -> None:
@@ -447,19 +604,30 @@ class Agent:
 
         **`restored[]`는 첫 하트비트에만** 올린다 (C12) — 올린 뒤에는 비운다. 올리지 못했으면
         그대로 들고 있다가 다음에 올린다 (ADR-0007).
+
+        **`running[]`·`waiting[]`을 정말 싣는다.** 비워 올리면 셋이 함께 깨진다 — CON-12가
+        아무것도 못 보이고, `capacity.running`이 늘 0이라 Center가 **상한을 넘겨 보내고**,
+        맞추기 규칙이 멀쩡한 실행을 두 주기 뒤 `runner_lost`로 닫는다. 조각 4-①에서 이 자리가
+        빈 채로 나갔고(#109) 시험이 `running[]`의 **내용**을 보지 않아 드러나지 않았다.
         """
+        shots = [found.snapshot() for found in self.workers.values()]
+        alive = [one for one in shots if not one.done]
+        running = [one.running_row() for one in alive if one.holds_a_slot]
+        waiting = [one.waiting for one in alive if one.waiting is not None]
         return ServerRunnerHeartbeatRequest(
             schema=1,
             status=STATUS_PAUSED if self.paused else STATUS_RUNNING,
-            # 아직 돌리지 않으므로 **자리를 쥔 것이 없다** (M7 조각 2).
-            capacity=Capacity(max=self.settings.max_concurrency, running=0),
-            running=[],
-            waiting=[],
+            # **`running`은 기다리는 실행을 뺀 수**다 (C12) — `running[]` 길이와 같아야 한다
+            # (어긋나면 Center가 422로 거부한다, `validate_heartbeat`).
+            capacity=Capacity(max=self.settings.max_concurrency, running=len(running)),
+            running=running,
+            waiting=waiting,
             versions=self.versions(),
             # **설치된 Bot별 준비 상태** (C12) — 캐시하고 설치·키가 바뀌면 비운다.
             readiness=self.readiness(),
             deployment_results=list(self.pending_results),
             job_acks=list(self.pending_acks),
+            approval_acks=list(self.pending_approval_acks),
             restored=list(self.restored),
             unsent_events=self.unsent_events(),
         )
@@ -475,6 +643,7 @@ class Agent:
         self.restored.clear()  # 올렸다
         self.pending_results.clear()  # 올렸다
         self.pending_acks.clear()  # 올렸다
+        self.pending_approval_acks.clear()  # 올렸다
         self.next_in_s = answer.next_heartbeat_s
         self.last_response = answer
         if answer.paused != self.paused:
@@ -489,9 +658,7 @@ class Agent:
         self.take_jobs(answer.jobs)
         for job_id in answer.cancel_jobs:
             self.cancel_job(job_id)
-        if answer.approvals:
-            # 결재 답을 이어 가는 길은 조각 4-②다 — **조용히 버리지 않고 말한다**.
-            log.info("결재 답 %d건을 받았으나 아직 이어 가지 못한다 (M7 조각 4-②)", len(answer.approvals))
+        self.apply_approvals(list(answer.approvals))
 
     # ── 연결 (로그는 바뀔 때만) ──
 
@@ -518,13 +685,21 @@ class Agent:
         return f"{self.server_runner_id} — {where}, 상한 {self.settings.max_concurrency}{link}"
 
 
-def build(settings: Settings, api_key: str, *, client: Any | None = None) -> Agent:
-    """설정과 키로 실행기 하나를 만든다 (시험은 `client`에 ASGI를 꽂는다)."""
+def build(
+    settings: Settings, api_key: str, *, client: Any | None = None, store: Store | None = None
+) -> Agent:
+    """설정과 키로 실행기 하나를 만든다 (시험은 `client`에 ASGI를 꽂는다).
+
+    `store`를 주지 않으면 **설정이 가리키는 파일**에 담는다 (ADR-0054 — SQLite 한 파일).
+    담지 않게 하려면 부르는 쪽이 `Agent`를 직접 만든다 (`--once`가 그렇지 않다 — 담아 둔 것을
+    되살리는 것은 `--once`에서도 해야 **다시 뜬 뒤 상태**를 볼 수 있다).
+    """
     return Agent(
         settings=settings,
         client=CenterClient(
             base_url=settings.center_url, api_key=api_key, client=client, timeout_s=5.0
         ),
+        store=store if store is not None else Store(path=settings.state_db),
     )
 
 
