@@ -81,3 +81,25 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 - **C1의 「아는 값」 중 둘은 아직 호출자가 없다** — `KNOWN_SETTINGS`·`KNOWN_BUILT_BY`. `KNOWN_TRIGGER_KINDS`는 **쓰는 쪽을 만들었고**(R9, 2026-10-12 — 아무도 검사하지 않는 동안 Studio가 `schedule`·`manual`을 올려 **올라간 모든 패키지의 `triggers`가 계약에 없는 값을 담고 있었다**), `KNOWN_DOMAINS`는 C14 **B8**이 그림에서 쓴다. 남은 둘을 같이 묶지 않은 까닭은 **막는 것이 틀려서**다 — `built.by`는 우리가 모르는 빌더가 적을 수 있어 **열린 문자열이 맞다**(막으면 남의 도구로 만든 올바른 패키지를 거부한다), `settings`는 아직 읽는 쪽이 없다.
 - **도메인 목록의 정의는 `manifest.py` 하나다** — `KNOWN_DOMAINS`·`PC_ONLY_DOMAINS`를 `bpmn_ext`(C14 B8·B6)와 `core`(사전 점검·AI 태스크)가 import해 쓴다. 자리가 C1 쪽인 것은 층 때문이다 (`bpmn_ext`가 `manifest`를 import하므로 거꾸로는 순환이다). **두 벌로 되돌리지 않는다** — 값이 같고 거르는 자리만 다른 목록이 둘이면 조용히 갈라진다(`triggers[].kind`가 그랬다). `tests/test_contracts_bpmn_ext.py`가 **같은 객체인지**(`is`) 본다.
 - C13 `docs_url`·`owners`, C11 `Operation.json_schema`는 콘솔이 보이지 않는 선택 칸이다. 작고 급하지 않다.
+
+## 6. M6 첫째 — Windows 현장 PC에서 막힌 것 (CI가 못 보는 자리)
+
+M6의 첫째 기준(「시나리오 1~4가 Windows 현장 PC에서 Center 배포를 거쳐 통과」)은 **사람이 현장 PC에서** 한다. 해 보기 전에 그 PC(Windows 11, 일반 사용자)에서 무엇이 필요한지 대 보니 **둘이 막혀 있다** (2026-10-13).
+
+### 6-1. 시나리오 1·2·4는 서버 Bot이다 — 서버 실행기가 돌아야 한다
+
+시나리오와 예제의 짝(`docs/08-business-examples`의 「출처」 칸): 1 = BX-10(신규 거래처 등록 심사), 2 = BX-20(입사자 온보딩), 3 = BX-04(세금계산서 발행), 4 = BX-30(계약서 검토). **실행 위치가 PC인 것은 BX-04 하나**이고 셋은 `server`다 — 서버 우선([ADR-0016](decisions/0016-server-first.md))에 따라 예제를 그렇게 옮겼다 (BX-20의 장비 확인도 그래서 Center 결재함으로 갔다, `hr.md`).
+
+그런데 서버 실행기는 **작업을 받아 두고 돌리지 않는다** (`SERVER_RUNNER_AVAILABLE`이 꺼져 있다, §1 C12 — M7). 그래서 「Windows 현장 PC에서 Center 배포를 거쳐」는 **셋에는 성립하지 않는다** — Center 배포를 거치면 현장 PC가 아니라 서버 실행기에 간다. 고를 길은 셋이다 (사람이 고른다):
+
+- M6 첫째를 **시나리오 3**으로 좁히고, 1·2·4는 M7 인수 시험(로드맵 M7 「실행 위치 서버인 업무·기능 예제 전부」)이 덮는다고 적는다.
+- 1·2·4를 M7이 끝난 뒤에 현장에서 다시 돌린다 (M6가 M7을 기다린다).
+- 1·2·4를 **PC 판**으로 따로 둔다 — 예제를 비트는 일이라 권하지 않는다 (CLAUDE.md §3-6).
+
+### 6-2. 시나리오 3(BX-04)의 공급사 포털이 시험 안에만 있다
+
+BX-04는 **공급사 웹 포털**(화면 `supplier.portal.transactions`)을 읽어 **회계 프로그램**(화면 `accounting.taxbook.sheet`)에 적는다. 회계 프로그램은 사람이 띄울 수 있다 — `uv run python tests/fake_desktop_apps.py taxbook`. 그러나 **포털 HTML은 M4 인수 시험이 그 자리에서 띄우는 것뿐**이다(`tests/test_m4_acceptance.py`의 시험 서버) — 현장 PC의 사람이 열 주소가 없다. 그래서 그 화면을 BUI-06으로 등록할 수도, Bot이 읽을 수도 없다.
+
+닫는 길: 포털 한 장을 **사람이 띄울 수 있는 자리**로 옮긴다 — 모의 앱 서버(`samples/mock_apps`, `chk-mock-apps serve`)가 `/supplier-portal/transactions`처럼 함께 내준다. 시험과 사람이 **같은 HTML**을 보게 해야 「시험은 되는데 현장은 안 된다」가 생기지 않는다. 회계 프로그램도 시험 폴더(`tests/`)가 아니라 `samples/` 쪽에 진입점이 있는 편이 현장 PC에 맞다 (지금은 저장소를 통째로 받아야 띄울 수 있다).
+
+나머지는 막힌 것이 아니라 **사람이 할 차례**다 — Center(그리고 콘솔), Admin 서명 키, UI 자동화 앱과 그 키(`finance-tax`), Bot UI 설치·키 등록, 두 화면의 BUI-06 등록, 배포, 작업 지시. 각 단계는 이미 돌고(M4·M5 인수 시험), **한 PC에서 사람 손으로 이어 본 적이 없다**는 것이 이 기준이 보려는 것이다.
