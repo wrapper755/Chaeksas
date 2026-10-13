@@ -427,3 +427,34 @@ def test_generated_design_tokens_are_current() -> None:
         capture_output=True, text=True, cwd=root,
     )
     assert r.returncode == 0, f"토큰 생성물이 원본과 다르다 — gen_tokens.py를 다시 돌려라\n{r.stdout}{r.stderr}"
+
+def test_the_contract_status_table_matches_each_document() -> None:
+    """계약 목록(03-contracts/README)의 「상태」가 **각 문서 머리말**과 같은가.
+
+    **원본은 문서 머리말이다** (계약 README 원칙 1) — 목록은 모아 보여 주는 것이다. 둘이
+    갈라지면 「어느 쪽이 참인가」를 사람이 매번 다시 물어야 하고, 실제로 **여섯 줄이 낡아
+    있었다**(C1·C3·C4·C5·C7·C9가 목록에서는 「합의」, 문서에서는 「구현됨」).
+    """
+    from pathlib import Path as _Path
+
+    docs = _Path(__file__).resolve().parent.parent / "docs" / "03-contracts"
+    listed: dict[str, str] = {}
+    for line in (docs / "README.md").read_text(encoding="utf-8").splitlines():
+        if not line.startswith("| [C"):
+            continue
+        cells = [one.strip() for one in line.split("|")]
+        listed[cells[1].split("]")[0].lstrip("[")] = _status(cells[4])
+
+    assert len(listed) == 14, f"계약 열넷이 목록에 있어야 한다: {sorted(listed)}"
+    for name, said in sorted(listed.items()):
+        found = next(docs.glob(f"{name}-*.md"))
+        head = next(x for x in found.read_text(encoding="utf-8").splitlines() if x.startswith("| 상태 |"))
+        assert said == _status(head.split("|")[2]), f"{name}: 목록은 {said}, 문서는 {head[:60]}"
+
+
+def _status(cell: str) -> str:
+    """「상태」 칸에서 상태 낱말만 (뒤에 붙은 날짜·설명은 버린다)."""
+    for name in ("구현됨", "합의", "초안"):
+        if name in cell:
+            return name
+    return cell.strip()

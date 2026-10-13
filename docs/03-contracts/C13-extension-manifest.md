@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-01, 독립 검토 반영). 모델·검사 규칙 **구현됨** |
+| 상태 | **구현됨** (2026-10-12). 모델·검사 규칙(E1~E8)과 **기여 지점마다 읽는 쪽**이 있다 — 확장 호스트(`core.extensions`), Studio(팔레트·편집기·`studio.resource_views`), Bot UI(`bot_ui.panels`·로컬 런타임), 콘솔(`console.pages` 생성물), Center(외부 확장 등록·어댑터 `health`) |
 | schema | 2 (1은 `local_runtimes.command`를 쓰던 것 — 아래 변경 이력) |
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·Bot UI·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
 | 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |

@@ -30,9 +30,11 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C9 | **구현됨** | **`ext.ui_automation.contracts.registry`·`console`** | — (관리 콘솔이 읽는 길도 돈다) |
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
-| C12 | 초안 (M7) | **없다** (`apps/server_runner`는 docstring뿐) | M7 전부. **M6 기준의 「모든 계약」에서 빼야 하는가는 사람이 정한다** (§2-4) |
-| C13 | 합의 (모델·검사 구현됨) | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다. `studio.resource_views`는 STU-03이, `console.pages`는 콘솔이 읽는다). 「구현됨」으로 올릴지는 사람이 정한다 |
-| C14 | 초안 (B1~**B15** 구현됨) | `contracts.bpmn_ext` B1~B15 | 「합의」로 올릴지는 M3 엔진·Studio와 함께 정한다 (문서가 그렇게 적는다) |
+| C12 | 초안 (M7) | **없다** (`apps/server_runner`는 docstring뿐) | M7 전부. **M6 기준에서 뺐다** — 서버 실행기가 M7의 일이라 그 계약도 거기서 구현된다 (로드맵 문구를 「M6 범위의 계약」으로 좁혔다) |
+| C13 | **구현됨** | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다: 호스트·Studio·Bot UI·콘솔·Center) |
+| C14 | **구현됨** | `contracts.bpmn_ext` B1~B15 + `contracts.dmn` | — (닫았다 — 엔진이 수행하고 Studio가 편집·검사하고 예제 50개가 이 형식이다. schema 1에서 **쓰지 않기로 적은 것**은 범위 결정이다) |
+
+**열넷 중 열셋이 「구현됨」이고 C12만 초안이다** (M7). 상태 셋의 뜻은 [03-contracts/README](03-contracts/README.md) §상태에 적었다 — 적혀 있지 않아 올릴 때마다 사람이 다시 물었다.
 
 굵게 적은 셋(C8·C9·C10)은 **확장이 소유한 계약**이라 `extensions/ui_automation/…/contracts/`에
 있다 (계약 README 원칙 1). CLAUDE.md §7이 「계약 코드 C8~C10·C12가 없다」고 적어 두었는데
@@ -40,11 +42,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 2. 문서가 코드와 어긋난 자리 (코드를 고치는 일이 아니다)
 
-### 2-4. C12는 M7이다 — M6 기준에서 뺄 것인가
-
-C12만 코드가 전혀 없고(`apps/server_runner`는 docstring뿐), 문서도 「초안 (M7에서 구현)」이라고
-스스로 적는다. M6 기준의 「모든 계약 문서 상태가 「구현됨」」을 글자대로 읽으면 C12 때문에 M6가
-닫히지 않는다. **사람이 정할 거리다** — 기준 문구를 「M6 범위의 계약」으로 좁히는 쪽이 자연스럽다.
+**없다.** 마지막 하나(§2-4 — C12를 M6 기준에서 뺄 것인가)를 로드맵 문구로 닫았다.
 
 ## 3. 계약 쪽 기능 공백
 
