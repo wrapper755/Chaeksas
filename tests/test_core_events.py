@@ -554,3 +554,44 @@ def test_delivering_to_a_finished_run_is_harmless() -> None:
     assert run.state is State.DONE
     with pytest.raises(EngineError, match="기다리는 요청이 아니다"):
         engine.answer(run, "apr_없는것", {"decision": "approve"}, answered_by="홍길동")
+
+
+def test_the_contract_picks_the_same_receiver_as_the_engine() -> None:
+    """**규칙이 두 자리에 있으면 안 된다** (C12 §메시지).
+
+    Center는 보고된 `waiting[]` 줄로 받는 곳을 고르고(계약의 `message_matches`), 실행기는 그
+    실행의 `waits`로 고른다(`Engine.message_target`). 어긋나면 Center가 「전달했다」고 하고
+    실행기가 `no_receiver`로 돌려보낸다 — **그 메시지는 영영 전달되지 않는다**.
+
+    그래서 여기서 **같은 경우들을 양쪽에 물어 답을 맞춰 본다**.
+    """
+    from chaeksas.contracts.server_runner import WaitingRun, message_matches
+
+    cases: list[tuple[bool, Any, str, Any]] = [
+        # (기다리는 쪽에 상관 키가 있나, 그 값, 보낼 이름, 보낼 상관 키)
+        (True, "ORD-1", "work_done", "ORD-1"),
+        (True, "ORD-1", "work_done", "ORD-9"),
+        (True, "ORD-1", "work_done", None),
+        (False, None, "work_done", "ORD-1"),
+        (False, None, "work_done", None),
+        (True, "ORD-1", "다른메시지", "ORD-1"),
+        (False, None, "다른메시지", None),
+    ]
+    for has, value, name, sent in cases:
+        engine, run = start(receive_process(correlation=has), inputs={"주문번호": value or "ORD-1"})
+        engine.run_until_blocked(run)
+        waiting = next(w for w in run.waits.values() if w.kind == "message")
+        row = WaitingRun(
+            run_id=run.run_id,
+            bpm_process_id="x.y",
+            version="1.0.0",
+            waiting_for="message",
+            message_name=waiting.name,
+            correlation=waiting.correlation,
+            since=NOW.isoformat(),
+        )
+        engine_says = engine.message_target(run, name, correlation=sent) is not None
+        contract_says = message_matches(row, name=name, correlation=sent)
+        assert engine_says == contract_says, (
+            f"엔진과 계약이 다르게 고른다: {name=} {sent=} 기다림={waiting.correlation!r}"
+        )

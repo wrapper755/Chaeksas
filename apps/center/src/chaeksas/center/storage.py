@@ -122,6 +122,33 @@ CREATE TABLE IF NOT EXISTS jobs (
   -- 맞추기 규칙: 하트비트에 연속으로 보이지 않은 횟수 (C4 `bot_ui_lost`).
   misses           INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS messages (
+  -- 외부 시스템이 넣은 메시지 (C12 §메시지). **작업 표와 따로 둔다** — 메시지 시작으로 온
+  -- 것은 작업이 되지만(`job_id`), 기다리는 실행으로 가는 것은 작업이 아니다.
+  message_id       TEXT PRIMARY KEY,
+  name             TEXT NOT NULL,
+  -- 상관 키는 **아무 JSON 값**이다 (주문 번호 글자일 수도, 수일 수도 있다) — 그래서 JSON으로
+  -- 담고 비교도 JSON 글로 한다. 없으면 NULL이고 그때는 메시지 시작만이다.
+  correlation_json TEXT,
+  -- 업무 값이다 (원칙 6의 예외 — 받는 실행에 넣어야 한다). 작업의 `inputs`와 같은 결이다.
+  payload_json     TEXT NOT NULL,
+  -- 멱등 키의 범위이자 「자기 것」 판정 기준 (C5와 같다).
+  owner            TEXT NOT NULL,
+  idempotency_key  TEXT,
+  body_hash        TEXT NOT NULL,
+  received_at      TEXT NOT NULL,
+  received_by      TEXT NOT NULL,
+  delivered_to     TEXT NOT NULL,
+  -- 「실행으로」 갈 때만 채운다. `runner_id`는 **그 실행을 보고한 실행기**다 (한 실행은 시작한
+  -- 실행기에 끝까지 머문다 — C12 §Center가 작업을 나누는 규칙 4).
+  run_id           TEXT,
+  runner_id        TEXT,
+  job_id           TEXT,
+  -- pending(내려줄 차례) | done(ack 받았다) | refused(받아들이지 못했다)
+  state            TEXT NOT NULL,
+  reason           TEXT,
+  acked_at         TEXT
+);
 CREATE TABLE IF NOT EXISTS contributed_resources (
   -- 확장이 기여한 자원 (C7·C13 §5). Center는 `data`를 **해석하지 않고** 그대로 넘긴다.
   resource_type  TEXT NOT NULL,

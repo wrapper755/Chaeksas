@@ -226,6 +226,28 @@ class Worker:
         self.engine.answer(run, request_id, found, answered_by=answered_by)
         self._continue(run)
 
+    def deliver(self, name: str, *, correlation: Any = None, payload: Mapping[str, Any]) -> bool:
+        """메시지를 넣는다 (C12 §메시지). **넣었으면 참** — 받을 곳이 없으면 거짓이다.
+
+        받을 곳이 있는지 **먼저 묻는다** (`Engine.message_target`) — 엔진의 `deliver`는 받을 곳이
+        없어도 조용히 넘어가므로, 그것만 부르면 실행기가 Center에 「받았다」고 거짓 ack를 보낸다.
+        """
+        run = self.run
+        if run is None:  # pragma: no cover - 부르는 쪽이 먼저 되살린다
+            return False
+        if self.engine.message_target(run, name, correlation=correlation) is None:
+            return False
+        self.engine.deliver(run, name, correlation=correlation, payload=payload)
+        self._continue(run)
+        return True
+
+    def waits_for_message(self, name: str, *, correlation: Any = None) -> bool:
+        """그 메시지를 기다리고 있나 — **넣어 보지 않고** 묻는다 (빈자리를 먼저 세려고)."""
+        run = self.run
+        if run is None:
+            return False
+        return self.engine.message_target(run, name, correlation=correlation) is not None
+
     def withdraw(self, request_id: str, *, reason: str) -> None:
         """Center 결재가 **답 없이 끝났다** (회수·만료, C6·ADR-0038).
 
@@ -422,7 +444,9 @@ class Worker:
             return None
         common = {
             "run_id": self.run_id,
-            "bpm_process_id": run.process.id,
+            # **패키지 id다** (`_measure`와 같다) — 그림의 `process.id`를 올리면 Center의 Bot별
+            # 상한·메시지 찾기가 쓰는 이름과 갈라진다 (C1 — Bot의 신원은 패키지 id다).
+            "bpm_process_id": self.bot.id,
             "version": run.version,
             "since": now_iso(),
         }

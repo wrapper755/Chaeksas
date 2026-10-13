@@ -271,6 +271,30 @@ def server_versions(store: Store, *, bpm_process_id: str) -> list[str]:
     return [str(one["version"]) for one in rows]
 
 
+def server_message_starts(store: Store, *, name: str) -> list[str]:
+    """그 이름의 **메시지 시작 트리거**를 가진, 서버에 배포된 Bot id들 (C12 §메시지).
+
+    고르는 기준은 `server_versions`와 같다 (승인된 패키지의 철회되지 않은 서버 배포) — 배포되지
+    않은 Bot은 메시지로도 돌지 않는다. 트리거는 **매니페스트가 말한다** (C1 `triggers[]`) —
+    Center가 그림을 읽지 않는다.
+
+    버전은 돌려주지 않는다. **작업을 만드는 쪽이 고르게** 둔다 (`_resolved_version` — 둘 이상이면
+    `version_ambiguous`다). 여기서 또 고르면 두 자리가 다른 답을 낸다.
+    """
+    rows = store.rows(
+        "SELECT DISTINCT d.bpm_process_id AS id, p.manifest_json AS body FROM deployments d "
+        "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
+        "WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ?",
+        (STATUS_APPROVED, "server_runner"),
+    )
+    out = []
+    for one in rows:
+        manifest = Manifest.model_validate(json.loads(str(one["body"] or "{}")))
+        if any(t.kind == "message" and t.name == name for t in manifest.triggers):
+            out.append(str(one["id"]))
+    return sorted(set(out))
+
+
 def downloadable_by(store: Store, *, target_type: str, target_id: str) -> set[tuple[str, str]]:
     """그 대상이 **내려받을 수 있는** 패키지 `{(id, 버전)}` (C5 권한표).
 

@@ -21,6 +21,7 @@ from chaeksas.center.api import (
     bot_ui,
     deployments,
     jobs,
+    messages,
     package_access,
     packages,
     resources,
@@ -443,6 +444,19 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         """취소. **202면 아직 끝난 것이 아니다** — 현장의 ack를 기다린다 (C5 「취소」 표)."""
         info, status = jobs.cancel(app.state.store, authenticate(request), job_id)
         return Utf8JSONResponse(status_code=status, content=info.to_json_dict())
+
+    # ─────────────────── 메시지 (C12 §메시지) ───────────────────
+
+    @app.post(f"{API}/messages")
+    async def post_message(request: Request) -> Any:
+        """메시지 넣기. **서명이 없다** — 작업과 같은 관문이다 (C5 권한표).
+
+        기다리는 실행이 있으면 그 실행기에게, 없고 메시지 시작 트리거면 **작업으로** 간다.
+        """
+        info, created = messages.create(
+            app.state.store, authenticate(request), await _json(request)
+        )
+        return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
 
     @app.get(f"{API}/admin-keys")
     def list_admin_keys(request: Request) -> Any:

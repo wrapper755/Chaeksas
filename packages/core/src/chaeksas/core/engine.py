@@ -677,6 +677,25 @@ class Engine:
             value = str(run.variables[value])
         return now + _as_duration(value, node_id=node.id)
 
+    def message_target(
+        self, run: Run, name: str, *, correlation: Any = None
+    ) -> Waiting | None:
+        """그 메시지를 받을 **기다림 하나**. 없으면 `None`.
+
+        **규칙이 여기 하나다** — 이름이 같고, 둘 중 한쪽이라도 상관 키가 없으면 맞는 것으로 본다.
+        부르는 쪽이 「넣을 수 있나」를 먼저 알아야 하는 자리가 있어 `deliver`에서 떼어 놓았다
+        (서버 실행기는 받은 메시지를 ack해야 한다 — C12 §메시지). 계약의 `message_matches()`가
+        보고된 `waiting[]` 줄에 **같은 판정**을 하고, 시험이 둘을 대조한다.
+        """
+        return next(
+            (
+                w for w in run.waits.values()
+                if w.kind == WAIT_MESSAGE and w.name == name
+                and (w.correlation is None or correlation is None or w.correlation == correlation)
+            ),
+            None,
+        )
+
     def deliver(
         self,
         run: Run,
@@ -690,14 +709,7 @@ class Engine:
         **상관 키가 맞는 것만** 깨운다. 받을 곳이 없으면 아무 일도 없다 — 케이스가 `no_receiver`로
         기록만 하고 실패시키지 않는 것과 같은 태도다 (C14 시험 케이스 형식).
         """
-        found = next(
-            (
-                w for w in run.waits.values()
-                if w.kind == WAIT_MESSAGE and w.name == name
-                and (w.correlation is None or correlation is None or w.correlation == correlation)
-            ),
-            None,
-        )
+        found = self.message_target(run, name, correlation=correlation)
         if found is None:
             run.log.emit("log", level="warn", message=f"받을 곳이 없는 메시지다: {name}")
             return run.state

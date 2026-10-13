@@ -12,6 +12,10 @@ Bot UI와 **같은 코드**(`core.deploy`·`core.packages`)이고 다른 것은 
 올리고(C6 — 서버의 창구는 Center만이다), 하트비트로 내려온 답으로 **되살려 이어 간다**.
 **재시작도 같은 저장소가 넘긴다** — 다시 뜨면 담아 둔 것을 훑어 되살리고 `restored[]`로 알린다.
 
+**메시지도 하트비트로 내려온다** (C12 §메시지) — 받을 곳을 **이쪽에서 다시 찾아**(Center가 고른
+뒤 한 주기가 지났다) 넣고 ack한다. **넣을 자리가 없으면 ack하지 않고 둔다** — 그러면 Center가
+다음 주기에 다시 싣는다 (거절로 적으면 멀쩡한 메시지가 버려진다).
+
 한 걸음은 `tick()` 하나다 — **스레드를 만들지 않는다** (엔진과 같은 태도다). 부르는 쪽(`main`)이
 돌리고, 시험은 `tick()`을 직접 민다.
 """
@@ -33,6 +37,8 @@ from chaeksas.contracts.bot_ui import (
 )
 from chaeksas.contracts.server_runner import (
     Capacity,
+    MessageAck,
+    MessageDispatch,
     RunnerVersions,
     ServerRunnerHeartbeatRequest,
     ServerRunnerHeartbeatResponse,
@@ -132,6 +138,11 @@ class Agent:
     #: 이미 Center에 올린 결재 — **두 번 올리지 않는다**. 4xx로 거부된 것도 여기 넣는다
     #: (한 번 거부된 것을 주기마다 다시 올리면 Center 로그만 쌓인다).
     _posted: set[str] = field(default_factory=set)
+    #: 아직 올리지 못한 메시지 ack (C12 §메시지). 올릴 때까지 들고 있는다.
+    pending_message_acks: list[MessageAck] = field(default_factory=list)
+    #: 이미 다룬 메시지 (`message_id` → 마지막 ack). **두 번 넣지 않는다** — ack가 올라가기
+    #: 전에 같은 메시지가 또 내려오므로(C12), 들고 있지 않으면 한 메시지로 두 번 깨운다.
+    seen_messages: dict[str, MessageAck] = field(default_factory=dict)
 
     @property
     def registered(self) -> bool:
@@ -562,6 +573,73 @@ class Agent:
             )
             self._posted.discard(one.request_id)
 
+    # ── 메시지 (C12 §메시지 — 외부 시스템이 Center를 거쳐 온다) ──
+
+    def apply_messages(self, found: list[MessageDispatch]) -> None:
+        """내려온 메시지를 기다리는 실행에 넣는다 — **기다리던 실행이 이어 간다**.
+
+        **받을 곳을 이쪽에서 다시 찾는다** (`message_matches`와 같은 규칙) — Center가 고른 뒤
+        하트비트 한 주기가 지났으니 그 실행이 타이머로 지나갔을 수 있다. 그때는 `no_receiver`로
+        돌려보낸다 (Center는 다시 싣지 않는다).
+
+        **ack하지 않고 두는 자리가 있다** — 빈자리가 없으면 넣지 않고 ack도 하지 않는다. 그러면
+        Center가 다음 주기에 다시 싣는다 (C12 — 작업과 같다). 거절로 적으면 멀쩡한 메시지가
+        버려진다.
+
+        **이미 다룬 메시지는 마지막 ack를 되돌려 보낸다** — ack가 올라가기 전에 같은 메시지가
+        또 내려오므로, 들고 있지 않으면 한 메시지로 **두 번 깨운다**.
+        """
+        for one in found:
+            seen = self.seen_messages.get(one.message_id)
+            if seen is not None:
+                self._remember_message_ack(seen)
+                continue
+            worker = self._waiting_message(one)
+            if worker is None:
+                self._remember_message_ack(
+                    MessageAck(message_id=one.message_id, accepted=False, reason="no_receiver")
+                )
+                continue
+            if self.free_slots() <= 0:
+                # **ack를 보내지 않는다** — 자리가 비면 다음 주기에 넣는다 (C12).
+                log.info("메시지 %s를 넣을 자리가 없다 — 다음 주기에", one.message_id)
+                continue
+            try:
+                put = worker.deliver(one.name, correlation=one.correlation, payload=one.payload)
+            except EngineError as e:
+                # 넣다 업무가 실패했다 — **받아들이지 못했다고 말한다** (실행은 실패로 닫힌다).
+                self._remember_message_ack(
+                    MessageAck(message_id=one.message_id, accepted=False, reason=str(e)[:200])
+                )
+                continue
+            if not put:  # pragma: no cover - 바로 위에서 찾았다
+                self._remember_message_ack(
+                    MessageAck(message_id=one.message_id, accepted=False, reason="no_receiver")
+                )
+                continue
+            self._remember_message_ack(
+                MessageAck(message_id=one.message_id, accepted=True, run_id=worker.run_id)
+            )
+            log.info("메시지 %s를 실행 %s에 넣었다 (%s)", one.message_id, worker.run_id, one.name)
+
+    def _remember_message_ack(self, ack: MessageAck) -> None:
+        self.seen_messages[ack.message_id] = ack
+        self.pending_message_acks = [
+            one for one in self.pending_message_acks if one.message_id != ack.message_id
+        ]
+        self.pending_message_acks.append(ack)
+
+    def _waiting_message(self, found: MessageDispatch) -> Worker | None:
+        """그 메시지를 기다리는 일꾼. 여럿이면 **먼저 시작한 것** (C12 — 오래 기다린 쪽부터)."""
+        picked = [
+            one
+            for one in self.workers.values()
+            if one.waits_for_message(found.name, correlation=found.correlation)
+        ]
+        if not picked:
+            return None
+        return sorted(picked, key=lambda one: (one.snapshot().started_at, one.run_id))[0]
+
     def _waiting_for(self, request_id: str) -> Worker | None:
         """그 결재를 기다리는 일꾼. 없으면 `None` (지나갔거나 남의 것이다)."""
         for found in self.workers.values():
@@ -628,6 +706,7 @@ class Agent:
             deployment_results=list(self.pending_results),
             job_acks=list(self.pending_acks),
             approval_acks=list(self.pending_approval_acks),
+            message_acks=list(self.pending_message_acks),
             restored=list(self.restored),
             unsent_events=self.unsent_events(),
         )
@@ -644,6 +723,7 @@ class Agent:
         self.pending_results.clear()  # 올렸다
         self.pending_acks.clear()  # 올렸다
         self.pending_approval_acks.clear()  # 올렸다
+        self.pending_message_acks.clear()  # 올렸다
         self.next_in_s = answer.next_heartbeat_s
         self.last_response = answer
         if answer.paused != self.paused:
@@ -659,6 +739,7 @@ class Agent:
         for job_id in answer.cancel_jobs:
             self.cancel_job(job_id)
         self.apply_approvals(list(answer.approvals))
+        self.apply_messages(list(answer.messages))
 
     # ── 연결 (로그는 바뀔 때만) ──
 

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from chaeksas.contracts import (
@@ -25,7 +27,9 @@ from chaeksas.contracts import (
     ServerRunnerRegisterResponse,
     WaitingRun,
     free_slots,
+    message_matches,
     pick_jobs,
+    pick_message_target,
     restorable,
     validate_runner_heartbeat,
 )
@@ -291,3 +295,66 @@ def test_admin_keys_omitted_means_unchanged() -> None:
     response = ServerRunnerHeartbeatResponse(server_time=AT)
     assert response.admin_keys is None
     assert "admin_keys" not in response.to_json_dict()
+
+
+# ─────────────────────────── 메시지 (C12 §메시지) ───────────────────────────
+
+
+def waiting_message(*, correlation: Any = None, since: str = AT, run_id: str = "run_a") -> WaitingRun:
+    return WaitingRun(
+        run_id=run_id,
+        bpm_process_id="scm.bid-collection",
+        version="1.0.0",
+        waiting_for="message",
+        message_name="bid_quote",
+        correlation=correlation,
+        since=since,
+    )
+
+
+def test_a_name_must_match() -> None:
+    assert not message_matches(waiting_message(), name="other", correlation="BID-1")
+
+
+def test_only_message_waits_are_receivers() -> None:
+    """결재·타이머를 기다리는 실행은 메시지를 받지 않는다 — 짝 칸이 달라 `message_name`이 없다."""
+    found = WaitingRun(
+        run_id="run_b",
+        bpm_process_id="scm.bid-collection",
+        version="1.0.0",
+        waiting_for="approval",
+        request_id="apr_x",
+        since=AT,
+    )
+    assert not message_matches(found, name="bid_quote", correlation="BID-1")
+
+
+def test_both_sides_with_the_same_correlation_match() -> None:
+    assert message_matches(waiting_message(correlation="BID-1"), name="bid_quote", correlation="BID-1")
+    assert not message_matches(
+        waiting_message(correlation="BID-1"), name="bid_quote", correlation="BID-2"
+    )
+
+
+def test_a_missing_correlation_on_either_side_matches() -> None:
+    """**엔진의 규칙 그대로다** — 아래 시험이 엔진과 대조한다."""
+    assert message_matches(waiting_message(correlation=None), name="bid_quote", correlation="BID-1")
+    assert message_matches(waiting_message(correlation="BID-1"), name="bid_quote")
+
+
+def test_the_longest_waiting_run_is_picked() -> None:
+    """한 메시지는 **한 실행에만** 간다 — 여럿이면 `since`가 이른 것이다 (C12)."""
+    old = waiting_message(correlation="BID-1", since="2026-10-13T08:00:00+09:00", run_id="run_old")
+    new = waiting_message(correlation="BID-1", since="2026-10-13T09:30:00+09:00", run_id="run_new")
+    found = pick_message_target([new, old], name="bid_quote", correlation="BID-1")
+    assert found is not None and found.run_id == "run_old"
+
+
+def test_no_receiver_is_none() -> None:
+    assert pick_message_target([], name="bid_quote", correlation="BID-1") is None
+    assert (
+        pick_message_target(
+            [waiting_message(correlation="BID-2")], name="bid_quote", correlation="BID-1"
+        )
+        is None
+    )
