@@ -1,6 +1,6 @@
 # 04. 개발 환경 구성
 
-> 상태: **일부 확인됨.** `uv sync --all-packages` → `uv run pytest`가 **CI(Windows Server + Linux x86_64)와 개발 PC(Linux aarch64)에서 돈다.** `web/`·Playwright·Docker 쪽과 Windows 데스크톱(Studio 창·트레이·UIA)은 그 단계가 오면 갱신한다.
+> 상태: **일부 확인됨.** Windows 11 데스크톱에서 이 문서만 따라 해 봤다 (§8 실행 기록, 23분쯤). `uv sync --all-packages` → `uv run pytest`가 **CI(Windows Server + Linux x86_64)와 개발 PC(Linux aarch64)에서 돈다.** `web/`·Playwright·Docker 쪽과 Windows 데스크톱(Studio 창·트레이·UIA)은 그 단계가 오면 갱신한다.
 > 이 문서는 **새 PC에서 이 문서만 보고** 환경을 만들 수 있어야 한다. 막히는 곳이 있으면 그 자리에서 고친다.
 
 ## 1. 어떤 PC에 무엇을 까는가
@@ -43,16 +43,22 @@ cd C:\dev\Chaeksas
 uv sync --all-packages
 uv run pytest
 
-# 4) Playwright 브라우저 (M1 이후)
-uv run playwright install chromium
+# 4) Playwright 브라우저 — 선택 의존성이라 `--with`로 부른다 (아래 설명)
+uv run --with playwright python -m playwright install chromium
 ```
+
+- **Playwright는 워크스페이스 의존성이 아니다** — CI가 브라우저 바이너리를 내려받지 않게 일부러 뺐다. 그래서 `uv run playwright …`는 `program not found`로 끝난다. 브라우저를 쓰는 시험(웹 UI 태스크·셀렉터 등록·M4 인수 시험의 웹 쪽)은 `uv run --with playwright python -m pytest`로 돌리고, **`python -m`으로** 부른다 (그냥 `pytest`는 프로젝트 venv의 실행 파일이라 Windows에서 Playwright가 붙지 않는다). 그 밖에는 Playwright 시험을 건너뛸 뿐 실패하지 않는다 (§7).
+- `uv run pytest`는 Windows 데스크톱에서 **17분쯤** 걸린다 (아래 §8의 실행 기록). 멈춘 것이 아니다.
 
 ### 웹 화면 (Windows·Linux 같음)
 
 ```powershell
 # Node.js LTS 설치 (Windows: winget, Linux: 배포판 패키지 또는 nvm)
 winget install --id OpenJS.NodeJS.LTS -e
-corepack enable          # pnpm 사용 준비 (버전은 web/package.json의 packageManager가 정한다)
+# pnpm 사용 준비 (버전은 web/package.json의 packageManager가 정한다).
+# Windows는 관리자 권한 없이 — uv가 이미 PATH에 넣어 둔 사용자 폴더에 둔다 (아래 「Windows 주의점」)
+corepack enable pnpm --install-directory "$env:USERPROFILE\.local\bin"
+# Linux·macOS, 또는 관리자 PowerShell이면: corepack enable
 cd web
 pnpm install
 pnpm dev                 # 콘솔 둘을 함께 띄운다 (8501, 8001)
@@ -66,6 +72,7 @@ pnpm --filter @chaeksas/center-console dev   # 하나만 — http://localhost:85
 | 환경변수 | 서비스 앱 콘솔: `CHK_SVC_CONSOLE__APP_URL`(기본 `http://localhost:8000` — **어느 서비스 앱의 콘솔인지는 이 값이 정한다**), `CHK_SVC_CONSOLE__SESSION_SECRET`(**필수**, 16자 이상) |
 | `pnpm build` | 둘 다 제품 빌드 (`output: standalone`) |
 | `pnpm typecheck` | 모든 패키지·앱의 TypeScript 검사 |
+| `pnpm test` | 콘솔 집계 함수의 단위 시험 (vitest — 브라우저를 띄우지 않는다) |
 | `pnpm gen:api-types` | 계약 JSON Schema → TypeScript 타입 |
 | `pnpm check:api-types` | 그 타입이 최신인지 검사만 (CI가 쓴다) |
 
@@ -86,6 +93,8 @@ pnpm --filter @chaeksas/center-console dev   # 하나만 — http://localhost:85
 | 루프백 방화벽 알림 | Worker가 8899를 열 때 방화벽 창 | 127.0.0.1에만 바인드하면 보통 뜨지 않음. 뜨면 "개인 네트워크"만 허용 |
 | 백신 실시간 검사 | `uv sync`, Playwright 설치가 매우 느림 | 개발 폴더를 검사 예외에 추가 (조직 정책 확인) |
 | 실행 정책 | `.ps1` 스크립트 실행 거부 | 스크립트 대신 `uv run <명령>`을 쓴다 |
+| `corepack enable`이 `EPERM` | `EPERM: operation not permitted, open 'C:\Program Files\nodejs\yarnpkg'` | winget·MSI로 깐 Node는 `Program Files`에 있어 **일반 사용자는 거기에 쓸 수 없다**. `corepack enable pnpm --install-directory "$env:USERPROFILE\.local\bin"` — uv 설치가 이미 PATH에 넣은 폴더다. `corepack pnpm install`만으로는 모자란다: 루트 스크립트(`pnpm typecheck` 등)가 안에서 `pnpm -r …`을 다시 부르는데 PATH에 `pnpm`이 없으면 `'pnpm'은(는) … 프로그램이 아닙니다`로 끝난다 |
+| Git Bash에서 `pnpm test`가 127 | 아무 말 없이 `ELIFECYCLE Test failed`, 끝 코드 127 | 웹 명령은 **PowerShell**에서 돌린다 (이 문서의 명령이 모두 PowerShell 기준이다). 같은 명령이 PowerShell에서는 통과한다 |
 | 포트가 이미 쓰임 | `pnpm dev`가 `EADDRINUSE: :::8501`로 죽음 | 다른 프로그램(프로토타입 Streamlit도 8501을 쓴다)이 잡고 있다. `pnpm --filter <앱> exec next dev --port <빈 포트>`로 옮겨 띄운다 |
 
 ## 4. Linux (서버 주 환경)
@@ -215,8 +224,25 @@ STU-13 편집기가 열릴 때 공개 카탈로그(C9)를 읽는데 주소는 **
 
 ## 8. 확인 체크리스트 (M1 완료 시 채움)
 
-- [x] Windows에서 clone → `uv sync` → 테스트 통과 (CI `windows-latest` = Windows Server. **Windows 11 데스크톱은 아직 확인 안 됨**)
+- [x] Windows에서 clone → `uv sync` → 테스트 통과 (CI `windows-latest` = Windows Server, 그리고 **Windows 11 데스크톱**에서 이 문서만 따라 해 봤다 — 아래 실행 기록)
 - [x] Linux에서 clone → `uv sync` → 테스트 통과 (CI `ubuntu-latest` x86_64 + 개발 PC aarch64)
 - [ ] Windows에서 Studio 창이 뜬다
 - [ ] Windows에서 Bot UI가 Worker 프로세스를 띄우고, Worker가 Chromium을 조작한다
 - [ ] Linux 서버의 Center에 Windows Bot UI가 Center API 키로 등록·하트비트한다
+
+### 실행 기록 — Windows 11 데스크톱에서 이 문서만 보고 (2026-10-13)
+
+M6 둘째 기준(「새 개발자가 이 문서만 보고 1시간 안에」)을 재 보려고 **이 문서의 명령을 글자 그대로** 따라 했다. 새 폴더 `C:\dev\Chaeksas`에 clone하고 **uv 캐시를 비운 채**(`UV_CACHE_DIR`를 새 폴더로) 돌렸다. Git·uv·Node는 이미 깔려 있었고, uv가 받은 Python 3.12도 이미 있었다 — 그 셋을 까는 몇 분은 셈에 없다. 일반 사용자 계정(관리자 아님)이다.
+
+| 단계 | 걸린 시간 | 결과 |
+| --- | --- | --- |
+| `git clone` | 5초 | 됐다 |
+| `uv sync --all-packages` (빈 캐시) | 57초 | 됐다 |
+| `uv run pytest` | 17분 | **2965 통과·44 건너뜀** (§7의 Windows 건너뜀 수와 같다) |
+| `uv run playwright install chromium` | — | **안 됐다** — `program not found`. 고쳤다: §3 4)번 |
+| `corepack enable` | — | **안 됐다** — `EPERM`. 고쳤다: §3 「웹 화면」·「Windows 주의점」 |
+| `pnpm install` | 1분 43초 | 됐다 (고친 명령으로) |
+| `pnpm typecheck` · `pnpm test` · `pnpm build` | 37초 · 8초 · 1분 53초 | 됐다 (`pnpm test`는 PowerShell에서 — Git Bash에서는 127) |
+
+**합이 23분쯤**이라 1시간 안이다 — 단 **문서가 틀린 곳 둘**을 그 자리에서 고친 뒤의 셈이다(고치기 전의 문서로는 Playwright와 웹 쪽에서 막힌다). 사람이 아니라 Claude가 문서를 따라 한 것이라, 「처음 보는 사람이 문서만으로」는 아직 사람이 한 번 해 봐야 한다 (로드맵 M6 둘째는 그래서 열어 둔다).
+
