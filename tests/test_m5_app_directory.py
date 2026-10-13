@@ -551,13 +551,15 @@ def test_the_runner_calls_the_external_app_end_to_end(
     client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path, monkeypatch: Any
 ) -> None:
     """한 바퀴 — 패키지 → 명부 검증 → 엔진 → **진짜 외부 앱** → 변수 → C3 기록."""
-    from chaeksas.bot_ui.runner_main import Package, Runner, app_directory, make_env, refuse_unusable
+    from chaeksas.bot_ui.runner_main import Runner, app_directory, refuse_unusable
     from chaeksas.core.engine import State
+    from chaeksas.core.packages import InstalledBot
+    from chaeksas.core.run_env import make_env
     from chaeksas.core.run_log import RunLog, log_path
 
     port, echo = ocr
     found = definition(port)
-    package = Package.read(package_at(tmp_path / "bot", found))
+    package = InstalledBot.read(package_at(tmp_path / "bot", found))
     path = services_file(tmp_path / "run.services.json", client, key, found)
     # 키 값은 실행기가 OS 비밀 저장소·환경변수에서 푼다 (ADR-0013).
     monkeypatch.setenv("CHK_BOT_UI__SVC__OCR_KEY", "ocr-secret-1")
@@ -594,12 +596,13 @@ def test_the_runner_refuses_to_start_when_the_definition_changed(
     client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
     """**실행 전에** 거절한다 — 중간에 알면 이미 한 일을 되돌릴 수 없다 (C1)."""
-    from chaeksas.bot_ui.runner_main import Package, app_directory, refuse_unusable
+    from chaeksas.bot_ui.runner_main import app_directory, refuse_unusable
     from chaeksas.core.engine import EngineError
+    from chaeksas.core.packages import InstalledBot
 
     port, _ = ocr
     approved = definition(port)
-    package = Package.read(package_at(tmp_path / "bot", approved))
+    package = InstalledBot.read(package_at(tmp_path / "bot", approved))
     # Center에는 새 판이 올라와 있다 — 승인받은 그 정의가 아니다.
     newer = definition(port, version="1.1.0")
     path = services_file(tmp_path / "run.services.json", client, key, newer)

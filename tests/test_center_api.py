@@ -116,7 +116,7 @@ def test_target_type_must_match_run_location() -> None:
     private, key = admin()
     env = deployment_envelope(private, target={"type": "server_runner", "id": "srv_1"})
     codes = [v.code for v in validate_deployment(env, package=package(run_location="pc"), keys=[key], now=NOW)]
-    assert codes == ["wrong_target", "server_runner_not_available"]
+    assert codes == ["wrong_target"]
 
     env = deployment_envelope(private)  # bot_ui 대상
     codes = [v.code for v in validate_deployment(env, package=package(run_location="server"), keys=[key], now=NOW)]
@@ -182,14 +182,23 @@ def test_a_wrong_target_wins_over_a_missing_one() -> None:
     assert (picked[0], picked[1].code) == (409, "wrong_target")
 
 
-def test_server_deployment_is_refused_until_m7() -> None:
+def test_a_server_deployment_passes_now_that_m7_is_on() -> None:
+    """**스위치를 켰다** (M7 조각 4-①) — 서버 실행기가 배포를 설치하고 작업을 돌린다.
+
+    `"*"` 대상은 서버 실행기만 쓴다 (ADR-0046) — 그래서 등록 여부를 묻지 않는다.
+    """
     private, key = admin()
     env = deployment_envelope(private, target={"type": "server_runner", "id": "*"})
     pkg = package(run_location="server")
-    codes = [v.code for v in validate_deployment(env, package=pkg, keys=[key], now=NOW)]
+    assert validate_deployment(env, package=pkg, keys=[key], now=NOW) == []
+    # 끄면 그대로 막는다 — 자리는 **하나**이고 배포와 작업이 같은 값을 본다 (ADR-0047).
+    codes = [
+        v.code
+        for v in validate_deployment(
+            env, package=pkg, keys=[key], now=NOW, server_runner_available=False
+        )
+    ]
     assert codes == ["server_runner_not_available"]
-    # M7에서 켜면 통과한다
-    assert validate_deployment(env, package=pkg, keys=[key], now=NOW, server_runner_available=True) == []
 
 
 def test_every_deployment_rule_has_a_status_in_the_table() -> None:
@@ -218,6 +227,18 @@ def test_every_deployment_rule_has_a_status_in_the_table() -> None:
         )
         if v.rule == "C5"
     }
+    # 스위치를 끈 길도 **표에 남아 있다** — 끌 수 있는 값이면 상태도 있어야 한다.
+    found |= {
+        v.code
+        for v in validate_deployment(
+            deployment_envelope(private, target={"type": "server_runner", "id": "srv_1"}),
+            package=package(run_location="server"),
+            keys=[key],
+            now=NOW,
+            server_runner_available=False,
+        )
+        if v.rule == "C5"
+    }
     assert found == set(DEPLOYMENT_REFUSAL_STATUS), "규칙과 표가 어긋났다"
 
 
@@ -235,9 +256,11 @@ def test_the_contract_picks_the_status_not_the_caller() -> None:
     assert picked is not None
     assert (picked[0], picked[1].code) == (409, "not_approved")
 
+    # 「아직 없는 기능」은 **상태가 아니라 기능**이라 422다 (스위치를 끄면 그 길이 돈다).
     env = deployment_envelope(private, target={"type": "server_runner", "id": "srv_1"})
     picked = deployment_refusal(validate_deployment(
-        env, package=package(run_location="server"), keys=[key], now=NOW
+        env, package=package(run_location="server"), keys=[key], now=NOW,
+        server_runner_available=False,
     ))
     assert picked is not None
     assert (picked[0], picked[1].code) == (422, "server_runner_not_available")

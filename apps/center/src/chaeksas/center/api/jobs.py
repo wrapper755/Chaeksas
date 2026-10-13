@@ -161,7 +161,9 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[JobInfo, b
                 request.bpm_process_id,
                 version,
                 target.type,
-                target.id,
+                # **서버 대상의 `"*"`·빈 값은 빈 글로 둔다** — 고를 때 그 실행기에 묶는다
+                # (`_server_dispatch`). PC는 그대로 그 id다.
+                "" if target.type == "server_runner" and (target.id or TARGET_ANY) == TARGET_ANY else target.id,
                 dumps(request.inputs),
                 request.expires_at,
                 request.note,
@@ -181,23 +183,38 @@ def _resolved_version(store: Store, request: JobCreateRequest) -> str:
     """어느 버전을 돌릴지 정한다 — 대상이 있는지, 배포돼 있는지까지 본다 (C5)."""
     target = request.target
     if target.type == "server_runner" and not SERVER_RUNNER_AVAILABLE:
-        # 서버 실행은 M7부터다 (ADR-0016) — **배포와 같은 스위치를 본다** (ADR-0047). 두 자리에
-        # 적어 두면 한쪽만 켜져 「작업은 만들어지는데 배포가 없다」가 된다.
-        raise ApiError(422, "server_runner_not_available", "서버 실행은 M7부터다 (ADR-0016)")
-    if target.type != "bot_ui":
+        # **배포와 같은 스위치를 본다** (ADR-0047). 두 자리에 적어 두면 한쪽만 켜져
+        # 「작업은 만들어지는데 배포가 없다」가 된다.
+        raise ApiError(422, "server_runner_not_available", "서버 실행은 아직 열려 있지 않다 (ADR-0016)")
+    if target.type not in ("bot_ui", "server_runner"):
         raise ApiError(422, "target_mismatch", f"모르는 대상 종류다: {target.type}")
 
-    from chaeksas.center.api import bot_ui  # noqa: PLC0415 — 순환 import를 피한다
+    from chaeksas.center.api import bot_ui, server_runner  # noqa: PLC0415 — 순환 import를 피한다
 
     target_id = str(target.id or "")
-    if not bot_ui.exists(store, target_id):
-        # **배포와 같은 코드다** (`target_not_found`, ADR-0049) — 같은 조건에 두 이름을 두는 것이
-        # ADR-0047이 고친 흠이다. `not_found`는 이 길에서 「그 작업이 없다」로 쓴다.
-        raise ApiError(404, "target_not_found", f"등록되지 않은 PC다: {target_id}")
-
-    deployed = deployments.versions_for(
-        store, target_type="bot_ui", target_id=target_id, bpm_process_id=request.bpm_process_id
-    )
+    if target.type == "server_runner":
+        # **실행기는 Center가 고를 수 있다** (C5 `JobTarget`) — `id`를 비우거나 `"*"`면
+        # 빈자리가 있는 쪽에 간다. 그때는 「어느 서버에 배포됐나」가 아니라 **어디든 배포돼
+        # 있나**를 묻는다 (`"*"` 배포도 센다 — ADR-0046).
+        if target_id in ("", TARGET_ANY):
+            deployed = deployments.server_versions(store, bpm_process_id=request.bpm_process_id)
+        else:
+            if not server_runner.exists(store, target_id):
+                raise ApiError(404, "target_not_found", f"등록되지 않은 서버 실행기다: {target_id}")
+            deployed = deployments.versions_for(
+                store,
+                target_type="server_runner",
+                target_id=target_id,
+                bpm_process_id=request.bpm_process_id,
+            )
+    else:
+        if not bot_ui.exists(store, target_id):
+            # **배포와 같은 코드다** (`target_not_found`, ADR-0049) — 같은 조건에 두 이름을 두는
+            # 것이 ADR-0047이 고친 흠이다. `not_found`는 이 길에서 「그 작업이 없다」로 쓴다.
+            raise ApiError(404, "target_not_found", f"등록되지 않은 PC다: {target_id}")
+        deployed = deployments.versions_for(
+            store, target_type="bot_ui", target_id=target_id, bpm_process_id=request.bpm_process_id
+        )
     problems = validate_job_create(request, deployed_versions=deployed)
     if problems:
         first = problems[0]

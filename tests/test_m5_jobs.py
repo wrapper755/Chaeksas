@@ -258,11 +258,15 @@ def test_inputs_must_be_an_object(world: World) -> None:
     assert caught.value.code == "inputs_not_object"
 
 
-def test_a_server_runner_job_is_refused(world: World) -> None:
-    """서버 실행은 M7부터다 (ADR-0016) — 배포와 같은 사유로 막는다."""
+def test_a_server_runner_job_needs_a_server_deployment(world: World) -> None:
+    """서버 실행은 열렸다 (M7) — 막는 것은 **배포가 없다**는 것뿐이다.
+
+    스위치(`SERVER_RUNNER_AVAILABLE`)를 켜기 전에는 `server_runner_not_available`이었다.
+    이제는 배포 검사가 관문이다 — 이 Bot은 **PC에** 배포돼 있고 서버에는 없다.
+    """
     with pytest.raises(CenterProblem) as caught:
         world.new_job(target={"type": "server_runner", "id": "*"})
-    assert caught.value.code == "server_runner_not_available"
+    assert caught.value.code == "no_deployment"
 
 
 def test_the_same_idempotency_key_gives_back_the_same_job(world: World) -> None:

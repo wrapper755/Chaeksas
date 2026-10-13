@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-13) — **등록·하트비트·배포 설치·준비 상태가 양쪽에서 돌고 시험이 지킨다** (`apps/server_runner` ↔ Center). 남은 것은 메시지 API와 **실행**(작업을 받아 두고 돌리지 않는다 — `SERVER_RUNNER_AVAILABLE`이 꺼져 있다) |
+| 상태 | **합의** (2026-10-13) — 등록·하트비트·운영 API·배포 설치·**작업 실행**이 양쪽에서 돌고 시험이 지킨다 (`apps/server_runner` ↔ Center). **아직 다 되지 않았다** — §메시지(`POST /api/v1/messages`·`messages[]`·`message_acks[]`)가 **양쪽에 코드가 없고**, 기다리는 실행의 저장·재개도 남았다 (조각 4-②) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
@@ -34,13 +34,13 @@
 - 이벤트(C3)와 결재(C6)는 Bot UI와 같은 API를 쓴다.
 
 **지금 도는 것**: 등록·하트비트·운영 API 셋, **배포 설치**(C2 V1~V7 — Bot UI와 `core.deploy`를
-같이 쓴다)와 `deployment_results`·`readiness` 보고, 그리고 하트비트 응답의 `deployments`·
-`jobs`·`cancel_jobs`·`approvals`·`paused`·`key_expires_at`.
+같이 쓴다), `deployment_results`·`readiness` 보고, 그리고 **작업 실행** — 받은 작업을 스레드
+하나로 돌려(ADR-0054 §5) 실행 기록을 하트비트 **뒤에** 보낸다 (C3 §전송). 서버 대상 배포·작업을
+막던 스위치(`SERVER_RUNNER_AVAILABLE`)는 **켰다**.
 
-**작업은 받아 두고 돌리지 않는다** (M7 기준 둘째) — 그래서 `started` ack를 보내지 않고
-`capacity.running`은 0이다. `messages[]`는 늘 비어 있다 (메시지 API가 아직 없다). 서버 대상
-작업·배포를 **만들 수** 없게 막는 스위치(`SERVER_RUNNER_AVAILABLE`)도 그대로 꺼져 있다 —
-켜는 것은 실행이 붙는 조각이다.
+**아직 없는 것 둘**: `messages[]`는 늘 비어 있고(메시지 API가 없다), **기다리는 실행을 이어
+가지 못한다** — 멈추면 `waiting[]`로 보고하고 자리를 놓지만, 결재 답으로 이어 가는 길과
+재시작을 넘기는 저장소(ADR-0054 §1·§3)는 조각 4-②다.
 
 **설치는 Bot UI와 같은 코드다** (`core.deploy`·`core.packages`) — 다른 것은 `host_kind`뿐이고,
 그래서 서버는 `"*"` 대상 배포도 받는다 (ADR-0046). **Admin 공개키가 아직 없으면 설치하지

@@ -221,10 +221,14 @@ def test_pause_is_heard_and_reported_back(
     assert found.paused is False
 
 
-def test_it_takes_orders_but_does_not_lie_about_running_them(
+def test_a_job_for_an_uninstalled_bot_is_refused_not_dropped(
     settings: Settings, key: str, center: TestClient, store: Store
 ) -> None:
-    """작업을 받아도 **`started` ack를 보내지 않는다** — 보내면 Center가 도는 줄 알고 기다린다."""
+    """깔리지 않은 Bot의 작업은 **거절하고 그렇게 말한다** (C4) — 조용히 버리지 않는다.
+
+    버리면 Center가 「넘겼는데 소식이 없다」로 두 주기 뒤 `runner_lost`를 적는다. 거짓
+    `started`를 보내는 것은 더 나쁘다 — Center가 도는 줄 알고 기다린다.
+    """
     found = build(settings, key, center)
     found.tick()
     with store.tx() as cur:
@@ -235,33 +239,25 @@ def test_it_takes_orders_but_does_not_lie_about_running_them(
             ("job_a", "finance.invoice-issue", "1.0.0", "server_runner", "", "{}", "운영자",
              now_iso(), "pending", "admin", "h"),
         )
-    found.tick()
-    assert found.last_response is not None
-    assert [j.job_id for j in found.last_response.jobs] == ["job_a"]
+    found.tick()  # 작업을 받아 보고 거절한다
+    assert [(a.job_id, a.result, a.reason) for a in found.pending_acks] == [
+        ("job_a", "rejected", "no_deployment")
+    ]
+    assert found.workers == {}, "띄우지 않았다"
 
-    found.tick()  # 다음 주기 — ack를 보내지 않았으니 작업은 그대로 넘어온 상태다
-    row = store.row("SELECT state, run_id FROM jobs WHERE job_id = ?", ("job_a",))
+    found.tick()  # ack를 올린다
+    row = store.row("SELECT state, state_reason, run_id FROM jobs WHERE job_id = ?", ("job_a",))
     assert row is not None
-    assert row["state"] == "dispatched" and row["run_id"] is None
+    assert row["state"] == "rejected" and row["state_reason"] == "no_deployment"
+    assert row["run_id"] is None, "돌지 않았으므로 실행도 없다"
 
 
-def test_once_registers_and_heartbeats(settings: Settings, key: str, center: TestClient) -> None:
-    """`Agent.once()` — **한 걸음으로는 모자라다** (첫 걸음은 등록이다)."""
+def test_an_unknown_cancel_is_answered(settings: Settings, key: str, center: TestClient) -> None:
+    """받은 적 없는 작업의 취소에도 **답한다** — 답이 없으면 Center가 매번 다시 싣는다."""
     found = build(settings, key, center)
-    assert found.once() is True
-    assert found.registered and found.last_response is not None
-    listed = center.get("/api/v1/server-runners", headers=READ).json()[0]
-    assert listed["online"] is True
-
-
-def test_once_does_not_hide_a_blocked_key(settings: Settings, center: TestClient) -> None:
-    """막힌 키로는 **거짓 성공을 내지 않는다** — `--once`의 끝 코드가 1이어야 한다."""
-    raw = center.post(
-        "/api/v1/center-keys", json={"name": "PC 키", "type": "bot_ui"}, headers=ADMIN
-    ).json()["key"]
-    found = build(settings, raw, center)
-    assert found.once() is False
-    assert found.blocked_by
+    found.tick()
+    found.cancel_job("job_ghost")
+    assert [(a.job_id, a.result) for a in found.pending_acks] == [("job_ghost", "cancelled")]
 
 
 def test_restored_is_sent_once(settings: Settings, key: str, center: TestClient) -> None:

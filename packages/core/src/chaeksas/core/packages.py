@@ -23,6 +23,8 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from chaeksas.contracts.bpmn_ext import BpmnProcess, read_process
+from chaeksas.contracts.dmn import Decision, DmnReadError, read_decisions
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.signing import Envelope
@@ -51,6 +53,15 @@ MAX_UNCOMPRESSED_MB = 1024
 
 class InstallError(RuntimeError):
     """설치하지 못했다 — 사람이 읽을 한 줄."""
+
+
+class UnusablePackage(RuntimeError):
+    """풀어 놓은 패키지를 쓸 수 없다 (진입 정의가 없다 등) — 사람이 읽을 한 줄.
+
+    실행하는 쪽이 `EngineError`로 옮겨 올린다 — `core.packages`는 엔진을 import하지 않는다.
+    **Studio의 `PackageError`와 다른 것이다** — 그쪽은 「내보낼 수 없다」(만들 때)이고 이쪽은
+    「돌릴 수 없다」(읽을 때)다. 이름을 가른 까닭이 그것이다.
+    """
 
 
 @dataclass(frozen=True)
@@ -93,6 +104,51 @@ class InstalledBot:
         except (OSError, ValueError):
             return "서명 읽지 못함"
         return f"승인됨 ({envelope.key_id[:8]}…)"
+
+    # ── 실행하는 쪽이 읽는 것 (C1 패키지 구성) ──
+
+    @classmethod
+    def read(cls, folder: Path) -> InstalledBot:
+        """풀어 놓은 패키지 폴더 하나를 읽는다 (C1).
+
+        `installed()`가 훑어 주는 것과 **같은 것**이고, 폴더를 이미 아는 쪽(실행기)이 쓴다.
+        해시는 비운다 — 다시 계산하는 것은 설치할 때의 일이다 (C2).
+        """
+        raw = (folder / MANIFEST_NAME).read_text(encoding="utf-8")
+        return cls(folder=folder, manifest=Manifest.model_validate_json(raw))
+
+    def entry(self) -> BpmnProcess:
+        if not self.manifest.entry:
+            raise UnusablePackage("매니페스트에 진입 정의가 없다")
+        return read_process((self.folder / self.manifest.entry).read_text(encoding="utf-8"))
+
+    def processes(self) -> dict[str, BpmnProcess]:
+        """호출(`callActivity`)이 찾을 다른 정의 — `process/`와 `libs/`."""
+        out: dict[str, BpmnProcess] = {}
+        for path in sorted([*self.folder.glob("process/*.bpmn"), *self.folder.glob("libs/*.bpmn")]):
+            try:
+                found = read_process(path.read_text(encoding="utf-8"))
+            except Exception:  # noqa: BLE001 — 깨진 정의 하나가 실행을 막지 않게
+                log.warning("정의를 읽지 못했다: %s", path.name)
+                continue
+            out[found.id] = found
+        return out
+
+    def decisions(self) -> dict[str, Decision]:
+        """규칙 태스크가 찾을 결정 — `process/`와 **`libs/`** (ADR-0048).
+
+        공유 BPM 프로세스가 제 결정표를 들고 오므로 그것도 읽는다 — Studio가 읽는 둘과 **같다**
+        (`studio/workspace.py`). **받은 것을 먼저 읽고 패키지 제 것으로 덮는다**(같은 id면
+        `process/`가 이긴다 — `processes()`와 같은 결).
+        """
+        found: dict[str, Decision] = {}
+        for path in [*sorted(self.folder.glob("libs/*.dmn")), *sorted(self.folder.glob("process/*.dmn"))]:
+            try:
+                found.update(read_decisions(path.read_text(encoding="utf-8")))
+            except DmnReadError:
+                log.warning("DMN을 읽지 못했다: %s", path.name)
+        return found
+
 
     @property
     def source(self) -> str:
@@ -249,6 +305,7 @@ __all__ = [
     "SOURCE_UNKNOWN",
     "InstallError",
     "InstalledBot",
+    "UnusablePackage",
     "bots_dir",
     "check_zip",
     "find",

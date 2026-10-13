@@ -73,11 +73,15 @@ KNOWN_AUTH_KINDS = frozenset(
 #: 실행 위치 → 배포·작업 대상 종류 (C2 "배포 대상 규칙").
 TARGET_TYPE_FOR_RUN_LOCATION = {"pc": "bot_ui", "server": "server_runner"}
 
-#: 서버 실행기 대상을 받아도 되나 (ADR-0016 — 서버 실행은 M7부터).
+#: 서버 실행기 대상을 받아도 되나 (ADR-0016).
 #:
-#: **M7에서 바꿀 자리는 여기 하나다** — 배포(`validate_deployment`)와 작업 만들기가 같은 값을
-#: 본다. 두 자리에 적어 두면 한쪽만 켜져 「작업은 만들어지는데 배포가 없다」가 된다.
-SERVER_RUNNER_AVAILABLE = False
+#: **자리는 여기 하나다** — 배포(`validate_deployment`)와 작업 만들기가 같은 값을 본다.
+#: 두 자리에 적어 두면 한쪽만 켜져 「작업은 만들어지는데 배포가 없다」가 된다.
+#:
+#: **M7 조각 4-①에서 켰다** — 서버 실행기가 등록·하트비트하고(C12), 배포를 설치하고,
+#: 받은 작업을 **정말 돌려** 실행 기록을 Center로 보낸다. 켜기 전에는 서버 대상 배포·작업이
+#: 422 `server_runner_not_available`이었다 (아무도 돌리지 않는 작업을 만들지 않으려고).
+SERVER_RUNNER_AVAILABLE = True
 
 #: `POST /deployments` 거절의 HTTP 상태 — **코드마다 한 자리에서** 정한다 (C5 §오류).
 #:

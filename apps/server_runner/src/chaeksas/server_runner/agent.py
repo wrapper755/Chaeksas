@@ -1,12 +1,15 @@
 """실행기의 심장 — 등록하고 주기마다 하트비트를 보낸다 (C12).
 
-**배포를 설치하고 준비 상태를 보고한다** (M7 조각 3). 설치는 Bot UI와 **같은 코드**
-(`core.deploy`·`core.packages`)이고 다른 것은 `host_kind`뿐이다 — 서버는 `"*"` 대상 배포도
-받는다 (ADR-0046).
+**배포를 설치하고, 작업을 받아 돌리고, 기록을 Center로 보낸다** (M7 조각 3·4-①). 설치는
+Bot UI와 **같은 코드**(`core.deploy`·`core.packages`)이고 다른 것은 `host_kind`뿐이다 —
+서버는 `"*"` 대상 배포도 받는다 (ADR-0046).
 
-**아직 Bot을 돌리지 않는다** — 내려온 작업은 **받아서 기록만 한다**. 그래서 `capacity.running`은
-늘 0이고 `running[]`·`waiting[]`은 비어 있다. **없는 것을 있는 척하지 않는다**: 작업을 받고도
-`started` ack를 보내면 Center는 도는 줄 알고 기다린다.
+실행 하나는 **스레드 하나**다 (`worker.Worker`, ADR-0054 §5). 자리 셈은 **기다리는 실행을
+빼고** 센다 (C12 — PC와 거꾸로다). 기록은 **파일이 원본이고**(C3) 하트비트 뒤에 `core.run_shipping`이
+묶어 보낸다 — 실행 중에 보내지 않는다 (느린 Center가 업무를 붙잡는다).
+
+**사람을 기다리는 실행은 아직 이어 가지 못한다** (조각 4-②) — `waiting[]`로 보고하고 자리를
+놓지만, 답을 받아 이어 가는 길과 재시작을 넘기는 저장소는 다음 조각이다.
 
 한 걸음은 `tick()` 하나다 — **스레드를 만들지 않는다** (엔진과 같은 태도다). 부르는 쪽(`main`)이
 돌리고, 시험은 `tick()`을 직접 민다.
@@ -19,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts.bot_ui import DeploymentResult, Readiness
+from chaeksas.contracts.bot_ui import DeploymentResult, JobAck, JobDispatch, Readiness
 from chaeksas.contracts.server_runner import (
     Capacity,
     RunnerVersions,
@@ -31,8 +34,11 @@ from chaeksas.contracts.server_runner import (
 from chaeksas.contracts.signing import AdminKey
 from chaeksas.core import machine
 from chaeksas.core.deploy import Deployer
-from chaeksas.core.packages import InstalledBot, installed
+from chaeksas.core.engine import WHERE_CENTER, RunEnv
+from chaeksas.core.packages import InstalledBot, find, installed
 from chaeksas.core.preflight import check as run_preflight
+from chaeksas.core.run_env import make_env
+from chaeksas.core.run_shipping import HttpUploader, Queue, ShipError
 from chaeksas.server_runner.center_client import (
     CenterClient,
     CenterProblem,
@@ -43,6 +49,7 @@ from chaeksas.server_runner.center_client import (
 )
 from chaeksas.server_runner.credentials import Credentials
 from chaeksas.server_runner.settings import Settings
+from chaeksas.server_runner.worker import ACK_STARTED, Worker
 
 log = logging.getLogger(__name__)
 
@@ -90,9 +97,20 @@ class Agent:
     last_response: ServerRunnerHeartbeatResponse | None = None
     #: 연결이 끊겼나 (로그를 주기마다 찍지 않으려고 바뀔 때만 본다 — BUI-05와 같은 결).
     online: bool = True
+    #: 작업을 받아도 되나. **`--once`는 받지 않는다** — 그 프로세스는 곧 끝나므로 받으면
+    #: 띄운 스레드를 버리게 되고, 다음 `--once`가 **같은 작업을 또** 띄운다(새 프로세스는
+    #: `seen_jobs`가 비어 있다). 진짜 소켓으로 돌려 보고 발견한 자리다.
+    accepts_jobs: bool = True
 
     #: 사전 점검 결과 캐시 — **설치가 바뀌면 비운다** (안 비우면 키를 넣어도 영원히 막힌다).
     _readiness: dict[tuple[str, str], Readiness] = field(default_factory=dict)
+    #: 지금 들고 있는 실행들 (`run_id` → 일꾼). 끝난 것은 거두고 ack를 쌓는다.
+    workers: dict[str, Worker] = field(default_factory=dict)
+    #: 아직 올리지 못한 작업 ack (C4). **올릴 때까지 들고 있는다** — 끝난 실행의 결과가
+    #: 한 주기만 올라가는 값이라 흘려보내면 Center가 영영 모른다.
+    pending_acks: list[JobAck] = field(default_factory=list)
+    #: 이미 받은 작업 (`job_id` → 마지막 ack). **두 번 돌리지 않는다** (C4 멱등).
+    seen_jobs: dict[str, JobAck] = field(default_factory=dict)
 
     @property
     def registered(self) -> bool:
@@ -128,7 +146,12 @@ class Agent:
         `tick()` 한 번으로는 모자라다: 새로 뜬 실행기의 첫 걸음은 **등록**이라 하트비트를
         한 번도 보내지 않고 끝난다. 그러면 「`--once`가 성공했는데 콘솔에는 오프라인」이
         된다 — 진짜 소켓으로 돌려 보고 발견한 자리다.
+
+        **작업은 받지 않는다** — 이 프로세스는 곧 끝나므로 받으면 띄운 스레드를 버리게 된다.
+        받지 않은 작업은 `dispatched`로 남아 **다음 하트비트에 다시 실린다** (C4 — ack가 올
+        때까지 매번 싣는다). 그래서 잃는 것이 없고, 거짓 `started`도 보내지 않는다.
         """
+        self.accepts_jobs = False
         self.tick()
         if self.registered and self.last_response is None and not self.blocked_by:
             self.tick()
@@ -194,6 +217,8 @@ class Agent:
 
         self._came_online()
         self._apply(answer)
+        # **하트비트 뒤에** 보낸다 (C3 §전송) — 실행 중에 보내면 느린 Center가 업무를 붙잡는다.
+        self.ship_events()
         return True
 
     # ── 배포 설치 (C2 V1~V7, C12) ──
@@ -270,6 +295,153 @@ class Agent:
             out.append(found)
         return out
 
+    # ── 작업 (C12 §Center가 작업을 나누는 규칙, C4 ack) ──
+
+    def take_jobs(self, jobs: list[JobDispatch]) -> None:
+        """내려온 작업을 받는다. **이미 본 것은 마지막 ack를 되돌려 보낸다** (C4 멱등).
+
+        Center는 **빈자리만큼만** 싣지만, 그래도 이쪽에서 다시 센다 — 하트비트를 보낸 뒤
+        끝난 실행이 있을 수 있고, 상한을 넘겨 받으면 그 실행이 자리를 못 잡는다.
+        """
+        if not self.accepts_jobs:
+            if jobs:
+                # **ack를 보내지 않는다** — Center가 다음에 다시 싣는다 (C4). 거절로 적으면
+                # 멀쩡한 작업이 닫히고, `started`로 적으면 Center가 도는 줄 알고 기다린다.
+                log.info("작업 %d건을 받았으나 이 프로세스는 받지 않는다 (--once)", len(jobs))
+            return
+        for job in jobs:
+            seen = self.seen_jobs.get(job.job_id)
+            if seen is not None:
+                self._remember_ack(seen)
+                continue
+            self._remember_ack(self._take_one(job))
+
+    def _take_one(self, job: JobDispatch) -> JobAck:
+        if self.paused:
+            # 일시 중지 중에는 **새 작업을 받지 않는다** (C12 `paused`).
+            return JobAck(job_id=job.job_id, result="rejected", reason="paused")
+        if self.free_slots() <= 0:
+            return JobAck(job_id=job.job_id, result="rejected", reason="queue_full")
+
+        bot = find(self.settings.data_path, job.bpm_process_id, job.version)
+        if bot is None:
+            # **없는 Bot은 조용히 넘기지 않는다** (C4) — 배포가 아직 안 왔을 수 있다.
+            return JobAck(job_id=job.job_id, result="rejected", reason="no_deployment")
+        ready = self._ready_for(bot)
+        if ready is not None and not ready.ready:
+            # **준비되지 않은 Bot은 띄우지 않는다** (ADR-0013 — 키·확장이 빠졌다).
+            return JobAck(job_id=job.job_id, result="rejected", reason="not_ready")
+
+        found = Worker(
+            bot=bot,
+            data_dir=self.settings.data_path,
+            env=self.run_env(bot),
+            job_id=job.job_id,
+            inputs=dict(job.inputs),
+            source="job",
+        )
+        self.workers[found.run_id] = found
+        found.start()
+        log.info("작업 %s를 시작했다 (%s, 실행 %s)", job.job_id, bot.id, found.run_id)
+        return JobAck(job_id=job.job_id, result=ACK_STARTED, run_id=found.run_id)
+
+    def _remember_ack(self, ack: JobAck) -> None:
+        self.seen_jobs[ack.job_id] = ack
+        self.pending_acks = [one for one in self.pending_acks if one.job_id != ack.job_id]
+        self.pending_acks.append(ack)
+
+    def _ready_for(self, bot: Any) -> Readiness | None:
+        return next(
+            (r for r in self.readiness() if r.bpm_process_id == bot.id and r.version == bot.version),
+            None,
+        )
+
+    def run_env(self, bot: Any) -> RunEnv:
+        """그 실행이 바깥 세계에 닿는 자리 — **Bot UI 실행기와 같은 함수**가 짓는다.
+
+        확장·모델·바깥 앱은 아직 꽂지 않는다 (조각 4-② 뒤) — **주지 않으면 기본값이 남아
+        부르지 않고 실패한다**(조용히 넘어가지 않는다). 그래서 그런 태스크가 든 Bot은
+        사전 점검이나 실행이 분명히 막는다.
+        """
+        return make_env(
+            bot,
+            output_dir=self.settings.data_path / "outputs" / bot.id,
+            readable=(),
+            llm_model="",
+            # 서버 실행기의 결재 창구는 **Center만**이다 (C12).
+            approval_where=WHERE_CENTER,
+        )
+
+    def collect(self) -> None:
+        """끝난 실행을 거두고 ack를 쌓는다. **거둔 뒤에 자리가 빈다.**"""
+        for run_id, found in list(self.workers.items()):
+            shot = found.snapshot()
+            if not shot.done:
+                continue
+            result = found.ack_result()
+            log.info("실행 %s 끝남 (%s)", run_id, shot.finished)
+            if found.job_id and result is not None:
+                # **실행의 성패는 작업 상태가 아니다** (C5) — Center는 `run_status`에만 적는다.
+                self._remember_ack(
+                    JobAck(job_id=found.job_id, result=result, run_id=run_id, reason=shot.failure or None)
+                )
+            del self.workers[run_id]
+
+    def free_slots(self) -> int:
+        """빈자리 — **기다리는 실행은 세지 않는다** (C12, ADR-0054 §5)."""
+        return max(0, self.settings.max_concurrency - self._running_count())
+
+    def _running_count(self) -> int:
+        return sum(1 for found in self.workers.values() if found.snapshot().holds_a_slot)
+
+    def cancel_job(self, job_id: str) -> None:
+        """취소 지시 (C4 `cancel_jobs`). **시작된 실행도 중지를 부탁한다** — 유예를 기다려 준다.
+
+        그래야 `cancelled`가 기록에 남는다. 이미 끝났으면 `cancel_refused`다 (현장이 옳다).
+        """
+        for run_id, found in self.workers.items():
+            if found.job_id != job_id:
+                continue
+            if found.snapshot().done:
+                self._remember_ack(
+                    JobAck(job_id=job_id, result="cancel_refused", reason="already_started")
+                )
+                return
+            found.stop(reason="Center에서 취소했습니다")
+            log.info("작업 %s 취소를 실행 %s에 넘겼다", job_id, run_id)
+            return
+        # 모르는 작업이다 — 받은 적이 없으면 **취소된 것으로** 답한다 (두 번 돌지 않게).
+        self._remember_ack(JobAck(job_id=job_id, result="cancelled"))
+
+    # ── 실행 기록 보내기 (C3 §전송) ──
+
+    def ship_events(self) -> None:
+        """하트비트 **뒤에** 묶어 보낸다 — 실행 중에 보내지 않는다 (느린 Center가 붙잡는다).
+
+        멱등이라 실패하면 같은 배치를 그대로 다시 보낸다. **401·403은 멈춘다** (키 문제다).
+        """
+        queue = Queue(data_dir=self.settings.data_path)
+        try:
+            # **Center와 말하는 클라이언트를 함께 쓴다** — 주소·키가 한 자리에서 오고, 시험은
+            # ASGI를 꽂은 그 클라이언트로 진짜 Center에 닿는다.
+            queue.ship(
+                HttpUploader(
+                    base_url=self.settings.center_url,
+                    api_key=self.client.api_key,
+                    client=self.client.client,
+                )
+            )
+        except ShipError as e:
+            if e.fatal:
+                self.blocked_by = f"실행 기록을 보낼 수 없습니다: {e}"
+                log.error("%s", self.blocked_by)
+                return
+            log.info("실행 기록을 보내지 못했다 — 다음 주기에 다시 보낸다 (%s)", e)
+
+    def unsent_events(self) -> int:
+        """C12 `unsent_events` — **파일을 읽어 센다** (원본이 파일이다)."""
+        return Queue(data_dir=self.settings.data_path).unsent_count()
+
     def _heartbeat_request(self) -> ServerRunnerHeartbeatRequest:
         """지금 상태 (C12 `HeartbeatRequest`).
 
@@ -287,25 +459,39 @@ class Agent:
             # **설치된 Bot별 준비 상태** (C12) — 캐시하고 설치·키가 바뀌면 비운다.
             readiness=self.readiness(),
             deployment_results=list(self.pending_results),
+            job_acks=list(self.pending_acks),
             restored=list(self.restored),
+            unsent_events=self.unsent_events(),
         )
 
     def _apply(self, answer: ServerRunnerHeartbeatResponse) -> None:
-        """응답을 반영한다 — **배포는 설치하고**, 작업은 받아 두고 적는다 (돌리지 않는다)."""
+        """응답을 반영한다 — 배포는 설치하고 작업은 돌린다.
+
+        **순서가 중요하다.** 「일시 중지」를 **작업을 받기 전에** 반영한다 — 거꾸로 두면 다시
+        시작한 바로 그 주기에 들고 있던 옛 값으로 작업을 거절하고, 그 거절이 `seen_jobs`에
+        남아 **그 작업은 영원히 돌지 않는다** (C4 멱등 — 이미 본 작업은 마지막 ack를 되돌려
+        보낸다). 시험이 그것을 잡았다.
+        """
         self.restored.clear()  # 올렸다
         self.pending_results.clear()  # 올렸다
+        self.pending_acks.clear()  # 올렸다
         self.next_in_s = answer.next_heartbeat_s
+        self.last_response = answer
+        if answer.paused != self.paused:
+            log.info("Center가 %s라고 한다", "일시 중지" if answer.paused else "다시 시작")
+        self.paused = answer.paused
         if answer.admin_keys is not None:
             # **생략 = 그대로**다 (C4·C12) — `None`이면 들고 있던 것을 지우지 않는다.
             self.admin_keys = list(answer.admin_keys)
         self.pending_results.extend(self.install_deployments(answer.deployments))
-        if answer.paused != self.paused:
-            log.info("Center가 %s라고 한다", "일시 중지" if answer.paused else "다시 시작")
-        self.paused = answer.paused
-        self.last_response = answer
-        if answer.jobs:
-            # **받고도 돌리지 않는다**는 것을 분명히 남긴다 (조용히 버리면 「왜 안 도나」가 된다).
-            log.info("작업 %d건을 받았으나 아직 돌리지 않는다 — M7 다음 조각이다", len(answer.jobs))
+        # **끝난 것을 먼저 거둔다** — 그래야 자리가 비고 이번에 온 작업이 들어간다.
+        self.collect()
+        self.take_jobs(answer.jobs)
+        for job_id in answer.cancel_jobs:
+            self.cancel_job(job_id)
+        if answer.approvals:
+            # 결재 답을 이어 가는 길은 조각 4-②다 — **조용히 버리지 않고 말한다**.
+            log.info("결재 답 %d건을 받았으나 아직 이어 가지 못한다 (M7 조각 4-②)", len(answer.approvals))
 
     # ── 연결 (로그는 바뀔 때만) ──
 

@@ -393,19 +393,18 @@ def test_a_pc_package_cannot_go_to_a_server_runner(center: Center) -> None:
     assert (caught.value.status, caught.value.code) == (409, "wrong_target")
 
 
-def test_a_server_deployment_is_refused_until_m7(center: Center) -> None:
-    """**서버 실행기 배포는 M7까지 받지 않는다** (ADR-0016, C5) — 422다.
+def test_a_server_deployment_is_taken_now_that_m7_is_open(center: Center) -> None:
+    """**서버 실행기 배포를 이제 받는다** (M7 — 스위치를 켰다).
 
-    문서는 두 곳에 적었는데 Center는 작업 만들기(`/jobs`)에서만 막고 있었다. 받아 두면 내려
-    줄 서버 실행기가 없는 배포가 표에 남고, `GET /deployments`를 보는 운영자는 돌 것이라고
-    읽는다. 계약 하나를 부르게 하면서 닫혔다 (ADR-0047).
+    켜기 전에는 422 `server_runner_not_available`이었다 (내려 줄 실행기가 없는 배포가 표에
+    남으면 `GET /deployments`를 보는 운영자가 돌 것이라고 읽는다). 이제 실행기가 등록하고
+    설치하고 **돌린다** — 관문은 서명·승인·대상뿐이다 (ADR-0047의 그 함수 하나).
     """
     key = admin_key(center)
     info = approved(center, key, package_id="erp.night-close", run_location="server")
-    with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info, target_type="server_runner", target="srv_1"))
-    assert (caught.value.status, caught.value.code) == (422, "server_runner_not_available")
-    assert center.deployments(active=False) == [], "행조차 남지 않는다"
+    assert center.deploy(deployment(key, info, target_type="server_runner", target="srv_1"))
+    listed = center.deployments(active=False)
+    assert [one["target"]["type"] for one in listed] == ["server_runner"]
 
 
 def test_an_unregistered_pc_cannot_be_deployed_to(center: Center) -> None:
@@ -471,8 +470,6 @@ def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> Non
                         deployment_id="dep_00000004")),
         (pc, deployment(key, pc, content_hash="sha256:" + "99" * 32,
                         deployment_id="dep_00000005")),
-        (server, deployment(key, server, target_type="server_runner", target="srv_1",
-                            deployment_id="dep_00000006")),
         (pc, deployment(key, pc, target="bui_00000000", deployment_id="dep_00000007")),
     )
     store = center.client.app.state.store
@@ -502,8 +499,20 @@ def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> Non
         )
         seen.add(caught.value.code)
     # **규칙마다** 봤다는 것까지 — 하나로 뭉쳐도 통과하면 「맞물린다」를 증명하지 못한다.
-    assert seen == set(DEPLOYMENT_REFUSAL_STATUS)
+    #
+    # `server_runner_not_available`만 빠진다 — **스위치를 켰으므로**(M7) HTTP 길로는 그 코드를
+    # 낼 수 없다. 표에는 남아 있다 (끌 수 있는 값이면 상태도 있어야 한다 — `test_center_api.py`가
+    # 끈 길을 본다).
+    assert seen == set(DEPLOYMENT_REFUSAL_STATUS) - {"server_runner_not_available"}
+
     assert center.deployments(active=False) == [], "거절한 것은 하나도 남지 않는다"
+
+    # 거꾸로도 본다 — **서버 패키지를 서버 실행기에 배포하는 것은 이제 통과한다** (M7).
+    assert center.deploy(
+        deployment(key, server, target_type="server_runner", target="srv_1",
+                   deployment_id="dep_00000006")
+    )
+    assert [one["deployment_id"] for one in center.deployments(active=False)] == ["dep_00000006"]
 
 
 def test_the_listing_answers_in_the_contract_shape(center: Center) -> None:
