@@ -67,4 +67,4 @@
 | [0056](0056-bounded-seen-maps.md) | 멱등 기억(`seen_jobs`·메시지)은 ack가 Center에 닿은 뒤 두 주기에 잊는다 — 닿지 않은 ack는 버리지 않고(업무가 두 번 일어난다), 작업과 메시지가 한 자리를 쓴다 | 수락 |
 | [0057](0057-shared-seen-map.md) | Bot UI도 같은 멱등 기억을 쓴다 — 자리는 `core.seen` 하나이고, 파일에는 **ack만** 남긴다 (「닿지 않았다」는 `pending_acks`가 이미 말해 준다) | 수락 |
 | [0058](0058-absorbed-messages-travel-with-the-snapshot.md) | 빨아들인 메시지(`message_id`)는 스냅샷과 한 트랜잭션에 담는다 — 재시작을 건너 두 번 들어가지 않고, 따로 담아 갈라져 잃지도 않는다 (ADR-0056이 남긴 자리) | 수락 |
-| [0059](0059-sending-mail-and-webhooks.md) | 보내기는 플랫폼이 한다 — `core.senders`의 SMTP·HTTP 구현에 실행하는 쪽이 설정을 준다. 웹훅 관문은 어댑터와 같은 함수이고 **허용 호스트는 운영자가 적는다**(기본은 닫힘) | **제안** |
+| [0059](0059-sending-mail-and-webhooks.md) | 보내기는 플랫폼이 한다 — `core.senders`의 SMTP·HTTP 구현에 실행하는 쪽이 설정을 준다. 웹훅 관문은 어댑터와 같은 함수이고 **허용 호스트는 운영자가 적는다**(기본은 닫힘) | 수락 |

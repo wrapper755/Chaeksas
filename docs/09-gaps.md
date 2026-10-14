@@ -59,7 +59,7 @@ C1은 외부 확장이면 `definition_hash`로 정의를 고정한다고 적어 
 
 알려진 값에 `llm`·`vlm`·`smtp`가 있는데 `studio/packaging.py`가 그 칸을 채우지 않아 **늘 비어 온다**. 그래서 사전 점검이 「이 Bot은 메일을 보내는데 SMTP 설정이 없다」를 **미리** 말할 수 없다 (§3-10과 같은 꼴이다).
 
-- **§3-10과 달리 먼저 정할 것이 없다** — 그림만 보면 안다 (`chk:email`이 있으면 `smtp`다). 보내기를 꽂는 조각이 함께 닫는다 ([ADR-0059](decisions/0059-sending-mail-and-webhooks.md) §4 — **제안** 상태다).
+- **§3-10과 달리 먼저 정할 것이 없다** — 그림만 보면 안다 (`chk:email`이 있으면 `smtp`다). 보내기를 꽂는 조각이 함께 닫는다 ([ADR-0059](decisions/0059-sending-mail-and-webhooks.md) §4 — 수락됐고 코드가 다음이다).
 
 ## 4. 화면 쪽 기능 공백
 
