@@ -482,15 +482,21 @@ class Agent:
     def run_env(self, bot: Any) -> RunEnv:
         """그 실행이 바깥 세계에 닿는 자리 — **Bot UI 실행기와 같은 함수**가 짓는다.
 
-        확장·모델·바깥 앱은 아직 꽂지 않는다 (조각 4-② 뒤) — **주지 않으면 기본값이 남아
-        부르지 않고 실패한다**(조용히 넘어가지 않는다). 그래서 그런 태스크가 든 Bot은
-        사전 점검이나 실행이 분명히 막는다.
+        모델·읽기 폴더는 **설정이 정한다** (Bot UI는 BUI-03이 정하는 자리다). 주지 않으면
+        `NoLlm`·`PathDenied`로 **분명히 실패한다** — 조용히 넘어가지 않는다 (ADR-0027·0032).
+
+        **보내기는 아직 꽂지 않는다** — 제품용 `Sender` 구현이 플랫폼에 없다(`core.senders`에
+        `NoSender`와 시험용뿐이다). PC도 같으므로 서버만의 공백이 아니고, 무엇으로 보낼지는
+        따로 정할 일이다. 그래서 `chk:email`이 든 Bot은 `NoSender`로 실패한다.
         """
         return make_env(
             bot,
             output_dir=self.settings.data_path / "outputs" / bot.id,
-            readable=(),
-            llm_model="",
+            readable=tuple(self.settings.readable_dirs),
+            writable=tuple(self.settings.writable_dirs),
+            llm_url=self.settings.llm_base_url,
+            llm_key=self.credentials.llm_api_key() or "",
+            llm_model=self.settings.llm_model,
             # 서버 실행기의 결재 창구는 **Center만**이다 (C12).
             approval_where=WHERE_CENTER,
         )

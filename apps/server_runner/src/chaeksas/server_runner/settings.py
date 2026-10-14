@@ -23,6 +23,9 @@ DEFAULT_CENTER_URL = "http://localhost:8800"
 DEFAULT_HEARTBEAT_S = 10
 #: 닿지 못했을 때 다시 걸기까지 (ADR-0007 — 부르는 쪽이 다시 온다). 주기보다 길게 둔다.
 DEFAULT_RETRY_S = 30
+#: 기본 모델 (ADR-0027). **이 앱의 기본값은 이 앱이 가진다** — Bot UI의 것을 import하지 않는다
+#: (앱끼리 import하지 않는다). 둘이 어긋나면 `docs/04-setup.md` §6의 표가 원본이다.
+DEFAULT_LLM_MODEL = "qwen2.5:7b"
 
 ENV_PREFIX = "CHK_SERVER_RUNNER__"
 
@@ -55,6 +58,14 @@ class Settings:
     heartbeat_s: int = DEFAULT_HEARTBEAT_S
     retry_s: int = DEFAULT_RETRY_S
     data_path: Path = field(default_factory=data_dir)
+    #: 모델 주소·이름 (ADR-0027). **비우면 AI 태스크가 `NoLlm`으로 실패한다** — 조용히
+    #: 넘어가지 않는다. 키는 여기 없다 (`credentials.llm_api_key()`).
+    llm_base_url: str = ""
+    llm_model: str = DEFAULT_LLM_MODEL
+    #: 읽기·쓰기 허용 폴더 (ADR-0032). **기본은 비어 있고** 운영자가 환경변수로 열어야 한다 —
+    #: 출력 폴더 밖은 적어 주지 않으면 `PathDenied`다. 쓸 수 있는 곳은 읽기도 된다.
+    readable_dirs: tuple[Path, ...] = ()
+    writable_dirs: tuple[Path, ...] = ()
 
     @property
     def runs_dir(self) -> Path:
@@ -78,12 +89,27 @@ class Settings:
             heartbeat_s=max(1, int(heartbeat)) if heartbeat else DEFAULT_HEARTBEAT_S,
             retry_s=max(1, int(retry)) if retry else DEFAULT_RETRY_S,
             data_path=data_dir(),
+            llm_base_url=_env("LLM__BASE_URL") or "",
+            llm_model=_env("LLM__MODEL") or DEFAULT_LLM_MODEL,
+            readable_dirs=_dirs(_env("READABLE_DIRS")),
+            writable_dirs=_dirs(_env("WRITABLE_DIRS")),
         )
+
+
+def _dirs(raw: str | None) -> tuple[Path, ...]:
+    """`os.pathsep`으로 가른 폴더 목록 (Linux `:`, Windows `;`).
+
+    **빈 조각은 버린다** — 끝에 구분자가 하나 붙었다고 현재 폴더(`Path("")`)가 열리면 안 된다.
+    """
+    if not raw:
+        return ()
+    return tuple(Path(one) for one in raw.split(os.pathsep) if one.strip())
 
 
 __all__ = [
     "DEFAULT_CENTER_URL",
     "DEFAULT_HEARTBEAT_S",
+    "DEFAULT_LLM_MODEL",
     "DEFAULT_MAX_CONCURRENCY",
     "DEFAULT_RETRY_S",
     "ENV_PREFIX",

@@ -22,6 +22,10 @@ SERVICE = "chaeksas-server-runner"
 CENTER_API_KEY = "center_api_key"
 ENV_CENTER_API_KEY = "CHK_SERVER_RUNNER__CENTER_API_KEY"
 
+#: 모델 키 (ADR-0027). **값은 설정·실행 기록에 넣지 않는다** (CLAUDE.md §5).
+LLM_API_KEY = "llm-api-key"
+ENV_LLM_API_KEY = "CHK_SERVER_RUNNER__LLM__API_KEY"
+
 #: 서비스 앱 키는 **참조 이름**으로 둔다 (ADR-0013 §3). Bot UI·Studio와 같은 규칙이다.
 SERVICE_APP_PREFIX = "svc:"
 ENV_SERVICE_APP_PREFIX = "CHK_SERVER_RUNNER__SVC__"
@@ -100,6 +104,10 @@ class Credentials:
     def center_api_key(self) -> str | None:
         return self.get(CENTER_API_KEY, env=ENV_CENTER_API_KEY)
 
+    def llm_api_key(self) -> str | None:
+        """모델 키. 환경변수가 먼저다 (개발·CI) — 서버는 대개 그쪽이다."""
+        return self.get(LLM_API_KEY, env=ENV_LLM_API_KEY)
+
     def service_app_key(self, ref: str) -> str | None:
         """서비스 앱 키 하나 (참조 이름 → 값). 키 **값은 실행기만 안다** (ADR-0013)."""
         return self.get(f"{SERVICE_APP_PREFIX}{ref}", env=service_key_env(ref))
@@ -108,7 +116,9 @@ class Credentials:
 __all__ = [
     "CENTER_API_KEY",
     "ENV_CENTER_API_KEY",
+    "ENV_LLM_API_KEY",
     "ENV_SERVICE_APP_PREFIX",
+    "LLM_API_KEY",
     "SERVICE",
     "SERVICE_APP_PREFIX",
     "Credentials",
