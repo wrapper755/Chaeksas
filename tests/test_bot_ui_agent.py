@@ -27,6 +27,7 @@ from chaeksas.bot_ui.store import Store
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.contracts.bot_ui import JobDispatch
+from chaeksas.core.seen import Seen
 
 ADMIN = "t-center-admin"
 
@@ -197,6 +198,38 @@ def test_unreachable_center_keeps_running(tmp_path: Path) -> None:
     assert agent.beat() is None
     assert isinstance(agent.last_problem, Unreachable)
     assert agent.tray_status() == TRAY_DISCONNECTED
+
+
+def test_delivery_is_only_known_after_the_heartbeat_answered(tmp_path: Path) -> None:
+    """**닿지 못한 하트비트에 실렸던 ack를 닿은 것으로 치지 않는다** (ADR-0056·0057).
+
+    그렇게 치면 다시 내려온 작업이 「처음 본 것」이 되어 **대기열에 두 번** 들어간다 (C4 멱등).
+    기본값(`grace`=2)에서는 자리를 틀려도 드러나지 않으므로 — `pending_acks`가 매 주기 다시
+    실려 나이를 0으로 되돌린다 — **그물을 걷고** 본다. 서버 실행기 쪽과 같은 시험이다.
+    """
+    agent = Agent(
+        settings=Settings(center_url="http://127.0.0.1:9"),  # 아무도 듣지 않는 포트
+        store=Store(path=tmp_path / "state.json"),
+        credentials=FakeCredentials("chk_ctr_x"),
+    )
+    agent.store.state.bot_ui_id = "bui_12345678"
+    agent.store.state.seen_jobs = Seen(grace=0)  # 그물을 걷는다 — 자리가 드러난다
+    job = JobDispatch(
+        job_id="job_1",
+        bpm_process_id="erp.order",
+        requested_by="홍길동",
+        requested_at="2026-10-03T00:00:00+00:00",
+    )
+    agent.take_job(job)
+
+    assert agent.beat() is None, "하트비트가 닿지 못했다"
+    kept = agent.store.state.seen_jobs.get("job_1")
+    assert kept is not None, "올리지 못한 ack를 잊었다 — 같은 작업이 두 번 돈다"
+
+    queued = len(agent.queue)
+    again = agent.take_job(job)  # Center가 다시 실어 보냈다 (ack를 못 받았으니)
+    assert again.result == kept.result, "마지막 ack를 그대로 되돌려 보낸다"
+    assert len(agent.queue) == queued, "두 번 들어가면 안 된다"
 
 
 def test_disabled_bot_ui_is_shown_and_refuses_new_jobs(center: TestClient, tmp_path: Path) -> None:

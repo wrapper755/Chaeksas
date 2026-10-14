@@ -19,6 +19,7 @@ Studio·Bot UI(실행기)·서버 실행기가 함께 쓴다. **화면(Qt)과 �
 | 실행 기록과 전송 — 파일이 원본이다 (C3) | `run_log`, `run_shipping` |
 | 올라가는 결재 요청(ADR-0038), 내려가는 제어 파일(ADR-0031) | `requests`, `control` |
 | 자식 프로세스 — Worker·실행기를 띄우고 끈다 (ADR-0023) | `processes` |
+| 멱등 기억 — 이미 본 지시의 마지막 ack, **언제 잊는가** (C4·C12, ADR-0056·0057) | `seen` |
 
 **엔진을 쓰는 쪽은 `chaeksas.core.engine` 하나만 본다** — `run_state`·`nodes`를 다시
 내보낸다. 나머지도 모듈 경로로 바로 가져온다 (`from chaeksas.core import control`).

@@ -12,6 +12,10 @@ Bot UI가 꺼졌다 켜져도 대기열과 아직 Center가 확인하지 않은 
 
 **업무 값은 두지 않는다** — 작업의 `inputs`는 대기열 항목에 필요해서 들고 있지만, 이 파일은
 PC 안에만 있고 Center로 되돌려 보내지 않는다 (계약 원칙 6은 *기록·보고*에 값을 넣지 않는 것이다).
+
+**본 `job_id`를 언제 잊는지는 `core.seen`이 쥔다** (ADR-0056·0057) — 서버 실행기와 **같은
+규칙·같은 코드**다. 파일에 남기는 것은 **ack뿐이고 나이는 남기지 않는다**: 「아직 닿지
+않았다」는 `pending_acks`가 이미 말해 주므로 되살릴 때 그것으로 가른다 (ADR-0057).
 """
 
 from __future__ import annotations
@@ -24,11 +28,9 @@ from typing import Any
 
 from chaeksas.contracts.bot_ui import ApprovalAck, DeploymentResult, JobAck, QueueItem
 from chaeksas.contracts.signing import AdminKey
+from chaeksas.core.seen import Seen
 
 log = logging.getLogger(__name__)
-
-#: 본 `job_id`를 몇 개까지 기억할지. 넘으면 오래된 것부터 버린다 (파일이 끝없이 자라지 않게).
-SEEN_JOBS_MAX = 2000
 
 
 @dataclass
@@ -49,7 +51,8 @@ class State:
     #: 마지막으로 받은 Admin 공개키 (C2 검증용). 하트비트에 없으면 **그대로 쓴다**.
     admin_keys: list[AdminKey] = field(default_factory=list)
     #: 이미 본 `job_id` → 마지막으로 보낸 ack (같은 작업이 다시 오면 이것을 되돌려 보낸다).
-    seen_jobs: dict[str, JobAck] = field(default_factory=dict)
+    #: **무한히 자라지 않고, 닿지 않은 ack는 잃지 않는다** (`core.seen`, ADR-0056·0057).
+    seen_jobs: Seen[JobAck] = field(default_factory=Seen)
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -65,11 +68,12 @@ class State:
 
     @classmethod
     def from_json_dict(cls, raw: dict[str, Any]) -> State:
+        pending_acks = [JobAck.model_validate(ack) for ack in raw.get("pending_acks", [])]
         return cls(
             bot_ui_id=raw.get("bot_ui_id") or None,
             queue=[QueueItem.model_validate(item) for item in raw.get("queue", [])],
             inputs=dict(raw.get("inputs", {})),
-            pending_acks=[JobAck.model_validate(ack) for ack in raw.get("pending_acks", [])],
+            pending_acks=pending_acks,
             pending_deployments=[
                 DeploymentResult.model_validate(one) for one in raw.get("pending_deployments", [])
             ],
@@ -77,9 +81,15 @@ class State:
                 ApprovalAck.model_validate(one) for one in raw.get("pending_approval_acks", [])
             ],
             admin_keys=[AdminKey.model_validate(one) for one in raw.get("admin_keys", [])],
-            seen_jobs={
-                job_id: JobAck.model_validate(ack) for job_id, ack in (raw.get("seen_jobs") or {}).items()
-            },
+            # **나이는 파일에 없다** — 「아직 닿지 않았다」는 `pending_acks`가 말해 준다
+            # (ADR-0057). 되살린 나이는 0부터라 닿은 것도 두 주기를 더 들고 있는다.
+            seen_jobs=Seen.restore(
+                {
+                    job_id: JobAck.model_validate(ack)
+                    for job_id, ack in (raw.get("seen_jobs") or {}).items()
+                },
+                undelivered={ack.job_id for ack in pending_acks},
+            ),
         )
 
 
@@ -146,21 +156,20 @@ class Store:
         """ack를 기억하고 보낼 목록에 넣는다. 같은 작업의 옛 ack는 **마지막 것으로 덮는다.**"""
         self.state.pending_acks = [found for found in self.state.pending_acks if found.job_id != ack.job_id]
         self.state.pending_acks.append(ack)
-        self.state.seen_jobs[ack.job_id] = ack
-        self._trim_seen()
+        self.state.seen_jobs.remember(ack.job_id, ack)
 
     def ack_sent(self, acks: list[JobAck]) -> None:
-        """Center가 받았다 — 보낼 목록에서 뺀다 (기억은 남긴다)."""
+        """하트비트 하나가 **성공했다** — 보낸 ack는 Center에 닿았다 (기억은 아직 남긴다).
+
+        **한 번 부르는 것이 한 주기다** (ADR-0056) — 멱등 기억은 이 부름으로 나이를 센다.
+        그래서 **하트비트가 성공했을 때만** 부른다: 보낼 때 부르면 끊긴 하트비트에 실렸던
+        ack를 닿은 것으로 쳐서, 다시 내려온 작업이 「처음 본 것」이 되어 **두 번 실행된다**.
+
+        **비우기 전에** 알린다 — 무엇이 실려 올라갔는지는 이 자리에서만 안다.
+        """
         sent = {ack.job_id for ack in acks}
+        self.state.seen_jobs.delivered(sent)
         self.state.pending_acks = [found for found in self.state.pending_acks if found.job_id not in sent]
 
-    def _trim_seen(self) -> None:
-        if len(self.state.seen_jobs) <= SEEN_JOBS_MAX:
-            return
-        # dict는 넣은 순서를 지킨다 — 오래된 것부터 버린다.
-        extra = len(self.state.seen_jobs) - SEEN_JOBS_MAX
-        for job_id in list(self.state.seen_jobs)[:extra]:
-            del self.state.seen_jobs[job_id]
 
-
-__all__ = ["SEEN_JOBS_MAX", "State", "Store"]
+__all__ = ["State", "Store"]

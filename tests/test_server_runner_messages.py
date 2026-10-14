@@ -40,9 +40,9 @@ from chaeksas.center.storage import now_iso
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.server_runner import MessageDispatch
 from chaeksas.contracts.signing import sign
+from chaeksas.core import seen as seen_mod
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.server_runner import agent as agent_mod
-from chaeksas.server_runner import seen as seen_mod
 from chaeksas.server_runner.center_client import Unreachable
 from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Store
@@ -405,7 +405,7 @@ def test_the_message_memory_does_not_grow_forever(
     """ack가 Center에 닿고 몇 주기가 지나면 **잊는다** (ADR-0056).
 
     메시지는 바깥 시스템이 밀어 넣는 것이라 수가 크다 — 잊지 않으면 몇 주 떠 있는 실행기가
-    끝없이 커진다. 규칙은 `seen.py`가 쥐고 셈은 `tests/test_server_runner_seen.py`가 잰다.
+    끝없이 커진다. 규칙은 `core.seen`이 쥐고 셈은 `tests/test_server_runner_seen.py`가 잰다.
     """
     ready(center, center_store, runner)
     make_job(center)

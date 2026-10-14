@@ -56,6 +56,7 @@ from chaeksas.core.preflight import check as run_preflight
 from chaeksas.core.run_env import make_env
 from chaeksas.core.run_log import log_path
 from chaeksas.core.run_shipping import HttpUploader, Queue, ShipError
+from chaeksas.core.seen import Seen
 from chaeksas.server_runner.center_client import (
     CenterClient,
     CenterProblem,
@@ -65,7 +66,6 @@ from chaeksas.server_runner.center_client import (
     Unreachable,
 )
 from chaeksas.server_runner.credentials import Credentials
-from chaeksas.server_runner.seen import Seen
 from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Saved, Store
 from chaeksas.server_runner.worker import ACK_STARTED, EMPTY_COUNTS, Worker, reopen_log
@@ -131,8 +131,8 @@ class Agent:
     #: 한 주기만 올라가는 값이라 흘려보내면 Center가 영영 모른다.
     pending_acks: list[JobAck] = field(default_factory=list)
     #: 이미 받은 작업 (`job_id` → 마지막 ack). **두 번 돌리지 않는다** (C4 멱등).
-    #: **무한히 자라지 않는다** — ack가 Center에 닿고 몇 주기가 지나면 잊는다 (`seen.py`,
-    #: ADR-0056). 메시지도 같은 것을 쓴다 (C12 §메시지 — 규칙이 갈라지면 한쪽만 고친다).
+    #: **무한히 자라지 않는다** — ack가 Center에 닿고 몇 주기가 지나면 잊는다 (`core.seen`,
+    #: ADR-0056). 메시지도, **Bot UI도** 같은 것을 쓴다 (ADR-0057 — 규칙이 갈라지면 한쪽만 고친다).
     seen_jobs: Seen[JobAck] = field(default_factory=Seen)
     #: 기다리는 실행을 담아 두는 곳 (ADR-0054 §3). 없으면 담지 않는다 (시험·한 번 돌리기).
     store: Store | None = None
@@ -145,7 +145,7 @@ class Agent:
     pending_message_acks: list[MessageAck] = field(default_factory=list)
     #: 이미 다룬 메시지 (`message_id` → 마지막 ack). **두 번 넣지 않는다** — ack가 올라가기
     #: 전에 같은 메시지가 또 내려오므로(C12), 들고 있지 않으면 한 메시지로 두 번 깨운다.
-    #: **무한히 자라지 않는다** — `seen_jobs`와 **같은 규칙**이다 (`seen.py`, ADR-0056).
+    #: **무한히 자라지 않는다** — `seen_jobs`와 **같은 규칙**이다 (`core.seen`, ADR-0056).
     #: 바깥 시스템이 밀어 넣는 것이라 수가 커서 여기가 더 급하다 (BX-11·BX-13).
     seen_messages: Seen[MessageAck] = field(default_factory=Seen)
 

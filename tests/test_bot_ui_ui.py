@@ -368,7 +368,8 @@ def test_shutdown_reports_center_jobs_as_rejected(app: Any, tmp_path: Path) -> N
     found.shutdown()
 
     # Center 작업은 거절로 보고되고 대기열에서 빠진다. 수동 항목은 그냥 사라진다.
-    assert agent.store.state.seen_jobs["job_center"].reason == "bot_ui_shutdown"
+    stopped = agent.store.state.seen_jobs.get("job_center")
+    assert stopped is not None and stopped.reason == "bot_ui_shutdown"
     assert [item.job_id for item in agent.queue] == [None]
     # 닿지 못했으니 ack는 디스크에 남아 다음에 간다 (C4).
     assert [a.job_id for a in agent.store.state.pending_acks] == ["job_center"]
