@@ -88,6 +88,19 @@ def test_the_manifest_is_collected_from_the_drawing(tmp_path: Path) -> None:
     assert "pdf_text_tool" in found.tools and "excel_parser_tool" in found.tools
 
 
+def test_a_mail_task_asks_for_smtp(tmp_path: Path) -> None:
+    """`chk:email`이 있으면 `requires.settings`에 `smtp`가 간다 (C1, ADR-0059 §4).
+
+    적어 두지 않으면 **사전 점검이 「SMTP가 없다」를 미리 말할 수 없다** — 현장은 메일을
+    보내려는 순간에야 안다. 09-gaps §3-11이 이 자리였다.
+    """
+    assert collect_requires(imported(tmp_path, "fx07_email")).settings == ["smtp"]
+    # BX-01도 메일로 끝난다 — 그래서 함께 묻는다.
+    assert collect_requires(imported(tmp_path, RECONCILIATION)).settings == ["smtp"]
+    # 보내지 않는 그림은 **묻지 않는다** (갖추지 않은 설정으로 막히면 안 된다).
+    assert collect_requires(imported(tmp_path, "fx03b_amount_branch")).settings == []
+
+
 def test_a_service_app_call_becomes_a_requirement_with_a_key_reference(tmp_path: Path) -> None:
     """**키 값이 아니라 참조 이름**이 간다 (C1 R5 — 패키지에 비밀을 넣지 않는다)."""
     found = collect_requires(imported(tmp_path, CREDIT))

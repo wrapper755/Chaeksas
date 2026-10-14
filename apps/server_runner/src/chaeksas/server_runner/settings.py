@@ -16,6 +16,13 @@ from pathlib import Path
 import platformdirs
 
 from chaeksas.contracts.server_runner import DEFAULT_MAX_CONCURRENCY
+from chaeksas.core.senders import (
+    DEFAULT_ATTACHMENT_MB,
+    DEFAULT_SMTP_TIMEOUT_S,
+    SECURITY_STARTTLS,
+    SmtpConfig,
+    WebhookConfig,
+)
 
 #: 기본값의 원본은 `docs/04-setup.md` §6의 표다.
 DEFAULT_CENTER_URL = "http://localhost:8800"
@@ -66,6 +73,37 @@ class Settings:
     #: 출력 폴더 밖은 적어 주지 않으면 `PathDenied`다. 쓸 수 있는 곳은 읽기도 된다.
     readable_dirs: tuple[Path, ...] = ()
     writable_dirs: tuple[Path, ...] = ()
+    #: 보내기 (ADR-0059). **비우면 `chk:email`이 보내지 않고 실패한다** — 조용히 넘어가지 않는다.
+    #: 비밀번호는 여기 없다 (`credentials.smtp_password()`).
+    smtp_host: str = ""
+    smtp_port: int = 0
+    smtp_security: str = SECURITY_STARTTLS
+    smtp_username: str = ""
+    smtp_sender: str = ""
+    smtp_timeout_s: float = DEFAULT_SMTP_TIMEOUT_S
+    smtp_attachment_mb: float = DEFAULT_ATTACHMENT_MB
+    #: 웹훅을 보낼 수 있는 호스트. **기본은 비어 있고 비면 아무 데도 보내지 않는다** (ADR-0059 §2).
+    #: **사설망을 여는 스위치는 두지 않는다** — 한 번 켜면 모든 Bot의 모든 웹훅에 적용된다.
+    webhook_allowed_hosts: tuple[str, ...] = ()
+
+    def smtp(self) -> SmtpConfig:
+        """보내기 설정 한 벌 — **Bot UI와 같은 모양**이다 (`core.senders`)."""
+        return SmtpConfig(
+            host=self.smtp_host,
+            port=self.smtp_port,
+            security=self.smtp_security,
+            username=self.smtp_username,
+            sender=self.smtp_sender,
+            timeout_s=self.smtp_timeout_s,
+            max_attachment_mb=self.smtp_attachment_mb,
+        )
+
+    def webhook(self) -> WebhookConfig:
+        return WebhookConfig(allowed_hosts=self.webhook_allowed_hosts)
+
+    def ready_settings(self) -> tuple[str, ...]:
+        """갖춰진 설정 이름들 (C1 `requires.settings`) — 사전 점검이 이것으로 막는다."""
+        return ("smtp",) if self.smtp().configured else ()
 
     @property
     def runs_dir(self) -> Path:
@@ -93,6 +131,16 @@ class Settings:
             llm_model=_env("LLM__MODEL") or DEFAULT_LLM_MODEL,
             readable_dirs=_dirs(_env("READABLE_DIRS")),
             writable_dirs=_dirs(_env("WRITABLE_DIRS")),
+            smtp_host=_env("SMTP__HOST") or "",
+            smtp_port=int(_env("SMTP__PORT") or 0),
+            smtp_security=_env("SMTP__SECURITY") or SECURITY_STARTTLS,
+            smtp_username=_env("SMTP__USERNAME") or "",
+            smtp_sender=_env("SMTP__FROM") or "",
+            smtp_timeout_s=float(_env("SMTP__TIMEOUT_S") or DEFAULT_SMTP_TIMEOUT_S),
+            smtp_attachment_mb=float(_env("SMTP__ATTACHMENT_MB") or DEFAULT_ATTACHMENT_MB),
+            # 여럿은 **쉼표**로 가른다 — 호스트 이름에는 `os.pathsep`(`:`)이 들어갈 수 있다
+            # (`host:port`를 적는 실수를 섞지 않으려고 폴더 목록과 규칙을 다르게 둔다).
+            webhook_allowed_hosts=_hosts(_env("WEBHOOK__ALLOWED_HOSTS")),
         )
 
 
@@ -104,6 +152,13 @@ def _dirs(raw: str | None) -> tuple[Path, ...]:
     if not raw:
         return ()
     return tuple(Path(one) for one in raw.split(os.pathsep) if one.strip())
+
+
+def _hosts(raw: str | None) -> tuple[str, ...]:
+    """쉼표로 가른 호스트 목록. 빈 조각·공백은 버린다."""
+    if not raw:
+        return ()
+    return tuple(one.strip() for one in raw.split(",") if one.strip())
 
 
 __all__ = [

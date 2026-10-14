@@ -212,7 +212,7 @@ def resolve(
             base_url,
             allowed_hosts=adapter.allowed_hosts,
             allow_private_network=adapter.allow_private_network,
-            lookup=resolver or _getaddrinfo,
+            lookup=resolver or getaddrinfo,
         )
     except HostRefused as e:
         raise AdapterError(str(e), code=e.code, retryable=e.retryable) from e
@@ -246,7 +246,10 @@ def resolve(
     )
 
 
-def _getaddrinfo(host: str) -> list[str]:
+def getaddrinfo(host: str) -> list[str]:
+    """호스트 → IP 목록. **보내기(`core.senders`)도 이것을 쓴다** — 규칙은 `resolve_host`
+    하나이고, 조회만 주입할 수 있게 밖에 둔다 (시험이 끼운다).
+    """
     found = socket.getaddrinfo(host, None, type=socket.SOCK_STREAM)
     out: list[str] = []
     for one in found:
@@ -498,6 +501,7 @@ __all__ = [
     "fill_header",
     "fill_path",
     "fill_query",
+    "getaddrinfo",
     "read_path",
     "resolve",
 ]

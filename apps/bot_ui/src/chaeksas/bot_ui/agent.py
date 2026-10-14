@@ -302,6 +302,9 @@ class Agent:
                 host=self.host,
                 context=self.extension_context if self.host is not None else None,
                 fix_hint=KEY_FIX_HINT,
+                # **갖춘 설정은 이쪽만 안다** (C1 `requires.settings`, ADR-0059 §4) — 메일을
+                # 보내는 Bot인데 SMTP가 없으면 **띄우기 전에** 막는다.
+                settings=self.settings.ready_settings(),
             )
             for why in found.skipped:
                 log.warning("Bot %s의 사전 점검 하나를 돌리지 못했다: %s", bot.id, why)
@@ -911,6 +914,10 @@ class Agent:
                 llm_url=self.settings.llm_base_url,
                 llm_model=self.settings.llm_model,
                 llm_key=self.credentials.llm_api_key() or "",
+                # 보내기도 BUI-03이 정한다 (ADR-0059) — 비어 있으면 `chk:email`이 **보내지
+                # 않고 실패한다**. 웹훅은 적어 둔 호스트만이고 비면 아무 데도 보내지 않는다.
+                smtp=self.settings.smtp(),
+                webhook_hosts=tuple(self.settings.webhook_allowed_hosts),
             )
         return self._launcher
 

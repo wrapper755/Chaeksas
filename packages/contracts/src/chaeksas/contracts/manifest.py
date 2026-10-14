@@ -17,7 +17,11 @@ PackageKind = Literal["bpm_process", "process_lib"]
 RunLocation = Literal["server", "pc"]
 
 KNOWN_TRIGGER_KINDS = frozenset({"none", "message", "timer", "conditional", "signal"})
-KNOWN_SETTINGS = frozenset({"llm", "vlm", "smtp"})
+#: 실행하는 쪽이 갖춰야 할 설정 이름 (C1 `requires.settings`).
+SETTING_LLM = "llm"
+SETTING_VLM = "vlm"
+SETTING_SMTP = "smtp"
+KNOWN_SETTINGS = frozenset({SETTING_LLM, SETTING_VLM, SETTING_SMTP})
 KNOWN_BUILT_BY = frozenset({"studio", "cli"})
 
 #: AI 태스크의 대상 환경 — C14 `chk:aiTask.domain`과 C1 `requires.domains`가 **같은 목록**이다.

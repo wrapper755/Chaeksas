@@ -43,6 +43,8 @@ TASK_TYPES_UNSUPPORTED = "task_types_unsupported"
 EXTENSION_TURNED_OFF = "extension_turned_off"
 EXTENSIONS_UNUSABLE = "extensions_unusable"
 MISSING_ENVIRONMENT = "missing_agent_environment"
+#: 실행하는 쪽이 갖춰야 할 설정이 없다 (C1 `requires.settings` — 지금은 `smtp` 하나가 쓰인다).
+SETTINGS_MISSING = "settings_missing"
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,27 @@ def _check_keys(
         message=f"서비스 앱 키 {len(missing)}개가 이 PC에 없습니다",
         items=tuple(missing),
         fix_hint=fix_hint,
+    )
+
+
+def _check_settings(manifest: Manifest, have: Sequence[str]) -> Finding | None:
+    """그 Bot이 요구하는 설정이 이 PC·서버에 갖춰져 있나 (C1 `requires.settings`).
+
+    **갖춘 목록은 부르는 쪽이 준다** — 무엇이 갖춰진 것인지는 실행하는 쪽만 안다(SMTP 주소가
+    있나 같은 것). 주지 않으면(`None`) **이 점검을 돌리지 않는다** — 모르는 것으로 막지 않는다.
+
+    `smtp`가 없는데 그림이 메일을 보내면 실행 중에 `SEND_FAILED`가 된다. **시작하기 전에**
+    말하는 것이 이 점검의 값이다 (ADR-0059 §4).
+    """
+    missing = [one for one in manifest.requires.settings if one not in set(have)]
+    if not missing:
+        return None
+    return Finding(
+        id=SETTINGS_MISSING,
+        severity=SEVERITY_BLOCK,
+        message=f"이 Bot이 쓰는 설정 {len(missing)}개가 갖춰지지 않았습니다",
+        items=tuple(missing),
+        fix_hint="설정에서 그 자리를 채우세요 (메일은 BUI-03 「보내기」)",
     )
 
 
@@ -258,6 +281,7 @@ def check(
     host: ExtensionHost | None = None,
     context: Callable[[str], ExtensionContext] | None = None,
     fix_hint: str | None = None,
+    settings: Sequence[str] | None = None,
 ) -> Preflight:
     """그 Bot을 이 PC에서 지금 돌릴 수 있나.
 
@@ -268,6 +292,8 @@ def check(
       건너뛴다 (플랫폼 점검은 그대로 돈다).
     - `fix_hint`: 키가 없을 때 「어떻게 고치나」 한 줄. 화면 이름이 들어가므로 **부르는 쪽이 적는다**
       (Bot UI는 BUI-10, Studio는 STU-10).
+    - `settings`: 이 PC·서버가 **갖춘** 설정 이름들 (C1 `requires.settings`의 값들 — 지금은
+      `smtp`). 주지 않으면 그 점검을 건너뛴다 — **모르는 것으로 막지 않는다** (ADR-0059 §4).
     """
     findings: list[Finding] = []
     skipped: list[str] = []
@@ -275,6 +301,11 @@ def check(
     keys = _check_keys(manifest, key_value, fix_hint=fix_hint)
     if keys is not None:
         findings.append(keys)
+
+    if settings is not None:
+        found = _check_settings(manifest, settings)
+        if found is not None:
+            findings.append(found)
 
     if host is not None:
         for platform_check in (_check_task_types, _check_extensions, _check_environments):

@@ -58,6 +58,7 @@ from chaeksas.core.run_env import make_env
 from chaeksas.core.run_log import log_path
 from chaeksas.core.run_shipping import HttpUploader, Queue, ShipError
 from chaeksas.core.seen import Seen
+from chaeksas.core.senders import make_sender
 from chaeksas.server_runner.center_client import (
     CenterClient,
     CenterProblem,
@@ -333,6 +334,9 @@ class Agent:
                     bot.manifest,
                     key_value=self.credentials.service_app_key,
                     fix_hint=KEY_FIX_HINT,
+                    # **갖춘 설정은 이쪽만 안다** (C1 `requires.settings`, ADR-0059 §4) —
+                    # 메일을 보내는 Bot인데 SMTP가 없으면 시작하기 전에 막는다.
+                    settings=self.settings.ready_settings(),
                 )
                 found = Readiness(
                     bpm_process_id=bot.id,
@@ -529,9 +533,9 @@ class Agent:
         모델·읽기 폴더는 **설정이 정한다** (Bot UI는 BUI-03이 정하는 자리다). 주지 않으면
         `NoLlm`·`PathDenied`로 **분명히 실패한다** — 조용히 넘어가지 않는다 (ADR-0027·0032).
 
-        **보내기는 아직 꽂지 않는다** — 제품용 `Sender` 구현이 플랫폼에 없다(`core.senders`에
-        `NoSender`와 시험용뿐이다). PC도 같으므로 서버만의 공백이 아니고, 무엇으로 보낼지는
-        따로 정할 일이다. 그래서 `chk:email`이 든 Bot은 `NoSender`로 실패한다.
+        **보내기도 설정이 정한다** (ADR-0059) — SMTP 주소·보내는 주소가 없으면 `chk:email`이
+        **보내지 않고 실패한다**(`SEND_FAILED`). 웹훅은 **허용 호스트에 적힌 곳만**이고 비면
+        아무 데도 보내지 않는다. 비밀번호는 `credentials.smtp_password()`가 준다.
         """
         return make_env(
             bot,
@@ -542,6 +546,12 @@ class Agent:
             llm_key=self.credentials.llm_api_key() or "",
             llm_model=self.settings.llm_model,
             directory=directory if directory is not None else self.app_directory(bot),
+            # 보내기 — **Bot UI와 같은 함수**가 짓는다 (ADR-0059).
+            sender=make_sender(
+                smtp=self.settings.smtp(),
+                webhook=self.settings.webhook(),
+                password=self.credentials.smtp_password() or "",
+            ),
             # 누가 부르는가 (C11 `caller.type`) — 앱의 기록에 「서버 실행기」로 남는다.
             caller_type=HOST_KIND,
             # 서버 실행기의 결재 창구는 **Center만**이다 (C12).

@@ -466,3 +466,60 @@ def test_a_runner_that_does_not_know_the_wait_says_nothing() -> None:
         job_id=None,
     )
     assert "--queued-s" not in args
+
+
+# ─────────────────── 보내기 (M7 조각 10, ADR-0059) ───────────────────
+
+
+def test_the_sending_settings_ride_the_command_line_but_the_password_does_not() -> None:
+    """SMTP 설정은 명령줄로, **비밀번호는 가지 않는다** (프로세스 목록에 뜬다).
+
+    자식이 이 PC의 비밀 저장소에서 제 손으로 읽는다 — 서비스 앱 키와 같은 길이다 (ADR-0013).
+    """
+    from chaeksas.core.senders import SmtpConfig
+
+    common: dict[str, Any] = {
+        "package": Path("/tmp/pkg"),
+        "run_id": "run_20261014_101500_abcdef",
+        "data_dir": Path("/tmp/data"),
+        "inputs_path": None,
+        "mode": "deterministic",
+        "source": "manual",
+        "job_id": None,
+    }
+    assert "--smtp-host" not in runner_args(**common), "설정이 없으면 아무것도 넘기지 않는다"
+
+    args = runner_args(
+        **common,
+        smtp=SmtpConfig(
+            host="smtp.example.com", username="bot", sender="bot@example.com", security="starttls"
+        ),
+        webhook_hosts=("hooks.example.com", "a.example.com"),
+    )
+    joined = " ".join(args)
+    assert "--smtp-host smtp.example.com" in joined
+    assert "--smtp-security starttls" in joined and "--smtp-user bot" in joined
+    assert "--smtp-from bot@example.com" in joined
+    assert "--smtp-port" not in joined, "비운 포트는 넘기지 않는다 (자식이 기본을 쓴다)"
+    assert args.count("--webhook-host") == 2
+    assert "비밀" not in joined and "password" not in joined.lower()
+
+
+def test_the_child_builds_the_same_sender(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """자식이 받은 값으로 **같은 함수**(`make_sender`)로 어댑터를 짓는다.
+
+    비밀번호는 명령줄이 아니라 **환경변수·비밀 저장소**에서 온다.
+    """
+    from chaeksas.bot_ui.credentials import ENV_SMTP_PASSWORD
+    from chaeksas.core.senders import SmtpConfig, WebhookConfig, make_sender
+
+    monkeypatch.setenv(ENV_SMTP_PASSWORD, "비밀")
+    from chaeksas.bot_ui.credentials import Credentials
+
+    made = make_sender(
+        smtp=SmtpConfig(host="smtp.example.com", sender="bot@example.com"),
+        webhook=WebhookConfig(allowed_hosts=("hooks.example.com",)),
+        password=Credentials().smtp_password() or "",
+    )
+    assert made.mail.password == "비밀"
+    assert made.webhook.config.allow_private_network is False, "사설망은 열리지 않는다"

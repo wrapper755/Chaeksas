@@ -352,3 +352,30 @@ def test_an_absent_ai_environment_still_says_install_it() -> None:
     found = preflight.check(manifest(domains=["desktop"]), key_value=never, host=ExtensionHost())
     assert found.blocked == (preflight.MISSING_ENVIRONMENT,)
     assert "설치하세요" in (found.findings[0].fix_hint or "")
+
+
+# ─────────────────── 갖춰야 할 설정 (C1 `requires.settings`, ADR-0059) ───────────────────
+
+
+def test_a_bot_that_sends_mail_needs_smtp() -> None:
+    """**메일을 보내는 Bot은 SMTP가 있어야 띄운다** — 실행 중에 알면 늦다 (ADR-0059 §4)."""
+    m = Manifest.model_validate({**BASE, "requires": {"settings": ["smtp"]}})
+
+    blocked = preflight.check(m, key_value=never, settings=())
+    assert blocked.blocks and blocked.blocked == (preflight.SETTINGS_MISSING,)
+    assert blocked.findings[0].items == ("smtp",)
+
+    assert not preflight.check(m, key_value=never, settings=("smtp",)).blocks
+
+
+def test_not_knowing_what_is_configured_does_not_block() -> None:
+    """**모르는 것으로 막지 않는다** — 갖춘 목록을 주지 않으면 그 점검을 돌리지 않는다.
+
+    Studio처럼 「그 자리가 없는」 쪽이 있기 때문이다 (시험 실행은 진짜로 보내지 않는다).
+    """
+    m = Manifest.model_validate({**BASE, "requires": {"settings": ["smtp"]}})
+    assert not preflight.check(m, key_value=never).blocks
+
+
+def test_a_bot_that_sends_nothing_does_not_ask_for_smtp() -> None:
+    assert not preflight.check(manifest(), key_value=never, settings=()).blocks

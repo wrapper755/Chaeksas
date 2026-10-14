@@ -26,6 +26,7 @@ import {
   keyRefsOf,
   percent,
   queueReason,
+  readinessLabel,
   runnerStatus,
   serverDeployments,
   summarize,
@@ -361,5 +362,33 @@ describe("elapsed", () => {
   it("없는 값·읽을 수 없는 값은 「—」다", () => {
     expect(elapsed(null, now)).toBe("—");
     expect(elapsed("어제", now)).toBe("—");
+  });
+});
+
+describe("readinessLabel", () => {
+  const row = (over: Record<string, unknown>) =>
+    ({ bpm_process_id: BOT, version: "1.0.0", ready: false, ...over }) as never;
+
+  it("준비됐으면 그렇게만 말한다", () => {
+    expect(readinessLabel(row({ ready: true }))?.label).toBe("준비됨");
+  });
+
+  it("키가 빠진 것이 가장 앞이다 (고치는 길이 BUI-10이다)", () => {
+    expect(readinessLabel(row({ missing_key_refs: ["fin-erp"] }))?.label).toBe("서비스 앱 키 없음");
+  });
+
+  it("**설정 없음을 확장 문제로 뭉치지 않는다** — 고치는 길이 다르다 (ADR-0059)", () => {
+    const found = readinessLabel(row({ blocked: ["settings_missing"] }));
+    expect(found?.label).toBe("설정 없음");
+    expect(found?.detail).toContain("settings_missing");
+  });
+
+  it("확장 꺼짐과 확장 없음을 가른다 (켜면 될 일에 「설치하세요」라고 하지 않는다)", () => {
+    expect(readinessLabel(row({ blocked: ["extension_turned_off"] }))?.label).toBe("확장 꺼짐");
+    expect(readinessLabel(row({ blocked: ["task_types_unsupported"] }))?.label).toBe("확장 없음");
+  });
+
+  it("모르는 코드는 「사전 점검 실행 불가」다", () => {
+    expect(readinessLabel(row({ blocked: ["무엇인가"] }))?.label).toBe("사전 점검 실행 불가");
   });
 });

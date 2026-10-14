@@ -26,6 +26,10 @@ ENV_CENTER_API_KEY = "CHK_SERVER_RUNNER__CENTER_API_KEY"
 LLM_API_KEY = "llm-api-key"
 ENV_LLM_API_KEY = "CHK_SERVER_RUNNER__LLM__API_KEY"
 
+#: SMTP 비밀번호 (ADR-0059). **설정·실행 기록에 넣지 않는다** (CLAUDE.md §5).
+SMTP_PASSWORD = "smtp-password"
+ENV_SMTP_PASSWORD = "CHK_SERVER_RUNNER__SMTP__PASSWORD"
+
 #: 서비스 앱 키는 **참조 이름**으로 둔다 (ADR-0013 §3). Bot UI·Studio와 같은 규칙이다.
 SERVICE_APP_PREFIX = "svc:"
 ENV_SERVICE_APP_PREFIX = "CHK_SERVER_RUNNER__SVC__"
@@ -108,6 +112,10 @@ class Credentials:
         """모델 키. 환경변수가 먼저다 (개발·CI) — 서버는 대개 그쪽이다."""
         return self.get(LLM_API_KEY, env=ENV_LLM_API_KEY)
 
+    def smtp_password(self) -> str | None:
+        """메일 서버 비밀번호. 환경변수가 먼저다 (서버의 주 경로)."""
+        return self.get(SMTP_PASSWORD, env=ENV_SMTP_PASSWORD)
+
     def service_app_key(self, ref: str) -> str | None:
         """서비스 앱 키 하나 (참조 이름 → 값). 키 **값은 실행기만 안다** (ADR-0013)."""
         return self.get(f"{SERVICE_APP_PREFIX}{ref}", env=service_key_env(ref))
@@ -118,9 +126,11 @@ __all__ = [
     "ENV_CENTER_API_KEY",
     "ENV_LLM_API_KEY",
     "ENV_SERVICE_APP_PREFIX",
+    "ENV_SMTP_PASSWORD",
     "LLM_API_KEY",
     "SERVICE",
     "SERVICE_APP_PREFIX",
+    "SMTP_PASSWORD",
     "Credentials",
     "SecretsUnavailable",
     "service_key_env",

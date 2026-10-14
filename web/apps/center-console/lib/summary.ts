@@ -256,6 +256,10 @@ export function readinessLabel(
   if (missing.length > 0) return { label: "서비스 앱 키 없음", detail: missing };
   const blocked = found.blocked ?? [];
   if (blocked.includes("extension_turned_off")) return { label: "확장 꺼짐", detail: blocked };
+  // **설정이 없는 것은 확장 문제가 아니다** (C1 `requires.settings`, ADR-0059) — 고치는 길이
+  // 「설치하세요」가 아니라 「BUI-03에서 채우세요」다. 적어 두지 않으면 아래 「실행 불가」로
+  // 떨어져 운영자가 로그를 뒤진다 (`EXTENSION_MISSING_CODES`에서 겪은 그 일이다).
+  if (blocked.includes("settings_missing")) return { label: "설정 없음", detail: blocked };
   if (blocked.some((code) => EXTENSION_MISSING_CODES.has(code)))
     return { label: "확장 없음", detail: blocked };
   return { label: "사전 점검 실행 불가", detail: blocked };

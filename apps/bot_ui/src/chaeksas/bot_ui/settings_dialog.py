@@ -17,13 +17,16 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QFrame,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -48,6 +51,7 @@ from chaeksas.bot_ui.settings import (
 )
 from chaeksas.contracts import SCOPE_BOT_UI, ConfigurationItem
 from chaeksas.contracts.center_keys import KEY_PREFIX, looks_like_key
+from chaeksas.core.senders import KNOWN_SECURITY, SECURITY_NONE, SECURITY_STARTTLS
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +88,7 @@ class SettingsDialog(QDialog):
         sections.addWidget(self._run_box())
         sections.addWidget(self._model_box())
         sections.addWidget(self._files_box())
+        sections.addWidget(self._sending_box())
         sections.addWidget(self._runtime_box())
         for box in self._extension_boxes():
             sections.addWidget(box)
@@ -287,6 +292,113 @@ class SettingsDialog(QDialog):
     def writable_dirs(self) -> tuple[Path, ...]:
         return tuple(Path(self.writable.item(i).text()) for i in range(self.writable.count()))
 
+    def _sending_box(self) -> QGroupBox:
+        """BUI-03 「보내기」 ([ADR-0059](../../../../../docs/decisions/0059-sending-mail-and-webhooks.md)).
+
+        **비어 있으면 `chk:email`이 보내지 않고 실패한다** — 조용히 넘어가지 않는다. 비밀번호는
+        설정 파일이 아니라 OS 비밀 저장소로 간다 (CLAUDE.md §5).
+        """
+        box = QGroupBox("보내기")
+        form = QFormLayout(box)
+        settings = self._agent.settings
+
+        self.smtp_host = QLineEdit(settings.smtp_host)
+        self.smtp_host.setPlaceholderText("smtp.example.com (비우면 메일 태스크가 실패합니다)")
+        form.addRow("SMTP 주소", self.smtp_host)
+
+        self.smtp_security = QComboBox()
+        for one in KNOWN_SECURITY:
+            self.smtp_security.addItem(one)
+        self.smtp_security.setCurrentText(
+            settings.smtp_security if settings.smtp_security in KNOWN_SECURITY else SECURITY_STARTTLS
+        )
+        self.smtp_security.currentTextChanged.connect(self._say_security)
+        form.addRow("보안", self.smtp_security)
+
+        self.smtp_port = QSpinBox()
+        self.smtp_port.setRange(0, 65535)
+        self.smtp_port.setSpecialValueText("기본")
+        self.smtp_port.setValue(settings.smtp_port)
+        self.smtp_port.setToolTip("비우면(0) 보안에 맞는 기본 포트를 씁니다 — starttls 587 · ssl 465 · none 25.")
+        form.addRow("포트", self.smtp_port)
+
+        self.smtp_user = QLineEdit(settings.smtp_username)
+        form.addRow("사용자", self.smtp_user)
+
+        self.smtp_password = QLineEdit()
+        self.smtp_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.smtp_password.setPlaceholderText(
+            KEY_SET_PLACEHOLDER if self._agent.credentials.smtp_password() else "비워 두면 로그인하지 않습니다"
+        )
+        form.addRow("비밀번호", self.smtp_password)
+
+        self.smtp_from = QLineEdit(settings.smtp_sender)
+        self.smtp_from.setPlaceholderText("bot@example.com (받는 쪽이 보는 보내는 주소)")
+        form.addRow("보내는 주소", self.smtp_from)
+
+        self.smtp_attachment = QDoubleSpinBox()
+        self.smtp_attachment.setRange(0.1, 100.0)
+        self.smtp_attachment.setSingleStep(1.0)
+        self.smtp_attachment.setSuffix(" MB")
+        self.smtp_attachment.setValue(settings.smtp_attachment_mb)
+        form.addRow("첨부 합계 상한", self.smtp_attachment)
+
+        self.security_note = QLabel("")
+        self.security_note.setWordWrap(True)
+        self.security_note.setEnabled(False)
+        form.addRow("", self.security_note)
+        self._say_security(self.smtp_security.currentText())
+
+        form.addRow(QLabel("웹훅 허용 호스트"))
+        self.webhook_hosts = QListWidget()
+        for one in settings.webhook_allowed_hosts:
+            self.webhook_hosts.addItem(str(one))
+        form.addRow(self.webhook_hosts)
+
+        buttons = QHBoxLayout()
+        add = QPushButton("추가...")
+        add.clicked.connect(self.add_webhook_host)
+        drop = QPushButton("삭제")
+        drop.clicked.connect(self.drop_webhook_host)
+        buttons.addWidget(add)
+        buttons.addWidget(drop)
+        buttons.addStretch(1)
+        form.addRow(buttons)
+
+        note = QLabel(
+            "비워 두면 웹훅을 **아무 데도 보내지 않습니다**. 적은 호스트만 열리고, "
+            "사설·루프백 주소는 적어도 열리지 않습니다."
+        )
+        note.setWordWrap(True)
+        note.setEnabled(False)
+        form.addRow("", note)
+        return box
+
+    def _say_security(self, value: str) -> None:
+        """`none`을 고르면 **위험을 분명히 말한다** (쓰기 허용 폴더와 같은 결)."""
+        if value == SECURITY_NONE:
+            self.security_note.setText("암호화하지 않고 보냅니다 — 사내 중계기에만 쓰세요.")
+        else:
+            self.security_note.setText("")
+
+    def add_webhook_host(self) -> None:
+        typed, ok = QInputDialog.getText(self, "웹훅 허용 호스트", "호스트 이름 (예: hooks.example.com)")
+        host = typed.strip() if ok else ""
+        if not host:
+            return
+        if host in self.webhook_host_list():
+            return  # 같은 호스트를 두 번 적지 않는다
+        self.webhook_hosts.addItem(host)
+
+    def drop_webhook_host(self) -> None:
+        for item in self.webhook_hosts.selectedItems():
+            self.webhook_hosts.takeItem(self.webhook_hosts.row(item))
+
+    def webhook_host_list(self) -> tuple[str, ...]:
+        return tuple(
+            self.webhook_hosts.item(i).text() for i in range(self.webhook_hosts.count())
+        )
+
     def _runtime_box(self) -> QGroupBox:
         box = QGroupBox("로컬 런타임")
         form = QFormLayout(box)
@@ -424,6 +536,13 @@ class SettingsDialog(QDialog):
             llm_model=self.llm_model.text().strip() or self._agent.settings.llm_model,
             readable_dirs=self.readable_dirs(),
             writable_dirs=self.writable_dirs(),
+            smtp_host=self.smtp_host.text().strip(),
+            smtp_port=self.smtp_port.value(),
+            smtp_security=self.smtp_security.currentText(),
+            smtp_username=self.smtp_user.text().strip(),
+            smtp_sender=self.smtp_from.text().strip(),
+            smtp_attachment_mb=float(self.smtp_attachment.value()),
+            webhook_allowed_hosts=self.webhook_host_list(),
             runtimes=(worker,),
             extensions={**self._agent.settings.extensions, **self._extension_values()},
         )
@@ -449,6 +568,22 @@ class SettingsDialog(QDialog):
                 self._agent.credentials.set_llm_api_key(model_key)
             except SecretsUnavailable as e:
                 QMessageBox.warning(self, "모델 키를 저장하지 못했습니다", str(e))
+                return
+
+        typed_password = self.smtp_password.text().strip()
+        if typed_password:
+            try:
+                self._agent.credentials.set_smtp_password(typed_password)
+            except SecretsUnavailable as e:
+                QMessageBox.warning(self, "메일 비밀번호를 저장하지 못했습니다", str(e))
+                return
+
+        typed_password = self.smtp_password.text().strip()
+        if typed_password:
+            try:
+                self._agent.credentials.set_smtp_password(typed_password)
+            except SecretsUnavailable as e:
+                QMessageBox.warning(self, "메일 비밀번호를 저장하지 못했습니다", str(e))
                 return
 
         for (extension_id, key), (item, field) in self._extension_fields.items():

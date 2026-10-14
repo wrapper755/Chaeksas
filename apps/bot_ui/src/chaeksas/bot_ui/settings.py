@@ -15,6 +15,8 @@ from typing import Any
 
 import platformdirs
 
+from chaeksas.core.senders import DEFAULT_ATTACHMENT_MB, SECURITY_STARTTLS, SmtpConfig, WebhookConfig
+
 #: 기본값의 원본은 `docs/04-setup.md` §6의 표다.
 DEFAULT_CENTER_URL = "http://localhost:8800"
 DEFAULT_WORKER_PORT = 8899
@@ -34,6 +36,13 @@ START_ALWAYS = "always"
 
 def _env(name: str, default: str | None = None) -> str | None:
     return os.environ.get(f"{ENV_PREFIX}{name}", default)
+
+
+def _hosts(raw: str | None) -> tuple[str, ...]:
+    """쉼표로 가른 호스트 목록 (서버 실행기와 같은 규칙). 빈 조각·공백은 버린다."""
+    if not raw:
+        return ()
+    return tuple(one.strip() for one in raw.split(",") if one.strip())
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -105,6 +114,16 @@ class Settings:
     #: Bot이 출력 폴더 **밖에 쓸 수 있는 폴더** (BUI-03 「파일」, ADR-0032). 기본은 비어 있다 —
     #: 적은 폴더 안의 파일은 Bot이 고칠 수 있다.
     writable_dirs: tuple[Path, ...] = ()
+    #: 보내기 (BUI-03 「보내기」, ADR-0059). **비우면 `chk:email`이 보내지 않고 실패한다.**
+    #: 비밀번호는 여기 없다 — OS 비밀 저장소다 (`credentials.smtp_password()`).
+    smtp_host: str = ""
+    smtp_port: int = 0
+    smtp_security: str = SECURITY_STARTTLS
+    smtp_username: str = ""
+    smtp_sender: str = ""
+    smtp_attachment_mb: float = DEFAULT_ATTACHMENT_MB
+    #: 웹훅을 보낼 수 있는 호스트. **기본은 비어 있고 비면 아무 데도 보내지 않는다** (ADR-0059 §2).
+    webhook_allowed_hosts: tuple[str, ...] = ()
     #: BUI-10에 등록한 서비스 앱 키 참조 (**이름만** — 값은 OS 비밀 저장소다).
     service_keys: tuple[ServiceKeyRef, ...] = ()
     runtimes: tuple[RuntimeSettings, ...] = field(
@@ -117,6 +136,24 @@ class Settings:
     #: **Studio의 것과 다른 자리다** — 개발 도구에서 끈 것이 현장 Bot을 멈추면 안 된다. 판은
     #: 적지 않는다 (올려도 꺼 둔 채로 있는 것이 사람의 뜻이다).
     disabled_extensions: tuple[str, ...] = ()
+
+    def smtp(self) -> SmtpConfig:
+        """보내기 설정 한 벌 — **서버 실행기와 같은 모양**이다 (`core.senders`)."""
+        return SmtpConfig(
+            host=self.smtp_host,
+            port=self.smtp_port,
+            security=self.smtp_security,
+            username=self.smtp_username,
+            sender=self.smtp_sender,
+            max_attachment_mb=self.smtp_attachment_mb,
+        )
+
+    def webhook(self) -> WebhookConfig:
+        return WebhookConfig(allowed_hosts=self.webhook_allowed_hosts)
+
+    def ready_settings(self) -> tuple[str, ...]:
+        """갖춰진 설정 이름들 (C1 `requires.settings`) — 사전 점검이 이것으로 막는다."""
+        return ("smtp",) if self.smtp().configured else ()
 
     def extension(self, extension_id: str) -> dict[str, Any]:
         return dict(self.extensions.get(extension_id, {}))
@@ -147,6 +184,13 @@ class Settings:
             "llm_model": self.llm_model,
             "readable_dirs": [str(one) for one in self.readable_dirs],
             "writable_dirs": [str(one) for one in self.writable_dirs],
+            "smtp_host": self.smtp_host,
+            "smtp_port": self.smtp_port,
+            "smtp_security": self.smtp_security,
+            "smtp_username": self.smtp_username,
+            "smtp_sender": self.smtp_sender,
+            "smtp_attachment_mb": self.smtp_attachment_mb,
+            "webhook_allowed_hosts": list(self.webhook_allowed_hosts),
             "service_keys": [one.to_json_dict() for one in self.service_keys],
             "runtimes": [r.to_json_dict() for r in self.runtimes],
             "extensions": {key: dict(value) for key, value in self.extensions.items()},
@@ -183,6 +227,12 @@ class Settings:
             webhook_external=_env_bool("WEBHOOK__EXTERNAL", self.webhook_external),
             llm_base_url=_env("LLM__BASE_URL") or self.llm_base_url,
             llm_model=_env("LLM__MODEL") or self.llm_model,
+            smtp_host=_env("SMTP__HOST") or self.smtp_host,
+            smtp_port=int(_env("SMTP__PORT") or self.smtp_port),
+            smtp_security=_env("SMTP__SECURITY") or self.smtp_security,
+            smtp_username=_env("SMTP__USERNAME") or self.smtp_username,
+            smtp_sender=_env("SMTP__FROM") or self.smtp_sender,
+            webhook_allowed_hosts=_hosts(_env("WEBHOOK__ALLOWED_HOSTS")) or self.webhook_allowed_hosts,
             runtimes=tuple(runtimes),
         )
 
@@ -211,6 +261,15 @@ class Settings:
             llm_model=str(raw.get("llm_model") or base.llm_model),
             readable_dirs=tuple(Path(one) for one in raw.get("readable_dirs", [])),
             writable_dirs=tuple(Path(one) for one in raw.get("writable_dirs", [])),
+            smtp_host=str(raw.get("smtp_host") or base.smtp_host),
+            smtp_port=int(raw.get("smtp_port", base.smtp_port)),
+            smtp_security=str(raw.get("smtp_security") or base.smtp_security),
+            smtp_username=str(raw.get("smtp_username") or base.smtp_username),
+            smtp_sender=str(raw.get("smtp_sender") or base.smtp_sender),
+            smtp_attachment_mb=float(raw.get("smtp_attachment_mb", base.smtp_attachment_mb)),
+            webhook_allowed_hosts=tuple(
+                str(one).strip() for one in raw.get("webhook_allowed_hosts", []) if str(one).strip()
+            ),
             service_keys=tuple(
                 ServiceKeyRef(ref=str(one["ref"]), app_id=str(one.get("app_id") or ""))
                 for one in raw.get("service_keys", [])
