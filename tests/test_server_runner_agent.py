@@ -21,9 +21,16 @@ from fastapi.testclient import TestClient
 from chaeksas.center import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store, now_iso
+from chaeksas.contracts.manifest import Manifest
+from chaeksas.contracts.resources import ServiceAppResource
 from chaeksas.server_runner import agent as agent_mod
 from chaeksas.server_runner import main as main_mod
-from chaeksas.server_runner.center_client import CenterClient, Unreachable, _problem
+from chaeksas.server_runner.center_client import (
+    CenterClient,
+    CenterProblem,
+    Unreachable,
+    _problem,
+)
 from chaeksas.server_runner.credentials import ENV_CENTER_API_KEY, Credentials
 from chaeksas.server_runner.settings import Settings
 
@@ -459,6 +466,116 @@ def test_the_model_key_is_not_in_the_settings(tmp_path: Path, monkeypatch: pytes
     assert Credentials().llm_api_key() == "k-model"
 
 
+# ─────────────────────── 바깥 앱 명부 (M7 조각 9) ───────────────────────
+
+
+#: `erp` 하나를 부르는 Bot (C1 `requires.service_apps` — 키는 **참조 이름**이다).
+_CALLS_ERP = {"service_apps": [{"app_id": "erp", "operations": ["get"], "key_ref": "fin-erp"}]}
+
+
+class _Resources:
+    """C7 리소스 목록만 주는 Center — **실행기가 제 손으로 읽는다**는 것을 본다.
+
+    `extension()`은 404다 (외부 확장이 없는 Bot) — 404는 **들고 있던 것을 버리는** 쪽이고
+    여기서는 버릴 것이 없다.
+    """
+
+    def __init__(self, base_url: str = "http://127.0.0.1:9/erp") -> None:
+        self.base_url = base_url
+        self.asked = 0
+
+    def service_apps(self) -> list[ServiceAppResource]:
+        self.asked += 1
+        return [
+            ServiceAppResource(
+                app_id="erp", name="모의 ERP", base_url=self.base_url, status="ok"
+            )
+        ]
+
+    def extension(self, extension_id: str) -> Any:
+        raise CenterProblem("없다", code="not_found", status=404)
+
+
+class _DeadCenter:
+    """닿지 못하는 Center — **들고 있던 것을 쓴다** (ADR-0007)."""
+
+    def service_apps(self) -> list[ServiceAppResource]:
+        raise Unreachable("꺼져 있다")
+
+    def extension(self, extension_id: str) -> Any:
+        raise Unreachable("꺼져 있다")
+
+
+def test_the_app_directory_is_read_by_the_runner_itself(tmp_path: Path) -> None:
+    """주소는 **C7 리소스 등록**에서 오고 실행기가 **직접** 읽는다 (파일을 거치지 않는다).
+
+    Bot UI는 자식 프로세스에 `--services` 파일로 건네지만(ADR-0031) 이 프로세스가 엔진을
+    돌리므로 건넬 곳이 없다. **같은 `DirectoryCache`를 쓴다** — 두 벌이면 「PC는 되는데
+    서버는 안 된다」가 된다.
+    """
+    made = agent_mod.Agent(
+        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, _Resources())
+    )
+    env = made.run_env(_FakeBot(requires=_CALLS_ERP))
+
+    others = env.services.others  # type: ignore[attr-defined]
+    assert others.addresses.base_url("erp") == "http://127.0.0.1:9/erp"
+    # **누가 부르는가**가 PC와 다르다 (C11 `caller.type`) — 앱의 기록에 그대로 남는다.
+    assert others.caller_type == "server_runner"
+
+
+def test_an_unreachable_center_uses_the_directory_we_held(tmp_path: Path) -> None:
+    """**Center가 꺼졌다고 업무가 멈추지 않는다** (ADR-0007) — 받아 둔 주소로 간다."""
+    bot = _FakeBot(requires=_CALLS_ERP)
+    good = _Resources()
+    agent_mod.Agent(
+        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, good)
+    ).run_env(bot)
+    assert good.asked == 1
+
+    offline = agent_mod.Agent(
+        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, _DeadCenter())
+    )
+    env = offline.run_env(bot)
+    assert env.services.others.addresses.base_url("erp") == good.base_url  # type: ignore[attr-defined]
+
+
+def test_a_bot_that_calls_nothing_gets_an_empty_directory(tmp_path: Path) -> None:
+    """부르는 것이 없으면 **묻지 않는다** — 하트비트마다 Center를 두드리지 않는다."""
+    found = _Resources()
+    made = agent_mod.Agent(
+        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, found)
+    )
+    env = made.run_env(_FakeBot())
+    assert found.asked == 0
+    assert env.services.others.addresses.base_url("erp") is None  # type: ignore[attr-defined]
+
+
+def test_the_register_answer_already_carries_the_admin_keys(
+    settings: Settings,
+    key: str,
+    center: TestClient,
+    store: Store,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """공개키는 **등록 응답에도** 온다 (C12) — 되살리기가 첫 하트비트 **전에** 일어난다.
+
+    되살린 실행도 바깥 앱 명부를 짓고, 봉투는 공개키로만 검증된다 (C13 E6). 등록에서 받지
+    않으면 되살린 실행은 외부 앱을 **한 번도** 부를 수 없다.
+    """
+    from chaeksas.admin import keys as keystore
+    from chaeksas.center.api.signing import bootstrap_key
+
+    monkeypatch.setenv(keystore.PASSPHRASE_ENV, "열쇠말")
+    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
+    bootstrap_key(store, public_key=keystore.create(label="첫 키").public_bytes(), label="첫 키")
+    found = build(settings, key, center)
+    assert found.tick() is True  # 등록만 했다
+    assert found.last_response is None, "아직 하트비트를 보내지 않았다"
+    assert [one.key_id for one in found.admin_keys], "등록 응답의 공개키를 들고 있어야 한다"
+
+
 class _NoClient:
     """Center를 부르지 않는다 — 이 시험이 보는 것은 배선뿐이다."""
 
@@ -467,6 +584,29 @@ class _FakeBot:
     id = "fx.sample"
     version = "1.0.0"
     folder = Path(__file__).resolve().parent
+
+    def __init__(self, *, requires: dict[str, Any] | None = None) -> None:
+        #: 기본은 **바깥 앱을 부르지 않는** Bot이다 (C1 `requires`).
+        self.manifest = Manifest.model_validate(
+            {
+                "schema": 1,
+                "id": "fx.sample",
+                "version": "1.0.0",
+                "name": "시험 Bot",
+                "kind": "bpm_process",
+                "run_location": "server",
+                "entry": "main.bpmn",
+                "content_hash": "sha256:" + "0" * 64,
+                "requires": requires or {},
+                "human": {"approval_center": False, "approval_field": False, "confirmation": False},
+                "built": {
+                    "by": "studio",
+                    "at": "2026-10-14T09:00:00+09:00",
+                    "core": "0.1.0",
+                    "spec_version": 1,
+                },
+            }
+        )
 
     def processes(self) -> dict[str, Any]:
         return {}

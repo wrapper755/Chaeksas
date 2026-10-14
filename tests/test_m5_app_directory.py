@@ -26,7 +26,6 @@ from fastapi.testclient import TestClient
 
 from chaeksas.admin import keys as keystore
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, Unreachable
-from chaeksas.bot_ui.services import Services, app_ids, external_ids
 from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings
@@ -34,7 +33,15 @@ from chaeksas.center.storage import Store
 from chaeksas.contracts.extension import definition_hash
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.signing import sign
-from chaeksas.core.app_directory import build, read_directory, to_json_dict
+from chaeksas.core.app_directory import (
+    DirectoryCache,
+    app_ids,
+    build,
+    extension_ids,
+    external_ids,
+    read_directory,
+    to_json_dict,
+)
 from chaeksas.core.services import OpCall
 
 TOKEN = "t-admin"
@@ -391,9 +398,8 @@ def test_bot_ui_fetches_and_writes_what_the_bot_uses(
     found = definition(port)
     assert register(client, found, envelope_for(key, found)).status_code == 201
 
-    made = Services(
-        data_dir=tmp_path / "data",
-        client=CenterClient(base_url="http://center", api_key=TOKEN, client=client),
+    made = DirectoryCache.using(
+        tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
     )
     path = made.write_for(manifest(found), path=tmp_path / "run.services.json", keys=public_keys(client))
 
@@ -413,7 +419,9 @@ def test_an_unreachable_center_uses_what_we_held(
     found = definition(port)
     assert register(client, found, envelope_for(key, found)).status_code == 201
     data_dir = tmp_path / "data"
-    good = Services(data_dir=data_dir, client=CenterClient(base_url="http://center", api_key=TOKEN, client=client))
+    good = DirectoryCache.using(
+        data_dir, CenterClient(base_url="http://center", api_key=TOKEN, client=client)
+    )
     good.refresh(externals=[APP])
 
     class Dead:
@@ -423,7 +431,7 @@ def test_an_unreachable_center_uses_what_we_held(
         def extension(self, extension_id: str) -> Any:
             raise Unreachable("닿지 못했습니다")
 
-    offline = Services(data_dir=data_dir, client=Dead())
+    offline = DirectoryCache.using(data_dir, Dead())
     path = offline.write_for(manifest(found), path=tmp_path / "run.services.json", keys=public_keys(client))
     assert path is not None
     assert set(read_directory(path).externals) == {APP}
@@ -438,7 +446,9 @@ def test_a_revoked_definition_is_dropped(
     found = definition(port)
     assert register(client, found, envelope_for(key, found)).status_code == 201
     data_dir = tmp_path / "data"
-    made = Services(data_dir=data_dir, client=CenterClient(base_url="http://center", api_key=TOKEN, client=client))
+    made = DirectoryCache.using(
+        data_dir, CenterClient(base_url="http://center", api_key=TOKEN, client=client)
+    )
     made.refresh(externals=[APP])
     assert made.cached()["extensions"], "들고 있다"
 
@@ -449,7 +459,7 @@ def test_a_revoked_definition_is_dropped(
         def extension(self, extension_id: str) -> Any:
             raise CenterProblem("없다", code="not_found", status=404)
 
-    after = Services(data_dir=data_dir, client=Revoked())
+    after = DirectoryCache.using(data_dir, Revoked())
     after.refresh(externals=[APP])
     assert after.cached()["extensions"] == []
     assert "철회됐을 수 있습니다" in " ".join(after.problems)
@@ -465,9 +475,8 @@ def test_only_what_the_manifest_asks_for_goes_in_the_file(
     for one in (found, other):
         assert register(client, one, envelope_for(key, one)).status_code == 201
 
-    made = Services(
-        data_dir=tmp_path / "data",
-        client=CenterClient(base_url="http://center", api_key=TOKEN, client=client),
+    made = DirectoryCache.using(
+        tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
     )
     path = made.write_for(manifest(found), path=tmp_path / "run.services.json", keys=public_keys(client))
     assert path is not None
@@ -476,7 +485,7 @@ def test_only_what_the_manifest_asks_for_goes_in_the_file(
 
 
 def test_a_bot_that_calls_nothing_gets_no_file(tmp_path: Path) -> None:
-    made = Services(data_dir=tmp_path / "data")
+    made = DirectoryCache(data_dir=tmp_path / "data")
     assert made.write_for(manifest(), path=tmp_path / "run.services.json", keys=[]) is None
 
 
@@ -495,6 +504,55 @@ def test_what_the_manifest_asks_for(ocr: tuple[int, type[Ocr]]) -> None:
     )
     assert external_ids(found) == [APP]
     assert app_ids(found) == ["svc-erp"]
+    # **정의를 받아 볼 대상은 전부다** — 지금 내보내기는 `definition_hash`를 적지 않으므로
+    # 고정된 것만 물으면 외부 앱을 하나도 부를 수 없다. 어느 것이 외부인가는 Center의 답이
+    # 말해 준다 (내장·사내는 정의 없이 와서 담기지 않는다).
+    assert extension_ids(found) == sorted([APP, "ui-automation"])
+
+
+def test_an_unpinned_external_is_still_fetched_and_verified(
+    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
+) -> None:
+    """**고정하지 않은 외부 확장도 부를 수 있어야 한다** (지금 Studio가 해시를 적지 않는다).
+
+    담긴 정의는 **그대로 봉투 검증을 거친다** — 고정이 없다고 관문이 느슨해지지 않는다.
+    """
+    port, _ = ocr
+    found = definition(port)
+    assert register(client, found, envelope_for(key, found)).status_code == 201
+    unpinned = manifest(requires={"extensions": [{"id": APP, "version": "1.0.0"}]})
+
+    made = DirectoryCache.using(
+        tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
+    )
+    directory = made.directory_for(unpinned, keys=public_keys(client))
+    assert set(directory.externals) == {APP}
+    # 고정하지 않았으니 **대조할 것이 없다** (C1 — `unusable`은 고정된 것만 본다).
+    assert directory.unusable(unpinned.requires.extensions) == []
+
+
+def test_the_server_runner_builds_the_directory_without_a_file(
+    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
+) -> None:
+    """서버 실행기는 **파일을 거치지 않는다** — 그래도 봉투 검증은 같은 자리에서 한다 (C13 E6).
+
+    공개키를 주지 않으면 **어느 봉투도 검증되지 않는다** — 받아도 쓰지 못하고 사유가 남는다.
+    """
+    port, _ = ocr
+    found = definition(port)
+    assert register(client, found, envelope_for(key, found)).status_code == 201
+    asked = manifest(found)
+    made = DirectoryCache.using(
+        tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
+    )
+
+    good = made.directory_for(asked, keys=public_keys(client), secrets=lambda ref: "svc-key")
+    assert set(good.externals) == {APP}
+    assert good.key("erp-key") == "svc-key", "키는 실행하는 쪽이 푼다 (명부에 값이 없다)"
+
+    without_keys = made.directory_for(asked, keys=[])
+    assert without_keys.externals == {}
+    assert APP in without_keys.problems, "쓰지 못한 정의는 사유와 함께 남는다"
 
 
 # ─────────────────────────── 실행기까지 (한 바퀴) ───────────────────────────

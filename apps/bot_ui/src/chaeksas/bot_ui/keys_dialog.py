@@ -378,9 +378,9 @@ class KeysDialog(QDialog):
 
     def check_keys(self) -> None:
         """줄마다 `GET <앱 주소>/v1/keys/self` (C11). 주소는 **들고 있는 것**을 쓴다 (C7 캐시)."""
-        from chaeksas.bot_ui.services import Services  # noqa: PLC0415 - 누를 때만 든다
+        from chaeksas.core.app_directory import DirectoryCache  # noqa: PLC0415 - 누를 때만 든다
 
-        held = Services(data_dir=data_dir())
+        held = DirectoryCache(data_dir=data_dir())
         for at, row in enumerate(self._rows):
             if not row.registered:
                 continue
