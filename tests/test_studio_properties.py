@@ -459,3 +459,84 @@ def test_a_flow_condition_round_trips(canvas: Any) -> None:
 
 def test_asking_about_a_node_that_is_not_there_says_so(canvas: Any) -> None:
     assert canvas.call_sync("properties", "없는노드")["found"] is False
+
+
+# ─────────────────── 정의 고정 경고 (ADR-0060) ───────────────────
+
+
+def test_an_unpinned_external_definition_warns_but_does_not_block(tmp_path: Path) -> None:
+    """고정하지 않은 외부 확장은 **경고**다 — 막지 않는다 (ADR-0060 §3·§4).
+
+    막으면 사람이 뒷문(「고정 없이 내보내기」)을 요구하고 그 뒷문이 기본값이 된다. 서명되지
+    않은 정의는 **봉투 관문이 이미 막는다** (C13 E6 — 첫째 관문이다).
+    """
+    from chaeksas.studio.preflight import readiness  # noqa: PLC0415
+
+    # BX-32는 `ext-helpdesk`(외부)를 쓰고, 지금 그림에는 고정이 없다.
+    found = readiness(
+        opened(tmp_path, "bx32_customer_inquiry"),
+        key_value=lambda _ref: "chk_svc_x",
+        external_ids=("ext-helpdesk",),
+    )
+    only = [v for v in found if v.code == "definition_unpinned"]
+    assert len(only) == 1, f"고정 경고가 없다: {[v.code for v in found]}"
+    assert not only[0].blocks, "**막지 않는다** — 경고다"
+    assert any("ext-helpdesk" in one for one in only[0].items)
+    assert "STU-15" in only[0].message, "어디서 고치는지 말한다"
+
+
+def test_nothing_is_said_when_we_do_not_know_what_is_external(tmp_path: Path) -> None:
+    """**모르면 경고를 지어내지 않는다** — 외부 목록을 주지 않으면 그 점검을 하지 않는다.
+
+    외부 확장은 이 PC에 깔리지 않아 호스트가 모르고(`host.get()`이 `None`이다) 점검은 서버를
+    부르지 않는다. 그래서 받아 둔 리소스 목록을 **부르는 쪽이** 넘긴다.
+    """
+    from chaeksas.studio.preflight import readiness  # noqa: PLC0415
+
+    found = readiness(opened(tmp_path, "bx32_customer_inquiry"), key_value=lambda _ref: "chk_svc_x")
+    assert [v for v in found if v.code == "definition_unpinned"] == []
+
+
+def test_a_pinned_drawing_says_nothing(tmp_path: Path) -> None:
+    """고정했으면 할 말이 없다 — 거짓 경고가 쌓이면 아무도 읽지 않는다.
+
+    고정 값은 **STU-15가 만드는 것과 같은 함수**(`pin_patch`)로 짓고, 그림에 **정말 심어**
+    다시 읽는다 — 점검은 저장된 파일에서 요구 사항을 모으므로(`collect_requires`) 파일에
+    들어가야 경고가 사라진다.
+    """
+    import json  # noqa: PLC0415
+
+    from chaeksas.studio.extension_dialog import pin_patch  # noqa: PLC0415
+    from chaeksas.studio.preflight import readiness  # noqa: PLC0415
+    from chaeksas.studio.workspace import Workspace  # noqa: PLC0415
+
+    process = opened(tmp_path, "bx32_customer_inquiry")
+    entry = process.entry_definition
+    assert entry is not None and entry.process is not None
+    assert [v.code for v in readiness(
+        process, key_value=lambda _ref: "chk_svc_x", external_ids=("ext-helpdesk",)
+    ) if v.code == "definition_unpinned"] == ["definition_unpinned"], "고정 전에는 경고한다"
+
+    # 앱에서는 캔버스가 이 일을 한다 (ADR-0022) — 시험이라 글로 바꿔 심는다.
+    patch = json.loads(pin_patch(entry.process.info, {"ext-helpdesk": "sha256:" + "a" * 64}))
+    body = entry.path.read_text(encoding="utf-8")
+    before = '"id": "ext-helpdesk",\n      "version": "&gt;=1,&lt;2"'
+    assert before in body, "그림의 모양이 바뀌었다 — 시험을 고쳐야 한다"
+    entry.path.write_text(
+        body.replace(before, before + ',\n      "definition_hash": "sha256:' + "a" * 64 + '"'),
+        encoding="utf-8",
+    )
+    assert any(one.get("definition_hash") for one in patch["extensions"]), "같은 값을 심었다"
+
+    again = Workspace(tmp_path / "w").read(process.folder, process.group)
+    needs = {one.id: one.definition_hash for one in collect_needs(again)}
+    assert needs["ext-helpdesk"] == "sha256:" + "a" * 64, "그림의 고정이 매니페스트로 간다"
+    assert [v for v in readiness(
+        again, key_value=lambda _ref: "chk_svc_x", external_ids=("ext-helpdesk",)
+    ) if v.code == "definition_unpinned"] == []
+
+
+def collect_needs(process: Any) -> Any:
+    from chaeksas.studio.packaging import collect_requires  # noqa: PLC0415
+
+    return collect_requires(process).extensions

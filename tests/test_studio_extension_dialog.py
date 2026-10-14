@@ -35,12 +35,16 @@ from chaeksas.contracts import (  # noqa: E402
     key_id_for,
     sign,
 )
+from chaeksas.contracts.bpmn_ext import ProcessInfo  # noqa: E402
 from chaeksas.contracts.resources import ExtensionResource  # noqa: E402
 from chaeksas.core.extensions import ExtensionHost  # noqa: E402
 from chaeksas.qt.theme import tokens  # noqa: E402
 from chaeksas.studio import services  # noqa: E402
 from chaeksas.studio.extension_dialog import (  # noqa: E402
     NAME,
+    NO_PIN_INTERNAL,
+    NO_PIN_NOT_DECLARED,
+    NO_PIN_NOT_OPEN,
     NO_TOGGLE_EXTERNAL,
     STATE,
     STATE_BROKEN,
@@ -53,6 +57,7 @@ from chaeksas.studio.extension_dialog import (  # noqa: E402
     StudioExtensionsDialog,
     check_definition,
     detail_sections,
+    pin_patch,
     state_of,
 )
 from chaeksas.studio.extensions import Extensions  # noqa: E402
@@ -201,9 +206,12 @@ def dialog(
     reader: services.CenterReader | None = None,
     settings: Settings | None = None,
     extensions: Extensions | None = None,
+    process_info: Any = None,
 ) -> StudioExtensionsDialog:
     made = settings or Settings(disabled_extensions=tuple(sorted(host.off)))
-    return StudioExtensionsDialog(made, extensions or Extensions(host=host), reader=reader)
+    return StudioExtensionsDialog(
+        made, extensions or Extensions(host=host), reader=reader, process_info=process_info
+    )
 
 
 def cell(window: StudioExtensionsDialog, row: int, column: int) -> QTableWidgetItem:
@@ -547,3 +555,96 @@ def test_each_state_gets_its_own_colour() -> None:
     assert shown != cell(broken, 0, STATE).foreground().color().name().lower()
     # 꺼 둔 줄에는 `problems`가 없다 — 빈 말풍선을 달지 않는다.
     assert "사람이 껐습니다" in cell(off, 0, STATE).toolTip()
+
+
+# ─────────────────── 정의 고정 (ADR-0060) ───────────────────
+
+
+def drawing(*needs: dict[str, Any]) -> ProcessInfo:
+    """진입 정의의 `chk:process` — 쓰는 확장을 적어 둔 그림."""
+    return ProcessInfo.model_validate({"run_location": "server", "extensions": list(needs)})
+
+
+def external_window(info: Any = None) -> StudioExtensionsDialog:
+    """「새로 고침」으로 외부 정의를 받아 둔 창 (봉투는 검증을 지났다)."""
+    definition = external()
+    envelope, keys = signed(definition)
+    window = dialog(
+        host_with(builtin()),
+        reader=FakeCenter([resource(definition, envelope)], keys),
+        process_info=info,
+    )
+    window.refresh_external()
+    row = next(at for at in range(window.table.rowCount()) if cell(window, at, TIER).text() == "외부")
+    window.table.selectRow(row)
+    return window
+
+
+def test_pinning_writes_the_hash_the_window_is_showing() -> None:
+    """**사람이 해시를 손으로 옮겨 적지 않는다** — 보고 있는 그 값이 그림으로 간다 (ADR-0060)."""
+    window = external_window(drawing({"id": "ext-ocr", "version": ">=1,<2"}))
+    assert window.pin_button.isEnabled() and not window.unpin_button.isEnabled()
+
+    window.set_pin(True)
+    found = window.selected()
+    assert found is not None
+    assert window.pins == {"ext-ocr": found.definition_hash}
+    assert "고정했습니다" in window.note.text()
+    # **그림은 창이 만지지 않는다** (ADR-0022) — 부른 쪽이 넘길 본문을 순수 함수가 만든다.
+    info = window.process_info
+    assert info is not None
+    patched = ProcessInfo.model_validate(json.loads(pin_patch(info, window.pins)))
+    assert patched.extensions[0].definition_hash == found.definition_hash
+    assert patched.run_location == "server", "창이 모르는 칸도 그대로 남는다"
+
+    # 고정한 뒤에는 「해제」만 켜진다 (U3 — 할 수 있는 쪽만).
+    assert not window.pin_button.isEnabled() and window.unpin_button.isEnabled()
+    assert "그림에 고정됨" in window.detail.toPlainText()
+
+
+def test_unpinning_clears_the_field() -> None:
+    """정의가 바뀌면 **지우고 다시** 누른다 — 그러면 승인·배포를 다시 받는다 (C1의 뜻)."""
+    window = external_window(drawing({"id": "ext-ocr", "version": ">=1,<2", "definition_hash": "sha256:" + "9" * 64}))
+    assert window.unpin_button.isEnabled() and not window.pin_button.isEnabled()
+    assert "다른** 해시" in window.detail.toPlainText(), "거짓 고정을 그대로 두지 않는다"
+
+    window.set_pin(False)
+    assert window.pins == {"ext-ocr": None}
+    info = window.process_info
+    assert info is not None
+    patched = ProcessInfo.model_validate(json.loads(pin_patch(info, window.pins)))
+    assert patched.extensions[0].definition_hash is None
+
+
+def test_an_internal_extension_is_not_pinned() -> None:
+    """내장·사내는 **고정할 대상이 아니다** — 정의가 설치 파일에 있다 (C13)."""
+    window = dialog(host_with(builtin()), process_info=drawing({"id": "doc-ocr", "version": "1.0.0"}))
+    window.table.selectRow(0)
+    assert not window.pin_button.isEnabled()
+    assert window.pin_button.toolTip() == NO_PIN_INTERNAL
+
+
+def test_pinning_needs_the_entry_definition_open() -> None:
+    """**그림을 고치는 일이라** 진입 정의가 열려 있을 때만 켜진다 (STU-06과 같은 규칙)."""
+    window = external_window(None)
+    assert not window.pin_button.isEnabled()
+    assert window.pin_button.toolTip() == NO_PIN_NOT_OPEN
+
+
+def test_an_extension_the_drawing_does_not_declare_cannot_be_pinned() -> None:
+    """적히지 않은 것에 **버전 범위를 지어내지 않는다** — 그렇게 말하고 멈춘다."""
+    window = external_window(drawing({"id": "다른-확장", "version": "1.0.0"}))
+    assert not window.pin_button.isEnabled()
+    assert window.pin_button.toolTip() == NO_PIN_NOT_DECLARED
+    assert window.pins == {}
+
+
+def test_the_patch_leaves_other_extensions_alone() -> None:
+    """고정은 **그 줄만** 건드린다 (여러 확장을 쓰는 그림에서 남의 고정을 지우지 않는다)."""
+    info = drawing(
+        {"id": "ext-ocr", "version": ">=1,<2"},
+        {"id": "ext-credit", "version": "1.0.0", "definition_hash": "sha256:" + "a" * 64},
+    )
+    patched = ProcessInfo.model_validate(json.loads(pin_patch(info, {"ext-ocr": "sha256:" + "b" * 64})))
+    assert patched.extensions[0].definition_hash == "sha256:" + "b" * 64
+    assert patched.extensions[1].definition_hash == "sha256:" + "a" * 64

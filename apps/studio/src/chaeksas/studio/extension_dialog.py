@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
 
@@ -39,6 +40,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts._base import Violation
+from chaeksas.contracts.bpmn_ext import ProcessInfo
 from chaeksas.contracts.extension import (
     EDITOR_BUILTIN,
     PROTOCOL_HTTP_ADAPTER,
@@ -246,6 +248,33 @@ def check_definition(raw: bytes, *, api_version: str) -> list[str]:
     return _lines(problems)
 
 
+#: 고정할 수 없는 까닭들 (단추 말풍선 — U3).
+NO_PIN_NOTHING = "확장을 고르세요."
+NO_PIN_INTERNAL = "내장·사내 확장은 고정하지 않습니다 — 정의가 설치 파일에 있습니다 (C13)."
+NO_PIN_UNVERIFIED = "「새로 고침」으로 Center에서 받아 봉투를 검증한 정의만 고정합니다 (C13 E6)."
+NO_PIN_NOT_OPEN = "진입 정의가 열려 있을 때만 고정합니다 — 그림을 고치는 일입니다 (STU-06과 같은 규칙)."
+NO_PIN_NOT_DECLARED = (
+    "그림이 이 확장을 쓴다고 적지 않았습니다 (`chk:process.extensions`) — "
+    "버전 범위를 지어내지 않습니다."
+)
+
+
+def pin_patch(info: ProcessInfo, pins: Mapping[str, str | None]) -> str:
+    """고정·해제를 반영한 `chk:process` 본문 (JSON 글 — `setProperties`의 규약).
+
+    **읽은 것을 통째로 되돌려 쓴다** — `inputs`·`outputs`처럼 이 창이 모르는 칸이 사라지지
+    않게 (STU-06과 같은 자리). 값이 `None`이면 **고정을 지운다**.
+
+    **적히지 않은 확장은 더하지 않는다** — 그림이 쓴다고 적지 않은 것에 버전 범위를
+    지어내는 것이 되기 때문이다 (부르는 쪽이 먼저 막는다).
+    """
+    made = info.model_copy(deep=True)
+    for need in made.extensions:
+        if need.id in pins:
+            need.definition_hash = pins[need.id]
+    return json.dumps(made.to_json_dict(), ensure_ascii=False, indent=2)
+
+
 class StudioExtensionsDialog(QDialog):
     """STU-15. 목록 + 상세, 그리고 단추 셋."""
 
@@ -255,11 +284,17 @@ class StudioExtensionsDialog(QDialog):
         extensions: Extensions,
         *,
         reader: services.CenterReader | None = None,
+        process_info: ProcessInfo | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.settings = settings
         self.extensions = extensions
+        #: 진입 정의의 `chk:process` — 고정 상태를 여기서 읽는다. `None`이면 고정할 수 없다
+        #: (진입 정의가 열려 있지 않다 — STU-06과 같은 규칙, ADR-0022).
+        self.process_info = process_info
+        #: 이 창에서 고정·해제한 것 (`확장 id → 해시 또는 None`). 부른 쪽(STU-01)이 캔버스에 넘긴다.
+        self.pins: dict[str, str | None] = {}
         #: 시험이 끼우는 Center 읽기 — `None`이면 「새로 고침」 때 설정에서 만든다.
         self.reader = reader
         #: Center에서 받아 **이 창만 쓰는** 외부 확장들 (설치된 호스트를 건드리지 않는다).
@@ -297,6 +332,13 @@ class StudioExtensionsDialog(QDialog):
         self.enable_button.clicked.connect(lambda: self.set_off(False))
         self.disable_button = QPushButton("끄기")
         self.disable_button.clicked.connect(lambda: self.set_off(True))
+        self.pin_button = QPushButton("정의 고정")
+        self.pin_button.setToolTip(
+            "지금 보고 있는 정의 해시를 그림에 적습니다 — 받는 쪽이 「승인받은 그 정의인가」를 대조합니다."
+        )
+        self.pin_button.clicked.connect(lambda: self.set_pin(True))
+        self.unpin_button = QPushButton("고정 해제")
+        self.unpin_button.clicked.connect(lambda: self.set_pin(False))
         self.refresh_button = QPushButton("새로 고침")
         self.refresh_button.setToolTip("Center에 등록된 외부 확장 정의를 다시 받습니다.")
         self.refresh_button.clicked.connect(self.refresh_external)
@@ -313,7 +355,14 @@ class StudioExtensionsDialog(QDialog):
         split.setStretchFactor(1, 3)
 
         buttons = QHBoxLayout()
-        for one in (self.enable_button, self.disable_button, self.refresh_button, self.open_button):
+        for one in (
+            self.enable_button,
+            self.disable_button,
+            self.pin_button,
+            self.unpin_button,
+            self.refresh_button,
+            self.open_button,
+        ):
             buttons.addWidget(one)
         buttons.addStretch(1)
         buttons.addWidget(self.close_button)
@@ -372,10 +421,19 @@ class StudioExtensionsDialog(QDialog):
     def _show_selected(self) -> None:
         found = self.selected()
         self._refresh_toggle(found)
+        self._refresh_pin(found)
         if found is None:
             self.detail.setPlainText(NO_SELECTION)
             return
-        self.detail.setPlainText(render(detail_sections(found)))
+        sections = detail_sections(found)
+        if found.manifest.is_external:
+            # **고정 상태를 상세에 보인다** — 해시만 보이면 「고정했나」를 알 수 없다 (ADR-0060).
+            pinned = self.pinned_hash(found.id)
+            said = "그림에 고정됨" if pinned == found.definition_hash else (
+                "그림에 **다른** 해시가 고정됨 — 받는 쪽이 거부합니다" if pinned else "고정되지 않음"
+            )
+            sections = [*sections, ("고정", [said])]
+        self.detail.setPlainText(render(sections))
 
     def _refresh_toggle(self, found: LoadedExtension | None) -> None:
         """「켜기」/「끄기」 중 **할 수 있는 쪽만** 켠다. 못 하면 이유가 말풍선에 있다 (U3).
@@ -389,6 +447,61 @@ class StudioExtensionsDialog(QDialog):
             can = not why and found is not None and found.off != wants_off
             button.setEnabled(can)
             button.setToolTip(why if why else "")
+
+    def pinned_hash(self, extension_id: str) -> str | None:
+        """지금 그림에 적힌 고정 값 (이 창에서 바꾼 것이 이긴다)."""
+        if extension_id in self.pins:
+            return self.pins[extension_id]
+        found = next(
+            (one for one in (self.process_info.extensions if self.process_info else []) if one.id == extension_id),
+            None,
+        )
+        return found.definition_hash if found is not None else None
+
+    def _declared(self, extension_id: str) -> bool:
+        """그림이 쓴다고 적었나 (`chk:process.extensions`)."""
+        return any(one.id == extension_id for one in (self.process_info.extensions if self.process_info else []))
+
+    def _pin_problem(self, found: LoadedExtension | None) -> str:
+        """고정할 수 없는 까닭 한 줄 (없으면 빈 글). **할 수 없으면 까닭을 말한다** (U3)."""
+        if found is None:
+            return NO_PIN_NOTHING
+        if not found.manifest.is_external:
+            return NO_PIN_INTERNAL
+        if found not in self.external:
+            # 설치된 목록에 외부가 섞일 일은 없지만, 「받아서 검증한 것만」을 코드로 지킨다.
+            return NO_PIN_UNVERIFIED
+        if self.process_info is None:
+            return NO_PIN_NOT_OPEN
+        if not self._declared(found.id):
+            return NO_PIN_NOT_DECLARED
+        return ""
+
+    def _refresh_pin(self, found: LoadedExtension | None) -> None:
+        why = self._pin_problem(found)
+        pinned = found is not None and bool(self.pinned_hash(found.id))
+        self.pin_button.setEnabled(not why and not pinned)
+        self.unpin_button.setEnabled(not why and pinned)
+        for button in (self.pin_button, self.unpin_button):
+            button.setToolTip(why if why else button.toolTip())
+
+    def set_pin(self, pin: bool) -> None:
+        """고른 외부 확장의 정의를 고정하거나 해제한다 (ADR-0060).
+
+        **그림은 부른 쪽이 캔버스에 넘긴다** — 창이 XML을 만지지 않는다 (ADR-0022). 그래서
+        여기서는 `pins`에 적어 두고, 파일로 가는 것은 「저장」(Ctrl+S)이다.
+        """
+        found = self.selected()
+        if found is None or self._pin_problem(found):
+            return
+        self.pins[found.id] = found.definition_hash if pin else None
+        self._refresh_pin(found)
+        self._show_selected()
+        self.note.setText(
+            f"{found.manifest.name} 정의를 그림에 고정했습니다 — 「저장」(Ctrl+S)으로 파일에 씁니다."
+            if pin
+            else f"{found.manifest.name}의 고정을 해제했습니다 — 정의가 바뀌어도 그대로 돕니다."
+        )
 
     def set_off(self, off: bool) -> None:
         """고른 확장을 끄거나 켠다 — **설정에 적고 호스트를 다시 읽는다** (ADR-0043).

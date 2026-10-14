@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHeaderView, QTableWidget, QTableWidgetItem, QWidget
@@ -87,6 +87,7 @@ def readiness(
     host: ExtensionHost | None = None,
     context: Callable[[str], ExtensionContext] | None = None,
     dirty: bool = False,
+    external_ids: Collection[str] = (),
 ) -> list[Violation]:
     """사전 점검 — **이 PC에서 지금 돌릴 수 있나** (`core.preflight`, ADR-0013).
 
@@ -99,6 +100,11 @@ def readiness(
     「있다」고 하면 사람이 엉뚱한 데를 고친다.
 
     **그림을 읽지 못하면 조용히 통과시키지 않는다** — 점검할 수 없었다고 경고로 남긴다.
+
+    `external_ids`는 **어느 확장이 외부인가**다 (ADR-0060의 고정 경고에 쓴다). **부르는 쪽이
+    준다** — 외부 확장은 이 PC에 깔리지 않아 호스트가 모르고(`host.get()`이 `None`이다),
+    점검은 **서버를 부르지 않는다**. 메인 창이 받아 둔 리소스 목록(C7)에서 넘긴다. 주지 않으면
+    **그 경고를 하지 않는다** — 모르는 것으로 경고를 지어내지 않는다.
     """
     from chaeksas.studio.packaging import PackageError, build_manifest  # noqa: PLC0415 - 순환 피함
 
@@ -135,6 +141,26 @@ def readiness(
                 message=f"{finding.message}{hint}",
                 items=list(finding.items),
                 severity=SEVERITY_ERROR if finding.severity == SEVERITY_BLOCK else SEVERITY_WARNING,
+            )
+        )
+    # **고정하지 않은 외부 확장은 경고다** (ADR-0060 §3) — 막지 않는다. 막으면 사람이 뒷문을
+    # 요구하고 그 뒷문이 기본값이 된다. 「덜 조인 것」이라 C14 검사(B…)를 늘리지도 않는다.
+    unpinned = [
+        f"{need.id} ({need.version})"
+        for need in manifest.requires.extensions
+        if not need.definition_hash and need.id in set(external_ids)
+    ]
+    if unpinned:
+        out.append(
+            Violation(
+                rule=PREFLIGHT_RULE,
+                code="definition_unpinned",
+                message=(
+                    f"외부 확장 {len(unpinned)}개가 고정되지 않았습니다 — 정의가 바뀌어도 "
+                    "그대로 돕니다 (STU-15 「정의 고정」)"
+                ),
+                items=unpinned,
+                severity=SEVERITY_WARNING,
             )
         )
     # 돌리지 못한 점검도 보인다 — 숨기면 「점검했는데 아무 말이 없었다」가 된다 (점검은 막지 않는다).

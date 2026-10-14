@@ -47,7 +47,7 @@ from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.checks import refs_in
 from chaeksas.studio.explorer import Explorer
-from chaeksas.studio.extension_dialog import StudioExtensionsDialog
+from chaeksas.studio.extension_dialog import StudioExtensionsDialog, pin_patch
 from chaeksas.studio.extensions import Extensions
 from chaeksas.studio.preflight import Preflight, inspect, readiness, summarize
 from chaeksas.studio.process_dialog import ProcessInfoDialog
@@ -327,8 +327,23 @@ class MainWindow(QMainWindow):
         꺼진 확장의 편집기가 패널에 남아 있으면 안 된다 — 창이 호스트를 다시 읽어 두었으니
         지금 고른 요소를 다시 보이면 패널이 새 호스트에게 묻는다.
         """
-        dialog = StudioExtensionsDialog(self.settings, self.extensions, parent=self)
+        # 고정은 **그림을 고치는 일**이라 진입 정의가 열려 있을 때만 된다 (STU-06과 같은 규칙,
+        # ADR-0022·ADR-0060). 창은 그림을 만지지 않고 `pins`에 적어 두고, 넘기는 것은 여기다.
+        entry = self.process.entry_definition if self.process is not None else None
+        editable = entry is not None and entry.process is not None and self.definition == entry.path
+        dialog = StudioExtensionsDialog(
+            self.settings,
+            self.extensions,
+            process_info=entry.process.info if editable and entry is not None and entry.process is not None else None,
+            parent=self,
+        )
         dialog.exec()
+        if dialog.pins and entry is not None and entry.process is not None:
+            self._apply_properties(
+                entry.process.id,
+                {"chk": {"process": pin_patch(entry.process.info, dialog.pins)}},
+            )
+            self.say("정의 고정을 그림에 적용했습니다 — 「저장」(Ctrl+S)으로 파일에 씁니다.")
         if not dialog.changed:
             return
         self.settings = dialog.settings
@@ -497,6 +512,9 @@ class MainWindow(QMainWindow):
             host=self.extensions.host,
             context=self.extensions.context,
             dirty=self.dirty,
+            # **어느 확장이 외부인가는 받아 둔 리소스 목록이 안다** (C7) — 외부 확장은 이 PC에
+            # 깔리지 않아 호스트가 모른다. 점검은 서버를 부르지 않으므로 여기서 넘긴다 (ADR-0060).
+            external_ids=self.properties.catalog.external_ids(),
         )
 
     def run_preflight(self) -> None:
