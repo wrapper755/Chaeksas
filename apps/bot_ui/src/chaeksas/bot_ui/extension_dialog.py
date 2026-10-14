@@ -44,7 +44,6 @@ from PySide6.QtWidgets import (
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.center_client import KeyRejected
 from chaeksas.bot_ui.runtimes import STATE_LABELS, RuntimeUnavailable, port_for
-from chaeksas.bot_ui.services import Services, external_ids
 from chaeksas.bot_ui.settings import data_dir
 from chaeksas.contracts._base import Violation
 from chaeksas.contracts.extension import (
@@ -55,6 +54,7 @@ from chaeksas.contracts.extension import (
     ExtensionManifest,
 )
 from chaeksas.contracts.signing import AdminKey, Envelope
+from chaeksas.core.app_directory import DirectoryCache, extension_ids
 from chaeksas.core.extensions import ExtensionHost, LoadedExtension
 from chaeksas.core.packages import InstalledBot, installed
 from chaeksas.extension_api import API_VERSION
@@ -455,7 +455,7 @@ class ExtensionsDialog(QDialog):
     def load_held(self) -> None:
         """들고 있는 명부의 외부 확장을 읽는다. **바깥을 부르지 않는다.**"""
         self.external, said = external_from(
-            Services(data_dir=data_dir()).cached(),
+            DirectoryCache(data_dir=data_dir()).cached(),
             keys=list(self._agent.store.state.admin_keys),
             api_version=self._api_version(),
         )
@@ -619,16 +619,18 @@ class ExtensionsDialog(QDialog):
         """Center에서 외부 확장 정의를 다시 받는다 (C7 → 명부).
 
         **닿지 못하면 들고 있던 것을 쓴다** (ADR-0007) — 사유는 표 아래 한 줄로 말한다. 받는 것은
-        **설치된 Bot이 요구하는 외부 확장**뿐이다 (명부의 규칙이 그렇다 — 필요한 것만 받는다).
+        **설치된 Bot이 요구하는 확장**뿐이다 (명부의 규칙이 그렇다 — 필요한 것만 받는다).
+        어느 것이 외부인가는 **Center의 답이 말해 준다** (`extension_ids` — 내장·사내는 정의
+        없이 와서 담기지 않는다).
         """
-        wanted = sorted({one for bot in installed(data_dir()) for one in external_ids(bot.manifest)})
+        wanted = sorted({one for bot in installed(data_dir()) for one in extension_ids(bot.manifest)})
         said: list[str] = []
         try:
             client = self._agent.client()
         except KeyRejected as e:
             client = None
             said.append(f"Center를 부르지 못했습니다 — {e}")
-        found = Services(data_dir=data_dir(), client=client)
+        found = DirectoryCache.using(data_dir(), client)
         held = found.refresh(externals=wanted) if wanted or client is not None else found.cached()
         said += found.problems
         self.external, problems = external_from(

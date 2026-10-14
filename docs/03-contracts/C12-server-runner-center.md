@@ -71,6 +71,10 @@
 
 → `{server_runner_id: "srv_<hex8>", admin_keys, heartbeat_interval_s: 10, server_time}`
 
+`admin_keys`는 **등록 응답에도 찬다** (하트비트와 같은 목록이다). 실행기는 공개키를 메모리에만
+두고 다시 뜨면 **첫 하트비트보다 먼저** 담아 둔 실행을 되살리므로(ADR-0054), 여기가 비면 되살린
+실행이 외부 확장의 봉투를 한 번도 검증할 수 없다 (C13 E6 — 「전송」).
+
 ### HeartbeatRequest
 
 | 필드 | 뜻 |

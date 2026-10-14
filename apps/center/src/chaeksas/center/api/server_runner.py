@@ -150,7 +150,11 @@ def register(
 
     return ServerRunnerRegisterResponse(
         server_runner_id=ServerRunnerId(runner_id),
-        admin_keys=[],  # 배포 서명 검증용 공개키는 하트비트가 준다 (C4와 같다)
+        # **등록 응답에도 싣는다** (C12 §등록) — 실행기는 공개키를 메모리에만 두고, 다시 뜨면
+        # **첫 하트비트보다 먼저** 담아 둔 실행을 되살린다 (ADR-0054). 되살린 실행이 바깥 앱
+        # 명부를 지을 때 공개키가 없으면 외부 확장의 봉투를 **한 번도** 검증할 수 없다 (C13 E6).
+        # Bot UI는 공개키를 제 저장소에 들고 있어 이 자리가 비어도 괜찮다 (C4).
+        admin_keys=signing.admin_keys(store),
         heartbeat_interval_s=heartbeat_interval_s,
         server_time=now_iso(),
         # **만료일은 Center만 안다** (C7) — 없으면 「만료 없음」이고 「모른다」가 아니다.

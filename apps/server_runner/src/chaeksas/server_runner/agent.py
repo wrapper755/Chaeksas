@@ -49,6 +49,7 @@ from chaeksas.contracts.server_runner import (
 from chaeksas.contracts.signing import AdminKey
 from chaeksas.core import machine
 from chaeksas.core import requests as approval_requests
+from chaeksas.core.app_directory import AppDirectory, DirectoryCache
 from chaeksas.core.deploy import Deployer
 from chaeksas.core.engine import WHERE_CENTER, EngineError, RunEnv
 from chaeksas.core.packages import InstalledBot, find, installed
@@ -223,6 +224,11 @@ class Agent:
         self._came_online()
         self.server_runner_id = str(answer.server_runner_id)
         self.next_in_s = answer.heartbeat_interval_s
+        if answer.admin_keys:
+            # **등록 응답도 공개키를 싣는다** (C12) — 되살리기가 봉투를 검증하는 데 그것이
+            # 필요하고(ADR-0007의 「들고 있던 정의」도 봉투로만 쓰인다) 되살리기는 첫 하트비트
+            # 전에 일어난다. 빈 목록으로는 지우지 않는다 (「생략 = 그대로」와 같은 결).
+            self.admin_keys = list(answer.admin_keys)
         log.info("등록했다: %s (주기 %d초)", self.server_runner_id, self.next_in_s)
         if not self._restored_once:
             # **등록한 뒤에 되살린다** — 되살리기가 `run_env`를 쓰고, 되살린 것은 첫 하트비트의
@@ -454,10 +460,19 @@ class Agent:
             # **준비되지 않은 Bot은 띄우지 않는다** (ADR-0013 — 키·확장이 빠졌다).
             return JobAck(job_id=job.job_id, result="rejected", reason="not_ready")
 
+        directory = self.app_directory(bot)
+        unusable = directory.unusable(bot.manifest.requires.extensions)
+        if unusable:
+            # **쓸 수 없는 외부 확장이 있으면 시작조차 하지 않는다** (C1·C13 — 중간에 알면 이미
+            # 한 일을 되돌릴 수 없다). 사전 점검은 이것을 보지 않는다 — 봉투 검증은 여기서
+            # 일어난다. 되살리는 쪽은 막지 않는다 (이미 시작된 실행이다).
+            log.error("작업 %s를 시작하지 않는다 — %s", job.job_id, " / ".join(unusable))
+            return JobAck(job_id=job.job_id, result="rejected", reason="not_ready")
+
         found = Worker(
             bot=bot,
             data_dir=self.settings.data_path,
-            env=self.run_env(bot),
+            env=self.run_env(bot, directory=directory),
             job_id=job.job_id,
             inputs=dict(job.inputs),
             source="job",
@@ -479,8 +494,37 @@ class Agent:
             None,
         )
 
-    def run_env(self, bot: Any) -> RunEnv:
+    def app_directory(self, bot: Any) -> AppDirectory:
+        """그 Bot이 부르는 **바깥 앱 한 벌** (C13 「전송」, C7) — 주소와 검증된 외부 확장 정의.
+
+        **Bot UI와 같은 코드가 받아 둔다** (`core.app_directory.DirectoryCache`) — 두 벌이면
+        「PC는 되는데 서버는 안 된다」가 된다. 다른 것은 **파일을 거치지 않는 것**뿐이다:
+        Bot UI는 자식 프로세스에 `--services`로 건네지만 여기서는 이 프로세스가 엔진을 돌린다
+        (ADR-0031의 「실행기는 Center를 부르지 않는다」는 그 자식 이야기다).
+
+        **닿지 못하면 들고 있던 것을 쓰고**(ADR-0007) **404는 버린다**(철회는 보안 동작이다).
+        봉투는 **받은 쪽에서 다시 검증한다** (C13 E6 — `build`가 한다). 키 값은 명부에 없고
+        **참조 이름**을 이 서버의 비밀 창고가 푼다 (ADR-0013).
+        """
+        found = DirectoryCache.using(self.settings.data_path, self.client)
+        made = found.directory_for(
+            bot.manifest,
+            # Admin 공개키는 Center가 준 것이다 (C12 등록·하트비트) — 배포 검증과 같은 창고.
+            keys=list(self.admin_keys),
+            secrets=self.credentials.service_app_key,
+        )
+        for why in found.problems:
+            log.warning("바깥 앱 명부: %s", why)
+        for app_id, why in sorted(made.problems.items()):
+            # **조용히 사라지지 않는다** — 쓰지 못한 정의는 이유와 함께 로그에 남는다.
+            log.warning("외부 확장 정의를 쓰지 못한다 (%s): %s", app_id, why)
+        return made
+
+    def run_env(self, bot: Any, *, directory: AppDirectory | None = None) -> RunEnv:
         """그 실행이 바깥 세계에 닿는 자리 — **Bot UI 실행기와 같은 함수**가 짓는다.
+
+        `directory`를 주면 그것을 쓴다 — 작업을 받는 쪽이 **시작 전에** 이미 지었으므로
+        (`_take_one`) 같은 것을 두 번 받지 않는다.
 
         모델·읽기 폴더는 **설정이 정한다** (Bot UI는 BUI-03이 정하는 자리다). 주지 않으면
         `NoLlm`·`PathDenied`로 **분명히 실패한다** — 조용히 넘어가지 않는다 (ADR-0027·0032).
@@ -497,6 +541,9 @@ class Agent:
             llm_url=self.settings.llm_base_url,
             llm_key=self.credentials.llm_api_key() or "",
             llm_model=self.settings.llm_model,
+            directory=directory if directory is not None else self.app_directory(bot),
+            # 누가 부르는가 (C11 `caller.type`) — 앱의 기록에 「서버 실행기」로 남는다.
+            caller_type=HOST_KIND,
             # 서버 실행기의 결재 창구는 **Center만**이다 (C12).
             approval_where=WHERE_CENTER,
         )

@@ -733,7 +733,7 @@ def install_bot_calling_an_app(*, bot_id: str = "fin.invoice", ref: str = KEY_RE
 
 def hold_address(*, app_id: str = APP_ID, base_url: str = "http://app.test") -> None:
     """Center에서 받아 **들고 있는** 주소 (C7 — 묻기 위해 Center를 두드리지 않는다)."""
-    from chaeksas.bot_ui.services import CACHE_NAME
+    from chaeksas.core.app_directory import CACHE_NAME
 
     path = data_dir() / CACHE_NAME
     path.parent.mkdir(parents=True, exist_ok=True)

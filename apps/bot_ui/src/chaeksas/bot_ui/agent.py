@@ -26,7 +26,6 @@ from chaeksas.bot_ui.notices import Notices
 from chaeksas.bot_ui.runner import Launcher, Running
 from chaeksas.bot_ui.runtimes import BUSY, RESERVED, HostSettings, RuntimeUnavailable, runtime_ids_of
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
-from chaeksas.bot_ui.services import Services
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
 from chaeksas.contracts import SERVICE_URL_ENV, SERVICE_URL_SETTING, STORAGE_DIR_SETTING
@@ -51,6 +50,7 @@ from chaeksas.contracts.bot_ui import (
     WorkerState,
 )
 from chaeksas.core import machine, requests
+from chaeksas.core.app_directory import DirectoryCache
 from chaeksas.core.deploy import APPLIED, Deployer
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.key_check import key_facts
@@ -399,7 +399,7 @@ class Agent:
         except KeyRejected:
             # 키가 없다 — **들고 있던 것으로 간다.** 키 문제는 트레이·BUI-03이 이미 말한다.
             client = None
-        found = Services(data_dir=data_dir(), client=client)
+        found = DirectoryCache.using(data_dir(), client)
         made = found.write_for(
             bot.manifest,
             path=run_dir(data_dir()) / f"{run_id}.services.json",
@@ -419,7 +419,7 @@ class Agent:
         found = self.host.get(extension_id) if self.host is not None else None
         service = found.manifest.service if found is not None else None
         # 들고 있는 명부를 먼저 본다 — **Center를 여기서 부르지 않는다** (화면마다 묻지 않게).
-        registered = Services(data_dir=data_dir()).base_url_of(extension_id=extension_id)
+        registered = DirectoryCache(data_dir=data_dir()).base_url_of(extension_id=extension_id)
         if registered:
             return registered
         return service.base_url if service is not None else None
@@ -576,7 +576,7 @@ class Agent:
         **점검 밖이다** — `core.preflight`는 그대로 서버를 부르지 않는다. 좁히는 것 다섯:
 
         - **설치된 Bot이 실제로 쓰는 참조만** (BUI-10에 등록만 해 둔 키는 묻지 않는다).
-        - **들고 있는 주소만** (`Services.base_url_of`) — 이것 때문에 Center를 두드리지 않는다.
+        - **들고 있는 주소만** (`DirectoryCache.base_url_of`) — 이것 때문에 Center를 두드리지 않는다.
         - **주기마다 많아야 하나**, 참조마다 하루 한 번. 하트비트는 화면과 같은 자리에서 돈다.
         - **닿지 못한 것은 알릴 거리가 아니다** (ADR-0007) — 조용히 다음 날 다시 묻는다.
         - **거부는 여기서 말하지 않는다** — 실행 기록이 말한다 (목소리를 둘 두지 않는다).
@@ -587,7 +587,7 @@ class Agent:
 
         now = now_iso()
         today = now[:10]
-        held = Services(data_dir=data_dir())
+        held = DirectoryCache(data_dir=data_dir())
         for bot in installed(data_dir()):
             for ref, app_id in key_apps_of(bot.manifest).items():
                 if self._keys_asked_on.get(ref) == today:

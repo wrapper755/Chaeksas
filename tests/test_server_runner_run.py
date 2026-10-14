@@ -28,10 +28,13 @@ from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store, now_iso
+from chaeksas.contracts.extension import definition_hash
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.signing import sign
 from chaeksas.core import seen as seen_mod
+from chaeksas.core.app_directory import CACHE_NAME
 from chaeksas.core.run_log import RunLog, log_path
+from chaeksas.mock_apps.external import definitions as external_definitions
 from chaeksas.server_runner import agent as agent_mod
 from chaeksas.server_runner.center_client import CenterClient, Unreachable
 from chaeksas.server_runner.settings import Settings
@@ -96,7 +99,7 @@ def runner(tmp_path: Path, key: str, center: TestClient) -> agent_mod.Agent:
 # ─────────────────────────── 거리 ───────────────────────────
 
 
-def package_zip() -> bytes:
+def package_zip(*, requires: dict[str, Any] | None = None) -> bytes:
     """업무 예제 하나를 C1 패키지로 싼다 (Studio가 내보내는 것과 같은 모양)."""
     manifest: dict[str, Any] = {
         "schema": 1,
@@ -107,7 +110,7 @@ def package_zip() -> bytes:
         "run_location": "server",
         "entry": "process/main.bpmn",
         "process_id": "Proc_fx03b_amount_branch",
-        "requires": {},
+        "requires": requires or {},
         "human": {},
         "built": {"by": "studio", "at": AT, "core": "0.1.0", "spec_version": 1},
         "content_hash": "sha256:" + "0" * 64,
@@ -129,15 +132,28 @@ def package_zip() -> bytes:
     return made(json.dumps(manifest, ensure_ascii=False))
 
 
-def ready_runner(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
-    """등록 → 승인 → 배포 → 설치까지 세워 둔다 (앞 조각들이 보는 길이다)."""
+def ready_runner(
+    center: TestClient,
+    store: Store,
+    runner: agent_mod.Agent,
+    *,
+    requires: dict[str, Any] | None = None,
+    after_bootstrap: Any = None,
+) -> None:
+    """등록 → 승인 → 배포 → 설치까지 세워 둔다 (앞 조각들이 보는 길이다).
+
+    `after_bootstrap(signer)`는 **첫 공개키가 들어간 뒤, 배포 전에** 불린다 — 배포는 C7
+    누락 검사를 지나야 하므로 확장·서비스 앱을 미리 등록해야 하는 시험이 쓴다.
+    """
     runner.tick()  # 등록
     signer = keystore.create(label="첫 키")
     bootstrap_key(store, public_key=signer.public_bytes(), label="첫 키")
+    if after_bootstrap is not None:
+        after_bootstrap(signer)
 
     uploaded = center.post(
         "/api/v1/packages",
-        files={"file": ("p.zip", package_zip(), "application/zip")},
+        files={"file": ("p.zip", package_zip(requires=requires), "application/zip")},
         headers=ADMIN,
     )
     assert uploaded.status_code in (200, 201), uploaded.text
@@ -546,3 +562,97 @@ def test_a_running_run_is_reported_with_its_node(
         assert one.job_id == job["job_id"]
     assert found.join(WAIT_S)
     drain(runner)
+
+
+# ─────────────────── 바깥 앱 명부 (M7 조각 9, C13 「전송」) ───────────────────
+
+
+def _extension_envelope(signer: Any, definition: dict[str, Any], *, kind: str) -> Any:
+    """외부 확장 등록·철회 봉투 하나 (C2 `extension`·`extension_revoke`)."""
+    return sign(
+        {
+            "kind": kind,
+            "id": definition["id"],
+            "version": definition["version"],
+            "definition_hash": definition_hash(definition),
+        },
+        keystore.load(signer, passphrase=PASS),
+        signed_at=AT,
+    )
+
+
+def test_a_job_whose_external_definition_was_revoked_does_not_start(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """**철회된 정의로는 시작조차 하지 않는다** (C1·C13 E6).
+
+    배포될 때는 Center에 그 정의가 있었다 — 해시가 어긋나면 **배포가** 422로 막히므로
+    (C7 `blocking_at_deploy`) 실행기 쪽 관문이 실제로 잡는 것은 **배포 뒤에 거둬진** 정의다.
+    철회는 보안 동작이라 「모르고 멈추는 것」보다 「철회된 정의로 도는 것」이 나쁘다.
+
+    사전 점검은 이것을 보지 않는다 (`core.preflight` — 봉투 검증은 실행하는 쪽의 일이다).
+    그래서 거절 사유는 같은 `not_ready`이고, 무엇이 왜 막혔는지는 로그가 말한다.
+    """
+    definition = external_definitions.credit("http://127.0.0.1:9")
+    held: dict[str, Any] = {}
+
+    def register_the_definition(signer: Any) -> None:
+        """운영자가 하듯 **서명 봉투로** 등록한다 (C13 E6 — C11로는 못 한다)."""
+        held["signer"] = signer
+        answer = center.post(
+            "/api/v1/resources/extensions",
+            json={
+                "definition": definition,
+                "envelope": _extension_envelope(signer, definition, kind="extension").to_json_dict(),
+            },
+            headers=ADMIN,
+        )
+        assert answer.status_code < 400, answer.text
+
+    ready_runner(
+        center,
+        store,
+        runner,
+        # 패키지가 **그 정의를** 고정한다 (C1) — 배포는 지나간다.
+        requires={
+            "extensions": [
+                {
+                    "id": definition["id"],
+                    "version": ">=1,<2",
+                    "definition_hash": definition_hash(definition),
+                }
+            ]
+        },
+        after_bootstrap=register_the_definition,
+    )
+
+    # 운영자가 정의를 거둔다 (C13 — 철회된 판은 되살아나지 않는다).
+    revoked = center.request(
+        "DELETE",
+        f"/api/v1/resources/extensions/{definition['id']}",
+        json=_extension_envelope(
+            held["signer"], definition, kind="extension_revoke"
+        ).to_json_dict(),
+        headers=ADMIN,
+    )
+    assert revoked.status_code < 400, revoked.text
+
+    job = make_job(center)
+    runner.tick()  # 작업을 받는다 — 받고도 띄우지 않는다
+    assert runner.workers == {}, "철회된 외부 정의를 쓰는 Bot을 시작했다"
+    ack = next(one for one in runner.pending_acks if one.job_id == job["job_id"])
+    assert (ack.result, ack.reason) == ("rejected", "not_ready")
+
+
+def test_the_runner_reads_the_addresses_itself_before_it_starts(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """실행기가 **제 손으로** C7을 읽어 명부를 짓는다 — 파일을 거치지 않는다 (ADR-0031 각주).
+
+    그 Bot이 부르는 앱만 담는다 (여기 그림은 아무것도 부르지 않으므로 **묻지도 않는다**).
+    """
+    ready_runner(center, store, runner)
+    bot = next(one for one in runner.installed_bots() if one.id == BOT)
+    made = runner.app_directory(bot)
+    assert made.addresses == {} and made.externals == {}
+    assert not (runner.settings.data_path / CACHE_NAME).exists(), "부를 것이 없으면 받아 두지 않는다"

@@ -51,7 +51,6 @@ from chaeksas.bot_ui.extension_dialog import (  # noqa: E402
     state_of,
 )
 from chaeksas.bot_ui.main_window import EXTENSION_OFF, NO_EXTENSION, readiness_label  # noqa: E402
-from chaeksas.bot_ui.services import CACHE_NAME  # noqa: E402
 from chaeksas.bot_ui.settings import Settings, data_dir  # noqa: E402
 from chaeksas.bot_ui.store import Store  # noqa: E402
 from chaeksas.contracts import AdminKey, definition_hash, key_id_for, sign  # noqa: E402
@@ -62,6 +61,7 @@ from chaeksas.contracts.manifest import (  # noqa: E402
     TaskTypeNeed,
 )
 from chaeksas.contracts.resources import ExtensionResource  # noqa: E402
+from chaeksas.core.app_directory import CACHE_NAME  # noqa: E402
 from chaeksas.core.extensions import ExtensionHost  # noqa: E402
 from chaeksas.core.preflight import EXTENSION_TURNED_OFF  # noqa: E402
 from chaeksas.qt.theme import tokens  # noqa: E402

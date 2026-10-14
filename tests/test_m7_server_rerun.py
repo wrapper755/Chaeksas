@@ -58,6 +58,7 @@ from chaeksas.mock_apps.external import apps as external_apps  # noqa: E402
 from chaeksas.mock_apps.external import definitions as external_definitions  # noqa: E402
 from chaeksas.server_runner import agent as agent_mod  # noqa: E402
 from chaeksas.server_runner.center_client import CenterClient  # noqa: E402
+from chaeksas.server_runner.credentials import service_key_env  # noqa: E402
 from chaeksas.server_runner.settings import Settings as RunnerSettings  # noqa: E402
 from chaeksas.studio.packaging import default_name, export  # noqa: E402
 from chaeksas.studio.workspace import Workspace  # noqa: E402
@@ -129,37 +130,51 @@ def admin_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
-@pytest.fixture(scope="session")
-def mock_apps() -> Iterator[tuple[dict[str, str], dict[str, str]]]:
-    """모의 앱들을 한 포트에 띄운다 (`samples/mock_apps`). `(C11 앱들, 외부 앱들)`.
-
-    **확장이 Center에 없으면 배포가 막히므로**(C7 누락 검사) 둘 다 알려야 한다 — 사내 확장은
-    서비스 앱 manifest의 `extension` 칸이 출처이고, **외부 확장은 서명 봉투로 등록한다**
-    (C13 E6). 외부 둘(`ext-credit`·`ext-helpdesk`)은 `service_kit`을 쓰지 않으므로 C11로
-    등록할 수 없다.
-    """
-    from fastapi import FastAPI  # noqa: PLC0415
-
-    os.environ[SHARED_KEY_ENV] = DEV_KEY
-    root = FastAPI(title="모의 서비스 앱 (서버 재통과)")
-    for one in catalog.C11_APPS:
-        root.mount(f"/{one.app_id}", build_mock(one).app)
-    root.mount("/ext-credit", external_apps.credit_app())
-    root.mount("/ext-helpdesk", external_apps.helpdesk_app())
-    server = uvicorn.Server(uvicorn.Config(root, host="127.0.0.1", port=0, log_level="warning"))
+def serve(app: Any) -> tuple[str, Any, threading.Thread]:
+    """ASGI 앱 하나를 127.0.0.1의 빈 포트에 띄운다 (M5 인수 시험과 같은 것)."""
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
     deadline = time.monotonic() + 30
     while not server.started and time.monotonic() < deadline:
         time.sleep(0.02)
-    assert server.started, "모의 앱이 뜨지 않았다"
-    base = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
-    yield (
-        {one.app_id: f"{base}/{one.app_id}" for one in catalog.C11_APPS},
-        {app_id: f"{base}/{app_id}" for app_id in external_definitions.BUILDERS},
-    )
-    server.should_exit = True
-    thread.join(timeout=10)
+    assert server.started, "앱이 뜨지 않았다"
+    return f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}", server, thread
+
+
+@pytest.fixture(scope="session")
+def mock_apps() -> Iterator[tuple[dict[str, str], dict[str, str]]]:
+    """모의 앱들을 띄운다 (`samples/mock_apps`). `(C11 앱들, 외부 앱들)`.
+
+    **확장이 Center에 없으면 배포가 막히므로**(C7 누락 검사) 둘 다 알려야 한다 — 사내 확장은
+    서비스 앱 manifest의 `extension` 칸이 출처이고, **외부 확장은 서명 봉투로 등록한다**
+    (C13 E6). 외부 둘(`ext-credit`·`ext-helpdesk`)은 `service_kit`을 쓰지 않으므로 C11로
+    등록할 수 없다.
+
+    C11 앱 열넷은 **한 포트**에 `/<app_id>`로 모으고, 외부 앱 둘은 **각자 포트**다 (M5 인수
+    시험과 같은 까닭) — `AdapterCaller`는 `base_url`의 **경로를 버리고** 호스트·포트만 쓰므로
+    (§4-3의 DNS 고정이 origin 단위다) 경로 접두사 뒤에 둘 수 없다.
+    """
+    from fastapi import FastAPI  # noqa: PLC0415
+
+    os.environ[SHARED_KEY_ENV] = DEV_KEY
+    held = []
+    root = FastAPI(title="모의 서비스 앱 (서버 재통과)")
+    for one in catalog.C11_APPS:
+        root.mount(f"/{one.app_id}", build_mock(one).app)
+    shared, server, thread = serve(root)
+    held.append((server, thread))
+
+    external: dict[str, str] = {}
+    for app_id, make in external_apps.BUILDERS.items():
+        base, one_server, one_thread = serve(make())
+        held.append((one_server, one_thread))
+        external[app_id] = base
+
+    yield {one.app_id: f"{shared}/{one.app_id}" for one in catalog.C11_APPS}, external
+    for one_server, one_thread in held:
+        one_server.should_exit = True
+        one_thread.join(timeout=10)
 
 
 @pytest.fixture
@@ -218,14 +233,44 @@ def model() -> Iterator[StubModel]:
         yield made
 
 
+def service_key_refs() -> list[str]:
+    """예제가 쓰는 서비스 앱 키 **참조 이름** 전부 — **그림에서 읽는다**.
+
+    사람이 옮겨 적으면 예제가 늘 때 묶음이 조용히 뒤처진다 (대상 목록과 같은 결).
+    **두 자리에 있다** — BPM 프로세스가 상속하는 `service_keys`와 태스크가 따로 적은
+    `chk:serviceCall.key_ref`다 (C1 `key_ref`·`task_key_refs` — 사전 점검도 둘을 센다).
+    """
+    found: set[str] = set()
+    for path in sorted(EXAMPLES.glob("*.bpmn")):
+        process = read_process(path.read_text(encoding="utf-8"))
+        found |= {ref for ref in process.info.service_keys.values() if ref}
+        for node in process.all_nodes():
+            call = node.prop("serviceCall")
+            if call is not None and call.key_ref:
+                found.add(call.key_ref)
+    return sorted(found)
+
+
+@pytest.fixture(autouse=True)
+def service_keys(monkeypatch: pytest.MonkeyPatch) -> None:
+    """참조마다 키 값을 **환경변수로** 준다 — 운영자가 서버에서 하는 일이다 (ADR-0013).
+
+    모의 앱은 키 하나를 받으므로(`CHK_MOCK_APPS__DEV_KEY`) 값은 모두 같다. **설정 파일에는
+    넣지 않는다** — 참조 이름만 BPM 프로세스에 있고 값은 이 서버만 안다.
+    """
+    for ref in service_key_refs():
+        monkeypatch.setenv(service_key_env(ref), DEV_KEY)
+
+
 @pytest.fixture
 def runner(
     tmp_path: Path, center: tuple[TestClient, Store, Any], model: StubModel
 ) -> agent_mod.Agent:
     """진짜 서버 실행기 — Center는 in-process이고 실행은 **제 스레드**로 돈다.
 
-    모델·읽기 폴더는 **설정으로** 준다 (운영자가 환경변수로 하는 일). **바깥 앱과 보내기는
-    아직 꽂히지 않는다** — 그래서 그 태스크가 든 예제는 `REMAINING`에 있다.
+    모델·읽기 폴더·서비스 앱 키는 **설정·환경변수로** 준다 (운영자가 하는 일). **바깥 앱
+    명부는 실행기가 제 손으로 Center에서 받는다** (C7 — 파일을 거치지 않는다). 아직 꽂히지
+    않는 것은 **보내기**뿐이고, 그 태스크가 든 예제는 `REMAINING`에 있다.
     """
     client, _, _ = center
     key = client.post(
@@ -428,27 +473,28 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 다섯. **모델과 읽기 폴더는 이제 꽂힌다** (조각 8) — 실행기가
-# 설정에서 받아 `run_env()`로 넘긴다. 남은 것은 셋으로 갈린다.
+# 아직 **돌리지는** 못하는 까닭 여섯. **바깥 앱 명부도 이제 꽂힌다** (조각 9) — 실행기가 제
+# 손으로 C7을 읽어 `RunEnv.services`를 짓는다. 남은 것은 셋으로 갈린다.
 #
-# - 실행기가 아직 안 꽂는 것: **바깥 앱 명부**(`_NO_APPS`).
 # - **플랫폼에 없는 것**: 제품용 보내기(`_NO_SENDER`) — `core.senders`에 `NoSender`와 시험용
 #   뿐이다. **PC도 같다**(`bot_ui/runner_main.py`도 `sender`를 주지 않는다) — 서버만의
 #   공백이 아니라 「배포된 Bot은 무엇으로 보내나」를 정하는 일이다.
-# - **묶음에 없는 것**: 짜 둔 모델 답·시계·신호 (`_NO_CANNED`·`_TIMER`·`_SIGNAL`).
+# - **묶음에 없는 것**: 짜 둔 모델 답·시계·신호·소켓 Center
+#   (`_NO_CANNED`·`_TIMER`·`_SIGNAL`·`_NO_SOCKET`).
+# - **일부러 실패하는 것**: BX-33 (`_ON_PURPOSE` — 아래에 따로 시험이 있다).
+#
+# **사유는 돌려 보고 적는다.** 조각 9에서 셋(BX-13·BX-22·BX-34)은 `_NO_SENDER`로 적혀 있었는데
+# 실제로는 **보내기까지 가지 않아** 그냥 통과했고, 넷(BX-10·BX-21·FX-10·BX-33)은 명부가 아니라
+# 다른 것에 걸려 있었다 — 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
 _NO_CANNED = (
     "묶음에 **짜 둔 모델 답**이 없다 — AI 태스크의 결과가 dict이고 그 안의 칸을 읽는데, "
     "스텁은 타입만 보고 빈 `{}`를 준다(`stub_model.answer_for`). 그래서 갈라짐이 케이스와 "
     "달라지거나 값을 읽다 실패한다. 답은 모델이 아니라 **시험이 정한다** — M3·M5 묶음은 제 "
     "`canned`를 가지고 있고, 그것을 함께 쓰는 자리로 옮기는 것이 다음 일이다. "
 )
-_NO_APPS = (
-    "실행기가 바깥 앱 명부를 꽂지 않는다 (`directory=None`) — `chk:serviceCall`이 부를 곳이 없고, "
-    "서비스 앱 키도 풀지 않아 사전 점검이 `not_ready`로 막는다. "
-)
-_NO_SENDER = "실행기가 보내기를 꽂지 않는다 (`NoSender`) — `chk:email`이 실패한다. "
+_NO_SENDER = "실행기가 보내기를 꽂지 않는다 (`NoSender`) — `chk:email`·`chk:send`가 실패한다. "
 
-# 아래 둘은 실행기가 아니라 **묶음**에 없는 것이다.
+# 아래 셋은 실행기가 아니라 **묶음**에 없는 것이다.
 _TIMER = (
     "실제 시계를 기다린다 — 묶음이 시계를 돌릴 수단이 없다 (실행기는 `RunEnv.clock`을 "
     "바깥에서 받지 않는다). Studio 시험 실행은 `QTimer`를 앞당겨 본다. "
@@ -456,6 +502,20 @@ _TIMER = (
 _SIGNAL = (
     "신호를 넣을 길이 묶음에 없다 — C12 메시지 API는 **메시지**를 넣고(§메시지) 신호는 "
     "엔진의 `signal()`이라 Center를 거치지 않는다. "
+)
+_NO_SOCKET = (
+    "모의 앱 `center-jobs`가 **진짜 Center 주소**를 받아야 한다 "
+    "(`CHK_SVC_CENTER_JOBS__CENTER__BASE_URL`·`__TOKEN`) — 이 묶음의 Center는 in-process "
+    "(`TestClient`)라 다른 스레드의 앱이 부를 주소가 없다. M5 인수 시험은 그 하나를 위해 "
+    "Center를 **진짜 소켓**에 올렸다 (BX-16). 여기서도 그렇게 하는 것이 다음 일이다. "
+)
+
+#: BX-33은 **일부러 실패한다** (ADR-0039) — 한 가지에서만 생기는 값을 뒤에서 읽는 교육 예제다.
+#: 그래서 `REMAINING`이지만 「아직 못 한다」가 아니고, 아래에 **의도한 실패를 보는 시험**이 있다.
+_ON_PURPOSE = (
+    "**일부러 실패하는 교육 예제**다 (ADR-0039 — B11 경고가 가리키는 그 하나). 지나지 않은 "
+    "가지의 변수를 뒤에서 읽어 식이 멈춘다. M5 인수 시험과 같이 **의도한 실패를 따로 본다** "
+    "(`test_bx33_fails_on_purpose_on_the_server_too`). "
 )
 
 #: 아직 **돌리지는** 못하는 예제와 그 이유. **조용히 빼면 묶음이 거짓말을 한다.**
@@ -466,32 +526,22 @@ REMAINING: dict[str, str] = {
     "bx01_invoice_reconciliation": _NO_SENDER,
     "bx02_morning_fx_report": _NO_SENDER,
     "bx05_month_end_close": _NO_SENDER,
-    "bx06_bulk_credit_check": _NO_APPS + _NO_SENDER,
-    "bx08_receivable_dunning": _NO_APPS,
-    "bx10_vendor_onboarding_review": _NO_APPS,
+    "bx06_bulk_credit_check": _NO_SENDER,
+    "bx10_vendor_onboarding_review": _NO_CANNED,
     "bx11_bid_collection": _NO_SENDER,
-    "bx13_return_processing": _NO_APPS + _NO_SENDER,
-    "bx15_quotation": _NO_APPS,
-    "bx16_reorder_proposal": _NO_APPS,
-    "bx20_employee_onboarding": _NO_APPS + _NO_SENDER,
-    "bx21_leave_request": _NO_APPS,
-    "bx22_offboarding_access": _NO_APPS + _NO_SENDER,
-    "bx23_training_reminder": _NO_APPS,
-    "bx24_leave_balance": _NO_APPS,
+    "bx16_reorder_proposal": _NO_SOCKET,
+    "bx20_employee_onboarding": _NO_SENDER,
+    "bx21_leave_request": _NO_SENDER,
     "bx30_contract_review": _NO_CANNED,
-    "bx31_request_triage": _NO_APPS + _NO_SENDER,
-    "bx32_customer_inquiry": _NO_APPS,
-    "bx33_access_request": _NO_APPS + _NO_SENDER,
-    "bx34_incident_alert": _NO_APPS + _NO_SENDER,
-    "bx35_voc_weekly": _NO_APPS + _NO_SENDER,
+    "bx31_request_triage": _NO_SENDER,
+    "bx33_access_request": _ON_PURPOSE,
+    "bx35_voc_weekly": _NO_SENDER,
     "fx04_folder_poll": _TIMER,
     "fx07_email": _NO_SENDER,
     "fx09_sequential_loop": _NO_CANNED,
-    "fx10_operator_routing": _NO_APPS,
+    "fx10_operator_routing": _NO_SENDER,
     "fx13_signal": _SIGNAL,
     "fx14_timers": _TIMER,
-    "fx18_parallel_loop": _NO_APPS,
-    "fx20_external_adapter": _NO_APPS,
 }
 
 GREEN = [one for one in SERVER if one not in REMAINING]
@@ -551,3 +601,28 @@ def test_a_server_example_runs_through_center_and_the_runner(
         messages=case_messages(example),
     )
     assert done["run_status"] == "success", f"{example}: {done}"
+
+
+def test_bx33_fails_on_purpose_on_the_server_too(
+    tmp_path: Path, center: tuple[TestClient, Store, Any], runner: agent_mod.Agent
+) -> None:
+    """BX-33은 **일부러 실패한다** (ADR-0039) — 서버에서도 **같은 식 오류**로 멈춘다.
+
+    지나지 않은 가지에서만 생기는 값을 뒤에서 읽는 교육 예제다 (B11 경고가 가리키는 그 하나).
+    빼지 않고 **의도한 실패를 본다** — 그냥 `REMAINING`에 두면 「언젠가 초록이 될 것」으로
+    읽히고, 어느 날 다른 이유로 실패해도 아무도 모른다 (M5 인수 시험과 같은 자리).
+    """
+    client, _, _ = center
+    info = deploy(center, runner, packaged(tmp_path, "bx33_access_request"))
+    job_id = dispatch(center, info, case_inputs("bx33_access_request"))
+    done = run_to_the_end(
+        center,
+        runner,
+        job_id,
+        answers=case_approvals("bx33_access_request"),
+        messages=case_messages("bx33_access_request"),
+    )
+    assert done["run_status"] == "failed", f"일부러 실패해야 한다: {done}"
+    found = client.get(f"/api/v1/runs/{done['run_id']}", headers=READ).json()
+    # **식 오류다** — 업무 실패(`TaskFailed`)가 아니라 그림의 흠이라 오류 경계로 가지 않는다.
+    assert found.get("error_code") == "expr_error", found
