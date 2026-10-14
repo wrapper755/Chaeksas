@@ -33,6 +33,8 @@ import re
 import threading
 import time
 from collections.abc import Iterator
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +54,7 @@ from chaeksas.center.storage import Store, now_iso  # noqa: E402
 from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
 from chaeksas.contracts.extension import definition_hash  # noqa: E402
 from chaeksas.contracts.signing import sign  # noqa: E402
+from chaeksas.core.senders import WebhookConfig  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
 from chaeksas.mock_apps.c11 import SHARED_KEY_ENV  # noqa: E402
 from chaeksas.mock_apps.c11 import build as build_mock  # noqa: E402
@@ -62,6 +65,8 @@ from chaeksas.server_runner.center_client import CenterClient  # noqa: E402
 from chaeksas.server_runner.credentials import service_key_env  # noqa: E402
 from chaeksas.server_runner.settings import Settings as RunnerSettings  # noqa: E402
 from chaeksas.studio.packaging import default_name, export  # noqa: E402
+from chaeksas.studio.receiver import Receiver  # noqa: E402
+from chaeksas.studio.runner import resolve_inputs  # noqa: E402
 from chaeksas.studio.workspace import Workspace  # noqa: E402
 
 DOCS = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples"
@@ -106,9 +111,18 @@ def _first_case(example: str) -> dict[str, Any]:
     return dict(next((one for one in cases if not one.get("manual")), {}) or {})
 
 
-def case_inputs(example: str) -> dict[str, Any]:
-    """작업 지시로 줄 입력 — 케이스의 `inputs`를 그대로 (C5 `inputs`)."""
-    return dict(_first_case(example).get("inputs") or {})
+def case_inputs(example: str, receiver: Receiver | None = None) -> dict[str, Any]:
+    """작업 지시로 줄 입력 (C5 `inputs`) — **케이스 입력 연산자를 푼다**.
+
+    푸는 것은 **Studio와 같은 함수**다 (`studio.runner.resolve_inputs`) — 연산자는 C14가
+    시험 케이스 형식으로 정한 것이고(`$test_receiver`·`$now_plus`) 작업 지시(C5)에는 그런
+    것이 없다. 베끼면 같은 케이스가 묶음에 따라 다른 값을 받는다.
+
+    `receiver`를 주지 않으면 `$test_receiver`를 만났을 때 **분명히 실패한다** (조용히 dict를
+    넘기면 그림이 그것을 주소로 알고 돈다).
+    """
+    raw = dict(_first_case(example).get("inputs") or {})
+    return resolve_inputs(raw, now=datetime.now().astimezone(), receiver=receiver)
 
 
 def case_approvals(example: str) -> dict[str, dict[str, Any]]:
@@ -267,6 +281,34 @@ def service_keys(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(service_key_env(ref), DEV_KEY)
 
 
+class BundleSettings(RunnerSettings):
+    """묶음만 쓰는 설정 — **웹훅의 사설망을 연다** (ADR-0059 §2).
+
+    제품 설정에는 그 스위치가 **없다**: 한 번 켜면 모든 Bot의 모든 웹훅에 적용되어 사내 아무
+    주소로나 업무 값이 나간다. 그래서 켜는 자리를 **묶음에 둔다** — ADR이 「시험과 Studio 시험
+    수신기만 켠다」고 적어 둔 그 자리다. 막는 규칙 자체는 `tests/test_core_senders.py`가 본다.
+
+    **나머지 길은 제품 그대로다** — 허용 호스트·SMTP는 설정에서 오고 어댑터는 `make_sender`가
+    짓는다.
+    """
+
+    def webhook(self) -> WebhookConfig:
+        return replace(super().webhook(), allow_private_network=True)
+
+
+@pytest.fixture(scope="session")
+def receiver() -> Iterator[Receiver]:
+    """웹훅을 받는 **시험 수신기** — 케이스의 `$test_receiver`가 가리키는 곳 (C14).
+
+    **Studio의 것과 같은 코드**다 (`studio.receiver`) — 받는 모양이 묶음마다 다를 이유가 없다.
+    127.0.0.1에 뜨므로 **배포된 Bot의 규칙으로는 보낼 수 없는 주소**다: 그래서 아래 `runner`가
+    사설망을 열어 준다 (ADR-0059 §2 — 제품 설정에는 그 스위치가 없다).
+    """
+    made = Receiver().start()
+    yield made
+    made.stop()
+
+
 @pytest.fixture(scope="session")
 def mail() -> Iterator[Any]:
     """메일을 받는 **작은 SMTP 서버** — 127.0.0.1이다 (바깥에 나가지 않는다).
@@ -284,7 +326,11 @@ def mail() -> Iterator[Any]:
 
 @pytest.fixture
 def runner(
-    tmp_path: Path, center: tuple[TestClient, Store, Any], model: StubModel, mail: Any
+    tmp_path: Path,
+    center: tuple[TestClient, Store, Any],
+    model: StubModel,
+    mail: Any,
+    receiver: Receiver,
 ) -> agent_mod.Agent:
     """진짜 서버 실행기 — Center는 in-process이고 실행은 **제 스레드**로 돈다.
 
@@ -300,7 +346,7 @@ def runner(
     key = client.post(
         "/api/v1/center-keys", json={"name": "시험 서버", "type": "server_runner"}, headers=ADMIN
     ).json()["key"]
-    settings = RunnerSettings(
+    settings = BundleSettings(
         center_url=CENTER_URL,
         name="재통과 서버",
         max_concurrency=4,
@@ -313,6 +359,8 @@ def runner(
         smtp_port=mail.port,
         smtp_security="none",
         smtp_sender="bot@example.com",
+        # 시험 수신기는 127.0.0.1이다 — 허용 호스트에 적어도 **사설망을 열지 않으면** 막힌다.
+        webhook_allowed_hosts=("127.0.0.1",),
     )
     settings.data_path.mkdir(parents=True, exist_ok=True)
     settings.runs_dir.mkdir(parents=True, exist_ok=True)
@@ -501,35 +549,31 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 여섯. **짜 둔 모델 답도 이제 있다** (조각 12) — M3·M5와 **같은
-# 자리**에서 온다 (`tests/canned_answers.py`). 남은 것은 **플랫폼이 아니라 묶음·계약 쪽**이다.
+# 아직 **돌리지는** 못하는 까닭 다섯. **웹훅도 이제 간다** (조각 12) — 묶음이 **Studio와 같은
+# 시험 수신기·같은 입력 리졸버**를 쓰고(`$test_receiver`·`$now_plus`), 실행기 설정이 그 주소를
+# 허용 호스트에 담는다. 127.0.0.1은 제품 규칙으로 막히므로 **묶음만** 사설망을 연다
+# (`BundleSettings` — ADR-0059 §2의 「시험과 Studio 시험 수신기만」 그 자리다).
 #
-# - **계약이 가른 것**: 웹훅 넷 (`_WEBHOOK` — `$test_receiver`는 Studio 전용이다, C14). 가장 큰
-#   묶음이고 **「아직」이 아니다**.
-# - **묶음에 없는 것**: 시계·신호·소켓 Center·표본 파일·케이스 입력 연산자
-#   (`_TIMER`·`_SIGNAL`·`_NO_SOCKET`·`_NO_SAMPLES`·`_NO_INPUT_OPS`).
+# 남은 것은 모두 **묶음·그림 쪽**이다.
+#
+# - **묶음에 없는 것**: 표본 파일·소켓 Center·시계·신호 (`_NO_SAMPLES`·`_NO_SOCKET`·`_TIMER`·`_SIGNAL`).
+# - **들여다볼 거리**: BX-11의 메시지 (`_MESSAGE_STALL`).
 # - **일부러 실패하는 것**: BX-33 (`_ON_PURPOSE` — 아래에 따로 시험이 있다).
 #
 # **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고(셋은 이미 초록이었다), 조각 10에서 둘,
-# 조각 12에서 또 둘이다 — BX-10·BX-30은 `_NO_CANNED`로 적혀 있었지만 답을 주니 **그 뒤의
-# 웹훅**에서 멈췄다. 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
-_WEBHOOK = (
-    "**웹훅은 이 묶음에서 보낼 곳이 없다** — 케이스가 `$test_receiver`를 가리키는데 그것은 "
-    "**Studio 시험 실행 전용**이고(C14), 배포된 Bot은 사설망으로 웹훅을 보내지 않는다 "
-    "(ADR-0059 §2 — 허용 호스트에 적어도 루프백은 열리지 않는다). 바깥에 나가지 않으므로 "
-    "공개 주소에 수신기를 둘 수도 없다. **계약이 가른 자리**라 「아직」이 아니다. "
-)
+# 조각 12에서 셋이다 — BX-10·BX-30은 짜 둔 답 뒤의 **웹훅**이었고, BX-11은 입력 연산자가 아니라
+# **메시지**였다. 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
 _NO_SAMPLES = (
     "묶음이 **표본 파일**을 만들지 않는다 — 그림이 `samples/<…>` 폴더를 읽는데 저장소에 "
     "이진 파일을 두지 않으므로(M3·M5 묶음은 **그 자리에서 만든다**) 폴더가 없다. "
     "그 자리를 옮겨 오는 것이 다음 일이다. "
 )
-_NO_INPUT_OPS = (
-    "묶음이 **케이스 입력 연산자**를 풀지 않는다 — 케이스가 `{\"$now_plus\": \"PT20S\"}`를 "
-    "적어 두었고(C14 — 시험 입력의 연산자다) 그것을 시각으로 바꾸는 것은 **Studio 시험 "
-    "실행의 일**이다. 작업 지시(C5)에는 그런 연산자가 없어 타이머가 그 dict를 읽다 멈춘다. "
+_MESSAGE_STALL = (
+    "메시지가 받는 실행에 닿지 않아 끝나지 않는다. **케이스 입력 연산자는 이제 풀린다** "
+    "(조각 12 — 마감 `PT20S`가 제대로 20초로 들어간다). 그런데 세 견적을 `POST /messages`로 "
+    "넣어도 실행이 `receive`에서 기다린 채로 남는다 — 상관 키(`입찰번호` → `BID-2610-01`)는 "
+    "맞으므로 **Center 맞추기와 `waiting[]` 보고 사이**를 들여다볼 거리다. 돌려 보고 적었다. "
 )
-
 # 아래 셋은 실행기가 아니라 **묶음**에 없는 것이다.
 _TIMER = (
     "실제 시계를 기다린다 — 묶음이 시계를 돌릴 수단이 없다 (실행기는 `RunEnv.clock`을 "
@@ -560,14 +604,10 @@ _ON_PURPOSE = (
 #: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
 REMAINING: dict[str, str] = {
     "bx01_invoice_reconciliation": _NO_SAMPLES,
-    "bx10_vendor_onboarding_review": _WEBHOOK,
-    "bx11_bid_collection": _NO_INPUT_OPS,
+    "bx11_bid_collection": _MESSAGE_STALL,
     "bx16_reorder_proposal": _NO_SOCKET,
-    "bx21_leave_request": _WEBHOOK,
-    "bx30_contract_review": _WEBHOOK,
     "bx33_access_request": _ON_PURPOSE,
     "fx04_folder_poll": _TIMER,
-    "fx10_operator_routing": _WEBHOOK,
     "fx13_signal": _SIGNAL,
     "fx14_timers": _TIMER,
 }
@@ -614,13 +654,14 @@ def test_a_server_example_runs_through_center_and_the_runner(
     tmp_path: Path,
     center: tuple[TestClient, Store, Any],
     runner: agent_mod.Agent,
+    receiver: Receiver,
 ) -> None:
     """한 줄로 본다: 서명 → 배포 → 설치 → **Center 작업 지시** → 실행 → Center가 안다.
 
     **업무 값은 보지 않는다** (C3에 없다 — 원칙 6). 결과가 맞는지는 Studio 시험 실행이 본다.
     """
     info = deploy(center, runner, packaged(tmp_path, example))
-    job_id = dispatch(center, info, case_inputs(example))
+    job_id = dispatch(center, info, case_inputs(example, receiver))
     done = run_to_the_end(
         center,
         runner,
@@ -632,7 +673,10 @@ def test_a_server_example_runs_through_center_and_the_runner(
 
 
 def test_bx33_fails_on_purpose_on_the_server_too(
-    tmp_path: Path, center: tuple[TestClient, Store, Any], runner: agent_mod.Agent
+    tmp_path: Path,
+    center: tuple[TestClient, Store, Any],
+    runner: agent_mod.Agent,
+    receiver: Receiver,
 ) -> None:
     """BX-33은 **일부러 실패한다** (ADR-0039) — 서버에서도 **같은 식 오류**로 멈춘다.
 
@@ -642,7 +686,7 @@ def test_bx33_fails_on_purpose_on_the_server_too(
     """
     client, _, _ = center
     info = deploy(center, runner, packaged(tmp_path, "bx33_access_request"))
-    job_id = dispatch(center, info, case_inputs("bx33_access_request"))
+    job_id = dispatch(center, info, case_inputs("bx33_access_request", receiver))
     done = run_to_the_end(
         center,
         runner,
