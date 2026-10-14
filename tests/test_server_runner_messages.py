@@ -14,6 +14,8 @@
 | 받을 곳이 없으면 `no_receiver` | Center가 고른 뒤 한 주기가 지났다 |
 | 같은 메시지가 두 번 와도 **한 번만** | ack가 올라가기 전에 또 내려온다 (C12) |
 | **빈자리가 없으면 ack하지 않는다** | 다음 주기에 다시 온다 (거절로 적으면 버려진다) |
+| ack가 올라가기 전에 **죽어도** 한 번만 | 기억이 스냅샷과 함께 담긴다 (ADR-0058) |
+| **담기 전에** 죽으면 다시 받는다 | 기억과 상태가 갈라지지 않는다 — 갈라지면 영영 잃는다 |
 """
 
 from __future__ import annotations
@@ -573,3 +575,136 @@ def test_a_restarted_runner_still_takes_the_message(
 
     assert [one.accepted for one in again.pending_message_acks] == [True]
     assert len(quotes(again, run_id)) == 1
+
+
+def test_a_message_put_before_a_restart_is_not_put_again(
+    center: TestClient,
+    center_store: CenterStore,
+    runner: agent_mod.Agent,
+    settings: Settings,
+    key: str,
+    store: Store,
+) -> None:
+    """**ack가 올라가기 전에 실행기가 죽어도** 같은 메시지가 두 번 들어가지 않는다.
+
+    가장 나쁜 짜임을 그대로 만든다 (ADR-0056 「어려워지거나 포기하는 것」이 적어 둔 자리):
+
+    1. 메시지가 기다리는 실행에 들어간다 — ack는 `pending_message_acks`에만 있다.
+    2. **그 ack가 올라가기 전에** 실행기가 죽는다 (`seen_messages`는 메모리였다).
+    3. 다시 뜬 실행기가 담아 둔 실행을 되살린다. BX-11은 견적을 받고 **또 기다리는 그림**이라
+       되살린 실행이 같은 이름·상관 키를 다시 기다린다.
+    4. Center는 ack를 못 받았으니 **같은 메시지를 다시 싣는다** (C12).
+
+    그때 「처음 본 것」으로 다루면 **견적이 두 번 접수된다**.
+    """
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting_for_message(runner)
+    posted = put_message(center, name="bid_quote", correlation=BID, payload=quote("가나상사"))
+    message_id = str(posted.json()["message_id"])
+
+    # ① 메시지가 들어가고 실행이 이어 가 **다시 기다린다**.
+    runner.tick()
+    settle(runner)
+    assert len(quotes(runner, run_id)) == 1
+    # ② ack는 아직 Center에 올라가지 않았다 — 올라갔으면 이 시험이 볼 것이 없다.
+    assert [one.accepted for one in runner.pending_message_acks] == [True]
+
+    # ③ 실행기가 죽는다. 남는 것은 같은 저장소뿐 — `seen_messages`는 메모리였다.
+    again = agent_mod.build(settings, key, client=center, store=store)
+    again.tick()  # 등록 → 되살린다
+    assert run_id in again.workers, "되살리지 않았다"
+    for found in list(again.workers.values()):
+        found.join(WAIT_S)
+    # 되살린 기억이 **받아들였다**를 들고 있다 (ADR-0058) — 거절로 적으면 Center가 접수를
+    # 놓친 줄 알고, 비어 있으면 아래에서 견적이 두 번 들어간다.
+    assert [(one.message_id, one.accepted, one.run_id) for one in again.pending_message_acks] == [
+        (message_id, True, run_id)
+    ]
+
+    # ④ Center가 같은 메시지를 **다시 싣는 가장 나쁜 짜임**을 그대로 건넨다 (ack가 안 갔다).
+    again.apply_messages(
+        [
+            MessageDispatch(
+                message_id=message_id,
+                name="bid_quote",
+                correlation=BID,
+                payload=quote("가나상사"),
+                received_at=now_iso(),
+            )
+        ]
+    )
+    for found in list(again.workers.values()):
+        found.join(WAIT_S)
+    assert len(quotes(again, run_id)) == 1, "재시작을 건너 같은 메시지로 견적이 두 번 들어갔다"
+
+    # ⑤ 그래서 첫 하트비트가 ack를 올리고 Center는 그 메시지를 **더 싣지 않는다**.
+    again.tick()
+    for found in list(again.workers.values()):
+        found.join(WAIT_S)
+    answer = again.last_response
+    assert answer is not None and answer.messages == []
+    assert len(quotes(again, run_id)) == 1
+
+
+def test_a_message_absorbed_but_not_saved_is_not_lost(
+    center: TestClient,
+    center_store: CenterStore,
+    runner: agent_mod.Agent,
+    settings: Settings,
+    key: str,
+    store: Store,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**담기 전에** 죽으면 그 메시지를 **다시 받는다** — 잊어서가 아니라 상태도 그 전이라서다.
+
+    ADR-0058이 기억을 스냅샷과 **한 트랜잭션**에 둔 까닭이 이 자리다. 기억만 따로 적었다면
+    여기서 「이미 받았다」와 「상태는 그 전」이 갈라져 **견적이 영영 사라진다** (두 번 들어가는
+    것보다 나쁘다 — 아무 자리에도 남지 않는다).
+
+    메시지를 넣은 뒤 담지 못하고 죽는 틈을 `save_waiting`을 비워 만든다.
+    """
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting_for_message(runner)
+    saved_before = store.get(run_id)
+    assert saved_before is not None and saved_before.snapshot is not None
+
+    # 넣은 뒤 **담지 못하고 죽는다** — 스냅샷은 메시지 전 그대로다.
+    monkeypatch.setattr(store, "save_waiting", lambda *a, **k: 0)
+    put_message(center, name="bid_quote", correlation=BID, payload=quote("가나상사"))
+    runner.tick()
+    settle(runner)
+    assert len(quotes(runner, run_id)) == 1  # 메모리에서는 나아갔다
+    assert store.absorbed() == {}, "담기지 않았는데 기억만 남았다"
+
+    monkeypatch.undo()
+    again = agent_mod.build(settings, key, client=center, store=store)
+    again.tick()  # 등록 → **메시지 전 상태**를 되살린다
+    for found in list(again.workers.values()):
+        found.join(WAIT_S)
+    assert quotes(again, run_id) == [], "되살린 것이 메시지 전 상태가 아니다"
+
+    again.tick()  # Center가 다시 싣는다 — ack를 못 받았다
+    for found in list(again.workers.values()):
+        found.join(WAIT_S)
+    assert len(quotes(again, run_id)) == 1, "견적을 잃었다"
+
+
+def test_the_absorbed_memory_goes_and_comes_with_the_run(store: Store) -> None:
+    """빨아들인 메시지의 기억은 **그 실행과 함께** 담기고 함께 지워진다 (ADR-0058).
+
+    실행이 끝나면 되살릴 상태가 없으니 그 기억에 쓸 데도 없다 — 그래서 이 표는 **기다리는
+    실행**만큼만 자라고 ADR-0056처럼 잊는 규칙을 따로 둘 것이 없다.
+    """
+    store.mark_running("run_1", bpm_process_id=BOT, version=VERSION, job_id=None, started_at=AT)
+    assert store.absorbed() == {}
+
+    store.save_waiting("run_1", {"run_id": "run_1"}, absorbed=["msg_aaaa1111"])
+    assert store.absorbed() == {"msg_aaaa1111": "run_1"}
+    # 같은 것을 또 담아도 한 줄이다 (담을 때마다 그 실행이 받은 것을 전부 넘긴다).
+    store.save_waiting("run_1", {"run_id": "run_1"}, absorbed=["msg_aaaa1111", "msg_bbbb2222"])
+    assert store.absorbed() == {"msg_aaaa1111": "run_1", "msg_bbbb2222": "run_1"}
+
+    store.forget("run_1")
+    assert store.absorbed() == {}, "실행은 끝났는데 기억만 남았다"

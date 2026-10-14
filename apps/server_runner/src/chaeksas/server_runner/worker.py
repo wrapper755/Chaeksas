@@ -144,6 +144,10 @@ class Worker:
     _failure: str = ""
     #: 도는 스레드가 찍어 둔 지금 모습. 묻는 쪽은 이것만 본다 (`Run`을 건드리지 않는다).
     _shot: Snapshot | None = None
+    #: **이 실행이 빨아들인 메시지** (C12 `message_id`, ADR-0058). 담을 때 스냅샷과 **함께**
+    #: 간다 — 여기 쌓아 두는 것이 그 때문이다. 넣는 쪽은 agent 스레드, 적는 쪽은 이 스레드라
+    #: 자물쇠를 함께 쓴다.
+    _absorbed: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         if not self.run_id:
@@ -226,17 +230,30 @@ class Worker:
         self.engine.answer(run, request_id, found, answered_by=answered_by)
         self._continue(run)
 
-    def deliver(self, name: str, *, correlation: Any = None, payload: Mapping[str, Any]) -> bool:
+    def deliver(
+        self,
+        name: str,
+        *,
+        correlation: Any = None,
+        payload: Mapping[str, Any],
+        message_id: str | None = None,
+    ) -> bool:
         """메시지를 넣는다 (C12 §메시지). **넣었으면 참** — 받을 곳이 없으면 거짓이다.
 
         받을 곳이 있는지 **먼저 묻는다** (`Engine.message_target`) — 엔진의 `deliver`는 받을 곳이
         없어도 조용히 넘어가므로, 그것만 부르면 실행기가 Center에 「받았다」고 거짓 ack를 보낸다.
+
+        `message_id`는 **엔진에 넘기지 않는다** (ADR-0058) — C12의 전송 이름이라 엔진이 알 일이
+        아니다. 담을 때 스냅샷과 함께 적어 **재시작을 건너 두 번 들어가지 않게** 한다.
         """
         run = self.run
         if run is None:  # pragma: no cover - 부르는 쪽이 먼저 되살린다
             return False
         if self.engine.message_target(run, name, correlation=correlation) is None:
             return False
+        if message_id:
+            with self._lock:
+                self._absorbed.append(message_id)
         self.engine.deliver(run, name, correlation=correlation, payload=payload)
         self._continue(run)
         return True
@@ -322,13 +339,19 @@ class Worker:
         self._settle(run)
 
     def _settle(self, run: Run) -> None:
-        """스레드가 끝나며 저장소를 맞춘다 — 끝났으면 지우고, 멈췄으면 **담는다**."""
+        """스레드가 끝나며 저장소를 맞춘다 — 끝났으면 지우고, 멈췄으면 **담는다**.
+
+        **빨아들인 메시지를 스냅샷과 함께 넘긴다** (ADR-0058) — 둘이 한 트랜잭션에 들어가야
+        「메시지는 받았다는데 상태는 그 전」이 생기지 않는다.
+        """
         if self.store is None:
             return
         if run.finished:
             self.store.forget(self.run_id)
             return
-        size = self.store.save_waiting(self.run_id, dump(run))
+        with self._lock:
+            absorbed = list(self._absorbed)
+        size = self.store.save_waiting(self.run_id, dump(run), absorbed=absorbed)
         log.info("실행 %s를 담았다 (%d바이트) — 자리를 놓는다", self.run_id, size)
 
     def _drive(self, run: Run) -> None:

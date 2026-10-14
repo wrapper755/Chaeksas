@@ -353,6 +353,26 @@ class Agent:
             return
         for saved in self.store.all():
             self._restore_one(saved)
+        self._restore_absorbed()
+
+    def _restore_absorbed(self) -> None:
+        """되살린 실행이 **이미 빨아들인 메시지**를 멱등 기억에 되돌려 놓는다 (ADR-0058).
+
+        이것이 없으면 ack가 올라가기 전에 죽은 실행기가 다시 떠서 **같은 메시지를 또 넣는다**
+        — BX-11처럼 받고 또 기다리는 그림이면 되살린 실행이 그 메시지를 다시 기다리고 있다.
+
+        **되살린 뒤에 읽는다** — 되살리지 못한 실행은 `_close_unrestored`가 행을 지우며 그
+        기억도 함께 버렸다(받을 실행이 없으니 쓸 데가 없다).
+
+        되돌린 ack는 **「아직 닿지 않았다」**로 들어간다 (`Seen.remember`) — 우리가 보낸 적이
+        없으니 맞다. 다음 하트비트에 올라가고 그때부터 잊을 준비를 한다 (ADR-0056).
+        """
+        if self.store is None:  # pragma: no cover - 부르는 쪽이 먼저 본다
+            return
+        for message_id, run_id in self.store.absorbed().items():
+            self._remember_message_ack(
+                MessageAck(message_id=message_id, accepted=True, run_id=run_id)
+            )
 
     def _restore_one(self, saved: Saved) -> None:
         bot = find(self.settings.data_path, saved.bpm_process_id, saved.version)
@@ -610,7 +630,14 @@ class Agent:
                 log.info("메시지 %s를 넣을 자리가 없다 — 다음 주기에", one.message_id)
                 continue
             try:
-                put = worker.deliver(one.name, correlation=one.correlation, payload=one.payload)
+                put = worker.deliver(
+                    one.name,
+                    correlation=one.correlation,
+                    payload=one.payload,
+                    # **담을 때 스냅샷과 함께 적힌다** (ADR-0058) — 그래야 ack가 올라가기 전에
+                    # 실행기가 죽어도 되살린 실행에 같은 메시지가 두 번 들어가지 않는다.
+                    message_id=one.message_id,
+                )
             except EngineError as e:
                 # 넣다 업무가 실패했다 — **받아들이지 못했다고 말한다** (실행은 실패로 닫힌다).
                 self._remember_message_ack(
