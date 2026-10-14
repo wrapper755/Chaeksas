@@ -13,6 +13,10 @@
 
 **걸음마다 적지 않는다** — 실행 기록 파일에 이미 걸음이 다 있고, 되살릴 자리는 기다림뿐이다.
 
+**빨아들인 메시지는 스냅샷과 같은 트랜잭션에** 간다 (`absorbed_messages`, ADR-0058) — 따로
+적으면 둘이 갈라져 메시지를 두 번 넣거나 영영 잃는다. **담을 때마다 그 실행이 받은 것을 전부
+다시 적는다**(멱등) — 한 번 적고 지우면 어긋난 순간이 그대로 굳는다.
+
 스레드가 여럿이라 **연결을 잠근다** — `sqlite3`의 기본 연결은 한 스레드만 쓸 수 있으므로
 `check_same_thread=False`로 열고 자물쇠 하나로 감싼다 (ADR-0054 §남은 것이 묻던 자리다).
 """
@@ -23,6 +27,7 @@ import json
 import logging
 import sqlite3
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -46,6 +51,18 @@ CREATE TABLE IF NOT EXISTS runs (
   job_id         TEXT,
   started_at     TEXT NOT NULL,
   saved_at       TEXT NOT NULL
+);
+
+-- 그 실행이 **이미 빨아들인 메시지** (ADR-0058). 스냅샷과 **같은 트랜잭션**에 들어가고
+-- 실행이 끝나면 함께 지워진다 — 둘이 갈라지면 메시지를 두 번 넣거나 영영 잃는다.
+--
+-- **열을 더하지 않고 표를 따로 둔다** — `CREATE TABLE IF NOT EXISTS`는 이미 만들어진 DB의
+-- 표를 고치지 않으므로 `runs`에 열을 더하면 돌던 실행기가 조용히 깨진다 (Center의
+-- `extension_health`와 같은 결).
+CREATE TABLE IF NOT EXISTS absorbed_messages (
+  message_id TEXT PRIMARY KEY,
+  run_id     TEXT NOT NULL,
+  saved_at   TEXT NOT NULL
 );
 """
 
@@ -120,24 +137,41 @@ class Store:
             )
             self.db.commit()
 
-    def save_waiting(self, run_id: str, snapshot: dict[str, Any]) -> int:
+    def save_waiting(
+        self, run_id: str, snapshot: dict[str, Any], *, absorbed: Iterable[str] = ()
+    ) -> int:
         """실행이 멈췄다 — 스냅샷을 담는다. 돌려주는 것은 담긴 글의 길이(바이트)다.
 
         **한 트랜잭션이다** — 쓰다 꺼져도 반만 적힌 행이 남지 않는다.
+
+        `absorbed`는 그 실행이 **이 상태에 이르기까지 빨아들인 메시지**다 (ADR-0058). 스냅샷과
+        **함께** 적는 것이 요점이다 — 따로 적으면 「메시지는 받았다는데 상태는 그 전」인 틈이
+        생겨 그 메시지를 영영 잃는다.
         """
         body = json.dumps(snapshot, ensure_ascii=False, sort_keys=True)
+        at = now_iso()
         with self._lock:
             self.db.execute(
                 "UPDATE runs SET state = ?, snapshot = ?, saved_at = ? WHERE run_id = ?",
-                (WAITING, body, now_iso(), run_id),
+                (WAITING, body, at, run_id),
+            )
+            self.db.executemany(
+                "INSERT INTO absorbed_messages (message_id, run_id, saved_at) VALUES (?, ?, ?)"
+                " ON CONFLICT(message_id) DO NOTHING",
+                [(one, run_id, at) for one in absorbed],
             )
             self.db.commit()
         return len(body)
 
     def forget(self, run_id: str) -> None:
-        """끝났다 — 행을 지운다. **실행 기록 파일은 남는다** (C3 — 파일이 원본이다)."""
+        """끝났다 — 행을 지운다. **실행 기록 파일은 남는다** (C3 — 파일이 원본이다).
+
+        **빨아들인 메시지도 함께 지운다** — 되살릴 상태가 없으면 그 기억에 쓸 데가 없다
+        (ADR-0058 — 그래서 이 표는 기다리는 실행 수만큼만 자란다).
+        """
         with self._lock:
             self.db.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
+            self.db.execute("DELETE FROM absorbed_messages WHERE run_id = ?", (run_id,))
             self.db.commit()
 
     # ── 읽기 ──
@@ -147,6 +181,18 @@ class Store:
         with self._lock:
             rows = self.db.execute("SELECT * FROM runs ORDER BY started_at, run_id").fetchall()
         return [self._row(one) for one in rows]
+
+    def absorbed(self) -> dict[str, str]:
+        """담아 둔 실행들이 **이미 빨아들인 메시지** — `message_id` → `run_id` (ADR-0058).
+
+        다시 뜬 실행기가 이것으로 멱등 기억을 되살린다. 행이 남은 실행의 것만 있다 (`forget`이
+        함께 지운다).
+        """
+        with self._lock:
+            rows = self.db.execute(
+                "SELECT message_id, run_id FROM absorbed_messages ORDER BY saved_at, message_id"
+            ).fetchall()
+        return {str(one["message_id"]): str(one["run_id"]) for one in rows}
 
     def get(self, run_id: str) -> Saved | None:
         with self._lock:

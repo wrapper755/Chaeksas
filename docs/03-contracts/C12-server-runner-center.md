@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0038](../decisions/0038-approval-request-channel.md), [0054](../decisions/0054-server-run-state-and-concurrency.md), [0056](../decisions/0056-bounded-seen-maps.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0038](../decisions/0038-approval-request-channel.md), [0054](../decisions/0054-server-run-state-and-concurrency.md), [0056](../decisions/0056-bounded-seen-maps.md), [0057](../decisions/0058-absorbed-messages-travel-with-the-snapshot.md) |
 | 관련 화면 | CON-12 서버 실행, CON-05, CON-04, CON-11 |
 
 ## 목적
@@ -199,6 +199,13 @@ Center는 메시지를 이렇게 처리한다.
   ack는 버리지 않는다** — 버리면 다시 내려온 지시가 「처음 본 것」이 되어 메시지가 실행에
   두 번 들어가거나 같은 작업으로 실행이 둘 생긴다. 「닿았다」는 **그 ack를 실은 하트비트가
   200을 받은 것**이다 (Center가 같은 요청에서 반영한다).
+- **빨아들인 메시지는 상태와 함께 담긴다** ([ADR-0058](../decisions/0058-absorbed-messages-travel-with-the-snapshot.md)) —
+  그 기억은 메모리라 재시작을 못 넘으므로, 실행에 넣은 `message_id`를 **스냅샷과 한
+  트랜잭션에** 적는다. 그래서 되살린 실행이 **같은 이름·상관 키를 다시 기다리더라도**(받고 또
+  기다리는 그림이 있다) Center가 다시 실은 그 메시지가 두 번 들어가지 않고 **마지막 ack가
+  되돌아간다**. **따로 담지 않는 것이 요점이다** — 넣은 뒤 담기 전에 죽는 틈에서 기억과 상태가
+  갈라지면 그 메시지를 영영 잃는다. 실행이 끝나면 그 기억도 함께 지워지므로, 그 뒤에 다시 온
+  같은 메시지는 `no_receiver`다 (업무는 한 번만 일어났고 접수는 실행 기록에 남는다 — C3).
 
 ## 예시
 
@@ -253,3 +260,4 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 | 2026-10-14 | 1 | **메시지가 돈다 → 「구현됨」** — `POST /api/v1/messages`(`center/api/messages.py`)·하트비트 `messages[]`·`message_acks[]`가 양쪽에 생겼다. 받는 곳을 고르는 규칙은 **엔진의 것 하나**이고(`message_matches()` ↔ `Engine.message_target()`, 시험이 대조한다) **상관 키가 없으면 찾지 않는 것**은 *고를 것인가*의 판단이라 Center에 둔다. 메시지 시작은 **`POST /jobs`와 같은 함수**로 작업이 되고(배포 검사·상한이 한 자리에 남는다), 둘 이상이면 422 `receiver_ambiguous`다. 작업과 같이 **ack가 올 때까지 다시 싣고** 실행기는 넣을 수 없는 것을 **ack하지 않고 둔다**. 거절은 다시 싣지 않는다. 「유실 처리」가 가던 메시지도 닫는다 | 0054 |
 | 2026-10-14 | 1 | **멱등 기억이 무한히 자라지 않는다** ([ADR-0056](../decisions/0056-bounded-seen-maps.md)) — 이미 본 작업·메시지의 마지막 ack는 **닿은 뒤 두 주기**까지 들고 있다가 잊고, **닿지 않은 ack는 버리지 않는다**(버리면 다시 내려온 지시가 「처음 본 것」이 되어 업무가 두 번 일어난다). 자리는 하나다(`seen.py`) — 작업과 메시지가 같은 까닭으로 있으므로 규칙을 갈라 두면 한쪽만 고친다 | 0056 |
 | 2026-10-14 | 1 | **CON-12가 이것을 읽는다** — `ServerRunnerInfo`에 `key_prefix`가 생겼다(만료만 보이면 CON-11의 어느 줄인지 못 찾는다 — 키가 여럿이면 만료일이 겹친다. 원문·해시는 그대로 주지 않는다). 읽는 자리는 **키 하나에서 둘을 함께** 꺼낸다 (`_key_of` — 앞자리만 있고 만료가 없으면 화면이 「무기한」을 거짓으로 말한다) | — |
+| 2026-10-14 | 1 | **재시작을 건너서도 메시지가 두 번 들어가지 않는다** ([ADR-0058](../decisions/0058-absorbed-messages-travel-with-the-snapshot.md)) — ADR-0056이 「재 보지 않았다」고 적어 둔 자리를 BX-11로 재 보니 **정말 두 번 들어갔다**(견적 하나가 두 번 접수). 빨아들인 `message_id`를 **스냅샷과 한 트랜잭션에** 담아 다시 뜰 때 멱등 기억을 되살린다. **따로 담지 않는 것이 요점이다** — 넣은 뒤 담기 전에 죽는 틈에서 갈라지면 그 메시지를 영영 잃는다. `message_id`는 엔진에 넘기지 않는다(전송 이름이다) | 0058 |
