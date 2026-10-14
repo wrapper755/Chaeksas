@@ -110,6 +110,16 @@ class Catalog:
     def app(self, app_id: str) -> App | None:
         return next((one for one in self.apps if one.app_id == app_id), None)
 
+    def external_ids(self) -> tuple[str, ...]:
+        """**외부 확장의 id들** (C13 `tier`) — 고정 경고가 쓴다 (ADR-0060).
+
+        확장 id와 `app_id`는 같은 이름 공간이다 (C13 「이름 공간은 하나다」). 외부 확장은 이 PC에
+        깔리지 않아 호스트가 모르므로, **받아 둔 이 목록이 아는 유일한 자리**다. 가르는 것은
+        `kind`다 — 그 줄을 외부 정의에서 만들었다는 뜻이고(`_from_external`), `tier`는 정의가
+        적어 보낸 글자 그대로라 믿을 거리가 아니다.
+        """
+        return tuple(sorted({one.app_id for one in self.apps if one.kind == KIND_EXTERNAL}))
+
     def __bool__(self) -> bool:
         return bool(self.apps)
 

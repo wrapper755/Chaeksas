@@ -19,7 +19,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 | 계약 | 문서 머리말 | 코드 | 「구현됨」까지 남은 것 |
 | --- | --- | --- | --- |
-| C1 | **구현됨** | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | — (닫았다 — Studio가 `Provides`를 짓고 CON-06이 읽는다). **칸 하나는 비어 온다**: `requires.extensions[].definition_hash`를 적는 쪽이 없다 (§3-10) — 모델·대조하는 쪽은 있어 상태를 내리지 않는다. `requires.settings`는 **찼다** (`chk:email` → `smtp`, [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)) |
+| C1 | **구현됨** | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | — (닫았다 — Studio가 `Provides`를 짓고 CON-06이 읽는다). — (닫았다). `definition_hash`는 **STU-15에서 사람이 고정한다**([ADR-0060](decisions/0060-pinning-external-definitions.md) — 고정하지 않으면 경고만 한다), `requires.settings`는 Studio가 그림에서 채운다 (`chk:email` → `smtp`, [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)) |
 | C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
 | C3 | **구현됨** | `contracts.events`·`core.run_log` | — (닫았다: `ui_session`은 [ADR-0041](decisions/0041-extension-run-events.md), `case_id`·`queued_s`는 아는 쪽이 넣는다, `confirmations`는 **세는 쪽**이 가르고 `bot_ui_id`는 **Center가 읽을 때** 채운다) |
 | C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠고 `key_expires_at`으로 BUI-05 키 만료를 닫았다) |
@@ -46,14 +46,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열넷의 상태는 §1 표에 있다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
-
-### 3-10. C1 `requires.extensions[].definition_hash`를 **채우는 쪽이 없다**
-
-C1은 외부 확장이면 `definition_hash`로 정의를 고정한다고 적어 두었고, 받는 쪽은 그것을 **대조한다** (C13 E6, `core.app_directory.unusable` — 다르면 시작조차 하지 않는다). 그런데 **Studio 내보내기가 그 칸을 적지 않는다** (`studio/packaging.py`는 그림의 `chk:process.extensions`에 있는 `{id, version}`만 옮긴다). 그래서 오늘 내보낸 패키지에는 고정된 정의가 하나도 없다.
-
-- **M7 조각 9에서 드러났다** — 실행기가 「고정된 것만」 물으면 외부 앱을 **하나도** 부를 수 없었다 (BX-32·FX-20). 지금은 `requires.extensions` **전부**를 묻고 어느 것이 외부인가는 **Center의 답**(정의가 함께 오나)으로 가른다. 봉투 검증은 그대로이고, 고정된 것의 대조도 그대로다 — **관문이 느슨해진 것은 없다.** 다만 고정이 없으면 「승인받은 그 정의인가」를 **아무도 묻지 않는다**.
-- **먼저 정할 것:** 내보낼 때 해시를 어디서 얻나 (이 줄의 아래 셋). Studio는 Center 리소스 목록을 **읽기만** 하고(`studio/services.py`), 내보내기는 Center 없이도 되어야 한다 (`export`는 오프라인 동작이다). 그래서 셋 중 하나다 — ① 등록된 정의를 읽어 적고 **없으면 비운다**(지금과 같은 상태가 섞인다), ② 없으면 **내보내기를 막는다**(Center 없이 내보낼 수 없게 된다), ③ **고정을 사람이 켠다**(STU-06의 칸). 정하기 전에는 ①도 ②도 코드에 넣지 않는다.
+계약 열넷의 상태는 §1 표에 있다. **남은 것이 없다** — 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
 
 ## 4. 화면 쪽 기능 공백
 

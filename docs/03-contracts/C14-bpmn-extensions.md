@@ -46,7 +46,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 
 | 요소 | JSON 필드 | 뜻 |
 | --- | --- | --- |
-| `chk:process` | `run_location`(`server`\|`pc`), `service_keys`(`{app_id: key_ref}`), `extensions`(`[{id, version}]`), `inputs`(`[{name, type, required, description, default?}]` — 메시지 본문으로 들어오는 값도 여기에 선언), `outputs`(`[name]`) | BPM 프로세스 정보 (STU-06). 패키지 매니페스트(C1)는 빌드 때 이것을 모아 만든다 |
+| `chk:process` | `run_location`(`server`\|`pc`), `service_keys`(`{app_id: key_ref}`), `extensions`(`[{id, version, definition_hash?}]` — **외부 확장은 `definition_hash`로 정의를 고정한다**: 적어 두면 빌드가 C1 `requires.extensions`로 그대로 옮기고, 받는 쪽이 「승인받은 그 정의인가」를 대조한다. **비워 두면 고정하지 않는다** — 막지 않고 Studio가 경고한다, [ADR-0060](../decisions/0060-pinning-external-definitions.md). 적는 자리는 STU-15다), `inputs`(`[{name, type, required, description, default?}]` — 메시지 본문으로 들어오는 값도 여기에 선언), `outputs`(`[name]`) | BPM 프로세스 정보 (STU-06). 패키지 매니페스트(C1)는 빌드 때 이것을 모아 만든다 |
 | `chk:defaults` | `limits`(`{timeout_s, max_steps}`), `forbidden_actions[]`, `confirm_triggers[]`, `web`(`{profile, session}`), `desktop`(`{app}` — 띄울 앱 이름) | 모든 AI·UI 태스크의 기본값. 태스크에 적은 값이 이긴다. 확장 태스크(`chk:task`)에는 `web`·`desktop`이 **속성의 기본값**으로 넘어간다 — 태스크 속성에 같은 이름이 없을 때만 엔진이 채운다 ([ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 
 ## 태스크 종류와 속성
