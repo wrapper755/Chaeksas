@@ -1,16 +1,18 @@
-/** CON-02가 세는 일 — **화면을 모르는 자리**다 (`page.tsx`는 이것을 그릴 뿐이다).
+/** CON-02·CON-12가 세는 일 — **화면을 모르는 자리**다 (`page.tsx`는 이것을 그릴 뿐이다).
  *
  * 여기 있는 것은 전부 **순수 함수**다: 서버 호출(`lib/center.ts`)도, JSX도, `next/*`도 들이지
  * 않는다. 갈라 둔 까닭은 **셈을 시험으로 재려고**다 — 페이지 모듈은 `server-only`를 끌고 와
  * 단위 시험에서 불러올 수 없다 (파이썬 쪽에서 「Qt를 모르는 함수」를 갈라 두는 것과 같은 결).
  *
- * 세는 규칙은 C3 요약에서 온다. **끝난 실행만**, **버전마다 최근 20회만**, 확인률은 **그 칸을
- * 보낸 실행만** 분모에 넣는다.
+ * CON-02의 세는 규칙은 C3 요약에서 온다. **끝난 실행만**, **버전마다 최근 20회만**, 확인률은
+ * **그 칸을 보낸 실행만** 분모에 넣는다. CON-12 쪽은 C12 보고와 C5 배포를 맞춰 본다.
  */
 
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
+import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
+import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
 
 /** 준비도를 재는 표본 (화면 문서 — 「최근 20회 실행 기준」). */
 export const SAMPLE = 20;
@@ -156,4 +158,204 @@ export function keyRefsOf(one: PackageInfo): string[] {
   const needs = one.manifest?.requires?.service_apps ?? [];
   const found = needs.flatMap((need) => [need.key_ref, ...(need.task_key_refs ?? [])]);
   return [...new Set(found.filter((ref): ref is string => Boolean(ref)))];
+}
+
+// ───────────────────────────── CON-12 서버 실행 ─────────────────────────────
+
+/**
+ * 서버 실행기 상태 → `status_map` 「서버 실행기」의 표기 (C12 `status`는 열린 문자열이다).
+ *
+ * **오프라인이 먼저고, 그다음이 「일시 중지」다.** 오프라인이면 실행기가 보고한 `status`는
+ * 지난 이야기라 「동작」으로 보이면 거짓이 되고, `paused`는 **Center의 뜻**이라 실행기가
+ * 다음 하트비트로 알기 전에도 참이다 (거꾸로 두면 막 멈춘 실행기가 한 주기 동안 「동작」이다).
+ */
+export function runnerStatus(row: ServerRunnerInfo): string {
+  if (!row.online) return "오프라인";
+  if (row.paused) return "일시 중지";
+  const table: Record<string, string> = {
+    running: "동작",
+    paused: "일시 중지",
+    draining: "정리 중",
+    error: "오류",
+    offline: "오프라인",
+  };
+  return table[row.status] ?? row.status;
+}
+
+/**
+ * **서버 배포**만 (C5). `runnerId`를 주면 그 실행기 것과 전체(`"*"`) 것으로 좁힌다.
+ *
+ * **`"*"`는 서버 실행기만 쓴다** (ADR-0046) — PC 배포에는 전체 대상이 없다. Center의
+ * `GET /deployments?bot_ui=`는 PC 대상만 풀어 주므로(그쪽은 `"*"`가 없다) 서버 쪽은
+ * **활성 배포를 한 번 읽어 여기서** 좁힌다 (CON-06이 패키지 종류를 콘솔에서 가리는 것과 같은 결).
+ *
+ * **종류를 먼저 거르는 것이 요점이다** — 같은 Bot이 PC와 서버에 함께 배포돼 있으면 PC 봉투의
+ * 상한을 서버 대기열의 「Bot별 상한 n」으로 보일 수 있다. 대기열은 아직 어느 실행기에도 묶이지
+ * 않아(C12) `runnerId` 없이 부른다.
+ */
+export function serverDeployments(all: DeploymentInfo[], runnerId?: string): DeploymentInfo[] {
+  return all.filter(
+    (one) =>
+      one.target.type === "server_runner" &&
+      (runnerId === undefined || one.target.id === runnerId || one.target.id === "*"),
+  );
+}
+
+/** 지금 그 Bot을 돌리고 있는 실행 수 (C12 `running[]` — **기다리는 실행은 세지 않는다**). */
+export function runningOfBot(row: ServerRunnerInfo, bot: string): number {
+  return (row.running ?? []).filter((one) => one.bpm_process_id === bot).length;
+}
+
+/**
+ * 그 Bot의 **동시 실행 상한** — 배포 봉투에 적힌 값이다 (C12 §Center가 작업을 나누는 규칙 3).
+ *
+ * **적혀 있지 않으면 `null`이다.** 기본값(계약의 `DEFAULT_PER_BOT_CONCURRENCY`)을 여기 베껴
+ * 적지 않는다 — 계약 쪽 숫자가 바뀌면 화면만 조용히 거짓말을 한다. 화면은 「기본」이라고 적고
+ * 숫자를 지어내지 않는다.
+ */
+export function perBotLimit(deployments: DeploymentInfo[], bot: string): number | null {
+  const found = deployments.find((one) => one.bpm_process_id === bot);
+  return found?.max_concurrency ?? null;
+}
+
+/**
+ * **확장이 없어서** 막힌 점검 코드 (`core.preflight`의 이름 그대로).
+ *
+ * 이름으로 어림하지 않고 **적어 둔다** — 「extension이 들어간 코드」로 걸렀더니
+ * `task_types_unsupported`·`missing_agent_environment`가 빠져 화면이 「확장 없음」 대신
+ * 「사전 점검 실행 불가」라고 했다 (운영자가 확장을 깔러 가는 대신 로그를 뒤진다).
+ * 코드가 늘면 여기 더한다 — `extension_turned_off`는 **이 묶음이 아니다**(켜면 된다).
+ */
+const EXTENSION_MISSING_CODES = new Set([
+  "task_types_unsupported",
+  "extensions_unusable",
+  "missing_agent_environment",
+]);
+
+/** 준비 상태의 알맹이 — C4·C12의 `Readiness`가 **같은 모양**이라 둘 다 들어온다. */
+interface ReadinessLike {
+  ready?: boolean;
+  missing_key_refs?: string[];
+  blocked?: string[];
+}
+
+/**
+ * 보고된 준비 상태 → `status_map` 「Bot 준비」의 표기와 툴팁 거리 (C4·C12 `Readiness`).
+ *
+ * 보고가 없으면 **`null`**이다 (「확인 전」이라고 단정하지 않는다 — 모르는 것을 안다고 하지
+ * 않는다). 가르는 순서는 BUI-04와 **같고**, **「꺼 뒀다」와 「없다」는 다른 점검이다**
+ * ([ADR-0043](../../../../docs/decisions/0043-turned-off-extensions.md)) — 뭉치면 켜면 될 일에
+ * 「판을 올리세요」라고 한다. CON-03과 CON-12가 **이 함수 하나**를 쓴다 (베끼면 갈라진다).
+ */
+export function readinessLabel(
+  found: ReadinessLike | undefined,
+): { label: string; detail: string[] } | null {
+  if (!found) return null;
+  if (found.ready) return { label: "준비됨", detail: [] };
+  const missing = found.missing_key_refs ?? [];
+  if (missing.length > 0) return { label: "서비스 앱 키 없음", detail: missing };
+  const blocked = found.blocked ?? [];
+  if (blocked.includes("extension_turned_off")) return { label: "확장 꺼짐", detail: blocked };
+  if (blocked.some((code) => EXTENSION_MISSING_CODES.has(code)))
+    return { label: "확장 없음", detail: blocked };
+  return { label: "사전 점검 실행 불가", detail: blocked };
+}
+
+/**
+ * 그 배포가 이 실행기에서 **돌 준비가 됐는가** — 실행기가 보고한 `readiness`에서 찾는다 (C12).
+ *
+ * 판은 `version`까지 맞춰 본다 — 다른 판의 보고를 끌어다 쓰면 막 올린 판이 「준비됨」이 된다.
+ */
+export function runnerReadiness(
+  row: ServerRunnerInfo,
+  bot: string,
+  version: string,
+): { label: string; detail: string[] } | null {
+  return readinessLabel(
+    (row.readiness ?? []).find((one) => one.bpm_process_id === bot && one.version === version),
+  );
+}
+
+/** CON-12 상세 「Bot별 상한」 한 줄. */
+export interface BotLimitRow {
+  bot: string;
+  version: string;
+  /** 배포 봉투에 적힌 상한. **없으면 `null`** — 화면이 「기본」이라고 적는다. */
+  limit: number | null;
+  running: number;
+  readiness: { label: string; detail: string[] } | null;
+}
+
+/**
+ * 「Bot별 상한」 — **배포가 줄을 정하고**, 실행 수와 준비는 실행기 보고에서 온다.
+ *
+ * 줄의 출처가 배포인 까닭: 배포됐는데 실행기가 아직 준비 상태를 올리지 않은 Bot이 **보여야
+ * 한다** (「배포는 했는데 왜 안 도나」가 이 화면에서 풀려야 한다 — CON-03과 같은 결). 거꾸로
+ * `readiness`로 줄을 지으면 그 Bot이 아예 사라진다.
+ *
+ * 철회된 배포는 부르는 쪽이 `active`로 걸러 온다. 같은 Bot의 판이 둘 이상 살아 있으면 **줄도
+ * 둘**이다 (실행기는 판마다 따로 준비 상태를 올린다).
+ */
+export function botLimitRows(
+  row: ServerRunnerInfo,
+  deployments: DeploymentInfo[],
+): BotLimitRow[] {
+  const seen = new Set<string>();
+  const out: BotLimitRow[] = [];
+  for (const one of deployments) {
+    const key = `${one.bpm_process_id}@${one.version}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      bot: one.bpm_process_id,
+      version: one.version,
+      limit: one.max_concurrency ?? null,
+      running: runningOfBot(row, one.bpm_process_id),
+      readiness: runnerReadiness(row, one.bpm_process_id, one.version),
+    });
+  }
+  return out.sort((a, b) => a.bot.localeCompare(b.bot) || a.version.localeCompare(b.version));
+}
+
+/**
+ * 「대기 이유」 (CON-12 목록의 대기열 표) — C12 §Center가 작업을 나누는 규칙 3.
+ *
+ * Center가 사유를 **적는 것은 `per_bot_limit` 하나**다. 사유 없이 남은 작업은 아직 보지도
+ * 않은 것이라 「전체 상한」이고, 실행기가 **모두 멈춰 있으면** 빈자리가 0인 까닭이 상한이
+ * 아니라 사람이 멈춘 것이므로 그렇게 말한다 (`free_slots`가 `paused`면 0을 준다).
+ *
+ * 등록된 실행기가 없을 때도 「전체 상한」이다 — 빈자리가 없는 것은 맞고, 실행기가 없다는 말은
+ * 바로 위 빈 상태가 한다 (없는 표기를 지어내지 않는다).
+ */
+export function queueReason(
+  job: JobInfo,
+  runners: ServerRunnerInfo[],
+  deployments: DeploymentInfo[],
+): string {
+  if (job.state_reason === "per_bot_limit") {
+    const limit = perBotLimit(deployments, job.bpm_process_id);
+    return limit === null ? "Bot별 상한" : `Bot별 상한 ${limit}`;
+  }
+  if (job.state_reason) return job.state_reason;
+  if (runners.length > 0 && runners.every((one) => one.paused)) return "일시 중지";
+  return "전체 상한";
+}
+
+/**
+ * 「경과」·「기다린 시간」 — 지금과의 차 (CON-12 상세).
+ *
+ * `now`를 **받는다** — `Date.now()`를 들이면 이 셈을 시험으로 잴 수 없다. 앞으로의 시각(시계
+ * 어긋남)은 **0초로 깎는다**(음수를 「-3분」으로 보이면 사람이 버그를 쫓는다).
+ */
+export function elapsed(since: string | null | undefined, now: number): string {
+  if (!since) return "—";
+  const at = new Date(since).getTime();
+  if (Number.isNaN(at)) return "—";
+  const seconds = Math.max(0, Math.floor((now - at) / 1000));
+  if (seconds < 60) return `${seconds}초`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}분`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}시간 ${minutes % 60}분`;
+  return `${Math.floor(hours / 24)}일 ${hours % 24}시간`;
 }

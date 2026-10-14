@@ -62,6 +62,42 @@ export async function setBotUiDisabled(botUiId: string, disabled: boolean): Prom
 }
 
 /**
+ * 서버 실행기 일시 중지·다시 시작 (CON-12, C12).
+ *
+ * 멈춰도 **도는 실행은 끝까지 간다** — 막는 것은 새 작업뿐이다. 그래서 「일시 중지」에만 확인
+ * 창이 붙고 「다시 시작」은 바로 된다 (U9 — 되돌릴 수 있고 해가 없는 쪽은 묻지 않는다).
+ */
+export async function setRunnerPaused(runnerId: string, paused: boolean): Promise<ActionResult> {
+  try {
+    await (paused ? center.pauseRunner(runnerId) : center.resumeRunner(runnerId));
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/server-runners", "layout");
+  return {};
+}
+
+/**
+ * 유실 처리 (CON-12, C12 `mark-lost`) — **되돌릴 수 없다.**
+ *
+ * 그 실행기의 실행을 `failed`(`runner_lost`)로 닫고 결재를 회수한다 (C6 `host_lost`).
+ * **온라인인 실행기는 Center가 409 `runner_online`으로 막는다** — 화면도 단추를 끄지만,
+ * 그사이 돌아온 실행기를 닫지 않는 것은 Center가 지킨다 (판정이 두 곳에 있으면 갈라진다).
+ */
+export async function markRunnerLost(runnerId: string): Promise<ActionResult> {
+  try {
+    await center.markRunnerLost(runnerId);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  // 결재함도 바뀐다 — 회수된 결재가 그 화면에 남아 보이면 안 된다 (C6 `host_lost`).
+  revalidatePath("/server-runners", "layout");
+  revalidatePath("/approvals", "layout");
+  revalidatePath("/runs", "layout");
+  return {};
+}
+
+/**
  * 결재 답하기 (CON-04). **일반 `<form>`이 부른다** — JS 없이도 답할 수 있다.
  *
  * 폼 칸의 타입은 **Center에 저장된 것**을 다시 읽어 맞춘다 (브라우저가 보낸 글자를 믿고
@@ -226,6 +262,9 @@ export async function cancelJob(jobId: string): Promise<ActionResult> {
     return { error: message(cause) };
   }
   revalidatePath("/jobs", "layout");
+  // 서버 작업은 CON-12의 「대기열」에도 같은 줄로 보인다 — 한쪽만 새로 그리면 취소한 작업이
+  // 다른 화면에 남는다.
+  revalidatePath("/server-runners", "layout");
   return {};
 }
 

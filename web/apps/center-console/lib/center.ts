@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
+import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
 import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
@@ -89,6 +90,24 @@ export const center = {
   botUis: () => call<BotUiInfo[]>("/api/v1/bot-uis"),
   disableBotUi: (id: string) => call<unknown>(`/api/v1/bot-uis/${id}/disable`, { method: "POST" }),
   enableBotUi: (id: string) => call<unknown>(`/api/v1/bot-uis/${id}/enable`, { method: "POST" }),
+
+  /**
+   * 서버 실행기 목록 (C12·CON-12). **목록 하나가 상세의 재료까지 들고 온다** — 실행 중·기다리는
+   * 실행·준비 상태·확장·최근 배치 결정이 모두 한 줄에 있어 상세가 따로 부를 길이 없다.
+   *
+   * `queued`는 **Center가 센 것**이다 (실행기가 보내는 값이 아니다 — 대기열은 Center가 가진다).
+   */
+  serverRunners: () => call<ServerRunnerInfo[]>("/api/v1/server-runners"),
+  /** 일시 중지·다시 시작 (C12). 다음 하트비트 응답의 `paused`로 전달된다. */
+  pauseRunner: (runnerId: string) =>
+    call<unknown>(`/api/v1/server-runners/${encodeURIComponent(runnerId)}/pause`, { method: "POST" }),
+  resumeRunner: (runnerId: string) =>
+    call<unknown>(`/api/v1/server-runners/${encodeURIComponent(runnerId)}/resume`, { method: "POST" }),
+  /** 유실 처리 (C12). **오프라인인 실행기만** — 온라인이면 409 `runner_online`이다. */
+  markRunnerLost: (runnerId: string) =>
+    call<unknown>(`/api/v1/server-runners/${encodeURIComponent(runnerId)}/mark-lost`, {
+      method: "POST",
+    }),
 
   /** 패키지 목록 (C5). `missing_resources`는 Center가 **읽을 때** 세어 준다 (C7). */
   packages: (query: { kind?: string } = {}) =>
@@ -178,8 +197,15 @@ export const center = {
     return call<DeploymentInfo[]>(`/api/v1/deployments${suffix}`);
   },
 
-  /** 작업 지시 (C5·CON-05). `state`는 쉼표로 여럿. */
-  jobs: (query: { state?: string; target_id?: string; limit?: number } = {}) => {
+  /**
+   * 작업 지시 (C5·CON-05). `state`는 쉼표로 여럿.
+   *
+   * `target_type`은 CON-12의 「대기열」이 쓴다 — 서버 대기열은 **아직 어느 실행기에도 묶이지
+   * 않아**(C12) `target_id`로는 좁힐 수 없고, 종류로 걸러야 PC 작업이 섞이지 않는다.
+   */
+  jobs: (
+    query: { state?: string; target_type?: string; target_id?: string; limit?: number } = {},
+  ) => {
     const search = new URLSearchParams(
       Object.entries(query)
         .filter(([, value]) => value !== undefined && value !== "")

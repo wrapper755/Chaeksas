@@ -259,6 +259,9 @@ class ServerRunnerInfo(ContractModel):
     versions: RunnerVersions | None = None
     last_heartbeat_at: Timestamp | None = None
     registered_at: Timestamp | None = None
+    #: 이 실행기가 쓰는 Center API 키의 **앞자리**. 원문·해시는 주지 않는다 (C7 `BotUiKey`와 같은 결).
+    #: 만료만 보이면 운영자가 CON-11의 어느 줄인지 못 찾는다 — 키가 여럿이면 만료일이 겹친다.
+    key_prefix: str | None = None
     key_expires_at: Timestamp | None = None
     unsent_events: int | None = None
 
