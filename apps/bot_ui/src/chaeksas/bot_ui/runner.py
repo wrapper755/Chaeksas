@@ -65,6 +65,8 @@ def runner_args(
     services_path: Path | None = None,
     approval_where: str = "field",
     off_extensions: tuple[str, ...] = (),
+    smtp: Any = None,
+    webhook_hosts: tuple[str, ...] = (),
 ) -> list[str]:
     """실행기 명령줄. **업무 값은 싣지 않는다** — 입력은 파일로 준다 (원칙 6)."""
     args = [
@@ -95,6 +97,19 @@ def runner_args(
         args += ["--writable", str(one)]
     if llm_url:
         args += ["--llm-url", llm_url, "--llm-model", llm_model]
+    if smtp is not None and smtp.host:
+        # 보내기 설정 (ADR-0059) — **비밀번호는 넘기지 않는다**. 자식이 이 PC의 비밀
+        # 저장소에서 제 손으로 읽는다 (서비스 앱 키와 같은 길).
+        args += ["--smtp-host", smtp.host, "--smtp-security", smtp.security]
+        if smtp.port:
+            args += ["--smtp-port", str(smtp.port)]
+        if smtp.username:
+            args += ["--smtp-user", smtp.username]
+        if smtp.sender:
+            args += ["--smtp-from", smtp.sender]
+        args += ["--smtp-attachment-mb", f"{smtp.max_attachment_mb:g}"]
+    for host in webhook_hosts:
+        args += ["--webhook-host", host]
     if extensions_path is not None:
         args += ["--extensions", str(extensions_path)]
     if services_path is not None:
@@ -304,6 +319,11 @@ class Launcher:
     llm_model: str = ""
     #: 모델 키 — 실행기에게 **환경변수로** 건넨다 (명령줄·설정 파일에 두지 않는다).
     llm_key: str = ""
+    #: 보내기 (BUI-03 「보내기」, ADR-0059). `SmtpConfig` 또는 `None`. **비밀번호는 없다** —
+    #: 자식이 이 PC의 비밀 저장소에서 제 손으로 읽는다.
+    smtp: Any = None
+    #: 웹훅을 보낼 수 있는 호스트. 비면 자식이 아무 데도 보내지 않는다.
+    webhook_hosts: tuple[str, ...] = ()
     #: 시험이 바꿔 끼운다 (진짜 프로세스를 띄우지 않고).
     make_child: Any = None
 
@@ -366,6 +386,8 @@ class Launcher:
             writable=self.writable,
             llm_url=self.llm_url,
             llm_model=self.llm_model,
+            smtp=self.smtp,
+            webhook_hosts=self.webhook_hosts,
             extensions_path=extensions_path,
             services_path=services_path,
             approval_where=approval_where,

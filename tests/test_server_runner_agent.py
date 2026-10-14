@@ -613,3 +613,61 @@ class _FakeBot:
 
     def decisions(self) -> dict[str, Any]:
         return {}
+
+
+# ─────────────────── 보내기 (M7 조각 10, ADR-0059) ───────────────────
+
+
+def test_the_sender_comes_from_the_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """메일·웹훅 설정은 **환경변수가 정한다** (서버에는 BUI-03에 해당하는 화면이 없다).
+
+    비밀번호는 **설정에 없다** — `credentials.smtp_password()`가 환경변수·비밀 저장소에서 읽는다.
+    """
+    monkeypatch.setenv("CHK_SERVER_RUNNER__SMTP__HOST", "smtp.example.com")
+    monkeypatch.setenv("CHK_SERVER_RUNNER__SMTP__FROM", "bot@example.com")
+    monkeypatch.setenv("CHK_SERVER_RUNNER__SMTP__PASSWORD", "비밀")
+    monkeypatch.setenv("CHK_SERVER_RUNNER__WEBHOOK__ALLOWED_HOSTS", "hooks.example.com, a.example.com")
+    found = Settings.from_env()
+
+    assert found.smtp().host == "smtp.example.com"
+    assert found.smtp().security == "starttls", "기본은 느슨한 쪽이 아니다"
+    assert found.webhook().allowed_hosts == ("hooks.example.com", "a.example.com")
+    assert found.webhook().allow_private_network is False, "사설망 스위치는 설정에 없다"
+    assert "비밀" not in repr(found), "비밀번호는 설정에 들어가지 않는다"
+    assert Credentials().smtp_password() == "비밀"
+
+
+def test_the_runner_plugs_the_sender_in(tmp_path: Path) -> None:
+    """실행기가 그 설정으로 어댑터를 짓는다 — **Bot UI와 같은 함수**다 (`make_sender`)."""
+    settings = Settings(
+        data_path=tmp_path / "runner",
+        smtp_host="smtp.example.com",
+        smtp_sender="bot@example.com",
+        webhook_allowed_hosts=("hooks.example.com",),
+    )
+    made = agent_mod.Agent(settings=settings, client=cast(Any, _NoClient()))
+    sender = made.run_env(_FakeBot()).sender
+
+    assert type(sender).__name__ == "PlatformSender", "보내기가 꽂히지 않았다"
+    assert sender.mail.config.host == "smtp.example.com"  # type: ignore[attr-defined]
+    assert sender.webhook.config.allowed_hosts == ("hooks.example.com",)  # type: ignore[attr-defined]
+
+
+def test_without_smtp_the_mail_task_fails_clearly(tmp_path: Path) -> None:
+    """**주지 않으면 보내지 않고 실패한다** — 조용히 넘어가지 않는다 (C14 §보내기)."""
+    from chaeksas.core.senders import EmailMessage, SendError
+
+    made = agent_mod.Agent(
+        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, _NoClient())
+    )
+    with pytest.raises(SendError, match="SMTP 주소가 비어"):
+        made.run_env(_FakeBot()).sender.send_email(EmailMessage(to=("a@example.com",)))
+
+
+def test_a_mail_bot_without_smtp_is_not_ready(tmp_path: Path) -> None:
+    """메일을 보내는 Bot은 SMTP가 없으면 **사전 점검이 막는다** (C1 `requires.settings`)."""
+    settings = Settings(data_path=tmp_path / "runner")
+    assert settings.ready_settings() == ()
+    assert Settings(
+        data_path=tmp_path / "r2", smtp_host="smtp.example.com", smtp_sender="bot@example.com"
+    ).ready_settings() == ("smtp",)

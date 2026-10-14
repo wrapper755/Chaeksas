@@ -33,6 +33,13 @@ from chaeksas.core.extensions import ExtensionHost, HostTasks, load_host
 from chaeksas.core.packages import InstalledBot
 from chaeksas.core.run_env import make_env
 from chaeksas.core.run_log import RunLog, log_path
+from chaeksas.core.senders import (
+    DEFAULT_ATTACHMENT_MB,
+    SECURITY_STARTTLS,
+    SmtpConfig,
+    WebhookConfig,
+    make_sender,
+)
 from chaeksas.extension_api import HOST_BOT_UI
 
 log = logging.getLogger(__name__)
@@ -253,6 +260,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--off", action="append", default=[], help="끈 확장 id (여러 번)")
     # 부를 수 있는 바깥 앱 — 주소·Admin 공개키·외부 확장 정의와 봉투 (C13 「전송」).
     parser.add_argument("--services", type=Path, default=None, help="바깥 앱 명부 JSON 파일")
+    # 보내기 (BUI-03 「보내기」, ADR-0059). **비밀번호는 명령줄에 없다** — 이 프로세스가
+    # 비밀 저장소에서 읽는다 (서비스 앱 키와 같은 길).
+    parser.add_argument("--smtp-host", default="")
+    parser.add_argument("--smtp-port", type=int, default=0)
+    parser.add_argument("--smtp-security", default=SECURITY_STARTTLS)
+    parser.add_argument("--smtp-user", default="")
+    parser.add_argument("--smtp-from", default="")
+    parser.add_argument("--smtp-attachment-mb", type=float, default=DEFAULT_ATTACHMENT_MB)
+    parser.add_argument("--webhook-host", action="append", default=[], help="웹훅 허용 호스트 (여러 번)")
     found = parser.parse_args(argv)
 
     package = InstalledBot.read(found.package)
@@ -290,6 +306,20 @@ def main(argv: list[str] | None = None) -> int:
             ),
             approval_where=found.approval_where,
             directory=directory,
+            # 보내기 — **서버 실행기와 같은 함수**가 짓는다 (ADR-0059). 설정이 비면
+            # `chk:email`·`chk:webhook`이 **보내지 않고 실패한다**.
+            sender=make_sender(
+                smtp=SmtpConfig(
+                    host=found.smtp_host,
+                    port=found.smtp_port,
+                    security=found.smtp_security,
+                    username=found.smtp_user,
+                    sender=found.smtp_from,
+                    max_attachment_mb=found.smtp_attachment_mb,
+                ),
+                webhook=WebhookConfig(allowed_hosts=tuple(found.webhook_host)),
+                password=Credentials().smtp_password() or "",
+            ),
         ),
     )
     state = runner.drive()

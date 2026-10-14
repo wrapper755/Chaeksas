@@ -31,6 +31,11 @@ ENV_SERVICE_APP_PREFIX = "CHK_BOT_UI__SVC__"
 LLM_API_KEY = "llm-api-key"
 ENV_LLM_API_KEY = "CHK_BOT_UI__LLM__API_KEY"
 
+#: SMTP 비밀번호 (BUI-03 「보내기」, ADR-0059). **설정 파일·명령줄에 넣지 않는다** —
+#: 실행기(자식 프로세스)가 이 저장소에서 제 손으로 읽는다 (서비스 앱 키와 같은 길).
+SMTP_PASSWORD = "smtp-password"
+ENV_SMTP_PASSWORD = "CHK_BOT_UI__SMTP__PASSWORD"
+
 
 #: 확장 설정 칸의 이름 공간 (확장마다 가른다).
 EXTENSION_PREFIX = "ext:"
@@ -121,6 +126,17 @@ class Credentials:
 
     def set_center_api_key(self, value: str) -> None:
         self.set(CENTER_API_KEY, value.strip())
+
+    def smtp_password(self) -> str | None:
+        """메일 서버 비밀번호. 환경변수가 먼저다 (개발·CI)."""
+        return self.get(SMTP_PASSWORD, env=ENV_SMTP_PASSWORD)
+
+    def set_smtp_password(self, value: str) -> None:
+        """BUI-03 「보내기」가 부른다. 비우면 **지운다** (로그인하지 않는다는 뜻이다)."""
+        if value.strip():
+            self.set(SMTP_PASSWORD, value.strip())
+        else:
+            self.delete(SMTP_PASSWORD)
 
     def llm_api_key(self) -> str | None:
         """모델 키 (ADR-0027). **키가 필요 없는 로컬 모델이면 비어 있다** — 그러면 보내지 않는다."""

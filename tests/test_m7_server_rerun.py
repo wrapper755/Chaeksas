@@ -262,15 +262,34 @@ def service_keys(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(service_key_env(ref), DEV_KEY)
 
 
+@pytest.fixture(scope="session")
+def mail() -> Iterator[Any]:
+    """메일을 받는 **작은 SMTP 서버** — 127.0.0.1이다 (바깥에 나가지 않는다).
+
+    `tests/test_core_senders.py`의 것을 다시 쓴다 (두 벌을 만들지 않는다). 운영자가 사내
+    중계기를 적어 주는 자리에 이것을 적는 셈이다.
+    """
+    from test_core_senders import FakeSmtp  # noqa: PLC0415 — 시험끼리 나눠 쓴다
+
+    server = FakeSmtp()
+    server.start()
+    yield server
+    server.close()
+
+
 @pytest.fixture
 def runner(
-    tmp_path: Path, center: tuple[TestClient, Store, Any], model: StubModel
+    tmp_path: Path, center: tuple[TestClient, Store, Any], model: StubModel, mail: Any
 ) -> agent_mod.Agent:
     """진짜 서버 실행기 — Center는 in-process이고 실행은 **제 스레드**로 돈다.
 
-    모델·읽기 폴더·서비스 앱 키는 **설정·환경변수로** 준다 (운영자가 하는 일). **바깥 앱
-    명부는 실행기가 제 손으로 Center에서 받는다** (C7 — 파일을 거치지 않는다). 아직 꽂히지
-    않는 것은 **보내기**뿐이고, 그 태스크가 든 예제는 `REMAINING`에 있다.
+    모델·읽기 폴더·서비스 앱 키·**보내기**는 **설정·환경변수로** 준다 (운영자가 하는 일).
+    **바깥 앱 명부는 실행기가 제 손으로 Center에서 받는다** (C7 — 파일을 거치지 않는다).
+
+    메일은 127.0.0.1의 작은 SMTP 서버로 가고 **암호화하지 않는다**(`none` — 시험 서버가 TLS를
+    모른다. 사내 중계기를 쓰는 현장과 같은 고름이다). **웹훅 허용 호스트는 비워 둔다** —
+    `$test_receiver`는 Studio 전용이고(C14) 배포된 Bot은 사설망으로 보내지 않으므로, 웹훅을
+    쓰는 예제는 이 묶음에서 돌 수 없다 (`REMAINING`).
     """
     client, _, _ = center
     key = client.post(
@@ -285,6 +304,10 @@ def runner(
         llm_model="stub",
         # 예제가 읽는 표본은 저장소 안에 있다 (`samples/`) — 출력 폴더 밖이라 열어 줘야 한다.
         readable_dirs=(Path(__file__).resolve().parent.parent,),
+        smtp_host="127.0.0.1",
+        smtp_port=mail.port,
+        smtp_security="none",
+        smtp_sender="bot@example.com",
     )
     settings.data_path.mkdir(parents=True, exist_ok=True)
     settings.runs_dir.mkdir(parents=True, exist_ok=True)
@@ -473,26 +496,40 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 여섯. **바깥 앱 명부도 이제 꽂힌다** (조각 9) — 실행기가 제
-# 손으로 C7을 읽어 `RunEnv.services`를 짓는다. 남은 것은 셋으로 갈린다.
+# 아직 **돌리지는** 못하는 까닭 일곱. **보내기도 이제 꽂힌다** (조각 10, ADR-0059) — 메일은
+# 설정의 SMTP로, 웹훅은 **운영자가 적은 허용 호스트**로 간다. 그래서 남은 것은 **플랫폼이 아니라
+# 묶음·그림 쪽**이다.
 #
-# - **플랫폼에 없는 것**: 제품용 보내기(`_NO_SENDER`) — `core.senders`에 `NoSender`와 시험용
-#   뿐이다. **PC도 같다**(`bot_ui/runner_main.py`도 `sender`를 주지 않는다) — 서버만의
-#   공백이 아니라 「배포된 Bot은 무엇으로 보내나」를 정하는 일이다.
-# - **묶음에 없는 것**: 짜 둔 모델 답·시계·신호·소켓 Center
-#   (`_NO_CANNED`·`_TIMER`·`_SIGNAL`·`_NO_SOCKET`).
+# - **묶음에 없는 것**: 짜 둔 모델 답·시계·신호·소켓 Center·표본 파일·케이스 입력 연산자
+#   (`_NO_CANNED`·`_TIMER`·`_SIGNAL`·`_NO_SOCKET`·`_NO_SAMPLES`·`_NO_INPUT_OPS`).
+# - **계약이 가른 것**: 웹훅 둘 (`_WEBHOOK` — `$test_receiver`는 Studio 전용이다, C14).
 # - **일부러 실패하는 것**: BX-33 (`_ON_PURPOSE` — 아래에 따로 시험이 있다).
 #
-# **사유는 돌려 보고 적는다.** 조각 9에서 셋(BX-13·BX-22·BX-34)은 `_NO_SENDER`로 적혀 있었는데
-# 실제로는 **보내기까지 가지 않아** 그냥 통과했고, 넷(BX-10·BX-21·FX-10·BX-33)은 명부가 아니라
-# 다른 것에 걸려 있었다 — 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
+# **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고(셋은 이미 초록이었다), 조각 10에서 또
+# 둘이 틀렸다 — BX-01은 보내기가 아니라 **표본 파일**이 없어서, BX-11은 **케이스 입력 연산자**를
+# 풀지 않아서 멈춘다. 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
 _NO_CANNED = (
     "묶음에 **짜 둔 모델 답**이 없다 — AI 태스크의 결과가 dict이고 그 안의 칸을 읽는데, "
     "스텁은 타입만 보고 빈 `{}`를 준다(`stub_model.answer_for`). 그래서 갈라짐이 케이스와 "
     "달라지거나 값을 읽다 실패한다. 답은 모델이 아니라 **시험이 정한다** — M3·M5 묶음은 제 "
     "`canned`를 가지고 있고, 그것을 함께 쓰는 자리로 옮기는 것이 다음 일이다. "
 )
-_NO_SENDER = "실행기가 보내기를 꽂지 않는다 (`NoSender`) — `chk:email`·`chk:send`가 실패한다. "
+_WEBHOOK = (
+    "**웹훅은 이 묶음에서 보낼 곳이 없다** — 케이스가 `$test_receiver`를 가리키는데 그것은 "
+    "**Studio 시험 실행 전용**이고(C14), 배포된 Bot은 사설망으로 웹훅을 보내지 않는다 "
+    "(ADR-0059 §2 — 허용 호스트에 적어도 루프백은 열리지 않는다). 바깥에 나가지 않으므로 "
+    "공개 주소에 수신기를 둘 수도 없다. **계약이 가른 자리**라 「아직」이 아니다. "
+)
+_NO_SAMPLES = (
+    "묶음이 **표본 파일**을 만들지 않는다 — 그림이 `samples/<…>` 폴더를 읽는데 저장소에 "
+    "이진 파일을 두지 않으므로(M3·M5 묶음은 **그 자리에서 만든다**) 폴더가 없다. "
+    "그 자리를 옮겨 오는 것이 다음 일이다. "
+)
+_NO_INPUT_OPS = (
+    "묶음이 **케이스 입력 연산자**를 풀지 않는다 — 케이스가 `{\"$now_plus\": \"PT20S\"}`를 "
+    "적어 두었고(C14 — 시험 입력의 연산자다) 그것을 시각으로 바꾸는 것은 **Studio 시험 "
+    "실행의 일**이다. 작업 지시(C5)에는 그런 연산자가 없어 타이머가 그 dict를 읽다 멈춘다. "
+)
 
 # 아래 셋은 실행기가 아니라 **묶음**에 없는 것이다.
 _TIMER = (
@@ -523,23 +560,16 @@ _ON_PURPOSE = (
 #: **배포·설치는 이것들도 모두 본다** (아래 `test_every_server_example_deploys_and_installs`) —
 #: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
 REMAINING: dict[str, str] = {
-    "bx01_invoice_reconciliation": _NO_SENDER,
-    "bx02_morning_fx_report": _NO_SENDER,
-    "bx05_month_end_close": _NO_SENDER,
-    "bx06_bulk_credit_check": _NO_SENDER,
+    "bx01_invoice_reconciliation": _NO_SAMPLES,
     "bx10_vendor_onboarding_review": _NO_CANNED,
-    "bx11_bid_collection": _NO_SENDER,
+    "bx11_bid_collection": _NO_INPUT_OPS,
     "bx16_reorder_proposal": _NO_SOCKET,
-    "bx20_employee_onboarding": _NO_SENDER,
-    "bx21_leave_request": _NO_SENDER,
+    "bx21_leave_request": _WEBHOOK,
     "bx30_contract_review": _NO_CANNED,
-    "bx31_request_triage": _NO_SENDER,
     "bx33_access_request": _ON_PURPOSE,
-    "bx35_voc_weekly": _NO_SENDER,
     "fx04_folder_poll": _TIMER,
-    "fx07_email": _NO_SENDER,
     "fx09_sequential_loop": _NO_CANNED,
-    "fx10_operator_routing": _NO_SENDER,
+    "fx10_operator_routing": _WEBHOOK,
     "fx13_signal": _SIGNAL,
     "fx14_timers": _TIMER,
 }

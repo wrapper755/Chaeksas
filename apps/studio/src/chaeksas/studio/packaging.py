@@ -22,6 +22,7 @@ from chaeksas.contracts import Violation
 from chaeksas.contracts.bpmn_ext import BpmnProcess
 from chaeksas.contracts.hashing import content_hash_from_files
 from chaeksas.contracts.manifest import (
+    SETTING_SMTP,
     Built,
     ExtensionNeed,
     HumanNeeds,
@@ -75,6 +76,7 @@ def collect_requires(
     """
     domains: set[str] = set()
     tools: set[str] = set()
+    settings: set[str] = set()
     apps: dict[str, ServiceAppNeed] = {}
     task_types: dict[str, TaskTypeNeed] = {}
     extensions: dict[str, ExtensionNeed] = {}
@@ -98,6 +100,10 @@ def collect_requires(
             if ai is not None:
                 domains.add(ai.domain)
                 tools.update(ai.tools)
+            if node.prop("email") is not None:
+                # **메일을 보내려면 실행하는 쪽에 SMTP가 있어야 한다** (C1 `requires.settings`,
+                # ADR-0059 §4) — 적어 두어야 사전 점검이 **시작하기 전에** 말한다.
+                settings.add(SETTING_SMTP)
             call = node.prop("serviceCall")
             if call is not None:
                 key_ref = call.key_ref or found.info.service_keys.get(call.app_id, "")
@@ -132,6 +138,7 @@ def collect_requires(
     return Requires(
         domains=sorted(domains),
         tools=sorted(tools),
+        settings=sorted(settings),
         service_apps=[apps[k] for k in sorted(apps)],
         task_types=[task_types[k] for k in sorted(task_types)],
         extensions=[extensions[k] for k in sorted(extensions)],
