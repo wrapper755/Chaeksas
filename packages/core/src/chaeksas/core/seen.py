@@ -5,6 +5,10 @@ Center는 ack가 올 때까지 같은 지시를 하트비트마다 다시 싣는
 무한히 자라면 몇 주 떠 있는 실행기가 끝없이 커진다 — 특히 **메시지**는 바깥 시스템이 밀어
 넣는 것이라 수가 크다 (C12 §메시지 — BX-11 입찰 견적·BX-13 반품 이벤트).
 
+**서버 실행기와 Bot UI가 같은 것을 쓴다** (ADR-0057) — 둘 다 같은 까닭으로 들고 있으므로
+(C4·C12가 같은 맞추기 규칙이다) 규칙을 갈라 두면 한쪽만 고치는 일이 생긴다. **Bot UI는
+이것을 파일에 남긴다** — 저장하는 것은 ack뿐이고 **나이는 저장하지 않는다** (`restore()`).
+
 **잊는 규칙은 하나다** (ADR-0056):
 
 1. ack가 **Center에 닿은 뒤** `GRACE_CYCLES` 주기가 더 지나면 버린다. 닿은 ack는 Center가
@@ -24,15 +28,15 @@ Center는 ack가 올 때까지 같은 지시를 하트비트마다 다시 싣는
 
 from __future__ import annotations
 
-from collections.abc import Iterable, ValuesView
+from collections.abc import Collection, ItemsView, Iterable, Mapping, ValuesView
 from dataclasses import dataclass, field
 
 #: ack가 Center에 닿은 뒤 **몇 주기를 더** 들고 있나. 기본 10초 주기로 20초다 (C12).
 #: 닿은 그 주기에 버려도 규칙상 맞지만, 그물을 한 겹 둔다 (하트비트는 한 번 어긋날 수 있다).
 GRACE_CYCLES = 2
 
-#: 들고 있을 항목 수 상한 (그물). Bot UI의 `SEEN_JOBS_MAX`와 **같은 수**다 — 같은 까닭으로
-#: 있는 자리라 숫자가 갈라지면 「서버는 되는데 PC는 안 된다」가 된다.
+#: 들고 있을 항목 수 상한 (그물). **서버 실행기와 Bot UI가 같은 수를 쓴다** — 같은 까닭으로
+#: 있는 자리라 숫자가 갈라지면 「서버는 되는데 PC는 안 된다」가 된다 (ADR-0057).
 CAP = 2000
 
 
@@ -48,6 +52,22 @@ class Seen[A]:
     #: 닿은 뒤 지난 주기. **키가 없으면 「아직 닿지 않았다」**다 (0과 다르다).
     _since: dict[str, int] = field(default_factory=dict)
 
+    @classmethod
+    def restore(cls, acks: Mapping[str, A], *, undelivered: Collection[str]) -> Seen[A]:
+        """파일에서 되살린다 (Bot UI — ADR-0057). **나이는 저장하지 않는다.**
+
+        「닿지 않았다」는 저장하는 쪽이 **이미 들고 있다** — 아직 올리지 못한 ack 목록
+        (`pending_acks`)이 바로 그것이다. 두 자리는 늘 같이 움직이므로(`remember`가 올릴
+        목록에 넣고 `delivered`가 거기서 뺀다) 나이를 따로 저장하면 같은 것을 두 번 적게 된다.
+
+        되살린 나이는 **0부터**다. 다시 켜면 닿은 것도 두 주기를 더 들고 있다는 뜻인데,
+        반대(닿지 않은 것을 닿았다고 치는 것)와 달리 **업무를 두 번 일으키지 않는다**.
+        """
+        found: Seen[A] = cls()
+        found._acks = dict(acks)
+        found._since = {key: 0 for key in found._acks if key not in undelivered}
+        return found
+
     def __len__(self) -> int:
         return len(self._acks)
 
@@ -60,6 +80,10 @@ class Seen[A]:
 
     def values(self) -> ValuesView[A]:
         return self._acks.values()
+
+    def items(self) -> ItemsView[str, A]:
+        """키 → 마지막 ack 전부 — **파일에 남기는 쪽이 쓴다** (`restore()`의 짝)."""
+        return self._acks.items()
 
     def remember(self, key: str, ack: A) -> None:
         """마지막 ack를 적는다. **새 ack는 다시 「아직 닿지 않았다」**가 된다.

@@ -11,8 +11,9 @@ import pytest
 
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.settings import Settings
-from chaeksas.bot_ui.store import SEEN_JOBS_MAX, Store
+from chaeksas.bot_ui.store import Store
 from chaeksas.contracts.bot_ui import HeartbeatResponse, JobDispatch, QueueItem
+from chaeksas.core.seen import CAP, GRACE_CYCLES
 
 AT = "2026-10-03T09:00:00+09:00"
 
@@ -133,8 +134,8 @@ def test_claiming_a_center_job_acks_started_with_the_run_id(tmp_path: Path) -> N
     found = agent(tmp_path)
     found.take_job(job("job_1"))
     run = found.claim_slot(found.queue[0])
-    ack = found.store.state.seen_jobs["job_1"]
-    assert (ack.result, ack.run_id) == ("started", run.run_id)
+    ack = found.store.state.seen_jobs.get("job_1")
+    assert ack is not None and (ack.result, ack.run_id) == ("started", run.run_id)
 
 
 def test_manual_front_goes_first(tmp_path: Path) -> None:
@@ -178,11 +179,34 @@ def test_a_broken_state_file_does_not_stop_the_app(tmp_path: Path) -> None:
 
 
 def test_seen_jobs_do_not_grow_forever(tmp_path: Path) -> None:
-    # 대기열은 1칸이라 첫 작업만 들어가고 나머지는 거절된다 — 그래도 **본 작업은 기억한다.**
+    """며칠 켜 둔 PC에서도 기억은 **몇 주기치**만 남는다 (ADR-0056·0057, `core.seen`).
+
+    대기열은 1칸이라 첫 작업만 들어가고 나머지는 거절된다 — 그래도 **본 작업은 기억한다**
+    (거절도 되돌려 보낼 ack다).
+    """
     found = agent(tmp_path, queue_max=1)
-    for i in range(SEEN_JOBS_MAX + 50):
+    for i in range(CAP * 2):
         found.take_job(job(f"job_{i}"))
-    assert len(found.store.state.seen_jobs) == SEEN_JOBS_MAX
+        # 한 주기에 하나씩 와서 ack가 닿는 흐름 (평상시 모습).
+        found.store.ack_sent(list(found.store.state.pending_acks))
+    assert len(found.store.state.seen_jobs) <= GRACE_CYCLES + 1, "닿은 뒤 두 주기면 잊는다"
+
+
+def test_a_burst_does_not_drop_acks_center_has_not_seen(tmp_path: Path) -> None:
+    """**닿지 않은 ack는 상한을 넘어도 버리지 않는다** (ADR-0056 규칙 2 — 전에는 버렸다).
+
+    버리면 다시 내려온 작업이 「처음 본 것」이 되어 **같은 작업으로 실행이 둘 생긴다**
+    (C4 — Center는 ack가 올 때까지 매번 다시 싣는다).
+    """
+    found = agent(tmp_path, queue_max=1)
+    for i in range(CAP + 50):
+        found.take_job(job(f"job_{i}"))
+    assert len(found.store.state.seen_jobs) == CAP + 50, "아직 하나도 닿지 않았다"
+
+    # 맨 처음 것이 다시 내려와도 대기열이 늘지 않는다 — 마지막 ack를 되돌려 보낼 뿐이다.
+    before = len(found.queue)
+    again = found.take_job(job("job_0"))
+    assert (again.result, len(found.queue)) == ("queued", before)
 
 
 def test_acks_are_dropped_once_center_has_them(tmp_path: Path) -> None:
@@ -191,8 +215,30 @@ def test_acks_are_dropped_once_center_has_them(tmp_path: Path) -> None:
     request = found.heartbeat_request()
     found.store.ack_sent(request.job_acks)
     assert found.store.state.pending_acks == []
-    # 기억은 남는다 — 같은 작업이 또 오면 되돌려 보낸다.
+    # 기억은 남는다 — 같은 작업이 또 오면 되돌려 보낸다 (닿은 그 주기에는 들고 있다).
     assert "job_1" in found.store.state.seen_jobs
+
+
+def test_a_restart_knows_which_acks_center_already_has(tmp_path: Path) -> None:
+    """ADR-0057 — 파일에는 **ack만** 남고 나이는 남지 않는다.
+
+    「아직 닿지 않았다」를 말해 주는 것은 `pending_acks`다 — 두 자리가 늘 같이 움직이므로
+    나이를 따로 저장하면 같은 것을 두 번 적게 된다. 다시 켠 뒤에도 **닿은 것은 잊고 닿지
+    않은 것은 들고 있어야** 한다.
+    """
+    first = agent(tmp_path)
+    first.take_job(job("job_landed"))
+    first.store.ack_sent(list(first.store.state.pending_acks))  # 하트비트가 성공했다
+    first.take_job(job("job_stuck"))  # 이 ack는 아직 올라가지 못했다
+    first.store.save()
+
+    again = agent(tmp_path)
+    for _ in range(GRACE_CYCLES):
+        again.store.ack_sent([])  # 주기만 지나간다 (올릴 ack가 없는 하트비트)
+    assert "job_landed" not in again.store.state.seen_jobs, "닿은 것은 두 주기 뒤 잊는다"
+    kept = again.store.state.seen_jobs.get("job_stuck")
+    assert kept is not None, "올리지 못한 ack는 다시 켜도 잃지 않는다 (업무가 두 번 일어난다)"
+    assert kept.result == "queued", "되돌려 보낼 것은 마지막 ack 그대로다"
 
 
 # ─────────────────────────── 응답 전체 ───────────────────────────
@@ -206,7 +252,8 @@ def test_apply_handles_cancel_before_new_jobs(tmp_path: Path) -> None:
     )
     found.apply(HeartbeatResponse(server_time=AT, jobs=[job("job_new")], cancel_jobs=["job_old"]))
     assert [item.job_id for item in found.queue] == ["job_new"]
-    assert found.store.state.seen_jobs["job_old"].result == "cancelled"
+    old = found.store.state.seen_jobs.get("job_old")
+    assert old is not None and old.result == "cancelled"
 
 
 def test_the_wait_is_measured_from_the_request() -> None:

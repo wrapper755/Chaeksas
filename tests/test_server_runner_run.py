@@ -30,9 +30,9 @@ from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store, now_iso
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.signing import sign
+from chaeksas.core import seen as seen_mod
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.server_runner import agent as agent_mod
-from chaeksas.server_runner import seen as seen_mod
 from chaeksas.server_runner.center_client import CenterClient, Unreachable
 from chaeksas.server_runner.settings import Settings
 
@@ -364,7 +364,7 @@ def test_the_seen_map_forgets_once_the_ack_reached_center(
 ) -> None:
     """멱등 기억은 **ack가 Center에 닿은 뒤 두 주기에** 잊는다 (ADR-0056).
 
-    규칙은 `seen.py`가 쥐고 `tests/test_server_runner_seen.py`가 잰다 — 여기서 보는 것은
+    규칙은 `core.seen`이 쥐고 `tests/test_server_runner_seen.py`가 잰다 — 여기서 보는 것은
     **진짜 하트비트가 그 자리를 정말 움직이는가**다. 아무도 `delivered()`를 부르지 않으면
     기억은 영원히 자라고, 이 시험만 그것을 본다.
     """
