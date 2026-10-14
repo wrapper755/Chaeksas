@@ -39,6 +39,7 @@ from typing import Any
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
+from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -207,11 +208,24 @@ def center(
 
 
 @pytest.fixture
-def runner(tmp_path: Path, center: tuple[TestClient, Store, Any]) -> agent_mod.Agent:
+def model() -> Iterator[StubModel]:
+    """AI 태스크가 쓰는 모델 — 127.0.0.1 스텁이다 (`tests/stub_model.py`).
+
+    답은 **아무 값**이어도 된다: 여기서 보는 것은 업무 결과가 아니라 **배포·실행 한 바퀴**다
+    (결과가 맞는지는 Studio 시험 실행이 본다 — 같은 그림·같은 엔진).
+    """
+    with StubModel(lambda wanted, given: None) as made:
+        yield made
+
+
+@pytest.fixture
+def runner(
+    tmp_path: Path, center: tuple[TestClient, Store, Any], model: StubModel
+) -> agent_mod.Agent:
     """진짜 서버 실행기 — Center는 in-process이고 실행은 **제 스레드**로 돈다.
 
-    **모델·바깥 앱은 아직 꽂히지 않는다** — 실행기의 `run_env()`가 그것을 주지 않는다
-    (`agent.py` — 「조각 4-② 뒤」). 그래서 그런 태스크가 든 예제는 `REMAINING`에 있다.
+    모델·읽기 폴더는 **설정으로** 준다 (운영자가 환경변수로 하는 일). **바깥 앱과 보내기는
+    아직 꽂히지 않는다** — 그래서 그 태스크가 든 예제는 `REMAINING`에 있다.
     """
     client, _, _ = center
     key = client.post(
@@ -222,6 +236,10 @@ def runner(tmp_path: Path, center: tuple[TestClient, Store, Any]) -> agent_mod.A
         name="재통과 서버",
         max_concurrency=4,
         data_path=tmp_path / "runner",
+        llm_base_url=model.base_url,
+        llm_model="stub",
+        # 예제가 읽는 표본은 저장소 안에 있다 (`samples/`) — 출력 폴더 밖이라 열어 줘야 한다.
+        readable_dirs=(Path(__file__).resolve().parent.parent,),
     )
     settings.data_path.mkdir(parents=True, exist_ok=True)
     settings.runs_dir.mkdir(parents=True, exist_ok=True)
@@ -410,17 +428,25 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 넷 — 모두 **실행기가 `RunEnv`를 덜 꽂아서**다.
-# Bot UI 쪽은 다섯을 꽂는다(폴더·모델·확장·바깥 앱 명부·결재 창구, `bot_ui/runner_main.py`)
-# 지만 실행기의 `agent.run_env()`는 결재 창구만 준다 — 그 함수가 스스로 「조각 4-② 뒤」라고
-# 적어 두었다. **주지 않으면 기본값이 남아 부르지 않고 실패한다**(조용히 넘어가지 않는다).
-_NO_LLM = "실행기가 모델을 꽂지 않는다 (`agent.run_env()`가 `llm_model=\"\"`) — AI 태스크가 `NoLlm`으로 실패한다. "
+# 아직 **돌리지는** 못하는 까닭 다섯. **모델과 읽기 폴더는 이제 꽂힌다** (조각 8) — 실행기가
+# 설정에서 받아 `run_env()`로 넘긴다. 남은 것은 셋으로 갈린다.
+#
+# - 실행기가 아직 안 꽂는 것: **바깥 앱 명부**(`_NO_APPS`).
+# - **플랫폼에 없는 것**: 제품용 보내기(`_NO_SENDER`) — `core.senders`에 `NoSender`와 시험용
+#   뿐이다. **PC도 같다**(`bot_ui/runner_main.py`도 `sender`를 주지 않는다) — 서버만의
+#   공백이 아니라 「배포된 Bot은 무엇으로 보내나」를 정하는 일이다.
+# - **묶음에 없는 것**: 짜 둔 모델 답·시계·신호 (`_NO_CANNED`·`_TIMER`·`_SIGNAL`).
+_NO_CANNED = (
+    "묶음에 **짜 둔 모델 답**이 없다 — AI 태스크의 결과가 dict이고 그 안의 칸을 읽는데, "
+    "스텁은 타입만 보고 빈 `{}`를 준다(`stub_model.answer_for`). 그래서 갈라짐이 케이스와 "
+    "달라지거나 값을 읽다 실패한다. 답은 모델이 아니라 **시험이 정한다** — M3·M5 묶음은 제 "
+    "`canned`를 가지고 있고, 그것을 함께 쓰는 자리로 옮기는 것이 다음 일이다. "
+)
 _NO_APPS = (
     "실행기가 바깥 앱 명부를 꽂지 않는다 (`directory=None`) — `chk:serviceCall`이 부를 곳이 없고, "
     "서비스 앱 키도 풀지 않아 사전 점검이 `not_ready`로 막는다. "
 )
 _NO_SENDER = "실행기가 보내기를 꽂지 않는다 (`NoSender`) — `chk:email`이 실패한다. "
-_NO_READABLE = "실행기가 읽기 허용 폴더를 주지 않는다 (`readable=()`) — `chk:fileList`가 막힌다. "
 
 # 아래 둘은 실행기가 아니라 **묶음**에 없는 것이다.
 _TIMER = (
@@ -434,39 +460,34 @@ _SIGNAL = (
 
 #: 아직 **돌리지는** 못하는 예제와 그 이유. **조용히 빼면 묶음이 거짓말을 한다.**
 #:
-#: **배포·설치까지는 34개 모두 여기서 본다** (아래 `test_every_server_example_deploys`) —
+#: **배포·설치는 이것들도 모두 본다** (아래 `test_every_server_example_deploys_and_installs`) —
 #: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
 REMAINING: dict[str, str] = {
-    "bx01_invoice_reconciliation": _NO_LLM + _NO_SENDER + _NO_READABLE,
-    "bx02_morning_fx_report": _NO_LLM + _NO_SENDER,
-    "bx05_month_end_close": _NO_LLM + _NO_SENDER,
+    "bx01_invoice_reconciliation": _NO_SENDER,
+    "bx02_morning_fx_report": _NO_SENDER,
+    "bx05_month_end_close": _NO_SENDER,
     "bx06_bulk_credit_check": _NO_APPS + _NO_SENDER,
-    "bx07_corporate_card_review": _NO_LLM,
-    "bx08_receivable_dunning": _NO_LLM + _NO_APPS,
-    "bx10_vendor_onboarding_review": _NO_LLM + _NO_APPS,
-    "bx11_bid_collection": _NO_LLM + _NO_SENDER,
-    "bx13_return_processing": _NO_LLM + _NO_APPS + _NO_SENDER,
-    "bx15_quotation": _NO_LLM + _NO_APPS,
+    "bx08_receivable_dunning": _NO_APPS,
+    "bx10_vendor_onboarding_review": _NO_APPS,
+    "bx11_bid_collection": _NO_SENDER,
+    "bx13_return_processing": _NO_APPS + _NO_SENDER,
+    "bx15_quotation": _NO_APPS,
     "bx16_reorder_proposal": _NO_APPS,
-    "bx20_employee_onboarding": _NO_LLM + _NO_APPS + _NO_SENDER,
+    "bx20_employee_onboarding": _NO_APPS + _NO_SENDER,
     "bx21_leave_request": _NO_APPS,
     "bx22_offboarding_access": _NO_APPS + _NO_SENDER,
-    "bx23_training_reminder": _NO_LLM + _NO_APPS,
+    "bx23_training_reminder": _NO_APPS,
     "bx24_leave_balance": _NO_APPS,
-    "bx30_contract_review": _NO_LLM,
-    "bx31_request_triage": _NO_LLM + _NO_APPS + _NO_SENDER,
-    "bx32_customer_inquiry": _NO_LLM + _NO_APPS,
+    "bx30_contract_review": _NO_CANNED,
+    "bx31_request_triage": _NO_APPS + _NO_SENDER,
+    "bx32_customer_inquiry": _NO_APPS,
     "bx33_access_request": _NO_APPS + _NO_SENDER,
-    "bx34_incident_alert": _NO_LLM + _NO_APPS + _NO_SENDER,
-    "bx35_voc_weekly": _NO_LLM + _NO_APPS + _NO_SENDER,
-    "bx37_clause_review": _NO_LLM,
-    "fx01_api_call": _NO_LLM,
-    "fx04_folder_poll": _NO_READABLE + _TIMER,
-    "fx06_document_read": _NO_LLM,
+    "bx34_incident_alert": _NO_APPS + _NO_SENDER,
+    "bx35_voc_weekly": _NO_APPS + _NO_SENDER,
+    "fx04_folder_poll": _TIMER,
     "fx07_email": _NO_SENDER,
-    "fx08_error_boundary": _NO_LLM,
-    "fx09_sequential_loop": _NO_LLM,
-    "fx10_operator_routing": _NO_LLM + _NO_APPS,
+    "fx09_sequential_loop": _NO_CANNED,
+    "fx10_operator_routing": _NO_APPS,
     "fx13_signal": _SIGNAL,
     "fx14_timers": _TIMER,
     "fx18_parallel_loop": _NO_APPS,

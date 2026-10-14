@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -402,3 +402,74 @@ def test_center_errors_are_split_by_what_to_do(status: int, code: str | None, ex
     assert type(problem).__name__ == expected
     # 닿지 못한 것만이 `Unreachable`이다 — 상태 코드가 있는 답은 모두 닿은 것이다.
     assert not isinstance(problem, Unreachable)
+
+
+# ─────────────────────── 바깥 세계 배선 (M7 조각 8) ───────────────────────
+
+
+def test_the_outside_world_comes_from_the_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """모델·읽기 폴더는 **설정이 정한다** — Bot UI는 BUI-03이 정하는 자리다 (ADR-0027·0032).
+
+    **주지 않으면 기본값이 남아 부르지 않고 실패한다**(조용히 넘어가지 않는다)는 것이 요점이라,
+    여기서는 「준 것이 정말 `RunEnv`에 닿았는가」를 본다.
+    """
+    monkeypatch.setenv("CHK_SERVER_RUNNER__LLM__API_KEY", "k-model")
+    settings = Settings(
+        data_path=tmp_path / "runner",
+        llm_base_url="http://127.0.0.1:1/v1",
+        llm_model="stub",
+        readable_dirs=(tmp_path / "in",),
+        writable_dirs=(tmp_path / "out",),
+    )
+    made = agent_mod.Agent(settings=settings, client=cast(Any, _NoClient()))
+    env = made.run_env(_FakeBot())
+
+    assert type(env.llm).__name__ != "NoLlm", "모델이 꽂히지 않았다"
+    space = env.workspace
+    assert (tmp_path / "in") in space.readable
+    assert (tmp_path / "out") in space.writable
+
+
+def test_no_model_address_means_no_model(tmp_path: Path) -> None:
+    """주소가 비면 **`NoLlm`이다** — 「없는데 된 척」하지 않는다 (ADR-0027)."""
+    made = agent_mod.Agent(
+        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, _NoClient())
+    )
+    assert type(made.run_env(_FakeBot()).llm).__name__ == "NoLlm"
+
+
+def test_folder_lists_split_on_the_os_separator(monkeypatch: pytest.MonkeyPatch) -> None:
+    """여러 폴더는 `os.pathsep`으로 가른다 (Linux `:`, Windows `;`).
+
+    **빈 조각은 버린다** — 끝에 구분자가 하나 붙었다고 현재 폴더가 열리면 안 된다.
+    """
+    import os
+
+    monkeypatch.setenv("CHK_SERVER_RUNNER__READABLE_DIRS", os.pathsep.join(["/a", "", "/b"]))
+    monkeypatch.setenv("CHK_SERVER_RUNNER__WRITABLE_DIRS", "")
+    found = Settings.from_env()
+    assert [one.as_posix() for one in found.readable_dirs] == ["/a", "/b"]
+    assert found.writable_dirs == ()
+
+
+def test_the_model_key_is_not_in_the_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """키는 **설정에 없다** (CLAUDE.md §5) — 환경변수나 OS 비밀 저장소에서 읽는다."""
+    monkeypatch.setenv("CHK_SERVER_RUNNER__LLM__API_KEY", "k-model")
+    assert "k-model" not in repr(Settings.from_env())
+    assert Credentials().llm_api_key() == "k-model"
+
+
+class _NoClient:
+    """Center를 부르지 않는다 — 이 시험이 보는 것은 배선뿐이다."""
+
+
+class _FakeBot:
+    id = "fx.sample"
+    version = "1.0.0"
+    folder = Path(__file__).resolve().parent
+
+    def processes(self) -> dict[str, Any]:
+        return {}
+
+    def decisions(self) -> dict[str, Any]:
+        return {}
