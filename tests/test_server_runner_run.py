@@ -32,7 +32,8 @@ from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.signing import sign
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.server_runner import agent as agent_mod
-from chaeksas.server_runner.center_client import CenterClient
+from chaeksas.server_runner import seen as seen_mod
+from chaeksas.server_runner.center_client import CenterClient, Unreachable
 from chaeksas.server_runner.settings import Settings
 
 ADMIN = {"Authorization": "Bearer t-admin"}
@@ -356,6 +357,100 @@ def test_the_same_job_is_not_run_twice(
     runner.tick()
     run_ids = {one.run_id for one in runner.seen_jobs.values() if one.run_id}
     assert run_ids == {first}, "같은 작업에 실행이 둘 생기면 안 된다"
+
+
+def test_the_seen_map_forgets_once_the_ack_reached_center(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """멱등 기억은 **ack가 Center에 닿은 뒤 두 주기에** 잊는다 (ADR-0056).
+
+    규칙은 `seen.py`가 쥐고 `tests/test_server_runner_seen.py`가 잰다 — 여기서 보는 것은
+    **진짜 하트비트가 그 자리를 정말 움직이는가**다. 아무도 `delivered()`를 부르지 않으면
+    기억은 영원히 자라고, 이 시험만 그것을 본다.
+    """
+    ready_runner(center, store, runner)
+    job = make_job(center)
+    runner.tick()
+    assert next(iter(runner.workers.values())).join(WAIT_S)
+    drain(runner)
+
+    assert job["job_id"] in runner.seen_jobs, "닿은 그 주기에는 아직 들고 있다"
+    # 그 뒤로 몇 주기가 지나면 잊는다 — Center는 이미 반영했으니 다시 싣지 않는다.
+    for _ in range(seen_mod.GRACE_CYCLES + 1):
+        runner.tick()
+    assert job["job_id"] not in runner.seen_jobs
+    assert len(runner.seen_jobs) == 0, "몇 주 떠 있어도 자라지 않는다"
+    # 잊은 것이 되살아나지 않는다 — Center는 그 작업을 끝난 것으로 안다 (C5).
+    info = center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()
+    assert info["run_status"] == "success"
+    assert runner.last_response is not None and runner.last_response.jobs == []
+
+
+def test_an_unshipped_ack_is_kept_even_as_cycles_pass(
+    center: TestClient,
+    store: Store,
+    runner: agent_mod.Agent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """**올리지 못한 ack는 잊지 않는다** — 다시 내려온 작업에 그것을 되돌려 보낸다 (C4 멱등).
+
+    Center에 닿지 못하는 동안에도 기억은 남아야 한다. 잊으면 그 작업을 「처음 본 것」으로
+    다루어 **같은 작업에 실행이 둘** 생긴다.
+    """
+    ready_runner(center, store, runner)
+    job = make_job(center)
+    runner.tick()
+    first = next(iter(runner.workers))
+    assert next(iter(runner.workers.values())).join(WAIT_S)
+
+    # 하트비트가 끊긴다 — ack가 올라가지 못하므로 기억은 **아무리 주기가 가도** 남는다.
+    def unreachable(_request: Any) -> Any:
+        raise Unreachable("Center에 닿지 못한다")
+
+    monkeypatch.setattr(runner.client, "heartbeat", unreachable)
+    for _ in range(seen_mod.GRACE_CYCLES + 5):
+        runner.tick()
+    kept = runner.seen_jobs.get(job["job_id"])
+    assert kept is not None and kept.run_id == first, "올리지 못한 ack는 들고 있는다"
+
+    # 다시 닿으면 그 ack가 올라가고, 다시 내려온 작업은 **그 ack를 되돌려 받는다**.
+    monkeypatch.undo()
+    drain(runner)
+    run_ids = {one.run_id for one in runner.seen_jobs.values() if one.run_id}
+    assert run_ids <= {first}, "같은 작업에 실행이 둘 생기면 안 된다"
+    info = center.get(f"/api/v1/jobs/{job['job_id']}", headers=READ).json()
+    assert info["run_id"] == first and info["run_status"] == "success"
+
+
+def test_delivery_is_only_known_after_the_heartbeat_answered(
+    center: TestClient,
+    store: Store,
+    runner: agent_mod.Agent,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """「닿았다」는 **응답을 받은 뒤에만** 안다 — 보낼 때 알려 주면 기억이 먼저 사라진다.
+
+    평상시에는 그물(`grace`) 때문에 이 자리가 드러나지 않는다 — `pending_acks`는 성공할
+    때까지 **매 주기 다시 실리므로**, 보낼 때 「닿았다」고 쳐도 다음 주기가 나이를 되돌려
+    놓는다. 그래서 그물을 걷고(`grace=0`) 본다: 올리지 못한 ack를 그 자리에서 잊으면
+    Center가 다시 내려보낸 작업이 「처음 본 것」이 되어 **같은 작업에 실행이 둘** 생긴다.
+    """
+    runner.seen_jobs = seen_mod.Seen(grace=0)  # 그물을 걷는다 — 자리가 드러난다
+    ready_runner(center, store, runner)
+    job = make_job(center)
+    runner.tick()  # 받아서 돌렸다 — ack는 아직 올라가지 못했다
+    first = next(iter(runner.workers))
+
+    def unreachable(_request: Any) -> Any:
+        raise Unreachable("Center에 닿지 못한다")
+
+    monkeypatch.setattr(runner.client, "heartbeat", unreachable)
+    for _ in range(3):
+        runner.tick()
+    kept = runner.seen_jobs.get(job["job_id"])
+    assert kept is not None and kept.run_id == first, (
+        "하트비트가 끊긴 동안에는 「닿았다」가 아니다 — 잊으면 실행이 둘 생긴다"
+    )
 
 
 def test_cancel_stops_the_run(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
