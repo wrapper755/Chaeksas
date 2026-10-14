@@ -38,6 +38,7 @@ from typing import Any
 
 import pytest
 import uvicorn
+from canned_answers import canned
 from fastapi.testclient import TestClient
 from stub_model import StubModel
 
@@ -226,10 +227,14 @@ def center(
 def model() -> Iterator[StubModel]:
     """AI 태스크가 쓰는 모델 — 127.0.0.1 스텁이다 (`tests/stub_model.py`).
 
-    답은 **아무 값**이어도 된다: 여기서 보는 것은 업무 결과가 아니라 **배포·실행 한 바퀴**다
-    (결과가 맞는지는 Studio 시험 실행이 본다 — 같은 그림·같은 엔진).
+    답은 **M3·M5와 같은 자리**에서 온다 (`tests/canned_answers.py`) — 전에는 「아무 값」이었고
+    (`lambda: None`) 그래서 결과의 **칸을 읽는** 예제가 값을 읽다 멈췄다(BX-10·BX-30·FX-09).
+    같은 그림이 묶음에 따라 다른 답을 받으면 안 된다.
+
+    여기서 보는 것은 여전히 업무 결과가 아니라 **배포·실행 한 바퀴**다 — 결과가 맞는지는
+    Studio 시험 실행이 본다 (같은 그림·같은 엔진).
     """
-    with StubModel(lambda wanted, given: None) as made:
+    with StubModel(canned) as made:
         yield made
 
 
@@ -496,24 +501,18 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 일곱. **보내기도 이제 꽂힌다** (조각 10, ADR-0059) — 메일은
-# 설정의 SMTP로, 웹훅은 **운영자가 적은 허용 호스트**로 간다. 그래서 남은 것은 **플랫폼이 아니라
-# 묶음·그림 쪽**이다.
+# 아직 **돌리지는** 못하는 까닭 여섯. **짜 둔 모델 답도 이제 있다** (조각 12) — M3·M5와 **같은
+# 자리**에서 온다 (`tests/canned_answers.py`). 남은 것은 **플랫폼이 아니라 묶음·계약 쪽**이다.
 #
-# - **묶음에 없는 것**: 짜 둔 모델 답·시계·신호·소켓 Center·표본 파일·케이스 입력 연산자
-#   (`_NO_CANNED`·`_TIMER`·`_SIGNAL`·`_NO_SOCKET`·`_NO_SAMPLES`·`_NO_INPUT_OPS`).
-# - **계약이 가른 것**: 웹훅 둘 (`_WEBHOOK` — `$test_receiver`는 Studio 전용이다, C14).
+# - **계약이 가른 것**: 웹훅 넷 (`_WEBHOOK` — `$test_receiver`는 Studio 전용이다, C14). 가장 큰
+#   묶음이고 **「아직」이 아니다**.
+# - **묶음에 없는 것**: 시계·신호·소켓 Center·표본 파일·케이스 입력 연산자
+#   (`_TIMER`·`_SIGNAL`·`_NO_SOCKET`·`_NO_SAMPLES`·`_NO_INPUT_OPS`).
 # - **일부러 실패하는 것**: BX-33 (`_ON_PURPOSE` — 아래에 따로 시험이 있다).
 #
-# **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고(셋은 이미 초록이었다), 조각 10에서 또
-# 둘이 틀렸다 — BX-01은 보내기가 아니라 **표본 파일**이 없어서, BX-11은 **케이스 입력 연산자**를
-# 풀지 않아서 멈춘다. 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
-_NO_CANNED = (
-    "묶음에 **짜 둔 모델 답**이 없다 — AI 태스크의 결과가 dict이고 그 안의 칸을 읽는데, "
-    "스텁은 타입만 보고 빈 `{}`를 준다(`stub_model.answer_for`). 그래서 갈라짐이 케이스와 "
-    "달라지거나 값을 읽다 실패한다. 답은 모델이 아니라 **시험이 정한다** — M3·M5 묶음은 제 "
-    "`canned`를 가지고 있고, 그것을 함께 쓰는 자리로 옮기는 것이 다음 일이다. "
-)
+# **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고(셋은 이미 초록이었다), 조각 10에서 둘,
+# 조각 12에서 또 둘이다 — BX-10·BX-30은 `_NO_CANNED`로 적혀 있었지만 답을 주니 **그 뒤의
+# 웹훅**에서 멈췄다. 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
 _WEBHOOK = (
     "**웹훅은 이 묶음에서 보낼 곳이 없다** — 케이스가 `$test_receiver`를 가리키는데 그것은 "
     "**Studio 시험 실행 전용**이고(C14), 배포된 Bot은 사설망으로 웹훅을 보내지 않는다 "
@@ -561,14 +560,13 @@ _ON_PURPOSE = (
 #: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
 REMAINING: dict[str, str] = {
     "bx01_invoice_reconciliation": _NO_SAMPLES,
-    "bx10_vendor_onboarding_review": _NO_CANNED,
+    "bx10_vendor_onboarding_review": _WEBHOOK,
     "bx11_bid_collection": _NO_INPUT_OPS,
     "bx16_reorder_proposal": _NO_SOCKET,
     "bx21_leave_request": _WEBHOOK,
-    "bx30_contract_review": _NO_CANNED,
+    "bx30_contract_review": _WEBHOOK,
     "bx33_access_request": _ON_PURPOSE,
     "fx04_folder_poll": _TIMER,
-    "fx09_sequential_loop": _NO_CANNED,
     "fx10_operator_routing": _WEBHOOK,
     "fx13_signal": _SIGNAL,
     "fx14_timers": _TIMER,
@@ -656,3 +654,17 @@ def test_bx33_fails_on_purpose_on_the_server_too(
     found = client.get(f"/api/v1/runs/{done['run_id']}", headers=READ).json()
     # **식 오류다** — 업무 실패(`TaskFailed`)가 아니라 그림의 흠이라 오류 경계로 가지 않는다.
     assert found.get("error_code") == "expr_error", found
+
+
+def test_the_canned_answers_are_the_shared_ones() -> None:
+    """짜 둔 답의 **자리가 하나다** (`tests/canned_answers.py`) — M3·M5와 같은 것을 쓴다.
+
+    묶음마다 따로 두면 **같은 그림이 묶음에 따라 다른 답을 받는다** — 그래서 M7이 세 예제를
+    돌리지 못했다.
+    """
+    import canned_answers
+
+    assert canned is canned_answers.canned
+    # FX-09의 그 자리 — 답이 없으면 스텁이 타입으로 때우고 케이스가 어긋난다.
+    found = canned({"판정": "dict"}, {"신청": {"id": 1, "금액": 30000, "영수증": True}})
+    assert found is not None and found["판정"]["승인"] is True
