@@ -13,6 +13,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from chaeksas.core.app_directory import AppDirectory
+from chaeksas.core.delegation import Delegator
 from chaeksas.core.engine import WHERE_FIELD, RunEnv
 from chaeksas.core.extensions import HostTasks
 from chaeksas.core.files import Workspace
@@ -37,10 +38,15 @@ def make_env(
     directory: AppDirectory | None = None,
     caller_type: str = "bot_ui",
     sender: Sender | None = None,
+    delegate: Delegator | None = None,
 ) -> RunEnv:
     """바깥 세계 한 벌 — **주소·키는 실행하는 쪽만 안다** (ADR-0013).
 
     `sender`를 주지 않으면 **보내지 않고 실패한다** (`NoSender`) — 조용히 넘어가지 않는다.
+
+    `delegate`도 그렇다 — 주지 않으면 `NoDelegator`가 남아 PC 위임이 **그림·설치 오류**가
+    된다 (ADR-0062 §2). **Bot UI는 주지 않는다**: PC 실행은 자리를 끝까지 쥐므로 PC가 다른
+    PC를 기다리면 둘이 서로를 기다릴 수 있다 (C1 R10이 그림에서 이미 막는다).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     space = Workspace(output_dir=output_dir, readable=readable, writable=writable)
@@ -67,6 +73,9 @@ def make_env(
         # `caller_type`은 **누가 부르는가**다 (C11 `caller.type`) — 앱의 기록·수행 모드 판단이
         # 그 값에 걸려 있어 서버 실행기가 「PC가 불렀다」고 말하면 안 된다.
         made = replace(made, services=directory.caller(caller_type=caller_type))
+    if delegate is not None:
+        # **PC 위임을 맡기는 포트 하나** (ADR-0062 §2) — 엔진은 어디에 맡기는지 모른다.
+        made = replace(made, delegate=delegate)
     return made
 
 

@@ -16,6 +16,11 @@ Bot UI와 **같은 코드**(`core.deploy`·`core.packages`)이고 다른 것은 
 뒤 한 주기가 지났다) 넣고 ack한다. **넣을 자리가 없으면 ack하지 않고 둔다** — 그러면 Center가
 다음 주기에 다시 싣는다 (거절로 적으면 멀쩡한 메시지가 버려진다).
 
+**PC 위임도 하트비트로 돌아온다** (C12 §PC 위임, ADR-0062) — 맡기는 것은 엔진이 `RunEnv.delegate`
+포트로 하고(`delegate.CenterDelegator`), 끝난 결과는 `delegations[]`로 내려와 기다리던 실행이
+이어 간다. **ack가 올라가야 Center가 그 업무 값을 지운다** — 그래서 ack는 올릴 때까지 들고 있고,
+올라가기 전에 같은 결과가 또 내려오면 **마지막 ack를 되돌려 보낸다** (작업·메시지와 같다).
+
 한 걸음은 `tick()` 하나다 — **스레드를 만들지 않는다** (엔진과 같은 태도다). 부르는 쪽(`main`)이
 돌리고, 시험은 `tick()`을 직접 민다.
 """
@@ -37,6 +42,8 @@ from chaeksas.contracts.bot_ui import (
 )
 from chaeksas.contracts.server_runner import (
     Capacity,
+    DelegationAck,
+    DelegationResult,
     MessageAck,
     MessageDispatch,
     RunnerVersions,
@@ -68,6 +75,7 @@ from chaeksas.server_runner.center_client import (
     Unreachable,
 )
 from chaeksas.server_runner.credentials import Credentials
+from chaeksas.server_runner.delegate import CenterDelegator
 from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Saved, Store
 from chaeksas.server_runner.worker import ACK_STARTED, EMPTY_COUNTS, Worker, reopen_log
@@ -150,6 +158,15 @@ class Agent:
     #: **무한히 자라지 않는다** — `seen_jobs`와 **같은 규칙**이다 (`core.seen`, ADR-0056).
     #: 바깥 시스템이 밀어 넣는 것이라 수가 커서 여기가 더 급하다 (BX-11·BX-13).
     seen_messages: Seen[MessageAck] = field(default_factory=Seen)
+    #: 아직 올리지 못한 위임 ack (C12 §PC 위임). 올릴 때까지 들고 있는다 — ack가 올라가야
+    #: Center가 그 업무 값을 지운다 (원칙 6의 예외는 좁게 쓴다).
+    pending_delegation_acks: list[DelegationAck] = field(default_factory=list)
+    #: 이미 넣은 위임 결과 (`job_id` → 마지막 ack). ack가 올라가기 전에 같은 결과가 또
+    #: 내려오므로(C12) 들고 있지 않으면 **지나간 자리에 또 넣으려 한다**.
+    #: **스냅샷과 함께 담지 않는다** (ADR-0062 §5) — 메시지가 겪은 「넣은 뒤 담기 전에 죽는
+    #: 틈」(ADR-0058)이 여기서는 생기지 않는다: 그 틈에서 죽으면 되살린 실행은 **다시 그
+    #: 위임을 기다리는 자리**이고, Center도 ack를 못 받았으니 같은 결과를 다시 내려 준다.
+    seen_delegations: Seen[DelegationAck] = field(default_factory=Seen)
 
     @property
     def registered(self) -> bool:
@@ -559,6 +576,9 @@ class Agent:
             caller_type=HOST_KIND,
             # 서버 실행기의 결재 창구는 **Center만**이다 (C12).
             approval_where=WHERE_CENTER,
+            # **PC 위임은 Center에 맡긴다** (ADR-0062) — 어느 PC인가도 Center가 고른다.
+            # Bot UI는 이 포트를 꽂지 않는다 (PC가 PC를 기다리면 서로를 기다릴 수 있다).
+            delegate=CenterDelegator(client=self.client),
         )
 
     def wake_due(self) -> int:
@@ -763,6 +783,68 @@ class Agent:
             return None
         return sorted(picked, key=lambda one: (one.snapshot().started_at, one.run_id))[0]
 
+    # ── PC 위임 (C12 §PC 위임 — 맡긴 PC 실행이 끝났다) ──
+
+    def apply_delegations(self, found: list[DelegationResult]) -> None:
+        """내려온 위임 결과를 기다리는 실행에 넣는다 (ADR-0062) — **그 실행이 이어 간다**.
+
+        **맡기는 쪽은 엔진이다** (`RunEnv.delegate` → `delegate.CenterDelegator`) — 여기는
+        **돌아오는 길**뿐이다. `finished`가 아닌 것도 그대로 넘긴다: 엔진이 업무 실패로 올려
+        오류 경계가 받는다 (가르는 자리를 둘로 두지 않는다).
+
+        **ack하지 않고 두는 자리가 있다** — 빈자리가 없으면 넣지 않는다 (메시지와 같은 결).
+        위임으로 멈춘 실행은 자리를 놓았으므로 이어 가면 **다시 쥔다**: 상한을 넘기면
+        `capacity.running > max`가 되어 **하트비트가 스스로 막는다**(`validate_heartbeat`).
+        그러면 실행기가 Center와 말을 못 한다 — 다음 주기에 넣는 편이 싸다.
+
+        **지나간 자리는 받았다고 말한다** — 넣을 실행이 없으면 다시 내려와도 같으므로, ack해
+        Center가 그 업무 값을 지우게 한다 (들고 있을 까닭이 없다).
+        """
+        for one in found:
+            seen = self.seen_delegations.get(one.job_id)
+            if seen is not None:
+                self._remember_delegation_ack(seen)
+                continue
+            worker = self._waiting_delegation(one.job_id)
+            if worker is None:
+                log.info("위임 %s의 결과를 넣을 실행이 없다 — 받은 것으로 둔다", one.job_id)
+                self._remember_delegation_ack(DelegationAck(job_id=one.job_id, accepted=True))
+                continue
+            if self.free_slots() <= 0:
+                log.info("위임 %s의 결과를 넣을 자리가 없다 — 다음 주기에", one.job_id)
+                continue
+            try:
+                worker.delegation_done(
+                    one.job_id, state=one.state, outputs=one.outputs, reason=one.reason
+                )
+            except EngineError as e:  # pragma: no cover - 바로 위에서 기다림을 찾았다
+                # 기다림은 이미 걷혔다 — **받은 것으로 둔다** (다시 내려와도 같다).
+                log.error("위임 %s의 결과를 넣다 실패했다: %s", one.job_id, e)
+                self._remember_delegation_ack(DelegationAck(job_id=one.job_id, accepted=True))
+                continue
+            self._remember_delegation_ack(DelegationAck(job_id=one.job_id, accepted=True))
+            log.info(
+                "위임 %s의 결과를 실행 %s에 넣었다 (%s)", one.job_id, worker.run_id, one.state
+            )
+
+    def _remember_delegation_ack(self, ack: DelegationAck) -> None:
+        self.seen_delegations.remember(ack.job_id, ack)
+        self.pending_delegation_acks = [
+            one for one in self.pending_delegation_acks if one.job_id != ack.job_id
+        ]
+        self.pending_delegation_acks.append(ack)
+
+    def _waiting_delegation(self, job_id: str) -> Worker | None:
+        """그 위임을 기다리는 일꾼. 없으면 `None` (지나갔거나 끝난 실행이다).
+
+        **`run_id`로 찾지 않는다** — 작업 id가 그 자리의 열쇠이고(멱등 키가 그것으로 지어졌다)
+        그 실행이 정말 **지금 그것을** 기다리는지는 작업 id로만 알 수 있다.
+        """
+        for found in self.workers.values():
+            if found.waits_for_delegation(job_id):
+                return found
+        return None
+
     def _waiting_for(self, request_id: str) -> Worker | None:
         """그 결재를 기다리는 일꾼. 없으면 `None` (지나갔거나 남의 것이다)."""
         for found in self.workers.values():
@@ -830,6 +912,7 @@ class Agent:
             job_acks=list(self.pending_acks),
             approval_acks=list(self.pending_approval_acks),
             message_acks=list(self.pending_message_acks),
+            delegation_acks=list(self.pending_delegation_acks),
             restored=list(self.restored),
             unsent_events=self.unsent_events(),
         )
@@ -844,6 +927,7 @@ class Agent:
         """
         self.seen_jobs.delivered(one.job_id for one in self.pending_acks)
         self.seen_messages.delivered(one.message_id for one in self.pending_message_acks)
+        self.seen_delegations.delivered(one.job_id for one in self.pending_delegation_acks)
 
     def _apply(self, answer: ServerRunnerHeartbeatResponse) -> None:
         """응답을 반영한다 — 배포는 설치하고 작업은 돌린다.
@@ -863,6 +947,7 @@ class Agent:
         self.pending_acks.clear()  # 올렸다
         self.pending_approval_acks.clear()  # 올렸다
         self.pending_message_acks.clear()  # 올렸다
+        self.pending_delegation_acks.clear()  # 올렸다
         self.next_in_s = answer.next_heartbeat_s
         self.last_response = answer
         if answer.paused != self.paused:
@@ -879,6 +964,10 @@ class Agent:
             self.cancel_job(job_id)
         self.apply_approvals(list(answer.approvals))
         self.apply_messages(list(answer.messages))
+        # **작업보다 뒤다** — 둘 다 자리를 쓰는데, 자리가 없을 때 작업은 `rejected`로 닫히고
+        # (거절은 다시 싣지 않는다, C4) 위임 결과는 **ack하지 않으면 다시 내려온다**. 거꾸로
+        # 두면 멀쩡한 작업이 큐에서 사라진다.
+        self.apply_delegations(list(answer.delegations))
 
     # ── 연결 (로그는 바뀔 때만) ──
 

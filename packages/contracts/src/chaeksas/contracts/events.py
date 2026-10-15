@@ -62,8 +62,12 @@ KNOWN_RUN_STATUSES = frozenset({"success", "failed", "cancelled"})
 #: `job_id`다 (ADR-0062 — 예약을 풀었다). C12 `waiting[]`과 **같은 말**이다.
 KNOWN_WAITING_FOR = frozenset({"approval", "message", "timer", "delegation"})
 #: `run_resumed.reason` — **무엇이 깨웠나**. 회수(`withdraw`)도 답은 아니지만 이어 간 것이다
-#: (C6·ADR-0038). 보내는 쪽이 이 밖의 값을 쓰면 화면이 모르는 글을 그대로 보인다.
-KNOWN_RESUME_REASONS = frozenset({"answer", "message", "timer", "restart", "withdraw"})
+#: (C6·ADR-0038). **`delegation`은 PC 위임의 결과가 돌아온 것**이다 (ADR-0062 — 실패·거절로
+#: 돌아와 오류 경계로 가는 길도 이어 간 것이다). 보내는 쪽이 이 밖의 값을 쓰면 화면이 모르는
+#: 글을 그대로 보인다.
+KNOWN_RESUME_REASONS = frozenset(
+    {"answer", "message", "timer", "restart", "withdraw", "delegation"}
+)
 KNOWN_HUMAN_LAYERS = frozenset({"approval", "confirmation"})
 KNOWN_UI_RESULTS = frozenset({"success", "escalated", "failed"})
 
