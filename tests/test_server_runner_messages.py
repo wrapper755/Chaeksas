@@ -545,6 +545,37 @@ def test_the_run_log_is_the_original(
     )
 
 
+def test_the_message_wait_is_written_down(
+    center: TestClient, center_store: CenterStore, runner: agent_mod.Agent
+) -> None:
+    """**메시지를 기다린 것도 기록에 남는다** (C3 `run_waiting`·`run_resumed`).
+
+    `waiting[]`은 지금 모습이라 이어 간 뒤에는 사라진다. BX-11은 받고 **다시 기다리러**
+    돌아가므로 짝이 두 번 생기는 것까지 한 그림으로 본다.
+    """
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting_for_message(runner)
+    path = log_path(runner.settings.data_path, run_id)
+
+    put_message(center, name="bid_quote", correlation=BID, payload=quote("가나상사"))
+    runner.tick()
+    settle(runner)
+
+    found = [one for one in RunLog.read(path) if one.kind.startswith("run_")]
+    assert [one.kind for one in found] == [
+        "run_started",
+        "run_waiting",
+        "run_resumed",
+        "run_waiting",
+    ]
+    assert found[1].data["waiting_for"] == "message"
+    # 메시지는 **짝이 되는 선택 칸이 없다** (C3는 `request_id`·`until` 둘만 둔다) — 이름·상관
+    # 키는 업무 값에 닿으므로 `waiting[]`에만 있다 (원칙 6).
+    assert set(found[1].data) == {"waiting_for"}
+    assert found[2].data["reason"] == "message" and found[2].data["after_s"] >= 0.0
+
+
 def test_a_restarted_runner_still_takes_the_message(
     center: TestClient,
     center_store: CenterStore,

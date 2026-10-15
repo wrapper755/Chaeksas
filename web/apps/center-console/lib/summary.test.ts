@@ -27,9 +27,11 @@ import {
   percent,
   queueReason,
   readinessLabel,
+  resumes,
   runnerStatus,
   serverDeployments,
   summarize,
+  waitTotals,
 } from "./summary";
 
 const BOT = "finance.invoice";
@@ -390,5 +392,72 @@ describe("readinessLabel", () => {
 
   it("모르는 코드는 「사전 점검 실행 불가」다", () => {
     expect(readinessLabel(row({ blocked: ["무엇인가"] }))?.label).toBe("사전 점검 실행 불가");
+  });
+});
+
+describe("resumes", () => {
+  const AT = "2026-10-13T09:00:00+09:00";
+  const event = (seq: number, kind: string, data: Record<string, unknown> = {}, ts = AT) =>
+    ({ schema: 1, run_id: "run_20261013_090000_abcdef", seq, ts, kind, data }) as never;
+
+  it("기다린 줄과 이어 간 줄을 **짝지어** 한 줄로 만든다", () => {
+    const found = resumes([
+      event(1, "run_started"),
+      event(2, "run_waiting", { waiting_for: "approval", request_id: "apr_x" }),
+      event(3, "run_resumed", { after_s: 3600.5, reason: "answer" }),
+    ]);
+    expect(found.map((row) => [row.waiting_for, row.seconds, row.reason])).toEqual([
+      ["approval", 3600.5, "answer"],
+    ]);
+  });
+
+  it("**기다린 시간은 보낸 쪽이 센 것**이다 — 시각 차로 다시 세지 않는다", () => {
+    const found = resumes([
+      event(1, "run_waiting", { waiting_for: "timer" }, AT),
+      // 시계가 어긋나 줄 사이가 1초뿐이어도 보낸 쪽의 3600초가 이긴다.
+      event(2, "run_resumed", { after_s: 3600 }, "2026-10-13T09:00:01+09:00"),
+    ]);
+    expect(found.map((row) => row.seconds)).toEqual([3600]);
+  });
+
+  it("`after_s`가 없으면 두 줄의 시각 차로 메운다 (옛 기록·잘린 줄)", () => {
+    const found = resumes([
+      event(1, "run_waiting", { waiting_for: "timer" }, AT),
+      event(2, "run_resumed", {}, "2026-10-13T09:00:30+09:00"),
+    ]);
+    expect(found.map((row) => [row.seconds, row.reason])).toEqual([[30, null]]);
+  });
+
+  it("**짝 없이 남은 마지막 줄은 지금 기다리는 중**이다 (빼면 멈춘 까닭이 사라진다)", () => {
+    const found = resumes([
+      event(1, "run_waiting", { waiting_for: "message" }),
+      event(2, "run_resumed", { after_s: 1 }),
+      event(3, "run_waiting", { waiting_for: "timer", until: "2026-10-14T09:00:00+09:00" }),
+    ]);
+    expect(found.map((row) => [row.resumed_at === null, row.seconds, row.until])).toEqual([
+      [false, 1, null],
+      [true, null, "2026-10-14T09:00:00+09:00"],
+    ]);
+  });
+
+  it("짝 없는 `run_resumed`로 줄을 지어내지 않는다 (앞부분이 아직 안 올라왔다)", () => {
+    expect(resumes([event(9, "run_resumed", { after_s: 5 })])).toEqual([]);
+  });
+
+  it("PC 실행에는 두 줄이 아예 없다 (C3 — 서버만 쓴다)", () => {
+    expect(resumes([event(1, "run_started"), event(2, "node_state", { state: "waiting" })])).toEqual(
+      [],
+    );
+  });
+
+  it("이어 돈 횟수와 기다린 시간의 합은 **끝난 기다림만** 센다", () => {
+    const rows = resumes([
+      event(1, "run_waiting", { waiting_for: "approval" }),
+      event(2, "run_resumed", { after_s: 10 }),
+      event(3, "run_waiting", { waiting_for: "timer" }),
+      event(4, "run_resumed", { after_s: 20 }),
+      event(5, "run_waiting", { waiting_for: "message" }),
+    ]);
+    expect(waitTotals(rows)).toEqual({ resumed: 2, seconds: 30 });
   });
 });

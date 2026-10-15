@@ -57,6 +57,9 @@ KNOWN_NODE_STATES = frozenset({"started", "completed", "failed", "skipped", "rep
 KNOWN_RUN_STATUSES = frozenset({"success", "failed", "cancelled"})
 KNOWN_WAITING_FOR = frozenset({"approval", "message", "timer"})
 RESERVED_WAITING_FOR = frozenset({"delegation"})
+#: `run_resumed.reason` — **무엇이 깨웠나**. 회수(`withdraw`)도 답은 아니지만 이어 간 것이다
+#: (C6·ADR-0038). 보내는 쪽이 이 밖의 값을 쓰면 화면이 모르는 글을 그대로 보인다.
+KNOWN_RESUME_REASONS = frozenset({"answer", "message", "timer", "restart", "withdraw"})
 KNOWN_HUMAN_LAYERS = frozenset({"approval", "confirmation"})
 KNOWN_UI_RESULTS = frozenset({"success", "escalated", "failed"})
 

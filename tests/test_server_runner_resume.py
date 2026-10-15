@@ -34,10 +34,12 @@ from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store as CenterStore
 from chaeksas.center.storage import now_iso
+from chaeksas.contracts.events import KNOWN_RESUME_REASONS
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.signing import sign
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.server_runner import agent as agent_mod
+from chaeksas.server_runner import worker as worker_mod
 from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import WAITING, Store
 
@@ -375,6 +377,125 @@ def test_a_restored_run_is_told_once(
     assert second.restored
     second.tick()
     assert second.restored == []
+
+
+# ─────────────────────────── 기다림이 기록에 남는다 (C3) ───────────────────────────
+
+
+def test_the_resume_reasons_are_the_ones_the_contract_knows() -> None:
+    """깨운 까닭은 **계약이 아는 값**이다 (C3 `run_resumed.reason`).
+
+    열린 문자열이라 받는 쪽이 거부하지는 않지만, 갈라지면 콘솔이 모르는 글을 그대로 보인다.
+    """
+    assert {
+        worker_mod.RESUME_ANSWER,
+        worker_mod.RESUME_MESSAGE,
+        worker_mod.RESUME_TIMER,
+        worker_mod.RESUME_RESTART,
+        worker_mod.RESUME_WITHDRAW,
+    } == KNOWN_RESUME_REASONS
+
+
+def lines(settings: Settings, run_id: str, kind: str) -> list[dict[str, Any]]:
+    """그 실행 기록에서 한 종류만 — **파일이 원본이다** (C3)."""
+    return [
+        one.data
+        for one in RunLog.read(log_path(settings.data_path, run_id))
+        if one.kind == kind
+    ]
+
+
+def test_a_waiting_run_leaves_a_line_saying_what_it_waits_for(
+    center: TestClient, center_store: CenterStore, settings: Settings, key: str, store: Store
+) -> None:
+    """**기다리기 시작하면 줄 하나** (C3 `run_waiting`) — 서버만 쓴다.
+
+    하트비트의 `waiting[]`은 **지금 모습**이라 기다림이 끝나면 사라진다. 이 줄이 없으면
+    CON-01이 「이 실행이 무엇을 기다렸나」를 영영 모른다.
+    """
+    runner = runner_of(settings, key, center, store)
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting(runner)
+
+    found = lines(settings, run_id, "run_waiting")
+    assert len(found) == 1, "기다림 한 번에 한 줄이다"
+    assert found[0]["waiting_for"] == "approval"
+    # **짝이 되는 칸을 채운다** — 결재는 `request_id`다 (C3 선택 칸).
+    assert found[0]["request_id"].startswith("apr_")
+    assert "until" not in found[0], "타이머가 아니다"
+
+
+def test_an_answer_says_how_long_it_waited(
+    center: TestClient, center_store: CenterStore, settings: Settings, key: str, store: Store
+) -> None:
+    """**이어 가면 줄 하나** (C3 `run_resumed`) — `after_s`가 기다린 시간이다.
+
+    `run_waiting`과 **짝**이고, 깨운 까닭(`reason`)이 함께 간다.
+    """
+    runner = runner_of(settings, key, center, store)
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting(runner)
+    runner.tick()
+    request_id = center.get("/api/v1/approvals?state=open", headers=READ).json()[0]["request_id"]
+    answer_in_center(center, request_id)
+    drain(runner)
+
+    found = lines(settings, run_id, "run_resumed")
+    assert len(found) == 1
+    assert found[0]["reason"] == "answer"
+    assert found[0]["after_s"] >= 0.0
+    # 차례가 있다 — 기다리기 시작한 뒤에 이어 갔다.
+    kinds = [one.kind for one in RunLog.read(log_path(settings.data_path, run_id))]
+    assert kinds.index("run_waiting") < kinds.index("run_resumed")
+    assert kinds[-1] == "run_finished"
+
+
+def test_center_stops_calling_a_resumed_run_waiting(
+    center: TestClient, center_store: CenterStore, settings: Settings, key: str, store: Store
+) -> None:
+    """**한 배치에 둘이 함께 온다** — 그래도 CON-01의 상태는 「기다리는 중」이 아니다.
+
+    보내기는 하트비트 뒤라(C3) 기다리기 시작한 줄과 이어 간 줄이 같은 배치에 실린다. 받는 쪽이
+    덮어쓰지 않으면 끝난 실행까지 「기다리는 중」으로 남는다.
+    """
+    runner = runner_of(settings, key, center, store)
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting(runner)
+    runner.tick()
+    assert center.get(f"/api/v1/runs/{run_id}", headers=READ).json()["status"] == "waiting"
+
+    request_id = center.get("/api/v1/approvals?state=open", headers=READ).json()[0]["request_id"]
+    answer_in_center(center, request_id)
+    drain(runner)
+    assert center.get(f"/api/v1/runs/{run_id}", headers=READ).json()["status"] == "success"
+
+
+def test_a_restart_says_it_resumed_too(
+    center: TestClient, center_store: CenterStore, settings: Settings, key: str, store: Store
+) -> None:
+    """재시작으로 되살린 것도 **이어 간 것**이다 (`reason: restart`).
+
+    기다린 시간은 **기록에서** 읽는다 — 메모리와 함께 사라지지 않는다 (파일이 원본이다).
+    """
+    first = runner_of(settings, key, center, store)
+    ready(center, center_store, first)
+    make_job(center)
+    run_id = until_waiting(first)
+    first.tick()
+    del first
+
+    second = runner_of(settings, key, center, store)
+    second.tick()
+    assert second.restored == [run_id]
+    assert second.workers[run_id].join(WAIT_S), "되살린 스레드가 다시 멈출 때까지"
+
+    found = lines(settings, run_id, "run_resumed")
+    assert [one["reason"] for one in found] == ["restart"]
+    # 되살린 실행은 그 자리에서 **다시 기다린다** — 그래서 기다림 줄이 둘이다.
+    assert len(lines(settings, run_id, "run_waiting")) == 2
 
 
 # ─────────────────────────── 되살리지 않는 둘 (ADR-0054 §4) ───────────────────────────

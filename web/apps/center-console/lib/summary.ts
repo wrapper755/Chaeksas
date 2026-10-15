@@ -1,4 +1,4 @@
-/** CON-02·CON-12가 세는 일 — **화면을 모르는 자리**다 (`page.tsx`는 이것을 그릴 뿐이다).
+/** CON-01·CON-02·CON-12가 세는 일 — **화면을 모르는 자리**다 (`page.tsx`는 이것을 그릴 뿐이다).
  *
  * 여기 있는 것은 전부 **순수 함수**다: 서버 호출(`lib/center.ts`)도, JSX도, `next/*`도 들이지
  * 않는다. 갈라 둔 까닭은 **셈을 시험으로 재려고**다 — 페이지 모듈은 `server-only`를 끌고 와
@@ -6,10 +6,12 @@
  *
  * CON-02의 세는 규칙은 C3 요약에서 온다. **끝난 실행만**, **버전마다 최근 20회만**, 확인률은
  * **그 칸을 보낸 실행만** 분모에 넣는다. CON-12 쪽은 C12 보고와 C5 배포를 맞춰 본다.
+ * CON-01의 「이어 돈 기록」은 C3 `run_waiting`·`run_resumed` **두 줄을 짝지은** 것이다.
  */
 
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
+import type { RunEvent } from "@chaeksas/api-types/c3-run-event";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
@@ -23,8 +25,8 @@ export const SAMPLE = 20;
  * 칸을 「0%」로 그리지 않는 것이 이 화면의 규칙이다.
  */
 export const SCAN = 200;
-/** 끝난 실행의 상태 (C3) — 표본에 넣는 것들. 도는 중·기다리는 중은 세지 않는다. */
-const FINISHED = new Set(["success", "failed", "cancelled"]);
+/** 끝난 실행의 상태 (C3 `run_finished.status`) — 표본에 넣는 것들. 도는 중·기다리는 중은 세지 않는다. */
+export const FINISHED = new Set(["success", "failed", "cancelled"]);
 /** 한 (Bot, 버전)의 집계 한 줄. */
 export interface BotRow {
   id: string;
@@ -355,11 +357,92 @@ export function elapsed(since: string | null | undefined, now: number): string {
   if (!since) return "—";
   const at = new Date(since).getTime();
   if (Number.isNaN(at)) return "—";
-  const seconds = Math.max(0, Math.floor((now - at) / 1000));
+  return duration(Math.max(0, (now - at) / 1000));
+}
+
+/**
+ * 초 → 「3초」·「5분」·「2시간 10분」·「1일 3시간」 (CON-12 「경과」, CON-01 「기다린 시간」).
+ *
+ * **며칠을 기다리는 실행이 있다** (C12 — 서버 실행은 결재를 며칠 기다린다). 그래서 소요(초)와
+ * 달리 큰 단위로 접는다 — 「259200초」는 사람이 읽고 다시 나눠야 한다.
+ */
+export function duration(value: number): string {
+  const seconds = Math.max(0, Math.floor(value));
   if (seconds < 60) return `${seconds}초`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}분`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}시간 ${minutes % 60}분`;
   return `${Math.floor(hours / 24)}일 ${hours % 24}시간`;
+}
+
+/** 「이어 돈 기록」 한 줄 — 기다림 한 번 (CON-01 상세). */
+export interface ResumeRow {
+  /** 기다리기 시작한 줄의 순번 (`run_waiting`) — 표의 열쇠다. */
+  seq: number;
+  /** 무엇을 기다렸나 (C3 `waiting_for` — 열린 문자열). */
+  waiting_for: string;
+  node_id: string | null;
+  since: string;
+  /** 타이머면 그 시각 (C3 선택 칸), 아니면 `null`. */
+  until: string | null;
+  /** 이어 간 시각. **아직 기다리는 중이면 `null`**이다. */
+  resumed_at: string | null;
+  /** 무엇이 깨웠나 (C3 `reason` — 선택 칸이라 없을 수 있다). */
+  reason: string | null;
+  /** 기다린 초 (C3 `after_s`). 아직 기다리는 중이면 `null`. */
+  seconds: number | null;
+}
+
+/**
+ * C3 `run_waiting`·`run_resumed`를 **짝지어** 기다림 목록을 만든다 (CON-01 「이어 돈 기록」).
+ *
+ * 두 줄은 **서버 실행만 남긴다** (C3 — PC Bot은 기다리는 동안에도 실행 자리를 쥐고 있어
+ * `node_state: waiting`만으로 뜻이 통한다). 그래서 PC 실행의 이 표는 늘 비어 있다.
+ *
+ * **기다린 시간은 보낸 쪽이 센 것(`after_s`)을 쓴다** — Center의 요약이 그렇듯 받는 쪽이 다시
+ * 세지 않는다. 숫자가 아니면(옛 기록·잘린 줄) 두 줄의 시각 차로 메운다.
+ *
+ * **마지막 줄이 짝 없이 남을 수 있다** — 지금 기다리는 중이다. 그 줄도 보인다(「기다리는 중」)
+ * — 빼면 「무엇을 기다리느라 멈춰 있나」가 화면에서 사라진다.
+ */
+export function resumes(events: RunEvent[]): ResumeRow[] {
+  const out: ResumeRow[] = [];
+  for (const event of [...events].sort((a, b) => a.seq - b.seq)) {
+    if (event.kind === "run_waiting") {
+      out.push({
+        seq: event.seq,
+        waiting_for: String(event.data?.waiting_for ?? ""),
+        node_id: event.node_id ?? null,
+        since: event.ts,
+        until: event.data?.until ? String(event.data.until) : null,
+        resumed_at: null,
+        reason: null,
+        seconds: null,
+      });
+      continue;
+    }
+    if (event.kind !== "run_resumed") continue;
+    // 짝은 **아직 열려 있는 마지막 기다림**이다. 짝 없는 `run_resumed`는 (그 실행의 앞부분이
+    // 아직 안 올라왔을 때) 줄을 지어내지 않고 버린다 — 기다린 자리를 모른다.
+    const open = [...out].reverse().find((row) => row.resumed_at === null);
+    if (!open) continue;
+    const after = event.data?.after_s;
+    open.resumed_at = event.ts;
+    open.reason = event.data?.reason ? String(event.data.reason) : null;
+    open.seconds =
+      typeof after === "number" && Number.isFinite(after)
+        ? after
+        : Math.max(0, (new Date(event.ts).getTime() - new Date(open.since).getTime()) / 1000);
+  }
+  return out;
+}
+
+/** 이어 돈 횟수와 기다린 시간의 합 (CON-01 — 섹션 머리말). */
+export function waitTotals(rows: ResumeRow[]): { resumed: number; seconds: number } {
+  const done = rows.filter((row) => row.resumed_at !== null);
+  return {
+    resumed: done.length,
+    seconds: done.reduce((sum, row) => sum + (row.seconds ?? 0), 0),
+  };
 }

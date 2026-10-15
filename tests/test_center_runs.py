@@ -163,6 +163,26 @@ def test_a_late_batch_does_not_un_finish_a_run(client: Any) -> None:
     assert read(client, f"/api/v1/runs/{RUN}").json()["status"] == "failed"
 
 
+def test_a_resumed_run_is_no_longer_waiting(client: Any) -> None:
+    """**한 배치에 둘이 함께 온다** — 보내기는 하트비트 뒤라서다 (C3 §전송).
+
+    덮어쓰지 않으면 이어 간 실행이 CON-01에서 영원히 「기다리는 중」이다.
+    """
+    post(client, [started(), event(2, "run_waiting", waiting_for="timer", until="2026-10-13T10:00:00+09:00"),
+                  event(3, "run_resumed", after_s=3600.0, reason="timer")])
+    assert read(client, f"/api/v1/runs/{RUN}").json()["status"] == "running"
+
+
+def test_a_resumed_line_does_not_un_finish_a_run(client: Any) -> None:
+    """**끝난 것은 되돌리지 않는다** — 차례가 어긋난 배치에도 (`_update_run`과 같은 규칙)."""
+    post(client, [started(), event(2, "run_waiting", waiting_for="approval"),
+                  event(4, "run_finished", status="success", duration_s=2,
+                        ai_tasks=0, replayed_tasks=0, ui_tasks=0, service_calls=0,
+                        human_requests=1),
+                  event(3, "run_resumed", after_s=1.5, reason="answer")])
+    assert read(client, f"/api/v1/runs/{RUN}").json()["status"] == "success"
+
+
 def test_the_events_come_back_in_seq_order(client: Any) -> None:
     """타임라인이 순서를 만든다 — 받은 차례가 아니라 `seq` 차례다."""
     post(client, [event(3), event(1, "log", level="info", message="첫 줄")])

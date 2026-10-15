@@ -18,6 +18,10 @@ PC와 **모양이 다르다**: Bot UI는 Bot 하나마다 **자식 프로세스*
 **멈추면 상태를 담고 스레드를 놓는다** (ADR-0054 §3) — 그러면 그 실행은 `waiting[]`로 보고되고
 **자리를 쥐지 않는다**. 답(결재)·메시지·타이머가 오면 부르는 쪽이 `resume()`으로 되살려 다시
 민다. 재시작을 넘기는 것도 같은 저장소다.
+
+**기다린 것은 실행 기록에도 남는다** — C3 `run_waiting`·`run_resumed`를 찍는 자리가 여기다
+(「서버만 쓴다」고 C3가 적어 두었다). 하트비트의 `waiting[]`은 **지금 모습**이라 기다림이 끝나면
+사라지므로, 찍지 않으면 CON-01이 「이 실행이 무엇을 얼마나 기다렸나」를 영영 모른다.
 """
 
 from __future__ import annotations
@@ -45,10 +49,17 @@ STEPS_PER_TICK = 50
 #: 멈춘 뒤 타이머를 보는 간격 (초).
 TICK_S = 0.2
 
-#: C12 `waiting[].waiting_for` — 무엇을 기다리나.
+#: C12 `waiting[].waiting_for` — 무엇을 기다리나. C3 `run_waiting.waiting_for`와 **같은 말**이다.
 WAITING_APPROVAL = "approval"
 WAITING_MESSAGE = "message"
 WAITING_TIMER = "timer"
+
+#: C3 `run_resumed.reason` — **무엇이 깨웠나** (열린 문자열의 알려진 값).
+RESUME_ANSWER = "answer"
+RESUME_MESSAGE = "message"
+RESUME_TIMER = "timer"
+RESUME_RESTART = "restart"
+RESUME_WITHDRAW = "withdraw"
 
 #: 아무것도 돌지 않은 실행의 셈 (C3 `run_finished`의 필수 칸). **빠뜨리면 그 줄이 거부된다.**
 EMPTY_COUNTS: dict[str, Any] = {
@@ -213,6 +224,8 @@ class Worker:
 
         with self._lock:
             self.run = run
+        # **되살렸다는 것부터 적는다** (C3 `run_resumed`) — 기다린 시간은 기록에 남아 있다.
+        self._emit_resumed(run, RESUME_RESTART)
         self._publish(run)
         self._drive(run)
         self._publish(run)
@@ -228,7 +241,7 @@ class Worker:
         if run is None:  # pragma: no cover - 부르는 쪽이 먼저 되살린다
             raise RuntimeError("되살리지 않은 실행에 답할 수 없다")
         self.engine.answer(run, request_id, found, answered_by=answered_by)
-        self._continue(run)
+        self._continue(run, RESUME_ANSWER)
 
     def deliver(
         self,
@@ -255,7 +268,7 @@ class Worker:
             with self._lock:
                 self._absorbed.append(message_id)
         self.engine.deliver(run, name, correlation=correlation, payload=payload)
-        self._continue(run)
+        self._continue(run, RESUME_MESSAGE)
         return True
 
     def due_now(self) -> bool:
@@ -282,7 +295,7 @@ class Worker:
         run = self.run
         if run is None:  # pragma: no cover - `due_now`가 먼저 본다
             return False
-        self._continue(run)
+        self._continue(run, RESUME_TIMER)
         return True
 
     def waits_for_message(self, name: str, *, correlation: Any = None) -> bool:
@@ -296,15 +309,21 @@ class Worker:
         """Center 결재가 **답 없이 끝났다** (회수·만료, C6·ADR-0038).
 
         답이 아니다 — 오류 경계가 받거나 실행이 실패한다 (`APPROVAL_WITHDRAWN`·`_EXPIRED`).
+        **그래도 이어 간 것은 이어 간 것이다** — C3 `run_resumed`의 까닭이 `withdraw`다.
         """
         run = self.run
         if run is None:  # pragma: no cover
             raise RuntimeError("되살리지 않은 실행의 결재를 거둘 수 없다")
         self.engine.withdraw(run, request_id, reason=reason)
-        self._continue(run)
+        self._continue(run, RESUME_WITHDRAW)
 
-    def _continue(self, run: Run) -> None:
-        """멈춰 있던 실행을 **다시 민다** — 새 스레드가 이어서 돈다."""
+    def _continue(self, run: Run, reason: str) -> None:
+        """멈춰 있던 실행을 **다시 민다** — 새 스레드가 이어서 돈다.
+
+        깨운 까닭을 **기록에 적는다** (C3 `run_resumed`). 답·메시지 줄 **뒤에** 오는데, 그 줄이
+        곧 깨운 까닭이라 읽는 차례가 그편이 맞다.
+        """
+        self._emit_resumed(run, reason)
         self._publish(run)
         self._thread = threading.Thread(
             target=self._continued_body, args=(run,), name=f"run-{self.run_id}", daemon=True
@@ -388,8 +407,9 @@ class Worker:
                 break
             if self.engine.blocked(run):
                 if not self._tick(run):
-                    # 사람·메시지를 기다린다 — 이 조각에서는 **이어 갈 길이 없다** (4-②).
-                    # 스레드는 끝내고 자리를 놓는다 (`waiting[]`로 보고된다).
+                    # 사람·메시지·타이머를 기다린다 — 스레드를 끝내고 **자리를 놓는다**
+                    # (`waiting[]`로 보고되고, 답·메시지·쓸기가 `_continue`로 되살린다).
+                    self._emit_waiting(run)
                     self._publish(run)
                     return
                 continue
@@ -401,6 +421,64 @@ class Worker:
             self._publish(run)
         if run.state is State.FAILED and run.error is not None:
             self._failure = str(run.error)
+
+    # ── 기다림을 기록에 남긴다 (C3 `run_waiting`·`run_resumed` — **서버만 쓴다**) ──
+
+    def _emit_waiting(self, run: Run) -> None:
+        """**기다리기 시작했다**는 줄 하나 (C3 `run_waiting`).
+
+        PC Bot은 이 줄이 없다 (C3) — 기다리는 동안에도 실행 자리를 쥐고 있어 `node_state:
+        waiting`만으로 뜻이 통한다. 서버는 **스레드를 놓으므로**(ADR-0054 §5) 기다린 사실이
+        기록에 없으면 CON-01이 「이 실행이 무엇을 얼마나 기다렸나」를 영영 모른다.
+
+        **담는 것과 묶지 않는다** — 담을 곳(`store`)이 없어도 기다린 것은 사실이다.
+
+        무엇을 기다리는지 모르면 **찍지 않는다** (`_waiting_row`가 이미 경고했다) — C3가
+        `waiting_for`를 필수로 두었으니 거짓을 적는 대신 줄을 비운다.
+        """
+        row = self._waiting_row(run)
+        if row is None:
+            return
+        data: dict[str, Any] = {"waiting_for": row.waiting_for}
+        # **짝이 되는 칸만** (C3 선택 칸은 `request_id`·`until` 둘이다).
+        if row.request_id:
+            data["request_id"] = row.request_id
+        if row.until:
+            data["until"] = row.until
+        run.log.emit("run_waiting", node_id=self._node_id(run), **data)
+
+    def _emit_resumed(self, run: Run, reason: str) -> None:
+        """**기다림을 끝내고 이어 간다**는 줄 하나 (C3 `run_resumed`).
+
+        **`run_waiting`과 짝이다** — 짝을 못 찾으면 찍지 않는다. `after_s`가 필수 칸이라 0을
+        넣어야 하는데, 0은 「바로 이어 갔다」라서 「얼마나 기다렸는지 모른다」와 같은 값이 된다
+        (C3 선택 칸 규칙과 같은 결). 짝이 없는 것은 이 판 전에 담긴 스냅샷뿐이다.
+        """
+        after = self._waited_s(run)
+        if after is None:
+            return
+        run.log.emit("run_resumed", after_s=after, reason=reason)
+
+    def _waited_s(self, run: Run) -> float | None:
+        """마지막 `run_waiting` 뒤로 흐른 초 (C3 `run_resumed.after_s`). 모르면 `None`.
+
+        **기록에서 읽는다** — 파일이 원본이라(C3) 실행기가 다시 떠도 그 자리가 남아 있고,
+        기다린 시간이 메모리와 함께 사라지지 않는다.
+        """
+        for event in reversed(run.log.events):
+            if event.kind == "run_resumed":
+                return None  # 이미 이어 갔다 — 기다리는 중이 아니다
+            if event.kind == "run_waiting":
+                try:
+                    since = datetime.fromisoformat(event.ts)
+                    now = datetime.fromisoformat(run.log.clock())
+                    waited = (now - since).total_seconds()
+                except (ValueError, TypeError):  # pragma: no cover - 시계를 바꿔 끼운 시험
+                    # 읽을 수 없는 시각·시간대 없는 시계다 — **0이 아니라 모른다**로 둔다.
+                    return None
+                # 시계가 거꾸로 가면 0이다 (`queued_s`와 같은 규칙, C3).
+                return max(0.0, round(waited, 3))
+        return None
 
     def _take_stop(self, run: Run) -> bool:
         with self._lock:
@@ -540,6 +618,11 @@ __all__ = [
     "ACK_FAILED",
     "ACK_FINISHED",
     "ACK_STARTED",
+    "RESUME_ANSWER",
+    "RESUME_MESSAGE",
+    "RESUME_RESTART",
+    "RESUME_TIMER",
+    "RESUME_WITHDRAW",
     "STEPS_PER_TICK",
     "TICK_S",
     "WAITING_APPROVAL",

@@ -725,6 +725,34 @@ def test_a_run_waiting_on_a_timer_is_woken_when_the_time_comes(
     assert shot.waiting is not None and shot.waiting.waiting_for == "approval"
 
 
+def test_the_timer_wait_is_written_down(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """**얼마나 기다렸나가 기록에 남는다** (C3 `run_waiting`·`run_resumed`).
+
+    타이머는 짝이 되는 칸이 `until`이고, 깨운 까닭은 `timer`다. 하트비트의 `waiting[]`은 지금
+    모습이라 깨어난 뒤에는 사라지므로 **이 두 줄만이** 기다림을 남긴다 (CON-01).
+    """
+    found = waiting_on_a_timer(center, store, runner)
+    path = log_path(runner.settings.data_path, found.run_id)
+
+    waiting = [one.data for one in RunLog.read(path) if one.kind == "run_waiting"]
+    assert len(waiting) == 1
+    assert waiting[0]["waiting_for"] == "timer" and waiting[0]["until"]
+    assert "request_id" not in waiting[0], "결재가 아니다"
+
+    time.sleep(3.2)
+    assert runner.wake_due() == 1
+    assert found.join(WAIT_S)
+
+    resumed = [one.data for one in RunLog.read(path) if one.kind == "run_resumed"]
+    assert [one["reason"] for one in resumed] == ["timer"]
+    assert resumed[0]["after_s"] >= 3.0, f"3초를 기다렸다: {resumed[0]}"
+    # 타이머를 지나 결재를 기다리므로 **다시 기다림 줄**이 생긴다 (짝이 맞는다).
+    kinds = [one.kind for one in RunLog.read(path) if one.kind.startswith("run_")]
+    assert kinds == ["run_started", "run_waiting", "run_resumed", "run_waiting"]
+
+
 def test_a_full_runner_wakes_it_next_cycle_instead(
     center: TestClient, store: Store, runner: agent_mod.Agent
 ) -> None:
