@@ -149,6 +149,26 @@ CREATE TABLE IF NOT EXISTS messages (
   reason           TEXT,
   acked_at         TEXT
 );
+CREATE TABLE IF NOT EXISTS delegations (
+  -- PC 위임 하나 (C12 §PC 위임, ADR-0062). **작업 표에 열을 더하지 않고 표를 따로 둔다** —
+  -- `CREATE TABLE IF NOT EXISTS`는 이미 만들어진 DB의 표를 고치지 않아 열을 더하면 돌던
+  -- Center가 조용히 깨진다 (`extension_health`와 같은 결).
+  --
+  -- `outputs_json`은 **업무 값**이다 (원칙 6의 명시한 예외) — 실행기가 받았다고 ack하면
+  -- **바로 지운다**. 못 받은 것은 작업 멱등 기간(7일)에 지운다.
+  job_id        TEXT PRIMARY KEY,
+  runner_id     TEXT NOT NULL,
+  run_id        TEXT NOT NULL,
+  node_id       TEXT NOT NULL,
+  node_instance INTEGER NOT NULL,
+  bot_ui_id     TEXT NOT NULL,
+  state         TEXT,
+  outputs_json  TEXT,
+  reason        TEXT,
+  pc_run_id     TEXT,
+  acked         INTEGER NOT NULL DEFAULT 0,
+  at            TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS contributed_resources (
   -- 확장이 기여한 자원 (C7·C13 §5). Center는 `data`를 **해석하지 않고** 그대로 넘긴다.
   resource_type  TEXT NOT NULL,

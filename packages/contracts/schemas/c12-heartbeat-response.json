@@ -93,6 +93,60 @@
       "title": "ApprovalDispatch",
       "type": "object"
     },
+    "DelegationResult": {
+      "additionalProperties": true,
+      "description": "끝난 PC 위임 하나 (C12 §PC 위임) — 하트비트 응답으로 내려간다.\n\n**`outputs`가 업무 값이다** — 원칙 6의 명시한 예외이고, 올라오는 것은 그 Bot이 **선언한\n`outputs`만**이다 (C1). `state`가 `finished`가 아니면 실행기가 오류 경계로 넘긴다.",
+      "properties": {
+        "job_id": {
+          "title": "Job Id",
+          "type": "string"
+        },
+        "outputs": {
+          "additionalProperties": true,
+          "title": "Outputs",
+          "type": "object"
+        },
+        "pc_run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pc Run Id"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "job_id",
+        "run_id",
+        "state"
+      ],
+      "title": "DelegationResult",
+      "type": "object"
+    },
     "JobDispatch": {
       "additionalProperties": true,
       "description": "내려온 작업 하나. ack가 올 때까지 매번 실린다.",
@@ -230,6 +284,13 @@
         "type": "string"
       },
       "title": "Cancel Jobs",
+      "type": "array"
+    },
+    "delegations": {
+      "items": {
+        "$ref": "#/$defs/DelegationResult"
+      },
+      "title": "Delegations",
       "type": "array"
     },
     "deployments": {

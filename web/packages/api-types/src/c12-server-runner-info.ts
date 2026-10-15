@@ -103,13 +103,14 @@ export interface RunnerVersions {
  * 상태만 남고 **일꾼을 놓은** 실행 (ADR-0054 §1·§3).
  *
  * `waiting_for`에 따라 **짝이 되는 칸이 있어야 한다** — 결재는 `request_id`, 메시지는
- * `message_name`, 타이머는 `until`. `validate_heartbeat()`가 그것을 본다.
+ * `message_name`, 타이머는 `until`, **PC 위임은 `job_id`**. `validate_heartbeat()`가 그것을 본다.
  */
 export interface WaitingRun {
   bpm_process_id: string;
   correlation?: {
     [k: string]: unknown;
   };
+  job_id?: string | null;
   message_name?: string | null;
   request_id?: string | null;
   run_id: string;

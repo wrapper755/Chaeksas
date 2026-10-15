@@ -28,6 +28,7 @@
 - 경로:
   - `POST /api/v1/server-runner/register`
   - `POST /api/v1/server-runner/heartbeat` — 기본 10초 (응답의 `next_heartbeat_s`를 따른다)
+  - `POST /api/v1/server-runner/delegations` — **PC 위임을 맡긴다** (§PC 위임)
 - 인증: Center API 키 (종류 「서버 실행기용」, CON-11). 다른 종류의 키는 403 `wrong_key_type`.
 - 키 묶기는 C4와 같다 — 키 하나 ↔ 서버 하나 ↔ 실행기 행 하나이고, 같은 `machine_id`를 다른 키가 등록하면 409 `machine_already_registered`다 (C4 「키 묶기」). **규칙은 코드로도 한 자리다** (`center/host_keys.py`) — C4와 C12가 같은 함수를 쓴다. `machine_id`를 만드는 쪽도 하나다 (`core.machine`).
 - 등록은 **멱등**이고, 등록·하트비트가 오면 운영자가 해 둔 「유실 처리」를 지운다 — 돌아온 실행기를 오프라인으로 보이게 두지 않는다 (CON-12).
@@ -82,17 +83,18 @@
 | `schema`, `status` | `status`는 열린 문자열. 알려진 값: `running`, `paused`, `draining`, `error` |
 | `capacity` | `{max, running}`. `running`은 기다리는 실행을 뺀 수 |
 | `running[]` | `{run_id, bpm_process_id, version, node_id, started_at, job_id?}` |
-| `waiting[]` | `{run_id, bpm_process_id, version, waiting_for: "approval" \| "message" \| "timer", request_id?, message_name?, correlation?, until?, since}` |
+| `waiting[]` | `{run_id, bpm_process_id, version, waiting_for: "approval" \| "message" \| "timer" \| "delegation", request_id?, message_name?, correlation?, until?, job_id?, since}` |
 | `job_acks[]` | C4와 같은 모양. `result`: `started`, `rejected`, `expired`, `cancelled`, `cancel_refused` |
 | `approval_acks[]`, `deployment_results[]` | C4와 같다 |
 | `readiness[]` | 배포된 서버 Bot별 준비 상태 (C4 Readiness와 같은 모양: 빠진 키 참조·확장). 바뀌었을 때만 |
 | `message_acks[]` | `{message_id, accepted, run_id?, reason?}` |
+| `delegation_acks[]` | `{job_id, accepted}` — **위임 결과를 받았다** (§PC 위임). 받으면 Center가 그 값을 지운다 |
 | `extensions[]` | 바뀌었을 때만 (C4와 같은 모양) |
 | `restored[]` | 재시작 직후 저장소에서 되살려 **정말 이어 가는** 실행 `run_id` (첫 하트비트에만). 되살리지 못한 것은 여기 넣지 않고 C5 `run_status`에 사유와 함께 적는다 |
 | `unsent_events` | |
 
 **`waiting[]`의 짝 칸은 비울 수 없다** — `approval`이면 `request_id`, `message`면
-`message_name`, `timer`면 `until`이다. 같은 실행이 `running[]`과 `waiting[]`에 함께 있을 수도
+`message_name`, `timer`면 `until`, **`delegation`이면 `job_id`**다 (§PC 위임). 같은 실행이 `running[]`과 `waiting[]`에 함께 있을 수도
 없다(쥐면서 놓을 수는 없다 — 자리 셈이 틀어진다). `capacity.running`은 `running[]`의 길이와
 같아야 한다. 보내는 쪽과 받는 쪽이 **같은 함수**로 본다 (`validate_heartbeat()`).
 
@@ -107,6 +109,7 @@
 | `cancel_jobs[]` | |
 | `approvals[]` | 답이 정해진 결재. 기다리던 실행이 이어 간다 |
 | `messages[]` | `{message_id, name, correlation?, payload, received_at}` — **기다리는 실행에 넣을 것만** 내려온다. 메시지 시작은 Center가 작업으로 바꿔 `jobs[]`로 보낸다 (§메시지) |
+| `delegations[]` | **끝난 PC 위임의 결과** — `{job_id, run_id, state, outputs?, reason?}` (§PC 위임). ack가 올 때까지 다시 싣는다 |
 | `paused` | true면 새 작업을 받지 않는다 (CON-12 「일시 중지」). 실행 중인 것은 끝까지 간다 |
 
 ### Center가 작업을 나누는 규칙
@@ -171,6 +174,47 @@ Center는 메시지를 이렇게 처리한다.
   `run_ended`·`not_waiting`·`duplicate`다. 여기서 다시 싣기로 하면 영원히 도는 메시지가 된다.
 - 받을 실행기가 **유실 처리**되면 그 실행기로 가던 메시지는 `host_lost`로 닫는다 (결재가
   회수되는 것과 같은 자리다 — C6 `host_lost`).
+
+### PC 위임 (서버 Bot → PC Bot)
+
+서버 Bot이 화면 조작·현장 확인이 필요한 한 부분을 **따로 배포된 PC Bot**에 맡긴다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 그림은 C14 `chk:call.delegate`, 매니페스트는 C1 `requires.delegations`다.
+
+**`POST /api/v1/server-runner/delegations`** (실행기 키만)
+
+| 필드 | 뜻 |
+| --- | --- |
+| `run_id` | 맡기는 **서버 실행**. **보낸 키의 실행이어야 한다** (C3 소유와 같은 대조) — 남의 실행 이름으로 작업을 만들 수 없다 |
+| `node_id`, `node_instance` | 그 실행 안의 호출 자리. 멱등 키를 여기서 짓는다 |
+| `bpm_process_id`, `version?` | 부를 PC Bot. 판을 비우면 **배포된 판**(둘 이상이면 422 `version_ambiguous`) |
+| `bot_ui?` | **그 PC로만** 보낸다 (그림의 `bot_ui` 식을 실행기가 값으로 풀어 보낸다). 비우면 Center가 고른다 |
+| `inputs` | 그 Bot에 줄 입력 (C14 `chk:call.input`을 실행기가 값으로 푼 것) |
+
+- 응답은 `{job_id, bot_ui_id, state}`다. **201이 새 작업, 200이 이미 만든 것**이다.
+- **멱등 키는 Center가 짓는다** — `dlg_<run_id>_<node_id>_<node_instance>`. 본문에서 받지 않는다(`requested_by`와 같은 결) — 부르는 쪽마다 짓는 규칙이 갈라지면 되살린 실행이 **작업을 두 번 만든다**. 그래서 ADR-0054의 「마지막 기다림 이후를 다시 한다」가 그대로 성립한다: 다시 요청하면 **같은 작업이 돌아온다**.
+- **`requested_by`는 Center가 적는다** — `server_bot:<run_id>`(C5 예약값). 본문에서 받지 않으므로 그 이름을 지어낼 수 없다.
+- **고른 뒤에는 `POST /jobs`와 같은 함수로 작업이 된다** — 배포 검사·대상 검사·대기열이 한 자리에 남는다 (메시지 시작이 이미 그렇다, §메시지).
+
+**어느 PC인가 — Center가 고른다** (그림에 PC id를 적지 않는다: 「PC에서 무엇을 돌려도 되는가」를 정하는 것은 배포다, [ADR-0049](../decisions/0049-deployment-target-must-exist.md))
+
+1. 그 `<id>@<version>`이 **살아 있는 배포로 걸린 PC** 중에서 고른다 (PC 배포는 대상이 `bot_ui_id` 하나씩이다 — [ADR-0046](../decisions/0046-no-wildcard-pc-deployment.md)).
+2. **활성인 PC만**, 그중 **대기열이 가장 짧은 곳**. 같으면 `bot_ui_id` 순서다.
+3. 고를 곳이 없으면 **거부**다 (404 `no_deployment`). **기다리지 않는다** — 배포되지 않은 것을 기다리는 것은 업무가 아니라 설정 잘못이고, 오류 경계가 받아야 사람이 안다.
+4. `bot_ui`를 적었으면 **그 PC만** 본다 (배포되지 않았거나 없으면 역시 `no_deployment`).
+
+**결과가 돌아오는 길** (원칙 6의 명시한 예외 — C6 `review`·`answer`와 같은 모양)
+
+| 항목 | 정한 것 |
+| --- | --- |
+| 올라오는 쪽 | PC Bot UI의 작업 ack에 **그 Bot이 선언한 `outputs`만** 싣는다 (C4·C1) |
+| 내려가는 쪽 | 하트비트 응답 `delegations[]`. **그 작업을 낸 실행기에게만** 내려간다 |
+| 다시 싣기 | **ack(`delegation_acks[]`)가 올 때까지 매번 다시 싣는다** (작업·메시지와 같다) |
+| 지우기 | **ack가 오면 값을 바로 지운다.** 못 받은 것은 **작업 멱등 기간(7일)**에 지운다 — 기간을 새로 만들지 않는다. 누가·언제·성패는 남는다 |
+| 화면 | **값을 보이지 않는다** (CON-05가 작업 입력을 키만 보이는 것과 같다) |
+
+- `state`는 **열린 문자열**이고 알려진 값은 작업 ack와 같다: `finished`·`failed`·`cancelled`·`expired`·`rejected`. 실행기는 `finished`가 아니면 **오류 경계로 넘긴다** (C14 — 업무 실패다).
+- 기다리는 동안 그 실행은 **자리를 쥐지 않는다** (`waiting[]`의 `delegation` 갈래, 짝 칸은 `job_id`). **PC 쪽은 ADR-0014 그대로** — 하나씩, 끝날 때까지.
+- 서버 실행이 취소되면 **그 위임 작업도 취소한다**. 이미 시작된 PC 실행은 끝까지 가고(C5 — 「시작된 작업의 취소는 거절」) 그 결과는 받는 쪽이 없으므로 **버린다**.
+- **배포 때 한 가지를 더 본다** — `requires.delegations`의 Bot이 **승인된 패키지로 Center에 있어야** 한다 (422 `delegation_not_approved`. C1 R8처럼 배포 시점에 본다 — 매니페스트만으로는 알 수 없다). 판을 비운 위임은 **승인된 판이 하나라도 있으면** 통과다. **PC에 배포됐는가는 묻지 않는다**: 서버 Bot을 먼저 배포하는 순서를 막으면 안 되고, 실제 관문은 위임을 요청할 때다.
 
 ### 재시작과 유실
 
@@ -251,6 +295,12 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 - 422 `receiver_ambiguous` — 메시지 시작 트리거가 서버 Bot 둘 이상에 걸렸다
 - 409 `idempotency_conflict`
 
+위임 요청에는 다음이 더 있다.
+
+- 404 `no_deployment` — 그 판이 배포된 활성 PC가 없다 (지정한 PC가 없거나 그 판이 없는 경우도 같다)
+- 403 `run_owner_mismatch` — 남의 실행 이름으로 맡기려 했다 (C3 소유와 같은 대조)
+- 422 `version_ambiguous` — 판을 비웠는데 배포된 판이 둘 이상이다
+
 되살리지 못한 실행의 사유는 오류가 아니라 **C5 `run_status`의 `error_code`**로 간다 —
 `runner_restarted`·`runner_version_changed`·`snapshot_unreadable` (ADR-0054).
 
@@ -262,6 +312,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-15 | 1 | **PC 위임**을 더했다 — 요청 경로(`POST …/delegations`), `waiting[]`의 `delegation` 갈래와 짝 칸 `job_id`, 하트비트의 `delegations[]`·`delegation_acks[]`, 그리고 배포 때 「그 Bot이 승인되어 있나」. **어느 PC인가는 Center가 고르고**(배포된·활성·대기열이 짧은 곳) **멱등 키·`requested_by`는 Center가 짓는다**(본문에서 받지 않는다). 선택 칸이라 **옛 실행기는 그대로 돈다** | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-01 | 1 | 초안 (M7) | 0015, 0016 |
 | 2026-10-01 | 1 | 화면 검토 반영: 운영 API(목록·일시 중지·유실 처리), `readiness` | — |
 | 2026-10-13 | 1 | 스파이크 s10 뒤 **합의**로 올림. 모델·검사가 코드로 생겼다(`validate_heartbeat`·`free_slots`·`pick_jobs`·`restorable`). §재시작과 유실을 다시 썼다 — 적는 때 둘·그림은 담지 않음·마지막 기다림 이후를 다시 함(멱등 키가 같은 값으로 다시 만들어지므로 호출 전 저장이 필요 없다)·기다린 적 없는 실행은 되살리지 않음·**기한은 Center가 꺼져 있어도 간다** | 0054 |

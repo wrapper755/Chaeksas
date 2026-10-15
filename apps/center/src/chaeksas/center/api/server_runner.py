@@ -243,10 +243,25 @@ def heartbeat(
         approvals=approvals.heartbeat(store, host_id=runner_id, acks=request.approval_acks),
         # 받을 곳이 이 실행기인 메시지 (C12 §메시지) — **ack가 올 때까지 매번 다시 싣는다**.
         messages=messages.heartbeat(store, runner_id=runner_id, acks=request.message_acks),
+        # 끝난 PC 위임의 결과 (C12 §PC 위임, ADR-0062) — 메시지와 같은 결이다: **ack가 올
+        # 때까지 다시 싣고**, 받았다는 ack가 오면 **값을 바로 지운다**.
+        delegations=_delegations(store, runner_id=runner_id, acks=request.delegation_acks),
         paused=paused,
         # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4·C12).
         key_expires_at=key.expires_at,
     )
+
+
+def _delegations(store: Store, *, runner_id: str, acks: list[Any]) -> list[Any]:
+    """내려줄 위임 결과 — **ack를 먼저 적는다** (그러면 받은 것은 이번에 다시 내려가지 않는다).
+
+    `delegations.py`를 **함수 안에서** 들여온다 — 그 모듈이 이 모듈의 `id_for_key`를 쓰므로
+    위에서 import하면 순환이다 (결재·메시지와 같은 짜임).
+    """
+    from chaeksas.center.api import delegations  # noqa: PLC0415 — 순환 import를 피한다
+
+    delegations.apply_acks(store, runner_id=runner_id, acks=acks)
+    return [one.to_json_dict() for one in delegations.pending_for(store, runner_id)]
 
 
 # ─────────────────────────── 운영 API (CON-12) ───────────────────────────

@@ -69,6 +69,8 @@ function waitingFor(row: NonNullable<ServerRunnerInfo["waiting"]>[number]): stri
     return `메시지 ${row.message_name ?? ""}${shown ? ` (${shown})` : ""}`.trim();
   }
   if (row.waiting_for === "timer") return `타이머 ${fullTime(row.until)}`;
+  // **PC 위임**의 짝 칸은 작업 id다 (ADR-0062) — 그 작업이 CON-05에 있다.
+  if (row.waiting_for === "delegation") return `PC 위임 ${row.job_id ?? ""}`.trim();
   return row.waiting_for;
 }
 
@@ -153,15 +155,24 @@ export default async function ServerRunnerPage({
       key: "link",
       header: "",
       width: "10ch",
-      // 결재면 결재함으로 — 답하는 자리가 CON-04다. 그 밖에는 갈 곳이 없다.
-      cell: (row) =>
-        row.waiting_for === "approval" && row.request_id ? (
-          <Link className="underline" href={`/approvals/${encodeURIComponent(row.request_id)}`}>
-            결재함
-          </Link>
-        ) : (
-          "—"
-        ),
+      // 결재면 결재함(CON-04), **PC 위임이면 그 작업(CON-05)**으로. 그 밖에는 갈 곳이 없다.
+      cell: (row) => {
+        if (row.waiting_for === "approval" && row.request_id) {
+          return (
+            <Link className="underline" href={`/approvals/${encodeURIComponent(row.request_id)}`}>
+              결재함
+            </Link>
+          );
+        }
+        if (row.waiting_for === "delegation" && row.job_id) {
+          return (
+            <Link className="underline" href={`/jobs/${encodeURIComponent(row.job_id)}`}>
+              작업
+            </Link>
+          );
+        }
+        return "—";
+      },
     },
   ];
 

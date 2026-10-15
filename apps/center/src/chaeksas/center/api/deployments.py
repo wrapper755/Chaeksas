@@ -136,6 +136,7 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
     )
 
     _refuse_missing_resources(package.manifest, store)
+    _refuse_unapproved_delegations(package.manifest, store)
     target = claim.get("target") or {}
 
     with store.tx() as cur:
@@ -154,6 +155,72 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
             ),
         )
     return _row(store, store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)))
+
+
+def targets_for(store: Store, *, bpm_process_id: str, version: str, target_type: str) -> list[str]:
+    """그 판이 **살아 있는 배포로 걸린 대상 id**들 (C5). PC 위임이 PC를 고를 때 쓴다.
+
+    **고르는 기준을 다섯째 자리에 적지 않으려고** 여기 둔다 — `envelopes_for`와 같은 조건
+    (철회되지 않음 + 패키지가 `approved`)이고, 어긋나면 「배포는 됐는데 위임이 안 간다」가 된다
+    (`_target_sql`의 각주와 같은 결).
+    """
+    rows = store.rows(
+        "SELECT DISTINCT d.target_id AS id FROM deployments d"
+        " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
+        " WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ?"
+        "   AND d.bpm_process_id = ? AND d.version = ?",
+        (STATUS_APPROVED, target_type, bpm_process_id, version),
+    )
+    return sorted(str(row["id"]) for row in rows)
+
+
+def versions_deployed_to(store: Store, *, bpm_process_id: str, target_type: str) -> list[str]:
+    """그 Bot이 그 종류의 대상에 배포된 판들 (C5) — 위임이 판을 비웠을 때 고를 거리다."""
+    rows = store.rows(
+        "SELECT DISTINCT d.version AS v FROM deployments d"
+        " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
+        " WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ?"
+        "   AND d.bpm_process_id = ?",
+        (STATUS_APPROVED, target_type, bpm_process_id),
+    )
+    return sorted(str(row["v"]) for row in rows)
+
+
+def _refuse_unapproved_delegations(manifest: Manifest | None, store: Store) -> None:
+    """**PC 위임으로 부르는 Bot이 승인되어 있어야** 한다 (C12 §PC 위임, ADR-0062).
+
+    C1 R8처럼 **배포 시점에** 본다 — 매니페스트만으로는 알 수 없다. 반대로 **PC에 배포됐는가는
+    묻지 않는다**: 서버 Bot을 먼저 배포하는 순서를 막으면 안 되고, 실제 관문은 위임을 요청할
+    때다 (그때 `no_deployment`로 거절한다).
+
+    판을 비운 위임(`<id>`)은 **승인된 판이 하나라도 있으면** 통과다 — 어느 판으로 돌릴지는
+    요청할 때 정한다 (둘 이상이면 그때 `version_ambiguous`다).
+    """
+    from chaeksas.center.api.signing import STATUS_APPROVED  # noqa: PLC0415 — 순환 import를 피한다
+
+    if manifest is None:  # pragma: no cover — 올릴 때 검증했다
+        return
+    missing: list[str] = []
+    for ref in manifest.requires.delegations:
+        bot, _, version = ref.partition("@")
+        if version:
+            row = store.row(
+                "SELECT status FROM packages WHERE id = ? AND version = ?", (bot, version)
+            )
+            ok = row is not None and row["status"] == STATUS_APPROVED
+        else:
+            rows = store.rows("SELECT status FROM packages WHERE id = ?", (bot,))
+            ok = any(row["status"] == STATUS_APPROVED for row in rows)
+        if not ok:
+            missing.append(ref)
+    if not missing:
+        return
+    raise ApiError(
+        422,
+        "delegation_not_approved",
+        f"PC 위임으로 부르는 Bot이 승인되지 않았다: {missing[0]}",
+        {"delegations": missing},
+    )
 
 
 def _refuse_missing_resources(manifest: Manifest | None, store: Store) -> None:
