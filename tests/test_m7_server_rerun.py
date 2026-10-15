@@ -46,6 +46,8 @@ from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from sample_files import make_samples  # noqa: E402
+
 from chaeksas.admin import keys as keystore  # noqa: E402
 from chaeksas.center.api.signing import bootstrap_key  # noqa: E402
 from chaeksas.center.app import create_app  # noqa: E402
@@ -192,6 +194,31 @@ def mock_apps() -> Iterator[tuple[dict[str, str], dict[str, str]]]:
         one_thread.join(timeout=10)
 
 
+#: 모의 앱 등록을 다시 해 보는 횟수. **Center가 읽지 못하면 등록하지 않는다**(C7) — 그것은
+#: 옳은 동작이고, 느린 러너에서 `/manifest` 읽기가 Center의 5초를 넘기는 일이 있다
+#: (Windows CI에서 한 번 겪었다 — 앱 열넷을 **시험마다** 등록하고 그 위에 예제가 돈다).
+REGISTER_TRIES = 3
+
+
+def register_app(client: TestClient, app_id: str, base_url: str) -> None:
+    """서비스 앱 하나를 등록한다 — **닿지 못한 것은 다시 해 본다** (ADR-0007과 같은 결).
+
+    다시 해도 안 되면 **그 자리에서 말한다** — 조용히 넘어가면 그 앱을 쓰는 예제가 배포에서
+    막히고(C7 누락 검사) 까닭이 「확장이 없다」로 보인다.
+    """
+    for attempt in range(1, REGISTER_TRIES + 1):
+        answer = client.post(
+            "/api/v1/resources/service-apps", json={"base_url": base_url}, headers=ADMIN
+        )
+        if answer.status_code < 400:
+            return
+        reachable = answer.json().get("code") not in ("manifest_unreachable", "healthz_unreachable")
+        assert not reachable, f"{app_id}: {answer.text}"
+        if attempt < REGISTER_TRIES:
+            time.sleep(0.5 * attempt)
+    pytest.fail(f"{app_id}: 모의 앱을 {REGISTER_TRIES}번 등록해 봤지만 Center가 읽지 못했다")
+
+
 @pytest.fixture
 def center(
     tmp_path: Path, mock_apps: tuple[dict[str, str], dict[str, str]]
@@ -209,10 +236,7 @@ def center(
         key = keystore.create(label="서버 재통과")
         bootstrap_key(store, public_key=key.public_bytes(), label="서버 재통과")
         for app_id, base_url in c11.items():
-            answer = client.post(
-                "/api/v1/resources/service-apps", json={"base_url": base_url}, headers=ADMIN
-            )
-            assert answer.status_code < 400, f"{app_id}: {answer.text}"
+            register_app(client, app_id, base_url)
         signer = keystore.load(key, passphrase=SIGN_PASS)
         for app_id, base_url in external.items():
             # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`).
@@ -373,18 +397,16 @@ def runner(
 # ─────────────────────────── 배포 (C2·C5) ───────────────────────────
 
 
-#: 그림이 읽는 **빈 폴더**들 — git은 빈 폴더를 담지 않으므로 묶음이 만든다 (M3·M5와 같은 결:
-#: 「표본 파일은 시험이 그 자리에서 만든다」). 상대 경로의 기준은 **출력 폴더**다 (ADR-0032).
-EMPTY_FOLDERS = {"fx04_folder_poll": ("samples/inbox-empty",)}
+def make_samples_for(runner: agent_mod.Agent, bot: str) -> None:
+    """그 Bot의 **출력 폴더 아래에** 표본 파일을 만든다 — **M3와 같은 자리**다
+    (`tests/sample_files.py`).
 
-
-def make_empty_folders(runner: agent_mod.Agent, example: str, bot: str) -> None:
-    """그 예제가 들여다볼 빈 폴더를 **출력 폴더 아래에** 만든다. 없으면 `TASK_FAILED`다.
-
-    출력 폴더 이름은 **패키지 id**다 (`agent.run_env()`가 `bot.id`로 짓는다).
+    저장소에 이진 파일을 두지 않으므로 묶음이 만든다. **상대 경로의 기준이 출력 폴더**이므로
+    (ADR-0032) 루트를 그것으로 준다 — Studio는 작업 폴더를 준다. **빈 폴더도 함께** 생긴다
+    (git은 빈 폴더를 담지 않는다 — FX-04의 그 케이스다). 출력 폴더 이름은 **패키지 id**다
+    (`agent.run_env()`가 `bot.id`로 짓는다).
     """
-    for one in EMPTY_FOLDERS.get(example, ()):
-        (runner.settings.data_path / "outputs" / bot / one).mkdir(parents=True, exist_ok=True)
+    make_samples(runner.settings.data_path / "outputs" / bot)
 
 
 def packaged(tmp_path: Path, example: str) -> Path:
@@ -563,22 +585,15 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 넷 → **셋**. **타이머도 이제 간다** (조각 13, ADR-0061) —
-# 실행기가 시각이 된 것을 하트비트마다 쓸어서 깨운다. 웹훅은 조각 12에서 열렸다.
+# 아직 **돌리지는** 못하는 까닭 **셋**. **표본 파일도 이제 있다** (조각 13) — 만드는 자리가
+# M3와 **하나**다 (`tests/sample_files.py`). 타이머는 ADR-0061이, 웹훅은 조각 12가 열었다.
 #
-# - **묶음에 없는 것**: 표본 **파일**·소켓 Center·신호 (`_NO_SAMPLES`·`_NO_SOCKET`·`_SIGNAL`).
-#   **빈 폴더는 묶음이 만든다** (`EMPTY_FOLDERS`).
+# - **묶음에 길이 없는 것**: 소켓 Center·신호 (`_NO_SOCKET`·`_SIGNAL`).
 # - **일부러 실패하는 것**: BX-33 (`_ON_PURPOSE` — 아래에 따로 시험이 있다).
 #
 # **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고, 조각 10에서 둘, 조각 12에서 다섯,
-# 조각 13에서 하나다 — FX-04는 타이머를 지나고 보니 **빈 폴더**가 없어 멈췄다(그건 묶음이
-# 만들 수 있었다). 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
-_NO_SAMPLES = (
-    "묶음이 **표본 파일**을 만들지 않는다 — 그림이 `samples/<…>`의 **파일**을 읽는데 저장소에 "
-    "이진 파일을 두지 않는다(M3·M5 묶음은 그 자리에서 만든다). **빈 폴더는 만든다** "
-    "(`EMPTY_FOLDERS` — git이 빈 폴더를 담지 않아서다). 표본을 만드는 자리를 M3에서 옮겨 "
-    "오는 것이 다음 일이다. "
-)# 아래 셋은 실행기가 아니라 **묶음**에 없는 것이다.
+# 조각 13에서 하나다 — FX-04는 타이머를 지나고 보니 **빈 폴더**가 없어 멈췄다(표본 만들기가
+# 그것까지 만든다). 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
 _SIGNAL = (
     "신호를 넣을 길이 묶음에 없다 — C12 메시지 API는 **메시지**를 넣고(§메시지) 신호는 "
     "엔진의 `signal()`이라 Center를 거치지 않는다. "
@@ -603,7 +618,6 @@ _ON_PURPOSE = (
 #: **배포·설치는 이것들도 모두 본다** (아래 `test_every_server_example_deploys_and_installs`) —
 #: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
 REMAINING: dict[str, str] = {
-    "bx01_invoice_reconciliation": _NO_SAMPLES,
     "bx16_reorder_proposal": _NO_SOCKET,
     "bx33_access_request": _ON_PURPOSE,
     "fx13_signal": _SIGNAL,
@@ -658,7 +672,7 @@ def test_a_server_example_runs_through_center_and_the_runner(
     **업무 값은 보지 않는다** (C3에 없다 — 원칙 6). 결과가 맞는지는 Studio 시험 실행이 본다.
     """
     info = deploy(center, runner, packaged(tmp_path, example))
-    make_empty_folders(runner, example, str(info["id"]))
+    make_samples_for(runner, str(info["id"]))
     job_id = dispatch(center, info, case_inputs(example, receiver))
     done = run_to_the_end(
         center,
