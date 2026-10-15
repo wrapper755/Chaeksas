@@ -272,3 +272,54 @@ def test_the_wait_is_measured_from_the_request() -> None:
     assert waited(item, now=asked - timedelta(seconds=5)) == 0
     # **모르면 `None`** — 0을 넣으면 「기다리지 않았다」가 된다.
     assert waited(item.model_copy(update={"requested_at": "깨진 값"})) is None
+
+
+# ─────────────────────────── PC 위임으로 받은 작업 (ADR-0062 §6) ───────────────────────────
+
+
+def delegated(job_id: str, *, run_id: str = "run_20261015_090000_aaaaaa") -> JobDispatch:
+    """위임이 만든 작업 — **`requested_by`가 그렇다고 말해 준다** (C5 예약값, Center가 짓는다)."""
+    return job(job_id).model_copy(update={"requested_by": f"server_bot:{run_id}"})
+
+
+def test_a_delegated_job_is_queued_as_a_delegation(tmp_path: Path) -> None:
+    """**출처가 `job`이 아니라 `delegation`이다** (C3·C4) — 그 출처만 끝날 때 결과를 올린다.
+
+    가르는 재료는 **작업의 `requested_by`** 하나다 (Center가 짓는 예약값이라 지어낼 수 없다).
+    새 칸을 두지 않는다.
+    """
+    found = agent(tmp_path)
+    found.take_job(delegated("job_dlg"))
+    (item,) = found.queue
+    assert item.source == "delegation"
+    # 맡긴 서버 실행은 **Bot UI 안에만** 둔다 — C4 `QueueItem`에 칸을 더하지 않는다
+    # (Center는 `requested_by`로 이미 알고, 대기열 보고에 쓸 데가 없다).
+    assert found.store.state.parents[item.queue_id] == "run_20261015_090000_aaaaaa"
+
+
+def test_a_plain_job_is_not_a_delegation(tmp_path: Path) -> None:
+    """사람이 낸 작업은 그대로 `job`이다 — 값을 올릴 길이 열리지 않는다."""
+    found = agent(tmp_path)
+    found.take_job(job("job_plain"))
+    (item,) = found.queue
+    assert item.source == "job" and found.store.state.parents == {}
+
+
+def test_the_parent_survives_a_restart(tmp_path: Path) -> None:
+    """다시 켜도 **맡긴 실행을 안다** — 대기열이 남는 자리에 함께 남는다 (C4)."""
+    first = agent(tmp_path)
+    first.take_job(delegated("job_dlg"))
+    first.store.save()
+
+    again = agent(tmp_path)
+    (item,) = again.queue
+    assert again.store.state.parents[item.queue_id] == "run_20261015_090000_aaaaaa"
+
+
+def test_dropping_the_item_forgets_the_parent(tmp_path: Path) -> None:
+    """대기열에서 버린 항목의 자리는 **함께 지운다** — 쌓이면 지난 실행 이름이 파일에 남는다."""
+    found = agent(tmp_path)
+    found.take_job(delegated("job_dlg"))
+    (item,) = found.queue
+    found.cancel_queued(item.queue_id)
+    assert found.store.state.parents == {}

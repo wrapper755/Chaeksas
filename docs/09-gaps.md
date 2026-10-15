@@ -30,7 +30,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C9 | **구현됨** | **`ext.ui_automation.contracts.registry`·`console`** | — (관리 콘솔이 읽는 길도 돈다) |
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
-| C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | — (닫았다). 「기한은 간다」는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)이 코드로도 사실로 만들었다 (주기만큼 늦을 수 있다고 C12에 적었다). 없음. **PC 위임은 계약 본문에서 아직 「제안」**이라 이 표가 묻지 않는다 — 모양은 [ADR-0062](decisions/0062-pc-delegation.md)가 정했고 본문을 고치는 것이 §3에 있다. 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
+| C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | — (닫았다). 「기한은 간다」는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)이 코드로도 사실로 만들었다 (주기만큼 늦을 수 있다고 C12에 적었다). **PC 위임도 본문이 되어 양쪽이 돈다** ([ADR-0062](decisions/0062-pc-delegation.md) — §3-13). 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
 | C13 | **구현됨** | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다: 호스트·Studio·Bot UI·콘솔·Center) |
 | C14 | **구현됨** | `contracts.bpmn_ext` B1~B15 + `contracts.dmn` | — (닫았다 — 엔진이 수행하고 Studio가 편집·검사하고 예제 50개가 이 형식이다. schema 1에서 **쓰지 않기로 적은 것**은 범위 결정이다) |
 
@@ -46,31 +46,39 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열넷의 상태는 §1 표에 있다. **남은 것은 PC 위임 하나다.**
+계약 열넷의 상태는 §1 표에 있다. **PC 위임까지 닫혔다** — 남은 것은 그 거리의 작은 하나뿐이다 (§3-13).
 
-### 3-13. PC 위임 — **남은 것은 현장에서 값을 ack로 옮기는 길 하나**다
+### 3-13. PC 위임 — **거리는 닫았다.** 남은 것은 작은 셋이다
 
-[ADR-0062](decisions/0062-pc-delegation.md)가 정했다(**먼저 정할 것이 없다** — 그 ADR이 선택지 셋을 두고 골랐다). 고칠 계약 다섯은 **모두 닫았다** (C14 → C1 → C12 → C4 → C3). **엔진 쪽도 닫았다** — `RunEnv.delegate` 포트(`core.delegation`)·네 번째 기다림(`WAIT_DELEGATION`, 짝 칸은 `job_id`이고 **스냅샷과 함께 간다**)·`Engine.delegation_done()`이 돈다. **「맡길 곳이 없다」와 「거절당했다」는 다른 예외**다(`DelegationUnsupported` ↔ `DelegationError` — 앞은 그림·설치 오류, 뒤는 업무 실패라 오류 경계가 받는다). **서버 실행기 쪽도 닫았다** — 맡기는 포트(`server_runner/delegate.py`의 `CenterDelegator`, `make_env(delegate=…)`로 꽂는다)·`waiting[]`의 `delegation` 갈래(짝 칸 `job_id`)·하트비트로 받은 결과를 넣는 자리(`Agent.apply_delegations`)·`delegation_acks[]`가 돈다. **ADR-0062 끝의 「증명할 다섯」 중 넷을 보았다** (`tests/test_server_runner_delegation.py` — 위임이 든 그림은 예제에 없어 손으로 만들었다): 자리를 놓는다·재시작을 건너 작업이 하나다·선언한 `outputs`가 변수가 된다·실패는 업무 실패다. **Studio 시험 실행의 포트도 닫았다** — `runner.CaseDelegator`가 케이스의 `delegations`를 돌려주고 **Center도 남의 패키지도 없이** 끝까지 간다. 이로써 **「증명할 다섯」이 다 찼다**. **남은 것은 하나**다 — **현장에서 값을 ack로 옮기는 길**(C4 줄). 그리고 작은 것 하나: B14의 `delegated_outputs`를 **주는 쪽**(Studio가 Center에서 그 Bot의 매니페스트를 읽어 넘긴다 — 주지 않으면 그 대조만 건너뛴다).
+[ADR-0062](decisions/0062-pc-delegation.md)가 정했고(선택지 셋을 두고 골랐다) **계약 다섯·엔진·
+꽂는 쪽 둘·현장에서 값이 올라오는 길이 모두 돈다**. 그래서 ADR 끝의 **「증명할 다섯」이 다 찼다**:
+서버 실행이 위임으로 멈추면 **자리를 놓고**, 재시작을 건너 **작업이 하나**이며(작업 id가 스냅샷과
+함께 간다), **선언한 `outputs`가 값으로 돌아와** `chk:call.output`이 적은 변수에 담기고, 실패·거절은
+**오류 경계가 받고**, Studio 시험 실행은 **케이스가 적어 둔 결과로** 끝까지 간다. 지키는 시험은 셋이다
+— `tests/test_core_events.py`(엔진)·`test_studio_runner.py`(케이스 포트)·`test_server_runner_delegation.py`
+(실행기·Center, 마지막 하나는 **PC를 진짜 자식 프로세스로 돌려** 현장이 만든 값이 서버 변수에
+담기는 것까지 본다). **위임이 든 그림은 업무 예제에 없어** 시험이 손으로 만든다.
 
-**Studio 쪽에서 정한 것 둘:**
-- **적어 두지 않은 위임의 사유 코드는 `DELEGATION_FAILED`다** — 진짜 PC 실행이 실패했을 때와 **같은 것**이라야 「적지 않는 것」이 C14가 적어 둔 **「오류 경계를 시험하는 길」**이 된다. 따로 코드를 만들면 그림이 받을 수 없어 그 길이 막힌다.
-- **`manual`이 위임을 막지 않는다** — 결재는 사람이 창에서 답할 수 있지만 위임은 Studio에 답할 사람이 없다. 막으면 그 케이스가 **끝나지 않는다**.
+**남은 것은 B14의 `delegated_outputs`를 주는 쪽**이다 — Studio가 Center에서 그 PC Bot의
+매니페스트를 읽어 넘기면 「그 Bot이 돌려주지 않는 값을 읽는다」를 **그림 검사에서** 안다
+(지금은 주지 않아 그 대조만 건너뛰고, 실행 때 업무 실패로 드러난다). 재료는 다 있다
+(계약은 `validate(..., delegated_outputs=…)`를 이미 받고, Studio는 STU-14·STU-11에서 Center를
+**읽기만** 하는 길을 갖고 있다) — **먼저 정할 것이 없다.**
 
-**실행기 쪽에서 정한 것 넷** (ADR에 없던 자리다):
-- **닿지 못한 것도 업무 실패다** — 포트는 작업 id를 돌려주지 못하면 기다릴 수 없다. 들고 있다 다시 거는 길(ADR-0007)이 없는 대신, 멱등 키가 Center의 것이라 **오류 경계가 다시 시도하면 같은 작업이 돌아온다**.
-- **위임 결과는 작업보다 뒤에 넣는다** — 둘 다 자리를 쓰는데 자리가 없을 때 작업은 `rejected`로 닫히고(C4 — 거절은 다시 싣지 않는다) 위임 결과는 **ack하지 않으면 다시 내려온다**. 거꾸로 두면 멀쩡한 작업이 큐에서 사라진다.
-- **빈자리가 없으면 넣지 않는다** (메시지와 같은 결) — 이어 가면 자리를 다시 쥐므로 상한을 넘기면 `capacity.running > max`가 되어 **하트비트가 스스로 막힌다**(`validate_heartbeat`). 그러면 실행기가 Center와 말을 못 한다.
-- **멱등 기억은 스냅샷과 함께 담지 않는다** (ADR-0062 §5 그대로) — 넣은 뒤 담기 전에 죽으면 되살린 실행은 **다시 그 위임을 기다리는 자리**이고 Center도 ack를 못 받았으니 같은 결과를 다시 내려 준다. 메시지(ADR-0058)와 다른 것은 그 때문이다.
+**값이 Center를 지나가는 것**이 이 거리의 값이다 (C6 `review`·`answer`에 이어 둘째 예외다) —
+그래서 올리는 것은 **선언한 `outputs`만**이고, **ack와 함께 지우며**, 화면에 보이지 않는다.
 
-| 계약 | 더할 것 |
-| --- | --- |
-| ~~C14~~ | **닫았다** — `chk:call.delegate`, B14 둘(**`server`에서만**·위임 호출은 패키지 안에서 찾지 않는다), 시험 케이스의 `delegations`, `bot_ui` 식을 읽기로 세는 것. **포트를 꽂지 않은 쪽에서는 설치 오류로 멈춘다**(폴백을 두지 않았다 — 꽂은 것은 서버 실행기와 Studio이고 **Bot UI는 일부러 꽂지 않는다**). **`delegated_outputs`를 주는 쪽이 아직 없다** — Studio가 Center에서 그 Bot의 매니페스트를 읽어 주는 것이 Studio 조각이고, 주지 않으면 그 대조만 건너뛴다 |
-| ~~C1~~ | **닫았다** — `requires.delegations`, **R10**(위임은 `run_location=server`만), R3 사유 글. Studio가 그림에서 모으고 **`libs`에 넣지 않는다**(복사해 넣는 것이 아니다 — 넣으면 없는 공유 BPM 프로세스를 요구하는 패키지가 된다) |
-| ~~C12~~ | **닫았다 (양쪽)** — 위임 요청(`POST …/server-runner/delegations`: Center가 PC를 고르고 **`POST /jobs`와 같은 함수**로 작업을 만든다), 결과 내려주기·ack·값 지우기, `waiting[]`의 `delegation` 갈래와 짝 칸 `job_id`, 배포 때 「그 Bot이 승인되어 있나」(422 `delegation_not_approved`). **실행기 쪽도 왔다** — 맡기는 포트(`delegate.py`)·기다리는 줄·결과 받기·ack가 돈다. **결과를 올리는 쪽은 C4**다(그 자리는 아래 줄이다) |
-| ~~C4~~ | **닫았다 (계약·Center 쪽)** — `JobAck.outputs`(선언한 `outputs`만·끝난 ack만·위임 작업만)와 받아서 담는 자리. 위임이 아닌 작업의 값은 **어디에도 남지 않는다**. **현장에서 값을 ack로 옮기는 길이 남았다** — 실행 변수를 아는 것은 자식 프로세스(실행기)이고 올라오는 길은 실행 기록뿐인데 거기엔 업무 값이 없다(원칙 6). 결재 요청이 그랬듯 **`runs/<run_id>.outputs.json`을 따로 쓰고 Bot UI가 올린 뒤 지우는** 모양이 맞다 ([ADR-0038](decisions/0038-approval-request-channel.md)과 같은 결) — **위임으로 받은 작업만** 그 파일을 쓴다(평범한 실행의 값을 디스크에 남기지 않는다) |
-| ~~C3~~ | **닫았다** — 예약 셋을 풀고(`source: delegation`·`parent_run_id`·`waiting_for: delegation`) `run_waiting`에 `job_id`를 적었다. `RunInfo.parent_run_id`를 더해 **CON-01이 서버 실행 ↔ PC 실행을 오간다** (Center가 `run_started`에서 읽어 담는다 — 줄을 다시 읽지 않는다) |
+**ADR이 적어 둔 것 둘이 아직 코드에 없다** (조각을 돌리며 세어 본 것이다 — 작지만 적어 둔다):
 
-**값이 Center를 지나가는 것**이 이 거리의 값이다 (C6 `review`·`answer`에 이어 둘째 예외다). 코드 쪽은 엔진의 **네 번째 기다림**(`WAIT_DELEGATION`)과 `RunEnv.delegate` 포트 둘(서버 실행기·Studio)이다.
+- **서버 실행이 취소되면 그 위임 작업도 취소한다** (ADR-0062 §5). 지금은 서버 실행만 닫히고
+  PC 작업은 대기열에 남는다 — 돌면 그 결과를 받을 쪽이 없다(Center가 들고 있다가 아래의
+  지우기로 사라진다). **먼저 정할 것이 하나**: `POST /jobs/{id}/cancel`은 C5 권한표에서
+  **관리자·연동용 키**의 길인데 취소하려는 쪽은 **실행기 키**다. 위임 전용 길을 둘 것인가,
+  권한표를 넓힐 것인가를 정해야 한다 (위임 요청이 그랬듯 **제 관문을 지난 안쪽 호출**로
+  두는 쪽이 결을 맞춘다).
+- **못 받은 값은 작업 멱등 기간(7일)에 지운다** (ADR-0062 §4). 지금은 **ack가 올 때만**
+  지운다(`apply_acks`) — 실행기가 영영 ack하지 못하면 그 업무 값이 Center DB에 남는다.
+  C6의 `purge_values`(30일)와 **같은 결**이고 자리도 거기 옆이다. **먼저 정할 것이 없다.**
 
 **닫은 것들** — §3-12(타이머로 깨우는 자리)는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)로 닫았다(하트비트가 쓸어서 깨우고 자리가 있을 때만 — 기한은 「그 시각 이후」다). 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
 

@@ -154,6 +154,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-15 | 1 | **`source: delegation`·`parent_run_id`를 넣는 쪽이 생겼다** (Bot UI) — 작업의 `requested_by`(`server_bot:<run_id>`)를 읽어 `Engine.start(parent_run_id=…)`로 넘긴다. **모르면 넣지 않는다**(선택 칸 규칙 그대로). 형식은 그대로다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **PC 위임을 기다리다 이어 가는 쪽이 생겼다** (서버 실행기) — `run_resumed.reason`의 아는 값에 **`delegation`**을 더했다. 실패·거절로 돌아와 오류 경계로 가는 길도 「이어 간 것」이라 같은 까닭을 쓴다 (`withdraw`와 같은 결). 열린 문자열이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **PC 위임의 예약을 풀었다** — `source: delegation`·`parent_run_id`·`waiting_for: delegation`이 이제 아는 값이고, `run_waiting`에 선택 칸 `job_id`(C12 짝 칸과 같은 것)를 적었다. `RunInfo.parent_run_id`를 더해 **CON-01이 서버 실행 ↔ PC 실행을 오간다** — Center가 `run_started`에서 읽어 담는다. 선택 칸이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **`run_waiting`·`run_resumed`를 내보내는 쪽이 생겼다** (서버 실행기) — 형식은 그대로이고, 적은 것은 **짝 규칙**(짝이 없으면 보내지 않는다)·**`after_s`는 보내는 쪽이 센다**·**한 배치에 둘이 함께 온다**다. `run_resumed.reason`의 아는 값에 `withdraw`를 더했다 (결재 회수로도 이어 간다 — [ADR-0038](../decisions/0038-approval-request-channel.md)). 열린 문자열이라 받는 쪽은 그대로 돈다 | — |

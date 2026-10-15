@@ -49,6 +49,7 @@ from chaeksas.contracts.bot_ui import (
     Versions,
     WorkerState,
 )
+from chaeksas.contracts.center_api import delegated_run
 from chaeksas.core import machine, requests
 from chaeksas.core.app_directory import DirectoryCache
 from chaeksas.core.deploy import APPLIED, Deployer
@@ -73,6 +74,10 @@ try:  # pragma: no cover - 설치되지 않은 경우
     CORE_VERSION = _dist_version("chaeksas-core")
 except Exception:  # noqa: BLE001 - 소스에서 바로 돌릴 때
     BOT_UI_VERSION = CORE_VERSION = "0.0.0"
+
+#: C3·C4 `source` — **PC 위임으로 받은 작업**이다 (ADR-0062 §6). 「이 작업이 위임인가」는
+#: 작업의 `requested_by`가 말해 주고(`delegated_run`), 그 출처만 끝날 때 결과를 올린다.
+SOURCE_DELEGATION = "delegation"
 
 #: 트레이 상태 글 (BUI-01). 색은 `status_map`의 「Bot UI」·「Bot」에서 온다.
 TRAY_UNREGISTERED = "등록 전"
@@ -825,9 +830,12 @@ class Agent:
             self.notices.queue_full(bot=job.bpm_process_id, limit=self.settings.queue_max)
             return self._ack(job, "rejected", reason="queue_full")
 
+        parent = delegated_run(job.requested_by)
         item = QueueItem(
             queue_id=new_queue_id(),
-            source="job",
+            # **PC 위임으로 받은 작업은 출처가 다르다** (C3·C4 `source: delegation`,
+            # ADR-0062 §6) — 그 출처만 끝날 때 결과를 올린다.
+            source=SOURCE_DELEGATION if parent else "job",
             bpm_process_id=job.bpm_process_id,
             version=job.version,
             job_id=job.job_id,
@@ -837,6 +845,9 @@ class Agent:
         self.store.state.queue.append(item)
         if job.inputs:
             self.store.state.inputs[item.queue_id] = dict(job.inputs)
+        if parent:
+            # 맡긴 서버 실행 — 실행을 띄울 때 C3 `run_started.parent_run_id`로 넘긴다.
+            self.store.state.parents[item.queue_id] = parent
         log.info("작업 %s을 대기열 %d번째에 넣었다", job.job_id, len(self.queue))
         return self._ack(job, "queued", position=len(self.queue))
 
@@ -855,6 +866,7 @@ class Agent:
             if found is not None:
                 self.store.state.queue.remove(found)
                 self.store.state.inputs.pop(found.queue_id, None)
+                self.store.state.parents.pop(found.queue_id, None)
                 made.append(self._ack_id(job_id, "cancelled"))
                 continue
             # 모르는 작업이다 — 이미 끝났거나 못 받았다. 취소된 것으로 ack해 Center에서 지운다.
@@ -890,6 +902,7 @@ class Agent:
         if item.job_id:
             self._ack_id(item.job_id, "started", run_id=run.run_id)
         self.store.state.inputs.pop(item.queue_id, None)
+        self.store.state.parents.pop(item.queue_id, None)
         self.store.save()
         return run
 
@@ -960,7 +973,10 @@ class Agent:
             result = "finished" if done.finished == "success" else (
                 "cancelled" if done.finished == "cancelled" else "failed"
             )
-            self._ack_id(done.job_id, result, run_id=done.run_id)
+            # **PC 위임의 결과를 나르기만 한다** (C4 `JobAck.outputs`, ADR-0062 §4) — 내용을
+            # 짓는 것은 실행기다(선언한 `outputs`만 골라 썼다). 위임이 아니거나 실패했으면
+            # 비어 있고, 파일은 `cleanup()`이 읽으며 **그 자리에서 지웠다**.
+            self._ack_id(done.job_id, result, run_id=done.run_id, outputs=done.outputs)
         self.release_runtimes()
         self.release_slot()
 
@@ -983,6 +999,7 @@ class Agent:
             # 설치되지 않은 Bot이다 — 조용히 두면 대기열이 영원히 막힌다 (C4 `rejected`).
             self.store.state.queue.remove(item)
             self.store.state.inputs.pop(item.queue_id, None)
+            self.store.state.parents.pop(item.queue_id, None)
             if item.job_id:
                 self._ack_id(item.job_id, "rejected", reason="bot_not_installed")
             self.store.save()
@@ -995,6 +1012,7 @@ class Agent:
             # (ADR-0013 §사전 점검, C4 `not_ready`). 자리를 쥐지 않았으니 대기열은 계속 돈다.
             self.store.state.queue.remove(item)
             self.store.state.inputs.pop(item.queue_id, None)
+            self.store.state.parents.pop(item.queue_id, None)
             if item.job_id:
                 self._ack_id(item.job_id, "rejected", reason="not_ready")
             self.store.save()
@@ -1002,6 +1020,9 @@ class Agent:
             return
 
         inputs = dict(self.store.state.inputs.get(item.queue_id) or {})
+        # **읽기만 한다** — 지우는 것은 `claim_slot`이다 (Worker가 바쁘면 여기서 돌아
+        # 나가고 다음 주기에 다시 온다 — 그때 부모를 잃으면 C3가 두 실행을 잇지 못한다).
+        parent = self.store.state.parents.get(item.queue_id)
         extensions = self.run_extensions(bot)
         run_id = new_run_id()
         services_path = self.run_services(bot, run_id)
@@ -1022,6 +1043,8 @@ class Agent:
                 job_id=item.job_id,
                 # C3 `run_started.queued_s` — **여기만 안다** (요청 시각과 지금 사이).
                 queued_s=waited(item),
+                # C3 `run_started.parent_run_id` — **두 실행이 서로를 안다** (ADR-0062 §6).
+                parent_run_id=parent,
                 run_id=run.run_id,
                 extensions=extensions,
                 services_path=services_path,
@@ -1060,6 +1083,7 @@ class Agent:
             dropped = True
             self.store.state.queue.remove(item)
             self.store.state.inputs.pop(item.queue_id, None)
+            self.store.state.parents.pop(item.queue_id, None)
             if item.job_id:
                 made.append(self._ack_id(item.job_id, "expired"))
             self.notices.queue_expired(bot=item.bpm_process_id)
@@ -1097,6 +1121,7 @@ class Agent:
             return None
         self.store.state.queue.remove(found)
         self.store.state.inputs.pop(queue_id, None)
+        self.store.state.parents.pop(queue_id, None)
         ack = None
         if found.job_id:
             # C4: 현장에서 취소한 것은 `rejected` + `cancelled_on_pc`다.

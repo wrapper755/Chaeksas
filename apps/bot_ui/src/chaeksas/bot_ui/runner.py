@@ -25,7 +25,7 @@ from typing import Any
 
 from chaeksas.bot_ui.credentials import ENV_LLM_API_KEY
 from chaeksas.contracts.bot_ui import CurrentRun
-from chaeksas.core import control, requests
+from chaeksas.core import control, outputs, requests
 from chaeksas.core.packages import InstalledBot, write_inputs
 from chaeksas.core.processes import ChildProcess
 from chaeksas.core.run_log import RunLog, log_path, run_dir
@@ -57,6 +57,7 @@ def runner_args(
     source: str,
     job_id: str | None,
     queued_s: float | None = None,
+    parent_run_id: str | None = None,
     readable: tuple[Path, ...] = (),
     writable: tuple[Path, ...] = (),
     llm_url: str = "",
@@ -88,6 +89,10 @@ def runner_args(
         args += ["--inputs", str(inputs_path)]
     if job_id:
         args += ["--job-id", job_id]
+    if parent_run_id:
+        # C3 `run_started.parent_run_id` — 맡긴 서버 실행 (ADR-0062 §6). **업무 값이 아니다**
+        # (실행 이름이라 명령줄에 실어도 된다 — 입력과 다르다).
+        args += ["--parent-run-id", parent_run_id]
     if queued_s is not None:
         # C3 `run_started.queued_s` — **모르면 넣지 않는다** (0은 「기다리지 않았다」는 뜻이다).
         args += ["--queued-s", f"{queued_s:.3f}"]
@@ -174,6 +179,9 @@ class Running:
     field_answered: list[str] = field(default_factory=list)
     #: 앱이 키를 거부한 호출 — `(앱, 참조)`마다 하나다 (재시도가 여러 줄을 남긴다).
     _refusals: dict[tuple[str, str], KeyRefusal] = field(default_factory=dict)
+    #: **PC 위임의 결과** — 실행기가 출력 파일에 쓴 것을 `cleanup()`이 들고 온다 (ADR-0062 §4).
+    #: 위임이 아니거나 실패했으면 비어 있다. 올리는 것은 `agent._finished`다.
+    outputs: dict[str, Any] = field(default_factory=dict)
 
     @property
     def control_path(self) -> Path:
@@ -187,6 +195,11 @@ class Running:
     def requests_path(self) -> Path:
         """올라갈 결재 요청 (ADR-0038) — 실행기가 쓰고 Bot UI가 나른다."""
         return requests.requests_path(self.data_dir, self.run_id)
+
+    @property
+    def outputs_path(self) -> Path:
+        """올라갈 위임 결과 (ADR-0062 §4) — 실행기가 쓰고 Bot UI가 나른다."""
+        return outputs.outputs_path(self.data_dir, self.run_id)
 
     @property
     def alive(self) -> bool:
@@ -302,7 +315,12 @@ class Running:
         """끝난 뒤 치운다. **실행 기록은 남긴다** (Center로 가야 한다).
 
         요청 파일도 지운다 — 실행기가 죽으면 스스로 못 지우고, **검토 자료에는 업무 값이 있다**.
+
+        **위임 결과는 치우기 전에 들고 온다** (ADR-0062 §4) — 읽기와 지우기를 한 걸음으로
+        묶어야(`outputs.take`) 값이 디스크에 남는 길이 생기지 않는다. 올리지 못한 ack는
+        메모리에 들고 있으면 되고(`pending_acks`), 파일은 들고 있을 까닭이 없다.
         """
+        self.outputs = outputs.take(self.outputs_path)
         control.clear(self.control_path)
         requests.clear(self.requests_path)
 
@@ -342,6 +360,7 @@ class Launcher:
         source: str = "manual",
         job_id: str | None = None,
         queued_s: float | None = None,
+        parent_run_id: str | None = None,
         run_id: str | None = None,
         extensions: dict[str, dict[str, Any]] | None = None,
         services_path: Path | None = None,
@@ -382,6 +401,7 @@ class Launcher:
             source=source,
             job_id=job_id,
             queued_s=queued_s,
+            parent_run_id=parent_run_id,
             readable=self.readable,
             writable=self.writable,
             llm_url=self.llm_url,

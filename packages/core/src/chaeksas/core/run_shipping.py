@@ -187,7 +187,7 @@ class Queue:
         if not self.folder.is_dir():
             return []
         # 실행 기록(`<run_id>.jsonl`)만 — 같은 폴더의 제어 파일(`.control.jsonl`)·요청 파일
-        # (`.requests.jsonl`, ADR-0038)은 C3가 아니다.
+        # (`.requests.jsonl`, ADR-0038)·출력 파일(`.outputs.json`, ADR-0062)은 C3가 아니다.
         found = [p for p in self.folder.glob("*.jsonl") if "." not in p.name.removesuffix(".jsonl")]
         return sorted(found, key=lambda p: (p.stat().st_mtime, p.name))
 
