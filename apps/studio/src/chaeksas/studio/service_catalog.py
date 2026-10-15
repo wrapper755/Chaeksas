@@ -20,11 +20,15 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from chaeksas.contracts.center_api import PackageInfo
 from chaeksas.contracts.extension import ExtensionManifest
 from chaeksas.contracts.resources import ServiceAppResource
 from chaeksas.contracts.service_app import MODE_DETERMINISTIC
 
 #: 구분 — 화면에 그대로 보인다 (STU-14 「서비스 앱」 콤보).
+#: C1 패키지 갈래 — **Bot**이다 (위임 대상은 따로 배포된 PC Bot이다, ADR-0062).
+KIND_BPM_PROCESS = "bpm_process"
+
 KIND_C11 = "서비스 앱"
 KIND_EXTERNAL = "외부 앱"
 
@@ -106,6 +110,11 @@ class Catalog:
     apps: tuple[App, ...] = ()
     #: 받지 못한 것들 (화면이 그대로 보인다).
     problems: tuple[str, ...] = ()
+    #: **PC 위임으로 부를 수 있는 Bot**의 `bpm_process_id` → 그 패키지가 선언한 `outputs`
+    #: (C1 → C14 B14, ADR-0062). 실행 전 검사가 「그 Bot이 돌려주지 않는 값을 받는다」를
+    #: 그림에서 보려면 **남의 패키지 매니페스트**가 필요하고, 그것을 아는 것은 Center뿐이다.
+    #: **못 받으면 비어 있고**, 그러면 B14가 그 대조를 건너뛴다 (모르는 것으로 막지 않는다).
+    bot_outputs: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
 
     def app(self, app_id: str) -> App | None:
         return next((one for one in self.apps if one.app_id == app_id), None)
@@ -218,13 +227,34 @@ def build(
     externals: Iterable[ExtensionManifest] = (),
     *,
     problems: Iterable[str] = (),
+    bot_outputs: Mapping[str, tuple[str, ...]] | None = None,
 ) -> Catalog:
     """고를 거리 한 벌 — 앱 id 순이다 (콤보가 흔들리지 않게)."""
     apps = [_from_service_app(one) for one in service_apps]
     apps += [made for one in externals if (made := _from_external(one)) is not None]
     return Catalog(
-        apps=tuple(sorted(apps, key=lambda one: one.app_id)), problems=tuple(problems)
+        apps=tuple(sorted(apps, key=lambda one: one.app_id)),
+        problems=tuple(problems),
+        bot_outputs=dict(bot_outputs or {}),
     )
+
+
+def declared_outputs(packages: Iterable[PackageInfo]) -> dict[str, tuple[str, ...]]:
+    """패키지 목록 → `bpm_process_id` → 선언한 `outputs` (C1, ADR-0062).
+
+    **판이 여럿이면 합친다.** B14의 이 대조는 **막는 검사**라(오류다) 좁게 잡으면 멀쩡한
+    그림을 거부한다 — 그림이 판을 적지 않으면 「배포된 판」이라는 뜻이고(C14) 어느 판이 배포될지
+    여기서는 알 수 없다. 그래서 **어느 판도 선언하지 않은 이름**만 걸린다.
+
+    매니페스트가 없는 줄은 건너뛴다 — 그 id를 「선언한 것이 없다」로 보면 멀쩡한 호출이
+    막힌다 (**모르는 것으로 막지 않는다**).
+    """
+    out: dict[str, set[str]] = {}
+    for one in packages:
+        if one.manifest is None:
+            continue
+        out.setdefault(one.id, set()).update(one.manifest.outputs)
+    return {bot: tuple(sorted(names)) for bot, names in out.items()}
 
 
 def from_center(reader: Any) -> Catalog:
@@ -243,6 +273,13 @@ def from_center(reader: Any) -> Catalog:
         service_apps = list(reader.service_apps())
     except CenterUnreachable as e:
         problems.append(f"서비스 앱 목록을 받지 못했습니다 — {e}")
+    bot_outputs: dict[str, tuple[str, ...]] = {}
+    try:
+        # **PC 위임이 받을 값을 그림 검사에서 보려면** 그 Bot의 매니페스트가 필요하다
+        # (C1 `outputs` → C14 B14, ADR-0062). 리소스 목록(C7)에는 그것이 없어 C5를 읽는다.
+        bot_outputs = declared_outputs(reader.packages(KIND_BPM_PROCESS))
+    except CenterUnreachable as e:
+        problems.append(f"Bot 패키지 목록을 받지 못했습니다 — {e}")
     try:
         for one in reader.extensions():
             if one.definition is None:
@@ -253,7 +290,7 @@ def from_center(reader: Any) -> Catalog:
                 problems.append(f"{one.id}: 정의를 읽지 못했습니다")
     except CenterUnreachable as e:
         problems.append(f"외부 확장 목록을 받지 못했습니다 — {e}")
-    return build(service_apps, externals, problems=problems)
+    return build(service_apps, externals, problems=problems, bot_outputs=bot_outputs)
 
 
 @dataclass
@@ -326,8 +363,10 @@ def missing_required(operation: Operation | None, usage: Usage) -> list[str]:
 
 
 __all__ = [
+    "KIND_BPM_PROCESS",
     "KIND_C11",
     "KIND_EXTERNAL",
+    "declared_outputs",
     "UNKNOWN",
     "App",
     "Catalog",

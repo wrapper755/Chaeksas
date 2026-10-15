@@ -517,6 +517,15 @@ class MainWindow(QMainWindow):
             external_ids=self.properties.catalog.external_ids(),
         )
 
+    def delegated_outputs(self) -> dict[str, tuple[str, ...]]:
+        """PC 위임으로 부르는 Bot들이 **선언한 `outputs`** (C1 → C14 B14, ADR-0062).
+
+        **창은 Center를 부르지 않는다** — 받아 둔 카탈로그에서 꺼낸다 (「새로 고침」·정의를 열
+        때·설정을 저장한 뒤에 받는다). 못 받았으면 **비어 있고** 그러면 B14가 그 대조를
+        건너뛴다 — 모르는 것으로 막지 않는다.
+        """
+        return dict(self.properties.catalog.bot_outputs)
+
     def run_preflight(self) -> None:
         if self.process is None or self.definition is None:
             self.say("열린 정의가 없습니다.")
@@ -536,7 +545,10 @@ class MainWindow(QMainWindow):
             self.say(f"검사하지 못했습니다: {e}")
             return
         violations = inspect(
-            found, self.process, task_type_locations=self.task_type_locations()
+            found,
+            self.process,
+            task_type_locations=self.task_type_locations(),
+            delegated_outputs=self.delegated_outputs(),
         ) + self.readiness()
         self.preflight.show_result(found, violations)
         self.bottom_tabs.setCurrentWidget(self.preflight)

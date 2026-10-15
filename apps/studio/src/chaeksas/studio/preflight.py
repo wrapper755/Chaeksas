@@ -59,15 +59,25 @@ def inspect(
     owner: BpmProcess | None = None,
     *,
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
+    delegated_outputs: Mapping[str, Sequence[str]] | None = None,
 ) -> list[Violation]:
     """B1~B15. 작업 폴더가 있으면 DMN·호출 대조까지 한다 (B14).
 
     `task_type_locations`는 확장 호스트가 주는 `{종류: [실행 위치]}`다 — B6이 **확장 태스크를**
     서버에서 되는지 보는 데 쓴다. 주지 않으면 B6이 확장 태스크를 건너뛰므로 Studio는 늘 준다
     (STU-06의 셈과 **같은 표**여야 한다 — 어긋나면 창이 「바꿔도 된다」고 하고 F6이 막는다).
+
+    `delegated_outputs`는 **PC 위임으로 부르는 Bot이 선언한 `outputs`**다 (C1, ADR-0062) —
+    남의 패키지 매니페스트라 작업 폴더에 없고 **Center만 안다**. 받아 둔 것을 **부르는 쪽이**
+    넘긴다 (이 모듈은 서버를 부르지 않는다 — `readiness()`와 같은 결). 주지 않거나 비어 있으면
+    B14가 그 대조를 건너뛴다 — **모르는 것으로 막지 않는다.**
     """
     if owner is None:
-        violations = validate_bpmn(process, task_type_locations=task_type_locations)
+        violations = validate_bpmn(
+            process,
+            task_type_locations=task_type_locations,
+            delegated_outputs=delegated_outputs or None,
+        )
     else:
         violations = validate_bpmn(
             process,
@@ -76,6 +86,9 @@ def inspect(
                 other.id: list(other.info.outputs) for other in owner.processes().values()
             },
             task_type_locations=task_type_locations,
+            # **빈 사전은 주지 않는다** — 「아무 Bot도 아무것도 선언하지 않았다」가 되어
+            # 멀쩡한 위임이 모두 막힌다. 못 받았으면 `None`이고 그러면 건너뛴다.
+            delegated_outputs=delegated_outputs or None,
         )
     return violations + check_expressions(process)
 
