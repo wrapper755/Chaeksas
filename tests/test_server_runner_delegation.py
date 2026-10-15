@@ -749,10 +749,9 @@ def test_the_field_outputs_reach_the_server_variables(
 
 # ─────────────────────────── 서버 실행이 취소되면 맡긴 것도 거둔다 (ADR-0062 §5) ───────────────────────────
 
-#: **취소 지시를 Center에서 끌어낼 수 없다** — 서버 작업은 실행이 시작되면 `accepted`이고
-#: C5가 「시작된 작업의 취소는 거절」이라 `cancel_jobs`에 실리지 않는다 (09-gaps §3-13에 적었다).
-#: 그래서 시험은 **Center가 말해 준 것처럼** 실행기의 그 자리를 바로 부른다 — 길이 생기는
-#: 날(중지 경로·운영자 중지) 이 가지가 그대로 돈다.
+#: **취소는 Center에서 온다** ([ADR-0063](../docs/decisions/0063-stopping-a-running-server-run.md)) —
+#: 서버 대상 작업은 `accepted`에도 취소를 받아 `cancel_jobs`로 내려온다 (PC는 그대로 거절이다).
+#: 그래서 아래 셋은 **운영자가 하는 그대로** `DELETE /jobs/{id}`로 민다.
 
 
 def test_cancelling_the_server_run_revokes_the_pc_job(
@@ -769,16 +768,19 @@ def test_cancelling_the_server_run_revokes_the_pc_job(
     run_id = until_waiting_for_delegation(runner)
     delegated_job = str(waiting_row(center)["job_id"])
 
-    runner.cancel_job(job_id)  # Center가 취소를 내려보낸 자리다
+    # 운영자가 CON-05에서 취소한다 — **서버 대상이라 `accepted`에도 받아 준다** (ADR-0063).
+    dropped = center.delete(f"/api/v1/jobs/{job_id}", headers=ADMIN)
+    assert dropped.status_code == 202, dropped.text
+    runner.tick()  # 취소 지시를 받아 실행을 닫고, 그 주기의 끝에서 위임을 거둔다
 
     # ① 서버 실행이 **정말 끝났다** (부탁만 해 두지 않는다).
     assert runner.workers[run_id].snapshot().finished == "cancelled"
     (one,) = lines(runner.settings, run_id, "run_finished")
     assert one["status"] == "cancelled"
 
-    # ② 맡긴 PC 작업이 거둬졌다 (하트비트 뒤에 거둔다).
-    assert runner.pending_cancels == [delegated_job], "거둘 것을 기다림이 걷히기 전에 읽는다"
-    runner.tick()
+    # ② 맡긴 PC 작업이 **같은 주기에** 거둬졌다 (하트비트 뒤가 그 자리다). 거둘 것은
+    # **기다림이 걷히기 전에** 읽어야 하는데(`Engine.cancel`이 비운다) 순서를 뒤집으면
+    # 여기서 드러난다 — 거둘 것이 없어 PC 작업이 `accepted`로 남는다.
     assert runner.pending_cancels == []
     revoked = center.get(f"/api/v1/jobs/{delegated_job}", headers=ADMIN).json()
     assert revoked["state"] == "cancelled"
@@ -798,7 +800,8 @@ def test_a_pc_job_that_already_started_is_left_alone(
         job_acks=[{"job_id": delegated_job, "result": "started", "run_id": "run_20261015_100000_bbbbbb"}],
     )
 
-    runner.cancel_job(job_id)
+    assert center.delete(f"/api/v1/jobs/{job_id}", headers=ADMIN).status_code == 202
+    runner.tick()
     runner.tick()
 
     assert runner.pending_cancels == [], "4xx는 다시 걸지 않는다"
@@ -815,7 +818,7 @@ def test_a_cancel_that_did_not_reach_center_is_tried_again(
     until_waiting_for_delegation(runner)
     delegated_job = str(waiting_row(center)["job_id"])
 
-    runner.cancel_job(job_id)
+    assert center.delete(f"/api/v1/jobs/{job_id}", headers=ADMIN).status_code == 202
 
     def unreachable(_: str) -> dict[str, Any]:
         raise Unreachable("Center에 닿지 못했습니다")

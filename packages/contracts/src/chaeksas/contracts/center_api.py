@@ -461,18 +461,31 @@ def validate_job_create(
     return out
 
 
-def cancel_outcome(state: str) -> tuple[int, str | None]:
+def cancel_outcome(state: str, target_type: str | None = None) -> tuple[int, str | None]:
     """작업 상태 → 취소 요청의 응답 코드와 오류 `code` (C5 「취소」 표).
 
     - `pending` → 200 (바로 `cancelled`)
     - `dispatched`·`queued` → 202 (하트비트로 빼내야 한다. 그사이 시작했으면 `accepted` 유지)
-    - `accepted` → 409 `already_started` (실행 중인 Bot을 멈추는 것은 schema 1 범위 밖)
+    - `accepted` → **대상이 서버 실행기면 202**, PC면 409 `already_started`
     - 그 밖 → 409 `not_cancellable`
+
+    **가르는 것은 대상 종류 하나다** ([ADR-0063](../decisions/0063-stopping-a-running-server-run.md)).
+    서버 실행은 **화면을 만지지 않으므로**(C1 R2가 UI 태스크를 막는다) 엔진 취소가 곧
+    `cancelled` 기록이다. PC 실행은 자리를 끝까지 쥐고(ADR-0014) 화면을 만지는 중일 수 있어
+    **그대로 거절한다** — 도중에 끊으면 화면이 반쯤 바뀐 채 남는다(기록에 `cancelled`가 남아도
+    되돌려지지 않는다). 현장 사람이 BUI-04에서 멈추는 것은 **그 사람이 화면을 보고 있어서** 다르다.
+
+    `target_type`을 주지 않으면 **옛 규칙대로** 본다 (PC와 같다 — 모르는 것을 열어 주지 않는다).
     """
     if state == "pending":
         return 200, None
     if state in ("dispatched", "queued"):
         return 202, None
     if state == "accepted":
+        # 서버 실행기는 **이미 멈출 수 있다** (C12 — 하트비트 `cancel_jobs`를 받아 실행을 닫고
+        # 맡긴 PC 위임까지 거둔다). Center가 혼자 `cancelled`로 적지 않는 것은 `dispatched`와
+        # 같은 결이다 — 정말 멈췄는지는 **현장만 안다** (ack가 상태를 옮긴다).
+        if target_type == "server_runner":
+            return 202, None
         return 409, "already_started"
     return 409, "not_cancellable"

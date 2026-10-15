@@ -219,10 +219,14 @@ JobInfo는 위 필드에 다음을 더한다.
 | --- | --- | --- |
 | `pending` | 200 | 바로 `cancelled` |
 | `dispatched` / `queued` | **202** `cancel_requested: true` | 다음 하트비트에 Bot UI가 빼내고 `cancelled`로 ack하면 `cancelled`. 그사이 실행을 시작했으면 Bot UI가 `cancel_refused`로 ack하고, 작업은 **`accepted` 그대로**, `cancel_result: refused_already_started` |
-| `accepted` | 409 `already_started` | 실행 중인 Bot을 멈추는 것은 schema 1 범위 밖 |
+| `accepted` + 대상 **서버 실행기** | **202** `cancel_requested: true` | 실행기가 다음 하트비트에 **그 실행을 닫고**(기다리는 실행도) `cancelled`로 ack한다. 이미 끝나 가던 것은 `cancel_refused`다 — 현장이 옳다 ([ADR-0063](../decisions/0063-stopping-a-running-server-run.md)) |
+| `accepted` + 대상 **PC** | 409 `already_started` | **PC 실행은 Center에서 멈추지 않는다** — 자리를 끝까지 쥐고(ADR-0014) 화면을 만지는 중일 수 있어, 도중에 끊으면 화면이 반쯤 바뀐 채 남는다. 현장 사람이 BUI-04 「중지」로 멈춘다 (그 사람은 화면을 보고 있다) |
 | 그 밖 | 409 `not_cancellable` | |
 
 - 실행의 성공·실패는 작업 상태가 아니다. C3 `run_finished`로 정해지고 `run_status`에 보인다.
+- **가르는 것은 대상 종류 하나다** — 판정은 계약이 쥔다 (`cancel_outcome(state, target_type)`). 서버 실행은 **화면을 만지지 않으므로**(R2가 UI 태스크를 막는다) 엔진 취소가 곧 `cancelled` 기록이다.
+- **Center가 혼자 `cancelled`로 적지 않는다** (`dispatched`와 같은 결) — 정말 멈췄는지는 현장만 안다. 실행기가 오프라인이면 취소 요청은 남고 **돌아오면 반영된다**; 돌아오지 않으면 CON-12 「유실 처리」가 닫는다 (C12).
+- 서버 실행이 취소되면 **그 실행이 맡긴 PC 위임도 거둬진다** ([ADR-0062](../decisions/0062-pc-delegation.md) §5).
 
 ## Bot UI 현황 (CON-03)
 
@@ -293,6 +297,7 @@ BotUiInfo 필드:
 | 2026-10-06 | 1 | `BotUiInfo.deployment_results`를 더했다 — 배치 결정은 하트비트 한 주기만 올라오고 Center가 버리고 있어서, CON-03 「최근 배치 결정」이 그릴 것이 없었다. `DeploymentInfo`의 봉투 유래 칸(`signed_by`·`signed_at`·`not_before`·`expires_at`·`revoked_at`)을 어디서 읽는지 적었다 | 0017 |
 | 2026-10-03 | 1 | `X-CHK-Actor`는 UTF-8 퍼센트 인코딩으로 보낸다 — 한글 이름을 그대로 실으면 HTTP 헤더에 넣을 수 없어 요청이 나가지 않는다 (콘솔을 붙이다 드러났다) | 0017 |
 | 2026-10-03 | 1 | `GET /bot-uis`(CON-03)의 응답 모델 `BotUiInfo`를 적었다 — 엔드포인트만 권한표에 있고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |
+| 2026-10-15 | 1 | **도는 서버 실행을 멈출 수 있다** — 취소 표의 `accepted` 줄이 **대상 종류로 갈린다**(서버는 202, PC는 그대로 409 `already_started`). 판정은 `cancel_outcome(state, target_type)` 한 함수가 쥐고, 대상을 주지 않으면 **옛 규칙대로** 본다. PC 쪽 규칙과 C4는 **바뀌지 않는다** | [0063](../decisions/0063-stopping-a-running-server-run.md) |
 | 2026-10-01 | 1 | 검토 반영: 엔드포인트별 권한표(읽기 토큰은 GET만, 연동용 키 신설), 행위자는 키·`X-CHK-Actor`에서, 취소는 202와 `cancel_result`(시작된 작업은 `accepted` 유지), 대상 이름 `server_runner`로 통일, `idempotency_key` 범위·충돌, `version_ambiguous`, 패키지 철회·지원 종료 엔드포인트, 툴팩만 따로 내려받기 | 0017 |
 | 2026-10-01 | 1 | 확장 반영: 리소스·확장 경로 권한 | 0018 |
 | 2026-10-01 | 1 | 화면 검토 반영: `cancelled_on_pc`, 서버 실행기·Bot UI 운영 경로 권한 | — |
