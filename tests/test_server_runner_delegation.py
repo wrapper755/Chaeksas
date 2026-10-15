@@ -85,8 +85,9 @@ SERVER_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>
 """
 
-#: PC 그림 — **이 시험은 PC에서 돌리지 않는다** (PC 쪽은 가짜 하트비트가 흉내 낸다).
-#: 그래도 패키지는 진짜여야 한다: Center가 승인·배포를 보고 위임의 관문을 지난다.
+#: PC 그림 — 대개 **가짜 하트비트가 PC를 흉내 낸다**(C4는 따로 시험한다). 마지막 시험
+#: 하나는 이것을 **진짜 자식 프로세스로 돌려** 현장이 만든 값이 서버 변수에 담기는지 본다.
+#: 그래서 선언한 `outputs`를 **정말 채운다**.
 PC_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
                   xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_erp">
@@ -96,8 +97,16 @@ PC_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
       "outputs": ["결과코드"]}</chk:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1" />
+    <bpmn:scriptTask id="Task_Erp" scriptFormat="chk-expr">
+      <bpmn:script>결과코드 = "OK-" + 전표번호</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:scriptTask id="Task_Note" scriptFormat="chk-expr">
+      <bpmn:script>현장메모 = "올라가지 않는다"</bpmn:script>
+    </bpmn:scriptTask>
     <bpmn:endEvent id="End_1" />
-    <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="End_1" />
+    <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Task_Erp" />
+    <bpmn:sequenceFlow id="f2" sourceRef="Task_Erp" targetRef="Task_Note" />
+    <bpmn:sequenceFlow id="f3" sourceRef="Task_Note" targetRef="End_1" />
   </bpmn:process>
 </bpmn:definitions>
 """
@@ -670,3 +679,68 @@ def test_a_restart_does_not_delegate_the_same_spot_twice(
     assert until_done(second, run_id) == "success"
     found = [one["reason"] for one in lines(settings, run_id, "run_resumed")]
     assert found == ["restart", "delegation"], "되살린 것과 이어 간 것이 함께 남는다"
+
+
+# ─────────────────────────── 현장이 만든 값이 서버 변수에 담긴다 (ADR-0062 §4) ───────────────────────────
+
+
+def test_the_field_outputs_reach_the_server_variables(
+    center: TestClient, private: Any, runner: agent_mod.Agent, tmp_path: Path
+) -> None:
+    """**PC가 진짜로 돌려 만든 값**이 서버 실행의 변수가 된다 (증명할 다섯의 3).
+
+    위의 시험들은 PC를 가짜 하트비트로 흉내 내지만, 값을 만드는 **현장 쪽 길**(실행기가
+    선언한 `outputs`를 출력 파일에 쓰고 Bot UI가 거두며 지운다)은 그렇게는 보이지 않는다.
+    그래서 여기서는 그 Bot을 **진짜 자식 프로세스로** 돌리고, 그 결과를 작업 ack로 올린다.
+
+    흉내 내는 것은 **C4 하트비트 한 번**뿐이다 (그 전송은 C4 시험이 본다).
+    """
+    from waiting import wait_for
+
+    from chaeksas.bot_ui.runner import Launcher
+    from chaeksas.core.packages import install
+
+    bot_ui_id = ready(center, private, runner)
+    make_job(center)
+    run_id = until_waiting_for_delegation(runner)
+    job_id = str(waiting_row(center)["job_id"])
+
+    # ① 그 PC에 Bot을 깔고 **위임으로 받은 작업처럼** 돌린다.
+    pc_zip = tmp_path / "pc.zip"
+    pc_zip.write_bytes(
+        package_zip(
+            bot=PC_BOT,
+            where="pc",
+            xml=PC_BPMN,
+            process_id="Proc_erp_input",
+            inputs=[{"name": "전표번호", "type": "string", "required": True}],
+            outputs=["결과코드"],
+        )
+    )
+    pc_dir = tmp_path / "botui"
+    bot = install(pc_dir, pc_zip)
+    launcher = Launcher(data_dir=pc_dir)
+    running = launcher.start(
+        bot,
+        inputs={"전표번호": CLAIM},
+        source="delegation",
+        job_id=job_id,
+        parent_run_id=run_id,
+    )
+    assert wait_for(lambda: not running.alive), "PC 실행기가 끝나지 않았다"
+    assert wait_for(lambda: launcher.tick() is not None), "거두지 못했다"
+    assert running.finished == "success", running.failure
+    # **선언한 것만** 올라간다 (C1) — 현장 메모는 PC에 남는다.
+    assert running.outputs == {"결과코드": f"OK-{CLAIM}"}
+
+    # ② 그 값을 작업 ack로 올린다 (C4 — 여기만 흉내다).
+    pc_finishes(center, bot_ui_id, job_id, outputs=running.outputs, pc_run_id=running.run_id)
+
+    # ③ 서버 실행이 그 값을 받아 이어 간다 — `chk:call.output`이 적은 변수에 담긴다.
+    worker = runner.workers[run_id]
+    runner.tick()
+    worker.join(WAIT_S)
+    run = worker.run
+    assert run is not None
+    assert run.variables["입력결과"] == f"OK-{CLAIM}"
+    assert run.variables["마무리"] == f"OK-{CLAIM}-확인", "위임 뒤의 걸음이 그 값을 쓴다"

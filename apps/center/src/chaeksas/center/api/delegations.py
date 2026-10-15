@@ -27,6 +27,7 @@ from chaeksas.center.api.server_runner import KEY_TYPE, id_for_key
 from chaeksas.center.auth import Caller
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
+from chaeksas.contracts.center_api import delegation_requester
 from chaeksas.contracts.server_runner import (
     DelegationAck,
     DelegationRequest,
@@ -152,7 +153,7 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[Delegation
     # 쪽이 지어낼 수 없다.
     job, made = jobs_api.create(
         store,
-        replace(found, actor=f"server_bot:{request.run_id}"),
+        replace(found, actor=delegation_requester(request.run_id)),
         {
             "schema": 1,
             "bpm_process_id": request.bpm_process_id,

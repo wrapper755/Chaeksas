@@ -523,3 +523,174 @@ def test_the_child_builds_the_same_sender(tmp_path: Path, monkeypatch: pytest.Mo
     )
     assert made.mail.password == "비밀"
     assert made.webhook.config.allow_private_network is False, "사설망은 열리지 않는다"
+
+
+# ─────────────────────────── PC 위임의 결과가 올라가는 길 (ADR-0062 §4) ───────────────────────────
+
+#: 선언한 `outputs` 하나와 선언하지 않은 변수 하나를 만드는 가장 작은 PC 그림.
+#: **예제 묶음에는 `outputs`를 선언한 PC 그림이 없어** 여기서 만든다 (위임이 어제 정해졌다).
+DELEGATED = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_erp" targetNamespace="urn:chaeksas:test">
+  <bpmn:process id="Proc_fx02_business_rule" name="ERP 입력" isExecutable="true">
+    <bpmn:extensionElements><chk:process>{"run_location": "pc",
+      "inputs": [{"name": "전표번호", "type": "string", "required": true}],
+      "outputs": ["결과코드"]}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" />
+    <bpmn:scriptTask id="Task_Do" scriptFormat="chk-expr">
+      <bpmn:script>결과코드 = "OK-" + 전표번호</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:scriptTask id="Task_Note" scriptFormat="chk-expr">
+      <bpmn:script>메모 = "올라가지 않는다"</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Task_Do" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Task_Do" targetRef="Task_Note" />
+    <bpmn:sequenceFlow id="F3" sourceRef="Task_Note" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>
+"""
+
+
+def delegated_bot(tmp_path: Path, data_dir: Path) -> Any:
+    """위임받을 PC Bot 하나 — 예제의 진입 정의를 통째로 바꿔 Studio처럼 내보낸다."""
+    made = Workspace(tmp_path / "studio").ensure().import_example(EXAMPLES, RULE)
+    entry = made.entry_definition
+    assert entry is not None
+    entry.path.write_text(DELEGATED, encoding="utf-8")
+    opened = Workspace(tmp_path / "studio").read(made.folder, made.group)
+    return install(data_dir, export(opened, tmp_path / default_name(opened)))
+
+
+def ran(launcher: Launcher, running: Any) -> Any:
+    """끝날 때까지 기다려 거둔다 — **거두는 그 자리에서** 출력 파일을 들고 온다 (`cleanup`)."""
+    assert wait_for(lambda: not running.alive), "실행기가 끝나지 않았다"
+    assert wait_for(lambda: launcher.tick() is not None), "거두지 못했다"
+    return running
+
+
+def test_a_delegated_run_leaves_only_the_declared_outputs(tmp_path: Path) -> None:
+    """**선언한 `outputs`만** 올라간다 (C1·C4) — 그것이 「부르는 쪽이 받을 것」이다.
+
+    실행 변수를 아는 것은 자식 프로세스뿐이고 실행 기록에는 업무 값이 없다 (원칙 6). 그래서
+    값은 **출력 파일로** 따로 올라오고, Bot UI가 거두며 **그 자리에서 지운다**.
+    """
+    data_dir = tmp_path / "botui"
+    bot = delegated_bot(tmp_path, data_dir)
+    launcher = Launcher(data_dir=data_dir)
+
+    running = launcher.start(
+        bot,
+        inputs={"전표번호": "DOC-1"},
+        source="delegation",
+        job_id="job_dlg1",
+        parent_run_id="run_20261015_090000_aaaaaa",
+    )
+    done = ran(launcher, running)
+    assert done.finished == "success", done.failure
+
+    assert done.outputs == {"결과코드": "OK-DOC-1"}, "선언하지 않은 변수가 섞였거나 비어 있다"
+    # **파일은 남지 않는다** — 업무 값이 PC에 남지 않는다 (제어·요청 파일과 같다).
+    assert not done.outputs_path.exists()
+
+    # 두 실행이 서로를 안다 (C3 — Center가 읽어 CON-01이 오간다).
+    events = list(RunLog.read(log_path(data_dir, running.run_id)))
+    assert events[0].data["source"] == "delegation"
+    assert events[0].data["parent_run_id"] == "run_20261015_090000_aaaaaa"
+    # **값은 기록에 없다** (원칙 6).
+    assert "OK-DOC-1" not in log_path(data_dir, running.run_id).read_text(encoding="utf-8")
+
+
+def test_a_plain_run_writes_no_outputs_file(tmp_path: Path) -> None:
+    """**위임으로 받은 작업만** 쓴다 — 평범한 실행의 업무 값을 디스크에 남기지 않는다."""
+    data_dir = tmp_path / "botui"
+    bot = delegated_bot(tmp_path, data_dir)
+    launcher = Launcher(data_dir=data_dir)
+
+    running = launcher.start(bot, inputs={"전표번호": "DOC-2"}, source="job", job_id="job_plain")
+    done = ran(launcher, running)
+    assert done.finished == "success", done.failure
+    assert done.outputs == {} and not done.outputs_path.exists()
+    events = list(RunLog.read(log_path(data_dir, running.run_id)))
+    assert "parent_run_id" not in events[0].data, "모르면 넣지 않는다 (C3 선택 칸)"
+
+
+def test_the_ack_carries_the_values_and_a_plain_job_does_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**Bot UI는 나르기만 한다** (C4 `JobAck.outputs`) — 내용을 짓는 것은 실행기다.
+
+    거두는 그 자리(`cleanup`)에서 파일을 읽고 **지운다**. 위임이 아니면 파일이 없어 ack가
+    비고, Center는 위임이 아닌 작업의 `outputs`를 **버린다**.
+    """
+    from chaeksas.bot_ui.agent import Agent
+    from chaeksas.bot_ui.settings import Settings
+    from chaeksas.bot_ui.store import Store
+    from chaeksas.core import outputs
+
+    data_dir = tmp_path / "botui"
+    monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
+    agent = Agent(settings=Settings(), store=Store.load(tmp_path / "s.json"))
+    bot = install(data_dir, packaged(tmp_path, RULE))
+
+    class FakeChild:
+        alive = False
+
+        def __init__(self, **kwargs: Any) -> None:
+            pass
+
+        def start(self) -> None:
+            pass
+
+        def poll(self) -> int | None:
+            return 0
+
+    launcher = agent.runner()
+    launcher.make_child = FakeChild
+    running = launcher.start(bot, source="delegation", job_id="job_dlg1")
+    # 실행기가 끝내며 쓴 것 (여기서는 그 자리에 바로 쓴다 — 자식이 가짜다).
+    outputs.write(running.outputs_path, {"결과코드": "OK"})
+    RunLog(run_id=running.run_id, path=log_path(data_dir, running.run_id)).emit(
+        "run_finished", status="success", duration_s=0.1,
+        ai_tasks=0, replayed_tasks=0, ui_tasks=0, service_calls=0, human_requests=0,
+    )
+
+    done = launcher.tick()
+    assert done is not None and not done.outputs_path.exists(), "읽고 그 자리에서 지운다"
+    agent._finished(done)  # noqa: SLF001 — 거두는 자리를 바로 본다
+    ack = agent.store.state.seen_jobs.get("job_dlg1")
+    assert ack is not None and (ack.result, ack.outputs) == ("finished", {"결과코드": "OK"})
+
+
+def test_a_plain_job_acks_without_values(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """위임이 아니면 올릴 값이 없다 — 실행기가 파일을 쓰지 않았다 (ADR-0062 §4)."""
+    from chaeksas.bot_ui.agent import Agent
+    from chaeksas.bot_ui.settings import Settings
+    from chaeksas.bot_ui.store import Store
+
+    data_dir = tmp_path / "botui"
+    monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
+    agent = Agent(settings=Settings(), store=Store.load(tmp_path / "s.json"))
+    bot = install(data_dir, packaged(tmp_path, RULE))
+
+    class FakeChild:
+        alive = False
+
+        def __init__(self, **kwargs: Any) -> None:
+            pass
+
+        def start(self) -> None:
+            pass
+
+        def poll(self) -> int | None:
+            return 0
+
+    launcher = agent.runner()
+    launcher.make_child = FakeChild
+    launcher.start(bot, source="job", job_id="job_plain")
+    done = launcher.tick()
+    assert done is not None
+    agent._finished(done)  # noqa: SLF001
+    ack = agent.store.state.seen_jobs.get("job_plain")
+    assert ack is not None and ack.outputs == {}

@@ -73,6 +73,27 @@ KNOWN_AUTH_KINDS = frozenset(
 #: 실행 위치 → 배포·작업 대상 종류 (C2 "배포 대상 규칙").
 TARGET_TYPE_FOR_RUN_LOCATION = {"pc": "bot_ui", "server": "server_runner"}
 
+#: `requested_by`의 예약값 앞머리 — **PC 위임이 만든 작업**이다 (`server_bot:<run_id>`,
+#: [ADR-0062](../decisions/0062-pc-delegation.md) §6).
+#:
+#: **자리는 여기 하나다** — 적는 쪽(Center의 위임 API)과 읽는 쪽(Bot UI가 「이 작업이 위임인가」를
+#: 가른다)이 같은 글을 봐야 한다. 두 자리에 적어 두면 한쪽을 고치는 날 **PC가 위임을 평범한
+#: 작업으로 돌려** 결과를 아무도 못 받는다.
+DELEGATION_REQUESTER_PREFIX = "server_bot:"
+
+
+def delegation_requester(run_id: str) -> str:
+    """맡긴 서버 실행 → `requested_by` (Center가 적는다 — 본문에서 받지 않는다)."""
+    return f"{DELEGATION_REQUESTER_PREFIX}{run_id}"
+
+
+def delegated_run(requested_by: str | None) -> str | None:
+    """`requested_by`가 PC 위임이면 **맡긴 서버 실행**, 아니면 `None` (Bot UI가 읽는다)."""
+    found = requested_by or ""
+    if not found.startswith(DELEGATION_REQUESTER_PREFIX):
+        return None
+    return found[len(DELEGATION_REQUESTER_PREFIX) :] or None
+
 #: 서버 실행기 대상을 받아도 되나 (ADR-0016).
 #:
 #: **자리는 여기 하나다** — 배포(`validate_deployment`)와 작업 만들기가 같은 값을 본다.

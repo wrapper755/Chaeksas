@@ -42,6 +42,10 @@ class State:
     queue: list[QueueItem] = field(default_factory=list)
     #: 대기열 항목의 입력 값 — `queue_id` → `inputs`. 실행할 때 쓴다 (PC 안에만).
     inputs: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: **PC 위임으로 받은 항목** — `queue_id` → 맡긴 서버 실행 (ADR-0062 §6, C3
+    #: `run_started.parent_run_id`). 작업의 `requested_by`에서 읽는다. **C4 `QueueItem`에
+    #: 칸을 더하지 않는다** — Center는 `requested_by`로 이미 알고, 대기열 보고에 쓸 데가 없다.
+    parents: dict[str, str] = field(default_factory=dict)
     #: 아직 Center가 확인하지 않은 ack. 하트비트마다 다시 보낸다.
     pending_acks: list[JobAck] = field(default_factory=list)
     #: 아직 못 보낸 배포 적용 결정 (C4 `deployment_results`).
@@ -59,6 +63,7 @@ class State:
             "bot_ui_id": self.bot_ui_id,
             "queue": [item.to_json_dict() for item in self.queue],
             "inputs": self.inputs,
+            "parents": self.parents,
             "pending_acks": [ack.to_json_dict() for ack in self.pending_acks],
             "pending_deployments": [one.to_json_dict() for one in self.pending_deployments],
             "pending_approval_acks": [one.to_json_dict() for one in self.pending_approval_acks],
@@ -73,6 +78,7 @@ class State:
             bot_ui_id=raw.get("bot_ui_id") or None,
             queue=[QueueItem.model_validate(item) for item in raw.get("queue", [])],
             inputs=dict(raw.get("inputs", {})),
+            parents=dict(raw.get("parents", {})),
             pending_acks=pending_acks,
             pending_deployments=[
                 DeploymentResult.model_validate(one) for one in raw.get("pending_deployments", [])

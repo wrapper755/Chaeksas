@@ -4,6 +4,9 @@ Bot UI는 이것을 띄우기만 하고 기다리지 않는다. 주고받는 길
 
 - 올라오는 것: **실행 기록** `runs/<run_id>.jsonl` (C3) — 노드 상태·결재 요청·끝남.
 - 내려가는 것: **제어 파일** `runs/<run_id>.control.jsonl` — 중지와 결재 답.
+- **PC 위임으로 받은 작업이면** 끝날 때 `runs/<run_id>.outputs.json`에 결과를 쓴다
+  (C4 `JobAck.outputs`, ADR-0062 §4) — 실행 변수를 아는 것은 이 프로세스뿐이고 실행 기록에는
+  업무 값이 없다 (원칙 6). Bot UI가 ack에 실어 올리고 그 자리에서 지운다.
 
 **스레드를 만들지 않는다.** 엔진은 한 걸음씩 돌고(`step()`), 멈추면(`blocked()`) 제어 파일을
 보고 타이머를 본다. 사람을 기다리는 동안에도 같은 자리를 돈다 (ADR-0014 — 자리를 쥔다).
@@ -26,7 +29,7 @@ from typing import Any
 
 from chaeksas.bot_ui.credentials import Credentials
 from chaeksas.bot_ui.runtimes import HostSettings
-from chaeksas.core import control, requests
+from chaeksas.core import control, outputs, requests
 from chaeksas.core.app_directory import AppDirectory, read_directory
 from chaeksas.core.engine import WHERE_CENTER, WHERE_FIELD, Engine, EngineError, Run, RunEnv, State
 from chaeksas.core.extensions import ExtensionHost, HostTasks, load_host
@@ -49,6 +52,10 @@ TICK_S = 0.2
 
 #: 한 번 깨어날 때 밟는 노드 수 — 멈춤 신호를 자주 본다.
 STEPS_PER_TICK = 50
+
+#: C3 `run_started.source` — **PC 위임으로 받은 작업**이다 (ADR-0062). 이 출처만 출력 파일을 쓴다.
+SOURCE_DELEGATION = "delegation"
+
 
 @dataclass(frozen=True)
 class RunnerSecrets:
@@ -112,6 +119,18 @@ def refuse_unusable(package: InstalledBot, directory: AppDirectory) -> None:
         )
 
 
+def _succeeded(run: Run) -> bool:
+    """**성공으로 끝났나** — 기록에서 읽는다 (C3 `run_finished.status`).
+
+    `State.DONE`으로는 가를 수 없다 — **취소도 `DONE`으로 앉는다** (서버 일꾼의 `_finished`와
+    같은 까닭이다).
+    """
+    for event in reversed(run.log.events):
+        if event.kind == "run_finished":
+            return str(event.data.get("status")) == "success"
+    return False
+
+
 @dataclass
 class Runner:
     """실행 하나를 끝까지 민다. **부르는 쪽이 `drive()`를 부른다** (스레드 없음)."""
@@ -125,6 +144,8 @@ class Runner:
     job_id: str | None = None
     #: 대기열에서 기다린 초 (C3 `run_started.queued_s`). 모르면 `None` — 0과 다르다.
     queued_s: float | None = None
+    #: **맡긴 서버 실행** (C3 `run_started.parent_run_id`, ADR-0062 §6). 위임이 아니면 `None`.
+    parent_run_id: str | None = None
     tick_s: float = TICK_S
     env: RunEnv | None = None
 
@@ -144,6 +165,10 @@ class Runner:
     @property
     def requests(self) -> Path:
         return requests.requests_path(self.data_dir, self.run_id)
+
+    @property
+    def outputs(self) -> Path:
+        return outputs.outputs_path(self.data_dir, self.run_id)
 
     def _post_requests(self, run: Run) -> None:
         """`where=center`인 새 결재를 요청 파일에 쓴다 (ADR-0038) — Bot UI가 나른다."""
@@ -168,8 +193,28 @@ class Runner:
             version=self.package.manifest.version,
             job_id=self.job_id,
             queued_s=self.queued_s,
+            parent_run_id=self.parent_run_id,
         )
         return self.run
+
+    def post_outputs(self) -> dict[str, Any] | None:
+        """끝난 뒤 **위임의 결과**를 출력 파일에 쓴다 (C4 `JobAck.outputs`, ADR-0062 §4).
+
+        **위임으로 받은 작업만** 쓴다 — 평범한 실행의 업무 값을 디스크에 남기지 않는다.
+        그리고 **성공했을 때만**이다: 실패·취소는 돌려줄 값이 없고(서버 쪽은 그것을 업무
+        실패로 다룬다) 쓰면 값만 더 오래 남는다.
+
+        **거르는 자리는 그 Bot이 선언한 `outputs`다** (C1) — 그것이 곧 「부르는 쪽이 받을
+        것」이다. 선언이 없으면 빈 벌을 쓴다(「끝났는데 돌려줄 것이 없다」도 사실이다 — 그러면
+        서버 그림이 읽는 값이 없어 그쪽에서 업무 실패가 된다).
+        """
+        run = self.run
+        if self.source != SOURCE_DELEGATION or run is None or not _succeeded(run):
+            return None
+        found = outputs.pick(self.package.manifest.outputs, run.variables)
+        outputs.write(self.outputs, found)
+        log.info("위임 결과 %d개를 올릴 파일에 썼다", len(found))
+        return found
 
     def drive(self, *, deadline_s: float | None = None) -> State:
         """끝날 때까지 (또는 중지될 때까지) 민다."""
@@ -245,6 +290,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", default="deterministic", choices=("deterministic", "autonomous"))
     parser.add_argument("--source", default="manual")
     parser.add_argument("--job-id", default=None)
+    # C3 `run_started.parent_run_id` — 맡긴 서버 실행 (ADR-0062 §6). 위임이 아니면 주지 않는다.
+    parser.add_argument("--parent-run-id", default=None)
     # C3 `run_started.queued_s` — Bot UI가 대기열에서 기다린 초를 알려 준다 (모르면 안 준다).
     parser.add_argument("--queued-s", type=float, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
@@ -292,6 +339,7 @@ def main(argv: list[str] | None = None) -> int:
         source=found.source,
         job_id=found.job_id,
         queued_s=found.queued_s,
+        parent_run_id=found.parent_run_id,
         env=make_env(
             package,
             output_dir=output_dir,
@@ -323,6 +371,9 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     state = runner.drive()
+    # **쓰는 것이 먼저다** — 제어·요청 파일을 치우는 것과 달리 이것은 **올릴 것을 남기는**
+    # 일이다 (Bot UI가 읽어 ack에 싣고 그 자리에서 지운다, ADR-0062 §4).
+    runner.post_outputs()
     control.clear(runner.control)
     requests.clear(runner.requests)
     # 끝난 방식을 종료 코드로도 알린다 (ADR-0023 — 실행 기록과 함께 본다).

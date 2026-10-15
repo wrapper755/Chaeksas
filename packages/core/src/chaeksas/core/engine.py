@@ -143,13 +143,15 @@ class Engine:
         job_id: str | None = None,
         case_id: str | None = None,
         queued_s: float | None = None,
+        parent_run_id: str | None = None,
         env: RunEnv | None = None,
         nested: bool = False,
     ) -> Run:
         """실행을 만들고 `run_started`를 남긴다. 토큰은 시작 이벤트에 놓인다.
 
-        `job_id`·`case_id`·`queued_s`는 C3 `run_started`의 선택 칸이다 — **그 자리에서 아는
-        쪽이** 준다 (작업 지시는 Bot UI, 케이스는 Studio, 대기열에서 기다린 초는 Bot UI).
+        `job_id`·`case_id`·`queued_s`·`parent_run_id`는 C3 `run_started`의 선택 칸이다 —
+        **그 자리에서 아는 쪽이** 준다 (작업 지시·대기열은 Bot UI, 케이스는 Studio,
+        **맡긴 서버 실행은 작업의 `requested_by`를 읽은 Bot UI**다 — ADR-0062 §6).
 
         `nested`면 호출(`callActivity`)이 띄운 안쪽 실행이다 — 같은 `run_id`를 쓰고
         `run_started`·`run_finished`를 남기지 않는다 (C3는 실행 하나에 하나씩만 둔다).
@@ -183,6 +185,10 @@ class Engine:
             extra["case_id"] = case_id
         if queued_s is not None:
             extra["queued_s"] = round(queued_s, 3)
+        if parent_run_id:
+            # **두 실행이 서로를 안다** (ADR-0062 §6) — Center가 이 줄을 읽어
+            # `RunInfo.parent_run_id`에 담고 CON-01이 서버 실행 ↔ PC 실행을 오간다.
+            extra["parent_run_id"] = parent_run_id
         log.emit(
             "run_started",
             bpm_process_id=process.id,
