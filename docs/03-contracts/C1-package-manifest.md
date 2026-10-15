@@ -81,6 +81,7 @@
 | `extensions` | `{id, version, definition_hash?}`[] | 쓰는 확장과 버전 범위 (C13). 외부 확장이면 `definition_hash`로 정의를 고정한다. Studio가 채운다 |
 | `task_types` | `{id, extension, run_locations?}`[] | 쓰는 태스크 종류 중 **확장이 기여한 것**과, 그 확장 정의에 적힌 실행 위치. Studio가 빌드할 때 확장 정의에서 옮겨 적는다. Center는 이것으로 R2를 판정하고, 실행하는 쪽은 자기 확장 정의로 다시 확인한다. **`run_locations`는 아는 쪽이 준다 — 모르면 넣지 않는다**: 빌드하는 PC에 그 확장이 깔려 있지 않거나 꺼져 있으면(ADR-0043) 적을 값이 없다 |
 | `libs` | str[] | 복사해 넣은 공유 BPM 프로세스 `<id>@<version>` |
+| `delegations` | str[] | **PC 위임**으로 부르는 PC Bot `<id>@<version>` 또는 `<id>`(판을 비우면 배포된 판). 복사해 넣는 것이 **아니다** — 따로 올리고 따로 배포한 Bot이라 `libs/`에 들어가지 않는다 ([ADR-0062](../decisions/0062-pc-delegation.md)). Studio가 그림(`chk:call.delegate`)에서 모은다 |
 | `runtimes` | str[] | 예: `node>=20`, `chromium` |
 | `os` | str[] | `windows` `linux`. 비면 제한 없음 |
 
@@ -139,7 +140,7 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 | --- | --- | --- |
 | R1 | `kind=bpm_process`면 `run_location`, `entry`, `process_id`가 있다 (`run_location`은 생략 시 `server`로 채움) | 422 |
 | R2 | `run_location=server`면: `requires.domains`에 `web`·`desktop` 없음, `requires.task_types[]`가 **`run_locations`를 적었으면** 거기에 `server`가 있음 (예: `ui_task`는 `pc`만이라 불가), `human.approval_field=false`, `human.confirmation=false` | 422 `server_incompatible` + 걸린 항목 목록 |
-| R3 | `run_location=server`인 BPM 프로세스가 `run_location=pc`인 공유 BPM 프로세스를 부르면 PC 위임이다 → schema 1에서는 **거부** (PC 위임은 ADR-0016 §3 제안, 확정되면 필드를 추가) | 422 `delegation_not_supported` |
+| R3 | `run_location=server`인 BPM 프로세스가 `run_location=pc`인 **공유 BPM 프로세스**를 부르면 **거부**다. PC 위임의 길이 아니다 — 패키지에 복사해 넣은 정의는 **PC에서 돌릴 길이 없다**(작업은 배포된 패키지를 가리키고 공유 BPM 프로세스에는 진입이 없다, R1). 위임은 `requires.delegations`로 적는다 ([ADR-0062](../decisions/0062-pc-delegation.md)) | 422 `delegation_not_supported` |
 | R8 | (Center, 배포 때) `run_location=server`면 `requires.service_apps[].operations`가 모두 C11 manifest에서 `server_ok=true`이고 결정 수행을 지원한다 (리소스 목록 C7과 대조). 업로드 때는 경고만 | 배포 422 `operation_not_server_ok` / `operation_not_deterministic` |
 | R4 | `key_ref`·`task_key_refs`는 이름 규칙을 따른다. 규칙상 `_`가 없어 키 값(`chk_…`)은 들어갈 수 없다 | 422 `invalid_key_ref` |
 | R5 | `manifest.json`·BPMN 어디에도 키 값·비밀 값이 없다 (Studio 빌드가 보장, Center는 R4만 검사) | — |
@@ -147,6 +148,7 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 
 **R7은 없어졌다** — 툴팩 해시를 검사하던 규칙이고 툴팩 갈래가 사라졌다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)). **번호는 다시 쓰지 않는다** (오류 코드는 사람이 기억한다).
 | R9 | `triggers[].kind`가 위 다섯 중 하나다 | 422 `unknown_trigger_kind` + 걸린 값 목록 |
+| R10 | `requires.delegations`가 있으면 `run_location=server`다 — **PC 위임은 서버 Bot만 한다** (PC 실행은 그 PC의 자리를 끝까지 쥐므로 PC가 PC를 기다리면 서로를 기다린다, [ADR-0014](../decisions/0014-one-bot-per-pc.md)). C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지 않는다** | 422 `delegation_not_from_pc` + 걸린 Bot 목록 |
 
 **R2는 모르는 것을 막지 않는다.** 태스크 종류의 실행 위치는 **확장 정의만** 안다 (C13
 `task_types[].run_locations`, ADR-0018) — 빌드하는 PC에 그 확장이 없거나 꺼져 있으면 Studio가
@@ -191,6 +193,7 @@ PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드�
     "task_types": [],
     "extensions": [],
     "libs": [],
+    "delegations": [],
     "runtimes": [],
     "os": []
   },
@@ -259,6 +262,7 @@ PC Bot (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-15 | 1 | **PC 위임**을 더했다 — `requires.delegations`(부르는 PC Bot `<id>@<version>?`)와 **R10**(위임은 `run_location=server`만), R3의 사유를 다시 적었다(**그 규칙은 그대로 거부다** — 복사해 넣은 PC 정의는 PC에서 돌릴 길이 없다). 선택 칸이라 **옛 패키지는 그대로 읽힌다** | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-12 | 1 | **툴팩 갈래를 뺐다** — `kind=toolpack`·`provides.tools`(`ProvidedTool`)·`requires.toolpacks`(`ToolpackRef`)·`requires.secrets`·**R7**. 툴팩은 처음부터 코드가 아니었고(용어집) 선언을 담을 자리가 계약에 없어 **이름표만 든 zip**이었다 — 도구는 확장이 기여하고 코드 있는 도구는 설치 파일로만 온다. **번호는 비워 둔다**(R8·R9는 그대로다 — 적어 둔 규칙 번호를 밀면 옛 응답의 `rule`이 다른 규칙을 가리킨다) | 0050 |
 | 2026-10-12 | 1 | **`triggers`의 `kind`를 쓰는 쪽과 맞췄다.** 적어 둔 다섯(`none`·`message`·`timer`·`conditional`·`signal`)은 그대로 두고, 그림에서 옮기는 쪽(Studio)이 쓰던 `schedule`·`manual`을 `timer`·`none`으로 바꿨다 — 아무도 `kind`를 검사하지 않아 **올라간 모든 패키지가 계약에 없는 값을 담고 있었다**. 함께: 타이머 식을 `name`에 싣던 것을 **`expression` 칸**으로 갈랐고(`name`은 C12가 메시지 이름으로 읽는다), 조건·신호 시작을 `manual`로 뭉개던 것을 그린 대로 적게 했고, **R9**를 더해 다시 갈라지지 못하게 했다 | — |
 | 2026-10-12 | 1 | **`libs/`에 결정표(.dmn)도 들어간다**고 적었다 — 정의만 복사하면 규칙 태스크를 쓰는 공유 BPM 프로세스가 **설치해도 돌지 않는다**(읽는 쪽이 `process/*.dmn`만 보고 있었다). 모양이 바뀐 것이 아니라 **적지 않았던 것을 적은 것**이다 (`libs/`는 처음부터 「복사해 넣은 공유 BPM 프로세스」였다) | 0048 |

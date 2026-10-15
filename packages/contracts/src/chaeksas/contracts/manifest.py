@@ -114,6 +114,10 @@ class Requires(ContractModel):
     extensions: list[ExtensionNeed] = Field(default_factory=list)
     task_types: list[TaskTypeNeed] = Field(default_factory=list)
     libs: list[str] = Field(default_factory=list)
+    #: **PC 위임**으로 부르는 PC Bot (`<id>@<version>` 또는 `<id>` — 판을 비우면 배포된 판,
+    #: [ADR-0062](../decisions/0062-pc-delegation.md)). `libs`와 다르다: 복사해 넣는 것이
+    #: 아니라 **따로 올리고 따로 배포한 Bot**이다.
+    delegations: list[str] = Field(default_factory=list)
     runtimes: list[str] = Field(default_factory=list)
     os: list[str] = Field(default_factory=list)
 
@@ -224,7 +228,12 @@ def _check_r2(m: Manifest) -> list[Violation]:
 
 
 def _check_r3(m: Manifest, lib_locations: Mapping[str, str]) -> list[Violation]:
-    """서버 BPM 프로세스가 PC 공유 BPM 프로세스를 부르면 PC 위임 — schema 1에서는 거부."""
+    """서버 BPM 프로세스가 **PC 공유 BPM 프로세스**를 부르면 거부 (C1 R3).
+
+    **PC 위임의 길이 아니다** ([ADR-0062](../decisions/0062-pc-delegation.md)) — 패키지에 복사해
+    넣은 정의(`libs/`)는 PC에서 돌릴 길이 없다: 작업은 **배포된 패키지**를 가리키고 공유 BPM
+    프로세스에는 **진입이 없다**(R1). 위임은 `requires.delegations`로 적는다.
+    """
     if m.run_location != "server":
         return []
     pc_libs = [lib for lib in m.requires.libs if lib_locations.get(lib) == "pc"]
@@ -234,8 +243,28 @@ def _check_r3(m: Manifest, lib_locations: Mapping[str, str]) -> list[Violation]:
         Violation(
             rule="R3",
             code="delegation_not_supported",
-            message="서버 BPM 프로세스가 PC 공유 BPM 프로세스를 부른다 (PC 위임은 schema 1 범위 밖)",
+            message="서버 BPM 프로세스가 PC 공유 BPM 프로세스를 부른다 "
+                    "(PC 위임은 requires.delegations로 적는다 — 복사해 넣은 정의는 PC에서 돌릴 길이 없다)",
             items=pc_libs,
+        )
+    ]
+
+
+def _check_r10(m: Manifest) -> list[Violation]:
+    """PC 위임은 **서버 Bot만** 한다 (C1 R10, [ADR-0062](../decisions/0062-pc-delegation.md)).
+
+    PC 실행은 그 PC의 자리를 끝까지 쥐므로(ADR-0014) PC가 다른 PC를 기다리면 둘이 서로를
+    기다릴 수 있다. C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지
+    않는다** — 둘 다 있어야 올리는 길과 설치하는 길이 함께 막힌다.
+    """
+    if not m.requires.delegations or m.run_location == "server":
+        return []
+    return [
+        Violation(
+            rule="R10",
+            code="delegation_not_from_pc",
+            message="PC 위임은 실행 위치가 server인 BPM 프로세스만 할 수 있다",
+            items=sorted(m.requires.delegations),
         )
     ]
 
@@ -317,4 +346,5 @@ def validate(
         *_check_r4(m),
         *_check_r6(m, computed_hash),
         *_check_r9(m),
+        *_check_r10(m),
     ]

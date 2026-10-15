@@ -156,6 +156,65 @@ def test_a_server_process_with_an_extension_task_is_not_falsely_rejected(tmp_pat
     assert "task_types:ui_task" in caught[0].items
 
 
+#: PC 위임 하나만 든 서버 그림 (ADR-0062). 예제 묶음에는 아직 위임이 없어 여기서 만든다.
+#: `calledElement`는 **읽는 사람을 위한 것**이라 패키지에 그 정의가 없어도 된다.
+DELEGATING = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_d" targetNamespace="urn:chaeksas:test">
+  <bpmn:process id="Proc_fx03b_amount_branch" name="위임" isExecutable="true">
+    <bpmn:extensionElements><chk:process>{"run_location": "server"}</chk:process></bpmn:extensionElements>
+    <bpmn:startEvent id="Start" />
+    <bpmn:callActivity id="Call_Erp" calledElement="Proc_erp_input">
+      <bpmn:extensionElements><chk:call>{"delegate":
+        {"bpm_process_id": "fin.erp-input", "version": "1.2.0"}, "output": {"결과": "결과코드"}}</chk:call>
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="End" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Call_Erp" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Call_Erp" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>
+"""
+
+
+def delegating(tmp_path: Path) -> BpmProcess:
+    """위임 그림을 작업 폴더에 넣어 읽는다 (진입 정의를 통째로 바꿔 쓴다)."""
+    made = imported(tmp_path, "fx03b_amount_branch")
+    entry = made.entry_definition
+    assert entry is not None
+    entry.path.write_text(DELEGATING, encoding="utf-8")
+    return Workspace(tmp_path / "작업").read(made.folder, made.group)
+
+
+def test_a_delegated_call_is_not_a_lib(tmp_path: Path) -> None:
+    """**PC 위임은 `libs`가 아니다** ([ADR-0062](../docs/decisions/0062-pc-delegation.md)).
+
+    복사해 넣는 것이 아니라 **따로 배포된 Bot**이다. `libs`에 넣으면 없는 공유 BPM 프로세스를
+    요구하는 패키지가 되어 설치가 막히고, R3이 「PC 정의를 부른다」고 읽는다.
+    """
+    found = collect_requires(delegating(tmp_path))
+    assert found.delegations == ["fin.erp-input@1.2.0"]
+    assert found.libs == [], "위임을 공유 BPM 프로세스로 셌다"
+
+
+def test_a_delegating_package_passes_the_manifest_rules(tmp_path: Path) -> None:
+    """서버 Bot이면 R10이 입을 닫는다 — 올리는 길이 막히지 않는다 (C1)."""
+    made = build_manifest(delegating(tmp_path))
+    assert made.run_location == "server"
+    assert made.requires.delegations == ["fin.erp-input@1.2.0"]
+    assert validate(made) == []
+
+
+def test_an_open_version_delegation_keeps_the_id_alone(tmp_path: Path) -> None:
+    """판을 비우면 **배포된 판**이라는 뜻이라 여기서 지어내지 않는다 (C14)."""
+    made = imported(tmp_path, "fx03b_amount_branch")
+    entry = made.entry_definition
+    assert entry is not None
+    entry.path.write_text(DELEGATING.replace(', "version": "1.2.0"', ""), encoding="utf-8")
+    opened = Workspace(tmp_path / "작업").read(made.folder, made.group)
+    assert collect_requires(opened).delegations == ["fin.erp-input"]
+
+
 def test_approvals_say_what_kind_of_human_is_needed(tmp_path: Path) -> None:
     found = collect_human(imported(tmp_path, EXPENSE))
     assert found.approval_center is True

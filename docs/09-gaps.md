@@ -55,8 +55,8 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | 계약 | 더할 것 |
 | --- | --- |
 | ~~C14~~ | **닫았다** — `chk:call.delegate`, B14 둘(**`server`에서만**·위임 호출은 패키지 안에서 찾지 않는다), 시험 케이스의 `delegations`, `bot_ui` 식을 읽기로 세는 것. 엔진은 아직 **설치 오류로 멈춘다**(맡길 포트가 없다 — 폴백을 두지 않았다). **`delegated_outputs`를 주는 쪽이 아직 없다** — Studio가 Center에서 그 Bot의 매니페스트를 읽어 주는 것이 Studio 조각이고, 주지 않으면 그 대조만 건너뛴다 |
-| C1 | `requires.delegations[]`, **`delegate`는 `run_location=server`에서만**이라는 규칙(422), R3 사유 글을 이 ADR로 |
-| C12 | 위임 요청(`POST …/server-runner/delegations` — Center가 PC를 고른 뒤 **`POST /jobs`와 같은 함수**로 작업을 만든다)과 결과 내려주기, `waiting[]`의 `delegation` 갈래·작업 id |
+| ~~C1~~ | **닫았다** — `requires.delegations`, **R10**(위임은 `run_location=server`만), R3 사유 글. Studio가 그림에서 모으고 **`libs`에 넣지 않는다**(복사해 넣는 것이 아니다 — 넣으면 없는 공유 BPM 프로세스를 요구하는 패키지가 된다) |
+| C12 | **배포 때 「그 Bot이 승인되어 있나」**(R8처럼 Center가 배포 시점에 본다 — 매니페스트만으로는 알 수 없어 C1 조각에서 미뤘다), 위임 요청(`POST …/server-runner/delegations` — Center가 PC를 고른 뒤 **`POST /jobs`와 같은 함수**로 작업을 만든다)과 결과 내려주기, `waiting[]`의 `delegation` 갈래·작업 id |
 | C4 | 작업 ack에 **그 Bot이 선언한 `outputs`** (원칙 6의 예외 — ack와 함께 지운다) |
 | C3 | `run_waiting`의 선택 칸 `job_id`, 그리고 예약 셋 풀기(`source: delegation`·`parent_run_id`·`waiting_for: delegation`) |
 

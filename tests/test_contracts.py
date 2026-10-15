@@ -335,6 +335,31 @@ def test_r9_passes_every_kind_the_contract_lists() -> None:
     assert validate(manifest(triggers=kinds)) == []
 
 
+def test_r10_only_a_server_bot_can_delegate_to_a_pc() -> None:
+    """**PC 위임은 서버 Bot만** 한다 (R10, [ADR-0062](../docs/decisions/0062-pc-delegation.md)).
+
+    PC 실행은 그 PC의 자리를 끝까지 쥐므로(ADR-0014) PC가 다른 PC를 기다리면 서로를 기다린다.
+    C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지 않는다**.
+    """
+    needs = Requires(delegations=["fin.erp-input@1.2.0"])
+    assert validate(manifest(run_location="server", requires=needs)) == []
+    v = validate(manifest(run_location="pc", requires=needs))
+    assert [(x.rule, x.code) for x in v] == [("R10", "delegation_not_from_pc")]
+    assert v[0].items == ["fin.erp-input@1.2.0"] and v[0].blocks
+
+
+def test_r10_says_nothing_when_nothing_is_delegated() -> None:
+    """PC Bot은 흔하다 — 위임이 없으면 이 규칙은 입을 닫는다."""
+    assert validate(manifest(run_location="pc")) == []
+
+
+def test_a_delegation_can_leave_the_version_open() -> None:
+    """판을 비우면 **배포된 판**이라는 뜻이다 (C14 — 작업 지시와 같은 규칙)."""
+    m = manifest(run_location="server", requires=Requires(delegations=["fin.erp-input"]))
+    assert validate(m) == []
+    assert m.requires.delegations == ["fin.erp-input"]
+
+
 def test_the_trigger_kinds_are_the_ones_the_contract_document_lists() -> None:
     """**문서가 원본이다** (CLAUDE.md §3-3) — C1의 표와 `KNOWN_TRIGGER_KINDS`를 대조한다.
 
