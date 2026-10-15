@@ -40,7 +40,7 @@
 
 | kind | 언제 | `data` 필수 키 | `data` 선택 키 |
 | --- | --- | --- | --- |
-| `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`, `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`\|`message`\|`test`, 예약: `delegation`) | `job_id`, `parent_run_id`(예약 — PC 위임, ADR-0016 §3 제안), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio 시험 실행의 케이스 이름) |
+| `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`, `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`\|`message`\|`test`\|**`delegation`**(PC 위임으로 받은 작업)) | `job_id`, `parent_run_id`(**맡긴 서버 실행** — PC 위임으로 시작된 실행에만, [ADR-0062](../decisions/0062-pc-delegation.md)), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio 시험 실행의 케이스 이름) |
 | `node_state` | 노드 상태가 바뀜 | `state`(`started`\|`completed`\|`failed`\|`skipped`\|`replayed`\|`waiting`) | `task_type`(`ai_task`\|`ui_task`\|`service_task`\|`approval`\|…), `error_code`, `message`(한 줄) |
 | `log` | 사람이 읽는 한 줄 | `level`(`info`\|`warn`\|`error`), `message` | |
 | `agent` | AI 태스크의 단계 하나 | `step`, `action`(`plan`\|`tool`\|`extract`\|`finish`) | `tool`, `summary`(값 제외) |
@@ -51,7 +51,7 @@
 | `human_answered` | 답을 받음 (값 없음) | `request_id`, `answered_by` | |
 | `human_timeout` | 시간 초과 | `request_id` | |
 | `human_withdrawn` | 답 없이 끝남 — Center에서 회수되었거나 만료됨 (C6, [ADR-0038](../decisions/0038-approval-request-channel.md)) | `request_id`, `reason`(`admin_withdraw`\|`expired`\|`host_lost`, 열린 문자열) | |
-| `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`, 예약: `delegation`) | `request_id`, `until` |
+| `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`\|**`delegation`**) | `request_id`, `until`, `job_id`(**위임일 때 그 작업** — C12 `waiting[]`의 짝 칸과 같다) |
 | `run_resumed` | (서버) 저장된 실행을 이어 감 | `after_s` | `reason`(`answer`\|`message`\|`timer`\|`restart`\|`withdraw`) |
 | `run_finished` | 실행 끝 (항상 마지막) | `status`(`success`\|`failed`\|`cancelled`), `duration_s`, `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | `error_code`, `error_message`(한 줄), `confirmations` |
 
@@ -62,6 +62,7 @@
 - **`run_resumed`는 `run_waiting`과 짝이다.** 짝을 못 찾으면(이 판 전에 담긴 실행을 되살릴 때) **보내지 않는다** — `after_s`가 필수 칸이라 0을 넣어야 하는데, 0은 「바로 이어 갔다」라서 「얼마나 기다렸는지 모른다」와 같은 값이 된다 (선택 칸 규칙과 같은 결). **`after_s`는 보내는 쪽이 센다** — 받는 쪽은 두 줄의 시각 차로 다시 세지 않는다.
 - 기다림이 끝났다고 **`run_waiting`을 지우거나 고치지 않는다** (줄은 더하기만 한다) — 「지금 기다리는 중인가」는 C4·C12 하트비트의 `waiting[]`이 말하고, 이 두 줄은 **지나간 기다림**을 남긴다. 받는 쪽은 둘이 **한 배치에 함께 올 것**을 셈해야 한다 (보내기는 하트비트 뒤다) — `run_resumed`를 뒤에 두고도 상태가 「기다리는 중」이면 이어 간 실행이 CON-01에서 영원히 멈춰 보인다.
 - 업무 값 기록은 기본으로 끈다. 실행 설정에서 명시적으로 켠 경우에만 `kind: "data"`(`data.vars`: 이름→값)를 보낸다 (principle 6).
+- **PC 위임은 두 실행을 잇는다** ([ADR-0062](../decisions/0062-pc-delegation.md)) — 맡겨진 PC 실행의 `run_started`에 `source: delegation`과 `parent_run_id`(맡긴 서버 실행)가 있고, Center가 그것을 읽어 `RunInfo.parent_run_id`에 담는다(줄을 다시 읽지 않는다). 그래서 CON-01이 서버 실행 ↔ PC 실행을 오갈 수 있다. 반대 방향은 작업의 `requested_by: server_bot:<run_id>`다 (C5).
 - **선택 칸은 아는 쪽이 준다** — `job_id`·`queued_s`는 Bot UI(작업 지시와 대기열을 그쪽만 안다), `case_id`는 Studio다. **모르면 넣지 않는다**: 0·빈 글을 넣으면 「대기 없이 바로 돌았다」와 「모른다」가 같은 값이 되고, 화면이 둘을 가를 수 없다. `queued_s`는 소수 셋째 자리까지이고 **음수를 적지 않는다** (시계가 거꾸로 가면 0).
 
 ## 확장이 남기는 이벤트
@@ -153,6 +154,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-15 | 1 | **PC 위임의 예약을 풀었다** — `source: delegation`·`parent_run_id`·`waiting_for: delegation`이 이제 아는 값이고, `run_waiting`에 선택 칸 `job_id`(C12 짝 칸과 같은 것)를 적었다. `RunInfo.parent_run_id`를 더해 **CON-01이 서버 실행 ↔ PC 실행을 오간다** — Center가 `run_started`에서 읽어 담는다. 선택 칸이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **`run_waiting`·`run_resumed`를 내보내는 쪽이 생겼다** (서버 실행기) — 형식은 그대로이고, 적은 것은 **짝 규칙**(짝이 없으면 보내지 않는다)·**`after_s`는 보내는 쪽이 센다**·**한 배치에 둘이 함께 온다**다. `run_resumed.reason`의 아는 값에 `withdraw`를 더했다 (결재 회수로도 이어 간다 — [ADR-0038](../decisions/0038-approval-request-channel.md)). 열린 문자열이라 받는 쪽은 그대로 돈다 | — |
 | 2026-10-11 | 1 | `run_finished`에 선택 칸 **`confirmations`**(결재와 확인을 가르는 셈)를, `RunInfo`에 **`confirmations`·`bot_ui_id`**와 목록 좁히기 `bot_ui_id`를 더했다 — CON-02 「확인률」과 CON-01 「Bot UI」 필터가 읽을 자리가 없었다 (09-gaps §4-9·§4-11). 셈은 **보내는 쪽**이 세고, `bot_ui_id`는 **Center가 읽을 때** 채운다(본문으로 받지 않는다 — 신원은 키다). 둘 다 선택 칸이라 받는 쪽·보내는 쪽 모두 그대로 돈다 | — |
 | 2026-10-09 | 1 | 상태를 **구현됨**으로. 선택 칸 `case_id`(Studio)·`queued_s`(Bot UI 대기열)를 넣는 쪽이 생겼다 — 모르면 넣지 않는다는 규칙도 적었다 | — |

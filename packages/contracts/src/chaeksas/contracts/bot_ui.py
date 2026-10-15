@@ -35,8 +35,11 @@ KNOWN_BOT_UI_STATUSES = frozenset(
     {"idle", "running", "waiting_approval", "waiting_confirmation", "selector_registration", "error"}
 )
 KNOWN_RUN_STATES = frozenset({"running", "waiting_approval", "waiting_confirmation"})
-KNOWN_SOURCES = frozenset({"job", "manual", "watch", "schedule", "message"})
-RESERVED_SOURCES = frozenset({"delegation"})
+#: 실행이 시작된 까닭. **`delegation`은 PC 위임으로 받은 작업**이다
+#: ([ADR-0062](../decisions/0062-pc-delegation.md) — 예약을 풀었다). C3와 같은 목록이다.
+KNOWN_SOURCES = frozenset(
+    {"job", "manual", "watch", "schedule", "message", "delegation"}
+)
 KNOWN_WORKER_STATES = frozenset({"running", "off", "restarting", "stopped"})
 KNOWN_WORKER_SESSIONS = frozenset({"idle", "bot", "studio", "selector_registration"})
 KNOWN_JOB_ACK_RESULTS = frozenset({"queued", "started", "rejected", "expired", "cancelled", "cancel_refused"})

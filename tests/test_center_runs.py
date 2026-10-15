@@ -163,6 +163,25 @@ def test_a_late_batch_does_not_un_finish_a_run(client: Any) -> None:
     assert read(client, f"/api/v1/runs/{RUN}").json()["status"] == "failed"
 
 
+def test_a_delegated_run_remembers_who_asked(client: Any) -> None:
+    """**PC 위임으로 시작된 실행은 맡긴 서버 실행을 기억한다** (C3 `parent_run_id`, ADR-0062).
+
+    Center는 `run_started`에서 **읽어 담는다** — 줄을 다시 읽지 않는다 (CON-01이 둘을 오간다).
+    """
+    parent = "run_20261015_090000_aaaaaa"
+    line = started()
+    line["data"] |= {"source": "delegation", "parent_run_id": parent}
+    post(client, [line])
+    found = read(client, f"/api/v1/runs/{RUN}").json()
+    assert found["parent_run_id"] == parent and found["source"] == "delegation"
+
+
+def test_a_plain_run_has_no_parent(client: Any) -> None:
+    """평범한 실행에는 **없다** — 「—」가 아니라 아예 없는 칸이다 (화면이 줄을 두지 않는다)."""
+    post(client, [started()])
+    assert read(client, f"/api/v1/runs/{RUN}").json()["parent_run_id"] is None
+
+
 def test_a_resumed_run_is_no_longer_waiting(client: Any) -> None:
     """**한 배치에 둘이 함께 온다** — 보내기는 하트비트 뒤라서다 (C3 §전송).
 

@@ -18,6 +18,7 @@ export interface RunInfo {
   finished_at?: string | null;
   human_requests?: number | null;
   mode?: string | null;
+  parent_run_id?: string | null;
   replayed_tasks?: number | null;
   run_id: string;
   run_location?: string | null;

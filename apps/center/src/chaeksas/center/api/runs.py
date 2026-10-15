@@ -161,6 +161,9 @@ def _note(summary: dict[str, Any], event: RunEvent) -> None:
                 "source": event.data.get("source"),
                 "started_at": event.ts,
                 "status": "running",
+                # **PC 위임으로 시작된 실행이면 맡긴 서버 실행**이 있다 (ADR-0062) —
+                # 보낸 쪽이 적은 값이라 읽어 담아 둔다 (CON-01이 둘을 오간다).
+                "parent_run_id": event.data.get("parent_run_id"),
             }
         )
     elif event.kind == "run_finished":
@@ -261,6 +264,8 @@ def _info(row: Any, store: Store) -> RunInfo:
         executor=summary.get("executor"),
         mode=summary.get("mode"),
         source=summary.get("source"),
+        # **PC 위임으로 시작된 실행만** 있다 (ADR-0062) — 보낸 쪽이 적은 값이다.
+        parent_run_id=summary.get("parent_run_id"),
         started_at=summary.get("started_at") or row["first_seen_at"],
         finished_at=summary.get("finished_at"),
         duration_s=summary.get("duration_s"),

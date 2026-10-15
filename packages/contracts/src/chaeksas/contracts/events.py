@@ -51,12 +51,16 @@ KNOWN_KINDS = frozenset(REQUIRED_DATA_KEYS) | {"data"}
 # 아래는 모두 **열린 문자열**의 알려진 값일 뿐이다 (README 원칙 10).
 KNOWN_EXECUTORS = frozenset({"bot_ui", "server_runner", "studio"})
 KNOWN_MODES = frozenset({"autonomous", "deterministic"})
-KNOWN_SOURCES = frozenset({"job", "manual", "watch", "schedule", "message", "test"})
-RESERVED_SOURCES = frozenset({"delegation"})
+#: 시작 출처 (C4 `source`와 같은 값). **`delegation`은 PC 위임으로 시작된 PC 실행이다**
+#: ([ADR-0062](../decisions/0062-pc-delegation.md) — 예약을 풀었다).
+KNOWN_SOURCES = frozenset(
+    {"job", "manual", "watch", "schedule", "message", "test", "delegation"}
+)
 KNOWN_NODE_STATES = frozenset({"started", "completed", "failed", "skipped", "replayed", "waiting"})
 KNOWN_RUN_STATUSES = frozenset({"success", "failed", "cancelled"})
-KNOWN_WAITING_FOR = frozenset({"approval", "message", "timer"})
-RESERVED_WAITING_FOR = frozenset({"delegation"})
+#: `run_waiting.waiting_for`. **`delegation`은 PC 위임을 기다리는 것**이고 짝 칸은
+#: `job_id`다 (ADR-0062 — 예약을 풀었다). C12 `waiting[]`과 **같은 말**이다.
+KNOWN_WAITING_FOR = frozenset({"approval", "message", "timer", "delegation"})
 #: `run_resumed.reason` — **무엇이 깨웠나**. 회수(`withdraw`)도 답은 아니지만 이어 간 것이다
 #: (C6·ADR-0038). 보내는 쪽이 이 밖의 값을 쓰면 화면이 모르는 글을 그대로 보인다.
 KNOWN_RESUME_REASONS = frozenset({"answer", "message", "timer", "restart", "withdraw"})
@@ -141,6 +145,10 @@ class RunInfo(ContractModel):
     #: **보낸 쪽이 넣었을 때만** 있다 — 없으면 「확인만은 모른다」다(0이 아니다). 결재 수는
     #: `human_requests - confirmations`다.
     confirmations: int | None = None
+    #: **이 PC 실행을 맡긴 서버 실행** (C3 `run_started.parent_run_id`, ADR-0062). PC 위임으로
+    #: 시작된 실행에만 있다 — CON-01이 이것으로 서버 실행과 오간다. **보낸 쪽이 적은 값**이라
+    #: Center는 `run_started`에서 읽어 요약에 담아 둔다 (줄을 다시 읽지 않는다).
+    parent_run_id: str | None = None
     #: 어느 PC가 보냈나 (CON-01 「Bot UI」 필터·열). **Center가 읽을 때 채운다** —
     #: 보내는 쪽은 적지 않는다(신원은 키다, C4). Studio·토큰이 보낸 기록에는 없다.
     bot_ui_id: str | None = None
