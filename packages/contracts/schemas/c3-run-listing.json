@@ -129,6 +129,18 @@
           "default": null,
           "title": "Mode"
         },
+        "parent_run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Run Id"
+        },
         "replayed_tasks": {
           "anyOf": [
             {

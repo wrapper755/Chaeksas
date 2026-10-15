@@ -351,6 +351,24 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
               <dd>{seen.human_requested ?? 0}</dd>
               <dt className="text-text-muted">이벤트</dt>
               <dd>{info.events}</dd>
+              {/*
+                **PC 위임으로 시작된 실행이면 맡긴 서버 실행이 있다** (C3 `parent_run_id`,
+                ADR-0062) — 없는 실행에는 줄도 두지 않는다 (「—」로 두면 모든 실행에 뜻 없는
+                칸이 하나 선다). 반대 방향은 그 서버 실행의 작업 요청자다 (C5).
+              */}
+              {info.parent_run_id ? (
+                <>
+                  <dt className="text-text-muted">맡긴 서버 실행</dt>
+                  <dd>
+                    <Link
+                      className="underline font-mono"
+                      href={`/runs/${encodeURIComponent(info.parent_run_id)}`}
+                    >
+                      {info.parent_run_id}
+                    </Link>
+                  </dd>
+                </>
+              ) : null}
             </dl>
             {info.error_code ? <ErrorBanner message={`오류 코드: ${info.error_code}`} /> : null}
           </Section>
