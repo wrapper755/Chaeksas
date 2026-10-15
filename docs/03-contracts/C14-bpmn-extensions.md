@@ -65,7 +65,31 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | 메일 보내기 | `sendTask` | `chk:email` | `to[]`, `cc[]`, `subject`, `body`, `attachments[]`(변수 이름), `store_as?`. 아래 「보내기」 |
 | 웹훅 보내기 | `sendTask` | `chk:webhook` | `url`, `method`, `body`(`all`\|`fields:[..]`\|`template:"…"`), `timeout_s`, `store_as?`. URL은 허용 호스트 규칙(C13 §4-3과 같은 해석기)을 따른다. 아래 「보내기」 |
 | 메시지 받기 | `receiveTask` | 표준 `messageRef` + `chk:receive` | `correlation`(변수 이름 — 이 값이 같은 메시지만 받는다), `payload[]`(메시지 본문에서 변수로 들어오는 이름 — 검사 B11이 출처로 본다. 메시지 시작은 `chk:process.inputs`로 선언) |
-| 다른 BPM 프로세스 호출 | `callActivity` | 표준 `calledElement` + `chk:call` | `input`(`{호출 대상 변수: 식}`), `output`(`{내 변수: 호출 대상 변수}`). **적은 것만 오간다.** 둘 다 비면 오가는 변수 없음 (프로토타입의 "비면 전부"는 없앴다) |
+| 다른 BPM 프로세스 호출 | `callActivity` | 표준 `calledElement` + `chk:call` | `input`(`{호출 대상 변수: 식}`), `output`(`{내 변수: 호출 대상 변수}`). **적은 것만 오간다.** 둘 다 비면 오가는 변수 없음 (프로토타입의 "비면 전부"는 없앴다). `delegate?`를 적으면 **PC 위임**이다 (아래) |
+
+### PC 위임 (`chk:call.delegate`)
+
+서버 BPM 프로세스가 **화면 조작·현장 확인이 필요한 한 부분**을 PC에 맡긴다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 새 태스크 종류를 만들지 않고 호출에 칸 하나를 더한다.
+
+```json
+{
+  "delegate": {"bpm_process_id": "fin.erp-input", "version": "1.2.0", "bot_ui": "담당자PC"},
+  "input": {"전표번호": "청구번호"},
+  "output": {"입력결과": "결과코드"}
+}
+```
+
+| 칸 | 뜻 |
+| --- | --- |
+| `bpm_process_id` | 부를 **PC Bot 패키지 id** (필수). **패키지 안의 정의가 아니다** — 따로 올리고 따로 배포한 Bot이다 |
+| `version?` | 판. 비우면 **배포된 판** (작업 지시와 같은 규칙 — 둘 이상이면 Center가 `version_ambiguous`) |
+| `bot_ui?` | **어느 PC인가를 정하는 식**(`input`의 값들과 같은 `chk-expr`). 비우면 **Center가 고른다**(그 판이 배포된, 활성인 Bot UI 중 대기열이 짧은 곳) |
+
+- **`delegate`는 실행 위치가 `server`인 BPM 프로세스에서만 쓸 수 있다** (B14). PC 실행은 그 PC의 자리를 끝까지 쥐므로(ADR-0014) PC가 다른 PC를 기다리면 둘이 서로를 기다릴 수 있다.
+- `calledElement`는 **적어 두면 읽는 사람에게 뜻이 있다**(그 Bot의 `process_id`). 검사는 **패키지 안에서 찾지 않는다** — 대상이 다른 패키지라서다.
+- `output`은 그 Bot이 **매니페스트에 선언한 `outputs`**와 맞춰 본다 (C1). 매핑은 이 그림에만 있고 PC는 모르므로, 돌아오는 것은 **선언한 `outputs` 전부**이고 고르는 것은 부르는 쪽이다.
+- 실패·거절·만료는 **오류 경계**로 간다. **업무 기한은 그림이 맡는다** — Call Activity에 타이머 경계를 달면 기다리는 동안 켜진다. 위임에 기한 칸을 두지 않는다.
+- 돌리는 쪽(서버 실행기 ↔ Center)의 약속은 C12, 결과가 돌아오는 길은 C4다. **Studio 시험 실행은 케이스의 `delegations`를 쓴다** (아래 — 돌릴 남의 패키지가 없다).
 
 ### 반복 (다중 인스턴스)
 
@@ -192,6 +216,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
     "expected": {"지급합계": 6358000, "보류건수": 5},
     "approvals": {"Approve_Hold": {"지급진행": "지급 대상대로 진행", "의견": "보류 5건 공급사에 확인 요청"}},
     "messages": [{"after_s": 5, "name": "return_arrived", "correlation": "RT-01", "payload": {"검수통과": true}}],
+    "delegations": {"Call_ErpInput": {"결과코드": "OK"}},
     "manual": false
   }]
 }
@@ -201,6 +226,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 - `messages`(선택): 시작 뒤 `after_s`초에 보내는 메시지. Center 메시지 API(C12)와 같은 모양(`name`, `correlation`, `payload`)이다. 받기 태스크·경계·중간 받기를 시험할 때 쓴다. 받을 곳이 없으면 `no_receiver`로 기록만 하고 케이스를 실패시키지 않는다.
 
 - `approvals`는 노드 id → 폼 응답이다.
+- `delegations`(선택): 노드 id → **PC 위임이 돌려주는 값**(그 Bot이 선언한 `outputs`). Studio에는 부를 PC Bot의 그림이 없고(다른 패키지다) 있다 해도 UI 태스크라 설계자 PC에서 화면을 만지게 되므로, **케이스가 결과를 적는다** — 결재 답·메시지와 같은 결이다 ([ADR-0062](../decisions/0062-pc-delegation.md) §2). **적어 두지 않은 위임은 그 자리에서 실패**다(기다리지 않는다 — 그림의 오류 경계를 시험하는 길이기도 하다).
 - `manual: true`인 케이스는 자동 응답이 있어도 쓰지 않고 실제 창을 띄운다. 폼을 사람이 보는지 확인하는 용도다.
 - 수동이 아닌 케이스에서 자동 응답이 없는 결재는 **답하지 않은 채 기다린다** — 타이머 경계(기한 초과)를 시험하는 방법이다. 케이스 전체 시간 제한(Studio 설정, 기본 300초)을 넘으면 그 케이스는 실패다.
 - `expected`가 비면 「비교 안 함」으로 판정한다 (U6).
@@ -242,7 +268,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | B11 | 어떤 경로로는 만들어지지 않는 변수를 읽는다 (예: 한 가지에서만 생기는 결재 칸을 합류 뒤에 읽음, 프로세스 `inputs`에 없는 메시지 본문 변수) | 경고 ([ADR-0039](../decisions/0039-optional-variables-and-b11.md) — 경로 어림이라 막지 않는다) |
 | B12 | 결재 칸 `type`이 C6의 `bool`·`number`·`text`·`choice` 중 하나이고, `choice`에는 `choices`가 있다. UI 태스크 스텝 `action`이 C10 동작 목록 안에 있다. 경계 이벤트는 태스크·하위 프로세스에만 붙는다. 파일 출력 `format`·파일 목록 `sort`·AI 태스크 `replay`가 아는 값이고, **도구 없는 AI 태스크에 `replay: full`이 없다**. (같은 규칙의 **경고**: 수동 작업(확인)에 `location: center` — 확인은 늘 현장에서 답한다) | 오류 |
 | B13 | 웹훅 `body: all` (비밀이 섞일 수 있음), `location: field` 결재에 하루 넘는 시간 제한 | 경고 |
-| B14 | 병렬 분기와 합류의 가지 수가 맞다 (오류 경계의 대체 흐름을 병렬 합류에 바로 이으면 합류가 영원히 기다린다). 규칙 태스크의 `input`·`output`이 DMN 입력·출력 이름과 맞다. 호출의 `output`이 호출 대상의 `outputs`에 있다. 타이머로 시작하는 BPM 프로세스에 기본값 없는 필수 입력이 없다 | 오류 |
+| B14 | 병렬 분기와 합류의 가지 수가 맞다 (오류 경계의 대체 흐름을 병렬 합류에 바로 이으면 합류가 영원히 기다린다). 규칙 태스크의 `input`·`output`이 DMN 입력·출력 이름과 맞다. 호출의 `output`이 호출 대상의 `outputs`에 있다 — **PC 위임(`delegate`)은 패키지 안에서 찾지 않고** 그 Bot이 선언한 `outputs`와 맞춰 보며(알 때만), `delegate`는 **실행 위치가 `server`일 때만** 쓸 수 있다. 타이머로 시작하는 BPM 프로세스에 기본값 없는 필수 입력이 없다 | 오류 |
 | B15 | 식·스크립트가 `chk-expr` 문법 안에 있고, **도우미 함수 호출의 인자 모양**(인자 수·키워드 이름)이 그 도우미와 맞다 (`세기(전체, '주제')`는 `세기`가 인자 하나만 받으므로 오류) | 오류 |
 
 `validate()`는 오류와 경고를 **함께** 돌려준다 (`Violation.severity`). Studio 「실행 전 검사」는 오류만으로 실행을 막고(`blocking()`), 경고는 보여 주고 사람이 판단한다.
@@ -280,6 +306,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-15 | 1 | **PC 위임**을 더했다 — `chk:call.delegate`(`bpm_process_id`·`version?`·`bot_ui?`)와 시험 케이스의 `delegations`, 그리고 B14가 보는 둘(**`server`에서만**, 위임 호출은 패키지 안에서 찾지 않는다). 선택 칸이라 **옛 그림은 그대로 읽힌다** | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-08 | 1 | **B15 추가** — 식·스크립트의 도우미 호출 인자 모양을 **미리** 본다. 이름만 맞으면 지나가던 탓에 BX-35가 `세기(전체, '주제')`·`비율(전체, 감성=…)`처럼 부를 수 없는 호출을 들고 있었고 실행할 때야 터졌다. 계약이 아니라 도우미 구현이 있는 쪽(`core.expr`)이 한다 | [0025](../decisions/0025-expression-language.md) |
 | 2026-10-07 | 1 | 오류 경계 표준 코드에 `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`를 더했다 (Center 결재가 답 없이 끝남). B12에 「수동 작업 + `location: center`」 경고를 적었다 | 0038 |
 | 2026-10-05 | 1 | `web`·`desktop` AI 태스크의 도구는 환경을 기여한 확장이 주고 허용 목록에 저절로 더해진다 (`desktop_look`·`desktop_act`) | 0037 |

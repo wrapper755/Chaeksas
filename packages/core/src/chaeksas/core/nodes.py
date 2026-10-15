@@ -949,8 +949,19 @@ def handle_call(context: Context) -> Outcome:
 
     **적은 것만 오간다** (`chk:call`의 `input`·`output`). 바깥 토큰은 안쪽이 끝날 때까지
     세워 두고, 안쪽은 같은 `run_id`·같은 기록을 쓴다 (C3는 실행 하나에 `run_started` 하나다).
+
+    **PC 위임은 여기서 돌리지 않는다** (`chk:call.delegate`, [ADR-0062](../decisions/0062-pc-delegation.md)) —
+    대상이 **다른 패키지**라 이 패키지 안에 그 정의가 없다. 맡길 자리(`RunEnv`의 포트)가
+    아직 없으므로 **그림·설치 오류로 멈춘다** — 안쪽을 서버에서 대신 돌리는 폴백은 두지 않는다.
     """
     engine, run, node = context.engine, context.run, context.node
+    spec: Call | None = node.prop("call")
+    if spec is not None and spec.delegate is not None:
+        raise EngineError(
+            f"PC 위임을 맡길 곳이 없다: {spec.delegate.bpm_process_id}",
+            node_id=node.id,
+            code=CODE_UNSUPPORTED,
+        )
     target = node.called_element
     if not target:
         raise EngineError("`calledElement`가 없다", node_id=node.id, code="call_target_missing")
@@ -963,7 +974,6 @@ def handle_call(context: Context) -> Outcome:
             code="call_target_missing",
         )
 
-    spec: Call | None = node.prop("call")
     scope = context.scope()
     inputs = {name: evaluate(expression, scope) for name, expression in (spec.input if spec else {}).items()}
     child = engine.start(

@@ -50,11 +50,11 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ### 3-13. PC 위임 — 모양은 정했고 계약 다섯이 남았다
 
-[ADR-0062](decisions/0062-pc-delegation.md)가 정했다(**먼저 정할 것이 없다** — 그 ADR이 선택지 셋을 두고 골랐다). 고칠 자리는 다섯이고 **C14부터** 간다(그림이 없으면 나머지가 가리킬 것이 없다).
+[ADR-0062](decisions/0062-pc-delegation.md)가 정했다(**먼저 정할 것이 없다** — 그 ADR이 선택지 셋을 두고 골랐다). 고칠 자리는 다섯이고 **C14부터** 갔다(그림이 없으면 나머지가 가리킬 것이 없다).
 
 | 계약 | 더할 것 |
 | --- | --- |
-| C14 | `chk:call.delegate`(`bpm_process_id`·`version?`·`bot_ui?`) + 그 호출을 보는 검사(B14는 패키지 안에서 찾지 않고 **선언한 `outputs`**와 맞춘다) + 시험 케이스의 `delegations`(Studio가 돌릴 남의 패키지가 없어 **케이스가 결과를 적는다** — 결재 답·메시지와 같은 결) |
+| ~~C14~~ | **닫았다** — `chk:call.delegate`, B14 둘(**`server`에서만**·위임 호출은 패키지 안에서 찾지 않는다), 시험 케이스의 `delegations`, `bot_ui` 식을 읽기로 세는 것. 엔진은 아직 **설치 오류로 멈춘다**(맡길 포트가 없다 — 폴백을 두지 않았다). **`delegated_outputs`를 주는 쪽이 아직 없다** — Studio가 Center에서 그 Bot의 매니페스트를 읽어 주는 것이 Studio 조각이고, 주지 않으면 그 대조만 건너뛴다 |
 | C1 | `requires.delegations[]`, **`delegate`는 `run_location=server`에서만**이라는 규칙(422), R3 사유 글을 이 ADR로 |
 | C12 | 위임 요청(`POST …/server-runner/delegations` — Center가 PC를 고른 뒤 **`POST /jobs`와 같은 함수**로 작업을 만든다)과 결과 내려주기, `waiting[]`의 `delegation` 갈래·작업 id |
 | C4 | 작업 ack에 **그 Bot이 선언한 `outputs`** (원칙 6의 예외 — ack와 함께 지운다) |

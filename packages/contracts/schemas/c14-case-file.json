@@ -12,6 +12,14 @@
           "title": "Approvals",
           "type": "object"
         },
+        "delegations": {
+          "additionalProperties": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Delegations",
+          "type": "object"
+        },
         "description": {
           "anyOf": [
             {
