@@ -699,7 +699,10 @@ def waiting_on_a_timer(
     while found.snapshot().waiting is None and time.monotonic() < deadline:
         time.sleep(0.02)
     assert found.snapshot().waiting is not None, "타이머를 기다리는 자리에 닿지 못했다"
-    assert not found.alive, "기다리는 실행은 스레드를 놓는다 (ADR-0054 §5)"
+    # **기다려 주고 본다** — 「기다린다」가 스냅샷에 찍히는 것은 스레드가 끝나기 **전**이다
+    # (찍은 뒤에 저장소에 담고 나서 끝난다). 그 자리에서 `not alive`를 단정하면 Windows CI가
+    # 그 틈을 밟는다 (실제로 밟았다). 제품의 약속은 「놓는다」이고 **그것을 그대로 본다**.
+    assert found.join(WAIT_S), "기다리는 실행은 스레드를 놓는다 (ADR-0054 §5)"
     return found
 
 
