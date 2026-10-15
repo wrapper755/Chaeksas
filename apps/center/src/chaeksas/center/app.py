@@ -19,6 +19,7 @@ from chaeksas.center import keys
 from chaeksas.center.api import (
     approvals,
     bot_ui,
+    delegations,
     deployments,
     jobs,
     messages,
@@ -68,6 +69,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     app.add_exception_handler(ApiError, handle)
     app.include_router(bot_ui.router)
     app.include_router(server_runner.router)
+    app.include_router(delegations.router)
     app.include_router(runs.router)
 
     @app.get("/healthz")

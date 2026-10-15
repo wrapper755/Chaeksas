@@ -12,6 +12,7 @@
 export interface ServerRunnerHeartbeatRequest {
   approval_acks?: ApprovalAck[];
   capacity: Capacity;
+  delegation_acks?: DelegationAck[];
   deployment_results?: DeploymentResult[];
   extensions?: ExtensionState[];
   job_acks?: JobAck[];
@@ -43,6 +44,17 @@ export interface ApprovalAck {
 export interface Capacity {
   max: number;
   running: number;
+  [k: string]: unknown;
+}
+/**
+ * 위임 결과 하나를 **받았다** (C12 §PC 위임, ADR-0062).
+ *
+ * 받으면 Center가 그 값을 지운다 — 업무 값이 Center에 남는 시간을 줄인다 (원칙 6의 예외는
+ * **좁게** 쓴다). ack가 오기 전에는 매번 다시 내려온다 (작업·메시지와 같다).
+ */
+export interface DelegationAck {
+  accepted?: boolean;
+  job_id: string;
   [k: string]: unknown;
 }
 /**
@@ -129,13 +141,14 @@ export interface RunnerVersions {
  * 상태만 남고 **일꾼을 놓은** 실행 (ADR-0054 §1·§3).
  *
  * `waiting_for`에 따라 **짝이 되는 칸이 있어야 한다** — 결재는 `request_id`, 메시지는
- * `message_name`, 타이머는 `until`. `validate_heartbeat()`가 그것을 본다.
+ * `message_name`, 타이머는 `until`, **PC 위임은 `job_id`**. `validate_heartbeat()`가 그것을 본다.
  */
 export interface WaitingRun {
   bpm_process_id: string;
   correlation?: {
     [k: string]: unknown;
   };
+  job_id?: string | null;
   message_name?: string | null;
   request_id?: string | null;
   run_id: string;

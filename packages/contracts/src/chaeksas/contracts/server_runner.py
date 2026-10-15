@@ -52,7 +52,11 @@ ServerRunnerId = Annotated[str, Field(pattern=r"^srv_[0-9a-f]{8}$")]
 
 # 알려진 값 (모두 열린 문자열).
 KNOWN_RUNNER_STATUSES = frozenset({"running", "paused", "draining", "error"})
-KNOWN_WAITING_FOR = frozenset({"approval", "message", "timer"})
+#: `waiting[].waiting_for` — C3 `run_waiting.waiting_for`와 **같은 말**이다.
+WAITING_DELEGATION = "delegation"
+KNOWN_WAITING_FOR = frozenset({"approval", "message", "timer", WAITING_DELEGATION})
+#: 위임 결과의 `state` — 작업 ack와 **같은 값**이다 (C4). `finished`가 아니면 업무 실패다.
+KNOWN_DELEGATION_STATES = frozenset({"finished", "failed", "cancelled", "expired", "rejected"})
 KNOWN_MESSAGE_ACK_REASONS = frozenset({"no_receiver", "run_ended", "not_waiting", "duplicate"})
 #: 되살리지 못한 실행의 사유 (ADR-0054 — C5 `run_status`의 `error_code`로도 간다).
 KNOWN_RESTORE_REFUSALS = frozenset({"runner_restarted", "runner_version_changed", "snapshot_unreadable"})
@@ -128,7 +132,7 @@ class WaitingRun(ContractModel):
     """상태만 남고 **일꾼을 놓은** 실행 (ADR-0054 §1·§3).
 
     `waiting_for`에 따라 **짝이 되는 칸이 있어야 한다** — 결재는 `request_id`, 메시지는
-    `message_name`, 타이머는 `until`. `validate_heartbeat()`가 그것을 본다.
+    `message_name`, 타이머는 `until`, **PC 위임은 `job_id`**. `validate_heartbeat()`가 그것을 본다.
     """
 
     run_id: str
@@ -140,6 +144,8 @@ class WaitingRun(ContractModel):
     correlation: Any = None
     #: 타이머가 울릴 시각. **절대 시각이라 재시작을 넘어 간다** (ADR-0054 §1·§6).
     until: Timestamp | None = None
+    #: **PC 위임**으로 기다릴 때 그 작업 (ADR-0062). 짝 칸이라 그때는 비울 수 없다.
+    job_id: str | None = None
     since: Timestamp
 
 
@@ -150,6 +156,35 @@ class MessageAck(ContractModel):
     accepted: bool
     run_id: str | None = None
     reason: str | None = None  # 열린 문자열 (KNOWN_MESSAGE_ACK_REASONS)
+
+
+class DelegationAck(ContractModel):
+    """위임 결과 하나를 **받았다** (C12 §PC 위임, ADR-0062).
+
+    받으면 Center가 그 값을 지운다 — 업무 값이 Center에 남는 시간을 줄인다 (원칙 6의 예외는
+    **좁게** 쓴다). ack가 오기 전에는 매번 다시 내려온다 (작업·메시지와 같다).
+    """
+
+    job_id: str
+    accepted: bool = True
+
+
+class DelegationResult(ContractModel):
+    """끝난 PC 위임 하나 (C12 §PC 위임) — 하트비트 응답으로 내려간다.
+
+    **`outputs`가 업무 값이다** — 원칙 6의 명시한 예외이고, 올라오는 것은 그 Bot이 **선언한
+    `outputs`만**이다 (C1). `state`가 `finished`가 아니면 실행기가 오류 경계로 넘긴다.
+    """
+
+    job_id: str
+    #: 맡긴 **서버 실행** (어느 실행으로 돌려줄지 — C3 소유로 대조한 그 실행이다).
+    run_id: str
+    state: str  # 열린 문자열 (KNOWN_DELEGATION_STATES)
+    #: PC 실행이 돌려준 값. 실패·거절이면 비어 있다.
+    outputs: dict[str, Any] = Field(default_factory=dict)
+    reason: str | None = None
+    #: PC 쪽 실행 (CON-01에서 오갈 수 있게 — C3 `parent_run_id`의 반대 방향).
+    pc_run_id: str | None = None
 
 
 class ServerRunnerHeartbeatRequest(SchemaVersioned):
@@ -169,6 +204,7 @@ class ServerRunnerHeartbeatRequest(SchemaVersioned):
     job_acks: list[JobAck] = Field(default_factory=list)
     approval_acks: list[ApprovalAck] = Field(default_factory=list)
     message_acks: list[MessageAck] = Field(default_factory=list)
+    delegation_acks: list[DelegationAck] = Field(default_factory=list)
     deployment_results: list[DeploymentResult] = Field(default_factory=list)
     extensions: list[ExtensionState] = Field(default_factory=list)  # 바뀌었을 때만
     restored: list[str] = Field(default_factory=list)
@@ -202,6 +238,8 @@ class ServerRunnerHeartbeatResponse(ContractModel):
     cancel_jobs: list[str] = Field(default_factory=list)
     approvals: list[ApprovalDispatch] = Field(default_factory=list)
     messages: list[MessageDispatch] = Field(default_factory=list)
+    #: 끝난 **PC 위임**의 결과. ack가 올 때까지 다시 싣는다 (ADR-0062).
+    delegations: list[DelegationResult] = Field(default_factory=list)
     #: 참이면 **새 작업을 받지 않는다** (CON-12 「일시 중지」). 도는 것은 끝까지 간다.
     paused: bool = False
     #: 이 키의 만료 (C7). **주기마다 싣는다** (C4와 같다).
@@ -221,6 +259,35 @@ class MessageRequest(SchemaVersioned):
     correlation: Any = None
     payload: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = None
+
+
+class DelegationRequest(SchemaVersioned):
+    """`POST /api/v1/server-runner/delegations` — **PC 위임을 맡긴다** (ADR-0062).
+
+    **멱등 키와 `requested_by`는 본문에서 받지 않는다** — Center가 `run_id`·`node_id`·
+    `node_instance`로 짓는다(`dlg_…`). 부르는 쪽마다 짓는 규칙이 갈라지면 되살린 실행이
+    **같은 자리에서 작업을 두 번 만든다**.
+    """
+
+    #: 맡기는 서버 실행. **보낸 키의 실행이어야 한다** (C3 소유와 같은 대조).
+    run_id: str
+    node_id: str
+    node_instance: int = 1
+    bpm_process_id: str
+    #: 비우면 **배포된 판** (작업 지시와 같은 규칙 — 둘 이상이면 422).
+    version: str | None = None
+    #: 적으면 **그 PC로만** (그림의 `bot_ui` 식을 실행기가 값으로 푼 것).
+    bot_ui: str | None = None
+    inputs: dict[str, Any] = Field(default_factory=dict)
+
+
+class DelegationResponse(ContractModel):
+    """맡긴 결과 — **201이 새 작업, 200이 이미 만든 것**이다."""
+
+    job_id: str
+    #: Center가 고른 PC (또는 요청이 지정한 PC).
+    bot_ui_id: str
+    state: str  # C5 작업 상태 (열린 문자열)
 
 
 class MessageResponse(ContractModel):
@@ -269,7 +336,12 @@ class ServerRunnerInfo(ContractModel):
 # ─────────────────────────── 검사 ───────────────────────────
 
 #: `waiting_for` → 그 줄에 반드시 있어야 하는 칸 (C12 `waiting[]`).
-WAITING_REQUIRES = {"approval": "request_id", "message": "message_name", "timer": "until"}
+WAITING_REQUIRES = {
+    "approval": "request_id",
+    "message": "message_name",
+    "timer": "until",
+    WAITING_DELEGATION: "job_id",
+}
 
 
 def free_slots(capacity: Capacity, *, paused: bool = False) -> int:
@@ -414,14 +486,20 @@ __all__ += [
     "DEFAULT_HEARTBEAT_S",
     "DEFAULT_MAX_CONCURRENCY",
     "DEFAULT_PER_BOT_CONCURRENCY",
+    "KNOWN_DELEGATION_STATES",
     "KNOWN_MESSAGE_ACK_REASONS",
     "KNOWN_MESSAGE_TARGETS",
     "KNOWN_RESTORE_REFUSALS",
     "KNOWN_RUNNER_STATUSES",
     "KNOWN_WAITING_FOR",
     "OFFLINE_AFTER_S",
+    "WAITING_DELEGATION",
     "WAITING_REQUIRES",
     "Capacity",
+    "DelegationAck",
+    "DelegationRequest",
+    "DelegationResponse",
+    "DelegationResult",
     "MessageAck",
     "MessageDispatch",
     "MessageRequest",

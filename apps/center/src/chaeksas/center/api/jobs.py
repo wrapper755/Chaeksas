@@ -120,9 +120,18 @@ def _remembered(store: Store, *, owner: str, key: str, now: str) -> Any:
     return None
 
 
-def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[JobInfo, bool]:
-    """`POST /jobs`. 두 번째 값이 `False`면 멱등으로 돌려준 기존 작업이다 (200)."""
-    _scope(found, write=True)
+def create(
+    store: Store, found: Caller, raw: dict[str, Any], *, by_center: bool = False
+) -> tuple[JobInfo, bool]:
+    """`POST /jobs`. 두 번째 값이 `False`면 멱등으로 돌려준 기존 작업이다 (200).
+
+    **`by_center`는 Center 안에서 부를 때만 참이다** — 지금은 **PC 위임**뿐이다 (C12 §PC 위임,
+    ADR-0062). 권한표의 「작업은 관리자 토큰이나 연동용 키로 다룬다」는 **HTTP `POST /jobs`의
+    규칙**이고, 위임은 그 길이 아니라 `POST …/server-runner/delegations`로 들어와 **제 관문**을
+    이미 지났다(실행기용 키·등록된 실행기·그 실행의 소유). 여기서 또 막으면 위임이 설 수 없다.
+    """
+    if not by_center:
+        _scope(found, write=True)
 
     if "inputs" in raw and not isinstance(raw["inputs"], dict):
         # 계약이 코드를 따로 두었다 — 「뭐가 틀렸는지」를 부르는 쪽이 바로 알 수 있게 (C5).
