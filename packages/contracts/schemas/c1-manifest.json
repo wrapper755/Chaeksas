@@ -253,6 +253,13 @@
           "default": null,
           "title": "Core"
         },
+        "delegations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Delegations",
+          "type": "array"
+        },
         "domains": {
           "items": {
             "type": "string"

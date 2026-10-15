@@ -69,6 +69,8 @@ def collect_requires(
 
     `definitions`를 주면 **그 정의들만** 본다 (공유 BPM 프로세스 패키지는 고른 정의만 담는다).
     `inside`는 「이 패키지 안에 있는 정의 id」로, 그 밖을 부르면 `libs`가 된다.
+    **PC 위임은 그 셈에서 빠진다** — `chk:call.delegate`가 붙은 호출은 `delegations`로 가고
+    `libs`에 넣지 않는다 (복사해 넣는 것이 아니라 따로 배포된 Bot이다, ADR-0062).
 
     `task_type_locations`는 확장 호스트가 주는 `{종류: [실행 위치]}`다
     (`ExtensionHost.task_type_locations()`). **표에 없는 종류는 넣지 않는다** — 그림은 태스크
@@ -81,6 +83,7 @@ def collect_requires(
     task_types: dict[str, TaskTypeNeed] = {}
     extensions: dict[str, ExtensionNeed] = {}
     libs: set[str] = set()
+    delegations: set[str] = set()
     # **내 정의만** 「패키지 안」이다 — `processes()`는 받아 둔 `libs/`까지 주므로(ADR-0048)
     # 그것을 쓰면 설치한 호출이 「안쪽 호출」로 보여 `requires.libs`가 빈다.
     within = (
@@ -128,6 +131,21 @@ def collect_requires(
                     extension=task.extension,
                     run_locations=None if where is None else list(where),
                 )
+            sub_call = node.prop("call")
+            if sub_call is not None and sub_call.delegate is not None:
+                # **PC 위임은 `libs`가 아니다** (ADR-0062) — 복사해 넣는 것이 아니라 따로
+                # 배포된 Bot이다. `libs`에 넣으면 **없는 공유 BPM 프로세스를 요구하는 패키지**가
+                # 되어 설치가 막히고, R3이 「PC 정의를 부른다」고 읽는다.
+                #
+                # 판은 **적은 대로** 간다 — 비우면 「배포된 판」이라는 뜻이라(C14) 여기서
+                # 지어내지 않는다.
+                found_bot = sub_call.delegate
+                delegations.add(
+                    f"{found_bot.bpm_process_id}@{found_bot.version}"
+                    if found_bot.version
+                    else found_bot.bpm_process_id
+                )
+                continue
             if node.called_element and node.called_element not in within:
                 # **설치한 것은 판까지 적는다** (C1 `<id>@<version>`, ADR-0048) — 설치 기록이
                 # 어느 패키지가 그 정의를 주는지 안다. 설치되지 않은 호출은 id만 적히는데,
@@ -143,6 +161,7 @@ def collect_requires(
         task_types=[task_types[k] for k in sorted(task_types)],
         extensions=[extensions[k] for k in sorted(extensions)],
         libs=sorted(libs),
+        delegations=sorted(delegations),
     )
 
 

@@ -86,6 +86,7 @@ export interface ProvidedProcess {
  */
 export interface Requires {
   core?: string | null;
+  delegations?: string[];
   domains?: string[];
   extensions?: ExtensionNeed[];
   libs?: string[];
