@@ -521,7 +521,31 @@ def _apply_acks(store: Store, *, host_id: str, acks: list[JobAck]) -> set[str]:
             cur.execute(
                 f"UPDATE jobs SET {columns} WHERE job_id = ?", (*changes.values(), ack.job_id)
             )
+        _note_delegation(store, row=row, ack=ack)
     return touched
+
+
+def _note_delegation(store: Store, *, row: Any, ack: JobAck) -> None:
+    """끝난 작업이 **PC 위임**이면 결과를 담아 둔다 (C12 §PC 위임, ADR-0062).
+
+    담는 것은 **끝난 ack**뿐이다 — `started`·`queued`는 아직 결과가 아니고, 그때 담으면
+    기다리는 서버 실행이 **빈 값으로 이어 간다**.
+
+    `outputs`는 **위임일 때만** 쓴다 — 평범한 PC 작업이 값을 실어 보내도 `finish()`가 거짓을
+    돌려주고 그 값은 **어디에도 남지 않는다** (원칙 6의 예외는 좁게 쓴다).
+    """
+    if ack.result in STATE_ACKS:
+        return
+    from chaeksas.center.api import delegations  # noqa: PLC0415 — 순환 import를 피한다
+
+    delegations.finish(
+        store,
+        job_id=ack.job_id,
+        state=ack.result,
+        outputs=dict(ack.outputs),
+        reason=ack.reason,
+        pc_run_id=ack.run_id or (row["run_id"] if "run_id" in row.keys() else None),
+    )
 
 
 #: 작업 상태를 정하는 ack 결과 (C4). 나머지(`finished`·`failed`·모르는 값)는 **실행의**

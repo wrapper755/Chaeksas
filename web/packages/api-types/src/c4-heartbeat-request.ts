@@ -76,6 +76,9 @@ export interface ExtensionState {
  */
 export interface JobAck {
   job_id: string;
+  outputs?: {
+    [k: string]: unknown;
+  };
   position?: number | null;
   reason?: string | null;
   result: string;

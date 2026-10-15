@@ -192,6 +192,11 @@
           "title": "Job Id",
           "type": "string"
         },
+        "outputs": {
+          "additionalProperties": true,
+          "title": "Outputs",
+          "type": "object"
+        },
         "position": {
           "anyOf": [
             {

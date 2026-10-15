@@ -97,11 +97,18 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | Queue | `max`(int), `items`: `{queue_id, source, bpm_process_id, version?, job_id?, requested_at, expires_at?}`[] (순서대로) |
 | WorkerState | `state`(`running`\|`off`(필요할 때 시작, 아직 안 띄움)\|`restarting`\|`stopped`), `reserved_for`?(C10 예약 `run_id`), `version`, `restarts`(연속 재시작 횟수), `session`(`idle`\|`bot`\|`studio`\|`selector_registration`) |
 | Readiness | `bpm_process_id`, `version`, `ready`(bool), `missing_key_refs`(str[]), `blocked`(str[] — 사전 점검 막힘 코드) |
-| JobAck | `job_id`, `result`(`queued`\|`started`\|`rejected`\|`expired`\|`cancelled`\|`cancel_refused`), `position`?(queued일 때 대기열 순번), `run_id`?(started일 때), `reason`?(rejected일 때: `queue_full` `no_deployment` `not_ready` `bot_ui_shutdown` `server_location` `cancelled_on_pc`(현장에서 대기열 항목을 취소함); `cancel_refused`일 때: `already_started`) |
+| JobAck | `job_id`, `result`(`queued`\|`started`\|`rejected`\|`expired`\|`cancelled`\|`cancel_refused`), `position`?(queued일 때 대기열 순번), `run_id`?(started일 때), `reason`?(rejected일 때: `queue_full` `no_deployment` `not_ready` `bot_ui_shutdown` `server_location` `cancelled_on_pc`(현장에서 대기열 항목을 취소함); `cancel_refused`일 때: `already_started`), `outputs?`(**PC 위임이 돌려주는 값** — 아래) |
 | ApprovalAck | `request_id`, `accepted`(bool), `reason`? |
 | DeploymentResult | `deployment_id`, `bpm_process_id`, `version`, `result`(`applied`\|`rejected`), `reason`?, `at` |
 
 > 모든 값 목록(`status`, `state`, `source`, `result`, `reason`, `session` 등)은 **열린 문자열**이다. 위의 값은 알려진 값일 뿐이다 (README 원칙 10).
+
+**`JobAck.outputs`는 PC 위임만 쓴다** (C12 §PC 위임, [ADR-0062](../decisions/0062-pc-delegation.md)). 원칙 6의 **명시한 예외**라 좁게 쓴다.
+
+- **그 Bot이 선언한 `outputs`만** 싣는다 (C1 `outputs`) — 그 선언이 곧 「부르는 쪽이 받을 것」이고, 호출의 매핑(C14 `chk:call.output`)은 서버 그림에만 있어 PC는 모른다. 선언이 없으면 **아무것도 싣지 않는다**.
+- **끝났을 때만** 싣는다 (`finished`·`failed`… — 작업 상태를 옮기는 ack가 아닌 것들). `started`에 실어 보내면 기다리는 서버 실행이 **빈 값으로 이어 간다**.
+- **위임으로 받은 작업만**이다 (`requested_by`가 `server_bot:<run_id>`). 평범한 작업에 실어 보내도 **Center가 버린다** — 받을 쪽이 없다.
+- Center는 받은 값을 그 서버 실행기에게 **하트비트로 내려 주고 ack가 오면 지운다** (C12).
 
 ### HeartbeatResponse
 
@@ -213,6 +220,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-15 | 1 | `JobAck`에 선택 칸 **`outputs`**를 더했다 — **PC 위임이 돌려주는 값**이다 (원칙 6의 명시한 예외: 선언한 `outputs`만·끝난 ack만·위임 작업만). 선택 칸이라 **옛 Bot UI는 그대로 돈다** | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-14 | 1 | **Bot UI의 멱등 기억도 서버 실행기와 같은 규칙이다** ([ADR-0057](../decisions/0057-shared-seen-map.md)·[0056](../decisions/0056-bounded-seen-maps.md)) — 이미 본 작업의 마지막 ack는 **닿은 뒤 두 주기**에 잊고 **닿지 않은 ack는 버리지 않는다**. 전에는 넣은 순서로 잘라, 한 주기에 상한을 넘게 받으면 올리지 못한 ack가 버려지고 다시 내려온 작업이 「처음 본 것」이 되어 **대기열에 두 번** 들어갈 수 있었다. 계약 본문은 그대로다 (받는 쪽 규칙) | 0057 |
 | 2026-10-11 | 1 | 등록·하트비트 응답에 **`key_expires_at`**을 더했다 — 키 만료일은 Center만 알아 BUI-05 「Center API 키 만료 임박」이 띄울 값이 없었다 (09-gaps §4-8). 선택 칸이고 **주기마다 싣는다**(늘어난 기간을 바로 알게). 없으면 「만료 없음」이다 | 0013 |
 | 2026-10-01 | 1 | 초안 | 0012, 0013, 0014 |

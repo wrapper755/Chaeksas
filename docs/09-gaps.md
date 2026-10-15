@@ -57,7 +57,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | ~~C14~~ | **닫았다** — `chk:call.delegate`, B14 둘(**`server`에서만**·위임 호출은 패키지 안에서 찾지 않는다), 시험 케이스의 `delegations`, `bot_ui` 식을 읽기로 세는 것. 엔진은 아직 **설치 오류로 멈춘다**(맡길 포트가 없다 — 폴백을 두지 않았다). **`delegated_outputs`를 주는 쪽이 아직 없다** — Studio가 Center에서 그 Bot의 매니페스트를 읽어 주는 것이 Studio 조각이고, 주지 않으면 그 대조만 건너뛴다 |
 | ~~C1~~ | **닫았다** — `requires.delegations`, **R10**(위임은 `run_location=server`만), R3 사유 글. Studio가 그림에서 모으고 **`libs`에 넣지 않는다**(복사해 넣는 것이 아니다 — 넣으면 없는 공유 BPM 프로세스를 요구하는 패키지가 된다) |
 | ~~C12~~ | **닫았다 (Center 쪽)** — 위임 요청(`POST …/server-runner/delegations`: Center가 PC를 고르고 **`POST /jobs`와 같은 함수**로 작업을 만든다), 결과 내려주기·ack·값 지우기, `waiting[]`의 `delegation` 갈래와 짝 칸 `job_id`, 배포 때 「그 Bot이 승인되어 있나」(422 `delegation_not_approved`). **실행기 쪽은 아직이다** — `RunEnv.delegate` 포트·네 번째 기다림·결과 받기가 다음 조각이고, **결과를 올리는 쪽은 C4**다(그 자리는 `delegations.finish()`로 비워 두었다) |
-| C4 | 작업 ack에 **그 Bot이 선언한 `outputs`** (원칙 6의 예외 — ack와 함께 지운다) |
+| ~~C4~~ | **닫았다 (계약·Center 쪽)** — `JobAck.outputs`(선언한 `outputs`만·끝난 ack만·위임 작업만)와 받아서 담는 자리. 위임이 아닌 작업의 값은 **어디에도 남지 않는다**. **현장에서 값을 ack로 옮기는 길이 남았다** — 실행 변수를 아는 것은 자식 프로세스(실행기)이고 올라오는 길은 실행 기록뿐인데 거기엔 업무 값이 없다(원칙 6). 결재 요청이 그랬듯 **`runs/<run_id>.outputs.json`을 따로 쓰고 Bot UI가 올린 뒤 지우는** 모양이 맞다 ([ADR-0038](decisions/0038-approval-request-channel.md)과 같은 결) — **위임으로 받은 작업만** 그 파일을 쓴다(평범한 실행의 값을 디스크에 남기지 않는다) |
 | C3 | `run_waiting`의 선택 칸 `job_id`, 그리고 예약 셋 풀기(`source: delegation`·`parent_run_id`·`waiting_for: delegation`) |
 
 **값이 Center를 지나가는 것**이 이 거리의 값이다 (C6 `review`·`answer`에 이어 둘째 예외다). 코드 쪽은 엔진의 **네 번째 기다림**(`WAIT_DELEGATION`)과 `RunEnv.delegate` 포트 둘(서버 실행기·Studio)이다.
