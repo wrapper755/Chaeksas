@@ -20,6 +20,8 @@ import httpx
 
 from chaeksas.contracts.resources import ExtensionResource, ServiceAppResource
 from chaeksas.contracts.server_runner import (
+    DelegationRequest,
+    DelegationResponse,
     ServerRunnerHeartbeatRequest,
     ServerRunnerHeartbeatResponse,
     ServerRunnerRegisterRequest,
@@ -171,6 +173,18 @@ class CenterClient:
         않는다** (부르는 쪽이 그렇게 다룬다 — 한 번 거부된 것이 큐를 영원히 막는다).
         """
         return self._send("", body, api=APPROVALS)
+
+    def create_delegation(self, request: DelegationRequest) -> DelegationResponse:
+        """PC 위임을 맡긴다 (C12 §PC 위임, ADR-0062). 돌려주는 것은 **그 작업**이다.
+
+        **멱등 키와 `requested_by`는 본문에 없다** — Center가 `run_id`·`node_id`·
+        `node_instance`로 짓는다. 그래서 되살린 실행이 같은 자리에서 다시 맡겨도 **같은
+        작업이 돌아온다**(200). 이쪽은 201·200을 가리지 않는다 — 어느 쪽이든 그 작업을
+        기다리면 된다.
+        """
+        return DelegationResponse.model_validate(
+            self._send("/delegations", request.to_json_dict())
+        )
 
     def service_apps(self) -> list[ServiceAppResource]:
         """서비스 앱 리소스 목록 (C7 `GET /resources?type=service_app`) — **주소의 유일한 출처**다.

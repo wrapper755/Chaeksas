@@ -40,7 +40,7 @@ from chaeksas.core.packages import InstalledBot, UnusablePackage
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.core.run_shipping import read_sent
 from chaeksas.core.run_snapshot import SnapshotMismatch, dump, restore
-from chaeksas.core.run_state import WAIT_MESSAGE, new_run_id
+from chaeksas.core.run_state import WAIT_DELEGATION, WAIT_MESSAGE, new_run_id
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +53,8 @@ TICK_S = 0.2
 WAITING_APPROVAL = "approval"
 WAITING_MESSAGE = "message"
 WAITING_TIMER = "timer"
+#: **PC 위임**을 기다린다 (ADR-0062). 짝 칸은 `job_id`다.
+WAITING_DELEGATION = "delegation"
 
 #: C3 `run_resumed.reason` — **무엇이 깨웠나** (열린 문자열의 알려진 값).
 RESUME_ANSWER = "answer"
@@ -60,6 +62,8 @@ RESUME_MESSAGE = "message"
 RESUME_TIMER = "timer"
 RESUME_RESTART = "restart"
 RESUME_WITHDRAW = "withdraw"
+#: PC 위임의 결과가 돌아왔다 (ADR-0062 — C3 `KNOWN_RESUME_REASONS`에 함께 더했다).
+RESUME_DELEGATION = "delegation"
 
 #: 아무것도 돌지 않은 실행의 셈 (C3 `run_finished`의 필수 칸). **빠뜨리면 그 줄이 거부된다.**
 EMPTY_COUNTS: dict[str, Any] = {
@@ -298,6 +302,42 @@ class Worker:
         self._continue(run, RESUME_TIMER)
         return True
 
+    def delegation_done(
+        self,
+        job_id: str,
+        *,
+        state: str,
+        outputs: Mapping[str, Any] | None = None,
+        reason: str | None = None,
+    ) -> None:
+        """**PC 위임이 끝났다** — 결과를 넣고 이어 간다 (C12 §PC 위임, ADR-0062).
+
+        `finished`가 아니면 엔진이 **업무 실패**로 올려 오류 경계가 받는다 — 이쪽은 가리지
+        않는다 (결재 답과 회수를 가르는 것과 달리 길이 하나다).
+
+        `job_id`는 **C12의 전송 이름이면서 기다림의 짝 칸**이다 (`message_id`와 다르다 —
+        그것은 엔진에 넘기지 않았다). 그래서 스냅샷과 함께 가고, 되살린 실행도 **어느 작업을
+        기다리는지 안다**.
+        """
+        run = self.run
+        if run is None:  # pragma: no cover - 부르는 쪽이 먼저 찾는다
+            raise RuntimeError("되살리지 않은 실행에 위임 결과를 넣을 수 없다")
+        self.engine.delegation_done(run, job_id, state=state, outputs=outputs, reason=reason)
+        self._continue(run, RESUME_DELEGATION)
+
+    def waits_for_delegation(self, job_id: str) -> bool:
+        """그 위임을 기다리고 있나 — **넣어 보지 않고** 묻는다 (`waits_for_message`와 같은 결).
+
+        엔진도 같은 것을 보지만(`delegation_done`) 그쪽은 아니면 예외다 — 부르는 쪽은
+        「지나간 자리인가」를 **조용히** 알아야 ack를 가를 수 있다.
+        """
+        run = self.run
+        if run is None:
+            return False
+        return any(
+            one.kind == WAIT_DELEGATION and one.job_id == job_id for one in run.waits.values()
+        )
+
     def waits_for_message(self, name: str, *, correlation: Any = None) -> bool:
         """그 메시지를 기다리고 있나 — **넣어 보지 않고** 묻는다 (빈자리를 먼저 세려고)."""
         run = self.run
@@ -440,11 +480,15 @@ class Worker:
         if row is None:
             return
         data: dict[str, Any] = {"waiting_for": row.waiting_for}
-        # **짝이 되는 칸만** (C3 선택 칸은 `request_id`·`until` 둘이다).
+        # **짝이 되는 칸만** (C3 선택 칸은 `request_id`·`until`·`job_id` 셋이다).
         if row.request_id:
             data["request_id"] = row.request_id
         if row.until:
             data["until"] = row.until
+        if row.waiting_for == WAITING_DELEGATION and row.job_id:
+            # **`running[].job_id`와 다른 것이다** — 그것은 이 실행을 만든 작업이고 이것은
+            # 이 실행이 **맡긴** 작업이다 (ADR-0062). 위임일 때만 적는다.
+            data["job_id"] = row.job_id
         run.log.emit("run_waiting", node_id=self._node_id(run), **data)
 
     def _emit_resumed(self, run: Run, reason: str) -> None:
@@ -591,6 +635,14 @@ class Worker:
                     message_name=found.name,
                     correlation=found.correlation,
                 )
+        # **타이머보다 먼저 본다** — 위임한 호출에 타이머 경계를 달면(업무 기한은 그림이
+        # 맡는다, ADR-0062 §2) 멈춘 동안 그 타이머가 켜져 있다. 아래의 `next_due()`가 먼저
+        # 답하면 「무엇을 기다리나」가 `timer`가 되어 Center가 결과를 내려줄 곳을 모른다.
+        for found in run.waits.values():
+            if found.kind == WAIT_DELEGATION:
+                return WaitingRun(
+                    **common, waiting_for=WAITING_DELEGATION, job_id=found.job_id
+                )
         due = run.next_due()
         if due is not None:
             return WaitingRun(**common, waiting_for=WAITING_TIMER, until=due.isoformat())
@@ -619,6 +671,7 @@ __all__ = [
     "ACK_FINISHED",
     "ACK_STARTED",
     "RESUME_ANSWER",
+    "RESUME_DELEGATION",
     "RESUME_MESSAGE",
     "RESUME_RESTART",
     "RESUME_TIMER",
@@ -626,6 +679,7 @@ __all__ = [
     "STEPS_PER_TICK",
     "TICK_S",
     "WAITING_APPROVAL",
+    "WAITING_DELEGATION",
     "WAITING_MESSAGE",
     "WAITING_TIMER",
     "Snapshot",

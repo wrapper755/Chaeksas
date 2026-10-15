@@ -52,7 +52,7 @@
 | `human_timeout` | 시간 초과 | `request_id` | |
 | `human_withdrawn` | 답 없이 끝남 — Center에서 회수되었거나 만료됨 (C6, [ADR-0038](../decisions/0038-approval-request-channel.md)) | `request_id`, `reason`(`admin_withdraw`\|`expired`\|`host_lost`, 열린 문자열) | |
 | `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`\|**`delegation`**) | `request_id`, `until`, `job_id`(**위임일 때 그 작업** — C12 `waiting[]`의 짝 칸과 같다) |
-| `run_resumed` | (서버) 저장된 실행을 이어 감 | `after_s` | `reason`(`answer`\|`message`\|`timer`\|`restart`\|`withdraw`) |
+| `run_resumed` | (서버) 저장된 실행을 이어 감 | `after_s` | `reason`(`answer`\|`message`\|`timer`\|`restart`\|`withdraw`\|**`delegation`**(PC 위임의 결과가 돌아왔다, [ADR-0062](../decisions/0062-pc-delegation.md))) |
 | `run_finished` | 실행 끝 (항상 마지막) | `status`(`success`\|`failed`\|`cancelled`), `duration_s`, `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | `error_code`, `error_message`(한 줄), `confirmations` |
 
 - **`human_requests`는 결재와 확인을 합친 수**다. 확인만 따로 세는 `confirmations`는 **선택 칸**이다 — 아는 쪽(보내는 쪽)이 `human_requested`의 `layer`로 센다. **옛 Bot UI는 넣지 않고**, 받는 쪽은 그때 「확인만은 모른다」로 다룬다(0으로 보지 않는다 — 「확인이 없었다」와 「세지 않았다」는 다르다). 결재 수는 `human_requests - confirmations`다 (칸을 둘 두지 않는다).
@@ -154,6 +154,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-15 | 1 | **PC 위임을 기다리다 이어 가는 쪽이 생겼다** (서버 실행기) — `run_resumed.reason`의 아는 값에 **`delegation`**을 더했다. 실패·거절로 돌아와 오류 경계로 가는 길도 「이어 간 것」이라 같은 까닭을 쓴다 (`withdraw`와 같은 결). 열린 문자열이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **PC 위임의 예약을 풀었다** — `source: delegation`·`parent_run_id`·`waiting_for: delegation`이 이제 아는 값이고, `run_waiting`에 선택 칸 `job_id`(C12 짝 칸과 같은 것)를 적었다. `RunInfo.parent_run_id`를 더해 **CON-01이 서버 실행 ↔ PC 실행을 오간다** — Center가 `run_started`에서 읽어 담는다. 선택 칸이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **`run_waiting`·`run_resumed`를 내보내는 쪽이 생겼다** (서버 실행기) — 형식은 그대로이고, 적은 것은 **짝 규칙**(짝이 없으면 보내지 않는다)·**`after_s`는 보내는 쪽이 센다**·**한 배치에 둘이 함께 온다**다. `run_resumed.reason`의 아는 값에 `withdraw`를 더했다 (결재 회수로도 이어 간다 — [ADR-0038](../decisions/0038-approval-request-channel.md)). 열린 문자열이라 받는 쪽은 그대로 돈다 | — |
 | 2026-10-11 | 1 | `run_finished`에 선택 칸 **`confirmations`**(결재와 확인을 가르는 셈)를, `RunInfo`에 **`confirmations`·`bot_ui_id`**와 목록 좁히기 `bot_ui_id`를 더했다 — CON-02 「확인률」과 CON-01 「Bot UI」 필터가 읽을 자리가 없었다 (09-gaps §4-9·§4-11). 셈은 **보내는 쪽**이 세고, `bot_ui_id`는 **Center가 읽을 때** 채운다(본문으로 받지 않는다 — 신원은 키다). 둘 다 선택 칸이라 받는 쪽·보내는 쪽 모두 그대로 돈다 | — |
