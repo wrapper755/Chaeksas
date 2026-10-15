@@ -167,6 +167,11 @@ class Agent:
     #: 틈」(ADR-0058)이 여기서는 생기지 않는다: 그 틈에서 죽으면 되살린 실행은 **다시 그
     #: 위임을 기다리는 자리**이고, Center도 ack를 못 받았으니 같은 결과를 다시 내려 준다.
     seen_delegations: Seen[DelegationAck] = field(default_factory=Seen)
+    #: 거둬야 할 위임 작업 (ADR-0062 §5) — 서버 실행이 취소되면 그 PC 작업도 취소한다.
+    #: **올릴 때까지 들고 있는다**(닿지 못하면 다음 주기에 다시 건다) — 거두지 못하면 PC가
+    #: **받을 쪽이 없는 일**을 한다. 메모리뿐이다: 취소된 실행은 담아 둔 것도 지워져서
+    #: 다시 뜬 실행기는 그 작업 id를 알 길이 없다 (그 값은 7일에 Center가 지운다).
+    pending_cancels: list[str] = field(default_factory=list)
 
     @property
     def registered(self) -> bool:
@@ -286,6 +291,8 @@ class Agent:
         # **하트비트 뒤에** 한다 (C3 §전송·ADR-0038) — 실행 중에 보내면 느린 Center가 업무를
         # 붙잡는다. 결재를 먼저 올려야 다음 주기에 답이 내려올 수 있다.
         self.post_approvals()
+        # **하트비트 뒤에** 거둔다 (결재 올리기와 같은 자리) — 업무를 붙잡지 않는다.
+        self.cancel_delegations()
         self.ship_events()
         # **하트비트 뒤에 깨운다** (ADR-0061) — 깨운 실행은 그 자리에서 돌기 시작하고 **다음
         # 주기의 `running[]`**에 올라간다 (지금 보낸 보고를 뒤늦게 고치지 않는다).
@@ -641,11 +648,38 @@ class Agent:
                     JobAck(job_id=job_id, result="cancel_refused", reason="already_started")
                 )
                 return
+            # **중지를 부탁하기 전에 읽는다** — `Engine.cancel`이 기다림을 비운다 (ADR-0062 §5).
+            self.pending_cancels.extend(found.delegation_jobs())
             found.stop(reason="Center에서 취소했습니다")
             log.info("작업 %s 취소를 실행 %s에 넘겼다", job_id, run_id)
             return
         # 모르는 작업이다 — 받은 적이 없으면 **취소된 것으로** 답한다 (두 번 돌지 않게).
         self._remember_ack(JobAck(job_id=job_id, result="cancelled"))
+
+    def cancel_delegations(self) -> int:
+        """맡긴 위임을 Center에서 거둔다 (ADR-0062 §5). 거둔 수를 돌려준다.
+
+        **4xx는 다시 걸지 않는다** — 이미 시작됐거나(거절) 모르는 작업이다. 둘 다 답이고,
+        다시 걸면 Center 로그만 쌓인다 (결재 올리기와 같은 결). **닿지 못한 것은 들고 있는다.**
+        """
+        if not self.pending_cancels:
+            return 0
+        left: list[str] = []
+        done = 0
+        for job_id in self.pending_cancels:
+            try:
+                self.client.cancel_delegation(job_id)
+            except CenterProblem as e:
+                if e.status is not None and 400 <= e.status < 500:
+                    log.info("위임 %s를 거두지 못했다 (%s) — 다시 걸지 않는다", job_id, e)
+                    continue
+                log.info("위임 %s를 거두지 못했다 — 다음 주기에 (%s)", job_id, e)
+                left.append(job_id)
+                continue
+            done += 1
+            log.info("위임 %s를 거뒀다 (서버 실행이 취소됐다)", job_id)
+        self.pending_cancels = left
+        return done
 
     # ── 결재 (C6 — 서버의 창구는 Center만이다) ──
 

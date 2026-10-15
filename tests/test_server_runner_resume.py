@@ -570,3 +570,38 @@ def test_an_unreadable_snapshot_is_not_restored(
     second.tick()
     assert second.restored == [] and second.workers == {}
     assert store.get(run_id) is None
+
+
+def test_cancelling_a_waiting_run_really_closes_it(
+    center: TestClient,
+    center_store: CenterStore,
+    settings: Settings,
+    key: str,
+    store: Store,
+) -> None:
+    """**기다리는 실행도 정말 닫힌다** (ADR-0054 §5) — 중지를 부탁할 상대가 없다.
+
+    기다리는 실행은 스레드를 놓으므로(자리를 쥐지 않는다) 깃발만 세워 두면 **볼 사람이
+    없어** 그 실행은 영원히 기다리고 Center의 작업도 `accepted`로 남는다. 그래서 도는 스레드가
+    없을 때는 **부르는 쪽이 그 자리에서** 닫는다 (답·메시지를 넣는 것과 같은 자리다).
+
+    그리고 **취소는 실패가 아니다** (C3) — 끝난 방식은 **기록에서 읽는다**. 엔진은 성공만
+    `DONE`으로 앉히고 취소도 `FAILED`라, 상태만 보면 작업 ack가 `cancelled`를 잃는다 (C4).
+    """
+    from chaeksas.server_runner.worker import ACK_CANCELLED
+
+    found = runner_of(settings, key, center, store)
+    ready(center, center_store, found)
+    made = make_job(center)
+    run_id = until_waiting(found)
+    assert found.free_slots() == settings.max_concurrency, "기다리는 실행은 자리를 쥐지 않는다"
+
+    found.cancel_job(str(made["job_id"]))
+
+    worker = found.workers[run_id]
+    assert worker.snapshot().finished == "cancelled", "부탁만 해 두고 끝내지 않았다"
+    assert worker.ack_result() == ACK_CANCELLED
+    # 담아 둔 것도 지워진다 — 다시 떠도 되살릴 것이 없다.
+    assert store.get(run_id) is None
+    (last,) = [one for one in lines(settings, run_id, "run_finished")]
+    assert last["status"] == "cancelled"

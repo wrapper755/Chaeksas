@@ -186,6 +186,14 @@ class CenterClient:
             self._send("/delegations", request.to_json_dict())
         )
 
+    def cancel_delegation(self, job_id: str) -> dict[str, Any]:
+        """맡긴 위임을 거둔다 (`POST …/delegations/{job_id}/cancel`, ADR-0062 §5).
+
+        **이미 시작된 PC 실행은 거절된다** (C5 — 작업은 `accepted`로 남는다). 그것도 답이므로
+        부르는 쪽은 다시 걸지 않는다.
+        """
+        return self._send(f"/delegations/{job_id}/cancel", {})
+
     def service_apps(self) -> list[ServiceAppResource]:
         """서비스 앱 리소스 목록 (C7 `GET /resources?type=service_app`) — **주소의 유일한 출처**다.
 

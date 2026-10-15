@@ -44,6 +44,7 @@ from chaeksas.contracts.server_runner import DelegationResult
 from chaeksas.contracts.signing import sign
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.server_runner import agent as agent_mod
+from chaeksas.server_runner.center_client import Unreachable
 from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Store
 
@@ -744,3 +745,85 @@ def test_the_field_outputs_reach_the_server_variables(
     assert run is not None
     assert run.variables["입력결과"] == f"OK-{CLAIM}"
     assert run.variables["마무리"] == f"OK-{CLAIM}-확인", "위임 뒤의 걸음이 그 값을 쓴다"
+
+
+# ─────────────────────────── 서버 실행이 취소되면 맡긴 것도 거둔다 (ADR-0062 §5) ───────────────────────────
+
+#: **취소 지시를 Center에서 끌어낼 수 없다** — 서버 작업은 실행이 시작되면 `accepted`이고
+#: C5가 「시작된 작업의 취소는 거절」이라 `cancel_jobs`에 실리지 않는다 (09-gaps §3-13에 적었다).
+#: 그래서 시험은 **Center가 말해 준 것처럼** 실행기의 그 자리를 바로 부른다 — 길이 생기는
+#: 날(중지 경로·운영자 중지) 이 가지가 그대로 돈다.
+
+
+def test_cancelling_the_server_run_revokes_the_pc_job(
+    center: TestClient, private: Any, runner: agent_mod.Agent
+) -> None:
+    """서버 실행이 취소되면 **그 위임 작업도 거둔다** — PC가 받을 쪽 없는 일을 하지 않는다.
+
+    **기다리는 실행도 정말 닫힌다** (ADR-0054 §5) — 스레드를 놓았으므로 부탁만 해 두면 볼
+    사람이 없어 영원히 기다린다. 거둘 작업은 **기다림이 걷히기 전에** 읽어야 한다
+    (`Engine.cancel`이 비운다).
+    """
+    ready(center, private, runner)
+    job_id = make_job(center)
+    run_id = until_waiting_for_delegation(runner)
+    delegated_job = str(waiting_row(center)["job_id"])
+
+    runner.cancel_job(job_id)  # Center가 취소를 내려보낸 자리다
+
+    # ① 서버 실행이 **정말 끝났다** (부탁만 해 두지 않는다).
+    assert runner.workers[run_id].snapshot().finished == "cancelled"
+    (one,) = lines(runner.settings, run_id, "run_finished")
+    assert one["status"] == "cancelled"
+
+    # ② 맡긴 PC 작업이 거둬졌다 (하트비트 뒤에 거둔다).
+    assert runner.pending_cancels == [delegated_job], "거둘 것을 기다림이 걷히기 전에 읽는다"
+    runner.tick()
+    assert runner.pending_cancels == []
+    revoked = center.get(f"/api/v1/jobs/{delegated_job}", headers=ADMIN).json()
+    assert revoked["state"] == "cancelled"
+
+
+def test_a_pc_job_that_already_started_is_left_alone(
+    center: TestClient, private: Any, runner: agent_mod.Agent
+) -> None:
+    """**이미 시작된 PC 실행은 끝까지 간다** (C5) — 거절도 답이라 다시 걸지 않는다."""
+    bot_ui_id = ready(center, private, runner)
+    job_id = make_job(center)
+    until_waiting_for_delegation(runner)
+    delegated_job = str(waiting_row(center)["job_id"])
+    pc_beat(
+        center,
+        bot_ui_id,
+        job_acks=[{"job_id": delegated_job, "result": "started", "run_id": "run_20261015_100000_bbbbbb"}],
+    )
+
+    runner.cancel_job(job_id)
+    runner.tick()
+
+    assert runner.pending_cancels == [], "4xx는 다시 걸지 않는다"
+    kept = center.get(f"/api/v1/jobs/{delegated_job}", headers=ADMIN).json()
+    assert kept["state"] == "accepted", "시작된 PC 실행을 멈추지 않는다"
+
+
+def test_a_cancel_that_did_not_reach_center_is_tried_again(
+    center: TestClient, private: Any, runner: agent_mod.Agent, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """닿지 못한 것은 **들고 있다 다시 건다** (ADR-0007) — 거두지 못하면 PC가 헛일을 한다."""
+    ready(center, private, runner)
+    job_id = make_job(center)
+    until_waiting_for_delegation(runner)
+    delegated_job = str(waiting_row(center)["job_id"])
+
+    runner.cancel_job(job_id)
+
+    def unreachable(_: str) -> dict[str, Any]:
+        raise Unreachable("Center에 닿지 못했습니다")
+
+    monkeypatch.setattr(runner.client, "cancel_delegation", unreachable)
+    runner.tick()
+    assert runner.pending_cancels == [delegated_job], "닿지 못한 것을 버렸다"
+
+    monkeypatch.undo()
+    assert runner.cancel_delegations() == 1
+    assert center.get(f"/api/v1/jobs/{delegated_job}", headers=ADMIN).json()["state"] == "cancelled"
