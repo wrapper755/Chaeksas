@@ -46,7 +46,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열넷의 상태는 §1 표에 있다. **남은 것이 없다** — 마지막 거리였던 PC 위임도 닫았고(§3-13), 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로 닫았다.
+계약 열넷의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로 닫았다. **남은 것은 §3-14 하나**이고 **지금은 닿을 수 없는 자리**다 (서버에서 돌 확장 태스크가 아직 없다).
 
 ### 3-13. PC 위임 — **닫았다**
 
@@ -92,6 +92,28 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
   영원히 기다리고 작업도 `accepted`로 남는다. 도는 스레드가 없을 때는 **부르는 쪽이 그 자리에서**
   닫는다 (답·메시지를 넣는 것과 같은 자리다, ADR-0054 §5).
 
+### 3-14. 서버 실행기가 **확장 태스크를 꽂지 않는다** (지금은 닿을 수 없다)
+
+§5의 「`HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`는 M7이 쓸 상수다」를 대조하다 찾았다
+(2026-10-16). 서버 실행기의 `run_env()`는 `make_env(extensions=…)`를 **주지 않고**, 사전 점검도
+`host=None`으로 돌려 **확장 점검을 건너뛴다**(그 docstring에 「확장 점검은 아직 없다」고 적혀
+있다). 그래서 확장 태스크(`chk:task`)가 든 서버 Bot은 **배포·시작까지 가서 실행 중에**
+`node_kind_unsupported`로 죽는다 — `not_ready`로 미리 거절하는 길이 없다.
+
+**지금은 닿을 수 없다** — 그래서 급하지 않다:
+
+- 내장 확장은 `ui-automation` 하나이고 그 태스크 종류(`ui_task`)는 **PC 전용**이다 (C1 R2·B6이
+  서버 그림에서 막는다).
+- 업무 예제 50개 중 **실행 위치가 `server`인 것에 `chk:task`가 하나도 없다** (grep으로 확인).
+- 외부 확장은 **코드를 기여할 수 없어**(C13 E1) 어댑터로만 붙는다 — 그 길은 이미 돈다
+  (`RoutedCaller`).
+
+**먼저 정할 것이 하나 있다** — 서버에서 돌 확장 태스크의 **로컬 런타임**을 누가 띄우나 (C13
+`local_runtimes`는 Bot UI가 띄우는 것으로 적혀 있다: 포트·토큰 파일·예약까지). 서버에서는
+Bot UI가 없으므로 ① 실행기가 같은 일을 하거나 ② 런타임 없는 태스크만 서버에 허용하거나
+(`run_locations`에 `server`를 적은 종류는 런타임을 요구하지 못하게) 둘 중 하나를 정해야 한다.
+**그것을 정하기 전에 코드를 넣으면** 「서버에서는 되는데 PC에서 안 된다」의 새 원천이 된다.
+
 **닫은 것들** — §3-12(타이머로 깨우는 자리)는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)로 닫았다(하트비트가 쓸어서 깨우고 자리가 있을 때만 — 기한은 「그 시각 이후」다). 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
 
 ## 4. 화면 쪽 기능 공백
@@ -120,10 +142,9 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 5. 공백은 아니지만 적어 둘 것
 
-- **쓰지 않는 편의 접근자 셋** — `ExtensionHost.studio_editors()`(호출자 **아예 없음**, Studio는 단수 `editor(task_type)`를 쓴다), `adapter_operations()`(`AdapterCaller`가 `definitions`를 직접 본다), `secret_config_keys()`(`credentials.py`가 `configuration()`을 제 손으로 거른다). 기능 공백이 아니다 — **지울지 쓸지만 정하면 된다.**
-- `extension_api`의 `HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`는 M7이 쓸 상수다 (지금 호출자 없음, 정상).
-- `SEVERITY_INFO`는 아무도 쓰지 않는다 (`SEVERITY_BLOCK`·`SEVERITY_WARN`만 쓴다).
-- **C1의 「아는 값」 중 둘은 아직 호출자가 없다** — `KNOWN_SETTINGS`·`KNOWN_BUILT_BY`. `KNOWN_TRIGGER_KINDS`는 **쓰는 쪽을 만들었고**(R9, 2026-10-12 — 아무도 검사하지 않는 동안 Studio가 `schedule`·`manual`을 올려 **올라간 모든 패키지의 `triggers`가 계약에 없는 값을 담고 있었다**), `KNOWN_DOMAINS`는 C14 **B8**이 그림에서 쓴다. 남은 둘을 같이 묶지 않은 까닭은 **막는 것이 틀려서**다 — `built.by`는 우리가 모르는 빌더가 적을 수 있어 **열린 문자열이 맞다**(막으면 남의 도구로 만든 올바른 패키지를 거부한다), `settings`는 아직 읽는 쪽이 없다.
+- **편의 접근자 둘을 지웠다** (2026-10-16) — `ExtensionHost.adapter_operations()`(창·어댑터는 정의의 `m.adapter.operations`를 직접 읽는다)와 `secret_config_keys()`(`credentials.py`가 `configuration()`에 `.secret`을 걸어 본다). **쓰는 길이 둘이면 한쪽만 고친다.** 함께 적어 둔 `studio_editors()`는 **쓰인다** — `editor(task_type)`가 그것을 부른다(단수 메서드 뒤에 있어 「호출자 없음」으로 잘못 적혀 있었다). 시험은 **제품이 쓰는 길**로 고쳐 같은 것을 본다.
+- **C1의 「아는 값」 둘을 정했다** (2026-10-16) — `KNOWN_SETTINGS`는 **쓰는 쪽을 만들었다**(R11: `requires.settings`가 아는 값인가 — R9와 같은 까닭이고, 지금 Studio가 넣는 것은 `smtp` 하나뿐이라 올라간 패키지는 다 지난다). `KNOWN_BUILT_BY`는 **검사하지 않는 쪽으로 정했다** — 남의 도구로 만든 올바른 패키지를 거부하게 되므로 열린 문자열이 맞다. 그 까닭을 **상수 옆에 적어** 두어 다음 사람이 「검사가 없다」고 또 적지 않게 했다.
+- **`extension_api`에 우리 호출자가 없는 상수들은 정상이다** (`SEVERITY_INFO`·`HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`) — 그 패키지는 **확장 저자에게 주는 API**(C13)다. 우리 코드가 다 쓰는지로 셈하지 않는다.
 - **도메인 목록의 정의는 `manifest.py` 하나다** — `KNOWN_DOMAINS`·`PC_ONLY_DOMAINS`를 `bpmn_ext`(C14 B8·B6)와 `core`(사전 점검·AI 태스크)가 import해 쓴다. 자리가 C1 쪽인 것은 층 때문이다 (`bpmn_ext`가 `manifest`를 import하므로 거꾸로는 순환이다). **두 벌로 되돌리지 않는다** — 값이 같고 거르는 자리만 다른 목록이 둘이면 조용히 갈라진다(`triggers[].kind`가 그랬다). `tests/test_contracts_bpmn_ext.py`가 **같은 객체인지**(`is`) 본다.
 - C13 `docs_url`·`owners`, C11 `Operation.json_schema`는 콘솔이 보이지 않는 선택 칸이다. 작고 급하지 않다.
 

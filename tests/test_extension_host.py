@@ -114,9 +114,13 @@ def test_other_contribution_points(host: ExtensionHost) -> None:
     assert [c.value.id for c in host.preflight()] == ["pages-registered"]
     assert [c.value.key for c in host.configuration(scope="bot_ui")] == ["registrar_key"]
     assert host.configuration(scope="server_runner") == []
-    assert [c.value.key for c in host.secret_config_keys()] == ["registrar_key"]
-    # 서버 부분이 C11 서비스 앱이므로 어댑터 작업은 없다 (작업은 앱의 /manifest에서 온다).
-    assert host.adapter_operations() == []
+    # **비밀 칸은 거르는 쪽이 거른다** — `credentials.py`가 `configuration()`에 `.secret`을
+    # 걸어 본다 (호스트에 그 편의 메서드를 두지 않는다 — 두 길이 되면 한쪽만 고친다).
+    secret = [c.value.key for c in host.configuration(scope="bot_ui") if c.value.secret]
+    assert secret == ["registrar_key"]
+    # 서버 부분이 C11 서비스 앱이므로 어댑터가 없다 (작업은 앱의 /manifest에서 온다).
+    found = host.get("ui-automation")
+    assert found is not None and found.manifest.adapter is None
 
 
 def test_states_report_what_center_asks_for(host: ExtensionHost) -> None:
@@ -434,7 +438,9 @@ def test_signed_external_definition_is_enabled_without_code() -> None:
     assert loaded is not None
     assert loaded.enabled, [str(p) for p in loaded.problems]
     assert loaded.root is None, "외부 확장은 코드를 돌리지 않는다"
-    assert [c.value.name for c in host.adapter_operations()] == ["read_invoice"]
+    # **작업은 정의에서 읽는다** — 창(STU-15)과 어댑터가 그렇게 본다 (`m.adapter.operations`).
+    assert loaded.manifest.adapter is not None
+    assert [one.name for one in loaded.manifest.adapter.operations] == ["read_invoice"]
 
 
 def test_unsigned_external_definition_is_not_enabled() -> None:
@@ -445,7 +451,8 @@ def test_unsigned_external_definition_is_not_enabled() -> None:
     loaded = host.add_external(definition, envelope, keys=[])  # 아는 Admin 키가 없다
     assert loaded is not None and not loaded.enabled
     assert [p.code for p in loaded.problems] == ["bad_envelope"]
-    assert host.adapter_operations() == []
+    # **꺼진 확장은 기여를 하나도 내지 않는다** (ADR-0043) — 작업도 그렇다.
+    assert host.task_types() == [] and host.resources() == []
 
 
 def test_tampered_external_definition_is_not_enabled() -> None:
