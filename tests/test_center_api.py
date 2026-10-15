@@ -410,6 +410,22 @@ def test_cancel_outcome_table(state: str, expected: tuple[int, str | None]) -> N
     assert cancel_outcome(state) == expected
 
 
+def test_a_started_server_run_can_be_cancelled_but_a_pc_one_cannot() -> None:
+    """**가르는 것은 대상 종류 하나다** ([ADR-0063](../docs/decisions/0063-stopping-a-running-server-run.md)).
+
+    서버 실행은 **화면을 만지지 않으므로**(C1 R2) 엔진 취소가 곧 `cancelled` 기록이다. PC
+    실행은 자리를 끝까지 쥐고(ADR-0014) 화면을 만지는 중일 수 있어 도중에 끊으면 **화면이
+    반쯤 바뀐 채 남는다** — 그래서 Center에서는 멈추지 않는다 (현장 사람이 BUI-04에서 멈춘다).
+    """
+    assert cancel_outcome("accepted", "server_runner") == (202, None)
+    assert cancel_outcome("accepted", "bot_ui") == (409, "already_started")
+    # **모르는 것을 열어 주지 않는다** — 대상을 주지 않으면 옛 규칙대로 본다.
+    assert cancel_outcome("accepted") == (409, "already_started")
+    # 다른 상태는 대상 종류와 무관하다 (표에 줄 하나가 늘 뿐이다).
+    assert cancel_outcome("queued", "server_runner") == cancel_outcome("queued", "bot_ui")
+    assert cancel_outcome("cancelled", "server_runner") == (409, "not_cancellable")
+
+
 # ─────────────── 목록 ───────────────
 
 

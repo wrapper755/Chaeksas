@@ -296,7 +296,9 @@ def cancel(
     found_job = (
         info_of(store, _must(store, job_id)) if by_center else get(store, found, job_id, write=True)
     )
-    status, code = cancel_outcome(found_job.state)
+    # **대상 종류가 `accepted`의 답을 가른다** (ADR-0063) — 서버 실행은 멈출 수 있고 PC는
+    # 그대로 거절이다. 판정은 계약이 쥔다 (문서의 표와 갈라지지 않게).
+    status, code = cancel_outcome(found_job.state, found_job.target.type)
     if code is not None:
         raise ApiError(409, code, f"지금 상태({found_job.state})에서는 취소할 수 없다")
 

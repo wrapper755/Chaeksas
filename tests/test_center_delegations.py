@@ -698,3 +698,78 @@ def test_the_purge_leaves_what_the_runner_has_not_seen_yet(
 
     assert api_mod.purge_values(store) == 0
     assert beat(center, runner_key)["delegations"][0]["outputs"] == {"결과코드": "OK"}
+
+
+# ─────────── 도는 실행을 멈추는 길 (ADR-0063 — 이 거리의 가지를 켜 주는 자리) ───────────
+
+
+def test_a_started_pc_job_still_refuses_the_cancel(
+    center: TestClient, private: Any, runner: str, ready: str
+) -> None:
+    """**PC 실행은 Center에서 멈추지 않는다** (ADR-0063) — 화면을 만지는 중일 수 있다.
+
+    도중에 끊으면 화면이 반쯤 바뀐 채 남는다(기록에 `cancelled`가 남아도 되돌려지지 않는다).
+    현장 사람이 BUI-04 「중지」로 멈춘다 — 그 사람은 화면을 보고 있다.
+    """
+    # 위임이 아니라 **평범한 PC 작업**이다 — 가르는 것은 대상 종류이지 위임인가가 아니다.
+    made = center.post(
+        "/api/v1/jobs",
+        json={"bpm_process_id": PC_BOT, "target": {"type": "bot_ui", "id": ready}, "inputs": {}},
+        headers=ADMIN,
+    )
+    assert made.status_code in (200, 201), made.text
+    pc_job = str(made.json()["job_id"])
+    pc_beat(center, ready, job_acks=[{"job_id": pc_job, "result": "started", "run_id": "run_20261015_100000_cccccc"}])
+
+    refused = center.delete(f"/api/v1/jobs/{pc_job}", headers=ADMIN)
+    assert refused.status_code == 409 and refused.json()["code"] == "already_started"
+    assert center.get(f"/api/v1/jobs/{pc_job}", headers=ADMIN).json()["state"] == "accepted"
+
+
+def test_a_started_server_job_takes_the_cancel_and_waits_for_the_runner(
+    center: TestClient, private: Any, runner: str, runner_key: str
+) -> None:
+    """**서버 실행은 멈출 수 있다** (ADR-0063) — 202로 받아 두고 하트비트로 내려 준다.
+
+    **Center가 혼자 `cancelled`로 적지 않는다** (`dispatched`와 같은 결) — 정말 멈췄는지는
+    현장만 안다. 실행기가 돌아오지 않으면 CON-12 「유실 처리」가 닫는다.
+    """
+    info = upload(center, private, bot=SERVER_BOT, where="server")
+    deployed = center.post(
+        "/api/v1/deployments",
+        json=sign(
+            {
+                "kind": "deployment",
+                "deployment_id": "dep_srv_c",
+                "target": {"type": "server_runner", "id": runner},
+                "bpm_process_id": info["id"],
+                "version": info["version"],
+                "content_hash": info["content_hash"],
+            },
+            private,
+            signed_at=now_iso(),
+        ).to_json_dict(),
+        headers=ADMIN,
+    )
+    assert deployed.status_code in (200, 201), deployed.text
+    made = center.post(
+        "/api/v1/jobs",
+        json={"bpm_process_id": SERVER_BOT, "target": {"type": "server_runner"}, "inputs": {}},
+        headers=ADMIN,
+    )
+    assert made.status_code in (200, 201), made.text
+    job_id = str(made.json()["job_id"])
+    # 실행기가 받아 가고(`dispatched`) 시작했다고 ack한다 (`accepted`).
+    assert beat(center, runner_key)["jobs"][0]["job_id"] == job_id
+    beat(center, runner_key, job_acks=[{"job_id": job_id, "result": "started", "run_id": RUN}])
+
+    dropped = center.delete(f"/api/v1/jobs/{job_id}", headers=ADMIN)
+    assert dropped.status_code == 202, dropped.text
+    assert center.get(f"/api/v1/jobs/{job_id}", headers=ADMIN).json()["state"] == "accepted"
+
+    # 다음 하트비트에 **취소 지시가 내려간다**.
+    assert beat(center, runner_key)["cancel_jobs"] == [job_id]
+    # 실행기가 닫았다고 ack하면 그때 `cancelled`다.
+    beat(center, runner_key, job_acks=[{"job_id": job_id, "result": "cancelled", "run_id": RUN}])
+    closed = center.get(f"/api/v1/jobs/{job_id}", headers=ADMIN).json()
+    assert (closed["state"], closed["cancel_result"]) == ("cancelled", "cancelled")
