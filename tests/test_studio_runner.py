@@ -298,6 +298,189 @@ def test_an_example_that_needs_a_model_says_so_instead_of_pretending(app: Any, t
     assert "모델" in found.detail or "도구" in found.detail, found.detail
 
 
+# ─────────────────────────── PC 위임 (ADR-0062 §2) ───────────────────────────
+
+#: PC 위임 하나를 거쳐 그 값을 쓰는 서버 그림. **예제 묶음에 위임이 없어 여기서 만든다**
+#: (`test_studio_packaging.py`도 같은 까닭으로 제 그림을 들고 있다). `calledElement`는
+#: **읽는 사람을 위한 것**이라 패키지에 그 정의가 없어도 된다 — 대상은 다른 패키지다.
+DELEGATING = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_dlg" targetNamespace="urn:chaeksas:test">
+  <bpmn:error id="Err_DLG" name="DELEGATION_FAILED" errorCode="DELEGATION_FAILED" />
+  <bpmn:process id="Proc_fx03b_amount_branch" name="위임" isExecutable="true">
+    <bpmn:extensionElements><chk:process>{"run_location": "server",
+      "inputs": [{"name": "청구번호", "type": "string", "required": true}]}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" />
+    <bpmn:callActivity id="Call_Erp" name="ERP 화면 입력" calledElement="Proc_erp_input">
+      <bpmn:extensionElements><chk:call>{"delegate":
+        {"bpm_process_id": "fin.erp-input", "version": "1.0.0"},
+        "input": {"전표번호": "청구번호"}, "output": {"입력결과": "결과코드"}}</chk:call>
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:scriptTask id="Task_After" scriptFormat="chk-expr">
+      <bpmn:script>마무리 = 입력결과 + "-확인"</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End" />
+    <bpmn:boundaryEvent id="Bnd_Dlg" name="위임 실패" attachedToRef="Call_Erp">
+      <bpmn:errorEventDefinition errorRef="Err_DLG" />
+    </bpmn:boundaryEvent>
+    <bpmn:scriptTask id="Task_Fallback" scriptFormat="chk-expr">
+      <bpmn:script>마무리 = "사람이 처리"</bpmn:script>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="End_Fallback" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Call_Erp" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Call_Erp" targetRef="Task_After" />
+    <bpmn:sequenceFlow id="F3" sourceRef="Task_After" targetRef="End" />
+    <bpmn:sequenceFlow id="F4" sourceRef="Bnd_Dlg" targetRef="Task_Fallback" />
+    <bpmn:sequenceFlow id="F5" sourceRef="Task_Fallback" targetRef="End_Fallback" />
+  </bpmn:process>
+</bpmn:definitions>
+"""
+
+
+def delegating(tmp_path: Path) -> tuple[Any, Any, Settings]:
+    """위임 그림을 작업 폴더에 넣고 다시 읽는다 — `(BPM 프로세스, 진입 정의, 설정)`."""
+    made, settings = studio(tmp_path, "fx03b_amount_branch")
+    entry = made.entry_definition
+    assert entry is not None
+    entry.path.write_text(DELEGATING, encoding="utf-8")
+    opened = Workspace(settings.workspace_dir).read(made.folder, made.group)
+    definition = opened.entry_definition
+    assert definition is not None
+    return opened, definition, settings
+
+
+def test_a_case_gives_the_delegation_result_and_the_run_finishes(app: Any, tmp_path: Path) -> None:
+    """**케이스가 적어 둔 결과로 위임이 끝난다** (ADR-0062 §2 — 증명할 다섯의 마지막).
+
+    Studio에는 부를 PC Bot의 그림이 없고(다른 패키지다) 있다 해도 UI 태스크라 설계자 PC에서
+    화면을 만지게 된다. 그래서 결재 답·메시지와 **같은 결**로 케이스가 결과를 적는다.
+    **Center도 남의 패키지도 없이** 끝까지 간다.
+    """
+    made, definition, settings = delegating(tmp_path)
+    case = Case(
+        name="위임",
+        inputs={"청구번호": "CLM-1"},
+        delegations={"Call_Erp": {"결과코드": "OK"}},
+        expected={"입력결과": "OK", "마무리": "OK-확인"},
+    )
+    found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
+    assert found.verdict == PASS, found.detail
+
+
+def test_only_what_the_graph_reads_becomes_a_variable(app: Any, tmp_path: Path) -> None:
+    """**적은 것만 오간다** (C14 `chk:call.output`) — 돌려준 나머지는 버린다."""
+    made, definition, settings = delegating(tmp_path)
+    case = Case(
+        name="덤",
+        inputs={"청구번호": "CLM-1"},
+        delegations={"Call_Erp": {"결과코드": "OK", "덤": "버린다"}},
+    )
+    found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
+    assert found.run is not None
+    assert found.run.variables["입력결과"] == "OK"
+    assert "덤" not in found.run.variables and "결과코드" not in found.run.variables
+
+
+def test_the_values_are_handed_over_as_values(app: Any, tmp_path: Path) -> None:
+    """입력은 **맡길 때 값으로** 푼다 (PC 쪽은 서버 그림을 모른다) — 식 이름이 가지 않는다."""
+    made, definition, settings = delegating(tmp_path)
+    case = Case(
+        name="입력",
+        inputs={"청구번호": "CLM-7"},
+        delegations={"Call_Erp": {"결과코드": "OK"}},
+    )
+    run = CaseRun(Plan(process=made, definition=definition, case=case, settings=settings))
+    drive(run)
+    (call,) = run.delegator.calls
+    assert call.inputs == {"전표번호": "CLM-7"}
+    assert (call.bpm_process_id, call.version) == ("fin.erp-input", "1.0.0")
+    assert call.node_id == "Call_Erp" and call.node_instance == 1
+    assert call.bot_ui is None, "그림이 PC를 지정하지 않았으면 고르는 것은 받는 쪽의 일이다"
+
+
+def test_a_delegation_the_case_did_not_write_goes_to_the_error_boundary(
+    app: Any, tmp_path: Path
+) -> None:
+    """**적어 두지 않은 위임은 그 자리에서 실패**다 (C14) — 기다리게 두면 끝나지 않는다.
+
+    현장 PC도 Center도 없으니 기다릴 상대가 없다. 업무 실패라 **그림의 오류 경계가 받고**,
+    그래서 이것이 경계를 시험하는 길이기도 하다. 그러려면 사유 코드가 그림이 받을 수 있는
+    것이어야 한다 — **`DELEGATION_FAILED`**, 진짜 PC 실행이 실패했을 때와 같은 코드다.
+    """
+    made, definition, settings = delegating(tmp_path)
+    case = Case(
+        name="안 적음",
+        inputs={"청구번호": "CLM-1"},
+        delegations={},
+        expected={"마무리": "사람이 처리"},
+    )
+    found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
+    assert found.verdict == PASS, found.detail
+    assert found.run is not None and found.run.state.value == "done", "경계가 받아 끝까지 갔다"
+
+
+def test_a_delegation_without_an_error_boundary_fails_the_run(app: Any, tmp_path: Path) -> None:
+    """경계가 없으면 **실행이 실패한다** — 조용히 기다리지 않는다."""
+    made, settings = studio(tmp_path, "fx03b_amount_branch")
+    entry = made.entry_definition
+    assert entry is not None
+    bare = DELEGATING.replace(
+        '<bpmn:boundaryEvent id="Bnd_Dlg" name="위임 실패" attachedToRef="Call_Erp">'
+        "\n      <bpmn:errorEventDefinition errorRef=\"Err_DLG\" />\n    </bpmn:boundaryEvent>",
+        "",
+    ).replace('<bpmn:sequenceFlow id="F4" sourceRef="Bnd_Dlg" targetRef="Task_Fallback" />', "")
+    entry.path.write_text(bare, encoding="utf-8")
+    opened = Workspace(settings.workspace_dir).read(made.folder, made.group)
+    definition = opened.entry_definition
+    assert definition is not None
+
+    case = Case(name="경계 없음", inputs={"청구번호": "CLM-1"}, delegations={})
+    found = drive(CaseRun(Plan(process=opened, definition=definition, case=case, settings=settings)))
+    assert found.verdict == ERROR
+    assert "케이스" in found.detail and "Call_Erp" in found.detail, found.detail
+
+
+def test_a_value_the_graph_reads_but_the_case_does_not_return_fails(
+    app: Any, tmp_path: Path
+) -> None:
+    """**적은 값이 오지 않으면 업무 실패**다 — 빈 값으로 이어 가지 않는다 (ADR-0062 §2).
+
+    현장에서는 「그 Bot의 판이 바뀌었다」가 이 꼴이다. 여기서는 경계가 그것을 받는다.
+    """
+    made, definition, settings = delegating(tmp_path)
+    case = Case(
+        name="빈 값",
+        inputs={"청구번호": "CLM-1"},
+        delegations={"Call_Erp": {}},
+        expected={"마무리": "사람이 처리"},
+    )
+    found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
+    assert found.verdict == PASS, found.detail
+
+
+def test_without_a_case_a_delegation_says_what_to_write() -> None:
+    """케이스를 고르지 않고 돌리면 위임은 **적을 곳이 없다** — 그 말을 그대로 한다.
+
+    창도 엔진도 필요 없는 자리라 포트만 직접 부른다.
+    """
+    from chaeksas.core.delegation import DelegationCall, DelegationError
+    from chaeksas.studio.runner import CaseDelegator
+
+    call = DelegationCall(
+        run_id="test_20261015_090000_aaaaaa",
+        node_id="Call_Erp",
+        node_instance=1,
+        bpm_process_id="fin.erp-input",
+    )
+    with pytest.raises(DelegationError) as caught:
+        CaseDelegator(None).delegate(call)
+    # **그림·설치 오류가 아니라 업무 실패다** — 그래서 경계가 받을 수 있다.
+    assert caught.value.code == "DELEGATION_FAILED"
+    assert "delegations에 적으세요" in str(caught.value)
+
+
 # ─────────────────────────── 배운 것 적기 (ADR-0028) ───────────────────────────
 
 
