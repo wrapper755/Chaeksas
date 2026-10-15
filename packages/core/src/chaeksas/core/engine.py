@@ -29,7 +29,14 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from chaeksas.contracts.approvals import Form, FormField, answer_variables
-from chaeksas.contracts.bpmn_ext import BpmnProcess, DataOutput, Node, duration_hours
+from chaeksas.contracts.bpmn_ext import BpmnProcess, Call, DataOutput, Node, duration_hours
+from chaeksas.core.delegation import (
+    DelegationCall,
+    DelegationError,
+    DelegationUnsupported,
+    Delegator,
+    NoDelegator,
+)
 from chaeksas.core.expr import ExprError, evaluate
 from chaeksas.core.files import FileTaskError, PathDenied, Workspace, write_output
 from chaeksas.core.helpers import bind
@@ -42,14 +49,17 @@ from chaeksas.core.run_state import (
     CODE_PATH_DENIED,
     CODE_UNSUPPORTED,
     DECISION_KEY,
+    DELEGATION_FINISHED,
     ERROR_APPROVAL_EXPIRED,
     ERROR_APPROVAL_WITHDRAWN,
     ERROR_CODE_VAR,
+    ERROR_DELEGATION_FAILED,
     ERROR_MESSAGE_VAR,
     ERROR_SEND_FAILED,
     ERROR_TASK_FAILED,
     FAILED_TASK_VAR,
     MAX_STEPS,
+    WAIT_DELEGATION,
     WAIT_MESSAGE,
     WAIT_SIGNAL,
     WAIT_TIMER,
@@ -833,6 +843,75 @@ class Engine:
             # 답 뒤에 쓰는 파일이 실패할 수 있다 — 그것도 오류 경계가 받는다.
             return self._handle_failure(context, e)
 
+    def delegation_done(
+        self,
+        run: Run,
+        job_id: str,
+        *,
+        state: str,
+        outputs: Mapping[str, Any] | None = None,
+        reason: str | None = None,
+    ) -> State:
+        """**PC 위임이 끝났다** — 결과를 받아 이어 간다 (C12 §PC 위임, ADR-0062).
+
+        `state`가 `finished`면 **`chk:call.output`이 적은 것만** 변수가 된다 (C14 — 적은 것만
+        오간다). 그 밖에는 **업무 실패**로 올려 오류 경계가 받게 한다 — PC 쪽이 실패·거절·
+        만료된 것은 고쳐야 할 버그가 아니라 업무에서 일어난 일이다.
+
+        **값은 기록에 남기지 않는다** (원칙 6) — 받았다는 사실만 로그 한 줄이다.
+        """
+        waiting = next(
+            (w for w in run.waits.values() if w.kind == WAIT_DELEGATION and w.job_id == job_id),
+            None,
+        )
+        token = None if waiting is None else next(
+            (t for t in run.tokens if t.waiting_for == waiting.key), None
+        )
+        if waiting is None or token is None:
+            jobs = ", ".join(
+                w.job_id or "?" for w in run.waits.values() if w.kind == WAIT_DELEGATION
+            ) or "없음"
+            raise EngineError(
+                f"기다리는 위임이 아니다: {job_id} (기다리는 것: {jobs})", code="not_waiting"
+            )
+
+        node = run.node(waiting.node_id)
+        spec: Call | None = node.prop("call")
+        run.waits.pop(waiting.key, None)
+        token.waiting_for = None
+        self.disarm(run, token.id)
+        context = Context(engine=self, run=run, token=token, node=node)
+        if state != DELEGATION_FINISHED:
+            error = TaskFailed(
+                f"PC 위임이 끝나지 못했습니다 ({state}{f': {reason}' if reason else ''})",
+                node_id=node.id,
+                code=ERROR_DELEGATION_FAILED,
+            )
+            return self._handle_failure(context, error)
+
+        # **적은 것만 오간다** (C14 `chk:call.output` — `{내 변수: 그 Bot의 출력}`).
+        given = dict(outputs or {})
+        mapping = spec.output if spec is not None else {}
+        missing = [theirs for theirs in mapping.values() if theirs not in given]
+        if missing:
+            # 선언한 `outputs`에 있다고 보고 적었는데 오지 않았다 — **업무 실패**다
+            # (빈 값으로 이어 가면 뒤에서 「왜 없나」가 된다). B14가 미리 보지만 **판이
+            # 바뀌었을 수 있다**.
+            error = TaskFailed(
+                f"PC 위임이 돌려주지 않은 값을 받으려 한다: {', '.join(missing)}",
+                node_id=node.id,
+                code=ERROR_DELEGATION_FAILED,
+            )
+            return self._handle_failure(context, error)
+        run.variables.update({mine: given[theirs] for mine, theirs in mapping.items()})
+        run.log.emit("log", node_id=node.id, level="info", message=f"PC 위임이 끝났다 (작업 {job_id})")
+        try:
+            return self._apply(context, Go())
+        except ExprError as e:
+            return self._handle_failure(context, EngineError(e.reason, node_id=node.id, code="expr_error"))
+        except EngineError as e:
+            return self._handle_failure(context, e)
+
     def withdraw(self, run: Run, request_id: str, *, reason: str) -> State:
         """Center 결재가 **답 없이 끝났다** — 관리자 회수·만료 (C6, ADR-0038).
 
@@ -879,16 +958,22 @@ __all__ = [
     "CODE_UNSUPPORTED",
     "DECISION_KEY",
     "DEFAULT_HANDLERS",
+    "DELEGATION_FINISHED",
     "ERROR_CODE_VAR",
     "ERROR_MESSAGE_VAR",
     "ERROR_APPROVAL_EXPIRED",
     "ERROR_APPROVAL_WITHDRAWN",
+    "ERROR_DELEGATION_FAILED",
     "ERROR_SEND_FAILED",
     "ERROR_TASK_FAILED",
     "FAILED_TASK_VAR",
     "MAX_STEPS",
     "Consume",
     "Context",
+    "DelegationCall",
+    "DelegationError",
+    "DelegationUnsupported",
+    "Delegator",
     "Engine",
     "EngineError",
     "Form",
@@ -896,6 +981,7 @@ __all__ = [
     "Go",
     "Handler",
     "LoopState",
+    "NoDelegator",
     "Outcome",
     "Pending",
     "Run",
@@ -903,6 +989,7 @@ __all__ = [
     "State",
     "TaskFailed",
     "Token",
+    "WAIT_DELEGATION",
     "WAIT_MESSAGE",
     "WAIT_SIGNAL",
     "WAIT_TIMER",

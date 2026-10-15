@@ -27,6 +27,7 @@ from chaeksas.contracts.bpmn_ext import (
     AiTask,
     Call,
     Defaults,
+    Delegate,
     Email,
     ExtensionTask,
     FileList,
@@ -43,6 +44,7 @@ from chaeksas.contracts.events import missing_keys
 from chaeksas.contracts.manifest import PC_ONLY_DOMAINS
 from chaeksas.core.agent import DEFAULT_MAX_STEPS_SCREEN, AgentError, check_results, finish_from, run_agent
 from chaeksas.core.agent import Outcome as AgentOutcome
+from chaeksas.core.delegation import DelegationCall, DelegationError, DelegationUnsupported
 from chaeksas.core.expr import Scope, evaluate, fill, run_script, truthy
 from chaeksas.core.files import FileTaskError, PathDenied, list_files
 from chaeksas.core.llm import ToolSpec
@@ -52,6 +54,7 @@ from chaeksas.core.run_state import (
     CODE_UNSUPPORTED,
     ERROR_SEND_FAILED,
     ERROR_TASK_FAILED,
+    WAIT_DELEGATION,
     WAIT_MESSAGE,
     WAIT_SIGNAL,
     WAIT_TIMER,
@@ -957,11 +960,7 @@ def handle_call(context: Context) -> Outcome:
     engine, run, node = context.engine, context.run, context.node
     spec: Call | None = node.prop("call")
     if spec is not None and spec.delegate is not None:
-        raise EngineError(
-            f"PC 위임을 맡길 곳이 없다: {spec.delegate.bpm_process_id}",
-            node_id=node.id,
-            code=CODE_UNSUPPORTED,
-        )
+        return _delegate(context, spec, spec.delegate)
     target = node.called_element
     if not target:
         raise EngineError("`calledElement`가 없다", node_id=node.id, code="call_target_missing")
@@ -990,6 +989,48 @@ def handle_call(context: Context) -> Outcome:
     key = f"call:{node.id}:{context.token.id}"
     run.children[key] = child
     context.emit("log", level="info", message=f"호출: {target} (입력 {len(inputs)}개)")
+    return Wait(key=key)
+
+
+def _delegate(context: Context, spec: Call, delegate: Delegate) -> Outcome:
+    """**PC 위임** — 맡기고 기다린다 (ADR-0062 §2, C12 §PC 위임).
+
+    안쪽을 여기서 돌리지 않는다 — 부르는 대상은 **다른 패키지**라 이 패키지에 그 정의가 없다.
+    맡기는 길은 `RunEnv.delegate` 포트 하나이고, 엔진은 **어디에 맡기는지 모른다**.
+
+    **맡길 곳이 없는 것과 맡겼는데 거절당한 것은 다르다** — 앞은 그림·설치 오류(고쳐야 할
+    버그), 뒤는 업무 실패(오류 경계가 받는다). `chk:call.input`은 **맡길 때 값으로** 풀어
+    보낸다 (PC 쪽은 그 그림을 모른다).
+    """
+    run, node = context.run, context.node
+    scope = context.scope()
+    inputs = {name: evaluate(expression, scope) for name, expression in spec.input.items()}
+    # **어느 PC인가도 식이다** (담당자 PC 같은 업무 규칙) — 비우면 받는 쪽이 고른다.
+    bot_ui = evaluate(delegate.bot_ui, scope) if delegate.bot_ui else None
+    # **엔진이 이미 센 것을 읽는다** — 여기서 또 올리면 같은 자리가 두 번째로 보이고
+    # 멱등 키가 달라져 **작업이 두 번 만들어진다** (`Engine._step`이 노드를 밟을 때 올린다).
+    instance = run.instances.get(node.id, 1)
+    call = DelegationCall(
+        run_id=run.run_id,
+        node_id=node.id,
+        node_instance=instance,
+        bpm_process_id=delegate.bpm_process_id,
+        version=delegate.version,
+        bot_ui=None if bot_ui is None else str(bot_ui),
+        inputs=inputs,
+    )
+    try:
+        job_id = run.env.delegate.delegate(call)
+    except DelegationUnsupported as e:
+        raise EngineError(str(e), node_id=node.id, code=CODE_UNSUPPORTED) from e
+    except DelegationError as e:
+        raise TaskFailed(str(e), node_id=node.id, code=e.code) from e
+
+    key = f"delegation:{node.id}:{context.token.id}"
+    run.waits[key] = Waiting(
+        key=key, node_id=node.id, kind=WAIT_DELEGATION, job_id=job_id, token_id=context.token.id
+    )
+    context.emit("log", level="info", message=f"PC 위임: {delegate.bpm_process_id} (작업 {job_id})")
     return Wait(key=key)
 
 

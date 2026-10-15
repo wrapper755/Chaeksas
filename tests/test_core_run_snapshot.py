@@ -29,7 +29,7 @@ from chaeksas.core.run_snapshot import (
     dump,
     restore,
 )
-from chaeksas.core.run_state import LoopState, Pending, Token, new_run_id
+from chaeksas.core.run_state import WAIT_DELEGATION, LoopState, Pending, Token, Waiting, new_run_id
 from chaeksas.core.senders import RecordingSender
 
 EXAMPLES = Path("docs/08-business-examples/bpmn")
@@ -115,6 +115,25 @@ def test_a_waiting_run_survives_a_roundtrip(tmp_path: Path) -> None:
     assert back.state is State.WAITING
     assert sorted(back.pendings) == sorted(run.pendings)
     assert sorted(back.waits) == sorted(run.waits)
+
+
+def test_a_delegation_wait_carries_its_job_id(tmp_path: Path) -> None:
+    """**위임 작업 id는 스냅샷과 함께 간다** ([ADR-0062](../docs/decisions/0062-pc-delegation.md)).
+
+    없으면 되살린 실행이 **어느 작업을 기다리는지 모른다** — 결과가 내려와도 받을 자리가 없다.
+    """
+    _engine, run = waiting_run(tmp_path)
+    run.waits["delegation:Call_Erp:t1"] = Waiting(
+        key="delegation:Call_Erp:t1",
+        node_id="Call_Erp",
+        kind=WAIT_DELEGATION,
+        job_id="job_dlg001",
+        token_id="t1",
+    )
+    back = roundtrip(run)
+    found = back.waits["delegation:Call_Erp:t1"]
+    assert (found.kind, found.job_id) == (WAIT_DELEGATION, "job_dlg001")
+    assert dump(back) == dump(run), "담은 것 ↔ 되살려 다시 담은 것이 다르다"
 
 
 def test_timers_keep_their_absolute_time(tmp_path: Path) -> None:
