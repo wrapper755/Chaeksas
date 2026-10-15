@@ -270,6 +270,9 @@ class Agent:
         # 붙잡는다. 결재를 먼저 올려야 다음 주기에 답이 내려올 수 있다.
         self.post_approvals()
         self.ship_events()
+        # **하트비트 뒤에 깨운다** (ADR-0061) — 깨운 실행은 그 자리에서 돌기 시작하고 **다음
+        # 주기의 `running[]`**에 올라간다 (지금 보낸 보고를 뒤늦게 고치지 않는다).
+        self.wake_due()
         return True
 
     # ── 배포 설치 (C2 V1~V7, C12) ──
@@ -557,6 +560,31 @@ class Agent:
             # 서버 실행기의 결재 창구는 **Center만**이다 (C12).
             approval_where=WHERE_CENTER,
         )
+
+    def wake_due(self) -> int:
+        """**시각이 된 타이머로 기다리는 실행을 깨운다** — 깨운 수를 돌려준다 (ADR-0061).
+
+        타이머를 보는 자리가 일꾼의 루프 안뿐이라, 기다리며 스레드를 놓은 실행은 시각이 되어도
+        스스로 깨어나지 못한다 (ADR-0054 §5). 메시지·결재는 **들어오는 지시**가 깨우지만 타이머는
+        깨울 사람이 없어서 이 쓸기가 그 일을 한다 — C12 §재시작과 유실의 「기한은 Center가 꺼져
+        있어도 간다」를 지키는 자리다.
+
+        **자리가 있을 때만 깨운다.** 기다리는 실행은 자리를 놓았으므로 깨우면 다시 쥔다 —
+        빈자리가 없으면 **다음 주기에 다시 본다**(상한을 넘겨 돌지 않는다). 그래서 기한은
+        **「그 시각 이후」**이고, 밀린 것은 `waiting[].until`이 지난 시각으로 올라가 보인다.
+
+        **네트워크를 쓰지 않는다** — 로컬 시계와 메모리의 일꾼만 본다.
+        """
+        woken = 0
+        # **오래 기다린 것부터** 깨운다 (C12의 작업 고르기와 같은 결) — 자리가 모자랄 때
+        # 늦게 기다린 것이 먼저 깨면 먼저 기다린 쪽이 영원히 밀린다.
+        for found in sorted(self.workers.values(), key=lambda one: one.run_id):
+            if self.free_slots() <= 0:
+                break
+            if found.wake():
+                woken += 1
+                log.info("실행 %s를 깨웠다 (타이머)", found.run_id)
+        return woken
 
     def collect(self) -> None:
         """끝난 실행을 거두고 ack를 쌓는다. **거둔 뒤에 자리가 빈다.**"""

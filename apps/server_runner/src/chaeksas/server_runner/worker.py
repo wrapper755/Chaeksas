@@ -258,6 +258,33 @@ class Worker:
         self._continue(run)
         return True
 
+    def due_now(self) -> bool:
+        """**시각이 된 타이머를 기다리고 있나** (ADR-0061).
+
+        기다리는 실행은 스레드를 놓으므로(ADR-0054 §5) 시각이 되어도 스스로 깨어나지 못한다 —
+        부르는 쪽(`Agent.wake_due()`)이 주기마다 묻는다. **묻는 것만으로 아무것도 바꾸지 않는다.**
+
+        **도는 중이면 거짓이다** — 그 실행은 이미 제 루프에서 타이머를 본다 (`_tick`). 묻는
+        쪽이 스레드를 또 띄우면 같은 `Run`을 둘이 민다.
+        """
+        run = self.run
+        if run is None or run.finished or self.alive:
+            return False
+        return bool(run.due(run.env.clock()))
+
+    def wake(self) -> bool:
+        """시각이 됐으면 **다시 민다**. 깨웠으면 참.
+
+        깨우는 길은 메시지·결재와 **같은 것**이다 (`_continue` — 스레드 하나를 다시 띄운다).
+        """
+        if not self.due_now():
+            return False
+        run = self.run
+        if run is None:  # pragma: no cover - `due_now`가 먼저 본다
+            return False
+        self._continue(run)
+        return True
+
     def waits_for_message(self, name: str, *, correlation: Any = None) -> bool:
         """그 메시지를 기다리고 있나 — **넣어 보지 않고** 묻는다 (빈자리를 먼저 세려고)."""
         run = self.run

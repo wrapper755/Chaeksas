@@ -15,8 +15,10 @@ from __future__ import annotations
 import io
 import json
 import tempfile
+import time
 import zipfile
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -38,6 +40,7 @@ from chaeksas.mock_apps.external import definitions as external_definitions
 from chaeksas.server_runner import agent as agent_mod
 from chaeksas.server_runner.center_client import CenterClient, Unreachable
 from chaeksas.server_runner.settings import Settings
+from chaeksas.server_runner.worker import Worker
 
 ADMIN = {"Authorization": "Bearer t-admin"}
 READ = {"Authorization": "Bearer t-read"}
@@ -47,7 +50,11 @@ AT = "2026-10-13T09:00:00+09:00"
 #: 업무 예제 FX-03b — 실행 위치 `server`, 입력 하나, 사람 없이 끝까지 간다.
 EXAMPLE = Path("docs/08-business-examples/bpmn/fx03b_amount_branch.bpmn")
 BOT = "fx.amount-branch"
+PROCESS_ID = "Proc_fx03b_amount_branch"
 VERSION = "1.0.0"
+#: 타이머 예제 — `PT3S`를 기다렸다가 결재로 간다 (ADR-0061의 쓸기를 보는 자리).
+TIMERS = Path("docs/08-business-examples/bpmn/fx14_timers.bpmn")
+TIMER_BOT = "fx.timers"
 #: 한 실행이 끝나기를 기다리는 한도 (초). 스레드가 도는 것을 기다린다.
 WAIT_S = 20.0
 
@@ -99,23 +106,25 @@ def runner(tmp_path: Path, key: str, center: TestClient) -> agent_mod.Agent:
 # ─────────────────────────── 거리 ───────────────────────────
 
 
-def package_zip(*, requires: dict[str, Any] | None = None) -> bytes:
+def package_zip(
+    *, requires: dict[str, Any] | None = None, example: Path = EXAMPLE, bot: str = BOT, process_id: str = PROCESS_ID
+) -> bytes:
     """업무 예제 하나를 C1 패키지로 싼다 (Studio가 내보내는 것과 같은 모양)."""
     manifest: dict[str, Any] = {
         "schema": 1,
         "kind": "bpm_process",
-        "id": BOT,
+        "id": bot,
         "version": VERSION,
         "name": "금액 갈래",
         "run_location": "server",
         "entry": "process/main.bpmn",
-        "process_id": "Proc_fx03b_amount_branch",
+        "process_id": process_id,
         "requires": requires or {},
         "human": {},
         "built": {"by": "studio", "at": AT, "core": "0.1.0", "spec_version": 1},
         "content_hash": "sha256:" + "0" * 64,
     }
-    files = {"process/main.bpmn": EXAMPLE.read_text(encoding="utf-8")}
+    files = {"process/main.bpmn": example.read_text(encoding="utf-8")}
 
     def made(body: str) -> bytes:
         out = io.BytesIO()
@@ -139,6 +148,7 @@ def ready_runner(
     *,
     requires: dict[str, Any] | None = None,
     after_bootstrap: Any = None,
+    zip_bytes: bytes | None = None,
 ) -> None:
     """등록 → 승인 → 배포 → 설치까지 세워 둔다 (앞 조각들이 보는 길이다).
 
@@ -153,7 +163,7 @@ def ready_runner(
 
     uploaded = center.post(
         "/api/v1/packages",
-        files={"file": ("p.zip", package_zip(requires=requires), "application/zip")},
+        files={"file": ("p.zip", zip_bytes or package_zip(requires=requires), "application/zip")},
         headers=ADMIN,
     )
     assert uploaded.status_code in (200, 201), uploaded.text
@@ -193,7 +203,7 @@ def ready_runner(
     assert deployed.status_code in (200, 201), deployed.text
 
     runner.tick()  # 공개키·배포를 받아 설치한다
-    assert [b.id for b in runner.installed_bots()] == [BOT]
+    assert info["id"] in [b.id for b in runner.installed_bots()]
 
 
 def make_job(center: TestClient, *, amount: int = 2_000_000, **extra: Any) -> dict[str, Any]:
@@ -656,3 +666,96 @@ def test_the_runner_reads_the_addresses_itself_before_it_starts(
     made = runner.app_directory(bot)
     assert made.addresses == {} and made.externals == {}
     assert not (runner.settings.data_path / CACHE_NAME).exists(), "부를 것이 없으면 받아 두지 않는다"
+
+
+# ─────────────────── 타이머로 깨우기 (ADR-0061) ───────────────────
+
+
+def timer_job(center: TestClient) -> dict[str, Any]:
+    """타이머 예제(FX-14)에 작업 하나 — 입력이 없다."""
+    response = center.post(
+        "/api/v1/jobs",
+        json={"bpm_process_id": TIMER_BOT, "target": {"type": "server_runner"}, "inputs": {}},
+        headers=ADMIN,
+    )
+    assert response.status_code in (200, 201), response.text
+    return dict(response.json())
+
+
+def waiting_on_a_timer(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> Worker:
+    """FX-14를 깔고 돌려 **타이머를 기다리는 자리**까지 보낸다 (`PT3S`)."""
+    ready_runner(
+        center,
+        store,
+        runner,
+        zip_bytes=package_zip(example=TIMERS, bot=TIMER_BOT, process_id="Proc_fx14_timers"),
+    )
+    timer_job(center)
+    runner.tick()
+    found = next(iter(runner.workers.values()))
+    deadline = time.monotonic() + 10
+    while found.snapshot().waiting is None and time.monotonic() < deadline:
+        time.sleep(0.02)
+    assert found.snapshot().waiting is not None, "타이머를 기다리는 자리에 닿지 못했다"
+    assert not found.alive, "기다리는 실행은 스레드를 놓는다 (ADR-0054 §5)"
+    return found
+
+
+def test_a_run_waiting_on_a_timer_is_woken_when_the_time_comes(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """**시각이 되면 깨운다** (ADR-0061) — 그러지 않으면 기한이 영원히 오지 않는다.
+
+    C12 §재시작과 유실의 「기한은 Center가 꺼져 있어도 간다」를 지키는 자리다. 깨우는 쪽은
+    `Agent.wake_due()`이고 **네트워크를 쓰지 않는다**.
+    """
+    found = waiting_on_a_timer(center, store, runner)
+
+    assert found.due_now() is False, "아직 3초가 지나지 않았다 — 일찍 깨우지 않는다"
+    assert runner.wake_due() == 0
+
+    time.sleep(3.2)
+    assert found.due_now() is True
+    assert runner.wake_due() == 1, "시각이 됐으니 깨운다"
+    assert found.join(WAIT_S), "깨운 실행이 이어 돌아야 한다"
+    # 타이머를 지나 **결재를 기다리는 자리**로 갔다 (FX-14는 그다음이 15초 결재다).
+    shot = found.snapshot()
+    assert shot.waiting is not None and shot.waiting.waiting_for == "approval"
+
+
+def test_a_full_runner_wakes_it_next_cycle_instead(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """**자리가 없으면 깨우지 않는다** — 상한을 넘겨 돌지 않는다 (ADR-0061 §2).
+
+    기다리는 실행은 자리를 놓았으므로 깨우면 다시 쥔다. 그래서 기한은 **「그 시각 이후」**이고,
+    밀린 것은 `waiting[].until`로 보인다 (CON-12).
+    """
+    found = waiting_on_a_timer(center, store, runner)
+    time.sleep(3.2)
+    assert found.due_now() is True
+
+    runner.settings = replace(runner.settings, max_concurrency=0)
+    assert runner.free_slots() == 0
+    assert runner.wake_due() == 0, "자리가 없으면 깨우지 않는다"
+    assert not found.alive
+
+    runner.settings = replace(runner.settings, max_concurrency=3)
+    assert runner.wake_due() == 1, "자리가 나면 다음 주기에 깨운다"
+    assert found.join(WAIT_S)
+
+
+def test_a_running_run_is_not_asked(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
+    """**도는 중에는 깨우지 않는다** — 그 실행은 제 루프에서 타이머를 본다 (`Worker._tick`).
+
+    묻는 쪽이 스레드를 또 띄우면 같은 `Run`을 둘이 민다.
+    """
+    ready_runner(center, store, runner)
+    make_job(center)
+    runner.tick()
+    found = next(iter(runner.workers.values()))
+    assert found.due_now() is False
+    drain(runner)
+    assert runner.wake_due() == 0, "끝난 실행도 깨우지 않는다"

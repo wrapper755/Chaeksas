@@ -373,6 +373,20 @@ def runner(
 # ─────────────────────────── 배포 (C2·C5) ───────────────────────────
 
 
+#: 그림이 읽는 **빈 폴더**들 — git은 빈 폴더를 담지 않으므로 묶음이 만든다 (M3·M5와 같은 결:
+#: 「표본 파일은 시험이 그 자리에서 만든다」). 상대 경로의 기준은 **출력 폴더**다 (ADR-0032).
+EMPTY_FOLDERS = {"fx04_folder_poll": ("samples/inbox-empty",)}
+
+
+def make_empty_folders(runner: agent_mod.Agent, example: str, bot: str) -> None:
+    """그 예제가 들여다볼 빈 폴더를 **출력 폴더 아래에** 만든다. 없으면 `TASK_FAILED`다.
+
+    출력 폴더 이름은 **패키지 id**다 (`agent.run_env()`가 `bot.id`로 짓는다).
+    """
+    for one in EMPTY_FOLDERS.get(example, ()):
+        (runner.settings.data_path / "outputs" / bot / one).mkdir(parents=True, exist_ok=True)
+
+
 def packaged(tmp_path: Path, example: str) -> Path:
     """Studio가 하듯 내보낸다 — 매니페스트는 **그림에서 모은다** (`studio.packaging`)."""
     space = Workspace(tmp_path / "studio" / example).ensure()
@@ -549,37 +563,22 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 넷. **웹훅도 이제 간다** (조각 12) — 묶음이 **Studio와 같은
-# 시험 수신기·같은 입력 리졸버**를 쓰고(`$test_receiver`·`$now_plus`), 실행기 설정이 그 주소를
-# 허용 호스트에 담는다. 127.0.0.1은 제품 규칙으로 막히므로 **묶음만** 사설망을 연다
-# (`BundleSettings` — ADR-0059 §2의 「시험과 Studio 시험 수신기만」 그 자리다).
+# 아직 **돌리지는** 못하는 까닭 넷 → **셋**. **타이머도 이제 간다** (조각 13, ADR-0061) —
+# 실행기가 시각이 된 것을 하트비트마다 쓸어서 깨운다. 웹훅은 조각 12에서 열렸다.
 #
-# - **제품 쪽 공백**: 타이머로 깨우는 자리가 없다 (`_NO_TIMER_WAKE` — 셋. 09-gaps §3-12).
-#   **가장 큰 묶음이고 묶음에서 고칠 수 없다.**
-# - **묶음에 없는 것**: 표본 파일·소켓 Center (`_NO_SAMPLES`·`_NO_SOCKET`).
-# - **묶음에 길이 없는 것**: 신호 (`_SIGNAL` — C12는 메시지만 넣는다).
+# - **묶음에 없는 것**: 표본 **파일**·소켓 Center·신호 (`_NO_SAMPLES`·`_NO_SOCKET`·`_SIGNAL`).
+#   **빈 폴더는 묶음이 만든다** (`EMPTY_FOLDERS`).
 # - **일부러 실패하는 것**: BX-33 (`_ON_PURPOSE` — 아래에 따로 시험이 있다).
 #
-# **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고(셋은 이미 초록이었다), 조각 10에서 둘,
-# 조각 12에서 **다섯**이다 — BX-10·BX-30은 짜 둔 답 뒤의 **웹훅**이었고, BX-11은 입력 연산자도
-# 메시지도 아니라 **타이머**였다(메시지는 201로 들어간다). FX-04·FX-14의 「묶음이 시계를 돌릴
-# 수단이 없다」도 **틀렸다** — 진짜 시계로 기다려도 실행기가 깨우지 않는다. 첫 실패만 보고
-# 적으면 그다음 까닭을 모른 채로 남는다.
+# **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고, 조각 10에서 둘, 조각 12에서 다섯,
+# 조각 13에서 하나다 — FX-04는 타이머를 지나고 보니 **빈 폴더**가 없어 멈췄다(그건 묶음이
+# 만들 수 있었다). 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
 _NO_SAMPLES = (
-    "묶음이 **표본 파일**을 만들지 않는다 — 그림이 `samples/<…>` 폴더를 읽는데 저장소에 "
-    "이진 파일을 두지 않으므로(M3·M5 묶음은 **그 자리에서 만든다**) 폴더가 없다. "
-    "그 자리를 옮겨 오는 것이 다음 일이다. "
-)
-# 아래 셋은 실행기가 아니라 **묶음**에 없는 것이다.
-_NO_TIMER_WAKE = (
-    "**실행기가 시각이 된 타이머로 기다리는 실행을 깨우지 않는다.** 타이머를 보는 자리는 "
-    "일꾼의 `_drive` 루프 안(`Worker._tick`)뿐이고, 그 루프는 **지금 울릴 것이 없으면 스레드를 "
-    "끝낸다** — 그 뒤에 시각이 되어도 다시 미는 쪽이 없다 (`Agent.tick()`에 그런 쓸기가 없다). "
-    "메시지·결재는 들어오는 지시가 깨우지만 타이머는 깨울 사람이 없다. **계약은 간다고 적어 "
-    "두었다** (C12 §재시작과 유실 — 「기한은 Center가 꺼져 있어도 간다」) — 09-gaps §3-12. "
-    "BX-11은 **메시지가 아니라 이것이다**: 견적 셋은 `201`로 들어가고(조각 12에서 재 봤다) "
-    "마감 타이머에서 멈춘다. 묶음 쪽 공백이 아니라 **제품 쪽 공백**이라 여기서 못 고친다. "
-)
+    "묶음이 **표본 파일**을 만들지 않는다 — 그림이 `samples/<…>`의 **파일**을 읽는데 저장소에 "
+    "이진 파일을 두지 않는다(M3·M5 묶음은 그 자리에서 만든다). **빈 폴더는 만든다** "
+    "(`EMPTY_FOLDERS` — git이 빈 폴더를 담지 않아서다). 표본을 만드는 자리를 M3에서 옮겨 "
+    "오는 것이 다음 일이다. "
+)# 아래 셋은 실행기가 아니라 **묶음**에 없는 것이다.
 _SIGNAL = (
     "신호를 넣을 길이 묶음에 없다 — C12 메시지 API는 **메시지**를 넣고(§메시지) 신호는 "
     "엔진의 `signal()`이라 Center를 거치지 않는다. "
@@ -605,12 +604,9 @@ _ON_PURPOSE = (
 #: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
 REMAINING: dict[str, str] = {
     "bx01_invoice_reconciliation": _NO_SAMPLES,
-    "bx11_bid_collection": _NO_TIMER_WAKE,
     "bx16_reorder_proposal": _NO_SOCKET,
     "bx33_access_request": _ON_PURPOSE,
-    "fx04_folder_poll": _NO_TIMER_WAKE,
     "fx13_signal": _SIGNAL,
-    "fx14_timers": _NO_TIMER_WAKE,
 }
 
 GREEN = [one for one in SERVER if one not in REMAINING]
@@ -662,6 +658,7 @@ def test_a_server_example_runs_through_center_and_the_runner(
     **업무 값은 보지 않는다** (C3에 없다 — 원칙 6). 결과가 맞는지는 Studio 시험 실행이 본다.
     """
     info = deploy(center, runner, packaged(tmp_path, example))
+    make_empty_folders(runner, example, str(info["id"]))
     job_id = dispatch(center, info, case_inputs(example, receiver))
     done = run_to_the_end(
         center,
