@@ -30,7 +30,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C9 | **구현됨** | **`ext.ui_automation.contracts.registry`·`console`** | — (관리 콘솔이 읽는 길도 돈다) |
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
-| C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | 없음. **PC 위임은 계약 본문에서 「제안」**이라 이 표가 묻지 않는다 (M7 기준 넷째가 정할 거리다). 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
+| C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | **타이머로 깨우는 자리가 없다** (§3-12) — 모델·검사·양쪽이 다 있어 상태를 내리지 않지만, 「기한은 간다」는 글만 남아 있다. 없음. **PC 위임은 계약 본문에서 「제안」**이라 이 표가 묻지 않는다 (M7 기준 넷째가 정할 거리다). 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
 | C13 | **구현됨** | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다: 호스트·Studio·Bot UI·콘솔·Center) |
 | C14 | **구현됨** | `contracts.bpmn_ext` B1~B15 + `contracts.dmn` | — (닫았다 — 엔진이 수행하고 Studio가 편집·검사하고 예제 50개가 이 형식이다. schema 1에서 **쓰지 않기로 적은 것**은 범위 결정이다) |
 
@@ -46,7 +46,14 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열넷의 상태는 §1 표에 있다. **남은 것이 없다** — 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
+계약 열넷의 상태는 §1 표에 있다. **하나가 열렸다** — §3-12(타이머로 깨우는 자리가 없다, M7 조각 12에서 드러났다). 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
+
+### 3-12. C12의 「기한은 간다」를 **실행기가 지키지 않는다** (타이머로 깨우는 자리가 없다)
+
+C12 §재시작과 유실은 **「기한은 Center가 꺼져 있어도 간다 — 경계 타이머는 실행기의 로컬 시계로 잰다」**고 적어 두었다. 그런데 서버 실행기에서 타이머를 보는 자리는 **일꾼의 `_drive` 루프 안**(`Worker._tick`)뿐이고, 그 루프는 **지금 울릴 것이 없으면 스레드를 끝낸다**. 그 뒤에 시각이 되어도 **다시 미는 쪽이 없다** — `Agent.tick()`에 「담아 둔 실행 중 시각이 된 것을 깨운다」가 없다. 메시지·결재는 **들어오는 지시**가 깨우지만 타이머는 깨울 사람이 없다.
+
+- **M7 조각 12에서 드러났다** — 서버 예제 재통과의 BX-11·FX-04·FX-14가 그것이다(묶음의 `_NO_TIMER_WAKE`). BX-11의 사유는 두 번 틀렸는데(「케이스 입력 연산자」→「메시지」), 돌려 보니 **견적 셋은 `201`로 들어가고 마감 타이머에서 멈춘다**. **PC 쪽은 다르다** — Bot UI의 실행기는 한 실행을 끝까지 쥐고 있어 루프가 살아 있다.
+- **먼저 정할 것:** 깨우는 쓸기를 **어디에 두고 얼마나 자주 도나**. ① `Agent.tick()`(하트비트 주기 10초 — 분 단위 기한에는 넉넉하고 초 단위에는 거칠다), ② 실행기에 **시계 스레드** 하나(주기를 따로 정한다 — ADR-0054가 「스레드는 실행마다 하나」라고 적어 둔 것과 어긋나지 않게), ③ 담을 때 **다음 기한을 저장소에 적어 두고**(`state.sqlite3`) 그 시각이 지난 것만 읽어 되살린다(ADR-0054의 스냅샷에 칸이 하나 는다). 그리고 **깨운 실행이 자리를 다시 잡는가**를 함께 정해야 한다 — 기다리는 실행은 자리를 놓았으므로(ADR-0054 §5) 상한이 찼으면 깰 수 없다.
 
 ## 4. 화면 쪽 기능 공백
 
