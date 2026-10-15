@@ -74,7 +74,6 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 5. 공백은 아니지만 적어 둘 것
 
-- **C3 `run_waiting`·`run_resumed`를 내보내는 쪽이 없다 — 이제 자리는 생겼다.** C3가 「서버만 쓴다」고 적어 두었고(PC Bot은 실행 자리를 쥐고 있어 `node_state: waiting`만 남긴다), **서버 실행기에 그 순간이 셋 생겼다**: 담을 때(`Worker._drive`가 스레드를 끝내는 자리)·되살릴 때(`resume`)·**깨울 때**(`wake`, [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)). **Center는 이미 읽는다** (`center/api/runs.py`가 두 줄을 받아 요약에 담는다). 찍지 않으면 **CON-01이 「이 실행이 기다렸다」를 영영 모른다**(지금은 `node_state: waiting`만 있어 「무엇을 얼마나 기다렸나」가 없다). **먼저 정할 것은 없다** — C3가 칸을 정해 두었다(`waiting_for`·`after_s`). 찍는 자리만 더하면 된다.
 - **쓰지 않는 편의 접근자 셋** — `ExtensionHost.studio_editors()`(호출자 **아예 없음**, Studio는 단수 `editor(task_type)`를 쓴다), `adapter_operations()`(`AdapterCaller`가 `definitions`를 직접 본다), `secret_config_keys()`(`credentials.py`가 `configuration()`을 제 손으로 거른다). 기능 공백이 아니다 — **지울지 쓸지만 정하면 된다.**
 - `extension_api`의 `HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`는 M7이 쓸 상수다 (지금 호출자 없음, 정상).
 - `SEVERITY_INFO`는 아무도 쓰지 않는다 (`SEVERITY_BLOCK`·`SEVERITY_WARN`만 쓴다).

@@ -6,6 +6,7 @@ import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
 import { CENTER_URL, CenterError, center, session } from "@/lib/center";
+import { FINISHED, type ResumeRow, duration, resumes, waitTotals } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { LABEL, seconds, time, where } from "../page";
 
@@ -61,6 +62,22 @@ export function consoleOf(
   }
   return out;
 }
+
+/** C3 `run_waiting.waiting_for` → 표기 (**열린 문자열**이라 모르는 값은 그대로 보인다). */
+const WAITING_FOR: Record<string, string> = {
+  approval: "결재",
+  message: "메시지",
+  timer: "타이머",
+};
+
+/** C3 `run_resumed.reason` → 표기. 없으면 「—」다 (선택 칸이다). */
+const RESUME_REASON: Record<string, string> = {
+  answer: "답",
+  message: "메시지",
+  timer: "시각이 됨",
+  restart: "실행기 재시작",
+  withdraw: "결재 회수",
+};
 
 const NODE_STATE: Record<string, string> = {
   started: "실행 중",
@@ -147,6 +164,10 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
   const logs = events.filter((e) => e.kind === "log");
   // C3 `ui_session` — 확장이 남기고 엔진이 쓴 줄 (ADR-0041). 전환·실패로 끝난 것도 있다.
   const ui = events.filter((e) => e.kind === "ui_session");
+  // 「이어 돈 기록」 — `run_waiting`·`run_resumed`를 짝지은다 (**서버 실행만** 남긴다, C3).
+  const waits = resumes(events);
+  const totals = waitTotals(waits);
+  const ended = FINISHED.has(info?.status ?? "");
 
   // UI 태스크가 없으면 **리소스 목록을 두드리지 않는다.** 읽지 못해도 실행 상세는 그려야 하니
   // (여기서 실패하면 운영자가 볼 것이 아무것도 없다) 못 읽으면 링크만 없다.
@@ -236,6 +257,47 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
     },
   ];
 
+  const resumeColumns: Array<Column<ResumeRow>> = [
+    {
+      key: "waiting_for",
+      header: "무엇을",
+      width: "10ch",
+      cell: (row) => WAITING_FOR[row.waiting_for] ?? row.waiting_for ?? "—",
+    },
+    { key: "node_id", header: "노드", mono: true, cell: (row) => row.node_id ?? "—" },
+    { key: "since", header: "기다리기 시작", width: "14ch", cell: (row) => time(row.since) },
+    {
+      key: "until",
+      header: "기한",
+      width: "14ch",
+      // 타이머만 기한이 있다 (C3 선택 칸). **지난 기한이 보일 수 있다** — 깨우기는 주기마다
+      // 쓸므로 기한은 「그 시각 이후」다 (ADR-0061).
+      cell: (row) => time(row.until),
+    },
+    {
+      key: "resumed_at",
+      header: "이어 감",
+      width: "14ch",
+      // **끝난 실행의 짝 없는 줄은 「기다리는 중」이 아니다** — 기다리다 취소되거나 마감으로
+      // 닫힌 것이다. 「기다리는 중」이라고 적으면 끝난 실행이 아직 멈춰 있는 것처럼 보인다.
+      cell: (row) =>
+        row.resumed_at ? time(row.resumed_at) : ended ? "이어 가지 않음" : "기다리는 중",
+    },
+    {
+      key: "seconds",
+      header: "기다린 시간",
+      width: "14ch",
+      align: "right",
+      cell: (row) => (row.seconds === null ? "—" : duration(row.seconds)),
+    },
+    {
+      key: "reason",
+      header: "깨운 까닭",
+      width: "14ch",
+      cell: (row) => (row.reason ? (RESUME_REASON[row.reason] ?? row.reason) : "—"),
+    },
+  ];
+
   const logColumns: Array<Column<RunEvent>> = [
     { key: "ts", header: "시각", width: "14ch", cell: (row) => time(row.ts) },
     { key: "level", header: "수준", width: "8ch", cell: (row) => String(row.data?.level ?? "info") },
@@ -300,6 +362,25 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
               <DataTable columns={nodeColumns} rows={nodes} rowKey={(row) => row.node_id} caption="노드" />
             )}
           </Section>
+
+          {/*
+            「이어 돈 기록」 — **기다림이 있을 때만 보인다** (화면 문서). C3가 두 줄을 「서버만
+            쓴다」고 두었으니 PC 실행에서는 늘 비는데, 빈 섹션을 늘 그리면 PC 실행 상세마다
+            뜻 없는 한 줄이 선다.
+          */}
+          {waits.length > 0 ? (
+            <Section title="이어 돈 기록">
+              <p className="text-body-sm text-text-secondary">
+                이어 돈 횟수 {totals.resumed}회 · 기다린 시간 합 {duration(totals.seconds)}
+              </p>
+              <DataTable
+                columns={resumeColumns}
+                rows={waits}
+                rowKey={(row) => String(row.seq)}
+                caption="기다림 (서버 실행)"
+              />
+            </Section>
+          ) : null}
 
           <Section title="AI 태스크 단계">
             {agent.length === 0 ? (

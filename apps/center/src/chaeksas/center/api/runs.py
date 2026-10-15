@@ -41,6 +41,10 @@ CODE_MISSING = "data_missing"
 CODE_SCHEMA = "schema_too_high"
 CODE_RUN_MISMATCH = "run_id_mismatch"
 
+#: 끝난 실행의 상태 (C3 `run_finished.status`) — **「도는 중」·「기다리는 중」으로 되돌리지
+#: 않는다**. 늦게 온 배치와, 한 배치 안의 `run_resumed` 둘 다 이 표를 본다.
+FINAL_STATUSES = ("success", "failed", "cancelled")
+
 #: 목록 한 번에 돌려주는 실행 수 (CON-01).
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 500
@@ -173,7 +177,12 @@ def _note(summary: dict[str, Any], event: RunEvent) -> None:
     elif event.kind == "run_waiting":
         summary["status"] = "waiting"
     elif event.kind == "run_resumed":
-        summary.setdefault("status", "running")
+        # **「기다린다」를 지운다.** 보내기는 하트비트 뒤라(C3) 기다리기 시작한 줄과 이어 간 줄이
+        # **한 배치에 함께 온다** — 덮어쓰지 않으면 이어 간 실행이 CON-01에서 영원히 「기다리는
+        # 중」이다. 끝난 실행은 건드리지 않는다 (`run_finished`는 늘 마지막 줄이지만, 차례가
+        # 어긋난 배치에도 끝난 것을 되돌리지 않는다 — `_update_run`과 같은 규칙).
+        if summary.get("status") not in FINAL_STATUSES:
+            summary["status"] = "running"
 
 
 def _update_run(cur: Any, run_id: str, summary: dict[str, Any]) -> None:
@@ -183,10 +192,7 @@ def _update_run(cur: Any, run_id: str, summary: dict[str, Any]) -> None:
         return
     found = cur.execute("SELECT summary_json FROM runs WHERE run_id = ?", (run_id,)).fetchone()
     before = loads(found["summary_json"] if found else None, {}) or {}
-    if before.get("status") in ("success", "failed", "cancelled") and summary.get("status") in (
-        "running",
-        "waiting",
-    ):
+    if before.get("status") in FINAL_STATUSES and summary.get("status") in ("running", "waiting"):
         summary = {k: v for k, v in summary.items() if k != "status"}
     cur.execute(
         "UPDATE runs SET summary_json = ? WHERE run_id = ?", (dumps({**before, **summary}), run_id)
