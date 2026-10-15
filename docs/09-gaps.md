@@ -30,7 +30,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C9 | **구현됨** | **`ext.ui_automation.contracts.registry`·`console`** | — (관리 콘솔이 읽는 길도 돈다) |
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
-| C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | — (닫았다). 「기한은 간다」는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)이 코드로도 사실로 만들었다 (주기만큼 늦을 수 있다고 C12에 적었다). 없음. **PC 위임은 계약 본문에서 「제안」**이라 이 표가 묻지 않는다 (M7 기준 넷째가 정할 거리다). 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
+| C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | — (닫았다). 「기한은 간다」는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)이 코드로도 사실로 만들었다 (주기만큼 늦을 수 있다고 C12에 적었다). 없음. **PC 위임은 계약 본문에서 아직 「제안」**이라 이 표가 묻지 않는다 — 모양은 [ADR-0062](decisions/0062-pc-delegation.md)가 정했고 본문을 고치는 것이 §3에 있다. 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
 | C13 | **구현됨** | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다: 호스트·Studio·Bot UI·콘솔·Center) |
 | C14 | **구현됨** | `contracts.bpmn_ext` B1~B15 + `contracts.dmn` | — (닫았다 — 엔진이 수행하고 Studio가 편집·검사하고 예제 50개가 이 형식이다. schema 1에서 **쓰지 않기로 적은 것**은 범위 결정이다) |
 
@@ -46,7 +46,23 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열넷의 상태는 §1 표에 있다. **남은 것이 없다** — §3-12(타이머로 깨우는 자리)는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)로 닫았다(하트비트가 쓸어서 깨우고 자리가 있을 때만 — 기한은 「그 시각 이후」다). 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
+계약 열넷의 상태는 §1 표에 있다. **남은 것은 PC 위임 하나다.**
+
+### 3-13. PC 위임 — 모양은 정했고 계약 다섯이 남았다
+
+[ADR-0062](decisions/0062-pc-delegation.md)가 정했다(**먼저 정할 것이 없다** — 그 ADR이 선택지 셋을 두고 골랐다). 고칠 자리는 다섯이고 **C14부터** 간다(그림이 없으면 나머지가 가리킬 것이 없다).
+
+| 계약 | 더할 것 |
+| --- | --- |
+| C14 | `chk:call.delegate`(`bpm_process_id`·`version?`·`bot_ui?`) + 그 호출을 보는 검사(B14는 패키지 안에서 찾지 않고 **선언한 `outputs`**와 맞춘다) + 시험 케이스의 `delegations`(Studio가 돌릴 남의 패키지가 없어 **케이스가 결과를 적는다** — 결재 답·메시지와 같은 결) |
+| C1 | `requires.delegations[]`, **`delegate`는 `run_location=server`에서만**이라는 규칙(422), R3 사유 글을 이 ADR로 |
+| C12 | 위임 요청(`POST …/server-runner/delegations` — Center가 PC를 고른 뒤 **`POST /jobs`와 같은 함수**로 작업을 만든다)과 결과 내려주기, `waiting[]`의 `delegation` 갈래·작업 id |
+| C4 | 작업 ack에 **그 Bot이 선언한 `outputs`** (원칙 6의 예외 — ack와 함께 지운다) |
+| C3 | `run_waiting`의 선택 칸 `job_id`, 그리고 예약 셋 풀기(`source: delegation`·`parent_run_id`·`waiting_for: delegation`) |
+
+**값이 Center를 지나가는 것**이 이 거리의 값이다 (C6 `review`·`answer`에 이어 둘째 예외다). 코드 쪽은 엔진의 **네 번째 기다림**(`WAIT_DELEGATION`)과 `RunEnv.delegate` 포트 둘(서버 실행기·Studio)이다.
+
+**닫은 것들** — §3-12(타이머로 깨우는 자리)는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)로 닫았다(하트비트가 쓸어서 깨우고 자리가 있을 때만 — 기한은 「그 시각 이후」다). 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
 
 ## 4. 화면 쪽 기능 공백
 

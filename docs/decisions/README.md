@@ -70,3 +70,4 @@
 | [0059](0059-sending-mail-and-webhooks.md) | 보내기는 플랫폼이 한다 — `core.senders`의 SMTP·HTTP 구현에 실행하는 쪽이 설정을 준다. 웹훅 관문은 어댑터와 같은 함수이고 **허용 호스트는 운영자가 적는다**(기본은 닫힘) | 수락 |
 | [0060](0060-pinning-external-definitions.md) | 외부 확장 정의는 **그림에 고정한다**(`chk:process.extensions[].definition_hash` — 모델·내보내기가 이미 받는다). 고정하지 않은 것은 **막지 않고 경고한다** — 겹으로 막는 것을 내보내기의 관문으로 올리면 뒷문이 기본값이 된다 | 수락 |
 | [0061](0061-waking-runs-whose-timer-is-due.md) | 시각이 된 타이머는 **하트비트가 쓸어서** 깨운다 — 메모리의 일꾼만 보고(재시작은 이미 전부 되살린다) **자리가 있을 때만**. 기한은 「그 시각 이후」다 | 수락 |
+| [0062](0062-pc-delegation.md) | PC 위임은 **배포된 PC Bot**을 Center 작업으로 부르는 것이다 (`chk:call.delegate`) — ADR-0016 §3의 「패키지 안의 PC 정의」는 **돌릴 길이 없었다**(공유 BPM 프로세스에는 진입이 없다). 결과 값만 Center를 지나가고 ack와 함께 지운다 | 수락 |
