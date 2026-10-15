@@ -605,3 +605,55 @@ def test_cancelling_a_waiting_run_really_closes_it(
     assert store.get(run_id) is None
     (last,) = [one for one in lines(settings, run_id, "run_finished")]
     assert last["status"] == "cancelled"
+
+
+def test_an_answer_waits_for_a_free_slot_instead_of_being_refused(
+    center: TestClient,
+    center_store: CenterStore,
+    settings: Settings,
+    key: str,
+    store: Store,
+) -> None:
+    """**빈자리가 없으면 답을 넣지 않고 ack도 하지 않는다** (메시지·타이머와 같은 결).
+
+    기다리던 실행은 자리를 놓았으므로 이어 가면 **다시 쥔다**. 상한을 넘기면
+    `capacity.running > max`가 되어 **하트비트가 스스로 막히고**(계약이 보내는 쪽에서 본다)
+    실행기가 Center와 말을 못 한다 — 작업·결재·메시지가 **모두** 멈춘다.
+
+    **거절로 적지 않는 것이 요점이다** — C6은 받아들이지 못한 ack를 `open`으로 되돌리며
+    **답을 지우므로** 사람이 답한 결재가 버려진다. ack하지 않으면 Center가 다음 주기에
+    **그대로 다시 내려 준다**.
+    """
+    from chaeksas.contracts.server_runner import validate_heartbeat
+    from chaeksas.core.packages import find
+    from chaeksas.server_runner.worker import Worker
+
+    runner = runner_of(settings, key, center, store)
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting(runner)
+
+    # 자리를 다른 실행이 쥐고 있다 (상한은 1이다).
+    bot = find(settings.data_path, BOT, VERSION)
+    assert bot is not None
+    busy = Worker(bot=bot, data_dir=settings.data_path, env=runner.run_env(bot), run_id="run_busy")
+    runner.workers["run_busy"] = busy
+    assert runner.free_slots() == 0
+
+    request_id = center.get("/api/v1/approvals?state=open", headers=READ).json()[0]["request_id"]
+    answer_in_center(center, request_id)
+    runner.tick()
+
+    # ① 넣지 않았고 **ack도 하지 않았다** — 그 답은 Center에 그대로 있다.
+    assert runner.pending_approval_acks == []
+    assert runner.workers[run_id].snapshot().waiting is not None, "자리도 없이 이어 갔다"
+    listed = center.get(f"/api/v1/approvals/{request_id}", headers=READ).json()
+    assert (listed["state"], listed["delivered"]) == ("answered", False), "답이 버려졌다"
+    # ② 그래서 하트비트가 막히지 않는다 (상한을 넘기지 않았다).
+    assert validate_heartbeat(runner._heartbeat_request()) == []  # noqa: SLF001
+
+    # ③ 자리가 비면 다음 주기에 들어간다.
+    del runner.workers["run_busy"]
+    drain(runner)
+    assert store.get(run_id) is None, "자리가 비었는데 이어 가지 않았다"
+    assert [one.request_id for one in runner.pending_approval_acks] in ([], [request_id])

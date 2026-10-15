@@ -714,6 +714,13 @@ class Agent:
 
         **지금 기다리지 않는 답은 `not_waiting`으로 돌려보낸다** (C6 — Center가 다시 연다).
         회수·만료는 **답이 아니다** — 오류 경계로 간다 (ADR-0038).
+
+        **빈자리가 없으면 넣지 않고 ack도 하지 않는다** (메시지·타이머와 같은 결) — 기다리던
+        실행은 자리를 놓았으므로 이어 가면 **다시 쥔다**. 상한을 넘기면
+        `capacity.running > max`가 되어 **하트비트가 스스로 막히고**(`validate_heartbeat`)
+        실행기가 Center와 말을 못 한다. **거절로 적지 않는 것이 요점이다** — C6이 받아들이지
+        못한 ack를 `open`으로 되돌리며 **답을 지우므로**(`_apply_acks`) 사람이 답한 결재가
+        버려진다. ack하지 않으면 Center가 다음 주기에 **그대로 다시 내려 준다**(`delivered = 0`).
         """
         for one in found:
             worker = self._waiting_for(one.request_id)
@@ -721,6 +728,9 @@ class Agent:
                 self.pending_approval_acks.append(
                     ApprovalAck(request_id=one.request_id, accepted=False, reason="not_waiting")
                 )
+                continue
+            if self.free_slots() <= 0:
+                log.info("결재 %s의 답을 넣을 자리가 없다 — 다음 주기에", one.request_id)
                 continue
             try:
                 if one.state == "answered":
