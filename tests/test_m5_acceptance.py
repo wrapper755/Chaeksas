@@ -37,6 +37,7 @@ from typing import Any
 import httpx
 import pytest
 import uvicorn
+from canned_answers import canned
 from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -451,125 +452,6 @@ def dispatch_target_in_the_drawing() -> str:
 
 
 # ─────────────────────────── 스텁 모델 ───────────────────────────
-
-
-def canned(wanted: dict[str, str], given: dict[str, Any]) -> dict[str, Any] | None:
-    """예제가 **그 값이어야 뜻이 통하는** 자리의 답. 열쇠는 `results`의 이름들이다.
-
-    모델이 똑똑한지는 여기서 시험하지 않는다. 시험하는 것은 **엔진·케이스·기대값이 한 줄로
-    맞물리는가**다 — 그래서 답은 모델이 아니라 시험이 정한다. `given`은 C14 §「AI 태스크가
-    보는 값」대로 모델에게 간 값이라, 건마다 다른 답(반복)도 여기서 만들 수 있다.
-    """
-    key = tuple(sorted(wanted))
-
-    if key == ("메일",):
-        # BX-08과 BX-23이 **같은 모양**을 돌려준다 — `대상`의 칸으로 가른다.
-        대상 = given.get("대상") or {}
-        if "교육명" in 대상:  # BX-23 교육 독려
-            단계 = str(대상.get("단계", ""))
-            참조 = [대상.get("팀장메일")] if 단계 in ("팀장참조", "인사팀보고") else []
-            if 단계 == "인사팀보고":
-                참조 = [*참조, given.get("인사팀메일")]
-            return {
-                "메일": {
-                    "받는사람": 대상.get("메일"),
-                    "참조": [one for one in 참조 if one],
-                    "제목": f"[{단계}] {대상.get('교육명')} 이수 안내",
-                    "본문": f"{대상.get('이름')}님, {대상.get('마감일')}까지 {대상.get('링크')}에서 이수해 주세요.",
-                }
-            }
-        # BX-08 연체 독촉
-        return {
-            "메일": {
-                "받는사람": f"{대상.get('거래처명')} 담당자",
-                "제목": f"[{대상.get('단계')}] 미결제 안내",
-                "본문": f"{대상.get('거래처명')} 귀중, {대상.get('금액')}원이 {대상.get('연체일수')}일 지났습니다.",
-            }
-        }
-
-    if key == ("서류결과",):  # BX-10 서류 확인
-        서류 = [str(one) for one in (given.get("서류") or [])]
-        통장 = any("bank" in one for one in 서류)
-        사업자 = any("biz" in one for one in 서류)
-        빠진 = [name for name, 있다 in (("사업자등록증", 사업자), ("통장 사본", 통장)) if not 있다]
-        return {"서류결과": {"충족": not 빠진, "빠진서류": 빠진, "불일치": []}}
-
-    if key == ("근거", "분류"):  # BX-13 반품 사유 분류
-        사유 = str(given.get("사유", ""))
-        if "안 켜" in 사유 or "고장" in 사유 or "불량" in 사유:
-            return {"분류": "불량", "근거": "제품이 동작하지 않는다고 적혀 있다"}
-        if "다른" in 사유 or "오배송" in 사유:
-            return {"분류": "오배송", "근거": "주문과 다른 물건이 왔다고 적혀 있다"}
-        return {"분류": "단순변심", "근거": "제품 하자를 말하지 않는다"}
-
-    if key == ("문단",):  # BX-15 견적서 문단
-        고객 = given.get("고객") or {}
-        return {"문단": f"{고객.get('이름', '고객')}님께 아래와 같이 견적을 보내 드립니다."}
-
-    if key == ("환영본문",):  # BX-20 환영 메일
-        return {
-            "환영본문": (
-                f"{given.get('이름')}님, {given.get('부서')} 합류를 환영합니다. "
-                f"{given.get('입사일')} 첫 출근이며 회사 메일은 {given.get('회사메일')}입니다. "
-                f"{given.get('첫날안내')}"
-            )
-        }
-
-    if key == ("긴급도", "요약", "종류", "확신도"):  # BX-31 요청 분류
-        본문 = str(given.get("본문", ""))
-        if "노트북" in 본문 or "화면" in 본문:
-            # 확신도 0.8 이상이면 사람 확인을 건너뛴다 (「노트북 고장」 케이스).
-            return {"종류": "장비", "긴급도": "높음", "요약": "노트북 화면 불량", "확신도": 0.92}
-        # 애매한 요청 — 확신도가 낮아 사람에게 간다.
-        return {"종류": "기타", "긴급도": "보통", "요약": "내용이 불분명한 요청", "확신도": 0.21}
-
-    if key == ("근거부족", "초안"):  # BX-32 답변 초안
-        근거 = given.get("근거") or []
-        if not 근거:
-            return {"초안": "", "근거부족": True}
-        첫 = 근거[0] if isinstance(근거[0], dict) else {}
-        return {
-            "초안": f"안녕하세요 고객님. {첫.get('본문', '')}",
-            "근거부족": False,
-        }
-
-    if key == ("분석",):  # BX-35 묶음 하나 분석 (반복)
-        한묶음 = given.get("한묶음") or []
-        found = []
-        for one in 한묶음:
-            제목 = str(one.get("subject", "")) if isinstance(one, dict) else ""
-            주제 = 제목[제목.find("[") + 1 : 제목.find("]")] if "[" in 제목 and "]" in 제목 else ""
-            주제 = 주제 or "기타"
-            감성 = "부정" if 주제 in ("배송", "환불", "품질") else "긍정"
-            found.append({"주제": 주제, "감성": 감성})
-        return {"분석": found}
-
-    if key == ("요약",):  # BX-35 한 장 요약
-        주제별 = given.get("주제별") or {}
-        return {"요약": f"주제 {len(주제별)}가지를 보았고 부정 비율은 {given.get('부정비율')}입니다."}
-
-    if key == ("요약", "원인후보"):  # BX-34 장애 요약
-        로그 = given.get("로그") or []
-        return {
-            "요약": f"{given.get('서비스')}에서 오류가 늘고 있습니다. 로그 {len(로그)}줄을 확인했습니다.",
-            "원인후보": ["상위 결제 게이트웨이 지연 (추정)", "회로 차단기 반개방 (추정)"],
-        }
-
-    if key == ("intent",):  # FX-10 라우팅
-        요청 = str(given.get("요청", ""))
-        if "환율" in 요청 or "달러" in 요청:
-            return {"intent": "exchange_rate"}
-        if 요청.startswith("http"):
-            return {"intent": "web_summary"}
-        return {"intent": "answer"}
-
-    if key == ("답",):
-        # 환율 태스크는 `주소`를 받는다 (`domain: api`). 스텁은 도구를 부르지 않는다.
-        if "주소" in given:
-            return {"답": "오늘 USD/KRW는 1,387.5원입니다."}
-        return {"답": f"「{given.get('요청')}」은 사내 안내 페이지를 확인해 주세요."}
-
-    return None
 
 
 @pytest.fixture(scope="session")

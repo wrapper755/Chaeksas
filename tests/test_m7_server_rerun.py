@@ -33,11 +33,14 @@ import re
 import threading
 import time
 from collections.abc import Iterator
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 import uvicorn
+from canned_answers import canned
 from fastapi.testclient import TestClient
 from stub_model import StubModel
 
@@ -51,6 +54,7 @@ from chaeksas.center.storage import Store, now_iso  # noqa: E402
 from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
 from chaeksas.contracts.extension import definition_hash  # noqa: E402
 from chaeksas.contracts.signing import sign  # noqa: E402
+from chaeksas.core.senders import WebhookConfig  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
 from chaeksas.mock_apps.c11 import SHARED_KEY_ENV  # noqa: E402
 from chaeksas.mock_apps.c11 import build as build_mock  # noqa: E402
@@ -61,6 +65,8 @@ from chaeksas.server_runner.center_client import CenterClient  # noqa: E402
 from chaeksas.server_runner.credentials import service_key_env  # noqa: E402
 from chaeksas.server_runner.settings import Settings as RunnerSettings  # noqa: E402
 from chaeksas.studio.packaging import default_name, export  # noqa: E402
+from chaeksas.studio.receiver import Receiver  # noqa: E402
+from chaeksas.studio.runner import resolve_inputs  # noqa: E402
 from chaeksas.studio.workspace import Workspace  # noqa: E402
 
 DOCS = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples"
@@ -105,9 +111,18 @@ def _first_case(example: str) -> dict[str, Any]:
     return dict(next((one for one in cases if not one.get("manual")), {}) or {})
 
 
-def case_inputs(example: str) -> dict[str, Any]:
-    """작업 지시로 줄 입력 — 케이스의 `inputs`를 그대로 (C5 `inputs`)."""
-    return dict(_first_case(example).get("inputs") or {})
+def case_inputs(example: str, receiver: Receiver | None = None) -> dict[str, Any]:
+    """작업 지시로 줄 입력 (C5 `inputs`) — **케이스 입력 연산자를 푼다**.
+
+    푸는 것은 **Studio와 같은 함수**다 (`studio.runner.resolve_inputs`) — 연산자는 C14가
+    시험 케이스 형식으로 정한 것이고(`$test_receiver`·`$now_plus`) 작업 지시(C5)에는 그런
+    것이 없다. 베끼면 같은 케이스가 묶음에 따라 다른 값을 받는다.
+
+    `receiver`를 주지 않으면 `$test_receiver`를 만났을 때 **분명히 실패한다** (조용히 dict를
+    넘기면 그림이 그것을 주소로 알고 돈다).
+    """
+    raw = dict(_first_case(example).get("inputs") or {})
+    return resolve_inputs(raw, now=datetime.now().astimezone(), receiver=receiver)
 
 
 def case_approvals(example: str) -> dict[str, dict[str, Any]]:
@@ -226,10 +241,14 @@ def center(
 def model() -> Iterator[StubModel]:
     """AI 태스크가 쓰는 모델 — 127.0.0.1 스텁이다 (`tests/stub_model.py`).
 
-    답은 **아무 값**이어도 된다: 여기서 보는 것은 업무 결과가 아니라 **배포·실행 한 바퀴**다
-    (결과가 맞는지는 Studio 시험 실행이 본다 — 같은 그림·같은 엔진).
+    답은 **M3·M5와 같은 자리**에서 온다 (`tests/canned_answers.py`) — 전에는 「아무 값」이었고
+    (`lambda: None`) 그래서 결과의 **칸을 읽는** 예제가 값을 읽다 멈췄다(BX-10·BX-30·FX-09).
+    같은 그림이 묶음에 따라 다른 답을 받으면 안 된다.
+
+    여기서 보는 것은 여전히 업무 결과가 아니라 **배포·실행 한 바퀴**다 — 결과가 맞는지는
+    Studio 시험 실행이 본다 (같은 그림·같은 엔진).
     """
-    with StubModel(lambda wanted, given: None) as made:
+    with StubModel(canned) as made:
         yield made
 
 
@@ -262,6 +281,34 @@ def service_keys(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv(service_key_env(ref), DEV_KEY)
 
 
+class BundleSettings(RunnerSettings):
+    """묶음만 쓰는 설정 — **웹훅의 사설망을 연다** (ADR-0059 §2).
+
+    제품 설정에는 그 스위치가 **없다**: 한 번 켜면 모든 Bot의 모든 웹훅에 적용되어 사내 아무
+    주소로나 업무 값이 나간다. 그래서 켜는 자리를 **묶음에 둔다** — ADR이 「시험과 Studio 시험
+    수신기만 켠다」고 적어 둔 그 자리다. 막는 규칙 자체는 `tests/test_core_senders.py`가 본다.
+
+    **나머지 길은 제품 그대로다** — 허용 호스트·SMTP는 설정에서 오고 어댑터는 `make_sender`가
+    짓는다.
+    """
+
+    def webhook(self) -> WebhookConfig:
+        return replace(super().webhook(), allow_private_network=True)
+
+
+@pytest.fixture(scope="session")
+def receiver() -> Iterator[Receiver]:
+    """웹훅을 받는 **시험 수신기** — 케이스의 `$test_receiver`가 가리키는 곳 (C14).
+
+    **Studio의 것과 같은 코드**다 (`studio.receiver`) — 받는 모양이 묶음마다 다를 이유가 없다.
+    127.0.0.1에 뜨므로 **배포된 Bot의 규칙으로는 보낼 수 없는 주소**다: 그래서 아래 `runner`가
+    사설망을 열어 준다 (ADR-0059 §2 — 제품 설정에는 그 스위치가 없다).
+    """
+    made = Receiver().start()
+    yield made
+    made.stop()
+
+
 @pytest.fixture(scope="session")
 def mail() -> Iterator[Any]:
     """메일을 받는 **작은 SMTP 서버** — 127.0.0.1이다 (바깥에 나가지 않는다).
@@ -279,7 +326,11 @@ def mail() -> Iterator[Any]:
 
 @pytest.fixture
 def runner(
-    tmp_path: Path, center: tuple[TestClient, Store, Any], model: StubModel, mail: Any
+    tmp_path: Path,
+    center: tuple[TestClient, Store, Any],
+    model: StubModel,
+    mail: Any,
+    receiver: Receiver,
 ) -> agent_mod.Agent:
     """진짜 서버 실행기 — Center는 in-process이고 실행은 **제 스레드**로 돈다.
 
@@ -295,7 +346,7 @@ def runner(
     key = client.post(
         "/api/v1/center-keys", json={"name": "시험 서버", "type": "server_runner"}, headers=ADMIN
     ).json()["key"]
-    settings = RunnerSettings(
+    settings = BundleSettings(
         center_url=CENTER_URL,
         name="재통과 서버",
         max_concurrency=4,
@@ -308,6 +359,8 @@ def runner(
         smtp_port=mail.port,
         smtp_security="none",
         smtp_sender="bot@example.com",
+        # 시험 수신기는 127.0.0.1이다 — 허용 호스트에 적어도 **사설망을 열지 않으면** 막힌다.
+        webhook_allowed_hosts=("127.0.0.1",),
     )
     settings.data_path.mkdir(parents=True, exist_ok=True)
     settings.runs_dir.mkdir(parents=True, exist_ok=True)
@@ -496,45 +549,36 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 일곱. **보내기도 이제 꽂힌다** (조각 10, ADR-0059) — 메일은
-# 설정의 SMTP로, 웹훅은 **운영자가 적은 허용 호스트**로 간다. 그래서 남은 것은 **플랫폼이 아니라
-# 묶음·그림 쪽**이다.
+# 아직 **돌리지는** 못하는 까닭 넷. **웹훅도 이제 간다** (조각 12) — 묶음이 **Studio와 같은
+# 시험 수신기·같은 입력 리졸버**를 쓰고(`$test_receiver`·`$now_plus`), 실행기 설정이 그 주소를
+# 허용 호스트에 담는다. 127.0.0.1은 제품 규칙으로 막히므로 **묶음만** 사설망을 연다
+# (`BundleSettings` — ADR-0059 §2의 「시험과 Studio 시험 수신기만」 그 자리다).
 #
-# - **묶음에 없는 것**: 짜 둔 모델 답·시계·신호·소켓 Center·표본 파일·케이스 입력 연산자
-#   (`_NO_CANNED`·`_TIMER`·`_SIGNAL`·`_NO_SOCKET`·`_NO_SAMPLES`·`_NO_INPUT_OPS`).
-# - **계약이 가른 것**: 웹훅 둘 (`_WEBHOOK` — `$test_receiver`는 Studio 전용이다, C14).
+# - **제품 쪽 공백**: 타이머로 깨우는 자리가 없다 (`_NO_TIMER_WAKE` — 셋. 09-gaps §3-12).
+#   **가장 큰 묶음이고 묶음에서 고칠 수 없다.**
+# - **묶음에 없는 것**: 표본 파일·소켓 Center (`_NO_SAMPLES`·`_NO_SOCKET`).
+# - **묶음에 길이 없는 것**: 신호 (`_SIGNAL` — C12는 메시지만 넣는다).
 # - **일부러 실패하는 것**: BX-33 (`_ON_PURPOSE` — 아래에 따로 시험이 있다).
 #
-# **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고(셋은 이미 초록이었다), 조각 10에서 또
-# 둘이 틀렸다 — BX-01은 보내기가 아니라 **표본 파일**이 없어서, BX-11은 **케이스 입력 연산자**를
-# 풀지 않아서 멈춘다. 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
-_NO_CANNED = (
-    "묶음에 **짜 둔 모델 답**이 없다 — AI 태스크의 결과가 dict이고 그 안의 칸을 읽는데, "
-    "스텁은 타입만 보고 빈 `{}`를 준다(`stub_model.answer_for`). 그래서 갈라짐이 케이스와 "
-    "달라지거나 값을 읽다 실패한다. 답은 모델이 아니라 **시험이 정한다** — M3·M5 묶음은 제 "
-    "`canned`를 가지고 있고, 그것을 함께 쓰는 자리로 옮기는 것이 다음 일이다. "
-)
-_WEBHOOK = (
-    "**웹훅은 이 묶음에서 보낼 곳이 없다** — 케이스가 `$test_receiver`를 가리키는데 그것은 "
-    "**Studio 시험 실행 전용**이고(C14), 배포된 Bot은 사설망으로 웹훅을 보내지 않는다 "
-    "(ADR-0059 §2 — 허용 호스트에 적어도 루프백은 열리지 않는다). 바깥에 나가지 않으므로 "
-    "공개 주소에 수신기를 둘 수도 없다. **계약이 가른 자리**라 「아직」이 아니다. "
-)
+# **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고(셋은 이미 초록이었다), 조각 10에서 둘,
+# 조각 12에서 **다섯**이다 — BX-10·BX-30은 짜 둔 답 뒤의 **웹훅**이었고, BX-11은 입력 연산자도
+# 메시지도 아니라 **타이머**였다(메시지는 201로 들어간다). FX-04·FX-14의 「묶음이 시계를 돌릴
+# 수단이 없다」도 **틀렸다** — 진짜 시계로 기다려도 실행기가 깨우지 않는다. 첫 실패만 보고
+# 적으면 그다음 까닭을 모른 채로 남는다.
 _NO_SAMPLES = (
     "묶음이 **표본 파일**을 만들지 않는다 — 그림이 `samples/<…>` 폴더를 읽는데 저장소에 "
     "이진 파일을 두지 않으므로(M3·M5 묶음은 **그 자리에서 만든다**) 폴더가 없다. "
     "그 자리를 옮겨 오는 것이 다음 일이다. "
 )
-_NO_INPUT_OPS = (
-    "묶음이 **케이스 입력 연산자**를 풀지 않는다 — 케이스가 `{\"$now_plus\": \"PT20S\"}`를 "
-    "적어 두었고(C14 — 시험 입력의 연산자다) 그것을 시각으로 바꾸는 것은 **Studio 시험 "
-    "실행의 일**이다. 작업 지시(C5)에는 그런 연산자가 없어 타이머가 그 dict를 읽다 멈춘다. "
-)
-
 # 아래 셋은 실행기가 아니라 **묶음**에 없는 것이다.
-_TIMER = (
-    "실제 시계를 기다린다 — 묶음이 시계를 돌릴 수단이 없다 (실행기는 `RunEnv.clock`을 "
-    "바깥에서 받지 않는다). Studio 시험 실행은 `QTimer`를 앞당겨 본다. "
+_NO_TIMER_WAKE = (
+    "**실행기가 시각이 된 타이머로 기다리는 실행을 깨우지 않는다.** 타이머를 보는 자리는 "
+    "일꾼의 `_drive` 루프 안(`Worker._tick`)뿐이고, 그 루프는 **지금 울릴 것이 없으면 스레드를 "
+    "끝낸다** — 그 뒤에 시각이 되어도 다시 미는 쪽이 없다 (`Agent.tick()`에 그런 쓸기가 없다). "
+    "메시지·결재는 들어오는 지시가 깨우지만 타이머는 깨울 사람이 없다. **계약은 간다고 적어 "
+    "두었다** (C12 §재시작과 유실 — 「기한은 Center가 꺼져 있어도 간다」) — 09-gaps §3-12. "
+    "BX-11은 **메시지가 아니라 이것이다**: 견적 셋은 `201`로 들어가고(조각 12에서 재 봤다) "
+    "마감 타이머에서 멈춘다. 묶음 쪽 공백이 아니라 **제품 쪽 공백**이라 여기서 못 고친다. "
 )
 _SIGNAL = (
     "신호를 넣을 길이 묶음에 없다 — C12 메시지 API는 **메시지**를 넣고(§메시지) 신호는 "
@@ -561,17 +605,12 @@ _ON_PURPOSE = (
 #: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
 REMAINING: dict[str, str] = {
     "bx01_invoice_reconciliation": _NO_SAMPLES,
-    "bx10_vendor_onboarding_review": _NO_CANNED,
-    "bx11_bid_collection": _NO_INPUT_OPS,
+    "bx11_bid_collection": _NO_TIMER_WAKE,
     "bx16_reorder_proposal": _NO_SOCKET,
-    "bx21_leave_request": _WEBHOOK,
-    "bx30_contract_review": _NO_CANNED,
     "bx33_access_request": _ON_PURPOSE,
-    "fx04_folder_poll": _TIMER,
-    "fx09_sequential_loop": _NO_CANNED,
-    "fx10_operator_routing": _WEBHOOK,
+    "fx04_folder_poll": _NO_TIMER_WAKE,
     "fx13_signal": _SIGNAL,
-    "fx14_timers": _TIMER,
+    "fx14_timers": _NO_TIMER_WAKE,
 }
 
 GREEN = [one for one in SERVER if one not in REMAINING]
@@ -616,13 +655,14 @@ def test_a_server_example_runs_through_center_and_the_runner(
     tmp_path: Path,
     center: tuple[TestClient, Store, Any],
     runner: agent_mod.Agent,
+    receiver: Receiver,
 ) -> None:
     """한 줄로 본다: 서명 → 배포 → 설치 → **Center 작업 지시** → 실행 → Center가 안다.
 
     **업무 값은 보지 않는다** (C3에 없다 — 원칙 6). 결과가 맞는지는 Studio 시험 실행이 본다.
     """
     info = deploy(center, runner, packaged(tmp_path, example))
-    job_id = dispatch(center, info, case_inputs(example))
+    job_id = dispatch(center, info, case_inputs(example, receiver))
     done = run_to_the_end(
         center,
         runner,
@@ -634,7 +674,10 @@ def test_a_server_example_runs_through_center_and_the_runner(
 
 
 def test_bx33_fails_on_purpose_on_the_server_too(
-    tmp_path: Path, center: tuple[TestClient, Store, Any], runner: agent_mod.Agent
+    tmp_path: Path,
+    center: tuple[TestClient, Store, Any],
+    runner: agent_mod.Agent,
+    receiver: Receiver,
 ) -> None:
     """BX-33은 **일부러 실패한다** (ADR-0039) — 서버에서도 **같은 식 오류**로 멈춘다.
 
@@ -644,7 +687,7 @@ def test_bx33_fails_on_purpose_on_the_server_too(
     """
     client, _, _ = center
     info = deploy(center, runner, packaged(tmp_path, "bx33_access_request"))
-    job_id = dispatch(center, info, case_inputs("bx33_access_request"))
+    job_id = dispatch(center, info, case_inputs("bx33_access_request", receiver))
     done = run_to_the_end(
         center,
         runner,
@@ -656,3 +699,17 @@ def test_bx33_fails_on_purpose_on_the_server_too(
     found = client.get(f"/api/v1/runs/{done['run_id']}", headers=READ).json()
     # **식 오류다** — 업무 실패(`TaskFailed`)가 아니라 그림의 흠이라 오류 경계로 가지 않는다.
     assert found.get("error_code") == "expr_error", found
+
+
+def test_the_canned_answers_are_the_shared_ones() -> None:
+    """짜 둔 답의 **자리가 하나다** (`tests/canned_answers.py`) — M3·M5와 같은 것을 쓴다.
+
+    묶음마다 따로 두면 **같은 그림이 묶음에 따라 다른 답을 받는다** — 그래서 M7이 세 예제를
+    돌리지 못했다.
+    """
+    import canned_answers
+
+    assert canned is canned_answers.canned
+    # FX-09의 그 자리 — 답이 없으면 스텁이 타입으로 때우고 케이스가 어긋난다.
+    found = canned({"판정": "dict"}, {"신청": {"id": 1, "금액": 30000, "영수증": True}})
+    assert found is not None and found["판정"]["승인"] is True
