@@ -200,7 +200,7 @@ def mock_apps() -> Iterator[tuple[dict[str, str], dict[str, str]]]:
 REGISTER_TRIES = 3
 
 
-def register_app(client: TestClient, app_id: str, base_url: str) -> None:
+def register_app(client: Any, app_id: str, base_url: str) -> None:
     """서비스 앱 하나를 등록한다 — **닿지 못한 것은 다시 해 본다** (ADR-0007과 같은 결).
 
     다시 해도 안 되면 **그 자리에서 말한다** — 조용히 넘어가면 그 앱을 쓰는 예제가 배포에서
@@ -219,6 +219,42 @@ def register_app(client: TestClient, app_id: str, base_url: str) -> None:
     pytest.fail(f"{app_id}: 모의 앱을 {REGISTER_TRIES}번 등록해 봤지만 Center가 읽지 못했다")
 
 
+def prepare_center(
+    client: Any, store: Store, mock_apps: tuple[dict[str, str], dict[str, str]]
+) -> Any:
+    """첫 Admin 공개키를 넣고 모의 앱·외부 확장을 등록한다 → 서명 키.
+
+    **부르는 쪽이 둘이다** — `center`(in-process)와 `socket_center`(진짜 소켓, BX-16)다.
+    베끼면 한쪽만 고쳐져 「여기서는 되는데 저기서는 안 된다」가 된다.
+    """
+    c11, external = mock_apps
+    key = keystore.create(label="서버 재통과")
+    bootstrap_key(store, public_key=key.public_bytes(), label="서버 재통과")
+    for app_id, base_url in c11.items():
+        register_app(client, app_id, base_url)
+    signer = keystore.load(key, passphrase=SIGN_PASS)
+    for app_id, base_url in external.items():
+        # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`).
+        found = external_definitions.BUILDERS[app_id](base_url)
+        envelope = sign(
+            {
+                "kind": "extension",
+                "id": found["id"],
+                "version": found["version"],
+                "definition_hash": definition_hash(found),
+            },
+            signer,
+            signed_at=SIGNED_AT,
+        )
+        answer = client.post(
+            "/api/v1/resources/extensions",
+            json={"definition": found, "envelope": envelope.to_json_dict()},
+            headers=ADMIN,
+        )
+        assert answer.status_code < 400, f"{app_id}: {answer.text}"
+    return key
+
+
 @pytest.fixture
 def center(
     tmp_path: Path, mock_apps: tuple[dict[str, str], dict[str, str]]
@@ -233,30 +269,7 @@ def center(
         read_token="t-read",
     )
     with TestClient(create_app(settings, store=store)) as client:
-        key = keystore.create(label="서버 재통과")
-        bootstrap_key(store, public_key=key.public_bytes(), label="서버 재통과")
-        for app_id, base_url in c11.items():
-            register_app(client, app_id, base_url)
-        signer = keystore.load(key, passphrase=SIGN_PASS)
-        for app_id, base_url in external.items():
-            # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`).
-            found = external_definitions.BUILDERS[app_id](base_url)
-            envelope = sign(
-                {
-                    "kind": "extension",
-                    "id": found["id"],
-                    "version": found["version"],
-                    "definition_hash": definition_hash(found),
-                },
-                signer,
-                signed_at=SIGNED_AT,
-            )
-            answer = client.post(
-                "/api/v1/resources/extensions",
-                json={"definition": found, "envelope": envelope.to_json_dict()},
-                headers=ADMIN,
-            )
-            assert answer.status_code < 400, f"{app_id}: {answer.text}"
+        key = prepare_center(client, store, mock_apps)
         yield client, store, key
     store.close()
 
@@ -585,25 +598,17 @@ def run_to_the_end(
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-# 아직 **돌리지는** 못하는 까닭 **둘**. 표본 파일·타이머·웹훅·짜 둔 답은 조각 12·13이 열었다.
+# **파라미터 묶음에서 빠지는 것은 이제 하나**다 — BX-33은 **일부러 실패하는** 교육 예제라
+# (`_ON_PURPOSE`, ADR-0039) 「열린다」가 맞지 않는다. 아래에 **의도한 실패를 보는 시험**이 있다.
 #
-# - **묶음에 길이 없는 것**: 소켓 Center 하나 (`_NO_SOCKET` — BX-16).
-# - **일부러 실패하는 것**: BX-33 (`_ON_PURPOSE` — 아래에 따로 시험이 있다. **「열린다」가
-#   맞지 않는 예제**다).
+# **BX-16도 돈다 — 다만 전용 시험이다** (`test_bx16_hands_work_to_a_pc_through_center_jobs`).
+# 그 예제만 발판이 넷 더 필요해서(소켓 Center·연동용 키·등록된 Bot UI·배포된 BX-17) 묶음에
+# 넣으면 **시험마다** Center 소켓과 가짜 PC가 뜬다.
 #
 # **사유는 돌려 보고 적는다.** 조각 9에서 일곱이 틀렸고, 조각 10에서 둘, 조각 12에서 다섯,
-# 조각 13에서 **둘**이다 — FX-04는 **빈 폴더**였고, **FX-13은 신호가 아니었다**: `ready`·`abort`는
-# 같은 실행 안에서 던지고 받으므로(`Thr_Ready` → `Wait_Ready`) 바깥에서 넣을 것이 없고, 바깥에서
-# 오는 것은 **메시지**뿐이라 묶음이 이미 넣고 있었다 — 막던 것은 **타이머**(`Wait_A`)였다.
+# 조각 13에서 셋이다 — FX-04는 **빈 폴더**, **FX-13은 신호가 아니라 타이머**(`ready`·`abort`는
+# 같은 실행 안에서 던지고 받는다), BX-16은 **못 하는 것이 아니라 발판이 필요한 것**이었다.
 # 첫 실패만 보고 적으면 그다음 까닭을 모른 채로 남는다.
-_NO_SOCKET = (
-    "모의 앱 `center-jobs`가 **진짜 Center의 `POST /jobs`**를 부르는 예제라(서버 Bot이 PC에 "
-    "일을 넘기는 자리 — ADR-0016 §3) 묶음이 넷을 갖춰야 한다: **소켓 Center**(여기 Center는 "
-    "in-process `TestClient`다)·**연동용 키**·**등록된 Bot UI**(`group:구매-PC`가 가리킬 PC)·"
-    "**배포된 BX-17**. **M5 인수 시험이 이미 그 한 바퀴를 본다** (`center_jobs` 픽스처) — "
-    "여기서 또 보려면 같은 발판을 한 벌 더 두고 시험마다 Center 소켓·가짜 Bot UI를 띄워야 "
-    "한다. 값과 얻는 것을 재 보고 **두지 않기로** 했다. "
-)
 #: BX-33은 **일부러 실패한다** (ADR-0039) — 한 가지에서만 생기는 값을 뒤에서 읽는 교육 예제다.
 #: 그래서 `REMAINING`이지만 「아직 못 한다」가 아니고, 아래에 **의도한 실패를 보는 시험**이 있다.
 _ON_PURPOSE = (
@@ -617,11 +622,21 @@ _ON_PURPOSE = (
 #: **배포·설치는 이것들도 모두 본다** (아래 `test_every_server_example_deploys_and_installs`) —
 #: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
 REMAINING: dict[str, str] = {
-    "bx16_reorder_proposal": _NO_SOCKET,
     "bx33_access_request": _ON_PURPOSE,
 }
 
-GREEN = [one for one in SERVER if one not in REMAINING]
+#: **묶음이 아니라 전용 시험이 보는 것**. 빠뜨린 것이 아니라 **다른 자리에서 본다** —
+#: 아래 `test_every_server_example_is_in_the_bundle_or_has_a_reason`가 셋을 합쳐 42개와 맞춰
+#: 본다(갈래를 더하면서 조용히 빠지는 일을 막는 자리다).
+ELSEWHERE: dict[str, str] = {
+    "bx16_reorder_proposal": (
+        "`test_bx16_hands_work_to_a_pc_through_center_jobs`가 본다 — 그 예제만 발판이 넷 더 "
+        "필요하다(소켓 Center·연동용 키·등록된 Bot UI·배포된 BX-17). 파라미터 묶음에 넣으면 "
+        "**시험마다** Center 소켓과 가짜 PC가 뜬다. "
+    ),
+}
+
+GREEN = [one for one in SERVER if one not in REMAINING and one not in ELSEWHERE]
 
 
 def test_the_server_examples_are_read_from_the_drawings() -> None:
@@ -634,9 +649,14 @@ def test_the_server_examples_are_read_from_the_drawings() -> None:
 
 
 def test_every_server_example_is_in_the_bundle_or_has_a_reason() -> None:
-    """빼는 것은 **이유와 함께** 적는다 (M4·M5 인수 시험과 같은 자리)."""
-    assert set(GREEN) | set(REMAINING) == set(SERVER)
-    for example, why in REMAINING.items():
+    """빼는 것은 **이유와 함께** 적는다 (M4·M5 인수 시험과 같은 자리).
+
+    갈래가 셋이다 — 묶음이 도는 것(`GREEN`), **전용 시험이 보는 것**(`ELSEWHERE`), 아직 못
+    도는 것(`REMAINING`). 셋을 합쳐 42개와 맞춰 보므로 **조용히 빠지는 일이 없다**.
+    """
+    assert set(GREEN) | set(REMAINING) | set(ELSEWHERE) == set(SERVER)
+    assert not (set(REMAINING) & set(ELSEWHERE)), "한 예제가 두 갈래에 있다"
+    for example, why in (*REMAINING.items(), *ELSEWHERE.items()):
         assert example in SERVER, f"{example}는 서버 예제가 아니다"
         assert why.strip(), f"{example}: 이유가 비었다"
 
@@ -722,3 +742,212 @@ def test_the_canned_answers_are_the_shared_ones() -> None:
     # FX-09의 그 자리 — 답이 없으면 스텁이 타입으로 때우고 케이스가 어긋난다.
     found = canned({"판정": "dict"}, {"신청": {"id": 1, "금액": 30000, "영수증": True}})
     assert found is not None and found["판정"]["승인"] is True
+
+
+# ─────────── BX-16: 서버 Bot이 PC에 일을 넘긴다 (전용 발판, ADR-0016 §3) ───────────
+
+#: 그림이 적어 둔 대상 그룹 (`target: 'group:구매-PC'`) — 그룹은 Center에 없고 그 앱이 안다.
+BX16_GROUP = "구매-PC"
+#: 그 그룹의 PC에 **배포돼 있어야 하는** PC 예제 — 배포되지 않은 것은 돌릴 수 없다 (C5).
+BX16_TARGET = "bx17_erp_po_entry"
+
+
+@pytest.fixture
+def socket_center(
+    tmp_path: Path, mock_apps: tuple[dict[str, str], dict[str, str]]
+) -> Iterator[tuple[Any, Store, Any, str]]:
+    """**진짜 소켓에 올린 Center** — 모의 앱이 `POST /jobs`를 부를 수 있어야 한다 (BX-16).
+
+    다른 시험의 Center는 in-process(`TestClient`)다 — 다른 스레드의 모의 앱이 부를 주소가
+    없으므로 이 예제만 소켓을 쓴다. 판 깔기는 **같은 함수**(`prepare_center`)이고, 쓰는 쪽
+    도우미(`deploy`·`dispatch`·`run_to_the_end`)도 그대로다 — `httpx.Client`와 `TestClient`가
+    같은 모양이다.
+    """
+    import httpx
+
+    store = Store(tmp_path / "socket-center.sqlite3")
+    settings = CenterSettings(
+        db_path=tmp_path / "socket-center.sqlite3",
+        package_dir=tmp_path / "socket-packages",
+        admin_token=ADMIN_TOKEN,
+        read_token="t-read",
+    )
+    url, server, thread = serve(create_app(settings, store=store))
+    with httpx.Client(base_url=url, timeout=30.0) as client:
+        key = prepare_center(client, store, mock_apps)
+        yield client, store, key, url
+    server.should_exit = True
+    thread.join(timeout=10)
+    store.close()
+
+
+@pytest.fixture
+def socket_runner(
+    tmp_path: Path, socket_center: tuple[Any, Store, Any, str], model: StubModel, mail: Any
+) -> agent_mod.Agent:
+    """소켓 Center에 **진짜 HTTP로** 붙는 실행기 (ASGI를 끼우지 않는다)."""
+    client, _, _, url = socket_center
+    key = client.post(
+        "/api/v1/center-keys", json={"name": "BX-16 서버", "type": "server_runner"}, headers=ADMIN
+    ).json()["key"]
+    settings = BundleSettings(
+        center_url=url,
+        name="BX-16 서버",
+        max_concurrency=2,
+        data_path=tmp_path / "bx16-runner",
+        llm_base_url=model.base_url,
+        llm_model="stub",
+        readable_dirs=(Path(__file__).resolve().parent.parent,),
+        smtp_host="127.0.0.1",
+        smtp_port=mail.port,
+        smtp_security="none",
+        smtp_sender="bot@example.com",
+        webhook_allowed_hosts=("127.0.0.1",),
+    )
+    settings.data_path.mkdir(parents=True, exist_ok=True)
+    settings.runs_dir.mkdir(parents=True, exist_ok=True)
+    return agent_mod.Agent(settings=settings, client=CenterClient(base_url=url, api_key=key))
+
+
+def register_a_pc(client: Any) -> str:
+    """등록된 Bot UI 하나 — 작업이 갈 PC다 (C4 「키 묶기」). `bot_ui_id`를 준다.
+
+    **하트비트까지 보낸다** — 확장을 보고하지 않으면 Center가 `ui-automation`을 몰라 그것을
+    요구하는 BX-17의 **배포가 막힌다** (C7 누락 검사). `Agent`를 쓰지 않고 C4를 직접 부른다 —
+    여기서 보는 것은 Bot UI가 아니라 **작업이 만들어지나**다.
+    """
+    from chaeksas.core.extensions import load_host
+
+    key = client.post(
+        "/api/v1/center-keys", json={"name": "BX-16 대상 PC", "type": "bot_ui"}, headers=ADMIN
+    ).json()["key"]
+    auth = {"Authorization": f"Bearer {key}"}
+    versions = {"bot_ui": "0.1.0", "core": "0.1.0"}
+    answer = client.post(
+        "/api/v1/bot-ui/register",
+        # C4 — PC 고유값의 SHA-256만 보낸다 (원값은 보내지 않는다).
+        json={"schema": 1, "machine_id": "b" * 64, "name": "구매 PC-01", "os": "Windows 11", "versions": versions},
+        headers=auth,
+    )
+    assert answer.status_code < 400, answer.text
+    bot_ui_id = str(answer.json()["bot_ui_id"])
+
+    beat = client.post(
+        "/api/v1/bot-ui/heartbeat",
+        json={
+            "schema": 1,
+            "status": "idle",
+            "current_run": None,
+            "queue": {"max": 20, "items": []},
+            "worker": {"state": "off", "version": "0.1.0", "restarts": 0, "session": "idle"},
+            "versions": versions,
+            "extensions": [one.to_json_dict() for one in load_host().states()],
+        },
+        headers=auth,
+    )
+    assert beat.status_code < 400, beat.text
+    return bot_ui_id
+
+
+def deploy_to_pc(
+    client: Any, signing_key: Any, bot_ui_id: str, example: str, tmp_path: Path
+) -> str:
+    """PC 예제 하나를 **승인 서명 → 배포 서명**으로 그 PC에 배포한다 (C2).
+
+    설치까지 가지 않는다 — `POST /jobs`가 보는 것은 **Center의 배포**이고(`no_deployment`)
+    설치는 하트비트 뒤의 일이다 (PC 쪽 한 바퀴는 `tests/test_m5_pc_rerun.py`가 본다).
+    """
+    space = Workspace(tmp_path / "bx16-target").ensure()
+    made = space.import_example(EXAMPLES, example)
+    package = export(made, tmp_path / default_name(made))
+    answer = client.post(
+        "/api/v1/packages",
+        files={"file": (package.name, package.read_bytes(), "application/zip")},
+        headers=ADMIN,
+    )
+    assert answer.status_code in (200, 201), answer.text
+    info = dict(answer.json())
+
+    signer = keystore.load(signing_key, passphrase=SIGN_PASS)
+    approve = sign(
+        {
+            "kind": "package",
+            "id": info["id"],
+            "version": info["version"],
+            "content_hash": info["content_hash"],
+        },
+        signer,
+        signed_at=SIGNED_AT,
+    )
+    answer = client.put(
+        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
+        json=approve.to_json_dict(),
+        headers=ADMIN,
+    )
+    assert answer.status_code < 400, answer.text
+
+    envelope = sign(
+        {
+            "kind": "deployment",
+            "deployment_id": "dep_pc" + re.sub(r"[^0-9a-f]", "", info["content_hash"])[:6],
+            "target": {"type": "bot_ui", "id": bot_ui_id},
+            "bpm_process_id": info["id"],
+            "version": info["version"],
+            "content_hash": info["content_hash"],
+        },
+        signer,
+        signed_at=now_iso(),
+    )
+    answer = client.post("/api/v1/deployments", json=envelope.to_json_dict(), headers=ADMIN)
+    assert answer.status_code < 400, answer.text
+    return str(info["id"])
+
+
+def test_bx16_hands_work_to_a_pc_through_center_jobs(
+    tmp_path: Path,
+    socket_center: tuple[Any, Store, Any, str],
+    socket_runner: agent_mod.Agent,
+    receiver: Receiver,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """BX-16 — **서버 Bot이 PC에 일을 넘긴다** (ADR-0016 §3). 묶음 전체와 따로 선다.
+
+    이 예제만 발판이 넷 더 필요하다 — **소켓 Center**(모의 앱이 `POST /jobs`를 부른다)·
+    **연동용 키**(작업을 만드는 관문, 봉투가 없다)·**등록된 Bot UI**(`group:구매-PC`가 가리킬
+    PC)·**배포된 BX-17**(배포되지 않은 것은 돌릴 수 없다). 그래서 파라미터 묶음에 넣지 않고
+    여기 둔다 — 그쪽에 넣으면 시험마다 Center 소켓과 가짜 PC가 뜬다.
+
+    **보는 것은 둘이다**: 서버 실행이 끝까지 돌았나, 그리고 **PC에 작업이 정말 생겼나**.
+    """
+    from chaeksas.mock_apps.apps.center_jobs import ENV_PREFIX
+
+    client, store, key, url = socket_center
+    bot_ui_id = register_a_pc(client)
+    target = deploy_to_pc(client, key, bot_ui_id, BX16_TARGET, tmp_path)
+
+    token = client.post(
+        "/api/v1/center-keys", json={"name": "center-jobs 앱", "type": "integration"}, headers=ADMIN
+    ).json()["key"]
+    # 앱은 **부를 때마다** 읽는다 (`_env()`) — 띄운 뒤에 넣어도 된다.
+    monkeypatch.setenv(f"{ENV_PREFIX}CENTER__BASE_URL", url)
+    monkeypatch.setenv(f"{ENV_PREFIX}CENTER__TOKEN", token)
+    monkeypatch.setenv(f"{ENV_PREFIX}GROUPS", json.dumps({BX16_GROUP: bot_ui_id}))
+
+    center = (client, store, key)
+    info = deploy(center, socket_runner, packaged(tmp_path, "bx16_reorder_proposal"))
+    make_samples_for(socket_runner, str(info["id"]))
+    job_id = dispatch(center, info, case_inputs("bx16_reorder_proposal", receiver))
+    done = run_to_the_end(
+        center,
+        socket_runner,
+        job_id,
+        answers=case_approvals("bx16_reorder_proposal"),
+        messages=case_messages("bx16_reorder_proposal"),
+    )
+    assert done["run_status"] == "success", done
+
+    # **PC에 일이 갔다** — 그 Bot UI로 BX-17 작업이 생겼다 (예제가 메우려는 그 자리다).
+    listed = client.get("/api/v1/jobs?state=pending,dispatched,accepted", headers=READ).json()
+    handed = [one for one in listed if one["bpm_process_id"] == target]
+    assert handed, f"PC에 넘긴 작업이 없다: {[one['bpm_process_id'] for one in listed]}"
+    assert handed[0]["target"] == {"type": "bot_ui", "id": bot_ui_id}
