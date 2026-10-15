@@ -265,11 +265,28 @@ class Receive(ContractModel):
     payload: list[str] = Field(default_factory=list)  # 본문에서 변수로 들어오는 이름
 
 
+class Delegate(ContractModel):
+    """`chk:call.delegate` — **PC 위임** ([ADR-0062](../decisions/0062-pc-delegation.md)).
+
+    부르는 것은 **따로 올리고 따로 배포한 PC Bot 패키지**다 — 이 패키지 안의 정의가 아니다.
+    그래서 `calledElement`가 가리키는 것을 패키지 안에서 찾지 않는다 (B14).
+    """
+
+    #: 부를 PC Bot 패키지 id (C1 — Bot의 신원은 패키지 id다).
+    bpm_process_id: str
+    #: 판. **비우면 배포된 판** (작업 지시와 같은 규칙 — 둘 이상이면 Center가 거절한다).
+    version: str | None = None
+    #: 어느 PC인가를 정하는 **식**. 비우면 Center가 고른다.
+    bot_ui: str | None = None
+
+
 class Call(ContractModel):
     """`chk:call` — 다른 BPM 프로세스 호출. **적은 것만 오간다.**"""
 
     input: dict[str, str] = Field(default_factory=dict)  # {호출 대상 변수: 식}
     output: dict[str, str] = Field(default_factory=dict)  # {내 변수: 호출 대상 변수}
+    #: 적으면 **PC 위임**이다 (ADR-0062). 선택 칸이라 옛 그림은 그대로 읽힌다.
+    delegate: Delegate | None = None
 
 
 class Loop(ContractModel):
@@ -677,6 +694,10 @@ class Case(ContractModel):
     #: 노드 id → 폼 응답. 없는 결재는 **답하지 않고 기다린다** (기한 초과 시험).
     approvals: dict[str, dict[str, Any]] = Field(default_factory=dict)
     messages: list[CaseMessage] = Field(default_factory=list)
+    #: 노드 id → **PC 위임이 돌려주는 값** (그 Bot이 선언한 `outputs`, ADR-0062).
+    #: Studio에는 부를 PC Bot의 그림이 없어 **케이스가 결과를 적는다**. 적지 않은 위임은
+    #: **그 자리에서 실패**다 — 결재처럼 기다리게 두면 끝나지 않는다(현장 PC가 없다).
+    delegations: dict[str, dict[str, Any]] = Field(default_factory=dict)
     #: 자동 응답을 쓰지 않고 실제 창을 띄운다 (폼을 사람이 보는지 확인).
     manual: bool = False
 
@@ -943,6 +964,9 @@ def read_vars(node: Node, flows: Sequence[Flow]) -> set[str]:
     sub_call: Call | None = node.prop("call")
     if sub_call is not None:
         out |= {v for expression in sub_call.input.values() for v in expression_vars(expression)}
+        # **어느 PC인가를 정하는 식도 읽기다** (ADR-0062) — 담당자 PC처럼 업무 값이 고른다.
+        if sub_call.delegate is not None and sub_call.delegate.bot_ui:
+            out |= expression_vars(sub_call.delegate.bot_ui)
     email: Email | None = node.prop("email")
     if email is not None:
         out |= set(email.attachments)
@@ -1396,6 +1420,7 @@ def _check_b14(
     process: BpmnProcess,
     dmn_decisions: Mapping[str, DecisionIo] | None,
     called_processes: Mapping[str, Sequence[str]] | None,
+    delegated_outputs: Mapping[str, Sequence[str]] | None,
 ) -> list[Violation]:
     out: list[Violation] = []
     # 병렬 분기·합류의 가지 수 (범위마다).
@@ -1444,7 +1469,12 @@ def _check_b14(
                 if unknown:
                     out.append(_error("B14", f"{node.id}: DMN 출력에 없는 것을 받는다", items=unknown))
         call: Call | None = node.prop("call")
-        if call is not None and called_processes is not None and node.called_element:
+        if call is None:
+            continue
+        if call.delegate is not None:
+            # **PC 위임** (ADR-0062) — 대상이 다른 패키지라 패키지 안에서 찾지 않는다.
+            out.extend(_check_delegation(process, node, call.delegate, call, delegated_outputs))
+        elif called_processes is not None and node.called_element:
             target = called_processes.get(node.called_element)
             if target is None:
                 out.append(_error("B14", f"{node.id}: 호출 대상 {node.called_element}이 패키지에 없다"))
@@ -1457,12 +1487,53 @@ def _check_b14(
     return out
 
 
+def _check_delegation(
+    process: BpmnProcess,
+    node: Node,
+    delegate: Delegate,
+    call: Call,
+    delegated_outputs: Mapping[str, Sequence[str]] | None,
+) -> list[Violation]:
+    """PC 위임 호출을 본다 (B14, [ADR-0062](../decisions/0062-pc-delegation.md)).
+
+    **실행 위치가 `server`일 때만** 위임할 수 있다 — PC 실행은 그 PC의 자리를 끝까지 쥐므로
+    (ADR-0014) PC가 다른 PC를 기다리면 둘이 서로를 기다릴 수 있다. C1에도 같은 규칙이 있다
+    (매니페스트를 보는 쪽은 그림을 읽지 않는다).
+
+    받을 값은 **그 Bot이 선언한 `outputs`**와 맞춰 보는데, 그것은 **남의 패키지 매니페스트**라
+    여기서 알 수 없다 — 부르는 쪽이 주면 보고 **주지 않으면 건너뛴다** (`called_processes`와
+    같은 규칙). 모르는 것으로 막지 않는다.
+    """
+    out: list[Violation] = []
+    if process.info.run_location != "server":
+        out.append(
+            _error(
+                "B14",
+                f"{node.id}: PC 위임은 실행 위치가 server인 BPM 프로세스에서만 쓸 수 있다",
+                code="delegation_not_from_pc",
+            )
+        )
+    known = None if delegated_outputs is None else delegated_outputs.get(delegate.bpm_process_id)
+    if known is not None:
+        unknown = [v for v in call.output.values() if v not in known]
+        if unknown:
+            out.append(
+                _error(
+                    "B14",
+                    f"{node.id}: {delegate.bpm_process_id}이 선언한 outputs에 없는 것을 받는다",
+                    items=unknown,
+                )
+            )
+    return out
+
+
 def validate(
     process: BpmnProcess,
     *,
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
     dmn_decisions: Mapping[str, DecisionIo] | None = None,
     called_processes: Mapping[str, Sequence[str]] | None = None,
+    delegated_outputs: Mapping[str, Sequence[str]] | None = None,
     extension_task_vars: Callable[[ExtensionTask], Iterable[str]] | None = None,
 ) -> list[Violation]:
     """C14 검사 규칙 B1~B14. 오류와 경고를 **함께** 돌려준다 (`Violation.severity`).
@@ -1475,6 +1546,9 @@ def validate(
       모른다** (ADR-0018).
     - `dmn_decisions`: 결정 id → 입력·출력 이름. 없으면 B14의 DMN 대조를 건너뛴다.
     - `called_processes`: `calledElement` → 그 BPM 프로세스의 `outputs`. 없으면 호출 대조를 건너뛴다.
+    - `delegated_outputs`: **PC 위임**으로 부르는 Bot의 `bpm_process_id` → 그 패키지가 선언한
+      `outputs` (C1). 남의 패키지 매니페스트라 계약이 스스로 알 수 없다 — 없으면 그 대조를
+      건너뛴다 (ADR-0062). **모르는 것으로 막지 않는다.**
 
     여기서 하지 않는 것:
     - **확장 태스크의 속 내용** (`chk:task`의 JSON). 그 확장의 계약이 검사한다 — 예를 들어 UI
@@ -1493,7 +1567,7 @@ def validate(
         *_check_b11(process, extension_task_vars),
         *_check_b12(process),
         *_check_b13(process),
-        *_check_b14(process, dmn_decisions, called_processes),
+        *_check_b14(process, dmn_decisions, called_processes, delegated_outputs),
     ]
 
 

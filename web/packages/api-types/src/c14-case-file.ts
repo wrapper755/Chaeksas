@@ -23,6 +23,11 @@ export interface Case {
       [k: string]: unknown;
     };
   };
+  delegations?: {
+    [k: string]: {
+      [k: string]: unknown;
+    };
+  };
   description?: string | null;
   expected?: {
     [k: string]: unknown;

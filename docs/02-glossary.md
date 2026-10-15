@@ -77,7 +77,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 프로세스 정의 | `process_definition` | BPMN 2.0 파일 하나. BPM 프로세스 하나는 진입 정의 1개 + 하위 정의 0개 이상 |
 | 실행 위치 | `run_location` | BPM 프로세스 속성. **서버**(`server`, **기본값**, 서버 우선 — [ADR-0016](decisions/0016-server-first.md)): / **PC**(`pc`: Bot UI에서 하나씩, 끝날 때까지 — UI 조작·현장 확인·PC 전용 자원이 필요할 때만) / 서버 쪽: 서버 실행기에서 동시 실행, 기다리는 동안 상태 저장). [ADR-0015](decisions/0015-run-location.md) |
 | 서버 Bot | `server_bot` | 운영 화면에서 실행 위치가 「서버」인 BPM 프로세스를 부르는 이름 (확정). PC 쪽은 그냥 「Bot」 |
-| PC 위임 | `pc_delegation` | 서버 Bot의 Call Activity가 실행 위치 「PC」인 BPM 프로세스를 부르는 것. Center 작업으로 Bot UI에 맡기고 서버 Bot은 상태를 저장하고 기다린다 (제안, [ADR-0016](decisions/0016-server-first.md) §3) |
+| PC 위임 | `pc_delegation` | 서버 Bot의 Call Activity가 **따로 배포된 PC Bot**을 부르는 것 (`chk:call.delegate`). Center 작업으로 Bot UI에 맡기고 서버 Bot은 상태를 저장하고 기다린다. 결과는 그 Bot이 선언한 `outputs`가 Center를 지나 돌아온다 ([ADR-0062](decisions/0062-pc-delegation.md) — 계약·코드는 아직이다) |
 | 동시 실행 상한 | `max_concurrency` | 서버 실행에만 있다. 서버 실행기 전체(기본 10) + BPM 프로세스별(배포 때, 기본 5) |
 | 진입 정의 | `entry` | BPM 프로세스를 시작할 때 처음 실행하는 정의 |
 | 공유 BPM 프로세스 | `process_lib` | 여러 BPM 프로세스가 Call Activity로 부르는 재사용 BPMN. 패키지에 복사되어 들어간다 |

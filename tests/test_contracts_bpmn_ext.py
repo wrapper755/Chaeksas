@@ -497,6 +497,62 @@ def test_b14_matches_rule_against_dmn_and_call_against_target() -> None:
     assert "B14" in codes(xml, dmn_decisions={})  # 결정이 패키지에 없다
 
 
+# ─────────────────────────── PC 위임 (ADR-0062) ───────────────────────────
+
+#: 위임 호출 하나. `calledElement`는 **읽는 사람을 위한 것**이라 패키지에 없어도 된다.
+DELEGATION = (
+    '<bpmn:callActivity id="Call_Erp" calledElement="Proc_erp_input">'
+    "<bpmn:extensionElements><chk:call>"
+    '{"delegate": {"bpm_process_id": "fin.erp-input", "version": "1.2.0", "bot_ui": "담당자PC"}, '
+    '"input": {"전표번호": "청구번호"}, "output": {"입력결과": "결과코드"}}'
+    "</chk:call></bpmn:extensionElements></bpmn:callActivity>"
+)
+SERVER = (
+    '{"run_location": "server", "inputs": ['
+    '{"name": "청구번호", "type": "string"}, {"name": "담당자PC", "type": "string"}]}'
+)
+
+
+def test_a_delegated_call_is_not_looked_for_in_the_package() -> None:
+    """**대상이 다른 패키지다** (ADR-0062) — 패키지 안에서 찾으면 멀쩡한 그림을 거부한다."""
+    xml = wrap(line(DELEGATION), process_json=SERVER)
+    found = read_process(xml)
+    call = found.nodes[1].prop("call")
+    assert call is not None and call.delegate is not None
+    assert call.delegate.bpm_process_id == "fin.erp-input"
+    # `called_processes`를 주어도 그 안에서 찾지 않는다 (평범한 호출이면 B14가 났을 것이다).
+    assert "B14" not in codes(xml, called_processes={})
+
+
+def test_a_delegated_call_only_works_from_a_server_process() -> None:
+    """PC에서 위임하면 **PC가 PC를 기다린다** (ADR-0014 — 자리를 끝까지 쥔다)."""
+    found = validate(read_process(wrap(line(DELEGATION))))  # 기본은 run_location: pc
+    assert [v.code for v in found if v.rule == "B14"] == ["delegation_not_from_pc"]
+
+
+def test_a_delegated_call_is_matched_against_what_that_bot_declares() -> None:
+    """받을 값은 **그 Bot이 선언한 `outputs`**와 맞춰 본다 (C1). **모르면 건너뛴다.**"""
+    xml = wrap(line(DELEGATION), process_json=SERVER)
+    assert "B14" not in codes(xml, delegated_outputs={"fin.erp-input": ("결과코드", "처리시각")})
+    found = validate(read_process(xml), delegated_outputs={"fin.erp-input": ("처리시각",)})
+    assert [v.rule for v in found if v.rule == "B14"] == ["B14"]
+    assert found[0].items == ["결과코드"]
+    # 주지 않으면 대조하지 않는다 — 남의 매니페스트라 계약이 스스로 알 수 없다.
+    assert "B14" not in codes(xml)
+    # 다른 Bot의 것만 알아도 막지 않는다.
+    assert "B14" not in codes(xml, delegated_outputs={"other.bot": ()})
+
+
+def test_the_pc_that_runs_it_can_come_from_a_variable() -> None:
+    """`bot_ui`는 **식**이다 — 담당자 PC처럼 업무 값이 고르므로 읽기로 센다 (B11)."""
+    found = read_process(wrap(line(DELEGATION), process_json=SERVER))
+    node = found.nodes[1]
+    assert {"청구번호", "담당자PC"} <= read_vars(node, found.flows)
+    # 선언하지 않았으면 B11이 말해 준다 (경고다 — 경로 어림이라 막지 않는다).
+    plain = wrap(line(DELEGATION), process_json='{"run_location": "server"}')
+    assert "B11" in codes(plain)
+
+
 # ─────────────────────────── 시험 케이스 형식 ───────────────────────────
 
 
@@ -547,6 +603,21 @@ def test_case_file_reads_messages_and_approvals() -> None:
     assert case.messages[0].name == "return_arrived"
     assert case.approvals["Approve_Hold"]["지급진행"] == "진행"
     assert case.manual is False
+    assert case.delegations == {}, "적지 않으면 비어 있다 (옛 케이스 파일은 그대로 읽힌다)"
+
+
+def test_a_case_can_write_down_what_a_delegation_returns() -> None:
+    """**케이스가 PC 위임의 결과를 적는다** (ADR-0062 §2).
+
+    Studio에는 부를 PC Bot의 그림이 없다 (다른 패키지다) — 결재 답·메시지와 같은 결이다.
+    """
+    found = CaseFile.model_validate(
+        {
+            "schema": 1,
+            "cases": [{"name": "정상", "delegations": {"Call_Erp": {"결과코드": "OK"}}}],
+        }
+    )
+    assert found.cases[0].delegations["Call_Erp"] == {"결과코드": "OK"}
 
 
 # ─────────────────────────── 업무 예제 50개 (가장 센 시험) ───────────────────────────
