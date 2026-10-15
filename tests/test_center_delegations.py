@@ -108,6 +108,10 @@ def runner(center: TestClient, runner_key: str) -> str:
     return str(made.json()["server_runner_id"])
 
 
+#: 등록한 PC의 키 (ack를 올릴 때 쓴다 — 신원은 키다, C4).
+PC_KEYS: dict[str, str] = {}
+
+
 def pc(center: TestClient, *, name: str, machine: str) -> str:
     """등록된 활성 Bot UI 하나 — 돌려주는 것은 `bot_ui_id`다 (C4)."""
     key = new_key(center, name=name, kind="bot_ui")
@@ -123,7 +127,9 @@ def pc(center: TestClient, *, name: str, machine: str) -> str:
         headers={"Authorization": f"Bearer {key}"},
     )
     assert made.status_code < 400, made.text
-    return str(made.json()["bot_ui_id"])
+    bot_ui_id = str(made.json()["bot_ui_id"])
+    PC_KEYS[bot_ui_id] = key
+    return bot_ui_id
 
 
 def package_zip(*, bot: str, where: str, delegations: list[str]) -> bytes:
@@ -431,6 +437,86 @@ def test_a_failed_delegation_comes_down_with_its_reason(
 def test_a_job_that_is_not_a_delegation_is_left_alone(center: TestClient, store: Store) -> None:
     """위임이 아닌 작업의 결과는 담지 않는다 (평범한 PC 작업이다)."""
     assert api.finish(store, job_id="job_whatever", state="finished") is False
+
+
+def pc_beat(center: TestClient, bot_ui_id: str, **over: Any) -> dict[str, Any]:
+    """PC가 하트비트를 올린다 (C4) — `job_acks[]`로 결과를 싣는 자리다."""
+    made = center.post(
+        "/api/v1/bot-ui/heartbeat",
+        json={
+            "schema": 1,
+            "status": "idle",
+            "current_run": None,
+            "queue": {"max": 5, "items": []},
+            "worker": {"state": "off"},
+            **over,
+        },
+        headers={"Authorization": f"Bearer {PC_KEYS[bot_ui_id]}"},
+    )
+    assert made.status_code == 200, made.text
+    return dict(made.json())
+
+
+def test_the_pc_sends_the_outputs_back_in_its_job_ack(
+    center: TestClient, runner_key: str, ready: str
+) -> None:
+    """**PC가 작업 ack에 값을 실어 올리고** 서버 실행기가 하트비트로 받는다 (C4 + C12).
+
+    길이 한 줄로 이어지는가를 본다 — PC 하트비트 → Center → 서버 실행기 하트비트.
+    """
+    job_id = ask(center, runner_key).json()["job_id"]
+    pc_beat(center, ready, job_acks=[{"job_id": job_id, "result": "started", "run_id": "run_20261015_100000_bbbbbb"}])
+    pc_beat(
+        center,
+        ready,
+        job_acks=[
+            {
+                "job_id": job_id,
+                "result": "finished",
+                "run_id": "run_20261015_100000_bbbbbb",
+                "outputs": {"결과코드": "OK"},
+            }
+        ],
+    )
+
+    (one,) = beat(center, runner_key)["delegations"]
+    assert one["job_id"] == job_id and one["state"] == "finished"
+    assert one["outputs"] == {"결과코드": "OK"}
+    # PC 쪽 실행도 함께 온다 — CON-01에서 오갈 수 있다 (C3 `parent_run_id`의 반대 방향).
+    assert one["pc_run_id"] == "run_20261015_100000_bbbbbb"
+    # 작업의 성패는 **`run_status`**에만 적힌다 (C5) — 작업 상태는 `accepted`로 남는다.
+    job = center.get(f"/api/v1/jobs/{job_id}", headers=ADMIN).json()
+    assert (job["state"], job["run_status"]) == ("accepted", "finished")
+
+
+def test_outputs_on_a_plain_job_go_nowhere(
+    center: TestClient, store: Store, private: Any, runner: str
+) -> None:
+    """**위임이 아닌 작업의 값은 어디에도 남지 않는다** (원칙 6의 예외는 좁게 쓴다)."""
+    info = upload(center, private, bot=PC_BOT, where="pc")
+    one = pc(center, name="현장 1", machine="7" * 64)
+    assert deploy_to_pc(center, private, info, one, deployment_id="dep_pc_1").status_code in (200, 201)
+    made = center.post(
+        "/api/v1/jobs",
+        json={"bpm_process_id": PC_BOT, "target": {"type": "bot_ui", "id": one}, "inputs": {}},
+        headers=ADMIN,
+    )
+    assert made.status_code in (200, 201), made.text
+    job_id = made.json()["job_id"]
+
+    pc_beat(center, one, job_acks=[{"job_id": job_id, "result": "finished", "outputs": {"값": 1}}])
+    assert store.row("SELECT * FROM delegations WHERE job_id = ?", (job_id,)) is None
+
+
+def test_a_started_ack_does_not_carry_a_result_yet(
+    center: TestClient, store: Store, runner_key: str, ready: str
+) -> None:
+    """`started`에 값을 실어 보내도 **담지 않는다** — 담으면 서버 실행이 빈 값으로 이어 간다."""
+    job_id = ask(center, runner_key).json()["job_id"]
+    pc_beat(center, ready, job_acks=[{"job_id": job_id, "result": "started", "outputs": {"결과코드": "X"}}])
+    assert beat(center, runner_key)["delegations"] == []
+    row = store.row("SELECT * FROM delegations WHERE job_id = ?", (job_id,))
+    assert row is not None and row["state"] is None
 
 
 # ─────────────────────────── 기다리는 줄·배포 관문 ───────────────────────────

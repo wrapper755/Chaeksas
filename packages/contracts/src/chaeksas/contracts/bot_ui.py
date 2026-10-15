@@ -157,6 +157,11 @@ class JobAck(ContractModel):
     position: int | None = None  # queued일 때 대기열 순번
     run_id: str | None = None  # started일 때
     reason: str | None = None  # rejected·cancel_refused일 때 (KNOWN_JOB_ACK_REASONS)
+    #: **PC 위임이 돌려주는 값** (C12 §PC 위임, [ADR-0062](../decisions/0062-pc-delegation.md)).
+    #: 원칙 6의 **명시한 예외**라 좁게 쓴다: **그 Bot이 선언한 `outputs`만**(C1), **끝났을
+    #: 때만**(`finished`·`failed`…), 그리고 **위임으로 받은 작업만**이다. 평범한 작업은 비운다 —
+    #: Center는 위임이 아닌 작업의 `outputs`를 **버린다**.
+    outputs: dict[str, Any] = Field(default_factory=dict)
 
 
 class ApprovalAck(ContractModel):
