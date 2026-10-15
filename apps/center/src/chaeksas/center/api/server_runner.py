@@ -261,6 +261,9 @@ def _delegations(store: Store, *, runner_id: str, acks: list[Any]) -> list[Any]:
     from chaeksas.center.api import delegations  # noqa: PLC0415 — 순환 import를 피한다
 
     delegations.apply_acks(store, runner_id=runner_id, acks=acks)
+    # **못 받은 값도 언젠가는 지운다** (ADR-0062 §4) — ack가 영영 오지 않는 것이 있다. C6
+    # 결재의 `purge_values`가 하트비트에서 돌듯 여기서 돈다 (따로 도는 청소기를 두지 않는다).
+    delegations.purge_values(store)
     return [one.to_json_dict() for one in delegations.pending_for(store, runner_id)]
 
 

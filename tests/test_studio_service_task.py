@@ -372,3 +372,124 @@ def test_the_panel_blocks_apply_when_the_editor_blocks(app: Any, catalog: Catalo
     changes, problem = panel.patch()
     assert changes == {}
     assert problem is not None and "days" in problem
+
+
+# ─────────────── 위임 대상이 선언한 outputs (C1 → B14, ADR-0062) ───────────────
+
+
+def package(bot: str, *, version: str = "1.0.0", outputs: list[str] | None = None,
+            manifest: bool = True) -> Any:
+    """C5 패키지 한 줄 — `manifest=False`면 **매니페스트가 없는 줄**이다 (옛 업로드)."""
+    from chaeksas.contracts.center_api import PackageInfo
+
+    body: dict[str, Any] = {
+        "id": bot,
+        "version": version,
+        "kind": "bpm_process",
+        "status": "approved",
+        "content_hash": "sha256:" + "0" * 64,
+        "uploaded_by": "설계자",
+        "uploaded_at": "2026-10-15T09:00:00+09:00",
+    }
+    if manifest:
+        body["manifest"] = {
+            "schema": 1,
+            "kind": "bpm_process",
+            "id": bot,
+            "version": version,
+            "name": bot,
+            "run_location": "pc",
+            "entry": "process/main.bpmn",
+            "process_id": "Proc_x",
+            "outputs": outputs or [],
+            "requires": {},
+            "human": {},
+            "built": {"by": "studio", "at": "2026-10-15T09:00:00+09:00", "core": "0.1.0",
+                      "spec_version": 1},
+            "content_hash": "sha256:" + "0" * 64,
+        }
+    return PackageInfo.model_validate(body)
+
+
+def test_the_declared_outputs_come_from_the_manifest() -> None:
+    """**그 Bot이 선언한 `outputs`**가 곧 「부르는 쪽이 받을 것」이다 (C1)."""
+    from chaeksas.studio.service_catalog import declared_outputs
+
+    found = declared_outputs([package("fin.erp-input", outputs=["결과코드"])])
+    assert found == {"fin.erp-input": ("결과코드",)}
+
+
+def test_versions_are_merged_so_a_good_graph_is_not_blocked() -> None:
+    """**판이 여럿이면 합친다** — 이 대조는 막는 검사라 좁게 잡으면 멀쩡한 그림을 거부한다.
+
+    그림이 판을 적지 않으면 「배포된 판」이라는 뜻이고(C14) 어느 판이 배포될지는 Studio가
+    알 수 없다. 그래서 **어느 판도 선언하지 않은 이름**만 걸린다.
+    """
+    from chaeksas.studio.service_catalog import declared_outputs
+
+    found = declared_outputs(
+        [
+            package("fin.erp-input", version="1.0.0", outputs=["결과코드"]),
+            package("fin.erp-input", version="2.0.0", outputs=["결과코드", "처리시각"]),
+        ]
+    )
+    assert found == {"fin.erp-input": ("결과코드", "처리시각")}
+
+
+def test_a_row_without_a_manifest_is_not_counted_as_declaring_nothing() -> None:
+    """매니페스트가 없는 줄은 **건너뛴다** — 「선언한 것이 없다」로 보면 멀쩡한 호출이 막힌다."""
+    from chaeksas.studio.service_catalog import declared_outputs
+
+    assert declared_outputs([package("fin.erp-input", manifest=False)]) == {}
+
+
+def test_the_preflight_sees_a_value_the_bot_does_not_return() -> None:
+    """실행 전 검사가 **그림에서** 잡는다 (B14) — 실행할 때 알면 늦다 (ADR-0062).
+
+    받아 둔 것을 **부르는 쪽이** 넘긴다 — 검사는 서버를 부르지 않는다.
+    """
+    from chaeksas.contracts.bpmn_ext import read_process
+    from chaeksas.studio.preflight import inspect
+
+    xml = DELEGATING_XML.replace('"입력결과": "결과코드"', '"입력결과": "없는칸"')
+    found = inspect(read_process(xml), delegated_outputs={"fin.erp-input": ("결과코드",)})
+    blocked = [v for v in found if v.rule == "B14" and v.blocks]
+    assert blocked and blocked[0].items == ["없는칸"]
+
+    # 맞는 이름이면 조용하다.
+    ok = inspect(read_process(DELEGATING_XML), delegated_outputs={"fin.erp-input": ("결과코드",)})
+    assert [v for v in ok if v.rule == "B14"] == []
+
+
+def test_without_the_center_answer_the_check_is_skipped() -> None:
+    """**모르는 것으로 막지 않는다** — 빈 사전도 「아무것도 선언하지 않았다」가 아니다.
+
+    빈 것을 그대로 넘기면 멀쩡한 위임이 **모두** 막힌다 (Center에 닿지 못한 날 Studio가 멈춘다).
+    """
+    from chaeksas.contracts.bpmn_ext import read_process
+    from chaeksas.studio.preflight import inspect
+
+    process = read_process(DELEGATING_XML)
+    assert [v for v in inspect(process) if v.rule == "B14"] == []
+    assert [v for v in inspect(process, delegated_outputs={}) if v.rule == "B14"] == []
+
+
+#: 위임 하나가 든 서버 그림 (예제에 없어 여기서 만든다 — ADR-0062).
+DELEGATING_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_dlg" targetNamespace="urn:chaeksas:test">
+  <bpmn:process id="Proc_dlg" name="위임" isExecutable="true">
+    <bpmn:extensionElements><chk:process>{"run_location": "server"}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" />
+    <bpmn:callActivity id="Call_Erp" calledElement="Proc_erp_input">
+      <bpmn:extensionElements><chk:call>{"delegate":
+        {"bpm_process_id": "fin.erp-input"}, "output": {"입력결과": "결과코드"}}</chk:call>
+      </bpmn:extensionElements>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="End" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start" targetRef="Call_Erp" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Call_Erp" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>
+"""

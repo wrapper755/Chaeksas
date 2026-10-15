@@ -279,14 +279,23 @@ def listing(
     return [info_of(store, row) for row in picked[offset : offset + window]]
 
 
-def cancel(store: Store, found: Caller, job_id: str) -> tuple[JobInfo, int]:
+def cancel(
+    store: Store, found: Caller, job_id: str, *, by_center: bool = False
+) -> tuple[JobInfo, int]:
     """`DELETE /jobs/{id}` (C5 「취소」 표). 두 번째 값이 응답 코드다 (200 / 202).
 
     `dispatched`·`queued`는 **Center 혼자 끝낼 수 없다** — 그사이 실행을 시작했을 수 있어서,
     현장에 물어보고(`cancel_jobs`) ack를 기다린다. 시작된 것은 거절이고 작업은 `accepted`로
     남는다 (실행 중인 Bot을 멈추는 것은 schema 1 범위 밖).
+
+    **`by_center`는 Center 안에서 부를 때만 참이다** — `create`와 **같은 결**이다 (지금은
+    **PC 위임을 거두는 길**뿐이다, ADR-0062 §5): 그 길은 실행기 키로 들어와 **제 관문**을 이미
+    지났다(등록된 실행기·그 위임의 임자). 권한표를 넓히면 실행기 키로 **남의 작업**까지
+    취소할 수 있게 된다.
     """
-    found_job = get(store, found, job_id, write=True)
+    found_job = (
+        info_of(store, _must(store, job_id)) if by_center else get(store, found, job_id, write=True)
+    )
     status, code = cancel_outcome(found_job.state)
     if code is not None:
         raise ApiError(409, code, f"지금 상태({found_job.state})에서는 취소할 수 없다")

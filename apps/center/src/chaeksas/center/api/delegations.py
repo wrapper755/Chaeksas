@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -27,7 +28,7 @@ from chaeksas.center.api.server_runner import KEY_TYPE, id_for_key
 from chaeksas.center.auth import Caller
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
-from chaeksas.contracts.center_api import delegation_requester
+from chaeksas.contracts.center_api import IDEMPOTENCY_WINDOW_DAYS, delegation_requester
 from chaeksas.contracts.server_runner import (
     DelegationAck,
     DelegationRequest,
@@ -264,10 +265,76 @@ def finish(
     return True
 
 
+def purge_values(store: Store, *, now: str | None = None, days: int = IDEMPOTENCY_WINDOW_DAYS) -> int:
+    """못 받은 위임 값을 **작업 멱등 기간**에 지운다 (ADR-0062 §4). 지운 수를 돌려준다.
+
+    받았다는 ack가 오면 `apply_acks`가 **바로** 지운다. 여기는 **그 ack가 영영 오지 않는
+    경우**다 — 실행기가 사라졌거나 그 실행이 닫혔다. 그때까지 업무 값을 Center DB에 두지
+    않는다 (원칙 6의 예외는 **좁게** 쓴다 — C6 `purge_values`와 같은 결이다).
+
+    **기간을 새로 만들지 않는다** — 같은 자리를 가리키는 작업 멱등 기간(7일)을 쓴다. 그 기간이
+    지나면 같은 위임을 다시 요청해도 **새 작업**이 되므로, 옛 값은 받을 쪽이 없다.
+
+    **누가·언제·성패는 남긴다** (`state`·`reason`·`at`) — 「무엇을 돌렸나」는 운영 기록이고
+    「무엇이 오갔나」만 업무 값이다.
+    """
+    at = now or now_iso()
+    edge = datetime.fromisoformat(at) - timedelta(days=days)
+    rows = store.rows(
+        "SELECT job_id, at FROM delegations WHERE acked = 0 AND outputs_json IS NOT NULL"
+    )
+    stale = [
+        str(row["job_id"])
+        for row in rows
+        if datetime.fromisoformat(str(row["at"])) <= edge
+    ]
+    for job_id in stale:
+        with store.tx() as cur:
+            # **값만** 지운다. `acked`는 그대로 0이다 — 받지 못한 것은 받지 못한 것이고,
+            # 1로 적으면 「실행기가 받아 갔다」는 거짓이 기록에 남는다.
+            cur.execute("UPDATE delegations SET outputs_json = NULL WHERE job_id = ?", (job_id,))
+    return len(stale)
+
+
+def cancel(store: Store, found: Caller, job_id: str) -> tuple[Any, int]:
+    """`POST /api/v1/server-runner/delegations/{job_id}/cancel` — **맡긴 것을 거둔다** (ADR-0062 §5).
+
+    서버 실행이 취소되면 그 위임 작업도 취소한다 — 돌아도 **결과를 받을 쪽이 없다**.
+
+    **C5 취소 경로를 그대로 쓰지 않는다** — 그 길의 관문은 관리자·연동용 키인데(C5 권한표)
+    거두려는 쪽은 **실행기 키**다. 그래서 위임 요청과 **같은 결**로 둔다: 제 관문(실행기
+    키·등록·그 위임의 임자)을 여기서 지나고 **Center 안에서** 작업 취소 함수를 부른다.
+    권한표를 넓히면 실행기 키로 **남의 작업**까지 취소할 수 있게 된다.
+
+    **이미 시작된 PC 실행은 끝까지 간다** (C5 — 「시작된 작업의 취소는 거절」). 그 결과는 받는
+    쪽이 없어 버려지고, 누가·언제·성패는 위임 표에 남는다.
+    """
+    runner_id = _runner_of(store, found)
+    row = store.row(
+        "SELECT job_id FROM delegations WHERE job_id = ? AND runner_id = ?", (job_id, runner_id)
+    )
+    if row is None:
+        # **「없다」와 「내 것이 아니다」는 같은 404** — 404로 가르지 않으면 그것이 곧 목록이 된다
+        # (작업 지시의 「남의 것은 404」와 같은 결).
+        raise ApiError(404, "not_found", "이 실행기가 맡긴 위임이 아니다")
+    # **Center 안에서 부른다** — 위에서 제 관문을 지났다 (`create`와 같은 결).
+    return jobs_api.cancel(store, found, job_id, by_center=True)
+
+
 def delegated_bots(store: Store, run_id: str) -> list[str]:
     """그 서버 실행이 맡긴 작업들 (CON-01이 오갈 때 쓴다 — 지금은 시험이 본다)."""
     rows = store.rows("SELECT job_id FROM delegations WHERE run_id = ? ORDER BY at", (run_id,))
     return [str(row["job_id"]) for row in rows]
+
+
+@router.post("/delegations/{job_id}/cancel")
+async def post_cancel(job_id: str, request: Request) -> Any:
+    from fastapi.responses import JSONResponse  # noqa: PLC0415
+
+    store: Store = request.app.state.store
+    found: Caller = request.app.state.authenticate(request)
+    made, status = cancel(store, found, job_id)
+    return JSONResponse(made.to_json_dict(), status_code=status)
 
 
 @router.post("/delegations")
@@ -286,11 +353,13 @@ async def post_delegation(request: Request) -> Any:
 __all__ = [
     "IN_QUEUE",
     "apply_acks",
+    "cancel",
     "create",
     "delegated_bots",
     "finish",
     "key_prefix",
     "pending_for",
     "pick_bot_ui",
+    "purge_values",
     "router",
 ]

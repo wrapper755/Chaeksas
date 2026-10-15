@@ -571,3 +571,130 @@ def test_deploying_a_delegating_bot_needs_the_pc_bot_approved(
         headers=ADMIN,
     )
     assert ok.status_code in (200, 201), ok.text
+
+
+# ─────────────────────────── 거두기와 청소 (ADR-0062 §4·§5) ───────────────────────────
+
+
+def revoke(center: TestClient, runner_key: str, job_id: str) -> Any:
+    """맡긴 위임을 거둔다 — **실행기 키로** (C5 취소 경로가 아니다)."""
+    return center.post(
+        f"/api/v1/server-runner/delegations/{job_id}/cancel",
+        headers={"Authorization": f"Bearer {runner_key}"},
+    )
+
+
+def test_cancelling_the_server_run_cancels_the_pc_job(
+    center: TestClient, runner_key: str, ready: str
+) -> None:
+    """서버 실행이 취소되면 **그 위임 작업도 취소한다** (ADR-0062 §5).
+
+    돌아도 결과를 받을 쪽이 없다 — PC가 **받을 쪽 없는 일**을 하게 두지 않는다.
+    """
+    job_id = ask(center, runner_key).json()["job_id"]
+    answer = revoke(center, runner_key, job_id)
+    assert answer.status_code == 200, answer.text
+
+    job = center.get(f"/api/v1/jobs/{job_id}", headers=ADMIN).json()
+    assert (job["state"], job["cancel_result"]) == ("cancelled", "cancelled")
+    # **내려가지 않는다** — 그 PC의 대기열에서도 사라진다.
+    assert job_id not in [one["job_id"] for one in center.get("/api/v1/jobs", headers=ADMIN).json()
+                          if one["state"] in ("pending", "dispatched")]
+
+
+def test_a_started_pc_run_is_not_stopped(center: TestClient, runner_key: str, ready: str) -> None:
+    """**이미 시작된 PC 실행은 끝까지 간다** (C5 — 「시작된 작업의 취소는 거절」).
+
+    그 결과는 받는 쪽이 없어 버려지고, 누가·언제·성패는 위임 표에 남는다.
+    """
+    job_id = ask(center, runner_key).json()["job_id"]
+    pc_beat(center, ready, job_acks=[{"job_id": job_id, "result": "started", "run_id": "run_20261015_100000_bbbbbb"}])
+
+    answer = revoke(center, runner_key, job_id)
+    assert answer.status_code == 409 and answer.json()["code"] == "already_started"
+
+
+def test_only_the_runner_that_delegated_can_cancel(
+    center: TestClient, runner_key: str, ready: str
+) -> None:
+    """**남의 위임은 거둘 수 없다** — 있다는 것조차 알리지 않는다 (404, 작업 지시와 같은 결).
+
+    권한표를 넓히지 않고 **제 관문**을 여기서 지나는 까닭이다 (실행기 키·등록·그 위임의 임자).
+    """
+    job_id = ask(center, runner_key).json()["job_id"]
+    other = new_key(center, name="서버 2", kind="server_runner")
+    made = center.post(
+        "/api/v1/server-runner/register",
+        json={
+            "schema": 1,
+            "machine_id": "b2" * 32,
+            "name": "서버 2",
+            "os": "Linux",
+            "versions": {"server_runner": "0.1.0", "core": "0.1.0"},
+            "max_concurrency": 1,
+        },
+        headers={"Authorization": f"Bearer {other}"},
+    )
+    assert made.status_code in (200, 201), made.text
+    assert revoke(center, other, job_id).status_code == 404
+
+    # 다른 종류의 키는 애초에 못 거둔다 (C5 권한표).
+    read_only = center.post(
+        f"/api/v1/server-runner/delegations/{job_id}/cancel",
+        headers={"Authorization": "Bearer t-read"},
+    )
+    assert read_only.status_code == 403
+
+
+def test_values_nobody_received_are_purged_after_the_idempotency_window(
+    center: TestClient, store: Store, runner_key: str, ready: str
+) -> None:
+    """**못 받은 값은 작업 멱등 기간에 지운다** (ADR-0062 §4 — 원칙 6의 예외는 좁게 쓴다).
+
+    ack가 오면 `apply_acks`가 바로 지운다. 여기는 **그 ack가 영영 오지 않는** 경우다.
+    누가·언제·성패는 남는다 — 「무엇이 오갔나」만 업무 값이다.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from chaeksas.center.api import delegations as api_mod
+
+    job_id = ask(center, runner_key).json()["job_id"]
+    pc_beat(center, ready, job_acks=[{"job_id": job_id, "result": "started", "run_id": "run_20261015_100000_bbbbbb"}])
+    pc_beat(
+        center,
+        ready,
+        job_acks=[{"job_id": job_id, "result": "finished", "run_id": "run_20261015_100000_bbbbbb",
+                   "outputs": {"결과코드": "OK"}}],
+    )
+    assert beat(center, runner_key)["delegations"][0]["outputs"] == {"결과코드": "OK"}
+
+    # 아직 기간 안이면 그대로 둔다.
+    assert api_mod.purge_values(store) == 0
+
+    later = (datetime.now(UTC) + timedelta(days=8)).isoformat()
+    assert api_mod.purge_values(store, now=later) == 1
+    (row,) = store.rows("SELECT * FROM delegations WHERE job_id = ?", (job_id,))
+    assert row["outputs_json"] is None
+    # **`acked`는 그대로 0이다** — 받지 못한 것을 받았다고 적지 않는다.
+    assert row["acked"] == 0 and row["state"] == "finished"
+    # 다시 내려가지만 값은 비어 있다 (성패는 알아야 오류 경계가 받는다).
+    (one,) = beat(center, runner_key)["delegations"]
+    assert one["outputs"] == {} and one["state"] == "finished"
+
+
+def test_the_purge_leaves_what_the_runner_has_not_seen_yet(
+    center: TestClient, store: Store, runner_key: str, ready: str
+) -> None:
+    """**기간 안의 것은 건드리지 않는다** — 받아 갈 실행기가 아직 있다."""
+    job_id = ask(center, runner_key).json()["job_id"]
+    pc_beat(center, ready, job_acks=[{"job_id": job_id, "result": "started", "run_id": "run_20261015_100000_bbbbbb"}])
+    pc_beat(
+        center,
+        ready,
+        job_acks=[{"job_id": job_id, "result": "finished", "run_id": "run_20261015_100000_bbbbbb",
+                   "outputs": {"결과코드": "OK"}}],
+    )
+    from chaeksas.center.api import delegations as api_mod
+
+    assert api_mod.purge_values(store) == 0
+    assert beat(center, runner_key)["delegations"][0]["outputs"] == {"결과코드": "OK"}

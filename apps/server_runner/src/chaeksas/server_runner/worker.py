@@ -180,10 +180,24 @@ class Worker:
         self._thread.start()
 
     def stop(self, *, reason: str = "운영자가 중지했습니다") -> None:
-        """중지를 **부탁한다** — 스레드가 다음 걸음에서 본다 (강제로 끊지 않는다)."""
+        """중지를 **부탁한다** — 스레드가 다음 걸음에서 본다 (강제로 끊지 않는다).
+
+        **기다리며 스레드를 놓은 실행은 그 자리에서 닫는다** (ADR-0054 §5) — 볼 사람이 없어
+        부탁만 해 두면 그 실행은 영원히 기다리고 작업도 `accepted`로 남는다. 도는 스레드가
+        없으므로 부르는 쪽이 `Run`을 만지는 유일한 스레드다 (답·메시지를 넣는 것과 같다).
+
+        **되살렸다고 적지 않는다** — 이어 간 것이 아니라 끝난 것이다. 마지막 `run_waiting`은
+        짝 없이 남고(C3 — 그때 정말 기다리고 있었다) 바로 `run_finished(cancelled)`가 온다.
+        """
         with self._lock:
             self._stopping = True
             self._stop_reason = reason
+        run = self.run
+        if run is None or run.finished or self.alive:
+            return
+        self.engine.cancel(run, reason=reason)
+        self._publish(run)
+        self._settle(run)
 
     def join(self, timeout_s: float | None = None) -> bool:
         if self._thread is None:
@@ -324,6 +338,22 @@ class Worker:
             raise RuntimeError("되살리지 않은 실행에 위임 결과를 넣을 수 없다")
         self.engine.delegation_done(run, job_id, state=state, outputs=outputs, reason=reason)
         self._continue(run, RESUME_DELEGATION)
+
+    def delegation_jobs(self) -> list[str]:
+        """지금 기다리는 **PC 위임 작업들** (ADR-0062 §5 — 취소할 때 거둘 것들).
+
+        **걷히기 전에 읽어야 한다** — `Engine.cancel`이 기다림을 비우므로(아무도 답할 사람이
+        없어진다) 취소된 뒤에 물으면 빈 목록이다. 그래서 부르는 쪽은 **중지를 부탁하기 전에**
+        읽는다.
+        """
+        run = self.run
+        if run is None:
+            return []
+        return [
+            one.job_id
+            for one in run.waits.values()
+            if one.kind == WAIT_DELEGATION and one.job_id
+        ]
 
     def waits_for_delegation(self, job_id: str) -> bool:
         """그 위임을 기다리고 있나 — **넣어 보지 않고** 묻는다 (`waits_for_message`와 같은 결).
@@ -595,16 +625,19 @@ class Worker:
         return run.tokens[0].node_id if run.tokens else None
 
     def _finished(self, run: Run) -> str | None:
-        """끝났으면 C3 `run_finished.status`. **취소는 실패가 아니다** (C3)."""
+        """끝났으면 C3 `run_finished.status`. **기록에서 읽는다** — 파일이 원본이다 (C3).
+
+        **`run.state`로는 가를 수 없다** — 엔진은 성공만 `DONE`으로 앉히고 **취소도 `FAILED`**다
+        (`_finish`). 상태만 보면 **취소가 실패로 올라가** 작업 ack가 `cancelled`를 잃고(C4)
+        같은 실행의 기록(`cancelled`)과 어긋난다. 「취소는 실패가 아니다」는 C3의 말이다.
+        """
         if not run.finished:
             return None
-        if run.state is State.DONE:
-            # 취소도 `DONE`으로 앉으므로 기록에서 읽는다 — `cancelled`와 `success`를 가른다.
-            for event in reversed(run.log.events):
-                if event.kind == "run_finished":
-                    return str(event.data.get("status") or "success")
-            return "success"
-        return "failed"
+        for event in reversed(run.log.events):
+            if event.kind == "run_finished":
+                return str(event.data.get("status") or "failed")
+        # 끝났는데 그 줄이 없다 — 있을 수 없는 자리다. 상태로 어림한다.
+        return "success" if run.state is State.DONE else "failed"
 
     def _waiting_row(self, run: Run) -> WaitingRun | None:
         """기다리는 중이면 C12 `waiting[]` 한 줄. **짝이 되는 칸을 반드시 채운다**.

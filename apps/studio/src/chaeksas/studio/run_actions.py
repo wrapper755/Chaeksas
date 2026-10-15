@@ -78,7 +78,12 @@ def run_test(window: MainWindow, *, mode: str | None = None) -> None:
 
     # 그림 검사(B1~B15)와 **사전 점검**(이 PC에서 돌 수 있나)이 같은 관문이다.
     violations = inspect(
-        found.process, process, task_type_locations=window.task_type_locations()
+        found.process,
+        process,
+        task_type_locations=window.task_type_locations(),
+        # **PC 위임이 받을 값**은 그 Bot의 매니페스트가 아는 것이라 Center에서 받아 둔 것을
+        # 쓴다 (C1 → B14, ADR-0062). 못 받았으면 그 대조만 건너뛴다.
+        delegated_outputs=window.delegated_outputs(),
     ) + window.readiness()
     blocking = [v for v in violations if v.blocks]
     if blocking:
