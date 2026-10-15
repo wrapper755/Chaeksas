@@ -149,6 +149,7 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 **R7은 없어졌다** — 툴팩 해시를 검사하던 규칙이고 툴팩 갈래가 사라졌다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)). **번호는 다시 쓰지 않는다** (오류 코드는 사람이 기억한다).
 | R9 | `triggers[].kind`가 위 다섯 중 하나다 | 422 `unknown_trigger_kind` + 걸린 값 목록 |
 | R10 | `requires.delegations`가 있으면 `run_location=server`다 — **PC 위임은 서버 Bot만 한다** (PC 실행은 그 PC의 자리를 끝까지 쥐므로 PC가 PC를 기다리면 서로를 기다린다, [ADR-0014](../decisions/0014-one-bot-per-pc.md)). C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지 않는다** | 422 `delegation_not_from_pc` + 걸린 Bot 목록 |
+| R11 | `requires.settings`가 아는 값 중 하나다 (`llm`·`vlm`·`smtp`) — **R9와 같은 까닭**이다: 그림에서 기계가 옮기는 값이고(`chk:email` → `smtp`) 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다(`core.preflight`). 모르는 이름은 그 점검을 **아무 말 없이 지나가** 준비되지 않은 Bot이 실행된다 | 422 `unknown_setting` + 걸린 값 목록 |
 
 **R2는 모르는 것을 막지 않는다.** 태스크 종류의 실행 위치는 **확장 정의만** 안다 (C13
 `task_types[].run_locations`, ADR-0018) — 빌드하는 PC에 그 확장이 없거나 꺼져 있으면 Studio가
@@ -262,6 +263,7 @@ PC Bot (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-16 | 1 | **R11**을 더했다 — `requires.settings`가 아는 값인가. **값·칸은 그대로**이고 검사만 늘었다(R9와 같은 까닭: 기계가 옮기는 값이라 모르는 이름은 옮기는 쪽의 흠이다). 지금 Studio가 넣는 것은 `smtp` 하나뿐이라 **올라간 패키지는 다 지난다**. `built.by`는 **그대로 열린 문자열**이다 — 남의 도구로 만든 올바른 패키지를 거부하게 된다 | — |
 | 2026-10-15 | 1 | **PC 위임**을 더했다 — `requires.delegations`(부르는 PC Bot `<id>@<version>?`)와 **R10**(위임은 `run_location=server`만), R3의 사유를 다시 적었다(**그 규칙은 그대로 거부다** — 복사해 넣은 PC 정의는 PC에서 돌릴 길이 없다). 선택 칸이라 **옛 패키지는 그대로 읽힌다** | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-12 | 1 | **툴팩 갈래를 뺐다** — `kind=toolpack`·`provides.tools`(`ProvidedTool`)·`requires.toolpacks`(`ToolpackRef`)·`requires.secrets`·**R7**. 툴팩은 처음부터 코드가 아니었고(용어집) 선언을 담을 자리가 계약에 없어 **이름표만 든 zip**이었다 — 도구는 확장이 기여하고 코드 있는 도구는 설치 파일로만 온다. **번호는 비워 둔다**(R8·R9는 그대로다 — 적어 둔 규칙 번호를 밀면 옛 응답의 `rule`이 다른 규칙을 가리킨다) | 0050 |
 | 2026-10-12 | 1 | **`triggers`의 `kind`를 쓰는 쪽과 맞췄다.** 적어 둔 다섯(`none`·`message`·`timer`·`conditional`·`signal`)은 그대로 두고, 그림에서 옮기는 쪽(Studio)이 쓰던 `schedule`·`manual`을 `timer`·`none`으로 바꿨다 — 아무도 `kind`를 검사하지 않아 **올라간 모든 패키지가 계약에 없는 값을 담고 있었다**. 함께: 타이머 식을 `name`에 싣던 것을 **`expression` 칸**으로 갈랐고(`name`은 C12가 메시지 이름으로 읽는다), 조건·신호 시작을 `manual`로 뭉개던 것을 그린 대로 적게 했고, **R9**를 더해 다시 갈라지지 못하게 했다 | — |

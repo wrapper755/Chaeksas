@@ -46,7 +46,6 @@ from chaeksas.contracts.bot_ui import ExtensionState
 from chaeksas.contracts.extension import (
     ENTRY_POINT_GROUP,
     EXTENSION_FILE,
-    AdapterOperation,
     AgentEnvironmentContribution,
     ConfigurationItem,
     ConsolePage,
@@ -420,19 +419,6 @@ class ExtensionHost:
     def resources(self) -> list[Contribution[ResourceContribution]]:
         """Center 리소스 목록(C7)에 올릴 갈래와 카탈로그 주소."""
         return self._gather(lambda m: m.contributes.resources)
-
-    def adapter_operations(self) -> list[Contribution[AdapterOperation]]:
-        """외부 확장이 선언한 작업들 (C13 §4).
-
-        C11을 따르는 서비스 앱의 작업은 여기 없다 — 그쪽은 앱의 `/manifest`에서 온다 (C7).
-        """
-        return self._gather(lambda m: m.adapter.operations if m.adapter else [])
-
-    def secret_config_keys(self) -> list[Contribution[ConfigurationItem]]:
-        """OS 비밀 저장소에 둬야 하는 칸들 (ADR-0013). 설정 파일·로그에 남기지 않는다."""
-        return [c for c in self.configuration() if c.value.secret]
-
-    # ─────────────────────────── 코드 ───────────────────────────
 
     def context(
         self,

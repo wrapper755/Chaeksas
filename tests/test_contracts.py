@@ -27,7 +27,7 @@ from chaeksas.contracts import (
     missing_keys,
     validate,
 )
-from chaeksas.contracts.manifest import KNOWN_TRIGGER_KINDS
+from chaeksas.contracts.manifest import KNOWN_BUILT_BY, KNOWN_SETTINGS, KNOWN_TRIGGER_KINDS
 
 HASH = "sha256:" + "ab" * 32
 TS = "2026-10-01T10:00:00+09:00"
@@ -333,6 +333,33 @@ def test_r9_a_trigger_kind_outside_the_contract_is_caught() -> None:
 def test_r9_passes_every_kind_the_contract_lists() -> None:
     kinds = [Trigger(kind=k) for k in sorted(KNOWN_TRIGGER_KINDS)]
     assert validate(manifest(triggers=kinds)) == []
+
+
+def test_r11_a_setting_outside_the_contract_is_caught() -> None:
+    """**R9와 같은 까닭이다** — `requires.settings`는 그림에서 기계가 옮기는 값이다.
+
+    모르는 이름이 들어오면 「이 호스트가 갖췄나」 점검이 **아무 말 없이 지나가** 준비되지
+    않은 Bot이 실행되고 그 태스크에서 죽는다 (`core.preflight`). R9를 만들기 전
+    `triggers[].kind`가 겪은 그 꼴이다.
+    """
+    v = validate(manifest(requires=Requires(settings=["smtp", "mailgun", "ftp"])))
+    assert [(x.rule, x.code) for x in v] == [("R11", "unknown_setting")]
+    assert v[0].items == ["ftp", "mailgun"] and v[0].blocks
+
+
+def test_r11_passes_every_setting_the_contract_lists() -> None:
+    """지금 Studio가 넣는 것은 `smtp` 하나뿐이라 **올라간 패키지는 다 지난다**."""
+    assert validate(manifest(requires=Requires(settings=sorted(KNOWN_SETTINGS)))) == []
+    assert validate(manifest()) == [], "적지 않은 것은 규칙이 입을 닫는다"
+
+
+def test_built_by_stays_an_open_string() -> None:
+    """**`built.by`는 검사하지 않는다** — 남의 도구로 만든 올바른 패키지를 거부하게 된다.
+
+    `settings`와 다른 자리다: 그쪽은 **우리가 아는 것만 점검할 수 있어** R11이 막는다.
+    """
+    assert validate(manifest(built=Built(by="남의도구", at=TS, core="0.1.0", spec_version=1))) == []
+    assert "cli" in KNOWN_BUILT_BY, "목록은 화면이 풀어 쓸 때 쓴다"
 
 
 def test_r10_only_a_server_bot_can_delegate_to_a_pc() -> None:

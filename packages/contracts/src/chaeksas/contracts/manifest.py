@@ -22,6 +22,9 @@ SETTING_LLM = "llm"
 SETTING_VLM = "vlm"
 SETTING_SMTP = "smtp"
 KNOWN_SETTINGS = frozenset({SETTING_LLM, SETTING_VLM, SETTING_SMTP})
+#: `built.by`의 아는 값. **검사하지 않는다** — 남의 도구로 만든 올바른 패키지를 거부하게
+#: 되므로 **열린 문자열이 맞다** (`settings`와 다르다: 그쪽은 우리가 아는 것만 점검할 수 있어
+#: R11이 막는다). 화면이 「studio로 만듦」처럼 풀어 쓸 때 쓰는 목록이다.
 KNOWN_BUILT_BY = frozenset({"studio", "cli"})
 
 #: AI 태스크의 대상 환경 — C14 `chk:aiTask.domain`과 C1 `requires.domains`가 **같은 목록**이다.
@@ -308,6 +311,31 @@ def _check_r9(m: Manifest) -> list[Violation]:
     ]
 
 
+def _check_r11(m: Manifest) -> list[Violation]:
+    """`requires.settings`가 계약에 적힌 것 중 하나인가 (C1 R11).
+
+    **R9와 같은 까닭이다** — 갖춰야 할 설정은 사람이 적는 값이 아니라 **그림에서 Studio가
+    옮기는 값**이고(`chk:email` → `smtp`), 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다
+    (`core.preflight`). 모르는 이름이 들어오면 그 점검은 **아무 말 없이 지나가** 준비되지 않은
+    Bot이 실행되고 그 태스크에서 죽는다. R9를 만들기 전 `triggers[].kind`가 겪은 그 꼴이다.
+
+    열어 두지 않는 것은 **우리가 아는 설정만 점검할 수 있어서**다 — `built.by`처럼 남이 적을
+    수 있는 값이 아니다 (그쪽은 열린 문자열이 맞다).
+    """
+    bad = sorted({one for one in m.requires.settings if one not in KNOWN_SETTINGS})
+    if not bad:
+        return []
+    return [
+        Violation(
+            rule="R11",
+            code="unknown_setting",
+            message="requires.settings가 계약에 없는 값이다 "
+            f"(아는 값: {', '.join(sorted(KNOWN_SETTINGS))})",
+            items=bad,
+        )
+    ]
+
+
 def _check_r6(m: Manifest, computed_hash: str | None) -> list[Violation]:
     if computed_hash is None or computed_hash == m.content_hash:
         return []
@@ -347,4 +375,5 @@ def validate(
         *_check_r6(m, computed_hash),
         *_check_r9(m),
         *_check_r10(m),
+        *_check_r11(m),
     ]
