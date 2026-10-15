@@ -48,9 +48,13 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 계약 열넷의 상태는 §1 표에 있다. **남은 것은 PC 위임 하나다.**
 
-### 3-13. PC 위임 — 계약 다섯과 엔진·서버 실행기가 닫혔고 **남은 것은 둘**이다
+### 3-13. PC 위임 — **남은 것은 현장에서 값을 ack로 옮기는 길 하나**다
 
-[ADR-0062](decisions/0062-pc-delegation.md)가 정했다(**먼저 정할 것이 없다** — 그 ADR이 선택지 셋을 두고 골랐다). 고칠 계약 다섯은 **모두 닫았다** (C14 → C1 → C12 → C4 → C3). **엔진 쪽도 닫았다** — `RunEnv.delegate` 포트(`core.delegation`)·네 번째 기다림(`WAIT_DELEGATION`, 짝 칸은 `job_id`이고 **스냅샷과 함께 간다**)·`Engine.delegation_done()`이 돈다. **「맡길 곳이 없다」와 「거절당했다」는 다른 예외**다(`DelegationUnsupported` ↔ `DelegationError` — 앞은 그림·설치 오류, 뒤는 업무 실패라 오류 경계가 받는다). **서버 실행기 쪽도 닫았다** — 맡기는 포트(`server_runner/delegate.py`의 `CenterDelegator`, `make_env(delegate=…)`로 꽂는다)·`waiting[]`의 `delegation` 갈래(짝 칸 `job_id`)·하트비트로 받은 결과를 넣는 자리(`Agent.apply_delegations`)·`delegation_acks[]`가 돈다. **ADR-0062 끝의 「증명할 다섯」 중 넷을 보았다** (`tests/test_server_runner_delegation.py` — 위임이 든 그림은 예제에 없어 손으로 만들었다): 자리를 놓는다·재시작을 건너 작업이 하나다·선언한 `outputs`가 변수가 된다·실패는 업무 실패다. **남은 것은 둘**이다 — ① **Studio 시험 실행**이 케이스의 `delegations`를 돌려주는 포트(증명할 다섯의 마지막), ② **현장에서 값을 ack로 옮기는 길**(C4 줄).
+[ADR-0062](decisions/0062-pc-delegation.md)가 정했다(**먼저 정할 것이 없다** — 그 ADR이 선택지 셋을 두고 골랐다). 고칠 계약 다섯은 **모두 닫았다** (C14 → C1 → C12 → C4 → C3). **엔진 쪽도 닫았다** — `RunEnv.delegate` 포트(`core.delegation`)·네 번째 기다림(`WAIT_DELEGATION`, 짝 칸은 `job_id`이고 **스냅샷과 함께 간다**)·`Engine.delegation_done()`이 돈다. **「맡길 곳이 없다」와 「거절당했다」는 다른 예외**다(`DelegationUnsupported` ↔ `DelegationError` — 앞은 그림·설치 오류, 뒤는 업무 실패라 오류 경계가 받는다). **서버 실행기 쪽도 닫았다** — 맡기는 포트(`server_runner/delegate.py`의 `CenterDelegator`, `make_env(delegate=…)`로 꽂는다)·`waiting[]`의 `delegation` 갈래(짝 칸 `job_id`)·하트비트로 받은 결과를 넣는 자리(`Agent.apply_delegations`)·`delegation_acks[]`가 돈다. **ADR-0062 끝의 「증명할 다섯」 중 넷을 보았다** (`tests/test_server_runner_delegation.py` — 위임이 든 그림은 예제에 없어 손으로 만들었다): 자리를 놓는다·재시작을 건너 작업이 하나다·선언한 `outputs`가 변수가 된다·실패는 업무 실패다. **Studio 시험 실행의 포트도 닫았다** — `runner.CaseDelegator`가 케이스의 `delegations`를 돌려주고 **Center도 남의 패키지도 없이** 끝까지 간다. 이로써 **「증명할 다섯」이 다 찼다**. **남은 것은 하나**다 — **현장에서 값을 ack로 옮기는 길**(C4 줄). 그리고 작은 것 하나: B14의 `delegated_outputs`를 **주는 쪽**(Studio가 Center에서 그 Bot의 매니페스트를 읽어 넘긴다 — 주지 않으면 그 대조만 건너뛴다).
+
+**Studio 쪽에서 정한 것 둘:**
+- **적어 두지 않은 위임의 사유 코드는 `DELEGATION_FAILED`다** — 진짜 PC 실행이 실패했을 때와 **같은 것**이라야 「적지 않는 것」이 C14가 적어 둔 **「오류 경계를 시험하는 길」**이 된다. 따로 코드를 만들면 그림이 받을 수 없어 그 길이 막힌다.
+- **`manual`이 위임을 막지 않는다** — 결재는 사람이 창에서 답할 수 있지만 위임은 Studio에 답할 사람이 없다. 막으면 그 케이스가 **끝나지 않는다**.
 
 **실행기 쪽에서 정한 것 넷** (ADR에 없던 자리다):
 - **닿지 못한 것도 업무 실패다** — 포트는 작업 id를 돌려주지 못하면 기다릴 수 없다. 들고 있다 다시 거는 길(ADR-0007)이 없는 대신, 멱등 키가 Center의 것이라 **오류 경계가 다시 시도하면 같은 작업이 돌아온다**.
@@ -60,7 +64,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 | 계약 | 더할 것 |
 | --- | --- |
-| ~~C14~~ | **닫았다** — `chk:call.delegate`, B14 둘(**`server`에서만**·위임 호출은 패키지 안에서 찾지 않는다), 시험 케이스의 `delegations`, `bot_ui` 식을 읽기로 세는 것. **포트를 꽂지 않은 쪽에서는 설치 오류로 멈춘다**(폴백을 두지 않았다 — 지금 꽂은 것은 서버 실행기뿐이고 Bot UI는 일부러 꽂지 않는다). **`delegated_outputs`를 주는 쪽이 아직 없다** — Studio가 Center에서 그 Bot의 매니페스트를 읽어 주는 것이 Studio 조각이고, 주지 않으면 그 대조만 건너뛴다 |
+| ~~C14~~ | **닫았다** — `chk:call.delegate`, B14 둘(**`server`에서만**·위임 호출은 패키지 안에서 찾지 않는다), 시험 케이스의 `delegations`, `bot_ui` 식을 읽기로 세는 것. **포트를 꽂지 않은 쪽에서는 설치 오류로 멈춘다**(폴백을 두지 않았다 — 꽂은 것은 서버 실행기와 Studio이고 **Bot UI는 일부러 꽂지 않는다**). **`delegated_outputs`를 주는 쪽이 아직 없다** — Studio가 Center에서 그 Bot의 매니페스트를 읽어 주는 것이 Studio 조각이고, 주지 않으면 그 대조만 건너뛴다 |
 | ~~C1~~ | **닫았다** — `requires.delegations`, **R10**(위임은 `run_location=server`만), R3 사유 글. Studio가 그림에서 모으고 **`libs`에 넣지 않는다**(복사해 넣는 것이 아니다 — 넣으면 없는 공유 BPM 프로세스를 요구하는 패키지가 된다) |
 | ~~C12~~ | **닫았다 (양쪽)** — 위임 요청(`POST …/server-runner/delegations`: Center가 PC를 고르고 **`POST /jobs`와 같은 함수**로 작업을 만든다), 결과 내려주기·ack·값 지우기, `waiting[]`의 `delegation` 갈래와 짝 칸 `job_id`, 배포 때 「그 Bot이 승인되어 있나」(422 `delegation_not_approved`). **실행기 쪽도 왔다** — 맡기는 포트(`delegate.py`)·기다리는 줄·결과 받기·ack가 돈다. **결과를 올리는 쪽은 C4**다(그 자리는 아래 줄이다) |
 | ~~C4~~ | **닫았다 (계약·Center 쪽)** — `JobAck.outputs`(선언한 `outputs`만·끝난 ack만·위임 작업만)와 받아서 담는 자리. 위임이 아닌 작업의 값은 **어디에도 남지 않는다**. **현장에서 값을 ack로 옮기는 길이 남았다** — 실행 변수를 아는 것은 자식 프로세스(실행기)이고 올라오는 길은 실행 기록뿐인데 거기엔 업무 값이 없다(원칙 6). 결재 요청이 그랬듯 **`runs/<run_id>.outputs.json`을 따로 쓰고 Bot UI가 올린 뒤 지우는** 모양이 맞다 ([ADR-0038](decisions/0038-approval-request-channel.md)과 같은 결) — **위임으로 받은 작업만** 그 파일을 쓴다(평범한 실행의 값을 디스크에 남기지 않는다) |
