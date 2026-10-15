@@ -25,6 +25,7 @@ from chaeksas.contracts.bpmn_ext import BpmnProcess, Flow, Node
 from chaeksas.contracts.dmn import Decision
 from chaeksas.contracts.replay import ReplayMemory, ReplaySpec
 from chaeksas.core.agent import Tool
+from chaeksas.core.delegation import Delegator, NoDelegator
 from chaeksas.core.expr import Scope
 from chaeksas.core.files import Workspace
 from chaeksas.core.llm import Llm, NoLlm
@@ -58,6 +59,11 @@ ERROR_SEND_FAILED = "SEND_FAILED"
 #: Center 결재가 답 없이 끝남 — 관리자 회수·만료 (C14·C6, ADR-0038). 오류 경계가 받는다.
 ERROR_APPROVAL_WITHDRAWN = "APPROVAL_WITHDRAWN"
 ERROR_APPROVAL_EXPIRED = "APPROVAL_EXPIRED"
+#: **PC 위임이 끝나지 못했다** — 실패·거절·만료 ([ADR-0062](../decisions/0062-pc-delegation.md)).
+#: 업무 실패라 오류 경계가 받는다 (고쳐야 할 버그가 아니다).
+ERROR_DELEGATION_FAILED = "DELEGATION_FAILED"
+#: 위임이 끝났다고 보는 결과 (C4 작업 ack·C12 `DelegationResult.state`).
+DELEGATION_FINISHED = "finished"
 #: 결재를 어디서 답하나 (C3 `human_requested.where`).
 WHERE_FIELD = "field"
 WHERE_CENTER = "center"
@@ -71,6 +77,8 @@ CODE_UNSUPPORTED = "node_kind_unsupported"
 WAIT_MESSAGE = "message"
 WAIT_TIMER = "timer"
 WAIT_SIGNAL = "signal"
+#: **PC 위임**을 기다린다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 짝 칸은 `job_id`다.
+WAIT_DELEGATION = "delegation"
 
 class State(StrEnum):
     """실행의 지금 상태."""
@@ -148,10 +156,12 @@ class Waiting:
 
     key: str
     node_id: str
-    kind: str  # WAIT_MESSAGE | WAIT_TIMER | WAIT_SIGNAL
+    kind: str  # WAIT_MESSAGE | WAIT_TIMER | WAIT_SIGNAL | WAIT_DELEGATION
     name: str = ""  # 메시지·신호 이름
     correlation: Any = None
     due_at: datetime | None = None
+    #: **PC 위임**을 기다릴 때 그 작업 (ADR-0062). C12 `waiting[].job_id`로 그대로 올라간다.
+    job_id: str | None = None
     #: 경계 이벤트면 붙은 노드, 아니면 `None`.
     attached_to: str | None = None
     #: 경계 이벤트가 붙은 노드를 끊는가 (`cancelActivity`).
@@ -211,6 +221,9 @@ class RunEnv:
     #: 확장 태스크를 수행하는 쪽 (`chk:task`, C13 `task_types[].executor`). 기본은 **없다** —
     #: 확장이 없는 곳에서 확장 태스크를 만나면 그림 오류로 멈춘다 (조용히 넘어가지 않는다).
     extensions: ExtensionTasks = field(default_factory=lambda: NoExtensionTasks())
+    #: **PC 위임**을 맡기는 쪽 (C12 §PC 위임, ADR-0062). 기본은 **맡기지 못한다** — 서버
+    #: 실행기는 Center에 요청하는 것을, Studio 시험 실행은 케이스가 적어 둔 결과를 꽂는다.
+    delegate: Delegator = field(default_factory=NoDelegator)
     #: `location: follow` 결재를 어디서 답하나 — **실행하는 쪽의 기본값** (ADR-0038). Bot UI는
     #: BUI-03 「원격 결재」, 서버 실행기는 `center`. 엔진은 설정 파일을 읽지 않는다. 기본은 현장.
     approval_where: str = "field"
@@ -474,7 +487,9 @@ def new_run_id(*, now: datetime | None = None, test: bool = False) -> str:
 
 
 __all__ = [
+    "DELEGATION_FINISHED",
     "ERROR_APPROVAL_EXPIRED",
+    "ERROR_DELEGATION_FAILED",
     "ERROR_APPROVAL_WITHDRAWN",
     "WHERE_CENTER",
     "WHERE_FIELD",
@@ -505,6 +520,7 @@ __all__ = [
     "State",
     "TaskFailed",
     "Token",
+    "WAIT_DELEGATION",
     "WAIT_MESSAGE",
     "WAIT_SIGNAL",
     "WAIT_TIMER",

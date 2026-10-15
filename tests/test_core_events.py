@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from chaeksas.contracts.bpmn_ext import read_process
+from chaeksas.core.delegation import RecordingDelegator
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State
 from chaeksas.core.run_log import RunLog
 
@@ -411,6 +412,81 @@ def test_a_missing_call_target_stops_the_run() -> None:
     engine, run = start(caller_process('{"input": {}, "output": {}}'), RunEnv(processes={}))
     assert engine.run_until_blocked(run) is State.FAILED
     assert run.error is not None and run.error.code == "call_target_missing"
+
+
+#: 위임 하나 — 값 하나를 주고 하나를 받는다 (`chk:call.delegate`, ADR-0062).
+DELEGATION = (
+    '{"delegate": {"bpm_process_id": "fin.erp-input", "version": "1.2.0"}, '
+    '"input": {"전표번호": "값"}, "output": {"답": "결과코드"}}'
+)
+
+
+def test_a_delegation_is_handed_over_and_waits() -> None:
+    """**맡기고 기다린다** (ADR-0062 §2) — 자리와 기다림의 짝 칸은 작업 id다."""
+    port = RecordingDelegator()
+    engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
+    assert engine.run_until_blocked(run) is State.WAITING
+
+    # **입력은 맡길 때 값으로** 풀어 보낸다 (PC 쪽은 서버 그림을 모른다).
+    (call,) = port.calls
+    assert call.bpm_process_id == "fin.erp-input" and call.version == "1.2.0"
+    assert call.inputs == {"전표번호": 21} and call.node_instance == 1
+    assert call.run_id == run.run_id and call.node_id == "Call_1"
+    # 기다림의 짝 칸이 그 작업이다 (C12 `waiting[].job_id`로 그대로 올라간다).
+    (waiting,) = [w for w in run.waits.values() if w.kind == "delegation"]
+    assert waiting.job_id == "job_dlg001"
+    # **안쪽을 여기서 돌리지 않았다** — 기록에 안쪽 실행이 없다.
+    assert [e.kind for e in run.log.events].count("run_started") == 1
+
+
+def test_a_finished_delegation_maps_only_what_is_listed() -> None:
+    """돌아온 값 중 **적은 것만** 변수가 된다 (C14 — `chk:call.output`)."""
+    port = RecordingDelegator()
+    engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
+    engine.run_until_blocked(run)
+    engine.delegation_done(
+        run, "job_dlg001", state="finished", outputs={"결과코드": 7, "덤": "버린다"}
+    )
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["답"] == 7 and "덤" not in run.variables
+    assert run.variables["최종"] == 7, "위임 뒤의 걸음이 그 값을 쓴다"
+    # **값은 기록에 남지 않는다** (원칙 6) — 받았다는 사실만이다.
+    assert not any("버린다" in str(e.data) for e in run.log.events)
+
+
+def test_a_failed_delegation_goes_to_the_error_boundary() -> None:
+    """실패·거절·만료는 **업무 실패**다 (고쳐야 할 버그가 아니다)."""
+    port = RecordingDelegator()
+    engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
+    engine.run_until_blocked(run)
+    assert engine.delegation_done(run, "job_dlg001", state="rejected", reason="not_ready") is State.FAILED
+    assert run.error is not None and run.error.code == "DELEGATION_FAILED"
+
+
+def test_a_delegation_that_does_not_return_what_we_read_fails() -> None:
+    """선언한 값이 오지 않으면 **업무 실패**다 — 빈 값으로 이어 가지 않는다."""
+    port = RecordingDelegator()
+    engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
+    engine.run_until_blocked(run)
+    assert engine.delegation_done(run, "job_dlg001", state="finished", outputs={}) is State.FAILED
+    assert run.error is not None and run.error.code == "DELEGATION_FAILED"
+
+
+def test_an_unknown_job_is_not_a_delegation_we_wait_for() -> None:
+    port = RecordingDelegator()
+    engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
+    engine.run_until_blocked(run)
+    with pytest.raises(EngineError) as caught:
+        engine.delegation_done(run, "job_other", state="finished")
+    assert caught.value.code == "not_waiting"
+
+
+def test_a_refused_handover_is_a_task_failure() -> None:
+    """**맡기지 못한 것**(배포된 PC가 없다 …)도 업무 실패다 — 오류 경계가 받는다."""
+    port = RecordingDelegator(fails={"Call_1": "no_deployment"})
+    engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
+    assert engine.run_until_blocked(run) is State.FAILED
+    assert run.error is not None and run.error.code == "no_deployment"
 
 
 def test_a_delegated_call_stops_instead_of_running_it_here() -> None:
