@@ -160,9 +160,9 @@ GREEN = [one for one in M3 if one not in REMAINING]
 
 def test_the_bundle_is_read_from_the_examples() -> None:
     """묶음 목록을 사람이 옮겨 적지 않는다 — 어긋나는 순간 시험이 거짓말을 한다."""
-    assert len(M3) == 26
+    assert len(M3) == 27
     assert set(REMAINING) <= set(M3), "남은 목록에 묶음 밖 예제가 있다"
-    assert len(GREEN) == 26, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+    assert len(GREEN) == 27, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
 
 
 @pytest.mark.parametrize("example", GREEN)
@@ -236,6 +236,53 @@ def test_the_same_cases_pass_again_as_a_replay(
     finally:
         receiver.stop()
     assert replayed_at_least_once, f"{example}: 되밟은 케이스가 하나도 없다 (배운 것이 없다)"
+
+
+def test_the_three_replay_modes_differ_in_how_often_the_model_is_asked(
+    app: Any, tmp_path: Path, model: StubModel
+) -> None:
+    """**재생 모드 셋이 정말 다르다** (FX-23, C14 §재생 · ADR-0028).
+
+    위 시험은 「되밟았나」만 본다 — 모드를 가르지 않는다. 가르는 자리는 **모델을 몇 번
+    부르나**다 (C14의 표가 그렇게 적어 두었다):
+
+    | `replay` | 결정 수행에서 |
+    | --- | --- |
+    | `plan`(기본) | 도구 차례를 밟고 **마지막 값만** 묻는다 |
+    | `full` | **한 번도 묻지 않는다** |
+    | `none` | 기억을 쓰지 않고 **그냥 묻는다** |
+
+    그래서 자율 수행(3번 물음) → 결정 수행은 **3보다 적게** 물어야 한다. 하나라도 같으면
+    재생이 전혀 듣지 않은 것이다. **`none`은 되밟지 않으므로** 되밟은 수도 3보다 적다.
+    """
+    example = "fx23_replay_modes"
+    assert example in GREEN, "FX-23이 묶음에서 빠졌다"
+    made, settings = studio(tmp_path, example, model)
+    definition = made.entry_definition
+    assert definition is not None
+    (case,) = list(read_cases(made, definition))
+
+    receiver = Receiver(port=0).start()
+    try:
+        before = model.asked
+        first = drive(CaseRun(_plan(made, definition, case, settings, AUTONOMOUS), receiver))
+        autonomous = model.asked - before
+        assert first.verdict in (PASS, NO_EXPECT), first.detail
+        # AI 태스크 셋을 다 지났으니 셋 다 물었다 (스텁은 도구를 부르지 않는다).
+        assert autonomous == 3, f"자율 수행이 {autonomous}번 물었다"
+        assert first.learned, "자율 수행이 아무것도 배우지 않았다"
+
+        before = model.asked
+        again = drive(CaseRun(_plan(made, definition, case, settings, DETERMINISTIC), receiver))
+        deterministic = model.asked - before
+    finally:
+        receiver.stop()
+
+    assert again.verdict == first.verdict, again.detail
+    # **`full`이 한 번도 묻지 않는다** — 셋 다 물으면 재생이 듣지 않은 것이다.
+    assert deterministic < autonomous, f"결정 수행도 {deterministic}번 물었다 (재생이 듣지 않는다)"
+    # **`none`은 되밟지 않는다** — 셋 다 되밟으면 `none`이 기억을 쓴 것이다.
+    assert 1 <= _replayed(again) < 3, f"되밟은 수가 {_replayed(again)}이다"
 
 
 def _plan(made: BpmProcess, definition: Any, case: Case, settings: Settings, mode: str) -> Plan:

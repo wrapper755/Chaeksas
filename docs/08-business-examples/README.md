@@ -132,17 +132,18 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [FX-20](feature-examples.md#fx-20-외부-확장-http-어댑터-호출) | 외부 확장 HTTP 어댑터 호출 | 서버 | 수동 실행 | ext-credit | 외부 확장 어댑터; 태스크 단위 `key_ref` (BPM 프로세스 기본 대신); Admin 서명된 정의만 사용 |
 | [FX-21](feature-examples.md#fx-21-결정표-적중-정책-uniqueany) | 결정표 적중 정책 (UNIQUE·ANY) | 서버 | 수동 실행 | — | DMN 적중 정책 `UNIQUE`; DMN 적중 정책 `ANY` (겹치는 줄, 같은 결과); 맞는 줄 없음 = 모든 출력 `None` |
 | [FX-22](feature-examples.md#fx-22-파일-출력--csv-덧붙이기와-txt) | 파일 출력 — csv 덧붙이기와 txt | 서버 | 수동 실행 | — | 파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만); 파일 출력 `txt` + `template`; 쓴 파일을 `chk:fileList`로 되세기 |
+| [FX-23](feature-examples.md#fx-23-재생-모드-셋-planfullnone) | 재생 모드 셋 (plan·full·none) | 서버 | 수동 실행 | — | 재생 모드 `plan`(기본)·`full`·`none`을 한 그림에서; `full`은 도구가 있어야 한다 (B12); `none`은 되밟지 않는다 |
 
 ## BPMN 요소 커버리지
 
 | 요소 | 예제 |
 | --- | --- |
-| 시작 — 없음(작업 지시·호출) | BX-06, BX-11, BX-12, BX-17, BX-24, BX-37, BX-36, FX-01, FX-02, FX-03, FX-03b, FX-05, FX-06, FX-07, FX-08, FX-09, FX-11, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-20, FX-21, FX-22 |
+| 시작 — 없음(작업 지시·호출) | BX-06, BX-11, BX-12, BX-17, BX-24, BX-37, BX-36, FX-01, FX-02, FX-03, FX-03b, FX-05, FX-06, FX-07, FX-08, FX-09, FX-11, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-20, FX-21, FX-22, FX-23 |
 | 시작 — 타이머 | BX-01, BX-02, BX-04, BX-05, BX-07, BX-08, BX-14, BX-16, BX-23, BX-35, FX-04, FX-12 |
 | 시작 — 메시지 | BX-03, BX-10, BX-13, BX-15, BX-20, BX-21, BX-22, BX-30, BX-31, BX-32, BX-33, BX-34, FX-10 |
 | 끝 — 종료(terminate) | BX-11 |
 | 스크립트 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-14, BX-15, BX-16, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-35, BX-36, FX-02, FX-03, FX-03b, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-21, FX-22 |
-| AI 태스크 — llm | BX-05, BX-07, BX-08, BX-11, BX-13, BX-15, BX-20, BX-23, BX-30, BX-37, BX-31, BX-32, BX-34, BX-35, FX-09, FX-10 |
+| AI 태스크 — llm | BX-05, BX-07, BX-08, BX-11, BX-13, BX-15, BX-20, BX-23, BX-30, BX-37, BX-31, BX-32, BX-34, BX-35, FX-09, FX-10, FX-23 |
 | AI 태스크 — api | BX-02, FX-01, FX-08, FX-10 |
 | AI 태스크 — doc | BX-01, BX-07, BX-10, BX-14, BX-30, FX-06 |
 | AI 태스크 — web | **없음** |
@@ -172,8 +173,12 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 경계 — 메시지 | BX-11 |
 | 경계 — 신호 | FX-13 |
 | 파일 출력 — md | BX-01, BX-02, BX-03, BX-04, BX-11, BX-15, BX-30, FX-07, FX-12 |
-| 파일 출력 — xlsx | BX-06, BX-07, BX-35 |
+| 파일 출력 — txt | FX-22 |
+| 파일 출력 — csv | FX-22 |
 | 파일 출력 — json | BX-05 |
+| 파일 출력 — xlsx | BX-06, BX-07, BX-35 |
+| 파일 출력 — 덧붙이기 (`append`) | FX-22 |
+| 파일 목록 (`chk:fileList`) | BX-01, FX-04, FX-22 |
 
 **없음**인 요소는 C14 schema 1에서 쓰지 않거나(조건 시작) 아직 예제가 없는 것이다.
 
@@ -181,7 +186,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 
 | 기능 | 예제 |
 | --- | --- |
-| 실행 위치 서버 | BX-01, BX-02, BX-03, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-12, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-31, BX-32, BX-33, BX-34, BX-35, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-17, FX-18, FX-20, FX-21, FX-22 |
+| 실행 위치 서버 | BX-01, BX-02, BX-03, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-12, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-31, BX-32, BX-33, BX-34, BX-35, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-17, FX-18, FX-20, FX-21, FX-22, FX-23 |
 | 실행 위치 PC | BX-04, BX-14, BX-17, BX-36, FX-05, FX-15, FX-16, FX-19 |
 | 결재 위치 Center 결재함 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14 |
 | 결재 위치 현장(PC) | FX-16, FX-19 |
@@ -194,7 +199,13 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 업무 파라미터 | BX-02, BX-05, BX-07, BX-14, BX-20, BX-23, FX-01, FX-08, FX-10 |
 | 다른 예제를 호출 (공유 BPM 프로세스) | BX-15, BX-21, BX-30, FX-03 |
 | 수동 케이스 (사람이 폼 확인) | BX-01, BX-02, BX-04, BX-14, BX-20, FX-16 |
+| DMN 적중 정책 UNIQUE | FX-21 |
+| DMN 적중 정책 FIRST | BX-06, BX-08, BX-12, BX-23, BX-33, FX-02 |
+| DMN 적중 정책 ANY | FX-21 |
 | DMN 적중 정책 COLLECT | BX-07 |
+| 재생 모드 `plan` (기본) | BX-01, BX-02, BX-05, BX-07, BX-08, BX-10, BX-11, BX-13, BX-14, BX-15, BX-20, BX-23, BX-30, BX-37, BX-31, BX-32, BX-34, BX-35, BX-36, FX-01, FX-05, FX-06, FX-08, FX-09, FX-10, FX-23 |
+| 재생 모드 `full` | FX-23 |
+| 재생 모드 `none` | FX-23 |
 
 ## 마일스톤별 인수 시험 묶음
 
@@ -202,7 +213,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 
 | 마일스톤 | 처음 통과해야 하는 예제 | 다시 통과 |
 | --- | --- | --- |
-| M3 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-11, BX-12, BX-30, BX-37, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-11, FX-12, FX-13, FX-14, FX-17, FX-19, FX-21, FX-22 |  |
+| M3 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-11, BX-12, BX-30, BX-37, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-11, FX-12, FX-13, FX-14, FX-17, FX-19, FX-21, FX-22, FX-23 |  |
 | M4 | BX-04, BX-14, BX-17, FX-05, FX-15, FX-16 |  |
 | M5 | BX-06, BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-35, BX-36, FX-10, FX-18, FX-20 | PC 예제: Center 배포 → Bot UI |
 | M7 | — | 서버 예제 전부: 서버 실행기 |

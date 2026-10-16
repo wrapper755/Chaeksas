@@ -315,9 +315,14 @@ def coverage(examples: list[Example]) -> list[str]:
         ("반복 — 차례", loop(False)), ("반복 — 병렬", loop(True)),
         ("경계 — 타이머 중단", bnd("timer", True)), ("경계 — 타이머 비중단", bnd("timer", False)),
         ("경계 — 오류", bnd("error")), ("경계 — 메시지", bnd("message")), ("경계 — 신호", bnd("signal")),
-        ("파일 출력 — md", lambda e: any(d.props["format"] == "md" for d in e.data)),
-        ("파일 출력 — xlsx", lambda e: any(d.props["format"] == "xlsx" for d in e.data)),
-        ("파일 출력 — json", lambda e: any(d.props["format"] == "json" for d in e.data)),
+        # **포맷 다섯과 덧붙이기를 모두 줄로 둔다** — 줄이 없으면 「아무도 밟지 않는다」가
+        # 표에 보이지 않는다. csv·txt·`append`가 그렇게 숨어 있었다 (M7 조각 30).
+        *[
+            (f"파일 출력 — {fmt}", (lambda fmt: lambda e: any(d.props["format"] == fmt for d in e.data))(fmt))
+            for fmt in ("md", "txt", "csv", "json", "xlsx")
+        ],
+        ("파일 출력 — 덧붙이기 (`append`)", lambda e: any(d.props.get("append") for d in e.data)),
+        ("파일 목록 (`chk:fileList`)", has("flist")),
     ]
     plat_rows = [
         ("실행 위치 서버", lambda e: e.run_location == "server"), ("실행 위치 PC", lambda e: e.run_location == "pc"),
@@ -331,7 +336,21 @@ def coverage(examples: list[Example]) -> list[str]:
         ("업무 파라미터", lambda e: any(n.kind == "ai" and n.props["task"]["params"] for n in nodes(e))),
         ("다른 예제를 호출 (공유 BPM 프로세스)", lambda e: bool(e.called)),
         ("수동 케이스 (사람이 폼 확인)", lambda e: any(c.manual for c in e.cases)),
-        ("DMN 적중 정책 COLLECT", lambda e: any(d.hit == "COLLECT" for d in e.decisions)),
+        # **적중 정책 넷을 줄로 둔다** (코드는 넷을 받는다 — `contracts.dmn.HIT_POLICIES`).
+        *[
+            (f"DMN 적중 정책 {hit}", (lambda hit: lambda e: any(d.hit == hit for d in e.decisions))(hit))
+            for hit in ("UNIQUE", "FIRST", "ANY", "COLLECT")
+        ],
+        # **재생 모드 셋도 줄로 둔다** — 기본값(`plan`)만 밟고 있던 것이 보이지 않았다.
+        *[
+            (
+                f"재생 모드 `{mode}`" + (" (기본)" if mode == "plan" else ""),
+                (lambda mode: lambda e: any(
+                    n.kind == "ai" and n.props["task"].get("replay", "plan") == mode for n in nodes(e)
+                ))(mode),
+            )
+            for mode in ("plan", "full", "none")
+        ],
     ]
     L = ["## BPMN 요소 커버리지", "", "| 요소 | 예제 |", "| --- | --- |"]
     L += [f"| {a} | {ids(p)} |" for a, p in bpmn_rows]

@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:chk="urn:chaeksas:bpmn:1"
+  id="Defs_fx23_replay_modes" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
+  <bpmn:process id="Proc_fx23_replay_modes" name="재생 모드 셋 (plan·full·none)" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{
+  "run_location": "server",
+  "service_keys": {},
+  "extensions": [],
+  "outputs": [],
+  "inputs": [
+    {
+      "name": "문의",
+      "type": "string",
+      "required": true,
+      "description": "고객 문의 한 문장"
+    }
+  ]
+}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" name="시작">
+      <bpmn:outgoing>Flow_01</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_Plan" name="분류 (plan)">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`문의`는 고객이 보낸 한 문장이다.\n\n## 할 일\n분류를 하나 고른다.\n\n## 판단하지 않는 것\n없는 값을 지어내지 않는다.\n\n## 반환\n- `문의갈래`: string",
+  "domain": "llm",
+  "results": {
+    "문의갈래": "string"
+  },
+  "tools": [],
+  "params": {}
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_01</bpmn:incoming>
+      <bpmn:outgoing>Flow_02</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Record" name="장부 기록 (full)">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`문의`와 `문의갈래`를 장부에 한 줄 더한다.\n\n## 할 일\n`excel_writer_tool`로 한 줄을 덧붙이고 결과를 한 마디로 적는다.\n\n## 판단하지 않는 것\n장부를 덮어쓰지 않는다 (덧붙이기만).\n\n## 반환\n- `기록결과`: string",
+  "domain": "llm",
+  "results": {
+    "기록결과": "string"
+  },
+  "tools": [
+    "excel_writer_tool"
+  ],
+  "params": {},
+  "replay": "full"
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_02</bpmn:incoming>
+      <bpmn:outgoing>Flow_03</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Tone" name="말투 고르기 (none)">
+      <bpmn:extensionElements>
+        <chk:aiTask>{
+  "goal": "## 상황\n`문의갈래`에 맞는 회신 말투를 고른다. 같은 분류라도 때에 따라 달라질 수 있다.\n\n## 할 일\n말투를 한 단어로 고른다.\n\n## 판단하지 않는 것\n회신 본문을 쓰지 않는다.\n\n## 반환\n- `말투`: string",
+  "domain": "llm",
+  "results": {
+    "말투": "string"
+  },
+  "tools": [],
+  "params": {},
+  "replay": "none"
+}</chk:aiTask>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_03</bpmn:incoming>
+      <bpmn:outgoing>Flow_04</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End" name="끝">
+      <bpmn:incoming>Flow_04</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_01" sourceRef="Start" targetRef="Task_Plan" />
+    <bpmn:sequenceFlow id="Flow_02" sourceRef="Task_Plan" targetRef="Task_Record" />
+    <bpmn:sequenceFlow id="Flow_03" sourceRef="Task_Record" targetRef="Task_Tone" />
+    <bpmn:sequenceFlow id="Flow_04" sourceRef="Task_Tone" targetRef="End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="Diagram_1">
+    <bpmndi:BPMNPlane id="Plane_1" bpmnElement="Proc_fx23_replay_modes">
+      <bpmndi:BPMNShape id="Start_di" bpmnElement="Start"><dc:Bounds x="160" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="140" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Plan_di" bpmnElement="Task_Plan"><dc:Bounds x="266" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Record_di" bpmnElement="Task_Record"><dc:Bounds x="436" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Tone_di" bpmnElement="Task_Tone"><dc:Bounds x="606" y="80" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="776" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="756" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_01_di" bpmnElement="Flow_01"><di:waypoint x="196" y="120" /><di:waypoint x="266" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_02_di" bpmnElement="Flow_02"><di:waypoint x="366" y="120" /><di:waypoint x="436" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_03_di" bpmnElement="Flow_03"><di:waypoint x="536" y="120" /><di:waypoint x="606" y="120" /></bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_04_di" bpmnElement="Flow_04"><di:waypoint x="706" y="120" /><di:waypoint x="776" y="120" /></bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
