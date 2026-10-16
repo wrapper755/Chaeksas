@@ -553,7 +553,13 @@ class Workspace:
         return self.read(made.folder, group)
 
     def _bring_along(self, source: Path, definition: BpmnProcess, made: BpmProcess) -> None:
-        """그 정의가 쓰는 DMN과 **호출 대상 BPM 프로세스**를 따라가며 가져온다."""
+        """그 정의가 쓰는 DMN과 **호출 대상 BPM 프로세스**를 따라가며 가져온다.
+
+        **PC 위임은 따라가지 않는다** ([ADR-0062](../../../../../docs/decisions/0062-pc-delegation.md)) —
+        그 대상은 **따로 올리고 따로 배포한 다른 패키지**다. 끌어오면 그 Bot의 정의가 내 작업
+        폴더에 앉아 매니페스트가 **그 Bot의 요구사항을 제 것처럼** 모으고(BX-16이 BX-17의
+        `ui_task`를 요구하게 되어 서버 Bot이 `not_ready`가 됐다), `requires.libs`에도 끼어든다.
+        """
         seen = {definition.id}
         pending = [definition]
         while pending:
@@ -562,6 +568,9 @@ class Workspace:
                 rule = node.prop("rule")
                 if rule is not None:
                     self._copy_next_to(source / f"{rule.decision}.dmn", made)
+                call = node.prop("call")
+                if call is not None and call.delegate is not None:
+                    continue
                 called = node.called_element
                 if not called or called in seen:
                     continue

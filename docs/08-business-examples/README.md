@@ -46,7 +46,6 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 
 | 공백 | 예제 | 갈 곳 |
 | --- | --- | --- |
-| 서버 BPM 프로세스가 PC 작업을 만드는 요소 | BX-16 (사내 확장으로 임시로 메움) | [ADR-0016](../decisions/0016-server-first.md) §3 「PC 위임」 제안 (Call Activity로 표현, schema 1은 C1 R3가 거부) → M7 |
 | 받는 곳이 아직 없을 때 온 메시지 — C12는 `no_receiver`로 거부해 잃는다 | BX-05, BX-11, BX-13, BX-34 | C12 메시지 보관(TTL) 검토 → M7 |
 | 식 언어의 업무 도우미 함수 (`지난달()`, `기간()`, `합계()`, `표를사전()` …) | 스크립트가 있는 예제 대부분 | C14 규칙 6, M3에서 목록 확정 |
 | 다중 인스턴스 하위 프로세스 | BX-22 (실행 하나 = 한 사람으로 우회) | M3 엔진 확인 |
@@ -80,7 +79,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [BX-13](scm.md#bx-13-반품-처리) | 반품 처리 | 서버 | 메시지 `return_request` | shop | 메시지 시작 + 받기 태스크(상관 키); 받기 태스크의 중단 타이머(자동 취소); AI 분류 → 스크립트 계산 → 서비스 앱 작업 |
 | [BX-14](scm.md#bx-14-공급사-포털-주문-내역-수집) | 공급사 포털 주문 내역 수집 | PC | 타이머 | ui-automation | 브라우저 프로필 세션 + 확인 트리거로 로그인 처리 (Bot이 비밀번호를 다루지 않음); 확인 트리거(로그인·2단계 인증·캡차); PC의 doc AI 태스크(공유 폴더 파일) |
 | [BX-15](scm.md#bx-15-견적서-작성) | 견적서 작성 | 서버 | 메시지 `quote_request` | erp, crm | BPM 프로세스 호출(call activity) — 넘기는 변수만 넘어감; 점 표기 입력 매핑(`고객.지역`); 결재로 값 조정, 반려하면 허용 한도(10%)로 |
-| [BX-16](scm.md#bx-16-재고-발주-제안-서버--erp-입력-pc) | 재고 발주 제안 (서버) → ERP 입력 (PC) | 서버 | 타이머 | wms, center-jobs | 서버 + PC 두 BPM 프로세스로 쪼개기; 작업 지시를 사내 확장 서비스 앱으로 (PC 위임의 공백 표시); 결재 반려 시 발주 안 함 |
+| [BX-16](scm.md#bx-16-재고-발주-제안-서버--erp-입력-pc) | 재고 발주 제안 (서버) → ERP 입력 (PC) | 서버 | 타이머 | wms | 서버 + PC로 **한 부분만 맡기기** (`chk:call.delegate`); 위임 실패를 오류 경계로 받기; 결재 반려 시 발주 안 함 |
 | [BX-17](scm.md#bx-17-erp-발주-화면-입력) | ERP 발주 화면 입력 | PC | 작업 지시 | ui-automation | 데스크톱 UI 태스크 반복; 다른 BPM 프로세스가 만든 작업 지시로 시작; 확인 트리거(경고 창) |
 
 ### 인사·총무 ([hr.md](hr.md))
@@ -151,10 +150,11 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 규칙 (DMN) | BX-06, BX-07, BX-08, BX-12, BX-23, BX-33, FX-02 |
 | 결재 (userTask) | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14, FX-16 |
 | 수동 확인 (manualTask) | FX-19 |
-| 메일 보내기 | BX-01, BX-02, BX-04, BX-05, BX-06, BX-11, BX-13, BX-20, BX-22, BX-31, BX-33, BX-34, BX-35, FX-07 |
+| 메일 보내기 | BX-01, BX-02, BX-04, BX-05, BX-06, BX-11, BX-13, BX-16, BX-20, BX-22, BX-31, BX-33, BX-34, BX-35, FX-07 |
 | 웹훅 보내기 | BX-03, BX-10, BX-21, BX-30, FX-10, FX-17 |
 | 메시지 받기 (receiveTask) | BX-05, BX-11, BX-13, BX-34, FX-13 |
 | BPM 프로세스 호출 | BX-15, BX-21, BX-30, FX-03 |
+| PC 위임 (`chk:call.delegate`) | BX-16 |
 | 하위 프로세스 | BX-20, BX-22 |
 | 배타 게이트웨이 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-15, BX-16, BX-21, BX-22, BX-30, BX-37, BX-31, BX-32, BX-33, FX-03b, FX-04, FX-10, FX-13, FX-15, FX-16 |
 | 포함 게이트웨이 | BX-10 |
@@ -166,7 +166,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 반복 — 병렬 | BX-06, BX-23, BX-35, FX-18 |
 | 경계 — 타이머 중단 | BX-03, BX-11, BX-13, BX-34, FX-14 |
 | 경계 — 타이머 비중단 | BX-03, BX-05, BX-20 |
-| 경계 — 오류 | BX-01, BX-02, BX-03, BX-22, BX-32, BX-36, FX-08, FX-10, FX-17 |
+| 경계 — 오류 | BX-01, BX-02, BX-03, BX-16, BX-22, BX-32, BX-36, FX-08, FX-10, FX-17 |
 | 경계 — 메시지 | BX-11 |
 | 경계 — 신호 | FX-13 |
 | 파일 출력 — md | BX-01, BX-02, BX-03, BX-04, BX-11, BX-15, BX-30, FX-07, FX-12 |
@@ -187,7 +187,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 외부 확장 (HTTP 어댑터) | BX-06, BX-10, BX-32, BX-35, FX-20 |
 | 사내 확장 서비스 앱 | BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-36, FX-10, FX-18 |
 | 태스크 단위 키 참조 | FX-20 |
-| 한 프로세스에 키 참조 여러 개 | BX-10, BX-15, BX-16, BX-22, BX-23, BX-32, BX-36 |
+| 한 프로세스에 키 참조 여러 개 | BX-10, BX-15, BX-22, BX-23, BX-32, BX-36 |
 | 프로세스 기본값 (금지 행동·확인 트리거) | BX-01, BX-04, BX-14, BX-17, BX-36 |
 | 업무 파라미터 | BX-02, BX-05, BX-07, BX-14, BX-20, BX-23, FX-01, FX-08, FX-10 |
 | 다른 예제를 호출 (공유 BPM 프로세스) | BX-15, BX-21, BX-30, FX-03 |

@@ -8,8 +8,6 @@ dependencies = [
     "chaeksas-service-kit",
     "fastapi>=0.115",
     "uvicorn>=0.32",
-    # center-jobs 앱이 Center의 작업 지시 API를 부른다 (C5).
-    "httpx>=0.27",
 ]
 
 [project.scripts]

@@ -90,9 +90,13 @@ def test_every_operation_the_examples_call_exists(examples: dict[str, set[str]])
 
 
 def test_the_example_count_matches_the_handoff_tally(examples: dict[str, set[str]]) -> None:
-    """앱 16개·작업 31개 — 이 수가 바뀌면 조각의 범위가 바뀐 것이다."""
-    assert len(examples) == 16
-    assert sum(len(ops) for ops in examples.values()) == 31
+    """앱 15개·작업 30개 — 이 수가 바뀌면 조각의 범위가 바뀐 것이다.
+
+    열여섯이었다 — BX-16이 PC 위임을 쓰게 되면서(ADR-0062) `center-jobs`가 **부르는 데가
+    없어져** 걷어냈다. 위에 있는 「예제가 부르지 않는 작업」 검사가 그것을 바로 잡아 주었다.
+    """
+    assert len(examples) == 15
+    assert sum(len(ops) for ops in examples.values()) == 30
 
 
 # ─────────────────────────── C11 (뼈대가 주는 것) ───────────────────────────
@@ -367,31 +371,6 @@ def test_the_web_reader_says_it_did_not_really_read() -> None:
     client, key = client_for(catalog.c11("web-reader") or catalog.C11_APPS[0])
     summary = output(client, key, "summarize_url", {"url": "https://example.com/a"})["summary"]
     assert "실제로 가져오지 않" in summary
-
-
-def test_center_jobs_says_so_when_it_has_no_center(monkeypatch: pytest.MonkeyPatch) -> None:
-    """BX-16의 작업 지시는 **진짜 Center**로 간다 — 없으면 흉내 내지 않고 503이다."""
-    monkeypatch.delenv("CHK_SVC_CENTER_JOBS__CENTER__BASE_URL", raising=False)
-    monkeypatch.delenv("CHK_SVC_CENTER_JOBS__CENTER__TOKEN", raising=False)
-    client, key = client_for(catalog.c11("center-jobs") or catalog.C11_APPS[0])
-    response = call(
-        client, key, "create_job", {"bpm_process": "bx17_erp_po_entry", "target": "group:구매-PC", "inputs": {}}
-    )
-    assert response.status_code == 503
-    assert response.json()["code"] == "dependency_down"
-
-
-def test_center_jobs_refuses_a_group_it_cannot_resolve(monkeypatch: pytest.MonkeyPatch) -> None:
-    """그룹은 Center에 없다 — 어느 PC인지 **이 앱이** 안다 (`GROUPS`)."""
-    monkeypatch.setenv("CHK_SVC_CENTER_JOBS__CENTER__BASE_URL", "http://127.0.0.1:1")
-    monkeypatch.setenv("CHK_SVC_CENTER_JOBS__CENTER__TOKEN", "t-int")
-    monkeypatch.setenv("CHK_SVC_CENTER_JOBS__GROUPS", json.dumps({"다른-PC": "bot-1"}))
-    client, key = client_for(catalog.c11("center-jobs") or catalog.C11_APPS[0])
-    response = call(
-        client, key, "create_job", {"bpm_process": "bx17_erp_po_entry", "target": "group:구매-PC", "inputs": {}}
-    )
-    assert response.status_code == 422
-    assert "구매-PC" in response.json()["message"]
 
 
 # ─────────────────────────── 업무 값을 되돌려주지 않는다 (원칙 6) ───────────────────────────

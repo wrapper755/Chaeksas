@@ -290,7 +290,9 @@ EXAMPLES.append(Example(
     origin="새로 설계 — 서버와 PC를 나누는 대표 예", 
     run_location="server", trigger="타이머 — 매일 07:00",
     background="""
-재고 데이터를 API로 읽어 안전재고 아래로 떨어진 품목의 발주 수량을 계산하고 구매 담당이 확인한다. 확인된 발주는 **ERP 화면 입력이 필요한데 ERP에 API가 없다.** 그래서 서버 BPM 프로세스는 「발주 입력」 PC BPM 프로세스(BX-17)의 작업 지시를 만든다. **현재 계약에는 서버 BPM 프로세스가 PC 작업을 만드는 요소가 없다** (「PC 위임」은 [ADR-0016](../decisions/0016-server-first.md) §3에 제안만 — 서버 BPM 프로세스의 Call Activity가 PC BPM 프로세스를 부르는 모양이며, schema 1에서는 C1 R3가 거부한다). 이 예제는 그 자리를 사내 확장 `center-jobs`(Center 작업 지시 API를 감싼 서비스 앱 — Center 연동용 키는 그 앱이 가진다)로 메운다.
+재고 데이터를 API로 읽어 안전재고 아래로 떨어진 품목의 발주 수량을 계산하고 구매 담당이 확인한다. 확인된 발주는 **ERP 화면 입력이 필요한데 ERP에 API가 없다.** 그래서 서버 BPM 프로세스가 그 한 부분만 **PC에 맡긴다** — 「발주 입력」 PC Bot(BX-17)을 `chk:call.delegate`로 부르고([ADR-0062](../decisions/0062-pc-delegation.md)), 입력이 끝나면 **발주번호 목록을 받아** 이어 간다. 어느 PC에서 돌릴지는 **Center가 고른다**(그 Bot이 배포된 활성 PC 중 대기열이 짧은 곳) — 그림에 PC 이름을 적지 않는다.
+
+실패·거절·만료는 **오류 경계**로 온다. 여기서는 담당자에게 메일로 알리고 끝낸다 — 발주는 사람이 ERP에서 직접 넣는다.
 """,
     why_location="계산·결재는 서버, 화면 입력만 PC — **업무를 두 BPM 프로세스로 쪼갠다.** PC 쪽은 짧게 끝나 실행 자리를 오래 잡지 않는다.",
     nodes=[
@@ -301,33 +303,48 @@ EXAMPLES.append(Example(
         appr("Approve_Order", "발주 확인", "발주 제안 확인", ["제안"], [fld("승인", "제안대로 발주합니까?", "bool", True), fld("메모", "메모")], location="center"),
         xgw("Gw_Order", "발주?"),
         script("Task_Confirm", "확정", "확정 = 제안"),
-        svc("Task_Dispatch", "ERP 입력 작업 지시", "center-jobs", "create_job",
-            {"bpm_process": "'bx17-erp-po-entry'", "target": "'group:구매-PC'", "inputs": "{'발주': 확정}"}, {"작업번호": "job_id"}),
+        call("Call_ErpInput", "ERP 입력 (PC 위임)", "Proc_bx17_erp_po_entry",
+             {"발주": "확정"}, {"발주번호목록": "발주번호목록"},
+             delegate=dict(bpm_process_id="bx17-erp-po-entry")),
+        script("Task_Note", "발주번호 기록", "발주건수 = len(발주번호목록)"),
+        mail("Task_Failed", "입력 실패 알림", ["purchasing@example.com"], "ERP 발주 입력 실패",
+             "발주 {제안수}건의 ERP 입력이 끝나지 않았습니다. 사유: {error_message}\nERP에서 직접 확인해 주세요."),
         end("End"),
     ],
     flows=[f("Start", "Task_Stock"), f("Task_Stock", "Task_Calc"), f("Task_Calc", "Gw_Any"),
            f("Gw_Any", "Approve_Order", "제안수 > 0", "있음"), f("Gw_Any", "End", default=True, name="없음"),
            f("Approve_Order", "Gw_Order"), f("Gw_Order", "Task_Confirm", "승인", "발주"), f("Gw_Order", "End", default=True, name="보류"),
-           f("Task_Confirm", "Task_Dispatch"), f("Task_Dispatch", "End")],
-    service_keys={"wms": "scm-wms", "center-jobs": "scm-center-jobs"}, extensions=[{"id": "wms", "version": ">=1,<2"}, {"id": "center-jobs", "version": ">=1,<2"}],
-    cases=[Case("부족 2품목", {}, {"제안수": 2, "작업번호": "*"}, {"Approve_Order": {"승인": True}}, "모의 WMS가 2품목을 안전재고 아래로 돌려준다")],
-    features=["서버 + PC 두 BPM 프로세스로 쪼개기", "작업 지시를 사내 확장 서비스 앱으로 (PC 위임의 공백 표시)", "결재 반려 시 발주 안 함"],
-    lessons=["한 BPM 프로세스 안에 서버 일과 PC 일을 섞지 않는다 — 실행 위치는 BPM 프로세스 단위다 (ADR-0015).",
-             "웹훅 태스크로 Center API를 직접 부르면 키를 붙일 방법이 없다 (웹훅은 인증 헤더를 갖지 않음, 비밀을 BPMN에 둘 수 없음) — 그래서 서비스 앱으로 감쌌다.",
-             "PC 위임이 확정되면(ADR-0016 §3, M7) 이 서비스 앱 태스크를 BX-17을 부르는 Call Activity로 바꾼다. 결과·실패는 Call Activity 출력과 오류 경계로 돌아온다.",
-             "`bpm_process`에 적는 것은 **패키지 id**다 (C1 `id`) — 예제 파일 이름이 아니다. 밑줄은 들어갈 수 없어(`^[a-z0-9][a-z0-9._-]{0,99}$`) BX-17의 패키지 id는 `bx17-erp-po-entry`다. 처음에는 파일 이름을 그대로 적어 두었는데, Center가 `no_deployment`로 거절해서야 드러났다 — **글자로만 가리키는 자리는 시험이 돌려 봐야 안다** (M5 인수 시험이 잡았다)."],
+           f("Task_Confirm", "Call_ErpInput"), f("Call_ErpInput", "Task_Note"), f("Task_Note", "End"),
+           f("Bnd_Delegation", "Task_Failed"), f("Task_Failed", "End")],
+    boundaries=[bnd("Bnd_Delegation", "Call_ErpInput", "error", "위임 실패", error="DELEGATION_FAILED")],
+    service_keys={"wms": "scm-wms"}, extensions=[{"id": "wms", "version": ">=1,<2"}],
+    variables=[("발주번호목록", "list", "Call_ErpInput (PC 위임)", "BX-17이 ERP에서 읽어 온 발주번호")],
+    cases=[Case("부족 2품목", {}, {"제안수": 2, "발주건수": 2}, {"Approve_Order": {"승인": True}},
+                "모의 WMS가 2품목을 안전재고 아래로 돌려준다. PC 위임 결과는 케이스가 적는다",
+                delegations={"Call_ErpInput": {"발주번호목록": ["PO-1001", "PO-1002"]}}),
+           Case("PC 입력이 실패", {}, {"제안수": 2}, {"Approve_Order": {"승인": True}},
+                "위임 결과를 **적어 두지 않으면** 그 자리에서 실패다 — 오류 경계가 받는 것을 본다",
+                delegations={})],
+    features=["서버 + PC로 **한 부분만 맡기기** (`chk:call.delegate`)", "위임 실패를 오류 경계로 받기", "결재 반려 시 발주 안 함"],
+    lessons=["한 BPM 프로세스 안에 서버 일과 PC 일을 섞지 않는다 — 실행 위치는 BPM 프로세스 단위이고(ADR-0015), **PC가 필요한 한 부분은 위임으로 떼어 낸다** (ADR-0062).",
+             "위임 대상은 **패키지 안의 정의가 아니다** — 따로 올리고 따로 배포한 PC Bot이다. 그래서 `requires.libs`에 들어가지 않고, 검사도 패키지 안에서 찾지 않는다 (B14).",
+             "**받을 값은 대상이 `outputs`로 선언해야 한다** (C1) — 선언하지 않으면 현장에서 값이 올라오지 않는다 (C4 `JobAck.outputs`가 선언한 것만 거른다). BX-17에 `발주번호목록`을 선언해 두었다.",
+             "**어느 PC인지 적지 않는다** — 비우면 Center가 고른다(배포된·활성인·대기열이 짧은 곳). 그림에 PC 이름을 적으면 배포가 정하는 자리를 그림이 가로챈다 (ADR-0049).",
+             "`bpm_process_id`에 적는 것은 **패키지 id**다 (C1 `id`) — 예제 파일 이름이 아니다. 밑줄은 들어갈 수 없어(`^[a-z0-9][a-z0-9._-]{0,99}$`) BX-17의 패키지 id는 `bx17-erp-po-entry`다. 처음에는 파일 이름을 그대로 적어 두었는데, Center가 `no_deployment`로 거절해서야 드러났다 — **글자로만 가리키는 자리는 시험이 돌려 봐야 안다**. 지금은 생성기가 짝을 대조한다.",
+             "전에는 이 자리를 **사내 확장 서비스 앱**(`center-jobs`, Center 작업 지시 API를 감싼 것)으로 메우고 있었다 — 계약에 위임 요소가 없던 때의 우회였고, ADR-0062가 그 공백을 닫았다."],
 ))
 
 # ───────────────────────────── BX-17 ─────────────────────────────
 EXAMPLES.append(Example(
     id="BX-17", file="bx17_erp_po_entry", name="ERP 발주 화면 입력", dept="구매·영업·물류",
-    origin="새로 설계 — BX-16의 PC 쪽", 
-    run_location="pc", trigger="작업 지시 — BX-16이 만든다 (대상: 구매 PC 그룹)",
+    origin="새로 설계 — BX-16의 PC 쪽",
+    run_location="pc", trigger="작업 지시 — BX-16이 **PC 위임**으로 만든다 (어느 PC인지는 Center가 고른다)",
     background="""
-확정된 발주 목록을 받아 ERP 데스크톱 클라이언트의 발주 입력 화면에 한 건씩 입력하고 발주번호를 읽어 온다. 입력이 끝나면 결과를 Center에 남긴다 (작업 결과 = 실행 결과).
+확정된 발주 목록을 받아 ERP 데스크톱 클라이언트의 발주 입력 화면에 한 건씩 입력하고 발주번호를 읽어 온다. 읽어 온 **발주번호 목록을 `outputs`로 선언해** 맡긴 쪽(BX-16)에게 돌려준다 ([ADR-0062](../decisions/0062-pc-delegation.md) — 선언한 것만 올라간다, C4 `JobAck.outputs`).
 """,
     why_location="API 없는 데스크톱 ERP 화면 → PC. 결재가 없어 짧게 끝난다.",
     inputs=[("발주", "list", True, "{품목, 수량}")],
+    outputs=["발주번호목록"],
     nodes=[
         start("Start", "작업 지시"),
         ui("Task_Entry", "발주 입력", "erp.desktop.po_entry",
