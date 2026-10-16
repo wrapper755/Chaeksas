@@ -23,6 +23,7 @@ from chaeksas.bot_ui.runtimes import RUNTIME_FLAG, serve
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.bot_ui.tray import Tray
 from chaeksas.contracts.bot_ui import JobAck
+from chaeksas.core.selftest import SELFTEST_FLAG
 from chaeksas.qt import theme
 
 log = logging.getLogger(__name__)
@@ -227,9 +228,14 @@ def main(argv: list[str] | None = None) -> int:
 
     `--local-runtime <확장 id>:<런타임 id>`로 불리면 **화면 없이** 그 런타임으로 돈다 —
     Bot UI가 자기 실행 파일을 그렇게 자식으로 다시 띄운다 (C13·ADR-0024).
+
+    `--selftest [파일]`은 **묶은 실행 파일의 빌드 검사**다 (ADR-0024) — 확장이 다 보이는지
+    보고 끝난다. 화면을 띄우지 않는다.
     """
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     args = list(argv if argv is not None else sys.argv)
+    if SELFTEST_FLAG in args:
+        return run_selftest(args)
     if RUNTIME_FLAG in args:
         return run_local_runtime(args)
     app = QApplication(args)
@@ -237,6 +243,22 @@ def main(argv: list[str] | None = None) -> int:
     # 창을 닫아도 트레이에서 돈다 (BUI-02).
     app.setQuitOnLastWindowClosed(False)
     return BotUiApp(app, make_agent()).run()
+
+
+def run_selftest(args: list[str]) -> int:
+    """`--selftest [파일]` — 묶은 앱이 제 확장을 들고 있나 (ADR-0024의 빌드 검사).
+
+    **Qt를 띄우지 않는다.** 묶인 앱은 콘솔 없이 뜰 수 있어 결과를 파일로 받는다 — 빌드가
+    그 파일을 읽고 하나라도 빠지면 **빌드를 실패시킨다** (빠진 확장은 실행 중에야 드러난다).
+    """
+    from chaeksas.core.selftest import run  # noqa: PLC0415 — 평소 기동을 무겁게 하지 않는다
+
+    parser = argparse.ArgumentParser(prog="chk-bot-ui", add_help=False)
+    parser.add_argument(SELFTEST_FLAG, dest="out", nargs="?", default=None)
+    parser.add_argument("--want", dest="want", default=None, help="켜져 있어야 하는 확장 id (쉼표로 여럿)")
+    found, _ = parser.parse_known_args(args[1:])
+    want = [one.strip() for one in str(found.want).split(",") if one.strip()] if found.want else None
+    return run(Path(found.out) if found.out else None, want=want)
 
 
 def run_local_runtime(args: list[str]) -> int:

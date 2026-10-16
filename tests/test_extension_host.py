@@ -154,8 +154,63 @@ def test_pyinstaller_hook_is_shipped_with_core() -> None:
     assert "hook-chaeksas.core.extensions.py" in hooks, hooks
 
     # PyInstaller가 훅 폴더를 찾는 길 (`pyinstaller40` 엔트리 포인트).
-    declared = {ep.name: ep.value for ep in entry_points(group="pyinstaller40")}
-    assert declared.get("hook-dirs") == "chaeksas.core.__pyinstaller:get_hook_dirs", declared
+    #
+    # **이름이 겹친다.** `hook-dirs`를 선언하는 것이 우리뿐이 아니다 — PyInstaller를 깔면
+    # `pyinstaller-hooks-contrib`도 같은 이름으로 선언한다(`--group build`). 사전으로 모으면
+    # 하나가 다른 하나를 덮으므로 **우리 것이 그 안에 있나**로 본다 (처음에는 사전으로 모아
+    # 두었고, 빌드를 들이자 그 자리가 깨져 드러났다).
+    declared = [ep.value for ep in entry_points(group="pyinstaller40") if ep.name == "hook-dirs"]
+    assert "chaeksas.core.__pyinstaller:get_hook_dirs" in declared, declared
+
+
+# ───────────────────── 빌드 검사 (`--selftest`, ADR-0024) ─────────────────────
+
+
+def test_selftest_sees_the_installed_extension() -> None:
+    """묶기 전 환경에서도 **같은 검사**가 돈다 (`core.selftest`).
+
+    이것이 보는 것은 ADR-0024가 적어 둔 세 가지 빠짐이다 — 메타데이터(엔트리 포인트가 빈
+    목록)·데이터 파일·서브모듈(`entry` 해석에서 터진다). **인스턴스를 만들지 않고 풀기만**
+    하므로 Qt 없이 돈다.
+    """
+    from chaeksas.core.selftest import check  # noqa: PLC0415
+
+    found = check()
+    assert found["all_ok"], found
+    assert BUILTIN_ID in " ".join(found["steps"]["entry_points"]["value"]["enabled"])
+    assert "풀린다" in str(found["steps"]["entries"]["value"])
+
+
+def test_selftest_fails_when_a_wanted_extension_is_missing() -> None:
+    """**빌드가 멈춰야 한다** — 묶음에 확장이 빠지면 실행 중에야 드러난다.
+
+    `--want`는 빌드하는 쪽이 「무엇이 들어가야 하는가」를 못 박는 자리다 (ADR-0018 §5 포함 목록).
+    """
+    from chaeksas.core.selftest import check  # noqa: PLC0415
+
+    found = check(want=[BUILTIN_ID, "없는-확장"])
+    assert not found["all_ok"]
+    assert not found["steps"]["entry_points"]["ok"]
+    # 기여를 푸는 쪽은 멀쩡하다 — 「무엇이 틀렸나」가 갈라져 보여야 한다.
+    assert found["steps"]["entries"]["ok"]
+
+
+def test_selftest_catches_an_entry_that_cannot_be_resolved() -> None:
+    """**서브모듈이 빠진 꼴** — 확장은 켜지는데 `entry`가 풀리지 않는다 (ADR-0024의 셋째 증상)."""
+    from chaeksas.core.selftest import check  # noqa: PLC0415
+
+    broken = ExtensionHost()
+    install(
+        broken,
+        definition(contributes={"task_types": [
+            {"id": "ocr_task", "label": "OCR", "executor": {"entry": "doc_ocr.gone:Missing"},
+             "run_locations": ["pc"]}
+        ]}),
+    )
+    found = check(host=broken)
+    assert not found["all_ok"]
+    assert found["steps"]["entry_points"]["ok"], "확장은 켜져 있다 — 터지는 자리는 entry다"
+    assert "ocr_task" in str(found["steps"]["entries"]["value"])
 
 
 def test_unknown_entry_point_group_loads_nothing() -> None:

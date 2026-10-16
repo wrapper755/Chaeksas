@@ -162,6 +162,33 @@ sudo apt-get install -y --no-install-recommends \
 >
 > `docker compose`로 띄울 때는 `.env`의 `CHK_CENTER__HOST_PORT`·`CHK_CONSOLE__HOST_PORT`가 **호스트 쪽 포트만** 옮긴다 (컨테이너 안의 포트는 위 표 그대로다).
 
+## 6-2. 데스크톱 앱 묶기 (설치 파일의 앞 단계)
+
+```bash
+uv run --group build python packaging/build.py              # Studio·Bot UI 둘 다
+uv run --group build python packaging/build.py bot-ui       # 하나만
+```
+
+PyInstaller **onedir**로 묶는다 ([ADR-0024](decisions/0024-desktop-packaging-extensions.md)) — 산출물은
+`build/dist/<이름>/`이고 **설치 프로그램이 담을 폴더**다(설치 프로그램 종류는 아직 정하지 않았다).
+PyInstaller는 `--group build`에만 있어 평소 `uv sync`로는 들어오지 않는다.
+
+- **확장 인자를 적지 않는다.** `core`가 주는 PyInstaller 훅이 설치된 엔트리 포인트를 훑어 넣는다 —
+  확장을 더해도 빌드 명령이 그대로다. 그래서 **무엇이 들어가는가는 빌드 환경에 무엇이 설치됐는가**로
+  정해진다 (사내 확장이 생기면 ADR-0018 §5의 포함 목록을 설치하는 걸음이 앞에 붙는다).
+- **묶은 뒤 스스로 검사한다** — `<실행 파일> --selftest <파일>`로 확장이 다 보이는지 보고 하나라도
+  빠지면 **빌드를 실패시킨다** (빠진 확장은 실행 중에야 드러난다). 못 박고 싶으면
+  `--want ui-automation`처럼 적는다. 그 깃발은 Bot UI·Studio가 **같은 검사**(`core.selftest`)를 쓴다.
+- **매니페스트는 Windows에서만** 들어간다 (`packaging/app.manifest` — DPI Per-Monitor v2,
+  [ADR-0021](decisions/0021-worker-dpi-capture.md)). 개발 PC가 Linux면 **Linux 묶음**이 나온다 —
+  빌드가 서는지 보는 데는 그것으로 되고 **Windows 산출물은 CI가 만든다**(아래).
+- **Windows 산출물은 수동으로 돌린다** — `.github/workflows/desktop.yml`(「데스크톱 산출물」)을
+  Actions에서 실행하거나 `v*` 태그를 민다. 푸시마다 묶지 않는다 (몇 분이 걸려 모든 PR에 붙이면 값이 크다).
+- 크기는 **OS·아키텍처마다 다르다.** 스파이크 S5가 Windows에서 본 것은 Studio 약 550MB(QtWebEngine
+  194MB 포함)·Bot UI 약 113MB이고, 개발 PC(Linux aarch64)에서는 **Studio 1008MB·Bot UI 356MB**가
+  나왔다 (2026-10-16). Bot UI는 모든 현장 PC에 깔리므로 **QtWebEngine을 넣지 않는다** — 그 차이가
+  크기의 대부분이다.
+
 ## 7. 시험 돌리기와 **건너뛰는 것**
 
 `uv sync --all-packages` → `uv run pytest`. `addopts`에 `-q`가 있으니 **`-q`를 또 주면 셈이 안 보인다**. 왜 건너뛰는지는 `uv run pytest -rs`가 말해 준다.
