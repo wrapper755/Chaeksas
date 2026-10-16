@@ -9,13 +9,22 @@ from __future__ import annotations
 import logging
 import sys
 
+from chaeksas.core.selftest import SELFTEST_FLAG
 from chaeksas.studio.settings import Settings
 
 log = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
+    """`chk-studio` 진입점.
+
+    `--selftest [파일]`은 **묶은 실행 파일의 빌드 검사**다 (ADR-0024) — Bot UI와 **같은 깃발·
+    같은 검사**이고(`core.selftest`) 화면을 띄우지 않는다.
+    """
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    args = list(argv if argv is not None else sys.argv)
+    if SELFTEST_FLAG in args:
+        return _selftest(args)
 
     from PySide6.QtCore import QCoreApplication, Qt  # noqa: PLC0415
     from PySide6.QtWidgets import QApplication  # noqa: PLC0415
@@ -35,6 +44,21 @@ def main(argv: list[str] | None = None) -> int:
     window = MainWindow(settings)
     window.show()
     return int(app.exec())
+
+
+def _selftest(args: list[str]) -> int:
+    """빌드 검사 — **Qt를 띄우지 않는다** (묶인 앱은 콘솔 없이 뜰 수 있어 파일로 받는다)."""
+    import argparse  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    from chaeksas.core.selftest import run  # noqa: PLC0415
+
+    parser = argparse.ArgumentParser(prog="chk-studio", add_help=False)
+    parser.add_argument(SELFTEST_FLAG, dest="out", nargs="?", default=None)
+    parser.add_argument("--want", dest="want", default=None, help="켜져 있어야 하는 확장 id (쉼표로 여럿)")
+    found, _ = parser.parse_known_args(args[1:])
+    want = [one.strip() for one in str(found.want).split(",") if one.strip()] if found.want else None
+    return run(Path(found.out) if found.out else None, want=want)
 
 
 __all__ = ["main"]

@@ -24,6 +24,11 @@ dev = [
     # 읽기만 하고, 한글 PDF는 글꼴을 심어야 진짜 문서와 같다 (스파이크 S8).
     "fpdf2>=2.8",
 ]
+# 데스크톱 앱을 묶는 데만 쓴다 (ADR-0024) — 평소 `uv sync`에 들어가지 않는다.
+# `uv run --group build python packaging/build.py`
+build = [
+    "pyinstaller>=6.11",
+]
 
 [tool.ruff]
 line-length = 120
