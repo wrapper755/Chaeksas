@@ -222,7 +222,7 @@ Windows에서 확신이 없는 것부터 작게 확인한다. 각 스파이크�
 CI에 산출물 잡이 없다.
 
 - [x] 제품 쪽 빌드 하나로 Studio·Bot UI 실행 파일이 나온다 (확장·`extension.json`·로컬 런타임이 함께 들어간다 — S5가 본 것) — **된다** (`packaging/build.py`, 조각 1): PyInstaller onedir 둘, **확장 인자 0개**(`core`의 훅이 엔트리 포인트를 훑어 hiddenimports 35개·datas 8개를 넣는다), Windows에서만 매니페스트(DPI Per-Monitor v2). 개발 PC(Linux aarch64)에서 Bot UI 356MB·62초, Studio 1008MB·81초
-- [x] CI가 **Windows 산출물을 만든다** — `.github/workflows/desktop.yml`(「데스크톱 산출물」)이 **수동 실행·`v*` 태그에만** 돈다 (푸시마다 묶지 않는다 — Windows CI가 이미 12분이다). Windows·Linux 둘을 묶고 `--selftest`로 검사한 뒤 산출물을 올린다. **사람이 단추를 눌러 Windows 묶음을 확인한다**
+- [x] CI가 **Windows 산출물을 만든다** — `.github/workflows/desktop.yml`(「데스크톱 산출물」)이 **수동 실행·`v*` 태그에만** 돈다 (푸시마다 묶지 않는다 — Windows CI가 이미 12분이다). Windows·Linux 둘을 묶고 `--selftest`로 검사한 뒤 산출물을 올린다. **Windows 묶음을 정말 확인했다** (런 38873092925 — Bot UI 160MB·86초, Studio 598MB·109초, 셀프테스트 통과). 그 전에 **Windows 전용 흠 둘**이 드러났다: 빌드 자신의 한글 `print`, 그리고 **PyInstaller 자식 안**의 훅이 찍는 한글 — 둘 다 이제 Linux에서 잡히는 시험이 막는다
 - [ ] 설치한 Bot UI가 **자동 시작**으로 뜬다 (`bot_ui/autostart.py`는 이미 있다 — 설치 파일에서도 같은 자리를 쓰는지 본다). **빌드 검사가 아직 보지 않는 자리다** — `--selftest`는 기여의 `entry`가 풀리는지까지만 보고 **로컬 런타임을 실제로 띄워 보지는 않는다** (ADR-0024가 적어 둔 것 중 남은 하나)
 - [ ] **「판 올리기」를 정한다** (ADR) — Center가 설치 파일을 내려 줄 것인가, 사람이 다시 설치하는가. 내려 준다면 **배포와 같은 서명 관문**인가 (C2)
 - [ ] 산출물에 **판이 찍혀** 있고 C4·C12 `versions`가 그것을 올린다
