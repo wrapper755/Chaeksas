@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -73,6 +74,17 @@ def size_mb(where: Path) -> float:
     return round(sum(f.stat().st_size for f in files) / 1024 / 1024, 1)
 
 
+def child_env() -> dict[str, str]:
+    """PyInstaller 자식에게 줄 환경 — **한글 출력이 Windows 코드페이지에서 죽지 않게**.
+
+    우리 `core`의 PyInstaller 훅이 묶은 확장 수를 **한글로** 찍는다. 그 글은 **PyInstaller의
+    프로세스**에서 나오므로 우리가 stdout을 고칠 수 없다 — **띄우는 쪽이 환경으로** 정해 준다
+    (`PYTHONIOENCODING`·`PYTHONUTF8`). 첫 Windows 산출물 실행이 여기서 멈췄다: 빌드 자신의
+    `print`를 고친 뒤에도 **자식 안에서** 같은 오류가 또 났다.
+    """
+    return {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
+
+
 def build(app: App) -> float:
     """PyInstaller onedir 한 벌. 걸린 초를 돌려준다."""
     args = [
@@ -88,7 +100,7 @@ def build(app: App) -> float:
     args.append(str(HERE / app.script))
 
     started = time.perf_counter()
-    done = subprocess.run(args, cwd=ROOT, check=False)
+    done = subprocess.run(args, cwd=ROOT, check=False, env=child_env())
     if done.returncode:
         raise SystemExit(f"{app.key}: PyInstaller가 실패했다 (끝 코드 {done.returncode})")
     return round(time.perf_counter() - started, 1)
@@ -104,7 +116,7 @@ def selftest(app: App, want: list[str]) -> dict:
     args = [str(app.exe), "--selftest", str(out)]
     if want:
         args += ["--want", ",".join(want)]
-    code = subprocess.run(args, check=False, timeout=300).returncode
+    code = subprocess.run(args, check=False, timeout=300, env=child_env()).returncode
     if not out.exists():
         raise SystemExit(f"{app.key}: `--selftest`가 결과를 남기지 않았다 (끝 코드 {code})")
     found = json.loads(out.read_text(encoding="utf-8"))
