@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmn:definitions xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Defs_risk_grade" name="위험 등급" namespace="urn:chaeksas:examples">
+  <dmn:decision id="risk_grade" name="위험 등급">
+    <dmn:decisionTable id="DT_risk_grade" hitPolicy="UNIQUE">
+      <dmn:input id="In_0" label="점수">
+        <dmn:inputExpression id="InE_0" typeRef="number"><dmn:text>점수</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:output id="Out_0" name="grade" typeRef="string" />
+      <dmn:rule id="Rule_0">
+        <dmn:description>80 이상</dmn:description>
+        <dmn:inputEntry id="R0_I0"><dmn:text>[80..100]</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R0_O0"><dmn:text>"상"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_1">
+        <dmn:description></dmn:description>
+        <dmn:inputEntry id="R1_I0"><dmn:text>[50..79]</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R1_O0"><dmn:text>"중"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_2">
+        <dmn:description>1 이상</dmn:description>
+        <dmn:inputEntry id="R2_I0"><dmn:text>[1..49]</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R2_O0"><dmn:text>"하"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+</dmn:definitions>

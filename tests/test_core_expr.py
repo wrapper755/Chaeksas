@@ -1,6 +1,6 @@
 """식 `chk-expr`·스크립트·템플릿 (ADR-0025, C14 §식).
 
-마지막 묶음이 중요하다 — **업무 예제 50개가 실제로 쓰는 식 자리 전부**를 파싱한다. 식 언어를
+마지막 묶음이 중요하다 — **업무 예제 51개가 실제로 쓰는 식 자리 전부**를 파싱한다. 식 언어를
 좁히거나 넓힐 때 예제가 먼저 깨지는 자리다.
 """
 
@@ -428,7 +428,7 @@ def test_the_helper_list_is_the_adr_list() -> None:
         assert refused not in HELPER_NAMES
 
 
-# ─────────────────────── 업무 예제 50개의 식 전부 ───────────────────────
+# ─────────────────────── 업무 예제 51개의 식 전부 ───────────────────────
 
 
 def example_sites() -> list[tuple[str, str, str, str]]:
@@ -484,7 +484,7 @@ def test_the_examples_actually_use_expressions() -> None:
     ("file", "node", "site", "source"), EXPRESSION_SITES, ids=[f"{s[0]}:{s[1]}:{s[2]}" for s in EXPRESSION_SITES]
 )
 def test_every_example_expression_parses(file: str, node: str, site: str, source: str) -> None:
-    """업무 예제 50개의 식 자리 전부가 `chk-expr` 문법 안에 있어야 한다.
+    """업무 예제 51개의 식 자리 전부가 `chk-expr` 문법 안에 있어야 한다.
 
     **문법만 보지 않는다** — `parse()`가 도우미 호출의 인자 모양도 본다 (C14 B15). 문법만 보던
     때 BX-35가 `세기(전체, '주제')`를 들고 여기를 지나갔다.

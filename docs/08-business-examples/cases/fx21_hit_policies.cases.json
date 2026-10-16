@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "process": "Proc_fx21_hit_policies",
+  "cases": [
+    {
+      "name": "고위험 서울 — 두 줄이 겹친다",
+      "description": "`ANY`의 두 줄이 함께 맞고 **결과가 같다** — `UNIQUE` 쪽은 한 줄만 맞는다",
+      "inputs": {
+        "점수": 90,
+        "지역": "서울"
+      },
+      "expected": {
+        "등급": "상",
+        "담당": "본사",
+        "요약": "상/본사"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "중위험 부산",
+      "description": "",
+      "inputs": {
+        "점수": 60,
+        "지역": "부산"
+      },
+      "expected": {
+        "등급": "중",
+        "담당": "지점",
+        "요약": "중/지점"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "해당 없음 (0점)",
+      "description": "맞는 줄이 없으면 **모든 출력이 `None`**이다 — 실패가 아니다",
+      "inputs": {
+        "점수": 0,
+        "지역": "부산"
+      },
+      "expected": {
+        "등급": null,
+        "요약": "해당 없음"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}
