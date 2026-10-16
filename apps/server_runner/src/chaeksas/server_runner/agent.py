@@ -59,6 +59,7 @@ from chaeksas.core import requests as approval_requests
 from chaeksas.core.app_directory import AppDirectory, DirectoryCache
 from chaeksas.core.deploy import Deployer
 from chaeksas.core.engine import WHERE_CENTER, EngineError, RunEnv
+from chaeksas.core.extensions import ExtensionHost, HostTasks
 from chaeksas.core.packages import InstalledBot, find, installed
 from chaeksas.core.preflight import check as run_preflight
 from chaeksas.core.run_env import make_env
@@ -76,6 +77,8 @@ from chaeksas.server_runner.center_client import (
 )
 from chaeksas.server_runner.credentials import Credentials
 from chaeksas.server_runner.delegate import CenterDelegator
+from chaeksas.server_runner.extensions import load as load_extensions
+from chaeksas.server_runner.extensions import tasks as extension_tasks
 from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Saved, Store
 from chaeksas.server_runner.worker import ACK_STARTED, EMPTY_COUNTS, Worker, reopen_log
@@ -172,10 +175,37 @@ class Agent:
     #: **받을 쪽이 없는 일**을 한다. 메모리뿐이다: 취소된 실행은 담아 둔 것도 지워져서
     #: 다시 뜬 실행기는 그 작업 id를 알 길이 없다 (그 값은 7일에 Center가 지운다).
     pending_cancels: list[str] = field(default_factory=list)
+    #: 확장 호스트 하나 (C13, ADR-0064) — **실행 위치를 쥔다**(서버에서 돌 수 있다고 적힌
+    #: 태스크 종류만 낸다). 사전 점검과 실행이 **같은 것을 본다** — 점검이 다른 호스트를 보면
+    #: 「점검은 통과했는데 실행이 안 된다」가 된다. **로컬 런타임은 띄우지 않는다.**
+    host: ExtensionHost | None = None
+    #: 그 호스트를 엔진·사전 점검에 꽂는 것 — 한 번 짓고 들고 있는다.
+    _tasks: HostTasks | None = None
 
     @property
     def registered(self) -> bool:
         return bool(self.server_runner_id)
+
+    def extension_host(self) -> ExtensionHost:
+        """확장을 읽은 호스트 — 한 번 읽고 들고 있는다 (주기마다 엔트리 포인트를 걷지 않는다)."""
+        if self.host is None:
+            self.host = load_extensions()
+        return self.host
+
+    def extensions(self) -> HostTasks:
+        """엔진의 `RunEnv.extensions`·사전 점검이 쓰는 **같은 하나** (ADR-0064).
+
+        주소는 **받아 둔 바깥 앱 명부**가 답한다 (C7·C13 「전송」) — 확장 id로 묻는 것이라
+        실행마다 다르지 않다. **Center를 부르지 않는다.**
+        """
+        if self._tasks is None:
+            held = DirectoryCache(data_dir=self.settings.data_path)
+            self._tasks = extension_tasks(
+                host=self.extension_host(),
+                service_url=lambda where: held.base_url_of(extension_id=where),
+                credentials=self.credentials,
+            )
+        return self._tasks
 
     def machine_id(self) -> str:
         """C12 `machine_id` — **Bot UI와 같은 함수**다 (`core.machine`). 원값은 보내지 않는다."""
@@ -226,9 +256,10 @@ class Agent:
             os=machine.os_label(),
             versions=self.versions(),
             max_concurrency=self.settings.max_concurrency,
-            # 확장은 아직 싣지 않는다 (다음 조각) — **빈 목록이 거짓이 아니다**: 지금 이
-            # 실행기는 정말 확장을 하나도 들고 있지 않다.
-            extensions=[],
+            # **이 서버에 깔린 확장** (C12 — Bot UI의 C4와 같은 모양, `host.states()` 하나다).
+            # 싣지 않으면 C7이 그 확장을 모르고, 그것을 요구하는 Bot의 **배포가 막힌다**
+            # (「확장 누락」은 배포를 막는 셋 중 하나다). CON-12 상세도 이 목록을 그린다.
+            extensions=self.extension_host().states(),
         )
         try:
             answer = self.client.register(request)
@@ -349,8 +380,11 @@ class Agent:
         """설치된 Bot별 준비 상태 (C12 — C4와 같은 모양).
 
         **서버를 부르지 않는다** (ADR-0013 — 하트비트마다 돈다). 키는 「값이 있나」까지만 본다.
-        확장 점검은 아직 없다 — 실행기가 확장을 싣는 것은 다음 조각이다 (`host=None`이면
-        플랫폼 점검만 돈다).
+
+        **확장까지 본다** (ADR-0064) — 태스크 종류·확장 판·AI 환경 셋이다. 호스트가 **실행
+        위치를 쥐므로**(`run_locations`에 `server`가 없는 종류는 기여를 내지 않는다) 그런 Bot은
+        `task_types_wrong_location`으로 **시작 전에** 막힌다 — 전에는 배포·시작까지 가서 실행
+        중에 `node_kind_unsupported`로 죽었다. **실행과 같은 호스트**를 쓴다.
         """
         out = []
         for bot in self.installed_bots():
@@ -364,6 +398,8 @@ class Agent:
                     # **갖춘 설정은 이쪽만 안다** (C1 `requires.settings`, ADR-0059 §4) —
                     # 메일을 보내는 Bot인데 SMTP가 없으면 시작하기 전에 막는다.
                     settings=self.settings.ready_settings(),
+                    host=self.extension_host(),
+                    context=self.extensions().context,
                 )
                 found = Readiness(
                     bpm_process_id=bot.id,
@@ -563,6 +599,9 @@ class Agent:
         **보내기도 설정이 정한다** (ADR-0059) — SMTP 주소·보내는 주소가 없으면 `chk:email`이
         **보내지 않고 실패한다**(`SEND_FAILED`). 웹훅은 **허용 호스트에 적힌 곳만**이고 비면
         아무 데도 보내지 않는다. 비밀번호는 `credentials.smtp_password()`가 준다.
+
+        **확장 태스크도 돈다** (ADR-0064) — 단 `run_locations`에 `server`를 적은 종류만이고,
+        **로컬 런타임은 띄우지 않는다**. 적지 않은 종류는 사전 점검이 이미 막았다(`readiness`).
         """
         return make_env(
             bot,
@@ -586,6 +625,9 @@ class Agent:
             # **PC 위임은 Center에 맡긴다** (ADR-0062) — 어느 PC인가도 Center가 고른다.
             # Bot UI는 이 포트를 꽂지 않는다 (PC가 PC를 기다리면 서로를 기다릴 수 있다).
             delegate=CenterDelegator(client=self.client),
+            # **확장 태스크** (C13·ADR-0064) — 호스트가 실행 위치를 쥐어 서버에서 돌 수 있는
+            # 종류만 수행기를 낸다. 없는 종류는 엔진이 설치 오류로 올린다.
+            extensions=self.extensions(),
         )
 
     def wake_due(self) -> int:

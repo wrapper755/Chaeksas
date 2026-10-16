@@ -532,6 +532,47 @@ def test_a_turned_off_extension_contributes_nothing() -> None:
     assert off.configuration() == []
 
 
+#: 양쪽에서 돈다고 적은 종류와 PC 전용 하나 (ADR-0064).
+BOTH_AND_PC: dict[str, Any] = {
+    "task_types": [
+        {"id": "ocr_task", "label": "OCR", "executor": {"entry": "x:Y"}, "run_locations": ["pc"]},
+        {"id": "sum_task", "label": "요약", "executor": {"entry": "x:Y"}, "run_locations": ["pc", "server"]},
+    ]
+}
+
+
+def test_a_host_that_holds_a_run_location_only_contributes_what_runs_there() -> None:
+    """**거르는 자리가 하나다** (ADR-0064) — 수행기·사전 점검·위치 표가 같은 것을 본다.
+
+    서버 실행기는 로컬 런타임을 띄우지 않으므로(런타임은 Bot UI의 것이다) PC 전용 종류는
+    서버에서 **없는 것**이 된다. 「깔려 있는데 못 돈다」는 사전 점검이 따로 말한다.
+    """
+    server = ExtensionHost(run_location="server")
+    install(server, definition(contributes=BOTH_AND_PC))
+
+    assert [c.value.id for c in server.task_types()] == ["sum_task"]
+    assert server.task_type("ocr_task") is None
+    assert server.task_type_locations() == {"sum_task": ["pc", "server"]}
+    with pytest.raises(LookupError):
+        server.executor("ocr_task")
+
+
+def test_a_host_without_a_run_location_contributes_everything() -> None:
+    """**주지 않으면 거르지 않는다** — Studio는 양쪽 그림을 편집하므로 팔레트에 둘 다 있어야 한다."""
+    both = ExtensionHost()
+    install(both, definition(contributes=BOTH_AND_PC))
+    assert [c.value.id for c in both.task_types()] == ["ocr_task", "sum_task"]
+
+
+def test_the_provider_is_still_found_for_a_filtered_task_type() -> None:
+    """걸러진 종류의 **주인은 보인다** — 사전 점검이 「이 위치에서 못 돈다」를 그것으로 말한다."""
+    server = ExtensionHost(run_location="server")
+    install(server, definition(contributes=BOTH_AND_PC))
+
+    owner = server.provider_of("ocr_task")
+    assert owner is not None and owner.id == "doc-ocr" and not owner.off
+
+
 def test_a_turned_off_extension_does_not_hold_the_task_type_name() -> None:
     """겹침(E4)은 **꺼지지 않은 것들 사이에서만** 본다 — 꺼진 것은 이름을 쥐고 있지 않다."""
     task = {
