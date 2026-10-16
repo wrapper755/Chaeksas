@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "process": "Proc_fx22_append_output",
+  "cases": [
+    {
+      "name": "한 줄 쓰기",
+      "description": "csv·txt 둘이 **정말 써졌는지** 파일 목록으로 센다",
+      "inputs": {
+        "건수": 7,
+        "담당": "김가나"
+      },
+      "expected": {
+        "일지파일수": 2,
+        "일지경로": "일지/처리일지.csv",
+        "글경로": "일지/처리일지.txt"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}
