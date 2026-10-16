@@ -34,6 +34,12 @@ ENV_SMTP_PASSWORD = "CHK_SERVER_RUNNER__SMTP__PASSWORD"
 SERVICE_APP_PREFIX = "svc:"
 ENV_SERVICE_APP_PREFIX = "CHK_SERVER_RUNNER__SVC__"
 
+#: 확장의 설정 칸 (C13 `configuration`, `scope: server_runner`)과 그 비밀 칸.
+#: **이름 규칙은 Bot UI의 것과 같다** (`CHK_BOT_UI__EXT__…` — ADR-0064 §2): 서버에는 설정 파일이
+#: 없어 비밀이 아닌 칸도 환경변수로 온다.
+EXTENSION_PREFIX = "ext:"
+ENV_EXTENSION_PREFIX = "CHK_SERVER_RUNNER__EXT__"
+
 
 class SecretsUnavailable(RuntimeError):
     """OS 비밀 저장소를 쓸 수 없다 (설치 안 됨·잠김·헤드리스 서버)."""
@@ -47,6 +53,14 @@ def _env_name(text: str) -> str:
 def service_key_env(ref: str) -> str:
     """그 키 참조를 줄 환경변수 이름 (사전 점검이 사람에게 보여 준다)."""
     return f"{ENV_SERVICE_APP_PREFIX}{_env_name(ref)}"
+
+
+def extension_config_env(extension_id: str, key: str) -> str:
+    """확장의 설정 칸 하나를 줄 환경변수 이름 (C13 `configuration`, ADR-0064 §2).
+
+    확장마다 이름 공간을 나눈다 — 다른 확장의 칸을 가져가지 못한다.
+    """
+    return f"{ENV_EXTENSION_PREFIX}{_env_name(extension_id)}__{_env_name(key)}"
 
 
 @dataclass
@@ -120,18 +134,28 @@ class Credentials:
         """서비스 앱 키 하나 (참조 이름 → 값). 키 **값은 실행기만 안다** (ADR-0013)."""
         return self.get(f"{SERVICE_APP_PREFIX}{ref}", env=service_key_env(ref))
 
+    def extension_secret(self, extension_id: str, key: str) -> str | None:
+        """확장의 비밀 설정 칸 (C13 `configuration[].secret`). Bot UI와 같은 규칙이다."""
+        return self.get(
+            f"{EXTENSION_PREFIX}{extension_id}:{key}",
+            env=extension_config_env(extension_id, key),
+        )
+
 
 __all__ = [
     "CENTER_API_KEY",
     "ENV_CENTER_API_KEY",
+    "ENV_EXTENSION_PREFIX",
     "ENV_LLM_API_KEY",
     "ENV_SERVICE_APP_PREFIX",
     "ENV_SMTP_PASSWORD",
+    "EXTENSION_PREFIX",
     "LLM_API_KEY",
     "SERVICE",
     "SERVICE_APP_PREFIX",
     "SMTP_PASSWORD",
     "Credentials",
     "SecretsUnavailable",
+    "extension_config_env",
     "service_key_env",
 ]

@@ -6,7 +6,8 @@
 | --- | --- |
 | 서비스 앱 | 운영자가 등록한 주소 + Center가 읽은 C11 `/manifest`·`/healthz` |
 | 런타임 | `bot_uis`가 등록·하트비트로 보고한 것 (C4) |
-| 확장 | 실행하는 쪽의 보고 + 서비스 앱 manifest의 `extension` + **외부로 등록된 정의**(C13) |
+| 확장 | 실행하는 쪽의 보고(`bot_uis`·**`server_runners`** — C4·C12) + 서비스 앱 manifest의 `extension` |
+| | + **외부로 등록된 정의** (C13) |
 | 확장 기여 자원 | 카탈로그를 읽어 쌓은 것 (C13 §5) |
 
 기여 자원의 **출처는 둘이고 모양은 같다** — 내장·사내는 C11 manifest의 `resources`,
@@ -469,11 +470,19 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
     found: dict[str, dict[str, Any]] = {}
 
     # 1) 실행하는 쪽이 보고한 것 — 몇 대에 깔렸는지는 여기서만 안다.
-    for row in store.rows("SELECT runtimes_json, state_json FROM bot_uis"):
-        reported = loads(row["runtimes_json"], {}) or {}
-        state = loads(row["state_json"], {}) or {}
-        # 하트비트가 더 새것이다 (C13 — 바뀔 때만 올라온다).
-        installed = state.get("extensions") or reported.get("extensions") or []
+    #    **PC와 서버를 함께 센다** (C7 `InstalledOn`이 「C4·C12 보고」라고 적어 두었다) — 서버
+    #    실행기만 가진 확장을 빼면 그것을 요구하는 서버 Bot의 **배포가 막힌다**(확장 누락은
+    #    배포를 막는 셋 중 하나다). 서버 실행기는 칸이 하나다 (등록이 넣고 하트비트가 고친다).
+    reports = [
+        (loads(row["state_json"], {}) or {}).get("extensions")
+        or (loads(row["runtimes_json"], {}) or {}).get("extensions")
+        or []
+        for row in store.rows("SELECT runtimes_json, state_json FROM bot_uis")
+    ] + [
+        loads(row["extensions_json"], []) or []
+        for row in store.rows("SELECT extensions_json FROM server_runners")
+    ]
+    for installed in reports:
         for one in installed:
             if not isinstance(one, dict) or not one.get("id"):
                 continue

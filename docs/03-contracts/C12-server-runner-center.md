@@ -79,6 +79,11 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 
 `max_concurrency`는 설정값 `CHK_SERVER_RUNNER__MAX_CONCURRENCY`이고 기본 10이다.
 
+`extensions[]`는 **이 서버에 깔린 확장**이다 (C4와 같은 모양). Center는 그것으로 C7 확장 자원의
+`installed_on`을 세므로, 싣지 않으면 **서버에만 깔린 확장을 요구하는 Bot의 배포가 막힌다**
+(「확장 누락」이 배포를 막는 셋 중 하나다). **서버는 로컬 런타임을 띄우지 않으므로**
+`run_locations`에 `server`를 적은 태스크 종류만 여기서 돈다 ([ADR-0064](../decisions/0064-extension-tasks-on-the-server.md), C13 `run_locations`).
+
 → `{server_runner_id: "srv_<hex8>", admin_keys, heartbeat_interval_s: 10, server_time}`
 
 `admin_keys`는 **등록 응답에도 찬다** (하트비트와 같은 목록이다). 실행기는 공개키를 메모리에만
@@ -336,3 +341,4 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 | 2026-10-14 | 1 | **멱등 기억이 무한히 자라지 않는다** ([ADR-0056](../decisions/0056-bounded-seen-maps.md)) — 이미 본 작업·메시지의 마지막 ack는 **닿은 뒤 두 주기**까지 들고 있다가 잊고, **닿지 않은 ack는 버리지 않는다**(버리면 다시 내려온 지시가 「처음 본 것」이 되어 업무가 두 번 일어난다). 자리는 하나다(`seen.py`) — 작업과 메시지가 같은 까닭으로 있으므로 규칙을 갈라 두면 한쪽만 고친다 | 0056 |
 | 2026-10-14 | 1 | **CON-12가 이것을 읽는다** — `ServerRunnerInfo`에 `key_prefix`가 생겼다(만료만 보이면 CON-11의 어느 줄인지 못 찾는다 — 키가 여럿이면 만료일이 겹친다. 원문·해시는 그대로 주지 않는다). 읽는 자리는 **키 하나에서 둘을 함께** 꺼낸다 (`_key_of` — 앞자리만 있고 만료가 없으면 화면이 「무기한」을 거짓으로 말한다) | — |
 | 2026-10-14 | 1 | **재시작을 건너서도 메시지가 두 번 들어가지 않는다** ([ADR-0058](../decisions/0058-absorbed-messages-travel-with-the-snapshot.md)) — ADR-0056이 「재 보지 않았다」고 적어 둔 자리를 BX-11로 재 보니 **정말 두 번 들어갔다**(견적 하나가 두 번 접수). 빨아들인 `message_id`를 **스냅샷과 한 트랜잭션에** 담아 다시 뜰 때 멱등 기억을 되살린다. **따로 담지 않는 것이 요점이다** — 넣은 뒤 담기 전에 죽는 틈에서 갈라지면 그 메시지를 영영 잃는다. `message_id`는 엔진에 넘기지 않는다(전송 이름이다) | 0058 |
+| 2026-10-16 | 1 | **확장 태스크가 돈다** ([ADR-0064](../decisions/0064-extension-tasks-on-the-server.md)) — 실행기가 확장을 꽂고(`run_env`·사전 점검이 **같은 호스트**를 본다) 등록에 `extensions[]`를 **정말 싣는다**(전에는 빈 목록이었고, 그래서 서버에만 깔린 확장은 C7이 모르고 배포가 막혔다). **로컬 런타임은 띄우지 않는다** — `run_locations`에 `server`를 적은 종류만 수행기를 내고, 적지 않은 것은 `readiness`가 `task_types_wrong_location`으로 **시작 전에** 막는다(전에는 실행 중에 `node_kind_unsupported`로 죽었다). 계약은 늘지 않았다 | 0064 |

@@ -106,6 +106,8 @@
 필드 설명:
 
 - `run_locations`: 이 태스크 종류를 쓸 수 있는 실행 위치. `ui_task`는 `["pc"]`다.
+  - **`server`를 적는 것은 「로컬 런타임도, 화면도, 예약도 필요 없다」는 약속이다** ([ADR-0064](../decisions/0064-extension-tasks-on-the-server.md)) — 서버 실행기는 **로컬 런타임을 띄우지 않으므로**(`bot_ui.local_runtimes`는 이름대로 Bot UI의 것이다) 예약 키 `runtime.<id>.*`가 **채워지지 않는다**. 확장 저자만 아는 사실이라 플랫폼은 집행하지 못한다 — 어기면 수행기가 포트를 묻고 `None`을 받는다.
+  - 실행하는 쪽은 **제 실행 위치를 적지 않은 종류의 수행기를 내지 않는다.** 그런 Bot은 시작 전에 사전 점검이 `task_types_wrong_location`으로 막는다 — 「그 확장이 없다」(`task_types_unsupported`)와 **다른 점검**이다(고치는 길이 다르다: 실행 위치를 PC로 바꾸거나 PC 위임으로 보낸다).
 - `studio.resource_views`: 리소스 탐색기(STU-03)의 뿌리 하나. 목록은 **C7 기여 자원**(`resource_type`)에서 오고, Studio는 항목의 `name`·`summary`만 그린다 — **`data`를 해석하지 않는다** (§5). 그래서 기여 뿌리는 **한 단계**다.
   - `creates_task_type`(선택): 「캔버스에 추가」(끌어다 놓기)가 만들 **태스크 종류 id**. 없으면 그 뿌리에서 태스크를 만들 수 없다.
   - `creates_task_field`(선택): 새 태스크의 `data`에서 **자원 id를 받을 칸 이름**. 선언하면 Studio가 `{"<creates_task_field>": "<자원 id>"}`만 넣고 그 밖은 비운다 — 선언이 없으면 `data`를 비운 채 만들고 사람이 편집기에서 고른다. **플랫폼은 `data`의 모양을 모른다** — 선언대로만 넣는다.

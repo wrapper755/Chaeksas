@@ -28,6 +28,7 @@ from chaeksas.contracts._semver import InvalidVersion, satisfies
 from chaeksas.contracts.manifest import PC_ONLY_DOMAINS, Manifest
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.extension_api import (
+    RUN_LOCATION_SERVER,
     SEVERITY_BLOCK,
     ExtensionContext,
     Finding,
@@ -41,6 +42,9 @@ MISSING_KEYS = "missing_service_app_keys"
 TASK_TYPES_UNSUPPORTED = "task_types_unsupported"
 #: 그 종류의 확장이 **깔려 있는데 사람이 꺼 뒀다** (ADR-0043). 고치는 길이 위와 다르다 — 켜면 된다.
 EXTENSION_TURNED_OFF = "extension_turned_off"
+#: 그 종류가 **깔려 있는데 이 실행 위치에서 못 돈다** (ADR-0064 — 서버에서만 생긴다). 고치는
+#: 길은 또 다르다 — 깔거나 켤 일이 아니라 **실행 위치**나 그림(PC 위임)을 고치는 일이다.
+TASK_TYPES_WRONG_LOCATION = "task_types_wrong_location"
 EXTENSIONS_UNUSABLE = "extensions_unusable"
 MISSING_ENVIRONMENT = "missing_agent_environment"
 #: 실행하는 쪽이 갖춰야 할 설정이 없다 (C1 `requires.settings` — 지금은 `smtp` 하나가 쓰인다).
@@ -141,8 +145,18 @@ def _check_settings(manifest: Manifest, have: Sequence[str]) -> Finding | None:
     )
 
 
+def _here(host: ExtensionHost) -> str:
+    """「어디에서 못 하나」 — 사람이 읽는 자리 이름. 실행 위치를 쥔 호스트는 서버다 (ADR-0064)."""
+    return "서버" if host.run_location == RUN_LOCATION_SERVER else "이 PC"
+
+
+def _what(host: ExtensionHost) -> str:
+    """「무엇을 새 판으로 올리나」 — 서버에서 「Bot UI를 올리세요」는 할 수 없는 일을 시키는 셈이다."""
+    return "서버 실행기" if host.run_location == RUN_LOCATION_SERVER else "Bot UI"
+
+
 def _check_task_types(manifest: Manifest, host: ExtensionHost) -> Finding | None:
-    """그림이 쓰는 **확장 태스크 종류**가 이 PC에 있나 (C1 `requires.task_types`, C13).
+    """그림이 쓰는 **확장 태스크 종류**를 여기서 수행할 수 있나 (C1 `requires.task_types`, C13).
 
     **`requires.extensions`가 비었나로 보지 않는다** — 그 목록에는 코드가 없는 확장도 들어간다
     (외부 확장은 코드를 기여할 수 없고(C13 E1), 사내 확장도 서버 부분만 있는 것이 있다. 서비스 앱
@@ -151,6 +165,9 @@ def _check_task_types(manifest: Manifest, host: ExtensionHost) -> Finding | None
 
     종류가 없으면 엔진이 `node_kind_unsupported`로 끝낸다 — 재시도로 풀리지 않는 설치 오류라
     오류 경계도 받지 않는다 (`core.nodes`). 그러니 **시작하기 전에** 말한다.
+
+    **까닭 셋을 가른다** — 꺼 뒀다(ADR-0043) / 이 실행 위치에서 못 돈다(ADR-0064) / 없다.
+    고치는 길이 셋 다 달라서, 뭉치면 사람이 **할 수 없는 일**을 하라고 듣는다.
     """
     missing = [need for need in manifest.requires.task_types if host.task_type(need.id) is None]
     if not missing:
@@ -171,12 +188,33 @@ def _check_task_types(manifest: Manifest, host: ExtensionHost) -> Finding | None
             items=tuple(off),
             fix_hint="확장 목록에서 그 확장을 켜세요",
         )
+
+    # **실행 위치가 아닌 것을 그다음에 가른다** (ADR-0064) — 깔려 있고 켜져 있는데 이 위치에서
+    # 돌 수 없는 것이다. 「깔린 판으로 올리세요」는 틀린 안내다(올려도 그 위치에서는 못 돈다).
+    if (where := host.run_location) is not None:
+        wrong = [
+            f"{need.id} ({owner.manifest.name} 확장 — {', '.join(found.run_locations) or '적힌 위치 없음'})"
+            for need in missing
+            if (owner := host.provider_of(need.id)) is not None
+            and not owner.off
+            and (found := owner.manifest.task_type(need.id)) is not None
+            and where not in found.run_locations
+        ]
+        if wrong:
+            return Finding(
+                id=TASK_TYPES_WRONG_LOCATION,
+                severity=SEVERITY_BLOCK,
+                message=f"그림이 쓰는 태스크 종류 {len(wrong)}개는 이 실행 위치({where})에서 돌 수 없습니다",
+                items=tuple(wrong),
+                fix_hint="실행 위치를 PC로 바꾸거나(STU-06), 그 태스크를 PC 위임으로 보내세요",
+            )
+
     return Finding(
         id=TASK_TYPES_UNSUPPORTED,
         severity=SEVERITY_BLOCK,
-        message=f"그림이 쓰는 태스크 종류 {len(missing)}개를 이 PC에서 수행할 수 없습니다",
+        message=f"그림이 쓰는 태스크 종류 {len(missing)}개를 {_here(host)}에서 수행할 수 없습니다",
         items=tuple(f"{need.id} ({need.extension} 확장)" for need in missing),
-        fix_hint="그 종류를 기여하는 확장이 깔린 Bot UI 판으로 올리세요",
+        fix_hint=f"그 종류를 기여하는 확장이 깔린 {_what(host)} 판으로 올리세요",
     )
 
 
@@ -209,7 +247,7 @@ def _check_extensions(manifest: Manifest, host: ExtensionHost) -> Finding | None
         severity=SEVERITY_BLOCK,
         message=f"깔린 확장 {len(bad)}개가 이 Bot이 요구하는 판이 아닙니다",
         items=tuple(bad),
-        fix_hint="Bot UI를 새 판으로 올리거나, 그 판에 맞는 Bot을 배포하세요",
+        fix_hint=f"{_what(host)}를 새 판으로 올리거나, 그 판에 맞는 Bot을 배포하세요",
     )
 
 

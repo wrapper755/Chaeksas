@@ -46,7 +46,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열넷의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로 닫았다. **남은 것은 §3-14 하나**이고 **지금은 닿을 수 없는 자리**다 (서버에서 돌 확장 태스크가 아직 없다).
+계약 열넷의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. **남은 것이 없다.**
 
 ### 3-13. PC 위임 — **닫았다**
 
@@ -92,27 +92,26 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
   영원히 기다리고 작업도 `accepted`로 남는다. 도는 스레드가 없을 때는 **부르는 쪽이 그 자리에서**
   닫는다 (답·메시지를 넣는 것과 같은 자리다, ADR-0054 §5).
 
-### 3-14. 서버 실행기가 **확장 태스크를 꽂지 않는다** (지금은 닿을 수 없다)
+### 3-14. 서버 실행기의 확장 태스크 — **닫았다**
 
-§5의 「`HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`는 M7이 쓸 상수다」를 대조하다 찾았다
-(2026-10-16). 서버 실행기의 `run_env()`는 `make_env(extensions=…)`를 **주지 않고**, 사전 점검도
-`host=None`으로 돌려 **확장 점검을 건너뛴다**(그 docstring에 「확장 점검은 아직 없다」고 적혀
-있다). 그래서 확장 태스크(`chk:task`)가 든 서버 Bot은 **배포·시작까지 가서 실행 중에**
-`node_kind_unsupported`로 죽는다 — `not_ready`로 미리 거절하는 길이 없다.
+[ADR-0064](decisions/0064-extension-tasks-on-the-server.md)가 정했다: **실행기는 확장을 꽂고
+로컬 런타임은 띄우지 않는다.** 적어 두었던 「먼저 정할 것」(런타임을 누가 띄우나)의 답은
+**선택지 ②**였고, 그것을 고른 까닭은 하나로 모인다 — **예약(`reserve`)이 배타 잠금**이라
+(ADR-0014 §4, 「PC에 하나」) **동시 실행이 기본인 서버**(C12)와 맞지 않는다. 묶는 길도 다르다:
+런타임은 데스크톱 설치 파일에 들어가고(ADR-0024) 서버는 화면 없는 컨테이너다.
 
-**지금은 닿을 수 없다** — 그래서 급하지 않다:
+**계약은 늘지 않았다** — `run_locations`에 `server`를 적는 것이 이미 「런타임도 화면도 필요
+없다」는 약속이라, 새 칸(`needs_runtime`)을 더하지 않았다. 더하면 **띄울 것을 고르는 길이 둘**이
+된다(Bot UI는 확장 단위로 띄운다) — 값이 같고 거르는 자리만 다른 목록은 조용히 갈라진다.
 
-- 내장 확장은 `ui-automation` 하나이고 그 태스크 종류(`ui_task`)는 **PC 전용**이다 (C1 R2·B6이
-  서버 그림에서 막는다).
-- 업무 예제 50개 중 **실행 위치가 `server`인 것에 `chk:task`가 하나도 없다** (grep으로 확인).
-- 외부 확장은 **코드를 기여할 수 없어**(C13 E1) 어댑터로만 붙는다 — 그 길은 이미 돈다
-  (`RoutedCaller`).
+**함께 드러난 것 하나** — Center의 C7 확장 자원이 `bot_uis`만 읽고 있었다. 계약은 처음부터
+「C4·**C12** 보고」라고 적어 두었는데(C7 `installed_on`) 코드가 덜 됐고, 실행기도 등록에
+`extensions=[]`를 싣고 있었다. 그래서 **서버에만 깔린 확장은 Center가 모르고**, 그것을 요구하는
+멀쩡한 서버 Bot의 **배포가 「확장 누락」으로 막혔다**. 양쪽을 고쳤다.
 
-**먼저 정할 것이 하나 있다** — 서버에서 돌 확장 태스크의 **로컬 런타임**을 누가 띄우나 (C13
-`local_runtimes`는 Bot UI가 띄우는 것으로 적혀 있다: 포트·토큰 파일·예약까지). 서버에서는
-Bot UI가 없으므로 ① 실행기가 같은 일을 하거나 ② 런타임 없는 태스크만 서버에 허용하거나
-(`run_locations`에 `server`를 적은 종류는 런타임을 요구하지 못하게) 둘 중 하나를 정해야 한다.
-**그것을 정하기 전에 코드를 넣으면** 「서버에서는 되는데 PC에서 안 된다」의 새 원천이 된다.
+남은 두 가지는 **공백이 아니라 선언의 일**이다: 서버에서 돌 태스크 종류를 가진 확장이 아직
+하나도 없고(내장은 `ui-automation` 하나, `ui_task`는 PC 전용이다), 그 길이 정말 열렸는지는
+가짜 확장으로 끝까지 돌려 본다 (`tests/test_server_runner_extension_run.py`).
 
 **닫은 것들** — §3-12(타이머로 깨우는 자리)는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)로 닫았다(하트비트가 쓸어서 깨우고 자리가 있을 때만 — 기한은 「그 시각 이후」다). 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
 
@@ -144,7 +143,7 @@ Bot UI가 없으므로 ① 실행기가 같은 일을 하거나 ② 런타임 �
 
 - **편의 접근자 둘을 지웠다** (2026-10-16) — `ExtensionHost.adapter_operations()`(창·어댑터는 정의의 `m.adapter.operations`를 직접 읽는다)와 `secret_config_keys()`(`credentials.py`가 `configuration()`에 `.secret`을 걸어 본다). **쓰는 길이 둘이면 한쪽만 고친다.** 함께 적어 둔 `studio_editors()`는 **쓰인다** — `editor(task_type)`가 그것을 부른다(단수 메서드 뒤에 있어 「호출자 없음」으로 잘못 적혀 있었다). 시험은 **제품이 쓰는 길**로 고쳐 같은 것을 본다.
 - **C1의 「아는 값」 둘을 정했다** (2026-10-16) — `KNOWN_SETTINGS`는 **쓰는 쪽을 만들었다**(R11: `requires.settings`가 아는 값인가 — R9와 같은 까닭이고, 지금 Studio가 넣는 것은 `smtp` 하나뿐이라 올라간 패키지는 다 지난다). `KNOWN_BUILT_BY`는 **검사하지 않는 쪽으로 정했다** — 남의 도구로 만든 올바른 패키지를 거부하게 되므로 열린 문자열이 맞다. 그 까닭을 **상수 옆에 적어** 두어 다음 사람이 「검사가 없다」고 또 적지 않게 했다.
-- **`extension_api`에 우리 호출자가 없는 상수들은 정상이다** (`SEVERITY_INFO`·`HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`) — 그 패키지는 **확장 저자에게 주는 API**(C13)다. 우리 코드가 다 쓰는지로 셈하지 않는다.
+- **`extension_api`에 우리 호출자가 없는 상수들은 정상이다** (`SEVERITY_INFO`) — 그 패키지는 **확장 저자에게 주는 API**(C13)다. 우리 코드가 다 쓰는지로 셈하지 않는다. (`HOST_SERVER_RUNNER`·`RUN_LOCATION_SERVER`는 2026-10-16에 쓰는 쪽이 생겼다 — [ADR-0064](decisions/0064-extension-tasks-on-the-server.md). 그때 그 둘을 대조하다 §3-14를 찾았다.)
 - **도메인 목록의 정의는 `manifest.py` 하나다** — `KNOWN_DOMAINS`·`PC_ONLY_DOMAINS`를 `bpmn_ext`(C14 B8·B6)와 `core`(사전 점검·AI 태스크)가 import해 쓴다. 자리가 C1 쪽인 것은 층 때문이다 (`bpmn_ext`가 `manifest`를 import하므로 거꾸로는 순환이다). **두 벌로 되돌리지 않는다** — 값이 같고 거르는 자리만 다른 목록이 둘이면 조용히 갈라진다(`triggers[].kind`가 그랬다). `tests/test_contracts_bpmn_ext.py`가 **같은 객체인지**(`is`) 본다.
 - C13 `docs_url`·`owners`, C11 `Operation.json_schema`는 콘솔이 보이지 않는 선택 칸이다. 작고 급하지 않다.
 

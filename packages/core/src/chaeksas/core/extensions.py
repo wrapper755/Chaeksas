@@ -146,10 +146,24 @@ class LoadFailure:
 class ExtensionHost:
     """확장 목록과 기여 지점. 실행하는 쪽마다 하나씩 만든다."""
 
-    def __init__(self, *, api_version: str = API_VERSION, off: Iterable[str] = ()) -> None:
+    def __init__(
+        self,
+        *,
+        api_version: str = API_VERSION,
+        off: Iterable[str] = (),
+        run_location: str | None = None,
+    ) -> None:
         self.api_version = api_version
         #: 사람이 꺼 둔 확장 id (ADR-0043). **부르는 쪽이 준다** — 플랫폼은 어느 확장인지 모른다.
         self.off = frozenset(off)
+        #: 이 호스트가 도는 **실행 위치** (C1 `run_location`). 주면 그 위치를 `run_locations`에
+        #: 적지 않은 태스크 종류는 **기여를 내지 않는다** ([ADR-0064](
+        #: ../../../../docs/decisions/0064-extension-tasks-on-the-server.md)).
+        #:
+        #: **주지 않으면 거르지 않는다** — Studio는 양쪽 그림을 다 편집하고(팔레트에 PC 전용도
+        #: 있어야 한다), Bot UI는 PC 그림만 받는다. 거르는 쪽은 **서버 실행기**다: 거기서만
+        #: 「깔려 있는데 못 돈다」가 생기고, 걸러 두면 사전 점검이 **시작 전에** 막는다.
+        self.run_location = run_location
         self._loaded: list[LoadedExtension] = []
         self._failures: list[LoadFailure] = []
         self._executors: dict[str, TaskExecutor] = {}
@@ -363,8 +377,18 @@ class ExtensionHost:
         ]
 
     def task_types(self) -> list[Contribution[TaskTypeContribution]]:
-        """Studio 팔레트·속성 편집기, 실행기의 태스크 수행."""
-        return self._gather(lambda m: m.contributes.task_types)
+        """Studio 팔레트·속성 편집기, 실행기의 태스크 수행.
+
+        **실행 위치를 쥔 호스트는 그 위치에서 돌 수 있는 것만 낸다** (ADR-0064) — 거르는 자리가
+        하나라서 수행기 찾기(`executor`)·사전 점검·`task_type_locations()`가 같은 것을 본다.
+        「깔려 있는데 못 돈다」를 사전 점검이 따로 말해 주므로(`task_types_wrong_location`) 여기서
+        사라져도 사람이 까닭을 모르지 않는다 — 그 점검은 `provider_of()`로 **걸러지지 않은**
+        목록을 본다.
+        """
+        found = self._gather(lambda m: m.contributes.task_types)
+        if self.run_location is None:
+            return found
+        return [c for c in found if self.run_location in c.value.run_locations]
 
     def task_type(self, task_type_id: str) -> Contribution[TaskTypeContribution] | None:
         return next((c for c in self.task_types() if c.value.id == task_type_id), None)
@@ -586,13 +610,18 @@ class ExtensionHost:
 
 
 def load_host(
-    *, api_version: str = API_VERSION, group: str = ENTRY_POINT_GROUP, off: Iterable[str] = ()
+    *,
+    api_version: str = API_VERSION,
+    group: str = ENTRY_POINT_GROUP,
+    off: Iterable[str] = (),
+    run_location: str | None = None,
 ) -> ExtensionHost:
     """설치된 확장을 모두 읽은 호스트 하나 — 실행하는 쪽이 시작할 때 부르는 길.
 
-    끌 id는 **부르는 쪽이 준다** (ADR-0043 — 그 앱의 설정에서 온다).
+    끌 id는 **부르는 쪽이 준다** (ADR-0043 — 그 앱의 설정에서 온다). 실행 위치도 그렇다
+    (ADR-0064 — 서버 실행기만 준다).
     """
-    host = ExtensionHost(api_version=api_version, off=off)
+    host = ExtensionHost(api_version=api_version, off=off, run_location=run_location)
     host.load_entry_points(group=group)
     return host
 
