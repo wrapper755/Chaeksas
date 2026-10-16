@@ -33,6 +33,14 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+# **한글을 찍는 CLI는 stdout도 UTF-8로 고정한다** (CLAUDE.md §5) — Windows 기본 코드페이지
+# (cp949·cp1252)에서는 `print("── 묶는다")` 한 줄에 `UnicodeEncodeError`로 죽는다. CI가 일부러
+# `PYTHONUTF8`을 켜지 않으므로(그래야 빠뜨린 곳이 드러난다) 여기서 고정한다 — 실제로 첫 번째
+# Windows 산출물 실행이 이 한 줄 때문에 멈췄다.
+for stream in (sys.stdout, sys.stderr):
+    if hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8")
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 DIST = ROOT / "build" / "dist"
