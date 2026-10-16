@@ -223,6 +223,19 @@ def canned(wanted: dict[str, str], given: dict[str, Any]) -> dict[str, Any] | No
             return {"답": "오늘 USD/KRW는 1,387.5원입니다."}
         return {"답": f"「{given.get('요청')}」은 사내 안내 페이지를 확인해 주세요."}
 
+    # ── FX-23 재생 모드 셋 (plan·full·none) ──
+    #
+    # **세 태스크가 같은 답을 내야** 「다른 것은 모델을 몇 번 부르나뿐」이라는 말이 선다.
+    # 열쇠는 `results` 이름이라 BX-07의 `("분류",)`와 겹치지 않게 `문의갈래`로 두었다 —
+    # 겹치면 한 예제의 답이 다른 예제를 조용히 바꾼다 (`test_no_two_examples_share_a_key`).
+    if key == ("문의갈래",):
+        문의 = str(given.get("문의", ""))
+        return {"문의갈래": "파손" if "깨" in 문의 or "파손" in 문의 else "문의"}
+    if key == ("기록결과",):
+        return {"기록결과": "장부에 한 줄 더했습니다"}
+    if key == ("말투",):
+        return {"말투": "정중"}
+
     return None
 
 

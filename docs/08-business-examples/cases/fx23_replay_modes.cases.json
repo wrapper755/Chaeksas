@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "process": "Proc_fx23_replay_modes",
+  "cases": [
+    {
+      "name": "문의 한 건",
+      "description": "세 모드가 **같은 답을 낸다** — 다른 것은 「모델을 몇 번 부르나」다 (시험이 그것을 센다)",
+      "inputs": {
+        "문의": "지난주에 받은 물건이 깨져 있습니다"
+      },
+      "expected": {
+        "문의갈래": "*",
+        "기록결과": "*",
+        "말투": "*"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

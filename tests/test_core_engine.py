@@ -571,12 +571,12 @@ def example_env(tmp_path: Path) -> RunEnv:
 
 
 def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> None:
-    """예제 **52개**를 모두 돌려 본다 (선언한 입력에는 자리 값을 넣는다).
+    """예제 **53개**를 모두 돌려 본다 (선언한 입력에는 자리 값을 넣는다).
 
     중요한 것은 「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
     **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 3b: 끝 11·대기 2 →
-    3c: 끝 19·대기 6 → 3d: 끝 20·대기 9 → 3f: 끝 23·대기 9 → M7 조각 29·30: 끝 25·대기 9 —
-    합치면 52개 중 **34개**가 사람이나 끝까지 간다).
+    3c: 끝 19·대기 6 → 3d: 끝 20·대기 9 → 3f: 끝 23·대기 9 → M7 조각 29~31: 끝 26·대기 9 —
+    합치면 53개 중 **35개**가 사람이나 끝까지 간다).
 
     남은 18개는 둘 중 하나다. **UI 자동화(M4)** 5개, 그리고 **자리 값 탓** 13개 — 선언만 보고
     넣는 `"시험값"`으로는 점 표기·반복·기간이 성립하지 않는다. 진짜 입력은 Studio 시험 실행의
@@ -618,7 +618,7 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
             reasons[run.error.code] = reasons.get(run.error.code, 0) + 1
             assert run.error.code in known, f"{path.name}: {run.error}"
 
-    assert len(done) + len(waiting) + sum(reasons.values()) == 52
+    assert len(done) + len(waiting) + sum(reasons.values()) == 53
     # 끝까지 가는 것·사람을 기다리는 것 — **다음 조각이 이 목록을 늘린다. 늘면 여기를 고쳐 적는다.**
     assert done == [
         "bx02_morning_fx_report.bpmn",  # API AI 태스크 + 통화마다 범위 점검 (3f)
@@ -646,6 +646,7 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         "fx20_external_adapter.bpmn",  # 서비스 앱 (외부 확장 어댑터)
         "fx21_hit_policies.bpmn",  # DMN 적중 정책 UNIQUE·ANY (M7 조각 29)
         "fx22_append_output.bpmn",  # csv 덧붙이기 + txt + 파일 되세기 (M7 조각 30)
+        "fx23_replay_modes.bpmn",  # 재생 모드 plan·full·none (M7 조각 31)
     ], done
     assert waiting == [
         "bx05_month_end_close.bpmn",  # 받기 태스크 3개 + 비중단 타이머 경계
