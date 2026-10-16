@@ -321,3 +321,31 @@ FX("FX-21", "fx21_hit_policies", "결정표 적중 정책 (UNIQUE·ANY)", "새�
             "`ANY`는 「겹쳐도 된다」가 아니라 **「겹치면 결과가 같아야 한다」**다. 결과가 갈라지면 실행 오류다 — `FIRST`로 두면 그것을 아무도 보지 않는다.",
             "그래서 `ANY` 표에는 **모든 것에 맞는 마지막 줄을 둘 수 없다** — 처음에 `-, - → 지점`을 적었더니 고위험 서울에서 세 줄이 맞고 결과가 갈라져 판정이 멈췄다. 「그 밖」은 **값을 적어** 겹치지 않게 한다.",
             "맞는 줄이 없을 때를 **게이트웨이로 가른다** — `None`을 그대로 뒤에 쓰면 식이 멈춘다."])
+
+FX("FX-22", "fx22_append_output", "파일 출력 — csv 덧붙이기와 txt", "새로 — 커버리지 구멍 (M7 조각 30)", "server", "수동 실행",
+   "일지 한 줄을 **csv에 덧붙이고**(`append: true`) 같은 내용을 txt로도 남긴다. 그다음 **출력 폴더를 훑어** "
+   "두 파일이 정말 써졌는지 센다 — 케이스가 볼 수 있는 것은 변수뿐이라, 파일이 생겼다는 것도 **변수로 만들어야** 본다.", SRV,
+   [start("Start"),
+    script("Task_Row", "오늘 한 줄", "줄 = [{'날짜': str(오늘), '건수': 건수, '담당': 담당}]"),
+    script("Task_Text", "글로도", "본문 = f'{오늘} 처리 {건수}건 (담당 {담당})'"),
+    flist("Task_Count", "쓴 파일 세기", "일지", "일지파일", pattern="*.*", count_as="일지파일수"),
+    end("End")],
+   [f("Start", "Task_Row"), f("Task_Row", "Task_Text"), f("Task_Text", "Task_Count"), f("Task_Count", "End")],
+   inputs=[("건수", "int", True, ""), ("담당", "string", True, "")],
+   data=[
+       # **csv 덧붙이기** — 열 이름 줄은 처음 한 번만 쓴다 (C14). 이름 **하나**만 쓸 수 있고
+       # 값이 사전 목록이면 그대로 표가 된다.
+       out("Data_Csv", "일지(csv)", "Task_Row", "일지/처리일지.csv", "csv", variables=["줄"], append=True, store_as="일지경로"),
+       # **txt** — `template`를 주면 채운 글 그대로다. 덧붙이기는 `md`·`txt`·`csv`만 된다 (B5).
+       out("Data_Txt", "일지(txt)", "Task_Text", "일지/처리일지.txt", "txt", template="{본문}\n", append=True, store_as="글경로"),
+   ],
+   variables=[("줄", "list", "Task_Row", "csv 한 줄이 될 사전 목록"), ("본문", "string", "Task_Text", "txt에 쓸 한 줄"),
+              ("일지파일", "list", "Task_Count", "출력 폴더의 일지 파일들"), ("일지파일수", "int", "Task_Count", "2가 되어야 한다")],
+   cases=[Case("한 줄 쓰기", {"건수": 7, "담당": "김가나"}, {"일지파일수": 2, "일지경로": "일지/처리일지.csv", "글경로": "일지/처리일지.txt"},
+               description="csv·txt 둘이 **정말 써졌는지** 파일 목록으로 센다")],
+   features=["파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만)", "파일 출력 `txt` + `template`",
+             "쓴 파일을 `chk:fileList`로 되세기"],
+   lessons=["파일 출력 포맷 다섯 중 예제가 밟던 것은 `md`·`json`·`xlsx` 셋뿐이었고 **`append`는 아무도 밟지 않았다** — 코드·계약이 받는 것과 예제가 돌려 본 것은 다르다 (FX-21의 적중 정책과 같은 꼴이다).",
+            "**케이스가 볼 수 있는 것은 변수뿐이다** — 「파일이 생겼다」를 보려면 `chk:fileList`로 세어 변수로 만들어야 한다. `store_as`가 주는 것은 **출력 폴더 기준 상대 경로**라 그것도 기대값으로 쓸 수 있다 (절대 경로를 업무 값에 섞지 않는다, C14).",
+            "`append`는 `json`·`xlsx`에 쓸 수 없다 (B5 검사 오류) — 이어 붙일 수 있는 것은 글 꼴 셋(`md`·`txt`·`csv`)이다.",
+            "`csv`의 `variables`는 **이름 하나**만 받는다. 둘을 적으면 B5가 막는다 — 한 파일에 표 둘을 넣을 수 없다."])
