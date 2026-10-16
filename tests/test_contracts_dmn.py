@@ -1,6 +1,6 @@
 """C14 §규칙 태스크와 DMN — 결정표를 읽고 판정한다 (`chaeksas.contracts.dmn`).
 
-예제의 `.dmn` 7개가 **그대로 읽히고 판정되는지**가 가장 중요한 시험이다. 규칙 태스크의
+예제의 `.dmn` 9개가 **그대로 읽히고 판정되는지**가 가장 중요한 시험이다. 규칙 태스크의
 `input`·`output`이 결정표와 맞는지도 B14로 함께 본다 (같은 이름을 두 곳에 적으니까).
 """
 
@@ -13,6 +13,7 @@ import pytest
 from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.contracts.bpmn_ext import validate as validate_bpmn
 from chaeksas.contracts.dmn import (
+    HIT_POLICIES,
     Decision,
     DmnError,
     DmnReadError,
@@ -222,9 +223,11 @@ def test_every_example_dmn_reads() -> None:
     found = {}
     for path in sorted(EXAMPLES.glob("*.dmn")):
         found.update(read_decisions(path.read_text(encoding="utf-8")))
-    assert len(found) == 7, sorted(found)
+    assert len(found) == 9, sorted(found)
     assert all(decision.rules for decision in found.values())
-    assert {d.hit for d in found.values()} == {"FIRST", "COLLECT"}
+    # **적중 정책 넷을 예제가 다 밟는다** (FX-21이 `UNIQUE`·`ANY`를 더했다 — 「받는다」와
+    # 「돌려 봤다」는 다르다). 이 집합이 줄면 그 정책을 아무 예제도 돌리지 않는 것이다.
+    assert {d.hit for d in found.values()} == set(HIT_POLICIES)
 
 
 def test_the_example_decisions_answer_the_way_the_cases_expect() -> None:
@@ -267,4 +270,4 @@ def test_b14_sees_the_example_rule_tasks_match_their_dmn() -> None:
         checked += 1
         b14 = [v for v in validate_bpmn(process, dmn_decisions=table_io) if v.rule == "B14"]
         assert not b14, f"{path.name}: {[v.message for v in b14]}"
-    assert checked == 7, "규칙 태스크를 쓰는 예제 수가 바뀌었다"
+    assert checked == 8, "규칙 태스크를 쓰는 예제 수가 바뀌었다"

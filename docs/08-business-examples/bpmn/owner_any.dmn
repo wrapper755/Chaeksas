@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dmn:definitions xmlns:dmn="https://www.omg.org/spec/DMN/20191111/MODEL/" id="Defs_owner_any" name="담당 배정" namespace="urn:chaeksas:examples">
+  <dmn:decision id="owner_any" name="담당 배정">
+    <dmn:decisionTable id="DT_owner_any" hitPolicy="ANY">
+      <dmn:input id="In_0" label="점수">
+        <dmn:inputExpression id="InE_0" typeRef="number"><dmn:text>점수</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:input id="In_1" label="지역">
+        <dmn:inputExpression id="InE_1" typeRef="string"><dmn:text>지역</dmn:text></dmn:inputExpression>
+      </dmn:input>
+      <dmn:output id="Out_0" name="owner" typeRef="string" />
+      <dmn:rule id="Rule_0">
+        <dmn:description>고위험은 본사</dmn:description>
+        <dmn:inputEntry id="R0_I0"><dmn:text>[80..100]</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R0_I1"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R0_O0"><dmn:text>"본사"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_1">
+        <dmn:description>서울·본사 지역도 본사</dmn:description>
+        <dmn:inputEntry id="R1_I0"><dmn:text>-</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R1_I1"><dmn:text>"서울","본사"</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R1_O0"><dmn:text>"본사"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+      <dmn:rule id="Rule_2">
+        <dmn:description>그 밖은 지점</dmn:description>
+        <dmn:inputEntry id="R2_I0"><dmn:text>[1..79]</dmn:text></dmn:inputEntry>
+        <dmn:inputEntry id="R2_I1"><dmn:text>"부산","대구","광주"</dmn:text></dmn:inputEntry>
+        <dmn:outputEntry id="R2_O0"><dmn:text>"지점"</dmn:text></dmn:outputEntry>
+      </dmn:rule>
+    </dmn:decisionTable>
+  </dmn:decision>
+</dmn:definitions>
