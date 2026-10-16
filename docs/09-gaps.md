@@ -57,7 +57,10 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 **오류 경계가 받고**, Studio 시험 실행은 **케이스가 적어 둔 결과로** 끝까지 간다. 지키는 시험은 셋이다
 — `tests/test_core_events.py`(엔진)·`test_studio_runner.py`(케이스 포트)·`test_server_runner_delegation.py`
 (실행기·Center, 마지막 하나는 **PC를 진짜 자식 프로세스로 돌려** 현장이 만든 값이 서버 변수에
-담기는 것까지 본다). **위임이 든 그림은 업무 예제에 없어** 시험이 손으로 만든다.
+담기는 것까지 본다). **업무 예제에도 들어왔다** — BX-16이 쓰던 사내 확장 우회(`center-jobs`)를
+걷어내고 `chk:call.delegate`로 다시 썼다(2026-10-16). 그 예제가 제품 흠 하나를 드러냈다:
+`import_example`이 **위임 대상까지 작업 폴더로 끌어와** 매니페스트가 그 Bot의 요구사항을 제
+것처럼 모았다(BX-16이 BX-17의 `ui_task`를 요구해 서버 Bot이 `not_ready`가 됐다).
 
 **B14의 `delegated_outputs`도 왔다** — Studio가 Center에서 Bot 패키지 목록(C5)을 받아 매니페스트의
 `outputs`를 모아 실행 전 검사에 넘긴다(`service_catalog.declared_outputs` → `preflight.inspect`).

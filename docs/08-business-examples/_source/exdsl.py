@@ -76,6 +76,9 @@ class Case:
     description: str = ""
     manual: bool = False
     messages: list[dict[str, Any]] = field(default_factory=list)  # [{after_s, name, correlation?, payload}]
+    #: 노드 id → **PC 위임이 돌려주는 값** (C14 — 돌릴 남의 패키지가 없어 케이스가 적는다).
+    #: **적어 두지 않은 위임은 그 자리에서 실패**다 (`DELEGATION_FAILED` — 경계를 시험하는 길이다).
+    delegations: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
@@ -182,8 +185,16 @@ def recv(id, name, message, correlation, payload=None):
     return Node(id, "recv", name, dict(message=message, correlation=correlation, payload=payload or []))
 
 
-def call(id, name, called, input, output):
-    return Node(id, "call", name, dict(called=called, task=dict(input=input, output=output)))
+def call(id, name, called, input, output, delegate=None):
+    """다른 BPM 프로세스 호출. `delegate`를 주면 **PC 위임**이다 (C14 `chk:call.delegate`).
+
+    위임의 대상은 **패키지 안의 정의가 아니라 따로 배포된 PC Bot**이라(ADR-0062) `called`는
+    읽는 사람을 위한 표시로만 남는다 — 검사가 패키지 안에서 찾지 않는다 (B14).
+    """
+    task = dict(input=input, output=output)
+    if delegate is not None:
+        task = dict(delegate=delegate, **task)  # 읽는 순서를 C14 예시와 같게 둔다
+    return Node(id, "call", name, dict(called=called, task=task, delegate=delegate))
 
 
 def xgw(id, name="", default=None):
@@ -872,7 +883,8 @@ def to_dmn(d: Decision) -> str:
 def to_cases(ex: Example) -> str:
     return json.dumps({"schema": 1, "process": "Proc_" + ex.file, "cases": [
         dict(name=c.name, description=c.description, inputs=c.inputs, expected=c.expected,
-             approvals=c.approvals, **({"messages": c.messages} if c.messages else {}), manual=c.manual) for c in ex.cases]}, ensure_ascii=False, indent=2) + "\n"
+             approvals=c.approvals, **({"messages": c.messages} if c.messages else {}),
+             **({"delegations": c.delegations} if c.delegations else {}), manual=c.manual) for c in ex.cases]}, ensure_ascii=False, indent=2) + "\n"
 
 
 # ───────────────────────── 문서 카드 ─────────────────────────

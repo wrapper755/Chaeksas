@@ -19,7 +19,9 @@
       "version": "&gt;=0.1,&lt;0.2"
     }
   ],
-  "outputs": [],
+  "outputs": [
+    "발주번호목록"
+  ],
   "inputs": [
     {
       "name": "발주",

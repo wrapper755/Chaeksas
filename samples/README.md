@@ -2,19 +2,19 @@
 
 > 상태: **구현됨** (M5 조각 13). 인수 시험이 쓰는 것은 M5 조각 14다.
 
-제품이 아니다. `docs/08-business-examples/`의 예제 50개가 서비스 앱 **16개**를 부르고
-(작업 **31개**), 그 앱이 하나도 없으면 M5 인수 시험을 돌릴 수 없다. 여기에 거짓 데이터로
+제품이 아니다. `docs/08-business-examples/`의 예제 50개가 서비스 앱 **15개**를 부르고
+(작업 **30개**), 그 앱이 하나도 없으면 M5 인수 시험을 돌릴 수 없다. 여기에 거짓 데이터로
 답하는 앱을 둔다.
 
-멤버는 하나다 — `samples/mock_apps` (import 이름 `chaeksas.mock_apps`). 앱 열여섯 개를
-`pyproject.toml` 열여섯 개로 쪼개지 않는다.
+멤버는 하나다 — `samples/mock_apps` (import 이름 `chaeksas.mock_apps`). 앱 열다섯 개를
+`pyproject.toml` 열다섯 개로 쪼개지 않는다.
 
 **아무 멤버도 `samples/`를 의존하지 않는다** (`tests/test_import_direction.py`가 막는다).
 쓰는 쪽은 `tests/`와 사람이 띄우는 `chk-mock-apps`뿐이다.
 
 ## 두 종류다
 
-| | C11 앱 열넷 (`apps/`) | 외부 앱 둘 (`external/`) |
+| | C11 앱 열셋 (`apps/`) | 외부 앱 둘 (`external/`) |
 | --- | --- | --- |
 | 무엇인가 | 사내 확장의 **서버 부분** | 우리 계약을 모르는 **남의 API** 흉내 |
 | 뼈대 | `packages/service_kit` (C11) | 없다 — 평범한 FastAPI |
@@ -37,7 +37,7 @@ uv run chk-mock-apps serve --app erp      # 하나만, 그 앱의 기본 포트�
 
 `serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다. 서비스 앱 주소에 경로가
 붙어도 되므로(`{base_url}/v1/ops/…`) Center 리소스 등록에 `http://127.0.0.1:8010/erp`를
-그대로 넣을 수 있다. 앱 열여섯 개를 따로 띄우지 않아도 된다.
+그대로 넣을 수 있다. 앱 열다섯 개를 따로 띄우지 않아도 된다.
 
 ### 웹 화면 (`/site`)
 
@@ -111,21 +111,22 @@ curl -X POST localhost:8010/erp/mock/v1/scenario -d '{"name":"이관1건"}'
 진짜 서비스 앱이 흉내 내서는 안 된다. **인증이 없으므로 이 앱들은 개발 PC·시험망에서만 띄운다**
 (`serve`의 기본 바인드가 127.0.0.1인 것도 그 이유다).
 
-## 두 가지는 모의가 아니다
+## 하나는 여기 없다
 
-- **`center-jobs`** — 진짜 Center의 `POST /jobs`(C5)를 부른다. BX-16이 메우려는 공백이
-  「서버 BPM 프로세스가 PC BPM 프로세스에 일을 넘기는 요소가 없다」는 것이고
-  ([ADR-0016](../docs/decisions/0016-server-first.md) §3), 그 자리를 **Center 연동용 키를 가진
-  서비스 앱**으로 메우는 것이 예제의 설계다 (`docs/08-business-examples/scm.md`).
-  `CHK_SVC_CENTER_JOBS__CENTER__BASE_URL`·`__CENTER__TOKEN`이 없으면 흉내 내지 않고 503이다.
 - **`ui-automation`** — 진짜 내장 확장이라 여기 없다 (BX-36이 쓴다).
+
+**`center-jobs`는 걷어냈다** — 진짜 Center의 `POST /jobs`를 부르던 앱이고, BX-16이 「서버가 PC에
+일을 넘기는 요소가 없다」를 메우려고 쓰던 **우회**였다. [ADR-0062](../docs/decisions/0062-pc-delegation.md)가
+PC 위임(`chk:call.delegate`)으로 그 공백을 닫아 BX-16이 더 이상 작업을 만들지 않는다 — 부르는
+예제가 없는 앱은 두지 않는다 (`tests/test_mock_apps.py`의 「예제가 부르지 않는 작업」 검사가
+그것을 지킨다).
 
 ## 드러난 공백
 
-- **C5의 작업 대상에 「그룹」이 없다.** 대상은 `bot_ui`(id 필수) 또는 `server_runner`뿐인데
-  BX-16은 `group:구매-PC`로 적는다. 지금은 **`center-jobs` 앱이** 그룹을 PC로 푼다
-  (`CHK_SVC_CENTER_JOBS__GROUPS`) — 계약을 늘리지 않고 앱 쪽에 두었다. 「어느 PC 묶음에
-  던진다」가 운영에서 필요하다고 판단되면 C5에 올릴 거리다.
+- ~~C5의 작업 대상에 「그룹」이 없다~~ → **공백이 아니게 됐다.** BX-16이 `group:구매-PC`로
+  적던 자리는 PC 위임이 되었고, **어느 PC인가는 Center가 고른다**(배포된·활성인·대기열이 짧은
+  곳 — [ADR-0062](../docs/decisions/0062-pc-delegation.md)). 그림에 PC 묶음을 적지 않는 것이
+  배포가 정하는 자리를 지키는 길이다 ([ADR-0049](../docs/decisions/0049-deployment-target-must-exist.md)).
 - **BX-35의 `나누기(VOC, 50)`가 성립하지 않는다.** `core.helpers`의 `나누기`는 수 나눗셈이고
   목록을 쪼개는 도우미가 없다. BX-35는 M5 묶음에 있으므로 조각 14 전에 정해야 한다
   (도우미를 더할지, 예제를 고칠지 — CLAUDE.md §5는 도우미를 더하면 ADR-0025의 표도 함께

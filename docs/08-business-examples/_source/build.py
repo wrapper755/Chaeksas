@@ -60,6 +60,13 @@ def cross_check(examples: list[Example]) -> list[str]:
         for n in all_nodes(e.nodes):
             if n.kind == "call":
                 tgt = n.props["called"].removeprefix("Proc_")
+                if n.props.get("delegate"):
+                    # **PC 위임은 패키지 안에서 찾지 않는다** (C14 B14) — 대상은 따로 올리고
+                    # 따로 배포한 Bot이다. `called`는 읽는 사람을 위한 표시이고 `called` 목록
+                    # (= `requires.libs`로 가는 공유 정의)에 들어가서는 안 된다.
+                    if tgt in e.called:
+                        errs.append(f"{e.id}: 위임 대상 {tgt}는 called 목록에 넣지 않는다 (다른 패키지다)")
+                    continue
                 if tgt not in files:
                     errs.append(f"{e.id}: 호출 대상 {tgt} 없음")
                 if tgt not in e.called:
@@ -109,9 +116,50 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
                 errs.append(f"{e.id}: {n.id} 출력 {bad}가 DMN 출력 {sorted(outs)}에 없음")
     # 호출 ↔ 대상
     calls = [n for n in ns if n.kind == "call"]
-    if sorted({n.props["called"].removeprefix("Proc_") for n in calls}) != sorted(set(e.called)):
+    plain = [n for n in calls if not n.props.get("delegate")]
+    if sorted({n.props["called"].removeprefix("Proc_") for n in plain}) != sorted(set(e.called)):
         errs.append(f"{e.id}: called 목록과 호출 노드가 다름")
-    for n in calls:
+
+    # **PC 위임 ↔ 대상 Bot** (C14 `chk:call.delegate`, ADR-0062) — 대상은 다른 패키지라 플랫폼
+    # 검사는 들여다보지 않지만, 여기서는 **대상도 예제**라 짝을 맞춰 볼 수 있다. 이 자리가
+    # 그래야 하는 까닭: 패키지 id는 **글자로만 가리키는 자리**라 틀려도 실행할 때까지 숨는다
+    # (BX-16이 파일 이름을 적어 두었던 일 — 그 예제의 「배운 것」에 있다).
+    for n in [one for one in calls if one.props.get("delegate")]:
+        if e.run_location != "server":
+            errs.append(f"{e.id}: {n.id} PC 위임은 실행 위치가 server일 때만 쓴다 (B14)")
+        pkg = n.props["delegate"]["bpm_process_id"]
+        tgt = next((x for x in by_file.values() if x.file.replace("_", "-") == pkg), None)
+        if tgt is None:
+            errs.append(f"{e.id}: {n.id} 위임 대상 패키지 id `{pkg}`에 맞는 예제가 없다 "
+                        f"(패키지 id는 예제 파일 이름의 `_`를 `-`로 바꾼 것이다 — C1 `id`)")
+            continue
+        if tgt.run_location != "pc":
+            errs.append(f"{e.id}: {n.id} 위임 대상 {tgt.id}의 실행 위치가 pc가 아니다")
+        t = n.props["task"]
+        tin = {i[0] for i in tgt.inputs}
+        if set(t["input"]) - tin:
+            errs.append(f"{e.id}: {n.id} 입력 {sorted(set(t['input']) - tin)}가 {tgt.id} 입력에 없음")
+        need = {i[0] for i in tgt.inputs if i[2]} - set(t["input"])
+        if need:
+            errs.append(f"{e.id}: {n.id}가 {tgt.id}의 필수 입력 {sorted(need)}를 넘기지 않음")
+        if not tgt.outputs:
+            # **선언하지 않으면 값이 돌아오지 않는다** (C4 `JobAck.outputs`가 선언한 것만 거른다).
+            errs.append(f"{e.id}: {n.id} 위임 대상 {tgt.id}가 outputs를 선언하지 않았다 — 값이 돌아올 수 없다")
+        bad = [v for v in t["output"].values() if v not in tgt.outputs]
+        if bad:
+            errs.append(f"{e.id}: {n.id} 출력 {bad}가 {tgt.id} outputs에 없음")
+        for c in e.cases:
+            if n.id not in c.delegations:
+                continue
+            extra = set(c.delegations[n.id]) - set(tgt.outputs)
+            if extra:
+                errs.append(f"{e.id}: 케이스 「{c.name}」 {n.id}의 위임 결과 {sorted(extra)}가 {tgt.id} outputs에 없음")
+            missing = set(t["output"].values()) - set(c.delegations[n.id])
+            if missing:
+                # 읽는 이름이 오지 않으면 **업무 실패**다 (C14 — 빈 값으로 이어 가지 않는다).
+                errs.append(f"{e.id}: 케이스 「{c.name}」 {n.id}이 읽는 {sorted(missing)}를 돌려주지 않는다")
+
+    for n in plain:
         tgt = by_file.get(n.props["called"].removeprefix("Proc_"))
         if not tgt:
             continue
@@ -258,7 +306,9 @@ def coverage(examples: list[Example]) -> list[str]:
         ("UI 태스크 (UI 자동화 확장)", has("ui")), ("서비스 앱 태스크", has("svc")), ("규칙 (DMN)", has("rule")),
         ("결재 (userTask)", has("appr")), ("수동 확인 (manualTask)", has("manual")),
         ("메일 보내기", has("mail")), ("웹훅 보내기", has("hook")), ("메시지 받기 (receiveTask)", has("recv")),
-        ("BPM 프로세스 호출", has("call")), ("하위 프로세스", has("sub")),
+        ("BPM 프로세스 호출", lambda e: any(n.kind == "call" and not n.props.get("delegate") for n in nodes(e))),
+        ("PC 위임 (`chk:call.delegate`)", lambda e: any(n.kind == "call" and n.props.get("delegate") for n in nodes(e))),
+        ("하위 프로세스", has("sub")),
         ("배타 게이트웨이", has("xgw")), ("포함 게이트웨이", has("igw")), ("병렬 게이트웨이", has("pgw")),
         ("중간 던지기 — 이정표(없음)", has("throw", kind="none")), ("중간 던지기·받기 — 신호", lambda e: has("throw", kind="signal")(e) or has("catch", kind="signal")(e)),
         ("중간 받기 — 타이머", has("catch", kind="timer")),

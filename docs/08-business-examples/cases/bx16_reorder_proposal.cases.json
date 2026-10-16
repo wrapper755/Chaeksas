@@ -4,11 +4,33 @@
   "cases": [
     {
       "name": "부족 2품목",
-      "description": "모의 WMS가 2품목을 안전재고 아래로 돌려준다",
+      "description": "모의 WMS가 2품목을 안전재고 아래로 돌려준다. PC 위임 결과는 케이스가 적는다",
       "inputs": {},
       "expected": {
         "제안수": 2,
-        "작업번호": "*"
+        "발주건수": 2
+      },
+      "approvals": {
+        "Approve_Order": {
+          "승인": true
+        }
+      },
+      "delegations": {
+        "Call_ErpInput": {
+          "발주번호목록": [
+            "PO-1001",
+            "PO-1002"
+          ]
+        }
+      },
+      "manual": false
+    },
+    {
+      "name": "PC 입력이 실패",
+      "description": "위임 결과를 **적어 두지 않으면** 그 자리에서 실패다 — 오류 경계가 받는 것을 본다",
+      "inputs": {},
+      "expected": {
+        "제안수": 2
       },
       "approvals": {
         "Approve_Order": {

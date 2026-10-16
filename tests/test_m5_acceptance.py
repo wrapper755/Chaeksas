@@ -26,7 +26,6 @@
 from __future__ import annotations
 
 import os
-import re
 import threading
 import time
 from collections.abc import Iterator
@@ -269,186 +268,38 @@ def test_both_external_definitions_survive_re_verification(directory: AppDirecto
     assert not directory.problems
 
 
-# ─────────────────────────── BX-16: 작업 지시를 만들 수 있는 Center ───────────────────────────
+# ─────────────────────────── BX-16: PC 위임 ───────────────────────────
 
-#: BX-16의 `Task_Dispatch`가 적은 대상 그룹과 **패키지 id** (`scm.md`). 그림에서 온 값이다.
-#:
-#: 패키지 id는 예제 **파일 이름이 아니다** — C1 `id`에는 밑줄이 들어갈 수 없어 `-`다. BX-16이
-#: 처음에 파일 이름(`bx17_erp_po_entry`)을 적어 두었고, Center가 `no_deployment`로 거절해서야
-#: 드러났다 (그 예제의 「배운 것」에 적어 두었다).
-BX16_GROUP = "구매-PC"
+#: BX-16이 맡기는 **PC Bot 패키지 id**와 그 예제 파일. 패키지 id는 파일 이름이 아니다 —
+#: C1 `id`에 밑줄이 들어갈 수 없어 `-`다 (그 예제의 「배운 것」에 있다).
 BX16_TARGET = "bx17-erp-po-entry"
 BX16_TARGET_EXAMPLE = "bx17_erp_po_entry"
 
 
-def bot_ui_that_reports_its_extensions(center: Center) -> str:
-    """등록된 Bot UI 하나를 만든다 — 작업 대상이 될 PC다 (C4 「키 묶기」).
+def test_bx16_delegates_to_the_pc_bot_that_declares_the_outputs() -> None:
+    """**그림과 대상이 맞물리나** (ADR-0062, C14 `chk:call.delegate`).
 
-    **하트비트까지 보낸다.** 확장을 보고하지 않으면 Center가 `ui-automation`을 모르고, 그것을
-    요구하는 BX-17은 **배포가 막힌다** (C7 누락 검사 — 확장 누락은 배포를 막는 셋 중 하나다).
-    `Agent`를 쓰지 않고 C4를 직접 부른다 — 여기서 보는 것은 Bot UI가 아니라 **작업이 만들어지나**다.
+    전에는 이 자리를 사내 확장 서비스 앱(`center-jobs`)으로 메우고 있었고, 그래서 시험이
+    **진짜 소켓 Center·연동용 키·등록된 Bot UI·배포된 BX-17** 넷을 세워야 했다. 위임이
+    본문이 된 뒤로는 그 발판이 **필요하지 않다** — Studio 시험 실행은 케이스의 `delegations`로
+    돈다. 진짜 Center·진짜 PC를 거치는 한 바퀴는 `test_server_runner_delegation.py`가 본다.
+
+    여기서 보는 것은 **글자로만 가리키는 자리**다 — 패키지 id는 틀려도 실행할 때까지 숨는다.
     """
-    from chaeksas.core.extensions import load_host  # noqa: PLC0415
+    from chaeksas.contracts.bpmn_ext import read_process  # noqa: PLC0415
 
-    key = center.client.post(
-        "/api/v1/center-keys", json={"name": "BX-16 대상 PC", "type": "bot_ui"}, headers=ADMIN
-    ).json()["key"]
-    auth = {"Authorization": f"Bearer {key}"}
-    versions = {"bot_ui": "0.1.0", "core": "0.1.0"}
-    answer = center.client.post(
-        "/api/v1/bot-ui/register",
-        json={
-            "schema": 1,
-            # C4 — PC 고유값의 SHA-256만 보낸다 (원값은 보내지 않는다).
-            "machine_id": "b" * 64,
-            "name": "구매 PC-01",
-            "os": "Windows 11",
-            "versions": versions,
-        },
-        headers=auth,
-    )
-    assert answer.status_code < 400, answer.text
-    bot_ui_id = str(answer.json()["bot_ui_id"])
+    caller = read_process((EXAMPLES / "bx16_reorder_proposal.bpmn").read_text(encoding="utf-8"))
+    node = next(one for one in caller.nodes if one.id == "Call_ErpInput")
+    call = node.prop("call")
+    assert call is not None and call.delegate is not None
+    assert call.delegate.bpm_process_id == BX16_TARGET
+    # **어느 PC인지 적지 않는다** — 비우면 Center가 고른다 (ADR-0049의 결).
+    assert call.delegate.bot_ui is None
 
-    beat = center.client.post(
-        "/api/v1/bot-ui/heartbeat",
-        json={
-            "schema": 1,
-            "status": "idle",
-            "current_run": None,
-            "queue": {"max": 20, "items": []},
-            "worker": {"state": "off", "version": "0.1.0", "restarts": 0, "session": "idle"},
-            "versions": versions,
-            "extensions": [one.to_json_dict() for one in load_host().states()],
-        },
-        headers=auth,
-    )
-    assert beat.status_code < 400, beat.text
-    return bot_ui_id
-
-
-def deploy_to(center: Center, bot_ui_id: str, example: str, tmp_path: Path) -> None:
-    """예제 하나를 **승인 서명 → 배포 서명**으로 그 PC에 배포한다 (C2 — 서명이 유일한 관문이다).
-
-    설치까지는 가지 않는다. `POST /jobs`가 보는 것은 **Center의 배포**이고(`no_deployment`),
-    설치는 하트비트 뒤의 일이다 — Bot UI 쪽 한 바퀴는 `test_m5_pc_rerun.py`가 본다.
-    """
-    space = Workspace(tmp_path / "bx16-target").ensure()
-    made = space.import_example(EXAMPLES, example)
-    from chaeksas.studio.packaging import default_name, export  # noqa: PLC0415
-
-    package = export(made, tmp_path / default_name(made))
-    answer = center.client.post(
-        "/api/v1/packages",
-        files={"file": (package.name, package.read_bytes(), "application/zip")},
-        headers=ADMIN,
-    )
-    assert answer.status_code in (200, 201), answer.text
-    info = dict(answer.json())
-
-    signer = keystore.load(center.signing_key, passphrase=SIGN_PASS)
-    approve = sign(
-        {
-            "kind": "package",
-            "id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        signer,
-        signed_at=SIGNED_AT,
-    )
-    answer = center.client.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=approve.to_json_dict(),
-        headers=ADMIN,
-    )
-    assert answer.status_code < 400, answer.text
-
-    envelope = sign(
-        {
-            "kind": "deployment",
-            "deployment_id": "dep_" + re.sub(r"[^0-9a-f]", "", info["content_hash"])[:8],
-            "target": {"type": "bot_ui", "id": bot_ui_id},
-            "bpm_process_id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        signer,
-        signed_at=SIGNED_AT,
-    )
-    answer = center.client.post("/api/v1/deployments", json=envelope.to_json_dict(), headers=ADMIN)
-    assert answer.status_code < 400, answer.text
-
-
-@pytest.fixture(scope="session")
-def center_jobs(center: Center, tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
-    """BX-16의 `center-jobs` 앱이 **진짜 작업을 만들 수 있게** 한다. `bot_ui_id`를 준다.
-
-    그 앱은 모의가 아니라 Center의 `POST /jobs`를 부른다 (`samples/.../center_jobs.py`) —
-    BX-16이 메우려는 공백이 「서버 BPM 프로세스가 PC에 일을 넘기는 요소가 없다」이고, 그 자리를
-    **Center 연동용 키를 가진 서비스 앱**으로 메우는 것이 예제의 설계다 (ADR-0016 §3).
-
-    그래서 셋이 있어야 한다 (C5).
-
-    1. **연동용 키** — 작업을 만드는 관문이다 (배포와 달리 봉투가 없다, C5 권한표).
-    2. **등록된 Bot UI** — `group:구매-PC`를 어느 PC로 보낼지 그 앱이 안다 (그룹은 Center에 없다).
-    3. **배포된 BX-17** — 배포되지 않은 것은 돌릴 수 없다 (`no_deployment`).
-
-    설정은 환경변수로만 준다 (CLAUDE.md §5). 앱이 **부를 때마다 읽으므로**(`_env()`) 앱을 띄운
-    뒤에 넣어도 된다 — 모의 앱 fixture는 Center보다 먼저 뜬다.
-    """
-    from chaeksas.mock_apps.apps.center_jobs import ENV_PREFIX  # noqa: PLC0415
-
-    bot_ui_id = bot_ui_that_reports_its_extensions(center)
-    deploy_to(center, bot_ui_id, BX16_TARGET_EXAMPLE, tmp_path_factory.mktemp("bx16"))
-    token = center.client.post(
-        "/api/v1/center-keys",
-        json={"name": "center-jobs 앱", "type": "integration"},
-        headers=ADMIN,
-    ).json()["key"]
-
-    names = {
-        f"{ENV_PREFIX}CENTER__BASE_URL": center.url,
-        f"{ENV_PREFIX}CENTER__TOKEN": token,
-        f"{ENV_PREFIX}GROUPS": f'{{"{BX16_GROUP}": "{bot_ui_id}"}}',
-    }
-    before = {name: os.environ.get(name) for name in names}
-    os.environ.update(names)
-    yield bot_ui_id
-    for name, value in before.items():
-        if value is None:
-            os.environ.pop(name, None)
-        else:
-            os.environ[name] = value
-
-
-def test_the_job_target_is_deployed_so_jobs_can_be_created(center: Center, center_jobs: str) -> None:
-    """BX-16이 돌기 전에 판이 맞는지 본다 — 아니면 실패 사유가 「Center가 거부했다」로 뭉개진다.
-
-    **그림이 적은 id가 정말 배포된 id인가**를 여기서 본다. 글자로만 가리키는 자리라 틀려도
-    실행할 때까지 숨는다 — 처음에 실제로 숨어 있었다.
-    """
-    rows = [
-        one
-        for one in center.client.get("/api/v1/deployments", headers=ADMIN).json()
-        if one["bpm_process_id"] == BX16_TARGET
-    ]
-    assert rows, f"{BX16_TARGET}이 배포되지 않았다"
-    assert rows[0]["target"]["id"] == center_jobs
-
-    wanted = dispatch_target_in_the_drawing()
-    assert wanted == BX16_TARGET, (
-        f"BX-16이 `{wanted}`로 작업을 만든다 — 배포된 것은 `{BX16_TARGET}`이다 "
-        "(예제를 고치려면 `_source/spec_scm.py` → `build.py`)"
-    )
-
-
-def dispatch_target_in_the_drawing() -> str:
-    """BX-16의 `Task_Dispatch`가 적은 `bpm_process`를 **그림에서** 읽는다 (옮겨 적지 않는다)."""
-    body = (EXAMPLES / "bx16_reorder_proposal.bpmn").read_text(encoding="utf-8")
-    found = re.search(r'"bpm_process":\s*"\'([^\']+)\'"', body)
-    assert found, "BX-16의 `bpm_process`를 그림에서 찾지 못했다"
-    return found.group(1)
+    target = read_process((EXAMPLES / f"{BX16_TARGET_EXAMPLE}.bpmn").read_text(encoding="utf-8"))
+    assert target.info.run_location == "pc"
+    # **선언한 것만 돌아온다** (C4 `JobAck.outputs`) — 읽는 이름이 그 선언에 있어야 한다.
+    assert set(call.output.values()) <= set(target.info.outputs)
 
 
 # ─────────────────────────── 스텁 모델 ───────────────────────────
@@ -613,7 +464,6 @@ def test_an_m5_example_passes_all_its_cases(
     app: Any,
     tmp_path: Path,
     center: Center,
-    center_jobs: str,
     directory: AppDirectory,
     mock_apps: dict[str, str],
     model: StubModel,
@@ -621,7 +471,9 @@ def test_an_m5_example_passes_all_its_cases(
 ) -> None:
     """케이스가 **모두 통과**한다 — 서비스 앱은 진짜로 불린다.
 
-    `center_jobs`는 BX-16 몫이다 (작업을 만들 수 있는 판). 묶음 하나에 Center 하나라 한 번만 선다.
+    **BX-16의 Center 발판은 없어졌다** — PC 위임이 본문이 되어(ADR-0062) 그 예제가 작업을
+    만들지 않으므로 연동용 키·등록된 Bot UI·배포된 BX-17이 필요하지 않다. 위임 결과는 케이스가
+    적는다 (C14 `delegations`).
     """
     results = run_all(tmp_path, example, directory, model, mock_apps, center_url=center.url)
     assert results, f"{example}: 돌릴 케이스가 없다"
