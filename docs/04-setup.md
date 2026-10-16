@@ -184,10 +184,17 @@ PyInstaller는 `--group build`에만 있어 평소 `uv sync`로는 들어오지 
   빌드가 서는지 보는 데는 그것으로 되고 **Windows 산출물은 CI가 만든다**(아래).
 - **Windows 산출물은 수동으로 돌린다** — `.github/workflows/desktop.yml`(「데스크톱 산출물」)을
   Actions에서 실행하거나 `v*` 태그를 민다. 푸시마다 묶지 않는다 (몇 분이 걸려 모든 PR에 붙이면 값이 크다).
-- 크기는 **OS·아키텍처마다 다르다.** 스파이크 S5가 Windows에서 본 것은 Studio 약 550MB(QtWebEngine
-  194MB 포함)·Bot UI 약 113MB이고, 개발 PC(Linux aarch64)에서는 **Studio 1008MB·Bot UI 356MB**가
-  나왔다 (2026-10-16). Bot UI는 모든 현장 PC에 깔리므로 **QtWebEngine을 넣지 않는다** — 그 차이가
-  크기의 대부분이다.
+- 크기·시간은 **OS·아키텍처마다 다르다.** CI가 말해 준 값이다 (2026-10-16, 런 38873092925):
+
+  | | Bot UI | Studio |
+  | --- | --- | --- |
+  | **Windows** (CI, x86_64) | **160MB · 86초** | **598MB · 109초** |
+  | Linux (CI, x86_64) | 353MB · 33초 | 1009MB · 37초 |
+  | Linux (개발 PC, aarch64) | 356MB · 50~62초 | 1008MB · 81초 |
+
+  Bot UI는 모든 현장 PC에 깔리므로 **QtWebEngine을 넣지 않는다** — 그 차이가 크기의 대부분이다.
+  스파이크 S5가 Windows에서 본 것은 Bot UI 113MB·Studio 551MB였고, 그 뒤 확장·의존이 늘어
+  조금 커졌다.
 
 ## 7. 시험 돌리기와 **건너뛰는 것**
 
