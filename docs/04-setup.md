@@ -121,6 +121,8 @@ sudo apt-get install -y --no-install-recommends \
 
 서버 쪽 구성(Center·Center 콘솔·서비스 앱과 그 관리 콘솔)은 `deploy/compose.yaml` **한 번으로** 뜬다 — Windows에서도 Docker Desktop으로 같은 서버를 띄운다. 레지스트리는 서비스 앱 안의 SQLite 한 파일이라 따로 세울 DB가 없다 ([ADR-0040](decisions/0040-registry-storage-sqlite.md)).
 
+**Center를 새 판으로 올리면 저장소가 뜰 때 저절로 옮겨진다** ([ADR-0065](decisions/0065-center-schema-migrations.md)) — 모자란 단계만 차례로 돌고, 단계 하나가 실패하면 그 단계는 없던 일이 되고 **Center가 뜨지 않는다**(사유가 로그에 남는다). **되돌리는 단계는 없다** — 옮겨진 DB를 옛 판 Center가 열면 「새 판의 Center로 띄우세요」라며 **뜨지 않는다**. 그래서 **올리기 전에 DB 파일을 떠 둔다**(WAL이라 `center.sqlite3`·`-wal`·`-shm` 셋을 함께, Center를 멈춘 뒤). 지금 판은 `SELECT * FROM schema_migrations`가 말해 준다.
+
 ## 5. 설정과 비밀
 
 - 설정 파일: 저장소의 `configs/*.example.yaml`을 복사해 쓴다 (M1).
