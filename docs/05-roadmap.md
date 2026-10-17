@@ -238,7 +238,7 @@ CI에 산출물 잡이 없다.
 - [x] 미뤄 둔 빚 하나를 **실제로 고쳐** 수단이 도는 것을 보인다 — **2판이 `deployment_results.bot_ui_id` → `host_id`**다 (그 칸은 PC와 서버 실행기를 함께 담는데 이름을 못 고쳐 부르는 쪽이 바꿔 부르고 있었다). **데이터가 든 옛 DB를 옮기는 것**까지 시험이 본다(새로 만든 DB와 옮긴 DB의 표·열이 같다)
 - [x] **키 묶기를 DB도 지킨다** ([ADR-0066](decisions/0066-migration-guards.md), 3판) — `bot_uis`·`server_runners`의 `key_id`·`machine_id`에 UNIQUE 넷. 겹친 옛 행(2026-10-08 전에 생길 수 있었다)은 **짐작해 고치지 않는다**(#57) — 단계의 **지킴 질의**가 걸리면 문을 하나도 돌리지 않고 무엇이 겹쳤는지와 고치는 길을 말한다. 고르는 것은 사람이고 `chk-center hosts duplicates`·`retire <id>`가 **옮기기를 돌리지 않고** DB를 연다(은퇴는 지우지 않는다 — 이력이 그 id를 가리킨다). 판정은 그대로 `host_keys.py`에 있다(사람에게 할 말은 그쪽이 안다)
 - [x] **CON-06 「내려받은 횟수」** — **된다** (4판, C5 `download_count`·`last_downloaded_at`): 계약과 화면을 먼저 고치고 열 둘을 더했다. **관문을 지나 파일을 내어 줄 때만** 센다(막힌 요청은 세지 않는다)
-- [ ] PostgreSQL 전환은 **그다음이고 이 단계에서 정한다** (ADR — 옮기기 수단이 둘을 함께 받는가) — 초안: [ADR-0070](decisions/0070-center-stays-on-sqlite.md)(「제안」 — SQLite로 남고 옮길 조건을 적는다)
+- [x] PostgreSQL 전환은 **그다음이고 이 단계에서 정한다** — **정했다** ([ADR-0070](decisions/0070-center-stays-on-sqlite.md)): **옮기지 않는다** — Center는 SQLite로 남고, 옮길 조건 셋(Center 여러 대·쓰기 잠금 관측·회사 요구)을 적었다. 옮기기 수단은 둘을 받을 수 있게 **SQL을 이식할 모양으로만** 적고 그것을 `tests/test_center_sql_portable.py`가 지킨다(실제 PostgreSQL에서 돌려 보지는 않는다). 백업은 `docs/04-setup.md` §6-4
 
 **선행은 M7이다.** 다만 A는 **M6의 사람 몫 둘을 쉽게 만든다** — 현장 PC에 개발 체크아웃을
 세우지 않아도 되므로, 순서상 M6보다 늦지만 **M6를 돕는다**.

@@ -2,11 +2,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 제안 |
+| 상태 | 수락 (2026-10-17) |
 | 날짜 | 2026-10-17 |
 | 관련 | [ADR-0065](0065-center-schema-migrations.md)(옮기기 수단 — §4 「PostgreSQL은 막지 않는다, 옮길지는 아직이다」를 여기서 정한다), [ADR-0066](0066-migration-guards.md)(지킴 질의), [ADR-0040](0040-registry-storage-sqlite.md)(UI 자동화 앱 SQLite), [ADR-0054](0054-server-run-state-and-concurrency.md)(서버 실행기 저장소), 로드맵 M8-B, `docs/01-architecture.md` §7(「SQLite로 시작, PostgreSQL 호환」) |
-
-> 초안이다. 아래 「결정」은 **추천**이고, 정할 것 셋(가~다)마다 고른 까닭과 버린 길을 적었다.
 
 ## 배경
 
@@ -15,8 +13,8 @@
 
 지금 모습 (main `c60d5be`):
 
-- `sqlite3`(표준 라이브러리)만 쓴다. **SQLite를 아는 파일은 다섯**이다 — `storage.py`(연결·WAL·
-  기준선)·`migrations.py`(`BEGIN IMMEDIATE`)·`repair.py`·`__main__.py`(`chk-center hosts`)·`settings.py`.
+- `sqlite3`(표준 라이브러리)만 쓴다. **`sqlite3`를 import하는 파일은 넷**이다 — `storage.py`(연결·WAL·
+  기준선)·`migrations.py`(`BEGIN IMMEDIATE`)·`repair.py`·`__main__.py`(`chk-center hosts`). `settings.py`는 파일 이름만 안다.
   **API 모듈은 `sqlite3`를 import하지 않는다** — 모두 `Store.tx()`·`rows()`·`row()`를 거친다.
 - SQL은 이식할 수 있는 모양으로 적어 왔다 — `ON CONFLICT … DO UPDATE/NOTHING`(둘 다 받는다)이 세 곳,
   SQLite 전용 함수(`GROUP_CONCAT`·`INSERT OR`·`AUTOINCREMENT`·`rowid`·`datetime()`)는 **없다**. 다른 것은
@@ -54,7 +52,7 @@
 
 ## 결정
 
-**가-A · 나-A · 다-A를 추천한다.** Center는 SQLite로 남고, PostgreSQL로 옮길 길은 **시험으로 지켜**
+**가-A · 나-A · 다-A를 쓴다.** 지금은 Center·서버 실행기·UI 자동화 앱이 **모두 SQLite**이고 PostgreSQL은 어디에서도 쓰지 않는다(드라이버도 컨테이너도 없다). 「PostgreSQL 호환」은 쓴다는 뜻이 아니라 **SQL을 SQLite 전용 문법 없이 적어 둔다**는 뜻이다 — 실제 PostgreSQL에서 돌려 본 적은 없다. Center는 SQLite로 남고, PostgreSQL로 옮길 길은 **시험으로 지켜**
 열어 둔다. 옮길 때는 아래 「옮길 조건」 가운데 하나가 실제로 생겼을 때다.
 
 ### 1. 옮길 조건 — 이것이 생기면 옮긴다
@@ -69,11 +67,11 @@
 
 ### 2. 이식성은 시험이 지킨다
 
-> 제안: `tests/test_center_sql_portable.py` — Center 패키지의 SQL 글(파이썬 문자열)에서 SQLite에만 있는
-> 것을 찾아 막는다: `INSERT OR`·`REPLACE INTO`·`AUTOINCREMENT`·`rowid`·`GROUP_CONCAT`·`datetime(`·
-> `julianday`·`strftime`·`IIF(`. **허용하는 자리는 `storage.py`·`migrations.py`·`repair.py`·`__main__.py`
-> 넷**이다(연결·`PRAGMA`·`BEGIN IMMEDIATE`가 사는 곳). 그리고 **API 모듈이 `sqlite3`를 import하지 않는
-> 것**도 본다 — 지금 그런 것을 굳힌다.
+`tests/test_center_sql_portable.py`가 Center 패키지의 SQL 글(파이썬 문자열)에서 SQLite에만 있는 것을
+찾아 막는다: `INSERT OR`·`REPLACE INTO`·`AUTOINCREMENT`·`rowid`·`GROUP_CONCAT`·`datetime(`·`julianday`·
+`strftime`·`IIF(`, 그리고 `PRAGMA`·`BEGIN IMMEDIATE`는 **`storage.py`·`migrations.py`·`repair.py`·
+`__main__.py` 넷**에서만 받는다(연결이 사는 곳). **`sqlite3`를 import하는 모듈도 그 넷**
+뿐이어야 한다 — API 모듈이 `Store`를 거치는 지금 모습을 굳힌다.
 
 옮길 때 바뀌는 자리는 그래서 **넷과 자리표시**로 줄어든다: 연결(`psycopg`)·`BEGIN IMMEDIATE` →
 `BEGIN` + `LOCK TABLE schema_migrations`·`_use_wal` 없애기, 그리고
@@ -81,9 +79,10 @@
 
 ### 3. SQLite로 남는 동안 운영에 적을 것
 
-> 제안: `docs/04-setup.md`에 **백업**을 적는다 — WAL에서는 파일 복사가 안전하지 않다(`-wal`에 커밋이
-> 남아 있다). `sqlite3 center.sqlite3 ".backup <파일>"`(돌던 중에도 된다)과 패키지 폴더를 함께 백업한다.
-> 판 번호가 같은 Center로만 되살린다(DB 판이 높으면 뜨지 않는다, ADR-0065 §2).
+`docs/04-setup.md` §6-4에 **백업**을 적는다 — WAL에서는 파일 복사가 안전하지 않다(`-wal`에 커밋이
+남아 있다). SQLite의 백업 API(파이썬 `Connection.backup` — 돌던 중에도 된다)로 뜬 사본과 패키지 폴더를
+함께 남긴다. 되살릴 때는 **판 번호가 같거나 높은 Center**로 연다(DB 판이 코드보다 높으면 뜨지 않는다,
+ADR-0065 §2).
 
 ### 4. Center 밖의 둘은 그대로다
 
@@ -94,7 +93,7 @@
 
 - 쉬워지는 것: 서버 구성이 그대로 `compose up` 한 번이다. 시험이 빠르다. 옮길 때 고칠 자리가 미리
   좁혀져 있다(넷과 자리표시).
-- 어려워지거나 포기하는 것: 여러 대의 Center는 아직 없다. 백업은 운영자가 `.backup`으로 한다.
+- 어려워지거나 포기하는 것: 여러 대의 Center는 아직 없다. 백업은 운영자가 백업 API로 한다.
   「PostgreSQL에서 돈다」는 진짜로 돌려 본 것이 아니라 시험이 지키는 어림이다.
 - 다시 볼 조건: 위 「옮길 조건」 셋. 그리고 **실행 기록(`run_events`)에 보관 기한이 없다** — 표가 끝없이
   커진다. 크기가 문제가 되면 먼저 보관 기한을 정하고(계약 C3·C5의 일이다), 그래도 모자라면 옮긴다 —
