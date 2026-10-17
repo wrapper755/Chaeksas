@@ -19,7 +19,7 @@ from chaeksas.bot_ui import notices
 from chaeksas.bot_ui.agent import Agent, make_agent
 from chaeksas.bot_ui.heartbeat import HeartbeatWorker
 from chaeksas.bot_ui.main_window import WINDOW_TITLE, MainWindow
-from chaeksas.bot_ui.runtimes import RUNTIME_FLAG, serve
+from chaeksas.bot_ui.runtimes import RUNTIME_FLAG, check_start, serve
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.bot_ui.tray import Tray
 from chaeksas.contracts.bot_ui import JobAck
@@ -251,9 +251,11 @@ def run_selftest(args: list[str]) -> int:
     **Qt를 띄우지 않는다.** 묶인 앱은 콘솔 없이 뜰 수 있어 결과를 파일로 받는다 — 빌드가
     그 파일을 읽고 하나라도 빠지면 **빌드를 실패시킨다** (빠진 확장은 실행 중에야 드러난다).
     """
-    from chaeksas.core.selftest import main  # noqa: PLC0415 — 평소 기동을 무겁게 하지 않는다
+    from chaeksas.core.extensions import load_host  # noqa: PLC0415 — 평소 기동을 무겁게 하지 않는다
+    from chaeksas.core.selftest import main  # noqa: PLC0415
 
-    return main(args[1:], prog="chk-bot-ui")
+    # `--start-runtimes`면 기여된 로컬 런타임을 **평소와 같은 길로** 띄워 본다 (`runtimes.check_start`).
+    return main(args[1:], prog="chk-bot-ui", start_runtimes=lambda: check_start(load_host()))
 
 
 def run_local_runtime(args: list[str]) -> int:

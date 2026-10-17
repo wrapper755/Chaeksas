@@ -194,6 +194,8 @@ PyInstaller는 `--group build`에만 있어 평소 `uv sync`로는 들어오지 
 - **묶은 뒤 스스로 검사한다** — `<실행 파일> --selftest <파일>`로 확장이 다 보이는지 보고 하나라도
   빠지면 **빌드를 실패시킨다** (빠진 확장은 실행 중에야 드러난다). 못 박고 싶으면
   `--want ui-automation`처럼 적는다. 그 깃발은 Bot UI·Studio가 **같은 검사**(`core.selftest`)를 쓴다.
+  **Bot UI는 로컬 런타임을 정말 띄워 본다**(`--start-runtimes` — 빈 포트·임시 폴더로 띄워 `health`가
+  답하는지 보고 끈다). 못 뜨면 자식 로그의 끝이 빌드 출력에 실린다.
 - **판을 찍는다** ([ADR-0067](decisions/0067-build-stamp.md)) — `--version`이 이기고, 없으면 지금 커밋의
   `v*` 태그, 그것도 없으면 `<core 판>+g<커밋>`(고치다 만 파일이 있으면 `.dirty`)이다. 실행 파일 옆
   `chaeksas-build.json`에 적히고(열어 볼 수 있다) Bot UI가 C4 `versions`로 올려 **CON-03에 보인다**.

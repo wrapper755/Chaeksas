@@ -20,13 +20,17 @@
 **찍힌 판도 함께 싣는다** ([ADR-0067](../../../../../docs/decisions/0067-build-stamp.md)) — 빌드가
 `--expect-version`으로 넘기면 묶은 앱이 **읽은** 판이 그것과 같아야 한다. 파일이 안 들어갔거나 앱이
 다른 자리를 읽으면 현장에서 `0.0.0`을 보고서야 안다.
+
+**런타임을 정말 띄워 보는 단계는 앱이 준다** (`--start-runtimes`) — 띄우는 길은 Bot UI의 것이라
+(`core`는 Bot UI를 모른다) `main(start_runtimes=…)`로 받는다. 그 앱이 주지 않았는데 깃발이 오면
+**실패로 적는다**(빌드가 「봤다」고 믿으면 안 된다).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -74,6 +78,7 @@ def check(
     host: ExtensionHost | None = None,
     expect_version: str | None = None,
     stamp: build_info.Stamp | None = None,
+    extra: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """묶은 앱에서 확장이 다 보이나. `{"all_ok": bool, "steps": {...}}`.
 
@@ -108,15 +113,22 @@ def check(
         "value": {"stamp": None if read is None else read.to_json(), "core": core},
     }
 
+    steps.update(extra or {})
     return {"all_ok": all(step["ok"] for step in steps.values()), "steps": steps}
 
 
-def run(out: Path | None = None, *, want: list[str] | None = None, expect_version: str | None = None) -> int:
+def run(
+    out: Path | None = None,
+    *,
+    want: list[str] | None = None,
+    expect_version: str | None = None,
+    extra: Callable[[], dict[str, dict[str, Any]]] | None = None,
+) -> int:
     """`--selftest` 본문 — 결과를 JSON으로 적고 끝 코드를 돌려준다 (0이면 다 좋다).
 
     **파일로 적는다** — 묶은 앱은 콘솔 없이(`--windowed`) 뜰 수 있어 표준 출력이 사라진다.
     """
-    found = check(want=want, expect_version=expect_version)
+    found = check(want=want, expect_version=expect_version, extra=extra() if extra is not None else None)
     text = json.dumps(found, ensure_ascii=False, indent=2)
     if out is not None:
         out.parent.mkdir(parents=True, exist_ok=True)
@@ -126,15 +138,36 @@ def run(out: Path | None = None, *, want: list[str] | None = None, expect_versio
     return 0 if found["all_ok"] else 1
 
 
-def main(args: Sequence[str], *, prog: str) -> int:
-    """`<앱> --selftest [파일] [--want a,b] [--expect-version 판]` — 두 앱이 이것을 부른다."""
+#: 런타임을 정말 띄워 보라는 깃발 — 빌드가 Bot UI에만 넘긴다.
+START_RUNTIMES_FLAG = "--start-runtimes"
+
+
+def main(
+    args: Sequence[str],
+    *,
+    prog: str,
+    start_runtimes: Callable[[], dict[str, Any]] | None = None,
+) -> int:
+    """`<앱> --selftest [파일] [--want a,b] [--expect-version 판] [--start-runtimes]` — 두 앱이 부른다."""
     parser = argparse.ArgumentParser(prog=prog, add_help=False)
     parser.add_argument(SELFTEST_FLAG, dest="out", nargs="?", default=None)
     parser.add_argument("--want", dest="want", default=None, help="켜져 있어야 하는 확장 id (쉼표로 여럿)")
     parser.add_argument("--expect-version", dest="expect", default=None, help="찍혀 있어야 하는 판")
+    parser.add_argument(START_RUNTIMES_FLAG, dest="start", action="store_true", help="로컬 런타임을 띄워 본다")
     found, _ = parser.parse_known_args(list(args))
     want = [one.strip() for one in str(found.want).split(",") if one.strip()] if found.want else None
-    return run(Path(found.out) if found.out else None, want=want, expect_version=found.expect)
+
+    def runtimes() -> dict[str, dict[str, Any]]:
+        if start_runtimes is None:
+            return {"runtimes": {"ok": False, "value": f"{prog}는 로컬 런타임을 띄우지 않는다"}}
+        return {"runtimes": start_runtimes()}
+
+    return run(
+        Path(found.out) if found.out else None,
+        want=want,
+        expect_version=found.expect,
+        extra=runtimes if found.start else None,
+    )
 
 
-__all__ = ["SELFTEST_FLAG", "check", "main", "run"]
+__all__ = ["SELFTEST_FLAG", "START_RUNTIMES_FLAG", "check", "main", "run"]

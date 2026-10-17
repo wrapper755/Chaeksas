@@ -223,7 +223,17 @@ def test_unknown_entry_point_group_loads_nothing() -> None:
 
 
 def test_resolved_code_matches_the_interface(host: ExtensionHost) -> None:
-    """`entry`가 가리키는 객체가 `extension_api`의 모양인지 호스트가 확인한다."""
+    """`entry`가 가리키는 객체가 `extension_api`의 모양인지 호스트가 확인한다.
+
+    편집기·유틸리티는 **Qt 위젯을 만든다** — `QApplication`을 먼저 세운다. 앞선 시험이 세워 둔 것에
+    기대면 이 파일만 돌릴 때 Qt가 프로세스를 죽인다(전체로 돌 때만 통과하던 시험이다).
+    """
+    import os  # noqa: PLC0415
+
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication  # noqa: PLC0415
+
+    _app = QApplication.instance() or QApplication([])
     assert isinstance(host.executor("ui_task"), TaskExecutor)
     assert isinstance(host.editor("ui_task"), TaskEditor)
     assert isinstance(host.utility("selector-registration"), BotUiUtility)
