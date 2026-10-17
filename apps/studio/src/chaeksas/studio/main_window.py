@@ -613,6 +613,8 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         if not dialog.exec() or dialog.saved is None:
+            if dialog.split_requested:
+                self.split_to_pc()
             return
         self.process = dialog.saved
         self.retitle()
@@ -624,6 +626,41 @@ class MainWindow(QMainWindow):
         # 같은 결). 그렇게 말해 둬야 「저장했다는데 패키지에 안 들어갔다」가 생기지 않는다.
         self._apply_properties(entry.process.id, {"chk": {"process": dialog.process_patch}})
         self.say("실행 위치·키 참조는 그림에 적용했습니다 — 「저장」(Ctrl+S)으로 파일에 씁니다.")
+
+    def split_to_pc(self) -> None:
+        """STU-06a — 서버에서 못 하는 노드 하나를 새 PC Bot으로 옮긴다 (ADR-0071).
+
+        진입 정의가 열려 있고 실행 위치가 「서버」일 때만 한다(그 밖은 까닭을 말한다). 창은 고르기만
+        하고 그림은 `split_actions.split()`이 **캔버스로** 바꾼다.
+        """
+        from chaeksas.studio import split_actions  # noqa: PLC0415 — 쓸 때만 든다
+        from chaeksas.studio.split_dialog import SplitDialog  # noqa: PLC0415
+
+        if self.process is None:
+            self.say("열린 BPM 프로세스가 없습니다.")
+            return
+        entry = self.process.entry_definition
+        if entry is None or entry.process is None or self.definition != entry.path:
+            self.say("나누기는 진입 정의를 연 채로 합니다 — 진입 정의를 여세요.")
+            return
+        if (entry.process.info.run_location or "server") != "server":
+            self.say("실행 위치가 「서버」인 BPM 프로세스만 나눕니다.")
+            return
+        found = split_actions.blockers(entry.process, self.task_type_locations())
+        if not found:
+            self.say("서버에서 못 하는 노드가 없습니다 — 나눌 것이 없습니다.")
+            return
+        dialog = SplitDialog(
+            entry.process,
+            found,
+            server_id=self.process.id,
+            server_name=self.process.display,
+            taken=lambda one: self.workspace.find(one) is not None,
+            parent=self,
+        )
+        if not dialog.exec() or dialog.plan is None:
+            return
+        split_actions.split(self, dialog.plan)
 
     def edit_cases(self) -> None:
         """STU-07. 케이스는 **열린 정의 옆**에 있다 — 무엇의 케이스인지 모호하지 않게."""

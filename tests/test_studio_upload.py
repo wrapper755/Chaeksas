@@ -431,6 +431,7 @@ def test_the_run_location_table_comes_from_the_host_and_goes_to_all_three(
         def __init__(self, *a: Any, **kw: Any) -> None:
             given.append(kw.get("task_type_locations"))
             self.saved = None
+            self.split_requested = False
 
         def exec(self) -> int:
             return 0
