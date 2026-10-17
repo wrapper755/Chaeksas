@@ -165,8 +165,12 @@ class SmtpConfig:
     def problems(self) -> list[str]:
         """모자란 것들 (사람이 읽을 한 줄씩). 화면과 사전 점검이 같은 글을 쓴다."""
         out = []
-        if not self.host.strip():
+        host = self.host.strip()
+        if not host:
             out.append("SMTP 주소가 비어 있습니다")
+        elif ":" in host and not host.startswith("["):
+            # `localhost:2525`처럼 적으면 포트 칸(0 → 기본 포트)이 이겨 엉뚱한 곳으로 간다.
+            out.append("SMTP 주소에 포트를 붙이지 마세요 — 포트는 「포트」 칸에 적습니다")
         if not self.sender.strip():
             out.append("보내는 주소(From)가 비어 있습니다")
         if self.security not in KNOWN_SECURITY:

@@ -22,8 +22,27 @@ from PySide6.QtWidgets import (
 
 from chaeksas.studio.workspace import DEFAULT_GROUP, BpmProcess, Definition, Workspace, WorkspaceError
 
-#: 업무 예제가 사는 곳 (저장소 안). 설치본에는 함께 들어간다.
-EXAMPLES_DIR = Path(__file__).resolve().parents[4] / "docs" / "08-business-examples" / "bpmn"
+#: 저장소 뿌리에서 본 업무 예제 자리.
+EXAMPLES_PARTS = ("docs", "08-business-examples", "bpmn")
+
+
+def _examples_dir() -> Path:
+    """업무 예제가 사는 곳 — **위로 올라가며 찾는다** (체크아웃에서만 있다, 설치본에는 들어가지 않는다).
+
+    단계 수를 세어 적으면 폴더를 한 번 옮길 때 조용히 어긋난다 — 시험이 모두 폴더를 직접 넘겨
+    기본값을 밟지 않아, 현장 리허설에서 「예제를 찾지 못했습니다」로야 드러났다. 못 찾으면 체크아웃
+    기준 자리를 돌려주고 창이 그 경로로 「못 찾았다」고 말한다.
+    """
+    here = Path(__file__).resolve()
+    for parent in here.parents:
+        found = parent.joinpath(*EXAMPLES_PARTS)
+        if found.is_dir():
+            return found
+    return here.parents[5].joinpath(*EXAMPLES_PARTS)
+
+
+#: 업무 예제가 사는 곳 (체크아웃 안).
+EXAMPLES_DIR = _examples_dir()
 
 HINT = "id는 소문자·숫자·`.`·`_`·`-`만 쓰고 소문자나 숫자로 시작합니다 (C1과 같은 규칙)."
 

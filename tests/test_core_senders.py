@@ -444,3 +444,11 @@ def test_make_sender_without_settings_fails_clearly() -> None:
         made.send_email(EmailMessage(to=("a@example.com",)))
     with pytest.raises(SendError):
         made.send_webhook(WebhookRequest(url="https://hooks.example.com/x"))
+
+
+def test_a_port_glued_to_the_host_is_a_problem() -> None:
+    """`localhost:2525`라고 적으면 포트 칸(기본 포트)이 이겨 엉뚱한 곳으로 간다 — 미리 말한다 (현장 리허설)."""
+    glued = SmtpConfig(host="localhost:2525", sender="bot@example.com")
+    assert not glued.configured
+    assert any("포트" in one for one in glued.problems())
+    assert SmtpConfig(host="localhost", port=2525, sender="bot@example.com").configured

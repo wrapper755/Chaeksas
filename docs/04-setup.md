@@ -96,6 +96,9 @@ pnpm --filter @chaeksas/center-console dev   # 하나만 — http://localhost:85
 | `corepack enable`이 `EPERM` | `EPERM: operation not permitted, open 'C:\Program Files\nodejs\yarnpkg'` | winget·MSI로 깐 Node는 `Program Files`에 있어 **일반 사용자는 거기에 쓸 수 없다**. `corepack enable pnpm --install-directory "$env:USERPROFILE\.local\bin"` — uv 설치가 이미 PATH에 넣은 폴더다. `corepack pnpm install`만으로는 모자란다: 루트 스크립트(`pnpm typecheck` 등)가 안에서 `pnpm -r …`을 다시 부르는데 PATH에 `pnpm`이 없으면 `'pnpm'은(는) … 프로그램이 아닙니다`로 끝난다 |
 | 한글 사용자 폴더의 Chromium | 화면에 보이는 Chromium이 뜨지 않음 — Playwright `spawn UNKNOWN`, 직접 띄우면 「side-by-side configuration is incorrect」(응용 프로그램 로그: `Dependent Assembly … could not be found`) | Playwright가 브라우저를 `%LOCALAPPDATA%\ms-playwright`에 받는데 **사용자 이름이 한글이면** 그 경로에서 Windows가 Chrome의 매니페스트를 찾지 못한다(같은 파일을 `C:\dev\…`로 옮기면 뜬다). `PLAYWRIGHT_BROWSERS_PATH`를 ASCII 경로(예: `C:\dev\ms-playwright`)로 두고 그 자리에 받는다 — Bot UI·Worker를 띄우는 창에도 같은 값을 준다. 화면 없는 실행(headless shell)은 이 병을 피해 가서 시험만으로는 드러나지 않는다 |
 | Playwright 판과 받아 둔 브라우저가 어긋남 | `Executable doesn't exist at …chromium_headless_shell-<번호>…` | `--with playwright`는 그때의 최신 판을 받고, 판마다 찾는 Chromium 번호가 다르다. 받아 둔 브라우저에 맞는 판으로 고정하거나(`--with playwright==<판>`) 그 판으로 `python -m playwright install chromium`을 다시 한다 |
+| 서버를 띄운 채 `uv run` | `error: failed to remove file …\.venv\Scripts\chk-mock-apps.exe … (os error 32)` | `git pull` 뒤 `uv run`이 환경을 맞추려다 **떠 있는 프로세스가 쥔 실행 파일**을 바꾸지 못한다(Windows는 실행 중인 파일을 지울 수 없다). 그 서버를 끄고 `uv sync`를 하거나, 우리 코드만 바뀌었으면 `uv run --no-sync …`로 띄운다 (멤버는 편집 가능 설치라 코드는 이미 반영돼 있다) |
+| Bot UI에 Playwright 붙이기 | 셀렉터 등록 「이 PC에는 브라우저 백엔드가 없습니다」 | Playwright는 선택 의존성이다. `uv run --with playwright chk-bot-ui`로는 **붙지 않는다**(uv가 `chk-bot-ui`를 프로젝트 `.venv`의 실행 파일로 풀어 그 Python으로 돈다). **`uv run --with playwright==<판> python -m chaeksas.bot_ui`**로 띄운다 — Worker는 Bot UI의 Python으로 뜨므로 함께 붙는다. 판은 받아 둔 브라우저에 맞춘다(바로 위 줄) |
+| 트레이의 Bot UI가 둘 | Worker 포트(8899)를 옛 쪽이 쥐고 새 Bot UI의 요청이 그리로 간다 | 창을 닫는 것은 끄는 것이 아니다(트레이에 남는다). 다시 띄우기 전에 트레이에서 「종료」했는지 본다 |
 | Git Bash에서 `pnpm test`가 127 | 아무 말 없이 `ELIFECYCLE Test failed`, 끝 코드 127 | 웹 명령은 **PowerShell**에서 돌린다 (이 문서의 명령이 모두 PowerShell 기준이다). 같은 명령이 PowerShell에서는 통과한다 |
 | 포트가 이미 쓰임 | `pnpm dev`가 `EADDRINUSE: :::8501`로 죽음 | 다른 프로그램(프로토타입 Streamlit도 8501을 쓴다)이 잡고 있다. `pnpm --filter <앱> exec next dev --port <빈 포트>`로 옮겨 띄운다 |
 
@@ -313,4 +316,24 @@ M6 둘째 기준(「새 개발자가 이 문서만 보고 1시간 안에」)을 
 | `pnpm typecheck` · `pnpm test` · `pnpm build` | 37초 · 8초 · 1분 53초 | 됐다 (`pnpm test`는 PowerShell에서 — Git Bash에서는 127) |
 
 **합이 23분쯤**이라 1시간 안이다 — 단 **문서가 틀린 곳 둘**을 그 자리에서 고친 뒤의 셈이다(고치기 전의 문서로는 Playwright와 웹 쪽에서 막힌다). 사람이 아니라 Claude가 문서를 따라 한 것이라, 「처음 보는 사람이 문서만으로」는 아직 사람이 한 번 해 봐야 한다 (로드맵 M6 둘째는 그래서 열어 둔다).
+
+### 실행 기록 — 시나리오 3 현장 리허설 (2026-10-17)
+
+M6 첫째 기준을 사람이 현장 PC에서 해 보기 전에 **같은 PC에서 Claude와 함께** 이어 봤다 (Windows 11, 일반 사용자, **한글 사용자 이름**). 서버(Center·UI 자동화 앱·모의 앱 포털·리허설용 SMTP 받는 곳)는 그 PC의 127.0.0.1에 띄우고 데이터는 따로 둔 폴더(`C:\dev\field-run\`)에 모았다. Bot UI·Studio·Admin은 사람이 제 PowerShell에서 띄웠다.
+
+**끝까지 돌았다** — 올리기 → 승인·배포 서명 → 설치·「준비됨」 → 작업 지시 → 포털 표 읽기 → 회계 프로그램 4줄 입력 → 검산 → 메일 (`success`, 약 50초). 막힌 자리와 처리:
+
+| 막힌 자리 | 처리 |
+| --- | --- |
+| Worker가 브라우저를 열지 못함 (「화면을 열지 못했습니다 (Error)」) | **제품 버그 — 고쳤다** (화면 스레드, CLAUDE.md §7 UI 자동화). 시험이 Worker 객체를 직접 불러 현장 경로를 밟지 않았다 → `test_worker_http_browser.py` |
+| 한글 사용자 폴더의 Chromium이 뜨지 않음 | `PLAYWRIGHT_BROWSERS_PATH`를 ASCII 경로로 (§3 「Windows 주의점」) |
+| Playwright 판과 받아 둔 Chromium이 어긋남 | 판 고정 (§3 「Windows 주의점」) |
+| `uv run --with playwright chk-bot-ui`로는 Playwright가 붙지 않음 | `python -m chaeksas.bot_ui`로 (§3 「Windows 주의점」) |
+| 「예제 가져오기」가 예제를 못 찾음 | **제품 버그 — 고쳤다** (기본 폴더가 한 단계 모자랐다 — 시험이 모두 폴더를 넘겨 기본값을 밟지 않았다) |
+| SMTP를 넣어도 「준비 안 됨」(`settings_missing`) | **제품 버그 — 고쳤다** (BUI-03 저장이 사전 점검을 비우지 않았다) |
+| SMTP 주소에 `localhost:2525`를 적어도 받아 줌 | **고쳤다** — 「포트는 포트 칸에」를 사전 점검·화면이 말한다 |
+| BUI-06이 데스크톱 화면을 담지 못함 / 첫 실행 전 앱 주소 명부가 비어 있음 | **사람 손이 닿지 않아 대신했다** — [09-gaps §6](09-gaps.md) |
+| `.ps1`이 실행 정책에 막힘 | 그 창에서만 `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` (창을 닫으면 돌아간다) |
+| 키 칸을 바꿔 넣음 (`finance-tax` 키를 「등록 담당자 키」에) | 화면이 「권한이 필요하다」로 말해 찾았다 — 두 칸 모두 「UI 자동화 앱 키」라 헷갈린다 |
+| 트레이의 Bot UI 둘, 서버를 띄운 채 `uv run` | §3 「Windows 주의점」 |
 
