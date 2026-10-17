@@ -18,7 +18,7 @@
 | Git | 최신 | 소스 관리 |
 | uv | 최신 | Python 설치·가상환경·의존성 (pip·venv 직접 사용 안 함) |
 | Python | **3.12** ([ADR-0005](decisions/0005-python-version.md)) | **직접 깔지 않는다 — uv가 내려받는다.** 시스템 Python 버전은 상관없다 |
-| Docker | 최신 | 서버 구성(`deploy/compose.yaml`) — Center·콘솔·서비스 앱 (선택: PostgreSQL) |
+| Docker | 최신 | 서버 구성(`deploy/compose.yaml`) — Center·콘솔·서비스 앱. 저장소는 모두 SQLite 파일이라 **따로 세울 DB가 없다** ([ADR-0070](decisions/0070-center-stays-on-sqlite.md)) |
 | Ollama | 최신 | 로컬 LLM (외부 API를 쓰면 생략) |
 | Node.js | LTS | 웹 화면(Next.js) 개발·빌드 ([ADR-0017](decisions/0017-web-nextjs-design-system.md)). 웹 화면을 만지지 않는 PC는 생략 |
 | pnpm | 최신 (corepack으로) | `web/` 의존성 |
@@ -231,6 +231,37 @@ PyInstaller는 `--group build`에만 있어 평소 `uv sync`로는 들어오지 
   Bot UI는 모든 현장 PC에 깔리므로 **QtWebEngine을 넣지 않는다** — 그 차이가 크기의 대부분이다.
   스파이크 S5가 Windows에서 본 것은 Bot UI 113MB·Studio 551MB였고, 그 뒤 확장·의존이 늘어
   조금 커졌다.
+
+## 6-3. 판 올리기 (Studio·Bot UI)
+
+**사람이 설치 파일을 다시 돌린다** ([ADR-0069](decisions/0069-upgrading-by-reinstall.md)) — Center는 프로그램을
+내려 주지 않는다. Bot(BPM 프로세스)의 판은 이것이 아니라 배포로 오간다(C2·C5).
+
+1. 설치 파일은 **산출물 워크플로가 올린 것**(`installers-windows`)에서 받는다. 처음 설치와 같은 파일이다.
+2. **Bot UI는 빈 때 깐다** — 설치 파일이 Bot UI를 닫으면 도는 Bot과 대기열을 잃는다. CON-03에서 그 PC를
+   「비활성화...」하면 새 작업이 그 PC로 가지 않고(Center에서 기다린다) 도는 Bot은 끝까지 돈다. 「실행 중」·
+   「대기열」이 비면 깐다. 결재를 기다리는 Bot을 기다릴지 멈출지는 사람이 정한다.
+3. 설치 파일을 돌린다 — 덮어쓰기이고 설정·설치한 Bot·실행 기록은 남는다. 끝 화면의 「실행」으로 다시 띄운다.
+4. CON-03에서 그 PC의 「버전」이 새 판으로 바뀌었는지 보고 「다시 활성화」한다.
+5. 문제가 있으면 **옛 판의 설치 파일로 다시 깐다**(낮은 판으로 덮어써도 된다). **옛 설치 파일은 받은 사람이
+   보관한다** — 산출물 워크플로는 30일만 남긴다(`desktop.yml` `retention-days`).
+
+## 6-4. Center 백업
+
+Center의 저장소는 **SQLite 파일 하나와 패키지 폴더**다([ADR-0070](decisions/0070-center-stays-on-sqlite.md) —
+PostgreSQL은 쓰지 않는다). 컨테이너에서는 `/data/center.sqlite3`·`/data/packages`이고 자리는
+`CHK_CENTER__DATA_DIR`(또는 `DB_PATH`·`PACKAGE_DIR`)가 정한다.
+
+- **DB 파일을 그냥 복사하지 않는다** — WAL이라 커밋 일부가 `-wal` 파일에 있다. SQLite의 백업 API로 뜬다
+  (Center가 도는 중에도 된다):
+
+  ```bash
+  docker compose exec center python -c "import sqlite3; sqlite3.connect('/data/center.sqlite3').backup(sqlite3.connect('/data/center-backup.sqlite3'))"
+  ```
+
+- **패키지 폴더도 함께** 남긴다 — DB에는 메타데이터만 있고 zip은 폴더에 있다.
+- 되살릴 때는 **판 번호가 같거나 높은 Center**로 연다 — DB 판이 코드보다 높으면 Center가 뜨지 않는다
+  ([ADR-0065](decisions/0065-center-schema-migrations.md) §2).
 
 ## 7. 시험 돌리기와 **건너뛰는 것**
 
