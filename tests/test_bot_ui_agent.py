@@ -328,3 +328,49 @@ def test_without_a_key_nothing_is_shipped(tmp_path: Path, monkeypatch: pytest.Mo
     )
     assert agent.ship_runs().sent == 0
     assert agent.runs().unsent_count() == 1
+
+
+# ─────────────────────────── 서비스 앱 주소 (C13 「전송」, 09-gaps §6) ───────────────────────────
+
+
+def test_the_service_addresses_are_taken_after_a_heartbeat_not_only_before_a_run(
+    center: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """첫 Bot 실행 전에도 명부가 찬다 — 셀렉터 등록 같은 유틸리티가 서버를 찾아야 Bot이 돌 수 있다.
+
+    현장 리허설에서 명부가 Bot을 띄울 때만 차서, 새 PC의 셀렉터 등록이 정의의 기본값(배포 이름)으로 가
+    「서버에 닿지 못해」가 됐다 (닭과 달걀). **10분에 한 번**만 받는다 — 하트비트마다 묻지 않는다.
+    """
+    from chaeksas.core.app_directory import DirectoryCache  # noqa: PLC0415
+
+    refreshed: list[int] = []
+
+    class Counting:
+        problems: list[str] = []
+
+        def refresh(self) -> None:
+            refreshed.append(1)
+
+    monkeypatch.setattr(DirectoryCache, "using", classmethod(lambda cls, *a, **k: Counting()))
+    agent = make_agent(center, tmp_path, key=issue_key(center))
+
+    assert agent.beat() is not None
+    assert len(refreshed) == 1, "처음 붙은 주기에 바로 받는다"
+    assert agent.beat() is not None
+    assert len(refreshed) == 1, "10분 안에는 다시 묻지 않는다"
+    agent.refresh_directory(force=True)
+    assert len(refreshed) == 2
+
+
+def test_a_failed_address_refresh_does_not_break_the_heartbeat(
+    center: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """명부를 못 받아도 하트비트는 끝났다 — 들고 있던 것을 쓴다 (ADR-0007)."""
+    from chaeksas.core.app_directory import DirectoryCache  # noqa: PLC0415
+
+    def broken(*_: object, **__: object) -> object:
+        raise RuntimeError("닿지 못함")
+
+    monkeypatch.setattr(DirectoryCache, "using", broken)
+    agent = make_agent(center, tmp_path, key=issue_key(center))
+    assert agent.beat() is not None

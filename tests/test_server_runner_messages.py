@@ -598,6 +598,9 @@ def test_a_restarted_runner_still_takes_the_message(
     again = agent_mod.build(settings, key, client=center, store=store)
     again.tick()  # 등록 → 되살린다
     assert again.restored == [run_id] or run_id in again.workers
+    # 되살리기 스레드가 **다시 담을 때까지** 기다린다 — 그 사이에 온 메시지는 넣지 않고 다음 주기로
+    # 미룬다(같은 `Run`을 둘이 밀지 않게 — 아래 `…still_being_pushed`가 그 틈을 따로 본다).
+    settle(again)
 
     put_message(center, name="bid_quote", correlation=BID, payload=quote("가나상사"))
     again.tick()
@@ -739,3 +742,31 @@ def test_the_absorbed_memory_goes_and_comes_with_the_run(store: Store) -> None:
 
     store.forget("run_1")
     assert store.absorbed() == {}, "실행은 끝났는데 기억만 남았다"
+
+
+def test_a_message_waits_while_the_run_is_still_being_pushed(
+    center: TestClient, center_store: CenterStore, runner: agent_mod.Agent, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**미는 스레드가 아직 돌면 넣지 않는다** — ack도 하지 않고 다음 주기에 (빈자리 관문과 같은 결).
+
+    되살리기·이어 가기 스레드는 `Run`을 걸어 둔 채 다시 담을 때까지 돈다. 그 틈에 넣으면 스레드가
+    하나 더 떠 **같은 `Run`을 둘이 밀어** 메시지 하나로 견적이 둘 붙었다 — 재시작 시험이 가끔
+    깨진 까닭이다. 여기서는 그 틈을 **일부러** 연다.
+    """
+    ready(center, center_store, runner)
+    make_job(center)
+    run_id = until_waiting_for_message(runner)
+
+    from chaeksas.server_runner.worker import Worker  # noqa: PLC0415
+
+    monkeypatch.setattr(Worker, "alive", property(lambda self: True))
+    put_message(center, name="bid_quote", correlation=BID, payload=quote("가나상사"))
+    runner.tick()
+    assert runner.pending_message_acks == [], "넣지 못한 것은 ack하지 않는다 — Center가 다시 싣는다"
+    assert quotes(runner, run_id) == [], "돌고 있는 실행에는 넣지 않는다"
+
+    monkeypatch.undo()
+    runner.tick()
+    settle(runner)
+    assert [one.accepted for one in runner.pending_message_acks] in ([True], [])
+    assert len(quotes(runner, run_id)) == 1, "다음 주기에 **한 번만** 들어간다"

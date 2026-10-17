@@ -438,3 +438,32 @@ def test_a_backend_without_a_page_says_so() -> None:
 def test_registration_needs_the_token() -> None:
     _, client = served()
     assert client.post("/v1/registration/browser", json={}).status_code == 401
+
+
+#: 이름이 어디서 오는지 다른 셋 — 이름 없는 표·`<caption>`이 있는 표·`<label>`로 이름 붙은 칸.
+NAMES_PAGE = """<!doctype html><html lang="ko"><body>
+  <label for="month">대상월</label><input id="month" />
+  <table id="bare"><tr><th>번호</th><th>금액</th></tr><tr><td>1</td><td>120,000</td></tr></table>
+  <table id="titled"><caption>거래 내역</caption><tr><th>번호</th></tr><tr><td>1</td></tr></table>
+</body></html>"""
+
+
+@pytestmark_browser
+def test_a_nameless_table_gets_no_role_rung_but_a_captioned_one_does(page: Any) -> None:
+    """표 안의 글 전체를 이름으로 삼으면 「역할 + 이름」 칸이 늘 「못 찾았다」다 (현장 리허설, 09-gaps §6).
+
+    이름은 브라우저가 짓는 대로 — `<caption>`·`<label>`·`aria-label`에서 온다. 그 칸은 **검증을 지나야** 한다.
+    """
+    page.set_content(NAMES_PAGE)
+    found = analyze(page, AnalyzeRequest(schema=1, include_read=True))
+    by_id = {one.element_id: one for one in found.candidates}
+
+    assert by_id["bare"].name == "", "이름 없는 표에는 이름을 지어 주지 않는다"
+    assert all(rung.type != "role" for rung in ladder_for(by_id["bare"]))
+    assert by_id["titled"].name == "거래 내역"
+    assert by_id["month"].name == "대상월", "<label>이 이름이다"
+
+    ladders = {key: ladder_for(by_id[key]) for key in ("bare", "titled", "month")}
+    rows = verify(BrowserFinder(page=page), ladders).rows
+    failed = [(row.semantic_key, row.strategy, row.reason) for row in rows if not row.passed]
+    assert failed == [], failed

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -108,6 +109,10 @@ class ExtensionSecrets:
         return self.credentials.extension_secret(self.extension_id, ref)
 
 
+#: 서비스 앱 주소를 다시 받는 간격 (초) — Center가 manifest를 다시 읽는 간격과 같다 (C7).
+DIRECTORY_REFRESH_S = 600.0
+
+
 def now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
@@ -195,6 +200,8 @@ class Agent:
     #: 사전 점검 결과 (BUI-04 「준비」·C4 `readiness`). **설치·키·확장이 바뀌면 비운다** —
     #: 하트비트마다 OS 비밀 저장소를 두드리면 주기가 느려진다 (C4 「바뀌었을 때만 보내도 됨」).
     _preflights: dict[tuple[str, str], Preflight] = field(default_factory=dict)
+    #: 서비스 앱 주소를 마지막으로 받아 둔 때 (`time.monotonic`). 처음 붙은 주기는 바로 받는다.
+    _directory_at: float | None = None
     #: 이 실행에 묶은 로컬 런타임 — 끝나면 푼다.
     _reserved: list[str] = field(default_factory=list)
     #: 서비스 앱 키 참조마다 만료를 **물어본 날짜** (ADR-0052 — 하루 한 번, 주기마다 하나).
@@ -675,7 +682,30 @@ class Agent:
         # 「복구」는 **보낸 것까지** 말한다 — 끊겨 있던 동안 쌓인 기록이 나갔다는 뜻이다 (BUI-05).
         self.notices.connection(online=True, shipped=shipped.sent)
         self.ship_approvals()
+        self.refresh_directory()
         return response
+
+    def refresh_directory(self, *, force: bool = False) -> None:
+        """C7 서비스 앱 주소를 받아 둔다 — **하트비트 뒤에, 10분에 한 번** (C13 「전송」).
+
+        Bot을 띄우기 전에만 받으면 첫 실행 전에는 명부가 비어 확장 유틸리티(셀렉터 등록)가 서버에
+        닿지 못한다 — 그런데 Bot은 화면이 등록돼야 돈다 (09-gaps §6, 현장 리허설). 외부 확장 정의는
+        여기서 받지 않는다(쓰는 Bot이 정한다 — `run_services`). **닿지 못하면 들고 있던 것을 쓴다.**
+        """
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        now = time.monotonic()
+        if not force and self._directory_at is not None and now - self._directory_at < DIRECTORY_REFRESH_S:
+            return
+        self._directory_at = now
+        try:
+            found = DirectoryCache.using(data_dir(), self.client())
+            found.refresh()
+        except Exception as e:  # noqa: BLE001 — 명부를 못 받아도 하트비트는 끝났다
+            log.warning("서비스 앱 주소를 받아 두지 못했다 (들고 있던 것을 쓴다): %s", e)
+            return
+        for why in found.problems:
+            log.warning("서비스 앱 주소: %s", why)
 
     # ── 지시 처리 (C4 HeartbeatResponse) ──
 
