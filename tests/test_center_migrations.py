@@ -32,6 +32,9 @@ from chaeksas.center.migrations import (
 )
 from chaeksas.center.storage import SCHEMA, Store
 
+#: 끝 판까지의 모든 판.
+ALL = list(range(BASELINE, latest() + 1))
+
 #: 얼린 기준선의 지문 — **SQL만** 본다(주석·공백은 빼고). 주석은 고쳐도 된다.
 FROZEN_BASELINE = "d043c4e83144224b43c3a8a389fa98dea08cf9a4804c2dbbe14a70908d82d3f6"
 
@@ -112,7 +115,7 @@ def test_an_old_database_is_moved_with_its_data(tmp_path: Path) -> None:
         store.close()
 
     assert row is not None and row["host_id"] == "srv_0001" and row["deployment_id"] == "dep_00000001"
-    assert _versions(db) == [1, 2]
+    assert _versions(db) == ALL
 
 
 def test_a_new_and_a_moved_database_have_the_same_shape(tmp_path: Path) -> None:
@@ -137,7 +140,7 @@ def test_opening_twice_moves_once(tmp_path: Path) -> None:
     db = tmp_path / "center.sqlite3"
     Store(db).close()
     Store(db).close()
-    assert _versions(db) == [1, 2]
+    assert _versions(db) == ALL
 
 
 def test_two_centers_starting_together_move_once(tmp_path: Path) -> None:
@@ -163,7 +166,7 @@ def test_two_centers_starting_together_move_once(tmp_path: Path) -> None:
         one.join(timeout=30)
 
     assert not errors, errors
-    assert _versions(db) == [1, 2]
+    assert _versions(db) == ALL
 
 
 # ─────────────────────────── 3. 중간 실패는 없던 일 ───────────────────────────
@@ -239,3 +242,144 @@ def test_the_baseline_splits_into_its_tables() -> None:
     found = statements_of(SCHEMA)
     assert found and all(one.lstrip("-").strip() for one in found)
     assert sum("CREATE TABLE" in one for one in found) == len(found)
+
+
+# ─────────────────────────── 3판 — 키 묶기를 DB도 지킨다 (ADR-0066) ───────────────────────────
+
+
+def _host(conn: sqlite3.Connection, table: str, host_id: str, *, key: str, machine: str, name: str) -> None:
+    """등록된 기계 행 하나 — **`host_keys`를 비켜 가서** 넣는다(겹친 옛 DB를 흉내 낸다)."""
+    if table == "bot_uis":
+        conn.execute(
+            "INSERT INTO bot_uis (bot_ui_id, key_id, machine_id, name, os, versions_json, registered_at,"
+            " last_seen_at) VALUES (?, ?, ?, ?, 'Windows 11', '{}', '2026-10-05T00:00:00+00:00', ?)",
+            (host_id, key, machine, name, f"2026-10-0{len(name) % 9 + 1}T00:00:00+00:00"),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO server_runners (server_runner_id, key_id, machine_id, name, os, versions_json,"
+            " max_concurrency, registered_at) VALUES (?, ?, ?, ?, 'Linux', '{}', 10, '2026-10-05T00:00:00+00:00')",
+            (host_id, key, machine, name),
+        )
+
+
+def _database_at_two_with(db: Path, *rows: tuple[str, str, str, str, str]) -> None:
+    """**2판에 멈춘 DB**에 행을 넣는다 — 2026-10-08 전에 같은 PC가 두 줄로 남은 꼴."""
+    conn = sqlite3.connect(db)
+    try:
+        migrate(conn, baseline=SCHEMA, steps=MIGRATIONS[:1])
+        for table, host_id, key, machine, name in rows:
+            _host(conn, table, host_id, key=key, machine=machine, name=name)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_a_key_or_a_machine_cannot_be_on_two_rows_any_more(tmp_path: Path) -> None:
+    """**판정을 비켜 가는 새 코드**를 막는 마지막 울타리다 — 사람에게 할 말은 `host_keys`가 안다."""
+    db = tmp_path / "center.sqlite3"
+    Store(db).close()
+    with sqlite3.connect(db) as conn:
+        _host(conn, "bot_uis", "bui_00000001", key="ck_a", machine="m" * 64, name="구매 PC")
+        with pytest.raises(sqlite3.IntegrityError):
+            _host(conn, "bot_uis", "bui_00000002", key="ck_b", machine="m" * 64, name="다른 PC")
+        with pytest.raises(sqlite3.IntegrityError):
+            _host(conn, "bot_uis", "bui_00000003", key="ck_a", machine="n" * 64, name="다른 PC")
+
+
+def test_duplicate_hosts_stop_the_step_and_say_what_to_do(tmp_path: Path) -> None:
+    """**짐작해 고치지 않는다** (#57) — 겹친 행을 보이고 고치는 길을 말하고 멈춘다.
+
+    문은 하나도 돌지 않는다 — DB는 2판에 그대로 남는다.
+    """
+    db = tmp_path / "center.sqlite3"
+    _database_at_two_with(
+        db,
+        ("bot_uis", "bui_00000001", "ck_a", "m" * 64, "구매 PC"),
+        ("bot_uis", "bui_00000002", "ck_b", "m" * 64, "구매 PC (옛 키)"),
+    )
+
+    with pytest.raises(MigrationError) as caught:
+        Store(db)
+    said = str(caught.value)
+    assert "bui_00000001" in said and "bui_00000002" in said
+    assert "chk-center hosts" in said
+    assert _versions(db) == [1, 2]
+
+
+def test_the_person_picks_the_row_and_the_step_goes_through(tmp_path: Path) -> None:
+    """**고르는 것은 사람**이고 도구는 은퇴시키기만 한다 — 지우지 않는다(이력이 그 id를 가리킨다)."""
+    from chaeksas.center.repair import RETIRED, RepairError, duplicates, retire  # noqa: PLC0415
+
+    db = tmp_path / "center.sqlite3"
+    _database_at_two_with(
+        db,
+        ("bot_uis", "bui_00000001", "ck_a", "m" * 64, "구매 PC"),
+        ("bot_uis", "bui_00000002", "ck_b", "m" * 64, "구매 PC (옛 키)"),
+        ("bot_uis", "bui_00000003", "ck_c", "z" * 64, "멀쩡한 PC"),
+    )
+    conn = sqlite3.connect(db)
+    try:
+        found = duplicates(conn)
+        assert {one.host_id for one in found} == {"bui_00000001", "bui_00000002"}
+        assert all(one.name for one in found), "고를 거리(이름)가 없다"
+
+        # **겹친 무리에 없는 행은 은퇴시키지 못한다** — 멀쩡한 PC의 이력이 갈라진다.
+        with pytest.raises(RepairError):
+            retire(conn, "bui_00000003")
+
+        assert retire(conn, "bui_00000002") == "bot_uis"
+        row = conn.execute(
+            "SELECT key_id, machine_id, disabled FROM bot_uis WHERE bot_ui_id = 'bui_00000002'"
+        ).fetchone()
+        assert row == (f"{RETIRED}bui_00000002", f"{RETIRED}bui_00000002", 1)
+        assert duplicates(conn) == []
+    finally:
+        conn.close()
+
+    Store(db).close()
+    assert _versions(db) == ALL
+
+
+def test_a_server_runner_is_retired_by_pausing(tmp_path: Path) -> None:
+    """서버 실행기에는 `disabled`가 없다 — **일시 중지**로 다시 쓰이지 않게 한다."""
+    from chaeksas.center.repair import retire  # noqa: PLC0415
+
+    db = tmp_path / "center.sqlite3"
+    _database_at_two_with(
+        db,
+        ("server_runners", "srv_00000001", "ck_s", "s" * 64, "서버 1"),
+        ("server_runners", "srv_00000002", "ck_s", "t" * 64, "서버 1 (다시 설치)"),
+    )
+    conn = sqlite3.connect(db)
+    try:
+        assert retire(conn, "srv_00000001") == "server_runners"
+        paused = conn.execute("SELECT paused FROM server_runners WHERE server_runner_id = 'srv_00000001'")
+        assert paused.fetchone() == (1,)
+    finally:
+        conn.close()
+    Store(db).close()
+    assert _versions(db) == ALL
+
+
+def test_the_cli_does_not_open_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """**지킴에 걸린 DB에서도 돈다** — `Store`를 열면 옮기기가 돌아 그 지킴에 다시 걸린다."""
+    from chaeksas.center.__main__ import hosts  # noqa: PLC0415
+
+    db = tmp_path / "center.sqlite3"
+    _database_at_two_with(
+        db,
+        ("bot_uis", "bui_00000001", "ck_a", "m" * 64, "구매 PC"),
+        ("bot_uis", "bui_00000002", "ck_b", "m" * 64, "구매 PC (옛 키)"),
+    )
+    monkeypatch.setenv("CHK_CENTER__DB_PATH", str(db))
+
+    assert hosts(["duplicates"]) == 0
+    listed = capsys.readouterr().out
+    assert "bui_00000001" in listed and "「구매 PC (옛 키)」" in listed
+
+    assert hosts(["retire", "bui_00000002"]) == 0
+    assert "겹친 행이 없다" in capsys.readouterr().out
+    assert hosts(["retire", "bui_00000001"]) == 2  # 이제 겹치지 않는다 — 은퇴시킬 수 없다

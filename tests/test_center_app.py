@@ -564,6 +564,27 @@ def test_upload_list_info_and_download(client: TestClient) -> None:
     assert zipfile.ZipFile(io.BytesIO(downloaded.content)).read("manifest.json")
 
 
+def test_downloads_are_counted_only_when_handed_out(client: TestClient) -> None:
+    """C5 `download_count` — **관문을 지나 내어 준 것만** 센다. 막힌 요청은 내어 준 것이 아니다.
+
+    같은 곳이 다시 받아도 센다 (「몇 곳이 쓰나」가 아니라 「얼마나 받아 갔나」다).
+    """
+    assert upload(client, build_package()).status_code == 201
+    info = client.get("/api/v1/packages/invoice-check/1.0.0/info", headers=READ).json()
+    assert info["download_count"] == 0
+    assert info.get("last_downloaded_at") is None
+
+    assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=READ).status_code == 403
+    for _ in range(2):
+        assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=ADMIN).status_code == 200
+
+    info = client.get("/api/v1/packages/invoice-check/1.0.0/info", headers=READ).json()
+    assert info["download_count"] == 2
+    assert info["last_downloaded_at"]
+    listed = client.get("/api/v1/packages", headers=READ).json()
+    assert [p["download_count"] for p in listed] == [2]
+
+
 def test_uploading_the_same_package_twice_is_safe(client: TestClient) -> None:
     """재시도가 안전해야 한다 — 같은 내용이면 200으로 그대로 돌려준다."""
     raw = build_package()

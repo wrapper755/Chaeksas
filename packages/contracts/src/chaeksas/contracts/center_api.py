@@ -167,6 +167,10 @@ class PackageInfo(ContractModel):
     preflight: PreflightSummary = Field(default_factory=PreflightSummary)
     manifest: Manifest | None = None
     missing_resources: list[MissingResource] = Field(default_factory=list)
+    #: **내어 준 횟수** — 관문을 지나 파일을 내어 줄 때 센다. 같은 곳이 다시 받아도 센다
+    #: (「몇 곳이 쓰나」는 `dependents`·배포 목록이 말한다).
+    download_count: int = Field(default=0, ge=0)
+    last_downloaded_at: Timestamp | None = None
 
 
 class DependentInfo(ContractModel):

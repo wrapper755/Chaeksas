@@ -189,6 +189,8 @@ def _info(row: Any, index: Any = None) -> PackageInfo:
         uploaded_by=row["uploaded_by"],
         # **읽을 때 리소스 목록과 대조한다** (C5·C7) — 저장해 두면 리소스가 바뀌어도 낡은다.
         missing_resources=_missing(manifest, index),
+        download_count=row["download_count"],
+        last_downloaded_at=row["last_downloaded_at"],
     )
 
 
@@ -343,3 +345,14 @@ def file_path(store: Store, *, package_dir: Path, package_id: str, version: str)
     if not path.exists():
         raise ApiError(500, "file_missing", "메타데이터는 있는데 파일이 없다 (저장소를 확인하세요)")
     return path, row["content_hash"]
+
+
+def count_download(store: Store, *, package_id: str, version: str) -> None:
+    """내어 준 것을 하나 센다 (C5 `download_count`). **관문과 파일 찾기를 지난 뒤에만** 부른다 —
+    막힌 요청·없는 파일은 내어 준 것이 아니다. 같은 곳이 다시 받아도 센다."""
+    with store.tx() as cur:
+        cur.execute(
+            "UPDATE packages SET download_count = download_count + 1, last_downloaded_at = ?"
+            " WHERE id = ? AND version = ?",
+            (now_iso(), package_id, version),
+        )

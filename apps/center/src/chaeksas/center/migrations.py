@@ -41,11 +41,38 @@ BASELINE = 1
 
 @dataclass(frozen=True)
 class Step:
-    """옮기는 걸음 하나. `statements`는 **한 트랜잭션**에서 차례로 돈다."""
+    """옮기는 걸음 하나. `statements`는 **한 트랜잭션**에서 차례로 돈다.
+
+    `guard`는 **아무 줄도 돌려주지 않아야 하는 SELECT**다 (ADR-0066) — 데이터가 그 단계의
+    전제를 어기면 문을 하나도 돌리지 않고 멈추고, 나온 줄과 `guard_help`를 말한다.
+    **짐작해 고치지 않는다** — 고칠 수 있는 것은 문이 하고, 사람이 골라야 하는 것만 막는다.
+    """
 
     version: int
     about: str
     statements: tuple[str, ...]
+    guard: str | None = None
+    guard_help: str = ""
+
+
+#: 키 묶기를 어긴 행 — `(표, 칸, 값, 행 id)`. **겹친 무리의 모든 행**을 돌려준다
+#: (`GROUP_CONCAT`처럼 SQLite에만 있는 함수를 쓰지 않는다 — PostgreSQL 길을 닫지 않는다).
+#: 3판의 지킴이자 `chk-center hosts duplicates`가 쓰는 질의다 — **한 자리에 둔다**.
+DUPLICATE_HOSTS = """
+SELECT 'bot_uis' AS host_table, 'key_id' AS host_column, key_id AS shared, bot_ui_id AS host_id
+  FROM bot_uis WHERE key_id IN (SELECT key_id FROM bot_uis GROUP BY key_id HAVING COUNT(*) > 1)
+UNION ALL
+SELECT 'bot_uis', 'machine_id', machine_id, bot_ui_id
+  FROM bot_uis WHERE machine_id IN (SELECT machine_id FROM bot_uis GROUP BY machine_id HAVING COUNT(*) > 1)
+UNION ALL
+SELECT 'server_runners', 'key_id', key_id, server_runner_id
+  FROM server_runners WHERE key_id IN (SELECT key_id FROM server_runners GROUP BY key_id HAVING COUNT(*) > 1)
+UNION ALL
+SELECT 'server_runners', 'machine_id', machine_id, server_runner_id
+  FROM server_runners
+  WHERE machine_id IN (SELECT machine_id FROM server_runners GROUP BY machine_id HAVING COUNT(*) > 1)
+ORDER BY 1, 2, 3, 4
+"""
 
 
 #: **더하기만 한다.** 지우거나 고치지 않는다 — 이미 이 단계를 지난 DB가 있다. 잘못 간 단계는
@@ -55,6 +82,30 @@ MIGRATIONS: tuple[Step, ...] = (
         2,
         "deployment_results.bot_ui_id → host_id (PC와 서버 실행기를 함께 담는다, C4·C12)",
         ("ALTER TABLE deployment_results RENAME COLUMN bot_ui_id TO host_id",),
+    ),
+    Step(
+        3,
+        "키 묶기를 DB도 지킨다 — key_id·machine_id는 한 행에만 (C4·C12, ADR-0066)",
+        (
+            "CREATE UNIQUE INDEX bot_uis_key_id ON bot_uis (key_id)",
+            "CREATE UNIQUE INDEX bot_uis_machine_id ON bot_uis (machine_id)",
+            "CREATE UNIQUE INDEX server_runners_key_id ON server_runners (key_id)",
+            "CREATE UNIQUE INDEX server_runners_machine_id ON server_runners (machine_id)",
+        ),
+        guard=DUPLICATE_HOSTS,
+        guard_help=(
+            "같은 키·같은 기계가 여러 행에 있다 (2026-10-08 전에 만든 DB에서 생길 수 있다). "
+            "**어느 행을 남길지는 사람이 고른다** — `chk-center hosts duplicates`로 보고 "
+            "`chk-center hosts retire <id>`로 나머지를 은퇴시킨 뒤 다시 띄우세요 (docs/04-setup.md)"
+        ),
+    ),
+    Step(
+        4,
+        "패키지를 내어 준 횟수·마지막 때 (C5 `download_count`·`last_downloaded_at`, CON-06)",
+        (
+            "ALTER TABLE packages ADD COLUMN download_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE packages ADD COLUMN last_downloaded_at TEXT",
+        ),
     ),
 )
 
@@ -124,7 +175,10 @@ def migrate(
             )
         _apply(conn, BASELINE, "기준선 (storage.SCHEMA)", statements_of(baseline), now)
         for one in steps:
-            _apply(conn, one.version, one.about, list(one.statements), now)
+            _apply(
+                conn, one.version, one.about, list(one.statements), now,
+                guard=one.guard, guard_help=one.guard_help,
+            )
         return current(conn)
     finally:
         conn.isolation_level = saved
@@ -136,6 +190,9 @@ def _apply(
     about: str,
     statements: Sequence[str],
     now: str | None,
+    *,
+    guard: str | None = None,
+    guard_help: str = "",
 ) -> None:
     """한 판을 **한 트랜잭션**에 — 그 판의 기록과 함께. 이미 있으면 지나간다."""
     conn.execute("BEGIN IMMEDIATE")
@@ -148,6 +205,12 @@ def _apply(
             return
         if at != version - 1:  # pragma: no cover — `_check_steps`가 먼저 막는다
             raise MigrationError(f"{version}판 앞에 {at + 1}판이 없다")
+        if guard is not None:
+            # **문을 하나도 돌리기 전에** 본다 — 잠금을 잡은 뒤라 그 사이 데이터가 바뀌지 않는다.
+            broken = conn.execute(guard).fetchall()
+            if broken:
+                lines = "\n".join("  " + " · ".join(str(cell) for cell in row) for row in broken)
+                raise MigrationError(f"{version}판으로 옮길 수 없다 — {about}\n{lines}\n{guard_help}")
         for sql in statements:
             conn.execute(sql)
         conn.execute(
@@ -177,6 +240,7 @@ def _check_steps(steps: Sequence[Step]) -> None:
 
 __all__ = [
     "BASELINE",
+    "DUPLICATE_HOSTS",
     "MIGRATIONS",
     "VERSIONS_TABLE",
     "MigrationError",

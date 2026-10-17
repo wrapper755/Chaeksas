@@ -90,6 +90,13 @@ export default async function PackagesPage() {
     },
     { key: "uploaded_at", header: "올린 시각", width: "18ch", cell: (row) => time(row.uploaded_at) },
     { key: "uploaded_by", header: "올린 이", width: "14ch" },
+    // 내어 준 횟수 (C5 `download_count`) — 같은 곳이 다시 받아도 센다. 쓰는 곳 수가 아니다.
+    {
+      key: "download_count",
+      header: "내려받은 횟수",
+      width: "12ch",
+      cell: (row) => String(row.download_count ?? 0),
+    },
   ];
 
   return (

@@ -239,6 +239,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         path, content_hash = packages.file_path(
             app.state.store, package_dir=settings.package_dir, package_id=package_id, version=version
         )
+        packages.count_download(app.state.store, package_id=package_id, version=version)
         # 승인된 패키지는 **`SIGNATURE`를 넣어** 준다 (C2). `content_hash`는 그 파일을 빼고
         # 세므로 해시는 그대로다 — 받는 쪽이 다시 세어도 같다.
         found = signing.signature_of(app.state.store, package_id, version)
