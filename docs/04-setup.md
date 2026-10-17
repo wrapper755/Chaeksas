@@ -94,6 +94,8 @@ pnpm --filter @chaeksas/center-console dev   # 하나만 — http://localhost:85
 | 백신 실시간 검사 | `uv sync`, Playwright 설치가 매우 느림 | 개발 폴더를 검사 예외에 추가 (조직 정책 확인) |
 | 실행 정책 | `.ps1` 스크립트 실행 거부 | 스크립트 대신 `uv run <명령>`을 쓴다 |
 | `corepack enable`이 `EPERM` | `EPERM: operation not permitted, open 'C:\Program Files\nodejs\yarnpkg'` | winget·MSI로 깐 Node는 `Program Files`에 있어 **일반 사용자는 거기에 쓸 수 없다**. `corepack enable pnpm --install-directory "$env:USERPROFILE\.local\bin"` — uv 설치가 이미 PATH에 넣은 폴더다. `corepack pnpm install`만으로는 모자란다: 루트 스크립트(`pnpm typecheck` 등)가 안에서 `pnpm -r …`을 다시 부르는데 PATH에 `pnpm`이 없으면 `'pnpm'은(는) … 프로그램이 아닙니다`로 끝난다 |
+| 한글 사용자 폴더의 Chromium | 화면에 보이는 Chromium이 뜨지 않음 — Playwright `spawn UNKNOWN`, 직접 띄우면 「side-by-side configuration is incorrect」(응용 프로그램 로그: `Dependent Assembly … could not be found`) | Playwright가 브라우저를 `%LOCALAPPDATA%\ms-playwright`에 받는데 **사용자 이름이 한글이면** 그 경로에서 Windows가 Chrome의 매니페스트를 찾지 못한다(같은 파일을 `C:\dev\…`로 옮기면 뜬다). `PLAYWRIGHT_BROWSERS_PATH`를 ASCII 경로(예: `C:\dev\ms-playwright`)로 두고 그 자리에 받는다 — Bot UI·Worker를 띄우는 창에도 같은 값을 준다. 화면 없는 실행(headless shell)은 이 병을 피해 가서 시험만으로는 드러나지 않는다 |
+| Playwright 판과 받아 둔 브라우저가 어긋남 | `Executable doesn't exist at …chromium_headless_shell-<번호>…` | `--with playwright`는 그때의 최신 판을 받고, 판마다 찾는 Chromium 번호가 다르다. 받아 둔 브라우저에 맞는 판으로 고정하거나(`--with playwright==<판>`) 그 판으로 `python -m playwright install chromium`을 다시 한다 |
 | Git Bash에서 `pnpm test`가 127 | 아무 말 없이 `ELIFECYCLE Test failed`, 끝 코드 127 | 웹 명령은 **PowerShell**에서 돌린다 (이 문서의 명령이 모두 PowerShell 기준이다). 같은 명령이 PowerShell에서는 통과한다 |
 | 포트가 이미 쓰임 | `pnpm dev`가 `EADDRINUSE: :::8501`로 죽음 | 다른 프로그램(프로토타입 Streamlit도 8501을 쓴다)이 잡고 있다. `pnpm --filter <앱> exec next dev --port <빈 포트>`로 옮겨 띄운다 |
 
