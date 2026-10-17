@@ -37,6 +37,49 @@ def _studio_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monk
 
 
 @pytest.fixture(autouse=True)
+def _keyring_is_in_memory() -> Iterator[None]:
+    """**어느 시험도 개발 PC의 OS 비밀 저장소를 읽거나 쓰지 않는다.** (위 데이터 폴더와 같은 까닭)
+
+    시나리오 3 현장 리허설에서 사람이 Studio에 넣은 Center 키가 Windows 자격 증명 관리자에 남자,
+    「설정이 없으면 …」을 보는 Studio 시험 둘이 그 키를 읽어 그 PC에서만 깨졌다(CI에는 키가 없어
+    지나갔다). 그래서 시험 동안은 `keyring`의 저장소를 **메모리 하나로** 바꿔 끼운다 — Studio·Bot UI·
+    서버 실행기 모두 이것을 거친다. 「저장소가 없다」를 보는 시험은 `_keyring`을 따로 갈아 끼우므로
+    그대로 돈다.
+    """
+    try:
+        import keyring
+        from keyring.backend import KeyringBackend
+        from keyring.errors import PasswordDeleteError
+    except ImportError:  # pragma: no cover - keyring이 없는 환경
+        yield
+        return
+
+    class MemoryKeyring(KeyringBackend):
+        priority = 1
+
+        def __init__(self) -> None:
+            super().__init__()  # type: ignore[no-untyped-call]
+            self.values: dict[tuple[str, str], str] = {}
+
+        def get_password(self, service: str, username: str) -> str | None:
+            return self.values.get((service, username))
+
+        def set_password(self, service: str, username: str, password: str) -> None:
+            self.values[(service, username)] = password
+
+        def delete_password(self, service: str, username: str) -> None:
+            if self.values.pop((service, username), None) is None:
+                raise PasswordDeleteError(f"{service}/{username}이 없다")
+
+    before = keyring.get_keyring()
+    keyring.set_keyring(MemoryKeyring())
+    try:
+        yield
+    finally:
+        keyring.set_keyring(before)
+
+
+@pytest.fixture(autouse=True)
 def _no_real_outbound_catalog_call(monkeypatch: Any) -> None:
     """**시험은 안 듣는 포트로 전화하지 않는다** (`docs/04-setup.md` §7).
 

@@ -51,7 +51,33 @@ COLLECT_JS = """
   return {
     tag: element.tagName.toLowerCase(),
     role: element.getAttribute("role") || "",
-    name: (element.getAttribute("aria-label") || element.innerText || attr("placeholder") || "").trim().slice(0, 120),
+    // 접근성 이름은 **브라우저가 짓는 대로** 어림한다 — 사다리의 「역할 + 이름」 칸이 이것으로 찾는다.
+    // 내용(innerText)으로 이름을 짓는 것은 단추·링크·제목·칸 같은 요소뿐이다. 표처럼 글을 담은 그릇에
+    // innerText를 쓰면 표 전체 글이 이름이 되어 그 칸이 늘 「못 찾았다」가 된다 (현장 리허설, 09-gaps §6).
+    name: (() => {
+      const labelled = attr("aria-label");
+      if (labelled) return labelled;
+      const by = attr("aria-labelledby");
+      if (by) {
+        const text = by.split(/\\s+/).map((id) => (document.getElementById(id) || {}).innerText || "").join(" ").trim();
+        if (text) return text;
+      }
+      if (element.labels && element.labels.length) {
+        const text = Array.from(element.labels).map((one) => one.innerText).join(" ").trim();
+        if (text) return text;
+      }
+      if (element.tagName === "TABLE") return element.caption ? element.caption.innerText : "";
+      const fromContent = [
+        "BUTTON", "A", "OPTION", "SUMMARY", "LEGEND", "TH", "TD", "H1", "H2", "H3", "H4", "H5", "H6",
+      ];
+      const contentRoles = [
+        "button", "link", "tab", "menuitem", "option", "heading", "cell", "columnheader", "rowheader",
+      ];
+      if (fromContent.includes(element.tagName) || contentRoles.includes(attr("role").toLowerCase())) {
+        return element.innerText || "";
+      }
+      return attr("placeholder") || attr("title") || "";
+    })().trim().slice(0, 120),
     element_id: element.id || "",
     field_name: name,
     test_id: attr("data-testid") || attr("data-test-id") || "",

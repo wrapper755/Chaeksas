@@ -774,6 +774,8 @@ class Agent:
             if self.free_slots() <= 0:
                 log.info("결재 %s의 답을 넣을 자리가 없다 — 다음 주기에", one.request_id)
                 continue
+            if self._busy(worker, f"결재 {one.request_id}의 답"):
+                continue
             try:
                 if one.state == "answered":
                     worker.answer(
@@ -826,6 +828,8 @@ class Agent:
                 # **ack를 보내지 않는다** — 자리가 비면 다음 주기에 넣는다 (C12).
                 log.info("메시지 %s를 넣을 자리가 없다 — 다음 주기에", one.message_id)
                 continue
+            if self._busy(worker, f"메시지 {one.message_id}"):
+                continue
             try:
                 put = worker.deliver(
                     one.name,
@@ -850,6 +854,21 @@ class Agent:
                 MessageAck(message_id=one.message_id, accepted=True, run_id=worker.run_id)
             )
             log.info("메시지 %s를 실행 %s에 넣었다 (%s)", one.message_id, worker.run_id, one.name)
+
+    @staticmethod
+    def _busy(worker: Worker, what: str) -> bool:
+        """**그 실행을 미는 스레드가 아직 돌고 있으면** 넣지 않는다 — ack도 하지 않고 다음 주기에.
+
+        기다리는 줄(`waits_for_*`)은 `Run`이 기다리는 자리를 보지만, 되살리기(`_resumed_body`)나
+        이어 가기 스레드는 `Run`을 걸어 둔 채 **다시 담을 때까지** 돈다. 그 틈에 넣으면 `_continue`가
+        스레드를 하나 더 띄워 **같은 `Run`을 둘이 민다** — 메시지 하나로 견적이 둘 붙었다
+        (`test_a_restarted_runner_still_takes_the_message`가 가끔 깨진 까닭). 빈자리 관문과 같은
+        결이라 Center가 그대로 다시 내려 준다.
+        """
+        if not worker.alive:
+            return False
+        log.info("%s — 실행 %s가 아직 돌고 있다, 다음 주기에 넣는다", what, worker.run_id)
+        return True
 
     def _remember_message_ack(self, ack: MessageAck) -> None:
         self.seen_messages.remember(ack.message_id, ack)
@@ -898,6 +917,8 @@ class Agent:
                 continue
             if self.free_slots() <= 0:
                 log.info("위임 %s의 결과를 넣을 자리가 없다 — 다음 주기에", one.job_id)
+                continue
+            if self._busy(worker, f"위임 {one.job_id}의 결과"):
                 continue
             try:
                 worker.delegation_done(
