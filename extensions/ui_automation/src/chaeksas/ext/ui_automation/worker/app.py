@@ -29,6 +29,7 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from chaeksas.ext.ui_automation.contracts.plan import (
+    DESKTOP,
     ORIGIN_RUN,
     ORIGIN_TEST,
     STATUS_ESCALATED,
@@ -41,6 +42,7 @@ from chaeksas.ext.ui_automation.contracts.plan import (
     LocatorSpec,
     PlanStep,
     SessionReport,
+    WindowSpec,
 )
 from chaeksas.ext.ui_automation.contracts.registration import (
     AnalyzeRequest,
@@ -210,6 +212,16 @@ class Session:
         )
 
 
+@dataclass(frozen=True)
+class DesktopTarget:
+    """등록 화면이 붙을 창 — `Backend.open`이 계획에서 읽는 칸만 갖는다 (`platform`·`window`·`app`)."""
+
+    window: WindowSpec
+    platform: str = DESKTOP
+    app: str = ""
+    start_url: str | None = None
+
+
 @dataclass
 class Worker:
     """Worker 한 벌의 상태. **세션은 하나**, 예약은 하나 (ADR-0014)."""
@@ -247,8 +259,12 @@ class Worker:
         if self.clock() - (found.touched_at or found.opened_at) > self.idle_s:
             self._end(found, failed=True)
 
-    def open(self, request: SessionRequest) -> tuple[SessionInfo, bool]:
-        """세션을 연다. 같은 `business_key`면 **열려 있는 그것**을 돌려준다 (멱등)."""
+    def open(self, request: SessionRequest, target: Any = None) -> tuple[SessionInfo, bool]:
+        """세션을 연다. 같은 `business_key`면 **열려 있는 그것**을 돌려준다 (멱등).
+
+        `target`은 **등록 화면만** 준다 — 아직 등록되지 않은 데스크톱 창을 계획 대신 가리킨다
+        (`DesktopTarget`, C10 §5). 실행 세션은 계획이 정한다.
+        """
         self.sweep()
         found = self.session
         if found is not None:
@@ -286,7 +302,7 @@ class Worker:
         if not request.start_url and made.plan is not None and made.plan.start_url:
             opening = request.model_copy(update={"start_url": made.plan.start_url})
         try:
-            made.current_url = self.backend.open(opening, made.plan)
+            made.current_url = self.backend.open(opening, target if target is not None else made.plan)
         except Exception as e:  # noqa: BLE001 — 브라우저가 안 뜰 수 있다 (바이너리 없음·화면 없음)
             if isinstance(getattr(e, "status", None), int) and getattr(e, "code", None):
                 # 백엔드가 C10 코드로 말한 실패 (앱 없음·창 여럿·잠금 …) — 그대로 옮긴다.
@@ -574,6 +590,29 @@ class Worker:
             )
         )
 
+    def registration_windows(self) -> dict[str, Any]:
+        """BUI-06 「창」 콤보 — 지금 떠 있는 최상위 창 (C10 §5)."""
+        from chaeksas.ext.ui_automation.worker import desktop  # noqa: PLC0415
+
+        if not desktop.available():
+            raise WorkerProblem(503, BROWSER_UNAVAILABLE, "이 PC에는 데스크톱(UIA) 백엔드가 없습니다")
+        return {"windows": desktop.top_windows()}
+
+    def registration_open_desktop(self, window: WindowSpec) -> tuple[SessionInfo, bool]:
+        """등록용 세션을 **창에 붙여** 연다 (BUI-06 「창에 붙기」). 창을 띄우지 않는다 — 앱 이름이 없다."""
+        if window.empty:
+            raise WorkerProblem(422, "input_invalid", "창 조건이 비어 있습니다")
+        return self.open(
+            SessionRequest(
+                schema=1,
+                caller=Caller(type=CALLER_REGISTRATION),
+                mode="autonomous",
+                business_key=f"reg_{secrets.token_hex(4)}",
+                heal=False,
+            ),
+            DesktopTarget(window=window),
+        )
+
     def _registering(self, session_id: str, secret: str) -> Session:
         """등록 세션이어야 한다 — 실행 중인 Bot의 화면을 등록 화면이 헤집지 못하게."""
         found = self.get(session_id, secret)
@@ -582,7 +621,7 @@ class Worker:
         return found
 
     def _surface(self, found: Session) -> Any:
-        """분석이 들여다볼 화면. **없으면 없다고 말한다** — 데스크톱(UIA) 세션은 아직 분석하지 않는다 (ADR-0033)."""
+        """분석이 들여다볼 화면. **없으면 없다고 말한다** — 브라우저 쪽이다 (데스크톱은 `analyze`가 창을 본다)."""
         finder = self.backend.finder(found.request.business_key) if self.backend else None
         page = getattr(finder, "page", None)
         if page is None:
@@ -592,9 +631,14 @@ class Worker:
         return page
 
     def analyze(self, session_id: str, secret: str, request: AnalyzeRequest) -> AnalyzeResult:
-        from chaeksas.ext.ui_automation.worker.registration import analyze  # noqa: PLC0415
+        from chaeksas.ext.ui_automation.worker.registration import analyze, analyze_desktop  # noqa: PLC0415
 
         found = self._registering(session_id, secret)
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        window = getattr(finder, "window", None)
+        if window is not None:
+            # 데스크톱 — 붙은 창 하나가 범위다 (`scope_css`는 쓰지 않는다).
+            return analyze_desktop(window, request)
         return analyze(self._surface(found), request)
 
     def pick(self, session_id: str, secret: str, *, on: bool) -> None:
@@ -828,6 +872,22 @@ def create_app(worker: Worker, screen: ScreenThread | None = None) -> FastAPI:
             str(body.get("start_url") or ""),
             headed=bool(body.get("headed", True)),
         )
+        return JSONResponse(status_code=201 if fresh else 200, content=info.to_json_dict())
+
+    @router.get("/registration/windows")
+    async def registration_windows(request: Request) -> Any:
+        check_token(request)
+        return await on.run(worker.registration_windows)
+
+    @router.post("/registration/desktop", status_code=201)
+    async def registration_desktop(request: Request) -> Any:
+        check_token(request)
+        body = await request.json()
+        try:
+            window = WindowSpec.model_validate(body.get("window") or {})
+        except (AttributeError, ValueError) as e:
+            raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
+        info, fresh = await on.run(worker.registration_open_desktop, window)
         return JSONResponse(status_code=201 if fresh else 200, content=info.to_json_dict())
 
     @router.post("/registration/{session_id}/analyze")
