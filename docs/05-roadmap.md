@@ -226,7 +226,7 @@ CI에 산출물 잡이 없다.
 - [x] 묶은 앱이 **로컬 런타임을 정말 띄운다** — **빌드가 본다** (ADR-0024가 적어 둔 것 중 남은 하나): Bot UI의 `--selftest --start-runtimes`가 기여된 런타임을 **평소와 같은 길**(`Runtimes.ensure` → `runtime_args` → `core.processes`)로 띄워 `health`가 답하고 **토큰 파일을 거친** `status`도 답하는지 보고 끈다. 다른 것은 셋 — 빈 포트·임시 폴더(사용자 자리에 `runtime.json`을 남기지 않는다)·긴 기다림. 못 뜨면 자식 로그 끝을 싣고 **빌드를 실패시킨다**. 개발 PC 묶음에서 Worker가 3.6초에 답했다
 - [x] **설치 파일이 나온다** — **된다** ([ADR-0068](decisions/0068-installer-inno-setup-per-user.md)): Inno Setup, **사용자별**(관리자 권한 없이 `%LOCALAPPDATA%\Programs\Chaeksas\<앱>`), Studio·Bot UI 둘, 서명 없음. 스크립트는 `packaging/installer/chaeksas.iss` 하나이고 앱마다 다른 값은 `build.py --installer`가 넘긴다. 덮어쓸 때 옛 `_internal`을 먼저 지운다. **산출물 워크플로가 조용히 설치 → 설치된 앱으로 `--selftest`(판·확장·런타임 기동) → 조용히 제거까지 해 본다** — 첫 시도에 통과했다 (런 39004329132): 설치 파일 **Bot UI 63MB·Studio 205MB**, 설치 → 검사 → 제거 7.8초·16.7초. Inno Setup은 러너에 이미 있었다
 - [ ] 설치한 Bot UI가 **자동 시작**으로 뜬다 — 거는 것은 앱(BUI-03 토글 → 작업 스케줄러)이고 설치 파일은 **제거할 때 지운다**(`autostart.TASK_NAME`). 설치한 실행 파일 자리로 등록되는지는 **현장 PC에서** 본다 (사람 몫과 함께)
-- [ ] **「판 올리기」를 정한다** (ADR) — Center가 설치 파일을 내려 줄 것인가, 사람이 다시 설치하는가. 내려 준다면 **배포와 같은 서명 관문**인가 (C2)
+- [x] **「판 올리기」를 정한다** — **정했다** ([ADR-0069](decisions/0069-upgrading-by-reinstall.md)): **사람이 설치 파일로 다시 깐다**(Studio·Bot UI). Center는 PC마다 판을 보여 줄 뿐 프로그램을 내려 주지 않고, 그래서 서명 봉투도 두지 않는다. 언제(도는 Bot·대기열이 빈 때 — CON-03 「비활성화」로 만든다)와 실패 때 되돌리기(옛 설치 파일)는 사람이 정한다. 순서는 `docs/04-setup.md` §6-3
 - [x] 산출물에 **판이 찍혀** 있고 C4·C12 `versions`가 그것을 올린다 — **된다** ([ADR-0067](decisions/0067-build-stamp.md)): 판은 **빌드가 정한다**(`--version` > `v*` 태그 > `<core 판>+g<커밋>[.dirty]`)이고 실행 파일 옆 `chaeksas-build.json`에 찍혀 `core.build_info`가 읽는다. C4 `versions.build`(`{commit, built_at}`)가 있으면 묶은 것, 없으면 체크아웃이다 — CON-03이 그것을 보인다. **고치다가 흠 둘이 드러났다**: 묶은 Bot UI가 `bot_ui`·`core`를 `0.0.0`으로 올리고 있었고(dist-info가 안 들어갔다), 서버 실행기는 판이 코드에 적혀 있었다. 빌드가 **되읽어** 판과 `core`의 판을 확인한다
 - [ ] 사람이 그 설치 파일로 **현장 PC에 넣어** M6의 둘(시나리오 3·「1시간 환경 구성」)을 다시 해 본다
 
@@ -238,7 +238,7 @@ CI에 산출물 잡이 없다.
 - [x] 미뤄 둔 빚 하나를 **실제로 고쳐** 수단이 도는 것을 보인다 — **2판이 `deployment_results.bot_ui_id` → `host_id`**다 (그 칸은 PC와 서버 실행기를 함께 담는데 이름을 못 고쳐 부르는 쪽이 바꿔 부르고 있었다). **데이터가 든 옛 DB를 옮기는 것**까지 시험이 본다(새로 만든 DB와 옮긴 DB의 표·열이 같다)
 - [x] **키 묶기를 DB도 지킨다** ([ADR-0066](decisions/0066-migration-guards.md), 3판) — `bot_uis`·`server_runners`의 `key_id`·`machine_id`에 UNIQUE 넷. 겹친 옛 행(2026-10-08 전에 생길 수 있었다)은 **짐작해 고치지 않는다**(#57) — 단계의 **지킴 질의**가 걸리면 문을 하나도 돌리지 않고 무엇이 겹쳤는지와 고치는 길을 말한다. 고르는 것은 사람이고 `chk-center hosts duplicates`·`retire <id>`가 **옮기기를 돌리지 않고** DB를 연다(은퇴는 지우지 않는다 — 이력이 그 id를 가리킨다). 판정은 그대로 `host_keys.py`에 있다(사람에게 할 말은 그쪽이 안다)
 - [x] **CON-06 「내려받은 횟수」** — **된다** (4판, C5 `download_count`·`last_downloaded_at`): 계약과 화면을 먼저 고치고 열 둘을 더했다. **관문을 지나 파일을 내어 줄 때만** 센다(막힌 요청은 세지 않는다)
-- [ ] PostgreSQL 전환은 **그다음이고 이 단계에서 정한다** (ADR — 옮기기 수단이 둘을 함께 받는가)
+- [ ] PostgreSQL 전환은 **그다음이고 이 단계에서 정한다** (ADR — 옮기기 수단이 둘을 함께 받는가) — 초안: [ADR-0070](decisions/0070-center-stays-on-sqlite.md)(「제안」 — SQLite로 남고 옮길 조건을 적는다)
 
 **선행은 M7이다.** 다만 A는 **M6의 사람 몫 둘을 쉽게 만든다** — 현장 PC에 개발 체크아웃을
 세우지 않아도 되므로, 순서상 M6보다 늦지만 **M6를 돕는다**.
