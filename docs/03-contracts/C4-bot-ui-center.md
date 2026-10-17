@@ -61,7 +61,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | `machine_id` | str | ✓ | PC 고유값의 SHA-256 (Windows MachineGuid / Linux `/etc/machine-id`). 원값은 보내지 않는다 |
 | `name` | str | ✓ | 표시 이름 (기본: PC 이름) |
 | `os` | str | ✓ | 예: `windows-11-23H2`, `ubuntu-24.04` |
-| `versions` | object | ✓ | `{bot_ui, core, worker}` |
+| `versions` | object | ✓ | `{bot_ui, core, worker, build?}`. `bot_ui`·`worker`는 **산출물의 판**이고(Worker는 같은 실행 파일로 뜬다) 묶은 앱이면 빌드가 찍은 판이다 ([ADR-0067](../decisions/0067-build-stamp.md) — 태그면 `0.2.0`, 태그 없이 묶었으면 `0.1.0+g<커밋>`). `build`(`{commit, built_at}`)는 **묶은 것에서 돈다**는 표시이고 **없으면 묶지 않은 것**(소스·`uv sync`)에서 돈다 — 「모른다」가 아니다 |
 | `runtimes` | object | | `{browsers: ["chromium-130"], desktop_backend: "uia", extensions: [{id, version, enabled, off}]}` — 설치된 확장 (C13) |
 
 ### RegisterResponse
@@ -222,6 +222,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-17 | 1 | **`versions.build`를 더했다** (`{commit, built_at}`, 선택) — 묶은 산출물에서 도는지와 어느 커밋인지. `bot_ui`는 빌드가 찍은 판이다(묶은 앱이 `0.0.0`을 올리던 흠을 고쳤다). 선택 칸이라 옛 Bot UI는 그대로 읽힌다 | [0067](../decisions/0067-build-stamp.md) |
 | 2026-10-15 | 1 | **현장에서 값을 올리는 쪽이 생겼다** — 실행기가 끝날 때 `runs/<run_id>.outputs.json`에 쓰고(위임·성공만) Bot UI가 거두며 **읽고 그 자리에서 지운다**. 「이 작업이 위임인가」는 **`requested_by`** 하나로 가르고(`server_bot:<run_id>`), 그 실행의 `run_started`에 `source: delegation`·`parent_run_id`가 붙는다. 형식은 그대로다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | `JobAck`에 선택 칸 **`outputs`**를 더했다 — **PC 위임이 돌려주는 값**이다 (원칙 6의 명시한 예외: 선언한 `outputs`만·끝난 ack만·위임 작업만). 선택 칸이라 **옛 Bot UI는 그대로 돈다** | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-14 | 1 | **Bot UI의 멱등 기억도 서버 실행기와 같은 규칙이다** ([ADR-0057](../decisions/0057-shared-seen-map.md)·[0056](../decisions/0056-bounded-seen-maps.md)) — 이미 본 작업의 마지막 ack는 **닿은 뒤 두 주기**에 잊고 **닿지 않은 ack는 버리지 않는다**. 전에는 넣은 순서로 잘라, 한 주기에 상한을 넘게 받으면 올리지 못한 ack가 버려지고 다시 내려온 작업이 「처음 본 것」이 되어 **대기열에 두 번** 들어갈 수 있었다. 계약 본문은 그대로다 (받는 쪽 규칙) | 0057 |

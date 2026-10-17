@@ -116,8 +116,20 @@ export interface Readiness {
 }
 export interface Versions {
   bot_ui: string;
+  build?: BuildStamp | null;
   core: string;
   worker?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * 묶은 산출물의 표시 (C4 `versions.build`, [ADR-0067](../../../../../docs/decisions/0067-build-stamp.md)).
+ *
+ * **있으면 묶은 것에서 돈다.** 없으면 묶지 않은 것(소스·`uv sync`)이다 — 「모른다」가 아니다.
+ * 판 자체는 `Versions.bot_ui`에 있다(빌드가 찍은 것).
+ */
+export interface BuildStamp {
+  built_at: string;
+  commit: string;
   [k: string]: unknown;
 }
 /**

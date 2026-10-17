@@ -1,5 +1,25 @@
 {
   "$defs": {
+    "BuildStamp": {
+      "additionalProperties": true,
+      "description": "묶은 산출물의 표시 (C4 `versions.build`, [ADR-0067](../../../../../docs/decisions/0067-build-stamp.md)).\n\n**있으면 묶은 것에서 돈다.** 없으면 묶지 않은 것(소스·`uv sync`)이다 — 「모른다」가 아니다.\n판 자체는 `Versions.bot_ui`에 있다(빌드가 찍은 것).",
+      "properties": {
+        "built_at": {
+          "title": "Built At",
+          "type": "string"
+        },
+        "commit": {
+          "title": "Commit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "built_at"
+      ],
+      "title": "BuildStamp",
+      "type": "object"
+    },
     "ExtensionState": {
       "additionalProperties": true,
       "description": "설치된 확장 하나 (C13).\n\n**`enabled`와 `off`는 다른 것을 말한다** ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)):\n`off`는 **사람이 껐다**(멀쩡한데 일부러 안 쓴다), `enabled=false`인데 `off`가 아니면 **흠이\n있다**(정의·판이 맞지 않는다). 화면이 「꺼짐」과 「호환 안 됨」을 가르는 자리다. 뜻을 바꾸지\n않고 칸을 더한 것이라 옛 Bot UI가 보낸 값(`off` 없음)도 그대로 읽힌다.",
@@ -81,6 +101,17 @@
         "bot_ui": {
           "title": "Bot Ui",
           "type": "string"
+        },
+        "build": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuildStamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "core": {
           "title": "Core",

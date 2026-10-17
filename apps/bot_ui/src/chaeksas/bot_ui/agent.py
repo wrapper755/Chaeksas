@@ -33,6 +33,7 @@ from chaeksas.contracts.bot_ui import (
     DEFAULT_HEARTBEAT_S,
     ApprovalAck,
     ApprovalDispatch,
+    BuildStamp,
     CurrentRun,
     DeploymentResult,
     ExtensionState,
@@ -50,7 +51,7 @@ from chaeksas.contracts.bot_ui import (
     WorkerState,
 )
 from chaeksas.contracts.center_api import delegated_run
-from chaeksas.core import machine, requests
+from chaeksas.core import build_info, machine, requests
 from chaeksas.core.app_directory import DirectoryCache
 from chaeksas.core.deploy import APPLIED, Deployer
 from chaeksas.core.extensions import ExtensionHost
@@ -66,14 +67,9 @@ from chaeksas.extension_api import HOST_BOT_UI, ExtensionContext
 
 log = logging.getLogger(__name__)
 
-#: 이 Bot UI의 버전 (C4 `versions`). 패키지 버전을 그대로 쓴다.
-try:  # pragma: no cover - 설치되지 않은 경우
-    from importlib.metadata import version as _dist_version
-
-    BOT_UI_VERSION = _dist_version("chaeksas-bot-ui")
-    CORE_VERSION = _dist_version("chaeksas-core")
-except Exception:  # noqa: BLE001 - 소스에서 바로 돌릴 때
-    BOT_UI_VERSION = CORE_VERSION = "0.0.0"
+#: 이 Bot UI의 판 (C4 `versions`, ADR-0067) — **묶은 앱이면 빌드가 찍은 판**, 아니면 dist-info.
+BOT_UI_VERSION = build_info.product_version("chaeksas-bot-ui")
+CORE_VERSION = build_info.package_version("chaeksas-core")
 
 #: C3·C4 `source` — **PC 위임으로 받은 작업**이다 (ADR-0062 §6). 「이 작업이 위임인가」는
 #: 작업의 `requested_by`가 말해 주고(`delegated_run`), 그 출처만 끝날 때 결과를 올린다.
@@ -473,10 +469,13 @@ class Agent:
 
     def versions(self) -> Versions:
         worker = self.supervisors.get("worker")
+        # **묶은 것에서 도는지**는 찍힌 파일이 말한다 — 없으면 `build`를 비운다(체크아웃이다).
+        found = build_info.stamp()
         return Versions(
             bot_ui=BOT_UI_VERSION,
             core=CORE_VERSION,
             worker=None if worker is None else BOT_UI_VERSION,
+            build=None if found is None else BuildStamp(commit=found.commit, built_at=found.built_at),
         )
 
     def register(self) -> RegisterResponse:

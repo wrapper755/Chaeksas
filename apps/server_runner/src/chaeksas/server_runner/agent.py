@@ -54,7 +54,7 @@ from chaeksas.contracts.server_runner import (
     validate_heartbeat,
 )
 from chaeksas.contracts.signing import AdminKey
-from chaeksas.core import machine
+from chaeksas.core import build_info, machine
 from chaeksas.core import requests as approval_requests
 from chaeksas.core.app_directory import AppDirectory, DirectoryCache
 from chaeksas.core.deploy import Deployer
@@ -85,9 +85,9 @@ from chaeksas.server_runner.worker import ACK_STARTED, EMPTY_COUNTS, Worker, reo
 
 log = logging.getLogger(__name__)
 
-#: 보고하는 버전 (C12 `versions`). `core`의 판은 함께 올린다.
-CORE_VERSION = "0.1.0"
-RUNNER_VERSION = "0.1.0"
+#: 보고하는 판 (C12 `versions`) — 설치된 dist-info다. **서버 실행기는 묶지 않는다** (ADR-0067).
+CORE_VERSION = build_info.package_version("chaeksas-core")
+RUNNER_VERSION = build_info.package_version("chaeksas-server-runner")
 
 #: 지금 상태 (C12 `status` — 열린 문자열, 아는 값만 쓴다).
 STATUS_RUNNING = "running"

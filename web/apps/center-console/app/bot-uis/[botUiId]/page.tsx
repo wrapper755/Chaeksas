@@ -238,6 +238,10 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
               <dd className="font-mono">
                 Bot UI {info.versions.bot_ui} · core {info.versions.core}
                 {info.versions.worker ? ` · Worker ${info.versions.worker}` : ""}
+                {/* 어디서 도는지 (C4 `versions.build`, ADR-0067) — 없으면 묶지 않은 것이다. */}
+                {info.versions.build
+                  ? ` · 묶음 ${info.versions.build.commit.slice(0, 12)} · ${fullTime(info.versions.build.built_at)}`
+                  : " · 개발 체크아웃"}
               </dd>
               <dt className="text-text-muted">런타임</dt>
               <dd>{runtimeLabel(info)}</dd>

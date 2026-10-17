@@ -251,14 +251,9 @@ def run_selftest(args: list[str]) -> int:
     **Qt를 띄우지 않는다.** 묶인 앱은 콘솔 없이 뜰 수 있어 결과를 파일로 받는다 — 빌드가
     그 파일을 읽고 하나라도 빠지면 **빌드를 실패시킨다** (빠진 확장은 실행 중에야 드러난다).
     """
-    from chaeksas.core.selftest import run  # noqa: PLC0415 — 평소 기동을 무겁게 하지 않는다
+    from chaeksas.core.selftest import main  # noqa: PLC0415 — 평소 기동을 무겁게 하지 않는다
 
-    parser = argparse.ArgumentParser(prog="chk-bot-ui", add_help=False)
-    parser.add_argument(SELFTEST_FLAG, dest="out", nargs="?", default=None)
-    parser.add_argument("--want", dest="want", default=None, help="켜져 있어야 하는 확장 id (쉼표로 여럿)")
-    found, _ = parser.parse_known_args(args[1:])
-    want = [one.strip() for one in str(found.want).split(",") if one.strip()] if found.want else None
-    return run(Path(found.out) if found.out else None, want=want)
+    return main(args[1:], prog="chk-bot-ui")
 
 
 def run_local_runtime(args: list[str]) -> int:

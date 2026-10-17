@@ -52,6 +52,7 @@ from chaeksas.contracts.approvals import validate_create as validate_approval_cr
 from chaeksas.contracts.bot_ui import (
     ApprovalAck,
     ApprovalDispatch,
+    BuildStamp,
     CurrentRun,
     DeploymentResult,
     ExtensionState,
@@ -391,6 +392,7 @@ __all__ = [
     "RegisterResponse",
     "Runtimes",
     "Versions",
+    "BuildStamp",
     "WorkerState",
     # C5
     "DEPLOYMENT_REFUSAL_STATUS",
