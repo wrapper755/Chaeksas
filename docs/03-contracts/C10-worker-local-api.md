@@ -87,7 +87,7 @@
 - 그래도 창이 없으면 `app_not_running`이다.
 - **계획 없는 데스크톱 세션** ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md), 데스크톱 AI 태스크): `page_id` 없이 `app`만 주면 창 조건을 `desktop-apps.json`의 그 앱 항목 `window`(C9 `window`와 같은 모양)에서 얻는다 — `{"Calculator": {"command": ["calc.exe"], "window": {"process": "CalculatorApp.exe"}}}`. `window`가 없으면 `app_not_running`이다 (어느 창인지 모른다).
 - 찾기·조작은 그 창 **안에서만** 한다. `current_url`은 `desktop:<앱 이름>`이다 — 창 제목에는 문서 이름 같은 업무 값이 들어 있을 수 있어 싣지 않는다.
-- 데스크톱 화면의 분석·직접 고르기·표시(§5)는 아직 없다 (503).
+- 데스크톱 화면의 **분석·검증**은 등록 세션이 창에 붙어서 한다(§5 `POST /registration/desktop`). **직접 고르기·표시**는 브라우저만이고 데스크톱 세션이면 503이다.
 
 **`POST /v1/sessions/{id}/steps` — 스텝 하나** (헤더 `X-CHK-Session`)
 
