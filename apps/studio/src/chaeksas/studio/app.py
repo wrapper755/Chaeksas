@@ -48,17 +48,9 @@ def main(argv: list[str] | None = None) -> int:
 
 def _selftest(args: list[str]) -> int:
     """빌드 검사 — **Qt를 띄우지 않는다** (묶인 앱은 콘솔 없이 뜰 수 있어 파일로 받는다)."""
-    import argparse  # noqa: PLC0415
-    from pathlib import Path  # noqa: PLC0415
+    from chaeksas.core.selftest import main  # noqa: PLC0415
 
-    from chaeksas.core.selftest import run  # noqa: PLC0415
-
-    parser = argparse.ArgumentParser(prog="chk-studio", add_help=False)
-    parser.add_argument(SELFTEST_FLAG, dest="out", nargs="?", default=None)
-    parser.add_argument("--want", dest="want", default=None, help="켜져 있어야 하는 확장 id (쉼표로 여럿)")
-    found, _ = parser.parse_known_args(args[1:])
-    want = [one.strip() for one in str(found.want).split(",") if one.strip()] if found.want else None
-    return run(Path(found.out) if found.out else None, want=want)
+    return main(args[1:], prog="chk-studio")
 
 
 __all__ = ["main"]

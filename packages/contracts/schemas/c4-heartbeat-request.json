@@ -31,6 +31,26 @@
       "title": "ApprovalAck",
       "type": "object"
     },
+    "BuildStamp": {
+      "additionalProperties": true,
+      "description": "묶은 산출물의 표시 (C4 `versions.build`, [ADR-0067](../../../../../docs/decisions/0067-build-stamp.md)).\n\n**있으면 묶은 것에서 돈다.** 없으면 묶지 않은 것(소스·`uv sync`)이다 — 「모른다」가 아니다.\n판 자체는 `Versions.bot_ui`에 있다(빌드가 찍은 것).",
+      "properties": {
+        "built_at": {
+          "title": "Built At",
+          "type": "string"
+        },
+        "commit": {
+          "title": "Commit",
+          "type": "string"
+        }
+      },
+      "required": [
+        "commit",
+        "built_at"
+      ],
+      "title": "BuildStamp",
+      "type": "object"
+    },
     "CurrentRun": {
       "additionalProperties": true,
       "description": "실행 자리 1건 (ADR-0014).",
@@ -377,6 +397,17 @@
         "bot_ui": {
           "title": "Bot Ui",
           "type": "string"
+        },
+        "build": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BuildStamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "core": {
           "title": "Core",

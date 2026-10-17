@@ -59,10 +59,14 @@ jobs:
 
       # **확장이 다 들어갔는지 빌드가 스스로 본다** — `--want`로 이름을 못 박는다.
       # 내장 확장은 `ui-automation` 하나다 (사내 확장이 생기면 여기 쉼표로 늘어난다).
+      # **판은 태그가 정한다** (ADR-0067) — 태그로 돌면 그 이름을 넘긴다(얕은 체크아웃에서 태그를
+      # 찾느라 헤매지 않는다). 단추로 돌리면 빌드가 `<core 판>+g<커밋>`을 찍는다.
       - name: 묶기 + 빌드 검사
+        shell: bash
         env:
           QT_QPA_PLATFORM: offscreen
-        run: uv run --group build python packaging/build.py ${{ inputs.apps }} --want ui-automation
+          VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+        run: uv run --group build python packaging/build.py ${{ inputs.apps }} --want ui-automation ${VERSION:+--version "$VERSION"}
 
       - name: 산출물 올리기
         uses: actions/upload-artifact@v4

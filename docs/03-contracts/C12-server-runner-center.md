@@ -77,6 +77,8 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 
 `{schema, machine_id, name, os, versions{core, server_runner}, max_concurrency, extensions: [{id, version, definition_hash, enabled}]}`.
 
+`versions`는 설치된 패키지의 판이다 — **서버 실행기는 묶지 않으므로**(소스에서 돈다) C4의 `build` 칸이 없다 ([ADR-0067](../decisions/0067-build-stamp.md)).
+
 `max_concurrency`는 설정값 `CHK_SERVER_RUNNER__MAX_CONCURRENCY`이고 기본 10이다.
 
 `extensions[]`는 **이 서버에 깔린 확장**이다 (C4와 같은 모양). Center는 그것으로 C7 확장 자원의

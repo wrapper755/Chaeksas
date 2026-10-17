@@ -51,10 +51,22 @@ KNOWN_DEPLOYMENT_RESULTS = frozenset({"applied", "rejected"})
 KNOWN_APPROVAL_STATES = frozenset({"answered", "expired", "withdrawn"})
 
 
+class BuildStamp(ContractModel):
+    """묶은 산출물의 표시 (C4 `versions.build`, [ADR-0067](../../../../../docs/decisions/0067-build-stamp.md)).
+
+    **있으면 묶은 것에서 돈다.** 없으면 묶지 않은 것(소스·`uv sync`)이다 — 「모른다」가 아니다.
+    판 자체는 `Versions.bot_ui`에 있다(빌드가 찍은 것).
+    """
+
+    commit: str
+    built_at: Timestamp
+
+
 class Versions(ContractModel):
     bot_ui: str
     core: str
     worker: str | None = None
+    build: BuildStamp | None = None
 
 
 class ExtensionState(ContractModel):

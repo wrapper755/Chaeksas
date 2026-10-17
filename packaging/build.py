@@ -3,6 +3,7 @@
     uv run --group build python packaging/build.py              # 둘 다
     uv run --group build python packaging/build.py bot-ui       # 하나만
     uv run --group build python packaging/build.py --want ui-automation
+    uv run --group build python packaging/build.py --version 0.2.0
 
 **onedir다** (onefile이 아니다) — 설치 프로그램이 그 폴더를 설치한다. 실행마다 압축을 풀면
 기동이 느려지고(warm 1.3초 ↔ 3.4초) 로컬 런타임을 띄울 때마다 또 푼다 (스파이크 S5).
@@ -20,6 +21,11 @@
 **Windows에서만 매니페스트를 넣는다** (`app.manifest` — DPI Per-Monitor v2, ADR-0021). 다른
 OS에서는 PyInstaller가 받지 않는다. 개발 PC(Linux)에서 돌리면 **Linux 묶음**이 나온다 — 빌드
 자체가 서는지 보는 데는 그것으로 되고, **Windows 산출물은 CI(또는 그 PC)가 만든다**.
+
+**판을 찍는다** ([ADR-0067](../docs/decisions/0067-build-stamp.md)) — `--version`이 이기고, 없으면
+지금 커밋의 `v*` 태그, 그것도 없으면 `<core 판>+g<커밋>`(고치다 만 파일이 있으면 `.dirty`)이다.
+실행 파일 옆 `chaeksas-build.json`에 적고, `--selftest`가 **되읽은 판**이 다르면 빌드를 멈춘다.
+`core`와 그 앱의 dist-info도 넣는다 — 안 넣으면 묶은 앱이 `core`의 판을 `0.0.0`으로 올린다.
 """
 
 from __future__ import annotations
@@ -32,7 +38,10 @@ import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+
+from chaeksas.core.build_info import STAMP_NAME, Stamp, package_version, valid_version
 
 # **한글을 찍는 CLI는 stdout도 UTF-8로 고정한다** (CLAUDE.md §5) — Windows 기본 코드페이지
 # (cp949·cp1252)에서는 `print("── 묶는다")` 한 줄에 `UnicodeEncodeError`로 죽는다. CI가 일부러
@@ -57,6 +66,7 @@ class App:
     key: str
     name: str  # 실행 파일·폴더 이름
     script: str
+    dist: str  # 그 앱의 배포판 이름 — dist-info를 넣는다 (ADR-0067)
 
     @property
     def exe(self) -> Path:
@@ -64,8 +74,8 @@ class App:
 
 
 APPS = (
-    App("bot-ui", "ChaeksasBotUI", "botui_main.py"),
-    App("studio", "ChaeksasStudio", "studio_main.py"),
+    App("bot-ui", "ChaeksasBotUI", "botui_main.py", "chaeksas-bot-ui"),
+    App("studio", "ChaeksasStudio", "studio_main.py", "chaeksas-studio"),
 )
 
 
@@ -85,6 +95,53 @@ def child_env() -> dict[str, str]:
     return {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1"}
 
 
+def _git(*args: str) -> str | None:
+    """git 한 번 — 없거나 실패하면 `None` (git 없이 받은 소스에서도 묶을 수 있어야 한다)."""
+    try:
+        done = subprocess.run(["git", *args], cwd=ROOT, capture_output=True, text=True, check=False)
+    except OSError:
+        return None
+    return done.stdout.strip() if done.returncode == 0 else None
+
+
+def decide_version(given: str | None) -> str:
+    """찍을 판 (ADR-0067 §1) — `--version` > 지금 커밋의 `v*` 태그 > `<core 판>+g<커밋>[.dirty]`.
+
+    **판 모양이 아니면 멈춘다** — 「판 올리기」가 견주어야 한다. 태그 없이 묶은 것은 로컬 판이
+    붙어 **태그로 착각되지 않는다**.
+    """
+    if given:
+        found = given.removeprefix("v")
+    else:
+        tag = _git("describe", "--tags", "--exact-match", "--match", "v*", "HEAD")
+        if tag:
+            found = tag.removeprefix("v")
+        else:
+            commit = _git("rev-parse", "--short=12", "HEAD")
+            base = package_version("chaeksas-core")
+            if commit is None:
+                found = base
+            else:
+                dirty = bool(_git("status", "--porcelain", "--untracked-files=no"))
+                found = f"{base}+g{commit}" + (".dirty" if dirty else "")
+    if not valid_version(found):
+        raise SystemExit(f"판 모양이 아니다: {found!r} — 예: 0.2.0, 0.2.0rc1 (ADR-0067)")
+    return found
+
+
+def write_stamp(app: App, version: str) -> Stamp:
+    """실행 파일 옆에 판을 찍는다 (ADR-0067 §2)."""
+    found = Stamp(
+        version=version,
+        commit=_git("rev-parse", "HEAD") or "unknown",
+        built_at=datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    )
+    (app.exe.parent / STAMP_NAME).write_text(
+        json.dumps(found.to_json(), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    return found
+
+
 def build(app: App) -> float:
     """PyInstaller onedir 한 벌. 걸린 초를 돌려준다."""
     args = [
@@ -93,6 +150,8 @@ def build(app: App) -> float:
         "--windowed", "--onedir",
         "--name", app.name,
         "--distpath", str(DIST), "--workpath", str(WORK), "--specpath", str(WORK),
+        # 판을 읽는 dist-info (ADR-0067) — 훅은 **확장의** 것만 넣는다.
+        "--copy-metadata", "chaeksas-core", "--copy-metadata", app.dist,
     ]
     if IS_WINDOWS:
         # DPI 선언 — 같은 실행 파일로 뜨는 Worker까지 Per-Monitor v2가 된다 (ADR-0021).
@@ -106,14 +165,14 @@ def build(app: App) -> float:
     return round(time.perf_counter() - started, 1)
 
 
-def selftest(app: App, want: list[str]) -> dict:
+def selftest(app: App, want: list[str], version: str) -> dict:
     """묶은 실행 파일을 `--selftest`로 돌린다 — 확장이 다 보이나 (ADR-0024).
 
     **결과를 파일로 받는다** — `--windowed`로 묶은 앱에는 콘솔이 없어 표준 출력이 사라진다.
     """
     out = WORK / f"selftest-{app.key}.json"
     out.unlink(missing_ok=True)
-    args = [str(app.exe), "--selftest", str(out)]
+    args = [str(app.exe), "--selftest", str(out), "--expect-version", version]
     if want:
         args += ["--want", ",".join(want)]
     code = subprocess.run(args, check=False, timeout=300, env=child_env()).returncode
@@ -122,6 +181,10 @@ def selftest(app: App, want: list[str]) -> dict:
     found = json.loads(out.read_text(encoding="utf-8"))
     if code != 0 or not found.get("all_ok"):
         print(json.dumps(found, ensure_ascii=False, indent=2))
+        if not found.get("steps", {}).get("build", {}).get("ok", True):
+            raise SystemExit(
+                f"{app.key}: 묶은 앱이 읽은 판이 찍은 판({version})과 다르거나 core의 판을 모른다 (ADR-0067)"
+            )
         raise SystemExit(f"{app.key}: 묶은 앱에 확장이 빠졌다 — 설치 파일로 내보내지 않는다")
     return dict(found)
 
@@ -131,7 +194,11 @@ def main() -> int:
     parser.add_argument("apps", nargs="*", choices=[one.key for one in APPS], help="비우면 둘 다")
     parser.add_argument("--want", default="", help="묶음에 켜져 있어야 하는 확장 id (쉼표로 여럿)")
     parser.add_argument("--keep", action="store_true", help="이전 산출물을 지우지 않는다")
+    parser.add_argument("--version", default=None, help="찍을 판 (비우면 태그 또는 <core 판>+g<커밋>)")
     found = parser.parse_args()
+
+    version = decide_version(found.version)
+    print(f"── 판 {version}")
 
     want = [one.strip() for one in found.want.split(",") if one.strip()]
     chosen = [one for one in APPS if not found.apps or one.key in found.apps]
@@ -144,10 +211,12 @@ def main() -> int:
         seconds = build(app)
         if not app.exe.exists():  # pragma: no cover — PyInstaller가 이름을 바꾸면
             raise SystemExit(f"{app.key}: 실행 파일이 없다: {app.exe}")
-        checked = selftest(app, want)
+        write_stamp(app, version)
+        checked = selftest(app, want, version)
         summary.append(
             {
                 "app": app.key,
+                "version": version,
                 "exe": str(app.exe.relative_to(ROOT).as_posix()),
                 "size_mb": size_mb(app.exe.parent),
                 "build_s": seconds,
@@ -157,7 +226,10 @@ def main() -> int:
 
     print()
     for one in summary:
-        print(f"{one['app']:7} {one['size_mb']:7.1f} MB  {one['build_s']:6.1f}초  확장 {one['extensions']}")
+        print(
+            f"{one['app']:7} {one['version']}  {one['size_mb']:7.1f} MB  {one['build_s']:6.1f}초"
+            f"  확장 {one['extensions']}"
+        )
         print(f"        {one['exe']}")
     return 0
 

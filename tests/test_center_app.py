@@ -397,6 +397,36 @@ def test_heartbeat_keeps_the_latest_state(client: TestClient) -> None:
     assert found["worker"]["session"] == "bot"
 
 
+def test_versions_say_whether_the_pc_runs_a_packed_build(client: TestClient) -> None:
+    """C4 `versions.build` — 있으면 묶은 산출물, **없으면 체크아웃**이다 (ADR-0067).
+
+    Center는 받은 그대로 담아 CON-03에 내준다. 묶은 판으로 바꿔 끼우면(하트비트 `versions`)
+    그것도 그대로 따라온다.
+    """
+    _key_id, raw = issue_key(client)
+    auth = {"Authorization": f"Bearer {raw}"}
+    bot_ui_id = client.post(
+        "/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth
+    ).json()["bot_ui_id"]
+    def shown_versions() -> dict[str, Any]:
+        (row,) = [one for one in client.get("/api/v1/bot-uis", headers=READ).json() if one["bot_ui_id"] == bot_ui_id]
+        return dict(row["versions"])
+
+    plain = shown_versions()
+    assert plain.get("build") is None
+
+    packed = {
+        "bot_ui": "0.2.0",
+        "core": "0.1.0",
+        "build": {"commit": "13bca2382f33034f7d2cbc3d41f533ea2cd1ab47", "built_at": "2026-10-17T03:18:55Z"},
+    }
+    beat = client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(versions=packed), headers=auth)
+    assert beat.status_code == 200, beat.text
+    shown = shown_versions()
+    assert shown["bot_ui"] == "0.2.0"
+    assert shown["build"]["commit"].startswith("13bca2382f33")
+
+
 def test_disabled_bot_ui_still_heartbeats(client: TestClient) -> None:
     """비활성이어도 하트비트는 받는다 — 실행 중 Bot과 대기열을 콘솔에서 봐야 한다 (CON-03)."""
     _key_id, raw = issue_key(client)
