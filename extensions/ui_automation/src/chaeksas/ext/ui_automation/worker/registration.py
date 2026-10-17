@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec
+from chaeksas.ext.ui_automation.contracts.plan import DESKTOP, LocatorSpec
 from chaeksas.ext.ui_automation.contracts.registration import (
     MAX_MAX,
     MIN_MAX,
@@ -346,8 +346,114 @@ def summarize(result: VerifyResult) -> str:
     return "모두 잡히고 대체 로케이터도 살아 있습니다. 등록해도 좋습니다."
 
 
+# ─────────────────────────── 데스크톱 창에서 담기 (C10 §5, BUI-06) ───────────────────────────
+
+#: UIA ControlTypeName → 역할. **조작 요소**는 늘, **읽기 대상**은 `include_read`일 때만 담는다.
+DESKTOP_CONTROLS: dict[str, str] = {
+    "EditControl": "textbox",
+    "ButtonControl": "button",
+    "ComboBoxControl": "combobox",
+    "CheckBoxControl": "checkbox",
+    "RadioButtonControl": "radio",
+    "ListControl": "listbox",
+    "HyperlinkControl": "link",
+    "MenuItemControl": "menuitem",
+}
+DESKTOP_READS: dict[str, str] = {
+    "TableControl": "table",
+    "DataGridControl": "grid",
+    "TextControl": "text",
+}
+#: 그 밑을 훑지 않는 컨트롤 — 창틀의 「최소화·최대화·닫기」는 앱의 요소가 아니다.
+DESKTOP_SKIP = frozenset({"TitleBarControl", "ScrollBarControl"})
+#: 훑는 깊이 (실행의 찾기와 같은 결 — 너무 깊은 트리는 자른다).
+DESKTOP_DEPTH = 12
+
+
+def desktop_candidates(controls: list[dict[str, str]], request: AnalyzeRequest) -> AnalyzeResult:
+    """UIA 컨트롤 줄들 → 후보. **UIA를 모르는 순수 함수**다 (Linux CI에서도 시험한다).
+
+    `controls`의 한 줄은 `{control_type, name, automation_id, class_name}`(ControlTypeName 그대로).
+    **창 안에서 겹치는 값은 사다리에 넣지 않는다** — Qt 라벨들은 AutomationId(`…QLabel`)를 나눠 써서,
+    그대로 두면 그 칸이 「여럿이 잡힌다」로 늘 실패한다. 겹치면 다음 전략(이름 + 종류)이 잡는다.
+    """
+    wanted = dict(DESKTOP_CONTROLS)
+    if request.include_read:
+        wanted.update(DESKTOP_READS)
+    picked = [one for one in controls if one.get("control_type") in wanted]
+    aid_count: dict[str, int] = {}
+    class_count: dict[tuple[str, str], int] = {}
+    for one in controls:
+        aid = one.get("automation_id") or ""
+        if aid:
+            aid_count[aid] = aid_count.get(aid, 0) + 1
+        key = (one.get("class_name") or "", one.get("control_type") or "")
+        if key[0]:
+            class_count[key] = class_count.get(key, 0) + 1
+
+    limit = request.max
+    taken: set[str] = set()
+    candidates: list[Candidate] = []
+    for one in picked[:limit]:
+        control_type = one.get("control_type") or ""
+        kind_name = control_type.removesuffix("Control")
+        aid = one.get("automation_id") or ""
+        class_name = one.get("class_name") or ""
+        role = wanted[control_type]
+        made = Candidate(
+            tag=kind_name,
+            role=role,
+            name=one.get("name") or "",
+            element_id=aid if aid_count.get(aid) == 1 else "",
+            class_name=class_name if class_count.get((class_name, control_type)) == 1 else "",
+            control_type=kind_name,
+            platform=DESKTOP,
+            kind=kind_for(role, ""),
+            actions=actions_for(role, ""),
+        )
+        made = made.model_copy(update={"suggested_key": suggest_key(made, taken)})
+        taken.add(made.suggested_key)
+        candidates.append(made)
+    return AnalyzeResult(candidates=candidates, total=len(picked), truncated=len(picked) > limit)
+
+
+def desktop_controls(window: Any) -> list[dict[str, str]]:
+    """붙은 창 하나의 UIA 트리를 줄로 — 창틀은 건너뛴다. **이것만 UIA를 안다.**"""
+    out: list[dict[str, str]] = []
+
+    def walk(control: Any, depth: int) -> None:
+        if depth > DESKTOP_DEPTH:
+            return
+        for child in control.GetChildren():
+            try:
+                control_type = child.ControlTypeName or ""
+                if control_type in DESKTOP_SKIP:
+                    continue
+                out.append(
+                    {
+                        "control_type": control_type,
+                        "name": child.Name or "",
+                        "automation_id": child.AutomationId or "",
+                        "class_name": child.ClassName or "",
+                    }
+                )
+            except Exception:  # noqa: BLE001 — 사라지는 중인 컨트롤
+                continue
+            walk(child, depth + 1)
+
+    walk(window, 1)
+    return out
+
+
+def analyze_desktop(window: Any, request: AnalyzeRequest) -> AnalyzeResult:
+    """BUI-06 「분석」(데스크톱). **창 하나가 범위다** — `scope_css`는 쓰지 않는다."""
+    return desktop_candidates(desktop_controls(window), request)
+
+
 __all__ = [
     "COLLECT_JS",
+    "DESKTOP_CONTROLS",
+    "DESKTOP_READS",
     "CONTROL_SELECTOR",
     "DRAIN_JS",
     "HIGHLIGHT_JS",
@@ -362,5 +468,8 @@ __all__ = [
     "start_pick",
     "stop_pick",
     "summarize",
+    "analyze_desktop",
+    "desktop_candidates",
+    "desktop_controls",
     "verify",
 ]

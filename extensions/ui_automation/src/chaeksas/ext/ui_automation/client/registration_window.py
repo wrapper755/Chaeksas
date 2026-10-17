@@ -12,6 +12,9 @@ Bot UI의 「도구」에서 열리는 유틸리티 창이다. 화면을 열고,
 - **검증을 마쳐야 등록이 켜진다**. 그 뒤 표를 바꾸면 다시 꺼진다 (단추 켜짐 규칙).
 - 검증 결과는 **막지 않는다** (7번) — 사람이 보고 정한다.
 
+데스크톱 창에서도 담는다 (「방식」 콤보) — 창에 **붙기만** 하고 띄우거나 닫지 않는다 (사용자의
+업무 앱이다). 「직접 고르기」·「표시」는 브라우저만 한다.
+
 > 상태: 「직접 고르기」·「등록」·BUI-07·BUI-08은 다음 조각이다. 지금은 꺼 두고 왜 꺼졌는지
 > 툴팁으로 말한다 — **없는 것을 되는 척하지 않는다.**
 """
@@ -46,7 +49,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec
+from chaeksas.ext.ui_automation.contracts.plan import DESKTOP, LocatorSpec, WindowSpec
 from chaeksas.ext.ui_automation.contracts.registration import (
     DEFAULT_MAX,
     KEY_SAFE,
@@ -96,6 +99,12 @@ NO_REGISTRY = (
     "UI 자동화 앱에 쓸 수 없습니다 — Bot UI 설정의 「UI 자동화 › 등록 담당자 키」를 넣으세요."
 )
 
+#: 「방식」 콤보 (BUI-06 [C]).
+MODE_BROWSER = "브라우저"
+MODE_DESKTOP = "데스크톱 창"
+#: 데스크톱에서 꺼 두는 단추의 툴팁 — **못 하는 것을 되는 척하지 않는다.**
+DESKTOP_NO_PICK = "데스크톱 창은 아직 직접 고르기·표시를 하지 않습니다 — 「분석」으로 담습니다"
+
 #: `page_id`에 남기는 글자 (C9와 같은 모양 — 영소문자·숫자·`_`·`.`).
 KEY_SAFE_DOT = re.compile(r"[^a-z0-9_.]+")
 
@@ -125,6 +134,8 @@ class Session:
     session_id: str
     secret: str
     url: str = ""
+    #: 데스크톱이면 붙은 창 — `{title, process}` (등록의 창 조건이 된다, C9).
+    window: dict[str, str] | None = None
 
 
 class RegistrationWidget(QWidget):
@@ -199,10 +210,15 @@ class RegistrationWidget(QWidget):
         return box
 
     def _collector(self) -> QWidget:
-        box = QGroupBox("브라우저에서 담기")
+        box = QGroupBox("화면에서 담기")
         outer = QVBoxLayout(box)
 
-        first = QHBoxLayout()
+        self.mode = QComboBox()
+        self.mode.addItems([MODE_BROWSER, MODE_DESKTOP])
+        self.mode.currentIndexChanged.connect(self._mode_changed)
+        self.browser_row = QWidget()
+        first = QHBoxLayout(self.browser_row)
+        first.setContentsMargins(0, 0, 0, 0)
         self.start_url = QLineEdit()
         self.start_url.setPlaceholderText("시작 주소 (예: https://erp.example/orders)")
         self.open_button = QPushButton("브라우저 열기")
@@ -217,7 +233,32 @@ class RegistrationWidget(QWidget):
         first.addWidget(self.start_url, 1)
         for one in (self.open_button, self.pick_button, self.analyze_button, self.close_button):
             first.addWidget(one)
-        outer.addLayout(first)
+
+        self.desktop_row = QWidget()
+        desk = QHBoxLayout(self.desktop_row)
+        desk.setContentsMargins(0, 0, 0, 0)
+        self.window_pick = QComboBox()
+        self.window_pick.setMinimumWidth(280)
+        self.refresh_windows_button = QPushButton("새로 고침")
+        self.refresh_windows_button.clicked.connect(self.refresh_windows)
+        self.attach_button = QPushButton("창에 붙기")
+        self.attach_button.clicked.connect(self.attach_window)
+        self.desktop_analyze_button = QPushButton("분석")
+        self.desktop_analyze_button.clicked.connect(self.analyze)
+        self.release_button = QPushButton("놓기")
+        self.release_button.clicked.connect(self.close_browser)
+        desk.addWidget(self.window_pick, 1)
+        for one in (
+            self.refresh_windows_button, self.attach_button, self.desktop_analyze_button, self.release_button
+        ):
+            desk.addWidget(one)
+        self.desktop_row.setVisible(False)
+
+        top = QHBoxLayout()
+        top.addWidget(self.mode)
+        top.addWidget(self.browser_row, 1)
+        top.addWidget(self.desktop_row, 1)
+        outer.addLayout(top)
 
         second = QHBoxLayout()
         self.scope = QLineEdit()
@@ -308,6 +349,62 @@ class RegistrationWidget(QWidget):
         )
         self._sync()
 
+    # ── 데스크톱 창 (BUI-06 1-1번) ──
+
+    def desktop(self) -> bool:
+        return self.mode.currentText() == MODE_DESKTOP
+
+    def _mode_changed(self) -> None:
+        desktop = self.desktop()
+        self.browser_row.setVisible(not desktop)
+        self.desktop_row.setVisible(desktop)
+        if desktop:
+            self.say("등록할 화면을 띄운 창을 고르고 「창에 붙기」를 누르세요.")
+            if not self.window_pick.count():
+                self.refresh_windows()
+        else:
+            self.say("브라우저를 열고 등록할 화면으로 이동한 뒤 「분석」을 누르세요.")
+        self._sync()
+
+    def refresh_windows(self) -> None:
+        """지금 떠 있는 창을 콤보에 채운다 — `제목 — 프로세스`."""
+        try:
+            found = self._client.registration_windows()
+        except Exception as e:  # noqa: BLE001 — UIA가 없는 PC일 수 있다
+            self.say(self._why(e))
+            return
+        self.window_pick.clear()
+        for one in found:
+            label = f"{one['title']} — {one['process']}" if one.get("process") else one["title"]
+            self.window_pick.addItem(label, one)
+        self.say(f"창 {len(found)}개를 찾았습니다." if found else "붙을 창이 없습니다 — 등록할 앱을 띄우세요.")
+        self._sync()
+
+    def attach_window(self) -> None:
+        """고른 창에 붙는다. **창을 띄우지도 닫지도 않는다** — 사용자의 업무 앱이다."""
+        chosen = self.window_pick.currentData()
+        if self._session is not None or not isinstance(chosen, dict):
+            return
+        window = {"title": "^" + re.escape(chosen["title"]) + "$"}
+        if chosen.get("process"):
+            window["process"] = chosen["process"]
+        try:
+            info = self._client.open_registration_desktop(window)
+        except Exception as e:  # noqa: BLE001
+            code = getattr(e, "code", "")
+            if code == "window_ambiguous":
+                self.say("같은 조건의 창이 여럿입니다 — 하나만 남기세요.")
+            elif code == "app_not_running":
+                self.say("그 창이 없습니다 — 「새로 고침」으로 다시 고르세요.")
+            else:
+                self.say(self._why(e))
+            return
+        self._session = Session(
+            session_id=info.session_id, secret=info.session_secret, window=window
+        )
+        self.say(f"붙었습니다 — {chosen['title']}. 등록할 화면을 띄워 둔 채 「분석」을 누르세요.")
+        self._sync()
+
     def _goto(self) -> None:
         found = self._session
         if found is None:
@@ -333,7 +430,7 @@ class RegistrationWidget(QWidget):
         self.say("화면을 분석하는 중…")
         request = AnalyzeRequest(
             schema=1,
-            scope_css=self.scope.text().strip() or None,
+            scope_css=None if found.window is not None else (self.scope.text().strip() or None),
             max=self.max_count.value(),
             include_read=self.include_read.isChecked(),
         )
@@ -357,9 +454,12 @@ class RegistrationWidget(QWidget):
                 f"범위를 좁히거나 최대치를 올리세요."
             )
         self.say(said)
-        if not self.page_id.currentText().strip() and self._session is not None:
+        if not self.page_id.currentText().strip() and found.window is not None:
+            # 창 제목에는 문서 이름이 섞인다 — **지어 채우지 않는다** (BUI-06 1-1번).
+            self.say(f"{said} 화면 ID를 적으세요.")
+        elif not self.page_id.currentText().strip():
             # 화면 ID가 비어 있으면 주소에서 채운다 (사람이 고친 뒤에는 건드리지 않는다).
-            self.page_id.setCurrentText(page_id_from(self._session.url))
+            self.page_id.setCurrentText(page_id_from(found.url))
         self.look_up()
         self._sync()
 
@@ -596,12 +696,14 @@ class RegistrationWidget(QWidget):
     def _page(self, page_id: str) -> PageRegistration:
         """표 → 등록 단위 (C9). **고른 줄만** 간다."""
         chosen = [row for row in self._rows if row.use and row.key]
+        window = self._session.window if self._session is not None else None
         return PageRegistration(
             schema=1,
             page_id=page_id,
-            platform=WEB,
+            platform=DESKTOP if window is not None else WEB,
             name=self._known.name if self._known is not None else "",
-            url_pattern=self._session.url if self._session is not None else None,
+            url_pattern=self._session.url if self._session is not None and window is None else None,
+            window=WindowSpec.model_validate(window) if window is not None else None,
             locators={row.key: row.ladder() for row in chosen},
             elements={
                 row.key: ElementHint(
@@ -712,7 +814,10 @@ class RegistrationWidget(QWidget):
         self._picking.stop()
         self.pick_button.setChecked(False)
         self._session = None
-        self.say("브라우저를 닫았습니다. 담아 둔 요소는 그대로입니다.")
+        if found.window is not None:
+            self.say("창을 놓았습니다 (창은 그대로 둡니다). 담아 둔 요소는 그대로입니다.")
+        else:
+            self.say("브라우저를 닫았습니다. 담아 둔 요소는 그대로입니다.")
         self._sync()
 
     def remove_selected(self) -> None:
@@ -776,7 +881,7 @@ class RegistrationWidget(QWidget):
                     one.role,
                     one.name,
                     one.element_id,
-                    " · ".join(one.css),
+                    " · ".join(one.css) or one.class_name,
                 )
                 for column, text in enumerate(rest, start=2):
                     cell = QTableWidgetItem(text)
@@ -788,7 +893,7 @@ class RegistrationWidget(QWidget):
 
     def _selection_changed(self) -> None:
         self._sync()
-        if self._session is not None:
+        if self._session is not None and self._session.window is None:
             self.show_selected()
 
     def _element_edited(self, item: QTableWidgetItem) -> None:
@@ -843,9 +948,18 @@ class RegistrationWidget(QWidget):
     def _sync(self) -> None:
         """단추 켜짐 규칙 (BUI-06)."""
         open_now = self._session is not None
+        desktop = self.desktop()
+        # 열린 세션의 방식을 중간에 바꾸지 않는다 — 놓거나 닫은 뒤에 바꾼다.
+        self.mode.setEnabled(not open_now)
         self.open_button.setText("주소로 이동" if open_now else "브라우저 열기")
         self.analyze_button.setEnabled(open_now)
-        self.pick_button.setEnabled(open_now)
+        self.pick_button.setEnabled(open_now and not desktop)
+        self.pick_button.setToolTip(DESKTOP_NO_PICK if desktop else "")
+        self.scope.setEnabled(not desktop)
+        self.scope.setToolTip("데스크톱은 붙은 창 하나가 범위입니다." if desktop else "")
+        self.attach_button.setEnabled(not open_now and self.window_pick.count() > 0)
+        self.desktop_analyze_button.setEnabled(open_now)
+        self.release_button.setEnabled(open_now)
         self.pick_button.setText("고르는 중… (누르면 종료)" if self.pick_button.isChecked() else "직접 고르기")
         self.close_button.setEnabled(open_now)
         has_rows = bool(self._rows)
@@ -853,7 +967,10 @@ class RegistrationWidget(QWidget):
         self.delete_all.setEnabled(has_rows)
         self.verify_button.setEnabled(open_now and has_rows)
         if not open_now:
-            self.verify_button.setToolTip("검증은 지금 열린 화면에서 합니다 — 브라우저를 여세요.")
+            self.verify_button.setToolTip(
+                "검증은 지금 열린 화면에서 합니다 — "
+                + ("창에 붙으세요." if desktop else "브라우저를 여세요.")
+            )
         else:
             self.verify_button.setToolTip("" if has_rows else "담은 요소가 없습니다.")
 
@@ -875,6 +992,8 @@ class RegistrationWidget(QWidget):
         text = str(error)
         if "worker_busy" in text or "사용 중" in text:
             return f"Worker가 사용 중입니다 — {text}"
+        if "browser_unavailable" in text and self.desktop():
+            return "데스크톱 창을 다룰 수단이 없습니다 — 이 PC에서는 UIA를 쓸 수 없습니다 (Windows 전용)."
         if "browser_unavailable" in text:
             return (
                 "화면을 조작할 수단이 없습니다 — 이 PC에 브라우저 자동화가 설치되지 않았습니다 "
@@ -1001,6 +1120,9 @@ def worker_client(settings: Any) -> Any:
 
 __all__ = [
     "CHECK_COLUMNS",
+    "DESKTOP_NO_PICK",
+    "MODE_BROWSER",
+    "MODE_DESKTOP",
     "ELEMENT_COLUMNS",
     "NO_REGISTRY",
     "PICK_POLL_MS",

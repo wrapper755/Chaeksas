@@ -157,6 +157,21 @@ class WorkerClient:
             self.call("POST", "/v1/registration/browser", body={"start_url": start_url, "headed": headed})
         )
 
+    def registration_windows(self) -> list[dict[str, str]]:
+        """지금 떠 있는 최상위 창 — `{title, class_name, process}` (C10 §5)."""
+        found = self.call("GET", "/v1/registration/windows")
+        return [
+            {key: str(one.get(key) or "") for key in ("title", "class_name", "process")}
+            for one in found.get("windows") or []
+            if isinstance(one, dict)
+        ]
+
+    def open_registration_desktop(self, window: dict[str, str]) -> SessionInfo:
+        """창에 붙어 등록 세션을 연다. `window.title`은 정규식이다 (C9 `window`)."""
+        return SessionInfo.model_validate(
+            self.call("POST", "/v1/registration/desktop", body={"window": window})
+        )
+
     def analyze(self, session_id: str, secret: str, request: AnalyzeRequest) -> AnalyzeResult:
         return AnalyzeResult.model_validate(
             self.call(
