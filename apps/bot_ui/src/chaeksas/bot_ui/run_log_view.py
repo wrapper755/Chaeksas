@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from chaeksas.contracts.events import RunEvent
@@ -104,6 +105,51 @@ def _read(path: Path) -> list[RunEvent]:
             out.append(event)
     except (OSError, ValueError):
         pass
+    return out
+
+
+#: BUI-04 「최근 실행」의 결과 표기 — `status_map`의 「실행·노드」에 있는 것만 쓴다 (C3 `status`).
+RESULT_LABEL = {"success": "완료", "failed": "실패", "cancelled": "취소됨"}
+
+
+@dataclass(frozen=True)
+class LastRun:
+    """한 Bot의 마지막 실행 (BUI-04 「최근 실행」). `result`가 비면 **끝 줄이 없다**."""
+
+    run_id: str
+    at: str
+    result: str = ""
+
+
+def _when(ts: str) -> str:
+    """`2026-10-09T01:02:03Z` → `2026-10-09 01:02`. **연도까지** 적는다 (BUI-02와 같은 UTC)."""
+    return ts[:16].replace("T", " ") if len(ts) >= 16 and ts[10:11] == "T" else ts
+
+
+def last_runs(data_dir: Path, *, runs: int = MAX_RUNS) -> dict[str, LastRun]:
+    """Bot마다 **마지막 실행 하나** — BUI-02와 **같은 파일·같은 읽기**다 (원본은 파일이다).
+
+    새 파일부터 보므로 처음 만난 것이 마지막이다. 결과는 `run_finished`에서만 읽고 **지어내지 않는다**
+    — 끝 줄이 없는 실행(도는 중이거나 실행기가 멈췄다)은 `result`가 빈다.
+    """
+    folder = run_dir(data_dir)
+    if not folder.is_dir():
+        return {}
+    found = sorted(folder.glob("*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)[:runs]
+    out: dict[str, LastRun] = {}
+    for path in found:
+        events = _read(path)
+        bot = _bot_of(events)
+        if not bot or bot in out:
+            continue
+        started = next((one for one in events if one.kind == "run_started"), events[0])
+        finished = next((one for one in reversed(events) if one.kind == "run_finished"), None)
+        status = str(finished.data.get("status") or "") if finished is not None else ""
+        out[bot] = LastRun(
+            run_id=started.run_id,
+            at=_when(started.ts),
+            result=RESULT_LABEL.get(status, status),
+        )
     return out
 
 

@@ -109,3 +109,52 @@ def test_business_values_do_not_reach_the_screen(tmp_path: Path) -> None:
     joined = "\n".join(run_log_view.lines(tmp_path))
     assert "app_id=erp" in joined and "operation=po.create" in joined
     assert "모든상사" not in joined and "1234567" not in joined
+
+
+# ─────────────────────────── BUI-04 「최근 실행」 ───────────────────────────
+
+
+def test_each_bot_gets_its_newest_run_with_the_result_in_status_map_words(tmp_path: Path) -> None:
+    """BUI-02와 **같은 파일**을 읽는다 — 결과는 「실행·노드」 표기로 옮긴다."""
+    import os  # noqa: PLC0415
+
+    old = write(tmp_path, "run_20261009_010203_111111", [started("bot-a"), finished("failed")])
+    new = write(tmp_path, "run_20261009_010203_222222", [started("bot-a"), finished()])
+    other = write(tmp_path, "run_20261009_010203_333333", [started("bot-b"), finished("cancelled")])
+    os.utime(old, (1_700_000_000, 1_700_000_000))
+    os.utime(new, (1_800_000_000, 1_800_000_000))
+    os.utime(other, (1_750_000_000, 1_750_000_000))
+    found = run_log_view.last_runs(tmp_path)
+    assert found["bot-a"].run_id == "run_20261009_010203_222222"
+    assert found["bot-a"].result == "완료"
+    assert found["bot-a"].at == "2026-10-09 01:02", "연도까지 적는다"
+    assert found["bot-b"].result == "취소됨"
+
+
+def test_a_run_without_an_ending_makes_up_no_result(tmp_path: Path) -> None:
+    """끝 줄이 없으면 **지어내지 않는다** — 화면이 「실행 중」인지 「—」인지 가른다."""
+    write(tmp_path, "run_20261009_010203_444444", [started("bot-c")])
+    assert run_log_view.last_runs(tmp_path)["bot-c"].result == ""
+    assert run_log_view.last_runs(tmp_path / "없는 곳") == {}
+
+
+def test_the_bot_table_shows_the_last_run(tmp_path: Path) -> None:
+    import os as _os  # noqa: PLC0415
+
+    _os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication  # noqa: PLC0415
+
+    from chaeksas.bot_ui.main_window import NO_ENDING, last_run_item  # noqa: PLC0415
+
+    QApplication.instance() or QApplication([])
+    assert last_run_item(None, None).text() == "", "한 번도 안 돌았으면 빈칸이다"
+    done = run_log_view.LastRun(run_id="r1", at="2026-10-09 01:02", result="실패")
+    assert last_run_item(done, None).text() == "2026-10-09 01:02 실패"
+    open_one = run_log_view.LastRun(run_id="r2", at="2026-10-09 01:02")
+
+    class Running:
+        run_id = "r2"
+
+    assert last_run_item(open_one, Running()).text().endswith("실행 중")
+    stale = last_run_item(open_one, None)
+    assert stale.text().endswith("—") and stale.toolTip() == NO_ENDING

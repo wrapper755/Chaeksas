@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from PySide6.QtCore import QPoint, Qt, QUrl, Signal
 from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices
@@ -40,6 +41,7 @@ from chaeksas.bot_ui import run_log_view
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.extension_dialog import ExtensionsDialog
 from chaeksas.bot_ui.keys_dialog import KeysDialog
+from chaeksas.bot_ui.run_log_view import LastRun, last_runs
 from chaeksas.bot_ui.runner import Running
 from chaeksas.bot_ui.runtimes import STATE_LABELS, RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
@@ -72,9 +74,12 @@ WINDOW_SIZE = (1000, 720)
 #: BUI-04 대기열 표의 열 (「입력 키」의 값은 접는다 — U10).
 QUEUE_COLUMNS = ("#", "Bot", "출처", "요청 시각", "만료", "입력 키")
 
-#: BUI-04 설치된 Bot 표의 열. 「최근 실행」은 아직 없다 — 모르는 것을 적지 않는다.
-BOT_COLUMNS = ("Bot", "버전", "출처", "서명", "준비", "상태")
+#: BUI-04 설치된 Bot 표의 열. 「최근 실행」은 BUI-02와 같은 기록 파일에서 읽는다.
+BOT_COLUMNS = ("Bot", "버전", "출처", "서명", "준비", "상태", "최근 실행")
 READY_COLUMN = BOT_COLUMNS.index("준비")
+LAST_RUN_COLUMN = BOT_COLUMNS.index("최근 실행")
+#: 끝 줄이 없는 지난 실행 — 결과를 지어내지 않는다 (BUI-04).
+NO_ENDING = "끝 기록이 없습니다 — 실행기가 도중에 멈췄을 수 있습니다. 「실행 기록」 탭에서 보세요."
 
 #: 「준비」의 표기 — `status_map`의 「Bot 준비」에 있는 것만 쓴다 (`docs/07-style-guide.md`).
 READY = "준비됨"
@@ -139,6 +144,24 @@ SOURCE_LABEL = {
     "message": "메시지",
 }
 
+
+def last_run_item(last: LastRun | None, running: Any) -> QTableWidgetItem:
+    """BUI-04 「최근 실행」 칸 — 시각 + 결과. 한 번도 안 돌았으면 빈칸이다."""
+    if last is None:
+        return QTableWidgetItem("")
+    result = last.result
+    tip = ""
+    if not result:
+        if running is not None and getattr(running, "run_id", None) == last.run_id:
+            result = "실행 중"
+        else:
+            result, tip = "—", NO_ENDING
+    item = QTableWidgetItem(f"{last.at} {result}")
+    color = theme.status_color("실행·노드", result, part="fg")
+    if color is not None:
+        item.setForeground(QColor(color))
+    item.setToolTip(tip)
+    return item
 
 class UtilityWindow(QWidget):
     """확장이 기여한 유틸리티 하나의 창 (BUI-06~08은 여기 들어온다).
@@ -530,10 +553,11 @@ class MainWindow(QMainWindow):
         return f"예약됨 — {run_id}"
 
     def _refresh_bots(self) -> None:
-        """설치된 Bot 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 「최근 실행」은 아직 없다."""
+        """설치된 Bot 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 「최근 실행」은 기록 파일에서 읽는다."""
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 
         self._bots = installed(data_dir())
+        latest = last_runs(data_dir())
         running = self._agent.current_run
         self.bots_title.setText(
             f"설치된 Bot {len(self._bots)}개"
@@ -559,6 +583,7 @@ class MainWindow(QMainWindow):
                         item.setForeground(QColor(color))
                     item.setToolTip(tip)
                 self.bots_table.setItem(row, column, item)
+            self.bots_table.setItem(row, LAST_RUN_COLUMN, last_run_item(latest.get(bot.id), running))
             # 키가 없으면 그 자리에서 BUI-10으로 간다 (BUI-04 — 「키 등록...」).
             self.bots_table.removeCellWidget(row, READY_COLUMN)
             if found.missing_key_refs:
