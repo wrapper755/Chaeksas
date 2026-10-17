@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import secrets
@@ -82,6 +83,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
 )
 from chaeksas.ext.ui_automation.worker.ladder import Finder, Healer, TableRead, run_step
 from chaeksas.ext.ui_automation.worker.routing import platform_of
+from chaeksas.ext.ui_automation.worker.screen import ScreenThread
 
 log = logging.getLogger(__name__)
 
@@ -657,15 +659,17 @@ class Worker:
 
     # ── 보기 ──
 
-    def health(self) -> Health:
-        self.sweep()
+    def health(self, *, sweep: bool = True) -> Health:
+        """`sweep=False`는 **화면을 만지지 않고** 지금 모습만 답한다 — HTTP 창구가 정리를 따로 맡긴다."""
+        if sweep:
+            self.sweep()
         return Health(
             version=self.version,
             session="idle" if self.session is None else self.session.request.caller.type,
         )
 
-    def status(self) -> Status:
-        base = self.health()
+    def status(self, *, sweep: bool = True) -> Status:
+        base = self.health(sweep=sweep)
         return Status(
             status=base.status,
             version=base.version,
@@ -709,14 +713,24 @@ class Worker:
 # ─────────────────────────── HTTP ───────────────────────────
 
 
+#: `health`·`status`가 유휴 정리를 기다리는 한도 (초). 화면이 바쁘면 기다리지 않고 답한다.
+SWEEP_WAIT_S = 1.0
+
+
 def _ms(seconds: float) -> int:
     return int(seconds * 1000)
 
 
-def create_app(worker: Worker) -> FastAPI:
-    """C10 경로 한 벌. **`/v1/health`만 토큰 없이** 답한다."""
+def create_app(worker: Worker, screen: ScreenThread | None = None) -> FastAPI:
+    """C10 경로 한 벌. **`/v1/health`만 토큰 없이** 답한다.
+
+    **Worker의 일은 모두 `screen`(스레드 하나)에서 돈다** — 창구는 uvicorn 루프에 있고, Playwright
+    동기 API는 루프 안에서 돌지 않으며 띄운 스레드에서만 만질 수 있다 (`worker/screen.py`).
+    """
     app = FastAPI(title="Chaeksas Worker", version=worker.version)
     app.state.worker = worker
+    on = screen or ScreenThread()
+    app.state.screen = on
     router = APIRouter(prefix="/v1")
 
     def check_token(request: Request) -> None:
@@ -737,14 +751,24 @@ def create_app(worker: Worker) -> FastAPI:
             content={"code": problem.code, "message": problem.message, "detail": problem.detail},
         )
 
+    async def swept() -> None:
+        """유휴 정리를 화면 스레드에서 — **오래 기다리지 않는다**. 긴 스텝 중이면 그 뒤에 돈다."""
+        try:
+            await asyncio.wait_for(on.run(worker.sweep), timeout=SWEEP_WAIT_S)
+        except TimeoutError:
+            pass
+
     @router.get("/health")
-    def health() -> Any:
-        return worker.health()
+    async def health() -> Any:
+        # 긴 스텝 중에도 살아 있다고 답해야 한다 — 못 하면 Bot UI가 멀쩡한 Worker를 다시 띄운다.
+        await swept()
+        return worker.health(sweep=False)
 
     @router.get("/status")
-    def status(request: Request) -> Any:
+    async def status(request: Request) -> Any:
         check_token(request)
-        return worker.status()
+        await swept()
+        return worker.status(sweep=False)
 
     @router.post("/sessions", status_code=201)
     async def open_session(request: Request) -> Any:
@@ -756,13 +780,14 @@ def create_app(worker: Worker) -> FastAPI:
             wanted = SessionRequest.model_validate(body)
         except ValueError as e:
             raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
-        info, fresh = worker.open(wanted)
+        info, fresh = await on.run(worker.open, wanted)
         return JSONResponse(status_code=201 if fresh else 200, content=info.to_json_dict())
 
     @router.get("/sessions/{session_id}")
-    def read_session(session_id: str, request: Request) -> Any:
+    async def read_session(session_id: str, request: Request) -> Any:
         check_token(request)
-        return worker.get(session_id, secret_of(request)).info()
+        found = await on.run(worker.get, session_id, secret_of(request))
+        return found.info()
 
     @router.post("/sessions/{session_id}/steps")
     async def run_step(session_id: str, request: Request) -> Any:
@@ -774,23 +799,23 @@ def create_app(worker: Worker) -> FastAPI:
             raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
         if wanted.timeout_s is None:
             wanted = wanted.model_copy(update={"timeout_s": STEP_TIMEOUT_S})
-        return worker.step(session_id, secret_of(request), wanted)
+        return await on.run(worker.step, session_id, secret_of(request), wanted)
 
     @router.get("/sessions/{session_id}/view")
-    def view_session(session_id: str, request: Request) -> Any:
+    async def view_session(session_id: str, request: Request) -> Any:
         check_token(request)
-        return worker.view(session_id, secret_of(request))
+        return await on.run(worker.view, session_id, secret_of(request))
 
     @router.post("/sessions/{session_id}/goto")
     async def goto(session_id: str, request: Request) -> Any:
         check_token(request)
         body = await request.json()
-        return worker.goto(session_id, secret_of(request), str(body.get("url") or ""))
+        return await on.run(worker.goto, session_id, secret_of(request), str(body.get("url") or ""))
 
     @router.delete("/sessions/{session_id}")
-    def close_session(session_id: str, request: Request) -> Any:
+    async def close_session(session_id: str, request: Request) -> Any:
         check_token(request)
-        return worker.close(session_id, secret_of(request))
+        return await on.run(worker.close, session_id, secret_of(request))
 
     # ── 셀렉터 등록 (C10 §5) — **여기만 물리 정보가 나간다** ──
 
@@ -798,8 +823,10 @@ def create_app(worker: Worker) -> FastAPI:
     async def registration_browser(request: Request) -> Any:
         check_token(request)
         body = await request.json()
-        info, fresh = worker.registration_open(
-            str(body.get("start_url") or ""), headed=bool(body.get("headed", True))
+        info, fresh = await on.run(
+            worker.registration_open,
+            str(body.get("start_url") or ""),
+            headed=bool(body.get("headed", True)),
         )
         return JSONResponse(status_code=201 if fresh else 200, content=info.to_json_dict())
 
@@ -811,24 +838,24 @@ def create_app(worker: Worker) -> FastAPI:
             wanted = AnalyzeRequest.model_validate(body)
         except ValueError as e:
             raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
-        return worker.analyze(session_id, secret_of(request), wanted)
+        return await on.run(worker.analyze, session_id, secret_of(request), wanted)
 
     @router.post("/registration/{session_id}/pick")
-    def registration_pick(session_id: str, request: Request) -> Any:
+    async def registration_pick(session_id: str, request: Request) -> Any:
         check_token(request)
-        worker.pick(session_id, secret_of(request), on=True)
+        await on.run(worker.pick, session_id, secret_of(request), on=True)
         return {"picking": True}
 
     @router.delete("/registration/{session_id}/pick")
-    def registration_unpick(session_id: str, request: Request) -> Any:
+    async def registration_unpick(session_id: str, request: Request) -> Any:
         check_token(request)
-        worker.pick(session_id, secret_of(request), on=False)
+        await on.run(worker.pick, session_id, secret_of(request), on=False)
         return {"picking": False}
 
     @router.get("/registration/{session_id}/pick/events")
-    def registration_picked(session_id: str, request: Request) -> Any:
+    async def registration_picked(session_id: str, request: Request) -> Any:
         check_token(request)
-        return worker.picked(session_id, secret_of(request))
+        return await on.run(worker.picked, session_id, secret_of(request))
 
     @router.post("/registration/{session_id}/highlight")
     async def registration_highlight(session_id: str, request: Request) -> Any:
@@ -838,7 +865,7 @@ def create_app(worker: Worker) -> FastAPI:
             locators = [LocatorSpec.model_validate(one) for one in (body.get("locators") or [])]
         except ValueError as e:
             raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
-        return worker.highlight(session_id, secret_of(request), locators)
+        return await on.run(worker.highlight, session_id, secret_of(request), locators)
 
     @router.post("/registration/{session_id}/verify")
     async def registration_verify(session_id: str, request: Request) -> Any:
@@ -851,30 +878,30 @@ def create_app(worker: Worker) -> FastAPI:
             }
         except (AttributeError, ValueError) as e:
             raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
-        return worker.verify(session_id, secret_of(request), ladders)
+        return await on.run(worker.verify, session_id, secret_of(request), ladders)
 
     @router.post("/admin/reserve")
     async def reserve(request: Request) -> Any:
         check_admin(request)
         body = await request.json()
-        worker.reserve(str(body.get("run_id") or ""))
+        await on.run(worker.reserve, str(body.get("run_id") or ""))
         return {"reserved_for": worker.reserved_for}
 
     @router.delete("/admin/reserve")
-    def unreserve(request: Request) -> Any:
+    async def unreserve(request: Request) -> Any:
         check_admin(request)
-        worker.unreserve()
+        await on.run(worker.unreserve)
         return {"reserved_for": None}
 
     @router.delete("/admin/sessions/{session_id}")
-    def force_close(session_id: str, request: Request) -> Any:
+    async def force_close(session_id: str, request: Request) -> Any:
         check_admin(request)
-        return {"closed": worker.force_close(session_id)}
+        return {"closed": await on.run(worker.force_close, session_id)}
 
     @router.post("/admin/shutdown")
-    def shutdown(request: Request) -> Any:
+    async def shutdown(request: Request) -> Any:
         check_admin(request)
-        return worker.shutdown()
+        return await on.run(worker.shutdown)
 
     app.include_router(router)
     return app
