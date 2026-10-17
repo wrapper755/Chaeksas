@@ -41,9 +41,8 @@ CREATE TABLE IF NOT EXISTS center_keys (
 );
 CREATE TABLE IF NOT EXISTS bot_uis (
   bot_ui_id   TEXT PRIMARY KEY,
-  -- `key_id`·`machine_id`는 둘 다 한 행에만 있다 (C4 「키 묶기」). **UNIQUE는 아직 걸지 않았다**
-  -- — 옮기기 단계로 걸 수 있게 됐지만(ADR-0065) **이미 겹친 행이 있으면 그 단계가 실패해
-  -- Center가 뜨지 않는다**. 겹친 것을 어떻게 다룰지 먼저 정한다. 지금 지키는 것은 `host_keys.py`다.
+  -- `key_id`·`machine_id`는 둘 다 한 행에만 있다 (C4 「키 묶기」). 판정은 `host_keys.py`가 하고
+  -- **3판 단계가 UNIQUE 색인을 건다**(ADR-0066 — 겹친 옛 행은 사람이 고른다).
   key_id      TEXT NOT NULL,
   machine_id  TEXT NOT NULL,
   name        TEXT NOT NULL,
@@ -57,8 +56,8 @@ CREATE TABLE IF NOT EXISTS bot_uis (
 );
 CREATE TABLE IF NOT EXISTS server_runners (
   server_runner_id TEXT PRIMARY KEY,
-  -- `bot_uis`와 **같은 묶기 규칙**이다 (C12 「키 묶기는 C4와 같다」) — 지키는 것은
-  -- `center/host_keys.py` 하나다. UNIQUE를 걸지 않은 까닭도 그쪽과 같다.
+  -- `bot_uis`와 **같은 묶기 규칙**이다 (C12 「키 묶기는 C4와 같다」) — 판정은
+  -- `center/host_keys.py` 하나이고 UNIQUE 색인도 같은 3판 단계가 건다 (ADR-0066).
   key_id        TEXT NOT NULL,
   machine_id    TEXT NOT NULL,
   name          TEXT NOT NULL,

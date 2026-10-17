@@ -97,6 +97,8 @@ PackageInfo 필드:
 | `preflight` | `{warnings, blocked}` |
 | `manifest` | C1 매니페스트 |
 | `missing_resources` | `[{type: extension \| service_app \| operation \| resource, id, reason}]`. 읽을 때 C7과 대조해 계산한다 (확장 기여 자원은 `resource`이고 id가 `<종류>:<id>`다 — 예: `ui_page:erp.order.form`) |
+| `download_count` | **내어 준 횟수** (기본 0). 관문(권한·배포 대조)을 지나 파일을 내어 줄 때 하나 센다 — **같은 곳이 다시 받아도 센다**(설치를 다시 하거나 캐시를 잃은 경우). 「몇 곳이 쓰나」가 아니라 「얼마나 받아 갔나」다. 쓰는 곳은 `dependents`·배포 목록이 말한다 |
+| `last_downloaded_at`? | 마지막으로 내어 준 때. 한 번도 받지 않았으면 없다 |
 
 ### 참조하는 패키지 (`dependents`)
 
@@ -284,6 +286,7 @@ BotUiInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-17 | 1 | **`download_count`·`last_downloaded_at`을 더했다** — 내어 준 횟수와 마지막 때(CON-06 「내려받은 횟수」). 셀 열을 더할 수단이 없어 화면에서 뺐던 것을 저장소 옮기기 단계(4판)로 되살렸다. 선택 칸이라 옛 응답을 읽는 쪽은 영향이 없다 | [0065](../decisions/0065-center-schema-migrations.md) |
 | 2026-10-12 | 1 | **툴팩 갈래가 사라졌다** ([ADR-0050](../decisions/0050-no-toolpack-kind.md)) — 내려받기 범위에서 `requires.toolpacks`가 빠지고(공유 BPM 프로세스는 패키지 안 `libs/`로 오므로 **따로 받는 것이 없다**), `dependents.relation`은 `lib` 하나이고 `pinned_hash`는 늘 `null`이다 | 0050 |
 | 2026-10-12 | 1 | **배포 대상은 등록된 PC여야 한다** (404 `target_not_found`). 「대상이 존재한다」를 어느 쪽도 보지 않아 **오타 하나가 201을 받고** 아무에게도 가지 않는 배포로 남았다 — `envelopes_for`는 `target_id`로 맞추고 CON-03에는 그 PC 줄이 없어 보여 줄 자리도 없다. 미리 배포해 두는 길이 막히는 것이 아니다: `bot_ui_id`는 Center가 **첫 등록에서 만들어** 등록 전에는 적을 id가 없다. 읽는 것은 Center, 판정은 계약이다 (ADR-0047 §다시 볼 조건 ②). **작업 지시의 같은 404도 `target_not_found`로 바꿨다** — 같은 조건에 두 이름을 두지 않는다 | 0049 |
 | 2026-10-12 | 1 | **배포 관문을 하나로 모았다.** 같은 검사가 계약(`validate_deployment()`)과 Center에 두 벌 있었고 **답이 갈려 있었다** — 대상 어긋남이 계약에서 `target_mismatch`(422), Center에서 `wrong_target`(409)이었고, 서버 배포를 막는 `server_runner_not_available`은 **계약에만** 있어서 Center가 M7 배포를 받아 두고 있었다. 이제 Center가 그 함수를 부르고 코드마다 상태는 `DEPLOYMENT_REFUSAL_STATUS` 한 표에 있다. **배포 쪽 `target_mismatch`는 없어졌다** — 대상이 틀린 것은 `wrong_target`(409) 하나다 | 0047 |

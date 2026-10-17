@@ -671,6 +671,12 @@
       "title": "Content Hash",
       "type": "string"
     },
+    "download_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Download Count",
+      "type": "integer"
+    },
     "id": {
       "title": "Id",
       "type": "string"
@@ -678,6 +684,18 @@
     "kind": {
       "title": "Kind",
       "type": "string"
+    },
+    "last_downloaded_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Downloaded At"
     },
     "manifest": {
       "anyOf": [

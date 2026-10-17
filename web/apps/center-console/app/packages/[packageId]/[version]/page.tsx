@@ -165,6 +165,12 @@ export default async function PackagePage({
               <dd>{info.uploaded_by}</dd>
               <dt className="text-text-muted">승인 서명</dt>
               <dd>{info.signed_by ? `${info.signed_by} · ${time(info.signed_at)}` : "없음"}</dd>
+              <dt className="text-text-muted">내려받기</dt>
+              <dd>
+                {info.download_count
+                  ? `${info.download_count}회 · 마지막 ${time(info.last_downloaded_at)}`
+                  : "아직 없음"}
+              </dd>
             </dl>
             {info.manifest?.description ? (
               <p className="text-body text-text-secondary">{info.manifest.description}</p>

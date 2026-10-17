@@ -7,8 +7,10 @@
  */
 export interface PackageInfo {
   content_hash: string;
+  download_count?: number;
   id: string;
   kind: string;
+  last_downloaded_at?: string | null;
   manifest?: Manifest | null;
   missing_resources?: MissingResource[];
   name?: string | null;

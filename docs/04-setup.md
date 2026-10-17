@@ -123,6 +123,18 @@ sudo apt-get install -y --no-install-recommends \
 
 **Center를 새 판으로 올리면 저장소가 뜰 때 저절로 옮겨진다** ([ADR-0065](decisions/0065-center-schema-migrations.md)) — 모자란 단계만 차례로 돌고, 단계 하나가 실패하면 그 단계는 없던 일이 되고 **Center가 뜨지 않는다**(사유가 로그에 남는다). **되돌리는 단계는 없다** — 옮겨진 DB를 옛 판 Center가 열면 「새 판의 Center로 띄우세요」라며 **뜨지 않는다**. 그래서 **올리기 전에 DB 파일을 떠 둔다**(WAL이라 `center.sqlite3`·`-wal`·`-shm` 셋을 함께, Center를 멈춘 뒤). 지금 판은 `SELECT * FROM schema_migrations`가 말해 준다.
 
+**3판에서 멈췄다면** — 같은 키·같은 기계가 여러 행에 있다는 뜻이다(2026-10-08 전에 만든 DB에서 같은 PC를 두 키로 등록하면 생긴다). Center는 **어느 행을 남길지 짐작하지 않는다**([ADR-0066](decisions/0066-migration-guards.md)) — Center를 멈춘 채로 사람이 고른다:
+
+```bash
+uv run chk-center hosts duplicates
+```
+
+```bash
+uv run chk-center hosts retire bui_xxxxxxxx
+```
+
+목록은 무리마다 이름·마지막으로 본 때를 보인다. 은퇴는 **지우지 않고**(배포·실행 기록이 그 id를 가리킨다) 그 행의 키·기계 자리를 놓게 하고 다시 쓰이지 않게 한다(PC는 비활성, 서버 실행기는 일시 중지). **겹친 무리에 든 행만** 은퇴시킬 수 있다. 다 고른 뒤 Center를 다시 띄우면 3판으로 간다.
+
 ## 5. 설정과 비밀
 
 - 설정 파일: 저장소의 `configs/*.example.yaml`을 복사해 쓴다 (M1).

@@ -57,6 +57,40 @@ def bootstrap(argv: list[str]) -> int:
     return 0
 
 
+def hosts(argv: list[str]) -> int:
+    """`chk-center hosts duplicates|retire <id>` — 겹친 기계 행을 **사람이** 고른다 (ADR-0066).
+
+    3판(키 묶기 UNIQUE)의 지킴에 걸려 Center가 뜨지 않을 때 쓴다. **`Store`를 열지 않는다** —
+    열면 옮기기가 돌고 그 지킴에 다시 걸린다. Center를 **멈춘 채로** 쓴다.
+    """
+    import sqlite3
+
+    from chaeksas.center.repair import RepairError, describe, duplicates, retire
+    from chaeksas.center.settings import Settings
+
+    if not argv or argv[0] not in ("duplicates", "retire") or (argv[0] == "retire" and len(argv) < 2):
+        print("쓰는 법: chk-center hosts duplicates | chk-center hosts retire <bot_ui_id|server_runner_id>")
+        return 2
+    path = Settings.from_env().db_path
+    if not Path(path).is_file():
+        print(f"DB가 없다: {path}")
+        return 2
+    conn = sqlite3.connect(str(path))
+    try:
+        if argv[0] == "duplicates":
+            print(describe(duplicates(conn)))
+            return 0
+        try:
+            table = retire(conn, argv[1])
+        except RepairError as e:
+            print(f"오류: {e}")
+            return 2
+        print(f"{argv[1]}을 은퇴시켰다 ({table}) — 남은 겹침:\n{describe(duplicates(conn))}")
+        return 0
+    finally:
+        conn.close()
+
+
 def main() -> int:
     import uvicorn
 
@@ -65,6 +99,8 @@ def main() -> int:
 
     if len(sys.argv) > 1 and sys.argv[1] == "admin-keys":
         return bootstrap(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "hosts":
+        return hosts(sys.argv[2:])
 
     settings = Settings.from_env()
     if not settings.admin_token:
