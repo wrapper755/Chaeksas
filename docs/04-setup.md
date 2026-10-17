@@ -182,6 +182,7 @@ uv run chk-center hosts retire bui_xxxxxxxx
 uv run --group build python packaging/build.py              # Studio·Bot UI 둘 다
 uv run --group build python packaging/build.py bot-ui       # 하나만
 uv run --group build python packaging/build.py --version 0.2.0
+uv run --group build python packaging/build.py --installer    # Windows에서만 — 설치 파일까지
 ```
 
 PyInstaller **onedir**로 묶는다 ([ADR-0024](decisions/0024-desktop-packaging-extensions.md)) — 산출물은
@@ -201,6 +202,14 @@ PyInstaller는 `--group build`에만 있어 평소 `uv sync`로는 들어오지 
   `chaeksas-build.json`에 적히고(열어 볼 수 있다) Bot UI가 C4 `versions`로 올려 **CON-03에 보인다**.
   **판을 올리려면 태그를 민다** — 산출물 워크플로가 태그 이름을 그대로 넘긴다. 묶은 앱이 되읽은 판이
   찍은 판과 다르면 빌드가 멈춘다.
+- **설치 파일은 Inno Setup이다** ([ADR-0068](decisions/0068-installer-inno-setup-per-user.md)) — `--installer`가
+  `build/installer/Chaeksas<앱>-setup-<판>.exe`를 만든다(Windows에서만, Inno Setup 6 필요 — 없으면
+  `choco install innosetup`). **사용자별**이라 관리자 권한을 묻지 않고 `%LOCALAPPDATA%\Programs\Chaeksas\<앱>`에
+  깔린다. 덮어쓰면 옛 판의 `_internal`을 지우고 깐다. 제거해도 **사용자 데이터는 남는다**(실행 기록·설치한 Bot).
+  `--check-install`(설치 → 설치된 앱 검사 → 제거)은 **같은 앱의 설치를 덮으므로 CI에서만** 쓴다.
+  설치 파일 크기는 CI가 말해 준 값으로 **Bot UI 63MB·Studio 205MB**다 (2026-10-17, 런 39004329132).
+- **설치 파일에 서명이 없다** — 처음 실행하면 SmartScreen이 「Windows의 PC 보호」를 띄운다.
+  「추가 정보」 → 「실행」을 누른다. 백신이 실행 파일을 막으면 그 자리의 예외로 넣는다(서명이 생기면 줄어든다).
 - **매니페스트는 Windows에서만** 들어간다 (`packaging/app.manifest` — DPI Per-Monitor v2,
   [ADR-0021](decisions/0021-worker-dpi-capture.md)). 개발 PC가 Linux면 **Linux 묶음**이 나온다 —
   빌드가 서는지 보는 데는 그것으로 되고 **Windows 산출물은 CI가 만든다**(아래).

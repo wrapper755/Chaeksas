@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-03). 설치 프로그램 종류는 미정 |
+| 상태 | 수락 (2026-10-03). 설치 프로그램은 [ADR-0068](0068-installer-inno-setup-per-user.md)(Inno Setup, 사용자별) |
 | 날짜 | 2026-10-02 |
 | 관련 | 스파이크 `spikes/S5-extension-packaging/`(Windows)·`.../linux-core-hook/`(Linux, 확장 호스트와 훅), ADR-0018(확장), ADR-0019(이름 공간), ADR-0021(DPI), ADR-0022(Studio 캔버스), ADR-0023(자동 시작), 계약 C13 |
-| 구현 | 훅: `packages/core/src/chaeksas/core/__pyinstaller/`, **빌드: `packaging/build.py`**, **빌드 검사: `packages/core/.../selftest.py` + 두 앱의 `--selftest`**, CI 산출물: `.github/workflows/desktop.yml` (배선 검사 `tests/test_extension_host.py`). 설치 프로그램 종류는 그대로 미정이다. **로컬 런타임 기동**은 Bot UI의 `--selftest --start-runtimes`가 평소와 같은 길(`runtimes.check_start` → `Runtimes.ensure`)로 띄워 `health`·`status`까지 본다 (`tests/test_selftest_runtimes.py`) |
+| 구현 | 훅: `packages/core/src/chaeksas/core/__pyinstaller/`, **빌드: `packaging/build.py`**, **빌드 검사: `packages/core/.../selftest.py` + 두 앱의 `--selftest`**, CI 산출물: `.github/workflows/desktop.yml` (배선 검사 `tests/test_extension_host.py`). 설치 파일: `packaging/installer/chaeksas.iss`([ADR-0068](0068-installer-inno-setup-per-user.md)). **로컬 런타임 기동**은 Bot UI의 `--selftest --start-runtimes`가 평소와 같은 길(`runtimes.check_start` → `Runtimes.ensure`)로 띄워 `health`·`status`까지 본다 (`tests/test_selftest_runtimes.py`) |
 
 ## 배경
 
@@ -45,7 +45,7 @@ B의 세 인자를 **손으로 적는 대신 훅으로 자동화**할 수 있는
 - **매니페스트:** PyInstaller 기본 매니페스트에 `dpiAwareness PerMonitorV2, PerMonitor`(+ `dpiAware true/pm`)를 더해 `--manifest`로 넣는다. 기본 매니페스트에는 DPI 선언이 없어 같은 실행 파일로 뜬 Worker가 DPI 비인식이 된다 (ADR-0021). `longPathAware`는 유지.
 - **Studio와 Bot UI는 따로 묶는다.** QtWebEngine은 Studio에만 넣는다 (Studio 551MB 중 WebEngine 194MB, 개발자 도구 리소스 83MB). Bot UI(113MB)는 모든 현장 PC에 깔리므로 작게 둔다.
 
-> 미정: 설치 프로그램 종류(Inno Setup, WiX/MSI). MSIX는 S4에서 본 파일·레지스트리 가상화(다른 프로세스·작업 스케줄러가 보지 못함) 때문에 Bot UI에는 맞지 않아 보인다. 코드 서명·백신 오탐, 크기 줄이기(devtools pak, Qt Quick 제외)는 M1 뒤 설치 파일 작업에서 확인한다.
+> 설치 프로그램 종류는 [ADR-0068](0068-installer-inno-setup-per-user.md)이 정했다 (Inno Setup, 사용자별, 서명 없음). 아래는 그때 남긴 메모다: MSIX는 S4에서 본 파일·레지스트리 가상화(다른 프로세스·작업 스케줄러가 보지 못함) 때문에 Bot UI에는 맞지 않아 보인다. 코드 서명·백신 오탐, 크기 줄이기(devtools pak, Qt Quick 제외)는 M1 뒤 설치 파일 작업에서 확인한다.
 
 ## 결과
 
