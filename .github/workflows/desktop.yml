@@ -6,8 +6,9 @@
 # 보는 것은 둘이다 — **Windows에서 정말 묶이나**, 그리고 **묶은 앱이 제 확장을 들고 있나**
 # (`--selftest`, ADR-0024의 빌드 검사. 확장이 빠지면 실행 중에야 드러난다).
 #
-# 산출물은 **설치 프로그램이 아니다** — 설치 프로그램 종류는 아직 정하지 않았다 (ADR-0024
-# 「미정」). 지금 나오는 것은 설치 프로그램이 담을 폴더다.
+# **Windows에서는 설치 파일까지 만든다** (ADR-0068 — Inno Setup, 사용자별, 서명 없음). 그리고
+# 그 설치 파일을 **조용히 설치 → 설치된 앱 검사 → 조용히 제거**까지 해 본다(`--check-install`).
+# 같은 앱의 설치를 덮으므로 러너에서만 한다.
 name: 데스크톱 산출물
 
 on:
@@ -57,6 +58,15 @@ jobs:
           sudo apt-get install -y libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 \
             libnss3 libxcomposite1 libxdamage1 libxrandr2 libasound2t64
 
+      # 러너 이미지에 Inno Setup 6이 없으면 깐다 (있으면 그대로 쓴다).
+      - name: Inno Setup (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $found = Get-Command iscc -ErrorAction SilentlyContinue
+          $default = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not $found -and -not (Test-Path $default)) { choco install innosetup -y --no-progress }
+
       # **확장이 다 들어갔는지 빌드가 스스로 본다** — `--want`로 이름을 못 박는다.
       # 내장 확장은 `ui-automation` 하나다 (사내 확장이 생기면 여기 쉼표로 늘어난다).
       # **판은 태그가 정한다** (ADR-0067) — 태그로 돌면 그 이름을 넘긴다(얕은 체크아웃에서 태그를
@@ -66,7 +76,8 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-        run: uv run --group build python packaging/build.py ${{ inputs.apps }} --want ui-automation ${VERSION:+--version "$VERSION"}
+          INSTALLER: ${{ runner.os == 'Windows' && '--installer --check-install' || '' }}
+        run: uv run --group build python packaging/build.py ${{ inputs.apps }} --want ui-automation ${VERSION:+--version "$VERSION"} $INSTALLER
 
       - name: 산출물 올리기
         uses: actions/upload-artifact@v4
@@ -76,3 +87,13 @@ jobs:
           retention-days: 7
           # 큰 폴더다 (Studio 약 550MB) — 압축을 낮춰 올리는 시간을 줄인다.
           compression-level: 1
+
+      # 설치 파일 — 사람이 현장 PC에 넣는 것은 이것이다 (이미 압축돼 있다).
+      - name: 설치 파일 올리기 (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers-windows
+          path: build/installer
+          retention-days: 30
+          compression-level: 0
