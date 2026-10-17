@@ -16,7 +16,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import socket
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -25,7 +27,7 @@ from typing import Any
 
 import httpx
 
-from chaeksas.bot_ui.settings import Settings, data_dir
+from chaeksas.bot_ui.settings import RuntimeSettings, Settings, data_dir
 from chaeksas.contracts import RESERVED_CONFIG_PREFIX, LocalRuntime
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.processes import ChildProcess, Supervisor
@@ -41,6 +43,9 @@ BOT_UI_MODULE = "chaeksas.bot_ui"
 READY_TIMEOUT_S = 15.0
 READY_POLL_S = 0.2
 HEALTH_TIMEOUT_S = 2.0
+#: 빌드 검사가 기다리는 시간 (초) — 묶은 앱의 **첫 기동**은 평소보다 느리다(압축 없는 onedir라도
+#: 바이러스 검사가 처음 보는 파일을 훑는다). 평소의 `READY_TIMEOUT_S`로 재면 CI가 흔들린다.
+CHECK_TIMEOUT_S = 90.0
 
 #: 이 PC에서 띄운 런타임의 주소 — **127.0.0.1 고정** (01-architecture §4).
 LOCAL_HOST = "127.0.0.1"
@@ -134,6 +139,9 @@ class Runtimes:
     supervisor_factory: Callable[[str, LocalRuntime, int, Path | None], Supervisor] | None = None
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
+    #: 토큰·로그를 둘 자리 — 비우면 사용자 데이터 위치(`data_dir()`). 빌드 검사는 **임시 폴더**를
+    #: 준다(사용자 자리에 `runtime.json`을 남기면 Studio가 없는 런타임을 찾는다).
+    root: Path | None = None
 
     def contributions(self) -> list[tuple[str, LocalRuntime]]:
         return [(c.extension_id, c.value) for c in self.host.local_runtimes()]
@@ -151,7 +159,7 @@ class Runtimes:
             return found
         extension_id, runtime = self.find(runtime_id)
         port = port_for(runtime, self.settings)
-        where = token_dir_for(runtime.id) if runtime.token_dir else None
+        where = token_dir_for(runtime.id, root=self.root) if runtime.token_dir else None
         if where is not None:
             where.mkdir(parents=True, exist_ok=True)
             # **포트를 남긴다** — 같은 PC의 Studio가 이 런타임을 찾는다 (C13 `token_dir`, STU-10 「Worker」).
@@ -165,7 +173,7 @@ class Runtimes:
             made = Supervisor(
                 child=ChildProcess(
                     args=runtime_args(f"{extension_id}:{runtime.id}", port=port, token_dir=where),
-                    log_path=data_dir() / "logs" / f"{runtime.id}.log",
+                    log_path=(self.root or data_dir()) / "logs" / f"{runtime.id}.log",
                     name=runtime.label,
                     # 자식은 부모 환경을 물려받는다 — 여기에 주소 같은 **비밀 아닌 것만** 더한다.
                     env={**os.environ, **extra} if extra else None,
@@ -247,7 +255,7 @@ class Runtimes:
         call = getattr(runtime, which, None)
         if call is None or not runtime.token_dir:
             return None
-        token_file = token_dir_for(runtime.id) / call.token_file
+        token_file = token_dir_for(runtime.id, root=self.root) / call.token_file
         token = token_file.read_text(encoding="utf-8").strip() if token_file.is_file() else ""
         url = f"http://{LOCAL_HOST}:{port_for(runtime, self.settings)}{call.path}"
         return url, {call.header: token}
@@ -329,7 +337,7 @@ class Runtimes:
             head = f"{RESERVED_CONFIG_PREFIX}{runtime_id}"
             out[f"{head}.port"] = port_for(runtime, self.settings)
             if runtime.token_dir:
-                out[f"{head}.token_dir"] = str(token_dir_for(runtime_id))
+                out[f"{head}.token_dir"] = str(token_dir_for(runtime_id, root=self.root))
             found = self.supervisors.get(runtime_id)
             out[f"{head}.state"] = found.state if found is not None else "off"
         return out
@@ -343,6 +351,59 @@ class HostSettings:
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.values.get(key, default)
+
+
+def free_port() -> int:
+    """지금 비어 있는 127.0.0.1 포트 하나 — 빌드 검사만 쓴다(평소 포트는 설정에서 온다)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind((LOCAL_HOST, 0))
+        return int(probe.getsockname()[1])
+
+
+def check_start(host: ExtensionHost, *, timeout_s: float = CHECK_TIMEOUT_S) -> dict[str, Any]:
+    """빌드 검사 — 기여된 로컬 런타임을 **정말 띄워 보고** 끈다 (ADR-0024, `--start-runtimes`).
+
+    `--selftest`의 다른 단계는 `entry`가 **풀리는지**까지만 본다. 그것으로는 묶은 실행 파일이
+    `--local-runtime`으로 **자신을 다시 띄울 수 있는지**, 그 자식이 확장을 찾아 포트를 여는지 모른다
+    — 현장에서 유틸리티를 처음 열 때에야 안다. 그래서 **평소와 같은 길**(`Runtimes.ensure` →
+    `runtime_args` → `core.processes`)로 띄운다. 다른 것은 셋이다: 포트는 **빈 것**(같은 PC에 도는
+    런타임과 부딪히지 않게), 자리는 **임시 폴더**, 기다림은 `CHECK_TIMEOUT_S`.
+
+    `health`가 답해야 하고, `status`를 선언했으면 **토큰을 파일에서 읽어** 그것도 답해야 한다
+    (토큰을 파일로 주고받는 길까지 본다). 끝나면 **늘 끈다** — 실패해도.
+    """
+    contributed = [(c.extension_id, c.value) for c in host.local_runtimes()]
+    settings = Settings(runtimes=tuple(RuntimeSettings(runtime_id=r.id, port=free_port()) for _, r in contributed))
+    seen: list[dict[str, Any]] = []
+    with tempfile.TemporaryDirectory(prefix="chk-selftest-") as where:
+        found = Runtimes(host=host, settings=settings, root=Path(where))
+        try:
+            for extension_id, runtime in contributed:
+                one: dict[str, Any] = {"runtime": f"{extension_id}:{runtime.id}"}
+                started = time.monotonic()
+                try:
+                    found.ensure(runtime.id, timeout_s=timeout_s)
+                except RuntimeUnavailable as e:
+                    one.update(ok=False, error=str(e), log=_tail(Path(where) / "logs" / f"{runtime.id}.log"))
+                    seen.append(one)
+                    continue
+                one["seconds"] = round(time.monotonic() - started, 1)
+                one["healthy"] = runtime.health is not None
+                if runtime.status is not None:
+                    one["status"] = found.status_of(runtime.id) is not None
+                one["ok"] = one.get("status", True)
+                seen.append(one)
+        finally:
+            found.stop_all()
+    return {"ok": all(one["ok"] for one in seen), "value": seen}
+
+
+def _tail(path: Path, lines: int = 20) -> list[str]:
+    """실패했을 때 자식 로그의 끝 — 빌드 로그에서 바로 까닭이 보이게."""
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
+    except OSError:
+        return []
 
 
 def serve(spec: str, *, port: int, token_dir: Path | None, host: ExtensionHost | None = None) -> int:
@@ -364,6 +425,7 @@ def serve(spec: str, *, port: int, token_dir: Path | None, host: ExtensionHost |
 
 __all__ = [
     "BOT_UI_MODULE",
+    "CHECK_TIMEOUT_S",
     "LOCAL_HOST",
     "READY_TIMEOUT_S",
     "RUNTIME_FLAG",
@@ -371,6 +433,8 @@ __all__ = [
     "HostSettings",
     "RuntimeUnavailable",
     "Runtimes",
+    "check_start",
+    "free_port",
     "frozen",
     "healthy",
     "port_for",

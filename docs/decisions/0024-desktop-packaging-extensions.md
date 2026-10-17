@@ -5,7 +5,7 @@
 | 상태 | 수락 (2026-10-03). 설치 프로그램 종류는 미정 |
 | 날짜 | 2026-10-02 |
 | 관련 | 스파이크 `spikes/S5-extension-packaging/`(Windows)·`.../linux-core-hook/`(Linux, 확장 호스트와 훅), ADR-0018(확장), ADR-0019(이름 공간), ADR-0021(DPI), ADR-0022(Studio 캔버스), ADR-0023(자동 시작), 계약 C13 |
-| 구현 | 훅: `packages/core/src/chaeksas/core/__pyinstaller/`, **빌드: `packaging/build.py`**, **빌드 검사: `packages/core/.../selftest.py` + 두 앱의 `--selftest`**, CI 산출물: `.github/workflows/desktop.yml` (배선 검사 `tests/test_extension_host.py`). 설치 프로그램 종류는 그대로 미정이고, **로컬 런타임을 실제로 띄워 보는 검사는 아직 없다** |
+| 구현 | 훅: `packages/core/src/chaeksas/core/__pyinstaller/`, **빌드: `packaging/build.py`**, **빌드 검사: `packages/core/.../selftest.py` + 두 앱의 `--selftest`**, CI 산출물: `.github/workflows/desktop.yml` (배선 검사 `tests/test_extension_host.py`). 설치 프로그램 종류는 그대로 미정이다. **로컬 런타임 기동**은 Bot UI의 `--selftest --start-runtimes`가 평소와 같은 길(`runtimes.check_start` → `Runtimes.ensure`)로 띄워 `health`·`status`까지 본다 (`tests/test_selftest_runtimes.py`) |
 
 ## 배경
 
