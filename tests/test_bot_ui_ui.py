@@ -409,3 +409,17 @@ def test_a_well_shaped_key_is_saved(app: Any, agent: Agent) -> None:
     dialog.api_key.setText(f"  {key}  ")  # 붙여 넣을 때 공백이 섞인다
     dialog.save()
     assert agent.credentials.center_api_key() == key
+
+
+def test_saving_settings_clears_the_readiness_cache(app: Any, agent: Agent) -> None:
+    """SMTP를 넣고 저장하면 다음 하트비트가 준비 상태를 **다시 잰다** (현장 리허설에서 드러났다).
+
+    안 비우면 갖춘 설정이 바뀌어도 「준비 안 됨」(`settings_missing`)이 계속 올라간다.
+    """
+    from chaeksas.bot_ui.settings_dialog import SettingsDialog  # noqa: PLC0415
+
+    agent._preflights[("bot", "1.0.0")] = object()  # type: ignore[assignment]  # 묵은 점검 결과
+    dialog = SettingsDialog(agent)
+    dialog.save()
+
+    assert agent._preflights == {}

@@ -609,6 +609,9 @@ class SettingsDialog(QDialog):
 
         self._agent.settings = wanted
         wanted.save()
+        # 설정이 바뀌면 사전 점검도 다시 잰다 — 안 비우면 SMTP를 넣어도 「준비 안 됨」이 계속
+        # 올라간다(현장 리허설에서 드러났다. 키·배포·확장 자리는 이미 비우고 있었다).
+        self._agent.invalidate_preflight()
         if failure:
             QMessageBox.warning(self, "자동 시작", failure)
         self.accept()
