@@ -5,18 +5,27 @@
 
 표준 라이브러리 `sqlite3`만 쓴다. SQL을 PostgreSQL에서도 통하는 모양으로 적어 둔다 (C7이
 「SQLite로 시작, PostgreSQL 호환」이라고 적었다) — 그래서 SQLite 전용 문법은 피한다.
+
+**표를 고치는 길은 `migrations.py`다** ([ADR-0065](../../../../../docs/decisions/0065-center-schema-migrations.md)).
+아래 `SCHEMA`는 **1판 기준선이고 얼었다** — 열·표·제약을 더하거나 이름을 바꾸는 것은 거기
+단계로 더한다. 여기를 고치면 「새로 만든 DB」와 「옮겨 온 DB」가 다른 모양이 된다(시험이 막는다).
+**주석은 고쳐도 된다** — 시험은 SQL만 본다.
 """
 
 from __future__ import annotations
 
 import json
 import sqlite3
+import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from chaeksas.center.migrations import migrate
+
+#: **1판 기준선 — 얼었다** (ADR-0065). 바꿀 것은 `migrations.MIGRATIONS`에 단계로 더한다.
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS center_keys (
   key_id      TEXT PRIMARY KEY,
@@ -32,9 +41,9 @@ CREATE TABLE IF NOT EXISTS center_keys (
 );
 CREATE TABLE IF NOT EXISTS bot_uis (
   bot_ui_id   TEXT PRIMARY KEY,
-  -- `key_id`·`machine_id`는 둘 다 한 행에만 있다 (C4 「키 묶기」). UNIQUE를 걸지 않은 것은
-  -- `CREATE TABLE IF NOT EXISTS`가 이미 만들어진 DB를 고치지 않아서다 (옮기기 수단이 없다) —
-  -- 지키는 것은 `api/bot_ui.py`의 `register`다.
+  -- `key_id`·`machine_id`는 둘 다 한 행에만 있다 (C4 「키 묶기」). **UNIQUE는 아직 걸지 않았다**
+  -- — 옮기기 단계로 걸 수 있게 됐지만(ADR-0065) **이미 겹친 행이 있으면 그 단계가 실패해
+  -- Center가 뜨지 않는다**. 겹친 것을 어떻게 다룰지 먼저 정한다. 지금 지키는 것은 `host_keys.py`다.
   key_id      TEXT NOT NULL,
   machine_id  TEXT NOT NULL,
   name        TEXT NOT NULL,
@@ -150,9 +159,9 @@ CREATE TABLE IF NOT EXISTS messages (
   acked_at         TEXT
 );
 CREATE TABLE IF NOT EXISTS delegations (
-  -- PC 위임 하나 (C12 §PC 위임, ADR-0062). **작업 표에 열을 더하지 않고 표를 따로 둔다** —
-  -- `CREATE TABLE IF NOT EXISTS`는 이미 만들어진 DB의 표를 고치지 않아 열을 더하면 돌던
-  -- Center가 조용히 깨진다 (`extension_health`와 같은 결).
+  -- PC 위임 하나 (C12 §PC 위임, ADR-0062). **작업 표와 따로 둔다** — 만들 때는 옮기기 수단이
+  -- 없어 열을 더할 수 없었다(ADR-0065 전). 지금은 단계로 더할 수 있지만 **값을 ack와 함께
+  -- 지우는 표**라 작업 행과 수명이 달라 그대로 둔다.
   --
   -- `outputs_json`은 **업무 값**이다 (원칙 6의 명시한 예외) — 실행기가 받았다고 ack하면
   -- **바로 지운다**. 못 받은 것은 작업 멱등 기간(7일)에 지운다.
@@ -207,9 +216,9 @@ CREATE TABLE IF NOT EXISTS extensions (
   PRIMARY KEY (id, version)
 );
 CREATE TABLE IF NOT EXISTS extension_health (
-  -- 외부 확장의 어댑터 `health` 점검 결과 (C7·C13 §4-1). **`extensions`에 열을 더하지 않고
-  -- 표를 따로 둔다** — `CREATE TABLE IF NOT EXISTS`는 이미 만들어진 DB의 표를 고치지 않아
-  -- 열을 더하면 돌던 Center가 조용히 깨진다 (표를 새로 만드는 것은 된다).
+  -- 외부 확장의 어댑터 `health` 점검 결과 (C7·C13 §4-1). **`extensions`와 따로 둔다** — 만들 때는
+  -- 옮기기 수단이 없어 열을 더할 수 없었다(ADR-0065 전). 등록 행(서명 봉투)과 점검 결과는 바뀌는
+  -- 때가 달라 그대로 둔다.
   id              TEXT PRIMARY KEY,
   status          TEXT NOT NULL,
   status_reasons  TEXT,
@@ -262,9 +271,8 @@ CREATE TABLE IF NOT EXISTS deployment_results (
   -- 배치 결정은 하트비트 한 주기만 올라온다 (C4·C12). 흘려보내면 「왜 설치가 안 됐나」가
   -- 영영 남지 않아서 쌓아 둔다 (CON-03·CON-12 「최근 배치 결정」).
   --
-  -- **이 칸은 「보고한 쪽」이다** — PC(`bui_…`)이거나 서버 실행기(`srv_…`)다. 이름이 `bot_ui_id`로
-  -- 남은 것은 `CREATE TABLE IF NOT EXISTS`가 이미 만들어진 DB의 열 이름을 고치지 못해서다
-  -- (옮기기 수단이 없다). 부르는 쪽은 `host_id`라고 쓴다.
+  -- **이 칸은 「보고한 쪽」이다** — PC(`bui_…`)이거나 서버 실행기(`srv_…`)다. 기준선에는
+  -- `bot_ui_id`로 남아 있고 **2판 단계가 `host_id`로 고친다** (`migrations.py`, ADR-0065).
   bot_ui_id      TEXT NOT NULL,
   deployment_id  TEXT NOT NULL,
   bpm_process_id TEXT NOT NULL,
@@ -302,6 +310,27 @@ CREATE TABLE IF NOT EXISTS packages (
 """
 
 
+def _use_wal(conn: sqlite3.Connection, *, tries: int = 100, pause_s: float = 0.05) -> None:
+    """WAL로 바꾼다 — **둘이 동시에 떠도** 한 쪽이 죽지 않게.
+
+    WAL로 바꾸려면 배타 잠금이 필요하고, 다른 연결이 같은 순간 바꾸고 있으면 SQLite는 기다리지
+    않고 `database is locked`를 돌려준다(연결의 대기 시간이 듣지 않는다). 옮기기 단계를 짜며
+    동시 기동 시험이 그것을 잡았다 — **이 결정 전의 코드에서도 같았다**. 판은 DB 파일에 남으므로
+    **이미 WAL이면 바꾸지 않는다**(읽기는 잠금이 필요 없다).
+    """
+    for attempt in range(tries):
+        try:
+            mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+            if str(mode).lower() in ("wal", "memory"):
+                return
+            conn.execute("PRAGMA journal_mode=WAL")
+            return
+        except sqlite3.OperationalError as e:
+            if "locked" not in str(e) or attempt == tries - 1:
+                raise
+            time.sleep(pause_s)
+
+
 def now_iso() -> str:
     """지금 (ISO 8601 + 시간대). 계약의 `Timestamp`는 시간대를 요구한다."""
     return datetime.now(UTC).isoformat()
@@ -317,10 +346,10 @@ class Store:
         # check_same_thread=False + 연결마다 락: 작은 규모에서 가장 단순하다.
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        _use_wal(self._conn)
         self._conn.execute("PRAGMA foreign_keys=ON")
-        with self.tx() as cur:
-            cur.executescript(SCHEMA)
+        # **모자란 판만 차례로 옮긴다** (ADR-0065) — 기준선은 판 표가 없는 DB에서만 돈다.
+        migrate(self._conn, baseline=SCHEMA)
 
     def close(self) -> None:
         self._conn.close()

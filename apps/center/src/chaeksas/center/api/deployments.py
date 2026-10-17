@@ -405,11 +405,10 @@ def max_concurrency_for(store: Store, *, bpm_process_id: str) -> int | None:
 def results_of(store: Store, *, host_id: str, limit: int = RECENT_RESULTS) -> list[DeploymentResult]:
     """그 **보고한 쪽**의 최근 배치 결정 (C5 `BotUiInfo.deployment_results`, CON-03·CON-12).
 
-    `host_id`는 PC(`bui_…`)이거나 서버 실행기(`srv_…`)다 — 열 이름이 `bot_ui_id`로 남은 까닭은
-    `storage.SCHEMA`에 적어 두었다.
+    `host_id`는 PC(`bui_…`)이거나 서버 실행기(`srv_…`)다 (열 이름은 2판 단계가 고쳤다, ADR-0065).
     """
     rows = store.rows(
-        "SELECT * FROM deployment_results WHERE bot_ui_id = ? ORDER BY at DESC LIMIT ?",
+        "SELECT * FROM deployment_results WHERE host_id = ? ORDER BY at DESC LIMIT ?",
         (host_id, limit),
     )
     return [
@@ -433,14 +432,14 @@ def remember_results(store: Store, *, host_id: str, results: Sequence[Deployment
     """
     for one in results:
         found = store.row(
-            "SELECT 1 FROM deployment_results WHERE bot_ui_id = ? AND deployment_id = ? AND at = ?",
+            "SELECT 1 FROM deployment_results WHERE host_id = ? AND deployment_id = ? AND at = ?",
             (host_id, one.deployment_id, one.at),
         )
         if found is not None:
             continue
         with store.tx() as cur:
             cur.execute(
-                "INSERT INTO deployment_results (bot_ui_id, deployment_id, bpm_process_id, version,"
+                "INSERT INTO deployment_results (host_id, deployment_id, bpm_process_id, version,"
                 " result, reason, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     host_id,
