@@ -207,6 +207,7 @@ PyInstaller는 `--group build`에만 있어 평소 `uv sync`로는 들어오지 
   `choco install innosetup`). **사용자별**이라 관리자 권한을 묻지 않고 `%LOCALAPPDATA%\Programs\Chaeksas\<앱>`에
   깔린다. 덮어쓰면 옛 판의 `_internal`을 지우고 깐다. 제거해도 **사용자 데이터는 남는다**(실행 기록·설치한 Bot).
   `--check-install`(설치 → 설치된 앱 검사 → 제거)은 **같은 앱의 설치를 덮으므로 CI에서만** 쓴다.
+  설치 파일 크기는 CI가 말해 준 값으로 **Bot UI 63MB·Studio 205MB**다 (2026-10-17, 런 39004329132).
 - **설치 파일에 서명이 없다** — 처음 실행하면 SmartScreen이 「Windows의 PC 보호」를 띄운다.
   「추가 정보」 → 「실행」을 누른다. 백신이 실행 파일을 막으면 그 자리의 예외로 넣는다(서명이 생기면 줄어든다).
 - **매니페스트는 Windows에서만** 들어간다 (`packaging/app.manifest` — DPI Per-Monitor v2,
