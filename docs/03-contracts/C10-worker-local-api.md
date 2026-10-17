@@ -161,6 +161,8 @@
 | 경로 | 뜻 (BUI-06) |
 | --- | --- |
 | `POST /v1/registration/browser` | 브라우저 열기 `{start_url, headed}` → `SessionInfo` (§2와 같은 모양) |
+| `GET /v1/registration/windows` | 지금 떠 있는 **최상위 창** 목록 → `{windows: [{title, class_name, process}]}`. 제목 없는 창은 뺀다. 데스크톱(UIA)이 없는 PC면 503 `browser_unavailable` |
+| `POST /v1/registration/desktop` | 창에 붙기 `{window: {title, class_name?, process?}}` → `SessionInfo`. `title`은 C9 `window.title`과 같은 **정규식**이다. 맞는 창이 없으면 409 `app_not_running`, 여럿이면 409 `window_ambiguous` (§2 오류와 같다). **창을 띄우지 않고 닫지도 않는다** |
 | `POST /v1/registration/{session_id}/analyze` | 화면 분석 `{scope_css?, max, include_read}` → 요소 후보 목록 |
 | `POST /v1/registration/{session_id}/pick` / `DELETE …/pick` | 직접 고르기 시작·끝. 고른 요소는 `GET …/pick/events`로 받는다 |
 | `GET /v1/registration/{session_id}/pick/events` | **고른 것을 비워 가져온다** (한 번 준 것은 다시 주지 않는다) |
@@ -173,7 +175,7 @@
 
 | 칸 | 타입 | 뜻 |
 | --- | --- | --- |
-| `candidates` | array | 후보 하나마다 `{tag, role, name, element_id, field_name, test_id, css[], kind, actions[], suggested_key}`. `name`은 접근성 이름, `field_name`은 HTML `name` 속성 |
+| `candidates` | array | 후보 하나마다 `{tag, role, name, element_id, field_name, test_id, css[], kind, actions[], suggested_key, platform, control_type, class_name}`. `name`은 접근성 이름, `field_name`은 HTML `name` 속성. **데스크톱 후보**(`platform: desktop`)는 `tag`·`control_type`에 UIA ControlType, `element_id`에 AutomationId, `class_name`에 ClassName, `name`에 UIA Name이 오고 `css`는 비어 있다. 사다리는 C8 데스크톱 순서다 (`automation_id` → `class_name` → `control_name`, 뒤 둘은 `control_type`으로 좁힌다) |
 | `total` | int | 범위 안에서 찾은 전체 수 (자르기 전) |
 | `truncated` | bool | `max`에 걸려 잘렸다. **잘렸으면 잘렸다고 말한다** — 조용히 자르면 없는 것을 없다고 단정한다 |
 | `scope_empty` | bool | `scope_css`가 아무것도 못 찾았다. **전체로 몰래 넓히지 않는다** — 범위를 잘못 적은 것을 알아야 한다 |
@@ -186,7 +188,7 @@
 
 `verify` 응답은 사다리 한 칸에 한 줄(`{semantic_key, rank, strategy, selector, passed, matched, reason}`)이다. **하나에 맞아야 통과**다 — 여럿이 잡히면 실행에서 엉뚱한 것을 누른다. 검증 결과는 **등록을 막지 않는다**: 사람이 보고 정한다.
 
-> 상태: `analyze`·`pick`·`highlight`는 **브라우저 백엔드에서만** 된다 — 데스크톱(UIA) 세션이면 503 `browser_unavailable`이다 (데스크톱 화면 등록은 사다리를 적어 넣는다, ADR-0033).
+> 상태: `analyze`·`verify`는 **브라우저와 데스크톱 모두** 된다 — 데스크톱은 붙은 창 안만 훑고 `scope_css`는 쓰지 않는다(창 하나가 범위다). `pick`·`highlight`는 **브라우저에서만** 되고 데스크톱 세션이면 503 `browser_unavailable`이다.
 
 ## 오류
 
@@ -223,6 +225,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-18 | 1 | §5 데스크톱 창에서 담기 — `GET /registration/windows`·`POST /registration/desktop`, `analyze` 후보의 `platform`·`control_type`·`class_name`, 데스크톱 `analyze`. 현장 리허설에서 데스크톱 화면을 사람이 등록할 길이 없던 것 (09-gaps §6) | 0033 |
 | 2026-10-09 | 1 | `recent_sessions[]`의 칸을 적고 `caller`·`fallback_depth_max`·`healed`를 더했다 — BUI-09 「최근 UI 세션」 표의 열이 다 있어야 그 칸을 그릴 수 있다 (더하기만이라 schema는 그대로) | 0042 |
 | 2026-10-06 | 1 | 예약이 409면 Bot UI가 강제로 닫지 않고 **기다린다**는 것을 적었다 (ADR-0014 §4 그대로). Bot UI는 C13 `reserve` 선언으로 이 경로를 부른다 | 0014 |
 | 2026-10-05 | 1 | 계획 없는 데스크톱 세션(`desktop-apps.json`의 `window`), 스텝의 `target`, `GET …/view` — 데스크톱 AI 태스크의 눈과 손 | 0037 |

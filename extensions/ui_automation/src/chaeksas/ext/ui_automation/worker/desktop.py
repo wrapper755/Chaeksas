@@ -294,6 +294,26 @@ def find_windows(spec: WindowSpec) -> list[Any]:
     return found
 
 
+#: 창 목록에서 빼는 셸 창 (작업 표시줄·바탕화면) — 등록할 화면이 아니다.
+SHELL_WINDOW_CLASSES = frozenset({"Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Progman", "WorkerW"})
+
+
+def top_windows() -> list[dict[str, str]]:
+    """지금 떠 있는 **최상위 창** (BUI-06 「창」 콤보, C10 §5). 제목 없는 창·셸 창은 뺀다."""
+    import uiautomation as auto  # noqa: PLC0415
+
+    out: list[dict[str, str]] = []
+    for one in auto.GetRootControl().GetChildren():
+        try:
+            title, class_name = one.Name or "", one.ClassName or ""
+            if not title.strip() or class_name in SHELL_WINDOW_CLASSES:
+                continue
+            out.append({"title": title, "class_name": class_name, "process": process_name(one.ProcessId)})
+        except Exception:  # noqa: BLE001 — 사라지는 중인 창
+            continue
+    return out
+
+
 @dataclass
 class AppLauncher:
     """앱 이름 → 그 PC의 실행 명령 (`desktop-apps.json`, C10). 경로는 PC마다 다르다 (ADR-0033)."""

@@ -16,7 +16,7 @@ from typing import ClassVar
 from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned
-from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec
+from chaeksas.ext.ui_automation.contracts.plan import DESKTOP, WEB, LocatorSpec
 
 #: 분석 한 번에 가져오는 요소 수 (BUI-06 「최대」 10~2000).
 DEFAULT_MAX = 200
@@ -47,6 +47,8 @@ ACTIONS_BY_ROLE: dict[str, list[str]] = {
     "list": ["read"],
     "heading": ["read"],
     "cell": ["read"],
+    "text": ["read"],
+    "menuitem": ["click"],
 }
 
 
@@ -70,6 +72,12 @@ class Candidate(ContractModel):
     actions: list[str] = Field(default_factory=list)
     #: 제안된 시맨틱 키 — 사람이 고친다.
     suggested_key: str = ""
+    #: 어느 화면에서 왔나 — `web`·`desktop` (C10 §5). 사다리 전략이 이것으로 갈린다.
+    platform: str = WEB
+    #: 데스크톱만 — UIA ControlType (`Edit`·`Button`…). 사다리의 뒤 두 칸을 이것으로 좁힌다.
+    control_type: str = ""
+    #: 데스크톱만 — UIA ClassName (언어를 따라 바뀌지 않아 이름보다 먼저 시도한다, C8).
+    class_name: str = ""
 
 
 class AnalyzeRequest(SchemaVersioned):
@@ -142,7 +150,11 @@ def suggest_key(candidate: Candidate, taken: set[str]) -> str:
     **한글 이름은 음역하지 않는다.** `고객명`을 `gogaegmyeong`으로 바꾸면 사람도 기계도 못
     읽는다 — 그럴 바엔 역할로 짓고 사람이 고치게 한다.
     """
-    for source in (candidate.test_id, candidate.element_id, candidate.field_name, candidate.name):
+    element_id = candidate.element_id
+    if candidate.platform == DESKTOP and element_id:
+        # AutomationId는 `QApplication.taxbook.nextRow`처럼 경로를 담는다 — 마지막 마디가 이름이다.
+        element_id = element_id.rsplit(".", 1)[-1]
+    for source in (candidate.test_id, element_id, candidate.field_name, candidate.name):
         if source and english(source):
             made = _slug(source)
             if made:
@@ -167,6 +179,8 @@ def _unique(base: str, taken: set[str]) -> str:
 
 def ladder_for(candidate: Candidate) -> list[LocatorSpec]:
     """후보 하나 → 사다리. **안정한 것부터** (C8 우선순위와 같다)."""
+    if candidate.platform == DESKTOP:
+        return _desktop_ladder(candidate)
     out: list[LocatorSpec] = []
     if candidate.role and candidate.name:
         out.append(LocatorSpec(type="role", value=candidate.role, name=candidate.name, exact=True))
@@ -174,6 +188,27 @@ def ladder_for(candidate: Candidate) -> list[LocatorSpec]:
         out.append(LocatorSpec(type="test_id", value=candidate.test_id))
     for css in candidate.css:
         out.append(LocatorSpec(type="css", value=css))
+    return out
+
+
+def _desktop_ladder(candidate: Candidate) -> list[LocatorSpec]:
+    """C8 데스크톱 순서 — `automation_id` → `class_name` → `control_name`.
+
+    뒤 둘은 창 안에서 여럿이 같은 값을 가질 수 있어 **컨트롤 종류로 좁힌다**. `control_name`은
+    화면 언어에 따라 달라지므로 마지막이다 (다른 언어 PC에서 깨진다).
+    """
+    kind = candidate.control_type or None
+    out: list[LocatorSpec] = []
+    if candidate.element_id:
+        out.append(LocatorSpec(type="automation_id", value=candidate.element_id, platform=DESKTOP))
+    if candidate.class_name:
+        out.append(
+            LocatorSpec(type="class_name", value=candidate.class_name, control_type=kind, platform=DESKTOP)
+        )
+    if candidate.name:
+        out.append(
+            LocatorSpec(type="control_name", value=candidate.name, control_type=kind, platform=DESKTOP)
+        )
     return out
 
 
@@ -190,7 +225,7 @@ def kind_for(role: str, tag: str) -> str:
         return KIND_TABLE
     if role in ("list", "listbox") or tag in ("ul", "ol", "select"):
         return KIND_LIST
-    if role in ("heading", "paragraph", "cell") or tag in ("p", "span", "td", "th", "h1", "h2", "h3"):
+    if role in ("heading", "paragraph", "cell", "text") or tag in ("p", "span", "td", "th", "h1", "h2", "h3"):
         return KIND_TEXT
     return KIND_CONTROL
 
