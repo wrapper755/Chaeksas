@@ -19,7 +19,7 @@ from typing import Any
 
 from chaeksas.admin import keys as keystore
 from chaeksas.admin.client import Center, CenterProblem
-from chaeksas.contracts.signing import Envelope, key_id_for, sign
+from chaeksas.contracts.signing import TARGET_ANY, Envelope, key_id_for, sign
 
 #: 승인을 기다리는 상태 (C5).
 CANDIDATE = "candidate"
@@ -202,12 +202,32 @@ def deprecate(args: argparse.Namespace, center: Center) -> int:
 
 
 def deploy(args: argparse.Namespace, center: Center) -> int:
-    """배포 서명 → Center (C2 `deployment`). **대상과 유효 기간을 보여 주고 묻는다.**"""
+    """배포 서명 → Center (C2 `deployment`). **대상과 유효 기간을 보여 주고 묻는다.**
+
+    PC 배포는 Bot UI 하나, 서버 배포는 서버 실행기 하나 또는 전체(`*`)다 — PC에는 전체 대상이
+    없다 (ADR-0046). 실행 위치와 대상이 맞는지는 **Center가 계약으로 본다** (ADR-0047) — 여기서
+    다시 짓지 않는다.
+    """
+    server = getattr(args, "server", None)
+    limit = getattr(args, "max_concurrency", None)
+    if limit is not None and server is None:
+        print("--max-concurrency는 서버 배포(--server)에만 씁니다.")
+        return 2
+    if limit is not None and limit < 1:
+        print("--max-concurrency는 1 이상입니다.")
+        return 2
     info = center.package(args.id, args.version)
     if info.get("status") != "approved":
         print(f"승인되지 않은 패키지입니다 (지금 {info.get('status')}) — 먼저 `chk-admin approve`")
         return 2
-    print(f"{args.id}@{args.version} → Bot UI {args.bot_ui}")
+    if server is None:
+        target = {"type": "bot_ui", "id": args.bot_ui}
+        print(f"{args.id}@{args.version} → Bot UI {args.bot_ui}")
+    else:
+        target = {"type": "server_runner", "id": server}
+        shown = "서버 실행기 전체" if server == TARGET_ANY else f"서버 실행기 {server}"
+        print(f"{args.id}@{args.version} → {shown}")
+        print(f"  동시 실행 상한: {limit if limit is not None else '기본'}")
     print(f"  해시: {info.get('content_hash')}")
     print(f"  유효: {args.start or '즉시'} ~ {args.until or '무기한'}")
     if not _ask("배포할까요?", assume_yes=args.yes):
@@ -217,13 +237,15 @@ def deploy(args: argparse.Namespace, center: Center) -> int:
     payload: dict[str, Any] = {
         "kind": "deployment",
         "deployment_id": args.deployment_id or f"dep_{secrets.token_hex(4)}",
-        "target": {"type": "bot_ui", "id": args.bot_ui},
+        "target": target,
         "bpm_process_id": args.id,
         "version": args.version,
         "content_hash": info.get("content_hash"),
         "not_before": args.start,
         "expires_at": args.until,
     }
+    if limit is not None:
+        payload["max_concurrency"] = limit
     found = center.deploy(_sign(args, payload))
     print(f"배포했습니다 — {found.get('deployment_id')} → {found.get('target', {}).get('id')}")
     return 0
@@ -514,7 +536,19 @@ def parser() -> argparse.ArgumentParser:
     sent = subs.add_parser("deploy", help="배포 서명 (ADM-03)")
     sent.add_argument("id")
     sent.add_argument("version")
-    sent.add_argument("--bot-ui", dest="bot_ui", required=True, help="대상 Bot UI id")
+    # 대상은 **둘 중 하나**다 — PC(Bot UI 하나) 또는 서버 실행기(C2 `target.type`, ADM-03).
+    where = sent.add_mutually_exclusive_group(required=True)
+    where.add_argument("--bot-ui", dest="bot_ui", help="대상 Bot UI id (PC 배포)")
+    where.add_argument(
+        "--server",
+        dest="server",
+        nargs="?",
+        const=TARGET_ANY,
+        help=f"서버 배포 — 서버 실행기 id, 비우면 전체({TARGET_ANY}). 실행 위치가 「서버」인 BPM 프로세스만",
+    )
+    sent.add_argument(
+        "--max-concurrency", dest="max_concurrency", type=int, help="서버 배포의 동시 실행 상한 (없으면 기본)"
+    )
     sent.add_argument("--from", dest="start", help="이때부터 (ISO 8601)")
     sent.add_argument("--until", dest="until", help="이때까지 (ISO 8601)")
     sent.add_argument("--deployment-id", dest="deployment_id", help="다시 올릴 때 (멱등)")

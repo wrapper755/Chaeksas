@@ -266,6 +266,55 @@ def test_a_wildcard_deployment_reaches_the_runner(
     assert [b.id for b in installed(runner.settings.data_path)] == [BOT]
 
 
+# ─────────────────────────── 명령줄 (ADM-03, ADR-0076) ───────────────────────────
+
+
+def admin_center(center: TestClient) -> Any:
+    from chaeksas.admin.client import Center  # noqa: PLC0415
+
+    return Center(base_url="http://center", token="t-admin", client=center)
+
+
+def test_the_command_signs_a_server_deployment(
+    center: TestClient, store: Store, runner: agent_mod.Agent, capsys: Any
+) -> None:
+    """사람이 **명령줄로** 서버 Bot을 배포한다 — 전에는 `--bot-ui`만 받아 서버 배포를 서명할 길이 없었다."""
+    from chaeksas.admin.cli import main as admin_main  # noqa: PLC0415
+
+    runner.tick()
+    approved(center, admin_key(store))
+    code = admin_main(
+        ["-y", "deploy", BOT, "1.0.0", "--server", "--max-concurrency", "3"], center=admin_center(center)
+    )
+    printed = capsys.readouterr().out
+    assert code == 0, printed
+    assert "서버 실행기 전체" in printed and "동시 실행 상한: 3" in printed and "배포했습니다" in printed
+
+    listed = center.get("/api/v1/deployments", headers=ADMIN).json()
+    assert [(one["target"], one.get("max_concurrency")) for one in listed] == [
+        ({"type": "server_runner", "id": "*"}, 3)
+    ]
+    runner.tick()
+    assert [b.id for b in installed(runner.settings.data_path)] == [BOT], "실행기가 받아 설치한다"
+
+
+def test_the_command_names_one_runner_or_refuses_a_limit_for_a_pc(
+    center: TestClient, store: Store, runner: agent_mod.Agent, capsys: Any
+) -> None:
+    from chaeksas.admin.cli import main as admin_main  # noqa: PLC0415
+
+    runner.tick()
+    approved(center, admin_key(store))
+    admin = admin_center(center)
+    assert admin_main(["-y", "deploy", BOT, "1.0.0", "--bot-ui", "pc-1", "--max-concurrency", "2"], center=admin) == 2
+    assert "서버 배포(--server)에만" in capsys.readouterr().out
+    assert admin_main(["-y", "deploy", BOT, "1.0.0", "--server", runner.server_runner_id], center=admin) == 0
+    assert f"서버 실행기 {runner.server_runner_id}" in capsys.readouterr().out
+    listed = center.get("/api/v1/deployments", headers=ADMIN).json()
+    assert [one["target"]["id"] for one in listed] == [runner.server_runner_id]
+    assert listed[0].get("max_concurrency") is None, "적지 않으면 기본이다 (계약의 값을 베끼지 않는다)"
+
+
 def test_someone_elses_deployment_is_refused(
     center: TestClient, store: Store, runner: agent_mod.Agent
 ) -> None:
