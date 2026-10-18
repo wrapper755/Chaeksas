@@ -183,6 +183,29 @@ def test_following_the_system_connects_once(app: Any) -> None:
     assert getattr(app, "_chk_theme_following", False) is True
 
 
+def test_a_fixed_choice_stops_following_the_system(app: Any, monkeypatch: Any) -> None:
+    """「시스템 따름」 뒤에 밝게·어둡게를 고르면 OS가 바꿔도 다시 입히지 않는다 (ADR-0073, STU-10 「외형」).
+
+    신호는 한 번 붙으면 떼지 않으므로 **받는 쪽이** 지금 고른 값을 본다.
+    """
+    from chaeksas.qt import theme as theme_module  # noqa: PLC0415
+
+    apply_theme(app, choice=THEME_SYSTEM)
+    apply_theme(app, choice=THEME_DARK)
+    seen: list[str] = []
+
+    def record(_app: Any, *, choice: str) -> str:
+        seen.append(choice)
+        return choice
+
+    monkeypatch.setattr(theme_module, "apply_theme", record)
+    theme_module._follow_system(app)
+    assert seen == [], "고정한 테마는 OS를 따라가지 않는다"
+    app._chk_theme_choice = THEME_SYSTEM
+    theme_module._follow_system(app)
+    assert seen == [THEME_SYSTEM]
+
+
 def test_load_fonts_registers_the_bundled_families(app: Any) -> None:
     """포함한 글꼴이 실제로 등록되는가 (`fonts/README.md`).
 

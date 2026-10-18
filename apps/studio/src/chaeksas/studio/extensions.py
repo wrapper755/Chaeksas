@@ -80,9 +80,15 @@ class StudioSecrets:
     """
 
     credentials: StudioCredentials = field(default_factory=StudioCredentials)
+    #: 이 확장의 비밀 설정 칸으로도 찾는다 (STU-10 「확장별 설정」, ADR-0073). 비면 키 참조만.
+    extension_id: str = ""
 
     def resolve(self, ref: str) -> str | None:
-        return self.credentials.service_key(ref)
+        """Bot UI 실행기와 **같은 순서**다 — 서비스 앱 키 참조가 먼저, 그다음 그 확장의 비밀 칸."""
+        found = self.credentials.service_key(ref)
+        if found or not self.extension_id:
+            return found
+        return self.credentials.extension_secret(self.extension_id, ref)
 
 
 def installed_host(off: Iterable[str] = ()) -> ExtensionHost:
@@ -104,15 +110,19 @@ class Extensions:
     host: ExtensionHost = field(default_factory=ExtensionHost)
     #: 호스트를 **다시 읽는 길** — 끈 목록이 바뀔 때 부른다 (STU-15). 시험이 바꿔 끼운다.
     loader: Callable[[Iterable[str]], ExtensionHost] = field(default_factory=lambda: installed_host)
+    #: STU-10 「확장별 설정」에 사람이 넣은 값 — `Settings.extensions` (비밀은 없다, ADR-0073).
+    configured: dict[str, dict[str, Any]] = field(default_factory=dict)
     _editors: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def load(cls, *, off: Iterable[str] = ()) -> Extensions:
+    def load(
+        cls, *, off: Iterable[str] = (), configured: dict[str, dict[str, Any]] | None = None
+    ) -> Extensions:
         """설치된 확장을 읽는다. `off`는 **사람이 꺼 둔** id다 (STU-15, ADR-0043).
 
         꺼 둔 것은 기여를 내지 않으므로 팔레트·편집기·시험 실행에서 한꺼번에 사라진다.
         """
-        return cls(host=installed_host(off))
+        return cls(host=installed_host(off), configured=dict(configured or {}))
 
     def reload(self, *, off: Iterable[str]) -> None:
         """끈 목록이 바뀌었다 — 호스트를 다시 읽고 **만들어 둔 편집기를 버린다**.
@@ -128,13 +138,18 @@ class Extensions:
         return found.value.label if found is not None else task_type
 
     def settings_for(self, extension_id: str) -> Settings:
-        """그 확장의 Studio 설정 + 예약 키. **주소의 출처는 하나다** (C13)."""
+        """그 확장의 Studio 설정 + 예약 키. **주소의 출처는 하나다** (C13).
+
+        칸의 값은 STU-10 「확장별 설정」이 넣은 것이고, 넣지 않은 칸은 `None`이다. **비밀 칸은
+        여기 오지 않는다** — `secrets.resolve(<칸>)`으로 푼다 (Bot UI와 같다).
+        """
         found = self.host.get(extension_id)
         values: dict[str, Any] = {}
         if found is not None:
+            stored = self.configured.get(extension_id, {})
             for item in found.manifest.contributes.configuration:
-                if item.scope == SCOPE_STUDIO:
-                    values[item.key] = None
+                if item.scope == SCOPE_STUDIO and not item.secret:
+                    values[item.key] = stored.get(item.key) or None
             service = found.manifest.service
             values[SERVICE_URL_SETTING] = service.base_url if service is not None else None
         return PlainSettings(values=values)
@@ -183,7 +198,10 @@ class Extensions:
         values = dict(getattr(self.settings_for(extension_id), "values", {}))
         values.update(self.runtime_settings(extension_id))
         return self.host.context(
-            extension_id, host=HOST_STUDIO, settings=PlainSettings(values=values), secrets=StudioSecrets()
+            extension_id,
+            host=HOST_STUDIO,
+            settings=PlainSettings(values=values),
+            secrets=StudioSecrets(extension_id=extension_id),
         )
 
     def tasks(self) -> HostTasks:

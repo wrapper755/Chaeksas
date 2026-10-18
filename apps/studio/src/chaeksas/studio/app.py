@@ -37,9 +37,9 @@ def main(argv: list[str] | None = None) -> int:
 
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("Chaeksas Studio")
-    apply_theme(app)
-
     settings = Settings.load()
+    apply_theme(app, choice=settings.theme)
+
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     window = MainWindow(settings)
     window.show()

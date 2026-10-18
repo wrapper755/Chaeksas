@@ -119,7 +119,7 @@ class MainWindow(QMainWindow):
         self.log_view = QPlainTextEdit(self)
         self.log_view.setReadOnly(True)
 
-        self.extensions = Extensions.load(off=settings.disabled_extensions)
+        self.extensions = Extensions.load(off=settings.disabled_extensions, configured=settings.extensions)
         self.properties = Properties(self, extensions=self.extensions)
         self.properties.applying.connect(self._apply_properties)
         self.canvas.selected.connect(self._on_selected)
@@ -312,12 +312,26 @@ class MainWindow(QMainWindow):
         self.explorer_tabs.setCurrentWidget(self.resource_tree)
         self.resource_tree.setFocus()
 
+    def _apply_theme(self, choice: str) -> None:
+        """STU-10 「외형」 — **저장하는 그 자리에서** 창 전체에 입힌다 (ADR-0073)."""
+        from PySide6.QtWidgets import QApplication  # noqa: PLC0415
+
+        from chaeksas.qt.theme import apply_theme  # noqa: PLC0415
+
+        app = QApplication.instance()
+        if isinstance(app, QApplication):
+            apply_theme(app, choice=choice)
+
     def open_settings(self) -> None:
         """STU-10. 저장하면 이 창의 설정도 바뀐다 (다음 시험 실행부터 쓴다)."""
         refs = refs_in(self.process.definitions) if self.process is not None else []
         dialog = StudioSettingsDialog(self.settings, self.extensions, refs=refs, parent=self)
         if dialog.exec() and dialog.saved is not None:
+            if dialog.saved.theme != self.settings.theme:
+                self._apply_theme(dialog.saved.theme)
             self.settings = dialog.saved
+            # 확장별 설정 — 다음 시험 실행·사전 점검부터 쓴다.
+            self.extensions.configured = dict(dialog.saved.extensions)
             self.say("설정을 저장했습니다.")
             self.refresh_catalog()  # Center 주소·키가 바뀌었을 수 있다
 

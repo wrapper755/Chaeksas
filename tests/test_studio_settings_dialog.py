@@ -1,4 +1,4 @@
-"""STU-10 설정 — 「LLM」·「Center」·「Worker」·「서비스 앱 키」 (M4 조각 26, Center는 M5).
+"""STU-10 설정 — 「외형」·「LLM」·「Center」·「확장별 설정」·「Worker」·「서비스 앱 키」 (ADR-0073).
 
 보는 것:
 
@@ -42,7 +42,12 @@ from chaeksas.studio.credentials import (  # noqa: E402
 )
 from chaeksas.studio.extensions import Extensions, StudioSecrets  # noqa: E402
 from chaeksas.studio.settings import ServiceKeyRef, Settings  # noqa: E402
-from chaeksas.studio.settings_dialog import CATEGORIES, LATER, StudioSettingsDialog  # noqa: E402
+from chaeksas.studio.settings_dialog import (  # noqa: E402
+    CATEGORIES,
+    NO_EXTENSION_FIELDS,
+    THEMES,
+    StudioSettingsDialog,
+)
 from chaeksas.studio.workspace import Workspace  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
@@ -108,15 +113,110 @@ def type_key(found: StudioSettingsDialog, at: int, value: str) -> None:
 # ─────────────────────────── 창 ───────────────────────────
 
 
-def test_every_category_is_listed_and_the_unbuilt_ones_say_why(
+def test_only_the_categories_something_reads_are_listed(
     qt: Any, settings: Settings, extensions: Extensions
 ) -> None:
+    """ADR-0073 — 메일·비밀은 읽는 곳이 없어 없고, 남은 분류에 「(아직)」이 없다."""
     found = dialog(settings, extensions, Vault())
     labels = [found.categories.item(i).text() for i in range(found.categories.count())]
-    assert len(labels) == len(CATEGORIES) == 8
-    assert sum(label.endswith("(아직)") for label in labels) == len(LATER) == 4
-    assert "Center" in labels, "M5 조각 14 — Center가 켜졌다 (「(아직)」이 붙지 않는다)"
-    assert found.categories.currentItem().text() == "LLM", "처음에는 받쳐 주는 첫 분류를 연다"
+    assert labels == list(CATEGORIES) == ["외형", "LLM", "Center", "확장별 설정", "Worker", "서비스 앱 키"]
+    assert found.categories.currentItem().text() == "LLM", "처음에는 모델 칸을 연다"
+
+
+def test_the_theme_goes_to_the_file(qt: Any, settings: Settings, extensions: Extensions) -> None:
+    found = dialog(settings, extensions, Vault())
+    assert found.theme.currentData() == "system", "기본은 시스템 따름"
+    assert [found.theme.itemText(i) for i in range(found.theme.count())] == [label for _, label in THEMES]
+    found.theme.setCurrentIndex(found.theme.findData("dark"))
+    found.save()
+    assert found.saved is not None and found.saved.theme == "dark"
+    assert Settings.load(settings.path).theme == "dark"
+    assert dialog(Settings.load(settings.path), extensions, Vault()).theme.currentData() == "dark"
+
+
+# ─────────────────────────── 확장별 설정 (C13 scope studio) ───────────────────────────
+
+DEMO: dict[str, Any] = {
+    "schema": 2,
+    "id": "demo-ext",
+    "version": "1.0.0",
+    "name": "데모 확장",
+    "publisher": "Chaeksas",
+    "tier": "builtin",
+    "api": ">=1,<2",
+    "contributes": {
+        "configuration": [
+            {"key": "region", "label": "지역", "scope": "studio", "schema": {"type": "string"}},
+            {"key": "token", "label": "개발용 토큰", "scope": "studio", "secret": True},
+            {"key": "elsewhere", "label": "현장 칸", "scope": "bot_ui"},
+        ]
+    },
+}
+
+
+def demo_extensions(**kw: Any) -> Extensions:
+    from chaeksas.core.extensions import ExtensionHost  # noqa: PLC0415
+
+    host = ExtensionHost()
+    assert host.add_installed(json.dumps(DEMO).encode("utf-8"), origin="test", root="demo_ext") is not None
+    return Extensions(host=host, **kw)
+
+
+def test_extension_fields_come_from_the_contribution(qt: Any, settings: Settings) -> None:
+    """창은 어느 확장인지 모른다 — `scope: studio` 칸만 그 확장의 이름 아래 짓는다."""
+    found = dialog(settings, demo_extensions(), Vault())
+    assert set(found.extension_fields) == {("demo-ext", "region"), ("demo-ext", "token")}, "bot_ui 칸은 없다"
+    _, secret = found.extension_fields[("demo-ext", "token")]
+    from PySide6.QtWidgets import QLineEdit  # noqa: PLC0415
+
+    assert secret.echoMode() == QLineEdit.EchoMode.Password
+
+
+def test_without_contributed_fields_the_page_says_so(qt: Any, settings: Settings) -> None:
+    from PySide6.QtWidgets import QLabel  # noqa: PLC0415
+
+    found = dialog(settings, Extensions(), Vault())
+    assert found.extension_fields == {}
+    page = found.pages.widget(CATEGORIES.index("확장별 설정"))
+    assert page is not None
+    assert NO_EXTENSION_FIELDS in [one.text() for one in page.findChildren(QLabel)]
+
+
+def test_extension_values_go_to_the_file_and_secrets_to_the_vault(qt: Any, settings: Settings) -> None:
+    vault = Vault()
+    found = dialog(settings, demo_extensions(), vault)
+    found.extension_fields[("demo-ext", "region")][1].setText("서울")
+    found.extension_fields[("demo-ext", "token")][1].setText("tok-비밀-1")
+    found.save()
+    assert found.saved is not None and found.saved.extensions == {"demo-ext": {"region": "서울"}}
+    assert vault.values[("chaeksas-studio", "ext:demo-ext:token")] == "tok-비밀-1"
+    raw = settings.path.read_text(encoding="utf-8")
+    assert "tok-비밀-1" not in raw and "서울" in raw, "비밀은 설정 파일에 들어가지 않는다"
+    again = dialog(Settings.load(settings.path), demo_extensions(), vault)
+    assert again.extension_fields[("demo-ext", "region")][1].text() == "서울"
+    token = again.extension_fields[("demo-ext", "token")][1]
+    assert token.text() == "" and token.placeholderText().startswith("저장됨")
+
+    again.extension_fields[("demo-ext", "region")][1].setText("")
+    again.save()
+    assert again.saved is not None and again.saved.extensions == {"demo-ext": {}}, "비운 칸은 지운다"
+
+
+def test_runs_see_what_was_put_in(monkeypatch: pytest.MonkeyPatch) -> None:
+    """시험 실행·사전 점검이 쓰는 `context()`가 그 값을 본다 — 비밀은 `secrets`로만 (Bot UI와 같다)."""
+    vault = Vault()
+    vault.set_password("chaeksas-studio", "ext:demo-ext:token", "tok-stored")
+    monkeypatch.setattr("chaeksas.studio.credentials.StudioCredentials._keyring", lambda self: vault)
+    monkeypatch.delenv("CHK_STUDIO__EXT__DEMO_EXT__TOKEN", raising=False)
+    found = demo_extensions(configured={"demo-ext": {"region": "부산"}})
+    values = dict(getattr(found.settings_for("demo-ext"), "values", {}))
+    assert values["region"] == "부산" and "token" not in values and "elsewhere" not in values
+    assert demo_extensions().settings_for("demo-ext").get("region") is None, "넣지 않은 칸은 None"
+    secrets = StudioSecrets(credentials=Credentials(vault), extension_id="demo-ext")
+    assert secrets.resolve("token") == "tok-stored"
+    monkeypatch.setenv("CHK_STUDIO__EXT__DEMO_EXT__TOKEN", "tok-env")
+    assert secrets.resolve("token") == "tok-env", "환경변수가 이긴다"
+    assert StudioSecrets(credentials=Credentials(vault)).resolve("token") is None, "확장을 모르면 키 참조만"
 
 
 def test_the_llm_key_goes_to_the_vault_not_the_file(qt: Any, settings: Settings, extensions: Extensions) -> None:
