@@ -87,7 +87,7 @@
 - 그래도 창이 없으면 `app_not_running`이다.
 - **계획 없는 데스크톱 세션** ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md), 데스크톱 AI 태스크): `page_id` 없이 `app`만 주면 창 조건을 `desktop-apps.json`의 그 앱 항목 `window`(C9 `window`와 같은 모양)에서 얻는다 — `{"Calculator": {"command": ["calc.exe"], "window": {"process": "CalculatorApp.exe"}}}`. `window`가 없으면 `app_not_running`이다 (어느 창인지 모른다).
 - 찾기·조작은 그 창 **안에서만** 한다. `current_url`은 `desktop:<앱 이름>`이다 — 창 제목에는 문서 이름 같은 업무 값이 들어 있을 수 있어 싣지 않는다.
-- 데스크톱 화면의 **분석·검증**은 등록 세션이 창에 붙어서 한다(§5 `POST /registration/desktop`). **직접 고르기·표시**는 브라우저만이고 데스크톱 세션이면 503이다.
+- 데스크톱 화면의 **분석·검증**은 등록 세션이 창에 붙어서 한다(§5 `POST /registration/desktop`). **직접 고르기·표시**도 된다 — 훅 없이 커서·Ctrl을 읽고, 표시는 사각형만 돌려준다 (§5, [ADR-0072](../decisions/0072-desktop-pick-without-hooks.md)).
 
 **`POST /v1/sessions/{id}/steps` — 스텝 하나** (헤더 `X-CHK-Session`)
 
@@ -185,11 +185,11 @@
 
 `pick/events` 응답: `{candidates: [Candidate…], picking: bool}`. `picking`이 `false`면 사람이 화면에서 끝낸 것이다(Esc) — 화면도 토글을 내린다. **고르는 동안 링크 이동과 폼 제출은 막는다** (누르면 다른 화면으로 가 버린다).
 
-`highlight` 응답: `{found: int}`. **하나가 아니면 그렇게 말한다** — 0이면 「찾지 못했습니다」, 여럿이면 「N개가 잡힙니다 — 모호해서 실패합니다」.
+`highlight` 응답: `{found: int, rect?: [left, top, right, bottom]}`. `rect`는 **데스크톱 세션에서 정확히 하나일 때만** 오고 **물리 픽셀**(UIA 좌표, ADR-0021)이다 — 그리는 것은 부르는 쪽이다(Worker에는 화면이 없다). **하나가 아니면 그렇게 말한다** — 0이면 「찾지 못했습니다」, 여럿이면 「N개가 잡힙니다 — 모호해서 실패합니다」.
 
 `verify` 응답은 사다리 한 칸에 한 줄(`{semantic_key, rank, strategy, selector, passed, matched, reason}`)이다. **하나에 맞아야 통과**다 — 여럿이 잡히면 실행에서 엉뚱한 것을 누른다. 검증 결과는 **등록을 막지 않는다**: 사람이 보고 정한다.
 
-> 상태: `analyze`·`verify`는 **브라우저와 데스크톱 모두** 된다 — 데스크톱은 붙은 창 안만 훑고 `scope_css`는 쓰지 않는다(창 하나가 범위다). `pick`·`highlight`는 **브라우저에서만** 되고 데스크톱 세션이면 503 `browser_unavailable`이다.
+> 상태: `analyze`·`verify`는 **브라우저와 데스크톱 모두** 된다 — 데스크톱은 붙은 창 안만 훑고 `scope_css`는 쓰지 않는다(창 하나가 범위다). `pick`·`highlight`도 둘 다 된다. **데스크톱 `pick`은 입력을 가로채지 않는다** ([ADR-0072](../decisions/0072-desktop-pick-without-hooks.md)) — 켜면 붙은 창의 컨트롤을 한 번 읽어 두고, `pick/events`로 비워 갈 때마다 **Ctrl이 눌려 있으면** 커서 아래 요소를 읽어 등록할 만한 종류가 나올 때까지 조상으로 올라간다(표 안의 칸 → 표). **붙은 창의 것이 아니면 버리고**, 누르고 있는 동안 같은 요소를 두 번 주지 않으며, **Esc가 눌려 있으면** `picking: false`다. 후보는 「분석」과 **같은 규칙**(겹치는 AutomationId·ClassName은 사다리에 넣지 않는다)으로 짓는다.
 
 ## 오류
 
@@ -226,6 +226,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-18 | 1 | §5 데스크톱 `pick`(훅 없이 커서·Ctrl 읽기)·`highlight`(`rect` — 물리 픽셀, 그리기는 부르는 쪽) (09-gaps §7-3) | 0072 |
 | 2026-10-18 | 1 | §5 `POST /registration/{id}/plan` — 등록 세션에 계획을 싣는다. BUI-08 「시험」이 등록 탭의 화면을 **놓지 않고** 이어 쓴다 (09-gaps §7-2) | 0014 |
 | 2026-10-18 | 1 | §5 데스크톱 창에서 담기 — `GET /registration/windows`·`POST /registration/desktop`, `analyze` 후보의 `platform`·`control_type`·`class_name`, 데스크톱 `analyze`. 현장 리허설에서 데스크톱 화면을 사람이 등록할 길이 없던 것 (09-gaps §6) | 0033 |
 | 2026-10-09 | 1 | `recent_sessions[]`의 칸을 적고 `caller`·`fallback_depth_max`·`healed`를 더했다 — BUI-09 「최근 UI 세션」 표의 열이 다 있어야 그 칸을 그릴 수 있다 (더하기만이라 schema는 그대로) | 0042 |

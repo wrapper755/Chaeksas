@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -102,8 +103,10 @@ NO_REGISTRY = (
 #: 「방식」 콤보 (BUI-06 [C]).
 MODE_BROWSER = "브라우저"
 MODE_DESKTOP = "데스크톱 창"
-#: 데스크톱에서 꺼 두는 단추의 툴팁 — **못 하는 것을 되는 척하지 않는다.**
-DESKTOP_NO_PICK = "데스크톱 창은 아직 직접 고르기·표시를 하지 않습니다 — 「분석」으로 담습니다"
+#: 데스크톱 「직접 고르기」의 안내 — 누르지 않고 **올려 두고 Ctrl**이다 (ADR-0072, 입력을 가로채지 않는다).
+DESKTOP_PICKING = "고르는 중… 담을 요소 위에 마우스를 올리고 Ctrl을 누르세요 (Esc로 끝)."
+#: 데스크톱 「표시」 테두리가 떠 있는 시간 (ms).
+FLASH_MS = 1500
 
 #: `page_id`에 남기는 글자 (C9와 같은 모양 — 영소문자·숫자·`_`·`.`).
 KEY_SAFE_DOT = re.compile(r"[^a-z0-9_.]+")
@@ -161,6 +164,8 @@ class RegistrationWidget(QWidget):
         self._rows: list[Row] = []
         self._verified: VerifyResult | None = None
         self._filling = False
+        #: 데스크톱 「표시」 테두리 창 (잠깐 떠 있다 — ADR-0072).
+        self._overlay: QWidget | None = None
         #: 고른 것을 받아 오는 타이머 (BUI-06 3번). **스레드를 만들지 않는다.**
         self._picking = QTimer(self)
         self._picking.setInterval(PICK_POLL_MS)
@@ -243,13 +248,20 @@ class RegistrationWidget(QWidget):
         self.refresh_windows_button.clicked.connect(self.refresh_windows)
         self.attach_button = QPushButton("창에 붙기")
         self.attach_button.clicked.connect(self.attach_window)
+        self.desktop_pick_button = QPushButton("직접 고르기")
+        self.desktop_pick_button.setCheckable(True)
+        self.desktop_pick_button.clicked.connect(self._desktop_pick_clicked)
         self.desktop_analyze_button = QPushButton("분석")
         self.desktop_analyze_button.clicked.connect(self.analyze)
         self.release_button = QPushButton("놓기")
         self.release_button.clicked.connect(self.close_browser)
         desk.addWidget(self.window_pick, 1)
         for one in (
-            self.refresh_windows_button, self.attach_button, self.desktop_analyze_button, self.release_button
+            self.refresh_windows_button,
+            self.attach_button,
+            self.desktop_pick_button,
+            self.desktop_analyze_button,
+            self.release_button,
         ):
             desk.addWidget(one)
         self.desktop_row.setVisible(False)
@@ -373,6 +385,11 @@ class RegistrationWidget(QWidget):
         else:
             self.say("브라우저를 열고 등록할 화면으로 이동한 뒤 「분석」을 누르세요.")
         self._sync()
+
+    def _desktop_pick_clicked(self) -> None:
+        """데스크톱 줄의 「직접 고르기」 — 고르는 길은 **브라우저와 하나**다 (`toggle_pick`)."""
+        self.pick_button.setChecked(self.desktop_pick_button.isChecked())
+        self.toggle_pick()
 
     def refresh_windows(self) -> None:
         """지금 떠 있는 창을 콤보에 채운다 — `제목 — 프로세스`."""
@@ -512,7 +529,10 @@ class RegistrationWidget(QWidget):
             return
         if on:
             self._picking.start()
-            self.say("고르는 중… 브라우저에서 요소를 누르세요 (Shift+클릭은 둘러싼 표, Esc로 끝).")
+            if found.window is not None:
+                self.say(DESKTOP_PICKING)
+            else:
+                self.say("고르는 중… 브라우저에서 요소를 누르세요 (Shift+클릭은 둘러싼 표, Esc로 끝).")
         else:
             self._picking.stop()
             self.say(f"고르기를 끝냈습니다 — 담은 요소 {len(self._rows)}개.")
@@ -567,6 +587,9 @@ class RegistrationWidget(QWidget):
         if not (0 <= row < len(self._rows)):
             return
         ladder = self._rows[row].ladder()
+        if found.window is not None:
+            self._show_desktop(found, ladder)
+            return
         if not any(one.type == "css" for one in ladder):
             # **못 하는 것을 못 찾았다고 하지 않는다** — 표시는 CSS로만 한다.
             self.say("CSS 후보가 없어 화면에 표시할 수 없습니다.")
@@ -582,6 +605,26 @@ class RegistrationWidget(QWidget):
             self.say("화면에서 찾지 못했습니다.")
         else:
             self.say(f"**{count}개가 잡힙니다** — 모호해서 실패합니다.")
+
+    def _show_desktop(self, found: Session, ladder: list[LocatorSpec]) -> None:
+        """데스크톱 「표시」 — Worker는 사각형만 주고 **그리는 것은 여기다** (ADR-0072)."""
+        try:
+            count, rect = self._client.highlight_rect(found.session_id, found.secret, ladder)
+        except Exception as e:  # noqa: BLE001
+            self.say(self._why(e))
+            return
+        if count == 1 and rect is not None:
+            self._flash(rect)
+            self.say("화면에 표시했습니다.")
+        elif count == 0:
+            self.say("화면에서 찾지 못했습니다.")
+        else:
+            self.say(f"**{count}개가 잡힙니다** — 모호해서 실패합니다.")
+
+    def _flash(self, rect: list[int]) -> None:
+        """그 자리에 잠깐 테두리 창을 띄운다 — **입력은 통과한다**. 색은 테마의 강조색이다."""
+        self._overlay = flash_frame(rect, self.palette().color(QPalette.ColorRole.Highlight).name())
+        QTimer.singleShot(FLASH_MS, self._overlay.close)
 
     # ── 레지스트리 (C9) ──
 
@@ -916,7 +959,7 @@ class RegistrationWidget(QWidget):
 
     def _selection_changed(self) -> None:
         self._sync()
-        if self._session is not None and self._session.window is None:
+        if self._session is not None:
             self.show_selected()
 
     def _element_edited(self, item: QTableWidgetItem) -> None:
@@ -977,7 +1020,11 @@ class RegistrationWidget(QWidget):
         self.open_button.setText("주소로 이동" if open_now else "브라우저 열기")
         self.analyze_button.setEnabled(open_now)
         self.pick_button.setEnabled(open_now and not desktop)
-        self.pick_button.setToolTip(DESKTOP_NO_PICK if desktop else "")
+        self.desktop_pick_button.setEnabled(open_now and desktop)
+        self.desktop_pick_button.setChecked(self.pick_button.isChecked())
+        self.desktop_pick_button.setText(
+            "고르는 중… (누르면 종료)" if self.pick_button.isChecked() else "직접 고르기"
+        )
         self.scope.setEnabled(not desktop)
         self.scope.setToolTip("데스크톱은 붙은 창 하나가 범위입니다." if desktop else "")
         self.attach_button.setEnabled(not open_now and self.window_pick.count() > 0)
@@ -1064,6 +1111,50 @@ class HintDialog(QDialog):
         return _split(self.depends_on.text()), _split(self.concepts.text())
 
 
+def flash_frame(rect: list[int], color: str) -> QWidget:
+    """물리 픽셀 사각형(UIA, ADR-0021) 위에 테두리 창 하나 — 그 화면의 배율로 나눠 논리 좌표로 둔다.
+
+    **입력을 통과시킨다** (`WindowTransparentForInput`) — 사람이 그 자리를 눌러도 업무 앱에 간다.
+    """
+    from PySide6.QtCore import QRect  # noqa: PLC0415
+    from PySide6.QtGui import QGuiApplication  # noqa: PLC0415
+
+    left, top, right, bottom = rect
+    cx, cy = (left + right) / 2, (top + bottom) / 2
+    screen = QGuiApplication.primaryScreen()
+    for one in QGuiApplication.screens():
+        geo, ratio = one.geometry(), one.devicePixelRatio()
+        if geo.left() * ratio <= cx < (geo.left() + geo.width()) * ratio and geo.top() * ratio <= cy < (
+            geo.top() + geo.height()
+        ) * ratio:
+            screen = one
+            break
+    ratio = screen.devicePixelRatio() if screen is not None else 1.0
+    pad = 4
+    frame = QWidget()
+    frame.setWindowFlags(
+        Qt.WindowType.FramelessWindowHint
+        | Qt.WindowType.WindowStaysOnTopHint
+        | Qt.WindowType.Tool
+        | Qt.WindowType.WindowTransparentForInput
+    )
+    frame.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    frame.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+    frame.setGeometry(
+        QRect(
+            round(left / ratio) - pad,
+            round(top / ratio) - pad,
+            round((right - left) / ratio) + 2 * pad,
+            round((bottom - top) / ratio) + 2 * pad,
+        )
+    )
+    border = QWidget(frame)
+    border.setGeometry(0, 0, frame.width(), frame.height())
+    border.setStyleSheet(f"border: 3px solid {color}; background: transparent;")
+    frame.show()
+    return frame
+
+
 def _split(text: str) -> list[str]:
     return [one.strip() for one in text.split(",") if one.strip()]
 
@@ -1145,7 +1236,8 @@ def worker_client(settings: Any) -> Any:
 
 __all__ = [
     "CHECK_COLUMNS",
-    "DESKTOP_NO_PICK",
+    "DESKTOP_PICKING",
+    "FLASH_MS",
     "MODE_BROWSER",
     "MODE_DESKTOP",
     "ELEMENT_COLUMNS",

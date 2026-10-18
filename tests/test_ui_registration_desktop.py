@@ -25,6 +25,7 @@ import threading
 import time
 import uuid
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -162,6 +163,22 @@ class FakeWorker:
         self.closed.append(session_id)
         return {}
 
+    # ── 직접 고르기·표시 (ADR-0072) ──
+
+    picking = False
+    to_pick: list[Candidate] = []
+    rect: list[int] | None = [100, 200, 300, 240]
+
+    def pick(self, session_id: str, secret: str, *, on: bool) -> None:
+        self.picking = on
+
+    def picked(self, session_id: str, secret: str) -> tuple[list[Candidate], bool]:
+        taken, self.to_pick = self.to_pick, []
+        return taken, self.picking
+
+    def highlight_rect(self, session_id: str, secret: str, locators: Any) -> tuple[int, list[int] | None]:
+        return (1, self.rect) if self.rect else (0, None)
+
 
 class Registry:
     def __init__(self) -> None:
@@ -198,13 +215,13 @@ def desktop_mode(widget: RegistrationWidget) -> None:
     widget.mode.setCurrentText(MODE_DESKTOP)
 
 
-def test_the_desktop_mode_lists_windows_and_turns_off_what_it_cannot_do(app: Any) -> None:
+def test_the_desktop_mode_lists_windows_and_waits_to_attach(app: Any) -> None:
     widget = RegistrationWidget(FakeWorker())
     desktop_mode(widget)
     assert widget.window_pick.count() == 1
     assert widget.window_pick.itemText(0).endswith("— python.exe")
     assert widget.attach_button.isEnabled()
-    assert not widget.pick_button.isEnabled() and "직접 고르기" in widget.pick_button.toolTip()
+    assert not widget.desktop_pick_button.isEnabled(), "붙기 전에는 고를 것이 없다"
     assert not widget.scope.isEnabled()
     widget.close()
 
@@ -396,3 +413,152 @@ def test_a_window_that_is_not_there_is_a_409_and_nothing_is_launched(worker_url:
     )
     assert found.status_code == 409
     assert found.json()["code"] == "app_not_running"
+
+
+
+def test_desktop_picking_says_hover_and_ctrl_and_takes_what_comes(app: Any) -> None:
+    """누르지 않고 **올려 두고 Ctrl** — 입력을 가로채지 않는다 (ADR-0072)."""
+    from chaeksas.ext.ui_automation.client.registration_window import DESKTOP_PICKING  # noqa: PLC0415
+
+    worker = FakeWorker()
+    widget = RegistrationWidget(worker)
+    desktop_mode(widget)
+    widget.attach_window()
+    assert widget.desktop_pick_button.isEnabled()
+    widget.desktop_pick_button.setChecked(True)
+    widget._desktop_pick_clicked()
+    assert worker.picking and widget.hint.text() == DESKTOP_PICKING
+    worker.to_pick = analyze(TAXBOOK).candidates[:1]
+    widget._collect_picked()
+    assert len(widget._rows) == 1 and widget._rows[0].candidate.platform == DESKTOP
+    worker.picking = False  # 사람이 Esc를 눌렀다
+    widget._collect_picked()
+    assert not widget.desktop_pick_button.isChecked(), "끝나면 토글도 내린다"
+    widget.close()
+
+
+def test_selecting_a_desktop_row_flashes_a_frame_over_it(app: Any) -> None:
+    """Worker는 사각형만 주고 **테두리 창은 여기서** 띄운다 — 입력은 통과한다."""
+    from PySide6.QtCore import Qt  # noqa: PLC0415
+
+    worker = FakeWorker()
+    widget = RegistrationWidget(worker)
+    desktop_mode(widget)
+    widget.attach_window()
+    widget.analyze()
+    widget.elements.selectRow(0)
+    assert widget.hint.text() == "화면에 표시했습니다."
+    frame = widget._overlay
+    assert frame is not None and frame.isVisible()
+    assert frame.windowFlags() & Qt.WindowType.WindowTransparentForInput
+    ratio = frame.screen().devicePixelRatio()
+    assert abs(frame.x() - (100 / ratio - 4)) <= 1 and abs(frame.width() - (200 / ratio + 8)) <= 1
+    worker.rect = None
+    widget.elements.selectRow(1)
+    assert widget.hint.text() == "화면에서 찾지 못했습니다."
+    widget.close()
+
+
+# ─────────────────────────── 직접 고르기 규칙 (UIA 없이) ───────────────────────────
+
+
+@dataclass
+class FakeControl:
+    ControlTypeName: str
+    Name: str = ""
+    AutomationId: str = ""
+    ClassName: str = ""
+    ProcessId: int = 7
+    parent: Any = None
+
+    def GetParentControl(self) -> Any:  # noqa: N802 — UIA 이름 그대로
+        return self.parent
+
+
+def same(a: Any, b: Any) -> bool:
+    return a is b
+
+
+def picking_state() -> Any:
+    from chaeksas.ext.ui_automation.worker.registration import DesktopPick  # noqa: PLC0415
+
+    return DesktopPick(rows=TAXBOOK)
+
+
+def test_only_a_held_ctrl_takes_and_a_cell_climbs_to_its_table() -> None:
+    from chaeksas.ext.ui_automation.worker.registration import desktop_drain  # noqa: PLC0415
+
+    window = FakeControl("WindowControl")
+    table = FakeControl("TableControl", "발행대장", AID + "sheet", "QTableWidget", parent=window)
+    cell = FakeControl("DataItemControl", "1행", parent=table)
+    state = picking_state()
+
+    assert desktop_drain(window, state, ctrl=False, esc=False, under_cursor=cell, same=same) == ([], True)
+    taken, picking = desktop_drain(window, state, ctrl=True, esc=False, under_cursor=cell, same=same)
+    assert picking and [one.control_type for one in taken] == ["Table"], "칸이면 그 표가 담긴다"
+    assert taken[0].element_id == "", "창 전체에서 겹치는 id는 「분석」처럼 뺀다 (표와 안쪽 틀)"
+    again, _ = desktop_drain(window, state, ctrl=True, esc=False, under_cursor=cell, same=same)
+    assert again == [], "누르고 있는 동안 두 번 담지 않는다"
+    desktop_drain(window, state, ctrl=False, esc=False, under_cursor=None, same=same)
+    after, _ = desktop_drain(window, state, ctrl=True, esc=False, under_cursor=cell, same=same)
+    assert len(after) == 1, "뗐다 누르면 다시 담는다"
+
+
+def test_other_windows_are_left_alone_and_esc_ends() -> None:
+    from chaeksas.ext.ui_automation.worker.registration import desktop_drain  # noqa: PLC0415
+
+    window = FakeControl("WindowControl")
+    stranger = FakeControl("ButtonControl", "확인", ProcessId=99)
+    sibling_window = FakeControl("WindowControl")
+    lost = FakeControl("ButtonControl", "닫기", parent=sibling_window)
+    state = picking_state()
+    assert desktop_drain(window, state, ctrl=True, esc=False, under_cursor=stranger, same=same) == ([], True)
+    assert desktop_drain(window, state, ctrl=True, esc=False, under_cursor=lost, same=same) == ([], True), (
+        "같은 앱의 다른 창도 담지 않는다"
+    )
+    assert desktop_drain(window, state, ctrl=True, esc=True, under_cursor=None, same=same) == ([], False)
+
+
+# ─────────────────────────── 직접 고르기·표시 (진짜 창, Windows) ───────────────────────────
+
+
+@needs_desktop
+def test_hover_with_ctrl_picks_and_highlight_gives_the_screen_rect(worker_url: str, taxbook: str) -> None:
+    """진짜 UIA로 — **입력은 읽기만** 한다. 커서는 끝나면 제자리로 돌린다."""
+    import httpx  # noqa: PLC0415
+    import uiautomation as auto  # noqa: PLC0415
+
+    from chaeksas.ext.ui_automation.contracts.worker_local import SESSION_HEADER, TOKEN_HEADER  # noqa: PLC0415
+
+    with httpx.Client(base_url=worker_url, headers={TOKEN_HEADER: TOKEN}, timeout=30) as http:
+        opened = http.post("/v1/registration/desktop", json={"window": {"title": "^" + re.escape(taxbook) + "$"}})
+        assert opened.status_code == 201, opened.text
+        session = opened.json()
+        secret = {SESSION_HEADER: session["session_secret"]}
+        where = f"/v1/registration/{session['session_id']}"
+        assert http.post(f"{where}/pick", headers=secret).status_code == 200
+
+        target = desktop.find_windows(WindowSpec(title="^" + re.escape(taxbook) + "$"))[0].EditControl(
+            AutomationId=AID + "nextRow"
+        )
+        r = target.BoundingRectangle
+        before = auto.GetCursorPos()
+        try:
+            auto.SetCursorPos((r.left + r.right) // 2, (r.top + r.bottom) // 2)
+            time.sleep(0.3)
+            auto.PressKey(auto.Keys.VK_CONTROL, waitTime=0.05)
+            try:
+                drained = http.get(f"{where}/pick/events", headers=secret).json()
+            finally:
+                auto.ReleaseKey(auto.Keys.VK_CONTROL, waitTime=0.05)
+        finally:
+            auto.SetCursorPos(*before)
+        assert drained["picking"] is True
+        assert [one["element_id"] for one in drained["candidates"]] == [AID + "nextRow"]
+
+        picked = Candidate.model_validate(drained["candidates"][0])
+        shown = http.post(
+            f"{where}/highlight", json={"locators": [one.to_json_dict() for one in ladder_for(picked)]}, headers=secret
+        ).json()
+        assert shown == {"found": 1, "rect": [r.left, r.top, r.right, r.bottom]}, "물리 픽셀 그대로 준다"
+        http.delete(f"/v1/sessions/{session['session_id']}", headers=secret)
