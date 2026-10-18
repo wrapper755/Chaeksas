@@ -72,6 +72,8 @@ services:
     environment:
       # 콘솔은 **컨테이너 이름**으로 앱을 부른다 (브라우저가 아니라 콘솔 서버가 부른다, ADR-0017 §1).
       CHK_SVC_CONSOLE__APP_URL: http://svc-uia:8000
+      # 「실행 id」 → CON-01 링크 (ADR-0075). **브라우저가 여는** 주소라 컨테이너 이름이 아니다.
+      CHK_SVC_CONSOLE__CENTER_CONSOLE_URL: http://localhost:${CHK_CONSOLE__HOST_PORT:-8501}
       CHK_SVC_CONSOLE__SESSION_SECRET: ${CHK_SVC_CONSOLE__SESSION_SECRET:?세션 비밀을 .env에 넣으세요 (16자 이상)}
       PORT: "8001"
     ports:
