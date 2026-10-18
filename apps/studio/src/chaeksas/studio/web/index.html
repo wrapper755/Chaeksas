@@ -97,6 +97,46 @@
       if (bridge) bridge.picked(one ? one.id : "");
     });
 
+    /** 노드 하나의 businessObject — `chk:*`를 **만들 때 함께** 단다(만든 뒤 고치면 실행 취소가 늘어난다). */
+    const makeBo = (spec) => {
+      const bpmnFactory = modeler.get("bpmnFactory");
+      const type = String((spec && spec.bpmn) || "bpmn:ServiceTask");
+      // `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `chk:*`가
+      // 아니라 요소 자신의 칸이라 만들 때 함께 넣는다. 글만 받는다.
+      const attrs = {};
+      for (const [name, value] of Object.entries((spec && spec.attrs) || {})) {
+        if (typeof value === "string" && value) attrs[name] = value;
+      }
+      const bo = bpmnFactory.create(type, { name: String((spec && spec.name) || ""), ...attrs });
+      const holder = extensionsOf(bpmnFactory, bo, (spec && spec.chk) || {});
+      if (holder) bo.extensionElements = holder;
+      return bo;
+    };
+
+    /** `{요소 이름: JSON 글}` → `bpmn:ExtensionElements` (비면 `null`). */
+    const extensionsOf = (bpmnFactory, bo, chk) => {
+      const entries = Object.entries(chk);
+      if (!entries.length) return null;
+      const values = entries.map(([name, text]) => bpmnFactory.create(toType(name), chkAttrs(name, text)));
+      const holder = bpmnFactory.create("bpmn:ExtensionElements", { values });
+      for (const one of values) one.$parent = holder;
+      holder.$parent = bo;
+      return holder;
+    };
+
+    // 위임 호출로 바꾸기 (ADR-0071) — 안쪽 명령들이 **하나의 실행 취소**로 묶인다.
+    modeler.get("commandStack").registerHandler("chk.delegateNode", function DelegateNode() {
+      this.preExecute = (context) => {
+        const spec = context.spec;
+        const made = modeler.get("bpmnReplace").replaceElement(context.element, { type: "bpmn:CallActivity" });
+        const holder = extensionsOf(modeler.get("bpmnFactory"), made.businessObject, spec.chk || {});
+        const patch = { name: String(spec.name || ""), extensionElements: holder || undefined };
+        if (spec.calledElement) patch.calledElement = String(spec.calledElement);
+        modeler.get("modeling").updateProperties(made, patch);
+        context.made = made;
+      };
+    });
+
     const api = {
       async importXML(xml) {
         const found = await modeler.importXML(xml);
@@ -216,25 +256,9 @@
        * 실행 취소가 두 걸음이 된다 (`setProperties`가 지키는 규칙과 같다).
        */
       async createTask(spec) {
-        const bpmnFactory = modeler.get("bpmnFactory");
         const type = String((spec && spec.bpmn) || "bpmn:ServiceTask");
-        // `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `chk:*`가
-        // 아니라 요소 자신의 칸이라 만들 때 함께 넣는다. 글만 받는다.
-        const attrs = {};
-        for (const [name, value] of Object.entries((spec && spec.attrs) || {})) {
-          if (typeof value === "string" && value) attrs[name] = value;
-        }
-        const bo = bpmnFactory.create(type, { name: String((spec && spec.name) || ""), ...attrs });
-        const entries = Object.entries((spec && spec.chk) || {});
-        if (entries.length) {
-          const values = entries.map(([name, text]) => bpmnFactory.create(toType(name), chkAttrs(name, text)));
-          const holder = bpmnFactory.create("bpmn:ExtensionElements", { values });
-          for (const one of values) one.$parent = holder;
-          holder.$parent = bo;
-          bo.extensionElements = holder;
-        }
         const canvas = modeler.get("canvas");
-        const shape = modeler.get("elementFactory").createShape({ type, businessObject: bo });
+        const shape = modeler.get("elementFactory").createShape({ type, businessObject: makeBo(spec) });
         const at = (spec && spec.at)
           ? spotAt(canvas, spec.at)
           : freeSpot(canvas, modeler.get("elementRegistry"), shape);
@@ -242,6 +266,35 @@
         modeler.get("selection").select(made);
         // 가운데를 함께 돌려준다 — 끌어다 놓은 자리에 **정말** 생겼는지 시험이 본다.
         return { id: made.id, x: made.x + made.width / 2, y: made.y + made.height / 2 };
+      },
+      /**
+       * STU-06a — 빈 그림의 시작 이벤트 뒤에 노드들을 **이어 붙인다** (ADR-0071).
+       * `autoPlace`가 자리와 흐름을 함께 만든다 — 파이썬이 XML을 짓지 않는다.
+       */
+      async appendChain(specs) {
+        const registry = modeler.get("elementRegistry");
+        const autoPlace = modeler.get("autoPlace");
+        const factory = modeler.get("elementFactory");
+        let at = registry.find((e) => e.type === "bpmn:StartEvent");
+        if (!at) throw new Error("시작 이벤트가 없다");
+        const ids = [];
+        for (const spec of specs || []) {
+          const type = String((spec && spec.bpmn) || "bpmn:ServiceTask");
+          at = autoPlace.append(at, factory.createShape({ type, businessObject: makeBo(spec) }));
+          ids.push(at.id);
+        }
+        return { ids };
+      },
+      /**
+       * STU-06a — 노드 하나를 **위임 호출로 바꾼다** (ADR-0071). 흐름·경계 이벤트는 그대로다
+       * (`bpmnReplace`). 명령 하나로 묶어 **실행 취소가 한 걸음**이다.
+       */
+      async delegateNode(id, spec) {
+        const element = modeler.get("elementRegistry").get(id);
+        if (!element) return { found: false };
+        const context = { element, spec: spec || {} };
+        modeler.get("commandStack").execute("chk.delegateNode", context);
+        return { found: true, id: context.made.id };
       },
       async select(id) {
         const found = modeler.get("elementRegistry").get(id);

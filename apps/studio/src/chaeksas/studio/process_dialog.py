@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QTableWidget,
@@ -240,6 +241,9 @@ class ProcessInfoDialog(QDialog):
         #: 「저장」을 눌러 바뀐 것. 부르는 쪽이 캔버스에 넘길 `chk:process`가 여기 있다.
         self.saved: BpmProcess | None = None
         self.process_patch: str | None = None
+        #: 「이 부분을 PC BPM 프로세스로 나누기...」를 눌렀다 — 창은 저장하지 않고 닫히고 메인 창이
+        #: STU-06a를 연다 (ADR-0071). 그림을 바꾸는 것은 캔버스를 쥔 메인 창의 일이다.
+        self.split_requested = False
 
         entry = process.entry_definition
         self.entry = entry
@@ -269,6 +273,9 @@ class ProcessInfoDialog(QDialog):
 
         self.to_pc = QPushButton("실행 위치를 PC로 바꾸기", self)
         self.to_pc.clicked.connect(self._choose_pc)
+        self.to_split = QPushButton("이 부분을 PC BPM 프로세스로 나누기...", self)
+        self.to_split.setObjectName("splitToPc")
+        self.to_split.clicked.connect(self._ask_split)
         self.warning = QLabel("", self)
         self.warning.setWordWrap(True)
         self.warning.setObjectName("serverWarning")
@@ -321,6 +328,7 @@ class ProcessInfoDialog(QDialog):
         warning_row = QHBoxLayout()
         warning_row.addWidget(self.warning, 1)
         warning_row.addWidget(self.to_pc)
+        warning_row.addWidget(self.to_split)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
@@ -411,6 +419,21 @@ class ProcessInfoDialog(QDialog):
         self.warning.setText(found)
         self.warning.setVisible(bool(found))
         self.to_pc.setVisible(bool(found) and self.location_box.isEnabled())
+        self.to_split.setVisible(bool(found) and self.location_box.isEnabled())
+
+    def _ask_split(self) -> None:
+        """STU-06a로 간다 — **이 창에서 고친 것은 저장되지 않는다**고 먼저 말한다."""
+        answer = QMessageBox.question(
+            self,
+            "PC BPM 프로세스로 나누기",
+            "이 창을 닫고 「나누기」 창을 엽니다. 이 창에서 고친 것은 저장되지 않습니다.",
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Ok:
+            return
+        self.split_requested = True
+        self.reject()
 
     def _choose_pc(self) -> None:
         at = self.location_box.findData("pc")

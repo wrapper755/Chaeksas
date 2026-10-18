@@ -320,3 +320,23 @@ def test_the_button_moves_the_location_back_to_pc(space: Workspace) -> None:
     assert window.location() == "pc"
     assert window.warning.isHidden(), "PC면 걸릴 것이 없다"
     assert window.warning.text() == ""
+
+
+def test_the_split_button_stands_beside_to_pc_and_asks_first(space: Workspace, monkeypatch: Any) -> None:
+    """STU-06 「이 부분을 PC BPM 프로세스로 나누기...」 (ADR-0071) — 「PC로 바꾸기」와 **같이** 보이고,
+    누르면 이 창에서 고친 것이 저장되지 않는다고 **먼저 묻는다**. 그림은 메인 창이 바꾼다."""
+    from PySide6.QtWidgets import QMessageBox  # noqa: PLC0415
+
+    found = dialog(space, imported(space, EXTENSION_EXAMPLE), task_type_locations=UI_TASK_ON_PC)
+    found.location_box.setCurrentIndex(found.location_box.findData("server"))
+    assert not found.to_split.isHidden() and not found.to_pc.isHidden()
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Cancel)
+    found._ask_split()
+    assert found.split_requested is False, "「취소」면 그대로다"
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Ok)
+    found._ask_split()
+    assert found.split_requested is True and found.saved is None, "저장하지 않고 닫힌다"
+
+    found.location_box.setCurrentIndex(found.location_box.findData("pc"))
+    assert found.to_split.isHidden(), "PC에서는 나눌 까닭이 없다"

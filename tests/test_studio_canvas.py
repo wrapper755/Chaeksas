@@ -442,3 +442,67 @@ def test_the_viewer_draws_our_bpmn_and_cannot_edit_it(viewer_page: Any) -> None:
     for name in ("saveXML", "createTask", "undo", "setProperties"):
         with pytest.raises(CanvasError, match="모르는 함수"):
             viewer_page.call_sync(name)
+
+
+# ─────────────────────────── STU-06a 나누기 (ADR-0071) ───────────────────────────
+
+
+UI_TASK = json.dumps(
+    {"type": "ui_task", "extension": "ui-automation", "data": {"page_id": "erp.order.form"}}, ensure_ascii=False
+)
+
+
+def test_a_chain_is_appended_after_the_start_with_its_flows(canvas: Any) -> None:
+    """빈 그림에 시작 → 노드 → 끝 — **흐름까지** 캔버스가 짓는다 (파이썬은 XML을 만지지 않는다)."""
+    canvas.create_empty("Proc_erp_pc", "ERP 입력")
+    ids = canvas.append_chain(
+        [
+            {"bpmn": "bpmn:ServiceTask", "name": "발주 입력", "chk": {"task": UI_TASK}},
+            {"bpmn": "bpmn:EndEvent", "name": "끝", "chk": {}},
+        ]
+    )
+    found = read_process(canvas.save_xml())
+    task, end = ids
+    start = next(n.id for n in found.all_nodes() if n.kind == "startEvent")
+    assert sorted((f.source, f.target) for f in found.flows) == sorted([(start, task), (task, end)])
+    moved = found.node(task)
+    assert moved is not None and moved.name == "발주 입력"
+    body = json.loads(canvas.call_sync("properties", task)["chk"]["task"])
+    assert body["type"] == "ui_task" and body["extension"] == "ui-automation", "본문 그대로 옮긴다"
+
+
+def test_a_node_becomes_a_delegated_call_keeping_flows_and_boundaries(canvas: Any) -> None:
+    """바꾸기는 **흐름·경계 이벤트를 그대로** 둔다 — 그림이 조용히 달라지지 않는다."""
+    canvas.call_sync("importXML", (EXAMPLES / "bx03_expense_approval.bpmn").read_text(encoding="utf-8"))
+    before = read_process(canvas.save_xml())
+    edges = sorted((f.source, f.target) for f in before.flows if "Approve_Expense" in (f.source, f.target))
+    call = json.dumps({"delegate": {"bpm_process_id": "bx03-pc"}, "input": {"금액": "금액"}, "output": {}})
+    made = canvas.delegate_node("Approve_Expense", name="결재 (PC 위임)", called="Proc_bx03_pc", call=call)
+
+    after = read_process(canvas.save_xml())
+    node = after.node(made)
+    assert node is not None and node.kind == "callActivity"
+    assert list(node.props) == ["call"], "옛 `chk:approval`은 남지 않는다"
+    assert json.loads(canvas.call_sync("properties", made)["chk"]["call"])["delegate"]["bpm_process_id"] == "bx03-pc"
+    moved = sorted((made if s == "Approve_Expense" else s, made if t == "Approve_Expense" else t) for s, t in edges)
+    assert sorted((f.source, f.target) for f in after.flows if made in (f.source, f.target)) == moved
+    attached = {n.id: n.attached_to for n in after.all_nodes() if n.kind == "boundaryEvent"}
+    assert attached["Bnd_Remind"] == made and attached["Bnd_Deadline"] == made, "경계 이벤트가 따라온다"
+
+
+def test_delegating_a_node_is_one_undo_step(canvas: Any) -> None:
+    canvas.create_empty("Proc_one", "하나")
+    task, _ = canvas.append_chain(
+        [{"bpmn": "bpmn:ServiceTask", "name": "화면", "chk": {"task": UI_TASK}}, {"bpmn": "bpmn:EndEvent"}]
+    )
+    before = meaning(canvas.save_xml())
+    canvas.delegate_node(task, name="화면 (PC 위임)", called="Proc_x", call='{"delegate": {"bpm_process_id": "x"}}')
+    assert meaning(canvas.save_xml()) != before
+    canvas.call_sync("undo")
+    assert meaning(canvas.save_xml()) == before, "실행 취소 **한 번**에 돌아온다"
+
+
+def test_delegating_a_missing_node_says_so(canvas: Any) -> None:
+    canvas.create_empty("Proc_none", "없음")
+    with pytest.raises(CanvasError):
+        canvas.delegate_node("Nope", name="", called="", call="{}")

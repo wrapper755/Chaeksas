@@ -269,6 +269,23 @@ class Canvas(QWebEngineView):
             spec["at"] = {"x": at[0], "y": at[1]}
         self.call("createTask", spec, then=then)
 
+    def append_chain(self, specs: list[dict[str, Any]]) -> list[str]:
+        """빈 그림의 시작 이벤트 뒤에 노드들을 **이어 붙인다** (STU-06a, ADR-0071).
+
+        `specs` 한 줄은 `create_task`와 같은 `{bpmn, name, chk, attrs?}`다. 만든 id들을 돌려준다.
+        """
+        return [str(one) for one in self.call_sync("appendChain", specs)["ids"]]
+
+    def delegate_node(self, node_id: str, *, name: str, called: str, call: str) -> str:
+        """노드 하나를 **위임 호출로 바꾼다** (STU-06a) — 흐름·경계는 그대로, 실행 취소 한 걸음.
+
+        `call`은 `chk:call` 본문(JSON 글)이다. 바뀐 노드의 id를 돌려준다.
+        """
+        found = self.call_sync("delegateNode", node_id, {"name": name, "calledElement": called, "chk": {"call": call}})
+        if not found.get("found"):
+            raise CanvasError(f"그 노드가 그림에 없다: {node_id}")
+        return str(found["id"])
+
     def mark(self, states: dict[str, str]) -> None:
         """실행 중 노드 색 (STU-09). `states`는 `{노드 id: running|done|failed|waiting}`."""
         self.call("mark", states)
