@@ -19,14 +19,19 @@ from __future__ import annotations
 import json
 import logging
 import os
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 import platformdirs
 
-from chaeksas.contracts import RESERVED_CONFIG_PREFIX, SCOPE_STUDIO, SERVICE_URL_SETTING
+from chaeksas.contracts import (
+    RESERVED_CONFIG_PREFIX,
+    SCOPE_STUDIO,
+    SERVICE_KEY_REF_SETTING,
+    SERVICE_URL_SETTING,
+)
 from chaeksas.core.extensions import ExtensionHost, HostTasks
 from chaeksas.extension_api import HOST_STUDIO, ExtensionContext, Settings
 from chaeksas.studio.credentials import StudioCredentials
@@ -42,6 +47,20 @@ class PlainSettings:
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.values.get(key, default)
+
+
+@dataclass(frozen=True)
+class LiveSettings:
+    """`extension_api.Settings` — **물을 때마다** 다시 짓는다 (편집기는 한 번 만들어 다시 쓴다).
+
+    열린 BPM 프로세스가 바뀌면 `service.key_ref`가, Bot UI가 Worker를 다시 띄우면 포트가 바뀐다.
+    """
+
+    values: Callable[[], Mapping[str, Any]]
+
+    def get(self, key: str, default: Any = None) -> Any:
+        found = self.values().get(key)
+        return default if found is None else found
 
 
 @dataclass(frozen=True)
@@ -112,6 +131,9 @@ class Extensions:
     loader: Callable[[Iterable[str]], ExtensionHost] = field(default_factory=lambda: installed_host)
     #: STU-10 「확장별 설정」에 사람이 넣은 값 — `Settings.extensions` (비밀은 없다, ADR-0073).
     configured: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: 열린 BPM 프로세스의 `chk:process.service_keys` (`{확장·앱 id: 참조}`) — 메인 창이 준다.
+    #: 편집기의 예약 키 `service.key_ref`가 여기서 온다 (ADR-0074).
+    process_key_refs: Callable[[], Mapping[str, str]] = field(default_factory=lambda: dict)
     _editors: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -189,14 +211,37 @@ class Extensions:
         service = found.manifest.service if found is not None else None
         return service.base_url if service is not None else None
 
+    def _values(self, extension_id: str) -> dict[str, Any]:
+        values = dict(getattr(self.settings_for(extension_id), "values", {}))
+        values.update(self.runtime_settings(extension_id))
+        return values
+
+    def editor_context(self, extension_id: str) -> ExtensionContext:
+        """확장 편집기의 바깥 세상 — **시험 실행과 같은 것**에 `service.key_ref`를 더한다 (ADR-0074).
+
+        편집기가 「이 스텝까지 시험」·「계획 세워 보기」로 Worker를 부를 때 시험 실행과 같은 Worker·같은
+        키를 본다. 값은 물을 때마다 읽는다 (`LiveSettings`).
+        """
+
+        def values() -> dict[str, Any]:
+            found = self._values(extension_id)
+            found[SERVICE_KEY_REF_SETTING] = self.process_key_refs().get(extension_id) or None
+            return found
+
+        return self.host.context(
+            extension_id,
+            host=HOST_STUDIO,
+            settings=LiveSettings(values=values),
+            secrets=StudioSecrets(extension_id=extension_id),
+        )
+
     def context(self, extension_id: str) -> ExtensionContext:
         """확장 코드에 넘길 바깥 세상 — 그 확장의 설정 + 호스트가 채우는 예약 키 (C13).
 
         시험 실행(`tasks()`)과 **사전 점검**이 같은 것을 쓴다 — 점검이 다른 설정을 보면
         「점검은 통과했는데 실행이 안 된다」가 된다.
         """
-        values = dict(getattr(self.settings_for(extension_id), "values", {}))
-        values.update(self.runtime_settings(extension_id))
+        values = self._values(extension_id)
         return self.host.context(
             extension_id,
             host=HOST_STUDIO,
@@ -219,13 +264,7 @@ class Extensions:
         try:
             editor = self.host.editor(task_type)
             if editor is not None:
-                context = self.host.context(
-                    found.extension_id,
-                    host=HOST_STUDIO,
-                    settings=self.settings_for(found.extension_id),
-                    secrets=NoSecrets(),
-                )
-                made = editor.widget(context)
+                made = editor.widget(self.editor_context(found.extension_id))
         except Exception:  # noqa: BLE001 — 확장이 깨져도 속성 패널은 산다
             log.exception("편집기를 만들지 못했다: %s", task_type)
             made = None
@@ -233,4 +272,12 @@ class Extensions:
         return made
 
 
-__all__ = ["Extensions", "NoSecrets", "PlainSettings", "StudioSecrets", "bot_ui_data_dir", "installed_host"]
+__all__ = [
+    "Extensions",
+    "LiveSettings",
+    "NoSecrets",
+    "PlainSettings",
+    "StudioSecrets",
+    "bot_ui_data_dir",
+    "installed_host",
+]
