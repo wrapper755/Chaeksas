@@ -12,14 +12,15 @@
 - **서버에 닿지 못해도 고칠 수 있다** — 마지막 목록을 쓰고 「(오프라인)」이라고 말한다.
 - 쓰는 모양은 C14 그대로다 (`chk:task` `type="ui_task"`의 `data`).
 
-> 상태: 「이 스텝까지 시험」과 리소스 탐색기 끌어다 놓기는 아직이다. 목표로 계획(자율)은
-> 모델이 하는 일이라 칸을 꺼 두고 왜 꺼졌는지 말한다.
+「이 스텝까지 시험」·「계획 세워 보기」→「스텝으로 굳히기」는 **Studio 시험 실행과 같은 길**로
+Worker를 부른다 (`editor_trial.py`, ADR-0074) — 보고하지 않고, 끝나면 세션을 닫고, 읽은 값은
+「시험 결과」 상자에만 보인다. 굳히기는 사람이 눌러야 표에 들어간다.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from PySide6.QtCore import Qt, Signal
@@ -32,6 +33,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QPlainTextEdit,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -58,6 +60,34 @@ GOAL_HELP = (
 )
 
 
+#: 「이 스텝까지 시험」이 꺼져 있는 까닭 (U3).
+NO_HOST = "Studio에서만 돌려 볼 수 있습니다."
+PICK_A_ROW = "표에서 시험할 마지막 스텝을 고르세요."
+GOAL_ON = "목표로 계획이 켜져 있습니다 — 「계획 세워 보기」를 쓰세요."
+PLAN_HELP = "자율 수행으로 계획만 받아 옵니다 — 스텝을 돌리지 않습니다."
+
+
+def ask_values_dialog(names: list[str], parent: QWidget | None = None) -> dict[str, str] | None:
+    """값의 `{이름}`을 사람에게 묻는다 (케이스가 없다). 취소하면 `None` — 아무것도 열지 않는다."""
+    from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout  # noqa: PLC0415
+
+    dialog = QDialog(parent)
+    dialog.setWindowTitle("시험에 넣을 값")
+    form = QFormLayout(dialog)
+    fields = {name: QLineEdit() for name in names}
+    for name, field in fields.items():
+        form.addRow(name, field)
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+    buttons.button(QDialogButtonBox.StandardButton.Ok).setText("시험")
+    buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("취소")
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    form.addRow(buttons)
+    if not dialog.exec():
+        return None
+    return {name: field.text() for name, field in fields.items()}
+
+
 def _row_steps(raw: Any) -> list[dict[str, Any]]:
     return [dict(one) for one in (raw or []) if isinstance(one, dict)]
 
@@ -77,6 +107,16 @@ class UiTaskEditor(QWidget):
 
         self.catalog = Catalog()
         self._loaded: dict[str, Any] = {}
+        #: Studio가 준 문맥 (ADR-0074) — 없으면 시험할 수 없다.
+        self._ctx: ExtensionContext | None = None
+        #: 「계획 세워 보기」가 받은 스텝 — 「스텝으로 굳히기」가 표에 넣는다. **그림에 몰래 적지 않는다.**
+        self.planned: list[dict[str, Any]] = []
+        #: 값의 `{이름}`을 묻는 길 — 시험이 바꿔 끼운다.
+        self.ask_values: Callable[[list[str]], dict[str, str] | None] = lambda names: ask_values_dialog(
+            names, self
+        )
+        #: Worker 창구를 짓는 길 — 시험이 바꿔 끼운다.
+        self.make_trial: Callable[[ExtensionContext], Any] = self._make_trial
 
         layout = QVBoxLayout(self)
         layout.addWidget(self._screen())
@@ -86,6 +126,11 @@ class UiTaskEditor(QWidget):
         self.warnings = QLabel("")
         self.warnings.setWordWrap(True)
         layout.addWidget(self.warnings)
+        self.trial_output = QPlainTextEdit()
+        self.trial_output.setReadOnly(True)
+        self.trial_output.setPlaceholderText("시험 결과 — 「이 스텝까지 시험」·「계획 세워 보기」가 여기에 씁니다.")
+        self.trial_output.setMaximumHeight(140)
+        layout.addWidget(self.trial_output)
         self._sync()
 
     # ── `extension_api.TaskEditor` ──
@@ -96,6 +141,7 @@ class UiTaskEditor(QWidget):
 
         found = ctx.setting(SERVICE_URL_SETTING)
         self.catalog.base_url = str(found) if found else None
+        self._ctx = ctx
         self.reload()
         return self
 
@@ -208,8 +254,8 @@ class UiTaskEditor(QWidget):
         self.down_button = QPushButton("아래로")
         self.down_button.clicked.connect(lambda: self.move_step(1))
         self.test_button = QPushButton("이 스텝까지 시험")
-        self.test_button.setEnabled(False)
-        self.test_button.setToolTip("Bot UI의 「UI 셀렉터 등록 › 시험」(BUI-08)에서 돌려 보세요.")
+        self.test_button.clicked.connect(self.test_to_selected)
+        self.steps.itemSelectionChanged.connect(self._sync)
         row.addStretch(1)
         for one in (self.add_button, self.drop_button, self.up_button, self.down_button, self.test_button):
             row.addWidget(one)
@@ -227,9 +273,17 @@ class UiTaskEditor(QWidget):
         self.results = QLineEdit()
         self.results.setPlaceholderText("결과 변수 (쉼표로 여럿)")
         self.results.setToolTip("읽은 값을 담을 변수 이름. 모델은 이 중에서만 고릅니다.")
+        self.plan_button = QPushButton("계획 세워 보기")
+        self.plan_button.setToolTip(PLAN_HELP)
+        self.plan_button.clicked.connect(self.try_plan)
+        self.freeze_button = QPushButton("스텝으로 굳히기")
+        self.freeze_button.setToolTip("받은 스텝을 표에 넣고 목표로 계획을 끕니다 — Bot(결정 수행)이 그 스텝을 돕니다.")
+        self.freeze_button.clicked.connect(self.freeze)
         row.addWidget(self.use_goal)
         row.addWidget(self.goal, 3)
         row.addWidget(self.results, 1)
+        row.addWidget(self.plan_button)
+        row.addWidget(self.freeze_button)
         self.use_goal.toggled.connect(lambda *_: self._sync())
         self.goal.textChanged.connect(lambda *_: self._sync())
         self.results.textChanged.connect(lambda *_: self._sync())
@@ -352,10 +406,11 @@ class UiTaskEditor(QWidget):
                 cell.setText(str(row + 1))
         self._sync()
 
-    def step_rows(self) -> list[dict[str, Any]]:
-        """C14 `steps[]` 모양. **빈 칸은 넣지 않는다.**"""
+    def step_rows(self, *, upto: int | None = None) -> list[dict[str, Any]]:
+        """C14 `steps[]` 모양. **빈 칸은 넣지 않는다.** `upto`면 그 줄(0부터)까지만."""
         out = []
-        for row in range(self.steps.rowCount()):
+        last = self.steps.rowCount() if upto is None else min(upto + 1, self.steps.rowCount())
+        for row in range(last):
             element = self.steps.cellWidget(row, 1)
             action_box = self.steps.cellWidget(row, 2)
             value = self.steps.item(row, 3)
@@ -424,6 +479,91 @@ class UiTaskEditor(QWidget):
             errors.append("스텝이 없습니다.")
         return errors, warnings
 
+    # ── 시험 (ADR-0074) ──
+
+    def _make_trial(self, ctx: ExtensionContext) -> Any:
+        from chaeksas.ext.ui_automation.client.editor_trial import EditorTrial  # noqa: PLC0415
+
+        return EditorTrial(ctx=ctx, say=self.trial_output.appendPlainText)
+
+    def selected_row(self) -> int | None:
+        rows = {index.row() for index in self.steps.selectedIndexes()}
+        return max(rows) if rows else None
+
+    def test_reason(self) -> str | None:
+        """「이 스텝까지 시험」이 꺼진 까닭 — 없으면 `None` (켜진다)."""
+        if self._ctx is None:
+            return NO_HOST
+        if self.use_goal.isChecked():
+            return GOAL_ON
+        if self.selected_row() is None:
+            return PICK_A_ROW
+        return None
+
+    def test_to_selected(self) -> None:
+        """STU-13 「이 스텝까지 시험」 — 1번부터 고른 줄까지. **오류가 있으면 돌리지 않는다**."""
+        from chaeksas.ext.ui_automation.client.editor_trial import NotReady, template_names  # noqa: PLC0415
+
+        reason = self.test_reason()
+        self.trial_output.clear()
+        if reason is not None or self._ctx is None:
+            self.trial_output.appendPlainText(reason or NO_HOST)
+            return
+        errors, _ = self.problems()
+        if errors:
+            self.trial_output.appendPlainText(f"먼저 고치세요 — {errors[0]}")
+            return
+        steps = self.step_rows(upto=self.selected_row())
+        names = template_names([str(one.get("value") or "") for one in steps])
+        answers: dict[str, str] = {}
+        if names:
+            asked = self.ask_values(names)
+            if asked is None:
+                self.trial_output.appendPlainText("취소했습니다 — 아무것도 열지 않았습니다.")
+                return
+            answers = asked
+        try:
+            self.make_trial(self._ctx).run(self.dump(), steps, answers)
+        except NotReady as e:
+            self.trial_output.appendPlainText(str(e))
+        except Exception as e:  # noqa: BLE001 — Worker 거절·닿지 못함은 한 줄로 말한다
+            self.trial_output.appendPlainText(f"시작하지 못했습니다 — {e}")
+
+    def try_plan(self) -> None:
+        """STU-13 [G] 「계획 세워 보기」 — 받은 스텝은 `planned`에 두고 **표에 넣지 않는다**."""
+        from chaeksas.ext.ui_automation.client.editor_trial import NotReady  # noqa: PLC0415
+
+        self.trial_output.clear()
+        self.planned = []
+        goal = self.goal.text().strip()
+        if self._ctx is None:
+            self.trial_output.appendPlainText(NO_HOST)
+        elif not goal or not self.page_id.currentText().strip():
+            self.trial_output.appendPlainText("화면과 목표를 먼저 적으세요.")
+        else:
+            try:
+                self.planned = list(self.make_trial(self._ctx).plan(self.dump(), goal, self.result_names()))
+            except NotReady as e:
+                self.trial_output.appendPlainText(str(e))
+            except Exception as e:  # noqa: BLE001 — 계획 거절(422)·닿지 못함은 한 줄로 말한다
+                self.trial_output.appendPlainText(f"계획을 받지 못했습니다 — {e}")
+        self._sync()
+
+    def freeze(self) -> None:
+        """받은 스텝을 표에 넣고 **목표로 계획을 끈다** — 결정 수행이 그 스텝을 돈다 (ADR-0035)."""
+        if not self.planned:
+            return
+        self.steps.setRowCount(0)
+        for one in self.planned:
+            self._add_row(
+                str(one.get("key") or ""), str(one.get("action") or ""),
+                "" if one.get("value") is None else str(one["value"]), str(one.get("result") or ""), False,
+            )
+        self.planned = []
+        self.use_goal.setChecked(False)
+        self.trial_output.appendPlainText("스텝으로 굳혔습니다 — 「적용」해야 그림에 들어갑니다.")
+        self._sync()
+
     def valid(self) -> bool:
         errors, _ = self.problems()
         return not errors
@@ -438,6 +578,12 @@ class UiTaskEditor(QWidget):
         self.steps.setEnabled(not goal_mode)
         self.goal.setEnabled(goal_mode)
         self.results.setEnabled(goal_mode)
+        self.plan_button.setEnabled(goal_mode and self._ctx is not None)
+        self.plan_button.setToolTip(PLAN_HELP if self._ctx is not None else NO_HOST)
+        self.freeze_button.setEnabled(goal_mode and bool(self.planned))
+        reason = self.test_reason()
+        self.test_button.setEnabled(reason is None)
+        self.test_button.setToolTip(reason or "1번부터 고른 스텝까지 Worker로 돌려 봅니다 — 보고하지 않습니다.")
         rows = self.steps.rowCount()
         self.drop_button.setEnabled(bool(rows))
         self.up_button.setEnabled(bool(rows))
@@ -445,4 +591,14 @@ class UiTaskEditor(QWidget):
         self.changed.emit()
 
 
-__all__ = ["GOAL_HELP", "NEEDS_RESULT", "NEEDS_VALUE", "STEP_COLUMNS", "UiTaskEditor"]
+__all__ = [
+    "GOAL_HELP",
+    "GOAL_ON",
+    "NEEDS_RESULT",
+    "NEEDS_VALUE",
+    "NO_HOST",
+    "PICK_A_ROW",
+    "STEP_COLUMNS",
+    "UiTaskEditor",
+    "ask_values_dialog",
+]

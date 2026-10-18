@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 — 결정 2의 「편집기(STU-13)에는 비밀을 주지 않는다」는 [ADR-0074](0074-ui-task-editor-runs-on-the-worker.md)가 바꿨다 |
 | 날짜 | 2026-10-18 |
 | 관련 | STU-10, C13 `configuration`, C14 시험 케이스, [ADR-0027](0027-llm-connection.md), [ADR-0050](0050-no-toolpack-kind.md), [ADR-0013](0013-api-keys.md), 09-gaps §7-5 |
 

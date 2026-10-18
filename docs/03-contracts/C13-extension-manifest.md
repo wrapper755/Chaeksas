@@ -142,6 +142,7 @@
   | `runtime.<런타임 id>.state` | `off` · `running` · `restarting` · `stopped` (C4 `WorkerState.state`와 같은 낱말) |
   | `storage.dir` | 이 확장이 **자기 파일을 둘 폴더** (호스트가 만들어 준다). 밀린 등록 큐처럼 확장이 혼자 들고 있어야 하는 것을 여기 둔다. **비밀은 두지 않는다** (OS 비밀 저장소로 간다) |
   | `service.base_url` | 이 확장의 **서버 부분 주소**. **출처는 하나다** — Center 리소스 등록(C7)에 있으면 그것을, 없으면 정의의 `service.base_url`을 쓴다. 확장이 설정 칸으로 따로 받지 않는다 |
+  | `service.key_ref` | **Studio 편집기에만** — 지금 열린 BPM 프로세스의 `chk:process.service_keys`가 이 확장에 준 **키 참조 이름**(없으면 `None`). 태스크의 `key_ref`가 비었을 때(「BPM 프로세스 설정을 따름」) 편집기가 시험에 쓸 참조다 — 엔진과 같은 순서. 값은 물을 때마다 열린 BPM 프로세스에서 읽는다. 실행하는 쪽은 채우지 않는다(수행기는 `TaskContext.key_ref`를 받는다). 키 **값**은 `ctx.secret(<참조>)`로 푼다 ([ADR-0074](../decisions/0074-ui-task-editor-runs-on-the-worker.md)) |
 
   로컬 런타임 자식에게는 같은 주소를 환경변수 **`CHK_RUNTIME__SERVICE_URL`**로 물려준다 (이름은 플랫폼이 정한다 — 호스트가 확장 이름을 모르고 넣을 수 있어야 한다). **비밀은 물려주지 않는다** — 키는 부르는 쪽이 세션마다 준다 (C10 `service_key`, ADR-0013).
 
@@ -328,6 +329,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-18 | 2 | 예약 설정 키에 `service.key_ref`를 더했다 — Studio 편집기가 「BPM 프로세스 설정을 따름」의 키 참조를 안다(STU-13 시험·계획 굳히기). 머리 `service.`는 이미 예약이라 E7이 그대로다. 호스트가 주는 값이라 schema는 그대로 | 0074 |
 | 2026-10-09 | 2 | `bot_ui.panels`(플랫폼 화면의 한 칸)를 더하고 `console.pages[].module`이 어떻게 화면이 되는지 적었다 — `extension_api` **1.3**. 기여 지점 추가라 기존 확장은 영향이 없다 | 0042 |
 | 2026-10-09 | 2 | 태스크 수행기가 **실행 기록에 남기는 길**을 적었다 (`TaskOutcome.events[]`) — `extension_api` **1.2**. 정의(`extension.json`)는 바뀌지 않으므로 `api: ">=1,<2"`인 확장은 그대로 돈다 | 0041 |
 | 2026-10-09 | 2 | `bot_ui.local_runtimes[].status`·`shutdown`(상태 묻기·곱게 끄기)을 더했다 — Bot UI가 BUI-09의 「예약」·「밀린 보고」를 보이고 종료 순서에서 런타임에게 닫을 틈을 준다. 선택 칸이라 기존 확장은 영향이 없다 | 0018, 0023 |

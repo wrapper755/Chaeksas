@@ -120,6 +120,7 @@ class MainWindow(QMainWindow):
         self.log_view.setReadOnly(True)
 
         self.extensions = Extensions.load(off=settings.disabled_extensions, configured=settings.extensions)
+        self.extensions.process_key_refs = self.process_key_refs
         self.properties = Properties(self, extensions=self.extensions)
         self.properties.applying.connect(self._apply_properties)
         self.canvas.selected.connect(self._on_selected)
@@ -311,6 +312,21 @@ class MainWindow(QMainWindow):
         """보기 → 「리소스」 (Ctrl+Shift+E)."""
         self.explorer_tabs.setCurrentWidget(self.resource_tree)
         self.resource_tree.setFocus()
+
+    def process_key_refs(self) -> dict[str, str]:
+        """열린 BPM 프로세스의 `chk:process.service_keys` — 편집기의 `service.key_ref` (ADR-0074).
+
+        저장된 파일 기준이다(키 참조는 STU-06에서 고쳐 저장한다). 정의가 여럿이면 먼저 적힌 것.
+        """
+        found: dict[str, str] = {}
+        for definition in self.process.definitions if self.process is not None else ():
+            drawn = getattr(definition, "process", None)
+            if drawn is None:
+                continue
+            for owner, ref in drawn.info.service_keys.items():
+                if ref:
+                    found.setdefault(str(owner), str(ref))
+        return found
 
     def _apply_theme(self, choice: str) -> None:
         """STU-10 「외형」 — **저장하는 그 자리에서** 창 전체에 입힌다 (ADR-0073)."""

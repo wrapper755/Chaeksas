@@ -63,6 +63,9 @@ STORAGE_DIR_SETTING = "storage.dir"
 
 #: 서버 부분 주소를 알려 주는 예약 키. **출처는 하나다** (Center 리소스 등록 > 정의).
 SERVICE_URL_SETTING = "service.base_url"
+#: Studio 편집기에만 — 열린 BPM 프로세스(`chk:process.service_keys`)가 이 확장에 준 키 참조 (ADR-0074).
+#: 태스크의 `key_ref`가 비었을 때(「BPM 프로세스 설정을 따름」) 쓴다 — 엔진과 같은 순서다.
+SERVICE_KEY_REF_SETTING = "service.key_ref"
 #: 로컬 런타임 자식에게 같은 값을 물려주는 환경변수 (C13). 이름은 **플랫폼이 정한다** —
 #: 호스트가 확장 이름을 모르고 넣을 수 있어야 한다. **비밀은 넣지 않는다** (키는 세션이 준다).
 SERVICE_URL_ENV = "CHK_RUNTIME__SERVICE_URL"
