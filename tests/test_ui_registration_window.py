@@ -760,3 +760,30 @@ def test_without_a_place_to_keep_it_nothing_is_queued(app: Any) -> None:
     widget.register()
     assert "다시 누르세요" in widget.hint.text()
     widget.close()
+
+
+def test_try_goes_to_the_trial_tab_with_the_chosen_rows(app: Any) -> None:
+    """BUI-06 「시험...」 — 등록된 화면이어야 하고, 고른 줄을 들고 「시험」 탭으로 간다."""
+    asked: list[tuple[str, list[str]]] = []
+    widget = RegistrationWidget(FakeWorker(), FakeRegistry(known=registered_page()))
+    widget.on_try = lambda page_id, keys: asked.append((page_id, keys))
+    widget.page_id.setCurrentText("erp.order.form")
+    widget.look_up(force=True)
+    assert widget.try_button.isEnabled()
+    widget.load_page()
+    widget.elements.selectRow(0)
+    widget.try_selected()
+    assert asked == [("erp.order.form", ["order.qty"])]
+    assert widget.shared_session() is None, "열린 화면이 없으면 시험 탭이 빌릴 것도 없다"
+    opened(widget)
+    assert widget.shared_session() == ("ses_1", "s3cret")
+    widget.close()
+
+
+def test_try_is_off_for_a_page_that_is_not_registered(app: Any) -> None:
+    widget = RegistrationWidget(FakeWorker(), FakeRegistry())
+    widget.on_try = lambda *_: None
+    widget.page_id.setCurrentText("erp.new")
+    widget.look_up(force=True)
+    assert not widget.try_button.isEnabled() and "먼저 등록" in widget.try_button.toolTip()
+    widget.close()

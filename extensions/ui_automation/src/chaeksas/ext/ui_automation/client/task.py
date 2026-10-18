@@ -172,6 +172,24 @@ class WorkerClient:
             self.call("POST", "/v1/registration/desktop", body={"window": window})
         )
 
+    def load_plan(
+        self,
+        session_id: str,
+        secret: str,
+        page_id: str,
+        *,
+        heal: bool = True,
+        report: bool = False,
+        service_key: str | None = None,
+    ) -> SessionInfo:
+        """등록 세션에 계획을 싣는다 (C10 §5 `…/plan`) — 시험이 등록 탭의 화면을 이어 쓴다."""
+        body: dict[str, Any] = {"page_id": page_id, "heal": heal, "report": report}
+        if service_key:
+            body["service_key"] = service_key
+        return SessionInfo.model_validate(
+            self.call("POST", f"/v1/registration/{session_id}/plan", body=body, secret=secret)
+        )
+
     def analyze(self, session_id: str, secret: str, request: AnalyzeRequest) -> AnalyzeResult:
         return AnalyzeResult.model_validate(
             self.call(

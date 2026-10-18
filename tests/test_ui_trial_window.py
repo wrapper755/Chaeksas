@@ -298,3 +298,59 @@ def test_starting_a_trial_releases_the_other_tab(app: Any) -> None:
     widget.run()
     assert released == [True]
     widget.close()
+
+
+# ─────────────────────────── 등록 탭의 화면을 이어 쓰기 (C10 `…/plan`) ───────────────────────────
+
+
+class SharingWorker(FakeWorker):
+    def __init__(self) -> None:
+        super().__init__()
+        self.loaded: list[tuple[str, str, bool, bool]] = []
+
+    def load_plan(self, session_id: str, secret: str, page_id: str, *, heal: bool, report: bool,
+                  service_key: str | None) -> SessionInfo:
+        self.loaded.append((session_id, page_id, heal, report))
+        return SessionInfo(session_id=session_id, session_secret=secret, plan_source="cache")
+
+
+def test_an_open_registration_screen_is_reused_and_never_closed(app: Any) -> None:
+    """등록 탭에 열린 화면이 있으면 **놓지 않고** 이어 쓴다 — 닫는 것은 그 탭의 일이다."""
+    worker = SharingWorker()
+    released: list[bool] = []
+    widget = TrialWidget(
+        worker, FakeRegistry(), service_key=KEY,
+        release_other=lambda: released.append(True), borrow=lambda: ("ses_reg", "reg-secret"),
+    )
+    widget.page_id.setCurrentText("erp.order.form")
+    widget.fetch()
+    widget.run()
+    assert worker.loaded == [("ses_reg", "erp.order.form", True, False)]
+    assert worker.opened == [] and released == [], "새 세션을 열지 않고, 등록 탭을 놓게 하지도 않는다"
+    assert worker.steps, "스텝은 그 화면에서 돈다"
+    assert worker.closed == [], "빌린 화면은 시험이 닫지 않는다"
+    assert "등록 탭의 화면을 그대로 두었습니다" in text(widget)
+    widget.close_browser()
+    assert worker.closed == []
+    widget.close()
+
+
+def test_without_an_open_registration_screen_the_trial_opens_its_own(app: Any) -> None:
+    worker = SharingWorker()
+    widget = TrialWidget(worker, FakeRegistry(), service_key=KEY, borrow=lambda: None)
+    widget.page_id.setCurrentText("erp.order.form")
+    widget.fetch()
+    widget.run()
+    assert worker.loaded == [] and len(worker.opened) == 1
+    widget.close()
+
+
+def test_try_from_the_registration_tab_keeps_only_the_chosen_rows(app: Any) -> None:
+    """BUI-06 「시험...」 — 고른 줄만 스텝 표에 남는다 (없으면 전부)."""
+    widget = TrialWidget(SharingWorker(), FakeRegistry(), service_key=KEY)
+    widget.prefill("erp.order.form", ["order.total"])
+    keys = [getattr(widget.steps.item(row, 0), "text", str)() for row in range(widget.steps.rowCount())]
+    assert keys == ["order.total"]
+    widget.prefill("erp.order.form", [])
+    assert widget.steps.rowCount() == 2
+    widget.close()

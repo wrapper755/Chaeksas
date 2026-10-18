@@ -310,7 +310,15 @@ class RegistrationWidget(QWidget):
         layout.addWidget(self.checks)
         self.verify_button = QPushButton("검증")
         self.verify_button.clicked.connect(self.verify)
-        layout.addWidget(self.verify_button, alignment=Qt.AlignmentFlag.AlignRight)
+        #: BUI-06 「시험...」 — 「시험」 탭으로 간다. 받는 쪽은 유틸리티 창이다 (`on_try(page_id, keys)`).
+        self.try_button = QPushButton("시험...")
+        self.try_button.clicked.connect(self.try_selected)
+        self.on_try: Any = None
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(self.try_button)
+        row.addWidget(self.verify_button)
+        layout.addLayout(row)
         return box
 
     def _footer(self) -> QHBoxLayout:
@@ -803,6 +811,21 @@ class RegistrationWidget(QWidget):
             return f"서버가 거부했습니다 ({getattr(error, 'code', '')}) — {error}. 보낸 내용을 고쳐야 합니다."
         return f"서버에 닿지 못했습니다 — {error}. 서버가 돌아오면 다시 누르세요."
 
+    def shared_session(self) -> tuple[str, str] | None:
+        """지금 연 화면 `(session_id, secret)` — 「시험」 탭이 **이어 쓴다** (BUI-08, C10 `…/plan`)."""
+        found = self._session
+        return (found.session_id, found.secret) if found is not None else None
+
+    def try_selected(self) -> None:
+        """BUI-06 「시험...」 — 등록된 화면이어야 한다 (계획은 레지스트리에서 온다)."""
+        page_id = self.page_id.currentText().strip()
+        if self._known is None or not page_id or self.on_try is None:
+            self.say("등록된 화면만 시험합니다 — 먼저 등록하세요.")
+            return
+        rows = sorted({index.row() for index in self.elements.selectedIndexes()})
+        keys = [self._rows[row].key for row in rows if 0 <= row < len(self._rows) and self._rows[row].key]
+        self.on_try(page_id, keys)
+
     def close_browser(self) -> None:
         found = self._session
         if found is None:
@@ -975,6 +998,8 @@ class RegistrationWidget(QWidget):
             self.verify_button.setToolTip("" if has_rows else "담은 요소가 없습니다.")
 
         known = self._known is not None
+        self.try_button.setEnabled(known and self.on_try is not None)
+        self.try_button.setToolTip("" if known else "등록된 화면만 시험합니다 — 먼저 등록하세요.")
         self.load_button.setEnabled(known)
         self.load_button.setToolTip("" if known else "등록된 화면일 때만 불러옵니다.")
         self.drop_page.setEnabled(known)

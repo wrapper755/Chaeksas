@@ -168,8 +168,9 @@
 | `GET /v1/registration/{session_id}/pick/events` | **고른 것을 비워 가져온다** (한 번 준 것은 다시 주지 않는다) |
 | `POST /v1/registration/{session_id}/highlight` | `{locators: [로케이터…]}` → 그 요소를 화면에 표시 (BUI-06 5번) |
 | `POST /v1/registration/{session_id}/verify` | `{ladders: {시맨틱 키: [로케이터…]}}` → 칸별 통과·실패 |
+| `POST /v1/registration/{session_id}/plan` | **등록 세션에 계획을 싣는다** (BUI-08 「시험」이 등록 탭의 화면을 이어 쓴다) `{page_id, heal?, report?, service_key}` → `SessionInfo`(`plan_source`). 그 뒤 §3 스텝을 **시맨틱 키로** 받고 수행 모드는 `deterministic`이다. 다시 부르면 **나중 것이 이긴다**(다른 화면으로 바꿔 시험한다). 받아 오기 실패는 세션을 열 때와 같다(§2 — 4xx는 앱의 코드 그대로, 닿지 못하고 캐시도 없으면 502 `ui_automation_unreachable`). 계획의 `platform`이 열린 화면과 다르면 409 `platform_mismatch`. **분석·검증은 계속 된다**(계획이 있어도 등록 세션이다). 보고는 닫을 때 `origin: test`로 간다 |
 
-**`business_key`는 Worker가 짓는다** (`reg_<hex8>`) — 등록 화면이 실행 키를 흉내 낼 일이 없다. 등록 세션은 `page_id`가 없어 계획(C8)을 받아 오지 않는다.
+**`business_key`는 Worker가 짓는다** (`reg_<hex8>`) — 등록 화면이 실행 키를 흉내 낼 일이 없다. 등록 세션은 `page_id`가 없어 **열 때는** 계획(C8)을 받아 오지 않는다 — 시험할 때 `…/plan`으로 싣는다.
 
 `analyze` 응답:
 
@@ -225,6 +226,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-18 | 1 | §5 `POST /registration/{id}/plan` — 등록 세션에 계획을 싣는다. BUI-08 「시험」이 등록 탭의 화면을 **놓지 않고** 이어 쓴다 (09-gaps §7-2) | 0014 |
 | 2026-10-18 | 1 | §5 데스크톱 창에서 담기 — `GET /registration/windows`·`POST /registration/desktop`, `analyze` 후보의 `platform`·`control_type`·`class_name`, 데스크톱 `analyze`. 현장 리허설에서 데스크톱 화면을 사람이 등록할 길이 없던 것 (09-gaps §6) | 0033 |
 | 2026-10-09 | 1 | `recent_sessions[]`의 칸을 적고 `caller`·`fallback_depth_max`·`healed`를 더했다 — BUI-09 「최근 UI 세션」 표의 열이 다 있어야 그 칸을 그릴 수 있다 (더하기만이라 schema는 그대로) | 0042 |
 | 2026-10-06 | 1 | 예약이 409면 Bot UI가 강제로 닫지 않고 **기다린다**는 것을 적었다 (ADR-0014 §4 그대로). Bot UI는 C13 `reserve` 선언으로 이 경로를 부른다 | 0014 |

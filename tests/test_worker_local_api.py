@@ -513,3 +513,69 @@ def test_the_worker_really_comes_up_on_loopback(tmp_path: Path) -> None:
     finally:
         child.terminate()
         child.wait(timeout=10)
+
+
+# ─────────────────────────── 등록 세션에 계획 싣기 (C10 §5 `…/plan`, BUI-08) ───────────────────────────
+
+
+def registration(client: TestClient) -> dict[str, Any]:
+    opened = client.post("/v1/registration/browser", json={"start_url": ""}, headers={TOKEN_HEADER: TOKEN})
+    assert opened.status_code == 201, opened.text
+    return dict(opened.json())
+
+
+def test_a_registration_session_takes_a_plan_and_runs_steps_without_reopening() -> None:
+    """시험이 등록 탭의 화면을 **놓지 않고** 이어 쓴다 — 보고는 `test`로 간다."""
+    plans = FakePlans()
+    worker, client = make(plans=plans)
+    opened = registration(client)
+    headers = {TOKEN_HEADER: TOKEN, SESSION_HEADER: opened["session_secret"]}
+    where = f"/v1/registration/{opened['session_id']}/plan"
+
+    body = {"page_id": "erp.order.form", "report": True, "service_key": "sk"}
+    loaded = client.post(where, json=body, headers=headers)
+    assert loaded.status_code == 200, loaded.text
+    assert loaded.json()["session_id"] == opened["session_id"], "새 세션을 열지 않는다"
+    assert worker.session is not None and worker.session.request.mode == "deterministic"
+
+    step = client.post(
+        f"/v1/sessions/{opened['session_id']}/steps",
+        json={"semantic_key": "주문.수량", "action": "fill", "value": "3"},
+        headers=headers,
+    )
+    assert step.status_code == 200 and step.json()["ok"], step.text
+    analyzed = client.post(f"/v1/registration/{opened['session_id']}/analyze", json={"schema": 1}, headers=headers)
+    assert analyzed.status_code != 403, "계획을 실어도 등록 세션이다"
+
+    client.delete(f"/v1/sessions/{opened['session_id']}", headers=headers)
+    assert plans.reports and plans.reports[-1].origin == "test", "시험 보고는 승격에 들어가지 않는다"
+
+
+def test_a_plan_for_the_other_platform_is_refused() -> None:
+    plans = FakePlans()
+    plans.plan_value = plans.plan_value.model_copy(update={"platform": "desktop"})
+    _, client = make(plans=plans)
+    opened = registration(client)
+    answer = client.post(
+        f"/v1/registration/{opened['session_id']}/plan",
+        json={"page_id": "erp.order.form"},
+        headers={TOKEN_HEADER: TOKEN, SESSION_HEADER: opened["session_secret"]},
+    )
+    assert answer.status_code == 409 and answer.json()["code"] == "platform_mismatch"
+
+
+def test_only_a_registration_session_takes_a_plan_and_it_needs_a_page() -> None:
+    _, client = make()
+    opened = registration(client)
+    headers = {TOKEN_HEADER: TOKEN, SESSION_HEADER: opened["session_secret"]}
+    empty = client.post(f"/v1/registration/{opened['session_id']}/plan", json={}, headers=headers)
+    assert empty.status_code == 422
+    client.delete(f"/v1/sessions/{opened['session_id']}", headers=headers)
+
+    bot = client.post("/v1/sessions", json=session_body(), headers={TOKEN_HEADER: TOKEN}).json()
+    refused = client.post(
+        f"/v1/registration/{bot['session_id']}/plan",
+        json={"page_id": "erp.order.form"},
+        headers={TOKEN_HEADER: TOKEN, SESSION_HEADER: bot["session_secret"]},
+    )
+    assert refused.status_code == 403, "실행 중인 Bot의 세션은 바꾸지 못한다"
