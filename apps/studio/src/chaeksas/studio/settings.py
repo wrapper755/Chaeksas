@@ -25,6 +25,8 @@ DEFAULT_LLM_BASE_URL = "http://localhost:11434"
 DEFAULT_LLM_MODEL = "qwen2.5:7b"
 #: 시험 실행 한 케이스의 시간 제한 (C14 시험 케이스 형식).
 DEFAULT_CASE_TIMEOUT_S = 300
+#: STU-10 「외형」 — `chaeksas.qt.theme.THEME_CHOICES`의 하나 (ADR-0073).
+DEFAULT_THEME = "system"
 
 APP_NAME = "Chaeksas"
 APP_AUTHOR = "Chaeksas"
@@ -80,6 +82,14 @@ class Settings:
     #: **Studio의 것이다** — Bot UI는 제 설정에 따로 둔다 (개발 도구의 실험이 현장 실행을 멈추지
     #: 않는다). 판은 적지 않는다 — 올려도 꺼 둔 채로 있는 것이 사람의 뜻이다.
     disabled_extensions: tuple[str, ...] = ()
+    #: STU-10 「외형」의 테마 (ADR-0073). 모르는 값은 `apply_theme`이 「시스템 따름」으로 읽는다.
+    theme: str = DEFAULT_THEME
+    #: STU-10 「확장별 설정」 — `{확장 id: {칸: 값}}` (C13 `configuration`, scope `studio`).
+    #: **비밀 칸은 여기 없다** — OS 비밀 저장소다 (`credentials.extension_secret`).
+    extensions: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def extension(self, extension_id: str) -> dict[str, Any]:
+        return dict(self.extensions.get(extension_id, {}))
 
     @property
     def workspace_dir(self) -> Path:
@@ -117,6 +127,7 @@ class Settings:
             "llm_model": str,
             "case_timeout_s": int,
             "last_opened": str,
+            "theme": str,
         }
         values = {name: kind(raw[name]) for name, kind in known.items() if name in raw}
         for name in ("readable_dirs", "writable_dirs"):
@@ -126,6 +137,10 @@ class Settings:
             values["disabled_extensions"] = tuple(
                 str(one) for one in raw["disabled_extensions"] if isinstance(one, str) and one
             )
+        if isinstance(raw.get("extensions"), dict):
+            values["extensions"] = {
+                str(name): dict(found) for name, found in raw["extensions"].items() if isinstance(found, dict)
+            }
         if isinstance(raw.get("service_keys"), list):
             values["service_keys"] = tuple(
                 ServiceKeyRef(ref=str(one.get("ref") or ""), app_id=str(one.get("app_id") or ""))
@@ -176,6 +191,7 @@ __all__ = [
     "DEFAULT_LLM_BASE_URL",
     "DEFAULT_LLM_MODEL",
     "DEFAULT_RECEIVER_PORT",
+    "DEFAULT_THEME",
     "ENV_PREFIX",
     "Settings",
     "data_dir",

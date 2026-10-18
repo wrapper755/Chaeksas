@@ -26,6 +26,9 @@ ENV_CENTER_API_KEY = "CHK_STUDIO__CENTER_API_KEY"
 #: 서비스 앱 키 — 참조 이름마다 하나 (`svc:<참조>`).
 SERVICE_KEY_PREFIX = "svc:"
 ENV_SERVICE_KEY_PREFIX = "CHK_STUDIO__SVC__"
+#: 확장의 비밀 설정 칸 — 확장마다 이름 공간을 가른다 (`ext:<확장>:<칸>`, Bot UI와 같은 규칙).
+EXTENSION_PREFIX = "ext:"
+ENV_EXTENSION_PREFIX = "CHK_STUDIO__EXT__"
 
 
 def env_name(text: str) -> str:
@@ -35,6 +38,10 @@ def env_name(text: str) -> str:
 
 def service_key_env(ref: str) -> str:
     return ENV_SERVICE_KEY_PREFIX + env_name(ref)
+
+
+def extension_secret_env(extension_id: str, key: str) -> str:
+    return f"{ENV_EXTENSION_PREFIX}{env_name(extension_id)}__{env_name(key)}"
 
 
 class SecretsUnavailable(RuntimeError):
@@ -137,15 +144,30 @@ class StudioCredentials:
     def delete_service_key(self, ref: str) -> None:
         self.delete(f"{SERVICE_KEY_PREFIX}{ref}")
 
+    def extension_secret(self, extension_id: str, key: str) -> str | None:
+        """확장의 비밀 설정 칸 (C13 `configuration[].secret`, STU-10 「확장별 설정」).
+
+        확장마다 이름 공간을 나눈다 — 다른 확장의 칸을 가져가지 못한다.
+        """
+        return self.get(f"{EXTENSION_PREFIX}{extension_id}:{key}", env=extension_secret_env(extension_id, key))
+
+    def stored_extension_secret(self, extension_id: str, key: str) -> str | None:
+        return self.stored(f"{EXTENSION_PREFIX}{extension_id}:{key}")
+
+    def set_extension_secret(self, extension_id: str, key: str, value: str) -> None:
+        self.set(f"{EXTENSION_PREFIX}{extension_id}:{key}", value.strip())
+
 
 __all__ = [
     "CENTER_KEY_NAME",
     "ENV_CENTER_API_KEY",
     "ENV_LLM_API_KEY",
+    "ENV_EXTENSION_PREFIX",
     "ENV_SERVICE_KEY_PREFIX",
     "SERVICE",
     "SecretsUnavailable",
     "StudioCredentials",
     "env_name",
+    "extension_secret_env",
     "service_key_env",
 ]

@@ -2,7 +2,9 @@
 
 - **「저장」을 누를 때까지 아무것도 바뀌지 않는다** — 키도 그때 OS 비밀 저장소에 간다.
 - 키는 칸에 **보이지 않는다** — 저장된 것이 있으면 자리 글로 알린다. 새로 넣을 때만 친다.
-- 아직 받쳐 줄 기능이 없는 분류는 목록에 두되 **끄고 이유를 적는다** (U3).
+- **쓰는 곳이 있는 칸만 둔다** (ADR-0073) — 메일·비밀·모델 공급자·temperature는 읽는 곳이 없어 없다.
+- 「확장별 설정」은 확장이 기여한 칸으로 **그 자리에서** 짓는다 (C13 `configuration`, scope `studio`).
+  창은 어느 확장인지 모른다.
 - 「연결 테스트」는 사람이 누를 때만 한다 (창을 열 때 바깥에 묻지 않는다). 결과는 한 줄이다.
 """
 
@@ -17,9 +19,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -34,6 +38,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from chaeksas.contracts import SCOPE_STUDIO, ConfigurationItem
+from chaeksas.qt.theme import THEME_DARK, THEME_LIGHT, THEME_SYSTEM
 from chaeksas.qt.theme.tokens import SPACE_1
 from chaeksas.studio.checks import center_status, key_status, llm_status, worker_place, worker_status
 from chaeksas.studio.credentials import (
@@ -41,6 +47,7 @@ from chaeksas.studio.credentials import (
     ENV_LLM_API_KEY,
     SecretsUnavailable,
     StudioCredentials,
+    extension_secret_env,
     service_key_env,
 )
 from chaeksas.studio.extensions import Extensions
@@ -52,18 +59,14 @@ TITLE = "설정"
 MIN_WIDTH = 720
 
 #: 분류 이름 (STU-10 표 순서).
-APPEARANCE, LLM, MAIL, CENTER, EXTENSIONS, WORKER, SERVICE_KEYS, SECRETS = (
-    "외형", "LLM", "메일", "Center", "확장별 설정", "Worker", "서비스 앱 키", "비밀",
+APPEARANCE, LLM, CENTER, EXTENSIONS, WORKER, SERVICE_KEYS = (
+    "외형", "LLM", "Center", "확장별 설정", "Worker", "서비스 앱 키",
 )
-CATEGORIES = (APPEARANCE, LLM, MAIL, CENTER, EXTENSIONS, WORKER, SERVICE_KEYS, SECRETS)
+CATEGORIES = (APPEARANCE, LLM, CENTER, EXTENSIONS, WORKER, SERVICE_KEYS)
 
-#: 아직인 분류와 그 이유 (U3 — 끄고 가까이에 적는다).
-LATER = {
-    APPEARANCE: "테마·캔버스 팔레트는 지금 시스템 설정을 따릅니다 — 고르는 칸은 아직입니다.",
-    MAIL: "시험 실행은 메일을 담아 두기만 합니다 (바깥으로 보내지 않는다) — 메일 서버 칸은 아직입니다.",
-    EXTENSIONS: "Studio 범위(`studio`)의 설정 칸을 기여한 확장이 아직 없습니다.",
-    SECRETS: "툴팩이 쓰는 비밀은 툴팩과 함께 옵니다 — 툴팩이 아직 없습니다.",
-}
+#: 「외형」 테마 — 저장하는 값과 보이는 글 (스타일 가이드 §4-2).
+THEMES = ((THEME_SYSTEM, "시스템 따름"), (THEME_LIGHT, "밝게"), (THEME_DARK, "어둡게"))
+NO_EXTENSION_FIELDS = "Studio 범위의 설정 칸을 기여한 확장이 없습니다."
 
 KEY_STORED = "저장됨 (바꾸려면 새로 붙여 넣으세요)"
 KEY_FROM_ENV = "환경변수가 이깁니다"
@@ -103,11 +106,10 @@ class StudioSettingsDialog(QDialog):
         self.categories.setMaximumWidth(180)
         self.categories.setSpacing(SPACE_1)
         self.pages = QStackedWidget()
+        #: 「확장별 설정」의 칸 — `(확장, 칸)` → (기여, 입력 칸).
+        self.extension_fields: dict[tuple[str, str], tuple[ConfigurationItem, QLineEdit]] = {}
         for name in CATEGORIES:
-            item = QListWidgetItem(name if name not in LATER else f"{name} (아직)")
-            if name in LATER:
-                item.setToolTip(LATER[name])
-            self.categories.addItem(item)
+            self.categories.addItem(QListWidgetItem(name))
             self.pages.addWidget(self._page(name))
         self.categories.currentRowChanged.connect(self.pages.setCurrentIndex)
         self.categories.setCurrentRow(CATEGORIES.index(LLM))
@@ -135,20 +137,61 @@ class StudioSettingsDialog(QDialog):
     # ── 분류마다 ──
 
     def _page(self, name: str) -> QWidget:
-        if name == LLM:
-            return self._llm_page()
-        if name == CENTER:
-            return self._center_page()
-        if name == WORKER:
-            return self._worker_page()
-        if name == SERVICE_KEYS:
-            return self._keys_page()
+        pages = {
+            APPEARANCE: self._appearance_page,
+            LLM: self._llm_page,
+            CENTER: self._center_page,
+            EXTENSIONS: self._extensions_page,
+            WORKER: self._worker_page,
+            SERVICE_KEYS: self._keys_page,
+        }
+        return pages[name]()
+
+    def _appearance_page(self) -> QWidget:
+        page = QWidget()
+        form = QFormLayout(page)
+        self.theme = QComboBox()
+        for value, label in THEMES:
+            self.theme.addItem(label, value)
+        at = self.theme.findData(self.settings.theme)
+        self.theme.setCurrentIndex(at if at >= 0 else 0)
+        form.addRow("테마", self.theme)
+        note = QLabel("캔버스의 그림은 테마와 상관없이 밝게 둡니다 — 그림의 선과 글자가 검정입니다.")
+        note.setWordWrap(True)
+        note.setProperty("role", "muted")
+        form.addRow("", note)
+        return page
+
+    def _extensions_page(self) -> QWidget:
+        """켜진 확장이 기여한 `scope: studio` 칸 (C13). 비밀 칸은 값을 보이지 않는다 (ADR-0013)."""
         page = QWidget()
         layout = QVBoxLayout(page)
-        reason = QLabel(LATER[name])
-        reason.setWordWrap(True)
-        reason.setEnabled(False)
-        layout.addWidget(reason)
+        for found in self.extensions.host.enabled():
+            items = [one for one in found.manifest.contributes.configuration if one.scope == SCOPE_STUDIO]
+            if not items:
+                continue
+            box = QGroupBox(found.manifest.name)
+            form = QFormLayout(box)
+            stored = self.settings.extension(found.id)
+            for item in items:
+                field = QLineEdit()
+                field.setObjectName(f"ext:{found.id}:{item.key}")
+                if item.secret:
+                    field.setEchoMode(QLineEdit.EchoMode.Password)
+                    if _env(extension_secret_env(found.id, item.key)):
+                        field.setPlaceholderText(KEY_FROM_ENV)
+                    elif self.credentials.stored_extension_secret(found.id, item.key):
+                        field.setPlaceholderText(KEY_STORED)
+                else:
+                    value = stored.get(item.key)
+                    field.setText("" if value is None else str(value))
+                form.addRow(item.label, field)
+                self.extension_fields[(found.id, item.key)] = (item, field)
+            layout.addWidget(box)
+        if not self.extension_fields:
+            empty = QLabel(NO_EXTENSION_FIELDS)
+            empty.setWordWrap(True)
+            layout.addWidget(empty)
         layout.addStretch(1)
         return page
 
@@ -372,6 +415,23 @@ class StudioSettingsDialog(QDialog):
                 item.setText(found)
                 item.setToolTip(found)
 
+    def extension_values(self) -> dict[str, dict[str, Any]]:
+        """「확장별 설정」에서 비밀이 **아닌** 칸만 — 비밀은 `save()`가 비밀 저장소로 보낸다.
+
+        창에 보이지 않은 칸(꺼 둔 확장의 것)은 그대로 둔다 — 다시 켜면 넣었던 값이 돌아온다.
+        """
+        out: dict[str, dict[str, Any]] = {}
+        for (extension_id, key), (item, field) in self.extension_fields.items():
+            if item.secret:
+                continue
+            out.setdefault(extension_id, self.settings.extension(extension_id))
+            text = field.text().strip()
+            if text:
+                out[extension_id][key] = text
+            else:
+                out[extension_id].pop(key, None)
+        return out
+
     def problems(self) -> list[str]:
         rows = self.key_rows()
         out = []
@@ -404,6 +464,9 @@ class StudioSettingsDialog(QDialog):
             for ref, _, typed in rows:
                 if typed:
                     self.credentials.set_service_key(ref, typed)
+            for (extension_id, key), (item, field) in self.extension_fields.items():
+                if item.secret and field.text().strip():
+                    self.credentials.set_extension_secret(extension_id, key, field.text().strip())
         except SecretsUnavailable as e:
             self.error.setText(f"키를 저장하지 못했습니다 — {e}")
             return
@@ -418,6 +481,8 @@ class StudioSettingsDialog(QDialog):
             llm_base_url=self.llm_url.text().strip(),
             llm_model=self.llm_model.text().strip(),
             service_keys=tuple(ServiceKeyRef(ref=ref, app_id=app) for ref, app, _ in rows),
+            theme=str(self.theme.currentData()),
+            extensions={**self.settings.extensions, **self.extension_values()},
         )
         made.save()
         self.saved = made
@@ -430,4 +495,4 @@ def _env(name: str) -> str | None:
     return os.environ.get(name) or None
 
 
-__all__ = ["CATEGORIES", "LATER", "StudioSettingsDialog"]
+__all__ = ["CATEGORIES", "NO_EXTENSION_FIELDS", "THEMES", "StudioSettingsDialog"]

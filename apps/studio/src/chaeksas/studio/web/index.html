@@ -11,7 +11,8 @@
   <link rel="stylesheet" href="vendor/assets/bpmn-js.css">
   <link rel="stylesheet" href="vendor/assets/bpmn-font/css/bpmn-embedded.css">
   <style>
-    /* 색은 Python 쪽이 토큰에서 넣어 준다 (`--chk-*`) — 여기 값을 적지 않는다 (ADR-0017). */
+    /* 그림은 테마와 상관없이 **밝게 둔다** — bpmn-js의 선·글자가 검정이다 (ADR-0073).
+       `--chk-*`를 넣는 쪽은 아직 없고 기본값(흰색)이 쓰인다. */
     html, body { margin: 0; height: 100%; background: var(--chk-bg, #ffffff); }
     #canvas { height: 100%; }
     .djs-palette { background: var(--chk-surface, #ffffff); }

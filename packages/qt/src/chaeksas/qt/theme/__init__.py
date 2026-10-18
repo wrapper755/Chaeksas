@@ -170,13 +170,21 @@ def apply_theme(app: QApplication, *, choice: str = THEME_SYSTEM) -> str:
         # PySide6 타입 정보는 클래스 이름 인자를 모른다 (`font(str)` 없음, `setFont`는 bytes만) — 실행은 된다.
         app.setFont(unhinted(app.font(widget_class)), widget_class)  # type: ignore[call-overload, arg-type]
 
+    # 지금 고른 값을 적어 둔다 — 「시스템 따름」에서 밝게로 바꾼 뒤에는 OS를 따라가지 않는다 (ADR-0073).
+    app._chk_theme_choice = choice  # type: ignore[attr-defined]
     if choice == THEME_SYSTEM:
         hints = app.styleHints()
         # 같은 app에 여러 번 붙지 않게 한 번만 잇는다.
         if not getattr(app, "_chk_theme_following", False):
-            hints.colorSchemeChanged.connect(lambda _scheme: apply_theme(app, choice=THEME_SYSTEM))
+            hints.colorSchemeChanged.connect(lambda _scheme: _follow_system(app))
             app._chk_theme_following = True  # type: ignore[attr-defined]
     return theme
+
+
+def _follow_system(app: QApplication) -> None:
+    """OS가 테마를 바꿨다 — **지금도** 「시스템 따름」일 때만 다시 입힌다."""
+    if getattr(app, "_chk_theme_choice", THEME_SYSTEM) == THEME_SYSTEM:
+        apply_theme(app, choice=THEME_SYSTEM)
 
 
 def status_color(group: str, label: str, *, theme: str = THEME_LIGHT, part: str = "solid") -> str | None:
