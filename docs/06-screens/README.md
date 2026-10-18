@@ -17,7 +17,7 @@
 | [worker.md](worker.md) | Worker 프로세스 — **화면 없음**. 예전 WRK 화면 ID가 어디로 갔는지만 적음 | (WRK-* 폐기) |
 | [center-console.md](center-console.md) | Center 콘솔 (웹) | CON-00 ~ CON-12 (CON-08~10 폐기) |
 | [service-app-console.md](service-app-console.md) | 서비스 앱 관리 콘솔 (웹, 앱마다) | SVC-00 ~ SVC-03, UIA-01 ~ UIA-03 |
-| [admin.md](admin.md) | Admin (명령줄, 창은 나중) | ADM-* |
+| [admin.md](admin.md) | Admin (명령줄 — 창은 두지 않는다, [ADR-0076](../decisions/0076-no-admin-window-yet.md)) | ADM-* |
 | 이 파일 §5 | 여러 앱이 같이 쓰는 창 | CMN-01 |
 
 ### 표기 규칙
