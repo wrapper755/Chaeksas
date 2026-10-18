@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { AdminStatus } from "@chaeksas/api-types/c11-admin-status";
-import { APP_URL, SvcError, svc, session } from "./svc";
+import { APP_URL, CENTER_CONSOLE_URL, SvcError, svc, session } from "./svc";
 import type { Session } from "./session";
 
 /**
@@ -30,4 +30,4 @@ export async function load(): Promise<Loaded | null> {
   }
 }
 
-export { APP_URL, svc };
+export { APP_URL, CENTER_CONSOLE_URL, svc };

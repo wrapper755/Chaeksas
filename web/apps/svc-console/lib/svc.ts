@@ -23,6 +23,12 @@ import { COOKIE_NAME, open, type Session } from "./session";
 
 export const APP_URL = process.env.CHK_SVC_CONSOLE__APP_URL ?? "http://localhost:8000";
 
+/**
+ * **브라우저가 여는** Center 콘솔 주소 — 「실행 id」를 CON-01로 잇는 데만 쓴다 (ADR-0075). 선택이다:
+ * 없으면 링크만 없다. 콘솔 서버는 Center를 부르지 않는다 (토큰도 없다).
+ */
+export const CENTER_CONSOLE_URL = process.env.CHK_SVC_CONSOLE__CENTER_CONSOLE_URL ?? "";
+
 export class SvcError extends Error {
   constructor(
     readonly status: number,

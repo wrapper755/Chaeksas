@@ -69,7 +69,7 @@ pnpm --filter @chaeksas/center-console dev   # 하나만 — http://localhost:85
 | --- | --- |
 | `pnpm dev` | 콘솔 둘을 함께 띄운다 (Center 8501, 서비스 앱 8001) |
 | 환경변수 | Center 콘솔: `CHK_CONSOLE__CENTER_URL`(기본 `http://localhost:8800`), `CHK_CONSOLE__SESSION_SECRET`(**필수**, 16자 이상 — 로그인 쿠키를 암호화한다) |
-| 환경변수 | 서비스 앱 콘솔: `CHK_SVC_CONSOLE__APP_URL`(기본 `http://localhost:8000` — **어느 서비스 앱의 콘솔인지는 이 값이 정한다**), `CHK_SVC_CONSOLE__SESSION_SECRET`(**필수**, 16자 이상) |
+| 환경변수 | 서비스 앱 콘솔: `CHK_SVC_CONSOLE__APP_URL`(기본 `http://localhost:8000` — **어느 서비스 앱의 콘솔인지는 이 값이 정한다**), `CHK_SVC_CONSOLE__SESSION_SECRET`(**필수**, 16자 이상), `CHK_SVC_CONSOLE__CENTER_CONSOLE_URL`(선택 — **브라우저가 여는** Center 콘솔 주소. 있으면 SVC-03·UIA-03의 「실행 id」가 CON-01로 이어진다, [ADR-0075](decisions/0075-service-console-links-to-center-console.md)) |
 | `pnpm build` | 둘 다 제품 빌드 (`output: standalone`) |
 | `pnpm typecheck` | 모든 패키지·앱의 TypeScript 검사 |
 | `pnpm test` | 콘솔 집계 함수의 단위 시험 (vitest — 브라우저를 띄우지 않는다) |

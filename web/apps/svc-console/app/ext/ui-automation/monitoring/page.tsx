@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { FallbackSpread, SessionRow } from "@chaeksas/api-types/c9-session-page";
-import { APP_URL, load, reason, svc } from "@/lib/page";
+import { runIdOfBusinessKey } from "@/lib/center-link";
+import { APP_URL, CENTER_CONSOLE_URL, load, reason, svc } from "@/lib/page";
+import { RunLink } from "@/components/RunLink";
 import { Shell } from "@/components/Shell";
 
 /**
@@ -117,7 +119,11 @@ export default async function UiAutomationMonitoringPage() {
       key: "business_key",
       header: "실행 id",
       mono: true,
-      cell: (row) => String(row.report?.business_key ?? "—"),
+      // `business_key`의 맨 앞 조각이 run_id다 (C10) — 시험(`reg_…`·`stu_…`)은 잇지 않는다 (ADR-0075).
+      cell: (row) => {
+        const key = row.report?.business_key == null ? null : String(row.report.business_key);
+        return <RunLink base={CENTER_CONSOLE_URL} runId={runIdOfBusinessKey(key)} text={key ?? "—"} />;
+      },
     },
     { key: "bpm_process_id", header: "Bot", cell: (row) => row.bpm_process_id ?? "—" },
     { key: "host", header: "Bot UI", cell: (row) => row.host ?? "—" },

@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { UsageRecord } from "@chaeksas/api-types/c11-usage-page";
-import { APP_URL, load, reason, svc } from "@/lib/page";
+import { APP_URL, CENTER_CONSOLE_URL, load, reason, svc } from "@/lib/page";
+import { RunLink } from "@/components/RunLink";
 import { Shell } from "@/components/Shell";
 
 /**
@@ -54,7 +55,14 @@ export default async function UsagePage() {
       cell: (row) => <StatusBadge group="작업" label={outcome(row.status)} />,
     },
     { key: "duration_ms", header: "소요", width: "10ch", cell: (row) => `${row.duration_ms} ms` },
-    { key: "run_id", header: "실행 id", width: "22ch", mono: true, cell: (row) => row.run_id ?? "—" },
+    {
+      key: "run_id",
+      header: "실행 id",
+      width: "22ch",
+      mono: true,
+      // CON-01로 잇는다 — Center 콘솔 주소가 설정에 없으면 글자만 (ADR-0075).
+      cell: (row) => <RunLink base={CENTER_CONSOLE_URL} runId={row.run_id ?? null} text={row.run_id ?? "—"} />,
+    },
     {
       key: "usage",
       header: "LLM",
