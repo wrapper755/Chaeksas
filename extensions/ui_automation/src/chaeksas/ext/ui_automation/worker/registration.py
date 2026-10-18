@@ -12,6 +12,7 @@ Worker는 레지스트리를 모른다.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 from chaeksas.ext.ui_automation.contracts.plan import DESKTOP, LocatorSpec
@@ -370,7 +371,9 @@ DESKTOP_SKIP = frozenset({"TitleBarControl", "ScrollBarControl"})
 DESKTOP_DEPTH = 12
 
 
-def desktop_candidates(controls: list[dict[str, str]], request: AnalyzeRequest) -> AnalyzeResult:
+def desktop_candidates(
+    controls: list[dict[str, str]], request: AnalyzeRequest, *, among: list[dict[str, str]] | None = None
+) -> AnalyzeResult:
     """UIA 컨트롤 줄들 → 후보. **UIA를 모르는 순수 함수**다 (Linux CI에서도 시험한다).
 
     `controls`의 한 줄은 `{control_type, name, automation_id, class_name}`(ControlTypeName 그대로).
@@ -383,7 +386,8 @@ def desktop_candidates(controls: list[dict[str, str]], request: AnalyzeRequest) 
     picked = [one for one in controls if one.get("control_type") in wanted]
     aid_count: dict[str, int] = {}
     class_count: dict[tuple[str, str], int] = {}
-    for one in controls:
+    # 겹침은 **창 전체**에서 센다 — 직접 고르기는 하나만 넘기므로 `among`(창의 모든 줄)을 준다.
+    for one in among if among is not None else controls:
         aid = one.get("automation_id") or ""
         if aid:
             aid_count[aid] = aid_count.get(aid, 0) + 1
@@ -445,6 +449,67 @@ def desktop_controls(window: Any) -> list[dict[str, str]]:
     return out
 
 
+@dataclass
+class DesktopPick:
+    """데스크톱 「직접 고르기」 한 번 (ADR-0072). **입력을 가로채지 않는다** — 읽기만 한다."""
+
+    #: 켤 때 읽어 둔 창의 모든 컨트롤 줄 — 겹침을 「분석」과 **같은 규칙**으로 가른다.
+    rows: list[dict[str, str]]
+    #: 마지막으로 준 요소 — Ctrl을 누르고 있는 동안 같은 것을 두 번 주지 않는다.
+    last: str = ""
+    picking: bool = True
+
+
+def row_of(control: Any) -> dict[str, str]:
+    return {
+        "control_type": control.ControlTypeName or "",
+        "name": control.Name or "",
+        "automation_id": control.AutomationId or "",
+        "class_name": control.ClassName or "",
+    }
+
+
+def registrable(control: Any, window: Any, same: Any) -> Any:
+    """커서 아래가 칸·틀이면 **위로 올라가** 등록할 만한 것을 찾는다. 붙은 창의 것이 아니면 없다.
+
+    `same(a, b)`는 두 컨트롤이 같은가 (UIA `ControlsAreSame` — 시험이 바꿔 끼운다).
+    """
+    wanted = set(DESKTOP_CONTROLS) | set(DESKTOP_READS)
+    seen: Any = control
+    found: Any = None
+    while seen is not None:
+        if seen.ProcessId != window.ProcessId:
+            return None
+        if same(seen, window):
+            return found
+        if found is None and seen.ControlTypeName in wanted:
+            found = seen
+        seen = seen.GetParentControl()
+    return None  # 창에 닿지 못했다 — 같은 프로세스의 다른 창이다
+
+
+def desktop_drain(
+    window: Any, state: DesktopPick, *, ctrl: bool, esc: bool, under_cursor: Any, same: Any
+) -> tuple[list[Candidate], bool]:
+    """「비워 가져오기」 한 번 — **Ctrl이 눌려 있을 때만** 커서 아래를 담는다. Esc면 끝낸다."""
+    if esc:
+        state.picking = False
+    if not state.picking or not ctrl or under_cursor is None:
+        if not ctrl:
+            state.last = ""  # 뗐다 — 다음에 같은 것을 다시 담을 수 있다
+        return [], state.picking
+    found = registrable(under_cursor, window, same)
+    if found is None:
+        return [], True
+    row = row_of(found)
+    identity = "|".join(row.values())
+    if identity == state.last:
+        return [], True
+    state.last = identity
+    request = AnalyzeRequest(schema=1, include_read=True)
+    return desktop_candidates([row], request, among=state.rows).candidates, True
+
+
 def analyze_desktop(window: Any, request: AnalyzeRequest) -> AnalyzeResult:
     """BUI-06 「분석」(데스크톱). **창 하나가 범위다** — `scope_css`는 쓰지 않는다."""
     return desktop_candidates(desktop_controls(window), request)
@@ -468,7 +533,10 @@ __all__ = [
     "start_pick",
     "stop_pick",
     "summarize",
+    "DesktopPick",
     "analyze_desktop",
+    "desktop_drain",
+    "registrable",
     "desktop_candidates",
     "desktop_controls",
     "verify",

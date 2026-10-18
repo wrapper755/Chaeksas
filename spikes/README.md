@@ -10,6 +10,6 @@
 
 제품 코드(`packages/`, `apps/`)는 이 폴더를 import하지 않는다.
 
-끝난 스파이크: S1~S5 → [ADR-0020](../docs/decisions/0020-windows-desktop-backend.md)~[0024](../docs/decisions/0024-desktop-packaging-extensions.md) (모두 수락), S6 → [ADR-0025](../docs/decisions/0025-expression-language.md), S7 → [ADR-0027](../docs/decisions/0027-llm-connection.md), S8 → [ADR-0030](../docs/decisions/0030-ai-task-tools.md), s9 → [ADR-0044](../docs/decisions/0044-canvas-drag-and-drop.md), s10 → [ADR-0054](../docs/decisions/0054-server-run-state-and-concurrency.md).
+끝난 스파이크: S1~S5 → [ADR-0020](../docs/decisions/0020-windows-desktop-backend.md)~[0024](../docs/decisions/0024-desktop-packaging-extensions.md) (모두 수락), S6 → [ADR-0025](../docs/decisions/0025-expression-language.md), S7 → [ADR-0027](../docs/decisions/0027-llm-connection.md), S8 → [ADR-0030](../docs/decisions/0030-ai-task-tools.md), s9 → [ADR-0044](../docs/decisions/0044-canvas-drag-and-drop.md), s10 → [ADR-0054](../docs/decisions/0054-server-run-state-and-concurrency.md), s11 → [ADR-0072](../docs/decisions/0072-desktop-pick-without-hooks.md) (Windows 11 실기, 배율 100%).
 S1~S4는 Windows 11 실기에서, S5는 Windows(묶기·크기·기동)와 Linux(`linux-core-hook/`, 확장 호스트와 훅)에서 나눠 봤다. s9는 Linux/offscreen에서 봤고 Windows는 제품 시험이 같은 길로 본다.
 s10은 Linux에서 봤다 — 서버는 Linux가 주 환경이다 (ADR-0003).

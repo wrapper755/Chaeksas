@@ -222,6 +222,20 @@ class WorkerClient:
         )
         return int(found.get("found") or 0)
 
+    def highlight_rect(
+        self, session_id: str, secret: str, locators: Sequence[LocatorSpec]
+    ) -> tuple[int, list[int] | None]:
+        """데스크톱 「표시」 — 몇 개가 잡혔나와, **하나면** 그 사각형(물리 픽셀, ADR-0072)."""
+        found = self.call(
+            "POST",
+            f"/v1/registration/{session_id}/highlight",
+            body={"locators": [one.to_json_dict() for one in locators]},
+            secret=secret,
+        )
+        rect = found.get("rect")
+        shape = [int(v) for v in rect] if isinstance(rect, list) and len(rect) == 4 else None
+        return int(found.get("found") or 0), shape
+
     def verify(
         self, session_id: str, secret: str, ladders: Mapping[str, Sequence[LocatorSpec]]
     ) -> VerifyResult:

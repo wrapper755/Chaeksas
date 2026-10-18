@@ -149,6 +149,8 @@ class Session:
     plan_source: str = "server"
     #: 이 세션이 쓰는 계획·보고 길 (C8). **키가 세션마다 다르다** (C10 `service_key`).
     plans: Any = None
+    #: 데스크톱 「직접 고르기」 (ADR-0072) — 켜 있을 때만 있다.
+    desktop_pick: Any = None
     #: 보고 재료 (C8 §report) — **업무 값은 담지 않는다**.
     attempts: list[AttemptReport] = field(default_factory=list)
     healed_locators: list[HealedReport] = field(default_factory=list)
@@ -211,6 +213,10 @@ class Session:
             healed=self.healed,
             escalated=self.escalated,
         )
+
+
+#: 데스크톱 「표시」가 한 칸을 찾아보는 시간 — 사람이 줄을 고를 때마다 부르므로 짧게 둔다.
+HIGHLIGHT_TIMEOUT_MS = 500
 
 
 @dataclass(frozen=True)
@@ -689,6 +695,11 @@ class Worker:
         from chaeksas.ext.ui_automation.worker import registration  # noqa: PLC0415
 
         found = self._registering(session_id, secret)
+        window = self._window(found)
+        if window is not None:
+            # 데스크톱 — 창의 줄을 한 번 읽어 둔다 (겹침을 「분석」과 같은 규칙으로 가른다).
+            found.desktop_pick = registration.DesktopPick(rows=registration.desktop_controls(window)) if on else None
+            return
         page = self._surface(found)
         registration.start_pick(page) if on else registration.stop_pick(page)
 
@@ -697,7 +708,11 @@ class Worker:
         from chaeksas.ext.ui_automation.worker import registration  # noqa: PLC0415
 
         found = self._registering(session_id, secret)
-        candidates, picking = registration.drain_pick(self._surface(found))
+        window = self._window(found)
+        if window is not None:
+            candidates, picking = self._drain_desktop(found, window)
+        else:
+            candidates, picking = registration.drain_pick(self._surface(found))
         return {
             "candidates": [one.to_json_dict() for one in candidates],
             "picking": picking,
@@ -707,7 +722,49 @@ class Worker:
         from chaeksas.ext.ui_automation.worker import registration  # noqa: PLC0415
 
         found = self._registering(session_id, secret)
+        window = self._window(found)
+        if window is not None:
+            return self._highlight_desktop(found, locators)
         return {"found": registration.highlight(self._surface(found), locators)}
+
+    def _window(self, found: Session) -> Any:
+        """데스크톱 등록 세션이면 붙은 창 — 아니면 `None` (브라우저 쪽이다)."""
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        return getattr(finder, "window", None)
+
+    def _drain_desktop(self, found: Session, window: Any) -> tuple[list[Any], bool]:
+        """커서·Ctrl·Esc를 **읽기만** 한다 (ADR-0072 — 입력을 가로채지 않는다)."""
+        from chaeksas.ext.ui_automation.worker import registration  # noqa: PLC0415
+
+        state = found.desktop_pick
+        if state is None:
+            return [], False
+        import uiautomation as auto  # noqa: PLC0415 — 데스크톱 세션이면 이미 들어와 있다
+
+        ctrl = bool(auto.IsKeyPressed(auto.Keys.VK_CONTROL))
+        esc = bool(auto.IsKeyPressed(auto.Keys.VK_ESCAPE))
+        under = auto.ControlFromCursor() if ctrl and not esc else None
+        candidates, picking = registration.desktop_drain(
+            window, state, ctrl=ctrl, esc=esc, under_cursor=under, same=auto.ControlsAreSame
+        )
+        if not picking:
+            found.desktop_pick = None
+        return candidates, picking
+
+    def _highlight_desktop(self, found: Session, locators: list[LocatorSpec]) -> dict[str, Any]:
+        """사다리를 차례로 찾아 **정확히 하나**면 그 사각형(물리 픽셀)을 준다 — 그리는 것은 Bot UI다."""
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        if finder is None:  # pragma: no cover — 세션이 있으면 화면도 있다
+            raise WorkerProblem(503, BROWSER_UNAVAILABLE, "열린 화면이 없습니다")
+        for locator in locators:
+            match = finder.find(locator, timeout_ms=HIGHLIGHT_TIMEOUT_MS)
+            if match.count == 0:
+                continue
+            if match.count > 1 or match.handle is None:
+                return {"found": match.count}
+            r: Any = getattr(match.handle, "BoundingRectangle")  # noqa: B009 — UIA 컨트롤
+            return {"found": 1, "rect": [r.left, r.top, r.right, r.bottom]}
+        return {"found": 0}
 
     def verify(
         self, session_id: str, secret: str, ladders: dict[str, list[LocatorSpec]]
