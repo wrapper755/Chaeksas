@@ -35,6 +35,7 @@ from chaeksas.ext.ui_automation.contracts.plan import (
     STATUS_ESCALATED,
     STATUS_FAILED,
     STATUS_SUCCEEDED,
+    WEB,
     AttemptReport,
     Escalation,
     ExecutionPlan,
@@ -613,6 +614,48 @@ class Worker:
             DesktopTarget(window=window),
         )
 
+    def registration_plan(
+        self,
+        session_id: str,
+        secret: str,
+        page_id: str,
+        *,
+        heal: bool = True,
+        report: bool = False,
+        service_key: str | None = None,
+    ) -> SessionInfo:
+        """등록 세션에 **계획을 싣는다** (C10 §5 `…/plan`, BUI-08) — 시험이 등록 탭의 화면을 이어 쓴다.
+
+        세션을 새로 열지 않으므로 화면을 놓지 않는다 (ADR-0014 — 한 번에 하나). 다시 부르면 나중
+        것이 이긴다. **계획의 플랫폼이 열린 화면과 다르면** 싣지 않는다 — 사다리가 맞을 리 없다.
+        """
+        found = self._registering(session_id, secret)
+        if not page_id:
+            raise WorkerProblem(422, "input_invalid", "화면 ID가 없습니다")
+        request = found.request.model_copy(
+            update={
+                "page_id": page_id,
+                "mode": "deterministic",
+                "heal": heal,
+                "report": report,
+                "service_key": service_key,
+            }
+        )
+        plans = self._plans_for(request)
+        if plans is None:
+            raise WorkerProblem(502, "ui_automation_unreachable", "UI 자동화 앱으로 가는 길이 없습니다")
+        plan, source = self._fetch_plan(request, plans)
+        finder = self.backend.finder(found.request.business_key) if self.backend else None
+        opened = DESKTOP if getattr(finder, "window", None) is not None else WEB
+        if plan is not None and (plan.platform or WEB) != opened:
+            raise WorkerProblem(
+                409, "platform_mismatch", f"그 화면은 {plan.platform} 화면인데 열린 것은 {opened}입니다"
+            )
+        found.request, found.plans = request, plans
+        found.plan, found.plan_source = plan, source
+        found.touched_at = self.clock()
+        return found.info()
+
     def _registering(self, session_id: str, secret: str) -> Session:
         """등록 세션이어야 한다 — 실행 중인 Bot의 화면을 등록 화면이 헤집지 못하게."""
         found = self.get(session_id, secret)
@@ -889,6 +932,22 @@ def create_app(worker: Worker, screen: ScreenThread | None = None) -> FastAPI:
             raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다") from e
         info, fresh = await on.run(worker.registration_open_desktop, window)
         return JSONResponse(status_code=201 if fresh else 200, content=info.to_json_dict())
+
+    @router.post("/registration/{session_id}/plan")
+    async def registration_plan(session_id: str, request: Request) -> Any:
+        check_token(request)
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise WorkerProblem(422, "input_invalid", "요청이 계약과 맞지 않습니다")
+        return await on.run(
+            worker.registration_plan,
+            session_id,
+            secret_of(request),
+            str(body.get("page_id") or ""),
+            heal=bool(body.get("heal", True)),
+            report=bool(body.get("report", False)),
+            service_key=str(body["service_key"]) if body.get("service_key") else None,
+        )
 
     @router.post("/registration/{session_id}/analyze")
     async def registration_analyze(session_id: str, request: Request) -> Any:

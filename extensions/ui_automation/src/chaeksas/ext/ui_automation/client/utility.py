@@ -62,9 +62,18 @@ class SelectorRegistration:
             service_key=ctx.secret(REGISTRAR_KEY),
             # **세션은 한 번에 하나다** — 시험을 시작하면 등록 탭이 쥔 것을 놓는다.
             release_other=register.close_browser,
+            # 등록 탭에 열린 화면이 있으면 **놓지 않고 이어 쓴다** (C10 `…/plan`).
+            borrow=register.shared_session,
         )
         made.addTab(register, "등록")
         made.addTab(trial, "시험")
+
+        def go_try(page_id: str, keys: list[str]) -> None:
+            made.setCurrentWidget(trial)
+            trial.prefill(page_id, keys)
+
+        register.on_try = go_try
+        register.look_up(force=True)
         self._widget = made
         self._parts = (register, trial)
         return made

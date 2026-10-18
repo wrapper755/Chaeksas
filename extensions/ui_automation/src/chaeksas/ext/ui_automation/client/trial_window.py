@@ -71,6 +71,8 @@ class Trial:
 
     session_id: str
     secret: str
+    #: 등록 탭이 연 화면을 빌렸다 — **시험이 닫지 않는다** (C10 `…/plan`).
+    borrowed: bool = False
 
 
 class TrialWidget(QWidget):
@@ -82,6 +84,7 @@ class TrialWidget(QWidget):
         registry: Any = None,
         service_key: str | None = None,
         release_other: Any = None,
+        borrow: Any = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -90,6 +93,8 @@ class TrialWidget(QWidget):
         self._service_key = service_key
         #: 다른 탭이 쥔 UI 세션을 놓게 하는 길 (세션은 한 번에 하나다, ADR-0014).
         self._release_other = release_other
+        #: 등록 탭이 지금 연 화면 `(session_id, secret)` — 있으면 그것을 이어 쓴다 (BUI-08).
+        self._borrow = borrow
         self._trial: Trial | None = None
 
         layout = QVBoxLayout(self)
@@ -240,11 +245,18 @@ class TrialWidget(QWidget):
             return
 
         self.output.clear()
-        if self._trial is None and self._release_other is not None:
-            # **세션은 한 번에 하나다** (ADR-0014) — 등록 탭이 쥐고 있으면 놓게 한다.
-            self._release_other()
-        if not self._open():
-            return
+        own = self._trial is not None and not self._trial.borrowed
+        shared = self._borrow() if self._borrow is not None and not own else None
+        if shared is not None:
+            # 등록 탭의 화면을 **놓지 않고** 이어 쓴다 — 거기에 계획을 싣는다 (C10 `…/plan`).
+            if not self._load(*shared):
+                return
+        else:
+            if self._trial is None and self._release_other is not None:
+                # **세션은 한 번에 하나다** (ADR-0014) — 등록 탭이 쥐고 있으면 놓게 한다.
+                self._release_other()
+            if not self._open():
+                return
         found = self._trial
         assert found is not None
 
@@ -307,12 +319,50 @@ class TrialWidget(QWidget):
         self._sync()
         return True
 
+    def _load(self, session_id: str, secret: str) -> bool:
+        """등록 탭의 화면에 계획을 싣는다. **그 화면을 닫지 않는다** — 등록 탭의 것이다."""
+        page_id = self.page_id.currentText().strip()
+        try:
+            info = self._client.load_plan(
+                session_id,
+                secret,
+                page_id,
+                heal=self.heal.isChecked(),
+                report=self.report.isChecked(),
+                service_key=self._service_key,
+            )
+        except Exception as e:  # noqa: BLE001
+            self.say(f"시작하지 못했습니다 — {e}")
+            return False
+        self._trial = Trial(session_id=session_id, secret=secret, borrowed=True)
+        source = PLAN_SOURCE.get(info.plan_source, info.plan_source)
+        self.say(f"[계획 출처: {source}] {page_id} · {self.steps.rowCount()}스텝 · 등록 탭의 화면을 이어 씁니다")
+        self._sync()
+        return True
+
+    def prefill(self, page_id: str, keys: list[str]) -> None:
+        """BUI-06 「시험...」 — 화면 ID를 채우고 가져온 뒤 **고른 줄만** 남긴다 (없으면 전부)."""
+        self.page_id.setCurrentText(page_id)
+        self.fetch()
+        if not keys:
+            return
+        for row in reversed(range(self.steps.rowCount())):
+            item = self.steps.item(row, 0)
+            if item is None or item.text() not in keys:
+                self.steps.removeRow(row)
+        self._sync()
+
     def _finish(self, done: int, total: int, *, escalated: bool) -> None:
         found = self._trial
         if found is None:
             return
         result = "사람에게 전환" if escalated else ("성공" if done == total else "실패")
         self.say(f"결과: {result} — {done}/{total} 스텝")
+        if found.borrowed:
+            self.say("등록 탭의 화면을 그대로 두었습니다 — 보고는 등록 탭에서 화면을 닫을 때 갑니다.")
+            self._trial = None
+            self._sync()
+            return
         if not self.keep_open.isChecked():
             self.close_browser()
             return
@@ -323,6 +373,12 @@ class TrialWidget(QWidget):
         """닫으면서 보고한다 (켜 두었을 때만). **보고는 `test`로 간다** (승격에 안 들어간다)."""
         found = self._trial
         if found is None:
+            return
+        if found.borrowed:
+            # 빌린 화면은 **등록 탭이 닫는다** — 여기서 닫으면 등록 탭이 쥔 것을 잃는다.
+            self._trial = None
+            self.say("등록 탭의 화면은 그 탭에서 닫습니다.")
+            self._sync()
             return
         try:
             closed = self._client.close(found.session_id, found.secret)
