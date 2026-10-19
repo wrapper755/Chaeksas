@@ -1,5 +1,8 @@
 """BUI-03 설정·등록. **처음 실행하면 이 창이 먼저 뜬다** (등록이 안 되어 있으므로).
 
+칸은 **탭으로 나눈다** — 「Center」·「실행」·「모델」·「파일」·「보내기」·「로컬 런타임」, 확장마다
+하나, 「나중에」. 「저장」·「취소」는 탭 밖에 있어 모든 탭을 함께 저장한다.
+
 키는 칸에 가려 넣고 **OS 비밀 저장소**로 간다 (설정 파일에 넣지 않는다, CLAUDE.md §5).
 「연결 테스트」는 실제로 Center에 등록해 보고 결과를 한 줄로 보여 준다 (BUI-03).
 
@@ -24,7 +27,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QFrame,
-    QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -34,6 +36,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -79,27 +82,20 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("Bot UI 설정")
         self.setMinimumWidth(560)
 
-        # 내용은 스크롤 영역에, 단추는 그 밖에 둔다 — 1920×1080을 150%로 쓰면 화면 높이가 672라
-        # 창 전체가 들어가지 않고 「저장」이 화면 밖으로 나갔다 (BUI-03, 이슈 #3 2-12).
-        content = QWidget()
-        sections = QVBoxLayout(content)
-        sections.setContentsMargins(0, 0, 0, 0)
-        sections.addWidget(self._center_box())
-        sections.addWidget(self._run_box())
-        sections.addWidget(self._model_box())
-        sections.addWidget(self._files_box())
-        sections.addWidget(self._sending_box())
-        sections.addWidget(self._runtime_box())
-        for box in self._extension_boxes():
-            sections.addWidget(box)
-        sections.addWidget(self._later_box())
-        sections.addStretch(1)
-
-        self.sections_area = QScrollArea()
-        self.sections_area.setWidget(content)
-        self.sections_area.setWidgetResizable(True)
-        self.sections_area.setFrameShape(QFrame.Shape.NoFrame)
-        self.sections_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # 탭마다 내용은 스크롤 영역에, 단추는 탭 밖에 둔다 — 1920×1080을 150%로 쓰면 화면 높이가
+        # 672라 창 전체가 들어가지 않고 「저장」이 화면 밖으로 나갔다 (BUI-03, 이슈 #3 2-12).
+        self.tabs = QTabWidget()
+        #: 탭마다 `(스크롤 영역, 그 안의 내용)` — 탭 순서 그대로.
+        self._pages: list[tuple[QScrollArea, QWidget]] = []
+        self._add_tab("Center", self._center_box())
+        self._add_tab("실행", self._run_box())
+        self._add_tab("모델", self._model_box())
+        self._add_tab("파일", self._files_box())
+        self._add_tab("보내기", self._sending_box())
+        self._add_tab("로컬 런타임", self._runtime_box())
+        for name, box in self._extension_boxes():
+            self._add_tab(name, box)
+        self._add_tab("나중에", self._later_box())
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("저장")
@@ -108,24 +104,44 @@ class SettingsDialog(QDialog):
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self.sections_area, 1)
+        layout.addWidget(self.tabs, 1)
         layout.addWidget(buttons)
-        self._fit_to_screen(content)
+        self._fit_to_screen()
 
-    def _fit_to_screen(self, content: QWidget) -> None:
-        """내용이 다 보이는 높이로 열되, 화면(작업 표시줄 뺀 영역)을 넘지 않게."""
+    def _add_tab(self, name: str, content: QWidget) -> None:
+        """탭 하나 — 내용이 창보다 길면 **그 탭의 내용만** 스크롤된다."""
+        page = QWidget()
+        column = QVBoxLayout(page)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.addWidget(content)
+        column.addStretch(1)
+        area = QScrollArea()
+        area.setWidget(page)
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.tabs.addTab(area, name)
+        self._pages.append((area, page))
+
+    def tab_pages(self) -> list[QWidget]:
+        """탭마다 스크롤되는 내용 (탭 순서 그대로)."""
+        return [page for _area, page in self._pages]
+
+    def _fit_to_screen(self) -> None:
+        """가장 긴 탭이 다 보이는 높이로 열되, 화면(작업 표시줄 뺀 영역)을 넘지 않게."""
         screen = self.screen() or QGuiApplication.primaryScreen()
         available = screen.availableGeometry().height() if screen else 0
-        # 스크롤 영역 밖(단추·여백·제목 표시줄)이 차지하는 몫을 남긴다.
-        outside = self.sizeHint().height() - self.sections_area.sizeHint().height()
-        wanted = content.sizeHint().height() + outside
+        # 스크롤 영역 밖(탭 머리·단추·여백)이 차지하는 몫을 남긴다.
+        outside = self.sizeHint().height() - max(area.sizeHint().height() for area, _page in self._pages)
+        tallest = max(page.sizeHint().height() for _area, page in self._pages)
+        wanted = tallest + outside
         height = min(wanted, int(available * 0.9)) if available else wanted
         self.resize(max(self.minimumWidth(), self.sizeHint().width()), height)
 
     # ── 섹션 ──
 
-    def _center_box(self) -> QGroupBox:
-        box = QGroupBox("Center")
+    def _center_box(self) -> QWidget:
+        box = QWidget()
         form = QFormLayout(box)
 
         self.center_url = QLineEdit(self._agent.settings.center_url)
@@ -152,8 +168,8 @@ class SettingsDialog(QDialog):
         form.addRow("", self.result_label)
         return box
 
-    def _run_box(self) -> QGroupBox:
-        box = QGroupBox("실행")
+    def _run_box(self) -> QWidget:
+        box = QWidget()
         form = QFormLayout(box)
 
         self.autostart = QCheckBox("로그인할 때 자동 시작")
@@ -183,9 +199,9 @@ class SettingsDialog(QDialog):
         form.addRow("대기열 크기", self.queue_max)
         return box
 
-    def _model_box(self) -> QGroupBox:
+    def _model_box(self) -> QWidget:
         """BUI-03 「모델」 (ADR-0027). **주소·키는 여기만 안다** — BPM 프로세스에 들어가지 않는다."""
-        box = QGroupBox("모델")
+        box = QWidget()
         form = QFormLayout(box)
 
         self.llm_url = QLineEdit(self._agent.settings.llm_base_url)
@@ -208,9 +224,9 @@ class SettingsDialog(QDialog):
         form.addRow("", note)
         return box
 
-    def _files_box(self) -> QGroupBox:
+    def _files_box(self) -> QWidget:
         """BUI-03 「파일」 (ADR-0026). **여기 적은 폴더만** Bot이 읽을 수 있다."""
-        box = QGroupBox("파일")
+        box = QWidget()
         layout = QVBoxLayout(box)
 
         self.readable = QListWidget()
@@ -292,13 +308,13 @@ class SettingsDialog(QDialog):
     def writable_dirs(self) -> tuple[Path, ...]:
         return tuple(Path(self.writable.item(i).text()) for i in range(self.writable.count()))
 
-    def _sending_box(self) -> QGroupBox:
+    def _sending_box(self) -> QWidget:
         """BUI-03 「보내기」 ([ADR-0059](../../../../../docs/decisions/0059-sending-mail-and-webhooks.md)).
 
         **비어 있으면 `chk:email`이 보내지 않고 실패한다** — 조용히 넘어가지 않는다. 비밀번호는
         설정 파일이 아니라 OS 비밀 저장소로 간다 (CLAUDE.md §5).
         """
-        box = QGroupBox("보내기")
+        box = QWidget()
         form = QFormLayout(box)
         settings = self._agent.settings
 
@@ -399,8 +415,8 @@ class SettingsDialog(QDialog):
             self.webhook_hosts.item(i).text() for i in range(self.webhook_hosts.count())
         )
 
-    def _runtime_box(self) -> QGroupBox:
-        box = QGroupBox("로컬 런타임")
+    def _runtime_box(self) -> QWidget:
+        box = QWidget()
         form = QFormLayout(box)
         worker = self._agent.settings.runtime("worker")
 
@@ -415,8 +431,10 @@ class SettingsDialog(QDialog):
 
         return box
 
-    def _extension_boxes(self) -> list[QGroupBox]:
-        """BUI-03 「확장별 설정」 — 확장의 `configuration` 기여로 **그 자리에서** 만든다 (C13).
+    def _extension_boxes(self) -> list[tuple[str, QWidget]]:
+        """BUI-03 「확장별 설정」 — **확장마다 탭 하나**(이름은 확장 이름).
+
+        확장의 `configuration` 기여로 **그 자리에서** 만든다 (C13).
 
         Bot UI는 어느 확장인지 모른다. 비밀 칸은 값을 보이지 않고 OS 비밀 저장소로 간다
         (ADR-0013) — **설정 파일에는 들어가지 않는다.**
@@ -430,7 +448,7 @@ class SettingsDialog(QDialog):
             items = [one for one in found.manifest.contributes.configuration if one.scope == SCOPE_BOT_UI]
             if not items:
                 continue
-            box = QGroupBox(found.manifest.name)
+            box = QWidget()
             form = QFormLayout(box)
             stored = self._agent.settings.extension(found.id)
             for item in items:
@@ -443,7 +461,7 @@ class SettingsDialog(QDialog):
                     field.setText(str(stored.get(item.key, "")))
                 form.addRow(item.label, field)
                 self._extension_fields[(found.id, item.key)] = (item, field)
-            out.append(box)
+            out.append((found.manifest.name, box))
         return out
 
     def _extension_values(self) -> dict[str, dict[str, object]]:
@@ -456,9 +474,9 @@ class SettingsDialog(QDialog):
             out[extension_id][key] = field.text().strip()
         return out
 
-    def _later_box(self) -> QGroupBox:
+    def _later_box(self) -> QWidget:
         """아직 없는 섹션 — 끄고 이유를 적는다 (U3)."""
-        box = QGroupBox("나중에")
+        box = QWidget()
         box.setEnabled(False)
         layout = QVBoxLayout(box)
         for text in (
@@ -568,14 +586,6 @@ class SettingsDialog(QDialog):
                 self._agent.credentials.set_llm_api_key(model_key)
             except SecretsUnavailable as e:
                 QMessageBox.warning(self, "모델 키를 저장하지 못했습니다", str(e))
-                return
-
-        typed_password = self.smtp_password.text().strip()
-        if typed_password:
-            try:
-                self._agent.credentials.set_smtp_password(typed_password)
-            except SecretsUnavailable as e:
-                QMessageBox.warning(self, "메일 비밀번호를 저장하지 못했습니다", str(e))
                 return
 
         typed_password = self.smtp_password.text().strip()

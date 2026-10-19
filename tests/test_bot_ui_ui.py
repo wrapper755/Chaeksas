@@ -230,7 +230,7 @@ def test_settings_dialog_saves_to_the_file_without_secrets(app: Any, agent: Agen
 def test_the_settings_dialog_fits_the_screen_and_keeps_its_buttons(app: Any, agent: Agent) -> None:
     """1920×1080을 150%로 쓰면 화면 높이가 672라 창이 넘쳐 「저장」이 화면 밖으로 나갔다 (BUI-03, 이슈 #3 2-12).
 
-    내용은 스크롤 영역에 두고, 단추는 그 밖에 둔다. 창은 화면 높이를 넘지 않게 연다.
+    탭마다 내용은 스크롤 영역에 두고, 단추는 탭 밖에 둔다. 창은 화면 높이를 넘지 않게 연다.
     """
     from PySide6.QtWidgets import QDialogButtonBox  # noqa: PLC0415
 
@@ -241,10 +241,25 @@ def test_the_settings_dialog_fits_the_screen_and_keeps_its_buttons(app: Any, age
     assert dialog.height() <= available
     buttons = dialog.findChild(QDialogButtonBox)
     assert buttons is not None
-    content = dialog.sections_area.widget()
-    assert content is not None
-    assert not content.isAncestorOf(buttons), "단추가 스크롤 안에 있으면 화면 밖으로 밀린다"
-    assert content.isAncestorOf(dialog.center_url)
+    assert not dialog.tabs.isAncestorOf(buttons), "단추가 탭 안에 있으면 그 탭에서만 보인다"
+    for page in dialog.tab_pages():
+        assert not page.isAncestorOf(buttons), "단추가 스크롤 안에 있으면 화면 밖으로 밀린다"
+
+
+def test_the_settings_dialog_is_split_into_tabs(app: Any, agent: Agent) -> None:
+    """BUI-03 — 칸을 아래로 늘어놓지 않고 탭으로 나눈다. 첫 탭은 「Center」다(첫 실행에 할 일)."""
+    from chaeksas.bot_ui.settings_dialog import SettingsDialog  # noqa: PLC0415
+
+    dialog = SettingsDialog(agent)
+    names = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
+    assert names[:6] == ["Center", "실행", "모델", "파일", "보내기", "로컬 런타임"]
+    assert names[-1] == "나중에"
+    assert dialog.tabs.currentIndex() == 0
+    pages = dialog.tab_pages()
+    assert len(pages) == len(names), "탭마다 제 스크롤 영역이 있다"
+    assert pages[0].isAncestorOf(dialog.center_url)
+    assert pages[1].isAncestorOf(dialog.queue_max)
+    assert pages[4].isAncestorOf(dialog.smtp_host)
 
 
 def test_a_failed_autostart_is_not_saved_as_on(app: Any, agent: Agent, monkeypatch: Any) -> None:
