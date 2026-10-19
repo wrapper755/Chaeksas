@@ -39,11 +39,10 @@
         "creates_task_field": "page_id"
       }
     ],
-    "bot_ui.utilities": [
+    "tool_ui.tools": [
       {
         "id": "selector-registration",
         "label": "UI 셀렉터 등록",
-        "menu": "tools",
         "entry": "ui_automation.client:SelectorRegistration",
         "needs_runtime": "worker"
       }
@@ -76,7 +75,7 @@
       {
         "key": "registrar_key",
         "label": "등록 담당자 키 (registry_write 권한)",
-        "scope": "bot_ui",
+        "scope": "tool_ui",
         "schema": {"type": "string"},
         "secret": true
       }

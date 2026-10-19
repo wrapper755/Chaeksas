@@ -90,7 +90,7 @@
 | `node_instance` | int | ✓ | 이 실행에서 이 노드의 몇 번째 실행인가. 1부터 |
 | `attempt` | int | ✓ | 1부터. 재시도마다 +1 |
 | `call_seq` | int | | 1부터 (기본 1). 같은 노드 인스턴스·시도 안에서 같은 작업을 여러 번 부를 때 +1 |
-| `caller` | object | ✓ | `{type, host, bpm_process_id, version}`. `type`은 열린 문자열, 알려진 값 `bot_ui` `server_runner` `studio` `worker` |
+| `caller` | object | ✓ | `{type, host, bpm_process_id, version}`. `type`은 열린 문자열, 알려진 값 `bot_ui` `server_runner` `studio` `worker` · `tool_ui`(Tool UI의 도구가 부를 때, [ADR-0077](../decisions/0077-tool-ui.md)) |
 | `business_key` | str | | UI 자동화처럼 세션을 잇는 키 (`<run_id>:<node_id>:<node_instance>:<attempt>`, C10) |
 | `input` | object | ✓ | `input_schema`를 따름 |
 

@@ -20,6 +20,7 @@ MEMBERS = {
     "packages/service_kit": "chaeksas.service_kit",
     "apps/studio": "chaeksas.studio",
     "apps/bot_ui": "chaeksas.bot_ui",
+    "apps/tool_ui": "chaeksas.tool_ui",
     "apps/server_runner": "chaeksas.server_runner",
     "apps/admin": "chaeksas.admin",
     "apps/center": "chaeksas.center",

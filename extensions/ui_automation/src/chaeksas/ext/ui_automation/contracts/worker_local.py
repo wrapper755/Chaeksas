@@ -111,7 +111,7 @@ class SessionRequest(SchemaVersioned):
     results: list[str] = Field(default_factory=list)
     headed: bool = False
     heal: bool = True
-    #: 닫을 때 보고할까 (C8). **셀렉터 시험(BUI-08)은 끈다** — 아예 보내지 않는다.
+    #: 닫을 때 보고할까 (C8). **셀렉터 시험(TOL-05)은 끈다** — 아예 보내지 않는다.
     report: bool = True
     service_key: str | None = None
 

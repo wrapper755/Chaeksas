@@ -5,7 +5,7 @@
 
 ## 0. 구현 기술과 모양
 
-- 웹 화면(Center 콘솔, 서비스 앱 관리 콘솔)은 **Next.js**, 데스크톱(Studio, Bot UI)은 **PySide6**. 둘 다 같은 디자인 토큰(`design/tokens.json`)과 [스타일 가이드](../07-style-guide.md)를 따른다 ([ADR-0017](../decisions/0017-web-nextjs-design-system.md)).
+- 웹 화면(Center 콘솔, 서비스 앱 관리 콘솔)은 **Next.js**, 데스크톱(Studio, Bot UI, Tool UI)은 **PySide6**. 둘 다 같은 디자인 토큰(`design/tokens.json`)과 [스타일 가이드](../07-style-guide.md)를 따른다 ([ADR-0017](../decisions/0017-web-nextjs-design-system.md)).
 - 이 폴더의 화면 설계서는 **무엇을 어디에 보이는가**를 정하고, **어떻게 보이는가**(색·글자·구성요소)는 스타일 가이드가 정한다.
 
 ## 1. 문서 구성
@@ -13,7 +13,8 @@
 | 파일 | 앱 | 화면 ID |
 | --- | --- | --- |
 | [studio.md](studio.md) | Studio (Windows 데스크톱, BPM 프로세스 설계) | STU-01 ~ STU-15 |
-| [bot-ui.md](bot-ui.md) | Bot UI (Windows 트레이 기반 GUI, 항상 실행) | BUI-01 ~ BUI-11 |
+| [bot-ui.md](bot-ui.md) | Bot UI (Windows 트레이 기반 GUI, 항상 실행) | BUI-01 ~ BUI-11 (BUI-06~08 폐기 → TOL-03~05) |
+| [tool-ui.md](tool-ui.md) | Tool UI (Windows 데스크톱, 확장이 기여한 도구를 띄움 — Bot UI와 함께 설치, [ADR-0077](../decisions/0077-tool-ui.md)) | TOL-01 ~ TOL-05 |
 | [worker.md](worker.md) | Worker 프로세스 — **화면 없음**. 예전 WRK 화면 ID가 어디로 갔는지만 적음 | (WRK-* 폐기) |
 | [center-console.md](center-console.md) | Center 콘솔 (웹) | CON-00 ~ CON-12 (CON-08~10 폐기) |
 | [service-app-console.md](service-app-console.md) | 서비스 앱 관리 콘솔 (웹, 앱마다) | SVC-00 ~ SVC-03, UIA-01 ~ UIA-03 |
@@ -82,7 +83,7 @@
 
 0. **준비 (서버)** — 서버에서 첫 Admin 키를 넣고(`chk-center admin-keys bootstrap`, [ADM](admin.md)), 운영자가 Center 콘솔에서 내장·사내 서비스 앱 주소를 등록한다([CON-07](center-console.md#con-07-리소스-신규)). 외부 확장은 Admin 서명과 함께 등록한다. 서버 Bot을 쓸 거면 서버 실행기용 Center API 키를 발급해 서버 실행기에 넣는다 (M7).
 1. **준비 (PC)** — 운영자가 Bot UI용 Center API 키를 발급하고([CON-11](center-console.md#con-11-center-api-키-신규)), 설치 담당자가 Bot UI 설정에 넣는다([BUI-03](bot-ui.md#bui-03-설정등록)). 서비스 앱 관리자가 서비스 앱 키를 발급하고([SVC-02](service-app-console.md#svc-02-api-키)), Bot UI 「서비스 앱 키」에 참조 이름으로 넣는다([BUI-10](bot-ui.md#bui-10-서비스-앱-키)).
-2. **UI 셀렉터 등록** (화면 조작이 필요할 때) — 등록 담당자가 UI 자동화 확장의 유틸리티로 화면 요소를 등록한다. [BUI-06](bot-ui.md#bui-06-ui-셀렉터-등록)
+2. **UI 셀렉터 등록** (화면 조작이 필요할 때) — 등록 담당자가 Tool UI에서 UI 자동화 확장의 도구로 화면 요소를 등록한다. [TOL-03](tool-ui.md#tol-03-ui-셀렉터-등록-구-bui-06)
 3. **BPM 프로세스 만들기** — 설계자가 Studio에서 새 BPM 프로세스를 만들고 실행 위치를 정한다 — 기본은 서버, 화면 조작·현장 확인이 필요하면 PC ([ADR-0016](../decisions/0016-server-first.md)). 사용할 서비스 앱마다 키 참조 이름을 정한다. [STU-05](studio.md#stu-05-새-bpm-프로세스), [STU-06](studio.md#stu-06-bpm-프로세스-정보)
 4. **그리기** — BPMN을 그리고 태스크마다 속성을 채운다. UI 태스크는 등록된 화면·요소를 고르고, 서비스 앱 태스크는 리소스 탐색기의 작업을 고른다. [STU-01](studio.md#stu-01-메인-창), [STU-03](studio.md#stu-03-리소스-탐색기), [STU-13](studio.md#stu-13-ui-태스크-편집기-신규), [STU-14](studio.md#stu-14-서비스-앱-태스크-편집기-신규)
 5. **시험** — 시험 케이스를 만들고 자율 수행으로 실행한다 (UI 태스크는 같은 PC의 Bot UI가 띄운 Worker 프로세스가 처리). AI 태스크는 학습되어 재생 명세가 생기고, 결정 수행(재생)으로 운영과 같은 방식을 미리 확인한다. [STU-07](studio.md#stu-07-시험-케이스), [STU-08](studio.md#stu-08-실행-대화상자), [STU-09](studio.md#stu-09-실행-표시와-결과)
@@ -148,12 +149,17 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 | BUI-03 | 설정·등록 | Bot UI | 설치 담당자 | M2 | 신규 |
 | BUI-04 | Bot 탭 (실행·대기열·설치된 Bot) | Bot UI | 현장 PC 사용자 | M4 | 신규 |
 | BUI-05 | 알림 | Bot UI | 현장 PC 사용자 | M3 | 프로토타입 |
-| BUI-06 | UI 셀렉터 등록 | Bot UI | UI 셀렉터 등록 담당자 | M4 | 프로토타입 Worker 화면 등록 |
-| BUI-07 | 요소 계획 정보 | Bot UI | UI 셀렉터 등록 담당자 | M4 | 프로토타입 |
-| BUI-08 | 셀렉터 시험 | Bot UI | UI 셀렉터 등록 담당자 | M4 | 프로토타입 |
+| BUI-06 | (폐기 → TOL-03) | — | — | — | — |
+| BUI-07 | (폐기 → TOL-04) | — | — | — | — |
+| BUI-08 | (폐기 → TOL-05) | — | — | — | — |
 | BUI-09 | 로컬 런타임 탭 (Worker 프로세스 등) | Bot UI | 현장 PC 사용자 | M4 | 신규 |
 | BUI-10 | 서비스 앱 키 | Bot UI | 설치 담당자 | M5 | 신규 |
 | BUI-11 | 확장 | Bot UI | 설치 담당자 | M4 | 신규 (ADR-0018) |
+| TOL-01 | Tool UI 창 | Tool UI | UI 셀렉터 등록 담당자 | M8 | 신규 (ADR-0077) |
+| TOL-02 | Tool UI 설정 | Tool UI | UI 셀렉터 등록 담당자 | M8 | 신규 (ADR-0077) |
+| TOL-03 | UI 셀렉터 등록 (구 BUI-06) | Tool UI | UI 셀렉터 등록 담당자 | M4 | 프로토타입 Worker 화면 등록 |
+| TOL-04 | 요소 계획 정보 (구 BUI-07) | Tool UI | UI 셀렉터 등록 담당자 | M4 | 프로토타입 |
+| TOL-05 | 셀렉터 시험 (구 BUI-08) | Tool UI | UI 셀렉터 등록 담당자 | M4 | 프로토타입 |
 | CON-00 | 공통 틀 | Center 콘솔 | 모두 | M2 | 프로토타입 |
 | CON-01 | 실행 로그 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
 | CON-02 | Bot 현황 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
@@ -180,4 +186,4 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 
 - 콘솔 쓰기 권한: 로그인(OIDC) 전까지 관리자 토큰을 입력한 세션에서만 쓰기 버튼을 보인다 (제안). 결재자 신원은 그동안 「자칭」으로 표시한다.
 - 서비스 앱 관리 콘솔의 로그인: 처음에는 앱별 관리자 토큰, 나중에 Center와 같은 OIDC로 묶는다 (제안).
-- 데스크톱 화면 등록(Windows UIA)의 수집 화면은 S1 스파이크 뒤에 BUI-06에 추가한다.
+- 데스크톱 화면 등록(Windows UIA)의 수집 화면은 TOL-03에 있다 (「방식 › 데스크톱 창」).

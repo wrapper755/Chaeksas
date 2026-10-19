@@ -20,8 +20,8 @@
  ┌── 설계자 PC ─────────────┐ ┌──────────────────── 현장 PC (Windows 주 / Linux 선택) ─────────────────┐
  │ Studio (자율 수행)        │ │ Bot UI (트레이 GUI, 항상 실행)                                         │
  │ Bot UI + Worker 프로세스  │ │  ├─ 실행 ─▶ Bot (BPM 프로세스, 결정 수행) ──REST 127.0.0.1──▶ Worker   │
- │  (개발 실행·셀렉터 등록)   │ │  ├─ 시작·감시 ─▶ Worker 프로세스 (서버, 화면 없음) ── 브라우저·데스크톱 │
- │ Admin (서명)             │ │  └─ 유틸리티: UI 셀렉터 등록                                           │
+ │ Tool UI (셀렉터 등록)     │ │  ├─ 시작·감시 ─▶ Worker 프로세스 (서버, 화면 없음) ── 브라우저·데스크톱 │
+ │ Admin (서명)             │ │  └─ 「도구」 ─▶ Tool UI (따로 뜸, Worker를 빌려 씀): UI 셀렉터 등록    │
  └──────────────────────────┘ └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -31,12 +31,13 @@
 | --- | --- | --- | --- | --- |
 | 공통 계약 (`contracts`) | 패키지 | 모든 곳 | 주고받는 데이터 모델, 스키마 버전, 해시·서명 규칙 | 로직, I/O |
 | 런타임 코어 (`core`) | 패키지 | Studio, Bot UI(실행기), 서버 실행기 | BPMN 실행, **확장 호스트**(확장을 찾아 기여 등록), HTTP 어댑터 해석기, AI 태스크(에이전트 루프), 도구, 재생 기억, 설정 로더 | 화면(Qt), 서버 통신 |
-| 확장 API (`extension_api`) | 패키지 | 모든 클라이언트·실행하는 쪽 | 확장이 구현하는 안정 인터페이스: 태스크 종류·수행기, Studio 편집기, Bot UI 유틸리티, 로컬 런타임, 사전 점검, HTTP 어댑터 해석 규격 ([ADR-0018](decisions/0018-extensions.md)) | 특정 확장의 로직 |
+| 확장 API (`extension_api`) | 패키지 | 모든 클라이언트·실행하는 쪽 | 확장이 구현하는 안정 인터페이스: 태스크 종류·수행기, Studio 편집기, Tool UI 도구, 로컬 런타임, 사전 점검, HTTP 어댑터 해석 규격 ([ADR-0018](decisions/0018-extensions.md)) | 특정 확장의 로직 |
 | 확장 (`extensions/*`, 외부 정의) | 확장 | 곳곳 (기여 지점) | BPM 프로세스에 공통 기능을 더함. 서버 부분(서비스 앱) + 클라이언트 기여. 확장 정의 C13 | 플랫폼 흐름 |
 | 모델 클라이언트 (`llm`) | 패키지 | 모델을 부르는 모든 곳 (`core`, 서비스 앱) | OpenAI 호환 `/v1/chat/completions` 어댑터와 그 모양(`Reply`·`ToolSpec`·`LlmError`). **맨 아래** — 우리 멤버를 하나도 모른다 ([ADR-0034](decisions/0034-service-app-model-connection.md)) | 도구 루프·결과 검증·궤적(`core.agent`), 주소·키 보관 |
 | 서비스 앱 뼈대 (`service_kit`) | 패키지 | 서비스 앱 | API 키 발급·검증, 관리 API(상태·키·사용 기록 — 화면은 `web/apps/svc-console`), `/healthz`, `/manifest`, 작업 호출 틀(수행 모드), 로깅 | 업무 로직 |
 | Studio | 화면 | 설계자 PC | BPM 프로세스 편집(BPMN), 시험 실행(자율 수행·재생), 학습, 패키지 빌드·업로드 | 배포 결정 |
-| **Bot UI** | 화면 (트레이) | 현장 PC, 설계자 PC | Center 등록·하트비트(Center API 키), **Bot 다운로드·설치·실행**(결정 수행, 실행 자리 하나 + 대기열), **Worker 프로세스 시작·감시·재시작**, **UI 셀렉터 등록**, 로컬 결재·확인 창, 서비스 앱 키 값 보관 | 셀렉터 보관, 화면 조작 자체 |
+| **Bot UI** | 화면 (트레이) | 현장 PC, 설계자 PC | Center 등록·하트비트(Center API 키), **Bot 다운로드·설치·실행**(결정 수행, 실행 자리 하나 + 대기열), **Worker 프로세스 시작·감시·재시작**, 로컬 결재·확인 창, 서비스 앱 키 값 보관, 「도구」 바로가기(Tool UI를 띄운다) | 셀렉터 보관, 화면 조작 자체, **확장 도구의 창**(Tool UI의 일) |
+| **Tool UI** | 화면 | 현장 PC, 설계자 PC (Bot UI와 함께 설치) | 확장이 기여한 **도구**를 띄운다(첫 도구: **UI 셀렉터 등록**). 도구 설정·비밀(`scope: tool_ui`) 보관 ([ADR-0077](decisions/0077-tool-ui.md)) | 로컬 런타임 기동(Bot UI가 띄운 것을 빌려 쓴다), Center 연결, 확장 켜기·끄기(BUI-11) |
 | 실행기 | 프로세스 | 현장 PC | 실행 중인 Bot 하나 (Bot UI의 자식, 동시에 하나만, [ADR-0014](decisions/0014-one-bot-per-pc.md)) | 다른 실행, 대기열 |
 | **Worker** (UI 자동화 확장의 로컬 런타임) | 프로세스 (서버) | 현장 PC, 설계자 PC | 127.0.0.1 REST: UI 세션, 로케이터 사다리 실행, 치유 제안 검증, 셀렉터 등록용 분석·선택·검증 | 화면(GUI), 그래프 쓰기, 업무 판단 |
 | 서버 실행기 | 프로세스 (서버) | 서버 | 실행 위치 「서버」인 BPM 프로세스를 동시 실행(상한 있음), 기다리는 동안 실행 상태 저장·재개, Center API 키로 등록·하트비트, 서비스 앱 키 값 보관(서버 비밀 저장소) | UI 태스크, 웹·데스크톱 AI 태스크, 현장 결재·확인 |
@@ -69,7 +70,7 @@
 6. 모든 메시지는 `contracts` 패키지의 모델로 만들고 검증한다.
 7. 모든 내장·사내 서비스 앱은 공통 계약 C11(healthz, manifest, 수행 모드, 자체 API 키 검증)을 지킨다. 외부 앱은 확장 정의의 HTTP 어댑터(C13)로 붙이고, 어댑터는 허용 호스트에만 닿는다.
 8. **서버 우선, 실행 위치에 따라 규칙이 다르다.** 기본은 서버 ([ADR-0016](decisions/0016-server-first.md)). PC: 한 대에서 실행 중인 Bot은 하나, 끝날 때까지 기다림. 서버: 서버 실행기가 동시 실행, 기다리는 동안 상태 저장 ([ADR-0015](decisions/0015-run-location.md)). 아래는 PC 쪽.
-   **PC 한 대에서 실행 중인 Bot은 하나.** 다른 요청은 Bot UI 대기열에서 기다리고, 대기열 상태는 하트비트로 Center에 보고한다. Worker의 UI 세션도 한 번에 하나라, Bot 실행·Studio 시험 실행·UI 셀렉터 등록이 겹치지 않는다 ([ADR-0014](decisions/0014-one-bot-per-pc.md)).
+   **PC 한 대에서 실행 중인 Bot은 하나.** 다른 요청은 Bot UI 대기열에서 기다리고, 대기열 상태는 하트비트로 Center에 보고한다. Worker의 UI 세션도 한 번에 하나라, Bot 실행·Studio 시험 실행·Tool UI의 UI 셀렉터 등록이 겹치지 않는다 ([ADR-0014](decisions/0014-one-bot-per-pc.md)).
 
 ## 5. 의존 방향 (코드)
 
@@ -142,13 +143,14 @@ Chaeksas/
 │  └─ service_kit/         # 서비스 앱 공통 뼈대 + 관리 API
 ├─ apps/
 │  ├─ studio/
-│  ├─ bot_ui/              # 트레이 GUI + 실행기 + 확장 기여(유틸리티·로컬 런타임) 자리
+│  ├─ bot_ui/              # 트레이 GUI + 실행기 + 확장 기여(패널·로컬 런타임) 자리
+│  ├─ tool_ui/             # 확장 도구를 띄우는 창 (ADR-0077 — Bot UI 실행 파일이 --tool-ui로 된다)
 │  ├─ server_runner/       # 서버 실행기 (화면 없음, core 사용)
 │  ├─ admin/
 │  └─ center/              # Center API (콘솔은 web/apps/center-console)
 ├─ extensions/             # 내장 확장 (확장 하나 = 폴더 하나, ADR-0018)
 │  └─ ui_automation/       # extension.json, contracts/(C8·C9·C10), service/(UI 자동화 앱),
-│                          # worker/(Worker 프로세스), client/(UI 태스크·STU-13·BUI-06~08), console/(UIA-01~03)
+│                          # worker/(Worker 프로세스), client/(UI 태스크·STU-13·TOL-03~05), console/(UIA-01~03)
 ├─ web/                    # 웹 화면 (Next.js, pnpm 워크스페이스, ADR-0017)
 │  ├─ apps/center-console/ # Center 콘솔
 │  ├─ apps/svc-console/    # 서비스 앱 관리 콘솔 (앱마다 하나씩 띄움)

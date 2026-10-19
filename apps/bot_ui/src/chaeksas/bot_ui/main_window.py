@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QPoint, Qt, QUrl, Signal
+from PySide6.QtCore import QPoint, Qt, QUrl
 from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -45,6 +45,7 @@ from chaeksas.bot_ui.run_log_view import LastRun, last_runs
 from chaeksas.bot_ui.runner import Running
 from chaeksas.bot_ui.runtimes import STATE_LABELS, RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
+from chaeksas.bot_ui.tool_launch import launch, tool_ui_command
 from chaeksas.contracts.approvals import Form
 from chaeksas.contracts.extension import SURFACE_BOT_UI_RUNTIMES
 from chaeksas.core.packages import (
@@ -114,14 +115,8 @@ def readiness_label(found: Preflight) -> tuple[str, str, str]:
 
 PACKAGE_FILTER = "패키지 (*.zip)"
 
-#: 「도구」 메뉴에 붙는 유틸리티 (C13 `bot_ui.utilities[].menu`).
-UTILITY_MENU = "tools"
-
 #: 지금 보여 주는 로컬 런타임 (BUI-09). 확장이 여럿 기여하면 칸이 여럿이 된다 — 아직 하나다.
 RUNTIME_ID = "worker"
-
-#: 유틸리티 창의 처음 크기 (BUI-06의 표 둘이 들어간다).
-UTILITY_SIZE = (1100, 820)
 
 #: 확장이 낸 칸을 만들지 못했을 때 (ADR-0042) — **그 칸만 접고 사유를 보인다**.
 PANEL_BROKEN = "이 칸을 그리지 못했습니다 —"
@@ -163,36 +158,6 @@ def last_run_item(last: LastRun | None, running: Any) -> QTableWidgetItem:
     item.setToolTip(tip)
     return item
 
-class UtilityWindow(QWidget):
-    """확장이 기여한 유틸리티 하나의 창 (BUI-06~08은 여기 들어온다).
-
-    **별도 창이 기본**이다 (BUI-02 [K]) — 메인 창 탭으로 붙이는 선택은 아직 없다. 닫을 때
-    `closed()`를 불러 잡아 둔 자원(UI 세션 등)을 놓게 한다.
-    """
-
-    closed = Signal()
-
-    def __init__(self, label: str, inner: QWidget, utility: object, parent: QWidget | None = None) -> None:
-        super().__init__(parent, Qt.WindowType.Window)
-        self._utility = utility
-        self.setWindowTitle(f"{label} — {WINDOW_TITLE}")
-        self.resize(*UTILITY_SIZE)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(inner)
-
-    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 — Qt 이름
-        """닫으면 유틸리티가 **자리를 놓는다** (Worker의 UI 세션은 한 번에 하나다)."""
-        closing = getattr(self._utility, "closed", None)
-        if callable(closing):
-            try:
-                closing()
-            except Exception:  # noqa: BLE001 — 닫다 실패해도 창은 닫힌다
-                log.exception("유틸리티를 닫다 실패했다")
-        self.closed.emit()
-        event.accept()
-
-
 @dataclass
 class ContributedPanel:
     """확장이 낸 칸 하나 (C13 `bot_ui.panels`) — 상자·그린 쪽·기다리는 런타임.
@@ -213,8 +178,6 @@ class MainWindow(QMainWindow):
     def __init__(self, agent: Agent) -> None:
         super().__init__()
         self._agent = agent
-        #: 열려 있는 유틸리티 창 (`utility_id` → 창). 같은 것을 두 번 열지 않는다.
-        self._utilities: dict[str, UtilityWindow] = {}
         #: 확장이 낸 칸들 (만든 순서대로). 새로 고침마다 이쪽의 `refresh()`를 부른다.
         self._panels: list[ContributedPanel] = []
         #: 「실행 기록」에 마지막으로 쓴 글 — 같으면 다시 쓰지 않는다 (선택이 날아간다).
@@ -251,15 +214,14 @@ class MainWindow(QMainWindow):
         """
         tools = self._tools_menu
         tools.clear()
-        # 유틸리티는 **확장이 기여한다** (ADR-0018) — Bot UI는 어느 확장인지 모른다.
-        utilities = self._agent.host.utilities() if self._agent.host is not None else []
-        for found in sorted(utilities, key=lambda c: c.value.label):
-            if found.value.menu != UTILITY_MENU:
-                continue
+        # 도구는 **확장이 기여하고 Tool UI가 띄운다** (ADR-0018·0077) — 여기는 바로가기뿐이고
+        # Bot UI는 어느 확장인지 모른다. 순서는 트레이와 같다(확장 이름순).
+        found_tools = self._agent.host.tools() if self._agent.host is not None else []
+        for found in sorted(found_tools, key=lambda c: (c.extension_id, c.value.label)):
             action = tools.addAction(f"{found.value.label}...")
-            action.setToolTip(f"{found.extension_id} 확장")
+            action.setToolTip(f"{found.extension_id} 확장 — Tool UI로 엽니다")
             action.triggered.connect(
-                lambda _=False, e=found.extension_id, u=found.value.id: self.open_utility(e, u)
+                lambda _=False, e=found.extension_id, t=found.value.id: self.open_tool(e, t)
             )
         if tools.actions():
             tools.addSeparator()
@@ -710,7 +672,7 @@ class MainWindow(QMainWindow):
     def open_extensions(self) -> None:
         """BUI-11. 창이 **그 자리에서** 확장을 끄고 켜므로, 끈 것이 있으면 메뉴를 다시 만든다.
 
-        「도구」의 유틸리티 목록이 기여에서 오기 때문이다 (꺼진 확장은 기여를 내지 않는다,
+        「도구」의 바로가기 목록이 기여에서 오기 때문이다 (꺼진 확장은 기여를 내지 않는다,
         ADR-0043). 확장이 낸 칸은 `_refresh_panels`가 다음 주기에 접는다.
         """
         dialog = ExtensionsDialog(self._agent, self)
@@ -765,25 +727,20 @@ class MainWindow(QMainWindow):
             self._agent.cancel_queued(item.queue_id)
             self.refresh()
 
-    # ── 유틸리티 (확장이 기여한다) ──
+    # ── 도구 (확장이 기여하고 Tool UI가 띄운다) ──
 
-    def open_utility(self, extension_id: str, utility_id: str) -> None:
-        """「도구」의 유틸리티를 연다 (C13 `bot_ui.utilities`).
+    def open_tool(self, extension_id: str, tool_id: str) -> None:
+        """「도구」의 바로가기 (ADR-0077) — **필요한 런타임을 먼저 띄우고** Tool UI를 따로 띄운다.
 
-        **필요한 런타임을 먼저 띄운다.** 못 띄우면 창을 열지 않고 왜 못 열었는지 말한다 —
-        빈 창을 띄워 놓고 「안 되네」 하게 두지 않는다.
+        못 띄우면 Tool UI를 띄우지 않고 왜 못 열었는지 말한다 — Tool UI는 런타임을 띄우지 않으므로
+        여기서 실패하면 그쪽에서도 열리지 않는다. 창은 Tool UI가 쥔다(한 세션에 하나).
         """
-        open_already = self._utilities.get(utility_id)
-        if open_already is not None:
-            open_already.show()
-            open_already.raise_()
-            open_already.activateWindow()
-            return
-
         agent = self._agent
         if agent.host is None:
             return
-        found = next((c for c in agent.host.utilities() if c.value.id == utility_id), None)
+        found = next(
+            (c for c in agent.host.tools() if c.extension_id == extension_id and c.value.id == tool_id), None
+        )
         if found is None:
             return
         needs = found.value.needs_runtime
@@ -795,22 +752,15 @@ class MainWindow(QMainWindow):
                 self.refresh()
                 return
         try:
-            utility = agent.host.utility(utility_id)
-            context = agent.extension_context(extension_id, runtime_ids=(needs,) if needs else ())
-            widget = utility.widget(context)
-        except Exception as e:  # noqa: BLE001 — 확장이 깨져도 Bot UI는 산다
-            log.exception("유틸리티를 열지 못했다: %s", utility_id)
-            QMessageBox.warning(self, found.value.label, f"유틸리티를 열지 못했습니다 — {e}")
-            return
-        if not isinstance(widget, QWidget):
-            QMessageBox.warning(self, found.value.label, "유틸리티가 화면을 주지 않았습니다.")
-            return
-
-        window = UtilityWindow(found.value.label, widget, utility, self)
-        window.closed.connect(lambda uid=utility_id: self._utilities.pop(uid, None))
-        self._utilities[utility_id] = window
-        window.show()
+            self.launch_tool_ui(tool_ui_command(extension_id, tool_id))
+        except OSError as e:
+            log.exception("Tool UI를 띄우지 못했다")
+            QMessageBox.warning(self, found.value.label, f"Tool UI를 띄우지 못했습니다 — {e}")
         self.refresh()
+
+    def launch_tool_ui(self, command: list[str]) -> None:
+        """Tool UI를 띄우는 자리 — 시험이 바꿔 끼운다."""
+        launch(command)
 
     # ── 로컬 런타임 (BUI-09) ──
 
@@ -870,9 +820,7 @@ __all__ = [
     "RUNTIME_ID",
     "SESSION_LABEL",
     "SOURCE_LABEL",
-    "UTILITY_MENU",
     "WINDOW_SIZE",
     "WINDOW_TITLE",
     "MainWindow",
-    "UtilityWindow",
 ]

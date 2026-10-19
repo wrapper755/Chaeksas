@@ -403,7 +403,7 @@ def test_checking_a_definition_file_uses_the_same_rules_as_chk_admin() -> None:
     """E1·E3·E5를 여기서 돌려 본다 — Center에 올리기 전에 알면 싸다."""
     assert check_definition(json.dumps(external()).encode("utf-8"), api_version="1.0.0") == []
 
-    coded = external(contributes={"bot_ui.utilities": [{"id": "u", "label": "u", "entry": "x:Y"}]})
+    coded = external(contributes={"tool_ui.tools": [{"id": "u", "label": "u", "entry": "x:Y"}]})
     problems = check_definition(json.dumps(coded).encode("utf-8"), api_version="1.0.0")
     assert any("external_code_not_allowed" in line for line in problems)
 

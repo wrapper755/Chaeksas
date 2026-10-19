@@ -1,4 +1,4 @@
-"""클라이언트 기여 — UI 태스크 수행기, Studio 편집기(STU-13), Bot UI 유틸리티(BUI-06~08)·칸(BUI-09),
+"""클라이언트 기여 — UI 태스크 수행기, Studio 편집기(STU-13), Tool UI 도구(TOL-03~05), Bot UI 칸(BUI-09),
 사전 점검, 데스크톱 AI 환경
 
 `extension.json`의 `entry`가 여기를 가리킨다 (`ui_automation.client:<이름>`). 확장 호스트는

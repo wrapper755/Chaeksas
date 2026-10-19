@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | **BPM 프로세스** / **Bot** | 업무 흐름 (BPMN으로 그린 것). 설계 화면에서는 "BPM 프로세스", 운영 화면에서는 "Bot". 같은 것이다 | 세금계산서 발행 Bot |
 | **<이름> 프로세스** | 프로그램이 도는 단위 (OS 프로세스, 화면 없음) | Worker 프로세스, 실행기 프로세스 |
-| **<이름> UI**, 앱 이름 | 사람이 보는 프로그램 (화면 있음) | Bot UI, Studio, Center 콘솔 |
+| **<이름> UI**, 앱 이름 | 사람이 보는 프로그램 (화면 있음) | Bot UI, Tool UI, Studio, Center 콘솔 |
 
 "프로세스"를 단독으로 쓰지 않는다.
 
@@ -19,7 +19,9 @@
 | 화면 표기 | 코드 | 종류 | 뜻 |
 | --- | --- | --- | --- |
 | Studio | `studio` | 화면 | 설계자가 BPM 프로세스를 그리고, 시험 실행(자율 수행·재생)·학습·패키지 빌드를 하는 데스크톱 앱 |
-| **Bot UI** | `bot_ui` | 화면 (트레이 GUI) | **항상 떠 있는 트레이 기반 GUI 프로그램.** PC 한 대에 하나, Center에 등록되는 단위. ① Bot 다운로드 및 실행 ② 확장의 로컬 런타임(Worker 프로세스 등) 실행 관리 ③ 확장이 더한 유틸리티(기본 제공: UI 셀렉터 등록) |
+| **Bot UI** | `bot_ui` | 화면 (트레이 GUI) | **항상 떠 있는 트레이 기반 GUI 프로그램.** PC 한 대에 하나, Center에 등록되는 단위. ① Bot 다운로드 및 실행 ② 확장의 로컬 런타임(Worker 프로세스 등) 실행 관리. 「도구」 메뉴는 Tool UI를 여는 바로가기다 |
+| **Tool UI** | `tool_ui` | 화면 | **확장이 기여한 도구를 띄우는 데스크톱 프로그램** (기본 제공: UI 셀렉터 등록). 트레이 없이 필요할 때만 뜨고, Center에 등록하지 않는다. **로컬 런타임을 띄우지 않고** 같은 PC의 Bot UI가 띄운 것을 빌려 쓴다. Bot UI 설치에 함께 들어간다 [ADR-0077](decisions/0077-tool-ui.md) |
+| 도구 | `tool` | 기여 | 확장이 Tool UI에 더하는 화면 하나 (C13 `tool_ui.tools`). 예: UI 셀렉터 등록 |
 | **Bot** | `bot` | 업무 | **Center에서 Bot UI로 전달되어 실행되는 BPM 프로세스.** 실행 중인 Bot이 Worker·서비스 앱·Center를 부른다 |
 | **Worker** | `worker` | 프로세스 (서버, 화면 없음) | **127.0.0.1의 REST API 서버.** Bot UI가 시작·감시·재시작·종료한다. 실행 중인 Bot(과 Studio 개발 실행)의 UI 자동화 요청을 받아 등록된 화면 요소를 로케이터 사다리로 조작하고, 실패하면 치유를 요청한다 |
 | 실행기 | `runner` | 프로세스 | 실행 중인 Bot 하나를 맡는 Bot UI의 자식 프로세스. **동시에 하나만** 있다 (격리용: Bot이 죽어도 Bot UI는 산다). S4에서 확인 [ADR-0014](decisions/0014-one-bot-per-pc.md) |
@@ -29,14 +31,14 @@
 | Center | `center` | 서버 | 패키지·Bot UI·배포·작업·결재·실행 이력·리소스·Center API 키를 관리 |
 | Center 콘솔 | `console` | 화면 (웹) | Center의 웹 화면. 운영자·결재자가 쓴다 |
 | Admin | `admin` | 도구 | 서명 키를 가지고 패키지 승인·배포에 서명 |
-| **확장** | `extension` | 묶음 | **BPM 프로세스에 공통 기능을 더하는 묶음.** 확장 정의(C13 `extension.json`)로 태스크 종류·작업·Studio 편집기·Bot UI 유틸리티·로컬 런타임 등을 **기여**한다. 등급: 내장 / 사내 / 외부. 첫 내장 확장은 UI 자동화 [ADR-0018](decisions/0018-extensions.md) |
+| **확장** | `extension` | 묶음 | **BPM 프로세스에 공통 기능을 더하는 묶음.** 확장 정의(C13 `extension.json`)로 태스크 종류·작업·Studio 편집기·Tool UI 도구·로컬 런타임 등을 **기여**한다. 등급: 내장 / 사내 / 외부. 첫 내장 확장은 UI 자동화 [ADR-0018](decisions/0018-extensions.md) |
 | 확장 정의 | `extension.json` | 파일 | 확장이 무엇을 더하는지 선언 (C13) |
 | 기여 / 기여 지점 | `contributes` | 개념 | 확장이 플랫폼에 끼워 넣는 것 / 끼워 넣을 수 있는 자리 (VS Code의 contribution point와 같은 뜻) |
 | 내장 확장 / 사내 확장 / 외부 확장 | `builtin` / `internal` / `external` | 등급 | 이 저장소에 있음 / 다른 사내 저장소 / 정의 파일만 (외부 앱). 외부 확장은 코드를 기여할 수 없다 |
 | 외부 앱 | `external app` | 서버 | 이 저장소·C11 밖의 서버 앱 (흔히 "외부 LLM 앱"이라 부르는 것). 외부 확장의 서버 부분으로, Admin 서명된 확장 정의의 HTTP 어댑터로만 붙는다 |
 | HTTP 어댑터 | `http-adapter` | 개념 | C11을 따르지 않는 외부 앱을 템플릿만으로 부르는 방법 (C13 §4) |
 | 로컬 런타임 | `local_runtime` | 프로세스 | 확장이 기여하고 Bot UI가 띄워 감시하는 로컬 프로세스. 예: Worker 프로세스 |
-| 확장 호스트 | `extension_host` | 코드 | Studio·Bot UI·실행기·서버 실행기 안에서 확장을 찾아 기여를 등록하는 부분 (`core`) |
+| 확장 호스트 | `extension_host` | 코드 | Studio·Bot UI·Tool UI·실행기·서버 실행기 안에서 확장을 찾아 기여를 등록하는 부분 (`core`) |
 | 서비스 앱 | `service_app` | 서버 | **확장의 서버 부분. BPM 프로세스가 API 키로 호출하는 서버 앱** (대부분 LLM 앱). 자율·결정 수행 모드를 가진다. 앱마다 **관리 콘솔**이 있다. [ADR-0010](decisions/0010-service-apps.md), [ADR-0013](decisions/0013-api-keys.md) |
 | 서비스 앱 관리 콘솔 | `svc_console` | 화면 (웹) | 서비스 앱마다 하나. 상태, API 키 발급·폐기, 사용 기록 (+ 앱 고유 화면) |
 | UI 자동화 앱 | `ui-automation` | 서버 | 첫 내장 확장 「UI 자동화」의 서버 부분(시스템). 화면·요소·로케이터 레지스트리, 실행 계획, 치유 제안. Worker가 Bot·Studio를 대신해 호출 |
@@ -61,13 +63,14 @@ Bot UI (화면, 트레이, 항상 실행)                      ── 현장 PC 
  │            ├─ 서비스 앱 태스크  → 서비스 앱 (REST, 서비스 앱 API 키)
  │            └─ 결재              → Center
  ├─ 시작·감시 ─▶ Worker 프로세스
- └─ 유틸리티: UI 셀렉터 등록 ─▶ Worker API + UI 자동화 앱
+ └─ 「도구」 바로가기 ─▶ Tool UI (따로 뜨는 화면)
+Tool UI ── 도구: UI 셀렉터 등록 ─▶ Worker API (빌려 씀) + UI 자동화 앱
 Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Center API 키로 인증)
 ```
 
 - Bot(BPM 프로세스)은 Worker를 띄우지 않는다. Worker 기동·종료는 Bot UI의 일이다.
 - Worker는 업무를 모른다. "어느 화면의 어느 요소에 무엇을 하라"(시맨틱 키 + 동작)만 받는다.
-- Studio의 개발 실행도 같은 PC의 Bot UI가 관리하는 Worker에 요청한다. 설계자 PC에도 Bot UI를 설치한다.
+- Studio의 개발 실행과 Tool UI의 도구도 같은 PC의 Bot UI가 관리하는 Worker에 요청한다 — 둘 다 Worker를 띄우지 않는다. 설계자 PC에도 Bot UI를 설치한다.
 
 ## 2. BPM 프로세스와 실행
 
@@ -126,7 +129,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 로케이터 | `locator` | 요소를 찾는 방법 하나 (role, test_id, css, xpath, automation_id, class_name, control_name) |
 | 사다리 | `ladder` | 한 요소의 로케이터들을 우선순위대로 늘어놓은 것. 앞에서부터 시도 |
 | 동작 | `action` | 요소에 하는 일 8종: fill, click, press, read, read_table, read_options, read_selection, select |
-| UI 셀렉터 등록 | `selector_registry` (기능) | UI 자동화 확장이 Bot UI에 기여하는 유틸리티 (기본 제공). 화면 요소를 담아 검증하고 UI 자동화 앱에 등록·삭제 |
+| UI 셀렉터 등록 | `selector_registry` (기능) | UI 자동화 확장이 Tool UI에 기여하는 도구 (기본 제공). 화면 요소를 담아 검증하고 UI 자동화 앱에 등록·삭제 |
 | 치유 | `healing` | 사다리가 모두 실패했을 때 새 로케이터를 제안받아 로컬에서 검증하는 것 |
 | 승격 | `promotion` | 치유된 로케이터가 연속 3회 성공해 `unverified` → `active`가 되는 것 |
 | 인텐트 | `intent` | 자연어 지시 → 스텝 목록 해석 결과의 캐시 |
@@ -158,7 +161,8 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | --- | --- | --- |
 | 프로세스 (단독) | BPM 프로세스인지 OS 프로세스인지 모호 | BPM 프로세스 / Bot / <이름> 프로세스 |
 | Bot (프로그램을 가리켜) | Bot은 업무(BPM 프로세스)다 | Bot UI |
-| Worker 앱, Worker 창, Worker 트레이 | Worker는 화면이 없다 | Worker 프로세스. 화면 기능은 Bot UI의 「UI 셀렉터 등록」 |
+| Worker 앱, Worker 창, Worker 트레이 | Worker는 화면이 없다 | Worker 프로세스. 화면 기능은 Tool UI의 「UI 셀렉터 등록」 |
+| 유틸리티 (확장이 더한 창을 가리켜) | Bot UI에 붙던 옛 구조 (`bot_ui.utilities`) | 도구 (Tool UI) |
 | 직원, Employee, 에이전트(배포 단위로서) | 배포 단위는 BPM 프로세스(Bot)다 | BPM 프로세스 / Bot |
 | 에이전트(화면에서) | LLM이 태스크를 수행하는 내부 구성만 뜻한다 | AI 태스크 |
 | RPA 봇, BPM 봇 | 모호 | Bot |

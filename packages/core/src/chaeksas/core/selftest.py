@@ -59,8 +59,8 @@ def _entries(host: ExtensionHost) -> list[tuple[str, str, str]]:
         found.append((editor.extension_id, f"studio.editors[{editor.value.task_type}]", editor.value.entry))
     for env in host.agent_environments():
         found.append((env.extension_id, f"agent_environments[{env.value.domain}]", env.value.entry))
-    for utility in host.utilities():
-        found.append((utility.extension_id, f"bot_ui.utilities[{utility.value.id}]", utility.value.entry))
+    for tool in host.tools():
+        found.append((tool.extension_id, f"tool_ui.tools[{tool.value.id}]", tool.value.entry))
     for runtime in host.local_runtimes():
         found.append((runtime.extension_id, f"bot_ui.local_runtimes[{runtime.value.id}]", runtime.value.entry))
     for one in host.preflight():

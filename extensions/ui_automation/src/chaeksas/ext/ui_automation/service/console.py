@@ -6,7 +6,7 @@
 관문은 **하나다**: `service_kit.admin_guard`. 콘솔은 서비스 앱 키를 갖지 않으므로(ADR-0013)
 `registry_write` 키 대신 **관리자 토큰**으로 읽는다 — 키를 발급하는 토큰이라 더 강하다.
 
-**읽기만 한다.** 등록·삭제는 C9 작업(`/v1/ops/registry_*`)이고 Bot UI 유틸리티의 일이다.
+**읽기만 한다.** 등록·삭제는 C9 작업(`/v1/ops/registry_*`)이고 셀렉터 등록 도구(Tool UI)의 일이다.
 """
 
 from __future__ import annotations

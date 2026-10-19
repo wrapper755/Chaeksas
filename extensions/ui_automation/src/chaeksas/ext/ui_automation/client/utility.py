@@ -1,13 +1,14 @@
-"""「UI 셀렉터 등록」 (BUI-06~08) — Bot UI 「도구」 메뉴의 유틸리티.
+"""「UI 셀렉터 등록」 (TOL-03~05) — Tool UI의 도구 (`tool_ui.tools`, ADR-0077).
 
-ADR-0018로 이것은 Bot UI의 고유 기능이 아니라 **이 확장이 기여하는 도구**가 되었다. 그래서
-Bot UI 코드에 셀렉터·화면 레지스트리라는 말이 나오지 않는다.
+ADR-0018로 이것은 플랫폼의 고유 기능이 아니라 **이 확장이 기여하는 도구**이고, ADR-0077로 그
+도구를 띄우는 것은 Bot UI가 아니라 **Tool UI**다. 그래서 Tool UI·Bot UI 코드에 셀렉터·화면
+레지스트리라는 말이 나오지 않는다.
 
-창 하나에 탭 둘이다 — 「등록」(BUI-06·07)과 「시험」(BUI-08). **UI 세션은 한 번에 하나**라
+창 하나에 탭 둘이다 — 「등록」(TOL-03·07)과 「시험」(TOL-05). **UI 세션은 한 번에 하나**라
 (ADR-0014) 한쪽이 열려 있으면 다른 쪽이 놓게 한다.
 
 Worker가 어디 있는지는 **호스트가 설정으로 알려 준다** (C13 예약 키 `runtime.worker.*`) —
-`needs_runtime: "worker"`라서 Bot UI가 먼저 띄워 두고 연다.
+`needs_runtime: "worker"`라서 **Bot UI가 띄워 둔 것**을 Tool UI가 빌려 쓴다(Tool UI는 띄우지 않는다).
 """
 
 from __future__ import annotations
@@ -30,7 +31,7 @@ def pending_queue(ctx: ExtensionContext) -> object | None:
 
 
 class SelectorRegistration:
-    """`bot_ui.utilities` — `extension_api.BotUiUtility`.
+    """`tool_ui.tools` — `extension_api.ToolUiTool`.
 
     등록 담당자 키는 설정 칸 `registrar_key`(비밀)로 받고, UI 자동화 앱 주소는 **호스트가**
     예약 키 `service.base_url`로 알려 준다 (C13 — 주소 출처는 하나). 둘 중 하나라도 없으면

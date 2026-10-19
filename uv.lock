@@ -17,6 +17,7 @@ members = [
     "chaeksas-server-runner",
     "chaeksas-service-kit",
     "chaeksas-studio",
+    "chaeksas-tool-ui",
 ]
 
 [manifest.dependency-groups]
@@ -376,6 +377,29 @@ requires-dist = [
     { name = "keyring", specifier = ">=25.4" },
     { name = "platformdirs", specifier = ">=4.3" },
     { name = "pyside6-addons", specifier = ">=6.8" },
+]
+
+[[package]]
+name = "chaeksas-tool-ui"
+version = "0.1.0"
+source = { editable = "apps/tool_ui" }
+dependencies = [
+    { name = "chaeksas-contracts" },
+    { name = "chaeksas-core" },
+    { name = "chaeksas-qt" },
+    { name = "httpx" },
+    { name = "keyring" },
+    { name = "platformdirs" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chaeksas-contracts", editable = "packages/contracts" },
+    { name = "chaeksas-core", editable = "packages/core" },
+    { name = "chaeksas-qt", editable = "packages/qt" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "keyring", specifier = ">=25.4" },
+    { name = "platformdirs", specifier = ">=4.3" },
 ]
 
 [[package]]

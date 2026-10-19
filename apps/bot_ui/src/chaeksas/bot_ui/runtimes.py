@@ -52,7 +52,7 @@ LOCAL_HOST = "127.0.0.1"
 
 
 class RuntimeUnavailable(RuntimeError):
-    """런타임을 띄우지 못했거나 제때 답하지 않았다. **유틸리티를 열지 않는다.**"""
+    """런타임을 띄우지 못했거나 제때 답하지 않았다. **그 도구(Tool UI)를 띄우지 않는다.**"""
 
 
 def frozen() -> bool:
@@ -126,7 +126,7 @@ def healthy(port: int, path: str, *, timeout_s: float = HEALTH_TIMEOUT_S) -> dic
 class Runtimes:
     """띄운 런타임들. Bot UI 한 벌에 하나다.
 
-    `ensure()`가 「켜져 있고 답한다」까지 책임진다 — 부르는 쪽(유틸리티를 여는 화면)은
+    `ensure()`가 「켜져 있고 답한다」까지 책임진다 — 부르는 쪽(「도구」 바로가기)은
     **된 척하는 런타임**을 받지 않는다.
     """
 
@@ -365,7 +365,7 @@ def check_start(host: ExtensionHost, *, timeout_s: float = CHECK_TIMEOUT_S) -> d
 
     `--selftest`의 다른 단계는 `entry`가 **풀리는지**까지만 본다. 그것으로는 묶은 실행 파일이
     `--local-runtime`으로 **자신을 다시 띄울 수 있는지**, 그 자식이 확장을 찾아 포트를 여는지 모른다
-    — 현장에서 유틸리티를 처음 열 때에야 안다. 그래서 **평소와 같은 길**(`Runtimes.ensure` →
+    — 현장에서 도구를 처음 열 때에야 안다. 그래서 **평소와 같은 길**(`Runtimes.ensure` →
     `runtime_args` → `core.processes`)로 띄운다. 다른 것은 셋이다: 포트는 **빈 것**(같은 PC에 도는
     런타임과 부딪히지 않게), 자리는 **임시 폴더**, 기다림은 `CHECK_TIMEOUT_S`.
 

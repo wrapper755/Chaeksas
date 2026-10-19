@@ -36,7 +36,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import KNOWN_ACTIONS
 PAGE_ID = re.compile(r"^[a-z][a-z0-9_.-]{0,99}$")
 SEMANTIC_KEY = re.compile(r"^[a-z][a-z0-9_.]{0,79}$")
 
-#: 요소의 종류 (BUI-06 「종류」).
+#: 요소의 종류 (TOL-03 「종류」).
 KINDS = ("control", "list", "table", "text")
 
 
@@ -96,7 +96,7 @@ class Registered(ContractModel):
 
 
 class RegistrationResult(ContractModel):
-    """`registry_register`의 결과 (BUI-06 결과 문구가 이것을 읽는다)."""
+    """`registry_register`의 결과 (TOL-03 결과 문구가 이것을 읽는다)."""
 
     page_id: str
     revision: int = 1
@@ -135,7 +135,7 @@ class DeletionResult(ContractModel):
 
 
 class PageBrief(ContractModel):
-    """`registry_list_pages` 한 줄 (BUI-06 「화면 ID」 콤보)."""
+    """`registry_list_pages` 한 줄 (TOL-03 「화면 ID」 콤보)."""
 
     page_id: str
     name: str = ""

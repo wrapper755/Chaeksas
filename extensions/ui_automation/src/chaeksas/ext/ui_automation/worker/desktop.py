@@ -299,7 +299,7 @@ SHELL_WINDOW_CLASSES = frozenset({"Shell_TrayWnd", "Shell_SecondaryTrayWnd", "Pr
 
 
 def top_windows() -> list[dict[str, str]]:
-    """지금 떠 있는 **최상위 창** (BUI-06 「창」 콤보, C10 §5). 제목 없는 창·셸 창은 뺀다."""
+    """지금 떠 있는 **최상위 창** (TOL-03 「창」 콤보, C10 §5). 제목 없는 창·셸 창은 뺀다."""
     import uiautomation as auto  # noqa: PLC0415
 
     out: list[dict[str, str]] = []

@@ -1,7 +1,7 @@
-"""레지스트리를 부르는 쪽 — BUI-06이 UI 자동화 앱을 직접 부른다 (C9·C11).
+"""레지스트리를 부르는 쪽 — TOL-03이 UI 자동화 앱을 직접 부른다 (C9·C11).
 
 **Worker는 레지스트리를 모른다** (C9) — 브라우저 일만 한다. 등록·삭제·조회는 이 확장의
-Bot UI 유틸리티가 자기 키(등록 담당자 키, C13 `registrar_key`)로 직접 부른다.
+도구(Tool UI, ADR-0077)가 자기 키(등록 담당자 키, C13 `registrar_key`)로 직접 부른다.
 
 - 작업 호출은 C11 그대로다 — `POST /v1/ops/<작업>`에 `{schema, mode, run_id, node_id, …}`.
   **등록은 LLM을 쓰지 않으니 `mode`는 늘 `deterministic`**이다.
@@ -32,8 +32,9 @@ log = logging.getLogger(__name__)
 RUN_PREFIX = "reg"
 NODE_ID = "registry"
 
-#: 부르는 쪽 (C11 `caller.type`).
-CALLER_BOT_UI = "bot_ui"
+#: 부르는 쪽 (C11 `caller.type`) — 도구를 띄우는 것은 Tool UI다 (ADR-0077). 실제 값은 호스트가 준
+#: `ExtensionContext.host`를 쓴다(`registration_window.registry_client`) — 이것은 그 기본값이다.
+CALLER_TOOL_UI = "tool_ui"
 
 
 def new_run_id() -> str:
@@ -56,7 +57,7 @@ class RegistryProblem(RuntimeError):
 
 
 class RegistryUnreachable(RegistryProblem):
-    """앱에 닿지 못했다 — 등록은 큐에 쌓고 나중에 보낸다 (BUI-06 8번)."""
+    """앱에 닿지 못했다 — 등록은 큐에 쌓고 나중에 보낸다 (TOL-03 8번)."""
 
 
 @dataclass
@@ -69,6 +70,7 @@ class RegistryClient:
     #: 시험이 끼우는 자리 (httpx.Client 또는 TestClient).
     client: Any = None
     caller_version: str | None = None
+    caller_type: str = CALLER_TOOL_UI
     _attempts: dict[str, int] = field(default_factory=dict, repr=False)
 
     # ── C9 작업 ──
@@ -105,7 +107,7 @@ class RegistryClient:
             node_instance=1,
             attempt=self._attempts[run_id],
             call_seq=1,
-            caller=Caller(type=CALLER_BOT_UI, version=self.caller_version),
+            caller=Caller(type=self.caller_type, version=self.caller_version),
             input={key: value for key, value in payload.items() if value is not None},
         )
 
@@ -152,7 +154,7 @@ def _body(response: Any) -> dict[str, Any]:
 
 
 __all__ = [
-    "CALLER_BOT_UI",
+    "CALLER_TOOL_UI",
     "NODE_ID",
     "RUN_PREFIX",
     "RegistryClient",

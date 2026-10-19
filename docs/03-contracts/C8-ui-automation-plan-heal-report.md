@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Worker 프로세스 → UI 자동화 앱 (실행 중 Bot·Studio를 대신해서) |
 | 코드 위치 | `extensions/ui_automation/contracts/plan.py` — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)). 계획·치유·보고가 한 파일에 있다 |
 | 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0010](../decisions/0010-service-apps.md) §5, [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0035](../decisions/0035-ui-goal-planning.md)(목표로 계획) |
-| 관련 화면 | STU-13, BUI-07·08, UIA-02·03, CON-01 「UI 태스크」 |
+| 관련 화면 | STU-13, TOL-04·05, UIA-02·03, CON-01 「UI 태스크」 |
 
 > 상태: **셋 다 돈다** — 계획(`service/app.py`의 `plan`, 결정 수행만)·치유(`service/healing.py`)·보고와
 > **목표로 계획**(`service/planning.py`, 자율 수행만 — [ADR-0035](../decisions/0035-ui-goal-planning.md)).
@@ -185,7 +185,7 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | 필드 | 뜻 |
 | --- | --- |
 | `business_key`, `page_id`, `plan_id`, `revision` | |
-| `origin` | `run`(Bot·Studio 실행) \| `test`(셀렉터 등록의 「셀렉터 시험」 BUI-08). **`test` 보고는 승격 통계에 넣지 않는다.** UIA-03에서 따로 보인다 |
+| `origin` | `run`(Bot·Studio 실행) \| `test`(셀렉터 등록의 「셀렉터 시험」 TOL-05). **`test` 보고는 승격 통계에 넣지 않는다.** UIA-03에서 따로 보인다 |
 | `status` | `succeeded` / `escalated` / `failed` (열린 문자열) |
 | `steps_completed`, `steps_total` | |
 | `attempts[]` | `{semantic_key, locator_key, succeeded, elapsed_ms, matched_count?, failure_reason?}`. 서버가 로케이터 통계를 갱신한다 |
@@ -195,7 +195,7 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | `duration_ms` | |
 
 - **업무 값은 보내지 않는다.** 읽기 결과(`text`·`data`)는 보고에 넣지 않는다. 프로토타입의 `outputs`(읽은 값)는 없앴다. UIA-03 모니터링은 진행·폴백·치유만 보면 된다.
-- 셀렉터 등록의 「셀렉터 시험」(BUI-08)도 같은 보고를 보낸다. 이때 `origin: test`이고, `run_id`에는 등록 세션의 `business_key`(`reg_<hex8>`)를 넣는다.
+- 셀렉터 등록의 「셀렉터 시험」(TOL-05)도 같은 보고를 보낸다. 이때 `origin: test`이고, `run_id`에는 등록 세션의 `business_key`(`reg_<hex8>`)를 넣는다.
 
 ### 서버가 보고로 하는 일 (승격 규칙)
 

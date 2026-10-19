@@ -87,7 +87,7 @@ POINT_LABEL = {
     "task_types": "태스크 종류",
     "studio.editors": "속성 편집기",
     "studio.resource_views": "리소스 탐색기 뿌리",
-    "bot_ui.utilities": "유틸리티",
+    "tool_ui.tools": "도구 (Tool UI)",
     "bot_ui.panels": "화면 칸",
     "bot_ui.local_runtimes": "로컬 런타임",
     "configuration": "설정 칸",
@@ -101,7 +101,7 @@ ENVIRONMENT_LABEL = "AI 환경"
 #: 키를 쓰는 자리 (C13 `requires_keys[].purpose`) — **넣는 화면까지** 말해 준다.
 PURPOSE_LABEL = {
     "run": "BPM 프로세스가 작업을 부를 때 — BUI-10 「서비스 앱 키」",
-    "utility": "Bot UI 유틸리티가 쓸 때 — BUI-03 「확장별 설정」",
+    "utility": "도구가 쓸 때 — Tool UI 설정 TOL-02",
 }
 
 #: 외부 확장은 코드를 기여할 수 없다 (C13 E1) — 「기여」 칸에 그렇게 적는다.
@@ -589,14 +589,14 @@ class ExtensionsDialog(QDialog):
         self.note.setText(
             f"{row.name}을 {'껐습니다' if off else '켰습니다'}."
             + (
-                " 이 확장의 태스크를 쓰는 Bot은 사전 점검에서 막히고, 「도구」의 유틸리티도 사라집니다."
+                " 이 확장의 태스크를 쓰는 Bot은 사전 점검에서 막히고, 「도구」의 그 도구도 사라집니다."
                 if off
                 else ""
             )
         )
 
     def _confirm_off(self, row: ExtensionRow) -> bool:
-        warning = f"확장 「{row.name}」을 이 Bot UI에서 끕니다. 기여(태스크 종류·유틸리티·점검)가 모두 빠집니다."
+        warning = f"확장 「{row.name}」을 이 Bot UI에서 끕니다. 기여(태스크 종류·도구·점검)가 모두 빠집니다."
         if row.used_by:
             warning += f"\n\n이 확장을 쓰는 Bot {len(row.used_by)}개가 실행 불가가 됩니다: " + ", ".join(row.used_by)
         answer = QMessageBox.question(

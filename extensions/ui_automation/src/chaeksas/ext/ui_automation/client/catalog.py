@@ -16,7 +16,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-#: 요소 종류 → 사람이 읽는 말 (BUI-06과 같은 낱말).
+#: 요소 종류 → 사람이 읽는 말 (TOL-03과 같은 낱말).
 KIND_LABEL = {"control": "조작", "list": "목록", "table": "표", "text": "글자"}
 
 

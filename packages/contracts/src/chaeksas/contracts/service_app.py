@@ -41,7 +41,7 @@ MODES = frozenset({MODE_AUTONOMOUS, MODE_DETERMINISTIC})
 #: 작업 이름 규칙.
 OPERATION_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
 
-KNOWN_CALLER_TYPES = frozenset({"bot_ui", "server_runner", "studio", "worker"})
+KNOWN_CALLER_TYPES = frozenset({"bot_ui", "server_runner", "studio", "tool_ui", "worker"})
 KNOWN_CATEGORIES = frozenset({"business", "system"})
 KNOWN_HEALTH_STATUSES = frozenset({"ok", "degraded"})
 

@@ -428,7 +428,7 @@
 
 **샘플 데이터**
 
-프로토타입은 the-internet.herokuapp.com/tables(4줄, 합계 251)와 `taxbook.ods`를 썼다. 새 구조에서는 사내 시험 포털 화면을 BUI-06으로 등록해 쓴다.
+프로토타입은 the-internet.herokuapp.com/tables(4줄, 합계 251)와 `taxbook.ods`를 썼다. 새 구조에서는 사내 시험 포털 화면을 TOL-03으로 등록해 쓴다.
 
 ---
 

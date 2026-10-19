@@ -580,7 +580,7 @@ class Worker:
     # ── 셀렉터 등록 (C10 §5) ──
 
     def registration_open(self, start_url: str, *, headed: bool = True) -> tuple[SessionInfo, bool]:
-        """등록용 세션을 연다 (BUI-06 「브라우저 열기」).
+        """등록용 세션을 연다 (TOL-03 「브라우저 열기」).
 
         `business_key`는 **Worker가 짓는다** (`reg_<hex8>`, C10 §2) — 등록 화면이 실행 키를
         흉내 낼 일이 없다. `page_id`를 비워 두니 계획도 받아 오지 않는다 (아직 없는 쪽이다).
@@ -598,7 +598,7 @@ class Worker:
         )
 
     def registration_windows(self) -> dict[str, Any]:
-        """BUI-06 「창」 콤보 — 지금 떠 있는 최상위 창 (C10 §5)."""
+        """TOL-03 「창」 콤보 — 지금 떠 있는 최상위 창 (C10 §5)."""
         from chaeksas.ext.ui_automation.worker import desktop  # noqa: PLC0415
 
         if not desktop.available():
@@ -606,7 +606,7 @@ class Worker:
         return {"windows": desktop.top_windows()}
 
     def registration_open_desktop(self, window: WindowSpec) -> tuple[SessionInfo, bool]:
-        """등록용 세션을 **창에 붙여** 연다 (BUI-06 「창에 붙기」). 창을 띄우지 않는다 — 앱 이름이 없다."""
+        """등록용 세션을 **창에 붙여** 연다 (TOL-03 「창에 붙기」). 창을 띄우지 않는다 — 앱 이름이 없다."""
         if window.empty:
             raise WorkerProblem(422, "input_invalid", "창 조건이 비어 있습니다")
         return self.open(
@@ -630,7 +630,7 @@ class Worker:
         report: bool = False,
         service_key: str | None = None,
     ) -> SessionInfo:
-        """등록 세션에 **계획을 싣는다** (C10 §5 `…/plan`, BUI-08) — 시험이 등록 탭의 화면을 이어 쓴다.
+        """등록 세션에 **계획을 싣는다** (C10 §5 `…/plan`, TOL-05) — 시험이 등록 탭의 화면을 이어 쓴다.
 
         세션을 새로 열지 않으므로 화면을 놓지 않는다 (ADR-0014 — 한 번에 하나). 다시 부르면 나중
         것이 이긴다. **계획의 플랫폼이 열린 화면과 다르면** 싣지 않는다 — 사다리가 맞을 리 없다.
@@ -691,7 +691,7 @@ class Worker:
         return analyze(self._surface(found), request)
 
     def pick(self, session_id: str, secret: str, *, on: bool) -> None:
-        """직접 고르기를 켜고 끈다 (BUI-06 3번)."""
+        """직접 고르기를 켜고 끈다 (TOL-03 3번)."""
         from chaeksas.ext.ui_automation.worker import registration  # noqa: PLC0415
 
         found = self._registering(session_id, secret)
