@@ -126,15 +126,17 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
     # (BX-16이 파일 이름을 적어 두었던 일 — 그 예제의 「배운 것」에 있다).
     for n in [one for one in calls if one.props.get("delegate")]:
         if e.run_location != "server":
-            errs.append(f"{e.id}: {n.id} PC 위임은 실행 위치가 server일 때만 쓴다 (B14)")
+            errs.append(f"{e.id}: {n.id} 위임은 실행 위치가 server일 때만 쓴다 (B14)")
         pkg = n.props["delegate"]["bpm_process_id"]
         tgt = next((x for x in by_file.values() if x.file.replace("_", "-") == pkg), None)
         if tgt is None:
             errs.append(f"{e.id}: {n.id} 위임 대상 패키지 id `{pkg}`에 맞는 예제가 없다 "
                         f"(패키지 id는 예제 파일 이름의 `_`를 `-`로 바꾼 것이다 — C1 `id`)")
             continue
-        if tgt.run_location != "pc":
-            errs.append(f"{e.id}: {n.id} 위임 대상 {tgt.id}의 실행 위치가 pc가 아니다")
+        if tgt is e:
+            # **자기 자신에게 위임하지 않는다** (C1 R12) — 끝나지 않는 되부름이다. 대상은 PC Bot이든
+            # 서버 Bot이든 된다 — 어디서 도는지는 대상 패키지가 정한다 (ADR-0082).
+            errs.append(f"{e.id}: {n.id} 자기 자신에게 위임한다 (C1 R12)")
         t = n.props["task"]
         tin = {i[0] for i in tgt.inputs}
         if set(t["input"]) - tin:
@@ -307,7 +309,8 @@ def coverage(examples: list[Example]) -> list[str]:
         ("결재 (userTask)", has("appr")), ("수동 확인 (manualTask)", has("manual")),
         ("메일 보내기", has("mail")), ("웹훅 보내기", has("hook")), ("메시지 받기 (receiveTask)", has("recv")),
         ("BPM 프로세스 호출", lambda e: any(n.kind == "call" and not n.props.get("delegate") for n in nodes(e))),
-        ("PC 위임 (`chk:call.delegate`)", lambda e: any(n.kind == "call" and n.props.get("delegate") for n in nodes(e))),
+        ("위임 (`chk:call.delegate`)", lambda e: any(n.kind == "call" and n.props.get("delegate") for n in nodes(e))),
+        ("일괄 기동 (반복 위임)", lambda e: any(n.kind == "call" and n.props.get("delegate") and n.props.get("loop") for n in nodes(e))),
         ("하위 프로세스", has("sub")),
         ("배타 게이트웨이", has("xgw")), ("포함 게이트웨이", has("igw")), ("병렬 게이트웨이", has("pgw")),
         ("중간 던지기 — 이정표(없음)", has("throw", kind="none")), ("중간 던지기·받기 — 신호", lambda e: has("throw", kind="signal")(e) or has("catch", kind="signal")(e)),

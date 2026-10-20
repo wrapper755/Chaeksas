@@ -40,14 +40,21 @@ router = APIRouter(prefix="/api/v1/server-runner", tags=["server-runner"])
 
 #: PC 대상 작업·배포의 종류 이름 (C5 `KNOWN_TARGET_TYPES`).
 PC = "bot_ui"
+#: 서버 대상 (ADR-0082) — 대상 패키지의 `run_location`이 `server`면 이리로 맡긴다.
+SERVER = "server_runner"
 
 #: 대기열에 있다고 보는 작업 상태 (PC를 고를 때 짧은 쪽을 찾는다).
 IN_QUEUE = ("pending", "dispatched", "accepted")
 
 
-def key_prefix(run_id: str, node_id: str, instance: int) -> str:
-    """멱등 키 — **Center가 짓는다** (C12 §PC 위임). 결재 `request_id`와 같은 짜임이다."""
-    return f"dlg_{run_id}_{node_id}_{instance}"
+def key_prefix(run_id: str, node_id: str, instance: int, loop_index: int | None = None) -> str:
+    """멱등 키 — **Center가 짓는다** (C12 §PC 위임). 결재 `request_id`와 같은 짜임이다.
+
+    반복 안이면 **차례가 붙는다** (ADR-0082). 반복이 아니면 그 꼬리가 없어야 한다 — 이미 맡겨
+    둔 위임(이 칸이 생기기 전)과 같은 키를 지어야 되살린 실행이 같은 작업을 받는다.
+    """
+    base = f"dlg_{run_id}_{node_id}_{instance}"
+    return base if loop_index is None else f"{base}_{loop_index}"
 
 
 def _runner_of(store: Store, found: Caller) -> str:
@@ -124,7 +131,7 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[Delegation
     if not _owns_the_run(store, run_id=request.run_id, key_id=found.key.key_id):
         raise ApiError(403, "run_owner_mismatch", "남의 실행 이름으로 위임을 맡길 수 없다")
 
-    key = key_prefix(request.run_id, request.node_id, request.node_instance)
+    key = key_prefix(request.run_id, request.node_id, request.node_instance, request.loop_index)
     before = store.row("SELECT * FROM delegations WHERE job_id IN (SELECT job_id FROM jobs"
                        " WHERE idempotency_key = ? AND owner = ?)", (key, jobs_api.owner_of(found)))
     if before is not None:
@@ -133,11 +140,11 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[Delegation
         row = store.row("SELECT * FROM jobs WHERE job_id = ?", (str(before["job_id"]),))
         assert row is not None  # 위임 행이 있으면 그 작업도 있다
         job = jobs_api.info_of(store, row)
-        return DelegationResponse(
-            job_id=job.job_id, bot_ui_id=str(before["bot_ui_id"]), state=job.state
-        ), False
+        return _response(job.job_id, str(before["target_type"]), str(before["bot_ui_id"]), job.state), False
 
-    version = _version_for(store, request)
+    version, target_type = _version_for(store, request)
+    if target_type == SERVER:
+        return _to_server(store, found, request, runner_id=runner_id, version=version, key=key)
     bot_ui_id = pick_bot_ui(store, bot=request.bpm_process_id, version=version, wanted=request.bot_ui)
     if bot_ui_id is None:
         # **기다리지 않는다** — 배포되지 않은 것을 기다리는 것은 업무가 아니라 설정 잘못이고,
@@ -181,25 +188,90 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[Delegation
                 now_iso(),
             ),
         )
-    return DelegationResponse(job_id=job.job_id, bot_ui_id=bot_ui_id, state=job.state), made
+    return _response(job.job_id, PC, bot_ui_id, job.state), made
 
 
-def _version_for(store: Store, request: DelegationRequest) -> str:
-    """판을 비우면 **배포된 판** — 둘 이상이면 거절한다 (작업 지시와 같은 규칙, C5)."""
-    if request.version:
-        return request.version
+def _response(job_id: str, target_type: str, bot_ui_id: str, state: str) -> DelegationResponse:
+    return DelegationResponse(
+        job_id=job_id, target_type=target_type, bot_ui_id=bot_ui_id or None, state=state
+    )
+
+
+def _to_server(
+    store: Store, found: Caller, request: DelegationRequest, *, runner_id: str, version: str, key: str
+) -> tuple[DelegationResponse, bool]:
+    """**서버 Bot에 맡긴다** (ADR-0082) — 서버 실행기 대상 작업 하나. 실행기는 내려줄 때 고른다.
+
+    고르는 규칙·상한·대기열은 **작업 쪽 한 자리**에 남는다 (`POST /jobs`와 같은 함수 — PC와 같다).
+    """
     from chaeksas.center.api import deployments  # noqa: PLC0415 — 순환 import를 피한다
 
-    versions = deployments.versions_deployed_to(
-        store, bpm_process_id=request.bpm_process_id, target_type=PC
+    if request.bot_ui:
+        # 어느 PC인가는 PC 대상에만 뜻이 있다 — 대상이 서버로 옮겨 갔을 수 있다. 업무 실패로 알린다.
+        raise ApiError(
+            422, "bot_ui_for_server", f"{request.bpm_process_id}@{version}은 서버 Bot이다 — PC를 고를 수 없다"
+        )
+    if not deployments.targets_for(
+        store, bpm_process_id=request.bpm_process_id, version=version, target_type=SERVER
+    ):
+        raise ApiError(404, "no_deployment", f"{request.bpm_process_id}@{version}이 서버에 배포되지 않았다")
+    job, made = jobs_api.create(
+        store,
+        replace(found, actor=delegation_requester(request.run_id), on_behalf=None),
+        {
+            "schema": 1,
+            "bpm_process_id": request.bpm_process_id,
+            "version": version,
+            "target": {"type": SERVER},
+            "inputs": request.inputs,
+            "idempotency_key": key,
+        },
+        by_center=True,
     )
+    with store.tx() as cur:
+        cur.execute(
+            "INSERT INTO delegations (job_id, runner_id, run_id, node_id, node_instance,"
+            " bot_ui_id, at, target_type) VALUES (?, ?, ?, ?, ?, '', ?, ?)",
+            (job.job_id, runner_id, request.run_id, request.node_id, request.node_instance, now_iso(), SERVER),
+        )
+    return _response(job.job_id, SERVER, "", job.state), made
+
+
+def _version_for(store: Store, request: DelegationRequest) -> tuple[str, str]:
+    """맡길 판과 **대상 종류** (ADR-0082). 판을 비우면 **배포된 판** — 둘 이상이면 거절한다.
+
+    대상 종류는 그 판의 **매니페스트 `run_location`**이 정한다(그림에 적지 않는다). 배포는
+    `run_location`과 대상 종류가 맞아야만 받으므로(`wrong_target`) 판을 비웠을 때는 배포된 쪽이
+    곧 그 판의 실행 위치다.
+    """
+    from chaeksas.center.api import deployments  # noqa: PLC0415 — 순환 import를 피한다
+
+    if request.version:
+        return request.version, _location_of(store, request.bpm_process_id, request.version)
+    found = {
+        (version, kind)
+        for kind in (PC, SERVER)
+        for version in deployments.versions_deployed_to(
+            store, bpm_process_id=request.bpm_process_id, target_type=kind
+        )
+    }
+    versions = sorted({version for version, _ in found})
     if not versions:
-        raise ApiError(404, "no_deployment", f"{request.bpm_process_id}이 PC에 배포되지 않았다")
+        raise ApiError(404, "no_deployment", f"{request.bpm_process_id}이 배포되지 않았다")
     if len(versions) > 1:
         raise ApiError(
             422, "version_ambiguous", "배포된 판이 둘 이상이다", {"versions": versions}
         )
-    return versions[0]
+    return versions[0], next(kind for version, kind in found if version == versions[0])
+
+
+def _location_of(store: Store, bot: str, version: str) -> str:
+    """그 판의 대상 종류 — 매니페스트 `run_location`(C1, 생략하면 `server`). 모르면 PC다(옛 규칙)."""
+    row = store.row("SELECT manifest_json FROM packages WHERE id = ? AND version = ?", (bot, version))
+    if row is None:
+        return PC  # 없는 판 — PC 쪽 고르기가 `no_deployment`로 알린다 (지금 규칙 그대로)
+    manifest = loads(row["manifest_json"], {}) or {}
+    return SERVER if (manifest.get("run_location") or "server") == "server" else PC
 
 
 def pending_for(store: Store, runner_id: str) -> list[DelegationResult]:

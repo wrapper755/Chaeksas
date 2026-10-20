@@ -1039,6 +1039,9 @@ def _delegate(context: Context, spec: Call, delegate: Delegate) -> Outcome:
         version=delegate.version,
         bot_ui=None if bot_ui is None else str(bot_ui),
         inputs=inputs,
+        # **반복 차례도 자리의 일부다** (ADR-0082) — 엔진은 반복 중에 `node_instance`를 올리지
+        # 않으므로 이것 없이는 2건째부터 1건째 작업이 돌아온다.
+        loop_index=context.token.loop.index if context.token.loop is not None else None,
     )
     try:
         job_id = run.env.delegate.delegate(call)

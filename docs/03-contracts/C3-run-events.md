@@ -40,7 +40,7 @@
 
 | kind | 언제 | `data` 필수 키 | `data` 선택 키 |
 | --- | --- | --- | --- |
-| `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`, `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`\|`message`\|`test`\|**`delegation`**(PC 위임으로 받은 작업)) | `job_id`, `parent_run_id`(**맡긴 서버 실행** — PC 위임으로 시작된 실행에만, [ADR-0062](../decisions/0062-pc-delegation.md)), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio 시험 실행의 케이스 이름) |
+| `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`, `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`\|`message`\|`test`\|**`delegation`**(위임으로 받은 작업 — PC·서버)) | `job_id`, `parent_run_id`(**맡긴 서버 실행** — 위임으로 시작된 실행에만, [ADR-0062](../decisions/0062-pc-delegation.md)·[ADR-0082](../decisions/0082-batch-start.md)), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio 시험 실행의 케이스 이름) |
 | `node_state` | 노드 상태가 바뀜 | `state`(`started`\|`completed`\|`failed`\|`skipped`\|`replayed`\|`waiting`) | `task_type`(`ai_task`\|`ui_task`\|`service_task`\|`approval`\|…), `error_code`, `message`(한 줄) |
 | `log` | 사람이 읽는 한 줄 | `level`(`info`\|`warn`\|`error`), `message` | |
 | `agent` | AI 태스크의 단계 하나 | `step`, `action`(`plan`\|`tool`\|`extract`\|`finish`) | `tool`, `summary`(값 제외) |

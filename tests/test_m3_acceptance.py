@@ -160,9 +160,9 @@ GREEN = [one for one in M3 if one not in REMAINING]
 
 def test_the_bundle_is_read_from_the_examples() -> None:
     """묶음 목록을 사람이 옮겨 적지 않는다 — 어긋나는 순간 시험이 거짓말을 한다."""
-    assert len(M3) == 27
+    assert len(M3) == 29  # FX-24·FX-25 (일괄 기동, ADR-0082)
     assert set(REMAINING) <= set(M3), "남은 목록에 묶음 밖 예제가 있다"
-    assert len(GREEN) == 27, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
+    assert len(GREEN) == 29, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
 
 
 @pytest.mark.parametrize("example", GREEN)

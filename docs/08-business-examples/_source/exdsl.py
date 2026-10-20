@@ -185,16 +185,18 @@ def recv(id, name, message, correlation, payload=None):
     return Node(id, "recv", name, dict(message=message, correlation=correlation, payload=payload or []))
 
 
-def call(id, name, called, input, output, delegate=None):
-    """다른 BPM 프로세스 호출. `delegate`를 주면 **PC 위임**이다 (C14 `chk:call.delegate`).
+def call(id, name, called, input, output, delegate=None, loop=None):
+    """다른 BPM 프로세스 호출. `delegate`를 주면 **위임**이다 (C14 `chk:call.delegate`).
 
-    위임의 대상은 **패키지 안의 정의가 아니라 따로 배포된 PC Bot**이라(ADR-0062) `called`는
-    읽는 사람을 위한 표시로만 남는다 — 검사가 패키지 안에서 찾지 않는다 (B14).
+    위임의 대상은 **패키지 안의 정의가 아니라 따로 배포된 Bot**이라(ADR-0062) `called`는
+    읽는 사람을 위한 표시로만 남는다 — 검사가 패키지 안에서 찾지 않는다 (B14). PC Bot이든
+    서버 Bot이든 같은 칸이다 — 어디서 도는지는 대상 패키지가 정한다 (ADR-0082). `loop`를 주면
+    차례마다 하나씩 맡긴다 (**일괄 기동**).
     """
     task = dict(input=input, output=output)
     if delegate is not None:
         task = dict(delegate=delegate, **task)  # 읽는 순서를 C14 예시와 같게 둔다
-    return Node(id, "call", name, dict(called=called, task=task, delegate=delegate))
+    return Node(id, "call", name, dict(called=called, task=task, delegate=delegate, loop=loop))
 
 
 def xgw(id, name="", default=None):
@@ -294,7 +296,7 @@ def validate(ex: Example) -> list[str]:
                     errs.append(f"{where}: {n.id} 조건 없는 흐름이 default가 아님")
             if n.kind == "sub":
                 chk_scope(n.children, n.flows, n.boundaries, n.id)
-            if n.kind in ("ai", "ui", "svc", "rule") and n.props.get("loop") and "collect_into" not in n.props["loop"]:
+            if n.kind in ("ai", "ui", "svc", "rule", "call") and n.props.get("loop") and "collect_into" not in n.props["loop"]:
                 errs.append(f"{n.id} 반복에 collect_into 없음")
             if n.kind in ("appr", "manual"):
                 for fd in n.props["task"]["fields"]:
@@ -593,8 +595,12 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
         return (f'{ind}<bpmn:receiveTask id="{n.id}" name="{nm}" messageRef="{mref}">\n'
                 f'{ext_el("receive", {"correlation": p["correlation"], "payload": p["payload"]})}{io}{ind}</bpmn:receiveTask>\n')
     if k == "call":
+        body = ext_el("call", p["task"])
+        if p.get("loop"):
+            body = body.replace(f"{ind}  </bpmn:extensionElements>\n",
+                                f"{ind}    <chk:loop>{jtext(lp2)}</chk:loop>\n{ind}  </bpmn:extensionElements>\n")
         return (f'{ind}<bpmn:callActivity id="{n.id}" name="{nm}" calledElement="{p["called"]}">\n'
-                f'{ext_el("call", p["task"])}{io}{dassoc}{ind}</bpmn:callActivity>\n')
+                f'{body}{io}{dassoc}{loop}{ind}</bpmn:callActivity>\n')
     if k == "sub":
         inner = ""
         for c in n.children:
@@ -961,7 +967,10 @@ def node_summary(n: Node) -> str:
         return f"메시지 `{p['message']}` · 상관 `{p['correlation']}`" + (f" · 받는 값 {', '.join(p['payload'])}" if p["payload"] else "")
     if k == "call":
         t = p["task"]
-        return f"`{p['called']}` · 입력 {', '.join(t['input'])} · 출력 {', '.join(t['output'])}"
+        s = f"`{p['called']}` · 입력 {', '.join(t['input'])} · 출력 {', '.join(t['output'])}"
+        if p.get("loop"):
+            s += f" · 반복(차례) `{p['loop']['collection']}`→`{p['loop']['collect_into']}`"
+        return s
     if k in ("xgw", "igw", "pgw"):
         return "—"
     if k == "sub":

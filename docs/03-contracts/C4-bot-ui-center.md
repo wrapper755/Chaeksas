@@ -103,7 +103,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 
 > 모든 값 목록(`status`, `state`, `source`, `result`, `reason`, `session` 등)은 **열린 문자열**이다. 위의 값은 알려진 값일 뿐이다 (README 원칙 10).
 
-**`JobAck.outputs`는 PC 위임만 쓴다** (C12 §PC 위임, [ADR-0062](../decisions/0062-pc-delegation.md)). 원칙 6의 **명시한 예외**라 좁게 쓴다.
+**`JobAck.outputs`는 위임만 쓴다** (C12 §PC 위임, [ADR-0062](../decisions/0062-pc-delegation.md)). 원칙 6의 **명시한 예외**라 좁게 쓴다. 서버 실행기도 C12 `job_acks[]`의 같은 칸을 같은 규칙으로 쓴다 ([ADR-0082](../decisions/0082-batch-start.md)).
 
 - **그 Bot이 선언한 `outputs`만** 싣는다 (C1 `outputs`) — 그 선언이 곧 「부르는 쪽이 받을 것」이고, 호출의 매핑(C14 `chk:call.output`)은 서버 그림에만 있어 PC는 모른다. 선언이 없으면 **아무것도 싣지 않는다**.
 - **끝났을 때만** 싣는다 (`finished`·`failed`… — 작업 상태를 옮기는 ack가 아닌 것들). `started`에 실어 보내면 기다리는 서버 실행이 **빈 값으로 이어 간다**.

@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "process": "Proc_fx25_batch_item",
+  "cases": [
+    {
+      "name": "작은 금액",
+      "description": "",
+      "inputs": {
+        "번호": 1,
+        "금액": 500000
+      },
+      "expected": {
+        "처리결과": "등록"
+      },
+      "approvals": {},
+      "manual": false
+    },
+    {
+      "name": "큰 금액은 보류",
+      "description": "보류는 **실패가 아니다** — 결과로 돌려준다",
+      "inputs": {
+        "번호": 2,
+        "금액": 2000000
+      },
+      "expected": {
+        "처리결과": "보류"
+      },
+      "approvals": {},
+      "manual": false
+    }
+  ]
+}

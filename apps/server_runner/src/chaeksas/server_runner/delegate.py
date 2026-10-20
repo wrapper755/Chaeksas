@@ -44,6 +44,7 @@ class CenterDelegator:
             run_id=call.run_id,
             node_id=call.node_id,
             node_instance=call.node_instance,
+            loop_index=call.loop_index,
             bpm_process_id=call.bpm_process_id,
             version=call.version,
             bot_ui=call.bot_ui,
@@ -56,10 +57,10 @@ class CenterDelegator:
             # 포트는 돌려줄 작업 id가 없으면 기다릴 수 없다.
             raise DelegationError(str(e), code=e.code or DEFAULT_CODE) from e
         log.info(
-            "PC 위임을 맡겼다: %s → 작업 %s (%s)",
+            "위임을 맡겼다: %s → 작업 %s (%s)",
             call.bpm_process_id,
             answer.job_id,
-            answer.bot_ui_id,
+            answer.bot_ui_id or answer.target_type,
         )
         return answer.job_id
 

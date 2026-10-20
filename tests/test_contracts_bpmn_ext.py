@@ -197,6 +197,53 @@ def test_b12_warns_when_a_confirmation_names_assignees() -> None:
     assert found and all(v.severity == SEVERITY_WARNING for v in found)
 
 
+def _batch(*, before: str = "", show: str = '["건들"]', approval: bool = True) -> str:
+    """접수 Bot 모양 — 목록을 만들고 (결재하고) 반복 위임으로 기동한다 (ADR-0082)."""
+    gate = (
+        '<bpmn:userTask id="Ap"><bpmn:extensionElements>'
+        f'<chk:approval>{{"title": "일괄 승인", "show": {show}}}</chk:approval>'
+        "</bpmn:extensionElements></bpmn:userTask>"
+    )
+    call = ('<bpmn:callActivity id="Call_Batch" calledElement="Proc_item"><bpmn:extensionElements>'
+            '<chk:call>{"delegate": {"bpm_process_id": "ops.item"}, "input": {"번호": "건"}, '
+            '"output": {}}</chk:call>'
+            '<chk:loop>{"collection": "건들", "item": "건", "collect_into": "끝"}</chk:loop>'
+            '</bpmn:extensionElements><bpmn:multiInstanceLoopCharacteristics isSequential="true" />'
+            "</bpmn:callActivity>")
+    steps = ["Start", "Make"] + (["Ap"] if approval else []) + (["Again"] if before else []) + ["Call_Batch", "End"]
+    body = ('<bpmn:startEvent id="Start" />'
+            '<bpmn:scriptTask id="Make" scriptFormat="chk-expr">'
+            "<bpmn:script>건들 = [1, 2]</bpmn:script></bpmn:scriptTask>"
+            + (gate if approval else "")
+            + (f'<bpmn:scriptTask id="Again" scriptFormat="chk-expr">'
+               f"<bpmn:script>{before}</bpmn:script></bpmn:scriptTask>" if before else "")
+            + call + '<bpmn:endEvent id="End" />'
+            + "".join(f'<bpmn:sequenceFlow id="f{i}" sourceRef="{a}" targetRef="{b}" />'
+                      for i, (a, b) in enumerate(zip(steps, steps[1:], strict=False))))
+    return wrap(line(body), process_json='{"run_location": "server"}')
+
+
+def _b16(xml: str) -> list[Any]:
+    return [v for v in validate(read_process(xml)) if v.rule == "B16"]
+
+
+def test_b16_quiet_when_the_list_was_shown_to_a_person() -> None:
+    assert _b16(_batch()) == []
+
+
+def test_b16_warns_about_a_batch_nobody_approved() -> None:
+    """**무인 일괄 기동** — 사람이 보지 않은 목록으로 N건을 기동한다. 막지 않고 알린다."""
+    for xml in (_batch(approval=False), _batch(show='["다른것"]')):
+        found = _b16(xml)
+        assert found and all(v.severity == SEVERITY_WARNING for v in found)
+
+
+def test_b16_warns_when_the_list_is_remade_after_the_approval() -> None:
+    """보여 준 것과 다른 것을 기동할 수 있다."""
+    found = _b16(_batch(before="건들 = [9]"))
+    assert [v.items for v in found] == [["Again"]]
+
+
 def test_b3_unconditional_branch_must_be_default() -> None:
     body = (
         '<bpmn:startEvent id="Start" /><bpmn:exclusiveGateway id="Gw" /><bpmn:endEvent id="E1" />'

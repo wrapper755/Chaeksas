@@ -684,3 +684,60 @@ def test_the_contract_picks_the_same_receiver_as_the_engine() -> None:
         assert engine_says == contract_says, (
             f"엔진과 계약이 다르게 고른다: {name=} {sent=} 기다림={waiting.correlation!r}"
         )
+
+
+# ─────────────── 반복 위임 — 일괄 기동 (ADR-0082) ───────────────
+
+
+def batch_process() -> Any:
+    """세 건을 차례로 맡기고 결과를 모은다 (C14 §반복 — 호출에도 쓴다)."""
+    call = (
+        '{"delegate": {"bpm_process_id": "ops.intake-item"}, '
+        '"input": {"번호": "건"}, "output": {"답": "처리결과"}}'
+    )
+    loop = '{"collection": "건들", "item": "건", "result": "답", "collect_into": "답들"}'
+    return make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + script("Task_Set", "건들 = [10, 20, 30]")
+        + '<bpmn:callActivity id="Call_Batch" calledElement="Proc_item"><bpmn:extensionElements>'
+        + f"<chk:call>{call}</chk:call><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
+        + '<bpmn:multiInstanceLoopCharacteristics isSequential="true" /></bpmn:callActivity>'
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Task_Set")
+        + flow("f2", "Task_Set", "Call_Batch")
+        + flow("f3", "Call_Batch", "End_1")
+    )
+
+
+def test_a_loop_of_delegations_hands_over_one_job_per_turn() -> None:
+    """**차례마다 작업 하나** — 반복 차례가 실려 받는 쪽이 멱등 키를 가른다.
+
+    엔진은 반복 중에 `node_instance`를 올리지 않는다 — 차례 없이 맡기면 2건째부터 같은 작업이다.
+    """
+    port = RecordingDelegator()
+    engine, run = start(batch_process(), RunEnv(processes={}, delegate=port))
+    for turn, job in enumerate(("job_dlg001", "job_dlg002", "job_dlg003")):
+        assert engine.run_until_blocked(run) is State.WAITING
+        call = port.calls[turn]
+        assert (call.inputs, call.loop_index, call.node_instance) == ({"번호": 10 * (turn + 1)}, turn, 1)
+        engine.delegation_done(run, job, state="finished", outputs={"처리결과": f"등록{turn}"})
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["답들"] == ["등록0", "등록1", "등록2"], "입력 순서대로 모인다"
+
+
+def test_a_failed_turn_stops_the_batch() -> None:
+    """한 건의 위임이 끝나지 못하면 **남은 건은 기동하지 않는다** (ADR-0082 §3)."""
+    port = RecordingDelegator()
+    engine, run = start(batch_process(), RunEnv(processes={}, delegate=port))
+    engine.run_until_blocked(run)
+    engine.delegation_done(run, "job_dlg001", state="finished", outputs={"처리결과": "등록"})
+    engine.run_until_blocked(run)
+    assert engine.delegation_done(run, "job_dlg002", state="failed") is State.FAILED
+    assert len(port.calls) == 2
+
+
+def test_a_plain_delegation_has_no_loop_index() -> None:
+    port = RecordingDelegator()
+    engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
+    engine.run_until_blocked(run)
+    assert port.calls[0].loop_index is None

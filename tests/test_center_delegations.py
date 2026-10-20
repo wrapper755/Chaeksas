@@ -773,3 +773,94 @@ def test_a_started_server_job_takes_the_cancel_and_waits_for_the_runner(
     beat(center, runner_key, job_acks=[{"job_id": job_id, "result": "cancelled", "run_id": RUN}])
     closed = center.get(f"/api/v1/jobs/{job_id}", headers=ADMIN).json()
     assert (closed["state"], closed["cancel_result"]) == ("cancelled", "cancelled")
+
+
+# ─────────────── 서버 Bot에 맡기기·반복 (일괄 기동, ADR-0082) ───────────────
+
+CHILD_BOT = "ops.intake-item"
+
+
+def deploy_to_server(center: TestClient, private: Any, info: dict[str, Any], runner_id: str,
+                     *, deployment_id: str) -> Any:
+    return center.post(
+        "/api/v1/deployments",
+        json=sign(
+            {
+                "kind": "deployment",
+                "deployment_id": deployment_id,
+                "target": {"type": "server_runner", "id": runner_id},
+                "bpm_process_id": info["id"],
+                "version": info["version"],
+                "content_hash": info["content_hash"],
+            },
+            private,
+            signed_at=now_iso(),
+        ).to_json_dict(),
+        headers=ADMIN,
+    )
+
+
+@pytest.fixture
+def server_child(center: TestClient, private: Any, runner: str) -> str:
+    """서버 Bot 하나가 승인·배포되어 있다. 돌려주는 것은 그 실행기 id다."""
+    info = upload(center, private, bot=CHILD_BOT, where="server")
+    answer = deploy_to_server(center, private, info, runner, deployment_id="dep_srv_1")
+    assert answer.status_code in (200, 201), answer.text
+    return runner
+
+
+def test_a_server_bot_is_delegated_to_a_server_runner(
+    center: TestClient, runner_key: str, server_child: str
+) -> None:
+    """**대상 패키지의 실행 위치가 가른다** — 그림은 그대로 `bpm_process_id`만 적는다 (ADR-0082)."""
+    made = ask(center, runner_key, bpm_process_id=CHILD_BOT, version=None)
+    assert made.status_code == 201, made.text
+    body = made.json()
+    assert body["target_type"] == "server_runner" and body.get("bot_ui_id") is None
+    job = center.get(f"/api/v1/jobs/{body['job_id']}", headers=ADMIN).json()
+    assert job["target"]["type"] == "server_runner"
+    assert job["requested_by"] == f"server_bot:{RUN}"
+    # 실행기가 하트비트로 받아 간다 — 같은 실행기여도 된다(부모는 기다리며 자리를 놓는다).
+    assert [one["job_id"] for one in beat(center, runner_key)["jobs"]] == [body["job_id"]]
+
+
+def test_each_loop_turn_is_its_own_job_and_comes_back_the_same(
+    center: TestClient, runner_key: str, server_child: str
+) -> None:
+    """반복 차례마다 작업 하나 — 되살린 실행이 다시 맡겨도 **같은 작업**이다 (ADR-0082)."""
+    first = [ask(center, runner_key, bpm_process_id=CHILD_BOT, loop_index=i) for i in range(3)]
+    assert [one.status_code for one in first] == [201, 201, 201]
+    assert len({one.json()["job_id"] for one in first}) == 3
+    again = ask(center, runner_key, bpm_process_id=CHILD_BOT, loop_index=1)
+    assert again.status_code == 200 and again.json()["job_id"] == first[1].json()["job_id"]
+    assert again.json()["target_type"] == "server_runner"
+
+
+def test_no_loop_index_keeps_the_old_key(center: TestClient, runner_key: str, ready: str) -> None:
+    """반복이 아니면 **옛 키 그대로** — 이미 맡겨 둔 위임이 같은 작업을 받는다."""
+    from chaeksas.center.api.delegations import key_prefix  # noqa: PLC0415
+
+    assert key_prefix(RUN, "Call_Erp", 1) == f"dlg_{RUN}_Call_Erp_1"
+    assert key_prefix(RUN, "Call_Erp", 1, 0) == f"dlg_{RUN}_Call_Erp_1_0"
+
+
+def test_a_pc_for_a_server_bot_is_refused(center: TestClient, runner_key: str, server_child: str) -> None:
+    made = ask(center, runner_key, bpm_process_id=CHILD_BOT, bot_ui="bui_x")
+    assert made.status_code == 422 and made.json()["code"] == "bot_ui_for_server"
+
+
+def test_a_server_result_goes_back_to_the_runner_that_asked(
+    center: TestClient, runner_key: str, server_child: str
+) -> None:
+    """서버 실행기가 작업 ack에 실은 `outputs`가 맡긴 실행기에게 내려간다 (C12)."""
+    job_id = ask(center, runner_key, bpm_process_id=CHILD_BOT).json()["job_id"]
+    beat(center, runner_key)  # 받아 간다
+    done = beat(center, runner_key, job_acks=[
+        {"job_id": job_id, "result": "started", "run_id": "run_20261020_000000_cccccc"},
+    ])
+    done = beat(center, runner_key, job_acks=[
+        {"job_id": job_id, "result": "finished", "run_id": "run_20261020_000000_cccccc",
+         "outputs": {"처리결과": "등록"}},
+    ])
+    [result] = done["delegations"]
+    assert (result["job_id"], result["state"], result["outputs"]) == (job_id, "finished", {"처리결과": "등록"})

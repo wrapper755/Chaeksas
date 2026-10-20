@@ -830,3 +830,20 @@ def test_a_cancel_that_did_not_reach_center_is_tried_again(
     monkeypatch.undo()
     assert runner.cancel_delegations() == 1
     assert center.get(f"/api/v1/jobs/{delegated_job}", headers=ADMIN).json()["state"] == "cancelled"
+
+
+def test_who_delegated_a_run_survives_a_restart(tmp_path: Path) -> None:
+    """맡겨진 실행은 **재시작을 건너서도** 결과를 올린다 — 맡긴 쪽을 스냅샷과 따로 적는다 (ADR-0082).
+
+    작업의 `requested_by`는 받을 때 한 번만 보이므로 적어 두지 않으면 되살린 실행이 그것을 모른다.
+    """
+    path = tmp_path / "runner.sqlite3"
+    first = Store(path)
+    first.mark_delegated("run_child", parent_run_id="run_parent")
+    first.close()
+    again = Store(path)
+    assert again.parent_of("run_child") == "run_parent"
+    assert again.parent_of("run_other") is None
+    again.forget("run_child")
+    assert again.parent_of("run_child") is None, "끝나면 함께 지운다"
+    again.close()

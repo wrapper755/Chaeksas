@@ -272,6 +272,26 @@ def _check_r10(m: Manifest) -> list[Violation]:
     ]
 
 
+def _check_r12(m: Manifest) -> list[Violation]:
+    """**자기 자신에게 위임하지 않는다** (C1 R12, [ADR-0082](../decisions/0082-batch-start.md)).
+
+    끝나지 않는 되부름이다 — 위임은 결과를 기다리므로 한 건이 같은 Bot을 또 기동하고 그것이
+    또 기동한다. 그림은 자기 패키지 id를 모르므로 **매니페스트가 본다** (`id`와
+    `requires.delegations`가 한 자리에 있다).
+    """
+    mine = [one for one in m.requires.delegations if one.split("@", 1)[0] == m.id]
+    if not mine:
+        return []
+    return [
+        Violation(
+            rule="R12",
+            code="delegation_to_self",
+            message="자기 자신에게 위임할 수 없다 (끝나지 않는 되부름이다)",
+            items=sorted(mine),
+        )
+    ]
+
+
 def _check_r4(m: Manifest) -> list[Violation]:
     import re
 
@@ -376,4 +396,5 @@ def validate(
         *_check_r9(m),
         *_check_r10(m),
         *_check_r11(m),
+        *_check_r12(m),
     ]

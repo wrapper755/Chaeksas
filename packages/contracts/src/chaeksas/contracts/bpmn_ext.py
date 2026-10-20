@@ -1587,7 +1587,100 @@ def validate(
         *_check_b12(process),
         *_check_b13(process),
         *_check_b14(process, dmn_decisions, called_processes, delegated_outputs),
+        *_check_b16(process),
     ]
+
+
+def _check_b16(process: BpmnProcess) -> list[Violation]:
+    """B16 — **결재 없는 일괄 기동** (경고, [ADR-0082](../decisions/0082-batch-start.md)).
+
+    반복이 붙은 위임 호출마다 본다. ① 그 `collection`을 `show`하는 결재(관문)를 지나지 않고
+    닿는 길이 있나, ② 관문과 반복 사이에서 그 목록을 다시 만드나. 막지 않는다 — 사람 없이 도는
+    정상 그림도 있고, 확장 태스크가 만드는 변수는 플랫폼이 모른다(ADR-0018). 막는 것은 가상
+    직원이 접수 Bot을 묶을 때다(ADR-0079 결정 3).
+    """
+    out: list[Violation] = []
+    scope_of: dict[str, tuple[str, list[Node], list[Flow]]] = {}
+    for scope in process.scopes():
+        for one in scope[1]:
+            scope_of[one.id] = scope
+    for node in process.all_nodes():
+        loop: Loop | None = node.prop("loop")
+        spec: Call | None = node.prop("call")
+        if loop is None or spec is None or spec.delegate is None:
+            continue
+        shown = {loop.collection} if is_var_name(loop.collection) else expression_vars(loop.collection)
+        gates = {
+            one.id
+            for one in process.all_nodes()
+            if one.kind == "userTask"
+            and (approval := one.prop("approval")) is not None
+            and shown <= set(approval.show)
+        }
+        if _reachable_without(scope_of, node.id, gates):
+            out.append(_warn(
+                "B16",
+                f"{node.id}는 사람이 보지 않은 목록으로 위임을 반복한다 — 그 목록({', '.join(sorted(shown))})을 "
+                "show하는 결재를 지나지 않고 닿는 길이 있다 (결재 없는 일괄 기동)",
+                items=sorted(shown),
+            ))
+        changed = sorted(_written_between(scope_of, gates, node.id, shown))
+        if changed:
+            out.append(_warn(
+                "B16",
+                f"{node.id}의 목록을 결재 뒤에 다시 만든다 — 보여 준 것과 다른 것을 기동할 수 있다",
+                items=changed,
+            ))
+    return out
+
+
+def _reachable_without(
+    scope_of: Mapping[str, tuple[str, list[Node], list[Flow]]], target: str, gates: set[str]
+) -> bool:
+    """`target`에 관문을 지나지 않고 닿는 길이 있나. 하위 프로세스 안이면 **그 하위 프로세스에도**."""
+    name, nodes, flows = scope_of[target]
+    reached: set[str] = set()
+    stopped: set[str] = set()  # 닿았지만 넘지 않은 관문 — 그 경계 이벤트는 「답 없이」 나간다
+    frontier = [one.id for one in nodes if one.kind == "startEvent"]
+    while frontier:
+        here = frontier.pop()
+        if here in reached or here in stopped:
+            continue
+        if here in gates:
+            stopped.add(here)
+        else:
+            reached.add(here)
+            frontier.extend(f.target for f in flows if f.source == here)
+        frontier.extend(
+            one.id for one in nodes if one.attached_to == here and one.id not in reached
+        )
+    if target not in reached:
+        return False
+    if name == "main" or name not in scope_of:
+        return True
+    # 하위 프로세스 안이다 — 그 하위 프로세스 노드에 관문 없이 닿아야 정말 「결재 없이」다.
+    return _reachable_without(scope_of, name, gates)
+
+
+def _written_between(
+    scope_of: Mapping[str, tuple[str, list[Node], list[Flow]]], gates: set[str], target: str, names: set[str]
+) -> set[str]:
+    """같은 범위의 관문에서 `target`까지 가는 길에 **그 이름들을 만드는 노드**들."""
+    _name, nodes, flows = scope_of[target]
+    by_id = {one.id: one for one in nodes}
+    found: set[str] = set()
+    for gate in gates & set(by_id):
+        seen: set[str] = set()
+        frontier = [f.target for f in flows if f.source == gate]
+        while frontier:
+            here = frontier.pop()
+            if here in seen or here == target or here in gates:
+                continue
+            seen.add(here)
+            if produced_vars(by_id[here]) & names:
+                found.add(here)
+            frontier.extend(f.target for f in flows if f.source == here)
+    return found
 
 
 def blocking(violations: Iterable[Violation]) -> list[Violation]:

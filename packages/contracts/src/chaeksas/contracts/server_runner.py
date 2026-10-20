@@ -273,10 +273,13 @@ class DelegationRequest(SchemaVersioned):
     run_id: str
     node_id: str
     node_instance: int = 1
+    #: **반복 차례**(0부터) — 반복이 붙은 호출일 때만 (ADR-0082). 멱등 키에 들어간다:
+    #: 엔진은 반복 중에 `node_instance`를 올리지 않으므로 이것이 없으면 2건째부터 같은 작업이다.
+    loop_index: int | None = Field(default=None, ge=0)
     bpm_process_id: str
     #: 비우면 **배포된 판** (작업 지시와 같은 규칙 — 둘 이상이면 422).
     version: str | None = None
-    #: 적으면 **그 PC로만** (그림의 `bot_ui` 식을 실행기가 값으로 푼 것).
+    #: 적으면 **그 PC로만** (그림의 `bot_ui` 식을 실행기가 값으로 푼 것). 서버 대상이면 422.
     bot_ui: str | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)
 
@@ -285,8 +288,10 @@ class DelegationResponse(ContractModel):
     """맡긴 결과 — **201이 새 작업, 200이 이미 만든 것**이다."""
 
     job_id: str
-    #: Center가 고른 PC (또는 요청이 지정한 PC).
-    bot_ui_id: str
+    #: 대상 종류 — 대상 패키지의 `run_location`이 정한다 (ADR-0082). `bot_ui` | `server_runner`.
+    target_type: str = "bot_ui"
+    #: Center가 고른 PC (또는 요청이 지정한 PC). **서버 대상이면 없다** — 실행기는 내려줄 때 고른다.
+    bot_ui_id: str | None = None
     state: str  # C5 작업 상태 (열린 문자열)
 
 
