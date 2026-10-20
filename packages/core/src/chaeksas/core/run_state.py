@@ -297,6 +297,9 @@ class Run:
     executor: str = "bot_ui"
     #: 그 BPM 프로세스의 판 (C11 `caller.version`).
     version: str = "0.0.0"
+    #: 실행이 바깥에 말하는 이름 — **패키지 id**다 (C3 `run_started`·C6·C11 `caller`, ADR-0086).
+    #: 비면 그림의 process id를 쓴다(`identity`) — 패키지 없이 엔진을 부르는 시험이 있다.
+    bpm_process_id: str = ""
     started: datetime = field(default_factory=utc_now)
     error: EngineError | None = None
     #: 노드마다 몇 번째 수행인지 (C6 `node_instance`·C10 `business_key`).
@@ -307,6 +310,11 @@ class Run:
     #: 엔진은 파일을 쓰지 않는다 (배포된 Bot은 기억을 읽기만 한다).
     learned: list[ReplaySpec] = field(default_factory=list)
     helpers: Mapping[str, Callable[..., Any]] = field(default_factory=dict)
+
+    @property
+    def identity(self) -> str:
+        """바깥에 말하는 `bpm_process_id` — 실행하는 쪽이 준 패키지 id, 없으면 그림 id."""
+        return self.bpm_process_id or self.process.id
 
     # ── 자주 쓰는 것 ──
 

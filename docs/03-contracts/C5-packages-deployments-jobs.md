@@ -300,7 +300,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 - 배포: 활성 가상 직원의 접수 Bot이면 그 판의 진입 그림에 B16이 없어야 한다 — 아니면 409 `intake_not_gated`.
 - 그림은 Center가 저장된 zip에서 읽는다(`contracts.bpmn_ext` — 내보낸 쪽을 믿지 않는다). B16만 본다.
 
-**이어 붙이기** — `GET /runs?virtual_worker=<id>`(C3)·`GET /jobs?virtual_worker=<id>`는 접수 Bot의 것과 **그 자식**(실행은 `parent_run_id`, 작업은 `requested_by = server_bot:<접수 실행>`)을 함께 준다. 「접수 Bot의 실행」은 실행 기록의 `bpm_process_id`가 **그 패키지 id이거나 그 패키지들 매니페스트의 `process_id`**인 것이다 — 엔진은 그림의 process id를 적는다 ([09-gaps](../09-gaps.md) §2-5). 저장하지 않고 읽을 때 모은다. **`requested_by`는 바꾸지 않는다** — 접수 Bot 작업을 부른 키가 그대로 적힌다.
+**이어 붙이기** — `GET /runs?virtual_worker=<id>`(C3)·`GET /jobs?virtual_worker=<id>`는 접수 Bot의 것과 **그 자식**(실행은 `parent_run_id`, 작업은 `requested_by = server_bot:<접수 실행>`)을 함께 준다. 「접수 Bot의 실행」은 실행 기록의 `bpm_process_id`가 **그 패키지 id**인 것이다 (C3 — 실행 기록도 패키지 id로 말한다, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)). 저장하지 않고 읽을 때 모은다. **`requested_by`는 바꾸지 않는다** — 접수 Bot 작업을 부른 키가 그대로 적힌다.
 
 ```json
 {

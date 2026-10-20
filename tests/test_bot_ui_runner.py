@@ -128,6 +128,7 @@ def test_a_bot_runs_to_the_end_in_a_child_process(tmp_path: Path) -> None:
     events = list(RunLog.read(log_path(data_dir, running.run_id)))
     assert events[0].kind == "run_started"
     assert events[0].data["executor"] == "bot_ui"
+    assert events[0].data["bpm_process_id"] == bot.id, "그림 id가 아니라 패키지 id다 (ADR-0086)"
     assert events[0].data["mode"] == "deterministic", "운영 실행은 결정 수행이다 (ADR-0010)"
     assert events[-1].kind == "run_finished" and events[-1].data["status"] == "success"
 

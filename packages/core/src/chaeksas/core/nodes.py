@@ -748,7 +748,7 @@ def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:
             call_seq=call_seq,
             key_ref=key_ref,
             timeout_s=spec.timeout_s,
-            bpm_process_id=run.process.id,
+            bpm_process_id=run.identity,
             version=run.version,
         )
         try:
@@ -1005,6 +1005,8 @@ def handle_call(context: Context) -> Outcome:
         mode=run.mode,
         executor=run.executor,
         version=run.version,
+        # 안쪽도 **같은 실행**이다 — 바깥 Bot의 이름을 물려받는다 (ADR-0086).
+        bpm_process_id=run.identity,
         nested=True,
     )
     key = f"call:{node.id}:{context.token.id}"

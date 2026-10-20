@@ -40,7 +40,7 @@
 
 | kind | 언제 | `data` 필수 키 | `data` 선택 키 |
 | --- | --- | --- | --- |
-| `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`, `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`\|`message`\|`test`\|**`delegation`**(위임으로 받은 작업 — PC·서버)) | `job_id`, `parent_run_id`(**맡긴 서버 실행** — 위임으로 시작된 실행에만, [ADR-0062](../decisions/0062-pc-delegation.md)·[ADR-0082](../decisions/0082-batch-start.md)), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio 시험 실행의 케이스 이름) |
+| `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`(**패키지 id** — C1 `id`. 그림의 process id가 아니다, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)), `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`\|`message`\|`test`\|**`delegation`**(위임으로 받은 작업 — PC·서버)) | `job_id`, `parent_run_id`(**맡긴 서버 실행** — 위임으로 시작된 실행에만, [ADR-0062](../decisions/0062-pc-delegation.md)·[ADR-0082](../decisions/0082-batch-start.md)), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio 시험 실행의 케이스 이름) |
 | `node_state` | 노드 상태가 바뀜 | `state`(`started`\|`completed`\|`failed`\|`skipped`\|`replayed`\|`waiting`) | `task_type`(`ai_task`\|`ui_task`\|`service_task`\|`approval`\|…), `error_code`, `message`(한 줄) |
 | `log` | 사람이 읽는 한 줄 | `level`(`info`\|`warn`\|`error`), `message` | |
 | `agent` | AI 태스크의 단계 하나 | `step`, `action`(`plan`\|`tool`\|`extract`\|`finish`) | `tool`, `summary`(값 제외) |
@@ -154,6 +154,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-20 | 1 | **`run_started.bpm_process_id`는 패키지 id다** — 엔진이 그림의 process id(`Proc_…`)를 적어 작업·배포·C12와 이름이 갈라졌다(09-gaps §2-5). 실행하는 쪽이 `Engine.start(bpm_process_id=…)`로 넘긴다. 형식은 그대로이고, 이전에 올라간 기록은 고쳐 쓰지 않는다 | [0086](../decisions/0086-run-identity-is-the-package-id.md) |
 | 2026-10-20 | 1 | `human_answered`의 선택 칸 `answered_via` — 누가 답했나(`answered_by`)와 어느 길로 왔나를 가른다 | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-15 | 1 | **`source: delegation`·`parent_run_id`를 넣는 쪽이 생겼다** (Bot UI) — 작업의 `requested_by`(`server_bot:<run_id>`)를 읽어 `Engine.start(parent_run_id=…)`로 넘긴다. **모르면 넣지 않는다**(선택 칸 규칙 그대로). 형식은 그대로다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **PC 위임을 기다리다 이어 가는 쪽이 생겼다** (서버 실행기) — `run_resumed.reason`의 아는 값에 **`delegation`**을 더했다. 실패·거절로 돌아와 오류 경계로 가는 길도 「이어 간 것」이라 같은 까닭을 쓴다 (`withdraw`와 같은 결). 열린 문자열이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |

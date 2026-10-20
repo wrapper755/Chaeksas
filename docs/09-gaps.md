@@ -42,15 +42,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 2. 문서가 코드와 어긋난 자리 (코드를 고치는 일이 아니다)
 
-### 2-5. C3 `run_started.bpm_process_id` — 패키지 id인가, 그림의 process id인가
-
-가상 직원을 지으며 드러났다 ([ADR-0085](decisions/0085-virtual-worker-resource.md)). C3 예시는
-`"bpm_process_id": "erp.order-entry"`(패키지 id 모양)인데 엔진은 **그림의 process id**(`Proc_…`)를
-적는다(`Engine.start` → `process.id`). 작업·배포·C12 `running[]`은 패키지 id로 말한다. 그래서
-실행 기록을 패키지로 거르는 자리(CON-01 「Bot」 거르기, 가상 직원의 일괄)는 **둘을 함께 봐야**
-잡힌다 — 가상 직원은 패키지 id와 그 패키지들 매니페스트의 `process_id`를 함께 본다. 어느 쪽이
-맞는지(문서를 고칠지, 엔진이 패키지 id를 받을지)는 **먼저 정할 것**이다: 엔진은 자기가 도는
-패키지를 모른다(Studio 시험 실행은 패키지 없이 돈다).
+**없다.** 마지막 하나(§2-5 — C3 `run_started.bpm_process_id`가 패키지 id인가 그림의 process id인가)는 패키지 id로 정해 엔진·계약을 맞췄다 ([ADR-0086](decisions/0086-run-identity-is-the-package-id.md)).
 
 ## 3. 계약 쪽 기능 공백
 

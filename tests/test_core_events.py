@@ -569,6 +569,35 @@ def test_a_called_process_can_wait_for_a_human() -> None:
     assert run.variables["답"] == 7
 
 
+def test_a_called_process_speaks_with_the_outer_package_id() -> None:
+    """안쪽 실행은 **같은 실행**이다 — 결재 요청(C6)이 안쪽 그림 id를 말하면 안 된다 (ADR-0086)."""
+    from chaeksas.core import requests
+
+    child = make(
+        '<bpmn:startEvent id="Sub_Start"/>'
+        + f'<bpmn:userTask id="Sub_Approve"><bpmn:extensionElements><chk:approval>{APPROVAL}'
+        + "</chk:approval></bpmn:extensionElements></bpmn:userTask>"
+        + '<bpmn:endEvent id="Sub_End"/>'
+        + flow("sf1", "Sub_Start", "Sub_Approve")
+        + flow("sf2", "Sub_Approve", "Sub_End"),
+        process_id="human.proc",
+    )
+    process = make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + '<bpmn:callActivity id="Call_1" calledElement="human.proc"/>'
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Call_1")
+        + flow("f2", "Call_1", "End_1")
+    )
+    engine, run = start(process, RunEnv(processes={"human.proc": child}), bpm_process_id="fin.pay")
+    assert engine.run_until_blocked(run) is State.WAITING
+
+    (child_run,) = run.children.values()
+    assert child_run.pending is not None
+    assert child_run.identity == "fin.pay"
+    assert requests.create_request(child_run, child_run.pending).bpm_process_id == "fin.pay"
+
+
 # ─────────────────────────── 읽기 (C14 reader) ───────────────────────────
 
 

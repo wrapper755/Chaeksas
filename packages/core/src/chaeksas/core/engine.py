@@ -139,6 +139,7 @@ class Engine:
         source: str = "manual",
         executor: str = "bot_ui",
         version: str = "0.0.0",
+        bpm_process_id: str | None = None,
         now: datetime | None = None,
         job_id: str | None = None,
         case_id: str | None = None,
@@ -153,6 +154,9 @@ class Engine:
         **그 자리에서 아는 쪽이** 준다 (작업 지시·대기열은 Bot UI, 케이스는 Studio,
         **맡긴 서버 실행은 작업의 `requested_by`를 읽은 Bot UI**다 — ADR-0062 §6).
 
+        `bpm_process_id`는 **패키지 id**다 (ADR-0086) — 엔진은 자기가 도는 패키지를 모르므로
+        실행하는 쪽이 `version`과 함께 준다. 주지 않으면 그림의 process id를 쓴다.
+
         `nested`면 호출(`callActivity`)이 띄운 안쪽 실행이다 — 같은 `run_id`를 쓰고
         `run_started`·`run_finished`를 남기지 않는다 (C3는 실행 하나에 하나씩만 둔다).
         """
@@ -165,6 +169,7 @@ class Engine:
             mode=mode,
             executor=executor,
             version=version,
+            bpm_process_id=bpm_process_id or "",
             started=at,
             nested=nested,
             helpers=bind(now=at),
@@ -191,7 +196,7 @@ class Engine:
             extra["parent_run_id"] = parent_run_id
         log.emit(
             "run_started",
-            bpm_process_id=process.id,
+            bpm_process_id=run.identity,
             version=version,
             run_location=process.info.run_location or "pc",
             executor=executor,
