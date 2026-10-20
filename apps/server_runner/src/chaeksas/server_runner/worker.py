@@ -249,7 +249,9 @@ class Worker:
         self._publish(run)
         self._settle(run)
 
-    def answer(self, request_id: str, found: Mapping[str, Any], *, answered_by: str) -> None:
+    def answer(
+        self, request_id: str, found: Mapping[str, Any], *, answered_by: str, answered_via: str | None = None
+    ) -> None:
         """결재·확인의 답을 넣는다 (C6). **되살린 실행이 이 자리에서 이어 간다.**
 
         답을 넣고 **다시 민다** — 넣기만 하면 그 실행은 멈춘 채 남는다. 미는 것은 새 스레드다
@@ -258,7 +260,7 @@ class Worker:
         run = self.run
         if run is None:  # pragma: no cover - 부르는 쪽이 먼저 되살린다
             raise RuntimeError("되살리지 않은 실행에 답할 수 없다")
-        self.engine.answer(run, request_id, found, answered_by=answered_by)
+        self.engine.answer(run, request_id, found, answered_by=answered_by, answered_via=answered_via)
         self._continue(run, RESUME_ANSWER)
 
     def deliver(

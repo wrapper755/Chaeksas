@@ -163,8 +163,9 @@ def create(
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO jobs (job_id, bpm_process_id, version, target_type, target_id, inputs_json,"
-            " expires_at, note, owner, idempotency_key, body_hash, requested_by, requested_at, state)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " expires_at, note, owner, idempotency_key, body_hash, requested_by, requested_at, state,"
+            " on_behalf_of)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 job_id,
                 request.bpm_process_id,
@@ -183,6 +184,9 @@ def create(
                 found.actor,
                 now,
                 PENDING,
+                # 연동용 키가 실은 사람 — **주장**이라 적기만 한다 (ADR-0081). `requested_by`는
+                # 그대로 키 이름이다: Bot UI가 그 칸의 `server_bot:`로 위임을 가른다.
+                None if by_center else found.on_behalf,
             ),
         )
     return info_of(store, _must(store, job_id)), True
@@ -731,6 +735,7 @@ def info_of(store: Store, row: Any) -> JobInfo:
         note=row["note"],
         idempotency_key=row["idempotency_key"],
         requested_by=row["requested_by"],
+        on_behalf_of=row["on_behalf_of"],
         requested_at=row["requested_at"],
         state=row["state"],
         state_reason=row["state_reason"],

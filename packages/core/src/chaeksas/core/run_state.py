@@ -190,6 +190,8 @@ class Pending:
     #: C6 `description`·`expires_at` — Center로 올릴 때 쓴다.
     description: str | None = None
     expires_at: str | None = None
+    #: C6 `assignees` — 결재 담당자를 **만들 때** 푼 이름들 (ADR-0080). 비면 담당자 없음.
+    assignees: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

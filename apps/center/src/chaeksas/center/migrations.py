@@ -107,6 +107,16 @@ MIGRATIONS: tuple[Step, ...] = (
             "ALTER TABLE packages ADD COLUMN last_downloaded_at TEXT",
         ),
     ),
+    Step(
+        5,
+        "결재 담당자·대리 답의 경로, 작업의 대신 부른 사람 (C6 `assignees`·`answered_via`, "
+        "C5 `on_behalf_of`, ADR-0080·0081)",
+        (
+            "ALTER TABLE approvals ADD COLUMN assignees_json TEXT",
+            "ALTER TABLE approvals ADD COLUMN answered_via TEXT",
+            "ALTER TABLE jobs ADD COLUMN on_behalf_of TEXT",
+        ),
+    ),
 )
 
 

@@ -312,6 +312,9 @@ def listing(
 async def post_events(run_id: str, request: Request) -> Any:
     store: Store = request.app.state.store
     found: Caller = request.app.state.authenticate(request)
+    if found.is_relay:
+        # 대리 답용 키는 결재 셋뿐이다 (ADR-0081) — 실행 기록을 지어 올리지 못한다.
+        raise ApiError(403, "forbidden", "대리 답용 키로는 실행 기록을 올릴 수 없다")
     raw = await request.body()
     if len(raw) > MAX_BATCH_BYTES:
         raise ApiError(413, "batch_too_large", f"한 배치는 {MAX_BATCH_BYTES // 1024} KB까지다")

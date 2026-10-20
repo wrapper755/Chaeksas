@@ -300,9 +300,9 @@ class Running:
 
     # ── 내려보내기 ──
 
-    def answer(self, request_id: str, body: dict[str, Any], *, answered_by: str) -> None:
+    def answer(self, request_id: str, body: dict[str, Any], *, answered_by: str, answered_via: str = "") -> None:
         """결재·확인 답 (CMN-01). **값은 제어 파일에만** 있다 (원칙 6, ADR-0031)."""
-        control.answer(self.control_path, request_id, body, answered_by=answered_by)
+        control.answer(self.control_path, request_id, body, answered_by=answered_by, answered_via=answered_via)
         asked = self._pendings.get(request_id)
         if asked is not None and asked.where == "center" and request_id not in self.field_answered:
             # Center 결재함에도 올라가 있다 — 거두지 않으면 결재자가 끝난 것에 또 답한다.

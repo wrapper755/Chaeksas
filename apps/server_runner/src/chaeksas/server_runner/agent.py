@@ -782,6 +782,7 @@ class Agent:
                         one.request_id,
                         dict(one.answer or {}),
                         answered_by=one.answered_by or "Center",
+                        answered_via=one.answered_via,
                     )
                 else:
                     # `expired`·`withdrawn` — 답이 아니다 (C6·ADR-0038).

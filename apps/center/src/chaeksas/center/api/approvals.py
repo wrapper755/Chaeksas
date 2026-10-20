@@ -20,7 +20,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Any
 
-from chaeksas.center.auth import Caller
+from chaeksas.center.auth import Caller, require_on_behalf
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
 from chaeksas.contracts.approvals import (
@@ -32,6 +32,7 @@ from chaeksas.contracts.approvals import (
     ApprovalInfo,
     Form,
     apply_defaults,
+    normalize_name,
     validate_answer,
     validate_create,
 )
@@ -106,8 +107,8 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ApprovalIn
         cur.execute(
             "INSERT INTO approvals (request_id, owner_key_id, host_type, host_id, run_id, node_id,"
             " node_instance, bpm_process_id, version, title, description, form_json, review_json,"
-            " expires_at, body_hash, created_at, state)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " expires_at, body_hash, created_at, state, assignees_json)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 request.request_id,
                 key.key_id,
@@ -126,6 +127,8 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ApprovalIn
                 body_hash,
                 now_iso(),
                 OPEN,
+                # 담당자는 업무 값이 아니라 사람 이름이다 — 30일 삭제 대상이 아니다 (ADR-0080).
+                dumps(request.assignees) if request.assignees else None,
             ),
         )
     return _info(_must(store, request.request_id), store), True
@@ -171,8 +174,16 @@ def _must(store: Store, request_id: str) -> Any:
     return row
 
 
-def get(store: Store, request_id: str) -> ApprovalInfo:
-    return _info(_must(store, request_id), store)
+def _assignees_of(row: Any) -> list[str]:
+    return list(loads(row["assignees_json"], []) or [])
+
+
+def get(store: Store, request_id: str, *, on_behalf: str | None = None) -> ApprovalInfo:
+    """하나. `on_behalf`가 있으면(대리 답용 키) **그 사람이 담당인 결재만** — 아니면 404 (ADR-0081)."""
+    row = _must(store, request_id)
+    if on_behalf is not None and on_behalf not in _assignees_of(row):
+        raise ApiError(404, "not_found", f"결재 {request_id}가 없다")  # 있다는 것조차 알리지 않는다
+    return _info(row, store)
 
 
 def listing(
@@ -181,8 +192,19 @@ def listing(
     state: str | None = None,
     bpm_process_id: str | None = None,
     host: str | None = None,
+    assignee: str | None = None,
+    on_behalf: str | None = None,
 ) -> list[ApprovalInfo]:
-    """`GET /approvals` (CON-04 결재함). 최신순."""
+    """`GET /approvals` (CON-04 결재함). 최신순.
+
+    `assignee`는 그 이름이 담당자에 있는 것만 (ADR-0080). `on_behalf`(대리 답용 키)가 있으면
+    거르기가 **그 이름으로 고정된다** — 다른 이름을 물으면 403 `not_assignee` (ADR-0081).
+    """
+    wanted = normalize_name(assignee) if assignee else None
+    if on_behalf is not None:
+        if wanted is not None and wanted != on_behalf:
+            raise ApiError(403, "not_assignee", "대리 답용 키는 그 사람의 결재만 본다")
+        wanted = on_behalf
     rows = store.rows("SELECT * FROM approvals ORDER BY created_at DESC, request_id DESC")
     return [
         _info(row, store)
@@ -190,18 +212,32 @@ def listing(
         if (state is None or row["state"] == state)
         and (bpm_process_id is None or row["bpm_process_id"] == bpm_process_id)
         and (host is None or row["host_id"] == host)
+        and (wanted is None or wanted in _assignees_of(row))
     ]
 
 
 def answer(store: Store, found: Caller, request_id: str, raw: dict[str, Any]) -> ApprovalInfo:
-    """`POST /approvals/{id}/answer` — 관리자 토큰만 (C6 권한표).
+    """`POST /approvals/{id}/answer` — 관리자 토큰, 또는 **담당자 대신** 대리 답용 키 (C6 권한표).
 
     **Center가 폼으로 답을 검증한다** — 틀리면 422로 콘솔에 바로 보인다. 실행하는 쪽도 같은
     함수로 한 번 더 본다 (CMN-01과 엔진이 쓰는 `validate_answer` 그대로다).
+
+    **관리자 토큰은 담당자로 막지 않는다** (ADR-0080 — 콘솔의 이름은 자칭이다). 막는 것은
+    대리 답 하나다: 그 사람이 담당자여야 하고, 담당자가 없는 결재는 콘솔에서만 답한다 (ADR-0081).
     """
-    if not found.is_admin:
-        raise ApiError(403, "admin_only", "결재에 답하려면 관리자 토큰이 필요하다")
-    row = _must(store, request_id)
+    via: str | None = None
+    if found.is_relay:
+        answered_by = require_on_behalf(found)
+        row = _must(store, request_id)
+        if answered_by not in _assignees_of(row):
+            raise ApiError(403, "not_assignee", f"「{answered_by}」은 이 결재의 담당자가 아니다")
+        assert found.key is not None  # is_relay가 본다
+        via = found.key.name
+    elif found.is_admin:
+        answered_by = found.actor
+        row = _must(store, request_id)
+    else:
+        raise ApiError(403, "admin_only", "결재에 답하려면 관리자 토큰이나 대리 답용 키가 필요하다")
     _refuse_if_not_open(store, row)
 
     try:
@@ -222,9 +258,10 @@ def answer(store: Store, found: Caller, request_id: str, raw: dict[str, Any]) ->
 
     with store.tx() as cur:
         cur.execute(
-            "UPDATE approvals SET state = ?, answer_json = ?, answered_by = ?, answered_at = ?,"
-            " delivered = 0, delivery_accepted = NULL, delivery_reason = NULL WHERE request_id = ?",
-            (ANSWERED, dumps(filled), found.actor, now_iso(), request_id),
+            "UPDATE approvals SET state = ?, answer_json = ?, answered_by = ?, answered_via = ?,"
+            " answered_at = ?, delivered = 0, delivery_accepted = NULL, delivery_reason = NULL"
+            " WHERE request_id = ?",
+            (ANSWERED, dumps(filled), answered_by, via, now_iso(), request_id),
         )
     return _info(_must(store, request_id), store)
 
@@ -395,7 +432,8 @@ def _apply_acks(store: Store, *, host_id: str, acks: list[ApprovalAck]) -> None:
                 # 받아들이지 못했다 — 사유만 남기고 **다시 답할 수 있게** 연다 (C6).
                 cur.execute(
                     "UPDATE approvals SET state = ?, delivered = 0, delivery_accepted = 0,"
-                    " delivery_reason = ?, answer_json = NULL, answered_by = NULL, answered_at = NULL"
+                    " delivery_reason = ?, answer_json = NULL, answered_by = NULL, answered_via = NULL,"
+                    " answered_at = NULL"
                     " WHERE request_id = ?",
                     (OPEN, ack.reason, ack.request_id),
                 )
@@ -415,6 +453,7 @@ def _to_dispatch(store: Store, *, host_id: str) -> list[ApprovalDispatch]:
             answer=loads(row["answer_json"]),
             answered_by=row["answered_by"],
             answered_at=row["answered_at"],
+            answered_via=row["answered_via"],
         )
         for row in rows
     ]
@@ -436,6 +475,14 @@ def _host_name(store: Store, row: Any) -> str | None:
     return str(found["name"]) if found is not None else None
 
 
+def _requested_by(store: Store, run_id: str) -> str | None:
+    """그 실행을 시작한 작업의 `requested_by` (ADR-0080). **읽을 때** 붙이고 저장하지 않는다."""
+    found = store.row(
+        "SELECT requested_by FROM jobs WHERE run_id = ? ORDER BY requested_at LIMIT 1", (run_id,)
+    )
+    return str(found["requested_by"]) if found is not None else None
+
+
 def _info(row: Any, store: Store | None = None) -> ApprovalInfo:
     return ApprovalInfo(
         schema=1,
@@ -451,6 +498,7 @@ def _info(row: Any, store: Store | None = None) -> ApprovalInfo:
         form=_form_of(row),
         review=loads(row["review_json"], {}) or {},
         expires_at=row["expires_at"],
+        assignees=_assignees_of(row),
         host=ApprovalHost(
             type=row["host_type"],
             id=row["host_id"],
@@ -461,6 +509,8 @@ def _info(row: Any, store: Store | None = None) -> ApprovalInfo:
         answer=loads(row["answer_json"]),
         answered_by=row["answered_by"],
         answered_at=row["answered_at"],
+        answered_via=row["answered_via"],
+        requested_by=_requested_by(store, row["run_id"]) if store is not None else None,
         withdraw_reason=row["withdraw_reason"],
         delivered=bool(row["delivered"]),
         delivery_accepted=None if row["delivery_accepted"] is None else bool(row["delivery_accepted"]),

@@ -59,10 +59,11 @@ SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 def approval_process(*, kind: str = "userTask", location: str = "follow", extra: str = "",
-                     boundary: bool = False) -> Any:
+                     boundary: bool = False, assignees: Any = None) -> Any:
     props = json.dumps(
         {"title": "지급 승인", "description": "승인하면 지급합니다.", "show": ["금액"],
-         "location": location, **({"expires": extra} if extra else {})},
+         "location": location, **({"expires": extra} if extra else {}),
+         **({"assignees": assignees} if assignees is not None else {})},
         ensure_ascii=False,
     )
     caught = (
@@ -90,12 +91,13 @@ def approval_process(*, kind: str = "userTask", location: str = "follow", extra:
     )))
 
 
-def waiting(process: Any, *, where: str = "field") -> tuple[Engine, Run]:
+def waiting(process: Any, *, where: str = "field", seed: dict[str, Any] | None = None) -> tuple[Engine, Run]:
     engine = Engine()
     run = engine.start(
         process, run_id=RUN_ID, log=RunLog(run_id=RUN_ID), now=NOW,
         env=RunEnv(clock=lambda: NOW, approval_where=where),
     )
+    run.variables.update(seed or {})  # 앞 태스크가 만든 값인 셈 친다
     assert engine.run_until_blocked(run) is State.WAITING
     return engine, run
 
@@ -229,6 +231,62 @@ def test_the_request_body_is_the_c6_contract_as_is() -> None:
     assert again.description == "승인하면 지급합니다."
     # **값은 실행 기록에 없다** (원칙 6) — 검토 자료는 요청 파일에만 간다.
     assert "1100000" not in json.dumps([e.data for e in run.log.events], ensure_ascii=False)
+
+
+# ─────────────────────────── 결재 담당자·대리 답 (엔진, ADR-0080·0081) ───────────────────────────
+
+
+def test_assignees_are_resolved_when_the_approval_is_made() -> None:
+    """이름 배열은 그대로, 글자 하나는 변수 이름이다 — 풀어서 C6 본문에 싣는다."""
+    _, run = waiting(approval_process(location="center", assignees=[" 김감독", "김감독", "이감독"]))
+    assert run.pending is not None
+    assert requests.create_request(run, run.pending).assignees == ["김감독", "이감독"]
+
+    _, run = waiting(approval_process(location="center", assignees="감독자"), seed={"감독자": "박감독"})
+    assert run.pending is not None and run.pending.assignees == ["박감독"]
+
+
+@pytest.mark.parametrize(("seed", "code"), [({}, "assignees_missing"), ({"감독자": 3}, "assignees_invalid")])
+def test_an_assignee_variable_that_is_missing_or_wrong_stops_the_run(seed: dict[str, Any], code: str) -> None:
+    """조용히 「담당자 없음」으로 두면 감독자가 사라진다 — 그림의 버그라 경계로 받지 않는다."""
+    engine = Engine()
+    run = engine.start(
+        approval_process(location="center", assignees="감독자", boundary=True),
+        run_id=RUN_ID, log=RunLog(run_id=RUN_ID), now=NOW,
+        env=RunEnv(clock=lambda: NOW, approval_where="center"),
+    )
+    run.variables.update(seed)
+    assert engine.run_until_blocked(run) is State.FAILED
+    assert run.error is not None and run.error.code == code
+
+
+def test_a_confirmation_has_no_assignees() -> None:
+    _, run = waiting(approval_process(kind="manualTask", assignees=["김감독"]))
+    assert run.pending is not None and run.pending.assignees == []
+
+
+def test_the_route_of_a_relayed_answer_is_kept_apart_from_the_person() -> None:
+    engine, run = waiting(approval_process(location="center"))
+    assert run.pending is not None
+    engine.answer(run, run.pending.request_id, {"decision": "approve"}, answered_by="김감독",
+                  answered_via="chaeksachat")
+    found = next(e.data for e in run.log.events if e.kind == "human_answered")
+    assert (found["answered_by"], found["answered_via"]) == ("김감독", "chaeksachat")
+
+
+def test_a_console_answer_has_no_route() -> None:
+    """모르면 넣지 않는다 — 빈 글로 채우면 「경로 없음」과 「모른다」가 같아진다."""
+    engine, run = waiting(approval_process(location="center"))
+    assert run.pending is not None
+    engine.answer(run, run.pending.request_id, {"decision": "approve"}, answered_by="운영자")
+    assert "answered_via" not in next(e.data for e in run.log.events if e.kind == "human_answered")
+
+
+def test_the_control_file_carries_the_route(tmp_path: Path) -> None:
+    path = tmp_path / "control.jsonl"
+    control.answer(path, "apr_x", {"decision": "approve"}, answered_by="김감독", answered_via="chaeksachat")
+    [command] = control.take(path)
+    assert (command.answered_by, command.answered_via) == ("김감독", "chaeksachat")
 
 
 # ─────────────────────────── 답 없이 끝남 (엔진) ───────────────────────────
@@ -530,3 +588,16 @@ def test_a_field_approval_shows_what_to_judge(
     assert shown["review"] and "오늘" in shown["review"], "결재자가 판단할 값이 창에 보인다"
     assert finished(agent) == "success"
     assert not running.field_requests_path.exists(), "현장 요청 파일도 끝나면 지운다 (업무 값이 있다)"
+
+
+def test_assignees_travel_with_the_server_snapshot() -> None:
+    """서버 실행기는 기다리는 실행을 담았다 되살린다 — 담당자도 함께 가야 다시 올릴 때 같은 본문이다."""
+    from chaeksas.core.run_snapshot import dump_pending, load_pending  # noqa: PLC0415
+
+    _, run = waiting(approval_process(location="center", assignees=["김감독"]))
+    assert run.pending is not None
+    again = load_pending(json.loads(json.dumps(dump_pending(run.pending), ensure_ascii=False)))
+    assert again.assignees == ["김감독"]
+    old = dump_pending(run.pending)
+    old.pop("assignees")  # 이 칸이 생기기 전에 담은 스냅샷
+    assert load_pending(old).assignees == []

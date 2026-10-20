@@ -17,6 +17,7 @@ const TYPE_LABEL: Record<string, string> = {
   studio: "Studio용",
   server_runner: "서버 실행기용",
   integration: "연동용",
+  relay: "대리 답용",
 };
 
 const STATE_LABEL: Record<string, string> = {

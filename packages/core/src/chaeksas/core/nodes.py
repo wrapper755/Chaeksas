@@ -21,7 +21,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts.approvals import Form, request_id_for
+from chaeksas.contracts.approvals import Form, normalize_assignees, request_id_for
 from chaeksas.contracts.bpmn_ext import (
     WEBHOOK_BODY_ALL,
     AiTask,
@@ -250,6 +250,8 @@ def handle_approval(context: Context) -> Outcome:
     review = {name: run.variables.get(name) for name in approval.show}
     where = _approval_where(layer, approval.location, run.env.approval_where)
     expires_at = _expires_at(approval.expires, run.variables, run.env.clock())
+    # 확인에는 담당자가 없다 — 화면 앞 사람이 답한다 (B12가 그림에서 알린다).
+    assignees = _assignees(approval.assignees, run.variables, node.id) if layer == "approval" else []
 
     run.pendings[request_id] = Pending(
         request_id=request_id,
@@ -262,6 +264,7 @@ def handle_approval(context: Context) -> Outcome:
         where=where,
         description=approval.description or None,
         expires_at=expires_at,
+        assignees=assignees,
     )
     context.emit(
         "human_requested",
@@ -272,6 +275,24 @@ def handle_approval(context: Context) -> Outcome:
         **({"expires_at": expires_at} if expires_at else {}),
     )
     return Wait(key=request_id)
+
+
+def _assignees(spec: list[str] | str | None, variables: Mapping[str, Any], node_id: str) -> list[str]:
+    """C14 `chk:approval.assignees` → C6 `assignees` (ADR-0080).
+
+    배열은 이름 그대로, 글자 하나는 **변수 이름**이다. 그 변수가 없거나 모양이 틀리면 실행
+    오류다 — 조용히 「담당자 없음」으로 두면 감독자가 사라지고 대리 답이 막힌다. 그림의 버그라
+    오류 경계로 받지 않는다 (식 오류와 같은 갈래).
+    """
+    value: Any = spec
+    if isinstance(spec, str):
+        if spec not in variables:
+            raise EngineError(f"결재 담당자 변수가 없다: {spec}", node_id=node_id, code="assignees_missing")
+        value = variables[spec]
+    try:
+        return normalize_assignees(value)
+    except TypeError as exc:
+        raise EngineError(str(exc), node_id=node_id, code="assignees_invalid") from exc
 
 
 def _approval_where(layer: str, location: str, default: str) -> str:

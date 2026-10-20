@@ -61,6 +61,7 @@ def create_request(run: Run, pending: Pending) -> ApprovalCreateRequest:
         form=pending.form,
         review=dict(pending.review),
         expires_at=pending.expires_at,
+        assignees=list(pending.assignees),
     )
 
 

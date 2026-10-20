@@ -34,6 +34,7 @@ from chaeksas.center.auth import (
     Caller,
     caller,
     require_admin,
+    require_approval_read,
     require_console,
     require_package_read,
     require_read,
@@ -386,16 +387,22 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         state: str | None = None,
         bpm_process_id: str | None = None,
         host: str | None = None,
+        assignee: str | None = None,
     ) -> Any:
-        require_read(authenticate(request))
+        on_behalf = require_approval_read(authenticate(request))
         return approvals.listing(
-            app.state.store, state=state, bpm_process_id=bpm_process_id, host=host
+            app.state.store,
+            state=state,
+            bpm_process_id=bpm_process_id,
+            host=host,
+            assignee=assignee,
+            on_behalf=on_behalf,
         )
 
     @app.get(f"{API}/approvals/{{request_id}}")
     def get_approval(request: Request, request_id: str) -> Any:
-        require_read(authenticate(request))
-        return approvals.get(app.state.store, request_id)
+        on_behalf = require_approval_read(authenticate(request))
+        return approvals.get(app.state.store, request_id, on_behalf=on_behalf)
 
     @app.post(f"{API}/approvals/{{request_id}}/answer")
     async def answer_approval(request: Request, request_id: str) -> Any:

@@ -169,7 +169,8 @@ export const center = {
     call<unknown>("/api/v1/resources/refresh", { method: "POST", body: JSON.stringify({}) }),
 
   /** 결재함 (C6·CON-04). */
-  approvals: (query: { state?: string; bpm_process_id?: string; host?: string } = {}) => {
+  /** 결재함 (C6). `assignee`는 그 이름이 담당자에 있는 것만 (ADR-0080) — 콘솔은 거르기만 한다. */
+  approvals: (query: { state?: string; bpm_process_id?: string; host?: string; assignee?: string } = {}) => {
     const search = new URLSearchParams(
       Object.entries(query).filter(([, value]) => Boolean(value)) as [string, string][],
     );

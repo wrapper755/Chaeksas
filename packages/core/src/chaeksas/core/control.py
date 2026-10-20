@@ -37,6 +37,7 @@ class Command:
     request_id: str = ""
     answer: dict[str, Any] = field(default_factory=dict)
     answered_by: str = ""
+    answered_via: str = ""  # 대리 답이면 그 키 이름 (C6, ADR-0081) — 모르면 빈 글
     reason: str = ""
 
     @property
@@ -62,6 +63,8 @@ def send(path: Path, command: Command) -> None:
             "answer": command.answer,
             "answered_by": command.answered_by,
         }
+        if command.answered_via:
+            body["answered_via"] = command.answered_via
     if command.kind == WITHDRAW:
         body |= {"request_id": command.request_id, "reason": command.reason}
     with path.open("a", encoding="utf-8", newline="\n") as f:
@@ -72,8 +75,15 @@ def stop(path: Path) -> None:
     send(path, Command(kind=STOP))
 
 
-def answer(path: Path, request_id: str, body: Mapping[str, Any], *, answered_by: str) -> None:
-    send(path, Command(kind=ANSWER, request_id=request_id, answer=dict(body), answered_by=answered_by))
+def answer(
+    path: Path, request_id: str, body: Mapping[str, Any], *, answered_by: str, answered_via: str = ""
+) -> None:
+    send(
+        path,
+        Command(
+            kind=ANSWER, request_id=request_id, answer=dict(body), answered_by=answered_by, answered_via=answered_via
+        ),
+    )
 
 
 def withdraw(path: Path, request_id: str, *, reason: str) -> None:
@@ -105,6 +115,7 @@ def take(path: Path) -> list[Command]:
                 request_id=str(found.get("request_id") or ""),
                 answer=dict(found.get("answer") or {}),
                 answered_by=str(found.get("answered_by") or ""),
+                answered_via=str(found.get("answered_via") or ""),
                 reason=str(found.get("reason") or ""),
             )
         )

@@ -493,3 +493,132 @@ def test_open_approvals_keep_their_values(
     later = (datetime.now(UTC) + timedelta(days=99)).isoformat()
     assert approvals.purge_values(store, now=later) == 0
     assert client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()["review"] == REVIEW
+
+
+# ─────────────── 결재 담당자·대리 답 (ADR-0080·0081) ───────────────
+
+#: 「김감독」을 퍼센트 인코딩한 것 — 헤더에 한글을 넣지 않는다 (C5).
+KIM = "%EA%B9%80%EA%B0%90%EB%8F%85"
+
+
+def relay(client: TestClient, *, name: str = "chaeksachat") -> dict[str, str]:
+    """대리 답용 키 하나의 인증 헤더 (사람 이름 없이)."""
+    return {"Authorization": f"Bearer {issue_key(client, name=name, key_type='relay')}"}
+
+
+def test_assignees_ride_the_body_and_filter_the_inbox(client: TestClient, host: dict[str, Any]) -> None:
+    made = put(client, host, assignees=["김감독", "이감독"])
+    assert made["assignees"] == ["김감독", "이감독"]
+    assert [one["request_id"] for one in client.get(
+        "/api/v1/approvals", params={"assignee": " 김감독 "}, headers=READ_AUTH).json()] == [REQUEST]
+    assert client.get("/api/v1/approvals", params={"assignee": "박감독"}, headers=READ_AUTH).json() == []
+
+
+def test_other_assignees_are_another_body(client: TestClient, host: dict[str, Any]) -> None:
+    """담당자는 본문의 일부다 — 같은 `request_id`에 다른 담당자는 409 (C6 멱등)."""
+    put(client, host, assignees=["김감독"])
+    again = client.post("/api/v1/approvals", json=request_body(assignees=["박감독"]), headers=host["auth"])
+    assert again.status_code == 409 and again.json()["code"] == "idempotency_conflict"
+
+
+def test_a_relay_key_sees_only_what_its_person_is_assigned(
+    client: TestClient, host: dict[str, Any]
+) -> None:
+    put(client, host, assignees=["김감독"])
+    auth = relay(client)
+    assert client.get("/api/v1/approvals", headers=auth).json()["code"] == "on_behalf_required"
+    mine = {**auth, "X-CHK-On-Behalf-Of": KIM}
+    assert [one["request_id"] for one in client.get("/api/v1/approvals", headers=mine).json()] == [REQUEST]
+    other = {**auth, "X-CHK-On-Behalf-Of": "%EB%B0%95"}  # 「박」
+    assert client.get("/api/v1/approvals", headers=other).json() == []
+    # 남의 결재 하나는 **있다는 것조차** 알리지 않는다 (404).
+    assert client.get(f"/api/v1/approvals/{REQUEST}", headers=other).status_code == 404
+    assert client.get(f"/api/v1/approvals/{REQUEST}", headers=mine).status_code == 200
+    # 거르기는 그 사람으로 고정된다.
+    asked = client.get("/api/v1/approvals", params={"assignee": "박"}, headers=mine)
+    assert asked.status_code == 403 and asked.json()["code"] == "not_assignee"
+
+
+def test_a_relay_answer_records_the_person_and_the_route(client: TestClient, host: dict[str, Any]) -> None:
+    put(client, host, assignees=["김감독"])
+    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    answered = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=mine)
+    assert answered.status_code == 200, answered.text
+    found = answered.json()
+    assert (found["answered_by"], found["answered_via"]) == ("김감독", "chaeksachat")
+
+    [dispatched] = client.post(
+        "/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=host["auth"]
+    ).json()["approvals"]
+    assert (dispatched["answered_by"], dispatched["answered_via"]) == ("김감독", "chaeksachat")
+
+    # 어느 쪽으로 답해도 결재는 한 번만 닫힌다.
+    twice = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": False}},
+                        headers={**ADMIN, "X-CHK-Actor": "%EC%9A%B4%EC%98%81%EC%9E%90"})
+    assert twice.status_code == 409 and twice.json()["code"] == "already_answered"
+
+
+def test_a_relay_answer_for_someone_not_assigned_is_refused(client: TestClient, host: dict[str, Any]) -> None:
+    put(client, host, assignees=["이감독"])
+    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    refused = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=mine)
+    assert refused.status_code == 403 and refused.json()["code"] == "not_assignee"
+
+
+def test_an_approval_without_assignees_is_answered_only_in_the_console(
+    client: TestClient, host: dict[str, Any]
+) -> None:
+    put(client, host)
+    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    refused = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=mine)
+    assert refused.status_code == 403 and refused.json()["code"] == "not_assignee"
+    # 콘솔(관리자 토큰)은 담당자로 막지 않는다 — 이름이 자칭이라서다 (ADR-0080).
+    ok = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=ADMIN)
+    assert ok.status_code == 200 and ok.json()["answered_via"] is None
+
+
+def test_the_console_is_not_blocked_by_assignees(client: TestClient, host: dict[str, Any]) -> None:
+    put(client, host, assignees=["이감독"])
+    ok = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}},
+                     headers={**ADMIN, "X-CHK-Actor": KIM})
+    assert ok.status_code == 200 and ok.json()["answered_by"] == "김감독"
+
+
+def test_a_bad_on_behalf_name_is_refused(client: TestClient, host: dict[str, Any]) -> None:
+    put(client, host, assignees=["김감독"])
+    auth = relay(client)
+    for bad in ("server_bot%3Arun_x", "%20", "%FF"):
+        found = client.get("/api/v1/approvals", headers={**auth, "X-CHK-On-Behalf-Of": bad})
+        assert found.status_code == 422 and found.json()["code"] == "on_behalf_invalid", bad
+
+
+def test_a_relay_key_does_nothing_but_approvals(client: TestClient, host: dict[str, Any]) -> None:
+    """권한은 결재 셋뿐이다 (ADR-0081) — 키가 새도 다른 것이 열리지 않는다."""
+    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    assert client.get("/api/v1/resources", headers=mine).status_code == 403
+    assert client.get("/api/v1/runs", headers=mine).status_code == 403
+    assert client.post(f"/api/v1/runs/{RUN}/events", json=[], headers=mine).status_code == 403
+    job = {"bpm_process_id": BOT, "target": {"type": "bot_ui", "id": host["bot_ui_id"]}, "inputs": {}}
+    assert client.post("/api/v1/jobs", json=job, headers=mine).status_code == 403
+
+
+def test_other_keys_do_not_read_the_inbox(client: TestClient, host: dict[str, Any]) -> None:
+    """결재에는 검토 자료(업무 값)가 있다 — 실행하는 쪽 키로는 읽지 못한다 (C6 권한표)."""
+    put(client, host)
+    assert client.get("/api/v1/approvals", headers=host["auth"]).status_code == 403
+    assert client.get(f"/api/v1/approvals/{REQUEST}", headers=host["auth"]).status_code == 403
+
+
+def test_requested_by_comes_from_the_job_that_started_the_run(
+    client: TestClient, store: Store, host: dict[str, Any]
+) -> None:
+    put(client, host)
+    assert client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json().get("requested_by") is None
+    with store.tx() as cur:
+        cur.execute(
+            "INSERT INTO jobs (job_id, bpm_process_id, version, target_type, target_id, inputs_json, owner,"
+            " body_hash, requested_by, requested_at, state, run_id)"
+            " VALUES ('job_0000abcd', ?, '1.0.0', 'bot_ui', ?, '{}', 'key:x', 'h', 'intake-key', ?, 'accepted', ?)",
+            (BOT, host["bot_ui_id"], "2026-10-06T09:15:00+00:00", RUN),
+        )
+    assert client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()["requested_by"] == "intake-key"

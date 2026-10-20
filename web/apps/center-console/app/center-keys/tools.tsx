@@ -8,6 +8,7 @@ import { createCenterKey, revokeCenterKey, unbindCenterKey, type ActionResult } 
 /** CON-11 관리자 모드 — 새 키, 폐기, 묶음 풀기. */
 export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
   const [creating, setCreating] = useState(false);
+  const [kind, setKind] = useState("bot_ui");
   const [result, create, pending] = useActionState<ActionResult, FormData>(createCenterKey, {});
   const [asking, setAsking] = useState<{ kind: "revoke" | "unbind"; key: CenterKeyInfo } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,7 +78,8 @@ export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
             종류
             <select
               name="type"
-              defaultValue="bot_ui"
+              value={kind}
+              onChange={(event) => setKind(event.target.value)}
               className="border border-border-strong bg-bg-surface px-3 text-body"
               style={{ height: "var(--size-control-md)", borderRadius: "var(--radius-md)" }}
             >
@@ -85,8 +87,15 @@ export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
               <option value="studio">Studio용</option>
               <option value="server_runner">서버 실행기용</option>
               <option value="integration">연동용</option>
+              <option value="relay">대리 답용</option>
             </select>
           </label>
+          {kind === "relay" ? (
+            // ADR-0081 — Center는 이름이 참인지 증명하지 못한다. 발급이 곧 그 신뢰다.
+            <p className="text-caption text-text-secondary">
+              이 키를 가진 쪽은 결재 담당자의 이름을 대면 그 사람 대신 답할 수 있습니다. 사람 확인은 그쪽이 합니다.
+            </p>
+          ) : null}
           <p className="text-caption text-text-muted">만료는 기본 1년입니다.</p>
         </form>
       </Dialog>

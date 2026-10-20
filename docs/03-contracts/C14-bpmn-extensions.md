@@ -85,7 +85,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 - **막지 않는다.** 콘솔은 담당자를 보이고 거르기만 한다. 막는 것은 대리 답 하나다 (C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)). 현장 결재에도 실려 결재 창이 보인다.
 - 확인(`manualTask`)에는 담당자가 없다 — 적으면 B12 경고다(화면 앞 사람이 답한다).
 
-> 상태: 계약 모델(`Approval.assignees`, B2·B12)은 있고, **엔진이 아직 풀어 싣지 않는다.**
+> 상태: 돈다 — 엔진이 결재를 만들 때 풀어 C6 본문에 싣는다 (`core.nodes._assignees`). 변수가 없으면 `assignees_missing`, 모양이 틀리면 `assignees_invalid`로 실행이 멈춘다.
 
 ### PC 위임 (`chk:call.delegate`)
 

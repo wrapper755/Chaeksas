@@ -22,7 +22,8 @@ BPM 프로세스의 결재(UserTask)를 Center 결재함으로 올린다. 결재
 > - 회수·만료는 실행하는 쪽에 **답 없이 끝남**(`TaskFailed` `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`)으로 간다. 오류 경계가 있으면 그리로, 없으면 실행이 실패로 끝난다.
 > - 현장에서 먼저 답하면 Bot UI가 `DELETE …?reason=answered_in_field`로 거둔다.
 >
-> 상태: **결재 담당자(`assignees`)·대리 답(대리 답용 키, `X-CHK-On-Behalf-Of`)·`requested_by`·`answered_via`는 모델만 있다** ([ADR-0080](../decisions/0080-approval-assignees.md)·[ADR-0081](../decisions/0081-answering-on-behalf.md)). 엔진이 담당자를 풀어 싣는 것, Center가 거르고 막는 것, CON-04 「담당」 칸은 아직이다.
+> 상태: **결재 담당자·대리 답도 돈다** ([ADR-0080](../decisions/0080-approval-assignees.md)·[ADR-0081](../decisions/0081-answering-on-behalf.md)) — 엔진이 그림의 담당자를 풀어 싣고(서버 스냅샷에도 간다), Center가 `?assignee=`로 거르고 대리 답용 키를 담당자와 대조하며, `answered_via`가 하트비트를 거쳐 C3 `human_answered`까지 간다. CON-04에 「담당」 칸·거르기가 있다.
+> - **결재 읽기는 콘솔 토큰과 대리 답용 키뿐이다** — 권한표 그대로다. 실행하는 쪽 키로는 읽지 못한다(검토 자료가 업무 값이다. 답은 하트비트로 받는다).
 
 - **Center로 올라가는 것은 결재(`approval`)뿐이다.** 확인(실행 중 막힘, `confirmation`)은 화면 앞 사람만 답할 수 있으므로 올리지 않는다 (용어집 §3). 서버 Bot에는 확인이 없다 (C1 R2).
 - PC Bot은 답이 올 때까지 실행 자리를 쥐고 기다린다 (ADR-0014 §5). 서버 Bot은 상태를 저장하고 기다린다 (ADR-0015).
@@ -182,6 +183,7 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-20 | 1 | **결재 담당자·대리 답이 돈다** (형식은 그대로다). 그러면서 결재 읽기가 **권한표를 따라갔다** — 코드가 「키면 무엇이든」(`require_read`)이라 Bot UI·서버 실행기 키도 남의 검토 자료를 읽을 수 있었다. 이제 콘솔 토큰과 대리 답용 키(담당인 것만)뿐이다 | [0080](../decisions/0080-approval-assignees.md), [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-20 | 1 | **결재 담당자·대리 답** — `assignees[]`·`?assignee=`, 대리 답용 키와 `X-CHK-On-Behalf-Of`(담당자일 때만), `answered_via`·`requested_by`, 오류 `on_behalf_required`·`not_assignee`·`on_behalf_invalid`. 모두 선택 칸이라 schema는 그대로다 | [0080](../decisions/0080-approval-assignees.md), [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-20 | 1 | 현장 결재도 이 본문을 현장 요청 파일에 쓴다 (형식은 그대로다, 올리지 않는다) — CMN-01이 검토 자료를 보인다 | 0078 |
 | 2026-10-15 | 1 | **「넣을 수 없는 답은 ack하지 않고 둔다」**를 적었다 (형식은 그대로다) — `delivered = 0`이면 다시 내려가므로 그것이 멀쩡한 길이고, **거절로 적으면 결재가 `open`으로 되돌아가며 답이 지워져** 사람이 다시 답해야 한다. 서버 실행기에서 그런 자리는 **빈자리가 없을 때**다 (C12 — 이어 가면 자리를 다시 쥔다) | — |

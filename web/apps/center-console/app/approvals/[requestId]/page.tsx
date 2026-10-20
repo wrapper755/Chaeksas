@@ -159,6 +159,18 @@ export default async function ApprovalPage({
               <dd>{time(info.expires_at)}</dd>
               <dt className="text-text-muted">전달됨</dt>
               <dd>{info.delivered ? "실행하는 쪽이 받아 갔습니다" : "아직"}</dd>
+              <dt className="text-text-muted">담당</dt>
+              <dd>
+                {(info.assignees ?? []).length > 0
+                  ? (info.assignees ?? []).join(", ")
+                  : "담당자 없음 — 콘솔에서만 답합니다"}
+              </dd>
+              {info.requested_by ? (
+                <>
+                  <dt className="text-text-muted">요청한 쪽</dt>
+                  <dd>{info.requested_by}</dd>
+                </>
+              ) : null}
             </dl>
             {info.description ? <p className="text-body text-text-secondary">{info.description}</p> : null}
           </Section>
@@ -191,7 +203,9 @@ export default async function ApprovalPage({
               <p className="text-body">
                 {JSON.stringify(info.answer)}{" "}
                 <span className="text-text-muted">
-                  ({info.answered_by} — 자칭, 신원 검증 없음 · {time(info.answered_at)})
+                  {info.answered_via
+                    ? `— ${info.answered_by}, 「${info.answered_via}」 키로 대리 답 (이름은 그 키를 쓰는 쪽이 확인) · ${time(info.answered_at)}`
+                    : `(${info.answered_by} — 자칭, 신원 검증 없음 · ${time(info.answered_at)})`}
                 </span>
               </p>
             </Section>
@@ -247,6 +261,10 @@ export default async function ApprovalPage({
                     defaultValue={found.actor}
                     className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
                   />
+                  {/* 담당자가 있어도 **막지 않는다** — 콘솔의 이름은 자칭이다 (ADR-0080). */}
+                  {(info.assignees ?? []).length > 0 ? (
+                    <span className="text-caption text-text-muted">담당: {(info.assignees ?? []).join(", ")}</span>
+                  ) : null}
                 </label>
                 <div className="flex gap-2">
                   <Button type="submit" variant="primary">

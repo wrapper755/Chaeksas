@@ -45,8 +45,9 @@ def info(**over: object) -> CenterKeyInfo:
 # ─────────────── 발급 ───────────────
 
 
-def test_only_four_key_types_are_issuable() -> None:
-    assert ISSUABLE_KEY_TYPES == {"bot_ui", "studio", "server_runner", "integration"}
+def test_only_five_key_types_are_issuable() -> None:
+    # `relay`(대리 답용)는 ADR-0081 — 결재 읽기·답뿐이다.
+    assert ISSUABLE_KEY_TYPES == {"bot_ui", "studio", "server_runner", "integration", "relay"}
     for t in sorted(ISSUABLE_KEY_TYPES):
         assert validate_center_key_create(CenterKeyCreateRequest(name="x", type=t)) == []
 
