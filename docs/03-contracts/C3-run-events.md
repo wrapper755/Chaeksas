@@ -110,7 +110,7 @@
 
 | 경로 | 돌려주는 것 |
 | --- | --- |
-| `GET /api/v1/runs?status=&bpm_process_id=&run_location=&bot_ui_id=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스·**실행 위치**·**Bot UI**, `limit` 기본 50·최대 500 |
+| `GET /api/v1/runs?status=&bpm_process_id=&run_location=&bot_ui_id=&virtual_worker=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스·**실행 위치**·**Bot UI**·**가상 직원**(그 접수 Bot의 실행과 그 자식 실행 — C5 §가상 직원), `limit` 기본 50·최대 500 |
 | `GET /api/v1/runs/{run_id}` | `RunInfo` 하나. 없으면 404 `run_not_found` |
 | `GET /api/v1/runs/{run_id}/events` | `RunEventsResponse` — **`seq` 차례로** 전부 (타임라인이 순서를 만든다) |
 

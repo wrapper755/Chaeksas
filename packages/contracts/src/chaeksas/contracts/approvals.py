@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import unicodedata
 from collections.abc import Mapping
 from typing import Any
@@ -70,6 +72,15 @@ def normalize_assignees(value: Any) -> list[str]:
         if name and name not in out:
             out.append(name)
     return out
+
+
+def review_digest(review: Mapping[str, Any] | None) -> str:
+    """검토 자료의 지문 (C6 「내용 고정」, ADR-0083) — `sha256:` + 정규화 JSON의 SHA-256.
+
+    받는 쪽(Center)과 연동하는 쪽이 **같은 규칙**을 쓴다. 정규화는 키 정렬·`,`/`:`·한글 그대로다.
+    """
+    body = json.dumps(dict(review or {}), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
 def request_id_for(run_id: str, node_id: str, node_instance: int) -> str:
@@ -149,6 +160,8 @@ class ApprovalInfo(ApprovalCreateRequest):
     answered_at: Timestamp | None = None
     #: 대리 답이면 그 키의 이름 (ADR-0081). 콘솔 답이면 없다.
     answered_via: str | None = None
+    #: 검토 자료의 지문 (ADR-0083, `review_digest`) — 값을 지운 뒤에도 남는다.
+    review_digest: str | None = None
     #: 그 실행을 시작한 작업의 `requested_by` (C5) — Center가 **읽을 때** 붙이고 저장하지 않는다.
     requested_by: str | None = None
     withdraw_reason: str | None = None  # KNOWN_WITHDRAW_REASONS
@@ -165,6 +178,8 @@ class AnswerRequest(ContractModel):
     """
 
     answer: dict[str, Any]
+    #: 답하는 쪽이 **본** 결재의 지문 (ADR-0083). 다르면 409 `review_changed`.
+    if_review_digest: str | None = None
 
 
 def validate_create(req: ApprovalCreateRequest) -> list[Violation]:

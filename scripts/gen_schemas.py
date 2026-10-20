@@ -74,6 +74,8 @@ from chaeksas.contracts import (
     ServiceAppManifest,
     ServiceAppResource,
     UsagePage,
+    VirtualWorkerInfo,
+    VirtualWorkerRequest,
 )
 
 # Windows 콘솔·파이프의 기본 코드페이지(cp949·cp1252)에서는 한글을 찍다 터진다.
@@ -112,6 +114,8 @@ MODELS: list[tuple[str, Any]] = [
     ("c5-deployment-info", DeploymentInfo),
     ("c5-job-create-request", JobCreateRequest),
     ("c5-job-info", JobInfo),
+    ("c5-virtual-worker-request", VirtualWorkerRequest),
+    ("c5-virtual-worker-info", VirtualWorkerInfo),
     ("c5-error-body", ErrorBody),  # C11과 같은 오류 형식
     ("c6-approval-create-request", ApprovalCreateRequest),
     ("c6-approval-info", ApprovalInfo),

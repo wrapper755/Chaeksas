@@ -622,3 +622,47 @@ def test_requested_by_comes_from_the_job_that_started_the_run(
             (BOT, host["bot_ui_id"], "2026-10-06T09:15:00+00:00", RUN),
         )
     assert client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()["requested_by"] == "intake-key"
+
+
+# ─────────────── 내용 고정 (ADR-0083) ───────────────
+
+
+def test_the_review_digest_is_set_and_kept_after_the_values_go(
+    client: TestClient, store: Store, host: dict[str, Any]
+) -> None:
+    from chaeksas.center.api import approvals as approvals_api  # noqa: PLC0415
+    from chaeksas.contracts.approvals import review_digest  # noqa: PLC0415
+
+    made = put(client, host)
+    assert made["review_digest"] == review_digest(REVIEW)
+    assert made["review_digest"].startswith("sha256:")
+    client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=ADMIN)
+    assert approvals_api.purge_values(store, now="2099-01-01T00:00:00+00:00") == 1
+    found = client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()
+    assert found["review"] == {} and found["review_digest"] == made["review_digest"], "지문은 남는다"
+
+
+def test_an_answer_for_what_someone_else_saw_is_refused(client: TestClient, host: dict[str, Any]) -> None:
+    """답하는 쪽이 본 것과 다르면 받지 않는다 — 다시 읽어 사람에게 보여야 한다."""
+    made = put(client, host, assignees=["김감독"])
+    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    wrong = client.post(f"/api/v1/approvals/{REQUEST}/answer",
+                        json={"answer": {"approved": True}, "if_review_digest": "sha256:" + "0" * 64}, headers=mine)
+    assert wrong.status_code == 409 and wrong.json()["code"] == "review_changed"
+    assert client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()["state"] == "open"
+    right = client.post(f"/api/v1/approvals/{REQUEST}/answer",
+                        json={"answer": {"approved": True}, "if_review_digest": made["review_digest"]}, headers=mine)
+    assert right.status_code == 200, right.text
+
+
+def test_the_digest_rule_is_the_one_the_request_named() -> None:
+    """정규화는 키 정렬·`,`/`:`·한글 그대로 — 연동하는 쪽(`args_digest`)과 같은 규칙이다."""
+    import hashlib  # noqa: PLC0415
+    import json  # noqa: PLC0415
+
+    from chaeksas.contracts.approvals import review_digest  # noqa: PLC0415
+
+    review = {"금액": 1100000, "거래처": "주식회사 예시"}
+    body = json.dumps(review, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    assert review_digest(review) == "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+    assert review_digest({"b": 1, "a": 2}) == review_digest({"a": 2, "b": 1})

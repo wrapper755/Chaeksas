@@ -122,6 +122,21 @@ MIGRATIONS: tuple[Step, ...] = (
         "위임 대상 종류 — 서버 Bot에도 맡긴다 (C12 §PC 위임, ADR-0082). 옛 행은 모두 PC다",
         ("ALTER TABLE delegations ADD COLUMN target_type TEXT NOT NULL DEFAULT 'bot_ui'",),
     ),
+    Step(
+        7,
+        "결재 검토 자료의 지문 — 값을 지운 뒤에도 남는다 (C6 `review_digest`, ADR-0083)",
+        ("ALTER TABLE approvals ADD COLUMN review_digest TEXT",),
+    ),
+    Step(
+        8,
+        "가상 직원 — 등록만 둔다, 일괄·자식은 읽을 때 잇는다 (C5 §가상 직원, ADR-0085)",
+        (
+            "CREATE TABLE virtual_workers ("
+            " id TEXT PRIMARY KEY, name TEXT NOT NULL, supervisors_json TEXT NOT NULL,"
+            " intake TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE INDEX virtual_workers_intake ON virtual_workers (intake)",
+        ),
+    ),
 )
 
 

@@ -64,6 +64,8 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /jobs…` | ✓ | ✓ | — | — | 자기 것만 |
 | `DELETE /jobs/{id}` | — | ✓ | — | — | 자기 것만 |
 | `POST /messages` (C12 §메시지) | — | ✓ | — | — | ✓ |
+| `GET /virtual-workers…` (CON-13) | ✓ | ✓ | — | — | — (대리 답용 키는 감독하는 것만) |
+| `POST/PUT/DELETE /virtual-workers…` | — | ✓ | — | — | — |
 
 ## 패키지
 
@@ -170,7 +172,7 @@ DeploymentInfo 필드: `deployment_id`, `target{type,id}`, `bpm_process_id`, `ve
 | 메서드·경로 | 뜻 | 성공 |
 | --- | --- | --- |
 | `POST /jobs` | 작업 만들기 | 201 JobInfo / 200 같은 `idempotency_key` |
-| `GET /jobs?state=&target_type=&target_id=&bpm_process_id=&limit=` | 목록 (최신순). `state`는 쉼표로 여럿 (`pending,dispatched`) | 200 |
+| `GET /jobs?state=&target_type=&target_id=&bpm_process_id=&virtual_worker=&limit=` | 목록 (최신순). `state`는 쉼표로 여럿 (`pending,dispatched`). `virtual_worker`는 그 접수 Bot의 작업과 그 자식 작업 (§가상 직원) | 200 |
 | `GET /jobs/{id}` | 하나 (연결된 실행 상태 포함) | 200 |
 | `DELETE /jobs/{id}` | 취소 (아래 표) | 200 / 202 / 409 |
 
@@ -259,6 +261,63 @@ BotUiInfo 필드:
 | `deployment_results` | 그 Bot UI가 보고한 **최근 배치 결정** (C4 `DeploymentResult`, 최신순 최대 20건). CON-03 「최근 배치 결정」. 마지막 하트비트만이 아니라 **Center가 쌓아 둔 것**이다 — 한 주기 뒤면 사라지는 값을 운영자가 보지 못하면 「왜 설치가 안 됐나」를 영영 알 수 없다 |
 | `key` | 그 Bot UI가 쓰는 Center API 키 `{prefix, expires_at, state}` — **원문·해시는 주지 않는다** (C7) |
 
+## 가상 직원 (CON-13)
+
+사람이 아닌 업무 주체 — 접수 Bot·감독자를 묶는다 ([ADR-0085](../decisions/0085-virtual-worker-resource.md), 용어집 §2-1). **일괄은 자원이 아니다** — 접수 Bot 실행 한 번이고(ADR-0079) 여기서는 **읽을 때** 이어 붙인다.
+
+| 메서드·경로 | 인증 | 뜻 |
+| --- | --- | --- |
+| `POST /virtual-workers` | 관리자 토큰 | 등록 (`VirtualWorkerRequest`). 201 |
+| `GET /virtual-workers?supervisor=` | 읽기·관리자 토큰 / 대리 답용 키 (**감독하는 것만**) | 목록 (`VirtualWorkerInfo[]`, `batches`는 비어 있다) |
+| `GET /virtual-workers/{id}` | 같음 (아니면 404) | 하나 + **최근 일괄** |
+| `PUT /virtual-workers/{id}` | 관리자 토큰 | 바꾸기 (본문 전체, `id`는 경로가 이긴다) |
+| `DELETE /virtual-workers/{id}` | 관리자 토큰 | 등록만 지운다 — 실행·작업은 남는다 |
+
+VirtualWorkerRequest:
+
+| 필드 | 타입 | 필수 | 뜻 |
+| --- | --- | --- | --- |
+| `id` | str | ✓ | `^[a-z0-9][a-z0-9._-]{0,63}$`. 주체 이름은 `vw:<id>` |
+| `name` | str | ✓ | 화면 이름 |
+| `supervisors` | str[] | | 감독자 이름들 (C6 담당자와 같은 정규화). **결재 담당자와 맞춰 보지 않는다** — 담당자는 그림이 정한다 |
+| `intake` | str | ✓ | 접수 Bot의 **패키지 id** (판은 배포가 정한다) |
+| `state` | str | | `active`(기본) / `stopped` — 열린 문자열. **새 작업을 막지 않는다**(보이기 위한 칸이다) |
+
+VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근 일괄 20개, 하나에서만)를 더한다:
+
+| 필드 | 뜻 |
+| --- | --- |
+| `run_id` | 일괄 id = 접수 Bot 실행 |
+| `status` | 그 실행의 C3 상태 (`running`·`waiting`·`success`·`failed`·`cancelled` — `RunInfo.status`와 같다) |
+| `started_at` | |
+| `children` | 그 실행이 기동한 자식 실행 수 (`parent_run_id`로 모은다) |
+| `children_by_status` | `{상태: 수}` |
+| `open_approvals` | 그 실행의 열린 결재 `request_id`들 (일괄 결재가 아직이면 여기 있다) |
+
+**관문 — 결재 없는 일괄 기동이 없어야 묶인다** ([ADR-0085](../decisions/0085-virtual-worker-resource.md) §2):
+
+- 등록·`intake` 바꾸기: 그 패키지의 **승인된 판이 하나 이상**(아니면 422 `intake_unknown`), 실행 위치 `server`(아니면 422 `intake_not_server`), **승인된 판마다** 진입 그림에 C14 **B16이 없다**(아니면 422 `intake_not_gated` + `detail.violations`).
+- 배포: 활성 가상 직원의 접수 Bot이면 그 판의 진입 그림에 B16이 없어야 한다 — 아니면 409 `intake_not_gated`.
+- 그림은 Center가 저장된 zip에서 읽는다(`contracts.bpmn_ext` — 내보낸 쪽을 믿지 않는다). B16만 본다.
+
+**이어 붙이기** — `GET /runs?virtual_worker=<id>`(C3)·`GET /jobs?virtual_worker=<id>`는 접수 Bot의 것과 **그 자식**(실행은 `parent_run_id`, 작업은 `requested_by = server_bot:<접수 실행>`)을 함께 준다. 「접수 Bot의 실행」은 실행 기록의 `bpm_process_id`가 **그 패키지 id이거나 그 패키지들 매니페스트의 `process_id`**인 것이다 — 엔진은 그림의 process id를 적는다 ([09-gaps](../09-gaps.md) §2-5). 저장하지 않고 읽을 때 모은다. **`requested_by`는 바꾸지 않는다** — 접수 Bot 작업을 부른 키가 그대로 적힌다.
+
+```json
+{
+  "id": "finance-intake",
+  "name": "재무 가상 직원",
+  "supervisors": ["김감독"],
+  "intake": "fx24-batch-intake",
+  "state": "active",
+  "created_at": "2026-10-20T09:00:00+09:00",
+  "updated_at": "2026-10-20T09:00:00+09:00",
+  "batches": [
+    {"run_id": "run_20261020_091500_a1b2c3", "status": "success", "started_at": "2026-10-20T09:15:00+09:00",
+     "children": 3, "children_by_status": {"success": 3}, "open_approvals": []}
+  ]
+}
+```
+
 ## 오류
 
 | 상태 코드 | `code` | 언제 |
@@ -277,6 +336,8 @@ BotUiInfo 필드:
 | 410 | `revoked` | 철회된 패키지 내려받기 |
 | 413 | `too_large` | 패키지 50 MB 초과 |
 | 422 | C1 규칙 코드, `target_mismatch`(모르는 대상 종류), `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
+| 422 | `intake_unknown` / `intake_not_server` / `intake_not_gated` | 가상 직원의 접수 Bot이 승인된 판이 없거나·서버 Bot이 아니거나·결재 없는 일괄 기동이 있다 (C14 B16, ADR-0085). 배포 쪽의 `intake_not_gated`는 409다 |
+| 409 | `id_conflict` | 같은 `id`의 가상 직원이 있다 |
 | 422 | `on_behalf_invalid` | `X-CHK-On-Behalf-Of`가 비었거나 200자를 넘거나 예약 앞머리로 시작함 (ADR-0081) |
 | 422 | `server_runner_not_available` | 서버 실행기 대상 (M7까지, ADR-0016). **배포와 작업 지시가 같다** — 상태 충돌이 아니라 **아직 없는 기능**이라 배포 쪽에서도 422다 |
 | 422 | `not_a_zip`, `manifest_missing`, `manifest_invalid`, `zip_too_many_entries`, `zip_unsafe_path`, `zip_too_large` | 업로드한 zip의 형식 오류. **400이 아니라 422다** — 본문은 읽혔고 내용이 계약과 맞지 않는다 |
@@ -290,6 +351,7 @@ BotUiInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-20 | 1 | **가상 직원**(§가상 직원, CON-13) — 등록·읽기·관문(B16, 묶을 때와 배포할 때)·`?virtual_worker=` 이어 붙이기. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0085](../decisions/0085-virtual-worker-resource.md) |
 | 2026-10-20 | 1 | **사람 대신 부르는 길** — `X-CHK-On-Behalf-Of`, `JobInfo.on_behalf_of`(주장, `requested_by`는 그대로), 대리 답용 키 줄, 오류 `on_behalf_invalid` | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-17 | 1 | **`download_count`·`last_downloaded_at`을 더했다** — 내어 준 횟수와 마지막 때(CON-06 「내려받은 횟수」). 셀 열을 더할 수단이 없어 화면에서 뺐던 것을 저장소 옮기기 단계(4판)로 되살렸다. 선택 칸이라 옛 응답을 읽는 쪽은 영향이 없다 | [0065](../decisions/0065-center-schema-migrations.md) |
 | 2026-10-12 | 1 | **툴팩 갈래가 사라졌다** ([ADR-0050](../decisions/0050-no-toolpack-kind.md)) — 내려받기 범위에서 `requires.toolpacks`가 빠지고(공유 BPM 프로세스는 패키지 안 `libs/`로 오므로 **따로 받는 것이 없다**), `dependents.relation`은 `lib` 하나이고 `pinned_hash`는 늘 `null`이다 | 0050 |

@@ -264,6 +264,18 @@
       "title": "Review",
       "type": "object"
     },
+    "review_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Review Digest"
+    },
     "run_id": {
       "title": "Run Id",
       "type": "string"

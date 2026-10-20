@@ -1060,6 +1060,14 @@ def test_fx24_starts_one_server_bot_per_approved_item(
         found = client.get(f"/api/v1/runs/{one['run_id']}", headers=READ).json()
         assert found["parent_run_id"] == done["run_id"], found
 
+    # **가상 직원에 묶으면** 이 일괄이 그 자리에서 보인다 (ADR-0085) — 저장하지 않고 읽을 때 잇는다.
+    bound = client.post("/api/v1/virtual-workers", json={
+        "id": "finance-intake", "name": "재무 가상 직원", "supervisors": ["김감독"], "intake": info["id"],
+    }, headers=ADMIN)
+    assert bound.status_code == 201, bound.text
+    [batch] = client.get("/api/v1/virtual-workers/finance-intake", headers=READ).json()["batches"]
+    assert (batch["run_id"], batch["children"], batch["children_by_status"]) == (done["run_id"], 3, {"success": 3})
+
 
 def test_fx24_starts_nothing_when_the_batch_is_rejected(
     tmp_path: Path,
@@ -1075,3 +1083,43 @@ def test_fx24_starts_nothing_when_the_batch_is_rejected(
     done = run_to_the_end(center, runner, job_id, answers={"Approve_Batch": {"승인": False}}, messages=[])
     assert done["run_status"] == "success", done
     assert batch_children(client, str(child["id"])) == []
+
+
+def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
+    tmp_path: Path,
+    center: tuple[TestClient, Store, Any],
+    runner: agent_mod.Agent,
+    receiver: Receiver,
+) -> None:
+    """**승인 뒤 일괄 취소** — 접수 실행을 취소하면 맡겨 둔 자식도 거둔다 (W6, ADR-0084).
+
+    실행기를 잠깐 멈춰 **자식이 아직 시작되지 않은 순간**을 만든다 (결재 답은 멈춰도 내려간다).
+    차례로 돌므로 그때 맡겨진 것은 **한 건**이고, 남은 건은 아예 맡겨지지 않는다.
+    """
+    client, _, _ = center
+    child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
+    info = deploy(center, runner, packaged(tmp_path, FX24))
+    job_id = dispatch(center, info, case_inputs(FX24, receiver))
+
+    until = time.monotonic() + WAIT_S
+    while not client.get("/api/v1/approvals", params={"state": "open"}, headers=READ).json():
+        assert time.monotonic() < until, "일괄 결재가 올라오지 않았다"
+        runner.tick()
+        time.sleep(0.05)
+    paused = client.post(f"/api/v1/server-runners/{runner.server_runner_id}/pause", headers=ADMIN)
+    assert paused.status_code < 400, paused.text
+    _answer_open_approvals(client, case_approvals(FX24), None)
+    while not batch_children(client, str(child["id"])):
+        assert time.monotonic() < until, "승인 뒤 맡긴 작업이 없다"
+        runner.tick()
+        time.sleep(0.05)
+
+    cancelled = client.delete(f"/api/v1/jobs/{job_id}", headers=ADMIN)
+    assert cancelled.status_code == 202, cancelled.text
+    while client.get(f"/api/v1/jobs/{job_id}", headers=READ).json().get("run_status") != "cancelled":
+        assert time.monotonic() < until, "접수 실행이 닫히지 않았다"
+        runner.tick()
+        time.sleep(0.05)
+
+    [made] = batch_children(client, str(child["id"]))
+    assert made["state"] == "cancelled", made

@@ -282,6 +282,7 @@ def listing(
     bpm_process_id: str | None = None,
     run_location: str | None = None,
     bot_ui_id: str | None = None,
+    virtual_worker: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> RunListing:
     """최근 실행부터 (CON-01 목록). 좁히기는 상태·BPM 프로세스·실행 위치·**Bot UI**다.
@@ -302,6 +303,12 @@ def listing(
         found = [one for one in found if one.run_location == run_location]
     if bot_ui_id:
         found = [one for one in found if one.bot_ui_id == bot_ui_id]
+    if virtual_worker:
+        from chaeksas.center.api import virtual_workers  # noqa: PLC0415 — 순환 import를 피한다
+
+        # 접수 Bot의 실행(일괄)과 **그 자식** — 읽을 때 잇는다 (C5 §가상 직원, ADR-0085).
+        intake, batches = virtual_workers.runs_of(store, virtual_worker)
+        found = [one for one in found if one.bpm_process_id in intake or one.parent_run_id in batches]
     return RunListing(runs=found[: max(1, min(limit, MAX_LIMIT))], total=len(found))
 
 
@@ -334,6 +341,7 @@ def get_runs(
     bpm_process_id: str | None = None,
     run_location: str | None = None,
     bot_ui_id: str | None = None,
+    virtual_worker: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> Any:
     require_read(request.app.state.authenticate(request))
@@ -343,6 +351,7 @@ def get_runs(
         bpm_process_id=bpm_process_id,
         run_location=run_location,
         bot_ui_id=bot_ui_id,
+        virtual_worker=virtual_worker,
         limit=limit,
     )
 

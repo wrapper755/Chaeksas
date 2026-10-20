@@ -104,7 +104,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 
 | 화면 표기 | 코드 | 뜻 |
 | --- | --- | --- |
-| 가상 직원 | `virtual_worker` | **사람이 아닌 업무 주체.** Center에 등록되고(주체 이름 `vw:<id>`) 접수 Bot·감독자·기동해도 되는 Bot 목록을 갖는다. 접수 Bot 실행과 그 실행이 기동한 작업의 주체가 된다. **배포 단위가 아니다** — 배포 단위는 여전히 Bot이다 (§7). 코드에서 `worker`로 줄여 쓰지 않는다 (Worker 프로세스와 겹친다) |
+| 가상 직원 | `virtual_worker` | **사람이 아닌 업무 주체.** Center에 등록되고(주체 이름 `vw:<id>`, C5 §가상 직원) 접수 Bot·감독자를 갖는다. 기동해도 되는 Bot은 따로 두지 않는다 — 접수 Bot의 서명된 `requires.delegations`다. 그 접수 Bot의 실행(일괄)과 자식 실행을 Center가 **읽을 때** 이어 붙인다 ([ADR-0085](decisions/0085-virtual-worker-resource.md)). **배포 단위가 아니다** — 배포 단위는 여전히 Bot이다 (§7). 코드에서 `worker`로 줄여 쓰지 않는다 (Worker 프로세스와 겹친다) |
 | 접수 Bot | `intake_bot` | 가상 직원이 돌리는 **서버 Bot**. 인입 → 항목 N건 만들기 → 일괄 결재 → 일괄 기동을 그림으로 그린 것 |
 | 일괄 | `batch` | **접수 Bot 실행 한 번.** 일괄 id는 그 실행의 `run_id`이고 항목은 그 실행의 변수(목록)다. 「묶음」이라 쓰지 않는다 (확장·시험 묶음·PC 묶음 풀기가 이미 쓴다) |
 | 일괄 결재 | — | 일괄 안의 결재 하나(C6). 항목 N건을 `show`로 보이고 감독자가 한 번에 승인·반려한다. 새 결재 종류가 아니다 |
@@ -130,7 +130,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 감독자 | `supervisor` | 가상 직원(§2-1)의 결재에 답하는 **사람**. 접수 Bot의 일괄 결재 담당자가 된다 |
 | 대리 답 | `on_behalf_of` | 연동하는 쪽(예: 대화 창구)이 **사람 대신** 결재 답을 Center에 나르는 것. 답한 사람(행위자)은 그 사람이고, 지나온 길(경로)은 키 이름이다 — 둘을 따로 적는다. 「위임」(`delegate`, PC 위임)과 다른 말이다 |
 
-> 상태: 감독자는 [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md), 결재 담당자는 [ADR-0080](decisions/0080-approval-assignees.md), 대리 답은 [ADR-0081](decisions/0081-answering-on-behalf.md)이 정한다. 결재 담당자·대리 답은 돈다 (C6). 가상 직원·일괄 기동은 아직이다.
+> 상태: 감독자는 [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md), 결재 담당자는 [ADR-0080](decisions/0080-approval-assignees.md), 대리 답은 [ADR-0081](decisions/0081-answering-on-behalf.md)이 정한다. 결재 담당자·대리 답(C6)·일괄 기동(ADR-0082)·가상 직원(C5, ADR-0085)이 돈다.
 
 ## 4. UI 자동화
 

@@ -100,6 +100,7 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 | `state` | 아래 상태 표 |
 | `answer`?, `answered_by`?, `answered_at`? | |
 | `answered_via`? | 대리 답이면 **그 키의 이름**. 콘솔 답이면 없다 (ADR-0081) |
+| `review_digest`? | **검토 자료의 지문** — `sha256:` + 정규화한 `review`의 SHA-256 (아래 「내용 고정」). Center가 받을 때 계산하고 **값을 지운 뒤에도 남긴다** ([ADR-0083](../decisions/0083-review-digest.md)) |
 | `requested_by`? | 그 실행을 시작한 **작업**의 `requested_by` (C5). Center가 읽을 때 붙이고 저장하지 않는다. 작업 없이 시작한 실행이면 없다 (ADR-0080) |
 | `withdraw_reason`? | |
 | `created_at` | |
@@ -131,7 +132,9 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 | 필드 | 타입 | 필수 | 뜻 |
 | --- | --- | --- | --- |
 | `answer` | object | ✓ | 폼이 있으면 `{key: value}`. 없으면 `{"decision": "approve" \| "reject", "comment"?}` |
+| `if_review_digest` | str | | 답하는 쪽이 **본** 결재의 `review_digest`. 지금 것과 다르면 409 `review_changed` ([ADR-0083](../decisions/0083-review-digest.md)) |
 
+- **내용 고정** ([ADR-0083](../decisions/0083-review-digest.md)) — `review_digest`는 `contracts.approvals.review_digest`가 짓는다: `json.dumps(review, sort_keys=True, separators=(",", ":"), ensure_ascii=False)`를 UTF-8로 SHA-256, 16진 소문자, 앞에 `sha256:`. `review`가 비어도 있다. 연동하는 쪽은 **Center가 준 값을 그대로** 되돌려 보낸다(제 손으로 다시 계산하지 않는다 — 수의 표기가 갈라질 수 있다). 이 칸이 생기기 전의 결재는 남은 `review`로 읽을 때 계산하고, 값도 지워졌으면 없다 — 그때 `if_review_digest`를 실으면 `review_changed`다.
 - **Center가 폼으로 답을 검증한다** (필수·타입·선택지, `contracts.approvals.validate_answer`). 틀리면 422로 콘솔에 바로 보인다. 실행하는 쪽도 같은 함수로 한 번 더 검증한다.
 - **검증 전에 빈 칸을 기본값으로 채운다** (`contracts.approvals.apply_defaults`) — 콘솔 폼이 안 보낸 칸이 「필수인데 비었다」가 되지 않게.
 - **폼의 칸은 모두 변수가 된다** (`contracts.approvals.answer_variables`) — 실행하는 쪽이 답을 변수로 옮길 때 기본값으로, 그것도 없으면 **`None`**으로 채운다. 결재 창(CMN-01)이 빈 칸에 보내는 것과 같은 값이다.
@@ -169,6 +172,7 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 | 403 | `not_assignee` | 대리 답의 그 사람이 담당자가 아님 (담당자 없는 결재 포함), 또는 `?assignee=`가 그 사람과 다름 | 연동하는 쪽: 답하지 못한다고 사람에게 알린다 |
 | 404 | `not_found` | | |
 | 409 | `already_answered` / `not_open` | 이미 답함, 회수·만료됨 | 콘솔: 목록을 새로 고친다 |
+| 409 | `review_changed` | `if_review_digest`가 지금 결재의 지문과 다르다 | 연동하는 쪽: 결재를 다시 읽어 사람에게 다시 보인다 |
 | 409 | `idempotency_conflict` | 같은 `request_id`에 다른 키·본문 | 버그 |
 | 422 | `answer_invalid` (`detail.fields`) | 폼과 맞지 않는 답 | 콘솔: 칸마다 오류를 표시한다 |
 | 422 | `confirmation_not_allowed` | `layer`가 `approval`이 아님 | 버그 |
@@ -183,6 +187,7 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-20 | 1 | **내용 고정** — `ApprovalInfo.review_digest`(값을 지워도 남는다), `AnswerRequest.if_review_digest?`, 409 `review_changed`. 선택 칸이라 schema는 그대로다 | [0083](../decisions/0083-review-digest.md) |
 | 2026-10-20 | 1 | **결재 담당자·대리 답이 돈다** (형식은 그대로다). 그러면서 결재 읽기가 **권한표를 따라갔다** — 코드가 「키면 무엇이든」(`require_read`)이라 Bot UI·서버 실행기 키도 남의 검토 자료를 읽을 수 있었다. 이제 콘솔 토큰과 대리 답용 키(담당인 것만)뿐이다 | [0080](../decisions/0080-approval-assignees.md), [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-20 | 1 | **결재 담당자·대리 답** — `assignees[]`·`?assignee=`, 대리 답용 키와 `X-CHK-On-Behalf-Of`(담당자일 때만), `answered_via`·`requested_by`, 오류 `on_behalf_required`·`not_assignee`·`on_behalf_invalid`. 모두 선택 칸이라 schema는 그대로다 | [0080](../decisions/0080-approval-assignees.md), [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-20 | 1 | 현장 결재도 이 본문을 현장 요청 파일에 쓴다 (형식은 그대로다, 올리지 않는다) — CMN-01이 검토 자료를 보인다 | 0078 |

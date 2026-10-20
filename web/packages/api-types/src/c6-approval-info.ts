@@ -30,6 +30,7 @@ export interface ApprovalInfo {
   review?: {
     [k: string]: unknown;
   };
+  review_digest?: string | null;
   run_id: string;
   /**
    * 이 계약의 schema 번호

@@ -7,6 +7,18 @@
       "additionalProperties": true,
       "title": "Answer",
       "type": "object"
+    },
+    "if_review_digest": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "If Review Digest"
     }
   },
   "required": [

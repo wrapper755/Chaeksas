@@ -263,10 +263,19 @@ def listing(
     target_type: str | None = None,
     target_id: str | None = None,
     bpm_process_id: str | None = None,
+    virtual_worker: str | None = None,
     limit: int = LIST_LIMIT_DEFAULT,
     offset: int = 0,
 ) -> list[JobInfo]:
     scope = _scope(found, write=False)
+    belongs = None
+    if virtual_worker:
+        from chaeksas.center.api import virtual_workers  # noqa: PLC0415 — 순환 import를 피한다
+
+        # 접수 Bot의 작업 + **그 일괄이 맡긴 작업** — 읽을 때 잇는다 (C5 §가상 직원, ADR-0085).
+        intake, batches = virtual_workers.runs_of(store, virtual_worker)
+        def belongs(row: Any) -> bool:
+            return virtual_workers.job_belongs(row, intake=intake, batches=batches)
     # 상태는 쉼표로 여럿 (C5 — CON-05의 상태 필터가 여러 개를 고른다).
     states = {one.strip() for one in state.split(",") if one.strip()} if state else None
     rows = store.rows("SELECT * FROM jobs ORDER BY requested_at DESC, job_id DESC")
@@ -278,6 +287,7 @@ def listing(
         and (target_type is None or row["target_type"] == target_type)
         and (target_id is None or row["target_id"] == target_id)
         and (bpm_process_id is None or row["bpm_process_id"] == bpm_process_id)
+        and (belongs is None or belongs(row))
     ]
     window = max(0, min(limit, LIST_LIMIT_MAX))
     return [info_of(store, row) for row in picked[offset : offset + window]]

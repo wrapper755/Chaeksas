@@ -12,5 +12,6 @@ export interface AnswerRequest {
   answer: {
     [k: string]: unknown;
   };
+  if_review_digest?: string | null;
   [k: string]: unknown;
 }

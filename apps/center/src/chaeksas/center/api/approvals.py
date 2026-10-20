@@ -33,6 +33,7 @@ from chaeksas.contracts.approvals import (
     Form,
     apply_defaults,
     normalize_name,
+    review_digest,
     validate_answer,
     validate_create,
 )
@@ -107,8 +108,8 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ApprovalIn
         cur.execute(
             "INSERT INTO approvals (request_id, owner_key_id, host_type, host_id, run_id, node_id,"
             " node_instance, bpm_process_id, version, title, description, form_json, review_json,"
-            " expires_at, body_hash, created_at, state, assignees_json)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " expires_at, body_hash, created_at, state, assignees_json, review_digest)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 request.request_id,
                 key.key_id,
@@ -129,6 +130,8 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ApprovalIn
                 OPEN,
                 # 담당자는 업무 값이 아니라 사람 이름이다 — 30일 삭제 대상이 아니다 (ADR-0080).
                 dumps(request.assignees) if request.assignees else None,
+                # 지문은 **값을 지워도 남는다** (ADR-0083) — 업무 값이 아니라 그 값의 지문이다.
+                review_digest(request.review),
             ),
         )
     return _info(_must(store, request.request_id), store), True
@@ -244,6 +247,10 @@ def answer(store: Store, found: Caller, request_id: str, raw: dict[str, Any]) ->
         request = AnswerRequest.model_validate(raw)
     except ValueError as e:
         raise ApiError(422, "input_invalid", "답이 계약과 맞지 않는다") from e
+
+    if request.if_review_digest is not None and request.if_review_digest != _digest_of(row):
+        # **답하는 쪽이 본 것과 다르다** (ADR-0083) — 받지 않는다. 다시 읽어 사람에게 보여야 한다.
+        raise ApiError(409, "review_changed", "본 검토 자료가 지금 결재와 다르다")
 
     form = _form_of(row)
     filled = apply_defaults(form, request.answer)
@@ -475,6 +482,15 @@ def _host_name(store: Store, row: Any) -> str | None:
     return str(found["name"]) if found is not None else None
 
 
+def _digest_of(row: Any) -> str | None:
+    """저장된 지문. 이 칸이 생기기 전의 결재는 **남은 값으로** 읽을 때 계산한다 (ADR-0083)."""
+    if row["review_digest"]:
+        return str(row["review_digest"])
+    if row["values_purged_at"]:
+        return None  # 값도 지문도 없다 — 맞춰 볼 근거가 없다
+    return review_digest(loads(row["review_json"], {}) or {})
+
+
 def _requested_by(store: Store, run_id: str) -> str | None:
     """그 실행을 시작한 작업의 `requested_by` (ADR-0080). **읽을 때** 붙이고 저장하지 않는다."""
     found = store.row(
@@ -510,6 +526,7 @@ def _info(row: Any, store: Store | None = None) -> ApprovalInfo:
         answered_by=row["answered_by"],
         answered_at=row["answered_at"],
         answered_via=row["answered_via"],
+        review_digest=_digest_of(row),
         requested_by=_requested_by(store, row["run_id"]) if store is not None else None,
         withdraw_reason=row["withdraw_reason"],
         delivered=bool(row["delivered"]),
