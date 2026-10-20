@@ -170,12 +170,21 @@ class Runner:
     def outputs(self) -> Path:
         return outputs.outputs_path(self.data_dir, self.run_id)
 
+    @property
+    def field_requests(self) -> Path:
+        return requests.field_requests_path(self.data_dir, self.run_id)
+
     def _post_requests(self, run: Run) -> None:
-        """`where=center`인 새 결재를 요청 파일에 쓴다 (ADR-0038) — Bot UI가 나른다."""
+        """새 결재·확인의 본문을 요청 파일에 쓴다.
+
+        `where=center`는 올릴 파일로(ADR-0038 — Bot UI가 나른다), 현장 것은 **결재 창이 읽을
+        파일로** 간다(ADR-0078 — 제목·검토 자료를 아는 것은 여기뿐이다).
+        """
         for pending in list(run.pendings.values()):
-            if pending.where != WHERE_CENTER or pending.request_id in self._posted:
+            if pending.request_id in self._posted:
                 continue
-            requests.append(self.requests, requests.create_request(run, pending).to_json_dict())
+            path = self.requests if pending.where == WHERE_CENTER else self.field_requests
+            requests.append(path, requests.create_request(run, pending).to_json_dict())
             self._posted.add(pending.request_id)
 
     def start(self) -> Run:
@@ -376,6 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     runner.post_outputs()
     control.clear(runner.control)
     requests.clear(runner.requests)
+    requests.clear(runner.field_requests)
     # 끝난 방식을 종료 코드로도 알린다 (ADR-0023 — 실행 기록과 함께 본다).
     return 0 if state is State.DONE else 1
 

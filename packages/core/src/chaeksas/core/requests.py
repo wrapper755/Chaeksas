@@ -5,6 +5,11 @@
 
 - 실행기가 `runs/<run_id>.requests.jsonl`에 **C6 `ApprovalCreateRequest` 본문 그대로** 한 줄씩
   덧붙인다. `where=center`인 것만 쓴다 (현장 결재는 올릴 이유가 없다).
+- **현장 결재·확인은 `runs/<run_id>.field-requests.jsonl`에** 같은 본문으로 쓴다
+  ([ADR-0078](../../../../docs/decisions/0078-field-approval-shows-what-to-judge.md)) — 올리지 않고
+  Bot UI의 결재 창(CMN-01)이 **읽기만** 한다. 제목·설명·검토 자료를 아는 것은 엔진뿐이라,
+  이것이 없으면 현장 결재자는 무엇을 승인하는지 모르고 누른다. 파일을 가른 것은 **올리는 길이
+  현장 결재를 나를 수 없게** 하려고다 (한 파일에 섞으면 고르는 자리가 하나 더 생긴다).
 - Bot UI가 하트비트 뒤에 읽어 `POST /approvals`로 올리고, 보낸 자리를 `.sent`에 남긴다 —
   **Bot UI는 내용을 짓지 않고 나르기만** 한다 (배포 봉투를 다루는 방식과 같다).
 - 끝나면 지운다 — 업무 값이 PC에 남지 않는다 (제어 파일과 같다).
@@ -23,11 +28,17 @@ from chaeksas.core.run_state import Pending, Run
 
 #: 요청 파일과 「어디까지 보냈나」 파일의 꼬리.
 REQUESTS_SUFFIX = ".requests.jsonl"
+#: 현장 결재·확인의 본문 (ADR-0078) — 올리지 않는다. 결재 창만 읽는다.
+FIELD_REQUESTS_SUFFIX = ".field-requests.jsonl"
 SENT_SUFFIX = ".sent"
 
 
 def requests_path(data_dir: Path, run_id: str) -> Path:
     return run_dir(data_dir) / f"{run_id}{REQUESTS_SUFFIX}"
+
+
+def field_requests_path(data_dir: Path, run_id: str) -> Path:
+    return run_dir(data_dir) / f"{run_id}{FIELD_REQUESTS_SUFFIX}"
 
 
 def _sent_path(path: Path) -> Path:
@@ -82,6 +93,20 @@ def unsent(path: Path) -> list[tuple[int, dict[str, Any]]]:
     return out
 
 
+def find(path: Path, request_id: str) -> dict[str, Any] | None:
+    """그 요청의 본문 (Bot UI 결재 창 쪽). 없거나 아직 쓰는 중이면 `None` — 부르는 쪽이 견딘다."""
+    if not path.is_file():
+        return None
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        try:
+            found = json.loads(raw)
+        except ValueError:
+            continue  # 쓰는 중인 마지막 줄
+        if isinstance(found, dict) and found.get("request_id") == request_id:
+            return found
+    return None
+
+
 def mark_sent(path: Path, through: int) -> None:
     """그 줄까지 보냈다 (또는 거부돼 지나갔다 — 한 줄이 큐를 영원히 막으면 안 된다)."""
     _sent_path(path).write_text(f"{through}\n", encoding="utf-8", newline="\n")
@@ -94,10 +119,13 @@ def clear(path: Path) -> None:
 
 
 __all__ = [
+    "FIELD_REQUESTS_SUFFIX",
     "REQUESTS_SUFFIX",
     "append",
     "clear",
     "create_request",
+    "field_requests_path",
+    "find",
     "mark_sent",
     "requests_path",
     "unsent",

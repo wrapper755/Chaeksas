@@ -158,6 +158,16 @@ def last_run_item(last: LastRun | None, running: Any) -> QTableWidgetItem:
     item.setToolTip(tip)
     return item
 
+
+def _form_from(raw: Any) -> Form | None:
+    """요청 본문의 폼 (C6). 읽을 수 없으면 `None` — 창은 그림의 폼으로라도 떠야 한다."""
+    if not raw:
+        return None
+    try:
+        return Form.model_validate(raw)
+    except ValueError:
+        return None
+
 @dataclass
 class ContributedPanel:
     """확장이 낸 칸 하나 (C13 `bot_ui.panels`) — 상자·그린 쪽·기다리는 런타임.
@@ -632,13 +642,20 @@ class MainWindow(QMainWindow):
         if running is None or not running.pendings:
             return
         asked = running.pendings[0]
-        node = running.bot.id
-        form = self._form_of(running, asked.node_id)
+        # **무엇을 판단하는지는 실행기가 쓴 본문이 말한다** (ADR-0078) — 제목·설명·검토 자료.
+        # 아직 쓰이지 않았으면 그림에서 폼만 읽어 승인·반려라도 할 수 있게 한다.
+        body = running.body_of(asked.request_id) or {}
+        form = _form_from(body.get("form")) or self._form_of(running, asked.node_id)
+        kind = "확인" if asked.is_confirmation else "결재"
+        title = str(body.get("title") or "") or f"{running.bot.name} — {asked.node_id}"
+        if asked.is_confirmation:
+            title = f"실행 확인 요청 — {title}"
         answer = ApprovalDialog.ask(
             self,
-            title=f"{running.bot.name} — {asked.node_id}",
-            description=f"{node}의 {'확인' if asked.is_confirmation else '결재'} 요청입니다.",
+            title=title,
+            description=str(body.get("description") or "") or f"{running.bot.name}의 {kind} 요청입니다.",
             form=form,
+            review=body.get("review") or None,
             layer=asked.layer,
         )
         if answer is None:

@@ -197,6 +197,23 @@ class Running:
         return requests.requests_path(self.data_dir, self.run_id)
 
     @property
+    def field_requests_path(self) -> Path:
+        """현장 결재·확인의 본문 (ADR-0078) — 실행기가 쓰고 결재 창이 **읽기만** 한다."""
+        return requests.field_requests_path(self.data_dir, self.run_id)
+
+    def body_of(self, request_id: str) -> dict[str, Any] | None:
+        """그 요청의 C6 본문 — 제목·설명·폼·검토 자료 (CMN-01, ADR-0078).
+
+        현장 것과 **Center로 올라간 것 둘 다** 본다 — 올라간 결재도 여기서 답할 수 있다
+        (ADR-0038). 실행기가 아직 쓰지 않았으면(기록 줄이 먼저 쓰인다) `None`이다.
+        """
+        for path in (self.field_requests_path, self.requests_path):
+            found = requests.find(path, request_id)
+            if found is not None:
+                return found
+        return None
+
+    @property
     def outputs_path(self) -> Path:
         """올라갈 위임 결과 (ADR-0062 §4) — 실행기가 쓰고 Bot UI가 나른다."""
         return outputs.outputs_path(self.data_dir, self.run_id)
@@ -323,6 +340,7 @@ class Running:
         self.outputs = outputs.take(self.outputs_path)
         control.clear(self.control_path)
         requests.clear(self.requests_path)
+        requests.clear(self.field_requests_path)
 
 
 @dataclass
