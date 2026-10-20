@@ -350,3 +350,51 @@ def test_a_business_value_that_is_not_json_is_caught(tmp_path: Path) -> None:
     run.variables["기한"] = timedelta(days=3)
     with pytest.raises(TypeError):
         json.dumps(dump(run), ensure_ascii=False)
+
+
+def test_a_parallel_loop_survives_a_restart_halfway(tmp_path: Path) -> None:
+    """**함께 도는 반복**도 담긴다 (ADR-0087) — 주인·차례 토큰과 미리 잡은 결과 자리가 그대로 온다.
+
+    `Run`에 칸이 늘지 않는다 — 토큰 목록이 이미 담기고 `LoopState`의 칸이 따라간다.
+    """
+    from chaeksas.core.delegation import RecordingDelegator
+
+    call = (
+        '{"delegate": {"bpm_process_id": "ops.item"}, "input": {"번호": "건"}, "output": {"답": "결과"}}'
+    )
+    loop = '{"collection": "건들", "item": "건", "result": "답", "collect_into": "답들"}'
+    process = read_process(
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" '
+        'xmlns:chk="urn:chaeksas:bpmn:1" id="Defs"><bpmn:process id="p.batch">'
+        '<bpmn:extensionElements><chk:process>{"run_location": "server"}</chk:process></bpmn:extensionElements>'
+        '<bpmn:startEvent id="S"/>'
+        '<bpmn:scriptTask id="Set" scriptFormat="chk-expr">'
+        "<bpmn:script>건들 = [1, 2, 3]</bpmn:script></bpmn:scriptTask>"
+        '<bpmn:callActivity id="Call"><bpmn:extensionElements>'
+        f"<chk:call>{call}</chk:call><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
+        '<bpmn:multiInstanceLoopCharacteristics isSequential="false" /></bpmn:callActivity>'
+        '<bpmn:endEvent id="E"/>'
+        '<bpmn:sequenceFlow id="f1" sourceRef="S" targetRef="Set"/>'
+        '<bpmn:sequenceFlow id="f2" sourceRef="Set" targetRef="Call"/>'
+        '<bpmn:sequenceFlow id="f3" sourceRef="Call" targetRef="E"/>'
+        "</bpmn:process></bpmn:definitions>"
+    )
+    port = RecordingDelegator()
+    engine = Engine()
+    run_id = new_run_id()
+    run = engine.start(process, run_id=run_id, log=RunLog(run_id=run_id), env=RunEnv(delegate=port))
+    engine.run_until_blocked(run)
+    engine.delegation_done(run, "job_dlg002", state="finished", outputs={"결과": "둘"})
+    engine.run_until_blocked(run)
+
+    back = roundtrip(run)
+    hosts = [t for t in back.tokens if t.loop is not None and t.loop.fanned_out]
+    assert len(hosts) == 1 and hosts[0].loop is not None
+    assert hosts[0].loop.results == [None, "둘", None]
+    assert sorted(t.loop.offset for t in back.tokens if t.loop is not None and t.loop.host) == [0, 2]
+    for job, answer in (("job_dlg003", "셋"), ("job_dlg001", "하나")):
+        engine.delegation_done(back, job, state="finished", outputs={"결과": answer})
+        engine.run_until_blocked(back)
+    assert back.state is State.DONE
+    assert back.variables["답들"] == ["하나", "둘", "셋"]

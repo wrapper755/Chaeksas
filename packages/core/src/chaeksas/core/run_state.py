@@ -114,7 +114,13 @@ class TaskFailed(EngineError):
 
 @dataclass
 class LoopState:
-    """반복(다중 인스턴스) 한 묶음 (C14 §반복)."""
+    """반복(다중 인스턴스) 한 묶음 (C14 §반복).
+
+    **함께 도는 반복은 토큰이 둘로 갈린다** ([ADR-0087](../decisions/0087-parallel-loop-on-the-server.md)) —
+    노드를 처음 밟은 **주인**은 목록 전체와 미리 잡은 결과 자리를 들고 멈추고, **차례 토큰**은
+    그 건 하나(`items=[건]`)와 전체에서의 자리(`offset`)와 주인(`host`)을 든다. 차례로 도는
+    반복은 지금처럼 토큰 하나가 `index`를 올린다.
+    """
 
     items: list[Any]
     item_name: str
@@ -122,11 +128,26 @@ class LoopState:
     collect_into: str
     index: int = 0
     results: list[Any] = field(default_factory=list)
+    #: 이 실행이 **차례로** 도는가 — 그림이 병렬이어도 PC에서는 참이다 (C14 §반복).
     sequential: bool = True
+    #: 차례 토큰이면 전체 목록에서 그 건의 자리 (0부터). 아니면 0.
+    offset: int = 0
+    #: 차례 토큰이면 주인 토큰의 id. 아니면 비어 있다.
+    host: str = ""
 
     @property
     def finished(self) -> bool:
         return self.index >= len(self.items)
+
+    @property
+    def position(self) -> int:
+        """지금 차례가 **전체에서** 몇 번째인가 — 위임의 `loop_index`다 (ADR-0082 §2)."""
+        return self.offset + self.index
+
+    @property
+    def fanned_out(self) -> bool:
+        """함께 도는 반복의 **주인**인가 (차례 토큰을 띄우고 기다린다)."""
+        return not self.sequential and not self.host
 
 
 @dataclass

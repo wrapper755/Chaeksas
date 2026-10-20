@@ -718,23 +718,47 @@ def test_the_contract_picks_the_same_receiver_as_the_engine() -> None:
 # ─────────────── 반복 위임 — 일괄 기동 (ADR-0082) ───────────────
 
 
-def batch_process() -> Any:
-    """세 건을 차례로 맡기고 결과를 모은다 (C14 §반복 — 호출에도 쓴다)."""
+def batch_process(
+    *, sequential: bool = True, location: str = "server", boundary: str = ""
+) -> Any:
+    """세 건을 맡기고 결과를 모은다 (C14 §반복 — 호출에도 쓴다).
+
+    `boundary`는 `Call_Batch`에 붙일 경계 정의 하나다 (`error`·`timer`) — 그 길은 `Task_Caught`로 간다.
+    """
     call = (
         '{"delegate": {"bpm_process_id": "ops.intake-item"}, '
         '"input": {"번호": "건"}, "output": {"답": "처리결과"}}'
     )
     loop = '{"collection": "건들", "item": "건", "result": "답", "collect_into": "답들"}'
+    attached = ""
+    if boundary == "error":
+        attached = (
+            '<bpmn:boundaryEvent id="Bnd_Batch" attachedToRef="Call_Batch">'
+            "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
+        )
+    elif boundary == "timer":
+        attached = (
+            '<bpmn:boundaryEvent id="Bnd_Batch" attachedToRef="Call_Batch" cancelActivity="true">'
+            "<bpmn:timerEventDefinition><bpmn:timeDuration>PT1H</bpmn:timeDuration>"
+            "</bpmn:timerEventDefinition></bpmn:boundaryEvent>"
+        )
+    caught = (
+        attached + script("Task_Caught", "잡힘 = True") + flow("f4", "Bnd_Batch", "Task_Caught")
+        + flow("f5", "Task_Caught", "End_1")
+    ) if attached else ""
     return make(
         '<bpmn:startEvent id="Start_1"/>'
         + script("Task_Set", "건들 = [10, 20, 30]")
         + '<bpmn:callActivity id="Call_Batch" calledElement="Proc_item"><bpmn:extensionElements>'
         + f"<chk:call>{call}</chk:call><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
-        + '<bpmn:multiInstanceLoopCharacteristics isSequential="true" /></bpmn:callActivity>'
+        + f'<bpmn:multiInstanceLoopCharacteristics isSequential="{str(sequential).lower()}" />'
+        + "</bpmn:callActivity>"
         + '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Task_Set")
         + flow("f2", "Task_Set", "Call_Batch")
         + flow("f3", "Call_Batch", "End_1")
+        + caught,
+        props=f'{{"run_location": "{location}"}}',
     )
 
 
@@ -770,3 +794,119 @@ def test_a_plain_delegation_has_no_loop_index() -> None:
     engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
     engine.run_until_blocked(run)
     assert port.calls[0].loop_index is None
+
+
+# ─────────────── 서버의 병렬 반복 — 함께 맡기고 함께 기다린다 (ADR-0087) ───────────────
+
+
+def node_states(run: Run, node_id: str) -> list[str]:
+    return [
+        e.data["state"] for e in run.log.events
+        if e.kind == "node_state" and e.node_id == node_id
+    ]
+
+
+def test_a_parallel_loop_on_the_server_hands_over_every_item_at_once() -> None:
+    """**N건을 한 번에 맡긴다** — 한 건이 끝나기를 기다리지 않는다 (C14 §반복, ADR-0087 §2).
+
+    결과는 **끝난 순서와 상관없이 입력 순서**이고, 노드의 시작·끝은 한 번이다.
+    """
+    port = RecordingDelegator()
+    engine, run = start(batch_process(sequential=False), RunEnv(processes={}, delegate=port))
+    assert engine.run_until_blocked(run) is State.WAITING
+    assert [(c.inputs, c.loop_index, c.node_instance) for c in port.calls] == [
+        ({"번호": 10}, 0, 1), ({"번호": 20}, 1, 1), ({"번호": 30}, 2, 1)
+    ], "세 건이 한 번에, 차례마다 제 자리로 맡겨진다"
+    jobs = sorted(str(w.job_id) for w in run.waits.values() if w.kind == "delegation")
+    assert jobs == ["job_dlg001", "job_dlg002", "job_dlg003"], "셋을 함께 기다린다"
+
+    # 끝나는 순서를 뒤섞는다 — 모으는 것은 입력 순서다.
+    for job, answer in (("job_dlg003", "셋"), ("job_dlg001", "하나"), ("job_dlg002", "둘")):
+        engine.delegation_done(run, job, state="finished", outputs={"처리결과": answer})
+        engine.run_until_blocked(run)
+    assert run.state is State.DONE
+    assert run.variables["답들"] == ["하나", "둘", "셋"]
+    assert "건" not in run.variables, "반복 항목은 반복 안에서만 보인다"
+    states = node_states(run, "Call_Batch")
+    assert states.count("started") == 1 and states.count("completed") == 1, states
+
+
+def test_a_parallel_loop_on_a_pc_still_runs_one_at_a_time() -> None:
+    """PC에서는 그림이 병렬이어도 **차례로** 돈다 — 실행 자리가 하나다 (ADR-0014, C14 §반복)."""
+    port = RecordingDelegator()
+    engine, run = start(
+        batch_process(sequential=False, location="pc"), RunEnv(processes={}, delegate=port)
+    )
+    engine.run_until_blocked(run)
+    assert len(port.calls) == 1
+
+
+def test_one_failed_item_withdraws_the_rest_and_the_boundary_catches_once() -> None:
+    """**한 건 실패는 나머지를 거둔다** (ADR-0087 §4) — 맡겨 둔 작업은 포트로 거두고 경계가 한 번 받는다."""
+    port = RecordingDelegator()
+    engine, run = start(
+        batch_process(sequential=False, boundary="error"), RunEnv(processes={}, delegate=port)
+    )
+    engine.run_until_blocked(run)
+    engine.delegation_done(run, "job_dlg001", state="finished", outputs={"처리결과": "하나"})
+    engine.delegation_done(run, "job_dlg002", state="failed", reason="거절")
+    assert sorted(port.withdrawn) == ["job_dlg003"], "끝난 것은 두고 기다리던 것만 거둔다"
+    assert not run.waits, "걷힌 기다림이 남지 않는다"
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["잡힘"] is True
+    assert run.variables["error_code"] == "DELEGATION_FAILED"
+    assert "답들" not in run.variables, "반복이 끝나지 않았으니 모은 목록은 없다"
+    assert node_states(run, "Call_Batch").count("failed") == 1
+
+
+def test_one_failed_item_without_a_boundary_fails_the_run_and_withdraws_the_rest() -> None:
+    port = RecordingDelegator()
+    engine, run = start(batch_process(sequential=False), RunEnv(processes={}, delegate=port))
+    engine.run_until_blocked(run)
+    assert engine.delegation_done(run, "job_dlg001", state="failed") is State.FAILED
+    assert sorted(port.withdrawn) == ["job_dlg002", "job_dlg003"]
+
+
+def test_a_handover_that_fails_at_once_withdraws_what_was_already_handed_over() -> None:
+    """맡기는 자리에서 실패해도 같다 — 먼저 맡긴 건을 거두고 아직 안 맡긴 건은 맡기지 않는다."""
+    port = RecordingDelegator(fails={"Call_Batch": "no_deployment"})
+    engine, run = start(
+        batch_process(sequential=False, boundary="error"), RunEnv(processes={}, delegate=port)
+    )
+    assert engine.run_until_blocked(run) is State.DONE
+    assert len(port.calls) == 1, "첫 건에서 멈춘다"
+    assert run.variables["잡힘"] is True
+
+
+def test_the_deadline_of_a_parallel_loop_withdraws_every_item() -> None:
+    """반복 노드의 기한(중단 타이머 경계)은 **활동 전체**의 것이다 — 울리면 모두 거둔다."""
+    clock = Clock()
+    port = RecordingDelegator()
+    engine, run = start(
+        batch_process(sequential=False, boundary="timer"),
+        RunEnv(processes={}, delegate=port, clock=clock),
+    )
+    engine.run_until_blocked(run)
+    timers = [w for w in run.waits.values() if w.kind == "timer"]
+    assert len(timers) == 1, "경계는 차례마다가 아니라 주인 하나에 걸린다"
+    engine.delegation_done(run, "job_dlg002", state="finished", outputs={"처리결과": "둘"})
+    engine.run_until_blocked(run)
+    clock.advance(hours=2)
+    assert engine.tick(run) is State.DONE
+    assert sorted(port.withdrawn) == ["job_dlg001", "job_dlg003"]
+    assert run.variables["잡힘"] is True
+
+
+def test_the_deadline_of_a_plain_delegation_withdraws_its_job() -> None:
+    """위임 호출의 기한이 울리면 **그 작업도 거둔다** — 받을 쪽이 없는 일을 남기지 않는다 (ADR-0087 §4)."""
+    clock = Clock()
+    port = RecordingDelegator()
+    engine, run = start(
+        batch_process(sequential=True, boundary="timer"),
+        RunEnv(processes={}, delegate=port, clock=clock),
+    )
+    engine.run_until_blocked(run)
+    clock.advance(hours=2)
+    assert engine.tick(run) is State.DONE
+    assert port.withdrawn == ["job_dlg001"]
+    assert run.variables["잡힘"] is True

@@ -28,6 +28,7 @@ Bot UI와 **같은 코드**(`core.deploy`·`core.packages`)이고 다른 것은 
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -179,6 +180,10 @@ class Agent:
     #: **받을 쪽이 없는 일**을 한다. 메모리뿐이다: 취소된 실행은 담아 둔 것도 지워져서
     #: 다시 뜬 실행기는 그 작업 id를 알 길이 없다 (그 값은 7일에 Center가 지운다).
     pending_cancels: list[str] = field(default_factory=list)
+    #: `pending_cancels`를 지키는 자물쇠 — **일꾼 스레드도 넣는다** (함께 도는 반복의 한 건이
+    #: 실패하면 엔진이 나머지를 거둔다, ADR-0087). 하트비트가 줄을 바꿔 끼우는 사이에 넣은
+    #: 것을 잃지 않게 한다.
+    _cancel_lock: threading.Lock = field(default_factory=threading.Lock)
     #: 확장 호스트 하나 (C13, ADR-0064) — **실행 위치를 쥔다**(서버에서 돌 수 있다고 적힌
     #: 태스크 종류만 낸다). 사전 점검과 실행이 **같은 것을 본다** — 점검이 다른 호스트를 보면
     #: 「점검은 통과했는데 실행이 안 된다」가 된다. **로컬 런타임은 띄우지 않는다.**
@@ -633,7 +638,7 @@ class Agent:
             approval_where=WHERE_CENTER,
             # **PC 위임은 Center에 맡긴다** (ADR-0062) — 어느 PC인가도 Center가 고른다.
             # Bot UI는 이 포트를 꽂지 않는다 (PC가 PC를 기다리면 서로를 기다릴 수 있다).
-            delegate=CenterDelegator(client=self.client),
+            delegate=CenterDelegator(client=self.client, on_withdraw=self.withdraw_later),
             # **확장 태스크** (C13·ADR-0064) — 호스트가 실행 위치를 쥐어 서버에서 돌 수 있는
             # 종류만 수행기를 낸다. 없는 종류는 엔진이 설치 오류로 올린다.
             extensions=self.extensions(),
@@ -707,7 +712,8 @@ class Agent:
                 )
                 return
             # **중지를 부탁하기 전에 읽는다** — `Engine.cancel`이 기다림을 비운다 (ADR-0062 §5).
-            self.pending_cancels.extend(found.delegation_jobs())
+            with self._cancel_lock:
+                self.pending_cancels.extend(found.delegation_jobs())
             found.stop(reason="Center에서 취소했습니다")
             log.info("작업 %s 취소를 실행 %s에 넘겼다", job_id, run_id)
             return
@@ -720,11 +726,13 @@ class Agent:
         **4xx는 다시 걸지 않는다** — 이미 시작됐거나(거절) 모르는 작업이다. 둘 다 답이고,
         다시 걸면 Center 로그만 쌓인다 (결재 올리기와 같은 결). **닿지 못한 것은 들고 있는다.**
         """
-        if not self.pending_cancels:
+        with self._cancel_lock:
+            todo, self.pending_cancels = self.pending_cancels, []
+        if not todo:
             return 0
         left: list[str] = []
         done = 0
-        for job_id in self.pending_cancels:
+        for job_id in todo:
             try:
                 self.client.cancel_delegation(job_id)
             except CenterProblem as e:
@@ -735,9 +743,20 @@ class Agent:
                 left.append(job_id)
                 continue
             done += 1
-            log.info("위임 %s를 거뒀다 (서버 실행이 취소됐다)", job_id)
-        self.pending_cancels = left
+            log.info("위임 %s를 거뒀다", job_id)
+        with self._cancel_lock:
+            self.pending_cancels = left + self.pending_cancels
         return done
+
+    def withdraw_later(self, job_id: str) -> None:
+        """엔진이 거둔 위임을 **다음 하트비트 뒤에** Center에서 거둔다 (ADR-0087 §4).
+
+        일꾼 스레드에서 불린다 — 함께 도는 반복의 한 건이 실패했거나 중단 경계가 울려 그 결과를
+        받을 쪽이 없어졌다. 실행 취소가 거두는 것과 **같은 줄**이다 (`cancel_delegations`).
+        """
+        with self._cancel_lock:
+            if job_id not in self.pending_cancels:
+                self.pending_cancels.append(job_id)
 
     # ── 결재 (C6 — 서버의 창구는 Center만이다) ──
 

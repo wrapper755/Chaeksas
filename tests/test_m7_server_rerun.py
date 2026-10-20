@@ -1094,7 +1094,8 @@ def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
     """**승인 뒤 일괄 취소** — 접수 실행을 취소하면 맡겨 둔 자식도 거둔다 (W6, ADR-0084).
 
     실행기를 잠깐 멈춰 **자식이 아직 시작되지 않은 순간**을 만든다 (결재 답은 멈춰도 내려간다).
-    차례로 돌므로 그때 맡겨진 것은 **한 건**이고, 남은 건은 아예 맡겨지지 않는다.
+    **병렬 반복이라 세 건이 한 번에 맡겨진다** (ADR-0087) — 한 건도 끝나지 않았는데 셋이 다
+    있다는 것이 「함께 맡긴다」의 증거다. 취소하면 셋 모두 거둬진다.
     """
     client, _, _ = center
     child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
@@ -1109,10 +1110,12 @@ def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
     paused = client.post(f"/api/v1/server-runners/{runner.server_runner_id}/pause", headers=ADMIN)
     assert paused.status_code < 400, paused.text
     _answer_open_approvals(client, case_approvals(FX24), None)
-    while not batch_children(client, str(child["id"])):
-        assert time.monotonic() < until, "승인 뒤 맡긴 작업이 없다"
+    while len(batch_children(client, str(child["id"]))) < 3:
+        assert time.monotonic() < until, "승인 뒤 세 건을 함께 맡기지 않았다"
         runner.tick()
         time.sleep(0.05)
+    handed = batch_children(client, str(child["id"]))
+    assert {one["state"] for one in handed} == {"pending"}, "한 건도 시작되지 않았는데 셋이 다 맡겨졌다"
 
     cancelled = client.delete(f"/api/v1/jobs/{job_id}", headers=ADMIN)
     assert cancelled.status_code == 202, cancelled.text
@@ -1121,5 +1124,5 @@ def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
         runner.tick()
         time.sleep(0.05)
 
-    [made] = batch_children(client, str(child["id"]))
-    assert made["state"] == "cancelled", made
+    made = batch_children(client, str(child["id"]))
+    assert [one["state"] for one in made] == ["cancelled"] * 3, made

@@ -145,6 +145,10 @@ class CaseDelegator:
         self.pending[job_id] = (call.node_id, dict(written))
         return job_id
 
+    def withdraw(self, job_id: str) -> None:
+        """거뒀다 (ADR-0087 — 함께 도는 반복의 한 건이 실패했다) — 적어 둔 결과를 돌려주지 않는다."""
+        self.pending.pop(job_id, None)
+
     def take(self) -> tuple[str, dict[str, Any]] | None:
         """아직 돌려주지 않은 것 하나 — `(job_id, 값)`. 없으면 `None`."""
         for job_id, (_, outputs) in self.pending.items():
