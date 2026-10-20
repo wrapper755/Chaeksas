@@ -48,7 +48,7 @@
 | `ui_session` | UI 태스크 한 번이 끝남 (Worker 보고 요약) | `business_key`(`<run_id>:<node_id>:<node_instance>:<attempt>`, C10), `page_id`, `result`(`success`\|`escalated`\|`failed`), `steps`, `fallback_depth_max`, `healed` | `session_id` |
 | `service_call` | 서비스 앱 작업 호출이 끝남 | `app_id`, `operation`, `mode`, `mode_used`, `status`(HTTP 코드), `duration_ms`, `key_ref`, `node_instance`, `attempt`, `call_seq` | `error_code`, `replayed`, `model`, `input_tokens`, `output_tokens` (C11 `usage`와 같은 이름) |
 | `human_requested` | 결재·확인 요청 | `layer`(`approval`\|`confirmation`), `request_id`(C6과 같은 id), `where`(`center`\|`field`) | `form_key`, `expires_at` |
-| `human_answered` | 답을 받음 (값 없음) | `request_id`, `answered_by` | |
+| `human_answered` | 답을 받음 (값 없음) | `request_id`, `answered_by` | `answered_via`(대리 답이면 그 키 이름 — C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)) |
 | `human_timeout` | 시간 초과 | `request_id` | |
 | `human_withdrawn` | 답 없이 끝남 — Center에서 회수되었거나 만료됨 (C6, [ADR-0038](../decisions/0038-approval-request-channel.md)) | `request_id`, `reason`(`admin_withdraw`\|`expired`\|`host_lost`, 열린 문자열) | |
 | `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`\|**`delegation`**) | `request_id`, `until`, `job_id`(**위임일 때 그 작업** — C12 `waiting[]`의 짝 칸과 같다) |
@@ -154,6 +154,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-20 | 1 | `human_answered`의 선택 칸 `answered_via` — 누가 답했나(`answered_by`)와 어느 길로 왔나를 가른다 | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-15 | 1 | **`source: delegation`·`parent_run_id`를 넣는 쪽이 생겼다** (Bot UI) — 작업의 `requested_by`(`server_bot:<run_id>`)를 읽어 `Engine.start(parent_run_id=…)`로 넘긴다. **모르면 넣지 않는다**(선택 칸 규칙 그대로). 형식은 그대로다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **PC 위임을 기다리다 이어 가는 쪽이 생겼다** (서버 실행기) — `run_resumed.reason`의 아는 값에 **`delegation`**을 더했다. 실패·거절로 돌아와 오류 경계로 가는 길도 「이어 간 것」이라 같은 까닭을 쓴다 (`withdraw`와 같은 결). 열린 문자열이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **PC 위임의 예약을 풀었다** — `source: delegation`·`parent_run_id`·`waiting_for: delegation`이 이제 아는 값이고, `run_waiting`에 선택 칸 `job_id`(C12 짝 칸과 같은 것)를 적었다. `RunInfo.parent_run_id`를 더해 **CON-01이 서버 실행 ↔ PC 실행을 오간다** — Center가 `run_started`에서 읽어 담는다. 선택 칸이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |

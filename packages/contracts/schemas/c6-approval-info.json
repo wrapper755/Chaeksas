@@ -136,6 +136,25 @@
       "default": null,
       "title": "Answered By"
     },
+    "answered_via": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answered Via"
+    },
+    "assignees": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assignees",
+      "type": "array"
+    },
     "bpm_process_id": {
       "title": "Bpm Process Id",
       "type": "string"
@@ -227,6 +246,18 @@
     "request_id": {
       "title": "Request Id",
       "type": "string"
+    },
+    "requested_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requested By"
     },
     "review": {
       "additionalProperties": true,

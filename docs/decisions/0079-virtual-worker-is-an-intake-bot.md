@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 제안 |
+| 상태 | 수락 (2026-10-20) |
 | 날짜 | 2026-10-20 |
 | 관련 | [C6](../03-contracts/C6-approvals.md), [C14](../03-contracts/C14-bpmn-extensions.md) §PC 위임·§반복, [C12](../03-contracts/C12-server-runner-center.md) §PC 위임, [C5](../03-contracts/C5-packages-deployments-jobs.md), [C1](../03-contracts/C1-package-manifest.md) `requires.delegations`, [ADR-0008](0008-map-driver-hands-boundary.md), [ADR-0018](0018-extensions.md), [ADR-0039](0039-optional-variables-and-b11.md), [ADR-0054](0054-server-run-state-and-concurrency.md), [ADR-0062](0062-pc-delegation.md), [ADR-0063](0063-stopping-a-running-server-run.md). 바깥 요청: 대화 창구 쪽 작업 요청서 W0~W6 (가상 직원·일괄 기동) |
 

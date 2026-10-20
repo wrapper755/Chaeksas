@@ -36,6 +36,15 @@ from chaeksas.contracts.signing import TARGET_ANY, AdminKey, Envelope, verify, v
 ACTOR_HEADER = "X-CHK-Actor"
 """콘솔 서버(BFF)가 로그인 세션의 사용자 이름을 실어 보낸다. **관리자·읽기 토큰일 때만 믿는다.**"""
 
+ON_BEHALF_HEADER = "X-CHK-On-Behalf-Of"
+"""사람 대신 부르는 키가 그 사람 이름을 싣는다 (ADR-0081). 퍼센트 인코딩한 UTF-8이다.
+
+대리 답용 키(`relay`)는 결재에 **반드시** 싣고 그 이름이 담당자여야 한다. 연동용 키는 작업·메시지에
+실어도 되고, 그때는 `JobInfo.on_behalf_of`로 **적기만** 한다 (`requested_by`는 키 이름 그대로)."""
+
+#: `X-CHK-On-Behalf-Of` 이름의 길이 상한 (정규화 뒤).
+MAX_ON_BEHALF_CHARS = 200
+
 CONTENT_HASH_HEADER = "X-Content-Hash"
 """패키지 내려받기 응답에 붙는다."""
 
@@ -85,6 +94,24 @@ DELEGATION_REQUESTER_PREFIX = "server_bot:"
 def delegation_requester(run_id: str) -> str:
     """맡긴 서버 실행 → `requested_by` (Center가 적는다 — 본문에서 받지 않는다)."""
     return f"{DELEGATION_REQUESTER_PREFIX}{run_id}"
+
+
+#: Center가 짓는 주체 이름의 앞머리 — 바깥에서 온 사람 이름이 이것으로 시작하면 받지 않는다.
+#: 받아 두면 기록을 읽는 쪽이 「Center가 지은 주체」와 가를 수 없다 (ADR-0081).
+RESERVED_ACTOR_PREFIXES: tuple[str, ...] = (DELEGATION_REQUESTER_PREFIX,)
+
+
+def on_behalf_violation(name: str) -> Violation | None:
+    """정규화한(`approvals.normalize_name`) `X-CHK-On-Behalf-Of` 이름 중 받지 않을 것 — 422 `on_behalf_invalid`."""
+    if not name:
+        reason = "비었다"
+    elif len(name) > MAX_ON_BEHALF_CHARS:
+        reason = f"{MAX_ON_BEHALF_CHARS}자를 넘는다"
+    elif name.startswith(RESERVED_ACTOR_PREFIXES):
+        reason = "Center가 짓는 주체 이름의 앞머리로 시작한다"
+    else:
+        return None
+    return Violation(rule="C5", code="on_behalf_invalid", message=f"{ON_BEHALF_HEADER} 이름이 {reason}")
 
 
 def delegated_run(requested_by: str | None) -> str | None:
@@ -408,6 +435,9 @@ class JobInfo(JobCreateRequest):
 
     job_id: JobId
     requested_by: str
+    #: 연동용 키가 `X-CHK-On-Behalf-Of`로 실은 사람 (ADR-0081) — **주장**이다. Center가 대조하지 않고
+    #: 권한을 바꾸지 않는다. `requested_by`(키 이름)는 그대로다.
+    on_behalf_of: str | None = None
     requested_at: Timestamp
     state: str  # 열린 문자열 (KNOWN_JOB_STATES)
     state_reason: str | None = None  # KNOWN_REJECT_REASONS / KNOWN_QUEUED_REASONS

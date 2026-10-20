@@ -100,7 +100,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 자율 수행 | `autonomous` | 수행 모드. AI가 방법을 찾아 수행하고 결과를 학습 자료로 남긴다. **Studio에서 개발 목적으로 실행할 때** |
 | 결정 수행 | `deterministic` | 수행 모드. 학습·등록된 대로 LLM 없이(또는 최소로) 수행한다. **Bot UI에서 Bot을 운영 실행할 때**, Studio의 재생 실행 |
 
-### 2-1. 가상 직원과 일괄 (제안 — [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md))
+### 2-1. 가상 직원과 일괄 ([ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md))
 
 | 화면 표기 | 코드 | 뜻 |
 | --- | --- | --- |
@@ -126,10 +126,11 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 결재 (업무 개입) | `approval` | BPMN UserTask. 업무상 사람이 결정해야 하는 것. Center로 올려 다른 사람이 답할 수 있다 |
 | 확인 (실행 개입) | `confirmation` | 실행 중 막힘(OTP, 애매한 클릭, Worker 응답 없음). 화면 앞 사람만 답할 수 있어 Center로 올리지 않는다 |
 | 전환 | `escalation` | 자동 치유가 한도를 넘어 사람에게 넘기는 것. 확인으로 이어진다 |
+| 결재 담당자 | `assignee` | 그 결재에 답할 사람. 그림(`chk:approval.assignees`)이 이름으로 정하고 C6에 실린다. 콘솔은 거르기만 하고, 대리 답은 담당자일 때만 받는다 ([ADR-0080](decisions/0080-approval-assignees.md)) |
 | 감독자 | `supervisor` | 가상 직원(§2-1)의 결재에 답하는 **사람**. 접수 Bot의 일괄 결재 담당자가 된다 |
 | 대리 답 | `on_behalf_of` | 연동하는 쪽(예: 대화 창구)이 **사람 대신** 결재 답을 Center에 나르는 것. 답한 사람(행위자)은 그 사람이고, 지나온 길(경로)은 키 이름이다 — 둘을 따로 적는다. 「위임」(`delegate`, PC 위임)과 다른 말이다 |
 
-> 제안: 감독자·대리 답은 [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md)가 정하는 말이다. 결재 담당자 칸·대리 답의 키·헤더는 그 뒤의 ADR이 정한다 — 계약·코드에는 아직 없다.
+> 상태: 감독자는 [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md), 결재 담당자는 [ADR-0080](decisions/0080-approval-assignees.md), 대리 답은 [ADR-0081](decisions/0081-answering-on-behalf.md)이 정한다. 계약 모델은 있고 Center·엔진·콘솔은 아직이다.
 
 ## 4. UI 자동화
 
@@ -161,6 +162,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 화면 표기 | 코드 | 뜻 |
 | --- | --- | --- |
 | 연동용 키 | `integration_key` | Center API 키의 한 종류. 외부 시스템이 작업을 만들 때 쓴다 (C5) |
+| 대리 답용 키 | `relay_key` | Center API 키의 한 종류 (`type: relay`). 연동하는 쪽이 **사람 대신 결재에 답할 때만** 쓴다 — 결재 읽기·답뿐이고, 그 사람(`X-CHK-On-Behalf-Of`)이 결재 담당자일 때만 받는다 ([ADR-0081](decisions/0081-answering-on-behalf.md)) |
 | Center API 키 | `center_api_key` | Center 콘솔에서 발급. **Bot UI 설정에 등록**해 Center 등록·하트비트·다운로드에 쓴다 (Studio용도 따로 발급). 키가 곧 그 Bot UI의 신원 |
 | 서비스 앱 API 키 | `service_api_key` | **각 서비스 앱의 관리 콘솔에서 발급.** 허용 작업·허용 수행 모드·만료를 가진다. Center는 발급·저장하지 않는다 |
 | 키 참조 | `key_ref` | BPM 프로세스 속성에 적는 키의 이름 (예: `finance-invoice`). 값은 Bot UI·Studio의 비밀 저장소에 있다 (확정, ADR-0013 §3) |

@@ -9,6 +9,7 @@
  * 노드로 돌아갈 수 있으므로 모델이 막는다.
  */
 export interface ApprovalCreateRequest {
+  assignees?: string[];
   bpm_process_id: string;
   description?: string | null;
   expires_at?: string | null;

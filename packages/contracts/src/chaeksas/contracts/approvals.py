@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Mapping
 from typing import Any
 
@@ -41,6 +42,34 @@ AUTO_WITHDRAW_REASONS = {
     "run_finished": "run_ended",  # C3 run_finished를 받았을 때
     "bot_ui_lost": "host_lost",  # 작업이 bot_ui_lost가 되었을 때 (C4 맞추기 규칙)
 }
+
+
+def normalize_name(raw: str) -> str:
+    """사람 이름 하나 — 앞뒤 공백을 걷고 NFC로 맞춘다 (ADR-0080).
+
+    담당자 대조·`?assignee=`·`X-CHK-On-Behalf-Of`가 **같은 함수**를 거쳐야 같은 이름이 같게 보인다.
+    """
+    return unicodedata.normalize("NFC", raw).strip()
+
+
+def normalize_assignees(value: Any) -> list[str]:
+    """결재 담당자 (C14 `chk:approval.assignees`를 푼 값) → C6 `assignees[]`.
+
+    이름 하나(글자) 또는 이름 목록을 받는다. 빈 것·겹치는 것은 버리고 순서는 지킨다.
+    `None`은 「담당자 없음」이다. **그 밖의 모양은 `TypeError`** — 그림의 버그라
+    부르는 쪽이 실행 오류로 올린다 (오류 경계로 받지 않는다).
+    """
+    if value is None:
+        return []
+    items = [value] if isinstance(value, str) else value
+    if not isinstance(items, list | tuple) or not all(isinstance(one, str) for one in items):
+        raise TypeError(f"결재 담당자는 이름(글자) 또는 이름 목록이어야 한다: {type(value).__name__}")
+    out: list[str] = []
+    for one in items:
+        name = normalize_name(one)
+        if name and name not in out:
+            out.append(name)
+    return out
 
 
 def request_id_for(run_id: str, node_id: str, node_instance: int) -> str:
@@ -97,6 +126,9 @@ class ApprovalCreateRequest(SchemaVersioned):
     # 폼의 「표시 변수」만 담고, 값은 끝난 뒤 VALUE_RETENTION_DAYS가 지나면 지운다.
     review: dict[str, Any] = Field(default_factory=dict)
     expires_at: Timestamp | None = None
+    #: 결재 담당자 (ADR-0080) — 실행하는 쪽이 그림에서 풀어 `normalize_assignees`로 싣는다.
+    #: 본문의 일부라 멱등 대조에 들어간다. 비면 담당자 없음.
+    assignees: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _request_id_matches_node(self) -> ApprovalCreateRequest:
@@ -115,6 +147,10 @@ class ApprovalInfo(ApprovalCreateRequest):
     answer: dict[str, Any] | None = None
     answered_by: str | None = None
     answered_at: Timestamp | None = None
+    #: 대리 답이면 그 키의 이름 (ADR-0081). 콘솔 답이면 없다.
+    answered_via: str | None = None
+    #: 그 실행을 시작한 작업의 `requested_by` (C5) — Center가 **읽을 때** 붙이고 저장하지 않는다.
+    requested_by: str | None = None
     withdraw_reason: str | None = None  # KNOWN_WITHDRAW_REASONS
     delivered: bool = False
     delivery_accepted: bool | None = None
@@ -124,7 +160,8 @@ class ApprovalInfo(ApprovalCreateRequest):
 class AnswerRequest(ContractModel):
     """`POST /api/v1/approvals/{request_id}/answer`.
 
-    `answered_by`는 **본문에서 받지 않는다.** 콘솔 BFF가 `X-CHK-Actor` 헤더로 보낸다.
+    `answered_by`는 **본문에서 받지 않는다.** 콘솔 BFF가 `X-CHK-Actor` 헤더로 보내고,
+    대리 답용 키는 `X-CHK-On-Behalf-Of`로 보낸다 (ADR-0081 — 그 사람이 담당자일 때만 받는다).
     """
 
     answer: dict[str, Any]

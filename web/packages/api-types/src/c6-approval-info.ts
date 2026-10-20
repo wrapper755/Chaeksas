@@ -11,6 +11,8 @@ export interface ApprovalInfo {
   } | null;
   answered_at?: string | null;
   answered_by?: string | null;
+  answered_via?: string | null;
+  assignees?: string[];
   bpm_process_id: string;
   created_at: string;
   delivered?: boolean;
@@ -24,6 +26,7 @@ export interface ApprovalInfo {
   node_id: string;
   node_instance: number;
   request_id: string;
+  requested_by?: string | null;
   review?: {
     [k: string]: unknown;
   };

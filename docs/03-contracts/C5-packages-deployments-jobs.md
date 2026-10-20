@@ -29,6 +29,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 - 목록 요청은 `limit`(기본 100, 최대 1000)과 `offset`을 쓴다. 시각은 시간대를 포함한 ISO 8601이다.
 - 오류 본문: `{"code": "...", "message": "...", "detail": {...}}` (C11과 같은 형식).
 - **행위자:** `requested_by`, `answered_by`, `uploaded_by`는 본문에서 받지 않는다. 키로 부르면 키 이름으로 채운다. 콘솔에서 부르면 콘솔 서버(BFF)가 로그인 세션의 사용자 이름을 `X-CHK-Actor` 헤더로 실어 보낸다. 이 헤더는 관리자·읽기 토큰으로 부를 때만 믿는다.
+  - **사람 대신 부르는 키는 `X-CHK-On-Behalf-Of`를 싣는다** ([ADR-0081](../decisions/0081-answering-on-behalf.md)). 대리 답용 키는 결재에 **반드시**(C6), 연동용 키는 `POST /jobs`·`POST /messages`에 **실어도 된다**. 작업에서는 **`on_behalf_of`로 적기만** 하고 `requested_by`는 그대로 키 이름이다 — `requested_by`는 권한의 주인이고 Bot UI가 그 앞머리 `server_bot:`로 위임 작업을 가르므로, 바깥에서 온 글을 그 칸에 넣지 않는다. 대조할 담당자가 없으니 **주장일 뿐**이고 권한을 바꾸지 않는다. 비었거나 200자를 넘거나 예약 앞머리로 시작하면 422 `on_behalf_invalid`.
   - **값은 UTF-8을 퍼센트 인코딩해서** 넣는다 (`운영자 김` → `%EC%9A%B4%EC%98%81%EC%9E%90%20%EA%B9%80`). HTTP 헤더 값에는 ASCII 밖의 글자를 넣을 수 없어서(보내는 쪽 HTTP 라이브러리가 거부한다), 한글 이름을 그대로 실으면 요청 자체가 나가지 않는다. 받는 쪽은 디코딩하고, 디코딩이 실패하면 받은 문자열을 그대로 쓴다.
 
 ### 인증
@@ -40,6 +41,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | Center API 키 — Studio용 | Studio | 패키지 업로드, 패키지·리소스 읽기 |
 | Center API 키 — Bot UI용 / 서버 실행기용 | 실행하는 쪽 | **자기에게 배포된** BPM 프로세스 패키지만 내려받기 (공유 BPM 프로세스는 그 안 `libs/`에 들어 있다) |
 | Center API 키 — 연동용 (신규, CON-11) | 외부 시스템 | 작업 만들기(`POST /jobs`)와 자기가 만든 작업 읽기·취소, 메시지 넣기(`POST /messages` — C12 §메시지) |
+| Center API 키 — 대리 답용 (`relay`) | 사람 대신 결재하는 연동 (대화 창구) | **결재 읽기·답뿐**이고 담당인 것만 (C6). 이 표의 엔드포인트는 하나도 부르지 못한다 |
 
 ### 엔드포인트별 권한
 
@@ -189,7 +191,8 @@ JobInfo는 위 필드에 다음을 더한다.
 | 필드 | 뜻 |
 | --- | --- |
 | `job_id` | `job_<hex8>` |
-| `requested_by` | 사람 이름, 키 이름, 또는 예약값 `server_bot:<run_id>` (PC 위임 제안) |
+| `requested_by` | 사람 이름, 키 이름, 또는 예약값 `server_bot:<run_id>` (PC 위임) |
+| `on_behalf_of`? | 연동용 키가 `X-CHK-On-Behalf-Of`로 실어 보낸 사람 이름 (**주장** — Center가 대조하지 않는다). 메시지 시작으로 만든 작업에는 그 메시지의 것을 옮긴다 (ADR-0081) |
 | `requested_at` | |
 | `state`, `state_reason`? | 아래 상태 표 |
 | `cancel_requested` | bool |
@@ -274,6 +277,7 @@ BotUiInfo 필드:
 | 410 | `revoked` | 철회된 패키지 내려받기 |
 | 413 | `too_large` | 패키지 50 MB 초과 |
 | 422 | C1 규칙 코드, `target_mismatch`(모르는 대상 종류), `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
+| 422 | `on_behalf_invalid` | `X-CHK-On-Behalf-Of`가 비었거나 200자를 넘거나 예약 앞머리로 시작함 (ADR-0081) |
 | 422 | `server_runner_not_available` | 서버 실행기 대상 (M7까지, ADR-0016). **배포와 작업 지시가 같다** — 상태 충돌이 아니라 **아직 없는 기능**이라 배포 쪽에서도 422다 |
 | 422 | `not_a_zip`, `manifest_missing`, `manifest_invalid`, `zip_too_many_entries`, `zip_unsafe_path`, `zip_too_large` | 업로드한 zip의 형식 오류. **400이 아니라 422다** — 본문은 읽혔고 내용이 계약과 맞지 않는다 |
 
@@ -286,6 +290,7 @@ BotUiInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-20 | 1 | **사람 대신 부르는 길** — `X-CHK-On-Behalf-Of`, `JobInfo.on_behalf_of`(주장, `requested_by`는 그대로), 대리 답용 키 줄, 오류 `on_behalf_invalid` | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-17 | 1 | **`download_count`·`last_downloaded_at`을 더했다** — 내어 준 횟수와 마지막 때(CON-06 「내려받은 횟수」). 셀 열을 더할 수단이 없어 화면에서 뺐던 것을 저장소 옮기기 단계(4판)로 되살렸다. 선택 칸이라 옛 응답을 읽는 쪽은 영향이 없다 | [0065](../decisions/0065-center-schema-migrations.md) |
 | 2026-10-12 | 1 | **툴팩 갈래가 사라졌다** ([ADR-0050](../decisions/0050-no-toolpack-kind.md)) — 내려받기 범위에서 `requires.toolpacks`가 빠지고(공유 BPM 프로세스는 패키지 안 `libs/`로 오므로 **따로 받는 것이 없다**), `dependents.relation`은 `lib` 하나이고 `pinned_hash`는 늘 `null`이다 | 0050 |
 | 2026-10-12 | 1 | **배포 대상은 등록된 PC여야 한다** (404 `target_not_found`). 「대상이 존재한다」를 어느 쪽도 보지 않아 **오타 하나가 201을 받고** 아무에게도 가지 않는 배포로 남았다 — `envelopes_for`는 `target_id`로 맞추고 CON-03에는 그 PC 줄이 없어 보여 줄 자리도 없다. 미리 배포해 두는 길이 막히는 것이 아니다: `bot_ui_id`는 Center가 **첫 등록에서 만들어** 등록 전에는 적을 id가 없다. 읽는 것은 Center, 판정은 계약이다 (ADR-0047 §다시 볼 조건 ②). **작업 지시의 같은 404도 `target_not_found`로 바꿨다** — 같은 조건에 두 이름을 두지 않는다 | 0049 |

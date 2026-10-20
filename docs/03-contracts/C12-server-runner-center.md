@@ -143,6 +143,7 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 ### 메시지 (외부 시스템 → Center)
 
 `POST /api/v1/messages`, 연동용 키 또는 관리자 토큰으로 부른다.
+연동용 키는 사람 이름을 `X-CHK-On-Behalf-Of`에 실을 수 있고, 메시지 시작으로 만든 작업의 `on_behalf_of`로 옮겨 적힌다 (C5, [ADR-0081](../decisions/0081-answering-on-behalf.md)).
 
 | 필드 | 뜻 |
 | --- | --- |

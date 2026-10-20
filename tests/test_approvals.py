@@ -22,7 +22,13 @@ from chaeksas.contracts import (
     validate_answer,
     validate_approval_create,
 )
-from chaeksas.contracts.approvals import AUTO_WITHDRAW_REASONS, VALUE_RETENTION_DAYS
+from chaeksas.contracts.approvals import (
+    AUTO_WITHDRAW_REASONS,
+    VALUE_RETENTION_DAYS,
+    normalize_assignees,
+    normalize_name,
+)
+from chaeksas.contracts.center_api import MAX_ON_BEHALF_CHARS, delegation_requester, on_behalf_violation
 
 RUN = "run_20261001_103000_d4e5f6"
 NOW = "2026-10-01T10:30:00+09:00"
@@ -263,3 +269,43 @@ def test_a_filled_none_still_passes_validation_for_optional_fields() -> None:
     """채운 `None`이 검증을 깨지 않는다 — 결재 창도 빈 칸을 `None`으로 보낸다 (CMN-01)."""
     form = Form(fields=[FormField(key="의견", label="의견", type="text")])
     assert validate_answer(form, answer_variables(form, {})) == []
+
+
+# ─────────────── 결재 담당자·대리 답 (ADR-0080·0081) ───────────────
+
+
+def test_assignees_are_normalized_once_for_every_comparison() -> None:
+    """담당자·`?assignee=`·`X-CHK-On-Behalf-Of`가 같은 함수를 거쳐야 같은 이름이 같게 보인다."""
+    decomposed = "\u1100\u1161\u11b7"  # 「감」을 자모로 쪼갠 것
+    assert normalize_name(f"  {decomposed}독 ") == "감독"
+    assert normalize_assignees(["김감독", " 김감독", "", "이감독"]) == ["김감독", "이감독"]
+    assert normalize_assignees("김감독") == ["김감독"]
+    assert normalize_assignees(None) == []
+
+
+def test_assignees_of_the_wrong_shape_are_a_picture_bug() -> None:
+    for bad in (3, {"이름": "김"}, ["김", 3]):
+        with pytest.raises(TypeError):
+            normalize_assignees(bad)
+
+
+def test_assignees_are_part_of_the_body() -> None:
+    """멱등 대조에 들어간다 — 같은 `request_id`에 다른 담당자는 다른 본문이다."""
+    assert request().assignees == []
+    assert request(assignees=["김감독"]).model_dump() != request().model_dump()
+
+
+def test_approval_info_keeps_the_route_apart_from_the_person() -> None:
+    info = ApprovalInfo.model_validate({
+        **request(assignees=["김감독"]).model_dump(by_alias=True),
+        "host": {"type": "server_runner", "id": "srv_1"}, "state": "answered", "created_at": NOW,
+        "answered_by": "김감독", "answered_via": "chaeksachat", "requested_by": "intake-key",
+    })
+    assert (info.answered_by, info.answered_via, info.requested_by) == ("김감독", "chaeksachat", "intake-key")
+
+
+def test_on_behalf_names_that_center_does_not_take() -> None:
+    assert on_behalf_violation("김감독") is None
+    for bad in ("", "가" * (MAX_ON_BEHALF_CHARS + 1), delegation_requester("run_x")):
+        found = on_behalf_violation(bad)
+        assert found is not None and found.code == "on_behalf_invalid", bad

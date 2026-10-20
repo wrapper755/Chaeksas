@@ -233,6 +233,7 @@ class ApprovalDispatch(ContractModel):
     answer: Any = None
     answered_by: str | None = None
     answered_at: Timestamp | None = None
+    answered_via: str | None = None  # 대리 답이면 그 키 이름 (C6, ADR-0081) — C3 human_answered에 남긴다
 
 
 class HeartbeatResponse(ContractModel):

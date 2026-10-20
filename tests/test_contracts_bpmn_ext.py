@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from chaeksas.contracts._base import SEVERITY_WARNING
 from chaeksas.contracts.bpmn_ext import (
     BUILTIN_VARS,
     BpmnReadError,
@@ -167,6 +168,33 @@ def test_b2_show_must_be_variable_names() -> None:
                     '<chk:approval>{"title": "확인", "show": ["대상 월"]}</chk:approval>'
                     "</bpmn:extensionElements></bpmn:userTask>"))
     assert "B2" in codes(xml)
+
+
+def _approval(kind: str, body: str) -> str:
+    return wrap(line(f'<bpmn:{kind} id="Ap"><bpmn:extensionElements>'
+                     f"<chk:approval>{body}</chk:approval>"
+                     f"</bpmn:extensionElements></bpmn:{kind}>"))
+
+
+def test_b2_assignees_are_a_name_list_or_one_variable_name() -> None:
+    """ADR-0080 — 배열은 글자 그대로의 이름, 글자 하나는 변수 이름이다 (`expires`와 같은 결)."""
+    for good in ('["김감독", "이감독"]', '"감독자"', "[]"):
+        assert "B2" not in codes(_approval("userTask", f'{{"title": "승인", "assignees": {good}}}')), good
+    # 글자 하나로 사람 이름을 적으면 변수로 읽힌다 — 띄어쓰기가 있으면 변수 이름도 아니다.
+    assert "B2" in codes(_approval("userTask", '{"title": "승인", "assignees": "김 감독"}'))
+    assert "B2" in codes(_approval("userTask", '{"title": "승인", "assignees": ["김감독", " "]}'))
+
+
+def test_b11_counts_the_assignees_variable_as_a_read() -> None:
+    """담당자 변수가 없으면 실행 오류다 — 조용히 「담당자 없음」이 되면 감독자가 사라진다."""
+    node = read_process(_approval("userTask", '{"title": "승인", "assignees": "감독자"}')).node("Ap")
+    assert node is not None and "감독자" in read_vars(node, [])
+
+
+def test_b12_warns_when_a_confirmation_names_assignees() -> None:
+    found = [v for v in validate(read_process(_approval("manualTask", '{"title": "확인", "assignees": ["김"]}')))
+             if v.rule == "B12"]
+    assert found and all(v.severity == SEVERITY_WARNING for v in found)
 
 
 def test_b3_unconditional_branch_must_be_default() -> None:

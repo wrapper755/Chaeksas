@@ -227,6 +227,8 @@ class Approval(ContractModel):
     fields: list[FormField] = Field(default_factory=list)
     location: str = "follow"  # APPROVAL_LOCATIONS
     expires: str | None = None  # ISO 기간 또는 변수 이름
+    #: 결재 담당자 (ADR-0080) — 이름 배열이거나 **변수 이름 하나**다 (`expires`와 같은 결). B2가 본다.
+    assignees: list[str] | str | None = None
 
 
 class Rule(ContractModel):
@@ -955,6 +957,8 @@ def read_vars(node: Node, flows: Sequence[Flow]) -> set[str]:
         # 오류」를 잡는 검사라 여기 넣으면 범주가 어긋난다 (FX-08이 그 경고를 받고 있었다).
         if approval.expires and is_var_name(approval.expires):
             out.add(approval.expires)
+        if isinstance(approval.assignees, str):
+            out.add(approval.assignees)
     call: ServiceCall | None = node.prop("serviceCall")
     if call is not None:
         out |= {v for expression in call.input.values() for v in expression_vars(expression)}
@@ -1171,7 +1175,19 @@ def _check_b1_b2(process: BpmnProcess) -> list[Violation]:
             bad = [name for name in approval.show if not is_var_name(name)]
             if bad:
                 out.append(_error("B2", f"{node.id}의 show에 변수 이름이 아닌 것이 있다", items=bad))
+            out.extend(_check_assignees(node.id, approval.assignees))
     return out
+
+
+def _check_assignees(node_id: str, assignees: list[str] | str | None) -> list[Violation]:
+    """B2 — 결재 담당자는 이름 배열(빈 글자 없음)이거나 변수 이름 하나다 (ADR-0080)."""
+    if isinstance(assignees, str):
+        if not is_var_name(assignees):
+            return [_error("B2", f"{node_id}의 assignees가 글자 하나면 변수 이름이어야 한다 "
+                                 "(이름을 적으려면 배열로)", items=[assignees])]
+    elif assignees and any(not name.strip() for name in assignees):
+        return [_error("B2", f"{node_id}의 assignees에 빈 이름이 있다")]
+    return []
 
 
 def _check_b3(process: BpmnProcess) -> list[Violation]:
@@ -1365,6 +1381,9 @@ def _check_b12(process: BpmnProcess) -> list[Violation]:
                     _warn("B12", f"{node.id}는 확인(수동 작업)이라 늘 현장에서 답한다 — "
                                  "location: center는 쓰이지 않는다")
                 )
+            if node.kind == "manualTask" and approval.assignees:
+                # 확인은 화면 앞 사람이 답한다 — 담당자를 적어도 아무도 쓰지 않는다 (ADR-0080).
+                out.append(_warn("B12", f"{node.id}는 확인(수동 작업)이라 담당자가 없다 — assignees는 쓰이지 않는다"))
             for field_ in approval.fields:
                 if field_.type not in KNOWN_FIELD_TYPES:
                     out.append(

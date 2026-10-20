@@ -67,6 +67,13 @@
   "additionalProperties": true,
   "description": "`POST /api/v1/approvals` — 실행하는 쪽이 결재를 올린다.\n\n`request_id`는 `run_id`·`node_id`·`node_instance`와 **맞아야 한다**. 어긋나면 답이 엉뚱한\n노드로 돌아갈 수 있으므로 모델이 막는다.",
   "properties": {
+    "assignees": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Assignees",
+      "type": "array"
+    },
     "bpm_process_id": {
       "title": "Bpm Process Id",
       "type": "string"

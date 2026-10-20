@@ -27,6 +27,9 @@ EXPIRY_WARNING_DAYS = 14
 
 #: `type`은 열린 문자열이지만 Center는 이 넷만 발급한다.
 ISSUABLE_KEY_TYPES = frozenset({"bot_ui", "studio", "server_runner", "integration"})
+#: 대리 답용 키 (ADR-0081) — 결재 읽기·답뿐이다. **아직 `ISSUABLE_KEY_TYPES`에 넣지 않는다**:
+#: Center가 이 종류의 권한을 가르기 전에 발급하면 권한 없는 키, 또는 넓은 키가 나간다.
+RELAY_KEY_TYPE = "relay"
 KNOWN_KEY_STATES = frozenset({"active", "expired", "revoked"})
 
 KeyId = Annotated[str, Field(pattern=r"^ck_[0-9a-f]{8}$")]

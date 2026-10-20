@@ -41,6 +41,7 @@ export interface ApprovalDispatch {
   };
   answered_at?: string | null;
   answered_by?: string | null;
+  answered_via?: string | null;
   request_id: string;
   state: string;
   [k: string]: unknown;
