@@ -92,7 +92,7 @@
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
-      <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
+      <bpmn:multiInstanceLoopCharacteristics isSequential="false" />
     </bpmn:callActivity>
     <bpmn:scriptTask id="Task_Tally" name="결과 세기" scriptFormat="chk-expr">
       <bpmn:incoming>Flow_06</bpmn:incoming>

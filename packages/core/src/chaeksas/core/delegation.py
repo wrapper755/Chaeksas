@@ -52,9 +52,17 @@ class DelegationUnsupported(RuntimeError):
 
 @runtime_checkable
 class Delegator(Protocol):
-    """위임을 맡는 쪽. 돌려주는 것은 **그 작업의 id**다 (기다릴 때 그것으로 찾는다)."""
+    """위임을 맡는 쪽. 돌려주는 것은 **그 작업의 id**다 (기다릴 때 그것으로 찾는다).
+
+    `withdraw`는 **기다림을 걷을 때** 엔진이 부른다 — 함께 도는 반복에서 한 건이 실패했거나
+    중단 경계가 울려 그 결과를 받을 쪽이 없어졌다 ([ADR-0087](../decisions/0087-parallel-loop-on-the-server.md)).
+    **예외를 내지 않는다** — 거두지 못한 것은 맡은 쪽이 들고 있다 다시 건다(업무가 기다릴 일이
+    아니다). 시작된 작업을 정말 멈추는지는 받는 쪽의 취소 규칙이 정한다 (C5).
+    """
 
     def delegate(self, call: DelegationCall) -> str: ...
+
+    def withdraw(self, job_id: str) -> None: ...
 
 
 class NoDelegator:
@@ -69,6 +77,9 @@ class NoDelegator:
             f"PC 위임을 맡길 곳이 없다: {call.bpm_process_id} — 실행하는 쪽이 끼워야 한다"
         )
 
+    def withdraw(self, job_id: str) -> None:
+        """맡긴 것이 없으니 거둘 것도 없다."""
+
 
 @dataclass
 class RecordingDelegator:
@@ -80,6 +91,8 @@ class RecordingDelegator:
     calls: list[DelegationCall] = field(default_factory=list)
     fails: Mapping[str, str] = field(default_factory=dict)
     next_id: int = 1
+    #: 거둔 작업 id (ADR-0087) — 시험이 「나머지를 거뒀나」를 본다.
+    withdrawn: list[str] = field(default_factory=list)
 
     def delegate(self, call: DelegationCall) -> str:
         self.calls.append(call)
@@ -89,6 +102,9 @@ class RecordingDelegator:
         job_id = f"job_dlg{self.next_id:03d}"
         self.next_id += 1
         return job_id
+
+    def withdraw(self, job_id: str) -> None:
+        self.withdrawn.append(job_id)
 
 
 __all__ = [

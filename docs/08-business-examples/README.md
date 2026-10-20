@@ -133,7 +133,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [FX-21](feature-examples.md#fx-21-결정표-적중-정책-uniqueany) | 결정표 적중 정책 (UNIQUE·ANY) | 서버 | 수동 실행 | — | DMN 적중 정책 `UNIQUE`; DMN 적중 정책 `ANY` (겹치는 줄, 같은 결과); 맞는 줄 없음 = 모든 출력 `None` |
 | [FX-22](feature-examples.md#fx-22-파일-출력--csv-덧붙이기와-txt) | 파일 출력 — csv 덧붙이기와 txt | 서버 | 수동 실행 | — | 파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만); 파일 출력 `txt` + `template`; 쓴 파일을 `chk:fileList`로 되세기 |
 | [FX-23](feature-examples.md#fx-23-재생-모드-셋-planfullnone) | 재생 모드 셋 (plan·full·none) | 서버 | 수동 실행 | — | 재생 모드 `plan`(기본)·`full`·`none`을 한 그림에서; `full`은 도구가 있어야 한다 (B12); `none`은 되밟지 않는다 |
-| [FX-24](feature-examples.md#fx-24-일괄-기동--접수-bot) | 일괄 기동 — 접수 Bot | 서버 | 작업 지시 | — | **일괄 기동** — Call Activity 반복 + 위임 (`chk:loop` + `chk:call.delegate`); 서버 Bot에 위임; 결재 담당자 (`assignees`) |
+| [FX-24](feature-examples.md#fx-24-일괄-기동--접수-bot) | 일괄 기동 — 접수 Bot | 서버 | 작업 지시 | — | **일괄 기동** — Call Activity 반복 + 위임 (`chk:loop` + `chk:call.delegate`); 서버 Bot에 위임; **병렬 반복** — 건을 한 번에 맡기고 함께 기다린다 (`isSequential=false`, ADR-0087) |
 | [FX-25](feature-examples.md#fx-25-일괄-기동의-한-건) | 일괄 기동의 한 건 | 서버 | 작업 지시 | — | 위임으로 시작하는 서버 Bot; `outputs` 선언 — 맡긴 쪽이 받을 것 |
 
 ## BPMN 요소 커버리지
@@ -168,8 +168,8 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 중간 던지기 — 이정표(없음) | BX-05 |
 | 중간 던지기·받기 — 신호 | FX-13 |
 | 중간 받기 — 타이머 | FX-13, FX-14 |
-| 반복 — 차례 | BX-01, BX-04, BX-06, BX-07, BX-08, BX-17, BX-23, BX-36, FX-09, FX-24 |
-| 반복 — 병렬 | BX-06, BX-23, BX-35, FX-18 |
+| 반복 — 차례 | BX-01, BX-04, BX-06, BX-07, BX-08, BX-17, BX-23, BX-36, FX-09 |
+| 반복 — 병렬 | BX-06, BX-23, BX-35, FX-18, FX-24 |
 | 경계 — 타이머 중단 | BX-03, BX-11, BX-13, BX-34, FX-14 |
 | 경계 — 타이머 비중단 | BX-03, BX-05, BX-20 |
 | 경계 — 오류 | BX-01, BX-02, BX-03, BX-16, BX-22, BX-32, BX-36, FX-08, FX-10, FX-17, FX-24 |

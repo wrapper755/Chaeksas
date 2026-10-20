@@ -832,6 +832,28 @@ def test_a_cancel_that_did_not_reach_center_is_tried_again(
     assert center.get(f"/api/v1/jobs/{delegated_job}", headers=ADMIN).json()["state"] == "cancelled"
 
 
+def test_what_the_engine_withdraws_is_revoked_after_the_heartbeat(
+    center: TestClient, private: Any, runner: agent_mod.Agent
+) -> None:
+    """엔진이 걷은 위임도 **실행 취소와 같은 줄**로 거둔다 (ADR-0087 §4).
+
+    함께 도는 반복의 한 건이 실패하거나 중단 경계가 울리면 엔진이 포트의 `withdraw`를 부른다 —
+    일꾼 스레드에서 Center를 부르지 않고 줄에 넣고, **하트비트 뒤에** 거둔다.
+    """
+    ready(center, private, runner)
+    make_job(center)
+    run_id = until_waiting_for_delegation(runner)
+    delegated_job = str(waiting_row(center)["job_id"])
+    run = runner.workers[run_id].run
+    assert run is not None
+
+    run.env.delegate.withdraw(delegated_job)  # 엔진이 기다림을 걷을 때 부르는 그 자리
+    assert runner.pending_cancels == [delegated_job], "그 자리에서 Center를 부르지 않는다"
+    runner.tick()
+    assert runner.pending_cancels == []
+    assert center.get(f"/api/v1/jobs/{delegated_job}", headers=ADMIN).json()["state"] == "cancelled"
+
+
 def test_who_delegated_a_run_survives_a_restart(tmp_path: Path) -> None:
     """맡겨진 실행은 **재시작을 건너서도** 결과를 올린다 — 맡긴 쪽을 스냅샷과 따로 적는다 (ADR-0082).
 

@@ -2,7 +2,8 @@
 
 **토큰이 여러 개일 수 있다.** 병렬·포함 게이트웨이가 갈라고 합치며, 하위 프로세스는 안쪽에
 토큰을 하나 만들어 끝날 때까지 바깥 토큰을 세워 둔다. 반복(다중 인스턴스)은 한 노드를 여러 번
-밟는다. PC에서는 실행 자리가 하나라 **한 번에 토큰 하나씩** 번갈아 밟는다 (ADR-0014·C14 §반복).
+밟는다 — 차례로 돌거나, **서버 그림의 병렬 반복이면 차례마다 토큰을 하나씩 띄워 함께 기다린다**
+(ADR-0087). 어느 쪽이든 **한 번에 토큰 하나씩** 번갈아 밟는다 (ADR-0014·C14 §반복).
 
 사람을 기다리면 그 토큰만 멈춘다 (`State.WAITING`). 엔진은 스레드를 만들지 않는다 — 부르는
 쪽(Bot UI·Studio)이 `step()`을 돈다.
@@ -291,15 +292,19 @@ class Engine:
         context = Context(engine=self, run=run, token=token, node=node)
         try:
             self._prepare_loop(context)
-            if token.loop is not None and token.loop.finished:
+            loop = token.loop
+            if loop is not None and loop.finished:
                 # 반복할 것이 없다 — 수행기를 부르지 않고 지나간다 (C3 `skipped`).
                 run.log.emit("node_state", node_id=node.id, state="skipped", task_type=task_type(node))
-                run.variables[token.loop.collect_into] = []
+                run.variables[loop.collect_into] = []
                 token.loop = None
                 return self._move(context, None)
+            if loop is not None and loop.fanned_out:
+                return self._fan_out(context, loop)
 
             self._prepare_iteration(context)
-            if token.loop is None or token.loop.index == 0:
+            # 노드의 시작은 **한 번**이다 — 차례로 돌면 첫 차례에, 함께 돌면 주인이 남긴다.
+            if loop is None or (loop.index == 0 and not loop.host):
                 run.instances[node.id] = run.instances.get(node.id, 0) + 1
                 run.log.emit("node_state", node_id=node.id, state="started", task_type=task_type(node))
             outcome = handler(context)
@@ -352,7 +357,10 @@ class Engine:
                 return True
             try:
                 self._collect_call(context, child)
-                self.pass_through(run, token)
+                # 반복이 붙은 호출이면 그 차례를 모은다 — `pass_through`는 반복을 모른다.
+                self._apply(context, Go())
+            except ExprError as e:
+                self._handle_failure(context, EngineError(e.reason, node_id=node.id, code="expr_error"))
             except EngineError as e:
                 self._handle_failure(context, e)
             return True
@@ -392,8 +400,10 @@ class Engine:
         if isinstance(outcome, Wait):
             run.log.emit("node_state", node_id=node.id, state="waiting", task_type=task_type(node))
             token.waiting_for = outcome.key
-            # 멈춰 있는 동안에만 경계가 울릴 수 있다 (기한 초과·독촉·중단 신호).
-            self.arm_boundaries(context, token)
+            # 멈춰 있는 동안에만 경계가 울릴 수 있다 (기한 초과·독촉·중단 신호). 함께 도는
+            # 반복의 차례 토큰은 켜지 않는다 — 그 노드의 경계는 **활동 전체**의 것이라 주인이 켠다.
+            if token.loop is None or not token.loop.host:
+                self.arm_boundaries(context, token)
             run.state = State.WAITING
             return run.state
 
@@ -404,9 +414,15 @@ class Engine:
         # 반복이 남았으면 같은 노드를 다시 밟는다 (PC는 차례로, C14 §반복).
         loop = token.loop
         if loop is not None:
-            self._collect_iteration(context, loop)
-            if not loop.finished:
-                return run.state  # 다음 `step()`이 같은 노드를 또 밟는다
+            if loop.host:
+                # 함께 도는 반복의 한 차례 — 제 자리에 넣고 사라진다 (ADR-0087).
+                self._collect_iteration(context, loop)
+                return self._instance_done(context, loop)
+            if loop.sequential:
+                self._collect_iteration(context, loop)
+                if not loop.finished:
+                    return run.state  # 다음 `step()`이 같은 노드를 또 밟는다
+            # 여기 오면 다 돌았다 — 차례로 돈 것이든, 주인이 마지막 차례를 받은 것이든.
             run.variables[loop.collect_into] = list(loop.results)
             run.variables.pop(loop.item_name, None)  # 반복 안에서만 보이는 이름이다
             token.loop = None
@@ -496,7 +512,11 @@ class Engine:
     # ── 반복 (다중 인스턴스) ──
 
     def _prepare_loop(self, context: Context) -> None:
-        """반복을 처음 만나면 목록을 펼쳐 둔다 (C14 §반복)."""
+        """반복을 처음 만나면 목록을 펼쳐 둔다 (C14 §반복).
+
+        **함께 도는 것은 서버 그림의 병렬 반복뿐이다** (ADR-0087) — 판단은 **도는 그림의**
+        실행 위치다. PC에서는 그림이 병렬이어도 차례로 돈다 (실행 자리 하나, ADR-0014).
+        """
         token, node, run = context.token, context.node, context.run
         if token.loop is not None:
             return
@@ -512,15 +532,75 @@ class Engine:
             raise EngineError(
                 f"반복할 목록이 아니다: {type(items).__name__}", node_id=node.id, code="loop_not_a_list"
             )
+        together = node.is_sequential is False and run.process.info.run_location == "server"
         token.loop = LoopState(
             items=list(items),
             item_name=spec.item,
             result_name=spec.result,
             collect_into=spec.collect_into,
-            sequential=node.is_sequential is not False,
+            sequential=not together,
         )
-        # 병렬로 적혀 있어도 PC에서는 차례로 돈다 (C14 §반복).
-        context.emit("log", level="info", message=f"반복 {len(token.loop.items)}건 (차례로)")
+        how = "함께" if together else "차례로"
+        context.emit("log", level="info", message=f"반복 {len(token.loop.items)}건 ({how})")
+
+    def _fan_out(self, context: Context, loop: LoopState) -> State:
+        """함께 도는 반복 — 주인이 멈추고 **차례마다 토큰을 하나씩** 띄운다 (ADR-0087 §2).
+
+        차례 토큰은 그 건 하나와 전체에서의 자리를 들고 같은 노드를 **한 번** 밟는다. 기다림은
+        여전히 토큰 하나에 하나다 — 그래서 답·위임 결과·스냅샷이 지금 길을 그대로 탄다.
+        결과 자리는 **건수만큼 미리 잡는다** (끝난 순서와 상관없이 입력 순서다).
+        """
+        run, token, node = context.run, context.token, context.node
+        run.instances[node.id] = run.instances.get(node.id, 0) + 1
+        run.log.emit("node_state", node_id=node.id, state="started", task_type=task_type(node))
+        if loop.result_name:
+            loop.results = [None] * len(loop.items)
+        spawned = [
+            Token(
+                id=new_token_id(),
+                node_id=node.id,
+                scope=token.scope,
+                loop=LoopState(
+                    items=[item],
+                    item_name=loop.item_name,
+                    result_name=loop.result_name,
+                    collect_into=loop.collect_into,
+                    sequential=False,
+                    offset=offset,
+                    host=token.id,
+                ),
+            )
+            for offset, item in enumerate(loop.items)
+        ]
+        # 주인 바로 뒤에 둔다 — 번갈아 밀 때 첫 차례부터 나아간다 (`Run.runnable`).
+        at = run.tokens.index(token) + 1
+        run.tokens[at:at] = spawned
+        # 주인은 **활동 전체**를 기다린다 — 그 노드의 경계(기한 등)는 주인이 켠다.
+        return self._apply(context, Wait(key=f"loop:{node.id}:{token.id}"))
+
+    def _instance_done(self, context: Context, loop: LoopState) -> State:
+        """차례 하나가 끝났다 — **제 자리**에 결과를 넣고 사라진다. 마지막이면 주인이 이어 간다."""
+        run, token = context.run, context.token
+        run.tokens.remove(token)
+        host = run.token(loop.host)
+        if host is None or host.loop is None:
+            return self._settle(run)  # 주인이 이미 걷혔다 — 받을 쪽이 없다
+        if host.loop.result_name and loop.results:
+            host.loop.results[loop.offset] = loop.results[0]
+        if any(t.loop is not None and t.loop.host == host.id for t in run.tokens):
+            return run.state  # 다른 차례가 아직 돈다
+
+        host.waiting_for = None
+        self.disarm(run, host.id)
+        finishing = Context(engine=self, run=run, token=host, node=context.node)
+        try:
+            return self._apply(finishing, Go())
+        except ExprError as e:
+            return self._handle_failure(
+                finishing, EngineError(e.reason, node_id=finishing.node.id, code="expr_error")
+            )
+        except EngineError as e:
+            return self._handle_failure(finishing, e)
 
     def _prepare_iteration(self, context: Context) -> None:
         """이번 번째의 `item`을 변수로 올려 둔다 (C14 §반복)."""
@@ -539,7 +619,13 @@ class Engine:
     # ── 실패·오류 경계 ──
 
     def _handle_failure(self, context: Context, error: EngineError) -> State:
-        """오류 경계가 붙어 있으면 그 길로 보내고, 없으면 실행을 실패로 끝낸다 (C14 §이벤트)."""
+        """오류 경계가 붙어 있으면 그 길로 보내고, 없으면 실행을 실패로 끝낸다 (C14 §이벤트).
+
+        함께 도는 반복의 차례 하나가 실패하면 그 실패는 **주인의 것**이다 (ADR-0087 §4) —
+        나머지 차례가 쥔 것을 걷고(맡긴 작업은 거둔다) 반복 노드의 오류 경계가 **한 번** 받는다.
+        """
+        if context.token.loop is not None and context.token.loop.host:
+            context = self._fail_together(context)
         run, token, node = context.run, context.token, context.node
         boundary = self._error_boundary(run, node, error)
         if boundary is None:
@@ -569,6 +655,18 @@ class Engine:
         for extra in flows[1:]:
             run.tokens.append(Token(id=new_token_id(), node_id=extra.target, scope=token.scope))
         return run.state
+
+    def _fail_together(self, context: Context) -> Context:
+        """실패한 차례를 지우고 주인이 쥔 것을 걷는다 — 이제 **주인**이 실패를 받는다."""
+        run, token = context.run, context.token
+        host_id = token.loop.host if token.loop is not None else ""
+        if token in run.tokens:
+            run.tokens.remove(token)
+        host = run.token(host_id)
+        if host is None:  # pragma: no cover - 차례가 남아 있는 동안 주인은 지워지지 않는다
+            return context
+        self._cancel(run, host)
+        return Context(engine=self, run=run, token=host, node=context.node)
 
     def _error_boundary(self, run: Run, node: Node, error: EngineError) -> Node | None:
         """그 실패를 받을 오류 경계. 코드가 맞는 것이 먼저, 없으면 코드를 적지 않은 것."""
@@ -797,18 +895,35 @@ class Engine:
         return run.state
 
     def _cancel(self, run: Run, host: Token) -> None:
-        """끊긴 호스트가 쥐고 있던 것을 걷는다 (결재 요청·안쪽 토큰·자기 기다림·경계)."""
+        """끊긴 호스트가 쥐고 있던 것을 걷는다 (결재 요청·안쪽 토큰·자기 기다림·경계).
+
+        **맡긴 작업은 거둔다** (ADR-0087 §4) — 결과를 받을 쪽이 없어졌다. 함께 도는 반복의
+        주인이면 차례 토큰과 그들이 쥔 것도 걷는다. 반복은 거기서 끝난다 (`loop`을 비운다 —
+        남겨 두면 다음 노드가 반복인 줄 안다).
+        """
         key = host.waiting_for
         host.waiting_for = None
         self.disarm(run, host.id)
         if key is None:
+            host.loop = None
             return
         run.pendings.pop(key, None)
-        run.waits.pop(key, None)
+        dropped = run.waits.pop(key, None)
+        if dropped is not None and dropped.kind == WAIT_DELEGATION and dropped.job_id:
+            run.log.emit(
+                "log", node_id=dropped.node_id, level="info",
+                message=f"맡긴 작업을 거둔다 (작업 {dropped.job_id})",
+            )
+            run.env.delegate.withdraw(dropped.job_id)
         if key.startswith("sub:"):
             inside = key[len("sub:") :]
             run.tokens = [t for t in run.tokens if inside not in t.scope]
+        if key.startswith("loop:"):
+            for one in [t for t in run.tokens if t.loop is not None and t.loop.host == host.id]:
+                self._cancel(run, one)
+                run.tokens.remove(one)
         run.children.pop(key, None)
+        host.loop = None
 
     # ── 사람 (결재·확인) ──
 

@@ -1043,7 +1043,8 @@ def _delegate(context: Context, spec: Call, delegate: Delegate) -> Outcome:
         inputs=inputs,
         # **반복 차례도 자리의 일부다** (ADR-0082) — 엔진은 반복 중에 `node_instance`를 올리지
         # 않으므로 이것 없이는 2건째부터 1건째 작업이 돌아온다.
-        loop_index=context.token.loop.index if context.token.loop is not None else None,
+        # 함께 도는 반복이면 그 건의 **전체에서의** 자리다 (ADR-0087) — 키가 차례로 돌 때와 같다.
+        loop_index=context.token.loop.position if context.token.loop is not None else None,
     )
     try:
         job_id = run.env.delegate.delegate(call)

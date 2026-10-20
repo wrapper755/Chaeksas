@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from chaeksas.contracts.server_runner import DelegationRequest
@@ -36,6 +37,9 @@ class CenterDelegator:
     """`RunEnv.delegate`에 꽂히는 것. **Center 클라이언트 하나**만 안다."""
 
     client: CenterClient
+    #: 거둘 작업을 넘길 곳 (ADR-0087 §4) — 실행기가 **하트비트 뒤에** Center 취소를 건다.
+    #: 주지 않으면 거두지 않는다 (기록만 남는다).
+    on_withdraw: Callable[[str], None] | None = None
 
     def delegate(self, call: DelegationCall) -> str:
         """맡기고 **작업 id**를 돌려준다 (기다릴 때 그것으로 찾는다)."""
@@ -63,6 +67,18 @@ class CenterDelegator:
             answer.bot_ui_id or answer.target_type,
         )
         return answer.job_id
+
+    def withdraw(self, job_id: str) -> None:
+        """맡긴 것을 **거둘 줄에 넣는다** — 그 자리에서 Center를 부르지 않는다.
+
+        실행 취소가 거두는 것과 **같은 줄**이다 (ADR-0062 §5) — 닿지 못하면 들고 있다 다시
+        걸고, 4xx(이미 시작된 PC 실행 등)는 답으로 본다. 실행 중에 부르면 느린 Center가
+        업무를 붙잡고, 닿지 못한 것을 다시 걸 자리도 없다.
+        """
+        if self.on_withdraw is None:
+            log.warning("거둘 곳이 없어 작업 %s를 두고 간다", job_id)
+            return
+        self.on_withdraw(job_id)
 
 
 __all__ = ["DEFAULT_CODE", "CenterDelegator"]
