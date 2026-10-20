@@ -17,6 +17,7 @@ BPM 프로세스의 결재(UserTask)를 Center 결재함으로 올린다. 결재
 > 상태: **Center 쪽·결재함(CON-04)·현장 연결이 돈다** ([ADR-0038](../decisions/0038-approval-request-channel.md)).
 > - 엔진이 `where`를 고른다 (`location` + 실행하는 쪽의 기본값 — Bot UI는 BUI-03 「원격 결재」).
 > - `center`면 실행기가 요청 파일(`runs/<run_id>.requests.jsonl`)에 이 계약의 `ApprovalCreateRequest`를 그대로 쓰고, Bot UI가 하트비트 뒤에 올린다.
+> - 현장(`field`) 결재·확인도 같은 본문을 `runs/<run_id>.field-requests.jsonl`에 쓴다 ([ADR-0078](../decisions/0078-field-approval-shows-what-to-judge.md)) — **올리지 않고** CMN-01이 제목·설명·검토 자료를 읽는다. 끝나면 지운다.
 > - 답·회수·만료는 하트비트(`approvals[]`)로 내려와 제어 파일을 거쳐 실행기에 간다. 받아 간 것은 `approval_acks`로 알린다 — 지금 기다리지 않는 결재의 답은 `accepted: false`(`not_waiting`)다.
 > - 회수·만료는 실행하는 쪽에 **답 없이 끝남**(`TaskFailed` `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`)으로 간다. 오류 경계가 있으면 그리로, 없으면 실행이 실패로 끝난다.
 > - 현장에서 먼저 답하면 Bot UI가 `DELETE …?reason=answered_in_field`로 거둔다.
@@ -157,6 +158,7 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-20 | 1 | 현장 결재도 이 본문을 현장 요청 파일에 쓴다 (형식은 그대로다, 올리지 않는다) — CMN-01이 검토 자료를 보인다 | 0078 |
 | 2026-10-15 | 1 | **「넣을 수 없는 답은 ack하지 않고 둔다」**를 적었다 (형식은 그대로다) — `delivered = 0`이면 다시 내려가므로 그것이 멀쩡한 길이고, **거절로 적으면 결재가 `open`으로 되돌아가며 답이 지워져** 사람이 다시 답해야 한다. 서버 실행기에서 그런 자리는 **빈자리가 없을 때**다 (C12 — 이어 가면 자리를 다시 쥔다) | — |
 | 2026-10-07 | 1 | 현장 연결 — 요청 파일로 올리고 하트비트로 내려받는다. 회수·만료는 실행하는 쪽에 `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`로 간다 | 0038 |
 | 2026-10-01 | 1 | 초안 (확인은 올리지 않음, Center가 답 검증, `review` 보관 기한, 서버 실행기도 올림) | 0014, 0015 |

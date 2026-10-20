@@ -46,7 +46,7 @@
 | [0035](0035-ui-goal-planning.md) | UI 태스크의 목표로 계획 — 모델은 값의 이름만 보고, 앱이 계획을 거르고, 수행기가 값을 채운다 | 수락 |
 | [0036](0036-screen-read-values.md) | 화면에서 읽은 값의 모양 — 표는 머리글을 열쇠로 하는 줄 목록, 수 모양 글은 수 | 수락 |
 | [0037](0037-desktop-ai-task-environment.md) | 데스크톱 AI 태스크의 눈과 손 — 확장이 「AI 환경」을 기여하고, 도구는 Worker 세션 위에서 돈다 | 수락 |
-| [0038](0038-approval-request-channel.md) | 결재 요청은 요청 파일로 올라오고 Bot UI가 Center로 올린다 (ADR-0031의 「올라오는 길은 하나」에 예외) | 수락 |
+| [0038](0038-approval-request-channel.md) | 결재 요청은 요청 파일로 올라오고 Bot UI가 Center로 올린다 (ADR-0031의 「올라오는 길은 하나」에 예외) | 수락 · 현장 결재도 본문을 쓴다(0078) |
 | [0039](0039-optional-variables-and-b11.md) | 한 가지에서만 생기는 값은 공통 경로에서 초기값을 두고, B11은 경고로 남긴다 (거짓 양성을 줄인다) | 수락 |
 | [0040](0040-registry-storage-sqlite.md) | UI 자동화 레지스트리는 SQLite 한 파일에 둔다 (그래프 저장소를 두지 않는다 — 문서에 남아 있던 Neo4j 전제를 걷었다) | 수락 |
 | [0041](0041-extension-run-events.md) | 확장은 `TaskOutcome.events[]`로 실행 기록에 남기고, 줄을 쓰는 것은 엔진이다 (원칙 6을 거르는 자리를 하나로) | 수락 |
@@ -86,3 +86,4 @@
 | [0075](0075-service-console-links-to-center-console.md) | **서비스 앱 콘솔은 Center 콘솔 주소를 자기 설정 하나로 받아 「실행 id」를 CON-01로 잇는다** — `CHK_SVC_CONSOLE__CENTER_CONSOLE_URL`(브라우저가 여는 주소, 선택 — 없으면 링크만 없다). C11을 늘리지 않는다(서비스 앱은 Center를 모른다). UIA-03은 `business_key`의 맨 앞 조각, `run_…`·`test_…` 모양만 잇는다 | 수락 |
 | [0076](0076-no-admin-window-yet.md) | **Admin 창(ADM-01~03)은 짓지 않는다** — 서명은 명령 한 번에 키를 열고 닫는 `chk-admin`에 남고, 읽는 일은 Center 콘솔이 한다. 대조하다 빠져 있던 서버 배포 서명(`deploy --server [id] [--max-concurrency]`)을 함께 메웠다. 다시 볼 조건: 서명이 미뤄질 때·하드웨어 키 | 수락 |
 | [0077](0077-tool-ui.md) | **UI 셀렉터 등록은 Bot UI 밖의 Tool UI에서 연다** — 확장이 기여한 도구(`tool_ui.tools`)를 띄우는 따로 뜨는 프로그램이고, 로컬 런타임은 띄우지 않고 Bot UI가 띄운 Worker를 빌려 쓴다(Studio와 같은 길). Bot UI 실행 파일이 `--tool-ui`로 되어 Bot UI 설치에 함께 들어간다. 등록 담당자 키는 `scope: tool_ui`로 Bot UI 설정에서 빠진다 | 수락 |
+| [0078](0078-field-approval-shows-what-to-judge.md) | **현장 결재·확인도 C6 본문을 요청 파일에 쓰고 결재 창(CMN-01)이 읽는다** — 올릴 파일(`.requests.jsonl`)과 갈라 `.field-requests.jsonl`에 두고 아무 데도 올리지 않는다. 창은 제목·설명·폼·검토 자료를 그대로 싣고, 본문이 아직 없으면 그림의 폼으로 뜬다. 끝나면 지운다 | 수락 |

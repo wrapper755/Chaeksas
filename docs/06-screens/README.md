@@ -123,6 +123,7 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 
 - 시간 초과: 창을 닫고 로그에 「결재 요청이 시간 초과로 취소되었습니다.」를 남긴다.
 - 시험 케이스의 「결재 자동 응답」이 있으면 창을 띄우지 않는다.
+- Bot UI는 [T]·[D]·[R]·[F]를 **실행기가 쓴 C6 본문**에서 읽는다 (현장은 `runs/<run_id>.field-requests.jsonl`, 원격은 `.requests.jsonl` — [ADR-0078](../decisions/0078-field-approval-shows-what-to-judge.md)). 본문이 아직 없으면 그림의 폼만으로 띄우고 제목은 「<Bot> — <노드>」다.
 - 결재가 Center로 올라간 경우(원격 결재) Bot UI는 창을 바로 띄우지 않고 트레이 알림 「결재가 Center 결재함으로 올라갔습니다 — 여기서 답하려면 누르세요」를 띄운다. 알림이나 BUI-04 「지금 실행」 줄의 「결재 창 열기」를 누르면 CMN-01이 열린다. 현장에서 먼저 답하면 Center 요청은 회수된다.
 
 ## 6. 화면 목록 총괄

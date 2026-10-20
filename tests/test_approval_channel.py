@@ -288,6 +288,17 @@ def test_the_request_file_remembers_what_was_sent(tmp_path: Path) -> None:
     assert not path.exists() and not list(tmp_path.rglob("*.sent"))
 
 
+def test_a_request_body_is_found_by_its_id(tmp_path: Path) -> None:
+    """결재 창이 본문을 찾는다 (ADR-0078) — 쓰는 중인 마지막 줄은 건너뛴다."""
+    path = requests.field_requests_path(tmp_path, RUN_ID)
+    assert requests.find(path, "a") is None, "파일이 없으면 없는 것이다"
+    requests.append(path, {"request_id": "a", "title": "가"})
+    with path.open("a", encoding="utf-8") as f:
+        f.write('{"request_id": "b"')
+    assert requests.find(path, "a") == {"request_id": "a", "title": "가"}
+    assert requests.find(path, "b") is None
+
+
 def test_the_command_line_says_where_only_when_it_is_not_the_default(tmp_path: Path) -> None:
     common: dict[str, Any] = {
         "package": tmp_path, "run_id": RUN_ID, "data_dir": tmp_path, "inputs_path": None,
@@ -329,6 +340,18 @@ def follow_package(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def agent(center: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Agent]:
+    yield from make_agent(center, tmp_path, monkeypatch, remote_approval=True)
+
+
+@pytest.fixture
+def field_agent(center: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Agent]:
+    """「원격 결재」를 끈 PC — 「따름」 결재가 **현장**에서 답해진다."""
+    yield from make_agent(center, tmp_path, monkeypatch, remote_approval=False)
+
+
+def make_agent(
+    center: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, remote_approval: bool
+) -> Iterator[Agent]:
     data_dir = tmp_path / "botui"
     monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
     key = center.post(
@@ -339,7 +362,7 @@ def agent(center: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         return CenterClient(base_url=BASE_URL, api_key=api_key, client=center)
 
     made = Agent(
-        settings=Settings(name="재무팀 PC-03", center_url=BASE_URL, remote_approval=True),
+        settings=Settings(name="재무팀 PC-03", center_url=BASE_URL, remote_approval=remote_approval),
         store=Store.load(tmp_path / "state.json"),
         credentials=FakeCredentials(key),
         client_factory=factory,
@@ -451,6 +474,7 @@ def test_the_run_log_shipper_reads_only_run_logs(tmp_path: Path) -> None:
     RunLog(run_id=RUN_ID, path=log_path(tmp_path, RUN_ID)).emit("run_started", executor="bot_ui", mode="deterministic")
     control.stop(control.control_path(tmp_path, RUN_ID))
     requests.append(requests.requests_path(tmp_path, RUN_ID), {"request_id": "a"})
+    requests.append(requests.field_requests_path(tmp_path, RUN_ID), {"request_id": "b"})
 
     queue = Queue(data_dir=tmp_path)
     assert [p.name for p in queue.files()] == [f"{RUN_ID}.jsonl"]
@@ -461,3 +485,48 @@ def seen(running: Any) -> list[Any]:
     """기록을 다시 읽고 기다리는 요청을 돌려준다."""
     running.read()
     return list(running.pendings)
+
+
+def test_a_field_approval_shows_what_to_judge(
+    field_agent: Agent, center: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """현장 결재 창(CMN-01)에 **제목·검토 자료**가 실린다 (ADR-0078) — 그리고 Center로는 가지 않는다."""
+    from PySide6.QtWidgets import QApplication  # noqa: PLC0415
+
+    from chaeksas.bot_ui import main_window  # noqa: PLC0415
+    from chaeksas.qt.approval import ApprovalDialog  # noqa: PLC0415
+
+    assert QApplication.instance() or QApplication([])
+    agent = field_agent
+    assert agent.beat() is not None
+    running = agent.runner().running
+    assert running is not None
+    assert wait_for(lambda: bool(seen(running)), child=running.child), "기록에 결재 요청이 없다"
+    (asked,) = running.pendings
+    assert asked.where == "field"
+    assert wait_for(lambda: running.body_of(asked.request_id) is not None, child=running.child), (
+        "현장 결재의 본문이 요청 파일에 없다"
+    )
+    assert not requests.unsent(running.requests_path), "현장 결재는 올릴 파일에 쓰지 않는다"
+    agent.beat()
+    assert center.get("/api/v1/approvals", headers=ADMIN_AUTH).json() == [], "Center로 올라가지 않는다"
+
+    shown: dict[str, Any] = {}
+
+    def ask(_parent: Any, **kwargs: Any) -> dict[str, Any]:
+        shown.update(kwargs)
+        return {"decision": "approve"}
+
+    monkeypatch.setattr(ApprovalDialog, "ask", ask)
+    window = main_window.MainWindow(agent)
+    try:
+        window.open_approval()
+    finally:
+        window.close()
+
+    body = running.body_of(asked.request_id)
+    assert body is not None
+    assert shown["title"] == body["title"], "제목은 그림의 `chk:approval.title`이다 — 노드 id가 아니다"
+    assert shown["review"] and "오늘" in shown["review"], "결재자가 판단할 값이 창에 보인다"
+    assert finished(agent) == "success"
+    assert not running.field_requests_path.exists(), "현장 요청 파일도 끝나면 지운다 (업무 값이 있다)"

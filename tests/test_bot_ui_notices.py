@@ -44,6 +44,9 @@ from chaeksas.core.packages import InstalledBot
 from chaeksas.core.processes import ChildProcess
 
 NOW = "2026-10-10T09:00:00+09:00"
+#: **진짜 시계로 열흘 뒤** — `Agent`는 `now_iso()`로 재므로 박아 둔 날짜는 그날이 지나면 「이미
+#: 만료」가 되어 알리지 않는다 (2026-10-20에 그렇게 깨졌다). 판단만 보는 시험은 `SOON`·`NOW`를 쓴다.
+SOON_FROM_TODAY = (datetime.now(UTC) + timedelta(days=10)).isoformat()
 BOT_UI_ID = "bui_a81c22d0"
 
 
@@ -303,7 +306,7 @@ def test_a_longer_key_period_can_be_told_again_later() -> None:
 
 def test_the_agent_tells_it_from_what_center_sent(tmp_path: Path) -> None:
     """**만료일은 Center만 안다** (C4) — 등록·하트비트 응답에서 와야 알릴 수 있다."""
-    soon = "2026-10-20T09:00:00+09:00"
+    soon = SOON_FROM_TODAY
 
     class WithExpiry(FakeCenter):
         def register(self, _request: Any) -> RegisterResponse:
@@ -764,7 +767,7 @@ def test_an_expiring_service_app_key_is_asked_for_and_told(tmp_path: Path, monke
     """만료일은 **그 앱만 안다** (C11) — 묻지 않으면 미리 알릴 수 없다."""
     install_bot_calling_an_app()
     hold_address()
-    agent, asked = agent_asking(tmp_path, monkeypatch, KeyFacts(line="정상", answered=True, expires_at=SOON))
+    agent, asked = agent_asking(tmp_path, monkeypatch, KeyFacts(line="정상", answered=True, expires_at=SOON_FROM_TODAY))
 
     assert agent.ask_service_key() == KEY_REF
     assert asked == [("http://app.test", "chk_svc_" + "a" * 40)], "들고 있는 주소로 묻는다"
@@ -838,7 +841,7 @@ def test_keys_are_asked_even_when_center_is_down(tmp_path: Path, monkeypatch: An
     """**Center보다 먼저 묻는다** — Center가 꺼져 있어도 서비스 앱 키는 만료된다."""
     install_bot_calling_an_app()
     hold_address()
-    agent, asked = agent_asking(tmp_path, monkeypatch, KeyFacts(line="정상", answered=True, expires_at=SOON))
+    agent, asked = agent_asking(tmp_path, monkeypatch, KeyFacts(line="정상", answered=True, expires_at=SOON_FROM_TODAY))
     agent.client_factory = lambda _url, _key: FakeCenter(fail=Unreachable("닿지 못합니다"))
     agent.store.state.bot_ui_id = "bui_1"
 
