@@ -139,6 +139,10 @@ export const STATUS_MAP = {
     "적용": "done",
     "거부": "failed",
   },
+  "가상 직원": {
+    "사용 중": "done",
+    "멈춤": "neutral",
+  },
 } as const satisfies Record<string, Record<string, StatusToken>>;
 
 export type StatusGroup = keyof typeof STATUS_MAP;

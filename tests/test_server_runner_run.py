@@ -107,7 +107,12 @@ def runner(tmp_path: Path, key: str, center: TestClient) -> agent_mod.Agent:
 
 
 def package_zip(
-    *, requires: dict[str, Any] | None = None, example: Path = EXAMPLE, bot: str = BOT, process_id: str = PROCESS_ID
+    *,
+    requires: dict[str, Any] | None = None,
+    example: Path = EXAMPLE,
+    bot: str = BOT,
+    process_id: str = PROCESS_ID,
+    outputs: list[str] | None = None,
 ) -> bytes:
     """업무 예제 하나를 C1 패키지로 싼다 (Studio가 내보내는 것과 같은 모양)."""
     manifest: dict[str, Any] = {
@@ -120,6 +125,7 @@ def package_zip(
         "entry": "process/main.bpmn",
         "process_id": process_id,
         "requires": requires or {},
+        **({"outputs": outputs} if outputs is not None else {}),
         "human": {},
         "built": {"by": "studio", "at": AT, "core": "0.1.0", "spec_version": 1},
         "content_hash": "sha256:" + "0" * 64,
@@ -790,3 +796,45 @@ def test_a_running_run_is_not_asked(center: TestClient, store: Store, runner: ag
     assert found.due_now() is False
     drain(runner)
     assert runner.wake_due() == 0, "끝난 실행도 깨우지 않는다"
+
+
+# ─────────────── 맡겨진 작업 — 서버 Bot 위임 (ADR-0082) ───────────────
+
+PARENT = "run_20261020_090000_pppppp"
+
+
+def test_a_delegated_job_knows_its_parent_and_sends_its_outputs_back(
+    center: TestClient, store: Store, runner: agent_mod.Agent, key: str
+) -> None:
+    """서버 Bot도 맡겨질 수 있다 — **Bot UI와 같이** 부모를 알고, 성공하면 선언한 값만 올린다."""
+    ready_runner(center, store, runner, zip_bytes=package_zip(outputs=["구분"]))
+    made = center.post(
+        "/api/v1/server-runner/delegations",
+        json={"schema": 1, "run_id": PARENT, "node_id": "Call_Batch", "bpm_process_id": BOT,
+              "loop_index": 0, "inputs": {"금액": 2_000_000}},
+        headers={"Authorization": f"Bearer {key}"},
+    )
+    assert made.status_code == 201 and made.json()["target_type"] == "server_runner", made.text
+
+    runner.tick()  # 맡겨진 작업을 받아 띄운다
+    [child] = list(runner.workers.values())
+    assert child.parent_run_id == PARENT
+    assert child.join(WAIT_S)
+    runner.collect()
+    [ack] = [one for one in runner.pending_acks if one.job_id == made.json()["job_id"]]
+    assert ack.result == "finished" and ack.outputs == {"구분": "고액"}, "선언한 것만 올린다 (C1 outputs)"
+
+    started = next(RunLog.read(log_path(runner.settings.data_path, child.run_id)))
+    assert (started.data["source"], started.data["parent_run_id"]) == ("delegation", PARENT)
+
+
+def test_a_plain_job_sends_no_outputs(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
+    """위임이 아니면 업무 값을 싣지 않는다 (원칙 6의 예외는 좁게)."""
+    ready_runner(center, store, runner, zip_bytes=package_zip(outputs=["구분"]))
+    job = make_job(center)
+    runner.tick()
+    [found] = list(runner.workers.values())
+    assert found.join(WAIT_S)
+    runner.collect()
+    [ack] = [one for one in runner.pending_acks if one.job_id == job["job_id"]]
+    assert ack.outputs == {} and found.parent_run_id is None

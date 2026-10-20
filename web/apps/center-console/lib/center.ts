@@ -21,6 +21,8 @@ export interface ContributedKind {
   errors: string[];
 }
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
+import type { VirtualWorkerInfo } from "@chaeksas/api-types/c5-virtual-worker-info";
+import type { VirtualWorkerRequest } from "@chaeksas/api-types/c5-virtual-worker-request";
 import type { JobCreateRequest } from "@chaeksas/api-types/c5-job-create-request";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { DependentInfo } from "@chaeksas/api-types/c5-dependent-info";
@@ -169,7 +171,8 @@ export const center = {
     call<unknown>("/api/v1/resources/refresh", { method: "POST", body: JSON.stringify({}) }),
 
   /** 결재함 (C6·CON-04). */
-  approvals: (query: { state?: string; bpm_process_id?: string; host?: string } = {}) => {
+  /** 결재함 (C6). `assignee`는 그 이름이 담당자에 있는 것만 (ADR-0080) — 콘솔은 거르기만 한다. */
+  approvals: (query: { state?: string; bpm_process_id?: string; host?: string; assignee?: string } = {}) => {
     const search = new URLSearchParams(
       Object.entries(query).filter(([, value]) => Boolean(value)) as [string, string][],
     );
@@ -237,6 +240,19 @@ export const center = {
   createCenterKey: (body: { name: string; type: string; expires_at?: string }) =>
     call<CenterKeyCreated>("/api/v1/center-keys", { method: "POST", body: JSON.stringify(body) }),
   revokeCenterKey: (keyId: string) => call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}`, { method: "DELETE" }),
+
+  /** 가상 직원 (C5 §가상 직원·CON-13). 일괄·자식은 **Center가 읽을 때** 이어 붙인다 — 콘솔이 세지 않는다. */
+  virtualWorkers: () => call<VirtualWorkerInfo[]>("/api/v1/virtual-workers"),
+  virtualWorker: (id: string) => call<VirtualWorkerInfo>(`/api/v1/virtual-workers/${encodeURIComponent(id)}`),
+  createVirtualWorker: (body: VirtualWorkerRequest) =>
+    call<VirtualWorkerInfo>("/api/v1/virtual-workers", { method: "POST", body: JSON.stringify(body) }),
+  updateVirtualWorker: (id: string, body: VirtualWorkerRequest) =>
+    call<VirtualWorkerInfo>(`/api/v1/virtual-workers/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteVirtualWorker: (id: string) =>
+    call<unknown>(`/api/v1/virtual-workers/${encodeURIComponent(id)}`, { method: "DELETE" }),
   unbindCenterKey: (keyId: string) =>
     call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}/unbind`, { method: "POST" }),
 

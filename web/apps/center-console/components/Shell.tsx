@@ -38,6 +38,7 @@ const NAV: NavItem[] = [
   { label: "서버 실행", href: "/server-runners" },
   { label: "결재함", href: "/approvals" },
   { label: "작업 지시", href: "/jobs" },
+  { label: "가상 직원", href: "/virtual-workers" },
   { label: "공통 패키지", href: "/packages" },
   { label: "리소스", href: "/resources" },
   { label: "Center API 키", href: "/center-keys" },

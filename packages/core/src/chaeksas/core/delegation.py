@@ -31,6 +31,8 @@ class DelegationCall:
     #: 어느 PC인가 — **식을 푼 값**이다 (비우면 받는 쪽이 고른다).
     bot_ui: str | None = None
     inputs: Mapping[str, Any] = field(default_factory=dict)
+    #: 반복 차례(0부터) — 반복이 붙은 호출일 때만 (ADR-0082). 받는 쪽이 멱등 키에 넣는다.
+    loop_index: int | None = None
 
 
 class DelegationError(RuntimeError):

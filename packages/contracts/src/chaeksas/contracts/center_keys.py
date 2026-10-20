@@ -25,8 +25,11 @@ PREFIX_LEN = 16
 DEFAULT_EXPIRY_DAYS = 365
 EXPIRY_WARNING_DAYS = 14
 
-#: `type`은 열린 문자열이지만 Center는 이 넷만 발급한다.
-ISSUABLE_KEY_TYPES = frozenset({"bot_ui", "studio", "server_runner", "integration"})
+#: `type`은 열린 문자열이지만 Center는 이 다섯만 발급한다.
+ISSUABLE_KEY_TYPES = frozenset({"bot_ui", "studio", "server_runner", "integration", "relay"})
+#: 대리 답용 키 (ADR-0081) — **결재 읽기·답뿐**이다. Center는 이 종류를 `require_read`·작업·
+#: 실행 기록에서 막고, 결재에서는 `X-CHK-On-Behalf-Of`의 그 사람이 담당자인 것만 보인다.
+RELAY_KEY_TYPE = "relay"
 KNOWN_KEY_STATES = frozenset({"active", "expired", "revoked"})
 
 KeyId = Annotated[str, Field(pattern=r"^ck_[0-9a-f]{8}$")]

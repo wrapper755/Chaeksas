@@ -45,6 +45,8 @@ export const CONTRACT_MODULES = [
   "c5-job-create-request",
   "c5-job-info",
   "c5-package-info",
+  "c5-virtual-worker-info",
+  "c5-virtual-worker-request",
   "c6-answer-request",
   "c6-approval-create-request",
   "c6-approval-info",

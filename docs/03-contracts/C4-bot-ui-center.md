@@ -103,7 +103,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 
 > 모든 값 목록(`status`, `state`, `source`, `result`, `reason`, `session` 등)은 **열린 문자열**이다. 위의 값은 알려진 값일 뿐이다 (README 원칙 10).
 
-**`JobAck.outputs`는 PC 위임만 쓴다** (C12 §PC 위임, [ADR-0062](../decisions/0062-pc-delegation.md)). 원칙 6의 **명시한 예외**라 좁게 쓴다.
+**`JobAck.outputs`는 위임만 쓴다** (C12 §PC 위임, [ADR-0062](../decisions/0062-pc-delegation.md)). 원칙 6의 **명시한 예외**라 좁게 쓴다. 서버 실행기도 C12 `job_acks[]`의 같은 칸을 같은 규칙으로 쓴다 ([ADR-0082](../decisions/0082-batch-start.md)).
 
 - **그 Bot이 선언한 `outputs`만** 싣는다 (C1 `outputs`) — 그 선언이 곧 「부르는 쪽이 받을 것」이고, 호출의 매핑(C14 `chk:call.output`)은 서버 그림에만 있어 PC는 모른다. 선언이 없으면 **아무것도 싣지 않는다**.
 - **끝났을 때만** 싣는다 (`finished`·`failed`… — 작업 상태를 옮기는 ack가 아닌 것들). `started`에 실어 보내면 기다리는 서버 실행이 **빈 값으로 이어 간다**.
@@ -131,7 +131,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | 모델 | 필드 |
 | --- | --- |
 | JobDispatch | `job_id`, `bpm_process_id`, `version`?(없으면 배포된 버전), `inputs`(object), `requested_by`(사람, 예약: `server_bot:<run_id>` — PC 위임), `requested_at`, `expires_at`?, `note` |
-| ApprovalDispatch | `request_id`, `state`(`answered`\|`expired`\|`withdrawn`, C6), `answer`, `answered_by`, `answered_at` |
+| ApprovalDispatch | `request_id`, `state`(`answered`\|`expired`\|`withdrawn`, C6), `answer`, `answered_by`, `answered_at`, `answered_via`?(대리 답이면 키 이름 — C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)) |
 
 ### 작업 상태 흐름 (Center 쪽, CON-05)
 
@@ -222,6 +222,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-20 | 1 | `ApprovalDispatch.answered_via?` — 대리 답이면 그 키 이름이 실행하는 쪽까지 내려가 C3 `human_answered`에 남는다 | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-17 | 1 | **`versions.build`를 더했다** (`{commit, built_at}`, 선택) — 묶은 산출물에서 도는지와 어느 커밋인지. `bot_ui`는 빌드가 찍은 판이다(묶은 앱이 `0.0.0`을 올리던 흠을 고쳤다). 선택 칸이라 옛 Bot UI는 그대로 읽힌다 | [0067](../decisions/0067-build-stamp.md) |
 | 2026-10-15 | 1 | **현장에서 값을 올리는 쪽이 생겼다** — 실행기가 끝날 때 `runs/<run_id>.outputs.json`에 쓰고(위임·성공만) Bot UI가 거두며 **읽고 그 자리에서 지운다**. 「이 작업이 위임인가」는 **`requested_by`** 하나로 가르고(`server_bot:<run_id>`), 그 실행의 `run_started`에 `source: delegation`·`parent_run_id`가 붙는다. 형식은 그대로다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | `JobAck`에 선택 칸 **`outputs`**를 더했다 — **PC 위임이 돌려주는 값**이다 (원칙 6의 명시한 예외: 선언한 `outputs`만·끝난 ack만·위임 작업만). 선택 칸이라 **옛 Bot UI는 그대로 돈다** | [0062](../decisions/0062-pc-delegation.md) |

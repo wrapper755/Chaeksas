@@ -42,6 +42,17 @@ export function where(row: ApprovalInfo): string {
   return row.host.name ?? row.host.id;
 }
 
+/** 담당자들 (ADR-0080). 없으면 「—」 — 콘솔은 담당자로 막지 않는다. */
+export function assigned(row: ApprovalInfo): string {
+  return (row.assignees ?? []).join(", ") || "—";
+}
+
+/** 답한 사람. 대리 답이면 「<이름> · <키 이름>」 — 누가와 어느 길로를 함께 (ADR-0081). */
+export function answeredBy(row: ApprovalInfo): string {
+  if (!row.answered_by) return "—";
+  return row.answered_via ? `${row.answered_by} · ${row.answered_via}` : row.answered_by;
+}
+
 const STATES = [
   { value: "", label: "(전체)" },
   { value: "open", label: "대기" },
@@ -53,19 +64,24 @@ const STATES = [
 export default async function ApprovalsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ state?: string; host?: string }>;
+  searchParams: Promise<{ state?: string; host?: string; assignee?: string }>;
 }) {
   const found = await session();
   if (!found) redirect("/login");
   const asked = await searchParams;
   const state = asked.state ?? "";
   const host = asked.host ?? "";
+  const assignee = (asked.assignee ?? "").trim();
 
   let rows: ApprovalInfo[] = [];
   let hosts: BotUiInfo[] = [];
   let failure: string | null = null;
   try {
-    rows = await center.approvals({ state: state || undefined, host: host || undefined });
+    rows = await center.approvals({
+      state: state || undefined,
+      host: host || undefined,
+      assignee: assignee || undefined,
+    });
     hosts = await center.botUis();
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
@@ -102,7 +118,8 @@ export default async function ApprovalsPage({
     },
     { key: "created_at", header: "요청 시각", width: "14ch", cell: (row) => time(row.created_at) },
     { key: "expires_at", header: "시한", width: "14ch", cell: (row) => time(row.expires_at) },
-    { key: "answered_by", header: "답한 사람", width: "14ch", cell: (row) => row.answered_by ?? "—" },
+    { key: "assignees", header: "담당", width: "14ch", cell: assigned },
+    { key: "answered_by", header: "답한 사람", width: "18ch", cell: answeredBy },
     {
       key: "delivered",
       header: "전달됨",
@@ -151,6 +168,16 @@ export default async function ApprovalsPage({
             ))}
           </select>
         </label>
+        <label className="flex flex-col gap-1 text-body-sm">
+          <span className="text-text-muted">담당</span>
+          <input
+            type="text"
+            name="assignee"
+            defaultValue={assignee}
+            placeholder="(전체)"
+            className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
+          />
+        </label>
         <Button type="submit" variant="secondary">
           보기
         </Button>
@@ -161,11 +188,11 @@ export default async function ApprovalsPage({
       ) : rows.length === 0 ? (
         <EmptyState
           title={
-            state || host
+            state || host || assignee
               ? "해당하는 결재 요청이 없습니다."
               : "기다리는 결재가 없습니다."
           }
-          hint={state || host ? "필터를 「(전체)」로 바꿔 보세요." : undefined}
+          hint={state || host || assignee ? "필터를 「(전체)」로 바꿔 보세요." : undefined}
         />
       ) : (
         <DataTable

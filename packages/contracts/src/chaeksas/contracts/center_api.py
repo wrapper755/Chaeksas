@@ -36,6 +36,15 @@ from chaeksas.contracts.signing import TARGET_ANY, AdminKey, Envelope, verify, v
 ACTOR_HEADER = "X-CHK-Actor"
 """콘솔 서버(BFF)가 로그인 세션의 사용자 이름을 실어 보낸다. **관리자·읽기 토큰일 때만 믿는다.**"""
 
+ON_BEHALF_HEADER = "X-CHK-On-Behalf-Of"
+"""사람 대신 부르는 키가 그 사람 이름을 싣는다 (ADR-0081). 퍼센트 인코딩한 UTF-8이다.
+
+대리 답용 키(`relay`)는 결재에 **반드시** 싣고 그 이름이 담당자여야 한다. 연동용 키는 작업·메시지에
+실어도 되고, 그때는 `JobInfo.on_behalf_of`로 **적기만** 한다 (`requested_by`는 키 이름 그대로)."""
+
+#: `X-CHK-On-Behalf-Of` 이름의 길이 상한 (정규화 뒤).
+MAX_ON_BEHALF_CHARS = 200
+
 CONTENT_HASH_HEADER = "X-Content-Hash"
 """패키지 내려받기 응답에 붙는다."""
 
@@ -85,6 +94,24 @@ DELEGATION_REQUESTER_PREFIX = "server_bot:"
 def delegation_requester(run_id: str) -> str:
     """맡긴 서버 실행 → `requested_by` (Center가 적는다 — 본문에서 받지 않는다)."""
     return f"{DELEGATION_REQUESTER_PREFIX}{run_id}"
+
+
+#: Center가 짓는 주체 이름의 앞머리 — 바깥에서 온 사람 이름이 이것으로 시작하면 받지 않는다.
+#: 받아 두면 기록을 읽는 쪽이 「Center가 지은 주체」와 가를 수 없다 (ADR-0081).
+RESERVED_ACTOR_PREFIXES: tuple[str, ...] = (DELEGATION_REQUESTER_PREFIX, "vw:")
+
+
+def on_behalf_violation(name: str) -> Violation | None:
+    """정규화한(`approvals.normalize_name`) `X-CHK-On-Behalf-Of` 이름 중 받지 않을 것 — 422 `on_behalf_invalid`."""
+    if not name:
+        reason = "비었다"
+    elif len(name) > MAX_ON_BEHALF_CHARS:
+        reason = f"{MAX_ON_BEHALF_CHARS}자를 넘는다"
+    elif name.startswith(RESERVED_ACTOR_PREFIXES):
+        reason = "Center가 짓는 주체 이름의 앞머리로 시작한다"
+    else:
+        return None
+    return Violation(rule="C5", code="on_behalf_invalid", message=f"{ON_BEHALF_HEADER} 이름이 {reason}")
 
 
 def delegated_run(requested_by: str | None) -> str | None:
@@ -408,6 +435,9 @@ class JobInfo(JobCreateRequest):
 
     job_id: JobId
     requested_by: str
+    #: 연동용 키가 `X-CHK-On-Behalf-Of`로 실은 사람 (ADR-0081) — **주장**이다. Center가 대조하지 않고
+    #: 권한을 바꾸지 않는다. `requested_by`(키 이름)는 그대로다.
+    on_behalf_of: str | None = None
     requested_at: Timestamp
     state: str  # 열린 문자열 (KNOWN_JOB_STATES)
     state_reason: str | None = None  # KNOWN_REJECT_REASONS / KNOWN_QUEUED_REASONS
@@ -417,6 +447,57 @@ class JobInfo(JobCreateRequest):
     dispatched_at: Timestamp | None = None
     run_id: str | None = None
     run_status: str | None = None  # 실행의 성패는 작업 상태가 아니다 (C3 run_finished가 정한다)
+
+
+# ─────────────────────────── 가상 직원 (C5 §가상 직원, ADR-0085) ───────────────────────────
+
+#: 가상 직원 상태 (열린 문자열). `stopped`는 **보이기 위한 칸**이다 — 새 작업을 막지 않는다.
+KNOWN_VIRTUAL_WORKER_STATES = frozenset({"active", "stopped"})
+#: 주체 이름의 앞머리 — `vw:<id>`. 바깥에서 온 사람 이름은 이것으로 시작할 수 없다 (ADR-0081).
+VIRTUAL_WORKER_PREFIX = "vw:"
+#: 상세가 주는 최근 일괄 수.
+VIRTUAL_WORKER_RECENT_BATCHES = 20
+
+VirtualWorkerId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$")]
+
+
+class VirtualWorkerRequest(ContractModel):
+    """`POST /virtual-workers`·`PUT /virtual-workers/{id}` — 사람이 아닌 업무 주체 (ADR-0085).
+
+    **기동 허용 목록은 없다** — 접수 Bot의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
+    """
+
+    id: VirtualWorkerId
+    name: str = Field(min_length=1)
+    #: 감독자 이름들 — C6 담당자와 같은 정규화(`approvals.normalize_assignees`)를 거쳐 저장한다.
+    supervisors: list[str] = Field(default_factory=list)
+    #: 접수 Bot의 **패키지 id** (C1 `id`). 판은 배포가 정한다.
+    intake: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,99}$")
+    state: str = "active"  # 열린 문자열 (KNOWN_VIRTUAL_WORKER_STATES)
+
+
+class VirtualWorkerBatch(ContractModel):
+    """일괄 하나 = 접수 Bot 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다."""
+
+    run_id: str
+    status: str | None = None  # C3 `RunInfo.status`와 같은 값
+    started_at: Timestamp | None = None
+    children: int = 0
+    children_by_status: dict[str, int] = Field(default_factory=dict)
+    open_approvals: list[str] = Field(default_factory=list)
+
+
+class VirtualWorkerInfo(VirtualWorkerRequest):
+    """`GET /virtual-workers…` — 등록 + 최근 일괄(하나를 읽을 때만)."""
+
+    created_at: Timestamp
+    updated_at: Timestamp
+    batches: list[VirtualWorkerBatch] = Field(default_factory=list)
+
+
+def virtual_worker_principal(worker_id: str) -> str:
+    """가상 직원의 주체 이름 — `vw:<id>` (사람 이름·키 이름과 겹치지 않는다)."""
+    return f"{VIRTUAL_WORKER_PREFIX}{worker_id}"
 
 
 def validate_job_create(

@@ -20,6 +20,7 @@ export interface JobInfo {
   };
   job_id: string;
   note?: string | null;
+  on_behalf_of?: string | null;
   queue_position?: number | null;
   requested_at: string;
   requested_by: string;

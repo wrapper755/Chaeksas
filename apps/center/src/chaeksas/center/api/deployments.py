@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from chaeksas.center.api.signing import STATUS_APPROVED, admin_keys
@@ -96,8 +97,11 @@ def _refuse(problems: Sequence[Any]) -> None:
     )
 
 
-def create(store: Store, raw: Any) -> DeploymentInfo:
-    """`deployment` 봉투를 받아 둔다 (C5 `POST /deployments`)."""
+def create(store: Store, raw: Any, *, package_dir: Path | None = None) -> DeploymentInfo:
+    """`deployment` 봉투를 받아 둔다 (C5 `POST /deployments`).
+
+    `package_dir`가 있으면 **가상 직원의 접수 Bot 관문**도 본다 (ADR-0085 §2 — 그 판의 그림을 읽는다).
+    """
     envelope = _envelope(raw)
     keys = admin_keys(store)
     # **봉투를 먼저 본다** — 패키지를 찾기 전에 막아야 없는 패키지의 404로 봉투의 진위가 새지
@@ -137,6 +141,13 @@ def create(store: Store, raw: Any) -> DeploymentInfo:
 
     _refuse_missing_resources(package.manifest, store)
     _refuse_unapproved_delegations(package.manifest, store)
+    if package_dir is not None:
+        from chaeksas.center.api import virtual_workers  # noqa: PLC0415 — 순환 import를 피한다
+
+        # 묶인 뒤 **새 판**으로 결재 없는 일괄 기동이 들어오는 길을 막는다 (409 `intake_not_gated`).
+        virtual_workers.deploy_gate(
+            store, package_dir, bot=str(claim.get("bpm_process_id") or ""), version=str(claim.get("version") or "")
+        )
     target = claim.get("target") or {}
 
     with store.tx() as cur:

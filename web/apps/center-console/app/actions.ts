@@ -464,3 +464,64 @@ export async function unbindCenterKey(keyId: string): Promise<ActionResult> {
   revalidatePath("/center-keys");
   return {};
 }
+
+/**
+ * 가상 직원 등록 (CON-13 「새 가상 직원」). **일반 `<form>`이 부른다** — JS 없이도 된다.
+ *
+ * 거부되면 Center의 사유를 **주소에 실어** 목록으로 돌아간다 — 「결재 없는 일괄 기동」(B16)이면
+ * 그 판과 메시지까지 (C5 `intake_not_gated`의 `detail.violations`).
+ */
+export async function createVirtualWorker(form: FormData): Promise<void> {
+  const supervisors = String(form.get("supervisors") ?? "")
+    .split(",")
+    .map((one) => one.trim())
+    .filter(Boolean);
+  try {
+    await center.createVirtualWorker({
+      id: String(form.get("id") ?? "").trim(),
+      name: String(form.get("name") ?? "").trim(),
+      supervisors,
+      intake: String(form.get("intake") ?? "").trim(),
+      state: "active",
+    });
+  } catch (cause) {
+    const found = cause instanceof CenterError ? cause.body?.detail : undefined;
+    const violations = (found as { violations?: Record<string, string[]> } | undefined)?.violations;
+    const detail = violations
+      ? " — " + Object.entries(violations).map(([version, said]) => `${version}: ${said.join(" / ")}`).join(" · ")
+      : "";
+    redirect(`/virtual-workers?error=${encodeURIComponent(message(cause) + detail)}` as Route);
+  }
+  revalidatePath("/virtual-workers");
+  redirect("/virtual-workers" as Route);
+}
+
+/** 멈추기·다시 쓰기 (CON-13) — **상태만** 바꾼다. 멈춤은 새 작업을 막지 않는다 (C5). */
+export async function setVirtualWorkerState(id: string, state: string): Promise<ActionResult> {
+  try {
+    const now = await center.virtualWorker(id);
+    await center.updateVirtualWorker(id, {
+      id,
+      name: now.name,
+      supervisors: now.supervisors ?? [],
+      intake: now.intake,
+      state,
+    });
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/virtual-workers", "layout");
+  return {};
+}
+
+/** 등록 해제 (CON-13) — **등록만** 지운다. 실행·작업 기록은 남는다. */
+export async function deleteVirtualWorker(id: string): Promise<ActionResult> {
+  try {
+    await center.deleteVirtualWorker(id);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/virtual-workers", "layout");
+  return {};
+}
+

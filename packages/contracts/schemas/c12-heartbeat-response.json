@@ -77,6 +77,18 @@
           "default": null,
           "title": "Answered By"
         },
+        "answered_via": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answered Via"
+        },
         "request_id": {
           "title": "Request Id",
           "type": "string"

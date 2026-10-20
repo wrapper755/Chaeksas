@@ -260,6 +260,7 @@ class Runner:
                         command.request_id,
                         command.answer,
                         answered_by=command.answered_by or "사람",
+                        answered_via=command.answered_via or None,
                     )
                 except EngineError as e:
                     # 답이 폼에 안 맞는다 — **실행을 죽이지 않는다**. 화면이 다시 묻는다.

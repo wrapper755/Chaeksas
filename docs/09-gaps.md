@@ -32,7 +32,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C11 | **구현됨** | `contracts.service_app`·`service_kit` | — (닫았다) |
 | C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | — (닫았다). 「기한은 간다」는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)이 코드로도 사실로 만들었다 (주기만큼 늦을 수 있다고 C12에 적었다). **PC 위임도 본문이 되어 양쪽이 돈다** ([ADR-0062](decisions/0062-pc-delegation.md) — §3-13). 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
 | C13 | **구현됨** | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다: 호스트·Studio·Bot UI·콘솔·Center) |
-| C14 | **구현됨** | `contracts.bpmn_ext` B1~B15 + `contracts.dmn` | — (닫았다 — 엔진이 수행하고 Studio가 편집·검사하고 예제 50개가 이 형식이다. schema 1에서 **쓰지 않기로 적은 것**은 범위 결정이다) |
+| C14 | **구현됨** | `contracts.bpmn_ext` B1~B16 + `contracts.dmn` | — (닫았다 — 엔진이 수행하고 Studio가 편집·검사하고 예제 50개가 이 형식이다. schema 1에서 **쓰지 않기로 적은 것**은 범위 결정이다) |
 
 **열넷이 모두 「구현됨」이다** (C12가 M7 다섯째 조각에서 올라왔다). 상태 셋의 뜻은 [03-contracts/README](03-contracts/README.md) §상태에 적었다 — 적혀 있지 않아 올릴 때마다 사람이 다시 물었다.
 
@@ -42,7 +42,15 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 2. 문서가 코드와 어긋난 자리 (코드를 고치는 일이 아니다)
 
-**없다.** 마지막 하나(§2-4 — C12를 M6 기준에서 뺄 것인가)를 로드맵 문구로 닫았다.
+### 2-5. C3 `run_started.bpm_process_id` — 패키지 id인가, 그림의 process id인가
+
+가상 직원을 지으며 드러났다 ([ADR-0085](decisions/0085-virtual-worker-resource.md)). C3 예시는
+`"bpm_process_id": "erp.order-entry"`(패키지 id 모양)인데 엔진은 **그림의 process id**(`Proc_…`)를
+적는다(`Engine.start` → `process.id`). 작업·배포·C12 `running[]`은 패키지 id로 말한다. 그래서
+실행 기록을 패키지로 거르는 자리(CON-01 「Bot」 거르기, 가상 직원의 일괄)는 **둘을 함께 봐야**
+잡힌다 — 가상 직원은 패키지 id와 그 패키지들 매니페스트의 `process_id`를 함께 본다. 어느 쪽이
+맞는지(문서를 고칠지, 엔진이 패키지 id를 받을지)는 **먼저 정할 것**이다: 엔진은 자기가 도는
+패키지를 모른다(Studio 시험 실행은 패키지 없이 돈다).
 
 ## 3. 계약 쪽 기능 공백
 
@@ -117,6 +125,18 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 가짜 확장으로 끝까지 돌려 본다 (`tests/test_server_runner_extension_run.py`).
 
 **닫은 것들** — §3-12(타이머로 깨우는 자리)는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)로 닫았다(하트비트가 쓸어서 깨우고 자리가 있을 때만 — 기한은 「그 시각 이후」다). 3-10(정의 고정)은 [ADR-0060](decisions/0060-pinning-external-definitions.md)으로 닫았고(그림에 고정하고 막지 않고 경고한다 — 재료가 이미 깔려 있어 계약이 늘지 않았다), 3-11(`requires.settings`)은 [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)가 닫았다. 3-9는 [ADR-0049](decisions/0049-deployment-target-must-exist.md)로 닫았다 — 배포 대상은 등록된 PC여야 하고, 등록 전에는 봉투에 적을 `bot_ui_id`가 없어 「미리 배포해 두기」는 길이 아니었다.
+
+### 3-15. 서버의 병렬 반복 — **남았다** (일괄 기동을 지으며 드러났다)
+
+C14 §반복은 「병렬(`isSequential=false`)은 서버 BPM 프로세스에서만 동시에 돈다」고 적었다. 엔진은
+그 칸을 읽고 담아 두기만 하고(`LoopState.sequential`) **늘 차례로 돈다**. 계약 쪽은 「미정」으로
+적었다 ([ADR-0082](decisions/0082-batch-start.md)).
+
+지금 그것이 무게를 갖는 자리는 **반복 위임(일괄 기동)** 하나다 — 위임은 결과를 기다리므로 N건이
+**한 건씩 끝까지** 돈다. 먼저 정할 것: ① 병렬 차례가 같은 실행 안에서 위임 여럿을 **함께
+기다리는** 모양(지금 기다림은 토큰 하나에 하나다), ② 결과를 **입력 순서로** 모으는 자리(C14가
+이미 약속했다), ③ 한 건 실패가 나머지를 거두는지(ADR-0082 §3 — 지금은 남은 건을 맡기지 않는다).
+
 
 ## 4. 화면 쪽 기능 공백
 

@@ -375,6 +375,17 @@ def test_r10_only_a_server_bot_can_delegate_to_a_pc() -> None:
     assert v[0].items == ["fin.erp-input@1.2.0"] and v[0].blocks
 
 
+def test_r12_a_bot_does_not_delegate_to_itself() -> None:
+    """**자기 자신에게 위임하지 않는다** (R12, ADR-0082) — 끝나지 않는 되부름이다.
+
+    그림은 자기 패키지 id를 모르므로 매니페스트가 본다 (`id`와 `requires.delegations`가 한 자리다).
+    """
+    me = manifest(run_location="server")
+    v = validate(manifest(run_location="server", requires=Requires(delegations=[f"{me.id}@1.0.0", "other.bot"])))
+    assert [(x.rule, x.code) for x in v] == [("R12", "delegation_to_self")]
+    assert v[0].items == [f"{me.id}@1.0.0"]
+
+
 def test_r10_says_nothing_when_nothing_is_delegated() -> None:
     """PC Bot은 흔하다 — 위임이 없으면 이 규칙은 입을 닫는다."""
     assert validate(manifest(run_location="pc")) == []

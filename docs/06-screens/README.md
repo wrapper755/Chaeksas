@@ -16,7 +16,7 @@
 | [bot-ui.md](bot-ui.md) | Bot UI (Windows 트레이 기반 GUI, 항상 실행) | BUI-01 ~ BUI-11 (BUI-06~08 폐기 → TOL-03~05) |
 | [tool-ui.md](tool-ui.md) | Tool UI (Windows 데스크톱, 확장이 기여한 도구를 띄움 — Bot UI와 함께 설치, [ADR-0077](../decisions/0077-tool-ui.md)) | TOL-01 ~ TOL-05 |
 | [worker.md](worker.md) | Worker 프로세스 — **화면 없음**. 예전 WRK 화면 ID가 어디로 갔는지만 적음 | (WRK-* 폐기) |
-| [center-console.md](center-console.md) | Center 콘솔 (웹) | CON-00 ~ CON-12 (CON-08~10 폐기) |
+| [center-console.md](center-console.md) | Center 콘솔 (웹) | CON-00 ~ CON-13 (CON-08~10 폐기) |
 | [service-app-console.md](service-app-console.md) | 서비스 앱 관리 콘솔 (웹, 앱마다) | SVC-00 ~ SVC-03, UIA-01 ~ UIA-03 |
 | [admin.md](admin.md) | Admin (명령줄 — 창은 두지 않는다, [ADR-0076](../decisions/0076-no-admin-window-yet.md)) | ADM-* |
 | 이 파일 §5 | 여러 앱이 같이 쓰는 창 | CMN-01 |
@@ -68,7 +68,7 @@
 | API 키 (Center·서비스 앱) | 사용 중 / 만료 / 폐기됨 | done / warning / neutral |
 | 서비스 앱 키 참조 (Bot UI·Studio) | 정상 / 없음(등록 필요) / 거부됨 / 만료 / 폐기됨 / 확인 전 | done / failed / failed / warning / failed / neutral |
 | 패키지 | 후보 / 승인됨 / 지원 종료 / 철회 / 로컬만 | waiting / done / warning / failed / neutral |
-| 서명·준비·온라인·UI 세션·배치 결정 | `tokens.json` `status_map` 참고 | — |
+| 서명·준비·온라인·UI 세션·배치 결정·가상 직원 | `tokens.json` `status_map` 참고 | — |
 | 결재 | 대기 / 답함 / 시간 초과 / 회수됨 (실행하는 쪽이 답을 거절하면 다시 「대기」 + 안내 띠) | waiting / done / warning / neutral |
 | 작업 | 대기 / 전달됨 / 대기열 / 수락 / 거절 / 만료 / 취소됨 | neutral / active / waiting / done / failed / warning / neutral |
 | 로케이터 | 사용 중(active) / 검증 전(unverified) / 대체됨(deprecated) | done / waiting / neutral |
@@ -171,6 +171,7 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 | CON-07 | 리소스 | Center 콘솔 | 운영자 | M5 | 신규 |
 | CON-11 | Center API 키 | Center 콘솔 | 운영자 | M2 | 신규 |
 | CON-12 | 서버 실행 | Center 콘솔 | 운영자 | M7 | 신규 |
+| CON-13 | 가상 직원 | Center 콘솔 | 운영자·감독자 | — | 신규 ([ADR-0085](../decisions/0085-virtual-worker-resource.md)) |
 | SVC-00 | 공통 틀 | 서비스 앱 관리 콘솔 | 서비스 앱 관리자 | M2 | 신규 (`service_kit`) |
 | SVC-01 | 상태 | 서비스 앱 관리 콘솔 | 서비스 앱 관리자 | M2 | 신규 |
 | SVC-02 | API 키 | 서비스 앱 관리 콘솔 | 서비스 앱 관리자 | M2 | 신규 |

@@ -64,6 +64,15 @@ CREATE TABLE IF NOT EXISTS absorbed_messages (
   run_id     TEXT NOT NULL,
   saved_at   TEXT NOT NULL
 );
+
+-- **위임으로 받은 실행과 그것을 맡긴 서버 실행** (C12 §PC 위임, ADR-0082). 끝날 때 결과를
+-- 올릴지, 무엇을 `parent_run_id`라 부를지가 여기 달렸다 — 작업의 `requested_by`는 받을 때
+-- 한 번만 보이므로 **재시작을 건너려면 적어 두어야** 한다. 스냅샷과 따로 둔다: 기다린 적 없이
+-- 도는 실행에도 필요하다. 이것도 표를 따로 둔다 (위와 같은 까닭).
+CREATE TABLE IF NOT EXISTS delegated_runs (
+  run_id        TEXT PRIMARY KEY,
+  parent_run_id TEXT NOT NULL
+);
 """
 
 
@@ -172,7 +181,26 @@ class Store:
         with self._lock:
             self.db.execute("DELETE FROM runs WHERE run_id = ?", (run_id,))
             self.db.execute("DELETE FROM absorbed_messages WHERE run_id = ?", (run_id,))
+            self.db.execute("DELETE FROM delegated_runs WHERE run_id = ?", (run_id,))
             self.db.commit()
+
+    def mark_delegated(self, run_id: str, *, parent_run_id: str) -> None:
+        """이 실행은 **맡겨진 것**이다 — 맡긴 서버 실행을 적어 둔다 (ADR-0082)."""
+        with self._lock:
+            self.db.execute(
+                "INSERT INTO delegated_runs (run_id, parent_run_id) VALUES (?, ?)"
+                " ON CONFLICT(run_id) DO NOTHING",
+                (run_id, parent_run_id),
+            )
+            self.db.commit()
+
+    def parent_of(self, run_id: str) -> str | None:
+        """맡긴 서버 실행. 위임이 아니면 `None`."""
+        with self._lock:
+            row = self.db.execute(
+                "SELECT parent_run_id FROM delegated_runs WHERE run_id = ?", (run_id,)
+            ).fetchone()
+        return str(row[0]) if row is not None else None
 
     # ── 읽기 ──
 

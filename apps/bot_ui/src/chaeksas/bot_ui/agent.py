@@ -736,7 +736,12 @@ class Agent:
             here = running is not None and one.request_id in waiting
             if one.state == "answered":
                 if here and running is not None:
-                    running.answer(one.request_id, dict(one.answer or {}), answered_by=one.answered_by or "")
+                    running.answer(
+                        one.request_id,
+                        dict(one.answer or {}),
+                        answered_by=one.answered_by or "",
+                        answered_via=one.answered_via or "",
+                    )
                     ack = ApprovalAck(request_id=one.request_id, accepted=True)
                 else:
                     ack = ApprovalAck(request_id=one.request_id, accepted=False, reason="not_waiting")

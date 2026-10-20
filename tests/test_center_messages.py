@@ -665,3 +665,35 @@ def test_an_offline_runner_is_still_a_receiver(
     assert response.json()["delivered_to"] == "run"
     # 돌아온 실행기가 그것을 받는다.
     assert len(heartbeat(center, runner_key, waiting=[waiting_row()])["messages"]) == 1
+
+
+def test_a_message_start_carries_on_behalf_of_into_the_job(
+    center: TestClient, private: Any, runner: str, integration_key: str
+) -> None:
+    """연동용 키가 실은 사람은 작업의 `on_behalf_of`로 **적기만** 한다 (ADR-0081).
+
+    `requested_by`는 키 이름 그대로다 — Bot UI가 그 칸의 `server_bot:`로 위임을 가르므로
+    바깥에서 온 글을 그 칸에 넣지 않는다. 그 앞머리로 시작하는 이름은 422다.
+    """
+    deploy(
+        center,
+        private=private,
+        runner_id=runner,
+        bot=RETURN_BOT,
+        path=RETURN,
+        process_id="Proc_bx13_return_processing",
+        triggers=[{"kind": "message", "name": "return_request"}],
+        deployment_id="dep_22222222",
+    )
+    body = {"schema": 1, "name": "return_request", "payload": {"반품번호": "RT-002", "주문번호": "ORD-9",
+            "사유": "파손", "금액": 10_000, "고객메일": "a@example.com"}}
+    auth = {"Authorization": f"Bearer {integration_key}"}
+    spoof = center.post("/api/v1/messages", json=body,
+                        headers={**auth, "X-CHK-On-Behalf-Of": "server_bot%3Arun_x"})
+    assert spoof.status_code == 422 and spoof.json()["code"] == "on_behalf_invalid"
+
+    made = center.post("/api/v1/messages", json=body, headers={**auth, "X-CHK-On-Behalf-Of": "%EA%B9%80"})
+    assert made.status_code == 201, made.text
+    job = center.get(f"/api/v1/jobs/{made.json()['job_id']}", headers=ADMIN).json()
+    assert job["on_behalf_of"] == "김"
+    assert not job["requested_by"].startswith("server_bot:") and job["requested_by"] != "김"

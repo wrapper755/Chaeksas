@@ -682,15 +682,20 @@ _ON_PURPOSE = (
 #: 아직 **돌리지는** 못하는 예제와 그 이유. **조용히 빼면 묶음이 거짓말을 한다.**
 #:
 #: **배포·설치는 이것들도 모두 본다** (아래 `test_every_server_example_deploys_and_installs`) —
-#: 막힌 것은 **도는 것**이고, 배포 길은 42개 전부가 지나간다.
+#: 막힌 것은 **도는 것**이고, 배포 길은 44개 전부가 지나간다.
 REMAINING: dict[str, str] = {
     "bx33_access_request": _ON_PURPOSE,
 }
 
 #: **묶음이 아니라 전용 시험이 보는 것**. 빠뜨린 것이 아니라 **다른 자리에서 본다** —
-#: 아래 `test_every_server_example_is_in_the_bundle_or_has_a_reason`가 셋을 합쳐 42개와 맞춰
+#: 아래 `test_every_server_example_is_in_the_bundle_or_has_a_reason`가 셋을 합쳐 44개와 맞춰
 #: 본다(갈래를 더하면서 조용히 빠지는 일을 막는 자리다).
 ELSEWHERE: dict[str, str] = {
+    "fx24_batch_intake": (
+        "`test_fx24_starts_one_server_bot_per_approved_item`가 본다 — **일괄 기동**이라(ADR-0082) "
+        "맡길 서버 Bot(FX-25)도 같은 실행기에 배포되어 있어야 한다. 묶음은 예제 하나만 배포하므로 "
+        "거기서는 위임이 `no_deployment`로 실패해 오류 경계로 간다. "
+    ),
     "bx16_reorder_proposal": (
         "`test_bx16_delegates_a_part_to_a_pc_and_continues`가 본다 — **PC 위임**이라(ADR-0062) "
         "맡긴 작업을 끝내 줄 PC가 있어야 한다(등록된 Bot UI·배포된 BX-17·그 PC의 작업 ack). "
@@ -714,7 +719,7 @@ def test_every_server_example_is_in_the_bundle_or_has_a_reason() -> None:
     """빼는 것은 **이유와 함께** 적는다 (M4·M5 인수 시험과 같은 자리).
 
     갈래가 셋이다 — 묶음이 도는 것(`GREEN`), **전용 시험이 보는 것**(`ELSEWHERE`), 아직 못
-    도는 것(`REMAINING`). 셋을 합쳐 42개와 맞춰 보므로 **조용히 빠지는 일이 없다**.
+    도는 것(`REMAINING`). 셋을 합쳐 44개와 맞춰 보므로 **조용히 빠지는 일이 없다**.
     """
     assert set(GREEN) | set(REMAINING) | set(ELSEWHERE) == set(SERVER)
     assert not (set(REMAINING) & set(ELSEWHERE)), "한 예제가 두 갈래에 있다"
@@ -730,7 +735,7 @@ def test_every_server_example_deploys_and_installs(
     center: tuple[TestClient, Store, Any],
     runner: agent_mod.Agent,
 ) -> None:
-    """**배포 길은 42개 전부가 지나간다** — 막힌 것은 *도는 것*이지 배포가 아니다.
+    """**배포 길은 44개 전부가 지나간다** — 막힌 것은 *도는 것*이지 배포가 아니다.
 
     여기서 새로운 것이 배포 길이다(서버 대상 봉투·`"*"`·C7 누락 검사) — PC 재통과가 여덟 개
     모두 배포까지 보는 것과 같은 결이다. 끝까지 도는 것은 아래 시험이 본다.
@@ -1010,3 +1015,111 @@ def test_bx16_delegates_a_part_to_a_pc_and_continues(
     # **값은 ack와 함께 지워진다** (ADR-0062 §4) — 누가·언제·성패는 남는다.
     rows = client.get(f"/api/v1/server-runners/{runner.server_runner_id}", headers=ADMIN).json()
     assert rows, "실행기 상세를 읽지 못했다"
+
+
+# ─────────────── 일괄 기동 — FX-24 → FX-25 (ADR-0079·0082) ───────────────
+
+FX24 = "fx24_batch_intake"
+
+
+def batch_children(client: TestClient, child: str) -> list[dict[str, Any]]:
+    return [one for one in client.get("/api/v1/jobs", headers=READ).json() if one["bpm_process_id"] == child]
+
+
+def test_fx24_starts_one_server_bot_per_approved_item(
+    tmp_path: Path,
+    center: tuple[TestClient, Store, Any],
+    runner: agent_mod.Agent,
+    receiver: Receiver,
+) -> None:
+    """**접수 Bot 실행 한 번 = 일괄** — 감독자가 승인하면 건마다 서버 Bot 작업이 하나씩 생긴다.
+
+    보는 것은 넷이다: 일괄 결재가 **담당자(감독자)로 걸러지나**, 승인 뒤 **건마다 작업 하나**인가
+    (차례마다 멱등 키가 달라 2건째부터 같은 작업이 돌아오지 않는다), 자식이 **같은 실행기에서**
+    돌아 결과를 돌려주나(부모는 기다리며 자리를 놓는다), 그리고 자식 실행이 **부모를 아나**.
+    """
+    client, _, _ = center
+    child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
+    info = deploy(center, runner, packaged(tmp_path, FX24))
+    job_id = dispatch(center, info, case_inputs(FX24, receiver))
+
+    done = run_to_the_end(center, runner, job_id, answers=case_approvals(FX24), messages=[])
+    assert done["run_status"] == "success", done
+    # 감독자의 결재함 — 담당자로 걸러 본다 (ADR-0080). 콘솔·대화 창구가 보는 것과 같다.
+    mine = client.get("/api/v1/approvals", params={"assignee": "김감독"}, headers=READ).json()
+    assert [one["run_id"] for one in mine] == [done["run_id"]], "일괄 결재가 감독자의 결재함에 없다"
+    assert mine[0]["review"]["건수"] == 3, "감독자는 N건을 한 번에 본다 (C6 `review`)"
+
+    made = batch_children(client, str(child["id"]))
+    assert len(made) == 3, [one["job_id"] for one in made]
+    assert {one["requested_by"] for one in made} == {f"server_bot:{done['run_id']}"}
+    assert {one["target"]["type"] for one in made} == {"server_runner"}
+    assert {one["run_status"] for one in made} == {"success"}
+    # 두 실행은 서로를 안다 (C3 `parent_run_id`) — 서버 자식도 PC 자식과 같다.
+    for one in made:
+        found = client.get(f"/api/v1/runs/{one['run_id']}", headers=READ).json()
+        assert found["parent_run_id"] == done["run_id"], found
+
+    # **가상 직원에 묶으면** 이 일괄이 그 자리에서 보인다 (ADR-0085) — 저장하지 않고 읽을 때 잇는다.
+    bound = client.post("/api/v1/virtual-workers", json={
+        "id": "finance-intake", "name": "재무 가상 직원", "supervisors": ["김감독"], "intake": info["id"],
+    }, headers=ADMIN)
+    assert bound.status_code == 201, bound.text
+    [batch] = client.get("/api/v1/virtual-workers/finance-intake", headers=READ).json()["batches"]
+    assert (batch["run_id"], batch["children"], batch["children_by_status"]) == (done["run_id"], 3, {"success": 3})
+
+
+def test_fx24_starts_nothing_when_the_batch_is_rejected(
+    tmp_path: Path,
+    center: tuple[TestClient, Store, Any],
+    runner: agent_mod.Agent,
+    receiver: Receiver,
+) -> None:
+    """반려하면 **하나도 기동하지 않는다** — 순서는 그림이 쥔다 (지도는 BPMN이다)."""
+    client, _, _ = center
+    child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
+    info = deploy(center, runner, packaged(tmp_path, FX24))
+    job_id = dispatch(center, info, case_inputs(FX24, receiver))
+    done = run_to_the_end(center, runner, job_id, answers={"Approve_Batch": {"승인": False}}, messages=[])
+    assert done["run_status"] == "success", done
+    assert batch_children(client, str(child["id"])) == []
+
+
+def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
+    tmp_path: Path,
+    center: tuple[TestClient, Store, Any],
+    runner: agent_mod.Agent,
+    receiver: Receiver,
+) -> None:
+    """**승인 뒤 일괄 취소** — 접수 실행을 취소하면 맡겨 둔 자식도 거둔다 (W6, ADR-0084).
+
+    실행기를 잠깐 멈춰 **자식이 아직 시작되지 않은 순간**을 만든다 (결재 답은 멈춰도 내려간다).
+    차례로 돌므로 그때 맡겨진 것은 **한 건**이고, 남은 건은 아예 맡겨지지 않는다.
+    """
+    client, _, _ = center
+    child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
+    info = deploy(center, runner, packaged(tmp_path, FX24))
+    job_id = dispatch(center, info, case_inputs(FX24, receiver))
+
+    until = time.monotonic() + WAIT_S
+    while not client.get("/api/v1/approvals", params={"state": "open"}, headers=READ).json():
+        assert time.monotonic() < until, "일괄 결재가 올라오지 않았다"
+        runner.tick()
+        time.sleep(0.05)
+    paused = client.post(f"/api/v1/server-runners/{runner.server_runner_id}/pause", headers=ADMIN)
+    assert paused.status_code < 400, paused.text
+    _answer_open_approvals(client, case_approvals(FX24), None)
+    while not batch_children(client, str(child["id"])):
+        assert time.monotonic() < until, "승인 뒤 맡긴 작업이 없다"
+        runner.tick()
+        time.sleep(0.05)
+
+    cancelled = client.delete(f"/api/v1/jobs/{job_id}", headers=ADMIN)
+    assert cancelled.status_code == 202, cancelled.text
+    while client.get(f"/api/v1/jobs/{job_id}", headers=READ).json().get("run_status") != "cancelled":
+        assert time.monotonic() < until, "접수 실행이 닫히지 않았다"
+        runner.tick()
+        time.sleep(0.05)
+
+    [made] = batch_children(client, str(child["id"]))
+    assert made["state"] == "cancelled", made

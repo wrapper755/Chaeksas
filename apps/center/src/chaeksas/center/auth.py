@@ -12,6 +12,10 @@
 
 **행위자 이름은 본문에서 받지 않는다** (C5). 키로 부르면 키 이름, 콘솔에서 부르면 BFF가 실어
 보내는 `X-CHK-Actor` 헤더를 쓴다 — 그 헤더는 **관리자·읽기 토큰으로 부를 때만** 믿는다.
+
+**사람 대신 부르는 키**(대리 답용·연동용)는 그 사람을 `X-CHK-On-Behalf-Of`로 싣는다 (ADR-0081).
+여기서 **한 번** 풀어 `Caller.on_behalf`에 두고, 결재(담당자 대조)와 작업(`on_behalf_of` 기록)이
+읽는다. 대리 답용 키는 **결재 셋뿐**이라 `require_read`도 지나지 못한다.
 """
 
 from __future__ import annotations
@@ -25,6 +29,9 @@ from fastapi import Request
 from chaeksas.center import keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
+from chaeksas.contracts.approvals import normalize_name
+from chaeksas.contracts.center_api import ON_BEHALF_HEADER, on_behalf_violation
+from chaeksas.contracts.center_keys import RELAY_KEY_TYPE
 
 #: 콘솔(BFF)이 로그인한 사용자 이름을 싣는 헤더. **값은 UTF-8 퍼센트 인코딩** (C5).
 ACTOR_HEADER = "X-CHK-Actor"
@@ -35,6 +42,9 @@ ACTOR_HEADER = "X-CHK-Actor"
 #: 일이 없고(내려받기만 한다), 연동용 키는 작업만 만든다.
 PACKAGE_KEY_TYPE = "studio"
 
+#: `X-CHK-On-Behalf-Of`를 읽는 키 종류 (ADR-0081). 다른 쪽이 실어 보내면 **듣지 않는다**.
+ON_BEHALF_KEY_TYPES = frozenset({RELAY_KEY_TYPE, "integration"})
+
 
 @dataclass(frozen=True)
 class Caller:
@@ -43,10 +53,16 @@ class Caller:
     kind: str
     actor: str
     key: keys.KeyRecord | None = None
+    #: 키가 대신 부르는 사람 (`X-CHK-On-Behalf-Of`, 정규화 뒤). 대리 답용·연동용 키일 때만 있다.
+    on_behalf: str | None = None
 
     @property
     def is_admin(self) -> bool:
         return self.kind == "admin"
+
+    @property
+    def is_relay(self) -> bool:
+        return self.key is not None and self.key.type == RELAY_KEY_TYPE
 
 
 def bearer(request: Request) -> str | None:
@@ -70,6 +86,25 @@ def _console_actor(request: Request, *, fallback: str) -> str:
         return raw
 
 
+def _on_behalf(request: Request) -> str | None:
+    """`X-CHK-On-Behalf-Of` — 퍼센트 인코딩한 UTF-8 (C5). **틀린 것은 거부한다** (422).
+
+    `X-CHK-Actor`와 달리 받은 글을 그대로 쓰지 않는다 — 이 이름은 담당자와 **대조하는** 값이라
+    디코딩되지 않은 글자로 맞춰 보면 엉뚱한 사람과 같아질 수 있다.
+    """
+    if ON_BEHALF_HEADER.lower() not in request.headers:
+        return None
+    raw = request.headers.get(ON_BEHALF_HEADER, "")
+    try:
+        name = normalize_name(unquote(raw.strip(), errors="strict"))
+    except (UnicodeDecodeError, ValueError) as e:
+        raise ApiError(422, "on_behalf_invalid", f"{ON_BEHALF_HEADER}를 풀 수 없다") from e
+    problem = on_behalf_violation(name)
+    if problem is not None:
+        raise ApiError(422, problem.code or "on_behalf_invalid", problem.message)
+    return name
+
+
 def caller(request: Request, store: Store, *, admin_token: str | None, read_token: str | None) -> Caller:
     """토큰·키를 보고 부르는 쪽을 정한다. 아무것도 맞지 않으면 401."""
     token = bearer(request)
@@ -89,8 +124,9 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
     if state != "active":
         raise ApiError(403, f"key_{state}", f"키 「{record.name}」은 {state} 상태다")
     keys.touch(store, record.key_id)
-    # 키로 부를 때는 X-CHK-Actor를 믿지 않는다 (C5).
-    return Caller(kind="key", actor=record.name, key=record)
+    # 키로 부를 때는 X-CHK-Actor를 믿지 않는다 (C5). 사람 대신 부르는 키만 On-Behalf-Of를 듣는다.
+    on_behalf = _on_behalf(request) if record.type in ON_BEHALF_KEY_TYPES else None
+    return Caller(kind="key", actor=record.name, key=record, on_behalf=on_behalf)
 
 
 def require_admin(found: Caller) -> Caller:
@@ -100,10 +136,35 @@ def require_admin(found: Caller) -> Caller:
 
 
 def require_read(found: Caller) -> Caller:
-    """GET에 필요한 권한 — 읽기·관리자 토큰, 또는 Center API 키."""
+    """GET에 필요한 권한 — 읽기·관리자 토큰, 또는 Center API 키.
+
+    **대리 답용 키는 뺀다** (ADR-0081) — 그 키의 권한은 결재 셋뿐이고, 결재는 제 관문
+    (`require_approval_read`)이 담당인 것만 보인다.
+    """
+    if found.is_relay:
+        raise ApiError(403, "forbidden", "대리 답용 키로는 결재만 읽고 답할 수 있다")
     if found.kind in ("admin", "read", "key"):
         return found
     raise ApiError(403, "forbidden", "읽을 권한이 없다")  # pragma: no cover - 방어
+
+
+def require_approval_read(found: Caller) -> str | None:
+    """결재 읽기 (C6). 콘솔 토큰이면 `None`(전부), 대리 답용 키면 **그 사람 이름**(담당인 것만).
+
+    그 밖의 키는 막는다 — 결재에는 검토 자료(업무 값)가 있고, 답은 하트비트로 내려간다.
+    """
+    if found.kind in ("admin", "read"):
+        return None
+    if found.is_relay:
+        return require_on_behalf(found)
+    raise ApiError(403, "forbidden", "결재는 콘솔 토큰이나 대리 답용 키로 읽는다")
+
+
+def require_on_behalf(found: Caller) -> str:
+    """대리 답용 키는 사람 이름을 **반드시** 싣는다 — 없으면 400 `on_behalf_required` (C6)."""
+    if not found.on_behalf:
+        raise ApiError(400, "on_behalf_required", f"대리 답용 키는 {ON_BEHALF_HEADER}를 실어야 한다")
+    return found.on_behalf
 
 
 def require_console(found: Caller) -> Caller:

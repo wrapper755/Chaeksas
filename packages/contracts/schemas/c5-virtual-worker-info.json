@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "VirtualWorkerBatch": {
+      "additionalProperties": true,
+      "description": "일괄 하나 = 접수 Bot 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다.",
+      "properties": {
+        "children": {
+          "default": 0,
+          "title": "Children",
+          "type": "integer"
+        },
+        "children_by_status": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Children By Status",
+          "type": "object"
+        },
+        "open_approvals": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Open Approvals",
+          "type": "array"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "title": "VirtualWorkerBatch",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c5-virtual-worker-info",
+  "additionalProperties": true,
+  "description": "`GET /virtual-workers…` — 등록 + 최근 일괄(하나를 읽을 때만).",
+  "properties": {
+    "batches": {
+      "items": {
+        "$ref": "#/$defs/VirtualWorkerBatch"
+      },
+      "title": "Batches",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "intake": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,99}$",
+      "title": "Intake",
+      "type": "string"
+    },
+    "name": {
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "state": {
+      "default": "active",
+      "title": "State",
+      "type": "string"
+    },
+    "supervisors": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Supervisors",
+      "type": "array"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "intake",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "VirtualWorkerInfo",
+  "type": "object"
+}

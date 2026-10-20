@@ -29,6 +29,7 @@ from chaeksas.contracts import (
     MessageRequest,
     RunEvent,
     ServerRunnerHeartbeatRequest,
+    VirtualWorkerInfo,
     validate_runner_heartbeat,
 )
 
@@ -43,6 +44,7 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C3-run-events", 1, EventBatchResponse),  # 응답
     ("C4-bot-ui-center", 0, HeartbeatRequest),
     ("C4-bot-ui-center", 1, HeartbeatResponse),
+    ("C5-packages-deployments-jobs", 0, VirtualWorkerInfo),  # 가상 직원 (ADR-0085)
     ("C6-approvals", 0, ApprovalCreateRequest),
     ("C12-server-runner-center", 0, ServerRunnerHeartbeatRequest),
     ("C12-server-runner-center", 1, MessageRequest),  # 외부 시스템이 넣는 메시지

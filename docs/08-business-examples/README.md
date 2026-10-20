@@ -133,16 +133,18 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [FX-21](feature-examples.md#fx-21-결정표-적중-정책-uniqueany) | 결정표 적중 정책 (UNIQUE·ANY) | 서버 | 수동 실행 | — | DMN 적중 정책 `UNIQUE`; DMN 적중 정책 `ANY` (겹치는 줄, 같은 결과); 맞는 줄 없음 = 모든 출력 `None` |
 | [FX-22](feature-examples.md#fx-22-파일-출력--csv-덧붙이기와-txt) | 파일 출력 — csv 덧붙이기와 txt | 서버 | 수동 실행 | — | 파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만); 파일 출력 `txt` + `template`; 쓴 파일을 `chk:fileList`로 되세기 |
 | [FX-23](feature-examples.md#fx-23-재생-모드-셋-planfullnone) | 재생 모드 셋 (plan·full·none) | 서버 | 수동 실행 | — | 재생 모드 `plan`(기본)·`full`·`none`을 한 그림에서; `full`은 도구가 있어야 한다 (B12); `none`은 되밟지 않는다 |
+| [FX-24](feature-examples.md#fx-24-일괄-기동--접수-bot) | 일괄 기동 — 접수 Bot | 서버 | 작업 지시 | — | **일괄 기동** — Call Activity 반복 + 위임 (`chk:loop` + `chk:call.delegate`); 서버 Bot에 위임; 결재 담당자 (`assignees`) |
+| [FX-25](feature-examples.md#fx-25-일괄-기동의-한-건) | 일괄 기동의 한 건 | 서버 | 작업 지시 | — | 위임으로 시작하는 서버 Bot; `outputs` 선언 — 맡긴 쪽이 받을 것 |
 
 ## BPMN 요소 커버리지
 
 | 요소 | 예제 |
 | --- | --- |
-| 시작 — 없음(작업 지시·호출) | BX-06, BX-11, BX-12, BX-17, BX-24, BX-37, BX-36, FX-01, FX-02, FX-03, FX-03b, FX-05, FX-06, FX-07, FX-08, FX-09, FX-11, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-20, FX-21, FX-22, FX-23 |
+| 시작 — 없음(작업 지시·호출) | BX-06, BX-11, BX-12, BX-17, BX-24, BX-37, BX-36, FX-01, FX-02, FX-03, FX-03b, FX-05, FX-06, FX-07, FX-08, FX-09, FX-11, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-20, FX-21, FX-22, FX-23, FX-24, FX-25 |
 | 시작 — 타이머 | BX-01, BX-02, BX-04, BX-05, BX-07, BX-08, BX-14, BX-16, BX-23, BX-35, FX-04, FX-12 |
 | 시작 — 메시지 | BX-03, BX-10, BX-13, BX-15, BX-20, BX-21, BX-22, BX-30, BX-31, BX-32, BX-33, BX-34, FX-10 |
 | 끝 — 종료(terminate) | BX-11 |
-| 스크립트 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-14, BX-15, BX-16, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-35, BX-36, FX-02, FX-03, FX-03b, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-21, FX-22 |
+| 스크립트 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-14, BX-15, BX-16, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-35, BX-36, FX-02, FX-03, FX-03b, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-21, FX-22, FX-24, FX-25 |
 | AI 태스크 — llm | BX-05, BX-07, BX-08, BX-11, BX-13, BX-15, BX-20, BX-23, BX-30, BX-37, BX-31, BX-32, BX-34, BX-35, FX-09, FX-10, FX-23 |
 | AI 태스크 — api | BX-02, FX-01, FX-08, FX-10 |
 | AI 태스크 — doc | BX-01, BX-07, BX-10, BX-14, BX-30, FX-06 |
@@ -151,25 +153,26 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | UI 태스크 (UI 자동화 확장) | BX-04, BX-14, BX-17, BX-36, FX-15, FX-16 |
 | 서비스 앱 태스크 | BX-06, BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-35, BX-36, FX-10, FX-18, FX-20 |
 | 규칙 (DMN) | BX-06, BX-07, BX-08, BX-12, BX-23, BX-33, FX-02, FX-21 |
-| 결재 (userTask) | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14, FX-16 |
+| 결재 (userTask) | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14, FX-16, FX-24 |
 | 수동 확인 (manualTask) | FX-19 |
 | 메일 보내기 | BX-01, BX-02, BX-04, BX-05, BX-06, BX-11, BX-13, BX-16, BX-20, BX-22, BX-31, BX-33, BX-34, BX-35, FX-07 |
 | 웹훅 보내기 | BX-03, BX-10, BX-21, BX-30, FX-10, FX-17 |
 | 메시지 받기 (receiveTask) | BX-05, BX-11, BX-13, BX-34, FX-13 |
 | BPM 프로세스 호출 | BX-15, BX-21, BX-30, FX-03 |
-| PC 위임 (`chk:call.delegate`) | BX-16 |
+| 위임 (`chk:call.delegate`) | BX-16, FX-24 |
+| 일괄 기동 (반복 위임) | FX-24 |
 | 하위 프로세스 | BX-20, BX-22 |
-| 배타 게이트웨이 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-15, BX-16, BX-21, BX-22, BX-30, BX-37, BX-31, BX-32, BX-33, FX-03b, FX-04, FX-10, FX-13, FX-15, FX-16, FX-21 |
+| 배타 게이트웨이 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-15, BX-16, BX-21, BX-22, BX-30, BX-37, BX-31, BX-32, BX-33, FX-03b, FX-04, FX-10, FX-13, FX-15, FX-16, FX-21, FX-24, FX-25 |
 | 포함 게이트웨이 | BX-10 |
 | 병렬 게이트웨이 | BX-05, BX-20, BX-22, BX-30, FX-11, FX-13 |
 | 중간 던지기 — 이정표(없음) | BX-05 |
 | 중간 던지기·받기 — 신호 | FX-13 |
 | 중간 받기 — 타이머 | FX-13, FX-14 |
-| 반복 — 차례 | BX-01, BX-04, BX-06, BX-07, BX-08, BX-17, BX-23, BX-36, FX-09 |
+| 반복 — 차례 | BX-01, BX-04, BX-06, BX-07, BX-08, BX-17, BX-23, BX-36, FX-09, FX-24 |
 | 반복 — 병렬 | BX-06, BX-23, BX-35, FX-18 |
 | 경계 — 타이머 중단 | BX-03, BX-11, BX-13, BX-34, FX-14 |
 | 경계 — 타이머 비중단 | BX-03, BX-05, BX-20 |
-| 경계 — 오류 | BX-01, BX-02, BX-03, BX-16, BX-22, BX-32, BX-36, FX-08, FX-10, FX-17 |
+| 경계 — 오류 | BX-01, BX-02, BX-03, BX-16, BX-22, BX-32, BX-36, FX-08, FX-10, FX-17, FX-24 |
 | 경계 — 메시지 | BX-11 |
 | 경계 — 신호 | FX-13 |
 | 파일 출력 — md | BX-01, BX-02, BX-03, BX-04, BX-11, BX-15, BX-30, FX-07, FX-12 |
@@ -186,9 +189,9 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 
 | 기능 | 예제 |
 | --- | --- |
-| 실행 위치 서버 | BX-01, BX-02, BX-03, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-12, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-31, BX-32, BX-33, BX-34, BX-35, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-17, FX-18, FX-20, FX-21, FX-22, FX-23 |
+| 실행 위치 서버 | BX-01, BX-02, BX-03, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-12, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-31, BX-32, BX-33, BX-34, BX-35, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-17, FX-18, FX-20, FX-21, FX-22, FX-23, FX-24, FX-25 |
 | 실행 위치 PC | BX-04, BX-14, BX-17, BX-36, FX-05, FX-15, FX-16, FX-19 |
-| 결재 위치 Center 결재함 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14 |
+| 결재 위치 Center 결재함 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14, FX-24 |
 | 결재 위치 현장(PC) | FX-16, FX-19 |
 | UI 자동화 확장 (내장) | BX-04, BX-14, BX-17, BX-36, FX-15, FX-16 |
 | 외부 확장 (HTTP 어댑터) | BX-06, BX-10, BX-32, BX-35, FX-20 |
@@ -213,7 +216,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 
 | 마일스톤 | 처음 통과해야 하는 예제 | 다시 통과 |
 | --- | --- | --- |
-| M3 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-11, BX-12, BX-30, BX-37, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-11, FX-12, FX-13, FX-14, FX-17, FX-19, FX-21, FX-22, FX-23 |  |
+| M3 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-11, BX-12, BX-30, BX-37, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-11, FX-12, FX-13, FX-14, FX-17, FX-19, FX-21, FX-22, FX-23, FX-24, FX-25 |  |
 | M4 | BX-04, BX-14, BX-17, FX-05, FX-15, FX-16 |  |
 | M5 | BX-06, BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-35, BX-36, FX-10, FX-18, FX-20 | PC 예제: Center 배포 → Bot UI |
 | M7 | — | 서버 예제 전부: 서버 실행기 |

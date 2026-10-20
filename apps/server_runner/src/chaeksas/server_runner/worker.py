@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.contracts.server_runner import RunningRun, WaitingRun
+from chaeksas.core import outputs as delegated_outputs
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State
 from chaeksas.core.packages import InstalledBot, UnusablePackage
 from chaeksas.core.run_log import RunLog, log_path
@@ -150,6 +151,9 @@ class Worker:
     queued_s: float | None = None
     #: 멈출 때 상태를 담아 둘 곳 (ADR-0054 §3). 없으면 담지 않는다 (시험·한 번 돌리기).
     store: Any | None = None
+    #: **맡긴 서버 실행** — 위임으로 받은 작업일 때만 (C3 `parent_run_id`, ADR-0082). 있으면
+    #: 성공으로 끝날 때 선언한 `outputs`를 작업 ack에 싣는다 (`delegated_outputs()`).
+    parent_run_id: str | None = None
 
     engine: Engine = field(default_factory=Engine)
     run: Run | None = None
@@ -249,7 +253,9 @@ class Worker:
         self._publish(run)
         self._settle(run)
 
-    def answer(self, request_id: str, found: Mapping[str, Any], *, answered_by: str) -> None:
+    def answer(
+        self, request_id: str, found: Mapping[str, Any], *, answered_by: str, answered_via: str | None = None
+    ) -> None:
         """결재·확인의 답을 넣는다 (C6). **되살린 실행이 이 자리에서 이어 간다.**
 
         답을 넣고 **다시 민다** — 넣기만 하면 그 실행은 멈춘 채 남는다. 미는 것은 새 스레드다
@@ -258,7 +264,7 @@ class Worker:
         run = self.run
         if run is None:  # pragma: no cover - 부르는 쪽이 먼저 되살린다
             raise RuntimeError("되살리지 않은 실행에 답할 수 없다")
-        self.engine.answer(run, request_id, found, answered_by=answered_by)
+        self.engine.answer(run, request_id, found, answered_by=answered_by, answered_via=answered_via)
         self._continue(run, RESUME_ANSWER)
 
     def deliver(
@@ -422,6 +428,7 @@ class Worker:
                 version=self.bot.version,
                 job_id=self.job_id,
                 queued_s=self.queued_s,
+                parent_run_id=self.parent_run_id,
             )
         except (EngineError, UnusablePackage, OSError, ValueError) as e:
             # 시작조차 못 했다 — **기록에 남겨야** Center가 안다 (C3). `run_started`는 없고
@@ -439,6 +446,9 @@ class Worker:
         with self._lock:
             self.run = run
         self._publish(run)
+        if self.store is not None and self.parent_run_id:
+            # **결과를 올릴 실행이라는 것부터 적는다** — 기다리다 재시작해도 올려야 한다.
+            self.store.mark_delegated(self.run_id, parent_run_id=self.parent_run_id)
         if self.store is not None:
             # **시작했다는 것부터 적는다** — 이것이 없으면 다시 뜬 실행기가 죽은 실행을 모른다.
             self.store.mark_running(
@@ -682,6 +692,20 @@ class Worker:
         # 멈췄는데 무엇을 기다리는지 모른다 — **거짓을 올리지 않는다** (자리를 쥔 것으로 둔다).
         log.warning("실행 %s가 멈췄는데 기다리는 것을 모른다", self.run_id)
         return None
+
+    def delegated_outputs(self) -> dict[str, Any]:
+        """맡겨진 실행이 **성공으로 끝났으면** 그 Bot이 선언한 `outputs`만 (C4 `JobAck.outputs`).
+
+        위임이 아니거나 성공이 아니면 **비운다** — 업무 값을 실을 일이 없다 (원칙 6의 예외는 좁게,
+        Bot UI 실행기와 같은 `core.outputs.pick`이 거른다 — ADR-0062 §4).
+        """
+        if not self.parent_run_id or self.snapshot().finished != "success":
+            return {}
+        with self._lock:
+            run = self.run
+        if run is None:
+            return {}
+        return delegated_outputs.pick(self.bot.manifest.outputs, run.variables)
 
     def ack_result(self) -> str | None:
         """끝난 실행의 작업 ack 결과 (C4). 아직 안 끝났으면 `None`.

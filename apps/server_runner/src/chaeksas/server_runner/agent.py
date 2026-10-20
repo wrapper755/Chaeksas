@@ -40,6 +40,7 @@ from chaeksas.contracts.bot_ui import (
     JobDispatch,
     Readiness,
 )
+from chaeksas.contracts.center_api import delegated_run
 from chaeksas.contracts.server_runner import (
     Capacity,
     DelegationAck,
@@ -84,6 +85,9 @@ from chaeksas.server_runner.store import Saved, Store
 from chaeksas.server_runner.worker import ACK_STARTED, EMPTY_COUNTS, Worker, reopen_log
 
 log = logging.getLogger(__name__)
+
+#: 위임으로 받은 작업의 출처 (C3 `run_started.source`) — Bot UI와 같은 값이다.
+SOURCE_DELEGATION = "delegation"
 
 #: 보고하는 판 (C12 `versions`) — 설치된 dist-info다. **서버 실행기는 묶지 않는다** (ADR-0067).
 CORE_VERSION = build_info.package_version("chaeksas-core")
@@ -467,6 +471,8 @@ class Agent:
             run_id=saved.run_id,
             job_id=saved.job_id,
             store=self.store,
+            # 맡겨진 실행이었으면 되살린 뒤에도 결과를 올린다 (ADR-0082).
+            parent_run_id=self.store.parent_of(saved.run_id) if self.store is not None else None,
         )
         self.workers[saved.run_id] = found
         found.resume(saved.snapshot)
@@ -542,7 +548,10 @@ class Agent:
             env=self.run_env(bot, directory=directory),
             job_id=job.job_id,
             inputs=dict(job.inputs),
-            source="job",
+            # **위임으로 받은 작업은 출처가 다르다** (C3 `source: delegation`, ADR-0082) — 그것을
+            # 말해 주는 것은 작업의 `requested_by` 하나다(Bot UI와 같은 `delegated_run`).
+            source=SOURCE_DELEGATION if delegated_run(job.requested_by) else "job",
+            parent_run_id=delegated_run(job.requested_by),
             store=self.store,
         )
         self.workers[found.run_id] = found
@@ -666,7 +675,14 @@ class Agent:
             if found.job_id and result is not None:
                 # **실행의 성패는 작업 상태가 아니다** (C5) — Center는 `run_status`에만 적는다.
                 self._remember_ack(
-                    JobAck(job_id=found.job_id, result=result, run_id=run_id, reason=shot.failure or None)
+                    JobAck(
+                        job_id=found.job_id,
+                        result=result,
+                        run_id=run_id,
+                        reason=shot.failure or None,
+                        # 위임으로 받은 작업이면 **선언한 결과**가 맡긴 실행에 돌아간다 (ADR-0082).
+                        outputs=found.delegated_outputs(),
+                    )
                 )
             del self.workers[run_id]
 
@@ -782,6 +798,7 @@ class Agent:
                         one.request_id,
                         dict(one.answer or {}),
                         answered_by=one.answered_by or "Center",
+                        answered_via=one.answered_via,
                     )
                 else:
                     # `expired`·`withdrawn` — 답이 아니다 (C6·ADR-0038).
