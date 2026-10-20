@@ -54,7 +54,7 @@ def create_request(run: Run, pending: Pending) -> ApprovalCreateRequest:
         run_id=run.run_id,
         node_id=pending.node_id,
         node_instance=pending.node_instance,
-        bpm_process_id=run.process.id,
+        bpm_process_id=run.identity,
         version=run.version,
         title=pending.title or None,
         description=pending.description,

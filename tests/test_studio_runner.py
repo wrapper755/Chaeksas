@@ -274,8 +274,11 @@ def test_the_run_log_is_written_as_jsonl(app: Any, tmp_path: Path) -> None:
     drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
     found = sorted((settings.data_dir / "runs").glob("test_*.jsonl"))
     assert found, "C3 기록이 남는다"
-    kinds = [json.loads(line)["kind"] for line in found[0].read_text(encoding="utf-8").splitlines()]
+    lines = [json.loads(line) for line in found[0].read_text(encoding="utf-8").splitlines()]
+    kinds = [one["kind"] for one in lines]
     assert kinds[0] == "run_started" and kinds[-1] == "run_finished"
+    # 작업 폴더의 id — 내보내면 매니페스트 `id`가 되는 값이다 (ADR-0086).
+    assert lines[0]["data"]["bpm_process_id"] == made.id
 
 
 def test_a_missing_required_input_is_said_plainly(app: Any, tmp_path: Path) -> None:

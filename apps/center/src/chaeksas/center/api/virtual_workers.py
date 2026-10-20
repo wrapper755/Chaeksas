@@ -189,24 +189,13 @@ def get(store: Store, worker_id: str, *, on_behalf: str | None = None) -> Virtua
     return _info(store, row, with_batches=True)
 
 
-def intake_names(store: Store, intake: str) -> set[str]:
-    """실행 기록이 접수 Bot을 부르는 이름들 — 패키지 id와 **그 패키지들의 진입 `process_id`**.
-
-    C3 `run_started.bpm_process_id`에는 엔진이 **그림의 process id**를 적는다(`Proc_…`). 작업·배포는
-    패키지 id로 말하므로 둘 다 본다 — 한쪽만 보면 일괄이 하나도 잡히지 않는다.
-    """
-    names = {intake}
-    for row in store.rows("SELECT manifest_json FROM packages WHERE id = ?", (intake,)):
-        process_id = (loads(row["manifest_json"], {}) or {}).get("process_id")
-        if process_id:
-            names.add(str(process_id))
-    return names
-
-
 def runs_of(store: Store, worker_id: str) -> tuple[set[str], set[str]]:
-    """그 가상 직원의 **접수 Bot 이름들**과 **일괄(접수 실행) id들** — `?virtual_worker=`가 쓴다."""
+    """그 가상 직원의 **접수 Bot 이름**과 **일괄(접수 실행) id들** — `?virtual_worker=`가 쓴다.
+
+    실행 기록도 패키지 id로 말한다 (C3, ADR-0086) — 접수 Bot의 패키지 id 하나로 고른다.
+    """
     row = _must(store, worker_id)
-    names = intake_names(store, str(row["intake"]))
+    names = {str(row["intake"])}
     batches = {
         str(one["run_id"])
         for one in store.rows("SELECT run_id, summary_json FROM runs")
@@ -236,7 +225,7 @@ def _supervisors_of(row: Any) -> list[str]:
 
 def _batches(store: Store, intake: str) -> list[VirtualWorkerBatch]:
     """최근 일괄 — 접수 Bot의 실행과 그 자식(`parent_run_id`), 열린 결재를 **읽을 때** 센다."""
-    names = intake_names(store, intake)
+    names = {intake}
     summaries = [
         (str(one["run_id"]), loads(one["summary_json"], {}) or {}, str(one["first_seen_at"]))
         for one in store.rows("SELECT run_id, summary_json, first_seen_at FROM runs")

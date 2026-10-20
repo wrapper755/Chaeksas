@@ -230,6 +230,18 @@ def test_a_loop_comes_back(tmp_path: Path) -> None:
     assert back.tokens[0].loop.items[1] == {"거래처": "다라물산"}
 
 
+def test_the_package_id_travels_with_the_snapshot(tmp_path: Path) -> None:
+    """되살린 서버 실행도 **같은 이름**으로 결재를 올린다 (ADR-0086). 칸이 없는 옛 스냅샷은 그림 id다."""
+    _engine, run = waiting_run(tmp_path)
+    run.bpm_process_id = "finance.expense"
+    assert roundtrip(run).identity == "finance.expense"
+
+    old = json.loads(json.dumps(dump(run), ensure_ascii=False))
+    del old["bpm_process_id"]
+    back = restore(old, process=run.process, log=RunLog(run_id=run.run_id), env=run.env)
+    assert back.identity == run.process.id
+
+
 def test_an_inner_run_comes_back(tmp_path: Path) -> None:
     """호출(`callActivity`)이 띄운 안쪽 실행은 **재귀로** 담기고 같은 `run_id`를 쓴다."""
     _engine, run = waiting_run(tmp_path)

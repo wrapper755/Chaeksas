@@ -79,7 +79,7 @@ BPM 프로세스의 결재(UserTask)를 Center 결재함으로 올린다. 결재
 | `request_id` | str | ✓ | 위 형식 |
 | `layer` | str | ✓ | `approval`만 받는다. 그 밖이면 422 `confirmation_not_allowed` (열린 문자열이지만 Center는 이 값만 받는다) |
 | `run_id`, `node_id`, `node_instance` | str, str, int | ✓ | C3과 같은 값 |
-| `bpm_process_id`, `version` | str | ✓ | |
+| `bpm_process_id`, `version` | str | ✓ | **패키지 id**와 그 판 (C3 `run_started`와 같은 값, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)) |
 | `title`, `description` | str | | 폼 제목·설명. 없으면 「결재 요청」 |
 | `form` | Form | | 답의 모양. 없으면 「승인 / 반려」 두 단추 |
 | `review` | object | | **검토 자료.** 폼의 「표시 변수」만 담는다 (이름 → 값) |

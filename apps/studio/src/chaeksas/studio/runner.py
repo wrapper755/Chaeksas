@@ -336,6 +336,8 @@ class CaseRun(QObject):
                 executor="studio",
                 source="test",
                 version=self.plan.process.version,
+                # 작업 폴더의 id — 내보내면 매니페스트 `id`가 되는 값이다 (ADR-0086).
+                bpm_process_id=self.plan.process.id,
                 # C3 `case_id` — 어느 케이스로 돌렸나 (CON-01이 보인다). 케이스 이름이 그 id다.
                 case_id=case.name if case else None,
             )

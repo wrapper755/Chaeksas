@@ -200,6 +200,8 @@ class Runner:
             executor="bot_ui",
             source=self.source,
             version=self.package.manifest.version,
+            # 실행 기록이 말하는 이름은 **패키지 id**다 (ADR-0086 — 그림 id가 아니다).
+            bpm_process_id=self.package.manifest.id,
             job_id=self.job_id,
             queued_s=self.queued_s,
             parent_run_id=self.parent_run_id,

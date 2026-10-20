@@ -274,6 +274,7 @@ def test_a_job_runs_to_the_end_and_center_knows(
     first = events["events"][0]["data"]
     assert first["run_location"] == "server" and first["executor"] == "server_runner"
     assert first["job_id"] == job["job_id"]
+    assert first["bpm_process_id"] == job["bpm_process_id"], "작업과 같은 이름 — 패키지 id다 (ADR-0086)"
     assert events["events"][-1]["data"]["status"] == "success"
 
 

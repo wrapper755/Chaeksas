@@ -885,6 +885,22 @@ def test_run_started_carries_the_optional_fields_only_when_known() -> None:
     assert data["queued_s"] == 42.457, "소수 셋째 자리까지"
 
 
+def test_run_started_names_the_package_the_runner_gave() -> None:
+    """`bpm_process_id`는 **패키지 id**다 (C3, ADR-0086) — 엔진은 패키지를 모르므로 실행하는 쪽이 준다.
+
+    주지 않으면 그림 id다(패키지 없이 엔진을 부르는 시험).
+    """
+    process = make('<bpmn:startEvent id="Start_1"/><bpmn:endEvent id="End_1"/>'
+                   + flow("f1", "Start_1", "End_1"))
+    told = started()
+    start(process, told, bpm_process_id="erp.order-entry")
+    assert told.events[0].data["bpm_process_id"] == "erp.order-entry"
+
+    bare = started()
+    start(process, bare)
+    assert bare.events[0].data["bpm_process_id"] == process.id
+
+
 def test_a_run_that_waited_nothing_says_zero_not_nothing() -> None:
     """0초는 **값이다** — 「모른다」와 다르다."""
     process = make('<bpmn:startEvent id="Start_1"/><bpmn:endEvent id="End_1"/>'

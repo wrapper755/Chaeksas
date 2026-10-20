@@ -40,7 +40,7 @@ from chaeksas.core.run_state import LoopState, Pending, Run, RunEnv, State, Toke
 #: 저장소에 글로 가는 칸.
 STORED = (
     "variables", "state", "tokens", "last_token_id", "pendings", "arrivals", "expected",
-    "waits", "children", "nested", "mode", "executor", "version", "started",
+    "waits", "children", "nested", "mode", "executor", "version", "bpm_process_id", "started",
     "instances", "call_seqs", "learned",
 )
 #: 되살릴 때 **밖에서 다시 꽂는** 칸.
@@ -129,6 +129,7 @@ def dump(run: Run) -> dict[str, Any]:
         "mode": run.mode,
         "executor": run.executor,
         "version": run.version,
+        "bpm_process_id": run.bpm_process_id,
         "started": run.started.isoformat(),
         "instances": dict(run.instances),
         "call_seqs": dict(run.call_seqs),
@@ -167,6 +168,8 @@ def restore(data: dict[str, Any], *, process: BpmnProcess, log: RunLog, env: Run
         mode=data["mode"],
         executor=data["executor"],
         version=data["version"],
+        # ADR-0086 전에 담은 스냅샷에는 없다 — 그러면 그림 id로 말한다(`Run.identity`).
+        bpm_process_id=str(data.get("bpm_process_id") or ""),
         started=started,
         instances=dict(data["instances"]),
         call_seqs=dict(data["call_seqs"]),

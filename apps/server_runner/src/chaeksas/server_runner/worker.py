@@ -426,6 +426,8 @@ class Worker:
                 executor="server_runner",
                 source=self.source,
                 version=self.bot.version,
+                # 실행 기록·결재·C11 봉투가 말하는 이름은 **패키지 id**다 (ADR-0086).
+                bpm_process_id=self.bot.id,
                 job_id=self.job_id,
                 queued_s=self.queued_s,
                 parent_run_id=self.parent_run_id,
