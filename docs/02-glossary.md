@@ -80,7 +80,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 프로세스 정의 | `process_definition` | BPMN 2.0 파일 하나. BPM 프로세스 하나는 진입 정의 1개 + 하위 정의 0개 이상 |
 | 실행 위치 | `run_location` | BPM 프로세스 속성. **서버**(`server`, **기본값**, 서버 우선 — [ADR-0016](decisions/0016-server-first.md)): / **PC**(`pc`: Bot UI에서 하나씩, 끝날 때까지 — UI 조작·현장 확인·PC 전용 자원이 필요할 때만) / 서버 쪽: 서버 실행기에서 동시 실행, 기다리는 동안 상태 저장). [ADR-0015](decisions/0015-run-location.md) |
 | 서버 Bot | `server_bot` | 운영 화면에서 실행 위치가 「서버」인 BPM 프로세스를 부르는 이름 (확정). PC 쪽은 그냥 「Bot」 |
-| PC 위임 | `pc_delegation` | 서버 Bot의 Call Activity가 **따로 배포된 PC Bot**을 부르는 것 (`chk:call.delegate`). Center 작업으로 Bot UI에 맡기고 서버 Bot은 상태를 저장하고 기다린다. 결과는 그 Bot이 선언한 `outputs`가 Center를 지나 돌아온다 ([ADR-0062](decisions/0062-pc-delegation.md) — 계약·코드는 아직이다) |
+| PC 위임 | `pc_delegation` | 서버 Bot의 Call Activity가 **따로 배포된 PC Bot**을 부르는 것 (`chk:call.delegate`). Center 작업으로 Bot UI에 맡기고 서버 Bot은 상태를 저장하고 기다린다. 결과는 그 Bot이 선언한 `outputs`가 Center를 지나 돌아온다 ([ADR-0062](decisions/0062-pc-delegation.md)) |
 | 동시 실행 상한 | `max_concurrency` | 서버 실행에만 있다. 서버 실행기 전체(기본 10) + BPM 프로세스별(배포 때, 기본 5) |
 | 진입 정의 | `entry` | BPM 프로세스를 시작할 때 처음 실행하는 정의 |
 | 공유 BPM 프로세스 | `process_lib` | 여러 BPM 프로세스가 Call Activity로 부르는 재사용 BPMN. 패키지에 복사되어 들어간다 |
@@ -100,7 +100,15 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 자율 수행 | `autonomous` | 수행 모드. AI가 방법을 찾아 수행하고 결과를 학습 자료로 남긴다. **Studio에서 개발 목적으로 실행할 때** |
 | 결정 수행 | `deterministic` | 수행 모드. 학습·등록된 대로 LLM 없이(또는 최소로) 수행한다. **Bot UI에서 Bot을 운영 실행할 때**, Studio의 재생 실행 |
 
-### 태스크 종류
+### 2-1. 가상 직원과 일괄 (제안 — [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md))
+
+| 화면 표기 | 코드 | 뜻 |
+| --- | --- | --- |
+| 가상 직원 | `virtual_worker` | **사람이 아닌 업무 주체.** Center에 등록되고(주체 이름 `vw:<id>`) 접수 Bot·감독자·기동해도 되는 Bot 목록을 갖는다. 접수 Bot 실행과 그 실행이 기동한 작업의 주체가 된다. **배포 단위가 아니다** — 배포 단위는 여전히 Bot이다 (§7). 코드에서 `worker`로 줄여 쓰지 않는다 (Worker 프로세스와 겹친다) |
+| 접수 Bot | `intake_bot` | 가상 직원이 돌리는 **서버 Bot**. 인입 → 항목 N건 만들기 → 일괄 결재 → 일괄 기동을 그림으로 그린 것 |
+| 일괄 | `batch` | **접수 Bot 실행 한 번.** 일괄 id는 그 실행의 `run_id`이고 항목은 그 실행의 변수(목록)다. 「묶음」이라 쓰지 않는다 (확장·시험 묶음·PC 묶음 풀기가 이미 쓴다) |
+| 일괄 결재 | — | 일괄 안의 결재 하나(C6). 항목 N건을 `show`로 보이고 감독자가 한 번에 승인·반려한다. 새 결재 종류가 아니다 |
+| 일괄 기동 | `batch_start` | 승인된 항목마다 Bot 작업을 하나씩 내는 것 (반복 + 위임). 기동된 실행을 **자식 실행**이라 하고 `parent_run_id`가 일괄 id다 |
 
 | 화면 표기 | 코드 | BPMN 요소 | 누가 수행 |
 | --- | --- | --- | --- |
@@ -118,6 +126,10 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 결재 (업무 개입) | `approval` | BPMN UserTask. 업무상 사람이 결정해야 하는 것. Center로 올려 다른 사람이 답할 수 있다 |
 | 확인 (실행 개입) | `confirmation` | 실행 중 막힘(OTP, 애매한 클릭, Worker 응답 없음). 화면 앞 사람만 답할 수 있어 Center로 올리지 않는다 |
 | 전환 | `escalation` | 자동 치유가 한도를 넘어 사람에게 넘기는 것. 확인으로 이어진다 |
+| 감독자 | `supervisor` | 가상 직원(§2-1)의 결재에 답하는 **사람**. 접수 Bot의 일괄 결재 담당자가 된다 |
+| 대리 답 | `on_behalf_of` | 연동하는 쪽(예: 대화 창구)이 **사람 대신** 결재 답을 Center에 나르는 것. 답한 사람(행위자)은 그 사람이고, 지나온 길(경로)은 키 이름이다 — 둘을 따로 적는다. 「위임」(`delegate`, PC 위임)과 다른 말이다 |
+
+> 제안: 감독자·대리 답은 [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md)가 정하는 말이다. 결재 담당자 칸·대리 답의 키·헤더는 그 뒤의 ADR이 정한다 — 계약·코드에는 아직 없다.
 
 ## 4. UI 자동화
 
@@ -163,7 +175,9 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | Bot (프로그램을 가리켜) | Bot은 업무(BPM 프로세스)다 | Bot UI |
 | Worker 앱, Worker 창, Worker 트레이 | Worker는 화면이 없다 | Worker 프로세스. 화면 기능은 Tool UI의 「UI 셀렉터 등록」 |
 | 유틸리티 (확장이 더한 창을 가리켜) | Bot UI에 붙던 옛 구조 (`bot_ui.utilities`) | 도구 (Tool UI) |
-| 직원, Employee, 에이전트(배포 단위로서) | 배포 단위는 BPM 프로세스(Bot)다 | BPM 프로세스 / Bot |
+| 직원, Employee, 에이전트(배포 단위로서) | 배포 단위는 BPM 프로세스(Bot)다. 「가상 직원」(§2-1)은 배포 단위가 아니라 **업무 주체**라 이 금지에 걸리지 않는다 — 「직원」만 단독으로 쓰지 않는다 | BPM 프로세스 / Bot |
+| 묶음 (일괄을 가리켜) | 확장·시험 묶음·PC 묶음 풀기가 이미 쓴다 | 일괄 |
+| `worker` (가상 직원을 가리켜, 경로·칸 이름에서) | Worker 프로세스와 겹친다 | `virtual_worker` |
 | 에이전트(화면에서) | LLM이 태스크를 수행하는 내부 구성만 뜻한다 | AI 태스크 |
 | RPA 봇, BPM 봇 | 모호 | Bot |
 | LLM 앱 (분류 이름으로) | 서비스 앱 중 LLM을 안 쓰는 것도 있다 | 서비스 앱 |
