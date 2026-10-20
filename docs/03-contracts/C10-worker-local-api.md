@@ -4,10 +4,10 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | 실행 중 Bot(Bot UI의 실행기)·Studio·Bot UI(셀렉터 등록, Worker 관리) → Worker 프로세스 |
+| 보내는 쪽 → 받는 쪽 | 실행 중 Bot(Bot UI의 실행기)·Studio·Bot UI(Worker 관리)·셀렉터 등록(Tool UI — ADR-0077) → Worker 프로세스 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (worker_local.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
 | 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
-| 관련 화면 | STU-08·13, BUI-06~09 |
+| 관련 화면 | STU-08·13, BUI-09, TOL-03~05 |
 
 ## 목적
 
@@ -71,7 +71,7 @@
 | `values`, `results` | str[] | | `goal`과 함께: 쓸 값의 **이름**·결과 변수 이름 (C8). 값은 싣지 않는다 |
 | `headed` | bool | | 기본 false. Studio 시험은 true 권장 |
 | `heal` | bool | | 자가 치유 사용. 기본 true |
-| `report` | bool | | 닫을 때 UI 자동화 앱에 보고할까 (C8). 기본 true. **셀렉터 시험(BUI-08)에서 끈다** — 통계에 넣지 않을 뿐 아니라 아예 보내지 않는다 |
+| `report` | bool | | 닫을 때 UI 자동화 앱에 보고할까 (C8). 기본 true. **셀렉터 시험(TOL-05)에서 끈다** — 통계에 넣지 않을 뿐 아니라 아예 보내지 않는다 |
 | `service_key` | str | Bot·Studio만 ✓ | **UI 자동화 앱 API 키 값.** 부르는 쪽이 BPM 프로세스의 키 참조를 풀어 넣는다 (ADR-0013). Worker는 이 값을 세션 동안 메모리에만 두고, 디스크·로그에 남기지 않는다 |
 
 → 201 SessionInfo `{session_id, session_secret, page_id, current_url, plan_source: "server" | "cache", steps_run: 0, mutating_steps_ok: 0, planned_steps}`
@@ -154,11 +154,11 @@
 | `DELETE /v1/admin/sessions/{id}` | 세션 강제 닫기 (실행기가 죽었을 때 정리) |
 | `POST /v1/admin/shutdown` | 열린 세션을 닫고 보고를 저장한 뒤 종료 (Bot UI 종료 순서, BUI-01) |
 
-### 5. 셀렉터 등록 (Bot UI의 유틸리티)
+### 5. 셀렉터 등록 (Tool UI의 도구)
 
-`caller.type = "selector_registration"`으로 연 세션에서만 쓸 수 있다 — 아니면 403 `session_locked`. **레지스트리 등록·삭제는 Worker가 하지 않는다.** UI 자동화 확장의 Bot UI 유틸리티가 UI 자동화 앱을 직접 부른다 (C9). 등록 화면에 필요하므로 **CSS 후보 같은 물리 정보가 응답에 포함된다** (예외).
+`caller.type = "selector_registration"`으로 연 세션에서만 쓸 수 있다 — 아니면 403 `session_locked`. **레지스트리 등록·삭제는 Worker가 하지 않는다.** UI 자동화 확장의 도구(Tool UI — [ADR-0077](../decisions/0077-tool-ui.md))가 UI 자동화 앱을 직접 부른다 (C9). 이 절의 경로는 **부르는 프로그램이 바뀌어도 그대로다** — Worker는 누가 띄운 창인지 모르고 세션의 `caller.type`만 본다. 등록 화면에 필요하므로 **CSS 후보 같은 물리 정보가 응답에 포함된다** (예외).
 
-| 경로 | 뜻 (BUI-06) |
+| 경로 | 뜻 (TOL-03) |
 | --- | --- |
 | `POST /v1/registration/browser` | 브라우저 열기 `{start_url, headed}` → `SessionInfo` (§2와 같은 모양) |
 | `GET /v1/registration/windows` | 지금 떠 있는 **최상위 창** 목록 → `{windows: [{title, class_name, process}]}`. 제목 없는 창은 뺀다. 데스크톱(UIA)이 없는 PC면 503 `browser_unavailable` |
@@ -166,9 +166,9 @@
 | `POST /v1/registration/{session_id}/analyze` | 화면 분석 `{scope_css?, max, include_read}` → 요소 후보 목록 |
 | `POST /v1/registration/{session_id}/pick` / `DELETE …/pick` | 직접 고르기 시작·끝. 고른 요소는 `GET …/pick/events`로 받는다 |
 | `GET /v1/registration/{session_id}/pick/events` | **고른 것을 비워 가져온다** (한 번 준 것은 다시 주지 않는다) |
-| `POST /v1/registration/{session_id}/highlight` | `{locators: [로케이터…]}` → 그 요소를 화면에 표시 (BUI-06 5번) |
+| `POST /v1/registration/{session_id}/highlight` | `{locators: [로케이터…]}` → 그 요소를 화면에 표시 (TOL-03 5번) |
 | `POST /v1/registration/{session_id}/verify` | `{ladders: {시맨틱 키: [로케이터…]}}` → 칸별 통과·실패 |
-| `POST /v1/registration/{session_id}/plan` | **등록 세션에 계획을 싣는다** (BUI-08 「시험」이 등록 탭의 화면을 이어 쓴다) `{page_id, heal?, report?, service_key}` → `SessionInfo`(`plan_source`). 그 뒤 §3 스텝을 **시맨틱 키로** 받고 수행 모드는 `deterministic`이다. 다시 부르면 **나중 것이 이긴다**(다른 화면으로 바꿔 시험한다). 받아 오기 실패는 세션을 열 때와 같다(§2 — 4xx는 앱의 코드 그대로, 닿지 못하고 캐시도 없으면 502 `ui_automation_unreachable`). 계획의 `platform`이 열린 화면과 다르면 409 `platform_mismatch`. **분석·검증은 계속 된다**(계획이 있어도 등록 세션이다). 보고는 닫을 때 `origin: test`로 간다 |
+| `POST /v1/registration/{session_id}/plan` | **등록 세션에 계획을 싣는다** (TOL-05 「시험」이 등록 탭의 화면을 이어 쓴다) `{page_id, heal?, report?, service_key}` → `SessionInfo`(`plan_source`). 그 뒤 §3 스텝을 **시맨틱 키로** 받고 수행 모드는 `deterministic`이다. 다시 부르면 **나중 것이 이긴다**(다른 화면으로 바꿔 시험한다). 받아 오기 실패는 세션을 열 때와 같다(§2 — 4xx는 앱의 코드 그대로, 닿지 못하고 캐시도 없으면 502 `ui_automation_unreachable`). 계획의 `platform`이 열린 화면과 다르면 409 `platform_mismatch`. **분석·검증은 계속 된다**(계획이 있어도 등록 세션이다). 보고는 닫을 때 `origin: test`로 간다 |
 
 **`business_key`는 Worker가 짓는다** (`reg_<hex8>`) — 등록 화면이 실행 키를 흉내 낼 일이 없다. 등록 세션은 `page_id`가 없어 **열 때는** 계획(C8)을 받아 오지 않는다 — 시험할 때 `…/plan`으로 싣는다.
 
@@ -181,7 +181,7 @@
 | `truncated` | bool | `max`에 걸려 잘렸다. **잘렸으면 잘렸다고 말한다** — 조용히 자르면 없는 것을 없다고 단정한다 |
 | `scope_empty` | bool | `scope_css`가 아무것도 못 찾았다. **전체로 몰래 넓히지 않는다** — 범위를 잘못 적은 것을 알아야 한다 |
 
-`suggested_key`는 `test_id` → `id` → `name` → **영문** 접근성 이름 → 역할 순으로 짓는다. **한글 이름은 음역하지 않는다** — `고객명`을 `gogaegmyeong`으로 바꾸면 사람도 기계도 못 읽는다. 어차피 사람이 고치는 자리다 (BUI-06 4번).
+`suggested_key`는 `test_id` → `id` → `name` → **영문** 접근성 이름 → 역할 순으로 짓는다. **한글 이름은 음역하지 않는다** — `고객명`을 `gogaegmyeong`으로 바꾸면 사람도 기계도 못 읽는다. 어차피 사람이 고치는 자리다 (TOL-03 4번).
 
 `pick/events` 응답: `{candidates: [Candidate…], picking: bool}`. `picking`이 `false`면 사람이 화면에서 끝낸 것이다(Esc) — 화면도 토글을 내린다. **고르는 동안 링크 이동과 폼 제출은 막는다** (누르면 다른 화면으로 가 버린다).
 
@@ -200,7 +200,7 @@
 | 401 | `token_invalid` / `session_secret_invalid` | Worker가 다시 떠서 토큰이 바뀜, 남의 세션 | 토큰 파일을 다시 읽고 한 번 재시도. 세션 비밀이 틀렸으면 버그 |
 | 403 | `admin_only` | 사용 토큰으로 `/v1/admin/*` 호출 | 버그 |
 | 404 | `session_not_found` | 세션이 닫힘 (유휴 시간 초과, Worker 재시작) | §3 |
-| 409 | `worker_busy` (`detail.holder`) / `reserved` (`detail.run_id`) | 다른 쪽이 세션을 쥐었거나 Worker가 다른 실행에 예약됨 | Studio: STU-08 「Worker 사용 중」. 셀렉터 등록: BUI-06 「Bot 실행 중」 |
+| 409 | `worker_busy` (`detail.holder`) / `reserved` (`detail.run_id`) | 다른 쪽이 세션을 쥐었거나 Worker가 다른 실행에 예약됨 | Studio: STU-08 「Worker 사용 중」. 셀렉터 등록: TOL-03 「Bot 실행 중」 |
 | 422 | `instruction_not_allowed` / `value_required` / `value_not_allowed` / `unknown_semantic_key` | 요청 모양이 틀림 | 재시도하지 않음 |
 | 502 | `ui_automation_unreachable` | UI 자동화 앱에 닿지 못하고 캐시도 없음 | 태스크 재시도 정책을 따른다 |
 | 409 | `app_not_running` (`detail.app`) | 데스크톱 화면의 창이 없고 띄우는 방법도 설정돼 있지 않음 (`desktop-apps.json`에 그 이름이 없거나 띄워도 창이 안 생김) | 재시도하지 않는다. 확인(CMN-01) — 「<앱>을 띄운 뒤 계속」 |

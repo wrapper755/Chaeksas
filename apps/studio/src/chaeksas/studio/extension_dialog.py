@@ -84,7 +84,7 @@ POINT_LABEL = {
     "task_types": "태스크 종류",
     "studio.editors": "속성 편집기",
     "studio.resource_views": "리소스 탐색기 뿌리",
-    "bot_ui.utilities": "Bot UI 유틸리티",
+    "tool_ui.tools": "Tool UI 도구",
     "bot_ui.panels": "Bot UI 화면 칸",
     "bot_ui.local_runtimes": "로컬 런타임",
     "configuration": "설정 칸",
@@ -94,7 +94,7 @@ POINT_LABEL = {
 }
 
 #: 키를 쓰는 자리 (C13 `requires_keys[].purpose`).
-PURPOSE_LABEL = {"run": "BPM 프로세스가 작업을 부를 때", "utility": "Bot UI 유틸리티가 쓸 때"}
+PURPOSE_LABEL = {"run": "BPM 프로세스가 작업을 부를 때", "utility": "Tool UI의 도구가 쓸 때"}
 
 NOTHING = "(없음)"
 NO_SELECTION = "확장을 고르면 그 확장이 더한 것을 봅니다."

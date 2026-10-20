@@ -11,6 +11,7 @@
 ;   SourceDir   묶은 onedir 폴더
 ;   OutputDir   설치 파일을 둘 곳
 ;   AutostartTask  (Bot UI만) 제거할 때 지울 작업 스케줄러 이름 — `autostart.TASK_NAME`
+;   ToolUiName     (Bot UI만) 같은 실행 파일을 `--tool-ui`로 여는 바로가기 이름 (ADR-0077 §6)
 ;
 ; 사용자별 설치다 — 관리자 권한을 묻지 않는다. 자리는 %LOCALAPPDATA%\Programs\Chaeksas\<앱>.
 ; 서명이 없다 — 처음 설치할 때 SmartScreen이 경고한다 (docs/04-setup.md).
@@ -67,6 +68,10 @@ Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs 
 [Icons]
 Name: "{autoprograms}\Chaeksas\{#AppName}"; Filename: "{app}\{#AppExe}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExe}"; Tasks: desktopicon
+#ifdef ToolUiName
+; Tool UI는 Bot UI 실행 파일이 `--tool-ui`로 뜬 것이다 — 따로 깔지 않는다 (ADR-0077 §6).
+Name: "{autoprograms}\Chaeksas\{#ToolUiName}"; Filename: "{app}\{#AppExe}"; Parameters: "--tool-ui"
+#endif
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "{#AppName} 실행"; Flags: nowait postinstall skipifsilent

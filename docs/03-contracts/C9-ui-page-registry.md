@@ -4,10 +4,10 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 레지스트리·공개 카탈로그와 관리 콘솔이 읽는 길까지 돈다) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | UI 자동화 확장의 Bot UI 유틸리티 「UI 셀렉터 등록」(직접 호출) → UI 자동화 앱, UI 자동화 앱 관리 콘솔(UIA-02) → UI 자동화 앱, Center(공개 카탈로그 읽기) → UI 자동화 앱 |
+| 보내는 쪽 → 받는 쪽 | UI 자동화 확장의 Tool UI 도구 「UI 셀렉터 등록」(직접 호출 — [ADR-0077](../decisions/0077-tool-ui.md)) → UI 자동화 앱, UI 자동화 앱 관리 콘솔(UIA-02) → UI 자동화 앱, Center(공개 카탈로그 읽기) → UI 자동화 앱 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (registry.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md) §5, [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0042](../decisions/0042-extension-contributed-panels.md)(콘솔 화면) |
-| 관련 화면 | BUI-06·07·08, UIA-01·02·03, CON-07 「UI 화면」, STU-03·13 |
+| 관련 화면 | TOL-03·04·05, UIA-01·02·03, CON-07 「UI 화면」, STU-03·13 |
 
 ## 목적
 
@@ -20,12 +20,12 @@
 | 경로 | 인증 | 뜻 |
 | --- | --- | --- |
 | `GET /v1/catalog` | **없음** | 공개 카탈로그. **셀렉터 없음.** Center 리소스 목록(C7)이 읽는다 |
-| `POST /v1/ops/registry_list_pages` | 서비스 앱 키 (아무 권한) | 화면 목록 (BUI-06 「화면 ID」 콤보) |
+| `POST /v1/ops/registry_list_pages` | 서비스 앱 키 (아무 권한) | 화면 목록 (TOL-03 「화면 ID」 콤보) |
 | `POST /v1/ops/registry_get_page` | 서비스 앱 키 + **`registry_write`** | 화면 하나 전체. 로케이터 포함 |
 | `POST /v1/ops/registry_register` | 서비스 앱 키 + `registry_write` | 등록·추가 |
 | `POST /v1/ops/registry_delete` | 서비스 앱 키 + `registry_write` | 삭제 |
 
-- **누가 부르나:** 레지스트리 작업은 **UI 자동화 확장의 Bot UI 유틸리티(클라이언트 코드)가 UI 자동화 앱을 직접** 부른다 (`caller.type: bot_ui`). 키는 확장 설정의 등록 담당자 키(C13 `configuration` 비밀 칸)를 쓴다. Worker는 브라우저 일(열기·분석·고르기·검증, C10 §5)만 하고 레지스트리를 부르지 않는다.
+- **누가 부르나:** 레지스트리 작업은 **UI 자동화 확장의 도구(클라이언트 코드)가 UI 자동화 앱을 직접** 부른다 (`caller.type`은 도구를 띄운 호스트 — Tool UI면 **`tool_ui`**, ADR-0077). 키는 확장 설정의 등록 담당자 키(C13 `configuration` 비밀 칸)를 쓴다. Worker는 브라우저 일(열기·분석·고르기·검증, C10 §5)만 하고 레지스트리를 부르지 않는다.
 - **멱등 키:** 등록·삭제 **동작마다** 새 `run_id` `reg_<hex8>`를 만든다 (`node_id: "registry"`, `node_instance: 1`, `attempt`는 재시도마다 +1, `call_seq: 1`).
 - 작업 호출은 C11을 따른다. `mode`는 `deterministic`로 보낸다 (등록은 LLM을 쓰지 않는다). manifest에는 두 모드를 모두 선언한다.
 - `registry_write`는 SVC-02에서 키를 발급할 때 고르는 추가 권한이다. 등록 담당자 개인 키(BUI-03)에만 준다. **운영용 Bot 키에는 주지 않는다.**
@@ -51,7 +51,7 @@
 | `app` | | 데스크톱만. **앱 이름** (예: `ERP Client`). Worker가 이 이름으로 그 PC의 실행 명령을 찾는다 — 실행 파일 경로는 여기 두지 않는다 (PC마다 다르다, [ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 | `window` | 데스크톱이면 ✓ | 데스크톱만. **이 화면인 창을 알아보는 조건** (WindowSpec, 아래). Worker는 이 창 **안에서만** 찾는다 |
 | `locators` | ✓ | `{semantic_key: LocatorSpec[]}` (C8). 요소마다 1개 이상 |
-| `elements` | | `{semantic_key: ElementHint}` — `{description, role, name, kind}`. `kind`: `control` \| `list` \| `table` \| `text` (BUI-06 「종류」). 치유·계획에 쓴다 |
+| `elements` | | `{semantic_key: ElementHint}` — `{description, role, name, kind}`. `kind`: `control` \| `list` \| `table` \| `text` (TOL-03 「종류」). 치유·계획에 쓴다 |
 | `catalog` | | `{semantic_key: CatalogEntry}` — `{actions[], depends_on[], concepts[], navigates_to?}`. 설계할 때만 쓴다 (STU-13 요소 목록, LLM 계획) |
 
 #### WindowSpec (데스크톱 창 조건)
@@ -92,14 +92,14 @@
 | `created` | `[{semantic_key, locator_key}]` 새로 생긴 것 |
 | `kept` | `[{semantic_key, locator_key}]` 이미 있던 것 |
 | `created_page` | bool. 새 화면이었나 |
-| `unchanged` | bool. `created`가 비고 `kept`만 있으면 true, "이미 등록된 것과 같다"는 뜻 (BUI-06 결과 문구) |
+| `unchanged` | bool. `created`가 비고 `kept`만 있으면 true, "이미 등록된 것과 같다"는 뜻 (TOL-03 결과 문구) |
 
 ### registry_delete
 
 입력: `{page_id, semantic_key?, force: false}`. `semantic_key`가 없으면 화면 전체를 지운다.
 
 - **잘못 만든 것을 없애는 길이다.** 화면 개편용이 아니다. 개편은 재등록(사다리를 더함)과 `deprecated` 판정으로 한다. 지우면 그 화면의 통계·승격·치유 이력이 사라진다.
-- **배포된 Bot이 쓰는지는 UI 자동화 앱이 모른다** (Center가 안다). 그래서 유틸리티는 지우기 전에 Center 리소스 목록(C7 `ContributedResource.used_by`)을 읽어 「이 화면을 쓰는 Bot <N>개 — 지우면 그 Bot의 UI 태스크가 실패합니다」를 보이고 확인을 받는다. 실행 중에 지워져도 보고는 걸리지 않는다 (C8 재전송 규칙).
+- **배포된 Bot이 쓰는지는 UI 자동화 앱이 모른다** (Center가 안다). 그래서 도구는 지우기 전에 Center 리소스 목록(C7 `ContributedResource.used_by`)을 읽어 「이 화면을 쓰는 Bot <N>개 — 지우면 그 Bot의 UI 태스크가 실패합니다」를 보이고 확인을 받는다. 실행 중에 지워져도 보고는 걸리지 않는다 (C8 재전송 규칙).
 - 다른 화면의 요소가 이것을 가리키면(`navigates_to`, `depends_on`), `force=false`일 때 409 `has_links`와 함께 끊길 경로 목록을 돌려준다. 사람이 두 번째로 확인하면(U9) `force=true`로 다시 보낸다.
 
 출력 (DeletionResult): `{page_id, semantic_key?, elements, locators, broken_links: [{page_id, semantic_key, kind}], revision}`. 되돌릴 수 없는 일이라 숫자로 남긴다.
@@ -151,7 +151,7 @@
 
 - **관문은 C11 관리 API와 같다** (`service_kit.admin_guard`) — 관리자 토큰이 없으면 503 `admin_disabled`, 없는 토큰은 401, 틀린 토큰은 403이다. **업무 키로는 못 부른다** (`registry_write` 키여도 403).
 - 왜 관리자 토큰인가: **콘솔은 서비스 앱 키를 갖지 않는다** ([ADR-0013](../decisions/0013-api-keys.md)). 셀렉터를 보는 작업(`registry_get_page`)은 `registry_write` 키의 일이고, 콘솔이 그 키를 들고 있으면 「키를 발급하는 화면이 키를 쓰는」 꼴이 된다. 관리자 토큰은 키를 발급하는 토큰이라 이미 더 강하다.
-- **읽기만 한다.** 등록·삭제는 §전송의 작업(`/v1/ops/registry_*`)이고 Bot UI 유틸리티(BUI-06)의 일이다.
+- **읽기만 한다.** 등록·삭제는 §전송의 작업(`/v1/ops/registry_*`)이고 셀렉터 등록 도구(TOL-03)의 일이다.
 - **대체된 것(`deprecated`)도 준다** — 무엇이 밀려났는지 보는 화면이다 (UIA-02).
 - **「치유가 더했다」는 표시는 레지스트리에 없다** — 보고가 적어 둔 것(`healed[].locator`·`supersedes`)에서 모은다. 그래서 화면의 「자가 치유」 열과 「대체 관계」는 **세션 기록이 있어야** 보인다.
 - 「화면 간 경로 탐색」은 **최단 하나**를 앱이 **너비 우선**으로 찾는다 ([ADR-0040](../decisions/0040-registry-storage-sqlite.md)) — 길이 없으면 빈 목록이고 **지어내지 않는다**.
@@ -216,13 +216,13 @@
 
 ## 오류
 
-| 상태 코드 | `code` | 언제 | 할 일 (BUI-06) |
+| 상태 코드 | `code` | 언제 | 할 일 (TOL-03) |
 | --- | --- | --- | --- |
 | 403 | `scope_missing` | `registry_write` 없는 키 (코드는 작업의 `required_scopes`를 뼈대가 걸어 낸다, C11 §오류) | 「등록 권한이 있는 키가 아닙니다 — 설정 → UI 셀렉터 등록」 |
 | 404 | `page_not_found` | | 「새 화면 — 등록하면 만들어집니다」 |
 | 409 | `has_links` (`detail.broken_links`) | 다른 화면이 가리키는 것 삭제 | 두 번째 확인 창 → `force=true` |
 | 422 | `invalid_page` (`detail` 규칙별) | 이름 규칙, 사다리 없는 요소, 자기 의존, 데스크톱인데 창 조건 없음·웹 전략 | 칸마다 표시 |
-| 503 | `registry_unavailable` | 저장소가 내려감 (무엇이 저장소인지는 응답에 드러내지 않는다) | 「서버에 닿지 못해 등록을 큐에 쌓았습니다」(BUI-06, 4xx는 큐에 쌓지 않음) |
+| 503 | `registry_unavailable` | 저장소가 내려감 (무엇이 저장소인지는 응답에 드러내지 않는다) | 「서버에 닿지 못해 등록을 큐에 쌓았습니다」(TOL-03, 4xx는 큐에 쌓지 않음) |
 
 ## 호환 규칙
 

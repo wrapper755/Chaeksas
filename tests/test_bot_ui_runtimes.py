@@ -47,8 +47,8 @@ DEFINITION: dict[str, Any] = {
     "tier": "builtin",
     "api": ">=1,<2",
     "contributes": {
-        "bot_ui.utilities": [
-            {"id": "pick-things", "label": "요소 담기", "menu": "tools",
+        "tool_ui.tools": [
+            {"id": "pick-things", "label": "요소 담기",
              "entry": "demo.client:Thing", "needs_runtime": "helper"}
         ],
         "bot_ui.local_runtimes": [
@@ -273,11 +273,11 @@ def test_the_tools_menu_comes_from_the_extensions(window: Any) -> None:
     assert "요소 담기..." in menu_texts(window)
 
 
-def test_the_tray_tools_menu_opens_the_same_utilities(app: Any, window: Any) -> None:
+def test_the_tray_tools_menu_opens_the_same_tools(app: Any, window: Any) -> None:
     """BUI-01 — **트레이가 주 진입점**이다 (창을 닫아도 트레이에 남는다). docs/09-gaps.md §4-3.
 
     붙이기 전까지 트레이 항목은 전부 `setEnabled(False)`였고 이름도 확장 id였다 — 같은 메뉴가
-    메인 창에서는 돌고 있었다. 창은 **메인 창이 쥔다** (같은 것을 두 번 열지 않는 자리다).
+    메인 창에서는 돌고 있었다. 누르면 **메인 창과 같은 길**로 Tool UI를 띄운다 (ADR-0077).
     """
     from PySide6.QtWidgets import QMenu, QSystemTrayIcon  # noqa: PLC0415
 
@@ -287,7 +287,7 @@ def test_the_tray_tools_menu_opens_the_same_utilities(app: Any, window: Any) -> 
         pytest.skip("이 환경에는 시스템 트레이가 없다")
     tray = Tray(window._agent, parent=app)  # noqa: SLF001
     asked: list[tuple[str, str]] = []
-    tray.open_utility.connect(lambda e, u: asked.append((e, u)))
+    tray.open_tool.connect(lambda e, t: asked.append((e, t)))
     tray.refresh()
     tools = next(one for one in tray.contextMenu().findChildren(QMenu) if one.title() == "도구")
     actions = [one for one in tools.actions() if one.text() == "요소 담기..."]
@@ -298,18 +298,37 @@ def test_the_tray_tools_menu_opens_the_same_utilities(app: Any, window: Any) -> 
     tray.setParent(None)
 
 
-def test_a_utility_that_cannot_start_its_runtime_does_not_open(
+def test_a_tool_whose_runtime_cannot_start_does_not_launch_tool_ui(
     window: Any, monkeypatch: Any, modal_boxes: list[tuple[str, str]]
 ) -> None:
-    """못 띄우면 **창을 열지 않고** 왜 못 열었는지 말한다."""
+    """못 띄우면 **Tool UI를 띄우지 않고** 왜 못 열었는지 말한다 — Tool UI는 런타임을 띄우지 않는다."""
 
     def refuse(*_a: Any, **_k: Any) -> None:
         raise RuntimeUnavailable("포트 9911이 이미 쓰이고 있습니다")
 
+    launched: list[list[str]] = []
     monkeypatch.setattr(window._agent.runtimes(), "ensure", refuse)  # noqa: SLF001
-    window.open_utility("demo", "pick-things")
-    assert window._utilities == {}  # noqa: SLF001
+    monkeypatch.setattr(window, "launch_tool_ui", launched.append)
+    window.open_tool("demo", "pick-things")
+    assert launched == []
     assert any("9911" in text for _, text in modal_boxes)
+
+
+def test_a_tool_starts_its_runtime_first_then_launches_tool_ui_with_it(
+    window: Any, monkeypatch: Any
+) -> None:
+    """ADR-0077 — 바로가기는 **런타임을 먼저** 띄우고 Tool UI를 `--open <확장>:<도구>`로 띄운다."""
+    order: list[str] = []
+    launched: list[list[str]] = []
+    monkeypatch.setattr(window._agent.runtimes(), "ensure", lambda rid, **_: order.append(f"ensure:{rid}"))  # noqa: SLF001
+    def launch(cmd: list[str]) -> None:
+        order.append("launch")
+        launched.append(cmd)
+
+    monkeypatch.setattr(window, "launch_tool_ui", launch)
+    window.open_tool("demo", "pick-things")
+    assert order == ["ensure:helper", "launch"]
+    assert launched[0][-2:] == ["--open", "demo:pick-things"]
 
 
 @pytest.fixture(autouse=True)

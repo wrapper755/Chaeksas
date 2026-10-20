@@ -157,7 +157,7 @@ def test_catalog_is_schema_versioned() -> None:
     [
         ("task_types", [{"id": "t", "label": "t", "run_locations": ["pc"]}]),
         ("studio.editors", [{"task_type": "t", "entry": "x:Y"}]),
-        ("bot_ui.utilities", [{"id": "u", "label": "u", "entry": "x:Y"}]),
+        ("tool_ui.tools", [{"id": "u", "label": "u", "entry": "x:Y"}]),
         ("bot_ui.local_runtimes", [{"id": "r", "label": "r", "entry": "x:Y"}]),
         ("configuration", [{"key": "k", "label": "k", "scope": "bot_ui"}]),
         ("preflight", [{"id": "p", "entry": "x:Y"}]),

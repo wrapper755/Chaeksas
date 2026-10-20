@@ -72,9 +72,11 @@ SERVICE_URL_ENV = "CHK_RUNTIME__SERVICE_URL"
 
 #: `configuration[].scope`, `local_runtimes[].start`, `requires_keys[].purpose`.
 SCOPE_BOT_UI = "bot_ui"
+#: Tool UI의 도구가 쓰는 칸 (TOL-02, ADR-0077) — 등록 담당자 키처럼 **현장 운영 설정에 섞지 않을 것**.
+SCOPE_TOOL_UI = "tool_ui"
 SCOPE_STUDIO = "studio"
 SCOPE_SERVER_RUNNER = "server_runner"
-CONFIG_SCOPES = frozenset({SCOPE_BOT_UI, SCOPE_STUDIO, SCOPE_SERVER_RUNNER})
+CONFIG_SCOPES = frozenset({SCOPE_BOT_UI, SCOPE_TOOL_UI, SCOPE_STUDIO, SCOPE_SERVER_RUNNER})
 START_ON_DEMAND = "on_demand"
 START_ALWAYS = "always"
 KNOWN_STARTS = frozenset({START_ON_DEMAND, START_ALWAYS})
@@ -167,14 +169,20 @@ class ResourceView(ContractModel):
     creates_task_field: str | None = None
 
 
-class Utility(ContractModel):
-    """Bot UI 「도구」 메뉴·탭에 더하는 유틸리티 하나 (BUI-06~08)."""
+#: 걷은 기여 지점 (ADR-0077) — 도구는 `tool_ui.tools`로 간다. 적은 확장이 있으면 호스트가 경고한다
+#: (모르는 열쇠라고 **조용히 사라지지 않게**).
+LEGACY_UTILITIES_KEY = "bot_ui.utilities"
+
+
+class Tool(ContractModel):
+    """Tool UI에 더하는 도구 하나 (`tool_ui.tools`, TOL-01 — ADR-0077). 예: UI 셀렉터 등록(TOL-03~05)."""
 
     id: str
     label: str
-    menu: str = "tools"
     entry: str
-    needs_runtime: str | None = None  # 열어 둘 때 띄워야 하는 로컬 런타임 id
+    #: 이 도구가 쓰는 로컬 런타임 id. **Tool UI는 띄우지 않는다** — Bot UI가 띄운 것을 빌린다.
+    #: Bot UI 「도구」 바로가기는 이것을 먼저 띄운 뒤 Tool UI를 연다.
+    needs_runtime: str | None = None
 
 
 class Panel(ContractModel):
@@ -292,7 +300,7 @@ class Contributes(ContractModel):
     task_types: list[TaskTypeContribution] = Field(default_factory=list)
     studio_editors: list[StudioEditorContribution] = Field(default_factory=list, alias="studio.editors")
     studio_resource_views: list[ResourceView] = Field(default_factory=list, alias="studio.resource_views")
-    bot_ui_utilities: list[Utility] = Field(default_factory=list, alias="bot_ui.utilities")
+    tool_ui_tools: list[Tool] = Field(default_factory=list, alias="tool_ui.tools")
     bot_ui_panels: list[Panel] = Field(default_factory=list, alias="bot_ui.panels")
     bot_ui_local_runtimes: list[LocalRuntime] = Field(default_factory=list, alias="bot_ui.local_runtimes")
     configuration: list[ConfigurationItem] = Field(default_factory=list)
@@ -401,7 +409,7 @@ class KeyNeed(ContractModel):
     """이 확장이 쓰는 서비스 앱 키 하나.
 
     - `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.
-    - `utility`: Bot UI 유틸리티가 쓸 때. `configuration`의 `secret` 칸으로 받는다.
+    - `utility`: Tool UI의 도구가 쓸 때 (ADR-0077). `configuration`의 `secret` 칸으로 받는다.
     """
 
     purpose: str  # KNOWN_PURPOSES
@@ -456,7 +464,7 @@ class ExtensionManifest(SchemaVersioned):
             "task_types": [t.id for t in c.task_types],
             "studio.editors": [e.task_type for e in c.studio_editors],
             "studio.resource_views": [v.id for v in c.studio_resource_views],
-            "bot_ui.utilities": [u.id for u in c.bot_ui_utilities],
+            "tool_ui.tools": [t.id for t in c.tool_ui_tools],
             "bot_ui.panels": [p.id for p in c.bot_ui_panels],
             "bot_ui.local_runtimes": [r.id for r in c.bot_ui_local_runtimes],
             "configuration": [i.key for i in c.configuration],
@@ -613,7 +621,7 @@ def _check_e1(m: ExtensionManifest) -> list[Violation]:
     forbidden = {
         "task_types": [t.id for t in c.task_types],
         "studio.editors": [e.task_type for e in c.studio_editors],
-        "bot_ui.utilities": [u.id for u in c.bot_ui_utilities],
+        "tool_ui.tools": [t.id for t in c.tool_ui_tools],
         "bot_ui.panels": [p.id for p in c.bot_ui_panels],
         "bot_ui.local_runtimes": [r.id for r in c.bot_ui_local_runtimes],
         "configuration": [i.key for i in c.configuration],

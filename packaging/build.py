@@ -87,6 +87,8 @@ class App:
     title: str = ""  # 설치·시작 메뉴에 보이는 이름
     dir_name: str = ""  # %LOCALAPPDATA%\Programs\Chaeksas\<여기>
     autostart_task: str | None = None  # 제거할 때 지울 작업 스케줄러 이름
+    #: 같은 실행 파일을 `--tool-ui`로 여는 시작 메뉴 바로가기 이름 (ADR-0077 §6 — Bot UI만).
+    tool_ui_shortcut: str | None = None
 
     @property
     def exe(self) -> Path:
@@ -102,6 +104,7 @@ APPS = (
         dir_name="BotUI",
         # 이름은 앱이 쓰는 그 자리에서 읽는다 — 베끼면 이름을 바꿀 때 지우지 못한 작업이 남는다.
         autostart_task=TASK_NAME,
+        tool_ui_shortcut="Chaeksas Tool UI",
     ),
     App(
         "studio", "ChaeksasStudio", "studio_main.py", "chaeksas-studio",
@@ -186,6 +189,9 @@ def build(app: App) -> float:
         # 판을 읽는 dist-info (ADR-0067) — 훅은 **확장의** 것만 넣는다.
         "--copy-metadata", "chaeksas-core", "--copy-metadata", app.dist,
     ]
+    if app.tool_ui_shortcut:
+        # Tool UI가 같은 실행 파일로 돈다 (ADR-0077 §6) — 그 판을 읽는 dist-info도 넣는다.
+        args += ["--copy-metadata", "chaeksas-tool-ui"]
     if IS_WINDOWS:
         # DPI 선언 — 같은 실행 파일로 뜨는 Worker까지 Per-Monitor v2가 된다 (ADR-0021).
         args += ["--manifest", str(HERE / "app.manifest")]
@@ -248,6 +254,8 @@ def installer_defines(app: App, version: str) -> list[str]:
     }
     if app.autostart_task:
         found["AutostartTask"] = app.autostart_task
+    if app.tool_ui_shortcut:
+        found["ToolUiName"] = app.tool_ui_shortcut
     return [f"/D{key}={value}" for key, value in found.items()]
 
 

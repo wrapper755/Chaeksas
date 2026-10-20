@@ -84,9 +84,9 @@ class Tray(QSystemTrayIcon):
     open_window = Signal()
     open_settings = Signal()
     open_extensions = Signal()
-    #: 확장이 기여한 유틸리티를 열어 달라 — `(확장 id, 유틸리티 id)`. **창은 메인 창이 쥔다**
-    #: (같은 것을 두 번 열지 않는 자리가 거기다, BUI-02 [K]).
-    open_utility = Signal(str, str)
+    #: 확장이 기여한 도구를 열어 달라 — `(확장 id, 도구 id)`. 메인 창이 런타임을 띄우고 **Tool UI를
+    #: 띄운다** (ADR-0077 — 창은 Tool UI가 쥔다).
+    open_tool = Signal(str, str)
     quit_requested = Signal()
 
     def __init__(
@@ -156,17 +156,17 @@ class Tray(QSystemTrayIcon):
         self._menu.addAction("창 열기", self.open_window.emit)
 
         tools = self._menu.addMenu("도구")
-        # 유틸리티는 **확장이 기여한다** (ADR-0018) — 트레이는 어느 확장인지 모른다.
+        # 도구는 **확장이 기여하고 Tool UI가 띄운다** (ADR-0018·0077) — 트레이는 바로가기뿐이다.
         # 이름은 기여가 적은 `label`이고(id가 아니다), **확장 이름순**이다 (BUI-01).
-        utilities = agent.host.utilities() if agent.host is not None else []
-        for found in sorted(utilities, key=lambda c: (c.extension_id, c.value.label)):
+        found_tools = agent.host.tools() if agent.host is not None else []
+        for found in sorted(found_tools, key=lambda c: (c.extension_id, c.value.label)):
             entry = tools.addAction(f"{found.value.label}...")
-            entry.setToolTip(f"{found.extension_id} 확장")
+            entry.setToolTip(f"{found.extension_id} 확장 — Tool UI로 엽니다")
             entry.triggered.connect(
-                lambda _=False, e=found.extension_id, u=found.value.id: self.open_utility.emit(e, u)
+                lambda _=False, e=found.extension_id, t=found.value.id: self.open_tool.emit(e, t)
             )
-        if not utilities:
-            empty = tools.addAction("확장이 더한 유틸리티가 없습니다")
+        if not found_tools:
+            empty = tools.addAction("확장이 더한 도구가 없습니다")
             empty.setEnabled(False)
         tools.addSeparator()
         # 창은 **메인 창이 쥔다** (BUI-02 [K] — 같은 것을 두 번 열지 않는 자리가 거기다).

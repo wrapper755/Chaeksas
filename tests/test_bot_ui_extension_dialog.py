@@ -341,7 +341,7 @@ def test_a_definition_that_could_not_be_read_is_said_below_the_table(tmp_path: P
 
 
 def test_the_detail_tells_where_the_keys_go(tmp_path: Path) -> None:
-    """키마다 **넣는 화면까지** 말해 준다 (실행용은 BUI-10, 유틸리티용은 BUI-03)."""
+    """키마다 **넣는 화면까지** 말해 준다 (실행용은 BUI-10, 도구용은 Tool UI 설정 TOL-02)."""
     window = dialog(host_with(builtin()), tmp_path=tmp_path)
     shown = window.detail.toPlainText()
 
@@ -581,14 +581,13 @@ def test_refresh_takes_the_definition_from_center(tmp_path: Path) -> None:
 
 
 def with_utility() -> dict[str, Any]:
-    """유틸리티를 기여하는 확장 — 끄면 「도구」 메뉴에서 사라져야 한다."""
+    """도구를 기여하는 확장 — 끄면 「도구」 메뉴(바로가기)에서 사라져야 한다."""
     return builtin(
         contributes={
-            "bot_ui.utilities": [
+            "tool_ui.tools": [
                 {
                     "id": "scan-things",
                     "label": "문서 담기",
-                    "menu": "tools",
                     "entry": "doc_ocr.client:Scan",
                 }
             ]

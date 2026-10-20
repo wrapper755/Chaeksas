@@ -19,12 +19,12 @@ from chaeksas.contracts import AdminKey, definition_hash, key_id_for, sign
 from chaeksas.core import ExtensionHost, load_host, summarize
 from chaeksas.extension_api import (
     API_VERSION,
-    BotUiUtility,
     EntryError,
     LocalRuntimeEntry,
     PreflightCheck,
     TaskEditor,
     TaskExecutor,
+    ToolUiTool,
 )
 from chaeksas.extension_api.entry import module_root
 
@@ -69,17 +69,16 @@ def test_entry_points_find_the_builtin_extension(host: ExtensionHost) -> None:
     assert host.failures == []
 
 
-def test_builtin_contributes_task_type_and_utility(host: ExtensionHost) -> None:
-    """M1 기준 — Studio에 태스크 종류, Bot UI에 유틸리티가 더해진다."""
+def test_builtin_contributes_task_type_and_tool(host: ExtensionHost) -> None:
+    """M1 기준 — Studio에 태스크 종류, Tool UI에 도구가 더해진다 (ADR-0077)."""
     task_types = {c.value.id: c for c in host.task_types()}
     assert "ui_task" in task_types
     assert task_types["ui_task"].extension_id == BUILTIN_ID
     assert task_types["ui_task"].value.run_locations == ["pc"], "UI 태스크는 PC에서만 돈다 (ADR-0015)"
 
-    utilities = {c.value.id: c.value for c in host.utilities()}
-    assert "selector-registration" in utilities
-    assert utilities["selector-registration"].menu == "tools"
-    assert utilities["selector-registration"].needs_runtime == "worker"
+    tools = {c.value.id: c.value for c in host.tools()}
+    assert "selector-registration" in tools
+    assert tools["selector-registration"].needs_runtime == "worker"
 
 
 def test_the_run_location_table_only_holds_task_types_that_are_turned_on(host: ExtensionHost) -> None:
@@ -112,11 +111,13 @@ def test_other_contribution_points(host: ExtensionHost) -> None:
     assert [c.value.id for c in host.console_pages()] == ["overview", "selectors", "monitoring"]
     assert [c.value.id for c in host.panels("bot_ui.runtimes")] == ["recent-ui-sessions"]
     assert [c.value.id for c in host.preflight()] == ["pages-registered"]
-    assert [c.value.key for c in host.configuration(scope="bot_ui")] == ["registrar_key"]
+    # 등록 담당자 키는 **도구의 것**이다 — 현장 운영 설정(Bot UI)에 섞이지 않는다 (ADR-0077).
+    assert [c.value.key for c in host.configuration(scope="tool_ui")] == ["registrar_key"]
+    assert host.configuration(scope="bot_ui") == []
     assert host.configuration(scope="server_runner") == []
     # **비밀 칸은 거르는 쪽이 거른다** — `credentials.py`가 `configuration()`에 `.secret`을
     # 걸어 본다 (호스트에 그 편의 메서드를 두지 않는다 — 두 길이 되면 한쪽만 고친다).
-    secret = [c.value.key for c in host.configuration(scope="bot_ui") if c.value.secret]
+    secret = [c.value.key for c in host.configuration(scope="tool_ui") if c.value.secret]
     assert secret == ["registrar_key"]
     # 서버 부분이 C11 서비스 앱이므로 어댑터가 없다 (작업은 앱의 /manifest에서 온다).
     found = host.get("ui-automation")
@@ -236,7 +237,7 @@ def test_resolved_code_matches_the_interface(host: ExtensionHost) -> None:
     _app = QApplication.instance() or QApplication([])
     assert isinstance(host.executor("ui_task"), TaskExecutor)
     assert isinstance(host.editor("ui_task"), TaskEditor)
-    assert isinstance(host.utility("selector-registration"), BotUiUtility)
+    assert isinstance(host.tool(BUILTIN_ID, "selector-registration"), ToolUiTool)
     checks = host.preflight_checks()
     assert len(checks) == 1
     assert isinstance(checks[0].value, PreflightCheck)
@@ -257,11 +258,26 @@ def test_executor_is_made_once_editor_every_time(host: ExtensionHost) -> None:
     assert host.editor("ui_task") is not host.editor("ui_task")
 
 
-def test_unknown_task_type_or_utility_raises(host: ExtensionHost) -> None:
+def test_unknown_task_type_or_tool_raises(host: ExtensionHost) -> None:
     with pytest.raises(LookupError):
         host.executor("nope_task")
     with pytest.raises(LookupError):
-        host.utility("nope")
+        host.tool(BUILTIN_ID, "nope")
+    with pytest.raises(LookupError, match="도구가 아니다"):
+        host.tool("nope", "selector-registration")
+
+
+def test_the_old_utilities_key_is_not_read_but_says_so(caplog: pytest.LogCaptureFixture) -> None:
+    """`bot_ui.utilities`는 걷었다 (ADR-0077) — **도구가 되지 않고**, 조용히 사라지지도 않는다."""
+    host = ExtensionHost()
+    with caplog.at_level("WARNING", logger="chaeksas.core.extensions"):
+        loaded = install(
+            host,
+            definition(contributes={"bot_ui.utilities": [{"id": "u", "label": "u", "entry": "x:Y"}]}),
+        )
+    assert loaded is not None and loaded.enabled, "옛 열쇠 하나로 확장 전체를 끄지 않는다"
+    assert host.tools() == []
+    assert "tool_ui.tools" in caplog.text and "bot_ui.utilities" in caplog.text
 
 
 def test_context_carries_settings_and_secrets(host: ExtensionHost) -> None:
@@ -349,12 +365,12 @@ def test_external_definition_with_code_is_not_enabled() -> None:
         definition(
             tier="external",
             api=None,
-            contributes={"bot_ui.utilities": [{"id": "u", "label": "u", "entry": "evil:Thing"}]},
+            contributes={"tool_ui.tools": [{"id": "u", "label": "u", "entry": "evil:Thing"}]},
         ),
     )
     assert loaded is not None and not loaded.enabled
     assert [p.code for p in loaded.problems] == ["external_code_not_allowed"]
-    assert host.utilities() == []
+    assert host.tools() == []
 
 
 def test_entry_cannot_point_outside_the_extension(host: ExtensionHost) -> None:

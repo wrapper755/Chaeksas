@@ -1,4 +1,4 @@
-"""밀린 등록 — 서버에 닿지 못한 등록을 쌓아 두고 나중에 올린다 (BUI-06 8번).
+"""밀린 등록 — 서버에 닿지 못한 등록을 쌓아 두고 나중에 올린다 (TOL-03 8번).
 
 사람이 화면 앞에서 한 일을 **네트워크 때문에 잃지 않게** 한다. 등록 담당자는 보통 현장에서
 일하고, 그 자리에서 서버가 안 열리는 일이 흔하다.
@@ -65,7 +65,7 @@ class Pending:
         return len(list(self.folder.glob("*.json"))) if self.folder.is_dir() else 0
 
     def drop(self, page_id: str) -> bool:
-        """그 화면의 밀린 등록을 버린다 (지운 화면을 나중에 되살리지 않게 — BUI-06 10번)."""
+        """그 화면의 밀린 등록을 버린다 (지운 화면을 나중에 되살리지 않게 — TOL-03 10번)."""
         found = self.path(page_id)
         if not found.is_file():
             return False

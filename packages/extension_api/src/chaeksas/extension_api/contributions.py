@@ -3,9 +3,9 @@
 모두 `Protocol`이다. 확장은 상속하지 않고 모양만 맞추면 된다. 호스트는 `entry`로 찾은 객체가
 이 모양인지 보고 켠다.
 
-**Qt를 import하지 않는다.** 화면을 만드는 기여(`TaskEditor`·`BotUiUtility`)는 위젯을 `object`로
+**Qt를 import하지 않는다.** 화면을 만드는 기여(`TaskEditor`·`ToolUiTool`·`BotUiPanel`)는 위젯을 `object`로
 돌려준다. `core`가 이 패키지를 쓰는데 `core`는 Qt를 모르기 때문이다 (01-architecture §5).
-위젯을 받아 붙이는 것은 Studio·Bot UI의 몫이다.
+위젯을 받아 붙이는 것은 Studio·Bot UI·Tool UI의 몫이다.
 
 로컬 런타임(`bot_ui.local_runtimes`)은 **다른 프로세스에서** 돈다. 띄우고 감시하는 것은 Bot UI이고
 (C13, BUI-09·11), 확장이 주는 것은 그 자식 프로세스 안에서 불릴 진입점 하나(`LocalRuntimeEntry`)다.
@@ -60,8 +60,12 @@ class TaskEditor(Protocol):
 
 
 @runtime_checkable
-class BotUiUtility(Protocol):
-    """Bot UI 「도구」 메뉴·탭의 유틸리티 (`bot_ui.utilities`, 예: BUI-06~08 셀렉터 등록)."""
+class ToolUiTool(Protocol):
+    """Tool UI의 도구 하나 (`tool_ui.tools`, TOL-01 — 예: TOL-03~05 셀렉터 등록, ADR-0077).
+
+    Tool UI가 탭 하나에 붙인다. 로컬 런타임이 필요하면 **Bot UI가 띄운 것**을 예약 키
+    (`runtime.<id>.*`)로 받는다 — 도구도 Tool UI도 런타임을 띄우지 않는다.
+    """
 
     def widget(self, ctx: ExtensionContext) -> object:
         """탭에 붙일 위젯 (Qt)."""
@@ -72,11 +76,15 @@ class BotUiUtility(Protocol):
         ...
 
 
+#: 옛 이름 (`bot_ui.utilities`, ADR-0077 전) — **모양이 같아** 1.x 약속을 깨지 않으려고 남긴다.
+BotUiUtility = ToolUiTool
+
+
 @runtime_checkable
 class BotUiPanel(Protocol):
     """플랫폼 화면의 **한 칸** (`bot_ui.panels`, BUI-09의 「최근 UI 세션」 — ADR-0042).
 
-    `BotUiUtility`와 다른 것은 「창이 아니라 남의 화면 안의 칸」이라는 점이다. 그래서 둘이
+    `ToolUiTool`과 다른 것은 「창이 아니라 남의 화면 안의 칸」이라는 점이다. 그래서 둘이
     더 있다.
 
     - **`refresh()`는 호스트가 부른다** — 패널이 자기 타이머를 만들지 않는다 (화면 스레드를

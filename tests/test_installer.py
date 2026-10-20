@@ -67,7 +67,7 @@ def test_the_script_and_the_build_name_the_same_values() -> None:
     used |= set(re.findall(r"\{#StringChange\((\w+),", text))
     for app in _peek()["apps"]:
         passed = {one[2:].split("=", 1)[0] for one in app["defines"]}
-        optional = {"AutostartTask"}
+        optional = {"AutostartTask", "ToolUiName"}
         assert used - optional <= passed, (app["key"], sorted(used - passed))
         assert passed <= used, (app["key"], sorted(passed - used))
 

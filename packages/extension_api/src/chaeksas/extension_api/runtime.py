@@ -24,6 +24,8 @@ RUN_LOCATION_SERVER = "server"
 HOST_STUDIO = "studio"
 HOST_BOT_UI = "bot_ui"
 HOST_SERVER_RUNNER = "server_runner"
+#: Tool UI — 확장의 도구를 띄우는 창 (ADR-0077). 런타임을 띄우지 않고 Bot UI 것을 빌린다.
+HOST_TOOL_UI = "tool_ui"
 
 #: 결과를 모르는 실패를 사람에게 넘기는 방법 (C13 §4 — PC는 확인, 서버는 오류 경계).
 ESCALATE_CONFIRMATION = "confirmation"
@@ -53,7 +55,7 @@ class ExtensionContext:
     extension_id: str
     extension_version: str
     api_version: str
-    #: 지금 이 코드를 돌리는 쪽 (HOST_STUDIO·HOST_BOT_UI·HOST_SERVER_RUNNER).
+    #: 지금 이 코드를 돌리는 쪽 (HOST_STUDIO·HOST_BOT_UI·HOST_TOOL_UI·HOST_SERVER_RUNNER).
     host: str
     settings: Settings
     secrets: Secrets

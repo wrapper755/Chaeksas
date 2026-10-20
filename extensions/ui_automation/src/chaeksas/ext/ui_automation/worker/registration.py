@@ -1,9 +1,9 @@
-"""셀렉터 등록 — 화면을 분석하고 사다리를 검증한다 (C10 §5, BUI-06).
+"""셀렉터 등록 — 화면을 분석하고 사다리를 검증한다 (C10 §5, TOL-03).
 
-Worker가 **브라우저 일만** 한다. 레지스트리에 쓰는 것은 Bot UI 유틸리티가 직접 한다 (C9) —
+Worker가 **브라우저 일만** 한다. 레지스트리에 쓰는 것은 셀렉터 등록 도구(Tool UI)가 직접 한다 (C9) —
 Worker는 레지스트리를 모른다.
 
-- **범위가 아무것도 못 찾으면 전체로 몰래 넓히지 않는다** (BUI-06 2번) — 그렇게 넓히면
+- **범위가 아무것도 못 찾으면 전체로 몰래 넓히지 않는다** (TOL-03 2번) — 그렇게 넓히면
   사람이 범위를 잘못 적은 것을 끝내 모른다.
 - **잘렸으면 잘렸다고 말한다** — 조용히 자르면 없는 것을 없다고 단정한다.
 - 검증은 **지금 열린 화면에서** 사다리 전체를 시험한다. 하나에 맞아야 통과다.
@@ -111,7 +111,7 @@ ROLE_BY_INPUT_TYPE: dict[str, str] = {
 #: 읽기 대상인가 (테두리 색을 가른다 — 조작은 빨강, 읽기는 주황).
 READ_KINDS_JS = "['table','grid','list','listbox','heading','paragraph','cell']"
 
-#: 직접 고르기 (BUI-06 3번). 화면에 덧씌워 **누른 것을 담는다**.
+#: 직접 고르기 (TOL-03 3번). 화면에 덧씌워 **누른 것을 담는다**.
 #:
 #: - **링크 이동과 폼 제출을 막는다** — 누르면 다른 화면으로 가 버린다.
 #: - Shift+클릭은 둘러싼 표. Esc로 끝.
@@ -200,7 +200,7 @@ STOP_JS = """
 }
 """
 
-#: 표시 (BUI-06 5번) — 고른 줄을 **파란 테두리**로 잠깐 보인다.
+#: 표시 (TOL-03 5번) — 고른 줄을 **파란 테두리**로 잠깐 보인다.
 HIGHLIGHT_JS = """
 (selector) => {
   document.querySelectorAll("[data-chk-shown]").forEach((one) => {
@@ -220,7 +220,7 @@ HIGHLIGHT_JS = """
 
 
 def start_pick(page: Any) -> None:
-    """직접 고르기를 켠다 (BUI-06 3번). **다시 켜도 두 번 걸리지 않는다**."""
+    """직접 고르기를 켠다 (TOL-03 3번). **다시 켜도 두 번 걸리지 않는다**."""
     page.evaluate(PICK_JS, COLLECT_JS)
 
 
@@ -239,7 +239,7 @@ def stop_pick(page: Any) -> None:
 
 
 def highlight(page: Any, locators: list[LocatorSpec]) -> int:
-    """사다리의 CSS로 화면에 표시한다 (BUI-06 5번) → 몇 개가 잡혔나.
+    """사다리의 CSS로 화면에 표시한다 (TOL-03 5번) → 몇 개가 잡혔나.
 
     **하나가 아니면 그렇게 말한다** — 여럿이 잡히면 실행에서 엉뚱한 것을 누른다.
     """
@@ -250,7 +250,7 @@ def highlight(page: Any, locators: list[LocatorSpec]) -> int:
 
 
 def analyze(page: Any, request: AnalyzeRequest) -> AnalyzeResult:
-    """지금 열린 화면에서 요소 후보를 모은다 (BUI-06 「분석」)."""
+    """지금 열린 화면에서 요소 후보를 모은다 (TOL-03 「분석」)."""
     wanted = READ_SELECTOR if request.include_read else CONTROL_SELECTOR
     limit = max(MIN_MAX, min(request.max, MAX_MAX))
 
@@ -300,7 +300,7 @@ def _role_of(tag: str, input_type: str) -> str:
 
 
 def verify(finder: Any, ladders: dict[str, list[LocatorSpec]], *, timeout_ms: int = 2000) -> VerifyResult:
-    """사다리를 **지금 열린 화면에서** 시험한다 (BUI-06 「검증」).
+    """사다리를 **지금 열린 화면에서** 시험한다 (TOL-03 「검증」).
 
     하나에 맞아야 통과다. 여럿이면 실패 — 실행에서 엉뚱한 것을 누른다.
     """
@@ -333,7 +333,7 @@ def _why(match: Any) -> str:
 
 
 def summarize(result: VerifyResult) -> str:
-    """BUI-06 7번의 요약 한 줄. **막지는 않는다** — 사람이 보고 정한다."""
+    """TOL-03 7번의 요약 한 줄. **막지는 않는다** — 사람이 보고 정한다."""
     if not result.rows:
         return "검증할 요소가 없습니다."
     if result.unreachable:
@@ -347,7 +347,7 @@ def summarize(result: VerifyResult) -> str:
     return "모두 잡히고 대체 로케이터도 살아 있습니다. 등록해도 좋습니다."
 
 
-# ─────────────────────────── 데스크톱 창에서 담기 (C10 §5, BUI-06) ───────────────────────────
+# ─────────────────────────── 데스크톱 창에서 담기 (C10 §5, TOL-03) ───────────────────────────
 
 #: UIA ControlTypeName → 역할. **조작 요소**는 늘, **읽기 대상**은 `include_read`일 때만 담는다.
 DESKTOP_CONTROLS: dict[str, str] = {
@@ -511,7 +511,7 @@ def desktop_drain(
 
 
 def analyze_desktop(window: Any, request: AnalyzeRequest) -> AnalyzeResult:
-    """BUI-06 「분석」(데스크톱). **창 하나가 범위다** — `scope_css`는 쓰지 않는다."""
+    """TOL-03 「분석」(데스크톱). **창 하나가 범위다** — `scope_css`는 쓰지 않는다."""
     return desktop_candidates(desktop_controls(window), request)
 
 

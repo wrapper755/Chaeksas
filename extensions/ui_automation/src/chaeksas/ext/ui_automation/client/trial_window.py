@@ -1,4 +1,4 @@
-"""BUI-08 셀렉터 시험 — 등록된 화면을 **계획을 받아 실제로 돌려 본다**.
+"""TOL-05 셀렉터 시험 — 등록된 화면을 **계획을 받아 실제로 돌려 본다**.
 
 Bot 실행과는 별개의 시험이다. 보고는 **`origin: test`**로 가고 승격 통계에 들어가지
 않는다 (C8) — 그 순간 그 화면에서 한 번 됐다고 「사용 중」으로 올리면 안 된다.
@@ -50,7 +50,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
 
 log = logging.getLogger(__name__)
 
-#: 스텝 표의 열 (BUI-08).
+#: 스텝 표의 열 (TOL-05).
 STEP_COLUMNS = ("시맨틱 키", "동작", "값")
 
 #: 고를 수 있는 동작 — 조작 먼저, 읽기 나중 (C10 `KNOWN_ACTIONS`).
@@ -76,7 +76,7 @@ class Trial:
 
 
 class TrialWidget(QWidget):
-    """BUI-08의 화면. Worker(C10)와 레지스트리(C9)를 모두 부른다."""
+    """TOL-05의 화면. Worker(C10)와 레지스트리(C9)를 모두 부른다."""
 
     def __init__(
         self,
@@ -93,7 +93,7 @@ class TrialWidget(QWidget):
         self._service_key = service_key
         #: 다른 탭이 쥔 UI 세션을 놓게 하는 길 (세션은 한 번에 하나다, ADR-0014).
         self._release_other = release_other
-        #: 등록 탭이 지금 연 화면 `(session_id, secret)` — 있으면 그것을 이어 쓴다 (BUI-08).
+        #: 등록 탭이 지금 연 화면 `(session_id, secret)` — 있으면 그것을 이어 쓴다 (TOL-05).
         self._borrow = borrow
         self._trial: Trial | None = None
 
@@ -180,7 +180,7 @@ class TrialWidget(QWidget):
         self.output.appendPlainText(line)
 
     def fetch(self) -> None:
-        """BUI-08 「가져오기」 — 등록된 요소로 스텝 표를 채운다.
+        """TOL-05 「가져오기」 — 등록된 요소로 스텝 표를 채운다.
 
         자연어 목표가 없으니 **등록된 것에서 출발**한다 — 사람이 동작과 값을 고친다.
         """
@@ -235,7 +235,7 @@ class TrialWidget(QWidget):
         return out
 
     def run(self) -> None:
-        """BUI-08 「실행」 — 세션을 열고 스텝을 하나씩 보낸다."""
+        """TOL-05 「실행」 — 세션을 열고 스텝을 하나씩 보낸다."""
         steps = self.plan_steps()
         if not steps:
             self.say("스텝이 없습니다 — 「가져오기」를 누르거나 줄을 더하세요.")
@@ -341,7 +341,7 @@ class TrialWidget(QWidget):
         return True
 
     def prefill(self, page_id: str, keys: list[str]) -> None:
-        """BUI-06 「시험...」 — 화면 ID를 채우고 가져온 뒤 **고른 줄만** 남긴다 (없으면 전부)."""
+        """TOL-03 「시험...」 — 화면 ID를 채우고 가져온 뒤 **고른 줄만** 남긴다 (없으면 전부)."""
         self.page_id.setCurrentText(page_id)
         self.fetch()
         if not keys:

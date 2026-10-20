@@ -183,7 +183,7 @@ class HealResponse(ContractModel):
     reasoning: str = ""
 
 
-#: 보고의 출처 — **`test`는 승격 통계에 넣지 않는다** (셀렉터 시험, BUI-08).
+#: 보고의 출처 — **`test`는 승격 통계에 넣지 않는다** (셀렉터 시험, TOL-05).
 ORIGIN_RUN = "run"
 ORIGIN_TEST = "test"
 

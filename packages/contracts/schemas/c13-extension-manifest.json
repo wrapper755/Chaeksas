@@ -324,13 +324,6 @@
           "title": "Bot Ui.Panels",
           "type": "array"
         },
-        "bot_ui.utilities": {
-          "items": {
-            "$ref": "#/$defs/Utility"
-          },
-          "title": "Bot Ui.Utilities",
-          "type": "array"
-        },
         "configuration": {
           "items": {
             "$ref": "#/$defs/ConfigurationItem"
@@ -378,6 +371,13 @@
             "$ref": "#/$defs/TaskTypeContribution"
           },
           "title": "Task Types",
+          "type": "array"
+        },
+        "tool_ui.tools": {
+          "items": {
+            "$ref": "#/$defs/Tool"
+          },
+          "title": "Tool Ui.Tools",
           "type": "array"
         }
       },
@@ -527,7 +527,7 @@
     },
     "KeyNeed": {
       "additionalProperties": true,
-      "description": "이 확장이 쓰는 서비스 앱 키 하나.\n\n- `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.\n- `utility`: Bot UI 유틸리티가 쓸 때. `configuration`의 `secret` 칸으로 받는다.",
+      "description": "이 확장이 쓰는 서비스 앱 키 하나.\n\n- `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.\n- `utility`: Tool UI의 도구가 쓸 때 (ADR-0077). `configuration`의 `secret` 칸으로 받는다.",
       "properties": {
         "config_key": {
           "anyOf": [
@@ -973,9 +973,9 @@
       "title": "TaskTypeContribution",
       "type": "object"
     },
-    "Utility": {
+    "Tool": {
       "additionalProperties": true,
-      "description": "Bot UI 「도구」 메뉴·탭에 더하는 유틸리티 하나 (BUI-06~08).",
+      "description": "Tool UI에 더하는 도구 하나 (`tool_ui.tools`, TOL-01 — ADR-0077). 예: UI 셀렉터 등록(TOL-03~05).",
       "properties": {
         "entry": {
           "title": "Entry",
@@ -987,11 +987,6 @@
         },
         "label": {
           "title": "Label",
-          "type": "string"
-        },
-        "menu": {
-          "default": "tools",
-          "title": "Menu",
           "type": "string"
         },
         "needs_runtime": {
@@ -1012,7 +1007,7 @@
         "label",
         "entry"
       ],
-      "title": "Utility",
+      "title": "Tool",
       "type": "object"
     }
   },

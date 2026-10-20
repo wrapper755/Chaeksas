@@ -1,4 +1,4 @@
-"""확장이 구현하는 안정 인터페이스 — 태스크 종류·수행기, 편집기, 유틸리티, 로컬 런타임 (ADR-0018).
+"""확장이 구현하는 안정 인터페이스 — 태스크 종류·수행기, 편집기, 도구, 로컬 런타임 (ADR-0018).
 
 확장을 만드는 쪽은 **이 패키지만** import한다. `core`·`apps/*`는 보지 않는다 (의존 방향은
 `docs/01-architecture.md` §5, `tests/test_import_direction.py`가 막는다).
@@ -7,7 +7,7 @@
 | --- | --- |
 | `task_types[].executor` | `TaskExecutor` |
 | `task_types[].editor`, `studio.editors` | `TaskEditor` (`kind="schema"`면 필요 없다) |
-| `bot_ui.utilities` | `BotUiUtility` |
+| `tool_ui.tools` | `ToolUiTool` (Tool UI의 탭 하나, ADR-0077 — 옛 이름 `BotUiUtility`) |
 | `bot_ui.panels` | `BotUiPanel` (플랫폼 화면의 한 칸, ADR-0042) |
 | `preflight` | `PreflightCheck` |
 | `bot_ui.local_runtimes` | `LocalRuntimeEntry` (자식 프로세스에서 불린다) |
@@ -45,6 +45,7 @@ from chaeksas.extension_api.contributions import (
     PreflightTarget,
     TaskEditor,
     TaskExecutor,
+    ToolUiTool,
 )
 from chaeksas.extension_api.entry import (
     EXTENSION_NAMESPACE,
@@ -59,6 +60,7 @@ from chaeksas.extension_api.runtime import (
     HOST_BOT_UI,
     HOST_SERVER_RUNNER,
     HOST_STUDIO,
+    HOST_TOOL_UI,
     RUN_LOCATION_PC,
     RUN_LOCATION_SERVER,
     ExtensionContext,
@@ -87,6 +89,7 @@ __all__ = [
     "HOST_BOT_UI",
     "HOST_SERVER_RUNNER",
     "HOST_STUDIO",
+    "HOST_TOOL_UI",
     "Secrets",
     "Settings",
     "TaskContext",
@@ -105,6 +108,7 @@ __all__ = [
     "SEVERITY_WARN",
     "TaskEditor",
     "TaskExecutor",
+    "ToolUiTool",
     # entry 해석
     "EXTENSION_NAMESPACE",
     "EntryError",

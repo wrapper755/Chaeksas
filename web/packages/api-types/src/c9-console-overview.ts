@@ -64,7 +64,7 @@ export interface LlmInfo {
  * (지금 무엇이 도는지는 현장의 BUI-09가 안다). 없는 수를 0으로 보이면 「아무것도 안 돈다」로
  * 읽히므로 칸 자체를 두지 않는다.
  *
- * `test`는 셀렉터 시험(BUI-08, C8 `origin: test`)이고 **나머지 수에 들어가지 않는다** —
+ * `test`는 셀렉터 시험(TOL-05, C8 `origin: test`)이고 **나머지 수에 들어가지 않는다** —
  * 시험이 운영 통계를 흔들지 않는다 (C8·C9).
  */
 export interface SessionCounts {

@@ -34,7 +34,6 @@ export interface Contributes {
   agent_environments?: AgentEnvironmentContribution[];
   "bot_ui.local_runtimes"?: LocalRuntime[];
   "bot_ui.panels"?: Panel[];
-  "bot_ui.utilities"?: Utility[];
   configuration?: ConfigurationItem[];
   "console.pages"?: ConsolePage[];
   preflight?: PreflightContribution[];
@@ -42,6 +41,7 @@ export interface Contributes {
   "studio.editors"?: StudioEditorContribution[];
   "studio.resource_views"?: ResourceView[];
   task_types?: TaskTypeContribution[];
+  "tool_ui.tools"?: Tool[];
   [k: string]: unknown;
 }
 /**
@@ -111,17 +111,6 @@ export interface Panel {
   label: string;
   runtime?: string | null;
   surface: string;
-  [k: string]: unknown;
-}
-/**
- * Bot UI 「도구」 메뉴·탭에 더하는 유틸리티 하나 (BUI-06~08).
- */
-export interface Utility {
-  entry: string;
-  id: string;
-  label: string;
-  menu?: string;
-  needs_runtime?: string | null;
   [k: string]: unknown;
 }
 /**
@@ -213,10 +202,20 @@ export interface Executor {
   [k: string]: unknown;
 }
 /**
+ * Tool UI에 더하는 도구 하나 (`tool_ui.tools`, TOL-01 — ADR-0077). 예: UI 셀렉터 등록(TOL-03~05).
+ */
+export interface Tool {
+  entry: string;
+  id: string;
+  label: string;
+  needs_runtime?: string | null;
+  [k: string]: unknown;
+}
+/**
  * 이 확장이 쓰는 서비스 앱 키 하나.
  *
  * - `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.
- * - `utility`: Bot UI 유틸리티가 쓸 때. `configuration`의 `secret` 칸으로 받는다.
+ * - `utility`: Tool UI의 도구가 쓸 때 (ADR-0077). `configuration`의 `secret` 칸으로 받는다.
  */
 export interface KeyNeed {
   config_key?: string | null;

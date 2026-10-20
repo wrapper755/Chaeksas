@@ -46,6 +46,7 @@ from chaeksas.contracts.bot_ui import ExtensionState
 from chaeksas.contracts.extension import (
     ENTRY_POINT_GROUP,
     EXTENSION_FILE,
+    LEGACY_UTILITIES_KEY,
     AgentEnvironmentContribution,
     ConfigurationItem,
     ConsolePage,
@@ -57,7 +58,7 @@ from chaeksas.contracts.extension import (
     ResourceView,
     StudioEditorContribution,
     TaskTypeContribution,
-    Utility,
+    Tool,
     check_api,
     check_size,
     definition_hash,
@@ -69,7 +70,6 @@ from chaeksas.extension_api import (
     API_VERSION,
     AgentEnvironment,
     BotUiPanel,
-    BotUiUtility,
     EntryError,
     ExtensionContext,
     LocalRuntimeEntry,
@@ -78,6 +78,7 @@ from chaeksas.extension_api import (
     Settings,
     TaskEditor,
     TaskExecutor,
+    ToolUiTool,
 )
 from chaeksas.extension_api.entry import resolve as resolve_entry
 
@@ -247,6 +248,13 @@ class ExtensionHost:
             self._failures.append(LoadFailure(origin=origin, message=f"정의가 C13과 맞지 않는다: {summary}"))
             return None
 
+        if LEGACY_UTILITIES_KEY in (manifest.contributes.model_extra or {}):
+            # 걷은 기여 지점 (ADR-0077) — 모르는 열쇠라고 **조용히 사라지게 두지 않는다**.
+            LOG.warning(
+                "확장 %s의 `%s`는 더 읽지 않는다 — 도구는 `tool_ui.tools`로 옮긴다 (ADR-0077)",
+                manifest.id,
+                LEGACY_UTILITIES_KEY,
+            )
         turned_off = manifest.id in self.off
         problems = (
             []
@@ -413,9 +421,9 @@ class ExtensionHost:
         """Studio 리소스 탐색기(STU-03)의 갈래들."""
         return self._gather(lambda m: m.contributes.studio_resource_views)
 
-    def utilities(self) -> list[Contribution[Utility]]:
-        """Bot UI 「도구」 메뉴·탭."""
-        return self._gather(lambda m: m.contributes.bot_ui_utilities)
+    def tools(self) -> list[Contribution[Tool]]:
+        """Tool UI의 도구들 (`tool_ui.tools`, ADR-0077) — Bot UI 「도구」 바로가기도 이것을 그린다."""
+        return self._gather(lambda m: m.contributes.tool_ui_tools)
 
     def panels(self, surface: str) -> list[Contribution[Panel]]:
         """그 자리에 낼 칸들 (`bot_ui.panels`, ADR-0042).
@@ -430,7 +438,7 @@ class ExtensionHost:
         return self._gather(lambda m: m.contributes.bot_ui_local_runtimes)
 
     def configuration(self, *, scope: str | None = None) -> list[Contribution[ConfigurationItem]]:
-        """설정 화면의 칸들. `scope`로 거른다 (`bot_ui`·`studio`·`server_runner`)."""
+        """설정 화면의 칸들. `scope`로 거른다 (`bot_ui`·`tool_ui`·`studio`·`server_runner`)."""
         items: list[Contribution[ConfigurationItem]] = self._gather(lambda m: m.contributes.configuration)
         return [c for c in items if scope is None or c.value.scope == scope]
 
@@ -547,15 +555,17 @@ class ExtensionHost:
         from_task_type: TaskEditor = self._instantiate(owner, editor.entry, expect=TaskEditor, what="편집기")
         return from_task_type
 
-    def utility(self, utility_id: str) -> BotUiUtility:
-        """Bot UI 「도구」의 유틸리티. 탭을 열 때마다 새로 만든다."""
-        found = next((c for c in self.utilities() if c.value.id == utility_id), None)
+    def tool(self, extension_id: str, tool_id: str) -> ToolUiTool:
+        """Tool UI의 도구 하나. 탭을 열 때마다 새로 만든다 (ADR-0077)."""
+        found = next(
+            (c for c in self.tools() if c.extension_id == extension_id and c.value.id == tool_id), None
+        )
         if found is None:
-            raise LookupError(f"기여된 유틸리티가 아니다: {utility_id}")
+            raise LookupError(f"기여된 도구가 아니다: {extension_id}:{tool_id}")
         owner = self.get(found.extension_id)
         assert owner is not None
-        utility: BotUiUtility = self._instantiate(owner, found.value.entry, expect=BotUiUtility, what="유틸리티")
-        return utility
+        tool: ToolUiTool = self._instantiate(owner, found.value.entry, expect=ToolUiTool, what="도구")
+        return tool
 
     def panel(self, extension_id: str, panel_id: str) -> BotUiPanel:
         """플랫폼 화면의 한 칸을 그릴 것 (`bot_ui.panels`, ADR-0042).

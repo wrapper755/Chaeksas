@@ -1,6 +1,6 @@
-"""BUI-06 「UI 셀렉터 등록」 — 담기·검증 (C10 §5).
+"""TOL-03 「UI 셀렉터 등록」 — 담기·검증 (C10 §5).
 
-Bot UI의 「도구」에서 열리는 유틸리티 창이다. 화면을 열고, 분석해 요소를 표에 담고, 시맨틱
+Tool UI의 도구 「UI 셀렉터 등록」 안 「등록」 탭이다 (ADR-0077). 화면을 열고, 분석해 요소를 표에 담고, 시맨틱
 키를 고치고, 사다리를 **지금 열린 화면에서** 검증한다.
 
 지키는 것 다섯.
@@ -15,7 +15,7 @@ Bot UI의 「도구」에서 열리는 유틸리티 창이다. 화면을 열고,
 데스크톱 창에서도 담는다 (「방식」 콤보) — 창에 **붙기만** 하고 띄우거나 닫지 않는다 (사용자의
 업무 앱이다). 「직접 고르기」·「표시」는 브라우저만 한다.
 
-> 상태: 「직접 고르기」·「등록」·BUI-07·BUI-08은 다음 조각이다. 지금은 꺼 두고 왜 꺼졌는지
+> 상태: 「직접 고르기」·「등록」·TOL-04·TOL-05은 다음 조각이다. 지금은 꺼 두고 왜 꺼졌는지
 > 툴팁으로 말한다 — **없는 것을 되는 척하지 않는다.**
 """
 
@@ -72,17 +72,17 @@ from chaeksas.ext.ui_automation.contracts.worker_local import DEFAULT_PORT
 
 log = logging.getLogger(__name__)
 
-#: 요소 표의 열 (BUI-06 [E]). 「CSS 후보」는 **등록 화면에서만** 보이는 물리 정보다 (C10 §5).
+#: 요소 표의 열 (TOL-03 [E]). 「CSS 후보」는 **등록 화면에서만** 보이는 물리 정보다 (C10 §5).
 ELEMENT_COLUMNS = (
     "쓸 것", "시맨틱 키", "종류", "가능한 동작", "계획 정보",
     "태그", "역할", "접근성 이름", "id", "CSS 후보",
 )
-#: 검증 표의 열 (BUI-06 [V]).
+#: 검증 표의 열 (TOL-03 [V]).
 CHECK_COLUMNS = ("시맨틱 키", "순위", "전략", "셀렉터", "결과", "사유")
 
 KIND_LABEL = {"control": "조작", "list": "목록", "table": "표", "text": "글자"}
 
-#: 분석 「최대」 칸의 눈금 (BUI-06 — 10~2000, 50 단위).
+#: 분석 「최대」 칸의 눈금 (TOL-03 — 10~2000, 50 단위).
 MAX_STEP = 50
 
 #: 고른 것을 받아 오는 주기 (ms). **밀려 있는 것을 비워 가져온다** — 하나씩 기다리지 않는다.
@@ -100,7 +100,7 @@ NO_REGISTRY = (
     "UI 자동화 앱에 쓸 수 없습니다 — Bot UI 설정의 「UI 자동화 › 등록 담당자 키」를 넣으세요."
 )
 
-#: 「방식」 콤보 (BUI-06 [C]).
+#: 「방식」 콤보 (TOL-03 [C]).
 MODE_BROWSER = "브라우저"
 MODE_DESKTOP = "데스크톱 창"
 #: 데스크톱 「직접 고르기」의 안내 — 누르지 않고 **올려 두고 Ctrl**이다 (ADR-0072, 입력을 가로채지 않는다).
@@ -119,11 +119,11 @@ class Row:
     candidate: Candidate
     key: str
     use: bool = True
-    #: BUI-07 — 이 요소를 조작하기 전에 채워야 하는 요소들.
+    #: TOL-04 — 이 요소를 조작하기 전에 채워야 하는 요소들.
     depends_on: list[str] = field(default_factory=list)
-    #: BUI-07 — 이 요소를 가리키는 업무 용어 (자연어 목표 계획이 쓴다).
+    #: TOL-04 — 이 요소를 가리키는 업무 용어 (자연어 목표 계획이 쓴다).
     concepts: list[str] = field(default_factory=list)
-    #: 서버에서 불러온 줄이면 그때의 사다리 (다시 등록해도 정의가 바뀌지 않게, BUI-06 9번).
+    #: 서버에서 불러온 줄이면 그때의 사다리 (다시 등록해도 정의가 바뀌지 않게, TOL-03 9번).
     loaded: list[LocatorSpec] | None = None
 
     def ladder(self) -> list[LocatorSpec]:
@@ -142,7 +142,7 @@ class Session:
 
 
 class RegistrationWidget(QWidget):
-    """BUI-06의 화면. Worker를 부르는 길은 `client`(C10) 하나뿐이다."""
+    """TOL-03의 화면. Worker를 부르는 길은 `client`(C10) 하나뿐이다."""
 
     def __init__(
         self,
@@ -153,7 +153,7 @@ class RegistrationWidget(QWidget):
     ) -> None:
         super().__init__(parent)
         self._client = client
-        #: 밀린 등록 (BUI-06 8번). 없으면 쌓지 않고 「다시 누르세요」로 말한다.
+        #: 밀린 등록 (TOL-03 8번). 없으면 쌓지 않고 「다시 누르세요」로 말한다.
         self._pending = pending
         #: 레지스트리를 부르는 쪽 (C9). **없으면 등록할 수 없다** — 설정이 비었다는 뜻이다.
         self._registry = registry
@@ -166,7 +166,7 @@ class RegistrationWidget(QWidget):
         self._filling = False
         #: 데스크톱 「표시」 테두리 창 (잠깐 떠 있다 — ADR-0072).
         self._overlay: QWidget | None = None
-        #: 고른 것을 받아 오는 타이머 (BUI-06 3번). **스레드를 만들지 않는다.**
+        #: 고른 것을 받아 오는 타이머 (TOL-03 3번). **스레드를 만들지 않는다.**
         self._picking = QTimer(self)
         self._picking.setInterval(PICK_POLL_MS)
         self._picking.timeout.connect(self._collect_picked)
@@ -322,7 +322,7 @@ class RegistrationWidget(QWidget):
         layout.addWidget(self.checks)
         self.verify_button = QPushButton("검증")
         self.verify_button.clicked.connect(self.verify)
-        #: BUI-06 「시험...」 — 「시험」 탭으로 간다. 받는 쪽은 유틸리티 창이다 (`on_try(page_id, keys)`).
+        #: TOL-03 「시험...」 — 「시험」 탭으로 간다. 받는 쪽은 도구(`utility.py`)다 (`on_try(page_id, keys)`).
         self.try_button = QPushButton("시험...")
         self.try_button.clicked.connect(self.try_selected)
         self.on_try: Any = None
@@ -369,7 +369,7 @@ class RegistrationWidget(QWidget):
         )
         self._sync()
 
-    # ── 데스크톱 창 (BUI-06 1-1번) ──
+    # ── 데스크톱 창 (TOL-03 1-1번) ──
 
     def desktop(self) -> bool:
         return self.mode.currentText() == MODE_DESKTOP
@@ -480,7 +480,7 @@ class RegistrationWidget(QWidget):
             )
         self.say(said)
         if not self.page_id.currentText().strip() and found.window is not None:
-            # 창 제목에는 문서 이름이 섞인다 — **지어 채우지 않는다** (BUI-06 1-1번).
+            # 창 제목에는 문서 이름이 섞인다 — **지어 채우지 않는다** (TOL-03 1-1번).
             self.say(f"{said} 화면 ID를 적으세요.")
         elif not self.page_id.currentText().strip():
             # 화면 ID가 비어 있으면 주소에서 채운다 (사람이 고친 뒤에는 건드리지 않는다).
@@ -489,7 +489,7 @@ class RegistrationWidget(QWidget):
         self._sync()
 
     def verify(self) -> None:
-        """BUI-06 7번. **하나에 맞아야** 통과다 — 결과가 등록을 막지는 않는다."""
+        """TOL-03 7번. **하나에 맞아야** 통과다 — 결과가 등록을 막지는 않는다."""
         found = self._session
         if found is None:
             return
@@ -511,7 +511,7 @@ class RegistrationWidget(QWidget):
         self.say(summary_of(result))
         self._sync()
 
-    # ── 직접 고르기 (BUI-06 3번) ──
+    # ── 직접 고르기 (TOL-03 3번) ──
 
     def toggle_pick(self) -> None:
         """브라우저에서 사람이 누른 요소를 표에 담는다. 다시 누르거나 Esc로 끝난다."""
@@ -578,7 +578,7 @@ class RegistrationWidget(QWidget):
         self._sync()
 
     def show_selected(self) -> None:
-        """BUI-06 5번 「표시」 — 고른 줄을 화면에서 파란 테두리로 보인다."""
+        """TOL-03 5번 「표시」 — 고른 줄을 화면에서 파란 테두리로 보인다."""
         found = self._session
         rows = {index.row() for index in self.elements.selectedIndexes()}
         if found is None or len(rows) != 1:
@@ -642,7 +642,7 @@ class RegistrationWidget(QWidget):
             self.say(f"아직 {left}건이 남아 있습니다 (서버가 돌아오면 다시 올립니다).")
 
     def look_up(self, *, force: bool = False) -> None:
-        """등록 상태를 조회한다 (BUI-06 [P]).
+        """등록 상태를 조회한다 (TOL-03 [P]).
 
         **일을 시작할 때만** 묻는다 — 화면 ID 입력이 끝났을 때, 분석·검증·등록·삭제 뒤.
         """
@@ -678,7 +678,7 @@ class RegistrationWidget(QWidget):
         self._sync()
 
     def load_page(self) -> None:
-        """BUI-06 9번 — 등록된 것을 표로 가져온다. **담아 둔 것을 덮는다**."""
+        """TOL-03 9번 — 등록된 것을 표로 가져온다. **담아 둔 것을 덮는다**."""
         page = self._known
         if page is None:
             return
@@ -697,7 +697,7 @@ class RegistrationWidget(QWidget):
             Row(
                 candidate=_candidate_of(key, page),
                 key=key,
-                loaded=list(ladder),  # 다시 등록해도 **정의가 바뀌지 않는다** (BUI-06 9번)
+                loaded=list(ladder),  # 다시 등록해도 **정의가 바뀌지 않는다** (TOL-03 9번)
                 depends_on=list(page.catalog[key].depends_on) if key in page.catalog else [],
                 concepts=list(page.catalog[key].concepts) if key in page.catalog else [],
             )
@@ -709,7 +709,7 @@ class RegistrationWidget(QWidget):
         self._sync()
 
     def register(self) -> None:
-        """BUI-06 8번 — 레지스트리에 올린다 (C9). **더하기다** (기존 것을 지우지 않는다)."""
+        """TOL-03 8번 — 레지스트리에 올린다 (C9). **더하기다** (기존 것을 지우지 않는다)."""
         if self._registry is None:
             self.say(NO_REGISTRY)
             return
@@ -723,7 +723,7 @@ class RegistrationWidget(QWidget):
             found = self._registry.register(page)
         except Exception as e:  # noqa: BLE001 — 거부·닿지 못함을 가려 보여 준다
             if not getattr(e, "permanent", False) and self._pending is not None:
-                # **사람이 한 일을 네트워크 때문에 잃지 않는다** (BUI-06 8번).
+                # **사람이 한 일을 네트워크 때문에 잃지 않는다** (TOL-03 8번).
                 self._pending.add(page)
                 self.say(
                     "서버에 닿지 못해 **등록을 큐에 쌓았습니다.** 서버가 돌아오면 저절로 "
@@ -773,7 +773,7 @@ class RegistrationWidget(QWidget):
         )
 
     def unregister(self, *, element: bool) -> None:
-        """BUI-06 10번 — **되돌릴 수 없다.** 경고 창, 기본 「취소」 (U9)."""
+        """TOL-03 10번 — **되돌릴 수 없다.** 경고 창, 기본 「취소」 (U9)."""
         if self._registry is None:
             self.say(NO_REGISTRY)
             return
@@ -819,7 +819,7 @@ class RegistrationWidget(QWidget):
         self.look_up(force=True)
 
     def open_hints(self, row: int) -> None:
-        """BUI-07 요소 계획 정보 — 선행 입력·업무 개념."""
+        """TOL-04 요소 계획 정보 — 선행 입력·업무 개념."""
         if not (0 <= row < len(self._rows)):
             return
         found = self._rows[row]
@@ -855,12 +855,12 @@ class RegistrationWidget(QWidget):
         return f"서버에 닿지 못했습니다 — {error}. 서버가 돌아오면 다시 누르세요."
 
     def shared_session(self) -> tuple[str, str] | None:
-        """지금 연 화면 `(session_id, secret)` — 「시험」 탭이 **이어 쓴다** (BUI-08, C10 `…/plan`)."""
+        """지금 연 화면 `(session_id, secret)` — 「시험」 탭이 **이어 쓴다** (TOL-05, C10 `…/plan`)."""
         found = self._session
         return (found.session_id, found.secret) if found is not None else None
 
     def try_selected(self) -> None:
-        """BUI-06 「시험...」 — 등록된 화면이어야 한다 (계획은 레지스트리에서 온다)."""
+        """TOL-03 「시험...」 — 등록된 화면이어야 한다 (계획은 레지스트리에서 온다)."""
         page_id = self.page_id.currentText().strip()
         if self._known is None or not page_id or self.on_try is None:
             self.say("등록된 화면만 시험합니다 — 먼저 등록하세요.")
@@ -902,7 +902,7 @@ class RegistrationWidget(QWidget):
         self._sync()
 
     def reset(self) -> None:
-        """BUI-06 「초기화」 — 표·검증·화면 ID를 비운다. **브라우저는 유지한다.**"""
+        """TOL-03 「초기화」 — 표·검증·화면 ID를 비운다. **브라우저는 유지한다.**"""
         self._rows = []
         self._verified = None
         self.page_id.setCurrentText("")
@@ -970,7 +970,7 @@ class RegistrationWidget(QWidget):
             row.use = item.checkState() == Qt.CheckState.Checked
         elif item.column() == 1:
             row.key = item.text().strip()
-            # 키를 고치면 자동 체크, 지우면 체크 해제 (BUI-06 4번).
+            # 키를 고치면 자동 체크, 지우면 체크 해제 (TOL-03 4번).
             row.use = bool(row.key)
             self._filling = True
             box = self.elements.item(item.row(), 0)
@@ -983,7 +983,7 @@ class RegistrationWidget(QWidget):
         self._sync()
 
     def _mark_duplicates(self) -> None:
-        """키가 겹치면 빨간 바탕 (BUI-06 [E]) — 겹친 채로 등록하면 하나가 사라진다."""
+        """키가 겹치면 빨간 바탕 (TOL-03 [E]) — 겹친 채로 등록하면 하나가 사라진다."""
         from PySide6.QtGui import QBrush, QColor  # noqa: PLC0415 — 그릴 때만 든다
 
         counts: dict[str, int] = {}
@@ -1012,7 +1012,7 @@ class RegistrationWidget(QWidget):
                 self.checks.setItem(index, column, QTableWidgetItem(text))
 
     def _sync(self) -> None:
-        """단추 켜짐 규칙 (BUI-06)."""
+        """단추 켜짐 규칙 (TOL-03)."""
         open_now = self._session is not None
         desktop = self.desktop()
         # 열린 세션의 방식을 중간에 바꾸지 않는다 — 놓거나 닫은 뒤에 바꾼다.
@@ -1075,9 +1075,9 @@ class RegistrationWidget(QWidget):
 
 
 class HintDialog(QDialog):
-    """BUI-07 요소 계획 정보 — 선행 입력·업무 개념.
+    """TOL-04 요소 계획 정보 — 선행 입력·업무 개념.
 
-    화면 이동(`navigates_to`)은 여기서 묻지 않는다 (BUI-07).
+    화면 이동(`navigates_to`)은 여기서 묻지 않는다 (TOL-04).
     """
 
     def __init__(self, row: Row, parent: QWidget | None = None) -> None:
@@ -1174,7 +1174,7 @@ def _candidate_of(key: str, page: PageRegistration) -> Candidate:
 
 
 def _same_as(candidate: Candidate, rows: list[Row]) -> int | None:
-    """표에 이미 있는 줄인가 — **같은 요소를 두 번 담지 않는다** (BUI-06 3번)."""
+    """표에 이미 있는 줄인가 — **같은 요소를 두 번 담지 않는다** (TOL-03 3번)."""
     for index, row in enumerate(rows):
         one = row.candidate
         if candidate.test_id and candidate.test_id == one.test_id:
@@ -1187,7 +1187,7 @@ def _same_as(candidate: Candidate, rows: list[Row]) -> int | None:
 
 
 def page_id_from(url: str) -> str:
-    """주소에서 화면 ID를 지어 본다 (BUI-06 2번 — 사람이 고친다).
+    """주소에서 화면 ID를 지어 본다 (TOL-03 2번 — 사람이 고친다).
 
     `https://erp.example/orders/new` → `erp.example.orders.new`. **영문·숫자만** 남긴다
     (C9의 `semantic_key`·`page_id` 모양).
@@ -1201,7 +1201,7 @@ def page_id_from(url: str) -> str:
 
 
 def summary_of(result: VerifyResult) -> str:
-    """BUI-06 7번의 요약. Worker의 `summarize()`와 **같은 말**을 쓴다."""
+    """TOL-03 7번의 요약. Worker의 `summarize()`와 **같은 말**을 쓴다."""
     from chaeksas.ext.ui_automation.worker.registration import summarize  # noqa: PLC0415
 
     return summarize(result)
@@ -1210,7 +1210,8 @@ def summary_of(result: VerifyResult) -> str:
 def registry_client(ctx: Any) -> Any:
     """레지스트리를 부르는 쪽 (C9). **주소·키가 없으면 `None`** — 등록이 꺼진다.
 
-    주소의 출처는 하나다 (C13 예약 키 `service.base_url`), 키는 BUI-03의 비밀 칸이다.
+    주소의 출처는 하나다 (C13 예약 키 `service.base_url`), 키는 TOL-02의 비밀 칸이다. C11
+    `caller.type`은 **도구를 띄운 호스트**다 (`ctx.host` — Tool UI면 `tool_ui`).
     """
     from chaeksas.contracts import SERVICE_URL_SETTING  # noqa: PLC0415
     from chaeksas.ext.ui_automation.client.registry_client import RegistryClient  # noqa: PLC0415
@@ -1219,6 +1220,9 @@ def registry_client(ctx: Any) -> Any:
     api_key = ctx.secret(REGISTRAR_KEY)
     if not base_url or not api_key:
         return None
+    host = getattr(ctx, "host", None)
+    if host:
+        return RegistryClient(base_url=str(base_url), api_key=str(api_key), caller_type=str(host))
     return RegistryClient(base_url=str(base_url), api_key=str(api_key))
 
 

@@ -20,13 +20,13 @@
 | [0009](0009-worker-deployment-form.md) | Worker는 미리 떠 있는 트레이 앱 | 대체됨(0012) |
 | [0010](0010-service-apps.md) | 서버 앱은 "서비스 앱"으로 통일 (자율/결정 수행 모드) | 수락 · 인증 부분 대체됨(0013) |
 | [0011](0011-config-ports-env.md) | 포트는 기본값 + 설정 변경, 환경변수 접두사는 CHK_ | 수락 |
-| [0012](0012-bot-ui.md) | 현장 PC의 프로그램은 Bot UI 하나: Bot(BPM 프로세스) 실행, Worker 실행 관리, UI 셀렉터 등록 | 수락 · 실행기 동시 실행 제안은 대체됨(0014) |
+| [0012](0012-bot-ui.md) | 현장 PC의 프로그램은 Bot UI 하나: Bot(BPM 프로세스) 실행, Worker 실행 관리, UI 셀렉터 등록 | 수락 · 실행기 동시 실행 제안은 대체됨(0014) · ③ 셀렉터 등록은 Tool UI로(0077) |
 | [0013](0013-api-keys.md) | Center 키는 Bot UI에 등록, 서비스 앱 키는 각 앱 관리 콘솔 발급, BPM 프로세스 단위 키 참조 | 수락 (키 지정 위치 안 C 확정) |
 | [0014](0014-one-bot-per-pc.md) | PC 한 대에서 실행 중인 Bot은 하나, 나머지는 Bot UI 대기열, 결재 대기 중에도 끝까지 | 수락 (결재 대기 중에도 끝까지 자리를 쥔다) |
 | [0015](0015-run-location.md) | BPM 프로세스의 실행 위치: PC(Bot UI, 하나씩) 또는 서버(Center 관리 서버 실행기, 동시 실행) | 수락 · 기본값은 대체됨(0016) |
 | [0016](0016-server-first.md) | 서버 우선: 업무 대부분은 서버 BPM 프로세스(기본값 서버), PC Bot은 사람·화면이 필요할 때만. 서버 Bot 이름·상한 10/5·M7 확정 | 수락 (PC 위임은 제안) |
 | [0017](0017-web-nextjs-design-system.md) | 웹 화면은 Next.js(BFF), 모든 화면은 디자인 토큰 하나(`design/tokens.json`)와 스타일 가이드를 따른다. Streamlit 폐기 | 수락 (버전은 M1에서 고정) |
-| [0018](0018-extensions.md) | 확장(Extension): BPM 프로세스의 공통 기능은 확장으로 붙인다. 내장·사내·외부 등급, 기여 지점, 외부 앱은 HTTP 어댑터, UI 자동화는 첫 내장 확장 | 수락 (사내 확장 코드 배포·어댑터 세부는 제안) |
+| [0018](0018-extensions.md) | 확장(Extension): BPM 프로세스의 공통 기능은 확장으로 붙인다. 내장·사내·외부 등급, 기여 지점, 외부 앱은 HTTP 어댑터, UI 자동화는 첫 내장 확장 | 수락 (사내 확장 코드 배포·어댑터 세부는 제안) · `bot_ui.utilities`는 대체됨(0077) |
 | [0019](0019-package-names.md) | 패키지 이름은 `chaeksas.*` PEP 420 네임스페이스, 폴더 이름은 문서 그대로. 확장은 `chaeksas.ext.<id>` | 수락 |
 | [0020](0020-windows-desktop-backend.md) | Windows 데스크톱 조작은 `uiautomation` 라이브러리로 한다 (S1) | 수락 |
 | [0021](0021-worker-dpi-capture.md) | Worker 프로세스는 시작하자마자 Per-Monitor v2 DPI 인식을 선언하고, 캡처는 `mss`로 한다 (S2) | 수락 (다중 모니터 미확인) |
@@ -85,3 +85,4 @@
 | [0074](0074-ui-task-editor-runs-on-the-worker.md) | **STU-13의 「이 스텝까지 시험」과 「계획 굳히기」는 Studio 시험 실행과 같은 길로 Worker를 부른다** — Bot UI로 넘기지 않는다(시험 실행이 이미 Worker에 직접 붙는다). 편집기도 Worker 자리와 Studio 비밀 창고를 받고, 「BPM 프로세스 설정을 따름」은 새 예약 키 `service.key_ref`로 푼다. 시험은 `report: false`·끝나면 닫고, 굳히기는 `planned_steps`를 받아 사람이 눌러 표에 넣으며 목표로 계획을 끈다 | 수락 |
 | [0075](0075-service-console-links-to-center-console.md) | **서비스 앱 콘솔은 Center 콘솔 주소를 자기 설정 하나로 받아 「실행 id」를 CON-01로 잇는다** — `CHK_SVC_CONSOLE__CENTER_CONSOLE_URL`(브라우저가 여는 주소, 선택 — 없으면 링크만 없다). C11을 늘리지 않는다(서비스 앱은 Center를 모른다). UIA-03은 `business_key`의 맨 앞 조각, `run_…`·`test_…` 모양만 잇는다 | 수락 |
 | [0076](0076-no-admin-window-yet.md) | **Admin 창(ADM-01~03)은 짓지 않는다** — 서명은 명령 한 번에 키를 열고 닫는 `chk-admin`에 남고, 읽는 일은 Center 콘솔이 한다. 대조하다 빠져 있던 서버 배포 서명(`deploy --server [id] [--max-concurrency]`)을 함께 메웠다. 다시 볼 조건: 서명이 미뤄질 때·하드웨어 키 | 수락 |
+| [0077](0077-tool-ui.md) | **UI 셀렉터 등록은 Bot UI 밖의 Tool UI에서 연다** — 확장이 기여한 도구(`tool_ui.tools`)를 띄우는 따로 뜨는 프로그램이고, 로컬 런타임은 띄우지 않고 Bot UI가 띄운 Worker를 빌려 쓴다(Studio와 같은 길). Bot UI 실행 파일이 `--tool-ui`로 되어 Bot UI 설치에 함께 들어간다. 등록 담당자 키는 `scope: tool_ui`로 Bot UI 설정에서 빠진다 | 수락 |

@@ -1,6 +1,6 @@
 """`entry` 문자열(`"ui_automation.client:UiTaskExecutor"`) → 실제 객체.
 
-확장 정의(C13)의 `executor`·`editor`·`bot_ui.utilities`·`preflight`가 코드를 이 형식으로
+확장 정의(C13)의 `executor`·`editor`·`tool_ui.tools`·`preflight`가 코드를 이 형식으로
 가리킨다. 모듈 이름은 **확장 이름 공간(`chaeksas.ext`) 밑에서 먼저** 찾는다 (ADR-0019).
 
     ui_automation.client:UiTaskExecutor  →  chaeksas.ext.ui_automation.client.UiTaskExecutor

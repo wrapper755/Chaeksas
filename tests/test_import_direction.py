@@ -81,7 +81,14 @@ def test_forbidden_dependency(member: str, forbidden: str, why: str) -> None:
 def test_platform_does_not_depend_on_extensions() -> None:
     """ADR-0018 — 플랫폼(core·apps)은 특정 확장을 의존하지 않는다. 엔트리 포인트로만 찾는다."""
     graph = members()
-    platform = ["chaeksas-core", "chaeksas-studio", "chaeksas-bot-ui", "chaeksas-server-runner", "chaeksas-center"]
+    platform = [
+        "chaeksas-core",
+        "chaeksas-studio",
+        "chaeksas-bot-ui",
+        "chaeksas-tool-ui",
+        "chaeksas-server-runner",
+        "chaeksas-center",
+    ]
     for m in platform:
         bad = {d for d in reachable(m, graph) if d.startswith("chaeksas-ext-")}
         assert not bad, f"{m}이 확장 {sorted(bad)}를 의존한다 (ADR-0018)"

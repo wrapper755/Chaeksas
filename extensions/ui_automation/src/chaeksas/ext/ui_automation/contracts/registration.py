@@ -3,7 +3,7 @@
 **여기만 물리 정보(CSS 후보)가 나온다.** 다른 곳에서는 시맨틱 키만 경계를 넘는다 (C10) —
 등록 화면은 사람이 셀렉터를 보고 고르는 자리라서 예외다.
 
-- 시맨틱 키는 **자동 제안**하고 사람이 고친다 (BUI-06 4번). **한글 이름은 음역하지 않는다** —
+- 시맨틱 키는 **자동 제안**하고 사람이 고친다 (TOL-03 4번). **한글 이름은 음역하지 않는다** —
   `고객명`을 `gogaegmyeong`으로 바꾸면 아무도 못 읽는다. 영문 단서가 없으면 역할로 짓는다.
 - 사다리는 후보 하나에서 **안정한 순서로** 만든다 (C8 우선순위와 같다).
 """
@@ -18,12 +18,12 @@ from pydantic import Field
 from chaeksas.contracts._base import ContractModel, SchemaVersioned
 from chaeksas.ext.ui_automation.contracts.plan import DESKTOP, WEB, LocatorSpec
 
-#: 분석 한 번에 가져오는 요소 수 (BUI-06 「최대」 10~2000).
+#: 분석 한 번에 가져오는 요소 수 (TOL-03 「최대」 10~2000).
 DEFAULT_MAX = 200
 MIN_MAX = 10
 MAX_MAX = 2000
 
-#: 요소의 종류 (BUI-06 「종류」).
+#: 요소의 종류 (TOL-03 「종류」).
 KIND_CONTROL = "control"
 KIND_LIST = "list"
 KIND_TABLE = "table"
@@ -32,7 +32,7 @@ KIND_TEXT = "text"
 #: 시맨틱 키에 쓸 수 있는 글자 (C9) — 영소문자·숫자·`_`·`.`.
 KEY_SAFE = re.compile(r"[^a-z0-9_.]+")
 
-#: 역할 → 기본 동작 (BUI-06 「가능한 동작」).
+#: 역할 → 기본 동작 (TOL-03 「가능한 동작」).
 ACTIONS_BY_ROLE: dict[str, list[str]] = {
     "textbox": ["fill", "read_selection"],
     "searchbox": ["fill", "read_selection"],
@@ -53,7 +53,7 @@ ACTIONS_BY_ROLE: dict[str, list[str]] = {
 
 
 class Candidate(ContractModel):
-    """화면에서 찾은 요소 하나 (BUI-06 요소 표의 한 줄).
+    """화면에서 찾은 요소 하나 (TOL-03 요소 표의 한 줄).
 
     **물리 정보가 들어 있다** — 등록 화면 전용이다 (C10 §5 예외).
     """
@@ -81,7 +81,7 @@ class Candidate(ContractModel):
 
 
 class AnalyzeRequest(SchemaVersioned):
-    """`POST /v1/registration/{session_id}/analyze` (BUI-06 「분석」)."""
+    """`POST /v1/registration/{session_id}/analyze` (TOL-03 「분석」)."""
 
     SCHEMA: ClassVar[int] = 1
 
@@ -97,12 +97,12 @@ class AnalyzeResult(ContractModel):
     #: 범위 선택자가 찾은 전체 수 (잘리기 전).
     total: int = 0
     truncated: bool = False
-    #: 범위가 아무것도 못 찾았다 — **전체로 몰래 넓히지 않는다** (BUI-06 2번).
+    #: 범위가 아무것도 못 찾았다 — **전체로 몰래 넓히지 않는다** (TOL-03 2번).
     scope_empty: bool = False
 
 
 class CheckRow(ContractModel):
-    """검증 표 한 줄 (BUI-06 [V]) — 사다리 한 칸에 한 줄."""
+    """검증 표 한 줄 (TOL-03 [V]) — 사다리 한 칸에 한 줄."""
 
     semantic_key: str
     rank: int
@@ -114,7 +114,7 @@ class CheckRow(ContractModel):
 
 
 class VerifyResult(ContractModel):
-    """검증 한 번. 요약 문구는 화면이 만든다 (BUI-06 7번)."""
+    """검증 한 번. 요약 문구는 화면이 만든다 (TOL-03 7번)."""
 
     rows: list[CheckRow] = Field(default_factory=list)
 
@@ -145,7 +145,7 @@ def english(text: str) -> bool:
 
 
 def suggest_key(candidate: Candidate, taken: set[str]) -> str:
-    """시맨틱 키를 제안한다 (BUI-06 4번) — `test_id` → `id` → `name` → 영문 이름 → 역할.
+    """시맨틱 키를 제안한다 (TOL-03 4번) — `test_id` → `id` → `name` → 영문 이름 → 역할.
 
     **한글 이름은 음역하지 않는다.** `고객명`을 `gogaegmyeong`으로 바꾸면 사람도 기계도 못
     읽는다 — 그럴 바엔 역할로 짓고 사람이 고치게 한다.
@@ -213,7 +213,7 @@ def _desktop_ladder(candidate: Candidate) -> list[LocatorSpec]:
 
 
 def actions_for(role: str, tag: str) -> list[str]:
-    """그 요소로 할 수 있는 일 (BUI-06 「가능한 동작」)."""
+    """그 요소로 할 수 있는 일 (TOL-03 「가능한 동작」)."""
     found = ACTIONS_BY_ROLE.get(role)
     if found is not None:
         return list(found)

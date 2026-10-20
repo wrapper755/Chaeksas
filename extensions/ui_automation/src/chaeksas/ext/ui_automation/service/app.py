@@ -1,6 +1,6 @@
 """UI 자동화 앱 — 화면 레지스트리의 서버 부분 (C9·C11).
 
-이 확장의 **서버 쪽**이다 (`extension.json`의 `service`). 사람이 BUI-06에서 등록한 화면이
+이 확장의 **서버 쪽**이다 (`extension.json`의 `service`). 사람이 TOL-03에서 등록한 화면이
 여기 쌓이고, 실행이 보낸 보고(C8)가 통계를 갱신해 승격을 결정한다.
 
 - 공통 뼈대는 `service_kit`이 준다 (C11): 키 검증·권한, 멱등, 오류 형식, 사용 기록, 관리 API.
@@ -450,7 +450,7 @@ class Service:
                 level=CHECK_OK if writers else CHECK_WARN,
                 detail=f"{len(writers)}개"
                 if writers
-                else f"{REGISTRY_WRITE} 권한이 있는 키가 없어 BUI-06에서 등록할 수 없습니다",
+                else f"{REGISTRY_WRITE} 권한이 있는 키가 없어 TOL-03에서 등록할 수 없습니다",
             )
         )
         pages = len(self.registry.pages)
@@ -461,7 +461,7 @@ class Service:
                 level=CHECK_OK if pages else CHECK_WARN,
                 detail=f"{pages}개"
                 if pages
-                else "Bot UI 「도구」 → 「UI 셀렉터 등록」(BUI-06)으로 등록하세요",
+                else "Bot UI 「도구」 → 「UI 셀렉터 등록」(TOL-03)으로 등록하세요",
             )
         )
         return made

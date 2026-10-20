@@ -60,8 +60,8 @@ class BotUiApp:
             self.tray.open_window.connect(self.show_window)
             self.tray.messageClicked.connect(self.on_notice_clicked)
             self.tray.open_settings.connect(self.open_settings)
-            # 트레이에서 고른 유틸리티도 **메인 창이 연다** — 같은 것을 두 번 열지 않는 자리가 거기다.
-            self.tray.open_utility.connect(self.open_utility)
+            # 트레이에서 고른 도구도 **메인 창과 같은 길**로 연다 — 런타임을 띄우고 Tool UI를 띄운다.
+            self.tray.open_tool.connect(self.open_tool)
             self.tray.open_extensions.connect(self.open_extensions)
             self.tray.quit_requested.connect(self.quit)
             self.tray.show()
@@ -95,10 +95,9 @@ class BotUiApp:
         self.window.open_extensions()
         self.refresh()
 
-    def open_utility(self, extension_id: str, utility_id: str) -> None:
-        """트레이 「도구」가 고른 유틸리티 (BUI-01). **창을 띄우지 않고도** 열 수 있다 —
-        유틸리티는 별도 창이 기본이라 메인 창은 그대로 둔다 (BUI-02 [K])."""
-        self.window.open_utility(extension_id, utility_id)
+    def open_tool(self, extension_id: str, tool_id: str) -> None:
+        """트레이 「도구」가 고른 도구 (BUI-01) — **메인 창을 띄우지 않고** Tool UI를 띄운다 (ADR-0077)."""
+        self.window.open_tool(extension_id, tool_id)
 
     def refresh(self) -> None:
         """하트비트가 끝났다 — **GUI 스레드에서** 다시 그린다."""
