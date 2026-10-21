@@ -16,7 +16,7 @@ curl http://localhost:8800/healthz
 
 - 포트·환경변수의 원본은 [`docs/04-setup.md`](../docs/04-setup.md) §6이다.
 - **관리자 토큰이 없으면 쓰기 API를 부를 수 없다** (읽기만 된다). 콘솔 BFF가 이 토큰을 들고 부른다 ([ADR-0017](../docs/decisions/0017-web-nextjs-design-system.md)).
-- 콘솔은 `http://center:8800`으로 Center를 부른다 — **브라우저가 아니라 콘솔 서버가** 부르기 때문에 `localhost`가 아니다.
+- 콘솔은 `http://center:8800`으로 Center를 부른다 — **브라우저가 아니라 콘솔 서버가** 부르기 때문에 `localhost`가 아니다. 위 막대에는 그 주소가 아니라 `.env`의 `CHK_CONSOLE__CENTER_PUBLIC_URL`(Bot UI·Studio에 적을 바깥 주소)이 보인다.
 - 그 포트를 이미 쓰는 것이 있으면 `.env`의 `CHK_CENTER__HOST_PORT`·`CHK_CONSOLE__HOST_PORT`로 **호스트 쪽만** 옮긴다 (컨테이너 안의 포트는 그대로다).
 - 바깥 노출을 역방향 프록시·터널(예: Cloudflare Tunnel)에 맡길 때는 같은 칸에 `127.0.0.1:8800`처럼 **주소까지** 적어 호스트의 루프백에만 연다. Docker가 연 포트는 ufw를 거치지 않으므로 방화벽으로는 막히지 않는다.
 - 콘솔에는 `HOSTNAME: "0.0.0.0"`을 준다 — Next.js standalone은 `HOSTNAME`에 바인드하는데 Docker가 그것을 컨테이너 id로 채워 127.0.0.1을 두드리는 HEALTHCHECK가 늘 실패한다.

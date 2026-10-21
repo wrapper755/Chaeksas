@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { Operation, ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
-import { CENTER_URL, CenterError, center, session } from "@/lib/center";
+import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { setServiceAppUrl } from "@/app/actions";
 import { UnregisterServiceApp } from "../../tools";
@@ -70,7 +70,7 @@ export default async function ServiceAppPage({
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_URL} current="/resources">
+    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/resources">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">{info?.name ?? wanted}</h1>
         <p className="text-body text-text-secondary">

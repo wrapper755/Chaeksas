@@ -43,6 +43,9 @@ import { COOKIE_NAME, open, type Session } from "./session";
 
 export const CENTER_URL = process.env.CHK_CONSOLE__CENTER_URL ?? "http://localhost:8800";
 
+/** 위 막대에 보일 주소 — 사람이 Bot UI·Studio에 적는 바깥 주소다. 콘솔이 부르는 주소는 컨테이너 이름일 수 있다. */
+export const CENTER_PUBLIC_URL = process.env.CHK_CONSOLE__CENTER_PUBLIC_URL || CENTER_URL;
+
 export class CenterError extends Error {
   constructor(
     readonly status: number,

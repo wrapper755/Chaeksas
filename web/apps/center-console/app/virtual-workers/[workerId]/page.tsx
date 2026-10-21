@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { VirtualWorkerBatch, VirtualWorkerInfo } from "@chaeksas/api-types/c5-virtual-worker-info";
-import { CENTER_URL, CenterError, center, session } from "@/lib/center";
+import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { LABEL as RUN_LABEL } from "../../runs/page";
 import { fullTime } from "../../bot-uis/page";
@@ -76,7 +76,7 @@ export default async function VirtualWorkerPage({ params }: { params: Promise<{ 
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_URL} current="/virtual-workers">
+    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/virtual-workers">
       <p className="mb-2 text-body-sm">
         <Link className="underline" href="/virtual-workers">
           가상 직원

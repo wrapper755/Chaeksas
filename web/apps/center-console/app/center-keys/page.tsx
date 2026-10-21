@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
-import { CENTER_URL, CenterError, center, session } from "@/lib/center";
+import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { KeyTools } from "./tools";
 
@@ -66,7 +66,7 @@ export default async function CenterKeysPage() {
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_URL} current="/center-keys">
+    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/center-keys">
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-h1 font-bold">Center API 키</h1>
