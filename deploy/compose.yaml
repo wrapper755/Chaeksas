@@ -38,6 +38,9 @@ services:
       CHK_CONSOLE__CENTER_URL: http://center:8800
       CHK_CONSOLE__SESSION_SECRET: ${CHK_CONSOLE__SESSION_SECRET:?세션 비밀을 .env에 넣으세요 (16자 이상)}
       PORT: "8501"
+      # Next.js standalone은 `HOSTNAME`에 바인드하는데 Docker가 그것을 컨테이너 id로 채운다 —
+      # 그러면 127.0.0.1을 두드리는 HEALTHCHECK가 닿지 못해 늘 unhealthy다.
+      HOSTNAME: "0.0.0.0"
     ports:
       - "${CHK_CONSOLE__HOST_PORT:-8501}:8501"
     depends_on:
@@ -76,6 +79,9 @@ services:
       CHK_SVC_CONSOLE__CENTER_CONSOLE_URL: http://localhost:${CHK_CONSOLE__HOST_PORT:-8501}
       CHK_SVC_CONSOLE__SESSION_SECRET: ${CHK_SVC_CONSOLE__SESSION_SECRET:?세션 비밀을 .env에 넣으세요 (16자 이상)}
       PORT: "8001"
+      # Next.js standalone은 `HOSTNAME`에 바인드하는데 Docker가 그것을 컨테이너 id로 채운다 —
+      # 그러면 127.0.0.1을 두드리는 HEALTHCHECK가 닿지 못해 늘 unhealthy다.
+      HOSTNAME: "0.0.0.0"
     ports:
       - "${CHK_SVC_CONSOLE__HOST_PORT:-8001}:8001"
     depends_on:
