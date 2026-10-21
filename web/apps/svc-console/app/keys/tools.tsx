@@ -34,6 +34,13 @@ export function KeyTools({
 }) {
   const [creating, setCreating] = useState(false);
   const [result, create, pending] = useActionState<ActionResult, FormData>(createKey, {});
+  // 결과는 `useActionState`가 쥐고 있어 지울 수 없다 — 닫은 키를 기억해 그 창만 내린다.
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const showing = Boolean(result.secret) && result.secret?.key !== dismissed;
+  function closeSecret() {
+    setDismissed(result.secret?.key ?? null);
+    setCreating(false);
+  }
   const [asking, setAsking] = useState<AdminKeyInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [working, start] = useTransition();
@@ -65,7 +72,7 @@ export function KeyTools({
       {error ? <ErrorBanner message={error} /> : null}
 
       <Dialog
-        open={creating && !result.secret}
+        open={creating && !showing}
         title="새 API 키"
         onClose={() => setCreating(false)}
         footer={
@@ -129,11 +136,11 @@ export function KeyTools({
 
       {/* 발급 직후 — **원문을 한 번만** 보여 준다 (SVC-02). */}
       <Dialog
-        open={Boolean(result.secret)}
+        open={showing}
         title="키를 발급했습니다"
-        onClose={() => setCreating(false)}
+        onClose={closeSecret}
         footer={
-          <Button variant="primary" onClick={() => setCreating(false)}>
+          <Button variant="primary" onClick={closeSecret}>
             닫기
           </Button>
         }
