@@ -6,7 +6,7 @@ import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-reso
 import type { RuntimeResource } from "@chaeksas/api-types/c7-runtime-resource";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
-import { CENTER_URL, CenterError, center, session, type ContributedKind } from "@/lib/center";
+import { CENTER_PUBLIC_URL, CenterError, center, session, type ContributedKind } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { registerExtension, registerServiceApp } from "@/app/actions";
 import { RefreshResources } from "./tools";
@@ -99,7 +99,7 @@ export default async function ResourcesPage({
     .slice(0, 8);
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_URL} current="/resources">
+    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/resources">
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-h1 font-bold">리소스</h1>

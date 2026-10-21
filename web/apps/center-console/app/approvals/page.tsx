@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
-import { CENTER_URL, CenterError, center, session } from "@/lib/center";
+import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 
 /**
@@ -129,7 +129,7 @@ export default async function ApprovalsPage({
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_URL} current="/approvals">
+    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/approvals">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">결재함</h1>
         <p className="text-body text-text-secondary">
