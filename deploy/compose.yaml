@@ -37,7 +37,7 @@ services:
       # localhost가 아니다, ADR-0017 §1).
       CHK_CONSOLE__CENTER_URL: http://center:8800
       # 위 막대에 보일 주소 — 사람이 Bot UI·Studio에 적는 **바깥** 주소다 (위의 것은 PC에서 닿지 않는다).
-      CHK_CONSOLE__CENTER_PUBLIC_URL: ${CHK_CONSOLE__CENTER_PUBLIC_URL:-http://localhost:${CHK_CENTER__HOST_PORT:-8800}}
+      CHK_CONSOLE__CENTER_PUBLIC_URL: ${CHK_CONSOLE__CENTER_PUBLIC_URL:-http://localhost:8800}
       CHK_CONSOLE__SESSION_SECRET: ${CHK_CONSOLE__SESSION_SECRET:?세션 비밀을 .env에 넣으세요 (16자 이상)}
       PORT: "8501"
       # Next.js standalone은 `HOSTNAME`에 바인드하는데 Docker가 그것을 컨테이너 id로 채운다 —
@@ -78,7 +78,8 @@ services:
       # 콘솔은 **컨테이너 이름**으로 앱을 부른다 (브라우저가 아니라 콘솔 서버가 부른다, ADR-0017 §1).
       CHK_SVC_CONSOLE__APP_URL: http://svc-uia:8000
       # 「실행 id」 → CON-01 링크 (ADR-0075). **브라우저가 여는** 주소라 컨테이너 이름이 아니다.
-      CHK_SVC_CONSOLE__CENTER_CONSOLE_URL: http://localhost:${CHK_CONSOLE__HOST_PORT:-8501}
+      # 호스트 포트 칸에는 `127.0.0.1:8501`처럼 주소가 들어갈 수 있어 그것으로 짓지 않는다.
+      CHK_SVC_CONSOLE__CENTER_CONSOLE_URL: ${CHK_SVC_CONSOLE__CENTER_CONSOLE_URL:-http://localhost:8501}
       CHK_SVC_CONSOLE__SESSION_SECRET: ${CHK_SVC_CONSOLE__SESSION_SECRET:?세션 비밀을 .env에 넣으세요 (16자 이상)}
       PORT: "8001"
       # Next.js standalone은 `HOSTNAME`에 바인드하는데 Docker가 그것을 컨테이너 id로 채운다 —
