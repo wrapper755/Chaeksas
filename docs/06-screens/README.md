@@ -68,7 +68,7 @@
 | API 키 (Center·서비스 앱) | 사용 중 / 만료 / 폐기됨 | done / warning / neutral |
 | 서비스 앱 키 참조 (Bot UI·Studio) | 정상 / 없음(등록 필요) / 거부됨 / 만료 / 폐기됨 / 확인 전 | done / failed / failed / warning / failed / neutral |
 | 패키지 | 후보 / 승인됨 / 지원 종료 / 철회 / 로컬만 | waiting / done / warning / failed / neutral |
-| 서명·준비·온라인·UI 세션·배치 결정·가상 직원 | `tokens.json` `status_map` 참고 | — |
+| 서명·준비·온라인·UI 세션·배치 결정·가상 직원·Admin 키 | `tokens.json` `status_map` 참고 | — |
 | 결재 | 대기 / 답함 / 시간 초과 / 회수됨 (실행하는 쪽이 답을 거절하면 다시 「대기」 + 안내 띠) | waiting / done / warning / neutral |
 | 작업 | 대기 / 전달됨 / 대기열 / 수락 / 거절 / 만료 / 취소됨 | neutral / active / waiting / done / failed / warning / neutral |
 | 로케이터 | 사용 중(active) / 검증 전(unverified) / 대체됨(deprecated) | done / waiting / neutral |

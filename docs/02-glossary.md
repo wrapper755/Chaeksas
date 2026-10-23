@@ -31,6 +31,7 @@
 | Center | `center` | 서버 | 패키지·Bot UI·배포·작업·결재·실행 이력·리소스·Center API 키를 관리 |
 | Center 콘솔 | `console` | 화면 (웹) | Center의 웹 화면. 운영자·결재자가 쓴다 |
 | Admin | `admin` | 도구 | 서명 키를 가지고 패키지 승인·배포에 서명 |
+| Admin UI | `admin_ui` | 화면 (데스크톱) | Admin이 쓰는 창 (`chk-admin-ui`). 서명 키, Center 연결, 외부 확장 서명·등록을 누르기로 한다. 서명은 `chk-admin`과 같은 함수다 [ADR-0089](decisions/0089-admin-ui.md) |
 | **확장** | `extension` | 묶음 | **BPM 프로세스에 공통 기능을 더하는 묶음.** 확장 정의(C13 `extension.json`)로 태스크 종류·작업·Studio 편집기·Tool UI 도구·로컬 런타임 등을 **기여**한다. 등급: 내장 / 사내 / 외부. 첫 내장 확장은 UI 자동화 [ADR-0018](decisions/0018-extensions.md) |
 | 확장 정의 | `extension.json` | 파일 | 확장이 무엇을 더하는지 선언 (C13) |
 | 기여 / 기여 지점 | `contributes` | 개념 | 확장이 플랫폼에 끼워 넣는 것 / 끼워 넣을 수 있는 자리 (VS Code의 contribution point와 같은 뜻) |

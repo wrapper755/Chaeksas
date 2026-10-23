@@ -37,6 +37,19 @@ def _studio_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monk
 
 
 @pytest.fixture(autouse=True)
+def _admin_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monkeypatch: Any) -> Iterator[Path]:
+    """**어느 시험도 개발 PC의 Admin 키 폴더를 쓰지 않는다.** (위 Bot UI와 같은 까닭)
+
+    한 시험이 없는 환경변수 이름(`CHK_ADMIN__HOME`)으로 돌려 놓은 탓에 돌릴 때마다 진짜 폴더에
+    「첫 키」가 두 개씩 쌓였다 — Admin이 `--key`로 열두 개 중 하나를 골라야 했고, 그 키들의 암호는
+    시험의 것이라 아무도 쓸 수 없었다. 파일마다 덮어쓰는 시험은 그대로 돈다(나중 것이 이긴다).
+    """
+    path = tmp_path_factory.mktemp("admin-data")
+    monkeypatch.setenv("CHK_ADMIN__DATA_DIR", str(path))
+    yield path
+
+
+@pytest.fixture(autouse=True)
 def _keyring_is_in_memory() -> Iterator[None]:
     """**어느 시험도 개발 PC의 OS 비밀 저장소를 읽거나 쓰지 않는다.** (위 데이터 폴더와 같은 까닭)
 

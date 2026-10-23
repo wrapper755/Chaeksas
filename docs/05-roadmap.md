@@ -246,7 +246,7 @@ CI에 산출물 잡이 없다.
 
 ## 나중에 (범위 밖, 기록만)
 
-서버 실행의 헤드리스 웹 조작, OIDC 로그인, LLM 비용 집계, 실행 기록 보존 정책, 무인 실행(Windows 서비스 모드, S4 결과에 따라), Admin 데스크톱 창(**지금은 짓지 않는다** — 다시 볼 조건은 [ADR-0076](decisions/0076-no-admin-window-yet.md)), 멀티 테넌시.
+서버 실행의 헤드리스 웹 조작, OIDC 로그인, LLM 비용 집계, 실행 기록 보존 정책, 무인 실행(Windows 서비스 모드, S4 결과에 따라), Admin UI의 승인·배포 화면(ADM-02·03 — 첫 판은 키·확장·Center 연결뿐이다, [ADR-0089](decisions/0089-admin-ui.md)), 멀티 테넌시.
 
 **PostgreSQL 전환은 M8로 옮겼다** (저장소 옮기기 수단과 같은 거리다 — 수단 없이 옮길 수 없다).
 **헤드리스 웹 조작은 더 멀어졌다** — [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)가

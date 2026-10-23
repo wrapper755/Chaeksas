@@ -440,6 +440,68 @@ def test_the_signed_envelope_is_accepted_by_center(
     assert answer.status_code == 201, answer.text
 
 
+def test_register_signs_and_registers_in_one_go(
+    client: TestClient, tmp_path: Path, key: Any, capsys: Any
+) -> None:
+    """`--register` — 서명하고 **그 자리에서** Center에 올린다. 봉투 파일도 남는다."""
+    from chaeksas.admin.client import Center
+
+    source = tmp_path / "extension.json"
+    source.write_text(json.dumps(definition(), ensure_ascii=False), encoding="utf-8")
+    out = tmp_path / "e.json"
+    center = Center(base_url="http://center", token=TOKEN, client=client)
+    argv = ["-y", "sign-extension", str(source), "--out", str(out), "--register"]
+
+    assert admin_main(argv, center=center) == 0
+    assert "Center에 등록했습니다 — ext-ocr@1.0.0" in capsys.readouterr().out
+    assert out.is_file(), "올리기가 실패해도 다시 서명하지 않게 봉투를 남긴다"
+    [one] = client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()["items"]
+    assert one["id"] == "ext-ocr"
+
+    # 같은 정의를 다시 올리면 「이미 있다」 — 실패가 아니다.
+    assert admin_main(argv, center=center) == 0
+    assert "이미 같은 정의로" in capsys.readouterr().out
+
+
+def test_the_key_center_knows_is_used_without_asking(
+    client: TestClient, tmp_path: Path, key: Any, capsys: Any
+) -> None:
+    """키가 여럿이어도 **Center에 등록된 것이 하나면** 그것을 쓴다 — `--key`를 적지 않아도 된다."""
+    from chaeksas.admin.client import Center
+
+    keystore.create(label="시험이 남긴 키")
+    keystore.create(label="또 하나")
+    source = tmp_path / "extension.json"
+    source.write_text(json.dumps(definition(), ensure_ascii=False), encoding="utf-8")
+    center = Center(base_url="http://center", token=TOKEN, client=client)
+
+    argv = ["-y", "sign-extension", str(source), "--out", str(tmp_path / "e.json"), "--register"]
+    assert admin_main(argv, center=center) == 0
+    printed = capsys.readouterr().out
+    assert f"서명 키: {key.key_id}" in printed
+    assert "Center에 등록했습니다" in printed
+
+
+def test_with_no_registered_key_among_many_it_still_asks(
+    client: TestClient, tmp_path: Path, capsys: Any, monkeypatch: Any
+) -> None:
+    """**아무거나 쓰지 않는다** — Center가 아는 키가 없으면 고르라고 하고, **묻기 전에** 멈춘다."""
+    from chaeksas.admin.client import Center
+
+    keystore.create(label="가")
+    keystore.create(label="나")
+    source = tmp_path / "extension.json"
+    source.write_text(json.dumps(definition(), ensure_ascii=False), encoding="utf-8")
+    center = Center(base_url="http://center", token=TOKEN, client=client)
+
+    def never(*_: Any) -> str:
+        raise AssertionError("키를 고르지 못했는데 「서명할까요?」를 물었다")
+
+    monkeypatch.setattr("builtins.input", never)
+    assert admin_main(["sign-extension", str(source)], center=center) == 2
+    assert "키가 여럿입니다" in capsys.readouterr().err
+
+
 def test_the_revoke_command_writes_an_envelope(tmp_path: Path, key: Any, capsys: Any) -> None:
     from chaeksas.admin.client import Center
 
