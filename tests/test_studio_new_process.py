@@ -112,10 +112,11 @@ def test_blank_is_the_default_and_makes_no_definition(space: Workspace) -> None:
 
 
 def test_the_new_dialog_offers_no_file_import(space: Workspace) -> None:
-    """파일에서 가져오기는 **따로 메뉴다** — 이 창의 「첫 정의」는 둘뿐이다."""
+    """파일에서 가져오기는 **따로 메뉴다** — 이 창의 「첫 정의」는 빈 정의·열린 정의·예제 셋이다."""
     dialog = NewProcessDialog(None, space)
-    assert [b.text() for b in dialog.picks.buttons()][0] == "빈 정의로 시작"
-    assert len(dialog.picks.buttons()) == 2
+    texts = [b.text() for b in dialog.picks.buttons()]
+    assert texts[0] == "빈 정의로 시작" and len(texts) == 3
+    assert not any("파일" in t for t in texts)
 
 
 def test_importing_shows_the_file_and_fills_from_the_drawing(space: Workspace, outside: Path) -> None:
@@ -169,3 +170,53 @@ def test_save_as_has_no_first_definition(space: Workspace, outside: Path) -> Non
     fill(dialog, "finance.claims-copy")
     dialog.accept()
     assert dialog.made is not None and dialog.made.entry == "청구.bpmn"
+
+
+# ─────────────────────────── 「예제에서 가져오기」 ───────────────────────────
+
+EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
+
+
+def test_the_id_rule_is_a_tooltip_not_a_line() -> None:
+    from PySide6.QtWidgets import QLabel  # noqa: PLC0415
+
+    from chaeksas.studio.dialogs import HINT  # noqa: PLC0415
+
+    dialog = NewProcessDialog(None, Workspace(Path("unused")), examples=EXAMPLES)
+    assert dialog.id_box.toolTip() == HINT
+    assert all(label.text() != HINT for label in dialog.findChildren(QLabel)), "창 아래 줄은 없다"
+
+
+def test_an_example_is_the_third_first_definition(space: Workspace) -> None:
+    dialog = NewProcessDialog(None, space, examples=EXAMPLES)
+    assert not dialog.example_list.isEnabled(), "고르기 전에는 목록이 꺼져 있다"
+    dialog.example_list.setCurrentIndex(dialog.example_list.findData("fx02_business_rule"))
+    dialog.example_pick.setChecked(True)
+    assert dialog.example_list.isEnabled()
+    assert dialog.id_box.text() == "fx02-business-rule" and dialog.name_box.text()
+    dialog.version_box.setText("0.2.0")
+    dialog.owner_box.setText("김설계")
+    dialog.accept()
+    made = dialog.made
+    assert made is not None and made.id == "fx02-business-rule" and made.version == "0.2.0"
+    assert made.owner == "김설계"
+    assert made.entry_definition is not None and made.entry_definition.path.is_file()
+    assert list(made.folder.glob("process/*.dmn")), "쓰는 DMN도 함께 온다"
+
+
+def test_picking_another_example_keeps_what_the_person_typed(space: Workspace) -> None:
+    dialog = NewProcessDialog(None, space, examples=EXAMPLES, example=True)
+    assert dialog.example_pick.isChecked(), "파일 메뉴는 이 줄을 골라 둔 채로 연다"
+    dialog.id_box.setText("my.own")
+    first_name = dialog.name_box.text()
+    dialog.example_list.setCurrentIndex((dialog.example_list.currentIndex() + 1) % dialog.example_list.count())
+    assert dialog.id_box.text() == "my.own", "고쳐 적은 칸은 덮지 않는다"
+    assert dialog.name_box.text() != first_name, "채워 둔 칸은 새 예제를 따른다"
+
+
+def test_no_examples_turns_the_line_off(space: Workspace, tmp_path: Path) -> None:
+    from chaeksas.studio.dialogs import NO_EXAMPLES  # noqa: PLC0415
+
+    dialog = NewProcessDialog(None, space, examples=tmp_path / "없음", example=True)
+    assert not dialog.example_pick.isEnabled() and NO_EXAMPLES in dialog.example_pick.text()
+    assert dialog.blank_pick.isChecked()
