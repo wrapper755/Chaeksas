@@ -255,6 +255,26 @@ def check_definition_name(process: BpmProcess, raw: str) -> str:
     return file_name
 
 
+def _readable_definition(path: Path) -> tuple[str, str]:
+    """가져올 정의 파일 → `(글, 파일 이름)`. 정의로 쓸 수 없으면 `WorkspaceError`.
+
+    파일 이름은 **그대로** 쓰므로 정의 이름 규칙(`check_definition_name`)과 같은 글자를 막는다.
+    """
+    if path.suffix.lower() != ".bpmn":
+        raise WorkspaceError(f"`.bpmn` 파일만 가져올 수 있다: {path.name}")
+    if any(ch in path.stem for ch in BAD_NAME_CHARS) or not path.stem.strip():
+        raise WorkspaceError(f"파일 이름으로 쓸 수 없다: {path.name}")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise WorkspaceError(f"파일을 읽지 못했다: {path.name} ({e})") from e
+    try:
+        read_process(text)
+    except BpmnReadError as e:
+        raise WorkspaceError(f"BPMN으로 읽지 못했다: {path.name} ({e})") from e
+    return text, f"{path.stem}.bpmn"
+
+
 def definition_process_id(file_name: str) -> str:
     """정의 파일 이름 → BPMN process id (`Proc_<파일>` — C14 케이스 형식과 같은 규칙).
 
@@ -384,8 +404,23 @@ class Workspace:
         version: str = "0.1.0",
         group: str = DEFAULT_GROUP,
         entry: str = "main.bpmn",
+        description: str = "",
+        owner: str = "",
+        first: Path | None = None,
     ) -> BpmProcess:
-        """새 BPM 프로세스 (STU-05). 정의 파일은 캔버스가 저장할 때 생긴다."""
+        """새 BPM 프로세스 (STU-05). 정의 파일은 캔버스가 저장할 때 생긴다.
+
+        `first`를 주면 **그 파일 하나**를 진입 정의로 복사한다 (「첫 정의」 — 「파일에서
+        가져오기」·「지금 열린 정의 복사」). 파일 이름은 그대로, 그림은 손대지 않는다(ADR-0022).
+        **아무것도 쓰기 전에 읽어 본다** — 읽지 못하면 반쯤 만든 폴더가 남지 않는다. 쓰는 DMN·호출
+        대상은 따라가지 않는다 (바깥 파일에는 예제 생성기의 이름 규칙이 없다 — B14가 말한다).
+        """
+        first_text = ""
+        if first is not None:
+            first_text, first_name = _readable_definition(first)
+            entry = first_name
+            if not name:
+                name = read_process(first_text).name or ""
         if not ID_PATTERN.match(process_id):
             raise WorkspaceError(
                 f"id는 소문자·숫자·`.`·`_`·`-`만 쓸 수 있고 소문자나 숫자로 시작한다: {process_id}"
@@ -399,9 +434,12 @@ class Workspace:
         (folder / "cases").mkdir()
         found = BpmProcess(
             id=process_id, folder=folder, group=group, name=name or process_id,
-            version=version, entry=entry,
+            version=version, entry=entry, description=description, owner=owner,
         )
         write_record(found)
+        if first is not None:
+            self.save_definition(found, entry, first_text)
+            return self.read(folder, group)
         return found
 
     def save_definition(self, process: BpmProcess, file_name: str, xml: str) -> Path:

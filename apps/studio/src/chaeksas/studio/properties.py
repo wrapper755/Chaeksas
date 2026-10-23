@@ -26,11 +26,13 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -70,6 +72,8 @@ KINDS = {
 CONDITION_KINDS = frozenset({"SequenceFlow"})
 #: 스크립트를 쓸 수 있는 요소.
 SCRIPT_KINDS = frozenset({"ScriptTask"})
+#: 결재·확인 편집기를 붙이는 요소 (C14 `chk:approval` — 결재는 userTask, 확인은 manualTask).
+APPROVAL_KINDS = frozenset({"UserTask", "ManualTask"})
 
 
 def kind_label(bpmn_type: str) -> str:
@@ -167,6 +171,8 @@ class Properties(QWidget):
         self.extensions = extensions
         #: 지금 붙어 있는 편집기와 붙일 때의 값 (바뀐 것만 보내려고).
         self._editor: Any = None
+        #: 편집기를 담은 스크롤 영역 — 탭에 들어가는 것은 이것이다 (STU-14).
+        self._editor_holder: QScrollArea | None = None
         self._editor_baseline: dict[str, Any] = {}
         #: 그 편집기가 고치는 자리 — `"task"`(STU-13) 또는 `"serviceCall"`(STU-14).
         self._editor_key = ""
@@ -175,6 +181,9 @@ class Properties(QWidget):
         #: BPM 프로세스가 적어 둔 키 참조 `{app_id: 참조}` (`chk:process.service_keys`) —
         #: STU-14가 「프로세스 설정을 따름 (<참조>)」에 보인다. **값은 없다** (ADR-0013).
         self.service_keys: dict[str, str] = {}
+        #: 열린 BPM 프로세스의 실행 위치 (`chk:process.run_location`) — 결재 편집기가 서버에서
+        #: 「현장 PC에서만」을 끈다 (B6과 같은 판정). 메인 창이 정의를 열 때 채운다.
+        self.run_location: str | None = None
 
         self.head = QLabel(EMPTY_TEXT, self)
         self.head.setWordWrap(True)
@@ -189,7 +198,11 @@ class Properties(QWidget):
         self.script_box.setPlaceholderText("변수 = 식  (한 줄에 하나, ADR-0025)")
 
         self.form = QWidget(self)
-        form_layout = QFormLayout(self.form)
+        outer = QVBoxLayout(self.form)
+        form_layout = QFormLayout()
+        outer.addLayout(form_layout)
+        # 칸들은 늘어나지 않는다 — 남는 높이를 아래로 모은다 (없으면 칸 사이가 벌어진다).
+        outer.addStretch(1)
         form_layout.addRow("이름", self.name_box)
         form_layout.addRow("설명", self.doc_box)
         self.condition_row = ("조건식", self.condition_box)
@@ -274,6 +287,9 @@ class Properties(QWidget):
         if "serviceCall" in chk:
             self._attach_service_editor(chk)
             return
+        if "approval" in chk or str(self.loaded.get("type") or "") in APPROVAL_KINDS:
+            self._attach_approval_editor(chk)
+            return
         if self.extensions is None:
             return
         task = _task_of(chk)
@@ -297,6 +313,19 @@ class Properties(QWidget):
         made.load(_body_of(chk, "serviceCall") or {})
         self._attach(made, TAB_LABEL, key="serviceCall")
 
+    def _attach_approval_editor(self, chk: dict[str, Any]) -> None:
+        """결재·확인 (`chk:approval`) — 아직 없는 사람 태스크에도 붙는다 (적용하면 생긴다)."""
+        from chaeksas.studio.approval_editor import (  # noqa: PLC0415
+            TAB_APPROVAL,
+            TAB_CONFIRMATION,
+            ApprovalEditor,
+        )
+
+        made = ApprovalEditor(self, run_location=self.run_location)
+        made.load(_body_of(chk, "approval") or {})
+        manual = str(self.loaded.get("type") or "") == "ManualTask"
+        self._attach(made, TAB_CONFIRMATION if manual else TAB_APPROVAL, key="approval")
+
     def _attach(self, found: Any, label: str, *, key: str) -> None:
         self._editor = found
         self._editor_key = key
@@ -304,7 +333,14 @@ class Properties(QWidget):
         changed = getattr(found, "changed", None)
         if changed is not None:
             changed.connect(self._refresh_apply)
-        self.tabs.insertTab(1, found, label)
+        # **세로로 스크롤되게 담는다** — 창이 낮아도 편집기의 표가 한 줄로 찌그러지지 않는다.
+        holder = QScrollArea(self)
+        holder.setWidgetResizable(True)
+        holder.setFrameShape(QFrame.Shape.NoFrame)
+        holder.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        holder.setWidget(found)
+        self._editor_holder = holder
+        self.tabs.insertTab(1, holder, label)
         self.tabs.setCurrentIndex(1)
 
     def _detach_editor(self) -> None:
@@ -317,9 +353,14 @@ class Properties(QWidget):
                 changed.disconnect(self._refresh_apply)
             except (RuntimeError, TypeError):  # pragma: no cover — 이미 끊겼다
                 pass
-        index = self.tabs.indexOf(found)
-        if index >= 0:
-            self.tabs.removeTab(index)
+        holder = self._editor_holder
+        if holder is not None:
+            index = self.tabs.indexOf(holder)
+            if index >= 0:
+                self.tabs.removeTab(index)
+            holder.takeWidget()
+            holder.deleteLater()
+        self._editor_holder = None
         found.setParent(None)
         self._editor = None
         self._editor_key = ""
@@ -366,9 +407,9 @@ class Properties(QWidget):
         if problem is not None:
             return {}, problem
         if data is not None:
-            if self._editor_key == "serviceCall":
-                # STU-14는 `chk:serviceCall` **통째로** 쓴다 (`data` 같은 포장이 없다).
-                changes["chk"] = {"serviceCall": json.dumps(data, ensure_ascii=False, indent=2)}
+            if self._editor_key in ("serviceCall", "approval"):
+                # STU-14·결재는 `chk:<이름>` **통째로** 쓴다 (`data` 같은 포장이 없다).
+                changes["chk"] = {self._editor_key: json.dumps(data, ensure_ascii=False, indent=2)}
                 return changes, None
             # `chk:task`는 `{type, extension, data}` **통째로** 오간다 — 본문만 보내면
             # 고칠 때마다 `type`·`extension`이 날아간다 (C1 — 패키지가 그 확장을 요구하지 않게 된다).

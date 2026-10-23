@@ -100,6 +100,7 @@
 | **KeyReveal** | 키 원문은 **발급 직후 한 번만**, 복사 단추 + 「다시 볼 수 없습니다」. 그 뒤에는 앞자리 16자만 | `KeyReveal` | `ChkKeyReveal` |
 | **Timeline** | CON-01 노드 막대: 상태 `solid` 색, 재생됨은 점선, 이어 돈 지점은 세로 점선 | `RunTimeline` | Studio 캔버스 표시 |
 | **LogView** | mono 13px, 최대 5000줄, 실패 줄은 `failed.fg` | `LogView` | `ChkLogView` |
+| **Section (묶음)** | 한 화면 안의 기능 묶음. 제목은 **카드 안쪽 맨 위**에 `text.primary`·굵게(`weight.bold`)·`size.body-lg`로, 왼쪽에 `primary` 세로 막대(3px)를 둔다. 제목과 내용 사이는 `space.3`, 묶음과 묶음 사이도 `space.3`. 테두리 위에 걸친 회색 제목은 쓰지 않는다 — 내용과 붙어 보이고 묶음이 갈리지 않는다 | — | `QGroupBox` 스타일 |
 | **Tabs / Nav** | 선택된 것은 `primary.subtle` 바탕 + `primary` 글자 + 굵게 | `Tabs`, `SideNav` | `QTabWidget` 스타일 |
 
 ## 4. 배치

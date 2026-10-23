@@ -8,19 +8,31 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
+    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
 
-from chaeksas.studio.workspace import DEFAULT_GROUP, BpmProcess, Definition, Workspace, WorkspaceError
+from chaeksas.contracts.bpmn_ext import BpmnReadError, read_process
+from chaeksas.studio.workspace import (
+    DEFAULT_GROUP,
+    ID_PATTERN,
+    BpmProcess,
+    Definition,
+    Workspace,
+    WorkspaceError,
+)
 
 #: 저장소 뿌리에서 본 업무 예제 자리.
 EXAMPLES_PARTS = ("docs", "08-business-examples", "bpmn")
@@ -46,12 +58,32 @@ EXAMPLES_DIR = _examples_dir()
 
 HINT = "id는 소문자·숫자·`.`·`_`·`-`만 쓰고 소문자나 숫자로 시작합니다 (C1과 같은 규칙)."
 
+#: 「지금 열린 정의 복사」를 끌 때 옆에 적는 까닭 (U3).
+NO_OPEN_DEFINITION = "열린 정의가 없습니다"
+
+#: 「파일에서 BPM 프로세스 가져오기」 안내 — 따라가지 않는 것을 미리 말한다 (STU-05).
+FILE_HINT = "그 파일 하나만 가져옵니다. 쓰는 결정(DMN)·호출 대상은 실행 전 검사가 알려 줍니다."
+
+
+def pick_bpmn_file(parent: QWidget | None) -> Path | None:
+    """STU-01 「파일에서 BPM 프로세스 가져오기...」의 첫 걸음 — 가져올 `.bpmn` 하나."""
+    path, _ = QFileDialog.getOpenFileName(parent, "가져올 BPMN 파일", "", "BPMN (*.bpmn)")
+    return Path(path) if path else None
+
 
 class NewProcessDialog(QDialog):
-    """STU-05. id·이름·버전·그룹을 받는다. 정의 파일은 캔버스가 저장할 때 생긴다.
+    """STU-05. id·이름·버전·그룹·설명·담당자와 「첫 정의」를 받는다.
+
+    「첫 정의」가 「빈 정의로 시작」이면 정의 파일은 캔버스가 저장할 때 생기고, 「지금 열린 정의
+    복사」면 **그 파일을 작업 폴더가 복사한다** (`Workspace.create`의 `first`) — 그때 `made`의
+    진입 정의가 이미 디스크에 있다.
+
+    **「파일에서 BPM 프로세스 가져오기...」도 이 창이다** (`imported`) — 파일은 메뉴가 먼저
+    고르고, 창은 「첫 정의」 대신 그 파일을 보이며 이름·id를 그림에서 채워 둔다.
 
     **「다른 이름으로 저장...」(STU-01)도 이 창이다** — 받는 칸이 같고 다른 것은 「만든다」와
-    「복사한다」뿐이다 (`source`). 그래서 그룹 만들기·오류 보이기가 한 자리에 있다.
+    「복사한다」뿐이다 (`source`). 그래서 그룹 만들기·오류 보이기가 한 자리에 있다. 그때는
+    설명·담당자·「첫 정의」를 두지 않는다 (한 벌을 통째로 옮긴다).
     """
 
     def __init__(
@@ -60,12 +92,21 @@ class NewProcessDialog(QDialog):
         workspace: Workspace,
         *,
         source: BpmProcess | None = None,
+        opened: Path | None = None,
+        imported: Path | None = None,
     ) -> None:
         super().__init__(parent)
         self.workspace = workspace
         self.source = source
+        self.opened = opened if opened is not None and opened.is_file() else None
+        self.imported = imported
         self.made: BpmProcess | None = None
-        self.setWindowTitle("다른 이름으로 저장" if source else "새 BPM 프로세스")
+        title = "새 BPM 프로세스"
+        if source is not None:
+            title = "다른 이름으로 저장"
+        elif imported is not None:
+            title = "파일에서 BPM 프로세스 가져오기"
+        self.setWindowTitle(title)
 
         self.id_box = QLineEdit(self)
         self.id_box.setPlaceholderText("finance.invoice-reconcile")
@@ -79,12 +120,29 @@ class NewProcessDialog(QDialog):
             self.name_box.setText(source.display)
             self.version_box.setText(source.version)
             self.group_box.setText(source.group)
+        if imported is not None:
+            self._fill_from(imported)
 
         form = QFormLayout()
         form.addRow("id", self.id_box)
         form.addRow("이름", self.name_box)
         form.addRow("버전", self.version_box)
         form.addRow("그룹", self.group_box)
+        if source is None:
+            self.description_box = QPlainTextEdit(self)
+            self.description_box.setFixedHeight(self.fontMetrics().lineSpacing() * 4)
+            self.owner_box = QLineEdit(self)
+            form.addRow("설명", self.description_box)
+            form.addRow("담당자", self.owner_box)
+            if imported is None:
+                form.addRow("첫 정의", self._first_choice())
+            else:
+                shown = QLabel(str(imported), self)
+                shown.setWordWrap(True)
+                form.addRow("가져올 파일", shown)
+                hint = QLabel(FILE_HINT, self)
+                hint.setWordWrap(True)
+                form.addRow("", hint)
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, parent=self
@@ -96,6 +154,46 @@ class NewProcessDialog(QDialog):
         layout.addLayout(form)
         layout.addWidget(QLabel(HINT, self))
         layout.addWidget(buttons)
+
+    def _first_choice(self) -> QWidget:
+        """「빈 정의로 시작」 / 「지금 열린 정의 복사」 (파일에서 가져오기는 따로 메뉴다)."""
+        box = QWidget(self)
+        column = QVBoxLayout(box)
+        column.setContentsMargins(0, 0, 0, 0)
+        self.blank_pick = QRadioButton("빈 정의로 시작", box)
+        self.blank_pick.setChecked(True)
+        opened = f"지금 열린 정의 복사 ({self.opened.name})" if self.opened else (
+            f"지금 열린 정의 복사 — {NO_OPEN_DEFINITION}"
+        )
+        self.opened_pick = QRadioButton(opened, box)
+        self.opened_pick.setEnabled(self.opened is not None)
+        self.picks = QButtonGroup(box)
+        for one in (self.blank_pick, self.opened_pick):
+            self.picks.addButton(one)
+            column.addWidget(one)
+        return box
+
+    def _fill_from(self, path: Path) -> None:
+        """그림의 이름과 (C1 규칙에 맞으면) process id로 채워 둔다 — 못 읽으면 비워 둔다.
+
+        읽지 못하는 파일인지는 「확인」이 작업 폴더를 거쳐 말한다 (한 자리에서 거부한다).
+        """
+        try:
+            drawing = read_process(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, BpmnReadError):
+            return
+        if drawing.name:
+            self.name_box.setText(drawing.name)
+        if ID_PATTERN.match(drawing.id) and self.workspace.find(drawing.id) is None:
+            self.id_box.setText(drawing.id)
+
+    def first(self) -> Path | None:
+        """고른 「첫 정의」 파일 — 빈 정의면 `None`."""
+        if self.source is not None:
+            return None
+        if self.imported is not None:
+            return self.imported
+        return self.opened if self.opened_pick.isChecked() else None
 
     def accept(self) -> None:
         group = self.group_box.text().strip() or DEFAULT_GROUP
@@ -115,7 +213,13 @@ class NewProcessDialog(QDialog):
                 )
             else:
                 self.made = self.workspace.create(
-                    process_id, name=name, version=version, group=group
+                    process_id,
+                    name=name,
+                    version=version,
+                    group=group,
+                    description=self.description_box.toPlainText().strip(),
+                    owner=self.owner_box.text().strip(),
+                    first=self.first(),
                 )
         except (WorkspaceError, OSError) as e:
             # **창을 닫지 않는다** — 적은 것을 버리지 않고 고칠 기회를 준다 (STU-05).
@@ -130,8 +234,10 @@ class NewProcessDialog(QDialog):
         workspace: Workspace,
         *,
         source: BpmProcess | None = None,
+        opened: Path | None = None,
+        imported: Path | None = None,
     ) -> BpmProcess | None:
-        dialog = cls(parent, workspace, source=source)
+        dialog = cls(parent, workspace, source=source, opened=opened, imported=imported)
         return dialog.made if dialog.exec() == QDialog.DialogCode.Accepted else None
 
 
