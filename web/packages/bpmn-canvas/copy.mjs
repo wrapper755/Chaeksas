@@ -1,4 +1,6 @@
 // bpmn-js 배포본 → `apps/studio/.../web/vendor/` (ADR-0029).
+// 그리고 **자동 배치 도우미 하나를 묶는다** (`src/auto-layout.mjs` → `bpmn-auto-layout.min.js`,
+// ADR-0088) — ESM 패키지라 그대로 복사할 배포본이 없다. 모델러·뷰어는 묶지 않는다.
 //
 //   node copy.mjs            복사한다
 //   node copy.mjs --check    쓰지 않고 검사만 (어긋나면 1로 끝난다 — CI가 쓴다)
@@ -39,17 +41,42 @@ async function listFonts() {
   return names.filter((n) => !n.endsWith(".map")).map((n) => `${FONT_DIR}/${n}`);
 }
 
+/** 자동 배치 도우미를 IIFE 하나로 (전역 `ChkAutoLayout`, ADR-0088). 같은 판이면 같은 바이트다. */
+async function autoLayout() {
+  const { build } = await import("esbuild");
+  const done = await build({
+    entryPoints: [join(HERE, "src/auto-layout.mjs")],
+    absWorkingDir: HERE,
+    bundle: true,
+    format: "iife",
+    globalName: "ChkAutoLayout",
+    platform: "browser",
+    target: "es2020",
+    minify: true,
+    charset: "utf8",
+    write: false,
+    logLevel: "silent",
+  });
+  return Buffer.from(done.outputFiles[0].contents);
+}
+
 async function outputs() {
   const version = JSON.parse(await readFile(require.resolve("bpmn-js/package.json"), "utf8")).version;
+  const layoutVersion = JSON.parse(
+    // `exports`가 package.json을 내보내지 않아 그 폴더에서 바로 읽는다.
+    await readFile(join(HERE, "node_modules/bpmn-auto-layout/package.json"), "utf8"),
+  ).version;
   const wanted = [...FILES, ...(await listFonts())];
   const out = new Map();
   for (const name of wanted) {
     out.set(name, await readFile(join(DIST, name)));
   }
+  out.set("bpmn-auto-layout.min.js", await autoLayout());
   out.set(
     "VERSION.txt",
     Buffer.from(
       `bpmn-js ${version}\n` +
+        `bpmn-auto-layout ${layoutVersion} (src/auto-layout.mjs를 esbuild로 묶었다, ADR-0088)\n` +
         "이 폴더는 생성물이다 (ADR-0029). 직접 고치지 말고 web/packages/bpmn-canvas의\n" +
         "package.json에서 판을 올린 뒤 `pnpm --filter @chaeksas/bpmn-canvas build`.\n",
       "utf8",

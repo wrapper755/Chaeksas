@@ -93,6 +93,7 @@ def test_the_vendored_bpmn_js_is_in_place() -> None:
     assert (WEB_DIR / "chk-moddle.js").is_file()
     assert (WEB_DIR / "vendor" / "bpmn-modeler.production.min.js").is_file()
     assert (WEB_DIR / "vendor" / "bpmn-navigated-viewer.production.min.js").is_file()
+    assert (WEB_DIR / "vendor" / "bpmn-auto-layout.min.js").is_file()  # ADR-0088
     assert "bpmn-js " in (WEB_DIR / "vendor" / "VERSION.txt").read_text(encoding="utf-8")
 
 
@@ -442,6 +443,59 @@ def test_the_viewer_draws_our_bpmn_and_cannot_edit_it(viewer_page: Any) -> None:
     for name in ("saveXML", "createTask", "undo", "setProperties"):
         with pytest.raises(CanvasError, match="모르는 함수"):
             viewer_page.call_sync(name)
+
+
+# ─────────────────────────── 그림 좌표 없는 정의 (ADR-0088) ───────────────────────────
+
+
+def without_di(xml: str) -> str:
+    """DI와 노드의 `incoming`·`outgoing`을 걷는다 — 다른 도구가 흔히 쓰는 모양이다.
+
+    둘 다 걷는 것이 요점이다: `incoming`·`outgoing`이 없으면 배치기가 선을 하나도 긋지 않았다.
+    """
+    import re  # noqa: PLC0415
+
+    xml = re.sub(r"<bpmndi:BPMNDiagram.*?</bpmndi:BPMNDiagram>", "", xml, flags=re.S)
+    return re.sub(r"\s*<bpmn:(incoming|outgoing)>[^<]*</bpmn:\1>", "", xml)
+
+
+def test_a_definition_without_di_is_laid_out_and_left_unsaved(canvas: Any) -> None:
+    original = (EXAMPLES / "bx03_expense_approval.bpmn").read_text(encoding="utf-8")
+    bare = without_di(original)
+    assert "BPMNDiagram" not in bare and "<bpmn:outgoing>" not in bare
+
+    found = canvas.call_sync("importXML", bare)
+    assert found.get("laid_out") is True
+    assert found.get("warnings") == [], found.get("warnings")
+    assert canvas.call_sync("stats")["dirty"] is True, "배치했으면 디스크와 다르다"
+
+    again = canvas.save_xml()
+    assert meaning(again) == meaning(original), "뜻은 그대로이고 좌표만 생긴다"
+    flows = len(read_process(original).flows)
+    assert again.count("<bpmndi:BPMNEdge") == flows, "흐름마다 선이 그어진다"
+
+
+def test_a_definition_with_di_is_not_laid_out_again(canvas: Any) -> None:
+    """사람이 놓은 자리를 덮지 않는다."""
+    original = (EXAMPLES / "bx03_expense_approval.bpmn").read_text(encoding="utf-8")
+    found = canvas.call_sync("importXML", original)
+    assert found.get("laid_out") is False
+    assert canvas.call_sync("stats")["dirty"] is False
+
+
+def test_the_viewer_lays_out_too(viewer_page: Any) -> None:
+    bare = without_di((EXAMPLES / "bx03_expense_approval.bpmn").read_text(encoding="utf-8"))
+    found = viewer_page.call_sync("importXML", bare)
+    assert found.get("laid_out") is True and found.get("warnings") == []
+    assert viewer_page.call_sync("stats")["elements"] > 4
+
+
+def test_clearing_takes_the_diagram_down(canvas: Any) -> None:
+    """STU-01 「BPM 프로세스 닫기」."""
+    canvas.call_sync("importXML", (EXAMPLES / "bx03_expense_approval.bpmn").read_text(encoding="utf-8"))
+    canvas.clear()
+    stats = canvas.call_sync("stats")
+    assert (stats["elements"], stats["dirty"]) == (0, False)
 
 
 # ─────────────────────────── STU-06a 나누기 (ADR-0071) ───────────────────────────

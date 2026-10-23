@@ -1,4 +1,4 @@
-"""정의를 열고·저장하고·만들고·가져오는 자리 (STU-01·STU-05).
+"""정의를 열고·닫고·저장하고·만들고·가져오는 자리 (STU-01·STU-05).
 
 메인 창에서 떼어 낸 글루다 (`main_window.py`가 500줄 선을 넘어 가른 자리, CLAUDE.md §4).
 **창의 상태를 바꾸는 쪽**이라 창을 받아 쓴다 — 열린 BPM 프로세스·정의·「저장 안 한 변경」은
@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from chaeksas.studio.canvas import CanvasError
-from chaeksas.studio.dialogs import NewProcessDialog, pick_example
+from chaeksas.studio.dialogs import NewProcessDialog, pick_bpmn_file, pick_example
 from chaeksas.studio.workspace import (
     BpmProcess,
     WorkspaceError,
@@ -38,6 +38,10 @@ NO_DEFINITION = "열린 정의가 없습니다."
 NO_PROCESS = "열린 BPM 프로세스가 없습니다."
 DISCARD_TITLE = "저장하지 않은 변경사항"
 DISCARD_TEXT = "저장하지 않은 변경사항이 있습니다. 저장할까요?"
+#: 그림 좌표가 없어 캔버스가 배치했을 때 (ADR-0088) — 디스크와 다르다는 것을 말한다.
+LAID_OUT = "그림 좌표가 없어 자동 배치했습니다 — 저장하면 파일에 남습니다."
+#: 시험 실행 중에는 닫지 않는다 — 실행이 그 그림에 노드 상태를 칠한다.
+CLOSE_WHILE_RUNNING = "시험 실행 중에는 닫을 수 없습니다 — 먼저 「실행 중지」를 누르세요."
 
 
 def inherited_keys(process: BpmProcess) -> dict[str, str]:
@@ -96,16 +100,23 @@ def open_definition(window: MainWindow, path_text: str) -> None:
             return
         warnings = found.get("warnings")
         count = len(warnings) if isinstance(warnings, list) else 0
-        window.process, window.definition, window.dirty = process, path, False
+        laid_out = bool(found.get("laid_out"))
+        window.process, window.definition, window.dirty = process, path, laid_out
         window.properties.show_nothing()
         window.preflight.setRowCount(0)
         window.retitle()
         window.explorer.refresh(opened=path.as_posix())
         note = f" (경고 {count}개)" if count else ""
         window.say(f"열었습니다: {process.display} / {path.name}{note}")
+        if laid_out:
+            window.say(LAID_OUT)
         # STU-14가 고를 거리는 **정의를 열 때** 받는다 (노드를 고를 때마다 두드리지 않게).
         window.refresh_catalog()
         window.properties.service_keys = inherited_keys(process)
+        entry = process.entry_definition
+        window.properties.run_location = (
+            entry.process.info.run_location if entry is not None and entry.process is not None else None
+        )
 
     window.canvas.load_xml(path.read_text(encoding="utf-8"), then=done)
 
@@ -131,11 +142,21 @@ def save(window: MainWindow) -> bool:
 
 
 def new_process(window: MainWindow) -> None:
-    """STU-05. 만든 뒤 빈 정의를 캔버스에 띄우고 바로 저장한다."""
+    """STU-05. 만든 뒤 빈 정의를 캔버스에 띄우고 바로 저장한다.
+
+    「첫 정의」로 파일을 골랐으면 작업 폴더가 이미 복사해 두었으니 **그것을 연다** (빈 정의를
+    짓지 않는다). 「지금 열린 정의 복사」가 디스크의 것을 옮기므로 관문(`may_discard`)이 먼저다.
+    """
     if not may_discard(window):
         return
-    made = NewProcessDialog.ask(window, window.workspace)
+    made = NewProcessDialog.ask(window, window.workspace, opened=window.definition)
     if made is None:
+        return
+    entry = made.entry_definition
+    if entry is not None and entry.path.is_file():
+        window.explorer.refresh(opened=entry.path.as_posix())
+        window.say(f"만들었습니다: {made.display} — 첫 정의 {entry.path.name}")
+        open_definition(window, entry.path.as_posix())
         return
     try:
         window.canvas.create_empty(f"Proc_{made.id.replace('-', '_')}", made.display)
@@ -249,19 +270,75 @@ def import_example(window: MainWindow) -> None:
         open_definition(window, entry.path.as_posix())
 
 
+def import_file(window: MainWindow) -> None:
+    """STU-01 「파일에서 BPM 프로세스 가져오기...」 — 파일을 고르고 STU-05로 id·이름을 받는다.
+
+    파일은 **그 하나만** 진입 정의로 복사한다 (`Workspace.create`의 `first` — 원본은 읽기만
+    한다). 그림 좌표가 없으면 **열 때** 캔버스가 배치한다 (ADR-0088).
+    """
+    if not may_discard(window):
+        return
+    picked = pick_bpmn_file(window)
+    if picked is None:
+        return
+    made = NewProcessDialog.ask(window, window.workspace, imported=picked)
+    if made is None:
+        return
+    entry = made.entry_definition
+    window.explorer.refresh(opened=entry.path.as_posix() if entry is not None else "")
+    window.say(f"가져왔습니다: {made.display} — {picked.name}")
+    if entry is not None:
+        open_definition(window, entry.path.as_posix())
+
+
+def close_process(window: MainWindow) -> None:
+    """STU-01 「BPM 프로세스 닫기」 (Ctrl+W) — 캔버스를 비우고 **다음에 띄울 때도 열지 않는다**.
+
+    저장 안 한 변경은 같은 관문(`may_discard`)이 묻는다. 시험 실행 중이면 닫지 않는다 — 실행이
+    그 그림에 노드 상태를 칠하고, 끝나면 그 BPM 프로세스의 기록을 쓴다.
+    """
+    if window.process is None:
+        window.say(NO_PROCESS)
+        return
+    if window.running is not None:
+        window.say(CLOSE_WHILE_RUNNING)
+        return
+    if not may_discard(window):
+        return
+    closed = window.process.display
+    try:
+        window.canvas.clear()
+    except CanvasError as e:
+        window.say(f"캔버스를 비우지 못했습니다: {e}")
+        return
+    window.process, window.definition, window.dirty = None, None, False
+    window.properties.show_nothing()
+    window.preflight.setRowCount(0)
+    window.retitle()
+    window.explorer.refresh()
+    remember_last_opened(window)
+    window.say(f"닫았습니다: {closed}")
+
+
 def remember_last_opened(window: MainWindow) -> None:
-    """닫을 때 마지막으로 열었던 정의를 설정에 남긴다 (다음에 그것을 연다)."""
-    if window.definition is not None:
-        replace(window.settings, last_opened=window.definition.as_posix()).save()
+    """마지막으로 열었던 정의를 설정에 남긴다 (다음에 그것을 연다). **닫았으면 비운다**."""
+    opened = window.definition.as_posix() if window.definition is not None else ""
+    if opened != window.settings.last_opened:
+        window.settings = replace(window.settings, last_opened=opened)
+        window.settings.save()
 
 
 __all__ = [
+    "CLOSE_WHILE_RUNNING",
     "DISCARD_TEXT",
     "DISCARD_TITLE",
+    "LAID_OUT",
     "NO_DEFINITION",
     "NO_PROCESS",
     "add_definition",
+    "close_process",
     "import_example",
+    "import_file",
     "inherited_keys",
     "make_entry",
     "may_discard",

@@ -240,6 +240,10 @@ class Canvas(QWebEngineView):
     def create_empty(self, process_id: str, name: str) -> None:
         self.call_sync("createEmpty", process_id, name)
 
+    def clear(self) -> None:
+        """그림을 내린다 (STU-01 「BPM 프로세스 닫기」)."""
+        self.call_sync("clear")
+
     def create_task(
         self,
         bpmn: str,

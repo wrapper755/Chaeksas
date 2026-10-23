@@ -14,6 +14,7 @@ from typing import Any
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from chaeksas.studio import file_actions
+from chaeksas.studio.dialogs import NewProcessDialog
 from chaeksas.studio.workspace import BpmProcess, Definition, Workspace, read_record
 
 MINIMAL = """<?xml version="1.0" encoding="UTF-8"?>
@@ -38,6 +39,48 @@ class FakeExplorer:
 
 
 @dataclass
+class FakeCanvas:
+    """`load_xml`은 받은 답을 **그 자리에서** 돌려준다 (캔버스가 무엇을 했는지는 시험이 정한다)."""
+
+    answer: dict[str, Any] = field(default_factory=lambda: {"ok": True, "warnings": []})
+    cleared: int = 0
+
+    def load_xml(self, _xml: str, *, then: Any = None) -> None:
+        if then is not None:
+            then(self.answer)
+
+    def clear(self) -> None:
+        self.cleared += 1
+
+
+@dataclass
+class FakeProperties:
+    service_keys: dict[str, str] = field(default_factory=dict)
+    run_location: str | None = None
+    emptied: int = 0
+
+    def show_nothing(self) -> None:
+        self.emptied += 1
+
+
+@dataclass
+class FakeTable:
+    rows: int = 3
+
+    def setRowCount(self, rows: int) -> None:  # noqa: N802 — Qt 이름 그대로
+        self.rows = rows
+
+
+@dataclass
+class FakeSettings:
+    last_opened: str = ""
+    saved: int = 0
+
+    def save(self) -> None:
+        self.saved += 1
+
+
+@dataclass
 class FakeWindow:
     """창이 공개하는 **작은 길**만 가진 가짜 (`main_window.py` 머리말)."""
 
@@ -47,6 +90,15 @@ class FakeWindow:
     explorer: FakeExplorer = field(default_factory=FakeExplorer)
     said: list[str] = field(default_factory=list)
     retitled: int = 0
+    dirty: bool = False
+    running: object | None = None
+    canvas: FakeCanvas = field(default_factory=FakeCanvas)
+    properties: FakeProperties = field(default_factory=FakeProperties)
+    preflight: FakeTable = field(default_factory=FakeTable)
+    settings: FakeSettings = field(default_factory=FakeSettings)
+
+    def refresh_catalog(self) -> None:
+        pass
 
     def say(self, message: str) -> None:
         self.said.append(message)
@@ -140,3 +192,88 @@ def test_the_name_rule_refuses_before_anything_is_written(tmp_path: Path, monkey
     assert warned and "쓸 수 없다" in warned[0]
     assert [d.path.name for d in window.process.definitions] == ["main.bpmn"]
     assert not list((window.process.folder.parent).glob("**/밖*"))
+
+
+# ─────────────────────────── 닫기 · 파일에서 가져오기 · 자동 배치 ───────────────────────────
+
+
+def test_closing_empties_the_window_and_forgets_the_last_opened(tmp_path: Path) -> None:
+    """「BPM 프로세스 닫기」 — **다음에 띄울 때도 열지 않는다**."""
+    window = opened(tmp_path, "main.bpmn")
+    window.settings.last_opened = str(window.definition)
+    file_actions.close_process(window)  # type: ignore[arg-type]
+    assert (window.process, window.definition, window.dirty) == (None, None, False)
+    assert window.canvas.cleared == 1 and window.properties.emptied == 1
+    assert window.preflight.rows == 0 and window.retitled == 1
+    assert (window.settings.last_opened, window.settings.saved) == ("", 1)
+    assert window.said[-1] == "닫았습니다: 한글 이름"
+
+
+def test_closing_during_a_test_run_is_refused(tmp_path: Path) -> None:
+    window = opened(tmp_path, "main.bpmn")
+    window.running = object()
+    file_actions.close_process(window)  # type: ignore[arg-type]
+    assert window.process is not None and window.canvas.cleared == 0
+    assert window.said == [file_actions.CLOSE_WHILE_RUNNING]
+
+
+def test_closing_with_nothing_open_says_so(tmp_path: Path) -> None:
+    window = opened(tmp_path, "main.bpmn")
+    window.process, window.definition = None, None
+    file_actions.close_process(window)  # type: ignore[arg-type]
+    assert window.said == [file_actions.NO_PROCESS] and window.canvas.cleared == 0
+
+
+def test_closing_keeps_unsaved_edits_when_asked_to_cancel(tmp_path: Path, monkeypatch: Any) -> None:
+    window = opened(tmp_path, "main.bpmn")
+    window.dirty = True
+    monkeypatch.setattr(file_actions, "may_discard", lambda _window: False)
+    file_actions.close_process(window)  # type: ignore[arg-type]
+    assert window.process is not None and window.canvas.cleared == 0
+
+
+def test_a_laid_out_definition_opens_as_unsaved(tmp_path: Path) -> None:
+    """캔버스가 배치했으면(ADR-0088) 디스크와 다르다 — 「저장 안 한 변경」이고 그렇게 말한다."""
+    window = opened(tmp_path, "main.bpmn")
+    window.canvas.answer = {"ok": True, "warnings": [], "laid_out": True}
+    assert window.definition is not None
+    file_actions.open_definition(window, window.definition.as_posix())  # type: ignore[arg-type]
+    assert window.dirty is True
+    assert window.said[-1] == file_actions.LAID_OUT
+
+
+def test_a_definition_with_di_opens_as_saved(tmp_path: Path) -> None:
+    window = opened(tmp_path, "main.bpmn")
+    assert window.definition is not None
+    file_actions.open_definition(window, window.definition.as_posix())  # type: ignore[arg-type]
+    assert window.dirty is False and file_actions.LAID_OUT not in window.said
+
+
+def test_importing_a_file_makes_a_process_and_opens_it(tmp_path: Path, monkeypatch: Any) -> None:
+    """「파일에서 BPM 프로세스 가져오기...」 — 파일 → STU-05 → 연다."""
+    window = opened(tmp_path, "main.bpmn")
+    source = tmp_path / "바깥.bpmn"
+    source.write_text(MINIMAL.format(process_id="Proc_out"), encoding="utf-8")
+    seen: dict[str, Any] = {}
+
+    def ask(_parent: Any, workspace: Workspace, **kwargs: Any) -> BpmProcess:
+        seen.update(kwargs)
+        return workspace.create("c.d", first=kwargs["imported"])
+
+    monkeypatch.setattr(file_actions, "pick_bpmn_file", lambda _window: source)
+    monkeypatch.setattr(NewProcessDialog, "ask", staticmethod(ask))
+    opened_paths: list[str] = []
+    monkeypatch.setattr(file_actions, "open_definition", lambda _w, path: opened_paths.append(path))
+
+    file_actions.import_file(window)  # type: ignore[arg-type]
+
+    assert seen == {"imported": source}
+    assert opened_paths and opened_paths[0].endswith("c.d/process/바깥.bpmn")
+    assert window.said[-1] == "가져왔습니다: Proc_out — 바깥.bpmn"
+
+
+def test_importing_stops_when_no_file_is_picked(tmp_path: Path, monkeypatch: Any) -> None:
+    window = opened(tmp_path, "main.bpmn")
+    monkeypatch.setattr(file_actions, "pick_bpmn_file", lambda _window: None)
+    file_actions.import_file(window)  # type: ignore[arg-type]
+    assert window.said == [] and window.workspace.find("c.d") is None

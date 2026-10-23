@@ -27,10 +27,26 @@
   <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
   <script src="vendor/bpmn-navigated-viewer.production.min.js"></script>
   <script src="chk-moddle.js"></script>
+  <script src="vendor/bpmn-auto-layout.min.js"></script>
 </head>
 <body>
 <div id="canvas"></div>
 <script>
+  /**
+   * 그림 좌표(DI)가 없으면 배치한 XML을 준다 (ADR-0088). **있으면 그대로** — 사람이 놓은 자리를
+   * 덮지 않는다. 읽지 못하는 XML은 그대로 넘겨 bpmn-js가 제 말로 거부하게 한다.
+   */
+  async function laidOutXml(xml) {
+    try {
+      if (window.ChkAutoLayout && (await ChkAutoLayout.needsLayout(xml))) {
+        return { xml: await ChkAutoLayout.layout(xml), laidOut: true };
+      }
+    } catch (e) {
+      // 아래 importXML이 같은 까닭으로 실패하며 말한다.
+    }
+    return { xml, laidOut: false };
+  }
+
   async function boot() {
     const viewer = new BpmnJS({
       container: "#canvas",
@@ -41,9 +57,13 @@
 
     const api = {
       async importXML(xml) {
-        const found = await viewer.importXML(xml);
+        const laid = await laidOutXml(xml);
+        const found = await viewer.importXML(laid.xml);
         viewer.get("canvas").zoom("fit-viewport");
-        return { warnings: (found.warnings || []).map((w) => String(w.message || w)) };
+        return {
+          warnings: (found.warnings || []).map((w) => String(w.message || w)),
+          laid_out: laid.laidOut,
+        };
       },
       /** 시험이 「정말 그 그림이 떴나」를 보는 자리 (모델러 쪽과 같은 이름이다). */
       async stats() {

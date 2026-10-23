@@ -258,10 +258,35 @@ def test_the_key_box_is_off_until_you_ask_for_an_exception(app: Any, catalog: Ca
     assert not made.key_box.isEnabled()
     assert "key_ref" not in made.dump()
 
-    made.follow_key.setChecked(False)
+    made.own_key.setChecked(True)
+    assert not made.follow_key.isChecked(), "둘 중 하나다"
     made.key_box.setText("hr-hris-write")
     assert made.key_box.isEnabled()
     assert made.dump()["key_ref"] == "hr-hris-write"
+
+
+def test_a_written_exception_opens_on_its_own_line(app: Any, catalog: Catalog) -> None:
+    made = editor(app, catalog, {**CALL, "key_ref": "hr-hris-write"})
+    assert made.own_key.isChecked() and made.key_box.isEnabled()
+    assert made.key_box.text() == "hr-hris-write"
+
+
+def test_a_missing_inherited_reference_is_said_on_its_own_line(app: Any, catalog: Catalog) -> None:
+    """한 줄에 몰아 적으면 참조 칸이 밀려 잘린다 — 기본 줄 **아래에** 경고 한 줄로 말한다."""
+    made = editor(app, catalog, CALL)
+    assert made.follow_key.text() == "BPM 프로세스 설정을 따름"
+    assert not made.key_note.isHidden()
+    made.own_key.setChecked(True)
+    assert made.key_note.isHidden(), "다른 참조를 적는 중이면 따를 것이 없어도 된다"
+
+
+def test_the_tables_show_three_rows_from_the_start(app: Any, catalog: Catalog) -> None:
+    from chaeksas.studio.service_editor import VISIBLE_ROWS  # noqa: PLC0415
+
+    made = editor(app, catalog, CALL)
+    for table in (made.inputs, made.outputs):
+        row = table.verticalHeader().defaultSectionSize()
+        assert table.minimumHeight() >= row * VISIBLE_ROWS + table.horizontalHeader().sizeHint().height()
 
 
 def test_the_editor_never_holds_a_key_value(app: Any, catalog: Catalog) -> None:
@@ -348,6 +373,11 @@ def test_the_properties_panel_attaches_the_editor_for_a_service_call(app: Any, c
     })
     assert panel.tabs.tabText(1) == TAB_LABEL
     assert panel._editor_key == "serviceCall"
+    # 탭에는 **스크롤 영역**이 들어가고 그 안에 편집기가 있다 (창이 낮아도 표가 찌그러지지 않는다).
+    from PySide6.QtWidgets import QScrollArea  # noqa: PLC0415
+
+    holder, attached = panel.tabs.widget(1), panel._editor
+    assert isinstance(holder, QScrollArea) and holder.widget() is attached
 
     # 고친 것은 `chk.serviceCall` **통째로** 간다 (`data` 포장이 없다).
     panel._editor.retry_box.setValue(3)
@@ -493,3 +523,24 @@ DELEGATING_XML = """<?xml version="1.0" encoding="UTF-8"?>
   </bpmn:process>
 </bpmn:definitions>
 """
+
+
+def test_each_section_is_its_own_group(app: Any, catalog: Catalog) -> None:
+    """섹션마다 묶음 상자 하나 — 제목으로 갈라 보인다 (STU-14)."""
+    from PySide6.QtWidgets import QGroupBox  # noqa: PLC0415
+
+    made = editor(app, catalog, CALL)
+    titles = [box.title() for box in made.findChildren(QGroupBox)]
+    assert titles == ["작업", "API 키", "입력", "출력", "실행 제한"]
+
+
+def test_empty_rows_are_hidden_until_an_operation_is_picked(app: Any) -> None:
+    """작업을 고르기 전에는 설명·「지원 수행 모드」 줄이 없다 — 라벨만 덩그러니 남기지 않는다."""
+    made = editor(app, build([], []), CALL)
+    assert not made.task_form.isRowVisible(made.modes_note)
+    assert not made.task_form.isRowVisible(made.operation_note)
+
+
+def test_picked_operation_shows_its_modes(app: Any, catalog: Catalog) -> None:
+    made = editor(app, catalog, CALL)
+    assert made.task_form.isRowVisible(made.modes_note)

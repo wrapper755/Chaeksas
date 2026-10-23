@@ -20,6 +20,7 @@
   <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
   <script src="vendor/bpmn-modeler.production.min.js"></script>
   <script src="chk-moddle.js"></script>
+  <script src="vendor/bpmn-auto-layout.min.js"></script>
 </head>
 <body>
 <div id="canvas"></div>
@@ -79,6 +80,21 @@
       y: Math.round(box.y + (Number(at.y) - rect.top) / box.scale),
     };
   };
+
+  /**
+   * 그림 좌표(DI)가 없으면 배치한 XML을 준다 (ADR-0088). **있으면 그대로** — 사람이 놓은 자리를
+   * 덮지 않는다. 읽지 못하는 XML은 그대로 넘겨 bpmn-js가 제 말로 거부하게 한다.
+   */
+  async function laidOutXml(xml) {
+    try {
+      if (window.ChkAutoLayout && (await ChkAutoLayout.needsLayout(xml))) {
+        return { xml: await ChkAutoLayout.layout(xml), laidOut: true };
+      }
+    } catch (e) {
+      // 아래 importXML이 같은 까닭으로 실패하며 말한다.
+    }
+    return { xml, laidOut: false };
+  }
 
   async function boot() {
     const modeler = new BpmnJS({
@@ -140,10 +156,15 @@
 
     const api = {
       async importXML(xml) {
-        const found = await modeler.importXML(xml);
+        const laid = await laidOutXml(xml);
+        const found = await modeler.importXML(laid.xml);
         modeler.get("canvas").zoom("fit-viewport");
-        dirty = false;
-        return { warnings: (found.warnings || []).map((w) => String(w.message || w)) };
+        // 배치했으면 디스크와 다르다 — 「저장 안 한 변경」으로 둔다(창이 `laid_out`을 보고 표시한다).
+        dirty = laid.laidOut;
+        return {
+          warnings: (found.warnings || []).map((w) => String(w.message || w)),
+          laid_out: laid.laidOut,
+        };
       },
       async saveXML() {
         const { xml } = await modeler.saveXML({ format: true });
@@ -157,6 +178,12 @@
         if (process) {
           modeler.get("modeling").updateProperties(process, { id: processId, name });
         }
+        dirty = false;
+        return { ok: true };
+      },
+      /** 「BPM 프로세스 닫기」 — 그림을 내린다 (다음 `importXML`·`createEmpty`가 다시 채운다). */
+      async clear() {
+        modeler.clear();
         dirty = false;
         return { ok: true };
       },

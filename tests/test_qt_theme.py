@@ -94,10 +94,28 @@ def test_qss_differs_by_theme_and_uses_tokens() -> None:
 
 
 def test_group_box_titles_have_room_and_labels_take_the_box_color() -> None:
-    """테두리 입힌 QGroupBox는 제목 자리·::title이 없으면 제목이 첫 줄과 겹친다 (이슈 #3)."""
+    """테두리 입힌 QGroupBox는 제목 자리·::title이 없으면 제목이 첫 줄과 겹친다 (이슈 #3).
+
+    제목은 **카드 안쪽 맨 위**다 (스타일 가이드 §3 Section) — 그래서 위 패딩이 제목 위 여백 +
+    제목 줄 + 제목 아래 간격을 모두 담아야 한다. 강조 막대와 진한 글자로 묶음을 가른다.
+    """
+    import json  # noqa: PLC0415
+    import math  # noqa: PLC0415
+    import re  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    tokens = json.loads((Path(__file__).resolve().parents[1] / "design" / "tokens.json").read_text(encoding="utf-8"))
+    line = math.ceil(tokens["font"]["size.body-lg"] * tokens["font"]["line.heading"])
     for theme in (THEME_LIGHT, THEME_DARK):
         sheet = qss(theme)
-        assert "QGroupBox::title" in sheet and "subcontrol-origin: margin" in sheet
+        box = sheet.split("QGroupBox {", 1)[1].split("}", 1)[0]
+        title = sheet.split("QGroupBox::title {", 1)[1].split("}", 1)[0]
+        assert "subcontrol-origin: padding" in title
+        pad_top = int(re.search(r"padding: (\d+)px", box).group(1))  # type: ignore[union-attr]
+        top = int(re.search(r"top: (\d+)px", title).group(1))  # type: ignore[union-attr]
+        assert pad_top > top + line, "제목 아래에 간격이 남아야 첫 줄과 붙지 않는다"
+        assert "border-left: 3px solid" in title
+        assert tokens["color"][theme]["text.primary"] in title
         assert "QLabel, QCheckBox, QRadioButton { background-color: transparent; }" in sheet
 
 
@@ -297,6 +315,11 @@ def test_checkbox_indicator_is_drawn_by_the_stylesheet() -> None:
         assert "QRadioButton::indicator" in text
         # 켜진 칸은 채우고 ✓를 올린다 (✓는 생성한 SVG).
         assert f"check-{theme}.svg" in text
+        # 고른 라디오는 **테두리 두께를 바꾸지 않고** 점을 그림으로 얹는다 — 두껍게 하면 상자가 커져
+        # 둥글기가 지름의 절반이 아니게 되고 모서리만 둥근 네모가 된다.
+        assert f"dot-{theme}.svg" in text
+        checked = text.split("QRadioButton::indicator:checked {", 1)[1].split("}", 1)[0]
+        assert "border:" not in checked and "border-color" in checked
         for state in (":hover", ":checked", ":disabled"):
             assert f"QCheckBox::indicator{state}" in text, (theme, state)
 

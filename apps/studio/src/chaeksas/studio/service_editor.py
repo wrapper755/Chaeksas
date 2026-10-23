@@ -24,21 +24,25 @@ from typing import Any
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QCheckBox,
+    QButtonGroup,
     QComboBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
+    QRadioButton,
     QSpinBox,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
+from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3, SPACE_4
 from chaeksas.studio.service_catalog import Catalog, Operation, Usage, missing_required, stale_fields
 
 #: 탭 이름.
@@ -46,6 +50,12 @@ TAB_LABEL = "서비스 앱"
 
 #: 「API 키」 — 기본은 BPM 프로세스 설정을 따른다 (STU-14).
 FOLLOW_TEXT = "BPM 프로세스 설정을 따름"
+OWN_TEXT = "이 태스크만 다른 참조"
+#: 따를 참조가 없을 때 기본 줄 **아래에** 한 줄 (한 줄에 몰면 칸이 밀려 잘린다).
+NO_INHERITED = "이 앱의 참조가 BPM 프로세스에 적혀 있지 않습니다 — BPM 프로세스 정보에서 적거나 아래에 직접 적으세요"
+
+#: 입력·출력 표가 처음부터 보이는 줄 수 (STU-14).
+VISIBLE_ROWS = 3
 
 #: 표의 열.
 INPUT_COLUMNS = ("입력 필드", "필수", "타입", "값 (변수 또는 식)")
@@ -89,10 +99,18 @@ class ServiceTaskEditor(QWidget):
         self.modes_note = QLabel("", self)
         self.modes_note.setWordWrap(True)
 
-        self.follow_key = QCheckBox(FOLLOW_TEXT, self)
+        self.follow_key = QRadioButton(FOLLOW_TEXT, self)
+        self.own_key = QRadioButton(OWN_TEXT, self)
+        self.key_choice = QButtonGroup(self)
+        self.key_choice.addButton(self.follow_key)
+        self.key_choice.addButton(self.own_key)
         self.follow_key.setChecked(True)
+        self.key_note = QLabel(NO_INHERITED, self)
+        self.key_note.setWordWrap(True)
+        self.key_note.setProperty("role", "warning")
         self.key_box = QLineEdit(self)
-        self.key_box.setPlaceholderText("이 태스크만 다른 참조 (예외일 때만)")
+        self.key_box.setPlaceholderText("키 참조 이름 (예: hr-hris-write)")
+        self.key_box.setEnabled(False)
 
         self.inputs = QTableWidget(0, len(INPUT_COLUMNS), self)
         self.inputs.setHorizontalHeaderLabels(list(INPUT_COLUMNS))
@@ -102,11 +120,15 @@ class ServiceTaskEditor(QWidget):
             table.verticalHeader().setVisible(False)
             table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
             table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+            _show_rows(table, VISIBLE_ROWS)
 
         self.fill_inputs = QPushButton("기대 입력 채우기", self)
         self.same_names = QPushButton("모두 같은 이름으로", self)
         self.add_input = QPushButton("줄 더하기", self)
         self.add_output = QPushButton("줄 더하기", self)
+        # 채운 단추는 영역마다 하나 (스타일 가이드 §3 Button) — 「채우기」가 주된 일이다.
+        for one in (self.add_input, self.add_output):
+            one.setObjectName("Secondary")
 
         self.timeout_box = QSpinBox(self)
         self.timeout_box.setRange(NO_TIMEOUT, 3600)
@@ -128,34 +150,82 @@ class ServiceTaskEditor(QWidget):
     # ── 짜기 ──
 
     def _build_layout(self) -> None:
-        form = QFormLayout()
-        form.addRow("서비스 앱", self.app_box)
-        form.addRow("작업", self.operation_box)
-        form.addRow("", self.operation_note)
-        form.addRow("지원 수행 모드", self.modes_note)
+        """기능마다 **묶음 상자 하나** — 제목·테두리·간격으로 갈라 보인다 (STU-13과 같은 결).
 
-        keys = QHBoxLayout()
-        keys.addWidget(self.follow_key)
-        keys.addWidget(self.key_box, 1)
-        form.addRow("API 키", _wrap(keys))
+        폼 라벨 칸은 「작업」 묶음에만 둔다. 나머지는 묶음 제목이 라벨이라 라벨 칸끼리 어긋날
+        일이 없다.
+        """
+        layout = QVBoxLayout(self)
+        layout.setSpacing(SPACE_3)
+        layout.addWidget(self._task_box())
+        layout.addWidget(self._key_box())
+        layout.addWidget(self._table_box("입력", self.inputs, [self.fill_inputs, self.add_input]), 1)
+        layout.addWidget(self._table_box("출력", self.outputs, [self.same_names, self.add_output]), 1)
+        layout.addWidget(self._limits_box())
+        layout.addWidget(self.warning)
 
+    def _task_box(self) -> QGroupBox:
+        box = QGroupBox("작업", self)
+        self.task_form = QFormLayout(box)
+        _tight(self.task_form)
+        self.task_form.setVerticalSpacing(SPACE_2)
+        self.task_form.addRow("서비스 앱", self.app_box)
+        self.task_form.addRow("작업", self.operation_box)
+        self.task_form.addRow("", self.operation_note)
+        self.task_form.addRow("지원 수행 모드", self.modes_note)
+        return box
+
+    def _key_box(self) -> QGroupBox:
+        """둘 중 하나 — 경고 줄은 **라디오 글자와 같은 자리**에서 시작한다 (동그라미 밑이 아니다)."""
+        box = QGroupBox("API 키", self)
+        column = QVBoxLayout(box)
+        _tight(column)
+        column.setSpacing(SPACE_2)
+        column.addWidget(self.follow_key)
+        style = self.follow_key.style()
+        indent = style.pixelMetric(QStyle.PixelMetric.PM_ExclusiveIndicatorWidth, None, self.follow_key)
+        indent += style.pixelMetric(QStyle.PixelMetric.PM_RadioButtonLabelSpacing, None, self.follow_key)
+        note = QHBoxLayout()
+        note.setContentsMargins(indent, 0, 0, 0)
+        note.addWidget(self.key_note)
+        column.addLayout(note)
+        own = QHBoxLayout()
+        own.setSpacing(SPACE_2)
+        own.addWidget(self.own_key)
+        own.addWidget(self.key_box, 1)
+        column.addLayout(own)
+        return box
+
+    def _table_box(self, title: str, table: QTableWidget, buttons: list[QPushButton]) -> QGroupBox:
+        """표 하나와 그 표의 단추 — 단추는 **표 바로 위 오른쪽**에 붙는다 (어느 표의 것인지 보인다)."""
+        box = QGroupBox(title, self)
+        column = QVBoxLayout(box)
+        _tight(column)
+        column.setSpacing(SPACE_2)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        for one in buttons:
+            row.addWidget(one)
+        column.addLayout(row)
+        column.addWidget(table, 1)
+        return box
+
+    def _limits_box(self) -> QGroupBox:
+        box = QGroupBox("실행 제한", self)
+        column = QVBoxLayout(box)
+        _tight(column)
+        column.setSpacing(SPACE_2)
         limits = QHBoxLayout()
-        limits.addWidget(QLabel("제한 시간(초)", self))
+        limits.setSpacing(SPACE_2)
+        limits.addWidget(QLabel("제한 시간(초)", box))
         limits.addWidget(self.timeout_box)
-        limits.addWidget(QLabel("재시도 횟수", self))
+        limits.addSpacing(SPACE_4)
+        limits.addWidget(QLabel("재시도 횟수", box))
         limits.addWidget(self.retry_box)
         limits.addStretch(1)
-
-        layout = QVBoxLayout(self)
-        layout.addLayout(form)
-        layout.addWidget(_section("입력", [self.fill_inputs, self.add_input], self))
-        layout.addWidget(self.inputs, 1)
-        layout.addWidget(_section("출력", [self.same_names, self.add_output], self))
-        layout.addWidget(self.outputs, 1)
-        layout.addWidget(_section("실행 제한", [], self))
-        layout.addLayout(limits)
-        layout.addWidget(self.retry_note)
-        layout.addWidget(self.warning)
+        column.addLayout(limits)
+        column.addWidget(self.retry_note)
+        return box
 
     def _wire(self) -> None:
         self.app_box.currentIndexChanged.connect(self._app_picked)
@@ -192,8 +262,8 @@ class ServiceTaskEditor(QWidget):
         self._select(self.app_box, self.usage.app_id)
         self._load_operations()
         self._select(self.operation_box, self.usage.operation)
-        self.follow_key.setChecked(not self.usage.key_ref)
         self.key_box.setText(self.usage.key_ref)
+        (self.own_key if self.usage.key_ref else self.follow_key).setChecked(True)
         self.key_box.setEnabled(bool(self.usage.key_ref))
         self.timeout_box.setValue(int(self.usage.timeout_s or NO_TIMEOUT))
         self.retry_box.setValue(int(self.usage.retry_max))
@@ -312,6 +382,9 @@ class ServiceTaskEditor(QWidget):
 
     def _key_toggled(self, following: bool) -> None:
         self.key_box.setEnabled(not following)
+        if not following:
+            self.key_box.setFocus()
+        self._retell_key()
         self._touched()
 
     def _retell_key(self) -> None:
@@ -321,9 +394,8 @@ class ServiceTaskEditor(QWidget):
         """
         app_id = str(self.app_box.currentData() or "")
         found = self.inherited.get(app_id, "")
-        self.follow_key.setText(
-            f"{FOLLOW_TEXT} ({found})" if found else f"{FOLLOW_TEXT} — 이 앱의 참조가 적혀 있지 않습니다"
-        )
+        self.follow_key.setText(f"{FOLLOW_TEXT} ({found})" if found else FOLLOW_TEXT)
+        self.key_note.setVisible(not found and self.follow_key.isChecked())
 
     def _touched(self) -> None:
         if self._quiet:
@@ -336,6 +408,9 @@ class ServiceTaskEditor(QWidget):
         operation = self._operation()
         self.operation_note.setText(operation.description if operation is not None else "")
         self.modes_note.setText(", ".join(operation.modes) if operation is not None else "")
+        # 작업을 고르기 전에는 빈 줄이다 — 라벨만 덩그러니 남기지 않는다.
+        self.task_form.setRowVisible(self.operation_note, bool(self.operation_note.text()))
+        self.task_form.setRowVisible(self.modes_note, bool(self.modes_note.text()))
         codes = self._retry_on()
         self.retry_note.setText(
             f"다시 부를 상태 코드: {', '.join(str(one) for one in codes)}" if codes else ""
@@ -423,23 +498,28 @@ def _mark_stale(table: QTableWidget, row: int) -> None:
             item.setToolTip("작업 정의에 없는 필드입니다")
 
 
-def _wrap(layout: Any) -> QWidget:
-    holder = QWidget()
-    holder.setLayout(layout)
-    return holder
+def _tight(layout: Any) -> None:
+    """묶음 안쪽 여백 — 테마가 이미 안쪽 패딩을 주므로 레이아웃 기본 여백까지 더하면 위가 빈다."""
+    layout.setContentsMargins(SPACE_2, SPACE_2, SPACE_2, SPACE_2)
 
 
-def _section(title: str, buttons: list[QPushButton], parent: QWidget) -> QWidget:
-    holder = QWidget(parent)
-    row = QHBoxLayout(holder)
-    row.setContentsMargins(0, 0, 0, 0)
-    label = QLabel(f"<b>{title}</b>", holder)
-    row.addWidget(label)
-    row.addStretch(1)
-    for one in buttons:
-        one.setParent(holder)
-        row.addWidget(one)
-    return holder
+def _show_rows(table: QTableWidget, rows: int) -> None:
+    """줄이 없어도 `rows`줄 높이를 보인다 — 한 줄로 찌그러지면 무엇을 적는 표인지 안 보인다."""
+    height = (
+        table.horizontalHeader().sizeHint().height()
+        + table.verticalHeader().defaultSectionSize() * rows
+        + table.frameWidth() * 2
+    )
+    table.setMinimumHeight(height)
 
 
-__all__ = ["FOLLOW_TEXT", "INPUT_COLUMNS", "OUTPUT_COLUMNS", "TAB_LABEL", "ServiceTaskEditor"]
+__all__ = [
+    "FOLLOW_TEXT",
+    "INPUT_COLUMNS",
+    "NO_INHERITED",
+    "OUTPUT_COLUMNS",
+    "OWN_TEXT",
+    "TAB_LABEL",
+    "VISIBLE_ROWS",
+    "ServiceTaskEditor",
+]

@@ -47,6 +47,8 @@ log = logging.getLogger(__name__)
 
 #: 스텝 표의 열 (STU-13 [T]).
 STEP_COLUMNS = ("#", "요소", "동작", "값", "결과 변수", "화면 이동")
+#: 스텝 표가 처음부터 보이는 줄 수 (STU-13 — STU-14의 입력·출력 표와 같다).
+VISIBLE_STEP_ROWS = 3
 
 #: 값이 있어야 하는 동작과 결과 변수가 있어야 하는 동작 (C10과 같은 낱말).
 NEEDS_VALUE = ("fill", "press", "select")
@@ -241,6 +243,12 @@ class UiTaskEditor(QWidget):
         self.steps.verticalHeader().setVisible(False)
         self.steps.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.steps.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        # 줄이 없어도 세 줄 높이를 보인다 — 한 줄로 찌그러지면 무엇을 적는 표인지 안 보인다 (STU-13).
+        self.steps.setMinimumHeight(
+            self.steps.horizontalHeader().sizeHint().height()
+            + self.steps.verticalHeader().defaultSectionSize() * VISIBLE_STEP_ROWS
+            + self.steps.frameWidth() * 2
+        )
         self.steps.itemChanged.connect(lambda *_: self._sync())
         layout.addWidget(self.steps)
 

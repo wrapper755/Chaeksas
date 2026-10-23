@@ -235,6 +235,15 @@ class MainWindow(QMainWindow):
         files = bar.addMenu("파일")
         self._add(files, "새 BPM 프로세스...", self.new_process, QKeySequence.StandardKey.New)
         self._add(files, "예제 BPM 프로세스 가져오기...", self.import_example)
+        self._add(
+            files, "파일에서 BPM 프로세스 가져오기...", lambda: file_actions.import_file(self)
+        )
+        self.close_action = self._add(
+            files,
+            "BPM 프로세스 닫기",
+            lambda: file_actions.close_process(self),
+            QKeySequence.StandardKey.Close,
+        )
         self._add(files, "BPM 프로세스 정보...", self.edit_info)
         self.add_definition_action = self._add(
             files, "정의 추가...", lambda: file_actions.add_definition(self)
@@ -427,6 +436,7 @@ class MainWindow(QMainWindow):
         """
         open_process = self.process is not None
         self.add_definition_action.setEnabled(open_process)
+        self.close_action.setEnabled(open_process)
         self.save_as_action.setEnabled(open_process)
         found = self.opened_definition()
         entry = self.process.entry_definition if self.process is not None else None

@@ -1,3 +1,4 @@
 bpmn-js 18.31.0
+bpmn-auto-layout 1.3.0 (src/auto-layout.mjs를 esbuild로 묶었다, ADR-0088)
 이 폴더는 생성물이다 (ADR-0029). 직접 고치지 말고 web/packages/bpmn-canvas의
 package.json에서 판을 올린 뒤 `pnpm --filter @chaeksas/bpmn-canvas build`.
