@@ -167,8 +167,29 @@ def find(key_id: str | None, root: Path | None = None) -> StoredKey:
         return picked
     if len(found) > 1:
         names = ", ".join(one.key_id for one in found)
-        raise KeyError_(f"키가 여럿입니다 — `--key`로 고르세요 ({names})")
+        # `--key`는 `chk-admin` 전체의 옵션이라 **명령 앞에** 온다 — 뒤에 적으면 argparse가 거부한다.
+        raise KeyError_(
+            f"키가 여럿입니다 — 명령 앞에 `--key`로 고르세요 "
+            f"(예: `chk-admin --key {found[0].key_id} <명령> …`). 키: {names}"
+        )
     return found[0]
+
+
+def delete(key_id: str, root: Path | None = None) -> None:
+    """이 PC에서 키를 지운다 (ADM-01 「지우기」) — 개인키·공개키 파일과 목록의 줄.
+
+    **Center의 등록은 건드리지 않는다** (그것은 철회다). 지워도 되는지는 부르는 쪽이 본다
+    (`ops.delete_refusal` — Center가 아는 유일한 키를 지우면 Admin이 잠긴다).
+    """
+    where = root or data_dir()
+    found = find(key_id, where)
+    found.path.unlink(missing_ok=True)
+    found.public_path.unlink(missing_ok=True)
+    index = _read_index(where)
+    if index.pop(key_id, None) is not None:
+        _index(where).write_text(
+            json.dumps(index, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
 
 
 def load(key: StoredKey, *, passphrase: str | None = None) -> Ed25519PrivateKey:
@@ -190,6 +211,7 @@ __all__ = [
     "StoredKey",
     "create",
     "data_dir",
+    "delete",
     "find",
     "listing",
     "load",

@@ -26,9 +26,11 @@ from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
 from chaeksas.studio.preflight import CLEAN, inspect, node_of, summarize  # noqa: E402
 from chaeksas.studio.properties import (  # noqa: E402
     CONDITION_KINDS,
+    GATEWAY_KINDS,
     SCRIPT_KINDS,
     as_text,
     check_chk,
+    empty_chk_hint,
     kind_label,
 )
 
@@ -540,3 +542,12 @@ def collect_needs(process: Any) -> Any:
     from chaeksas.studio.packaging import collect_requires  # noqa: PLC0415
 
     return collect_requires(process).extensions
+
+
+def test_an_empty_json_tab_says_so_instead_of_showing_an_example() -> None:
+    """흐린 JSON 예시는 적힌 값으로 읽힌다 — 게이트웨이에 `aiTask`가 보여 「항목이 안 보인다」가 됐다."""
+    for kind in ("ExclusiveGateway", "ServiceTask", "Task", "SequenceFlow"):
+        hint = empty_chk_hint(kind)
+        assert "{" not in hint and "chk:* 설정이 없습니다" in hint
+    assert all("순서 흐름" in empty_chk_hint(k) for k in GATEWAY_KINDS)
+    assert "순서 흐름" not in empty_chk_hint("ServiceTask")

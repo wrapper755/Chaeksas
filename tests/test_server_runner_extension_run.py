@@ -108,7 +108,7 @@ DEFINITION: dict[str, Any] = {
 
 @pytest.fixture(autouse=True)
 def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("CHK_ADMIN__HOME", str(tmp_path / "admin"))
+    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
     monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
 
 

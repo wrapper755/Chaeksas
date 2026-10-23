@@ -143,6 +143,12 @@ export const STATUS_MAP = {
     "사용 중": "done",
     "멈춤": "neutral",
   },
+  "Admin 키": {
+    "등록됨": "done",
+    "등록 안 됨": "warning",
+    "철회됨": "neutral",
+    "알 수 없음": "neutral",
+  },
 } as const satisfies Record<string, Record<string, StatusToken>>;
 
 export type StatusGroup = keyof typeof STATUS_MAP;

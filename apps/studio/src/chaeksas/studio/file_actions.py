@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from chaeksas.studio.canvas import CanvasError
-from chaeksas.studio.dialogs import NewProcessDialog, pick_bpmn_file, pick_example
+from chaeksas.studio.dialogs import NewProcessDialog, pick_bpmn_file
 from chaeksas.studio.workspace import (
     BpmProcess,
     WorkspaceError,
@@ -251,17 +251,13 @@ def save_process_as(window: MainWindow) -> None:
 
 
 def import_example(window: MainWindow) -> None:
-    """예제 BPM 프로세스 가져오기 (STU-01 파일 메뉴). 예제 폴더는 **읽기만** 한다."""
+    """예제 BPM 프로세스 가져오기 (STU-01 파일 메뉴) — STU-05를 「예제에서 가져오기」가 골라진
+    채로 연다. 예제 폴더는 **읽기만** 한다.
+    """
     if not may_discard(window):
         return
-    picked = pick_example(window)
-    if picked is None:
-        return
-    source, example_id = picked
-    try:
-        made = window.workspace.import_example(source, example_id)
-    except (WorkspaceError, OSError) as e:
-        QMessageBox.warning(window, window.windowTitle(), f"가져오지 못했습니다: {e}")
+    made = NewProcessDialog.ask(window, window.workspace, opened=window.definition, example=True)
+    if made is None:
         return
     entry = made.entry_definition
     window.explorer.refresh()

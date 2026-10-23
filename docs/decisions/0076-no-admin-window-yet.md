@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨(ADR-0089) |
 | 날짜 | 2026-10-18 |
 | 관련 | 화면 `admin.md`(ADM-01~03 「창 초안」), C2 서명 봉투, `apps/admin`(`chk-admin`), [ADR-0013](0013-api-keys.md), [ADR-0053](0053-no-watch-mode-in-studio.md), 05-roadmap 「나중에」, 09-gaps §7-8 |
 

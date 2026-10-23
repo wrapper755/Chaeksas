@@ -6,14 +6,14 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
+from chaeksas.admin.connection import DEFAULT_CENTER_URL
+from chaeksas.contracts.resources import ExtensionResource
 from chaeksas.contracts.signing import AdminKey, Envelope
 
 ENV_PREFIX = "CHK_ADMIN__"
-DEFAULT_CENTER_URL = "http://localhost:8800"
 API = "/api/v1"
 
 
@@ -28,23 +28,30 @@ class CenterProblem(RuntimeError):
 
 @dataclass
 class Center:
-    """Center 하나. 관리자 토큰은 **환경변수로** 받는다 (명령줄은 기록에 남는다)."""
+    """Center 하나. 관리자 토큰은 **환경변수나 OS 비밀 저장소**에서 받는다 (명령줄은 기록에 남는다)."""
 
     base_url: str = ""
     token: str = ""
     timeout_s: float = 30.0
     client: Any = None  # httpx.Client (시험이 끼운다)
+    last_status: int = 0  # 마지막 응답 코드 — 201(새로)과 200(이미 있음)을 가르는 데 쓴다
 
     @classmethod
     def from_env(cls) -> Center:
-        return cls(
-            base_url=os.environ.get(f"{ENV_PREFIX}CENTER_URL") or DEFAULT_CENTER_URL,
-            token=os.environ.get(f"{ENV_PREFIX}ADMIN_TOKEN") or "",
-        )
+        """환경변수 → Admin UI가 저장한 연결 → 기본값 (ADM-05 — 창과 같은 순서다)."""
+        from chaeksas.admin import connection  # noqa: PLC0415
+
+        found = connection.current()
+        return cls(base_url=found.url, token=found.token)
 
     def call(self, method: str, path: str, *, body: Any = None) -> Any:
         import httpx  # noqa: PLC0415 — 부를 때만 든다
 
+        if not self.token.isascii():
+            # HTTP 헤더는 ASCII다 — 보내는 라이브러리가 요청을 만들다 죽기 전에 사람 말로 멈춘다 (CLAUDE.md §5).
+            raise CenterProblem(
+                "관리자 토큰에 ASCII가 아닌 글자가 있습니다 — 토큰을 다시 확인하세요", code="token_not_ascii"
+            )
         own = self.client is None
         client = self.client or httpx.Client(timeout=self.timeout_s)
         try:
@@ -59,6 +66,7 @@ class Center:
         finally:
             if own:
                 client.close()
+        self.last_status = response.status_code
         return _checked(response)
 
     # ── C5 ──
@@ -119,6 +127,31 @@ class Center:
     def bot_uis(self) -> list[dict[str, Any]]:
         found = self.call("GET", "/bot-uis")
         return list(found) if isinstance(found, list) else []
+
+    # ── C13 외부 확장 ──
+
+    def register_extension(
+        self, definition: dict[str, Any], envelope: Envelope
+    ) -> tuple[ExtensionResource, bool]:
+        """정의와 봉투를 **함께** 올린다 (C13 E6). 둘째 값은 「새로 등록했나」(201 ↔ 200)."""
+        found = self.call(
+            "POST",
+            "/resources/extensions",
+            body={"definition": definition, "envelope": envelope.to_json_dict()},
+        )
+        info = ExtensionResource.model_validate(found)
+        return info, self.last_status == 201
+
+    def revoke_extension(self, envelope: Envelope) -> dict[str, Any]:
+        """`extension_revoke` 봉투로 등록 해제 (C13). **되살릴 수 없다.**"""
+        found = self.call("DELETE", "/resources/extensions", body=envelope.to_json_dict())
+        return dict(found) if isinstance(found, dict) else {}
+
+    def extensions(self) -> list[ExtensionResource]:
+        """C7 리소스 목록의 확장들 (ADM-04가 외부만 골라 보인다)."""
+        found = self.call("GET", "/resources?type=extension")
+        items = found.get("items", []) if isinstance(found, dict) else []
+        return [ExtensionResource.model_validate(one) for one in items]
 
     def admin_keys(self) -> list[AdminKey]:
         found = self.call("GET", "/admin-keys")

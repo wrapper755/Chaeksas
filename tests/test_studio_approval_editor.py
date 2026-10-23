@@ -62,7 +62,7 @@ def loaded(body: dict[str, Any] | None = None, **kwargs: Any) -> ApprovalEditor:
 def test_everything_in_the_drawing_is_shown() -> None:
     made = loaded()
     assert made.title_box.text() == "고객계획 원천 확인"
-    assert made.show_box.toPlainText().splitlines() == ["원천ID", "검증통과", "검증오류수"]
+    assert made.show_names() == ["원천ID", "검증통과", "검증오류수"]
     assert made.fields.rowCount() == 4, "폼 칸이 전부 보인다"
     kinds = [made.fields.cellWidget(r, COL_TYPE) for r in range(4)]
     assert [k.currentText() for k in kinds if isinstance(k, QComboBox)] == ["choice", "text", "number", "bool"]
@@ -177,3 +177,55 @@ def test_a_manual_task_gets_the_confirmation_tab() -> None:
     assert panel.tabs.tabText(1) == "확인"
     changes, problem = panel.patch()
     assert changes == {} and problem is None, "손대지 않으면 아무것도 보내지 않는다"
+
+
+# ── 「표시 변수」는 목록에 더하고 지운다 ──
+
+
+def add_name(made: ApprovalEditor, name: str) -> None:
+    made.show_input.setText(name)
+    made.add_show_name()
+
+
+def test_show_names_are_added_and_dropped_as_list_rows() -> None:
+    made = loaded()
+    add_name(made, "  금액 ")
+    assert made.show_names() == ["원천ID", "검증통과", "검증오류수", "금액"]
+    assert made.show_input.text() == "", "더하면 입력 칸을 비운다"
+    made.show_list.item(1).setSelected(True)
+    made.show_list.item(3).setSelected(True)
+    made.drop_show_names()
+    assert made.dump()["show"] == ["원천ID", "검증오류수"]
+
+
+def test_bad_or_duplicate_show_names_are_refused_where_typed() -> None:
+    made = loaded()
+    for name in ("검증 통과", "1번", "원천ID"):
+        add_name(made, name)
+        assert made.show_note.text(), f"까닭을 말한다: {name}"
+        assert made.show_input.text() == name, "고칠 수 있게 글을 남긴다"
+    assert made.show_names() == ["원천ID", "검증통과", "검증오류수"]
+    assert made.show_list.currentRow() == 0, "겹친 이름은 이미 있는 줄을 가리킨다"
+
+
+def test_emptying_the_show_list_drops_the_field() -> None:
+    made = loaded()
+    made.show_list.selectAll()
+    made.drop_show_names()
+    assert "show" not in made.dump(), "비우면 전부 — 빈 목록을 그림에 남기지 않는다"
+
+
+def test_buttons_follow_what_can_be_done() -> None:
+    made = loaded()
+    assert not made.add_show.isEnabled() and not made.drop_show.isEnabled()
+    made.show_input.setText("금액")
+    assert made.add_show.isEnabled()
+    made.show_list.item(0).setSelected(True)
+    assert made.drop_show.isEnabled()
+
+
+def test_a_bad_name_already_in_the_drawing_is_kept_but_blocks_apply() -> None:
+    made = loaded({**BODY, "show": ["원천ID", "검증 통과"]})
+    assert made.show_names() == ["원천ID", "검증 통과"], "적어 둔 것을 조용히 바꾸지 않는다"
+    errors, _ = made.problems()
+    assert any("검증 통과" in e for e in errors)

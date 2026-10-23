@@ -76,8 +76,27 @@ SCRIPT_KINDS = frozenset({"ScriptTask"})
 APPROVAL_KINDS = frozenset({"UserTask", "ManualTask"})
 
 
+#: `chk:*`를 갖지 않는 게이트웨이 — 가지의 조건은 나가는 순서 흐름에 있다 (C14).
+GATEWAY_KINDS = frozenset({"ExclusiveGateway", "ParallelGateway", "InclusiveGateway"})
+
+
 def kind_label(bpmn_type: str) -> str:
     return KINDS.get(bpmn_type, bpmn_type)
+
+
+def empty_chk_hint(bpmn_type: str) -> str:
+    """「JSON」 탭이 비었을 때의 안내. **JSON 모양의 예시를 두지 않는다** — 흐린 글이어도
+    적혀 있는 값으로 읽힌다 (게이트웨이에 `aiTask` 예시가 보여 「항목이 안 보인다」가 됐다).
+    """
+    if bpmn_type in GATEWAY_KINDS:
+        return (
+            "게이트웨이에는 chk:* 설정이 없습니다.\n"
+            "가지마다의 조건식은 나가는 순서 흐름을 골라 「폼」 탭에서 봅니다."
+        )
+    return (
+        "이 요소에는 chk:* 설정이 없습니다.\n"
+        "더하려면 설정 이름을 맨 바깥 키로 적습니다 (C14 — aiTask·rule·email 등)."
+    )
 
 
 def check_chk(text: str) -> tuple[dict[str, str], str | None]:
@@ -213,7 +232,6 @@ class Properties(QWidget):
 
         self.json_box = QPlainTextEdit(self)
         self.json_box.setFont(QFont("JetBrains Mono"))
-        self.json_box.setPlaceholderText('{\n  "aiTask": {"goal": "…", "domain": "llm"}\n}')
 
         self.tabs = QTabWidget(self)
         self.tabs.addTab(self.form, "폼")
@@ -265,6 +283,7 @@ class Properties(QWidget):
         self.doc_box.setPlainText(str(found.get("documentation") or ""))
         self.condition_box.setText(str(found.get("condition") or ""))
         self.script_box.setPlainText(str(found.get("script") or ""))
+        self.json_box.setPlaceholderText(empty_chk_hint(bpmn_type))
         self.json_box.setPlainText(as_text(dict(found.get("chk") or {})))
         self._show_editor(dict(found.get("chk") or {}))
 
@@ -459,10 +478,12 @@ class Properties(QWidget):
 __all__ = [
     "CONDITION_KINDS",
     "EMPTY_TEXT",
+    "GATEWAY_KINDS",
     "KINDS",
     "SCRIPT_KINDS",
     "Properties",
     "as_text",
     "check_chk",
+    "empty_chk_hint",
     "kind_label",
 ]

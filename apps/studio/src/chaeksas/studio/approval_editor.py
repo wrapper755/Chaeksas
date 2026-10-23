@@ -4,6 +4,8 @@
 같다** (`load`/`dump`/`problems`/`changed`) — 속성 패널은 어느 편집기인지 모른다.
 
 - **적어 둔 것을 조용히 바꾸지 않는다.** 편집기가 다루지 않는 칸은 읽은 그대로 돌려준다.
+- 「표시 변수」는 **목록에 더하고 지운다** — 글상자로 두면 오타·빈 줄·겹침이 그대로 그림에 간다.
+  규칙에 맞지 않거나 이미 있는 이름은 **넣지 않고** 그 자리에서 까닭을 말한다.
 - 「적용」을 막는 것은 **엔진이 거부할 것**뿐이다 — 제목 없음, 키 없음·겹침, 선택지 없는
   `choice`, 타입에 맞지 않는 기본값, 서버에서의 현장 결재(B6과 같은 판정).
 - 마지막 관문은 계약 모델(`Approval`)이다 — 여기서 놓친 것도 그것이 잡는다.
@@ -17,6 +19,7 @@ from typing import Any
 
 from pydantic import ValidationError
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -27,6 +30,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
@@ -36,7 +40,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from chaeksas.contracts.bpmn_ext import Approval
+from chaeksas.contracts.bpmn_ext import Approval, is_var_name
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3
 
 #: 탭 이름 — 결재와 확인은 같은 `chk:approval`이고 이름만 다르다 (C14).
@@ -88,11 +92,21 @@ class ApprovalEditor(QWidget):
         self.title_box.setPlaceholderText("결재 창 제목 (필수)")
         self.description_box = QPlainTextEdit(self)
         self.description_box.setPlaceholderText("결재하는 사람에게 보일 설명")
-        self.show_box = QPlainTextEdit(self)
-        self.show_box.setPlaceholderText("검토 자료로 보일 변수 — 한 줄에 하나 (비우면 전부)")
         lines = self.fontMetrics().lineSpacing()
-        for box in (self.description_box, self.show_box):
-            box.setFixedHeight(lines * 4)
+        self.description_box.setFixedHeight(lines * 4)
+        self.show_list = QListWidget(self)
+        self.show_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        # 테마가 줄마다 안쪽 여백을 주므로 글 높이만으로 세면 셋째 줄이 잘린다 — 넉 줄이 보이게.
+        self.show_list.setFixedHeight(int(lines * 1.6) * 4 + self.show_list.frameWidth() * 2)
+        self.show_input = QLineEdit(self)
+        self.show_input.setPlaceholderText("변수 이름 — Enter로 추가 (목록이 비면 전부 보입니다)")
+        self.add_show = QPushButton("추가", self)
+        self.drop_show = QPushButton("삭제", self)
+        self.drop_show.setObjectName("Secondary")
+        self.show_note = QLabel("", self)
+        self.show_note.setWordWrap(True)
+        self.show_note.setProperty("role", "error")
+        self.show_note.hide()
 
         self.fields = QTableWidget(0, len(FIELD_COLUMNS), self)
         self.fields.setHorizontalHeaderLabels(list(FIELD_COLUMNS))
@@ -133,6 +147,7 @@ class ApprovalEditor(QWidget):
         self._build_layout()
         self._wire()
         self._refresh_location()
+        self._refresh_show_buttons()
 
     # ── 짜기 ──
 
@@ -151,8 +166,23 @@ class ApprovalEditor(QWidget):
         _tight(form)
         form.addRow("제목", self.title_box)
         form.addRow("설명", self.description_box)
-        form.addRow("표시 변수", self.show_box)
+        form.addRow("표시 변수", self._show_area())
         return box
+
+    def _show_area(self) -> QWidget:
+        area = QWidget(self)
+        column = QVBoxLayout(area)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(SPACE_2)
+        row = QHBoxLayout()
+        row.setSpacing(SPACE_2)
+        row.addWidget(self.show_input, 1)
+        row.addWidget(self.add_show)
+        row.addWidget(self.drop_show)
+        column.addLayout(row)
+        column.addWidget(self.show_note)
+        column.addWidget(self.show_list)
+        return area
 
     def _fields_box(self) -> QGroupBox:
         box = QGroupBox("폼 칸", self)
@@ -193,8 +223,15 @@ class ApprovalEditor(QWidget):
     def _wire(self) -> None:
         for line in (self.title_box, self.assignee_box, self.expires_box):
             line.textChanged.connect(self._touched)
-        for area in (self.description_box, self.show_box):
-            area.textChanged.connect(self._touched)
+        self.description_box.textChanged.connect(self._touched)
+        self.show_input.textChanged.connect(self._refresh_show_buttons)
+        self.show_input.returnPressed.connect(self.add_show_name)
+        self.add_show.clicked.connect(self.add_show_name)
+        self.drop_show.clicked.connect(self.drop_show_names)
+        self.show_list.itemSelectionChanged.connect(self._refresh_show_buttons)
+        delete = QShortcut(QKeySequence.StandardKey.Delete, self.show_list)
+        delete.setContext(Qt.ShortcutContext.WidgetShortcut)
+        delete.activated.connect(self.drop_show_names)
         self.fields.itemChanged.connect(self._touched)
         self.location_group.buttonToggled.connect(self._touched)
         self.assignee_mode.currentIndexChanged.connect(self._touched)
@@ -210,7 +247,11 @@ class ApprovalEditor(QWidget):
         self.title_box.setText(str(body.get("title") or ""))
         self.description_box.setPlainText(str(body.get("description") or ""))
         show = body.get("show")
-        self.show_box.setPlainText("\n".join(str(v) for v in show) if isinstance(show, list) else "")
+        self.show_list.clear()
+        # 그림에 있는 것은 규칙에 맞지 않아도 그대로 보인다 — 지우는 것은 사람이다 (검사가 말한다).
+        self.show_list.addItems([str(v) for v in show] if isinstance(show, list) else [])
+        self.show_input.clear()
+        self._say_show("")
         self.fields.setRowCount(0)
         for found in body.get("fields") or []:
             if isinstance(found, Mapping):
@@ -234,7 +275,7 @@ class ApprovalEditor(QWidget):
         out = dict(self._loaded)
         out["title"] = self.title_box.text().strip()
         _put(out, "description", self.description_box.toPlainText().strip() or None)
-        _put(out, "show", _lines(self.show_box.toPlainText()) or None)
+        _put(out, "show", self.show_names() or None)
         _put(out, "fields", [one for one, _ in self._rows()] or None)
         location = self.location()
         # 기본값(`follow`)은 적지 않는다 — 읽은 그림에 있었으면 그대로 둔다.
@@ -248,6 +289,9 @@ class ApprovalEditor(QWidget):
         errors: list[str] = []
         if not self.title_box.text().strip():
             errors.append("제목을 적으세요.")
+        errors.extend(
+            f"표시 변수 이름으로 쓸 수 없습니다: {name}" for name in self.show_names() if not is_var_name(name)
+        )
         seen: set[str] = set()
         for one, row_errors in self._rows():
             errors.extend(row_errors)
@@ -271,6 +315,38 @@ class ApprovalEditor(QWidget):
         self.warning.setText(errors[0] if errors else "")
         return errors, []
 
+    def show_names(self) -> list[str]:
+        """「표시 변수」 목록 — 보이는 순서 그대로."""
+        return [self.show_list.item(i).text() for i in range(self.show_list.count())]
+
+    def add_show_name(self) -> None:
+        """입력 칸의 이름을 목록 끝에 더한다. **틀린 이름·겹친 이름은 넣지 않는다.**"""
+        name = self.show_input.text().strip()
+        if not name:
+            return
+        if not is_var_name(name):
+            self._say_show(f"변수 이름으로 쓸 수 없습니다: {name}")
+            return
+        names = self.show_names()
+        if name in names:
+            self.show_list.setCurrentRow(names.index(name))
+            self._say_show(f"이미 있습니다: {name}")
+            return
+        self.show_list.addItem(name)
+        self.show_input.clear()
+        self._say_show("")
+        self._touched()
+
+    def drop_show_names(self) -> None:
+        """고른 줄을 지운다 (고른 것이 없으면 아무것도 하지 않는다)."""
+        rows = sorted({self.show_list.row(one) for one in self.show_list.selectedItems()}, reverse=True)
+        if not rows:
+            return
+        for row in rows:
+            self.show_list.takeItem(row)
+        self._say_show("")
+        self._touched()
+
     def location(self) -> str:
         return next((v for v, one in self.location_picks.items() if one.isChecked()), "follow")
 
@@ -281,6 +357,16 @@ class ApprovalEditor(QWidget):
             return
         self._refresh_location()
         self.changed.emit()
+
+    def _refresh_show_buttons(self) -> None:
+        self.add_show.setEnabled(bool(self.show_input.text().strip()))
+        self.drop_show.setEnabled(bool(self.show_list.selectedItems()))
+        if not self.show_input.text().strip():
+            self._say_show("")
+
+    def _say_show(self, text: str) -> None:
+        self.show_note.setText(text)
+        self.show_note.setVisible(bool(text))
 
     def _refresh_location(self) -> None:
         """서버에서는 「현장 PC에서만」을 끄고 까닭을 적는다 — **이미 골라 둔 것은 지우지 않는다**."""
@@ -385,10 +471,6 @@ def _put(out: dict[str, Any], key: str, value: Any) -> None:
         out.pop(key, None)
     else:
         out[key] = value
-
-
-def _lines(text: str) -> list[str]:
-    return [line.strip() for line in text.splitlines() if line.strip()]
 
 
 def _split(text: str) -> list[str]:

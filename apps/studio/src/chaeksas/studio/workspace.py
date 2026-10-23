@@ -562,8 +562,21 @@ class Workspace:
         write_record(process)
         return True
 
-    def import_example(self, source: Path, process_id: str, *, group: str = DEFAULT_GROUP) -> BpmProcess:
-        """예제 BPM 프로세스 가져오기 (STU-01 파일 메뉴).
+    def import_example(
+        self,
+        source: Path,
+        process_id: str,
+        *,
+        group: str = DEFAULT_GROUP,
+        new_id: str | None = None,
+        name: str = "",
+        version: str = "0.1.0",
+        description: str = "",
+        owner: str = "",
+    ) -> BpmProcess:
+        """예제 BPM 프로세스 가져오기 (STU-05 「예제에서 가져오기」).
+
+        `new_id`·`name`을 비우면 예제 id(`_` → `-`)와 그림의 이름을 쓴다.
 
         `source`는 업무 예제의 `bpmn/` 폴더이고, `<id>.bpmn`과 그것이 쓰는 `.dmn`·**호출 대상**·
         케이스를 함께 가져온다. **예제 폴더는 생성물이라 건드리지 않는다** (CLAUDE.md §2).
@@ -576,10 +589,13 @@ class Workspace:
             raise WorkspaceError(f"예제를 찾지 못했다: {found.name}")
         definition = read_process(found.read_text(encoding="utf-8"))
         made = self.create(
-            process_id.replace("_", "-"),
-            name=definition.name or process_id,
+            new_id or process_id.replace("_", "-"),
+            name=name or definition.name or process_id,
+            version=version,
             group=group,
             entry=f"{process_id}.bpmn",
+            description=description,
+            owner=owner,
         )
         self.save_definition(made, found.name, found.read_text(encoding="utf-8"))
         self._bring_along(source, definition, made)

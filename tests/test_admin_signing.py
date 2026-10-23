@@ -140,6 +140,45 @@ def test_choosing_between_keys_is_asked_not_guessed() -> None:
         keystore.find(None)
 
 
+def test_choosing_a_key_says_where_the_option_goes(center: Center, capsys: Any) -> None:
+    """`--key`는 **명령 앞에** 온다 — 안내가 그 꼴을 보여 주고, 보여 준 꼴이 정말 돈다."""
+    made = first_key(center)
+    keystore.create(label="둘째")
+    info = upload(center, package_zip())
+    # Center에 닿지 못하면 어느 키가 등록됐는지 몰라 고를 수 없다 → 고르라고 한다.
+    away = Center(base_url="http://127.0.0.1:9", token=TOKEN, timeout_s=0.5)
+    assert admin_main(["-y", "approve", info["id"], info["version"]], center=away) == 2
+    said = capsys.readouterr().err
+    assert "chk-admin --key " in said and "<명령>" in said
+    with pytest.raises(SystemExit):
+        admin_main(["approve", info["id"], info["version"], "--key", made.key_id], center=center)
+    capsys.readouterr()
+    assert admin_main(["--key", made.key_id, "-y", "approve", info["id"], info["version"]], center=center) == 0
+
+
+def test_keys_list_does_not_guess_when_center_is_away(capsys: Any) -> None:
+    """**모르는 것을 안다고 하지 않는다** — Center에 닿지 못하면 「등록 안 됨」이 아니라 「알 수 없음」이다."""
+    keystore.create(label="가")
+
+    class Away:
+        def admin_keys(self) -> Any:
+            raise CenterProblem("Center에 닿지 못했습니다 (ConnectError)")
+
+    assert admin_main(["keys", "list"], center=Away()) == 0  # type: ignore[arg-type]
+    printed = capsys.readouterr().out
+    assert "알 수 없음" in printed
+    assert "등록 안 됨" not in printed
+
+
+def test_keys_list_tells_registered_from_not(center: Center, capsys: Any) -> None:
+    made = first_key(center)
+    other = keystore.create(label="둘째")
+    assert admin_main(["keys", "list"], center=center) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert any(made.key_id in line and "등록됨" in line for line in lines)
+    assert any(other.key_id in line and "등록 안 됨" in line for line in lines)
+
+
 def test_the_first_key_only_goes_in_once(center: Center) -> None:
     """부트스트랩은 **키가 하나도 없을 때만** (C2)."""
     from chaeksas.center.api.signing import bootstrap_key
