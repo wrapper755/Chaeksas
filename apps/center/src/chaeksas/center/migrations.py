@@ -137,6 +137,29 @@ MIGRATIONS: tuple[Step, ...] = (
             "CREATE INDEX virtual_workers_intake ON virtual_workers (intake)",
         ),
     ),
+    Step(
+        9,
+        "관리자 계정·세션·Center 서명 키, 승인·배포를 누가 했나 (ADR-0090)",
+        (
+            "CREATE TABLE accounts ("
+            " username TEXT PRIMARY KEY, password_hash TEXT NOT NULL, role TEXT NOT NULL,"
+            " created_at TEXT NOT NULL, created_by TEXT NOT NULL, disabled_at TEXT,"
+            " password_changed_at TEXT NOT NULL, last_login_at TEXT)",
+            "CREATE TABLE account_sessions ("
+            " token_hash TEXT PRIMARY KEY, username TEXT NOT NULL, created_at TEXT NOT NULL,"
+            " expires_at TEXT NOT NULL)",
+            "CREATE INDEX account_sessions_user ON account_sessions (username)",
+            # 개인키는 raw 32바이트 base64. **DB와 같이 백업되고 같이 지켜진다** (ADR-0090 §5).
+            "CREATE TABLE center_signing_keys ("
+            " key_id TEXT PRIMARY KEY, private_key TEXT NOT NULL, created_at TEXT NOT NULL,"
+            " active INTEGER NOT NULL)",
+            "ALTER TABLE packages ADD COLUMN approved_by TEXT",
+            "ALTER TABLE packages ADD COLUMN revoked_by TEXT",
+            "ALTER TABLE deployments ADD COLUMN deployed_by TEXT",
+            "ALTER TABLE deployments ADD COLUMN revoked_by TEXT",
+            "ALTER TABLE extensions ADD COLUMN revoked_by TEXT",
+        ),
+    ),
 )
 
 

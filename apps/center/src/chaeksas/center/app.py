@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
-from chaeksas.center import keys
+from chaeksas.center import accounts, keys, signer
 from chaeksas.center.api import (
     approvals,
     bot_ui,
@@ -33,6 +33,7 @@ from chaeksas.center.api import (
 )
 from chaeksas.center.auth import (
     Caller,
+    bearer,
     caller,
     require_admin,
     require_approval_read,
@@ -45,7 +46,20 @@ from chaeksas.center.errors import ApiError, handle
 from chaeksas.center.responses import Utf8JSONResponse
 from chaeksas.center.settings import Settings
 from chaeksas.center.storage import Store, now_iso
-from chaeksas.contracts.center_api import LIST_LIMIT_DEFAULT
+from chaeksas.contracts.accounts import (
+    AccountCreateRequest,
+    AccountUpdateRequest,
+    LoginRequest,
+    PasswordChangeRequest,
+    WhoAmI,
+)
+from chaeksas.contracts.center_api import (
+    LIST_LIMIT_DEFAULT,
+    DeploymentRequest,
+    DeploymentRevokeRequest,
+    ExtensionRevokeRequest,
+    RevokeRequest,
+)
 from chaeksas.contracts.center_keys import CenterKeyCreated, CenterKeyCreateRequest
 from chaeksas.contracts.center_keys import validate_create as validate_key_create
 
@@ -58,6 +72,20 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     app = FastAPI(title="Chaeksas Center", version="0.1.0", default_response_class=Utf8JSONResponse)
     app.state.settings = settings
     app.state.store = store or Store(settings.db_path)
+    # 첫 비밀번호 파일을 두는 곳 — **DB를 제가 열었을 때만**. 저장소를 받았으면(시험) 설정의
+    # 기본 경로가 이 PC의 진짜 데이터 폴더일 수 있다.
+    data_folder = settings.data_folder() if store is None else None
+    # 서명 키와 첫 관리자는 **뜰 때** 갖춘다 (ADR-0090 §2·§5) — 처음 누를 때 만들면 그 사이에
+    # 하트비트가 Center 키 없는 목록을 내려 준다.
+    signer.active(app.state.store)
+    if store is None or settings.first_admin_password:
+        # 받은 저장소(시험)에는 적어 준 것만 만든다 — 비밀번호를 지어 찍을 까닭이 없다.
+        accounts.ensure_first_admin(
+            app.state.store,
+            username=settings.first_admin_username,
+            password=settings.first_admin_password,
+            data_dir=data_folder,
+        )
 
     def authenticate(request: Request) -> Caller:
         return caller(
@@ -78,6 +106,75 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def healthz() -> dict[str, str]:
         """인증 없음 — 비밀이 없다. 컨테이너 상태 확인이 쓴다."""
         return {"status": "ok", "server_time": now_iso()}
+
+    # ─────────────────── 로그인·관리자 계정 (C5, ADR-0090) ───────────────────
+
+    @app.post(f"{API}/auth/login")
+    async def login(request: Request) -> Any:
+        """인증 없이 부른다. 세션 토큰은 **이 응답에만** 실린다."""
+        wanted = _model(LoginRequest, await _json(request))
+        return accounts.login(app.state.store, username=wanted.username.strip(), password=wanted.password)
+
+    @app.post(f"{API}/auth/logout", status_code=204)
+    def logout(request: Request) -> Response:
+        token = bearer(request)
+        if token:
+            accounts.logout(app.state.store, token)
+        return Response(status_code=204)
+
+    @app.get(f"{API}/auth/me")
+    def whoami(request: Request) -> Any:
+        found = authenticate(request)
+        if found.kind not in ("admin", "read"):
+            raise ApiError(403, "forbidden", "콘솔 계정·토큰으로만 묻는다")
+        return WhoAmI(
+            actor=found.actor, role="admin" if found.is_admin else "viewer", account=found.account
+        )
+
+    @app.put(f"{API}/auth/password")
+    async def change_password(request: Request) -> Any:
+        """자기 비밀번호. **세션으로만** — 토큰에는 계정이 없다."""
+        found = authenticate(request)
+        if found.account is None:
+            raise ApiError(403, "account_only", "로그인한 계정으로만 바꿀 수 있다")
+        wanted = _model(PasswordChangeRequest, await _json(request))
+        return accounts.change_own_password(
+            app.state.store,
+            found.account,
+            current=wanted.current_password,
+            new=wanted.new_password,
+            data_dir=data_folder,
+        )
+
+    @app.get(f"{API}/accounts")
+    def list_accounts(request: Request) -> Any:
+        require_admin(authenticate(request))
+        return accounts.listing(app.state.store)
+
+    @app.post(f"{API}/accounts", status_code=201)
+    async def create_account(request: Request) -> Any:
+        found = require_admin(authenticate(request))
+        wanted = _model(AccountCreateRequest, await _json(request))
+        return accounts.create(
+            app.state.store,
+            username=wanted.username.strip(),
+            password=wanted.password,
+            role=wanted.role,
+            by=found.actor,
+        )
+
+    @app.put(f"{API}/accounts/{{username}}")
+    async def update_account(request: Request, username: str) -> Any:
+        require_admin(authenticate(request))
+        wanted = _model(AccountUpdateRequest, await _json(request))
+        return accounts.update(
+            app.state.store,
+            username,
+            role=wanted.role,
+            disabled=wanted.disabled,
+            password=wanted.password,
+            data_dir=data_folder,
+        )
 
     # ─────────────────── Center API 키 (C7, CON-11) ───────────────────
 
@@ -183,7 +280,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     async def upload_package(request: Request) -> Any:
         """업로드 (C5). **Studio용 키로도 된다** — 올리는 쪽이 Studio다 (ADR-0013).
 
-        올라간 것은 **후보**다. 승인·배포는 서명이 관문이라(C2) 키로는 할 수 없다.
+        올라간 것은 **후보**다. 승인·배포는 관리자의 일이라 키로는 할 수 없다.
         """
         found = require_upload(authenticate(request))
         form = await request.form()
@@ -225,7 +322,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.delete(f"{API}/packages/{{package_id}}/{{version}}")
     def delete_package(request: Request, package_id: str, version: str) -> Any:
-        """삭제 (C5). 서명이 필요 없다 — 막는 쪽이라서 관리자 토큰이 관문이다."""
+        """삭제 (C5). 서명이 필요 없다 — 막는 쪽이라서 관리자가 관문이다."""
         require_admin(authenticate(request))
         packages.remove(
             app.state.store, package_dir=settings.package_dir, package_id=package_id, version=version
@@ -267,29 +364,38 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         require_admin(authenticate(request))
         return packages.set_status(app.state.store, package_id, version, await _json(request))
 
-    # ─────────────────── 서명 (C2·C5) ───────────────────
+    # ─────────────────── 승인·배포 — Center가 서명한다 (C2·C5, ADR-0090) ───────────────────
 
     @app.put(f"{API}/packages/{{package_id}}/{{version}}/signature")
-    async def approve_package(request: Request, package_id: str, version: str) -> Any:
-        """승인 봉투. **토큰만으로는 아무것도 바뀌지 않는다** — 서명이 관문이다 (C2)."""
-        require_admin(authenticate(request))
-        return signing.approve_package(app.state.store, package_id, version, await _json(request))
+    def approve_package(request: Request, package_id: str, version: str) -> Any:
+        """승인. 본문 없음 — Center가 `package` 봉투를 지어 서명한다."""
+        found = require_admin(authenticate(request))
+        return signing.approve_package(app.state.store, package_id, version, by=found.actor)
 
     @app.post(f"{API}/packages/{{package_id}}/{{version}}/revoke")
     async def revoke_package(request: Request, package_id: str, version: str) -> Any:
-        require_admin(authenticate(request))
-        return signing.revoke_package(app.state.store, package_id, version, await _json(request))
+        found = require_admin(authenticate(request))
+        wanted = _model(RevokeRequest, await _json(request))
+        return signing.revoke_package(
+            app.state.store, package_id, version, reason=wanted.reason, by=found.actor
+        )
 
     @app.post(f"{API}/deployments")
     async def create_deployment(request: Request) -> Any:
-        """배포 봉투 (C5). Center는 배포를 **짓지 않는다** — 받아 두었다가 그대로 내려 준다."""
-        require_admin(authenticate(request))
-        return deployments.create(app.state.store, await _json(request), package_dir=settings.package_dir)
+        """배포 (C5). Center가 `deployment` 봉투를 지어 서명하고 받아 두었다가 그대로 내려 준다."""
+        found = require_admin(authenticate(request))
+        wanted = _model(DeploymentRequest, await _json(request))
+        return deployments.create(
+            app.state.store, wanted, by=found.actor, package_dir=settings.package_dir
+        )
 
     @app.delete(f"{API}/deployments")
     async def revoke_deployment(request: Request) -> Any:
-        require_admin(authenticate(request))
-        return deployments.revoke(app.state.store, await _json(request))
+        found = require_admin(authenticate(request))
+        wanted = _model(DeploymentRevokeRequest, await _json(request))
+        return deployments.revoke(
+            app.state.store, wanted.deployment_id, reason=wanted.reason, by=found.actor
+        )
 
     @app.get(f"{API}/deployments")
     def list_deployments(request: Request, bot_ui: str | None = None, active: bool = False) -> Any:
@@ -329,23 +435,18 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.post(f"{API}/resources/extensions")
     async def register_extension(request: Request) -> Any:
-        """외부 확장 등록. **서명이 관문이다** (C2 `extension` 봉투, C13 E6)."""
+        """외부 확장 등록. 검사를 지나면 Center가 `extension` 봉투로 서명한다 (C13 E6, ADR-0090)."""
         found = require_admin(authenticate(request))
         info, created = resources.register_extension(app.state.store, found, await _json(request))
         return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
 
     @app.delete(f"{API}/resources/extensions")
     async def revoke_extension(request: Request) -> Any:
-        """등록 해제. `extension_revoke` 봉투 (C13). **되살릴 수 없다.**"""
-        require_admin(authenticate(request))
-        return resources.revoke_extension(app.state.store, await _json(request))
-
-    @app.delete(f"{API}/resources/extensions/{{extension_id}}")
-    async def revoke_extension_by_id(request: Request, extension_id: str) -> Any:
-        """같은 일 — 경로에 id를 적는 꼴 (C13). **봉투가 원본**이고 경로는 거들 뿐이다."""
-        require_admin(authenticate(request))
+        """등록 해제 (C13). Center가 `extension_revoke` 봉투로 서명한다. **되살릴 수 없다.**"""
+        found = require_admin(authenticate(request))
+        wanted = _model(ExtensionRevokeRequest, await _json(request))
         return resources.revoke_extension(
-            app.state.store, await _json(request), expect_id=extension_id
+            app.state.store, wanted.id, wanted.version, reason=wanted.reason, by=found.actor
         )
 
     @app.post(f"{API}/resources/service-apps")
@@ -506,17 +607,15 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         require_read(authenticate(request))
         return [one.to_json_dict() for one in signing.admin_keys(app.state.store)]
 
-    @app.post(f"{API}/admin-keys")
-    async def add_admin_key(request: Request) -> Any:
-        require_admin(authenticate(request))
-        return signing.add_admin_key(app.state.store, await _json(request)).to_json_dict()
-
-    @app.delete(f"{API}/admin-keys")
-    async def revoke_admin_key(request: Request) -> Any:
-        require_admin(authenticate(request))
-        return signing.revoke_admin_key(app.state.store, await _json(request)).to_json_dict()
-
     return app
+
+
+def _model(cls: Any, body: dict[str, Any]) -> Any:
+    """본문을 계약 모델로 — 맞지 않으면 422 `input_invalid`."""
+    try:
+        return cls.model_validate(body)
+    except ValueError as e:
+        raise ApiError(422, "input_invalid", "요청이 계약과 맞지 않는다", {"error": str(e).splitlines()[0]}) from e
 
 
 async def _json(request: Request) -> dict[str, Any]:

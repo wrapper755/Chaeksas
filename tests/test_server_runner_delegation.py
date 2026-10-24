@@ -30,18 +30,15 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import center_admin
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store as CenterStore
-from chaeksas.center.storage import now_iso
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.server_runner import DelegationResult
-from chaeksas.contracts.signing import sign
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.server_runner import agent as agent_mod
 from chaeksas.server_runner.center_client import Unreachable
@@ -49,7 +46,6 @@ from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Store
 
 ADMIN = {"Authorization": "Bearer t-admin"}
-PASS = "열쇠말"
 AT = "2026-10-13T09:00:00+09:00"
 VERSION = "1.0.0"
 WAIT_S = 20.0
@@ -113,12 +109,6 @@ PC_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
-
-
 @pytest.fixture
 def center_store() -> Iterator[CenterStore]:
     found = CenterStore(Path(":memory:"))
@@ -133,14 +123,6 @@ def center(center_store: CenterStore, tmp_path: Path) -> Iterator[TestClient]:
     )
     with TestClient(create_app(settings, store=center_store)) as found:
         yield found
-
-
-@pytest.fixture
-def private(center_store: CenterStore) -> Any:
-    """Admin 서명 키 — **서명이 유일한 관문이다** (C2)."""
-    signer = keystore.create(label="첫 키")
-    bootstrap_key(center_store, public_key=signer.public_bytes(), label="첫 키")
-    return keystore.load(signer, passphrase=PASS)
 
 
 def new_key(center: TestClient, *, name: str, kind: str) -> str:
@@ -223,7 +205,7 @@ def package_zip(
     return made(json.dumps(manifest, ensure_ascii=False))
 
 
-def upload(center: TestClient, private: Any, body: bytes) -> dict[str, Any]:
+def upload(center: TestClient, body: bytes) -> dict[str, Any]:
     """올리고 **승인까지** (C2 — 승인되지 않은 패키지는 배포할 수 없다)."""
     made = center.post(
         "/api/v1/packages",
@@ -232,44 +214,12 @@ def upload(center: TestClient, private: Any, body: bytes) -> dict[str, Any]:
     )
     assert made.status_code in (200, 201), made.text
     info = dict(made.json())
-    approved = center.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=sign(
-            {
-                "kind": "package",
-                "id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=AT,
-        ).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert approved.status_code == 200, approved.text
+    center_admin.approve(center, info["id"], info["version"])
     return info
 
 
-def deploy(
-    center: TestClient, private: Any, info: dict[str, Any], *, target: dict[str, str], dep: str
-) -> None:
-    made = center.post(
-        "/api/v1/deployments",
-        json=sign(
-            {
-                "kind": "deployment",
-                "deployment_id": dep,
-                "target": target,
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=now_iso(),
-        ).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert made.status_code in (200, 201), made.text
+def deploy(center: TestClient, info: dict[str, Any], *, target: dict[str, str]) -> None:
+    center_admin.deploy(center, target=target, bpm_process_id=info["id"], version=info["version"])
 
 
 #: 등록한 PC의 키 (ack를 올릴 때 쓴다 — **신원은 키다**, C4).
@@ -319,7 +269,6 @@ def pc_beat(center: TestClient, bot_ui_id: str, **over: Any) -> dict[str, Any]:
 
 def ready(
     center: TestClient,
-    private: Any,
     runner: agent_mod.Agent,
     *,
     with_pc: bool = True,
@@ -331,7 +280,6 @@ def ready(
     runner.tick()
     pc_info = upload(
         center,
-        private,
         package_zip(
             bot=PC_BOT,
             where="pc",
@@ -344,11 +292,10 @@ def ready(
     bot_ui_id = ""
     if with_pc:
         bot_ui_id = register_pc(center, name="현장 1", machine="7" * 64)
-        deploy(center, private, pc_info, target={"type": "bot_ui", "id": bot_ui_id}, dep="dep_pc_1")
+        deploy(center, pc_info, target={"type": "bot_ui", "id": bot_ui_id})
 
     server_info = upload(
         center,
-        private,
         package_zip(
             bot=SERVER_BOT,
             where="server",
@@ -360,10 +307,8 @@ def ready(
     )
     deploy(
         center,
-        private,
         server_info,
         target={"type": "server_runner", "id": runner.server_runner_id},
-        dep="dep_srv_1",
     )
     runner.tick()
     assert [one.id for one in runner.installed_bots()] == [SERVER_BOT]
@@ -460,7 +405,7 @@ def waiting_row(center: TestClient) -> dict[str, Any]:
 
 
 def test_a_delegation_runs_on_the_pc_and_the_server_run_continues(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """**맡기고 기다리고 받아 이어 간다** (ADR-0062 — 「증명할 다섯」의 1·3).
 
@@ -468,7 +413,7 @@ def test_a_delegation_runs_on_the_pc_and_the_server_run_continues(
     **자리를 놓는가**, PC가 올린 값이 `chk:call.output`이 적은 변수가 되는가, 그래서 업무가
     **끝까지 갔는가**.
     """
-    bot_ui_id = ready(center, private, runner)
+    bot_ui_id = ready(center, runner)
     make_job(center)
     run_id = until_waiting_for_delegation(runner)
 
@@ -502,13 +447,13 @@ def test_a_delegation_runs_on_the_pc_and_the_server_run_continues(
 
 
 def test_the_outputs_become_the_variables_the_graph_asked_for(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """**적은 것만 오간다** (C14 `chk:call.output`) — 그 뒤 걸음이 그 값을 쓴다.
 
     실행이 끝난 뒤에는 일꾼을 거두므로(`collect`) 변수를 보려면 **끝나기 전에** 본다.
     """
-    bot_ui_id = ready(center, private, runner)
+    bot_ui_id = ready(center, runner)
     make_job(center)
     run_id = until_waiting_for_delegation(runner)
     job_id = str(waiting_row(center)["job_id"])
@@ -526,13 +471,13 @@ def test_the_outputs_become_the_variables_the_graph_asked_for(
 
 
 def test_the_ack_makes_center_forget_the_business_value(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """**ack가 올라가면 값이 지워진다** (원칙 6의 예외는 좁게 쓴다, C12).
 
     ack가 올라가기 **전에는** 매번 다시 내려온다 — 그래서 받은 뒤 한 주기는 들고 있다.
     """
-    bot_ui_id = ready(center, private, runner)
+    bot_ui_id = ready(center, runner)
     make_job(center)
     run_id = until_waiting_for_delegation(runner)
     job_id = str(waiting_row(center)["job_id"])
@@ -552,14 +497,14 @@ def test_the_ack_makes_center_forget_the_business_value(
 
 
 def test_the_same_result_is_only_put_in_once(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """ack가 올라가기 전에 **같은 결과가 또 내려온다** (C12) — 두 번 넣지 않는다.
 
     두 번 넣으면 엔진이 「기다리는 위임이 아니다」로 터지고, 더 나쁘게는 지나간 자리에 값을
     덮는다. 기억은 작업·메시지와 **같은 자리**(`core.seen`)를 쓴다 (ADR-0057).
     """
-    bot_ui_id = ready(center, private, runner)
+    bot_ui_id = ready(center, runner)
     make_job(center)
     run_id = until_waiting_for_delegation(runner)
     job_id = str(waiting_row(center)["job_id"])
@@ -580,13 +525,13 @@ def test_the_same_result_is_only_put_in_once(
 
 
 def test_a_rejected_delegation_is_a_task_failure(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """PC 쪽이 실패·거절·만료되면 **업무 실패**다 (ADR-0062 「증명할 다섯」의 4).
 
     오류 경계가 없는 그림이라 실행이 실패로 닫힌다 — **조용히 멈추지 않는 것**이 요점이다.
     """
-    bot_ui_id = ready(center, private, runner)
+    bot_ui_id = ready(center, runner)
     make_job(center)
     run_id = until_waiting_for_delegation(runner)
     job_id = str(waiting_row(center)["job_id"])
@@ -602,14 +547,14 @@ def test_a_rejected_delegation_is_a_task_failure(
 
 
 def test_a_delegation_with_nowhere_to_go_fails_the_run(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """맡길 PC가 없으면 **업무 실패**다 (ADR-0062 §3 — 기다리지 않는다).
 
     배포되지 않은 PC를 기다리는 것은 업무가 아니라 설정 잘못이고, 오류 경계가 받아야 사람이
     안다. 사유 코드는 Center가 준 것(`no_deployment`)이 그대로 온다.
     """
-    ready(center, private, runner, with_pc=False)
+    ready(center, runner, with_pc=False)
     make_job(center)
 
     deadline = time.monotonic() + WAIT_S
@@ -624,7 +569,7 @@ def test_a_delegation_with_nowhere_to_go_fails_the_run(
 
 
 def test_waiting_for_a_delegation_leaves_the_slot_for_another_job(
-    center: TestClient, private: Any, key: str, store: Store, tmp_path: Path
+    center: TestClient, key: str, store: Store, tmp_path: Path
 ) -> None:
     """**상한 1에 위임 하나를 들고도 새 작업을 받는다** (ADR-0062 「증명할 다섯」의 1).
 
@@ -632,7 +577,7 @@ def test_waiting_for_a_delegation_leaves_the_slot_for_another_job(
     """
     settings = settings_at(tmp_path / "runner1", max_concurrency=1)
     runner = agent_mod.build(settings, key, client=center, store=store)
-    ready(center, private, runner)
+    ready(center, runner)
     make_job(center)
     first = until_waiting_for_delegation(runner)
     assert runner.free_slots() == 1, "기다리는 실행은 자리를 쥐지 않는다"
@@ -649,7 +594,7 @@ def test_waiting_for_a_delegation_leaves_the_slot_for_another_job(
 
 
 def test_a_restart_does_not_delegate_the_same_spot_twice(
-    center: TestClient, private: Any, key: str, store: Store, tmp_path: Path
+    center: TestClient, key: str, store: Store, tmp_path: Path
 ) -> None:
     """**재시작을 건너 작업이 하나다** (ADR-0062 「증명할 다섯」의 2).
 
@@ -659,7 +604,7 @@ def test_a_restart_does_not_delegate_the_same_spot_twice(
     """
     settings = settings_at(tmp_path / "runner2")
     first = agent_mod.build(settings, key, client=center, store=store)
-    bot_ui_id = ready(center, private, first)
+    bot_ui_id = ready(center, first)
     make_job(center)
     run_id = until_waiting_for_delegation(first)
     job_id = str(waiting_row(center)["job_id"])
@@ -686,7 +631,7 @@ def test_a_restart_does_not_delegate_the_same_spot_twice(
 
 
 def test_the_field_outputs_reach_the_server_variables(
-    center: TestClient, private: Any, runner: agent_mod.Agent, tmp_path: Path
+    center: TestClient, runner: agent_mod.Agent, tmp_path: Path
 ) -> None:
     """**PC가 진짜로 돌려 만든 값**이 서버 실행의 변수가 된다 (증명할 다섯의 3).
 
@@ -701,7 +646,7 @@ def test_the_field_outputs_reach_the_server_variables(
     from chaeksas.bot_ui.runner import Launcher
     from chaeksas.core.packages import install
 
-    bot_ui_id = ready(center, private, runner)
+    bot_ui_id = ready(center, runner)
     make_job(center)
     run_id = until_waiting_for_delegation(runner)
     job_id = str(waiting_row(center)["job_id"])
@@ -755,7 +700,7 @@ def test_the_field_outputs_reach_the_server_variables(
 
 
 def test_cancelling_the_server_run_revokes_the_pc_job(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """서버 실행이 취소되면 **그 위임 작업도 거둔다** — PC가 받을 쪽 없는 일을 하지 않는다.
 
@@ -763,7 +708,7 @@ def test_cancelling_the_server_run_revokes_the_pc_job(
     사람이 없어 영원히 기다린다. 거둘 작업은 **기다림이 걷히기 전에** 읽어야 한다
     (`Engine.cancel`이 비운다).
     """
-    ready(center, private, runner)
+    ready(center, runner)
     job_id = make_job(center)
     run_id = until_waiting_for_delegation(runner)
     delegated_job = str(waiting_row(center)["job_id"])
@@ -787,10 +732,10 @@ def test_cancelling_the_server_run_revokes_the_pc_job(
 
 
 def test_a_pc_job_that_already_started_is_left_alone(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """**이미 시작된 PC 실행은 끝까지 간다** (C5) — 거절도 답이라 다시 걸지 않는다."""
-    bot_ui_id = ready(center, private, runner)
+    bot_ui_id = ready(center, runner)
     job_id = make_job(center)
     until_waiting_for_delegation(runner)
     delegated_job = str(waiting_row(center)["job_id"])
@@ -810,10 +755,10 @@ def test_a_pc_job_that_already_started_is_left_alone(
 
 
 def test_a_cancel_that_did_not_reach_center_is_tried_again(
-    center: TestClient, private: Any, runner: agent_mod.Agent, monkeypatch: pytest.MonkeyPatch
+    center: TestClient, runner: agent_mod.Agent, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """닿지 못한 것은 **들고 있다 다시 건다** (ADR-0007) — 거두지 못하면 PC가 헛일을 한다."""
-    ready(center, private, runner)
+    ready(center, runner)
     job_id = make_job(center)
     until_waiting_for_delegation(runner)
     delegated_job = str(waiting_row(center)["job_id"])
@@ -833,14 +778,14 @@ def test_a_cancel_that_did_not_reach_center_is_tried_again(
 
 
 def test_what_the_engine_withdraws_is_revoked_after_the_heartbeat(
-    center: TestClient, private: Any, runner: agent_mod.Agent
+    center: TestClient, runner: agent_mod.Agent
 ) -> None:
     """엔진이 걷은 위임도 **실행 취소와 같은 줄**로 거둔다 (ADR-0087 §4).
 
     함께 도는 반복의 한 건이 실패하거나 중단 경계가 울리면 엔진이 포트의 `withdraw`를 부른다 —
     일꾼 스레드에서 Center를 부르지 않고 줄에 넣고, **하트비트 뒤에** 거둔다.
     """
-    ready(center, private, runner)
+    ready(center, runner)
     make_job(center)
     run_id = until_waiting_for_delegation(runner)
     delegated_job = str(waiting_row(center)["job_id"])

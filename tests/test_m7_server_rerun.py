@@ -29,7 +29,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import threading
 import time
 from collections.abc import Iterator
@@ -41,6 +40,7 @@ from typing import Any
 import pytest
 import uvicorn
 from canned_answers import canned
+from center_admin import approve, deploy_id, register_extension
 from fastapi.testclient import TestClient
 from stub_model import StubModel
 
@@ -48,14 +48,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from sample_files import make_samples  # noqa: E402
 
-from chaeksas.admin import keys as keystore  # noqa: E402
-from chaeksas.center.api.signing import bootstrap_key  # noqa: E402
 from chaeksas.center.app import create_app  # noqa: E402
 from chaeksas.center.settings import Settings as CenterSettings  # noqa: E402
-from chaeksas.center.storage import Store, now_iso  # noqa: E402
+from chaeksas.center.storage import Store  # noqa: E402
 from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
-from chaeksas.contracts.extension import definition_hash  # noqa: E402
-from chaeksas.contracts.signing import sign  # noqa: E402
 from chaeksas.core.senders import WebhookConfig  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
 from chaeksas.mock_apps.c11 import SHARED_KEY_ENV  # noqa: E402
@@ -77,8 +73,6 @@ EXAMPLES = DOCS / "bpmn"
 ADMIN_TOKEN = "t-admin"
 ADMIN = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 READ = {"Authorization": "Bearer t-read"}
-SIGN_PASS = "열쇠말"
-SIGNED_AT = "2026-10-14T09:00:00+09:00"
 CENTER_URL = "http://testserver"
 
 #: 모의 앱이 받는 키 하나 (`samples/README.md`).
@@ -153,13 +147,6 @@ def case_delegations(example: str) -> dict[str, Any]:
 # ─────────────────────────── 판 깔기 ───────────────────────────
 
 
-@pytest.fixture(autouse=True)
-def admin_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """`chk-admin`의 개인키가 사는 곳 — 임시 폴더다 (개발 PC를 건드리지 않는다)."""
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, SIGN_PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
-
-
 def serve(app: Any) -> tuple[str, Any, threading.Thread]:
     """ASGI 앱 하나를 127.0.0.1의 빈 포트에 띄운다 (M5 인수 시험과 같은 것)."""
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
@@ -232,47 +219,25 @@ def register_app(client: Any, app_id: str, base_url: str) -> None:
     pytest.fail(f"{app_id}: 모의 앱을 {REGISTER_TRIES}번 등록해 봤지만 Center가 읽지 못했다")
 
 
-def prepare_center(
-    client: Any, store: Store, mock_apps: tuple[dict[str, str], dict[str, str]]
-) -> Any:
-    """첫 Admin 공개키를 넣고 모의 앱·외부 확장을 등록한다 → 서명 키.
+def prepare_center(client: Any, mock_apps: tuple[dict[str, str], dict[str, str]]) -> None:
+    """모의 앱·외부 확장을 등록한다 (봉투는 Center가 짓는다 — ADR-0090).
 
     **부르는 쪽이 둘이다** — 묶음의 `center`와 BX-16 전용 시험이다. 베끼면 한쪽만 고쳐져
     「여기서는 되는데 저기서는 안 된다」가 된다.
     """
     c11, external = mock_apps
-    key = keystore.create(label="서버 재통과")
-    bootstrap_key(store, public_key=key.public_bytes(), label="서버 재통과")
     for app_id, base_url in c11.items():
         register_app(client, app_id, base_url)
-    signer = keystore.load(key, passphrase=SIGN_PASS)
     for app_id, base_url in external.items():
         # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`).
-        found = external_definitions.BUILDERS[app_id](base_url)
-        envelope = sign(
-            {
-                "kind": "extension",
-                "id": found["id"],
-                "version": found["version"],
-                "definition_hash": definition_hash(found),
-            },
-            signer,
-            signed_at=SIGNED_AT,
-        )
-        answer = client.post(
-            "/api/v1/resources/extensions",
-            json={"definition": found, "envelope": envelope.to_json_dict()},
-            headers=ADMIN,
-        )
-        assert answer.status_code < 400, f"{app_id}: {answer.text}"
-    return key
+        register_extension(client, external_definitions.BUILDERS[app_id](base_url), headers=ADMIN)
 
 
 @pytest.fixture
 def center(
     tmp_path: Path, mock_apps: tuple[dict[str, str], dict[str, str]]
-) -> Iterator[tuple[TestClient, Store, Any]]:
-    """진짜 Center + 첫 Admin 공개키 + 등록된 모의 앱들. `(client, store, 서명 키)`."""
+) -> Iterator[tuple[TestClient, Store]]:
+    """진짜 Center + 등록된 모의 앱들. `(client, store)` — 서명 키는 Center가 처음 뜰 때 만든다."""
     c11, external = mock_apps
     store = Store(tmp_path / "center.sqlite3")
     settings = CenterSettings(
@@ -282,8 +247,8 @@ def center(
         read_token="t-read",
     )
     with TestClient(create_app(settings, store=store)) as client:
-        key = prepare_center(client, store, mock_apps)
-        yield client, store, key
+        prepare_center(client, mock_apps)
+        yield client, store
     store.close()
 
 
@@ -377,7 +342,7 @@ def mail() -> Iterator[Any]:
 @pytest.fixture
 def runner(
     tmp_path: Path,
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     model: StubModel,
     mail: Any,
     receiver: Receiver,
@@ -392,7 +357,7 @@ def runner(
     `$test_receiver`는 Studio 전용이고(C14) 배포된 Bot은 사설망으로 보내지 않으므로, 웹훅을
     쓰는 예제는 이 묶음에서 돌 수 없다 (`REMAINING`).
     """
-    client, _, _ = center
+    client, _ = center
     key = client.post(
         "/api/v1/center-keys", json={"name": "시험 서버", "type": "server_runner"}, headers=ADMIN
     ).json()["key"]
@@ -443,7 +408,7 @@ def packaged(tmp_path: Path, example: str) -> Path:
 
 
 def approve_delegation_targets(
-    center: tuple[TestClient, Store, Any], tmp_path: Path, example: str
+    center: tuple[TestClient, Store], tmp_path: Path, example: str
 ) -> None:
     """그 예제가 **PC 위임으로 부르는 Bot**을 올려 승인해 둔다 (ADR-0062).
 
@@ -451,7 +416,7 @@ def approve_delegation_targets(
     `delegation_not_approved`다. 그림에서 읽으므로(`requires.delegations`) 위임을 쓰는 예제가
     늘어도 이 자리는 그대로다. 패키지 id는 예제 파일 이름의 `_`를 `-`로 바꾼 것이다 (C1 `id`).
     """
-    client, _, key = center
+    client, _ = center
     # **작업 폴더를 따로 쓴다** — `packaged()`가 쓰는 자리에 또 들이면 같은 id가 둘이 된다.
     space = Workspace(tmp_path / "delegation-targets" / example).ensure()
     made = space.import_example(EXAMPLES, example)
@@ -466,32 +431,17 @@ def approve_delegation_targets(
         )
         assert answer.status_code in (200, 201), answer.text
         info = dict(answer.json())
-        envelope = sign(
-            {
-                "kind": "package",
-                "id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            keystore.load(key, passphrase=SIGN_PASS),
-            signed_at=SIGNED_AT,
-        )
-        answer = client.put(
-            f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-            json=envelope.to_json_dict(),
-            headers=ADMIN,
-        )
-        assert answer.status_code < 400, answer.text
+        approve(client, info["id"], info["version"], headers=ADMIN)
 
 
 def deploy(
-    center: tuple[TestClient, Store, Any], runner: agent_mod.Agent, zip_path: Path
+    center: tuple[TestClient, Store], runner: agent_mod.Agent, zip_path: Path
 ) -> dict[str, Any]:
-    """업로드 → **승인 서명** → **배포 서명** → 하트비트로 설치까지 (C2 V1~V7).
+    """업로드 → **승인** → **배포** → 하트비트로 설치까지 (C2 V1~V7).
 
-    서명이 유일한 관문이다 — 관리자 토큰만으로는 아무것도 배포되지 않는다.
+    봉투는 Center가 지어 서명하고(ADR-0090), 실행기가 하트비트의 `admin_keys`로 다시 본다.
     """
-    client, _, key = center
+    client, _ = center
     answer = client.post(
         "/api/v1/packages",
         files={"file": (zip_path.name, zip_path.read_bytes(), "application/zip")},
@@ -499,43 +449,19 @@ def deploy(
     )
     assert answer.status_code in (200, 201), answer.text
     info = dict(answer.json())
-
-    signer = keystore.load(key, passphrase=SIGN_PASS)
-    approve = sign(
-        {
-            "kind": "package",
-            "id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        signer,
-        signed_at=SIGNED_AT,
-    )
-    answer = client.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=approve.to_json_dict(),
-        headers=ADMIN,
-    )
-    assert answer.status_code < 400, answer.text
+    approve(client, info["id"], info["version"], headers=ADMIN)
 
     # 실행기가 등록되어야 배포 대상이 생긴다 (C12 — 키 하나 ↔ 서버 하나).
     runner.tick()
     assert runner.server_runner_id, "실행기가 등록되지 않았다"
 
-    envelope = sign(
-        {
-            "kind": "deployment",
-            "deployment_id": "dep_" + re.sub(r"[^0-9a-f]", "", info["content_hash"])[:8],
-            "target": {"type": "server_runner", "id": runner.server_runner_id},
-            "bpm_process_id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        signer,
-        signed_at=now_iso(),
+    deploy_id(
+        client,
+        target={"type": "server_runner", "id": runner.server_runner_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
+        headers=ADMIN,
     )
-    answer = client.post("/api/v1/deployments", json=envelope.to_json_dict(), headers=ADMIN)
-    assert answer.status_code < 400, answer.text
 
     runner.tick()  # 공개키·배포를 받아 설치한다
     assert info["id"] in [one.id for one in runner.installed_bots()], (
@@ -545,10 +471,10 @@ def deploy(
 
 
 def dispatch(
-    center: tuple[TestClient, Store, Any], info: dict[str, Any], inputs: dict[str, Any]
+    center: tuple[TestClient, Store], info: dict[str, Any], inputs: dict[str, Any]
 ) -> str:
     """Center 작업 지시 하나 (C5 — `id`를 비우면 Center가 고른다)."""
-    client, _, _ = center
+    client, _ = center
     answer = client.post(
         "/api/v1/jobs",
         json={
@@ -620,7 +546,7 @@ def _post_message(client: TestClient, message: dict[str, Any]) -> bool:
 
 
 def run_to_the_end(
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     runner: agent_mod.Agent,
     job_id: str,
     *,
@@ -637,7 +563,7 @@ def run_to_the_end(
     위임은 Center가 PC 작업으로 만들고 **그 PC의 ack로** 값이 돌아오므로, 아무도 끝내 주지
     않으면 서버 실행이 영원히 기다린다.
     """
-    client, _, _ = center
+    client, _ = center
     left = list(messages)
     until = time.monotonic() + timeout_s
     while time.monotonic() < until:
@@ -732,7 +658,7 @@ def test_every_server_example_is_in_the_bundle_or_has_a_reason() -> None:
 def test_every_server_example_deploys_and_installs(
     example: str,
     tmp_path: Path,
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     runner: agent_mod.Agent,
 ) -> None:
     """**배포 길은 44개 전부가 지나간다** — 막힌 것은 *도는 것*이지 배포가 아니다.
@@ -751,7 +677,7 @@ def test_every_server_example_deploys_and_installs(
 def test_a_server_example_runs_through_center_and_the_runner(
     example: str,
     tmp_path: Path,
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -774,7 +700,7 @@ def test_a_server_example_runs_through_center_and_the_runner(
 
 def test_bx33_fails_on_purpose_on_the_server_too(
     tmp_path: Path,
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -784,7 +710,7 @@ def test_bx33_fails_on_purpose_on_the_server_too(
     빼지 않고 **의도한 실패를 본다** — 그냥 `REMAINING`에 두면 「언젠가 초록이 될 것」으로
     읽히고, 어느 날 다른 이유로 실패해도 아무도 모른다 (M5 인수 시험과 같은 자리).
     """
-    client, _, _ = center
+    client, _ = center
     info = deploy(center, runner, packaged(tmp_path, "bx33_access_request"))
     job_id = dispatch(center, info, case_inputs("bx33_access_request", receiver))
     done = run_to_the_end(
@@ -905,10 +831,8 @@ class FakePc:
                 assert beat.status_code == 200, beat.text
 
 
-def deploy_to_pc(
-    client: Any, signing_key: Any, bot_ui_id: str, example: str, tmp_path: Path
-) -> str:
-    """PC 예제 하나를 **승인 서명 → 배포 서명**으로 그 PC에 배포한다 (C2).
+def deploy_to_pc(client: Any, bot_ui_id: str, example: str, tmp_path: Path) -> str:
+    """PC 예제 하나를 **승인 → 배포**로 그 PC에 배포한다 (C2 — 봉투는 Center가 짓는다).
 
     설치까지 가지 않는다 — `POST /jobs`가 보는 것은 **Center의 배포**이고(`no_deployment`)
     설치는 하트비트 뒤의 일이다 (PC 쪽 한 바퀴는 `tests/test_m5_pc_rerun.py`가 본다).
@@ -924,44 +848,20 @@ def deploy_to_pc(
     assert answer.status_code in (200, 201), answer.text
     info = dict(answer.json())
 
-    signer = keystore.load(signing_key, passphrase=SIGN_PASS)
-    approve = sign(
-        {
-            "kind": "package",
-            "id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        signer,
-        signed_at=SIGNED_AT,
-    )
-    answer = client.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=approve.to_json_dict(),
+    approve(client, info["id"], info["version"], headers=ADMIN)
+    deploy_id(
+        client,
+        target={"type": "bot_ui", "id": bot_ui_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
         headers=ADMIN,
     )
-    assert answer.status_code < 400, answer.text
-
-    envelope = sign(
-        {
-            "kind": "deployment",
-            "deployment_id": "dep_pc" + re.sub(r"[^0-9a-f]", "", info["content_hash"])[:6],
-            "target": {"type": "bot_ui", "id": bot_ui_id},
-            "bpm_process_id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        signer,
-        signed_at=now_iso(),
-    )
-    answer = client.post("/api/v1/deployments", json=envelope.to_json_dict(), headers=ADMIN)
-    assert answer.status_code < 400, answer.text
     return str(info["id"])
 
 
 def test_bx16_delegates_a_part_to_a_pc_and_continues(
     tmp_path: Path,
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -979,9 +879,9 @@ def test_bx16_delegates_a_part_to_a_pc_and_continues(
     **보는 것은 셋이다**: 위임이 **PC 작업이 되었나**, 그 값으로 서버 실행이 **끝까지 갔나**,
     그리고 Center가 ack를 받고 **업무 값을 지웠나** (원칙 6의 예외는 좁게 쓴다).
     """
-    client, store, key = center
+    client, store = center
     bot_ui_id = register_a_pc(client)
-    target = deploy_to_pc(client, key, bot_ui_id, BX16_TARGET, tmp_path)
+    target = deploy_to_pc(client, bot_ui_id, BX16_TARGET, tmp_path)
 
     info = deploy(center, runner, packaged(tmp_path, "bx16_reorder_proposal"))
     make_samples_for(runner, str(info["id"]))
@@ -1028,7 +928,7 @@ def batch_children(client: TestClient, child: str) -> list[dict[str, Any]]:
 
 def test_fx24_starts_one_server_bot_per_approved_item(
     tmp_path: Path,
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -1038,7 +938,7 @@ def test_fx24_starts_one_server_bot_per_approved_item(
     (차례마다 멱등 키가 달라 2건째부터 같은 작업이 돌아오지 않는다), 자식이 **같은 실행기에서**
     돌아 결과를 돌려주나(부모는 기다리며 자리를 놓는다), 그리고 자식 실행이 **부모를 아나**.
     """
-    client, _, _ = center
+    client, _ = center
     child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
     info = deploy(center, runner, packaged(tmp_path, FX24))
     job_id = dispatch(center, info, case_inputs(FX24, receiver))
@@ -1071,12 +971,12 @@ def test_fx24_starts_one_server_bot_per_approved_item(
 
 def test_fx24_starts_nothing_when_the_batch_is_rejected(
     tmp_path: Path,
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
     """반려하면 **하나도 기동하지 않는다** — 순서는 그림이 쥔다 (지도는 BPMN이다)."""
-    client, _, _ = center
+    client, _ = center
     child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
     info = deploy(center, runner, packaged(tmp_path, FX24))
     job_id = dispatch(center, info, case_inputs(FX24, receiver))
@@ -1087,7 +987,7 @@ def test_fx24_starts_nothing_when_the_batch_is_rejected(
 
 def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
     tmp_path: Path,
-    center: tuple[TestClient, Store, Any],
+    center: tuple[TestClient, Store],
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -1097,7 +997,7 @@ def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
     **병렬 반복이라 세 건이 한 번에 맡겨진다** (ADR-0087) — 한 건도 끝나지 않았는데 셋이 다
     있다는 것이 「함께 맡긴다」의 증거다. 취소하면 셋 모두 거둬진다.
     """
-    client, _, _ = center
+    client, _ = center
     child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
     info = deploy(center, runner, packaged(tmp_path, FX24))
     job_id = dispatch(center, info, case_inputs(FX24, receiver))

@@ -7,7 +7,7 @@ import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { readinessLabel } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { BotUiActions } from "../actions-ui";
-import { CopyButton } from "../copy";
+import type { Route } from "next";
 import { fullTime, runtimeLabel, running, statusLabel, time, workerLabel } from "../page";
 
 /**
@@ -126,11 +126,11 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
       header: "배포 id",
       width: "26ch",
       mono: true,
+      // 철회는 「배포」 화면 한 곳에서 한다 (같은 단추는 한 곳).
       cell: (row) => (
-        <span className="inline-flex items-center gap-1">
+        <Link className="underline" href={`/deployments#${row.deployment_id}` as Route}>
           {row.deployment_id}
-          <CopyButton value={row.deployment_id} />
-        </span>
+        </Link>
       ),
     },
     { key: "bpm_process_id", header: "Bot" },
@@ -276,7 +276,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
           <Section title="배포">
             {deployments.length === 0 ? (
               <p className="text-body-sm text-text-muted">
-                이 Bot UI에 걸린 활성 배포가 없습니다. Admin의 `chk-admin deploy`로 배포하세요.
+                이 Bot UI에 걸린 활성 배포가 없습니다. 「배포」에서 배포하세요.
               </p>
             ) : (
               <DataTable

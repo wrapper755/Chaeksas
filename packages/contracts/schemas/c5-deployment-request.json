@@ -1,0 +1,64 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-deployment-request",
+  "additionalProperties": true,
+  "description": "`POST /deployments` — 관리자만. **Center가 봉투를 지어 서명한다** (ADR-0090).\n\n`deployment_id`·`content_hash`는 Center가 채운다 (해시는 패키지의 것이다). 받아들이는 규칙은\n봉투로 받던 때와 **같은 함수**(`validate_deployment`)다.",
+  "properties": {
+    "bpm_process_id": {
+      "title": "Bpm Process Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "max_concurrency": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Concurrency"
+    },
+    "not_before": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Not Before"
+    },
+    "target": {
+      "additionalProperties": true,
+      "title": "Target",
+      "type": "object"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "target",
+    "bpm_process_id",
+    "version"
+  ],
+  "title": "DeploymentRequest",
+  "type": "object"
+}

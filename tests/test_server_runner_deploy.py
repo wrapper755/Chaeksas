@@ -1,6 +1,6 @@
 """서버 실행기가 배포를 받아 설치하고 준비 상태를 보고한다 (C2 V1~V7, C12, M7 조각 3).
 
-**한 줄로 본다**: 진짜 `chk-admin`으로 서명 → 진짜 Center → 실행기의 `agent.tick()`이 받아
+**한 줄로 본다**: 관리자가 배포 → 진짜 Center가 서명(ADR-0090) → 실행기의 `agent.tick()`이 받아
 설치 → 다음 하트비트에 `deployment_results`·`readiness`가 올라간다.
 
 `core.deploy`·`core.packages`는 Bot UI와 **같은 코드**다(`tests/test_m5_deploy.py`가 PC 쪽을
@@ -25,11 +25,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+import center_admin
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.center.api.signing import bootstrap_key
+from chaeksas.center import signer as center_signer
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store, now_iso
@@ -43,15 +43,8 @@ from chaeksas.server_runner.settings import Settings
 
 ADMIN = {"Authorization": "Bearer t-admin"}
 READ = {"Authorization": "Bearer t-read"}
-PASS = "열쇠말"
 AT = "2026-10-13T09:00:00+09:00"
 BOT = "finance.invoice-issue"
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 @pytest.fixture(autouse=True)
@@ -149,15 +142,8 @@ def _zipped(manifest: dict[str, Any], files: dict[str, str]) -> bytes:
     return made(json.dumps(manifest, ensure_ascii=False))
 
 
-def admin_key(store: Store) -> Any:
-    """Admin 개인키를 만들고 **공개키만** Center에 심는다 (C2 — 첫 키는 서버 셸에서 한 번)."""
-    made = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=made.public_bytes(), label="첫 키")
-    return made
-
-
-def approved(center: TestClient, signer: Any, **extra: Any) -> dict[str, Any]:
-    """업로드 → 승인까지 (C2)."""
+def approved(center: TestClient, **extra: Any) -> dict[str, Any]:
+    """업로드 → 승인까지 (C2 — 봉투는 Center가 짓는다)."""
     response = center.post(
         "/api/v1/packages",
         files={"file": ("p.zip", package_zip(**extra), "application/zip")},
@@ -165,49 +151,20 @@ def approved(center: TestClient, signer: Any, **extra: Any) -> dict[str, Any]:
     )
     assert response.status_code in (200, 201), response.text
     info = dict(response.json())
-    envelope = sign(
-        {
-            "kind": "package",
-            "id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        keystore.load(signer, passphrase=PASS),
-        signed_at=AT,
-    )
-    answer = center.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=envelope.to_json_dict(),
-        headers=ADMIN,
-    )
-    assert answer.status_code == 200, answer.text
+    center_admin.approve(center, info["id"], info["version"])
     return info
 
 
-def deploy(
-    center: TestClient,
-    signer: Any,
-    info: dict[str, Any],
-    *,
-    target: str,
-    deployment_id: str = "dep_3f9a1c07",
-    **extra: Any,
-) -> Any:
-    """배포 봉투를 서명해 Center에 올린다 (C2·C5)."""
-    payload = {
-        "kind": "deployment",
-        "deployment_id": deployment_id,
-        "target": {"type": "server_runner", "id": target},
-        "bpm_process_id": info["id"],
-        "version": info["version"],
-        "content_hash": info["content_hash"],
+def deploy(center: TestClient, info: dict[str, Any], *, target: str, **extra: Any) -> Any:
+    """서버 실행기에 배포한다 (C5 — Center가 봉투를 지어 서명한다). 응답을 그대로 돌려준다."""
+    return center_admin.deploy(
+        center,
+        target={"type": "server_runner", "id": target},
+        bpm_process_id=info["id"],
+        version=info["version"],
+        expect=None,
         **extra,
-    }
-    envelope = sign(payload, keystore.load(signer, passphrase=PASS), signed_at=now_iso())
-    response = center.post(
-        "/api/v1/deployments", json=envelope.to_json_dict(), headers=ADMIN
     )
-    return response
 
 
 def deployed(
@@ -220,9 +177,8 @@ def deployed(
 ) -> Any:
     """등록 → 승인 → 배포까지 세워 둔다. 돌려주는 것은 배포 응답이다."""
     runner.tick()  # 등록 — `server_runner_id`를 받는다
-    signer = admin_key(store)
-    info = approved(center, signer)
-    return deploy(center, signer, info, target=target or runner.server_runner_id, **extra)
+    info = approved(center)
+    return deploy(center, info, target=target or runner.server_runner_id, **extra)
 
 
 # ─────────────────────────── 한 줄 ───────────────────────────
@@ -266,29 +222,15 @@ def test_a_wildcard_deployment_reaches_the_runner(
     assert [b.id for b in installed(runner.settings.data_path)] == [BOT]
 
 
-# ─────────────────────────── 명령줄 (ADM-03, ADR-0076) ───────────────────────────
+# ─────────────────────────── 동시 실행 상한 (C2 `max_concurrency`) ───────────────────────────
 
 
-def admin_center(center: TestClient) -> Any:
-    from chaeksas.admin.client import Center  # noqa: PLC0415
-
-    return Center(base_url="http://center", token="t-admin", client=center)
-
-
-def test_the_command_signs_a_server_deployment(
-    center: TestClient, store: Store, runner: agent_mod.Agent, capsys: Any
+def test_a_server_deployment_carries_its_concurrency_limit(
+    center: TestClient, store: Store, runner: agent_mod.Agent
 ) -> None:
-    """사람이 **명령줄로** 서버 Bot을 배포한다 — 전에는 `--bot-ui`만 받아 서버 배포를 서명할 길이 없었다."""
-    from chaeksas.admin.cli import main as admin_main  # noqa: PLC0415
-
-    runner.tick()
-    approved(center, admin_key(store))
-    code = admin_main(
-        ["-y", "deploy", BOT, "1.0.0", "--server", "--max-concurrency", "3"], center=admin_center(center)
-    )
-    printed = capsys.readouterr().out
-    assert code == 0, printed
-    assert "서버 실행기 전체" in printed and "동시 실행 상한: 3" in printed and "배포했습니다" in printed
+    """서버 배포는 **동시 실행 상한**을 싣는다 — 실행기 전체(`"*"`)에도 하나에도 (C2·C12 §3)."""
+    response = deployed(center, store, runner, target="*", max_concurrency=3)
+    assert response.status_code in (200, 201), response.text
 
     listed = center.get("/api/v1/deployments", headers=ADMIN).json()
     assert [(one["target"], one.get("max_concurrency")) for one in listed] == [
@@ -298,18 +240,11 @@ def test_the_command_signs_a_server_deployment(
     assert [b.id for b in installed(runner.settings.data_path)] == [BOT], "실행기가 받아 설치한다"
 
 
-def test_the_command_names_one_runner_or_refuses_a_limit_for_a_pc(
-    center: TestClient, store: Store, runner: agent_mod.Agent, capsys: Any
+def test_a_limit_left_out_is_the_default(
+    center: TestClient, store: Store, runner: agent_mod.Agent
 ) -> None:
-    from chaeksas.admin.cli import main as admin_main  # noqa: PLC0415
-
-    runner.tick()
-    approved(center, admin_key(store))
-    admin = admin_center(center)
-    assert admin_main(["-y", "deploy", BOT, "1.0.0", "--bot-ui", "pc-1", "--max-concurrency", "2"], center=admin) == 2
-    assert "서버 배포(--server)에만" in capsys.readouterr().out
-    assert admin_main(["-y", "deploy", BOT, "1.0.0", "--server", runner.server_runner_id], center=admin) == 0
-    assert f"서버 실행기 {runner.server_runner_id}" in capsys.readouterr().out
+    response = deployed(center, store, runner)
+    assert response.status_code in (200, 201), response.text
     listed = center.get("/api/v1/deployments", headers=ADMIN).json()
     assert [one["target"]["id"] for one in listed] == [runner.server_runner_id]
     assert listed[0].get("max_concurrency") is None, "적지 않으면 기본이다 (계약의 값을 베끼지 않는다)"
@@ -346,7 +281,6 @@ def test_an_unsigned_package_is_refused_with_a_reason(
     바꿔 끼워** 실행기 자신의 V7만 본다. 서버에서는 이 검사를 끌 길을 두지 않았다.
     """
     runner.tick()
-    signer = admin_key(store)
     runner.admin_keys = _public_keys(store)
 
     unsigned = tmp_path / "unsigned.zip"
@@ -362,7 +296,7 @@ def test_an_unsigned_package_is_refused_with_a_reason(
             "version": "1.0.0",
             "content_hash": content_hash_zip(unsigned),
         },
-        keystore.load(signer, passphrase=PASS),
+        center_signer.active(store),  # 믿는 키로 서명했다 — 막는 것은 V7 하나다
         signed_at=now_iso(),
     )
     found = runner.install_deployments([envelope.to_json_dict()])
@@ -411,11 +345,10 @@ def test_readiness_names_the_missing_key_ref(
 ) -> None:
     """키 참조가 이 서버에 없으면 **그 이름을 올린다** (C12 — CON-12가 보인다)."""
     runner.tick()
-    signer = admin_key(store)
     info = approved(
-        center, signer, requires={"service_apps": [{"app_id": "erp", "operations": ["issue"], "key_ref": "erp-key"}]}
+        center, requires={"service_apps": [{"app_id": "erp", "operations": ["issue"], "key_ref": "erp-key"}]}
     )
-    deploy(center, signer, info, target=runner.server_runner_id)
+    deploy(center, info, target=runner.server_runner_id)
     runner.tick()
 
     found = runner.readiness()
@@ -432,11 +365,10 @@ def test_readiness_sees_the_key_once_it_is_there(
 ) -> None:
     """키를 주면 **다음에 묻는 쪽이 「준비됨」을 본다** — 캐시가 그것을 막으면 안 된다."""
     runner.tick()
-    signer = admin_key(store)
     info = approved(
-        center, signer, requires={"service_apps": [{"app_id": "erp", "operations": ["issue"], "key_ref": "erp-key"}]}
+        center, requires={"service_apps": [{"app_id": "erp", "operations": ["issue"], "key_ref": "erp-key"}]}
     )
-    deploy(center, signer, info, target=runner.server_runner_id)
+    deploy(center, info, target=runner.server_runner_id)
     runner.tick()
     assert runner.readiness()[0].ready is False
 

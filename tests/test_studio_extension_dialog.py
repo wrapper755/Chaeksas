@@ -10,7 +10,7 @@
 4. **「새로 고침」은 봉투를 다시 검증한다** (C13 E6) — 서명이 맞지 않는 정의는 켜지지 않고,
    받아 온 것이 **설치된 확장 호스트를 건드리지 않는다**(팔레트·시험 실행이 보는 것).
    닿지 못하면 **그 자리에서 말한다** (Studio는 현장이 아니다).
-5. **「정의 파일 열기...」는 `chk-admin`과 같은 함수로 본다** (E1·E3·E5). 등록·서명은 하지 않는다.
+5. **「정의 파일 열기...」는 Center 등록과 같은 함수로 본다** (E1·E3·E5). 등록·서명은 하지 않는다.
 """
 
 from __future__ import annotations
@@ -445,7 +445,7 @@ def test_opening_a_definition_file_shows_the_result(tmp_path: Path, monkeypatch:
     )
     window.open_definition()
     assert "흠이 없습니다" in window.note.text()
-    assert "Admin이 서명해 올립니다" in window.note.text()
+    assert "관리자가 Center 콘솔에서" in window.note.text()
     assert "정의 파일 검사: extension.json" in window.detail.toPlainText()
     # 받아 둔 외부 확장이 생기지 않는다 — 검사일 뿐이다.
     assert window.external == []

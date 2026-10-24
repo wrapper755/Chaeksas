@@ -8,8 +8,9 @@
 ```
  ┌───────────────────────────── 서버 (Linux 주 / Windows 선택) ─────────────────────────────┐
  │  Center API ── Center DB          서비스 앱들                                           │
- │  Center 콘솔 (웹)                  ├─ UI 자동화 앱 ── SQLite   + 관리 콘솔 (웹)          │
- │  - Center API 키 발급              ├─ (다음 서비스 앱)          + 관리 콘솔 (웹)          │
+ │  Center 콘솔 (웹, 관리자 계정)      ├─ UI 자동화 앱 ── SQLite   + 관리 콘솔 (웹)          │
+ │  - 승인·배포 (Center가 서명)       ├─ (다음 서비스 앱)          + 관리 콘솔 (웹)          │
+ │  - Center API 키 발급              │                                                     │
  │                                   └─ 각 앱: 서비스 앱 API 키 발급·검증                    │
  │  서버 실행기 (Center 관리, 서버 BPM 프로세스 동시 실행)                                     │
  │  LLM 게이트웨이 (Ollama 또는 외부 API)                                                   │
@@ -21,7 +22,7 @@
  │ Studio (자율 수행)        │ │ Bot UI (트레이 GUI, 항상 실행)                                         │
  │ Bot UI + Worker 프로세스  │ │  ├─ 실행 ─▶ Bot (BPM 프로세스, 결정 수행) ──REST 127.0.0.1──▶ Worker   │
  │ Tool UI (셀렉터 등록)     │ │  ├─ 시작·감시 ─▶ Worker 프로세스 (서버, 화면 없음) ── 브라우저·데스크톱 │
- │ Admin (서명)             │ │  └─ 「도구」 ─▶ Tool UI (따로 뜸, Worker를 빌려 씀): UI 셀렉터 등록    │
+ │                          │ │  └─ 「도구」 ─▶ Tool UI (따로 뜸, Worker를 빌려 씀): UI 셀렉터 등록    │
  └──────────────────────────┘ └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -41,8 +42,7 @@
 | 실행기 | 프로세스 | 현장 PC | 실행 중인 Bot 하나 (Bot UI의 자식, 동시에 하나만, [ADR-0014](decisions/0014-one-bot-per-pc.md)) | 다른 실행, 대기열 |
 | **Worker** (UI 자동화 확장의 로컬 런타임) | 프로세스 (서버) | 현장 PC, 설계자 PC | 127.0.0.1 REST: UI 세션, 로케이터 사다리 실행, 치유 제안 검증, 셀렉터 등록용 분석·선택·검증 | 화면(GUI), 그래프 쓰기, 업무 판단 |
 | 서버 실행기 | 프로세스 (서버) | 서버 | 실행 위치 「서버」인 BPM 프로세스를 동시 실행(상한 있음), 기다리는 동안 실행 상태 저장·재개, Center API 키로 등록·하트비트, 서비스 앱 키 값 보관(서버 비밀 저장소) | UI 태스크, 웹·데스크톱 AI 태스크, 현장 결재·확인 |
-| Admin | 도구 | 관리자 PC | 서명 키, 패키지 승인·배포 서명 | 서버 운영 |
-| Center | 서버 | 서버 | 패키지 레지스트리, Bot UI 등록·상태, 배포, 작업, 결재 창구, 실행 이력, 리소스 목록, Center API 키, 콘솔 | BPMN 해석, 비밀(서비스 앱 키) 저장, 배포 결정 |
+| Center | 서버 | 서버 | 패키지 레지스트리, **관리자 계정**, 승인·배포 봉투 서명(서버의 키, [ADR-0090](decisions/0090-center-admin-accounts.md)), Bot UI 등록·상태, 배포, 작업, 결재 창구, 실행 이력, 리소스 목록, Center API 키, 콘솔 | BPMN 해석, 비밀(서비스 앱 키) 저장 |
 | 서비스 앱 (확장의 서버 부분) | 서버 | 서버 또는 외부 | BPM 프로세스가 API로 맡기는 일 (C11, 외부 앱은 HTTP 어댑터), 자기 API 키 발급·검증, 관리 콘솔 | 프로세스 흐름, 작업 배분 |
 | UI 자동화 앱 (첫 내장 확장의 서버 부분) | 서버 | 서버 | 화면·요소·로케이터 그래프, 실행 계획, 치유 제안, 승격, 관리 콘솔(셀렉터·모니터링) | 브라우저 실행 |
 
@@ -91,7 +91,7 @@ llm ◀── core, service_kit   (맨 아래 — chaeksas의 아무것도 impor
 
 - `web/`은 Python 코드를 import하지 않는다. HTTP로만 부르고, 타입은 `contracts`의 JSON Schema에서 생성한다. 브라우저는 서버 API를 직접 부르지 않는다 (콘솔 서버가 중계, [ADR-0017](decisions/0017-web-nextjs-design-system.md)).
 - `center`, `extensions/*/service`, `extensions/*/worker`는 `core`를 import하지 않는다.
-- **Studio는 Center를 읽는다** (`studio/services.py` — C7 리소스 목록·Admin 공개키). 쓰지 않는다. 실행기는 Center를 부르지 않는다 ([ADR-0031](decisions/0031-runner-control-file.md)) — Studio는 실행기가 아니라 제 안에서 엔진을 돌리는 쪽이라 다르다.
+- **Studio는 Center를 읽는다** (`studio/services.py` — C7 리소스 목록·믿는 서명 키). 쓰지 않는다. 실행기는 Center를 부르지 않는다 ([ADR-0031](decisions/0031-runner-control-file.md)) — Studio는 실행기가 아니라 제 안에서 엔진을 돌리는 쪽이라 다르다.
 - 서비스 앱끼리 서로 import하지 않는다. 필요하면 HTTP로 부른다.
 - `core`는 Qt를 import하지 않는다. 화면은 `studio`, `bot_ui`의 몫. `worker`는 화면이 없다.
 - 제품 코드는 `spikes/`를 import하지 않는다.

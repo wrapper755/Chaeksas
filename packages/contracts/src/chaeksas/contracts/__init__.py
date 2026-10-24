@@ -11,7 +11,7 @@
 | C2 | `hashing`, `signing` | `canonical_json`·`content_hash`, 서명 봉투 + 검증 규칙 V1~V8 |
 | C3 | `events` | 실행 이벤트 (`kind`는 열린 문자열) |
 | C4 | `bot_ui` | Bot UI 등록·하트비트 |
-| C5 | `center_api` | 패키지·배포·작업 + 배포·작업 검사 |
+| C5 | `center_api`, `accounts` | 패키지·배포·작업 + 배포·작업 검사, 관리자 계정·로그인 세션 |
 | C6 | `approvals` | 결재 요청·답 + 폼으로 답 검증 |
 | C7 | `resources`, `center_keys` | 리소스 목록 + 누락 검사, Center API 키 |
 | C11 | `service_app` | 서비스 앱 공통 (manifest·작업 호출·키·멱등). 뼈대는 `chaeksas.service_kit` |
@@ -35,6 +35,15 @@ from chaeksas.contracts._base import (
     Sha256,
     Timestamp,
     Violation,
+)
+from chaeksas.contracts.accounts import (
+    AccountCreateRequest,
+    AccountInfo,
+    AccountUpdateRequest,
+    LoginRequest,
+    PasswordChangeRequest,
+    SessionInfo,
+    WhoAmI,
 )
 from chaeksas.contracts.approvals import (
     AnswerRequest,
@@ -113,13 +122,17 @@ from chaeksas.contracts.center_api import (
     BotUiKey,
     DependentInfo,
     DeploymentInfo,
+    DeploymentRequest,
+    DeploymentRevokeRequest,
     ErrorBody,
+    ExtensionRevokeRequest,
     JobCreateRequest,
     JobInfo,
     JobTarget,
     ListParams,
     PackageInfo,
     PreflightSummary,
+    RevokeRequest,
     VirtualWorkerBatch,
     VirtualWorkerInfo,
     VirtualWorkerRequest,
@@ -400,6 +413,17 @@ __all__ = [
     "BuildStamp",
     "WorkerState",
     # C5
+    "AccountCreateRequest",
+    "AccountInfo",
+    "AccountUpdateRequest",
+    "LoginRequest",
+    "PasswordChangeRequest",
+    "SessionInfo",
+    "WhoAmI",
+    "DeploymentRequest",
+    "DeploymentRevokeRequest",
+    "ExtensionRevokeRequest",
+    "RevokeRequest",
     "DEPLOYMENT_REFUSAL_STATUS",
     "ENVELOPE_REFUSAL_STATUS",
     "SERVER_RUNNER_AVAILABLE",

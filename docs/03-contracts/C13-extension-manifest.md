@@ -9,7 +9,7 @@
 | 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md), [0042](../decisions/0042-extension-contributed-panels.md), [0077](../decisions/0077-tool-ui.md) |
 | 관련 화면 | BUI-01·03·09·11, TOL-01·02, STU-03·14·15, CON-07, SVC-00 |
 
-> 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`가 **서명 봉투로만** 받고(C2 `extension`·`extension_revoke`, E6), E1·E2·E3을 검사하며, 정의와 봉투를 **그대로** 보관해 실행하는 쪽이 다시 검증할 수 있게 한다. `chk-admin sign-extension`·`revoke-extension`이 봉투 파일을 만들고, CON-07 「확장」 탭에서 올린다. **E4·E8은 외부 확장으로 띄울 수 없다** — `task_types`·`agent_environments`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
+> 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`를 **관리자가 부르면** E1·E2·E3을 검사하고 **Center가 C2 `extension`·`extension_revoke` 봉투에 서명해**(ADR-0090) 정의와 봉투를 **그대로** 보관한다 — 실행하는 쪽이 다시 검증한다(E6). CON-07 「확장」 탭에서 정의 파일 하나를 올린다. **E4·E8은 외부 확장으로 띄울 수 없다** — `task_types`·`agent_environments`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
 >
 > `contributes.resources[].catalog_url`은 Center가 읽어 쌓는다 (M5 조각 10) — 내장 확장의 정의가 Center에 없어 `catalog_url`을 찾을 길이 없던 구멍은 **C11에 카탈로그 칸을 더해** 메웠다 (C11 §모델 연결 아래 `resources`).
 >
@@ -38,24 +38,22 @@
 
 ### 외부 확장
 
-외부 확장은 정의 파일만 있다. **Admin 서명 없이는 쓰이지 않는다.**
+외부 확장은 정의 파일만 있다. **서명된 봉투 없이는 쓰이지 않는다.**
 
-정의가 서비스 앱 키를 어느 주소로 보낼지 정하기 때문에, 배포와 같은 관문(C2)을 둔다. 관리자 토큰만 새어도 Bot의 키·업무 값이 다른 주소로 새는 일을 막기 위해서다.
+정의가 서비스 앱 키를 어느 주소로 보낼지 정하기 때문에, 배포와 같은 관문을 둔다 — **관리자만** 등록하고, 등록하면 Center가 C2 `extension` claim(`{id, version, definition_hash}`)에 서명한다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)). 실행하는 쪽은 봉투로 「Center가 등록한 그 정의인가」를 다시 본다.
 
-1. 운영자가 정의 파일을 Admin에게 넘긴다.
-2. Admin이 `chk-admin sign-extension <정의 파일>`로 C2 `extension` claim(`{id, version, definition_hash}`)에 서명한다.
-3. 정의와 봉투를 함께 Center에 올린다.
+1. 관리자가 CON-07 「확장 추가」에서 정의 파일을 올린다.
+2. Center가 E1·E2·E3·E4·E8을 보고, 지나면 봉투에 서명해 정의와 함께 둔다.
 
 | 경로 | 인증 | 뜻 |
 | --- | --- | --- |
-| `POST /api/v1/resources/extensions` `{definition, envelope}` | 관리자 토큰 + **C2 `extension` 봉투** | 외부 확장 등록 |
+| `POST /api/v1/resources/extensions` `{definition}` | 관리자 (계정·토큰) — Center가 C2 `extension` 봉투에 서명한다 | 외부 확장 등록 |
 | `GET /api/v1/resources?type=extension` | 읽기·관리자 토큰, Studio·Bot UI·서버 실행기 키 (C5 권한표) | 목록 |
 | `GET /api/v1/resources/extensions/{id}` | 같음 | 하나 (외부면 정의와 봉투 포함) |
-| `DELETE /api/v1/resources/extensions[/{id}]` | 관리자 토큰 + C2 `extension_revoke` 봉투 | 해제. **쓰는 Bot이 있어도 막지 않는다** (아래) |
+| `DELETE /api/v1/resources/extensions` `{id, version, reason?}` | 관리자 — Center가 C2 `extension_revoke` 봉투에 서명한다 | 해제. **쓰는 Bot이 있어도 막지 않는다** (아래) |
 
 - **실행하는 쪽은 받은 외부 정의의 봉투를 다시 검증한다** (C2 V1~V3, `definition_hash` 일치). 검증되지 않은 정의는 쓰지 않는다.
-- **해제는 쓰는 Bot이 있어도 막지 않는다.** 서비스 앱 등록 해제(C7 `in_use`)와 다르다 — 그쪽은 운영자의 장부 정리지만, 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이다 (Admin 서명이 필요한 이유도 그것이다). 쓰는 Bot이 있다고 남겨 두면 그게 더 위험하다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07). 철회된 `id`·`version`은 **되살아나지 않는다** — 고치려면 버전을 올린다.
-- 봉투에 `id`·`version`이 들어 있으므로 경로의 `{id}`는 **적어도 되고 안 적어도 된다**. 적었는데 봉투와 다르면 거부한다.
+- **해제는 쓰는 Bot이 있어도 막지 않는다.** 서비스 앱 등록 해제(C7 `in_use`)와 다르다 — 그쪽은 운영자의 장부 정리지만, 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이다 (관리자만 하는 이유도 그것이다). 쓰는 Bot이 있다고 남겨 두면 그게 더 위험하다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07). 철회된 `id`·`version`은 **되살아나지 않는다** — 고치려면 버전을 올린다.
 - 같은 `id`·`version`·같은 내용이면 200, 같은 `id`·`version`인데 내용이 다르면 409 `version_conflict`. 내용을 바꾸려면 버전을 올린다.
 - **이름 공간은 하나다.** 확장 `id`는 서비스 앱 `app_id`와 같은 공간을 쓴다. 이미 있는 확장·서비스 앱과 `id`가 같으면 409 `id_conflict`.
 - BPM 프로세스 매니페스트(C1)의 `requires.extensions[]`는 외부 확장이면 `definition_hash`까지 고정한다. 정의가 바뀌면 Bot을 다시 승인·배포해야 한다.
@@ -333,6 +331,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-24 | 2 | 외부 확장 등록·해제는 **봉투 대신 정의(해제는 `{id, version}`)를 받고 Center가 서명한다**. `DELETE …/extensions/{id}` 꼴을 없앴다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 2 | 기여 지점 `tool_ui.tools`와 `configuration.scope`의 `tool_ui`를 더하고 `bot_ui.utilities`를 걷었다 — 확장의 도구는 Tool UI가 띄우고 런타임은 Bot UI 것을 빌려 쓴다. 열쇠가 모두 선택이라 schema는 그대로이고 `extension_api`는 **1.4**다(`ToolUiTool`·`HOST_TOOL_UI` — 옛 `BotUiUtility`는 같은 모양의 이름으로 남겼다. 큰 판 2.0으로 올리면 `api: ">=1,<2"`인 확장이 모두 꺼진다) | 0077 |
 | 2026-10-18 | 2 | 예약 설정 키에 `service.key_ref`를 더했다 — Studio 편집기가 「BPM 프로세스 설정을 따름」의 키 참조를 안다(STU-13 시험·계획 굳히기). 머리 `service.`는 이미 예약이라 E7이 그대로다. 호스트가 주는 값이라 schema는 그대로 | 0074 |
 | 2026-10-09 | 2 | `bot_ui.panels`(플랫폼 화면의 한 칸)를 더하고 `console.pages[].module`이 어떻게 화면이 되는지 적었다 — `extension_api` **1.3**. 기여 지점 추가라 기존 확장은 영향이 없다 | 0042 |
@@ -352,7 +351,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 검토 반영 내용:
 
-- 외부 정의는 Admin 서명(C2 `extension`)을 받아야 쓰이고, C1에 `definition_hash`로 고정한다.
+- 외부 정의는 서명된 봉투(C2 `extension` — Center가 등록할 때 서명한다)가 있어야 쓰이고, C1에 `definition_hash`로 고정한다.
 - 어댑터 안전 규칙을 더했다: https만, 리다이렉트 금지, 사설망 차단, DNS 고정, 위치별 인코딩, 쿼리 인증 제거, 제한 JSONPath, 읽는 동안 크기 상한.
 - `configuration` 기여 지점(비밀 칸은 OS 비밀 저장소)을 더했다.
 - 주소 출처를 하나로 했다.

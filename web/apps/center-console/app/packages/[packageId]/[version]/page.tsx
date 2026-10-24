@@ -6,6 +6,7 @@ import type { DependentInfo } from "@chaeksas/api-types/c5-dependent-info";
 import type { ProvidedProcess } from "@chaeksas/api-types/c1-manifest";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
+import { PackageActions } from "@/components/PackageActions";
 import { DeletePackage } from "../../tools";
 import { KIND_LABEL, STATUS_LABEL, packageHref, time } from "../../page";
 
@@ -163,8 +164,13 @@ export default async function PackagePage({
               <dd>{time(info.uploaded_at)}</dd>
               <dt className="text-text-muted">올린 이</dt>
               <dd>{info.uploaded_by}</dd>
-              <dt className="text-text-muted">승인 서명</dt>
-              <dd>{info.signed_by ? `${info.signed_by} · ${time(info.signed_at)}` : "없음"}</dd>
+              <dt className="text-text-muted">승인</dt>
+              <dd>
+                {/* 사람이 서명하던 때의 승인에는 계정이 없다 — 서명 키만 남아 있다 (ADR-0090). */}
+                {info.signed_by
+                  ? `${info.approved_by ?? `서명 키 ${info.signed_by}`} · ${time(info.signed_at)}`
+                  : "아직"}
+              </dd>
               <dt className="text-text-muted">내려받기</dt>
               <dd>
                 {info.download_count
@@ -236,9 +242,7 @@ export default async function PackagePage({
           {found.mode === "admin" ? (
             <section className="flex flex-col gap-3">
               <h2 className="text-h2 font-semibold">관리</h2>
-              <p className="text-body-sm text-text-muted">
-                승인·철회는 콘솔에서 하지 않습니다 — 서명이 필요해서 Admin이 합니다 (CON-00).
-              </p>
+              <PackageActions packageId={info.id} version={info.version} status={info.status} />
               <DeletePackage packageId={info.id} version={info.version} />
             </section>
           ) : null}

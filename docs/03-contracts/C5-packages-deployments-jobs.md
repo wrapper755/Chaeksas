@@ -4,31 +4,31 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | Studio·Admin·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
-| 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py` (import `chaeksas.contracts.center_api`, [ADR-0019](../decisions/0019-package-names.md)) |
-| JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md) |
-| 관련 화면 | STU-01(올리기), CON-02·05·06·11·12, ADM |
+| 보내는 쪽 → 받는 쪽 | Studio·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
+| 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py`, `…/accounts.py` (import `chaeksas.contracts.center_api`·`chaeksas.contracts.accounts`, [ADR-0019](../decisions/0019-package-names.md)) |
+| JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-deployment-request.json`](../../packages/contracts/schemas/c5-deployment-request.json) · [`c5-login-request.json`](../../packages/contracts/schemas/c5-login-request.json) · [`c5-session-info.json`](../../packages/contracts/schemas/c5-session-info.json) · [`c5-account-info.json`](../../packages/contracts/schemas/c5-account-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md) |
+| 관련 화면 | STU-01(올리기), CON-00(로그인)·02·05·06·11·12·14·15 |
 
 ## 목적
 
 Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 
 1. 패키지를 올린다 (후보).
-2. 승인 서명을 붙인다.
-3. 배포 서명으로 실행할 대상에 배치한다.
+2. 관리자가 승인한다 — Center가 승인 봉투에 서명한다 (C2).
+3. 관리자가 실행할 대상에 배포한다 — Center가 배포 봉투에 서명한다.
 4. 작업 지시로 실행시킨다.
 
 실행하는 쪽(Bot UI·서버 실행기)은 이 API로 패키지를 내려받는다. 배포와 작업은 하트비트 응답으로 받는다 (C4·C12).
 
-> 상태: **돈다 — 남은 기능이 없다.** 패키지 승인·철회·지원 종료(`PUT …/status`), Admin 키, 배포(`POST/DELETE/GET /deployments`)가 돈다 — 하트비트가 활성 배포 봉투와 Admin 키를 내려 주고 Bot UI가 설치한다 (C2 V1~V7). **작업 지시(`/jobs`)도 돈다** — 만들기·목록·하나·취소와 하트비트의 `jobs`·`cancel_jobs`·`job_acks`, 맞추기 규칙(`bot_ui_lost`)까지. **참조·삭제(`GET …/dependents`·`DELETE /packages/…`)도 돈다** — CON-06이 읽고 지운다. 콘솔 화면(CON-05·CON-06)도 돈다. 서버 실행기 대상은 422 `server_runner_not_available`이다 (M7).
+> 상태: **돈다 — 남은 기능이 없다.** **관리자 계정·로그인 세션**(ADR-0090), 패키지 승인·철회·지원 종료(`PUT …/status`), 배포(`POST/DELETE/GET /deployments`)가 돈다 — 승인·배포 봉투는 Center가 서명하고, 하트비트가 활성 배포 봉투와 믿는 키(`admin_keys`)를 내려 주고 Bot UI가 설치한다 (C2 V1~V7). **작업 지시(`/jobs`)도 돈다** — 만들기·목록·하나·취소와 하트비트의 `jobs`·`cancel_jobs`·`job_acks`, 맞추기 규칙(`bot_ui_lost`)까지. **참조·삭제(`GET …/dependents`·`DELETE /packages/…`)도 돈다** — CON-06이 읽고 지운다. 콘솔 화면(CON-05·CON-06)도 돈다. 서버 실행기 대상은 422 `server_runner_not_available`이다 (M7).
 
 ## 전송 공통
 
 - 기본 경로는 `/api/v1`. 본문은 JSON이고, 업로드만 multipart다.
 - 목록 요청은 `limit`(기본 100, 최대 1000)과 `offset`을 쓴다. 시각은 시간대를 포함한 ISO 8601이다.
 - 오류 본문: `{"code": "...", "message": "...", "detail": {...}}` (C11과 같은 형식).
-- **행위자:** `requested_by`, `answered_by`, `uploaded_by`는 본문에서 받지 않는다. 키로 부르면 키 이름으로 채운다. 콘솔에서 부르면 콘솔 서버(BFF)가 로그인 세션의 사용자 이름을 `X-CHK-Actor` 헤더로 실어 보낸다. 이 헤더는 관리자·읽기 토큰으로 부를 때만 믿는다.
+- **행위자:** `requested_by`, `answered_by`, `uploaded_by`, `approved_by`, `deployed_by`, `revoked_by`는 본문에서 받지 않는다. **세션으로 부르면 계정 아이디**다(로그인이 정한 신원이라 `X-CHK-Actor`를 듣지 않는다, ADR-0090). 키로 부르면 키 이름이다. 관리자·읽기 토큰(자동화)으로 부르면 `X-CHK-Actor` 헤더의 이름이고, 없으면 「관리자 토큰」·「보기 전용」이다 — 이 헤더는 **토큰으로 부를 때만** 믿는다.
   - **사람 대신 부르는 키는 `X-CHK-On-Behalf-Of`를 싣는다** ([ADR-0081](../decisions/0081-answering-on-behalf.md)). 대리 답용 키는 결재에 **반드시**(C6), 연동용 키는 `POST /jobs`·`POST /messages`에 **실어도 된다**. 작업에서는 **`on_behalf_of`로 적기만** 하고 `requested_by`는 그대로 키 이름이다 — `requested_by`는 권한의 주인이고 Bot UI가 그 앞머리 `server_bot:`로 위임 작업을 가르므로, 바깥에서 온 글을 그 칸에 넣지 않는다. 대조할 담당자가 없으니 **주장일 뿐**이고 권한을 바꾸지 않는다. 비었거나 200자를 넘거나 예약 앞머리로 시작하면 422 `on_behalf_invalid`.
   - **값은 UTF-8을 퍼센트 인코딩해서** 넣는다 (`운영자 김` → `%EC%9A%B4%EC%98%81%EC%9E%90%20%EA%B9%80`). HTTP 헤더 값에는 ASCII 밖의 글자를 넣을 수 없어서(보내는 쪽 HTTP 라이브러리가 거부한다), 한글 이름을 그대로 실으면 요청 자체가 나가지 않는다. 받는 쪽은 디코딩하고, 디코딩이 실패하면 받은 문자열을 그대로 쓴다.
 
@@ -36,8 +36,10 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 
 | 인증 수단 | 누가 쓰나 | 어디까지 쓸 수 있나 |
 | --- | --- | --- |
-| 읽기 토큰 | 콘솔 「보기 전용」 | **GET만** |
-| 관리자 토큰 | 콘솔 「관리자」 모드, Admin 명령 | 쓰기 전부. 단 서명이 필요한 동작은 봉투도 함께 (C2) |
+| 세션 토큰 — 보기 전용 계정 | 콘솔 | **GET만** (계정 목록은 빼고) |
+| 세션 토큰 — 관리자 계정 | 콘솔 | 쓰기 전부. 승인·배포·외부 확장은 Center가 서명한다 (C2) |
+| 읽기 토큰 | 자동화 (선택 — 비우면 닫힌다) | 보기 전용 계정과 같다 |
+| 관리자 토큰 | 자동화 (선택 — 비우면 닫힌다) | 관리자 계정과 같다. 자기 비밀번호 바꾸기만 없다 (계정이 없다) |
 | Center API 키 — Studio용 | Studio | 패키지 업로드, 패키지·리소스 읽기 |
 | Center API 키 — Bot UI용 / 서버 실행기용 | 실행하는 쪽 | **자기에게 배포된** BPM 프로세스 패키지만 내려받기 (공유 BPM 프로세스는 그 안 `libs/`에 들어 있다) |
 | Center API 키 — 연동용 (신규, CON-11) | 외부 시스템 | 작업 만들기(`POST /jobs`)와 자기가 만든 작업 읽기·취소, 메시지 넣기(`POST /messages` — C12 §메시지) |
@@ -45,18 +47,24 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 
 ### 엔드포인트별 권한
 
-| 엔드포인트 | 읽기 토큰 | 관리자 토큰 | Studio 키 | Bot UI·서버 실행기 키 | 연동용 키 |
+아래 표의 「읽기」는 보기 전용 계정·읽기 토큰, 「관리자」는 관리자 계정·관리자 토큰이다.
+
+| 엔드포인트 | 읽기 | 관리자 | Studio 키 | Bot UI·서버 실행기 키 | 연동용 키 |
 | --- | --- | --- | --- | --- | --- |
 | `GET /packages…` (목록·정보) | ✓ | ✓ | ✓ | — | — |
 | `GET /packages/{id}/{v}` (내려받기) | — | ✓ | ✓ | 자기 배포분만 | — |
 | `POST /packages` | — | ✓ | ✓ | — | — |
-| `PUT …/signature`, `POST …/revoke` (봉투) | — | ✓ | — | — | — |
+| `POST /auth/login` | 인증 없음 | | | | |
+| `POST /auth/logout`, `GET /auth/me` | ✓ | ✓ | — | — | — |
+| `PUT /auth/password` (자기 비밀번호) | 세션만 | 세션만 | — | — | — |
+| `GET/POST /accounts`, `PUT /accounts/{username}` | — | ✓ | — | — | — |
+| `PUT …/signature`, `POST …/revoke` (Center가 서명) | — | ✓ | — | — | — |
 | `PUT …/status` (지원 종료), `DELETE /packages/…` | — | ✓ | — | — | — |
-| `POST/DELETE /deployments` (봉투), `POST/DELETE /admin-keys` (봉투) | — | ✓ | — | — | — |
+| `POST/DELETE /deployments` (Center가 서명) | — | ✓ | — | — | — |
 | `GET /deployments`, `GET /admin-keys` | ✓ | ✓ | — | — | — |
 | `GET /resources…` (C7·C13, 확장 정의 포함) | ✓ | ✓ | ✓ | ✓ | — |
 | `POST/PUT/DELETE /resources/service-apps…`, `POST /resources/refresh` | — | ✓ | — | — | — |
-| `POST/DELETE /resources/extensions` (C2 `extension` 봉투) | — | ✓ | — | — | — |
+| `POST/DELETE /resources/extensions` (Center가 C2 `extension` 봉투에 서명) | — | ✓ | — | — | — |
 | `GET /server-runners` | ✓ | ✓ | — | — | — |
 | `POST /server-runners/{id}/pause·resume·mark-lost` (C12) | — | ✓ | — | — | — |
 | `GET /bot-uis…` (CON-03), `POST /bot-uis/{id}/disable·enable` | GET만 ✓ | ✓ | — | — | — |
@@ -67,6 +75,31 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /virtual-workers…` (CON-13) | ✓ | ✓ | — | — | — (대리 답용 키는 감독하는 것만) |
 | `POST/PUT/DELETE /virtual-workers…` | — | ✓ | — | — | — |
 
+## 관리자 계정 ([ADR-0090](../decisions/0090-center-admin-accounts.md))
+
+콘솔은 **계정으로만** 들어온다. Center가 비밀번호를 확인하고 **세션 토큰**을 주면 콘솔 서버(BFF)가 그것을 들고 부른다 — 브라우저는 모른다 (ADR-0017).
+
+| 메서드·경로 | 뜻 | 성공 |
+| --- | --- | --- |
+| `POST /auth/login` `{username, password}` | 로그인. **토큰은 이 응답에만** 실린다 | 200 SessionInfo `{token, username, role, expires_at}` |
+| `POST /auth/logout` | 그 세션을 지운다 | 204 |
+| `GET /auth/me` | 지금 부르는 쪽 `{actor, role, account?}` | 200 WhoAmI |
+| `PUT /auth/password` `{current_password, new_password}` | 자기 비밀번호. 그 계정의 세션이 **모두** 끝난다 | 200 AccountInfo |
+| `GET /accounts` | 계정 목록 (비밀번호 해시는 나가지 않는다) | 200 AccountInfo[] |
+| `POST /accounts` `{username, password, role}` | 만들기 | 201 AccountInfo |
+| `PUT /accounts/{username}` `{role?, disabled?, password?}` | 역할 바꾸기·멈추기·다시 쓰기·비밀번호 새로 정하기. 바뀌면 그 계정의 세션이 **모두** 끝난다 | 200 AccountInfo |
+
+- **역할은 둘**이다 — `admin`(관리자)·`viewer`(보기 전용).
+- **아이디**는 영문 소문자·숫자·`.`·`_`·`-` 3~32자(영문 소문자나 숫자로 시작) — 아니면 422 `username_invalid`. 이미 있으면 409 `account_exists`.
+- **비밀번호**는 12자 이상이고 영문과 숫자를 모두 넣는다 — 아니면 422 `password_weak`. Center는 `scrypt` 해시만 둔다.
+- **계정은 지우지 않고 멈춘다** (`disabled`). 기록에 남은 이름이 가리킬 곳이 사라지지 않게 한다. 멈춘 계정은 로그인이 403 `account_disabled`이고 세션도 곧바로 끝난다.
+- **마지막 남은 관리자는 멈추거나 보기 전용으로 바꿀 수 없다** — 409 `last_admin`.
+- 로그인이 틀리면 401 `login_failed` 하나다(「아이디가 없다」와 「비밀번호가 틀렸다」를 가르지 않는다). **같은 아이디로 5번 연달아** 틀리면 5분 동안 429 `login_locked`다.
+- 세션은 **12시간** 뒤 끝난다 — 그 뒤에 부르면 401 `session_expired`. 토큰은 `chk_ses_`로 시작하고 Center는 해시만 둔다.
+- **첫 관리자**는 Center 설정(`CHK_CENTER__FIRST_ADMIN__*`, `docs/04-setup.md` §5)이 계정이 하나도 없을 때 한 번 만든다.
+
+AccountInfo 필드: `username`, `role`, `state`(`active` / `disabled`), `created_at`, `created_by`, `password_changed_at`, `disabled_at`?, `last_login_at`?.
+
 ## 패키지
 
 | 메서드·경로 | 뜻 | 성공 |
@@ -75,18 +108,18 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /packages?kind=&status=&id=` | 목록 | 200 PackageInfo[] |
 | `GET /packages/{id}/{version}/info` | 정보 (매니페스트, 상태, 사전 점검 요약, 누락 리소스) | 200 |
 | `GET /packages/{id}/{version}` | 내려받기. 승인된 패키지면 zip에 `SIGNATURE`를 넣어 준다 (C2). 헤더 `X-Content-Hash` | 200 zip / 410 철회됨 |
-| `PUT /packages/{id}/{version}/signature` | 승인 봉투(C2 `package`). 상태가 `approved`가 된다 | 200 |
-| `POST /packages/{id}/{version}/revoke` | 승인 철회 봉투(C2 `package_revoke`). 상태가 `revoked`가 되고 배포가 모두 무효가 된다 | 200 |
+| `PUT /packages/{id}/{version}/signature` (본문 없음) | 승인. **Center가 C2 `package` 봉투에 서명한다**. 상태가 `approved`가 되고 `approved_by`가 남는다. 이미 승인됐으면 그대로 200, 철회된 것은 409 `package_revoked` | 200 |
+| `POST /packages/{id}/{version}/revoke` `{reason?}` | 승인 철회. Center가 C2 `package_revoke` 봉투에 서명한다. 상태가 `revoked`가 되고 배포가 모두 무효가 된다. **되살릴 수 없다** | 200 |
 | `PUT /packages/{id}/{version}/status` `{status: "deprecated"}` | 지원 종료 표시. 새 배포를 막는다. 서명이 필요 없다 (실행을 허용하는 쪽이 아니라 막는 쪽이라서) | 200 |
 | `GET /packages/{id}/{version}/dependents` | 이 패키지를 `requires`로 쓰는 패키지 | 200 DependentInfo[] |
 | `DELETE /packages/{id}/{version}` | 삭제. 배포나 다른 패키지가 참조하면 409 `in_use` | 204 |
 
 지원 종료(`PUT …/status`) 규칙:
 
-- **받는 값은 `deprecated` 하나뿐이다.** 되돌리는 것은 「다시 허용」이라 서명이 필요하고, 그 길은 승인(`PUT …/signature`)이다. 다른 값을 주면 422 `input_invalid`.
+- **받는 값은 `deprecated` 하나뿐이다.** 되돌리는 것은 「다시 허용」이고 그 길은 승인(`PUT …/signature`)이다. 다른 값을 주면 422 `input_invalid`.
 - **`revoked`는 끝이다** — 철회된 것은 되살아나지 않고 더 막을 것도 없다 (409 `package_revoked`).
 - 어느 상태에서든 지원 종료로 갈 수 있고(`candidate`도 — 새 배포를 막는 뜻이다), **두 번 해도 같은 답**이다.
-- **이미 배포된 것은 그대로 돈다** — 내려받기도 그대로 된다 (철회면 410이다). 돌고 있는 것을 세우는 것은 배포 철회이고 그쪽은 서명이 필요하다.
+- **이미 배포된 것은 그대로 돈다** — 내려받기도 그대로 된다 (철회면 410이다). 돌고 있는 것을 세우는 것은 배포 철회다.
 
 PackageInfo 필드:
 
@@ -97,7 +130,8 @@ PackageInfo 필드:
 | `status` | `candidate` / `approved` / `deprecated` / `revoked` (열린 문자열) |
 | `content_hash` | |
 | `uploaded_by`, `uploaded_at` | |
-| `signed_by`?, `signed_at`? | 승인 서명 |
+| `signed_by`?, `signed_at`? | 승인 봉투의 서명 키 id·시각 (지금은 늘 Center 키다) |
+| `approved_by`? | 승인한 사람 — 계정 아이디 (ADR-0090). 사람이 서명하던 때의 승인에는 없다 |
 | `preflight` | `{warnings, blocked}` |
 | `manifest` | C1 매니페스트 |
 | `missing_resources` | `[{type: extension \| service_app \| operation \| resource, id, reason}]`. 읽을 때 C7과 대조해 계산한다 (확장 기여 자원은 `resource`이고 id가 `<종류>:<id>`다 — 예: `ui_page:erp.order.form`) |
@@ -137,15 +171,16 @@ DependentInfo 필드:
 
 | 메서드·경로 | 뜻 | 성공 |
 | --- | --- | --- |
-| `POST /deployments` (본문 = C2 `deployment` 봉투) | 배포. 아래 항목을 검사한다 | 201 / 200 같은 봉투 재전송 |
-| `DELETE /deployments/{id}` (본문 = C2 `revoke` 봉투) | 철회. 행은 지우지 않고 `revoked_at`을 찍는다 | 200 |
+| `POST /deployments` `{target, bpm_process_id, version, not_before?, expires_at?, max_concurrency?}` (DeploymentRequest) | 배포. **Center가 `deployment_id`(`dep_<hex8>`)와 `content_hash`(그 패키지의 것)를 채워 C2 `deployment` 봉투에 서명하고** 아래 항목을 검사한다. 누를 때마다 새 배포다 | 200 DeploymentInfo |
+| `DELETE /deployments` `{deployment_id, reason?}` | 철회. Center가 C2 `revoke` 봉투에 서명한다. 행은 지우지 않고 `revoked_at`을 찍는다. **되살릴 수 없다** | 200 |
 | `GET /deployments?target_type=&target_id=&bpm_process_id=&active=` | 목록 | 200 DeploymentInfo[] |
 
 배포할 때 Center가 검사하는 것 — **규칙은 계약의 `validate_deployment()` 하나이고 Center가 그것을 부른다** ([ADR-0047](../decisions/0047-one-deployment-gate.md)). 상태 코드는 같은 자리의 `DEPLOYMENT_REFUSAL_STATUS` 표가 정한다:
 
 | 검사 | 거절 | 상태 |
 | --- | --- | --- |
-| 서명 (C2 V1~V5a). `not_before`가 미래인 예약 배포도 받는다 | C2의 사유 코드 | 403 |
+| 그 패키지가 있다 | `not_found` | 404 |
+| 지은 봉투의 서명·시간 (C2 V1~V5a — 지난 `expires_at`이면 `expired`). `not_before`가 미래인 예약 배포도 받는다 | C2의 사유 코드 | 403 |
 | 패키지가 `approved`다 | `not_approved` | 409 |
 | 지원 종료가 아니다 — **따로 알린다**, 승인은 되어 있고 새 배포만 막힌 것이다 | `deprecated` | 409 |
 | 봉투의 해시가 패키지와 같다 | `hash_mismatch` | 409 |
@@ -157,12 +192,12 @@ DependentInfo 필드:
 - **대상이 틀린 두 가지는 코드가 하나다** (`wrong_target`) — C2 V6이 같은 조건에 쓰는 이름이고, 둘 다 받아 두면 **모든 PC가 V6으로 거부할** 봉투라 운영자가 할 일도 같다(대상을 하나 제대로 적는다). `target_mismatch`는 **작업 지시 쪽 코드**다 (모르는 대상 종류, 422).
 - **「대상이 틀렸다」가 「대상이 없다」를 이긴다** — PC 배포에 `"*"`가 오면 그 id도 등록되어 있지 않지만 답은 `wrong_target`이다 (운영자가 할 일은 「대상을 하나 적는다」이고, 「`*`라는 PC가 없다」는 엉뚱한 말이다). 그래서 등록 검사는 **대상 검사 뒤에** 온다.
 - **`target_not_found`는 `not_found`와 다른 코드다** — 한 요청에서 없을 수 있는 것이 둘(패키지·PC)이라 뭉치면 운영자가 어느 쪽을 고칠지 모른다. **작업 지시도 같은 코드로 답한다** — 같은 조건에 두 이름을 두는 것이 ADR-0047이 고친 흠이다.
-- Center가 자기 저장소를 봐야 하는 **읽기**는 계약이 하지 않는다. 읽어서 **넘기는** 것은 계약이 판정한다 (지금 `package`와 대상 등록 여부가 그렇다, [ADR-0047](../decisions/0047-one-deployment-gate.md) §다시 볼 조건 ②). 계약이 판정하지 않고 Center에 남은 것: 그 패키지가 있나(404 `not_found`), 같은 `deployment_id`의 충돌(409 `deployment_conflict`·`deployment_revoked`), 그리고 배포를 막는 리소스 누락과 C1 R8(422, C7 §누락 검사).
-- **등록되지 않은 PC에 미리 배포해 두는 길은 없다** — `bot_ui_id`는 Center가 **첫 등록에서 만든다**(C4 「키 묶기」). 등록 전에는 봉투에 적을 id가 없으므로, 등록되지 않은 id가 오면 오타이거나 낡은 id다. 행은 지워지지 않으니(「PC 묶음 풀기」는 키만 푼다) **한번 통과한 배포의 대상은 사라지지 않는다**.
+- Center가 자기 저장소를 봐야 하는 **읽기**는 계약이 하지 않는다. 읽어서 **넘기는** 것은 계약이 판정한다 (지금 `package`와 대상 등록 여부가 그렇다, [ADR-0047](../decisions/0047-one-deployment-gate.md) §다시 볼 조건 ②). 계약이 판정하지 않고 Center에 남은 것: 그 패키지가 있나(404 `not_found`), 그리고 배포를 막는 리소스 누락과 C1 R8(422, C7 §누락 검사).
+- **등록되지 않은 PC에 미리 배포해 두는 길은 없다** — `bot_ui_id`는 Center가 **첫 등록에서 만든다**(C4 「키 묶기」). 등록 전에는 대상에 적을 id가 없으므로, 등록되지 않은 id가 오면 오타이거나 낡은 id다. 행은 지워지지 않으니(「PC 묶음 풀기」는 키만 푼다) **한번 통과한 배포의 대상은 사라지지 않는다**.
 
-DeploymentInfo 필드: `deployment_id`, `target{type,id}`, `bpm_process_id`, `version`, `content_hash`, `max_concurrency`?, `signed_by`, `signed_at`, `not_before`?, `expires_at`?, `revoked_at`?, `last_result`?. `last_result`는 C4 `deployment_results`의 마지막 값이다.
+DeploymentInfo 필드: `deployment_id`, `target{type,id}`, `bpm_process_id`, `version`, `content_hash`, `max_concurrency`?, `signed_by`, `signed_at`, `not_before`?, `expires_at`?, `revoked_at`?, `last_result`?, `deployed_by`?, `revoked_by`?. `last_result`는 C4 `deployment_results`의 마지막 값이다. `deployed_by`·`revoked_by`는 **누른 계정**이다 (ADR-0090 — 사람이 서명하던 때의 배포에는 없다).
 
-- `signed_by`·`signed_at`·`not_before`·`expires_at`·`max_concurrency`는 **봉투에서 읽는다** (Center가 따로 짓지 않는다). `signed_by`는 서명한 Admin 키의 `key_id`다.
+- `signed_by`·`signed_at`·`not_before`·`expires_at`·`max_concurrency`는 **봉투에서 읽는다** (Center가 따로 짓지 않는다). `signed_by`는 서명한 키의 `key_id`다 (지금은 늘 Center 키라 사람을 말하지 않는다 — 사람은 `deployed_by`다).
 - `revoked_at`은 철회 봉투의 `revoked_at`이다. 행은 지우지 않으므로 철회된 배포도 목록에 남는다 (`active=true`로 거른다).
 
 - **M6까지:** `target.type=server_runner` 배포는 422 `server_runner_not_available` (서버 실행은 M7부터, ADR-0016). 작업 지시도 같은 코드로 막고 **스위치는 한 자리다** (`SERVER_RUNNER_AVAILABLE` — 한쪽만 켜면 「작업은 만들어지는데 배포가 없다」가 된다).
@@ -322,16 +357,19 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 상태 코드 | `code` | 언제 |
 | --- | --- | --- |
-| 400 | `bad_envelope` | 봉투 형식 오류 |
+| 401 | `login_failed` / `session_expired` | 아이디·비밀번호가 맞지 않음 / 로그인이 끝남 (다시 로그인한다) |
+| 403 | `account_disabled` / `admin_only` / `password_wrong` | 멈춘 계정 / 관리자만 / 자기 비밀번호 바꾸기의 지금 비밀번호가 틀림 |
+| 429 | `login_locked` | 같은 아이디로 5번 연달아 틀림 — 5분 뒤 |
+| 422 | `username_invalid` / `password_weak` / `role_unknown` | 계정 규칙 |
+| 409 | `account_exists` / `last_admin` | 같은 아이디 / 마지막 관리자를 멈추거나 내리려 함 |
 | 401 / 403 | `key_invalid` / `forbidden` | 인증 실패, 권한 밖 (예: Bot UI가 자기에게 배포되지 않은 패키지를 요청) |
 | 404 | `not_found` | |
 | 404 | `target_not_found` | 배포·작업 지시의 대상 PC가 **등록되어 있지 않다** (ADR-0049). `not_found`(패키지가 없다)와 **가른다** — 한 요청에서 없을 수 있는 것이 둘이라 뭉치면 어느 쪽을 고칠지 모른다 |
 | 409 | `version_conflict` | 같은 버전인데 내용이 다름 |
 | 409 | `in_use` | 참조 중인 패키지 삭제 |
 | 409 | `already_started` / `not_cancellable` | 취소할 수 없는 작업 |
-| 409 | `deployment_conflict` / `deployment_revoked` | C2 |
 | 409 | `not_approved` / `deprecated` / `hash_mismatch` / `wrong_target` | 배포가 가리키는 **패키지의 상태**가 요청과 어긋난다. 「본문이 잘못됐다」가 아니라 **상태 충돌**이라 409다 (`deployment_conflict`과 같은 결). 지원 종료는 `not_approved`로 뭉개지 않는다 — 승인은 되어 있고 새 배포만 막힌 것이다. `wrong_target`은 **대상이 틀린 것 전부**다 — `target.type` ↔ `run_location` 어긋남과 **PC 배포의 `"*"`** (ADR-0046·0047) |
-| 409 | `package_revoked` | 철회된 패키지를 지원 종료로 바꾸려 함 (끝난 일이다) |
+| 409 | `package_revoked` | 철회된 패키지를 승인하거나 지원 종료로 바꾸려 함 (끝난 일이다) |
 | 409 | `idempotency_conflict` | 같은 `idempotency_key`에 다른 본문 |
 | 410 | `revoked` | 철회된 패키지 내려받기 |
 | 413 | `too_large` | 패키지 50 MB 초과 |
@@ -351,6 +389,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-24 | 1 | **관리자 계정과 로그인 세션**을 더했다(`/auth/*`·`/accounts`). 승인·승인 철회·배포·배포 철회는 **봉투 대신 요청을 받고 Center가 서명한다** — 본문이 바뀌었다(`DeploymentRequest`·`{deployment_id, reason}`·`{reason}`). `approved_by`·`deployed_by`·`revoked_by`를 더했다. `POST/DELETE /admin-keys`를 없앴다. 관리자·읽기 토큰은 자동화용으로 남는다. 배포 철회 경로를 코드대로 `DELETE /deployments`(본문에 id)로 고쳐 적었다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 1 | **가상 직원**(§가상 직원, CON-13) — 등록·읽기·관문(B16, 묶을 때와 배포할 때)·`?virtual_worker=` 이어 붙이기. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0085](../decisions/0085-virtual-worker-resource.md) |
 | 2026-10-20 | 1 | **사람 대신 부르는 길** — `X-CHK-On-Behalf-Of`, `JobInfo.on_behalf_of`(주장, `requested_by`는 그대로), 대리 답용 키 줄, 오류 `on_behalf_invalid` | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-17 | 1 | **`download_count`·`last_downloaded_at`을 더했다** — 내어 준 횟수와 마지막 때(CON-06 「내려받은 횟수」). 셀 열을 더할 수단이 없어 화면에서 뺐던 것을 저장소 옮기기 단계(4판)로 되살렸다. 선택 칸이라 옛 응답을 읽는 쪽은 영향이 없다 | [0065](../decisions/0065-center-schema-migrations.md) |

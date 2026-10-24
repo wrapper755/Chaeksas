@@ -154,7 +154,7 @@ def deploy_row(client: TestClient, *, deployment_id: str, bot_ui: str) -> None:
     """살아 있는 PC 배포 한 줄.
 
     **서명을 거치지 않고 행을 직접 넣는다** — 이 묶음이 보는 것은 「재료가 콘솔에 오는가」이고,
-    서명 관문(`*` 거절까지)은 `tests/test_m5_deploy.py`가 진짜 `chk-admin`으로 본다.
+    서명 관문(`*` 거절까지)은 `tests/test_m5_deploy.py`가 진짜 배포 API로 본다.
     """
     store = client.app.state.store  # type: ignore[attr-defined]
     envelope = {

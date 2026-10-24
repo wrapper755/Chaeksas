@@ -666,6 +666,18 @@
   "additionalProperties": true,
   "description": "`GET /packages`의 한 줄, `POST /packages`의 응답.",
   "properties": {
+    "approved_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved By"
+    },
     "content_hash": {
       "pattern": "^sha256:[0-9a-f]{64}$",
       "title": "Content Hash",

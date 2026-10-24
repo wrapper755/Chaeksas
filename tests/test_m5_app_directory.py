@@ -1,6 +1,6 @@
 """실행하는 쪽의 연결 — 받아서 **다시 검증하고** 꽂는다 (C13 「전송」, M5 조각 12).
 
-진짜 Center를 in-process로 띄우고, 진짜 Admin 키로 서명하고, **진짜 외부 앱**을 127.0.0.1에
+진짜 Center를 in-process로 띄우고, **Center의 서명 키**로 서명하고(ADR-0090), **진짜 외부 앱**을 127.0.0.1에
 띄워 Bot UI → 실행기 → 어댑터까지 한 바퀴를 본다.
 
 거듭 보는 것 다섯.
@@ -22,11 +22,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from center_admin import register_extension
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, Unreachable
-from chaeksas.center.api.signing import bootstrap_key
+from chaeksas.center import signer as center_signer
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings
 from chaeksas.center.storage import Store
@@ -46,18 +47,11 @@ from chaeksas.core.services import OpCall
 
 TOKEN = "t-admin"
 ADMIN = {"Authorization": f"Bearer {TOKEN}"}
-PASS = "열쇠말"
 AT = "2026-10-08T09:00:00+09:00"
 APP = "ext-ocr"
 
 
 # ─────────────────────────── 거리 ───────────────────────────
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: Any, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 @pytest.fixture
@@ -81,13 +75,15 @@ def client(tmp_path: Path, store: Store) -> Iterator[TestClient]:
 
 @pytest.fixture
 def key(store: Store) -> Any:
-    made = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=made.public_bytes(), label="첫 키")
-    return made
+    """Center가 서명하는 키 — 공개키는 하트비트의 `admin_keys`로 현장에 간다 (ADR-0090 §5).
+
+    정의를 손대거나 봉투를 따로 지어 보는 시험이 이 키로 직접 서명한다.
+    """
+    return center_signer.active(store)
 
 
 def public_keys(client: TestClient) -> list[Any]:
-    """Center가 가진 Admin 공개키 — Bot UI는 하트비트로 받는다 (C4 `admin_keys`)."""
+    """Center가 믿는 공개키(Center 키) — Bot UI는 하트비트로 받는다 (C4 `admin_keys`)."""
     from chaeksas.contracts.signing import AdminKey
 
     found = client.get("/api/v1/admin-keys", headers=ADMIN).json()
@@ -144,15 +140,12 @@ def envelope_for(key: Any, found: dict[str, Any], **over: Any) -> Any:
         "definition_hash": definition_hash(found),
     }
     claim.update(over)
-    return sign(claim, keystore.load(key, passphrase=PASS), signed_at=AT)
+    return sign(claim, key, signed_at=AT)
 
 
-def register(client: TestClient, found: dict[str, Any], envelope: Any) -> Any:
-    return client.post(
-        "/api/v1/resources/extensions",
-        json={"definition": found, "envelope": envelope.to_json_dict()},
-        headers=ADMIN,
-    )
+def register(client: TestClient, found: dict[str, Any]) -> Any:
+    """관리자가 정의를 올린다 — 봉투는 Center가 짓는다 (ADR-0090)."""
+    return register_extension(client, found, expect=None)
 
 
 class Ocr(BaseHTTPRequestHandler):
@@ -272,7 +265,7 @@ def test_an_unknown_key_is_refused(ocr: tuple[int, type[Ocr]]) -> None:
     """Center에 등록되지 않은 키로 서명한 정의는 쓰지 않는다 (V2)."""
     port, _ = ocr
     found = definition(port)
-    stranger = keystore.create(label="남의 키")
+    stranger = Ed25519PrivateKey.generate()
     made = build(
         to_json_dict(
             addresses={}, keys=[],
@@ -392,11 +385,11 @@ def test_a_service_app_goes_to_c11_not_the_adapter(tmp_path: Path) -> None:
 
 
 def test_bot_ui_fetches_and_writes_what_the_bot_uses(
-    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
+    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
     port, _ = ocr
     found = definition(port)
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
 
     made = DirectoryCache.using(
         tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
@@ -412,12 +405,12 @@ def test_bot_ui_fetches_and_writes_what_the_bot_uses(
 
 
 def test_an_unreachable_center_uses_what_we_held(
-    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
+    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
     """**Center가 꺼졌다고 업무가 멈추지 않는다** (ADR-0007) — 들고 있던 정의를 쓴다."""
     port, _ = ocr
     found = definition(port)
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
     data_dir = tmp_path / "data"
     good = DirectoryCache.using(
         data_dir, CenterClient(base_url="http://center", api_key=TOKEN, client=client)
@@ -439,12 +432,12 @@ def test_an_unreachable_center_uses_what_we_held(
 
 
 def test_a_revoked_definition_is_dropped(
-    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
+    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
     """**404는 버린다** — 철회된 정의로 돌리는 것이 모르고 멈추는 것보다 나쁘다 (C13)."""
     port, _ = ocr
     found = definition(port)
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
     data_dir = tmp_path / "data"
     made = DirectoryCache.using(
         data_dir, CenterClient(base_url="http://center", api_key=TOKEN, client=client)
@@ -466,14 +459,14 @@ def test_a_revoked_definition_is_dropped(
 
 
 def test_only_what_the_manifest_asks_for_goes_in_the_file(
-    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
+    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
     """**필요한 것만 준다** — 다른 Bot이 쓰는 확장의 정의는 담지 않는다."""
     port, _ = ocr
     found = definition(port)
     other = definition(port, id="ext-credit", name="외부 신용")
     for one in (found, other):
-        assert register(client, one, envelope_for(key, one)).status_code == 201
+        assert register(client, one).status_code == 201
 
     made = DirectoryCache.using(
         tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
@@ -511,7 +504,7 @@ def test_what_the_manifest_asks_for(ocr: tuple[int, type[Ocr]]) -> None:
 
 
 def test_an_unpinned_external_is_still_fetched_and_verified(
-    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
+    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
     """**고정하지 않은 외부 확장도 부를 수 있어야 한다** (지금 Studio가 해시를 적지 않는다).
 
@@ -519,7 +512,7 @@ def test_an_unpinned_external_is_still_fetched_and_verified(
     """
     port, _ = ocr
     found = definition(port)
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
     unpinned = manifest(requires={"extensions": [{"id": APP, "version": "1.0.0"}]})
 
     made = DirectoryCache.using(
@@ -532,7 +525,7 @@ def test_an_unpinned_external_is_still_fetched_and_verified(
 
 
 def test_the_server_runner_builds_the_directory_without_a_file(
-    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
+    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
     """서버 실행기는 **파일을 거치지 않는다** — 그래도 봉투 검증은 같은 자리에서 한다 (C13 E6).
 
@@ -540,7 +533,7 @@ def test_the_server_runner_builds_the_directory_without_a_file(
     """
     port, _ = ocr
     found = definition(port)
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
     asked = manifest(found)
     made = DirectoryCache.using(
         tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)

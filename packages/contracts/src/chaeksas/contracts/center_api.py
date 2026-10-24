@@ -191,6 +191,8 @@ class PackageInfo(ContractModel):
     uploaded_at: Timestamp
     signed_by: str | None = None
     signed_at: Timestamp | None = None
+    #: 승인한 사람 (계정 아이디 — ADR-0090). 봉투의 `signed_by`는 이제 늘 Center 키라 사람을 말하지 못한다.
+    approved_by: str | None = None
     preflight: PreflightSummary = Field(default_factory=PreflightSummary)
     manifest: Manifest | None = None
     missing_resources: list[MissingResource] = Field(default_factory=list)
@@ -277,6 +279,45 @@ class DeploymentInfo(ContractModel):
     expires_at: Timestamp | None = None
     revoked_at: Timestamp | None = None
     last_result: str | None = None  # C4 deployment_results의 마지막 값
+    #: 배포한 사람·철회한 사람 (계정 아이디 — ADR-0090). 옛 배포(사람이 서명하던 때)에는 없다.
+    deployed_by: str | None = None
+    revoked_by: str | None = None
+
+
+class DeploymentRequest(ContractModel):
+    """`POST /deployments` — 관리자만. **Center가 봉투를 지어 서명한다** (ADR-0090).
+
+    `deployment_id`·`content_hash`는 Center가 채운다 (해시는 패키지의 것이다). 받아들이는 규칙은
+    봉투로 받던 때와 **같은 함수**(`validate_deployment`)다.
+    """
+
+    target: dict[str, Any]  # {type, id} — C2 DeploymentTarget과 같은 모양
+    bpm_process_id: str
+    version: str
+    not_before: Timestamp | None = None
+    expires_at: Timestamp | None = None
+    max_concurrency: int | None = Field(default=None, ge=1)  # 서버 배포에만
+
+
+class DeploymentRevokeRequest(ContractModel):
+    """`DELETE /deployments` — 관리자만. **되살릴 수 없다.**"""
+
+    deployment_id: str
+    reason: str = "관리자 철회"
+
+
+class RevokeRequest(ContractModel):
+    """패키지 승인 철회(`POST /packages/{id}/{version}/revoke`)의 본문 — 관리자만."""
+
+    reason: str = "관리자 철회"
+
+
+class ExtensionRevokeRequest(ContractModel):
+    """`DELETE /resources/extensions` — 관리자만 (C7·C13). 그 판을 쓰는 Bot은 실행 불가가 된다."""
+
+    id: str
+    version: str
+    reason: str = "관리자 철회"
 
 
 def validate_deployment(

@@ -63,6 +63,14 @@ class Settings:
     #: 코드·설정 파일에 넣지 않고 환경변수로 준다 (CLAUDE.md §5).
     admin_token: str | None = None
     read_token: str | None = None
+    #: 첫 관리자 계정 (ADR-0090 §2) — **계정이 하나도 없을 때만** 쓴다. 비밀번호를 비우면 Center가
+    #: 만들어 로그와 데이터 폴더의 파일에 둔다. 아이디를 비우면 `admin`이다.
+    first_admin_username: str | None = None
+    first_admin_password: str | None = None
+
+    def data_folder(self) -> Path | None:
+        """DB가 있는 폴더 — 첫 비밀번호 파일을 둔다. 메모리 DB면 `None`."""
+        return None if str(self.db_path) == ":memory:" else self.db_path.parent
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -78,4 +86,6 @@ class Settings:
             runner_heartbeat_s=int(_env("RUNNER_HEARTBEAT_S") or DEFAULT_RUNNER_HEARTBEAT_S),
             admin_token=_env("ADMIN_TOKEN"),
             read_token=_env("READ_TOKEN"),
+            first_admin_username=_env("FIRST_ADMIN__USERNAME"),
+            first_admin_password=_env("FIRST_ADMIN__PASSWORD"),
         )

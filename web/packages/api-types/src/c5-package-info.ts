@@ -6,6 +6,7 @@
  * `GET /packages`의 한 줄, `POST /packages`의 응답.
  */
 export interface PackageInfo {
+  approved_by?: string | null;
   content_hash: string;
   download_count?: number;
   id: string;

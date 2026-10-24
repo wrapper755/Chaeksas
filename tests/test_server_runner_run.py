@@ -22,17 +22,15 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import center_admin
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
-from chaeksas.center.storage import Store, now_iso
+from chaeksas.center.storage import Store
 from chaeksas.contracts.extension import definition_hash
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
-from chaeksas.contracts.signing import sign
 from chaeksas.core import seen as seen_mod
 from chaeksas.core.app_directory import CACHE_NAME
 from chaeksas.core.run_log import RunLog, log_path
@@ -44,7 +42,6 @@ from chaeksas.server_runner.worker import Worker
 
 ADMIN = {"Authorization": "Bearer t-admin"}
 READ = {"Authorization": "Bearer t-read"}
-PASS = "열쇠말"
 AT = "2026-10-13T09:00:00+09:00"
 
 #: 업무 예제 FX-03b — 실행 위치 `server`, 입력 하나, 사람 없이 끝까지 간다.
@@ -57,12 +54,6 @@ TIMERS = Path("docs/08-business-examples/bpmn/fx14_timers.bpmn")
 TIMER_BOT = "fx.timers"
 #: 한 실행이 끝나기를 기다리는 한도 (초). 스레드가 도는 것을 기다린다.
 WAIT_S = 20.0
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 @pytest.fixture
@@ -153,19 +144,17 @@ def ready_runner(
     runner: agent_mod.Agent,
     *,
     requires: dict[str, Any] | None = None,
-    after_bootstrap: Any = None,
+    before_deploy: Any = None,
     zip_bytes: bytes | None = None,
 ) -> None:
     """등록 → 승인 → 배포 → 설치까지 세워 둔다 (앞 조각들이 보는 길이다).
 
-    `after_bootstrap(signer)`는 **첫 공개키가 들어간 뒤, 배포 전에** 불린다 — 배포는 C7
-    누락 검사를 지나야 하므로 확장·서비스 앱을 미리 등록해야 하는 시험이 쓴다.
+    `before_deploy()`는 **배포 전에** 불린다 — 배포는 C7 누락 검사를 지나야 하므로
+    확장·서비스 앱을 미리 등록해야 하는 시험이 쓴다.
     """
     runner.tick()  # 등록
-    signer = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=signer.public_bytes(), label="첫 키")
-    if after_bootstrap is not None:
-        after_bootstrap(signer)
+    if before_deploy is not None:
+        before_deploy()
 
     uploaded = center.post(
         "/api/v1/packages",
@@ -174,39 +163,13 @@ def ready_runner(
     )
     assert uploaded.status_code in (200, 201), uploaded.text
     info = dict(uploaded.json())
-    approved = center.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=sign(
-            {
-                "kind": "package",
-                "id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            keystore.load(signer, passphrase=PASS),
-            signed_at=AT,
-        ).to_json_dict(),
-        headers=ADMIN,
+    center_admin.approve(center, info["id"], info["version"])
+    center_admin.deploy(
+        center,
+        target={"type": "server_runner", "id": runner.server_runner_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
     )
-    assert approved.status_code == 200, approved.text
-
-    deployed = center.post(
-        "/api/v1/deployments",
-        json=sign(
-            {
-                "kind": "deployment",
-                "deployment_id": "dep_3f9a1c07",
-                "target": {"type": "server_runner", "id": runner.server_runner_id},
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            keystore.load(signer, passphrase=PASS),
-            signed_at=now_iso(),
-        ).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert deployed.status_code in (200, 201), deployed.text
 
     runner.tick()  # 공개키·배포를 받아 설치한다
     assert info["id"] in [b.id for b in runner.installed_bots()]
@@ -584,20 +547,6 @@ def test_a_running_run_is_reported_with_its_node(
 # ─────────────────── 바깥 앱 명부 (M7 조각 9, C13 「전송」) ───────────────────
 
 
-def _extension_envelope(signer: Any, definition: dict[str, Any], *, kind: str) -> Any:
-    """외부 확장 등록·철회 봉투 하나 (C2 `extension`·`extension_revoke`)."""
-    return sign(
-        {
-            "kind": kind,
-            "id": definition["id"],
-            "version": definition["version"],
-            "definition_hash": definition_hash(definition),
-        },
-        keystore.load(signer, passphrase=PASS),
-        signed_at=AT,
-    )
-
-
 def test_a_job_whose_external_definition_was_revoked_does_not_start(
     center: TestClient, store: Store, runner: agent_mod.Agent
 ) -> None:
@@ -611,20 +560,10 @@ def test_a_job_whose_external_definition_was_revoked_does_not_start(
     그래서 거절 사유는 같은 `not_ready`이고, 무엇이 왜 막혔는지는 로그가 말한다.
     """
     definition = external_definitions.credit("http://127.0.0.1:9")
-    held: dict[str, Any] = {}
 
-    def register_the_definition(signer: Any) -> None:
-        """운영자가 하듯 **서명 봉투로** 등록한다 (C13 E6 — C11로는 못 한다)."""
-        held["signer"] = signer
-        answer = center.post(
-            "/api/v1/resources/extensions",
-            json={
-                "definition": definition,
-                "envelope": _extension_envelope(signer, definition, kind="extension").to_json_dict(),
-            },
-            headers=ADMIN,
-        )
-        assert answer.status_code < 400, answer.text
+    def register_the_definition() -> None:
+        """운영자가 하듯 **Center에** 등록한다 (C13 E6 — 봉투는 Center가 짓는다, ADR-0090)."""
+        center_admin.register_extension(center, definition)
 
     ready_runner(
         center,
@@ -640,19 +579,11 @@ def test_a_job_whose_external_definition_was_revoked_does_not_start(
                 }
             ]
         },
-        after_bootstrap=register_the_definition,
+        before_deploy=register_the_definition,
     )
 
     # 운영자가 정의를 거둔다 (C13 — 철회된 판은 되살아나지 않는다).
-    revoked = center.request(
-        "DELETE",
-        f"/api/v1/resources/extensions/{definition['id']}",
-        json=_extension_envelope(
-            held["signer"], definition, kind="extension_revoke"
-        ).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert revoked.status_code < 400, revoked.text
+    center_admin.revoke_extension(center, definition["id"], definition["version"])
 
     job = make_job(center)
     runner.tick()  # 작업을 받는다 — 받고도 띄우지 않는다

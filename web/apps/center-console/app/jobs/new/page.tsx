@@ -182,11 +182,11 @@ export default async function NewJobPage({
 
       {bots.length === 0 && !failure ? (
         <p className="text-body text-text-secondary">
-          PC에 배포된 Bot이 없습니다. Admin에서 배포한 뒤 만드세요.
+          PC에 배포된 Bot이 없습니다. 「배포」에서 배포한 뒤 만드세요.
         </p>
       ) : null}
       {bot && places.length === 0 ? (
-        <ErrorBanner message="이 Bot이 배포된 Bot UI가 없습니다 — Admin에서 배포한 뒤 만드세요." />
+        <ErrorBanner message="이 Bot이 배포된 Bot UI가 없습니다 — 「배포」에서 배포한 뒤 만드세요." />
       ) : null}
       {bot && botUi && versions.length === 0 ? (
         <ErrorBanner message="이 Bot UI에 유효한 배포가 없습니다." />
