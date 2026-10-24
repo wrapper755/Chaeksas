@@ -245,18 +245,13 @@ function Extensions({ items, admin }: { items: ExtensionResource[]; admin: boole
         <section className="flex flex-col gap-2">
           <h2 className="text-h2 font-semibold">확장 추가 (외부)</h2>
           <p className="text-body-sm text-text-muted">
-            정의 파일과 <strong>Admin 서명 봉투</strong>를 함께 올리세요 — 서명 없이는 등록되지
-            않습니다. 봉투는 관리자 PC에서 <code>chk-admin sign-extension &lt;정의 파일&gt;</code>로
-            만듭니다. 내장·사내 확장은 설치 파일에 든 것만 쓰므로 여기서 등록할 수 없습니다.
+            외부 확장 정의 파일을 올리세요. 검사를 지나면 Center가 서명해 등록합니다. 내장·사내 확장은
+            설치 파일에 든 것만 쓰므로 여기서 등록할 수 없습니다.
           </p>
           <form action={registerExtension} className="flex max-w-2xl flex-col gap-2">
             <label className="flex flex-col gap-1 text-body-sm">
               <span className="text-text-muted">확장 정의 파일 (extension.json) *</span>
               <input type="file" name="definition" accept=".json,application/json" required className="text-body" />
-            </label>
-            <label className="flex flex-col gap-1 text-body-sm">
-              <span className="text-text-muted">서명 봉투 파일 *</span>
-              <input type="file" name="envelope" accept=".json,application/json" required className="text-body" />
             </label>
             <div>
               <Button type="submit" variant="primary">

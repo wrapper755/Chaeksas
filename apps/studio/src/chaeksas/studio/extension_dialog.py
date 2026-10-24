@@ -228,9 +228,9 @@ def _service_lines(m: ExtensionManifest) -> list[str]:
 
 
 def check_definition(raw: bytes, *, api_version: str) -> list[str]:
-    """정의 파일 하나를 **Center에 올리기 전에** 여기서 검사한다 (C13 E1·E3, `chk-admin`과 같은 함수).
+    """정의 파일 하나를 **Center에 올리기 전에** 여기서 검사한다 (C13 E1·E3 — Center가 등록할 때와 같은 함수).
 
-    빈 목록이면 흠이 없다. 서명·등록은 Admin의 일이라 여기서 하지 않는다 (C2).
+    빈 목록이면 흠이 없다. 등록은 Center 콘솔에서 관리자가 한다 (ADR-0090).
     """
     problems = list(check_size(raw))
     try:
@@ -536,7 +536,7 @@ class StudioExtensionsDialog(QDialog):
         """Center에 등록된 외부 확장 정의를 다시 받는다 (C7 리소스 목록).
 
         **봉투를 다시 검증한다** (`add_external` → C13 E6) — 정의가 Bot의 키를 어느 주소로 보낼지
-        정하므로 Studio도 Admin 서명을 직접 본다. 닿지 못하면 **그 자리에서 말한다**
+        정하므로 Studio도 봉투 서명을 직접 본다. 닿지 못하면 **그 자리에서 말한다**
         (들고 있지 않는다 — Studio는 현장이 아니라 개발 도구다, `services.py`).
         """
         reader = self.reader or services.reader_for(self.settings, _center_key())
@@ -571,7 +571,7 @@ class StudioExtensionsDialog(QDialog):
         self.note.setText(f"{got} {' / '.join(said)}" if said else got)
 
     def open_definition(self) -> None:
-        """정의 파일 하나를 골라 C13 검사를 돌린다. **등록하지 않는다** — 서명은 Admin의 일이다."""
+        """정의 파일 하나를 골라 C13 검사를 돌린다. **등록하지 않는다** — 등록은 Center 콘솔의 관리자가 한다."""
         chosen, _ = QFileDialog.getOpenFileName(self, "확장 정의 파일", "", DEFINITION_FILTER)
         if not chosen:
             return
@@ -587,7 +587,7 @@ class StudioExtensionsDialog(QDialog):
             self.note.setText(f"{path.name}: 흠 {len(problems)}개 — 아래에 있습니다.")
             self.detail.setPlainText(render([(title, problems)]))
             return
-        self.note.setText(f"{path.name}: 흠이 없습니다. 등록은 Admin이 서명해 올립니다 (C2).")
+        self.note.setText(f"{path.name}: 흠이 없습니다. 등록은 관리자가 Center 콘솔에서 합니다.")
         self.detail.setPlainText(render([(title, ["흠이 없습니다 (C13 E1·E3·E5)."])]))
 
 

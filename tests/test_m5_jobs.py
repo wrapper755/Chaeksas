@@ -15,7 +15,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import zipfile
@@ -25,26 +24,22 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from center_admin import AdminCenter as Center
+from center_admin import CenterProblem
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.admin.cli import main as admin_main
-from chaeksas.admin.client import Center, CenterProblem
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.center_client import CenterClient
 from chaeksas.bot_ui.settings import Settings as BotSettings
 from chaeksas.bot_ui.store import Store as BotStore
-from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings
 from chaeksas.center.storage import Store
 from chaeksas.contracts.bot_ui import HeartbeatResponse
 from chaeksas.contracts.hashing import content_hash_zip
-from chaeksas.contracts.signing import sign
 
 TOKEN = "t-admin"
 READ = "t-read"
-PASS = "열쇠말"
 AT = "2026-10-05T09:00:00+09:00"
 BOT = "erp.order-entry"
 VERSION = "2.1.0"
@@ -52,12 +47,6 @@ INPUTS = {"주문번호": "PO-2608-001"}
 
 ADMIN_AUTH = {"Authorization": f"Bearer {TOKEN}"}
 READ_AUTH = {"Authorization": f"Bearer {READ}"}
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: Any, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 # ─────────────────────────── 세상 하나 ───────────────────────────
@@ -80,10 +69,10 @@ class World:
             "target": {"type": "bot_ui", "id": self.bot_ui_id},
             "inputs": dict(INPUTS),
         }
-        return self.center.create_job(body | over)
+        return dict(self.center.create_job(body | over))
 
     def job(self, job_id: str) -> dict[str, Any]:
-        return self.center.job(job_id)
+        return dict(self.center.job(job_id))
 
     def cancel(self, job_id: str) -> Any:
         """취소 — 응답 코드까지 본다 (200과 202가 다른 뜻이다)."""
@@ -149,30 +138,11 @@ def deploy_bot(center: Center, bot_ui_id: str, *, version: str = VERSION) -> dic
     assert answer.status_code in (200, 201), answer.text
     info = dict(answer.json())
 
-    key = keystore.find(None)
-    center.approve(
-        info["id"],
-        info["version"],
-        sign(
-            {"kind": "package", "id": info["id"], "version": info["version"],
-             "content_hash": info["content_hash"]},
-            keystore.load(key, passphrase=PASS),
-            signed_at=AT,
-        ),
-    )
+    center.approve(info["id"], info["version"])
     center.deploy(
-        sign(
-            {
-                "kind": "deployment",
-                "deployment_id": f"dep_{hashlib.sha256(version.encode()).hexdigest()[:8]}",
-                "target": {"type": "bot_ui", "id": bot_ui_id},
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            keystore.load(key, passphrase=PASS),
-            signed_at=AT,
-        )
+        target={"type": "bot_ui", "id": bot_ui_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
     )
     return info
 
@@ -195,10 +165,7 @@ def world(tmp_path: Path) -> World:
     )
     store = Store(settings.db_path)
     client = TestClient(create_app(settings, store=store))
-    center = Center(base_url="http://center", token=TOKEN, client=client)
-
-    made = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=made.public_bytes(), label="첫 키")
+    center = Center(client=client, token=TOKEN)
 
     # Bot UI를 **진짜로 등록한다** — 신원은 키가 정한다 (C4).
     raw = issue_key(client, name="현장 PC 1", key_type="bot_ui")
@@ -526,50 +493,6 @@ def test_a_live_deadline_still_runs(world: World) -> None:
     made = world.new_job(expires_at=later)
     assert [one.job_id for one in world.beat().jobs] == [made["job_id"]]
     assert [one.expires_at for one in world.agent.jobs_waiting] == [later]
-
-
-# ─────────────────────────── 명령줄 (ADM) ───────────────────────────
-
-
-def test_the_command_sends_a_job(world: World, capsys: Any) -> None:
-    code = admin_main(
-        ["-y", "job", "new", BOT, "--bot-ui", world.bot_ui_id, "--input", "주문번호=PO-1", "--note", "급함"],
-        center=world.center,
-    )
-    assert code == 0
-    assert "작업을 만들었습니다" in capsys.readouterr().out
-    found = world.center.jobs()
-    assert len(found) == 1
-    assert found[0]["inputs"] == {"주문번호": "PO-1"} and found[0]["note"] == "급함"
-
-
-def test_the_command_refuses_an_undeployed_bot(world: World, capsys: Any) -> None:
-    assert admin_main(
-        ["-y", "job", "new", "erp.없는것", "--bot-ui", world.bot_ui_id], center=world.center
-    ) == 2
-    assert "배포" in capsys.readouterr().err
-
-
-def test_the_command_lists_shows_and_cancels(world: World, capsys: Any) -> None:
-    made = world.new_job()
-    assert admin_main(["job", "list"], center=world.center) == 0
-    assert made["job_id"] in capsys.readouterr().out
-
-    assert admin_main(["job", "show", made["job_id"]], center=world.center) == 0
-    assert BOT in capsys.readouterr().out
-
-    assert admin_main(["-y", "job", "cancel", made["job_id"]], center=world.center) == 0
-    assert "취소했습니다" in capsys.readouterr().out
-    assert world.job(made["job_id"])["state"] == "cancelled"
-
-
-def test_the_command_says_when_the_answer_has_to_wait(world: World, capsys: Any) -> None:
-    """202 — 현장에 물어본 상태다. **끝났다고 말하지 않는다.**"""
-    made = world.new_job()
-    world.beat()
-    world.beat()
-    assert admin_main(["-y", "job", "cancel", made["job_id"]], center=world.center) == 0
-    assert "취소를 요청했습니다" in capsys.readouterr().out
 
 
 def test_the_listing_takes_several_states(world: World) -> None:

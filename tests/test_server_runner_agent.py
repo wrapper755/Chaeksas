@@ -556,24 +556,21 @@ def test_the_register_answer_already_carries_the_admin_keys(
     key: str,
     center: TestClient,
     store: Store,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """공개키는 **등록 응답에도** 온다 (C12) — 되살리기가 첫 하트비트 **전에** 일어난다.
 
     되살린 실행도 바깥 앱 명부를 짓고, 봉투는 공개키로만 검증된다 (C13 E6). 등록에서 받지
     않으면 되살린 실행은 외부 앱을 **한 번도** 부를 수 없다.
     """
-    from chaeksas.admin import keys as keystore
-    from chaeksas.center.api.signing import bootstrap_key
+    from chaeksas.center import signer  # noqa: PLC0415
 
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, "열쇠말")
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
-    bootstrap_key(store, public_key=keystore.create(label="첫 키").public_bytes(), label="첫 키")
     found = build(settings, key, center)
     assert found.tick() is True  # 등록만 했다
     assert found.last_response is None, "아직 하트비트를 보내지 않았다"
-    assert [one.key_id for one in found.admin_keys], "등록 응답의 공개키를 들고 있어야 한다"
+    # Center가 처음 뜰 때 만든 서명 키다 (ADR-0090) — 승인·배포 봉투는 이 키가 서명한다.
+    assert signer.current_key_id(store) in [one.key_id for one in found.admin_keys], (
+        "등록 응답의 공개키를 들고 있어야 한다"
+    )
 
 
 class _NoClient:

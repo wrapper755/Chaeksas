@@ -4,13 +4,14 @@ import type { Route } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { center, CenterError } from "@/lib/center";
-import { COOKIE_NAME, seal, type Mode } from "@/lib/session";
+import { center, CenterError, session, signIn, signOut } from "@/lib/center";
+import { COOKIE_NAME, seal } from "@/lib/session";
 
 /**
  * 쓰기 동작 — 모두 **콘솔 서버에서** 돈다 (Server Action). 브라우저는 토큰을 모른다.
  *
- * 서명이 필요한 동작(패키지 승인·배포·철회)은 콘솔에서 하지 않는다 → Admin (CON-00).
+ * 승인·배포·외부 확장 등록도 여기서 한다 — 봉투는 **Center가 서버의 키로 서명한다** (ADR-0090).
+ * 「누가」는 로그인한 계정이고 Center가 세션에서 읽는다.
  */
 
 export interface ActionResult {
@@ -24,28 +25,34 @@ function message(cause: unknown): string {
 }
 
 export async function login(_previous: ActionResult, form: FormData): Promise<ActionResult> {
-  const token = String(form.get("token") ?? "").trim();
-  const mode = (String(form.get("mode") ?? "read") === "admin" ? "admin" : "read") as Mode;
-  const actor = String(form.get("actor") ?? "").trim() || (mode === "admin" ? "관리자" : "보기 전용");
-  if (!token) return { error: "토큰을 입력하세요." };
+  const username = String(form.get("username") ?? "").trim();
+  const password = String(form.get("password") ?? "");
+  if (!username || !password) return { error: "아이디와 비밀번호를 넣으세요." };
 
-  const store = await cookies();
-  store.set(COOKIE_NAME, seal({ mode, token, actor }), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
+  let made;
   try {
-    await center.check();
+    made = await signIn(username, password);
   } catch (cause) {
-    store.delete(COOKIE_NAME);
     return { error: message(cause) };
   }
+  (await cookies()).set(
+    COOKIE_NAME,
+    seal({ mode: made.role === "admin" ? "admin" : "read", token: made.token, actor: made.username }),
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      // Center 세션과 **같이 끝난다** — 끝난 세션을 들고 있으면 화면마다 「로그인이 끝났습니다」가 뜬다.
+      expires: new Date(made.expires_at),
+    },
+  );
   redirect("/bot-uis");
 }
 
 export async function logout(): Promise<void> {
+  const found = await session();
+  if (found) await signOut(found.token).catch(() => undefined); // 닿지 못해도 쿠키는 지운다
   (await cookies()).delete(COOKIE_NAME);
   redirect("/login");
 }
@@ -105,13 +112,9 @@ export async function markRunnerLost(runnerId: string): Promise<ActionResult> {
  */
 export async function answerApproval(form: FormData): Promise<void> {
   const requestId = String(form.get("request_id") ?? "");
-  const actor = String(form.get("actor") ?? "").trim();
   // 타입 라우트는 질의 문자열이 붙은 주소를 리터럴로 요구한다 — 한 자리에서 만든다.
   const back = (query: string): Route =>
     `/approvals/${encodeURIComponent(requestId)}?${query}` as Route;
-  if (!actor) {
-    redirect(back(`error=${encodeURIComponent("답하는 사람을 적으세요.")}`));
-  }
 
   let answer: Record<string, unknown>;
   try {
@@ -122,7 +125,7 @@ export async function answerApproval(form: FormData): Promise<void> {
   }
 
   try {
-    await center.answerApproval(requestId, answer, actor);
+    await center.answerApproval(requestId, answer);
   } catch (cause) {
     // 칸마다 오류를 그 자리에 보이려고 칸 이름을 함께 넘긴다 (C6 `detail.fields`).
     const fields =
@@ -284,24 +287,21 @@ async function jsonFile(form: FormData, field: string, label: string): Promise<u
 /**
  * 외부 확장 등록 (CON-07 「확장 추가」).
  *
- * **정의 파일과 Admin 서명 봉투를 함께** 올린다 — 서명 없이는 등록되지 않는다 (C2).
- * 봉투는 `chk-admin sign-extension`이 만든다. C13 검사 결과는 Center가 칸별 사유와 함께
- * 돌려주므로 그것을 그대로 보인다.
+ * **정의 파일 하나**를 올린다. C13 검사(E1~E8)를 지나면 Center가 서명해 둔다 (ADR-0090) —
+ * 검사 결과는 Center가 칸별 사유와 함께 돌려주므로 그것을 그대로 보인다.
  */
 export async function registerExtension(form: FormData): Promise<void> {
   const back = (query: string): Route => `/resources?${query}` as Route;
   let definition: unknown;
-  let envelope: unknown;
   try {
     definition = await jsonFile(form, "definition", "확장 정의 파일");
-    envelope = await jsonFile(form, "envelope", "서명 봉투 파일");
   } catch (cause) {
     const said = cause instanceof Error ? cause.message : "파일을 읽지 못했습니다.";
     redirect(back(`tab=extension&error=${encodeURIComponent(said)}`));
   }
 
   try {
-    await center.registerExtension(definition, envelope);
+    await center.registerExtension(definition);
   } catch (cause) {
     redirect(back(`tab=extension&error=${encodeURIComponent(violations(cause))}`));
   }
@@ -309,22 +309,12 @@ export async function registerExtension(form: FormData): Promise<void> {
   redirect(back("tab=extension&extension=1"));
 }
 
-/** 등록 해제 — **봉투가 필요하다** (`extension_revoke`, `chk-admin revoke-extension`). */
-export async function revokeExtension(form: FormData): Promise<void> {
-  const extensionId = String(form.get("extension_id") ?? "");
-  const back = (query: string): Route =>
-    `/resources/extensions/${encodeURIComponent(extensionId)}?${query}` as Route;
-  let envelope: unknown;
+/** 등록 해제 — 확인 창을 거쳐서만 온다. **되살릴 수 없다.** */
+export async function revokeExtension(extensionId: string, version: string): Promise<ActionResult> {
   try {
-    envelope = await jsonFile(form, "envelope", "해제 봉투 파일");
+    await center.revokeExtension(extensionId, version);
   } catch (cause) {
-    const said = cause instanceof Error ? cause.message : "파일을 읽지 못했습니다.";
-    redirect(back(`error=${encodeURIComponent(said)}`));
-  }
-  try {
-    await center.revokeExtension(envelope);
-  } catch (cause) {
-    redirect(back(`error=${encodeURIComponent(violations(cause))}`));
+    return { error: violations(cause) };
   }
   revalidatePath("/resources", "layout");
   redirect("/resources?tab=extension&revoked=1" as Route);
@@ -525,3 +515,161 @@ export async function deleteVirtualWorker(id: string): Promise<ActionResult> {
   return {};
 }
 
+
+// ─────────────────── 승인·배포 (ADR-0090 — Center가 서명한다) ───────────────────
+
+/** 패키지 상태를 바꾸면 그것을 읽는 화면 셋을 함께 새로 그린다 (CON-02·CON-06·배포). */
+function packagesChanged(): void {
+  revalidatePath("/bots", "layout");
+  revalidatePath("/packages", "layout");
+  revalidatePath("/deployments", "layout");
+}
+
+/** 승인 (CON-02·CON-06). 지원 종료된 것을 다시 승인하면 새 배포가 다시 열린다 (C5). */
+export async function approvePackage(packageId: string, version: string): Promise<ActionResult> {
+  try {
+    await center.approvePackage(packageId, version);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  packagesChanged();
+  return {};
+}
+
+/** 승인 철회 — 그 판의 배포가 **모두** 무효가 된다. 되살릴 수 없다. */
+export async function revokePackage(packageId: string, version: string): Promise<ActionResult> {
+  try {
+    await center.revokePackage(packageId, version);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  packagesChanged();
+  return {};
+}
+
+/** 지원 종료 — 새 배포만 막는다. 이미 배포된 것은 그대로 돈다. */
+export async function deprecatePackage(packageId: string, version: string): Promise<ActionResult> {
+  try {
+    await center.deprecatePackage(packageId, version);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  packagesChanged();
+  return {};
+}
+
+/**
+ * 새 배포 (CON-15). **일반 `<form>`이 부른다.** PC는 여럿을 고를 수 있고 **PC마다 배포 하나**다
+ * (ADR-0046 — PC 배포에 전체 대상은 없다). 하나라도 거부되면 그 까닭을 보이고, 이미 된 것은
+ * 목록에 남는다.
+ */
+export async function createDeployment(form: FormData): Promise<void> {
+  const bot = String(form.get("bot") ?? "");
+  const [botId = "", version = ""] = bot.split("@");
+  const place = String(form.get("place") ?? "pc");
+  const back = (query: string): Route => `/deployments/new?${query}` as Route;
+  const keep = `bot=${encodeURIComponent(bot)}`;
+  const fail = (said: string): never => redirect(back(`${keep}&error=${encodeURIComponent(said)}`));
+
+  const when = (name: string): string | undefined => {
+    const raw = String(form.get(name) ?? "").trim();
+    // `datetime-local`은 지역 시각이라 그대로 두면 Center가 시간대를 모른다 — 서버의 시각으로 읽는다.
+    return raw ? new Date(raw).toISOString() : undefined;
+  };
+  const common = {
+    bpm_process_id: botId,
+    version,
+    not_before: when("not_before"),
+    expires_at: when("expires_at"),
+  };
+
+  if (!botId || !version) fail("배포할 Bot과 버전을 고르세요.");
+  let targets: Array<{ type: string; id: string }>;
+  let limit: number | undefined;
+  if (place === "server") {
+    const runner = String(form.get("runner") ?? "").trim();
+    targets = [{ type: "server_runner", id: runner || "*" }];
+    const raw = String(form.get("max_concurrency") ?? "").trim();
+    limit = raw ? Number(raw) : undefined;
+    if (limit !== undefined && !(Number.isInteger(limit) && limit >= 1)) fail("동시 실행 상한은 1 이상의 정수입니다.");
+  } else {
+    targets = form.getAll("bot_ui").map((one) => ({ type: "bot_ui", id: String(one) })).filter((one) => one.id);
+    if (targets.length === 0) fail("배포할 Bot UI를 하나 이상 고르세요.");
+  }
+
+  const done: string[] = [];
+  for (const target of targets) {
+    try {
+      const made = await center.createDeployment({ ...common, target, max_concurrency: limit });
+      done.push(made.deployment_id);
+    } catch (cause) {
+      const said = done.length > 0 ? `${message(cause)} (먼저 만든 배포 ${done.length}건은 남았습니다)` : message(cause);
+      revalidatePath("/deployments", "layout");
+      fail(said);
+    }
+  }
+  revalidatePath("/deployments", "layout");
+  revalidatePath("/bots", "layout");
+  redirect(`/deployments?created=${done.length}` as Route);
+}
+
+/** 배포 철회 — 확인 창을 거쳐서만 온다. **되살릴 수 없다.** */
+export async function revokeDeployment(deploymentId: string): Promise<ActionResult> {
+  try {
+    await center.revokeDeployment(deploymentId);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/deployments", "layout");
+  revalidatePath("/bots", "layout");
+  return {};
+}
+
+// ─────────────────── 관리자 계정 (CON-14) ───────────────────
+
+export async function createAccount(_previous: ActionResult, form: FormData): Promise<ActionResult> {
+  try {
+    await center.createAccount({
+      username: String(form.get("username") ?? "").trim(),
+      password: String(form.get("password") ?? ""),
+      role: String(form.get("role") ?? "admin"),
+    });
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/accounts");
+  return {};
+}
+
+/** 역할 바꾸기·멈추기·다시 쓰기·비밀번호 새로 정하기 — 한 길이다 (C5 `PUT /accounts/{id}`). */
+export async function updateAccount(
+  username: string,
+  change: { role?: string; disabled?: boolean; password?: string },
+): Promise<ActionResult> {
+  try {
+    await center.updateAccount(username, change);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  // 자기 계정을 바꾸면 Center가 그 세션을 지웠다 — 다시 로그인해야 한다.
+  const found = await session();
+  if (found?.actor === username) {
+    (await cookies()).delete(COOKIE_NAME);
+    redirect("/login");
+  }
+  revalidatePath("/accounts");
+  return {};
+}
+
+/** 자기 비밀번호 바꾸기. 바꾸면 세션이 모두 끝나므로 다시 로그인한다. */
+export async function changeOwnPassword(_previous: ActionResult, form: FormData): Promise<ActionResult> {
+  const next = String(form.get("new_password") ?? "");
+  if (next !== String(form.get("confirm_password") ?? "")) return { error: "새 비밀번호 두 칸이 다릅니다." };
+  try {
+    await center.changePassword(String(form.get("current_password") ?? ""), next);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  (await cookies()).delete(COOKIE_NAME);
+  redirect("/login?changed=1" as Route);
+}

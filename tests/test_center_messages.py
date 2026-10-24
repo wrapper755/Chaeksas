@@ -25,21 +25,18 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import center_admin
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
 from chaeksas.center.api import messages as messages_api
-from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store, now_iso
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
-from chaeksas.contracts.signing import sign
 
 ADMIN = {"Authorization": "Bearer t-admin"}
 READ = {"Authorization": "Bearer t-read"}
-PASS = "열쇠말"
 AT = "2026-10-13T09:00:00+09:00"
 
 #: 업무 예제 BX-11 — 실행 위치 `server`, 메시지 `bid_quote`를 상관 키 `입찰번호`로 기다린다.
@@ -51,12 +48,6 @@ RETURN_BOT = "scm.return-processing"
 VERSION = "1.0.0"
 
 RUN = "run_20261013_090000_aa11bb"
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 @pytest.fixture
@@ -149,26 +140,16 @@ def package_zip(*, bot: str, path: Path, process_id: str, triggers: list[dict[st
     return made(json.dumps(manifest, ensure_ascii=False))
 
 
-@pytest.fixture
-def private(store: Store) -> Any:
-    """Admin 개인키 하나 — **첫 키는 한 번만** 넣을 수 있다 (C2 §부트스트랩)."""
-    signer = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=signer.public_bytes(), label="첫 키")
-    return keystore.load(signer, passphrase=PASS)
-
-
 def deploy(
     center: TestClient,
     *,
-    private: Any,
     runner_id: str,
     bot: str,
     path: Path,
     process_id: str,
     triggers: list[dict[str, Any]],
-    deployment_id: str,
 ) -> None:
-    """올리고 승인하고 그 실행기에 배포한다 (C2 — 서명이 유일한 관문이다)."""
+    """올리고 승인하고 그 실행기에 배포한다 (C2 — 봉투는 Center가 짓는다, ADR-0090)."""
 
     uploaded = center.post(
         "/api/v1/packages",
@@ -183,38 +164,13 @@ def deploy(
     )
     assert uploaded.status_code in (200, 201), uploaded.text
     info = dict(uploaded.json())
-    approved = center.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=sign(
-            {
-                "kind": "package",
-                "id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=AT,
-        ).to_json_dict(),
-        headers=ADMIN,
+    center_admin.approve(center, info["id"], info["version"])
+    center_admin.deploy(
+        center,
+        target={"type": "server_runner", "id": runner_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
     )
-    assert approved.status_code == 200, approved.text
-    deployed = center.post(
-        "/api/v1/deployments",
-        json=sign(
-            {
-                "kind": "deployment",
-                "deployment_id": deployment_id,
-                "target": {"type": "server_runner", "id": runner_id},
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=now_iso(),
-        ).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert deployed.status_code in (200, 201), deployed.text
 
 
 def heartbeat(
@@ -416,7 +372,7 @@ def test_mark_lost_closes_messages_on_the_way(
 
 
 def test_a_message_start_becomes_a_job(
-    center: TestClient, private: Any, runner_key: str, runner: str
+    center: TestClient, runner_key: str, runner: str
 ) -> None:
     """기다리는 실행이 없고 **메시지 시작 트리거**면 작업이 생긴다 (C12 §메시지).
 
@@ -425,13 +381,11 @@ def test_a_message_start_becomes_a_job(
     """
     deploy(
         center,
-        private=private,
         runner_id=runner,
         bot=RETURN_BOT,
         path=RETURN,
         process_id="Proc_bx13_return_processing",
         triggers=[{"kind": "message", "name": "return_request"}],
-        deployment_id="dep_11111111",
     )
     response = put_message(
         center,
@@ -452,20 +406,18 @@ def test_a_message_start_becomes_a_job(
 
 
 def test_a_message_start_with_two_bots_refuses_to_choose(
-    center: TestClient, private: Any, runner_key: str, runner: str
+    center: TestClient, runner_key: str, runner: str
 ) -> None:
     """같은 이름으로 시작하는 서버 Bot이 둘이면 **고르지 않는다** (422 `receiver_ambiguous`)."""
-    for bot, deployment in ((RETURN_BOT, "dep_22222222"), (f"{RETURN_BOT}-2", "dep_33333333")):
+    for bot in (RETURN_BOT, f"{RETURN_BOT}-2"):
         deploy(
             center,
-            private=private,
-            runner_id=runner,
+                runner_id=runner,
             bot=bot,
             path=RETURN,
             process_id="Proc_bx13_return_processing",
             triggers=[{"kind": "message", "name": "return_request"}],
-            deployment_id=deployment,
-        )
+            )
 
     response = put_message(center, name="return_request", correlation="RT-002", payload={})
     assert response.status_code == 422, response.text
@@ -668,7 +620,7 @@ def test_an_offline_runner_is_still_a_receiver(
 
 
 def test_a_message_start_carries_on_behalf_of_into_the_job(
-    center: TestClient, private: Any, runner: str, integration_key: str
+    center: TestClient, runner: str, integration_key: str
 ) -> None:
     """연동용 키가 실은 사람은 작업의 `on_behalf_of`로 **적기만** 한다 (ADR-0081).
 
@@ -677,13 +629,11 @@ def test_a_message_start_carries_on_behalf_of_into_the_job(
     """
     deploy(
         center,
-        private=private,
         runner_id=runner,
         bot=RETURN_BOT,
         path=RETURN,
         process_id="Proc_bx13_return_processing",
         triggers=[{"kind": "message", "name": "return_request"}],
-        deployment_id="dep_22222222",
     )
     body = {"schema": 1, "name": "return_request", "payload": {"반품번호": "RT-002", "주문번호": "ORD-9",
             "사유": "파손", "금액": 10_000, "고객메일": "a@example.com"}}

@@ -790,15 +790,6 @@ def catalog_kinds(store: Store) -> list[dict[str, Any]]:
 # ─────────────────────────── 외부 확장 등록 (C13·C2) ───────────────────────────
 
 
-def _envelope_of(raw: Any) -> Any:
-    from chaeksas.contracts.signing import Envelope  # noqa: PLC0415
-
-    try:
-        return Envelope.model_validate(raw)
-    except ValueError as e:
-        raise ApiError(400, "bad_envelope", f"봉투가 계약과 맞지 않는다: {e}") from e
-
-
 def _refuse(problems: list[Any], *, status: int = 422) -> None:
     if not problems:
         return
@@ -817,11 +808,13 @@ def _refuse(problems: list[Any], *, status: int = 422) -> None:
 
 
 def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ExtensionResource, bool]:
-    """`POST /resources/extensions` — 정의와 **서명 봉투**를 함께 받는다 (C13 E6).
+    """`POST /resources/extensions` — 정의를 받아 **Center가 `extension` 봉투로 서명한다** (C13 E6, ADR-0090).
 
-    **서명이 관문이다** (C2). 관리자 토큰만으로는 등록되지 않는다 — 정의가 Bot의 키를 어느
-    주소로 보낼지 정하므로 배포와 같은 관문을 둔다.
+    관문은 관리자 계정이다. 검사(E1·E2·E3·E4·E8)를 모두 지난 정의에만 서명한다 — 정의가 Bot의
+    키를 어느 주소로 보낼지 정하므로 배포와 같은 관문이다. 봉투는 정의와 함께 그대로 두고
+    실행하는 쪽이 다시 검증한다(E6).
     """
+    from chaeksas.center import signer  # noqa: PLC0415
     from chaeksas.center.api.signing import admin_keys  # noqa: PLC0415 — 순환 import를 피한다
     from chaeksas.contracts.extension import (  # noqa: PLC0415
         ExtensionManifest,
@@ -836,7 +829,6 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
     definition = raw.get("definition")
     if not isinstance(definition, dict):
         raise ApiError(422, "input_invalid", "`definition`에 확장 정의를 보내세요")
-    envelope = _envelope_of(raw.get("envelope"))
 
     _refuse(check_size(json.dumps(definition, ensure_ascii=False).encode("utf-8")), status=413)
     try:
@@ -848,8 +840,6 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
 
     # E1·E2·E3 — 외부 확장에 코드 기여가 없고, 등급이 external이고, 어댑터 선언이 안전한가.
     _refuse(validate(manifest, from_center=True))
-    # E6 — 봉투가 **이 정의**에 대한 것인가 (해시·id·버전).
-    _refuse(verify_external(definition, envelope, keys=admin_keys(store)), status=400)
 
     # E4·E8 — 이미 등록된 **다른** 확장들과 겹치지 않는가.
     others = [one for one in _registered_manifests(store) if one.id != manifest.id]
@@ -858,7 +848,6 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
 
     computed = definition_hash(definition)
     body = json.dumps(definition, ensure_ascii=False, sort_keys=True)
-    envelope_body = json.dumps(envelope.to_json_dict(), ensure_ascii=False)
 
     before = store.row(
         "SELECT * FROM extensions WHERE id = ? AND version = ?", (manifest.id, manifest.version)
@@ -871,6 +860,13 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
             raise ApiError(409, "id_conflict", f"{manifest.id}@{manifest.version}에 다른 정의가 왔다")
         return extension(store, manifest.id), False
 
+    envelope = signer.seal(
+        store,
+        {"kind": "extension", "id": manifest.id, "version": manifest.version, "definition_hash": computed},
+    )
+    # E6 — 현장이 할 검증을 지금 한 번 — 지은 봉투가 **이 정의**에 맞는가 (해시·id·버전·키).
+    _refuse(verify_external(definition, envelope, keys=admin_keys(store)), status=400)
+    envelope_body = json.dumps(envelope.to_json_dict(), ensure_ascii=False)
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO extensions (id, version, definition_json, envelope_json, definition_hash,"
@@ -881,47 +877,37 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
 
 
 def revoke_extension(
-    store: Store, raw: dict[str, Any], *, expect_id: str | None = None
+    store: Store, extension_id: str, version: str, *, reason: str, by: str
 ) -> ExtensionResource:
-    """`DELETE /resources/extensions[/{id}]` — `extension_revoke` 봉투 (C13·C2).
+    """`DELETE /resources/extensions` — Center가 `extension_revoke` 봉투를 지어 서명한다 (C13·C2, ADR-0090).
 
     **쓰는 Bot이 있어도 막지 않는다** (C13) — 서비스 앱 등록 해제(`in_use`)와 다르다. 그쪽은
     장부 정리지만 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라, 쓰는 쪽이 있을 때
     더 거둬야 한다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).
-
-    경로에 `{id}`를 적었으면 봉투와 맞는지 본다 — **봉투가 원본**이고 경로는 거들 뿐이다.
     """
-    from chaeksas.center.api.signing import admin_keys  # noqa: PLC0415
-    from chaeksas.contracts.signing import verify  # noqa: PLC0415
+    from chaeksas.center import signer  # noqa: PLC0415
 
-    envelope = _envelope_of(raw.get("envelope") if "envelope" in raw else raw)
-    _refuse(verify(envelope, keys=admin_keys(store), expect_kind="extension_revoke"), status=403)
-
-    claim = envelope.payload
-    if expect_id is not None and str(claim.get("id")) != expect_id:
-        raise ApiError(
-            400,
-            "bad_envelope",
-            f"경로의 확장({expect_id})과 봉투의 확장({claim.get('id')})이 다르다",
-        )
-    found = store.row(
-        "SELECT * FROM extensions WHERE id = ? AND version = ?",
-        (claim.get("id"), claim.get("version")),
-    )
+    found = store.row("SELECT * FROM extensions WHERE id = ? AND version = ?", (extension_id, version))
     if found is None:
-        raise ApiError(404, "not_found", f"등록된 확장이 없다: {claim.get('id')}@{claim.get('version')}")
+        raise ApiError(404, "not_found", f"등록된 확장이 없다: {extension_id}@{version}")
     if not found["revoked_json"]:
+        envelope = signer.seal(
+            store,
+            {
+                "kind": "extension_revoke",
+                "id": extension_id,
+                "version": version,
+                "reason": reason,
+                "revoked_at": now_iso(),
+            },
+        )
         with store.tx() as cur:
             cur.execute(
-                "UPDATE extensions SET revoked_json = ? WHERE id = ? AND version = ?",
-                (
-                    json.dumps(envelope.to_json_dict(), ensure_ascii=False),
-                    claim.get("id"),
-                    claim.get("version"),
-                ),
+                "UPDATE extensions SET revoked_json = ?, revoked_by = ? WHERE id = ? AND version = ?",
+                (json.dumps(envelope.to_json_dict(), ensure_ascii=False), by, extension_id, version),
             )
     # **철회된 것은 목록에서 빠지므로** `extension()`으로는 찾을 수 없다 — 저장된 줄에서 짓는다.
-    return _revoked_info(store, str(claim.get("id")), str(claim.get("version")))
+    return _revoked_info(store, extension_id, version)
 
 
 def _revoked_info(store: Store, extension_id: str, version: str) -> ExtensionResource:

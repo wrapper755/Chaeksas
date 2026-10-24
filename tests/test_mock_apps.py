@@ -398,7 +398,7 @@ def parsed(app_id: str, base_url: str) -> ExtensionManifest:
 
 @pytest.mark.parametrize("app_id", sorted(definitions.BUILDERS))
 def test_an_external_definition_passes_the_c13_checks(app_id: str) -> None:
-    """E1(코드 기여 없음)·E3(어댑터 선언) — `chk-admin sign-extension`이 먼저 돌리는 것들이다."""
+    """E1(코드 기여 없음)·E3(어댑터 선언) — Center가 등록할 때 서명하기 전에 돌리는 것들이다."""
     found = parsed(app_id, "http://127.0.0.1:8150")
     assert validate(found, from_center=True) == []
     assert found.is_external

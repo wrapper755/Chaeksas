@@ -1,7 +1,7 @@
-"""배포 한 바퀴 — Admin 서명 → Center → Bot UI 설치 (C2·C4·C5, M5 조각 2).
+"""배포 한 바퀴 — 관리자 배포 → Center 서명 → Bot UI 설치 (C2·C4·C5, M5 조각 2).
 
-**서명이 유일한 관문**이라는 것을 끝에서 끝까지 본다. 진짜 Center를 in-process로 띄우고,
-진짜 `chk-admin`으로 서명하고, 진짜 Bot UI 쪽 코드가 받아 설치한다.
+**서명이 관문**이라는 것을 끝에서 끝까지 본다. 진짜 Center를 in-process로 띄우고, 관리자가
+배포하면 **Center가 제 키로 서명하고**(ADR-0090), 진짜 Bot UI 쪽 코드가 받아 설치한다.
 
 거듭 보는 것 다섯.
 
@@ -22,16 +22,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from center_admin import AdminCenter as Center
+from center_admin import CenterProblem
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.admin.cli import main as admin_main
-from chaeksas.admin.client import Center, CenterProblem
-from chaeksas.center.api.signing import bootstrap_key
+from chaeksas.center import signer as center_signer
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings
 from chaeksas.contracts.hashing import content_hash_zip
-from chaeksas.contracts.signing import sign
 from chaeksas.core.deploy import APPLIED, REJECTED, Deployer, read_signature
 from chaeksas.core.packages import (
     CENTER,
@@ -45,15 +43,8 @@ from chaeksas.core.packages import (
 )
 
 TOKEN = "t-admin"
-PASS = "열쇠말"
 BOT_UI = "bui_a81c22d0"
 AT = "2026-10-05T09:00:00+09:00"
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: Any, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 @pytest.fixture
@@ -61,7 +52,7 @@ def center(tmp_path: Path, monkeypatch: Any) -> Any:
     settings = Settings(
         db_path=tmp_path / "center.sqlite3", package_dir=tmp_path / "packages", admin_token=TOKEN
     )
-    made = Center(base_url="http://center", token=TOKEN, client=TestClient(create_app(settings)))
+    made = Center(client=TestClient(create_app(settings)), token=TOKEN)
     # 그 PC의 키는 내려받기 관문을 보는 시험이 쓴다 (C5 권한표).
     made.client.app.state.bot_ui_key = register_pc(made, monkeypatch, BOT_UI, machine="9" * 64)
     return made
@@ -179,44 +170,44 @@ def upload(center: Center, raw: bytes) -> dict[str, Any]:
     return dict(answer.json())
 
 
-def admin_key(center: Center) -> Any:
-    made = keystore.create(label="첫 키")
-    bootstrap_key(center.client.app.state.store, public_key=made.public_bytes(), label="첫 키")
-    return made
-
-
 def approved(
-    center: Center, key: Any, *, package_id: str = "erp.order-entry", run_location: str = "pc"
+    center: Center, *, package_id: str = "erp.order-entry", run_location: str = "pc"
 ) -> dict[str, Any]:
-    """업로드 → 승인까지."""
+    """업로드 → 승인까지 (봉투는 Center가 짓는다)."""
     info = upload(center, package_zip(package_id, run_location=run_location))
-    center.approve(
-        info["id"],
-        info["version"],
-        sign(
-            {"kind": "package", "id": info["id"], "version": info["version"],
-             "content_hash": info["content_hash"]},
-            keystore.load(key, passphrase=PASS),
-            signed_at=AT,
-        ),
-    )
+    center.approve(info["id"], info["version"])
     return info
 
 
-def deployment(
-    key: Any, info: dict[str, Any], *, target: str = BOT_UI, **extra: Any
-) -> Any:
+def deploy(
+    center: Center, info: dict[str, Any], *, target: str = BOT_UI, target_type: str = "bot_ui", **extra: Any
+) -> dict[str, Any]:
+    """배포한다 — `deployment_id`는 Center가 짓는다. 돌려주는 것은 C5 `DeploymentInfo`다."""
+    return dict(
+        center.deploy(
+            target={"type": target_type, "id": target},
+            bpm_process_id=info["id"],
+            version=info["version"],
+            **extra,
+        )
+    )
+
+
+def sealed(center: Center, info: dict[str, Any], *, deployment_id: str, **over: Any) -> Any:
+    """Center 키로 서명한 `deployment` 봉투 — `create`를 **거치지 않고** 지은 것이다.
+
+    옛 DB에 들어 있던 행을 꾸미거나, 같은 봉투를 계약에게 직접 물어 보려고 쓴다.
+    """
     payload: dict[str, Any] = {
         "kind": "deployment",
-        "deployment_id": extra.pop("deployment_id", "dep_3f9a1c07"),
-        "target": {"type": extra.pop("target_type", "bot_ui"), "id": target},
+        "deployment_id": deployment_id,
+        "target": {"type": over.pop("target_type", "bot_ui"), "id": over.pop("target", BOT_UI)},
         "bpm_process_id": info["id"],
         "version": info["version"],
-        "content_hash": extra.pop("content_hash", info["content_hash"]),
-        "not_before": extra.pop("not_before", None),
-        "expires_at": extra.pop("expires_at", None),
+        "content_hash": over.pop("content_hash", info["content_hash"]),
+        **over,
     }
-    return sign(payload, keystore.load(key, passphrase=PASS), signed_at=AT)
+    return center_signer.seal(center.client.app.state.store, payload)
 
 
 def deployer(center: Center, tmp_path: Path, **extra: Any) -> Deployer:
@@ -247,10 +238,9 @@ def deployer(center: Center, tmp_path: Path, **extra: Any) -> Deployer:
 
 def test_an_unapproved_package_cannot_be_deployed(center: Center) -> None:
     """**승인이 먼저다** — 서명 없는 것을 배포하면 받는 쪽이 어차피 거부한다."""
-    key = admin_key(center)
     info = upload(center, package_zip())
     with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info))
+        deploy(center, info)
     assert caught.value.code == "not_approved"
 
 
@@ -259,31 +249,24 @@ def test_a_deprecated_package_cannot_be_deployed_again(center: Center) -> None:
 
     막는 일에는 봉투가 없다 — 관리자 토큰으로 상태만 옮긴다.
     """
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     center.deprecate(info["id"], info["version"])
     with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info))
+        deploy(center, info)
     assert caught.value.code == "deprecated"
 
 
-def test_the_same_envelope_twice_is_idempotent(center: Center) -> None:
-    key = admin_key(center)
-    info = approved(center, key)
-    envelope = deployment(key, info)
-    first = center.deploy(envelope)
-    again = center.deploy(envelope)
-    assert first == again
-    assert len(center.deployments()) == 1
+def test_deploying_twice_makes_two_deployments(center: Center) -> None:
+    """같은 배포를 두 번 누르면 **두 배포**다 — `deployment_id`를 Center가 새로 짓는다 (ADR-0090 §6).
 
-
-def test_a_different_body_on_the_same_id_conflicts(center: Center) -> None:
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
-    with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info, expires_at="2027-01-01T00:00:00+09:00"))
-    assert caught.value.code == "deployment_conflict"
+    막을 일은 아니다 — 하나를 철회해도 다른 하나가 남아 그 PC에 그대로 간다.
+    """
+    info = approved(center)
+    first = deploy(center, info)
+    again = deploy(center, info)
+    assert first["deployment_id"] != again["deployment_id"]
+    assert all(one["deployment_id"].startswith("dep_") for one in (first, again))
+    assert len(center.deployments()) == 2
 
 
 def test_a_wildcard_pc_deployment_is_not_even_kept(center: Center) -> None:
@@ -292,10 +275,9 @@ def test_a_wildcard_pc_deployment_is_not_even_kept(center: Center) -> None:
     받아 두면 Center가 모든 PC에 내려 주고 **모든 PC가 V6 `wrong_target`으로 거부해** CON-03이
     거짓 ⛔로 찬다. 그때 운영자가 뒤지는 것은 승인·해시·키인데 **막은 것은 대상**이다.
     """
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info, target="*"))
+        deploy(center, info, target="*")
     assert caught.value.code == "wrong_target"
     assert center.deployments() == [], "행조차 남지 않는다"
 
@@ -310,8 +292,7 @@ def test_a_wildcard_row_already_in_the_database_still_goes_nowhere(
     """
     from chaeksas.center.api.deployments import downloadable_by, envelopes_for, versions_for
 
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     store = center.client.app.state.store
     # `create`를 거치지 않고 **손으로** 넣는다 (옛 DB에 들어 있던 꼴).
     with store.tx() as cur:
@@ -324,7 +305,10 @@ def test_a_wildcard_row_already_in_the_database_still_goes_nowhere(
                 info["id"],
                 info["version"],
                 info["content_hash"],
-                json.dumps(deployment(key, info, target="*").to_json_dict(), ensure_ascii=False),
+                json.dumps(
+                    sealed(center, info, deployment_id="dep_old00001", target="*").to_json_dict(),
+                    ensure_ascii=False,
+                ),
                 AT,
             ),
         )
@@ -362,21 +346,14 @@ def listing_of(center: Center, target_id: str) -> list[Any]:
 
 
 def test_a_revoked_deployment_never_comes_back(center: Center) -> None:
-    """**철회된 것은 영구히 철회 상태**다 (C2)."""
-    key = admin_key(center)
-    info = approved(center, key)
-    envelope = deployment(key, info)
-    center.deploy(envelope)
-    center.revoke_deployment(
-        sign(
-            {"kind": "revoke", "deployment_id": "dep_3f9a1c07", "reason": "잘못", "revoked_at": AT},
-            keystore.load(key, passphrase=PASS),
-            signed_at=AT,
-        )
-    )
-    with pytest.raises(CenterProblem) as caught:
-        center.deploy(envelope)
-    assert caught.value.code == "deployment_revoked"
+    """**철회된 것은 영구히 철회 상태**다 (C2) — 다시 철회해도 그대로이고 더 내려가지 않는다."""
+    info = approved(center)
+    made = deploy(center, info)
+    assert _envelopes(center)
+    first = center.revoke_deployment(made["deployment_id"], reason="잘못")
+    again = center.revoke_deployment(made["deployment_id"], reason="또")
+    assert first["revoked_at"] and again["revoked_at"] == first["revoked_at"], "멱등이다"
+    assert _envelopes(center) == [], "철회된 배포는 내려가지 않는다"
     assert center.deployments(active=True) == []
 
 
@@ -386,10 +363,9 @@ def test_a_pc_package_cannot_go_to_a_server_runner(center: Center) -> None:
     코드는 **`wrong_target`(409) 하나**다 (ADR-0047) — 계약도 그 이름으로 말한다.
     `target_mismatch`는 작업 쪽(모르는 대상 종류)에만 남았다.
     """
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info, target_type="server_runner", target="*"))
+        deploy(center, info, target_type="server_runner", target="*")
     assert (caught.value.status, caught.value.code) == (409, "wrong_target")
 
 
@@ -400,9 +376,8 @@ def test_a_server_deployment_is_taken_now_that_m7_is_open(center: Center) -> Non
     남으면 `GET /deployments`를 보는 운영자가 돌 것이라고 읽는다). 이제 실행기가 등록하고
     설치하고 **돌린다** — 관문은 서명·승인·대상뿐이다 (ADR-0047의 그 함수 하나).
     """
-    key = admin_key(center)
-    info = approved(center, key, package_id="erp.night-close", run_location="server")
-    assert center.deploy(deployment(key, info, target_type="server_runner", target="srv_1"))
+    info = approved(center, package_id="erp.night-close", run_location="server")
+    assert deploy(center, info, target_type="server_runner", target="srv_1")
     listed = center.deployments(active=False)
     assert [one["target"]["type"] for one in listed] == ["server_runner"]
 
@@ -414,15 +389,14 @@ def test_an_unregistered_pc_cannot_be_deployed_to(center: Center) -> None:
     맞추고, CON-03에는 그 PC 줄이 없어 보여 줄 자리조차 없다. 「미리 배포해 두기」를 막는 것이
     아니다: `bot_ui_id`는 Center가 등록에서 만들어 등록 전에는 봉투에 적을 id가 없다.
     """
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info, target="bui_00000000"))
+        deploy(center, info, target="bui_00000000")
     assert (caught.value.status, caught.value.code) == (404, "target_not_found")
     assert center.deployments(active=False) == [], "행조차 남지 않는다"
 
     # 등록된 PC에는 그대로 간다 — 막는 것은 **명부에 없는 id**뿐이다.
-    center.deploy(deployment(key, info, target=BOT_UI))
+    deploy(center, info, target=BOT_UI)
     assert [one["target"]["id"] for one in center.deployments(active=True)] == [BOT_UI]
 
 
@@ -432,10 +406,9 @@ def test_a_wrong_target_is_answered_before_a_missing_one(center: Center) -> None
     PC 배포의 `"*"`는 등록된 id가 아니지만, 운영자가 할 일은 「대상을 하나 적는다」다 (ADR-0046)
     — 404로 답하면 있지도 않은 「`*`라는 PC」를 찾는다.
     """
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info, target="*"))
+        deploy(center, info, target="*")
     assert (caught.value.status, caught.value.code) == (409, "wrong_target")
 
 
@@ -444,7 +417,7 @@ def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> Non
 
     두 벌이던 때 대상 어긋남이 한쪽에서 `target_mismatch`(422), 다른 쪽에서 `wrong_target`(409)
     이었고 서버 배포 관문은 계약에만 있었다. 베낀 것이 아니라 **같은 함수**를 부르는지 보려고
-    같은 봉투를 계약에게도 물어 본다.
+    Center가 지을 것과 같은 봉투를 계약에게도 물어 본다.
     """
     from chaeksas.center.api import bot_ui as bot_ui_api
     from chaeksas.contracts.center_api import (
@@ -454,27 +427,24 @@ def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> Non
         validate_deployment,
     )
 
-    key = admin_key(center)
     keys = center.admin_keys()
-    pc = approved(center, key)
-    server = approved(center, key, package_id="erp.night-close", run_location="server")
+    pc = approved(center)
+    server = approved(center, package_id="erp.night-close", run_location="server")
     other = upload(center, package_zip("erp.not-approved"))  # 승인하지 않는다
-    old = approved(center, key, package_id="erp.old")
+    old = approved(center, package_id="erp.old")
     center.deprecate(old["id"], old["version"])
 
-    tried = (
-        (other, deployment(key, other, deployment_id="dep_00000001")),
-        (old, deployment(key, old, deployment_id="dep_00000002")),
-        (pc, deployment(key, pc, target="*", deployment_id="dep_00000003")),
-        (pc, deployment(key, pc, target_type="server_runner", target="srv_1",
-                        deployment_id="dep_00000004")),
-        (pc, deployment(key, pc, content_hash="sha256:" + "99" * 32,
-                        deployment_id="dep_00000005")),
-        (pc, deployment(key, pc, target="bui_00000000", deployment_id="dep_00000007")),
+    tried: tuple[tuple[dict[str, Any], dict[str, Any]], ...] = (
+        (other, {}),
+        (old, {}),
+        (pc, {"target": "*"}),
+        (pc, {"target_type": "server_runner", "target": "srv_1"}),
+        (pc, {"target": "bui_00000000"}),
     )
     store = center.client.app.state.store
     seen = set()
-    for info, envelope in tried:
+    for info, over in tried:
+        envelope = sealed(center, info, deployment_id="dep_00000001", **over)
         # 대상이 등록됐나는 **Center가 읽어 계약에 넘긴다** (ADR-0049) — 여기서도 같은 길로
         # 묻는다. SQL을 베껴 두면 「같은 함수를 부르는가」가 아니라 베낀 것을 보게 된다.
         target = envelope.payload["target"]
@@ -491,28 +461,24 @@ def test_center_refuses_exactly_what_the_contract_refuses(center: Center) -> Non
                 ),
             )
         )
-        assert said is not None, f"계약이 거절하지 않았다: {envelope.payload['deployment_id']}"
+        assert said is not None, f"계약이 거절하지 않았다: {info['id']} {over}"
         with pytest.raises(CenterProblem) as caught:
-            center.deploy(envelope)
-        assert (caught.value.status, caught.value.code) == (said[0], said[1].code), (
-            envelope.payload["deployment_id"]
-        )
+            deploy(center, info, **over)
+        assert (caught.value.status, caught.value.code) == (said[0], said[1].code), (info["id"], over)
         seen.add(caught.value.code)
     # **규칙마다** 봤다는 것까지 — 하나로 뭉쳐도 통과하면 「맞물린다」를 증명하지 못한다.
     #
-    # `server_runner_not_available`만 빠진다 — **스위치를 켰으므로**(M7) HTTP 길로는 그 코드를
+    # 둘이 빠진다. `server_runner_not_available` — **스위치를 켰으므로**(M7) HTTP 길로는 그 코드를
     # 낼 수 없다. 표에는 남아 있다 (끌 수 있는 값이면 상태도 있어야 한다 — `test_center_api.py`가
-    # 끈 길을 본다).
-    assert seen == set(DEPLOYMENT_REFUSAL_STATUS) - {"server_runner_not_available"}
+    # 끈 길을 본다). `hash_mismatch` — **해시는 Center가 패키지에서 채운다**(ADR-0090) — 요청에
+    # 해시를 적을 칸이 없어 어긋날 수가 없다. 계약 쪽은 `test_contracts_center_api.py`가 본다.
+    assert seen == set(DEPLOYMENT_REFUSAL_STATUS) - {"server_runner_not_available", "hash_mismatch"}
 
     assert center.deployments(active=False) == [], "거절한 것은 하나도 남지 않는다"
 
     # 거꾸로도 본다 — **서버 패키지를 서버 실행기에 배포하는 것은 이제 통과한다** (M7).
-    assert center.deploy(
-        deployment(key, server, target_type="server_runner", target="srv_1",
-                   deployment_id="dep_00000006")
-    )
-    assert [one["deployment_id"] for one in center.deployments(active=False)] == ["dep_00000006"]
+    made = deploy(center, server, target_type="server_runner", target="srv_1")
+    assert [one["deployment_id"] for one in center.deployments(active=False)] == [made["deployment_id"]]
 
 
 def test_the_listing_answers_in_the_contract_shape(center: Center) -> None:
@@ -522,33 +488,26 @@ def test_the_listing_answers_in_the_contract_shape(center: Center) -> None:
     """
     from chaeksas.contracts.center_api import DeploymentInfo
 
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     until = "2027-01-01T00:00:00+09:00"
-    center.deploy(deployment(key, info, expires_at=until))
+    deploy(center, info, expires_at=until)
 
     found = DeploymentInfo.model_validate(center.deployments()[0])
-    assert found.signed_by == key.key_id, "서명한 Admin 키"
-    assert found.signed_at == AT
+    assert found.signed_by == center_signer.current_key_id(center.client.app.state.store), "Center 키"
+    assert found.signed_at
+    assert found.deployed_by, "누가 배포했는지는 계정·행위자 이름으로 남는다 (ADR-0090 §6)"
     assert found.expires_at == until and found.not_before is None
     assert found.revoked_at is None and found.last_result is None
 
 
 def test_a_revoked_deployment_keeps_its_row_with_a_time(center: Center) -> None:
     """철회해도 **행은 남는다** — 「언제 철회됐나」가 콘솔에 보여야 한다 (C5)."""
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
-    center.revoke_deployment(
-        sign(
-            {"kind": "revoke", "deployment_id": "dep_3f9a1c07", "reason": "잘못", "revoked_at": AT},
-            keystore.load(key, passphrase=PASS),
-            signed_at=AT,
-        )
-    )
+    info = approved(center)
+    made = deploy(center, info)
+    center.revoke_deployment(made["deployment_id"], reason="잘못")
     assert center.deployments(active=True) == []
     [one] = center.deployments(active=False)
-    assert one["revoked_at"] == AT
+    assert one["revoked_at"]
 
 
 def test_a_bot_ui_key_downloads_only_what_is_deployed_to_it(center: Center) -> None:
@@ -556,26 +515,19 @@ def test_a_bot_ui_key_downloads_only_what_is_deployed_to_it(center: Center) -> N
 
     배포를 철회하면 **그 자리에서 닫힌다** — 키는 그대로인데 받을 수 있는 것이 달라진다.
     """
-    key = admin_key(center)
-    mine = approved(center, key)
-    other = approved(center, key, package_id="erp.payment")
+    mine = approved(center)
+    other = approved(center, package_id="erp.payment")
 
     auth = {"Authorization": f"Bearer {center.client.app.state.bot_ui_key}"}
 
-    center.deploy(deployment(key, mine, target=BOT_UI))
+    made = deploy(center, mine, target=BOT_UI)
     for info, expected in ((mine, 200), (other, 403)):
         answer = center.client.get(
             f"/api/v1/packages/{info['id']}/{info['version']}", headers=auth
         )
         assert answer.status_code == expected, (info["id"], answer.text)
 
-    center.revoke_deployment(
-        sign(
-            {"kind": "revoke", "deployment_id": "dep_3f9a1c07", "reason": "잘못", "revoked_at": AT},
-            keystore.load(key, passphrase=PASS),
-            signed_at=AT,
-        )
-    )
+    center.revoke_deployment(made["deployment_id"], reason="잘못")
     closed = center.client.get(f"/api/v1/packages/{mine['id']}/{mine['version']}", headers=auth)
     assert closed.status_code == 403
 
@@ -586,22 +538,12 @@ def test_a_bot_ui_key_gets_only_the_package_deployed_to_it(center: Center) -> No
     쓰는 공유 BPM 프로세스도 따로 받지 않는다 — 그것은 패키지 안 `libs/`로 **복사해 넣은**
     것이다 (C1 §패키지 구성). 도구 묶음은 패키지로 오지 않는다 (ADR-0050).
     """
-    key = admin_key(center)
     lib = upload(center, lib_zip())
     info = upload(
         center,
         package_zip(requires={"libs": [f"{lib['id']}@{lib['version']}"]}),
     )
-    center.approve(
-        info["id"],
-        info["version"],
-        sign(
-            {"kind": "package", "id": info["id"], "version": info["version"],
-             "content_hash": info["content_hash"]},
-            keystore.load(key, passphrase=PASS),
-            signed_at=AT,
-        ),
-    )
+    center.approve(info["id"], info["version"])
 
     created = center.client.post(
         "/api/v1/center-keys",
@@ -620,7 +562,7 @@ def test_a_bot_ui_key_gets_only_the_package_deployed_to_it(center: Center) -> No
         },
         headers=auth,
     )
-    center.deploy(deployment(key, info, target=registered.json()["bot_ui_id"]))
+    deploy(center, info, target=registered.json()["bot_ui_id"])
     assert center.client.get(
         f"/api/v1/packages/{info['id']}/{info['version']}", headers=auth
     ).status_code == 200
@@ -635,9 +577,8 @@ def test_a_bot_ui_key_gets_only_the_package_deployed_to_it(center: Center) -> No
 
 def test_a_signed_deployment_installs(center: Center, tmp_path: Path) -> None:
     """한 바퀴 — Admin 서명 → Center → **설치**."""
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
+    info = approved(center)
+    deploy(center, info)
 
     found = deployer(center, tmp_path).apply(_envelopes(center))
     assert [one.result for one in found] == [APPLIED]
@@ -647,9 +588,8 @@ def test_a_signed_deployment_installs(center: Center, tmp_path: Path) -> None:
 
 
 def test_installing_twice_does_nothing(center: Center, tmp_path: Path) -> None:
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
+    info = approved(center)
+    deploy(center, info)
     one = deployer(center, tmp_path)
     assert len(one.apply(_envelopes(center))) == 1
     assert one.apply(_envelopes(center)) == [], "이미 설치돼 있으면 조용히 지나간다"
@@ -657,10 +597,8 @@ def test_installing_twice_does_nothing(center: Center, tmp_path: Path) -> None:
 
 def test_an_unsigned_package_is_refused(center: Center, tmp_path: Path) -> None:
     """**서명 없는 패키지는 설치하지 않는다** (V7) — 거부도 보고한다."""
-    key = admin_key(center)
-    info = approved(center, key)
-    envelope = deployment(key, info)
-    center.deploy(envelope)
+    info = approved(center)
+    deploy(center, info)
 
     def bare(package_id: str, version: str) -> Path:
         """승인 봉투를 뺀 zip — Center를 거치지 않고 온 것처럼."""
@@ -685,12 +623,11 @@ def test_someone_elses_deployment_is_refused(
     남의 것도 **등록된 PC**다 (ADR-0049) — 등록되지 않은 id로는 배포 자체가 404라서, 이 시험이
     보려는 「설치하는 쪽이 대상을 본다」를 Center가 먼저 가로챈다.
     """
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     other_pc = "bui_b70d1104"
     register_pc(center, monkeypatch, other_pc, machine="7" * 64, name="현장 PC 2")
 
-    center.deploy(deployment(key, info, target=other_pc))
+    deploy(center, info, target=other_pc)
     found = deployer(center, tmp_path).apply(_all_envelopes(center))
     assert [one.reason for one in found] == ["wrong_target"]
     assert installed(tmp_path / "botui") == []
@@ -698,9 +635,8 @@ def test_someone_elses_deployment_is_refused(
 
 def test_an_unknown_key_is_refused(center: Center, tmp_path: Path) -> None:
     """Admin 키를 모르면 **설치하지 않는다** (V2)."""
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
+    info = approved(center)
+    deploy(center, info)
     one = deployer(center, tmp_path)
     one.keys = []  # 아직 키를 못 받았다
     found = one.apply(_envelopes(center))
@@ -709,10 +645,9 @@ def test_an_unknown_key_is_refused(center: Center, tmp_path: Path) -> None:
 
 def test_a_scheduled_deployment_waits(center: Center, tmp_path: Path) -> None:
     """**예약은 거부가 아니다** (V5b) — 때가 되면 설치한다."""
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     later = (datetime.fromisoformat(AT) + timedelta(days=1)).isoformat()
-    center.deploy(deployment(key, info, not_before=later))
+    deploy(center, info, not_before=later)
 
     waiting = deployer(center, tmp_path)
     assert waiting.apply(_envelopes(center)) == [], "기다림은 보고하지 않는다"
@@ -724,39 +659,50 @@ def test_a_scheduled_deployment_waits(center: Center, tmp_path: Path) -> None:
 
 
 def test_an_expired_deployment_is_refused(center: Center, tmp_path: Path) -> None:
-    key = admin_key(center)
-    info = approved(center, key)
+    info = approved(center)
     past = (datetime.now(UTC) - timedelta(days=1)).isoformat()
     with pytest.raises(CenterProblem) as caught:
-        center.deploy(deployment(key, info, expires_at=past))
+        deploy(center, info, expires_at=past)
     assert caught.value.code == "expired", "Center도 만료를 본다 (V5a)"
 
 
 def test_a_revoked_package_stops_coming_down(center: Center) -> None:
     """승인이 철회되면 **배포가 더 내려오지 않는다** (C2)."""
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
+    info = approved(center)
+    deploy(center, info)
     assert _envelopes(center)
 
-    center.revoke_package(
-        info["id"],
-        info["version"],
-        sign(
-            {"kind": "package_revoke", "id": info["id"], "version": info["version"],
-             "reason": "결함", "revoked_at": AT},
-            keystore.load(key, passphrase=PASS),
-            signed_at=AT,
-        ),
-    )
+    center.revoke_package(info["id"], info["version"], reason="결함")
     assert _envelopes(center) == []
+    with pytest.raises(CenterProblem) as caught:
+        center.approve(info["id"], info["version"])
+    assert caught.value.status == 409, "철회된 승인은 되살아나지 않는다 (C2)"
+
+
+def test_a_retired_signing_key_makes_the_field_refuse(center: Center, tmp_path: Path) -> None:
+    """Center 키를 **버리면** 그 키가 서명한 배포를 현장이 거부한다 (C2 V2 `revoked_key`, ADR-0090 §5).
+
+    사람이 Admin 키를 철회하던 자리다. 버리기 전에 바꿔야 한다 — 지금 서명하는 키는 버릴 수
+    없다(잠기면 아무것도 서명하지 못한다).
+    """
+    store = center.client.app.state.store
+    info = approved(center)
+    deploy(center, info)
+    old = center_signer.current_key_id(store)
+    with pytest.raises(ValueError):
+        center_signer.retire(store, old)
+
+    center_signer.rotate(store)
+    center_signer.retire(store, old)
+    found = deployer(center, tmp_path).apply(_envelopes(center))
+    assert [x.reason for x in found] == ["revoked_key"]
+    assert installed(tmp_path / "botui") == []
 
 
 def test_a_download_failure_is_not_a_refusal(center: Center, tmp_path: Path) -> None:
     """**닿지 못한 것은 거부가 아니다** — 다음 하트비트에 다시 받는다."""
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
+    info = approved(center)
+    deploy(center, info)
 
     def broken(package_id: str, version: str) -> Path:
         raise RuntimeError("닿지 못했다")
@@ -783,9 +729,8 @@ def _manual(data_dir: Path, tmp_path: Path, name: str = "manual.zip") -> Any:
 
 def test_a_deployed_bot_says_it_came_from_center(center: Center, tmp_path: Path) -> None:
     """배포로 설치된 것은 「Center 배포」다 — 표식이 봉투 옆에 남는다 (BUI-04)."""
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
+    info = approved(center)
+    deploy(center, info)
 
     assert [one.result for one in deployer(center, tmp_path).apply(_envelopes(center))] == [APPLIED]
     [bot] = installed(tmp_path / "botui")
@@ -838,9 +783,8 @@ def test_a_marker_it_cannot_read_is_unknown_too(tmp_path: Path, raw: str) -> Non
 
 def test_installing_over_a_deployed_bot_rewrites_the_mark(center: Center, tmp_path: Path) -> None:
     """같은 판을 사람이 다시 넣으면 「수동 설치」다 — **폴더에 있는 것은 그 파일이다**."""
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
+    info = approved(center)
+    deploy(center, info)
     data_dir = tmp_path / "botui"
     deployer(center, tmp_path).apply(_envelopes(center))
     assert installed(data_dir)[0].source == "Center 배포"
@@ -855,9 +799,8 @@ def test_a_skipped_deployment_leaves_the_mark_alone(center: Center, tmp_path: Pa
 
     사람이 넣은 파일이 그 폴더에 있는 것이니 「수동 설치」가 맞다 (설치하지 않았으므로).
     """
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
+    info = approved(center)
+    deploy(center, info)
     data_dir = tmp_path / "botui"
     _manual(data_dir, tmp_path)
 
@@ -877,38 +820,6 @@ def test_the_mark_does_not_make_the_bot_unreadable(tmp_path: Path) -> None:
     [again] = installed(data_dir)
     assert again.id == bot.id and again.version == bot.version
     assert content_hash_zip(package) == before, "zip은 그대로다"
-
-
-# ─────────────────────────── 명령줄 ───────────────────────────
-
-
-def test_the_command_signs_and_deploys(center: Center, capsys: Any) -> None:
-    key = admin_key(center)
-    info = approved(center, key)
-    code = admin_main(["-y", "deploy", info["id"], info["version"], "--bot-ui", BOT_UI], center=center)
-    assert code == 0
-    printed = capsys.readouterr().out
-    assert info["content_hash"] in printed and "배포했습니다" in printed
-    assert len(center.deployments()) == 1
-
-
-def test_the_command_refuses_an_unapproved_package(center: Center, capsys: Any) -> None:
-    admin_key(center)
-    info = upload(center, package_zip())
-    assert admin_main(["-y", "deploy", info["id"], info["version"], "--bot-ui", BOT_UI], center=center) == 2
-    assert "승인되지 않은" in capsys.readouterr().out
-
-
-def test_the_command_lists_and_revokes(center: Center, capsys: Any) -> None:
-    key = admin_key(center)
-    info = approved(center, key)
-    center.deploy(deployment(key, info))
-    assert admin_main(["deployments"], center=center) == 0
-    assert "dep_3f9a1c07" in capsys.readouterr().out
-
-    assert admin_main(["-y", "revoke-deploy", "dep_3f9a1c07"], center=center) == 0
-    assert "철회했습니다" in capsys.readouterr().out
-    assert center.deployments(active=True) == []
 
 
 # ─────────────────────────── 하트비트가 나르는 것 ───────────────────────────
@@ -950,10 +861,11 @@ def test_the_heartbeat_carries_the_envelope_and_keys(center: Center, tmp_path: P
     from chaeksas.bot_ui.store import Store as BotStore
     from chaeksas.contracts.bot_ui import HeartbeatResponse
 
-    key = admin_key(center)
-    info = approved(center, key)
-    envelope = deployment(key, info)
-    center.deploy(envelope)
+    info = approved(center)
+    made = deploy(center, info)
+    store = center.client.app.state.store
+    row = store.row("SELECT envelope_json FROM deployments WHERE deployment_id = ?", (made["deployment_id"],))
+    stored = json.loads(row["envelope_json"])
 
     # Center가 그 Bot UI에게 줄 것 (하트비트 응답의 `deployments`).
     body = {
@@ -962,7 +874,7 @@ def test_the_heartbeat_carries_the_envelope_and_keys(center: Center, tmp_path: P
         "admin_keys": [one.to_json_dict() for one in center.admin_keys()],
     }
     response = HeartbeatResponse.model_validate(body)
-    assert response.deployments[0]["sig"] == envelope.sig, "봉투 바이트가 그대로다"
+    assert response.deployments[0]["sig"] == stored["sig"], "봉투 바이트가 그대로다"
 
     agent = Agent(
         settings=BotSettings(),

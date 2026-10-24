@@ -176,6 +176,9 @@ def with_signature(path: Path, envelope: Any) -> bytes:
 def _info(row: Any, index: Any = None) -> PackageInfo:
     # `size_bytes`는 C5 `PackageInfo`에 없다 — DB에만 둔다 (운영용). 화면이 필요하면 계약 먼저 고친다.
     manifest = Manifest.model_validate(loads(row["manifest_json"], {}))
+    # 승인 봉투에서 서명 키·시각을 읽는다 (C5). 사람은 `approved_by`다 (ADR-0090).
+    keys = row.keys()
+    signature = loads(row["signature_json"], None) if "signature_json" in keys else None
     return PackageInfo(
         id=row["id"],
         version=row["version"],
@@ -187,6 +190,9 @@ def _info(row: Any, index: Any = None) -> PackageInfo:
         manifest=manifest,
         uploaded_at=row["uploaded_at"],
         uploaded_by=row["uploaded_by"],
+        signed_by=signature.get("key_id") if signature else None,
+        signed_at=signature.get("signed_at") if signature else None,
+        approved_by=row["approved_by"] if "approved_by" in keys else None,
         # **읽을 때 리소스 목록과 대조한다** (C5·C7) — 저장해 두면 리소스가 바뀌어도 낡은다.
         missing_resources=_missing(manifest, index),
         download_count=row["download_count"],

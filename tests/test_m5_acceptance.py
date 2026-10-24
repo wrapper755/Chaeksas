@@ -16,8 +16,8 @@
 
 1. **묶음 목록은 예제에서 읽는다** — `README.md`의 표를 사람이 옮겨 적으면 어긋난다.
 2. **주소의 출처는 하나다** (C13) — Center 리소스 등록이다. 등록하지 않은 앱은 부를 수 없다.
-3. **외부 앱은 봉투로만** 온다 — 진짜 `chk-admin` 서명을 Center에 등록하고, Studio가 받아
-   `verify_external`로 **다시 검증한다**. 검증되지 않으면 부르지 않는다.
+3. **외부 앱은 봉투로만** 온다 — 관리자가 정의를 등록하면 Center가 서명하고(ADR-0090), Studio가
+   받아 `verify_external`로 **다시 검증한다**. 검증되지 않으면 부르지 않는다.
 4. **키는 참조 이름으로만** 간다 (ADR-0013) — 그림에는 이름뿐이고 값은 Studio의 비밀 창고에서
    나온다. 여기서는 시험이 그 자리를 맡는다.
 5. **바깥에 나가지 않는다** — 모델도 모의 앱도 127.0.0.1이다.
@@ -37,18 +37,15 @@ import httpx
 import pytest
 import uvicorn
 from canned_answers import canned
+from center_admin import register_extension
 from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from chaeksas.admin import keys as keystore  # noqa: E402
-from chaeksas.center.api.signing import bootstrap_key  # noqa: E402
 from chaeksas.center.app import create_app  # noqa: E402
 from chaeksas.center.settings import Settings as CenterSettings  # noqa: E402
 from chaeksas.center.storage import Store  # noqa: E402
 from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
-from chaeksas.contracts.extension import definition_hash  # noqa: E402
-from chaeksas.contracts.signing import sign  # noqa: E402
 from chaeksas.core.app_directory import AppDirectory  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
 from chaeksas.mock_apps.c11 import SHARED_KEY_ENV  # noqa: E402
@@ -70,8 +67,6 @@ DEV_KEY = "chk_svc_m5acceptancekey000000000000000000000"
 
 ADMIN_TOKEN = "t-admin"
 ADMIN = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
-SIGN_PASS = "열쇠말"
-SIGNED_AT = "2026-10-07T09:00:00+09:00"
 
 
 def bundle() -> list[str]:
@@ -159,21 +154,6 @@ def scenario(apps: dict[str, str], app_id: str, name: str) -> None:
 # ─────────────────────────── Center (진짜 앱) ───────────────────────────
 
 
-@pytest.fixture(scope="session")
-def admin_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Path]:
-    """`chk-admin`의 개인키가 사는 곳 — 시험이 쓰는 임시 폴더다 (개발 PC를 건드리지 않는다)."""
-    home = tmp_path_factory.mktemp("admin")
-    before = {name: os.environ.get(name) for name in (keystore.PASSPHRASE_ENV, f"{keystore.ENV_PREFIX}DATA_DIR")}
-    os.environ[keystore.PASSPHRASE_ENV] = SIGN_PASS
-    os.environ[f"{keystore.ENV_PREFIX}DATA_DIR"] = str(home)
-    yield home
-    for name, value in before.items():
-        if value is None:
-            os.environ.pop(name, None)
-        else:
-            os.environ[name] = value
-
-
 @dataclass(frozen=True)
 class Center:
     """시험이 띄운 Center 하나.
@@ -185,18 +165,16 @@ class Center:
     url: str
     client: httpx.Client
     studio_key: str
-    #: Admin 서명 키 — 승인·배포 봉투를 만든다 (C2).
-    signing_key: Any
 
 
 @pytest.fixture(scope="session")
 def center(
-    tmp_path_factory: pytest.TempPathFactory, mock_apps: dict[str, str], admin_home: Path
+    tmp_path_factory: pytest.TempPathFactory, mock_apps: dict[str, str]
 ) -> Iterator[Center]:
     """진짜 Center + 등록된 모의 앱들.
 
-    여기서 운영자가 하는 일을 시험이 그대로 한다 — **주소를 넣고**(C7), 외부 확장 정의에
-    **서명해 등록한다**(C13 E6). 둘 다 하지 않으면 Studio가 그 앱을 부를 수 없다.
+    여기서 운영자가 하는 일을 시험이 그대로 한다 — **주소를 넣고**(C7), 외부 확장 정의를
+    **등록한다**(C13 E6 — 봉투는 Center가 짓는다). 둘 다 하지 않으면 Studio가 그 앱을 부를 수 없다.
     """
     root = tmp_path_factory.mktemp("center")
     store = Store(root / "center.sqlite3")
@@ -205,9 +183,6 @@ def center(
     )
     url, server, thread = serve(create_app(settings, store=store))
     with httpx.Client(base_url=url, timeout=30.0) as client:
-        signing_key = keystore.create(label="M5 인수 시험")
-        bootstrap_key(store, public_key=signing_key.public_bytes(), label="M5 인수 시험")
-
         for one in catalog.C11_APPS:
             answer = client.post(
                 "/api/v1/resources/service-apps",
@@ -217,28 +192,12 @@ def center(
             assert answer.status_code < 400, f"{one.app_id}: {answer.text}"
 
         for app_id, make in external_defs.BUILDERS.items():
-            found = make(mock_apps[app_id])
-            envelope = sign(
-                {
-                    "kind": "extension",
-                    "id": found["id"],
-                    "version": found["version"],
-                    "definition_hash": definition_hash(found),
-                },
-                keystore.load(signing_key, passphrase=SIGN_PASS),
-                signed_at=SIGNED_AT,
-            )
-            answer = client.post(
-                "/api/v1/resources/extensions",
-                json={"definition": found, "envelope": envelope.to_json_dict()},
-                headers=ADMIN,
-            )
-            assert answer.status_code < 400, f"{app_id}: {answer.text}"
+            register_extension(client, make(mock_apps[app_id]), headers=ADMIN)
 
         studio_key = client.post(
             "/api/v1/center-keys", json={"name": "Studio", "type": "studio"}, headers=ADMIN
         ).json()["key"]
-        yield Center(url=url, client=client, studio_key=studio_key, signing_key=signing_key)
+        yield Center(url=url, client=client, studio_key=studio_key)
     server.should_exit = True
     thread.join(timeout=10)
     store.close()

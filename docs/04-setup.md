@@ -157,6 +157,8 @@ uv run chk-center hosts retire bui_xxxxxxxx
 - Studio: `uv run chk-studio` (캔버스는 QtWebEngine이라 `pyside6-addons`가 함께 깔린다). 작업 폴더·설정은 사용자 데이터 폴더의 `studio/`이고 환경변수로 덮어쓴다 — `CHK_STUDIO__DATA_DIR`, `CHK_STUDIO__CENTER__URL`, `CHK_STUDIO__LLM__BASE_URL`, `CHK_STUDIO__LLM__MODEL`, `CHK_STUDIO__READABLE_DIRS`.
 - Bot UI: `uv run chk-bot-ui` (트레이에 뜬다. 트레이가 없는 환경이면 메인 창으로 뜬다). 설정은 BUI-03 창에서 하고 파일은 사용자 데이터 폴더의 `settings.json`이다. 환경변수로 덮어쓸 수 있다 — `CHK_BOT_UI__CENTER__URL`, `CHK_BOT_UI__QUEUE__MAX`, `CHK_BOT_UI__WORKER__PORT`, `CHK_BOT_UI__AUTOSTART`, `CHK_BOT_UI__DATA_DIR`. **Center API 키는 OS 비밀 저장소**에 있고, 비밀 저장소가 없는 환경(헤드리스 CI)에서는 `CHK_BOT_UI__CENTER_API_KEY`로 준다.
 - Tool UI: `uv run chk-tool-ui [--open <확장>:<도구>]` (TOL-01, [ADR-0077](decisions/0077-tool-ui.md)) — 보통은 Bot UI 「도구」에서 연다(그러면 Bot UI가 Worker를 먼저 띄운다). **Worker를 띄우지 않으므로** Bot UI가 떠 있어야 셀렉터 등록이 열린다. 설정은 데이터 폴더(`CHK_TOOL_UI__DATA_DIR`로 바꾼다)의 `settings.json`이고, 등록 담당자 키 같은 비밀 칸은 OS 비밀 저장소 `chaeksas-tool-ui`(`ext:<확장>:<칸>`) — 개발·CI에서는 `CHK_TOOL_UI__EXT__<확장>__<칸>`(예: `CHK_TOOL_UI__EXT__UI_AUTOMATION__REGISTRAR_KEY`). 묶은 앱에서는 Bot UI 실행 파일에 `--tool-ui`를 붙인 것이고 설치 파일이 시작 메뉴에 「Chaeksas Tool UI」를 만든다.
+- Center 관리자 계정 ([ADR-0090](decisions/0090-center-admin-accounts.md)): 콘솔은 **아이디·비밀번호**로 들어온다. 첫 관리자는 `CHK_CENTER__FIRST_ADMIN__USERNAME`(비우면 `admin`)·`CHK_CENTER__FIRST_ADMIN__PASSWORD`로 정하고 **계정이 하나도 없을 때만** 쓰인다(그다음에는 콘솔 CON-14에서 바꾼다). 비밀번호는 12자 이상·영문과 숫자를 모두 넣는다 — 맞지 않으면 Center가 **뜨지 않는다**. 비우면 Center가 만들어 로그에 한 번 찍고 데이터 폴더의 `first-admin-password.txt`에 둔다(그 계정이 비밀번호를 바꾸면 지운다). `CHK_CENTER__ADMIN_TOKEN`·`CHK_CENTER__READ_TOKEN`은 **자동화용**이고 선택이다 — 비우면 그 길이 닫힌다.
+- Center 서명 키: Center가 **처음 뜰 때 만들어 DB에 둔다**(승인·배포·외부 확장 봉투에 Center가 서명한다, ADR-0090). 서버 셸에서 `chk-center signing-key list`(믿는 키) · `rotate`(새 키로 바꾼다 — 옛 키는 믿는 목록에 남는다) · `retire <key_id>`(그 키가 서명한 승인·배포가 **모두 무효**가 된다, 묻는다)다. compose면 `docker compose exec center uv run --frozen --package chaeksas-center chk-center signing-key …`.
 - 서비스 앱 관리자 토큰: `CHK_SVC_<앱 id>__ADMIN_TOKEN` (예: `CHK_SVC_UI_AUTOMATION__ADMIN_TOKEN`). **이 토큰이 없으면 그 앱의 관리 API(`/admin/v1/*`)가 503으로 닫혀 있다** — 빈 토큰으로 열리지 않는다 ([C11](03-contracts/C11-service-app-common.md) §관리 API). 서비스 앱 API 키는 그 콘솔(SVC-02)에서 발급해 Bot UI 설정·Studio 설정에 **참조 이름**으로 넣는다.
 - 서비스 앱의 모델: `CHK_SVC_<앱 id>__LLM__BASE_URL`·`__LLM__MODEL`·`__LLM__API_KEY`(선택, 비밀). 없으면 모델이 필요한 작업만 503 `llm_unavailable`이고 나머지는 돈다 ([C11](03-contracts/C11-service-app-common.md) §모델 연결).
 
@@ -351,7 +353,7 @@ M6 둘째 기준(「새 개발자가 이 문서만 보고 1시간 안에」)을 
 
 ### 실행 기록 — 시나리오 3 현장 리허설 (2026-10-17)
 
-M6 첫째 기준을 사람이 현장 PC에서 해 보기 전에 **같은 PC에서 Claude와 함께** 이어 봤다 (Windows 11, 일반 사용자, **한글 사용자 이름**). 서버(Center·UI 자동화 앱·모의 앱 포털·리허설용 SMTP 받는 곳)는 그 PC의 127.0.0.1에 띄우고 데이터는 따로 둔 폴더(`C:\dev\field-run\`)에 모았다. Bot UI·Studio·Admin은 사람이 제 PowerShell에서 띄웠다.
+M6 첫째 기준을 사람이 현장 PC에서 해 보기 전에 **같은 PC에서 Claude와 함께** 이어 봤다 (Windows 11, 일반 사용자, **한글 사용자 이름**). 서버(Center·UI 자동화 앱·모의 앱 포털·리허설용 SMTP 받는 곳)는 그 PC의 127.0.0.1에 띄우고 데이터는 따로 둔 폴더(`C:\dev\field-run\`)에 모았다. Bot UI·Studio·Admin(그때는 데스크톱 창이었다 — 지금은 콘솔, ADR-0090)은 사람이 제 PowerShell에서 띄웠다.
 
 **끝까지 돌았다** — 올리기 → 승인·배포 서명 → 설치·「준비됨」 → 작업 지시 → 포털 표 읽기 → 회계 프로그램 4줄 입력 → 검산 → 메일 (`success`, 약 50초). 막힌 자리와 처리:
 

@@ -23,17 +23,15 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import center_admin
 import fake_server_extension
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
-from chaeksas.center.storage import Store, now_iso
+from chaeksas.center.storage import Store
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
-from chaeksas.contracts.signing import sign
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.run_log import log_path
 from chaeksas.server_runner import agent as agent_mod
@@ -41,7 +39,6 @@ from chaeksas.server_runner.center_client import CenterClient
 from chaeksas.server_runner.settings import Settings
 
 ADMIN = {"Authorization": "Bearer t-admin"}
-PASS = "열쇠말"
 AT = "2026-10-16T09:00:00+09:00"
 BOT = "doc.summary"
 PROCESS_ID = "Proc_doc_summary"
@@ -104,12 +101,6 @@ DEFINITION: dict[str, Any] = {
         ],
     },
 }
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
 
 
 @pytest.fixture(autouse=True)
@@ -203,8 +194,6 @@ def package_zip() -> bytes:
 def ready_runner(center: TestClient, store: Store, runner: agent_mod.Agent) -> None:
     """등록 → 승인 → 배포 → 설치까지 세워 둔다."""
     runner.tick()  # 등록 — 이때 깔린 확장을 보고한다 (C12)
-    signer = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=signer.public_bytes(), label="첫 키")
 
     uploaded = center.post(
         "/api/v1/packages",
@@ -214,39 +203,13 @@ def ready_runner(center: TestClient, store: Store, runner: agent_mod.Agent) -> N
     assert uploaded.status_code in (200, 201), uploaded.text
     info = dict(uploaded.json())
 
-    approved = center.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=sign(
-            {
-                "kind": "package",
-                "id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            keystore.load(signer, passphrase=PASS),
-            signed_at=AT,
-        ).to_json_dict(),
-        headers=ADMIN,
+    center_admin.approve(center, info["id"], info["version"])
+    center_admin.deploy(
+        center,
+        target={"type": "server_runner", "id": runner.server_runner_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
     )
-    assert approved.status_code == 200, approved.text
-
-    deployed = center.post(
-        "/api/v1/deployments",
-        json=sign(
-            {
-                "kind": "deployment",
-                "deployment_id": "dep_ext00001",
-                "target": {"type": "server_runner", "id": runner.server_runner_id},
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            keystore.load(signer, passphrase=PASS),
-            signed_at=now_iso(),
-        ).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert deployed.status_code in (200, 201), deployed.text
 
     runner.tick()  # 공개키·배포를 받아 설치한다
     assert BOT in [one.id for one in runner.installed_bots()]

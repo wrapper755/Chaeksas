@@ -8,17 +8,18 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:
  * 토큰은 브라우저에 내려가지 않는다. 쿠키에는 암호문만 들어가고, 복호화는 콘솔 서버에서만
  * 한다 (`server-only` — 실수로 클라이언트 번들에 들어가면 빌드가 깨진다).
  *
- * OIDC는 나중이다 (ADR-0017). 지금은 Center의 관리자·읽기 토큰을 그대로 받아 둔다.
+ * 들어오는 길은 **관리자 계정**이다 (ADR-0090). Center가 아이디·비밀번호를 확인하고 준 세션
+ * 토큰을 받아 둔다. 역할(`mode`)과 이름(`actor`)은 그 응답에서 온다 — 사람이 고르지 않는다.
  */
 
-/** 쓰기 모드 (CON-00 「보기 전용」 / 「관리자」). */
+/** 역할 (CON-00 「보기 전용」 / 「관리자」) — 계정이 정한다. */
 export type Mode = "admin" | "read";
 
 export interface Session {
   mode: Mode;
-  /** Center에 보낼 토큰. **서버 안에서만 쓴다.** */
+  /** Center 세션 토큰 (`chk_ses_…`). **서버 안에서만 쓴다.** */
   token: string;
-  /** 화면에 보일 사용자 이름 (C5 `X-CHK-Actor`로도 보낸다). */
+  /** 계정 아이디 — 위 막대에 보이고, Center 기록의 「누가」가 된다. */
   actor: string;
 }
 

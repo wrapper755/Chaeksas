@@ -1,0 +1,21 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-login-request",
+  "additionalProperties": true,
+  "description": "`POST /auth/login` — 인증 없이 부른다.",
+  "properties": {
+    "password": {
+      "title": "Password",
+      "type": "string"
+    },
+    "username": {
+      "title": "Username",
+      "type": "string"
+    }
+  },
+  "required": [
+    "username",
+    "password"
+  ],
+  "title": "LoginRequest",
+  "type": "object"
+}

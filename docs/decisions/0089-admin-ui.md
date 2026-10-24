@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨([ADR-0090](0090-center-admin-accounts.md)) |
 | 날짜 | 2026-10-23 |
 | 관련 | [ADR-0076](0076-no-admin-window-yet.md)(이것이 대체한다), 화면 `admin.md`(ADM-01·04·05·06), C2 서명 봉투, C13 E6, `apps/admin`(`chk-admin`·`chk-admin-ui`), [ADR-0013](0013-api-keys.md) |
 

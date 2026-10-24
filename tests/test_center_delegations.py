@@ -24,19 +24,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from center_admin import approve as approve_package
+from center_admin import deploy
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
 from chaeksas.center.api import delegations as api
-from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store, now_iso
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
-from chaeksas.contracts.signing import sign
 
 ADMIN = {"Authorization": "Bearer t-admin"}
-PASS = "열쇠말"
 AT = "2026-10-13T09:00:00+09:00"
 VERSION = "1.0.0"
 #: 맡길 PC Bot과 맡기는 서버 Bot.
@@ -48,12 +46,6 @@ BPMN = """<?xml version="1.0" encoding="UTF-8"?>
   <bpmn:process id="Proc_x" isExecutable="true"><bpmn:startEvent id="S" /></bpmn:process>
 </bpmn:definitions>
 """
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 @pytest.fixture
@@ -70,13 +62,6 @@ def center(store: Store, tmp_path: Path) -> Iterator[TestClient]:
     )
     with TestClient(create_app(settings, store=store)) as found:
         yield found
-
-
-@pytest.fixture
-def private(store: Store) -> Any:
-    signer = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=signer.public_bytes(), label="첫 키")
-    return keystore.load(signer, passphrase=PASS)
 
 
 def new_key(center: TestClient, *, name: str, kind: str) -> str:
@@ -162,7 +147,7 @@ def package_zip(*, bot: str, where: str, delegations: list[str]) -> bytes:
     return made(json.dumps(manifest, ensure_ascii=False))
 
 
-def upload(center: TestClient, private: Any, *, bot: str, where: str,
+def upload(center: TestClient, *, bot: str, where: str,
            delegations: list[str] | None = None, approve: bool = True) -> dict[str, Any]:
     made = center.post(
         "/api/v1/packages",
@@ -178,41 +163,17 @@ def upload(center: TestClient, private: Any, *, bot: str, where: str,
     assert made.status_code in (200, 201), made.text
     info = dict(made.json())
     if approve:
-        signed = center.put(
-            f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-            json=sign(
-                {
-                    "kind": "package",
-                    "id": info["id"],
-                    "version": info["version"],
-                    "content_hash": info["content_hash"],
-                },
-                private,
-                signed_at=AT,
-            ).to_json_dict(),
-            headers=ADMIN,
-        )
-        assert signed.status_code == 200, signed.text
+        approve_package(center, info["id"], info["version"])
     return info
 
 
-def deploy_to_pc(center: TestClient, private: Any, info: dict[str, Any], bot_ui_id: str,
-                 *, deployment_id: str) -> Any:
-    return center.post(
-        "/api/v1/deployments",
-        json=sign(
-            {
-                "kind": "deployment",
-                "deployment_id": deployment_id,
-                "target": {"type": "bot_ui", "id": bot_ui_id},
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=now_iso(),
-        ).to_json_dict(),
-        headers=ADMIN,
+def deploy_to_pc(center: TestClient, info: dict[str, Any], bot_ui_id: str) -> Any:
+    return deploy(
+        center,
+        target={"type": "bot_ui", "id": bot_ui_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
+        expect=None,
     )
 
 
@@ -251,11 +212,11 @@ def beat(center: TestClient, runner_key: str, **over: Any) -> dict[str, Any]:
 
 
 @pytest.fixture
-def ready(center: TestClient, private: Any, runner: str) -> str:
+def ready(center: TestClient, runner: str) -> str:
     """PC Bot이 승인·배포된 PC 하나. 돌려주는 것은 `bot_ui_id`다."""
-    info = upload(center, private, bot=PC_BOT, where="pc")
+    info = upload(center, bot=PC_BOT, where="pc")
     one = pc(center, name="현장 1", machine="7" * 64)
-    answer = deploy_to_pc(center, private, info, one, deployment_id="dep_pc_1")
+    answer = deploy_to_pc(center, info, one)
     assert answer.status_code in (200, 201), answer.text
     return one
 
@@ -303,16 +264,14 @@ def test_another_call_site_in_the_same_run_is_another_job(
 
 
 def test_the_shortest_queue_wins(
-    center: TestClient, private: Any, runner: str, runner_key: str
+    center: TestClient, runner: str, runner_key: str
 ) -> None:
     """**대기열이 짧은 PC**로 간다 — 한 PC에 몰리면 자리 하나가 병목이다 (ADR-0014)."""
-    info = upload(center, private, bot=PC_BOT, where="pc")
+    info = upload(center, bot=PC_BOT, where="pc")
     busy = pc(center, name="현장 1", machine="7" * 64)
     free = pc(center, name="현장 2", machine="8" * 64)
-    for i, one in enumerate((busy, free)):
-        assert deploy_to_pc(
-            center, private, info, one, deployment_id=f"dep_pc_{i}"
-        ).status_code in (200, 201)
+    for one in (busy, free):
+        assert deploy_to_pc(center, info, one).status_code in (200, 201)
     # 바쁜 쪽에 작업 하나를 쌓아 둔다.
     queued = center.post(
         "/api/v1/jobs",
@@ -324,13 +283,13 @@ def test_the_shortest_queue_wins(
 
 
 def test_a_wanted_pc_is_honoured_and_checked(
-    center: TestClient, private: Any, runner: str, runner_key: str
+    center: TestClient, runner: str, runner_key: str
 ) -> None:
     """`bot_ui`를 적으면 **그 PC로만** — 배포되지 않았으면 거부다 (담당자 PC 규칙)."""
-    info = upload(center, private, bot=PC_BOT, where="pc")
+    info = upload(center, bot=PC_BOT, where="pc")
     mine = pc(center, name="현장 1", machine="7" * 64)
     other = pc(center, name="현장 2", machine="8" * 64)
-    assert deploy_to_pc(center, private, info, mine, deployment_id="dep_pc_1").status_code in (200, 201)
+    assert deploy_to_pc(center, info, mine).status_code in (200, 201)
 
     assert ask(center, runner_key, bot_ui=mine).json()["bot_ui_id"] == mine
     refused = ask(center, runner_key, node_id="Call_Other", bot_ui=other)
@@ -490,12 +449,12 @@ def test_the_pc_sends_the_outputs_back_in_its_job_ack(
 
 
 def test_outputs_on_a_plain_job_go_nowhere(
-    center: TestClient, store: Store, private: Any, runner: str
+    center: TestClient, store: Store, runner: str
 ) -> None:
     """**위임이 아닌 작업의 값은 어디에도 남지 않는다** (원칙 6의 예외는 좁게 쓴다)."""
-    info = upload(center, private, bot=PC_BOT, where="pc")
+    info = upload(center, bot=PC_BOT, where="pc")
     one = pc(center, name="현장 1", machine="7" * 64)
-    assert deploy_to_pc(center, private, info, one, deployment_id="dep_pc_1").status_code in (200, 201)
+    assert deploy_to_pc(center, info, one).status_code in (200, 201)
     made = center.post(
         "/api/v1/jobs",
         json={"bpm_process_id": PC_BOT, "target": {"type": "bot_ui", "id": one}, "inputs": {}},
@@ -542,35 +501,23 @@ def test_a_delegation_wait_needs_its_job_id(center: TestClient, runner_key: str,
 
 
 def test_deploying_a_delegating_bot_needs_the_pc_bot_approved(
-    center: TestClient, private: Any, runner: str
+    center: TestClient, runner: str
 ) -> None:
     """위임하는 Bot은 그 PC Bot이 **승인되어 있어야** 배포된다 (C1 R8처럼 배포 때 본다)."""
-    server = upload(center, private, bot=SERVER_BOT, where="server",
+    server = upload(center, bot=SERVER_BOT, where="server",
                     delegations=[f"{PC_BOT}@{VERSION}"])
-    envelope = {
-        "kind": "deployment",
-        "deployment_id": "dep_srv_1",
+    wanted = {
         "target": {"type": "server_runner", "id": runner},
         "bpm_process_id": server["id"],
         "version": server["version"],
-        "content_hash": server["content_hash"],
     }
-    refused = center.post(
-        "/api/v1/deployments",
-        json=sign(envelope, private, signed_at=now_iso()).to_json_dict(),
-        headers=ADMIN,
-    )
+    refused = deploy(center, **wanted, expect=422)
     assert refused.status_code == 422, refused.text
     assert refused.json()["code"] == "delegation_not_approved"
 
     # 올리고 승인하면 통과한다. **PC에 배포됐는가는 묻지 않는다.**
-    upload(center, private, bot=PC_BOT, where="pc")
-    ok = center.post(
-        "/api/v1/deployments",
-        json=sign(envelope, private, signed_at=now_iso()).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert ok.status_code in (200, 201), ok.text
+    upload(center, bot=PC_BOT, where="pc")
+    deploy(center, **wanted)
 
 
 # ─────────────────────────── 거두기와 청소 (ADR-0062 §4·§5) ───────────────────────────
@@ -704,7 +651,7 @@ def test_the_purge_leaves_what_the_runner_has_not_seen_yet(
 
 
 def test_a_started_pc_job_still_refuses_the_cancel(
-    center: TestClient, private: Any, runner: str, ready: str
+    center: TestClient, runner: str, ready: str
 ) -> None:
     """**PC 실행은 Center에서 멈추지 않는다** (ADR-0063) — 화면을 만지는 중일 수 있다.
 
@@ -727,31 +674,20 @@ def test_a_started_pc_job_still_refuses_the_cancel(
 
 
 def test_a_started_server_job_takes_the_cancel_and_waits_for_the_runner(
-    center: TestClient, private: Any, runner: str, runner_key: str
+    center: TestClient, runner: str, runner_key: str
 ) -> None:
     """**서버 실행은 멈출 수 있다** (ADR-0063) — 202로 받아 두고 하트비트로 내려 준다.
 
     **Center가 혼자 `cancelled`로 적지 않는다** (`dispatched`와 같은 결) — 정말 멈췄는지는
     현장만 안다. 실행기가 돌아오지 않으면 CON-12 「유실 처리」가 닫는다.
     """
-    info = upload(center, private, bot=SERVER_BOT, where="server")
-    deployed = center.post(
-        "/api/v1/deployments",
-        json=sign(
-            {
-                "kind": "deployment",
-                "deployment_id": "dep_srv_c",
-                "target": {"type": "server_runner", "id": runner},
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=now_iso(),
-        ).to_json_dict(),
-        headers=ADMIN,
+    info = upload(center, bot=SERVER_BOT, where="server")
+    deploy(
+        center,
+        target={"type": "server_runner", "id": runner},
+        bpm_process_id=info["id"],
+        version=info["version"],
     )
-    assert deployed.status_code in (200, 201), deployed.text
     made = center.post(
         "/api/v1/jobs",
         json={"bpm_process_id": SERVER_BOT, "target": {"type": "server_runner"}, "inputs": {}},
@@ -780,31 +716,21 @@ def test_a_started_server_job_takes_the_cancel_and_waits_for_the_runner(
 CHILD_BOT = "ops.intake-item"
 
 
-def deploy_to_server(center: TestClient, private: Any, info: dict[str, Any], runner_id: str,
-                     *, deployment_id: str) -> Any:
-    return center.post(
-        "/api/v1/deployments",
-        json=sign(
-            {
-                "kind": "deployment",
-                "deployment_id": deployment_id,
-                "target": {"type": "server_runner", "id": runner_id},
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=now_iso(),
-        ).to_json_dict(),
-        headers=ADMIN,
+def deploy_to_server(center: TestClient, info: dict[str, Any], runner_id: str) -> Any:
+    return deploy(
+        center,
+        target={"type": "server_runner", "id": runner_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
+        expect=None,
     )
 
 
 @pytest.fixture
-def server_child(center: TestClient, private: Any, runner: str) -> str:
+def server_child(center: TestClient, runner: str) -> str:
     """서버 Bot 하나가 승인·배포되어 있다. 돌려주는 것은 그 실행기 id다."""
-    info = upload(center, private, bot=CHILD_BOT, where="server")
-    answer = deploy_to_server(center, private, info, runner, deployment_id="dep_srv_1")
+    info = upload(center, bot=CHILD_BOT, where="server")
+    answer = deploy_to_server(center, info, runner)
     assert answer.status_code in (200, 201), answer.text
     return runner
 

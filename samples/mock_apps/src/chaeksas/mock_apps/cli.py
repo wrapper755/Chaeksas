@@ -123,7 +123,7 @@ def _definition(app_id: str, base_url: str, out: Path | None) -> int:
         return 0
     out.write_text(text, encoding="utf-8")
     print(f"썼다: {out}")
-    print("다음: chk-admin sign-extension으로 서명하고 Center에 등록한다 (C13 E6).")
+    print("다음: Center 콘솔 「리소스 → 확장 추가...」로 등록한다 (Center가 서명한다, C13 E6).")
     return 0
 
 

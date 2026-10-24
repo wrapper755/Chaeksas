@@ -1,11 +1,12 @@
-"""외부 확장 등록 — 서명 봉투로만 (C13·C2, M5 조각 9).
+"""외부 확장 등록 — 관리자가 올리고 Center가 서명한다 (C13·C2, M5 조각 9, ADR-0090).
 
-진짜 Center를 in-process로 띄우고 **진짜 `chk-admin`으로** 정의에 서명한다.
+진짜 Center를 in-process로 띄우고 관리자로 정의를 올린다 — 봉투는 **Center가 짓는다**.
 
 거듭 보는 것 다섯.
 
-1. **서명이 관문이다** — 관리자 토큰만으로는 등록되지 않는다 (C2).
-2. **봉투는 그 정의에 대한 것이어야 한다** — 한 글자만 고쳐도 `hash_mismatch`다 (E6).
+1. **관리자만 등록한다** — 읽기 토큰으로는 안 된다.
+2. **봉투는 그 정의에 대한 것이다** — 실행하는 쪽이 같은 검증(E6)으로 다시 본다. 같은 판에 다른
+   정의가 오면 `id_conflict`다.
 3. **외부 확장에 코드 기여를 넣을 수 없다** (E1) — 내장·사내는 등록할 수 없다 (E2).
 4. **어댑터 선언이 안전해야 한다** (E3) — http, 허용 호스트 밖, 금지 헤더, 모르는 템플릿 변수.
 5. **철회된 판은 되살아나지 않는다**. 정의와 봉투는 **그대로** 남아 실행하는 쪽이 다시 검증한다.
@@ -13,35 +14,26 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
+from center_admin import register_extension, revoke_extension
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.admin.cli import main as admin_main
-from chaeksas.center.api.signing import bootstrap_key
+from chaeksas.center import signer as center_signer
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings
 from chaeksas.center.storage import Store
-from chaeksas.contracts.extension import definition_hash
-from chaeksas.contracts.signing import sign
+from chaeksas.contracts.extension import definition_hash, verify_external
+from chaeksas.contracts.signing import AdminKey
 
 TOKEN = "t-admin"
 READ = "t-read"
 ADMIN = {"Authorization": f"Bearer {TOKEN}"}
 READ_AUTH = {"Authorization": f"Bearer {READ}"}
-PASS = "열쇠말"
 AT = "2026-10-07T09:00:00+09:00"
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: Any, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 @pytest.fixture
@@ -61,13 +53,6 @@ def client(tmp_path: Path, store: Store) -> Iterator[TestClient]:
     )
     with TestClient(create_app(settings, store=store)) as found:
         yield found
-
-
-@pytest.fixture
-def key(store: Store) -> Any:
-    made = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=made.public_bytes(), label="첫 키")
-    return made
 
 
 def definition(**over: Any) -> dict[str, Any]:
@@ -123,32 +108,18 @@ def definition(**over: Any) -> dict[str, Any]:
     return base
 
 
-def envelope_for(key: Any, found: dict[str, Any], **over: Any) -> Any:
-    claim = {
-        "kind": "extension",
-        "id": found["id"],
-        "version": found["version"],
-        "definition_hash": definition_hash(found),
-    }
-    claim.update(over)
-    return sign(claim, keystore.load(key, passphrase=PASS), signed_at=AT)
-
-
-def register(client: TestClient, found: dict[str, Any], envelope: Any) -> Any:
-    return client.post(
-        "/api/v1/resources/extensions",
-        json={"definition": found, "envelope": envelope.to_json_dict()},
-        headers=ADMIN,
-    )
+def register(client: TestClient, found: dict[str, Any]) -> Any:
+    """정의만 올린다 — 봉투는 Center가 짓는다 (ADR-0090). 응답을 그대로 돌려준다."""
+    return register_extension(client, found, expect=None)
 
 
 # ─────────────────────────── 등록 (C13 E1~E6) ───────────────────────────
 
 
-def test_a_signed_definition_registers(client: TestClient, key: Any) -> None:
+def test_a_signed_definition_registers(client: TestClient) -> None:
     """한 바퀴 — 서명 → 등록 → 확장 목록에 뜬다."""
     found = definition()
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 201, answer.text
     info = answer.json()
     assert info["id"] == "ext-ocr" and info["tier"] == "external"
@@ -161,44 +132,33 @@ def test_a_signed_definition_registers(client: TestClient, key: Any) -> None:
     assert listed["id"] == "ext-ocr"
 
 
-def test_the_definition_and_envelope_are_kept_as_is(client: TestClient, key: Any) -> None:
-    """실행하는 쪽이 **받아서 다시 검증한다** (C13 전송·E6) — 그대로 남아야 한다."""
+def test_the_definition_and_envelope_are_kept_as_is(client: TestClient, store: Store) -> None:
+    """실행하는 쪽이 **받아서 다시 검증한다** (C13 전송·E6) — Center 키로 서명한 봉투가 남는다."""
+    from chaeksas.contracts.signing import Envelope  # noqa: PLC0415
+
     found = definition()
-    made = envelope_for(key, found)
-    register(client, found, made)
+    register(client, found)
 
     info = client.get("/api/v1/resources/extensions/ext-ocr", headers=READ_AUTH).json()
-    assert info["envelope"]["sig"] == made.sig, "봉투 바이트가 그대로다"
+    assert info["envelope"]["key_id"] == center_signer.current_key_id(store)
     assert info["definition"]["service"]["adapter"]["allowed_hosts"] == ["ocr.example.com"]
+    # 현장이 하는 검증 그대로 — 하트비트가 내려 주는 믿는 키로 통과한다.
+    keys = [AdminKey.model_validate(one) for one in client.get("/api/v1/admin-keys", headers=ADMIN).json()]
+    envelope = Envelope.model_validate(info["envelope"])
+    assert verify_external(info["definition"], envelope, keys=keys) == []
+    # 한 글자만 고쳐도 현장이 거부한다 (E6 `hash_mismatch`).
+    tampered = {**info["definition"], "name": "바꾼 이름"}
+    assert "hash_mismatch" in [v.code for v in verify_external(tampered, envelope, keys=keys)]
 
 
-def test_a_token_alone_registers_nothing(client: TestClient) -> None:
-    """**서명이 관문이다** (C2) — Admin 키가 없으면 등록되지 않는다."""
-    found = definition()
-    # 키를 등록하지 않은 Center — 어떤 봉투도 모르는 키다.
-    made = keystore.create(label="아무 키")
-    answer = register(client, found, envelope_for(made, found))
-    assert answer.status_code == 400 and answer.json()["code"] == "bad_envelope"
+def test_another_definition_on_the_same_version_is_refused(client: TestClient) -> None:
+    """같은 판(`id@version`)에 **다른 정의**가 오면 409다 — 판을 올려야 한다."""
+    assert register(client, definition()).status_code == 201
+    answer = register(client, definition(name="바꾼 이름"))
+    assert answer.status_code == 409 and answer.json()["code"] == "id_conflict"
 
 
-def test_an_envelope_for_another_definition_is_refused(client: TestClient, key: Any) -> None:
-    """한 글자만 고쳐도 `hash_mismatch`다 (E6)."""
-    found = definition()
-    made = envelope_for(key, found)
-    tampered = definition(name="바꾼 이름")
-    answer = register(client, tampered, made)
-    assert answer.status_code == 400
-    assert answer.json()["code"] == "hash_mismatch"
-
-
-def test_an_envelope_for_another_extension_is_refused(client: TestClient, key: Any) -> None:
-    """해시는 맞아도 **봉투가 다른 확장을 가리키면** 거부한다 (E6)."""
-    found = definition()
-    answer = register(client, found, envelope_for(key, found, id="딴것"))
-    assert answer.status_code == 400 and answer.json()["code"] == "bad_envelope"
-
-
-def test_external_code_contributions_are_refused(client: TestClient, key: Any) -> None:
+def test_external_code_contributions_are_refused(client: TestClient) -> None:
     """**외부 확장에 코드 기여를 넣을 수 없다** (E1) — 설치 파일에 없는 코드를 부를 수 없다."""
     found = definition(
         contributes={
@@ -208,65 +168,64 @@ def test_external_code_contributions_are_refused(client: TestClient, key: Any) -
             ]
         }
     )
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 422
     assert answer.json()["code"] == "external_code_not_allowed"
 
 
-def test_a_builtin_tier_cannot_be_registered(client: TestClient, key: Any) -> None:
+def test_a_builtin_tier_cannot_be_registered(client: TestClient) -> None:
     """내장·사내는 **설치 파일에 든 것만** 쓴다 (E2)."""
     # 내장·사내는 `api`(필요한 `extension_api` 범위)가 필수다 — 그것까지 채워 E2를 띄운다.
     found = definition(tier="builtin", api=">=1,<2")
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 422 and answer.json()["code"] == "id_conflict"
 
 
-def test_a_plain_http_adapter_is_refused(client: TestClient, key: Any) -> None:
+def test_a_plain_http_adapter_is_refused(client: TestClient) -> None:
     """**https만** 쓴다 (E3·§4-3) — 사설망 허용이 아니면 http는 안 된다."""
     found = definition()
     found["service"]["base_url"] = "http://ocr.example.com"
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 422 and answer.json()["code"] == "adapter_invalid"
 
 
-def test_a_host_outside_allowed_hosts_is_refused(client: TestClient, key: Any) -> None:
+def test_a_host_outside_allowed_hosts_is_refused(client: TestClient) -> None:
     found = definition()
     found["service"]["adapter"]["allowed_hosts"] = ["other.example.com"]
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 422 and answer.json()["code"] == "adapter_invalid"
 
 
-def test_an_unknown_template_variable_is_refused(client: TestClient, key: Any) -> None:
+def test_an_unknown_template_variable_is_refused(client: TestClient) -> None:
     """쓸 수 있는 변수는 `input.*`·`run_id`·`node_id`·`idempotency_key`뿐이다 (§4-2)."""
     found = definition()
     found["service"]["adapter"]["operations"][0]["request"]["body"] = {"url": "{{비밀}}"}
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 422 and answer.json()["code"] == "adapter_invalid"
 
 
-def test_a_forbidden_header_template_is_refused(client: TestClient, key: Any) -> None:
+def test_a_forbidden_header_template_is_refused(client: TestClient) -> None:
     """`Authorization`은 템플릿으로 못 쓴다 (§4-2) — 키가 거기로 새면 안 된다."""
     found = definition()
     found["service"]["adapter"]["operations"][0]["request"]["headers"] = {
         "Authorization": "{{input.file_url}}"
     }
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 422 and answer.json()["code"] == "adapter_invalid"
 
 
-def test_the_same_definition_twice_is_idempotent(client: TestClient, key: Any) -> None:
+def test_the_same_definition_twice_is_idempotent(client: TestClient) -> None:
     found = definition()
-    made = envelope_for(key, found)
-    assert register(client, found, made).status_code == 201
-    assert register(client, found, made).status_code == 200
+    assert register(client, found).status_code == 201
+    assert register(client, found).status_code == 200
     assert len(client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()["items"]) == 1
 
 
-def test_a_read_token_cannot_register(client: TestClient, key: Any) -> None:
+def test_a_read_token_cannot_register(client: TestClient) -> None:
     found = definition()
     answer = client.post(
         "/api/v1/resources/extensions",
-        json={"definition": found, "envelope": envelope_for(key, found).to_json_dict()},
+        json={"definition": found},
         headers=READ_AUTH,
     )
     assert answer.status_code == 403
@@ -275,7 +234,7 @@ def test_a_read_token_cannot_register(client: TestClient, key: Any) -> None:
 # ─────────────────────────── 겹침 (E4·E8) ───────────────────────────
 
 
-def test_conflicting_contributions_cannot_even_be_declared(client: TestClient, key: Any) -> None:
+def test_conflicting_contributions_cannot_even_be_declared(client: TestClient) -> None:
     """**E4·E8은 외부 확장으로 띄울 수 없다** — E1이 먼저 막는다.
 
     `task_types`·`agent_environments`는 `entry`(코드)를 요구하고, 외부 확장에는 코드 기여를
@@ -285,7 +244,7 @@ def test_conflicting_contributions_cannot_even_be_declared(client: TestClient, k
     found = definition(
         contributes={"agent_environments": [{"domain": "web", "entry": "x:Y"}]}
     )
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 422
     assert answer.json()["code"] == "external_code_not_allowed"
 
@@ -293,74 +252,47 @@ def test_conflicting_contributions_cannot_even_be_declared(client: TestClient, k
 # ─────────────────────────── 철회 (C13·C2) ───────────────────────────
 
 
-def revoke_envelope(key: Any, *, id: str = "ext-ocr", version: str = "1.0.0") -> Any:
-    return sign(
-        {
-            "kind": "extension_revoke",
-            "id": id,
-            "version": version,
-            "reason": "정의 결함",
-            "revoked_at": AT,
-        },
-        keystore.load(key, passphrase=PASS),
-        signed_at=AT,
-    )
+def test_revoking_names_the_version(client: TestClient) -> None:
+    """무엇을 거두는지 **판까지** 적어야 한다 — 비우면 422다."""
+    register(client, definition())
+    answer = client.request("DELETE", "/api/v1/resources/extensions", json={}, headers=ADMIN)
+    assert answer.status_code == 422 and answer.json()["code"] == "input_invalid"
 
 
-def test_revoking_needs_an_envelope_too(client: TestClient, key: Any) -> None:
+def test_a_read_token_cannot_revoke(client: TestClient) -> None:
+    register(client, definition())
+    revoke_extension(client, "ext-ocr", "1.0.0", headers=READ_AUTH, expect=403)
+
+
+def test_a_revoked_extension_drops_out_of_the_list(client: TestClient) -> None:
     found = definition()
-    register(client, found, envelope_for(key, found))
-    # 봉투 없이 — 토큰만으로는 철회되지 않는다.
-    assert client.request("DELETE", "/api/v1/resources/extensions", json={}, headers=ADMIN).status_code == 400
-
-
-def test_a_revoked_extension_drops_out_of_the_list(client: TestClient, key: Any) -> None:
-    found = definition()
-    register(client, found, envelope_for(key, found))
-    answer = client.request(
-        "DELETE",
-        "/api/v1/resources/extensions",
-        json=revoke_envelope(key).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert answer.status_code == 200, answer.text
+    register(client, found)
+    revoke_extension(client, "ext-ocr", "1.0.0", reason="정의 결함")
     assert client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()["items"] == []
 
 
-def test_a_revoked_version_never_comes_back(client: TestClient, key: Any) -> None:
+def test_a_revoked_version_never_comes_back(client: TestClient) -> None:
     """**되살아나지 않는다** (배포·패키지와 같은 규칙, C2)."""
     found = definition()
-    made = envelope_for(key, found)
-    register(client, found, made)
-    client.request(
-        "DELETE",
-        "/api/v1/resources/extensions",
-        json=revoke_envelope(key).to_json_dict(),
-        headers=ADMIN,
-    )
-    again = register(client, found, made)
+    register(client, found)
+    revoke_extension(client, "ext-ocr", "1.0.0", reason="정의 결함")
+    again = register(client, found)
     assert again.status_code == 409 and again.json()["code"] == "extension_revoked"
 
 
-def test_revoking_something_unregistered_is_404(client: TestClient, key: Any) -> None:
-    answer = client.request(
-        "DELETE",
-        "/api/v1/resources/extensions",
-        json=revoke_envelope(key, id="없는것").to_json_dict(),
-        headers=ADMIN,
-    )
-    assert answer.status_code == 404
+def test_revoking_something_unregistered_is_404(client: TestClient) -> None:
+    revoke_extension(client, "없는것", "1.0.0", expect=404)
 
 
 # ─────────────────────────── 보고와 합쳐지는가 (C7) ───────────────────────────
 
 
-def test_a_registered_definition_wins_over_reports(client: TestClient, key: Any, store: Store) -> None:
+def test_a_registered_definition_wins_over_reports(client: TestClient) -> None:
     """등록된 정의가 **이름·등급·연결 방식의 원본**이고, 「몇 대에 깔렸나」는 보고에서 온다."""
     import hashlib
 
     found = definition()
-    register(client, found, envelope_for(key, found))
+    register(client, found)
 
     raw = client.post(
         "/api/v1/center-keys", json={"name": "PC 키", "type": "bot_ui"}, headers=ADMIN
@@ -381,136 +313,6 @@ def test_a_registered_definition_wins_over_reports(client: TestClient, key: Any,
     [one] = client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()["items"]
     assert one["tier"] == "external", "정의가 원본이다 (보고만 있으면 builtin으로 봤을 것)"
     assert one["installed_on"] == {"hosts": 1, "by_version": {"1.0.0": 1}}
-
-
-# ─────────────────────────── 명령줄 (ADM-04) ───────────────────────────
-
-
-def test_the_command_signs_to_a_file(tmp_path: Path, key: Any, capsys: Any) -> None:
-    """**봉투를 파일로 쓴다** — Center로 바로 보내지 않는다 (운영자가 콘솔에 올린다)."""
-    from chaeksas.admin.client import Center
-
-    source = tmp_path / "extension.json"
-    source.write_text(json.dumps(definition(), ensure_ascii=False), encoding="utf-8")
-    out = tmp_path / "e.json"
-    code = admin_main(
-        ["-y", "sign-extension", str(source), "--out", str(out)], center=Center()
-    )
-    assert code == 0
-    printed = capsys.readouterr().out
-    assert "ocr.example.com" in printed, "허용 호스트를 보여 준다"
-    assert "autonomous, deterministic" in printed, "결정 수행 허용을 보여 준다"
-    assert out.is_file()
-    assert json.loads(out.read_text(encoding="utf-8"))["payload"]["kind"] == "extension"
-
-
-def test_the_command_refuses_a_bad_definition(tmp_path: Path, key: Any, capsys: Any) -> None:
-    """**E1·E3을 먼저 로컬에서 돌려 본다** — 서명한 뒤에 Center가 거부하면 늦다."""
-    from chaeksas.admin.client import Center
-
-    found = definition()
-    found["service"]["base_url"] = "http://ocr.example.com"
-    source = tmp_path / "extension.json"
-    source.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
-
-    assert admin_main(["-y", "sign-extension", str(source)], center=Center()) == 2
-    assert "서명하지 않았습니다" in capsys.readouterr().out
-
-
-def test_the_signed_envelope_is_accepted_by_center(
-    client: TestClient, tmp_path: Path, key: Any
-) -> None:
-    """명령이 쓴 봉투를 Center가 받는다 — 한 바퀴가 이어진다."""
-    from chaeksas.admin.client import Center
-
-    found = definition()
-    source = tmp_path / "extension.json"
-    source.write_text(json.dumps(found, ensure_ascii=False), encoding="utf-8")
-    out = tmp_path / "e.json"
-    admin_main(["-y", "sign-extension", str(source), "--out", str(out)], center=Center())
-
-    answer = client.post(
-        "/api/v1/resources/extensions",
-        json={
-            "definition": json.loads(source.read_text(encoding="utf-8")),
-            "envelope": json.loads(out.read_text(encoding="utf-8")),
-        },
-        headers=ADMIN,
-    )
-    assert answer.status_code == 201, answer.text
-
-
-def test_register_signs_and_registers_in_one_go(
-    client: TestClient, tmp_path: Path, key: Any, capsys: Any
-) -> None:
-    """`--register` — 서명하고 **그 자리에서** Center에 올린다. 봉투 파일도 남는다."""
-    from chaeksas.admin.client import Center
-
-    source = tmp_path / "extension.json"
-    source.write_text(json.dumps(definition(), ensure_ascii=False), encoding="utf-8")
-    out = tmp_path / "e.json"
-    center = Center(base_url="http://center", token=TOKEN, client=client)
-    argv = ["-y", "sign-extension", str(source), "--out", str(out), "--register"]
-
-    assert admin_main(argv, center=center) == 0
-    assert "Center에 등록했습니다 — ext-ocr@1.0.0" in capsys.readouterr().out
-    assert out.is_file(), "올리기가 실패해도 다시 서명하지 않게 봉투를 남긴다"
-    [one] = client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()["items"]
-    assert one["id"] == "ext-ocr"
-
-    # 같은 정의를 다시 올리면 「이미 있다」 — 실패가 아니다.
-    assert admin_main(argv, center=center) == 0
-    assert "이미 같은 정의로" in capsys.readouterr().out
-
-
-def test_the_key_center_knows_is_used_without_asking(
-    client: TestClient, tmp_path: Path, key: Any, capsys: Any
-) -> None:
-    """키가 여럿이어도 **Center에 등록된 것이 하나면** 그것을 쓴다 — `--key`를 적지 않아도 된다."""
-    from chaeksas.admin.client import Center
-
-    keystore.create(label="시험이 남긴 키")
-    keystore.create(label="또 하나")
-    source = tmp_path / "extension.json"
-    source.write_text(json.dumps(definition(), ensure_ascii=False), encoding="utf-8")
-    center = Center(base_url="http://center", token=TOKEN, client=client)
-
-    argv = ["-y", "sign-extension", str(source), "--out", str(tmp_path / "e.json"), "--register"]
-    assert admin_main(argv, center=center) == 0
-    printed = capsys.readouterr().out
-    assert f"서명 키: {key.key_id}" in printed
-    assert "Center에 등록했습니다" in printed
-
-
-def test_with_no_registered_key_among_many_it_still_asks(
-    client: TestClient, tmp_path: Path, capsys: Any, monkeypatch: Any
-) -> None:
-    """**아무거나 쓰지 않는다** — Center가 아는 키가 없으면 고르라고 하고, **묻기 전에** 멈춘다."""
-    from chaeksas.admin.client import Center
-
-    keystore.create(label="가")
-    keystore.create(label="나")
-    source = tmp_path / "extension.json"
-    source.write_text(json.dumps(definition(), ensure_ascii=False), encoding="utf-8")
-    center = Center(base_url="http://center", token=TOKEN, client=client)
-
-    def never(*_: Any) -> str:
-        raise AssertionError("키를 고르지 못했는데 「서명할까요?」를 물었다")
-
-    monkeypatch.setattr("builtins.input", never)
-    assert admin_main(["sign-extension", str(source)], center=center) == 2
-    assert "키가 여럿입니다" in capsys.readouterr().err
-
-
-def test_the_revoke_command_writes_an_envelope(tmp_path: Path, key: Any, capsys: Any) -> None:
-    from chaeksas.admin.client import Center
-
-    out = tmp_path / "r.json"
-    code = admin_main(
-        ["-y", "revoke-extension", "ext-ocr", "1.0.0", "--out", str(out)], center=Center()
-    )
-    assert code == 0
-    assert json.loads(out.read_text(encoding="utf-8"))["payload"]["kind"] == "extension_revoke"
 
 
 # ─────────── 외부 확장의 상태 (C7 — 어댑터 `health`, 09-gaps §3-7) ───────────
@@ -578,24 +380,24 @@ def extension_row(client: TestClient, extension_id: str = "ext-ocr") -> Any:
     return answer.json()
 
 
-def test_an_extension_without_health_stays_unchecked(client: TestClient, key: Any) -> None:
+def test_an_extension_without_health_stays_unchecked(client: TestClient) -> None:
     """선언이 없으면 **두드리지 않는다** — 「확인 전」이지 「응답 없음」이 아니다 (C7).
 
     C11의 `/healthz`를 외부 앱에 들이대지 않는다 — 어디를 봐야 하는지는 정의가 말한다.
     """
     found = definition()
     del found["service"]["adapter"]["health"]
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
 
     row = extension_row(client)
     assert row["status"] == "unknown"
     assert row["status_reasons"] == [] and row["checked_at"] is None
 
 
-def test_a_declared_health_is_probed(client: TestClient, key: Any, health_server: Any) -> None:
+def test_a_declared_health_is_probed(client: TestClient, health_server: Any) -> None:
     """선언된 경로·기대 코드로 두드린다. 맞으면 `ok`이고 본 때가 남는다."""
     found = local_definition(health_server.port)
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
 
     row = extension_row(client)
     assert row["status"] == "ok" and row["status_reasons"] == []
@@ -603,12 +405,12 @@ def test_a_declared_health_is_probed(client: TestClient, key: Any, health_server
     assert health_server.hits == 1
 
 
-def test_a_different_status_code_is_unreachable(client: TestClient, key: Any) -> None:
+def test_a_different_status_code_is_unreachable(client: TestClient) -> None:
     """**기대 코드와 다르면** 응답 없음이다 — 200이라고 넘겨짚지 않는다 (C13 `expect_status`)."""
     server = _HealthServer(code=500)
     try:
         found = local_definition(server.port)
-        assert register(client, found, envelope_for(key, found)).status_code == 201
+        assert register(client, found).status_code == 201
         row = extension_row(client)
         assert row["status"] == "unreachable"
         assert row["status_reasons"] == ["health_500"]
@@ -616,20 +418,20 @@ def test_a_different_status_code_is_unreachable(client: TestClient, key: Any) ->
         server.close()
 
 
-def test_a_host_outside_allowed_hosts_never_registers(client: TestClient, key: Any) -> None:
+def test_a_host_outside_allowed_hosts_never_registers(client: TestClient) -> None:
     """허용 호스트 밖은 **등록에서 막힌다** (E3) — 상태 점검까지 갈 일이 없다.
 
     관문이 둘인 셈이다: 선언이 들어올 때 E3가 보고, 나갈 때 §4-3이 본다.
     """
     found = definition()
     found["service"]["base_url"] = "https://다른곳.example.com"
-    answer = register(client, found, envelope_for(key, found))
+    answer = register(client, found)
     assert answer.status_code == 422
     assert any("allowed_hosts" in str(v) for v in answer.json()["detail"]["violations"])
 
 
 def test_an_allowed_name_that_resolves_private_is_refused(
-    client: TestClient, key: Any, health_server: Any
+    client: TestClient, health_server: Any
 ) -> None:
     """**허용된 이름이 사설 IP로 풀리면 나가지 않는다** (C13 §4-3 4번).
 
@@ -639,7 +441,7 @@ def test_an_allowed_name_that_resolves_private_is_refused(
     """
     found = local_definition(health_server.port, allow_private_network=False)
     found["service"]["base_url"] = f"https://127.0.0.1:{health_server.port}"
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
 
     row = extension_row(client)
     assert row["status"] == "unreachable"
@@ -647,20 +449,20 @@ def test_an_allowed_name_that_resolves_private_is_refused(
     assert health_server.hits == 0, "관문에 걸렸는데 두드렸다"
 
 
-def test_the_probe_keeps_its_interval(client: TestClient, key: Any, health_server: Any) -> None:
+def test_the_probe_keeps_its_interval(client: TestClient, health_server: Any) -> None:
     """목록을 읽을 때마다 바깥으로 나가지 않는다 — 서비스 앱과 **같은 간격**이다 (C7 60초)."""
     found = local_definition(health_server.port)
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
 
     for _ in range(3):
         assert client.get("/api/v1/resources?type=extension", headers=READ_AUTH).status_code == 200
     assert health_server.hits == 1, f"간격을 지키지 않았다 ({health_server.hits}번)"
 
 
-def test_refresh_ignores_the_interval(client: TestClient, key: Any, health_server: Any) -> None:
+def test_refresh_ignores_the_interval(client: TestClient, health_server: Any) -> None:
     """「새로 고침」만 간격을 무시한다 (C7)."""
     found = local_definition(health_server.port)
-    assert register(client, found, envelope_for(key, found)).status_code == 201
+    assert register(client, found).status_code == 201
     extension_row(client)
     before = health_server.hits
 

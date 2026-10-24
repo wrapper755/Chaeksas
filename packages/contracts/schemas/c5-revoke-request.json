@@ -1,0 +1,14 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-revoke-request",
+  "additionalProperties": true,
+  "description": "패키지 승인 철회(`POST /packages/{id}/{version}/revoke`)의 본문 — 관리자만.",
+  "properties": {
+    "reason": {
+      "default": "관리자 철회",
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "title": "RevokeRequest",
+  "type": "object"
+}

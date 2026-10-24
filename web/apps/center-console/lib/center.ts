@@ -32,6 +32,9 @@ import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
 import type { RunListing } from "@chaeksas/api-types/c3-run-listing";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { RunEventsResponse } from "@chaeksas/api-types/c3-run-events-response";
+import type { AccountInfo } from "@chaeksas/api-types/c5-account-info";
+import type { DeploymentRequest } from "@chaeksas/api-types/c5-deployment-request";
+import type { SessionInfo } from "@chaeksas/api-types/c5-session-info";
 import { COOKIE_NAME, open, type Session } from "./session";
 
 /**
@@ -61,18 +64,21 @@ export async function session(): Promise<Session | null> {
   return open(store.get(COOKIE_NAME)?.value);
 }
 
-async function call<T>(path: string, init?: RequestInit & { actor?: string }): Promise<T> {
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const found = await session();
   if (!found) throw new CenterError(401, null, "로그인이 필요합니다");
+  return send<T>(path, init, found.token);
+}
 
+/**
+ * Center 한 번. 행위자는 **세션이 정한다** (ADR-0090) — Center가 세션 토큰에서 계정 아이디를
+ * 읽으므로 `X-CHK-Actor`를 싣지 않는다.
+ */
+async function send<T>(path: string, init: RequestInit | undefined, token: string | null): Promise<T> {
   const response = await fetch(`${CENTER_URL}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${found.token}`,
-      // 행위자 이름은 BFF가 싣는다 (C5 — 본문에서 받지 않는다).
-      // **퍼센트 인코딩해서** 넣는다: HTTP 헤더 값은 ASCII라서 한글 이름을 그대로 실으면
-      // 요청 자체가 나가지 않는다 (undici가 거부한다).
-      "X-CHK-Actor": encodeURIComponent(found.actor),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
       ...init?.headers,
     },
@@ -90,6 +96,22 @@ async function call<T>(path: string, init?: RequestInit & { actor?: string }): P
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
+
+/** 로그인 (C5 `POST /auth/login`). 세션 토큰은 이 응답에만 실린다 — 받은 쪽이 쿠키에 담는다. */
+export function signIn(username: string, password: string): Promise<SessionInfo> {
+  return send<SessionInfo>("/api/v1/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  }, null);
+}
+
+/** 로그아웃 — Center의 세션을 지운다. 닿지 못해도 쿠키는 부르는 쪽이 지운다. */
+export function signOut(token: string): Promise<void> {
+  return send<void>("/api/v1/auth/logout", { method: "POST" }, token);
+}
+
+const pkg = (packageId: string, version: string) =>
+  `/api/v1/packages/${encodeURIComponent(packageId)}/${encodeURIComponent(version)}`;
 
 export const center = {
   botUis: () => call<BotUiInfo[]>("/api/v1/bot-uis"),
@@ -144,16 +166,17 @@ export const center = {
 
   extension: (extensionId: string) =>
     call<ExtensionResource>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}`),
-  /** 외부 확장 등록 — 정의와 **서명 봉투**를 함께 보낸다 (C2 `extension`, C13 E6). */
-  registerExtension: (definition: unknown, envelope: unknown) =>
+  /** 외부 확장 등록 — 정의만 보낸다. 검사를 지나면 **Center가 서명한다** (C13 E6, ADR-0090). */
+  registerExtension: (definition: unknown) =>
     call<ExtensionResource>("/api/v1/resources/extensions", {
       method: "POST",
-      body: JSON.stringify({ definition, envelope }),
+      body: JSON.stringify({ definition }),
     }),
-  revokeExtension: (envelope: unknown) =>
+  /** 등록 해제 — 그 판을 쓰는 Bot은 실행 불가가 된다. **되살릴 수 없다.** */
+  revokeExtension: (extensionId: string, version: string) =>
     call<ExtensionResource>("/api/v1/resources/extensions", {
       method: "DELETE",
-      body: JSON.stringify(envelope),
+      body: JSON.stringify({ id: extensionId, version }),
     }),
 
   serviceApp: (appId: string) =>
@@ -184,12 +207,11 @@ export const center = {
   },
   approval: (requestId: string) =>
     call<ApprovalInfo>(`/api/v1/approvals/${encodeURIComponent(requestId)}`),
-  /** 답하기. 행위자는 BFF가 `X-CHK-Actor`로 싣는다 (C6) — 본문에 없다. */
-  answerApproval: (requestId: string, answer: Record<string, unknown>, actor: string) =>
+  /** 답하기. 답한 사람은 **로그인한 계정**이다 (ADR-0090) — 본문에 없다. */
+  answerApproval: (requestId: string, answer: Record<string, unknown>) =>
     call<ApprovalInfo>(`/api/v1/approvals/${encodeURIComponent(requestId)}/answer`, {
       method: "POST",
       body: JSON.stringify({ answer }),
-      headers: { "X-CHK-Actor": encodeURIComponent(actor) },
     }),
   withdrawApproval: (requestId: string) =>
     call<ApprovalInfo>(`/api/v1/approvals/${encodeURIComponent(requestId)}`, { method: "DELETE" }),
@@ -202,6 +224,44 @@ export const center = {
     const suffix = search.size > 0 ? `?${search}` : "";
     return call<DeploymentInfo[]>(`/api/v1/deployments${suffix}`);
   },
+  /** 배포 (C5). Center가 봉투를 지어 서명한다 — 배포 id·해시도 Center가 채운다 (ADR-0090). */
+  createDeployment: (body: DeploymentRequest) =>
+    call<DeploymentInfo>("/api/v1/deployments", { method: "POST", body: JSON.stringify(body) }),
+  /** 배포 철회. **되살릴 수 없다.** */
+  revokeDeployment: (deploymentId: string) =>
+    call<DeploymentInfo>("/api/v1/deployments", {
+      method: "DELETE",
+      body: JSON.stringify({ deployment_id: deploymentId }),
+    }),
+
+  /** 승인 (C5 `PUT …/signature`). 본문 없음 — Center가 서명한다. */
+  approvePackage: (packageId: string, version: string) =>
+    call<unknown>(`${pkg(packageId, version)}/signature`, { method: "PUT" }),
+  /** 승인 철회. 그 패키지의 배포가 모두 무효가 된다. **되살릴 수 없다.** */
+  revokePackage: (packageId: string, version: string) =>
+    call<unknown>(`${pkg(packageId, version)}/revoke`, { method: "POST", body: JSON.stringify({}) }),
+  /** 지원 종료 — 새 배포만 막는다. 되돌리는 길은 승인이다 (C5). */
+  deprecatePackage: (packageId: string, version: string) =>
+    call<PackageInfo>(`${pkg(packageId, version)}/status`, {
+      method: "PUT",
+      body: JSON.stringify({ status: "deprecated" }),
+    }),
+
+  /** 관리자 계정 (C5 §관리자 계정·CON-14). 관리자만. */
+  accounts: () => call<AccountInfo[]>("/api/v1/accounts"),
+  createAccount: (body: { username: string; password: string; role: string }) =>
+    call<AccountInfo>("/api/v1/accounts", { method: "POST", body: JSON.stringify(body) }),
+  updateAccount: (username: string, body: { role?: string; disabled?: boolean; password?: string }) =>
+    call<AccountInfo>(`/api/v1/accounts/${encodeURIComponent(username)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  /** 자기 비밀번호 — 지금 비밀번호가 맞아야 한다. 바꾸면 그 계정의 세션이 모두 끝난다. */
+  changePassword: (current: string, next: string) =>
+    call<AccountInfo>("/api/v1/auth/password", {
+      method: "PUT",
+      body: JSON.stringify({ current_password: current, new_password: next }),
+    }),
 
   /**
    * 작업 지시 (C5·CON-05). `state`는 쉼표로 여럿.
@@ -280,7 +340,4 @@ export const center = {
   run: (runId: string) => call<RunInfo>(`/api/v1/runs/${encodeURIComponent(runId)}`),
   runEvents: (runId: string) =>
     call<RunEventsResponse>(`/api/v1/runs/${encodeURIComponent(runId)}/events`),
-
-  /** 토큰이 쓸 수 있는지 본다 (로그인에서 쓴다). 읽기 경로 하나를 불러 확인한다. */
-  check: () => call<CenterKeyInfo[]>("/api/v1/center-keys"),
 };
