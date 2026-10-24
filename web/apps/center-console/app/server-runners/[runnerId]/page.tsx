@@ -364,7 +364,7 @@ export default async function ServerRunnerPage({
           <Section title="Bot별 상한">
             {limits.length === 0 ? (
               <p className="text-body-sm text-text-muted">
-                이 실행기에 걸린 활성 배포가 없습니다. Admin의 `chk-admin deploy`로 배포하세요.
+                이 실행기에 걸린 활성 배포가 없습니다. 「배포」에서 배포하세요.
               </p>
             ) : (
               <DataTable

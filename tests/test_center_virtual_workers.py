@@ -18,20 +18,17 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+import center_admin
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
-from chaeksas.center.storage import Store, dumps, now_iso
+from chaeksas.center.storage import Store, dumps
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
-from chaeksas.contracts.signing import sign
 
 ADMIN = {"Authorization": "Bearer t-admin"}
 READ = {"Authorization": "Bearer t-read"}
-PASS = "열쇠말"
 AT = "2026-10-20T09:00:00+09:00"
 INTAKE = "fx24-batch-intake"
 ROOT = Path(__file__).resolve().parent.parent
@@ -55,12 +52,6 @@ UNGATED = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
-
-
 @pytest.fixture
 def store() -> Iterator[Store]:
     found = Store(Path(":memory:"))
@@ -73,13 +64,6 @@ def center(store: Store, tmp_path: Path) -> Iterator[TestClient]:
     settings = CenterSettings(admin_token="t-admin", read_token="t-read", package_dir=tmp_path / "pkg")
     with TestClient(create_app(settings, store=store)) as found:
         yield found
-
-
-@pytest.fixture
-def private(store: Store) -> Any:
-    signer = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=signer.public_bytes(), label="첫 키")
-    return keystore.load(signer, passphrase=PASS)
 
 
 def package_zip(*, bot: str, bpmn: str, version: str = "1.0.0", where: str = "server") -> bytes:
@@ -105,18 +89,12 @@ def package_zip(*, bot: str, bpmn: str, version: str = "1.0.0", where: str = "se
     return made(json.dumps(manifest, ensure_ascii=False))
 
 
-def approved(center: TestClient, private: Any, **kw: Any) -> dict[str, Any]:
+def approved(center: TestClient, **kw: Any) -> dict[str, Any]:
     made = center.post("/api/v1/packages", files={"file": ("p.zip", package_zip(**kw), "application/zip")},
                        headers=ADMIN)
     assert made.status_code in (200, 201), made.text
     info = dict(made.json())
-    signed = center.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=sign({"kind": "package", "id": info["id"], "version": info["version"],
-                   "content_hash": info["content_hash"]}, private, signed_at=AT).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert signed.status_code == 200, signed.text
+    center_admin.approve(center, info["id"], info["version"])
     return info
 
 
@@ -135,8 +113,8 @@ def relay(center: TestClient, person: str) -> dict[str, str]:
 # ─────────────────────────── 관문 ───────────────────────────
 
 
-def test_a_gated_intake_bot_is_bound(center: TestClient, private: Any) -> None:
-    approved(center, private, bot=INTAKE, bpmn=GATED)
+def test_a_gated_intake_bot_is_bound(center: TestClient) -> None:
+    approved(center, bot=INTAKE, bpmn=GATED)
     made = register(center)
     assert made.status_code == 201, made.text
     body = made.json()
@@ -145,9 +123,9 @@ def test_a_gated_intake_bot_is_bound(center: TestClient, private: Any) -> None:
     assert again.status_code == 409 and again.json()["code"] == "id_conflict"
 
 
-def test_an_intake_bot_that_starts_a_batch_without_approval_is_refused(center: TestClient, private: Any) -> None:
+def test_an_intake_bot_that_starts_a_batch_without_approval_is_refused(center: TestClient) -> None:
     """**무인 일괄 기동은 묶이지 않는다** — Center가 저장된 그림을 읽어 B16을 본다."""
-    approved(center, private, bot=INTAKE, bpmn=UNGATED)
+    approved(center, bot=INTAKE, bpmn=UNGATED)
     refused = register(center)
     assert refused.status_code == 422 and refused.json()["code"] == "intake_not_gated"
     assert "1.0.0" in refused.json()["detail"]["violations"]
@@ -155,19 +133,19 @@ def test_an_intake_bot_that_starts_a_batch_without_approval_is_refused(center: T
 
 @pytest.mark.parametrize(("setup", "code"), [("none", "intake_unknown"), ("pc", "intake_not_server")])
 def test_an_intake_bot_must_be_an_approved_server_bot(
-    center: TestClient, private: Any, setup: str, code: str
+    center: TestClient, setup: str, code: str
 ) -> None:
     if setup == "pc":
-        approved(center, private, bot=INTAKE, bpmn=GATED, where="pc")
+        approved(center, bot=INTAKE, bpmn=GATED, where="pc")
     refused = register(center)
     assert refused.status_code == 422 and refused.json()["code"] == code
 
 
-def test_a_new_version_without_the_gate_is_not_deployed(center: TestClient, private: Any) -> None:
+def test_a_new_version_without_the_gate_is_not_deployed(center: TestClient) -> None:
     """묶인 뒤 **새 판**으로 결재 없는 일괄 기동이 들어오는 길도 막는다 (409)."""
-    approved(center, private, bot=INTAKE, bpmn=GATED)
+    approved(center, bot=INTAKE, bpmn=GATED)
     assert register(center).status_code == 201
-    later = approved(center, private, bot=INTAKE, bpmn=UNGATED, version="1.1.0")
+    later = approved(center, bot=INTAKE, bpmn=UNGATED, version="1.1.0")
     runner = center.post("/api/v1/center-keys", json={"name": "서버", "type": "server_runner"}, headers=ADMIN)
     registered = center.post(
         "/api/v1/server-runner/register",
@@ -175,21 +153,21 @@ def test_a_new_version_without_the_gate_is_not_deployed(center: TestClient, priv
               "versions": {"server_runner": "0.1.0", "core": "0.1.0"}, "max_concurrency": 3},
         headers={"Authorization": f"Bearer {runner.json()['key']}"},
     )
-    envelope = sign(
-        {"kind": "deployment", "deployment_id": "dep_vw000001",
-         "target": {"type": "server_runner", "id": registered.json()["server_runner_id"]},
-         "bpm_process_id": INTAKE, "version": later["version"], "content_hash": later["content_hash"]},
-        private, signed_at=now_iso(),
+    refused = center_admin.deploy(
+        center,
+        target={"type": "server_runner", "id": registered.json()["server_runner_id"]},
+        bpm_process_id=INTAKE,
+        version=later["version"],
+        expect=None,
     )
-    refused = center.post("/api/v1/deployments", json=envelope.to_json_dict(), headers=ADMIN)
     assert refused.status_code == 409 and refused.json()["code"] == "intake_not_gated", refused.text
 
 
 # ─────────────────────────── 읽기 ───────────────────────────
 
 
-def test_a_relay_key_reads_only_what_its_person_supervises(center: TestClient, private: Any) -> None:
-    approved(center, private, bot=INTAKE, bpmn=GATED)
+def test_a_relay_key_reads_only_what_its_person_supervises(center: TestClient) -> None:
+    approved(center, bot=INTAKE, bpmn=GATED)
     register(center)
     mine = relay(center, "김감독")
     assert [one["id"] for one in center.get("/api/v1/virtual-workers", headers=mine).json()] == ["finance-intake"]
@@ -203,9 +181,9 @@ def test_a_relay_key_reads_only_what_its_person_supervises(center: TestClient, p
     assert center.get("/api/v1/runs", headers=mine).status_code == 403
 
 
-def test_batches_and_children_are_joined_when_read(center: TestClient, store: Store, private: Any) -> None:
+def test_batches_and_children_are_joined_when_read(center: TestClient, store: Store) -> None:
     """일괄 = 접수 Bot 실행, 자식 = `parent_run_id`가 그 실행인 것 — 읽을 때 센다."""
-    approved(center, private, bot=INTAKE, bpmn=GATED)
+    approved(center, bot=INTAKE, bpmn=GATED)
     register(center)
     batch, other = "run_20261020_091500_aaaaaa", "run_20261020_091600_bbbbbb"
     rows = [
@@ -237,8 +215,8 @@ def test_batches_and_children_are_joined_when_read(center: TestClient, store: St
     assert [one["job_id"] for one in jobs] == ["job_0000aaa1"]
 
 
-def test_update_and_remove(center: TestClient, private: Any) -> None:
-    approved(center, private, bot=INTAKE, bpmn=GATED)
+def test_update_and_remove(center: TestClient) -> None:
+    approved(center, bot=INTAKE, bpmn=GATED)
     register(center)
     changed = center.put("/api/v1/virtual-workers/finance-intake",
                          json={"id": "ignored", "name": "재무", "supervisors": ["이감독"], "intake": INTAKE,

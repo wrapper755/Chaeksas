@@ -25,8 +25,8 @@ import type { Mode } from "@/lib/session";
 type NavItem =
   // `Route`로 적는다 — 리터럴 **합집합**을 `Link`에 넘기면 타입 라우트가 그중 하나로만
   // 좁혀 보고 나머지를 거부한다 (화면을 더할 때마다 깨졌다).
-  | { label: string; href: Route; later?: never }
-  | { label: string; href?: never; later: string };
+  | { label: string; href: Route; later?: never; adminOnly?: boolean }
+  | { label: string; href?: never; later: string; adminOnly?: boolean };
 
 /** 꺼진 줄에 붙는 짧은 표시. 이유는 말풍선에 있다. */
 const LATER_BADGE = "아직";
@@ -40,8 +40,11 @@ const NAV: NavItem[] = [
   { label: "작업 지시", href: "/jobs" },
   { label: "가상 직원", href: "/virtual-workers" },
   { label: "공통 패키지", href: "/packages" },
+  { label: "배포", href: "/deployments" },
   { label: "리소스", href: "/resources" },
   { label: "Center API 키", href: "/center-keys" },
+  // 계정을 보는 것도 관리자의 일이다 (C5 `GET /accounts`) — 보기 전용에는 줄이 없다.
+  { label: "관리자 계정", href: "/accounts", adminOnly: true },
 ];
 
 export function Shell({
@@ -66,7 +69,7 @@ export function Shell({
       >
         <p className="px-2 pb-3 text-h3 font-bold">Chaeksas</p>
         <ul className="flex flex-col gap-1">
-          {NAV.map((item) => (
+          {NAV.filter((item) => !item.adminOnly || mode === "admin").map((item) => (
             <li key={item.label}>
               {item.later ? (
                 <span
@@ -104,12 +107,12 @@ export function Shell({
           </p>
           <div className="flex items-center gap-3">
             <span className="text-body-sm">
-              {mode === "admin" ? "관리자" : "보기 전용"}
-              <span className="text-text-muted"> · {actor}</span>
+              {actor}
+              <span className="text-text-muted"> · {mode === "admin" ? "관리자" : "보기 전용"}</span>
             </span>
             <form action={logout}>
               <Button type="submit" variant="ghost" size="sm">
-                나가기
+                로그아웃
               </Button>
             </form>
           </div>

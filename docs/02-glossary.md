@@ -30,13 +30,13 @@
 | 대기열 | `run_queue` | 개념 | 실행 자리가 차 있을 때 실행 요청(Center 작업, 수동, 감시 트리거, 일정, 메시지)이 기다리는 Bot UI의 목록. 들어온 순서, 기본 20건 |
 | Center | `center` | 서버 | 패키지·Bot UI·배포·작업·결재·실행 이력·리소스·Center API 키를 관리 |
 | Center 콘솔 | `console` | 화면 (웹) | Center의 웹 화면. 운영자·결재자가 쓴다 |
-| Admin | `admin` | 도구 | 서명 키를 가지고 패키지 승인·배포에 서명 |
-| Admin UI | `admin_ui` | 화면 (데스크톱) | Admin이 쓰는 창 (`chk-admin-ui`). 서명 키, Center 연결, 외부 확장 서명·등록을 누르기로 한다. 서명은 `chk-admin`과 같은 함수다 [ADR-0089](decisions/0089-admin-ui.md) |
+| 관리자 계정 | `account` | Center | Center 콘솔에 들어오는 아이디·비밀번호. 역할은 「관리자」(승인·배포까지 쓰기 전부)·「보기 전용」. 지우지 않고 멈춘다 [ADR-0090](decisions/0090-center-admin-accounts.md) |
+| Center 서명 키 | `signing key` | Center | 승인·배포·외부 확장 봉투에 Center가 대신 서명하는 키. DB에 있고 공개키는 믿는 키 목록(`admin_keys`)으로 현장에 내려간다 [ADR-0090](decisions/0090-center-admin-accounts.md) |
 | **확장** | `extension` | 묶음 | **BPM 프로세스에 공통 기능을 더하는 묶음.** 확장 정의(C13 `extension.json`)로 태스크 종류·작업·Studio 편집기·Tool UI 도구·로컬 런타임 등을 **기여**한다. 등급: 내장 / 사내 / 외부. 첫 내장 확장은 UI 자동화 [ADR-0018](decisions/0018-extensions.md) |
 | 확장 정의 | `extension.json` | 파일 | 확장이 무엇을 더하는지 선언 (C13) |
 | 기여 / 기여 지점 | `contributes` | 개념 | 확장이 플랫폼에 끼워 넣는 것 / 끼워 넣을 수 있는 자리 (VS Code의 contribution point와 같은 뜻) |
 | 내장 확장 / 사내 확장 / 외부 확장 | `builtin` / `internal` / `external` | 등급 | 이 저장소에 있음 / 다른 사내 저장소 / 정의 파일만 (외부 앱). 외부 확장은 코드를 기여할 수 없다 |
-| 외부 앱 | `external app` | 서버 | 이 저장소·C11 밖의 서버 앱 (흔히 "외부 LLM 앱"이라 부르는 것). 외부 확장의 서버 부분으로, Admin 서명된 확장 정의의 HTTP 어댑터로만 붙는다 |
+| 외부 앱 | `external app` | 서버 | 이 저장소·C11 밖의 서버 앱 (흔히 "외부 LLM 앱"이라 부르는 것). 외부 확장의 서버 부분으로, 관리자가 등록한(Center가 서명한) 확장 정의의 HTTP 어댑터로만 붙는다 |
 | HTTP 어댑터 | `http-adapter` | 개념 | C11을 따르지 않는 외부 앱을 템플릿만으로 부르는 방법 (C13 §4) |
 | 로컬 런타임 | `local_runtime` | 프로세스 | 확장이 기여하고 Bot UI가 띄워 감시하는 로컬 프로세스. 예: Worker 프로세스 |
 | 확장 호스트 | `extension_host` | 코드 | Studio·Bot UI·Tool UI·실행기·서버 실행기 안에서 확장을 찾아 기여를 등록하는 부분 (`core`) |
@@ -87,7 +87,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 공유 BPM 프로세스 | `process_lib` | 여러 BPM 프로세스가 Call Activity로 부르는 재사용 BPMN. 패키지에 복사되어 들어간다 |
 | 패키지 | `package` | BPM 프로세스·공유 BPM 프로세스를 담은 서명 가능한 zip. 종류(`kind`)를 가진다. **비밀(키 값)은 넣지 않는다**. 도구 묶음(툴팩)은 패키지가 아니다 — 도구는 확장이 기여한다 ([ADR-0050](decisions/0050-no-toolpack-kind.md)) |
 | 태스크 | `task` | BPMN 노드 하나 |
-| 배포 | `deployment` | "이 Bot UI(또는 서버 실행기)에서 이 BPM 프로세스의 이 버전을 쓴다"는 Admin 서명 봉투. 서버 배포에는 동시 실행 상한이 들어간다 |
+| 배포 | `deployment` | "이 Bot UI(또는 서버 실행기)에서 이 BPM 프로세스의 이 버전을 쓴다"는 서명 봉투 — 관리자가 콘솔에서 누르면 Center가 서명한다. 서버 배포에는 동시 실행 상한이 들어간다 |
 | 작업 | `job` | 배포된 Bot을 특정 입력으로 한 번 실행하라는 Center의 지시 |
 | 실행 | `run` | Bot 실행 한 번. `run_id`로 식별 |
 | 실행 이벤트 | `run_event` | 실행 중 일어난 일 하나. `(run_id, seq)`가 멱등 키 |

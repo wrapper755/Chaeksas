@@ -4,33 +4,33 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | Admin(서명) → Center(검증·보관) → Bot UI·서버 실행기(다시 검증) |
+| 보내는 쪽 → 받는 쪽 | Center(관리자가 누르면 서버의 키로 서명·보관) → Bot UI·서버 실행기(다시 검증) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/signing.py`, `…/hashing.py` (import `chaeksas.contracts.signing`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c2-envelope.json`](../../packages/contracts/schemas/c2-envelope.json) · [`c2-claim-deployment.json`](../../packages/contracts/schemas/c2-claim-deployment.json) · [`c2-claim-package.json`](../../packages/contracts/schemas/c2-claim-package.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0015](../decisions/0015-run-location.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md) |
-| 관련 화면 | ADM(명령), CON-02·CON-03 「최근 배치 결정」, CON-06 |
+| 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0015](../decisions/0015-run-location.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0090](../decisions/0090-center-admin-accounts.md) |
+| 관련 화면 | CON-02·CON-06 「승인」, CON-15 「배포」, CON-07 「확장 추가」, CON-03 「최근 배치 결정」 |
 
 ## 목적
 
-다음 일을 **Admin의 개인키 서명**으로만 할 수 있게 한다.
+다음 일을 **서명 봉투**로 남겨, 실행하는 쪽이 Center를 거쳐 받은 것이 **그때 승인·배포한 그것**인지 다시 확인하게 한다.
 
 - 패키지 승인·철회
 - 배포·배포 철회
-- Admin 공개키 추가·철회
+- 외부 확장 등록·철회
 
-관리자 토큰이나 Center API 키가 새도 배포를 만들거나 서명 키를 바꿔치기할 수 없게 하는 마지막 관문이다. Center와 실행하는 쪽은 공개키만 가진다.
+**서명하는 것은 Center다** ([ADR-0090](../decisions/0090-center-admin-accounts.md)) — 관리자 계정이 콘솔에서 누르면 Center가 봉투를 지어 **서버에 둔 키**로 서명한다. 실행하는 쪽은 공개키만 가진다(하트비트의 `admin_keys`). 그래서 서명은 **전송 중·보관 중 변조**와 **철회**를 지킨다. 「Center를 쥔 사람도 배포를 못 만든다」는 지키지 않는다 — 대신 승인·배포마다 **누가** 했는지 계정 이름이 남는다 (C5).
 
 ## 전송
 
 - 방식: JSON 봉투.
-  - 승인 봉투: C5 `PUT /packages/{id}/{version}/signature`로 올린다. Center는 패키지를 내려줄 때 이 봉투를 zip 안 `SIGNATURE` 파일로 **넣어서** 준다. `content_hash`는 `SIGNATURE`를 빼고 계산하므로 해시는 바뀌지 않는다.
-  - 배포·철회 봉투: C5로 올린다. 실행하는 쪽에는 C4 하트비트 응답 `deployments[]`로 전달한다.
-  - Admin 키 봉투: C5 `POST/DELETE /admin-keys`로 올린다.
-- 인증: 봉투 자체가 증명이다. 올리는 HTTP 요청에는 관리자 토큰도 함께 필요하다 (C5). 다만 **토큰만으로는 아무것도 바뀌지 않는다.**
+  - 승인 봉투: C5 `PUT /packages/{id}/{version}/signature`를 관리자가 부르면 Center가 짓는다. Center는 패키지를 내려줄 때 이 봉투를 zip 안 `SIGNATURE` 파일로 **넣어서** 준다. `content_hash`는 `SIGNATURE`를 빼고 계산하므로 해시는 바뀌지 않는다.
+  - 배포·철회 봉투: C5 `POST·DELETE /deployments`에서 Center가 짓는다. 실행하는 쪽에는 C4 하트비트 응답 `deployments[]`로 전달한다.
+  - 외부 확장 봉투: C7 `POST·DELETE /resources/extensions`에서 Center가 짓는다 (C13 E6).
+  - **바깥에서 서명한 봉투를 받는 길은 없다.**
+- 인증: 관리자(계정 세션 또는 관리자 토큰)만 부를 수 있다 (C5 권한표).
 - 멱등성:
-  - 같은 봉투를 다시 올리면 200을 돌려준다.
-  - 같은 `deployment_id`에 다른 내용이 오면 409 `deployment_conflict`.
-  - **철회된 `deployment_id`는 영구히 철회 상태다.** 같은 배포 봉투를 다시 올려도 되살아나지 않고 409 `deployment_revoked`.
+  - 이미 승인된 판을 다시 승인하면 그대로 200이다. 배포는 누를 때마다 새 `deployment_id`다.
+  - **철회는 영구하다.** 철회된 배포·패키지 승인·외부 확장은 되살아나지 않는다 (409 `deployment_revoked`·`package_revoked`·`extension_revoked`).
 - 바이트 보존: Center는 받은 봉투 JSON을 그대로 저장·전달한다 (감사 추적).
 
 ## 모델
@@ -48,7 +48,7 @@
 | --- | --- | --- | --- |
 | `schema` | int | ✓ | 1 |
 | `payload` | Claim | ✓ | 서명 대상 (`kind`로 구분) |
-| `key_id` | str | ✓ | 서명한 Admin 키 id. 공개키 raw 32바이트의 SHA-256 앞 16 hex |
+| `key_id` | str | ✓ | 서명한 키 id (Center 서명 키, 또는 사람이 서명하던 때의 옛 Admin 키). 공개키 raw 32바이트의 SHA-256 앞 16 hex |
 | `alg` | `"ed25519"` | ✓ | 다른 값은 거부 |
 | `sig` | str | ✓ | base64( Ed25519 서명( sha256( canonical_json(payload) ) ) ) |
 | `signed_at` | str | ✓ | ISO 8601 |
@@ -63,8 +63,7 @@
 | `revoke` | `deployment_id`, `reason`, `revoked_at` | 배포 철회 |
 | `extension` | `id`, `version`, `definition_hash` | 외부 확장 정의 승인 (C13). 정의가 서비스 앱 키를 어느 주소로 보낼지 정하므로 배포와 같은 관문을 둔다 |
 | `extension_revoke` | `id`, `version`, `reason`, `revoked_at` | 외부 확장 승인 철회. 그 정의를 쓰는 Bot은 실행 불가가 된다 |
-| `admin_key` | `key_id`, `public_key`(raw 32바이트 base64), `label` | Admin 공개키 추가. **이미 등록된, 철회되지 않은 다른 Admin 키**가 서명한다 |
-| `admin_key_revoke` | `key_id`, `reason`, `revoked_at` | Admin 공개키 철회. 철회되지 않은 Admin 키가 서명한다 (자기 자신도 가능) |
+| `admin_key` · `admin_key_revoke` | — | **더 만들지 않는다** (ADR-0090 — 믿는 키는 Center가 서버 셸 명령으로 다룬다). 이름은 남겨 둔다 — 옛 감사 기록을 읽을 수 있게 |
 
 `deployment` 필드 규칙:
 
@@ -81,11 +80,11 @@
 - 공유 BPM 프로세스는 패키지 안 `libs/`에 복사되어 들어가므로 따로 배포하지 않는다 (C1).
 - 도구 묶음(툴팩)은 **패키지가 아니다** — 도구는 확장이 기여하고, 코드 있는 도구는 설치 파일로만 온다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)). 외부 확장 정의는 `extension` 봉투로 등록한다 (아래).
 
-### Admin 키 처음 등록 (부트스트랩)
+### 믿는 키 (`admin_keys`)
 
-- Admin 키가 하나도 없을 때만, **서버에서** 명령으로 첫 키를 넣는다: `chk-center admin-keys bootstrap <public.pem>`. 이 명령은 서버 셸 접근이 있어야 쓸 수 있다.
-- 키가 하나라도 있으면 이 명령은 거부되고, 그다음부터는 `admin_key` 봉투로만 추가한다.
-- 마지막 남은 Admin 키는 철회할 수 없다 (409 `last_admin_key`). 잠겨서 아무도 서명할 수 없게 되는 것을 막는다.
+- 믿는 키는 **Center 서명 키**와 사람이 서명하던 때 들어온 **옛 Admin 키**다. Center가 C4·C12 하트비트로 그대로 내려 준다 (`AdminKey` — 「Center」라는 이름이 붙은 것이 Center 키다).
+- Center 서명 키는 **Center가 처음 뜰 때 만들어 DB에 둔다**. 서버 셸의 `chk-center signing-key rotate`로 바꾸면 새 키가 그 뒤를 서명하고 **옛 키는 믿는 목록에 남는다**(이미 나간 승인·배포가 산다).
+- 키를 믿지 않게 하는 것은 `chk-center signing-key retire <key_id>`뿐이다 — `revoked_at`이 붙고, 그 키가 서명한 승인·배포는 실행하는 쪽에서 V2 `revoked_key`로 거부된다. **지금 서명하는 키는 버릴 수 없다**(먼저 바꾼다).
 
 ## 검증 규칙
 
@@ -101,10 +100,10 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 | V5b | (deployment) 지금이 `not_before` 이후다 | `not_yet` | **실행하는 쪽만**, 적용할 때. Center는 예약 배포를 받아 둔다 |
 | V6 | (deployment) `target`이 나 자신이다 (`server_runner`의 `"*"`는 모든 서버 실행기와 맞음) | `wrong_target` | 실행하는 쪽 |
 | V7 | (deployment) 받은 패키지의 실제 `content_hash`가 봉투와 같고, 패키지 `SIGNATURE`(package claim)도 V1~V3을 통과한다 | `hash_mismatch` / `unsigned_package` | 실행하는 쪽 |
-| V8 | (admin_key) 서명 키가 추가하려는 키 자신이 아니다 | `self_signed_key` | Center |
+| V8 | (admin_key) 서명 키가 추가하려는 키 자신이 아니다 | `self_signed_key` | **쓰지 않는다** (`admin_key`를 더 만들지 않는다, ADR-0090) |
 
 - 실패하면 실행하는 쪽은 설치하지 않는다. C4 `deployment_results`에 `rejected`와 사유 코드를 보낸다 (CON-03 「⛔ 거부」).
-- Admin 키나 패키지 승인이 철회되면, 실행하는 쪽은 다음 하트비트에서 해당 Bot을 비활성으로 돌린다. 패키지 파일은 지우지 않는다.
+- 서명 키를 버리거나 패키지 승인이 철회되면, 실행하는 쪽은 다음 하트비트에서 해당 Bot을 비활성으로 돌린다. 패키지 파일은 지우지 않는다.
 
 ## 예시
 
@@ -130,13 +129,14 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 
 ## 오류
 
-| 상태 코드 | 언제 | 보내는 쪽(Admin)이 할 일 |
+봉투를 짓는 것이 Center라 V1~V4가 실패할 일은 없다 — 받아들이는 규칙은 C5(승인·배포)·C13(외부 확장)이 같은 코드로 보고 같은 코드로 답한다.
+
+| 상태 코드 | 언제 | 부르는 쪽(관리자)이 할 일 |
 | --- | --- | --- |
-| 400 | V1~V5a, V8 실패 (`detail.code`) | 키·시각을 확인하고 다시 서명한다 |
-| 409 | `deployment_conflict` (같은 id, 다른 내용), `deployment_revoked`, `last_admin_key` | 새 id로 서명한다, 또는 다른 키를 먼저 추가한다 |
-| 409 | `not_approved` (패키지가 승인 상태가 아님), `deprecated`, `hash_mismatch`, `wrong_target` (`target.type` ↔ `run_location`, 또는 **PC 배포의 `"*"`** — ADR-0046) | 봉투가 아니라 **가리키는 패키지·대상의 상태**가 어긋난다. 승인·버전·대상을 보고 다시 서명한다 |
-| 404 | `not_found` (가리키는 패키지가 Center에 없다), `target_not_found` (**등록되지 않은 PC**, [ADR-0049](../decisions/0049-deployment-target-must-exist.md)) | 패키지를 먼저 올린다 / 대상 id를 확인한다 — **`bot_ui_id`는 그 PC가 한 번 등록한 뒤에 생긴다**(C4). 미리 배포해 둘 수는 없다 |
-| 422 | `server_runner_not_available` (M7 전 서버 배포), `float_in_payload` | 메시지대로 고친다 |
+| 409 | `deployment_revoked`·`package_revoked`·`extension_revoked` (철회된 것은 되살아나지 않는다) | 버전을 올려 새로 올린다 |
+| 409 | `not_approved` (패키지가 승인 상태가 아님), `deprecated`, `wrong_target` (`target.type` ↔ `run_location`, 또는 **PC 배포의 `"*"`** — ADR-0046) | 승인·버전·대상을 보고 다시 누른다 |
+| 404 | `not_found` (가리키는 패키지가 Center에 없다), `target_not_found` (**등록되지 않은 PC**, [ADR-0049](../decisions/0049-deployment-target-must-exist.md)) | 패키지를 먼저 올린다 / 대상을 확인한다 — **`bot_ui_id`는 그 PC가 한 번 등록한 뒤에 생긴다**(C4). 미리 배포해 둘 수는 없다 |
+| 422 | `server_runner_not_available` (M7 전 서버 배포) | 메시지대로 고친다 |
 
 ## 호환 규칙
 
@@ -147,6 +147,7 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-24 | 1 | **서명하는 것이 Center가 됐다.** 관리자 계정이 누르면 Center가 서버의 키로 봉투를 짓는다. 바깥 봉투를 받는 길·Admin 키 추가·철회(`admin_key`·`admin_key_revoke`, V8)·첫 키 부트스트랩을 없앴다. 봉투 모양과 V1~V7, 현장의 검증은 **그대로**다 — 믿는 키 목록에 Center 키가 들어갔을 뿐이다 | 0090 |
 | 2026-10-12 | 1 | **404 행을 적었다** — 배포 봉투가 없는 패키지(`not_found`)나 **등록되지 않은 PC**(`target_not_found`)를 가리킬 때 받는 답이다. 뒤쪽은 받아 두고 있었다 | 0049 |
 | 2026-10-12 | 1 | **배포 봉투를 거절하는 코드·상태를 C5와 맞췄다.** 여기 422 행에 `not_approved`·`hash_mismatch`·`target_mismatch`가 있었는데 Center는 처음부터 409 `not_approved`·`hash_mismatch`·`wrong_target`으로 답했다 (C5는 2026-10-09에 409로 고쳤고 이 표만 남아 있었다). 대상 어긋남의 이름은 **V6과 같은 `wrong_target`**이다 | 0047 |
 | 2026-10-11 | 1 | **PC 배포에 `"*"`가 없다는 것을 적었다.** 규칙은 처음부터 「서버 배포는 쓸 수 있다」뿐이었고 V6·`matches`도 그랬지만, 없다는 것을 적지 않아 Center·콘솔이 **PC 쪽 `"*"`를 풀고 있었다**. 한쪽만 적으면 「적지 않았을 뿐」으로 읽힌다 | 0046 |

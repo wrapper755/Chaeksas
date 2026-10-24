@@ -12,6 +12,18 @@
       "title": "Content Hash",
       "type": "string"
     },
+    "deployed_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Deployed By"
+    },
     "deployment_id": {
       "title": "Deployment Id",
       "type": "string"
@@ -75,6 +87,18 @@
       ],
       "default": null,
       "title": "Revoked At"
+    },
+    "revoked_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Revoked By"
     },
     "signed_at": {
       "title": "Signed At",

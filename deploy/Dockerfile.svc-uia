@@ -25,7 +25,6 @@ COPY apps/center/pyproject.toml apps/center/
 COPY apps/studio/pyproject.toml apps/studio/
 COPY apps/bot_ui/pyproject.toml apps/bot_ui/
 COPY apps/server_runner/pyproject.toml apps/server_runner/
-COPY apps/admin/pyproject.toml apps/admin/
 COPY extensions/ui_automation/pyproject.toml extensions/ui_automation/
 
 # 서버에 필요한 것만 (Qt·PySide6는 들어가지 않는다 — 확장의 클라이언트 기여는 쓰지 않는다).

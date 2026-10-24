@@ -87,7 +87,7 @@ export default async function CenterKeysPage() {
               title="발급한 키가 없습니다."
               hint="「새 키...」로 Bot UI용 키부터 만드세요."
               action={found.mode === "admin" ? undefined : <Button variant="secondary" disabled
-                disabledReason="관리자 토큰으로 들어와야 발급할 수 있습니다.">새 키...</Button>}
+                disabledReason="관리자 계정으로 들어와야 발급할 수 있습니다.">새 키...</Button>}
             />
           ) : (
             <DataTable columns={columns} rows={rows} rowKey={(row) => row.key_id} caption="Center API 키 목록" />

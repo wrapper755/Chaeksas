@@ -5,6 +5,7 @@ import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
+import { PackageActions } from "@/components/PackageActions";
 import { STATUS_LABEL, packageHref, time } from "@/app/packages/page";
 import { DeleteVersion } from "./tools";
 import {
@@ -247,6 +248,16 @@ export default async function BotsPage() {
       header: "서비스 앱 키 참조",
       cell: (row) => (row.key_refs.length === 0 ? <span className="text-text-muted">—</span> : row.key_refs.join(", ")),
     },
+    // 승인은 **이 줄에서** 한다 (ADR-0090 — Center가 서명한다). 배포는 「배포」 화면 한 곳이다.
+    ...(found.mode === "admin"
+      ? [
+          {
+            key: "actions",
+            header: "승인",
+            cell: (row: BotRow) => <PackageActions packageId={row.id} version={row.version} status={row.status} />,
+          } as Column<BotRow>,
+        ]
+      : []),
   ];
 
   return (
@@ -298,7 +309,7 @@ export default async function BotsPage() {
             <DeleteVersion rows={rows.map((row) => ({ id: row.id, version: row.version }))} />
           ) : (
             <p className="text-body-sm text-text-muted">
-              버전을 지우려면 관리자 모드로 켜세요 (위 막대의 「관리자」).
+              승인·삭제는 관리자 계정으로 합니다.
             </p>
           )}
         </div>

@@ -1,0 +1,26 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-account-create-request",
+  "additionalProperties": true,
+  "description": "`POST /accounts` — 관리자만.",
+  "properties": {
+    "password": {
+      "title": "Password",
+      "type": "string"
+    },
+    "role": {
+      "default": "admin",
+      "title": "Role",
+      "type": "string"
+    },
+    "username": {
+      "title": "Username",
+      "type": "string"
+    }
+  },
+  "required": [
+    "username",
+    "password"
+  ],
+  "title": "AccountCreateRequest",
+  "type": "object"
+}

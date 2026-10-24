@@ -2,16 +2,18 @@
 
 | 부르는 쪽 | 토큰 | 할 수 있는 것 |
 | --- | --- | --- |
-| 콘솔 「보기 전용」 | 읽기 토큰 | **GET만** |
-| 콘솔 「관리자」·Admin | 관리자 토큰 | 쓰기 전부 (서명이 필요한 것은 봉투도 함께) |
+| 콘솔 「보기 전용」 계정 | 세션 토큰 (`chk_ses_…`) | **GET만** |
+| 콘솔 「관리자」 계정 | 세션 토큰 | 쓰기 전부 — 승인·배포·외부 확장은 Center가 서명한다 (ADR-0090) |
+| 자동화(스크립트·시험) | 관리자·읽기 토큰 | 위의 둘과 같다. 설정하지 않으면 그 길이 닫힌다 |
 | Bot UI·Studio·서버 실행기 | Center API 키 (종류별) | 자기 일만 |
 
 **「자기 일만」은 키 종류로 가른다.** 토큰이 맞는지만 보는 `require_read`로는 C5 권한표를
 지킬 수 없다 — 패키지 쪽은 종류를 보는 관문(`require_upload`·`require_package_read`)과,
 배포 표까지 대조하는 관문(`api.package_access.guard_download`)이 따로 있다.
 
-**행위자 이름은 본문에서 받지 않는다** (C5). 키로 부르면 키 이름, 콘솔에서 부르면 BFF가 실어
-보내는 `X-CHK-Actor` 헤더를 쓴다 — 그 헤더는 **관리자·읽기 토큰으로 부를 때만** 믿는다.
+**행위자 이름은 본문에서 받지 않는다** (C5). 세션으로 부르면 **계정 아이디**(로그인이 정한
+신원이라 `X-CHK-Actor`를 듣지 않는다), 키로 부르면 키 이름, 관리자·읽기 토큰으로 부르면
+`X-CHK-Actor` 헤더 — 그 헤더는 **토큰으로 부를 때만** 믿는다.
 
 **사람 대신 부르는 키**(대리 답용·연동용)는 그 사람을 `X-CHK-On-Behalf-Of`로 싣는다 (ADR-0081).
 여기서 **한 번** 풀어 `Caller.on_behalf`에 두고, 결재(담당자 대조)와 작업(`on_behalf_of` 기록)이
@@ -26,9 +28,10 @@ from urllib.parse import unquote
 
 from fastapi import Request
 
-from chaeksas.center import keys
+from chaeksas.center import accounts, keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
+from chaeksas.contracts.accounts import ROLE_ADMIN, SESSION_PREFIX
 from chaeksas.contracts.approvals import normalize_name
 from chaeksas.contracts.center_api import ON_BEHALF_HEADER, on_behalf_violation
 from chaeksas.contracts.center_keys import RELAY_KEY_TYPE
@@ -55,6 +58,8 @@ class Caller:
     key: keys.KeyRecord | None = None
     #: 키가 대신 부르는 사람 (`X-CHK-On-Behalf-Of`, 정규화 뒤). 대리 답용·연동용 키일 때만 있다.
     on_behalf: str | None = None
+    #: 세션으로 불렀으면 그 계정 아이디 (ADR-0090). 토큰·키로 부르면 `None`.
+    account: str | None = None
 
     @property
     def is_admin(self) -> bool:
@@ -111,6 +116,13 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
     if token is None:
         raise ApiError(401, "token_missing", "인증 토큰이 없다")
 
+    if token.startswith(SESSION_PREFIX):
+        found = accounts.session_of(store, token)
+        if found is None:
+            raise ApiError(401, "session_expired", "로그인이 끝났습니다 — 다시 로그인하세요")
+        kind = "admin" if found.role == ROLE_ADMIN else "read"
+        return Caller(kind=kind, actor=found.username, account=found.username)
+
     # 토큰이 비어 있으면(설정하지 않았으면) 그 권한으로는 부를 수 없다.
     if admin_token and hmac.compare_digest(token, admin_token):
         return Caller(kind="admin", actor=_console_actor(request, fallback="관리자"))
@@ -131,7 +143,7 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
 
 def require_admin(found: Caller) -> Caller:
     if not found.is_admin:
-        raise ApiError(403, "admin_only", "관리자 토큰이 필요하다")
+        raise ApiError(403, "admin_only", "관리자만 할 수 있다")
     return found
 
 

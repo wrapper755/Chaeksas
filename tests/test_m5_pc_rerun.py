@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import threading
 import time
 from collections.abc import Iterator
@@ -39,19 +38,17 @@ from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from center_admin import approve, deploy_id  # noqa: E402
 from waiting import wait_for  # noqa: E402
 
-from chaeksas.admin import keys as keystore  # noqa: E402
 from chaeksas.bot_ui.agent import Agent, load_extensions  # noqa: E402
 from chaeksas.bot_ui.center_client import CenterClient  # noqa: E402
 from chaeksas.bot_ui.settings import Settings as BotUiSettings  # noqa: E402
 from chaeksas.bot_ui.store import Store as BotUiStore  # noqa: E402
-from chaeksas.center.api.signing import bootstrap_key  # noqa: E402
 from chaeksas.center.app import create_app  # noqa: E402
 from chaeksas.center.settings import Settings as CenterSettings  # noqa: E402
 from chaeksas.center.storage import Store  # noqa: E402
 from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
-from chaeksas.contracts.signing import sign  # noqa: E402
 from chaeksas.core.packages import installed  # noqa: E402
 from chaeksas.core.run_log import RunLog, log_path  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
@@ -65,8 +62,6 @@ EXAMPLES = DOCS / "bpmn"
 
 ADMIN_TOKEN = "t-admin"
 ADMIN = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
-SIGN_PASS = "열쇠말"
-SIGNED_AT = "2026-10-07T09:00:00+09:00"
 CENTER_URL = "http://testserver"
 
 #: 모의 앱이 받는 키 하나 (`samples/README.md`).
@@ -117,15 +112,6 @@ def field_answers(example: str) -> dict[str, dict[str, Any]]:
 # ─────────────────────────── 판 깔기 ───────────────────────────
 
 
-@pytest.fixture
-def admin_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """`chk-admin`의 개인키가 사는 곳 — 임시 폴더다 (개발 PC를 건드리지 않는다)."""
-    home = tmp_path / "admin"
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, SIGN_PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(home))
-    return home
-
-
 @pytest.fixture(scope="session")
 def mock_apps() -> Iterator[dict[str, str]]:
     """모의 C11 앱들을 한 포트에 띄운다 (`samples/mock_apps`).
@@ -154,21 +140,19 @@ def mock_apps() -> Iterator[dict[str, str]]:
 
 
 @pytest.fixture
-def center(tmp_path: Path, admin_home: Path, mock_apps: dict[str, str]) -> Iterator[tuple[TestClient, Any]]:
-    """진짜 Center + 첫 Admin 공개키 + 등록된 모의 앱들. `(client, 서명 키)`."""
+def center(tmp_path: Path, mock_apps: dict[str, str]) -> Iterator[TestClient]:
+    """진짜 Center + 등록된 모의 앱들. 서명 키는 Center가 처음 뜰 때 만든다 (ADR-0090)."""
     store = Store(tmp_path / "center.sqlite3")
     settings = CenterSettings(
         db_path=tmp_path / "center.sqlite3", package_dir=tmp_path / "packages", admin_token=ADMIN_TOKEN
     )
     with TestClient(create_app(settings, store=store)) as client:
-        key = keystore.create(label="PC 재통과")
-        bootstrap_key(store, public_key=key.public_bytes(), label="PC 재통과")
         for app_id, base_url in mock_apps.items():
             answer = client.post(
                 "/api/v1/resources/service-apps", json={"base_url": base_url}, headers=ADMIN
             )
             assert answer.status_code < 400, f"{app_id}: {answer.text}"
-        yield client, key
+        yield client
     store.close()
 
 
@@ -182,10 +166,10 @@ def model() -> Iterator[StubModel]:
 
 @pytest.fixture
 def agent(
-    center: tuple[TestClient, Any], tmp_path: Path, model: StubModel, monkeypatch: pytest.MonkeyPatch
+    center: TestClient, tmp_path: Path, model: StubModel, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[Agent]:
     """진짜 Bot UI — Center는 in-process, 실행기는 **진짜 자식 프로세스**다."""
-    client, _ = center
+    client = center
     data_dir = tmp_path / "botui"
     monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
     key = client.post(
@@ -224,12 +208,12 @@ def packaged(tmp_path: Path, example: str) -> Path:
     return export(made, tmp_path / default_name(made))
 
 
-def deploy(center: tuple[TestClient, Any], agent: Agent, zip_path: Path) -> dict[str, Any]:
-    """업로드 → **승인 서명** → **배포 서명** → 하트비트로 설치까지 (C2 V1~V7).
+def deploy(center: TestClient, agent: Agent, zip_path: Path) -> dict[str, Any]:
+    """업로드 → **승인** → **배포** → 하트비트로 설치까지 (C2 V1~V7).
 
-    서명이 유일한 관문이다 — 관리자 토큰만으로는 아무것도 배포되지 않는다.
+    봉투는 Center가 지어 서명하고(ADR-0090), 설치하는 쪽이 하트비트의 `admin_keys`로 다시 본다.
     """
-    client, key = center
+    client = center
     answer = client.post(
         "/api/v1/packages",
         files={"file": (zip_path.name, zip_path.read_bytes(), "application/zip")},
@@ -237,44 +221,19 @@ def deploy(center: tuple[TestClient, Any], agent: Agent, zip_path: Path) -> dict
     )
     assert answer.status_code in (200, 201), answer.text
     info = dict(answer.json())
-
-    signer = keystore.load(key, passphrase=SIGN_PASS)
-    approve = sign(
-        {
-            "kind": "package",
-            "id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        signer,
-        signed_at=SIGNED_AT,
-    )
-    # 승인은 **봉투를 그대로** 올린다 (C2 — Center가 짓지 않는다).
-    answer = client.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=approve.to_json_dict(),
-        headers=ADMIN,
-    )
-    assert answer.status_code < 400, answer.text
+    approve(client, info["id"], info["version"], headers=ADMIN)
 
     # Bot UI가 등록되어야 배포 대상이 생긴다 (C4 — 키 하나 ↔ PC 하나).
     assert agent.beat() is not None
     assert agent.bot_ui_id, "등록되지 않았다"
 
-    envelope = sign(
-        {
-            "kind": "deployment",
-            "deployment_id": "dep_" + re.sub(r"[^0-9a-f]", "", info["content_hash"])[:8],
-            "target": {"type": "bot_ui", "id": agent.bot_ui_id},
-            "bpm_process_id": info["id"],
-            "version": info["version"],
-            "content_hash": info["content_hash"],
-        },
-        signer,
-        signed_at=SIGNED_AT,
+    deploy_id(
+        client,
+        target={"type": "bot_ui", "id": agent.bot_ui_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
+        headers=ADMIN,
     )
-    answer = client.post("/api/v1/deployments", json=envelope.to_json_dict(), headers=ADMIN)
-    assert answer.status_code < 400, answer.text
 
     agent.beat()  # 배포가 내려와 설치된다
     from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415
@@ -284,9 +243,9 @@ def deploy(center: tuple[TestClient, Any], agent: Agent, zip_path: Path) -> dict
     return info
 
 
-def dispatch(center: tuple[TestClient, Any], agent: Agent, info: dict[str, Any], inputs: dict[str, Any]) -> str:
+def dispatch(center: TestClient, agent: Agent, info: dict[str, Any], inputs: dict[str, Any]) -> str:
     """Center 작업 지시 하나 → 하트비트로 받아 실행기를 띄운다 (C5·C4)."""
-    client, _ = center
+    client = center
     answer = client.post(
         "/api/v1/jobs",
         json={
@@ -417,14 +376,14 @@ def test_the_examples_ask_for_the_extension_version_we_actually_have() -> None:
 
 @pytest.mark.parametrize("example", PC)
 def test_every_pc_example_deploys_and_installs(
-    center: tuple[TestClient, Any], agent: Agent, tmp_path: Path, example: str
+    center: TestClient, agent: Agent, tmp_path: Path, example: str
 ) -> None:
     """**여덟 개 모두** Center를 거쳐 설치된다 — 화면이 없어도 여기까지는 돈다.
 
     돌리는 것(아래)은 브라우저·데스크톱이 있어야 하지만, **서명·승인·배포·설치**(C2 V1~V7)는
     환경과 무관하다. 가르지 않으면 브라우저 없는 PC에서 그 길이 하나도 시험되지 않는다.
     """
-    client, _ = center
+    client = center
     info = deploy(center, agent, packaged(tmp_path, example))
     found = client.get("/api/v1/deployments", headers=ADMIN).json()
     rows = [one for one in found if one["bpm_process_id"] == info["id"]]
@@ -439,13 +398,13 @@ def test_every_pc_example_deploys_and_installs(
 
 @pytest.mark.parametrize("example", GREEN)
 def test_a_pc_example_deploys_and_runs(
-    center: tuple[TestClient, Any], agent: Agent, tmp_path: Path, example: str
+    center: TestClient, agent: Agent, tmp_path: Path, example: str
 ) -> None:
     """**Center 배포 → 작업 지시 → 실행기 → 끝** 한 바퀴.
 
     업무 값을 보지 않는다 (C3에 없다) — 보는 것은 설치·시작·완료와 **Center가 그것을 아는가**다.
     """
-    client, _ = center
+    client = center
     info = deploy(center, agent, packaged(tmp_path, example))
     job_id = dispatch(center, agent, info, case_inputs(example))
 
@@ -470,13 +429,13 @@ def test_a_pc_example_deploys_and_runs(
 
 
 def test_a_confirmation_is_answered_in_the_field(
-    center: tuple[TestClient, Any], agent: Agent, tmp_path: Path
+    center: TestClient, agent: Agent, tmp_path: Path
 ) -> None:
     """확인은 **늘 현장**이다 (ADR-0038) — Center 결재함으로 올라가지 않는다.
 
     FX-19가 가장 작은 PC 예제다 (확인 하나 + 스크립트).
     """
-    client, _ = center
+    client = center
     info = deploy(center, agent, packaged(tmp_path, "fx19_manual_task_pc"))
     dispatch(center, agent, info, {})
     running = agent.runner().running

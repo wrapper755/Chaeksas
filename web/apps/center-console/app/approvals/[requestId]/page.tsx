@@ -205,7 +205,7 @@ export default async function ApprovalPage({
                 <span className="text-text-muted">
                   {info.answered_via
                     ? `— ${info.answered_by}, 「${info.answered_via}」 키로 대리 답 (이름은 그 키를 쓰는 쪽이 확인) · ${time(info.answered_at)}`
-                    : `(${info.answered_by} — 자칭, 신원 검증 없음 · ${time(info.answered_at)})`}
+                    : `(${info.answered_by} · ${time(info.answered_at)})`}
                 </span>
               </p>
             </Section>
@@ -252,20 +252,11 @@ export default async function ApprovalPage({
                     <Field key={field.key} field={field} bad={bad.has(field.key)} />
                   ))
                 )}
-                <label className="flex flex-col gap-1 text-body-sm">
-                  <span className="text-text-muted">답하는 사람 (자칭 — 신원 검증 없음) *</span>
-                  <input
-                    type="text"
-                    name="actor"
-                    required
-                    defaultValue={found.actor}
-                    className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
-                  />
-                  {/* 담당자가 있어도 **막지 않는다** — 콘솔의 이름은 자칭이다 (ADR-0080). */}
-                  {(info.assignees ?? []).length > 0 ? (
-                    <span className="text-caption text-text-muted">담당: {(info.assignees ?? []).join(", ")}</span>
-                  ) : null}
-                </label>
+                {/* 답한 사람은 **로그인한 계정**이다 (ADR-0090). 담당자가 있어도 막지 않는다 (ADR-0080). */}
+                <p className="text-body-sm text-text-muted">
+                  답하는 사람: {found.actor}
+                  {(info.assignees ?? []).length > 0 ? ` · 담당: ${(info.assignees ?? []).join(", ")}` : ""}
+                </p>
                 <div className="flex gap-2">
                   <Button type="submit" variant="primary">
                     답 보내기

@@ -1,0 +1,66 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-account-info",
+  "additionalProperties": true,
+  "description": "`GET /accounts`의 한 줄. **비밀번호 해시는 나가지 않는다.**",
+  "properties": {
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "created_by": {
+      "title": "Created By",
+      "type": "string"
+    },
+    "disabled_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Disabled At"
+    },
+    "last_login_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Login At"
+    },
+    "password_changed_at": {
+      "title": "Password Changed At",
+      "type": "string"
+    },
+    "role": {
+      "title": "Role",
+      "type": "string"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "username": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,31}$",
+      "title": "Username",
+      "type": "string"
+    }
+  },
+  "required": [
+    "username",
+    "role",
+    "state",
+    "created_at",
+    "created_by",
+    "password_changed_at"
+  ],
+  "title": "AccountInfo",
+  "type": "object"
+}

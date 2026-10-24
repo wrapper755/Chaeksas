@@ -1,6 +1,6 @@
 """`chk-center` — Center API를 띄운다.
 
-    CHK_CENTER__ADMIN_TOKEN=... uv run chk-center
+    CHK_CENTER__FIRST_ADMIN__PASSWORD=... uv run chk-center
 
 포트·경로는 환경변수로 바꾼다 (`CHK_CENTER__PORT` 등, `docs/04-setup.md` §6).
 """
@@ -14,47 +14,46 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")  # Windows 기본 코드페이지에서 한글이 터진다
 
 
-def bootstrap(argv: list[str]) -> int:
-    """`chk-center admin-keys bootstrap <public>` — 첫 Admin 키 (C2 §부트스트랩).
+def signing_key(argv: list[str]) -> int:
+    """`chk-center signing-key list|rotate|retire <key_id>` — Center 서명 키 (ADR-0090 §5).
 
-    **서버 셸에서만** 쓴다. 키가 하나라도 있으면 거부한다 — 그다음부터는 서명한 봉투로만
-    더한다. 파일은 `chk-admin keys new`가 적어 둔 base64 공개키(`.pub`)다.
+    **서버 셸에서만** 쓴다. `rotate`는 새 키가 그 뒤의 서명을 맡고 옛 키는 믿는 목록에 남는다.
+    `retire`는 그 키가 서명한 승인·배포를 **모두 무효**로 만든다 — 그래서 한 번 더 묻는다.
     """
-    import base64
-
-    from chaeksas.center.api.signing import bootstrap_key
-    from chaeksas.center.errors import ApiError
+    from chaeksas.center import signer
+    from chaeksas.center.api.signing import admin_keys
     from chaeksas.center.settings import Settings
     from chaeksas.center.storage import Store
 
-    if len(argv) < 2 or argv[0] != "bootstrap":
-        print("쓰는 법: chk-center admin-keys bootstrap <공개키 파일> [이름]")
+    if not argv or argv[0] not in ("list", "rotate", "retire") or (argv[0] == "retire" and len(argv) < 2):
+        print("쓰는 법: chk-center signing-key list | rotate | retire <key_id> [-y]")
         return 2
-    path = Path(argv[1])
-    try:
-        raw = path.read_text(encoding="utf-8").strip()
-    except OSError as e:
-        print(f"공개키 파일을 읽지 못했다: {e}")
-        return 2
-    try:
-        public = base64.b64decode(raw, validate=True)
-    except Exception:  # noqa: BLE001 — 사람이 아무 파일이나 줄 수 있다
-        print("공개키가 base64(raw 32바이트)가 아니다 — `chk-admin keys new`가 만든 `.pub`를 주세요")
-        return 2
-    if len(public) != 32:
-        print(f"Ed25519 공개키는 32바이트다 (받은 것 {len(public)}바이트)")
-        return 2
-
     store = Store(Settings.from_env().db_path)
     try:
-        found = bootstrap_key(store, public_key=public, label=argv[2] if len(argv) > 2 else None)
-    except ApiError as e:
-        print(f"오류: {e.message}")
-        return 2
+        current = signer.current_key_id(store)
+        if argv[0] == "list":
+            for one in admin_keys(store):
+                state = "버림" if one.revoked else ("서명 중" if one.key_id == current else "믿음")
+                print(f"{one.key_id}  {one.label or '-':12}  {state}")
+            return 0
+        if argv[0] == "rotate":
+            print(f"새 서명 키 {signer.rotate(store)} — 옛 키 {current}는 믿는 목록에 남는다")
+            return 0
+        key_id = argv[1]
+        if "-y" not in argv:
+            answer = input(f"{key_id}가 서명한 승인·배포가 모두 무효가 됩니다. 계속할까요? [y/N] ")
+            if answer.strip().lower() not in ("y", "yes"):
+                print("그만두었다")
+                return 1
+        try:
+            signer.retire(store, key_id)
+        except (ValueError, LookupError) as e:
+            print(f"오류: {e}")
+            return 2
+        print(f"{key_id}를 버렸다")
+        return 0
     finally:
         store.close()
-    print(f"첫 Admin 키를 넣었다 — {found.key_id}")
-    return 0
 
 
 def hosts(argv: list[str]) -> int:
@@ -94,19 +93,24 @@ def hosts(argv: list[str]) -> int:
 def main() -> int:
     import uvicorn
 
+    from chaeksas.center.accounts import FirstAdminError
     from chaeksas.center.app import create_app
     from chaeksas.center.settings import Settings
 
-    if len(sys.argv) > 1 and sys.argv[1] == "admin-keys":
-        return bootstrap(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "signing-key":
+        return signing_key(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "hosts":
         return hosts(sys.argv[2:])
 
     settings = Settings.from_env()
-    if not settings.admin_token:
-        print("경고: CHK_CENTER__ADMIN_TOKEN이 없다 — 쓰기 API를 부를 수 없다 (읽기만 된다).")
+    try:
+        app = create_app(settings)
+    except FirstAdminError as e:
+        # 설치할 때 고치는 것이 가장 싸다 — 규칙에 안 맞는 비밀번호로 뜨지 않는다 (ADR-0090 §2).
+        print(f"오류: {e} — .env의 CHK_CENTER__FIRST_ADMIN__*를 고치세요")
+        return 2
     print(f"Center API: http://{settings.host}:{settings.port}  (DB {settings.db_path})")
-    uvicorn.run(create_app(settings), host=settings.host, port=settings.port, log_level="info")
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level="info")
     return 0
 
 

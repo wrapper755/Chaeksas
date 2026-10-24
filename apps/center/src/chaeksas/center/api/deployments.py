@@ -1,7 +1,8 @@
-"""배포 — **봉투로만** 만들고 철회한다 (C2·C5).
+"""배포 — 관리자가 요청하면 **Center가 봉투를 지어 서명한다** (C2·C5, ADR-0090).
 
-Center는 배포를 **짓지 않는다.** Admin이 서명한 것을 받아 두었다가 하트비트로 그대로 내려
-줄 뿐이다 (C4) — 재직렬화하면 서명이 깨지므로 **저장된 JSON 그대로** 다룬다.
+봉투를 지은 뒤에는 사람이 서명하던 때와 **같은 길**(`_accept`)을 지난다. 받아 둔 봉투는
+하트비트로 그대로 내려 줄 뿐이다 (C4) — 재직렬화하면 서명이 깨지므로 **저장된 JSON 그대로**
+다룬다. 누가 배포·철회했는지는 계정 이름으로 남긴다(`deployed_by`·`revoked_by`).
 
 **무엇을 받아들이나는 계약이 정한다** (ADR-0047) —
 `contracts.center_api.validate_deployment()`가 규칙(서명·승인 상태·해시·대상·M7)을 모두 보고,
@@ -18,10 +19,12 @@ Center만 아는 것(저장소를 봐야 하는 것)이 여기 남는다:
 from __future__ import annotations
 
 import json
+import secrets
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+from chaeksas.center import signer
 from chaeksas.center.api.signing import STATUS_APPROVED, admin_keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
@@ -29,6 +32,7 @@ from chaeksas.contracts.bot_ui import DeploymentResult
 from chaeksas.contracts.center_api import (
     RECENT_RESULTS,
     DeploymentInfo,
+    DeploymentRequest,
     deployment_refusal,
     validate_deployment,
 )
@@ -97,8 +101,36 @@ def _refuse(problems: Sequence[Any]) -> None:
     )
 
 
-def create(store: Store, raw: Any, *, package_dir: Path | None = None) -> DeploymentInfo:
-    """`deployment` 봉투를 받아 둔다 (C5 `POST /deployments`).
+def create(
+    store: Store, wanted: DeploymentRequest, *, by: str, package_dir: Path | None = None
+) -> DeploymentInfo:
+    """배포한다 (C5 `POST /deployments`). Center가 `deployment` 봉투를 지어 서명한다 (ADR-0090).
+
+    `deployment_id`는 새로 짓고 `content_hash`는 그 패키지의 것이다. 없는 패키지면 404다.
+    """
+    from chaeksas.center.api import packages  # noqa: PLC0415 — 순환 import를 피한다
+
+    package = packages.info_of(store, wanted.bpm_process_id, wanted.version)
+    claim: dict[str, Any] = {
+        "kind": "deployment",
+        "deployment_id": f"dep_{secrets.token_hex(4)}",
+        "target": {"type": str(wanted.target.get("type") or ""), "id": str(wanted.target.get("id") or "")},
+        "bpm_process_id": wanted.bpm_process_id,
+        "version": wanted.version,
+        "content_hash": package.content_hash,
+    }
+    for name in ("not_before", "expires_at", "max_concurrency"):
+        value = getattr(wanted, name)
+        if value is not None:
+            claim[name] = value
+    made = _accept(store, signer.seal(store, claim).to_json_dict(), package_dir=package_dir)
+    with store.tx() as cur:
+        cur.execute("UPDATE deployments SET deployed_by = ? WHERE deployment_id = ?", (by, made.deployment_id))
+    return _row(store, store.row("SELECT * FROM deployments WHERE deployment_id = ?", (made.deployment_id,)))
+
+
+def _accept(store: Store, raw: Any, *, package_dir: Path | None = None) -> DeploymentInfo:
+    """서명된 `deployment` 봉투를 받아 둔다 — 사람이 서명하던 때부터 같은 관문이다.
 
     `package_dir`가 있으면 **가상 직원의 접수 Bot 관문**도 본다 (ADR-0085 §2 — 그 판의 그림을 읽는다).
     """
@@ -258,20 +290,20 @@ def _refuse_missing_resources(manifest: Manifest | None, store: Store) -> None:
     )
 
 
-def revoke(store: Store, raw: Any) -> DeploymentInfo:
-    """`revoke` 봉투 (C5 `DELETE /deployments`). **되살릴 수 없다.**"""
-    envelope = _envelope(raw)
-    _refuse(verify(envelope, keys=admin_keys(store), expect_kind="revoke"))
-    deployment_id = str(envelope.payload.get("deployment_id") or "")
+def revoke(store: Store, deployment_id: str, *, reason: str, by: str) -> DeploymentInfo:
+    """배포를 철회한다 (C5 `DELETE /deployments`). Center가 `revoke` 봉투를 지어 서명한다. **되살릴 수 없다.**"""
     found = store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,))
     if found is None:
         raise ApiError(404, "not_found", f"그 배포가 없다: {deployment_id}")
     if found["revoked_json"]:
         return _row(store, found)  # 멱등
+    envelope = signer.seal(
+        store, {"kind": "revoke", "deployment_id": deployment_id, "reason": reason, "revoked_at": now_iso()}
+    )
     with store.tx() as cur:
         cur.execute(
-            "UPDATE deployments SET revoked_json = ? WHERE deployment_id = ?",
-            (json.dumps(envelope.to_json_dict(), ensure_ascii=False), deployment_id),
+            "UPDATE deployments SET revoked_json = ?, revoked_by = ? WHERE deployment_id = ?",
+            (json.dumps(envelope.to_json_dict(), ensure_ascii=False), by, deployment_id),
         )
     return _row(store, store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,)))
 
@@ -494,6 +526,8 @@ def _row(store: Store, row: Any) -> DeploymentInfo:
         expires_at=claim.get("expires_at"),
         revoked_at=(revoked.get("payload") or {}).get("revoked_at") if revoked else None,
         last_result=_last_result(store, str(row["deployment_id"])),
+        deployed_by=row["deployed_by"],
+        revoked_by=row["revoked_by"],
     )
 
 

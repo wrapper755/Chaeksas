@@ -1,0 +1,21 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-deployment-revoke-request",
+  "additionalProperties": true,
+  "description": "`DELETE /deployments` — 관리자만. **되살릴 수 없다.**",
+  "properties": {
+    "deployment_id": {
+      "title": "Deployment Id",
+      "type": "string"
+    },
+    "reason": {
+      "default": "관리자 철회",
+      "title": "Reason",
+      "type": "string"
+    }
+  },
+  "required": [
+    "deployment_id"
+  ],
+  "title": "DeploymentRevokeRequest",
+  "type": "object"
+}

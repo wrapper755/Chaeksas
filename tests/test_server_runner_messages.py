@@ -30,18 +30,16 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+import center_admin
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.admin import keys as keystore
-from chaeksas.center.api.signing import bootstrap_key
 from chaeksas.center.app import create_app
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store as CenterStore
 from chaeksas.center.storage import now_iso
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.contracts.server_runner import MessageDispatch
-from chaeksas.contracts.signing import sign
 from chaeksas.core import seen as seen_mod
 from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.server_runner import agent as agent_mod
@@ -50,7 +48,6 @@ from chaeksas.server_runner.settings import Settings
 from chaeksas.server_runner.store import Store
 
 ADMIN = {"Authorization": "Bearer t-admin"}
-PASS = "열쇠말"
 AT = "2026-10-13T09:00:00+09:00"
 
 #: 업무 예제 BX-11 — 견적을 메시지로 받아 쌓고 **다시 기다린다**.
@@ -78,12 +75,6 @@ def quote(supplier: str) -> dict[str, Any]:
             "회신메일": "q2@example.com",
         }
     }
-
-
-@pytest.fixture(autouse=True)
-def _admin_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv(keystore.PASSPHRASE_ENV, PASS)
-    monkeypatch.setenv(f"{keystore.ENV_PREFIX}DATA_DIR", str(tmp_path / "admin"))
 
 
 @pytest.fixture
@@ -173,9 +164,6 @@ def package_zip() -> bytes:
 def ready(center: TestClient, store: CenterStore, runner: agent_mod.Agent) -> None:
     """등록 → 승인 → 배포 → 설치까지."""
     runner.tick()
-    signer = keystore.create(label="첫 키")
-    bootstrap_key(store, public_key=signer.public_bytes(), label="첫 키")
-    private = keystore.load(signer, passphrase=PASS)
 
     uploaded = center.post(
         "/api/v1/packages",
@@ -184,38 +172,13 @@ def ready(center: TestClient, store: CenterStore, runner: agent_mod.Agent) -> No
     )
     assert uploaded.status_code in (200, 201), uploaded.text
     info = dict(uploaded.json())
-    approved = center.put(
-        f"/api/v1/packages/{info['id']}/{info['version']}/signature",
-        json=sign(
-            {
-                "kind": "package",
-                "id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=AT,
-        ).to_json_dict(),
-        headers=ADMIN,
+    center_admin.approve(center, info["id"], info["version"])
+    center_admin.deploy(
+        center,
+        target={"type": "server_runner", "id": runner.server_runner_id},
+        bpm_process_id=info["id"],
+        version=info["version"],
     )
-    assert approved.status_code == 200, approved.text
-    deployed = center.post(
-        "/api/v1/deployments",
-        json=sign(
-            {
-                "kind": "deployment",
-                "deployment_id": "dep_7a1b2c3d",
-                "target": {"type": "server_runner", "id": runner.server_runner_id},
-                "bpm_process_id": info["id"],
-                "version": info["version"],
-                "content_hash": info["content_hash"],
-            },
-            private,
-            signed_at=now_iso(),
-        ).to_json_dict(),
-        headers=ADMIN,
-    )
-    assert deployed.status_code in (200, 201), deployed.text
     runner.tick()
     assert [b.id for b in runner.installed_bots()] == [BOT]
 

@@ -52,7 +52,6 @@ def reachable(name: str, graph: dict[str, Member]) -> set[str]:
 # (멤버, 의존하면 안 되는 멤버, 근거)
 FORBIDDEN_DEPS = [
     ("chaeksas-center", "chaeksas-core", "§5 — center는 core를 import하지 않는다"),
-    ("chaeksas-admin", "chaeksas-core", "§5 — admin은 contracts만 본다"),
     ("chaeksas-ext-ui-automation", "chaeksas-core", "§5 — 확장의 service·worker는 core를 import하지 않는다"),
     ("chaeksas-contracts", "chaeksas-extension-api", "§2 — contracts는 로직·I/O를 모른다"),
     ("chaeksas-extension-api", "chaeksas-core", "§5 — 방향은 extension_api ◀── core"),
@@ -117,7 +116,6 @@ FORBIDDEN_IMPORTS = [
     ("packages/core", "chaeksas.ext.", "ADR-0018 — 플랫폼은 특정 확장을 import하지 않는다"),
     ("apps/*", "chaeksas.ext.", "ADR-0018 — 플랫폼은 특정 확장을 import하지 않는다"),
     ("apps/center", "chaeksas.core", "§5"),
-    ("apps/admin", "chaeksas.core", "§5"),
     ("extensions/*", "chaeksas.core", "§5 — 확장의 service·worker는 core를 모른다"),
     ("packages/core", "PySide6", "§5 — core는 Qt를 import하지 않는다"),
     ("packages/llm", "chaeksas.", "ADR-0034 — llm은 맨 아래다 (chaeksas의 아무것도 모른다)"),

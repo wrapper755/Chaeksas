@@ -71,7 +71,6 @@ mypy_path = [
     "apps/bot_ui/src",
     "apps/tool_ui/src",
     "apps/server_runner/src",
-    "apps/admin/src",
     "apps/center/src",
     "extensions/ui_automation/src",
     "samples/mock_apps/src",

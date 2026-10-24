@@ -10,12 +10,14 @@
 export interface DeploymentInfo {
   bpm_process_id: string;
   content_hash: string;
+  deployed_by?: string | null;
   deployment_id: string;
   expires_at?: string | null;
   last_result?: string | null;
   max_concurrency?: number | null;
   not_before?: string | null;
   revoked_at?: string | null;
+  revoked_by?: string | null;
   signed_at: string;
   signed_by: string;
   target: {

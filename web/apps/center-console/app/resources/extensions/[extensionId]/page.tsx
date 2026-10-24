@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Button, DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
+import { DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
-import { revokeExtension } from "@/app/actions";
 import { appStatus, time } from "../../page";
+import { RevokeExtension } from "../../tools";
 
 /**
  * CON-07 「확장」 상세 — 외부 확장의 정의·허용 호스트·이 확장을 쓰는 Bot.
@@ -13,7 +13,7 @@ import { appStatus, time } from "../../page";
  * **정의가 Center에 있는 것은 외부 확장뿐이다** (내장·사내는 설치 파일에 든다). 그래서
  * 이 화면은 외부 확장만 다룬다.
  *
- * 「해제」도 **봉투가 필요하다** (`extension_revoke`) — 토큰만으로는 거둘 수 없다 (C2).
+ * 「해제」는 관리자가 누르고 Center가 철회 봉투(`extension_revoke`)에 서명한다 (ADR-0090).
  */
 
 const TIER: Record<string, string> = { builtin: "내장", internal: "사내", external: "외부" };
@@ -200,30 +200,7 @@ export default async function ExtensionPage({
           {found.mode === "admin" ? (
             <section className="flex flex-col gap-2">
               <h2 className="text-h2 font-semibold">관리</h2>
-              <p className="text-body-sm text-text-muted">
-                해제하려면 <strong>해제 봉투</strong>가 필요합니다 —{" "}
-                <code>chk-admin revoke-extension {info.id} {info.version}</code>으로 만듭니다.
-                {users.length > 0
-                  ? ` 해제하면 이 정의를 쓰는 Bot ${users.length}개가 실행 불가가 됩니다.`
-                  : ""}{" "}
-                되살릴 수 없습니다.
-              </p>
-              <form action={revokeExtension} className="flex max-w-xl flex-wrap items-end gap-2">
-                <input type="hidden" name="extension_id" value={info.id} />
-                <label className="flex flex-1 flex-col gap-1 text-body-sm">
-                  <span className="text-text-muted">해제 봉투 파일 *</span>
-                  <input
-                    type="file"
-                    name="envelope"
-                    accept=".json,application/json"
-                    required
-                    className="text-body"
-                  />
-                </label>
-                <Button type="submit" variant="danger">
-                  등록 해제
-                </Button>
-              </form>
+              <RevokeExtension extensionId={info.id} version={info.version} users={users.length} />
             </section>
           ) : null}
         </div>

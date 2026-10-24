@@ -22,7 +22,6 @@ MEMBERS = {
     "apps/bot_ui": "chaeksas.bot_ui",
     "apps/tool_ui": "chaeksas.tool_ui",
     "apps/server_runner": "chaeksas.server_runner",
-    "apps/admin": "chaeksas.admin",
     "apps/center": "chaeksas.center",
     "extensions/ui_automation": "chaeksas.ext.ui_automation",
     # 제품이 아니다 — 업무 예제가 부르는 모의 앱 (01-architecture §8).

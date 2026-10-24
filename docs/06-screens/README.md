@@ -16,9 +16,8 @@
 | [bot-ui.md](bot-ui.md) | Bot UI (Windows 트레이 기반 GUI, 항상 실행) | BUI-01 ~ BUI-11 (BUI-06~08 폐기 → TOL-03~05) |
 | [tool-ui.md](tool-ui.md) | Tool UI (Windows 데스크톱, 확장이 기여한 도구를 띄움 — Bot UI와 함께 설치, [ADR-0077](../decisions/0077-tool-ui.md)) | TOL-01 ~ TOL-05 |
 | [worker.md](worker.md) | Worker 프로세스 — **화면 없음**. 예전 WRK 화면 ID가 어디로 갔는지만 적음 | (WRK-* 폐기) |
-| [center-console.md](center-console.md) | Center 콘솔 (웹) | CON-00 ~ CON-13 (CON-08~10 폐기) |
+| [center-console.md](center-console.md) | Center 콘솔 (웹) — 관리자 계정으로 승인·배포까지 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) | CON-00 ~ CON-15 (CON-08~10 폐기) |
 | [service-app-console.md](service-app-console.md) | 서비스 앱 관리 콘솔 (웹, 앱마다) | SVC-00 ~ SVC-03, UIA-01 ~ UIA-03 |
-| [admin.md](admin.md) | Admin (명령줄 — 창은 두지 않는다, [ADR-0076](../decisions/0076-no-admin-window-yet.md)) | ADM-* |
 | 이 파일 §5 | 여러 앱이 같이 쓰는 창 | CMN-01 |
 
 ### 표기 규칙
@@ -68,7 +67,7 @@
 | API 키 (Center·서비스 앱) | 사용 중 / 만료 / 폐기됨 | done / warning / neutral |
 | 서비스 앱 키 참조 (Bot UI·Studio) | 정상 / 없음(등록 필요) / 거부됨 / 만료 / 폐기됨 / 확인 전 | done / failed / failed / warning / failed / neutral |
 | 패키지 | 후보 / 승인됨 / 지원 종료 / 철회 / 로컬만 | waiting / done / warning / failed / neutral |
-| 서명·준비·온라인·UI 세션·배치 결정·가상 직원·Admin 키 | `tokens.json` `status_map` 참고 | — |
+| 서명·준비·온라인·UI 세션·배치 결정·가상 직원·관리자 계정·배포 | `tokens.json` `status_map` 참고 | — |
 | 결재 | 대기 / 답함 / 시간 초과 / 회수됨 (실행하는 쪽이 답을 거절하면 다시 「대기」 + 안내 띠) | waiting / done / warning / neutral |
 | 작업 | 대기 / 전달됨 / 대기열 / 수락 / 거절 / 만료 / 취소됨 | neutral / active / waiting / done / failed / warning / neutral |
 | 로케이터 | 사용 중(active) / 검증 전(unverified) / 대체됨(deprecated) | done / waiting / neutral |
@@ -81,14 +80,14 @@
 
 새 업무 하나가 만들어져 운영되기까지 거치는 화면이다.
 
-0. **준비 (서버)** — 서버에서 첫 Admin 키를 넣고(`chk-center admin-keys bootstrap`, [ADM](admin.md)), 운영자가 Center 콘솔에서 내장·사내 서비스 앱 주소를 등록한다([CON-07](center-console.md#con-07-리소스-신규)). 외부 확장은 Admin 서명과 함께 등록한다. 서버 Bot을 쓸 거면 서버 실행기용 Center API 키를 발급해 서버 실행기에 넣는다 (M7).
+0. **준비 (서버)** — 설치하는 사람이 `.env`에 첫 관리자 아이디·비밀번호를 적고 Center를 띄운다. 관리자가 Center 콘솔에 들어가([CON-00](center-console.md#con-00-공통-틀)) 내장·사내 서비스 앱 주소와 외부 확장 정의를 등록한다([CON-07](center-console.md#con-07-리소스-신규)). 서버 Bot을 쓸 거면 서버 실행기용 Center API 키를 발급해 서버 실행기에 넣는다 (M7).
 1. **준비 (PC)** — 운영자가 Bot UI용 Center API 키를 발급하고([CON-11](center-console.md#con-11-center-api-키-신규)), 설치 담당자가 Bot UI 설정에 넣는다([BUI-03](bot-ui.md#bui-03-설정등록)). 서비스 앱 관리자가 서비스 앱 키를 발급하고([SVC-02](service-app-console.md#svc-02-api-키)), Bot UI 「서비스 앱 키」에 참조 이름으로 넣는다([BUI-10](bot-ui.md#bui-10-서비스-앱-키)).
 2. **UI 셀렉터 등록** (화면 조작이 필요할 때) — 등록 담당자가 Tool UI에서 UI 자동화 확장의 도구로 화면 요소를 등록한다. [TOL-03](tool-ui.md#tol-03-ui-셀렉터-등록-구-bui-06)
 3. **BPM 프로세스 만들기** — 설계자가 Studio에서 새 BPM 프로세스를 만들고 실행 위치를 정한다 — 기본은 서버, 화면 조작·현장 확인이 필요하면 PC ([ADR-0016](../decisions/0016-server-first.md)). 사용할 서비스 앱마다 키 참조 이름을 정한다. [STU-05](studio.md#stu-05-새-bpm-프로세스), [STU-06](studio.md#stu-06-bpm-프로세스-정보)
 4. **그리기** — BPMN을 그리고 태스크마다 속성을 채운다. UI 태스크는 등록된 화면·요소를 고르고, 서비스 앱 태스크는 리소스 탐색기의 작업을 고른다. [STU-01](studio.md#stu-01-메인-창), [STU-03](studio.md#stu-03-리소스-탐색기), [STU-13](studio.md#stu-13-ui-태스크-편집기-신규), [STU-14](studio.md#stu-14-서비스-앱-태스크-편집기-신규)
 5. **시험** — 시험 케이스를 만들고 자율 수행으로 실행한다 (UI 태스크는 같은 PC의 Bot UI가 띄운 Worker 프로세스가 처리). AI 태스크는 학습되어 재생 명세가 생기고, 결정 수행(재생)으로 운영과 같은 방식을 미리 확인한다. [STU-07](studio.md#stu-07-시험-케이스), [STU-08](studio.md#stu-08-실행-대화상자), [STU-09](studio.md#stu-09-실행-표시와-결과)
 6. **올리기** — 패키지로 Center에 올린다 (후보 상태). 패키지에는 키 값이 없고 참조 이름만 있다. [STU-01](studio.md#stu-01-메인-창) 파일 메뉴, [CON-02](center-console.md#con-02-bot-현황)
-7. **승인·배포** — Admin이 승인에 서명하고, PC Bot은 Bot UI에, 서버 Bot은 서버 실행기에 배포 서명한다 (서버는 M7). [ADM](admin.md)
+7. **승인·배포** — 관리자가 콘솔에서 승인하고([CON-02](center-console.md#con-02-bot-현황)), PC Bot은 Bot UI에, 서버 Bot은 서버 실행기에 배포한다([CON-15](center-console.md#con-15-배포-신규)). 봉투는 Center가 서명한다.
 8. **적용** — PC: Bot UI가 하트비트로 배포를 받아 Bot을 설치하고 사전 점검(키 참조·확장 포함)을 한다 ([BUI-04](bot-ui.md#bui-04-bot-탭-실행대기열설치된-bot), [CON-03](center-console.md#con-03-bot-ui-현황)). 서버: 서버 실행기가 배포를 받는다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
 9. **작업 지시** — 운영자가 콘솔에서 작업을 만들거나, 외부 시스템(연동용 키)·감시 모드·일정·메시지로 시작된다. [CON-05](center-console.md#con-05-작업-지시)
 10. **실행** — PC: Bot UI가 Bot을 결정 수행으로 실행한다. 한 PC에서 실행 중인 Bot은 하나이고 나머지는 대기열에서 기다린다 ([ADR-0014](../decisions/0014-one-bot-per-pc.md), [BUI-01](bot-ui.md#bui-01-트레이), [BUI-09](bot-ui.md#bui-09-로컬-런타임-탭-worker-프로세스-등)). 서버: 서버 실행기가 여러 건을 동시에 실행한다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
@@ -172,6 +171,8 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 | CON-11 | Center API 키 | Center 콘솔 | 운영자 | M2 | 신규 |
 | CON-12 | 서버 실행 | Center 콘솔 | 운영자 | M7 | 신규 |
 | CON-13 | 가상 직원 | Center 콘솔 | 운영자·감독자 | — | 신규 ([ADR-0085](../decisions/0085-virtual-worker-resource.md)) |
+| CON-14 | 관리자 계정 | Center 콘솔 | 관리자 | — | 신규 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) |
+| CON-15 | 배포 | Center 콘솔 | 관리자 | — | 신규 (ADM-03을 옮겼다, ADR-0090) |
 | SVC-00 | 공통 틀 | 서비스 앱 관리 콘솔 | 서비스 앱 관리자 | M2 | 신규 (`service_kit`) |
 | SVC-01 | 상태 | 서비스 앱 관리 콘솔 | 서비스 앱 관리자 | M2 | 신규 |
 | SVC-02 | API 키 | 서비스 앱 관리 콘솔 | 서비스 앱 관리자 | M2 | 신규 |
@@ -179,13 +180,12 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 | UIA-01 | 개요 | UI 자동화 앱 관리 콘솔 | 서비스 앱 관리자 | M4 | 프로토타입 (UI 자동화 서버 화면) |
 | UIA-02 | 셀렉터 | UI 자동화 앱 관리 콘솔 | UI 셀렉터 등록 담당자 | M4 | 프로토타입 |
 | UIA-03 | 모니터링 | UI 자동화 앱 관리 콘솔 | 서비스 앱 관리자 | M4 | 프로토타입 |
-| ADM | 명령 (`chk-admin`, `chk-center`) | Admin | 관리자 | M2~M5 | 프로토타입 확장 |
 | CMN-01 | 결재 / 확인 창 | Studio, Bot UI | 결재자, 현장 PC 사용자 | M3 | 프로토타입 |
 
-폐기된 ID: BOT-01~05 → BUI-01~05, WRK-01~05 → BUI-02·06·07·08·01/09 ([worker.md](worker.md)), CON-08~10 → UIA-01~03.
+폐기된 ID: BOT-01~05 → BUI-01~05, WRK-01~05 → BUI-02·06·07·08·01/09 ([worker.md](worker.md)), CON-08~10 → UIA-01~03, ADM-01~06 → CON-02·06(승인)·CON-14(계정)·CON-15(배포)·CON-07(외부 확장) — Admin 명령·창은 없어졌다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)).
 
 ## 7. 열린 질문
 
-- 콘솔 쓰기 권한: 로그인(OIDC) 전까지 관리자 토큰을 입력한 세션에서만 쓰기 버튼을 보인다 (제안). 결재자 신원은 그동안 「자칭」으로 표시한다.
+- 콘솔 로그인: 지금은 Center의 관리자 계정이다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)). 사내 로그인(OIDC)이 필요해지면 계정 확인만 그쪽으로 넘긴다 (제안).
 - 서비스 앱 관리 콘솔의 로그인: 처음에는 앱별 관리자 토큰, 나중에 Center와 같은 OIDC로 묶는다 (제안).
 - 데스크톱 화면 등록(Windows UIA)의 수집 화면은 TOL-03에 있다 (「방식 › 데스크톱 창」).
