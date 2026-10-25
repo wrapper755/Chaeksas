@@ -31,6 +31,7 @@ from chaeksas.contracts.service_app import (
     UsagePage,
     admin_key_info,
 )
+from chaeksas.contracts.service_keys import CENTER_KEY_PREFIX
 from chaeksas.service_kit import keys as key_tools
 from chaeksas.service_kit.stores import KeyStore, UsageLog
 
@@ -172,6 +173,9 @@ def create_router(
             return _error(422, "input_invalid", "요청이 계약과 맞지 않는다", {"errors": e.error_count()})
 
         # 이름은 앱 안에서 유일하다 — 키 참조 이름과 맞추기를 권하므로 겹치면 어느 키인지 모른다.
+        # `svk_`는 Center가 지은 키의 이름이다 (ADR-0094) — 사람이 같은 이름을 쓰면 어느 키인지 모른다.
+        if wanted.name.startswith(CENTER_KEY_PREFIX):
+            return _error(409, "name_reserved", f"「{CENTER_KEY_PREFIX}」로 시작하는 이름은 Center가 쓴다")
         if any(key.name == wanted.name for key in keys.all_keys()):
             return _error(409, "name_conflict", f"키 이름 「{wanted.name}」이 이미 있다")
 

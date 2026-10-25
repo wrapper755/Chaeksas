@@ -32,6 +32,19 @@ def extension_secret_env(extension_id: str, key: str) -> str:
     return f"{ENV_EXTENSION_PREFIX}{env_name(extension_id)}__{env_name(key)}"
 
 
+#: 도구용 키를 호스트가 주는 이름 (C13 KeyNeed `utility`, ADR-0094 §6).
+UTILITY_SECRET = "utility"
+#: Bot UI의 비밀 저장소와 그 안의 도구용 키 이름 — Bot UI(`core.service_keys.utility_name`)와 **같은
+#: 규칙**이다. 앱끼리 import하지 않으므로 여기 한 번 더 적고 시험이 대조한다.
+BOT_UI_SERVICE = "chaeksas-bot-ui"
+BOT_UI_UTILITY_PREFIX = "util:"
+
+
+def bot_ui_utility_key(app_id: str) -> str | None:
+    """이 PC Bot UI가 받아 둔 도구용 키 (없으면 `None` — 관리자가 「셀렉터 등록」을 켜지 않았다)."""
+    return ToolCredentials(service=BOT_UI_SERVICE).stored(BOT_UI_UTILITY_PREFIX + app_id)
+
+
 class SecretsUnavailable(RuntimeError):
     """OS 비밀 저장소를 쓸 수 없다 (설치 안 됨·잠김·헤드리스)."""
 
@@ -107,6 +120,11 @@ class ToolSecrets:
     extension_id: str
 
     def resolve(self, ref: str) -> str | None:
+        if ref == UTILITY_SECRET:
+            # 도구용 키 — 환경변수가 먼저(자동화·CI), 아니면 **이 PC Bot UI가 Center에서 받아 둔 것**을
+            # 읽기만 한다 (ADR-0094 §6, CON-03 「셀렉터 등록」). Bot UI 데이터를 읽기만 하는 것과 같은 결.
+            found = os.environ.get(extension_secret_env(self.extension_id, ref))
+            return found or bot_ui_utility_key(self.extension_id)
         return self.credentials.extension_secret(self.extension_id, ref)
 
 

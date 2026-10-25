@@ -93,6 +93,19 @@
       "title": "Os",
       "type": "string"
     },
+    "public_key": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Public Key"
+    },
     "schema": {
       "description": "이 계약의 schema 번호",
       "title": "Schema",

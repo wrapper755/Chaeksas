@@ -29,7 +29,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from chaeksas.center import host_keys
+from chaeksas.center import enrollments, host_keys, service_keys
 from chaeksas.center.api import approvals, deployments, jobs, messages, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
@@ -148,6 +148,9 @@ def register(
                 ),
             )
 
+    # 승인으로 받은 키가 처음 쓰였다 — **봉해 둔 것을 지운다** (C12 §등록 요청과 승인).
+    enrollments.delivered(store, key, public_key=request.public_key)
+
     return ServerRunnerRegisterResponse(
         server_runner_id=ServerRunnerId(runner_id),
         # **등록 응답에도 싣는다** (C12 §등록) — 실행기는 공개키를 메모리에만 두고, 다시 뜨면
@@ -224,6 +227,11 @@ def heartbeat(
     # 배치 결정은 **한 주기만 올라온다** — 흘려보내면 「왜 설치가 안 됐나」가 남지 않는다 (C4·C12).
     deployments.remember_results(store, host_id=runner_id, results=request.deployment_results)
 
+    # 서비스 앱 키는 **나르기만** 한다 (ADR-0094 §3) — 짓고 거두는 것은 맞추기가 한다.
+    service_keys.apply_acks(store, target_type="server_runner", target_id=runner_id, acks=request.service_key_acks)
+    service_keys.note_missing(store, target_type="server_runner", target_id=runner_id, readiness=request.readiness)
+    keys_out, drops = service_keys.deliveries(store, target_type="server_runner", target_id=runner_id)
+
     paused = bool(found["paused"])
     dispatch, cancels = jobs.server_heartbeat(
         store, runner_id=runner_id, request=request, paused=paused
@@ -247,8 +255,11 @@ def heartbeat(
         # 때까지 다시 싣고**, 받았다는 ack가 오면 **값을 바로 지운다**.
         delegations=_delegations(store, runner_id=runner_id, acks=request.delegation_acks),
         paused=paused,
+        rotated_key=enrollments.rotation_for(store, key, host_id=runner_id),
         # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4·C12).
         key_expires_at=key.expires_at,
+        service_keys=keys_out,
+        drop_service_keys=drops,
     )
 
 
@@ -311,6 +322,7 @@ def runner_listing(store: Store) -> list[ServerRunnerInfo]:
                 registered_at=str(row["registered_at"]),
                 **_key_of(store, str(row["key_id"])),
                 unsent_events=state.get("unsent_events"),
+                service_keys=service_keys.status_of(store, target_type="server_runner", target_id=runner_id),
             )
         )
     return out

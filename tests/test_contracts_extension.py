@@ -373,9 +373,9 @@ def test_builtin_editor_needs_an_entry() -> None:
 
 
 def test_utility_key_must_land_in_a_secret_config_field() -> None:
-    """키를 받는 칸은 OS 비밀 저장소에 둔다 (ADR-0013)."""
+    """키를 받는 칸은 OS 비밀 저장소에 둔다 (ADR-0013). 칸이 없으면 호스트가 준다 (ADR-0094 §6)."""
     definition = builtin(requires_keys=[{"purpose": "utility"}])
-    assert "config_key_missing" in codes(definition)
+    assert validate_extension(parse(definition)) == []
 
     definition = builtin(requires_keys=[{"purpose": "utility", "config_key": "nope"}])
     assert "config_key_not_found" in codes(definition)

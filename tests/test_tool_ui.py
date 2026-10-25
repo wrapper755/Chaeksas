@@ -273,39 +273,38 @@ class FakeCredentials(ToolCredentials):
         self.saved[name] = value
 
 
-def test_settings_put_the_registrar_key_in_the_secret_store_not_the_file(
-    app: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from chaeksas.tool_ui.settings_dialog import ToolSettingsDialog  # noqa: PLC0415
+def test_settings_have_no_registrar_key_field(app: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """등록 담당자 키 칸은 없다 — Center가 이 PC Bot UI에 내려 준다 (TOL-02, ADR-0094 §6)."""
+    from chaeksas.tool_ui.settings_dialog import NO_FIELDS, ToolSettingsDialog  # noqa: PLC0415
 
     monkeypatch.setenv("CHK_TOOL_UI__DATA_DIR", str(tmp_path))
-    monkeypatch.delenv(extension_secret_env(BUILTIN, "registrar_key"), raising=False)
     tools = tool_host(tmp_path)
-    credentials = FakeCredentials()
-    dialog = ToolSettingsDialog(tools.host, ToolSettings(), credentials)
-    assert dialog.tabs.count() == 1, "확장마다 탭 하나 — `scope: tool_ui` 칸이 있는 것만"
-    _, field = dialog.fields[(BUILTIN, "registrar_key")]
-    field.setText("uia_new_key")
-    dialog.save()
-    assert credentials.saved == {f"ext:{BUILTIN}:registrar_key": "uia_new_key"}
-    assert dialog.saved is not None
-    assert "uia_new_key" not in (tmp_path / "settings.json").read_text(encoding="utf-8")
+    dialog = ToolSettingsDialog(tools.host, ToolSettings(), FakeCredentials())
+    assert dialog.tabs.count() == 0
+    assert not dialog.fields
+    assert NO_FIELDS
 
 
-def test_settings_stay_open_when_the_secret_store_fails(
-    app: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from chaeksas.tool_ui.settings_dialog import ToolSettingsDialog  # noqa: PLC0415
+def test_the_utility_key_is_what_bot_ui_received(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """도구용 키는 Bot UI 비밀 저장소의 `util:<앱>`을 **읽기만** 한다 — Bot UI와 같은 이름 규칙이다."""
+    from chaeksas.core.service_keys import utility_name  # noqa: PLC0415
+    from chaeksas.tool_ui import credentials as tool_credentials  # noqa: PLC0415
 
-    monkeypatch.setenv("CHK_TOOL_UI__DATA_DIR", str(tmp_path))
-    monkeypatch.delenv(extension_secret_env(BUILTIN, "registrar_key"), raising=False)
-    tools = tool_host(tmp_path)
-    dialog = ToolSettingsDialog(tools.host, ToolSettings(), FakeCredentials(works=False))
-    dialog.fields[(BUILTIN, "registrar_key")][1].setText("uia_new_key")
-    dialog.save()
-    assert dialog.saved is None
-    assert "저장하지 못했습니다" in dialog.error.text()
-    assert not (tmp_path / "settings.json").exists(), "「저장」이 실패하면 아무것도 바뀌지 않는다"
+    assert tool_credentials.BOT_UI_UTILITY_PREFIX + BUILTIN == utility_name(BUILTIN)
+    from chaeksas.bot_ui.credentials import SERVICE as BOT_UI_SERVICE  # noqa: PLC0415
+
+    assert tool_credentials.BOT_UI_SERVICE == BOT_UI_SERVICE
+    asked: list[tuple[str, str]] = []
+
+    def stored(self: Any, name: str) -> str | None:
+        asked.append((self.service, name))
+        return "chk_svc_utility" if self.service == BOT_UI_SERVICE else None
+
+    monkeypatch.delenv(extension_secret_env(BUILTIN, "utility"), raising=False)
+    monkeypatch.setattr(tool_credentials.ToolCredentials, "stored", stored)
+    ctx = tool_host(tmp_path).context(BUILTIN)
+    assert ctx.secret("utility") == "chk_svc_utility"
+    assert (BOT_UI_SERVICE, utility_name(BUILTIN)) in asked
 
 
 # ─────────────────────────── 띄우는 길 (ADR-0077 §3·§6) ───────────────────────────

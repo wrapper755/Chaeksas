@@ -262,7 +262,7 @@ def test_without_a_key_it_does_not_pretend(app: Any) -> None:
     widget.page_id.setCurrentText("erp.order.form")
     widget.fetch()
     widget.run()
-    assert "등록 담당자 키가 없어" in text(widget)
+    assert "셀렉터 등록이 허락되지 않아" in text(widget)
     widget.close()
 
 

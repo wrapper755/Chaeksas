@@ -66,8 +66,9 @@ from chaeksas.ext.ui_automation.service.store import (
     RegistryStore,
     SessionStore,
     SqliteKeyStore,
+    SqliteTrustStore,
 )
-from chaeksas.service_kit import OpError, OpResult, ServiceLlm, create_app, usage_of
+from chaeksas.service_kit import CenterLink, OpError, OpResult, ServiceLlm, create_app, usage_of
 
 log = logging.getLogger(__name__)
 
@@ -498,6 +499,8 @@ def create(
         keys=keys,
         admin_token=admin_token or _env("ADMIN_TOKEN"),
         llm=model,
+        # Center 발급 (ADR-0094) — `CHK_SVC_UI_AUTOMATION__CENTER__URL`이 없으면 받지 않는다.
+        center_link=CenterLink.from_env(ENV_PREFIX, store=SqliteTrustStore(db=database)),
     )
     app.state.service = service
     # 앱 고유 관리 경로 (UIA-01~03) — 관문은 C11과 같은 `admin_guard` 하나다.

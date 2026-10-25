@@ -82,6 +82,31 @@
       ],
       "title": "Operation",
       "type": "object"
+    },
+    "TrustState": {
+      "additionalProperties": true,
+      "description": "서비스 앱이 Center 발급을 받나 (C11 `GET /center/v1/trust`, ADR-0094 §1).",
+      "properties": {
+        "checked_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checked At"
+        },
+        "state": {
+          "default": "unknown",
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "title": "TrustState",
+      "type": "object"
     }
   },
   "$id": "urn:chaeksas:contracts:c7-service-app-resource",
@@ -194,6 +219,17 @@
       },
       "title": "Status Reasons",
       "type": "array"
+    },
+    "trust": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TrustState"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "used_by": {
       "items": {

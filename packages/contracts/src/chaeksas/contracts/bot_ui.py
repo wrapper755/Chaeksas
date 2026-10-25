@@ -16,6 +16,8 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp
+from chaeksas.contracts.enrollment import PublicKey, RotatedKey
+from chaeksas.contracts.service_keys import ServiceKeyAck, ServiceKeyDelivery
 from chaeksas.contracts.signing import AdminKey
 
 #: 하트비트 기본 간격과 온라인 판정 (CON-03).
@@ -102,6 +104,18 @@ class RegisterRequest(SchemaVersioned):
     os: str
     versions: Versions
     runtimes: Runtimes | None = None
+    #: X25519 공개키 (C4 §키 회전). 보내면 Center가 이 PC의 키를 **회전해 준다**. 등록 요청으로
+    #: 들어온 PC는 Center가 이미 안다.
+    public_key: PublicKey | None = None
+
+
+class EnrollRequest(RegisterRequest):
+    """`POST /api/v1/bot-ui/enroll` — 키가 없을 때 **등록 요청** (C4 §등록 요청과 승인, 인증 없음).
+
+    `RegisterRequest`와 같은 칸에 `public_key`가 **필수**다 — 승인된 키를 이것으로 봉해 내려 준다.
+    """
+
+    public_key: PublicKey
 
 
 class RegisterResponse(ContractModel):
@@ -210,6 +224,8 @@ class HeartbeatRequest(SchemaVersioned):
     extensions: list[ExtensionState] = Field(default_factory=list)
     approval_acks: list[ApprovalAck] = Field(default_factory=list)
     unsent_events: int | None = None
+    #: 받은(또는 지운) 서비스 앱 키 (C4 §서비스 앱 키 전달, ADR-0094).
+    service_key_acks: list[ServiceKeyAck] = Field(default_factory=list)
 
 
 class JobDispatch(ContractModel):
@@ -251,6 +267,12 @@ class HeartbeatResponse(ContractModel):
     cancel_jobs: list[str] = Field(default_factory=list)
     approvals: list[ApprovalDispatch] = Field(default_factory=list)
     disabled: bool = False
+    #: 만료 14일 전부터 새 키 (C4 §키 회전). 새 키로 첫 요청이 올 때까지 주기마다 싣는다.
+    rotated_key: RotatedKey | None = None
     #: 이 키의 만료 (C7). **주기마다 싣는다** — 「생략 = 그대로」로 두면 운영자가 기간을
     #: 늘려 줘도 Bot UI가 그것을 모른다.
     key_expires_at: Timestamp | None = None
+    #: 봉한 서비스 앱 키 (C4 §서비스 앱 키 전달). ack가 올 때까지 매번 실린다.
+    service_keys: list[ServiceKeyDelivery] = Field(default_factory=list)
+    #: 지울 `service_key_id`. ack가 올 때까지 실린다.
+    drop_service_keys: list[str] = Field(default_factory=list)

@@ -376,19 +376,17 @@ def test_uploading_without_an_open_process_says_so(window: Any) -> None:
     assert window.log_view.toPlainText().count("열린 BPM 프로세스가 없습니다") == 2
 
 
-def test_no_center_settings_means_no_uploader(window: Any, monkeypatch: Any) -> None:
-    """설정이 없으면 **묻고**, 사람이 「아니오」면 `None`이다 (STU-10 맨 아래)."""
-    from PySide6.QtWidgets import QMessageBox
+def test_no_center_key_opens_stu16_and_later_means_no_uploader(window: Any, monkeypatch: Any) -> None:
+    """키가 없으면 **STU-16 「Center에 연결」을 띄우고**, 「나중에」면 `None`이다 (ADR-0093)."""
+    opened: list[bool] = []
 
-    asked: list[str] = []
+    def later(self: Any, **kwargs: Any) -> bool:
+        opened.append(True)
+        return False
 
-    def no(parent: Any, title: str, text: str, buttons: Any) -> Any:
-        asked.append(text)
-        return QMessageBox.StandardButton.No
-
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(no))
+    monkeypatch.setattr(type(window), "ensure_center", later)
     assert export_actions.uploader(window) is None
-    assert asked == [export_actions.NO_CENTER_SETTINGS]
+    assert opened == [True]
 
 
 def test_the_run_location_table_comes_from_the_host_and_goes_to_all_three(

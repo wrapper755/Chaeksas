@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Center ↔ 서비스 앱(공개 정보 읽기), Studio·Bot UI·서버 실행기·Center 콘솔 → Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/resources.py`, `…/center_keys.py` (import `chaeksas.contracts.resources`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | 리소스 [`c7-extension-resource.json`](../../packages/contracts/schemas/c7-extension-resource.json) · [`c7-service-app-resource.json`](../../packages/contracts/schemas/c7-service-app-resource.json) · [`c7-contributed-resource.json`](../../packages/contracts/schemas/c7-contributed-resource.json) · [`c7-runtime-resource.json`](../../packages/contracts/schemas/c7-runtime-resource.json) / 키 [`c7-center-key-create-request.json`](../../packages/contracts/schemas/c7-center-key-create-request.json) · [`c7-center-key-info.json`](../../packages/contracts/schemas/c7-center-key-info.json) · [`c7-center-key-created.json`](../../packages/contracts/schemas/c7-center-key-created.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md) |
+| 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 관련 화면 | CON-07 리소스, CON-11 Center API 키, STU-03 리소스 탐색기, STU-13·14·15, BUI-11, TOL-03 |
 
 ## 목적
@@ -37,11 +37,13 @@
 
 **플랫폼 계약은 특정 확장을 모른다** (ADR-0018). 확장이 기여한 자원은 C13 §5의 **공통 카탈로그 형식**으로만 다룬다. 예를 들어 「UI 화면」의 모양은 UI 자동화 확장(C9)이 정하고, Center는 해석하지 않고 넘긴다.
 
-**Center는 서비스 앱 키를 갖지 않는다** (ADR-0013). 서비스 앱에서 읽는 것은 인증이 필요 없는 공개 정보뿐이다.
+**Center는 서비스 앱 키를 지어 앱에는 해시만 맡긴다** ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md), C11 §Center가 발급하는 키). 원문은 짓는 자리에서 배포 대상에 봉하고 버리므로 Center DB에는 봉한 덩이가 ack까지만 남는다. **원문을 오래 드는 것은 외부 앱 키뿐**이다(§외부 앱 키). 서비스 앱에서 읽는 것은 인증이 필요 없는 공개 정보다.
 
-- C11 `/healthz`, `/manifest`
+- C11 `/healthz`, `/manifest`, `/center/v1/trust`
 - 외부 확장 어댑터의 `health`
 - 확장의 공개 카탈로그
+
+앱에 보내는 것은 Center가 서명한 봉투(`POST /center/v1/keys`)뿐이다.
 
 ## 리소스 모으는 방식
 
@@ -72,6 +74,15 @@
 
 외부 확장의 등록·해제는 C13 경로(관리자만 — Center가 봉투에 서명한다)로 한다.
 
+**ADR-0094** —
+
+| 메서드·경로 | 인증 | 뜻 |
+| --- | --- | --- |
+| `GET /signing-keys` | **없음** (공개키다) | 믿는 키 목록 (C2 `AdminKey[]` — 하트비트의 `admin_keys`와 같은 것). 서비스 앱이 Center를 믿으려고 받는다 (C11) |
+| `PUT /resources/extensions/{id}/app-key` `{key}` | 관리자 (계정 세션·관리자 토큰) | 외부 앱 **운영 키** 넣기·바꾸기 (§외부 앱 키). 응답에 원문은 없다 |
+| `DELETE /resources/extensions/{id}/app-key` | 관리자 | 운영 키 지우기 |
+| `PUT /resources/extensions/{id}/app-key/test` `{key}`, `DELETE …/app-key/test` | 관리자 | **시험용 키** 넣기·바꾸기·지우기 — Studio 시험 실행에만 간다 (§외부 앱 키) |
+
 ## 모델
 
 ### ExtensionResource
@@ -86,6 +97,7 @@
 | `status` | 서버 부분 상태. 값은 `ServiceAppResource.status`와 같고 **서버 부분이 아예 없으면 `n/a`**다. C11 앱은 그 앱의 `/healthz`, 외부 확장은 **어댑터 `health`**(C13 §4-1)로 본다 — 선언이 없으면 `unknown`(「확인 전」)이다 |
 | `status_reasons`, `checked_at`? | 상태의 사유와 마지막으로 본 때. 서버 부분이 없으면 비어 있다 |
 | `definition`, `envelope` | 외부 확장만. 실행하는 쪽이 받아 검증한다 |
+| `app_key` | 외부 확장이고 키를 받는 앱일 때만(ADR-0091 `takes_key()`). `{run: KeySlot, test: KeySlot}` — KeySlot은 `{set: bool, set_at?, set_by?}`. **원문·앞자리는 없다** (§외부 앱 키) |
 
 외부 확장의 상태를 볼 때 Center는 **어댑터와 같은 관문을 지난다** (C13 §4-3 1~4 — 허용 호스트·사설망·https·DNS 고정). 규칙이 갈라지지 않게 `contracts`의 같은 함수(`resolve_host`)를 쓴다. 관문에 걸리면 두드리지 않고 `unreachable`에 사유를 남긴다 — **정의가 적은 주소라고 해서 Center가 아무 데나 나가지 않는다.**
 
@@ -101,6 +113,7 @@
 | `status` | `ok` / `degraded` / `unreachable` / `unknown` (열린 문자열). 화면 표기는 「정상」 / 「저하」 / 「응답 없음」 / 「확인 전」 |
 | `status_reasons`, `checked_at`, `manifest_at` | |
 | `used_by` | 이 앱을 쓰는 BPM 프로세스 (`id@version`, 승인·배포된 것) |
+| `trust` | `{state, checked_at?}` — 이 앱이 Center 발급을 받나 (C11 `GET /center/v1/trust`를 상태와 같이 60초마다 본다). `state`는 열린 문자열, 알려진 값 `trusted`(이 Center의 지금 서명 키를 믿는다) `not_configured`(앱에 `CENTER__URL`이 없다) `other_center`(다른 주소를 믿는다) `stale_key`(지금 서명 키를 아직 모른다) `pin_mismatch`(앱의 `KEY_PIN`이 이 Center의 키와 다르다 — 서명 키를 바꾼 뒤 앱 설정을 고치지 않았다) `unknown`(묻지 못했다·외부 앱). `trusted`가 아니면 Center는 그 앱의 키를 짓지 않고 CON-07 「할 일」로 말한다 |
 
 ### ContributedResource (확장 기여 자원)
 
@@ -138,6 +151,19 @@
 - 업로드할 때는 경고만 한다 (CON-02 띠).
 - **배포할 때는** C1 R8에 걸리는 것(서버 BPM 프로세스의 작업)과 확장 누락·해시 불일치만 거부한다. 서비스 앱이 잠시 응답이 없다고 배포를 막지는 않는다.
 
+## 외부 앱 키
+
+> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §7, ADR-0092 §4).
+
+외부 앱의 키는 우리가 발급할 수 없어서 관리자가 CON-07에서 **한 번** 넣는다.
+
+- 받는 것은 키를 받는 외부 확장(`takes_key()`)뿐이다. 아니면 422 `takes_no_key`. 키는 ASCII여야 한다(어댑터가 거절한다 — C13 §4) — 아니면 422 `key_not_ascii`.
+- Center는 **서명 키와 같은 자리에 암호화해** 둔다. 응답·목록·화면 어디에도 원문이 다시 나오지 않는다 — `app_key`에는 넣었는지·언제·누가만 있다.
+- 그 확장을 쓰는 Bot의 **배포 대상마다** 같은 원문을 봉해 하트비트로 내려 준다 (C4 §서비스 앱 키 전달 `source: external`). 바꾸면 모든 대상에 새로 내려 주고(옛 것은 `replaces`), 지우면 `drop_service_keys`로 보낸다.
+- **운영 키는 Studio에 내려 주지 않는다** (ADR-0094 §7).
+- **시험용 키는 따로 넣는다** — 같은 보관·같은 규칙(ASCII·원문 다시 안 보임)이고 **Studio에만** 간다(C5 §Studio 개발 키). 배포 대상에는 늘 운영 키가 간다. 시험용 키가 없으면 Studio가 「관리자가 시험용 키를 넣지 않았습니다」라고 말하고, 환경변수 `CHK_STUDIO__SVC__<참조>`가 있으면 그것이 이긴다.
+- 외부 확장을 등록 해제하면 그 키도 지운다.
+
 ## Center API 키 관리 (CON-11)
 
 | 메서드·경로 | 인증 | 뜻 |
@@ -149,6 +175,8 @@
 
 `type`: `bot_ui`, `studio`, `server_runner`, `integration`, `relay` (열린 문자열이지만 Center는 이 다섯만 발급한다).
 
+- **`bot_ui`·`server_runner`·`studio` 키는 등록 승인이 만든다** (`studio`는 [0093](../decisions/0093-studio-is-let-in-by-approval.md)) (C5 §등록 승인, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). 이 경로로 그 둘을 발급하는 길은 **자동화·시험용**으로 남고(관리자 토큰) CON-11 화면에는 없다. 승인이 만든 키는 `enrollment_id`를 가진다.
+
 - `relay`(**대리 답용 키**, CON-11 표기 「대리 답용」)는 연동하는 쪽이 **사람 대신 결재에 답할 때만** 쓴다 — 결재 읽기·답뿐이고, 그 사람이 담당자일 때만 받는다 (C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)). 연동용 키에 그 권한을 더하지 않은 것은 연동용 키가 **작업을 만드는 바깥 시스템 모두**에 나가기 때문이다. Center는 이 키를 `require_read`·작업·실행 기록 올리기에서 막는다.
 
 CenterKeyInfo 필드:
@@ -159,11 +187,12 @@ CenterKeyInfo 필드:
 | `name`, `type` | |
 | `prefix` | 앞자리 16자 (`chk_ctr_` + 무작위 8자) |
 | `bound_to`? | `{type, id, name, machine_name?, first_seen}` |
+| `enrollment_id`? | 등록 승인이 만든 키면 그 요청 (C5 §등록 승인). 없으면 사람이·자동화가 발급한 키다 |
 | `created_at`, `expires_at`?, `last_used_at`?, `revoked_at`? | |
 | `state` | `active` / `expired` / `revoked`. 화면 표기는 「사용 중」 / 「만료」 / 「폐기됨」 |
 
 - 키 원문은 `chk_ctr_<무작위 40자>`이고, Center는 해시만 저장한다.
-- 기본 만료는 1년. 만료 14일 전부터 CON-11과 해당 Bot UI 알림(BUI-05)에 보인다.
+- 기본 만료는 1년. 만료 14일 전부터 CON-11에 보인다. **등록 승인이 만든 키는 Center가 그때부터 회전한다** (C4 §키 회전) — Bot UI 알림(BUI-05)은 회전이 7일 전까지 닿지 않았을 때만, 회전하지 않는 키는 14일 전부터다.
 
 ## 오류
 
@@ -175,6 +204,7 @@ CenterKeyInfo 필드:
 | 422 | `manifest_unreachable` / `manifest_invalid` | 등록 때 manifest를 읽지 못하거나 C11과 맞지 않음 |
 | 422 | `host_not_allowed` | 외부 주소가 `allowed_hosts` 밖이거나 사설망 |
 | 422 | `key_type_unknown` | |
+| 422 | `takes_no_key` / `key_not_ascii` | 키를 받지 않는 외부 앱에 키를 넣음 / ASCII가 아닌 키 (§외부 앱 키) |
 
 ## 호환 규칙
 
@@ -184,6 +214,8 @@ CenterKeyInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | `GET /signing-keys`(인증 없음), §외부 앱 키(운영 `PUT/DELETE …/extensions/{id}/app-key`·시험용 `…/app-key/test`, `ExtensionResource.app_key{run, test}`), `trust`의 `pin_mismatch`, `ServiceAppResource.trust` | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
+| 2026-10-25 | 1 | `bot_ui`·`server_runner` 키는 등록 승인이 만든다 — `CenterKeyInfo.enrollment_id?`. 이 경로로 발급하는 길은 자동화·시험용으로 남는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | 키 종류 **`relay`(대리 답용 키)**를 더했다 — CON-11에서 발급한다 | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-12 | 1 | **툴팩 리소스를 뺐다** (`ToolpackResource`·`?type=toolpack`·누락 검사의 `toolpack`) — 툴팩이라는 패키지 갈래가 사라졌다. 고정 종류는 **넷**이다 (확장·서비스 앱·확장 기여 자원·런타임). 도구는 확장이 기여한다 | 0050 |
 | 2026-10-01 | 1 | 초안 | 0010, 0013, 0015 |

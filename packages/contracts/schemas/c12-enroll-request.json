@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "ExtensionState": {
+      "additionalProperties": true,
+      "description": "설치된 확장 하나 (C13).\n\n**`enabled`와 `off`는 다른 것을 말한다** ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)):\n`off`는 **사람이 껐다**(멀쩡한데 일부러 안 쓴다), `enabled=false`인데 `off`가 아니면 **흠이\n있다**(정의·판이 맞지 않는다). 화면이 「꺼짐」과 「호환 안 됨」을 가르는 자리다. 뜻을 바꾸지\n않고 칸을 더한 것이라 옛 Bot UI가 보낸 값(`off` 없음)도 그대로 읽힌다.",
+      "properties": {
+        "definition_hash": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Definition Hash"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "off": {
+          "default": false,
+          "title": "Off",
+          "type": "boolean"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionState",
+      "type": "object"
+    },
+    "RunnerVersions": {
+      "additionalProperties": true,
+      "description": "C4 `Versions`와 **칸이 다르다** — 서버에는 Worker가 없다.",
+      "properties": {
+        "core": {
+          "title": "Core",
+          "type": "string"
+        },
+        "server_runner": {
+          "title": "Server Runner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "server_runner",
+        "core"
+      ],
+      "title": "RunnerVersions",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c12-enroll-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/server-runner/enroll` — 키가 없을 때 **등록 요청** (C12 §등록 요청과 승인).\n\nC4 `EnrollRequest`와 같은 결이다 — 등록 본문에 `public_key`가 **필수**다.",
+  "properties": {
+    "extensions": {
+      "items": {
+        "$ref": "#/$defs/ExtensionState"
+      },
+      "title": "Extensions",
+      "type": "array"
+    },
+    "machine_id": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Machine Id",
+      "type": "string"
+    },
+    "max_concurrency": {
+      "default": 10,
+      "minimum": 1,
+      "title": "Max Concurrency",
+      "type": "integer"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "os": {
+      "title": "Os",
+      "type": "string"
+    },
+    "public_key": {
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "title": "Public Key",
+      "type": "string"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "versions": {
+      "$ref": "#/$defs/RunnerVersions"
+    }
+  },
+  "required": [
+    "schema",
+    "machine_id",
+    "name",
+    "os",
+    "versions",
+    "public_key"
+  ],
+  "title": "ServerRunnerEnrollRequest",
+  "type": "object"
+}

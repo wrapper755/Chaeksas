@@ -65,6 +65,12 @@ class KeyRecord:
     last_used_at: str | None = None
     revoked_at: str | None = None
     bound_to: BoundTo | None = None
+    #: 등록 승인이 만든 키면 그 요청 (C5 §등록 승인, ADR-0092).
+    enrollment_id: str | None = None
+    #: 그 기계의 X25519 공개키 — 있으면 Center가 키를 회전해 준다 (C4 §키 회전).
+    public_key: str | None = None
+    #: 회전으로 갈아 줄 새 키 (새 키로 첫 요청이 오면 이 키를 폐기한다).
+    successor_id: str | None = None
 
     def state(self, *, now: str) -> str:
         return key_state(now=now, expires_at=self.expires_at, revoked_at=self.revoked_at)
@@ -81,6 +87,7 @@ class KeyRecord:
             last_used_at=self.last_used_at,
             revoked_at=self.revoked_at,
             state=self.state(now=now),
+            enrollment_id=self.enrollment_id,
         )
 
 
@@ -96,11 +103,26 @@ def _record(row: Any) -> KeyRecord:
         last_used_at=row["last_used_at"],
         revoked_at=row["revoked_at"],
         bound_to=BoundTo.model_validate(bound) if bound else None,
+        enrollment_id=row["enrollment_id"],
+        public_key=row["public_key"],
+        successor_id=row["successor_id"],
     )
 
 
-def issue(store: Store, *, name: str, key_type: str, expires_at: str | None) -> tuple[KeyRecord, str]:
-    """키를 발급한다. `(기록, 원문)` — **원문은 이때만 볼 수 있다.**"""
+def issue(
+    store: Store,
+    *,
+    name: str,
+    key_type: str,
+    expires_at: str | None,
+    bound: BoundTo | None = None,
+    enrollment_id: str | None = None,
+    public_key: str | None = None,
+) -> tuple[KeyRecord, str]:
+    """키를 발급한다. `(기록, 원문)` — **원문은 이때만 볼 수 있다.**
+
+    등록 승인·회전은 `bound`를 주어 **그 기계에 미리 묶는다** (C4 §등록 요청과 승인).
+    """
     raw = new_key()
     record = KeyRecord(
         key_id=new_key_id(),
@@ -109,14 +131,34 @@ def issue(store: Store, *, name: str, key_type: str, expires_at: str | None) -> 
         prefix=prefix_of(raw),
         created_at=now_iso(),
         expires_at=expires_at,
+        bound_to=bound,
+        enrollment_id=enrollment_id,
+        public_key=public_key,
     )
     with store.tx() as cur:
         cur.execute(
-            "INSERT INTO center_keys (key_id, name, type, prefix, key_hash, created_at, expires_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (record.key_id, name, key_type, record.prefix, key_hash(raw), record.created_at, expires_at),
+            "INSERT INTO center_keys (key_id, name, type, prefix, key_hash, created_at, expires_at,"
+            " bound_json, enrollment_id, public_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                record.key_id,
+                name,
+                key_type,
+                record.prefix,
+                key_hash(raw),
+                record.created_at,
+                expires_at,
+                dumps(bound.to_json_dict()) if bound is not None else None,
+                enrollment_id,
+                public_key,
+            ),
         )
     return record, raw
+
+
+def set_public_key(store: Store, key_id: str, public_key: str) -> None:
+    """그 기계가 등록에 실어 보낸 공개키를 둔다 — 그때부터 Center가 키를 회전해 준다 (C4)."""
+    with store.tx() as cur:
+        cur.execute("UPDATE center_keys SET public_key = ? WHERE key_id = ?", (public_key, key_id))
 
 
 def find(store: Store, raw: str) -> KeyRecord | None:

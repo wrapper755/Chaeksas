@@ -796,11 +796,11 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
                                  message=f"모르는 키 용도다: {need.purpose}", items=sorted(KNOWN_PURPOSES)))
         if need.purpose != PURPOSE_UTILITY:
             continue
-        # 유틸리티 키는 설정의 secret 칸으로 받는다 (ADR-0013).
+        # 도구용 키는 Center가 내려 주고 호스트가 `ctx.secret("utility")`로 준다 (ADR-0094 §6) —
+        # `config_key`는 옛 정의의 호환으로만 남는다. **적었으면** 그 칸은 비밀 칸이어야 한다.
         if not need.config_key:
-            out.append(Violation(rule="C13", code="config_key_missing",
-                                 message="purpose=utility인 키는 받을 configuration 칸(config_key)이 필요하다"))
-        elif need.config_key not in config_keys:
+            continue
+        if need.config_key not in config_keys:
             out.append(Violation(rule="C13", code="config_key_not_found",
                                  message=f"config_key {need.config_key}가 configuration에 없다",
                                  items=sorted(config_keys)))

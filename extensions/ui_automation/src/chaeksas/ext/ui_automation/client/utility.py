@@ -17,7 +17,7 @@ from pathlib import Path
 
 from chaeksas.extension_api import ExtensionContext
 
-#: 등록 담당자 키를 받는 설정 칸 (C13 `configuration`, BUI-03).
+#: 옛 등록 담당자 키 칸 — 자동화·CI의 환경변수로만 남는다. 키는 호스트가 `utility`로 준다 (ADR-0094 §6).
 REGISTRAR_KEY = "registrar_key"
 
 
@@ -33,7 +33,7 @@ def pending_queue(ctx: ExtensionContext) -> object | None:
 class SelectorRegistration:
     """`tool_ui.tools` — `extension_api.ToolUiTool`.
 
-    등록 담당자 키는 설정 칸 `registrar_key`(비밀)로 받고, UI 자동화 앱 주소는 **호스트가**
+    도구용 키는 **호스트가** `utility`로 주고(CON-03 「셀렉터 등록」, ADR-0094 §6), UI 자동화 앱 주소도 **호스트가**
     예약 키 `service.base_url`로 알려 준다 (C13 — 주소 출처는 하나). 둘 중 하나라도 없으면
     등록·시험이 꺼지고 왜 꺼졌는지 화면이 말한다.
     """
@@ -60,7 +60,7 @@ class SelectorRegistration:
         trial = TrialWidget(
             worker,
             registry,
-            service_key=ctx.secret(REGISTRAR_KEY),
+            service_key=ctx.secret("utility") or ctx.secret(REGISTRAR_KEY),
             # **세션은 한 번에 하나다** — 시험을 시작하면 등록 탭이 쥔 것을 놓는다.
             release_other=register.close_browser,
             # 등록 탭에 열린 화면이 있으면 **놓지 않고 이어 쓴다** (C10 `…/plan`).

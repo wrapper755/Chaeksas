@@ -144,14 +144,14 @@
   | `runtime.<런타임 id>.state` | `off` · `running` · `restarting` · `stopped` (C4 `WorkerState.state`와 같은 낱말) |
   | `storage.dir` | 이 확장이 **자기 파일을 둘 폴더** (호스트가 **제 데이터 폴더 아래에** 만들어 준다 — Bot UI와 Tool UI는 다른 자리다). 밀린 등록 큐처럼 확장이 혼자 들고 있어야 하는 것을 여기 둔다. **비밀은 두지 않는다** (OS 비밀 저장소로 간다) |
   | `service.base_url` | 이 확장의 **서버 부분 주소**. **출처는 하나다** — Center 리소스 등록(C7)에 있으면 그것을, 없으면 정의의 `service.base_url`을 쓴다. 확장이 설정 칸으로 따로 받지 않는다. Tool UI는 Center를 부르지 않으므로 **Bot UI가 받아 둔 명부**를 읽는다 (같은 출처) |
-  | `service.key_ref` | **Studio 편집기에만** — 지금 열린 BPM 프로세스의 `chk:process.service_keys`가 이 확장에 준 **키 참조 이름**(없으면 `None`). 태스크의 `key_ref`가 비었을 때(「BPM 프로세스 설정을 따름」) 편집기가 시험에 쓸 참조다 — 엔진과 같은 순서. 값은 물을 때마다 열린 BPM 프로세스에서 읽는다. 실행하는 쪽은 채우지 않는다(수행기는 `TaskContext.key_ref`를 받는다). 키 **값**은 `ctx.secret(<참조>)`로 푼다 ([ADR-0074](../decisions/0074-ui-task-editor-runs-on-the-worker.md)) |
+  | `service.key_ref` | **Studio 편집기에만** — 지금 열린 BPM 프로세스의 `chk:process.service_keys`가 이 확장에 준 **키 참조 이름**(없으면 `None`). 태스크의 `key_ref`가 비었을 때(「BPM 프로세스 설정을 따름」) 편집기가 시험에 쓸 참조다 — 엔진과 같은 순서. 값은 물을 때마다 열린 BPM 프로세스에서 읽는다. 실행하는 쪽은 채우지 않는다(수행기는 `TaskContext.key_ref`를 받는다). 키 **값**은 `ctx.secret(<참조>)`로 푼다 ([ADR-0074](../decisions/0074-ui-task-editor-runs-on-the-worker.md)). (ADR-0094 §5) Studio의 개발 키는 앱마다 하나라 어느 참조를 넘겨도 이 확장의 서버 부분 앱의 개발 키가 풀린다 — 칸은 그대로 둔다 |
 
   로컬 런타임 자식에게는 같은 주소를 환경변수 **`CHK_RUNTIME__SERVICE_URL`**로 물려준다 (이름은 플랫폼이 정한다 — 호스트가 확장 이름을 모르고 넣을 수 있어야 한다). **비밀은 물려주지 않는다** — 키는 부르는 쪽이 세션마다 준다 (C10 `service_key`, ADR-0013).
 
   `runtime.`·`service.`·`storage.`로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7).
 - `configuration`의 `scope`: `bot_ui`, `tool_ui`, `studio`, `server_runner` 중 하나. `tool_ui`는 도구가 쓰는 칸(등록 담당자 키 같은 것)이고 값은 Tool UI 설정(TOL-02)·Tool UI의 비밀 저장소(`chaeksas-tool-ui`)에 있다 (ADR-0077).
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.
-- **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 키(`requires_keys` `utility`)도 이 칸으로 받는다.
+- **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 키(`requires_keys` `utility`)도 이 칸으로 받는다 — **(ADR-0094) 서비스 앱 키는 이 칸으로 받지 않는다** (위 KeyNeed). 비밀 칸은 서비스 앱 키가 **아닌** 비밀(바깥 도구의 암호 같은 것)에만 남는다.
 - `editor`: 두 가지 중 하나다.
   - `{"kind": "builtin", "entry": "…"}`: 확장이 준 편집기.
   - `{"kind": "schema"}`: 입력 JSON Schema로 만든 자동 폼 (STU-14 방식).
@@ -171,12 +171,16 @@
 | --- | --- |
 | `purpose` | 키를 어디에 쓰나. 두 가지 중 하나다 (아래) |
 | `extra_scopes` | 그 키에 필요한 추가 권한 (C11 키 레코드와 같은 이름, 예: `registry_write`) |
-| `config_key` | `utility`일 때 그 키를 받는 `configuration` 칸 |
+| `config_key` | `utility`일 때 그 키를 받는 `configuration` 칸. **(ADR-0094) 쓰지 않는다** — 있어도 무시한다 |
 
 `purpose` 값:
 
 - `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.
 - `utility`: 확장 도구(Tool UI)가 쓸 때. `configuration`의 `secret` 칸으로 받는다. 값 이름은 그대로다.
+
+> [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md): **선언의 뜻은 그대로이고 키를 받는 길만 바뀐다.**
+> - `run` — Center가 배포 대상마다 짓고 내려 준다 (C4 §서비스 앱 키 전달). `extra_scopes`가 있으면 Center가 그 권한을 단다.
+> - `utility` — 사람이 키를 넣지 않는다. 관리자가 CON-03에서 그 PC의 「셀렉터 등록」을 켜면 Center가 (PC × 앱) 키를 `extra_scopes`대로 짓고 그 PC Bot UI에 내려 준다. 호스트가 그것을 **`ctx.secret("utility")`**로 준다(Tool UI는 Bot UI가 받아 둔 것을 읽기만 한다 — ADR-0077). **`config_key`는 쓰지 않는다** — 옛 정의에 적혀 있어도 거부하지 않고 무시한다(호환). 그래서 그 칸이 가리키던 `configuration`의 비밀 칸(UI 자동화의 `registrar_key`)은 확장이 빼고, TOL-02에서도 없어진다.
 
 ## 4. HTTP 어댑터 (`protocol: "http-adapter"`, 외부 확장)
 
@@ -186,7 +190,7 @@
 | --- | --- |
 | `allowed_hosts` | 부를 수 있는 호스트 목록 (정확한 이름, 와일드카드 없음). `base_url`·Center의 `base_url`·`catalog_url`·`health`의 호스트가 모두 이 안에 있어야 한다 |
 | `allow_private_network` | 기본 false. 사설망·루프백·링크 로컬 주소를 부르려면 true여야 하고, 이것도 서명 대상이다 |
-| `auth` | `{type: "bearer" \| "header", name?}`. 값은 BPM 프로세스 키 참조로 푼 키. **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md), `takes_key()`) — 어댑터는 키를 싣지 않고, B7·사전 점검·BUI-10·STU-06은 그 앱의 키를 묻지 않으며 빌드는 C1 `key_ref`를 적지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
+| `auth` | `{type: "bearer" \| "header", name?}`. 값은 BPM 프로세스 키 참조로 푼 키. **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md), `takes_key()`) — 어댑터는 키를 싣지 않고, 사전 점검은 그 앱의 키를 묻지 않고 Center도 짓지 않으며 빌드는 C1 `key_ref`를 적지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
 | `limits` | `{timeout_s: 60, max_response_kb: 1024}` |
 | `health` | 선택. `{path, expect_status: 200}`. 없으면 Center는 상태를 「확인 전」으로 둔다 |
 | `operations` | 아래 Operation[] |
@@ -331,6 +335,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | `requires_keys`의 키는 Center가 내려 준다 — `run`은 배포 대상마다, `utility`는 CON-03 「셀렉터 등록」을 켠 PC에. `config_key`는 무시한다(호환), 호스트가 `ctx.secret("utility")`로 준다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 2 | `adapter.auth`가 없는 외부 앱은 **키를 받지 않는 앱**이라고 적었다. E3가 `run` 키를 적고 `auth`가 없는 정의를 거부한다 — 키를 실을 자리 없이 키를 요구하던 모순이었다. 칸은 그대로라 schema도 그대로다 | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-24 | 2 | 외부 확장 등록·해제는 **봉투 대신 정의(해제는 `{id, version}`)를 받고 Center가 서명한다**. `DELETE …/extensions/{id}` 꼴을 없앴다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 2 | 기여 지점 `tool_ui.tools`와 `configuration.scope`의 `tool_ui`를 더하고 `bot_ui.utilities`를 걷었다 — 확장의 도구는 Tool UI가 띄우고 런타임은 Bot UI 것을 빌려 쓴다. 열쇠가 모두 선택이라 schema는 그대로이고 `extension_api`는 **1.4**다(`ToolUiTool`·`HOST_TOOL_UI` — 옛 `BotUiUtility`는 같은 모양의 이름으로 남겼다. 큰 판 2.0으로 올리면 `api: ">=1,<2"`인 확장이 모두 꺼진다) | 0077 |

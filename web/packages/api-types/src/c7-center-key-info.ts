@@ -8,6 +8,7 @@
 export interface CenterKeyInfo {
   bound_to?: BoundTo | null;
   created_at: string;
+  enrollment_id?: string | null;
   expires_at?: string | null;
   key_id: string;
   last_used_at?: string | null;

@@ -64,6 +64,7 @@ from chaeksas.contracts.bot_ui import (
     BuildStamp,
     CurrentRun,
     DeploymentResult,
+    EnrollRequest,
     ExtensionState,
     HeartbeatRequest,
     HeartbeatResponse,
@@ -161,6 +162,16 @@ from chaeksas.contracts.dmn import (
     decision_io,
     read_decisions,
 )
+from chaeksas.contracts.enrollment import (
+    EnrollmentApproveRequest,
+    EnrollmentDecision,
+    EnrollmentInfo,
+    EnrollmentRejectRequest,
+    EnrollStatus,
+    RotatedKey,
+    Sealed,
+    StudioEnrollRequest,
+)
 from chaeksas.contracts.events import (
     EventBatchResponse,
     RejectedLine,
@@ -234,6 +245,7 @@ from chaeksas.contracts.manifest import (
     ServiceAppNeed,
     TaskTypeNeed,
     Trigger,
+    default_key_ref,
     validate,
 )
 from chaeksas.contracts.replay import (
@@ -280,6 +292,7 @@ from chaeksas.contracts.server_runner import (
     MessageResponse,
     RunnerVersions,
     RunningRun,
+    ServerRunnerEnrollRequest,
     ServerRunnerHeartbeatRequest,
     ServerRunnerHeartbeatResponse,
     ServerRunnerId,
@@ -341,6 +354,17 @@ from chaeksas.contracts.signing import (
 )
 
 __all__ = [
+    "default_key_ref",
+    "StudioEnrollRequest",
+    "EnrollRequest",
+    "EnrollStatus",
+    "EnrollmentApproveRequest",
+    "EnrollmentDecision",
+    "EnrollmentInfo",
+    "EnrollmentRejectRequest",
+    "RotatedKey",
+    "Sealed",
+    "ServerRunnerEnrollRequest",
     # 바탕
     "ContractModel",
     "SEVERITY_ERROR",

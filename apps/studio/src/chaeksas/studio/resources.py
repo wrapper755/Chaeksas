@@ -78,7 +78,7 @@ NO_INSTALL = (
     "설치·제거는 「Center 공유 자원...」 창에서 합니다 — 설치는 열린 BPM 프로세스 하나에 "
     "하는 일입니다 (ADR-0048)."
 )
-NO_CENTER = "Center 주소·Studio 키가 설정되지 않았습니다 — 설정 → 「Center」 (STU-10)."
+NO_CENTER = "Center에 아직 들어오지 않았습니다 — 설정 → 「Center」에서 「연결 테스트」 (STU-16)."
 
 #: 공유 BPM 프로세스로 **셋을 할 수 없는 까닭** (ADR-0051 — 끄고 적고 **STU-11로 보낸다**).
 #:

@@ -46,7 +46,7 @@ from chaeksas.core.processes import ChildProcess
 NOW = "2026-10-10T09:00:00+09:00"
 #: **진짜 시계로 열흘 뒤** — `Agent`는 `now_iso()`로 재므로 박아 둔 날짜는 그날이 지나면 「이미
 #: 만료」가 되어 알리지 않는다 (2026-10-20에 그렇게 깨졌다). 판단만 보는 시험은 `SOON`·`NOW`를 쓴다.
-SOON_FROM_TODAY = (datetime.now(UTC) + timedelta(days=10)).isoformat()
+SOON_FROM_TODAY = (datetime.now(UTC) + timedelta(days=5)).isoformat()
 BOT_UI_ID = "bui_a81c22d0"
 
 
@@ -181,18 +181,15 @@ def test_an_approval_bound_for_center_is_not_told_as_a_field_one() -> None:
     assert told[0].action == module.ACTION_APPROVAL
 
 
-def test_a_deployment_that_needs_a_key_says_so_instead() -> None:
-    """설치는 됐는데 돌지 않는다 — 「설치했습니다」만 띄우면 왜 안 도는지 모른다 (BUI-10으로)."""
+def test_a_deployment_does_not_ask_for_keys() -> None:
+    """키는 배포와 함께 Center가 내려 준다 (ADR-0094) — 사람이 넣을 것이 없어 「키를 등록하세요」가 없다."""
     found = Notices()
     found.deployed(bot="청구서 처리", version="1.2.0")
     assert found.take()[0].text == "청구서 처리 1.2.0을 설치했습니다"
 
     found.deployed(bot="청구서 처리", version="1.2.0", missing_keys=["fin-erp", "fin-crm"])
     told = found.take()
-    assert told[0].kind == module.DEPLOYED_NEEDS_KEY
-    assert told[0].text == "청구서 처리 설치됨 — 서비스 앱 키 fin-erp, fin-crm를 등록해야 실행할 수 있습니다"
-    assert told[0].action == module.ACTION_KEYS
-    assert told[0].sticky
+    assert [one.text for one in told] == ["청구서 처리 1.2.0을 설치했습니다"]
 
 
 # ─────────────────────────── Agent에 붙은 자리 ───────────────────────────
@@ -540,17 +537,17 @@ def test_without_a_tray_the_status_bar_is_the_notice_place(qt_app: Any, tmp_path
 
 
 def test_clicking_a_notice_opens_what_it_points_at(qt_app: Any, tmp_path: Path, monkeypatch: Any) -> None:
-    """누르면 **그 알림이 가리키는 자리**가 열린다 (BUI-05 — 결재는 CMN-01, 키는 BUI-10)."""
+    """누르면 **그 알림이 가리키는 자리**가 열린다 (BUI-05 — 결재는 CMN-01, 키는 BUI-04 「Bot」 탭)."""
     from chaeksas.bot_ui.app import BotUiApp
     from chaeksas.bot_ui.main_window import MainWindow
 
     agent = agent_with(tmp_path)
     made = BotUiApp(qt_app, agent)
     opened: list[str] = []
-    monkeypatch.setattr(MainWindow, "open_keys", lambda _self: opened.append("keys"))
+    monkeypatch.setattr(MainWindow, "show_bots", lambda _self: opened.append("keys"))
     monkeypatch.setattr(MainWindow, "open_approval", lambda _self: opened.append("approval"))
     try:
-        agent.notices.deployed(bot="청구서 처리", version="1.0.0", missing_keys=["fin-erp"])
+        agent.notices.service_keys_refused([a_refusal()], bot="청구서 처리", run_id="run_1")
         made.show_notices()
         made.on_notice_clicked()
         assert opened == ["keys"]
@@ -590,7 +587,7 @@ def test_the_heartbeat_problem_signal_does_not_make_its_own_notice(qt_app: Any, 
 
 APP_ID = "tax-invoice"
 KEY_REF = "finance-invoice"
-SOON = "2026-10-20T09:00:00+09:00"  # NOW에서 열흘 뒤
+SOON = "2026-10-15T09:00:00+09:00"  # NOW에서 닷새 뒤 — 서비스 앱 키는 7일 전부터 알린다 (ADR-0094)
 
 
 def a_refusal(*, status: int = 403, app_id: str = APP_ID, ref: str = KEY_REF) -> Any:
@@ -605,7 +602,7 @@ def test_a_refused_service_app_key_is_told_with_what_to_do() -> None:
     found.service_keys_refused([a_refusal()], bot="청구서 처리", run_id="run_1")
     [one] = found.take()
     assert one.kind == module.SERVICE_KEY_REFUSED
-    assert one.text == "tax-invoice이 키 finance-invoice를 거부했습니다 — 새 키를 넣으세요"
+    assert one.text == "tax-invoice이 키 finance-invoice를 거부했습니다 — 관리자에게 알리세요"
     assert (one.action, one.sticky, one.level) == (module.ACTION_KEYS, True, "error")
 
 
@@ -625,12 +622,15 @@ def test_the_same_refusal_is_told_once_per_run_and_again_in_the_next_run() -> No
 
 
 def test_an_expiring_service_app_key_is_told_once_a_day_per_ref() -> None:
-    """Center 키와 **같은 규칙**이다 — 14일 전부터 하루 한 번, 참조마다."""
+    """하루 한 번, 참조마다 — Center가 14일 전부터 새 키를 주므로 **7일 전까지 오지 않았을 때만** (ADR-0094)."""
     found = Notices()
     found.service_key_expiring(ref=KEY_REF, expires_at=SOON, now=NOW)
     [one] = found.take()
     assert one.kind == module.SERVICE_KEY_EXPIRING
-    assert one.text == "서비스 앱 키 finance-invoice가 2026-10-20에 만료됩니다"
+    assert one.text == (
+        "서비스 앱 키 finance-invoice가 2026-10-15에 만료되는데 Center가 아직 새 키를 주지 않았습니다"
+        " — Center 연결을 확인하세요"
+    )
     assert (one.action, one.level, one.seconds) == (module.ACTION_KEYS, "warning", module.LONG_S)
 
     found.service_key_expiring(ref=KEY_REF, expires_at=SOON, now="2026-10-10T09:00:30+09:00")

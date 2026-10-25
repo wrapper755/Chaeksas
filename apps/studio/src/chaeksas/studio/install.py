@@ -49,7 +49,7 @@ PROCESS_DIR = "process/"
 SUFFIXES = (".bpmn", ".dmn")
 
 NO_PROCESS = "열린 BPM 프로세스가 없습니다 — 설치는 BPM 프로세스 하나에 하는 일입니다."
-NO_CENTER = "Center 주소·Studio 키가 설정되지 않았습니다 — 설정 → 「Center」 (STU-10)."
+NO_CENTER = "Center에 아직 들어오지 않았습니다 — 설정 → 「Center」에서 「연결 테스트」 (STU-16)."
 #: 받아 둔 판이 그 정의를 주지 않는다 (읽지 못한 정의일 수 있다 — B14가 그 말을 한다).
 NOT_PROVIDED = "설치된 판이 이 정의를 주지 않습니다 (읽지 못한 정의일 수 있습니다)."
 

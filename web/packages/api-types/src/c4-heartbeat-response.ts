@@ -16,10 +16,13 @@ export interface HeartbeatResponse {
     [k: string]: unknown;
   }[];
   disabled?: boolean;
+  drop_service_keys?: string[];
   jobs?: JobDispatch[];
   key_expires_at?: string | null;
   next_heartbeat_s?: number;
+  rotated_key?: RotatedKey | null;
   server_time: string;
+  service_keys?: ServiceKeyDelivery[];
   [k: string]: unknown;
 }
 /**
@@ -60,5 +63,38 @@ export interface JobDispatch {
   requested_at: string;
   requested_by: string;
   version?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * 하트비트 답의 새 키 (C4 §키 회전). 새 키로 첫 요청이 올 때까지 주기마다 실린다.
+ */
+export interface RotatedKey {
+  expires_at?: string | null;
+  sealed_key: Sealed;
+  [k: string]: unknown;
+}
+/**
+ * 받는 쪽 공개키로만 열리는 한 덩이 (C4 §봉함).
+ */
+export interface Sealed {
+  alg?: string;
+  ciphertext: string;
+  epk: string;
+  nonce: string;
+  [k: string]: unknown;
+}
+/**
+ * 하트비트 답에 실린 봉한 키 하나 (C4 §서비스 앱 키 전달).
+ */
+export interface ServiceKeyDelivery {
+  app_id: string;
+  bpm_process_id?: string | null;
+  expires_at?: string | null;
+  key_refs?: string[];
+  purpose?: string;
+  replaces?: string | null;
+  sealed_key: Sealed;
+  service_key_id: string;
+  source?: string;
   [k: string]: unknown;
 }

@@ -17,6 +17,7 @@ export interface ServiceAppResource {
   operations?: Operation[];
   status?: string;
   status_reasons?: string[];
+  trust?: TrustState | null;
   used_by?: string[];
   version?: string | null;
   [k: string]: unknown;
@@ -38,5 +39,13 @@ export interface Operation {
   required_scopes?: string[];
   server_ok?: boolean;
   timeout_s?: number;
+  [k: string]: unknown;
+}
+/**
+ * 서비스 앱이 Center 발급을 받나 (C11 `GET /center/v1/trust`, ADR-0094 §1).
+ */
+export interface TrustState {
+  checked_at?: string | null;
+  state?: string;
   [k: string]: unknown;
 }

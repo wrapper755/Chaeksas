@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.contracts.bot_ui import ApprovalAck, DeploymentResult, JobAck, QueueItem
+from chaeksas.contracts.enrollment import EnrollStatus
 from chaeksas.contracts.signing import AdminKey
 from chaeksas.core.seen import Seen
 
@@ -57,6 +58,9 @@ class State:
     #: 이미 본 `job_id` → 마지막으로 보낸 ack (같은 작업이 다시 오면 이것을 되돌려 보낸다).
     #: **무한히 자라지 않고, 닿지 않은 ack는 잃지 않는다** (`core.seen`, ADR-0056·0057).
     seen_jobs: Seen[JobAck] = field(default_factory=Seen)
+    #: 보낸 등록 요청 (C4 §등록 요청과 승인) — 다시 떠도 같은 요청을 묻는다. **봉한 키는 담지
+    #: 않는다**(받은 키는 비밀 저장소로 간다).
+    enrollment: EnrollStatus | None = None
 
     def to_json_dict(self) -> dict[str, Any]:
         return {
@@ -69,6 +73,9 @@ class State:
             "pending_approval_acks": [one.to_json_dict() for one in self.pending_approval_acks],
             "admin_keys": [one.to_json_dict() for one in self.admin_keys],
             "seen_jobs": {job_id: ack.to_json_dict() for job_id, ack in self.seen_jobs.items()},
+            "enrollment": self.enrollment.model_copy(update={"sealed_key": None}).to_json_dict()
+            if self.enrollment is not None
+            else None,
         }
 
     @classmethod
@@ -87,6 +94,7 @@ class State:
                 ApprovalAck.model_validate(one) for one in raw.get("pending_approval_acks", [])
             ],
             admin_keys=[AdminKey.model_validate(one) for one in raw.get("admin_keys", [])],
+            enrollment=EnrollStatus.model_validate(raw["enrollment"]) if raw.get("enrollment") else None,
             # **나이는 파일에 없다** — 「아직 닿지 않았다」는 `pending_acks`가 말해 준다
             # (ADR-0057). 되살린 나이는 0부터라 닿은 것도 두 주기를 더 들고 있는다.
             seen_jobs=Seen.restore(

@@ -13,6 +13,8 @@ import logging
 import os
 from dataclasses import dataclass
 
+from chaeksas.core import service_keys
+
 log = logging.getLogger(__name__)
 
 #: `keyring`의 서비스 이름. 한 PC에 여러 Bot UI를 두지 않으므로 하나로 충분하다.
@@ -21,6 +23,10 @@ SERVICE = "chaeksas-bot-ui"
 #: Center API 키 (C4 — 「Bot UI용」 종류). 개발·CI용 환경변수.
 CENTER_API_KEY = "center_api_key"
 ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
+
+#: 등록 요청에 쓴 키 쌍의 **비밀 반쪽** (C4 §등록 요청과 승인). 승인된 키와 회전한 키를 이것으로
+#: 연다. 환경변수 길은 없다 — 이것을 쓰는 것은 승인으로 들어온 PC뿐이다.
+ENROLL_SECRET = "enroll_secret"
 
 #: 서비스 앱 키는 **참조 이름**으로 저장한다 (BUI-10, ADR-0013 §3).
 SERVICE_APP_PREFIX = "svc:"
@@ -127,6 +133,16 @@ class Credentials:
     def set_center_api_key(self, value: str) -> None:
         self.set(CENTER_API_KEY, value.strip())
 
+    def center_key_from_env(self) -> bool:
+        """Center API 키가 환경변수로 오는가 (개발·CI) — 그러면 등록 요청을 보내지 않는다."""
+        return bool(os.environ.get(ENV_CENTER_API_KEY))
+
+    def enroll_secret(self) -> str | None:
+        return self.get(ENROLL_SECRET)
+
+    def set_enroll_secret(self, value: str) -> None:
+        self.set(ENROLL_SECRET, value)
+
     def smtp_password(self) -> str | None:
         """메일 서버 비밀번호. 환경변수가 먼저다 (개발·CI)."""
         return self.get(SMTP_PASSWORD, env=ENV_SMTP_PASSWORD)
@@ -156,12 +172,29 @@ class Credentials:
     def set_extension_secret(self, extension_id: str, key: str, value: str) -> None:
         self.set(f"{EXTENSION_PREFIX}{extension_id}:{key}", value.strip())
 
-    def service_app_key(self, ref: str) -> str | None:
-        """BPM 프로세스 속성의 **키 참조 이름**으로 찾는다 (ADR-0013 §3).
+    def service_app_key(self, ref: str, bot: str | None = None) -> str | None:
+        """**키 참조 이름**으로 찾는다 (C1 `key_ref`).
 
-        읽기는 **환경변수가 먼저다** — `CHK_BOT_UI__SVC__<참조>` (개발·CI). Studio와 같은 규칙.
+        찾는 순서: 환경변수 `CHK_BOT_UI__SVC__<참조>`(개발·CI) → **Center가 그 Bot에 내려 준 키**
+        (`svc:<Bot>:<참조>`, ADR-0094 — 두 Bot이 같은 참조를 써도 키가 다르다) → 사람이 BUI-10에
+        넣은 옛 자리(`svc:<참조>`).
         """
-        return self.get(f"{SERVICE_APP_PREFIX}{ref}", env=service_key_env(ref))
+        found = os.environ.get(service_key_env(ref))
+        if found:
+            return found
+        if bot:
+            delivered = self.get(service_keys.run_name(bot, ref))
+            if delivered:
+                return delivered
+        return self.get(f"{SERVICE_APP_PREFIX}{ref}")
+
+    def for_bot(self, bot: str) -> BotCredentials:
+        """그 Bot의 실행이 쓰는 창구 — 참조 이름을 **그 Bot이 받은 키**로 푼다 (ADR-0094 §8)."""
+        return BotCredentials(credentials=self, bot=bot)
+
+    def utility_key(self, app_id: str) -> str | None:
+        """도구(Tool UI)용 키 — CON-03 「셀렉터 등록」을 켜면 Center가 내려 준다 (ADR-0094 §6)."""
+        return self.get(service_keys.utility_name(app_id))
 
     def stored_service_app_key(self, ref: str) -> str | None:
         """**비밀 저장소에 들어 있는** 값만 (환경변수는 보지 않는다).
@@ -179,7 +212,22 @@ class Credentials:
         self.delete(f"{SERVICE_APP_PREFIX}{ref}")
 
 
+
+@dataclass(frozen=True)
+class BotCredentials:
+    """한 Bot에 묶인 창구. 확장·바깥 앱 명부가 참조 이름만 넘겨도 그 Bot의 키가 풀린다."""
+
+    credentials: Credentials
+    bot: str
+
+    def service_app_key(self, ref: str) -> str | None:
+        return self.credentials.service_app_key(ref, self.bot)
+
+    def extension_secret(self, extension_id: str, key: str) -> str | None:
+        return self.credentials.extension_secret(extension_id, key)
+
 __all__ = [
+    "BotCredentials",
     "CENTER_API_KEY",
     "ENV_SERVICE_APP_PREFIX",
     "ENV_EXTENSION_PREFIX",

@@ -2,13 +2,13 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) — **§등록 승인도 돈다** (2026-10-25, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). **§Studio 등록 요청도 돈다** (2026-10-25, [0093](../decisions/0093-studio-is-let-in-by-approval.md)) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py`, `…/accounts.py` (import `chaeksas.contracts.center_api`·`chaeksas.contracts.accounts`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-deployment-request.json`](../../packages/contracts/schemas/c5-deployment-request.json) · [`c5-login-request.json`](../../packages/contracts/schemas/c5-login-request.json) · [`c5-session-info.json`](../../packages/contracts/schemas/c5-session-info.json) · [`c5-account-info.json`](../../packages/contracts/schemas/c5-account-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md) |
-| 관련 화면 | STU-01(올리기), CON-00(로그인)·02·05·06·11·12·14·15 |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| 관련 화면 | STU-01(올리기), CON-00(로그인)·02·03·05·06·11·12·14·15 |
 
 ## 목적
 
@@ -28,7 +28,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 - 기본 경로는 `/api/v1`. 본문은 JSON이고, 업로드만 multipart다.
 - 목록 요청은 `limit`(기본 100, 최대 1000)과 `offset`을 쓴다. 시각은 시간대를 포함한 ISO 8601이다.
 - 오류 본문: `{"code": "...", "message": "...", "detail": {...}}` (C11과 같은 형식).
-- **행위자:** `requested_by`, `answered_by`, `uploaded_by`, `approved_by`, `deployed_by`, `revoked_by`는 본문에서 받지 않는다. **세션으로 부르면 계정 아이디**다(로그인이 정한 신원이라 `X-CHK-Actor`를 듣지 않는다, ADR-0090). 키로 부르면 키 이름이다. 관리자·읽기 토큰(자동화)으로 부르면 `X-CHK-Actor` 헤더의 이름이고, 없으면 「관리자 토큰」·「보기 전용」이다 — 이 헤더는 **토큰으로 부를 때만** 믿는다.
+- **행위자:** `requested_by`, `answered_by`, `uploaded_by`, `approved_by`, `deployed_by`, `revoked_by`는 본문에서 받지 않는다. **세션으로 부르면 계정 아이디**다(로그인이 정한 신원이라 `X-CHK-Actor`를 듣지 않는다, ADR-0090). 키로 부르면 키 이름이다(Studio 키는 **승인할 때 붙인 이름** — §Studio 등록 요청과 승인). 관리자·읽기 토큰(자동화)으로 부르면 `X-CHK-Actor` 헤더의 이름이고, 없으면 「관리자 토큰」·「보기 전용」이다 — 이 헤더는 **토큰으로 부를 때만** 믿는다.
   - **사람 대신 부르는 키는 `X-CHK-On-Behalf-Of`를 싣는다** ([ADR-0081](../decisions/0081-answering-on-behalf.md)). 대리 답용 키는 결재에 **반드시**(C6), 연동용 키는 `POST /jobs`·`POST /messages`에 **실어도 된다**. 작업에서는 **`on_behalf_of`로 적기만** 하고 `requested_by`는 그대로 키 이름이다 — `requested_by`는 권한의 주인이고 Bot UI가 그 앞머리 `server_bot:`로 위임 작업을 가르므로, 바깥에서 온 글을 그 칸에 넣지 않는다. 대조할 담당자가 없으니 **주장일 뿐**이고 권한을 바꾸지 않는다. 비었거나 200자를 넘거나 예약 앞머리로 시작하면 422 `on_behalf_invalid`.
   - **값은 UTF-8을 퍼센트 인코딩해서** 넣는다 (`운영자 김` → `%EC%9A%B4%EC%98%81%EC%9E%90%20%EA%B9%80`). HTTP 헤더 값에는 ASCII 밖의 글자를 넣을 수 없어서(보내는 쪽 HTTP 라이브러리가 거부한다), 한글 이름을 그대로 실으면 요청 자체가 나가지 않는다. 받는 쪽은 디코딩하고, 디코딩이 실패하면 받은 문자열을 그대로 쓴다.
 
@@ -40,7 +40,8 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | 세션 토큰 — 관리자 계정 | 콘솔 | 쓰기 전부. 승인·배포·외부 확장은 Center가 서명한다 (C2) |
 | 읽기 토큰 | 자동화 (선택 — 비우면 닫힌다) | 보기 전용 계정과 같다 |
 | 관리자 토큰 | 자동화 (선택 — 비우면 닫힌다) | 관리자 계정과 같다. 자기 비밀번호 바꾸기만 없다 (계정이 없다) |
-| Center API 키 — Studio용 | Studio | 패키지 업로드, 패키지·리소스 읽기 |
+| 인증 없음 | 키가 아직 없는 Bot UI·서버 실행기 | **등록 요청을 보내고 그 답을 묻는 것뿐** (C4·C12 §등록 요청과 승인 — 내려 주는 키는 요청의 공개키로 봉해 있다) |
+| Center API 키 — Studio용 | Studio (등록 요청을 관리자가 승인해 받은 키, 자동화용은 관리자 토큰으로 발급) | 패키지 업로드, 패키지·리소스 읽기 |
 | Center API 키 — Bot UI용 / 서버 실행기용 | 실행하는 쪽 | **자기에게 배포된** BPM 프로세스 패키지만 내려받기 (공유 BPM 프로세스는 그 안 `libs/`에 들어 있다) |
 | Center API 키 — 연동용 (신규, CON-11) | 외부 시스템 | 작업 만들기(`POST /jobs`)와 자기가 만든 작업 읽기·취소, 메시지 넣기(`POST /messages` — C12 §메시지) |
 | Center API 키 — 대리 답용 (`relay`) | 사람 대신 결재하는 연동 (대화 창구) | **결재 읽기·답뿐**이고 담당인 것만 (C6). 이 표의 엔드포인트는 하나도 부르지 못한다 |
@@ -68,6 +69,13 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /server-runners` | ✓ | ✓ | — | — | — |
 | `POST /server-runners/{id}/pause·resume·mark-lost` (C12) | — | ✓ | — | — | — |
 | `GET /bot-uis…` (CON-03), `POST /bot-uis/{id}/disable·enable` | GET만 ✓ | ✓ | — | — | — |
+| `PUT /bot-uis/{id}/utility` (「셀렉터 등록」, ADR-0094 §6) | — | ✓ | — | — | — |
+| `POST /studio/service-keys` (개발 키, ADR-0094 §5) | — | — | ✓ | — | — |
+| `GET /signing-keys` (C7) | 인증 없음 | | | | |
+| `PUT/DELETE /resources/extensions/{id}/app-key`, `…/app-key/test` (C7 §외부 앱 키) | — | ✓ | — | — | — |
+| `POST /bot-ui/enroll`, `POST /server-runner/enroll`, `GET …/enroll/{id}` (C4·C12) | 인증 없음 | | | | |
+| `GET /enrollments` (§등록 승인) | ✓ | ✓ | — | — | — |
+| `POST /enrollments/{id}/approve·reject` | — | ✓ | — | — | — |
 | `POST /jobs` | — | ✓ | — | — | ✓ |
 | `GET /jobs…` | ✓ | ✓ | — | — | 자기 것만 |
 | `DELETE /jobs/{id}` | — | ✓ | — | — | 자기 것만 |
@@ -200,6 +208,8 @@ DeploymentInfo 필드: `deployment_id`, `target{type,id}`, `bpm_process_id`, `ve
 - `signed_by`·`signed_at`·`not_before`·`expires_at`·`max_concurrency`는 **봉투에서 읽는다** (Center가 따로 짓지 않는다). `signed_by`는 서명한 키의 `key_id`다 (지금은 늘 Center 키라 사람을 말하지 않는다 — 사람은 `deployed_by`다).
 - `revoked_at`은 철회 봉투의 `revoked_at`이다. 행은 지우지 않으므로 철회된 배포도 목록에 남는다 (`active=true`로 거른다).
 
+- **배포·철회가 서비스 앱 키를 데리고 다닌다** ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §3). 배포하면 Center가 그 대상에 (Bot × 대상 × 앱) 키를 지어 앱에 해시를 맡기고(C11 §Center가 발급하는 키) 하트비트로 봉해 내려 준다(C4 §서비스 앱 키 전달). 철회해 그 대상의 그 Bot 배포가 하나도 남지 않으면 키를 폐기한다. 판을 올린 새 배포는 같은 키를 이어 쓴다. **키를 짓지 못해도 배포는 막지 않는다**(앱이 잠시 답하지 않는 것으로 배포를 막지 않는 것과 같은 결 — C7 `blocking_at_deploy`) — 그 대상의 준비가 「키를 받지 못함」으로 말하고 다음 맞추기에서 다시 짓는다. PC를 비활성화·묶음 풀기·유실 처리해도 그 대상의 키를 모두 폐기한다.
+
 - **M6까지:** `target.type=server_runner` 배포는 422 `server_runner_not_available` (서버 실행은 M7부터, ADR-0016). 작업 지시도 같은 코드로 막고 **스위치는 한 자리다** (`SERVER_RUNNER_AVAILABLE` — 한쪽만 켜면 「작업은 만들어지는데 배포가 없다」가 된다).
 
 ## 작업 (job)
@@ -270,6 +280,67 @@ JobInfo는 위 필드에 다음을 더한다.
 - **Center가 혼자 `cancelled`로 적지 않는다** (`dispatched`와 같은 결) — 정말 멈췄는지는 현장만 안다. 실행기가 오프라인이면 취소 요청은 남고 **돌아오면 반영된다**; 돌아오지 않으면 CON-12 「유실 처리」가 닫는다 (C12).
 - 서버 실행이 취소되면 **그 실행이 맡긴 PC 위임도 거둬진다** ([ADR-0062](../decisions/0062-pc-delegation.md) §5).
 
+## 등록 승인 (CON-03·CON-12·CON-11)
+
+> 상태: **돈다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — `center/enrollments.py`. 콘솔은 CON-03·CON-12 「승인 대기」(`components/Enrollments.tsx`).
+
+PC(Bot UI)·서버 실행기·**Studio**가 보낸 **등록 요청**(C4·C12 §등록 요청과 승인, 아래 §Studio 등록 요청과 승인)을 관리자가 보고 들인다. 사람은 키를 보지 않는다 — 승인하면 Center가 키를 만들어 그 요청의 공개키로 봉해 둔다.
+
+| 메서드·경로 | 뜻 |
+| --- | --- |
+| `GET /enrollments?type=bot_ui\|server_runner\|studio&state=pending` | 요청 목록 (`state`는 쉼표로 여럿, 기본 `pending`) |
+| `POST /enrollments/{enrollment_id}/approve` `{name?}` | 승인. `name`을 비우면 요청의 `name`을 쓴다 |
+| `POST /enrollments/{enrollment_id}/reject` `{reason?}` | 거절. 사유는 요청한 쪽에 그대로 보인다 (200자까지) |
+
+EnrollmentInfo 필드:
+
+| 필드 | 뜻 |
+| --- | --- |
+| `enrollment_id`, `type` | `type`은 `bot_ui` / `server_runner` |
+| `code` | 요청 코드 `XXXX-XXXX` — 현장 화면(서버는 로그)과 맞춰 보는 값 |
+| `name`, `os`, `versions` | 요청이 보낸 그대로 |
+| `machine_id_prefix` | `machine_id` 앞 12자 (같은 PC인지 알아볼 만큼만) |
+| `remote_addr` | 요청이 온 주소 (Center가 본 그대로) |
+| `requested_at`, `expires_at` | |
+| `state` | **열린 문자열.** 알려진 값: `pending` `approved` `rejected` `expired`. 화면 표기는 `status_map` 「등록 요청」 |
+| `existing`? | 그 `machine_id`가 이미 등록돼 있으면 `{id, name, key_prefix, last_seen}` — 승인하면 **이 자리를 이어받고 그 키는 폐기된다** (C4 키 묶기) |
+| `decided_by`?, `decided_at`?, `reason`? | 승인·거절한 계정과 때, 거절 사유 |
+| `key_id`? | 승인이 만든 키 (C7 `CenterKeyInfo`) |
+
+- 승인 응답은 `{key_id, host_id, replaced_key_id?}`다 (`host_id`는 이어받았으면 그 `bot_ui_id`·`server_runner_id`, 새 자리면 첫 `register`가 만든다 — 그때까지 `null`).
+- **이미 결정된·만료된 요청은 다시 결정하지 못한다** (409 `enrollment_closed`).
+- 승인은 **행위자를 남긴다** (`decided_by` — 세션이면 계정, 토큰이면 `X-CHK-Actor`).
+- 승인·거절은 되돌리지 않는다. 잘못 들였으면 CON-03 「비활성화」 또는 그 키를 폐기한다 (C7).
+
+### Studio 등록 요청과 승인 ([ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md))
+
+> 상태: **돈다** (2026-10-25) — Center `center/enrollments.py`(종류 `studio`, 받았다는 표시는 `auth.caller`가 첫 사용에서 봉함을 지운다), Studio `studio/center_enroll.py`, 콘솔 CON-11 「승인 대기」. 계정 로그인(`POST /auth/studio-login`)과 계정 권한은 걷어 냈다. 시험: `tests/test_center_enrollment.py`·`tests/test_studio_settings_dialog.py`.
+
+Studio도 Bot UI와 **같은 길**로 들어온다 (C4 §등록 요청과 승인 — 요청 코드·봉함·24시간 대기·막기·같은 PC의 옛 요청 닫기가 같은 규칙, 같은 코드다). 아이디·비밀번호로 들어오는 길은 없다.
+
+| 메서드·경로 | 인증 | 뜻 |
+| --- | --- | --- |
+| `POST /studio/enroll` | 없음 | 등록 요청. 본문은 `{schema, machine_id, name, os, versions{studio, core}, public_key}`, 응답은 C4 `EnrollStatus` |
+| `GET /studio/enroll/{enrollment_id}` | 없음 | 그 요청이 승인됐나. 승인됐으면 봉한 Studio 키가 실려 온다 |
+
+- 승인하면 Center가 종류 `studio`의 키를 만든다. **이름은 승인할 때 정하고**(기본은 요청의 `name` — PC 이름) **그 키의 이름이 「누가」다**(`uploaded_by` 등). 그 PC(`machine_id`)에 묶어 두고, **같은 PC를 다시 승인하면 옛 Studio 키를 폐기한다**(`EnrollmentInfo.existing`에 그 키가 보인다).
+- **만료는 1년이고 회전하지 않는다** — Studio에는 하트비트가 없다. 만료 14일 전부터 Studio가 알리고, 만료·폐기되면 새로 요청해 승인받는다.
+- 봉함을 받았다는 표시는 **그 키로 처음 부른 것**이다 (Bot UI의 `register` 자리) — 그때 Center가 봉해 둔 것을 지운다. 24시간 안에 부르지 않으면 키를 폐기한다 (C4와 같다).
+- 자동화·CI가 쓰는 Studio용 키는 관리자 토큰으로 발급한다(C7 `POST /center-keys`) — 화면에는 없다.
+
+#### Studio 개발 키
+
+> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §5). Center `service_keys.studio_key`, Studio `studio/dev_keys.py`(시험 실행·사전 점검·편집기 시험·STU-10 「서비스 앱」이 같은 한 벌을 쓴다). 시험: `tests/test_service_keys.py`·`tests/test_studio_settings_dialog.py`.
+
+| 메서드·경로 | 인증 | 뜻 |
+| --- | --- | --- |
+| `POST /studio/service-keys` `{app_id, public_key}` | Studio 키 | 그 앱의 개발 키 하나. 응답 `{app_id, service_key_id, sealed_key, expires_at}` — `sealed_key`는 C4 §봉함(HKDF `salt`는 `service_key_id`), `public_key`는 Studio가 **그때 만든** X25519 공개키다 |
+
+- 개발 키: 허용 작업 `*`, 허용 모드 자율·결정, 만료 7일, C11 `issued_for.kind: studio`. 같은 (Studio 키 × 앱)에 새로 청하면 Center가 옛 것을 앱에서 폐기한다. Studio 키를 폐기하면 그 개발 키도 모두 폐기한다.
+- **외부 앱이면 관리자가 넣은 「시험용 키」를** 봉해 준다(C7 §외부 앱 키 — `service_key_id`는 `xak_…`, `expires_at`은 지금 + 7일로 Studio가 다시 청할 때를 정한다). 시험용 키가 없으면 404 `no_test_key`. 운영 키는 주지 않는다.
+- C11 앱은 앱이 Center를 믿지 않으면 409 `app_not_trusting_center`(C7 `trust`), 앱에 닿지 못하면 503 `app_unreachable` — Studio는 그 까닭을 그대로 말한다.
+- 원문은 응답에만 봉해 실리고 Center에는 남지 않는다 (Studio에는 하트비트가 없어 ack를 기다리지 않는다).
+
 ## Bot UI 현황 (CON-03)
 
 콘솔이 PC마다 하나인 Bot UI의 상태를 본다. 값은 **Bot UI가 하트비트로 보고한 그대로**이고 (C4),
@@ -281,6 +352,7 @@ Center는 온라인 판정과 키 정보만 더한다. 보기 전용이다 — �
 | `GET /bot-uis` | 읽기·관리자 토큰 | 목록 (BotUiInfo[]) |
 | `POST /bot-uis/{bot_ui_id}/disable` | 관리자 토큰 | 새 작업·배포를 보내지 않는다. **하트비트는 계속 받는다** (C4 `disabled`) |
 | `POST /bot-uis/{bot_ui_id}/enable` | 관리자 토큰 | 되돌리기 |
+| `PUT /bot-uis/{bot_ui_id}/utility` `{selector_registration: bool}` | 관리자 | ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §6). 켜면 Center가 그 PC가 보고한 확장 중 `requires_keys`에 `utility`가 있는 앱마다 (PC × 앱) 키를 지어 내려 주고, 끄면 폐기하고 `drop_service_keys`로 보낸다. `BotUiInfo.utility`에 `{selector_registration, keys: [{app_id, state}]}`로 보인다 |
 
 BotUiInfo 필드:
 
@@ -371,6 +443,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 | 409 | `not_approved` / `deprecated` / `hash_mismatch` / `wrong_target` | 배포가 가리키는 **패키지의 상태**가 요청과 어긋난다. 「본문이 잘못됐다」가 아니라 **상태 충돌**이라 409다 (`deployment_conflict`과 같은 결). 지원 종료는 `not_approved`로 뭉개지 않는다 — 승인은 되어 있고 새 배포만 막힌 것이다. `wrong_target`은 **대상이 틀린 것 전부**다 — `target.type` ↔ `run_location` 어긋남과 **PC 배포의 `"*"`** (ADR-0046·0047) |
 | 409 | `package_revoked` | 철회된 패키지를 승인하거나 지원 종료로 바꾸려 함 (끝난 일이다) |
 | 409 | `idempotency_conflict` | 같은 `idempotency_key`에 다른 본문 |
+| 409 | `enrollment_closed` | 이미 승인·거절됐거나 만료된 등록 요청을 다시 결정하려 함 |
 | 410 | `revoked` | 철회된 패키지 내려받기 |
 | 413 | `too_large` | 패키지 50 MB 초과 |
 | 422 | C1 규칙 코드, `target_mismatch`(모르는 대상 종류), `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
@@ -389,6 +462,10 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | 배포·철회가 서비스 앱 키를 데리고 다닌다, §Studio 개발 키(`POST /studio/service-keys`), `PUT /bot-uis/{id}/utility`(「셀렉터 등록」), 권한표 줄 넷 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
+| 2026-10-25 | 1 | **Studio 등록 요청과 승인** — `POST/GET /studio/enroll`, `GET /enrollments?type=studio`. 계정 권한·Studio 로그인(바로 아래 줄)을 걷어 낸다 | [0093](../decisions/0093-studio-is-let-in-by-approval.md) |
+| 2026-10-25 | 1 | **계정 권한과 Studio 로그인** (0093이 걷어 낸다) — `AccountInfo.permissions`·`studio_logins`, `POST /auth/studio-login`·`studio-logout`, 오류 `permission_missing` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| 2026-10-25 | 1 | **등록 승인** — `GET /enrollments`·`POST …/approve·reject`, 권한표의 「인증 없음」 줄(등록 요청 두 경로), 오류 `enrollment_closed` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-24 | 1 | **관리자 계정과 로그인 세션**을 더했다(`/auth/*`·`/accounts`). 승인·승인 철회·배포·배포 철회는 **봉투 대신 요청을 받고 Center가 서명한다** — 본문이 바뀌었다(`DeploymentRequest`·`{deployment_id, reason}`·`{reason}`). `approved_by`·`deployed_by`·`revoked_by`를 더했다. `POST/DELETE /admin-keys`를 없앴다. 관리자·읽기 토큰은 자동화용으로 남는다. 배포 철회 경로를 코드대로 `DELETE /deployments`(본문에 id)로 고쳐 적었다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 1 | **가상 직원**(§가상 직원, CON-13) — 등록·읽기·관문(B16, 묶을 때와 배포할 때)·`?virtual_worker=` 이어 붙이기. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0085](../decisions/0085-virtual-worker-resource.md) |
 | 2026-10-20 | 1 | **사람 대신 부르는 길** — `X-CHK-On-Behalf-Of`, `JobInfo.on_behalf_of`(주장, `requested_by`는 그대로), 대리 답용 키 줄, 오류 `on_behalf_invalid` | [0081](../decisions/0081-answering-on-behalf.md) |

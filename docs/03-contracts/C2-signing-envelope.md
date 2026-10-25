@@ -63,6 +63,7 @@
 | `revoke` | `deployment_id`, `reason`, `revoked_at` | 배포 철회 |
 | `extension` | `id`, `version`, `definition_hash` | 외부 확장 정의 승인 (C13). 정의가 서비스 앱 키를 어느 주소로 보낼지 정하므로 배포와 같은 관문을 둔다 |
 | `extension_revoke` | `id`, `version`, `reason`, `revoked_at` | 외부 확장 승인 철회. 그 정의를 쓰는 Bot은 실행 불가가 된다 |
+| `service_key` | `action`, `app_id`, `center_key_id`, `hash`?, `prefix`?, `allowed_operations`?, `allowed_modes`?, `extra_scopes`?, `expires_at`?, `issued_for`?, `reason`?, `not_after` | ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md)). Center가 서비스 앱에 키를 짓고·고치고·폐기하라고 보낸다. 받는 쪽은 **서비스 앱**이고 칸의 뜻은 C11 §Center가 발급하는 키에 있다. 현장(Bot UI·서버 실행기)은 이 봉투를 받지 않는다 |
 | `admin_key` · `admin_key_revoke` | — | **더 만들지 않는다** (ADR-0090 — 믿는 키는 Center가 서버 셸 명령으로 다룬다). 이름은 남겨 둔다 — 옛 감사 기록을 읽을 수 있게 |
 
 `deployment` 필드 규칙:
@@ -147,6 +148,7 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | Claim `service_key` — Center가 서비스 앱에 키를 맡기는 봉투 (C11) | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-24 | 1 | **서명하는 것이 Center가 됐다.** 관리자 계정이 누르면 Center가 서버의 키로 봉투를 짓는다. 바깥 봉투를 받는 길·Admin 키 추가·철회(`admin_key`·`admin_key_revoke`, V8)·첫 키 부트스트랩을 없앴다. 봉투 모양과 V1~V7, 현장의 검증은 **그대로**다 — 믿는 키 목록에 Center 키가 들어갔을 뿐이다 | 0090 |
 | 2026-10-12 | 1 | **404 행을 적었다** — 배포 봉투가 없는 패키지(`not_found`)나 **등록되지 않은 PC**(`target_not_found`)를 가리킬 때 받는 답이다. 뒤쪽은 받아 두고 있었다 | 0049 |
 | 2026-10-12 | 1 | **배포 봉투를 거절하는 코드·상태를 C5와 맞췄다.** 여기 422 행에 `not_approved`·`hash_mismatch`·`target_mismatch`가 있었는데 Center는 처음부터 409 `not_approved`·`hash_mismatch`·`wrong_target`으로 답했다 (C5는 2026-10-09에 409로 고쳤고 이 표만 남아 있었다). 대상 어긋남의 이름은 **V6과 같은 `wrong_target`**이다 | 0047 |

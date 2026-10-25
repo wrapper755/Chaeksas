@@ -280,7 +280,7 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
     },
     "Bot 준비": {
         "준비됨": "done",
-        "서비스 앱 키 없음": "failed",
+        "서비스 앱 키 받지 못함": "failed",
         "확장 없음": "failed",
         "확장 꺼짐": "neutral",
         "사전 점검 실행 불가": "failed",
@@ -318,6 +318,17 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
         "예약": "waiting",
         "만료": "warning",
         "철회됨": "neutral",
+    },
+    "등록 요청": {
+        "대기": "waiting",
+        "승인됨": "done",
+        "거절됨": "failed",
+        "만료": "neutral",
+    },
+    "기능": {
+        "쓸 수 있음": "done",
+        "쓸 수 없음": "failed",
+        "확인 전": "neutral",
     },
 }
 

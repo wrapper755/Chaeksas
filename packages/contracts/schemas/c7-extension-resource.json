@@ -1,5 +1,19 @@
 {
   "$defs": {
+    "AppKeyState": {
+      "additionalProperties": true,
+      "description": "외부 앱 키 둘 — 운영(`run`)과 Studio 시험용(`test`) (ADR-0094 §7).",
+      "properties": {
+        "run": {
+          "$ref": "#/$defs/KeySlot"
+        },
+        "test": {
+          "$ref": "#/$defs/KeySlot"
+        }
+      },
+      "title": "AppKeyState",
+      "type": "object"
+    },
     "InstalledOn": {
       "additionalProperties": true,
       "description": "이 확장을 가진 실행하는 쪽의 수와 버전 분포 (C4·C12 보고. Studio는 세지 않는다).",
@@ -19,12 +33,60 @@
       },
       "title": "InstalledOn",
       "type": "object"
+    },
+    "KeySlot": {
+      "additionalProperties": true,
+      "description": "관리자가 넣은 외부 앱 키 한 칸 (C7 §외부 앱 키). **원문·앞자리는 없다.**",
+      "properties": {
+        "set": {
+          "default": false,
+          "title": "Set",
+          "type": "boolean"
+        },
+        "set_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Set At"
+        },
+        "set_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Set By"
+        }
+      },
+      "title": "KeySlot",
+      "type": "object"
     }
   },
   "$id": "urn:chaeksas:contracts:c7-extension-resource",
   "additionalProperties": true,
   "description": "확장 하나 (C13 정의에서 모은 것).",
   "properties": {
+    "app_key": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AppKeyState"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "checked_at": {
       "anyOf": [
         {

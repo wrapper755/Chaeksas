@@ -306,9 +306,56 @@ def test_without_a_key_it_says_where_to_put_one(
     monkeypatch.delenv(ENV_CENTER_API_KEY, raising=False)
     monkeypatch.setenv("CHK_SERVER_RUNNER__DATA_DIR", str(tmp_path))
     monkeypatch.setattr(Credentials, "center_api_key", lambda self: None)
+    # 비밀 저장소도 없다 — 받은 키를 둘 곳이 없으니 등록 요청을 보내지 않는다 (C12).
+    monkeypatch.setattr(Credentials, "available", property(lambda self: False))
     assert main_mod.main(["--once"]) == 2
     out = capsys.readouterr().out
-    assert ENV_CENTER_API_KEY in out and "CON-11" in out
+    assert ENV_CENTER_API_KEY in out and "비밀 저장소" in out
+
+
+class MemoryCredentials(Credentials):
+    """OS 비밀 저장소 대신 메모리 (시험이 개발 PC의 키링을 건드리지 않게)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.values: dict[str, str] = {}
+
+    @property
+    def available(self) -> bool:
+        return True
+
+    def get(self, name: str, *, env: str | None = None) -> str | None:
+        return self.values.get(name)
+
+    def set(self, name: str, value: str) -> None:
+        self.values[name] = value
+
+
+def test_without_a_key_it_asks_center_and_is_let_in_by_approval(
+    settings: Settings, center: TestClient, caplog: Any
+) -> None:
+    """C12 §등록 요청과 승인 — 요청 코드는 로그 한 줄, 승인은 CON-12. 사람은 키를 보지 않는다."""
+    from chaeksas.server_runner import enroll  # noqa: PLC0415
+
+    found = build(settings, "", center)
+    found.credentials = MemoryCredentials()
+    caplog.set_level("INFO")
+    assert enroll.step(found) is None
+    pending = center.get("/api/v1/enrollments?type=server_runner", headers=READ).json()
+    assert len(pending) == 1
+    assert pending[0]["code"] in caplog.text, "요청 코드는 로그에 찍힌다 — 관리자가 그것과 맞춰 본다"
+
+    approved = center.post(f"/api/v1/enrollments/{pending[0]['enrollment_id']}/approve", json={}, headers=ADMIN)
+    assert approved.status_code == 200, approved.text
+    key = enroll.step(found)
+    assert key is not None and key.startswith("chk_ctr_")
+    assert found.credentials.center_api_key() == key
+    assert key not in caplog.text, "키는 로그에 남지 않는다"
+    assert not (settings.data_path / enroll.STATE_FILE).exists()
+
+    found.client.api_key = key
+    assert found.tick() is True  # 평소처럼 등록한다
+    assert found.registered
 
 
 def test_once_prints_a_line_without_the_key(

@@ -92,12 +92,15 @@ PICK_POLL_MS = 400
 PORT_SETTING = "runtime.worker.port"
 TOKEN_DIR_SETTING = "runtime.worker.token_dir"
 
-#: 등록 담당자 키를 받는 설정 칸 (C13 `configuration`, BUI-03 「확장별 설정」).
+#: 옛 등록 담당자 키 칸 — 정의에서 빠졌고 자동화·CI의 환경변수로만 남는다 (ADR-0094 §6).
 REGISTRAR_KEY = "registrar_key"
+#: 호스트가 도구용 키를 주는 이름 (C13 KeyNeed `utility`, ADR-0094 §6).
+UTILITY_SECRET = "utility"
 
 #: 레지스트리를 부를 수 없을 때의 한 줄. **왜 안 되는지와 어디서 고치는지**를 적는다.
 NO_REGISTRY = (
-    "UI 자동화 앱에 쓸 수 없습니다 — Bot UI 설정의 「UI 자동화 › 등록 담당자 키」를 넣으세요."
+    "이 PC는 셀렉터 등록이 허락되지 않았습니다 — 관리자에게 Center 콘솔 「Bot UI 현황」에서 "
+    "이 PC의 「셀렉터 등록」을 켜 달라고 하세요."
 )
 
 #: 「방식」 콤보 (TOL-03 [C]).
@@ -1210,14 +1213,16 @@ def summary_of(result: VerifyResult) -> str:
 def registry_client(ctx: Any) -> Any:
     """레지스트리를 부르는 쪽 (C9). **주소·키가 없으면 `None`** — 등록이 꺼진다.
 
-    주소의 출처는 하나다 (C13 예약 키 `service.base_url`), 키는 TOL-02의 비밀 칸이다. C11
+    주소의 출처는 하나다 (C13 예약 키 `service.base_url`), 키는 호스트가 `utility`로 준다(ADR-0094 §6). C11
     `caller.type`은 **도구를 띄운 호스트**다 (`ctx.host` — Tool UI면 `tool_ui`).
     """
     from chaeksas.contracts import SERVICE_URL_SETTING  # noqa: PLC0415
     from chaeksas.ext.ui_automation.client.registry_client import RegistryClient  # noqa: PLC0415
 
     base_url = ctx.setting(SERVICE_URL_SETTING)
-    api_key = ctx.secret(REGISTRAR_KEY)
+    # 도구용 키는 Center가 이 PC Bot UI에 내려 준 것을 호스트가 준다 (ADR-0094 §6 — CON-03
+    # 「셀렉터 등록」). 옛 설정 칸·환경변수(`registrar_key`)는 자동화·CI를 위해 그다음에 본다.
+    api_key = ctx.secret(UTILITY_SECRET) or ctx.secret(REGISTRAR_KEY)
     if not base_url or not api_key:
         return None
     host = getattr(ctx, "host", None)

@@ -18,6 +18,7 @@ import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
 import {
+  keyStages,
   NO_RUNS,
   SAMPLE,
   botLimitRows,
@@ -321,7 +322,7 @@ describe("botLimitRows", () => {
         } as Partial<ServerRunnerInfo>),
         [serverDeployment()],
       )[0]?.readiness?.label;
-    expect(ready({ missing_key_refs: ["crm-key"] })).toBe("서비스 앱 키 없음");
+    expect(ready({ missing_key_refs: ["crm-key"] })).toBe("서비스 앱 키 받지 못함");
     expect(ready({ blocked: ["extension_turned_off"] })).toBe("확장 꺼짐");
     expect(ready({ blocked: ["task_types_unsupported"] })).toBe("확장 없음");
     expect(ready({ blocked: ["something_else"] })).toBe("사전 점검 실행 불가");
@@ -376,7 +377,7 @@ describe("readinessLabel", () => {
   });
 
   it("키가 빠진 것이 가장 앞이다 (고치는 길이 BUI-10이다)", () => {
-    expect(readinessLabel(row({ missing_key_refs: ["fin-erp"] }))?.label).toBe("서비스 앱 키 없음");
+    expect(readinessLabel(row({ missing_key_refs: ["fin-erp"] }))?.label).toBe("서비스 앱 키 받지 못함");
   });
 
   it("**설정 없음을 확장 문제로 뭉치지 않는다** — 고치는 길이 다르다 (ADR-0059)", () => {
@@ -461,3 +462,23 @@ describe("resumes", () => {
     expect(waitTotals(rows)).toEqual({ resumed: 2, seconds: 30 });
   });
 });
+
+describe("keyStages — 「서비스 앱 키 받지 못함」의 Center 쪽 까닭 (ADR-0094)", () => {
+  it("그 Bot의 실행 키만 단계로 말한다", () => {
+    const keys = [
+      { app_id: "crm", bpm_process_id: "fin.a", purpose: "run", stage: "app_pending", error: "unreachable" },
+      { app_id: "erp", bpm_process_id: "fin.a", purpose: "run", stage: "sent" },
+      { app_id: "crm", bpm_process_id: "fin.b", purpose: "run", stage: "received" },
+      { app_id: "ui-automation", purpose: "utility", stage: "received" },
+    ];
+    expect(keyStages(keys, "fin.a")).toEqual([
+      "crm: Center가 앱에 아직 맡기지 못함 (unreachable)",
+      "erp: 보냄 — 현장이 받기를 기다림",
+    ]);
+  });
+
+  it("Center에 그 Bot의 키가 아예 없으면 짓지 않은 까닭을 말한다", () => {
+    expect(keyStages([], "fin.a")[0]).toContain("짓지 않았습니다");
+  });
+});
+

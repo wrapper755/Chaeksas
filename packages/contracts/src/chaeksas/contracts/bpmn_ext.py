@@ -1300,10 +1300,10 @@ def _check_b7(process: BpmnProcess, keyless_apps: Collection[str] | None) -> lis
             if call.key_ref and not re.fullmatch(KEY_REF_PATTERN, call.key_ref):
                 out.append(_error("B7", f"{node.id}: 키 참조 이름이 규칙에 맞지 않는다", items=[call.key_ref]))
             continue
+        # **적지 않은 것은 흠이 아니다** — 빌드·엔진이 C1 기본값(`default_key_ref`)을 쓴다 (ADR-0094).
+        # 적었으면 이름 규칙만 본다.
         key_ref = call.key_ref or process.info.service_keys.get(call.app_id)
-        if not key_ref:
-            out.append(_error("B7", f"{node.id}: 서비스 앱 {call.app_id}의 키 참조가 없다"))
-        elif not re.fullmatch(KEY_REF_PATTERN, key_ref):
+        if key_ref and not re.fullmatch(KEY_REF_PATTERN, key_ref):
             out.append(_error("B7", f"{node.id}: 키 참조 이름이 규칙에 맞지 않는다", items=[key_ref]))
     return out
 

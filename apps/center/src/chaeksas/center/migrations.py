@@ -160,6 +160,61 @@ MIGRATIONS: tuple[Step, ...] = (
             "ALTER TABLE extensions ADD COLUMN revoked_by TEXT",
         ),
     ),
+    Step(
+        10,
+        "등록 요청과 승인, 키 회전 — 키는 Center가 만들어 봉해 내려 준다 (C4·C12·C5, ADR-0092)",
+        (
+            # 요청 본문은 그대로 둔다 — 승인해도 `register`가 다시 보낸다. 봉한 키는 **받을 때까지만**.
+            "CREATE TABLE enrollments ("
+            " enrollment_id TEXT PRIMARY KEY, type TEXT NOT NULL, machine_id TEXT NOT NULL,"
+            " name TEXT NOT NULL, os TEXT NOT NULL, request_json TEXT NOT NULL, public_key TEXT NOT NULL,"
+            " code TEXT NOT NULL, remote_addr TEXT, requested_at TEXT NOT NULL, expires_at TEXT NOT NULL,"
+            " state TEXT NOT NULL, decided_by TEXT, decided_at TEXT, reason TEXT, key_id TEXT,"
+            " sealed_json TEXT, replaced_key_id TEXT)",
+            "CREATE INDEX enrollments_state ON enrollments (state)",
+            "CREATE INDEX enrollments_machine ON enrollments (type, machine_id)",
+            "ALTER TABLE center_keys ADD COLUMN enrollment_id TEXT",
+            # 회전에 쓰는 그 기계의 공개키, 갈아 줄 새 키, 새 키를 봉한 것 (새 키의 행에 둔다).
+            "ALTER TABLE center_keys ADD COLUMN public_key TEXT",
+            "ALTER TABLE center_keys ADD COLUMN successor_id TEXT",
+            "ALTER TABLE center_keys ADD COLUMN sealed_json TEXT",
+        ),
+    ),
+    Step(
+        11,
+        "계정 권한과 Studio 로그인 — 키가 계정·PC 이름에 묶인다 (C5 §계정 권한과 Studio 로그인, ADR-0092)",
+        (
+            "ALTER TABLE accounts ADD COLUMN permissions_json TEXT",
+            "ALTER TABLE center_keys ADD COLUMN account TEXT",
+            "ALTER TABLE center_keys ADD COLUMN machine_name TEXT",
+            "CREATE INDEX center_keys_account ON center_keys (account)",
+        ),
+    ),
+    Step(
+        12,
+        "서비스 앱 키를 Center가 짓고 나른다 — 외부 앱 키 보관, 셀렉터 등록, 앱의 신뢰 (C4·C7·C11, ADR-0094)",
+        (
+            # 원문은 두지 않는다 — **봉한 덩이만** 받았다는 ack까지 (`sealed_json`). 해시는 앱이 검증한다.
+            "CREATE TABLE service_keys ("
+            " service_key_id TEXT PRIMARY KEY, source TEXT NOT NULL, purpose TEXT NOT NULL,"
+            " app_id TEXT NOT NULL, bpm_process_id TEXT, target_type TEXT NOT NULL, target_id TEXT NOT NULL,"
+            " key_refs_json TEXT, issued_for_json TEXT, key_hash TEXT, prefix TEXT,"
+            " allowed_ops_json TEXT, extra_scopes_json TEXT, expires_at TEXT, created_at TEXT NOT NULL,"
+            " state TEXT NOT NULL, sealed_json TEXT, acked_at TEXT, replaces TEXT,"
+            " revoke_reason TEXT, revoked_at TEXT, dropped_at TEXT, last_error TEXT, last_try_at TEXT)",
+            "CREATE INDEX service_keys_target ON service_keys (target_type, target_id)",
+            "CREATE INDEX service_keys_state ON service_keys (state)",
+            # 외부 앱 키 — 운영(`run`)·시험용(`test`). **암호화해** 둔다 (감싸는 키는 `center_secrets`).
+            "CREATE TABLE external_app_keys ("
+            " extension_id TEXT NOT NULL, slot TEXT NOT NULL, ciphertext TEXT NOT NULL,"
+            " set_at TEXT NOT NULL, set_by TEXT NOT NULL, PRIMARY KEY (extension_id, slot))",
+            "CREATE TABLE center_secrets (name TEXT PRIMARY KEY, value TEXT NOT NULL, created_at TEXT NOT NULL)",
+            # CON-03 「셀렉터 등록」 (ADR-0094 §6).
+            "ALTER TABLE bot_uis ADD COLUMN selector_registration INTEGER NOT NULL DEFAULT 0",
+            # 앱이 Center 발급을 받나 (C11 `GET /center/v1/trust`, C7 `trust`).
+            "ALTER TABLE service_apps ADD COLUMN trust_json TEXT",
+        ),
+    ),
 )
 
 

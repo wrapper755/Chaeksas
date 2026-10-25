@@ -7,7 +7,8 @@
 지키는 것 여섯.
 
 - **고를 거리는 Center에서 온다** (`service_catalog`) — 주소·작업·수행 모드·입출력 스키마.
-  **키 값은 모른다** (ADR-0013). 「API 키」 칸은 **참조 이름**만 받는다.
+  **키는 다루지 않는다** — 키는 Center가 (Bot × 배포 대상 × 앱)마다 내려 주므로 태스크가 다른 참조를
+  적을 까닭이 없다 (ADR-0094 §4). 옛 그림에 적힌 `key_ref`는 **조용히 바꾸지 않고** 그대로 둔다.
 - **적어 둔 것을 조용히 바꾸지 않는다** (STU-13과 같은 규칙). 작업을 바꿔도 사람이 적어 둔
   입력·출력 값은 지우지 않고, 작업 정의에 없는 칸은 **낡았다고 말한다**.
 - **필수 입력이 비면 「적용」을 막는다** (STU-14 검증) — 실행할 때 알면 늦다.
@@ -27,18 +28,14 @@ from typing import Any
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QButtonGroup,
     QComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QPushButton,
-    QRadioButton,
     QSpinBox,
-    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -50,12 +47,6 @@ from chaeksas.studio.service_catalog import Catalog, Operation, Usage, missing_r
 
 #: 탭 이름.
 TAB_LABEL = "서비스 앱"
-
-#: 「API 키」 — 기본은 BPM 프로세스 설정을 따른다 (STU-14).
-FOLLOW_TEXT = "BPM 프로세스 설정을 따름"
-OWN_TEXT = "이 태스크만 다른 참조"
-#: 따를 참조가 없을 때 기본 줄 **아래에** 한 줄 (한 줄에 몰면 칸이 밀려 잘린다).
-NO_INHERITED = "이 앱의 참조가 BPM 프로세스에 적혀 있지 않습니다 — BPM 프로세스 정보에서 적거나 아래에 직접 적으세요"
 
 #: 그림이 부르는 앱이 고를 거리에 없을 때 콤보 줄에 붙는 말 (STU-14).
 NOT_LISTED = "Center 목록에 없음"
@@ -92,12 +83,11 @@ class ServiceTaskEditor(QWidget):
         catalog: Catalog,
         parent: QWidget | None = None,
         *,
-        inherited: Mapping[str, str] | None = None,
+        inherited: Mapping[str, str] | None = None,  # 옛 부르는 쪽의 호환 — 더 쓰지 않는다 (ADR-0094 §4)
     ) -> None:
         super().__init__(parent)
         self.catalog = catalog
-        #: BPM 프로세스가 적어 둔 키 참조 (`chk:process.service_keys`) — **이름만** 보인다.
-        self.inherited = dict(inherited or {})
+        del inherited
         self.usage = Usage()
         self._quiet = False
         #: 「목록에 없음」으로 빨갛게 칠하기 전의 콤보 팔레트 (되돌릴 때 쓴다).
@@ -110,19 +100,6 @@ class ServiceTaskEditor(QWidget):
         self.operation_note.setProperty("role", "muted")
         self.modes_note = QLabel("", self)
         self.modes_note.setWordWrap(True)
-
-        self.follow_key = QRadioButton(FOLLOW_TEXT, self)
-        self.own_key = QRadioButton(OWN_TEXT, self)
-        self.key_choice = QButtonGroup(self)
-        self.key_choice.addButton(self.follow_key)
-        self.key_choice.addButton(self.own_key)
-        self.follow_key.setChecked(True)
-        self.key_note = QLabel(NO_INHERITED, self)
-        self.key_note.setWordWrap(True)
-        self.key_note.setProperty("role", "warning")
-        self.key_box = QLineEdit(self)
-        self.key_box.setPlaceholderText("키 참조 이름 (예: hr-hris-write)")
-        self.key_box.setEnabled(False)
 
         self.inputs = QTableWidget(0, len(INPUT_COLUMNS), self)
         self.inputs.setHorizontalHeaderLabels(list(INPUT_COLUMNS))
@@ -170,7 +147,6 @@ class ServiceTaskEditor(QWidget):
         layout = QVBoxLayout(self)
         layout.setSpacing(SPACE_3)
         layout.addWidget(self._task_box())
-        layout.addWidget(self._key_box())
         layout.addWidget(self._table_box("입력", self.inputs, [self.fill_inputs, self.add_input]), 1)
         layout.addWidget(self._table_box("출력", self.outputs, [self.same_names, self.add_output]), 1)
         layout.addWidget(self._limits_box())
@@ -185,27 +161,6 @@ class ServiceTaskEditor(QWidget):
         self.task_form.addRow("작업", self.operation_box)
         self.task_form.addRow("", self.operation_note)
         self.task_form.addRow("지원 수행 모드", self.modes_note)
-        return box
-
-    def _key_box(self) -> QGroupBox:
-        """둘 중 하나 — 경고 줄은 **라디오 글자와 같은 자리**에서 시작한다 (동그라미 밑이 아니다)."""
-        box = QGroupBox("API 키", self)
-        column = QVBoxLayout(box)
-        _tight(column)
-        column.setSpacing(SPACE_2)
-        column.addWidget(self.follow_key)
-        style = self.follow_key.style()
-        indent = style.pixelMetric(QStyle.PixelMetric.PM_ExclusiveIndicatorWidth, None, self.follow_key)
-        indent += style.pixelMetric(QStyle.PixelMetric.PM_RadioButtonLabelSpacing, None, self.follow_key)
-        note = QHBoxLayout()
-        note.setContentsMargins(indent, 0, 0, 0)
-        note.addWidget(self.key_note)
-        column.addLayout(note)
-        own = QHBoxLayout()
-        own.setSpacing(SPACE_2)
-        own.addWidget(self.own_key)
-        own.addWidget(self.key_box, 1)
-        column.addLayout(own)
         return box
 
     def _table_box(self, title: str, table: QTableWidget, buttons: list[QPushButton]) -> QGroupBox:
@@ -242,8 +197,6 @@ class ServiceTaskEditor(QWidget):
     def _wire(self) -> None:
         self.app_box.currentIndexChanged.connect(self._app_picked)
         self.operation_box.currentIndexChanged.connect(self._operation_picked)
-        self.follow_key.toggled.connect(self._key_toggled)
-        self.key_box.textChanged.connect(self._touched)
         self.timeout_box.valueChanged.connect(self._touched)
         self.retry_box.valueChanged.connect(self._touched)
         self.inputs.itemChanged.connect(self._touched)
@@ -284,9 +237,6 @@ class ServiceTaskEditor(QWidget):
         self._select(self.app_box, self.usage.app_id)
         self._load_operations()
         self._select(self.operation_box, self.usage.operation)
-        self.key_box.setText(self.usage.key_ref)
-        (self.own_key if self.usage.key_ref else self.follow_key).setChecked(True)
-        self.key_box.setEnabled(bool(self.usage.key_ref))
         self.timeout_box.setValue(int(self.usage.timeout_s or NO_TIMEOUT))
         self.retry_box.setValue(int(self.usage.retry_max))
         self._draw_tables()
@@ -360,7 +310,8 @@ class ServiceTaskEditor(QWidget):
             operation=str(self.operation_box.currentData() or ""),
             inputs=inputs,
             outputs=outputs,
-            key_ref="" if self.follow_key.isChecked() else self.key_box.text().strip(),
+            # 옛 그림에 적힌 참조는 **그대로** 둔다 — 고칠 칸이 없으니 지우지도 않는다 (ADR-0094 §4).
+            key_ref=self.usage.key_ref,
             timeout_s=self.timeout_box.value() or None,
             retry_max=self.retry_box.value(),
             retry_on=self._retry_on(),
@@ -411,23 +362,6 @@ class ServiceTaskEditor(QWidget):
         self._retell()
         self.changed.emit()
 
-    def _key_toggled(self, following: bool) -> None:
-        self.key_box.setEnabled(not following)
-        if not following:
-            self.key_box.setFocus()
-        self._retell_key()
-        self._touched()
-
-    def _retell_key(self) -> None:
-        """「BPM 프로세스 설정을 따름 (`<참조>`)」 — 무엇을 따르는지 보인다 (STU-14).
-
-        적혀 있지 않으면 **그렇게 말한다** — 따를 것이 없으면 실행할 때 「키 참조가 없다」다 (B7).
-        """
-        app_id = str(self.app_box.currentData() or "")
-        found = self.inherited.get(app_id, "")
-        self.follow_key.setText(f"{FOLLOW_TEXT} ({found})" if found else FOLLOW_TEXT)
-        self.key_note.setVisible(not found and self.follow_key.isChecked())
-
     def _retell_app(self) -> None:
         """고른 줄이 「목록에 없음」이면 닫힌 콤보의 글자도 빨갛다 (펼친 목록만 빨가면 안 보인다)."""
         from PySide6.QtGui import QPalette  # noqa: PLC0415
@@ -453,7 +387,6 @@ class ServiceTaskEditor(QWidget):
         self.changed.emit()
 
     def _retell(self) -> None:
-        self._retell_key()
         self._retell_app()
         operation = self._operation()
         self.operation_note.setText(operation.description if operation is not None else "")
@@ -571,14 +504,11 @@ def _show_rows(table: QTableWidget, rows: int) -> None:
 
 
 __all__ = [
-    "FOLLOW_TEXT",
     "INPUT_COLUMNS",
     "NOT_CHECKED",
     "NOT_LISTED",
     "NOT_LISTED_BLOCK",
-    "NO_INHERITED",
     "OUTPUT_COLUMNS",
-    "OWN_TEXT",
     "TAB_LABEL",
     "VISIBLE_ROWS",
     "ServiceTaskEditor",

@@ -42,6 +42,7 @@ KNOWN_CLAIM_KINDS = frozenset(
         "extension_revoke",
         "admin_key",
         "admin_key_revoke",
+        "service_key",  # Center → 서비스 앱 (C11 §Center가 발급하는 키, ADR-0094)
     }
 )
 

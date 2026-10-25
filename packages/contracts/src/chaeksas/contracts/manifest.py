@@ -6,6 +6,7 @@ Studio(빌드)·Center(업로드)·Bot UI·서버 실행기(설치)가 **같은 
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
@@ -37,6 +38,15 @@ PC_ONLY_DOMAINS = frozenset({"web", "desktop"})
 
 #: `key_ref` 이름 규칙 (R4). `_`가 없으므로 키 값(`chk_…`)은 들어갈 수 없다.
 KEY_REF_PATTERN = r"^[a-z0-9][a-z0-9-]{0,39}$"
+
+
+def default_key_ref(bpm_process_id: str) -> str:
+    """키 참조 이름의 기본값 — BPM 프로세스(패키지) id의 `.`·`_`를 `-`로, 40자까지 (C1).
+
+    **그림에 적지 않으면 이 이름이다** — 빌드·엔진·실행하는 쪽이 같은 함수를 쓴다 (ADR-0094 — STU-06의
+    「서비스 앱 키」 섹션이 없어져 사람이 미리 적지 않는다).
+    """
+    return re.sub(r"[._]", "-", bpm_process_id).lower()[:40]
 
 PackageId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,99}$")]
 SemVer = Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")]
@@ -294,8 +304,6 @@ def _check_r12(m: Manifest) -> list[Violation]:
 
 
 def _check_r4(m: Manifest) -> list[Violation]:
-    import re
-
     out = []
     for need in m.requires.service_apps:
         refs = [*([] if need.key_ref is None else [need.key_ref]), *need.task_key_refs]

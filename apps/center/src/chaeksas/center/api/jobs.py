@@ -436,6 +436,22 @@ def _server_candidates(store: Store, *, runner_id: str) -> list[Any]:
     )
 
 
+def _keys_pending(store: Store, *, runner_id: str, request: ServerRunnerHeartbeatRequest) -> set[str]:
+    """이 실행기가 **서비스 앱 키를 아직 받지 못한** Bot (C12 규칙 5, ADR-0094).
+
+    실행기가 보고한 준비 상태에서 `missing_key_refs`가 비지 않은 것이다. **Center가 키를 내려
+    주는 실행기만** 그렇게 본다 — 공개키가 없는 실행기(환경변수 키)는 기다려도 키가 오지 않으니
+    지금처럼 실어 보내고 실행기가 거절한다. 준비 상태를 아직 올리지 않았으면 막지 않는다.
+    """
+    from chaeksas.center import keys  # noqa: PLC0415 — 순환 import를 피한다
+
+    row = store.row("SELECT key_id FROM server_runners WHERE server_runner_id = ?", (runner_id,))
+    record = keys.get(store, str(row["key_id"])) if row else None
+    if record is None or not record.public_key:
+        return set()
+    return {one.bpm_process_id for one in request.readiness if one.missing_key_refs}
+
+
 def _server_dispatch(
     store: Store, *, runner_id: str, request: ServerRunnerHeartbeatRequest, paused: bool
 ) -> list[JobDispatch]:
@@ -456,6 +472,7 @@ def _server_dispatch(
         slots=free_slots(request.capacity, paused=paused),
         running_per_bot=_running_per_bot(store),
         per_bot_limit=_per_bot_limits(store, {bot for _, bot in queued}),
+        keys_pending=_keys_pending(store, runner_id=runner_id, request=request),
     )
 
     with store.tx() as cur:

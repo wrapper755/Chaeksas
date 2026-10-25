@@ -1,0 +1,117 @@
+{
+  "$defs": {
+    "Sealed": {
+      "additionalProperties": true,
+      "description": "받는 쪽 공개키로만 열리는 한 덩이 (C4 §봉함).",
+      "properties": {
+        "alg": {
+          "default": "x25519-hkdf-sha256-chacha20poly1305",
+          "title": "Alg",
+          "type": "string"
+        },
+        "ciphertext": {
+          "title": "Ciphertext",
+          "type": "string"
+        },
+        "epk": {
+          "title": "Epk",
+          "type": "string"
+        },
+        "nonce": {
+          "title": "Nonce",
+          "type": "string"
+        }
+      },
+      "required": [
+        "epk",
+        "nonce",
+        "ciphertext"
+      ],
+      "title": "Sealed",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c4-enroll-status",
+  "additionalProperties": true,
+  "description": "`POST …/enroll`의 응답이자 `GET …/enroll/{id}`의 응답 (C4 `EnrollResponse`·`EnrollStatus`).",
+  "properties": {
+    "code": {
+      "pattern": "^[A-Z2-7]{4}-[A-Z2-7]{4}$",
+      "title": "Code",
+      "type": "string"
+    },
+    "enrollment_id": {
+      "pattern": "^enr_[0-9a-f]{32}$",
+      "title": "Enrollment Id",
+      "type": "string"
+    },
+    "expires_at": {
+      "title": "Expires At",
+      "type": "string"
+    },
+    "key_expires_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Expires At"
+    },
+    "key_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Name"
+    },
+    "poll_after_s": {
+      "default": 10,
+      "title": "Poll After S",
+      "type": "integer"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "sealed_key": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Sealed"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "enrollment_id",
+    "state",
+    "code",
+    "expires_at"
+  ],
+  "title": "EnrollStatus",
+  "type": "object"
+}

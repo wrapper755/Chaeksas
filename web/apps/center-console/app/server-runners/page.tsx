@@ -1,3 +1,5 @@
+import { Enrollments } from "@/components/Enrollments";
+import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
@@ -30,11 +32,14 @@ export default async function ServerRunnersPage() {
   if (!found) redirect("/login");
 
   let rows: ServerRunnerInfo[] = [];
+  let enrollments: EnrollmentInfo[] = [];
   let queue: JobInfo[] = [];
   let deployments: DeploymentInfo[] = [];
   let failure: string | null = null;
   try {
     rows = await center.serverRunners();
+    // 「승인 대기」 — 등록 요청이 있을 때만 목록 위에 보인다 (C12 §등록 요청과 승인, ADR-0092).
+    enrollments = await center.enrollments("server_runner");
     // 대기열은 **종류로** 좁힌다 — 아직 대상이 없는 작업이라 `target_id`로는 못 찾는다 (C12).
     queue = await center.jobs({ state: QUEUED_STATE, target_type: "server_runner" });
     // 「Bot별 상한 n」의 n은 **배포 봉투**에 있다 (C12 규칙 3). 활성 배포를 한 번 읽고
@@ -175,11 +180,13 @@ export default async function ServerRunnersPage() {
 
       {failure ? <ErrorBanner message={failure} /> : null}
 
+      <Enrollments rows={enrollments} where="서버 실행기 로그" canDecide={found.mode === "admin"} />
+
       <div className="flex flex-col gap-6">
         {rows.length === 0 && !failure ? (
           <EmptyState
             title="등록된 서버 실행기가 없습니다."
-            hint="「Center API 키」에서 서버 실행기용 키를 발급해 서버 실행기 설정에 넣으세요."
+            hint="서버 실행기에 Center 주소를 주고 띄우면 등록 요청을 보냅니다. 로그의 요청 코드와 같은 줄을 위의 「승인 대기」에서 승인하세요."
           />
         ) : rows.length > 0 ? (
           <DataTable

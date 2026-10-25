@@ -153,7 +153,6 @@ class UiTaskEditor(QWidget):
         self._loaded = found
         self.page_id.setCurrentText(str(found.get("page_id") or ""))
         self.start_url.setText(str(found.get("start_url") or ""))
-        self.key_ref.setText(str(found.get("key_ref") or ""))
         self.heal.setChecked(bool(found.get("heal", True)))
         self.close_browser.setChecked(bool(found.get("close_browser", False)))
         self.goal.setText(str(found.get("goal") or ""))
@@ -176,8 +175,10 @@ class UiTaskEditor(QWidget):
         out: dict[str, Any] = {"page_id": self.page_id.currentText().strip()}
         if self.start_url.text().strip():
             out["start_url"] = self.start_url.text().strip()
-        if self.key_ref.text().strip():
-            out["key_ref"] = self.key_ref.text().strip()
+        # 키 참조 칸은 없다 — 키는 Center가 그 Bot의 UI 자동화 앱 키 하나를 내려 준다 (ADR-0094 §4).
+        # 옛 그림에 적힌 참조는 **조용히 바꾸지 않고** 그대로 둔다.
+        if self._loaded.get("key_ref"):
+            out["key_ref"] = str(self._loaded["key_ref"])
         out["steps"] = self.step_rows()
         if self.use_goal.isChecked() and self.goal.text().strip():
             out["goal"] = self.goal.text().strip()
@@ -212,14 +213,9 @@ class UiTaskEditor(QWidget):
         first = QHBoxLayout()
         self.start_url = QLineEdit()
         self.start_url.setPlaceholderText("시작 주소 (비우면 화면의 기본 주소, 또는 이어서)")
-        self.key_ref = QLineEdit()
-        self.key_ref.setPlaceholderText("UI 자동화 앱 키 참조 (비우면 BPM 프로세스 설정)")
-        for line in (self.start_url, self.key_ref):
-            line.textChanged.connect(lambda *_: self._sync())
+        self.start_url.textChanged.connect(lambda *_: self._sync())
         first.addWidget(QLabel("시작 주소"))
         first.addWidget(self.start_url, 2)
-        first.addWidget(QLabel("키 참조"))
-        first.addWidget(self.key_ref, 1)
         outer.addLayout(first)
 
         second = QHBoxLayout()

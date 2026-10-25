@@ -28,7 +28,6 @@ if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (창이 이 �
 PACKAGE_FILTER = "패키지 (*.zip)"
 
 #: Center가 필요한 동작을 설정 없이 눌렀을 때 (STU-10 맨 아래).
-NO_CENTER_SETTINGS = "Center 주소와 Center API 키가 아직 없습니다.\n\n지금 설정 → Center를 열까요?"
 
 NO_PROCESS = "열린 BPM 프로세스가 없습니다."
 
@@ -51,10 +50,11 @@ def export_package(window: MainWindow) -> None:
     # Center의 R2가 거짓으로 막지 않는다. 모르는 종류는 넣지 않는다.
     where = window.task_type_locations()
     keyless = window.keyless_apps()  # 키를 받지 않는 앱에는 참조를 적지 않는다 (ADR-0091)
+    keyed = window.key_extensions()  # 키를 받는 확장의 태스크도 앱 줄이 된다 (ADR-0094)
     _write(
         window,
         "패키지",
-        lambda: export(process, target, task_type_locations=where, keyless_apps=keyless),
+        lambda: export(process, target, task_type_locations=where, keyless_apps=keyless, key_extensions=keyed),
     )
 
 
@@ -106,23 +106,16 @@ def _write(window: MainWindow, what: str, make: Callable[[], Path]) -> None:
 
 
 def uploader(window: MainWindow) -> upload.CenterUploader | None:
-    """올릴 자리. 설정이 없으면 **STU-10을 열어 주고 다시 본다** (STU-10 맨 아래).
+    """올릴 자리. 키가 없으면 **STU-16 「Center에 연결」을 띄우고 다시 본다** (ADR-0093).
 
-    사람이 「아니오」를 고르거나 저장하지 않으면 `None`이다 — 그때는 부르는 쪽이 조용히
-    그만둔다 (이미 창으로 말했다).
+    사람이 「나중에」로 닫으면 `None`이다 — 그때는 부르는 쪽이 조용히 그만둔다 (이미 창으로 말했다).
     """
     found = upload.from_settings(window.settings)
     if found is not None:
         return found
-    answer = QMessageBox.question(
-        window,
-        window.windowTitle(),
-        NO_CENTER_SETTINGS,
-        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-    )
-    if answer != QMessageBox.StandardButton.Yes:
+    # 키가 없다 — **STU-16 「Center에 연결」**을 띄운다. 승인되어 닫히면 이어 가고, 「나중에」면 그만둔다.
+    if not window.ensure_center():
         return None
-    window.open_settings()
     return upload.from_settings(window.settings)
 
 
@@ -140,11 +133,16 @@ def upload_package(window: MainWindow) -> None:
         return
     locations = window.task_type_locations()
     keyless = window.keyless_apps()
+    keyed = window.key_extensions()
     _upload(
         window,
         "패키지",
         lambda where: export(
-            process, where / default_name(process), task_type_locations=locations, keyless_apps=keyless
+            process,
+            where / default_name(process),
+            task_type_locations=locations,
+            keyless_apps=keyless,
+            key_extensions=keyed,
         ),
     )
 
@@ -204,7 +202,6 @@ def _upload(window: MainWindow, what: str, make: Callable[[Path], Path]) -> None
 
 
 __all__ = [
-    "NO_CENTER_SETTINGS",
     "NO_PROCESS",
     "PACKAGE_FILTER",
     "export_package",

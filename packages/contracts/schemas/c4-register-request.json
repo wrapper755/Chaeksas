@@ -155,6 +155,19 @@
       "title": "Os",
       "type": "string"
     },
+    "public_key": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9_-]{43}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Public Key"
+    },
     "runtimes": {
       "anyOf": [
         {

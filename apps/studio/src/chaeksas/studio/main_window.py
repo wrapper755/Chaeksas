@@ -33,8 +33,10 @@ from PySide6.QtWidgets import (
 
 from chaeksas.contracts import Violation
 from chaeksas.contracts.bpmn_ext import BpmnProcess
+from chaeksas.core.preflight import key_apps_of
 from chaeksas.studio import (
     center_actions,
+    dev_keys,
     export_actions,
     file_actions,
     layout,
@@ -46,9 +48,12 @@ from chaeksas.studio import (
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.checks import refs_in
+from chaeksas.studio.connect_dialog import CenterConnectDialog
+from chaeksas.studio.dev_keys import DevKeys
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extension_dialog import StudioExtensionsDialog, pin_patch
 from chaeksas.studio.extensions import Extensions
+from chaeksas.studio.packaging import build_manifest
 from chaeksas.studio.preflight import Preflight, inspect, readiness, summarize
 from chaeksas.studio.process_dialog import ProcessInfoDialog
 from chaeksas.studio.properties import Properties
@@ -68,12 +73,6 @@ NO_PROCESS = "(BPM 프로세스를 선택하거나 새로 만드세요)"
 DEFAULT_SIZE = (1400, 860)
 
 PACKAGE_FILTER = "패키지 (*.zip)"
-
-#: Center가 필요한 동작을 설정 없이 눌렀을 때 (STU-10 맨 아래).
-NO_CENTER_SETTINGS = (
-    "Center 주소와 Center API 키가 아직 없습니다.\n\n지금 설정 → Center를 열까요?"
-)
-
 
 class MainWindow(QMainWindow):
     """STU-01. 열린 정의 하나를 캔버스가 들고 있고, 디스크가 원본이다."""
@@ -121,6 +120,7 @@ class MainWindow(QMainWindow):
 
         self.extensions = Extensions.load(off=settings.disabled_extensions, configured=settings.extensions)
         self.extensions.process_key_refs = self.process_key_refs
+        self.extensions.dev_keys = self.dev_keys
         self.properties = Properties(self, extensions=self.extensions)
         self.properties.applying.connect(self._apply_properties)
         self.canvas.selected.connect(self._on_selected)
@@ -322,6 +322,26 @@ class MainWindow(QMainWindow):
         self.explorer_tabs.setCurrentWidget(self.resource_tree)
         self.resource_tree.setFocus()
 
+    def dev_keys(self) -> DevKeys:
+        """개발 키 한 벌 — 승인된 Studio 키로 Center에 청한다 (ADR-0094 §5). 누를 때마다 새로 짓는다."""
+        return dev_keys.from_settings(self.settings)
+
+    def key_apps(self) -> dict[str, str]:
+        """열린 BPM 프로세스의 `{키 참조: 앱}` — 빌드가 짓는 매니페스트와 **같은 것**이다 (C1)."""
+        if self.process is None:
+            return {}
+        try:
+            made = build_manifest(
+                self.process,
+                task_type_locations=self.task_type_locations(),
+                keyless_apps=self.keyless_apps(),
+                key_extensions=self.key_extensions(),
+            )
+        except Exception as e:  # noqa: BLE001 — 진입 정의가 없는 등 — 그때는 키를 풀 앱을 모른다
+            log.debug("매니페스트를 짓지 못했다: %s", e)
+            return {}
+        return key_apps_of(made)
+
     def process_key_refs(self) -> dict[str, str]:
         """열린 BPM 프로세스의 `chk:process.service_keys` — 편집기의 `service.key_ref` (ADR-0074).
 
@@ -347,6 +367,40 @@ class MainWindow(QMainWindow):
         if isinstance(app, QApplication):
             apply_theme(app, choice=choice)
 
+    def ensure_center(self, *, refused: bool = False, send_now: bool = False) -> bool:
+        """STU-16 「Center에 연결」을 띄운다. 키를 받았으면 참 — 부르는 쪽이 원래 동작을 이어 간다.
+
+        「나중에」로 닫아도 주소는 적혀 있을 수 있어 설정은 늘 받아 온다 (그 창은 「저장」이 없다).
+        """
+        dialog = CenterConnectDialog(self.settings, refused=refused, send_now=send_now, parent=self)
+        dialog.exec()
+        self.settings = dialog.settings
+        if dialog.connected:
+            self.say(dialog.status.text())
+            self.refresh_catalog()
+        return dialog.connected
+
+    def check_center_at_start(self) -> None:
+        """Studio를 켤 때 한 번 (STU-16 「언제 뜨나」). **메인 창이 먼저 뜬 뒤** 부른다.
+
+        키가 없거나 거부됐을 때만 창을 띄운다. 닿지 못한 것·만료 14일 안은 상태 표시줄 한 줄이다.
+        """
+        import os  # noqa: PLC0415
+
+        from chaeksas.studio import center_enroll  # noqa: PLC0415
+        from chaeksas.studio.credentials import ENV_CENTER_API_KEY, StudioCredentials  # noqa: PLC0415
+
+        need = center_enroll.need_at_start(
+            base_url=self.settings.center_url,
+            key=StudioCredentials().center_api_key(),
+            from_env=bool(os.environ.get(ENV_CENTER_API_KEY)),
+            key_expires=self.settings.center_key_expires,
+        )
+        if need.kind in (center_enroll.NEED_CONNECT, center_enroll.NEED_REFUSED):
+            self.ensure_center(refused=need.kind == center_enroll.NEED_REFUSED)
+        elif need.text:
+            self.say(need.text)
+
     def open_settings(self) -> None:
         """STU-10. 저장하면 이 창의 설정도 바뀐다 (다음 시험 실행부터 쓴다)."""
         refs = refs_in(self.process.definitions) if self.process is not None else []
@@ -359,6 +413,10 @@ class MainWindow(QMainWindow):
             self.extensions.configured = dict(dialog.saved.extensions)
             self.say("설정을 저장했습니다.")
             self.refresh_catalog()  # Center 주소·키가 바뀌었을 수 있다
+        elif dialog.center_changed is not None:
+            # 「Center」의 등록 요청·키 받기는 「저장」을 기다리지 않는다 (ADR-0093) — 「취소」로 닫아도 받는다.
+            self.settings = dialog.center_changed
+            self.refresh_catalog()
 
     def open_extensions(self) -> None:
         """STU-15. 끄고 켠 것이 있으면 **속성 패널을 다시 그린다** (ADR-0043).
@@ -536,19 +594,22 @@ class MainWindow(QMainWindow):
         """
         return self.extensions.host.task_type_locations()
 
+    def key_extensions(self) -> list[str]:
+        """키를 받는 켜진 확장 (C13 `requires_keys` `run`) — 빌드가 그 확장의 앱 줄을 적는다 (ADR-0094)."""
+        return self.extensions.host.key_extensions()
+
     def readiness(self) -> list[Violation]:
         """사전 점검 — **이 PC에서 돌 수 있나** (`core.preflight`, ADR-0013).
 
         키 값은 Studio 비밀 저장소에서, 확장은 호스트에서 온다. 시험 실행과 **같은 것을 본다**
         (`Extensions.context`) — 점검이 다른 설정을 보면 「점검은 통과했는데 실행이 안 된다」가 된다.
         """
-        from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 - 누를 때만 든다
-
         if self.process is None:
             return []
         return readiness(
             self.process,
-            key_value=StudioCredentials().service_key,
+            # 참조를 **그 앱의 개발 키로** 푼다 — 없으면 Center에 청한다 (ADR-0094 §5).
+            key_value=self.dev_keys().resolver(self.key_apps()),
             host=self.extensions.host,
             context=self.extensions.context,
             dirty=self.dirty,
@@ -650,7 +711,6 @@ class MainWindow(QMainWindow):
         if editable and not self.may_drop_edits():
             return
         from chaeksas.contracts.bpmn_ext import BpmnReadError, read_process  # noqa: PLC0415
-        from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 — 순환 피함
 
         drawn = None
         if editable:
@@ -661,19 +721,13 @@ class MainWindow(QMainWindow):
             except (CanvasError, BpmnReadError) as e:
                 self.say(f"그림을 읽지 못해 BPM 프로세스 정보를 열지 않았습니다: {e}")
                 return
-        store = StudioCredentials()
-        catalog = self.properties.catalog
         dialog = ProcessInfoDialog(
             self.process,
             self.workspace,
-            has_value=lambda ref: bool(ref) and store.service_key(ref) is not None,
             editable=editable,
             # 창은 호스트를 들고 있지 않다 — **F6과 같은 표**를 여기서 넘긴다 (C13).
             task_type_locations=self.task_type_locations(),
             drawn=drawn,
-            # STU-14와 **같은 고를 거리** — 받지 못했으면 「목록에 없음」을 말하지 않는다.
-            listed=[one.app_id for one in catalog.apps] if catalog else None,
-            keyless_apps=self.keyless_apps(),
             parent=self,
         )
         if not dialog.exec() or dialog.saved is None:
@@ -767,4 +821,4 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
-__all__ = ["DEFAULT_SIZE", "NO_CENTER_SETTINGS", "NO_PROCESS", "TITLE", "MainWindow"]
+__all__ = ["DEFAULT_SIZE", "NO_PROCESS", "TITLE", "MainWindow"]

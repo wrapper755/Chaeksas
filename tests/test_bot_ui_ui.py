@@ -26,7 +26,6 @@ from chaeksas.contracts.bot_ui import CurrentRun, JobDispatch  # noqa: E402
 
 AT = "2026-10-03T09:00:00+09:00"
 #: 모양이 맞는 키 (`chk_ctr_` + 무작위 40자). 모양이 틀리면 설정 창이 막는다.
-NEW_KEY = "chk_ctr_" + "b" * 40
 
 
 @pytest.fixture(scope="session")
@@ -194,17 +193,31 @@ def test_the_tray_menu_is_rebuilt_on_refresh(app: Any, agent: Agent) -> None:
 # ─────────────────────────── BUI-03 설정 ───────────────────────────
 
 
-def test_settings_dialog_never_shows_the_key(app: Any, agent: Agent) -> None:
-    """키는 **값이 보이지 않는다** — 저장되어 있다는 사실만 알려 준다."""
-    from PySide6.QtWidgets import QLineEdit  # noqa: PLC0415
-
-    from chaeksas.bot_ui.settings_dialog import KEY_SET_PLACEHOLDER, SettingsDialog  # noqa: PLC0415
+def test_center_tab_has_no_key_field(app: Any, agent: Agent) -> None:
+    """「Center」 탭은 주소 하나다 — 사람은 Center API 키를 보지도 넣지도 않는다 (ADR-0092)."""
+    from chaeksas.bot_ui.settings_dialog import SettingsDialog  # noqa: PLC0415
 
     dialog = SettingsDialog(agent)
-    assert dialog.api_key.text() == ""
-    assert dialog.api_key.placeholderText() == KEY_SET_PLACEHOLDER
-    assert dialog.api_key.echoMode() == QLineEdit.EchoMode.Password
+    assert not hasattr(dialog, "api_key")
     assert "chk_ctr_test" not in dialog.result_label.text()
+
+
+def test_center_tab_shows_the_request_code_while_waiting(app: Any, tmp_path: Path) -> None:
+    """승인을 기다리는 동안 요청 코드를 크게, 「복사」와 함께 보인다 (BUI-03)."""
+    from chaeksas.bot_ui.settings_dialog import SettingsDialog  # noqa: PLC0415
+    from chaeksas.contracts.enrollment import EnrollStatus  # noqa: PLC0415
+
+    store = Store.load(tmp_path / "state.json")
+    store.state.enrollment = EnrollStatus(
+        enrollment_id="enr_" + "0" * 32, state="pending", code="ABCD-EFGH", expires_at="2026-10-26T10:00:00+09:00"
+    )
+    waiting = Agent(settings=Settings(), store=store, credentials=FakeCredentials(None))
+    dialog = SettingsDialog(waiting)
+    assert dialog.code_label.text() == "ABCD-EFGH"
+    assert not dialog.code_label.isHidden() and not dialog.copy_code.isHidden()
+    assert "ABCD-EFGH" in dialog.result_label.text()
+    assert "트레이" not in dialog.result_label.text()
+    assert waiting.tray_status() == "승인 대기 — 코드 ABCD-EFGH"
 
 
 def test_settings_dialog_saves_to_the_file_without_secrets(app: Any, agent: Agent, tmp_path: Path) -> None:
@@ -213,18 +226,16 @@ def test_settings_dialog_saves_to_the_file_without_secrets(app: Any, agent: Agen
     dialog = SettingsDialog(agent)
     dialog.center_url.setText("http://center.example.com:8800")
     dialog.queue_max.setValue(5)
-    dialog.api_key.setText(NEW_KEY)
 
     dialog.save()
 
     assert agent.settings.center_url == "http://center.example.com:8800"
     assert agent.settings.queue_max == 5
-    assert agent.credentials.center_api_key() == NEW_KEY
     # 저장은 시험용 데이터 폴더로 간다 (conftest) — 개발 PC의 진짜 설정이 아니다.
     path = agent.settings.config_path
     assert path.parent == Path(os.environ["CHK_BOT_UI__DATA_DIR"])
     # **설정 파일에 키가 없다** (CLAUDE.md §5).
-    assert NEW_KEY not in path.read_text(encoding="utf-8")
+    assert "chk_ctr_test" not in path.read_text(encoding="utf-8")
 
 
 def test_the_settings_dialog_fits_the_screen_and_keeps_its_buttons(app: Any, agent: Agent) -> None:
@@ -390,40 +401,6 @@ def test_shutdown_reports_center_jobs_as_rejected(app: Any, tmp_path: Path) -> N
     assert [a.job_id for a in agent.store.state.pending_acks] == ["job_center"]
     # Worker는 꺼졌다 (ADR-0023 — 트리째).
     assert worker.state == "off" and not worker.child.alive
-
-
-def test_a_pasted_non_key_is_refused_with_a_reason(
-    app: Any, agent: Agent, modal_boxes: list[tuple[str, str]]
-) -> None:
-    """이슈 #3 — curl 명령 한 줄이 그대로 키로 저장돼 등록이 401로만 실패했다.
-
-    모양이 아니면 **저장하지 않고** 이유를 보인다. 「저장」은 경고 창을 띄우고 칸으로 돌려보낸다.
-    """
-    from chaeksas.bot_ui.settings_dialog import KEY_SHAPE_MESSAGE, SettingsDialog  # noqa: PLC0415
-
-    dialog = SettingsDialog(agent)
-    dialog.api_key.setText("Invoke-RestMethod -Uri http://127.0.0.1:8800/api/v1/center-keys")
-
-    dialog.test_connection()
-    assert dialog.result_label.text() == KEY_SHAPE_MESSAGE
-    # 비밀 저장소는 손대지 않는다 — 전에 넣은 키가 그대로다.
-    assert agent.credentials.center_api_key() == "chk_ctr_test"
-
-    dialog.save()
-    assert modal_boxes == [("키 모양이 다릅니다", KEY_SHAPE_MESSAGE)]
-    assert agent.credentials.center_api_key() == "chk_ctr_test"
-    assert dialog.result() == 0, "저장되지 않았으므로 창이 닫히지 않는다"
-
-
-def test_a_well_shaped_key_is_saved(app: Any, agent: Agent) -> None:
-    from chaeksas.bot_ui.settings_dialog import SettingsDialog  # noqa: PLC0415
-    from chaeksas.contracts.center_keys import KEY_PREFIX, KEY_RANDOM_LEN  # noqa: PLC0415
-
-    key = KEY_PREFIX + "c" * KEY_RANDOM_LEN
-    dialog = SettingsDialog(agent)
-    dialog.api_key.setText(f"  {key}  ")  # 붙여 넣을 때 공백이 섞인다
-    dialog.save()
-    assert agent.credentials.center_api_key() == key
 
 
 def test_saving_settings_clears_the_readiness_cache(app: Any, agent: Agent) -> None:

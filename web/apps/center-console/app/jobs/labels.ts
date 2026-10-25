@@ -32,6 +32,7 @@ export const REASON_LABEL: Record<string, string> = {
   cancelled_on_pc: "현장에서 취소",
   global_limit: "서버 실행기 빈자리 없음",
   per_bot_limit: "Bot별 동시 실행 상한",
+  keys_pending: "키 받는 중",
   paused: "일시 중지",
 };
 

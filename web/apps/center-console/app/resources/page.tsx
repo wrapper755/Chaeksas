@@ -1,25 +1,25 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
-import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
-import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
-import type { RuntimeResource } from "@chaeksas/api-types/c7-runtime-resource";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
 import { CENTER_PUBLIC_URL, CenterError, center, session, type ContributedKind } from "@/lib/center";
+import type { FeatureRow } from "@/lib/features";
 import { Shell } from "@/components/Shell";
 import { registerExtension, registerServiceApp } from "@/app/actions";
+import { loadFeatures } from "./load";
 import { RefreshResources } from "./tools";
 
 /**
- * CON-07 리소스.
+ * CON-07 리소스 — 「기능」 하나와 확장이 기여한 자원 종류마다 탭 하나.
  *
- * 고정 탭 셋(확장·서비스 앱·런타임). **키는 다루지 않는다** (C7 — 서비스 앱 키는 각
- * 앱의 관리 콘솔에서 발급한다, ADR-0013).
+ * 관리자가 여기서 묻는 것은 하나다: **이 기능을 Bot이 지금 쓸 수 있나, 안 되면 무엇을 하나.**
+ * 그래서 목록은 「이름 / 쓸 수 있나 / 할 일」 세 칸이고, 그 기능이 안에서 어떻게 도는지(서비스
+ * 앱인지 외부 앱인지·무엇을 기여하나·어떤 로컬 런타임을 띄우나)는 보이지 않는다
+ * (`docs/06-screens/center-console.md` CON-07). 셈은 `lib/features.ts`가 한다.
  *
- * 고정 탭 뒤에 **확장이 기여한 자원 종류마다 탭 하나**가 붙는다 (C7). 그 탭의 칸은 카탈로그의
- * **공통 칸**(id·이름·요약·갱신)뿐이다 — `data`는 확장 고유 내용이라 Center도 콘솔도 해석하지
- * 않는다 (C13 §5, ADR-0018). 그래서 이 파일에 「UI 화면」이라는 말이 없다.
+ * 기여 자원 탭의 칸은 카탈로그의 **공통 칸**(id·이름·요약·갱신)뿐이다 — `data`는 확장 고유
+ * 내용이라 Center도 콘솔도 해석하지 않는다 (C13 §5, ADR-0018).
  */
 
 /** C7 상태 → `status_map` 「서비스 앱」 묶음의 표기. 모르는 값은 그대로 (원칙 10). */
@@ -30,16 +30,6 @@ const APP_STATUS: Record<string, string> = {
   unknown: "확인 전",
 };
 
-const TIER: Record<string, string> = { builtin: "내장", internal: "사내", external: "외부" };
-
-const PROTOCOL: Record<string, string> = { "chk-c11": "C11", "http-adapter": "HTTP 어댑터" };
-
-const TABS = [
-  { key: "extension", label: "확장" },
-  { key: "service_app", label: "서비스 앱" },
-  { key: "runtime", label: "런타임" },
-] as const;
-
 export function time(value: string | null | undefined): string {
   if (!value) return "—";
   const at = new Date(value);
@@ -49,6 +39,10 @@ export function time(value: string | null | undefined): string {
 
 export function appStatus(value: string): string {
   return APP_STATUS[value] ?? value;
+}
+
+export function featureHref(row: FeatureRow): string {
+  return `/resources/features/${encodeURIComponent(row.key)}`;
 }
 
 export default async function ResourcesPage({
@@ -65,29 +59,32 @@ export default async function ResourcesPage({
   const found = await session();
   if (!found) redirect("/login");
   const asked = await searchParams;
-  let items: unknown[] = [];
+  let rows: FeatureRow[] = [];
+  let items: ContributedResource[] = [];
   let fetchedAt = "";
   let packages: PackageInfo[] = [];
   let kinds: ContributedKind[] = [];
   let failure: string | null = null;
-  // 어떤 탭이 있는지는 **Center가 안다** (확장이 기여한 종류). 탭 이름을 화면이 짓지 않는다.
+  // 어떤 기여 탭이 있는지는 **Center가 안다** (확장이 기여한 종류). 탭 이름을 화면이 짓지 않는다.
   try {
     kinds = (await center.contributedKinds()).items;
   } catch {
-    kinds = []; // 종류를 못 읽어도 고정 탭은 보여야 한다
+    kinds = []; // 종류를 못 읽어도 「기능」은 보여야 한다
   }
-  const fixed = TABS.some((one) => one.key === asked.tab);
   const contributedTab = kinds.find((one) => one.resource_type === asked.tab);
-  const tab = fixed ? asked.tab! : contributedTab ? asked.tab! : "extension";
 
   try {
-    const got = contributedTab
-      ? await center.contributed(contributedTab.resource_type)
-      : await center.resources<unknown>(tab);
-    items = got.items;
-    fetchedAt = got.fetched_at;
-    // 경고 띠는 **패키지가 요구하는데 없는 것**에서 온다 (C7 누락 검사).
-    packages = await center.packages();
+    if (contributedTab) {
+      const got = await center.contributed(contributedTab.resource_type);
+      items = got.items;
+      fetchedAt = got.fetched_at;
+      packages = await center.packages();
+    } else {
+      const got = await loadFeatures();
+      rows = got.rows;
+      fetchedAt = got.fetchedAt;
+      packages = got.input.packages;
+    }
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -98,13 +95,18 @@ export default async function ResourcesPage({
     )
     .slice(0, 8);
 
+  const tabClass = (on: boolean) =>
+    on
+      ? "border border-border-strong bg-bg-subtle px-3 py-1 text-body"
+      : "border border-border-default px-3 py-1 text-body text-text-secondary";
+
   return (
     <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/resources">
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-h1 font-bold">리소스</h1>
           <p className="text-body text-text-secondary">
-            Bot이 실행에 필요로 하는 바깥 자원입니다. 키는 각 서비스 앱의 관리 콘솔에서 다룹니다.
+            Bot이 실행에 쓰는 바깥 기능입니다. 쓸 수 없으면 할 일이 함께 보입니다.
             {fetchedAt ? ` · 확인 ${time(fetchedAt)}` : ""}
           </p>
         </div>
@@ -112,141 +114,102 @@ export default async function ResourcesPage({
       </header>
 
       <nav className="mb-4 flex flex-wrap gap-2" aria-label="리소스 종류">
-        {TABS.map((one) => (
-          <Link
-            key={one.key}
-            href={`/resources?tab=${one.key}`}
-            aria-current={tab === one.key ? "page" : undefined}
-            className={
-              tab === one.key
-                ? "border border-border-strong bg-bg-subtle px-3 py-1 text-body"
-                : "border border-border-default px-3 py-1 text-body text-text-secondary"
-            }
-          >
-            {one.label}
-          </Link>
-        ))}
+        <Link href="/resources" aria-current={!contributedTab ? "page" : undefined} className={tabClass(!contributedTab)}>
+          기능
+        </Link>
         {/* 확장이 기여한 자원 종류마다 탭 하나 (C7) — 플랫폼은 그 뜻을 모른다. */}
         {kinds.map((one) => (
           <Link
             key={one.resource_type}
             href={`/resources?tab=${encodeURIComponent(one.resource_type)}`}
-            aria-current={tab === one.resource_type ? "page" : undefined}
-            className={
-              tab === one.resource_type
-                ? "border border-border-strong bg-bg-subtle px-3 py-1 text-body"
-                : "border border-border-default px-3 py-1 text-body text-text-secondary"
-            }
+            aria-current={contributedTab?.resource_type === one.resource_type ? "page" : undefined}
+            className={tabClass(contributedTab?.resource_type === one.resource_type)}
           >
             {one.label} ({one.count})
           </Link>
         ))}
       </nav>
 
+      {shortfall.length > 0 ? (
+        <div className="mb-4">
+          <ErrorBanner message={`Bot이 요구하지만 쓸 수 없는 기능: ${shortfall.join(" · ")}`} />
+        </div>
+      ) : null}
       {failure ? <ErrorBanner message={failure} /> : null}
       {asked.error ? <ErrorBanner message={asked.error} /> : null}
       {asked.registered ? (
         <p className="mb-4 text-body text-status-completed-fg">서비스 앱을 등록했습니다.</p>
       ) : null}
       {asked.extension ? (
-        <p className="mb-4 text-body text-status-completed-fg">확장을 등록했습니다.</p>
+        <p className="mb-4 text-body text-status-completed-fg">기능을 등록했습니다.</p>
       ) : null}
-      {shortfall.length > 0 ? (
-        <div className="mb-4">
-          <ErrorBanner message={`Bot이 요구하지만 없는 리소스: ${shortfall.join(" · ")}`} />
-        </div>
-      ) : null}
-
       {asked.revoked ? (
-        <p className="mb-4 text-body text-status-completed-fg">확장 등록을 해제했습니다.</p>
+        <p className="mb-4 text-body text-status-completed-fg">기능 등록을 해제했습니다.</p>
       ) : null}
 
-      {tab === "extension" ? (
-        <Extensions items={items as ExtensionResource[]} admin={found.mode === "admin"} />
-      ) : null}
-      {tab === "service_app" ? (
-        <ServiceApps items={items as ServiceAppResource[]} admin={found.mode === "admin"} />
-      ) : null}
-      {tab === "runtime" ? <Runtimes items={items as RuntimeResource[]} /> : null}
       {contributedTab ? (
-        <Contributed kind={contributedTab} items={items as ContributedResource[]} />
-      ) : null}
+        <Contributed kind={contributedTab} items={items} />
+      ) : (
+        <Features rows={rows} admin={found.mode === "admin"} />
+      )}
     </Shell>
   );
 }
 
-function Extensions({ items, admin }: { items: ExtensionResource[]; admin: boolean }) {
-  const columns: Array<Column<ExtensionResource>> = [
+function Features({ rows, admin }: { rows: FeatureRow[]; admin: boolean }) {
+  const columns: Array<Column<FeatureRow>> = [
     {
       key: "name",
       header: "이름",
-      cell: (row) =>
-        // 외부 확장만 상세가 있다 — 정의·봉투가 Center에 있는 것이 그것뿐이다.
-        row.tier === "external" ? (
-          <Link className="underline" href={`/resources/extensions/${encodeURIComponent(row.id)}`}>
-            {row.name ?? row.id}
-          </Link>
-        ) : (
-          (row.name ?? "—")
-        ),
+      cell: (row) => (
+        <Link className="underline" href={featureHref(row) as never}>
+          {row.name}
+        </Link>
+      ),
     },
-    { key: "id", header: "id", mono: true },
-    { key: "tier", header: "등급", width: "10ch", cell: (row) => TIER[row.tier] ?? row.tier },
-    { key: "version", header: "버전", width: "12ch", mono: true },
     {
-      key: "protocol",
-      header: "연결 방식",
+      key: "usable",
+      header: "쓸 수 있나",
       width: "14ch",
-      cell: (row) => (row.protocol ? (PROTOCOL[row.protocol] ?? row.protocol) : "없음"),
+      cell: (row) => <StatusBadge group="기능" label={row.usable} />,
     },
     {
-      key: "installed_on",
-      header: "설치된 Bot UI",
-      width: "14ch",
-      align: "right",
-      cell: (row) => `${row.installed_on?.hosts ?? 0}대`,
-    },
-    {
-      key: "service_app_id",
-      header: "서버 부분",
-      // HTTP 어댑터 확장도 **서버 부분이 있다** (바깥 앱) — C11 서비스 앱이 아닐 뿐이다.
-      // 「없음」이라고 적으면 키를 어디로 보내는지 모르는 것처럼 읽힌다.
+      key: "todos",
+      header: "할 일",
       cell: (row) =>
-        row.service_app_id ? (
-          <Link className="underline" href={`/resources/service-apps/${encodeURIComponent(row.service_app_id)}`}>
-            {row.service_app_id}
-          </Link>
-        ) : row.protocol === "http-adapter" ? (
-          "외부 앱 (어댑터)"
+        row.todos.length === 0 ? (
+          ""
         ) : (
-          "없음 (클라이언트 기여만)"
+          <span className="flex flex-col gap-1">
+            {row.todos.map((todo) =>
+              todo.href ? (
+                <Link key={todo.kind} className="underline" href={todo.href as never}>
+                  {todo.text}
+                </Link>
+              ) : (
+                <span key={todo.kind}>{todo.text}</span>
+              ),
+            )}
+          </span>
         ),
-    },
-    {
-      key: "status",
-      header: "상태",
-      width: "12ch",
-      cell: (row) =>
-        row.status === "n/a" ? "—" : <StatusBadge group="서비스 앱" label={appStatus(row.status ?? "")} />,
     },
   ];
   return (
     <div className="flex flex-col gap-6">
-      {items.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState
-          title="설치·등록된 확장이 없습니다."
-          hint="내장 확장은 Bot UI가 보고하면 나타납니다. 외부 확장은 아래에서 등록하세요."
+          title="쓸 수 있는 기능이 없습니다."
+          hint="외부 기능은 「기능 추가 (외부)」로, 서비스 앱은 「서비스 앱 추가」로 등록합니다."
         />
       ) : (
-        <DataTable columns={columns} rows={items} rowKey={(row) => row.id} caption="확장" />
+        <DataTable columns={columns} rows={rows} rowKey={(row) => row.key} caption="기능" />
       )}
 
       {admin ? (
         <section className="flex flex-col gap-2">
-          <h2 className="text-h2 font-semibold">확장 추가 (외부)</h2>
+          <h2 className="text-h2 font-semibold">기능 추가 (외부)</h2>
           <p className="text-body-sm text-text-muted">
-            외부 확장 정의 파일을 올리세요. 검사를 지나면 Center가 서명해 등록합니다. 내장·사내 확장은
-            설치 파일에 든 것만 쓰므로 여기서 등록할 수 없습니다.
+            외부 확장 정의 파일을 올리세요. 검사를 지나면 Center가 서명해 등록합니다.
           </p>
           <form action={registerExtension} className="flex max-w-2xl flex-col gap-2">
             <label className="flex flex-col gap-1 text-body-sm">
@@ -261,65 +224,12 @@ function Extensions({ items, admin }: { items: ExtensionResource[]; admin: boole
           </form>
         </section>
       ) : null}
-    </div>
-  );
-}
-
-function ServiceApps({ items, admin }: { items: ServiceAppResource[]; admin: boolean }) {
-  const columns: Array<Column<ServiceAppResource>> = [
-    {
-      key: "name",
-      header: "앱 이름",
-      cell: (row) => (
-        <Link className="underline" href={`/resources/service-apps/${encodeURIComponent(row.app_id)}`}>
-          {row.name ?? row.app_id}
-        </Link>
-      ),
-    },
-    { key: "app_id", header: "id", mono: true },
-    {
-      key: "category",
-      header: "구분",
-      width: "10ch",
-      cell: (row) => (row.category === "system" ? "시스템" : row.category === "business" ? "업무" : "—"),
-    },
-    { key: "version", header: "버전", width: "10ch", mono: true, cell: (row) => row.version ?? "—" },
-    {
-      key: "status",
-      header: "상태",
-      cell: (row) => (
-        <span className="inline-flex items-center gap-2">
-          <StatusBadge group="서비스 앱" label={appStatus(row.status ?? "unknown")} />
-          <span className="text-caption text-text-muted">{time(row.checked_at)}</span>
-        </span>
-      ),
-    },
-    { key: "base_url", header: "API 주소", mono: true, cell: (row) => row.base_url ?? "—" },
-    {
-      key: "operations",
-      header: "작업",
-      width: "8ch",
-      align: "right",
-      cell: (row) => `${row.operations?.length ?? 0}개`,
-    },
-  ];
-
-  return (
-    <div className="flex flex-col gap-6">
-      {items.length === 0 ? (
-        <EmptyState
-          title="등록된 서비스 앱이 없습니다."
-          hint={admin ? "아래 「서비스 앱 추가」에 API 주소를 넣으세요." : undefined}
-        />
-      ) : (
-        <DataTable columns={columns} rows={items} rowKey={(row) => row.app_id} caption="서비스 앱" />
-      )}
 
       {admin ? (
-        <section className="flex flex-col gap-2">
+        <section id="add-service-app" className="flex flex-col gap-2">
           <h2 className="text-h2 font-semibold">서비스 앱 추가</h2>
           <p className="text-body-sm text-text-muted">
-            주소만 넣으세요 — Center가 <code>/manifest</code>를 읽어 앱 이름과 작업을 가져옵니다.
+            주소만 넣으세요 — Center가 앱 이름과 어느 기능의 서버인지를 읽어 그 기능의 줄에 붙입니다.
             읽지 못하면 등록하지 않습니다.
           </p>
           <form action={registerServiceApp} className="flex max-w-xl flex-wrap items-end gap-2">
@@ -329,7 +239,7 @@ function ServiceApps({ items, admin }: { items: ServiceAppResource[]; admin: boo
                 type="url"
                 name="base_url"
                 required
-                placeholder="http://svc-uia:8810"
+                placeholder="http://svc-uia:8000"
                 className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
               />
             </label>
@@ -341,69 +251,6 @@ function ServiceApps({ items, admin }: { items: ServiceAppResource[]; admin: boo
       ) : null}
     </div>
   );
-}
-
-function Runtimes({ items }: { items: RuntimeResource[] }) {
-  const columns: Array<Column<RuntimeResource>> = [
-    {
-      key: "host",
-      header: "실행하는 곳",
-      cell: (row) =>
-        row.host.type === "bot_ui" ? (
-          <Link className="underline" href={`/bot-uis/${encodeURIComponent(row.host.id)}`}>
-            {row.host.name ?? row.host.id}
-          </Link>
-        ) : (
-          (row.host.name ?? row.host.id)
-        ),
-    },
-    {
-      key: "type",
-      header: "종류",
-      width: "12ch",
-      cell: (row) => (row.host.type === "bot_ui" ? "Bot UI" : "서버 실행기"),
-    },
-    { key: "os", header: "OS", width: "20ch", cell: (row) => row.os ?? "—" },
-    {
-      key: "core",
-      header: "core",
-      width: "10ch",
-      mono: true,
-      cell: (row) => row.versions?.core ?? "—",
-    },
-    {
-      key: "worker",
-      header: "Worker",
-      width: "10ch",
-      mono: true,
-      cell: (row) => row.versions?.worker ?? "—",
-    },
-    { key: "browsers", header: "브라우저", cell: (row) => (row.browsers ?? []).join(", ") || "—" },
-    {
-      key: "desktop_backend",
-      header: "데스크톱",
-      width: "12ch",
-      cell: (row) => row.desktop_backend ?? "—",
-    },
-    {
-      key: "extensions",
-      header: "확장",
-      cell: (row) =>
-        (row.extensions ?? [])
-          .map((one) => String((one as { id?: unknown }).id ?? ""))
-          .filter(Boolean)
-          .join(", ") || "—",
-    },
-  ];
-  if (items.length === 0) {
-    return (
-      <EmptyState
-        title="보고된 런타임이 없습니다."
-        hint="Bot UI가 등록·하트비트로 보고하면 여기에 나타납니다."
-      />
-    );
-  }
-  return <DataTable columns={columns} rows={items} rowKey={(row) => row.host.id} caption="런타임" />;
 }
 
 /**

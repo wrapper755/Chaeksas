@@ -1,0 +1,180 @@
+{
+  "$defs": {
+    "ExistingHost": {
+      "additionalProperties": true,
+      "description": "그 기계가 이미 등록돼 있으면 — 승인하면 이 자리를 이어받고 그 키는 폐기된다 (C5).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "key_prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key Prefix"
+        },
+        "last_seen": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Last Seen"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "ExistingHost",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c5-enrollment-info",
+  "additionalProperties": true,
+  "description": "`GET /enrollments`의 한 줄 (C5 §등록 승인, CON-03·CON-12 「승인 대기」).",
+  "properties": {
+    "code": {
+      "pattern": "^[A-Z2-7]{4}-[A-Z2-7]{4}$",
+      "title": "Code",
+      "type": "string"
+    },
+    "decided_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decided At"
+    },
+    "decided_by": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decided By"
+    },
+    "enrollment_id": {
+      "pattern": "^enr_[0-9a-f]{32}$",
+      "title": "Enrollment Id",
+      "type": "string"
+    },
+    "existing": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExistingHost"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "expires_at": {
+      "title": "Expires At",
+      "type": "string"
+    },
+    "key_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Id"
+    },
+    "machine_id_prefix": {
+      "title": "Machine Id Prefix",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "os": {
+      "title": "Os",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "remote_addr": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Remote Addr"
+    },
+    "requested_at": {
+      "title": "Requested At",
+      "type": "string"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    },
+    "versions": {
+      "additionalProperties": true,
+      "title": "Versions",
+      "type": "object"
+    }
+  },
+  "required": [
+    "enrollment_id",
+    "type",
+    "code",
+    "name",
+    "os",
+    "machine_id_prefix",
+    "requested_at",
+    "expires_at",
+    "state"
+  ],
+  "title": "EnrollmentInfo",
+  "type": "object"
+}

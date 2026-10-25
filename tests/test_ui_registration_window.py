@@ -268,7 +268,7 @@ def test_registering_without_a_key_is_not_pretended(made: Any) -> None:
     widget.analyze()
     widget.verify()
     assert not widget.register_button.isEnabled()
-    assert "등록 담당자 키" in widget.register_button.toolTip()
+    assert "셀렉터 등록" in widget.register_button.toolTip()
 
 
 # ─────────────────────────── 놓아 주기 ───────────────────────────

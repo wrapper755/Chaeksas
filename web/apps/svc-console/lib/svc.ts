@@ -2,7 +2,6 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import type { AdminStatus } from "@chaeksas/api-types/c11-admin-status";
-import type { AdminKeyCreated } from "@chaeksas/api-types/c11-admin-key-created";
 import type { AdminKeyInfo } from "@chaeksas/api-types/c11-admin-key-info";
 import type { UsagePage } from "@chaeksas/api-types/c11-usage-page";
 import type { ConsoleOverview } from "@chaeksas/api-types/c9-console-overview";
@@ -73,20 +72,9 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export interface KeyCreateInput {
-  name: string;
-  allowed_operations: string[];
-  allowed_modes: string[];
-  extra_scopes: string[];
-  expires_at?: string;
-  note?: string;
-}
-
 export const svc = {
   status: () => call<AdminStatus>("/admin/v1/status"),
   keys: () => call<AdminKeyInfo[]>("/admin/v1/keys"),
-  createKey: (body: KeyCreateInput) =>
-    call<AdminKeyCreated>("/admin/v1/keys", { method: "POST", body: JSON.stringify(body) }),
   // 이름에 한글·공백이 올 수 있다 — 경로에 넣기 전에 인코딩한다.
   revokeKey: (name: string) => call<AdminKeyInfo>(`/admin/v1/keys/${encodeURIComponent(name)}`, { method: "DELETE" }),
   usage: (limit = 100) => call<UsagePage>(`/admin/v1/usage?limit=${limit}`),

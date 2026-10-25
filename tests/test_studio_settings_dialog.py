@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +42,7 @@ from chaeksas.studio.credentials import (  # noqa: E402
     StudioCredentials,
 )
 from chaeksas.studio.extensions import Extensions, StudioSecrets  # noqa: E402
-from chaeksas.studio.settings import ServiceKeyRef, Settings  # noqa: E402
+from chaeksas.studio.settings import Settings  # noqa: E402
 from chaeksas.studio.settings_dialog import (  # noqa: E402
     CATEGORIES,
     NO_EXTENSION_FIELDS,
@@ -97,17 +98,54 @@ def extensions() -> Extensions:
     return Extensions.load()
 
 
+#: 이 시험이 만든 창 — 끝날 때 Qt가 지우게 한다 (`_close_dialogs`).
+_MADE: list[StudioSettingsDialog] = []
+
+
+@pytest.fixture(autouse=True)
+def _close_dialogs(qt: Any) -> Any:
+    """만든 창을 **시험마다** Qt에게 지우게 한다 — 부모 없는 창을 인터프리터가 끝날 때까지 두면
+    `QApplication`보다 늦게 사라지며 프로세스가 죽는다 (시험은 모두 통과하고 끝에서 139로 나간다)."""
+    yield
+    while _MADE:
+        _MADE.pop().deleteLater()
+    qt.processEvents()
+
+
 def dialog(settings: Settings, extensions: Extensions, vault: Vault | None, **kw: Any) -> StudioSettingsDialog:
-    return StudioSettingsDialog(settings, extensions, credentials=Credentials(vault), **kw)
+    made = StudioSettingsDialog(settings, extensions, credentials=Credentials(vault), **kw)
+    _MADE.append(made)
+    return made
 
 
-def type_key(found: StudioSettingsDialog, at: int, value: str) -> None:
-    """사람이 「키 값」 칸에 붙여 넣는 것."""
-    from PySide6.QtWidgets import QLineEdit  # noqa: PLC0415
+def center_hands_out(monkeypatch: pytest.MonkeyPatch, raw: str) -> list[str]:
+    """Center 대신 — Studio가 청한 개발 키를 **그 요청의 공개키로** 봉해 준다 (C5 §Studio 개발 키)."""
+    from chaeksas.contracts.enrollment import seal  # noqa: PLC0415
+    from chaeksas.contracts.service_keys import StudioServiceKey  # noqa: PLC0415
+    from chaeksas.studio import dev_keys  # noqa: PLC0415
 
-    cell = found.keys.cellWidget(at, 2)
-    assert isinstance(cell, QLineEdit)
-    cell.setText(value)
+    asked: list[str] = []
+
+    def made(base_url: str, api_key: str) -> Any:
+        def fetch(app_id: str, public_key: str) -> StudioServiceKey:
+            asked.append(app_id)
+            return StudioServiceKey(
+                app_id=app_id,
+                service_key_id="svk_00000001",
+                sealed_key=seal(public_key, raw, salt="svk_00000001"),
+                expires_at="2099-01-01T00:00:00+00:00",
+            )
+
+        return fetch
+
+    monkeypatch.setattr(dev_keys, "http_fetch", made)
+    return asked
+
+
+def approved(vault: Vault) -> Vault:
+    """승인된 Studio 키가 있다 (ADR-0093)."""
+    vault.set_password("chaeksas-studio", "center", "chk_ctr_studio")
+    return vault
 
 
 # ─────────────────────────── 창 ───────────────────────────
@@ -119,7 +157,7 @@ def test_only_the_categories_something_reads_are_listed(
     """ADR-0073 — 메일·비밀은 읽는 곳이 없어 없고, 남은 분류에 「(아직)」이 없다."""
     found = dialog(settings, extensions, Vault())
     labels = [found.categories.item(i).text() for i in range(found.categories.count())]
-    assert labels == list(CATEGORIES) == ["외형", "LLM", "Center", "확장별 설정", "Worker", "서비스 앱 키"]
+    assert labels == list(CATEGORIES) == ["외형", "LLM", "Center", "확장별 설정", "Worker", "서비스 앱"]
     assert found.categories.currentItem().text() == "LLM", "처음에는 모델 칸을 연다"
 
 
@@ -233,7 +271,7 @@ def test_the_llm_key_goes_to_the_vault_not_the_file(qt: Any, settings: Settings,
     assert dialog(settings, extensions, vault).llm_key.placeholderText().startswith("저장됨"), "값은 보이지 않는다"
 
 
-@pytest.mark.parametrize("field", ["llm_key", "center_key"])
+@pytest.mark.parametrize("field", ["llm_key"])
 def test_without_a_vault_saving_fails_and_the_window_stays(
     qt: Any, settings: Settings, extensions: Extensions, field: str
 ) -> None:
@@ -244,22 +282,123 @@ def test_without_a_vault_saving_fails_and_the_window_stays(
     assert not settings.path.exists(), "평문으로 흘리지 않는다 — 아무것도 쓰지 않았다"
 
 
-def test_the_center_key_goes_to_the_vault_and_the_address_to_the_file(
-    qt: Any, settings: Settings, extensions: Extensions
-) -> None:
+@pytest.fixture
+def center(tmp_path: Path) -> Any:
+    """진짜 Center (TestClient). 관리자 토큰으로 승인한다 (콘솔이 하는 일)."""
+    from chaeksas.center.app import create_app  # noqa: PLC0415
+    from chaeksas.center.settings import Settings as CenterSettings  # noqa: PLC0415
+    from chaeksas.center.storage import Store  # noqa: PLC0415
+
+    store = Store(tmp_path / "center.sqlite3")
+    app = create_app(
+        CenterSettings(db_path=tmp_path / "center.sqlite3", package_dir=tmp_path / "packages", admin_token="t-admin"),
+        store=store,
+    )
+    with TestClient(app) as client:
+        yield client
+    store.close()
+
+
+def approve_studio(center: Any, name: str = "김OO 설계 PC") -> None:
+    admin = {"Authorization": "Bearer t-admin"}
+    pending = center.get("/api/v1/enrollments?type=studio", headers=admin).json()
+    assert len(pending) == 1
+    done = center.post(f"/api/v1/enrollments/{pending[0]['enrollment_id']}/approve", json={"name": name}, headers=admin)
+    assert done.status_code == 200, done.text
+
+
+def connect_window(settings: Settings, vault: Vault, center: Any, **over: Any) -> Any:
+    from chaeksas.studio.connect_dialog import CenterConnectDialog  # noqa: PLC0415
+
+    return CenterConnectDialog(settings, credentials=Credentials(vault), client=center, **over)
+
+
+def test_stu16_lets_studio_in_by_approval(qt: Any, settings: Settings, center: Any) -> None:
+    """STU-16 — 주소를 넣고 「보내기」, 관리자가 승인하면 키를 받는다. 아이디·비밀번호는 없다 (ADR-0093)."""
     vault = Vault()
-    found = dialog(settings, extensions, vault)
-    found.center_url.setText("http://center.example.com:8800")
-    found.center_key.setText("chk_ctr_개발용")
-    found.save()
-    assert found.saved is not None and found.saved.center_url == "http://center.example.com:8800"
-    assert vault.values[("chaeksas-studio", CENTER_KEY_NAME)] == "chk_ctr_개발용"
+    found = connect_window(replace(settings, center_url="http://center.test"), vault, center)
+    assert not found.send.isHidden() and found.code.isHidden(), "요청이 없으면 「보내기」만"
+
+    found.send_request()
+    code = found.code.text()
+    assert code and code in found.status.text()
+    assert found.send.isHidden() and not found.copy.isHidden()
+    assert found.timer.isActive(), "기다리는 동안 10초마다 묻는다"
+    assert found.again.isHidden(), "기다리는 중에는 「다시 요청」이 없다"
+
+    approve_studio(center)
+    found.poll()
+    assert found.connected and not found.timer.isActive()
+    assert found.status.text().startswith("연결됨 — 「김OO 설계 PC」으로 들어와 있습니다")
+    key = vault.values[("chaeksas-studio", CENTER_KEY_NAME)]
     raw = settings.path.read_text(encoding="utf-8")
-    assert "chk_ctr_개발용" not in raw, "키는 설정 파일에 들어가지 않는다"
-    assert "http://center.example.com:8800" in raw
-    assert Settings.load(settings.path).center_url == "http://center.example.com:8800"
-    again = dialog(settings, extensions, vault)
-    assert again.center_key.text() == "" and again.center_key.placeholderText().startswith("저장됨")
+    assert key not in raw and "김OO 설계 PC" in raw and "http://center.test" in raw, "「저장」 없이 그 자리에서 적는다"
+
+
+def test_stu16_later_keeps_the_request_for_next_time(qt: Any, settings: Settings, center: Any) -> None:
+    vault = Vault()
+    first = connect_window(replace(settings, center_url="http://center.test"), vault, center)
+    first.send_request()
+    code = first.code.text()
+    first.reject()  # 「나중에」
+    assert not first.timer.isActive(), "닫힌 동안은 묻지 않는다"
+    again = connect_window(replace(Settings.load(settings.path), data_dir=settings.data_dir), vault, center)
+    assert again.code.text() == code, "다음에 뜨면 같은 코드다"
+
+
+def test_stu16_refused_key_offers_asking_again(qt: Any, settings: Settings, center: Any) -> None:
+    vault = Vault()
+    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_" + "x" * 40)
+    found = connect_window(replace(settings, center_url="http://center.test"), vault, center, refused=True)
+    assert "키가 거부되었습니다" in found.status.text() and not found.again.isHidden()
+    found.ask_again()
+    assert ("chaeksas-studio", CENTER_KEY_NAME) not in vault.values
+    assert found.code.text() in found.status.text() and found.again.isHidden()
+
+
+def test_need_at_start(center: Any) -> None:
+    """STU-16 「언제 뜨나」 — 키가 없거나 거부됐을 때만 창, 닿지 못함·만료 임박은 한 줄."""
+    from chaeksas.studio import center_enroll as ce  # noqa: PLC0415
+
+    base: dict[str, Any] = {"base_url": "http://center.test", "key": None, "from_env": False, "key_expires": ""}
+
+    def ask(**over: Any) -> Any:
+        return ce.need_at_start(**(base | {"client": center} | over))
+
+    assert ask().kind == ce.NEED_CONNECT
+    assert ask(from_env=True).kind == ce.NEED_NONE
+    assert ask(key="chk_ctr_" + "x" * 40).kind == ce.NEED_REFUSED
+    assert ask(key="chk_ctr_" + "x" * 40, base_url="http://127.0.0.1:9", client=None).kind == ce.NEED_UNREACHABLE
+
+
+def test_center_tab_hides_ask_again_while_connected(
+    qt: Any, settings: Settings, extensions: Extensions, center: Any
+) -> None:
+    """STU-10 — 연결이 멀쩡하면 「다시 요청」이 없다 (누르면 쓰던 키를 버린다)."""
+    vault = Vault()
+    found = connect_window(replace(settings, center_url="http://center.test"), vault, center)
+    found.send_request()
+    approve_studio(center)
+    found.poll()
+    tab = dialog(replace(Settings.load(settings.path), data_dir=settings.data_dir), extensions, vault, client=center)
+    assert tab.center_result.text().startswith("연결됨")
+    assert tab.center_again.isHidden()
+    tab.test_center()
+    assert tab.center_result.text() == "연결됨 — 서비스 앱 0개를 읽었습니다" and tab.center_again.isHidden()
+
+    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_" + "x" * 40)  # 폐기된 키라 치자
+    tab.test_center()
+    assert tab.center_result.text() == "키가 거부되었습니다 — 「다시 요청」으로 새로 승인받으세요"
+    assert not tab.center_again.isHidden()
+
+
+def test_an_env_key_skips_the_request(
+    qt: Any, settings: Settings, extensions: Extensions, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_env")
+    found = dialog(settings, extensions, Vault())
+    assert "환경변수의 키를 씁니다" in found.center_result.text()
+    assert found.center_again.isHidden()
 
 
 def test_an_empty_center_address_blocks_saving(qt: Any, settings: Settings, extensions: Extensions) -> None:
@@ -280,136 +419,51 @@ def test_the_center_key_env_var_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Credentials(vault).stored_center_api_key() == "chk_ctr_stored", "자리 글은 저장된 것만 본다"
 
 
-def test_the_center_test_asks_the_real_center(
-    qt: Any, settings: Settings, extensions: Extensions, tmp_path: Path
-) -> None:
-    """Center 상태는 **진짜 Center**의 리소스 목록에 묻는다 (C7 — Studio용 키가 읽는다)."""
-    from chaeksas.center.app import create_app  # noqa: PLC0415
-    from chaeksas.center.settings import Settings as CenterSettings  # noqa: PLC0415
-    from chaeksas.center.storage import Store  # noqa: PLC0415
-
-    store = Store(tmp_path / "center.sqlite3")
-    center = create_app(
-        CenterSettings(
-            db_path=tmp_path / "center.sqlite3",
-            package_dir=tmp_path / "packages",
-            admin_token="t-admin",
-        ),
-        store=store,
-    )
-    try:
-        with TestClient(center) as client:
-            made = client.post(
-                "/api/v1/center-keys",
-                json={"name": "설계자 PC", "type": "studio"},
-                headers={"Authorization": "Bearer t-admin"},
-            )
-            assert made.status_code == 201, made.text
-            key = made.json()["key"]
-            found = dialog(settings, extensions, Vault(), client=client)
-            found.center_url.setText("http://center.test")
-
-            found.center_key.setText(key)
-            found.test_center()
-            assert found.center_result.text() == "연결됨 — 서비스 앱 0개를 읽었습니다"
-
-            found.center_key.setText("chk_ctr_" + "x" * 40)
-            found.test_center()
-            assert found.center_result.text() == "키가 거부되었습니다 (401)"
-            assert "x" * 40 not in found.center_result.text()
-
-            found.center_key.setText("")
-            found.test_center()
-            assert found.center_result.text() == "Center API 키가 없습니다."
-    finally:
-        store.close()
-
-
-def test_service_keys_names_in_the_file_values_in_the_vault(
+def test_the_apps_table_is_read_only_and_starts_from_the_open_process(
     qt: Any, settings: Settings, extensions: Extensions
 ) -> None:
+    """「서비스 앱」 (ADR-0094 §5) — 값·참조 칸이 없다. 앱마다 개발 키를 **받았나**만 보인다."""
     vault = Vault()
-    vault.set_password("chaeksas-studio", "svc:old-ref", "chk_svc_old")
-    start = Settings(data_dir=settings.data_dir, service_keys=(ServiceKeyRef("old-ref", "ui-automation"),))
-    found = dialog(start, extensions, vault, refs=[("test-ui", "ui-automation"), ("old-ref", "ui-automation")])
-    found.fill_from_process()
-    assert [ref for ref, _, _ in found.key_rows()] == ["old-ref", "test-ui"], "표에 없는 것만 더한다"
-    type_key(found, 1, GOOD)
-    found.keys.selectRow(0)
-    found.drop_selected_key()
+    held = '{"key": "chk_svc_x", "expires_at": "2026-11-01T00:00:00+00:00"}'
+    vault.set_password("chaeksas-studio", "dev:ui-automation", held)
+    found = dialog(settings, extensions, vault, refs=[("test-ui", "ui-automation"), ("fin", "crm")])
+    assert found.app_rows() == [("crm", "아직 받지 않음", ""), ("ui-automation", "받음 — 2026-11-01까지", "")]
+    assert not hasattr(found, "keys") and not hasattr(found, "add_key")
     found.save()
-    assert found.saved is not None
-    assert found.saved.service_keys == (ServiceKeyRef("test-ui", "ui-automation"),)
-    assert vault.values == {("chaeksas-studio", "svc:test-ui"): GOOD}, "지운 줄은 비밀 저장소에서도 지운다"
-    assert GOOD not in settings.path.read_text(encoding="utf-8")
-    assert Settings.load(settings.path).service_keys == (ServiceKeyRef("test-ui", "ui-automation"),)
+    assert found.saved is not None, "고칠 칸이 없으니 저장을 막을 것도 없다"
 
 
-@pytest.mark.parametrize(("rows", "why"), [([("", "x")], "빈 줄"), ([("a", "x"), ("a", "y")], "두 줄")])
-def test_bad_key_rows_block_saving(
-    qt: Any, settings: Settings, extensions: Extensions, rows: list[tuple[str, str]], why: str
+def test_the_key_test_asks_center_for_a_dev_key_and_the_app_accepts_it(
+    qt: Any, settings: Settings, extensions: Extensions, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    found = dialog(settings, extensions, Vault())
-    for ref, app in rows:
-        found._add_key_row(ref, app)
-    found.save()
-    assert found.saved is None and why in found.error.text()
-
-
-def test_the_key_test_asks_the_real_app(qt: Any, settings: Settings, extensions: Extensions, tmp_path: Path) -> None:
-    """키 상태는 **진짜 UI 자동화 앱**의 `/v1/keys/self`에 묻는다 (C11). 주소는 확장의 `service.base_url`."""
-    path = tmp_path / "uia.sqlite3"
-    app = create(db_path=path, admin_token="t")
-    store = SqliteKeyStore(db=Database(path=path))
-    for raw, name, revoked in ((GOOD, "개발", None), (REVOKED, "옛 키", "2026-10-01T00:00:00+09:00")):
-        store.add(ServiceAppKey(name=name, hash=hash_key(raw), prefix=raw[:16], allowed_operations=["*"],
-                                allowed_modes=["deterministic", "autonomous"], created_at="2026-10-05T09:00:00+09:00",
-                                revoked_at=revoked))
-    found = dialog(settings, extensions, Vault(), client=TestClient(app))
-    for ref, app_id, value in (("good", "ui-automation", GOOD), ("gone", "ui-automation", REVOKED),
-                               ("wrong", "ui-automation", "chk_svc_" + "x" * 40), ("empty", "ui-automation", ""),
-                               ("elsewhere", "crm", GOOD)):
-        at = found._add_key_row(ref, app_id)
-        type_key(found, at, value)
-    found.test_keys()
-    states = [found._cell(at, 3) for at in range(found.keys.rowCount())]
-    assert states[0] == "정상 — 허용: 결정·자율"
-    assert states[1:] == ["폐기됨", "키가 틀림", "없음", "주소를 모름"]
-
-
-def test_the_key_test_finds_addresses_where_the_test_run_does(
-    qt: Any, settings: Settings, extensions: Extensions, tmp_path: Path
-) -> None:
-    """설치된 확장이 모르는 앱은 **Center 리소스 목록**에서 주소를 찾고(시험 실행과 같은 곳),
-    외부 확장은 묻지 않는다 — `/v1/keys/self`는 C11의 길이다."""
-    from types import SimpleNamespace
-
-    from chaeksas.studio.checks import EXTERNAL_NOT_CHECKED
-
+    """「연결 테스트」 — 키가 없으면 Center에 청하고, 받은 키로 **진짜 UI 자동화 앱**의 `/v1/keys/self`에 묻는다."""
     path = tmp_path / "uia.sqlite3"
     app = create(db_path=path, admin_token="t")
     SqliteKeyStore(db=Database(path=path)).add(
-        ServiceAppKey(name="개발", hash=hash_key(GOOD), prefix=GOOD[:16], allowed_operations=["*"],
+        ServiceAppKey(name="svk_00000001", hash=hash_key(GOOD), prefix=GOOD[:16], allowed_operations=["*"],
                       allowed_modes=["deterministic", "autonomous"], created_at="2026-10-05T09:00:00+09:00")
     )
-    asked: list[str] = []
-
-    class Reader:
-        def service_apps(self) -> list[Any]:
-            asked.append("service_apps")
-            return [SimpleNamespace(app_id="crm", base_url="http://testserver")]
-
-        def extensions(self) -> list[Any]:
-            return [SimpleNamespace(id="nowview-sc01", tier="external")]
-
-    found = dialog(settings, extensions, Vault(), client=TestClient(app))
-    found._center_reader = Reader  # type: ignore[method-assign]
-    for ref, app_id in (("crm", "crm"), ("nv", "nowview-sc01"), ("ui", "ui-automation")):
-        type_key(found, found._add_key_row(ref, app_id), GOOD)
+    asked = center_hands_out(monkeypatch, GOOD)
+    vault = approved(Vault())
+    start = replace(settings, center_url="http://center.test")
+    found = dialog(start, extensions, vault, refs=[("test-ui", "ui-automation")], client=TestClient(app))
+    found._center_reader = lambda: None  # type: ignore[method-assign]
     found.test_keys()
-    assert [found._cell(at, 3) for at in range(3)] == ["정상 — 허용: 결정·자율", EXTERNAL_NOT_CHECKED,
-                                                       "정상 — 허용: 결정·자율"]
-    assert asked == ["service_apps"], "Center는 한 번만 묻는다"
+    assert asked == ["ui-automation"]
+    assert found.app_rows() == [("ui-automation", "정상 — 허용: 결정·자율", "자율·결정")]
+    assert ("chaeksas-studio", "dev:ui-automation") in vault.values, "받은 키는 비밀 저장소에 둔다"
+    assert GOOD not in settings.path.read_text(encoding="utf-8") if settings.path.exists() else True
+
+
+def test_without_a_studio_key_the_table_says_why(
+    qt: Any, settings: Settings, extensions: Extensions, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv(ENV_CENTER_API_KEY, raising=False)
+    found = dialog(settings, extensions, Vault(), refs=[("test-ui", "ui-automation")])
+    found._center_reader = lambda: None  # type: ignore[method-assign]
+    found.test_keys()
+    [(app, said, _)] = found.app_rows()
+    assert app == "ui-automation" and said.startswith("받지 못함") and "Center" in said
 
 
 # ─────────────────────────── 확인들 ───────────────────────────

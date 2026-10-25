@@ -25,12 +25,15 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from chaeksas.bot_ui.runner import KeyRefusal, Request
-from chaeksas.contracts.center_keys import expires_soon
+from chaeksas.contracts.center_keys import EXPIRY_WARNING_DAYS, expires_soon
 
 #: 누르면 할 일. 화면이 이 글로 창을 고른다 (여기서 Qt를 부르지 않는다).
 ACTION_APPROVAL = "approval"
 ACTION_SETTINGS = "settings"
+#: 서비스 앱 키 알림이 가리키는 자리 — BUI-04 「Bot」 탭 (BUI-10은 없다, ADR-0094).
 ACTION_KEYS = "keys"
+#: 서비스 앱 키 만료 알림 — Center가 14일 전부터 새 키를 주므로 7일 전까지 안 왔을 때만 (ADR-0094).
+SERVICE_KEY_NOTICE_DAYS = 7
 ACTION_WINDOW = "window"
 
 #: 알림 종류 — 시험과 화면이 고르는 열쇠다 (문구로 고르지 않는다).
@@ -182,19 +185,9 @@ class Notices:
     # ── 배포 (C2·C4) ──
 
     def deployed(self, *, bot: str, version: str, missing_keys: Iterable[str] = ()) -> None:
-        """설치했다. **키가 빠져 있으면 그것을 말한다** — 설치됐지만 돌지 않는다 (BUI-10으로)."""
-        refs = ", ".join(missing_keys)
-        if refs:
-            self.add(
-                Notice(
-                    kind=DEPLOYED_NEEDS_KEY,
-                    text=f"{_bot(bot)} 설치됨 — 서비스 앱 키 {refs}를 등록해야 실행할 수 있습니다",
-                    action=ACTION_KEYS,
-                    sticky=True,
-                    level="warning",
-                )
-            )
-            return
+        """설치했다. 키는 **배포와 함께 Center가 내려 준다** (ADR-0094) — 사람이 넣을 것이 없어 키가
+        아직 오지 않았다고 따로 알리지 않는다(BUI-04 「준비」가 말한다). `missing_keys`는 옛 호출의 호환이다."""
+        del missing_keys
         self.add(Notice(kind=DEPLOYED, text=f"{_bot(bot)} {version}을 설치했습니다"))
 
     def deploy_refused(self, *, why: str) -> None:
@@ -236,7 +229,7 @@ class Notices:
         more = f" — 기록 {shipped}건 보냄" if shipped else ""
         self.add(Notice(kind=CENTER_BACK, text=f"Center 연결 복구{more}"))
 
-    def center_key_expiring(self, *, expires_at: str | None, now: str) -> None:
+    def center_key_expiring(self, *, expires_at: str | None, now: str, within_days: int = EXPIRY_WARNING_DAYS) -> None:
         """Center API 키 만료가 가까웠다 (C4 `key_expires_at`, BUI-05).
 
         **14일 전부터 하루 한 번**이다 — 주기마다 넣으면 30초에 한 번 같은 말을 한다. 그래서
@@ -244,8 +237,11 @@ class Notices:
 
         **이미 만료된 키는 여기서 알리지 않는다** — 그때는 Center가 거부하고 `key_rejected()`가
         할 일을 말한다. 값이 **없으면 만료가 없는 키**다 (C4 — 「모른다」가 아니다).
+
+        **Center가 회전해 주는 키**는 `within_days`를 7로 준다 (C4 §키 회전) — 그 키는 14일 전부터
+        새 키가 오므로, 7일 전까지 오지 않았다는 것은 Center에 닿지 못했다는 뜻이다.
         """
-        if not expires_soon(now=now, expires_at=expires_at):
+        if not expires_soon(now=now, expires_at=expires_at, within_days=within_days):
             self._key_told_on = ""  # 기간이 늘어났다 — 다음에 가까워지면 다시 알린다
             return
         today = now[:10]
@@ -285,7 +281,7 @@ class Notices:
         """앱이 키를 거부했다 — **실행 기록에서 읽은 것**이다 (C3 `service_call`의 401·403).
 
         **묻지 않고 안다.** 실행이 이미 그 앱에 물었고 거부당했으므로, 알리려고 다시 부를 것이
-        없다. 값이 이 PC에 없는 것은 여기 오지 않는다 (사전 점검의 「서비스 앱 키 없음」이다).
+        없다. 값이 이 PC에 없는 것은 여기 오지 않는다 (사전 점검의 「서비스 앱 키 받지 못함」이다).
 
         **같은 실행에서는 한 번**이다 — 재시도가 `service_call` 줄을 여럿 남긴다. 실행이 바뀌면
         들고 있던 것을 버려 **다시 알린다**: 지난 알림이 아니라 방금 실패한 업무다.
@@ -300,9 +296,9 @@ class Notices:
             self.add(
                 Notice(
                     kind=SERVICE_KEY_REFUSED,
-                    # **까닭(만료·폐기·틀림)은 넣지 않는다** — 어느 쪽이든 할 일이 같고(새 키),
-                    # 어느 쪽인지는 BUI-10 「확인」이 말한다 (`key_rejected()`와 같은 결).
-                    text=f"{_app(one.app_id)}이 키 {one.key_ref}를 거부했습니다 — 새 키를 넣으세요",
+                    # **까닭(만료·폐기·틀림)은 넣지 않는다** — 어느 쪽이든 이 PC에서 할 일은 같다.
+                    # 키는 Center가 짓는다 — 앱에서 비상 폐기했을 수 있어 저절로 되살아나지 않는다 (ADR-0094).
+                    text=f"{_app(one.app_id)}이 키 {one.key_ref}를 거부했습니다 — 관리자에게 알리세요",
                     action=ACTION_KEYS,
                     sticky=True,
                     level="error",
@@ -319,7 +315,8 @@ class Notices:
         **없으면 만료 없는 키**다. 묻는 때·범위를 정하는 것은 부르는 쪽이고, **알릴지는 여기서**
         정한다 (`center_key_expiring()`과 같은 자리).
         """
-        if not expires_soon(now=now, expires_at=expires_at):
+        # Center가 14일 전부터 새 키를 내려 주므로 **7일 전까지 오지 않았을 때만** 알린다 (ADR-0094).
+        if not expires_soon(now=now, expires_at=expires_at, within_days=SERVICE_KEY_NOTICE_DAYS):
             self._service_key_told_on.pop(ref, None)  # 기간이 늘었다 — 다음에 가까워지면 다시
             return
         today = now[:10]
@@ -329,7 +326,10 @@ class Notices:
         self.add(
             Notice(
                 kind=SERVICE_KEY_EXPIRING,
-                text=f"서비스 앱 키 {ref}가 {(expires_at or '')[:10]}에 만료됩니다",
+                text=(
+                    f"서비스 앱 키 {ref}가 {(expires_at or '')[:10]}에 만료되는데 Center가 아직 새 키를 주지 않았습니다"
+                    " — Center 연결을 확인하세요"
+                ),
                 action=ACTION_KEYS,
                 seconds=LONG_S,
                 level="warning",

@@ -24,6 +24,8 @@ export interface BotUiInfo {
   readiness?: Readiness[];
   registered_at: string;
   runtimes?: Runtimes | null;
+  selector_registration?: boolean;
+  service_keys?: ServiceKeyStatus[];
   status?: string | null;
   versions: Versions;
   worker?: WorkerState | null;
@@ -113,6 +115,24 @@ export interface Runtimes {
   browsers?: string[];
   desktop_backend?: string | null;
   extensions?: ExtensionState[];
+  [k: string]: unknown;
+}
+/**
+ * CON-03·CON-12 「준비」 툴팁 — 그 대상의 키 하나가 어디까지 왔나. **원문·해시는 없다.**
+ *
+ * `stage`: `app_pending`(앱에 아직 맡기지 못함 — `error`가 까닭) / `sent`(봉해 실었다, 현장이
+ * 받기를 기다림) / `received`(현장이 받았다). 열린 문자열.
+ */
+export interface ServiceKeyStatus {
+  app_id: string;
+  bpm_process_id?: string | null;
+  error?: string | null;
+  expires_at?: string | null;
+  key_refs?: string[];
+  purpose: string;
+  service_key_id: string;
+  source: string;
+  stage: string;
   [k: string]: unknown;
 }
 export interface Versions {

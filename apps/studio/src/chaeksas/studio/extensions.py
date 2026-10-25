@@ -101,13 +101,20 @@ class StudioSecrets:
     credentials: StudioCredentials = field(default_factory=StudioCredentials)
     #: 이 확장의 비밀 설정 칸으로도 찾는다 (STU-10 「확장별 설정」, ADR-0073). 비면 키 참조만.
     extension_id: str = ""
+    #: 개발 키를 청하는 쪽 (ADR-0094 §5) — 메인 창이 준다. 없으면 청하지 않는다.
+    dev_keys: Callable[[], Any] | None = None
 
     def resolve(self, ref: str) -> str | None:
-        """Bot UI 실행기와 **같은 순서**다 — 서비스 앱 키 참조가 먼저, 그다음 그 확장의 비밀 칸."""
+        """Bot UI 실행기와 **같은 순서**다 — 서비스 앱 키 참조가 먼저, 그다음 그 확장의 비밀 칸,
+        마지막으로 **이 확장의 서버 부분 앱의 개발 키**다 (앱마다 하나라 참조와 상관없다)."""
         found = self.credentials.service_key(ref)
         if found or not self.extension_id:
             return found
-        return self.credentials.extension_secret(self.extension_id, ref)
+        found = self.credentials.extension_secret(self.extension_id, ref)
+        if found or self.dev_keys is None:
+            return found
+        made = self.dev_keys()
+        return made.key_for(self.extension_id) if made is not None else None
 
 
 def installed_host(off: Iterable[str] = ()) -> ExtensionHost:
@@ -134,6 +141,8 @@ class Extensions:
     #: 열린 BPM 프로세스의 `chk:process.service_keys` (`{확장·앱 id: 참조}`) — 메인 창이 준다.
     #: 편집기의 예약 키 `service.key_ref`가 여기서 온다 (ADR-0074).
     process_key_refs: Callable[[], Mapping[str, str]] = field(default_factory=lambda: dict)
+    #: 개발 키를 청하는 쪽 (ADR-0094 §5) — 메인 창이 준다.
+    dev_keys: Callable[[], Any] | None = None
     _editors: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -232,7 +241,7 @@ class Extensions:
             extension_id,
             host=HOST_STUDIO,
             settings=LiveSettings(values=values),
-            secrets=StudioSecrets(extension_id=extension_id),
+            secrets=StudioSecrets(extension_id=extension_id, dev_keys=self.dev_keys),
         )
 
     def context(self, extension_id: str) -> ExtensionContext:
@@ -246,7 +255,7 @@ class Extensions:
             extension_id,
             host=HOST_STUDIO,
             settings=PlainSettings(values=values),
-            secrets=StudioSecrets(extension_id=extension_id),
+            secrets=StudioSecrets(extension_id=extension_id, dev_keys=self.dev_keys),
         )
 
     def tasks(self) -> HostTasks:

@@ -43,6 +43,10 @@ def main(argv: list[str] | None = None) -> int:
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     window = MainWindow(settings)
     window.show()
+    # Center에 들어와 있나 — **메인 창이 먼저 뜬 뒤** 한 번 본다 (STU-16 「언제 뜨나」).
+    from PySide6.QtCore import QTimer  # noqa: PLC0415
+
+    QTimer.singleShot(0, window.check_center_at_start)
     return int(app.exec())
 
 

@@ -13,7 +13,7 @@
   },
   "requires_keys": [
     {"purpose": "run", "extra_scopes": []},
-    {"purpose": "utility", "extra_scopes": ["registry_write"], "config_key": "registrar_key"}
+    {"purpose": "utility", "extra_scopes": ["registry_write"]}
   ],
   "contributes": {
     "task_types": [
@@ -69,15 +69,6 @@
         "reserve": {"path": "/v1/admin/reserve", "header": "X-CHK-Local-Admin", "token_file": "worker.admin.token"},
         "status": {"path": "/v1/status", "header": "X-CHK-Local-Token", "token_file": "worker.token"},
         "shutdown": {"path": "/v1/admin/shutdown", "header": "X-CHK-Local-Admin", "token_file": "worker.admin.token"}
-      }
-    ],
-    "configuration": [
-      {
-        "key": "registrar_key",
-        "label": "등록 담당자 키 (registry_write 권한)",
-        "scope": "tool_ui",
-        "schema": {"type": "string"},
-        "secret": true
       }
     ],
     "preflight": [

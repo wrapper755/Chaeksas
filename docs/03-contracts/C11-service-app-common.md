@@ -7,8 +7,8 @@
 | 보내는 쪽 → 받는 쪽 | Bot UI(실행 중 Bot)·서버 실행기·Studio·Worker 프로세스 → 모든 서비스 앱 |
 | 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py` (import `chaeksas.contracts.service_app`), 받는 쪽 뼈대 `packages/service_kit/` (import `chaeksas.service_kit`, [ADR-0019](../decisions/0019-package-names.md)), **부르는 쪽 `chaeksas.core.services`** (서비스 앱 태스크 — 멱등 키·재시도·C3 `service_call` 기록). 보기: 진짜 앱은 `extensions/ui_automation/.../service/app.py`, 업무 예제가 부르는 **모의 앱 열넷**은 [`samples/`](../../samples/README.md) |
 | JSON Schema | [`c11-service-app-manifest.json`](../../packages/contracts/schemas/c11-service-app-manifest.json) · [`c11-op-request.json`](../../packages/contracts/schemas/c11-op-request.json) · [`c11-op-response.json`](../../packages/contracts/schemas/c11-op-response.json) · [`c11-health-response.json`](../../packages/contracts/schemas/c11-health-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md) |
-| 관련 화면 | STU-14, BUI-10, SVC-00~03, CON-07 |
+| 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
+| 관련 화면 | STU-14, STU-10 「서비스 앱」, SVC-00~03, CON-03, CON-07 |
 
 ## 목적
 
@@ -22,9 +22,11 @@
 | `GET /manifest` | 없음 (비밀 없음) | 앱 정보와 작업 목록 |
 | `POST /v1/ops/{operation}` | **서비스 앱 API 키** | 작업 호출 |
 | `GET /v1/keys/self` | 서비스 앱 API 키 | 이 키의 이름·허용 작업·허용 모드·만료 (Studio·Bot UI 「연결 테스트」용, 키 원문은 돌려주지 않음) |
+| `GET /center/v1/trust` | 없음 (비밀 없음) | 이 앱이 Center 발급을 받나 (§Center가 발급하는 키) |
+| `POST /center/v1/keys` | **Center 서명 봉투** | Center가 키를 짓고·고치고·폐기한다 (§Center가 발급하는 키) |
 | 관리 콘솔 (웹) | 관리자 토큰 | SVC-00~03 (+ 앱 고유 화면). 기본 포트 = API 포트 + 1 |
 
-- 인증: `Authorization: Bearer <서비스 앱 API 키>`. 키는 **그 서비스 앱의 관리 콘솔(SVC-02)에서 발급**하고, 앱이 **스스로 검증**한다 (해시 저장). Center는 키를 모른다.
+- 인증: `Authorization: Bearer <서비스 앱 API 키>`. 키는 **Center가 짓고 앱에는 해시만 맡긴다** (§Center가 발급하는 키, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md)). 앱이 **스스로 검증**한다 (해시 저장). 관리 API의 발급(`POST /admin/v1/keys`)은 자동화·시험·Center를 믿지 않는 앱을 위해 남고 SVC-02 화면에는 없다.
 - 키 형식: `chk_svc_<무작위 40자>`. **앞자리 = 앞 16자**(`chk_svc_` + 무작위 8자)만 화면·기록에 남긴다. 앱 id는 키에 넣지 않는다 (앞자리가 키마다 달라야 구별된다). Center API 키도 같은 규칙으로 `chk_ctr_…` (C4).
 - 멱등성: **멱등 키 = `(operation, run_id, node_id, node_instance, attempt, call_seq)`.** 같은 키로 다시 오면 수행하지 않고 저장된 결과를 그대로 돌려준다 (`replayed: true`). 같은 키인데 본문(`input`·`mode`)의 해시가 다르면 409 `idempotency_conflict`. 보관 기간 기본 7일 (`CHK_SVC_<APP>__IDEMPOTENCY_DAYS`).
   - `node_instance`: 같은 노드가 한 실행 안에서 몇 번째로 실행되는가 (BPMN 반복·다중 인스턴스). 1부터.
@@ -115,6 +117,9 @@
 | `allowed_modes` | `deterministic`(운영: Bot UI·서버 실행기용) / `autonomous`+`deterministic`(개발: Studio용) |
 | `extra_scopes` | 앱별 추가 권한 (예: UI 자동화 앱 `registry_write` — UI 셀렉터 등록 담당자용) |
 | `expires_at`, `created_at`, `last_used_at`, `revoked_at` | |
+| `issued_by` | `admin`(관리 API로 발급) \| `center`(Center가 발급). 지금 있는 키는 모두 `admin`이다 |
+| `center_key_id` | Center가 발급한 키면 Center의 id (`svk_<hex8>`). 그 키의 이름(`name`)도 이 값이다 |
+| `issued_for` | Center가 발급한 키면 **누구를 위해서인가** — 아래 IssuedFor. SVC-02 「발급」 열과 「배포 없이 생긴 키」가 이것을 본다 |
 
 ### 사용 기록 (앱 안, SVC-03)
 
@@ -152,6 +157,70 @@ AdminKeyInfo: `ServiceAppKey`에서 **`hash`를 뺀 것** + `state`(`active`·`e
   프로세스의 키 참조 이름과 맞추기를 권하므로(SVC-02), 이름이 겹치면 어느 키인지 알 수 없다.
 - 관리자 토큰이 설정되지 않았으면 관리 API 전체가 503 `admin_disabled`다. **빈 토큰으로 열리지
   않는다.**
+
+## Center가 발급하는 키
+
+> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md), [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) §3). 사람이 SVC-02에서 키를 발급해 PC마다 붙여 넣던 일을 없앤다. Center가 키 원문을 짓고 **앱에는 해시만** 맡기며, 원문은 배포 대상에 봉해서만 나간다 (C4 §서비스 앱 키 전달).
+
+### 앱이 Center를 믿는 방법
+
+| 설정 | 뜻 |
+| --- | --- |
+| `CHK_SVC_<APP>__CENTER__URL` | Center 주소. **비우면 Center 발급을 받지 않는다** — `POST /center/v1/keys`가 503 `center_disabled`이고, 키는 관리 API로만 생긴다 (자동화·시험·다른 조직이 운영하는 앱) |
+| `CHK_SVC_<APP>__CENTER__KEY_PIN` | **선택.** 믿을 Center 서명 키의 `key_id` 하나 (ADR-0094 §1). 있으면 받은 목록에 그 키가 있을 때만 믿고, 없으면 목록을 받지 않고 관리 상태(`dependencies`의 `center` 줄)에 까닭을 남긴다. 비우면 HTTPS만 믿는다(기본) |
+
+- 앱은 **뜰 때**, 그리고 **모르는 `key_id`의 봉투를 받았을 때**(5분에 한 번까지) `GET <Center>/api/v1/signing-keys`(C7 — 인증 없음)로 믿는 키 목록(C2 `AdminKey[]`)을 받아 **앱의 저장소에 남긴다.** Center에 닿지 못하면 들고 있던 목록으로 검증한다.
+- `revoked_at`이 붙은 키가 서명한 봉투는 받지 않는다 (C2 V2와 같다).
+
+### `GET /center/v1/trust`
+
+인증 없음. Center가 서비스 앱을 등록할 때와 상태를 볼 때(60초) 읽는다 (C7 `ServiceAppResource.trust`).
+
+| 필드 | 타입 | 뜻 |
+| --- | --- | --- |
+| `center_url` | str? | 설정된 Center 주소. 없으면 Center 발급을 받지 않는 앱이다 |
+| `key_ids` | str[] | 지금 믿는 Center 서명 키 id |
+| `fetched_at` | str? | 그 목록을 마지막으로 받은 때 |
+| `pinned` | bool | `KEY_PIN`을 쓰나. 쓰는데 목록에 그 키가 없으면 `key_ids`가 비고 Center는 `pin_mismatch`로 본다 (C7 `trust`) |
+
+Center는 `center_url`이 자기 주소와 다르거나 `key_ids`에 지금 서명하는 키가 없으면 그 앱에 키를 짓지 않고 CON-07 「할 일」로 말한다.
+
+### `POST /center/v1/keys`
+
+본문은 **C2 봉투 하나**(`payload.kind: service_key`)다. 앱은 현장이 배포 봉투를 볼 때와 **같은 `verify()`**(C2 V1~V4)를 쓰고 아래를 더 본다.
+
+| ServiceKeyClaim 필드 | 타입 | 뜻 |
+| --- | --- | --- |
+| `kind` | `service_key` | |
+| `action` | `issue` \| `update` \| `revoke` | 짓기 / 허용 작업·만료 고치기 (판을 올려도 같은 키 — ADR-0094 §3) / 폐기 |
+| `app_id` | str | **이 앱이어야 한다.** 아니면 422 `wrong_app` |
+| `center_key_id` | str | `svk_<hex8>`. 키 레코드의 `name`이 된다 |
+| `hash` · `prefix` | str | `issue`에만. 원문의 SHA-256(앱이 저장하는 것과 같다)과 앞자리 16자. **원문은 오지 않는다** |
+| `allowed_operations` · `allowed_modes` · `extra_scopes` · `expires_at` | | `issue`·`update`. 뜻은 키 레코드와 같다 |
+| `issued_for` | IssuedFor | `issue`에만 |
+| `reason` | str? | `revoke`일 때 (`deployment_revoked` `target_disabled` `target_unbound` `rotated` `reissued` `studio_key_revoked` `utility_off` — 열린 문자열) |
+| `not_after` | str | 이 봉투를 받아도 되는 마지막 때 (지은 때 + 10분). 지나면 403 `envelope_expired` |
+
+| IssuedFor 필드 | 뜻 |
+| --- | --- |
+| `kind` | `deployment`(현장 실행 키) \| `studio`(개발 키) \| `utility`(Tool UI 도구 — ADR-0094 §6). 열린 문자열 |
+| `bpm_process_id` · `deployment_id` | `deployment`일 때. 키를 처음 지은 배포 (판을 올려도 바뀌지 않는다) |
+| `target` | `{type: "bot_ui" \| "server_runner", id, name}` — `deployment`·`utility`일 때. `name`은 SVC-02에 보일 이름이다 (앱은 PC 이름을 모른다) |
+| `center_key` | `{key_id, name}` — `studio`일 때. 승인된 Studio 키 (ADR-0093) |
+
+응답: `200 {center_key_id, state}` (`state`는 C11 `key_state()`의 값).
+
+- **멱등이다.** 같은 `center_key_id`·같은 `hash`로 다시 `issue`하면 같은 200이다. 같은 id인데 `hash`가 다르면 409 `key_conflict`. 이미 폐기된 것을 다시 `revoke`하면 200이다. 그래서 Center는 앱이 답하지 않을 때 **같은 봉투를 그대로 다시 보낸다**(`not_after` 안에서 — 지나면 새로 짓는다).
+- `update`·`revoke`가 모르는 `center_key_id`를 가리키면 404 `key_not_found`다. Center는 그것을 「이미 없다」로 보고 지나간다.
+- Center가 짓는 키는 **관리 API의 이름 규칙과 겹치지 않는다** — `svk_`로 시작하는 이름은 관리 API가 받지 않는다(409 `name_reserved`).
+
+| 상태 | `code` | 언제 |
+| --- | --- | --- |
+| 401 | `center_signature_invalid` | V1~V3 실패, 모르는 `key_id`(목록을 다시 받아도 없다) |
+| 403 | `center_key_revoked` / `envelope_expired` | 버린 키가 서명함 / `not_after`가 지남 |
+| 409 | `key_conflict` | 같은 `center_key_id`, 다른 `hash` |
+| 422 | `wrong_app` / `wrong_kind` | 다른 앱의 봉투 / `kind`가 `service_key`가 아님 |
+| 503 | `center_disabled` | `CENTER__URL`이 없다 |
 
 ## 예시
 
@@ -237,6 +306,7 @@ Content-Type: application/json
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | §Center가 발급하는 키 — `CENTER__URL`, `GET /center/v1/trust`, `POST /center/v1/keys`(C2 봉투 `service_key`, 해시만), 키 레코드 `issued_by`·`center_key_id`·`issued_for`. 새 경로·선택 칸이라 옛 부르는 쪽은 그대로다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-03 | 1 | 관리 API(`/admin/v1/status`·`keys`·`usage`)의 경로·모델·권한을 적었다 — ADR-0017이 경로만 말하고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |
 | 2026-10-05 | 1 | 모델 연결(`CHK_SVC_<APP>__LLM__*`)과 503 `llm_unavailable`, 관리 상태의 `llm` 의존 줄을 적었다 — 서비스 앱은 `core`를 쓸 수 없어 모델 클라이언트를 `chaeksas.llm`으로 내렸다. 모델 칸은 새로 생긴 것이라 기존 앱은 영향이 없다 | 0034 |
 | 2026-10-05 | 1 | `Operation.required_scopes`를 더했다 — 추가 권한을 **작업이 선언하고 뼈대가 건다** (C9의 `registry_write`를 앱마다 손으로 거는 것을 막는다). 없던 칸이라 기존 앱은 영향이 없다 | 0013 |

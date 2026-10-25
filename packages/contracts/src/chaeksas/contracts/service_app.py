@@ -21,6 +21,7 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp, Violation
+from chaeksas.contracts.service_keys import IssuedFor
 
 #: 서비스 앱 API 키 — `chk_svc_` + 무작위 40자. 앞자리 16자만 화면·기록에 남긴다.
 #: 앱 id를 키에 넣지 않는다 (앞자리가 키마다 달라야 구별된다).
@@ -188,6 +189,12 @@ class ServiceAppKey(ContractModel):
     expires_at: Timestamp | None = None
     last_used_at: Timestamp | None = None
     revoked_at: Timestamp | None = None
+    #: 누가 지었나 — `admin`(관리 API) / `center`(Center 발급, ADR-0094). 없으면 `admin`이다.
+    issued_by: str | None = None
+    #: Center가 지은 키면 Center의 id (`svk_<hex8>`). 이름(`name`)도 이 값이다.
+    center_key_id: str | None = None
+    #: Center가 지은 키면 누구를 위해서인가 (SVC-02 「발급」 열).
+    issued_for: IssuedFor | None = None
 
     def allows_operation(self, name: str) -> bool:
         return "*" in self.allowed_operations or name in self.allowed_operations
@@ -386,6 +393,9 @@ class AdminKeyInfo(ContractModel):
     last_used_at: Timestamp | None = None
     revoked_at: Timestamp | None = None
     state: str  # active / expired / revoked
+    issued_by: str | None = None
+    center_key_id: str | None = None
+    issued_for: IssuedFor | None = None
 
 
 class AdminKeyCreateRequest(ContractModel):
@@ -425,4 +435,7 @@ def admin_key_info(key: ServiceAppKey, *, now: str) -> AdminKeyInfo:
         last_used_at=key.last_used_at,
         revoked_at=key.revoked_at,
         state=key_state(key, now=now),
+        issued_by=key.issued_by,
+        center_key_id=key.center_key_id,
+        issued_for=key.issued_for,
     )

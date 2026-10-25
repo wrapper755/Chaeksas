@@ -21,7 +21,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -37,6 +37,8 @@ from chaeksas.contracts.bot_ui import (
     MachineId,
     Readiness,
 )
+from chaeksas.contracts.enrollment import PublicKey, RotatedKey
+from chaeksas.contracts.service_keys import ServiceKeyAck, ServiceKeyDelivery, ServiceKeyStatus
 from chaeksas.contracts.signing import AdminKey
 
 #: 하트비트 기본 간격과 오프라인 판정 (C12 §재시작과 유실 — PC보다 촘촘하다).
@@ -96,6 +98,17 @@ class ServerRunnerRegisterRequest(SchemaVersioned):
     #: 이 실행기가 한 번에 도는 실행 수의 상한. 설정값이라 **실행기가 정한다**.
     max_concurrency: int = Field(default=DEFAULT_MAX_CONCURRENCY, ge=1)
     extensions: list[ExtensionState] = Field(default_factory=list)
+    #: X25519 공개키 — 보내면 키를 회전해 준다 (C4 §키 회전과 같다).
+    public_key: PublicKey | None = None
+
+
+class ServerRunnerEnrollRequest(ServerRunnerRegisterRequest):
+    """`POST /api/v1/server-runner/enroll` — 키가 없을 때 **등록 요청** (C12 §등록 요청과 승인).
+
+    C4 `EnrollRequest`와 같은 결이다 — 등록 본문에 `public_key`가 **필수**다.
+    """
+
+    public_key: PublicKey
 
 
 class ServerRunnerRegisterResponse(ContractModel):
@@ -209,6 +222,7 @@ class ServerRunnerHeartbeatRequest(SchemaVersioned):
     extensions: list[ExtensionState] = Field(default_factory=list)  # 바뀌었을 때만
     restored: list[str] = Field(default_factory=list)
     unsent_events: int | None = None
+    service_key_acks: list[ServiceKeyAck] = Field(default_factory=list)  # C4와 같다 (ADR-0094)
 
 
 class MessageDispatch(ContractModel):
@@ -242,8 +256,13 @@ class ServerRunnerHeartbeatResponse(ContractModel):
     delegations: list[DelegationResult] = Field(default_factory=list)
     #: 참이면 **새 작업을 받지 않는다** (CON-12 「일시 중지」). 도는 것은 끝까지 간다.
     paused: bool = False
+    #: 만료 14일 전부터 새 키 (C4 §키 회전과 같다).
+    rotated_key: RotatedKey | None = None
     #: 이 키의 만료 (C7). **주기마다 싣는다** (C4와 같다).
     key_expires_at: Timestamp | None = None
+    #: 봉한 서비스 앱 키·지울 것 (C4 §서비스 앱 키 전달과 같다, ADR-0094).
+    service_keys: list[ServiceKeyDelivery] = Field(default_factory=list)
+    drop_service_keys: list[str] = Field(default_factory=list)
 
 
 # ─────────────────────────── 메시지 (외부 시스템 → Center) ───────────────────────────
@@ -336,6 +355,8 @@ class ServerRunnerInfo(ContractModel):
     key_prefix: str | None = None
     key_expires_at: Timestamp | None = None
     unsent_events: int | None = None
+    #: 이 실행기에 내려 줄 서비스 앱 키가 어디까지 왔나 (ADR-0094 — CON-12 「준비」 툴팁).
+    service_keys: list[ServiceKeyStatus] = Field(default_factory=list)
 
 
 # ─────────────────────────── 검사 ───────────────────────────
@@ -462,6 +483,7 @@ def pick_jobs(
     slots: int,
     running_per_bot: dict[str, int],
     per_bot_limit: dict[str, int] | None = None,
+    keys_pending: Iterable[str] = (),
 ) -> tuple[list[str], dict[str, str]]:
     """대기열에서 실어 보낼 작업을 고른다 (C12 §Center가 작업을 나누는 규칙 1~3).
 
@@ -469,15 +491,23 @@ def pick_jobs(
     건너뛰고 다음 것을 본다** — 막아 세우면 상한에 걸린 Bot 하나가 대기열 전체를 멈춘다.
 
     돌려주는 것은 `(고른 job_id 목록, 건너뛴 job_id → 사유)`다. 사유는 CON-12 「대기 이유」가
-    보이는 값이고 지금은 `per_bot_limit` 하나다.
+    보이는 값이고 `per_bot_limit`과 `keys_pending`이다.
+
+    `keys_pending`은 **이 실행기가 아직 서비스 앱 키를 받지 못한** Bot이다 (규칙 5, ADR-0094) —
+    실어 보내면 `not_ready`로 거절되어 작업이 닫힌다. 건너뛰면 다른 실행기가 받거나 키가 올 때까지
+    대기열에 남는다.
     """
     limits = per_bot_limit or {}
+    waiting_keys = set(keys_pending)
     taken: list[str] = []
     skipped: dict[str, str] = {}
     counts = dict(running_per_bot)
     for job_id, bot in queued:
         if len(taken) >= slots:
             break
+        if bot in waiting_keys:
+            skipped[job_id] = "keys_pending"
+            continue
         cap = limits.get(bot, DEFAULT_PER_BOT_CONCURRENCY)
         if counts.get(bot, 0) >= cap:
             skipped[job_id] = "per_bot_limit"

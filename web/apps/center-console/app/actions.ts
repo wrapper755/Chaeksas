@@ -297,16 +297,16 @@ export async function registerExtension(form: FormData): Promise<void> {
     definition = await jsonFile(form, "definition", "확장 정의 파일");
   } catch (cause) {
     const said = cause instanceof Error ? cause.message : "파일을 읽지 못했습니다.";
-    redirect(back(`tab=extension&error=${encodeURIComponent(said)}`));
+    redirect(back(`error=${encodeURIComponent(said)}`));
   }
 
   try {
     await center.registerExtension(definition);
   } catch (cause) {
-    redirect(back(`tab=extension&error=${encodeURIComponent(violations(cause))}`));
+    redirect(back(`error=${encodeURIComponent(violations(cause))}`));
   }
   revalidatePath("/resources", "layout");
-  redirect(back("tab=extension&extension=1"));
+  redirect(back("extension=1"));
 }
 
 /** 등록 해제 — 확인 창을 거쳐서만 온다. **되살릴 수 없다.** */
@@ -317,7 +317,7 @@ export async function revokeExtension(extensionId: string, version: string): Pro
     return { error: violations(cause) };
   }
   revalidatePath("/resources", "layout");
-  redirect("/resources?tab=extension&revoked=1" as Route);
+  redirect("/resources?revoked=1" as Route);
 }
 
 /** C13 검사 위반을 **칸별 사유까지** 한 줄로 (E3은 어디가 틀렸는지가 요점이다). */
@@ -341,15 +341,15 @@ export async function registerServiceApp(form: FormData): Promise<void> {
   const baseUrl = String(form.get("base_url") ?? "").trim();
   const back = (query: string): Route => `/resources?${query}` as Route;
   if (!baseUrl) {
-    redirect(back(`tab=service_app&error=${encodeURIComponent("API 주소를 적으세요.")}`));
+    redirect(back(`error=${encodeURIComponent("API 주소를 적으세요.")}`));
   }
   try {
     await center.registerServiceApp(baseUrl);
   } catch (cause) {
-    redirect(back(`tab=service_app&error=${encodeURIComponent(message(cause))}`));
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
   }
   revalidatePath("/resources", "layout");
-  redirect(back("tab=service_app&registered=1"));
+  redirect(back("registered=1"));
 }
 
 /** 주소 바꾸기 — **환경별 주소의 유일한 출처**다 (C7 `PUT`). */
@@ -370,6 +370,47 @@ export async function setServiceAppUrl(form: FormData): Promise<void> {
   redirect(back("moved=1"));
 }
 
+/**
+ * 외부 앱 키 「키 넣기...」·「바꾸기...」 (CON-07 상세, C7 §외부 앱 키). **원문은 다시 보이지 않는다** —
+ * 돌아가는 주소에 싣지 않고, Center 응답에도 없다.
+ */
+export async function putAppKey(form: FormData): Promise<void> {
+  const extensionId = String(form.get("extension_id") ?? "");
+  const slot = String(form.get("slot") ?? "") === "test" ? "test" : "run";
+  const key = String(form.get("key") ?? "").trim();
+  const back = (query: string): Route =>
+    `/resources/features/${encodeURIComponent(extensionId)}?${query}` as Route;
+  if (!key) redirect(back(`error=${encodeURIComponent("키를 넣으세요.")}`));
+  try {
+    await center.setAppKey(extensionId, slot, key);
+  } catch (cause) {
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
+  }
+  revalidatePath("/resources", "layout");
+  redirect(back(`key_saved=${slot}`));
+}
+
+export async function deleteAppKey(extensionId: string, slot: "run" | "test"): Promise<ActionResult> {
+  try {
+    await center.deleteAppKey(extensionId, slot);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/resources", "layout");
+  return {};
+}
+
+/** CON-03 「셀렉터 등록」 켜기·끄기 (ADR-0094 §6). 키는 Center가 그 PC에 내려 주고 거둔다. */
+export async function setSelectorRegistration(botUiId: string, on: boolean): Promise<ActionResult> {
+  try {
+    await center.setSelectorRegistration(botUiId, on);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath(`/bot-uis/${botUiId}`);
+  return {};
+}
+
 export async function unregisterServiceApp(appId: string): Promise<ActionResult> {
   try {
     await center.unregisterServiceApp(appId);
@@ -382,7 +423,8 @@ export async function unregisterServiceApp(appId: string): Promise<ActionResult>
     return { error: message(cause) };
   }
   revalidatePath("/resources", "layout");
-  return {};
+  // 해제한 기능의 상세는 더 없다 — 목록으로 돌아간다.
+  redirect("/resources" as Route);
 }
 
 /**
@@ -441,6 +483,27 @@ export async function revokeCenterKey(keyId: string): Promise<ActionResult> {
   } catch (cause) {
     return { error: message(cause) };
   }
+  revalidatePath("/center-keys");
+  return {};
+}
+
+/**
+ * 등록 요청 승인·거절 (CON-03·CON-12 「승인 대기」, C5 §등록 승인). 키는 Center가 만들어
+ * 요청의 공개키로 봉해 둔다 — 여기서도 원문은 지나가지 않는다.
+ */
+export async function decideEnrollment(
+  enrollmentId: string,
+  decision: "approve" | "reject",
+  text: string,
+): Promise<ActionResult> {
+  try {
+    if (decision === "approve") await center.approveEnrollment(enrollmentId, text.trim() || undefined);
+    else await center.rejectEnrollment(enrollmentId, text.trim() || undefined);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/bot-uis", "layout");
+  revalidatePath("/server-runners", "layout");
   revalidatePath("/center-keys");
   return {};
 }

@@ -349,13 +349,16 @@ def test_b6_asks_the_host_about_extension_task_locations() -> None:
     assert "B6" in codes(xml, task_type_locations={"ui_task": ["pc"]})
 
 
-def test_b7_service_call_needs_a_key_ref() -> None:
+def test_b7_only_checks_the_name_of_a_written_key_ref() -> None:
+    """적지 않은 참조는 흠이 아니다 — 빌드·엔진이 C1 기본값을 쓴다 (ADR-0094). 적었으면 이름 규칙을 본다."""
     task = ('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
             '<chk:serviceCall>{"app_id": "erp", "operation": "read"}</chk:serviceCall>'
             "</bpmn:extensionElements></bpmn:serviceTask>")
-    assert "B7" in codes(wrap(line(task)))
+    assert "B7" not in codes(wrap(line(task)))
     ok = wrap(line(task), process_json='{"run_location": "pc", "service_keys": {"erp": "erp-reader"}}')
     assert "B7" not in codes(ok)
+    bad = wrap(line(task), process_json='{"run_location": "pc", "service_keys": {"erp": "ERP_Reader"}}')
+    assert "B7" in codes(bad)
 
 
 def test_b8_result_types_and_code_like_names() -> None:

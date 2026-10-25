@@ -364,6 +364,84 @@
       "title": "Runtimes",
       "type": "object"
     },
+    "ServiceKeyStatus": {
+      "additionalProperties": true,
+      "description": "CON-03·CON-12 「준비」 툴팁 — 그 대상의 키 하나가 어디까지 왔나. **원문·해시는 없다.**\n\n`stage`: `app_pending`(앱에 아직 맡기지 못함 — `error`가 까닭) / `sent`(봉해 실었다, 현장이\n받기를 기다림) / `received`(현장이 받았다). 열린 문자열.",
+      "properties": {
+        "app_id": {
+          "title": "App Id",
+          "type": "string"
+        },
+        "bpm_process_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bpm Process Id"
+        },
+        "error": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "key_refs": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Key Refs",
+          "type": "array"
+        },
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
+        },
+        "service_key_id": {
+          "title": "Service Key Id",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        },
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        }
+      },
+      "required": [
+        "service_key_id",
+        "purpose",
+        "source",
+        "app_id",
+        "stage"
+      ],
+      "title": "ServiceKeyStatus",
+      "type": "object"
+    },
     "Versions": {
       "additionalProperties": true,
       "properties": {
@@ -573,6 +651,18 @@
         }
       ],
       "default": null
+    },
+    "selector_registration": {
+      "default": false,
+      "title": "Selector Registration",
+      "type": "boolean"
+    },
+    "service_keys": {
+      "items": {
+        "$ref": "#/$defs/ServiceKeyStatus"
+      },
+      "title": "Service Keys",
+      "type": "array"
     },
     "status": {
       "anyOf": [
