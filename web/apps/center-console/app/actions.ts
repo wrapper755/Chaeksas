@@ -371,6 +371,39 @@ export async function setServiceAppUrl(form: FormData): Promise<void> {
 }
 
 /**
+ * 외부 기능 「주소 바꾸기...」 (CON-07 상세 「서버 주소」, C7 §외부 확장 주소, ADR-0097). 정의의 허용
+ * 호스트 밖이면 Center가 422로 거절하고 그 까닭을 그 자리에 보인다.
+ */
+export async function setExtensionAddress(form: FormData): Promise<void> {
+  const extensionId = String(form.get("extension_id") ?? "");
+  const baseUrl = String(form.get("base_url") ?? "").trim();
+  const back = (query: string): Route =>
+    `/resources/features/${encodeURIComponent(extensionId)}?${query}` as Route;
+  if (!baseUrl) redirect(back(`error=${encodeURIComponent("API 주소를 적으세요.")}`));
+  try {
+    await center.setExtensionAddress(extensionId, baseUrl);
+  } catch (cause) {
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
+  }
+  revalidatePath("/resources", "layout");
+  redirect(back("moved=1"));
+}
+
+/** 「기본값으로 되돌리기」 — 되돌릴 수 있는 일이라 확인 창 없이 바로 한다. */
+export async function resetExtensionAddress(form: FormData): Promise<void> {
+  const extensionId = String(form.get("extension_id") ?? "");
+  const back = (query: string): Route =>
+    `/resources/features/${encodeURIComponent(extensionId)}?${query}` as Route;
+  try {
+    await center.deleteExtensionAddress(extensionId);
+  } catch (cause) {
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
+  }
+  revalidatePath("/resources", "layout");
+  redirect(back("reset=1"));
+}
+
+/**
  * 외부 앱 키 「키 넣기...」·「바꾸기...」 (CON-07 상세, C7 §외부 앱 키). **원문은 다시 보이지 않는다** —
  * 돌아가는 주소에 싣지 않고, Center 응답에도 없다.
  */

@@ -82,6 +82,14 @@ class TrustState(ContractModel):
     checked_at: Timestamp | None = None
 
 
+class AddressOverride(ContractModel):
+    """Center가 덮어쓴 외부 확장 주소 (C7 §외부 확장 주소, ADR-0097)."""
+
+    base_url: str
+    set_at: Timestamp | None = None
+    set_by: str | None = None
+
+
 class ExtensionResource(ContractModel):
     """확장 하나 (C13 정의에서 모은 것)."""
 
@@ -105,6 +113,9 @@ class ExtensionResource(ContractModel):
     envelope: dict[str, Any] | None = None
     #: 외부 확장이고 키를 받는 앱일 때만 (C7 §외부 앱 키).
     app_key: AppKeyState | None = None
+    #: 외부 확장이고 **Center가 주소를 덮어썼을 때만** — 실행하는 쪽은 이것을 명부의 주소로 쓴다
+    #: (C7 §외부 확장 주소). 지금 정의의 허용 호스트 밖이면 싣지 않는다(`address_outside_definition`).
+    address: AddressOverride | None = None
 
 
 class ServiceAppResource(ContractModel):

@@ -1,5 +1,44 @@
 {
   "$defs": {
+    "AddressOverride": {
+      "additionalProperties": true,
+      "description": "Center가 덮어쓴 외부 확장 주소 (C7 §외부 확장 주소, ADR-0097).",
+      "properties": {
+        "base_url": {
+          "title": "Base Url",
+          "type": "string"
+        },
+        "set_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Set At"
+        },
+        "set_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Set By"
+        }
+      },
+      "required": [
+        "base_url"
+      ],
+      "title": "AddressOverride",
+      "type": "object"
+    },
     "AppKeyState": {
       "additionalProperties": true,
       "description": "외부 앱 키 둘 — 운영(`run`)과 Studio 시험용(`test`) (ADR-0094 §7).",
@@ -76,6 +115,17 @@
   "additionalProperties": true,
   "description": "확장 하나 (C13 정의에서 모은 것).",
   "properties": {
+    "address": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AddressOverride"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "app_key": {
       "anyOf": [
         {

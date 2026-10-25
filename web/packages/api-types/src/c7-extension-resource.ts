@@ -6,6 +6,7 @@
  * 확장 하나 (C13 정의에서 모은 것).
  */
 export interface ExtensionResource {
+  address?: AddressOverride | null;
   app_key?: AppKeyState | null;
   checked_at?: string | null;
   contributes_summary?: {
@@ -28,6 +29,15 @@ export interface ExtensionResource {
   status_reasons?: string[];
   tier: string;
   version: string;
+  [k: string]: unknown;
+}
+/**
+ * Center가 덮어쓴 외부 확장 주소 (C7 §외부 확장 주소, ADR-0097).
+ */
+export interface AddressOverride {
+  base_url: string;
+  set_at?: string | null;
+  set_by?: string | null;
   [k: string]: unknown;
 }
 /**

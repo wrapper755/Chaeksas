@@ -365,14 +365,17 @@ class CaseDialog(QDialog):
                     payload=body if isinstance(body, dict) else {},
                 )
             )
-        self.edited.cases[self.current] = Case(
-            name=self.name_box.text().strip(),
-            description=self.description_box.text().strip() or None,
-            inputs=inputs,
-            expected=expected,
-            approvals=approvals,
-            messages=messages,
-            manual=self.manual_box.isChecked(),
+        # **편집기가 다루지 않는 칸은 그대로 남긴다** (`delegations`·`answered_by` — ADR-0096).
+        self.edited.cases[self.current] = self.edited.cases[self.current].model_copy(
+            update={
+                "name": self.name_box.text().strip(),
+                "description": self.description_box.text().strip() or None,
+                "inputs": inputs,
+                "expected": expected,
+                "approvals": approvals,
+                "messages": messages,
+                "manual": self.manual_box.isChecked(),
+            }
         )
 
     # ── 저장·닫기 ──

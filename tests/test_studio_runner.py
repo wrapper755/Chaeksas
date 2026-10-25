@@ -24,7 +24,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
+from chaeksas.contracts.bpmn_ext import CASE_ANSWERER, Case  # noqa: E402
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest  # noqa: E402
 from chaeksas.studio.receiver import Receiver  # noqa: E402
 from chaeksas.studio.run_actions import MAX_VALUE, format_variables  # noqa: E402
@@ -198,6 +198,42 @@ def test_a_case_answers_the_approval_and_the_run_finishes(app: Any, tmp_path: Pa
     found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
     assert found.verdict == NO_EXPECT, found.detail
     assert found.run is not None and found.run.state.value == "done"
+
+
+def _naming_the_answerer(tmp_path: Path) -> tuple[Any, Any, Settings]:
+    """FX-19의 확인에 `answered_by_as`를 단다 — 그림만 바꾸고 다시 읽는다."""
+    made, settings = studio(tmp_path, "fx19_manual_task_pc")
+    entry = made.entry_definition
+    assert entry is not None
+    xml = entry.path.read_text(encoding="utf-8")
+    entry.path.write_text(
+        xml.replace('"location": "field"', '"location": "field", "answered_by_as": "확인자"', 1), encoding="utf-8"
+    )
+    opened = Workspace(settings.workspace_dir).read(made.folder, made.group)
+    definition = opened.entry_definition
+    assert definition is not None
+    return opened, definition, settings
+
+
+def test_the_case_names_who_answered(app: Any, tmp_path: Path) -> None:
+    """**답한 사람도 케이스가 적는다** (C14 `answered_by`, ADR-0096) — 그림이 그 변수로 받는다."""
+    made, definition, settings = _naming_the_answerer(tmp_path)
+    case = Case(
+        name="확인",
+        approvals={"Manual_Paper": {"decision": "approve"}},
+        answered_by={"Manual_Paper": "이도윤"},
+        expected={"확인자": "이도윤"},
+    )
+    found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
+    assert found.verdict == PASS, found.detail
+
+
+def test_an_unnamed_answerer_is_the_test_case(app: Any, tmp_path: Path) -> None:
+    """적지 않으면 「시험 케이스」다 — Studio에 「Studio 사용자」가 없어 지어내지 않는다."""
+    made, definition, settings = _naming_the_answerer(tmp_path)
+    case = Case(name="확인", approvals={"Manual_Paper": {"decision": "approve"}}, expected={"확인자": CASE_ANSWERER})
+    found = drive(CaseRun(Plan(process=made, definition=definition, case=case, settings=settings)))
+    assert found.verdict == PASS, found.detail
 
 
 def test_an_answer_the_form_refuses_ends_the_run_instead_of_looping(app: Any, tmp_path: Path) -> None:

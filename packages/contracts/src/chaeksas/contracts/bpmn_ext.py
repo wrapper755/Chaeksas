@@ -229,6 +229,11 @@ class Approval(ContractModel):
     expires: str | None = None  # ISO 기간 또는 변수 이름
     #: 결재 담당자 (ADR-0080) — 이름 배열이거나 **변수 이름 하나**다 (`expires`와 같은 결). B2가 본다.
     assignees: list[str] | str | None = None
+    #: **답한 사람**이 들어갈 변수 (ADR-0096) — C3 `human_answered.answered_by`와 같은 이름이다.
+    #: 반려여도 채운다. 비우면 변수를 만들지 않는다. B2가 이름을 본다.
+    answered_by_as: str | None = None
+    #: 대리 답이면 **그 키 이름**이 들어갈 변수 (C6 `answered_via`, ADR-0081). 대리가 아니면 `None`.
+    answered_via_as: str | None = None
 
 
 class Rule(ContractModel):
@@ -675,6 +680,8 @@ def read_process(xml: str | bytes) -> BpmnProcess:
 EXPECT_OPERATORS = frozenset({"$gt", "$gte", "$lt", "$lte", "$contains"})
 INPUT_OPERATORS = frozenset({"$now_plus", "$test_receiver"})
 ANY_VALUE = "*"
+#: 케이스가 `answered_by`에 적지 않은 결재를 답한 사람 (ADR-0096) — 지어낸 사람 이름을 넣지 않는다.
+CASE_ANSWERER = "시험 케이스"
 
 
 class CaseMessage(ContractModel):
@@ -700,6 +707,8 @@ class Case(ContractModel):
     #: Studio에는 부를 PC Bot의 그림이 없어 **케이스가 결과를 적는다**. 적지 않은 위임은
     #: **그 자리에서 실패**다 — 결재처럼 기다리게 두면 끝나지 않는다(현장 PC가 없다).
     delegations: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    #: 노드 id → **답한 사람** (ADR-0096). 적지 않은 결재는 `CASE_ANSWERER`가 답한 것이 된다.
+    answered_by: dict[str, str] = Field(default_factory=dict)
     #: 자동 응답을 쓰지 않고 실제 창을 띄운다 (폼을 사람이 보는지 확인).
     manual: bool = False
 
@@ -894,6 +903,7 @@ def produced_vars(node: Node) -> set[str]:
     approval: Approval | None = node.prop("approval")
     if approval is not None:
         out |= {f.key for f in approval.fields}
+        out |= {name for name in (approval.answered_by_as, approval.answered_via_as) if name}
     receive: Receive | None = node.prop("receive")
     if receive is not None:
         out |= set(receive.payload)
@@ -1176,6 +1186,12 @@ def _check_b1_b2(process: BpmnProcess) -> list[Violation]:
             if bad:
                 out.append(_error("B2", f"{node.id}의 show에 변수 이름이 아닌 것이 있다", items=bad))
             out.extend(_check_assignees(node.id, approval.assignees))
+            bad = [
+                name for name in (approval.answered_by_as, approval.answered_via_as)
+                if name is not None and not is_var_name(name)
+            ]
+            if bad:
+                out.append(_error("B2", f"{node.id}의 answered_by_as·answered_via_as가 변수 이름이 아니다", items=bad))
     return out
 
 

@@ -529,6 +529,18 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         require_admin(authenticate(request))
         return service_keys.delete_external_key(app.state.store, extension_id, service_keys.SLOT_TEST)
 
+    @app.put(f"{API}/resources/extensions/{{extension_id}}/address")
+    async def put_extension_address(request: Request, extension_id: str) -> Any:
+        """외부 확장 주소 덮어쓰기 — 정의의 허용 호스트 안에서만 (C7 §외부 확장 주소, ADR-0097)."""
+        found = require_admin(authenticate(request))
+        return resources.set_address(app.state.store, extension_id, await _json(request), by=found.actor)
+
+    @app.delete(f"{API}/resources/extensions/{{extension_id}}/address")
+    def delete_extension_address(request: Request, extension_id: str) -> Any:
+        """덮어쓴 주소를 지운다 — 정의의 `base_url`로 돌아간다."""
+        require_admin(authenticate(request))
+        return resources.delete_address(app.state.store, extension_id)
+
     @app.post(f"{API}/studio/service-keys")
     async def studio_service_key(request: Request) -> Any:
         """Studio 개발 키 (C5 §Studio 개발 키, ADR-0094 §5). **Studio 키만** 부른다."""

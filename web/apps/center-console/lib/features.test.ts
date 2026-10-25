@@ -13,7 +13,7 @@ import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
 import type { RuntimeResource } from "@chaeksas/api-types/c7-runtime-resource";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
-import { type FeatureInput, featureRows } from "./features";
+import { ADDRESS_OUTSIDE, type FeatureInput, addressOf, featureRows } from "./features";
 
 function bot(id: string, extensions: string[], missing: Array<{ type: string; id: string }> = []): PackageInfo {
   return {
@@ -185,5 +185,46 @@ describe("featureRows", () => {
     expect(kinds("pin_mismatch")).toEqual(["app_not_trusting"]);
     expect(kinds("trusted")).toEqual([]);
     expect(kinds("unknown")).toEqual([]);
+  });
+});
+
+describe("addressOf (ADR-0097)", () => {
+  const definition = {
+    service: {
+      protocol: "http-adapter",
+      base_url: "https://www.nowview.work",
+      adapter: { allowed_hosts: ["www.nowview.work", "localhost"] },
+    },
+  };
+  const external = { id: "nowview-sc01", tier: "external", version: "0.1.0", status: "ok", definition } as unknown as ExtensionResource;
+
+  it("덮어쓰지 않았으면 정의의 기본값이고 허용 호스트를 함께 준다", () => {
+    expect(addressOf(external)).toEqual({
+      url: "https://www.nowview.work",
+      source: "default",
+      setAt: null,
+      setBy: null,
+      allowedHosts: ["www.nowview.work", "localhost"],
+    });
+  });
+
+  it("Center가 덮어썼으면 그 주소와 누가·언제다", () => {
+    const moved = {
+      ...external,
+      address: { base_url: "http://localhost:3000", set_at: "2026-10-25T00:00:00+00:00", set_by: "admin" },
+    } as unknown as ExtensionResource;
+    expect(addressOf(moved)).toMatchObject({ url: "http://localhost:3000", source: "center", setBy: "admin" });
+    expect(featureRows(input({ extensions: [moved] }))[0]?.address?.source).toBe("center");
+  });
+
+  it("바꾼 주소를 지금 정의가 허용하지 않으면 기본값이고 그렇게 말한다", () => {
+    const outside = { ...external, status_reasons: [ADDRESS_OUTSIDE] } as unknown as ExtensionResource;
+    expect(addressOf(outside)).toMatchObject({ url: "https://www.nowview.work", source: "outside" });
+  });
+
+  it("서버를 부르지 않는 외부 기능과 내장 기능은 칸이 없다", () => {
+    const noServer = { ...external, definition: { service: { protocol: "http-adapter" } } } as unknown as ExtensionResource;
+    expect(addressOf(noServer)).toBeNull();
+    expect(featureRows(input({ extensions: [UIA], serviceApps: [UIA_APP] }))[0]?.address).toBeNull();
   });
 });

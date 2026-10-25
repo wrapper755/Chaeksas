@@ -169,6 +169,11 @@ class Ocr(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def do_GET(self) -> None:  # noqa: N802 — 어댑터 `health` (C13 §4-1)
+        self.send_response(200 if self.path == "/health" else 404)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def log_message(self, *args: Any) -> None:  # 조용히
         return
 
@@ -661,3 +666,139 @@ def test_the_runner_refuses_to_start_when_the_definition_changed(
     with pytest.raises(EngineError) as caught:
         refuse_unusable(package, app_directory(path))
     assert caught.value.code == "extension_definition_unusable"
+
+
+# ─────────────────────────── 외부 확장 주소 (C7 §외부 확장 주소, ADR-0097) ───────────────────────────
+
+
+def _two_hosts(port: int, **over: Any) -> dict[str, Any]:
+    """기본 주소는 **아무도 듣지 않는 곳**이고 허용 호스트는 둘이다 — 덮어쓴 주소로만 닿는다."""
+    found = definition(port, **over)
+    found["service"]["base_url"] = "http://localhost:9"
+    found["service"]["adapter"]["allowed_hosts"] = ["127.0.0.1", "localhost"]
+    return found
+
+
+def _address(client: TestClient, base_url: str, *, headers: dict[str, str] = ADMIN) -> Any:
+    return client.put(f"/api/v1/resources/extensions/{APP}/address", json={"base_url": base_url}, headers=headers)
+
+
+def test_center_moves_the_address_and_the_adapter_follows_it(
+    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
+) -> None:
+    """**정의 하나로 환경을 넘는다** — Center가 덮어쓴 주소로 어댑터가 정말 부른다 (ADR-0097)."""
+    port, echo = ocr
+    found = _two_hosts(port)
+    assert register(client, found).status_code == 201
+
+    moved = _address(client, f"http://127.0.0.1:{port}/")
+    assert moved.status_code == 200, moved.text
+    assert moved.json()["address"]["base_url"] == f"http://127.0.0.1:{port}", "끝의 /는 다듬는다"
+    assert moved.json()["address"]["set_by"]
+
+    made = DirectoryCache.using(
+        tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
+    )
+    directory = made.directory_for(manifest(found), keys=public_keys(client), secrets=lambda ref: "ocr-secret-1")
+    assert directory.base_url(APP) == f"http://127.0.0.1:{port}"
+    assert directory.caller().call(op_call()).output == {"biz_no": "123-45-67890"}
+    assert echo.seen["path"] == "/v2/invoice"
+
+    # Bot UI가 실행기에 건네는 파일에도 같은 주소가 간다.
+    path = made.write_for(manifest(found), path=tmp_path / "run.services.json", keys=public_keys(client))
+    assert path is not None and read_directory(path).base_url(APP) == f"http://127.0.0.1:{port}"
+
+
+def test_an_address_outside_the_definition_is_refused(client: TestClient, ocr: tuple[int, type[Ocr]]) -> None:
+    """**정의를 넓히지 않는다** — 허용 호스트 밖·경로·공용 http는 422다."""
+    port, _ = ocr
+    assert register(client, _two_hosts(port)).status_code == 201
+    for bad in ("https://evil.example.com", f"http://127.0.0.1:{port}/api", "", "ftp://127.0.0.1"):
+        refused = _address(client, bad)
+        assert refused.status_code == 422, bad
+        assert refused.json()["code"] == "host_not_allowed", bad
+    assert client.get(f"/api/v1/resources/extensions/{APP}", headers=ADMIN).json().get("address") is None
+
+
+def test_only_an_admin_moves_the_address(client: TestClient, ocr: tuple[int, type[Ocr]]) -> None:
+    port, _ = ocr
+    assert register(client, _two_hosts(port)).status_code == 201
+    assert _address(client, f"http://127.0.0.1:{port}", headers={"Authorization": "Bearer t-read"}).status_code == 403
+    assert client.put(
+        "/api/v1/resources/extensions/no-such/address", json={"base_url": "https://a.example"}, headers=ADMIN
+    ).status_code == 404
+
+
+def test_resetting_goes_back_to_the_definition(
+    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
+) -> None:
+    port, _ = ocr
+    found = _two_hosts(port)
+    assert register(client, found).status_code == 201
+    assert _address(client, f"http://127.0.0.1:{port}").status_code == 200
+
+    reset = client.delete(f"/api/v1/resources/extensions/{APP}/address", headers=ADMIN)
+    assert reset.status_code == 200 and reset.json().get("address") is None
+    made = DirectoryCache.using(
+        tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
+    )
+    # 덮어쓴 것이 없으면 명부에 담지 않는다 — 어댑터가 정의의 기본값으로 떨어진다.
+    assert made.directory_for(manifest(found), keys=public_keys(client)).base_url(APP) is None
+
+
+def test_a_new_version_that_no_longer_allows_the_address_stops_sending_it(
+    client: TestClient, ocr: tuple[int, type[Ocr]]
+) -> None:
+    """새 판의 허용 호스트 밖이 되면 **내려 주지 않고** 사유를 남긴다 — 지우지는 않는다."""
+    port, _ = ocr
+    assert register(client, _two_hosts(port)).status_code == 201
+    assert _address(client, "http://localhost:3000").status_code == 200
+
+    narrower = _two_hosts(port, version="1.1.0")
+    narrower["service"]["adapter"]["allowed_hosts"] = ["127.0.0.1"]
+    narrower["service"]["base_url"] = f"http://127.0.0.1:{port}"
+    assert register(client, narrower).status_code == 201
+
+    got = client.get(f"/api/v1/resources/extensions/{APP}", headers=ADMIN).json()
+    assert got["version"] == "1.1.0"
+    assert got.get("address") is None
+    assert "address_outside_definition" in got["status_reasons"]
+
+
+def test_revoking_the_extension_forgets_the_address(
+    client: TestClient, store: Store, ocr: tuple[int, type[Ocr]]
+) -> None:
+    from center_admin import revoke_extension
+
+    port, _ = ocr
+    found = _two_hosts(port)
+    assert register(client, found).status_code == 201
+    assert _address(client, f"http://127.0.0.1:{port}").status_code == 200
+    revoke_extension(client, APP, found["version"])
+    assert store.row("SELECT * FROM extension_addresses WHERE extension_id = ?", (APP,)) is None
+
+
+def test_studio_uses_the_address_center_moved(client: TestClient, ocr: tuple[int, type[Ocr]]) -> None:
+    """Studio 시험 실행도 **같은 명부**다 — 로컬 덮어쓰기는 없다 (ADR-0097)."""
+    from chaeksas.studio.services import CenterReader, Services
+
+    port, _ = ocr
+    assert register(client, _two_hosts(port)).status_code == 201
+    assert _address(client, f"http://127.0.0.1:{port}").status_code == 200
+
+    made = Services(reader=CenterReader(base_url="http://center", api_key=TOKEN, client=client))
+    directory = made.directory()
+    assert set(directory.externals) == {APP}, made.problems
+    assert directory.base_url(APP) == f"http://127.0.0.1:{port}"
+
+
+def test_center_checks_health_at_the_address_it_moved(client: TestClient, ocr: tuple[int, type[Ocr]]) -> None:
+    """상태 점검도 **현장이 부르는 곳**으로 간다 — 기본 주소는 아무도 듣지 않는다."""
+    port, _ = ocr
+    found = _two_hosts(port)
+    found["service"]["adapter"]["health"] = {"path": "/health"}
+    assert register(client, found).status_code == 201
+    assert _address(client, f"http://127.0.0.1:{port}").status_code == 200
+
+    got = client.get(f"/api/v1/resources/extensions/{APP}", headers=ADMIN).json()
+    assert got["status"] == "ok", got["status_reasons"]
