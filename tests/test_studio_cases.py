@@ -241,12 +241,13 @@ def test_the_answerer_table_round_trips(app: Any, tmp_path: Path) -> None:
 
     dialog = CaseDialog(None, made, definition)
     assert dialog.answerers.rowCount() == 1
-    assert dialog.answerers.item(0, 1).text() == "이도윤"
+    name = dialog.answerers.item(0, 1)
+    assert name is not None and name.text() == "이도윤"
     dialog.answerer_block.add_row()  # 노드만 고르고 이름은 비운 줄
     assert dialog.save() is True
     assert read(made, definition).cases[0].answered_by == {node_id: "이도윤"}
 
-    dialog.answerers.item(0, 1).setText("박서진")
+    name.setText("박서진")
     assert dialog.save() is True
     assert read(made, definition).cases[0].answered_by == {node_id: "박서진"}
 
