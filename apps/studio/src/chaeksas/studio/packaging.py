@@ -64,6 +64,7 @@ def collect_requires(
     definitions: Sequence[Definition] | None = None,
     inside: Collection[str] | None = None,
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
+    keyless_apps: Collection[str] = (),
 ) -> Requires:
     """그림에서 「무엇이 필요한가」를 모은다 (C1 `requires`).
 
@@ -75,6 +76,10 @@ def collect_requires(
     `task_type_locations`는 확장 호스트가 주는 `{종류: [실행 위치]}`다
     (`ExtensionHost.task_type_locations()`). **표에 없는 종류는 넣지 않는다** — 그림은 태스크
     종류의 실행 위치를 모르고, 확장 정의만 안다 (ADR-0018).
+
+    `keyless_apps`는 **키를 받지 않는 앱**이다 (C13 `auth`가 없는 외부 앱, ADR-0091) — 그 앱에는
+    `key_ref`를 적지 않는다. 정의는 Center에 있어 부르는 쪽이 STU-14 고를 거리에서 넘긴다.
+    주지 않으면 모든 앱에 적는다 (모르는 것으로 풀어 주지 않는다).
     """
     domains: set[str] = set()
     tools: set[str] = set()
@@ -109,18 +114,23 @@ def collect_requires(
                 settings.add(SETTING_SMTP)
             call = node.prop("serviceCall")
             if call is not None:
-                key_ref = call.key_ref or found.info.service_keys.get(call.app_id, "")
                 before = apps.get(call.app_id)
                 operations = sorted({*(before.operations if before else []), call.operation})
-                task_keys = sorted(
-                    {*(before.task_key_refs if before else []), *([call.key_ref] if call.key_ref else [])}
-                )
-                apps[call.app_id] = ServiceAppNeed(
-                    app_id=call.app_id,
-                    operations=operations,
-                    key_ref=(before.key_ref if before else "") or key_ref,
-                    task_key_refs=task_keys,
-                )
+                if call.app_id in keyless_apps:
+                    # **키를 받지 않는 앱**에는 참조를 적지 않는다 (C13 `auth` 없음, ADR-0091) —
+                    # 적으면 사전 점검·BUI-10이 보내지도 않을 키를 넣으라고 막는다.
+                    apps[call.app_id] = ServiceAppNeed(app_id=call.app_id, operations=operations)
+                else:
+                    key_ref = call.key_ref or found.info.service_keys.get(call.app_id, "")
+                    task_keys = sorted(
+                        {*(before.task_key_refs if before else []), *([call.key_ref] if call.key_ref else [])}
+                    )
+                    apps[call.app_id] = ServiceAppNeed(
+                        app_id=call.app_id,
+                        operations=operations,
+                        key_ref=(before.key_ref if before else "") or key_ref,
+                        task_key_refs=task_keys,
+                    )
             task = node.prop("task")
             if task is not None:
                 # **어느 실행 위치에서 되는지는 확장이 안다** (ADR-0018) — 호스트가 준 표에
@@ -265,6 +275,7 @@ def build_manifest(
     by: str = "studio",
     core: str = "0.1.0",
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
+    keyless_apps: Collection[str] = (),
 ) -> Manifest:
     """C1 매니페스트 (`content_hash`는 아직 비어 있다 — 파일을 모은 뒤 채운다)."""
     entry = _entry(process)
@@ -283,7 +294,9 @@ def build_manifest(
         entry=f"process/{entry.path.name}",
         process_id=entry.process.id,
         triggers=collect_triggers(entry),
-        requires=collect_requires(process, task_type_locations=task_type_locations),
+        requires=collect_requires(
+            process, task_type_locations=task_type_locations, keyless_apps=keyless_apps
+        ),
         human=collect_human(process),
         # 작업 지시 화면(CON-05)이 입력 칸을 그린다 — 사람이 두 번 적지 않게 그림에서 옮긴다.
         inputs=[
@@ -311,6 +324,7 @@ def build_lib_manifest(
     by: str = "studio",
     core: str = "0.1.0",
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
+    keyless_apps: Collection[str] = (),
 ) -> Manifest:
     """공유 BPM 프로세스 패키지의 매니페스트 (C1 `kind=process_lib`, STU-12).
 
@@ -328,7 +342,11 @@ def build_lib_manifest(
         version=process.version,
         name=process.name or process.id,
         requires=collect_requires(
-            process, definitions=chosen, inside=within, task_type_locations=task_type_locations
+            process,
+            definitions=chosen,
+            inside=within,
+            task_type_locations=task_type_locations,
+            keyless_apps=keyless_apps,
         ),
         human=collect_human(process, definitions=chosen),
         provides=collect_provides(chosen),
@@ -387,10 +405,11 @@ def export_lib(
     *,
     by: str = "studio",
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
+    keyless_apps: Collection[str] = (),
 ) -> Path:
     """공유 BPM 프로세스 패키지 zip 하나 (STU-12 「내보내기」)."""
     manifest = build_lib_manifest(
-        process, definitions, by=by, task_type_locations=task_type_locations
+        process, definitions, by=by, task_type_locations=task_type_locations, keyless_apps=keyless_apps
     )
     files = gather_lib(process, definitions)
     blocking = [v for v in check_lib(process, manifest, files) if v.blocks]
@@ -433,9 +452,12 @@ def export(
     *,
     by: str = "studio",
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
+    keyless_apps: Collection[str] = (),
 ) -> Path:
     """패키지 zip 하나를 만든다. `content_hash`는 **파일에서 계산한다** (C2·R6)."""
-    manifest = build_manifest(process, by=by, task_type_locations=task_type_locations)
+    manifest = build_manifest(
+        process, by=by, task_type_locations=task_type_locations, keyless_apps=keyless_apps
+    )
     files = gather(process)
     blocking = [v for v in check(process, manifest, files) if v.blocks]
     if blocking:

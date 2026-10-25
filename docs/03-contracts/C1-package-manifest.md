@@ -91,7 +91,7 @@
 | --- | --- | --- | --- |
 | `app_id` | str | ✓ | 서비스 앱 id (C11 manifest의 `app_id`) |
 | `operations` | str[] | ✓ | 부르는 작업 이름 |
-| `key_ref` | str | ✓ | BPM 프로세스 단위 **키 참조 이름**. `^[a-z0-9][a-z0-9-]{0,39}$` (1~40자, 소문자·숫자·`-`). Studio 기본값은 BPM 프로세스 id에서 `.`·`_`를 `-`로 바꾸고 40자로 자른 것 (예: `finance.invoice-issue` → `finance-invoice-issue`) |
+| `key_ref` | str | | BPM 프로세스 단위 **키 참조 이름**. **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)에는 적지 않는다 — 사전 점검·BUI-10이 그 앱의 키를 묻지 않는다 ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)). `^[a-z0-9][a-z0-9-]{0,39}$` (1~40자, 소문자·숫자·`-`). Studio 기본값은 BPM 프로세스 id에서 `.`·`_`를 `-`로 바꾸고 40자로 자른 것 (예: `finance.invoice-issue` → `finance-invoice-issue`) |
 | `task_key_refs` | str[] | | 태스크에서 다르게 지정한 참조 (예외). 사전 점검은 `key_ref` + 이것 모두를 찾는다 |
 
 ### HumanNeeds
@@ -142,7 +142,7 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 | R2 | `run_location=server`면: `requires.domains`에 `web`·`desktop` 없음, `requires.task_types[]`가 **`run_locations`를 적었으면** 거기에 `server`가 있음 (예: `ui_task`는 `pc`만이라 불가), `human.approval_field=false`, `human.confirmation=false` | 422 `server_incompatible` + 걸린 항목 목록 |
 | R3 | `run_location=server`인 BPM 프로세스가 `run_location=pc`인 **공유 BPM 프로세스**를 부르면 **거부**다. PC 위임의 길이 아니다 — 패키지에 복사해 넣은 정의는 **PC에서 돌릴 길이 없다**(작업은 배포된 패키지를 가리키고 공유 BPM 프로세스에는 진입이 없다, R1). 위임은 `requires.delegations`로 적는다 ([ADR-0062](../decisions/0062-pc-delegation.md)) | 422 `delegation_not_supported` |
 | R8 | (Center, 배포 때) `run_location=server`면 `requires.service_apps[].operations`가 모두 C11 manifest에서 `server_ok=true`이고 결정 수행을 지원한다 (리소스 목록 C7과 대조). 업로드 때는 경고만 | 배포 422 `operation_not_server_ok` / `operation_not_deterministic` |
-| R4 | `key_ref`·`task_key_refs`는 이름 규칙을 따른다. 규칙상 `_`가 없어 키 값(`chk_…`)은 들어갈 수 없다 | 422 `invalid_key_ref` |
+| R4 | 적힌 `key_ref`·`task_key_refs`는 이름 규칙을 따른다. 규칙상 `_`가 없어 키 값(`chk_…`)은 들어갈 수 없다 | 422 `invalid_key_ref` |
 | R5 | `manifest.json`·BPMN 어디에도 키 값·비밀 값이 없다 (Studio 빌드가 보장, Center는 R4만 검사) | — |
 | R6 | `content_hash`가 실제 내용과 같다 (C2) | 422 `hash_mismatch` |
 
@@ -264,6 +264,7 @@ PC Bot (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | `requires.service_apps[].key_ref`를 **선택**으로 — 키를 받지 않는 외부 앱(C13 `auth` 없음)에는 빌드가 적지 않는다. 받는 쪽은 비어 있으면 묻지 않는다 | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-20 | 1 | **R12**(자기 자신에게 위임하지 않는다)를 더했다. `requires.delegations`의 대상은 PC Bot만이 아니라 서버 Bot일 수도 있다 — 어디서 도는지는 대상 패키지가 정한다 | [0082](../decisions/0082-batch-start.md) |
 | 2026-10-16 | 1 | **R11**을 더했다 — `requires.settings`가 아는 값인가. **값·칸은 그대로**이고 검사만 늘었다(R9와 같은 까닭: 기계가 옮기는 값이라 모르는 이름은 옮기는 쪽의 흠이다). 지금 Studio가 넣는 것은 `smtp` 하나뿐이라 **올라간 패키지는 다 지난다**. `built.by`는 **그대로 열린 문자열**이다 — 남의 도구로 만든 올바른 패키지를 거부하게 된다 | — |
 | 2026-10-15 | 1 | **PC 위임**을 더했다 — `requires.delegations`(부르는 PC Bot `<id>@<version>?`)와 **R10**(위임은 `run_location=server`만), R3의 사유를 다시 적었다(**그 규칙은 그대로 거부다** — 복사해 넣은 PC 정의는 PC에서 돌릴 길이 없다). 선택 칸이라 **옛 패키지는 그대로 읽힌다** | [0062](../decisions/0062-pc-delegation.md) |

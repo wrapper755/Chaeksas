@@ -340,3 +340,92 @@ def test_the_split_button_stands_beside_to_pc_and_asks_first(space: Workspace, m
 
     found.location_box.setCurrentIndex(found.location_box.findData("pc"))
     assert found.to_split.isHidden(), "PC에서는 나눌 까닭이 없다"
+
+
+# ─────────────────────────── 키 표 — 노드가 부르는 앱 (ADR-0091 와 같은 조각) ───────────────────────────
+
+
+def test_a_row_says_whether_it_is_written_and_who_uses_it(space: Workspace) -> None:
+    """기본값 줄도 「적용」하면 적힌다 — 그것이 보여야 한다. 쓰는 노드는 수와 이름이다."""
+    process = imported(space)
+    [default] = key_rows(process, ProcessInfo(), has_value=lambda _ref: False)
+    assert (default.written, default.written_text) == (False, module.WRITTEN_DEFAULT)
+    assert default.users and all(one.startswith(f"{process.entry_definition.name}/") for one in default.users)  # type: ignore[union-attr]
+    assert not default.removable, "부르는 앱의 줄은 지워도 기본값으로 다시 생길 뿐이다"
+
+    info = ProcessInfo(service_keys={"ext-credit": "finance-credit", "old-app": "old-key"})
+    rows = {one.app_id: one for one in key_rows(process, info, has_value=lambda _ref: True)}
+    assert rows["ext-credit"].written_text == module.WRITTEN_YES
+    assert rows["old-app"].users == () and rows["old-app"].removable, "적혀 있지만 쓰는 노드가 없다"
+
+
+def test_an_app_missing_from_the_center_list_says_so_like_stu14(space: Workspace) -> None:
+    from chaeksas.studio.service_editor import NOT_LISTED
+
+    process = imported(space)
+    [one] = key_rows(process, ProcessInfo(), has_value=lambda _ref: False, listed=["other-app"])
+    assert one.listed is False and one.app_text == f"ext-credit — {NOT_LISTED}"
+    [unknown] = key_rows(process, ProcessInfo(), has_value=lambda _ref: False, listed=None)
+    assert unknown.app_text == "ext-credit", "목록을 받지 못했으면 모르는 것으로 말하지 않는다"
+
+
+def test_an_app_that_takes_no_key_has_no_row_unless_written(space: Workspace) -> None:
+    process = imported(space)
+    assert key_rows(process, ProcessInfo(), has_value=lambda _ref: False, keyless_apps={"ext-credit"}) == []
+    info = ProcessInfo(service_keys={"ext-credit": "finance-credit"})
+    [one] = key_rows(process, info, has_value=lambda _ref: True, keyless_apps={"ext-credit"})
+    assert one.value_text == module.VALUE_KEYLESS and one.removable, "적혀 있으면 지울 수 있게 남는다"
+
+
+def test_the_window_reads_the_drawing_on_the_canvas_not_the_file(space: Workspace) -> None:
+    """「적용」한 것은 Ctrl+S 전에는 파일에 없다 — 다시 열면 캔버스의 지금 그림을 읽어야 보인다."""
+    process = imported(space)
+    entry = process.entry_definition
+    assert entry is not None
+    drawn = read_process(entry.path.read_text(encoding="utf-8"))
+    drawn.info.service_keys = {"ext-credit": "applied-ref"}
+    window = ProcessInfoDialog(
+        process, space, has_value=lambda _ref: False, editable=True, drawn=drawn, listed=None
+    )
+    assert window.keys.item(0, module.REF).text() == "applied-ref"  # type: ignore[union-attr]
+    assert window.keys.item(0, module.WRITTEN).text() == module.WRITTEN_YES  # type: ignore[union-attr]
+
+    closed = ProcessInfoDialog(process, space, has_value=lambda _ref: False, editable=False, drawn=drawn)
+    assert closed.keys.item(0, module.REF).text() != "applied-ref", "닫혀 있으면 파일의 것이다"  # type: ignore[union-attr]
+
+
+def test_the_button_is_apply_and_says_where_things_go(space: Workspace) -> None:
+    from PySide6.QtWidgets import QDialogButtonBox
+
+    window = dialog(space, imported(space))
+    apply = window.buttons.button(QDialogButtonBox.StandardButton.Apply)
+    assert apply is not None and apply.text() == "적용"
+    assert window.buttons.button(QDialogButtonBox.StandardButton.Save) is None
+    assert window.apply_note.text() == module.APPLY_NOTE
+    assert not hasattr(window, "add_key"), "부르지 않는 앱의 키는 쓸 데가 없다 — 「추가」가 없다"
+    closed = dialog(space, imported(space, PC_EXAMPLE), editable=False)
+    assert closed.apply_note.text() == module.APPLY_NOTE_RECORD_ONLY
+
+
+def test_delete_works_only_on_rows_no_node_uses(space: Workspace) -> None:
+    process = imported(space)
+    entry = process.entry_definition
+    assert entry is not None
+    drawn = read_process(entry.path.read_text(encoding="utf-8"))
+    drawn.info.service_keys = {"ext-credit": "finance-credit", "old-app": "old-key"}
+    window = ProcessInfoDialog(process, space, has_value=lambda _ref: False, editable=True, drawn=drawn)
+    apps = [window.keys.item(at, module.APP).text() for at in range(window.keys.rowCount())]  # type: ignore[union-attr]
+    assert apps == ["ext-credit", "old-app"]
+    assert window.keys.item(0, module.APP).flags() & module.Qt.ItemFlag.ItemIsEditable == module.Qt.ItemFlag(0)  # type: ignore[union-attr]
+
+    window.keys.selectRow(0)
+    assert not window.drop_key.isEnabled()
+    window._drop_selected()
+    assert window.keys.rowCount() == 2, "쓰는 노드가 있는 줄은 지우지 않는다"
+
+    window.keys.selectRow(1)
+    assert window.drop_key.isEnabled()
+    window.drop_key.click()
+    window.save()
+    assert window.process_patch is not None
+    assert json.loads(window.process_patch)["service_keys"] == {"ext-credit": "finance-credit"}

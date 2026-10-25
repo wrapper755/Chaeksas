@@ -669,6 +669,12 @@ def _check_e3(m: ExtensionManifest) -> list[Violation]:
         out.append(_e3(f"경로는 /로 시작한다: {adapter.health.path!r}", "service.adapter.health.path"))
 
     auth = adapter.auth
+    if auth is None and any(need.purpose == PURPOSE_RUN for need in m.requires_keys):
+        # 키를 받는다고 적고(`requires_keys`) 실을 자리는 두지 않았다 — 어댑터는 키를 보내지 않는데
+        # 사전 점검은 값을 요구하게 된다 (ADR-0091). 어느 쪽이 틀렸는지는 정의를 쓴 사람만 안다.
+        out.append(_e3("requires_keys에 purpose=run이 있는데 키를 실을 auth가 없다 "
+                       "(키를 받지 않는 앱이면 requires_keys에서 빼고, 받는 앱이면 auth를 적는다)",
+                       "service.adapter.auth"))
     if auth is not None:
         if auth.type not in KNOWN_AUTH_TYPES:
             out.append(_e3(f"모르는 인증 방식이다: {auth.type}", "service.adapter.auth.type"))
@@ -689,6 +695,19 @@ def _check_e3(m: ExtensionManifest) -> list[Violation]:
     for i, res in enumerate(m.contributes.resources):
         out += _check_url(res.catalog_url, adapter, f"contributes.resources[{i}].catalog_url")
     return out
+
+
+def takes_key(m: ExtensionManifest) -> bool:
+    """그 확장의 서버 부분이 **키를 받는가** (ADR-0091).
+
+    HTTP 어댑터에 `auth`가 없으면 받지 않는다 — 어댑터가 키를 실을 자리가 없다. 그런 앱은 B7·사전
+    점검·BUI-10·STU-06이 키를 묻지 않고 빌드가 C1 `key_ref`를 적지 않는다. C11 서비스 앱은 늘
+    받는다 (키 발급·검증이 공통 계약이다).
+    """
+    svc = m.service
+    if svc is None or svc.adapter is None:
+        return True
+    return svc.adapter.auth is not None
 
 
 def _check_shape(m: ExtensionManifest) -> list[Violation]:

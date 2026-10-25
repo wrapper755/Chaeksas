@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 from xml.etree import ElementTree
@@ -1289,11 +1289,16 @@ def _check_b6(process: BpmnProcess, task_type_locations: Mapping[str, Sequence[s
     ]
 
 
-def _check_b7(process: BpmnProcess) -> list[Violation]:
+def _check_b7(process: BpmnProcess, keyless_apps: Collection[str] | None) -> list[Violation]:
     out: list[Violation] = []
     for node in process.all_nodes():
         call: ServiceCall | None = node.prop("serviceCall")
         if call is None:
+            continue
+        if keyless_apps is not None and call.app_id in keyless_apps:
+            # 키를 받지 않는 앱 (C13 `auth`가 없는 외부 앱, ADR-0091) — 참조를 적었다면 이름만 본다.
+            if call.key_ref and not re.fullmatch(KEY_REF_PATTERN, call.key_ref):
+                out.append(_error("B7", f"{node.id}: 키 참조 이름이 규칙에 맞지 않는다", items=[call.key_ref]))
             continue
         key_ref = call.key_ref or process.info.service_keys.get(call.app_id)
         if not key_ref:
@@ -1554,6 +1559,7 @@ def validate(
     called_processes: Mapping[str, Sequence[str]] | None = None,
     delegated_outputs: Mapping[str, Sequence[str]] | None = None,
     extension_task_vars: Callable[[ExtensionTask], Iterable[str]] | None = None,
+    keyless_apps: Collection[str] | None = None,
 ) -> list[Violation]:
     """C14 검사 규칙 B1~B14. 오류와 경고를 **함께** 돌려준다 (`Violation.severity`).
 
@@ -1568,6 +1574,8 @@ def validate(
     - `delegated_outputs`: **PC 위임**으로 부르는 Bot의 `bpm_process_id` → 그 패키지가 선언한
       `outputs` (C1). 남의 패키지 매니페스트라 계약이 스스로 알 수 없다 — 없으면 그 대조를
       건너뛴다 (ADR-0062). **모르는 것으로 막지 않는다.**
+    - `keyless_apps`: **키를 받지 않는 앱** id들 (C13 `auth`가 없는 외부 앱, ADR-0091). B7이 그 앱에는
+      키 참조를 묻지 않는다. 정의는 Center에 있어 계약이 모른다 — 없으면 **모든 앱에 묻는다**.
 
     여기서 하지 않는 것:
     - **확장 태스크의 속 내용** (`chk:task`의 JSON). 그 확장의 계약이 검사한다 — 예를 들어 UI
@@ -1580,7 +1588,7 @@ def validate(
         *_check_b3(process),
         *_check_b4_b5(process),
         *_check_b6(process, task_type_locations),
-        *_check_b7(process),
+        *_check_b7(process, keyless_apps),
         *_check_b8(process),
         *_check_b9_b10(process),
         *_check_b11(process, extension_task_vars),

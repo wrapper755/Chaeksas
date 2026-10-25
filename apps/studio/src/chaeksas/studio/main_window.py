@@ -555,7 +555,15 @@ class MainWindow(QMainWindow):
             # **어느 확장이 외부인가는 받아 둔 리소스 목록이 안다** (C7) — 외부 확장은 이 PC에
             # 깔리지 않아 호스트가 모른다. 점검은 서버를 부르지 않으므로 여기서 넘긴다 (ADR-0060).
             external_ids=self.properties.catalog.external_ids(),
+            keyless_apps=self.keyless_apps(),
         )
+
+    def keyless_apps(self) -> tuple[str, ...]:
+        """**키를 받지 않는 앱** (C13 `auth`가 없는 외부 앱, ADR-0091) — B7·매니페스트·사전 점검·
+        STU-06이 **같은 목록**을 본다. 받아 둔 고를 거리(STU-14)에서 꺼내고, 못 받았으면 비어 있어
+        모든 앱에 키를 묻는다.
+        """
+        return self.properties.catalog.keyless_ids()
 
     def delegated_outputs(self) -> dict[str, tuple[str, ...]]:
         """PC 위임으로 부르는 Bot들이 **선언한 `outputs`** (C1 → C14 B14, ADR-0062).
@@ -589,6 +597,7 @@ class MainWindow(QMainWindow):
             self.process,
             task_type_locations=self.task_type_locations(),
             delegated_outputs=self.delegated_outputs(),
+            keyless_apps=self.keyless_apps(),
         ) + self.readiness()
         self.preflight.show_result(found, violations)
         self.bottom_tabs.setCurrentWidget(self.preflight)
@@ -630,7 +639,7 @@ class MainWindow(QMainWindow):
         """STU-06. 기록은 창이 쓰고, **그림은 캔버스가** 쓴다 (XML을 파이썬이 만지지 않는다).
 
         그래서 실행 위치·키 참조는 **진입 정의가 열려 있을 때만** 켜진다 — 창이 그 까닭을
-        적는다 (U3). 열려 있으면 「저장」이 `chk:process`를 한 걸음으로 적용해 **실행 취소도
+        적는다 (U3). 열려 있으면 「적용」이 `chk:process`를 한 걸음으로 적용해 **실행 취소도
         한 걸음**이다.
         """
         if self.process is None:
@@ -640,9 +649,20 @@ class MainWindow(QMainWindow):
         editable = entry is not None and self.definition == entry.path
         if editable and not self.may_drop_edits():
             return
+        from chaeksas.contracts.bpmn_ext import BpmnReadError, read_process  # noqa: PLC0415
         from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 — 순환 피함
 
+        drawn = None
+        if editable:
+            # **그림은 캔버스의 지금 것을 읽는다** — 파일에서 읽으면 「적용」한 것이 Ctrl+S 전에는
+            # 다시 열었을 때 안 보인다 (STU-06).
+            try:
+                drawn = read_process(self.canvas.save_xml())
+            except (CanvasError, BpmnReadError) as e:
+                self.say(f"그림을 읽지 못해 BPM 프로세스 정보를 열지 않았습니다: {e}")
+                return
         store = StudioCredentials()
+        catalog = self.properties.catalog
         dialog = ProcessInfoDialog(
             self.process,
             self.workspace,
@@ -650,6 +670,10 @@ class MainWindow(QMainWindow):
             editable=editable,
             # 창은 호스트를 들고 있지 않다 — **F6과 같은 표**를 여기서 넘긴다 (C13).
             task_type_locations=self.task_type_locations(),
+            drawn=drawn,
+            # STU-14와 **같은 고를 거리** — 받지 못했으면 「목록에 없음」을 말하지 않는다.
+            listed=[one.app_id for one in catalog.apps] if catalog else None,
+            keyless_apps=self.keyless_apps(),
             parent=self,
         )
         if not dialog.exec() or dialog.saved is None:
@@ -660,11 +684,11 @@ class MainWindow(QMainWindow):
         self.retitle()
         self.explorer.refresh(opened=self.definition.name if self.definition else "")
         self.say(f"BPM 프로세스 정보를 저장했습니다: {dialog.saved.display} (v{dialog.saved.version})")
-        if dialog.process_patch is None or entry is None or entry.process is None:
+        if dialog.process_patch is None or entry is None or drawn is None:
             return
         # 그림은 **캔버스에만** 반영된다 — 파일로 가는 것은 「저장」(Ctrl+S)이다 (STU-04의 「적용」과
         # 같은 결). 그렇게 말해 둬야 「저장했다는데 패키지에 안 들어갔다」가 생기지 않는다.
-        self._apply_properties(entry.process.id, {"chk": {"process": dialog.process_patch}})
+        self._apply_properties(drawn.id, {"chk": {"process": dialog.process_patch}})
         self.say("실행 위치·키 참조는 그림에 적용했습니다 — 「저장」(Ctrl+S)으로 파일에 씁니다.")
 
     def split_to_pc(self) -> None:

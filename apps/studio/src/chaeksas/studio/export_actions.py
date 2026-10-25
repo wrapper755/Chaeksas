@@ -50,7 +50,12 @@ def export_package(window: MainWindow) -> None:
     # 확장 태스크의 실행 위치는 **확장 정의만** 안다 (C13) — 매니페스트에 진짜 값이 들어가야
     # Center의 R2가 거짓으로 막지 않는다. 모르는 종류는 넣지 않는다.
     where = window.task_type_locations()
-    _write(window, "패키지", lambda: export(process, target, task_type_locations=where))
+    keyless = window.keyless_apps()  # 키를 받지 않는 앱에는 참조를 적지 않는다 (ADR-0091)
+    _write(
+        window,
+        "패키지",
+        lambda: export(process, target, task_type_locations=where, keyless_apps=keyless),
+    )
 
 
 def export_shared(window: MainWindow) -> None:
@@ -72,10 +77,11 @@ def export_shared(window: MainWindow) -> None:
     if target is None:
         return
     where = window.task_type_locations()
+    keyless = window.keyless_apps()
     _write(
         window,
         "공유 BPM 프로세스 패키지",
-        lambda: export_lib(process, picked, target, task_type_locations=where),
+        lambda: export_lib(process, picked, target, task_type_locations=where, keyless_apps=keyless),
     )
 
 
@@ -133,11 +139,12 @@ def upload_package(window: MainWindow) -> None:
     if not window.saved_to_disk():
         return
     locations = window.task_type_locations()
+    keyless = window.keyless_apps()
     _upload(
         window,
         "패키지",
         lambda where: export(
-            process, where / default_name(process), task_type_locations=locations
+            process, where / default_name(process), task_type_locations=locations, keyless_apps=keyless
         ),
     )
 
@@ -154,11 +161,16 @@ def upload_shared(window: MainWindow) -> None:
     if not picked:
         return
     locations = window.task_type_locations()
+    keyless = window.keyless_apps()
     _upload(
         window,
         "공유 BPM 프로세스 패키지",
         lambda where: export_lib(
-            process, picked, where / default_lib_name(process), task_type_locations=locations
+            process,
+            picked,
+            where / default_lib_name(process),
+            task_type_locations=locations,
+            keyless_apps=keyless,
         ),
     )
 

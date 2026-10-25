@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from chaeksas.contracts.center_api import PackageInfo
-from chaeksas.contracts.extension import ExtensionManifest
+from chaeksas.contracts.extension import ExtensionManifest, takes_key
 from chaeksas.contracts.resources import ServiceAppResource
 from chaeksas.contracts.service_app import MODE_DETERMINISTIC
 
@@ -84,6 +84,8 @@ class App:
     extension_id: str = ""
     #: 관리 콘솔 주소 (C7). 없으면 「관리 콘솔에서 보기」를 띄우지 않는다.
     console_url: str = ""
+    #: 키를 받는 앱인가 (C13 `takes_key` — `auth`가 없는 외부 앱은 받지 않는다, ADR-0091).
+    takes_key: bool = True
 
     @property
     def status_text(self) -> str:
@@ -128,6 +130,12 @@ class Catalog:
         적어 보낸 글자 그대로라 믿을 거리가 아니다.
         """
         return tuple(sorted({one.app_id for one in self.apps if one.kind == KIND_EXTERNAL}))
+
+    def keyless_ids(self) -> tuple[str, ...]:
+        """**키를 받지 않는 앱**의 id들 (ADR-0091) — B7·매니페스트·사전 점검·STU-06이 그 앱의 키를
+        묻지 않는다. 고를 거리를 받지 못했으면 비어 있고, 그러면 **모든 앱에 묻는다**.
+        """
+        return tuple(sorted(one.app_id for one in self.apps if not one.takes_key))
 
     def __bool__(self) -> bool:
         return bool(self.apps)
@@ -219,6 +227,7 @@ def _from_external(found: ExtensionManifest) -> App | None:
         operations=operations,
         # 외부 앱은 확장 그 자체다 — 관리 콘솔은 우리 것이 아니라 주소를 모른다 (C13 E1).
         extension_id=found.id,
+        takes_key=takes_key(found),
     )
 
 

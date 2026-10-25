@@ -144,7 +144,7 @@ export interface ResourceRef {
  */
 export interface ServiceAppNeed {
   app_id: string;
-  key_ref: string;
+  key_ref?: string | null;
   operations: string[];
   task_key_refs?: string[];
   [k: string]: unknown;

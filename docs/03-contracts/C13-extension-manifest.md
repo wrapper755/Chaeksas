@@ -186,7 +186,7 @@
 | --- | --- |
 | `allowed_hosts` | 부를 수 있는 호스트 목록 (정확한 이름, 와일드카드 없음). `base_url`·Center의 `base_url`·`catalog_url`·`health`의 호스트가 모두 이 안에 있어야 한다 |
 | `allow_private_network` | 기본 false. 사설망·루프백·링크 로컬 주소를 부르려면 true여야 하고, 이것도 서명 대상이다 |
-| `auth` | `{type: "bearer" \| "header", name?}`. 값은 BPM 프로세스 키 참조로 푼 키. **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 |
+| `auth` | `{type: "bearer" \| "header", name?}`. 값은 BPM 프로세스 키 참조로 푼 키. **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md), `takes_key()`) — 어댑터는 키를 싣지 않고, B7·사전 점검·BUI-10·STU-06은 그 앱의 키를 묻지 않으며 빌드는 C1 `key_ref`를 적지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
 | `limits` | `{timeout_s: 60, max_response_kb: 1024}` |
 | `health` | 선택. `{path, expect_status: 200}`. 없으면 Center는 상태를 「확인 전」으로 둔다 |
 | `operations` | 아래 Operation[] |
@@ -313,7 +313,7 @@ Operation:
 | --- | --- | --- |
 | E1 | `tier=external`이면 `entry`가 있는 기여와 `configuration`·`task_types`가 없다 | 422 `external_code_not_allowed` |
 | E2 | `tier=builtin`·`internal`은 설치 파일에 든 확장만. Center에 외부로 등록할 수 없다 | 409 `id_conflict` |
-| E3 | `http-adapter`: `allowed_hosts`·https·템플릿 변수·경로 시작 `/`·제한 JSONPath·금지 헤더 규칙(§4) | 422 `adapter_invalid` (`detail`에 칸별 사유) |
+| E3 | `http-adapter`: `allowed_hosts`·https·템플릿 변수·경로 시작 `/`·제한 JSONPath·금지 헤더 규칙(§4). `requires_keys`에 `purpose: run`이 있으면 `adapter.auth`가 있다 (키를 실을 자리 — ADR-0091) | 422 `adapter_invalid` (`detail`에 칸별 사유) |
 | E4 | `task_types[].id`는 확장 사이에 겹치지 않는다 | 409 `task_type_conflict` |
 | E5 | 확장 호스트는 `api` 범위가 맞지 않는 확장을 켜지 않는다 (목록에 「호환 안 됨」) | — |
 | E6 | 외부 정의의 봉투(C2 `extension`)가 검증되고 `definition_hash`가 맞는다 | 400 `bad_envelope` / `hash_mismatch` |
@@ -331,6 +331,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 2 | `adapter.auth`가 없는 외부 앱은 **키를 받지 않는 앱**이라고 적었다. E3가 `run` 키를 적고 `auth`가 없는 정의를 거부한다 — 키를 실을 자리 없이 키를 요구하던 모순이었다. 칸은 그대로라 schema도 그대로다 | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-24 | 2 | 외부 확장 등록·해제는 **봉투 대신 정의(해제는 `{id, version}`)를 받고 Center가 서명한다**. `DELETE …/extensions/{id}` 꼴을 없앴다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 2 | 기여 지점 `tool_ui.tools`와 `configuration.scope`의 `tool_ui`를 더하고 `bot_ui.utilities`를 걷었다 — 확장의 도구는 Tool UI가 띄우고 런타임은 Bot UI 것을 빌려 쓴다. 열쇠가 모두 선택이라 schema는 그대로이고 `extension_api`는 **1.4**다(`ToolUiTool`·`HOST_TOOL_UI` — 옛 `BotUiUtility`는 같은 모양의 이름으로 남겼다. 큰 판 2.0으로 올리면 `api: ">=1,<2"`인 확장이 모두 꺼진다) | 0077 |
 | 2026-10-18 | 2 | 예약 설정 키에 `service.key_ref`를 더했다 — Studio 편집기가 「BPM 프로세스 설정을 따름」의 키 참조를 안다(STU-13 시험·계획 굳히기). 머리 `service.`는 이미 예약이라 E7이 그대로다. 호스트가 주는 값이라 schema는 그대로 | 0074 |
