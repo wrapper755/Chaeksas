@@ -205,8 +205,8 @@ def test_an_example_is_the_third_first_definition(space: Workspace) -> None:
 
 
 def test_picking_another_example_keeps_what_the_person_typed(space: Workspace) -> None:
-    dialog = NewProcessDialog(None, space, examples=EXAMPLES, example=True)
-    assert dialog.example_pick.isChecked(), "파일 메뉴는 이 줄을 골라 둔 채로 연다"
+    dialog = NewProcessDialog(None, space, examples=EXAMPLES)
+    dialog.example_pick.setChecked(True)
     dialog.id_box.setText("my.own")
     first_name = dialog.name_box.text()
     dialog.example_list.setCurrentIndex((dialog.example_list.currentIndex() + 1) % dialog.example_list.count())
@@ -217,6 +217,6 @@ def test_picking_another_example_keeps_what_the_person_typed(space: Workspace) -
 def test_no_examples_turns_the_line_off(space: Workspace, tmp_path: Path) -> None:
     from chaeksas.studio.dialogs import NO_EXAMPLES  # noqa: PLC0415
 
-    dialog = NewProcessDialog(None, space, examples=tmp_path / "없음", example=True)
+    dialog = NewProcessDialog(None, space, examples=tmp_path / "없음")
     assert not dialog.example_pick.isEnabled() and NO_EXAMPLES in dialog.example_pick.text()
     assert dialog.blank_pick.isChecked()

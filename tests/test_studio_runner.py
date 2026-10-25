@@ -290,6 +290,34 @@ def test_a_missing_required_input_is_said_plainly(app: Any, tmp_path: Path) -> N
     assert found.verdict == ERROR and "필요하다" in found.detail
 
 
+def test_the_run_dialog_stops_a_caseless_run_that_lacks_required_inputs(app: Any, tmp_path: Path) -> None:
+    """STU-08 — 엔진이 거부할 실행을 보내지 않고 창에서 까닭을 말한다 (U3)."""
+    from chaeksas.studio.run_dialog import NO_CASE, RunDialog, required_inputs  # noqa: PLC0415
+
+    made, settings = studio(tmp_path, "fx06_document_read")
+    definition = made.entry_definition
+    assert definition is not None
+    names = required_inputs(definition)
+    assert names, "이 예제는 필수 입력이 있다"
+    dialog = RunDialog(None, made, definition, settings)
+    dialog.case_box.setCurrentIndex(dialog.case_box.findText(NO_CASE))
+    assert not dialog.run_button.isEnabled()
+    assert not dialog.needs_case.isHidden() and names[0] in dialog.needs_case.text()
+    dialog.case_box.setCurrentIndex(1)  # 케이스를 고르면 다시 켜진다
+    assert dialog.run_button.isEnabled() and dialog.needs_case.isHidden()
+
+
+def test_a_caseless_run_without_required_inputs_is_allowed(app: Any, tmp_path: Path) -> None:
+    from chaeksas.studio.run_dialog import NO_CASE, RunDialog  # noqa: PLC0415
+
+    made, settings = studio(tmp_path, "fx12_daily_report")
+    definition = made.entry_definition
+    assert definition is not None
+    dialog = RunDialog(None, made, definition, settings)
+    dialog.case_box.setCurrentIndex(dialog.case_box.findText(NO_CASE))
+    assert dialog.run_button.isEnabled() and dialog.needs_case.isHidden()
+
+
 def test_an_example_that_needs_a_model_says_so_instead_of_pretending(app: Any, tmp_path: Path) -> None:
     """모델이 설정되지 않았으면 **조용히 넘어가지 않는다** (ADR-0027)."""
     made, settings = studio(tmp_path, "fx06_document_read")

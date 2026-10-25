@@ -427,6 +427,13 @@ def check_lib(process: BpmProcess, manifest: Manifest, files: dict[str, bytes]) 
     return out
 
 
+def blocked_text(blocking: Sequence[Violation]) -> str:
+    """막은 까닭 한 줄 — **무엇이 걸렸는지**(`items`)까지 싣는다. 규칙 이름만으로는 어느 노드를
+    고칠지 모른다."""
+    parts = [f"{v.message} ({', '.join(v.items)})" if v.items else v.message for v in blocking]
+    return "패키지 검사가 막습니다: " + "; ".join(parts)
+
+
 def export_lib(
     process: BpmProcess,
     definitions: Sequence[Definition],
@@ -443,7 +450,7 @@ def export_lib(
     files = gather_lib(process, definitions)
     blocking = [v for v in check_lib(process, manifest, files) if v.blocks]
     if blocking:
-        raise PackageError("패키지 검사가 막습니다: " + "; ".join(v.message for v in blocking))
+        raise PackageError(blocked_text(blocking))
     return _write(manifest, files, target)
 
 
@@ -495,7 +502,7 @@ def export(
     files = gather(process)
     blocking = [v for v in check(process, manifest, files) if v.blocks]
     if blocking:
-        raise PackageError("패키지 검사가 막습니다: " + "; ".join(v.message for v in blocking))
+        raise PackageError(blocked_text(blocking))
 
     return _write(manifest, files, target)
 

@@ -139,6 +139,42 @@ def test_service_app_not_registered() -> None:
     assert [(x.type, x.reason) for x in missing(m, index())] == [("service_app", "not_registered")]
 
 
+def external(*ops: dict[str, Any], ext_id: str = "nowview-sc01") -> ExtensionResource:
+    """HTTP 어댑터로 붙은 외부 확장 — `chk:serviceCall`이 서비스 앱처럼 부른다."""
+    return ExtensionResource.model_validate({
+        "id": ext_id, "version": "0.1.1", "tier": "external", "protocol": "http-adapter",
+        "definition": {"id": ext_id, "service": {
+            "base_url": "https://example.test", "protocol": "http-adapter",
+            "adapter": {"allowed_hosts": ["example.test"], "operations": list(ops)},
+        }},
+    })
+
+
+def adapter_op(name: str, *, modes: list[str] | None = None, server_ok: bool = True) -> dict[str, Any]:
+    return {"name": name, "modes": modes or ["deterministic"], "server_ok": server_ok,
+            "request": {"method": "POST", "path": f"/{name}"}}
+
+
+def test_an_external_app_called_like_a_service_app_counts_as_registered() -> None:
+    """외부 확장을 `chk:serviceCall`로 부르면 C1에는 `service_apps`로 적힌다 — 「등록되지 않음」이 아니다."""
+    m = manifest(run_location="server", requires={"service_apps": [
+        {"app_id": "nowview-sc01", "operations": ["validate_source", "compare", "gone", "auto"]}]})
+    found = index(extensions=[external(
+        adapter_op("validate_source"), adapter_op("compare", server_ok=False),
+        adapter_op("auto", modes=["autonomous"]))])
+    assert sorted((x.type, x.id, x.reason) for x in missing(m, found)) == [
+        ("operation", "nowview-sc01.auto", "not_deterministic"),
+        ("operation", "nowview-sc01.compare", "not_server_ok"),
+        ("operation", "nowview-sc01.gone", "not_found"),
+    ]
+
+
+def test_a_builtin_extension_with_the_same_id_is_not_an_adapter() -> None:
+    m = manifest(requires={"service_apps": [{"app_id": "ui-automation", "operations": ["plan"]}]})
+    assert [(x.type, x.reason) for x in missing(m, index(extensions=[ui_automation()]))] == [
+        ("service_app", "not_registered")]
+
+
 def test_operation_not_found() -> None:
     m = manifest(requires={"service_apps": [
         {"app_id": "ui-automation", "operations": ["plan", "heal"], "key_ref": "erp"}]})
