@@ -3,7 +3,7 @@
 import { useActionState, useState, useTransition } from "react";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import { Button, ConfirmDialog, Dialog, ErrorBanner, Field } from "@chaeksas/ui";
-import { createCenterKey, revokeCenterKey, unbindCenterKey, type ActionResult } from "@/app/actions";
+import { createCenterKey, deleteCenterKey, revokeCenterKey, unbindCenterKey, type ActionResult } from "@/app/actions";
 import { keyActions, type KeyAction } from "@/lib/center-keys";
 
 /** CON-11 관리자 모드 — 새 키. 폐기·묶음 풀기는 줄마다의 「...」에 있다 (`KeyMenu`). */
@@ -95,14 +95,15 @@ export function KeyTools() {
 const ACTION_LABEL: Record<KeyAction, string> = {
   revoke: "키 폐기...",
   unbind: "묶음 풀기...",
+  delete: "삭제...",
 };
 
 /**
- * CON-11 줄 끝의 「...」 — **그 줄의 키에만** 건다. 할 것이 없는 줄(폐기됨·만료)은 끄고 까닭을
- * 툴팁으로 말한다. 확인 창에는 이름·앞자리·연결된 대상을 보여 고른 키가 맞는지 한 번 더 보게 한다.
+ * CON-11 줄 끝의 「...」 — **그 줄의 키에만** 건다. 폐기된 줄은 「삭제...」만 있다(되살리지 않는다).
+ * 확인 창에는 이름·앞자리·연결된 대상을 보여 고른 키가 맞는지 한 번 더 보게 한다.
  */
 export function KeyMenu({ row }: { row: CenterKeyInfo }) {
-  const { actions, reason } = keyActions(row);
+  const { actions } = keyActions(row);
   const [menu, setMenu] = useState(false);
   const [asking, setAsking] = useState<KeyAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -133,8 +134,7 @@ export function KeyMenu({ row }: { row: CenterKeyInfo }) {
         size="sm"
         variant="ghost"
         aria-label={`${row.name} 키 동작`}
-        disabled={actions.length === 0 || working}
-        disabledReason={reason ?? undefined}
+        disabled={working}
         onClick={() => setMenu(!menu)}
       >
         ...
@@ -177,6 +177,16 @@ export function KeyMenu({ row }: { row: CenterKeyInfo }) {
         confirmLabel="묶음 풀기"
         danger={false}
         onConfirm={() => run(() => unbindCenterKey(row.key_id))}
+        onCancel={() => setAsking(null)}
+      >
+        {what}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={asking === "delete"}
+        title="이 키를 삭제할까요?"
+        description="목록에서 이 키를 지웁니다. 되돌릴 수 없습니다. 실행 기록·결재는 남고, 이 키가 묶였던 PC·서버 자리는 새 키가 이어받을 수 있게 놓입니다."
+        confirmLabel="삭제"
+        onConfirm={() => run(() => deleteCenterKey(row.key_id))}
         onCancel={() => setAsking(null)}
       >
         {what}

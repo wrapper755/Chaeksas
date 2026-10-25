@@ -193,6 +193,7 @@ C13은 「Center 리소스 등록의 `base_url`이 이긴다」고 적었다. �
 | `GET /center-keys?type=&state=` | 읽기·관리자 토큰 | 목록 (원문 없음) |
 | `DELETE /center-keys/{key_id}` | 관리자 토큰 | 폐기 |
 | `POST /center-keys/{key_id}/unbind` | 관리자 토큰 | PC 묶음 풀기 (Bot UI용·서버 실행기용) |
+| `POST /center-keys/{key_id}/purge` | 관리자 토큰 | **폐기된 키**의 행을 지운다 (204). 폐기되지 않았으면 409 `not_revoked` — 폐기 → 삭제 두 걸음이다 ([0095](../decisions/0095-deleting-revoked-center-keys.md)). 묶였던 PC·서버 자리는 「묶음 풀기」처럼 놓인 자리가 되고, 실행 기록·결재의 `owner_key_id`는 글자로 남는다 |
 
 `type`: `bot_ui`, `studio`, `server_runner`, `integration`, `relay` (열린 문자열이지만 Center는 이 다섯만 발급한다).
 
@@ -221,6 +222,7 @@ CenterKeyInfo 필드:
 | --- | --- | --- |
 | 404 | `not_found` | |
 | 409 | `in_use` | 쓰는 서비스 앱·확장 해제 |
+| 409 | `not_revoked` | 폐기되지 않은 키를 지우려 함 (`POST /center-keys/{key_id}/purge`) |
 | 409 | `id_conflict` | 같은 `id`가 이미 있음 (확장과 서비스 앱이 같은 이름 공간) |
 | 422 | `manifest_unreachable` / `manifest_invalid` | 등록 때 manifest를 읽지 못하거나 C11과 맞지 않음 |
 | 422 | `host_not_allowed` | 외부 주소가 `allowed_hosts` 밖이거나 사설망 |

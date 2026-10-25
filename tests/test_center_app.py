@@ -328,6 +328,39 @@ def test_unbinding_lets_a_new_key_take_over_the_pc(client: TestClient) -> None:
     assert lost.status_code == 409 and lost.json()["code"] == "not_registered"
 
 
+def test_only_a_revoked_key_can_be_deleted(client: TestClient) -> None:
+    """삭제는 **폐기 → 삭제** 두 걸음이다 (C7 `purge`, ADR-0095)."""
+    key_id, _raw = issue_key(client)
+    refused = client.post(f"/api/v1/center-keys/{key_id}/purge", headers=ADMIN)
+    assert refused.status_code == 409 and refused.json()["code"] == "not_revoked"
+    assert client.post(f"/api/v1/center-keys/{key_id}/purge", headers=READ).status_code == 403
+
+    assert client.delete(f"/api/v1/center-keys/{key_id}", headers=ADMIN).status_code == 200
+    assert client.post(f"/api/v1/center-keys/{key_id}/purge", headers=ADMIN).status_code == 204
+    assert client.get("/api/v1/center-keys", headers=READ).json() == []
+    gone = client.post(f"/api/v1/center-keys/{key_id}/purge", headers=ADMIN)
+    assert gone.status_code == 404
+
+
+def test_deleting_a_revoked_key_frees_its_pc_like_unbinding(client: TestClient) -> None:
+    """지운 키가 묶였던 PC는 놓인 자리다 — 새 키가 **같은 Bot UI 자리를 이어받는다** (C4·ADR-0095)."""
+    key_a_id, key_a = issue_key(client)
+    _b_id, key_b = issue_key(client, name="다시 발급한 키")
+    machine = machine_id("pc1")
+    first = client.post(
+        "/api/v1/bot-ui/register", json=register_body(machine=machine), headers={"Authorization": f"Bearer {key_a}"}
+    ).json()
+    client.delete(f"/api/v1/center-keys/{key_a_id}", headers=ADMIN)
+    auth_b = {"Authorization": f"Bearer {key_b}"}
+    blocked = client.post("/api/v1/bot-ui/register", json=register_body(machine=machine), headers=auth_b)
+    assert blocked.status_code == 409, "폐기만 해서는 자리가 묶여 있다"
+
+    assert client.post(f"/api/v1/center-keys/{key_a_id}/purge", headers=ADMIN).status_code == 204
+    again = client.post("/api/v1/bot-ui/register", json=register_body(machine=machine), headers=auth_b)
+    assert again.status_code == 200, again.text
+    assert again.json()["bot_ui_id"] == first["bot_ui_id"]
+
+
 def test_a_key_that_still_has_its_own_pc_cannot_take_over_another(client: TestClient) -> None:
     """이어받기는 **행이 없는 키만** 한다 (C4) — 어느 쪽 이력을 버릴지 짐작하지 않는다."""
     key_a_id, key_a = issue_key(client)

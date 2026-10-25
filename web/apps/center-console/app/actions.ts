@@ -542,6 +542,17 @@ export async function decideEnrollment(
   return {};
 }
 
+/** CON-11 「삭제...」 — 폐기된 키의 행을 지운다 (C7 `purge`, ADR-0095). */
+export async function deleteCenterKey(keyId: string): Promise<ActionResult> {
+  try {
+    await center.purgeCenterKey(keyId);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/center-keys");
+  return {};
+}
+
 export async function unbindCenterKey(keyId: string): Promise<ActionResult> {
   try {
     await center.unbindCenterKey(keyId);
