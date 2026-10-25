@@ -117,6 +117,19 @@ class AppDirectory:
         return out
 
 
+def external_addresses(entries: Iterable[Mapping[str, Any]]) -> dict[str, str]:
+    """외부 확장 묶음에서 **Center가 덮어쓴 주소**만 → `{확장 id: 주소}` (C7 §외부 확장 주소, ADR-0097).
+
+    덮어쓰지 않았으면 담지 않는다 — 그러면 어댑터가 정의의 `base_url`로 떨어진다.
+    """
+    out: dict[str, str] = {}
+    for one in entries:
+        extension_id = str((one.get("definition") or {}).get("id") or "")
+        if extension_id and one.get("base_url"):
+            out[extension_id] = str(one["base_url"])
+    return out
+
+
 def read_directory(
     path: Path | None,
     *,
@@ -322,7 +335,12 @@ class DirectoryCache:
         if found.definition is None or found.envelope is None:
             # 내장·사내 확장이다 — 정의는 설치 파일에 있다 (C13). 받을 것이 없다.
             return None, False
-        return {"definition": found.definition, "envelope": found.envelope}, False
+        entry: dict[str, Any] = {"definition": found.definition, "envelope": found.envelope}
+        if found.address is not None:
+            # Center가 덮어쓴 주소 (C7 §외부 확장 주소) — 명부의 주소로 간다. 어댑터가 부를 때
+            # 그 정의의 허용 호스트로 **다시 본다** (서명된 정의 밖으로는 나가지 않는다).
+            entry["base_url"] = found.address.base_url
+        return entry, False
 
     # ── 그 Bot이 쓸 것만 ──
 
@@ -337,18 +355,20 @@ class DirectoryCache:
         if not wanted and not externals:
             return None
         held = self.refresh(externals=sorted(externals)) if refresh else self.cached()
+        chosen = [
+            one for one in held["extensions"] if str((one.get("definition") or {}).get("id") or "") in externals
+        ]
         return to_json_dict(
             addresses={
-                app_id: str(one["base_url"])
-                for app_id, one in held["apps"].items()
-                if app_id in wanted and one.get("base_url")
+                **{
+                    app_id: str(one["base_url"])
+                    for app_id, one in held["apps"].items()
+                    if app_id in wanted and one.get("base_url")
+                },
+                **external_addresses(chosen),
             },
             keys=list(keys),
-            extensions=[
-                one
-                for one in held["extensions"]
-                if str((one.get("definition") or {}).get("id") or "") in externals
-            ],
+            extensions=chosen,
         )
 
     def write_for(
@@ -392,6 +412,7 @@ __all__ = [
     "app_ids",
     "build",
     "extension_ids",
+    "external_addresses",
     "external_ids",
     "read_directory",
     "to_json_dict",

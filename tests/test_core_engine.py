@@ -334,6 +334,66 @@ def test_an_answer_becomes_variables_and_the_run_continues() -> None:
     assert "진행" not in str(answered.data) and "다음 달에" not in str(run.log.events)
 
 
+ANSWERER_PROPS = APPROVAL_PROPS[:-1] + ', "answered_by_as": "확인자", "answered_via_as": "확인경로"}'
+
+
+def test_the_answerer_goes_into_the_variable_the_graph_named() -> None:
+    """**답한 사람**도 변수가 된다 — C3 `human_answered`와 같은 값이다 (C14, ADR-0096)."""
+    engine, run = start(approval_process(props=ANSWERER_PROPS))
+    engine.run_until_blocked(run)
+    assert run.pending is not None
+    engine.answer(run, run.pending.request_id, {"진행": "지급"}, answered_by="이도윤")
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["확인자"] == "이도윤"
+    # 대리가 아니면 `None`이다 — 빈 글은 「대리였는데 이름을 모른다」로 읽힌다.
+    assert "확인경로" in run.variables and run.variables["확인경로"] is None
+    answered = next(e for e in run.log.events if e.kind == "human_answered")
+    assert answered.data["answered_by"] == run.variables["확인자"]
+
+
+def test_an_answer_on_behalf_names_the_relay_key_too() -> None:
+    """대리 답이면 그 키 이름이 `answered_via_as`에 간다 (C6 `answered_via`, ADR-0081)."""
+    engine, run = start(approval_process(props=ANSWERER_PROPS))
+    engine.run_until_blocked(run)
+    assert run.pending is not None
+    engine.answer(
+        run, run.pending.request_id, {"진행": "보류"}, answered_by="이도윤", answered_via="NowView 대리 답"
+    )
+    engine.run_until_blocked(run)
+    assert (run.variables["확인자"], run.variables["확인경로"]) == ("이도윤", "NowView 대리 답")
+
+
+def test_a_rejection_still_names_who_rejected() -> None:
+    """반려도 업무 사실이다 — 누가 반려했는지 채운다 (ADR-0096)."""
+    props = '{"title": "승인해 주세요", "answered_by_as": "결정한사람"}'
+    engine, run = start(approval_process(props=props))
+    engine.run_until_blocked(run)
+    assert run.pending is not None
+    engine.answer(run, run.pending.request_id, {DECISION_KEY: "reject", "진행": "보류"}, answered_by="김감독")
+    assert run.variables["결정한사람"] == "김감독"
+
+
+def test_without_the_fields_the_answerer_makes_no_variable() -> None:
+    """적지 않으면 변수를 만들지 않는다 — 옛 그림은 그대로다."""
+    engine, run = start(approval_process())
+    engine.run_until_blocked(run)
+    assert run.pending is not None
+    before = set(run.variables)
+    engine.answer(run, run.pending.request_id, {"진행": "지급"}, answered_by="홍길동")
+    engine.run_until_blocked(run)
+    assert set(run.variables) - before == {"진행", "의견", "결정"}
+
+
+def test_a_confirmation_can_name_who_confirmed() -> None:
+    """확인(`manualTask`)에도 적을 수 있다 — `via`는 늘 `None`이다."""
+    engine, run = start(approval_process(kind="manualTask", props=ANSWERER_PROPS))
+    engine.run_until_blocked(run)
+    assert run.pending is not None and run.pending.layer == "confirmation"
+    engine.answer(run, run.pending.request_id, {"진행": "지급"}, answered_by="현장 PC 담당")
+    engine.run_until_blocked(run)
+    assert run.variables["확인자"] == "현장 PC 담당" and run.variables["확인경로"] is None
+
+
 def test_a_manual_task_is_a_confirmation() -> None:
     """`manualTask`는 화면에 「확인」으로 보인다 (C14)."""
     engine, run = start(approval_process(kind="manualTask"))

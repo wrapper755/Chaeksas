@@ -57,7 +57,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | UI 태스크 (UI 자동화 확장) | `serviceTask` | `chk:task` `type="ui_task"` `extension="ui-automation"` | `page_id`, `start_url?`, `steps[]`(`{key, action, value?, result?, navigates?}`), `goal?`(자율 수행 전용 — 스텝 대신 목표 한 줄. 쓸 값은 목표 안에 `{이름}`으로 적고 **이름만** 모델에 간다, [ADR-0035](../decisions/0035-ui-goal-planning.md)), `results?`(목표 모드: 읽은 값을 담을 변수 이름들), `heal`(기본 true). 읽기 스텝의 `result` 변수: `read_table`은 **줄 목록**(`[{머리글: 값}]`), `read`와 표의 칸은 **수 모양이면 수**다 ([ADR-0036](../decisions/0036-screen-read-values.md), C10), `close_browser`. 스텝 `value`의 `{변수}`·`{변수.키}`(사전 안의 값)는 **수행기가 실행 시점의 변수로 채운다** — 사전·목록 값은 JSON으로, `{{`·`}}`는 중괄호 글자. 모르는 이름이면 업무 실패다 (글자 그대로 입력하지 않는다, [ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 | 서비스 앱 태스크 | `serviceTask` | `chk:serviceCall` | `app_id`, `operation`, `input`(`{필드: 식}`), `output`(`{변수: 필드}`), `key_ref?`(없으면 프로세스의 `service_keys`를 상속), `timeout_s`, `retry`(`{max, on: [503, 429]}`) |
 | 다른 확장 태스크 | `serviceTask` | `chk:task` `type="<확장 태스크 종류>"` `extension="<id>"` | 그 확장의 계약이 정한 JSON |
-| 결재 | `userTask` | `chk:approval` | `title`, `description`, `show`(**변수 이름 배열** — 문자열 하나로 쓰면 검사 오류), `fields[]`(C6 Form과 같다: `{key, label, type: bool\|number\|text\|choice, choices?, required, default?}`), `location`(`follow`\|`center`\|`field`), `expires`(ISO 기간 또는 변수 이름), `assignees`(**결재 담당자** — 이름 배열 또는 변수 이름 하나, 아래 「결재 담당자」) |
+| 결재 | `userTask` | `chk:approval` | `title`, `description`, `show`(**변수 이름 배열** — 문자열 하나로 쓰면 검사 오류), `fields[]`(C6 Form과 같다: `{key, label, type: bool\|number\|text\|choice, choices?, required, default?}`), `location`(`follow`\|`center`\|`field`), `expires`(ISO 기간 또는 변수 이름), `assignees`(**결재 담당자** — 이름 배열 또는 변수 이름 하나, 아래 「결재 담당자」), `answered_by_as?`·`answered_via_as?`(**답한 사람**이 들어갈 변수, 아래 「답한 사람」) |
 | 수동 작업 (사람 확인) | `manualTask` | `chk:approval` | 결재와 같은 형식. 화면에는 「확인」으로 보인다. **늘 현장에서 답한다** (화면 앞 사람만 답할 수 있다, C6) — `location`에 `center`를 적으면 **B12 경고**다. **서버 BPM 프로세스에는 넣을 수 없다** (C1 R2 `human.confirmation=false`) |
 | 스크립트 | `scriptTask` | 표준 `bpmn:script` (`scriptFormat="chk-expr"`) | 식 언어로 쓴 대입문. 입력은 프로세스 변수, 결과는 대입한 변수 |
 | 규칙 | `businessRuleTask` | `chk:rule` | `decision`(같은 패키지의 DMN 결정 id), `input`(`{DMN 입력 식 이름: 식}`), `output`(`{변수: DMN 출력}`). DMN은 한 건을 판정한다 — 목록은 반복(아래)으로. 적중 정책 `COLLECT`면 출력이 목록이다 (맞는 줄이 없으면 빈 목록). 아래 「규칙 태스크와 DMN」 |
@@ -86,6 +86,23 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 - 확인(`manualTask`)에는 담당자가 없다 — 적으면 B12 경고다(화면 앞 사람이 답한다).
 
 > 상태: 돈다 — 엔진이 결재를 만들 때 풀어 C6 본문에 싣는다 (`core.nodes._assignees`). 변수가 없으면 `assignees_missing`, 모양이 틀리면 `assignees_invalid`로 실행이 멈춘다.
+
+### 답한 사람 (`chk:approval.answered_by_as`·`answered_via_as`)
+
+결재 뒤 태스크가 「누가 답했나」를 쓰려면 그 이름을 변수로 받는다 ([ADR-0096](../decisions/0096-answerer-into-variables.md)). 폼에 「확인자」 칸을 두지 않는다 — 사람이 스스로 적은 이름과 Center가 담당자와 대조한 이름이 둘이 된다.
+
+```json
+{"title": "원천 확인", "fields": [{"key": "확인완료", "type": "bool", "required": true}],
+ "assignees": ["이도윤"], "answered_by_as": "확인자", "answered_via_as": "확인경로"}
+```
+
+- `answered_by_as`: 답을 넣을 때 **답한 사람**을 그 변수에 적는다. C3 `human_answered.answered_by`와 **같은 값**이다 — 콘솔이면 관리자 계정 이름, 대리 답이면 `X-CHK-On-Behalf-Of`의 이름(Center가 담당자와 대조한 것), 현장이면 Bot UI의 표시 이름, Studio 시험 실행이면 케이스의 `answered_by[노드 id]`(없으면 「시험 케이스」).
+- `answered_via_as`: 대리 답이면 **그 키 이름**(C6 `answered_via`), 아니면 `None`.
+- **반려여도 채운다.** 회수·만료는 답한 사람이 없어 채우지 않는다(그 길은 `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED` 오류 경계다).
+- 확인(`manualTask`)에도 적을 수 있다 — `via`는 늘 `None`이다.
+- 이름은 B2가 변수 규칙으로 보고, 생기는 변수는 B11이 출처로 센다. 둘 다 선택 칸이라 **옛 그림은 그대로 읽힌다**.
+
+> 상태: 돈다 — 엔진이 답을 넣을 때 채운다 (`core.engine.answerer_variables`). Studio 시험 실행은 케이스의 `answered_by`를 쓴다.
 
 ### PC 위임 (`chk:call.delegate`)
 
@@ -244,6 +261,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
     "approvals": {"Approve_Hold": {"지급진행": "지급 대상대로 진행", "의견": "보류 5건 공급사에 확인 요청"}},
     "messages": [{"after_s": 5, "name": "return_arrived", "correlation": "RT-01", "payload": {"검수통과": true}}],
     "delegations": {"Call_ErpInput": {"결과코드": "OK"}},
+    "answered_by": {"Approve_Hold": "김재무"},
     "manual": false
   }]
 }
@@ -253,6 +271,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 - `messages`(선택): 시작 뒤 `after_s`초에 보내는 메시지. Center 메시지 API(C12)와 같은 모양(`name`, `correlation`, `payload`)이다. 받기 태스크·경계·중간 받기를 시험할 때 쓴다. 받을 곳이 없으면 `no_receiver`로 기록만 하고 케이스를 실패시키지 않는다.
 
 - `approvals`는 노드 id → 폼 응답이다.
+- `answered_by`(선택): 노드 id → **답한 사람** 이름. 그림이 `answered_by_as`로 받는 값이다. 적지 않으면 「시험 케이스」다 — Studio에는 「Studio 사용자」가 없어 지어내지 않는다 ([ADR-0096](../decisions/0096-answerer-into-variables.md)).
 - `delegations`(선택): 노드 id → **PC 위임이 돌려주는 값**(그 Bot이 선언한 `outputs`). Studio에는 부를 PC Bot의 그림이 없고(다른 패키지다) 있다 해도 UI 태스크라 설계자 PC에서 화면을 만지게 되므로, **케이스가 결과를 적는다** — 결재 답·메시지와 같은 결이다 ([ADR-0062](../decisions/0062-pc-delegation.md) §2). **적어 두지 않은 위임은 그 자리에서 실패**다(기다리지 않는다 — 기다리게 두면 끝나지 않는다: 현장 PC도 Center도 없다). 사유 코드는 **`DELEGATION_FAILED`**, 진짜 PC 실행이 실패했을 때와 **같은 것**이다 — 그래서 적어 두지 않는 것이 **그림의 오류 경계를 시험하는 길**이다. `manual`은 이것을 막지 않는다(결재는 사람이 창에서 답할 수 있지만 위임은 Studio에 답할 사람이 없다).
   - 값을 적되 **그림이 읽는 이름을 빼면**(`{}`도 그렇다) 역시 업무 실패다 — 빈 값으로 이어 가지 않는다 (「그 Bot의 판이 바뀌었다」가 현장에서 이 꼴이다).
 - `manual: true`인 케이스는 자동 응답이 있어도 쓰지 않고 실제 창을 띄운다. 폼을 사람이 보는지 확인하는 용도다.
@@ -284,7 +303,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | # | 규칙 | 위반 |
 | --- | --- | --- |
 | B1 | `chk:*` JSON이 모델과 맞는다 | 오류 |
-| B2 | `show`는 배열이고 각 이름이 변수 규칙에 맞는다. `assignees`가 배열이면 빈 글자가 없고, 글자 하나면 변수 이름 규칙에 맞는다 | 오류 |
+| B2 | `show`는 배열이고 각 이름이 변수 규칙에 맞는다. `assignees`가 배열이면 빈 글자가 없고, 글자 하나면 변수 이름 규칙에 맞는다. `answered_by_as`·`answered_via_as`는 변수 이름 규칙에 맞는다 | 오류 |
 | B3 | 배타·포함 게이트웨이의 나가는 흐름 중 조건 없는 것은 `default`로 지정된다. 포함 분기는 포함 합류로 닫는다 | 오류 |
 | B4 | 반복에 `collect_into`가 있다 | 오류 |
 | B5 | 파일 출력에 `store_as`가 있고 `template`·`variables` 중 하나가 있다. `xlsx`에 `template`를 쓰지 않고, `csv`의 `variables`는 이름 하나이며, `append`는 `md`·`txt`·`csv`에만 있다. 파일 목록에 `store_as`가 있고 `pattern`에 경로 구분자가 없다 | 오류 |
@@ -359,3 +378,4 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 | 2026-10-05 | 1 | `chk:defaults`의 `web`·`desktop`이 확장 태스크 속성의 기본값으로 넘어간다 (UI 태스크가 띄울 앱 이름을 받는다) | 0033 |
 | 2026-10-05 | 1 | UI 태스크 스텝 `value`의 `{변수}`·`{변수.키}`를 수행기가 채운다고 적었다 — 채우지 않아 `{신청.이름}`이 글자 그대로 입력되고 있었다 (M4 인수 시험에서 발견) | 0033 |
 | 2026-10-07 | 1 | 수동 작업(확인)은 **늘 현장**이고 서버 BPM 프로세스에 넣을 수 없다고 바로잡았다 — 「서버에서는 Center 결재함으로 간다」가 C1 R2(`human.confirmation=false`)·C6(확인은 올리지 않는다)와 어긋나 있었다. 결재 현장 연결을 설계하다 드러났다 | [0038](../decisions/0038-approval-request-channel.md) |
+| 2026-10-25 | 1 | **답한 사람** `chk:approval.answered_by_as`·`answered_via_as`(선택)와 케이스 `answered_by`(선택)를 더했다 — B2가 이름을, B11이 출처를 본다. 선택 칸이라 **옛 그림은 그대로 읽힌다** (바깥 요청 NowView R1) | [0096](../decisions/0096-answerer-into-variables.md) |

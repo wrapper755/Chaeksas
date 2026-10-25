@@ -30,7 +30,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from chaeksas.contracts.approvals import Form, FormField, answer_variables
-from chaeksas.contracts.bpmn_ext import BpmnProcess, Call, DataOutput, Node, duration_hours
+from chaeksas.contracts.bpmn_ext import Approval, BpmnProcess, Call, DataOutput, Node, duration_hours
 from chaeksas.core.delegation import (
     DelegationCall,
     DelegationError,
@@ -116,6 +116,24 @@ def _missing_fields(form: Form | None, answer: Mapping[str, Any]) -> list[str]:
     if form is None or not form.fields:
         return [] if DECISION_KEY in answer else [DECISION_KEY]
     return [f.key for f in form.fields if f.required and f.key not in answer]
+
+
+def answerer_variables(
+    approval: Approval | None, answered_by: str, answered_via: str | None
+) -> dict[str, Any]:
+    """**답한 사람**을 그림이 적은 변수로 (C14 `answered_by_as`·`answered_via_as`, ADR-0096).
+
+    C3 `human_answered`에 남는 것과 **같은 값**이다 — 따로 짓지 않는다. 대리가 아니면 `via`는
+    `None`이다(빈 글은 「대리였는데 이름을 모른다」로 읽힌다). 적지 않은 칸은 변수를 만들지 않는다.
+    """
+    if approval is None:
+        return {}
+    out: dict[str, Any] = {}
+    if approval.answered_by_as:
+        out[approval.answered_by_as] = answered_by
+    if approval.answered_via_as:
+        out[approval.answered_via_as] = answered_via or None
+    return out
 
 
 # ─────────────────────────── 엔진 ───────────────────────────
@@ -943,7 +961,8 @@ class Engine:
         (C6 `answer_variables`). **지나지 않은 결재의 칸은 채우지 않으므로** 그것을 가리키는
         식은 그대로 실패한다 (조용히 도우미로 떨어지지 않는다, `expr._Name`). 답 **값은 기록에
         남기지 않는다** (C3 `human_answered`는 값이 없다). 대리 답이면 그 키 이름(`answered_via`)을
-        **사람과 따로** 남긴다 (ADR-0081) — 모르면 넣지 않는다.
+        **사람과 따로** 남긴다 (ADR-0081) — 모르면 넣지 않는다. 그림이 `answered_by_as`·
+        `answered_via_as`를 적었으면 **같은 값을 변수에도** 넣는다 (ADR-0096 — 반려여도).
         """
         pending = run.pendings.get(request_id)
         token = next((t for t in run.tokens if t.waiting_for == request_id), None)
@@ -963,6 +982,8 @@ class Engine:
 
         # **폼의 칸은 모두 변수가 된다** — 기본값, 없으면 `None` (C6 `answer_variables`).
         run.variables.update(answer_variables(pending.form, answer))
+        node = run.node(pending.node_id)
+        run.variables.update(answerer_variables(node.prop("approval"), answered_by, answered_via))
         run.log.emit(
             "human_answered",
             node_id=pending.node_id,
@@ -974,7 +995,6 @@ class Engine:
         token.waiting_for = None
         self.disarm(run, token.id)
 
-        node = run.node(pending.node_id)
         context = Context(engine=self, run=run, token=token, node=node)
         try:
             return self._apply(context, Go())

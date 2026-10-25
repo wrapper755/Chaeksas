@@ -40,6 +40,7 @@ from chaeksas.center.settings import (
 from chaeksas.center.storage import Store, dumps, loads, now_iso
 from chaeksas.contracts.extension import ExtensionManifest, HostRefused, resolve_host, takes_key
 from chaeksas.contracts.resources import (
+    AddressOverride,
     AppKeyState,
     ContributedResource,
     ExtensionResource,
@@ -114,7 +115,9 @@ def read_public(base_url: str, *, timeout_s: float = RESOURCE_TIMEOUT_S) -> dict
     return out
 
 
-def read_adapter_health(definition: dict[str, Any], *, timeout_s: float = RESOURCE_TIMEOUT_S) -> dict[str, Any]:
+def read_adapter_health(
+    definition: dict[str, Any], *, base_url: str | None = None, timeout_s: float = RESOURCE_TIMEOUT_S
+) -> dict[str, Any]:
     """외부 확장의 어댑터 `health`를 두드린다 (C7, C13 §4-1). `{status, reasons}`.
 
     **선언이 없으면 두드리지 않는다** — `unknown`(「확인 전」)으로 둔다. 「어디를 봐야 하나」를
@@ -131,7 +134,8 @@ def read_adapter_health(definition: dict[str, Any], *, timeout_s: float = RESOUR
     service = (definition.get("service") or {}) if isinstance(definition, dict) else {}
     adapter_raw = service.get("adapter") or {}
     health = adapter_raw.get("health") or {}
-    base_url = str(service.get("base_url") or "").strip()
+    # Center가 덮어쓴 주소가 있으면 그것으로 간다 (C7 §외부 확장 주소) — 현장이 부르는 곳과 같다.
+    base_url = str(base_url or service.get("base_url") or "").strip()
     if not health or not health.get("path") or not base_url:
         # **보지 않았다**는 뜻이다 — 부르는 쪽이 「본 때」를 찍지 않게 `declared`로 갈라 준다.
         return {"status": UNKNOWN, "reasons": [], "declared": False}
@@ -184,7 +188,9 @@ def _extension_health(store: Store, rows: dict[str, Any], *, probe: bool) -> dic
     for key, registered in rows.items():
         was = stored.get(key)
         if probe and (was is None or _due(was["checked_at"], now, RESOURCE_STATUS_S)):
-            found = read_adapter_health(json.loads(registered["definition_json"]))
+            definition = json.loads(registered["definition_json"])
+            moved = _address_of(store, key, definition)[0]
+            found = read_adapter_health(definition, base_url=moved.base_url if moved else None)
             if not found["declared"]:
                 # 선언이 없으면 **본 적이 없다** — 「본 때」를 찍으면 확인한 것처럼 보인다.
                 out[key] = {"status": UNKNOWN, "reasons": [], "checked_at": None}
@@ -537,10 +543,13 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
 
     out = []
     for key in sorted(set(found) | set(apps) | set(external)):
+        address, address_problem = (None, None)
         slot = found.get(key, {"versions": {}, "hosts": 0, "hash": None})
         app = apps.get(key)
         registered = external.get(key)
         definition = json.loads(registered["definition_json"]) if registered is not None else None
+        if definition is not None:
+            address, address_problem = _address_of(store, key, definition)
         versions = slot["versions"]
         out.append(
             ExtensionResource(
@@ -568,7 +577,8 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
                 status=app.status if app else (health[key]["status"] if key in health else "n/a"),
                 status_reasons=(
                     app.status_reasons if app else (health[key]["reasons"] if key in health else [])
-                ),
+                )
+                + ([address_problem] if address_problem else []),
                 checked_at=(
                     app.checked_at if app else (health[key]["checked_at"] if key in health else None)
                 ),
@@ -576,9 +586,101 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
                 envelope=json.loads(registered["envelope_json"]) if registered is not None else None,
                 # 외부 앱 키 — 넣었는지·언제·누가만 (C7 §외부 앱 키, 원문 없음).
                 app_key=_app_key_of(store, key, definition),
+                address=address,
             )
         )
     return out
+
+
+# ─────────────────────────── 외부 확장 주소 (C7 §외부 확장 주소, ADR-0097) ───────────────────────────
+
+#: 덮어쓴 주소가 지금 정의의 허용 호스트 밖이다 — 내려 주지 않는다 (`status_reasons`에 남는다).
+ADDRESS_OUTSIDE = "address_outside_definition"
+
+
+def _check_address(base_url: str, definition: dict[str, Any], *, lookup: Any = None) -> str:
+    """정의의 허용 호스트 안인가 — **어댑터와 같은 관문**(`resolve_host`)을 지난다. 다듬은 주소를 준다.
+
+    `lookup`이 없으면 DNS를 보지 않고 「허용 호스트·http(s)」만 본다 (목록을 읽을 때마다 풀지 않는다).
+    DNS를 풀지 못한 것은 막지 않는다 — 부르는 곳에서는 풀릴 수 있고, 부를 때 같은 관문이 다시 본다.
+    """
+    from urllib.parse import urlsplit  # noqa: PLC0415
+
+    value = base_url.strip().rstrip("/")
+    parts = urlsplit(value)
+    if parts.path or parts.query or parts.fragment or parts.username or parts.password:
+        raise ApiError(422, "host_not_allowed", f"주소에는 경로·쿼리를 적지 않는다 (어댑터가 버린다): {base_url}")
+    adapter = ((definition.get("service") or {}).get("adapter") or {}) if isinstance(definition, dict) else {}
+    allowed = [str(one) for one in (adapter.get("allowed_hosts") or [])]
+    private_ok = bool(adapter.get("allow_private_network"))
+    if parts.scheme == "http" and not private_ok:
+        # DNS를 보기 전에 막는다 — 풀리지 않는 갈래로 http가 새어 들어오지 않게 (§4-3 2번).
+        raise ApiError(422, "host_not_allowed", f"https만 쓴다: {base_url}", {"allowed_hosts": allowed})
+    try:
+        resolve_host(
+            value,
+            allowed_hosts=allowed,
+            allow_private_network=private_ok,
+            # DNS를 보지 않을 때는 「풀리지 않는다」로 둔다 — 그 갈래는 막지 않는다.
+            lookup=lookup or _no_lookup,
+        )
+    except HostRefused as e:
+        if not e.retryable:
+            raise ApiError(422, "host_not_allowed", str(e), {"allowed_hosts": allowed}) from e
+    return value
+
+
+def _no_lookup(host: str) -> list[str]:
+    raise OSError("조회하지 않음")
+
+
+def _address_of(
+    store: Store, extension_id: str, definition: dict[str, Any]
+) -> tuple[AddressOverride | None, str | None]:
+    """덮어쓴 주소와, 내려 주지 못하는 까닭. 덮어쓰지 않았으면 `(None, None)`."""
+    row = store.row("SELECT * FROM extension_addresses WHERE extension_id = ?", (extension_id,))
+    if row is None:
+        return None, None
+    try:
+        _check_address(str(row["base_url"]), definition)
+    except ApiError:
+        # 새 판의 허용 호스트가 바뀌었다 — **내려 주지 않고**(기본값이 쓰인다) 지우지도 않는다.
+        return None, ADDRESS_OUTSIDE
+    return AddressOverride(base_url=str(row["base_url"]), set_at=row["set_at"], set_by=row["set_by"]), None
+
+
+def set_address(store: Store, extension_id: str, raw: dict[str, Any], *, by: str) -> ExtensionResource:
+    """`PUT /resources/extensions/{id}/address` — 정의의 허용 호스트 안에서만 받는다."""
+    registered = _external_rows(store).get(extension_id)
+    if registered is None:
+        raise ApiError(404, "not_found", f"등록된 외부 확장이 아니다: {extension_id}")
+    definition = json.loads(registered["definition_json"])
+    if ((definition.get("service") or {}).get("protocol")) != "http-adapter":
+        raise ApiError(404, "not_found", f"주소를 부르는 외부 확장이 아니다: {extension_id}")
+    base_url = str(raw.get("base_url") or "").strip()
+    if not base_url:
+        raise ApiError(422, "host_not_allowed", "주소가 비었다 — 기본값으로 돌아가려면 DELETE")
+    value = _check_address(base_url, definition, lookup=_getaddrinfo)
+    with store.tx() as cur:
+        cur.execute(
+            "INSERT INTO extension_addresses (extension_id, base_url, set_at, set_by) VALUES (?, ?, ?, ?)"
+            " ON CONFLICT (extension_id) DO UPDATE SET base_url = excluded.base_url,"
+            " set_at = excluded.set_at, set_by = excluded.set_by",
+            (extension_id, value, now_iso(), by),
+        )
+        # 상태는 **새 주소로** 다시 본다 — 옛 주소의 「응답 없음」을 들고 있지 않는다.
+        cur.execute("DELETE FROM extension_health WHERE id = ?", (extension_id,))
+    return extension(store, extension_id)
+
+
+def delete_address(store: Store, extension_id: str) -> ExtensionResource:
+    """`DELETE /resources/extensions/{id}/address` — 정의의 `base_url`(기본값)로 돌아간다."""
+    if _external_rows(store).get(extension_id) is None:
+        raise ApiError(404, "not_found", f"등록된 외부 확장이 아니다: {extension_id}")
+    with store.tx() as cur:
+        cur.execute("DELETE FROM extension_addresses WHERE extension_id = ?", (extension_id,))
+        cur.execute("DELETE FROM extension_health WHERE id = ?", (extension_id,))
+    return extension(store, extension_id)
 
 
 def _app_key_of(store: Store, extension_id: str, definition: dict[str, Any] | None) -> AppKeyState | None:
@@ -960,6 +1062,9 @@ def revoke_extension(
             from chaeksas.center import service_keys  # noqa: PLC0415 — 순환 import를 피한다
 
             service_keys.forget_external(store, extension_id)
+            # 덮어쓴 주소도 (C7 §외부 확장 주소).
+            with store.tx() as cur:
+                cur.execute("DELETE FROM extension_addresses WHERE extension_id = ?", (extension_id,))
     # **철회된 것은 목록에서 빠지므로** `extension()`으로는 찾을 수 없다 — 저장된 줄에서 짓는다.
     return _revoked_info(store, extension_id, version)
 
