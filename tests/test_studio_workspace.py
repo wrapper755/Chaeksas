@@ -84,6 +84,19 @@ def test_saving_a_definition_writes_utf8_and_shows_up_in_the_tree(tmp_path: Path
     assert entry is not None and entry.process is not None and entry.process.id == "Proc_a_b"
 
 
+def test_saving_refreshes_the_definition_the_window_holds(tmp_path: Path) -> None:
+    """저장하면 **들고 있는 읽은 그림도** 바뀐다 — 안 바뀌면 BPM 프로세스 정보·「참조 채우기」가
+    다시 열 때까지 저장 전의 그림을 말한다."""
+    found = workspace(tmp_path)
+    made = found.create("a.b")
+    found.save_definition(made, "main.bpmn", MINIMAL.format(process_id="Proc_old", name="x"))
+    found.save_definition(made, "main.bpmn", MINIMAL.format(process_id="Proc_new", name="x"))
+    (entry,) = made.definitions
+    assert entry.process is not None and entry.process.id == "Proc_new"
+    found.save_definition(made, "a_sub.bpmn", MINIMAL.format(process_id="Proc_sub", name="x"))
+    assert [d.path.name for d in made.definitions] == ["a_sub.bpmn", "main.bpmn"]
+
+
 def test_a_definition_that_does_not_read_keeps_its_reason(tmp_path: Path) -> None:
     """읽지 못한 정의를 **숨기지 않는다** — 탐색기가 사유를 보인다."""
     found = workspace(tmp_path)

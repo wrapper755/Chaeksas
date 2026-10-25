@@ -41,7 +41,16 @@ from PySide6.QtWidgets import (
 from chaeksas.contracts import SCOPE_STUDIO, ConfigurationItem
 from chaeksas.qt.theme import THEME_DARK, THEME_LIGHT, THEME_SYSTEM
 from chaeksas.qt.theme.tokens import SPACE_1
-from chaeksas.studio.checks import center_status, key_status, llm_status, worker_place, worker_status
+from chaeksas.studio.checks import (
+    EXTERNAL_NOT_CHECKED,
+    AppPlaces,
+    app_places,
+    center_status,
+    key_status,
+    llm_status,
+    worker_place,
+    worker_status,
+)
 from chaeksas.studio.credentials import (
     ENV_CENTER_API_KEY,
     ENV_LLM_API_KEY,
@@ -404,16 +413,40 @@ class StudioSettingsDialog(QDialog):
         self.worker_state.setText(worker_status(self.worker, client=self.client))
 
     def test_keys(self) -> None:
-        """줄마다 `/v1/keys/self` — 새로 친 값이 있으면 그것을, 없으면 지금 쓰일 값을 본다."""
+        """줄마다 `/v1/keys/self` — 새로 친 값이 있으면 그것을, 없으면 지금 쓰일 값을 본다.
+
+        주소는 설치된 확장 정의가 먼저, 없으면 **Center 리소스 목록**이다(시험 실행과 같은 곳).
+        Center는 **주소를 모르는 줄이 있을 때만 한 번** 묻는다. 외부 확장은 묻지 않는다.
+        """
+        places: AppPlaces | None = None
         for at, (ref, app, typed) in enumerate(self.key_rows()):
             key = typed or (self.credentials.service_key(ref) if ref else None)
-            found = key_status(self.extensions.service_url(app) if app else None, key, client=self.client)
+            url = self.extensions.service_url(app) if app else None
+            if app and url is None:
+                places = places or app_places(self._center_reader())
+                url = places.addresses.get(app)
+            if places is not None and app in places.externals:
+                found = EXTERNAL_NOT_CHECKED
+            else:
+                found = key_status(url, key, client=self.client)
+                if url is None and places is not None and places.problem:
+                    found += f" ({places.problem})"
             if not typed and ref and _env(service_key_env(ref)):
                 found += " (환경변수)"
             item = self.keys.item(at, STATE)
             if item is not None:
                 item.setText(found)
                 item.setToolTip(found)
+
+    def _center_reader(self) -> Any:
+        """지금 창에 적힌 Center 주소·키로 읽는 쪽 — 둘 중 하나라도 없으면 `None`(두드리지 않는다)."""
+        from chaeksas.studio.services import CenterReader  # noqa: PLC0415
+
+        url = self.center_url.text().strip()
+        key = self.center_key.text().strip() or self.credentials.center_api_key()
+        if not url or not key:
+            return None
+        return CenterReader(base_url=url, api_key=key, client=self.client)
 
     def extension_values(self) -> dict[str, dict[str, Any]]:
         """「확장별 설정」에서 비밀이 **아닌** 칸만 — 비밀은 `save()`가 비밀 저장소로 보낸다.

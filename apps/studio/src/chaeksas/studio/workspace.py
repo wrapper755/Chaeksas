@@ -374,10 +374,7 @@ class Workspace:
 
     def _definitions(self, folder: Path) -> Iterator[Definition]:
         for path in sorted((folder / "process").glob("*.bpmn")):
-            try:
-                yield Definition(path=path, process=read_process(path.read_text(encoding="utf-8")))
-            except (BpmnReadError, OSError) as e:
-                yield Definition(path=path, problem=str(e))
+            yield _read_definition(path)
 
     def find(self, process_id: str) -> BpmProcess | None:
         return next(
@@ -449,6 +446,11 @@ class Workspace:
         path = process.folder / "process" / file_name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(xml, encoding="utf-8", newline="\n")
+        # **들고 있는 읽은 그림도 바꾼다** — 안 바꾸면 BPM 프로세스 정보·설정의 「참조 채우기」가
+        # 다시 열 때까지 저장 전의 그림을 말한다.
+        fresh = _read_definition(path)
+        kept = [d for d in process.definitions if d.path.name != path.name]
+        process.definitions = sorted([*kept, fresh], key=lambda d: d.path.name)
         return path
 
     def set_entry(self, process: BpmProcess, file_name: str) -> BpmProcess:
@@ -642,6 +644,14 @@ class Workspace:
                 path.read_text(encoding="utf-8"), encoding="utf-8", newline="\n"
             )
 
+
+
+def _read_definition(path: Path) -> Definition:
+    """정의 파일 하나를 읽는다. 읽지 못하면 그 까닭을 들고 있다 (목록에서 빠지지 않는다)."""
+    try:
+        return Definition(path=path, process=read_process(path.read_text(encoding="utf-8")))
+    except (BpmnReadError, OSError) as e:
+        return Definition(path=path, problem=str(e))
 
 __all__ = [
     "BAD_NAME_CHARS",

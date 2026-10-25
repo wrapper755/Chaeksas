@@ -377,6 +377,41 @@ def test_the_key_test_asks_the_real_app(qt: Any, settings: Settings, extensions:
     assert states[1:] == ["폐기됨", "키가 틀림", "없음", "주소를 모름"]
 
 
+def test_the_key_test_finds_addresses_where_the_test_run_does(
+    qt: Any, settings: Settings, extensions: Extensions, tmp_path: Path
+) -> None:
+    """설치된 확장이 모르는 앱은 **Center 리소스 목록**에서 주소를 찾고(시험 실행과 같은 곳),
+    외부 확장은 묻지 않는다 — `/v1/keys/self`는 C11의 길이다."""
+    from types import SimpleNamespace
+
+    from chaeksas.studio.checks import EXTERNAL_NOT_CHECKED
+
+    path = tmp_path / "uia.sqlite3"
+    app = create(db_path=path, admin_token="t")
+    SqliteKeyStore(db=Database(path=path)).add(
+        ServiceAppKey(name="개발", hash=hash_key(GOOD), prefix=GOOD[:16], allowed_operations=["*"],
+                      allowed_modes=["deterministic", "autonomous"], created_at="2026-10-05T09:00:00+09:00")
+    )
+    asked: list[str] = []
+
+    class Reader:
+        def service_apps(self) -> list[Any]:
+            asked.append("service_apps")
+            return [SimpleNamespace(app_id="crm", base_url="http://testserver")]
+
+        def extensions(self) -> list[Any]:
+            return [SimpleNamespace(id="nowview-sc01", tier="external")]
+
+    found = dialog(settings, extensions, Vault(), client=TestClient(app))
+    found._center_reader = Reader  # type: ignore[method-assign]
+    for ref, app_id in (("crm", "crm"), ("nv", "nowview-sc01"), ("ui", "ui-automation")):
+        type_key(found, found._add_key_row(ref, app_id), GOOD)
+    found.test_keys()
+    assert [found._cell(at, 3) for at in range(3)] == ["정상 — 허용: 결정·자율", EXTERNAL_NOT_CHECKED,
+                                                       "정상 — 허용: 결정·자율"]
+    assert asked == ["service_apps"], "Center는 한 번만 묻는다"
+
+
 # ─────────────────────────── 확인들 ───────────────────────────
 
 
