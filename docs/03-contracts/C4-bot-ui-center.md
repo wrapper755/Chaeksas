@@ -2,24 +2,26 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 등록·하트비트·배포·작업·결재·`readiness`·`reserved_for`까지 양쪽이 쓴다) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 등록·하트비트·배포·작업·결재·`readiness`·`reserved_for`까지 양쪽이 쓴다) — **§등록 요청과 승인은 초안이다** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), 코드 아직) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Bot UI ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/bot_ui.py` (import `chaeksas.contracts.bot_ui`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c4-register-request.json`](../../packages/contracts/schemas/c4-register-request.json) · [`c4-register-response.json`](../../packages/contracts/schemas/c4-register-response.json) · [`c4-heartbeat-request.json`](../../packages/contracts/schemas/c4-heartbeat-request.json) · [`c4-heartbeat-response.json`](../../packages/contracts/schemas/c4-heartbeat-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md) |
-| 관련 화면 | BUI-01·03·04·09, CON-03·05·11 |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| 관련 화면 | BUI-01·03·04·05·09, CON-03·05·11 |
 
 ## 목적
 
-Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 중 Bot 1건, 대기열, Worker 프로세스, 준비 상태)를 보고하며, 그 응답으로 배포·작업·결재 답·취소 지시를 받는다. **연결은 항상 Bot UI → Center**다 (ADR-0007).
+Bot UI가 **등록 요청**을 보내 관리자의 승인으로 Center API 키를 받고(§등록 요청과 승인), 그 키로 자기를 등록하고, 30초마다 상태(실행 중 Bot 1건, 대기열, Worker 프로세스, 준비 상태)를 보고하며, 그 응답으로 배포·작업·결재 답·취소 지시를 받는다. **연결은 항상 Bot UI → Center**다 (ADR-0007).
 
 ## 전송
 
 - 방식:
+  - `POST /api/v1/bot-ui/enroll` — 키가 없을 때 **등록 요청**을 보낸다 (§등록 요청과 승인, 인증 없음).
+  - `GET /api/v1/bot-ui/enroll/{enrollment_id}` — 그 요청이 승인됐나 묻는다 (인증 없음).
   - `POST /api/v1/bot-ui/register` — 처음 한 번, 그리고 정보(이름·버전)가 바뀔 때.
   - `POST /api/v1/bot-ui/heartbeat` — 30초마다 (응답의 `next_heartbeat_s`를 따름).
-- 인증: `Authorization: Bearer <Center API 키>` (종류 「Bot UI용」, CON-11). **Bot UI의 신원은 키로 정한다.** 경로·본문에 `bot_ui_id`를 넣지 않는다.
+- 인증: `Authorization: Bearer <Center API 키>` (종류 「Bot UI용」 — 승인이 만든 키, 또는 자동화·시험용으로 관리자 토큰이 발급한 키). **등록 요청 두 경로만 인증이 없다.** **Bot UI의 신원은 키로 정한다.** 경로·본문에 `bot_ui_id`를 넣지 않는다.
 - 키 묶기: **키 하나 ↔ PC 하나 ↔ Bot UI 행 하나**다 (아래 [키 묶기](#키-묶기)).
 - 키 종류: 「Bot UI용」 키만 받는다. Studio용·서버 실행기용 키로 부르면 403 `wrong_key_type`.
 - 키 형식: `chk_ctr_<무작위 40자>`, 앞자리 16자만 화면에 (C11과 같은 규칙).
@@ -27,6 +29,72 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 - 크기 한도: 요청 256 KB.
 - **`current_run`은 비어 있어도 `null`로 싣는다.** 「필수이지만 비어 있을 수 있는」 필드라서, `None`인 선택 필드처럼 빼 버리면 받는 쪽이 「필수 필드 누락」으로 422를 돌려준다 (`ContractModel.to_json_dict()`가 필수 필드의 `null`은 남긴다).
 - 온라인 판정: 마지막 하트비트가 90초 이내면 「● 온라인」 (CON-03).
+
+## 등록 요청과 승인
+
+> 상태: **초안** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — 코드는 아직 「CON-11에서 발급한 키를 사람이 BUI-03에 붙여 넣는」 길만 있다.
+
+설치하는 사람은 **Center 주소만** 넣는다. 키를 만드는 것도 내려 주는 것도 Center이고, 사람은 **이 PC를 들일지 승인만** 한다.
+
+| 차례 | 누가 | 무엇을 |
+| --- | --- | --- |
+| 1 | Bot UI | 키가 없으면 키 쌍(X25519)을 만들어 비밀 반쪽을 OS 비밀 저장소에 두고 `POST …/enroll`을 보낸다 |
+| 2 | Center | 요청을 「승인 대기」로 두고 `enrollment_id`와 **요청 코드**를 돌려준다 |
+| 3 | Bot UI | 요청 코드를 **스스로 다시 계산해** 맞을 때만 BUI-03·트레이에 띄운다. `poll_after_s`마다 `GET …/enroll/{id}`로 묻는다 |
+| 4 | 관리자 | CON-03 「승인 대기」에서 **같은 코드**를 확인하고 「승인」 (C5 §등록 승인) |
+| 5 | Center | 「Bot UI용」 키를 만들어 **그 `machine_id`에 미리 묶고**, 요청의 공개키로 봉해 둔다 |
+| 6 | Bot UI | 다음에 물을 때 봉한 키를 받아 열고 OS 비밀 저장소에 둔 뒤 `register`를 부른다 (그다음은 지금과 같다) |
+| 7 | Center | 그 키로 `register`가 성공하면 **봉해 둔 것을 지운다** — 그것이 받았다는 표시다 |
+
+- **환경변수로 키가 오면**(`CHK_BOT_UI__CENTER_API_KEY` — 개발·CI) 등록 요청을 보내지 않는다.
+- **요청 코드**: `SHA-256(public_key ‖ enrollment_id)`를 base32(RFC 4648, 대문자, 덧붙임 없음)로 적은 앞 8자를 `XXXX-XXXX`로 보인다. 공개키와 Center가 준 id 둘로 정해지므로 **사람이 지어 맞출 수 없고**, 가운데서 응답을 바꿔치면 Bot UI가 계산한 값과 어긋나 띄우지 않는다. 같은 PC가 다시 요청하면 코드도 바뀐다.
+- **승인 대기는 24시간**이다. 지나면 `expired`이고 Bot UI는 새 요청을 보낸다(코드가 바뀐다). 같은 `machine_id`가 대기 중에 다시 요청하면 **옛 요청을 닫고** 새것만 남긴다 — CON-03에 같은 PC가 두 줄 서지 않는다.
+- **승인된 키를 24시간 안에 `register`로 쓰지 않으면** Center가 그 키를 폐기하고 요청을 `expired`로 닫는다.
+- **묻는 길에 인증이 없어도 된다.** 내려 주는 키는 그 요청의 공개키로 봉해 있어 남이 받아도 열지 못한다. `enrollment_id`는 `enr_` + 무작위 32자라 짐작할 수 없다.
+- **막는 것**: 같은 원격 주소에서 10분에 10건까지(429 `enroll_rate_limited`), 대기 중인 요청은 Center 전체에 200건까지(429 `enroll_queue_full`).
+- **거절**되면 `rejected`와 사유를 돌려주고 Bot UI는 그것을 보인다. 다시 요청할 수 있다(관리자가 또 거절할 뿐이다).
+- 승인은 **키 묶기 규칙을 그대로 따른다** (아래). 그 `machine_id`가 이미 다른 키로 등록돼 있으면 승인 화면이 그것을 말하고, 승인하면 **옛 키를 폐기하고 그 `bot_ui_id`를 이어받는다** — 「PC 묶음 풀기」가 하던 일을 승인이 한다(PC를 다시 설치한 경우).
+
+### 봉함
+
+받는 쪽 공개키로만 열리는 한 덩이다. 승인으로 받는 키, 아래 키 회전, 다음 조각의 서비스 앱 키가 **같은 봉함**을 쓴다.
+
+| 칸 | 뜻 |
+| --- | --- |
+| `alg` | `x25519-hkdf-sha256-chacha20poly1305` (지금은 이것 하나) |
+| `epk` | Center가 봉할 때마다 만든 X25519 공개키 (base64url, 32바이트) |
+| `nonce` | 12바이트 (base64url) |
+| `ciphertext` | 키 원문을 봉한 것 (base64url). HKDF의 `info`는 `chaeksas-seal-v1`, `salt`는 `enrollment_id`(회전이면 `bot_ui_id`) |
+
+### EnrollRequest
+
+`RegisterRequest`와 같은 칸(`schema`·`machine_id`·`name`·`os`·`versions`·`runtimes`)에 하나를 더한다.
+
+| 필드 | 타입 | 필수 | 뜻 |
+| --- | --- | --- | --- |
+| `public_key` | str | ✓ | X25519 공개키 (base64url, 32바이트). 틀리면 422 `public_key_invalid` |
+
+### EnrollResponse · EnrollStatus
+
+| 필드 | 타입 | 뜻 |
+| --- | --- | --- |
+| `enrollment_id` | str | `enr_<무작위 32자>` |
+| `state` | str | **열린 문자열.** 알려진 값: `pending` `approved` `rejected` `expired` |
+| `code` | str | 요청 코드 `XXXX-XXXX` |
+| `poll_after_s` | int | 다음에 물을 때까지 (기본 10) |
+| `expires_at` | str | 승인 대기가 끝나는 때 |
+| `sealed_key` | Sealed? | `approved`일 때만. 봉한 Center API 키 |
+| `key_expires_at` | str? | `approved`일 때만. 받은 키의 만료 |
+| `reason` | str? | `rejected`일 때 관리자가 적은 사유 |
+
+`POST …/enroll`은 `EnrollResponse`(`state: pending`), `GET …/enroll/{id}`는 같은 모양의 `EnrollStatus`를 돌려준다. 없는 id는 404 `not_found`다.
+
+### 키 회전
+
+- 공개키를 아는 Bot UI(등록 요청으로 들어왔거나 `RegisterRequest.public_key`를 보낸 것)에는 **만료 14일 전부터** 하트비트 답에 `rotated_key`가 실린다.
+- Bot UI는 열어서 OS 비밀 저장소의 키를 바꾸고 **다음 요청부터 새 키**를 쓴다. Center는 새 키로 첫 요청이 오면 옛 키를 폐기한다 — 그것이 받았다는 표시다. 그 전까지는 주기마다 같은 것을 싣는다.
+- 새 키의 만료는 그때부터 1년이고 묶인 PC·`bot_ui_id`는 그대로다.
+- 공개키를 모르는 Bot UI(환경변수로 키를 받은 것)는 회전하지 않는다.
 
 ## 키 묶기
 
@@ -63,6 +131,7 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | `os` | str | ✓ | 예: `windows-11-23H2`, `ubuntu-24.04` |
 | `versions` | object | ✓ | `{bot_ui, core, worker, build?}`. `bot_ui`·`worker`는 **산출물의 판**이고(Worker는 같은 실행 파일로 뜬다) 묶은 앱이면 빌드가 찍은 판이다 ([ADR-0067](../decisions/0067-build-stamp.md) — 태그면 `0.2.0`, 태그 없이 묶었으면 `0.1.0+g<커밋>`). `build`(`{commit, built_at}`)는 **묶은 것에서 돈다**는 표시이고 **없으면 묶지 않은 것**(소스·`uv sync`)에서 돈다 — 「모른다」가 아니다 |
 | `runtimes` | object | | `{browsers: ["chromium-130"], desktop_backend: "uia", extensions: [{id, version, enabled, off}]}` — 설치된 확장 (C13) |
+| `public_key` | str? | | X25519 공개키 (base64url). 보내면 Center가 이 PC의 키를 **회전해 준다** (§키 회전). 등록 요청으로 들어온 PC는 Center가 이미 안다 |
 
 ### RegisterResponse
 
@@ -124,9 +193,10 @@ Bot UI가 Center API 키로 자기를 등록하고, 30초마다 상태(실행 �
 | `cancel_jobs` | str[] | 콘솔에서 취소된 작업 id. 대기열에 있으면 빼고 `cancelled`로 ack. **이미 시작했으면 멈추지 않고** `cancel_refused` + `already_started`로 ack. 작업은 Center에서 `accepted` 그대로 남는다 (C5, 실행 중 Bot을 멈추는 것은 schema 1 범위 밖) |
 | `approvals` | ApprovalDispatch[] | 답이 정해졌고 아직 ack되지 않은 결재 (C6) |
 | `disabled` | bool | true면 Bot UI는 새 작업·배포를 받지 않는다. 하트비트는 계속 받으므로 실행 중 Bot과 대기열은 콘솔에 계속 보인다 (CON-03 「비활성화」) |
+| `rotated_key` | `{sealed_key, expires_at}`? | 만료 14일 전부터 새 키 (§키 회전). 새 키로 첫 요청이 올 때까지 주기마다 싣는다 |
 | `key_expires_at` | str? | 등록 응답과 같은 값. **주기마다 싣는다** — 운영자가 키 기간을 늘려 주면 다음 주기에 바로 안다 (「생략 = 그대로」로 두면 늘어난 것을 모른다) |
 
-**키 만료일은 Center만 안다** — 그래서 내려 준다. 받는 쪽은 그것으로 BUI-05 「Center API 키 만료 임박」을 띄우고(14일 전부터 **하루 한 번** — 주기마다 띄우면 30초에 한 번 같은 말을 한다), 이미 만료된 키는 **알리지 않는다**(그때는 Center가 거부하고 「키 거부」가 말한다). 값이 **없는 것은 「만료가 없다」는 뜻**이고 「모른다」가 아니다 — Center는 만료 없는 키도 발급한다 (C7).
+**키 만료일은 Center만 안다** — 그래서 내려 준다. 받는 쪽은 그것으로 BUI-05 「Center API 키 만료 임박」을 띄우고(**회전을 받는 PC는 7일 전까지 새 키가 오지 않았을 때만** — Center에 닿지 못했다는 뜻이다. 회전하지 않는 PC는 14일 전부터. 둘 다 **하루 한 번** — 주기마다 띄우면 30초에 한 번 같은 말을 한다), 이미 만료된 키는 **알리지 않는다**(그때는 Center가 거부하고 「키 거부」가 말한다). 값이 **없는 것은 「만료가 없다」는 뜻**이고 「모른다」가 아니다 — Center는 만료 없는 키도 발급한다 (C7).
 
 | 모델 | 필드 |
 | --- | --- |
@@ -196,7 +266,9 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 | 401 | 키 없음·틀림 | 트레이 「등록 전」, BUI-03 「키가 거부되었습니다」. 실행 중 Bot은 계속, 기록은 쌓음 |
 | 403 | 키 폐기·만료 (`detail.code`=`key_revoked`\|`key_expired`), 키 종류가 다름 (`wrong_key_type`) | 알림 「Center가 이 PC의 키를 거부했습니다」. 하트비트 간격을 5분으로 늘림. 실행 중 Bot은 끝까지, 기록은 쌓음 |
 | 409 | 키가 다른 PC에 묶여 있음 (`machine_mismatch`, `detail.bound_to`) | BUI-03에 「이 키는 <PC>에서 쓰고 있습니다」. 트레이 「등록 전」 |
-| 409 | 이 PC가 이미 다른 키로 등록돼 있음 (`machine_already_registered`, `detail.reason`·`bot_ui_id`·`name`) | BUI-03에 Center가 준 말 그대로. 트레이 「등록 전」. **다시 시도해도 같다** — 운영자가 CON-11에서 옛 키의 「PC 묶음 풀기」를 해야 한다 |
+| 409 | 이 PC가 이미 다른 키로 등록돼 있음 (`machine_already_registered`, `detail.reason`·`bot_ui_id`·`name`) | BUI-03에 Center가 준 말 그대로. 트레이 「등록 전」. **다시 시도해도 같다** — 등록 요청을 보내 승인받으면 그 자리를 이어받는다 (자동화 키라면 운영자가 옛 키의 묶음을 풀어야 한다) |
+| 422 | 등록 요청의 공개키가 틀림 (`public_key_invalid`) | 키 쌍을 새로 만들어 다시 요청한다 |
+| 429 | 등록 요청이 너무 잦음 (`enroll_rate_limited`) / 대기 줄이 가득 참 (`enroll_queue_full`) | `Retry-After`만큼 기다렸다 다시 요청한다. BUI-03에 「Center가 지금 등록 요청을 받지 않습니다」 |
 | 409 | 등록하기 전에 `heartbeat` (`not_registered`) | `register`를 먼저 부른다 (자리를 다른 키가 이어받은 경우도 이 코드다) |
 | 422 | 필수 필드 누락, 더 높은 `schema` | Bot UI 업데이트 필요 안내 |
 | 5xx / 연결 실패 | | 트레이 「연결 끊김」. 30초 간격 재시도 (최대 5분까지 늘림). 실행·대기열은 계속 |
@@ -222,6 +294,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | **초안: 등록 요청과 승인** — `POST/GET …/enroll`(인증 없음, 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`, 오류 `public_key_invalid`·`enroll_rate_limited`·`enroll_queue_full`. 선택 칸·새 경로라 옛 Bot UI는 그대로 돈다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | `ApprovalDispatch.answered_via?` — 대리 답이면 그 키 이름이 실행하는 쪽까지 내려가 C3 `human_answered`에 남는다 | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-17 | 1 | **`versions.build`를 더했다** (`{commit, built_at}`, 선택) — 묶은 산출물에서 도는지와 어느 커밋인지. `bot_ui`는 빌드가 찍은 판이다(묶은 앱이 `0.0.0`을 올리던 흠을 고쳤다). 선택 칸이라 옛 Bot UI는 그대로 읽힌다 | [0067](../decisions/0067-build-stamp.md) |
 | 2026-10-15 | 1 | **현장에서 값을 올리는 쪽이 생겼다** — 실행기가 끝날 때 `runs/<run_id>.outputs.json`에 쓰고(위임·성공만) Bot UI가 거두며 **읽고 그 자리에서 지운다**. 「이 작업이 위임인가」는 **`requested_by`** 하나로 가르고(`server_bot:<run_id>`), 그 실행의 `run_started`에 `source: delegation`·`parent_run_id`가 붙는다. 형식은 그대로다 | [0062](../decisions/0062-pc-delegation.md) |

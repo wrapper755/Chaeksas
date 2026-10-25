@@ -2,11 +2,11 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-15) — 등록·하트비트·운영 API·배포 설치·작업 실행·기다리는 실행의 저장·재개·결재·메시지·**PC 위임**이 양쪽에서 돌고 시험이 지킨다 |
+| 상태 | **구현됨** (2026-10-15) — 등록·하트비트·운영 API·배포 설치·작업 실행·기다리는 실행의 저장·재개·결재·메시지·**PC 위임**이 양쪽에서 돌고 시험이 지킨다. **§등록 요청과 승인은 초안이다** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), 코드 아직) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0038](../decisions/0038-approval-request-channel.md), [0054](../decisions/0054-server-run-state-and-concurrency.md), [0056](../decisions/0056-bounded-seen-maps.md), [0057](../decisions/0058-absorbed-messages-travel-with-the-snapshot.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0038](../decisions/0038-approval-request-channel.md), [0054](../decisions/0054-server-run-state-and-concurrency.md), [0056](../decisions/0056-bounded-seen-maps.md), [0057](../decisions/0058-absorbed-messages-travel-with-the-snapshot.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 관련 화면 | CON-12 서버 실행, CON-05, CON-04, CON-11 |
 
 ## 목적
@@ -26,11 +26,12 @@
 ## 전송
 
 - 경로:
+  - `POST /api/v1/server-runner/enroll`, `GET /api/v1/server-runner/enroll/{enrollment_id}` — 키가 없을 때 **등록 요청**과 그 답 (§등록 요청과 승인, 인증 없음)
   - `POST /api/v1/server-runner/register`
   - `POST /api/v1/server-runner/heartbeat` — 기본 10초 (응답의 `next_heartbeat_s`를 따른다)
   - `POST /api/v1/server-runner/delegations` — **PC 위임을 맡긴다** (§PC 위임)
   - `POST /api/v1/server-runner/delegations/{job_id}/cancel` — **맡긴 것을 거둔다** (§PC 위임)
-- 인증: Center API 키 (종류 「서버 실행기용」, CON-11). 다른 종류의 키는 403 `wrong_key_type`.
+- 인증: Center API 키 (종류 「서버 실행기용」 — 승인이 만든 키, 또는 자동화·시험용으로 관리자 토큰이 발급한 키). 다른 종류의 키는 403 `wrong_key_type`. **등록 요청 두 경로만 인증이 없다.**
 - 키 묶기는 C4와 같다 — 키 하나 ↔ 서버 하나 ↔ 실행기 행 하나이고, 같은 `machine_id`를 다른 키가 등록하면 409 `machine_already_registered`다 (C4 「키 묶기」). **규칙은 코드로도 한 자리다** (`center/host_keys.py`) — C4와 C12가 같은 함수를 쓴다. `machine_id`를 만드는 쪽도 하나다 (`core.machine`).
 - 등록은 **멱등**이고, 등록·하트비트가 오면 운영자가 해 둔 「유실 처리」를 지운다 — 돌아온 실행기를 오프라인으로 보이게 두지 않는다 (CON-12).
 - 이벤트(C3)와 결재(C6)는 Bot UI와 같은 API를 쓴다.
@@ -73,9 +74,29 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 
 ## 모델
 
+### 등록 요청과 승인
+
+> 상태: **초안** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — 코드는 아직 환경변수 `CHK_SERVER_RUNNER__CENTER_API_KEY` 길만 있다.
+
+**C4 §등록 요청과 승인과 같다** — 같은 요청 코드·같은 봉함·같은 24시간·같은 막기이고, 다른 것은 아래뿐이다. 규칙은 코드로도 한 자리에 둔다(키 묶기의 `center/host_keys.py`와 같은 결).
+
+| | Bot UI (C4) | 서버 실행기 |
+| --- | --- | --- |
+| 요청 본문 | C4 `RegisterRequest` + `public_key` | 이 문서의 `RegisterRequest` + `public_key` |
+| 요청 코드를 보이는 곳 | BUI-03·트레이 | **시작할 때 로그 한 줄**: 「Center에 등록 요청을 보냈습니다. 요청 코드 ABCD-EFGH — Center 콘솔 「서버 실행」에서 승인하세요」. `--once`는 그 줄을 찍고 끝 코드 1로 끝난다(「사람이 고쳐야 한다」 — 승인이 그 일이다) |
+| 승인하는 곳 | CON-03 「승인 대기」 | CON-12 「승인 대기」 |
+| 만드는 키 | 「Bot UI용」 | 「서버 실행기용」 |
+| 받은 키를 두는 곳 | OS 비밀 저장소 | OS 비밀 저장소(`chaeksas-server-runner`, 이름 `center_api_key`) |
+
+- **환경변수로 키가 오면** 등록 요청을 보내지 않는다 (지금 길이고, 컨테이너·CI는 이 길이다).
+- **OS 비밀 저장소가 없으면 등록 요청을 보내지 않는다.** 받은 키를 둘 곳이 없어서다 — 평문 파일로 흘리지 않는다 (CLAUDE.md §5). 로그에 「비밀 저장소가 없습니다 — 환경변수 CHK_SERVER_RUNNER__CENTER_API_KEY로 키를 주세요」를 찍고 끝 코드 1이다.
+- 키 회전도 C4 §키 회전과 같다 — 하트비트 답의 `rotated_key`. 환경변수로 받은 키는 회전하지 않는다.
+
+> 미정: 컨테이너에서도 승인으로 들이려면 받은 키를 둘 자리(마운트한 비밀 볼륨 같은 것)를 정해야 한다.
+
 ### RegisterRequest
 
-`{schema, machine_id, name, os, versions{core, server_runner}, max_concurrency, extensions: [{id, version, definition_hash, enabled}]}`.
+`{schema, machine_id, name, os, versions{core, server_runner}, max_concurrency, extensions: [{id, version, definition_hash, enabled}], public_key?}`. `public_key`는 C4와 같다 — 보내면 키를 회전해 준다.
 
 `versions`는 설치된 패키지의 판이다 — **서버 실행기는 묶지 않으므로**(소스에서 돈다) C4의 `build` 칸이 없다 ([ADR-0067](../decisions/0067-build-stamp.md)).
 
@@ -127,6 +148,7 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 | `messages[]` | `{message_id, name, correlation?, payload, received_at}` — **기다리는 실행에 넣을 것만** 내려온다. 메시지 시작은 Center가 작업으로 바꿔 `jobs[]`로 보낸다 (§메시지) |
 | `delegations[]` | **끝난 PC 위임의 결과** — `{job_id, run_id, state, outputs?, reason?}` (§PC 위임). ack가 올 때까지 다시 싣는다 |
 | `paused` | true면 새 작업을 받지 않는다 (CON-12 「일시 중지」). 실행 중인 것은 끝까지 간다 |
+| `rotated_key`? | 만료 14일 전부터 새 키 (C4 §키 회전과 같다) |
 
 ### Center가 작업을 나누는 규칙
 
@@ -332,6 +354,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | **초안: 등록 요청과 승인** — `POST/GET …/server-runner/enroll`(C4와 같은 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`. 요청 코드는 로그에 찍고 CON-12에서 승인한다. 비밀 저장소가 없으면 요청하지 않는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | **서버 Bot에도 위임한다** (일괄 기동) — 대상 매니페스트의 `run_location`으로 가른다. 위임 요청의 `loop_index?`(멱등 키에 들어간다), 응답의 `target_type`(`bot_ui_id`는 PC일 때만), 422 `bot_ui_for_server`, 서버 실행기가 맡겨진 작업의 `outputs`를 올린다 | [0082](../decisions/0082-batch-start.md) |
 | 2026-10-15 | 1 | **도는 실행을 멈추는 길이 생겼다** — C5 취소 표가 서버 대상 `accepted`를 202로 받아 `cancel_jobs`로 내려 준다 (C12는 **받는 쪽이 이미 하던 일**이라 모양이 늘지 않았다). 그래서 위임 거두기 가지가 **켜진다** | [0063](../decisions/0063-stopping-a-running-server-run.md) |
 | 2026-10-15 | 1 | **맡긴 것을 거두는 길과 못 받은 값의 청소를 더했다** — `POST …/delegations/{job_id}/cancel`(실행기 키, **제 관문을 지나 Center 안에서** 작업 취소를 부른다. 남의 위임은 404)과 하트비트가 함께 돌리는 7일 청소다. 둘 다 ADR이 적어 두었던 것이고 **경로 하나가 늘었다** — 옛 실행기는 부르지 않을 뿐이다 | [0062](../decisions/0062-pc-delegation.md) |

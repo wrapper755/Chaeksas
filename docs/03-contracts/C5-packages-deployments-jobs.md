@@ -2,13 +2,13 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) — **§등록 승인은 초안이다** ([0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), 코드 아직) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py`, `…/accounts.py` (import `chaeksas.contracts.center_api`·`chaeksas.contracts.accounts`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-deployment-request.json`](../../packages/contracts/schemas/c5-deployment-request.json) · [`c5-login-request.json`](../../packages/contracts/schemas/c5-login-request.json) · [`c5-session-info.json`](../../packages/contracts/schemas/c5-session-info.json) · [`c5-account-info.json`](../../packages/contracts/schemas/c5-account-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md) |
-| 관련 화면 | STU-01(올리기), CON-00(로그인)·02·05·06·11·12·14·15 |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| 관련 화면 | STU-01(올리기), CON-00(로그인)·02·03·05·06·11·12·14·15 |
 
 ## 목적
 
@@ -40,6 +40,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | 세션 토큰 — 관리자 계정 | 콘솔 | 쓰기 전부. 승인·배포·외부 확장은 Center가 서명한다 (C2) |
 | 읽기 토큰 | 자동화 (선택 — 비우면 닫힌다) | 보기 전용 계정과 같다 |
 | 관리자 토큰 | 자동화 (선택 — 비우면 닫힌다) | 관리자 계정과 같다. 자기 비밀번호 바꾸기만 없다 (계정이 없다) |
+| 인증 없음 | 키가 아직 없는 Bot UI·서버 실행기 | **등록 요청을 보내고 그 답을 묻는 것뿐** (C4·C12 §등록 요청과 승인 — 내려 주는 키는 요청의 공개키로 봉해 있다) |
 | Center API 키 — Studio용 | Studio | 패키지 업로드, 패키지·리소스 읽기 |
 | Center API 키 — Bot UI용 / 서버 실행기용 | 실행하는 쪽 | **자기에게 배포된** BPM 프로세스 패키지만 내려받기 (공유 BPM 프로세스는 그 안 `libs/`에 들어 있다) |
 | Center API 키 — 연동용 (신규, CON-11) | 외부 시스템 | 작업 만들기(`POST /jobs`)와 자기가 만든 작업 읽기·취소, 메시지 넣기(`POST /messages` — C12 §메시지) |
@@ -68,6 +69,9 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /server-runners` | ✓ | ✓ | — | — | — |
 | `POST /server-runners/{id}/pause·resume·mark-lost` (C12) | — | ✓ | — | — | — |
 | `GET /bot-uis…` (CON-03), `POST /bot-uis/{id}/disable·enable` | GET만 ✓ | ✓ | — | — | — |
+| `POST /bot-ui/enroll`, `POST /server-runner/enroll`, `GET …/enroll/{id}` (C4·C12) | 인증 없음 | | | | |
+| `GET /enrollments` (§등록 승인) | ✓ | ✓ | — | — | — |
+| `POST /enrollments/{id}/approve·reject` | — | ✓ | — | — | — |
 | `POST /jobs` | — | ✓ | — | — | ✓ |
 | `GET /jobs…` | ✓ | ✓ | — | — | 자기 것만 |
 | `DELETE /jobs/{id}` | — | ✓ | — | — | 자기 것만 |
@@ -270,6 +274,38 @@ JobInfo는 위 필드에 다음을 더한다.
 - **Center가 혼자 `cancelled`로 적지 않는다** (`dispatched`와 같은 결) — 정말 멈췄는지는 현장만 안다. 실행기가 오프라인이면 취소 요청은 남고 **돌아오면 반영된다**; 돌아오지 않으면 CON-12 「유실 처리」가 닫는다 (C12).
 - 서버 실행이 취소되면 **그 실행이 맡긴 PC 위임도 거둬진다** ([ADR-0062](../decisions/0062-pc-delegation.md) §5).
 
+## 등록 승인 (CON-03·CON-12)
+
+> 상태: **초안** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — 코드 아직.
+
+PC(Bot UI)와 서버 실행기가 보낸 **등록 요청**(C4·C12 §등록 요청과 승인)을 관리자가 보고 들인다. 사람은 키를 보지 않는다 — 승인하면 Center가 키를 만들어 그 요청의 공개키로 봉해 둔다.
+
+| 메서드·경로 | 뜻 |
+| --- | --- |
+| `GET /enrollments?type=bot_ui\|server_runner&state=pending` | 요청 목록 (`state`는 쉼표로 여럿, 기본 `pending`) |
+| `POST /enrollments/{enrollment_id}/approve` `{name?}` | 승인. `name`을 비우면 요청의 `name`을 쓴다 |
+| `POST /enrollments/{enrollment_id}/reject` `{reason?}` | 거절. 사유는 요청한 쪽에 그대로 보인다 (200자까지) |
+
+EnrollmentInfo 필드:
+
+| 필드 | 뜻 |
+| --- | --- |
+| `enrollment_id`, `type` | `type`은 `bot_ui` / `server_runner` |
+| `code` | 요청 코드 `XXXX-XXXX` — 현장 화면(서버는 로그)과 맞춰 보는 값 |
+| `name`, `os`, `versions` | 요청이 보낸 그대로 |
+| `machine_id_prefix` | `machine_id` 앞 12자 (같은 PC인지 알아볼 만큼만) |
+| `remote_addr` | 요청이 온 주소 (Center가 본 그대로) |
+| `requested_at`, `expires_at` | |
+| `state` | **열린 문자열.** 알려진 값: `pending` `approved` `rejected` `expired`. 화면 표기는 `status_map` 「등록 요청」 |
+| `existing`? | 그 `machine_id`가 이미 등록돼 있으면 `{id, name, key_prefix, last_seen}` — 승인하면 **이 자리를 이어받고 그 키는 폐기된다** (C4 키 묶기) |
+| `decided_by`?, `decided_at`?, `reason`? | 승인·거절한 계정과 때, 거절 사유 |
+| `key_id`? | 승인이 만든 키 (C7 `CenterKeyInfo`) |
+
+- 승인 응답은 `{key_id, host_id, replaced_key_id?}`다 (`host_id`는 이어받았으면 그 `bot_ui_id`·`server_runner_id`, 새 자리면 첫 `register`가 만든다 — 그때까지 `null`).
+- **이미 결정된·만료된 요청은 다시 결정하지 못한다** (409 `enrollment_closed`).
+- 승인은 **행위자를 남긴다** (`decided_by` — 세션이면 계정, 토큰이면 `X-CHK-Actor`).
+- 승인·거절은 되돌리지 않는다. 잘못 들였으면 CON-03 「비활성화」 또는 그 키를 폐기한다 (C7).
+
 ## Bot UI 현황 (CON-03)
 
 콘솔이 PC마다 하나인 Bot UI의 상태를 본다. 값은 **Bot UI가 하트비트로 보고한 그대로**이고 (C4),
@@ -371,6 +407,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 | 409 | `not_approved` / `deprecated` / `hash_mismatch` / `wrong_target` | 배포가 가리키는 **패키지의 상태**가 요청과 어긋난다. 「본문이 잘못됐다」가 아니라 **상태 충돌**이라 409다 (`deployment_conflict`과 같은 결). 지원 종료는 `not_approved`로 뭉개지 않는다 — 승인은 되어 있고 새 배포만 막힌 것이다. `wrong_target`은 **대상이 틀린 것 전부**다 — `target.type` ↔ `run_location` 어긋남과 **PC 배포의 `"*"`** (ADR-0046·0047) |
 | 409 | `package_revoked` | 철회된 패키지를 승인하거나 지원 종료로 바꾸려 함 (끝난 일이다) |
 | 409 | `idempotency_conflict` | 같은 `idempotency_key`에 다른 본문 |
+| 409 | `enrollment_closed` | 이미 승인·거절됐거나 만료된 등록 요청을 다시 결정하려 함 |
 | 410 | `revoked` | 철회된 패키지 내려받기 |
 | 413 | `too_large` | 패키지 50 MB 초과 |
 | 422 | C1 규칙 코드, `target_mismatch`(모르는 대상 종류), `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
@@ -389,6 +426,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | **초안: 등록 승인** — `GET /enrollments`·`POST …/approve·reject`, 권한표의 「인증 없음」 줄(등록 요청 두 경로), 오류 `enrollment_closed` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-24 | 1 | **관리자 계정과 로그인 세션**을 더했다(`/auth/*`·`/accounts`). 승인·승인 철회·배포·배포 철회는 **봉투 대신 요청을 받고 Center가 서명한다** — 본문이 바뀌었다(`DeploymentRequest`·`{deployment_id, reason}`·`{reason}`). `approved_by`·`deployed_by`·`revoked_by`를 더했다. `POST/DELETE /admin-keys`를 없앴다. 관리자·읽기 토큰은 자동화용으로 남는다. 배포 철회 경로를 코드대로 `DELETE /deployments`(본문에 id)로 고쳐 적었다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 1 | **가상 직원**(§가상 직원, CON-13) — 등록·읽기·관문(B16, 묶을 때와 배포할 때)·`?virtual_worker=` 이어 붙이기. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0085](../decisions/0085-virtual-worker-resource.md) |
 | 2026-10-20 | 1 | **사람 대신 부르는 길** — `X-CHK-On-Behalf-Of`, `JobInfo.on_behalf_of`(주장, `requested_by`는 그대로), 대리 답용 키 줄, 오류 `on_behalf_invalid` | [0081](../decisions/0081-answering-on-behalf.md) |

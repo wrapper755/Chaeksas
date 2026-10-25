@@ -21,7 +21,7 @@
 | [0010](0010-service-apps.md) | 서버 앱은 "서비스 앱"으로 통일 (자율/결정 수행 모드) | 수락 · 인증 부분 대체됨(0013) |
 | [0011](0011-config-ports-env.md) | 포트는 기본값 + 설정 변경, 환경변수 접두사는 CHK_ | 수락 |
 | [0012](0012-bot-ui.md) | 현장 PC의 프로그램은 Bot UI 하나: Bot(BPM 프로세스) 실행, Worker 실행 관리, UI 셀렉터 등록 | 수락 · 실행기 동시 실행 제안은 대체됨(0014) · ③ 셀렉터 등록은 Tool UI로(0077) |
-| [0013](0013-api-keys.md) | Center 키는 Bot UI에 등록, 서비스 앱 키는 각 앱 관리 콘솔 발급, BPM 프로세스 단위 키 참조 | 수락 (키 지정 위치 안 C 확정) |
+| [0013](0013-api-keys.md) | Center 키는 Bot UI에 등록, 서비스 앱 키는 각 앱 관리 콘솔 발급, BPM 프로세스 단위 키 참조 | 대체됨(0092) |
 | [0014](0014-one-bot-per-pc.md) | PC 한 대에서 실행 중인 Bot은 하나, 나머지는 Bot UI 대기열, 결재 대기 중에도 끝까지 | 수락 (결재 대기 중에도 끝까지 자리를 쥔다) |
 | [0015](0015-run-location.md) | BPM 프로세스의 실행 위치: PC(Bot UI, 하나씩) 또는 서버(Center 관리 서버 실행기, 동시 실행) | 수락 · 기본값은 대체됨(0016) |
 | [0016](0016-server-first.md) | 서버 우선: 업무 대부분은 서버 BPM 프로세스(기본값 서버), PC Bot은 사람·화면이 필요할 때만. 서버 Bot 이름·상한 10/5·M7 확정 | 수락 (PC 위임은 제안) |
@@ -100,4 +100,4 @@
 | [0089](0089-admin-ui.md) | **Admin UI를 짓는다** (`chk-admin-ui`, ADR-0076을 대체) — 첫 판은 키(ADM-01)·외부 확장(ADM-04)·Center 연결(ADM-05)이다. 서명은 **누를 때마다 암호를 묻고 키를 버리고**, 확인 문구·서명·키 고르기는 CLI와 **같은 함수**(`admin/ops.py`)다. 연결은 설정 파일(주소)과 OS 비밀 저장소(토큰)에 두고 CLI도 읽는다. 첫 키는 **서버 셸**(이 PC 또는 SSH — 암호는 받지 않는다)에서 compose 컨테이너나 적은 명령으로 넣고 **Center API로 들어갔나 확인한다**. 셸이 없으면 명령을 보이고 복사만 둔다. 네트워크로 넣는 길은 없다. 승인·배포(ADM-02·03)는 다음 판이다 | 대체됨(ADR-0090) |
 | [0090](0090-center-admin-accounts.md) | **관리자는 Center 콘솔에 계정으로 들어오고, 서명은 Center가 서버의 키로 대신 한다** (ADR-0089를 대체) — Admin UI·`chk-admin`·Admin 개인키·첫 키 부트스트랩을 없앤다. 계정은 아이디·비밀번호(`scrypt`)·역할(관리자/보기 전용), 지우지 않고 멈추며 마지막 관리자는 지킨다. 첫 관리자는 `.env`(비우면 Center가 지어 로그·파일에). 세션 토큰 12시간, 행위자는 계정. 서명 키는 DB에 처음 뜰 때 만들고 믿는 키 목록에 들어가 현장 코드는 그대로다(교체·버리기는 서버 셸 `chk-center signing-key`). 승인·배포·외부 확장 API는 봉투 대신 요청을 받고 `approved_by`·`deployed_by`를 남긴다. 관리자·읽기 토큰은 자동화용으로 남는다. 「Center를 쥔 사람도 배포를 못 만든다」는 포기한다 | 수락 |
 | [0091](0091-external-apps-without-auth-take-no-key.md) | **`auth`가 없는 외부 앱은 키를 받지 않는 앱이다** — 판단은 `contracts.extension.takes_key()` 하나다. `requires_keys`에 `run`이 있는데 `adapter.auth`가 없으면 E3가 거부한다(Center 등록·STU-15 같은 함수). 키를 받지 않는 앱은 B7(`keyless_apps`, 부르는 쪽이 준다 — 주지 않으면 지금처럼 요구한다)·C1 `key_ref`(선택 — 빌드가 적지 않는다)·사전 점검·BUI-10·STU-06에서 빠진다. Studio는 STU-14 고를 거리(Center 목록)에서 안다 | 수락 |
-| [0092](0092-keys-are-issued-and-delivered-by-center.md) | **키는 Center가 발급해 내려 주고, 관리자는 승인만 한다** (수락되면 ADR-0013을 대체) — Bot UI·서버 실행기는 주소만 넣고 요청 코드를 맞춰 승인받는다. Studio·Tool UI는 Center 계정으로 로그인한다. 서비스 앱 키는 배포가 발급하고 철회가 거두며, Center는 ack 뒤 원문을 지운다. 외부 앱 키만 Center에 한 번 넣는다. 사람은 키 원문을 보지 않는다 | 제안 |
+| [0092](0092-keys-are-issued-and-delivered-by-center.md) | **키는 Center가 발급해 내려 주고, 관리자는 승인만 한다** (ADR-0013을 대체) — Bot UI·서버 실행기는 주소만 넣고 요청 코드를 맞춰 승인받는다. Studio·Tool UI는 Center 계정으로 로그인한다. 서비스 앱 키는 배포가 발급하고 철회가 거두며, Center는 ack 뒤 원문을 지운다. 외부 앱 키만 Center에 한 번 넣는다. 사람은 키 원문을 보지 않는다 | 수락 |

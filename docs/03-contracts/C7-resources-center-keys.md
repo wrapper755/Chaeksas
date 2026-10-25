@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Center ↔ 서비스 앱(공개 정보 읽기), Studio·Bot UI·서버 실행기·Center 콘솔 → Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/resources.py`, `…/center_keys.py` (import `chaeksas.contracts.resources`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | 리소스 [`c7-extension-resource.json`](../../packages/contracts/schemas/c7-extension-resource.json) · [`c7-service-app-resource.json`](../../packages/contracts/schemas/c7-service-app-resource.json) · [`c7-contributed-resource.json`](../../packages/contracts/schemas/c7-contributed-resource.json) · [`c7-runtime-resource.json`](../../packages/contracts/schemas/c7-runtime-resource.json) / 키 [`c7-center-key-create-request.json`](../../packages/contracts/schemas/c7-center-key-create-request.json) · [`c7-center-key-info.json`](../../packages/contracts/schemas/c7-center-key-info.json) · [`c7-center-key-created.json`](../../packages/contracts/schemas/c7-center-key-created.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md) |
+| 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 관련 화면 | CON-07 리소스, CON-11 Center API 키, STU-03 리소스 탐색기, STU-13·14·15, BUI-11, TOL-03 |
 
 ## 목적
@@ -149,6 +149,8 @@
 
 `type`: `bot_ui`, `studio`, `server_runner`, `integration`, `relay` (열린 문자열이지만 Center는 이 다섯만 발급한다).
 
+- **`bot_ui`·`server_runner` 키는 등록 승인이 만든다** (C5 §등록 승인, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) — 초안, 코드 아직). 이 경로로 그 둘을 발급하는 길은 **자동화·시험용**으로 남고(관리자 토큰) CON-11 화면에는 없다. 승인이 만든 키는 `enrollment_id`를 가진다.
+
 - `relay`(**대리 답용 키**, CON-11 표기 「대리 답용」)는 연동하는 쪽이 **사람 대신 결재에 답할 때만** 쓴다 — 결재 읽기·답뿐이고, 그 사람이 담당자일 때만 받는다 (C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)). 연동용 키에 그 권한을 더하지 않은 것은 연동용 키가 **작업을 만드는 바깥 시스템 모두**에 나가기 때문이다. Center는 이 키를 `require_read`·작업·실행 기록 올리기에서 막는다.
 
 CenterKeyInfo 필드:
@@ -159,11 +161,12 @@ CenterKeyInfo 필드:
 | `name`, `type` | |
 | `prefix` | 앞자리 16자 (`chk_ctr_` + 무작위 8자) |
 | `bound_to`? | `{type, id, name, machine_name?, first_seen}` |
+| `enrollment_id`? | 등록 승인이 만든 키면 그 요청 (C5 §등록 승인). 없으면 사람이·자동화가 발급한 키다 |
 | `created_at`, `expires_at`?, `last_used_at`?, `revoked_at`? | |
 | `state` | `active` / `expired` / `revoked`. 화면 표기는 「사용 중」 / 「만료」 / 「폐기됨」 |
 
 - 키 원문은 `chk_ctr_<무작위 40자>`이고, Center는 해시만 저장한다.
-- 기본 만료는 1년. 만료 14일 전부터 CON-11과 해당 Bot UI 알림(BUI-05)에 보인다.
+- 기본 만료는 1년. 만료 14일 전부터 CON-11에 보인다. **등록 승인이 만든 키는 Center가 그때부터 회전한다** (C4 §키 회전) — Bot UI 알림(BUI-05)은 회전이 7일 전까지 닿지 않았을 때만, 회전하지 않는 키는 14일 전부터다.
 
 ## 오류
 
@@ -184,6 +187,7 @@ CenterKeyInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | **초안:** `bot_ui`·`server_runner` 키는 등록 승인이 만든다 — `CenterKeyInfo.enrollment_id?`. 이 경로로 발급하는 길은 자동화·시험용으로 남는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | 키 종류 **`relay`(대리 답용 키)**를 더했다 — CON-11에서 발급한다 | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-12 | 1 | **툴팩 리소스를 뺐다** (`ToolpackResource`·`?type=toolpack`·누락 검사의 `toolpack`) — 툴팩이라는 패키지 갈래가 사라졌다. 고정 종류는 **넷**이다 (확장·서비스 앱·확장 기여 자원·런타임). 도구는 확장이 기여한다 | 0050 |
 | 2026-10-01 | 1 | 초안 | 0010, 0013, 0015 |
