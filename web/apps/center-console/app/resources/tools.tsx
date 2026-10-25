@@ -26,7 +26,7 @@ export function RefreshResources() {
  * 「등록 해제」 — **쓰는 Bot이 있으면 막히고** 그 목록이 보인다 (C7 `in_use`).
  * 되돌릴 수 있지만 그 Bot들이 실행 불가가 되므로 확인 창을 띄우고 기본은 「취소」다 (U9).
  */
-export function UnregisterServiceApp({ appId }: { appId: string }) {
+export function UnregisterServiceApp({ appId, users = [] }: { appId: string; users?: string[] }) {
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -40,7 +40,7 @@ export function UnregisterServiceApp({ appId }: { appId: string }) {
       <ConfirmDialog
         open={asking}
         title="이 서비스 앱의 등록을 해제할까요?"
-        description="이 앱을 쓰는 Bot이 있으면 해제되지 않습니다. 해제하면 그 주소를 Center가 더 알지 못합니다."
+        description={`${users.length > 0 ? `쓰는 Bot: ${users.join(", ")} — 쓰는 Bot이 있으면 해제되지 않습니다.` : "쓰는 Bot이 없습니다."} 해제하면 그 주소를 Center가 더 알지 못합니다.`}
         confirmLabel="등록 해제"
         onConfirm={() =>
           start(async () => {

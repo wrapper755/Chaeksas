@@ -297,16 +297,16 @@ export async function registerExtension(form: FormData): Promise<void> {
     definition = await jsonFile(form, "definition", "확장 정의 파일");
   } catch (cause) {
     const said = cause instanceof Error ? cause.message : "파일을 읽지 못했습니다.";
-    redirect(back(`tab=extension&error=${encodeURIComponent(said)}`));
+    redirect(back(`error=${encodeURIComponent(said)}`));
   }
 
   try {
     await center.registerExtension(definition);
   } catch (cause) {
-    redirect(back(`tab=extension&error=${encodeURIComponent(violations(cause))}`));
+    redirect(back(`error=${encodeURIComponent(violations(cause))}`));
   }
   revalidatePath("/resources", "layout");
-  redirect(back("tab=extension&extension=1"));
+  redirect(back("extension=1"));
 }
 
 /** 등록 해제 — 확인 창을 거쳐서만 온다. **되살릴 수 없다.** */
@@ -317,7 +317,7 @@ export async function revokeExtension(extensionId: string, version: string): Pro
     return { error: violations(cause) };
   }
   revalidatePath("/resources", "layout");
-  redirect("/resources?tab=extension&revoked=1" as Route);
+  redirect("/resources?revoked=1" as Route);
 }
 
 /** C13 검사 위반을 **칸별 사유까지** 한 줄로 (E3은 어디가 틀렸는지가 요점이다). */
@@ -341,15 +341,15 @@ export async function registerServiceApp(form: FormData): Promise<void> {
   const baseUrl = String(form.get("base_url") ?? "").trim();
   const back = (query: string): Route => `/resources?${query}` as Route;
   if (!baseUrl) {
-    redirect(back(`tab=service_app&error=${encodeURIComponent("API 주소를 적으세요.")}`));
+    redirect(back(`error=${encodeURIComponent("API 주소를 적으세요.")}`));
   }
   try {
     await center.registerServiceApp(baseUrl);
   } catch (cause) {
-    redirect(back(`tab=service_app&error=${encodeURIComponent(message(cause))}`));
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
   }
   revalidatePath("/resources", "layout");
-  redirect(back("tab=service_app&registered=1"));
+  redirect(back("registered=1"));
 }
 
 /** 주소 바꾸기 — **환경별 주소의 유일한 출처**다 (C7 `PUT`). */
@@ -382,7 +382,8 @@ export async function unregisterServiceApp(appId: string): Promise<ActionResult>
     return { error: message(cause) };
   }
   revalidatePath("/resources", "layout");
-  return {};
+  // 해제한 기능의 상세는 더 없다 — 목록으로 돌아간다.
+  redirect("/resources" as Route);
 }
 
 /**

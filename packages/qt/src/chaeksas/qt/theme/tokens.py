@@ -325,6 +325,11 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
         "거절됨": "failed",
         "만료": "neutral",
     },
+    "기능": {
+        "쓸 수 있음": "done",
+        "쓸 수 없음": "failed",
+        "확인 전": "neutral",
+    },
 }
 
 
