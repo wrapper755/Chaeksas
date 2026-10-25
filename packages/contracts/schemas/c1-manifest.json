@@ -363,8 +363,16 @@
           "type": "string"
         },
         "key_ref": {
-          "title": "Key Ref",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key Ref"
         },
         "operations": {
           "items": {
@@ -383,8 +391,7 @@
       },
       "required": [
         "app_id",
-        "operations",
-        "key_ref"
+        "operations"
       ],
       "title": "ServiceAppNeed",
       "type": "object"

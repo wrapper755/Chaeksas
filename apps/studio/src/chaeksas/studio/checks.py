@@ -4,7 +4,10 @@
 - Center: `GET <주소>/api/v1/resources?type=service_app` — 닿는지, Studio용 키가 맞는지 (C7).
 - Worker: `GET http://127.0.0.1:<포트>/v1/health` — 토큰 없이 답하는 유일한 자리 (C10).
 - 서비스 앱 키: `core.key_check.key_status` — **Bot UI(BUI-10)와 같은 함수**를 쓴다. 두 화면이
-  같은 말을 해야 하고, 앱끼리 import할 수 없어 `core`에 두었다.
+  같은 말을 해야 하고, 앱끼리 import할 수 없어 `core`에 두었다. 주소는 시험 실행과 **같은 곳**
+  (Center 리소스 목록, `services.py`)에서도 찾는다(`app_places`) — 다른 곳을 보면 「테스트는 주소를
+  모르는데 실행은 된다」가 된다. **외부 확장은 묻지 않는다** — `/v1/keys/self`는 C11의 길이고 외부
+  앱에는 없다 (C13 §4).
 
 키 값은 결과 글에 **들어가지 않는다**. `client`는 시험이 끼운다 (httpx와 같은 모양).
 """
@@ -128,6 +131,34 @@ def worker_status(place: WorkerPlace, *, client: Any = None) -> str:
     return f"실행 중 — Worker {version}" if version else "실행 중"
 
 
+#: 외부 확장 줄의 「연결 테스트」 — 키를 확인하는 길이 없다 (C11 `/v1/keys/self`가 없다).
+EXTERNAL_NOT_CHECKED = "외부 확장 — 키를 확인하는 길이 없습니다 (시험 실행으로 확인)"
+
+
+@dataclass(frozen=True)
+class AppPlaces:
+    """Center가 아는 앱들 — 서비스 앱 주소와 외부 확장 id. 못 받았으면 `problem`이 있다."""
+
+    addresses: Mapping[str, str]
+    externals: frozenset[str]
+    problem: str = ""
+
+
+def app_places(reader: Any) -> AppPlaces:
+    """`studio.services.CenterReader`로 한 번 읽는다. 읽는 쪽이 없으면(설정이 없다) 빈 것이다."""
+    from chaeksas.contracts.extension import TIER_EXTERNAL  # noqa: PLC0415
+    from chaeksas.studio.services import CenterUnreachable  # noqa: PLC0415 — 순환 피함
+
+    if reader is None:
+        return AppPlaces(addresses={}, externals=frozenset())
+    try:
+        addresses = {one.app_id: one.base_url for one in reader.service_apps() if one.base_url}
+        externals = frozenset(one.id for one in reader.extensions() if one.tier == TIER_EXTERNAL)
+    except CenterUnreachable as e:
+        return AppPlaces(addresses={}, externals=frozenset(), problem=str(e))
+    return AppPlaces(addresses=addresses, externals=externals)
+
+
 def refs_in(definitions: Iterable[Any]) -> list[tuple[str, str]]:
     """그림이 쓰는 키 참조 `(참조, 서비스 앱)` — `chk:process.service_keys`와 태스크의 `key_ref`."""
     found: dict[str, str] = {}
@@ -149,7 +180,10 @@ def refs_in(definitions: Iterable[Any]) -> list[tuple[str, str]]:
 
 
 __all__ = [
+    "EXTERNAL_NOT_CHECKED",
+    "AppPlaces",
     "WorkerPlace",
+    "app_places",
     "center_status",
     "key_status",
     "llm_status",

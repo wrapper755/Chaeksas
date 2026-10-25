@@ -5,9 +5,8 @@
 # 개발 PC(aarch64 Linux)와 다른 환경이라, 여기서 처음 드러나는 문제가 있다.
 name: CI
 
+# main에 푸시할 때는 돌리지 않는다 — 머지 전에 PR에서 이미 한 번 돌았다 (CI는 PR당 한 번).
 on:
-  push:
-    branches: [main]
   pull_request:
   workflow_dispatch:
 

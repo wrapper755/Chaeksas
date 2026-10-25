@@ -21,6 +21,10 @@
 - **읽고 쓰는 것은 진입 정의 하나다.** 하위 정의가 적은 `service_keys`를 섞어 보이면 저장이
   그것을 진입으로 옮기는 셈이 된다. 태스크가 따로 적은 참조는 **「태스크에서 바꾼 곳」**이
   세어 보인다 (읽기만 한다).
+- **그림은 캔버스의 지금 것을 읽는다** — 진입 정의가 열려 있으면 메인 창이 캔버스에서 읽어
+  `drawn`으로 넘긴다. 파일에서 읽으면 「적용」한 것이 다시 열었을 때 안 보인다.
+- **키 표의 줄은 노드가 부르는 앱**과 적혀 있지만 쓰는 노드가 없는 것이다. 「추가」는 없다.
+  **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱, ADR-0091)은 적혀 있을 때만 지울 줄로 남는다.
 """
 
 from __future__ import annotations
@@ -28,10 +32,11 @@ from __future__ import annotations
 import json
 import logging
 import re
-from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Collection, Mapping, Sequence
+from dataclasses import dataclass, replace
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -51,7 +56,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from chaeksas.contracts.bpmn_ext import ProcessInfo, server_blockers
+from chaeksas.contracts.bpmn_ext import BpmnProcess, ProcessInfo, server_blockers
+from chaeksas.studio.service_editor import NOT_LISTED
 from chaeksas.studio.workspace import BpmProcess, Definition, Workspace, WorkspaceError, write_record
 
 log = logging.getLogger(__name__)
@@ -65,8 +71,12 @@ LOCATIONS = (("server", "서버 — 대부분의 업무. 여러 건 동시에"),
 #: 생략하면 서버다 (C1 R1·ADR-0016).
 DEFAULT_LOCATION = "server"
 
-KEY_COLUMNS = ("서비스 앱", "키 참조 이름", "이 PC의 값", "태스크에서 바꾼 곳")
-APP, REF, VALUE, OVERRIDES = range(len(KEY_COLUMNS))
+KEY_COLUMNS = ("서비스 앱", "키 참조 이름", "적힌 곳", "이 PC의 값", "쓰는 노드", "태스크에서 바꾼 곳")
+APP, REF, WRITTEN, VALUE, USERS, OVERRIDES = range(len(KEY_COLUMNS))
+
+#: 「적힌 곳」 — 기본값 줄도 「적용」하면 적힌다는 것이 보이게 (STU-06).
+WRITTEN_YES = "그림에 적힘"
+WRITTEN_DEFAULT = "기본값 — 적용하면 적힘"
 
 #: 키 참조 이름 규칙 (C1 — 영문 소문자·숫자·`-`, 1~40자).
 REF_PATTERN = re.compile(r"^[a-z0-9-]{1,40}$")
@@ -74,6 +84,15 @@ REF_PATTERN = re.compile(r"^[a-z0-9-]{1,40}$")
 #: 「이 PC의 값」 (Studio 설정 기준 — 읽기만 한다).
 VALUE_OK = "정상"
 VALUE_MISSING = "없음 — 설정 → 서비스 앱 키"
+#: 키를 받지 않는 앱 (C13 `auth` 없음, ADR-0091).
+VALUE_KEYLESS = "키를 받지 않음"
+
+#: 단추 위 한 줄 — 「적용」이 어디로 가나 (STU-04 「적용」과 같은 말).
+APPLY_NOTE = (
+    "실행 위치·키 참조는 그림에 적용됩니다 — 파일에는 Ctrl+S로 저장됩니다. "
+    "이름·버전·설명·담당자·태그는 바로 저장됩니다."
+)
+APPLY_NOTE_RECORD_ONLY = "이름·버전·설명·담당자·태그는 바로 저장됩니다."
 
 #: 그림을 고칠 수 없는 까닭 (U3 — 끄고 **가까이에** 적는다).
 NO_CANVAS = (
@@ -101,10 +120,35 @@ class KeyRow:
     has_value: bool
     #: 이 참조를 쓰지 않고 다른 참조로 바꾼 태스크들 (`<정의>/<노드>`).
     overrides: tuple[str, ...] = ()
+    #: 그림(`chk:process.service_keys`)에 적혀 있나 — 아니면 **기본값을 미리 넣은 줄**이다.
+    written: bool = True
+    #: 그 앱을 부르는 노드들 (`<정의>/<이름 또는 id>`).
+    users: tuple[str, ...] = ()
+    #: 고를 거리(Center 목록)에 있나. 목록을 받지 못했으면 `None` — 모르는 것으로 말하지 않는다.
+    listed: bool | None = None
+    #: 키를 받는 앱인가 (ADR-0091).
+    takes_key: bool = True
 
     @property
     def value_text(self) -> str:
+        if not self.takes_key:
+            return VALUE_KEYLESS
         return VALUE_OK if self.has_value else VALUE_MISSING
+
+    @property
+    def written_text(self) -> str:
+        return WRITTEN_YES if self.written else WRITTEN_DEFAULT
+
+    @property
+    def app_text(self) -> str:
+        """「서비스 앱」 칸 — 목록에 없으면 STU-14와 **같은 말**을 붙인다."""
+        return self.app_id if self.listed is not False else f"{self.app_id} — {NOT_LISTED}"
+
+    @property
+    def removable(self) -> bool:
+        """「삭제」가 켜지나 — 쓰는 노드가 없거나 키를 받지 않는 앱이다 (부르는 앱의 줄은 지워도
+        기본값으로 다시 생길 뿐이다)."""
+        return not self.users or not self.takes_key
 
 
 def default_ref(process_id: str) -> str:
@@ -121,23 +165,41 @@ def learning(process: BpmProcess) -> str:
     return f"재생 명세 {len(specs)}개 — {nodes}"
 
 
-def apps_in(definitions: Sequence[Definition]) -> list[str]:
-    """그림이 부르는 서비스 앱들 (서비스 앱 태스크·확장 태스크). **이름순**이다.
+def users_of(definitions: Sequence[Definition]) -> dict[str, tuple[str, ...]]:
+    """앱 id → 그 앱을 부르는 노드들 (`<정의>/<이름 또는 id>`). 앱은 **이름순**이다.
 
-    확장 태스크의 앱은 그 확장 id다 (C13 — 서버 부분을 가진 확장은 그 id로 키를 쓴다).
+    서비스 앱 태스크의 `app_id`와, 키 참조를 적은 확장 태스크의 확장 id다 (C13 — 서버 부분을
+    가진 확장은 그 id로 키를 쓴다).
     """
-    found: set[str] = set()
+    found: dict[str, list[str]] = {}
     for definition in definitions:
         if definition.process is None:
             continue
         for node in definition.process.all_nodes():
+            where = f"{definition.name}/{node.name or node.id}"
             call = node.prop("serviceCall")
             if call is not None and call.app_id:
-                found.add(str(call.app_id))
+                found.setdefault(str(call.app_id), []).append(where)
             task = node.prop("task")
             if task is not None and task.extension and task.data.get("key_ref"):
-                found.add(str(task.extension))
-    return sorted(found)
+                found.setdefault(str(task.extension), []).append(where)
+    return {app_id: tuple(found[app_id]) for app_id in sorted(found)}
+
+
+def apps_in(definitions: Sequence[Definition]) -> list[str]:
+    """그림이 부르는 서비스 앱들 (서비스 앱 태스크·확장 태스크). **이름순**이다."""
+    return list(users_of(definitions))
+
+
+def with_drawn(process: BpmProcess, drawn: BpmnProcess | None) -> list[Definition]:
+    """정의 목록에서 **진입 정의만 캔버스의 지금 그림으로** 바꾼 것 (없으면 그대로).
+
+    열린 것은 진입 정의 하나라 나머지는 파일의 것이 지금 것이다.
+    """
+    entry = process.entry_definition
+    if drawn is None or entry is None:
+        return list(process.definitions)
+    return [replace(one, process=drawn) if one.path == entry.path else one for one in process.definitions]
 
 
 def overrides_of(definitions: Sequence[Definition], app_id: str, ref: str) -> tuple[str, ...]:
@@ -163,23 +225,41 @@ def overrides_of(definitions: Sequence[Definition], app_id: str, ref: str) -> tu
 
 
 def key_rows(
-    process: BpmProcess, info: ProcessInfo, *, has_value: Callable[[str], bool]
+    process: BpmProcess,
+    info: ProcessInfo,
+    *,
+    has_value: Callable[[str], bool],
+    definitions: Sequence[Definition] | None = None,
+    listed: Collection[str] | None = None,
+    keyless_apps: Collection[str] = (),
 ) -> list[KeyRow]:
-    """표 한 벌 — 그림이 부르는 앱과 **진입 정의가 적어 둔** 참조를 합친다.
+    """표 한 벌 — **노드가 부르는 앱**과 **진입 정의가 적어 둔** 참조를 합친다.
 
     적어 두지 않은 앱도 줄로 보인다 (기본 참조 이름을 미리 넣어 둔다) — 빠진 것을 사람이
     찾아다니지 않게. 「실행 전 검사」가 빠진 참조를 오류로 말하는 것과 같은 줄이다.
+    **키를 받지 않는 앱**(ADR-0091)은 적혀 있을 때만 줄이 된다(지울 수 있게).
+
+    `definitions`는 지금 그림이다 (`with_drawn`) — 주지 않으면 파일의 것. `listed`는 고를 거리
+    (Center 목록)에 있는 앱 id들이고 **받지 못했으면 `None`**이다.
     """
-    apps = dict.fromkeys([*info.service_keys, *apps_in(process.definitions)])
+    drawn = list(process.definitions) if definitions is None else list(definitions)
+    users = users_of(drawn)
+    called = [one for one in users if one not in keyless_apps]
+    apps = dict.fromkeys([*info.service_keys, *called])
     out = []
     for app_id in sorted(apps):
-        ref = str(info.service_keys.get(app_id) or "")
+        written = str(info.service_keys.get(app_id) or "")
+        ref = written or default_ref(process.id)
         out.append(
             KeyRow(
                 app_id=app_id,
-                ref=ref or default_ref(process.id),
-                has_value=bool(ref) and has_value(ref),
-                overrides=overrides_of(process.definitions, app_id, ref) if ref else (),
+                ref=ref,
+                has_value=has_value(ref),
+                overrides=overrides_of(drawn, app_id, written) if written else (),
+                written=bool(written),
+                users=users.get(app_id, ()),
+                listed=None if listed is None else app_id in listed,
+                takes_key=app_id not in keyless_apps,
             )
         )
     return out
@@ -217,7 +297,10 @@ def check(*, name: str, version: str, rows: Sequence[KeyRow], taken: Sequence[st
 
 
 class ProcessInfoDialog(QDialog):
-    """STU-06. **저장을 누를 때까지 아무것도 바뀌지 않는다** (STU-10과 같은 결)."""
+    """STU-06. **「적용」을 누를 때까지 아무것도 바뀌지 않는다** (STU-10과 같은 결).
+
+    「적용」은 기록을 바로 쓰고 그림은 캔버스에만 넘긴다 — 파일로 가는 것은 Ctrl+S다.
+    """
 
     def __init__(
         self,
@@ -227,6 +310,9 @@ class ProcessInfoDialog(QDialog):
         has_value: Callable[[str], bool],
         editable: bool = True,
         task_type_locations: Mapping[str, Sequence[str]] | None = None,
+        drawn: BpmnProcess | None = None,
+        listed: Collection[str] | None = None,
+        keyless_apps: Collection[str] = (),
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -247,11 +333,15 @@ class ProcessInfoDialog(QDialog):
 
         entry = process.entry_definition
         self.entry = entry
-        self.info = (
-            entry.process.info.model_copy(deep=True)
-            if entry is not None and entry.process is not None
-            else ProcessInfo()
-        )
+        #: 지금 그림 — 진입 정의가 열려 있으면 **캔버스의 것**(`drawn`)이다. 파일에서 읽으면
+        #: 「적용」한 것이 다시 열었을 때 안 보인다 (Ctrl+S 전에는 파일에 없다).
+        self.drawn = drawn if editable else None
+        self.definitions = with_drawn(process, self.drawn)
+        found = self.drawn or (entry.process if entry is not None else None)
+        self.info = found.info.model_copy(deep=True) if found is not None else ProcessInfo()
+        #: 고를 거리(STU-14와 같은 Center 목록)의 앱 id들 — 받지 못했으면 `None`.
+        self.listed = listed
+        self.keyless_apps = tuple(keyless_apps)
 
         self.setWindowTitle(TITLE)
         self.resize(*DEFAULT_SIZE)
@@ -299,31 +389,48 @@ class ProcessInfoDialog(QDialog):
         header = self.keys.horizontalHeader()
         header.setSectionResizeMode(APP, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(REF, QHeaderView.ResizeMode.Stretch)
-        for column in (VALUE, OVERRIDES):
+        for column in (WRITTEN, VALUE, USERS, OVERRIDES):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        for row in key_rows(process, self.info, has_value=has_value):
+        #: 표의 줄과 같은 차례 — 앱 id·적힌 곳·쓰는 노드는 **표가 아니라 여기서** 읽는다.
+        self._rows: list[KeyRow] = []
+        for row in key_rows(
+            process,
+            self.info,
+            has_value=has_value,
+            definitions=self.definitions,
+            listed=listed,
+            keyless_apps=self.keyless_apps,
+        ):
             self._add_row(row)
 
-        self.add_key = QPushButton("추가", self)
-        self.add_key.clicked.connect(lambda: self._add_row(self._blank()))
+        # 「추가」는 없다 — 노드가 부르지 않는 앱의 키는 쓸 데가 없다 (STU-06).
         self.drop_key = QPushButton("삭제", self)
+        self.drop_key.setToolTip("쓰는 노드가 없는 줄만 지웁니다")
         self.drop_key.clicked.connect(self._drop_selected)
+        self.drop_key.setEnabled(False)
+        self.keys.itemSelectionChanged.connect(self._refresh_drop)
 
         #: 아래 한 줄 — 검사 오류와 안내를 여기로만 말한다 (STU-10과 같은 결).
         self.note = QLabel("", self)
         self.note.setWordWrap(True)
 
+        #: 단추 위 한 줄 — 「적용」이 어디로 가나 (STU-04 「적용」과 같은 말).
+        self.apply_note = QLabel(APPLY_NOTE if self._graph_open() else APPLY_NOTE_RECORD_ONLY, self)
+        self.apply_note.setWordWrap(True)
+        self.apply_note.setProperty("role", "muted")
+
         buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel, parent=self
+            QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Cancel, parent=self
         )
-        buttons.accepted.connect(self.save)
+        buttons.button(QDialogButtonBox.StandardButton.Apply).setText("적용")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("취소")
+        buttons.button(QDialogButtonBox.StandardButton.Apply).clicked.connect(self.save)
         buttons.rejected.connect(self.reject)
         self.buttons = buttons
 
         keys_row = QHBoxLayout()
-        keys_row.addWidget(self.add_key)
-        keys_row.addWidget(self.drop_key)
         keys_row.addStretch(1)
+        keys_row.addWidget(self.drop_key)
 
         warning_row = QHBoxLayout()
         warning_row.addWidget(self.warning, 1)
@@ -337,6 +444,7 @@ class ProcessInfoDialog(QDialog):
         layout.addWidget(self.keys, 1)
         layout.addLayout(keys_row)
         layout.addWidget(self.note)
+        layout.addWidget(self.apply_note)
         layout.addWidget(buttons)
 
         self._lock_graph_fields()
@@ -350,19 +458,38 @@ class ProcessInfoDialog(QDialog):
         found.setWordWrap(True)
         return found
 
-    def _blank(self) -> KeyRow:
-        return KeyRow(app_id="", ref=default_ref(self.process.id), has_value=False)
+    def _graph_open(self) -> bool:
+        return self.editable and self.entry is not None
+
+    def _fixed_item(self, text: str) -> QTableWidgetItem:
+        item = QTableWidgetItem(text)
+        item.setFlags(item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        return item
 
     def _add_row(self, row: KeyRow) -> None:
         at = self.keys.rowCount()
         self.keys.insertRow(at)
-        self.keys.setItem(at, APP, QTableWidgetItem(row.app_id))
-        self.keys.setItem(at, REF, QTableWidgetItem(row.ref))
-        value = QTableWidgetItem(row.value_text)
-        value.setFlags(value.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self.keys.setItem(at, VALUE, value)
-        count = QTableWidgetItem(str(len(row.overrides)) if row.overrides else "—")
-        count.setFlags(count.flags() & ~Qt.ItemFlag.ItemIsEditable)
+        self._rows.append(row)
+        app = self._fixed_item(row.app_text)
+        if row.listed is False:
+            # 오류색 — 토큰에서 온 팔레트의 것이다 (STU-14와 같은 색·같은 말).
+            app.setForeground(self.keys.palette().brush(QPalette.ColorRole.BrightText))
+            app.setToolTip(
+                f"그림이 부르는 「{row.app_id}」은 Center 목록에 없습니다 — 그 노드에서 서비스 앱을 다시 고르세요."
+            )
+        self.keys.setItem(at, APP, app)
+        ref = QTableWidgetItem(row.ref)
+        if not row.written:
+            # 기본값을 미리 넣은 줄은 흐리게 — 「적용」하면 적힌다 (「적힌 곳」 칸이 말한다).
+            ref.setForeground(self.keys.palette().brush(QPalette.ColorRole.PlaceholderText))
+        self.keys.setItem(at, REF, ref)
+        self.keys.setItem(at, WRITTEN, self._fixed_item(row.written_text))
+        self.keys.setItem(at, VALUE, self._fixed_item(row.value_text))
+        users = self._fixed_item(str(len(row.users)))
+        if row.users:
+            users.setToolTip("\n".join(row.users))
+        self.keys.setItem(at, USERS, users)
+        count = self._fixed_item(str(len(row.overrides)) if row.overrides else "—")
         if row.overrides:
             # 누르면 목록 — 말풍선으로 보인다 (창을 또 띄우지 않는다).
             count.setToolTip("\n".join(row.overrides))
@@ -370,10 +497,10 @@ class ProcessInfoDialog(QDialog):
 
     def _lock_graph_fields(self) -> None:
         """그림을 고칠 수 없으면 **두 칸만** 끄고 까닭을 적는다 (나머지는 저장된다)."""
-        if self.editable and self.entry is not None:
+        if self._graph_open():
             return
         why = NO_ENTRY if self.entry is None else NO_CANVAS.format(entry=self.entry.path.name)
-        for one in (self.location_box, self.keys, self.add_key, self.drop_key):
+        for one in (self.location_box, self.keys, self.drop_key):
             one.setEnabled(False)
             one.setToolTip(why)
         self.note.setText(why)
@@ -382,19 +509,34 @@ class ProcessInfoDialog(QDialog):
     # ── 표 읽기 ──
 
     def rows(self) -> list[KeyRow]:
+        """표의 지금 모습 — 사람이 고칠 수 있는 것은 참조 이름뿐이다."""
         out = []
-        for at in range(self.keys.rowCount()):
-            app_id, ref = self._cell(at, APP), self._cell(at, REF)
-            out.append(KeyRow(app_id=app_id, ref=ref, has_value=self.has_value(ref)))
+        for at, row in enumerate(self._rows):
+            ref = self._cell(at, REF)
+            out.append(replace(row, ref=ref, has_value=self.has_value(ref)))
         return out
 
     def _cell(self, at: int, column: int) -> str:
         item = self.keys.item(at, column)
         return item.text().strip() if item is not None else ""
 
+    def _selected(self) -> list[int]:
+        return sorted({index.row() for index in self.keys.selectedIndexes()})
+
+    def _refresh_drop(self) -> None:
+        """「삭제」는 **쓰는 노드가 없는 줄만** 켠다 (`KeyRow.removable`)."""
+        picked = self._selected()
+        self.drop_key.setEnabled(
+            self.keys.isEnabled() and bool(picked) and all(self._rows[at].removable for at in picked)
+        )
+
     def _drop_selected(self) -> None:
-        for at in sorted({index.row() for index in self.keys.selectedIndexes()}, reverse=True):
+        for at in reversed(self._selected()):
+            if not self._rows[at].removable:
+                continue
             self.keys.removeRow(at)
+            del self._rows[at]
+        self._refresh_drop()
 
     # ── 실행 위치 ──
 
@@ -409,9 +551,10 @@ class ProcessInfoDialog(QDialog):
         표**를 쓰므로 둘이 같은 것을 말한다 (어긋나면 「검사는 통과했는데 창이 막는다」가 된다).
         **표에 없는 종류는 세지 않는다** — 그 확장이 깔려 있지 않으면 실행 위치를 모른다.
         """
-        if self.entry is None or self.entry.process is None:
+        found = self.drawn or (self.entry.process if self.entry is not None else None)
+        if found is None:
             return []
-        return server_blockers(self.entry.process, self.task_type_locations)
+        return server_blockers(found, self.task_type_locations)
 
     def _refresh_warning(self) -> None:
         """「서버」일 때만 센다. **저장을 막지 않는다** (화면 설계서 STU-06)."""
@@ -498,23 +641,6 @@ class ProcessInfoDialog(QDialog):
         return json.dumps(made.to_json_dict(), ensure_ascii=False, indent=2)
 
 
-def ask(
-    parent: QWidget | None,
-    process: BpmProcess,
-    workspace: Workspace,
-    *,
-    has_value: Callable[[str], bool],
-    editable: bool = True,
-) -> ProcessInfoDialog | None:
-    """창을 띄우고 **저장했을 때만** 돌려준다 (부르는 쪽이 `saved`·`process_patch`를 쓴다)."""
-    dialog = ProcessInfoDialog(
-        process, workspace, has_value=has_value, editable=editable, parent=parent
-    )
-    if not dialog.exec():
-        return None
-    return dialog
-
-
 __all__ = [
     "DEFAULT_LOCATION",
     "DEFAULT_SIZE",
@@ -522,19 +648,25 @@ __all__ = [
     "LOCATIONS",
     "NO_CANVAS",
     "NO_ENTRY",
+    "APPLY_NOTE",
+    "APPLY_NOTE_RECORD_ONLY",
     "NO_MEMORY",
     "REF_PATTERN",
     "TITLE",
     "VALUE_MISSING",
+    "VALUE_KEYLESS",
     "VALUE_OK",
+    "WRITTEN_DEFAULT",
+    "WRITTEN_YES",
     "KeyRow",
     "ProcessInfoDialog",
     "apps_in",
-    "ask",
     "check",
     "default_ref",
     "key_rows",
     "learning",
     "overrides_of",
     "server_warning",
+    "users_of",
+    "with_drawn",
 ]

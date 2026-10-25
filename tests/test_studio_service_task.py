@@ -353,6 +353,39 @@ def test_an_empty_catalog_says_so_instead_of_an_empty_combo(app: Any) -> None:
     assert any("서비스 앱을 고르세요" in one for one in blocking)
 
 
+def test_an_app_not_in_the_list_is_shown_as_written_not_swapped(app: Any, catalog: Catalog) -> None:
+    """그림이 부르는 앱이 목록에 없으면 **첫 줄을 고른 척하지 않는다** — 이 탭과 「JSON」 탭이
+    다른 것을 말하면 사람이 무엇이 맞는지 모른다 (STU-14)."""
+    from chaeksas.studio.service_editor import NOT_LISTED  # noqa: PLC0415
+
+    call = {"app_id": "nowview.sc01", "operation": "validate_source", "input": {"a": "b"}}
+    made = editor(app, catalog, call)
+    assert made.app_box.currentData() == "nowview.sc01"
+    assert NOT_LISTED in made.app_box.currentText()
+    # 작업도 그대로다 — 적용해도 그림이 조용히 바뀌지 않는다.
+    assert made.operation_box.currentData() == "validate_source"
+    assert made.dump() == call
+    blocking, _ = made.problems()
+    assert any("nowview.sc01" in one and "목록에 없습니다" in one for one in blocking)
+
+
+def test_picking_a_listed_app_clears_the_block(app: Any, catalog: Catalog) -> None:
+    made = editor(app, catalog, {"app_id": "nowview.sc01", "operation": "lookup"})
+    made.app_box.setCurrentIndex(made.app_box.findData("ext-credit"))
+    assert made.dump()["app_id"] == "ext-credit"
+    blocking, _ = made.problems()
+    assert not any("목록에 없습니다" in one for one in blocking)
+
+
+def test_an_unread_list_does_not_block_what_is_written(app: Any) -> None:
+    """목록을 **받지 못했으면** 있는지 모르는 것이다 — 막지 않고 그렇게 말한다."""
+    made = editor(app, Catalog(problems=("Center에 닿지 못했습니다",)), {"app_id": "hris", "operation": "x"})
+    assert made.app_box.currentData() == "hris"
+    blocking, warnings = made.problems()
+    assert not any("목록에 없습니다" in one for one in blocking)
+    assert any("확인하지 못했습니다" in one for one in warnings)
+
+
 # ─────────────────────────── 속성 패널에 붙는다 ───────────────────────────
 
 

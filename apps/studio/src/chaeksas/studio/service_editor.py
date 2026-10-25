@@ -4,7 +4,7 @@
 속성 패널은 어느 쪽인지 모르고 탭으로 끼울 뿐이다. 다만 이것은 **플랫폼이 가진 편집기**다:
 확장이 자기 편집기를 기여하지 않은 작업은 모두 이 편집기를 쓴다 (STU-14 머리말).
 
-지키는 것 다섯.
+지키는 것 여섯.
 
 - **고를 거리는 Center에서 온다** (`service_catalog`) — 주소·작업·수행 모드·입출력 스키마.
   **키 값은 모른다** (ADR-0013). 「API 키」 칸은 **참조 이름**만 받는다.
@@ -14,6 +14,9 @@
 - **결정 수행을 지원하지 않는 작업은 경고한다** — Bot에서 돌지 않는다 (배포 전 검사도 잡는다).
 - manifest가 입력·출력 칸을 알려 주지 않으면(스키마는 선택 칸이다) **사람이 적게 둔다** —
   없는 칸을 지어내지 않는다.
+- **그림이 부르는 앱이 목록에 없으면 고른 척하지 않는다** — 그 id를 콤보 맨 위에 빨갛게
+  「<id> — Center 목록에 없음」으로 두고 「적용」을 막는다. 아무 줄이나 골라 두면 이 탭과
+  「JSON」 탭이 다른 것을 말해 사람이 무엇이 맞는지 모른다.
 """
 
 from __future__ import annotations
@@ -54,6 +57,13 @@ OWN_TEXT = "이 태스크만 다른 참조"
 #: 따를 참조가 없을 때 기본 줄 **아래에** 한 줄 (한 줄에 몰면 칸이 밀려 잘린다).
 NO_INHERITED = "이 앱의 참조가 BPM 프로세스에 적혀 있지 않습니다 — BPM 프로세스 정보에서 적거나 아래에 직접 적으세요"
 
+#: 그림이 부르는 앱이 고를 거리에 없을 때 콤보 줄에 붙는 말 (STU-14).
+NOT_LISTED = "Center 목록에 없음"
+#: 그때 「적용」을 막는 까닭.
+NOT_LISTED_BLOCK = "그림이 부르는 「{app_id}」은 Center 목록에 없습니다 — 서비스 앱을 다시 고르세요."
+#: 목록을 받지 못했으면 있는지 모르는 것이라 막지 않는다.
+NOT_CHECKED = "Center 목록을 받지 못해 「{app_id}」이 있는지 확인하지 못했습니다."
+
 #: 입력·출력 표가 처음부터 보이는 줄 수 (STU-14).
 VISIBLE_ROWS = 3
 
@@ -90,6 +100,8 @@ class ServiceTaskEditor(QWidget):
         self.inherited = dict(inherited or {})
         self.usage = Usage()
         self._quiet = False
+        #: 「목록에 없음」으로 빨갛게 칠하기 전의 콤보 팔레트 (되돌릴 때 쓴다).
+        self._plain_palette: Any = None
 
         self.app_box = QComboBox(self)
         self.operation_box = QComboBox(self)
@@ -241,16 +253,24 @@ class ServiceTaskEditor(QWidget):
         self.add_input.clicked.connect(lambda: self._add_row(self.inputs))
         self.add_output.clicked.connect(lambda: self._add_row(self.outputs))
 
-    def _load_apps(self) -> None:
+    def _load_apps(self, written: str = "") -> None:
+        """고를 거리를 채운다. `written`은 그림이 적어 둔 앱이다.
+
+        그것이 목록에 없으면 **맨 위에 그대로** 둔다 — 첫 줄이 저절로 골라지면 그림은 그대로인데
+        화면만 다른 앱을 말한다.
+        """
         self._quiet = True
         self.app_box.clear()
-        if not self.catalog:
+        self.app_box.setEnabled(True)
+        if written and self.catalog.app(written) is None:
+            self.app_box.addItem(f"{written} — {NOT_LISTED}", written)
+            self.app_box.setItemData(0, _error_brush(self.app_box), Qt.ItemDataRole.ForegroundRole)
+        if not self.catalog and not written:
             # **고를 것이 없으면 그렇게 말한다** — 빈 콤보를 두지 않는다.
             self.app_box.addItem("(Center에 등록된 서비스 앱이 없습니다)", "")
             self.app_box.setEnabled(False)
-        else:
-            for one in self.catalog.apps:
-                self.app_box.addItem(one.label, one.app_id)
+        for one in self.catalog.apps:
+            self.app_box.addItem(one.label, one.app_id)
         self._quiet = False
 
     # ── 규약 (속성 패널이 부른다) ──
@@ -259,6 +279,8 @@ class ServiceTaskEditor(QWidget):
         """그림에 적힌 `chk:serviceCall`을 그린다."""
         self._quiet = True
         self.usage = Usage.of(call)
+        self._load_apps(self.usage.app_id)
+        self._quiet = True  # `_load_apps`가 풀어 둔다
         self._select(self.app_box, self.usage.app_id)
         self._load_operations()
         self._select(self.operation_box, self.usage.operation)
@@ -282,6 +304,11 @@ class ServiceTaskEditor(QWidget):
         warnings: list[str] = []
         if not usage.app_id:
             blocking.append("서비스 앱을 고르세요.")
+        elif self.catalog.app(usage.app_id) is None:
+            if self.catalog.problems:
+                warnings.append(NOT_CHECKED.format(app_id=usage.app_id))
+            else:
+                blocking.append(NOT_LISTED_BLOCK.format(app_id=usage.app_id))
         if not usage.operation:
             blocking.append("작업을 고르세요.")
 
@@ -358,9 +385,13 @@ class ServiceTaskEditor(QWidget):
             box.setCurrentIndex(index)
 
     def _load_operations(self) -> None:
-        app = self.catalog.app(str(self.app_box.currentData() or ""))
+        app_id = str(self.app_box.currentData() or "")
+        app = self.catalog.app(app_id)
         self.operation_box.clear()
         if app is None:
+            # 목록에 없는 앱이어도 그림이 적은 작업은 **그대로 남긴다** (적용할 때 지워지지 않게).
+            if app_id and app_id == self.usage.app_id and self.usage.operation:
+                self.operation_box.addItem(self.usage.operation, self.usage.operation)
             return
         for one in app.operations:
             self.operation_box.addItem(one.name, one.name)
@@ -397,6 +428,24 @@ class ServiceTaskEditor(QWidget):
         self.follow_key.setText(f"{FOLLOW_TEXT} ({found})" if found else FOLLOW_TEXT)
         self.key_note.setVisible(not found and self.follow_key.isChecked())
 
+    def _retell_app(self) -> None:
+        """고른 줄이 「목록에 없음」이면 닫힌 콤보의 글자도 빨갛다 (펼친 목록만 빨가면 안 보인다)."""
+        from PySide6.QtGui import QPalette  # noqa: PLC0415
+
+        app_id = str(self.app_box.currentData() or "")
+        missing = bool(app_id) and self.catalog.app(app_id) is None
+        if missing:
+            if self._plain_palette is None:
+                self._plain_palette = QPalette(self.app_box.palette())
+            palette = QPalette(self._plain_palette)
+            for role in (QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText):
+                palette.setBrush(role, _error_brush(self.app_box))
+            self.app_box.setPalette(palette)
+        elif self._plain_palette is not None:
+            self.app_box.setPalette(self._plain_palette)
+            self._plain_palette = None
+        self.app_box.setToolTip(NOT_LISTED_BLOCK.format(app_id=app_id) if missing else "")
+
     def _touched(self) -> None:
         if self._quiet:
             return
@@ -405,6 +454,7 @@ class ServiceTaskEditor(QWidget):
 
     def _retell(self) -> None:
         self._retell_key()
+        self._retell_app()
         operation = self._operation()
         self.operation_note.setText(operation.description if operation is not None else "")
         self.modes_note.setText(", ".join(operation.modes) if operation is not None else "")
@@ -483,6 +533,13 @@ class ServiceTaskEditor(QWidget):
         self._touched()
 
 
+def _error_brush(widget: QWidget) -> Any:
+    """오류색 — 토큰에서 온 팔레트의 것이다 (색을 직접 적지 않는다, `_mark_stale`과 같다)."""
+    from PySide6.QtGui import QPalette  # noqa: PLC0415
+
+    return widget.palette().brush(QPalette.ColorRole.BrightText)
+
+
 def _mark_stale(table: QTableWidget, row: int) -> None:
     """작업 정의에 **없는 칸**임을 그 줄에 보인다 (STU-14 — 빨갛게).
 
@@ -516,6 +573,9 @@ def _show_rows(table: QTableWidget, rows: int) -> None:
 __all__ = [
     "FOLLOW_TEXT",
     "INPUT_COLUMNS",
+    "NOT_CHECKED",
+    "NOT_LISTED",
+    "NOT_LISTED_BLOCK",
     "NO_INHERITED",
     "OUTPUT_COLUMNS",
     "OWN_TEXT",

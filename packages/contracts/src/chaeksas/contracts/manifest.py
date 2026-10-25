@@ -74,7 +74,8 @@ class ServiceAppNeed(ContractModel):
     app_id: str
     operations: list[str]
     # 이름 규칙은 타입이 아니라 R4(`validate()`)가 검사한다 — 위반에 `invalid_key_ref` 코드를 붙이려고.
-    key_ref: str
+    # **없으면 키를 받지 않는 앱이다** (C13 `auth`가 없는 외부 앱, ADR-0091) — 받는 쪽은 묻지 않는다.
+    key_ref: str | None = None
     task_key_refs: list[str] = Field(default_factory=list)
 
 
@@ -297,7 +298,8 @@ def _check_r4(m: Manifest) -> list[Violation]:
 
     out = []
     for need in m.requires.service_apps:
-        bad = [r for r in [need.key_ref, *need.task_key_refs] if not re.fullmatch(KEY_REF_PATTERN, r)]
+        refs = [*([] if need.key_ref is None else [need.key_ref]), *need.task_key_refs]
+        bad = [r for r in refs if not re.fullmatch(KEY_REF_PATTERN, r)]
         if bad:
             out.append(
                 Violation(
