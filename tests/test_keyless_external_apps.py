@@ -131,7 +131,8 @@ def test_the_build_writes_no_key_reference_for_it(space: Workspace) -> None:
     [need] = built.requires.service_apps
     assert (need.app_id, need.key_ref, need.task_key_refs) == (APP, None, [])
     assert need.operations, "부르는 작업은 그대로 적는다"
-    assert "key_ref" not in built.to_json_dict()["requires"]["service_apps"][0]
+    dumped: Any = built.to_json_dict()
+    assert "key_ref" not in dumped["requires"]["service_apps"][0]
     assert not [v for v in validate_manifest(built) if v.rule == "R4"], "적지 않은 참조는 R4가 묻지 않는다"
 
 

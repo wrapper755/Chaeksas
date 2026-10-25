@@ -416,7 +416,10 @@ def test_delete_works_only_on_rows_no_node_uses(space: Workspace) -> None:
     window = ProcessInfoDialog(process, space, has_value=lambda _ref: False, editable=True, drawn=drawn)
     apps = [window.keys.item(at, module.APP).text() for at in range(window.keys.rowCount())]  # type: ignore[union-attr]
     assert apps == ["ext-credit", "old-app"]
-    assert window.keys.item(0, module.APP).flags() & module.Qt.ItemFlag.ItemIsEditable == module.Qt.ItemFlag(0)  # type: ignore[union-attr]
+    from PySide6.QtCore import Qt
+
+    app_item = window.keys.item(0, module.APP)
+    assert app_item is not None and not app_item.flags() & Qt.ItemFlag.ItemIsEditable, "앱 칸은 읽기 전용이다"
 
     window.keys.selectRow(0)
     assert not window.drop_key.isEnabled()
