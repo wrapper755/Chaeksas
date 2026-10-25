@@ -161,6 +161,7 @@ def apply_theme(app: QApplication, *, choice: str = THEME_SYSTEM) -> str:
     「시스템 따름」이면 OS가 테마를 바꿀 때 다시 적용한다 (Qt가 신호를 준다).
     """
     theme = resolve(choice, app=app)
+    load_translations(app)
     load_fonts()
     app.setPalette(palette(theme))
     app.setStyleSheet(qss(theme))
@@ -179,6 +180,25 @@ def apply_theme(app: QApplication, *, choice: str = THEME_SYSTEM) -> str:
             hints.colorSchemeChanged.connect(lambda _scheme: _follow_system(app))
             app._chk_theme_following = True  # type: ignore[attr-defined]
     return theme
+
+
+def load_translations(app: QApplication) -> None:
+    """Qt 자체 글(표준 단추 「OK」·「Cancel」·「Save」 등)을 한국어로 — 앱 하나에 한 번만 단다.
+
+    OS 언어를 따르지 않는다 — 우리 화면은 한국어뿐이라 단추만 영어로 남으면 섞인다.
+    번역 파일(`qtbase_ko.qm`)은 PySide6에 들어 있다. 못 읽으면 영어로 두고 로그만 남긴다.
+    """
+    if getattr(app, "_chk_translator", None) is not None:
+        return
+    from PySide6.QtCore import QLibraryInfo, QTranslator  # noqa: PLC0415
+
+    translator = QTranslator(app)
+    where = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    if not translator.load("qtbase_ko", where):
+        LOG.warning("Qt 한국어 번역을 읽지 못했습니다: %s", where)
+        return
+    app.installTranslator(translator)
+    app._chk_translator = translator  # type: ignore[attr-defined]
 
 
 def _follow_system(app: QApplication) -> None:
@@ -207,6 +227,7 @@ __all__ = [
     "THEME_SYSTEM",
     "apply_theme",
     "load_fonts",
+    "load_translations",
     "palette",
     "qss",
     "resolve",

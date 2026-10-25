@@ -4,6 +4,8 @@
 골라 넣는다. 고를 것(입력 이름·결재 노드·폼 칸·메시지 이름)은 **그림에서 미리 넣어 둔다**.
 
 「저장」은 창을 닫지 않고 모든 케이스를 검증한다. 값과 검증은 `cases.py`에 있다.
+
+표 넷은 **탭**이고 탭 이름에 줄 수가 붙는다. 표는 줄 셋이 스크롤 없이 보이는 높이를 늘 가진다.
 """
 
 from __future__ import annotations
@@ -27,11 +29,14 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from chaeksas.contracts.bpmn_ext import Case, CaseMessage
+from chaeksas.qt.messages import ask_unsaved
+from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3, SPACE_4
 from chaeksas.studio.cases import (
     COMPARISONS,
     NO_APPROVALS,
@@ -49,23 +54,39 @@ from chaeksas.studio.cases import (
 )
 from chaeksas.studio.workspace import BpmProcess, Definition
 
+#: 스크롤 없이 보이는 줄 수 (STU-07).
+VISIBLE_ROWS = 3
+
 
 def _table(headers: Sequence[str]) -> QTableWidget:
     found = QTableWidget(0, len(headers))
     found.setHorizontalHeaderLabels(list(headers))
-    found.verticalHeader().setVisible(False)
+    rows = found.verticalHeader()
+    rows.setVisible(False)
+    # 줄 높이는 **콤보가 잘리지 않는** 높이 — 기본 줄 높이는 글자 한 줄이라 콤보가 눌린다.
+    rows.setDefaultSectionSize(max(rows.defaultSectionSize(), QComboBox().sizeHint().height()))
+    found.setMinimumHeight(
+        found.horizontalHeader().sizeHint().height()
+        + VISIBLE_ROWS * rows.defaultSectionSize()
+        + 2 * found.frameWidth()
+    )
     found.horizontalHeader().setSectionResizeMode(len(headers) - 1, QHeaderView.ResizeMode.Stretch)
     found.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
     return found
 
 
 class Block(QWidget):
-    """표 하나 + 「추가」·「선택 줄 삭제」 (STU-07 — 줄을 더할 길이 없으면 표가 소용없다)."""
+    """탭 하나 — 표 + 「추가」·「선택 줄 삭제」 (STU-07 — 줄을 더할 길이 없으면 표가 소용없다).
+
+    `title`은 탭 이름이다. 줄 수가 바뀔 때마다 `counted`를 불러 탭 이름을 다시 쓰게 한다.
+    """
 
     def __init__(self, title: str, headers: Sequence[str], maker: Callable[[], Sequence[Any]]) -> None:
         super().__init__()
+        self.title = title
         self.table = _table(headers)
         self.maker = maker
+        self.counted: Callable[[], None] = lambda: None
 
         add = QPushButton("추가", self)
         add.clicked.connect(self.add_row)
@@ -73,29 +94,39 @@ class Block(QWidget):
         drop.clicked.connect(self.drop_row)
 
         head = QHBoxLayout()
-        head.addWidget(QLabel(title, self))
         head.addStretch(1)
         head.addWidget(add)
         head.addWidget(drop)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        # 탭 테두리와 단추·표 사이를 띄운다 (붙어 있으면 답답하다).
+        layout.setContentsMargins(SPACE_3, SPACE_3, SPACE_3, SPACE_3)
+        layout.setSpacing(SPACE_2)
         layout.addLayout(head)
-        layout.addWidget(self.table)
+        layout.addWidget(self.table, 1)
+
+    def label(self) -> str:
+        """탭 이름 — 「입력 변수 (2)」. 비었으면 이름만."""
+        count = self.table.rowCount()
+        return f"{self.title} ({count})" if count else self.title
 
     def add_row(self) -> None:
-        rows = _read_raw(self.table)
-        rows.append(list(self.maker()))
-        _fill(self.table, rows)
-        self.table.setCurrentCell(len(rows) - 1, 0)
+        # **있는 줄은 건드리지 않는다** — 표를 다시 채우면 같은 콤보를 같은 칸에 다시 넣게 되고,
+        # Qt는 그 칸의 옛 위젯(=같은 콤보)을 `deleteLater`로 지운다. 다음 이벤트에 콤보가
+        # 사라지고 그 칸을 만지면 프로세스가 죽는다.
+        row = self.table.rowCount()
+        self.table.insertRow(row)
+        for column, cell in enumerate(self.maker()):
+            _fill_cell(self.table, row, column, cell)
+        self.table.setCurrentCell(row, 0)
+        self.counted()
 
     def drop_row(self) -> None:
         row = self.table.currentRow()
         if row < 0:
             return
-        rows = _read_raw(self.table)
-        del rows[row]
-        _fill(self.table, rows)
+        self.table.removeRow(row)
+        self.counted()
 
 
 class CaseDialog(QDialog):
@@ -161,11 +192,15 @@ class CaseDialog(QDialog):
         self.note.setWordWrap(True)
         self.note.setProperty("role", "error")
 
+        self.blocks = (self.input_block, self.expected_block, self.answer_block, self.message_block)
+        self.tabs = QTabWidget(self)
+        for block in self.blocks:
+            self.tabs.addTab(block, block.title)
+            block.counted = self._recount
+
         right = QVBoxLayout()
         right.addLayout(form)
-        for block in (self.input_block, self.expected_block, self.answer_block, self.message_block):
-            right.addWidget(block)
-        right.addWidget(self.note)
+        right.addWidget(self.tabs, 1)
 
         left = QVBoxLayout()
         left.addWidget(self.list, 1)
@@ -174,7 +209,9 @@ class CaseDialog(QDialog):
         buttons.addWidget(drop)
         left.addLayout(buttons)
 
+        # 왼쪽 목록·단추와 오른쪽 탭의 **아래 끝을 맞춘다** — 안내 줄은 아래 단추 줄로 뺀다.
         middle = QHBoxLayout()
+        middle.setSpacing(SPACE_4)
         middle.addLayout(left, 1)
         middle.addLayout(right, 3)
 
@@ -187,9 +224,14 @@ class CaseDialog(QDialog):
         box.button(QDialogButtonBox.StandardButton.Save).clicked.connect(self.save)
         box.rejected.connect(self.reject)
 
+        bottom = QHBoxLayout()
+        bottom.addWidget(self.note, 1)
+        bottom.addWidget(box)
+
         layout = QVBoxLayout(self)
+        layout.setSpacing(SPACE_3)
         layout.addLayout(middle, 1)
-        layout.addWidget(box)
+        layout.addLayout(bottom)
 
         self._refresh_list()
         if self.edited.cases:
@@ -271,6 +313,12 @@ class CaseDialog(QDialog):
                 for m in case.messages
             ],
         )
+        self._recount()
+
+    def _recount(self) -> None:
+        """탭 이름의 줄 수를 다시 쓴다 — 가린 탭에 무엇이 있는지 열지 않고 보이게."""
+        for index, block in enumerate(self.blocks):
+            self.tabs.setTabText(index, block.label())
 
     def _keys(self, node_id: str = "") -> list[str]:
         """그 결재 폼의 칸 이름들 (폼이 없으면 `decision`·`comment` — C6)."""
@@ -340,14 +388,7 @@ class CaseDialog(QDialog):
     def reject(self) -> None:
         """「닫기」 — 저장 안 한 변경이 있으면 묻는다 (U11)."""
         if self.unsaved():
-            answer = QMessageBox.question(
-                self,
-                "저장하지 않은 변경사항",
-                "시험 케이스에 저장하지 않은 변경이 있습니다.",
-                QMessageBox.StandardButton.Save
-                | QMessageBox.StandardButton.Discard
-                | QMessageBox.StandardButton.Cancel,
-            )
+            answer = ask_unsaved(self, "저장하지 않은 변경사항", "시험 케이스에 저장하지 않은 변경이 있습니다.")
             if answer == QMessageBox.StandardButton.Cancel:
                 return
             if answer == QMessageBox.StandardButton.Save and not self.save():
@@ -395,22 +436,6 @@ def _fill_cell(table: QTableWidget, row: int, column: int, cell: Any) -> None:
     else:
         table.removeCellWidget(row, column)
         table.setItem(row, column, QTableWidgetItem(str(cell)))
-
-
-def _read_raw(table: QTableWidget) -> list[list[Any]]:
-    """표를 **그대로** (콤보는 위젯째) 거둔다 — 줄을 더하거나 지울 때 쓴다."""
-    out = []
-    for row in range(table.rowCount()):
-        cells: list[Any] = []
-        for column in range(table.columnCount()):
-            widget = table.cellWidget(row, column)
-            if isinstance(widget, QComboBox):
-                cells.append(widget)
-            else:
-                item = table.item(row, column)
-                cells.append(item.text() if item else "")
-        out.append(cells)
-    return out
 
 
 def _fill(table: QTableWidget, rows: Sequence[Sequence[Any]]) -> None:

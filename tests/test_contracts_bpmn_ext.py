@@ -354,6 +354,17 @@ def test_b6_server_cannot_run_pc_only_things() -> None:
              "</bpmn:extensionElements></bpmn:serviceTask>")))
 
 
+def test_b6_a_confirmation_cannot_run_on_the_server() -> None:
+    """확인(manualTask)은 늘 현장이다 — 패키지 R2(`human.confirmation`)와 같은 판정이어야
+    시험 실행은 되는데 올리기만 막히는 일이 없다."""
+    task = line('<bpmn:manualTask id="C"><bpmn:extensionElements>'
+                '<chk:approval>{"title": "확인"}</chk:approval>'
+                "</bpmn:extensionElements></bpmn:manualTask>")
+    found = [v for v in validate(read_process(wrap(task, process_json='{"run_location": "server"}'))) if v.rule == "B6"]
+    assert found and any(item.startswith("C:") for item in found[0].items)
+    assert "B6" not in codes(wrap(task))
+
+
 def test_b6_asks_the_host_about_extension_task_locations() -> None:
     """어느 태스크 종류가 PC 전용인지 플랫폼은 스스로 모른다 (ADR-0018)."""
     xml = wrap(

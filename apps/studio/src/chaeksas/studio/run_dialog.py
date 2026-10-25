@@ -1,7 +1,7 @@
 """STU-08 실행 대화상자 — 무엇을, 어떻게 돌릴지 고른다.
 
 **고를 수 없는 것은 끄고 바로 아래에 이유를 보인다** (U3) — 조용히 안 되는 것보다 낫다.
-지금 끄는 것은 둘이다.
+지금 끄는 것은 셋이다.
 
 실행 메뉴의 「결정 수행 (재생)...」(Ctrl+F5)은 `prefer`로 들어와 그 모드를 **미리 골라 둔다**
 — 할 수 없으면 골라 두지 않는다 (끈 라디오를 고르면 어느 모드도 아니게 된다).
@@ -10,6 +10,7 @@
 | --- | --- |
 | 결정 수행 (재생) | 학습 안 된 AI 태스크가 있다 (`memory/specs.json`에 명세가 없다) |
 | 감시 모드 | 트리거를 기다려 되풀이하는 일은 아직 없다 (docs/09-gaps.md §4-5) |
+| 「실행」 (케이스 없음일 때) | 기본값 없는 필수 입력이 있다 — 돌리면 엔진이 `input_required`로 거부한다 |
 
 Worker·서비스 앱 줄은 M4·M5에 그 쪽이 생기면 채운다 — 지금 없는 것을 「정상」이라고 하지 않는다.
 """
@@ -62,6 +63,20 @@ def unlearned(process: BpmProcess, definition: Definition) -> list[str]:
     ]
 
 
+def required_inputs(definition: Definition) -> list[str]:
+    """케이스 없이 돌면 비는 필수 입력 — 기본값이 있는 것은 엔진이 채운다 (C14 §6)."""
+    if definition.process is None:
+        return []
+    return [d.name for d in definition.process.info.inputs if d.required and not d.has_default]
+
+
+def needs_case_text(names: list[str]) -> str:
+    return (
+        f"필수 입력이 있어 케이스 없이 돌 수 없습니다: {', '.join(names)} "
+        "— 「파일 → 시험 케이스...」에서 값을 적은 케이스를 고르세요"
+    )
+
+
 def describe(case: Case | None) -> str:
     if case is None:
         return "기대 결과를 비교하지 않습니다"
@@ -108,6 +123,10 @@ class RunDialog(QDialog):
             self.case_box.setCurrentIndex(1)
         self.case_note = QLabel("", self)
         self.case_note.setWordWrap(True)
+        self.required = required_inputs(definition)
+        self.needs_case = QLabel(needs_case_text(self.required) if self.required else "", self)
+        self.needs_case.setProperty("role", "error")
+        self.needs_case.setWordWrap(True)
         self.case_box.currentIndexChanged.connect(self._retell)
 
         self.autonomous = QRadioButton("자율 수행 — AI가 방법을 찾고, 성공하면 학습한다", self)
@@ -131,7 +150,8 @@ class RunDialog(QDialog):
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, parent=self
         )
-        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("실행")
+        self.run_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.run_button.setText("실행")
         buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("취소")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
@@ -141,6 +161,7 @@ class RunDialog(QDialog):
         layout.addWidget(QLabel("케이스", self))
         layout.addWidget(self.case_box)
         layout.addWidget(self.case_note)
+        layout.addWidget(self.needs_case)
         layout.addWidget(QLabel("수행 모드", self))
         for radio in (self.autonomous, self.deterministic):
             layout.addWidget(radio)
@@ -150,6 +171,9 @@ class RunDialog(QDialog):
 
     def _retell(self) -> None:
         self.case_note.setText(describe(self.picked_case()))
+        blocked = bool(self.required) and self.case_box.currentText() == NO_CASE
+        self.needs_case.setVisible(blocked)
+        self.run_button.setEnabled(not blocked)
 
     def picked_case(self) -> Case | None:
         text = self.case_box.currentText()

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
+from chaeksas.qt.messages import ask_unsaved
 from chaeksas.studio.canvas import CanvasError
 from chaeksas.studio.dialogs import NewProcessDialog, pick_bpmn_file
 from chaeksas.studio.workspace import (
@@ -60,15 +61,7 @@ def may_discard(window: MainWindow) -> bool:
     """저장 안 한 변경이 있으면 묻는다 (STU-01 U11). 전환·닫기·만들기가 같은 관문을 쓴다."""
     if not window.dirty:
         return True
-    answer = QMessageBox.question(
-        window,
-        DISCARD_TITLE,
-        DISCARD_TEXT,
-        QMessageBox.StandardButton.Save
-        | QMessageBox.StandardButton.Discard
-        | QMessageBox.StandardButton.Cancel,
-        QMessageBox.StandardButton.Save,
-    )
+    answer = ask_unsaved(window, DISCARD_TITLE, DISCARD_TEXT)
     if answer == QMessageBox.StandardButton.Cancel:
         return False
     if answer == QMessageBox.StandardButton.Save:
@@ -250,22 +243,6 @@ def save_process_as(window: MainWindow) -> None:
         open_definition(window, entry.path.as_posix())
 
 
-def import_example(window: MainWindow) -> None:
-    """예제 BPM 프로세스 가져오기 (STU-01 파일 메뉴) — STU-05를 「예제에서 가져오기」가 골라진
-    채로 연다. 예제 폴더는 **읽기만** 한다.
-    """
-    if not may_discard(window):
-        return
-    made = NewProcessDialog.ask(window, window.workspace, opened=window.definition, example=True)
-    if made is None:
-        return
-    entry = made.entry_definition
-    window.explorer.refresh()
-    window.say(f"가져왔습니다: {made.display}")
-    if entry is not None:
-        open_definition(window, entry.path.as_posix())
-
-
 def import_file(window: MainWindow) -> None:
     """STU-01 「파일에서 BPM 프로세스 가져오기...」 — 파일을 고르고 STU-05로 id·이름을 받는다.
 
@@ -333,7 +310,6 @@ __all__ = [
     "NO_PROCESS",
     "add_definition",
     "close_process",
-    "import_example",
     "import_file",
     "inherited_keys",
     "make_entry",

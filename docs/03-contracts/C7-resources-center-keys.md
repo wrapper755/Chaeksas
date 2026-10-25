@@ -152,8 +152,8 @@
 | 검사 | 결과 `type` / `reason` |
 | --- | --- |
 | `requires.extensions[]`가 있고 버전 범위가 맞나 (외부면 `definition_hash`도) | `extension` / `not_found` / `version_mismatch` / `hash_mismatch` |
-| `requires.service_apps[].app_id`가 등록되어 있나 | `service_app` / `not_registered` |
-| 그 작업이 있나, 결정 수행을 지원하나, 서버 BPM 프로세스면 `server_ok`인가 | `operation` / `not_found` / `not_deterministic` / `not_server_ok` |
+| `requires.service_apps[].app_id`가 등록되어 있나 — 서비스 앱(C11)이거나 **같은 id의 외부 확장(HTTP 어댑터)**이면 등록된 것이다 (`chk:serviceCall`은 둘을 가리지 않는다 — C13 §4) | `service_app` / `not_registered` |
+| 그 작업이 있나, 결정 수행을 지원하나, 서버 BPM 프로세스면 `server_ok`인가 — 외부 확장이면 어댑터의 `operations[]`에서 본다 | `operation` / `not_found` / `not_deterministic` / `not_server_ok` |
 | `requires.resources[]` (`{type, id}`)가 확장 기여 자원에 있나 | `resource` / `not_found` |
 
 - 업로드할 때는 경고만 한다 (CON-02 띠).
