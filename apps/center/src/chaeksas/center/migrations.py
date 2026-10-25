@@ -180,6 +180,16 @@ MIGRATIONS: tuple[Step, ...] = (
             "ALTER TABLE center_keys ADD COLUMN sealed_json TEXT",
         ),
     ),
+    Step(
+        11,
+        "계정 권한과 Studio 로그인 — 키가 계정·PC 이름에 묶인다 (C5 §계정 권한과 Studio 로그인, ADR-0092)",
+        (
+            "ALTER TABLE accounts ADD COLUMN permissions_json TEXT",
+            "ALTER TABLE center_keys ADD COLUMN account TEXT",
+            "ALTER TABLE center_keys ADD COLUMN machine_name TEXT",
+            "CREATE INDEX center_keys_account ON center_keys (account)",
+        ),
+    ),
 )
 
 

@@ -31,7 +31,7 @@ from fastapi import Request
 from chaeksas.center import accounts, enrollments, keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
-from chaeksas.contracts.accounts import ROLE_ADMIN, SESSION_PREFIX
+from chaeksas.contracts.accounts import PERMISSION_DESIGN, ROLE_ADMIN, SESSION_PREFIX
 from chaeksas.contracts.approvals import normalize_name
 from chaeksas.contracts.center_api import ON_BEHALF_HEADER, on_behalf_violation
 from chaeksas.contracts.center_keys import RELAY_KEY_TYPE
@@ -138,6 +138,12 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
     keys.touch(store, record.key_id)
     # 회전한 새 키로 첫 요청이면 행을 새 키로 옮긴다 (C4 §키 회전) — 하트비트가 행을 찾기 **전에**.
     enrollments.adopt_successor(store, record)
+    if record.account is not None:
+        # Studio 로그인이 만든 키 (C5 §계정 권한과 Studio 로그인) — 부를 때마다 **계정을 다시 본다**.
+        # 계정이 멈췄거나 「설계」 권한이 없어졌으면 그 자리에서 막는다. 행위자는 계정이다.
+        if not accounts.account_allows(store, record.account, PERMISSION_DESIGN):
+            raise accounts.permission_missing(PERMISSION_DESIGN)
+        return Caller(kind="key", actor=record.account, key=record)
     # 키로 부를 때는 X-CHK-Actor를 믿지 않는다 (C5). 사람 대신 부르는 키만 On-Behalf-Of를 듣는다.
     on_behalf = _on_behalf(request) if record.type in ON_BEHALF_KEY_TYPES else None
     return Caller(kind="key", actor=record.name, key=record, on_behalf=on_behalf)

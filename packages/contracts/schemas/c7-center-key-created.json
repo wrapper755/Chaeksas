@@ -61,6 +61,18 @@
   "additionalProperties": true,
   "description": "발급 응답 — 여기에만 원문 `key`가 실린다. 다시 볼 수 없다.\n\n받는 쪽(운영자)은 이 값을 Bot UI·Studio 설정이나 OS 비밀 저장소에 넣는다.\n**기록·로그에 남기지 않는다.**",
   "properties": {
+    "account": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Account"
+    },
     "bound_to": {
       "anyOf": [
         {

@@ -251,9 +251,12 @@ export const center = {
 
   /** 관리자 계정 (C5 §관리자 계정·CON-14). 관리자만. */
   accounts: () => call<AccountInfo[]>("/api/v1/accounts"),
-  createAccount: (body: { username: string; password: string; role: string }) =>
+  createAccount: (body: { username: string; password: string; role: string; permissions?: string[] }) =>
     call<AccountInfo>("/api/v1/accounts", { method: "POST", body: JSON.stringify(body) }),
-  updateAccount: (username: string, body: { role?: string; disabled?: boolean; password?: string }) =>
+  updateAccount: (
+    username: string,
+    body: { role?: string; disabled?: boolean; password?: string; permissions?: string[] },
+  ) =>
     call<AccountInfo>(`/api/v1/accounts/${encodeURIComponent(username)}`, {
       method: "PUT",
       body: JSON.stringify(body),

@@ -48,10 +48,12 @@ from chaeksas.center.responses import Utf8JSONResponse
 from chaeksas.center.settings import Settings
 from chaeksas.center.storage import Store, now_iso
 from chaeksas.contracts.accounts import (
+    PERMISSION_DESIGN,
     AccountCreateRequest,
     AccountUpdateRequest,
     LoginRequest,
     PasswordChangeRequest,
+    StudioLoginRequest,
     WhoAmI,
 )
 from chaeksas.contracts.center_api import (
@@ -117,6 +119,27 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         wanted = _model(LoginRequest, await _json(request))
         return accounts.login(app.state.store, username=wanted.username.strip(), password=wanted.password)
 
+    @app.post(f"{API}/auth/studio-login")
+    async def studio_login(request: Request) -> Any:
+        """Studio 로그인 (C5 §계정 권한과 Studio 로그인) — 인증 없이 부른다. 키는 **이 응답에만**."""
+        wanted = _model(StudioLoginRequest, await _json(request))
+        return accounts.studio_login(
+            app.state.store,
+            username=wanted.username.strip(),
+            password=wanted.password,
+            machine_name=wanted.machine_name,
+            permission=PERMISSION_DESIGN,
+        )
+
+    @app.post(f"{API}/auth/studio-logout", status_code=204)
+    def studio_logout(request: Request) -> Response:
+        """그 Studio 키로 부르면 그 키를 폐기한다. 계정에 묶인 키가 아니면 403."""
+        found = authenticate(request)
+        if found.key is None or found.key.account is None:
+            raise ApiError(403, "forbidden", "Studio 로그인으로 받은 키로만 로그아웃할 수 있다")
+        keys.revoke(app.state.store, found.key.key_id)
+        return Response(status_code=204)
+
     @app.post(f"{API}/auth/logout", status_code=204)
     def logout(request: Request) -> Response:
         token = bearer(request)
@@ -163,6 +186,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             password=wanted.password,
             role=wanted.role,
             by=found.actor,
+            permissions=wanted.permissions,
         )
 
     @app.put(f"{API}/accounts/{{username}}")
@@ -175,6 +199,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             role=wanted.role,
             disabled=wanted.disabled,
             password=wanted.password,
+            permissions=wanted.permissions,
             data_dir=data_folder,
         )
 

@@ -61,6 +61,18 @@
   "additionalProperties": true,
   "description": "`GET /center-keys`의 한 줄. **원문은 들어가지 않는다.**",
   "properties": {
+    "account": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Account"
+    },
     "bound_to": {
       "anyOf": [
         {

@@ -162,7 +162,7 @@ CenterKeyInfo 필드:
 | `prefix` | 앞자리 16자 (`chk_ctr_` + 무작위 8자) |
 | `bound_to`? | `{type, id, name, machine_name?, first_seen}` |
 | `enrollment_id`? | 등록 승인이 만든 키면 그 요청 (C5 §등록 승인). 없으면 사람이·자동화가 발급한 키다 |
-| `account`? | Studio 로그인이 만든 키면 그 계정 (C5 §계정 권한과 Studio 로그인 — 초안). 그 키의 행위자는 이 계정이다 |
+| `account`? | Studio 로그인이 만든 키면 그 계정 (C5 §계정 권한과 Studio 로그인). 그 키의 행위자는 이 계정이다 |
 | `created_at`, `expires_at`?, `last_used_at`?, `revoked_at`? | |
 | `state` | `active` / `expired` / `revoked`. 화면 표기는 「사용 중」 / 「만료」 / 「폐기됨」 |
 

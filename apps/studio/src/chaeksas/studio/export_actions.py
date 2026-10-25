@@ -28,7 +28,7 @@ if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (창이 이 �
 PACKAGE_FILTER = "패키지 (*.zip)"
 
 #: Center가 필요한 동작을 설정 없이 눌렀을 때 (STU-10 맨 아래).
-NO_CENTER_SETTINGS = "Center 주소와 Center API 키가 아직 없습니다.\n\n지금 설정 → Center를 열까요?"
+NO_CENTER_SETTINGS = "Center에 로그인하지 않았습니다.\n\n지금 설정 → Center를 열까요?"
 
 NO_PROCESS = "열린 BPM 프로세스가 없습니다."
 

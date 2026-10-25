@@ -11,8 +11,21 @@ export interface AccountInfo {
   disabled_at?: string | null;
   last_login_at?: string | null;
   password_changed_at: string;
+  permissions?: string[];
   role: string;
   state: string;
+  studio_logins?: StudioLoginInfo[];
   username: string;
+  [k: string]: unknown;
+}
+/**
+ * 그 계정이 로그인해 있는 Studio 하나 — 살아 있는 Studio 키 (CON-14 「Studio 로그인」).
+ */
+export interface StudioLoginInfo {
+  created_at: string;
+  expires_at?: string | null;
+  key_id: string;
+  last_used_at?: string | null;
+  machine_name: string;
   [k: string]: unknown;
 }

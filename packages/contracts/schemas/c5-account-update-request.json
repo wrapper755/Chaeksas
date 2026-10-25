@@ -27,6 +27,21 @@
       "default": null,
       "title": "Password"
     },
+    "permissions": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Permissions"
+    },
     "role": {
       "anyOf": [
         {

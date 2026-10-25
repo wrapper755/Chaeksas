@@ -71,6 +71,9 @@ class KeyRecord:
     public_key: str | None = None
     #: 회전으로 갈아 줄 새 키 (새 키로 첫 요청이 오면 이 키를 폐기한다).
     successor_id: str | None = None
+    #: Studio 로그인이 만든 키면 그 계정과 PC 이름 (C5 §계정 권한과 Studio 로그인).
+    account: str | None = None
+    machine_name: str | None = None
 
     def state(self, *, now: str) -> str:
         return key_state(now=now, expires_at=self.expires_at, revoked_at=self.revoked_at)
@@ -88,6 +91,7 @@ class KeyRecord:
             revoked_at=self.revoked_at,
             state=self.state(now=now),
             enrollment_id=self.enrollment_id,
+            account=self.account,
         )
 
 
@@ -106,6 +110,8 @@ def _record(row: Any) -> KeyRecord:
         enrollment_id=row["enrollment_id"],
         public_key=row["public_key"],
         successor_id=row["successor_id"],
+        account=row["account"],
+        machine_name=row["machine_name"],
     )
 
 
@@ -118,6 +124,8 @@ def issue(
     bound: BoundTo | None = None,
     enrollment_id: str | None = None,
     public_key: str | None = None,
+    account: str | None = None,
+    machine_name: str | None = None,
 ) -> tuple[KeyRecord, str]:
     """키를 발급한다. `(기록, 원문)` — **원문은 이때만 볼 수 있다.**
 
@@ -134,11 +142,14 @@ def issue(
         bound_to=bound,
         enrollment_id=enrollment_id,
         public_key=public_key,
+        account=account,
+        machine_name=machine_name,
     )
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO center_keys (key_id, name, type, prefix, key_hash, created_at, expires_at,"
-            " bound_json, enrollment_id, public_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " bound_json, enrollment_id, public_key, account, machine_name)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 record.key_id,
                 name,
@@ -150,9 +161,32 @@ def issue(
                 dumps(bound.to_json_dict()) if bound is not None else None,
                 enrollment_id,
                 public_key,
+                account,
+                machine_name,
             ),
         )
     return record, raw
+
+
+def of_account(store: Store, username: str) -> list[KeyRecord]:
+    """그 계정에 묶인 **살아 있는** 키 (Studio 로그인). 만료·폐기된 것은 뺀다."""
+    now = now_iso()
+    rows = store.rows(
+        "SELECT * FROM center_keys WHERE account = ? AND revoked_at IS NULL ORDER BY created_at", (username,)
+    )
+    return [one for one in (_record(row) for row in rows) if one.state(now=now) == "active"]
+
+
+def revoke_account(store: Store, username: str, *, machine_name: str | None = None) -> int:
+    """그 계정의 키를 폐기한다 — `machine_name`을 주면 그 PC의 것만. 폐기한 수."""
+    sql = "UPDATE center_keys SET revoked_at = ? WHERE account = ? AND revoked_at IS NULL"
+    params: tuple[str, ...] = (now_iso(), username)
+    if machine_name is not None:
+        sql += " AND machine_name = ?"
+        params = (*params, machine_name)
+    with store.tx() as cur:
+        cur.execute(sql, params)
+        return int(cur.rowcount)
 
 
 def set_public_key(store: Store, key_id: str, public_key: str) -> None:

@@ -35,6 +35,17 @@ SESSION_PREFIX = "chk_ses_"
 #: 세션은 이만큼 지나면 끝난다 (다시 로그인한다).
 SESSION_HOURS = 12
 
+#: 계정 권한 (C5 §계정 권한과 Studio 로그인, ADR-0092). **열린 문자열**이고 알려진 값은 이것뿐이다.
+#: 관리자는 모든 권한을 가진다 — `permissions`를 비워 두어도 그렇다.
+PERMISSION_DESIGN = "design"
+KNOWN_PERMISSIONS = frozenset({PERMISSION_DESIGN})
+
+#: Studio 로그인이 만드는 키의 수명과, Studio가 「곧 끝납니다」를 말하기 시작하는 때.
+STUDIO_KEY_DAYS = 30
+STUDIO_NOTICE_DAYS = 7
+#: 로그인한 PC의 이름 — 사람이 알아볼 만큼.
+MACHINE_NAME_MAX = 64
+
 #: 같은 아이디로 이만큼 연달아 틀리면 그 아이디를 잠깐 받지 않는다.
 LOGIN_FAILURES_MAX = 5
 LOGIN_LOCK_MINUTES = 5
@@ -85,6 +96,21 @@ class WhoAmI(ContractModel):
     account: Username | None = None
 
 
+def allows(role: str, permissions: list[str] | None, wanted: str) -> bool:
+    """그 역할·권한으로 `wanted`를 할 수 있나 — 관리자는 늘 된다 (C5)."""
+    return role == ROLE_ADMIN or wanted in (permissions or [])
+
+
+class StudioLoginInfo(ContractModel):
+    """그 계정이 로그인해 있는 Studio 하나 — 살아 있는 Studio 키 (CON-14 「Studio 로그인」)."""
+
+    key_id: str
+    machine_name: str
+    created_at: Timestamp
+    last_used_at: Timestamp | None = None
+    expires_at: Timestamp | None = None
+
+
 class AccountInfo(ContractModel):
     """`GET /accounts`의 한 줄. **비밀번호 해시는 나가지 않는다.**"""
 
@@ -96,6 +122,10 @@ class AccountInfo(ContractModel):
     password_changed_at: Timestamp
     disabled_at: Timestamp | None = None
     last_login_at: Timestamp | None = None
+    #: 켜 둔 권한 (KNOWN_PERMISSIONS). 관리자는 비어 있어도 모든 권한을 가진다.
+    permissions: list[str] = Field(default_factory=list)
+    #: 로그인해 있는 Studio (살아 있는 키만).
+    studio_logins: list[StudioLoginInfo] = Field(default_factory=list)
 
 
 class AccountCreateRequest(ContractModel):
@@ -104,6 +134,7 @@ class AccountCreateRequest(ContractModel):
     username: str
     password: str
     role: str = ROLE_ADMIN
+    permissions: list[str] | None = None
 
 
 class AccountUpdateRequest(ContractModel):
@@ -116,6 +147,25 @@ class AccountUpdateRequest(ContractModel):
     role: str | None = None
     disabled: bool | None = None
     password: str | None = None
+    #: 통째로 바꾼다. **줄면** 그 계정의 Studio 로그인이 모두 끝난다.
+    permissions: list[str] | None = None
+
+
+class StudioLoginRequest(ContractModel):
+    """`POST /auth/studio-login` — 인증 없이 부른다 (C5 §계정 권한과 Studio 로그인)."""
+
+    username: str
+    password: str
+    machine_name: str = Field(min_length=1, max_length=MACHINE_NAME_MAX)
+
+
+class StudioLogin(ContractModel):
+    """Studio 로그인 응답. **`key`는 이 응답에만 실린다** — Studio는 OS 비밀 저장소에 둔다."""
+
+    key: str
+    key_id: str
+    username: Username
+    expires_at: Timestamp
 
 
 class PasswordChangeRequest(ContractModel):
@@ -126,7 +176,16 @@ class PasswordChangeRequest(ContractModel):
 
 
 __all__ = [
+    "KNOWN_PERMISSIONS",
     "KNOWN_ROLES",
+    "MACHINE_NAME_MAX",
+    "PERMISSION_DESIGN",
+    "STUDIO_KEY_DAYS",
+    "STUDIO_NOTICE_DAYS",
+    "StudioLogin",
+    "StudioLoginInfo",
+    "StudioLoginRequest",
+    "allows",
     "LOGIN_FAILURES_MAX",
     "LOGIN_LOCK_MINUTES",
     "PASSWORD_MIN",

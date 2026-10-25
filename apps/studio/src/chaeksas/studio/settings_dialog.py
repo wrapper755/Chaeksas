@@ -1,6 +1,8 @@
 """STU-10 설정 — 왼쪽 분류 목록, 오른쪽 그 분류의 칸.
 
-- **「저장」을 누를 때까지 아무것도 바뀌지 않는다** — 키도 그때 OS 비밀 저장소에 간다.
+- **「저장」을 누를 때까지 아무것도 바뀌지 않는다** — 키도 그때 OS 비밀 저장소에 간다. **예외는 「Center」의
+  「로그인」·「로그아웃」 하나**다 — 누르는 그 자리에서 키를 받거나 지우고 주소·계정을 적는다 (ADR-0092).
+  그래서 창을 「취소」로 닫아도 `login_changed`에 바뀐 설정이 남는다.
 - 키는 칸에 **보이지 않는다** — 저장된 것이 있으면 자리 글로 알린다. 새로 넣을 때만 친다.
 - **쓰는 곳이 있는 칸만 둔다** (ADR-0073) — 메일·비밀·모델 공급자·temperature는 읽는 곳이 없어 없다.
 - 「확장별 설정」은 확장이 기여한 칸으로 **그 자리에서** 짓는다 (C13 `configuration`, scope `studio`).
@@ -39,8 +41,10 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts import SCOPE_STUDIO, ConfigurationItem
+from chaeksas.contracts.accounts import STUDIO_NOTICE_DAYS
 from chaeksas.qt.theme import THEME_DARK, THEME_LIGHT, THEME_SYSTEM
 from chaeksas.qt.theme.tokens import SPACE_1
+from chaeksas.studio import center_login
 from chaeksas.studio.checks import (
     EXTERNAL_NOT_CHECKED,
     AppPlaces,
@@ -105,6 +109,8 @@ class StudioSettingsDialog(QDialog):
         #: 시험이 끼우는 HTTP 클라이언트 (연결 테스트).
         self.client = client
         self.saved: Settings | None = None
+        #: 「로그인」·「로그아웃」이 그 자리에서 적은 설정 — 「취소」로 닫아도 부르는 쪽이 받는다.
+        self.login_changed: Settings | None = None
         #: 창을 열 때 있던 참조 — 지운 줄은 「저장」 때 비밀 저장소에서도 지운다.
         self._original_refs = [one.ref for one in settings.service_keys]
         self.setWindowTitle(TITLE)
@@ -241,46 +247,102 @@ class StudioSettingsDialog(QDialog):
         return page
 
     def _center_page(self) -> QWidget:
+        """STU-10 「Center」 — 로그인 전에는 주소·아이디·비밀번호, 뒤에는 「누구로 언제까지」와 「로그아웃」.
+
+        **Center API 키 칸은 없다** (ADR-0092) — 키는 로그인이 받아 OS 비밀 저장소에 둔다.
+        """
         page = QWidget()
         form = QFormLayout(page)
-        intro = QLabel(
-            "Center 콘솔(CON-11)에서 **Studio용**으로 발급받은 키를 넣습니다. "
-            "Bot UI와는 다른 키입니다."
-        )
-        intro.setTextFormat(Qt.TextFormat.MarkdownText)
-        intro.setWordWrap(True)
+        self.center_form = form
         self.center_url = QLineEdit(self.settings.center_url)
         self.center_url.setPlaceholderText("http://center.example.com:8800")
-        self.center_key = QLineEdit()
-        self.center_key.setEchoMode(QLineEdit.EchoMode.Password)
-        if self.credentials.stored_center_api_key():
-            self.center_key.setPlaceholderText(KEY_STORED)
-        self.center_show = QCheckBox("표시")
-        self.center_show.toggled.connect(
-            lambda on: self.center_key.setEchoMode(
-                QLineEdit.EchoMode.Normal if on else QLineEdit.EchoMode.Password
-            )
-        )
-        key_row = QHBoxLayout()
-        key_row.addWidget(self.center_key, 1)
-        key_row.addWidget(self.center_show)
+        self.center_user = QLineEdit(self.settings.center_account)
+        self.center_password = QLineEdit()
+        self.center_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.center_login = QPushButton("로그인")
+        self.center_login.clicked.connect(self.login_center)
+        self.center_who = QLabel("")
+        self.center_who.setWordWrap(True)
+        self.center_logout = QPushButton("로그아웃")
+        self.center_logout.clicked.connect(self.logout_center)
         self.center_test = QPushButton("연결 테스트")
         self.center_test.clicked.connect(self.test_center)
         self.center_result = QLabel("")
         self.center_result.setWordWrap(True)
-        form.addRow(intro)
+
         form.addRow("Center 주소", self.center_url)
-        form.addRow("Center API 키", key_row)
-        if _env(ENV_CENTER_API_KEY):
-            note = QLabel(f"환경변수 {ENV_CENTER_API_KEY}가 있어 그 값이 이깁니다.")
-            note.setWordWrap(True)
-            form.addRow("", note)
-        test_row = QHBoxLayout()
-        test_row.addWidget(self.center_test)
-        test_row.addStretch(1)
-        form.addRow("", test_row)
+        form.addRow("아이디", self.center_user)
+        form.addRow("비밀번호", self.center_password)
+        self.center_login_row = QWidget()
+        login_row = QHBoxLayout(self.center_login_row)
+        login_row.setContentsMargins(0, 0, 0, 0)
+        login_row.addWidget(self.center_login)
+        login_row.addStretch(1)
+        form.addRow("", self.center_login_row)
+        form.addRow("", self.center_who)
+        out_row = QHBoxLayout()
+        out_row.addWidget(self.center_logout)
+        out_row.addWidget(self.center_test)
+        out_row.addStretch(1)
+        form.addRow("", out_row)
         form.addRow("", self.center_result)
+        self._show_login()
         return page
+
+    def _show_login(self) -> None:
+        """로그인 전·뒤에 맞춰 칸을 켜고 끈다. 환경변수 키면 로그인 칸을 끈다 (자동화·CI)."""
+        from_env = bool(_env(ENV_CENTER_API_KEY))
+        logged_in = bool(self.credentials.stored_center_api_key()) and not from_env
+        for field in (self.center_user, self.center_password, self.center_login_row):
+            # 줄째 감춘다 — 칸만 감추면 「아이디」·「비밀번호」 이름표가 남는다.
+            self.center_form.setRowVisible(field, not logged_in)
+            field.setEnabled(not from_env)
+        self.center_logout.setVisible(logged_in)
+        self.center_test.setVisible(logged_in or from_env)
+        if from_env:
+            self.center_who.setText(f"환경변수의 키를 씁니다 ({ENV_CENTER_API_KEY}).")
+        elif logged_in:
+            who = self.settings.center_account or "Studio"
+            until = self.settings.center_login_expires[:10]
+            text = f"{who}로 로그인됨" + (f" ({until}까지)" if until else "")
+            if _ends_soon(self.settings.center_login_expires):
+                text += f" — {until}에 로그인이 끝납니다. 다시 로그인하세요"
+            self.center_who.setText(text)
+        else:
+            self.center_who.setText("로그인하지 않았습니다.")
+
+    def _remember_login(self, *, account: str, expires: str) -> None:
+        """로그인·로그아웃은 「저장」을 기다리지 않는다 — 주소·계정을 그 자리에서 적는다."""
+        made = replace(
+            self.settings,
+            center_url=self.center_url.text().strip() or self.settings.center_url,
+            center_account=account,
+            center_login_expires=expires,
+        )
+        made.save()
+        self.settings = made
+        self.login_changed = made
+
+    def login_center(self) -> None:
+        found = center_login.login(
+            self.center_url.text().strip(),
+            self.center_user.text(),
+            self.center_password.text(),
+            credentials=self.credentials,
+            client=self.client,
+        )
+        # **비밀번호는 남기지 않는다** — 되든 안 되든 칸을 비운다.
+        self.center_password.clear()
+        self.center_result.setText("" if found.ok else found.message)
+        if found.ok:
+            self._remember_login(account=found.username, expires=found.expires_at)
+        self._show_login()
+
+    def logout_center(self) -> None:
+        said = center_login.logout(self.center_url.text().strip(), credentials=self.credentials, client=self.client)
+        self._remember_login(account=self.settings.center_account, expires="")
+        self.center_result.setText(said)
+        self._show_login()
 
     def _worker_page(self) -> QWidget:
         page = QWidget()
@@ -405,8 +467,7 @@ class StudioSettingsDialog(QDialog):
         self.llm_result.setText(llm_status(self.llm_url.text().strip(), key, client=self.client))
 
     def test_center(self) -> None:
-        typed = self.center_key.text().strip()
-        key = typed or self.credentials.center_api_key()
+        key = self.credentials.center_api_key()
         self.center_result.setText(center_status(self.center_url.text().strip(), key, client=self.client))
 
     def test_worker(self) -> None:
@@ -443,7 +504,7 @@ class StudioSettingsDialog(QDialog):
         from chaeksas.studio.services import CenterReader  # noqa: PLC0415
 
         url = self.center_url.text().strip()
-        key = self.center_key.text().strip() or self.credentials.center_api_key()
+        key = self.credentials.center_api_key()
         if not url or not key:
             return None
         return CenterReader(base_url=url, api_key=key, client=self.client)
@@ -491,9 +552,6 @@ class StudioSettingsDialog(QDialog):
             typed_llm = self.llm_key.text().strip()
             if typed_llm:
                 self.credentials.set_llm_api_key(typed_llm)
-            typed_center = self.center_key.text().strip()
-            if typed_center:
-                self.credentials.set_center_api_key(typed_center)
             for ref, _, typed in rows:
                 if typed:
                     self.credentials.set_service_key(ref, typed)
@@ -520,6 +578,19 @@ class StudioSettingsDialog(QDialog):
         made.save()
         self.saved = made
         self.accept()
+
+
+def _ends_soon(expires: str) -> bool:
+    """만료 7일 전부터 「곧 끝납니다」를 말한다 (STU-10)."""
+    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
+
+    if not expires:
+        return False
+    try:
+        until = datetime.fromisoformat(expires)
+    except ValueError:
+        return False
+    return until - datetime.now(UTC) <= timedelta(days=STUDIO_NOTICE_DAYS)
 
 
 def _env(name: str) -> str | None:

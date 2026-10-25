@@ -61,6 +61,8 @@ export const CONTRACT_MODULES = [
   "c5-password-change-request",
   "c5-revoke-request",
   "c5-session-info",
+  "c5-studio-login-request",
+  "c5-studio-login",
   "c5-virtual-worker-info",
   "c5-virtual-worker-request",
   "c5-who-am-i",

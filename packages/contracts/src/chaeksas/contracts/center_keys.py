@@ -105,6 +105,8 @@ class CenterKeyInfo(ContractModel):
     revoked_at: Timestamp | None = None
     #: 등록 승인이 만든 키면 그 요청 (C5 §등록 승인, ADR-0092). 없으면 사람·자동화가 발급했다.
     enrollment_id: str | None = None
+    #: Studio 로그인이 만든 키면 그 계정 (C5 §계정 권한과 Studio 로그인). 그 키의 행위자다.
+    account: str | None = None
 
 
 class CenterKeyCreated(CenterKeyInfo):

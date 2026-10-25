@@ -1,0 +1,28 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-studio-login-request",
+  "additionalProperties": true,
+  "description": "`POST /auth/studio-login` — 인증 없이 부른다 (C5 §계정 권한과 Studio 로그인).",
+  "properties": {
+    "machine_name": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Machine Name",
+      "type": "string"
+    },
+    "password": {
+      "title": "Password",
+      "type": "string"
+    },
+    "username": {
+      "title": "Username",
+      "type": "string"
+    }
+  },
+  "required": [
+    "username",
+    "password",
+    "machine_name"
+  ],
+  "title": "StudioLoginRequest",
+  "type": "object"
+}

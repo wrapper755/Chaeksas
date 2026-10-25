@@ -54,6 +54,7 @@ export default async function CenterKeysPage() {
       cell: (row) => {
         const target = row.bound_to ? `${row.bound_to.name} (${day(row.bound_to.first_seen)})` : "등록 전";
         // 등록 승인이 만든 키 (C7 `enrollment_id`, ADR-0092) — 사람이 건넨 키가 아니다.
+        if (row.account) return `로그인으로 발급 · ${row.account}`; // Studio 로그인 (C5)
         return row.enrollment_id ? `${target} · 승인으로 발급` : target;
       },
     },
