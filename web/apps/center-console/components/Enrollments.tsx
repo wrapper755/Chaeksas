@@ -52,7 +52,7 @@ export function Enrollments({
       header: "버전",
       width: "12ch",
       mono: true,
-      cell: (row) => String(row.versions.bot_ui ?? row.versions.server_runner ?? "—"),
+      cell: (row) => String(row.versions?.bot_ui ?? row.versions?.server_runner ?? "—"),
     },
     { key: "remote_addr", header: "요청한 곳", width: "16ch", mono: true, cell: (row) => row.remote_addr ?? "—" },
     { key: "requested_at", header: "요청 시각", width: "12ch", cell: (row) => clock(row.requested_at) },
