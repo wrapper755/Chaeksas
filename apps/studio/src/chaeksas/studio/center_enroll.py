@@ -225,6 +225,10 @@ class StudioEnrollment:
         self._save(found)
         return Outcome(waiting_text(found))
 
+    def forget(self) -> None:
+        """보낸 요청 기록을 지운다 (「다시 요청」 — 다음 걸음이 새로 보낸다)."""
+        self._save(None)
+
     def again(self) -> Outcome:
         """「다시 요청」 — 들고 있던 키(거부·만료)와 요청을 버리고 새로 요청한다."""
         self.credentials.delete(CENTER_KEY_NAME)
@@ -232,8 +236,53 @@ class StudioEnrollment:
         return self.request()
 
 
+# ─────────────────────────── 켤 때 (STU-16 「언제 뜨나」) ───────────────────────────
+
+#: 켤 때 무엇을 할까 — `connect`·`refused`면 STU-16을 띄우고, `soon`·`unreachable`이면 상태 표시줄 한 줄.
+NEED_NONE, NEED_CONNECT, NEED_REFUSED, NEED_SOON, NEED_UNREACHABLE = (
+    "none", "connect", "refused", "soon", "unreachable",
+)
+
+
+@dataclass(frozen=True)
+class Need:
+    kind: str
+    text: str = ""
+
+
+def need_at_start(
+    *, base_url: str, key: str | None, from_env: bool, key_expires: str, client: Any = None
+) -> Need:
+    """STU-16 표 — Studio를 켤 때 「Center에 연결」을 띄울지.
+
+    키가 있을 때만 **한 번** 묻는다(그 키가 살아 있나). 닿지 못한 것은 키 문제가 아니다 — 띄우지
+    않는다. 환경변수 키(자동화·CI)는 묻지도 않는다.
+    """
+    from chaeksas.studio.checks import center_status  # noqa: PLC0415
+
+    if from_env:
+        return Need(NEED_NONE)
+    if not key:
+        return Need(NEED_CONNECT)
+    said = center_status(base_url, key, client=client)
+    if said.startswith("키가 거부되었습니다"):
+        return Need(NEED_REFUSED, "키가 거부되었습니다 — 「다시 요청」으로 새로 승인받으세요")
+    if said.startswith("닿지 못함"):
+        return Need(NEED_UNREACHABLE, f"Center에 닿지 못했습니다 ({base_url})")
+    if expires_soon(key_expires):
+        return Need(NEED_SOON, f"{key_expires[:10]}에 Center 키가 만료됩니다 — 설정 → Center에서 「다시 요청」하세요")
+    return Need(NEED_NONE)
+
+
 __all__ = [
+    "NEED_CONNECT",
+    "NEED_NONE",
+    "NEED_REFUSED",
+    "NEED_SOON",
+    "NEED_UNREACHABLE",
     "ENROLL_SECRET",
+    "Need",
+    "need_at_start",
     "STATE_FILE",
     "Outcome",
     "StudioEnrollment",

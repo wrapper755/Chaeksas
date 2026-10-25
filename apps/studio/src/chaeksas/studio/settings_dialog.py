@@ -1,7 +1,7 @@
 """STU-10 설정 — 왼쪽 분류 목록, 오른쪽 그 분류의 칸.
 
-- **「저장」을 누를 때까지 아무것도 바뀌지 않는다** — 키도 그때 OS 비밀 저장소에 간다. **예외는 「Center」의
-  「연결 테스트」·「다시 요청」**이다 — 누르는 그 자리에서 등록 요청을 보내거나 승인된 키를 받고 주소를
+- **「저장」을 누를 때까지 아무것도 바뀌지 않는다** — 키도 그때 OS 비밀 저장소에 간다. **예외는 「Center」가
+  여는 STU-16 「Center에 연결」**이다 — 그 창은 누르는 그 자리에서 등록 요청을 보내거나 키를 받고 주소를
   적는다 (ADR-0093). 그래서 창을 「취소」로 닫아도 `center_changed`에 바뀐 설정이 남는다.
 - 키는 칸에 **보이지 않는다** — 저장된 것이 있으면 자리 글로 알린다. 새로 넣을 때만 친다.
 - **쓰는 곳이 있는 칸만 둔다** (ADR-0073) — 메일·비밀·모델 공급자·temperature는 읽는 곳이 없어 없다.
@@ -17,8 +17,7 @@ from collections.abc import Iterable
 from dataclasses import replace
 from typing import Any
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -44,7 +43,7 @@ from PySide6.QtWidgets import (
 from chaeksas.contracts import SCOPE_STUDIO, ConfigurationItem
 from chaeksas.qt.theme import THEME_DARK, THEME_LIGHT, THEME_SYSTEM
 from chaeksas.qt.theme.tokens import SPACE_1
-from chaeksas.studio.center_enroll import Outcome, StudioEnrollment, connected_text, waiting_text
+from chaeksas.studio.center_enroll import StudioEnrollment, connected_text, expires_soon, waiting_text
 from chaeksas.studio.checks import (
     EXTERNAL_NOT_CHECKED,
     AppPlaces,
@@ -55,7 +54,9 @@ from chaeksas.studio.checks import (
     worker_place,
     worker_status,
 )
+from chaeksas.studio.connect_dialog import CenterConnectDialog
 from chaeksas.studio.credentials import (
+    CENTER_KEY_NAME,
     ENV_CENTER_API_KEY,
     ENV_LLM_API_KEY,
     SecretsUnavailable,
@@ -247,10 +248,10 @@ class StudioSettingsDialog(QDialog):
         return page
 
     def _center_page(self) -> QWidget:
-        """STU-10 「Center」 — 주소 하나와 상태 줄 (ADR-0093). 아이디·비밀번호도, 키 칸도 없다.
+        """STU-10 「Center」 — 주소·상태 줄·「연결 테스트」, 필요할 때만 「다시 요청」 (ADR-0093).
 
-        「연결 테스트」가 등록 요청을 보내거나 승인됐나 묻고, 승인되면 키를 받아 비밀 저장소에 둔다.
-        기다리는 동안은 **창이 열려 있을 때만** 10초마다 묻는다 (Studio에는 상시 주기가 없다).
+        **들어오는 일 자체는 STU-16 「Center에 연결」**이 한다 — 키가 없으면 「연결 테스트」가 그 창을
+        연다. 이 탭은 「지금 어떤가」를 보고 고치는 자리다. 아이디·비밀번호도, 키 칸도 없다.
         """
         page = QWidget()
         form = QFormLayout(page)
@@ -259,33 +260,18 @@ class StudioSettingsDialog(QDialog):
         self.center_result = QLabel("")
         self.center_result.setWordWrap(True)
         self.center_result.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.center_code = QLabel("")
-        self.center_code.setProperty("role", "h2")
-        self.center_code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.center_copy = QPushButton("복사")
-        self.center_copy.clicked.connect(self._copy_code)
         self.center_test = QPushButton("연결 테스트")
         self.center_test.clicked.connect(self.test_center)
         self.center_again = QPushButton("다시 요청")
         self.center_again.clicked.connect(self.request_again)
 
         form.addRow("Center 주소", self.center_url)
-        code_row = QHBoxLayout()
-        code_row.addWidget(self.center_code)
-        code_row.addWidget(self.center_copy)
-        code_row.addStretch(1)
         form.addRow("", self.center_result)
-        form.addRow("", code_row)
         buttons = QHBoxLayout()
         buttons.addWidget(self.center_test)
         buttons.addWidget(self.center_again)
         buttons.addStretch(1)
         form.addRow("", buttons)
-
-        # 기다리는 동안만 돈다 — 창을 닫으면 함께 사라진다.
-        self.center_timer = QTimer(self)
-        self.center_timer.setInterval(10_000)
-        self.center_timer.timeout.connect(self._poll_center)
         self._show_center(self._center_text())
         return page
 
@@ -305,57 +291,45 @@ class StudioSettingsDialog(QDialog):
             return connected_text(self.settings.center_key_name, self.settings.center_key_expires)
         found = self._enrollment().current()
         if found is None:
-            return "아직 등록 요청을 보내지 않았습니다 — 주소를 넣고 「연결 테스트」를 누르세요."
+            return "아직 Center에 들어오지 않았습니다 — 「연결 테스트」를 누르세요."
         return waiting_text(found)
 
-    def _show_center(self, text: str) -> None:
-        """상태 줄·요청 코드·「다시 요청」을 지금 상태에 맞춘다. 기다리면 10초 주기를 켠다."""
-        from_env = bool(_env(ENV_CENTER_API_KEY))
-        has_key = bool(self.credentials.stored_center_api_key())
-        found = None if (from_env or has_key) else self._enrollment().current()
-        waiting = found is not None and found.state == "pending"
+    def _show_center(self, text: str, *, refused: bool = False) -> None:
+        """상태 줄과 「다시 요청」. **「다시 요청」은 거절·만료·키 거부·만료 14일 안일 때만** (STU-10).
+
+        연결이 멀쩡할 때 보이면 쓰던 키를 버리고 처음부터 다시 승인받게 된다 — 보이지 않는다.
+        """
         self.center_result.setText(text)
-        self.center_code.setText(found.code if waiting and found is not None else "")
-        self.center_code.setVisible(waiting)
-        self.center_copy.setVisible(waiting)
-        self.center_again.setVisible(not from_env and (has_key or (found is not None and found.state != "pending")))
-        self.center_test.setEnabled(True)
-        if waiting:
-            self.center_timer.start()
+        if _env(ENV_CENTER_API_KEY):
+            self.center_again.setVisible(False)
+            return
+        if self.credentials.stored_center_api_key():
+            needed = refused or expires_soon(self.settings.center_key_expires)
         else:
-            self.center_timer.stop()
+            found = self._enrollment().current()
+            needed = found is not None and found.state in ("rejected", "expired")
+        self.center_again.setVisible(needed)
 
-    def _remember_center(self, *, key_name: str | None = None, expires: str | None = None) -> None:
-        """그 자리에서 주소·키 이름·만료를 적는다 — 「저장」을 기다리지 않는다 (ADR-0093)."""
-        made = replace(
-            self.settings,
-            center_url=self.center_url.text().strip() or self.settings.center_url,
-            center_key_name=self.settings.center_key_name if key_name is None else key_name,
-            center_key_expires=self.settings.center_key_expires if expires is None else expires,
+    def _connect(self, *, send_now: bool = False) -> None:
+        """STU-16을 연다. 그 창은 「저장」이 없어 주소·키 이름을 그 자리에서 적는다 — 받아 온다."""
+        dialog = CenterConnectDialog(
+            replace(self.settings, center_url=self.center_url.text().strip() or self.settings.center_url),
+            credentials=self.credentials,
+            client=self.client,
+            send_now=send_now,
+            parent=self,
         )
-        made.save()
-        self.settings = made
-        self.center_changed = made
-
-    def _take(self, outcome: Outcome) -> None:
-        if outcome.got_key:
-            self._remember_center(key_name=outcome.key_name, expires=outcome.expires_at)
-        else:
-            self._remember_center()
-        self._show_center(outcome.text)
-
-    def _poll_center(self) -> None:
-        self._take(self._enrollment().step())
-
-    def _copy_code(self) -> None:
-        clipboard = QGuiApplication.clipboard()
-        if clipboard is not None:
-            clipboard.setText(self.center_code.text())
+        dialog.exec()
+        self.settings = dialog.settings
+        self.center_changed = dialog.settings
+        self.center_url.setText(dialog.settings.center_url)
+        self._show_center(dialog.status.text() if dialog.connected else self._center_text())
 
     def request_again(self) -> None:
-        """「다시 요청」 — 거절·만료된 뒤, 또는 키가 거부·만료되었을 때 새로 승인받는다."""
-        self._remember_center(key_name="", expires="")
-        self._take(self._enrollment().again())
+        """「다시 요청」 — 들고 있던 키와 요청을 버리고 STU-16에서 새로 요청한다."""
+        self.credentials.delete(CENTER_KEY_NAME)
+        self._enrollment().forget()
+        self._connect(send_now=True)
 
     def _worker_page(self) -> QWidget:
         page = QWidget()
@@ -480,15 +454,16 @@ class StudioSettingsDialog(QDialog):
         self.llm_result.setText(llm_status(self.llm_url.text().strip(), key, client=self.client))
 
     def test_center(self) -> None:
-        """키가 있으면 닿는지 본다. 없으면 **등록 요청을 보내거나 승인됐나 묻는다** (ADR-0093)."""
+        """키가 있으면 닿는지 본다. 없으면 **STU-16 「Center에 연결」을 연다** (ADR-0093)."""
         key = self.credentials.center_api_key()
         if key is None:
-            self._take(self._enrollment().step())
+            self._connect()
             return
         said = center_status(self.center_url.text().strip(), key, client=self.client)
-        if said.startswith("키가 거부되었습니다"):
+        refused = said.startswith("키가 거부되었습니다")
+        if refused:
             said = "키가 거부되었습니다 — 「다시 요청」으로 새로 승인받으세요"
-        self._show_center(said)
+        self._show_center(said, refused=refused)
 
     def test_worker(self) -> None:
         self.worker_state.setText(worker_status(self.worker, client=self.client))

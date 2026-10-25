@@ -46,6 +46,7 @@ from chaeksas.studio import (
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.checks import refs_in
+from chaeksas.studio.connect_dialog import CenterConnectDialog
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extension_dialog import StudioExtensionsDialog, pin_patch
 from chaeksas.studio.extensions import Extensions
@@ -68,12 +69,6 @@ NO_PROCESS = "(BPM 프로세스를 선택하거나 새로 만드세요)"
 DEFAULT_SIZE = (1400, 860)
 
 PACKAGE_FILTER = "패키지 (*.zip)"
-
-#: Center가 필요한 동작을 설정 없이 눌렀을 때 (STU-10 맨 아래).
-NO_CENTER_SETTINGS = (
-    "Center에 아직 들어오지 않았습니다.\n\n지금 설정 → Center를 열까요?"
-)
-
 
 class MainWindow(QMainWindow):
     """STU-01. 열린 정의 하나를 캔버스가 들고 있고, 디스크가 원본이다."""
@@ -346,6 +341,40 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if isinstance(app, QApplication):
             apply_theme(app, choice=choice)
+
+    def ensure_center(self, *, refused: bool = False, send_now: bool = False) -> bool:
+        """STU-16 「Center에 연결」을 띄운다. 키를 받았으면 참 — 부르는 쪽이 원래 동작을 이어 간다.
+
+        「나중에」로 닫아도 주소는 적혀 있을 수 있어 설정은 늘 받아 온다 (그 창은 「저장」이 없다).
+        """
+        dialog = CenterConnectDialog(self.settings, refused=refused, send_now=send_now, parent=self)
+        dialog.exec()
+        self.settings = dialog.settings
+        if dialog.connected:
+            self.say(dialog.status.text())
+            self.refresh_catalog()
+        return dialog.connected
+
+    def check_center_at_start(self) -> None:
+        """Studio를 켤 때 한 번 (STU-16 「언제 뜨나」). **메인 창이 먼저 뜬 뒤** 부른다.
+
+        키가 없거나 거부됐을 때만 창을 띄운다. 닿지 못한 것·만료 14일 안은 상태 표시줄 한 줄이다.
+        """
+        import os  # noqa: PLC0415
+
+        from chaeksas.studio import center_enroll  # noqa: PLC0415
+        from chaeksas.studio.credentials import ENV_CENTER_API_KEY, StudioCredentials  # noqa: PLC0415
+
+        need = center_enroll.need_at_start(
+            base_url=self.settings.center_url,
+            key=StudioCredentials().center_api_key(),
+            from_env=bool(os.environ.get(ENV_CENTER_API_KEY)),
+            key_expires=self.settings.center_key_expires,
+        )
+        if need.kind in (center_enroll.NEED_CONNECT, center_enroll.NEED_REFUSED):
+            self.ensure_center(refused=need.kind == center_enroll.NEED_REFUSED)
+        elif need.text:
+            self.say(need.text)
 
     def open_settings(self) -> None:
         """STU-10. 저장하면 이 창의 설정도 바뀐다 (다음 시험 실행부터 쓴다)."""
@@ -771,4 +800,4 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
-__all__ = ["DEFAULT_SIZE", "NO_CENTER_SETTINGS", "NO_PROCESS", "TITLE", "MainWindow"]
+__all__ = ["DEFAULT_SIZE", "NO_PROCESS", "TITLE", "MainWindow"]

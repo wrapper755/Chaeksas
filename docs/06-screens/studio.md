@@ -388,7 +388,7 @@ id 규칙(「id는 소문자·숫자·`.`·`_`·`-`만 쓰고 소문자나 숫�
 
 > 상태: **분류 여섯이 모두 돈다** (`apps/studio/settings_dialog.py`). **쓰는 곳이 있는 칸만 둔다** ([ADR-0073](../decisions/0073-studio-settings-only-what-is-used.md)) — 「메일」(시험 실행은 메일을 담아 두기만 한다, C14)·「비밀」(툴팩이 없다, ADR-0050)과 「LLM」의 공급자(OpenAI 호환 하나, ADR-0027)·temperature(현장에 그 칸이 없어 시험만 다른 답을 낸다)·화면 인식 모델, 「외형」의 캔버스 팔레트(bpmn-js가 스스로 접는다)는 **두지 않는다**. 다시 넣으려면 읽는 곳을 먼저 만든다.
 
-> 「Center」 분류는 **초안이다** ([ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md) — 코드 아직). 지금 코드는 들어오는 일(요청 코드·10초마다 묻기)을 이 탭이 직접 하고, **「다시 요청」이 연결된 때도 보인다**(흠). 들어오는 일은 STU-16으로 옮긴다.
+> 「Center」 분류가 **이 모양으로 돈다** ([ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md) — 들어오는 일은 STU-16 `connect_dialog.py`, 요청·키 받기는 `center_enroll.py`).
 
 최소 폭 720. 왼쪽 분류 목록. 단추 「저장」/「취소」 — **「저장」을 누를 때까지 아무것도 바뀌지 않는다** (키도 그때 비밀 저장소에 간다). **예외는 「Center」의 「다시 요청」**이다 — 누르는 그 자리에서 키를 버리고 STU-16을 연다.
 
@@ -535,7 +535,7 @@ Studio에 켜진 확장과 각 확장이 더한 것을 본다 ([ADR-0018](../dec
 
 ## STU-16 Center에 연결 (신규, [ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md))
 
-> 상태: **초안** — 코드 아직. 지금 코드는 Studio를 켤 때 묻지 않고, 설정 창(STU-10 「Center」)의 「연결 테스트」를 눌러야 등록 요청이 나간다.
+> 상태: **돈다** (`apps/studio/connect_dialog.py`) — 켤 때 판단은 `center_enroll.need_at_start`(Qt를 모른다), 메인 창이 뜬 뒤 `MainWindow.check_center_at_start`가 한 번 부른다. 올리기는 `MainWindow.ensure_center`로 이 창을 연다.
 
 Studio가 Center에 들어오는 창이다 — Bot UI를 처음 켜면 BUI-03이 먼저 뜨는 것과 같은 자리. **아이디·비밀번호는 없고** 요청 코드를 관리자가 승인한다 (C5 §Studio 등록 요청과 승인). 480×260, 모달.
 

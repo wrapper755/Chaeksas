@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -269,47 +270,89 @@ def approve_studio(center: Any, name: str = "김OO 설계 PC") -> None:
     assert done.status_code == 200, done.text
 
 
-def test_studio_is_let_in_by_approval_not_a_password(
-    qt: Any, settings: Settings, extensions: Extensions, center: Any
-) -> None:
-    """STU-10 「Center」 — 주소만 넣고 「연결 테스트」, 관리자가 승인하면 키를 받는다 (ADR-0093)."""
-    vault = Vault()
-    found = dialog(settings, extensions, vault, client=center)
-    assert not hasattr(found, "center_key") and not hasattr(found, "center_password"), "키·비밀번호 칸이 없다"
-    found.center_url.setText("http://center.test")
+def connect_window(settings: Settings, vault: Vault, center: Any, **over: Any) -> Any:
+    from chaeksas.studio.connect_dialog import CenterConnectDialog  # noqa: PLC0415
 
-    found.test_center()  # 등록 요청을 보낸다
-    code = found.center_code.text()
-    assert code and code in found.center_result.text()
-    assert not found.center_code.isHidden() and found.center_timer.isActive(), "기다리는 동안 10초마다 묻는다"
-    assert found.center_changed is not None, "「저장」을 기다리지 않는다"
+    return CenterConnectDialog(settings, credentials=Credentials(vault), client=center, **over)
+
+
+def test_stu16_lets_studio_in_by_approval(qt: Any, settings: Settings, center: Any) -> None:
+    """STU-16 — 주소를 넣고 「보내기」, 관리자가 승인하면 키를 받는다. 아이디·비밀번호는 없다 (ADR-0093)."""
+    vault = Vault()
+    found = connect_window(replace(settings, center_url="http://center.test"), vault, center)
+    assert not found.send.isHidden() and found.code.isHidden(), "요청이 없으면 「보내기」만"
+
+    found.send_request()
+    code = found.code.text()
+    assert code and code in found.status.text()
+    assert found.send.isHidden() and not found.copy.isHidden()
+    assert found.timer.isActive(), "기다리는 동안 10초마다 묻는다"
+    assert found.again.isHidden(), "기다리는 중에는 「다시 요청」이 없다"
 
     approve_studio(center)
-    found._poll_center()
+    found.poll()
+    assert found.connected and not found.timer.isActive()
+    assert found.status.text().startswith("연결됨 — 「김OO 설계 PC」으로 들어와 있습니다")
     key = vault.values[("chaeksas-studio", CENTER_KEY_NAME)]
-    assert key.startswith("chk_ctr_")
-    assert found.center_result.text().startswith("연결됨 — 「김OO 설계 PC」으로 들어와 있습니다")
-    assert not found.center_timer.isActive()
     raw = settings.path.read_text(encoding="utf-8")
-    assert key not in raw and "김OO 설계 PC" in raw
-
-    found.test_center()
-    assert found.center_result.text() == "연결됨 — 서비스 앱 0개를 읽었습니다"
-    again = dialog(Settings.load(settings.path), extensions, vault)
-    assert again.center_result.text().startswith("연결됨 — 「김OO 설계 PC」"), "다시 열면 바깥에 묻지 않고 말한다"
+    assert key not in raw and "김OO 설계 PC" in raw and "http://center.test" in raw, "「저장」 없이 그 자리에서 적는다"
 
 
-def test_asking_again_drops_the_old_key(qt: Any, settings: Settings, extensions: Extensions, center: Any) -> None:
+def test_stu16_later_keeps_the_request_for_next_time(qt: Any, settings: Settings, center: Any) -> None:
+    vault = Vault()
+    first = connect_window(replace(settings, center_url="http://center.test"), vault, center)
+    first.send_request()
+    code = first.code.text()
+    first.reject()  # 「나중에」
+    assert not first.timer.isActive(), "닫힌 동안은 묻지 않는다"
+    again = connect_window(replace(Settings.load(settings.path), data_dir=settings.data_dir), vault, center)
+    assert again.code.text() == code, "다음에 뜨면 같은 코드다"
+
+
+def test_stu16_refused_key_offers_asking_again(qt: Any, settings: Settings, center: Any) -> None:
     vault = Vault()
     vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_" + "x" * 40)
-    found = dialog(settings, extensions, vault, client=center)
-    found.center_url.setText("http://center.test")
-    found.test_center()
-    assert found.center_result.text() == "키가 거부되었습니다 — 「다시 요청」으로 새로 승인받으세요"
-    assert "x" * 40 not in found.center_result.text()
-    found.request_again()
+    found = connect_window(replace(settings, center_url="http://center.test"), vault, center, refused=True)
+    assert "키가 거부되었습니다" in found.status.text() and not found.again.isHidden()
+    found.ask_again()
     assert ("chaeksas-studio", CENTER_KEY_NAME) not in vault.values
-    assert found.center_code.text() in found.center_result.text()
+    assert found.code.text() in found.status.text() and found.again.isHidden()
+
+
+def test_need_at_start(center: Any) -> None:
+    """STU-16 「언제 뜨나」 — 키가 없거나 거부됐을 때만 창, 닿지 못함·만료 임박은 한 줄."""
+    from chaeksas.studio import center_enroll as ce  # noqa: PLC0415
+
+    base: dict[str, Any] = {"base_url": "http://center.test", "key": None, "from_env": False, "key_expires": ""}
+
+    def ask(**over: Any) -> Any:
+        return ce.need_at_start(**(base | {"client": center} | over))
+
+    assert ask().kind == ce.NEED_CONNECT
+    assert ask(from_env=True).kind == ce.NEED_NONE
+    assert ask(key="chk_ctr_" + "x" * 40).kind == ce.NEED_REFUSED
+    assert ask(key="chk_ctr_" + "x" * 40, base_url="http://127.0.0.1:9", client=None).kind == ce.NEED_UNREACHABLE
+
+
+def test_center_tab_hides_ask_again_while_connected(
+    qt: Any, settings: Settings, extensions: Extensions, center: Any
+) -> None:
+    """STU-10 — 연결이 멀쩡하면 「다시 요청」이 없다 (누르면 쓰던 키를 버린다)."""
+    vault = Vault()
+    found = connect_window(replace(settings, center_url="http://center.test"), vault, center)
+    found.send_request()
+    approve_studio(center)
+    found.poll()
+    tab = dialog(replace(Settings.load(settings.path), data_dir=settings.data_dir), extensions, vault, client=center)
+    assert tab.center_result.text().startswith("연결됨")
+    assert tab.center_again.isHidden()
+    tab.test_center()
+    assert tab.center_result.text() == "연결됨 — 서비스 앱 0개를 읽었습니다" and tab.center_again.isHidden()
+
+    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_" + "x" * 40)  # 폐기된 키라 치자
+    tab.test_center()
+    assert tab.center_result.text() == "키가 거부되었습니다 — 「다시 요청」으로 새로 승인받으세요"
+    assert not tab.center_again.isHidden()
 
 
 def test_an_env_key_skips_the_request(

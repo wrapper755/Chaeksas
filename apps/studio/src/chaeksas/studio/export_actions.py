@@ -28,7 +28,6 @@ if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (창이 이 �
 PACKAGE_FILTER = "패키지 (*.zip)"
 
 #: Center가 필요한 동작을 설정 없이 눌렀을 때 (STU-10 맨 아래).
-NO_CENTER_SETTINGS = "Center에 아직 들어오지 않았습니다.\n\n지금 설정 → Center를 열까요?"
 
 NO_PROCESS = "열린 BPM 프로세스가 없습니다."
 
@@ -106,23 +105,16 @@ def _write(window: MainWindow, what: str, make: Callable[[], Path]) -> None:
 
 
 def uploader(window: MainWindow) -> upload.CenterUploader | None:
-    """올릴 자리. 설정이 없으면 **STU-10을 열어 주고 다시 본다** (STU-10 맨 아래).
+    """올릴 자리. 키가 없으면 **STU-16 「Center에 연결」을 띄우고 다시 본다** (ADR-0093).
 
-    사람이 「아니오」를 고르거나 저장하지 않으면 `None`이다 — 그때는 부르는 쪽이 조용히
-    그만둔다 (이미 창으로 말했다).
+    사람이 「나중에」로 닫으면 `None`이다 — 그때는 부르는 쪽이 조용히 그만둔다 (이미 창으로 말했다).
     """
     found = upload.from_settings(window.settings)
     if found is not None:
         return found
-    answer = QMessageBox.question(
-        window,
-        window.windowTitle(),
-        NO_CENTER_SETTINGS,
-        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-    )
-    if answer != QMessageBox.StandardButton.Yes:
+    # 키가 없다 — **STU-16 「Center에 연결」**을 띄운다. 승인되어 닫히면 이어 가고, 「나중에」면 그만둔다.
+    if not window.ensure_center():
         return None
-    window.open_settings()
     return upload.from_settings(window.settings)
 
 
@@ -204,7 +196,6 @@ def _upload(window: MainWindow, what: str, make: Callable[[Path], Path]) -> None
 
 
 __all__ = [
-    "NO_CENTER_SETTINGS",
     "NO_PROCESS",
     "PACKAGE_FILTER",
     "export_package",
