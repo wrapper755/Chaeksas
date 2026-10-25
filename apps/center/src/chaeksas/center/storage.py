@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -336,13 +337,20 @@ def now_iso() -> str:
 
 
 class Store:
-    """Center의 저장소 하나. 스레드마다 연결을 따로 쓴다 (FastAPI는 스레드 풀에서 돈다)."""
+    """Center의 저장소 하나 — **연결 하나를 락 하나로** 나눠 쓴다 (FastAPI는 스레드 풀에서 돈다).
+
+    락 없이 한 연결을 여러 스레드가 동시에 쓰면 sqlite3가 `InterfaceError: bad parameter or other
+    API misuse`를 낸다 — 콘솔이 한 화면에서 여럿을 함께 읽을 때 세션 찾기가 그렇게 깨져
+    401·500이 났다. 트랜잭션은 끝날 때까지 락을 쥔다 (다른 스레드의 읽기가 끼지 않게).
+    """
 
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         if str(db_path) != ":memory:":
             db_path.parent.mkdir(parents=True, exist_ok=True)
         # check_same_thread=False + 연결마다 락: 작은 규모에서 가장 단순하다.
+        # 재진입 락이다 — 트랜잭션 안에서 같은 스레드가 `rows()`를 부를 수 있다.
+        self._lock = threading.RLock()
         self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         _use_wal(self._conn)
@@ -351,27 +359,30 @@ class Store:
         migrate(self._conn, baseline=SCHEMA)
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Cursor]:
         """트랜잭션 하나. 예외가 나면 되돌린다."""
-        cur = self._conn.cursor()
-        try:
-            yield cur
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
-        finally:
-            cur.close()
+        with self._lock:
+            cur = self._conn.cursor()
+            try:
+                yield cur
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
+            finally:
+                cur.close()
 
     def rows(self, sql: str, params: Sequence[Any] = ()) -> list[sqlite3.Row]:
-        cur = self._conn.execute(sql, params)
-        try:
-            return cur.fetchall()
-        finally:
-            cur.close()
+        with self._lock:
+            cur = self._conn.execute(sql, params)
+            try:
+                return cur.fetchall()
+            finally:
+                cur.close()
 
     def row(self, sql: str, params: Sequence[Any] = ()) -> sqlite3.Row | None:
         found = self.rows(sql, params)

@@ -234,7 +234,6 @@ class MainWindow(QMainWindow):
         bar = self.menuBar()
         files = bar.addMenu("파일")
         self._add(files, "새 BPM 프로세스...", self.new_process, QKeySequence.StandardKey.New)
-        self._add(files, "예제 BPM 프로세스 가져오기...", self.import_example)
         self._add(
             files, "파일에서 BPM 프로세스 가져오기...", lambda: file_actions.import_file(self)
         )
@@ -800,8 +799,6 @@ class MainWindow(QMainWindow):
     def new_process(self) -> None:
         file_actions.new_process(self)
 
-    def import_example(self) -> None:
-        file_actions.import_example(self)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 — Qt 이름 그대로
         """닫기 보호 (U11) → **돌던 것 멈추기** → 마지막 정의 기억하기."""

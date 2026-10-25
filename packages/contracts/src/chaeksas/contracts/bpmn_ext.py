@@ -1267,7 +1267,10 @@ def server_blockers(
         if ai is not None and ai.domain in PC_ONLY_DOMAINS:
             items.append(f"{node.id}: AI 태스크 domain={ai.domain}")
         approval: Approval | None = node.prop("approval")
-        if approval is not None and approval.location == "field":
+        if approval is not None and node.kind == "manualTask":
+            # 확인은 `location`과 상관없이 늘 현장이다 (C6·ADR-0015) — C1 R2 `human.confirmation`과 같다.
+            items.append(f"{node.id}: 확인 (늘 현장에서 답한다)")
+        elif approval is not None and approval.location == "field":
             items.append(f"{node.id}: 현장 결재")
         task: ExtensionTask | None = node.prop("task")
         if task is not None and task_type_locations is not None:

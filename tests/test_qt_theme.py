@@ -349,3 +349,26 @@ def test_the_checkbox_indicator_really_has_a_box(app: Any) -> None:
 
     assert colors["primary"].upper() in seen, "켜진 표시기의 바탕이 없다"
     assert colors["primary.fg"].upper() in seen, "✓가 없다"
+
+
+def test_standard_buttons_speak_korean(app: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Qt 표준 단추(OK·Cancel·Save)가 영어로 남지 않는다 — 테마를 입히면 번역도 단다."""
+    from PySide6.QtWidgets import QDialogButtonBox, QMessageBox  # noqa: PLC0415
+
+    from chaeksas.qt.messages import DISCARD_LABEL, ask_unsaved  # noqa: PLC0415
+
+    apply_theme(app)
+    apply_theme(app)  # 두 번 입혀도 번역은 하나다
+    buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+    assert sorted(b.text() for b in buttons.buttons()) == sorted(["확인", "취소"])
+
+    seen: list[str] = []
+
+    def answer(box: QMessageBox) -> int:  # 모달 루프 없이 — 단추 글을 보고 「저장 안 함」을 누른다
+        seen.extend(b.text() for b in box.buttons())
+        box.button(QMessageBox.StandardButton.Discard).click()
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", answer)
+    assert ask_unsaved(None, "제목", "본문") == QMessageBox.StandardButton.Discard
+    assert sorted(seen) == sorted(["저장", DISCARD_LABEL, "취소"])

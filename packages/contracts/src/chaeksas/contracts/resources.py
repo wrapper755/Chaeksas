@@ -11,12 +11,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 
 from chaeksas.contracts._base import ContractModel, Timestamp
 from chaeksas.contracts._semver import InvalidVersion, satisfies
+from chaeksas.contracts.extension import AdapterOperation
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.service_app import Operation
 
@@ -208,17 +210,42 @@ def _check_extensions(m: Manifest, index: ResourceIndex) -> list[MissingResource
     return out
 
 
+def _adapter_operations(ext: ExtensionResource | None) -> dict[str, AdapterOperation] | None:
+    """외부 확장의 어댑터 작업들 (이름 → 작업). 외부 확장이 아니거나 어댑터가 없으면 `None`."""
+    if ext is None or ext.tier != "external" or not ext.definition:
+        return None
+    adapter = (ext.definition.get("service") or {}).get("adapter")
+    if not isinstance(adapter, dict):
+        return None
+    found: dict[str, AdapterOperation] = {}
+    for raw in adapter.get("operations") or []:
+        try:
+            op = AdapterOperation.model_validate(raw)
+        except ValidationError:
+            continue  # 등록 때 E3가 이미 걸렀다 — 여기서 하나 때문에 목록을 깨지 않는다
+        found[op.name] = op
+    return found
+
+
 def _check_service_apps(m: Manifest, index: ResourceIndex) -> list[MissingResource]:
     out = []
     server = m.run_location == "server"
     for need in m.requires.service_apps:
         app = index.service_app(need.app_id)
-        if app is None:
-            out.append(MissingResource(type="service_app", id=need.app_id, reason="not_registered"))
-            continue
+        # `chk:serviceCall`은 서비스 앱과 외부 확장을 가리지 않는다 (C13 §4) — 같은 id의 외부
+        # 확장이 있으면 그 어댑터 작업으로 본다. 없다고 하면 등록된 앱에 「등록되지 않음」이 뜬다.
+        find_op: Callable[[str], Any]
+        if app is not None:
+            find_op = app.operation
+        else:
+            adapter = _adapter_operations(index.extension(need.app_id))
+            if adapter is None:
+                out.append(MissingResource(type="service_app", id=need.app_id, reason="not_registered"))
+                continue
+            find_op = adapter.get
         for name in need.operations:
             op_id = f"{need.app_id}.{name}"
-            op = app.operation(name)
+            op = find_op(name)
             if op is None:
                 out.append(MissingResource(type="operation", id=op_id, reason="not_found"))
                 continue

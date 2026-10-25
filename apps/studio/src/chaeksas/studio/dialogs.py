@@ -87,8 +87,7 @@ class NewProcessDialog(QDialog):
 
     **「예제에서 가져오기」는 「첫 정의」의 셋째 줄이다** — 고른 예제로 id·이름을 채우되 사람이
     고쳐 적은 칸은 덮지 않는다. 「확인」은 `Workspace.import_example`로 DMN·호출 대상·케이스를
-    함께 가져온다. 파일 메뉴 「예제 BPM 프로세스 가져오기...」는 이 줄을 골라 둔 채로 연다
-    (`example=True`).
+    함께 가져온다. 파일 메뉴에 따로 두지 않는다 — 「새 BPM 프로세스...」의 이 줄이 그 자리다.
 
     **「다른 이름으로 저장...」(STU-01)도 이 창이다** — 받는 칸이 같고 다른 것은 「만든다」와
     「복사한다」뿐이다 (`source`). 그래서 그룹 만들기·오류 보이기가 한 자리에 있다. 그때는
@@ -103,7 +102,6 @@ class NewProcessDialog(QDialog):
         source: BpmProcess | None = None,
         opened: Path | None = None,
         imported: Path | None = None,
-        example: bool = False,
         examples: Path | None = None,
     ) -> None:
         super().__init__(parent)
@@ -153,8 +151,6 @@ class NewProcessDialog(QDialog):
             form.addRow("담당자", self.owner_box)
             if imported is None:
                 form.addRow("첫 정의", self._first_choice())
-                if example and self.example_pick.isEnabled():
-                    self.example_pick.setChecked(True)
             else:
                 shown = QLabel(str(imported), self)
                 shown.setWordWrap(True)
@@ -310,9 +306,8 @@ class NewProcessDialog(QDialog):
         source: BpmProcess | None = None,
         opened: Path | None = None,
         imported: Path | None = None,
-        example: bool = False,
     ) -> BpmProcess | None:
-        dialog = cls(parent, workspace, source=source, opened=opened, imported=imported, example=example)
+        dialog = cls(parent, workspace, source=source, opened=opened, imported=imported)
         return dialog.made if dialog.exec() == QDialog.DialogCode.Accepted else None
 
 

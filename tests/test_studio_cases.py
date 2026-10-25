@@ -294,7 +294,7 @@ def test_closing_with_changes_asks_first(app: Any, tmp_path: Path, monkeypatch: 
 
     closed: list[str] = []
     dialog.rejected.connect(lambda: closed.append("닫혔다"))
-    monkeypatch.setattr(QMessageBox, "question", staticmethod(answer))
+    monkeypatch.setattr("chaeksas.studio.case_dialog.ask_unsaved", answer)
     dialog.reject()
 
     assert asked, "저장 안 한 변경이 있는데 묻지 않았다"
@@ -304,3 +304,51 @@ def test_closing_with_changes_asks_first(app: Any, tmp_path: Path, monkeypatch: 
 def test_closing_without_changes_does_not_ask(app: Any, tmp_path: Path) -> None:
     made, definition = imported(tmp_path, RECONCILIATION)
     assert CaseDialog(None, made, definition).unsaved() is False
+
+
+def test_adding_a_row_keeps_the_rows_already_there_alive(app: Any, tmp_path: Path) -> None:
+    """「추가」가 있는 줄의 콤보를 지우지 않는다 — 지워진 콤보를 만지면 Studio가 죽었다.
+
+    Qt는 지울 위젯을 `deleteLater`로 미루고 **이벤트 루프가 돌 때** 지운다. 시험은 그 루프를
+    돌지 않으므로 미뤄 둔 삭제를 손으로 처리해 현장과 같게 만든다.
+    """
+    import shiboken6  # noqa: PLC0415
+    from PySide6.QtCore import QCoreApplication, QEvent  # noqa: PLC0415
+
+    made, definition = imported(tmp_path, RECONCILIATION)
+    dialog = CaseDialog(None, made, definition)
+    dialog._add()
+    dialog.input_block.add_row()
+    first = dialog.inputs.cellWidget(0, 0)
+    dialog.input_block.add_row()
+    dialog.input_block.add_row()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert shiboken6.isValid(first) and dialog.inputs.cellWidget(0, 0) is first
+    assert dialog.inputs.rowCount() == 3
+
+    dialog.inputs.setCurrentCell(1, 0)
+    dialog.input_block.drop_row()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    assert shiboken6.isValid(first) and dialog.inputs.rowCount() == 2
+
+
+def test_the_four_tables_are_tabs_that_show_three_rows_and_their_count(app: Any, tmp_path: Path) -> None:
+    """STU-07 — 표 넷은 탭이고, 탭 이름에 줄 수가 붙고, 표는 줄 셋이 보이는 높이다."""
+    from chaeksas.studio.case_dialog import VISIBLE_ROWS  # noqa: PLC0415
+
+    made, definition = imported(tmp_path, RECONCILIATION)
+    dialog = CaseDialog(None, made, definition)
+    dialog._add()
+    assert dialog.tabs.count() == 4
+    assert dialog.tabs.tabText(0) == "입력 변수"
+    dialog.input_block.add_row()
+    dialog.input_block.add_row()
+    assert dialog.tabs.tabText(0) == "입력 변수 (2)"
+    dialog.input_block.drop_row()
+    assert dialog.tabs.tabText(0) == "입력 변수 (1)"
+    row = dialog.inputs.verticalHeader().defaultSectionSize()
+    assert row >= dialog.inputs.cellWidget(0, 0).sizeHint().height(), "콤보가 줄에 눌리지 않는다"
+    for block in dialog.blocks:
+        table = block.table
+        header = table.horizontalHeader().sizeHint().height()
+        assert table.minimumHeight() >= header + VISIBLE_ROWS * row, block.title
