@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from conftest import FakeCredentials
@@ -374,3 +375,56 @@ def test_a_failed_address_refresh_does_not_break_the_heartbeat(
     monkeypatch.setattr(DirectoryCache, "using", broken)
     agent = make_agent(center, tmp_path, key=issue_key(center))
     assert agent.beat() is not None
+
+
+# ─────────────────────────── 등록 요청과 승인 (C4, ADR-0092) ───────────────────────────
+
+
+def approve_all(center: TestClient) -> list[dict[str, Any]]:
+    """콘솔이 하는 일 (CON-03 「승인 대기」) — 대기 중인 요청을 모두 승인한다."""
+    admin = {"Authorization": f"Bearer {ADMIN}"}
+    pending = center.get("/api/v1/enrollments", headers=admin).json()
+    for one in pending:
+        response = center.post(f"/api/v1/enrollments/{one['enrollment_id']}/approve", json={}, headers=admin)
+        assert response.status_code == 200, response.text
+    return list(pending)
+
+
+def test_a_pc_without_a_key_asks_and_is_let_in_by_approval(center: TestClient, tmp_path: Path) -> None:
+    """주소만 넣은 PC — 등록 요청 → 승인 → 키를 받아 등록·하트비트까지. 사람은 키를 보지 않는다."""
+    agent = make_agent(center, tmp_path, key=None)
+
+    assert agent.beat() is None  # 요청을 보냈다 — 아직 키가 없다
+    pending = agent.enrollment
+    assert pending is not None and pending.state == "pending"
+    assert agent.tray_status() == f"승인 대기 — 코드 {pending.code}"
+
+    listed = approve_all(center)
+    assert [one["code"] for one in listed] == [pending.code]  # 콘솔에 보이는 코드가 현장 것과 같다
+
+    assert agent.beat() is not None  # 키를 받아 등록하고 하트비트까지 한다
+    assert agent.registered
+    assert agent.credentials.center_api_key(), "받은 키는 비밀 저장소에 있다"
+    assert agent.credentials.enroll_secret(), "비밀 반쪽도 비밀 저장소에 있다"
+    # 상태 파일에는 봉함도 키도 없다.
+    saved = (tmp_path / "state.json").read_text(encoding="utf-8")
+    assert "chk_ctr_" not in saved and "ciphertext" not in saved
+    assert agent.tray_status() == "대기"
+
+
+def test_a_rejected_request_waits_for_the_person(center: TestClient, tmp_path: Path) -> None:
+    agent = make_agent(center, tmp_path, key=None)
+    agent.beat()
+    pending = agent.enrollment
+    assert pending is not None
+    admin = {"Authorization": f"Bearer {ADMIN}"}
+    center.post(f"/api/v1/enrollments/{pending.enrollment_id}/reject", json={"reason": "모르는 PC"}, headers=admin)
+
+    agent.beat()
+    assert agent.enrollment is not None and agent.enrollment.state == "rejected"
+    assert agent.enrollment.reason == "모르는 PC"
+    # 다음 주기에도 같은 요청을 거듭 보내지 않는다 — 사람이 「다시 요청」을 누를 때까지.
+    agent.beat()
+    assert center.get("/api/v1/enrollments", headers=admin).json() == []
+    again = agent.request_enrollment()
+    assert again.state == "pending" and again.enrollment_id != pending.enrollment_id

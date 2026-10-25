@@ -25,7 +25,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from chaeksas.bot_ui.runner import KeyRefusal, Request
-from chaeksas.contracts.center_keys import expires_soon
+from chaeksas.contracts.center_keys import EXPIRY_WARNING_DAYS, expires_soon
 
 #: 누르면 할 일. 화면이 이 글로 창을 고른다 (여기서 Qt를 부르지 않는다).
 ACTION_APPROVAL = "approval"
@@ -236,7 +236,7 @@ class Notices:
         more = f" — 기록 {shipped}건 보냄" if shipped else ""
         self.add(Notice(kind=CENTER_BACK, text=f"Center 연결 복구{more}"))
 
-    def center_key_expiring(self, *, expires_at: str | None, now: str) -> None:
+    def center_key_expiring(self, *, expires_at: str | None, now: str, within_days: int = EXPIRY_WARNING_DAYS) -> None:
         """Center API 키 만료가 가까웠다 (C4 `key_expires_at`, BUI-05).
 
         **14일 전부터 하루 한 번**이다 — 주기마다 넣으면 30초에 한 번 같은 말을 한다. 그래서
@@ -244,8 +244,11 @@ class Notices:
 
         **이미 만료된 키는 여기서 알리지 않는다** — 그때는 Center가 거부하고 `key_rejected()`가
         할 일을 말한다. 값이 **없으면 만료가 없는 키**다 (C4 — 「모른다」가 아니다).
+
+        **Center가 회전해 주는 키**는 `within_days`를 7로 준다 (C4 §키 회전) — 그 키는 14일 전부터
+        새 키가 오므로, 7일 전까지 오지 않았다는 것은 Center에 닿지 못했다는 뜻이다.
         """
-        if not expires_soon(now=now, expires_at=expires_at):
+        if not expires_soon(now=now, expires_at=expires_at, within_days=within_days):
             self._key_told_on = ""  # 기간이 늘어났다 — 다음에 가까워지면 다시 알린다
             return
         today = now[:10]

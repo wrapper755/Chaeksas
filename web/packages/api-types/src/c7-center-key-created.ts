@@ -11,6 +11,7 @@
 export interface CenterKeyCreated {
   bound_to?: BoundTo | null;
   created_at: string;
+  enrollment_id?: string | null;
   expires_at?: string | null;
   key: string;
   key_id: string;

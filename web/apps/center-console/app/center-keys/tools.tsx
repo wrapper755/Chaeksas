@@ -8,7 +8,7 @@ import { createCenterKey, revokeCenterKey, unbindCenterKey, type ActionResult } 
 /** CON-11 관리자 모드 — 새 키, 폐기, 묶음 풀기. */
 export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
   const [creating, setCreating] = useState(false);
-  const [kind, setKind] = useState("bot_ui");
+  const [kind, setKind] = useState("studio");
   const [result, create, pending] = useActionState<ActionResult, FormData>(createCenterKey, {});
   // 결과는 `useActionState`가 쥐고 있어 지울 수 없다 — 닫은 키를 기억해 그 창만 내린다.
   const [dismissed, setDismissed] = useState<string | null>(null);
@@ -21,7 +21,8 @@ export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
   const [error, setError] = useState<string | null>(null);
   const [working, start] = useTransition();
 
-  const bound = rows.filter((row) => row.bound_to && row.state === "active");
+  // 승인이 만든 키에는 「묶음 풀기」가 없다 — 다시 설치한 PC는 새 등록 요청을 승인하면 이어받는다 (ADR-0092).
+  const bound = rows.filter((row) => row.bound_to && row.state === "active" && !row.enrollment_id);
   const active = rows.filter((row) => row.state === "active");
 
   function run(action: () => Promise<ActionResult>) {
@@ -90,9 +91,8 @@ export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
               className="border border-border-strong bg-bg-surface px-3 text-body"
               style={{ height: "var(--size-control-md)", borderRadius: "var(--radius-md)" }}
             >
-              <option value="bot_ui">Bot UI용</option>
+              {/* Bot UI용·서버 실행기용은 여기서 발급하지 않는다 — 등록 승인이 만든다 (ADR-0092). */}
               <option value="studio">Studio용</option>
-              <option value="server_runner">서버 실행기용</option>
               <option value="integration">연동용</option>
               <option value="relay">대리 답용</option>
             </select>
@@ -119,7 +119,7 @@ export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
         }
       >
         <p className="text-body">
-          이 키는 <strong>다시 볼 수 없습니다.</strong> 지금 복사해 Bot UI 설정(또는 Studio 설정)에 넣으세요.
+          이 키는 <strong>다시 볼 수 없습니다.</strong> 지금 복사해 Studio 설정이나 연동하는 시스템에 넣으세요.
         </p>
         <p className="mt-2 font-mono text-body-sm break-all" style={{ userSelect: "all" }}>
           {result.secret?.key}

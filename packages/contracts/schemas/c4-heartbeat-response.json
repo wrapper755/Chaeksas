@@ -175,6 +175,62 @@
       ],
       "title": "JobDispatch",
       "type": "object"
+    },
+    "RotatedKey": {
+      "additionalProperties": true,
+      "description": "하트비트 답의 새 키 (C4 §키 회전). 새 키로 첫 요청이 올 때까지 주기마다 실린다.",
+      "properties": {
+        "expires_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "sealed_key": {
+          "$ref": "#/$defs/Sealed"
+        }
+      },
+      "required": [
+        "sealed_key"
+      ],
+      "title": "RotatedKey",
+      "type": "object"
+    },
+    "Sealed": {
+      "additionalProperties": true,
+      "description": "받는 쪽 공개키로만 열리는 한 덩이 (C4 §봉함).",
+      "properties": {
+        "alg": {
+          "default": "x25519-hkdf-sha256-chacha20poly1305",
+          "title": "Alg",
+          "type": "string"
+        },
+        "ciphertext": {
+          "title": "Ciphertext",
+          "type": "string"
+        },
+        "epk": {
+          "title": "Epk",
+          "type": "string"
+        },
+        "nonce": {
+          "title": "Nonce",
+          "type": "string"
+        }
+      },
+      "required": [
+        "epk",
+        "nonce",
+        "ciphertext"
+      ],
+      "title": "Sealed",
+      "type": "object"
     }
   },
   "$id": "urn:chaeksas:contracts:c4-heartbeat-response",
@@ -246,6 +302,17 @@
       "default": 30,
       "title": "Next Heartbeat S",
       "type": "integer"
+    },
+    "rotated_key": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RotatedKey"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "server_time": {
       "title": "Server Time",

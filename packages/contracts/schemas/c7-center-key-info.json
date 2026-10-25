@@ -76,6 +76,18 @@
       "title": "Created At",
       "type": "string"
     },
+    "enrollment_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Enrollment Id"
+    },
     "expires_at": {
       "anyOf": [
         {

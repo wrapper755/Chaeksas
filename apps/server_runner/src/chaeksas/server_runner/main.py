@@ -21,7 +21,9 @@ import threading
 from types import FrameType
 
 from chaeksas.server_runner import agent as agent_mod
-from chaeksas.server_runner.credentials import ENV_CENTER_API_KEY, Credentials
+from chaeksas.server_runner import enroll
+from chaeksas.server_runner.center_client import CenterProblem
+from chaeksas.server_runner.credentials import ENV_CENTER_API_KEY, Credentials, SecretsUnavailable
 from chaeksas.server_runner.settings import Settings
 
 # 한글을 찍는 CLI는 stdout을 UTF-8로 고정한다 (Windows 기본 코드페이지에서 죽는다 — CLAUDE.md §5).
@@ -32,8 +34,8 @@ log = logging.getLogger(__name__)
 
 #: 키가 없을 때 사람에게 할 말. **어디에 넣어야 하는지까지** 적는다.
 NO_KEY = (
-    f"Center API 키가 없습니다 — 환경변수 {ENV_CENTER_API_KEY}에 「서버 실행기용」 키를 넣으세요 "
-    "(콘솔 CON-11에서 발급합니다)"
+    "Center API 키가 아직 없습니다 — 등록 요청을 보냈으니 Center 콘솔 「서버 실행」의 「승인 대기」에서 "
+    f"로그의 요청 코드와 같은 줄을 승인하세요 (또는 환경변수 {ENV_CENTER_API_KEY}로 키를 주세요)"
 )
 
 
@@ -55,13 +57,24 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = Settings.from_env()
     api_key = Credentials().center_api_key()
-    if not api_key:
-        print(NO_KEY)
-        return 2
-
     settings.data_path.mkdir(parents=True, exist_ok=True)
     settings.runs_dir.mkdir(parents=True, exist_ok=True)
-    found = agent_mod.build(settings, api_key)
+    found = agent_mod.build(settings, api_key or "")
+    if not api_key:
+        # **키가 없다 — 등록 요청을 보내고 승인을 기다린다** (C12 §등록 요청과 승인, ADR-0092).
+        try:
+            api_key = enroll.obtain_key(found, once=args.once)
+        except SecretsUnavailable as e:
+            print(e)
+            return 2
+        except CenterProblem as e:
+            print(e)
+            return 1
+        if not api_key:
+            # `--once`이고 아직 승인되지 않았다 — 사람이 할 일(승인)이 있다.
+            print(NO_KEY)
+            return 1
+        found.client.api_key = api_key
 
     if args.once:
         # **등록하고 하트비트까지** 한 번 (`Agent.once`) — 등록만 하면 콘솔에 오프라인으로 남는다.

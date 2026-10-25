@@ -23,6 +23,7 @@ export interface ServerRunnerHeartbeatResponse {
   messages?: MessageDispatch[];
   next_heartbeat_s?: number;
   paused?: boolean;
+  rotated_key?: RotatedKey | null;
   server_time: string;
   [k: string]: unknown;
 }
@@ -96,5 +97,23 @@ export interface MessageDispatch {
     [k: string]: unknown;
   };
   received_at: string;
+  [k: string]: unknown;
+}
+/**
+ * 하트비트 답의 새 키 (C4 §키 회전). 새 키로 첫 요청이 올 때까지 주기마다 실린다.
+ */
+export interface RotatedKey {
+  expires_at?: string | null;
+  sealed_key: Sealed;
+  [k: string]: unknown;
+}
+/**
+ * 받는 쪽 공개키로만 열리는 한 덩이 (C4 §봉함).
+ */
+export interface Sealed {
+  alg?: string;
+  ciphertext: string;
+  epk: string;
+  nonce: string;
   [k: string]: unknown;
 }

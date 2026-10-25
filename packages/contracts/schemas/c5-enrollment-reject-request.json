@@ -1,0 +1,22 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-enrollment-reject-request",
+  "additionalProperties": true,
+  "description": "`POST /enrollments/{id}/reject` — 사유는 요청한 쪽에 그대로 보인다.",
+  "properties": {
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    }
+  },
+  "title": "EnrollmentRejectRequest",
+  "type": "object"
+}

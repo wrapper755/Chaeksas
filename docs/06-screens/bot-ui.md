@@ -77,7 +77,7 @@
 
 ## BUI-03 설정·등록
 
-> 상태: 「Center」 탭은 **초안이다** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — 코드는 아직 주소와 **Center API 키**(CON-11에서 발급해 붙여 넣는 칸)를 받는다. 승인을 기다리는 동안 트레이 아이콘의 글은 「승인 대기 — 코드 ABCD-EFGH」이고, 누르면 이 창의 「Center」 탭이 열린다.
+> 상태: 「Center」 탭이 **이 모양으로 돈다** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), `settings_dialog.py`·`agent.enroll_step()`). 승인을 기다리는 동안 트레이 아이콘의 글은 「승인 대기 — 코드 ABCD-EFGH」이고, 누르면 이 창의 「Center」 탭이 열린다.
 
 처음 실행하면 등록이 안 되어 있으므로 이 창이 먼저 뜬다. 칸은 **탭으로 나눈다** — 아래 표의 한 줄이 탭 하나이고 순서도 표와 같다. 창은 「Center」 탭으로 열린다(첫 실행에 할 일이 거기 있다).
 

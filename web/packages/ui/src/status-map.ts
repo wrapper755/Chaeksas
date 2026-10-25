@@ -153,6 +153,12 @@ export const STATUS_MAP = {
     "만료": "warning",
     "철회됨": "neutral",
   },
+  "등록 요청": {
+    "대기": "waiting",
+    "승인됨": "done",
+    "거절됨": "failed",
+    "만료": "neutral",
+  },
 } as const satisfies Record<string, Record<string, StatusToken>>;
 
 export type StatusGroup = keyof typeof STATUS_MAP;

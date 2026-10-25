@@ -14,6 +14,7 @@ export interface ServerRunnerRegisterRequest {
   max_concurrency?: number;
   name: string;
   os: string;
+  public_key?: string | null;
   /**
    * 이 계약의 schema 번호
    */

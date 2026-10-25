@@ -22,6 +22,10 @@ SERVICE = "chaeksas-bot-ui"
 CENTER_API_KEY = "center_api_key"
 ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
 
+#: 등록 요청에 쓴 키 쌍의 **비밀 반쪽** (C4 §등록 요청과 승인). 승인된 키와 회전한 키를 이것으로
+#: 연다. 환경변수 길은 없다 — 이것을 쓰는 것은 승인으로 들어온 PC뿐이다.
+ENROLL_SECRET = "enroll_secret"
+
 #: 서비스 앱 키는 **참조 이름**으로 저장한다 (BUI-10, ADR-0013 §3).
 SERVICE_APP_PREFIX = "svc:"
 #: 서비스 앱 키를 환경변수로도 읽는다 (개발·CI). Studio의 `CHK_STUDIO__SVC__…`와 같은 규칙.
@@ -126,6 +130,16 @@ class Credentials:
 
     def set_center_api_key(self, value: str) -> None:
         self.set(CENTER_API_KEY, value.strip())
+
+    def center_key_from_env(self) -> bool:
+        """Center API 키가 환경변수로 오는가 (개발·CI) — 그러면 등록 요청을 보내지 않는다."""
+        return bool(os.environ.get(ENV_CENTER_API_KEY))
+
+    def enroll_secret(self) -> str | None:
+        return self.get(ENROLL_SECRET)
+
+    def set_enroll_secret(self, value: str) -> None:
+        self.set(ENROLL_SECRET, value)
 
     def smtp_password(self) -> str | None:
         """메일 서버 비밀번호. 환경변수가 먼저다 (개발·CI)."""

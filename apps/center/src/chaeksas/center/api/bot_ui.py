@@ -19,7 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from chaeksas.center import host_keys, keys
+from chaeksas.center import enrollments, host_keys, keys
 from chaeksas.center.api import approvals, deployments, jobs, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
@@ -129,6 +129,9 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
                 ),
             )
 
+    # 승인으로 받은 키가 처음 쓰였다 — **봉해 둔 것을 지운다** (C4 §등록 요청과 승인).
+    enrollments.delivered(store, key, public_key=request.public_key)
+
     return RegisterResponse(
         bot_ui_id=BotUiId(bot_ui_id),
         admin_keys=[],  # 배포 서명 검증용 Admin 공개키 — 등록 응답에는 싣지 않는다 (하트비트가 준다)
@@ -200,6 +203,8 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
             store, host_id=str(found["bot_ui_id"]), acks=request.approval_acks
         ),
         disabled=disabled,
+        # 만료 14일 전부터 새 키 (C4 §키 회전) — 공개키를 아는 키만.
+        rotated_key=enrollments.rotation_for(store, key, host_id=str(found["bot_ui_id"])),
         # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4).
         key_expires_at=key.expires_at,
     )

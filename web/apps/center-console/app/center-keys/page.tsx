@@ -51,7 +51,11 @@ export default async function CenterKeysPage() {
     {
       key: "bound_to",
       header: "연결된 대상",
-      cell: (row) => (row.bound_to ? `${row.bound_to.name} (${day(row.bound_to.first_seen)})` : "등록 전"),
+      cell: (row) => {
+        const target = row.bound_to ? `${row.bound_to.name} (${day(row.bound_to.first_seen)})` : "등록 전";
+        // 등록 승인이 만든 키 (C7 `enrollment_id`, ADR-0092) — 사람이 건넨 키가 아니다.
+        return row.enrollment_id ? `${target} · 승인으로 발급` : target;
+      },
     },
     { key: "prefix", header: "앞자리", width: "20ch", mono: true, cell: (row) => `${row.prefix}…` },
     { key: "created_at", header: "만든 날", width: "13ch", cell: (row) => day(row.created_at) },

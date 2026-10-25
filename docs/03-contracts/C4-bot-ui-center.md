@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 등록·하트비트·배포·작업·결재·`readiness`·`reserved_for`까지 양쪽이 쓴다) — **§등록 요청과 승인은 초안이다** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), 코드 아직) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 등록·하트비트·배포·작업·결재·`readiness`·`reserved_for`까지 양쪽이 쓴다) — **§등록 요청과 승인·키 회전도 양쪽이 쓴다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Bot UI ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/bot_ui.py` (import `chaeksas.contracts.bot_ui`, [ADR-0019](../decisions/0019-package-names.md)) |
@@ -32,7 +32,7 @@ Bot UI가 **등록 요청**을 보내 관리자의 승인으로 Center API 키�
 
 ## 등록 요청과 승인
 
-> 상태: **초안** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — 코드는 아직 「CON-11에서 발급한 키를 사람이 BUI-03에 붙여 넣는」 길만 있다.
+> 상태: **돈다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — Center `center/enrollments.py`·`api/enrollments.py`, Bot UI `agent.request_enrollment()`·`enroll_step()`, 봉함·요청 코드는 `chaeksas.contracts.enrollment` 한 자리다. 시험: `tests/test_center_enrollment.py`·`tests/test_bot_ui_agent.py`. 개발·CI의 환경변수 길(`CHK_BOT_UI__CENTER_API_KEY`)은 그대로 남는다.
 
 설치하는 사람은 **Center 주소만** 넣는다. 키를 만드는 것도 내려 주는 것도 Center이고, 사람은 **이 PC를 들일지 승인만** 한다.
 
@@ -294,7 +294,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-25 | 1 | **초안: 등록 요청과 승인** — `POST/GET …/enroll`(인증 없음, 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`, 오류 `public_key_invalid`·`enroll_rate_limited`·`enroll_queue_full`. 선택 칸·새 경로라 옛 Bot UI는 그대로 돈다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| 2026-10-25 | 1 | **등록 요청과 승인** — `POST/GET …/enroll`(인증 없음, 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`, 오류 `public_key_invalid`·`enroll_rate_limited`·`enroll_queue_full`. 선택 칸·새 경로라 옛 Bot UI는 그대로 돈다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | `ApprovalDispatch.answered_via?` — 대리 답이면 그 키 이름이 실행하는 쪽까지 내려가 C3 `human_answered`에 남는다 | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-17 | 1 | **`versions.build`를 더했다** (`{commit, built_at}`, 선택) — 묶은 산출물에서 도는지와 어느 커밋인지. `bot_ui`는 빌드가 찍은 판이다(묶은 앱이 `0.0.0`을 올리던 흠을 고쳤다). 선택 칸이라 옛 Bot UI는 그대로 읽힌다 | [0067](../decisions/0067-build-stamp.md) |
 | 2026-10-15 | 1 | **현장에서 값을 올리는 쪽이 생겼다** — 실행기가 끝날 때 `runs/<run_id>.outputs.json`에 쓰고(위임·성공만) Bot UI가 거두며 **읽고 그 자리에서 지운다**. 「이 작업이 위임인가」는 **`requested_by`** 하나로 가르고(`server_bot:<run_id>`), 그 실행의 `run_started`에 `source: delegation`·`parent_run_id`가 붙는다. 형식은 그대로다 | [0062](../decisions/0062-pc-delegation.md) |

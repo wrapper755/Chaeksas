@@ -28,7 +28,7 @@ from urllib.parse import unquote
 
 from fastapi import Request
 
-from chaeksas.center import accounts, keys
+from chaeksas.center import accounts, enrollments, keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
 from chaeksas.contracts.accounts import ROLE_ADMIN, SESSION_PREFIX
@@ -136,6 +136,8 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
     if state != "active":
         raise ApiError(403, f"key_{state}", f"키 「{record.name}」은 {state} 상태다")
     keys.touch(store, record.key_id)
+    # 회전한 새 키로 첫 요청이면 행을 새 키로 옮긴다 (C4 §키 회전) — 하트비트가 행을 찾기 **전에**.
+    enrollments.adopt_successor(store, record)
     # 키로 부를 때는 X-CHK-Actor를 믿지 않는다 (C5). 사람 대신 부르는 키만 On-Behalf-Of를 듣는다.
     on_behalf = _on_behalf(request) if record.type in ON_BEHALF_KEY_TYPES else None
     return Caller(kind="key", actor=record.name, key=record, on_behalf=on_behalf)

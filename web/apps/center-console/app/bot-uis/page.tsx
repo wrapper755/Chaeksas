@@ -4,6 +4,8 @@ import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } 
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
+import { Enrollments } from "@/components/Enrollments";
+import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
 /**
  * CON-03 Bot UI 현황 (목록).
@@ -73,9 +75,12 @@ export default async function BotUisPage() {
   if (!found) redirect("/login");
 
   let rows: BotUiInfo[] = [];
+  let enrollments: EnrollmentInfo[] = [];
   let failure: string | null = null;
   try {
     rows = await center.botUis();
+    // 「승인 대기」 — 등록 요청이 있을 때만 목록 위에 보인다 (C4 §등록 요청과 승인, ADR-0092).
+    enrollments = await center.enrollments("bot_ui");
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -154,12 +159,14 @@ export default async function BotUisPage() {
         </div>
       </header>
 
+      <Enrollments rows={enrollments} where="현장 화면" canDecide={found.mode === "admin"} />
+
       {failure ? (
         <ErrorBanner message={failure} action={<Button variant="secondary">다시 시도</Button>} />
       ) : rows.length === 0 ? (
         <EmptyState
           title="등록된 Bot UI가 없습니다."
-          hint="「Center API 키」에서 Bot UI용 키를 발급해 현장 PC의 Bot UI 설정에 넣으면 여기에 나타납니다."
+          hint="현장 PC의 Bot UI 설정에 Center 주소를 넣으면 등록 요청을 보냅니다. 현장 화면의 요청 코드와 같은 줄을 위의 「승인 대기」에서 승인하세요."
         />
       ) : (
         <DataTable columns={columns} rows={rows} rowKey={(row) => row.bot_ui_id} caption="Bot UI 목록" />

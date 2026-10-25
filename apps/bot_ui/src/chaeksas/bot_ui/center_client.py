@@ -21,11 +21,13 @@ import httpx
 
 from chaeksas.contracts.approvals import ApprovalInfo
 from chaeksas.contracts.bot_ui import (
+    EnrollRequest,
     HeartbeatRequest,
     HeartbeatResponse,
     RegisterRequest,
     RegisterResponse,
 )
+from chaeksas.contracts.enrollment import EnrollStatus
 from chaeksas.contracts.resources import ExtensionResource, ServiceAppResource
 
 log = logging.getLogger(__name__)
@@ -121,11 +123,10 @@ class CenterClient:
                 f"{self.base_url.rstrip('/')}{api}{path}",
                 params=params,
                 content=body,
-                headers={
-                    # 토큰·키는 ASCII만 (CLAUDE.md §5 — 헤더에 한글을 넣지 않는다).
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
+                # 토큰·키는 ASCII만 (CLAUDE.md §5 — 헤더에 한글을 넣지 않는다). **키가 없으면 싣지
+                # 않는다** — 등록 요청 두 경로는 인증이 없다 (C4 §등록 요청과 승인).
+                headers={"Content-Type": "application/json"}
+                | ({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}),
             )
         except httpx.HTTPError as e:
             raise Unreachable(f"Center에 닿지 못했습니다 ({self.base_url}) — {type(e).__name__}") from e
@@ -139,6 +140,14 @@ class CenterClient:
             return dict(response.json())
         except ValueError as e:
             raise CenterProblem("Center 응답이 JSON이 아닙니다") from e
+
+    def enroll(self, request: EnrollRequest) -> EnrollStatus:
+        """키가 없을 때 등록 요청을 보낸다 (C4 §등록 요청과 승인 — 인증 없음)."""
+        return EnrollStatus.model_validate(self._send("/enroll", request.to_json_dict()))
+
+    def enroll_status(self, enrollment_id: str) -> EnrollStatus:
+        """그 요청이 승인됐나 묻는다. 승인됐으면 봉한 키가 실려 온다."""
+        return EnrollStatus.model_validate(self._send(f"/enroll/{enrollment_id}", None, method="GET"))
 
     def register(self, request: RegisterRequest) -> RegisterResponse:
         """처음 한 번, 그리고 이름·버전이 바뀔 때. **멱등** — 같은 키·PC면 같은 `bot_ui_id`."""

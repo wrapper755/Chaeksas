@@ -1,0 +1,40 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-enrollment-decision",
+  "additionalProperties": true,
+  "description": "승인 응답 (C5). `host_id`는 이어받았으면 그 id, 새 자리면 첫 `register`가 만들 때까지 `None`.",
+  "properties": {
+    "host_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Host Id"
+    },
+    "key_id": {
+      "title": "Key Id",
+      "type": "string"
+    },
+    "replaced_key_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Replaced Key Id"
+    }
+  },
+  "required": [
+    "key_id"
+  ],
+  "title": "EnrollmentDecision",
+  "type": "object"
+}

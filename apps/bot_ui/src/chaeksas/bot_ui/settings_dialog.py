@@ -3,8 +3,9 @@
 칸은 **탭으로 나눈다** — 「Center」·「실행」·「모델」·「파일」·「보내기」·「로컬 런타임」, 확장마다
 하나, 「나중에」. 「저장」·「취소」는 탭 밖에 있어 모든 탭을 함께 저장한다.
 
-키는 칸에 가려 넣고 **OS 비밀 저장소**로 간다 (설정 파일에 넣지 않는다, CLAUDE.md §5).
-「연결 테스트」는 실제로 Center에 등록해 보고 결과를 한 줄로 보여 준다 (BUI-03).
+「Center」 탭은 **주소 하나**다 — Center API 키 칸은 없다 (ADR-0092). 주소를 넣고 「연결 테스트」를
+누르면 등록 요청을 보내고, 관리자가 요청 코드를 맞춰 승인하면 키를 받아 OS 비밀 저장소에 둔다.
+사람은 키를 보지 않는다. 다른 키(모델·메일)는 칸에 가려 넣고 비밀 저장소로 간다 (CLAUDE.md §5).
 
 확장별 설정 칸은 **확장이 기여한 것으로 그 자리에서 만든다** (C13 `configuration`). 아직 없는
 섹션(툴팩 비밀)은 **끄고 이유를 가까이에 적는다** (U3).
@@ -53,20 +54,13 @@ from chaeksas.bot_ui.settings import (
     data_dir,
 )
 from chaeksas.contracts import SCOPE_BOT_UI, ConfigurationItem
-from chaeksas.contracts.center_keys import KEY_PREFIX, looks_like_key
 from chaeksas.core.senders import KNOWN_SECURITY, SECURITY_NONE, SECURITY_STARTTLS
 
 log = logging.getLogger(__name__)
 
-#: 모양이 아닌 값을 붙여 넣었을 때 (이슈 #3 — 명령 한 줄이 그대로 키로 저장돼 401만 났다).
-KEY_SHAPE_MESSAGE = (
-    f"Center API 키는 「{KEY_PREFIX}」로 시작하는 48자입니다 — "
-    "Center 콘솔 「Center API 키」에서 발급한 값만 붙여 넣으세요."
-)
-
 #: 키를 넣었는지 사람에게 알려 주는 자리 글. **값은 보이지 않는다.**
 KEY_SET_PLACEHOLDER = "저장된 키가 있습니다 (바꾸려면 새로 붙여 넣으세요)"
-KEY_EMPTY_PLACEHOLDER = "Center 콘솔 「Center API 키」에서 발급한 키"
+KEY_EMPTY_PLACEHOLDER = "넣으면 OS 비밀 저장소에 둡니다"
 LLM_KEY_PLACEHOLDER = "키가 필요 없으면 비워 두세요"
 
 
@@ -152,21 +146,51 @@ class SettingsDialog(QDialog):
         self.name.setPlaceholderText(f"비우면 PC 이름 ({self._agent.display_name()})")
         form.addRow("이 PC의 표시 이름", self.name)
 
-        self.api_key = QLineEdit()
-        self.api_key.setEchoMode(QLineEdit.EchoMode.Password)
-        has_key = bool(self._agent.credentials.center_api_key())
-        self.api_key.setPlaceholderText(KEY_SET_PLACEHOLDER if has_key else KEY_EMPTY_PLACEHOLDER)
-        form.addRow("Center API 키", self.api_key)
-
         test = QPushButton("연결 테스트")
         test.clicked.connect(self.test_connection)
         form.addRow("", test)
 
+        # 상태 줄 하나 (BUI-03) — 승인을 기다리면 요청 코드를 크게, 「복사」와 함께.
         self.result_label = QLabel(self._initial_result())
         self.result_label.setWordWrap(True)
         self.result_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         form.addRow("", self.result_label)
+
+        code_row = QHBoxLayout()
+        self.code_label = QLabel()
+        self.code_label.setProperty("role", "h2")
+        self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.copy_code = QPushButton("복사")
+        self.copy_code.clicked.connect(self._copy_code)
+        self.again = QPushButton("다시 요청")
+        self.again.clicked.connect(self.request_again)
+        code_row.addWidget(self.code_label)
+        code_row.addWidget(self.copy_code)
+        code_row.addWidget(self.again)
+        code_row.addStretch(1)
+        form.addRow("", code_row)
+        self._show_code()
         return box
+
+    def _show_code(self) -> None:
+        """요청 코드와 「다시 요청」을 지금 상태에 맞춘다."""
+        pending = self._agent.enrollment
+        waiting = (
+            not self._agent.credentials.center_api_key() and pending is not None and pending.state == "pending"
+        )
+        self.code_label.setText(pending.code if waiting and pending is not None else "")
+        self.code_label.setVisible(waiting)
+        self.copy_code.setVisible(waiting)
+        closed = not self._agent.credentials.center_api_key() and pending is not None and pending.state in (
+            "rejected",
+            "expired",
+        )
+        self.again.setVisible(closed or bool(self._agent.last_problem and not self._agent.registered))
+
+    def _copy_code(self) -> None:
+        clipboard = QGuiApplication.clipboard()
+        if clipboard is not None:
+            clipboard.setText(self.code_label.text())
 
     def _run_box(self) -> QWidget:
         box = QWidget()
@@ -489,11 +513,13 @@ class SettingsDialog(QDialog):
     # ── 동작 ──
 
     def _initial_result(self) -> str:
+        if self._agent.credentials.center_key_from_env():
+            return "환경변수의 키를 씁니다 (CHK_BOT_UI__CENTER_API_KEY)."
         if not self._agent.credentials.center_api_key():
-            return "아직 등록되지 않았습니다 — 콘솔에서 발급한 Center API 키를 넣고 「연결 테스트」를 누르세요."
+            return enrollment_text(self._agent)
         if self._agent.registered:
-            return f"등록됨 — 이 PC는 「{self._agent.display_name()}」입니다."
-        return "키는 있지만 아직 등록되지 않았습니다."
+            return f"연결됨 — 이 PC는 「{self._agent.display_name()}」으로 등록됨"
+        return "키를 받았습니다 — 「연결 테스트」를 누르면 등록합니다."
 
     def test_connection(self) -> None:
         """실제로 등록해 본다 (C4 등록은 멱등이라 여러 번 눌러도 된다).
@@ -502,22 +528,27 @@ class SettingsDialog(QDialog):
         (타임아웃 10초, `center_client.DEFAULT_TIMEOUT_S`).
         """
         wanted = self._pending_settings()
-        typed = self.api_key.text().strip()
-        if typed:
-            if not looks_like_key(typed):
-                # 모양부터 틀린 값을 저장하면 등록이 401로만 실패해 이유를 알 수 없다 (이슈 #3).
-                self.result_label.setText(KEY_SHAPE_MESSAGE)
-                return
-            try:
-                self._agent.credentials.set_center_api_key(typed)
-            except SecretsUnavailable as e:
-                self.result_label.setText(f"키를 저장하지 못했습니다 — {e}")
-                return
-            self.api_key.clear()
-            self.api_key.setPlaceholderText(KEY_SET_PLACEHOLDER)
-
         before = self._agent.settings
         self._agent.settings = wanted
+        if not self._agent.credentials.center_api_key():
+            # **키가 없다 — 등록 요청을 보내거나 승인됐나 묻는다** (C4 §등록 요청과 승인).
+            try:
+                got = self._agent.enroll_step()
+            except Unreachable as e:
+                self.result_label.setText(f"닿지 못함 — {e}")
+                self._agent.settings = before
+                self._show_code()
+                return
+            except CenterProblem as e:
+                self.result_label.setText(enrollment_problem_text(e))
+                self._agent.settings = before
+                self._show_code()
+                return
+            if not got:
+                self.result_label.setText(enrollment_text(self._agent))
+                self._show_code()
+                return
+            self._agent.store.state.bot_ui_id = None
         try:
             found = self._agent.register()
         except Unreachable as e:
@@ -532,9 +563,28 @@ class SettingsDialog(QDialog):
             self.result_label.setText(
                 f"연결됨 — 이 PC는 「{wanted.name or self._agent.display_name()}」으로 등록됨 ({found.bot_ui_id})"
             )
+            self._show_code()
             return
         # 실패했으면 설정을 되돌린다 (저장을 누르지 않았으므로).
         self._agent.settings = before
+        self._show_code()
+
+    def request_again(self) -> None:
+        """「다시 요청」 — 거절·만료된 뒤, 또는 키가 거부된 뒤 새로 승인받는다."""
+        wanted = self._pending_settings()
+        before = self._agent.settings
+        self._agent.settings = wanted
+        if self._agent.credentials.center_api_key() and not self._agent.credentials.center_key_from_env():
+            # 거부된 키를 들고 있으면 새 요청이 묻히지 않는다 — 지우고 새로 받는다.
+            self._agent.credentials.delete("center_api_key")
+        try:
+            self._agent.request_enrollment()
+        except CenterProblem as e:
+            self.result_label.setText(enrollment_problem_text(e))
+            self._agent.settings = before
+        else:
+            self.result_label.setText(enrollment_text(self._agent))
+        self._show_code()
 
     def _pending_settings(self) -> Settings:
         worker = RuntimeSettings(
@@ -567,19 +617,6 @@ class SettingsDialog(QDialog):
 
     def save(self) -> None:
         """설정 파일에 쓰고, 키를 비밀 저장소에, 자동 시작을 OS에 반영한다."""
-        typed = self.api_key.text().strip()
-        if typed:
-            if not looks_like_key(typed):
-                QMessageBox.warning(self, "키 모양이 다릅니다", KEY_SHAPE_MESSAGE)
-                self.api_key.selectAll()
-                self.api_key.setFocus()
-                return
-            try:
-                self._agent.credentials.set_center_api_key(typed)
-            except SecretsUnavailable as e:
-                QMessageBox.warning(self, "키를 저장하지 못했습니다", str(e))
-                return
-
         model_key = self.llm_key.text().strip()
         if model_key:
             try:
@@ -630,7 +667,33 @@ class SettingsDialog(QDialog):
 __all__ = [
     "KEY_EMPTY_PLACEHOLDER",
     "KEY_SET_PLACEHOLDER",
-    "KEY_SHAPE_MESSAGE",
     "LLM_KEY_PLACEHOLDER",
     "SettingsDialog",
+    "enrollment_problem_text",
+    "enrollment_text",
 ]
+
+
+def enrollment_text(agent: Agent) -> str:
+    """키가 없을 때의 상태 줄 (BUI-03 「Center」 탭)."""
+    pending = agent.enrollment
+    if pending is None:
+        return "아직 등록 요청을 보내지 않았습니다 — 주소를 넣고 「연결 테스트」를 누르세요."
+    if pending.state == "pending":
+        return (
+            f"승인을 기다립니다 — 관리자에게 요청 코드 {pending.code}를 알려 주세요 "
+            f"({pending.expires_at[:16].replace('T', ' ')}까지)"
+        )
+    if pending.state == "rejected":
+        reason = f": {pending.reason}" if pending.reason else ""
+        return f"거절되었습니다{reason}"
+    if pending.state == "expired":
+        return "요청이 만료되었습니다"
+    return "승인되었습니다 — 키를 받는 중입니다."
+
+
+def enrollment_problem_text(problem: CenterProblem) -> str:
+    """등록 요청이 막혔을 때 (C4 오류 표)."""
+    if problem.code in ("enroll_rate_limited", "enroll_queue_full"):
+        return "Center가 지금 등록 요청을 받지 않습니다 — 잠시 뒤 다시 요청합니다"
+    return f"등록 요청을 보내지 못했습니다 — {problem}"

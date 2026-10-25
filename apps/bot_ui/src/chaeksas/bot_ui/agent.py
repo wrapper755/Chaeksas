@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
-from chaeksas.bot_ui.credentials import Credentials
+from chaeksas.bot_ui.credentials import Credentials, SecretsUnavailable
 from chaeksas.bot_ui.notices import Notices
 from chaeksas.bot_ui.runner import Launcher, Running
 from chaeksas.bot_ui.runtimes import BUSY, RESERVED, HostSettings, RuntimeUnavailable, runtime_ids_of
@@ -37,6 +37,7 @@ from chaeksas.contracts.bot_ui import (
     BuildStamp,
     CurrentRun,
     DeploymentResult,
+    EnrollRequest,
     ExtensionState,
     HeartbeatRequest,
     HeartbeatResponse,
@@ -52,6 +53,16 @@ from chaeksas.contracts.bot_ui import (
     WorkerState,
 )
 from chaeksas.contracts.center_api import delegated_run
+from chaeksas.contracts.center_keys import EXPIRY_WARNING_DAYS
+from chaeksas.contracts.enrollment import (
+    ROTATE_NOTICE_DAYS,
+    EnrollStatus,
+    SealError,
+    new_keypair,
+    open_sealed,
+    public_of,
+    request_code,
+)
 from chaeksas.core import build_info, machine, requests
 from chaeksas.core.app_directory import DirectoryCache
 from chaeksas.core.deploy import APPLIED, Deployer
@@ -78,6 +89,8 @@ SOURCE_DELEGATION = "delegation"
 
 #: 트레이 상태 글 (BUI-01). 색은 `status_map`의 「Bot UI」·「Bot」에서 온다.
 TRAY_UNREGISTERED = "등록 전"
+#: 등록 요청을 보내고 승인을 기다린다 (C4 §등록 요청과 승인) — 뒤에 요청 코드가 붙는다.
+TRAY_AWAITING_APPROVAL = "승인 대기"
 TRAY_DISCONNECTED = "연결 끊김"
 TRAY_KEY_REVOKED = "키 폐기됨"
 TRAY_KEY_EXPIRED = "키 만료"
@@ -467,10 +480,139 @@ class Agent:
         """Center 클라이언트. 키가 없으면 `KeyRejected`로 막는다 (BUI-03으로 보낸다)."""
         key = self.credentials.center_api_key()
         if not key:
-            raise KeyRejected("Center API 키가 없습니다 — 설정에서 콘솔에서 발급한 키를 넣으세요", code="no_key")
+            raise KeyRejected("Center API 키가 아직 없습니다 — 등록 요청이 승인되면 받습니다", code="no_key")
+        return self._client_with(key)
+
+    def _client_with(self, key: str) -> CenterClient:
         if self.client_factory is not None:
             return self.client_factory(self.settings.center_url, key)
         return CenterClient(base_url=self.settings.center_url, api_key=key)
+
+    # ── 등록 요청과 승인 (C4 §등록 요청과 승인, ADR-0092) ──
+
+    @property
+    def enrollment(self) -> EnrollStatus | None:
+        return self.store.state.enrollment
+
+    def _secret(self, *, make: bool) -> str | None:
+        """등록 요청에 쓰는 키 쌍의 비밀 반쪽. `make`면 없을 때 만들어 **비밀 저장소에** 둔다."""
+        found = self.credentials.enroll_secret()
+        if found or not make:
+            return found
+        private, _ = new_keypair()
+        self.credentials.set_enroll_secret(private)  # 저장소가 없으면 SecretsUnavailable
+        return private
+
+    def request_enrollment(self) -> EnrollStatus:
+        """등록 요청을 보낸다 (BUI-03 「다시 요청」도 이것이다). 키 쌍은 있으면 그대로 쓴다.
+
+        **요청 코드를 스스로 다시 계산해** 맞을 때만 받아들인다 — 가운데서 응답을 바꿔치면
+        사람이 엉뚱한 코드를 승인하게 된다.
+        """
+        try:
+            secret = self._secret(make=True)
+        except SecretsUnavailable as e:
+            problem = CenterProblem(f"키를 둘 비밀 저장소가 없어 등록 요청을 보내지 않습니다 — {e}", code="no_secrets")
+            self.last_problem = problem
+            raise problem from e
+        assert secret is not None
+        public = public_of(secret)
+        request = EnrollRequest(
+            schema=1,
+            machine_id=self.machine_id(),
+            name=self.display_name(),
+            os=machine.os_label(),
+            versions=self.versions(),
+            runtimes=Runtimes(extensions=list(self.extensions)) if self.extensions else None,
+            public_key=public,
+        )
+        try:
+            found = self._client_with("").enroll(request)
+        except CenterProblem as e:
+            self.last_problem = e
+            raise
+        if found.code != request_code(public, found.enrollment_id):
+            problem = CenterProblem(
+                "Center가 준 요청 코드가 이 PC가 계산한 것과 다릅니다 — Center 주소가 맞는지 확인하세요",
+                code="code_mismatch",
+            )
+            self.last_problem = problem
+            raise problem
+        self.last_problem = None
+        self.store.state.enrollment = found
+        self.store.save()
+        log.info("등록 요청을 보냈다 — 요청 코드 %s (%s까지)", found.code, found.expires_at)
+        return found
+
+    def enroll_step(self) -> bool:
+        """키가 없을 때 한 걸음. 키를 받았으면 `True` — 그다음은 평소의 `register`다.
+
+        - 요청이 없거나 만료됐으면 새로 보낸다.
+        - 기다리는 중이면 묻고, 승인됐으면 봉함을 열어 **비밀 저장소에** 넣는다.
+        - 거절됐으면 사람이 「다시 요청」을 누를 때까지 기다린다 (같은 요청을 거듭 보내지 않는다).
+        """
+        current = self.store.state.enrollment
+        if current is None or current.state == "expired":
+            self.request_enrollment()
+            return False
+        if current.state == "rejected":
+            return False
+        try:
+            found = self._client_with("").enroll_status(current.enrollment_id)
+        except CenterProblem as e:
+            if e.status == 404:
+                # Center가 모르는 요청이다 (DB를 갈았거나 오래돼 지워졌다) — 새로 보낸다.
+                self.store.state.enrollment = None
+                self.store.save()
+                return False
+            self.last_problem = e
+            raise
+        if found.state == "approved" and found.sealed_key is not None:
+            secret = self._secret(make=False)
+            if secret is None:
+                # 비밀 반쪽을 잃었다 — 이 봉함은 열 수 없다. 새로 요청한다.
+                self.store.state.enrollment = None
+                self.store.save()
+                return False
+            try:
+                key = open_sealed(secret, found.sealed_key, salt=found.enrollment_id)
+            except SealError as e:
+                problem = CenterProblem(f"받은 키를 열지 못했습니다 — {e}", code="seal_error")
+                self.last_problem = problem
+                raise problem from e
+            self.credentials.set_center_api_key(key)
+            self.store.state.enrollment = found.model_copy(update={"sealed_key": None})
+            self.store.save()
+            self.last_problem = None
+            log.info("등록 요청이 승인되어 Center API 키를 받았다")
+            return True
+        self.store.state.enrollment = found.model_copy(update={"sealed_key": None})
+        self.store.save()
+        self.last_problem = None
+        return False
+
+    def _key_notice_days(self) -> int:
+        """Center가 회전해 주는 키면 7일, 아니면 14일 (C4 §키 회전, BUI-05)."""
+        if self.credentials.center_key_from_env() or self.credentials.enroll_secret() is None:
+            return EXPIRY_WARNING_DAYS
+        return ROTATE_NOTICE_DAYS
+
+    def _take_rotated(self, response: HeartbeatResponse) -> None:
+        """하트비트 답의 새 키를 받는다 (C4 §키 회전). 다음 요청부터 새 키를 쓴다."""
+        rotated = response.rotated_key
+        if rotated is None or not self.bot_ui_id or self.credentials.center_key_from_env():
+            return
+        secret = self.credentials.enroll_secret()
+        if secret is None:
+            return
+        try:
+            key = open_sealed(secret, rotated.sealed_key, salt=self.bot_ui_id)
+            self.credentials.set_center_api_key(key)
+        except (SealError, SecretsUnavailable) as e:
+            # 옛 키는 아직 산다 — 다음 주기에 같은 것이 또 온다.
+            log.warning("새 Center API 키를 받지 못했다: %s", e)
+            return
+        log.info("Center API 키를 갈았다 (새 키 만료 %s)", rotated.expires_at)
 
     # ── 등록·하트비트 ──
 
@@ -494,6 +636,8 @@ class Agent:
             os=machine.os_label(),
             versions=self.versions(),
             runtimes=Runtimes(extensions=list(self.extensions)) if self.extensions else None,
+            # 공개키를 싣으면 Center가 키를 회전해 준다 (C4 §키 회전). 환경변수 키는 회전하지 않는다.
+            public_key=self._register_public_key(),
         )
         try:
             found = self.client().register(request)
@@ -505,9 +649,17 @@ class Agent:
         self.store.save()
         self.heartbeat_interval_s = found.heartbeat_interval_s
         # 키 만료일은 **Center만 안다** (C4 `key_expires_at`) — 받은 자리에서 바로 재 둔다.
-        self.notices.center_key_expiring(expires_at=found.key_expires_at, now=now_iso())
+        self.notices.center_key_expiring(
+            expires_at=found.key_expires_at, now=now_iso(), within_days=self._key_notice_days()
+        )
         log.info("등록됨: %s (하트비트 %d초)", found.bot_ui_id, found.heartbeat_interval_s)
         return found
+
+    def _register_public_key(self) -> str | None:
+        if self.credentials.center_key_from_env():
+            return None
+        secret = self.credentials.enroll_secret()
+        return public_of(secret) if secret else None
 
     def worker_state(self) -> WorkerState:
         """C4 `worker`. 감시자가 없으면 「꺼 둠」(`off`)이다 — 확장이 아직 없는 PC.
@@ -638,6 +790,23 @@ class Agent:
         # **Center보다 먼저 묻는다** — Center가 꺼져 있어도 서비스 앱 키는 만료된다 (ADR-0052).
         self.ask_service_key()
 
+        if not self.credentials.center_api_key():
+            # **키가 없다 — 등록 요청을 보내고 승인을 기다린다** (C4 §등록 요청과 승인).
+            try:
+                got = self.enroll_step()
+            except Unreachable as e:
+                self.last_problem = e
+                log.warning("%s", e)
+                self.notices.connection(online=False)
+                return None
+            except CenterProblem as e:
+                log.warning("등록 요청: %s", e)
+                return None
+            if not got:
+                return None
+            # 새 키다 — 들고 있던 자리 이름은 옛 키의 것이다. 등록이 다시 정한다.
+            self.store.state.bot_ui_id = None
+
         if not self.registered:
             try:
                 self.register()
@@ -670,7 +839,10 @@ class Agent:
         self.heartbeat_interval_s = response.next_heartbeat_s
         self.disabled = response.disabled
         # **주기마다 재지만 알림은 하루 한 번**이다 (BUI-05) — 그 판단은 `notices`가 쥔다.
-        self.notices.center_key_expiring(expires_at=response.key_expires_at, now=self.last_beat_at)
+        self.notices.center_key_expiring(
+            expires_at=response.key_expires_at, now=self.last_beat_at, within_days=self._key_notice_days()
+        )
+        self._take_rotated(response)
         # 보낸 ack는 Center가 받았다 (같은 요청에 실어 보냈으므로).
         self.store.ack_sent(request.job_acks)
         self.store.deployments_sent(request.deployment_results)
@@ -1169,6 +1341,9 @@ class Agent:
     def tray_status(self) -> str:
         """BUI-01 트레이 상태 글. 하나만 고른다 — 급한 것이 먼저다."""
         if not self.credentials.center_api_key():
+            pending = self.store.state.enrollment
+            if pending is not None and pending.state == "pending":
+                return f"{TRAY_AWAITING_APPROVAL} — 코드 {pending.code}"
             return TRAY_UNREGISTERED
         # 키는 있다 — 그럼 왜 못 하고 있는지가 더 쓸모 있는 말이다 (닿지 못함 / 키 거부).
         problem = self.last_problem
@@ -1244,6 +1419,7 @@ def make_agent(settings: Settings | None = None, *, state_path: Path | None = No
 __all__ = [
     "BOT_UI_VERSION",
     "CORE_VERSION",
+    "TRAY_AWAITING_APPROVAL",
     "TRAY_DISABLED",
     "TRAY_DISCONNECTED",
     "TRAY_ERROR",

@@ -21,6 +21,7 @@ from chaeksas.center.api import (
     bot_ui,
     delegations,
     deployments,
+    enrollments,
     jobs,
     messages,
     package_access,
@@ -98,6 +99,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     app.state.authenticate = authenticate
     app.add_exception_handler(ApiError, handle)
     app.include_router(bot_ui.router)
+    app.include_router(enrollments.router)
     app.include_router(server_runner.router)
     app.include_router(delegations.router)
     app.include_router(runs.router)

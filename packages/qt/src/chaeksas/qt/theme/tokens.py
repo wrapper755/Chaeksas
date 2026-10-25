@@ -319,6 +319,12 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
         "만료": "warning",
         "철회됨": "neutral",
     },
+    "등록 요청": {
+        "대기": "waiting",
+        "승인됨": "done",
+        "거절됨": "failed",
+        "만료": "neutral",
+    },
 }
 
 

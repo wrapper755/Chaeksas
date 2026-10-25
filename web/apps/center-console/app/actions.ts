@@ -445,6 +445,27 @@ export async function revokeCenterKey(keyId: string): Promise<ActionResult> {
   return {};
 }
 
+/**
+ * 등록 요청 승인·거절 (CON-03·CON-12 「승인 대기」, C5 §등록 승인). 키는 Center가 만들어
+ * 요청의 공개키로 봉해 둔다 — 여기서도 원문은 지나가지 않는다.
+ */
+export async function decideEnrollment(
+  enrollmentId: string,
+  decision: "approve" | "reject",
+  text: string,
+): Promise<ActionResult> {
+  try {
+    if (decision === "approve") await center.approveEnrollment(enrollmentId, text.trim() || undefined);
+    else await center.rejectEnrollment(enrollmentId, text.trim() || undefined);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/bot-uis", "layout");
+  revalidatePath("/server-runners", "layout");
+  revalidatePath("/center-keys");
+  return {};
+}
+
 export async function unbindCenterKey(keyId: string): Promise<ActionResult> {
   try {
     await center.unbindCenterKey(keyId);

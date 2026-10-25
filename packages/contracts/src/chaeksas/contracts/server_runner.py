@@ -37,6 +37,7 @@ from chaeksas.contracts.bot_ui import (
     MachineId,
     Readiness,
 )
+from chaeksas.contracts.enrollment import PublicKey, RotatedKey
 from chaeksas.contracts.signing import AdminKey
 
 #: 하트비트 기본 간격과 오프라인 판정 (C12 §재시작과 유실 — PC보다 촘촘하다).
@@ -96,6 +97,17 @@ class ServerRunnerRegisterRequest(SchemaVersioned):
     #: 이 실행기가 한 번에 도는 실행 수의 상한. 설정값이라 **실행기가 정한다**.
     max_concurrency: int = Field(default=DEFAULT_MAX_CONCURRENCY, ge=1)
     extensions: list[ExtensionState] = Field(default_factory=list)
+    #: X25519 공개키 — 보내면 키를 회전해 준다 (C4 §키 회전과 같다).
+    public_key: PublicKey | None = None
+
+
+class ServerRunnerEnrollRequest(ServerRunnerRegisterRequest):
+    """`POST /api/v1/server-runner/enroll` — 키가 없을 때 **등록 요청** (C12 §등록 요청과 승인).
+
+    C4 `EnrollRequest`와 같은 결이다 — 등록 본문에 `public_key`가 **필수**다.
+    """
+
+    public_key: PublicKey
 
 
 class ServerRunnerRegisterResponse(ContractModel):
@@ -242,6 +254,8 @@ class ServerRunnerHeartbeatResponse(ContractModel):
     delegations: list[DelegationResult] = Field(default_factory=list)
     #: 참이면 **새 작업을 받지 않는다** (CON-12 「일시 중지」). 도는 것은 끝까지 간다.
     paused: bool = False
+    #: 만료 14일 전부터 새 키 (C4 §키 회전과 같다).
+    rotated_key: RotatedKey | None = None
     #: 이 키의 만료 (C7). **주기마다 싣는다** (C4와 같다).
     key_expires_at: Timestamp | None = None
 

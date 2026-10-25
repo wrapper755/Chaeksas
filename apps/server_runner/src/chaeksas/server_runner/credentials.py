@@ -21,6 +21,8 @@ SERVICE = "chaeksas-server-runner"
 #: Center API 키 (C12 — 「서버 실행기용」 종류).
 CENTER_API_KEY = "center_api_key"
 ENV_CENTER_API_KEY = "CHK_SERVER_RUNNER__CENTER_API_KEY"
+#: 등록 요청에 쓴 키 쌍의 비밀 반쪽 (C12 §등록 요청과 승인).
+ENROLL_SECRET = "enroll_secret"
 
 #: 모델 키 (ADR-0027). **값은 설정·실행 기록에 넣지 않는다** (CLAUDE.md §5).
 LLM_API_KEY = "llm-api-key"
@@ -121,6 +123,21 @@ class Credentials:
 
     def center_api_key(self) -> str | None:
         return self.get(CENTER_API_KEY, env=ENV_CENTER_API_KEY)
+
+    def set_center_api_key(self, value: str) -> None:
+        """승인·회전으로 받은 키 (C12 §등록 요청과 승인). 저장소가 없으면 분명히 실패한다."""
+        self.set(CENTER_API_KEY, value)
+
+    def center_key_from_env(self) -> bool:
+        """키가 환경변수로 오는가 — 그러면 등록 요청도 회전도 하지 않는다."""
+        return bool(os.environ.get(ENV_CENTER_API_KEY))
+
+    def enroll_secret(self) -> str | None:
+        """등록 요청에 쓴 키 쌍의 비밀 반쪽 — 비밀 저장소에만 있다 (환경변수 길이 없다)."""
+        return self.get(ENROLL_SECRET)
+
+    def set_enroll_secret(self, value: str) -> None:
+        self.set(ENROLL_SECRET, value)
 
     def llm_api_key(self) -> str | None:
         """모델 키. 환경변수가 먼저다 (개발·CI) — 서버는 대개 그쪽이다."""

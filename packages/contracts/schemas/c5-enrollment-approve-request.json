@@ -1,0 +1,21 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-enrollment-approve-request",
+  "additionalProperties": true,
+  "description": "`POST /enrollments/{id}/approve` — `name`을 비우면 요청의 이름을 쓴다.",
+  "properties": {
+    "name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Name"
+    }
+  },
+  "title": "EnrollmentApproveRequest",
+  "type": "object"
+}

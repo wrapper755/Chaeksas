@@ -67,7 +67,7 @@
 | API 키 (Center·서비스 앱) | 사용 중 / 만료 / 폐기됨 | done / warning / neutral |
 | 서비스 앱 키 참조 (Bot UI·Studio) | 정상 / 없음(등록 필요) / 거부됨 / 만료 / 폐기됨 / 확인 전 | done / failed / failed / warning / failed / neutral |
 | 패키지 | 후보 / 승인됨 / 지원 종료 / 철회 / 로컬만 | waiting / done / warning / failed / neutral |
-| 서명·준비·온라인·UI 세션·배치 결정·가상 직원·관리자 계정·배포 | `tokens.json` `status_map` 참고 | — |
+| 서명·준비·온라인·UI 세션·배치 결정·가상 직원·관리자 계정·배포·등록 요청 | `tokens.json` `status_map` 참고 | — |
 | 결재 | 대기 / 답함 / 시간 초과 / 회수됨 (실행하는 쪽이 답을 거절하면 다시 「대기」 + 안내 띠) | waiting / done / warning / neutral |
 | 작업 | 대기 / 전달됨 / 대기열 / 수락 / 거절 / 만료 / 취소됨 | neutral / active / waiting / done / failed / warning / neutral |
 | 로케이터 | 사용 중(active) / 검증 전(unverified) / 대체됨(deprecated) | done / waiting / neutral |
@@ -80,8 +80,8 @@
 
 새 업무 하나가 만들어져 운영되기까지 거치는 화면이다.
 
-0. **준비 (서버)** — 설치하는 사람이 `.env`에 첫 관리자 아이디·비밀번호를 적고 Center를 띄운다. 관리자가 Center 콘솔에 들어가([CON-00](center-console.md#con-00-공통-틀)) 내장·사내 서비스 앱 주소와 외부 확장 정의를 등록한다([CON-07](center-console.md#con-07-리소스-신규)). 서버 Bot을 쓸 거면 서버 실행기용 Center API 키를 발급해 서버 실행기에 넣는다 (M7).
-1. **준비 (PC)** — 운영자가 Bot UI용 Center API 키를 발급하고([CON-11](center-console.md#con-11-center-api-키-신규)), 설치 담당자가 Bot UI 설정에 넣는다([BUI-03](bot-ui.md#bui-03-설정등록)). 서비스 앱 관리자가 서비스 앱 키를 발급하고([SVC-02](service-app-console.md#svc-02-api-키)), Bot UI 「서비스 앱 키」에 참조 이름으로 넣는다([BUI-10](bot-ui.md#bui-10-서비스-앱-키)).
+0. **준비 (서버)** — 설치하는 사람이 `.env`에 첫 관리자 아이디·비밀번호를 적고 Center를 띄운다. 관리자가 Center 콘솔에 들어가([CON-00](center-console.md#con-00-공통-틀)) 내장·사내 서비스 앱 주소와 외부 확장 정의를 등록한다([CON-07](center-console.md#con-07-리소스-신규)). 서버 Bot을 쓸 거면 서버 실행기에 Center 주소를 주고 띄운 뒤, 로그의 요청 코드와 같은 줄을 [CON-12](center-console.md#con-12-서버-실행-신규-m7) 「승인 대기」에서 승인한다 (컨테이너는 환경변수로 키를 준다 — C12).
+1. **준비 (PC)** — 설치 담당자가 Bot UI 설정에 Center 주소를 넣고([BUI-03](bot-ui.md#bui-03-설정등록)) 화면에 뜬 요청 코드를 관리자에게 알리면, 관리자가 [CON-03](center-console.md#con-03-bot-ui-현황) 「승인 대기」에서 같은 코드를 승인한다 — 키는 Center가 내려 준다 ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). 서비스 앱 관리자가 서비스 앱 키를 발급하고([SVC-02](service-app-console.md#svc-02-api-키)), Bot UI 「서비스 앱 키」에 참조 이름으로 넣는다([BUI-10](bot-ui.md#bui-10-서비스-앱-키)).
 2. **UI 셀렉터 등록** (화면 조작이 필요할 때) — 등록 담당자가 Tool UI에서 UI 자동화 확장의 도구로 화면 요소를 등록한다. [TOL-03](tool-ui.md#tol-03-ui-셀렉터-등록-구-bui-06)
 3. **BPM 프로세스 만들기** — 설계자가 Studio에서 새 BPM 프로세스를 만들고 실행 위치를 정한다 — 기본은 서버, 화면 조작·현장 확인이 필요하면 PC ([ADR-0016](../decisions/0016-server-first.md)). 사용할 서비스 앱마다 키 참조 이름을 정한다. [STU-05](studio.md#stu-05-새-bpm-프로세스), [STU-06](studio.md#stu-06-bpm-프로세스-정보)
 4. **그리기** — BPMN을 그리고 태스크마다 속성을 채운다. UI 태스크는 등록된 화면·요소를 고르고, 서비스 앱 태스크는 리소스 탐색기의 작업을 고른다. [STU-01](studio.md#stu-01-메인-창), [STU-03](studio.md#stu-03-리소스-탐색기), [STU-13](studio.md#stu-13-ui-태스크-편집기-신규), [STU-14](studio.md#stu-14-서비스-앱-태스크-편집기-신규)

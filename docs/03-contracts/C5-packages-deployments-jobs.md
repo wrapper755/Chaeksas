@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) — **§등록 승인은 초안이다** ([0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), 코드 아직) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) — **§등록 승인도 돈다** (2026-10-25, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py`, `…/accounts.py` (import `chaeksas.contracts.center_api`·`chaeksas.contracts.accounts`, [ADR-0019](../decisions/0019-package-names.md)) |
@@ -276,7 +276,7 @@ JobInfo는 위 필드에 다음을 더한다.
 
 ## 등록 승인 (CON-03·CON-12)
 
-> 상태: **초안** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — 코드 아직.
+> 상태: **돈다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — `center/enrollments.py`. 콘솔은 CON-03·CON-12 「승인 대기」(`components/Enrollments.tsx`).
 
 PC(Bot UI)와 서버 실행기가 보낸 **등록 요청**(C4·C12 §등록 요청과 승인)을 관리자가 보고 들인다. 사람은 키를 보지 않는다 — 승인하면 Center가 키를 만들어 그 요청의 공개키로 봉해 둔다.
 
@@ -426,7 +426,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-25 | 1 | **초안: 등록 승인** — `GET /enrollments`·`POST …/approve·reject`, 권한표의 「인증 없음」 줄(등록 요청 두 경로), 오류 `enrollment_closed` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| 2026-10-25 | 1 | **등록 승인** — `GET /enrollments`·`POST …/approve·reject`, 권한표의 「인증 없음」 줄(등록 요청 두 경로), 오류 `enrollment_closed` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-24 | 1 | **관리자 계정과 로그인 세션**을 더했다(`/auth/*`·`/accounts`). 승인·승인 철회·배포·배포 철회는 **봉투 대신 요청을 받고 Center가 서명한다** — 본문이 바뀌었다(`DeploymentRequest`·`{deployment_id, reason}`·`{reason}`). `approved_by`·`deployed_by`·`revoked_by`를 더했다. `POST/DELETE /admin-keys`를 없앴다. 관리자·읽기 토큰은 자동화용으로 남는다. 배포 철회 경로를 코드대로 `DELETE /deployments`(본문에 id)로 고쳐 적었다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 1 | **가상 직원**(§가상 직원, CON-13) — 등록·읽기·관문(B16, 묶을 때와 배포할 때)·`?virtual_worker=` 이어 붙이기. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0085](../decisions/0085-virtual-worker-resource.md) |
 | 2026-10-20 | 1 | **사람 대신 부르는 길** — `X-CHK-On-Behalf-Of`, `JobInfo.on_behalf_of`(주장, `requested_by`는 그대로), 대리 답용 키 줄, 오류 `on_behalf_invalid` | [0081](../decisions/0081-answering-on-behalf.md) |

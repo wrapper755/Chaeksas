@@ -160,6 +160,26 @@ MIGRATIONS: tuple[Step, ...] = (
             "ALTER TABLE extensions ADD COLUMN revoked_by TEXT",
         ),
     ),
+    Step(
+        10,
+        "등록 요청과 승인, 키 회전 — 키는 Center가 만들어 봉해 내려 준다 (C4·C12·C5, ADR-0092)",
+        (
+            # 요청 본문은 그대로 둔다 — 승인해도 `register`가 다시 보낸다. 봉한 키는 **받을 때까지만**.
+            "CREATE TABLE enrollments ("
+            " enrollment_id TEXT PRIMARY KEY, type TEXT NOT NULL, machine_id TEXT NOT NULL,"
+            " name TEXT NOT NULL, os TEXT NOT NULL, request_json TEXT NOT NULL, public_key TEXT NOT NULL,"
+            " code TEXT NOT NULL, remote_addr TEXT, requested_at TEXT NOT NULL, expires_at TEXT NOT NULL,"
+            " state TEXT NOT NULL, decided_by TEXT, decided_at TEXT, reason TEXT, key_id TEXT,"
+            " sealed_json TEXT, replaced_key_id TEXT)",
+            "CREATE INDEX enrollments_state ON enrollments (state)",
+            "CREATE INDEX enrollments_machine ON enrollments (type, machine_id)",
+            "ALTER TABLE center_keys ADD COLUMN enrollment_id TEXT",
+            # 회전에 쓰는 그 기계의 공개키, 갈아 줄 새 키, 새 키를 봉한 것 (새 키의 행에 둔다).
+            "ALTER TABLE center_keys ADD COLUMN public_key TEXT",
+            "ALTER TABLE center_keys ADD COLUMN successor_id TEXT",
+            "ALTER TABLE center_keys ADD COLUMN sealed_json TEXT",
+        ),
+    ),
 )
 
 

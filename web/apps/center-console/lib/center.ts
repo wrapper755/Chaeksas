@@ -27,6 +27,8 @@ import type { JobCreateRequest } from "@chaeksas/api-types/c5-job-create-request
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { DependentInfo } from "@chaeksas/api-types/c5-dependent-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
+import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
+import type { EnrollmentDecision } from "@chaeksas/api-types/c5-enrollment-decision";
 import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
 import type { RunListing } from "@chaeksas/api-types/c3-run-listing";
@@ -318,6 +320,23 @@ export const center = {
     call<unknown>(`/api/v1/virtual-workers/${encodeURIComponent(id)}`, { method: "DELETE" }),
   unbindCenterKey: (keyId: string) =>
     call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}/unbind`, { method: "POST" }),
+
+  /**
+   * 등록 요청 (C5 §등록 승인, ADR-0092) — CON-03·CON-12 「승인 대기」. 기본은 대기 중인 것만.
+   * 사람은 키를 보지 않는다 — 승인 응답에도 원문이 없다.
+   */
+  enrollments: (type: "bot_ui" | "server_runner") =>
+    call<EnrollmentInfo[]>(`/api/v1/enrollments?type=${type}`),
+  approveEnrollment: (id: string, name?: string) =>
+    call<EnrollmentDecision>(`/api/v1/enrollments/${encodeURIComponent(id)}/approve`, {
+      method: "POST",
+      body: JSON.stringify(name ? { name } : {}),
+    }),
+  rejectEnrollment: (id: string, reason?: string) =>
+    call<EnrollmentInfo>(`/api/v1/enrollments/${encodeURIComponent(id)}/reject`, {
+      method: "POST",
+      body: JSON.stringify(reason ? { reason } : {}),
+    }),
 
   runs: (
     query: {

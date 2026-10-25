@@ -29,7 +29,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from chaeksas.center import host_keys
+from chaeksas.center import enrollments, host_keys
 from chaeksas.center.api import approvals, deployments, jobs, messages, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
@@ -148,6 +148,9 @@ def register(
                 ),
             )
 
+    # 승인으로 받은 키가 처음 쓰였다 — **봉해 둔 것을 지운다** (C12 §등록 요청과 승인).
+    enrollments.delivered(store, key, public_key=request.public_key)
+
     return ServerRunnerRegisterResponse(
         server_runner_id=ServerRunnerId(runner_id),
         # **등록 응답에도 싣는다** (C12 §등록) — 실행기는 공개키를 메모리에만 두고, 다시 뜨면
@@ -247,6 +250,7 @@ def heartbeat(
         # 때까지 다시 싣고**, 받았다는 ack가 오면 **값을 바로 지운다**.
         delegations=_delegations(store, runner_id=runner_id, acks=request.delegation_acks),
         paused=paused,
+        rotated_key=enrollments.rotation_for(store, key, host_id=runner_id),
         # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4·C12).
         key_expires_at=key.expires_at,
     )

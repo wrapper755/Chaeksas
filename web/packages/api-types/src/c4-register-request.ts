@@ -11,6 +11,7 @@ export interface RegisterRequest {
   machine_id: string;
   name: string;
   os: string;
+  public_key?: string | null;
   runtimes?: Runtimes | null;
   /**
    * 이 계약의 schema 번호

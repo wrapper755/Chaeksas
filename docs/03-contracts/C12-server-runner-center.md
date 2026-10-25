@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-15) — 등록·하트비트·운영 API·배포 설치·작업 실행·기다리는 실행의 저장·재개·결재·메시지·**PC 위임**이 양쪽에서 돌고 시험이 지킨다. **§등록 요청과 승인은 초안이다** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), 코드 아직) |
+| 상태 | **구현됨** (2026-10-15) — 등록·하트비트·운영 API·배포 설치·작업 실행·기다리는 실행의 저장·재개·결재·메시지·**PC 위임**이 양쪽에서 돌고 시험이 지킨다. **§등록 요청과 승인·키 회전도 돈다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
@@ -76,20 +76,20 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 
 ### 등록 요청과 승인
 
-> 상태: **초안** ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — 코드는 아직 환경변수 `CHK_SERVER_RUNNER__CENTER_API_KEY` 길만 있다.
+> 상태: **돈다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — `server_runner/enroll.py`(요청·묻기·받기, 보낸 요청은 데이터 폴더의 `enrollment.json` — 키도 봉함도 담지 않는다)와 Center의 C4와 같은 코드다. 시험: `tests/test_server_runner_agent.py`·`tests/test_center_enrollment.py`.
 
 **C4 §등록 요청과 승인과 같다** — 같은 요청 코드·같은 봉함·같은 24시간·같은 막기이고, 다른 것은 아래뿐이다. 규칙은 코드로도 한 자리에 둔다(키 묶기의 `center/host_keys.py`와 같은 결).
 
 | | Bot UI (C4) | 서버 실행기 |
 | --- | --- | --- |
 | 요청 본문 | C4 `RegisterRequest` + `public_key` | 이 문서의 `RegisterRequest` + `public_key` |
-| 요청 코드를 보이는 곳 | BUI-03·트레이 | **시작할 때 로그 한 줄**: 「Center에 등록 요청을 보냈습니다. 요청 코드 ABCD-EFGH — Center 콘솔 「서버 실행」에서 승인하세요」. `--once`는 그 줄을 찍고 끝 코드 1로 끝난다(「사람이 고쳐야 한다」 — 승인이 그 일이다) |
+| 요청 코드를 보이는 곳 | BUI-03·트레이 | **시작할 때 로그 한 줄**: 「Center에 등록 요청을 보냈습니다. 요청 코드 ABCD-EFGH — Center 콘솔 「서버 실행」에서 승인하세요」. `--once`는 한 걸음만 하고 아직 승인되지 않았으면 끝 코드 1로 끝난다(「사람이 고쳐야 한다」 — 승인이 그 일이다) |
 | 승인하는 곳 | CON-03 「승인 대기」 | CON-12 「승인 대기」 |
 | 만드는 키 | 「Bot UI용」 | 「서버 실행기용」 |
 | 받은 키를 두는 곳 | OS 비밀 저장소 | OS 비밀 저장소(`chaeksas-server-runner`, 이름 `center_api_key`) |
 
 - **환경변수로 키가 오면** 등록 요청을 보내지 않는다 (지금 길이고, 컨테이너·CI는 이 길이다).
-- **OS 비밀 저장소가 없으면 등록 요청을 보내지 않는다.** 받은 키를 둘 곳이 없어서다 — 평문 파일로 흘리지 않는다 (CLAUDE.md §5). 로그에 「비밀 저장소가 없습니다 — 환경변수 CHK_SERVER_RUNNER__CENTER_API_KEY로 키를 주세요」를 찍고 끝 코드 1이다.
+- **OS 비밀 저장소가 없으면 등록 요청을 보내지 않는다.** 받은 키를 둘 곳이 없어서다 — 평문 파일로 흘리지 않는다 (CLAUDE.md §5). 로그에 「비밀 저장소가 없습니다 — 환경변수 CHK_SERVER_RUNNER__CENTER_API_KEY로 키를 주세요」를 찍고 끝 코드 2다(키가 없을 때의 지금 코드와 같다).
 - 키 회전도 C4 §키 회전과 같다 — 하트비트 답의 `rotated_key`. 환경변수로 받은 키는 회전하지 않는다.
 
 > 미정: 컨테이너에서도 승인으로 들이려면 받은 키를 둘 자리(마운트한 비밀 볼륨 같은 것)를 정해야 한다.
@@ -354,7 +354,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-25 | 1 | **초안: 등록 요청과 승인** — `POST/GET …/server-runner/enroll`(C4와 같은 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`. 요청 코드는 로그에 찍고 CON-12에서 승인한다. 비밀 저장소가 없으면 요청하지 않는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| 2026-10-25 | 1 | **등록 요청과 승인** — `POST/GET …/server-runner/enroll`(C4와 같은 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`. 요청 코드는 로그에 찍고 CON-12에서 승인한다. 비밀 저장소가 없으면 요청하지 않는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | **서버 Bot에도 위임한다** (일괄 기동) — 대상 매니페스트의 `run_location`으로 가른다. 위임 요청의 `loop_index?`(멱등 키에 들어간다), 응답의 `target_type`(`bot_ui_id`는 PC일 때만), 422 `bot_ui_for_server`, 서버 실행기가 맡겨진 작업의 `outputs`를 올린다 | [0082](../decisions/0082-batch-start.md) |
 | 2026-10-15 | 1 | **도는 실행을 멈추는 길이 생겼다** — C5 취소 표가 서버 대상 `accepted`를 202로 받아 `cancel_jobs`로 내려 준다 (C12는 **받는 쪽이 이미 하던 일**이라 모양이 늘지 않았다). 그래서 위임 거두기 가지가 **켜진다** | [0063](../decisions/0063-stopping-a-running-server-run.md) |
 | 2026-10-15 | 1 | **맡긴 것을 거두는 길과 못 받은 값의 청소를 더했다** — `POST …/delegations/{job_id}/cancel`(실행기 키, **제 관문을 지나 Center 안에서** 작업 취소를 부른다. 남의 위임은 404)과 하트비트가 함께 돌리는 7일 청소다. 둘 다 ADR이 적어 두었던 것이고 **경로 하나가 늘었다** — 옛 실행기는 부르지 않을 뿐이다 | [0062](../decisions/0062-pc-delegation.md) |

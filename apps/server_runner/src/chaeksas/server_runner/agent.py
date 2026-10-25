@@ -42,6 +42,7 @@ from chaeksas.contracts.bot_ui import (
     Readiness,
 )
 from chaeksas.contracts.center_api import delegated_run
+from chaeksas.contracts.enrollment import SealError, open_sealed, public_of
 from chaeksas.contracts.server_runner import (
     Capacity,
     DelegationAck,
@@ -77,7 +78,7 @@ from chaeksas.server_runner.center_client import (
     NotRegistered,
     Unreachable,
 )
-from chaeksas.server_runner.credentials import Credentials
+from chaeksas.server_runner.credentials import Credentials, SecretsUnavailable
 from chaeksas.server_runner.delegate import CenterDelegator
 from chaeksas.server_runner.extensions import load as load_extensions
 from chaeksas.server_runner.extensions import tasks as extension_tasks
@@ -257,6 +258,42 @@ class Agent:
             self.tick()
         return self.last_response is not None
 
+    def register_fields(self) -> dict[str, Any]:
+        """등록 본문의 칸 — 등록과 등록 요청(C12 §등록 요청과 승인)이 같은 것을 싣는다."""
+        return {
+            "schema": 1,
+            "machine_id": self.machine_id(),
+            "name": self.name(),
+            "os": machine.os_label(),
+            "versions": self.versions(),
+            "max_concurrency": self.settings.max_concurrency,
+            "extensions": self.extension_host().states(),
+        }
+
+    def _public_key(self) -> str | None:
+        """등록에 실을 공개키 — 실으면 Center가 키를 회전해 준다 (C4 §키 회전). 환경변수 키는 뺀다."""
+        if self.credentials.center_key_from_env():
+            return None
+        secret = self.credentials.enroll_secret()
+        return public_of(secret) if secret else None
+
+    def _take_rotated(self, answer: Any) -> None:
+        """하트비트 답의 새 키 (C4 §키 회전) — 비밀 저장소에 두고 **다음 요청부터** 쓴다."""
+        rotated = getattr(answer, "rotated_key", None)
+        if rotated is None or not self.server_runner_id or self.credentials.center_key_from_env():
+            return
+        secret = self.credentials.enroll_secret()
+        if secret is None:
+            return
+        try:
+            key = open_sealed(secret, rotated.sealed_key, salt=self.server_runner_id)
+            self.credentials.set_center_api_key(key)
+        except (SealError, SecretsUnavailable) as e:
+            log.warning("새 Center API 키를 받지 못했다 (옛 키로 계속한다): %s", e)
+            return
+        self.client.api_key = key
+        log.info("Center API 키를 갈았다 (새 키 만료 %s)", rotated.expires_at)
+
     def _register(self) -> bool:
         request = ServerRunnerRegisterRequest(
             schema=1,
@@ -269,6 +306,7 @@ class Agent:
             # 싣지 않으면 C7이 그 확장을 모르고, 그것을 요구하는 Bot의 **배포가 막힌다**
             # (「확장 누락」은 배포를 막는 셋 중 하나다). CON-12 상세도 이 목록을 그린다.
             extensions=self.extension_host().states(),
+            public_key=self._public_key(),
         )
         try:
             answer = self.client.register(request)
@@ -328,6 +366,7 @@ class Agent:
 
         self._came_online()
         self._apply(answer)
+        self._take_rotated(answer)
         # **하트비트 뒤에** 한다 (C3 §전송·ADR-0038) — 실행 중에 보내면 느린 Center가 업무를
         # 붙잡는다. 결재를 먼저 올려야 다음 주기에 답이 내려올 수 있다.
         self.post_approvals()
