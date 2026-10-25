@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from chaeksas.contracts.bpmn_ext import Case, CaseMessage
+from chaeksas.contracts.bpmn_ext import CASE_ANSWERER, Case, CaseMessage
 from chaeksas.qt.messages import ask_unsaved
 from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3, SPACE_4
@@ -57,6 +57,9 @@ from chaeksas.studio.workspace import BpmProcess, Definition
 
 #: 스크롤 없이 보이는 줄 수 (STU-07).
 VISIBLE_ROWS = 3
+
+#: 「결재 자동 응답」 탭 아래 작은 표의 이름 (케이스 `answered_by`, ADR-0096).
+ANSWERER_TITLE = f"답한 사람 (적지 않으면 「{CASE_ANSWERER}」)"
 
 
 def _table(headers: Sequence[str]) -> QTableWidget:
@@ -172,6 +175,21 @@ class CaseDialog(QDialog):
             ("결재 노드", "칸", "값"),
             lambda: [_combo(sorted(self.forms), ""), _combo(self._keys(), "decision", editable=True), ""],
         )
+        # 답한 사람 (케이스 `answered_by`, ADR-0096) — 답과 한 자리에서 보이게 같은 탭 아래에 둔다.
+        self.answerer_block = Block(
+            ANSWERER_TITLE,
+            ("결재 노드", "이름"),
+            lambda: [_combo(sorted(self.forms), ""), ""],
+        )
+        heading = QLabel(ANSWERER_TITLE, self.answer_block)
+        set_role(heading, "muted")
+        answer_layout = self.answer_block.layout()
+        assert isinstance(answer_layout, QVBoxLayout)
+        answer_layout.addWidget(heading)
+        inner = self.answerer_block.layout()
+        if inner is not None:
+            inner.setContentsMargins(0, 0, 0, 0)  # 탭 안의 표라 테두리 여백을 또 두지 않는다
+        answer_layout.addWidget(self.answerer_block, 1)
         self.message_block = Block(
             "보낼 메시지",
             ("몇 초 뒤", "메시지", "상관 값", "본문(JSON)"),
@@ -180,6 +198,7 @@ class CaseDialog(QDialog):
         self.inputs = self.input_block.table
         self.expected = self.expected_block.table
         self.answers = self.answer_block.table
+        self.answerers = self.answerer_block.table
         self.messages = self.message_block.table
 
         mark = " — 진입" if definition is process.entry_definition else ""
@@ -300,6 +319,10 @@ class CaseDialog(QDialog):
                     ]
                 )
         _fill(self.answers, answers)
+        _fill(
+            self.answerers,
+            [[_combo(sorted(self.forms) or [node_id], node_id), name] for node_id, name in case.answered_by.items()],
+        )
         self.note.setText("" if self.forms else NO_APPROVALS)
 
         _fill(
@@ -349,6 +372,8 @@ class CaseDialog(QDialog):
             answer = approvals.setdefault(node_id, {})
             if key:
                 answer[key] = _loose(text)
+        # 이름이 빈 줄은 담지 않는다 — 비우면 「시험 케이스」다.
+        answered_by = {node_id: name for node_id, name in _read(self.answerers, (0, 1)) if node_id and name}
         messages = []
         for after, name, correlation, payload in _read(self.messages, (0, 1, 2, 3)):
             if not name:
@@ -365,7 +390,7 @@ class CaseDialog(QDialog):
                     payload=body if isinstance(body, dict) else {},
                 )
             )
-        # **편집기가 다루지 않는 칸은 그대로 남긴다** (`delegations`·`answered_by` — ADR-0096).
+        # **편집기가 다루지 않는 칸은 그대로 남긴다** (`delegations`).
         self.edited.cases[self.current] = self.edited.cases[self.current].model_copy(
             update={
                 "name": self.name_box.text().strip(),
@@ -373,6 +398,7 @@ class CaseDialog(QDialog):
                 "inputs": inputs,
                 "expected": expected,
                 "approvals": approvals,
+                "answered_by": answered_by,
                 "messages": messages,
                 "manual": self.manual_box.isChecked(),
             }

@@ -140,6 +140,24 @@ def test_assignees_can_be_a_variable() -> None:
     assert made.dump()["assignees"] == "검토자"
 
 
+def test_the_answerer_variables_are_shown_and_written() -> None:
+    """「답한 사람」·「대리 경로」 — 그림의 `answered_by_as`·`answered_via_as` (ADR-0096)."""
+    made = loaded({**BODY, "answered_by_as": "확인자", "answered_via_as": "확인경로"})
+    assert (made.answered_by_box.text(), made.answered_via_box.text()) == ("확인자", "확인경로")
+    made.answered_via_box.clear()
+    body = made.dump()
+    assert body["answered_by_as"] == "확인자"
+    assert "answered_via_as" not in body, "비우면 변수를 만들지 않는다 — 그림에서 빠진다"
+    assert made.problems() == ([], [])
+
+
+def test_a_bad_answerer_variable_blocks_apply() -> None:
+    made = loaded()
+    made.answered_by_box.setText("확인 한 사람")
+    errors, _ = made.problems()
+    assert errors == ["답한 사람 변수 이름으로 쓸 수 없습니다: 확인 한 사람"]
+
+
 def test_empty_optional_fields_leave_the_drawing() -> None:
     made = loaded({"title": "확인"})
     body = made.dump()

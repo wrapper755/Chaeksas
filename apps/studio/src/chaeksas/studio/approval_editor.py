@@ -140,6 +140,18 @@ class ApprovalEditor(QWidget):
         self.assignee_box.setPlaceholderText("비우면 담당자를 정하지 않습니다")
         self.expires_box = QLineEdit(self)
         self.expires_box.setPlaceholderText("ISO 기간(예: P3D) 또는 변수 이름 — 비우면 기한 없음")
+        # 답한 사람이 들어갈 변수 (C14 `answered_by_as`·`answered_via_as`, ADR-0096).
+        self.answered_by_box = QLineEdit(self)
+        self.answered_by_box.setPlaceholderText("변수 이름 — 비우면 만들지 않습니다")
+        self.answered_by_box.setToolTip(
+            "답한 사람의 이름이 이 변수에 들어갑니다 — 콘솔이면 계정 이름, 대리 답이면 그 사람, "
+            "현장이면 Bot UI 표시 이름. 반려여도 채웁니다."
+        )
+        self.answered_via_box = QLineEdit(self)
+        self.answered_via_box.setPlaceholderText("변수 이름 — 비우면 만들지 않습니다")
+        self.answered_via_box.setToolTip(
+            "대리 답이면 그 대리 답용 키 이름이, 아니면 빈 값(None)이 이 변수에 들어갑니다."
+        )
 
         self.warning = QLabel("", self)
         self.warning.setWordWrap(True)
@@ -210,7 +222,7 @@ class ApprovalEditor(QWidget):
         return box
 
     def _who_box(self) -> QGroupBox:
-        box = QGroupBox("담당자·기한", self)
+        box = QGroupBox("담당자·기한·답한 사람", self)
         form = QFormLayout(box)
         _tight(form)
         who = QHBoxLayout()
@@ -219,10 +231,12 @@ class ApprovalEditor(QWidget):
         who.addWidget(self.assignee_box, 1)
         form.addRow("담당자", who)
         form.addRow("기한", self.expires_box)
+        form.addRow("답한 사람", self.answered_by_box)
+        form.addRow("대리 경로", self.answered_via_box)
         return box
 
     def _wire(self) -> None:
-        for line in (self.title_box, self.assignee_box, self.expires_box):
+        for line in (self.title_box, self.assignee_box, self.expires_box, self.answered_by_box, self.answered_via_box):
             line.textChanged.connect(self._touched)
         self.description_box.textChanged.connect(self._touched)
         self.show_input.textChanged.connect(self._refresh_show_buttons)
@@ -268,6 +282,8 @@ class ApprovalEditor(QWidget):
             names = assignees if isinstance(assignees, list) else []
             self.assignee_box.setText(", ".join(str(n) for n in names))
         self.expires_box.setText(str(body.get("expires") or ""))
+        self.answered_by_box.setText(str(body.get("answered_by_as") or ""))
+        self.answered_via_box.setText(str(body.get("answered_via_as") or ""))
         self._quiet = False
         self._refresh_location()
 
@@ -283,6 +299,8 @@ class ApprovalEditor(QWidget):
         _put(out, "location", location if location != "follow" or "location" in self._loaded else None)
         _put(out, "assignees", self._assignees())
         _put(out, "expires", self.expires_box.text().strip() or None)
+        _put(out, "answered_by_as", self.answered_by_box.text().strip() or None)
+        _put(out, "answered_via_as", self.answered_via_box.text().strip() or None)
         return out
 
     def problems(self) -> tuple[list[str], list[str]]:
@@ -306,6 +324,10 @@ class ApprovalEditor(QWidget):
             name = self.assignee_box.text().strip()
             if not name.isidentifier():
                 errors.append(f"담당자 변수 이름으로 쓸 수 없습니다: {name}")
+        for label, line in (("답한 사람", self.answered_by_box), ("대리 경로", self.answered_via_box)):
+            name = line.text().strip()
+            if name and not is_var_name(name):
+                errors.append(f"{label} 변수 이름으로 쓸 수 없습니다: {name}")
         if not errors:
             try:
                 Approval.model_validate(self.dump())

@@ -436,3 +436,21 @@ def test_a_role_given_after_the_label_is_shown_still_colors_it(app: Any) -> None
     set_role(late, "")  # 뜻을 거두면 기본 글자로 돌아간다
     assert late.palette().color(QPalette.ColorRole.WindowText) != wanted
     holder.close()
+
+
+def test_roles_are_given_through_set_role() -> None:
+    """`setProperty("role", …)`만 부르면 보인 뒤 준 뜻이 칠해지지 않는다 — `set_role`을 쓴다.
+
+    `chaeksas-qt`를 쓰지 않는 확장은 스스로 다시 칠하므로 여기서 보지 않는다 (스타일 가이드 §4-2).
+    """
+    from pathlib import Path  # noqa: PLC0415
+
+    root = Path(__file__).resolve().parent.parent
+    theme = root / "packages" / "qt" / "src" / "chaeksas" / "qt" / "theme" / "__init__.py"
+    raw = [
+        f"{path.relative_to(root).as_posix()}"
+        for top in ("apps", "packages")
+        for path in (root / top).rglob("*.py")
+        if path != theme and 'setProperty("role"' in path.read_text(encoding="utf-8")
+    ]
+    assert not raw, f"set_role 대신 setProperty로 role을 준다: {raw}"
