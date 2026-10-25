@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { keyStages, readinessLabel } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { BotUiActions, SelectorRegistration } from "../actions-ui";
@@ -203,7 +203,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/bot-uis">
+    <Shell mode={found.mode} actor={found.actor} current="/bot-uis">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">{info?.name ?? wanted}</h1>
         <p className="text-body text-text-secondary">

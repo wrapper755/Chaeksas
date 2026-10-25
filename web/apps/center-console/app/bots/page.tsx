@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { PackageActions } from "@/components/PackageActions";
 import { STATUS_LABEL, packageHref, time } from "@/app/packages/page";
@@ -261,7 +261,7 @@ export default async function BotsPage() {
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/bots">
+    <Shell mode={found.mode} actor={found.actor} current="/bots">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">Bot 현황</h1>
         <p className="text-body text-text-secondary">

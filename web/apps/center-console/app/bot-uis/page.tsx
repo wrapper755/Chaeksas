@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
 import { Enrollments } from "@/components/Enrollments";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
@@ -149,13 +150,14 @@ export default async function BotUisPage() {
   const online = rows.filter((row) => row.online).length;
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/bot-uis">
+    <Shell mode={found.mode} actor={found.actor} current="/bot-uis">
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-h1 font-bold">Bot UI 현황</h1>
           <p className="text-body text-text-secondary">
             {rows.length > 0 ? `${online}/${rows.length} 온라인` : "PC마다 하나인 Bot UI의 상태입니다."}
           </p>
+          <CenterAddress url={CENTER_PUBLIC_URL} who="Bot UI" />
         </div>
       </header>
 

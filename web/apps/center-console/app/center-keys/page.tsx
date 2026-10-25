@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
 import { KeyMenu, KeyTools } from "./tools";
 import { Enrollments } from "@/components/Enrollments";
@@ -79,7 +80,7 @@ export default async function CenterKeysPage() {
   }
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/center-keys">
+    <Shell mode={found.mode} actor={found.actor} current="/center-keys">
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-h1 font-bold">Center API 키</h1>
@@ -87,6 +88,7 @@ export default async function CenterKeysPage() {
             Bot UI·Studio·서버 실행기·외부 시스템이 Center에 접속할 때 쓰는 키입니다. 서비스 앱 키는 각 앱의
             관리 콘솔에서 발급합니다.
           </p>
+          <CenterAddress url={CENTER_PUBLIC_URL} who="Bot UI·Studio·서버 실행기" />
         </div>
       </header>
 

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, ErrorBanner, StatusBadge } from "@chaeksas/ui";
 import type { ApprovalInfo, FormField } from "@chaeksas/api-types/c6-approval-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { answerApproval } from "@/app/actions";
 import { WithdrawApproval } from "../withdraw";
@@ -106,7 +106,7 @@ export default async function ApprovalPage({
   const canAnswer = found.mode === "admin" && info?.state === "open";
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/approvals">
+    <Shell mode={found.mode} actor={found.actor} current="/approvals">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">{info?.title ?? "결재 요청"}</h1>
         <p className="text-body text-text-secondary">

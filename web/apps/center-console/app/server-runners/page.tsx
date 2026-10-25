@@ -8,6 +8,7 @@ import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { queueReason, runnerStatus, serverDeployments } from "@/lib/summary";
+import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
 import { fullTime, time } from "../bot-uis/page";
 import { CancelQueuedJob } from "./queue-cancel";
@@ -168,7 +169,7 @@ export default async function ServerRunnersPage() {
   const online = rows.filter((row) => row.online).length;
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/server-runners">
+    <Shell mode={found.mode} actor={found.actor} current="/server-runners">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">서버 실행</h1>
         <p className="text-body text-text-secondary">
@@ -176,6 +177,7 @@ export default async function ServerRunnersPage() {
             ? `${online}/${rows.length} 온라인`
             : "실행 위치가 「서버」인 Bot을 Center가 관리하는 서버 실행기에서 돌립니다."}
         </p>
+        <CenterAddress url={CENTER_PUBLIC_URL} who="서버 실행기" />
       </header>
 
       {failure ? <ErrorBanner message={failure} /> : null}

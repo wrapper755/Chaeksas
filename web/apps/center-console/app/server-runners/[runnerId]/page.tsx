@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { botLimitRows, elapsed, keyStages, runnerStatus, serverDeployments } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { fullTime, time } from "../../bot-uis/page";
@@ -241,7 +241,7 @@ export default async function ServerRunnerPage({
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/server-runners">
+    <Shell mode={found.mode} actor={found.actor} current="/server-runners">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">{info?.name ?? wanted}</h1>
         <p className="text-body text-text-secondary">

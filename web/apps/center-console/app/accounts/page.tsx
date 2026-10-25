@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { AccountInfo } from "@chaeksas/api-types/c5-account-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { fullTime } from "@/app/bot-uis/page";
 import { AccountMenu, NewAccount } from "./tools";
@@ -57,7 +57,7 @@ export default async function AccountsPage() {
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/accounts">
+    <Shell mode={found.mode} actor={found.actor} current="/accounts">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-h1 font-bold">관리자 계정</h1>
