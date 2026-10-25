@@ -231,6 +231,27 @@ def test_saving_keeps_what_the_editor_does_not_show(app: Any, tmp_path: Path) ->
     assert again.answered_by == {"Approve_X": "이도윤"}
 
 
+def test_the_answerer_table_round_trips(app: Any, tmp_path: Path) -> None:
+    """「답한 사람」 표 — 케이스 `answered_by` (ADR-0096). 이름이 빈 줄은 담지 않는다."""
+    made, definition = imported(tmp_path, EXPENSE)
+    node_id = next(iter(approvals_of(definition)))
+    edited = read(made, definition)
+    edited.cases = [Case(name="답한 사람", answered_by={node_id: "이도윤"})]
+    write(edited)
+
+    dialog = CaseDialog(None, made, definition)
+    assert dialog.answerers.rowCount() == 1
+    name = dialog.answerers.item(0, 1)
+    assert name is not None and name.text() == "이도윤"
+    dialog.answerer_block.add_row()  # 노드만 고르고 이름은 비운 줄
+    assert dialog.save() is True
+    assert read(made, definition).cases[0].answered_by == {node_id: "이도윤"}
+
+    name.setText("박서진")
+    assert dialog.save() is True
+    assert read(made, definition).cases[0].answered_by == {node_id: "박서진"}
+
+
 def test_saving_a_bad_answer_does_not_write(app: Any, tmp_path: Path) -> None:
     """저장을 막고 **창은 열어 둔다** (STU-07) — 고칠 수 있게."""
     made, definition = imported(tmp_path, EXPENSE)
