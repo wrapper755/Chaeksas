@@ -149,7 +149,7 @@
 
 `type`: `bot_ui`, `studio`, `server_runner`, `integration`, `relay` (열린 문자열이지만 Center는 이 다섯만 발급한다).
 
-- **`bot_ui`·`server_runner` 키는 등록 승인이 만든다** (C5 §등록 승인, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). 이 경로로 그 둘을 발급하는 길은 **자동화·시험용**으로 남고(관리자 토큰) CON-11 화면에는 없다. 승인이 만든 키는 `enrollment_id`를 가진다.
+- **`bot_ui`·`server_runner`·`studio` 키는 등록 승인이 만든다** (`studio`는 [0093](../decisions/0093-studio-is-let-in-by-approval.md) — 초안, 코드 아직) (C5 §등록 승인, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). 이 경로로 그 둘을 발급하는 길은 **자동화·시험용**으로 남고(관리자 토큰) CON-11 화면에는 없다. 승인이 만든 키는 `enrollment_id`를 가진다.
 
 - `relay`(**대리 답용 키**, CON-11 표기 「대리 답용」)는 연동하는 쪽이 **사람 대신 결재에 답할 때만** 쓴다 — 결재 읽기·답뿐이고, 그 사람이 담당자일 때만 받는다 (C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)). 연동용 키에 그 권한을 더하지 않은 것은 연동용 키가 **작업을 만드는 바깥 시스템 모두**에 나가기 때문이다. Center는 이 키를 `require_read`·작업·실행 기록 올리기에서 막는다.
 
@@ -162,7 +162,6 @@ CenterKeyInfo 필드:
 | `prefix` | 앞자리 16자 (`chk_ctr_` + 무작위 8자) |
 | `bound_to`? | `{type, id, name, machine_name?, first_seen}` |
 | `enrollment_id`? | 등록 승인이 만든 키면 그 요청 (C5 §등록 승인). 없으면 사람이·자동화가 발급한 키다 |
-| `account`? | Studio 로그인이 만든 키면 그 계정 (C5 §계정 권한과 Studio 로그인). 그 키의 행위자는 이 계정이다 |
 | `created_at`, `expires_at`?, `last_used_at`?, `revoked_at`? | |
 | `state` | `active` / `expired` / `revoked`. 화면 표기는 「사용 중」 / 「만료」 / 「폐기됨」 |
 
