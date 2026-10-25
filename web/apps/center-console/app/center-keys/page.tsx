@@ -6,8 +6,6 @@ import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
 import { KeyMenu, KeyTools } from "./tools";
 import { splitKeys } from "@/lib/center-keys";
-import { Enrollments } from "@/components/Enrollments";
-import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
 /**
  * CON-11 Center API 키.
@@ -24,7 +22,7 @@ const TYPE_LABEL: Record<string, string> = {
   relay: "대리 답용",
 };
 
-const STATE_LABEL: Record<string, string> = {
+export const STATE_LABEL: Record<string, string> = {
   active: "사용 중",
   expired: "만료",
   revoked: "폐기됨",
@@ -42,12 +40,10 @@ export default async function CenterKeysPage() {
   if (!found) redirect("/login");
 
   let rows: CenterKeyInfo[] = [];
-  let enrollments: EnrollmentInfo[] = [];
   let failure: string | null = null;
   try {
+    // 「승인 대기」는 여기 없다 — Bot UI·Studio는 「PC 현황」, 서버 실행기는 「Bot 현황」 서버 탭 (CON-11).
     rows = await center.centerKeys();
-    // Studio의 「승인 대기」 — 요청이 있을 때만 보인다 (C5 §Studio 등록 요청과 승인, ADR-0093).
-    enrollments = await center.enrollments("studio");
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -123,16 +119,10 @@ export default async function CenterKeysPage() {
 
           <section className="flex flex-col gap-3">
             <h2 className="text-h2 font-semibold">승인으로 들인 키</h2>
-            <Enrollments
-              rows={enrollments}
-              where="Studio 설정 창"
-              canDecide={found.mode === "admin"}
-              nameHelp="이 이름이 Studio에서 올린 것의 「누가」로 남습니다 (예: 김OO 설계 PC)."
-            />
             {enrolled.length === 0 ? (
               <EmptyState
                 title="승인으로 들인 키가 없습니다."
-                hint="Bot UI·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — Bot UI는 「Bot UI 현황」, 서버 실행기는 「서버 실행」, Studio는 이 표 위 「승인 대기」에서 승인합니다."
+                hint="Bot UI·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — Bot UI·Studio는 「PC 현황」, 서버 실행기는 「Bot 현황」의 「서버」 탭에서 승인합니다."
               />
             ) : (
               <DataTable

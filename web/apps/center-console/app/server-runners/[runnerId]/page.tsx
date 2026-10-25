@@ -241,12 +241,12 @@ export default async function ServerRunnerPage({
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} current="/server-runners">
+    <Shell mode={found.mode} actor={found.actor} current="/bots">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">{info?.name ?? wanted}</h1>
         <p className="text-body text-text-secondary">
-          <Link className="underline" href="/server-runners">
-            서버 실행
+          <Link className="underline" href="/bots?tab=server">
+            Bot 현황 (서버)
           </Link>
           으로 돌아가기
         </p>

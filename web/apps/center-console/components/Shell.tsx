@@ -41,8 +41,7 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { label: "실행 로그", href: "/runs" },
       { label: "Bot 현황", href: "/bots" },
-      { label: "Bot UI 현황", href: "/bot-uis" },
-      { label: "서버 실행", href: "/server-runners" },
+      { label: "PC 현황", href: "/bot-uis" },
     ],
   },
   {

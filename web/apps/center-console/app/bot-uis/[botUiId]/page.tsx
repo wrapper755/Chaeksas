@@ -11,7 +11,7 @@ import type { Route } from "next";
 import { fullTime, runtimeLabel, running, statusLabel, time, workerLabel } from "../page";
 
 /**
- * CON-03 Bot UI 현황 (상세) — 대기열·배포·확장·최근 배치 결정.
+ * CON-03 PC 현황 — Bot UI 상세 — 대기열·배포·확장·최근 배치 결정.
  *
  * 대기열·확장은 **Bot UI가 하트비트로 보고한 그대로**이고 보기 전용이다 (Center 작업을
  * 취소하는 곳은 CON-05다). 배포는 Center가 가진 것, 「준비」는 Bot UI가 보고한 것이라
@@ -208,7 +208,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
         <h1 className="text-h1 font-bold">{info?.name ?? wanted}</h1>
         <p className="text-body text-text-secondary">
           <Link className="underline" href="/bot-uis">
-            Bot UI 현황
+            PC 현황
           </Link>
           으로 돌아가기
         </p>

@@ -479,3 +479,10 @@ export function waitTotals(rows: ResumeRow[]): { resumed: number; seconds: numbe
     seconds: done.reduce((sum, row) => sum + (row.seconds ?? 0), 0),
   };
 }
+
+/** CON-02 탭 — Bot이 도는 곳 (C1 `run_location`, **생략하면 서버** — 서버 우선). */
+export type Place = "server" | "pc";
+
+export function placeOf(runLocation: string | null | undefined): Place {
+  return runLocation === "pc" ? "pc" : "server";
+}

@@ -82,6 +82,7 @@ export async function setRunnerPaused(runnerId: string, paused: boolean): Promis
     return { error: message(cause) };
   }
   revalidatePath("/server-runners", "layout");
+  revalidatePath("/bots");
   return {};
 }
 
@@ -100,6 +101,7 @@ export async function markRunnerLost(runnerId: string): Promise<ActionResult> {
   }
   // 결재함도 바뀐다 — 회수된 결재가 그 화면에 남아 보이면 안 된다 (C6 `host_lost`).
   revalidatePath("/server-runners", "layout");
+  revalidatePath("/bots");
   revalidatePath("/approvals", "layout");
   revalidatePath("/runs", "layout");
   return {};
@@ -269,6 +271,7 @@ export async function cancelJob(jobId: string): Promise<ActionResult> {
   // 서버 작업은 CON-12의 「대기열」에도 같은 줄로 보인다 — 한쪽만 새로 그리면 취소한 작업이
   // 다른 화면에 남는다.
   revalidatePath("/server-runners", "layout");
+  revalidatePath("/bots");
   return {};
 }
 
@@ -538,6 +541,7 @@ export async function decideEnrollment(
   }
   revalidatePath("/bot-uis", "layout");
   revalidatePath("/server-runners", "layout");
+  revalidatePath("/bots");
   revalidatePath("/center-keys");
   return {};
 }
