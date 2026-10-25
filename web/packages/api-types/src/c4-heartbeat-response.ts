@@ -16,11 +16,13 @@ export interface HeartbeatResponse {
     [k: string]: unknown;
   }[];
   disabled?: boolean;
+  drop_service_keys?: string[];
   jobs?: JobDispatch[];
   key_expires_at?: string | null;
   next_heartbeat_s?: number;
   rotated_key?: RotatedKey | null;
   server_time: string;
+  service_keys?: ServiceKeyDelivery[];
   [k: string]: unknown;
 }
 /**
@@ -79,5 +81,20 @@ export interface Sealed {
   ciphertext: string;
   epk: string;
   nonce: string;
+  [k: string]: unknown;
+}
+/**
+ * 하트비트 답에 실린 봉한 키 하나 (C4 §서비스 앱 키 전달).
+ */
+export interface ServiceKeyDelivery {
+  app_id: string;
+  bpm_process_id?: string | null;
+  expires_at?: string | null;
+  key_refs?: string[];
+  purpose?: string;
+  replaces?: string | null;
+  sealed_key: Sealed;
+  service_key_id: string;
+  source?: string;
   [k: string]: unknown;
 }

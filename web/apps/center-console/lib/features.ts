@@ -23,7 +23,21 @@ import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-reso
 /** `status_map` 「기능」의 표기. */
 export type Usable = "쓸 수 있음" | "쓸 수 없음" | "확인 전";
 
-export type TodoKind = "add_address" | "server_down" | "missing_on_hosts" | "off_on_hosts" | "wrong_version";
+export type TodoKind =
+  | "add_address"
+  | "server_down"
+  | "missing_on_hosts"
+  | "off_on_hosts"
+  | "wrong_version"
+  | "add_app_key"
+  | "app_not_trusting";
+
+/** 외부 앱 키 한 칸 (C7 `app_key` — 원문 없음). */
+export interface KeySlotView {
+  set: boolean;
+  setAt: string | null;
+  setBy: string | null;
+}
 
 export interface Todo {
   kind: TodoKind;
@@ -48,6 +62,10 @@ export interface FeatureRow {
   checkedAt: string | null;
   /** 이 기능을 요구하는 Bot (`<id>`) — 해제 확인 창이 쓴다. */
   usedBy: string[];
+  /** 외부 기능이고 키를 받는 앱일 때만 — 운영 키·Studio 시험용 키 (ADR-0094 §7). */
+  appKey: { run: KeySlotView; test: KeySlotView } | null;
+  /** C11 앱이 Center 발급을 받나 (C7 `trust.state`, ADR-0094 §1). 모르면 없다. */
+  trust: string | null;
 }
 
 export interface FeatureInput {
@@ -131,6 +149,35 @@ function hostTodos(row: ExtensionResource, input: FeatureInput, bots: PackageInf
   return out;
 }
 
+function slotOf(raw: unknown): KeySlotView {
+  const one = (raw ?? {}) as { set?: boolean; set_at?: string | null; set_by?: string | null };
+  return { set: Boolean(one.set), setAt: one.set_at ?? null, setBy: one.set_by ?? null };
+}
+
+function appKeyOf(ext: ExtensionResource): FeatureRow["appKey"] {
+  const raw = (ext as { app_key?: { run?: unknown; test?: unknown } | null }).app_key;
+  if (!raw) return null;
+  return { run: slotOf(raw.run), test: slotOf(raw.test) };
+}
+
+function trustOf(app: ServiceAppResource | null): string | null {
+  const raw = (app as { trust?: { state?: string } | null } | null)?.trust;
+  return raw?.state ?? null;
+}
+
+/** 「이 앱이 Center 발급을 받지 않습니다」 — 받지 않으면 Center가 그 앱의 키를 짓지 못한다 (ADR-0094 §1). */
+export const TRUST_TODO: Record<string, string> = {
+  not_configured: "이 앱이 Center 발급을 받지 않습니다 — 앱 설정에 Center 주소(CHK_SVC_<APP>__CENTER__URL)를 넣으세요",
+  other_center: "이 앱은 다른 Center를 믿습니다 — 앱 설정의 Center 주소를 확인하세요",
+  stale_key: "이 앱이 Center의 새 서명 키를 아직 모릅니다 — 앱을 다시 시작하세요",
+  pin_mismatch: "앱 설정의 CENTER__KEY_PIN이 이 Center의 서명 키와 다릅니다 — 앱 설정을 고치세요",
+};
+
+function trustTodos(trust: string | null): Todo[] {
+  const text = trust ? TRUST_TODO[trust] : undefined;
+  return text ? [{ kind: "app_not_trusting", text }] : [];
+}
+
 function serverTodos(status: string, checkedAt: string | null | undefined): Todo[] {
   if (DOWN.has(status)) {
     const at = shortTime(checkedAt);
@@ -181,6 +228,10 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       todos.push({ kind: "add_address", text: "서버 주소를 넣으세요", href: ADD_ADDRESS_HREF });
     }
     todos.push(...serverTodos(status, ext.checked_at));
+    const appKey = external ? appKeyOf(ext) : null;
+    // 외부 앱 키가 없다 — 관리자가 한 번 넣는다 (C7 §외부 앱 키). 시험용 키는 운영과 상관없다.
+    if (appKey && !appKey.run.set) todos.push({ kind: "add_app_key", text: "외부 앱 키를 넣으세요", href: "#app-key" });
+    todos.push(...trustTodos(trustOf(app)));
     if (!external) todos.push(...hostTodos(ext, input, bots));
     rows.push({
       key: ext.id,
@@ -194,6 +245,8 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       consoleUrl: app?.console_url ?? null,
       checkedAt: ext.checked_at ?? null,
       usedBy: bots.map((one) => one.id),
+      appKey,
+      trust: trustOf(app),
     });
   }
 
@@ -201,7 +254,7 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
   for (const app of input.serviceApps) {
     if (claimedApps.has(app.app_id)) continue;
     const status = String(app.status ?? "");
-    const todos = serverTodos(status, app.checked_at);
+    const todos = [...serverTodos(status, app.checked_at), ...trustTodos(trustOf(app))];
     rows.push({
       key: `app:${app.app_id}`,
       id: app.app_id,
@@ -214,6 +267,8 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       consoleUrl: app.console_url ?? null,
       checkedAt: app.checked_at ?? null,
       usedBy: botsUsing(input.packages, null, app.app_id).map((one) => one.id),
+      appKey: null,
+      trust: trustOf(app),
     });
   }
 
@@ -232,6 +287,8 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       consoleUrl: null,
       checkedAt: null,
       usedBy: botsUsing(input.packages, null, id).map((one) => one.id),
+      appKey: null,
+      trust: null,
     });
   }
 

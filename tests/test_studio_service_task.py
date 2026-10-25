@@ -251,33 +251,14 @@ def test_the_editor_keeps_what_a_person_wrote_outside_the_schema(app: Any, catal
     assert any("작업 정의가 바뀌었습니다" in one for one in warnings)
 
 
-def test_the_key_box_is_off_until_you_ask_for_an_exception(app: Any, catalog: Catalog) -> None:
-    """기본은 「BPM 프로세스 설정을 따름」이다 — 참조를 적는 것은 예외일 때만 (STU-14)."""
+def test_there_is_no_key_choice_and_a_written_reference_is_kept(app: Any, catalog: Catalog) -> None:
+    """키는 Center가 (Bot × 대상 × 앱)마다 내려 준다 — 태스크가 다른 참조를 적을 칸이 없다 (ADR-0094 §4).
+    옛 그림에 적힌 참조는 **조용히 바꾸지 않는다**."""
     made = editor(app, catalog, CALL)
-    assert made.follow_key.isChecked()
-    assert not made.key_box.isEnabled()
+    assert not hasattr(made, "follow_key") and not hasattr(made, "key_box")
     assert "key_ref" not in made.dump()
-
-    made.own_key.setChecked(True)
-    assert not made.follow_key.isChecked(), "둘 중 하나다"
-    made.key_box.setText("hr-hris-write")
-    assert made.key_box.isEnabled()
-    assert made.dump()["key_ref"] == "hr-hris-write"
-
-
-def test_a_written_exception_opens_on_its_own_line(app: Any, catalog: Catalog) -> None:
-    made = editor(app, catalog, {**CALL, "key_ref": "hr-hris-write"})
-    assert made.own_key.isChecked() and made.key_box.isEnabled()
-    assert made.key_box.text() == "hr-hris-write"
-
-
-def test_a_missing_inherited_reference_is_said_on_its_own_line(app: Any, catalog: Catalog) -> None:
-    """한 줄에 몰아 적으면 참조 칸이 밀려 잘린다 — 기본 줄 **아래에** 경고 한 줄로 말한다."""
-    made = editor(app, catalog, CALL)
-    assert made.follow_key.text() == "BPM 프로세스 설정을 따름"
-    assert not made.key_note.isHidden()
-    made.own_key.setChecked(True)
-    assert made.key_note.isHidden(), "다른 참조를 적는 중이면 따를 것이 없어도 된다"
+    kept = editor(app, catalog, {**CALL, "key_ref": "hr-hris-write"})
+    assert kept.dump()["key_ref"] == "hr-hris-write"
 
 
 def test_the_tables_show_three_rows_from_the_start(app: Any, catalog: Catalog) -> None:
@@ -564,7 +545,7 @@ def test_each_section_is_its_own_group(app: Any, catalog: Catalog) -> None:
 
     made = editor(app, catalog, CALL)
     titles = [box.title() for box in made.findChildren(QGroupBox)]
-    assert titles == ["작업", "API 키", "입력", "출력", "실행 제한"]
+    assert titles == ["작업", "입력", "출력", "실행 제한"]  # 「API 키」는 없다 (ADR-0094 §4)
 
 
 def test_empty_rows_are_hidden_until_an_operation_is_picked(app: Any) -> None:

@@ -186,7 +186,7 @@ class TrialWidget(QWidget):
         """
         page_id = self.page_id.currentText().strip()
         if self._registry is None or not page_id:
-            self.say("화면 ID를 적으세요 (등록 담당자 키가 있어야 조회합니다).")
+            self.say("화면 ID를 적으세요 (셀렉터 등록이 허락된 PC여야 조회합니다).")
             return
         try:
             page, warnings = self._registry.get_page(page_id)
@@ -241,7 +241,10 @@ class TrialWidget(QWidget):
             self.say("스텝이 없습니다 — 「가져오기」를 누르거나 줄을 더하세요.")
             return
         if not self._service_key:
-            self.say("등록 담당자 키가 없어 계획을 받아 올 수 없습니다 (설정에서 넣으세요).")
+            self.say(
+                "이 PC는 셀렉터 등록이 허락되지 않아 계획을 받아 올 수 없습니다"
+                " (Center 콘솔 「Bot UI 현황」 → 「셀렉터 등록」)."
+            )
             return
 
         self.output.clear()
@@ -407,7 +410,7 @@ class TrialWidget(QWidget):
         self.drop_step.setEnabled(bool(self.steps.rowCount()))
         self.fetch_button.setEnabled(self._registry is not None)
         if self._registry is None:
-            self.fetch_button.setToolTip("등록 담당자 키가 있어야 조회합니다 (설정).")
+            self.fetch_button.setToolTip("셀렉터 등록이 허락된 PC여야 조회합니다 (Center 콘솔 「셀렉터 등록」).")
 
 
 __all__ = ["ACTIONS", "DEFAULT_ACTION", "NO_GOAL", "PLAN_SOURCE", "STEP_COLUMNS", "Trial", "TrialWidget"]

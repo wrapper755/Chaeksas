@@ -6,6 +6,7 @@
  * 확장 하나 (C13 정의에서 모은 것).
  */
 export interface ExtensionResource {
+  app_key?: AppKeyState | null;
   checked_at?: string | null;
   contributes_summary?: {
     [k: string]: string[];
@@ -27,6 +28,23 @@ export interface ExtensionResource {
   status_reasons?: string[];
   tier: string;
   version: string;
+  [k: string]: unknown;
+}
+/**
+ * 외부 앱 키 둘 — 운영(`run`)과 Studio 시험용(`test`) (ADR-0094 §7).
+ */
+export interface AppKeyState {
+  run?: KeySlot;
+  test?: KeySlot;
+  [k: string]: unknown;
+}
+/**
+ * 관리자가 넣은 외부 앱 키 한 칸 (C7 §외부 앱 키). **원문·앞자리는 없다.**
+ */
+export interface KeySlot {
+  set?: boolean;
+  set_at?: string | null;
+  set_by?: string | null;
   [k: string]: unknown;
 }
 /**

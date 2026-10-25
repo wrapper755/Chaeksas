@@ -280,7 +280,7 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
     },
     "Bot 준비": {
         "준비됨": "done",
-        "서비스 앱 키 없음": "failed",
+        "서비스 앱 키 받지 못함": "failed",
         "확장 없음": "failed",
         "확장 꺼짐": "neutral",
         "사전 점검 실행 불가": "failed",

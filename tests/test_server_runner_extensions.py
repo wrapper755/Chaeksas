@@ -165,7 +165,8 @@ def test_readiness_and_the_run_share_one_host(runner: agent_mod.Agent) -> None:
     runner.readiness()
     bot = runner.installed_bots()[0]
 
-    assert runner.run_env(bot).extensions is runner.extensions()
+    # 실행은 그 Bot에 묶인 창구를 받지만(ADR-0094 §8) **호스트는 점검과 같은 하나**다.
+    assert runner.run_env(bot).extensions.host is runner.extensions().host  # type: ignore[attr-defined]
     assert runner.extensions().host is runner.extension_host()
 
 

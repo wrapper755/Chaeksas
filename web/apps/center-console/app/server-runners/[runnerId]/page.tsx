@@ -4,7 +4,7 @@ import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@c
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
-import { botLimitRows, elapsed, runnerStatus, serverDeployments } from "@/lib/summary";
+import { botLimitRows, elapsed, keyStages, runnerStatus, serverDeployments } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { fullTime, time } from "../../bot-uis/page";
 import { ServerRunnerActions } from "../actions-ui";
@@ -195,7 +195,14 @@ export default async function ServerRunnerPage({
       width: "20ch",
       cell: (row) =>
         row.readiness ? (
-          <span title={row.readiness.detail.join(", ") || undefined}>
+          <span
+            title={
+              (row.readiness.label === "서비스 앱 키 받지 못함" && info
+                ? keyStages(info.service_keys, row.bot)
+                : row.readiness.detail
+              ).join("\n") || undefined
+            }
+          >
             <StatusBadge group="Bot 준비" label={row.readiness.label} />
           </span>
         ) : (

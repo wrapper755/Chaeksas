@@ -38,6 +38,8 @@ from chaeksas.contracts.service_app import (
 )
 from chaeksas.service_kit.admin import DependencyProbe
 from chaeksas.service_kit.admin import create_router as create_admin_router
+from chaeksas.service_kit.center import CenterLink
+from chaeksas.service_kit.center import create_router as create_center_router
 from chaeksas.service_kit.keys import find_key
 from chaeksas.service_kit.stores import (
     IdempotencyStore,
@@ -123,6 +125,7 @@ def create_app(
     dependencies: DependencyProbe | None = None,
     center: CenterRegistration | None = None,
     llm: ServiceLlm | None = None,
+    center_link: CenterLink | None = None,
     now: Callable[[], str] = _now,
 ) -> FastAPI:
     """계약을 지키는 앱 하나.
@@ -133,6 +136,8 @@ def create_app(
     503이다 — **빈 토큰으로 열리지 않는다** (C11).
     `dependencies`는 앱이 자기 바깥 의존(Neo4j·LLM …)의 상태를 돌려주는 함수다 (SVC-01).
     `llm`(모델 연결, C11 §모델 연결)을 주면 관리 상태에 `llm` 한 줄이 저절로 붙는다.
+    `center_link`(C11 §Center가 발급하는 키, ADR-0094)를 주면 Center가 서명한 봉투로 키를 짓는다.
+    주지 않으면 `POST /center/v1/keys`는 503 `center_disabled`이고 키는 관리 API로만 생긴다.
     """
     declared = {op.name for op in manifest.operations}
     if set(handlers) != declared:
@@ -151,11 +156,16 @@ def create_app(
     app.state.usage_log = log
     app.state.admin_token = admin_token
     app.state.llm = llm
+    app.state.center_link = center_link
     started_at = now()
 
     def probe() -> Sequence[Dependency]:
         found = list(dependencies()) if dependencies else []
-        return [*found, llm.dependency()] if llm is not None else found
+        if llm is not None:
+            found = [*found, llm.dependency()]
+        if center_link is not None:
+            found = [*found, _center_dependency(center_link)]
+        return found
 
     app.include_router(
         create_admin_router(
@@ -168,6 +178,8 @@ def create_app(
             now=now,
         )
     )
+
+    app.include_router(create_center_router(app_id=manifest.app_id, keys=keys, link=center_link, now=now))
 
     @app.get("/healthz")
     def healthz() -> HealthResponse:
@@ -281,6 +293,16 @@ def create_app(
         return response
 
     return app
+
+
+def _center_dependency(link: CenterLink) -> Dependency:
+    """SVC-01 「Center 발급」 — 믿는 Center 서명 키를 받아 두었나 (ADR-0094 §1). 키 값은 없다."""
+    trust = link.trust()
+    if link.problem:
+        return Dependency(name="center", status="degraded", detail=link.problem)
+    if not trust.key_ids:
+        return Dependency(name="center", status="unknown", detail="Center 공개키를 아직 받지 않았다")
+    return Dependency(name="center", status="ok", detail=f"서명 키 {', '.join(trust.key_ids)} ({trust.fetched_at})")
 
 
 def _log_refusal(log: UsageLog, key: ServiceAppKey, operation: str, status: int, started: float, at: str) -> None:

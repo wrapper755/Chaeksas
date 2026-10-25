@@ -190,6 +190,31 @@ MIGRATIONS: tuple[Step, ...] = (
             "CREATE INDEX center_keys_account ON center_keys (account)",
         ),
     ),
+    Step(
+        12,
+        "서비스 앱 키를 Center가 짓고 나른다 — 외부 앱 키 보관, 셀렉터 등록, 앱의 신뢰 (C4·C7·C11, ADR-0094)",
+        (
+            # 원문은 두지 않는다 — **봉한 덩이만** 받았다는 ack까지 (`sealed_json`). 해시는 앱이 검증한다.
+            "CREATE TABLE service_keys ("
+            " service_key_id TEXT PRIMARY KEY, source TEXT NOT NULL, purpose TEXT NOT NULL,"
+            " app_id TEXT NOT NULL, bpm_process_id TEXT, target_type TEXT NOT NULL, target_id TEXT NOT NULL,"
+            " key_refs_json TEXT, issued_for_json TEXT, key_hash TEXT, prefix TEXT,"
+            " allowed_ops_json TEXT, extra_scopes_json TEXT, expires_at TEXT, created_at TEXT NOT NULL,"
+            " state TEXT NOT NULL, sealed_json TEXT, acked_at TEXT, replaces TEXT,"
+            " revoke_reason TEXT, revoked_at TEXT, dropped_at TEXT, last_error TEXT, last_try_at TEXT)",
+            "CREATE INDEX service_keys_target ON service_keys (target_type, target_id)",
+            "CREATE INDEX service_keys_state ON service_keys (state)",
+            # 외부 앱 키 — 운영(`run`)·시험용(`test`). **암호화해** 둔다 (감싸는 키는 `center_secrets`).
+            "CREATE TABLE external_app_keys ("
+            " extension_id TEXT NOT NULL, slot TEXT NOT NULL, ciphertext TEXT NOT NULL,"
+            " set_at TEXT NOT NULL, set_by TEXT NOT NULL, PRIMARY KEY (extension_id, slot))",
+            "CREATE TABLE center_secrets (name TEXT PRIMARY KEY, value TEXT NOT NULL, created_at TEXT NOT NULL)",
+            # CON-03 「셀렉터 등록」 (ADR-0094 §6).
+            "ALTER TABLE bot_uis ADD COLUMN selector_registration INTEGER NOT NULL DEFAULT 0",
+            # 앱이 Center 발급을 받나 (C11 `GET /center/v1/trust`, C7 `trust`).
+            "ALTER TABLE service_apps ADD COLUMN trust_json TEXT",
+        ),
+    ),
 )
 
 

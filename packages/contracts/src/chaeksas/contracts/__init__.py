@@ -245,6 +245,7 @@ from chaeksas.contracts.manifest import (
     ServiceAppNeed,
     TaskTypeNeed,
     Trigger,
+    default_key_ref,
     validate,
 )
 from chaeksas.contracts.replay import (
@@ -353,6 +354,7 @@ from chaeksas.contracts.signing import (
 )
 
 __all__ = [
+    "default_key_ref",
     "StudioEnrollRequest",
     "EnrollRequest",
     "EnrollStatus",

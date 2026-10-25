@@ -13,6 +13,8 @@ import logging
 import os
 from dataclasses import dataclass
 
+from chaeksas.core import service_keys
+
 log = logging.getLogger(__name__)
 
 #: `keyring`의 서비스 이름. 한 PC에 여러 Bot UI를 두지 않으므로 하나로 충분하다.
@@ -170,12 +172,29 @@ class Credentials:
     def set_extension_secret(self, extension_id: str, key: str, value: str) -> None:
         self.set(f"{EXTENSION_PREFIX}{extension_id}:{key}", value.strip())
 
-    def service_app_key(self, ref: str) -> str | None:
-        """BPM 프로세스 속성의 **키 참조 이름**으로 찾는다 (ADR-0013 §3).
+    def service_app_key(self, ref: str, bot: str | None = None) -> str | None:
+        """**키 참조 이름**으로 찾는다 (C1 `key_ref`).
 
-        읽기는 **환경변수가 먼저다** — `CHK_BOT_UI__SVC__<참조>` (개발·CI). Studio와 같은 규칙.
+        찾는 순서: 환경변수 `CHK_BOT_UI__SVC__<참조>`(개발·CI) → **Center가 그 Bot에 내려 준 키**
+        (`svc:<Bot>:<참조>`, ADR-0094 — 두 Bot이 같은 참조를 써도 키가 다르다) → 사람이 BUI-10에
+        넣은 옛 자리(`svc:<참조>`).
         """
-        return self.get(f"{SERVICE_APP_PREFIX}{ref}", env=service_key_env(ref))
+        found = os.environ.get(service_key_env(ref))
+        if found:
+            return found
+        if bot:
+            delivered = self.get(service_keys.run_name(bot, ref))
+            if delivered:
+                return delivered
+        return self.get(f"{SERVICE_APP_PREFIX}{ref}")
+
+    def for_bot(self, bot: str) -> BotCredentials:
+        """그 Bot의 실행이 쓰는 창구 — 참조 이름을 **그 Bot이 받은 키**로 푼다 (ADR-0094 §8)."""
+        return BotCredentials(credentials=self, bot=bot)
+
+    def utility_key(self, app_id: str) -> str | None:
+        """도구(Tool UI)용 키 — CON-03 「셀렉터 등록」을 켜면 Center가 내려 준다 (ADR-0094 §6)."""
+        return self.get(service_keys.utility_name(app_id))
 
     def stored_service_app_key(self, ref: str) -> str | None:
         """**비밀 저장소에 들어 있는** 값만 (환경변수는 보지 않는다).
@@ -193,7 +212,22 @@ class Credentials:
         self.delete(f"{SERVICE_APP_PREFIX}{ref}")
 
 
+
+@dataclass(frozen=True)
+class BotCredentials:
+    """한 Bot에 묶인 창구. 확장·바깥 앱 명부가 참조 이름만 넘겨도 그 Bot의 키가 풀린다."""
+
+    credentials: Credentials
+    bot: str
+
+    def service_app_key(self, ref: str) -> str | None:
+        return self.credentials.service_app_key(ref, self.bot)
+
+    def extension_secret(self, extension_id: str, key: str) -> str | None:
+        return self.credentials.extension_secret(extension_id, key)
+
 __all__ = [
+    "BotCredentials",
     "CENTER_API_KEY",
     "ENV_SERVICE_APP_PREFIX",
     "ENV_EXTENSION_PREFIX",

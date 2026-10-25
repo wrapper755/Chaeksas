@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { svc, SvcError, type KeyCreateInput } from "@/lib/svc";
+import { svc, SvcError } from "@/lib/svc";
 import { COOKIE_NAME, seal } from "@/lib/session";
 
 /**
@@ -44,34 +44,6 @@ export async function login(_previous: ActionResult, form: FormData): Promise<Ac
 export async function logout(): Promise<void> {
   (await cookies()).delete(COOKIE_NAME);
   redirect("/login");
-}
-
-export async function createKey(_previous: ActionResult, form: FormData): Promise<ActionResult> {
-  const name = String(form.get("name") ?? "").trim();
-  if (!name) return { error: "이름을 입력하세요." };
-
-  // 「모든 작업」이면 `*` 하나로 보낸다 (C11).
-  const operations = form.getAll("operations").map(String).filter(Boolean);
-  const body: KeyCreateInput = {
-    name,
-    allowed_operations: operations.length > 0 ? operations : ["*"],
-    // 기본은 **결정 수행만** — 운영 Bot용 키가 자율 수행을 하지 않게 (SVC-02).
-    allowed_modes: String(form.get("modes") ?? "deterministic") === "both"
-      ? ["autonomous", "deterministic"]
-      : ["deterministic"],
-    extra_scopes: form.getAll("scopes").map(String).filter(Boolean),
-  };
-  const note = String(form.get("note") ?? "").trim();
-  if (note) body.note = note;
-
-  try {
-    const created = await svc.createKey(body);
-    revalidatePath("/keys");
-    // 원문은 화면에 한 번만 보이고, 어디에도 저장하지 않는다.
-    return { secret: { name: created.name, key: created.key } };
-  } catch (cause) {
-    return { error: message(cause) };
-  }
 }
 
 export async function revokeKey(name: string): Promise<ActionResult> {

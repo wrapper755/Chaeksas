@@ -70,6 +70,7 @@ from chaeksas.core.run_log import log_path
 from chaeksas.core.run_shipping import HttpUploader, Queue, ShipError
 from chaeksas.core.seen import Seen
 from chaeksas.core.senders import make_sender
+from chaeksas.core.service_keys import ReceivedKeys
 from chaeksas.server_runner.center_client import (
     CenterClient,
     CenterProblem,
@@ -144,6 +145,7 @@ class Agent:
 
     #: 사전 점검 결과 캐시 — **설치가 바뀌면 비운다** (안 비우면 키를 넣어도 영원히 막힌다).
     _readiness: dict[tuple[str, str], Readiness] = field(default_factory=dict)
+    _received: ReceivedKeys | None = None
     #: 지금 들고 있는 실행들 (`run_id` → 일꾼). 끝난 것은 거두고 ack를 쌓는다.
     workers: dict[str, Worker] = field(default_factory=dict)
     #: 아직 올리지 못한 작업 ack (C4). **올릴 때까지 들고 있는다** — 끝난 실행의 결과가
@@ -367,6 +369,7 @@ class Agent:
         self._came_online()
         self._apply(answer)
         self._take_rotated(answer)
+        self._take_service_keys(request, answer)
         # **하트비트 뒤에** 한다 (C3 §전송·ADR-0038) — 실행 중에 보내면 느린 Center가 업무를
         # 붙잡는다. 결재를 먼저 올려야 다음 주기에 답이 내려올 수 있다.
         self.post_approvals()
@@ -441,7 +444,7 @@ class Agent:
             if found is None:
                 checked = run_preflight(
                     bot.manifest,
-                    key_value=self.credentials.service_app_key,
+                    key_value=self.credentials.for_bot(bot.id).service_app_key,
                     fix_hint=KEY_FIX_HINT,
                     # **갖춘 설정은 이쪽만 안다** (C1 `requires.settings`, ADR-0059 §4) —
                     # 메일을 보내는 Bot인데 SMTP가 없으면 시작하기 전에 막는다.
@@ -631,7 +634,8 @@ class Agent:
             bot.manifest,
             # Admin 공개키는 Center가 준 것이다 (C12 등록·하트비트) — 배포 검증과 같은 창고.
             keys=list(self.admin_keys),
-            secrets=self.credentials.service_app_key,
+            # **그 Bot이 받은 키로** 푼다 (ADR-0094 §8).
+            secrets=self.credentials.for_bot(bot.id).service_app_key,
         )
         for why in found.problems:
             log.warning("바깥 앱 명부: %s", why)
@@ -680,7 +684,19 @@ class Agent:
             delegate=CenterDelegator(client=self.client, on_withdraw=self.withdraw_later),
             # **확장 태스크** (C13·ADR-0064) — 호스트가 실행 위치를 쥐어 서버에서 돌 수 있는
             # 종류만 수행기를 낸다. 없는 종류는 엔진이 설치 오류로 올린다.
-            extensions=self.extensions(),
+            extensions=self.extensions_for(bot),
+        )
+
+    def extensions_for(self, bot: Any) -> HostTasks:
+        """그 Bot의 실행이 쓰는 확장 — 확장이 묻는 참조 이름을 **그 Bot이 받은 키로** 푼다 (ADR-0094 §8).
+
+        호스트는 사전 점검과 **같은 하나**다(`extensions()` — 점검과 실행이 같은 호스트를 본다).
+        """
+        held = DirectoryCache(data_dir=self.settings.data_path)
+        return extension_tasks(
+            host=self.extension_host(),
+            service_url=lambda where: held.base_url_of(extension_id=where),
+            credentials=self.credentials.for_bot(bot.id),
         )
 
     def wake_due(self) -> int:
@@ -1097,7 +1113,30 @@ class Agent:
             delegation_acks=list(self.pending_delegation_acks),
             restored=list(self.restored),
             unsent_events=self.unsent_events(),
+            service_key_acks=list(self.received_keys().pending),
         )
+
+    def received_keys(self) -> ReceivedKeys:
+        """Center가 내려 준 서비스 앱 키의 자리와 보낼 ack (ADR-0094 — Bot UI와 같은 코드)."""
+        if self._received is None:
+            self._received = ReceivedKeys.at(self.settings.data_path)
+        return self._received
+
+    def _take_service_keys(self, request: Any, answer: Any) -> None:
+        """하트비트 답의 서비스 앱 키를 받아 둔다. 바뀌었으면 사전 점검을 다시 잰다."""
+        held = self.received_keys()
+        held.sent(request.service_key_acks)
+        if self.credentials.center_key_from_env():
+            return  # 공개키를 보내지 않았다 — Center가 싣지 않는다 (환경변수 키를 쓴다)
+        changed = held.take(
+            list(getattr(answer, "service_keys", []) or []),
+            list(getattr(answer, "drop_service_keys", []) or []),
+            secret=self.credentials.enroll_secret(),
+            put=self.credentials.set,
+            delete=self.credentials.delete,
+        )
+        if changed:
+            self._readiness.clear()
 
     def _acks_delivered(self) -> None:
         """실어 올린 ack가 Center에 닿았다 — 멱등 기억이 **그때부터** 잊을 준비를 한다.

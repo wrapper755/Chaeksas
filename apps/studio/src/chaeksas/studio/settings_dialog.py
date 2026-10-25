@@ -43,9 +43,9 @@ from PySide6.QtWidgets import (
 from chaeksas.contracts import SCOPE_STUDIO, ConfigurationItem
 from chaeksas.qt.theme import THEME_DARK, THEME_LIGHT, THEME_SYSTEM
 from chaeksas.qt.theme.tokens import SPACE_1
+from chaeksas.studio import dev_keys
 from chaeksas.studio.center_enroll import StudioEnrollment, connected_text, expires_soon, waiting_text
 from chaeksas.studio.checks import (
-    EXTERNAL_NOT_CHECKED,
     AppPlaces,
     app_places,
     center_status,
@@ -64,8 +64,9 @@ from chaeksas.studio.credentials import (
     extension_secret_env,
     service_key_env,
 )
+from chaeksas.studio.dev_keys import DevKeys
 from chaeksas.studio.extensions import Extensions
-from chaeksas.studio.settings import ServiceKeyRef, Settings
+from chaeksas.studio.settings import Settings
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ MIN_WIDTH = 720
 
 #: 분류 이름 (STU-10 표 순서).
 APPEARANCE, LLM, CENTER, EXTENSIONS, WORKER, SERVICE_KEYS = (
-    "외형", "LLM", "Center", "확장별 설정", "Worker", "서비스 앱 키",
+    "외형", "LLM", "Center", "확장별 설정", "Worker", "서비스 앱",
 )
 CATEGORIES = (APPEARANCE, LLM, CENTER, EXTENSIONS, WORKER, SERVICE_KEYS)
 
@@ -84,8 +85,12 @@ NO_EXTENSION_FIELDS = "Studio 범위의 설정 칸을 기여한 확장이 없습
 
 KEY_STORED = "저장됨 (바꾸려면 새로 붙여 넣으세요)"
 KEY_FROM_ENV = "환경변수가 이깁니다"
-KEY_COLUMNS = ("키 참조 이름", "서비스 앱", "키 값", "상태")
-REF, APP, VALUE, STATE = range(4)
+#: 「서비스 앱」 표 (ADR-0094 §5) — **읽기 전용**이다. 키는 Studio가 Center에 청한다.
+APP_COLUMNS = ("서비스 앱", "개발 키", "허용")
+APP, DEV_KEY, ALLOWED = range(3)
+NOT_YET = "아직 받지 않음"
+FROM_ENV = "환경변수"
+EXTERNAL_TEST_KEY = "외부 앱 — 관리자가 넣은 시험용 키를 받습니다"
 
 
 class StudioSettingsDialog(QDialog):
@@ -105,15 +110,13 @@ class StudioSettingsDialog(QDialog):
         self.settings = settings
         self.extensions = extensions
         self.credentials = credentials or StudioCredentials()
-        #: 열린 BPM 프로세스가 쓰는 키 참조 `(참조, 서비스 앱)` — 「참조 채우기」가 쓴다.
+        #: 열린 BPM 프로세스가 쓰는 키 참조 `(참조, 서비스 앱)` — 「서비스 앱」 표의 처음 줄이다.
         self.refs = list(refs)
         #: 시험이 끼우는 HTTP 클라이언트 (연결 테스트).
         self.client = client
         self.saved: Settings | None = None
         #: 「Center」가 그 자리에서 적은 설정 — 「취소」로 닫아도 부르는 쪽이 받는다 (ADR-0093).
         self.center_changed: Settings | None = None
-        #: 창을 열 때 있던 참조 — 지운 줄은 「저장」 때 비밀 저장소에서도 지운다.
-        self._original_refs = [one.ref for one in settings.service_keys]
         self.setWindowTitle(TITLE)
         self.setMinimumWidth(MIN_WIDTH)
 
@@ -363,90 +366,87 @@ class StudioSettingsDialog(QDialog):
         return out
 
     def _keys_page(self) -> QWidget:
+        """「서비스 앱」 (ADR-0094 §5) — 앱마다 개발 키를 **받았나**만 보인다. 값·참조 이름 칸은 없다."""
         page = QWidget()
         layout = QVBoxLayout(page)
         intro = QLabel(
-            "서비스 앱 관리 콘솔에서 **개발용**(자율·결정 허용)으로 발급받은 키를 넣습니다. "
-            "Bot UI와 같은 참조 이름을 쓰되 값은 다릅니다."
+            "시험 실행이 서비스 앱을 부를 때 Studio가 **그 앱의 개발 키**(자율·결정, 7일)를 Center에 청합니다. "
+            "넣을 것은 없습니다 — 여기서는 지금 어떤지 봅니다."
         )
         intro.setTextFormat(Qt.TextFormat.MarkdownText)
         intro.setWordWrap(True)
         layout.addWidget(intro)
-        self.keys = QTableWidget(0, len(KEY_COLUMNS))
-        self.keys.setHorizontalHeaderLabels(list(KEY_COLUMNS))
-        self.keys.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        header = self.keys.horizontalHeader()
-        for column in (REF, APP):
-            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(VALUE, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(STATE, QHeaderView.ResizeMode.Stretch)
-        self.keys.verticalHeader().setVisible(False)
-        for line in self.settings.service_keys:
-            self._add_key_row(line.ref, line.app_id)
-        layout.addWidget(self.keys, 1)
+        self.apps = QTableWidget(0, len(APP_COLUMNS))
+        self.apps.setHorizontalHeaderLabels(list(APP_COLUMNS))
+        self.apps.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.apps.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        header = self.apps.horizontalHeader()
+        header.setSectionResizeMode(APP, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(DEV_KEY, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(ALLOWED, QHeaderView.ResizeMode.ResizeToContents)
+        self.apps.verticalHeader().setVisible(False)
+        #: 앱 → 그 앱의 참조들 (환경변수 `CHK_STUDIO__SVC__<참조>`가 이기는지 보려고).
+        self._app_refs: dict[str, list[str]] = {}
+        for ref, app in self.refs:
+            if app:
+                self._app_refs.setdefault(app, []).append(ref)
+        for app in sorted(self._app_refs):
+            self._add_app_row(app)
+        layout.addWidget(self.apps, 1)
         row = QHBoxLayout()
-        self.add_key = QPushButton("추가")
-        self.drop_key = QPushButton("삭제")
         self.test_keys_button = QPushButton("연결 테스트")
-        self.fill_refs = QPushButton("열린 BPM 프로세스가 쓰는 참조 채우기")
-        self.fill_refs.setEnabled(bool(self.refs))
-        if not self.refs:
-            self.fill_refs.setToolTip("열린 BPM 프로세스가 없거나 키 참조를 쓰지 않습니다.")
-        self.add_key.clicked.connect(lambda: self._add_key_row("", ""))
-        self.drop_key.clicked.connect(self.drop_selected_key)
+        self.test_keys_button.setToolTip("Center 목록의 앱을 더하고, 키가 없으면 청한 뒤 그 키로 앱에 묻습니다")
         self.test_keys_button.clicked.connect(self.test_keys)
-        self.fill_refs.clicked.connect(self.fill_from_process)
-        for one in (self.add_key, self.drop_key, self.test_keys_button):
-            row.addWidget(one)
+        row.addWidget(self.test_keys_button)
         row.addStretch(1)
-        row.addWidget(self.fill_refs)
         layout.addLayout(row)
         return page
 
-    def _add_key_row(self, ref: str, app_id: str) -> int:
-        at = self.keys.rowCount()
-        self.keys.insertRow(at)
-        self.keys.setItem(at, REF, QTableWidgetItem(ref))
-        self.keys.setItem(at, APP, QTableWidgetItem(app_id))
-        value = QLineEdit()
-        value.setEchoMode(QLineEdit.EchoMode.Password)
-        if ref and _env(service_key_env(ref)):
-            value.setPlaceholderText(KEY_FROM_ENV)
-        elif ref and self.credentials.stored_service_key(ref):
-            value.setPlaceholderText(KEY_STORED)
-        self.keys.setCellWidget(at, VALUE, value)
-        state = QTableWidgetItem("")
-        state.setFlags(state.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self.keys.setItem(at, STATE, state)
+    def _row_of(self, app: str) -> int:
+        for at in range(self.apps.rowCount()):
+            item = self.apps.item(at, APP)
+            if item is not None and item.text() == app:
+                return at
+        return -1
+
+    def _add_app_row(self, app: str) -> int:
+        found = self._row_of(app)
+        if found >= 0:
+            return found
+        at = self.apps.rowCount()
+        self.apps.insertRow(at)
+        self.apps.setItem(at, APP, QTableWidgetItem(app))
+        self.apps.setItem(at, DEV_KEY, QTableWidgetItem(self._held_text(app)))
+        self.apps.setItem(at, ALLOWED, QTableWidgetItem(""))
         return at
 
-    # ── 동작 ──
+    def _held_text(self, app: str) -> str:
+        if any(_env(service_key_env(ref)) for ref in self._app_refs.get(app, [])):
+            return FROM_ENV
+        held = self._dev_keys().held(app)
+        if held is None:
+            return NOT_YET
+        return f"받음 — {(held[1] or '')[:10]}까지" if held[1] else "받음"
 
-    def key_rows(self) -> list[tuple[str, str, str]]:
-        """표의 줄 `(참조, 서비스 앱, 새로 친 값)`."""
+    def _dev_keys(self) -> DevKeys:
+        """지금 창에 적힌 Center 주소로 청하는 한 벌 (STU-10의 다른 칸과 같은 결 — 「저장」 전이라도)."""
+        current = replace(self.settings, center_url=self.center_url.text().strip())
+        return dev_keys.from_settings(current, self.credentials)
+
+    def _set(self, at: int, column: int, text: str) -> None:
+        item = self.apps.item(at, column)
+        if item is not None:
+            item.setText(text)
+            item.setToolTip(text)
+
+    def app_rows(self) -> list[tuple[str, str, str]]:
+        """표의 줄 `(서비스 앱, 개발 키, 허용)` — 시험이 읽는다."""
         out = []
-        for at in range(self.keys.rowCount()):
-            ref, app = self._cell(at, REF), self._cell(at, APP)
-            field = self.keys.cellWidget(at, VALUE)
-            typed = field.text().strip() if isinstance(field, QLineEdit) else ""
-            out.append((ref, app, typed))
+        for at in range(self.apps.rowCount()):
+            cells = [self.apps.item(at, column) for column in (APP, DEV_KEY, ALLOWED)]
+            app, key, allowed = (one.text() if one is not None else "" for one in cells)
+            out.append((app, key, allowed))
         return out
-
-    def _cell(self, at: int, column: int) -> str:
-        item = self.keys.item(at, column)
-        return item.text().strip() if item is not None else ""
-
-    def drop_selected_key(self) -> None:
-        rows = sorted({index.row() for index in self.keys.selectedIndexes()}, reverse=True)
-        for at in rows:
-            self.keys.removeRow(at)
-
-    def fill_from_process(self) -> None:
-        """그림이 쓰는 참조 중 표에 없는 것을 빈 줄로 더한다."""
-        have = {ref for ref, _, _ in self.key_rows()}
-        for ref, app in self.refs:
-            if ref not in have:
-                self._add_key_row(ref, app)
 
     def test_llm(self) -> None:
         typed = self.llm_key.text().strip()
@@ -469,30 +469,30 @@ class StudioSettingsDialog(QDialog):
         self.worker_state.setText(worker_status(self.worker, client=self.client))
 
     def test_keys(self) -> None:
-        """줄마다 `/v1/keys/self` — 새로 친 값이 있으면 그것을, 없으면 지금 쓰일 값을 본다.
-
-        주소는 설치된 확장 정의가 먼저, 없으면 **Center 리소스 목록**이다(시험 실행과 같은 곳).
-        Center는 **주소를 모르는 줄이 있을 때만 한 번** 묻는다. 외부 확장은 묻지 않는다.
-        """
-        places: AppPlaces | None = None
-        for at, (ref, app, typed) in enumerate(self.key_rows()):
-            key = typed or (self.credentials.service_key(ref) if ref else None)
-            url = self.extensions.service_url(app) if app else None
-            if app and url is None:
-                places = places or app_places(self._center_reader())
-                url = places.addresses.get(app)
-            if places is not None and app in places.externals:
-                found = EXTERNAL_NOT_CHECKED
-            else:
-                found = key_status(url, key, client=self.client)
-                if url is None and places is not None and places.problem:
-                    found += f" ({places.problem})"
-            if not typed and ref and _env(service_key_env(ref)):
-                found += " (환경변수)"
-            item = self.keys.item(at, STATE)
-            if item is not None:
-                item.setText(found)
-                item.setToolTip(found)
+        """「서비스 앱」의 「연결 테스트」 — Center 목록의 앱을 더하고, 줄마다 개발 키를 받아(없거나 하루 안이면
+        Center에 청한다) `/v1/keys/self`로 묻는다. 외부 앱은 묻지 않는다 (C11의 길이다)."""
+        places: AppPlaces = app_places(self._center_reader())
+        for app in sorted(places.addresses):
+            self._add_app_row(app)
+        keys = self._dev_keys()
+        for at in range(self.apps.rowCount()):
+            app = self.apps.item(at, APP).text()  # type: ignore[union-attr]
+            env_key = next(
+                (_env(service_key_env(ref)) for ref in self._app_refs.get(app, []) if _env(service_key_env(ref))), None
+            )
+            key = env_key or keys.key_for(app)
+            if app in places.externals:
+                self._set(at, DEV_KEY, EXTERNAL_TEST_KEY if key else f"받지 못함 — {keys.problems.get(app, '')}")
+                self._set(at, ALLOWED, "—")
+                continue
+            if key is None:
+                why = keys.problems.get(app, "") or places.problem or "까닭을 모릅니다"
+                self._set(at, DEV_KEY, f"받지 못함 — {why}")
+                continue
+            url = self.extensions.service_url(app) or places.addresses.get(app)
+            said = key_status(url, key, client=self.client)
+            self._set(at, DEV_KEY, (FROM_ENV + " · " if env_key else "") + said)
+            self._set(at, ALLOWED, "자율·결정" if not env_key else "")
 
     def _center_reader(self) -> Any:
         """지금 창에 적힌 Center 주소·키로 읽는 쪽 — 둘 중 하나라도 없으면 `None`(두드리지 않는다)."""
@@ -522,14 +522,7 @@ class StudioSettingsDialog(QDialog):
         return out
 
     def problems(self) -> list[str]:
-        rows = self.key_rows()
         out = []
-        if any(not ref for ref, _, _ in rows):
-            out.append("키 참조 이름이 빈 줄이 있습니다.")
-        refs = [ref for ref, _, _ in rows if ref]
-        doubled = sorted({ref for ref in refs if refs.count(ref) > 1})
-        if doubled:
-            out.append(f"같은 키 참조 이름이 두 줄입니다: {', '.join(doubled)}")
         if not self.llm_model.text().strip():
             out.append("모델 이름이 비었습니다.")
         if not self.center_url.text().strip():
@@ -542,31 +535,21 @@ class StudioSettingsDialog(QDialog):
         if found:
             self.error.setText(found[0])
             return
-        rows = self.key_rows()
         try:
             typed_llm = self.llm_key.text().strip()
             if typed_llm:
                 self.credentials.set_llm_api_key(typed_llm)
-            for ref, _, typed in rows:
-                if typed:
-                    self.credentials.set_service_key(ref, typed)
             for (extension_id, key), (item, field) in self.extension_fields.items():
                 if item.secret and field.text().strip():
                     self.credentials.set_extension_secret(extension_id, key, field.text().strip())
         except SecretsUnavailable as e:
             self.error.setText(f"키를 저장하지 못했습니다 — {e}")
             return
-        kept = {ref for ref, _, _ in rows}
-        for ref in self._original_refs:
-            if ref not in kept:
-                # 지운 줄 — 비밀 저장소에 남겨 두면 보이지 않는 키가 계속 쓰인다.
-                self.credentials.delete_service_key(ref)
         made = replace(
             self.settings,
             center_url=self.center_url.text().strip(),
             llm_base_url=self.llm_url.text().strip(),
             llm_model=self.llm_model.text().strip(),
-            service_keys=tuple(ServiceKeyRef(ref=ref, app_id=app) for ref, app, _ in rows),
             theme=str(self.theme.currentData()),
             extensions={**self.settings.extensions, **self.extension_values()},
         )

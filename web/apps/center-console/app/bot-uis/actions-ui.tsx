@@ -2,7 +2,49 @@
 
 import { useState, useTransition } from "react";
 import { Button, ConfirmDialog, ErrorBanner } from "@chaeksas/ui";
-import { setBotUiDisabled } from "@/app/actions";
+import { setBotUiDisabled, setSelectorRegistration } from "@/app/actions";
+
+/**
+ * CON-03 「셀렉터 등록」 (ADR-0094 §6) — 켜면 Center가 이 PC Bot UI에 도구용 키를 내려 주고 Tool UI가
+ * 그것을 읽는다. 권한이 **사람이 아니라 PC**에 붙으므로 켤 때 확인 창이고 기본은 「취소」다 (U9).
+ */
+export function SelectorRegistration({ botUiId, on }: { botUiId: string; on: boolean }) {
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  function apply(next: boolean) {
+    start(async () => {
+      setError((await setSelectorRegistration(botUiId, next)).error ?? null);
+      setAsking(false);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div>
+        {on ? (
+          <Button variant="secondary" disabled={pending} onClick={() => apply(false)}>
+            끄기
+          </Button>
+        ) : (
+          <Button variant="secondary" disabled={pending} onClick={() => setAsking(true)}>
+            켜기...
+          </Button>
+        )}
+      </div>
+      {error ? <ErrorBanner message={error} /> : null}
+      <ConfirmDialog
+        open={asking}
+        title="이 PC에서 셀렉터 등록을 허락할까요?"
+        description="이 PC를 쓰는 누구나 Tool UI로 셀렉터를 등록·삭제할 수 있게 됩니다."
+        confirmLabel="켜기"
+        onConfirm={() => apply(true)}
+        onCancel={() => setAsking(false)}
+      />
+    </div>
+  );
+}
 
 /**
  * CON-03 관리자 모드 단추. 「비활성화」는 **되돌릴 수 있지만 운영에 영향**이 있어 확인 창을

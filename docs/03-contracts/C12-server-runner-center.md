@@ -127,6 +127,7 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 | `message_acks[]` | `{message_id, accepted, run_id?, reason?}` |
 | `delegation_acks[]` | `{job_id, accepted}` — **위임 결과를 받았다** (§PC 위임). 받으면 Center가 그 값을 지운다 |
 | `extensions[]` | 바뀌었을 때만 (C4와 같은 모양) |
+| `service_key_acks[]` | C4 `ServiceKeyAck`와 같다 (§서비스 앱 키) |
 | `restored[]` | 재시작 직후 저장소에서 되살려 **정말 이어 가는** 실행 `run_id` (첫 하트비트에만). 되살리지 못한 것은 여기 넣지 않고 C5 `run_status`에 사유와 함께 적는다 |
 | `unsent_events` | |
 
@@ -149,6 +150,17 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 | `delegations[]` | **끝난 PC 위임의 결과** — `{job_id, run_id, state, outputs?, reason?}` (§PC 위임). ack가 올 때까지 다시 싣는다 |
 | `paused` | true면 새 작업을 받지 않는다 (CON-12 「일시 중지」). 실행 중인 것은 끝까지 간다 |
 | `rotated_key`? | 만료 14일 전부터 새 키 (C4 §키 회전과 같다) |
+| `service_keys[]`, `drop_service_keys[]` | C4 §서비스 앱 키 전달과 같다 (§서비스 앱 키) |
+
+#### 서비스 앱 키
+
+> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md)). `core.service_keys.ReceivedKeys`(Bot UI와 같은 코드)가 받아 두고 `credentials.service_app_key(참조, Bot)`이 푼다. 환경변수 `CHK_SERVER_RUNNER__SVC__<참조>`는 그대로 이긴다 (컨테이너·CI).
+
+C4 §서비스 앱 키 전달과 **같은 모양·같은 봉함·같은 ack**다. 다른 것은 셋이다.
+
+- **`"*"` 대상 배포는 실행기마다 키가 따로다** — 키 단위가 (Bot × 배포 대상 × 앱)이고 대상은 실행기 하나다. 새 실행기가 승인되면 Center의 다음 맞추기(60초)에서 그 실행기 몫이 생긴다. 그 전에는 그 Bot의 준비가 「키를 받지 못함」이고, **Center는 그 Bot의 작업을 그 실행기에 나누지 않는다** (아래 §Center가 작업을 나누는 규칙 5).
+- 받은 키는 OS 비밀 저장소(`chaeksas-server-runner`의 `svc:<bpm_process_id>:<key_ref>`)에 둔다. 저장소가 없으면 `store_unavailable`로 ack하고 환경변수 길만 남는다(등록 요청과 같은 규칙).
+- `credentials.service_app_key`가 찾는 순서는 환경변수 → (그 Bot, 참조) → 옛 자리(`svc:<참조>`)다 (ADR-0094 §8).
 
 ### Center가 작업을 나누는 규칙
 
@@ -156,6 +168,7 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 2. 하트비트마다 Center는 실행기의 빈자리를 계산한다: `capacity.max - capacity.running`, `paused`면 0.
 3. 대기열 앞에서부터 실어 보내되, **BPM 프로세스별 상한**(배포의 `max_concurrency`, 기본 5)을 넘는 작업은 건너뛰고 다음 것을 본다. 건너뛴 작업의 `state_reason`은 `per_bot_limit`으로 표시한다 (CON-12 「대기 이유」).
 4. 실행기가 여럿이면 빈자리가 많은 쪽부터 준다. **한 실행은 시작한 실행기에 끝까지 머문다** (상태가 그 실행기 저장소에 있으므로).
+5. ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §3): 실행기가 보고한 `readiness[]`에서 그 Bot이 **서비스 앱 키를 받지 못해**(`missing_key_refs`가 비지 않음) 준비되지 않았으면 그 실행기에는 그 작업을 싣지 않고 건너뛴다 — 다른 실행기가 받거나, 키가 도착할 때까지 대기열에 남는다(`state_reason`은 `keys_pending`, CON-12 「대기 이유」 「키 받는 중」). 받은 실행기가 `not_ready`로 거절하면 작업이 `rejected`로 닫혀 다시 싣지 않으므로(§작업), 키가 오기 전 몇십 초 사이에 들어온 작업을 잃게 된다. **키가 아닌 까닭**(확장 없음 등)으로 준비되지 않은 것은 지금처럼 싣고 실행기가 거절한다 — 기다려도 풀리지 않는다. 준비 상태를 아직 올리지 않은 실행기는 **막지 않는다**(모르는 것으로 막지 않는다).
 
 빈자리는 `free_slots()`가, 고르는 것은 `pick_jobs()`가 센다 — **건너뛰고 다음 것을 본다**
 (막아 세우면 상한에 걸린 Bot 하나가 대기열 전체를 멈춘다). CON-12의 「대기 이유」에서
@@ -354,6 +367,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | §서비스 앱 키 — 하트비트 `service_keys[]`·`drop_service_keys[]`·`service_key_acks[]` (C4와 같다), `"*"` 배포는 실행기마다 키, 작업 나누기 규칙 5(키를 받지 못한 실행기는 건너뛴다 — `keys_pending`) | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | **등록 요청과 승인** — `POST/GET …/server-runner/enroll`(C4와 같은 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`. 요청 코드는 로그에 찍고 CON-12에서 승인한다. 비밀 저장소가 없으면 요청하지 않는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | **서버 Bot에도 위임한다** (일괄 기동) — 대상 매니페스트의 `run_location`으로 가른다. 위임 요청의 `loop_index?`(멱등 키에 들어간다), 응답의 `target_type`(`bot_ui_id`는 PC일 때만), 422 `bot_ui_for_server`, 서버 실행기가 맡겨진 작업의 `outputs`를 올린다 | [0082](../decisions/0082-batch-start.md) |
 | 2026-10-15 | 1 | **도는 실행을 멈추는 길이 생겼다** — C5 취소 표가 서버 대상 `accepted`를 202로 받아 `cancel_jobs`로 내려 준다 (C12는 **받는 쪽이 이미 하던 일**이라 모양이 늘지 않았다). 그래서 위임 거두기 가지가 **켜진다** | [0063](../decisions/0063-stopping-a-running-server-run.md) |

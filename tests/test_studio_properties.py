@@ -270,7 +270,8 @@ def test_a_missing_service_app_key_blocks_the_run(tmp_path: Path) -> None:
     only = found[0]
     assert only.blocks
     assert only.rule == PREFLIGHT_RULE, "B 규칙과 갈라 보여야 한다 (그림의 흠이 아니다)"
-    assert only.items == ["it-crm"], "무엇이 빠졌는지 말해야 고칠 수 있다"
+    # UI 태스크의 앱(ui-automation)도 키 줄이다 — 그 확장이 키를 받는다 (ADR-0094, 빌드가 적는다).
+    assert only.items == ["it-crm", "it-legacy-ui"], "무엇이 빠졌는지 말해야 고칠 수 있다"
     assert KEY_FIX_HINT in only.message, "어디서 고치는지도 말한다 (STU-10)"
 
 

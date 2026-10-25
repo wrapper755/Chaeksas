@@ -272,7 +272,7 @@ class Running:
         elif kind == "service_call":
             # **묻지 않고 안다** (ADR-0052) — 앱이 키를 거부한 것은 실행이 이미 겪었다.
             # 거부만 본다: 값이 이 PC에 없는 것은 `status`가 없어 0으로 남고, 그것은
-            # 「앱이 거부했다」가 아니라 사전 점검의 「서비스 앱 키 없음」이다.
+            # 「앱이 거부했다」가 아니라 사전 점검의 「서비스 앱 키 받지 못함」이다.
             status = int(data.get("status") or 0)
             key_ref = str(data.get("key_ref") or "")
             app_id = str(data.get("app_id") or "")

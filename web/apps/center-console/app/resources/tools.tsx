@@ -2,7 +2,44 @@
 
 import { useState, useTransition } from "react";
 import { Button, ConfirmDialog, ErrorBanner } from "@chaeksas/ui";
-import { refreshResources, revokeExtension, unregisterServiceApp } from "@/app/actions";
+import { deleteAppKey, refreshResources, revokeExtension, unregisterServiceApp } from "@/app/actions";
+
+/**
+ * 외부 앱 키 「키 지우기」 (CON-07 상세, C7 §외부 앱 키). 운영 키를 지우면 쓰는 Bot이 실행 불가가
+ * 되므로 확인 창이고 기본은 「취소」다 (U9). 시험용 키는 Studio 시험 실행만 못 하게 된다.
+ */
+export function DeleteAppKey({ extensionId, slot, users }: { extensionId: string; slot: "run" | "test"; users: number }) {
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+  const what = slot === "test" ? "시험용 키" : "외부 앱 키";
+  const why =
+    slot === "test"
+      ? "Studio 시험 실행이 이 앱을 부르지 못하게 됩니다."
+      : `${users > 0 ? `이 기능을 쓰는 Bot ${users}개가 실행 불가가 됩니다. ` : ""}쓰는 곳 모두에서 지워집니다.`;
+  return (
+    <span className="inline-flex flex-col gap-1">
+      <Button variant="danger" disabled={pending} onClick={() => setAsking(true)}>
+        {slot === "test" ? "시험용 키 지우기" : "키 지우기"}
+      </Button>
+      {error ? <ErrorBanner message={error} /> : null}
+      <ConfirmDialog
+        open={asking}
+        title={`${what}를 지울까요?`}
+        description={why}
+        confirmLabel="지우기"
+        danger
+        onConfirm={() =>
+          start(async () => {
+            setError((await deleteAppKey(extensionId, slot)).error ?? null);
+            setAsking(false);
+          })
+        }
+        onCancel={() => setAsking(false)}
+      />
+    </span>
+  );
+}
 
 /** 「새로 고침」 — 간격을 무시하고 서비스 앱을 **바로 다시 읽는다** (C7). */
 export function RefreshResources() {

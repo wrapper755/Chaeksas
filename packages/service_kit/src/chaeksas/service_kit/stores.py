@@ -50,6 +50,10 @@ class KeyStore(Protocol):
         """폐기 시각을 남긴다. **지우지 않는다** — 사용 기록이 이름을 가리킨다."""
         ...
 
+    def put(self, key: ServiceAppKey) -> None:
+        """같은 해시의 레코드를 바꾼다 (Center 발급 키의 허용 작업·만료 고치기, ADR-0094)."""
+        ...
+
 
 class IdempotencyStore(Protocol):
     """멱등 저장소."""
@@ -83,6 +87,9 @@ class InMemoryKeyStore:
 
     def revoke(self, key: ServiceAppKey, *, at: str) -> None:
         key.revoked_at = at
+
+    def put(self, key: ServiceAppKey) -> None:
+        self.keys = [key if one.hash == key.hash else one for one in self.keys]
 
 
 @dataclass

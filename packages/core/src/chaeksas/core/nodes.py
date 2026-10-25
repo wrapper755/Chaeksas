@@ -41,7 +41,7 @@ from chaeksas.contracts.bpmn_ext import (
 )
 from chaeksas.contracts.dmn import DmnError
 from chaeksas.contracts.events import missing_keys
-from chaeksas.contracts.manifest import PC_ONLY_DOMAINS
+from chaeksas.contracts.manifest import PC_ONLY_DOMAINS, default_key_ref
 from chaeksas.core.agent import DEFAULT_MAX_STEPS_SCREEN, AgentError, check_results, finish_from, run_agent
 from chaeksas.core.agent import Outcome as AgentOutcome
 from chaeksas.core.delegation import DelegationCall, DelegationError, DelegationUnsupported
@@ -435,7 +435,12 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
         )
 
     scope = context.scope()
-    key_ref = spec.data.get("key_ref") or run.process.info.service_keys.get(spec.extension)
+    # 적지 않았으면 C1 기본값 — 빌드가 매니페스트에 적는 것과 **같은 이름**이다 (ADR-0094).
+    key_ref = (
+        spec.data.get("key_ref")
+        or run.process.info.service_keys.get(spec.extension)
+        or default_key_ref(run.identity)
+    )
     task = TaskContext(
         extension=_extension_context(run, spec),
         run_id=run.run_id,
@@ -724,7 +729,8 @@ def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:
     없는 작업을 부른 것(`FATAL_CODES`)은 다시 불러도 똑같으므로 바로 그만둔다.
     """
     run, node = context.run, context.node
-    key_ref = spec.key_ref or run.process.info.service_keys.get(spec.app_id)
+    # 적지 않았으면 C1 기본값 — 빌드가 매니페스트에 적는 것과 **같은 이름**이다 (ADR-0094).
+    key_ref = spec.key_ref or run.process.info.service_keys.get(spec.app_id) or default_key_ref(run.identity)
     scope = context.scope()
     arguments = {name: evaluate(expression, scope) for name, expression in spec.input.items()}
 

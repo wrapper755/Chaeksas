@@ -13,6 +13,8 @@ import logging
 import os
 from dataclasses import dataclass
 
+from chaeksas.core import service_keys
+
 log = logging.getLogger(__name__)
 
 #: `keyring`의 서비스 이름 (Bot UI·Studio와 가른다 — 한 PC에 셋이 있을 수 있다).
@@ -147,9 +149,30 @@ class Credentials:
         """메일 서버 비밀번호. 환경변수가 먼저다 (서버의 주 경로)."""
         return self.get(SMTP_PASSWORD, env=ENV_SMTP_PASSWORD)
 
-    def service_app_key(self, ref: str) -> str | None:
-        """서비스 앱 키 하나 (참조 이름 → 값). 키 **값은 실행기만 안다** (ADR-0013)."""
-        return self.get(f"{SERVICE_APP_PREFIX}{ref}", env=service_key_env(ref))
+    def service_app_key(self, ref: str, bot: str | None = None) -> str | None:
+        """서비스 앱 키 하나 (참조 이름 → 값). Bot UI와 같은 순서다 — 환경변수 → Center가 그 Bot에
+        내려 준 키(`svc:<Bot>:<참조>`, ADR-0094) → 옛 자리(`svc:<참조>`)."""
+        found = os.environ.get(service_key_env(ref))
+        if found:
+            return found
+        if bot:
+            delivered = self.get(service_keys.run_name(bot, ref))
+            if delivered:
+                return delivered
+        return self.get(f"{SERVICE_APP_PREFIX}{ref}")
+
+    def delete(self, name: str) -> None:
+        backend = self._keyring()
+        if backend is None:
+            return
+        try:
+            backend.delete_password(self.service, name)  # type: ignore[attr-defined]
+        except Exception as e:  # noqa: BLE001 — 없는 비밀을 지우는 것은 오류가 아니다
+            log.debug("비밀을 지우지 못했다 (%s): %s", name, e)
+
+    def for_bot(self, bot: str) -> BotCredentials:
+        """그 Bot의 실행이 쓰는 창구 — 참조 이름을 **그 Bot이 받은 키**로 푼다 (ADR-0094 §8)."""
+        return BotCredentials(credentials=self, bot=bot)
 
     def extension_secret(self, extension_id: str, key: str) -> str | None:
         """확장의 비밀 설정 칸 (C13 `configuration[].secret`). Bot UI와 같은 규칙이다."""
@@ -159,7 +182,22 @@ class Credentials:
         )
 
 
+
+@dataclass(frozen=True)
+class BotCredentials:
+    """한 Bot에 묶인 창구. 확장·바깥 앱 명부가 참조 이름만 넘겨도 그 Bot의 키가 풀린다."""
+
+    credentials: Credentials
+    bot: str
+
+    def service_app_key(self, ref: str) -> str | None:
+        return self.credentials.service_app_key(ref, self.bot)
+
+    def extension_secret(self, extension_id: str, key: str) -> str | None:
+        return self.credentials.extension_secret(extension_id, key)
+
 __all__ = [
+    "BotCredentials",
     "CENTER_API_KEY",
     "ENV_CENTER_API_KEY",
     "ENV_EXTENSION_PREFIX",

@@ -58,6 +58,28 @@ class InstalledOn(ContractModel):
     by_version: dict[str, int] = Field(default_factory=dict)
 
 
+class KeySlot(ContractModel):
+    """관리자가 넣은 외부 앱 키 한 칸 (C7 §외부 앱 키). **원문·앞자리는 없다.**"""
+
+    set: bool = False
+    set_at: Timestamp | None = None
+    set_by: str | None = None
+
+
+class AppKeyState(ContractModel):
+    """외부 앱 키 둘 — 운영(`run`)과 Studio 시험용(`test`) (ADR-0094 §7)."""
+
+    run: KeySlot = Field(default_factory=KeySlot)
+    test: KeySlot = Field(default_factory=KeySlot)
+
+
+class TrustState(ContractModel):
+    """서비스 앱이 Center 발급을 받나 (C11 `GET /center/v1/trust`, ADR-0094 §1)."""
+
+    state: str = "unknown"  # 열린 문자열 (service_keys.TRUST_*)
+    checked_at: Timestamp | None = None
+
+
 class ExtensionResource(ContractModel):
     """확장 하나 (C13 정의에서 모은 것)."""
 
@@ -79,6 +101,8 @@ class ExtensionResource(ContractModel):
     # 외부 확장만 — 실행하는 쪽이 받아 검증한다 (C2 `extension` 봉투).
     definition: dict[str, Any] | None = None
     envelope: dict[str, Any] | None = None
+    #: 외부 확장이고 키를 받는 앱일 때만 (C7 §외부 앱 키).
+    app_key: AppKeyState | None = None
 
 
 class ServiceAppResource(ContractModel):
@@ -97,6 +121,8 @@ class ServiceAppResource(ContractModel):
     checked_at: Timestamp | None = None
     manifest_at: Timestamp | None = None
     used_by: list[str] = Field(default_factory=list)  # `id@version`
+    #: C11 앱이 Center 발급을 받나 (ADR-0094 §1). 외부 앱은 없다.
+    trust: TrustState | None = None
 
     def operation(self, name: str) -> Operation | None:
         return next((o for o in self.operations if o.name == name), None)

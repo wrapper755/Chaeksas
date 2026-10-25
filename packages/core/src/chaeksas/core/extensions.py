@@ -401,6 +401,18 @@ class ExtensionHost:
     def task_type(self, task_type_id: str) -> Contribution[TaskTypeContribution] | None:
         return next((c for c in self.task_types() if c.value.id == task_type_id), None)
 
+    def key_extensions(self) -> list[str]:
+        """**서비스 앱 키를 받는** 켜진 확장 — 서버 부분이 있고 `requires_keys`에 `run`을 적었다 (C13).
+
+        빌드가 그 확장의 태스크를 쓰는 Bot에 `requires.service_apps` 줄을 적어야 Center가 그 Bot의
+        키를 짓는다 (ADR-0094). 서버 부분의 앱 id는 확장 id와 같다고 본다 (내장 확장이 그렇다).
+        """
+        return sorted(
+            e.id
+            for e in self.enabled()
+            if e.manifest.service is not None and any(k.purpose == "run" for k in e.manifest.requires_keys)
+        )
+
     def task_type_locations(self) -> dict[str, list[str]]:
         """`{태스크 종류: [실행 위치]}` — C14 B6·C1 R2가 「서버에서 되나」를 묻는 표다.
 

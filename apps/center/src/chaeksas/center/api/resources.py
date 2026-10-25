@@ -38,16 +38,25 @@ from chaeksas.center.settings import (
     RESOURCE_TIMEOUT_S,
 )
 from chaeksas.center.storage import Store, dumps, loads, now_iso
-from chaeksas.contracts.extension import HostRefused, resolve_host
+from chaeksas.contracts.extension import ExtensionManifest, HostRefused, resolve_host, takes_key
 from chaeksas.contracts.resources import (
+    AppKeyState,
     ContributedResource,
     ExtensionResource,
     InstalledOn,
     RuntimeHost,
     RuntimeResource,
     ServiceAppResource,
+    TrustState,
 )
 from chaeksas.contracts.service_app import ServiceAppManifest
+from chaeksas.contracts.service_keys import (
+    TRUST_NOT_CONFIGURED,
+    TRUST_OTHER_CENTER,
+    TRUST_PIN_MISMATCH,
+    TRUST_STALE_KEY,
+    TRUST_TRUSTED,
+)
 
 #: 서비스 앱 상태 (C7). 열린 문자열이지만 Center가 짓는 것은 이 넷이다.
 OK = "ok"
@@ -96,6 +105,9 @@ def read_public(base_url: str, *, timeout_s: float = RESOURCE_TIMEOUT_S) -> dict
             manifest = client.get(f"{root}/manifest")
             if manifest.status_code < 400 and manifest.content:
                 out["manifest"] = manifest.json()
+            # Center 발급을 받나 (C11 `GET /center/v1/trust`, ADR-0094). 옛 앱은 그 경로가 없다.
+            trust = client.get(f"{root}/center/v1/trust")
+            out["trust"] = trust.json() if trust.status_code < 400 and trust.content else {}
     except Exception as e:  # noqa: BLE001 — 주소가 틀렸거나 꺼져 있다
         out["status"] = UNREACHABLE
         out["reasons"] = [type(e).__name__]
@@ -352,11 +364,32 @@ def _probe_into(store: Store, row: Any, *, force: bool = False) -> None:
             "UPDATE service_apps SET status = ?, status_reasons = ?, checked_at = ? WHERE app_id = ?",
             (probed["status"], dumps(probed["reasons"]), now, row["app_id"]),
         )
+        if "trust" in probed:
+            cur.execute(
+                "UPDATE service_apps SET trust_json = ? WHERE app_id = ?",
+                (dumps({"state": _trust_state(store, probed["trust"]), "checked_at": now}), row["app_id"]),
+            )
         if wants_manifest and probed["manifest"] is not None:
             cur.execute(
                 "UPDATE service_apps SET manifest_json = ?, manifest_at = ? WHERE app_id = ?",
                 (dumps(probed["manifest"]), now, row["app_id"]),
             )
+
+
+def _trust_state(store: Store, trust: dict[str, Any]) -> str:
+    """앱이 말한 `CenterTrust`를 C7 `trust.state`로 (ADR-0094 §1)."""
+    from chaeksas.center import signer  # noqa: PLC0415
+    from chaeksas.center.api import signing  # noqa: PLC0415
+
+    if not trust.get("center_url"):
+        return TRUST_NOT_CONFIGURED
+    ids = set(trust.get("key_ids") or [])
+    if not ids:
+        return TRUST_PIN_MISMATCH if trust.get("pinned") else TRUST_STALE_KEY
+    if signer.current_key_id(store) in ids:
+        return TRUST_TRUSTED
+    ours = {one.key_id for one in signing.admin_keys(store)}
+    return TRUST_STALE_KEY if ids & ours else TRUST_OTHER_CENTER
 
 
 def _due(at: str | None, now: str, seconds: int) -> bool:
@@ -431,6 +464,7 @@ def _service_app_of(store: Store, row: Any) -> ServiceAppResource:
         checked_at=row["checked_at"],
         manifest_at=row["manifest_at"],
         used_by=_used_by(store, str(row["app_id"])),
+        trust=TrustState.model_validate(loads(row["trust_json"])) if row["trust_json"] else None,
     )
 
 
@@ -540,9 +574,24 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
                 ),
                 definition=definition,
                 envelope=json.loads(registered["envelope_json"]) if registered is not None else None,
+                # 외부 앱 키 — 넣었는지·언제·누가만 (C7 §외부 앱 키, 원문 없음).
+                app_key=_app_key_of(store, key, definition),
             )
         )
     return out
+
+
+def _app_key_of(store: Store, extension_id: str, definition: dict[str, Any] | None) -> AppKeyState | None:
+    if definition is None:
+        return None
+    try:
+        if not takes_key(ExtensionManifest.model_validate(definition)):
+            return None
+    except ValueError:  # pragma: no cover — 등록할 때 검증했다
+        return None
+    from chaeksas.center import service_keys  # noqa: PLC0415 — 순환 import를 피한다
+
+    return service_keys.external_state(store, extension_id)
 
 
 def _protocol_of(definition: dict[str, Any] | None, app: ServiceAppResource | None) -> str | None:
@@ -906,6 +955,11 @@ def revoke_extension(
                 "UPDATE extensions SET revoked_json = ?, revoked_by = ? WHERE id = ? AND version = ?",
                 (json.dumps(envelope.to_json_dict(), ensure_ascii=False), by, extension_id, version),
             )
+        if not _external_rows(store).get(extension_id):
+            # 그 외부 확장의 판이 하나도 남지 않았다 — 넣어 둔 키도 지운다 (C7 §외부 앱 키).
+            from chaeksas.center import service_keys  # noqa: PLC0415 — 순환 import를 피한다
+
+            service_keys.forget_external(store, extension_id)
     # **철회된 것은 목록에서 빠지므로** `extension()`으로는 찾을 수 없다 — 저장된 줄에서 짓는다.
     return _revoked_info(store, extension_id, version)
 

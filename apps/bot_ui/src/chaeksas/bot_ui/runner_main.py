@@ -64,11 +64,12 @@ class RunnerSecrets:
     태스크의 **서비스 앱 키 참조**(BUI-10)가 먼저, 아니면 그 확장의 비밀 칸이다.
     """
 
-    credentials: Credentials
+    credentials: Any  # `Credentials` 또는 그 Bot에 묶인 `BotCredentials`
     extension_id: str
 
     def resolve(self, ref: str) -> str | None:
-        return self.credentials.service_app_key(ref) or self.credentials.extension_secret(self.extension_id, ref)
+        found: str | None = self.credentials.service_app_key(ref)
+        return found or self.credentials.extension_secret(self.extension_id, ref)
 
 
 def extension_tasks(
@@ -76,6 +77,7 @@ def extension_tasks(
     *,
     host: ExtensionHost | None = None,
     off: Sequence[str] = (),
+    bot: str | None = None,
 ) -> HostTasks:
     """이 실행의 확장 — 설치된 것을 읽고, Bot UI가 넘긴 확장별 설정(Worker 자리 등)을 붙인다.
 
@@ -83,7 +85,8 @@ def extension_tasks(
     넘긴다(`--off`). 그런 Bot은 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
     """
     loaded = host if host is not None else load_host(off=off)
-    credentials = Credentials()
+    # **그 Bot이 받은 키로** 푼다 (ADR-0094 §8) — 두 Bot이 같은 참조 이름을 써도 키가 다르다.
+    credentials: Any = Credentials().for_bot(bot) if bot else Credentials()
 
     def make_context(extension_id: str) -> Any:
         return loaded.context(
@@ -96,13 +99,14 @@ def extension_tasks(
     return HostTasks(host=loaded, make_context=make_context)
 
 
-def app_directory(path: Path | None) -> AppDirectory:
+def app_directory(path: Path | None, bot: str | None = None) -> AppDirectory:
     """부를 수 있는 바깥 앱들 (C13 「전송」) — Bot UI가 Center에서 받아 파일로 건넨 것.
 
     **봉투를 다시 검증한다** — `read_directory`가 통과한 것만 싣고 나머지는 사유를 남긴다.
     키 값은 파일에 없다. **참조 이름**을 BUI-10의 서비스 앱 키로 푼다 (ADR-0013).
     """
-    return read_directory(path, secrets=Credentials().service_app_key)
+    found = Credentials()
+    return read_directory(path, secrets=found.for_bot(bot).service_app_key if bot else found.service_app_key)
 
 
 def refuse_unusable(package: InstalledBot, directory: AppDirectory) -> None:
@@ -336,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:
     # 모델 키는 **환경변수로** 받는다 (설정 파일·명령줄에 두지 않는다, CLAUDE.md §5).
     import os  # noqa: PLC0415
 
-    directory = app_directory(found.services)
+    directory = app_directory(found.services, bot=package.manifest.id)
     for app_id, why in sorted(directory.problems.items()):
         # **조용히 사라지지 않는다** — 쓰지 못한 정의는 이유와 함께 기록에 남는다.
         log.warning("외부 확장 정의를 쓰지 못한다 (%s): %s", app_id, why)
@@ -363,6 +367,7 @@ def main(argv: list[str] | None = None) -> int:
             extensions=extension_tasks(
                 json.loads(found.extensions.read_text(encoding="utf-8")) if found.extensions else {},
                 off=list(found.off),
+                bot=package.manifest.id,
             ),
             approval_where=found.approval_where,
             directory=directory,

@@ -370,6 +370,47 @@ export async function setServiceAppUrl(form: FormData): Promise<void> {
   redirect(back("moved=1"));
 }
 
+/**
+ * 외부 앱 키 「키 넣기...」·「바꾸기...」 (CON-07 상세, C7 §외부 앱 키). **원문은 다시 보이지 않는다** —
+ * 돌아가는 주소에 싣지 않고, Center 응답에도 없다.
+ */
+export async function putAppKey(form: FormData): Promise<void> {
+  const extensionId = String(form.get("extension_id") ?? "");
+  const slot = String(form.get("slot") ?? "") === "test" ? "test" : "run";
+  const key = String(form.get("key") ?? "").trim();
+  const back = (query: string): Route =>
+    `/resources/features/${encodeURIComponent(extensionId)}?${query}` as Route;
+  if (!key) redirect(back(`error=${encodeURIComponent("키를 넣으세요.")}`));
+  try {
+    await center.setAppKey(extensionId, slot, key);
+  } catch (cause) {
+    redirect(back(`error=${encodeURIComponent(message(cause))}`));
+  }
+  revalidatePath("/resources", "layout");
+  redirect(back(`key_saved=${slot}`));
+}
+
+export async function deleteAppKey(extensionId: string, slot: "run" | "test"): Promise<ActionResult> {
+  try {
+    await center.deleteAppKey(extensionId, slot);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/resources", "layout");
+  return {};
+}
+
+/** CON-03 「셀렉터 등록」 켜기·끄기 (ADR-0094 §6). 키는 Center가 그 PC에 내려 주고 거둔다. */
+export async function setSelectorRegistration(botUiId: string, on: boolean): Promise<ActionResult> {
+  try {
+    await center.setSelectorRegistration(botUiId, on);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath(`/bot-uis/${botUiId}`);
+  return {};
+}
+
 export async function unregisterServiceApp(appId: string): Promise<ActionResult> {
   try {
     await center.unregisterServiceApp(appId);

@@ -75,6 +75,7 @@ from chaeksas.core.processes import Supervisor
 from chaeksas.core.run_log import run_dir
 from chaeksas.core.run_shipping import HttpUploader, Shipment
 from chaeksas.core.run_shipping import Queue as RunQueue
+from chaeksas.core.service_keys import ReceivedKeys
 from chaeksas.extension_api import HOST_BOT_UI, ExtensionContext
 
 log = logging.getLogger(__name__)
@@ -101,7 +102,10 @@ TRAY_IDLE = "대기"
 TRAY_WORKER_BUSY = "Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다"
 
 #: 사전 점검이 키가 없다고 할 때 「어떻게 고치나」 (BUI-10). 화면 이름은 **부르는 쪽이** 적는다.
-KEY_FIX_HINT = "「도구」 → 「서비스 앱 키...」에서 등록하세요 (BUI-10)"
+KEY_FIX_HINT = (
+    "Center가 배포와 함께 내려 줍니다 — 곧 받습니다. 오래 이러면 관리자에게 알리세요 "
+    "(이 PC가 환경변수로 Center 키를 받았다면 서비스 앱 키도 환경변수 CHK_BOT_UI__SVC__<참조>로 받습니다)"
+)
 
 #: 서비스 앱 키 만료를 묻는 제한 시간 (ADR-0052). **BUI-10 「확인」보다 짧다** — 하트비트는
 #: 화면과 같은 자리에서 돌아, 기다리는 만큼 창이 멈춘다.
@@ -220,6 +224,7 @@ class Agent:
     #: 서비스 앱 키 참조마다 만료를 **물어본 날짜** (ADR-0052 — 하루 한 번, 주기마다 하나).
     #: 알린 날짜는 `notices`가 따로 쥔다 (묻는 것과 알리는 것은 다른 일이다).
     _keys_asked_on: dict[str, str] = field(default_factory=dict)
+    _received: ReceivedKeys | None = None
 
     def runtimes(self) -> LocalRuntimes:
         """확장이 기여한 로컬 런타임들. **띄우지는 않는다** — 필요할 때 `ensure()`가 띄운다."""
@@ -319,7 +324,7 @@ class Agent:
         if found is None:
             found = run_preflight(
                 bot.manifest,
-                key_value=self.credentials.service_app_key,
+                key_value=self.credentials.for_bot(bot.id).service_app_key,
                 host=self.host,
                 context=self.extension_context if self.host is not None else None,
                 fix_hint=KEY_FIX_HINT,
@@ -715,7 +720,32 @@ class Agent:
             approval_acks=list(self.store.state.pending_approval_acks),
             extensions=list(self.extensions),
             unsent_events=self.runs().unsent_count(),
+            service_key_acks=list(self.received_keys().pending),
         )
+
+    def received_keys(self) -> ReceivedKeys:
+        """Center가 내려 준 서비스 앱 키의 자리와 보낼 ack (ADR-0094 — 서버 실행기와 같은 코드)."""
+        if self._received is None:
+            from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+            self._received = ReceivedKeys.at(data_dir())
+        return self._received
+
+    def _take_service_keys(self, request: HeartbeatRequest, response: HeartbeatResponse) -> None:
+        """하트비트 답의 서비스 앱 키를 받아 둔다 (C4 §서비스 앱 키 전달). 바뀌면 사전 점검을 다시 잰다."""
+        held = self.received_keys()
+        held.sent(request.service_key_acks)
+        if self.credentials.center_key_from_env():
+            return  # 공개키를 보내지 않았다 — Center가 싣지 않는다 (환경변수 키를 쓴다)
+        changed = held.take(
+            response.service_keys,
+            response.drop_service_keys,
+            secret=self.credentials.enroll_secret(),
+            put=self.credentials.set,
+            delete=self.credentials.delete,
+        )
+        if changed:
+            self.invalidate_preflight()
 
     def api_key(self) -> str:
         return self.credentials.center_api_key() or ""
@@ -760,7 +790,7 @@ class Agent:
                     continue
                 base_url = held.base_url_of(app_id=app_id) if app_id else None
                 try:
-                    key = self.credentials.service_app_key(ref)
+                    key = self.credentials.service_app_key(ref, bot.id)
                 except Exception as e:  # noqa: BLE001 - 비밀 저장소가 없는 PC도 있다
                     log.warning("키 참조 %s를 풀지 못했다: %s", ref, e)
                     key = None
@@ -843,6 +873,7 @@ class Agent:
             expires_at=response.key_expires_at, now=self.last_beat_at, within_days=self._key_notice_days()
         )
         self._take_rotated(response)
+        self._take_service_keys(request, response)
         # 보낸 ack는 Center가 받았다 (같은 요청에 실어 보냈으므로).
         self.store.ack_sent(request.job_acks)
         self.store.deployments_sent(request.deployment_results)

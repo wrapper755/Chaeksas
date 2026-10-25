@@ -7,7 +7,8 @@
 2. **읽은 것을 통째로 되돌려 쓴다** — `extensions`·`inputs`·`outputs`를 빼면 그 선언이 사라진다.
 3. **「서버로 바꾸면 무엇이 걸리나」는 검사와 같은 함수로 센다** (`contracts.server_blockers`) —
    어긋나면 「검사는 통과했는데 창이 막는다」가 된다. **저장은 막지 않는다.**
-4. **키 값은 여기 없다** (ADR-0013) — 참조 이름만이고 「이 PC의 값」은 읽어서 보인다.
+4. **「서비스 앱 키」 섹션은 없다** (ADR-0094) — 키는 Center가 내려 주고, 그림에 적힌 참조는
+   **그대로** 간다.
 """
 
 from __future__ import annotations
@@ -21,19 +22,14 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from chaeksas.contracts.bpmn_ext import ProcessInfo, read_process, server_blockers  # noqa: E402
+from chaeksas.contracts.bpmn_ext import read_process, server_blockers  # noqa: E402
 from chaeksas.contracts.bpmn_ext import validate as validate_bpmn  # noqa: E402
 from chaeksas.studio import process_dialog as module  # noqa: E402
 from chaeksas.studio.packaging import build_manifest  # noqa: E402
 from chaeksas.studio.process_dialog import (  # noqa: E402
-    KeyRow,
     ProcessInfoDialog,
-    apps_in,
     check,
-    default_ref,
-    key_rows,
     learning,
-    overrides_of,
     server_warning,
 )
 from chaeksas.studio.workspace import BpmProcess, Workspace, read_record  # noqa: E402
@@ -71,58 +67,9 @@ def _app() -> Any:
 # ─────────────────────────── 담는 것 (Qt 없음) ───────────────────────────
 
 
-def test_the_default_key_reference_comes_from_the_id() -> None:
-    """C1 규칙 — `.`·`_`를 `-`로 바꾼 것이 기본값이다."""
-    assert default_ref("finance.invoice_check") == "finance-invoice-check"
-    assert len(default_ref("x" * 60)) == 40, "40자를 넘지 않는다"
-
-
 def test_learning_says_nothing_when_there_is_no_memory(space: Workspace) -> None:
     """**빈 상자를 말없이 두지 않는다** — 없으면 어떻게 생기는지 말한다 (ADR-0028)."""
     assert learning(imported(space)) == module.NO_MEMORY
-
-
-def test_the_table_merges_what_is_written_with_what_the_drawing_calls(space: Workspace) -> None:
-    """적어 두지 않은 앱도 줄로 보인다 — 빠진 것을 사람이 찾아다니지 않게."""
-    process = imported(space)
-    assert apps_in(process.definitions) == ["ext-credit"]
-
-    rows = key_rows(process, ProcessInfo(), has_value=lambda _ref: False)
-    [one] = rows
-    assert one.app_id == "ext-credit"
-    assert one.ref == default_ref(process.id), "적어 두지 않았으면 기본 참조를 미리 넣는다"
-    assert one.value_text == module.VALUE_MISSING
-
-
-def test_a_written_reference_wins_and_its_value_is_read(space: Workspace) -> None:
-    process = imported(space)
-    info = ProcessInfo(service_keys={"ext-credit": "finance-credit"})
-    [one] = key_rows(process, info, has_value=lambda ref: ref == "finance-credit")
-    assert (one.ref, one.has_value) == ("finance-credit", True)
-    assert one.value_text == module.VALUE_OK
-
-
-def test_a_task_that_wrote_another_reference_is_counted(space: Workspace) -> None:
-    """**상속한 태스크는 「바꾼 곳」이 아니다** — 적지 않은 것과 다르게 적은 것을 가른다.
-
-    예제의 서비스 앱 태스크는 참조를 적지 않고 `chk:process`에서 **상속한다** — 그래서 참조를
-    무엇으로 바꿔도 「바꾼 곳」이 없다. 다르게 적은 태스크를 그 자리에서 만들어 견준다.
-    """
-    process = imported(space)
-    assert overrides_of(process.definitions, "ext-credit", "finance-credit") == ()
-    assert overrides_of(process.definitions, "ext-credit", "other-ref") == ()
-
-    entry = process.entry_definition
-    assert entry is not None
-    xml = entry.path.read_text(encoding="utf-8")
-    assert '"app_id": "ext-credit"' in xml, "예제가 그 앱을 부른다"
-    changed = xml.replace(
-        '"app_id": "ext-credit"', '"app_id": "ext-credit", "key_ref": "other-ref"', 1
-    )
-    entry.path.write_text(changed, encoding="utf-8", newline="\n")
-    again = space.read(process.folder, process.group)
-    assert overrides_of(again.definitions, "ext-credit", "finance-credit") != ()
-    assert overrides_of(again.definitions, "ext-credit", "other-ref") == (), "같은 참조는 아니다"
 
 
 def test_the_server_warning_counts_and_stays_quiet_when_clean() -> None:
@@ -181,19 +128,10 @@ def test_the_window_and_b6_use_the_same_table_for_extension_tasks(space: Workspa
 
 
 def test_the_check_says_the_first_problem_only() -> None:
-    rows = [KeyRow(app_id="a", ref="ok-ref", has_value=False)]
-    assert check(name="이름", version="1.0.0", rows=rows, taken=[]) == ""
-    assert "이름을 적으세요" in check(name="  ", version="1.0.0", rows=rows, taken=[])
-    assert "같은 이름" in check(name="겹침", version="1.0.0", rows=rows, taken=["겹침"])
-    assert "버전은" in check(name="이름", version="1.0", rows=rows, taken=[])
-
-    bad = [KeyRow(app_id="a", ref="대문자", has_value=False)]
-    assert "키 참조 이름" in check(name="이름", version="1.0.0", rows=bad, taken=[])
-    twice = [
-        KeyRow(app_id="a", ref="same", has_value=False),
-        KeyRow(app_id="b", ref="same", has_value=False),
-    ]
-    assert "겹칩니다" in check(name="이름", version="1.0.0", rows=twice, taken=[])
+    assert check(name="이름", version="1.0.0", taken=[]) == ""
+    assert "이름을 적으세요" in check(name="  ", version="1.0.0", taken=[])
+    assert "같은 이름" in check(name="겹침", version="1.0.0", taken=["겹침"])
+    assert "버전은" in check(name="이름", version="1.0", taken=[])
 
 
 # ─────────────────────────── 창 ───────────────────────────
@@ -209,7 +147,6 @@ def dialog(
     return ProcessInfoDialog(
         process,
         space,
-        has_value=lambda ref: ref == "finance-credit",
         editable=editable,
         task_type_locations=task_type_locations,
     )
@@ -268,7 +205,6 @@ def test_the_graph_fields_are_off_when_the_entry_is_not_open(space: Workspace) -
     process = imported(space)
     window = dialog(space, process, editable=False)
     assert not window.location_box.isEnabled()
-    assert not window.keys.isEnabled()
     entry = process.entry_definition
     assert entry is not None
     assert entry.path.name in window.note.text()
@@ -287,13 +223,12 @@ def test_saving_builds_one_patch_that_keeps_what_the_window_does_not_know(space:
 
     at = window.location_box.findData("pc")
     window.location_box.setCurrentIndex(at)
-    window.keys.item(0, module.REF).setText("finance-credit")  # type: ignore[union-attr]
     window.save()
 
     assert window.process_patch is not None
     found = json.loads(window.process_patch)
     assert found["run_location"] == "pc"
-    assert found["service_keys"] == {"ext-credit": "finance-credit"}
+    assert found.get("service_keys", {}) == window.info.service_keys, "적힌 참조는 그대로 간다"
     assert [one["name"] for one in found["inputs"]] == [one.name for one in window.info.inputs]
 
 
@@ -342,56 +277,21 @@ def test_the_split_button_stands_beside_to_pc_and_asks_first(space: Workspace, m
     assert found.to_split.isHidden(), "PC에서는 나눌 까닭이 없다"
 
 
-# ─────────────────────────── 키 표 — 노드가 부르는 앱 (ADR-0091 와 같은 조각) ───────────────────────────
+# ─────────────────────────── 「서비스 앱 키」 섹션은 없다 (ADR-0094) ───────────────────────────
 
 
-def test_a_row_says_whether_it_is_written_and_who_uses_it(space: Workspace) -> None:
-    """기본값 줄도 「적용」하면 적힌다 — 그것이 보여야 한다. 쓰는 노드는 수와 이름이다."""
-    process = imported(space)
-    [default] = key_rows(process, ProcessInfo(), has_value=lambda _ref: False)
-    assert (default.written, default.written_text) == (False, module.WRITTEN_DEFAULT)
-    assert default.users and all(one.startswith(f"{process.entry_definition.name}/") for one in default.users)  # type: ignore[union-attr]
-    assert not default.removable, "부르는 앱의 줄은 지워도 기본값으로 다시 생길 뿐이다"
-
-    info = ProcessInfo(service_keys={"ext-credit": "finance-credit", "old-app": "old-key"})
-    rows = {one.app_id: one for one in key_rows(process, info, has_value=lambda _ref: True)}
-    assert rows["ext-credit"].written_text == module.WRITTEN_YES
-    assert rows["old-app"].users == () and rows["old-app"].removable, "적혀 있지만 쓰는 노드가 없다"
-
-
-def test_an_app_missing_from_the_center_list_says_so_like_stu14(space: Workspace) -> None:
-    from chaeksas.studio.service_editor import NOT_LISTED
-
-    process = imported(space)
-    [one] = key_rows(process, ProcessInfo(), has_value=lambda _ref: False, listed=["other-app"])
-    assert one.listed is False and one.app_text == f"ext-credit — {NOT_LISTED}"
-    [unknown] = key_rows(process, ProcessInfo(), has_value=lambda _ref: False, listed=None)
-    assert unknown.app_text == "ext-credit", "목록을 받지 못했으면 모르는 것으로 말하지 않는다"
-
-
-def test_an_app_that_takes_no_key_has_no_row_unless_written(space: Workspace) -> None:
-    process = imported(space)
-    assert key_rows(process, ProcessInfo(), has_value=lambda _ref: False, keyless_apps={"ext-credit"}) == []
-    info = ProcessInfo(service_keys={"ext-credit": "finance-credit"})
-    [one] = key_rows(process, info, has_value=lambda _ref: True, keyless_apps={"ext-credit"})
-    assert one.value_text == module.VALUE_KEYLESS and one.removable, "적혀 있으면 지울 수 있게 남는다"
-
-
-def test_the_window_reads_the_drawing_on_the_canvas_not_the_file(space: Workspace) -> None:
-    """「적용」한 것은 Ctrl+S 전에는 파일에 없다 — 다시 열면 캔버스의 지금 그림을 읽어야 보인다."""
+def test_there_is_no_key_table_and_a_written_reference_survives(space: Workspace) -> None:
+    """키는 Center가 내려 준다 — 표가 없고, 그림에 이미 적힌 참조는 **지우지 않는다** (옛 그림이 그대로 빌드된다)."""
     process = imported(space)
     entry = process.entry_definition
     assert entry is not None
     drawn = read_process(entry.path.read_text(encoding="utf-8"))
     drawn.info.service_keys = {"ext-credit": "applied-ref"}
-    window = ProcessInfoDialog(
-        process, space, has_value=lambda _ref: False, editable=True, drawn=drawn, listed=None
-    )
-    assert window.keys.item(0, module.REF).text() == "applied-ref"  # type: ignore[union-attr]
-    assert window.keys.item(0, module.WRITTEN).text() == module.WRITTEN_YES  # type: ignore[union-attr]
-
-    closed = ProcessInfoDialog(process, space, has_value=lambda _ref: False, editable=False, drawn=drawn)
-    assert closed.keys.item(0, module.REF).text() != "applied-ref", "닫혀 있으면 파일의 것이다"  # type: ignore[union-attr]
+    window = ProcessInfoDialog(process, space, editable=True, drawn=drawn)
+    assert not hasattr(window, "keys") and not hasattr(window, "drop_key")
+    window.save()
+    assert window.process_patch is not None
+    assert json.loads(window.process_patch)["service_keys"] == {"ext-credit": "applied-ref"}
 
 
 def test_the_button_is_apply_and_says_where_things_go(space: Workspace) -> None:
@@ -402,33 +302,5 @@ def test_the_button_is_apply_and_says_where_things_go(space: Workspace) -> None:
     assert apply is not None and apply.text() == "적용"
     assert window.buttons.button(QDialogButtonBox.StandardButton.Save) is None
     assert window.apply_note.text() == module.APPLY_NOTE
-    assert not hasattr(window, "add_key"), "부르지 않는 앱의 키는 쓸 데가 없다 — 「추가」가 없다"
     closed = dialog(space, imported(space, PC_EXAMPLE), editable=False)
     assert closed.apply_note.text() == module.APPLY_NOTE_RECORD_ONLY
-
-
-def test_delete_works_only_on_rows_no_node_uses(space: Workspace) -> None:
-    process = imported(space)
-    entry = process.entry_definition
-    assert entry is not None
-    drawn = read_process(entry.path.read_text(encoding="utf-8"))
-    drawn.info.service_keys = {"ext-credit": "finance-credit", "old-app": "old-key"}
-    window = ProcessInfoDialog(process, space, has_value=lambda _ref: False, editable=True, drawn=drawn)
-    apps = [window.keys.item(at, module.APP).text() for at in range(window.keys.rowCount())]  # type: ignore[union-attr]
-    assert apps == ["ext-credit", "old-app"]
-    from PySide6.QtCore import Qt
-
-    app_item = window.keys.item(0, module.APP)
-    assert app_item is not None and not app_item.flags() & Qt.ItemFlag.ItemIsEditable, "앱 칸은 읽기 전용이다"
-
-    window.keys.selectRow(0)
-    assert not window.drop_key.isEnabled()
-    window._drop_selected()
-    assert window.keys.rowCount() == 2, "쓰는 노드가 있는 줄은 지우지 않는다"
-
-    window.keys.selectRow(1)
-    assert window.drop_key.isEnabled()
-    window.drop_key.click()
-    window.save()
-    assert window.process_patch is not None
-    assert json.loads(window.process_patch)["service_keys"] == {"ext-credit": "finance-credit"}

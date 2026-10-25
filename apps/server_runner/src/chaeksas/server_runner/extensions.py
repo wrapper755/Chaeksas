@@ -24,7 +24,7 @@ from chaeksas.contracts import SERVICE_URL_SETTING
 from chaeksas.contracts.extension import SCOPE_SERVER_RUNNER
 from chaeksas.core.extensions import ExtensionHost, HostTasks, load_host
 from chaeksas.extension_api import HOST_SERVER_RUNNER, RUN_LOCATION_SERVER, ExtensionContext
-from chaeksas.server_runner.credentials import Credentials, extension_config_env
+from chaeksas.server_runner.credentials import BotCredentials, Credentials, extension_config_env
 
 
 def load(*, host: ExtensionHost | None = None) -> ExtensionHost:
@@ -55,7 +55,7 @@ class RunnerSecrets:
     확장마다 이름 공간이 갈라져 있어 남의 비밀을 가져갈 수 없다.
     """
 
-    credentials: Credentials
+    credentials: Credentials | BotCredentials
     extension_id: str
 
     def resolve(self, ref: str) -> str | None:
@@ -97,7 +97,7 @@ def tasks(
     *,
     host: ExtensionHost | None = None,
     service_url: Callable[[str], str | None] | None = None,
-    credentials: Credentials | None = None,
+    credentials: Credentials | BotCredentials | None = None,
 ) -> HostTasks:
     """엔진의 `RunEnv.extensions` — 확장 호스트를 꽂는다 (ADR-0018 — 엔진은 확장을 모른다).
 
@@ -106,7 +106,7 @@ def tasks(
     모든 실행이 함께 쓴다. 주지 않으면 정의에 적힌 주소를 쓴다.
     """
     loaded = load(host=host)
-    creds = credentials if credentials is not None else Credentials()
+    creds: Credentials | BotCredentials = credentials if credentials is not None else Credentials()
 
     def make_context(extension_id: str) -> ExtensionContext:
         return loaded.context(

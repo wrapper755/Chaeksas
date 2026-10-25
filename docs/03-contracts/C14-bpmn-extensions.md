@@ -289,7 +289,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | B4 | 반복에 `collect_into`가 있다 | 오류 |
 | B5 | 파일 출력에 `store_as`가 있고 `template`·`variables` 중 하나가 있다. `xlsx`에 `template`를 쓰지 않고, `csv`의 `variables`는 이름 하나이며, `append`는 `md`·`txt`·`csv`에만 있다. 파일 목록에 `store_as`가 있고 `pattern`에 경로 구분자가 없다 | 오류 |
 | B6 | 실행 위치가 `server`면 UI 태스크·`web`/`desktop` 도메인 AI 태스크·`location: field` 결재가 없다 (C1 R2) | 오류 |
-| B7 | 서비스 앱 태스크의 `app_id`에 키 참조가 있다 (자기 것 또는 프로세스 `service_keys`). **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)은 묻지 않는다 — 어느 앱인지는 계약이 모르므로 부르는 쪽이 `keyless_apps`로 주고, 주지 않으면 모든 앱에 묻는다 ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)) | 오류 |
+| B7 | 서비스 앱 태스크에 **적힌** 키 참조(자기 것 또는 프로세스 `service_keys`)가 이름 규칙(C1 R4)을 따른다. **적지 않은 것은 흠이 아니다** — 빌드·엔진이 C1 기본값(`default_key_ref` — BPM 프로세스 id에서 `.`·`_`를 `-`로)을 쓴다 ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) — STU-06 「서비스 앱 키」 섹션이 없어져 사람이 미리 적지 않는다). **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)은 묻지 않는다 — 어느 앱인지는 계약이 모르므로 부르는 쪽이 `keyless_apps`로 주고, 주지 않으면 모든 앱에 묻는다 ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)) | 오류 |
 | B8 | 결과 필드 타입이 `string`·`int`·`number`·`bool`·`list`·`dict`·`date` 중 하나다. 번호처럼 보이는 문자열(예: 발주번호 `PO-2608-001`)을 `int`로 두면 경고 | 오류 / 경고 |
 | B9 | 연결되지 않은 노드가 없다 (들어오는 흐름·나가는 흐름) | 오류 |
 | B10 | 노드 id가 생성형(`Activity_[0-9a-z]{7}`)이면 경고 | 경고 |
@@ -335,6 +335,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | B7은 **적힌** 키 참조의 이름만 본다 — 적지 않은 것은 C1 기본값이다 (빌드·엔진이 같은 `default_key_ref`) | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | B7이 **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)에는 키 참조를 묻지 않는다. 그 목록은 부르는 쪽이 준다(Studio는 STU-14의 고를 거리에서) | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-20 | 1 | **서버의 병렬 반복**을 지었다 — 「미정」을 걷었다. 실행 위치가 `server`인 그림의 `isSequential=false`는 차례마다 토큰 하나로 함께 기다리고, 결과는 입력 순서, 한 건의 업무 실패는 나머지를 거둔 뒤 오류 경계가 한 번 받는다. 모양(칸)은 그대로다 | [0087](../decisions/0087-parallel-loop-on-the-server.md) |
 | 2026-10-20 | 1 | **일괄 기동** — 위임 대상이 서버 Bot이어도 같은 칸이다(대상 패키지의 `run_location`이 정한다), 반복을 호출에도 쓴다(차례마다 작업 하나, 멱등 키에 `loop_index`), C1 R12(자기 자신 위임 금지), B16(결재 없는 일괄 기동) 경고. 엔진이 반복을 늘 차례로 돈다는 것을 「미정」으로 적었다 | [0082](../decisions/0082-batch-start.md) |

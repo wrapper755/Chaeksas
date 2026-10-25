@@ -111,14 +111,10 @@ def test_other_contribution_points(host: ExtensionHost) -> None:
     assert [c.value.id for c in host.console_pages()] == ["overview", "selectors", "monitoring"]
     assert [c.value.id for c in host.panels("bot_ui.runtimes")] == ["recent-ui-sessions"]
     assert [c.value.id for c in host.preflight()] == ["pages-registered"]
-    # 등록 담당자 키는 **도구의 것**이다 — 현장 운영 설정(Bot UI)에 섞이지 않는다 (ADR-0077).
-    assert [c.value.key for c in host.configuration(scope="tool_ui")] == ["registrar_key"]
+    # 등록 담당자 키 칸은 없다 — Center가 이 PC Bot UI에 내려 주고 호스트가 준다 (ADR-0094 §6).
+    assert host.configuration(scope="tool_ui") == []
     assert host.configuration(scope="bot_ui") == []
     assert host.configuration(scope="server_runner") == []
-    # **비밀 칸은 거르는 쪽이 거른다** — `credentials.py`가 `configuration()`에 `.secret`을
-    # 걸어 본다 (호스트에 그 편의 메서드를 두지 않는다 — 두 길이 되면 한쪽만 고친다).
-    secret = [c.value.key for c in host.configuration(scope="tool_ui") if c.value.secret]
-    assert secret == ["registrar_key"]
     # 서버 부분이 C11 서비스 앱이므로 어댑터가 없다 (작업은 앱의 /manifest에서 온다).
     found = host.get("ui-automation")
     assert found is not None and found.manifest.adapter is None

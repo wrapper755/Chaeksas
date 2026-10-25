@@ -91,8 +91,15 @@
 | --- | --- | --- | --- |
 | `app_id` | str | ✓ | 서비스 앱 id (C11 manifest의 `app_id`) |
 | `operations` | str[] | ✓ | 부르는 작업 이름 |
-| `key_ref` | str | | BPM 프로세스 단위 **키 참조 이름**. **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)에는 적지 않는다 — 사전 점검·BUI-10이 그 앱의 키를 묻지 않는다 ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)). `^[a-z0-9][a-z0-9-]{0,39}$` (1~40자, 소문자·숫자·`-`). Studio 기본값은 BPM 프로세스 id에서 `.`·`_`를 `-`로 바꾸고 40자로 자른 것 (예: `finance.invoice-issue` → `finance-invoice-issue`) |
+| `key_ref` | str | | BPM 프로세스 단위 **키 참조 이름**. **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)에는 적지 않는다 — 사전 점검이 그 앱의 키를 묻지 않고 Center도 짓지 않는다 ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)). `^[a-z0-9][a-z0-9-]{0,39}$` (1~40자, 소문자·숫자·`-`). **적지 않으면 빌드가 기본값을 적는다**(`default_key_ref`) — BPM 프로세스 id에서 `.`·`_`를 `-`로 바꾸고 40자로 자른 것 (예: `finance.invoice-issue` → `finance-invoice-issue`) |
 | `task_key_refs` | str[] | | 태스크에서 다르게 지정한 참조 (예외). 사전 점검은 `key_ref` + 이것 모두를 찾는다 |
+
+> [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md), ADR-0092 §3: **형식은 그대로이고 뜻이 바뀐다.**
+> - `key_ref`는 **사람이 값을 넣는 자리가 아니라, Center가 내려 준 키를 현장에서 찾는 이름**이다. Center는 (이 Bot × 배포 대상 × `app_id`)마다 키를 하나 지어 이 이름을 붙여 내려 준다 (C4 §서비스 앱 키 전달 `key_refs`). 판을 올려도 같은 키를 이어 쓴다. Studio가 지금처럼 기본값을 짓는다.
+> - `operations`가 그 키의 허용 작업이 된다 — 그래서 빌드가 모은 목록이 곧 권한이다.
+> - `task_key_refs`는 **같은 키의 다른 이름**이다 — 키는 앱마다 하나라 태스크가 다른 이름을 적어도 다른 키가 생기지 않는다. Center는 그 앱의 키를 `key_ref`와 `task_key_refs` **모든 이름으로** 내려 준다(C4 `key_refs`). Studio의 편집기에는 태스크별 참조 칸이 없어 새 그림은 이 칸을 채우지 않고, 옛 그림에 적힌 것만 빌드가 옮긴다 (ADR-0094 §4). 칸과 R4는 그대로다.
+> - **적지 않으면 기본값이다** — 그림에 참조가 없으면 빌드가 `default_key_ref`(위의 기본값 규칙)를 적고 엔진도 같은 이름을 쓴다. 그래서 B7은 적힌 이름만 본다 (C14).
+> - **확장 태스크의 앱도 줄이 된다** — 그 확장이 키를 받으면(C13 `requires_keys` `run`) 빌드가 그 확장 id로 줄을 적고 `operations`는 비운다(그 앱의 모든 작업 — 어느 작업을 부르는지는 확장이 안다). 그래야 Center가 그 Bot의 UI 자동화 앱 키를 짓는다.
 
 ### HumanNeeds
 
@@ -264,6 +271,7 @@ PC Bot (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | `key_ref`는 Center가 내려 준 키를 찾는 이름(형식은 그대로), `operations`가 그 키의 허용 작업(비면 모든 작업), `task_key_refs`는 같은 키의 다른 이름, 적지 않으면 `default_key_ref`, 키를 받는 확장의 태스크도 줄이 된다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | `requires.service_apps[].key_ref`를 **선택**으로 — 키를 받지 않는 외부 앱(C13 `auth` 없음)에는 빌드가 적지 않는다. 받는 쪽은 비어 있으면 묻지 않는다 | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-20 | 1 | **R12**(자기 자신에게 위임하지 않는다)를 더했다. `requires.delegations`의 대상은 PC Bot만이 아니라 서버 Bot일 수도 있다 — 어디서 도는지는 대상 패키지가 정한다 | [0082](../decisions/0082-batch-start.md) |
 | 2026-10-16 | 1 | **R11**을 더했다 — `requires.settings`가 아는 값인가. **값·칸은 그대로**이고 검사만 늘었다(R9와 같은 까닭: 기계가 옮기는 값이라 모르는 이름은 옮기는 쪽의 흠이다). 지금 Studio가 넣는 것은 `smtp` 하나뿐이라 **올라간 패키지는 다 지난다**. `built.by`는 **그대로 열린 문자열**이다 — 남의 도구로 만든 올바른 패키지를 거부하게 된다 | — |

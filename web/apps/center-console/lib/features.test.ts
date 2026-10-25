@@ -160,4 +160,30 @@ describe("featureRows", () => {
     const rows = featureRows(input({ serviceApps: [app] }));
     expect(rows[0]).toMatchObject({ key: "app:tax-invoice", usable: "쓸 수 있음", serverUrl: "http://tax" });
   });
+
+  it("외부 앱 키가 없으면 할 일이고, 시험용 키는 운영과 상관없다 (ADR-0094 §7)", () => {
+    const external = {
+      id: "ext-credit",
+      tier: "external",
+      version: "0.1.0",
+      status: "ok",
+      app_key: { run: { set: false }, test: { set: true, set_at: "2026-10-25T00:00:00+00:00", set_by: "admin" } },
+    } as unknown as ExtensionResource;
+    const [row] = featureRows(input({ extensions: [external] }));
+    expect(row).toMatchObject({ usable: "쓸 수 없음", appKey: { run: { set: false }, test: { set: true, setBy: "admin" } } });
+    expect(row?.todos.map((one) => one.kind)).toEqual(["add_app_key"]);
+
+    const ready = { ...external, app_key: { run: { set: true }, test: { set: false } } } as unknown as ExtensionResource;
+    expect(featureRows(input({ extensions: [ready] }))[0]).toMatchObject({ usable: "쓸 수 있음", todos: [] });
+  });
+
+  it("앱이 Center 발급을 받지 않으면 할 일이다 — 받거나 모르면 말하지 않는다 (ADR-0094 §1)", () => {
+    const app = (state: string) => ({ ...UIA_APP, trust: { state } }) as unknown as ServiceAppResource;
+    const kinds = (state: string) =>
+      featureRows(input({ extensions: [UIA], serviceApps: [app(state)] }))[0]?.todos.map((one) => one.kind);
+    expect(kinds("not_configured")).toEqual(["app_not_trusting"]);
+    expect(kinds("pin_mismatch")).toEqual(["app_not_trusting"]);
+    expect(kinds("trusted")).toEqual([]);
+    expect(kinds("unknown")).toEqual([]);
+  });
 });

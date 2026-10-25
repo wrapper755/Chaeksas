@@ -103,8 +103,9 @@ def drawing_without_keys() -> Any:
     return process
 
 
-def test_b7_asks_every_app_when_it_is_not_told() -> None:
-    assert any(v.rule == "B7" for v in validate_bpmn(drawing_without_keys()))
+def test_b7_does_not_ask_for_an_unwritten_reference() -> None:
+    """적지 않은 참조는 C1 기본값이다 (ADR-0094) — 키를 받는 앱이라도 B7이 막지 않는다."""
+    assert not any(v.rule == "B7" for v in validate_bpmn(drawing_without_keys()))
 
 
 def test_b7_does_not_ask_an_app_that_takes_no_key() -> None:

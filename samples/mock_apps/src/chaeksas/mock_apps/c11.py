@@ -37,7 +37,7 @@ from chaeksas.contracts.service_app import (
     ServiceAppManifest,
     prefix_of,
 )
-from chaeksas.service_kit import InMemoryKeyStore, OpError, create_app, hash_key, issue
+from chaeksas.service_kit import CenterLink, InMemoryKeyStore, OpError, create_app, hash_key, issue
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +53,8 @@ BOTH_MODES = (MODE_DETERMINISTIC, MODE_AUTONOMOUS)
 #: 앱 열여섯 개에 키를 하나씩 심는 것은 개발에서 쓸 수 없다. 이 환경변수 하나를 주면
 #: **모든 모의 앱이 그 키를 받는다**. 앱마다 다르게 하려면 `CHK_SVC_<앱>__DEV_KEY`가 이긴다.
 SHARED_KEY_ENV = "CHK_MOCK_APPS__DEV_KEY"
+#: 모든 모의 앱이 함께 읽는 접두사 (`CHK_MOCK_APPS__CENTER__URL`).
+SHARED_PREFIX = "CHK_MOCK_APPS__"
 
 
 class Scenario:
@@ -178,6 +180,9 @@ def build(mock: MockApp, *, console_url: str = "", admin_token: str | None = Non
         handlers,
         keys=keys,
         admin_token=admin_token or mock.env("ADMIN_TOKEN"),
+        # Center 발급 (C11 §Center가 발급하는 키, ADR-0094) — 앱마다 `CHK_SVC_<앱>__CENTER__URL`,
+        # 없으면 모든 모의 앱이 함께 쓰는 `CHK_MOCK_APPS__CENTER__URL`. 둘 다 없으면 받지 않는다.
+        center_link=CenterLink.from_env(mock.env_prefix) or CenterLink.from_env(SHARED_PREFIX),
     )
     _mount_scenario(app, scenario)
     return Built(mock=mock, app=app, scenario=scenario, key=raw, key_from_env=bool(given))

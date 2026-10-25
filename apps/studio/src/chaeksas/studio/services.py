@@ -202,7 +202,7 @@ def reader_for(settings: Any, api_key: str | None) -> CenterReader | None:
     return CenterReader(base_url=base, api_key=api_key)
 
 
-def from_settings(settings: Any) -> Services:
+def from_settings(settings: Any, *, secrets: Callable[[str], str | None] | None = None) -> Services:
     """STU-10 설정과 비밀 저장소에서 한 벌 (`main_window`가 실행마다 한 번 짓는다).
 
     키는 **환경변수가 먼저**다 (`CHK_STUDIO__CENTER_API_KEY`·`CHK_STUDIO__SVC__<참조>`) —
@@ -211,7 +211,8 @@ def from_settings(settings: Any) -> Services:
     from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 — 순환 피함
 
     store = StudioCredentials()
-    return Services(reader=reader_for(settings, store.center_api_key()), secrets=store.service_key)
+    # 시험 실행은 참조를 **그 앱의 개발 키로** 푼다 (`dev_keys`, ADR-0094 §5) — 주지 않으면 옛 자리만.
+    return Services(reader=reader_for(settings, store.center_api_key()), secrets=secrets or store.service_key)
 
 
 __all__ = [

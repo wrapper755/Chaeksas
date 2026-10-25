@@ -45,7 +45,7 @@ _NODE_HINT = ("items", "message")
 PREFLIGHT_RULE = "사전 점검"
 
 #: 키가 없을 때 「어떻게 고치나」 (STU-10). 화면 이름이 들어가므로 **부르는 쪽이** 적는다.
-KEY_FIX_HINT = "설정 → 「서비스 앱 키」에 넣으세요"
+KEY_FIX_HINT = "Studio가 그 앱의 개발 키를 Center에 청합니다 — 받지 못했으면 설정 → 「서비스 앱」에서 까닭을 보세요"
 
 #: 저장하지 않은 편집이 있을 때. 사전 점검은 **저장된 파일**에서 요구 사항을 모은다.
 UNSAVED = (
@@ -141,6 +141,7 @@ def readiness(
             owner,
             task_type_locations=None if host is None else host.task_type_locations(),
             keyless_apps=keyless_apps,
+            key_extensions=None if host is None else host.key_extensions(),
         )
     except (PackageError, AssertionError, ValueError) as e:
         # 시작 정의가 없거나 읽히지 않는다 — B 규칙이 이미 말하고 있을 것이다. 덮어쓰지 않는다.

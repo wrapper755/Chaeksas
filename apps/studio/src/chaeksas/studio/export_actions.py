@@ -50,10 +50,11 @@ def export_package(window: MainWindow) -> None:
     # Center의 R2가 거짓으로 막지 않는다. 모르는 종류는 넣지 않는다.
     where = window.task_type_locations()
     keyless = window.keyless_apps()  # 키를 받지 않는 앱에는 참조를 적지 않는다 (ADR-0091)
+    keyed = window.key_extensions()  # 키를 받는 확장의 태스크도 앱 줄이 된다 (ADR-0094)
     _write(
         window,
         "패키지",
-        lambda: export(process, target, task_type_locations=where, keyless_apps=keyless),
+        lambda: export(process, target, task_type_locations=where, keyless_apps=keyless, key_extensions=keyed),
     )
 
 
@@ -132,11 +133,16 @@ def upload_package(window: MainWindow) -> None:
         return
     locations = window.task_type_locations()
     keyless = window.keyless_apps()
+    keyed = window.key_extensions()
     _upload(
         window,
         "패키지",
         lambda where: export(
-            process, where / default_name(process), task_type_locations=locations, keyless_apps=keyless
+            process,
+            where / default_name(process),
+            task_type_locations=locations,
+            keyless_apps=keyless,
+            key_extensions=keyed,
         ),
     )
 

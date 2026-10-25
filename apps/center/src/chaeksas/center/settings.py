@@ -47,6 +47,10 @@ def data_dir() -> Path:
     return Path(platformdirs.user_data_dir("chaeksas", appauthor=False)) / "center"
 
 
+#: 서비스 앱 키를 맞추는 간격 (초) — 서비스 앱 상태를 보는 주기와 같다 (C7).
+DEFAULT_RECONCILE_S = 60
+
+
 @dataclass(frozen=True)
 class Settings:
     """Center 한 벌의 설정. `from_env()`로 만든다."""
@@ -67,6 +71,8 @@ class Settings:
     #: 만들어 로그와 데이터 폴더의 파일에 둔다. 아이디를 비우면 `admin`이다.
     first_admin_username: str | None = None
     first_admin_password: str | None = None
+    #: 서비스 앱 키 맞추기 간격 (초, ADR-0094 §3). **0이면 배경에서 돌지 않는다** — 시험은 손으로 부른다.
+    service_keys_reconcile_s: int = 0
 
     def data_folder(self) -> Path | None:
         """DB가 있는 폴더 — 첫 비밀번호 파일을 둔다. 메모리 DB면 `None`."""
@@ -88,4 +94,5 @@ class Settings:
             read_token=_env("READ_TOKEN"),
             first_admin_username=_env("FIRST_ADMIN__USERNAME"),
             first_admin_password=_env("FIRST_ADMIN__PASSWORD"),
+            service_keys_reconcile_s=int(_env("SERVICE_KEYS__RECONCILE_S") or DEFAULT_RECONCILE_S),
         )
