@@ -208,6 +208,35 @@ def test_the_answerer_variables_are_produced_by_the_approval() -> None:
     assert node is not None and {"확인자", "확인경로"} <= produced_vars(node)
 
 
+def _identity(process_json: str) -> str:
+    """신원 변수를 결재 담당자로 쓰는 그림 (ADR-0098)."""
+    return wrap(
+        line('<bpmn:userTask id="Ap"><bpmn:extensionElements>'
+             '<chk:approval>{"title": "일괄 승인", "assignees": "감독자"}</chk:approval>'
+             "</bpmn:extensionElements></bpmn:userTask>"),
+        process_json=process_json,
+    )
+
+
+def test_b2_identity_variables_are_names_and_never_inputs() -> None:
+    """ADR-0098 — 신원은 Center만 채운다. 입력과 겹치면 부르는 쪽이 지어낼 수 있다."""
+    good = '{"run_location": "server", "virtual_worker_as": {"name": "가상직원", "supervisors": "감독자"}}'
+    assert "B2" not in codes(_identity(good))
+    bad_name = '{"run_location": "server", "virtual_worker_as": {"supervisors": "감독 자"}}'
+    assert "B2" in codes(_identity(bad_name))
+    clash = ('{"run_location": "server", "virtual_worker_as": {"supervisors": "감독자"},'
+             ' "inputs": [{"name": "감독자", "type": "list"}]}')
+    found = [v for v in validate(read_process(_identity(clash))) if v.rule == "B2"]
+    assert found and found[0].items == ["감독자"]
+
+
+def test_identity_variables_are_there_from_the_start() -> None:
+    """B11 — 신원 변수는 시작 자리의 출처다. 적지 않으면 「경로에 따라 없는 변수」다."""
+    named = '{"run_location": "server", "virtual_worker_as": {"supervisors": "감독자"}}'
+    assert "B11" not in codes(_identity(named))
+    assert "B11" in codes(_identity('{"run_location": "server"}'))
+
+
 def test_b12_warns_when_a_confirmation_names_assignees() -> None:
     found = [v for v in validate(read_process(_approval("manualTask", '{"title": "확인", "assignees": ["김"]}')))
              if v.rule == "B12"]

@@ -95,6 +95,11 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
     by_id = {n.id: n for n in ns}
     declared = {i[0] for i in e.inputs}
     defaults = {i[0] for i in e.inputs if len(i) > 4}
+    # **신원은 입력으로 줄 수 없다** (C14 B2, ADR-0098) — 칸은 셋뿐이고 이름이 입력과 겹치지 않는다.
+    if set(e.virtual_worker_as) - {"id", "name", "supervisors"}:
+        errs.append(f"{e.id}: virtual_worker_as의 칸 {sorted(set(e.virtual_worker_as) - {'id', 'name', 'supervisors'})}을 모른다")
+    if set(e.virtual_worker_as.values()) & declared:
+        errs.append(f"{e.id}: virtual_worker_as의 변수 {sorted(set(e.virtual_worker_as.values()) & declared)}가 입력과 겹친다 (B2)")
     # 타이머 시작인데 필수 입력이 있으면 채울 사람이 없다
     if any(n.kind == "start" and n.props.get("kind") == "timer" for n in e.nodes):
         for i in e.inputs:
@@ -203,6 +208,8 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
         missing = {i[0] for i in e.inputs if i[2]} - set(c.inputs)
         if missing:
             errs.append(f"{e.id}: 케이스 「{c.name}」에 필수 입력 {sorted(missing)} 없음")
+        if c.virtual_worker is not None and set(c.virtual_worker) != {"id", "name", "supervisors"}:
+            errs.append(f"{e.id}: 케이스 「{c.name}」 virtual_worker는 id·name·supervisors 셋이다")
         for k in c.expected:
             if k not in dv:
                 errs.append(f"{e.id}: 케이스 「{c.name}」 기대 변수 `{k}`를 만드는 곳이 없음")

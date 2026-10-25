@@ -34,6 +34,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from chaeksas.contracts.bpmn_ext import VirtualWorkerIdentity
 from chaeksas.contracts.server_runner import RunningRun, WaitingRun
 from chaeksas.core import outputs as delegated_outputs
 from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State
@@ -154,6 +155,9 @@ class Worker:
     #: **맡긴 서버 실행** — 위임으로 받은 작업일 때만 (C3 `parent_run_id`, ADR-0082). 있으면
     #: 성공으로 끝날 때 선언한 `outputs`를 작업 ack에 싣는다 (`delegated_outputs()`).
     parent_run_id: str | None = None
+    #: **가상 직원 신원** — Center가 접수 Bot 작업에 붙여 내려 준 것 (C12, ADR-0098). 시작할 때
+    #: 엔진에 넘기면 변수가 되고 스냅샷이 담으므로, 되살릴 때는 다시 줄 필요가 없다.
+    virtual_worker: VirtualWorkerIdentity | None = None
 
     engine: Engine = field(default_factory=Engine)
     run: Run | None = None
@@ -431,6 +435,7 @@ class Worker:
                 job_id=self.job_id,
                 queued_s=self.queued_s,
                 parent_run_id=self.parent_run_id,
+                virtual_worker=self.virtual_worker,
             )
         except (EngineError, UnusablePackage, OSError, ValueError) as e:
             # 시작조차 못 했다 — **기록에 남겨야** Center가 안다 (C3). `run_started`는 없고

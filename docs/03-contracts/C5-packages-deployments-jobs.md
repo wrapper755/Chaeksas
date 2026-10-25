@@ -43,7 +43,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | 인증 없음 | 키가 아직 없는 Bot UI·서버 실행기 | **등록 요청을 보내고 그 답을 묻는 것뿐** (C4·C12 §등록 요청과 승인 — 내려 주는 키는 요청의 공개키로 봉해 있다) |
 | Center API 키 — Studio용 | Studio (등록 요청을 관리자가 승인해 받은 키, 자동화용은 관리자 토큰으로 발급) | 패키지 업로드, 패키지·리소스 읽기 |
 | Center API 키 — Bot UI용 / 서버 실행기용 | 실행하는 쪽 | **자기에게 배포된** BPM 프로세스 패키지만 내려받기 (공유 BPM 프로세스는 그 안 `libs/`에 들어 있다) |
-| Center API 키 — 연동용 (신규, CON-11) | 외부 시스템 | 작업 만들기(`POST /jobs`)와 자기가 만든 작업 읽기·취소, 메시지 넣기(`POST /messages` — C12 §메시지) |
+| Center API 키 — 연동용 (신규, CON-11) | 외부 시스템 | 작업 만들기(`POST /jobs`)와 자기가 만든 작업 읽기·취소, 메시지 넣기(`POST /messages` — C12 §메시지), **가상 직원 읽기**(`GET /virtual-workers…` — 전부, [ADR-0098](../decisions/0098-virtual-worker-identity.md)) |
 | Center API 키 — 대리 답용 (`relay`) | 사람 대신 결재하는 연동 (대화 창구) | **결재 읽기·답뿐**이고 담당인 것만 (C6). 이 표의 엔드포인트는 하나도 부르지 못한다 |
 
 ### 엔드포인트별 권한
@@ -80,7 +80,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /jobs…` | ✓ | ✓ | — | — | 자기 것만 |
 | `DELETE /jobs/{id}` | — | ✓ | — | — | 자기 것만 |
 | `POST /messages` (C12 §메시지) | — | ✓ | — | — | ✓ |
-| `GET /virtual-workers…` (CON-13) | ✓ | ✓ | — | — | — (대리 답용 키는 감독하는 것만) |
+| `GET /virtual-workers…` (CON-13) | ✓ | ✓ | — | — | ✓ 전부 (대리 답용 키는 감독하는 것만) |
 | `POST/PUT/DELETE /virtual-workers…` | — | ✓ | — | — | — |
 
 ## 관리자 계정 ([ADR-0090](../decisions/0090-center-admin-accounts.md))
@@ -375,7 +375,7 @@ BotUiInfo 필드:
 | 메서드·경로 | 인증 | 뜻 |
 | --- | --- | --- |
 | `POST /virtual-workers` | 관리자 토큰 | 등록 (`VirtualWorkerRequest`). 201 |
-| `GET /virtual-workers?supervisor=` | 읽기·관리자 토큰 / 대리 답용 키 (**감독하는 것만**) | 목록 (`VirtualWorkerInfo[]`, `batches`는 비어 있다) |
+| `GET /virtual-workers?supervisor=` | 읽기·관리자 토큰·연동용 키 (전부) / 대리 답용 키 (**감독하는 것만**) | 목록 (`VirtualWorkerInfo[]`, `batches`는 비어 있다) |
 | `GET /virtual-workers/{id}` | 같음 (아니면 404) | 하나 + **최근 일괄** |
 | `PUT /virtual-workers/{id}` | 관리자 토큰 | 바꾸기 (본문 전체, `id`는 경로가 이긴다) |
 | `DELETE /virtual-workers/{id}` | 관리자 토큰 | 등록만 지운다 — 실행·작업은 남는다 |
@@ -386,8 +386,8 @@ VirtualWorkerRequest:
 | --- | --- | --- | --- |
 | `id` | str | ✓ | `^[a-z0-9][a-z0-9._-]{0,63}$`. 주체 이름은 `vw:<id>` |
 | `name` | str | ✓ | 화면 이름 |
-| `supervisors` | str[] | | 감독자 이름들 (C6 담당자와 같은 정규화). **결재 담당자와 맞춰 보지 않는다** — 담당자는 그림이 정한다 |
-| `intake` | str | ✓ | 접수 Bot의 **패키지 id** (판은 배포가 정한다) |
+| `supervisors` | str[] | | 감독자 이름들 (C6 담당자와 같은 정규화). **결재 담당자와 맞춰 보지 않는다** — 담당자는 그림이 정한다. 그림이 신원 변수(`assignees: "감독자"`)를 쓰면 이 목록이 그대로 담당자가 된다 (§가상 직원 「신원」) |
+| `intake` | str | ✓ | 접수 Bot의 **패키지 id** (판은 배포가 정한다). **접수 Bot 하나에 가상 직원은 하나다** — 다른 가상 직원이 이미 쓰면 409 `intake_in_use` (그 실행에 실을 신원이 하나여야 한다, ADR-0098) |
 | `state` | str | | `active`(기본) / `stopped` — 열린 문자열. **새 작업을 막지 않는다**(보이기 위한 칸이다) |
 
 VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근 일괄 20개, 하나에서만)를 더한다:
@@ -408,6 +408,8 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 - 그림은 Center가 저장된 zip에서 읽는다(`contracts.bpmn_ext` — 내보낸 쪽을 믿지 않는다). B16만 본다.
 
 **이어 붙이기** — `GET /runs?virtual_worker=<id>`(C3)·`GET /jobs?virtual_worker=<id>`는 접수 Bot의 것과 **그 자식**(실행은 `parent_run_id`, 작업은 `requested_by = server_bot:<접수 실행>`)을 함께 준다. 「접수 Bot의 실행」은 실행 기록의 `bpm_process_id`가 **그 패키지 id**인 것이다 (C3 — 실행 기록도 패키지 id로 말한다, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)). 저장하지 않고 읽을 때 모은다. **`requested_by`는 바꾸지 않는다** — 접수 Bot 작업을 부른 키가 그대로 적힌다.
+
+**신원** — 접수 Bot 작업이 서버 실행기로 내려갈 때 Center가 `{id, name, supervisors}`를 붙이고(C12 `jobs[].virtual_worker`), 그림이 `chk:process.virtual_worker_as`로 고른 변수에 들어간다 (C14). 그래서 일괄 결재가 `assignees: "감독자"`로 이 자원의 감독자를 그대로 받는다. 멈춘 가상 직원도 붙인다. 저장하지 않는다 ([ADR-0098](../decisions/0098-virtual-worker-identity.md)).
 
 ```json
 {
@@ -449,6 +451,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 | 422 | C1 규칙 코드, `target_mismatch`(모르는 대상 종류), `no_deployment`, `version_ambiguous`, `inputs_not_object` | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
 | 422 | `intake_unknown` / `intake_not_server` / `intake_not_gated` | 가상 직원의 접수 Bot이 승인된 판이 없거나·서버 Bot이 아니거나·결재 없는 일괄 기동이 있다 (C14 B16, ADR-0085). 배포 쪽의 `intake_not_gated`는 409다 |
 | 409 | `id_conflict` | 같은 `id`의 가상 직원이 있다 |
+| 409 | `intake_in_use` | 그 접수 Bot을 다른 가상 직원이 이미 쓴다 (ADR-0098) |
 | 422 | `on_behalf_invalid` | `X-CHK-On-Behalf-Of`가 비었거나 200자를 넘거나 예약 앞머리로 시작함 (ADR-0081) |
 | 422 | `server_runner_not_available` | 서버 실행기 대상 (M7까지, ADR-0016). **배포와 작업 지시가 같다** — 상태 충돌이 아니라 **아직 없는 기능**이라 배포 쪽에서도 422다 |
 | 422 | `not_a_zip`, `manifest_missing`, `manifest_invalid`, `zip_too_many_entries`, `zip_unsafe_path`, `zip_too_large` | 업로드한 zip의 형식 오류. **400이 아니라 422다** — 본문은 읽혔고 내용이 계약과 맞지 않는다 |
@@ -462,6 +465,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-26 | 1 | **연동용 키가 가상 직원을 읽는다**(전부 — 실행·작업 목록·결재 검토 자료는 넓히지 않는다), 접수 Bot 하나에 가상 직원 하나(409 `intake_in_use`), §가상 직원 「신원」 | [0098](../decisions/0098-virtual-worker-identity.md) |
 | 2026-10-25 | 1 | 배포·철회가 서비스 앱 키를 데리고 다닌다, §Studio 개발 키(`POST /studio/service-keys`), `PUT /bot-uis/{id}/utility`(「셀렉터 등록」), 권한표 줄 넷 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | **Studio 등록 요청과 승인** — `POST/GET /studio/enroll`, `GET /enrollments?type=studio`. 계정 권한·Studio 로그인(바로 아래 줄)을 걷어 낸다 | [0093](../decisions/0093-studio-is-let-in-by-approval.md) |
 | 2026-10-25 | 1 | **계정 권한과 Studio 로그인** (0093이 걷어 낸다) — `AccountInfo.permissions`·`studio_logins`, `POST /auth/studio-login`·`studio-logout`, 오류 `permission_missing` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |

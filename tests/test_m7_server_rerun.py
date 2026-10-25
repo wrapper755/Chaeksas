@@ -926,6 +926,17 @@ def batch_children(client: TestClient, child: str) -> list[dict[str, Any]]:
     return [one for one in client.get("/api/v1/jobs", headers=READ).json() if one["bpm_process_id"] == child]
 
 
+def bind_virtual_worker(client: TestClient, intake: str) -> None:
+    """접수 Bot을 가상 직원에 **먼저** 묶는다 — 일괄 결재의 담당자가 그 감독자다 (ADR-0098).
+
+    묶지 않고 돌리면 감독자 변수가 `None`이라 결재를 만들 때 멈춘다. 케이스의 신원과 같은 사람이다.
+    """
+    bound = client.post("/api/v1/virtual-workers", json={
+        "id": "finance-intake", "name": "재무 가상 직원", "supervisors": ["김감독"], "intake": intake,
+    }, headers=ADMIN)
+    assert bound.status_code == 201, bound.text
+
+
 def test_fx24_starts_one_server_bot_per_approved_item(
     tmp_path: Path,
     center: tuple[TestClient, Store],
@@ -941,11 +952,13 @@ def test_fx24_starts_one_server_bot_per_approved_item(
     client, _ = center
     child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
     info = deploy(center, runner, packaged(tmp_path, FX24))
+    bind_virtual_worker(client, info["id"])
     job_id = dispatch(center, info, case_inputs(FX24, receiver))
 
     done = run_to_the_end(center, runner, job_id, answers=case_approvals(FX24), messages=[])
     assert done["run_status"] == "success", done
-    # 감독자의 결재함 — 담당자로 걸러 본다 (ADR-0080). 콘솔·대화 창구가 보는 것과 같다.
+    # 감독자의 결재함 — 담당자로 걸러 본다 (ADR-0080). 담당자는 그림에 적은 이름이 아니라
+    # **가상 직원의 감독자**다 — Center가 작업에 신원을 붙였다 (ADR-0098).
     mine = client.get("/api/v1/approvals", params={"assignee": "김감독"}, headers=READ).json()
     assert [one["run_id"] for one in mine] == [done["run_id"]], "일괄 결재가 감독자의 결재함에 없다"
     assert mine[0]["review"]["건수"] == 3, "감독자는 N건을 한 번에 본다 (C6 `review`)"
@@ -955,16 +968,14 @@ def test_fx24_starts_one_server_bot_per_approved_item(
     assert {one["requested_by"] for one in made} == {f"server_bot:{done['run_id']}"}
     assert {one["target"]["type"] for one in made} == {"server_runner"}
     assert {one["run_status"] for one in made} == {"success"}
+    # 신원은 자식에게 따라가지 않는다 — 그림이 **적어서** 넘긴 것만 간다 (C14 「적은 것만 오간다」).
+    assert {one["inputs"]["처리자"] for one in made} == {"재무 가상 직원"}
     # 두 실행은 서로를 안다 (C3 `parent_run_id`) — 서버 자식도 PC 자식과 같다.
     for one in made:
         found = client.get(f"/api/v1/runs/{one['run_id']}", headers=READ).json()
         assert found["parent_run_id"] == done["run_id"], found
 
-    # **가상 직원에 묶으면** 이 일괄이 그 자리에서 보인다 (ADR-0085) — 저장하지 않고 읽을 때 잇는다.
-    bound = client.post("/api/v1/virtual-workers", json={
-        "id": "finance-intake", "name": "재무 가상 직원", "supervisors": ["김감독"], "intake": info["id"],
-    }, headers=ADMIN)
-    assert bound.status_code == 201, bound.text
+    # 가상 직원 자리에서 이 일괄이 보인다 (ADR-0085) — 저장하지 않고 읽을 때 잇는다.
     [batch] = client.get("/api/v1/virtual-workers/finance-intake", headers=READ).json()["batches"]
     assert (batch["run_id"], batch["children"], batch["children_by_status"]) == (done["run_id"], 3, {"success": 3})
 
@@ -979,6 +990,7 @@ def test_fx24_starts_nothing_when_the_batch_is_rejected(
     client, _ = center
     child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
     info = deploy(center, runner, packaged(tmp_path, FX24))
+    bind_virtual_worker(client, info["id"])
     job_id = dispatch(center, info, case_inputs(FX24, receiver))
     done = run_to_the_end(center, runner, job_id, answers={"Approve_Batch": {"승인": False}}, messages=[])
     assert done["run_status"] == "success", done
@@ -1000,6 +1012,7 @@ def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
     client, _ = center
     child = deploy(center, runner, packaged(tmp_path, "fx25_batch_item"))
     info = deploy(center, runner, packaged(tmp_path, FX24))
+    bind_virtual_worker(client, info["id"])
     job_id = dispatch(center, info, case_inputs(FX24, receiver))
 
     until = time.monotonic() + WAIT_S

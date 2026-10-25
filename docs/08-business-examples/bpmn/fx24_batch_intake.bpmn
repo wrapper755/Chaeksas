@@ -21,7 +21,11 @@
       "required": true,
       "description": "{번호, 금액} 목록"
     }
-  ]
+  ],
+  "virtual_worker_as": {
+    "name": "가상직원",
+    "supervisors": "감독자"
+  }
 }</chk:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
@@ -56,9 +60,7 @@
     }
   ],
   "location": "center",
-  "assignees": [
-    "김감독"
-  ]
+  "assignees": "감독자"
 }</chk:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
@@ -77,7 +79,8 @@
   },
   "input": {
     "번호": "건['번호']",
-    "금액": "건['금액']"
+    "금액": "건['금액']",
+    "처리자": "가상직원"
   },
   "output": {
     "처리결과": "처리결과"

@@ -344,6 +344,8 @@ class CaseRun(QObject):
                 bpm_process_id=self.plan.process.id,
                 # C3 `case_id` — 어느 케이스로 돌렸나 (CON-01이 보인다). 케이스 이름이 그 id다.
                 case_id=case.name if case else None,
+                # 가상 직원 신원도 케이스가 적는다 (ADR-0098) — 현장에서는 Center가 채운다.
+                virtual_worker=case.virtual_worker if case else None,
             )
         except EngineError as e:
             self._finish(Outcome(case=case.name if case else "", verdict=ERROR, detail=str(e)))

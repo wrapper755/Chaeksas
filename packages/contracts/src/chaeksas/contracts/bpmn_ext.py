@@ -146,6 +146,31 @@ class DesktopEnv(ContractModel):
     app: str | None = None  # 띄울 앱 이름
 
 
+class VirtualWorkerIdentity(ContractModel):
+    """**가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).
+
+    Center가 서버 작업을 내려줄 때 붙이고(C12 `JobDispatch.virtual_worker`) Studio는 케이스가
+    적는다. 엔진이 `chk:process.virtual_worker_as`가 고른 변수에 넣는다.
+    """
+
+    id: str
+    name: str
+    #: 감독자 이름 — Center가 저장할 때 정규화한 그대로 (ADR-0080 `normalize_assignees`).
+    supervisors: list[str] = Field(default_factory=list)
+
+
+class VirtualWorkerAs(ContractModel):
+    """`chk:process.virtual_worker_as` — 신원의 칸마다 **들어갈 변수 이름** (ADR-0098). 모두 선택."""
+
+    id: str | None = None
+    name: str | None = None
+    supervisors: str | None = None
+
+    def names(self) -> dict[str, str]:
+        """`{신원 칸: 변수 이름}` — 적은 것만."""
+        return {key: value for key, value in self.model_dump().items() if value}
+
+
 class ProcessInfo(ContractModel):
     """`chk:process` — BPM 프로세스 정보 (STU-06). 빌드가 이것을 모아 C1 매니페스트를 만든다."""
 
@@ -154,9 +179,15 @@ class ProcessInfo(ContractModel):
     extensions: list[ExtensionNeed] = Field(default_factory=list)
     inputs: list[InputDecl] = Field(default_factory=list)
     outputs: list[str] = Field(default_factory=list)
+    #: **가상 직원 신원**이 들어갈 변수 (ADR-0098). 채우는 것은 Center — 입력으로는 줄 수 없다.
+    virtual_worker_as: VirtualWorkerAs | None = None
 
     def input(self, name: str) -> InputDecl | None:
         return next((i for i in self.inputs if i.name == name), None)
+
+    def identity_vars(self) -> set[str]:
+        """신원이 만드는 변수 이름들 — B11이 시작 자리의 출처로 센다."""
+        return set(self.virtual_worker_as.names().values()) if self.virtual_worker_as else set()
 
 
 class Defaults(ContractModel):
@@ -709,6 +740,8 @@ class Case(ContractModel):
     delegations: dict[str, dict[str, Any]] = Field(default_factory=dict)
     #: 노드 id → **답한 사람** (ADR-0096). 적지 않은 결재는 `CASE_ANSWERER`가 답한 것이 된다.
     answered_by: dict[str, str] = Field(default_factory=dict)
+    #: **가상 직원 신원** (ADR-0098) — 현장에서는 Center가 채운다. 적지 않으면 신원 변수는 `None`이다.
+    virtual_worker: VirtualWorkerIdentity | None = None
     #: 자동 응답을 쓰지 않고 실제 창을 띄운다 (폼을 사람이 보는지 확인).
     manual: bool = False
 
@@ -1093,7 +1126,8 @@ def available_vars(
         return out
 
     produced = {n.id: made(n) for n in nodes}
-    declared = {i.name for i in process.info.inputs}
+    # 신원 변수도 시작 자리에 있다 — Center가 채운다 (ADR-0098).
+    declared = {i.name for i in process.info.inputs} | process.info.identity_vars()
     #: 하위 프로세스 → 그 안의 노드 (안에서 만든 변수를 **바깥으로 내보내려고**).
     inside = {n.id: list(n.children) for n in nodes if n.children}
     universe = set(declared)
@@ -1177,6 +1211,7 @@ def _check_b1_b2(process: BpmnProcess) -> list[Violation]:
     out: list[Violation] = []
     for name, reason in process.bad_props.items():
         out.append(_error("B1", f"chk:{name}이 모델과 맞지 않는다 ({reason})", items=[process.id]))
+    out.extend(_check_identity(process.info))
     for node in process.all_nodes():
         for name, reason in node.bad_props.items():
             out.append(_error("B1", f"{node.id}의 chk:{name}이 모델과 맞지 않는다 ({reason})"))
@@ -1192,6 +1227,26 @@ def _check_b1_b2(process: BpmnProcess) -> list[Violation]:
             ]
             if bad:
                 out.append(_error("B2", f"{node.id}의 answered_by_as·answered_via_as가 변수 이름이 아니다", items=bad))
+    return out
+
+
+def _check_identity(info: ProcessInfo) -> list[Violation]:
+    """B2 — 신원 변수는 변수 이름이고 **선언한 입력과 겹치지 않는다** (ADR-0098).
+
+    겹치면 부르는 쪽이 입력으로 신원을 지어낼 길이 생긴다 — 신원은 Center만 채운다.
+    """
+    if info.virtual_worker_as is None:
+        return []
+    names = info.virtual_worker_as.names()
+    out: list[Violation] = []
+    bad = [name for name in names.values() if not is_var_name(name)]
+    if bad:
+        out.append(_error("B2", "virtual_worker_as에 변수 이름이 아닌 것이 있다", items=bad))
+    clash = sorted(set(names.values()) & {decl.name for decl in info.inputs})
+    if clash:
+        out.append(
+            _error("B2", "virtual_worker_as의 변수가 선언한 입력과 겹친다 — 신원은 입력으로 줄 수 없다", items=clash)
+        )
     return out
 
 

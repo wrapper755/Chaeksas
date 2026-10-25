@@ -478,6 +478,8 @@ def _server_dispatch(
     with store.tx() as cur:
         for job_id, reason in skipped.items():
             cur.execute("UPDATE jobs SET state_reason = ? WHERE job_id = ?", (reason, job_id))
+    from chaeksas.center.api import virtual_workers  # noqa: PLC0415 — 순환 import를 피한다
+
     out = []
     by_id = {str(row["job_id"]): row for row in rows}
     for job_id in taken:
@@ -498,6 +500,9 @@ def _server_dispatch(
                 requested_at=row["requested_at"],
                 expires_at=row["expires_at"],
                 note=row["note"],
+                # **가상 직원의 접수 Bot이면 신원을 붙인다** (C12, ADR-0098) — 저장하지 않고 내려줄
+                # 때 읽는다. 감독자를 바꾸면 다음 작업부터 맞는다.
+                virtual_worker=virtual_workers.identity_of(store, str(row["bpm_process_id"])),
             )
         )
     return out

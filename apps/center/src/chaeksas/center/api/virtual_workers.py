@@ -9,6 +9,10 @@
    그것이 없어야 배포된다. 그림은 **Center가 저장된 zip에서 읽는다** — 내보낸 쪽을 믿지 않는다.
 2. **기동 허용 목록은 없다** — 접수 Bot의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
 3. **대리 답용 키는 감독하는 것만** 읽는다 — `X-CHK-On-Behalf-Of`의 사람이 감독자일 때 (ADR-0081).
+   **연동용 키는 전부** 읽는다 — 회사 시스템이 가상 직원 카드를 그린다 (ADR-0098).
+
+그리고 **신원** — 접수 Bot 작업이 서버 실행기로 내려갈 때 그 가상 직원을 붙인다
+(`identity_of`, C12 `JobDispatch.virtual_worker`). 이것도 저장하지 않고 읽을 때 붙인다.
 """
 
 from __future__ import annotations
@@ -17,11 +21,11 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from chaeksas.center.auth import Caller, require_on_behalf
+from chaeksas.center.auth import INTEGRATION_KEY_TYPE, Caller, require_on_behalf
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
 from chaeksas.contracts.approvals import normalize_assignees, normalize_name
-from chaeksas.contracts.bpmn_ext import BpmnReadError, read_process, validate
+from chaeksas.contracts.bpmn_ext import BpmnReadError, VirtualWorkerIdentity, read_process, validate
 from chaeksas.contracts.center_api import (
     DELEGATION_REQUESTER_PREFIX,
     VIRTUAL_WORKER_RECENT_BATCHES,
@@ -58,8 +62,15 @@ def entry_gate(package_dir: Path, file_name: str) -> list[str]:
     return [v.message for v in validate(process) if v.rule == GATE_RULE]
 
 
-def _check_intake(store: Store, package_dir: Path, intake: str) -> None:
-    """묶어도 되는가 — 승인된 판이 있고·서버 Bot이고·**승인된 판마다** B16이 없다 (ADR-0085 §2)."""
+def _check_intake(store: Store, package_dir: Path, intake: str, *, worker_id: str) -> None:
+    """묶어도 되는가 — 승인된 판이 있고·서버 Bot이고·**승인된 판마다** B16이 없다 (ADR-0085 §2).
+
+    그리고 **다른 가상 직원이 그 패키지를 쓰지 않는다** (409 `intake_in_use`, ADR-0098) — 그
+    실행에 실을 신원이 하나여야 한다.
+    """
+    taken = store.row("SELECT id FROM virtual_workers WHERE intake = ? AND id != ?", (intake, worker_id))
+    if taken is not None:
+        raise ApiError(409, "intake_in_use", f"{intake}는 이미 가상 직원 {taken['id']}의 접수 Bot이다")
     rows = store.rows(
         "SELECT version, run_location, file_name FROM packages WHERE id = ? AND status = ?",
         (intake, APPROVED),
@@ -121,7 +132,7 @@ def create(store: Store, package_dir: Path, raw: Any) -> VirtualWorkerInfo:
     request = _parse(raw)
     if store.row("SELECT id FROM virtual_workers WHERE id = ?", (request.id,)) is not None:
         raise ApiError(409, "id_conflict", f"가상 직원 {request.id}가 이미 있다")
-    _check_intake(store, package_dir, request.intake)
+    _check_intake(store, package_dir, request.intake, worker_id=request.id)
     at = now_iso()
     with store.tx() as cur:
         cur.execute(
@@ -137,7 +148,7 @@ def update(store: Store, package_dir: Path, worker_id: str, raw: Any) -> Virtual
     before = _must(store, worker_id)
     request = _parse(raw, path_id=worker_id)
     if request.intake != before["intake"]:
-        _check_intake(store, package_dir, request.intake)
+        _check_intake(store, package_dir, request.intake, worker_id=worker_id)
     with store.tx() as cur:
         cur.execute(
             "UPDATE virtual_workers SET name = ?, supervisors_json = ?, intake = ?, state = ?, updated_at = ?"
@@ -158,12 +169,33 @@ def remove(store: Store, worker_id: str) -> None:
 
 
 def reader(found: Caller) -> str | None:
-    """읽을 수 있는 쪽 — 콘솔 토큰이면 `None`(전부), 대리 답용 키면 **그 사람**(감독하는 것만)."""
+    """읽을 수 있는 쪽 — 콘솔 토큰·연동용 키면 `None`(전부), 대리 답용 키면 **그 사람**(감독하는 것만).
+
+    **연동용 키는 전부다** (ADR-0098) — 가상 직원에는 「자기 것」이 없고, 그 키는 이미 어느
+    Bot이든 작업을 낼 수 있어 묶임을 보는 것으로 힘이 늘지 않는다. `X-CHK-On-Behalf-Of`를
+    실어도 거르지 않는다(연동용 키의 그 헤더는 주장이라 적기만 한다, ADR-0081).
+    """
     if found.kind in ("admin", "read"):
         return None
     if found.is_relay:
         return require_on_behalf(found)
-    raise ApiError(403, "forbidden", "가상 직원은 콘솔 토큰이나 대리 답용 키로 읽는다")
+    if found.key is not None and found.key.type == INTEGRATION_KEY_TYPE:
+        return None
+    raise ApiError(403, "forbidden", "가상 직원은 콘솔 토큰·연동용 키·대리 답용 키로 읽는다")
+
+
+def identity_of(store: Store, bpm_process_id: str) -> VirtualWorkerIdentity | None:
+    """그 Bot을 접수 Bot으로 쓰는 가상 직원의 **신원** (C12 `JobDispatch.virtual_worker`, ADR-0098).
+
+    멈춘 가상 직원도 준다 — 그 칸은 새 작업을 막지 않고 그 실행은 여전히 그의 일이다.
+    **둘 이상이면 아무것도 주지 않는다** (묶을 때 막지만 옛 저장소에는 있을 수 있다) — 누구의
+    신원인지 고를 수 없고, 비면 신원 변수가 `None`이라 실행이 멈춰 사람이 고친다.
+    """
+    rows = store.rows("SELECT * FROM virtual_workers WHERE intake = ?", (bpm_process_id,))
+    if len(rows) != 1:
+        return None
+    row = rows[0]
+    return VirtualWorkerIdentity(id=row["id"], name=row["name"], supervisors=_supervisors_of(row))
 
 
 def listing(store: Store, *, supervisor: str | None = None, on_behalf: str | None = None) -> list[VirtualWorkerInfo]:
@@ -279,6 +311,7 @@ __all__ = [
     "deploy_gate",
     "entry_gate",
     "get",
+    "identity_of",
     "job_belongs",
     "listing",
     "reader",

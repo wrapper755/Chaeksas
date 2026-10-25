@@ -23,7 +23,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QComboBox  # noqa: E402
 
-from chaeksas.contracts.bpmn_ext import Case, CaseMessage  # noqa: E402
+from chaeksas.contracts.bpmn_ext import Case, CaseMessage, VirtualWorkerIdentity  # noqa: E402
 from chaeksas.studio.case_dialog import CaseDialog  # noqa: E402
 from chaeksas.studio.cases import (  # noqa: E402
     approvals_of,
@@ -213,11 +213,12 @@ def test_the_dialog_round_trips_a_case(app: Any, tmp_path: Path) -> None:
 
 
 def test_saving_keeps_what_the_editor_does_not_show(app: Any, tmp_path: Path) -> None:
-    """**편집기가 다루지 않는 칸은 그대로 남긴다** — PC 위임 결과·답한 사람 (STU-07, ADR-0096)."""
+    """**편집기가 다루지 않는 칸은 그대로 남긴다** — PC 위임 결과·가상 직원 신원 (STU-07, ADR-0096·0098)."""
     made, definition = imported(tmp_path, RECONCILIATION)
     edited = read(made, definition)
     edited.cases = [
-        Case(name="원본", delegations={"Call_Erp": {"결과코드": "OK"}}, answered_by={"Approve_X": "이도윤"})
+        Case(name="원본", delegations={"Call_Erp": {"결과코드": "OK"}}, answered_by={"Approve_X": "이도윤"},
+             virtual_worker=VirtualWorkerIdentity(id="finance-intake", name="재무 가상 직원", supervisors=["김감독"]))
     ]
     write(edited)
 
@@ -229,6 +230,7 @@ def test_saving_keeps_what_the_editor_does_not_show(app: Any, tmp_path: Path) ->
     assert again.name == "고친 이름"
     assert again.delegations == {"Call_Erp": {"결과코드": "OK"}}
     assert again.answered_by == {"Approve_X": "이도윤"}
+    assert again.virtual_worker is not None and again.virtual_worker.supervisors == ["김감독"]
 
 
 def test_the_answerer_table_round_trips(app: Any, tmp_path: Path) -> None:

@@ -30,7 +30,16 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from chaeksas.contracts.approvals import Form, FormField, answer_variables
-from chaeksas.contracts.bpmn_ext import Approval, BpmnProcess, Call, DataOutput, Node, duration_hours
+from chaeksas.contracts.bpmn_ext import (
+    Approval,
+    BpmnProcess,
+    Call,
+    DataOutput,
+    Node,
+    ProcessInfo,
+    VirtualWorkerIdentity,
+    duration_hours,
+)
 from chaeksas.core.delegation import (
     DelegationCall,
     DelegationError,
@@ -136,6 +145,22 @@ def answerer_variables(
     return out
 
 
+def identity_variables(info: ProcessInfo, identity: VirtualWorkerIdentity | None) -> dict[str, Any]:
+    """**가상 직원 신원**을 그림이 고른 변수로 (C14 `chk:process.virtual_worker_as`, ADR-0098).
+
+    가상 직원의 실행이 아니면 **`None`**이다 — 빈 목록이 아니다. 감독자 변수를 `assignees`로
+    쓰는 결재가 조용히 「담당자 없음」이 되지 않고 `assignees_missing`으로 멈춘다.
+    """
+    if info.virtual_worker_as is None:
+        return {}
+    values: dict[str, Any] = (
+        {"id": identity.id, "name": identity.name, "supervisors": list(identity.supervisors)}
+        if identity is not None
+        else {}
+    )
+    return {name: values.get(key) for key, name in info.virtual_worker_as.names().items()}
+
+
 # ─────────────────────────── 엔진 ───────────────────────────
 
 
@@ -164,6 +189,7 @@ class Engine:
         case_id: str | None = None,
         queued_s: float | None = None,
         parent_run_id: str | None = None,
+        virtual_worker: VirtualWorkerIdentity | None = None,
         env: RunEnv | None = None,
         nested: bool = False,
     ) -> Run:
@@ -175,6 +201,10 @@ class Engine:
 
         `bpm_process_id`는 **패키지 id**다 (ADR-0086) — 엔진은 자기가 도는 패키지를 모르므로
         실행하는 쪽이 `version`과 함께 준다. 주지 않으면 그림의 process id를 쓴다.
+
+        `virtual_worker`는 그 실행을 돌리는 **가상 직원 신원**이다 (ADR-0098) — 서버 실행기는
+        Center가 작업에 붙인 것을, Studio는 케이스의 것을 준다. 그림이 `virtual_worker_as`를
+        적었을 때만 변수가 생기고 **입력보다 뒤에** 넣어 신원이 이긴다(B2가 겹침을 막는다).
 
         `nested`면 호출(`callActivity`)이 띄운 안쪽 실행이다 — 같은 `run_id`를 쓰고
         `run_started`·`run_finished`를 남기지 않는다 (C3는 실행 하나에 하나씩만 둔다).
@@ -194,6 +224,9 @@ class Engine:
             helpers=bind(now=at),
         )
         run.variables.update(self._seed(process, inputs or {}, run_id=run_id, now=at))
+        if not nested:
+            # **진입 정의의 것만** — 안쪽 실행은 매핑으로 받는다 (C14 「적은 것만 오간다」).
+            run.variables.update(identity_variables(process.info, virtual_worker))
 
         if nested:
             run.tokens = [Token(id=new_token_id(), node_id=self._start_node(process))]

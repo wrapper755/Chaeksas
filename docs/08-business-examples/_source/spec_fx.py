@@ -384,6 +384,9 @@ FX("FX-23", "fx23_replay_modes", "재생 모드 셋 (plan·full·none)", "새로
             "**재생이 맞지 않으면 몰래 자율로 넘어가지 않는다** (ADR-0028) — 기억에 적힌 도구가 없거나 도구가 실패하면 `TASK_FAILED`로 올려 오류 경계가 받는다."])
 
 
+#: FX-24 케이스의 가상 직원 신원 — 현장에서는 Center가 등록에서 읽어 채운다 (ADR-0098).
+FINANCE_VW = {"id": "finance-intake", "name": "재무 가상 직원", "supervisors": ["김감독"]}
+
 FX("FX-24", "fx24_batch_intake", "일괄 기동 — 접수 Bot", "새로 — 가상 직원·일괄 기동 (ADR-0079·0082)", "server", "작업 지시 — 인입 목록을 받는다",
    "가상 직원의 **접수 Bot**이다. 인입 N건을 감독자에게 **한 번에** 보이고(결재 하나, 담당자 = 감독자), 승인되면 "
    "**건마다 서버 Bot(FX-25) 작업을 하나씩** 낸다 — Call Activity 반복 + 위임이다. 반려하면 아무것도 기동하지 않는다. "
@@ -391,10 +394,10 @@ FX("FX-24", "fx24_batch_intake", "일괄 기동 — 접수 Bot", "새로 — 가
    [start("Start"),
     script("Task_Count", "건수 세기", "건수 = len(인입)"),
     appr("Approve_Batch", "일괄 승인", "인입 {건수}건 일괄 기동", ["인입", "건수"],
-         [fld("승인", "모두 기동합니까?", "bool", True), fld("메모", "메모")], location="center", assignees=["김감독"]),
+         [fld("승인", "모두 기동합니까?", "bool", True), fld("메모", "메모")], location="center", assignees="감독자"),
     xgw("Gw_Ok", "승인?"),
     call("Call_Batch", "건마다 기동 (위임 반복)", "Proc_fx25_batch_item",
-         {"번호": "건['번호']", "금액": "건['금액']"}, {"처리결과": "처리결과"},
+         {"번호": "건['번호']", "금액": "건['금액']", "처리자": "가상직원"}, {"처리결과": "처리결과"},
          delegate=dict(bpm_process_id="fx25-batch-item"),
          loop=dict(collection="인입", item="건", result="처리결과", collect_into="결과목록", parallel=True)),
     script("Task_Tally", "결과 세기", "등록수 = len([x for x in 결과목록 if x == '등록'])\n보류수 = len(결과목록) - 등록수"),
@@ -406,24 +409,27 @@ FX("FX-24", "fx24_batch_intake", "일괄 기동 — 접수 Bot", "새로 — 가
     f("Bnd_Batch", "Task_Failed"), f("Task_Failed", "End")],
    boundaries=[bnd("Bnd_Batch", "Call_Batch", "error", "기동 실패", error="DELEGATION_FAILED")],
    inputs=[("인입", "list", True, "{번호, 금액} 목록")],
+   virtual_worker_as={"name": "가상직원", "supervisors": "감독자"},
    cases=[Case("세 건 승인", {"인입": [{"번호": 1, "금액": 500000}, {"번호": 2, "금액": 2000000}, {"번호": 3, "금액": 300000}]},
-               {"건수": 3, "결과목록": ["등록", "등록", "등록"], "등록수": 3},
+               {"건수": 3, "결과목록": ["등록", "등록", "등록"], "등록수": 3, "감독자": ["김감독"]},
                {"Approve_Batch": {"승인": True}},
                "Studio에서는 케이스가 **건마다 같은 값**을 돌려준다. 진짜 서버 실행기에서는 FX-25가 건마다 판정한다(둘째 건은 보류)",
-               delegations={"Call_Batch": {"처리결과": "등록"}}),
+               delegations={"Call_Batch": {"처리결과": "등록"}}, virtual_worker=FINANCE_VW),
           Case("반려 — 기동 없음", {"인입": [{"번호": 1, "금액": 500000}]}, {"건수": 1},
-               {"Approve_Batch": {"승인": False}}, "반려하면 위임이 하나도 나가지 않는다"),
+               {"Approve_Batch": {"승인": False}}, "반려하면 위임이 하나도 나가지 않는다", virtual_worker=FINANCE_VW),
           Case("기동 실패", {"인입": [{"번호": 1, "금액": 500000}]}, {"실패사유": "*"},
                {"Approve_Batch": {"승인": True}},
                "위임 결과를 **적어 두지 않으면** 그 자리에서 실패다 — 반복 노드의 오류 경계가 **한 번** 받고 나머지 건은 거둔다",
-               delegations={})],
+               delegations={}, virtual_worker=FINANCE_VW)],
    features=["**일괄 기동** — Call Activity 반복 + 위임 (`chk:loop` + `chk:call.delegate`)", "서버 Bot에 위임",
              "**병렬 반복** — 건을 한 번에 맡기고 함께 기다린다 (`isSequential=false`, ADR-0087)",
-             "결재 담당자 (`assignees`)", "결재 반려 시 기동 없음"],
+             "결재 담당자 = **가상 직원의 감독자** (`assignees: \"감독자\"` ← `virtual_worker_as`, ADR-0098)", "결재 반려 시 기동 없음"],
    lessons=["일괄은 **자원이 아니라 실행 하나**다 — 승인은 보통 결재이고 순서는 그림에 있다 (ADR-0079). 그래서 B16이 그림에서 「결재를 지나지 않는 반복 위임」을 알린다.",
             "결재가 **보여 준 목록 그대로** 반복한다 — 결재와 반복 사이에서 `인입`을 다시 만들면 B16 경고다 (보여 준 것과 다른 것을 기동할 수 있다).",
             "건별 업무 결과(등록·보류)는 **자식 Bot이 제 그림에서 정해 `outputs`로 돌려준다** — 위임 실패로 남는 것은 거절·만료 같은 바깥 일뿐이다. 바깥 일 한 건이 실패하면 **맡겨 둔 나머지를 거둔다** (ADR-0087 §4 — 시작 안 된 것·시작된 서버 자식은 취소된다).",
             "반복 안의 위임은 **차례마다 작업 하나**이고 멱등 키에 차례가 들어간다 — 그것이 없으면 2건째부터 1건째 작업이 돌아왔다 (엔진은 반복 중에 `node_instance`를 올리지 않는다).",
+            "**감독자를 그림에 다시 적지 않는다** — `virtual_worker_as`가 Center에 등록된 가상 직원의 감독자를 `감독자`에 넣고 결재가 그 변수를 담당자로 쓴다. 감독자를 CON-13에서 바꾸면 다음 일괄부터 따라간다. 가상 직원에 묶지 않고 돌리면 `감독자`가 `None`이라 결재를 만들 때 멈춘다(조용히 「담당자 없음」이 되지 않는다). Studio에서는 케이스가 `virtual_worker`로 적는다.",
+            "**신원은 자식에게 따라가지 않는다** — 맡길 때 `\"처리자\": \"가상직원\"`으로 **적어서** 넘긴다(C14 「적은 것만 오간다」). FX-25는 그것을 보통 입력으로 받으므로 혼자 기동해도 같은 그림이다.",
             "**병렬로 그린다** — 차례로 그리면 한 건이 끝나야 다음 건을 맡겨 N건이 한 건씩 끝까지 돈다. 서버 그림의 병렬 반복은 N건을 한 번에 맡기고, 결과 목록은 끝난 순서와 상관없이 **입력 순서**다 (ADR-0087)."])
 
 FX("FX-25", "fx25_batch_item", "일괄 기동의 한 건", "새로 — FX-24가 맡기는 서버 Bot (ADR-0082)", "server", "작업 지시 — FX-24가 **위임**으로 만든다",
@@ -436,7 +442,8 @@ FX("FX-25", "fx25_batch_item", "일괄 기동의 한 건", "새로 — FX-24가 
     end("End")],
    [f("Start", "Gw_Amount"), f("Gw_Amount", "Task_Hold", "금액 > 1000000", "큰 금액"), f("Gw_Amount", "Task_Ok", default=True, name="그 밖"),
     f("Task_Ok", "End"), f("Task_Hold", "End")],
-   inputs=[("번호", "int", True, ""), ("금액", "int", True, "")],
+   inputs=[("번호", "int", True, ""), ("금액", "int", True, ""),
+           ("처리자", "string", False, "일괄을 낸 가상 직원의 이름 — 맡긴 쪽(FX-24)이 적어 넘긴다. 혼자 기동하면 비어 있다")],
    outputs=["처리결과"],
    cases=[Case("작은 금액", {"번호": 1, "금액": 500000}, {"처리결과": "등록"}),
           Case("큰 금액은 보류", {"번호": 2, "금액": 2000000}, {"처리결과": "보류"},

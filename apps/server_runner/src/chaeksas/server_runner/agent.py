@@ -599,6 +599,8 @@ class Agent:
             # 말해 주는 것은 작업의 `requested_by` 하나다(Bot UI와 같은 `delegated_run`).
             source=SOURCE_DELEGATION if delegated_run(job.requested_by) else "job",
             parent_run_id=delegated_run(job.requested_by),
+            # 가상 직원의 접수 Bot이면 Center가 신원을 붙여 보냈다 (ADR-0098).
+            virtual_worker=job.virtual_worker,
             store=self.store,
         )
         self.workers[found.run_id] = found

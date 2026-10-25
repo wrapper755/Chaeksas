@@ -27,6 +27,12 @@
       "type": "int",
       "required": true,
       "description": ""
+    },
+    {
+      "name": "처리자",
+      "type": "string",
+      "required": false,
+      "description": "일괄을 낸 가상 직원의 이름 — 맡긴 쪽(FX-24)이 적어 넘긴다. 혼자 기동하면 비어 있다"
     }
   ]
 }</chk:process>

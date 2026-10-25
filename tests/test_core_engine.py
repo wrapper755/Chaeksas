@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from chaeksas.contracts.bpmn_ext import read_process
+from chaeksas.contracts.bpmn_ext import VirtualWorkerIdentity, read_process
 from chaeksas.contracts.dmn import read_decisions
 from chaeksas.contracts.events import REQUIRED_DATA_KEYS
 from chaeksas.core.engine import DECISION_KEY, Engine, EngineError, Run, RunEnv, State, new_run_id
@@ -351,6 +351,55 @@ def test_the_answerer_goes_into_the_variable_the_graph_named() -> None:
     assert answered.data["answered_by"] == run.variables["확인자"]
 
 
+IDENTITY_PROPS = '{"virtual_worker_as": {"id": "가상직원ID", "name": "가상직원", "supervisors": "감독자"}}'
+BATCH_APPROVAL = APPROVAL_PROPS[:-1] + ', "location": "center", "assignees": "감독자"}'
+
+
+def test_the_virtual_worker_identity_goes_into_the_variables_the_graph_named() -> None:
+    """**가상 직원 신원** — 실행이 자기가 누구인지 안다. 결재 담당자가 감독자 변수에서 온다 (ADR-0098)."""
+    identity = VirtualWorkerIdentity(id="finance-intake", name="재무 가상 직원", supervisors=["김감독", "이감독"])
+    engine, run = start(
+        make_identity(BATCH_APPROVAL),
+        env=RunEnv(clock=lambda: NOW, approval_where="center"),
+        virtual_worker=identity,
+    )
+    assert (run.variables["가상직원ID"], run.variables["가상직원"]) == ("finance-intake", "재무 가상 직원")
+    assert engine.run_until_blocked(run) is State.WAITING
+    assert run.pending is not None and run.pending.assignees == ["김감독", "이감독"]
+    # 실행 기록에는 값이 가지 않는다 (원칙 6) — 이름이 남는 곳은 C6 담당자다.
+    assert "재무 가상 직원" not in str([e.data for e in run.log.events])
+
+
+def test_without_a_virtual_worker_the_identity_is_none_and_the_approval_stops() -> None:
+    """가상 직원의 실행이 아니면 `None`이다 — 감독자가 **조용히 사라지지 않는다** (`assignees_missing`)."""
+    engine, run = start(make_identity(BATCH_APPROVAL), env=RunEnv(clock=lambda: NOW, approval_where="center"))
+    assert {run.variables[name] for name in ("가상직원ID", "가상직원", "감독자")} == {None}
+    assert engine.run_until_blocked(run) is State.FAILED
+    assert run.error is not None and run.error.code == "assignees_missing"
+
+
+def test_a_graph_without_identity_names_gets_no_identity_variables() -> None:
+    """옛 그림은 그대로다 — 신원을 줘도 적지 않은 그림에는 변수가 생기지 않는다."""
+    identity = VirtualWorkerIdentity(id="x", name="x", supervisors=[])
+    _, run = start(approval_process(), virtual_worker=identity)
+    assert not {"가상직원", "감독자"} & set(run.variables)
+
+
+def make_identity(props: str) -> Any:
+    """`approval_process`와 같은 그림에 신원 변수를 적는다."""
+    return make(
+        '<bpmn:startEvent id="Start_1"/>'
+        + script("Task_Count", "보류건수 = 2")
+        + '<bpmn:userTask id="Approve_Hold"><bpmn:extensionElements>'
+        + f"<chk:approval>{props}</chk:approval></bpmn:extensionElements></bpmn:userTask>"
+        + '<bpmn:endEvent id="End_1"/>'
+        + flow("f1", "Start_1", "Task_Count")
+        + flow("f2", "Task_Count", "Approve_Hold")
+        + flow("f3", "Approve_Hold", "End_1"),
+        process_props=IDENTITY_PROPS,
+    )
+
+
 def test_an_answer_on_behalf_names_the_relay_key_too() -> None:
     """대리 답이면 그 키 이름이 `answered_via_as`에 간다 (C6 `answered_via`, ADR-0081)."""
     engine, run = start(approval_process(props=ANSWERER_PROPS))
@@ -630,6 +679,10 @@ def example_env(tmp_path: Path) -> RunEnv:
     )
 
 
+#: 예제를 돌릴 때 주는 가상 직원 신원 — 신원 변수를 적지 않은 그림에는 아무 일도 없다.
+DUMMY_WORKER = VirtualWorkerIdentity(id="dummy", name="자리 값 가상 직원", supervisors=["자리 값 감독자"])
+
+
 def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> None:
     """예제 **55개**를 모두 돌려 본다 (선언한 입력에는 자리 값을 넣는다).
 
@@ -661,7 +714,9 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         engine = Engine()
         try:
             run = engine.start(
-                process, run_id=log.run_id, log=log, now=NOW, env=env, inputs=dummy_inputs(process)
+                process, run_id=log.run_id, log=log, now=NOW, env=env, inputs=dummy_inputs(process),
+                # 접수 Bot(FX-24)의 담당자는 **가상 직원의 감독자**다 — 현장에서는 Center가 붙인다 (ADR-0098).
+                virtual_worker=DUMMY_WORKER,
             )
         except EngineError as e:
             reasons[e.code] = reasons.get(e.code, 0) + 1
