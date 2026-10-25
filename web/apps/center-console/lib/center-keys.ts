@@ -23,3 +23,17 @@ export function keyActions(row: Pick<CenterKeyInfo, "state" | "bound_to" | "enro
   if (row.bound_to && !row.enrollment_id) actions.push("unbind");
   return { actions };
 }
+
+/** 승인이 만드는 종류 (ADR-0092·0093) — CON-11 「승인으로 들인 키」 표. */
+const ENROLLED_TYPES = new Set(["bot_ui", "studio", "server_runner"]);
+
+/**
+ * CON-11의 두 표로 가른다 — 「연동 키」(「새 키...」가 만드는 것)와 「승인으로 들인 키」.
+ * **종류로 가른다**(자동화로 발급한 Bot UI용 키도 아래로 간다). 모르는 종류는 위로 — 사라지지 않게.
+ */
+export function splitKeys<T extends Pick<CenterKeyInfo, "type">>(rows: T[]): { integration: T[]; enrolled: T[] } {
+  const integration: T[] = [];
+  const enrolled: T[] = [];
+  for (const row of rows) (ENROLLED_TYPES.has(row.type) ? enrolled : integration).push(row);
+  return { integration, enrolled };
+}

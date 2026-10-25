@@ -1,6 +1,6 @@
 /** CON-11 줄 동작 (`lib/center-keys.ts`) — 폐기·묶음 풀기가 **그 줄의 키에만** 걸리는가. */
 import { describe, expect, it } from "vitest";
-import { keyActions } from "./center-keys";
+import { keyActions, splitKeys } from "./center-keys";
 
 const pc = { id: "bui_1", type: "bot_ui", name: "재무팀 PC-03" };
 
@@ -23,5 +23,14 @@ describe("keyActions", () => {
 
   it("만료된 키는 폐기부터 — Center는 폐기된 키만 지운다", () => {
     expect(keyActions({ state: "expired", bound_to: pc }).actions).toEqual(["revoke"]);
+  });
+});
+
+describe("splitKeys", () => {
+  it("승인이 만드는 종류는 아래, 나머지는 위 — 순서는 그대로", () => {
+    const rows = ["bot_ui", "integration", "studio", "relay", "server_runner", "someday"].map((type) => ({ type }));
+    const { integration, enrolled } = splitKeys(rows);
+    expect(integration.map((row) => row.type)).toEqual(["integration", "relay", "someday"]);
+    expect(enrolled.map((row) => row.type)).toEqual(["bot_ui", "studio", "server_runner"]);
   });
 });

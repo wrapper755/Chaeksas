@@ -6,7 +6,7 @@ import { Button, ConfirmDialog, Dialog, ErrorBanner, Field } from "@chaeksas/ui"
 import { createCenterKey, deleteCenterKey, revokeCenterKey, unbindCenterKey, type ActionResult } from "@/app/actions";
 import { keyActions, type KeyAction } from "@/lib/center-keys";
 
-/** CON-11 관리자 모드 — 새 키. 폐기·묶음 풀기는 줄마다의 「...」에 있다 (`KeyMenu`). */
+/** CON-11 「연동 키」 표 오른쪽 위의 「새 키...」 (관리자 모드). 폐기·묶음 풀기·삭제는 줄마다의 「...」다 (`KeyMenu`). */
 export function KeyTools() {
   const [creating, setCreating] = useState(false);
   const [kind, setKind] = useState("integration");
@@ -20,12 +20,10 @@ export function KeyTools() {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          새 키...
-        </Button>
-      </div>
+    <div>
+      <Button variant="primary" onClick={() => setCreating(true)}>
+        새 키...
+      </Button>
 
       <Dialog
         open={creating && !showing}

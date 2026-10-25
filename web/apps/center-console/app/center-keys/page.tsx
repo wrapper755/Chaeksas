@@ -5,6 +5,7 @@ import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
 import { KeyMenu, KeyTools } from "./tools";
+import { splitKeys } from "@/lib/center-keys";
 import { Enrollments } from "@/components/Enrollments";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
@@ -79,6 +80,8 @@ export default async function CenterKeysPage() {
     columns.push({ key: "actions", header: "", width: "8ch", cell: (row) => <KeyMenu row={row} /> });
   }
 
+  const { integration, enrolled } = splitKeys(rows);
+
   return (
     <Shell mode={found.mode} actor={found.actor} current="/center-keys">
       <header className="mb-4 flex items-end justify-between gap-4">
@@ -92,28 +95,54 @@ export default async function CenterKeysPage() {
         </div>
       </header>
 
-      <Enrollments
-        rows={enrollments}
-        where="Studio 설정 창"
-        canDecide={found.mode === "admin"}
-        nameHelp="이 이름이 Studio에서 올린 것의 「누가」로 남습니다 (예: 김OO 설계 PC)."
-      />
-
       {failure ? (
         <ErrorBanner message={failure} />
       ) : (
-        <div className="flex flex-col gap-4">
-          {found.mode === "admin" ? <KeyTools /> : null}
-          {rows.length === 0 ? (
-            <EmptyState
-              title="발급한 키가 없습니다."
-              hint="「새 키...」로 Bot UI용 키부터 만드세요."
-              action={found.mode === "admin" ? undefined : <Button variant="secondary" disabled
-                disabledReason="관리자 계정으로 들어와야 발급할 수 있습니다.">새 키...</Button>}
+        <div className="flex flex-col gap-8">
+          {/* 표가 둘이다 — 「새 키...」가 만드는 것과 등록 승인이 만드는 것 (CON-11, ADR-0092·0093). */}
+          <section className="flex flex-col gap-3">
+            <div className="flex items-end justify-between gap-4">
+              <h2 className="text-h2 font-semibold">연동 키</h2>
+              {found.mode === "admin" ? (
+                <KeyTools />
+              ) : (
+                <Button variant="secondary" disabled disabledReason="관리자 계정으로 들어와야 발급할 수 있습니다.">
+                  새 키...
+                </Button>
+              )}
+            </div>
+            {integration.length === 0 ? (
+              <EmptyState
+                title="발급한 연동 키가 없습니다."
+                hint="외부 시스템이 작업을 만들거나 결재에 대신 답하게 하려면 「새 키...」로 만드세요."
+              />
+            ) : (
+              <DataTable columns={columns} rows={integration} rowKey={(row) => row.key_id} caption="연동 키 목록" />
+            )}
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-h2 font-semibold">승인으로 들인 키</h2>
+            <Enrollments
+              rows={enrollments}
+              where="Studio 설정 창"
+              canDecide={found.mode === "admin"}
+              nameHelp="이 이름이 Studio에서 올린 것의 「누가」로 남습니다 (예: 김OO 설계 PC)."
             />
-          ) : (
-            <DataTable columns={columns} rows={rows} rowKey={(row) => row.key_id} caption="Center API 키 목록" />
-          )}
+            {enrolled.length === 0 ? (
+              <EmptyState
+                title="승인으로 들인 키가 없습니다."
+                hint="Bot UI·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — Bot UI는 「Bot UI 현황」, 서버 실행기는 「서버 실행」, Studio는 이 표 위 「승인 대기」에서 승인합니다."
+              />
+            ) : (
+              <DataTable
+                columns={columns}
+                rows={enrolled}
+                rowKey={(row) => row.key_id}
+                caption="승인으로 들인 키 목록"
+              />
+            )}
+          </section>
         </div>
       )}
     </Shell>
