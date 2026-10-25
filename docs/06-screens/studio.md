@@ -388,7 +388,7 @@ id 규칙(「id는 소문자·숫자·`.`·`_`·`-`만 쓰고 소문자나 숫�
 
 > 상태: **분류 여섯이 모두 돈다** (`apps/studio/settings_dialog.py`). **쓰는 곳이 있는 칸만 둔다** ([ADR-0073](../decisions/0073-studio-settings-only-what-is-used.md)) — 「메일」(시험 실행은 메일을 담아 두기만 한다, C14)·「비밀」(툴팩이 없다, ADR-0050)과 「LLM」의 공급자(OpenAI 호환 하나, ADR-0027)·temperature(현장에 그 칸이 없어 시험만 다른 답을 낸다)·화면 인식 모델, 「외형」의 캔버스 팔레트(bpmn-js가 스스로 접는다)는 **두지 않는다**. 다시 넣으려면 읽는 곳을 먼저 만든다.
 
-> 「Center」 분류는 **초안이다** ([ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md) — 코드 아직). 지금 코드는 아이디·비밀번호로 Center 계정에 로그인하는 칸이다.
+> 「Center」 분류가 **이 모양으로 돈다** ([ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md) — 요청·키 받기는 `studio/center_enroll.py`, 창은 `settings_dialog.py`).
 
 최소 폭 720. 왼쪽 분류 목록. 단추 「저장」/「취소」 — **「저장」을 누를 때까지 아무것도 바뀌지 않는다** (키도 그때 비밀 저장소에 간다). **예외는 「Center」의 「연결 테스트」·「다시 요청」**이다 — 누르는 그 자리에서 등록 요청을 보내거나 키를 받는다.
 

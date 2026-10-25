@@ -4,6 +4,7 @@
 | --- | --- |
 | `POST /bot-ui/enroll`, `GET /bot-ui/enroll/{id}` | 없음 — 내려 주는 키는 요청의 공개키로 봉해 있다 |
 | `POST /server-runner/enroll`, `GET /server-runner/enroll/{id}` | 위와 같다 |
+| `POST /studio/enroll`, `GET /studio/enroll/{id}` | 위와 같다 (ADR-0093) |
 | `GET /enrollments` | 읽기·관리자 |
 | `POST /enrollments/{id}/approve·reject` | 관리자 |
 
@@ -55,6 +56,17 @@ async def post_runner_enroll(request: Request) -> Any:
 @router.get("/server-runner/enroll/{enrollment_id}")
 def get_runner_enroll(request: Request, enrollment_id: str) -> Any:
     return enrollments.status(_store(request), enrollment_id, kind="server_runner")
+
+
+@router.post("/studio/enroll", status_code=201)
+async def post_studio_enroll(request: Request) -> Any:
+    """Studio의 등록 요청 (C5 §Studio 등록 요청과 승인, ADR-0093) — Bot UI와 같은 길이다."""
+    return enrollments.request(_store(request), kind="studio", body=await _json(request), remote_addr=_remote(request))
+
+
+@router.get("/studio/enroll/{enrollment_id}")
+def get_studio_enroll(request: Request, enrollment_id: str) -> Any:
+    return enrollments.status(_store(request), enrollment_id, kind="studio")
 
 
 @router.get("/enrollments")

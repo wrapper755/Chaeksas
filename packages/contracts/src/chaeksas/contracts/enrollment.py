@@ -32,7 +32,7 @@ from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from pydantic import Field
 
-from chaeksas.contracts._base import ContractModel, Timestamp
+from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp
 
 #: 봉함 방식 — 지금은 이것 하나다 (C4 §봉함).
 SEAL_ALG = "x25519-hkdf-sha256-chacha20poly1305"
@@ -54,8 +54,8 @@ ROTATE_NOTICE_DAYS = 7
 #: 거절 사유 길이 (C5).
 REASON_MAX = 200
 
-#: 요청할 수 있는 종류 — 만드는 키 종류와 같다 (C7).
-ENROLLMENT_TYPES = frozenset({"bot_ui", "server_runner"})
+#: 요청할 수 있는 종류 — 만드는 키 종류와 같다 (C7). Studio도 같은 길이다 (ADR-0093).
+ENROLLMENT_TYPES = frozenset({"bot_ui", "server_runner", "studio"})
 #: 알려진 상태 (열린 문자열).
 KNOWN_ENROLLMENT_STATES = frozenset({"pending", "approved", "rejected", "expired"})
 
@@ -163,6 +163,26 @@ def open_sealed(private_key: str, sealed: Sealed, *, salt: str) -> str:
     return plain.decode("utf-8")
 
 
+class StudioVersions(ContractModel):
+    """Studio의 판 (C5 §Studio 등록 요청과 승인)."""
+
+    studio: str
+    core: str
+
+
+class StudioEnrollRequest(SchemaVersioned):
+    """`POST /api/v1/studio/enroll` — Studio의 등록 요청 (C5 §Studio 등록 요청과 승인, ADR-0093).
+
+    Bot UI의 `EnrollRequest`와 같은 결이다 — 등록(`register`)이 없는 Studio라 그 칸만 따로 둔다.
+    """
+
+    machine_id: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    name: str
+    os: str
+    versions: StudioVersions
+    public_key: PublicKey
+
+
 class EnrollStatus(ContractModel):
     """`POST …/enroll`의 응답이자 `GET …/enroll/{id}`의 응답 (C4 `EnrollResponse`·`EnrollStatus`)."""
 
@@ -174,6 +194,8 @@ class EnrollStatus(ContractModel):
     #: `approved`일 때만 — 봉한 Center API 키.
     sealed_key: Sealed | None = None
     key_expires_at: Timestamp | None = None
+    #: `approved`일 때만. 승인할 때 붙인 키 이름 — Studio는 이것이 「누가」라 보여 준다 (ADR-0093).
+    key_name: str | None = None
     #: `rejected`일 때 관리자가 적은 사유.
     reason: str | None = None
 
@@ -259,6 +281,8 @@ __all__ = [
     "RequestCode",
     "RotatedKey",
     "SealError",
+    "StudioEnrollRequest",
+    "StudioVersions",
     "Sealed",
     "new_keypair",
     "open_sealed",

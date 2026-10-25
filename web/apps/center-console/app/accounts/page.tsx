@@ -11,7 +11,6 @@ import { AccountMenu, NewAccount } from "./tools";
  * 「누가」가 가리킬 곳이 남아야 한다. 마지막 관리자를 멈추거나 내리려 하면 Center가 막는다.
  */
 const ROLE_LABEL: Record<string, string> = { admin: "관리자", viewer: "보기 전용" };
-const PERMISSION_LABEL: Record<string, string> = { design: "설계" };
 
 export default async function AccountsPage() {
   const found = await session();
@@ -29,39 +28,6 @@ export default async function AccountsPage() {
   const columns: Array<Column<AccountInfo>> = [
     { key: "username", header: "아이디", mono: true },
     { key: "role", header: "역할", width: "12ch", cell: (row) => ROLE_LABEL[row.role] ?? row.role },
-    {
-      key: "permissions",
-      header: "권한",
-      width: "10ch",
-      // 관리자는 모든 권한을 가진다 (C5). 보기 전용은 켜 둔 것만.
-      cell: (row) =>
-        row.role === "admin"
-          ? "전부"
-          : (row.permissions ?? []).map((one) => PERMISSION_LABEL[one] ?? one).join(", ") || "—",
-    },
-    {
-      key: "studio_logins",
-      header: "Studio 로그인",
-      width: "22ch",
-      cell: (row) => {
-        const logins = row.studio_logins ?? [];
-        if (logins.length === 0) return "—";
-        // 누르면 펼친다 — JS 없이 (`<details>`).
-        return (
-          <details>
-            <summary className="cursor-pointer">{logins.length}곳</summary>
-            <ul className="mt-1 flex flex-col gap-1 text-body-sm">
-              {logins.map((one) => (
-                <li key={one.key_id}>
-                  {one.machine_name} · 로그인 {fullTime(one.created_at)} · 마지막 사용{" "}
-                  {one.last_used_at ? fullTime(one.last_used_at) : "—"} · {fullTime(one.expires_at)}까지
-                </li>
-              ))}
-            </ul>
-          </details>
-        );
-      },
-    },
     {
       key: "state",
       header: "상태",
@@ -85,8 +51,6 @@ export default async function AccountsPage() {
           role={row.role}
           disabled={row.state === "disabled"}
           self={row.username === found.actor}
-          permissions={row.permissions ?? []}
-          studioLogins={(row.studio_logins ?? []).map((one) => ({ key_id: one.key_id, machine_name: one.machine_name }))}
         />
       ),
     },

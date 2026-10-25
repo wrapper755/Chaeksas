@@ -651,13 +651,10 @@ export async function revokeDeployment(deploymentId: string): Promise<ActionResu
 
 export async function createAccount(_previous: ActionResult, form: FormData): Promise<ActionResult> {
   try {
-    const role = String(form.get("role") ?? "admin");
     await center.createAccount({
       username: String(form.get("username") ?? "").trim(),
       password: String(form.get("password") ?? ""),
-      role,
-      // 관리자는 모든 권한을 가진다 — 「설계」 체크는 보기 전용일 때만 뜻이 있다 (C5).
-      permissions: role === "viewer" && form.get("design") === "on" ? ["design"] : [],
+      role: String(form.get("role") ?? "admin"),
     });
   } catch (cause) {
     return { error: message(cause) };
@@ -669,7 +666,7 @@ export async function createAccount(_previous: ActionResult, form: FormData): Pr
 /** 역할 바꾸기·멈추기·다시 쓰기·비밀번호 새로 정하기 — 한 길이다 (C5 `PUT /accounts/{id}`). */
 export async function updateAccount(
   username: string,
-  change: { role?: string; disabled?: boolean; password?: string; permissions?: string[] },
+  change: { role?: string; disabled?: boolean; password?: string },
 ): Promise<ActionResult> {
   try {
     await center.updateAccount(username, change);
@@ -683,21 +680,6 @@ export async function updateAccount(
     redirect("/login");
   }
   revalidatePath("/accounts");
-  return {};
-}
-
-/**
- * 「Studio에서 로그아웃시키기...」 (CON-14) — 그 계정의 Studio 키를 모두 폐기한다 (C7 `DELETE /center-keys`).
- * PC를 잃어버렸을 때 쓴다. 그 Studio는 다음에 Center를 부를 때 「로그인이 끝났습니다」가 된다.
- */
-export async function logoutStudios(keyIds: string[]): Promise<ActionResult> {
-  try {
-    for (const keyId of keyIds) await center.revokeCenterKey(keyId);
-  } catch (cause) {
-    return { error: message(cause) };
-  }
-  revalidatePath("/accounts");
-  revalidatePath("/center-keys");
   return {};
 }
 

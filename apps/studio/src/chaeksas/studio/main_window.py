@@ -71,7 +71,7 @@ PACKAGE_FILTER = "패키지 (*.zip)"
 
 #: Center가 필요한 동작을 설정 없이 눌렀을 때 (STU-10 맨 아래).
 NO_CENTER_SETTINGS = (
-    "Center에 로그인하지 않았습니다.\n\n지금 설정 → Center를 열까요?"
+    "Center에 아직 들어오지 않았습니다.\n\n지금 설정 → Center를 열까요?"
 )
 
 
@@ -359,9 +359,9 @@ class MainWindow(QMainWindow):
             self.extensions.configured = dict(dialog.saved.extensions)
             self.say("설정을 저장했습니다.")
             self.refresh_catalog()  # Center 주소·키가 바뀌었을 수 있다
-        elif dialog.login_changed is not None:
-            # 「로그인」·「로그아웃」은 「저장」을 기다리지 않는다 (STU-10) — 「취소」로 닫아도 받는다.
-            self.settings = dialog.login_changed
+        elif dialog.center_changed is not None:
+            # 「Center」의 등록 요청·키 받기는 「저장」을 기다리지 않는다 (ADR-0093) — 「취소」로 닫아도 받는다.
+            self.settings = dialog.center_changed
             self.refresh_catalog()
 
     def open_extensions(self) -> None:

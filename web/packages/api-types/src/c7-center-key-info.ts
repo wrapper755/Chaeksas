@@ -6,7 +6,6 @@
  * `GET /center-keys`의 한 줄. **원문은 들어가지 않는다.**
  */
 export interface CenterKeyInfo {
-  account?: string | null;
   bound_to?: BoundTo | null;
   created_at: string;
   enrollment_id?: string | null;

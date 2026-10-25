@@ -43,8 +43,6 @@ from chaeksas.contracts.accounts import (
     LoginRequest,
     PasswordChangeRequest,
     SessionInfo,
-    StudioLogin,
-    StudioLoginRequest,
     WhoAmI,
 )
 from chaeksas.contracts.approvals import (
@@ -172,6 +170,7 @@ from chaeksas.contracts.enrollment import (
     EnrollStatus,
     RotatedKey,
     Sealed,
+    StudioEnrollRequest,
 )
 from chaeksas.contracts.events import (
     EventBatchResponse,
@@ -354,8 +353,7 @@ from chaeksas.contracts.signing import (
 )
 
 __all__ = [
-    "StudioLogin",
-    "StudioLoginRequest",
+    "StudioEnrollRequest",
     "EnrollRequest",
     "EnrollStatus",
     "EnrollmentApproveRequest",

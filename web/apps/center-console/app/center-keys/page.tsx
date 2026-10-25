@@ -4,6 +4,8 @@ import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { KeyTools } from "./tools";
+import { Enrollments } from "@/components/Enrollments";
+import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
 /**
  * CON-11 Center API 키.
@@ -38,9 +40,12 @@ export default async function CenterKeysPage() {
   if (!found) redirect("/login");
 
   let rows: CenterKeyInfo[] = [];
+  let enrollments: EnrollmentInfo[] = [];
   let failure: string | null = null;
   try {
     rows = await center.centerKeys();
+    // Studio의 「승인 대기」 — 요청이 있을 때만 보인다 (C5 §Studio 등록 요청과 승인, ADR-0093).
+    enrollments = await center.enrollments("studio");
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -54,7 +59,6 @@ export default async function CenterKeysPage() {
       cell: (row) => {
         const target = row.bound_to ? `${row.bound_to.name} (${day(row.bound_to.first_seen)})` : "등록 전";
         // 등록 승인이 만든 키 (C7 `enrollment_id`, ADR-0092) — 사람이 건넨 키가 아니다.
-        if (row.account) return `로그인으로 발급 · ${row.account}`; // Studio 로그인 (C5)
         return row.enrollment_id ? `${target} · 승인으로 발급` : target;
       },
     },
@@ -81,6 +85,13 @@ export default async function CenterKeysPage() {
           </p>
         </div>
       </header>
+
+      <Enrollments
+        rows={enrollments}
+        where="Studio 설정 창"
+        canDecide={found.mode === "admin"}
+        nameHelp="이 이름이 Studio에서 올린 것의 「누가」로 남습니다 (예: 김OO 설계 PC)."
+      />
 
       {failure ? (
         <ErrorBanner message={failure} />

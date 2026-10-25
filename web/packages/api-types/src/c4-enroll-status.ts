@@ -10,6 +10,7 @@ export interface EnrollStatus {
   enrollment_id: string;
   expires_at: string;
   key_expires_at?: string | null;
+  key_name?: string | null;
   poll_after_s?: number;
   reason?: string | null;
   sealed_key?: Sealed | null;

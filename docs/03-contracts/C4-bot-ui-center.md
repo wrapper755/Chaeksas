@@ -85,6 +85,7 @@ Bot UI가 **등록 요청**을 보내 관리자의 승인으로 Center API 키�
 | `expires_at` | str | 승인 대기가 끝나는 때 |
 | `sealed_key` | Sealed? | `approved`일 때만. 봉한 Center API 키 |
 | `key_expires_at` | str? | `approved`일 때만. 받은 키의 만료 |
+| `key_name` | str? | `approved`일 때만. 승인할 때 붙인 키 이름 — Studio가 「「<이름>」으로 들어와 있습니다」로 보인다 (ADR-0093) |
 | `reason` | str? | `rejected`일 때 관리자가 적은 사유 |
 
 `POST …/enroll`은 `EnrollResponse`(`state: pending`), `GET …/enroll/{id}`는 같은 모양의 `EnrollStatus`를 돌려준다. 없는 id는 404 `not_found`다.

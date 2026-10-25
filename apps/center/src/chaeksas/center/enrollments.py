@@ -37,16 +37,23 @@ from chaeksas.contracts.enrollment import (
     ExistingHost,
     RotatedKey,
     Sealed,
+    StudioEnrollRequest,
     request_code,
     seal,
     valid_public_key,
 )
 from chaeksas.contracts.server_runner import ServerRunnerEnrollRequest
 
-#: 요청 종류 → 키 묶기를 지킬 표 (C4·C12 — 규칙은 `host_keys`에 하나다).
+#: 요청 종류 → 키 묶기를 지킬 표 (C4·C12 — 규칙은 `host_keys`에 하나다). **Studio는 표가 없다** —
+#: 등록(`register`)이 없어 그 PC는 키 자체에만 묶인다 (C5 §Studio 등록 요청과 승인, ADR-0093).
 TABLES = {"bot_ui": host_keys.BOT_UI, "server_runner": host_keys.SERVER_RUNNER}
-#: 요청 본문 모델 — 각자의 `RegisterRequest` + `public_key`.
-MODELS: dict[str, Any] = {"bot_ui": EnrollRequest, "server_runner": ServerRunnerEnrollRequest}
+STUDIO = "studio"
+#: 요청 본문 모델 — 각자의 `RegisterRequest` + `public_key` (Studio는 제 모양).
+MODELS: dict[str, Any] = {
+    "bot_ui": EnrollRequest,
+    "server_runner": ServerRunnerEnrollRequest,
+    STUDIO: StudioEnrollRequest,
+}
 
 
 def new_enrollment_id() -> str:
@@ -89,7 +96,9 @@ def _with_key_expiry(store: Store, row: Any, found: EnrollStatus) -> EnrollStatu
     if found.sealed_key is None or not row["key_id"]:
         return found
     record = keys.get(store, str(row["key_id"]))
-    return found.model_copy(update={"key_expires_at": record.expires_at if record else None})
+    return found.model_copy(
+        update={"key_expires_at": record.expires_at if record else None, "key_name": record.name if record else None}
+    )
 
 
 def request(store: Store, *, kind: str, body: dict[str, Any], remote_addr: str | None) -> EnrollStatus:
@@ -178,18 +187,46 @@ def _existing(store: Store, kind: str, machine_id: str) -> Any | None:
     return store.row(f"SELECT * FROM {table.name} WHERE machine_id = ?", (machine_id,))  # noqa: S608 — 표 이름은 상수다
 
 
+def _studio_keys(store: Store, machine_id: str) -> list[keys.KeyRecord]:
+    """그 PC에 묶인 **살아 있는** Studio 키 — 같은 PC를 다시 승인하면 폐기할 것들."""
+    now = now_iso()
+    rows = store.rows("SELECT key_id FROM center_keys WHERE type = ? AND revoked_at IS NULL", (STUDIO,))
+    found = [keys.get(store, str(row["key_id"])) for row in rows]
+    return [
+        one
+        for one in found
+        if one is not None
+        and one.bound_to is not None
+        and one.bound_to.id == machine_id
+        and one.state(now=now) == "active"
+    ]
+
+
+def _existing_info(store: Store, kind: str, machine_id: str) -> ExistingHost | None:
+    """그 기계가 이미 들어와 있으면 — 승인하면 그 자리를 이어받고 옛 키는 폐기된다."""
+    if kind == STUDIO:
+        held = _studio_keys(store, machine_id)
+        if not held:
+            return None
+        newest = held[-1]
+        return ExistingHost(id=newest.key_id, name=newest.name, key_prefix=newest.prefix, last_seen=newest.last_used_at)
+    table = TABLES.get(kind)
+    other = _existing(store, kind, machine_id) if table is not None else None
+    if other is None or table is None:
+        return None
+    record = keys.get(store, str(other["key_id"]))
+    return ExistingHost(
+        id=str(other[table.id_column]),
+        name=str(other["name"]),
+        key_prefix=record.prefix if record else None,
+        last_seen=other["last_seen_at"],
+    )
+
+
 def _info(store: Store, row: Any) -> EnrollmentInfo:
-    table = TABLES.get(str(row["type"]))
-    other = _existing(store, str(row["type"]), str(row["machine_id"])) if table is not None else None
-    existing = None
-    if other is not None and table is not None and row["state"] == "pending":
-        record = keys.get(store, str(other["key_id"]))
-        existing = ExistingHost(
-            id=str(other[table.id_column]),
-            name=str(other["name"]),
-            key_prefix=record.prefix if record else None,
-            last_seen=other["last_seen_at"],
-        )
+    existing = (
+        _existing_info(store, str(row["type"]), str(row["machine_id"])) if row["state"] == "pending" else None
+    )
     request_body = loads(row["request_json"], {}) or {}
     return EnrollmentInfo(
         enrollment_id=row["enrollment_id"],
@@ -239,14 +276,19 @@ def approve(store: Store, enrollment_id: str, *, name: str | None, actor: str) -
     """승인 (C5). 키를 만들어 **그 기계에 미리 묶고** 요청의 공개키로 봉해 둔다."""
     row = _pending(store, enrollment_id)
     kind = str(row["type"])
-    table = TABLES[kind]
     machine_id = str(row["machine_id"])
     shown = (name or "").strip() or str(row["name"])
 
     replaced = None
     host_id = None
-    other = _existing(store, kind, machine_id)
+    if kind == STUDIO:
+        # 같은 PC를 다시 승인했다 — 그 PC의 옛 Studio 키를 폐기한다 (Studio에는 이어받을 행이 없다).
+        for old in _studio_keys(store, machine_id):
+            keys.revoke(store, old.key_id)
+            replaced = old.key_id
+    other = _existing(store, kind, machine_id) if kind in TABLES else None
     if other is not None:
+        table = TABLES[kind]
         # 이미 등록된 기계 — **옛 키를 폐기하고 묶음을 풀어 둔다**. 새 키의 첫 `register`가
         # 그 자리를 이어받는다 (C4 키 묶기 「이어받기」 — 배포·기록이 그 id를 가리킨다).
         host_id = str(other[table.id_column])
@@ -296,7 +338,10 @@ def delivered(store: Store, key: keys.KeyRecord, *, public_key: str | None) -> N
     """
     if key.enrollment_id:
         with store.tx() as cur:
-            cur.execute("UPDATE enrollments SET sealed_json = NULL WHERE key_id = ?", (key.key_id,))
+            cur.execute(
+                "UPDATE enrollments SET sealed_json = NULL WHERE key_id = ? AND sealed_json IS NOT NULL",
+                (key.key_id,),
+            )
     if public_key and public_key != key.public_key and valid_public_key(public_key):
         keys.set_public_key(store, key.key_id, public_key)
 

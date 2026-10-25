@@ -246,91 +246,79 @@ def test_without_a_vault_saving_fails_and_the_window_stays(
 
 @pytest.fixture
 def center(tmp_path: Path) -> Any:
-    """진짜 Center (TestClient) — 설계 권한이 있는 계정 `kim`, 없는 계정 `lee`."""
-    from chaeksas.center import accounts  # noqa: PLC0415
+    """진짜 Center (TestClient). 관리자 토큰으로 승인한다 (콘솔이 하는 일)."""
     from chaeksas.center.app import create_app  # noqa: PLC0415
     from chaeksas.center.settings import Settings as CenterSettings  # noqa: PLC0415
     from chaeksas.center.storage import Store  # noqa: PLC0415
 
-    accounts.reset_failures()
     store = Store(tmp_path / "center.sqlite3")
     app = create_app(
         CenterSettings(db_path=tmp_path / "center.sqlite3", package_dir=tmp_path / "packages", admin_token="t-admin"),
         store=store,
     )
-    admin = {"Authorization": "Bearer t-admin"}
     with TestClient(app) as client:
-        for name, permissions in (("kim", ["design"]), ("lee", [])):
-            made = client.post(
-                "/api/v1/accounts",
-                json={"username": name, "password": "designer-pass-1234", "role": "viewer", "permissions": permissions},
-                headers=admin,
-            )
-            assert made.status_code == 201, made.text
         yield client
     store.close()
 
 
-def test_login_puts_the_key_in_the_vault_and_who_in_the_file(
+def approve_studio(center: Any, name: str = "김OO 설계 PC") -> None:
+    admin = {"Authorization": "Bearer t-admin"}
+    pending = center.get("/api/v1/enrollments?type=studio", headers=admin).json()
+    assert len(pending) == 1
+    done = center.post(f"/api/v1/enrollments/{pending[0]['enrollment_id']}/approve", json={"name": name}, headers=admin)
+    assert done.status_code == 200, done.text
+
+
+def test_studio_is_let_in_by_approval_not_a_password(
     qt: Any, settings: Settings, extensions: Extensions, center: Any
 ) -> None:
-    """STU-10 「Center」 — 키 칸은 없고, 로그인이 키를 받아 비밀 저장소에 둔다 (ADR-0092)."""
+    """STU-10 「Center」 — 주소만 넣고 「연결 테스트」, 관리자가 승인하면 키를 받는다 (ADR-0093)."""
     vault = Vault()
     found = dialog(settings, extensions, vault, client=center)
-    assert not hasattr(found, "center_key"), "Center API 키 칸은 없다"
+    assert not hasattr(found, "center_key") and not hasattr(found, "center_password"), "키·비밀번호 칸이 없다"
     found.center_url.setText("http://center.test")
-    found.center_user.setText("kim")
-    found.center_password.setText("designer-pass-1234")
-    found.login_center()
 
+    found.test_center()  # 등록 요청을 보낸다
+    code = found.center_code.text()
+    assert code and code in found.center_result.text()
+    assert not found.center_code.isHidden() and found.center_timer.isActive(), "기다리는 동안 10초마다 묻는다"
+    assert found.center_changed is not None, "「저장」을 기다리지 않는다"
+
+    approve_studio(center)
+    found._poll_center()
     key = vault.values[("chaeksas-studio", CENTER_KEY_NAME)]
     assert key.startswith("chk_ctr_")
-    assert found.center_password.text() == "", "비밀번호는 남기지 않는다"
-    assert found.center_who.text().startswith("kim로 로그인됨")
-    assert found.saved is None, "「저장」을 기다리지 않는다 — 그래도 창은 닫히지 않았다"
-    assert found.login_changed is not None and found.login_changed.center_account == "kim"
+    assert found.center_result.text().startswith("연결됨 — 「김OO 설계 PC」으로 들어와 있습니다")
+    assert not found.center_timer.isActive()
     raw = settings.path.read_text(encoding="utf-8")
-    assert key not in raw and "designer-pass-1234" not in raw
-    assert Settings.load(settings.path).center_url == "http://center.test"
+    assert key not in raw and "김OO 설계 PC" in raw
 
     found.test_center()
     assert found.center_result.text() == "연결됨 — 서비스 앱 0개를 읽었습니다"
-
-    found.logout_center()
-    assert ("chaeksas-studio", CENTER_KEY_NAME) not in vault.values
-    assert found.center_who.text() == "로그인하지 않았습니다."
-    after = center.get("/api/v1/packages", headers={"Authorization": f"Bearer {key}"})
-    assert after.status_code == 403, "Center에서도 그 키가 폐기됐다"
+    again = dialog(Settings.load(settings.path), extensions, vault)
+    assert again.center_result.text().startswith("연결됨 — 「김OO 설계 PC」"), "다시 열면 바깥에 묻지 않고 말한다"
 
 
-@pytest.mark.parametrize(
-    ("user", "password", "said"),
-    [
-        ("kim", "wrong-password-1", "아이디나 비밀번호가 맞지 않습니다"),
-        ("lee", "designer-pass-1234", "이 계정에는 「설계」 권한이 없습니다"),
-    ],
-)
-def test_login_failures_say_why_and_change_nothing(
-    qt: Any, settings: Settings, extensions: Extensions, center: Any, user: str, password: str, said: str
-) -> None:
+def test_asking_again_drops_the_old_key(qt: Any, settings: Settings, extensions: Extensions, center: Any) -> None:
     vault = Vault()
+    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_" + "x" * 40)
     found = dialog(settings, extensions, vault, client=center)
     found.center_url.setText("http://center.test")
-    found.center_user.setText(user)
-    found.center_password.setText(password)
-    found.login_center()
-    assert found.center_result.text().startswith(said)
-    assert vault.values == {} and found.login_changed is None
-    assert found.center_password.text() == ""
+    found.test_center()
+    assert found.center_result.text() == "키가 거부되었습니다 — 「다시 요청」으로 새로 승인받으세요"
+    assert "x" * 40 not in found.center_result.text()
+    found.request_again()
+    assert ("chaeksas-studio", CENTER_KEY_NAME) not in vault.values
+    assert found.center_code.text() in found.center_result.text()
 
 
-def test_an_env_key_turns_the_login_off(
+def test_an_env_key_skips_the_request(
     qt: Any, settings: Settings, extensions: Extensions, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_env")
     found = dialog(settings, extensions, Vault())
-    assert "환경변수의 키를 씁니다" in found.center_who.text()
-    assert not found.center_login.isEnabled()
+    assert "환경변수의 키를 씁니다" in found.center_result.text()
+    assert found.center_again.isHidden()
 
 
 def test_an_empty_center_address_blocks_saving(qt: Any, settings: Settings, extensions: Extensions) -> None:
@@ -349,12 +337,6 @@ def test_the_center_key_env_var_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_env")
     assert Credentials(vault).center_api_key() == "chk_ctr_env"
     assert Credentials(vault).stored_center_api_key() == "chk_ctr_stored", "자리 글은 저장된 것만 본다"
-
-
-def test_the_center_test_without_a_login_says_so(qt: Any, settings: Settings, extensions: Extensions) -> None:
-    found = dialog(settings, extensions, Vault())
-    found.test_center()
-    assert found.center_result.text() == "Center에 로그인하지 않았습니다."
 
 
 def test_service_keys_names_in_the_file_values_in_the_vault(
@@ -479,7 +461,7 @@ def test_center_status_says_what_happened() -> None:
     listing = mock(lambda r: httpx.Response(200, json={"items": [{"id": "a"}, {"id": "b"}]}))
     assert center_status("http://c/", "k", client=listing) == "연결됨 — 서비스 앱 2개를 읽었습니다"
     assert center_status("", "k") == "Center 주소가 없습니다."
-    assert center_status("http://c", None) == "Center에 로그인하지 않았습니다.", "키 없이는 묻지 않는다"
+    assert center_status("http://c", None) == "Center API 키가 없습니다.", "키 없이는 묻지 않는다"
     assert center_status("http://c", "k", client=mock(lambda r: httpx.Response(403))) == (
         "키가 거부되었습니다 (403)"
     )

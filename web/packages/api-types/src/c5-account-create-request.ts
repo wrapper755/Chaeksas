@@ -7,7 +7,6 @@
  */
 export interface AccountCreateRequest {
   password: string;
-  permissions?: string[] | null;
   role?: string;
   username: string;
   [k: string]: unknown;

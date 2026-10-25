@@ -1,55 +1,4 @@
 {
-  "$defs": {
-    "StudioLoginInfo": {
-      "additionalProperties": true,
-      "description": "그 계정이 로그인해 있는 Studio 하나 — 살아 있는 Studio 키 (CON-14 「Studio 로그인」).",
-      "properties": {
-        "created_at": {
-          "title": "Created At",
-          "type": "string"
-        },
-        "expires_at": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Expires At"
-        },
-        "key_id": {
-          "title": "Key Id",
-          "type": "string"
-        },
-        "last_used_at": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Last Used At"
-        },
-        "machine_name": {
-          "title": "Machine Name",
-          "type": "string"
-        }
-      },
-      "required": [
-        "key_id",
-        "machine_name",
-        "created_at"
-      ],
-      "title": "StudioLoginInfo",
-      "type": "object"
-    }
-  },
   "$id": "urn:chaeksas:contracts:c5-account-info",
   "additionalProperties": true,
   "description": "`GET /accounts`의 한 줄. **비밀번호 해시는 나가지 않는다.**",
@@ -90,13 +39,6 @@
       "title": "Password Changed At",
       "type": "string"
     },
-    "permissions": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Permissions",
-      "type": "array"
-    },
     "role": {
       "title": "Role",
       "type": "string"
@@ -104,13 +46,6 @@
     "state": {
       "title": "State",
       "type": "string"
-    },
-    "studio_logins": {
-      "items": {
-        "$ref": "#/$defs/StudioLoginInfo"
-      },
-      "title": "Studio Logins",
-      "type": "array"
     },
     "username": {
       "pattern": "^[a-z0-9][a-z0-9._-]{2,31}$",

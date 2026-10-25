@@ -11,7 +11,6 @@
 export interface AccountUpdateRequest {
   disabled?: boolean | null;
   password?: string | null;
-  permissions?: string[] | null;
   role?: string | null;
   [k: string]: unknown;
 }

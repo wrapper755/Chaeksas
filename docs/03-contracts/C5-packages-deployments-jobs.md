@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) — **§등록 승인도 돈다** (2026-10-25, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). **§Studio 등록 요청은 초안이다** ([0093](../decisions/0093-studio-is-let-in-by-approval.md), 코드 아직 — 지금 코드는 계정 로그인) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) — **§등록 승인도 돈다** (2026-10-25, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). **§Studio 등록 요청도 돈다** (2026-10-25, [0093](../decisions/0093-studio-is-let-in-by-approval.md)) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py`, `…/accounts.py` (import `chaeksas.contracts.center_api`·`chaeksas.contracts.accounts`, [ADR-0019](../decisions/0019-package-names.md)) |
@@ -308,7 +308,7 @@ EnrollmentInfo 필드:
 
 ### Studio 등록 요청과 승인 ([ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md))
 
-> 상태: **초안** — 코드 아직. 지금 코드는 Studio가 Center 계정(아이디·비밀번호)으로 로그인해 키를 받는다(`POST /auth/studio-login`) — 이 결정으로 걷어 낸다.
+> 상태: **돈다** (2026-10-25) — Center `center/enrollments.py`(종류 `studio`, 받았다는 표시는 `auth.caller`가 첫 사용에서 봉함을 지운다), Studio `studio/center_enroll.py`, 콘솔 CON-11 「승인 대기」. 계정 로그인(`POST /auth/studio-login`)과 계정 권한은 걷어 냈다. 시험: `tests/test_center_enrollment.py`·`tests/test_studio_settings_dialog.py`.
 
 Studio도 Bot UI와 **같은 길**로 들어온다 (C4 §등록 요청과 승인 — 요청 코드·봉함·24시간 대기·막기·같은 PC의 옛 요청 닫기가 같은 규칙, 같은 코드다). 아이디·비밀번호로 들어오는 길은 없다.
 
@@ -442,7 +442,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-25 | 1 | **초안: Studio 등록 요청과 승인** — `POST/GET /studio/enroll`, `GET /enrollments?type=studio`. 계정 권한·Studio 로그인(바로 아래 줄)을 걷어 낸다 | [0093](../decisions/0093-studio-is-let-in-by-approval.md) |
+| 2026-10-25 | 1 | **Studio 등록 요청과 승인** — `POST/GET /studio/enroll`, `GET /enrollments?type=studio`. 계정 권한·Studio 로그인(바로 아래 줄)을 걷어 낸다 | [0093](../decisions/0093-studio-is-let-in-by-approval.md) |
 | 2026-10-25 | 1 | **계정 권한과 Studio 로그인** (0093이 걷어 낸다) — `AccountInfo.permissions`·`studio_logins`, `POST /auth/studio-login`·`studio-logout`, 오류 `permission_missing` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-25 | 1 | **등록 승인** — `GET /enrollments`·`POST …/approve·reject`, 권한표의 「인증 없음」 줄(등록 요청 두 경로), 오류 `enrollment_closed` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-24 | 1 | **관리자 계정과 로그인 세션**을 더했다(`/auth/*`·`/accounts`). 승인·승인 철회·배포·배포 철회는 **봉투 대신 요청을 받고 Center가 서명한다** — 본문이 바뀌었다(`DeploymentRequest`·`{deployment_id, reason}`·`{reason}`). `approved_by`·`deployed_by`·`revoked_by`를 더했다. `POST/DELETE /admin-keys`를 없앴다. 관리자·읽기 토큰은 자동화용으로 남는다. 배포 철회 경로를 코드대로 `DELETE /deployments`(본문에 id)로 고쳐 적었다 | [0090](../decisions/0090-center-admin-accounts.md) |

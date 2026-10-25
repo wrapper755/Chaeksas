@@ -15,11 +15,14 @@ export function Enrollments({
   rows,
   where,
   canDecide,
+  nameHelp = "사람이 알아볼 이름. 비우면 요청이 보낸 이름을 씁니다.",
 }: {
   rows: EnrollmentInfo[];
   /** 확인 창 첫 줄이 가리키는 자리 — 「현장 화면」(Bot UI) / 「서버 실행기 로그」. */
   where: string;
   canDecide: boolean;
+  /** 승인 창 「이름」 칸의 도움말 — Studio는 그 이름이 「누가」라서 다르게 말한다 (CON-11). */
+  nameHelp?: string;
 }) {
   const [asking, setAsking] = useState<{ kind: "approve" | "reject"; row: EnrollmentInfo } | null>(null);
   const [text, setText] = useState("");
@@ -52,14 +55,14 @@ export function Enrollments({
       header: "버전",
       width: "12ch",
       mono: true,
-      cell: (row) => String(row.versions?.bot_ui ?? row.versions?.server_runner ?? "—"),
+      cell: (row) => String(row.versions?.bot_ui ?? row.versions?.server_runner ?? row.versions?.studio ?? "—"),
     },
     { key: "remote_addr", header: "요청한 곳", width: "16ch", mono: true, cell: (row) => row.remote_addr ?? "—" },
     { key: "requested_at", header: "요청 시각", width: "12ch", cell: (row) => clock(row.requested_at) },
     { key: "expires_at", header: "남은 시간", width: "10ch", cell: (row) => left(row.expires_at) },
     {
       key: "existing",
-      header: where === "현장 화면" ? "이 PC의 자리" : "이 서버의 자리",
+      header: where === "서버 실행기 로그" ? "이 서버의 자리" : "이 PC의 자리",
       cell: (row) => (row.existing ? `「${row.existing.name}」을 이어받음` : "새로"),
     },
     {
@@ -115,8 +118,9 @@ export function Enrollments({
         </p>
         {row?.existing ? (
           <p className="mt-2 text-body-sm text-text-secondary">
-            이미 「{row.existing.name}」으로 등록되어 있습니다. 승인하면 그 자리(배포·실행 기록)를 이어받고 옛 키는
-            폐기됩니다.
+            {where === "Studio 설정 창"
+              ? `이 PC는 이미 「${row.existing.name}」으로 들어와 있습니다. 승인하면 그 옛 키는 폐기됩니다.`
+              : `이미 「${row.existing.name}」으로 등록되어 있습니다. 승인하면 그 자리(배포·실행 기록)를 이어받고 옛 키는 폐기됩니다.`}
           </p>
         ) : null}
         <Field
@@ -124,7 +128,7 @@ export function Enrollments({
           label="이름"
           value={text}
           onChange={(event) => setText(event.target.value)}
-          help="사람이 알아볼 이름. 비우면 요청이 보낸 이름을 씁니다."
+          help={nameHelp}
         />
       </Dialog>
 

@@ -66,10 +66,10 @@ class Settings:
 
     data_dir: Path = field(default_factory=data_dir)
     center_url: str = DEFAULT_CENTER_URL
-    #: STU-10 「Center」에 로그인한 계정과 그 키의 만료 (C5 §계정 권한과 Studio 로그인). **비밀이 아니다** —
-    #: 키는 OS 비밀 저장소에 있고 여기는 「누구로 언제까지」를 보이려는 것뿐이다.
-    center_account: str = ""
-    center_login_expires: str = ""
+    #: 승인으로 받은 Studio 키의 이름과 만료 (C5 §Studio 등록 요청과 승인, ADR-0093). **비밀이 아니다** —
+    #: 키는 OS 비밀 저장소에 있고 여기는 「무슨 이름으로 언제까지」를 보이려는 것뿐이다.
+    center_key_name: str = ""
+    center_key_expires: str = ""
     receiver_port: int = DEFAULT_RECEIVER_PORT
     llm_base_url: str = DEFAULT_LLM_BASE_URL
     llm_model: str = DEFAULT_LLM_MODEL
@@ -126,8 +126,8 @@ class Settings:
     def merged(self, raw: dict[str, Any]) -> Settings:
         known = {
             "center_url": str,
-            "center_account": str,
-            "center_login_expires": str,
+            "center_key_name": str,
+            "center_key_expires": str,
             "receiver_port": int,
             "llm_base_url": str,
             "llm_model": str,

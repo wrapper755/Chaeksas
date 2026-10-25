@@ -76,7 +76,7 @@ def center_status(base_url: str, api_key: str | None, *, client: Any = None) -> 
     if not base_url.strip():
         return "Center 주소가 없습니다."
     if not api_key:
-        return "Center에 로그인하지 않았습니다."
+        return "Center API 키가 없습니다."
     try:
         answer = _get(
             f"{base_url.rstrip('/')}{CENTER_PROBE_PATH}",

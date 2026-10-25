@@ -9,7 +9,6 @@
  * **기록·로그에 남기지 않는다.**
  */
 export interface CenterKeyCreated {
-  account?: string | null;
   bound_to?: BoundTo | null;
   created_at: string;
   enrollment_id?: string | null;

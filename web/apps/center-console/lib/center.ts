@@ -251,12 +251,9 @@ export const center = {
 
   /** 관리자 계정 (C5 §관리자 계정·CON-14). 관리자만. */
   accounts: () => call<AccountInfo[]>("/api/v1/accounts"),
-  createAccount: (body: { username: string; password: string; role: string; permissions?: string[] }) =>
+  createAccount: (body: { username: string; password: string; role: string }) =>
     call<AccountInfo>("/api/v1/accounts", { method: "POST", body: JSON.stringify(body) }),
-  updateAccount: (
-    username: string,
-    body: { role?: string; disabled?: boolean; password?: string; permissions?: string[] },
-  ) =>
+  updateAccount: (username: string, body: { role?: string; disabled?: boolean; password?: string }) =>
     call<AccountInfo>(`/api/v1/accounts/${encodeURIComponent(username)}`, {
       method: "PUT",
       body: JSON.stringify(body),
@@ -328,7 +325,7 @@ export const center = {
    * 등록 요청 (C5 §등록 승인, ADR-0092) — CON-03·CON-12 「승인 대기」. 기본은 대기 중인 것만.
    * 사람은 키를 보지 않는다 — 승인 응답에도 원문이 없다.
    */
-  enrollments: (type: "bot_ui" | "server_runner") =>
+  enrollments: (type: "bot_ui" | "server_runner" | "studio") =>
     call<EnrollmentInfo[]>(`/api/v1/enrollments?type=${type}`),
   approveEnrollment: (id: string, name?: string) =>
     call<EnrollmentDecision>(`/api/v1/enrollments/${encodeURIComponent(id)}/approve`, {

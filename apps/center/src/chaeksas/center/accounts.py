@@ -6,9 +6,6 @@
 - **마지막 관리자는 멈추거나 보기 전용으로 바꿀 수 없다** (409 `last_admin`).
 - 같은 아이디로 5번 연달아 틀리면 5분 동안 받지 않는다. 「아이디가 없다」와 「비밀번호가
   틀렸다」는 **같은 답**이다 — 어느 아이디가 있는지 새지 않게.
-- **권한**은 역할과 따로 계정마다 켠다 (C5 §계정 권한과 Studio 로그인, ADR-0092). 관리자는 모든
-  권한을 가진다. **Studio 로그인**은 세션 대신 그 계정에 묶인 Studio용 키를 준다 — 계정이 멈추거나
-  비밀번호·역할이 바뀌거나 권한이 줄면 그 키를 모두 폐기한다(세션이 끝나는 때와 같다).
 """
 
 from __future__ import annotations
@@ -16,7 +13,6 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
-import json
 import logging
 import secrets
 import threading
@@ -24,23 +20,17 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from chaeksas.center import keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
 from chaeksas.contracts.accounts import (
-    KNOWN_PERMISSIONS,
     KNOWN_ROLES,
     LOGIN_FAILURES_MAX,
     LOGIN_LOCK_MINUTES,
     ROLE_ADMIN,
     SESSION_HOURS,
     SESSION_PREFIX,
-    STUDIO_KEY_DAYS,
     AccountInfo,
     SessionInfo,
-    StudioLogin,
-    StudioLoginInfo,
-    allows,
     password_violation,
     username_violation,
 )
@@ -90,8 +80,8 @@ def _session_hash(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _later(*, days: float = 0, hours: float = 0, minutes: float = 0) -> str:
-    return (datetime.fromisoformat(now_iso()) + timedelta(days=days, hours=hours, minutes=minutes)).isoformat()
+def _later(*, hours: float = 0, minutes: float = 0) -> str:
+    return (datetime.fromisoformat(now_iso()) + timedelta(hours=hours, minutes=minutes)).isoformat()
 
 
 # ─────────────────────────── 로그인 실패 세기 ───────────────────────────
@@ -128,29 +118,7 @@ def reset_failures() -> None:
 # ─────────────────────────── 계정 ───────────────────────────
 
 
-def _permissions(row: Any) -> list[str]:
-    raw = row["permissions_json"]
-    try:
-        found = json.loads(raw) if raw else []
-    except ValueError:
-        return []
-    return [str(one) for one in found] if isinstance(found, list) else []
-
-
-def _logins(store: Store, username: str) -> list[StudioLoginInfo]:
-    return [
-        StudioLoginInfo(
-            key_id=one.key_id,
-            machine_name=one.machine_name or one.name,
-            created_at=one.created_at,
-            last_used_at=one.last_used_at,
-            expires_at=one.expires_at,
-        )
-        for one in keys.of_account(store, username)
-    ]
-
-
-def _info(row: Any, store: Store | None = None) -> AccountInfo:
+def _info(row: Any) -> AccountInfo:
     return AccountInfo(
         username=row["username"],
         role=row["role"],
@@ -160,8 +128,6 @@ def _info(row: Any, store: Store | None = None) -> AccountInfo:
         password_changed_at=row["password_changed_at"],
         disabled_at=row["disabled_at"],
         last_login_at=row["last_login_at"],
-        permissions=_permissions(row),
-        studio_logins=_logins(store, str(row["username"])) if store is not None else [],
     )
 
 
@@ -173,11 +139,11 @@ def _row(store: Store, username: str) -> Any:
 
 
 def listing(store: Store) -> list[AccountInfo]:
-    return [_info(row, store) for row in store.rows("SELECT * FROM accounts ORDER BY username")]
+    return [_info(row) for row in store.rows("SELECT * FROM accounts ORDER BY username")]
 
 
 def get(store: Store, username: str) -> AccountInfo:
-    return _info(_row(store, username), store)
+    return _info(_row(store, username))
 
 
 def _refuse(problem: Any) -> None:
@@ -191,30 +157,18 @@ def _role(role: str) -> str:
     return role
 
 
-def _known(permissions: list[str] | None) -> list[str]:
-    """쓰는 쪽은 **알려진 권한만** 받는다 — 모르는 이름을 켜 두면 아무것도 열지 못한 채 남는다."""
-    wanted = sorted({one.strip() for one in permissions or [] if one.strip()})
-    unknown = [one for one in wanted if one not in KNOWN_PERMISSIONS]
-    if unknown:
-        raise ApiError(422, "permission_unknown", f"모르는 권한입니다: {', '.join(unknown)}")
-    return wanted
-
-
-def create(
-    store: Store, *, username: str, password: str, role: str, by: str, permissions: list[str] | None = None
-) -> AccountInfo:
+def create(store: Store, *, username: str, password: str, role: str, by: str) -> AccountInfo:
     _refuse(username_violation(username))
     _refuse(password_violation(password))
     _role(role)
-    granted = _known(permissions)
     if store.row("SELECT 1 FROM accounts WHERE username = ?", (username,)) is not None:
         raise ApiError(409, "account_exists", f"이미 있는 아이디입니다: {username}")
     at = now_iso()
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO accounts (username, password_hash, role, created_at, created_by, disabled_at,"
-            " password_changed_at, last_login_at, permissions_json) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, ?)",
-            (username, hash_password(password), role, at, by, at, json.dumps(granted)),
+            " password_changed_at, last_login_at) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)",
+            (username, hash_password(password), role, at, by, at),
         )
     return get(store, username)
 
@@ -233,18 +187,14 @@ def update(
     role: str | None = None,
     disabled: bool | None = None,
     password: str | None = None,
-    permissions: list[str] | None = None,
     data_dir: Path | None = None,
 ) -> AccountInfo:
-    """역할·멈춤·비밀번호·권한을 바꾼다 (관리자). 비운 칸은 그대로다."""
+    """역할·멈춤·비밀번호를 바꾼다 (관리자). 비운 칸은 그대로다."""
     row = _row(store, username)
     if role is not None:
         _role(role)
     if password is not None:
         _refuse(password_violation(password))
-    granted = _known(permissions) if permissions is not None else None
-    # 권한이 **줄면** Studio 로그인을 끝낸다 — 늘어나는 것은 묻지 않는다 (CON-14).
-    shrunk = granted is not None and bool(set(_permissions(row)) - set(granted))
 
     # 이 계정이 **지금 쓰이는 관리자**인데 관리자에서 빠지게 되면 — 마지막 하나면 막는다.
     was_admin = row["role"] == ROLE_ADMIN and not row["disabled_at"]
@@ -272,14 +222,8 @@ def update(
                 "UPDATE accounts SET password_hash = ?, password_changed_at = ? WHERE username = ?",
                 (hash_password(password), at, username),
             )
-        if granted is not None:
-            cur.execute("UPDATE accounts SET permissions_json = ? WHERE username = ?", (json.dumps(granted), username))
         # 역할·멈춤·비밀번호가 바뀌면 **그 계정의 세션을 그 자리에서 지운다**.
-        if role is not None or disabled is not None or password is not None:
-            cur.execute("DELETE FROM account_sessions WHERE username = ?", (username,))
-    # Studio 로그인도 같은 때에 끝난다 — 세션보다 오래 사는 키라 놓치면 계속 올린다 (C5).
-    if role is not None or disabled is not None or password is not None or shrunk:
-        keys.revoke_account(store, username)
+        cur.execute("DELETE FROM account_sessions WHERE username = ?", (username,))
     if password is not None:
         _forget_first_password(data_dir, username)
     return get(store, username)
@@ -298,7 +242,6 @@ def change_own_password(
             (hash_password(new), now_iso(), username),
         )
         cur.execute("DELETE FROM account_sessions WHERE username = ?", (username,))
-    keys.revoke_account(store, username)
     _forget_first_password(data_dir, username)
     return get(store, username)
 
@@ -306,8 +249,7 @@ def change_own_password(
 # ─────────────────────────── 세션 ───────────────────────────
 
 
-def _verify(store: Store, *, username: str, password: str) -> Any:
-    """아이디·비밀번호를 본다 — 콘솔 로그인과 Studio 로그인이 **같은 함수**다 (잠금 포함)."""
+def login(store: Store, *, username: str, password: str) -> SessionInfo:
     wrong = ApiError(401, "login_failed", "아이디나 비밀번호가 맞지 않습니다")
     if _locked(username):
         raise ApiError(
@@ -324,11 +266,7 @@ def _verify(store: Store, *, username: str, password: str) -> Any:
     if row["disabled_at"]:
         raise ApiError(403, "account_disabled", "멈춘 계정입니다 — 다른 관리자에게 물어보세요")
     _succeeded(username)
-    return row
 
-
-def login(store: Store, *, username: str, password: str) -> SessionInfo:
-    row = _verify(store, username=username, password=password)
     token = SESSION_PREFIX + secrets.token_urlsafe(32)
     at = now_iso()
     expires = _later(hours=SESSION_HOURS)
@@ -355,51 +293,6 @@ def session_of(store: Store, token: str) -> AccountInfo | None:
 def logout(store: Store, token: str) -> None:
     with store.tx() as cur:
         cur.execute("DELETE FROM account_sessions WHERE token_hash = ?", (_session_hash(token),))
-
-
-# ─────────────────────────── 권한·Studio 로그인 ───────────────────────────
-
-
-def permission_missing(permission: str) -> ApiError:
-    return ApiError(
-        403,
-        "permission_missing",
-        f"이 계정에는 「{permission}」 권한이 없습니다 — 관리자에게 켜 달라고 하세요",
-        {"permission": permission},
-    )
-
-
-def account_allows(store: Store, username: str, permission: str) -> bool:
-    """그 계정이 **지금** 그 권한을 쓸 수 있나 — 멈춘 계정은 아무것도 못 한다."""
-    row = store.row("SELECT * FROM accounts WHERE username = ?", (username,))
-    if row is None or row["disabled_at"]:
-        return False
-    return allows(str(row["role"]), _permissions(row), permission)
-
-
-def studio_login(store: Store, *, username: str, password: str, machine_name: str, permission: str) -> StudioLogin:
-    """Studio 로그인 (C5) — 그 계정에 묶인 Studio용 키를 만든다. **원문은 이 응답에만.**
-
-    비밀번호가 맞았는데 권한이 없으면 403 `permission_missing` — 잠금 횟수에 넣지 않는다.
-    같은 계정·같은 PC 이름이면 옛 키를 폐기한다(한 PC에 키가 쌓이지 않게).
-    """
-    row = _verify(store, username=username, password=password)
-    if not allows(str(row["role"]), _permissions(row), permission):
-        raise permission_missing(permission)
-    machine = machine_name.strip()
-    keys.revoke_account(store, username, machine_name=machine)
-    expires = _later(days=STUDIO_KEY_DAYS)
-    record, raw = keys.issue(
-        store,
-        name=f"{username} · {machine}",
-        key_type="studio",
-        expires_at=expires,
-        account=username,
-        machine_name=machine,
-    )
-    with store.tx() as cur:
-        cur.execute("UPDATE accounts SET last_login_at = ? WHERE username = ?", (now_iso(), username))
-    return StudioLogin(key=raw, key_id=record.key_id, username=username, expires_at=expires)
 
 
 # ─────────────────────────── 첫 관리자 ───────────────────────────
@@ -477,10 +370,7 @@ __all__ = [
     "listing",
     "login",
     "logout",
-    "account_allows",
-    "permission_missing",
     "reset_failures",
-    "studio_login",
     "session_of",
     "update",
 ]

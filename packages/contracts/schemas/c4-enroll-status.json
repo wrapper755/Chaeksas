@@ -61,6 +61,18 @@
       "default": null,
       "title": "Key Expires At"
     },
+    "key_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Name"
+    },
     "poll_after_s": {
       "default": 10,
       "title": "Poll After S",

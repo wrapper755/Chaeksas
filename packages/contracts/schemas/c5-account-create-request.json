@@ -7,21 +7,6 @@
       "title": "Password",
       "type": "string"
     },
-    "permissions": {
-      "anyOf": [
-        {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Permissions"
-    },
     "role": {
       "default": "admin",
       "title": "Role",
