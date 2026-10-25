@@ -12,7 +12,7 @@
 
 | 파일 | 앱 | 화면 ID |
 | --- | --- | --- |
-| [studio.md](studio.md) | Studio (Windows 데스크톱, BPM 프로세스 설계) | STU-01 ~ STU-15 |
+| [studio.md](studio.md) | Studio (Windows 데스크톱, BPM 프로세스 설계) | STU-01 ~ STU-16 |
 | [bot-ui.md](bot-ui.md) | Bot UI (Windows 트레이 기반 GUI, 항상 실행) | BUI-01 ~ BUI-11 (BUI-06~08 폐기 → TOL-03~05) |
 | [tool-ui.md](tool-ui.md) | Tool UI (Windows 데스크톱, 확장이 기여한 도구를 띄움 — Bot UI와 함께 설치, [ADR-0077](../decisions/0077-tool-ui.md)) | TOL-01 ~ TOL-05 |
 | [worker.md](worker.md) | Worker 프로세스 — **화면 없음**. 예전 WRK 화면 ID가 어디로 갔는지만 적음 | (WRK-* 폐기) |
@@ -144,6 +144,7 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 | STU-13 | UI 태스크 편집기 | Studio | 설계자 | M4 | 신규 |
 | STU-14 | 서비스 앱 태스크 편집기 | Studio | 설계자 | M5 | 신규 |
 | STU-15 | 확장 | Studio | 설계자 | M4 | 신규 (ADR-0018) |
+| STU-16 | Center에 연결 | Studio | 설계자 | — | 신규 (ADR-0093) |
 | BUI-01 | 트레이 | Bot UI | 현장 PC 사용자 | M2 | 프로토타입 Bot 트레이 + Worker 트레이 |
 | BUI-02 | 메인 창 | Bot UI | 현장 PC 사용자 | M2 | 프로토타입 로그 창 확장 |
 | BUI-03 | 설정·등록 | Bot UI | 설치 담당자 | M2 | 신규 |
