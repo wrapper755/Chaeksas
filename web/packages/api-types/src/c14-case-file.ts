@@ -18,6 +18,9 @@ export interface CaseFile {
  * 시험 케이스 하나. **패키지에 넣지 않는다** (Studio에서만 쓴다).
  */
 export interface Case {
+  answered_by?: {
+    [k: string]: string;
+  };
   approvals?: {
     [k: string]: {
       [k: string]: unknown;

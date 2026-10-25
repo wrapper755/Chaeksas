@@ -25,6 +25,7 @@ from chaeksas.contracts.bpmn_ext import (
     expression_vars,
     is_var_name,
     matches,
+    produced_vars,
     read_process,
     read_vars,
     script_vars,
@@ -189,6 +190,22 @@ def test_b11_counts_the_assignees_variable_as_a_read() -> None:
     """담당자 변수가 없으면 실행 오류다 — 조용히 「담당자 없음」이 되면 감독자가 사라진다."""
     node = read_process(_approval("userTask", '{"title": "승인", "assignees": "감독자"}')).node("Ap")
     assert node is not None and "감독자" in read_vars(node, [])
+
+
+def test_b2_answerer_variables_must_be_variable_names() -> None:
+    """ADR-0096 — 답한 사람이 들어갈 자리는 변수 이름이다."""
+    good = '{"title": "승인", "answered_by_as": "확인자", "answered_via_as": "확인경로"}'
+    assert "B2" not in codes(_approval("userTask", good))
+    assert "B2" in codes(_approval("userTask", '{"title": "승인", "answered_by_as": "확인 한 사람"}'))
+    assert "B2" in codes(_approval("manualTask", '{"title": "확인", "answered_via_as": ""}'))
+
+
+def test_the_answerer_variables_are_produced_by_the_approval() -> None:
+    """생기는 변수를 B11이 안다 — 뒤에서 읽어도 「경로에 따라 없는 변수」가 아니다."""
+    node = read_process(
+        _approval("userTask", '{"title": "승인", "answered_by_as": "확인자", "answered_via_as": "확인경로"}')
+    ).node("Ap")
+    assert node is not None and {"확인자", "확인경로"} <= produced_vars(node)
 
 
 def test_b12_warns_when_a_confirmation_names_assignees() -> None:

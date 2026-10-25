@@ -85,7 +85,7 @@
 | 필드 | 뜻 |
 | --- | --- |
 | `protocol` | `chk-c11`(C11을 따르는 서비스 앱) 또는 `http-adapter`(외부 앱, §4) |
-| `base_url` | 기본 주소. **주소의 출처는 하나다:** Center 리소스 등록(C7)의 `base_url`이 있으면 그것을, 없으면 이 값을 쓴다. 클라이언트 설정에 따로 두지 않는다 |
+| `base_url` | 기본 주소. **주소의 출처는 하나다:** Center 리소스 등록(C7)의 `base_url`이 있으면 그것을, 없으면 이 값을 쓴다. 클라이언트 설정에 따로 두지 않는다. **외부 확장은 지금 이 값뿐이다** — Center에 외부 확장의 주소를 넣는 입구가 없다(서비스 앱 등록은 C11 `/manifest`를 읽어야 행을 만든다). 정의의 `allowed_hosts` 안에서 덮어쓰는 길은 [ADR-0097](../decisions/0097-external-extension-address-from-center.md)(제안)이다 |
 | `adapter` | `protocol=http-adapter`일 때만 (§4) |
 
 ### Contributes

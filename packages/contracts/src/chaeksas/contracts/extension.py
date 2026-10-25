@@ -398,6 +398,10 @@ class HttpAdapter(ContractModel):
 class Service(ContractModel):
     """서버 부분. **주소의 출처는 하나다** — Center 리소스 등록(C7)의 `base_url`이 있으면
     그것을, 없으면 이 값을 쓴다. 클라이언트 설정에 따로 두지 않는다.
+
+    **외부 확장(`http-adapter`)은 지금 이 값뿐이다** — 읽는 쪽은 명부를 먼저 보지만, Center에
+    외부 확장의 주소를 넣는 입구가 아직 없다(서비스 앱 등록은 C11 `/manifest`가 있어야 한다).
+    채우는 길은 [ADR-0097](../decisions/0097-external-extension-address-from-center.md)이다.
     """
 
     protocol: str  # KNOWN_PROTOCOLS

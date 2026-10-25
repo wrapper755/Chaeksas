@@ -29,7 +29,7 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from chaeksas.contracts.bpmn_ext import Case, CaseFile, CaseMessage, duration_hours, matches
+from chaeksas.contracts.bpmn_ext import CASE_ANSWERER, Case, CaseFile, CaseMessage, duration_hours, matches
 from chaeksas.core.app_directory import AppDirectory
 from chaeksas.core.delegation import DelegationCall, DelegationError
 from chaeksas.core.engine import (
@@ -401,7 +401,9 @@ class CaseRun(QObject):
                 if answer is None:
                     continue  # **적지 않은 결재는 기다린다** (기한 초과 시험, C14)
                 self.said.emit(f"[케이스] 결재 자동 응답: {pending.node_id}")
-                self.engine.answer(run, request_id, answer, answered_by="시험 케이스")
+                # 답한 사람도 케이스가 적는다 (ADR-0096) — 적지 않으면 「시험 케이스」다.
+                who = case.answered_by.get(pending.node_id, CASE_ANSWERER)
+                self.engine.answer(run, request_id, answer, answered_by=who)
                 return True
 
         # **위임은 바로 돌려준다** — 여기 오는 것은 케이스에 적혀 있던 것뿐이다(적지 않은 것은

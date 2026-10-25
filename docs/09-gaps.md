@@ -46,7 +46,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열넷의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. **남은 것이 없다.**
+계약 열넷의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 남은 것은 바깥 요청(NowView R4)이 드러낸 §3-16 하나다.
 
 ### 3-13. PC 위임 — **닫았다**
 
@@ -135,6 +135,17 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 뜻이다 — 엔진에 스레드가 없어 서비스 앱 호출 같은 동기 태스크는 겹치지 않는다. FX-24가 병렬로
 그려져 세 건을 한 번에 맡긴다(M7 `test_cancelling_the_batch_cancels_the_child_that_has_not_run`이
 「한 건도 시작되지 않았는데 셋이 다 맡겨졌다」를 본다).
+
+
+### 3-16. 외부 확장의 주소를 Center가 덮어쓰는 입구 — **남았다**
+
+C13은 「Center 리소스 등록의 `base_url`이 이긴다」고 적었고 읽는 쪽(`AdapterCaller` → `AppDirectory`)은
+그대로 돈다. **그런데 Center에 외부 확장의 주소를 넣는 길이 없다** — 명부의 주소는 C7 서비스 앱
+등록에서만 오고, 그 등록은 C11 `/manifest`를 읽어야 행을 만든다. 그래서 외부 확장은 정의의 `base_url`이
+유일한 주소이고, 환경마다 정의를 두 벌(다른 해시) 두게 된다. 채우는 길은
+[ADR-0097](decisions/0097-external-extension-address-from-center.md)(제안)이다 — 관리자가 넣고 **정의의
+`allowed_hosts`·`allow_private_network` 안에서만** 받으며, 같은 명부로 내려가 실행하는 쪽 코드는 그대로다.
+먼저 정할 것은 **CON-07의 칸 자리·문구**(화면은 먼저 묻는다)와 C7 경로 이름이다.
 
 
 ## 4. 화면 쪽 기능 공백

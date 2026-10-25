@@ -212,6 +212,25 @@ def test_the_dialog_round_trips_a_case(app: Any, tmp_path: Path) -> None:
     assert again.expected == {"결과": {"$gte": 90}}
 
 
+def test_saving_keeps_what_the_editor_does_not_show(app: Any, tmp_path: Path) -> None:
+    """**편집기가 다루지 않는 칸은 그대로 남긴다** — PC 위임 결과·답한 사람 (STU-07, ADR-0096)."""
+    made, definition = imported(tmp_path, RECONCILIATION)
+    edited = read(made, definition)
+    edited.cases = [
+        Case(name="원본", delegations={"Call_Erp": {"결과코드": "OK"}}, answered_by={"Approve_X": "이도윤"})
+    ]
+    write(edited)
+
+    dialog = CaseDialog(None, made, definition)
+    dialog.name_box.setText("고친 이름")
+    assert dialog.save() is True
+
+    again = read(made, definition).cases[0]
+    assert again.name == "고친 이름"
+    assert again.delegations == {"Call_Erp": {"결과코드": "OK"}}
+    assert again.answered_by == {"Approve_X": "이도윤"}
+
+
 def test_saving_a_bad_answer_does_not_write(app: Any, tmp_path: Path) -> None:
     """저장을 막고 **창은 열어 둔다** (STU-07) — 고칠 수 있게."""
     made, definition = imported(tmp_path, EXPENSE)
