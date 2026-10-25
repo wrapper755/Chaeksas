@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) — **§등록 승인도 돈다** (2026-10-25, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 지원 종료·참조·삭제까지) — **§등록 승인도 돈다** (2026-10-25, [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). **§계정 권한과 Studio 로그인은 초안이다** (코드 아직) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py`, `…/accounts.py` (import `chaeksas.contracts.center_api`·`chaeksas.contracts.accounts`, [ADR-0019](../decisions/0019-package-names.md)) |
@@ -28,7 +28,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 - 기본 경로는 `/api/v1`. 본문은 JSON이고, 업로드만 multipart다.
 - 목록 요청은 `limit`(기본 100, 최대 1000)과 `offset`을 쓴다. 시각은 시간대를 포함한 ISO 8601이다.
 - 오류 본문: `{"code": "...", "message": "...", "detail": {...}}` (C11과 같은 형식).
-- **행위자:** `requested_by`, `answered_by`, `uploaded_by`, `approved_by`, `deployed_by`, `revoked_by`는 본문에서 받지 않는다. **세션으로 부르면 계정 아이디**다(로그인이 정한 신원이라 `X-CHK-Actor`를 듣지 않는다, ADR-0090). 키로 부르면 키 이름이다. 관리자·읽기 토큰(자동화)으로 부르면 `X-CHK-Actor` 헤더의 이름이고, 없으면 「관리자 토큰」·「보기 전용」이다 — 이 헤더는 **토큰으로 부를 때만** 믿는다.
+- **행위자:** `requested_by`, `answered_by`, `uploaded_by`, `approved_by`, `deployed_by`, `revoked_by`는 본문에서 받지 않는다. **세션으로 부르면 계정 아이디**다(로그인이 정한 신원이라 `X-CHK-Actor`를 듣지 않는다, ADR-0090). 키로 부르면 키 이름이고, **Studio 로그인이 만든 키면 그 계정 아이디**다(§계정 권한과 Studio 로그인 — 초안). 관리자·읽기 토큰(자동화)으로 부르면 `X-CHK-Actor` 헤더의 이름이고, 없으면 「관리자 토큰」·「보기 전용」이다 — 이 헤더는 **토큰으로 부를 때만** 믿는다.
   - **사람 대신 부르는 키는 `X-CHK-On-Behalf-Of`를 싣는다** ([ADR-0081](../decisions/0081-answering-on-behalf.md)). 대리 답용 키는 결재에 **반드시**(C6), 연동용 키는 `POST /jobs`·`POST /messages`에 **실어도 된다**. 작업에서는 **`on_behalf_of`로 적기만** 하고 `requested_by`는 그대로 키 이름이다 — `requested_by`는 권한의 주인이고 Bot UI가 그 앞머리 `server_bot:`로 위임 작업을 가르므로, 바깥에서 온 글을 그 칸에 넣지 않는다. 대조할 담당자가 없으니 **주장일 뿐**이고 권한을 바꾸지 않는다. 비었거나 200자를 넘거나 예약 앞머리로 시작하면 422 `on_behalf_invalid`.
   - **값은 UTF-8을 퍼센트 인코딩해서** 넣는다 (`운영자 김` → `%EC%9A%B4%EC%98%81%EC%9E%90%20%EA%B9%80`). HTTP 헤더 값에는 ASCII 밖의 글자를 넣을 수 없어서(보내는 쪽 HTTP 라이브러리가 거부한다), 한글 이름을 그대로 실으면 요청 자체가 나가지 않는다. 받는 쪽은 디코딩하고, 디코딩이 실패하면 받은 문자열을 그대로 쓴다.
 
@@ -41,7 +41,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | 읽기 토큰 | 자동화 (선택 — 비우면 닫힌다) | 보기 전용 계정과 같다 |
 | 관리자 토큰 | 자동화 (선택 — 비우면 닫힌다) | 관리자 계정과 같다. 자기 비밀번호 바꾸기만 없다 (계정이 없다) |
 | 인증 없음 | 키가 아직 없는 Bot UI·서버 실행기 | **등록 요청을 보내고 그 답을 묻는 것뿐** (C4·C12 §등록 요청과 승인 — 내려 주는 키는 요청의 공개키로 봉해 있다) |
-| Center API 키 — Studio용 | Studio | 패키지 업로드, 패키지·리소스 읽기 |
+| Center API 키 — Studio용 | Studio (로그인으로 받은 키 — 계정에 묶이고 `design` 권한이 있어야 쓴다. 자동화용은 계정 없이) | 패키지 업로드, 패키지·리소스 읽기 |
 | Center API 키 — Bot UI용 / 서버 실행기용 | 실행하는 쪽 | **자기에게 배포된** BPM 프로세스 패키지만 내려받기 (공유 BPM 프로세스는 그 안 `libs/`에 들어 있다) |
 | Center API 키 — 연동용 (신규, CON-11) | 외부 시스템 | 작업 만들기(`POST /jobs`)와 자기가 만든 작업 읽기·취소, 메시지 넣기(`POST /messages` — C12 §메시지) |
 | Center API 키 — 대리 답용 (`relay`) | 사람 대신 결재하는 연동 (대화 창구) | **결재 읽기·답뿐**이고 담당인 것만 (C6). 이 표의 엔드포인트는 하나도 부르지 못한다 |
@@ -55,7 +55,8 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /packages…` (목록·정보) | ✓ | ✓ | ✓ | — | — |
 | `GET /packages/{id}/{v}` (내려받기) | — | ✓ | ✓ | 자기 배포분만 | — |
 | `POST /packages` | — | ✓ | ✓ | — | — |
-| `POST /auth/login` | 인증 없음 | | | | |
+| `POST /auth/login`, `POST /auth/studio-login` | 인증 없음 | | | | |
+| `POST /auth/studio-logout` | — | — | 자기 키만 | — | — |
 | `POST /auth/logout`, `GET /auth/me` | ✓ | ✓ | — | — | — |
 | `PUT /auth/password` (자기 비밀번호) | 세션만 | 세션만 | — | — | — |
 | `GET/POST /accounts`, `PUT /accounts/{username}` | — | ✓ | — | — | — |
@@ -102,7 +103,37 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 - 세션은 **12시간** 뒤 끝난다 — 그 뒤에 부르면 401 `session_expired`. 토큰은 `chk_ses_`로 시작하고 Center는 해시만 둔다.
 - **첫 관리자**는 Center 설정(`CHK_CENTER__FIRST_ADMIN__*`, `docs/04-setup.md` §5)이 계정이 하나도 없을 때 한 번 만든다.
 
-AccountInfo 필드: `username`, `role`, `state`(`active` / `disabled`), `created_at`, `created_by`, `password_changed_at`, `disabled_at`?, `last_login_at`?.
+AccountInfo 필드: `username`, `role`, `state`(`active` / `disabled`), `created_at`, `created_by`, `password_changed_at`, `disabled_at`?, `last_login_at`?, `permissions`(아래), `studio_logins`(아래).
+
+### 계정 권한과 Studio 로그인 ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md))
+
+> 상태: **초안** — 코드 아직. 지금 Studio는 CON-11에서 발급한 Studio용 키를 STU-10에 붙여 넣는다.
+
+**역할은 둘 그대로**이고, 계정마다 **권한**을 켜고 끈다. 한 사람이 보기 전용이면서 설계자일 수 있어서, 역할을 늘리면 겹치는 사람마다 역할을 하나씩 더 만들어야 한다.
+
+| 권한 | 뜻 | 쓰는 곳 |
+| --- | --- | --- |
+| `design` (「설계」) | Studio에서 로그인해 **패키지를 올리고** Studio가 읽는 것을 읽는다 (아래 권한표의 「Studio 키」 줄과 같다) | STU-10 「Center」·STU-12 「올리기」 |
+
+- **관리자는 모든 권한을 가진다** — `permissions`를 비워 두어도 그렇다. 보기 전용 계정에 권한을 켜면 **그 권한의 쓰기만** 열린다.
+- `permissions`는 **열린 문자열 목록**이고 알려진 값은 위 표뿐이다. 「셀렉터 등록」은 Tool UI가 로그인하게 되는 조각에서 더한다 (쓰는 곳이 없는 권한을 먼저 두지 않는다 — ADR-0073과 같은 결).
+- `POST /accounts`·`PUT /accounts/{username}`이 `permissions?`를 받는다. 권한이 **줄면** 그 계정의 Studio 로그인이 **모두 끝난다**(키를 폐기한다).
+
+**Studio는 콘솔 세션을 쓰지 않는다.** 세션은 12시간이면 끝나는데 Studio는 며칠씩 켜 두는 도구라, 그대로 쓰면 하루에도 몇 번 다시 로그인해야 한다. 그래서 로그인하면 Center가 **그 계정에 묶인 Studio용 Center API 키**를 만들어 내려 주고, Studio는 그 키를 OS 비밀 저장소에 둔다.
+
+| 메서드·경로 | 인증 | 뜻 | 성공 |
+| --- | --- | --- | --- |
+| `POST /auth/studio-login` `{username, password, machine_name}` | 없음 | 로그인하고 Studio 키를 받는다. **원문은 이 응답에만** 실린다 | 200 StudioLogin `{key, key_id, username, expires_at}` |
+| `POST /auth/studio-logout` | 그 Studio 키 | 그 키를 폐기한다 | 204 |
+
+- 비밀번호 확인은 `POST /auth/login`과 **같은 함수**다 — 같은 401 `login_failed`, 같은 5번·5분 잠금(429 `login_locked`), 멈춘 계정은 403 `account_disabled`.
+- **`design` 권한이 없으면** 403 `permission_missing`(`detail.permission`=`design`) — 비밀번호는 맞았다는 뜻이라 잠금 횟수에 넣지 않는다.
+- 만드는 키는 종류 `studio`, 이름은 `<아이디> · <machine_name>`(machine_name은 1~64자, 사람이 알아볼 PC 이름), **만료 30일**이다. 키에 계정이 붙는다 (C7 `CenterKeyInfo.account`).
+- 같은 계정이 같은 `machine_name`으로 다시 로그인하면 **옛 키를 폐기하고** 새 키를 준다 — 한 PC에 키가 쌓이지 않는다.
+- 이 키로 부르면 **행위자는 계정 아이디**다(`uploaded_by` 등 — 키 이름이 아니다). 부를 때마다 계정을 다시 본다: 계정이 멈췄거나 `design` 권한이 없으면 403 `permission_missing`.
+- **계정을 멈추거나, 비밀번호가 바뀌거나, 역할·권한이 줄면** 그 계정의 Studio 키를 **모두 폐기한다** — 세션이 끝나는 때와 같다.
+- `studio_logins`(AccountInfo)는 그 계정의 **살아 있는** Studio 키 `{key_id, machine_name, created_at, last_used_at?, expires_at}[]`이다 — CON-14가 「어느 PC에 로그인돼 있나」를 보인다.
+- 자동화·CI가 쓰는 Studio용 키(관리자 토큰으로 발급, 계정 없음)는 그대로 남는다 — 그 키의 행위자는 지금처럼 키 이름이다.
 
 ## 패키지
 
@@ -393,6 +424,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 상태 코드 | `code` | 언제 |
 | --- | --- | --- |
+| 403 | `permission_missing` | 그 계정에 필요한 권한이 없다 (`detail.permission`) — Studio 로그인·Studio 키로 부를 때 |
 | 401 | `login_failed` / `session_expired` | 아이디·비밀번호가 맞지 않음 / 로그인이 끝남 (다시 로그인한다) |
 | 403 | `account_disabled` / `admin_only` / `password_wrong` | 멈춘 계정 / 관리자만 / 자기 비밀번호 바꾸기의 지금 비밀번호가 틀림 |
 | 429 | `login_locked` | 같은 아이디로 5번 연달아 틀림 — 5분 뒤 |
@@ -426,6 +458,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | **초안: 계정 권한과 Studio 로그인** — `AccountInfo.permissions`·`studio_logins`, `POST /auth/studio-login`·`studio-logout`, 오류 `permission_missing` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-25 | 1 | **등록 승인** — `GET /enrollments`·`POST …/approve·reject`, 권한표의 「인증 없음」 줄(등록 요청 두 경로), 오류 `enrollment_closed` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-24 | 1 | **관리자 계정과 로그인 세션**을 더했다(`/auth/*`·`/accounts`). 승인·승인 철회·배포·배포 철회는 **봉투 대신 요청을 받고 Center가 서명한다** — 본문이 바뀌었다(`DeploymentRequest`·`{deployment_id, reason}`·`{reason}`). `approved_by`·`deployed_by`·`revoked_by`를 더했다. `POST/DELETE /admin-keys`를 없앴다. 관리자·읽기 토큰은 자동화용으로 남는다. 배포 철회 경로를 코드대로 `DELETE /deployments`(본문에 id)로 고쳐 적었다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 1 | **가상 직원**(§가상 직원, CON-13) — 등록·읽기·관문(B16, 묶을 때와 배포할 때)·`?virtual_worker=` 이어 붙이기. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0085](../decisions/0085-virtual-worker-resource.md) |
