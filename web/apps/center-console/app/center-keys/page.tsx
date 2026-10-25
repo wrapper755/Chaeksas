@@ -3,7 +3,7 @@ import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } 
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
-import { KeyTools } from "./tools";
+import { KeyMenu, KeyTools } from "./tools";
 import { Enrollments } from "@/components/Enrollments";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
@@ -73,6 +73,10 @@ export default async function CenterKeysPage() {
       cell: (row) => <StatusBadge group="API 키" label={STATE_LABEL[row.state] ?? row.state} />,
     },
   ];
+  // 폐기·묶음 풀기는 **줄마다** 건다 — 표 위 단추로는 어느 키인지 화면이 말하지 못한다 (CON-11 끝 칸).
+  if (found.mode === "admin") {
+    columns.push({ key: "actions", header: "", width: "8ch", cell: (row) => <KeyMenu row={row} /> });
+  }
 
   return (
     <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/center-keys">
@@ -97,7 +101,7 @@ export default async function CenterKeysPage() {
         <ErrorBanner message={failure} />
       ) : (
         <div className="flex flex-col gap-4">
-          {found.mode === "admin" ? <KeyTools rows={rows} /> : null}
+          {found.mode === "admin" ? <KeyTools /> : null}
           {rows.length === 0 ? (
             <EmptyState
               title="발급한 키가 없습니다."
