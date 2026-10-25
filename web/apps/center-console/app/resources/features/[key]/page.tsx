@@ -2,9 +2,9 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, ErrorBanner, StatusBadge } from "@chaeksas/ui";
 import { CENTER_PUBLIC_URL, CenterError, session } from "@/lib/center";
-import type { FeatureRow } from "@/lib/features";
+import type { AddressView, FeatureRow } from "@/lib/features";
 import { Shell } from "@/components/Shell";
-import { putAppKey, setServiceAppUrl } from "@/app/actions";
+import { putAppKey, resetExtensionAddress, setExtensionAddress, setServiceAppUrl } from "@/app/actions";
 import { loadFeatures } from "../../load";
 import { time } from "../../page";
 import { DeleteAppKey, RevokeExtension, UnregisterServiceApp } from "../../tools";
@@ -19,12 +19,21 @@ function keyLine(slot: { set: boolean; setAt: string | null; setBy: string | nul
   return `넣음 (${slot.setAt ? time(slot.setAt) : "—"}, ${slot.setBy ?? "—"})`;
 }
 
+/** 외부 기능 「서버 주소」 옆에 붙는 출처 (ADR-0097). */
+function addressNote(address: AddressView): string {
+  if (address.source === "center") {
+    return `Center에서 바꿈 (${address.setAt ? time(address.setAt) : "—"}, ${address.setBy ?? "—"})`;
+  }
+  if (address.source === "outside") return "기본값 — Center에서 바꾼 주소를 지금 정의가 허용하지 않습니다";
+  return "기본값";
+}
+
 export default async function FeaturePage({
   params,
   searchParams,
 }: {
   params: Promise<{ key: string }>;
-  searchParams: Promise<{ error?: string; moved?: string; key_saved?: string }>;
+  searchParams: Promise<{ error?: string; moved?: string; reset?: string; key_saved?: string }>;
 }) {
   const found = await session();
   if (!found) redirect("/login");
@@ -55,6 +64,7 @@ export default async function FeaturePage({
       {failure ? <ErrorBanner message={failure} /> : null}
       {asked.error ? <ErrorBanner message={asked.error} /> : null}
       {asked.moved ? <p className="mb-4 text-body text-status-completed-fg">주소를 바꿨습니다.</p> : null}
+      {asked.reset ? <p className="mb-4 text-body text-status-completed-fg">기본값으로 되돌렸습니다.</p> : null}
       {asked.key_saved ? (
         <p className="mb-4 text-body text-status-completed-fg">
           {asked.key_saved === "test"
@@ -106,6 +116,18 @@ export default async function FeaturePage({
                   ) : (
                     "—"
                   )}
+                </dd>
+              </>
+            ) : null}
+            {row.address ? (
+              <>
+                <dt className="text-text-muted">서버 주소</dt>
+                <dd>
+                  <span className="font-mono">{row.address.url || "—"}</span>
+                  <span className="ml-2 text-caption text-text-muted">{addressNote(row.address)}</span>
+                  {row.checkedAt ? (
+                    <span className="ml-2 text-caption text-text-muted">확인 {time(row.checkedAt)}</span>
+                  ) : null}
                 </dd>
               </>
             ) : null}
@@ -172,6 +194,39 @@ export default async function FeaturePage({
                   ) : null}
                 </div>
               ))}
+            </section>
+          ) : null}
+
+          {admin && row.address ? (
+            <section id="address" className="flex flex-col gap-2">
+              <h2 className="text-h2 font-semibold">주소 바꾸기</h2>
+              <form action={setExtensionAddress} className="flex max-w-xl flex-wrap items-end gap-2">
+                <input type="hidden" name="extension_id" value={row.id} />
+                <label className="flex flex-1 flex-col gap-1 text-body-sm">
+                  <span className="text-text-muted">API 주소 *</span>
+                  <input
+                    type="url"
+                    name="base_url"
+                    required
+                    defaultValue={row.address.url}
+                    className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
+                  />
+                </label>
+                <Button type="submit" variant="primary">
+                  저장
+                </Button>
+              </form>
+              <p className="text-body-sm text-text-muted">
+                허용 호스트: {row.address.allowedHosts.join(", ") || "—"} (정의 밖 호스트는 받지 않습니다)
+              </p>
+              {row.address.source !== "default" ? (
+                <form action={resetExtensionAddress}>
+                  <input type="hidden" name="extension_id" value={row.id} />
+                  <Button type="submit" variant="secondary">
+                    기본값으로 되돌리기
+                  </Button>
+                </form>
+              ) : null}
             </section>
           ) : null}
 

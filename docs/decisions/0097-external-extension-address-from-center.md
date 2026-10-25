@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 제안 |
+| 상태 | 수락 |
 | 날짜 | 2026-10-25 |
 | 관련 | 계약 C13·C7, [ADR-0060](0060-pinning-external-definitions.md)·[ADR-0091](0091-external-apps-without-auth-take-no-key.md)·[ADR-0094](0094-service-app-keys-ride-the-deployment.md), 바깥 요청 NowView R4 |
 
@@ -26,12 +26,14 @@ C13은 「주소의 출처는 하나다 — Center 리소스 등록(C7)의 `base
 
 **B를 고른다. Studio 로컬 덮어쓰기(C)는 두지 않는다.**
 
-- 관리자가 외부 확장의 주소를 Center에 넣는다(C7 `PUT /resources/extensions/{id}/address {base_url}` — 이름은 계약을 고칠 때 정한다). **정의를 넓히지 않는다** — 그 주소는 계약의 호스트 관문(`contracts.extension.resolve_host`)을 정의의 `allowed_hosts`·`allow_private_network`로 지나야 받는다. 정의 밖 호스트는 422다.
+- 관리자가 외부 확장의 주소를 Center에 넣는다(C7 `PUT /resources/extensions/{id}/address {base_url}`, CON-07 상세 「서버 주소」의 「주소 바꾸기...」). **정의를 넓히지 않는다** — 그 주소는 계약의 호스트 관문(`contracts.extension.resolve_host`)을 정의의 `allowed_hosts`·`allow_private_network`로 지나야 받는다. 정의 밖 호스트는 422다.
 - 주소는 서비스 앱 주소와 **같은 명부**로 내려간다(C7 목록 → `DirectoryCache` → `AppDirectory.addresses`). 그래서 실행하는 쪽(Bot UI·서버 실행기·Studio)의 코드는 바뀌지 않는다 — 이미 명부를 먼저 본다.
 - **환경은 연결한 Center가 정한다.** Studio는 연결한 Center의 명부를 따른다. 로컬 NowView로 시험하려면 로컬 Center(compose)에 붙는다.
 - 덮어쓰지 않으면 지금처럼 정의의 `base_url`이다.
 
-> 미정: CON-07에 칸을 두는 자리와 문구 (화면은 사람에게 먼저 묻는다). 구현은 다음 조각이다 (09-gaps에 올렸다).
+- CON-07에서는 상세의 「서버 주소」 칸이 맡는다(사람에게 물어 정했다) — 「기본값」/「Center에서 바꿈」 표시, 「주소 바꾸기...」 창은 정의의 허용 호스트를 한 줄로 보이고, 덮어썼으면 「기본값으로 되돌리기」. 목록·등록 흐름은 그대로다.
+- 새 판을 등록해 허용 호스트가 바뀌어 덮어쓴 주소가 밖이 되면 **내려 주지 않고**(기본값) 사유를 남긴다. 지우지는 않는다.
+- Center에서 이름이 풀리지 않는 주소(DNS)는 막지 않는다 — 부르는 곳에서는 풀릴 수 있고, 부를 때 같은 관문이 다시 본다.
 
 ## 결과
 

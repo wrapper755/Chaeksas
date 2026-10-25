@@ -66,6 +66,38 @@ export interface FeatureRow {
   appKey: { run: KeySlotView; test: KeySlotView } | null;
   /** C11 앱이 Center 발급을 받나 (C7 `trust.state`, ADR-0094 §1). 모르면 없다. */
   trust: string | null;
+  /** 외부 기능이고 서버를 부를 때만 — 「서버 주소」 칸 (C7 §외부 확장 주소, ADR-0097). */
+  address: AddressView | null;
+}
+
+/** 외부 기능의 주소 — 지금 쓰는 것과 그 출처. */
+export interface AddressView {
+  /** 현장이 지금 쓰는 주소 (덮어쓴 것이 있으면 그것, 아니면 정의의 기본값). */
+  url: string;
+  /** `default`: 정의의 기본값 · `center`: Center에서 바꿈 · `outside`: 바꾼 주소를 지금 정의가 허용하지 않아 기본값. */
+  source: "default" | "center" | "outside";
+  setAt: string | null;
+  setBy: string | null;
+  /** 정의의 허용 호스트 — 「주소 바꾸기」 창이 한 줄로 보인다. */
+  allowedHosts: string[];
+}
+
+/** Center가 덮어쓴 주소를 지금 정의가 허용하지 않는다 (C7 `status_reasons`). */
+export const ADDRESS_OUTSIDE = "address_outside_definition";
+
+/** 외부 기능의 「서버 주소」 (ADR-0097). 서버를 부르지 않는(어댑터가 없는) 외부 기능은 `null`. */
+export function addressOf(ext: ExtensionResource): AddressView | null {
+  const service = (ext.definition as { service?: { base_url?: unknown; adapter?: { allowed_hosts?: unknown } } } | null)
+    ?.service;
+  if (!service?.adapter) return null;
+  const fallback = typeof service.base_url === "string" ? service.base_url : "";
+  const allowedHosts = Array.isArray(service.adapter.allowed_hosts) ? service.adapter.allowed_hosts.map(String) : [];
+  const override = ext.address ?? null;
+  if (override) {
+    return { url: override.base_url, source: "center", setAt: override.set_at ?? null, setBy: override.set_by ?? null, allowedHosts };
+  }
+  const outside = (ext.status_reasons ?? []).includes(ADDRESS_OUTSIDE);
+  return { url: fallback, source: outside ? "outside" : "default", setAt: null, setBy: null, allowedHosts };
 }
 
 export interface FeatureInput {
@@ -247,6 +279,7 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       usedBy: bots.map((one) => one.id),
       appKey,
       trust: trustOf(app),
+      address: external ? addressOf(ext) : null,
     });
   }
 
@@ -269,6 +302,7 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       usedBy: botsUsing(input.packages, null, app.app_id).map((one) => one.id),
       appKey: null,
       trust: trustOf(app),
+      address: null,
     });
   }
 
@@ -289,6 +323,7 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       usedBy: botsUsing(input.packages, null, id).map((one) => one.id),
       appKey: null,
       trust: null,
+      address: null,
     });
   }
 

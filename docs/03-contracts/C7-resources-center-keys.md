@@ -83,6 +83,13 @@
 | `DELETE /resources/extensions/{id}/app-key` | 관리자 | 운영 키 지우기 |
 | `PUT /resources/extensions/{id}/app-key/test` `{key}`, `DELETE …/app-key/test` | 관리자 | **시험용 키** 넣기·바꾸기·지우기 — Studio 시험 실행에만 간다 (§외부 앱 키) |
 
+**ADR-0097** —
+
+| 메서드·경로 | 인증 | 뜻 |
+| --- | --- | --- |
+| `PUT /resources/extensions/{id}/address` `{base_url}` | 관리자 (계정 세션·관리자 토큰) | 외부 확장 **주소 덮어쓰기** (§외부 확장 주소). 정의의 허용 호스트 밖이면 422 `host_not_allowed` |
+| `DELETE /resources/extensions/{id}/address` | 관리자 | 덮어쓴 주소를 지운다 — 정의의 `base_url`(기본값)로 돌아간다 |
+
 ## 모델
 
 ### ExtensionResource
@@ -98,6 +105,7 @@
 | `status_reasons`, `checked_at`? | 상태의 사유와 마지막으로 본 때. 서버 부분이 없으면 비어 있다 |
 | `definition`, `envelope` | 외부 확장만. 실행하는 쪽이 받아 검증한다 |
 | `app_key` | 외부 확장이고 키를 받는 앱일 때만(ADR-0091 `takes_key()`). `{run: KeySlot, test: KeySlot}` — KeySlot은 `{set: bool, set_at?, set_by?}`. **원문·앞자리는 없다** (§외부 앱 키) |
+| `address`? | 외부 확장이고 **Center가 주소를 덮어썼을 때만** `{base_url, set_at, set_by}` (§외부 확장 주소). 없으면 정의의 `service.base_url`을 쓴다 |
 
 외부 확장의 상태를 볼 때 Center는 **어댑터와 같은 관문을 지난다** (C13 §4-3 1~4 — 허용 호스트·사설망·https·DNS 고정). 규칙이 갈라지지 않게 `contracts`의 같은 함수(`resolve_host`)를 쓴다. 관문에 걸리면 두드리지 않고 `unreachable`에 사유를 남긴다 — **정의가 적은 주소라고 해서 Center가 아무 데나 나가지 않는다.**
 
@@ -164,6 +172,19 @@
 - **시험용 키는 따로 넣는다** — 같은 보관·같은 규칙(ASCII·원문 다시 안 보임)이고 **Studio에만** 간다(C5 §Studio 개발 키). 배포 대상에는 늘 운영 키가 간다. 시험용 키가 없으면 Studio가 「관리자가 시험용 키를 넣지 않았습니다」라고 말하고, 환경변수 `CHK_STUDIO__SVC__<참조>`가 있으면 그것이 이긴다.
 - 외부 확장을 등록 해제하면 그 키도 지운다.
 
+## 외부 확장 주소
+
+> 상태: **돈다** (2026-10-25, [ADR-0097](../decisions/0097-external-extension-address-from-center.md)).
+
+C13은 「Center 리소스 등록의 `base_url`이 이긴다」고 적었다. 서비스 앱은 등록이 곧 주소이고, **외부 확장은 이 칸으로 덮어쓴다** — 정의를 한 벌로 두고 환경(= 연결한 Center)마다 주소를 고르게 하려고다.
+
+- 받는 것은 **등록된 외부 확장**(`http-adapter`)뿐이다. 아니면 404 `not_found`.
+- **정의를 넓히지 않는다.** 주소는 그 정의의 `allowed_hosts`·`allow_private_network`로 **어댑터와 같은 관문**(`contracts.extension.resolve_host`)을 지나야 받는다 — 허용 호스트 밖·사설망·`https`가 아닌 공용 주소는 422 `host_not_allowed`. Center에서 이름이 풀리지 않는 것(DNS)만은 막지 않는다 — 부르는 곳(PC·서버)에서는 풀릴 수 있고, 부를 때 같은 관문이 다시 본다. 경로·쿼리는 받지 않는다(어댑터가 `base_url`의 경로를 버린다) — 422 `host_not_allowed`.
+- 실행하는 쪽(Bot UI·서버 실행기·Studio)은 `ExtensionResource.address.base_url`을 **명부의 주소**로 넣는다(`core.app_directory`). 그래서 어댑터가 정의의 값보다 먼저 쓴다 — 코드가 하나다. **부를 때도 그 정의의 허용 호스트로 다시 본다** — Center가 틀린 주소를 주어도 서명된 정의 밖으로는 나가지 않는다.
+- Center의 상태 점검(어댑터 `health`)도 덮어쓴 주소로 간다.
+- **새 판을 등록해 허용 호스트가 바뀌어 덮어쓴 주소가 밖이 되면** Center는 그 주소를 **내려 주지 않고**(정의의 기본값이 쓰인다) `status_reasons`에 `address_outside_definition`을 남긴다. 지우지는 않는다(다음 판에서 다시 맞을 수 있다 — 사람이 지운다).
+- 외부 확장을 등록 해제하면 덮어쓴 주소도 지운다.
+
 ## Center API 키 관리 (CON-11)
 
 | 메서드·경로 | 인증 | 뜻 |
@@ -214,6 +235,7 @@ CenterKeyInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-25 | 1 | §외부 확장 주소 — `PUT/DELETE …/extensions/{id}/address`, `ExtensionResource.address{base_url, set_at, set_by}`, 사유 `address_outside_definition`. 선택 칸이라 schema는 그대로다 | [0097](../decisions/0097-external-extension-address-from-center.md) |
 | 2026-10-25 | 1 | `GET /signing-keys`(인증 없음), §외부 앱 키(운영 `PUT/DELETE …/extensions/{id}/app-key`·시험용 `…/app-key/test`, `ExtensionResource.app_key{run, test}`), `trust`의 `pin_mismatch`, `ServiceAppResource.trust` | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | `bot_ui`·`server_runner` 키는 등록 승인이 만든다 — `CenterKeyInfo.enrollment_id?`. 이 경로로 발급하는 길은 자동화·시험용으로 남는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | 키 종류 **`relay`(대리 답용 키)**를 더했다 — CON-11에서 발급한다 | [0081](../decisions/0081-answering-on-behalf.md) |

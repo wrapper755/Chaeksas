@@ -33,7 +33,7 @@ from chaeksas.contracts.resources import (
     ServiceAppResource,
 )
 from chaeksas.contracts.signing import AdminKey
-from chaeksas.core.app_directory import AppDirectory, build, to_json_dict
+from chaeksas.core.app_directory import AppDirectory, build, external_addresses, to_json_dict
 
 log = logging.getLogger(__name__)
 
@@ -171,7 +171,10 @@ class Services:
                 if one.definition is None or one.envelope is None:
                     self.problems.append(f"{one.id}: 정의·봉투가 함께 오지 않았습니다")
                     continue
-                entries.append({"definition": one.definition, "envelope": one.envelope})
+                entry: dict[str, Any] = {"definition": one.definition, "envelope": one.envelope}
+                if one.address is not None:
+                    entry["base_url"] = one.address.base_url  # Center가 덮어쓴 주소 (ADR-0097)
+                entries.append(entry)
         except CenterUnreachable as e:
             self.problems.append(f"외부 확장 정의를 받지 못했습니다 — {e}")
 
@@ -183,7 +186,8 @@ class Services:
                 # 공개키가 없으면 **어느 봉투도 검증되지 않는다** — 정의를 받아도 못 쓴다.
                 self.problems.append(f"Admin 공개키를 받지 못했습니다 — {e}")
 
-        return self._build(addresses, keys, entries)
+        # Center가 덮어쓴 외부 확장 주소도 **같은 명부**로 간다 — 현장과 같은 코드다 (ADR-0097).
+        return self._build({**addresses, **external_addresses(entries)}, keys, entries)
 
     def _build(
         self, addresses: dict[str, str], keys: list[AdminKey], entries: list[dict[str, Any]]

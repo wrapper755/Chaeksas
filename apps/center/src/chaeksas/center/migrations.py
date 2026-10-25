@@ -215,6 +215,16 @@ MIGRATIONS: tuple[Step, ...] = (
             "ALTER TABLE service_apps ADD COLUMN trust_json TEXT",
         ),
     ),
+    Step(
+        13,
+        "외부 확장의 주소를 Center가 덮어쓴다 — 정의의 허용 호스트 안에서만 (C7 §외부 확장 주소, ADR-0097)",
+        (
+            # 확장 id에 붙는다(판이 아니다) — 새 판을 올려도 주소는 남고, 밖이 되면 읽을 때 거른다.
+            "CREATE TABLE extension_addresses ("
+            " extension_id TEXT PRIMARY KEY, base_url TEXT NOT NULL,"
+            " set_at TEXT NOT NULL, set_by TEXT NOT NULL)",
+        ),
+    ),
 )
 
 

@@ -203,6 +203,15 @@ export const center = {
     call<unknown>(appKeyPath(extensionId, slot), { method: "PUT", body: JSON.stringify({ key }) }),
   deleteAppKey: (extensionId: string, slot: "run" | "test") =>
     call<unknown>(appKeyPath(extensionId, slot), { method: "DELETE" }),
+  /** 외부 기능 주소 덮어쓰기 (C7 §외부 확장 주소, ADR-0097) — 정의의 허용 호스트 밖이면 422. */
+  setExtensionAddress: (extensionId: string, baseUrl: string) =>
+    call<unknown>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}/address`, {
+      method: "PUT",
+      body: JSON.stringify({ base_url: baseUrl }),
+    }),
+  /** 덮어쓴 주소를 지운다 — 정의의 기본값으로 돌아간다. */
+  deleteExtensionAddress: (extensionId: string) =>
+    call<unknown>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}/address`, { method: "DELETE" }),
   /** CON-03 「셀렉터 등록」 (C5 `PUT /bot-uis/{id}/utility`, ADR-0094 §6). */
   setSelectorRegistration: (botUiId: string, on: boolean) =>
     call<unknown>(`/api/v1/bot-uis/${encodeURIComponent(botUiId)}/utility`, {
