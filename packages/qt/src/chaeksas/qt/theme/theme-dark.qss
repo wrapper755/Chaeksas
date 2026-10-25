@@ -38,6 +38,12 @@ QLabel, QCheckBox, QRadioButton { background-color: transparent; }
 QLabel#Secondary { color: #B4BBC6; }
 QLabel#Muted { color: #939CA9; }
 
+/* 글자의 뜻은 `role` 속성으로 준다 (스타일 가이드 §4-2) — 「빨간 글자로 이유」(U3)가 여기서 빨갛다. */
+QLabel[role="error"] { color: #FF9A8F; }
+QLabel[role="warning"] { color: #F5B65C; }
+QLabel[role="muted"] { color: #939CA9; }
+QLabel[role="h2"] { font-size: 20px; font-weight: 600; }
+
 QPushButton {
   background-color: #7AA2FF;
   color: #0F1115;

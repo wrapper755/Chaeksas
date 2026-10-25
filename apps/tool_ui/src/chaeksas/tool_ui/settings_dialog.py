@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from chaeksas.contracts import SCOPE_TOOL_UI, ConfigurationItem
 from chaeksas.core.extensions import ExtensionHost
+from chaeksas.qt.theme import set_role
 from chaeksas.tool_ui.credentials import SecretsUnavailable, ToolCredentials, extension_secret_env
 from chaeksas.tool_ui.settings import ToolSettings
 
@@ -65,7 +66,7 @@ class ToolSettingsDialog(QDialog):
             layout.addWidget(empty)
 
         self.error = QLabel("")
-        self.error.setProperty("role", "error")
+        set_role(self.error, "error")
         self.error.setWordWrap(True)
         layout.addWidget(self.error)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)

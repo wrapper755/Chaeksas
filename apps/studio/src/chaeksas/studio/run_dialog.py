@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts.bpmn_ext import Case
+from chaeksas.qt.theme import set_role
 from chaeksas.studio.runner import Plan, read_cases
 from chaeksas.studio.settings import Settings
 from chaeksas.studio.workspace import BpmProcess, Definition
@@ -125,7 +126,7 @@ class RunDialog(QDialog):
         self.case_note.setWordWrap(True)
         self.required = required_inputs(definition)
         self.needs_case = QLabel(needs_case_text(self.required) if self.required else "", self)
-        self.needs_case.setProperty("role", "error")
+        set_role(self.needs_case, "error")
         self.needs_case.setWordWrap(True)
         self.case_box.currentIndexChanged.connect(self._retell)
 
@@ -144,7 +145,7 @@ class RunDialog(QDialog):
             f"학습 안 된 AI 태스크가 있습니다: {', '.join(missing)}" if missing else "", self
         )
         reason.setVisible(bool(missing))
-        reason.setProperty("role", "error")
+        set_role(reason, "error")
         reason.setWordWrap(True)
 
         buttons = QDialogButtonBox(

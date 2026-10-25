@@ -577,6 +577,9 @@ class UiTaskEditor(QWidget):
         lines = [f"오류: {one}" for one in errors] + [f"경고: {one}" for one in warnings]
         self.warnings.setText("\n".join(lines))
         self.warnings.setProperty("role", "error" if errors else "")
+        # 스타일시트는 속성을 바꿔도 다시 보지 않는다 — 다시 칠해야 오류가 빨갛게 바뀐다 (스타일 가이드 §4-2).
+        self.warnings.style().unpolish(self.warnings)
+        self.warnings.style().polish(self.warnings)
         goal_mode = self.use_goal.isChecked()
         # 목표로 실행하면 스텝 표는 흐려진다 — 실행 때 앱이 세운 스텝을 쓴다 (STU-13 [G]).
         self.steps.setEnabled(not goal_mode)

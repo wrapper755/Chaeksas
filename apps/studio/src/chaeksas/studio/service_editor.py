@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3, SPACE_4
 from chaeksas.studio.service_catalog import Catalog, Operation, Usage, missing_required, stale_fields
 
@@ -97,7 +98,7 @@ class ServiceTaskEditor(QWidget):
         self.operation_box = QComboBox(self)
         self.operation_note = QLabel("", self)
         self.operation_note.setWordWrap(True)
-        self.operation_note.setProperty("role", "muted")
+        set_role(self.operation_note, "muted")
         self.modes_note = QLabel("", self)
         self.modes_note.setWordWrap(True)
 
@@ -126,11 +127,11 @@ class ServiceTaskEditor(QWidget):
         self.retry_box.setRange(0, 10)
         self.retry_note = QLabel("", self)
         self.retry_note.setWordWrap(True)
-        self.retry_note.setProperty("role", "muted")
+        set_role(self.retry_note, "muted")
 
         self.warning = QLabel("", self)
         self.warning.setWordWrap(True)
-        self.warning.setProperty("role", "warning")
+        set_role(self.warning, "warning")
 
         self._build_layout()
         self._wire()

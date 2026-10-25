@@ -372,3 +372,67 @@ def test_standard_buttons_speak_korean(app: Any, monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(QMessageBox, "exec", answer)
     assert ask_unsaved(None, "제목", "본문") == QMessageBox.StandardButton.Discard
     assert sorted(seen) == sorted(["저장", DISCARD_LABEL, "취소"])
+
+
+ROLE_SOURCES = ("apps", "packages", "extensions")
+
+
+def roles_in_code() -> set[str]:
+    """코드가 `set_role(…, "…")`(또는 `setProperty("role", "…")`)로 쓰는 글자 뜻들."""
+    import re  # noqa: PLC0415
+    from pathlib import Path  # noqa: PLC0415
+
+    root = Path(__file__).resolve().parent.parent
+    found: set[str] = set()
+    for top in ROLE_SOURCES:
+        for path in (root / top).rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            found |= set(re.findall(r'setProperty\(\s*"role",\s*"([a-z0-9_]+)"', text))
+            found |= set(re.findall(r'set_role\(\s*[\w.]+,\s*"([a-z0-9_]+)"', text))
+    return found
+
+
+def test_every_role_the_code_uses_has_a_rule() -> None:
+    """`role`을 적어 놓고 QSS에 규칙이 없으면 조용히 기본 글자다 — 「빨간 글자」가 검게 보였다."""
+    used = roles_in_code()
+    assert "error" in used, "찾는 규칙이 틀렸다 — error는 쓰는 곳이 여럿이다"
+    for theme in (THEME_LIGHT, THEME_DARK):
+        sheet = qss(theme)
+        missing = sorted(r for r in used if f'QLabel[role="{r}"]' not in sheet)
+        assert not missing, f"{theme}: 규칙이 없는 role {missing} (스타일 가이드 §4-2 표와 gen_tokens.py)"
+
+
+def test_an_error_label_is_drawn_in_the_error_color(app: Any) -> None:
+    from PySide6.QtGui import QColor, QPalette  # noqa: PLC0415
+    from PySide6.QtWidgets import QLabel  # noqa: PLC0415
+
+    apply_theme(app, choice=THEME_LIGHT)
+    plain, error = QLabel("보통"), QLabel("막는 까닭")
+    error.setProperty("role", "error")
+    for label in (plain, error):
+        label.ensurePolished()
+    wanted = QColor(tokens.colors(dark=False)["status.failed.fg"])
+    assert error.palette().color(QPalette.ColorRole.WindowText) == wanted
+    assert plain.palette().color(QPalette.ColorRole.WindowText) != wanted
+
+
+def test_a_role_given_after_the_label_is_shown_still_colors_it(app: Any) -> None:
+    """스타일시트는 처음 보일 때 한 번 입힌다 — `set_role`이 다시 칠해야 늦게 준 뜻도 보인다.
+
+    실행 창의 「학습 안 된 AI 태스크」 줄이 `setVisible` 뒤에 `role`을 받아 검게 남았다.
+    """
+    from PySide6.QtGui import QColor, QPalette  # noqa: PLC0415
+    from PySide6.QtWidgets import QLabel, QWidget  # noqa: PLC0415
+
+    from chaeksas.qt.theme import set_role  # noqa: PLC0415
+
+    apply_theme(app, choice=THEME_LIGHT)
+    holder = QWidget()
+    late = QLabel("늦게 받은 뜻", holder)
+    holder.show()
+    set_role(late, "error")
+    wanted = QColor(tokens.colors(dark=False)["status.failed.fg"])
+    assert late.palette().color(QPalette.ColorRole.WindowText) == wanted
+    set_role(late, "")  # 뜻을 거두면 기본 글자로 돌아간다
+    assert late.palette().color(QPalette.ColorRole.WindowText) != wanted
+    holder.close()
