@@ -439,6 +439,16 @@ class Workspace:
             return self.read(folder, group)
         return found
 
+    def replace_entry(self, process: BpmProcess, source: Path) -> BpmProcess:
+        """진입 정의의 **내용만** 바깥 파일로 바꾼다 (STU-05 「기존 것을 바꾸기」).
+
+        파일 이름은 기존 진입 이름 그대로다 — 기록·케이스가 그 이름을 가리킨다. 이름·버전·
+        케이스는 건드리지 않는다. **쓰기 전에 읽어 본다** — 읽지 못하면 아무것도 바뀌지 않는다.
+        """
+        text, _ = _readable_definition(source)
+        self.save_definition(process, process.entry, text)
+        return self.read(process.folder, process.group)
+
     def save_definition(self, process: BpmProcess, file_name: str, xml: str) -> Path:
         """정의 하나를 쓴다. 파일은 늘 UTF-8이다 (Windows 기본 인코딩은 cp949)."""
         if not file_name.endswith(".bpmn"):

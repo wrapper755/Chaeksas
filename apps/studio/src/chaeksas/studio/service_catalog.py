@@ -141,9 +141,13 @@ class Catalog:
         return bool(self.apps)
 
 
+#: Center 상태 → `status_map` 「서비스 앱」의 표기. **이 표에 있는 표기만 쓴다** (스타일 가이드 §2-2).
+STATUS_LABEL = {"ok": "정상", "degraded": "저하", "unreachable": "응답 없음"}
+
+
 def _status_text(status: str) -> str:
-    """상태 표기 — `docs/07-style-guide.md`의 말과 같게 (「정상」·「응답 없음」)."""
-    return {"ok": "정상", "degraded": "일부 이상", "unreachable": "응답 없음"}.get(status, "알 수 없음")
+    """상태 표기. 모르는 값(`unknown`·`n/a`)은 「확인 전」이다 — 「받지 못했다」로 읽히지 않게."""
+    return STATUS_LABEL.get(status, "확인 전")
 
 
 def _fields_of(schema: Mapping[str, Any] | None) -> tuple[Field_, ...]:
@@ -199,8 +203,11 @@ def _from_service_app(found: ServiceAppResource) -> App:
     )
 
 
-def _from_external(found: ExtensionManifest) -> App | None:
-    """외부 확장의 어댑터 작업들 (C13 §4). 어댑터가 없으면 고를 거리가 없다."""
+def _from_external(found: ExtensionManifest, status: str = UNKNOWN) -> App | None:
+    """외부 확장의 어댑터 작업들 (C13 §4). 어댑터가 없으면 고를 거리가 없다.
+
+    `status`는 Center가 C7에 실은 것이다 — 정의의 어댑터 `health`로 Center가 본다.
+    """
     adapter = found.adapter
     if adapter is None:
         return None
@@ -221,8 +228,7 @@ def _from_external(found: ExtensionManifest) -> App | None:
         app_id=found.id,
         name=found.name or found.id,
         kind=KIND_EXTERNAL,
-        # 외부 앱은 C11이 아니라 `/healthz`가 없다 — Center가 상태를 모른다 (C7).
-        status=UNKNOWN,
+        status=status,
         tier=found.tier,
         operations=operations,
         # 외부 앱은 확장 그 자체다 — 관리 콘솔은 우리 것이 아니라 주소를 모른다 (C13 E1).
@@ -237,10 +243,19 @@ def build(
     *,
     problems: Iterable[str] = (),
     bot_outputs: Mapping[str, tuple[str, ...]] | None = None,
+    external_status: Mapping[str, str] | None = None,
 ) -> Catalog:
-    """고를 거리 한 벌 — 앱 id 순이다 (콤보가 흔들리지 않게)."""
+    """고를 거리 한 벌 — 앱 id 순이다 (콤보가 흔들리지 않게).
+
+    `external_status`는 외부 확장 id → Center가 C7에 실은 상태다. 없는 것은 「확인 전」이다.
+    """
+    status = external_status or {}
     apps = [_from_service_app(one) for one in service_apps]
-    apps += [made for one in externals if (made := _from_external(one)) is not None]
+    apps += [
+        made
+        for one in externals
+        if (made := _from_external(one, status.get(one.id, UNKNOWN))) is not None
+    ]
     return Catalog(
         apps=tuple(sorted(apps, key=lambda one: one.app_id)),
         problems=tuple(problems),
@@ -276,6 +291,7 @@ def from_center(reader: Any) -> Catalog:
     problems: list[str] = []
     service_apps: list[ServiceAppResource] = []
     externals: list[ExtensionManifest] = []
+    external_status: dict[str, str] = {}
     if reader is None:
         return Catalog(problems=("Center 주소·Studio 키가 설정되지 않았습니다 (STU-10)",))
     try:
@@ -295,11 +311,18 @@ def from_center(reader: Any) -> Catalog:
                 continue
             try:
                 externals.append(ExtensionManifest.model_validate(one.definition))
+                external_status[one.id] = one.status
             except ValueError:
                 problems.append(f"{one.id}: 정의를 읽지 못했습니다")
     except CenterUnreachable as e:
         problems.append(f"외부 확장 목록을 받지 못했습니다 — {e}")
-    return build(service_apps, externals, problems=problems, bot_outputs=bot_outputs)
+    return build(
+        service_apps,
+        externals,
+        problems=problems,
+        bot_outputs=bot_outputs,
+        external_status=external_status,
+    )
 
 
 @dataclass
