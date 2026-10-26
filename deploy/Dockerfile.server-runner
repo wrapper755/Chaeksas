@@ -1,0 +1,52 @@
+# 서버 실행기 컨테이너 — 실행 위치 「서버」 BPM 프로세스를 돌린다 (C12, ADR-0015).
+# `Dockerfile.center`와 같은 뼈대다. 다른 것은 설치하는 멤버·진입점, 그리고 **들어오는 포트가 없다**는 것이다
+# (Center로 하트비트만 보낸다).
+FROM python:3.12-slim AS base
+
+COPY --from=ghcr.io/astral-sh/uv:0.9.9 /uv /usr/local/bin/uv
+
+ENV UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONUTF8=1 \
+    # **이미지의 Python을 쓴다** (Dockerfile.center와 같은 이유 — `/root`는 0700이다).
+    UV_PYTHON_PREFERENCE=only-system \
+    UV_PYTHON_DOWNLOADS=never
+
+WORKDIR /app
+
+COPY pyproject.toml uv.lock .python-version ./
+COPY packages/contracts/pyproject.toml packages/contracts/
+COPY packages/extension_api/pyproject.toml packages/extension_api/
+COPY packages/core/pyproject.toml packages/core/
+COPY packages/llm/pyproject.toml packages/llm/
+COPY packages/qt/pyproject.toml packages/qt/
+COPY packages/service_kit/pyproject.toml packages/service_kit/
+COPY apps/center/pyproject.toml apps/center/
+COPY apps/studio/pyproject.toml apps/studio/
+COPY apps/bot_ui/pyproject.toml apps/bot_ui/
+COPY apps/server_runner/pyproject.toml apps/server_runner/
+COPY extensions/ui_automation/pyproject.toml extensions/ui_automation/
+
+# 실행기가 쓰는 것만 (Qt·PySide6는 들어가지 않는다). 내장 확장 ui-automation은 태스크가 PC 전용이라
+# 넣지 않는다 — 서버 Bot에는 UI 태스크를 넣을 수 없다 (ADR-0015).
+RUN uv sync --frozen --no-install-workspace --package chaeksas-server-runner
+
+COPY packages/ packages/
+COPY apps/server_runner/ apps/server_runner/
+RUN uv sync --frozen --package chaeksas-server-runner
+
+# 데이터(배포·실행 기록·기다리는 실행 `state.sqlite3`)와 비밀(받은 Center API 키·서비스 앱 키)은
+# **볼륨 둘로 가른다** — 데이터를 백업·복사해도 키가 따라 나가지 않게 (ADR-0100).
+ENV CHK_SERVER_RUNNER__DATA_DIR=/data \
+    CHK_SERVER_RUNNER__SECRETS_DIR=/secrets
+VOLUME ["/data", "/secrets"]
+
+# 기계 id는 **데이터 볼륨에** 둔다 — 이미지에 `/etc/machine-id`가 있으면 그 이미지로 뜬 실행기가 모두 같은
+# id를 갖고(C12 키 묶기가 둘째를 409로 막는다), 볼륨에 두면 컨테이너를 다시 만들어도 같은 실행기다.
+RUN rm -f /etc/machine-id /var/lib/dbus/machine-id \
+ && useradd --create-home --uid 10001 chaeksas \
+ && mkdir -p /data /secrets && chown -R chaeksas /data /app && chown chaeksas /secrets && chmod 0700 /secrets
+USER chaeksas
+
+CMD ["uv", "run", "--frozen", "--package", "chaeksas-server-runner", "chk-server-runner"]

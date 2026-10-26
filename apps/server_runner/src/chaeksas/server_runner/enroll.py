@@ -29,6 +29,7 @@ from chaeksas.contracts.server_runner import ServerRunnerEnrollRequest
 from chaeksas.server_runner.agent import Agent
 from chaeksas.server_runner.center_client import CenterProblem, Unreachable
 from chaeksas.server_runner.credentials import ENV_CENTER_API_KEY, SecretsUnavailable
+from chaeksas.server_runner.secret_file import ENV_SECRETS_DIR
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +37,8 @@ STATE_FILE = "enrollment.json"
 
 NO_SECRETS = (
     "Center API 키가 없고 OS 비밀 저장소도 없습니다 — 받은 키를 둘 곳이 없어 등록 요청을 보내지 "
-    f"않습니다. 환경변수 {ENV_CENTER_API_KEY}로 「서버 실행기용」 키를 주세요"
+    f"않습니다. 비밀 폴더를 {ENV_SECRETS_DIR}로 적어 주거나(컨테이너는 볼륨) "
+    f"환경변수 {ENV_CENTER_API_KEY}로 「서버 실행기용」 키를 주세요"
 )
 
 
