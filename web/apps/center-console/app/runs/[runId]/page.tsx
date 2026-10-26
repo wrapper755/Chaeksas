@@ -5,7 +5,7 @@ import type { RunEvent } from "@chaeksas/api-types/c3-run-event";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { FINISHED, type ResumeRow, duration, resumes, waitTotals } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { LABEL, seconds, time, where } from "../page";
@@ -307,7 +307,7 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/runs">
+    <Shell mode={found.mode} actor={found.actor} current="/runs">
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-h1 font-bold font-mono">{decodeURIComponent(runId)}</h1>

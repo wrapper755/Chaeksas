@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, ErrorBanner, StatusBadge } from "@chaeksas/ui";
-import { CENTER_PUBLIC_URL, CenterError, session } from "@/lib/center";
+import { CenterError, session } from "@/lib/center";
 import type { AddressView, FeatureRow } from "@/lib/features";
 import { Shell } from "@/components/Shell";
 import { putAppKey, resetExtensionAddress, setExtensionAddress, setServiceAppUrl } from "@/app/actions";
@@ -55,7 +55,7 @@ export default async function FeaturePage({
   const admin = found.mode === "admin";
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/resources">
+    <Shell mode={found.mode} actor={found.actor} current="/resources">
       <p className="mb-2 text-body-sm">
         <Link className="underline" href="/resources">
           리소스

@@ -4,7 +4,7 @@ import { Button, ErrorBanner } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { createDeployment } from "@/app/actions";
 
@@ -51,7 +51,7 @@ export default async function NewDeploymentPage({
   const pcs = botUis.filter((one) => !one.disabled).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/deployments">
+    <Shell mode={found.mode} actor={found.actor} current="/deployments">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">새 배포</h1>
         <p className="text-body text-text-secondary">

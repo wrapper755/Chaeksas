@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import type { Route } from "next";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { PackageActions } from "@/components/PackageActions";
+import { ServerRunners } from "@/components/ServerRunners";
 import { STATUS_LABEL, packageHref, time } from "@/app/packages/page";
 import { DeleteVersion } from "./tools";
 import {
@@ -15,8 +17,10 @@ import {
   deployedPcs,
   keyRefsOf,
   percent,
+  placeOf,
   summarize,
   type BotRow,
+  type Place,
   type RunFields,
 } from "@/lib/summary";
 
@@ -38,8 +42,11 @@ export type { BotRow, RunFields };
  */
 
 
-/** 실행 위치 (C1 `run_location`). */
-const PLACE: Record<string, string> = { pc: "PC", server: "서버" };
+/** 탭 — 실행 위치 (C1 `run_location`). 서버가 먼저다 (서버 우선, ADR-0016). */
+const TABS: Array<{ place: Place; label: string }> = [
+  { place: "server", label: "서버" },
+  { place: "pc", label: "PC (Bot UI)" },
+];
 
 
 /**
@@ -85,9 +92,10 @@ function Rate({ part, whole, token }: { part: number; whole: number; token: stri
 
 
 
-export default async function BotsPage() {
+export default async function BotsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const found = await session();
   if (!found) redirect("/login");
+  const place: Place = (await searchParams).tab === "pc" ? "pc" : "server";
 
   let rows: BotRow[] = [];
   let failure: string | null = null;
@@ -140,6 +148,11 @@ export default async function BotsPage() {
   }
 
   const bots = new Set(rows.map((row) => row.id)).size;
+  const versions = rows.length;
+  const counts = { server: 0, pc: 0 };
+  for (const row of rows) counts[placeOf(row.run_location)] += 1;
+  // 탭은 **실행 위치로** 가른다 — 그래서 표에 「실행 위치」 열이 없다 (CON-02).
+  rows = rows.filter((row) => placeOf(row.run_location) === place);
   const notReady = rows.filter((row) => row.blocked > 0);
   const incomplete = rows.filter((row) => row.missing.length > 0);
 
@@ -155,12 +168,6 @@ export default async function BotsPage() {
       ),
     },
     { key: "version", header: "버전", width: "12ch", mono: true },
-    {
-      key: "run_location",
-      header: "실행 위치",
-      width: "10ch",
-      cell: (row) => (row.run_location ? PLACE[row.run_location] ?? row.run_location : "—"),
-    },
     {
       key: "status",
       header: "상태",
@@ -260,20 +267,40 @@ export default async function BotsPage() {
       : []),
   ];
 
+  // 「배포된 Bot UI」는 PC Bot의 것이다 — 서버 Bot은 PC에 배포하지 않는다.
+  const shown = place === "pc" ? columns : columns.filter((column) => column.key !== "pcs");
+
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/bots">
+    <Shell mode={found.mode} actor={found.actor} current="/bots">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">Bot 현황</h1>
         <p className="text-body text-text-secondary">
-          Bot {bots}개, 버전 {rows.length}개 · 준비도는 최근 {SAMPLE}회 실행 기준
+          Bot {bots}개, 버전 {versions}개 · 준비도는 최근 {SAMPLE}회 실행 기준
         </p>
       </header>
+
+      <nav className="mb-4 flex flex-wrap gap-2" aria-label="실행 위치">
+        {TABS.map((one) => (
+          <Link
+            key={one.place}
+            href={`/bots?tab=${one.place}` as Route}
+            aria-current={place === one.place ? "page" : undefined}
+            className={
+              place === one.place
+                ? "border border-border-strong bg-bg-subtle px-3 py-1 text-body"
+                : "border border-border-default px-3 py-1 text-body text-text-secondary"
+            }
+          >
+            {one.label} ({counts[one.place]})
+          </Link>
+        ))}
+      </nav>
 
       {failure ? (
         <ErrorBanner message={failure} />
       ) : rows.length === 0 ? (
         <EmptyState
-          title="올라온 Bot이 없습니다."
+          title={place === "server" ? "올라온 서버 Bot이 없습니다." : "올라온 PC Bot이 없습니다."}
           hint="Studio에서 「Center로 올리기」로 올리세요."
         />
       ) : (
@@ -294,7 +321,7 @@ export default async function BotsPage() {
           ) : null}
 
           <DataTable
-            columns={columns}
+            columns={shown}
             rows={rows}
             rowKey={(row) => `${row.id}@${row.version}`}
             caption="Bot·버전별 준비도"
@@ -314,6 +341,13 @@ export default async function BotsPage() {
           )}
         </div>
       )}
+
+      {/* 서버 Bot이 도는 곳 — 서버 실행기 목록·승인 대기·대기열 (옛 CON-12 목록). */}
+      {place === "server" ? (
+        <div className="mt-8">
+          <ServerRunners admin={found.mode === "admin"} />
+        </div>
+      ) : null}
     </Shell>
   );
 }

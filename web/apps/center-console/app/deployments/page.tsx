@@ -3,7 +3,7 @@ import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { fullTime } from "@/app/bot-uis/page";
 import { RevokeDeployment } from "./tools";
@@ -126,7 +126,7 @@ export default async function DeploymentsPage({
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/deployments">
+    <Shell mode={found.mode} actor={found.actor} current="/deployments">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-h1 font-bold">배포</h1>

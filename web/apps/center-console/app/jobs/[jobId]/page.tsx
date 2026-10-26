@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { ErrorBanner, StatusBadge } from "@chaeksas/ui";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { CancelJob } from "../cancel";
 import {
@@ -61,7 +61,7 @@ export default async function JobPage({
   const withoutInputs = job ? Object.fromEntries(Object.entries(job).filter(([key]) => key !== "inputs")) : {};
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/jobs">
+    <Shell mode={found.mode} actor={found.actor} current="/jobs">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">작업 {job?.job_id ?? ""}</h1>
         <p className="text-body text-text-secondary">

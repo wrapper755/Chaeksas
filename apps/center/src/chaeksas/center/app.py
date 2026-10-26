@@ -245,6 +245,15 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         assert found is not None
         return found.info(now=now_iso())
 
+    @app.post(f"{API}/center-keys/{{key_id}}/purge", status_code=204)
+    def purge_center_key(request: Request, key_id: str) -> None:
+        """삭제 (CON-11, ADR-0095). **폐기된 키만** — 폐기 → 삭제 두 걸음이다."""
+        require_admin(authenticate(request))
+        if keys.get(app.state.store, key_id) is None:
+            raise ApiError(404, "not_found", f"키 {key_id}가 없다")
+        if not keys.purge(app.state.store, key_id):
+            raise ApiError(409, "not_revoked", "폐기된 키만 지울 수 있다 — 먼저 폐기하세요")
+
     @app.post(f"{API}/center-keys/{{key_id}}/unbind")
     def unbind_center_key(request: Request, key_id: str) -> Any:
         """PC 묶음 풀기 (CON-11). PC를 다시 설치해 `machine_id`가 바뀐 경우."""

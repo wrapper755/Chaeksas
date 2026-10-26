@@ -345,6 +345,8 @@ export const center = {
     call<unknown>(`/api/v1/virtual-workers/${encodeURIComponent(id)}`, { method: "DELETE" }),
   unbindCenterKey: (keyId: string) =>
     call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}/unbind`, { method: "POST" }),
+  /** 삭제 (C7 `purge`, ADR-0095) — **폐기된 키만**. 아니면 409 `not_revoked`. */
+  purgeCenterKey: (keyId: string) => call<void>(`/api/v1/center-keys/${keyId}/purge`, { method: "POST" }),
 
   /**
    * 등록 요청 (C5 §등록 승인, ADR-0092) — CON-03·CON-12 「승인 대기」. 기본은 대기 중인 것만.

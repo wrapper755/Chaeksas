@@ -58,6 +58,8 @@ export interface ConfirmDialogProps {
   /** 제목 — 동사로 묻는다 (「키를 폐기할까요?」). */
   title: string;
   description?: string;
+  /** 무엇에 하는지 — 사람이 고른 것이 맞는지 한 번 더 보게 한다 (예: 키의 이름·앞자리). */
+  children?: ReactNode;
   /** 되돌릴 수 없는 동작의 단추 글자 (「폐기」). */
   confirmLabel: string;
   danger?: boolean;
@@ -73,6 +75,7 @@ export function ConfirmDialog({
   open,
   title,
   description,
+  children,
   confirmLabel,
   danger = true,
   onConfirm,
@@ -95,6 +98,8 @@ export function ConfirmDialog({
           </Button>
         </>
       }
-    />
+    >
+      {children}
+    </Dialog>
   );
 }

@@ -5,7 +5,7 @@ import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ManifestInput } from "@chaeksas/api-types/c5-package-info";
 import { fromCaller } from "@/lib/inputs";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { createJob } from "@/app/actions";
 
@@ -125,7 +125,7 @@ export default async function NewJobPage({
   }
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/jobs">
+    <Shell mode={found.mode} actor={found.actor} current="/jobs">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">새 작업</h1>
         <p className="text-body text-text-secondary">

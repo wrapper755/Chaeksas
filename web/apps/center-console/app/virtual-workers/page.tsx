@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { VirtualWorkerInfo } from "@chaeksas/api-types/c5-virtual-worker-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { createVirtualWorker } from "@/app/actions";
 
@@ -60,7 +60,7 @@ export default async function VirtualWorkersPage({
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/virtual-workers">
+    <Shell mode={found.mode} actor={found.actor} current="/virtual-workers">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">가상 직원</h1>
         <p className="text-body text-text-secondary">
