@@ -327,9 +327,14 @@ class CaseRun(QObject):
         record = RunLog(run_id=log_file.stem, path=log_file)
         record.sinks.append(self._on_event)
         try:
-            inputs = resolve_inputs(
+            given = resolve_inputs(
                 case.inputs if case else {}, now=self._started, receiver=self.receiver
             )
+            # **값 출처로 가른다** (ADR-0099) — 현장에서는 Center가 넣는 값(가상 직원)을 시험에서는
+            # 케이스가 같은 「입력 변수」에 적는다. 엔진은 부르는 쪽 값과 따로 받는다.
+            not_caller = {decl.name for decl in definition.process.info.inputs if not decl.from_caller}
+            inputs = {name: value for name, value in given.items() if name not in not_caller}
+            sourced = {name: value for name, value in given.items() if name in not_caller}
             self.run = self.engine.start(
                 definition.process,
                 run_id=record.run_id,
@@ -344,8 +349,7 @@ class CaseRun(QObject):
                 bpm_process_id=self.plan.process.id,
                 # C3 `case_id` — 어느 케이스로 돌렸나 (CON-01이 보인다). 케이스 이름이 그 id다.
                 case_id=case.name if case else None,
-                # 가상 직원 신원도 케이스가 적는다 (ADR-0098) — 현장에서는 Center가 채운다.
-                virtual_worker=case.virtual_worker if case else None,
+                sourced=sourced,
             )
         except EngineError as e:
             self._finish(Outcome(case=case.name if case else "", verdict=ERROR, detail=str(e)))

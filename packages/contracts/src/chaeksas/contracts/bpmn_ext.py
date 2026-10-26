@@ -126,10 +126,18 @@ class InputDecl(ContractModel):
     required: bool = False
     description: str | None = None
     default: Any = None
+    #: **값 출처** (ADR-0099) — 비우면 부르는 쪽(`caller`). `virtual_worker.*`면 Center가 넣고
+    #: 부르는 쪽은 줄 수 없다. 열린 문자열이고 아는 값은 `INPUT_SOURCE_TYPES`다 (B8).
+    source: str | None = None
 
     @property
     def has_default(self) -> bool:
         return self.default is not None
+
+    @property
+    def from_caller(self) -> bool:
+        """부르는 쪽이 넣는 입력인가 — 출처를 비웠거나 `caller`다."""
+        return self.source in (None, INPUT_SOURCE_CALLER)
 
 
 class Limits(ContractModel):
@@ -146,29 +154,27 @@ class DesktopEnv(ContractModel):
     app: str | None = None  # 띄울 앱 이름
 
 
+#: 입력의 값 출처 (C14 「입력의 값 출처」, ADR-0099) — 비우면 이것이다.
+INPUT_SOURCE_CALLER = "caller"
+#: 아는 출처 → 그 출처가 주는 값의 타입 (B8이 선언한 타입과 맞춰 본다). `caller`는 선언한 대로다.
+INPUT_SOURCE_TYPES = {
+    "virtual_worker.id": "string",
+    "virtual_worker.name": "string",
+    "virtual_worker.supervisors": "list",
+}
+
+
 class VirtualWorkerIdentity(ContractModel):
     """**가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).
 
-    Center가 서버 작업을 내려줄 때 붙이고(C12 `JobDispatch.virtual_worker`) Studio는 케이스가
-    적는다. 엔진이 `chk:process.virtual_worker_as`가 고른 변수에 넣는다.
+    Center가 서버 작업을 내려줄 때 붙인다(C12 `JobDispatch.virtual_worker`, ADR-0099). 실행하는
+    쪽이 출처가 `virtual_worker.*`인 입력의 값으로 푼다 (`core.engine.sourced_inputs`).
     """
 
     id: str
     name: str
     #: 감독자 이름 — Center가 저장할 때 정규화한 그대로 (ADR-0080 `normalize_assignees`).
     supervisors: list[str] = Field(default_factory=list)
-
-
-class VirtualWorkerAs(ContractModel):
-    """`chk:process.virtual_worker_as` — 신원의 칸마다 **들어갈 변수 이름** (ADR-0098). 모두 선택."""
-
-    id: str | None = None
-    name: str | None = None
-    supervisors: str | None = None
-
-    def names(self) -> dict[str, str]:
-        """`{신원 칸: 변수 이름}` — 적은 것만."""
-        return {key: value for key, value in self.model_dump().items() if value}
 
 
 class ProcessInfo(ContractModel):
@@ -179,15 +185,9 @@ class ProcessInfo(ContractModel):
     extensions: list[ExtensionNeed] = Field(default_factory=list)
     inputs: list[InputDecl] = Field(default_factory=list)
     outputs: list[str] = Field(default_factory=list)
-    #: **가상 직원 신원**이 들어갈 변수 (ADR-0098). 채우는 것은 Center — 입력으로는 줄 수 없다.
-    virtual_worker_as: VirtualWorkerAs | None = None
 
     def input(self, name: str) -> InputDecl | None:
         return next((i for i in self.inputs if i.name == name), None)
-
-    def identity_vars(self) -> set[str]:
-        """신원이 만드는 변수 이름들 — B11이 시작 자리의 출처로 센다."""
-        return set(self.virtual_worker_as.names().values()) if self.virtual_worker_as else set()
 
 
 class Defaults(ContractModel):
@@ -740,8 +740,6 @@ class Case(ContractModel):
     delegations: dict[str, dict[str, Any]] = Field(default_factory=dict)
     #: 노드 id → **답한 사람** (ADR-0096). 적지 않은 결재는 `CASE_ANSWERER`가 답한 것이 된다.
     answered_by: dict[str, str] = Field(default_factory=dict)
-    #: **가상 직원 신원** (ADR-0098) — 현장에서는 Center가 채운다. 적지 않으면 신원 변수는 `None`이다.
-    virtual_worker: VirtualWorkerIdentity | None = None
     #: 자동 응답을 쓰지 않고 실제 창을 띄운다 (폼을 사람이 보는지 확인).
     manual: bool = False
 
@@ -1126,8 +1124,7 @@ def available_vars(
         return out
 
     produced = {n.id: made(n) for n in nodes}
-    # 신원 변수도 시작 자리에 있다 — Center가 채운다 (ADR-0098).
-    declared = {i.name for i in process.info.inputs} | process.info.identity_vars()
+    declared = {i.name for i in process.info.inputs}
     #: 하위 프로세스 → 그 안의 노드 (안에서 만든 변수를 **바깥으로 내보내려고**).
     inside = {n.id: list(n.children) for n in nodes if n.children}
     universe = set(declared)
@@ -1211,7 +1208,6 @@ def _check_b1_b2(process: BpmnProcess) -> list[Violation]:
     out: list[Violation] = []
     for name, reason in process.bad_props.items():
         out.append(_error("B1", f"chk:{name}이 모델과 맞지 않는다 ({reason})", items=[process.id]))
-    out.extend(_check_identity(process.info))
     for node in process.all_nodes():
         for name, reason in node.bad_props.items():
             out.append(_error("B1", f"{node.id}의 chk:{name}이 모델과 맞지 않는다 ({reason})"))
@@ -1227,26 +1223,6 @@ def _check_b1_b2(process: BpmnProcess) -> list[Violation]:
             ]
             if bad:
                 out.append(_error("B2", f"{node.id}의 answered_by_as·answered_via_as가 변수 이름이 아니다", items=bad))
-    return out
-
-
-def _check_identity(info: ProcessInfo) -> list[Violation]:
-    """B2 — 신원 변수는 변수 이름이고 **선언한 입력과 겹치지 않는다** (ADR-0098).
-
-    겹치면 부르는 쪽이 입력으로 신원을 지어낼 길이 생긴다 — 신원은 Center만 채운다.
-    """
-    if info.virtual_worker_as is None:
-        return []
-    names = info.virtual_worker_as.names()
-    out: list[Violation] = []
-    bad = [name for name in names.values() if not is_var_name(name)]
-    if bad:
-        out.append(_error("B2", "virtual_worker_as에 변수 이름이 아닌 것이 있다", items=bad))
-    clash = sorted(set(names.values()) & {decl.name for decl in info.inputs})
-    if clash:
-        out.append(
-            _error("B2", "virtual_worker_as의 변수가 선언한 입력과 겹친다 — 신원은 입력으로 줄 수 없다", items=clash)
-        )
     return out
 
 
@@ -1387,6 +1363,16 @@ def _check_b8(process: BpmnProcess) -> list[Violation]:
     for decl in process.info.inputs:
         if decl.type not in VALUE_TYPES:
             out.append(_error("B8", f"입력 {decl.name}의 타입을 모른다: {decl.type}", items=sorted(VALUE_TYPES)))
+        if decl.from_caller:
+            continue
+        # **값 출처** (ADR-0099) — 아는 출처이고 그 출처가 주는 타입과 맞아야 한다.
+        wanted = INPUT_SOURCE_TYPES.get(str(decl.source))
+        if wanted is None:
+            out.append(
+                _error("B8", f"입력 {decl.name}의 값 출처를 모른다: {decl.source}", items=sorted(INPUT_SOURCE_TYPES))
+            )
+        elif decl.type != wanted:
+            out.append(_error("B8", f"입력 {decl.name}은 {decl.source}라 타입이 {wanted}여야 한다 (지금 {decl.type})"))
     for node in process.all_nodes():
         ai: AiTask | None = node.prop("aiTask")
         if ai is None:

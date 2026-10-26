@@ -268,38 +268,36 @@ def test_other_keys_still_cannot_read_virtual_workers(center: TestClient) -> Non
     assert refused.status_code == 403
 
 
-def test_one_intake_bot_belongs_to_one_virtual_worker(center: TestClient) -> None:
-    """그 실행에 실을 **신원이 하나**여야 한다 — 둘째 가상 직원은 같은 접수 Bot을 묶지 못한다."""
+def test_one_intake_bot_is_shared_by_many_virtual_workers(center: TestClient, store: Store) -> None:
+    """**접수 Bot 하나를 여러 가상 직원이 쓴다** (ADR-0099) — 어느 쪽 일인지는 작업이 id로 말한다."""
+    from chaeksas.center.api.virtual_workers import pick  # noqa: PLC0415
+    from chaeksas.center.errors import ApiError  # noqa: PLC0415
+
     approved(center, bot=INTAKE, bpmn=GATED)
     assert register(center).status_code == 201
-    taken = register(center, id="sales-intake", name="영업 가상 직원")
-    assert taken.status_code == 409 and taken.json()["code"] == "intake_in_use"
-    # 자기 자신을 다시 적는 것은 막지 않는다 (바꾸기).
-    same = center.put("/api/v1/virtual-workers/finance-intake",
-                      json={"name": "재무", "supervisors": ["이감독"], "intake": INTAKE}, headers=ADMIN)
-    assert same.status_code == 200, same.text
+    assert pick(store, bot=INTAKE, requested=None) == "finance-intake", "하나뿐이면 적지 않아도 그것이다"
+    shared = register(center, id="sales-intake", name="영업 가상 직원", supervisors=["박감독"])
+    assert shared.status_code == 201, shared.text
+    assert pick(store, bot=INTAKE, requested=None) is None, "여럿인데 고르지 않으면 조용히 고르지 않는다"
+    assert pick(store, bot=INTAKE, requested="sales-intake") == "sales-intake"
+    for wrong in ("nobody", "finance-intake"):
+        with pytest.raises(ApiError) as caught:
+            pick(store, bot="someone.else" if wrong == "finance-intake" else INTAKE, requested=wrong)
+        assert caught.value.code == "virtual_worker_mismatch"
 
 
 def test_the_identity_is_read_from_the_registration(center: TestClient, store: Store) -> None:
-    """Center가 서버 작업을 내려줄 때 붙이는 신원 — **저장하지 않고** 그때 등록에서 읽는다."""
+    """Center가 서버 작업을 내려줄 때 붙이는 값 — **저장하지 않고** 그때 등록에서 읽는다."""
     from chaeksas.center.api.virtual_workers import identity_of  # noqa: PLC0415
 
     approved(center, bot=INTAKE, bpmn=GATED)
-    assert identity_of(store, INTAKE) is None, "묶이기 전에는 신원이 없다"
+    assert identity_of(store, "finance-intake") is None, "묶이기 전에는 없다"
+    assert identity_of(store, None) is None
     register(center)
-    found = identity_of(store, INTAKE)
+    found = identity_of(store, "finance-intake")
     assert found is not None
     assert (found.id, found.name, found.supervisors) == ("finance-intake", "재무 가상 직원", ["김감독"])
     center.put("/api/v1/virtual-workers/finance-intake",
                json={"name": "재무", "supervisors": ["이감독"], "intake": INTAKE, "state": "stopped"}, headers=ADMIN)
-    changed = identity_of(store, INTAKE)
+    changed = identity_of(store, "finance-intake")
     assert changed is not None and changed.supervisors == ["이감독"], "감독자를 바꾸면 다음 작업부터 맞는다"
-    assert identity_of(store, "someone.else") is None
-    # 옛 저장소에 둘이 있으면 고를 수 없다 — 아무것도 싣지 않는다.
-    with store.tx() as cur:
-        cur.execute(
-            "INSERT INTO virtual_workers (id, name, supervisors_json, intake, state, created_at, updated_at)"
-            " VALUES ('twin', '쌍둥이', '[]', ?, 'active', ?, ?)",
-            (INTAKE, AT, AT),
-        )
-    assert identity_of(store, INTAKE) is None

@@ -143,7 +143,7 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 | `server_time`, `next_heartbeat_s` | |
 | `deployments[]` | `target.type=server_runner`이고 `id`가 이 실행기 또는 `"*"`인 활성 배포 봉투 (C2) |
 | `admin_keys` | 바뀌었을 때만 |
-| `jobs[]` | **빈자리만큼만** 싣는다. C4 JobDispatch와 같은 모양. 그 Bot이 **가상 직원의 접수 Bot**이면 `virtual_worker`(`{id, name, supervisors}`)를 붙인다 — Center가 내려줄 때 등록에서 읽어 붙이고 저장하지 않는다. 실행기는 엔진에 넘겨 그림의 `chk:process.virtual_worker_as` 변수에 넣는다 (C14, [ADR-0098](../decisions/0098-virtual-worker-identity.md)) |
+| `jobs[]` | **빈자리만큼만** 싣는다. C4 JobDispatch와 같은 모양. 작업에 가상 직원이 있으면(C5 `virtual_worker`) `virtual_worker`(`{id, name, supervisors}`)를 붙인다 — Center가 내려줄 때 등록에서 읽어 붙이고 값은 저장하지 않는다. 실행기는 엔진에 넘겨 그림이 값 출처로 선언한 입력에 넣는다 (C14, [ADR-0099](../decisions/0099-input-value-source.md)) |
 | `cancel_jobs[]` | |
 | `approvals[]` | 답이 정해진 결재. 기다리던 실행이 이어 간다 |
 | `messages[]` | `{message_id, name, correlation?, payload, received_at}` — **기다리는 실행에 넣을 것만** 내려온다. 메시지 시작은 Center가 작업으로 바꿔 `jobs[]`로 보낸다 (§메시지) |
@@ -186,6 +186,7 @@ C4 §서비스 앱 키 전달과 **같은 모양·같은 봉함·같은 ack**다
 | `correlation` | 기다리는 실행을 찾는 키 (예: 주문 번호). 없으면 메시지 시작만 |
 | `payload` | object |
 | `idempotency_key` | C5와 같은 규칙 |
+| `virtual_worker` | **메시지 시작**으로 만들 작업의 가상 직원 id — C5 `JobCreateRequest.virtual_worker`와 같은 규칙이다 (ADR-0099). 기다리는 실행에 넣는 메시지에는 쓰지 않는다 |
 
 Center는 메시지를 이렇게 처리한다.
 
@@ -367,7 +368,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-26 | 1 | 하트비트 `jobs[].virtual_worker?` — 접수 Bot 작업에 가상 직원 신원을 붙인다. 선택 칸이라 옛 실행기는 그대로 돈다(신원 변수만 생기지 않는다) | [0098](../decisions/0098-virtual-worker-identity.md) |
+| 2026-10-26 | 1 | 하트비트 `jobs[].virtual_worker?` — 작업의 가상 직원을 붙인다. `MessageRequest.virtual_worker?`(메시지 시작). 선택 칸이라 옛 실행기는 그대로 돈다(출처가 가상 직원인 입력만 비어 있다) | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | §서비스 앱 키 — 하트비트 `service_keys[]`·`drop_service_keys[]`·`service_key_acks[]` (C4와 같다), `"*"` 배포는 실행기마다 키, 작업 나누기 규칙 5(키를 받지 못한 실행기는 건너뛴다 — `keys_pending`) | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | **등록 요청과 승인** — `POST/GET …/server-runner/enroll`(C4와 같은 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`. 요청 코드는 로그에 찍고 CON-12에서 승인한다. 비밀 저장소가 없으면 요청하지 않는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | **서버 Bot에도 위임한다** (일괄 기동) — 대상 매니페스트의 `run_location`으로 가른다. 위임 요청의 `loop_index?`(멱등 키에 들어간다), 응답의 `target_type`(`bot_ui_id`는 PC일 때만), 422 `bot_ui_for_server`, 서버 실행기가 맡겨진 작업의 `outputs`를 올린다 | [0082](../decisions/0082-batch-start.md) |

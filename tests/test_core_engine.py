@@ -16,7 +16,16 @@ import pytest
 from chaeksas.contracts.bpmn_ext import VirtualWorkerIdentity, read_process
 from chaeksas.contracts.dmn import read_decisions
 from chaeksas.contracts.events import REQUIRED_DATA_KEYS
-from chaeksas.core.engine import DECISION_KEY, Engine, EngineError, Run, RunEnv, State, new_run_id
+from chaeksas.core.engine import (
+    DECISION_KEY,
+    Engine,
+    EngineError,
+    Run,
+    RunEnv,
+    State,
+    new_run_id,
+    sourced_inputs,
+)
 from chaeksas.core.files import Workspace
 from chaeksas.core.llm import Reply
 from chaeksas.core.run_log import RunLog, sanitize
@@ -351,42 +360,16 @@ def test_the_answerer_goes_into_the_variable_the_graph_named() -> None:
     assert answered.data["answered_by"] == run.variables["확인자"]
 
 
-IDENTITY_PROPS = '{"virtual_worker_as": {"id": "가상직원ID", "name": "가상직원", "supervisors": "감독자"}}'
+SOURCED_PROPS = (
+    '{"inputs": [{"name": "감독자", "type": "list", "required": true, "source": "virtual_worker.supervisors"},'
+    ' {"name": "처리자", "type": "string", "source": "virtual_worker.name"}]}'
+)
 BATCH_APPROVAL = APPROVAL_PROPS[:-1] + ', "location": "center", "assignees": "감독자"}'
+FINANCE = VirtualWorkerIdentity(id="finance-intake", name="재무 가상 직원", supervisors=["김감독", "이감독"])
 
 
-def test_the_virtual_worker_identity_goes_into_the_variables_the_graph_named() -> None:
-    """**가상 직원 신원** — 실행이 자기가 누구인지 안다. 결재 담당자가 감독자 변수에서 온다 (ADR-0098)."""
-    identity = VirtualWorkerIdentity(id="finance-intake", name="재무 가상 직원", supervisors=["김감독", "이감독"])
-    engine, run = start(
-        make_identity(BATCH_APPROVAL),
-        env=RunEnv(clock=lambda: NOW, approval_where="center"),
-        virtual_worker=identity,
-    )
-    assert (run.variables["가상직원ID"], run.variables["가상직원"]) == ("finance-intake", "재무 가상 직원")
-    assert engine.run_until_blocked(run) is State.WAITING
-    assert run.pending is not None and run.pending.assignees == ["김감독", "이감독"]
-    # 실행 기록에는 값이 가지 않는다 (원칙 6) — 이름이 남는 곳은 C6 담당자다.
-    assert "재무 가상 직원" not in str([e.data for e in run.log.events])
-
-
-def test_without_a_virtual_worker_the_identity_is_none_and_the_approval_stops() -> None:
-    """가상 직원의 실행이 아니면 `None`이다 — 감독자가 **조용히 사라지지 않는다** (`assignees_missing`)."""
-    engine, run = start(make_identity(BATCH_APPROVAL), env=RunEnv(clock=lambda: NOW, approval_where="center"))
-    assert {run.variables[name] for name in ("가상직원ID", "가상직원", "감독자")} == {None}
-    assert engine.run_until_blocked(run) is State.FAILED
-    assert run.error is not None and run.error.code == "assignees_missing"
-
-
-def test_a_graph_without_identity_names_gets_no_identity_variables() -> None:
-    """옛 그림은 그대로다 — 신원을 줘도 적지 않은 그림에는 변수가 생기지 않는다."""
-    identity = VirtualWorkerIdentity(id="x", name="x", supervisors=[])
-    _, run = start(approval_process(), virtual_worker=identity)
-    assert not {"가상직원", "감독자"} & set(run.variables)
-
-
-def make_identity(props: str) -> Any:
-    """`approval_process`와 같은 그림에 신원 변수를 적는다."""
+def sourced_process(props: str = BATCH_APPROVAL, process_props: str = SOURCED_PROPS) -> Any:
+    """값 출처가 가상 직원인 입력을 선언하고 그 감독자에게 결재를 거는 그림."""
     return make(
         '<bpmn:startEvent id="Start_1"/>'
         + script("Task_Count", "보류건수 = 2")
@@ -396,8 +379,45 @@ def make_identity(props: str) -> Any:
         + flow("f1", "Start_1", "Task_Count")
         + flow("f2", "Task_Count", "Approve_Hold")
         + flow("f3", "Approve_Hold", "End_1"),
-        process_props=IDENTITY_PROPS,
+        process_props=process_props,
     )
+
+
+def test_inputs_whose_source_is_the_virtual_worker_are_filled_from_it() -> None:
+    """**가상 직원 정보도 입력 한 줄**이다 — 결재 담당자가 감독자 입력에서 온다 (C14, ADR-0099)."""
+    process = sourced_process()
+    engine, run = start(
+        process, env=RunEnv(clock=lambda: NOW, approval_where="center"), sourced=sourced_inputs(process.info, FINANCE)
+    )
+    assert (run.variables["감독자"], run.variables["처리자"]) == (["김감독", "이감독"], "재무 가상 직원")
+    assert engine.run_until_blocked(run) is State.WAITING
+    assert run.pending is not None and run.pending.assignees == ["김감독", "이감독"]
+    # 실행 기록에는 값이 가지 않는다 (원칙 6) — 이름이 남는 곳은 C6 담당자다.
+    assert "재무 가상 직원" not in str([e.data for e in run.log.events])
+
+
+def test_the_caller_cannot_give_an_input_whose_source_is_elsewhere() -> None:
+    """신원을 입력으로 지어낼 수 없다 — `input_not_from_caller`."""
+    with pytest.raises(EngineError) as caught:
+        start(sourced_process(), inputs={"감독자": ["아무나"]})
+    assert caught.value.code == "input_not_from_caller"
+
+
+def test_a_required_sourced_input_without_a_virtual_worker_does_not_start() -> None:
+    """필수로 둔 감독자는 가상 직원이 없으면 **시작조차 하지 않는다** — 다른 입력과 같은 규칙이다."""
+    assert sourced_inputs(sourced_process().info, None) == {}
+    with pytest.raises(EngineError) as caught:
+        start(sourced_process())
+    assert caught.value.code == "input_required"
+
+
+def test_an_optional_sourced_input_is_none_and_the_approval_stops() -> None:
+    """필수가 아니면 `None`이고, 그것을 담당자로 쓴 결재는 **조용히 담당자 없음이 되지 않는다**."""
+    optional = SOURCED_PROPS.replace('"required": true', '"required": false')
+    engine, run = start(sourced_process(process_props=optional), env=RunEnv(clock=lambda: NOW, approval_where="center"))
+    assert run.variables["감독자"] is None
+    assert engine.run_until_blocked(run) is State.FAILED
+    assert run.error is not None and run.error.code == "assignees_missing"
 
 
 def test_an_answer_on_behalf_names_the_relay_key_too() -> None:
@@ -613,7 +633,10 @@ DUMMY_BY_TYPE: dict[str, Any] = {
 
 
 def dummy_inputs(process: Any) -> dict[str, Any]:
-    return {decl.name: DUMMY_BY_TYPE.get(decl.type, "시험값") for decl in process.info.inputs}
+    """부르는 쪽이 넣는 입력만 — 값 출처가 있는 입력은 `sourced`로 간다 (ADR-0099)."""
+    return {
+        decl.name: DUMMY_BY_TYPE.get(decl.type, "시험값") for decl in process.info.inputs if decl.from_caller
+    }
 
 
 def example_service_outputs() -> dict[str, dict[str, Any]]:
@@ -679,7 +702,7 @@ def example_env(tmp_path: Path) -> RunEnv:
     )
 
 
-#: 예제를 돌릴 때 주는 가상 직원 신원 — 신원 변수를 적지 않은 그림에는 아무 일도 없다.
+#: 예제를 돌릴 때 주는 가상 직원 — 값 출처가 가상 직원인 입력을 선언하지 않은 그림에는 아무 일도 없다.
 DUMMY_WORKER = VirtualWorkerIdentity(id="dummy", name="자리 값 가상 직원", supervisors=["자리 값 감독자"])
 
 
@@ -715,8 +738,8 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         try:
             run = engine.start(
                 process, run_id=log.run_id, log=log, now=NOW, env=env, inputs=dummy_inputs(process),
-                # 접수 Bot(FX-24)의 담당자는 **가상 직원의 감독자**다 — 현장에서는 Center가 붙인다 (ADR-0098).
-                virtual_worker=DUMMY_WORKER,
+                # 접수 Bot(FX-24)의 담당자는 **가상 직원의 감독자**다 — 현장에서는 Center가 붙인다 (ADR-0099).
+                sourced=sourced_inputs(process.info, DUMMY_WORKER),
             )
         except EngineError as e:
             reasons[e.code] = reasons.get(e.code, 0) + 1

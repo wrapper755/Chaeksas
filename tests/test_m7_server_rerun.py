@@ -118,6 +118,11 @@ def case_inputs(example: str, receiver: Receiver | None = None) -> dict[str, Any
     넘기면 그림이 그것을 주소로 알고 돈다).
     """
     raw = dict(_first_case(example).get("inputs") or {})
+    # **값 출처가 있는 입력은 작업에 싣지 않는다** — Center가 넣는다 (ADR-0099). 케이스는 Studio에서
+    # 그 값을 대신 적을 뿐이고, 작업에 실으면 Center가 422 `input_not_from_caller`로 거절한다.
+    process = read_process((EXAMPLES / f"{example}.bpmn").read_text(encoding="utf-8"))
+    sourced = {decl.name for decl in process.info.inputs if not decl.from_caller}
+    raw = {name: value for name, value in raw.items() if name not in sourced}
     return resolve_inputs(raw, now=datetime.now().astimezone(), receiver=receiver)
 
 
@@ -927,9 +932,10 @@ def batch_children(client: TestClient, child: str) -> list[dict[str, Any]]:
 
 
 def bind_virtual_worker(client: TestClient, intake: str) -> None:
-    """접수 Bot을 가상 직원에 **먼저** 묶는다 — 일괄 결재의 담당자가 그 감독자다 (ADR-0098).
+    """접수 Bot을 가상 직원에 **먼저** 묶는다 — 일괄 결재의 담당자가 그 감독자다 (ADR-0099).
 
-    묶지 않고 돌리면 감독자 변수가 `None`이라 결재를 만들 때 멈춘다. 케이스의 신원과 같은 사람이다.
+    FX-24의 `감독자`는 값 출처가 가상 직원인 **필수** 입력이라 묶지 않고 돌리면 시작조차 하지 않는다.
+    가상 직원이 하나뿐이라 작업에 id를 적지 않아도 Center가 그것을 고른다. 케이스의 감독자와 같다.
     """
     bound = client.post("/api/v1/virtual-workers", json={
         "id": "finance-intake", "name": "재무 가상 직원", "supervisors": ["김감독"], "intake": intake,
@@ -958,7 +964,7 @@ def test_fx24_starts_one_server_bot_per_approved_item(
     done = run_to_the_end(center, runner, job_id, answers=case_approvals(FX24), messages=[])
     assert done["run_status"] == "success", done
     # 감독자의 결재함 — 담당자로 걸러 본다 (ADR-0080). 담당자는 그림에 적은 이름이 아니라
-    # **가상 직원의 감독자**다 — Center가 작업에 신원을 붙였다 (ADR-0098).
+    # **가상 직원의 감독자**다 — Center가 값 출처가 가상 직원인 입력을 채웠다 (ADR-0099).
     mine = client.get("/api/v1/approvals", params={"assignee": "김감독"}, headers=READ).json()
     assert [one["run_id"] for one in mine] == [done["run_id"]], "일괄 결재가 감독자의 결재함에 없다"
     assert mine[0]["review"]["건수"] == 3, "감독자는 N건을 한 번에 본다 (C6 `review`)"
@@ -968,12 +974,22 @@ def test_fx24_starts_one_server_bot_per_approved_item(
     assert {one["requested_by"] for one in made} == {f"server_bot:{done['run_id']}"}
     assert {one["target"]["type"] for one in made} == {"server_runner"}
     assert {one["run_status"] for one in made} == {"success"}
-    # 신원은 자식에게 따라가지 않는다 — 그림이 **적어서** 넘긴 것만 간다 (C14 「적은 것만 오간다」).
-    assert {one["inputs"]["처리자"] for one in made} == {"재무 가상 직원"}
+    # 일괄이 맡긴 자식은 **가상 직원을 이어받는다** (ADR-0099 §3) — 부모가 넘기지 않았다.
+    assert {one["virtual_worker"] for one in made} == {"finance-intake"}
+    assert all("처리자" not in one["inputs"] for one in made)
     # 두 실행은 서로를 안다 (C3 `parent_run_id`) — 서버 자식도 PC 자식과 같다.
     for one in made:
         found = client.get(f"/api/v1/runs/{one['run_id']}", headers=READ).json()
         assert found["parent_run_id"] == done["run_id"], found
+
+    # 부르는 쪽은 감독자를 줄 수 없고, 남의 가상 직원 이름으로 부를 수도 없다 (C5, ADR-0099).
+    body = {"bpm_process_id": info["id"], "target": {"type": "server_runner"}, "inputs": case_inputs(FX24, receiver)}
+    forged = client.post("/api/v1/jobs", json={**body, "inputs": {**body["inputs"], "감독자": ["아무나"]}},
+                         headers=ADMIN)
+    assert forged.status_code == 422 and forged.json()["code"] == "input_not_from_caller", forged.text
+    wrong = client.post("/api/v1/jobs", json={**body, "virtual_worker": "nobody"}, headers=ADMIN)
+    assert wrong.status_code == 422 and wrong.json()["code"] == "virtual_worker_mismatch", wrong.text
+    assert client.get(f"/api/v1/jobs/{job_id}", headers=READ).json()["virtual_worker"] == "finance-intake"
 
     # 가상 직원 자리에서 이 일괄이 보인다 (ADR-0085) — 저장하지 않고 읽을 때 잇는다.
     [batch] = client.get("/api/v1/virtual-workers/finance-intake", headers=READ).json()["batches"]

@@ -46,7 +46,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 
 | 요소 | JSON 필드 | 뜻 |
 | --- | --- | --- |
-| `chk:process` | `run_location`(`server`\|`pc`), `service_keys`(`{app_id: key_ref}`), `extensions`(`[{id, version, definition_hash?}]` — **외부 확장은 `definition_hash`로 정의를 고정한다**: 적어 두면 빌드가 C1 `requires.extensions`로 그대로 옮기고, 받는 쪽이 「승인받은 그 정의인가」를 대조한다. **비워 두면 고정하지 않는다** — 막지 않고 Studio가 경고한다, [ADR-0060](../decisions/0060-pinning-external-definitions.md). 적는 자리는 STU-15다), `inputs`(`[{name, type, required, description, default?}]` — 메시지 본문으로 들어오는 값도 여기에 선언), `outputs`(`[name]`), `virtual_worker_as?`(`{id?, name?, supervisors?}` — **가상 직원 신원**이 들어갈 변수 이름, 아래 「가상 직원 신원」) | BPM 프로세스 정보 (STU-06). 패키지 매니페스트(C1)는 빌드 때 이것을 모아 만든다 |
+| `chk:process` | `run_location`(`server`\|`pc`), `service_keys`(`{app_id: key_ref}`), `extensions`(`[{id, version, definition_hash?}]` — **외부 확장은 `definition_hash`로 정의를 고정한다**: 적어 두면 빌드가 C1 `requires.extensions`로 그대로 옮기고, 받는 쪽이 「승인받은 그 정의인가」를 대조한다. **비워 두면 고정하지 않는다** — 막지 않고 Studio가 경고한다, [ADR-0060](../decisions/0060-pinning-external-definitions.md). 적는 자리는 STU-15다), `inputs`(`[{name, type, required, description, default?, source?}]` — 메시지 본문으로 들어오는 값도 여기에 선언. `source`는 **값을 누가 넣나**, 아래 「입력의 값 출처」), `outputs`(`[name]`) | BPM 프로세스 정보 (STU-06). 패키지 매니페스트(C1)는 빌드 때 이것을 모아 만든다 |
 | `chk:defaults` | `limits`(`{timeout_s, max_steps}`), `forbidden_actions[]`, `confirm_triggers[]`, `web`(`{profile, session}`), `desktop`(`{app}` — 띄울 앱 이름) | 모든 AI·UI 태스크의 기본값. 태스크에 적은 값이 이긴다. 확장 태스크(`chk:task`)에는 `web`·`desktop`이 **속성의 기본값**으로 넘어간다 — 태스크 속성에 같은 이름이 없을 때만 엔진이 채운다 ([ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 
 ## 태스크 종류와 속성
@@ -85,7 +85,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 - **막지 않는다.** 콘솔은 담당자를 보이고 거르기만 한다. 막는 것은 대리 답 하나다 (C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)). 현장 결재에도 실려 결재 창이 보인다.
 - 확인(`manualTask`)에는 담당자가 없다 — 적으면 B12 경고다(화면 앞 사람이 답한다).
 
-> 상태: 돈다 — 엔진이 결재를 만들 때 풀어 C6 본문에 싣는다 (`core.nodes._assignees`). 변수가 없거나 **값이 `None`이면** `assignees_missing`, 모양이 틀리면 `assignees_invalid`로 실행이 멈춘다 — 담당자 없음은 그림이 빈 배열로 적는다 (가상 직원 신원이 없으면 감독자 변수가 `None`이다, [ADR-0098](../decisions/0098-virtual-worker-identity.md)).
+> 상태: 돈다 — 엔진이 결재를 만들 때 풀어 C6 본문에 싣는다 (`core.nodes._assignees`). 변수가 없거나 **값이 `None`이면** `assignees_missing`, 모양이 틀리면 `assignees_invalid`로 실행이 멈춘다 — 담당자 없음은 그림이 빈 배열로 적는다 (가상 직원이 없으면 출처가 가상 직원인 입력이 `None`이다, [ADR-0099](../decisions/0099-input-value-source.md)).
 
 ### 답한 사람 (`chk:approval.answered_by_as`·`answered_via_as`)
 
@@ -104,28 +104,33 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 
 > 상태: 돈다 — 엔진이 답을 넣을 때 채운다 (`core.engine.answerer_variables`). Studio 시험 실행은 케이스의 `answered_by`를 쓴다.
 
-### 가상 직원 신원 (`chk:process.virtual_worker_as`)
+### 입력의 값 출처 (`chk:process.inputs[].source`)
 
-가상 직원(C5 §가상 직원)이 돌리는 실행이 **자기가 누구인지** 받는다 ([ADR-0098](../decisions/0098-virtual-worker-identity.md)). 감독자를 그림에 이름으로 다시 적지 않는다 — 가상 직원 자원을 바꾸면 그림과 어긋난다.
+BPM 프로세스가 받는 정보는 **입력 한 목록**이다. 대부분은 부르는 쪽이 넣지만, **가상 직원 정보**처럼 Center가 넣는 값도 같은 목록에 한 줄로 선언하고 `source`로 출처만 다르게 적는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
 
 ```json
 {"run_location": "server",
- "virtual_worker_as": {"id": "가상직원ID", "name": "가상직원", "supervisors": "감독자"}}
+ "inputs": [
+   {"name": "인입", "type": "list", "required": true, "description": "{번호, 금액} 목록"},
+   {"name": "감독자", "type": "list", "required": true, "source": "virtual_worker.supervisors"}
+ ]}
 ```
 
-| 칸 | 그 변수에 들어가는 값 |
-| --- | --- |
-| `id` | 가상 직원 id |
-| `name` | 가상 직원의 화면 이름 |
-| `supervisors` | 감독자 이름 목록 (Center가 저장할 때 정규화한 그대로) — 결재에 `"assignees": "감독자"`로 쓴다 |
+| `source` | 값을 넣는 쪽 | 타입 |
+| --- | --- | --- |
+| (없음) — `caller` | **부르는 쪽** — 작업 `inputs`·메시지 본문·위임 `chk:call.input`·시험 케이스 | 선언한 대로 |
+| `virtual_worker.id` | **Center** — 이 실행을 돌리는 가상 직원(C5 §가상 직원)의 id | `string` |
+| `virtual_worker.name` | **Center** — 가상 직원의 이름 | `string` |
+| `virtual_worker.supervisors` | **Center** — 감독자 이름 목록 (등록 때 정규화한 그대로). 결재에 `"assignees": "감독자"`로 쓴다 | `list` |
 
-- 세 칸 모두 선택이고 값은 **변수 이름**이다. 채우는 것은 **Center**다 — 서버 작업을 내려줄 때 그 Bot이 어느 가상 직원의 접수 Bot이면 신원을 붙이고(C12 `JobDispatch.virtual_worker`) 엔진이 이 변수에 넣는다. **부르는 쪽(작업 입력·메시지 본문)은 줄 수 없다** — 그래서 선언한 입력(`inputs`)과 이름이 겹치면 B2 오류다.
-- **가상 직원의 실행이 아니면 셋 다 `None`이다**(빈 목록이 아니다). 그 변수를 `assignees`로 쓰면 결재를 만들 때 `assignees_missing`으로 멈춘다 — 가상 직원에 묶지 않고 접수 Bot을 돌린 것은 고쳐야 할 설정이다.
-- **진입 정의의 것만 본다.** 위임한 자식 실행에는 **따라가지 않는다** — 자식이 신원을 원하면 보통 입력으로 선언하고 부르는 쪽이 `chk:call.input`에 적는다(`{"처리자": "가상직원"}` — 「적은 것만 오간다」).
-- 생기는 변수는 B11이 출처로 센다. 실행 기록(C3)에는 값이 가지 않는다(변수 값은 원래 기록되지 않는다).
-- Studio 시험 실행은 케이스의 `virtual_worker`를 쓴다(아래 「시험 케이스 형식」). 없으면 `None`이다.
+- **출처가 `caller`가 아닌 입력은 부르는 쪽이 줄 수 없다** — Center가 작업을 만들 때 422 `input_not_from_caller`로 거절하고(C5 — 위임도 같다), 엔진도 `input_not_from_caller`로 거절한다. 신원을 입력으로 지어낼 길이 없다.
+- 값은 서버 작업이 내려갈 때 Center가 붙인 가상 직원(C12 `JobDispatch.virtual_worker`)에서 엔진이 넣는다. **어느 가상 직원인지는 부르는 쪽이 id로 적는다**(C5 `virtual_worker`) — 비우면 그 Bot을 접수 Bot으로 쓰는 가상 직원이 하나뿐일 때만 그것이다.
+- 값이 없으면 다른 입력과 같다 — **기본값 → 필수면 시작하지 않음(`input_required`) → `None`**. 그래서 「감독자」를 필수로 두면 가상 직원 없이 돌린 접수 Bot은 시작조차 하지 않는다. 필수가 아니면 `None`이고, 그것을 결재 담당자로 쓰면 결재를 만들 때 `assignees_missing`으로 멈춘다.
+- **위임한 자식 작업은 가상 직원을 이어받는다** — 자식 Bot이 이 출처의 입력을 선언했으면 값이 들어간다. 부모가 `chk:call.input`으로 넘기는 것이 아니다(넘기면 위의 422로 업무 실패다). PC 자식에는 아직 값이 가지 않는다 (> 미정: ADR-0099 §3).
+- 실행 기록(C3)에는 값이 가지 않는다(입력 값은 원래 개수만 남는다).
+- Studio 시험 실행은 케이스의 `inputs`에 **다른 입력처럼** 적은 값을 쓴다.
 
-> 상태: 돈다 — 서버 실행기가 받은 신원을 `Engine.start(virtual_worker=…)`로 넘기고 엔진이 넣는다 (`core.engine.identity_variables`). Studio는 케이스의 `virtual_worker`를 쓴다.
+> 상태: 돈다 — 서버 실행기가 받은 가상 직원을 `Engine.start(virtual_worker=…)`로 넘기고 엔진이 출처대로 넣는다 (`core.engine.sourced_inputs`). Studio는 케이스 입력을 출처로 갈라 준다.
 
 ### PC 위임 (`chk:call.delegate`)
 
@@ -285,7 +290,6 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
     "messages": [{"after_s": 5, "name": "return_arrived", "correlation": "RT-01", "payload": {"검수통과": true}}],
     "delegations": {"Call_ErpInput": {"결과코드": "OK"}},
     "answered_by": {"Approve_Hold": "김재무"},
-    "virtual_worker": {"id": "finance-intake", "name": "재무 가상 직원", "supervisors": ["김감독"]},
     "manual": false
   }]
 }
@@ -296,7 +300,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 
 - `approvals`는 노드 id → 폼 응답이다.
 - `answered_by`(선택): 노드 id → **답한 사람** 이름. 그림이 `answered_by_as`로 받는 값이다. 적지 않으면 「시험 케이스」다 — Studio에는 「Studio 사용자」가 없어 지어내지 않는다 ([ADR-0096](../decisions/0096-answerer-into-variables.md)).
-- `virtual_worker`(선택): **가상 직원 신원** `{id, name, supervisors}` — 그림이 `chk:process.virtual_worker_as`로 받는 값이다. 현장에서는 Center가 채우므로 Studio에서는 케이스가 적는다. 적지 않으면 셋 다 `None`이다 ([ADR-0098](../decisions/0098-virtual-worker-identity.md)).
+- `inputs`에는 **출처가 가상 직원인 입력도** 다른 입력처럼 적는다 — 현장에서는 Center가 넣는 값을 시험에서는 케이스가 적는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
 - `delegations`(선택): 노드 id → **PC 위임이 돌려주는 값**(그 Bot이 선언한 `outputs`). Studio에는 부를 PC Bot의 그림이 없고(다른 패키지다) 있다 해도 UI 태스크라 설계자 PC에서 화면을 만지게 되므로, **케이스가 결과를 적는다** — 결재 답·메시지와 같은 결이다 ([ADR-0062](../decisions/0062-pc-delegation.md) §2). **적어 두지 않은 위임은 그 자리에서 실패**다(기다리지 않는다 — 기다리게 두면 끝나지 않는다: 현장 PC도 Center도 없다). 사유 코드는 **`DELEGATION_FAILED`**, 진짜 PC 실행이 실패했을 때와 **같은 것**이다 — 그래서 적어 두지 않는 것이 **그림의 오류 경계를 시험하는 길**이다. `manual`은 이것을 막지 않는다(결재는 사람이 창에서 답할 수 있지만 위임은 Studio에 답할 사람이 없다).
   - 값을 적되 **그림이 읽는 이름을 빼면**(`{}`도 그렇다) 역시 업무 실패다 — 빈 값으로 이어 가지 않는다 (「그 Bot의 판이 바뀌었다」가 현장에서 이 꼴이다).
 - `manual: true`인 케이스는 자동 응답이 있어도 쓰지 않고 실제 창을 띄운다. 폼을 사람이 보는지 확인하는 용도다.
@@ -328,13 +332,13 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | # | 규칙 | 위반 |
 | --- | --- | --- |
 | B1 | `chk:*` JSON이 모델과 맞는다 | 오류 |
-| B2 | `show`는 배열이고 각 이름이 변수 규칙에 맞는다. `assignees`가 배열이면 빈 글자가 없고, 글자 하나면 변수 이름 규칙에 맞는다. `answered_by_as`·`answered_via_as`는 변수 이름 규칙에 맞는다. `chk:process.virtual_worker_as`의 이름은 변수 이름 규칙에 맞고 **선언한 입력과 겹치지 않는다** (신원을 입력으로 지어낼 수 없게) | 오류 |
+| B2 | `show`는 배열이고 각 이름이 변수 규칙에 맞는다. `assignees`가 배열이면 빈 글자가 없고, 글자 하나면 변수 이름 규칙에 맞는다. `answered_by_as`·`answered_via_as`는 변수 이름 규칙에 맞는다. | 오류 |
 | B3 | 배타·포함 게이트웨이의 나가는 흐름 중 조건 없는 것은 `default`로 지정된다. 포함 분기는 포함 합류로 닫는다 | 오류 |
 | B4 | 반복에 `collect_into`가 있다 | 오류 |
 | B5 | 파일 출력에 `store_as`가 있고 `template`·`variables` 중 하나가 있다. `xlsx`에 `template`를 쓰지 않고, `csv`의 `variables`는 이름 하나이며, `append`는 `md`·`txt`·`csv`에만 있다. 파일 목록에 `store_as`가 있고 `pattern`에 경로 구분자가 없다 | 오류 |
 | B6 | 실행 위치가 `server`면 UI 태스크·`web`/`desktop` 도메인 AI 태스크·`location: field` 결재·**확인(`manualTask`)**이 없다 (C1 R2 — 확인은 늘 현장이라 서버에는 답할 사람이 없다, ADR-0015) | 오류 |
 | B7 | 서비스 앱 태스크에 **적힌** 키 참조(자기 것 또는 프로세스 `service_keys`)가 이름 규칙(C1 R4)을 따른다. **적지 않은 것은 흠이 아니다** — 빌드·엔진이 C1 기본값(`default_key_ref` — BPM 프로세스 id에서 `.`·`_`를 `-`로)을 쓴다 ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) — STU-06 「서비스 앱 키」 섹션이 없어져 사람이 미리 적지 않는다). **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)은 묻지 않는다 — 어느 앱인지는 계약이 모르므로 부르는 쪽이 `keyless_apps`로 주고, 주지 않으면 모든 앱에 묻는다 ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)) | 오류 |
-| B8 | 결과 필드 타입이 `string`·`int`·`number`·`bool`·`list`·`dict`·`date` 중 하나다. 번호처럼 보이는 문자열(예: 발주번호 `PO-2608-001`)을 `int`로 두면 경고 | 오류 / 경고 |
+| B8 | 결과 필드 타입이 `string`·`int`·`number`·`bool`·`list`·`dict`·`date` 중 하나다. 입력의 `source`가 아는 값이고 그 출처의 타입과 맞다(`virtual_worker.supervisors`는 `list`, 나머지는 `string`). 번호처럼 보이는 문자열(예: 발주번호 `PO-2608-001`)을 `int`로 두면 경고 | 오류 / 경고 |
 | B9 | 연결되지 않은 노드가 없다 (들어오는 흐름·나가는 흐름) | 오류 |
 | B10 | 노드 id가 생성형(`Activity_[0-9a-z]{7}`)이면 경고 | 경고 |
 | B11 | 어떤 경로로는 만들어지지 않는 변수를 읽는다 (예: 한 가지에서만 생기는 결재 칸을 합류 뒤에 읽음, 프로세스 `inputs`에 없는 메시지 본문 변수) | 경고 ([ADR-0039](../decisions/0039-optional-variables-and-b11.md) — 경로 어림이라 막지 않는다) |
@@ -379,7 +383,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-26 | 1 | **가상 직원 신원** `chk:process.virtual_worker_as`(선택)와 케이스 `virtual_worker`(선택)를 더했다 — B2가 이름과 입력과의 겹침을, B11이 출처를 본다. 선택 칸이라 **옛 그림은 그대로 읽힌다** (바깥 요청 NowView R7). 그리고 **담당자 변수의 값이 `None`이면 `assignees_missing`**이다 — 전에는 「담당자 없음」으로 받았다 | [0098](../decisions/0098-virtual-worker-identity.md) |
+| 2026-10-26 | 1 | **입력의 값 출처** `chk:process.inputs[].source`(선택 — 없으면 부르는 쪽)를 더했다. `virtual_worker.*`는 Center가 넣고 부르는 쪽은 줄 수 없다. B8이 출처와 타입을 본다. 선택 칸이라 **옛 그림은 그대로 읽힌다** (바깥 요청 NowView R7). 그리고 **담당자 변수의 값이 `None`이면 `assignees_missing`**이다 — 전에는 「담당자 없음」으로 받았다 | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | B7은 **적힌** 키 참조의 이름만 본다 — 적지 않은 것은 C1 기본값이다 (빌드·엔진이 같은 `default_key_ref`) | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | B7이 **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)에는 키 참조를 묻지 않는다. 그 목록은 부르는 쪽이 준다(Studio는 STU-14의 고를 거리에서) | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-20 | 1 | **서버의 병렬 반복**을 지었다 — 「미정」을 걷었다. 실행 위치가 `server`인 그림의 `isSequential=false`는 차례마다 토큰 하나로 함께 기다리고, 결과는 입력 순서, 한 건의 업무 실패는 나머지를 거둔 뒤 오류 경계가 한 번 받는다. 모양(칸)은 그대로다 | [0087](../decisions/0087-parallel-loop-on-the-server.md) |

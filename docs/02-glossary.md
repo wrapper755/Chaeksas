@@ -109,7 +109,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 접수 Bot | `intake_bot` | 가상 직원이 돌리는 **서버 Bot**. 인입 → 항목 N건 만들기 → 일괄 결재 → 일괄 기동을 그림으로 그린 것 |
 | 일괄 | `batch` | **접수 Bot 실행 한 번.** 일괄 id는 그 실행의 `run_id`이고 항목은 그 실행의 변수(목록)다. 「묶음」이라 쓰지 않는다 (확장·시험 묶음·PC 묶음 풀기가 이미 쓴다) |
 | 일괄 결재 | — | 일괄 안의 결재 하나(C6). 항목 N건을 `show`로 보이고 감독자가 한 번에 승인·반려한다. 새 결재 종류가 아니다 |
-| 신원 변수 | `virtual_worker_as` | 가상 직원이 돌리는 실행이 **자기가 누구인지** 받는 변수 — id·이름·감독자. 그림이 `chk:process.virtual_worker_as`로 이름을 고르고 Center가 작업을 내려줄 때 채운다. 가상 직원의 실행이 아니면 `None`이다. 자식 실행에는 따라가지 않는다 — 그림이 입력으로 넘긴다 ([ADR-0098](decisions/0098-virtual-worker-identity.md)) |
+| 값 출처 | `source` | BPM 프로세스 입력 하나의 값을 **누가 넣나**. 비우면 부르는 쪽(작업·메시지·위임·케이스), `virtual_worker.id`·`.name`·`.supervisors`면 **Center**가 그 실행의 가상 직원에서 넣는다 — 부르는 쪽은 줄 수 없다. 가상 직원 정보를 따로 된 칸이 아니라 **입력 한 줄**로 받는다 ([ADR-0099](decisions/0099-input-value-source.md)) |
 | 일괄 기동 | `batch_start` | 승인된 항목마다 Bot 작업을 하나씩 내는 것 (반복 + 위임). 기동된 실행을 **자식 실행**이라 하고 `parent_run_id`가 일괄 id다 |
 
 | 화면 표기 | 코드 | BPMN 요소 | 누가 수행 |
@@ -129,7 +129,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 확인 (실행 개입) | `confirmation` | 실행 중 막힘(OTP, 애매한 클릭, Worker 응답 없음). 화면 앞 사람만 답할 수 있어 Center로 올리지 않는다 |
 | 전환 | `escalation` | 자동 치유가 한도를 넘어 사람에게 넘기는 것. 확인으로 이어진다 |
 | 결재 담당자 | `assignee` | 그 결재에 답할 사람. 그림(`chk:approval.assignees`)이 이름으로 정하고 C6에 실린다. 콘솔은 거르기만 하고, 대리 답은 담당자일 때만 받는다 ([ADR-0080](decisions/0080-approval-assignees.md)) |
-| 감독자 | `supervisor` | 가상 직원(§2-1)의 결재에 답하는 **사람**. 접수 Bot의 일괄 결재 담당자가 된다 — 그림은 신원 변수(`assignees: "감독자"`)로 가상 직원 자원의 목록을 그대로 받는다 (ADR-0098) |
+| 감독자 | `supervisor` | 가상 직원(§2-1)의 결재에 답하는 **사람**. 접수 Bot의 일괄 결재 담당자가 된다 — 그림은 출처가 `virtual_worker.supervisors`인 입력(`assignees: "감독자"`)으로 가상 직원 자원의 목록을 그대로 받는다 (ADR-0099) |
 | 대리 답 | `on_behalf_of` | 연동하는 쪽(예: 대화 창구)이 **사람 대신** 결재 답을 Center에 나르는 것. 답한 사람(행위자)은 그 사람이고, 지나온 길(경로)은 키 이름이다 — 둘을 따로 적는다. 「위임」(`delegate`, PC 위임)과 다른 말이다 |
 
 > 상태: 감독자는 [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md), 결재 담당자는 [ADR-0080](decisions/0080-approval-assignees.md), 대리 답은 [ADR-0081](decisions/0081-answering-on-behalf.md)이 정한다. 결재 담당자·대리 답(C6)·일괄 기동(ADR-0082)·가상 직원(C5, ADR-0085)이 돈다.

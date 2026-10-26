@@ -41,7 +41,6 @@ export interface Case {
   manual?: boolean;
   messages?: CaseMessage[];
   name: string;
-  virtual_worker?: VirtualWorkerIdentity | null;
   [k: string]: unknown;
 }
 /**
@@ -54,17 +53,5 @@ export interface CaseMessage {
   payload?: {
     [k: string]: unknown;
   };
-  [k: string]: unknown;
-}
-/**
- * **가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).
- *
- * Center가 서버 작업을 내려줄 때 붙이고(C12 `JobDispatch.virtual_worker`) Studio는 케이스가
- * 적는다. 엔진이 `chk:process.virtual_worker_as`가 고른 변수에 넣는다.
- */
-export interface VirtualWorkerIdentity {
-  id: string;
-  name: string;
-  supervisors?: string[];
   [k: string]: unknown;
 }

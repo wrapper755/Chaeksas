@@ -19,6 +19,9 @@
             "번호": 3,
             "금액": 300000
           }
+        ],
+        "감독자": [
+          "김감독"
         ]
       },
       "expected": {
@@ -43,13 +46,6 @@
           "처리결과": "등록"
         }
       },
-      "virtual_worker": {
-        "id": "finance-intake",
-        "name": "재무 가상 직원",
-        "supervisors": [
-          "김감독"
-        ]
-      },
       "manual": false
     },
     {
@@ -61,6 +57,9 @@
             "번호": 1,
             "금액": 500000
           }
+        ],
+        "감독자": [
+          "김감독"
         ]
       },
       "expected": {
@@ -70,13 +69,6 @@
         "Approve_Batch": {
           "승인": false
         }
-      },
-      "virtual_worker": {
-        "id": "finance-intake",
-        "name": "재무 가상 직원",
-        "supervisors": [
-          "김감독"
-        ]
       },
       "manual": false
     },
@@ -89,6 +81,9 @@
             "번호": 1,
             "금액": 500000
           }
+        ],
+        "감독자": [
+          "김감독"
         ]
       },
       "expected": {
@@ -98,13 +93,6 @@
         "Approve_Batch": {
           "승인": true
         }
-      },
-      "virtual_worker": {
-        "id": "finance-intake",
-        "name": "재무 가상 직원",
-        "supervisors": [
-          "김감독"
-        ]
       },
       "manual": false
     }

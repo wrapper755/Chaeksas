@@ -76,6 +76,9 @@ class ManifestInput(ContractModel):
     required: bool = False
     description: str | None = None
     default: Any = None
+    #: **값 출처** (C14, ADR-0099) — 비우면 부르는 쪽. 있으면 Center가 넣으므로 작업 화면이 칸을
+    #: 그리지 않고, 그 이름이 작업 `inputs`에 오면 Center가 거절한다 (C5 `input_not_from_caller`).
+    source: str | None = None
 
 
 class ServiceAppNeed(ContractModel):

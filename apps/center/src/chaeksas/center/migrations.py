@@ -225,6 +225,11 @@ MIGRATIONS: tuple[Step, ...] = (
             " set_at TEXT NOT NULL, set_by TEXT NOT NULL)",
         ),
     ),
+    Step(
+        14,
+        "작업이 어느 가상 직원의 일인가 — id만 남기고 값은 내려줄 때 읽는다 (C5 `virtual_worker`, ADR-0099)",
+        ("ALTER TABLE jobs ADD COLUMN virtual_worker TEXT",),
+    ),
 )
 
 

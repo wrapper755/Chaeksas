@@ -79,8 +79,6 @@ class Case:
     #: 노드 id → **PC 위임이 돌려주는 값** (C14 — 돌릴 남의 패키지가 없어 케이스가 적는다).
     #: **적어 두지 않은 위임은 그 자리에서 실패**다 (`DELEGATION_FAILED` — 경계를 시험하는 길이다).
     delegations: dict[str, dict[str, Any]] = field(default_factory=dict)
-    #: **가상 직원 신원** `{id, name, supervisors}` (C14, ADR-0098) — 현장에서는 Center가 채운다.
-    virtual_worker: dict[str, Any] | None = None
 
 
 @dataclass
@@ -112,8 +110,8 @@ class Example:
     called: list[str] = field(default_factory=list)  # 호출하는 다른 예제 file
     milestone: str = ""  # build.py가 쓰는 기능으로 정한다
     outputs: list[str] = field(default_factory=list)  # chk:process.outputs (호출 대상이면 필수)
-    #: chk:process.virtual_worker_as — 신원 칸(`id`·`name`·`supervisors`) → 변수 이름 (ADR-0098)
-    virtual_worker_as: dict[str, str] = field(default_factory=dict)
+    #: 입력 이름 → **값 출처** (C14 `inputs[].source`, ADR-0099). 적지 않은 입력은 부르는 쪽이다.
+    input_sources: dict[str, str] = field(default_factory=dict)
 
 
 # ───────── 만들기 도우미 ─────────
@@ -707,9 +705,8 @@ def to_bpmn(ex: Example) -> str:
     pid = "Proc_" + ex.file
     proc_meta = dict(run_location=ex.run_location, service_keys=ex.service_keys,
                      extensions=ex.extensions, outputs=ex.outputs,
-                     inputs=[dict(name=i[0], type=i[1], required=i[2], description=i[3], **({'default': i[4]} if len(i) > 4 else {})) for i in ex.inputs])
-    if ex.virtual_worker_as:
-        proc_meta["virtual_worker_as"] = ex.virtual_worker_as
+                     inputs=[dict(name=i[0], type=i[1], required=i[2], description=i[3], **({'default': i[4]} if len(i) > 4 else {}),
+                                  **({'source': ex.input_sources[i[0]]} if i[0] in ex.input_sources else {})) for i in ex.inputs])
     s = ['<?xml version="1.0" encoding="UTF-8"?>',
          '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"',
          '  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"',
@@ -896,8 +893,7 @@ def to_cases(ex: Example) -> str:
     return json.dumps({"schema": 1, "process": "Proc_" + ex.file, "cases": [
         dict(name=c.name, description=c.description, inputs=c.inputs, expected=c.expected,
              approvals=c.approvals, **({"messages": c.messages} if c.messages else {}),
-             **({"delegations": c.delegations} if c.delegations else {}),
-             **({"virtual_worker": c.virtual_worker} if c.virtual_worker else {}), manual=c.manual) for c in ex.cases]}, ensure_ascii=False, indent=2) + "\n"
+             **({"delegations": c.delegations} if c.delegations else {}), manual=c.manual) for c in ex.cases]}, ensure_ascii=False, indent=2) + "\n"
 
 
 # ───────────────────────── 문서 카드 ─────────────────────────
@@ -1002,12 +998,8 @@ def to_card(ex: Example, bpmn_rel: str, cases_rel: str) -> str:
     L += ["**업무 배경과 목표**", "", ex.background.strip(), "",
           f"**왜 {'서버' if ex.run_location == 'server' else 'PC'}에서 도는가**", "", ex.why_location.strip(), ""]
     if ex.inputs:
-        L += ["**입력** (`chk:process.inputs` — 작업 지시·메시지 본문·케이스가 채운다)", "", "| 이름 | 타입 | 필수 | 기본값 | 뜻 |", "| --- | --- | --- | --- | --- |"]
-        L += [f"| `{i[0]}` | {i[1]} | {'✓' if i[2] else ''} | {md_cell(json.dumps(i[4], ensure_ascii=False)) if len(i) > 4 else ''} | {md_cell(i[3])} |" for i in ex.inputs]
-        L.append("")
-    if ex.virtual_worker_as:
-        L += ["**가상 직원 신원** (`chk:process.virtual_worker_as` — Center가 채운다, 입력으로는 줄 수 없다)", "", "| 신원 칸 | 변수 |", "| --- | --- |"]
-        L += [f"| `{k}` | `{v}` |" for k, v in ex.virtual_worker_as.items()]
+        L += ["**입력** (`chk:process.inputs` — 작업 지시·메시지 본문·케이스가 채운다. 값 출처가 있으면 Center가 넣는다)", "", "| 이름 | 타입 | 필수 | 기본값 | 값 출처 | 뜻 |", "| --- | --- | --- | --- | --- | --- |"]
+        L += [f"| `{i[0]}` | {i[1]} | {'✓' if i[2] else ''} | {md_cell(json.dumps(i[4], ensure_ascii=False)) if len(i) > 4 else ''} | {('`' + ex.input_sources[i[0]] + '`') if i[0] in ex.input_sources else '부르는 쪽'} | {md_cell(i[3])} |" for i in ex.inputs]
         L.append("")
     L += ["**흐름 (노드)**", "", "| id | 이름 | 종류 | 핵심 속성 | 다음 |", "| --- | --- | --- | --- | --- |"]
 
@@ -1081,7 +1073,7 @@ _NAME = r"[A-Za-z가-힣_][A-Za-z0-9가-힣_]*"
 
 
 def defined_vars(ex: Example) -> set[str]:
-    d = set(_BUILTIN) | {i[0] for i in ex.inputs} | set(ex.virtual_worker_as.values())
+    d = set(_BUILTIN) | {i[0] for i in ex.inputs}
     for n in all_nodes(ex.nodes):
         p = n.props
         t = p.get("task") or {}

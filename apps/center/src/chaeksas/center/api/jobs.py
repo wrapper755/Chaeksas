@@ -25,7 +25,9 @@ from chaeksas.center.auth import Caller
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
 from chaeksas.contracts.bot_ui import HeartbeatRequest, JobAck, JobDispatch
+from chaeksas.contracts.bpmn_ext import INPUT_SOURCE_CALLER
 from chaeksas.contracts.center_api import (
+    DELEGATION_REQUESTER_PREFIX,
     IDEMPOTENCY_WINDOW_DAYS,
     LIST_LIMIT_DEFAULT,
     LIST_LIMIT_MAX,
@@ -158,14 +160,16 @@ def create(
 
     target = request.target
     version = _resolved_version(store, request)
+    _refuse_sourced_inputs(store, bot=request.bpm_process_id, version=version, inputs=request.inputs)
+    virtual_worker = _virtual_worker_of(store, request, actor=found.actor, by_center=by_center)
 
     job_id = new_job_id()
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO jobs (job_id, bpm_process_id, version, target_type, target_id, inputs_json,"
             " expires_at, note, owner, idempotency_key, body_hash, requested_by, requested_at, state,"
-            " on_behalf_of)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " on_behalf_of, virtual_worker)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 job_id,
                 request.bpm_process_id,
@@ -187,9 +191,48 @@ def create(
                 # 연동용 키가 실은 사람 — **주장**이라 적기만 한다 (ADR-0081). `requested_by`는
                 # 그대로 키 이름이다: Bot UI가 그 칸의 `server_bot:`로 위임을 가른다.
                 None if by_center else found.on_behalf,
+                virtual_worker,
             ),
         )
     return info_of(store, _must(store, job_id)), True
+
+
+def _refuse_sourced_inputs(store: Store, *, bot: str, version: str, inputs: dict[str, Any]) -> None:
+    """**값 출처가 부르는 쪽이 아닌 입력**은 줄 수 없다 — 422 `input_not_from_caller` (C5, ADR-0099).
+
+    매니페스트의 `inputs[].source`로 본다. 위임도 같은 길을 지난다 — 부모 그림이 자식의 그
+    입력에 매핑을 적으면 업무 실패가 된다(넘기는 것이 아니라 Center가 넣는 값이다).
+    """
+    row = store.row("SELECT manifest_json FROM packages WHERE id = ? AND version = ?", (bot, version))
+    declared = (loads(row["manifest_json"], {}) or {}).get("inputs") or [] if row is not None else []
+    sourced = sorted(
+        str(one.get("name"))
+        for one in declared
+        if isinstance(one, dict) and one.get("source") not in (None, INPUT_SOURCE_CALLER) and one.get("name") in inputs
+    )
+    if sourced:
+        raise ApiError(
+            422,
+            "input_not_from_caller",
+            f"{bot}@{version}의 입력 {', '.join(sourced)}은 Center가 넣는다 — 부르는 쪽이 줄 수 없다",
+            {"inputs": sourced},
+        )
+
+
+def _virtual_worker_of(store: Store, request: JobCreateRequest, *, actor: str, by_center: bool) -> str | None:
+    """이 작업의 가상 직원 id (ADR-0099 §2·§3).
+
+    **위임으로 만든 작업은 맡긴 실행의 작업에서 이어받는다** — 일괄이 맡긴 일은 그 가상 직원의
+    일이다. 그 밖에는 부른 쪽이 적은 것을 `intake`와 대조하고, 비웠으면 하나뿐일 때만 그것이다.
+    """
+    from chaeksas.center.api import virtual_workers  # noqa: PLC0415 — 순환 import를 피한다
+
+    if by_center and actor.startswith(DELEGATION_REQUESTER_PREFIX):
+        parent = store.row(
+            "SELECT virtual_worker FROM jobs WHERE run_id = ?", (actor[len(DELEGATION_REQUESTER_PREFIX):],)
+        )
+        return str(parent["virtual_worker"]) if parent is not None and parent["virtual_worker"] else None
+    return virtual_workers.pick(store, bot=request.bpm_process_id, requested=request.virtual_worker)
 
 
 def _resolved_version(store: Store, request: JobCreateRequest) -> str:
@@ -500,9 +543,9 @@ def _server_dispatch(
                 requested_at=row["requested_at"],
                 expires_at=row["expires_at"],
                 note=row["note"],
-                # **가상 직원의 접수 Bot이면 신원을 붙인다** (C12, ADR-0098) — 저장하지 않고 내려줄
-                # 때 읽는다. 감독자를 바꾸면 다음 작업부터 맞는다.
-                virtual_worker=virtual_workers.identity_of(store, str(row["bpm_process_id"])),
+                # **작업의 가상 직원을 붙인다** (C12, ADR-0099) — id만 남겨 두고 값은 내려줄 때
+                # 등록에서 읽는다. 감독자를 바꾸면 다음 작업부터 맞는다.
+                virtual_worker=virtual_workers.identity_of(store, row["virtual_worker"]),
             )
         )
     return out
@@ -766,6 +809,7 @@ def info_of(store: Store, row: Any) -> JobInfo:
         expires_at=row["expires_at"],
         note=row["note"],
         idempotency_key=row["idempotency_key"],
+        virtual_worker=row["virtual_worker"],
         requested_by=row["requested_by"],
         on_behalf_of=row["on_behalf_of"],
         requested_at=row["requested_at"],

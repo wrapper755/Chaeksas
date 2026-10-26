@@ -11,8 +11,9 @@
 3. **대리 답용 키는 감독하는 것만** 읽는다 — `X-CHK-On-Behalf-Of`의 사람이 감독자일 때 (ADR-0081).
    **연동용 키는 전부** 읽는다 — 회사 시스템이 가상 직원 카드를 그린다 (ADR-0098).
 
-그리고 **신원** — 접수 Bot 작업이 서버 실행기로 내려갈 때 그 가상 직원을 붙인다
-(`identity_of`, C12 `JobDispatch.virtual_worker`). 이것도 저장하지 않고 읽을 때 붙인다.
+그리고 **신원** — 작업은 어느 가상 직원의 일인지 id만 들고(`pick`, ADR-0099) 서버 실행기로
+내려갈 때 그 가상 직원의 값을 붙인다(`identity_of`, C12 `JobDispatch.virtual_worker`). 값은
+저장하지 않고 읽을 때 붙인다. **접수 Bot 하나를 여러 가상 직원이 쓸 수 있다.**
 """
 
 from __future__ import annotations
@@ -62,15 +63,8 @@ def entry_gate(package_dir: Path, file_name: str) -> list[str]:
     return [v.message for v in validate(process) if v.rule == GATE_RULE]
 
 
-def _check_intake(store: Store, package_dir: Path, intake: str, *, worker_id: str) -> None:
-    """묶어도 되는가 — 승인된 판이 있고·서버 Bot이고·**승인된 판마다** B16이 없다 (ADR-0085 §2).
-
-    그리고 **다른 가상 직원이 그 패키지를 쓰지 않는다** (409 `intake_in_use`, ADR-0098) — 그
-    실행에 실을 신원이 하나여야 한다.
-    """
-    taken = store.row("SELECT id FROM virtual_workers WHERE intake = ? AND id != ?", (intake, worker_id))
-    if taken is not None:
-        raise ApiError(409, "intake_in_use", f"{intake}는 이미 가상 직원 {taken['id']}의 접수 Bot이다")
+def _check_intake(store: Store, package_dir: Path, intake: str) -> None:
+    """묶어도 되는가 — 승인된 판이 있고·서버 Bot이고·**승인된 판마다** B16이 없다 (ADR-0085 §2)."""
     rows = store.rows(
         "SELECT version, run_location, file_name FROM packages WHERE id = ? AND status = ?",
         (intake, APPROVED),
@@ -132,7 +126,7 @@ def create(store: Store, package_dir: Path, raw: Any) -> VirtualWorkerInfo:
     request = _parse(raw)
     if store.row("SELECT id FROM virtual_workers WHERE id = ?", (request.id,)) is not None:
         raise ApiError(409, "id_conflict", f"가상 직원 {request.id}가 이미 있다")
-    _check_intake(store, package_dir, request.intake, worker_id=request.id)
+    _check_intake(store, package_dir, request.intake)
     at = now_iso()
     with store.tx() as cur:
         cur.execute(
@@ -148,7 +142,7 @@ def update(store: Store, package_dir: Path, worker_id: str, raw: Any) -> Virtual
     before = _must(store, worker_id)
     request = _parse(raw, path_id=worker_id)
     if request.intake != before["intake"]:
-        _check_intake(store, package_dir, request.intake, worker_id=worker_id)
+        _check_intake(store, package_dir, request.intake)
     with store.tx() as cur:
         cur.execute(
             "UPDATE virtual_workers SET name = ?, supervisors_json = ?, intake = ?, state = ?, updated_at = ?"
@@ -184,17 +178,36 @@ def reader(found: Caller) -> str | None:
     raise ApiError(403, "forbidden", "가상 직원은 콘솔 토큰·연동용 키·대리 답용 키로 읽는다")
 
 
-def identity_of(store: Store, bpm_process_id: str) -> VirtualWorkerIdentity | None:
-    """그 Bot을 접수 Bot으로 쓰는 가상 직원의 **신원** (C12 `JobDispatch.virtual_worker`, ADR-0098).
+def pick(store: Store, *, bot: str, requested: str | None) -> str | None:
+    """작업의 가상 직원 id (C5 `virtual_worker`, ADR-0099 §2).
 
-    멈춘 가상 직원도 준다 — 그 칸은 새 작업을 막지 않고 그 실행은 여전히 그의 일이다.
-    **둘 이상이면 아무것도 주지 않는다** (묶을 때 막지만 옛 저장소에는 있을 수 있다) — 누구의
-    신원인지 고를 수 없고, 비면 신원 변수가 `None`이라 실행이 멈춰 사람이 고친다.
+    적었으면 **그 가상 직원의 `intake`가 이 Bot**이어야 한다 — 아니면(없는 id도) 422
+    `virtual_worker_mismatch`. 비웠으면 그 Bot을 접수 Bot으로 쓰는 가상 직원이 **정확히 하나**일
+    때만 그것이다 — 여럿인데 고르지 않은 것을 조용히 고르지 않는다.
     """
-    rows = store.rows("SELECT * FROM virtual_workers WHERE intake = ?", (bpm_process_id,))
-    if len(rows) != 1:
+    if requested:
+        row = store.row("SELECT intake FROM virtual_workers WHERE id = ?", (requested,))
+        if row is None or row["intake"] != bot:
+            raise ApiError(
+                422,
+                "virtual_worker_mismatch",
+                f"가상 직원 {requested}의 접수 Bot이 {bot}이 아니다",
+                {"virtual_worker": requested, "bpm_process_id": bot},
+            )
+        return requested
+    rows = store.rows("SELECT id FROM virtual_workers WHERE intake = ?", (bot,))
+    return str(rows[0]["id"]) if len(rows) == 1 else None
+
+
+def identity_of(store: Store, worker_id: str | None) -> VirtualWorkerIdentity | None:
+    """그 가상 직원의 **값** — 서버 작업을 내려줄 때 붙인다 (C12 `JobDispatch.virtual_worker`).
+
+    멈춘 가상 직원도 준다 — 그 칸은 새 작업을 막지 않고 그 실행은 여전히 그의 일이다. 그 사이
+    지워졌으면 `None`이다 (출처가 가상 직원인 입력이 기본값·필수·`None`을 따른다).
+    """
+    row = store.row("SELECT * FROM virtual_workers WHERE id = ?", (worker_id,)) if worker_id else None
+    if row is None:
         return None
-    row = rows[0]
     return VirtualWorkerIdentity(id=row["id"], name=row["name"], supervisors=_supervisors_of(row))
 
 
@@ -312,6 +325,7 @@ __all__ = [
     "entry_gate",
     "get",
     "identity_of",
+    "pick",
     "job_belongs",
     "listing",
     "reader",

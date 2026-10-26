@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨(ADR-0099) — §1 받는 자리(`virtual_worker_as`)·§2의 「접수 Bot 하나에 하나」·§3 자식으로 넘기기. §2의 「Center가 내려줄 때 붙인다」와 §4 연동용 키 읽기는 그대로다 |
 | 날짜 | 2026-10-26 |
 | 관련 | [ADR-0085](0085-virtual-worker-resource.md)(가상 직원 자원 — 이 ADR이 「다시 볼 조건 ②」에 답하고 §3 읽는 쪽을 넓힌다), [ADR-0080](0080-approval-assignees.md)(「다시 볼 조건 ③」), [ADR-0096](0096-answerer-into-variables.md)(그림이 변수 이름을 고르는 결), [ADR-0079](0079-virtual-worker-is-an-intake-bot.md), [ADR-0082](0082-batch-start.md), 계약 C14·C12·C4·C5, 바깥 요청 NowView R7 |
 

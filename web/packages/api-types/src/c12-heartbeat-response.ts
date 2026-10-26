@@ -90,8 +90,8 @@ export interface JobDispatch {
 /**
  * **가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).
  *
- * Center가 서버 작업을 내려줄 때 붙이고(C12 `JobDispatch.virtual_worker`) Studio는 케이스가
- * 적는다. 엔진이 `chk:process.virtual_worker_as`가 고른 변수에 넣는다.
+ * Center가 서버 작업을 내려줄 때 붙인다(C12 `JobDispatch.virtual_worker`, ADR-0099). 실행하는
+ * 쪽이 출처가 `virtual_worker.*`인 입력의 값으로 푼다 (`core.engine.sourced_inputs`).
  */
 export interface VirtualWorkerIdentity {
   id: string;

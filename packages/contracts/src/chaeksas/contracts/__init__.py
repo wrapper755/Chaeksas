@@ -81,6 +81,8 @@ from chaeksas.contracts.bot_ui import (
 )
 from chaeksas.contracts.bpmn_ext import (
     BUILTIN_VARS,
+    INPUT_SOURCE_CALLER,
+    INPUT_SOURCE_TYPES,
     AiTask,
     Approval,
     BpmnProcess,
@@ -102,7 +104,6 @@ from chaeksas.contracts.bpmn_ext import (
     Receive,
     Rule,
     ServiceCall,
-    VirtualWorkerAs,
     VirtualWorkerIdentity,
     Webhook,
     available_vars,
@@ -613,6 +614,8 @@ __all__ = [
     "AiTask",
     "Approval",
     "BUILTIN_VARS",
+    "INPUT_SOURCE_CALLER",
+    "INPUT_SOURCE_TYPES",
     "BpmnFlow",
     "BpmnNode",
     "BpmnProcess",
@@ -645,7 +648,6 @@ __all__ = [
     "ReplayStep",
     "Rule",
     "ServiceCall",
-    "VirtualWorkerAs",
     "VirtualWorkerIdentity",
     "Webhook",
     "available_vars",

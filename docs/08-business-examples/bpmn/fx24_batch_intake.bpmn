@@ -20,12 +20,15 @@
       "type": "list",
       "required": true,
       "description": "{번호, 금액} 목록"
+    },
+    {
+      "name": "감독자",
+      "type": "list",
+      "required": true,
+      "description": "이 일괄을 승인할 사람들 — Center가 가상 직원 등록에서 넣는다",
+      "source": "virtual_worker.supervisors"
     }
-  ],
-  "virtual_worker_as": {
-    "name": "가상직원",
-    "supervisors": "감독자"
-  }
+  ]
 }</chk:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
@@ -79,8 +82,7 @@
   },
   "input": {
     "번호": "건['번호']",
-    "금액": "건['금액']",
-    "처리자": "가상직원"
+    "금액": "건['금액']"
   },
   "output": {
     "처리결과": "처리결과"

@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { center, CenterError, session, signIn, signOut } from "@/lib/center";
+import { fromCaller } from "@/lib/inputs";
 import { COOKIE_NAME, seal } from "@/lib/session";
 
 /**
@@ -192,7 +193,7 @@ export async function createJob(form: FormData): Promise<void> {
   try {
     // 입력 칸은 **그 Bot UI에 배포된 버전**의 매니페스트로 그렸다 (`version`을 비워 보내도).
     const shown = String(form.get("inputs_from") ?? "") || version;
-    const declared = shown ? ((await center.packageInfo(bot, shown)).manifest?.inputs ?? []) : [];
+    const declared = shown ? fromCaller((await center.packageInfo(bot, shown)).manifest?.inputs ?? []) : [];
     inputs = readInputs(declared, form);
   } catch (cause) {
     redirect(back(`error=${encodeURIComponent(message(cause))}`));

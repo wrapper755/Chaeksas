@@ -470,6 +470,9 @@ class JobCreateRequest(ContractModel):
     expires_at: Timestamp | None = None
     note: str | None = Field(default=None, max_length=MAX_NOTE_CHARS)
     idempotency_key: str | None = None
+    #: **어느 가상 직원의 일인가** (가상 직원 id, ADR-0099). 그 가상 직원의 `intake`가 이 Bot이어야
+    #: 한다. 비우면 그 Bot의 가상 직원이 하나뿐일 때만 그것이다. 값(이름·감독자)은 Center가 채운다.
+    virtual_worker: str | None = None
 
 
 class JobInfo(JobCreateRequest):
