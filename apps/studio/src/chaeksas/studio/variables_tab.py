@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts.bpmn_ext import INPUT_SOURCE_CALLER, INPUT_SOURCE_TYPES, InputDecl, ProcessInfo
+from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2
 from chaeksas.studio.variables import (
     INPUT_SOURCES,
@@ -136,10 +137,10 @@ class VariablesTab(QWidget):
 
         self.note = QLabel("", self)
         self.note.setWordWrap(True)
-        self.note.setProperty("role", "muted")
+        set_role(self.note, "muted")
         self.error = QLabel("", self)
         self.error.setWordWrap(True)
-        self.error.setProperty("role", "error")
+        set_role(self.error, "error")
         self.error.hide()
 
         buttons = QHBoxLayout()
