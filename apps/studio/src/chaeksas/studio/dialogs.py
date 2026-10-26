@@ -113,6 +113,8 @@ class NewProcessDialog(QDialog):
         self.opened = opened if opened is not None and opened.is_file() else None
         self.imported = imported
         self.made: BpmProcess | None = None
+        #: 파일에서 가져오기가 새로 만들지 않고 기존 것의 진입 정의를 바꿨는가.
+        self.replaced = False
         title = "새 BPM 프로세스"
         if source is not None:
             title = "다른 이름으로 저장"
@@ -242,7 +244,8 @@ class NewProcessDialog(QDialog):
             return
         if drawing.name:
             self.name_box.setText(drawing.name)
-        if ID_PATTERN.match(drawing.id) and self.workspace.find(drawing.id) is None:
+        # **이미 있는 id여도 채운다** — 「확인」이 「기존 것을 바꾸기」를 묻는 입구다.
+        if ID_PATTERN.match(drawing.id):
             self.id_box.setText(drawing.id)
 
     def first(self) -> Path | None:
@@ -254,6 +257,11 @@ class NewProcessDialog(QDialog):
         return self.opened if self.opened_pick.isChecked() else None
 
     def accept(self) -> None:
+        if self.imported is not None:
+            existing = self.workspace.find(self.id_box.text().strip())
+            if existing is not None:
+                self._replace(existing, self.imported)
+                return
         group = self.group_box.text().strip() or DEFAULT_GROUP
         if not (self.workspace.root / group).is_dir():
             try:
@@ -295,6 +303,37 @@ class NewProcessDialog(QDialog):
             # **창을 닫지 않는다** — 적은 것을 버리지 않고 고칠 기회를 준다 (STU-05).
             QMessageBox.warning(self, self.windowTitle(), str(e))
             return
+        super().accept()
+
+    def _replace(self, existing: BpmProcess, source: Path) -> None:
+        """같은 id가 있으면 막다른 오류 대신 「기존 것을 바꾸기」를 묻는다 (STU-05).
+
+        **기본은 「취소」다** — 덮어쓰기는 되돌릴 수 없다. 바꾸는 것은 진입 정의의 내용뿐이고
+        창에 적은 이름·버전·그룹은 쓰지 않는다.
+        """
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Question)
+        box.setWindowTitle(self.windowTitle())
+        box.setText(
+            f"같은 id의 BPM 프로세스가 있습니다: {existing.id}\n"
+            f"({existing.display} {existing.version})"
+        )
+        box.setInformativeText(
+            f"바꾸면 진입 정의 {existing.entry}만 이 파일로 바뀝니다.\n"
+            "시험 케이스·이름·버전은 그대로 남습니다."
+        )
+        replace = box.addButton("기존 것을 바꾸기", QMessageBox.ButtonRole.AcceptRole)
+        cancel = box.addButton("취소", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(cancel)
+        box.exec()
+        if box.clickedButton() is not replace:
+            return
+        try:
+            self.made = self.workspace.replace_entry(existing, source)
+        except (WorkspaceError, OSError) as e:
+            QMessageBox.warning(self, self.windowTitle(), str(e))
+            return
+        self.replaced = True
         super().accept()
 
     @classmethod
