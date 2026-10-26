@@ -41,7 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts import SCOPE_STUDIO, ConfigurationItem
-from chaeksas.qt.theme import THEME_DARK, THEME_LIGHT, THEME_SYSTEM
+from chaeksas.qt.theme import THEME_DARK, THEME_LIGHT, THEME_SYSTEM, set_role
 from chaeksas.qt.theme.tokens import SPACE_1
 from chaeksas.studio import dev_keys
 from chaeksas.studio.center_enroll import StudioEnrollment, connected_text, expires_soon, waiting_text
@@ -134,7 +134,7 @@ class StudioSettingsDialog(QDialog):
         self.categories.setCurrentRow(CATEGORIES.index(LLM))
 
         self.error = QLabel("")
-        self.error.setProperty("role", "error")
+        set_role(self.error, "error")
         self.error.setWordWrap(True)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.button(QDialogButtonBox.StandardButton.Save).setText("저장")
@@ -177,7 +177,7 @@ class StudioSettingsDialog(QDialog):
         form.addRow("테마", self.theme)
         note = QLabel("캔버스의 그림은 테마와 상관없이 밝게 둡니다 — 그림의 선과 글자가 검정입니다.")
         note.setWordWrap(True)
-        note.setProperty("role", "muted")
+        set_role(note, "muted")
         form.addRow("", note)
         return page
 

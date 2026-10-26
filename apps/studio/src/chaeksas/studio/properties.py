@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts.bpmn_ext import ELEMENT_MODELS
+from chaeksas.qt.theme import set_role
 from chaeksas.studio.service_catalog import Catalog
 
 EMPTY_TEXT = "캔버스에서 요소를 선택하면 속성을 편집할 수 있습니다."
@@ -239,7 +240,7 @@ class Properties(QWidget):
 
         self.error = QLabel("", self)
         self.error.setWordWrap(True)
-        self.error.setProperty("role", "error")
+        set_role(self.error, "error")
         self.apply_button = QPushButton("적용", self)
         self.apply_button.clicked.connect(self.apply)
 

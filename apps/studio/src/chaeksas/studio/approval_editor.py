@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts.bpmn_ext import Approval, is_var_name
+from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3
 
 #: 탭 이름 — 결재와 확인은 같은 `chk:approval`이고 이름만 다르다 (C14).
@@ -105,7 +106,7 @@ class ApprovalEditor(QWidget):
         self.drop_show.setObjectName("Secondary")
         self.show_note = QLabel("", self)
         self.show_note.setWordWrap(True)
-        self.show_note.setProperty("role", "error")
+        set_role(self.show_note, "error")
         self.show_note.hide()
 
         self.fields = QTableWidget(0, len(FIELD_COLUMNS), self)
@@ -130,7 +131,7 @@ class ApprovalEditor(QWidget):
         self.location_picks["follow"].setChecked(True)
         self.location_note = QLabel("", self)
         self.location_note.setWordWrap(True)
-        self.location_note.setProperty("role", "muted")
+        set_role(self.location_note, "muted")
 
         self.assignee_mode = QComboBox(self)
         self.assignee_mode.addItem("이름 목록 (쉼표)", ASSIGNEE_NAMES)
@@ -154,7 +155,7 @@ class ApprovalEditor(QWidget):
 
         self.warning = QLabel("", self)
         self.warning.setWordWrap(True)
-        self.warning.setProperty("role", "error")
+        set_role(self.warning, "error")
 
         self._build_layout()
         self._wire()
@@ -203,7 +204,7 @@ class ApprovalEditor(QWidget):
         row = QHBoxLayout()
         hint = QLabel("답한 값은 같은 이름의 변수가 됩니다. 칸이 없으면 「승인 / 반려」 두 단추입니다.", box)
         hint.setWordWrap(True)
-        hint.setProperty("role", "muted")
+        set_role(hint, "muted")
         row.addWidget(hint, 1)
         row.addWidget(self.add_field)
         row.addWidget(self.drop_field)

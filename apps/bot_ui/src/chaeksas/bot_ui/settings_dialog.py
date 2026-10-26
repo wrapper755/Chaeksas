@@ -55,6 +55,7 @@ from chaeksas.bot_ui.settings import (
 )
 from chaeksas.contracts import SCOPE_BOT_UI, ConfigurationItem
 from chaeksas.core.senders import KNOWN_SECURITY, SECURITY_NONE, SECURITY_STARTTLS
+from chaeksas.qt.theme import set_role
 
 log = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class SettingsDialog(QDialog):
 
         code_row = QHBoxLayout()
         self.code_label = QLabel()
-        self.code_label.setProperty("role", "h2")
+        set_role(self.code_label, "h2")
         self.code_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.copy_code = QPushButton("복사")
         self.copy_code.clicked.connect(self._copy_code)

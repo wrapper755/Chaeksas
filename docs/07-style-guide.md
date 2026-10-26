@@ -128,6 +128,16 @@
 - 테마: 「시스템 따름」(기본) / 밝게 / 어둡게 (STU-10 「외형」, Bot UI도 같음).
 - 트레이 아이콘의 상태 점은 상태 `solid` 색, 툴팁에 글자.
 - 표는 `row.compact`(32), 컨트롤은 `control.md`(32).
+- 글자 하나의 뜻은 `QLabel`의 **`role` 속성**으로 준다 — 색·크기를 코드에 쓰지 않는다. 생성 QSS(`gen_tokens.py`)가 칠한다. **`chaeksas.qt.theme.set_role(위젯, 뜻)`으로 준다** — Qt는 스타일시트를 처음 보일 때 한 번 입히므로 `setProperty`만 부르면 보인 뒤에 준 뜻이 칠해지지 않는다.
+
+  | `role` | 쓰는 곳 | 모양 |
+  | --- | --- | --- |
+  | `error` | 막는 까닭·검증 오류 (U3 「바로 아래에 빨간 글자로」) | `status.failed.fg` |
+  | `warning` | 막지는 않는 주의 | `status.warning.fg` |
+  | `muted` | 덜 중요한 설명 | `text.muted` |
+  | `h2` | 창 안의 큰 제목 | `size.h2`·`weight.semibold` |
+
+  모르는 `role`은 기본 글자로 보인다. 새 `role`을 쓰려면 이 표와 생성기를 함께 고친다 (시험이 코드에서 쓰는 `role`을 모아 대조한다).
 
 ## 5. 문구
 
