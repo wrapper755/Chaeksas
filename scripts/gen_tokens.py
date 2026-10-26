@@ -401,6 +401,12 @@ QLabel, QCheckBox, QRadioButton {{ background-color: transparent; }}
 QLabel#Secondary {{ color: {c["text.secondary"]}; }}
 QLabel#Muted {{ color: {c["text.muted"]}; }}
 
+/* 글자의 뜻은 `role` 속성으로 준다 (스타일 가이드 §4-2) — 「빨간 글자로 이유」(U3)가 여기서 빨갛다. */
+QLabel[role="error"] {{ color: {c["status.failed.fg"]}; }}
+QLabel[role="warning"] {{ color: {c["status.warning.fg"]}; }}
+QLabel[role="muted"] {{ color: {c["text.muted"]}; }}
+QLabel[role="h2"] {{ font-size: {f["size.h2"]}px; font-weight: {f["weight.semibold"]}; }}
+
 QPushButton {{
   background-color: {c["primary"]};
   color: {c["primary.fg"]};

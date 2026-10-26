@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts.approvals import Form, FormField, validate_answer
+from chaeksas.qt.theme import set_role
 
 #: 확인(`confirmation`)은 업무 결재가 아니라 **실행 중 막힘**이다 (CMN-01 오른쪽 칸).
 CONFIRMATION = "confirmation"
@@ -91,7 +92,7 @@ class ApprovalDialog(QDialog):
         layout = QVBoxLayout(self)
         heading = QLabel(title or "결재 요청", self)
         heading.setWordWrap(True)
-        heading.setProperty("role", "h2")
+        set_role(heading, "h2")
         layout.addWidget(heading)
 
         if description:
@@ -114,7 +115,7 @@ class ApprovalDialog(QDialog):
 
         self.note = QLabel("", self)
         self.note.setWordWrap(True)
-        self.note.setProperty("role", "error")
+        set_role(self.note, "error")
         layout.addWidget(self.note)
         layout.addWidget(buttons)
 

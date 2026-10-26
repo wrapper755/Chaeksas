@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 
 from chaeksas.contracts.bpmn_ext import CASE_ANSWERER, Case, CaseMessage
 from chaeksas.qt.messages import ask_unsaved
+from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3, SPACE_4
 from chaeksas.studio.cases import (
     COMPARISONS,
@@ -181,7 +182,7 @@ class CaseDialog(QDialog):
             lambda: [_combo(sorted(self.forms), ""), ""],
         )
         heading = QLabel(ANSWERER_TITLE, self.answer_block)
-        heading.setProperty("role", "muted")
+        set_role(heading, "muted")
         answer_layout = self.answer_block.layout()
         assert isinstance(answer_layout, QVBoxLayout)
         answer_layout.addWidget(heading)
@@ -209,7 +210,7 @@ class CaseDialog(QDialog):
 
         self.note = QLabel("", self)
         self.note.setWordWrap(True)
-        self.note.setProperty("role", "error")
+        set_role(self.note, "error")
 
         self.blocks = (self.input_block, self.expected_block, self.answer_block, self.message_block)
         self.tabs = QTabWidget(self)

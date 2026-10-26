@@ -28,7 +28,7 @@ from chaeksas.qt.theme import tokens
 
 if TYPE_CHECKING:  # QApplication을 타입으로만 쓴다 (import 비용을 줄인다)
     from PySide6.QtGui import QFont, QPalette
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QWidget
 
 LOG = logging.getLogger(__name__)
 
@@ -207,6 +207,19 @@ def _follow_system(app: QApplication) -> None:
         apply_theme(app, choice=THEME_SYSTEM)
 
 
+def set_role(widget: QWidget, role: str) -> None:
+    """글자의 뜻(`role` — 스타일 가이드 §4-2)을 주고 **그 자리에서 다시 칠한다**.
+
+    Qt는 스타일시트를 위젯이 처음 보일 때(또는 `setVisible`이 부를 때) 한 번 입히고, 그 뒤에
+    속성을 바꿔도 다시 보지 않는다 — 그래서 `setVisible` 뒤에 `setProperty("role", …)`를 부르면
+    「빨간 글자」가 검게 남았다. `setProperty`를 직접 부르지 않는다.
+    """
+    widget.setProperty("role", role)
+    style = widget.style()
+    style.unpolish(widget)
+    style.polish(widget)
+
+
 def status_color(group: str, label: str, *, theme: str = THEME_LIGHT, part: str = "solid") -> str | None:
     """상태 표기 → 색 (스타일 가이드 §2-2). 웹의 `statusToken()`과 같은 표를 쓴다.
 
@@ -231,6 +244,7 @@ __all__ = [
     "palette",
     "qss",
     "resolve",
+    "set_role",
     "status_color",
     "tokens",
 ]

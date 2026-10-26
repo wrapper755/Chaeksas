@@ -50,6 +50,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts.bpmn_ext import BpmnProcess, ProcessInfo, server_blockers
+from chaeksas.qt.theme import set_role
 from chaeksas.studio.workspace import BpmProcess, Definition, Workspace, WorkspaceError, write_record
 
 log = logging.getLogger(__name__)
@@ -214,7 +215,7 @@ class ProcessInfoDialog(QDialog):
         #: 단추 위 한 줄 — 「적용」이 어디로 가나 (STU-04 「적용」과 같은 말).
         self.apply_note = QLabel(APPLY_NOTE if self._graph_open() else APPLY_NOTE_RECORD_ONLY, self)
         self.apply_note.setWordWrap(True)
-        self.apply_note.setProperty("role", "muted")
+        set_role(self.apply_note, "muted")
 
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Cancel, parent=self

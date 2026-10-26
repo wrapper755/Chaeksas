@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from chaeksas.qt.theme import set_role
 from chaeksas.studio.center_enroll import Outcome, StudioEnrollment, waiting_text
 from chaeksas.studio.credentials import StudioCredentials
 from chaeksas.studio.settings import Settings
@@ -67,7 +68,7 @@ class CenterConnectDialog(QDialog):
         self.resize(WIDTH, HEIGHT)
 
         self.title = QLabel(TITLE)
-        self.title.setProperty("role", "h2")
+        set_role(self.title, "h2")
         self.address = QLineEdit(settings.center_url)
         self.address.setPlaceholderText("http://center.example.com:8800")
         self.address.textChanged.connect(lambda _text: self._show())
@@ -77,7 +78,7 @@ class CenterConnectDialog(QDialog):
         self.status.setWordWrap(True)
         self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.code = QLabel("")
-        self.code.setProperty("role", "h2")
+        set_role(self.code, "h2")
         self.code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.copy = QPushButton("복사")
         self.copy.clicked.connect(self._copy)

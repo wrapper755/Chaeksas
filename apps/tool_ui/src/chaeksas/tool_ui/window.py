@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from chaeksas.qt.theme import set_role
 from chaeksas.tool_ui.host import ToolHost
 
 log = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ class ToolWindow(QMainWindow):
         #: 도구를 열지 못한 까닭 (U3 — 툴팁에 숨기지 않는다).
         self.problem = QLabel()
         self.problem.setWordWrap(True)
-        self.problem.setProperty("role", "error")
+        set_role(self.problem, "error")
         self.problem.hide()
         empty_layout.addWidget(self.problem)
         empty_layout.addStretch(1)
