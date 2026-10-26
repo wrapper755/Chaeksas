@@ -220,6 +220,8 @@ def _to_new_job(
             "target": {"type": "server_runner"},
             "inputs": dict(request.payload),
             "note": f"메시지 {request.name}",
+            # 어느 가상 직원의 일인가 — `POST /jobs`와 같은 규칙으로 고른다 (ADR-0099).
+            "virtual_worker": request.virtual_worker,
         },
     )
     message_id = new_message_id()

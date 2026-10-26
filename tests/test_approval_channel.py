@@ -246,7 +246,10 @@ def test_assignees_are_resolved_when_the_approval_is_made() -> None:
     assert run.pending is not None and run.pending.assignees == ["박감독"]
 
 
-@pytest.mark.parametrize(("seed", "code"), [({}, "assignees_missing"), ({"감독자": 3}, "assignees_invalid")])
+@pytest.mark.parametrize(
+    ("seed", "code"),
+    [({}, "assignees_missing"), ({"감독자": None}, "assignees_missing"), ({"감독자": 3}, "assignees_invalid")],
+)
 def test_an_assignee_variable_that_is_missing_or_wrong_stops_the_run(seed: dict[str, Any], code: str) -> None:
     """조용히 「담당자 없음」으로 두면 감독자가 사라진다 — 그림의 버그라 경계로 받지 않는다."""
     engine = Engine()

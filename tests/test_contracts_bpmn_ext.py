@@ -208,6 +208,34 @@ def test_the_answerer_variables_are_produced_by_the_approval() -> None:
     assert node is not None and {"확인자", "확인경로"} <= produced_vars(node)
 
 
+def _sourced(source: str, kind: str) -> str:
+    """값 출처가 있는 입력 하나를 선언하고 결재 담당자로 쓰는 그림 (ADR-0099)."""
+    return wrap(
+        line('<bpmn:userTask id="Ap"><bpmn:extensionElements>'
+             '<chk:approval>{"title": "일괄 승인", "assignees": "감독자"}</chk:approval>'
+             "</bpmn:extensionElements></bpmn:userTask>"),
+        process_json=(
+            f'{{"run_location": "server", "inputs": [{{"name": "감독자", "type": "{kind}", "source": "{source}"}}]}}'
+        ),
+    )
+
+
+def test_b8_an_input_source_must_be_known_and_match_its_type() -> None:
+    """ADR-0099 — 감독자는 목록, id·이름은 글자다. 모르는 출처는 오류다."""
+    assert "B8" not in codes(_sourced("virtual_worker.supervisors", "list"))
+    assert "B8" not in codes(_sourced("caller", "list"))
+    assert "B8" in codes(_sourced("virtual_worker.supervisors", "string"))
+    assert "B8" in codes(_sourced("virtual_worker.boss", "list"))
+
+
+def test_a_sourced_input_is_an_input() -> None:
+    """같은 형식이다 — 출처가 달라도 선언한 입력이라 B11의 출처이고 `from_caller`만 다르다."""
+    process = read_process(_sourced("virtual_worker.supervisors", "list"))
+    assert "B11" not in codes(_sourced("virtual_worker.supervisors", "list"))
+    decl = process.info.input("감독자")
+    assert decl is not None and not decl.from_caller
+
+
 def test_b12_warns_when_a_confirmation_names_assignees() -> None:
     found = [v for v in validate(read_process(_approval("manualTask", '{"title": "확인", "assignees": ["김"]}')))
              if v.rule == "B12"]

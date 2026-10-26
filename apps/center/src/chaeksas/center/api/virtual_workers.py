@@ -9,6 +9,11 @@
    그것이 없어야 배포된다. 그림은 **Center가 저장된 zip에서 읽는다** — 내보낸 쪽을 믿지 않는다.
 2. **기동 허용 목록은 없다** — 접수 Bot의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
 3. **대리 답용 키는 감독하는 것만** 읽는다 — `X-CHK-On-Behalf-Of`의 사람이 감독자일 때 (ADR-0081).
+   **연동용 키는 전부** 읽는다 — 회사 시스템이 가상 직원 카드를 그린다 (ADR-0098).
+
+그리고 **신원** — 작업은 어느 가상 직원의 일인지 id만 들고(`pick`, ADR-0099) 서버 실행기로
+내려갈 때 그 가상 직원의 값을 붙인다(`identity_of`, C12 `JobDispatch.virtual_worker`). 값은
+저장하지 않고 읽을 때 붙인다. **접수 Bot 하나를 여러 가상 직원이 쓸 수 있다.**
 """
 
 from __future__ import annotations
@@ -17,11 +22,11 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from chaeksas.center.auth import Caller, require_on_behalf
+from chaeksas.center.auth import INTEGRATION_KEY_TYPE, Caller, require_on_behalf
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
 from chaeksas.contracts.approvals import normalize_assignees, normalize_name
-from chaeksas.contracts.bpmn_ext import BpmnReadError, read_process, validate
+from chaeksas.contracts.bpmn_ext import BpmnReadError, VirtualWorkerIdentity, read_process, validate
 from chaeksas.contracts.center_api import (
     DELEGATION_REQUESTER_PREFIX,
     VIRTUAL_WORKER_RECENT_BATCHES,
@@ -158,12 +163,52 @@ def remove(store: Store, worker_id: str) -> None:
 
 
 def reader(found: Caller) -> str | None:
-    """읽을 수 있는 쪽 — 콘솔 토큰이면 `None`(전부), 대리 답용 키면 **그 사람**(감독하는 것만)."""
+    """읽을 수 있는 쪽 — 콘솔 토큰·연동용 키면 `None`(전부), 대리 답용 키면 **그 사람**(감독하는 것만).
+
+    **연동용 키는 전부다** (ADR-0098) — 가상 직원에는 「자기 것」이 없고, 그 키는 이미 어느
+    Bot이든 작업을 낼 수 있어 묶임을 보는 것으로 힘이 늘지 않는다. `X-CHK-On-Behalf-Of`를
+    실어도 거르지 않는다(연동용 키의 그 헤더는 주장이라 적기만 한다, ADR-0081).
+    """
     if found.kind in ("admin", "read"):
         return None
     if found.is_relay:
         return require_on_behalf(found)
-    raise ApiError(403, "forbidden", "가상 직원은 콘솔 토큰이나 대리 답용 키로 읽는다")
+    if found.key is not None and found.key.type == INTEGRATION_KEY_TYPE:
+        return None
+    raise ApiError(403, "forbidden", "가상 직원은 콘솔 토큰·연동용 키·대리 답용 키로 읽는다")
+
+
+def pick(store: Store, *, bot: str, requested: str | None) -> str | None:
+    """작업의 가상 직원 id (C5 `virtual_worker`, ADR-0099 §2).
+
+    적었으면 **그 가상 직원의 `intake`가 이 Bot**이어야 한다 — 아니면(없는 id도) 422
+    `virtual_worker_mismatch`. 비웠으면 그 Bot을 접수 Bot으로 쓰는 가상 직원이 **정확히 하나**일
+    때만 그것이다 — 여럿인데 고르지 않은 것을 조용히 고르지 않는다.
+    """
+    if requested:
+        row = store.row("SELECT intake FROM virtual_workers WHERE id = ?", (requested,))
+        if row is None or row["intake"] != bot:
+            raise ApiError(
+                422,
+                "virtual_worker_mismatch",
+                f"가상 직원 {requested}의 접수 Bot이 {bot}이 아니다",
+                {"virtual_worker": requested, "bpm_process_id": bot},
+            )
+        return requested
+    rows = store.rows("SELECT id FROM virtual_workers WHERE intake = ?", (bot,))
+    return str(rows[0]["id"]) if len(rows) == 1 else None
+
+
+def identity_of(store: Store, worker_id: str | None) -> VirtualWorkerIdentity | None:
+    """그 가상 직원의 **값** — 서버 작업을 내려줄 때 붙인다 (C12 `JobDispatch.virtual_worker`).
+
+    멈춘 가상 직원도 준다 — 그 칸은 새 작업을 막지 않고 그 실행은 여전히 그의 일이다. 그 사이
+    지워졌으면 `None`이다 (출처가 가상 직원인 입력이 기본값·필수·`None`을 따른다).
+    """
+    row = store.row("SELECT * FROM virtual_workers WHERE id = ?", (worker_id,)) if worker_id else None
+    if row is None:
+        return None
+    return VirtualWorkerIdentity(id=row["id"], name=row["name"], supervisors=_supervisors_of(row))
 
 
 def listing(store: Store, *, supervisor: str | None = None, on_behalf: str | None = None) -> list[VirtualWorkerInfo]:
@@ -279,6 +324,8 @@ __all__ = [
     "deploy_gate",
     "entry_gate",
     "get",
+    "identity_of",
+    "pick",
     "job_belongs",
     "listing",
     "reader",

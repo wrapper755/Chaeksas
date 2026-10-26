@@ -95,6 +95,16 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
     by_id = {n.id: n for n in ns}
     declared = {i[0] for i in e.inputs}
     defaults = {i[0] for i in e.inputs if len(i) > 4}
+    # **값 출처** (C14 B8, ADR-0099) — 선언한 입력에만, 아는 출처이고 그 타입이어야 한다.
+    source_types = {"virtual_worker.id": "string", "virtual_worker.name": "string", "virtual_worker.supervisors": "list"}
+    types = {i[0]: i[1] for i in e.inputs}
+    for name, source in e.input_sources.items():
+        if name not in types:
+            errs.append(f"{e.id}: 값 출처를 적은 입력 `{name}`이 선언되지 않음")
+        elif source not in source_types:
+            errs.append(f"{e.id}: 입력 `{name}`의 값 출처 `{source}`를 모른다")
+        elif types[name] != source_types[source]:
+            errs.append(f"{e.id}: 입력 `{name}`은 `{source}`라 타입이 {source_types[source]}여야 한다 (B8)")
     # 타이머 시작인데 필수 입력이 있으면 채울 사람이 없다
     if any(n.kind == "start" and n.props.get("kind") == "timer" for n in e.nodes):
         for i in e.inputs:
@@ -141,7 +151,10 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
         tin = {i[0] for i in tgt.inputs}
         if set(t["input"]) - tin:
             errs.append(f"{e.id}: {n.id} 입력 {sorted(set(t['input']) - tin)}가 {tgt.id} 입력에 없음")
-        need = {i[0] for i in tgt.inputs if i[2]} - set(t["input"])
+        # 값 출처가 있는 입력은 **넘기지 않는다** — Center가 넣는다 (ADR-0099 §3, Center 422).
+        if set(t["input"]) & set(tgt.input_sources):
+            errs.append(f"{e.id}: {n.id}가 {tgt.id}의 값 출처 입력 {sorted(set(t['input']) & set(tgt.input_sources))}를 넘긴다")
+        need = {i[0] for i in tgt.inputs if i[2] and i[0] not in tgt.input_sources} - set(t["input"])
         if need:
             errs.append(f"{e.id}: {n.id}가 {tgt.id}의 필수 입력 {sorted(need)}를 넘기지 않음")
         if not tgt.outputs:
@@ -169,7 +182,10 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
         tin = {i[0] for i in tgt.inputs}
         if set(t["input"]) - tin:
             errs.append(f"{e.id}: {n.id} 입력 {sorted(set(t['input']) - tin)}가 {tgt.id} 입력에 없음")
-        need = {i[0] for i in tgt.inputs if i[2]} - set(t["input"])
+        # 값 출처가 있는 입력은 **넘기지 않는다** — Center가 넣는다 (ADR-0099 §3, Center 422).
+        if set(t["input"]) & set(tgt.input_sources):
+            errs.append(f"{e.id}: {n.id}가 {tgt.id}의 값 출처 입력 {sorted(set(t['input']) & set(tgt.input_sources))}를 넘긴다")
+        need = {i[0] for i in tgt.inputs if i[2] and i[0] not in tgt.input_sources} - set(t["input"])
         if need:
             errs.append(f"{e.id}: {n.id}가 {tgt.id}의 필수 입력 {sorted(need)}를 넘기지 않음")
         bad = [v for v in t["output"].values() if v not in tgt.outputs]

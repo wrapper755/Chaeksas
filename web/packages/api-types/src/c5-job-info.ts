@@ -30,6 +30,7 @@ export interface JobInfo {
   state_reason?: string | null;
   target: JobTarget;
   version?: string | null;
+  virtual_worker?: string | null;
   [k: string]: unknown;
 }
 /**

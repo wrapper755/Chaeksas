@@ -17,6 +17,7 @@ export interface JobCreateRequest {
   note?: string | null;
   target: JobTarget;
   version?: string | null;
+  virtual_worker?: string | null;
   [k: string]: unknown;
 }
 /**

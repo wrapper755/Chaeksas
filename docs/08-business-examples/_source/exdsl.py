@@ -110,6 +110,8 @@ class Example:
     called: list[str] = field(default_factory=list)  # 호출하는 다른 예제 file
     milestone: str = ""  # build.py가 쓰는 기능으로 정한다
     outputs: list[str] = field(default_factory=list)  # chk:process.outputs (호출 대상이면 필수)
+    #: 입력 이름 → **값 출처** (C14 `inputs[].source`, ADR-0099). 적지 않은 입력은 부르는 쪽이다.
+    input_sources: dict[str, str] = field(default_factory=dict)
 
 
 # ───────── 만들기 도우미 ─────────
@@ -703,7 +705,8 @@ def to_bpmn(ex: Example) -> str:
     pid = "Proc_" + ex.file
     proc_meta = dict(run_location=ex.run_location, service_keys=ex.service_keys,
                      extensions=ex.extensions, outputs=ex.outputs,
-                     inputs=[dict(name=i[0], type=i[1], required=i[2], description=i[3], **({'default': i[4]} if len(i) > 4 else {})) for i in ex.inputs])
+                     inputs=[dict(name=i[0], type=i[1], required=i[2], description=i[3], **({'default': i[4]} if len(i) > 4 else {}),
+                                  **({'source': ex.input_sources[i[0]]} if i[0] in ex.input_sources else {})) for i in ex.inputs])
     s = ['<?xml version="1.0" encoding="UTF-8"?>',
          '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"',
          '  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"',
@@ -995,8 +998,8 @@ def to_card(ex: Example, bpmn_rel: str, cases_rel: str) -> str:
     L += ["**업무 배경과 목표**", "", ex.background.strip(), "",
           f"**왜 {'서버' if ex.run_location == 'server' else 'PC'}에서 도는가**", "", ex.why_location.strip(), ""]
     if ex.inputs:
-        L += ["**입력** (`chk:process.inputs` — 작업 지시·메시지 본문·케이스가 채운다)", "", "| 이름 | 타입 | 필수 | 기본값 | 뜻 |", "| --- | --- | --- | --- | --- |"]
-        L += [f"| `{i[0]}` | {i[1]} | {'✓' if i[2] else ''} | {md_cell(json.dumps(i[4], ensure_ascii=False)) if len(i) > 4 else ''} | {md_cell(i[3])} |" for i in ex.inputs]
+        L += ["**입력** (`chk:process.inputs` — 작업 지시·메시지 본문·케이스가 채운다. 값 출처가 있으면 Center가 넣는다)", "", "| 이름 | 타입 | 필수 | 기본값 | 값 출처 | 뜻 |", "| --- | --- | --- | --- | --- | --- |"]
+        L += [f"| `{i[0]}` | {i[1]} | {'✓' if i[2] else ''} | {md_cell(json.dumps(i[4], ensure_ascii=False)) if len(i) > 4 else ''} | {('`' + ex.input_sources[i[0]] + '`') if i[0] in ex.input_sources else '부르는 쪽'} | {md_cell(i[3])} |" for i in ex.inputs]
         L.append("")
     L += ["**흐름 (노드)**", "", "| id | 이름 | 종류 | 핵심 속성 | 다음 |", "| --- | --- | --- | --- | --- |"]
 

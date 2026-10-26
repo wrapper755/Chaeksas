@@ -4,6 +4,7 @@ import { Button, ErrorBanner } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ManifestInput } from "@chaeksas/api-types/c5-package-info";
+import { fromCaller } from "@/lib/inputs";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { createJob } from "@/app/actions";
@@ -116,7 +117,8 @@ export default async function NewJobPage({
   let inputs: ManifestInput[] = [];
   if (ready) {
     try {
-      inputs = (await center.packageInfo(bot, shown)).manifest?.inputs ?? [];
+      // 값 출처가 있는 입력은 Center가 넣는다 — 칸을 그리지 않는다 (C1 `inputs[].source`, ADR-0099).
+      inputs = fromCaller((await center.packageInfo(bot, shown)).manifest?.inputs ?? []);
     } catch (cause) {
       failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
     }

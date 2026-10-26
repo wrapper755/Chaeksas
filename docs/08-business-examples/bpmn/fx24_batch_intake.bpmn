@@ -20,6 +20,13 @@
       "type": "list",
       "required": true,
       "description": "{번호, 금액} 목록"
+    },
+    {
+      "name": "감독자",
+      "type": "list",
+      "required": true,
+      "description": "이 일괄을 승인할 사람들 — Center가 가상 직원 등록에서 넣는다",
+      "source": "virtual_worker.supervisors"
     }
   ]
 }</chk:process>
@@ -56,9 +63,7 @@
     }
   ],
   "location": "center",
-  "assignees": [
-    "김감독"
-  ]
+  "assignees": "감독자"
 }</chk:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>

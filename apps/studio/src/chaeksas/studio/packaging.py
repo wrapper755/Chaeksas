@@ -335,6 +335,8 @@ def build_manifest(
                 required=one.required,
                 description=one.description,
                 default=one.default,
+                # 값 출처도 옮긴다 (ADR-0099) — Center가 「부르는 쪽이 줄 수 없는 입력」을 안다.
+                source=one.source,
             )
             for one in entry.process.info.inputs
         ],

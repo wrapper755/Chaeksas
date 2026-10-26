@@ -63,6 +63,19 @@ export interface JobDispatch {
   requested_at: string;
   requested_by: string;
   version?: string | null;
+  virtual_worker?: VirtualWorkerIdentity | null;
+  [k: string]: unknown;
+}
+/**
+ * **가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).
+ *
+ * Center가 서버 작업을 내려줄 때 붙인다(C12 `JobDispatch.virtual_worker`, ADR-0099). 실행하는
+ * 쪽이 출처가 `virtual_worker.*`인 입력의 값으로 푼다 (`core.engine.sourced_inputs`).
+ */
+export interface VirtualWorkerIdentity {
+  id: string;
+  name: string;
+  supervisors?: string[];
   [k: string]: unknown;
 }
 /**

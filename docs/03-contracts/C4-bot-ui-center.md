@@ -236,7 +236,7 @@ Center가 이 PC에 배포한 Bot이 부르는 앱의 키를 **위의 봉함으�
 
 | 모델 | 필드 |
 | --- | --- |
-| JobDispatch | `job_id`, `bpm_process_id`, `version`?(없으면 배포된 버전), `inputs`(object), `requested_by`(사람, 예약: `server_bot:<run_id>` — PC 위임), `requested_at`, `expires_at`?, `note` |
+| JobDispatch | `job_id`, `bpm_process_id`, `version`?(없으면 배포된 버전), `inputs`(object), `requested_by`(사람, 예약: `server_bot:<run_id>` — PC 위임), `requested_at`, `expires_at`?, `note`, `virtual_worker`?(`{id, name, supervisors}` — **서버 작업에만** 실린다, C12. Bot UI에는 오지 않고 Bot UI는 읽지 않는다 — PC 자식에 나르는 것은 미정이다, [ADR-0099](../decisions/0099-input-value-source.md) §3) |
 | ApprovalDispatch | `request_id`, `state`(`answered`\|`expired`\|`withdrawn`, C6), `answer`, `answered_by`, `answered_at`, `answered_via`?(대리 답이면 키 이름 — C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)) |
 
 ### 작업 상태 흐름 (Center 쪽, CON-05)
@@ -330,6 +330,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-26 | 1 | `JobDispatch.virtual_worker?`를 적었다 — 모델이 C12와 같아 보일 뿐 Bot UI에는 실리지 않는다 | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | §서비스 앱 키 전달 — 응답 `service_keys[]`·`drop_service_keys[]`, 요청 `service_key_acks[]`, `missing_key_refs`의 뜻이 「받지 못함」으로. 선택 칸이라 옛 Bot UI는 그대로 돈다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | **등록 요청과 승인** — `POST/GET …/enroll`(인증 없음, 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`, 오류 `public_key_invalid`·`enroll_rate_limited`·`enroll_queue_full`. 선택 칸·새 경로라 옛 Bot UI는 그대로 돈다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-20 | 1 | `ApprovalDispatch.answered_via?` — 대리 답이면 그 키 이름이 실행하는 쪽까지 내려가 C3 `human_answered`에 남는다 | [0081](../decisions/0081-answering-on-behalf.md) |

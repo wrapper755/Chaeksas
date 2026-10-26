@@ -52,7 +52,7 @@
 | `triggers` | Trigger[] | | 시작 방법 | 1 |
 | `requires` | Requires | ✓ | 실행에 필요한 것 (아래) | 1 |
 | `human` | HumanNeeds | ✓ | 사람 개입 종류 (서버 검사에 씀) | 1 |
-| `inputs` | ManifestInput[] | | 진입 정의가 받는 입력 (`chk:process.inputs`를 그대로 옮긴 것). 작업을 만드는 화면(CON-05)이 입력 칸을 그린다. 실행하는 쪽은 이것이 아니라 BPMN을 본다 | 1 |
+| `inputs` | ManifestInput[] | | 진입 정의가 받는 입력 (`chk:process.inputs`를 그대로 옮긴 것 — `source?` 포함). 작업을 만드는 화면(CON-05)이 입력 칸을 그린다(**`source`가 있는 입력은 그리지 않는다** — Center가 넣는다). Center는 `source`가 있는 이름이 작업 `inputs`에 오면 거절한다(C5 `input_not_from_caller`, [ADR-0099](../decisions/0099-input-value-source.md)). 실행하는 쪽은 이것이 아니라 BPMN을 본다 | 1 |
 | `outputs` | str[] | | 실행이 끝나면 만드는 변수 이름 | 1 |
 | `provides` | Provides | `process_lib`만 | 제공하는 BPM 프로세스 목록 | 1 |
 | `built` | Built | ✓ | 누가 언제 무엇으로 빌드했나 | 1 |
@@ -271,6 +271,7 @@ PC Bot (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-26 | 1 | `inputs[].source?`(값 출처 — C14)를 옮긴다. 없으면 부르는 쪽이다 (옛 패키지와 같다) | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | `key_ref`는 Center가 내려 준 키를 찾는 이름(형식은 그대로), `operations`가 그 키의 허용 작업(비면 모든 작업), `task_key_refs`는 같은 키의 다른 이름, 적지 않으면 `default_key_ref`, 키를 받는 확장의 태스크도 줄이 된다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | `requires.service_apps[].key_ref`를 **선택**으로 — 키를 받지 않는 외부 앱(C13 `auth` 없음)에는 빌드가 적지 않는다. 받는 쪽은 비어 있으면 묻지 않는다 | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-20 | 1 | **R12**(자기 자신에게 위임하지 않는다)를 더했다. `requires.delegations`의 대상은 PC Bot만이 아니라 서버 Bot일 수도 있다 — 어디서 도는지는 대상 패키지가 정한다 | [0082](../decisions/0082-batch-start.md) |

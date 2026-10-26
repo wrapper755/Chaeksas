@@ -16,6 +16,7 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp
+from chaeksas.contracts.bpmn_ext import VirtualWorkerIdentity
 from chaeksas.contracts.enrollment import PublicKey, RotatedKey
 from chaeksas.contracts.service_keys import ServiceKeyAck, ServiceKeyDelivery
 from chaeksas.contracts.signing import AdminKey
@@ -239,6 +240,9 @@ class JobDispatch(ContractModel):
     requested_at: Timestamp
     expires_at: Timestamp | None = None
     note: str | None = None
+    #: **가상 직원 신원** — 그 Bot이 가상 직원의 접수 Bot이면 Center가 내려줄 때 붙인다 (C12,
+    #: ADR-0098). 저장하지 않는다. 접수 Bot은 서버에서만 돌아 **Bot UI에는 오지 않는다**.
+    virtual_worker: VirtualWorkerIdentity | None = None
 
 
 class ApprovalDispatch(ContractModel):

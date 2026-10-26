@@ -82,6 +82,7 @@ export interface ManifestInput {
   description?: string | null;
   name: string;
   required?: boolean;
+  source?: string | null;
   type: string;
   [k: string]: unknown;
 }

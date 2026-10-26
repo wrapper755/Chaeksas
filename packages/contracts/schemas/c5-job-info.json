@@ -198,6 +198,18 @@
       ],
       "default": null,
       "title": "Version"
+    },
+    "virtual_worker": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Virtual Worker"
     }
   },
   "required": [

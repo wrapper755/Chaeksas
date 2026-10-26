@@ -114,6 +114,18 @@
           "title": "Required",
           "type": "boolean"
         },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source"
+        },
         "type": {
           "title": "Type",
           "type": "string"

@@ -230,3 +230,74 @@ def test_update_and_remove(center: TestClient) -> None:
 def test_writes_need_the_admin_token(center: TestClient) -> None:
     refused = center.post("/api/v1/virtual-workers", json={}, headers=READ)
     assert refused.status_code == 403
+
+
+# ─────────────────────────── 신원·연동용 키 (ADR-0098) ───────────────────────────
+
+
+def integration(center: TestClient, *, person: str | None = None) -> dict[str, str]:
+    made = center.post("/api/v1/center-keys", json={"name": "nowview", "type": "integration"}, headers=ADMIN)
+    assert made.status_code == 201, made.text
+    out = {"Authorization": f"Bearer {made.json()['key']}"}
+    if person is not None:
+        from urllib.parse import quote  # noqa: PLC0415
+
+        out["X-CHK-On-Behalf-Of"] = quote(person)
+    return out
+
+
+def test_an_integration_key_reads_every_virtual_worker(center: TestClient) -> None:
+    """회사 시스템이 가상 직원 카드를 그린다 — **전부** 읽고, 사람을 실어도 거르지 않는다."""
+    approved(center, bot=INTAKE, bpmn=GATED)
+    register(center)
+    for headers in (integration(center), integration(center, person="박감독")):
+        listed = center.get("/api/v1/virtual-workers", headers=headers)
+        assert listed.status_code == 200 and [one["id"] for one in listed.json()] == ["finance-intake"]
+        one = center.get("/api/v1/virtual-workers/finance-intake", headers=headers)
+        assert one.status_code == 200 and one.json()["batches"] == []
+    # **넓히지 않는 것** — 결재(검토 자료)는 그대로 못 읽는다.
+    key = integration(center)
+    assert center.get("/api/v1/approvals", headers=key).status_code == 403
+    # 쓰기는 여전히 관리자만이다.
+    assert center.post("/api/v1/virtual-workers", json={}, headers=key).status_code == 403
+
+
+def test_other_keys_still_cannot_read_virtual_workers(center: TestClient) -> None:
+    made = center.post("/api/v1/center-keys", json={"name": "pc-1", "type": "bot_ui"}, headers=ADMIN)
+    refused = center.get("/api/v1/virtual-workers", headers={"Authorization": f"Bearer {made.json()['key']}"})
+    assert refused.status_code == 403
+
+
+def test_one_intake_bot_is_shared_by_many_virtual_workers(center: TestClient, store: Store) -> None:
+    """**접수 Bot 하나를 여러 가상 직원이 쓴다** (ADR-0099) — 어느 쪽 일인지는 작업이 id로 말한다."""
+    from chaeksas.center.api.virtual_workers import pick  # noqa: PLC0415
+    from chaeksas.center.errors import ApiError  # noqa: PLC0415
+
+    approved(center, bot=INTAKE, bpmn=GATED)
+    assert register(center).status_code == 201
+    assert pick(store, bot=INTAKE, requested=None) == "finance-intake", "하나뿐이면 적지 않아도 그것이다"
+    shared = register(center, id="sales-intake", name="영업 가상 직원", supervisors=["박감독"])
+    assert shared.status_code == 201, shared.text
+    assert pick(store, bot=INTAKE, requested=None) is None, "여럿인데 고르지 않으면 조용히 고르지 않는다"
+    assert pick(store, bot=INTAKE, requested="sales-intake") == "sales-intake"
+    for wrong in ("nobody", "finance-intake"):
+        with pytest.raises(ApiError) as caught:
+            pick(store, bot="someone.else" if wrong == "finance-intake" else INTAKE, requested=wrong)
+        assert caught.value.code == "virtual_worker_mismatch"
+
+
+def test_the_identity_is_read_from_the_registration(center: TestClient, store: Store) -> None:
+    """Center가 서버 작업을 내려줄 때 붙이는 값 — **저장하지 않고** 그때 등록에서 읽는다."""
+    from chaeksas.center.api.virtual_workers import identity_of  # noqa: PLC0415
+
+    approved(center, bot=INTAKE, bpmn=GATED)
+    assert identity_of(store, "finance-intake") is None, "묶이기 전에는 없다"
+    assert identity_of(store, None) is None
+    register(center)
+    found = identity_of(store, "finance-intake")
+    assert found is not None
+    assert (found.id, found.name, found.supervisors) == ("finance-intake", "재무 가상 직원", ["김감독"])
+    center.put("/api/v1/virtual-workers/finance-intake",
+               json={"name": "재무", "supervisors": ["이감독"], "intake": INTAKE, "state": "stopped"}, headers=ADMIN)
+    changed = identity_of(store, "finance-intake")
+    assert changed is not None and changed.supervisors == ["이감독"], "감독자를 바꾸면 다음 작업부터 맞는다"
