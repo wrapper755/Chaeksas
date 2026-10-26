@@ -15,7 +15,8 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.contracts.approvals import Form, validate_answer
-from chaeksas.contracts.bpmn_ext import Case, CaseFile
+from chaeksas.contracts.bpmn_ext import Case, CaseFile, InputDecl
+from chaeksas.studio.variables import known_names, made_by
 from chaeksas.studio.workspace import BpmProcess, Definition
 
 #: 입력 값의 타입 (STU-07 — 「지금부터」는 `$now_plus`, 「시험 수신기」는 `$test_receiver`).
@@ -120,6 +121,39 @@ def declared_inputs(definition: Definition) -> list[str]:
     return [i.name for i in definition.process.info.inputs]
 
 
+#: 정의된 입력의 타입 → 「입력 변수」 표의 타입 (STU-07 — 깔린 줄이 이것으로 시작한다).
+KIND_OF_TYPE = {"int": "number", "number": "number", "bool": "bool", "list": "json", "dict": "json"}
+#: 깔린 줄을 「적지 않았다」로 볼 수 있는 타입 — 글이 비면 담지 않는다.
+PLAIN_KINDS = ("string", "number", "bool", "json")
+
+
+def declared_input_decls(definition: Definition) -> list[InputDecl]:
+    """정의된 입력 줄 (`chk:process.inputs`, 「변수」 탭) — 「입력 변수」에 미리 깔린다 (STU-07)."""
+    return list(definition.process.info.inputs) if definition.process is not None else []
+
+
+def kind_of(decl: InputDecl) -> str:
+    """깔린 줄의 타입 — 정의의 타입에서 온다. 그 밖은 글자다 (`date`도 글로 적는다)."""
+    return KIND_OF_TYPE.get(decl.type, "string")
+
+
+def input_tip(decl: InputDecl) -> str:
+    """깔린 줄 이름 칸의 툴팁 — 필수인가, 그리고 설명."""
+    parts = ["필수" if decl.required else "선택"]
+    if decl.has_default:
+        parts.append(f"기본값 {json.dumps(decl.default, ensure_ascii=False)}")
+    if decl.description:
+        parts.append(decl.description)
+    return " · ".join(parts)
+
+
+def result_names(definition: Definition) -> list[str]:
+    """「기대 결과」 이름의 고를 거리 — 출력, 그림이 만드는 변수, 입력 차례 (「변수」 탭과 같은 목록)."""
+    if definition.process is None:
+        return []
+    return known_names(definition.process.info, made_by(definition.process))
+
+
 def check_cases(cases: Sequence[Case], definition: Definition) -> list[str]:
     """저장 전 검증 (STU-07). 틀린 것을 사람 말로 돌려준다."""
     problems: list[str] = []
@@ -181,11 +215,17 @@ def write(edited: Edited, *, process_id: str = "") -> Path:
 __all__ = [
     "COMPARISONS",
     "NO_APPROVALS",
+    "KIND_OF_TYPE",
+    "PLAIN_KINDS",
     "VALUE_KINDS",
     "Edited",
     "approvals_of",
     "check_cases",
+    "declared_input_decls",
     "declared_inputs",
+    "input_tip",
+    "kind_of",
+    "result_names",
     "messages_of",
     "pack_expected",
     "pack_value",

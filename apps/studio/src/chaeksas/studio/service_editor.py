@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QStringListModel, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 
 from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3, SPACE_4
+from chaeksas.studio.name_pick import NameDelegate
 from chaeksas.studio.service_catalog import Catalog, Operation, Usage, missing_required, stale_fields
 
 #: 탭 이름.
@@ -85,6 +86,7 @@ class ServiceTaskEditor(QWidget):
         parent: QWidget | None = None,
         *,
         inherited: Mapping[str, str] | None = None,  # 옛 부르는 쪽의 호환 — 더 쓰지 않는다 (ADR-0094 §4)
+        names: QStringListModel | None = None,
     ) -> None:
         super().__init__(parent)
         self.catalog = catalog
@@ -111,6 +113,9 @@ class ServiceTaskEditor(QWidget):
             table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
             table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
             _show_rows(table, VISIBLE_ROWS)
+        # 「값」·「저장할 변수」는 변수 이름 칸이다 — 「변수」 탭의 이름을 고를 거리로 (STU-04).
+        self.inputs.setItemDelegateForColumn(INPUT_COLUMNS.index("값 (변수 또는 식)"), NameDelegate(names, self))
+        self.outputs.setItemDelegateForColumn(OUTPUT_COLUMNS.index("저장할 변수"), NameDelegate(names, self))
 
         self.fill_inputs = QPushButton("기대 입력 채우기", self)
         self.same_names = QPushButton("모두 같은 이름으로", self)

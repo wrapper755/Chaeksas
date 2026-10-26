@@ -7,7 +7,7 @@
 **메뉴 동작 중 큰 두 묶음은 떼어 냈다** (이 파일이 500줄 선을 넘어서다, CLAUDE.md §4):
 `export_actions`(내보내기·올리기 넷)와 `run_actions`(시험 실행 몰이). 둘은 창을 받아 쓰고,
 창은 그들이 쓰는 **작은 길**만 공개한다 — `saved_to_disk()`·`readiness()`·`say()`·
-`show_preflight()`·`show_variables()`·`reset_ui_sessions()`·`show_ui_session()`. 창이 그 일의
+`show_preflight()`·`show_variables()`·`variables_running()`·`reset_ui_sessions()`·`show_ui_session()`. 창이 그 일의
 속을 알지는 않는다 — 아래 탭의 글·줄은 떼어 낸 모듈과 `ui_sessions.py`가 짓는다.
 """
 
@@ -17,7 +17,7 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
     QDockWidget,
@@ -32,7 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts import Violation
-from chaeksas.contracts.bpmn_ext import BpmnProcess
+from chaeksas.contracts.bpmn_ext import BpmnProcess, BpmnReadError, read_process
 from chaeksas.core.preflight import key_apps_of
 from chaeksas.studio import (
     center_actions,
@@ -63,6 +63,8 @@ from chaeksas.studio.settings import Settings
 from chaeksas.studio.settings_dialog import StudioSettingsDialog
 from chaeksas.studio.ui_sessions import Row as UiSessionRow
 from chaeksas.studio.ui_sessions import UiSessions
+from chaeksas.studio.variables import known_names, made_by
+from chaeksas.studio.variables_tab import RUNNING, VariablesTab
 from chaeksas.studio.workspace import BpmProcess, Definition, Workspace
 
 log = logging.getLogger(__name__)
@@ -73,6 +75,24 @@ NO_PROCESS = "(BPM 프로세스를 선택하거나 새로 만드세요)"
 DEFAULT_SIZE = (1400, 860)
 
 PACKAGE_FILTER = "패키지 (*.zip)"
+#: 캔버스가 바뀐 뒤 「변수」 탭이 그림을 다시 읽기까지 (ms) — 끌기 한 번에 여러 번 바뀐다.
+VARIABLES_DELAY_MS = 300
+
+def ask_unapplied(parent: QWidget, text: str, problem: str | None) -> QMessageBox.StandardButton:
+    """「적용하지 않은 변경사항」 — 「적용」/「버리기」/「머무르기」 (STU-04). 지금 적용할 수 없으면 「적용」을 뺀다."""
+    buttons = QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
+    if problem is None:
+        buttons |= QMessageBox.StandardButton.Apply
+    box = QMessageBox(parent)
+    box.setWindowTitle("적용하지 않은 변경사항")
+    box.setText(text + (f"\n\n지금 적용할 수 없습니다 — {problem}" if problem else ""))
+    box.setStandardButtons(buttons)
+    box.button(QMessageBox.StandardButton.Discard).setText("버리기")
+    box.button(QMessageBox.StandardButton.Cancel).setText("머무르기")
+    if problem is None:
+        box.button(QMessageBox.StandardButton.Apply).setText("적용")
+    return QMessageBox.StandardButton(box.exec())
+
 
 class MainWindow(QMainWindow):
     """STU-01. 열린 정의 하나를 캔버스가 들고 있고, 디스크가 원본이다."""
@@ -132,8 +152,14 @@ class MainWindow(QMainWindow):
         # 기여한 칸이 아니다. BUI-09는 재료가 C10이라 그쪽이 그린다).
         self.ui_sessions = UiSessions(self)
 
-        self.variables_view = QPlainTextEdit(self)
-        self.variables_view.setReadOnly(True)
+        # 「변수」 — 입력·출력 **정의**와 시험 실행의 지금 값 (STU-01). 그림은 캔버스에서 읽고
+        # 「적용」은 캔버스로 넘긴다 (ADR-0022). 캔버스가 바뀔 때마다 읽으면 한 번에 몇 번씩이라 모아 읽는다.
+        self.variables = VariablesTab(self)
+        self.variables.applying.connect(self._apply_variables)
+        self._variables_timer = QTimer(self)
+        self._variables_timer.setSingleShot(True)
+        self._variables_timer.setInterval(VARIABLES_DELAY_MS)
+        self._variables_timer.timeout.connect(self.refresh_variables)
         #: 돌릴 것이 남아 있는 계획과 지금까지의 결과 (「모든 케이스 차례로」).
         self.queue: list[Plan] = []
         self.outcomes: list[Outcome] = []
@@ -176,7 +202,7 @@ class MainWindow(QMainWindow):
         bottom.addTab(self.log_view, "로그")
         bottom.addTab(self.preflight, "검사")
         bottom.addTab(self.ui_sessions, "UI 태스크")
-        bottom.addTab(self.variables_view, "변수")
+        bottom.addTab(self.variables, "변수")
 
         split = QSplitter(Qt.Orientation.Vertical, self)
         self.split = split
@@ -476,7 +502,9 @@ class MainWindow(QMainWindow):
         if self.process is None or self.definition is None:
             self.setWindowTitle(f"{TITLE} - {NO_PROCESS}")
             self.refresh_menus()
+            self._variables_timer.start()
             return
+        self._variables_timer.start()  # 열고·닫고·고칠 때마다 — 「변수」 탭도 같은 상태에서 온다
         mark = " *" if self.dirty else ""
         self.setWindowTitle(
             f"{TITLE} - {self.process.display} (v{self.process.version}) - {self.definition.stem}{mark}"
@@ -557,25 +585,29 @@ class MainWindow(QMainWindow):
         return not self.dirty or self.save()
 
     def may_drop_edits(self) -> bool:
-        """적용 안 한 편집이 있으면 묻는다 (STU-04). 지금 적용할 수 없으면 「적용」을 뺀다."""
+        """적용 안 한 편집이 있으면 묻는다 (STU-04 → 「변수」 탭). 지금 적용할 수 없으면 「적용」을 뺀다."""
+        if not self._may_drop_properties():
+            return False
+        return self._may_drop_variables()
+
+    def _may_drop_variables(self) -> bool:
+        """「변수」 탭의 적용 안 한 편집 — 속성 패널과 **같은 확인**이다 (STU-01 「닫기·전환 보호」)."""
+        if not self.variables.unapplied:
+            return True
+        _, problem = self.variables.patch()
+        answer = ask_unapplied(self, "「변수」 탭에 적용하지 않은 변경사항이 있습니다.", problem)
+        if answer == QMessageBox.StandardButton.Cancel:
+            return False
+        if answer == QMessageBox.StandardButton.Apply:
+            return self.variables.apply()
+        self.variables.discard()
+        return True
+
+    def _may_drop_properties(self) -> bool:
         if not self.properties.unapplied:
             return True
         _, problem = self.properties.patch()
-        buttons = QMessageBox.StandardButton.Discard | QMessageBox.StandardButton.Cancel
-        if problem is None:
-            buttons |= QMessageBox.StandardButton.Apply
-        box = QMessageBox(self)
-        box.setWindowTitle("적용하지 않은 변경사항")
-        box.setText(
-            "속성 패널에 적용하지 않은 변경사항이 있습니다."
-            + (f"\n\n지금 적용할 수 없습니다 — {problem}" if problem else "")
-        )
-        box.setStandardButtons(buttons)
-        box.button(QMessageBox.StandardButton.Discard).setText("버리기")
-        box.button(QMessageBox.StandardButton.Cancel).setText("머무르기")
-        if problem is None:
-            box.button(QMessageBox.StandardButton.Apply).setText("적용")
-        answer = box.exec()
+        answer = ask_unapplied(self, "속성 패널에 적용하지 않은 변경사항이 있습니다.", problem)
         if answer == QMessageBox.StandardButton.Cancel:
             return False
         if answer == QMessageBox.StandardButton.Apply:
@@ -672,9 +704,17 @@ class MainWindow(QMainWindow):
         self.preflight.show_result(process, violations)
         self.bottom_tabs.setCurrentWidget(self.preflight)
 
-    def show_variables(self, text: str) -> None:
-        """「변수」 탭의 글. **글은 `run_actions.format_variables`가 짓는다** (Qt를 모르는 자리)."""
-        self.variables_view.setPlainText(text)
+    def show_variables(self, variables: dict[str, object]) -> None:
+        """시험 실행의 지금 값 — 「변수」 탭의 정의 표에 「지금 값」 열로 붙는다 (STU-09)."""
+        self.variables.show_values(variables)
+
+    def variables_running(self, running: bool) -> None:
+        """시험 실행이 시작·끝날 때 — 시작하면 지난 값을 비우고 고치기를 잠근다 (STU-01 「변수」 탭)."""
+        if running:
+            self.variables.clear_values()
+            self.variables.set_locked(True, RUNNING)
+        else:
+            self.refresh_variables()
 
     def reset_ui_sessions(self) -> None:
         """「UI 태스크」 탭을 비운다 — 실행 하나가 시작할 때 (STU-09)."""
@@ -685,7 +725,52 @@ class MainWindow(QMainWindow):
         self.ui_sessions.add(row)
 
     def show_variables_tab(self) -> None:
-        self.bottom_tabs.setCurrentWidget(self.variables_view)
+        self.bottom_tabs.setCurrentWidget(self.variables)
+
+    # ── 「변수」 탭 (STU-01) ──
+
+    def refresh_variables(self) -> None:
+        """그림을 **캔버스에서** 읽어 「변수」 탭을 채운다 — 파일에서 읽으면 「적용」한 것이 안 보인다.
+
+        고칠 수 있는 것은 **열린 정의**다 — 하위 정의도 제 입력·출력을 가진다(호출이 그것과 맞춰
+        본다, B14). 시험 실행 중이면 표는 보이고 고치기만 잠근다 (U3).
+        """
+        key = self.definition.as_posix() if self.definition is not None else ""
+        if self.process is None or self.definition is None or not self.canvas.live:
+            self.variables.show_definition(None, {}, key=key)
+            self.properties.known_names.setStringList([])
+            return
+
+        def done(found: dict[str, object]) -> None:
+            if not found.get("ok") or key != (self.definition.as_posix() if self.definition else ""):
+                return  # 읽는 사이에 다른 정의를 열었다 — 그쪽의 읽기가 채운다
+            try:
+                drawn = read_process(str(found.get("xml") or ""))
+            except BpmnReadError:
+                return  # 그리는 중의 반쪽 그림 — 들고 있던 것을 둔다
+            made = made_by(drawn)
+            reason = RUNNING if self.running is not None else ""
+            self.variables.show_definition(drawn.info, made, key=key, reason=reason)
+            self.properties.known_names.setStringList(known_names(drawn.info, made))
+
+        self.canvas.call("saveXML", then=done)
+
+    def _apply_variables(self, body: str) -> None:
+        """「변수」 탭의 「적용」 — 열린 정의의 `chk:process`를 **한 걸음으로** 바꾼다 (ADR-0022)."""
+        try:
+            drawn = read_process(self.canvas.save_xml())
+        except (CanvasError, BpmnReadError) as e:
+            self.say(f"적용하지 못했습니다: {e}")
+            return
+
+        def done(found: dict[str, object]) -> None:
+            if not found.get("ok"):
+                self.say(f"적용하지 못했습니다: {found.get('error')}")
+                return
+            self.say("입력·출력을 그림에 적용했습니다 — 「저장」(Ctrl+S)으로 파일에 씁니다.")
+            self.refresh_variables()
+
+        self.canvas.call("setProperties", drawn.id, {"chk": {"process": body}}, then=done)
 
     # ── 시험 케이스 · BPM 프로세스 정보 ──
 

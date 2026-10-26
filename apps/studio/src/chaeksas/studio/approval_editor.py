@@ -18,7 +18,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from pydantic import ValidationError
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QStringListModel, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -43,6 +43,7 @@ from PySide6.QtWidgets import (
 from chaeksas.contracts.bpmn_ext import Approval, is_var_name
 from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3
+from chaeksas.studio.name_pick import attach
 
 #: 탭 이름 — 결재와 확인은 같은 `chk:approval`이고 이름만 다르다 (C14).
 TAB_APPROVAL = "결재"
@@ -83,6 +84,7 @@ class ApprovalEditor(QWidget):
         parent: QWidget | None = None,
         *,
         run_location: str | None = None,
+        names: QStringListModel | None = None,
     ) -> None:
         super().__init__(parent)
         self.run_location = run_location
@@ -158,9 +160,18 @@ class ApprovalEditor(QWidget):
         set_role(self.warning, "error")
 
         self._build_layout()
+        # 변수 이름 칸의 고를 거리 — 「변수」 탭의 이름 (STU-04). 담당자는 「변수 이름 하나」일 때만.
+        for line in (self.show_input, self.expires_box, self.answered_by_box, self.answered_via_box):
+            attach(line, names)
+        self._assignee_pick = attach(self.assignee_box, names)
+        self._names = names
+        #: 「이름 목록」일 때 고를 거리 — 비어 있다 (칸의 고를 거리를 떼면 Qt가 그것을 지운다).
+        self._no_names = QStringListModel(self)
+
         self._wire()
         self._refresh_location()
         self._refresh_show_buttons()
+        self._refresh_assignee_pick()
 
     # ── 짜기 ──
 
@@ -250,8 +261,18 @@ class ApprovalEditor(QWidget):
         self.fields.itemChanged.connect(self._touched)
         self.location_group.buttonToggled.connect(self._touched)
         self.assignee_mode.currentIndexChanged.connect(self._touched)
+        self.assignee_mode.currentIndexChanged.connect(lambda _at: self._refresh_assignee_pick())
         self.add_field.clicked.connect(lambda: self._add_row({}))
         self.drop_field.clicked.connect(self._drop_row)
+
+    def _refresh_assignee_pick(self) -> None:
+        """담당자 칸은 「변수 이름 하나」일 때만 변수를 고르게 한다 — 이름 목록에 변수 이름을 권하지 않는다."""
+        variable = self.assignee_mode.currentData() == ASSIGNEE_VARIABLE
+        completer = self.assignee_box.completer()
+        if completer is not None and self._names is not None:
+            completer.setModel(self._names if variable else self._no_names)
+        if self._assignee_pick is not None:
+            self._assignee_pick.setVisible(variable)
 
     # ── 규약 ──
 
