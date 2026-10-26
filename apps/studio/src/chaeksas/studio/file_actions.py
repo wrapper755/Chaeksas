@@ -254,12 +254,17 @@ def import_file(window: MainWindow) -> None:
     picked = pick_bpmn_file(window)
     if picked is None:
         return
+    # 같은 id가 있으면 창이 「기존 것을 바꾸기」를 묻는다 — 상태 줄이 무엇을 했는지 가른다.
+    known = {one.id for group in window.workspace.groups() for one in group.processes}
     made = NewProcessDialog.ask(window, window.workspace, imported=picked)
     if made is None:
         return
     entry = made.entry_definition
     window.explorer.refresh(opened=entry.path.as_posix() if entry is not None else "")
-    window.say(f"가져왔습니다: {made.display} — {picked.name}")
+    if made.id in known:
+        window.say(f"진입 정의를 바꿨습니다: {made.display} / {made.entry} ← {picked.name}")
+    else:
+        window.say(f"가져왔습니다: {made.display} — {picked.name}")
     if entry is not None:
         open_definition(window, entry.path.as_posix())
 

@@ -2,15 +2,18 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
+import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
+import { STATE_LABEL } from "@/app/center-keys/page";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
 import { Enrollments } from "@/components/Enrollments";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
 /**
- * CON-03 Bot UI 현황 (목록).
+ * CON-03 PC 현황 — Bot UI(목록)와 Studio. 표가 둘이고 각각 위에 그 프로그램의 「승인 대기」가 있다.
  *
- * 값은 **Bot UI가 하트비트로 보고한 그대로**다 (C4·C5 `BotUiInfo`). Center가 더하는 것은
+ * Bot UI 값은 **Bot UI가 하트비트로 보고한 그대로**다 (C4·C5 `BotUiInfo`). Center가 더하는 것은
  * 온라인 판정과 키 정보뿐이다. 상세(대기열·배포·확장·최근 배치 결정)는 이름을 누르면 열린다.
  */
 
@@ -76,11 +79,16 @@ export default async function BotUisPage() {
 
   let rows: BotUiInfo[] = [];
   let enrollments: EnrollmentInfo[] = [];
+  let studios: CenterKeyInfo[] = [];
+  let studioEnrollments: EnrollmentInfo[] = [];
   let failure: string | null = null;
   try {
     rows = await center.botUis();
     // 「승인 대기」 — 등록 요청이 있을 때만 목록 위에 보인다 (C4 §등록 요청과 승인, ADR-0092).
     enrollments = await center.enrollments("bot_ui");
+    // Studio는 하트비트가 없다 — **승인 하나가 키 하나**라 Studio용 키 목록이 곧 Studio 목록이다 (ADR-0093).
+    studios = await center.centerKeys({ type: "studio" });
+    studioEnrollments = await center.enrollments("studio");
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -148,28 +156,73 @@ export default async function BotUisPage() {
 
   const online = rows.filter((row) => row.online).length;
 
+  const studioColumns: Array<Column<CenterKeyInfo>> = [
+    { key: "name", header: "이름" },
+    { key: "pc", header: "PC", cell: (row) => row.bound_to?.machine_name ?? "—" },
+    { key: "created_at", header: "승인한 날", width: "18ch", cell: (row) => fullTime(row.created_at) },
+    // 하트비트가 없어 「온라인」 대신 마지막으로 Center를 부른 때다.
+    { key: "last_used_at", header: "마지막 사용", width: "16ch", cell: (row) => time(row.last_used_at) },
+    { key: "expires_at", header: "키 만료", width: "18ch", cell: (row) => fullTime(row.expires_at) },
+    {
+      key: "state",
+      header: "상태",
+      width: "12ch",
+      cell: (row) => <StatusBadge group="API 키" label={STATE_LABEL[row.state] ?? row.state} />,
+    },
+  ];
+
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/bot-uis">
+    <Shell mode={found.mode} actor={found.actor} current="/bot-uis">
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-h1 font-bold">Bot UI 현황</h1>
+          <h1 className="text-h1 font-bold">PC 현황</h1>
           <p className="text-body text-text-secondary">
-            {rows.length > 0 ? `${online}/${rows.length} 온라인` : "PC마다 하나인 Bot UI의 상태입니다."}
+            현장 PC에서 Center에 붙는 Bot UI(Bot을 돌린다)와 Studio(Bot을 만든다)입니다.
           </p>
+          <CenterAddress url={CENTER_PUBLIC_URL} who="Bot UI·Studio" />
         </div>
       </header>
 
-      <Enrollments rows={enrollments} where="현장 화면" canDecide={found.mode === "admin"} />
-
       {failure ? (
         <ErrorBanner message={failure} action={<Button variant="secondary">다시 시도</Button>} />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title="등록된 Bot UI가 없습니다."
-          hint="현장 PC의 Bot UI 설정에 Center 주소를 넣으면 등록 요청을 보냅니다. 현장 화면의 요청 코드와 같은 줄을 위의 「승인 대기」에서 승인하세요."
-        />
       ) : (
-        <DataTable columns={columns} rows={rows} rowKey={(row) => row.bot_ui_id} caption="Bot UI 목록" />
+        <div className="flex flex-col gap-8">
+          <section className="flex flex-col gap-3">
+            <h2 className="text-h2 font-semibold">
+              Bot UI{rows.length > 0 ? ` · ${online}/${rows.length} 온라인` : ""}
+            </h2>
+            <Enrollments rows={enrollments} where="현장 화면" canDecide={found.mode === "admin"} />
+            {rows.length === 0 ? (
+              <EmptyState
+                title="등록된 Bot UI가 없습니다."
+                hint="현장 PC의 Bot UI 설정에 Center 주소를 넣으면 등록 요청을 보냅니다. 현장 화면의 요청 코드와 같은 줄을 위의 「승인 대기」에서 승인하세요."
+              />
+            ) : (
+              <DataTable columns={columns} rows={rows} rowKey={(row) => row.bot_ui_id} caption="Bot UI 목록" />
+            )}
+          </section>
+
+          <section className="flex flex-col gap-3">
+            <h2 className="text-h2 font-semibold">Studio</h2>
+            <Enrollments
+              rows={studioEnrollments}
+              where="Studio 설정 창"
+              canDecide={found.mode === "admin"}
+              nameHelp="이 이름이 Studio에서 올린 것의 「누가」로 남습니다 (예: 김OO 설계 PC)."
+            />
+            {studios.length === 0 ? (
+              <EmptyState
+                title="승인된 Studio가 없습니다."
+                hint="Studio 설정 창에 Center 주소를 넣으면 등록 요청이 옵니다."
+              />
+            ) : (
+              <DataTable columns={studioColumns} rows={studios} rowKey={(row) => row.key_id} caption="Studio 목록" />
+            )}
+            <p className="text-caption text-text-muted">
+              폐기·삭제는 「Center API 키」의 「승인으로 들인 키」에서 합니다.
+            </p>
+          </section>
+        </div>
       )}
     </Shell>
   );

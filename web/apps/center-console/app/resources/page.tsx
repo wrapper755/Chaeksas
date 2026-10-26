@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
-import { CENTER_PUBLIC_URL, CenterError, center, session, type ContributedKind } from "@/lib/center";
+import { CenterError, center, session, type ContributedKind } from "@/lib/center";
 import type { FeatureRow } from "@/lib/features";
 import { Shell } from "@/components/Shell";
 import { registerExtension, registerServiceApp } from "@/app/actions";
@@ -101,7 +101,7 @@ export default async function ResourcesPage({
       : "border border-border-default px-3 py-1 text-body text-text-secondary";
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/resources">
+    <Shell mode={found.mode} actor={found.actor} current="/resources">
       <header className="mb-4 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-h1 font-bold">리소스</h1>

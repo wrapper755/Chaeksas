@@ -3,10 +3,11 @@
 import { useActionState, useState, useTransition } from "react";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import { Button, ConfirmDialog, Dialog, ErrorBanner, Field } from "@chaeksas/ui";
-import { createCenterKey, revokeCenterKey, unbindCenterKey, type ActionResult } from "@/app/actions";
+import { createCenterKey, deleteCenterKey, revokeCenterKey, unbindCenterKey, type ActionResult } from "@/app/actions";
+import { keyActions, type KeyAction } from "@/lib/center-keys";
 
-/** CON-11 관리자 모드 — 새 키, 폐기, 묶음 풀기. */
-export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
+/** CON-11 「연동 키」 표 오른쪽 위의 「새 키...」 (관리자 모드). 폐기·묶음 풀기·삭제는 줄마다의 「...」다 (`KeyMenu`). */
+export function KeyTools() {
   const [creating, setCreating] = useState(false);
   const [kind, setKind] = useState("integration");
   const [result, create, pending] = useActionState<ActionResult, FormData>(createCenterKey, {});
@@ -17,52 +18,12 @@ export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
     setDismissed(result.secret?.key ?? null);
     setCreating(false);
   }
-  const [asking, setAsking] = useState<{ kind: "revoke" | "unbind"; key: CenterKeyInfo } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [working, start] = useTransition();
-
-  // 승인이 만든 키에는 「묶음 풀기」가 없다 — 다시 설치한 PC는 새 등록 요청을 승인하면 이어받는다 (ADR-0092).
-  const bound = rows.filter((row) => row.bound_to && row.state === "active" && !row.enrollment_id);
-  const active = rows.filter((row) => row.state === "active");
-
-  function run(action: () => Promise<ActionResult>) {
-    start(async () => {
-      const done = await action();
-      setError(done.error ?? null);
-      setAsking(null);
-    });
-  }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          새 키...
-        </Button>
-        <Button
-          variant="danger"
-          disabled={active.length === 0 || working}
-          disabledReason="폐기할 수 있는 키가 없습니다."
-          onClick={() => setAsking({ kind: "revoke", key: active[0]! })}
-        >
-          키 폐기...
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={bound.length === 0 || working}
-          disabledReason="PC에 묶인 키가 없습니다."
-          onClick={() => setAsking({ kind: "unbind", key: bound[0]! })}
-        >
-          묶음 풀기...
-        </Button>
-        {active.length > 0 ? (
-          <span className="text-caption text-text-muted">
-            («폐기»·«묶음 풀기»는 목록 첫 줄에 적용됩니다 — 줄 고르기는 다음에 붙입니다)
-          </span>
-        ) : null}
-      </div>
-
-      {error ? <ErrorBanner message={error} /> : null}
+    <div>
+      <Button variant="primary" onClick={() => setCreating(true)}>
+        새 키...
+      </Button>
 
       <Dialog
         open={creating && !showing}
@@ -125,23 +86,109 @@ export function KeyTools({ rows }: { rows: CenterKeyInfo[] }) {
         </p>
       </Dialog>
 
+    </div>
+  );
+}
+
+const ACTION_LABEL: Record<KeyAction, string> = {
+  revoke: "키 폐기...",
+  unbind: "묶음 풀기...",
+  delete: "삭제...",
+};
+
+/**
+ * CON-11 줄 끝의 「...」 — **그 줄의 키에만** 건다. 폐기된 줄은 「삭제...」만 있다(되살리지 않는다).
+ * 확인 창에는 이름·앞자리·연결된 대상을 보여 고른 키가 맞는지 한 번 더 보게 한다.
+ */
+export function KeyMenu({ row }: { row: CenterKeyInfo }) {
+  const { actions } = keyActions(row);
+  const [menu, setMenu] = useState(false);
+  const [asking, setAsking] = useState<KeyAction | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [working, start] = useTransition();
+
+  function run(action: () => Promise<ActionResult>) {
+    start(async () => {
+      const done = await action();
+      setError(done.error ?? null);
+      setAsking(null);
+    });
+  }
+
+  const what = (
+    <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-body">
+      <dt className="text-text-secondary">이름</dt>
+      <dd>{row.name}</dd>
+      <dt className="text-text-secondary">앞자리</dt>
+      <dd className="font-mono text-body-sm">{row.prefix}…</dd>
+      <dt className="text-text-secondary">연결된 대상</dt>
+      <dd>{row.bound_to ? (row.bound_to.name ?? row.bound_to.id) : "등록 전"}</dd>
+    </dl>
+  );
+
+  return (
+    <div className="relative flex flex-col items-start gap-1">
+      <Button
+        size="sm"
+        variant="ghost"
+        aria-label={`${row.name} 키 동작`}
+        disabled={working}
+        onClick={() => setMenu(!menu)}
+      >
+        ...
+      </Button>
+      {menu ? (
+        <ul className="absolute right-0 top-full z-10 flex min-w-[160px] flex-col border border-border-default bg-bg-surface py-1 shadow-md">
+          {actions.map((action) => (
+            <li key={action}>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left text-body hover:bg-bg-subtle"
+                onClick={() => {
+                  setMenu(false);
+                  setError(null);
+                  setAsking(action);
+                }}
+              >
+                {ACTION_LABEL[action]}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {error ? <ErrorBanner message={error} /> : null}
+
       <ConfirmDialog
-        open={asking?.kind === "revoke"}
+        open={asking === "revoke"}
         title="이 키를 폐기할까요?"
-        description={`「${asking?.key.name ?? ""}」을 쓰는 Bot UI의 하트비트가 바로 거부됩니다. 실행 중인 Bot은 끝까지 돕니다.`}
+        description="이 키를 쓰는 쪽의 요청이 바로 거부됩니다. 실행 중인 Bot은 끝까지 돕니다. 되돌릴 수 없습니다."
         confirmLabel="폐기"
-        onConfirm={() => asking && run(() => revokeCenterKey(asking.key.key_id))}
+        onConfirm={() => run(() => revokeCenterKey(row.key_id))}
         onCancel={() => setAsking(null)}
-      />
+      >
+        {what}
+      </ConfirmDialog>
       <ConfirmDialog
-        open={asking?.kind === "unbind"}
+        open={asking === "unbind"}
         title="PC 묶음을 풀까요?"
-        description={`다음 등록이 새 PC에 묶입니다. PC를 다시 설치한 경우에만 쓰세요 (「${asking?.key.bound_to?.name ?? ""}」).`}
+        description="다음 등록이 새 PC에 묶입니다. PC를 다시 설치한 경우에만 쓰세요."
         confirmLabel="묶음 풀기"
         danger={false}
-        onConfirm={() => asking && run(() => unbindCenterKey(asking.key.key_id))}
+        onConfirm={() => run(() => unbindCenterKey(row.key_id))}
         onCancel={() => setAsking(null)}
-      />
+      >
+        {what}
+      </ConfirmDialog>
+      <ConfirmDialog
+        open={asking === "delete"}
+        title="이 키를 삭제할까요?"
+        description="목록에서 이 키를 지웁니다. 되돌릴 수 없습니다. 실행 기록·결재는 남고, 이 키가 묶였던 PC·서버 자리는 새 키가 이어받을 수 있게 놓입니다."
+        confirmLabel="삭제"
+        onConfirm={() => run(() => deleteCenterKey(row.key_id))}
+        onCancel={() => setAsking(null)}
+      >
+        {what}
+      </ConfirmDialog>
     </div>
   );
 }

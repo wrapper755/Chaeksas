@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 
 /**
@@ -175,7 +175,7 @@ export default async function RunsPage({
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/runs">
+    <Shell mode={found.mode} actor={found.actor} current="/runs">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">실행 로그</h1>
         <p className="text-body text-text-secondary">

@@ -201,6 +201,18 @@ def revoke(store: Store, key_id: str) -> bool:
         return cur.rowcount > 0
 
 
+def purge(store: Store, key_id: str) -> bool:
+    """폐기된 키의 행을 지운다 (CON-11 「삭제」, [ADR-0095]). **폐기된 것만** — 아니면 `False`.
+
+    키 행을 가리키는 것(Bot UI·서버 실행기 행의 `key_id`, 실행 기록·결재의 `owner_key_id`,
+    회전의 `successor_id`)은 그대로 둔다 — 모두 키 행이 없을 때를 다룬다. 묶였던 기계 자리는
+    「묶음 풀기」처럼 놓인 자리가 된다 (`host_keys._adopt_or_refuse`).
+    """
+    with store.tx() as cur:
+        cur.execute("DELETE FROM center_keys WHERE key_id = ? AND revoked_at IS NOT NULL", (key_id,))
+        return cur.rowcount > 0
+
+
 def bind(store: Store, key_id: str, bound: BoundTo) -> None:
     """키를 그 PC·대상에 묶는다 (처음 등록할 때)."""
     with store.tx() as cur:

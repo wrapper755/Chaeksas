@@ -22,13 +22,14 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from chaeksas.contracts.extension import ExtensionManifest  # noqa: E402
-from chaeksas.contracts.resources import ServiceAppResource  # noqa: E402
+from chaeksas.contracts.resources import ExtensionResource, ServiceAppResource  # noqa: E402
 from chaeksas.studio.service_catalog import (  # noqa: E402
     KIND_C11,
     KIND_EXTERNAL,
     Catalog,
     Usage,
     build,
+    from_center,
     missing_required,
     stale_fields,
 )
@@ -124,10 +125,38 @@ def test_both_sources_come_in_the_same_shape(catalog: Catalog) -> None:
 
 
 def test_the_label_says_the_name_the_kind_and_the_status(catalog: Catalog) -> None:
-    """STU-14 콤보 — 「<앱 이름> (<구분>) — 정상 / 응답 없음」."""
+    """STU-14 콤보 — 「<앱 이름> (<구분>) — <상태>」, 표기는 `status_map` 「서비스 앱」."""
     assert catalog.app("hris").label == "모의 인사 시스템 (서비스 앱) — 정상"  # type: ignore[union-attr]
-    # 외부 앱은 `/healthz`가 없어 Center가 상태를 모른다 (C7).
-    assert "알 수 없음" in catalog.app("ext-credit").label  # type: ignore[union-attr]
+    # 상태를 받지 않은 외부 앱은 「확인 전」이다 — 「받지 못했다」로 읽히는 「알 수 없음」이 아니다.
+    assert catalog.app("ext-credit").label.endswith("— 확인 전")  # type: ignore[union-attr]
+    worse = build([service_app(status="degraded")])
+    assert worse.app("hris").label.endswith("— 저하")  # type: ignore[union-attr]
+
+
+def test_an_external_app_shows_the_status_center_sends() -> None:
+    """외부 앱의 상태는 Center가 어댑터 `health`로 본 것이다 (C7) — Studio가 「모른다」로 덮지 않는다."""
+
+    class Reader:
+        def service_apps(self) -> list[ServiceAppResource]:
+            return []
+
+        def packages(self, _kind: str) -> list[Any]:
+            return []
+
+        def extensions(self) -> list[ExtensionResource]:
+            found = external()
+            return [
+                ExtensionResource(
+                    id=found.id,
+                    version=found.version,
+                    tier="external",
+                    status="unreachable",
+                    definition=found.model_dump(mode="json", by_alias=True, exclude_none=True),
+                )
+            ]
+
+    made = from_center(Reader())
+    assert made.app("ext-credit").label == "외부 신용 조회 (외부 앱) — 응답 없음"  # type: ignore[union-attr]
 
 
 def test_input_fields_come_from_the_schema(catalog: Catalog) -> None:

@@ -3,7 +3,7 @@ import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 
 /**
@@ -100,7 +100,7 @@ export default async function PackagesPage() {
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/packages">
+    <Shell mode={found.mode} actor={found.actor} current="/packages">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">공통 패키지</h1>
         <p className="text-body text-text-secondary">

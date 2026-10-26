@@ -31,32 +31,53 @@ type NavItem =
 /** 꺼진 줄에 붙는 짧은 표시. 이유는 말풍선에 있다. */
 const LATER_BADGE = "아직";
 
-const NAV: NavItem[] = [
-  { label: "실행 로그", href: "/runs" },
-  { label: "Bot 현황", href: "/bots" },
-  { label: "Bot UI 현황", href: "/bot-uis" },
-  { label: "서버 실행", href: "/server-runners" },
-  { label: "결재함", href: "/approvals" },
-  { label: "작업 지시", href: "/jobs" },
-  { label: "가상 직원", href: "/virtual-workers" },
-  { label: "공통 패키지", href: "/packages" },
-  { label: "배포", href: "/deployments" },
-  { label: "리소스", href: "/resources" },
-  { label: "Center API 키", href: "/center-keys" },
-  // 계정을 보는 것도 관리자의 일이다 (C5 `GET /accounts`) — 보기 전용에는 줄이 없다.
-  { label: "관리자 계정", href: "/accounts", adminOnly: true },
+/**
+ * 상위 메뉴 넷 (CON-00 [N]). **지금 화면이 든 것만 펼쳐** 열리고 누르면 접고 편다 — `<details>`라
+ * JS가 없어도 된다.
+ */
+const NAV: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: "운영 현황",
+    items: [
+      { label: "실행 로그", href: "/runs" },
+      { label: "Bot 현황", href: "/bots" },
+      { label: "PC 현황", href: "/bot-uis" },
+    ],
+  },
+  {
+    label: "업무",
+    items: [
+      { label: "결재함", href: "/approvals" },
+      { label: "작업 지시", href: "/jobs" },
+      { label: "가상 직원", href: "/virtual-workers" },
+    ],
+  },
+  {
+    label: "배포·자원",
+    items: [
+      { label: "공통 패키지", href: "/packages" },
+      { label: "배포", href: "/deployments" },
+      { label: "리소스", href: "/resources" },
+    ],
+  },
+  {
+    label: "관리",
+    items: [
+      { label: "Center API 키", href: "/center-keys" },
+      // 계정을 보는 것도 관리자의 일이다 (C5 `GET /accounts`) — 보기 전용에는 줄이 없다.
+      { label: "관리자 계정", href: "/accounts", adminOnly: true },
+    ],
+  },
 ];
 
 export function Shell({
   mode,
   actor,
-  centerUrl,
   current,
   children,
 }: {
   mode: Mode;
   actor: string;
-  centerUrl: string;
   current: string;
   children: React.ReactNode;
 }) {
@@ -69,42 +90,37 @@ export function Shell({
       >
         <p className="px-2 pb-3 text-h3 font-bold">Chaeksas</p>
         <ul className="flex flex-col gap-1">
-          {NAV.filter((item) => !item.adminOnly || mode === "admin").map((item) => (
-            <li key={item.label}>
-              {item.later ? (
-                <span
-                  className="flex items-center justify-between rounded-md px-3 py-2 text-body text-text-muted"
-                  title={item.later}
-                >
-                  {item.label}
-                  <span className="text-caption">{LATER_BADGE}</span>
-                </span>
-              ) : (
-                <Link
-                  href={item.href!}
-                  aria-current={current === item.href ? "page" : undefined}
-                  className={
-                    current === item.href
-                      ? "block rounded-md bg-primary-subtle px-3 py-2 text-body font-semibold text-primary"
-                      : "block rounded-md px-3 py-2 text-body hover:bg-bg-subtle"
-                  }
-                >
-                  {item.label}
-                </Link>
-              )}
-            </li>
-          ))}
+          {NAV.map((group) => {
+            const items = group.items.filter((item) => !item.adminOnly || mode === "admin");
+            if (items.length === 0) return null;
+            return (
+              <li key={group.label}>
+                <details open={items.some((item) => item.href === current)} className="group">
+                  <summary className="flex cursor-pointer list-none items-center justify-between rounded-md px-3 py-2 text-body-sm font-semibold text-text-secondary hover:bg-bg-subtle [&::-webkit-details-marker]:hidden">
+                    {group.label}
+                    <span aria-hidden className="text-caption transition-transform group-open:rotate-90">
+                      ▸
+                    </span>
+                  </summary>
+                  <ul className="flex flex-col gap-1 pb-2 pl-2">
+                    {items.map((item) => (
+                      <li key={item.label}>
+                        <NavLink item={item} current={current} />
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
       <div className="flex min-w-0 flex-1 flex-col">
         <header
-          className="flex shrink-0 items-center justify-between gap-4 border-b border-border-default bg-bg-surface px-6"
+          className="flex shrink-0 items-center justify-end gap-4 border-b border-border-default bg-bg-surface px-6"
           style={{ height: "var(--size-topbar-height)" }}
         >
-          <p className="truncate text-body-sm text-text-secondary">
-            Center: <span className="font-mono">{centerUrl}</span>
-          </p>
           <div className="flex items-center gap-3">
             <span className="text-body-sm">
               {actor}
@@ -120,5 +136,32 @@ export function Shell({
         <main className="min-w-0 flex-1 p-6">{children}</main>
       </div>
     </div>
+  );
+}
+
+function NavLink({ item, current }: { item: NavItem; current: string }) {
+  if (item.later) {
+    return (
+      <span
+        className="flex items-center justify-between rounded-md px-3 py-2 text-body text-text-muted"
+        title={item.later}
+      >
+        {item.label}
+        <span className="text-caption">{LATER_BADGE}</span>
+      </span>
+    );
+  }
+  return (
+    <Link
+      href={item.href!}
+      aria-current={current === item.href ? "page" : undefined}
+      className={
+        current === item.href
+          ? "block rounded-md bg-primary-subtle px-3 py-2 text-body font-semibold text-primary"
+          : "block rounded-md px-3 py-2 text-body hover:bg-bg-subtle"
+      }
+    >
+      {item.label}
+    </Link>
   );
 }

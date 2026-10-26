@@ -135,7 +135,68 @@ def test_a_drawing_id_that_fits_c1_is_offered(space: Workspace, tmp_path: Path) 
     found.write_text(MINIMAL.replace('id="Proc_청구"', 'id="nowview.sc01"'), encoding="utf-8")
     assert NewProcessDialog(None, space, imported=found).id_box.text() == "nowview.sc01"
     space.create("nowview.sc01")
-    assert NewProcessDialog(None, space, imported=found).id_box.text() == "", "이미 있으면 비운다"
+    assert NewProcessDialog(None, space, imported=found).id_box.text() == "nowview.sc01", (
+        "이미 있어도 채운다 — 「기존 것을 바꾸기」의 입구다"
+    )
+
+
+def _answer_replace(monkeypatch: Any, choice: str) -> list[str]:
+    """「기존 것을 바꾸기」 확인 창에 `choice` 단추로 답한다. 본 글을 돌려준다."""
+    seen: list[str] = []
+
+    def exec_(box: QMessageBox) -> int:
+        seen.append(f"{box.text()}\n{box.informativeText()}")
+        assert box.defaultButton().text() == "취소", "덮어쓰기는 되돌릴 수 없다 — 기본은 취소"
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", exec_)
+    monkeypatch.setattr(
+        QMessageBox, "clickedButton", lambda box: next(b for b in box.buttons() if b.text() == choice)
+    )
+    return seen
+
+
+def test_importing_an_existing_id_replaces_only_the_entry(
+    space: Workspace, tmp_path: Path, monkeypatch: Any
+) -> None:
+    old = space.create("nowview.sc01", name="SC01", version="0.3.0", first=_drawing(tmp_path, "옛"))
+    cases = old.folder / "cases" / "sc01.cases.json"
+    cases.write_text("{}", encoding="utf-8")
+    newer = _drawing(tmp_path / "new", "새")
+    seen = _answer_replace(monkeypatch, "기존 것을 바꾸기")
+    dialog = NewProcessDialog(None, space, imported=newer)
+    dialog.name_box.setText("창에 적은 이름")
+    dialog.accept()
+    assert seen and "nowview.sc01" in seen[0] and "sc01.bpmn" in seen[0]
+    assert dialog.replaced and dialog.made is not None
+    assert (old.folder / "process" / "sc01.bpmn").read_text(encoding="utf-8") == newer.read_text(
+        encoding="utf-8"
+    )
+    again = space.find("nowview.sc01")
+    assert again is not None and (again.name, again.version) == ("SC01", "0.3.0"), "기록은 그대로"
+    assert cases.read_text(encoding="utf-8") == "{}", "시험 케이스는 그대로"
+
+
+def test_cancelling_the_replace_changes_nothing(
+    space: Workspace, tmp_path: Path, monkeypatch: Any
+) -> None:
+    old = space.create("nowview.sc01", first=_drawing(tmp_path, "옛"))
+    before = (old.folder / "process" / "sc01.bpmn").read_text(encoding="utf-8")
+    _answer_replace(monkeypatch, "취소")
+    dialog = NewProcessDialog(None, space, imported=_drawing(tmp_path / "new", "새"))
+    dialog.accept()
+    assert dialog.made is None and not dialog.replaced
+    assert (old.folder / "process" / "sc01.bpmn").read_text(encoding="utf-8") == before
+
+
+def _drawing(folder: Path, name: str) -> Path:
+    folder.mkdir(parents=True, exist_ok=True)
+    found = folder / "sc01.bpmn"
+    found.write_text(
+        MINIMAL.replace('id="Proc_청구"', 'id="nowview.sc01"').replace("청구서 대사", name),
+        encoding="utf-8",
+    )
+    return found
 
 
 def test_an_unreadable_import_keeps_the_dialog_open(

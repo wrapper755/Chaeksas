@@ -4,7 +4,7 @@ import { DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { DependentInfo } from "@chaeksas/api-types/c5-dependent-info";
 import type { ProvidedProcess } from "@chaeksas/api-types/c1-manifest";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { PackageActions } from "@/components/PackageActions";
 import { DeletePackage } from "../../tools";
@@ -130,7 +130,7 @@ export default async function PackagePage({
   ];
 
   return (
-    <Shell mode={found.mode} actor={found.actor} centerUrl={CENTER_PUBLIC_URL} current="/packages">
+    <Shell mode={found.mode} actor={found.actor} current="/packages">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">
           {info?.name ?? packageId} <span className="font-mono text-h2">{version}</span>

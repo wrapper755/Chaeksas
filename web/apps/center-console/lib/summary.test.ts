@@ -26,6 +26,7 @@ import {
   elapsed,
   keyRefsOf,
   percent,
+  placeOf,
   queueReason,
   readinessLabel,
   resumes,
@@ -482,3 +483,11 @@ describe("keyStages — 「서비스 앱 키 받지 못함」의 Center 쪽 까�
   });
 });
 
+describe("placeOf", () => {
+  it("PC라고 적은 것만 PC — 생략은 서버다 (C1 서버 우선)", () => {
+    expect(placeOf("pc")).toBe("pc");
+    expect(placeOf("server")).toBe("server");
+    expect(placeOf(null)).toBe("server");
+    expect(placeOf(undefined)).toBe("server");
+  });
+});
