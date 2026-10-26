@@ -41,14 +41,19 @@ from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3, SPACE_4
 from chaeksas.studio.cases import (
     COMPARISONS,
     NO_APPROVALS,
+    PLAIN_KINDS,
     VALUE_KINDS,
     approvals_of,
     check_cases,
+    declared_input_decls,
     declared_inputs,
+    input_tip,
+    kind_of,
     messages_of,
     pack_expected,
     pack_value,
     read,
+    result_names,
     unpack_expected,
     unpack_value,
     write,
@@ -153,6 +158,12 @@ class CaseDialog(QDialog):
         drop.clicked.connect(self._drop)
 
         self.names = declared_inputs(definition)
+        #: 정의된 입력 — 케이스에 없어도 줄로 깔린다 (STU-07). 비운 채 둔 깔린 줄은 담지 않는다.
+        self.decls = declared_input_decls(definition)
+        #: 지금 케이스가 **적어 둔** 입력 이름 — 깔린 줄과 가른다.
+        self._given: set[str] = set()
+        #: 「기대 결과」 이름의 고를 거리 (출력 → 그림이 만드는 변수 → 입력).
+        self.result_names = result_names(definition)
         self.forms = approvals_of(definition)
         self.message_names = messages_of(definition)
 
@@ -168,7 +179,12 @@ class CaseDialog(QDialog):
         self.expected_block = Block(
             "기대 결과",
             ("이름", "비교", "타입", "값"),
-            lambda: ["", _combo(list(COMPARISONS), "같음"), _kind_box("string"), ""],
+            lambda: [
+                _combo(self.result_names, "", editable=True),
+                _combo(list(COMPARISONS), "같음"),
+                _kind_box("string"),
+                "",
+            ],
         )
         self.answer_block = Block(
             "결재 자동 응답",
@@ -293,18 +309,30 @@ class CaseDialog(QDialog):
         self.description_box.setText(case.description or "")
         self.manual_box.setChecked(case.manual)
 
-        _fill(
-            self.inputs,
-            [
-                [_combo(self.names, name, editable=True), _kind_box(kind), text]
-                for name, kind, text in ((n, *unpack_value(v)) for n, v in case.inputs.items())
-            ],
-        )
+        self._given = set(case.inputs)
+        rows: list[list[Any]] = [
+            [_combo(self.names, name, editable=True), _kind_box(kind), text]
+            for name, kind, text in ((n, *unpack_value(v)) for n, v in case.inputs.items())
+        ]
+        # 정의된 입력 중 적지 않은 것도 줄로 깐다 — 값만 적으면 된다 (「변수」 탭의 정의).
+        for decl in self.decls:
+            if decl.name not in self._given:
+                name_box = _combo(self.names, decl.name, editable=True)
+                name_box.setToolTip(input_tip(decl))
+                rows.append([name_box, _kind_box(kind_of(decl)), ""])
+        _fill(self.inputs, rows)
 
         wanted = []
         for name, value in case.expected.items():
             comparison, kind, text = unpack_expected(value)
-            wanted.append([name, _combo(list(COMPARISONS), comparison), _kind_box(kind), text])
+            wanted.append(
+                [
+                    _combo(self.result_names, name, editable=True),
+                    _combo(list(COMPARISONS), comparison),
+                    _kind_box(kind),
+                    text,
+                ]
+            )
         _fill(self.expected, wanted)
 
         answers = []
@@ -355,10 +383,12 @@ class CaseDialog(QDialog):
         """화면 → 지금 고른 케이스."""
         if not (0 <= self.current < len(self.edited.cases)):
             return
+        declared = {decl.name for decl in self.decls}
         inputs = {
             name: pack_value(kind, text)
             for name, kind, text in _read(self.inputs, (0, 1, 2))
-            if name
+            # 깔린 줄을 비운 채 두었으면 「적지 않았다」다 — 빈 글을 담지 않는다 (기본값이 쓰인다).
+            if name and not (name in declared and name not in self._given and not text.strip() and kind in PLAIN_KINDS)
         }
         expected = {
             name: pack_expected(comparison, kind, text)
@@ -501,7 +531,6 @@ def _loose(text: str) -> Any:
         return float(body)
     except ValueError:
         return text
-
 
 
 __all__ = ["Block", "CaseDialog"]

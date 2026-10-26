@@ -18,7 +18,6 @@ CLAUDE.md §4). **돌고 있는 것은 창이 쥔다** (`window.running`·`windo
 
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import QMessageBox
@@ -33,25 +32,9 @@ from chaeksas.studio.ui_sessions import row_of
 if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (창이 이 모듈을 부른다)
     from chaeksas.studio.main_window import MainWindow
 
-#: 변수 한 줄에 보일 값의 최대 길이 (STU-09 「변수」 탭).
-MAX_VALUE = 200
-
 NO_DEFINITION = "열린 정의가 없습니다."
 ALREADY = "이미 실행 중입니다."
 UNREADABLE = "정의를 읽지 못했습니다."
-
-
-def format_variables(variables: dict[str, object]) -> str:
-    """STU-09 「변수」 탭의 글. **Qt를 모른다** — 글 짓는 일만이라 따로 시험한다.
-
-    값은 잘라 보인다 — 긴 목록 하나가 탭을 다 차지하면 나머지를 못 본다.
-    """
-    lines = [f"변수 {len(variables)}개", ""]
-    for name in sorted(variables):
-        value = variables[name]
-        shown = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
-        lines.append(f"{name} ({type(value).__name__}) = {shown[:MAX_VALUE]}")
-    return "\n".join(lines)
 
 
 def run_test(window: MainWindow, *, mode: str | None = None) -> None:
@@ -120,6 +103,7 @@ def run_test(window: MainWindow, *, mode: str | None = None) -> None:
     # 차례로」에서 3번째 케이스의 전환을 보려는데 마지막 케이스가 표를 덮으면 안 된다
     # (어느 케이스의 줄인지는 「케이스」 열이 말한다).
     window.reset_ui_sessions()
+    window.variables_running(True)
     window.canvas.mark({})
     next_run(window)
 
@@ -134,7 +118,8 @@ def next_run(window: MainWindow) -> None:
     window.running = running
     running.said.connect(window.say)
     running.marked.connect(window.canvas.mark)
-    running.varied.connect(lambda found: window.show_variables(format_variables(found)))
+    # 지금 값은 「변수」 탭의 정의 표에 열로 붙는다 (STU-01 「변수」 탭).
+    running.varied.connect(window.show_variables)
     # 케이스 이름은 C3 `ui_session`에 없다 — 여기서 넣는다 (STU-09 「UI 태스크」의 「케이스」 열).
     case_name = plan.case.name if plan.case else ""
     running.ui_session.connect(lambda event: window.show_ui_session(row_of(event, case=case_name)))
@@ -159,6 +144,7 @@ def all_done(window: MainWindow) -> None:
     window.run_action.setEnabled(True)
     window.replay_action.setEnabled(True)
     window.stop_action.setEnabled(False)
+    window.variables_running(False)
     if len(window.outcomes) > 1:
         window.say(summarize_runs(window.outcomes))
     last = window.outcomes[-1] if window.outcomes else None
@@ -176,11 +162,9 @@ def stop_test(window: MainWindow) -> None:
 
 __all__ = [
     "ALREADY",
-    "MAX_VALUE",
     "NO_DEFINITION",
     "UNREADABLE",
     "all_done",
-    "format_variables",
     "next_run",
     "one_done",
     "run_test",

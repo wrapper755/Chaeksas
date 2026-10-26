@@ -363,13 +363,14 @@ def test_adding_a_row_keeps_the_rows_already_there_alive(app: Any, tmp_path: Pat
     dialog.input_block.add_row()
     dialog.input_block.add_row()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    laid = len(declared_inputs(definition))  # 정의된 입력은 줄로 미리 깔린다
     assert shiboken6.isValid(first) and dialog.inputs.cellWidget(0, 0) is first
-    assert dialog.inputs.rowCount() == 3
+    assert dialog.inputs.rowCount() == laid + 3
 
     dialog.inputs.setCurrentCell(1, 0)
     dialog.input_block.drop_row()
     QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
-    assert shiboken6.isValid(first) and dialog.inputs.rowCount() == 2
+    assert shiboken6.isValid(first) and dialog.inputs.rowCount() == laid + 2
 
 
 def test_the_four_tables_are_tabs_that_show_three_rows_and_their_count(app: Any, tmp_path: Path) -> None:
@@ -379,13 +380,16 @@ def test_the_four_tables_are_tabs_that_show_three_rows_and_their_count(app: Any,
     made, definition = imported(tmp_path, RECONCILIATION)
     dialog = CaseDialog(None, made, definition)
     dialog._add()
+    laid = len(declared_inputs(definition))  # 정의된 입력은 줄로 미리 깔린다
+    assert laid, "이 시험은 입력이 정의된 예제를 쓴다"
     assert dialog.tabs.count() == 4
-    assert dialog.tabs.tabText(0) == "입력 변수"
+    assert dialog.tabs.tabText(0) == f"입력 변수 ({laid})"
     dialog.input_block.add_row()
     dialog.input_block.add_row()
-    assert dialog.tabs.tabText(0) == "입력 변수 (2)"
+    assert dialog.tabs.tabText(0) == f"입력 변수 ({laid + 2})"
     dialog.input_block.drop_row()
-    assert dialog.tabs.tabText(0) == "입력 변수 (1)"
+    assert dialog.tabs.tabText(0) == f"입력 변수 ({laid + 1})"
+    assert dialog.tabs.tabText(1) == "기대 결과"
     row = dialog.inputs.verticalHeader().defaultSectionSize()
     assert row >= dialog.inputs.cellWidget(0, 0).sizeHint().height(), "콤보가 줄에 눌리지 않는다"
     for block in dialog.blocks:

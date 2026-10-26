@@ -22,7 +22,7 @@ import json
 from typing import Any
 
 from pydantic import ValidationError
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QStringListModel, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -204,6 +204,9 @@ class Properties(QWidget):
         #: 열린 BPM 프로세스의 실행 위치 (`chk:process.run_location`) — 결재 편집기가 서버에서
         #: 「현장 PC에서만」을 끈다 (B6과 같은 판정). 메인 창이 정의를 열 때 채운다.
         self.run_location: str | None = None
+        #: 변수 이름 칸의 고를 거리 — 「변수」 탭의 이름 (STU-04). 메인 창이 그림을 읽을 때 채우고
+        #: 편집기들이 **같은 모델**을 본다 (열린 편집기의 목록도 따라 바뀐다).
+        self.known_names = QStringListModel(self)
 
         self.head = QLabel(EMPTY_TEXT, self)
         self.head.setWordWrap(True)
@@ -329,7 +332,7 @@ class Properties(QWidget):
         """STU-14. 고를 거리가 **Center에서** 온다 (`catalog`) — 없으면 편집기가 그렇게 말한다."""
         from chaeksas.studio.service_editor import TAB_LABEL, ServiceTaskEditor  # noqa: PLC0415
 
-        made = ServiceTaskEditor(self.catalog, self, inherited=self.service_keys)
+        made = ServiceTaskEditor(self.catalog, self, names=self.known_names)
         made.load(_body_of(chk, "serviceCall") or {})
         self._attach(made, TAB_LABEL, key="serviceCall")
 
@@ -341,7 +344,7 @@ class Properties(QWidget):
             ApprovalEditor,
         )
 
-        made = ApprovalEditor(self, run_location=self.run_location)
+        made = ApprovalEditor(self, run_location=self.run_location, names=self.known_names)
         made.load(_body_of(chk, "approval") or {})
         manual = str(self.loaded.get("type") or "") == "ManualTask"
         self._attach(made, TAB_CONFIRMATION if manual else TAB_APPROVAL, key="approval")
