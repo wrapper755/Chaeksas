@@ -128,6 +128,7 @@
 - 테마: 「시스템 따름」(기본) / 밝게 / 어둡게 (STU-10 「외형」, Bot UI도 같음).
 - 트레이 아이콘의 상태 점은 상태 `solid` 색, 툴팁에 글자.
 - 표는 `row.compact`(32), 컨트롤은 `control.md`(32).
+- 펼친 메뉴(메뉴 막대·문맥 메뉴)는 `bg.surface` 바탕에 `border.strong` 테두리, 고른 줄은 `primary`·`primary.fg`. 메뉴에는 아이콘을 보이지 않는다(체크 표시를 가린다) — 아이콘은 도구 모음에만.
 - 글자 하나의 뜻은 `QLabel`의 **`role` 속성**으로 준다 — 색·크기를 코드에 쓰지 않는다. 생성 QSS(`gen_tokens.py`)가 칠한다. **`chaeksas.qt.theme.set_role(위젯, 뜻)`으로 준다** — Qt는 스타일시트를 처음 보일 때 한 번 입히므로 `setProperty`만 부르면 보인 뒤에 준 뜻이 칠해지지 않는다.
 
   | `role` | 쓰는 곳 | 모양 |
@@ -137,7 +138,7 @@
   | `muted` | 덜 중요한 설명 | `text.muted` |
   | `h2` | 창 안의 큰 제목 | `size.h2`·`weight.semibold` |
 
-  모르는 `role`은 기본 글자로 보인다. 새 `role`을 쓰려면 이 표와 생성기를 함께 고친다 (시험이 코드에서 쓰는 `role`을 모아 대조한다).
+  모르는 `role`은 기본 글자로 보인다. 도구 모음의 실행 단추는 실행 중에 **`running` 속성**(`QToolButton[running="true"]`)으로 강조색(`primary`·`primary.fg`)이 된다 (U5). 새 `role`을 쓰려면 이 표와 생성기를 함께 고친다 (시험이 코드에서 쓰는 `role`을 모아 대조한다).
 
 ## 5. 문구
 
@@ -156,7 +157,7 @@
 
 ## 6. 아이콘
 
-- **Lucide** 한 벌만 (ISC). 웹은 `lucide-react`, Qt는 같은 SVG를 리소스로 넣어 `currentColor`를 토큰 색으로 칠한다.
+- **Lucide** 한 벌만 (ISC). 웹은 `lucide-react`, Qt는 같은 판의 SVG를 `packages/qt`의 테마 폴더(`icon-<이름>.svg`)에 옮겨 두고 `chaeksas.qt.theme.icon(이름, 색)`이 `currentColor`를 토큰 색(팔레트)으로 칠한다. 테마가 바뀌면 다시 칠한다.
 - 크기 16 (본문 옆), 20 (단추·탐색). 선 굵기 기본(2)을 바꾸지 않는다.
 - 아이콘만 있는 단추는 툴팁·`aria-label` 필수.
 

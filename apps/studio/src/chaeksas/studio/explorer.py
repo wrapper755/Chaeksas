@@ -1,6 +1,7 @@
 """STU-02 BPM 프로세스 탐색기 — 그룹 → BPM 프로세스 → 정의.
 
-**파일을 직접 여는 메뉴는 없다** (STU-01 U1). BPM 프로세스는 여기서 연다.
+**파일을 직접 여는 메뉴는 없다** (STU-01 U1). 목록은 **연 BPM 프로세스**다 — 작업 폴더 전부가
+아니다. 열면 올라가고 「BPM 프로세스 닫기」가 빼며, 다시 올리는 길은 「BPM 프로세스 열기...」다.
 
 열은 셋이다: 「BPM 프로세스 / 정의」, 「버전」, 「학습·검증」. 학습·검증 칸은 지금 AI 태스크 수만
 센다 — 학습·재생 검증·케이스 통과 수는 시험 실행이 생긴 뒤에 채운다 (조각 3e-3).
@@ -8,13 +9,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import QTreeView, QWidget
 
-from chaeksas.studio.workspace import BpmProcess, Definition, Group, Workspace
+from chaeksas.studio.workspace import DEFAULT_GROUP, BpmProcess, Definition, Group, Workspace
 
 HEADERS = ("BPM 프로세스 / 정의", "버전", "학습·검증")
 
@@ -26,7 +27,7 @@ ROW_DEFINITION = "definition"
 _KIND = Qt.ItemDataRole.UserRole + 1
 _PAYLOAD = Qt.ItemDataRole.UserRole + 2
 
-EMPTY_TEXT = "BPM 프로세스가 없습니다. 파일 → 새 BPM 프로세스...로 만드세요."
+EMPTY_TEXT = "열린 BPM 프로세스가 없습니다. 파일 → BPM 프로세스 열기...로 열거나 새 BPM 프로세스...로 만드세요."
 
 
 def ai_task_count(definition: Definition) -> int:
@@ -69,11 +70,16 @@ class ExplorerModel(QStandardItemModel):
         super().__init__(parent)
         self.setHorizontalHeaderLabels(list(HEADERS))
 
-    def fill(self, groups: list[Group], *, opened: str = "") -> None:
+    def fill(self, groups: list[Group], *, opened: str = "", listed: Iterable[str] | None = None) -> None:
+        """`listed`가 있으면 그 id의 BPM 프로세스만 그린다 — 그룹은 「기본」과 고른 것이 든 것만."""
+        keep = None if listed is None else set(listed)
         self.removeRows(0, self.rowCount())
         for group in groups:
+            shown = [p for p in group.processes if keep is None or p.id in keep]
+            if not shown and keep is not None and group.name != DEFAULT_GROUP:
+                continue
             row = _row(group.name, "", "", ROW_GROUP, group.name)
-            for process in group.processes:
+            for process in shown:
                 row[0].appendRow(_process_row(process, opened))
             self.appendRow(row)
 
@@ -125,9 +131,13 @@ class Explorer(QTreeView):
     #: 열 정의의 경로 (`Definition.path`).
     opening = Signal(str)
 
-    def __init__(self, workspace: Workspace, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, workspace: Workspace, parent: QWidget | None = None, *, listed: Iterable[str] = ()
+    ) -> None:
         super().__init__(parent)
         self.workspace = workspace
+        #: 목록에 올린 BPM 프로세스 id (올린 차례). 창이 설정 `open_processes`에 남긴다.
+        self.listed: list[str] = list(dict.fromkeys(listed))
         self._model = ExplorerModel(self)
         self.setModel(self._model)
         self.setAlternatingRowColors(True)
@@ -137,11 +147,29 @@ class Explorer(QTreeView):
         self.doubleClicked.connect(lambda _: self.open_selected())
         self.refresh()
 
-    def refresh(self, *, opened: str = "") -> None:
-        self._model.fill(self.workspace.groups(), opened=opened)
+    def refresh(self, *, opened: str = "", adding: Iterable[str] = ()) -> None:
+        """디스크를 다시 읽어 그린다. **연 정의의 BPM 프로세스는 목록에 올린다** (`adding`도).
+
+        `opened`는 정의 경로다. 작업 폴더에서 없어진 id는 여기서 빠진다.
+        """
+        groups = self.workspace.groups()
+        processes = [p for g in groups for p in g.processes]
+        for process in processes:
+            if process.id in adding or any(d.path.as_posix() == opened for d in process.definitions):
+                if process.id not in self.listed:
+                    self.listed.append(process.id)
+        known = {p.id for p in processes}
+        self.listed = [one for one in self.listed if one in known]
+        self._model.fill(groups, opened=opened, listed=self.listed)
         self.expandAll()
         for column in range(len(HEADERS)):
             self.resizeColumnToContents(column)
+
+    def unlist(self, process_id: str) -> None:
+        """「BPM 프로세스 닫기」 — 목록에서 뺀다 (작업 폴더의 파일은 그대로다)."""
+        if process_id in self.listed:
+            self.listed.remove(process_id)
+        self.refresh()
 
     # ── 고른 줄 ──
 

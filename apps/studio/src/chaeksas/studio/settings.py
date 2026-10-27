@@ -80,6 +80,8 @@ class Settings:
     writable_dirs: tuple[Path, ...] = ()
     #: 마지막으로 연 정의 (STU-01 — 시작하면 다시 연다).
     last_opened: str = ""
+    #: STU-02 탐색기 목록에 올린 BPM 프로세스 id (올린 차례). 닫으면 빠진다.
+    open_processes: tuple[str, ...] = ()
     #: STU-10 「서비스 앱 키」의 줄들 (참조 이름·서비스 앱). **값은 여기 없다.**
     service_keys: tuple[ServiceKeyRef, ...] = ()
     #: STU-15에서 **사람이 꺼 둔** 확장 id ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)).
@@ -139,6 +141,10 @@ class Settings:
         for name in ("readable_dirs", "writable_dirs"):
             if name in raw:
                 values[name] = tuple(Path(p) for p in raw[name])
+        if isinstance(raw.get("open_processes"), list):
+            values["open_processes"] = tuple(
+                str(one) for one in raw["open_processes"] if isinstance(one, str) and one
+            )
         if isinstance(raw.get("disabled_extensions"), list):
             values["disabled_extensions"] = tuple(
                 str(one) for one in raw["disabled_extensions"] if isinstance(one, str) and one

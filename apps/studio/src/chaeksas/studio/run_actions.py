@@ -127,6 +127,7 @@ def next_run(window: MainWindow) -> None:
     window.run_action.setEnabled(False)
     window.replay_action.setEnabled(False)
     window.stop_action.setEnabled(True)
+    window.show_running(plan.mode)
     window.statusBar().showMessage(f"실행 중: {plan.case.name if plan.case else '(케이스 없음)'}")
     running.start()
 
@@ -144,6 +145,7 @@ def all_done(window: MainWindow) -> None:
     window.run_action.setEnabled(True)
     window.replay_action.setEnabled(True)
     window.stop_action.setEnabled(False)
+    window.show_running(None)
     window.variables_running(False)
     if len(window.outcomes) > 1:
         window.say(summarize_runs(window.outcomes))

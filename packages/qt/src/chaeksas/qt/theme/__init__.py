@@ -8,6 +8,8 @@
 
 이 폴더에서 **생성물**은 `tokens.py`·`theme-light.qss`·`theme-dark.qss`다
 (`design/tokens.json` → `scripts/gen_tokens.py`). 색·크기를 여기 적지 않는다.
+`icon-*.svg`는 **Lucide를 그대로 옮긴 것**이다 (스타일 가이드 §6, ISC — `icons-LICENSE.txt`).
+웹의 `lucide-react`와 같은 판에서 꺼냈고 `currentColor`를 `icon()`이 칠한다.
 
 세 가지를 함께 적용한다. QSS만으로는 모자라기 때문이다.
 
@@ -27,7 +29,7 @@ from typing import TYPE_CHECKING
 from chaeksas.qt.theme import tokens
 
 if TYPE_CHECKING:  # QApplication을 타입으로만 쓴다 (import 비용을 줄인다)
-    from PySide6.QtGui import QFont, QPalette
+    from PySide6.QtGui import QFont, QIcon, QPalette
     from PySide6.QtWidgets import QApplication, QWidget
 
 LOG = logging.getLogger(__name__)
@@ -207,6 +209,32 @@ def _follow_system(app: QApplication) -> None:
         apply_theme(app, choice=THEME_SYSTEM)
 
 
+#: 단추·탐색 아이콘 크기 (스타일 가이드 §6 — 20). 고해상도 화면용으로 두 배도 함께 그린다.
+ICON_SIZE = 20
+
+
+def icon(name: str, color: str) -> QIcon:
+    """Lucide 아이콘 하나 (`icon-<name>.svg`) — `currentColor`를 `color`(토큰에서 온 색)로 칠한다.
+
+    없는 이름은 `FileNotFoundError`다 — 빈 아이콘으로 조용히 넘어가지 않는다.
+    """
+    from PySide6.QtCore import QByteArray, Qt  # noqa: PLC0415
+    from PySide6.QtGui import QIcon, QPainter, QPixmap  # noqa: PLC0415
+    from PySide6.QtSvg import QSvgRenderer  # noqa: PLC0415
+
+    svg = (files(__package__ or "chaeksas.qt.theme") / f"icon-{name}.svg").read_text(encoding="utf-8")
+    renderer = QSvgRenderer(QByteArray(svg.replace("currentColor", color).encode("utf-8")))
+    found = QIcon()
+    for size in (ICON_SIZE, ICON_SIZE * 2):
+        pixmap = QPixmap(size, size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.end()
+        found.addPixmap(pixmap)
+    return found
+
+
 def set_role(widget: QWidget, role: str) -> None:
     """글자의 뜻(`role` — 스타일 가이드 §4-2)을 주고 **그 자리에서 다시 칠한다**.
 
@@ -234,11 +262,13 @@ def status_color(group: str, label: str, *, theme: str = THEME_LIGHT, part: str 
 
 __all__ = [
     "FONT_PACKAGE",
+    "ICON_SIZE",
     "THEME_CHOICES",
     "THEME_DARK",
     "THEME_LIGHT",
     "THEME_SYSTEM",
     "apply_theme",
+    "icon",
     "load_fonts",
     "load_translations",
     "palette",

@@ -769,19 +769,49 @@ def test_the_resource_tab_holds_the_explorer_not_a_label(window: Any) -> None:
     assert isinstance(window.resource_tree, resources.ResourceExplorer)
 
 
-def test_the_view_menu_has_the_resource_shortcut(window: Any) -> None:
-    """STU-01 메뉴 표 — 「보기 → 리소스」는 Ctrl+Shift+E다."""
-    view_menu = next(one for one in window.menuBar().actions() if one.text() == "보기")
-    found = {one.text(): one.shortcut().toString() for one in view_menu.menu().actions()}
-    assert found["BPM 프로세스 탐색기"] == "Ctrl+E"
-    assert found["리소스"] == "Ctrl+Shift+E"
+def test_the_explorer_dock_is_fixed_without_a_title_bar(window: Any) -> None:
+    """STU-01 [E] — 왼쪽 고정, 제목 줄 없음 (띄우기·닫기·옮기기가 없다)."""
+    from PySide6.QtWidgets import QDockWidget
+
+    dock = window.explorer_dock
+    assert dock.features() == QDockWidget.DockWidgetFeature.NoDockWidgetFeatures
+    assert dock.titleBarWidget() is not None
 
 
-def test_showing_the_resources_brings_the_tab_forward(window: Any) -> None:
-    window.show_resources()
-    assert window.explorer_tabs.currentWidget() is window.resource_tree
-    window.show_explorer()
-    assert window.explorer_tabs.currentWidget() is window.explorer
+def test_the_toolbar_holds_the_everyday_actions(window: Any) -> None:
+    """STU-01 [B] — 메뉴와 같은 동작(같은 켜짐·체크), 고정이라 옮기거나 감출 수 없다."""
+    bar = window.toolbar
+    texts = [one.text() for one in bar.actions() if not one.isSeparator()]
+    assert texts == ["저장", "실행 취소", "다시 실행", "실행 전 검사", "실행...", "속성 패널 접기"]
+    assert bar.actions()[0] is window.save_action and window.collapse_action in bar.actions()
+    assert not bar.isMovable() and not bar.isFloatable() and not bar.toggleViewAction().isVisible()
+    assert all(not one.icon().isNull() for one in bar.actions() if not one.isSeparator())
+    assert not window.collapse_action.isIconVisibleInMenu(), "메뉴에서 체크 표시를 가리지 않는다"
+
+
+def test_the_run_button_turns_into_a_stop_button_while_running(window: Any) -> None:
+    """U5 — 실행 중에는 수행 모드에 맞는 중지 글이 되고 강조색 속성이 붙는다."""
+    from chaeksas.studio import run_dialog
+
+    button = window.toolbar.widgetForAction(window.run_tool_action)
+    window.show_running(run_dialog.DETERMINISTIC)
+    assert window.run_tool_action.text() == "결정 수행 중지" and button.property("running") is True
+    stop_icon = window.run_tool_action.icon().cacheKey()
+    window.show_running(run_dialog.AUTONOMOUS)
+    assert window.run_tool_action.text() == "자율 수행 중지"
+    window.show_running(None)
+    assert window.run_tool_action.text() == "실행..." and button.property("running") is False
+    assert window.run_tool_action.icon().cacheKey() != stop_icon, "중지 아이콘에서 실행 아이콘으로 돌아온다"
+
+
+def test_the_view_menu_holds_the_layout_and_tools_only_extensions(window: Any) -> None:
+    """STU-01 메뉴 표 — 화면 모양을 바꾸는 것은 「보기」, 「도구」에는 「확장...」만 있다."""
+    menus = {
+        one.text(): [a.text() for a in one.menu().actions() if not a.isSeparator()]
+        for one in window.menuBar().actions()
+    }
+    assert menus["보기"] == ["속성 패널 접기", "레이아웃 초기화", "로그 지우기"]
+    assert menus["도구"] == ["확장..."]
 
 
 def test_the_roots_are_drawn_without_knocking_on_center(window: Any) -> None:

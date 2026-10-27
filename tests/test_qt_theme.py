@@ -454,3 +454,38 @@ def test_roles_are_given_through_set_role() -> None:
         if path != theme and 'setProperty("role"' in path.read_text(encoding="utf-8")
     ]
     assert not raw, f"set_role 대신 setProperty로 role을 준다: {raw}"
+
+
+def test_an_icon_is_drawn_in_the_color_given(app: Any) -> None:
+    """스타일 가이드 §6 — Lucide SVG의 `currentColor`를 토큰 색으로 칠한다 (20과 고해상도용 40)."""
+    from PySide6.QtGui import QColor  # noqa: PLC0415
+
+    from chaeksas.qt.theme import ICON_SIZE, icon  # noqa: PLC0415
+
+    found = icon("square", "#ff0000")
+    assert sorted(s.width() for s in found.availableSizes()) == [ICON_SIZE, ICON_SIZE * 2]
+    image = found.pixmap(ICON_SIZE * 2).toImage()
+    colors = {image.pixelColor(x, y).name() for x in range(image.width()) for y in range(image.height())
+              if image.pixelColor(x, y).alpha() == 255}
+    assert colors == {QColor("#ff0000").name()}
+
+
+def test_every_shipped_icon_loads_and_an_unknown_one_is_an_error(app: Any) -> None:
+    from importlib.resources import files  # noqa: PLC0415
+
+    from chaeksas.qt.theme import icon  # noqa: PLC0415
+
+    names = [p.name[len("icon-"):-len(".svg")] for p in files("chaeksas.qt.theme").iterdir()
+             if p.name.startswith("icon-") and p.name.endswith(".svg")]
+    assert "play" in names
+    for name in names:
+        assert not icon(name, "#000000").isNull(), name
+    with pytest.raises(FileNotFoundError):
+        icon("없는-아이콘", "#000000")
+
+
+def test_an_open_menu_has_a_border() -> None:
+    """펼친 메뉴는 테두리가 있다 — 없으면 흰 바탕 위에서 메뉴가 어디까지인지 안 보였다."""
+    for theme in (THEME_LIGHT, THEME_DARK):
+        color = tokens.colors(dark=theme == THEME_DARK)["border.strong"]
+        assert f"border: 1px solid {color};" in qss(theme).split("QMenu {", 1)[1].split("}", 1)[0]

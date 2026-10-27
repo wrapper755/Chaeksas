@@ -159,8 +159,11 @@ def canvas(app: Any) -> Any:
 class Explorer:
     refreshed: list[str] = field(default_factory=list)
 
-    def refresh(self, *, opened: str = "") -> None:
+    added: list[str] = field(default_factory=list)
+
+    def refresh(self, *, opened: str = "", adding: Any = ()) -> None:
         self.refreshed.append(opened)
+        self.added.extend(adding)
 
 
 @dataclass
@@ -232,6 +235,7 @@ def test_splitting_builds_the_pc_bot_then_delegates_in_place(tmp_path: Path, can
     erp, prepare, check = (node_named(drawn_server, n) for n in ("ERP 입력", "준비", "현장 확인"))
     plan = Plan(node_id=erp, pc_id="order-pc", pc_name="발주 PC", inputs=[("확정", "list")], outputs=["번호"])
     assert split_actions.split(window, plan) is True  # type: ignore[arg-type]
+    assert window.explorer.added == ["order-pc"]  # STU-02 — 만든 PC Bot도 목록에 올린다
 
     # PC 쪽 — 새 작업 폴더, 시작 → 옮긴 노드(본문 그대로) → 끝.
     pc = window.workspace.find("order-pc")

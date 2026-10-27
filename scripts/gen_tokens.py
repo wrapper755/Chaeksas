@@ -431,6 +431,12 @@ QPushButton#Danger {{
   color: {c["danger.fg"]};
 }}
 
+QToolButton[running="true"] {{
+  background-color: {c["primary"]};
+  color: {c["primary.fg"]};
+  border-radius: {r["md"]}px;
+}}
+
 QLineEdit, QComboBox, QPlainTextEdit, QTextEdit, QSpinBox {{
   background-color: {c["bg.surface"]};
   color: {c["text.primary"]};
@@ -521,6 +527,18 @@ QTableView::item:selected, QTreeView::item:selected, QListView::item:selected {{
   background-color: {c["primary.subtle"]};
   color: {c["text.primary"]};
 }}
+
+/* 펼친 메뉴(메뉴 막대·문맥 메뉴) — 테두리가 없으면 흰 바탕 위에서 메뉴가 어디까지인지 안 보인다. */
+QMenu {{
+  background-color: {c["bg.surface"]};
+  color: {c["text.primary"]};
+  border: 1px solid {c["border.strong"]};
+  padding: {s["1"]}px 0;
+}}
+QMenu::item {{ padding: {s["1"]}px {s["6"]}px {s["1"]}px {s["3"]}px; }}
+QMenu::item:selected {{ background-color: {c["primary"]}; color: {c["primary.fg"]}; }}
+QMenu::item:disabled {{ color: {c["text.muted"]}; }}
+QMenu::separator {{ height: 1px; background-color: {c["border.default"]}; margin: {s["1"]}px {s["2"]}px; }}
 
 QToolTip {{
   background-color: {c["bg.inverse"]};

@@ -47,7 +47,7 @@ class Layout:
     window_state: str = ""
     middle: str = ""
     split: str = ""
-    #: 「속성 패널 접기」가 켜져 있었나 (STU-01 도구 메뉴, Ctrl+Shift+P).
+    #: 「속성 패널 접기」가 켜져 있었나 (STU-01 보기 메뉴, Ctrl+Shift+P).
     properties_collapsed: bool = False
 
 
