@@ -1,7 +1,9 @@
 """비밀 값 — 환경변수가 먼저, 그다음 OS 비밀 저장소 (CLAUDE.md §5).
 
 **서버에서는 환경변수가 주 경로다.** 컨테이너·systemd가 그렇게 준다. 그래도 저장소를 쓸 수
-있으면 읽는다 — 개발 PC에서 Bot UI·Studio와 같은 방식으로 다룰 수 있게.
+있으면 읽는다 — 개발 PC에서 Bot UI·Studio와 같은 방식으로 다룰 수 있게. **운영자가 비밀 폴더
+(`CHK_SERVER_RUNNER__SECRETS_DIR`)를 적으면 그것이 저장소 자리에 들어간다** (ADR-0100) — OS 비밀
+저장소가 없는 컨테이너에서도 등록 승인·키 회전·서비스 앱 키 받기가 돈다.
 
 설정 파일·실행 기록·코드에는 넣지 않는다. **쓰기는 저장소가 없으면 분명히 실패한다** (평문으로
 흘리지 않는다 — Bot UI와 같은 태도다).
@@ -14,6 +16,7 @@ import os
 from dataclasses import dataclass
 
 from chaeksas.core import service_keys
+from chaeksas.server_runner import secret_file
 
 log = logging.getLogger(__name__)
 
@@ -74,6 +77,10 @@ class Credentials:
     service: str = SERVICE
 
     def _keyring(self) -> object | None:
+        # 사람이 적은 비밀 폴더가 이긴다 — 적었는데 OS 저장소로 가면 볼륨 밖에 남는다.
+        chosen = secret_file.from_env()
+        if chosen is not None:
+            return chosen
         try:
             import keyring  # noqa: PLC0415 — 없을 수도 있다 (헤드리스 서버)
         except ImportError:  # pragma: no cover - 설치되어 있다

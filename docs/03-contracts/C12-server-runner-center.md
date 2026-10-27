@@ -86,13 +86,12 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 | 요청 코드를 보이는 곳 | BUI-03·트레이 | **시작할 때 로그 한 줄**: 「Center에 등록 요청을 보냈습니다. 요청 코드 ABCD-EFGH — Center 콘솔 「서버 실행」에서 승인하세요」. `--once`는 한 걸음만 하고 아직 승인되지 않았으면 끝 코드 1로 끝난다(「사람이 고쳐야 한다」 — 승인이 그 일이다) |
 | 승인하는 곳 | CON-03 「승인 대기」 | CON-12 「승인 대기」 |
 | 만드는 키 | 「Bot UI용」 | 「서버 실행기용」 |
-| 받은 키를 두는 곳 | OS 비밀 저장소 | OS 비밀 저장소(`chaeksas-server-runner`, 이름 `center_api_key`) |
+| 받은 키를 두는 곳 | OS 비밀 저장소 | OS 비밀 저장소(`chaeksas-server-runner`, 이름 `center_api_key`). **운영자가 비밀 폴더 `CHK_SERVER_RUNNER__SECRETS_DIR`를 적으면 그 폴더의 `secrets.json`**(컨테이너 — [ADR-0100](../decisions/0100-server-runner-secrets-dir.md)) |
 
-- **환경변수로 키가 오면** 등록 요청을 보내지 않는다 (지금 길이고, 컨테이너·CI는 이 길이다).
-- **OS 비밀 저장소가 없으면 등록 요청을 보내지 않는다.** 받은 키를 둘 곳이 없어서다 — 평문 파일로 흘리지 않는다 (CLAUDE.md §5). 로그에 「비밀 저장소가 없습니다 — 환경변수 CHK_SERVER_RUNNER__CENTER_API_KEY로 키를 주세요」를 찍고 끝 코드 2다(키가 없을 때의 지금 코드와 같다).
+- **환경변수로 키가 오면** 등록 요청을 보내지 않는다 (CI·자동화의 길이다).
+- **비밀 폴더를 적으면 그것이 비밀 저장소다** (ADR-0100) — 폴더 0700·파일 0600, 깨진 파일은 덮지 않는다. 적었으면 OS 비밀 저장소가 있어도 그 폴더가 이긴다. `deploy/compose.yaml`의 실행기는 이 길이다(볼륨 `server-runner-secrets`).
+- **비밀 폴더도 OS 비밀 저장소도 없으면 등록 요청을 보내지 않는다.** 받은 키를 둘 곳이 없어서다 — 사람이 자리를 정해 주지 않은 평문 파일로 흘리지 않는다 (CLAUDE.md §5). 로그에 그 둘(`CHK_SERVER_RUNNER__SECRETS_DIR`·`CHK_SERVER_RUNNER__CENTER_API_KEY`)을 적은 한 줄을 찍고 끝 코드 2다.
 - 키 회전도 C4 §키 회전과 같다 — 하트비트 답의 `rotated_key`. 환경변수로 받은 키는 회전하지 않는다.
-
-> 미정: 컨테이너에서도 승인으로 들이려면 받은 키를 둘 자리(마운트한 비밀 볼륨 같은 것)를 정해야 한다.
 
 ### RegisterRequest
 
@@ -154,7 +153,7 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 
 #### 서비스 앱 키
 
-> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md)). `core.service_keys.ReceivedKeys`(Bot UI와 같은 코드)가 받아 두고 `credentials.service_app_key(참조, Bot)`이 푼다. 환경변수 `CHK_SERVER_RUNNER__SVC__<참조>`는 그대로 이긴다 (컨테이너·CI).
+> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md)). `core.service_keys.ReceivedKeys`(Bot UI와 같은 코드)가 받아 두고 `credentials.service_app_key(참조, Bot)`이 푼다. 환경변수 `CHK_SERVER_RUNNER__SVC__<참조>`는 그대로 이긴다 (CI·자동화).
 
 C4 §서비스 앱 키 전달과 **같은 모양·같은 봉함·같은 ack**다. 다른 것은 셋이다.
 
