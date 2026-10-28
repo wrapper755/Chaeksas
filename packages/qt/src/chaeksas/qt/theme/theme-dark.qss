@@ -165,6 +165,27 @@ QTableView::item:selected, QTreeView::item:selected, QListView::item:selected {
   color: #E8EAEE;
 }
 
+/* 작업 영역(STU-01) — 영역마다 카드(흰 바탕 + 테두리)이고 사이는 바탕색 틈이 가른다. 선을 긋지 않는다
+   (선은 옆 영역의 테두리와 겹쳐 두 겹이 된다). 틈이 곧 끌어서 크기를 바꾸는 자리다. */
+QSplitter::handle, QMainWindow::separator { background-color: transparent; }
+QSplitter::handle:horizontal, QMainWindow::separator:horizontal { width: 8px; }
+QSplitter::handle:vertical, QMainWindow::separator:vertical { height: 8px; }
+QFrame#Pane, QTabWidget#PaneTabs::pane {
+  background-color: #171A20;
+  border: 1px solid #2C313A;
+  border-radius: 8px;
+}
+QTabWidget#PaneTabs::pane { top: -1px; border-top-left-radius: 0; }
+/* 카드 안의 첫 목록은 카드의 테두리를 쓴다 — 제 테두리를 또 그리면 두 겹이다. */
+QTabWidget#PaneTabs > QStackedWidget > QAbstractScrollArea,
+QTabWidget#PaneTabs > QStackedWidget > QWidget > QAbstractScrollArea {
+  border: none;
+  border-radius: 0;
+}
+
+/* 무리 아래 선 (STU-01 「변수」 탭) — 작은 탭과 그 아래 표를 가른다. */
+QFrame#Rule { background-color: #2C313A; border: none; max-height: 1px; min-height: 1px; }
+
 /* 펼친 메뉴(메뉴 막대·문맥 메뉴) — 테두리가 없으면 흰 바탕 위에서 메뉴가 어디까지인지 안 보인다. */
 QMenu {
   background-color: #171A20;

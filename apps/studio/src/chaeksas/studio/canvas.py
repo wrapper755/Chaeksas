@@ -12,6 +12,11 @@
 불리지 않는다**. 그 자식은 `__init__`에 없어 `ChildAdded`를 보고 생길 때 단다. 캔버스는
 **무엇이 떨어졌는지 모른다** — 받을 형식은 부르는 쪽이 알려 주고(`accept_drops_of`), 글과
 자리만 `dropped`로 올려 보낸다.
+
+**그림도 창의 테마를 따른다** ([ADR-0101](../../../../../docs/decisions/0101-canvas-follows-theme.md)) —
+bpmn-js가 선·채움·글자를 CSS 변수로 그리고, 캔버스가 토큰 색을 그 변수에 넣는다(`CANVAS_TOKENS`).
+페이지가 뜰 때와 앱의 팔레트가 바뀔 때(`apply_theme`) 넣으므로 테마를 바꿔도 그림을 다시
+읽지 않는다 — 실행 취소·「저장 안 한 변경」이 그대로다.
 """
 
 from __future__ import annotations
@@ -23,11 +28,14 @@ from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QChildEvent, QEvent, QObject, QTimer, QUrl, Signal, Slot
-from PySide6.QtGui import QDropEvent
+from PySide6.QtGui import QColor, QDropEvent
 from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QApplication, QWidget
+
+from chaeksas.qt.theme import THEME_DARK, current
+from chaeksas.qt.theme.tokens import colors as token_colors
 
 log = logging.getLogger(__name__)
 
@@ -41,6 +49,25 @@ VIEW_PAGE = "view.html"
 
 #: 한 번의 부름을 기다리는 기본 시간 (ms). bpmn-js가 큰 그림을 읽을 때를 넉넉히 잡는다.
 DEFAULT_TIMEOUT_MS = 15_000
+
+#: 페이지의 CSS 변수 ↔ 토큰 (ADR-0101). 페이지는 이 변수만 쓰고 색 값을 적지 않는다.
+CANVAS_TOKENS = {
+    "--chk-surface": "bg.surface",
+    "--chk-subtle": "bg.subtle",
+    "--chk-line": "text.primary",
+    "--chk-text": "text.primary",
+    "--chk-text-muted": "text.muted",
+    "--chk-border": "border.default",
+    "--chk-border-strong": "border.strong",
+    "--chk-accent": "primary",
+    "--chk-accent-subtle": "primary.subtle",
+}
+
+
+def canvas_colors(theme: str) -> dict[str, str]:
+    """그 테마에서 페이지에 넣을 `{CSS 변수: 색}`."""
+    found = token_colors(dark=theme == THEME_DARK)
+    return {name: found[token] for name, token in CANVAS_TOKENS.items()}
 
 
 class CanvasError(RuntimeError):
@@ -118,6 +145,26 @@ class Canvas(QWebEngineView):
         # 오프라인 (ADR-0022·0029) — 로컬 페이지가 바깥을 부르지 못하게 한다.
         self.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, False)
         self.settings().setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
+        self.loadFinished.connect(lambda _ok: self.paint_theme())
+        self.paint_theme()
+
+    def theme(self) -> str:
+        """지금 앱의 테마 (`light`/`dark`). 앱이 없으면 밝게."""
+        app = QApplication.instance()
+        return current(app) if isinstance(app, QApplication) else "light"
+
+    def paint_theme(self) -> None:
+        """앱의 테마 색을 페이지에 넣는다 — 뜰 때·팔레트가 바뀔 때 (ADR-0101)."""
+        colors = canvas_colors(self.theme())
+        # 페이지가 뜨기 전 바탕도 같은 색이다 — 어두운 창에서 흰 판이 번쩍이지 않게.
+        self.page().setBackgroundColor(QColor(colors["--chk-surface"]))
+        self.page().runJavaScript(f"window.chkTheme && window.chkTheme({json.dumps(colors)})")
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802 — Qt 이름 그대로
+        # `apply_theme`이 앱 팔레트를 바꾸면 모든 위젯이 이것을 받는다 — 「시스템 따름」도 같은 길이다.
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+            self.paint_theme()
+        super().changeEvent(event)
 
     def _mark_live(self) -> None:
         self._live = True

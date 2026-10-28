@@ -594,3 +594,79 @@ def test_delegating_a_missing_node_says_so(canvas: Any) -> None:
     canvas.create_empty("Proc_none", "없음")
     with pytest.raises(CanvasError):
         canvas.delegate_node("Nope", name="", called="", call="{}")
+
+
+# ── 테마 (ADR-0101) ──
+
+
+def js_value(canvas: Any, script: str) -> Any:
+    """페이지에서 식 하나를 읽는다 (다리를 거치지 않는다)."""
+    from PySide6.QtCore import QEventLoop, QTimer
+
+    found: dict[str, Any] = {}
+    loop = QEventLoop()
+
+    def keep(value: Any) -> None:
+        found["value"] = value
+        loop.quit()
+
+    canvas.page().runJavaScript(script, 0, keep)
+    QTimer.singleShot(5_000, loop.quit)
+    loop.exec()
+    return found.get("value")
+
+
+def test_the_pages_draw_with_theme_variables_and_write_no_colors() -> None:
+    """두 페이지가 같은 변수로 그리고, 색 값은 토큰에서만 온다 (CLAUDE.md §5)."""
+    import re
+
+    from chaeksas.studio.canvas import CANVAS_TOKENS, EDIT_PAGE
+
+    for page in (EDIT_PAGE, VIEW_PAGE):
+        text = (WEB_DIR / page).read_text(encoding="utf-8")
+        assert "window.chkTheme" in text, page
+        for key in ("defaultFillColor", "defaultStrokeColor", "defaultLabelColor"):
+            assert re.search(rf'{key}: "var\(--chk-[a-z-]+, [a-z]+\)"', text), (page, key)
+        used = set(re.findall(r"var\((--chk-[a-z-]+)", text))
+        assert used <= set(CANVAS_TOKENS), (page, used - set(CANVAS_TOKENS))
+        assert not re.search(r"#[0-9a-fA-F]{3,8}\b", text.split("<script")[0]), page
+
+
+def test_every_canvas_variable_is_a_token_in_both_themes() -> None:
+    from chaeksas.studio.canvas import CANVAS_TOKENS, canvas_colors
+
+    light, dark = canvas_colors("light"), canvas_colors("dark")
+    assert set(light) == set(dark) == set(CANVAS_TOKENS)
+    assert light["--chk-surface"] != dark["--chk-surface"]
+
+
+def test_the_diagram_follows_the_app_theme_without_reloading(canvas: Any) -> None:
+    """어둡게 → 밝게로 바꾸면 그림을 다시 읽지 않고 색만 바뀐다."""
+    from PySide6.QtGui import QColor
+    from PySide6.QtWidgets import QApplication
+
+    from chaeksas.qt.theme import apply_theme
+    from chaeksas.studio.canvas import canvas_colors
+
+    app = QApplication.instance()
+    assert isinstance(app, QApplication)
+
+    def rgb(value: str) -> str:
+        color = QColor(value)
+        return f"rgb({color.red()}, {color.green()}, {color.blue()})"
+
+    fill = "getComputedStyle(document.querySelector('.djs-element[data-element-id] .djs-visual rect')).fill"
+    try:
+        apply_theme(app, choice="dark")
+        canvas.load_xml((EXAMPLES / "bx01_invoice_reconciliation.bpmn").read_text(encoding="utf-8"))
+        canvas.call_sync("stats")
+        assert js_value(canvas, fill) == rgb(canvas_colors("dark")["--chk-surface"])
+        before = canvas.call_sync("stats")
+
+        apply_theme(app, choice="light")
+        app.processEvents()
+        canvas.call_sync("stats")
+        assert js_value(canvas, fill) == rgb(canvas_colors("light")["--chk-surface"])
+        assert canvas.call_sync("stats")["elements"] == before["elements"]
+    finally:
+        apply_theme(app, choice="light")

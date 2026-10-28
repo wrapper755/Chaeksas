@@ -20,6 +20,7 @@ from PySide6.QtGui import QPainter, QPalette
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -37,7 +38,7 @@ from PySide6.QtWidgets import (
 
 from chaeksas.contracts.bpmn_ext import INPUT_SOURCE_CALLER, INPUT_SOURCE_TYPES, InputDecl, ProcessInfo
 from chaeksas.qt.theme import icon, set_role
-from chaeksas.qt.theme.tokens import SIZE_ROW_COMPACT, SPACE_2
+from chaeksas.qt.theme.tokens import SIZE_ROW_COMPACT, SPACE_1, SPACE_2
 from chaeksas.studio.variables import (
     INPUT_SOURCES,
     INPUT_TYPES,
@@ -273,17 +274,26 @@ class VariablesTab(QWidget):
         self.error.hide()
 
         top = QHBoxLayout()
-        top.addWidget(self.sections)
+        top.addWidget(self.sections, 0, Qt.AlignmentFlag.AlignBottom)  # 탭이 아래 선 위에 앉는다
         top.addStretch(1)
-        top.addWidget(self.add_input)
-        top.addWidget(self.add_output)
-        top.addWidget(self.drop_row)
-        top.addSpacing(SPACE_2)
-        top.addWidget(self.apply_button)
+        buttons = QHBoxLayout()
+        buttons.setContentsMargins(0, 0, 0, SPACE_1)  # 단추는 선에 닿지 않는다
+        buttons.addWidget(self.add_input)
+        buttons.addWidget(self.add_output)
+        buttons.addWidget(self.drop_row)
+        buttons.addSpacing(SPACE_2)
+        buttons.addWidget(self.apply_button)
+        top.addLayout(buttons)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(SPACE_2, SPACE_2, SPACE_2, SPACE_2)
         layout.setSpacing(SPACE_2)
-        layout.addLayout(top)
+        rule = QFrame(self)
+        rule.setObjectName("Rule")  # 무리 탭과 표를 가르는 선 (STU-01)
+        head = QVBoxLayout()
+        head.setSpacing(0)
+        head.addLayout(top)
+        head.addWidget(rule)
+        layout.addLayout(head)
         layout.addWidget(self.stack, 1)
         layout.addWidget(self.note)
         layout.addWidget(self.error)

@@ -175,10 +175,6 @@ class StudioSettingsDialog(QDialog):
         at = self.theme.findData(self.settings.theme)
         self.theme.setCurrentIndex(at if at >= 0 else 0)
         form.addRow("테마", self.theme)
-        note = QLabel("캔버스의 그림은 테마와 상관없이 밝게 둡니다 — 그림의 선과 글자가 검정입니다.")
-        note.setWordWrap(True)
-        set_role(note, "muted")
-        form.addRow("", note)
         return page
 
     def _extensions_page(self) -> QWidget:

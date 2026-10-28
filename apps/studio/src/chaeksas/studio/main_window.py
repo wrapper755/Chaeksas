@@ -21,6 +21,7 @@ from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QPalette
 from PySide6.QtWidgets import (
     QDockWidget,
+    QFrame,
     QMainWindow,
     QMenu,
     QMessageBox,
@@ -35,6 +36,7 @@ from PySide6.QtWidgets import (
 from chaeksas.contracts import Violation
 from chaeksas.contracts.bpmn_ext import BpmnProcess, BpmnReadError, read_process
 from chaeksas.core.preflight import key_apps_of
+from chaeksas.qt.theme.tokens import SPACE_2
 from chaeksas.studio import (
     center_actions,
     dev_keys,
@@ -190,10 +192,12 @@ class MainWindow(QMainWindow):
         dock = QDockWidget("BPM 프로세스", self)
         dock.setObjectName("explorerDock")
         tabs = QTabWidget(dock)
+        tabs.setObjectName("PaneTabs")
         self.explorer_tabs = tabs
         tabs.addTab(self.explorer, "BPM 프로세스")
         tabs.addTab(self.resource_tree, "리소스")
-        dock.setWidget(tabs)
+        # 바깥 틈 — 창 가장자리와 캔버스 쪽 틈은 분할자·가운데 영역이 낸다.
+        dock.setWidget(_margined(tabs, SPACE_2, SPACE_2, 0, SPACE_2))
         # STU-01 [E] — 왼쪽 고정, 제목 줄 없음 (띄우기·닫기·옮기기가 없다 — 닫아 잃어버릴 일이 없다).
         dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
         dock.setTitleBarWidget(QWidget(dock))
@@ -202,13 +206,18 @@ class MainWindow(QMainWindow):
         self.explorer_dock = dock
         middle = QSplitter(Qt.Orientation.Horizontal, self)
         self.middle = middle
-        middle.addWidget(self.canvas)
-        middle.addWidget(self.properties)
+        middle.addWidget(_pane(self.canvas))
+        self.properties_pane = _pane(self.properties)
+        middle.addWidget(self.properties_pane)
         middle.setObjectName("middleSplit")
         middle.setStretchFactor(0, 3)  # 캔버스와 속성 패널은 3:1 (STU-01)
         middle.setStretchFactor(1, 1)
+        # 처음 비율도 3:1이다 — 비율만 주면 첫 크기는 위젯의 sizeHint가 정해 캔버스가 좁게 뜬다.
+        # 분할자는 준 크기를 지금 너비에 비례해 맞추므로 큰 수로 비율만 준다.
+        middle.setSizes([3000, 1000])
 
         bottom = QTabWidget(self)
+        bottom.setObjectName("PaneTabs")
         self.bottom_tabs = bottom
         bottom.addTab(self.log_view, "로그")
         bottom.addTab(self.preflight, "검사")
@@ -222,10 +231,11 @@ class MainWindow(QMainWindow):
         split.setObjectName("bottomSplit")
         split.setStretchFactor(0, 4)
         split.setStretchFactor(1, 1)
+        split.setSizes([4000, 1000])
 
         holder = QWidget(self)
         box = QVBoxLayout(holder)
-        box.setContentsMargins(0, 0, 0, 0)
+        box.setContentsMargins(0, SPACE_2, SPACE_2, SPACE_2)
         box.addWidget(split)
         self.setCentralWidget(holder)
 
@@ -241,12 +251,12 @@ class MainWindow(QMainWindow):
             return
         layout.apply(found, self, self.middle, self.split)
         self.collapse_action.setChecked(found.properties_collapsed)
-        self.properties.setVisible(not found.properties_collapsed)
+        self.properties_pane.setVisible(not found.properties_collapsed)
 
     def toggle_properties(self) -> None:
         """보기 → 「속성 패널 접기」 (Ctrl+Shift+P). 체크가 곧 접힌 상태다."""
         collapsed = self.collapse_action.isChecked()
-        self.properties.setVisible(not collapsed)
+        self.properties_pane.setVisible(not collapsed)
         self.say("속성 패널을 접었습니다." if collapsed else "속성 패널을 펼쳤습니다.")
 
     def reset_layout(self) -> None:
@@ -260,7 +270,7 @@ class MainWindow(QMainWindow):
         self.explorer_dock.show()
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, self.explorer_dock)
         self.collapse_action.setChecked(False)
-        self.properties.setVisible(True)
+        self.properties_pane.setVisible(True)
         # 3:1·4:1은 짤 때의 비율 그대로다 (STU-01).
         width, height = self.middle.width(), self.split.height()
         self.middle.setSizes([width * 3 // 4, width // 4])
@@ -984,3 +994,21 @@ class MainWindow(QMainWindow):
 
 
 __all__ = ["DEFAULT_SIZE", "NO_PROCESS", "RUN_TEXT", "STOP_TEXTS", "TITLE", "MainWindow"]
+
+
+def _pane(widget: QWidget) -> QFrame:
+    """STU-01 — 작업 영역 하나를 카드(흰 바탕 + 테두리)로 감싼다. 영역 사이는 바탕색 틈이 가른다."""
+    frame = QFrame(widget.parentWidget())
+    frame.setObjectName("Pane")
+    box = QVBoxLayout(frame)
+    box.setContentsMargins(1, 1, 1, 1)  # 테두리 1px 안쪽 — 캔버스(WebEngine)가 테두리를 덮지 않게
+    box.addWidget(widget)
+    return frame
+
+
+def _margined(widget: QWidget, left: int, top: int, right: int, bottom: int) -> QWidget:
+    holder = QWidget(widget.parentWidget())
+    box = QVBoxLayout(holder)
+    box.setContentsMargins(left, top, right, bottom)
+    box.addWidget(widget)
+    return holder
