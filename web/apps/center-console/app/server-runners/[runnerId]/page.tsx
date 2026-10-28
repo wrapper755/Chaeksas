@@ -71,6 +71,8 @@ function waitingFor(row: NonNullable<ServerRunnerInfo["waiting"]>[number]): stri
   if (row.waiting_for === "timer") return `타이머 ${fullTime(row.until)}`;
   // **PC 위임**의 짝 칸은 작업 id다 (ADR-0062) — 그 작업이 CON-05에 있다.
   if (row.waiting_for === "delegation") return `PC 위임 ${row.job_id ?? ""}`.trim();
+  // **긴 외부 작업**의 짝 칸은 C15 일감 id다 (ADR-0103) — 볼 화면이 없어 글자만 보인다.
+  if (row.waiting_for === "external_task") return `외부 작업 ${row.task_id ?? ""}`.trim();
   return row.waiting_for;
 }
 

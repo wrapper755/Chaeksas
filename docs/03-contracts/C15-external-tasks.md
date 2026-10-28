@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-29) — Center(`api/external_tasks.py`, 15판)와 양쪽이 돈다: 부르는 쪽은 `core.services.CenterServiceCaller`(서버 실행기·실행기 자식·Studio)와 UI 자동화의 `worker/plans.py`·`client/registry_client.py`(`CenterOps`, 토픽 `ui-automation`), 일꾼은 `service_kit.consumer`(서비스 앱·모의 앱)와 어댑터 일꾼 `chk-adapter-consumer`(`apps/adapter_consumer`). `tests/test_center_external_tasks.py`·`test_c15_round_trip.py`·`test_service_kit_consumer.py`·`test_adapter_consumer.py`가 지킨다. 남은 것은 긴 작업(ADR-0102 조각 6)이다 |
+| 상태 | **구현됨** (2026-10-29) — Center(`api/external_tasks.py`, 15판)와 양쪽이 돈다: 부르는 쪽은 `core.services.CenterServiceCaller`(서버 실행기·실행기 자식·Studio)와 UI 자동화의 `worker/plans.py`·`client/registry_client.py`(`CenterOps`, 토픽 `ui-automation`), 일꾼은 `service_kit.consumer`(서비스 앱·모의 앱)와 어댑터 일꾼 `chk-adapter-consumer`(`apps/adapter_consumer`). `tests/test_center_external_tasks.py`·`test_c15_round_trip.py`·`test_service_kit_consumer.py`·`test_adapter_consumer.py`가 지킨다. 서버 실행기는 긴 작업을 기다림으로 넘긴다(ADR-0103) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기·실행기 자식 프로세스·Studio·Worker·Tool UI → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
 | 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
@@ -125,7 +125,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ## 부르는 쪽의 규칙
 
-- **엔진은 모른다.** `ServiceCaller` 자리에 「Center에 올리고 기다리는」 구현이 들어갈 뿐이다. 기다리는 동안 부르는 쪽은 결과 기다리기를 되풀이한다. 서버 실행기가 기다리는 동안 스레드를 놓는 것은 아직이다 (ADR-0102 조각 6).
+- **엔진은 모른다.** `ServiceCaller` 자리에 「Center에 올리고 기다리는」 구현이 들어갈 뿐이다. 기다리는 동안 부르는 쪽은 결과 기다리기를 되풀이한다. **서버 실행기는 오래 걸리는 것을 기다림으로 넘기고 자리를 놓는다** — 한 번 기다려 끝나지 않으면 `GET …/{task_id}`를 하트비트 주기마다 묻는다 (C12 §긴 외부 작업, [ADR-0103](../decisions/0103-long-external-tasks.md)).
 - **멱등 칸은 C11과 같은 규칙으로 짓는다** — 재시작 뒤에도 같은 값이 되게 한다(원칙 9). 그래서 되살린 실행은 새 일감이 아니라 **같은 일감의 결과**를 받는다.
 - 실행이 취소되면 기다리던 일감을 `cancel`한다.
 - 실행 기록(C3 `service_call`)은 지금과 같은 칸이다(업무 값 없음). `key_ref`는 빈 글이다(키가 없다).
@@ -201,5 +201,6 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | **받아 간(`ack`) 일감을 같은 본문으로 다시 올리면 다시 줄에 선다**(옛 일감을 돌려주면 빈 결과다). 서버 실행기가 긴 작업을 기다림으로 넘기고 `GET`으로 묻는다 — 경로·모양은 그대로다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-29 | 1 | **구현됨** — 부르는 쪽(서버 실행기·실행기 자식·Studio·Worker·Tool UI)과 일꾼(`service_kit`·어댑터 일꾼)이 붙었다. 옛 Push 길(C11 `/v1/ops`·어댑터 직접 호출·서비스 앱 키 배달)은 걷었다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-28 | 1 | 처음 씀 (초안) | [0102](../decisions/0102-calling-outside-is-pull.md) |

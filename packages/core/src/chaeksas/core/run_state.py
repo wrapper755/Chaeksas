@@ -79,6 +79,8 @@ WAIT_TIMER = "timer"
 WAIT_SIGNAL = "signal"
 #: **PC 위임**을 기다린다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 짝 칸은 `job_id`다.
 WAIT_DELEGATION = "delegation"
+#: **긴 외부 작업**을 기다린다 ([ADR-0103](../decisions/0103-long-external-tasks.md)). 짝 칸은 `task_id`다.
+WAIT_EXTERNAL_TASK = "external_task"
 
 class State(StrEnum):
     """실행의 지금 상태."""
@@ -177,12 +179,17 @@ class Waiting:
 
     key: str
     node_id: str
-    kind: str  # WAIT_MESSAGE | WAIT_TIMER | WAIT_SIGNAL | WAIT_DELEGATION
+    kind: str  # WAIT_MESSAGE | WAIT_TIMER | WAIT_SIGNAL | WAIT_DELEGATION | WAIT_EXTERNAL_TASK
     name: str = ""  # 메시지·신호 이름
     correlation: Any = None
     due_at: datetime | None = None
     #: **PC 위임**을 기다릴 때 그 작업 (ADR-0062). C12 `waiting[].job_id`로 그대로 올라간다.
     job_id: str | None = None
+    #: **긴 외부 작업**을 기다릴 때 그 일감 (C15 `task_id`, ADR-0103). C12 `waiting[].task_id`로 간다.
+    task_id: str | None = None
+    #: 그 일감의 멱등 칸 중 둘 — 이어 갈 때 **같은 칸으로** 다시 올리거나 다음 `attempt`로 간다.
+    attempt: int = 0
+    call_seq: int = 0
     #: 경계 이벤트면 붙은 노드, 아니면 `None`.
     attached_to: str | None = None
     #: 경계 이벤트가 붙은 노드를 끊는가 (`cancelActivity`).
@@ -552,6 +559,7 @@ __all__ = [
     "TaskFailed",
     "Token",
     "WAIT_DELEGATION",
+    "WAIT_EXTERNAL_TASK",
     "WAIT_MESSAGE",
     "WAIT_SIGNAL",
     "WAIT_TIMER",

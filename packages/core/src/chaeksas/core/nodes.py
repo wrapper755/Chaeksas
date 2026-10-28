@@ -55,6 +55,7 @@ from chaeksas.core.run_state import (
     ERROR_SEND_FAILED,
     ERROR_TASK_FAILED,
     WAIT_DELEGATION,
+    WAIT_EXTERNAL_TASK,
     WAIT_MESSAGE,
     WAIT_SIGNAL,
     WAIT_TIMER,
@@ -77,7 +78,7 @@ from chaeksas.core.run_state import (
     new_token_id,
 )
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest
-from chaeksas.core.services import RETRYABLE_STATUS, OpCall, OpOutcome, ServiceCallError
+from chaeksas.core.services import RETRYABLE_STATUS, OpCall, OpOutcome, ServiceCallError, ServicePending
 from chaeksas.core.tools import ToolDef
 from chaeksas.extension_api import RUN_LOCATION_PC, ExtensionEvent, TaskContext
 from chaeksas.extension_api import TaskFailed as ExtensionTaskFailed
@@ -728,38 +729,71 @@ def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:
 
     마지막까지 실패하면 `TaskFailed`라서 **오류 경계가 받는다** (`TASK_FAILED`). 키가 틀렸거나
     없는 작업을 부른 것(`FATAL_CODES`)은 다시 불러도 똑같으므로 바로 그만둔다.
+
+    **끝나지 않은 채 넘겨받으면 기다린다** (`ServicePending`, ADR-0103 — 서버 실행기만) — 이어 가는
+    것은 `Engine.external_done()`이고 **같은 `service_attempts()`**로 돈다.
     """
     run, node = context.run, context.node
-    # 키 참조는 쓰지 않는다 (ADR-0102 — 서비스 앱 키가 없어졌다). C3 `service_call.key_ref`는 빈 글이다.
-    key_ref = None
-    scope = context.scope()
-    arguments = {name: evaluate(expression, scope) for name, expression in spec.input.items()}
+    call_seq = run.call_seqs.get(node.id, 0) + 1
+    run.call_seqs[node.id] = call_seq
+    return service_attempts(context, spec, call_seq=call_seq, first=1)
 
+
+def service_call_of(context: Context, spec: ServiceCall, *, attempt: int, call_seq: int) -> OpCall:
+    """그 노드의 호출 하나. 입력은 **지금 변수로** 푼다 — 기다리는 동안 그 토큰은 멈춰 있다."""
+    run, node = context.run, context.node
+    scope = context.scope()
+    return OpCall(
+        app_id=spec.app_id,
+        operation=spec.operation,
+        mode=run.mode,
+        input={name: evaluate(expression, scope) for name, expression in spec.input.items()},
+        run_id=run.run_id,
+        node_id=node.id,
+        node_instance=context.instance(),
+        attempt=attempt,
+        call_seq=call_seq,
+        # 키 참조는 쓰지 않는다 (ADR-0102 — 서비스 앱 키가 없어졌다). C3 `service_call.key_ref`는 빈 글이다.
+        key_ref=None,
+        timeout_s=spec.timeout_s,
+        bpm_process_id=run.identity,
+        version=run.version,
+    )
+
+
+def service_attempts(
+    context: Context,
+    spec: ServiceCall,
+    *,
+    call_seq: int,
+    first: int,
+    done: OpOutcome | ServiceCallError | None = None,
+) -> Outcome:
+    """`first`번째부터 부른다. `done`이 있으면 **그 번째는 이미 끝났다**(넘겨받은 일감의 결과)."""
+    run, node = context.run, context.node
     retry = spec.retry
     codes = tuple(retry.on) if (retry and retry.on) else RETRYABLE_STATUS
     attempts = (retry.max if retry else 0) + 1
-    call_seq = run.call_seqs.get(node.id, 0) + 1
-    run.call_seqs[node.id] = call_seq
 
     last: ServiceCallError | None = None
-    for attempt in range(1, attempts + 1):
-        call = OpCall(
-            app_id=spec.app_id,
-            operation=spec.operation,
-            mode=run.mode,
-            input=arguments,
-            run_id=run.run_id,
-            node_id=node.id,
-            node_instance=context.instance(),
-            attempt=attempt,
-            call_seq=call_seq,
-            key_ref=key_ref,
-            timeout_s=spec.timeout_s,
-            bpm_process_id=run.identity,
-            version=run.version,
-        )
+    for attempt in range(first, attempts + 1):
+        call = service_call_of(context, spec, attempt=attempt, call_seq=call_seq)
         try:
-            outcome = run.env.services.call(call)
+            if done is not None:
+                found, done = done, None
+                if isinstance(found, ServiceCallError):
+                    raise found
+                outcome = found
+            else:
+                outcome = run.env.services.call(call)
+        except ServicePending as e:
+            key = f"external:{node.id}:{context.token.id}"
+            run.waits[key] = Waiting(
+                key=key, node_id=node.id, kind=WAIT_EXTERNAL_TASK, task_id=e.task_id,
+                attempt=attempt, call_seq=call_seq, token_id=context.token.id,
+            )
+            context.emit("log", level="info", message=f"외부 작업을 기다린다 ({spec.app_id}/{spec.operation})")
+            return Wait(key=key)
         except ServiceCallError as e:
             last = e
             # 실패도 C3에 남긴다 — 「몇 번 불렀고 왜 실패했나」가 보여야 한다.
@@ -1107,6 +1141,8 @@ __all__ = [
     "handle_send",
     "handle_receive",
     "handle_service_call",
+    "service_call_of",
+    "service_attempts",
     "handle_service_task",
     "handle_subprocess",
     "handle_throw",

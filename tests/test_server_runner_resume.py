@@ -367,6 +367,7 @@ def test_the_resume_reasons_are_the_ones_the_contract_knows() -> None:
         worker_mod.RESUME_RESTART,
         worker_mod.RESUME_WITHDRAW,
         worker_mod.RESUME_DELEGATION,
+        worker_mod.RESUME_EXTERNAL_TASK,
     } == KNOWN_RESUME_REASONS
 
 

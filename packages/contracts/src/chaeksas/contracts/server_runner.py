@@ -55,7 +55,9 @@ ServerRunnerId = Annotated[str, Field(pattern=r"^srv_[0-9a-f]{8}$")]
 KNOWN_RUNNER_STATUSES = frozenset({"running", "paused", "draining", "error"})
 #: `waiting[].waiting_for` — C3 `run_waiting.waiting_for`와 **같은 말**이다.
 WAITING_DELEGATION = "delegation"
-KNOWN_WAITING_FOR = frozenset({"approval", "message", "timer", WAITING_DELEGATION})
+#: **긴 외부 작업** — 한 번 기다려 끝나지 않은 C15 일감 ([ADR-0103](../decisions/0103-long-external-tasks.md)).
+WAITING_EXTERNAL_TASK = "external_task"
+KNOWN_WAITING_FOR = frozenset({"approval", "message", "timer", WAITING_DELEGATION, WAITING_EXTERNAL_TASK})
 #: 위임 결과의 `state` — 작업 ack와 **같은 값**이다 (C4). `finished`가 아니면 업무 실패다.
 KNOWN_DELEGATION_STATES = frozenset({"finished", "failed", "cancelled", "expired", "rejected"})
 KNOWN_MESSAGE_ACK_REASONS = frozenset({"no_receiver", "run_ended", "not_waiting", "duplicate"})
@@ -144,7 +146,8 @@ class WaitingRun(ContractModel):
     """상태만 남고 **일꾼을 놓은** 실행 (ADR-0054 §1·§3).
 
     `waiting_for`에 따라 **짝이 되는 칸이 있어야 한다** — 결재는 `request_id`, 메시지는
-    `message_name`, 타이머는 `until`, **PC 위임은 `job_id`**. `validate_heartbeat()`가 그것을 본다.
+    `message_name`, 타이머는 `until`, **PC 위임은 `job_id`**, **긴 외부 작업은 `task_id`**.
+    `validate_heartbeat()`가 그것을 본다.
     """
 
     run_id: str
@@ -158,6 +161,8 @@ class WaitingRun(ContractModel):
     until: Timestamp | None = None
     #: **PC 위임**으로 기다릴 때 그 작업 (ADR-0062). 짝 칸이라 그때는 비울 수 없다.
     job_id: str | None = None
+    #: **긴 외부 작업**으로 기다릴 때 그 일감 (C15 `task_id`, ADR-0103). 짝 칸이다.
+    task_id: str | None = None
     since: Timestamp
 
 
@@ -362,6 +367,7 @@ WAITING_REQUIRES = {
     "message": "message_name",
     "timer": "until",
     WAITING_DELEGATION: "job_id",
+    WAITING_EXTERNAL_TASK: "task_id",
 }
 
 
@@ -515,6 +521,7 @@ __all__ += [
     "KNOWN_WAITING_FOR",
     "OFFLINE_AFTER_S",
     "WAITING_DELEGATION",
+    "WAITING_EXTERNAL_TASK",
     "WAITING_REQUIRES",
     "Capacity",
     "DelegationAck",

@@ -654,6 +654,43 @@ def test_a_server_example_runs_through_center_and_the_runner(
     assert done["run_status"] == "success", f"{example}: {done}"
 
 
+#: 서비스 호출이 있는 서버 예제 — **모든 호출을 기다림으로 넘겨도** 끝까지 간다 (ADR-0103).
+#: 반복(BX-06)·여럿(BX-22)·**겹치는 기다림**(FX-18 병렬 반복)·외부 앱(FX-20 어댑터 일꾼).
+PARKED = ["bx06_bulk_credit_check", "bx22_offboarding_access", "fx18_parallel_loop", "fx20_external_adapter"]
+
+
+@pytest.mark.parametrize("example", PARKED)
+def test_a_long_external_task_lets_go_of_the_slot_and_comes_back(
+    example: str,
+    tmp_path: Path,
+    center: CenterHandle,
+    runner: agent_mod.Agent,
+    receiver: Receiver,
+) -> None:
+    """`park_after_s=0` — 올린 일감은 **곧바로 기다림**이 되고 자리를 놓는다. 결과는 하트비트 뒤에
+    실행기가 묻고 넣는다(`wake_external`). 기록에 `run_waiting`·`run_resumed`가 짝으로 남는다 (C3).
+    """
+    runner.settings = replace(runner.settings, park_after_s=0.0)
+    info = deploy(center, runner, packaged(tmp_path, example))
+    make_samples_for(runner, str(info["id"]))
+    job_id = dispatch(center, info, case_inputs(example, receiver))
+    done = run_to_the_end(
+        center, runner, job_id, answers=case_approvals(example), messages=case_messages(example)
+    )
+    assert done["run_status"] == "success", f"{example}: {done}"
+    events = [
+        json.loads(line)
+        for line in (runner.settings.runs_dir / f"{done['run_id']}.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    waited = [one["data"] for one in events if one["kind"] == "run_waiting"]
+    resumed = [one["data"] for one in events if one["kind"] == "run_resumed"]
+    assert any(one["waiting_for"] == "external_task" and one.get("task_id") for one in waited), example
+    assert any(one["reason"] == "external_task" for one in resumed), example
+    assert len(waited) == len(resumed), "기다림과 이어 감은 짝이다"
+    calls = [one for one in events if one["kind"] == "service_call"]
+    assert calls and all("error_code" not in one["data"] for one in calls), "넘겨도 호출은 한 번씩 성공한다"
+
+
 def test_bx33_fails_on_purpose_on_the_server_too(
     tmp_path: Path,
     center: CenterHandle,

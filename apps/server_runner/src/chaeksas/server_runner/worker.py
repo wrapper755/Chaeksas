@@ -43,6 +43,7 @@ from chaeksas.core.run_log import RunLog, log_path
 from chaeksas.core.run_shipping import read_sent
 from chaeksas.core.run_snapshot import SnapshotMismatch, dump, restore
 from chaeksas.core.run_state import WAIT_DELEGATION, WAIT_MESSAGE, new_run_id
+from chaeksas.core.services import OpCall, OpOutcome, ServiceCallError
 
 log = logging.getLogger(__name__)
 
@@ -57,6 +58,8 @@ WAITING_MESSAGE = "message"
 WAITING_TIMER = "timer"
 #: **PC 위임**을 기다린다 (ADR-0062). 짝 칸은 `job_id`다.
 WAITING_DELEGATION = "delegation"
+#: **긴 외부 작업**을 기다린다 (ADR-0103). 짝 칸은 `task_id`다.
+WAITING_EXTERNAL_TASK = "external_task"
 
 #: C3 `run_resumed.reason` — **무엇이 깨웠나** (열린 문자열의 알려진 값).
 RESUME_ANSWER = "answer"
@@ -66,6 +69,8 @@ RESUME_RESTART = "restart"
 RESUME_WITHDRAW = "withdraw"
 #: PC 위임의 결과가 돌아왔다 (ADR-0062 — C3 `KNOWN_RESUME_REASONS`에 함께 더했다).
 RESUME_DELEGATION = "delegation"
+#: 넘겨받은 외부 작업이 끝났다 (ADR-0103 — 실패·만료로 돌아온 것도).
+RESUME_EXTERNAL_TASK = "external_task"
 
 #: 아무것도 돌지 않은 실행의 셈 (C3 `run_finished`의 필수 칸). **빠뜨리면 그 줄이 거부된다.**
 EMPTY_COUNTS: dict[str, Any] = {
@@ -378,6 +383,35 @@ class Worker:
             one.kind == WAIT_DELEGATION and one.job_id == job_id for one in run.waits.values()
         )
 
+    # ── 긴 외부 작업 (ADR-0103) ──
+
+    def external_tasks(self) -> list[str]:
+        """넘겨받아 기다리는 외부 작업 — **멈춰 있을 때만** (도는 중이면 제 스레드가 민다)."""
+        run = self.run
+        if run is None or run.finished or self.alive:
+            return []
+        return [one.task_id for _, one in self.engine.external_waits(run) if one.task_id]
+
+    def external_call(self, task_id: str) -> OpCall:
+        """그 일감을 낸 호출 — 결과를 묻거나 같은 칸으로 다시 올릴 때 (`Engine.external_call`)."""
+        run = self.run
+        if run is None:  # pragma: no cover - `external_tasks`가 먼저 본다
+            raise RuntimeError("되살리지 않은 실행의 외부 작업을 물을 수 없다")
+        return self.engine.external_call(run, task_id)
+
+    def external_done(self, task_id: str, result: OpOutcome | ServiceCallError) -> None:
+        """**넘겨받은 외부 작업이 끝났다** — 넣고 이어 간다. 실패도 엔진이 가른다(재시도·경계).
+
+        **넣는 일도 새 스레드에서 한다** — 재시도면 다음 시도를 그 자리에서 올리고 기다리므로
+        (최대 `park_after_s`) 부르는 쪽(하트비트)이 그만큼 붙잡히면 안 된다.
+        """
+        run = self.run
+        if run is None:  # pragma: no cover
+            raise RuntimeError("되살리지 않은 실행에 외부 작업 결과를 넣을 수 없다")
+        self._continue(
+            run, RESUME_EXTERNAL_TASK, first=lambda: self.engine.external_done(run, task_id, result)
+        )
+
     def waits_for_message(self, name: str, *, correlation: Any = None) -> bool:
         """그 메시지를 기다리고 있나 — **넣어 보지 않고** 묻는다 (빈자리를 먼저 세려고)."""
         run = self.run
@@ -397,7 +431,7 @@ class Worker:
         self.engine.withdraw(run, request_id, reason=reason)
         self._continue(run, RESUME_WITHDRAW)
 
-    def _continue(self, run: Run, reason: str) -> None:
+    def _continue(self, run: Run, reason: str, *, first: Any = None) -> None:
         """멈춰 있던 실행을 **다시 민다** — 새 스레드가 이어서 돈다.
 
         깨운 까닭을 **기록에 적는다** (C3 `run_resumed`). 답·메시지 줄 **뒤에** 오는데, 그 줄이
@@ -406,11 +440,13 @@ class Worker:
         self._emit_resumed(run, reason)
         self._publish(run)
         self._thread = threading.Thread(
-            target=self._continued_body, args=(run,), name=f"run-{self.run_id}", daemon=True
+            target=self._continued_body, args=(run, first), name=f"run-{self.run_id}", daemon=True
         )
         self._thread.start()
 
-    def _continued_body(self, run: Run) -> None:
+    def _continued_body(self, run: Run, first: Any = None) -> None:
+        if first is not None:
+            first()  # 그 스레드에서 먼저 할 일 (외부 작업의 결과를 넣는다 — 재시도면 다시 부른다)
         self._drive(run)
         self._publish(run)
         self._settle(run)
@@ -529,7 +565,7 @@ class Worker:
         if row is None:
             return
         data: dict[str, Any] = {"waiting_for": row.waiting_for}
-        # **짝이 되는 칸만** (C3 선택 칸은 `request_id`·`until`·`job_id` 셋이다).
+        # **짝이 되는 칸만** (C3 선택 칸은 `request_id`·`until`·`job_id`·`task_id` 넷이다).
         if row.request_id:
             data["request_id"] = row.request_id
         if row.until:
@@ -538,6 +574,8 @@ class Worker:
             # **`running[].job_id`와 다른 것이다** — 그것은 이 실행을 만든 작업이고 이것은
             # 이 실행이 **맡긴** 작업이다 (ADR-0062). 위임일 때만 적는다.
             data["job_id"] = row.job_id
+        if row.waiting_for == WAITING_EXTERNAL_TASK and row.task_id:
+            data["task_id"] = row.task_id
         run.log.emit("run_waiting", node_id=self._node_id(run), **data)
 
     def _emit_resumed(self, run: Run, reason: str) -> None:
@@ -695,6 +733,10 @@ class Worker:
                 return WaitingRun(
                     **common, waiting_for=WAITING_DELEGATION, job_id=found.job_id
                 )
+        # 외부 작업도 **타이머보다 먼저** — 같은 까닭이다(호출에 기한 경계를 단다). 호출이 띄운
+        # 안쪽 실행의 것도 본다.
+        for _, found in self.engine.external_waits(run):
+            return WaitingRun(**common, waiting_for=WAITING_EXTERNAL_TASK, task_id=found.task_id)
         due = run.next_due()
         if due is not None:
             return WaitingRun(**common, waiting_for=WAITING_TIMER, until=due.isoformat())

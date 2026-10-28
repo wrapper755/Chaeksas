@@ -51,8 +51,8 @@
 | `human_answered` | 답을 받음 (값 없음) | `request_id`, `answered_by` | `answered_via`(대리 답이면 그 키 이름 — C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)) |
 | `human_timeout` | 시간 초과 | `request_id` | |
 | `human_withdrawn` | 답 없이 끝남 — Center에서 회수되었거나 만료됨 (C6, [ADR-0038](../decisions/0038-approval-request-channel.md)) | `request_id`, `reason`(`admin_withdraw`\|`expired`\|`host_lost`, 열린 문자열) | |
-| `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`\|**`delegation`**) | `request_id`, `until`, `job_id`(**위임일 때 그 작업** — C12 `waiting[]`의 짝 칸과 같다) |
-| `run_resumed` | (서버) 저장된 실행을 이어 감 | `after_s` | `reason`(`answer`\|`message`\|`timer`\|`restart`\|`withdraw`\|**`delegation`**(PC 위임의 결과가 돌아왔다, [ADR-0062](../decisions/0062-pc-delegation.md))) |
+| `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`\|**`delegation`**\|**`external_task`**) | `request_id`, `until`, `job_id`(**위임일 때 그 작업** — C12 `waiting[]`의 짝 칸과 같다), `task_id`(**긴 외부 작업일 때 그 일감** — C15, [ADR-0103](../decisions/0103-long-external-tasks.md)) |
+| `run_resumed` | (서버) 저장된 실행을 이어 감 | `after_s` | `reason`(`answer`\|`message`\|`timer`\|`restart`\|`withdraw`\|**`delegation`**(PC 위임의 결과가 돌아왔다, [ADR-0062](../decisions/0062-pc-delegation.md))\|**`external_task`**(외부 작업이 끝났다 — 실패·만료로 돌아온 것도, [ADR-0103](../decisions/0103-long-external-tasks.md))) |
 | `run_finished` | 실행 끝 (항상 마지막) | `status`(`success`\|`failed`\|`cancelled`), `duration_s`, `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | `error_code`, `error_message`(한 줄), `confirmations` |
 
 - **`human_requests`는 결재와 확인을 합친 수**다. 확인만 따로 세는 `confirmations`는 **선택 칸**이다 — 아는 쪽(보내는 쪽)이 `human_requested`의 `layer`로 센다. **옛 Bot UI는 넣지 않고**, 받는 쪽은 그때 「확인만은 모른다」로 다룬다(0으로 보지 않는다 — 「확인이 없었다」와 「세지 않았다」는 다르다). 결재 수는 `human_requests - confirmations`다 (칸을 둘 두지 않는다).
@@ -156,6 +156,7 @@
 | --- | --- | --- | --- |
 | 2026-10-20 | 1 | **`run_started.bpm_process_id`는 패키지 id다** — 엔진이 그림의 process id(`Proc_…`)를 적어 작업·배포·C12와 이름이 갈라졌다(09-gaps §2-5). 실행하는 쪽이 `Engine.start(bpm_process_id=…)`로 넘긴다. 형식은 그대로이고, 이전에 올라간 기록은 고쳐 쓰지 않는다 | [0086](../decisions/0086-run-identity-is-the-package-id.md) |
 | 2026-10-20 | 1 | `human_answered`의 선택 칸 `answered_via` — 누가 답했나(`answered_by`)와 어느 길로 왔나를 가른다 | [0081](../decisions/0081-answering-on-behalf.md) |
+| 2026-10-29 | 1 | **긴 외부 작업을 기다리다 이어 가는 쪽이 생겼다** (서버 실행기) — `waiting_for`·`reason`의 아는 값에 `external_task`, `run_waiting`에 선택 칸 `task_id`. 열린 문자열·선택 칸이라 받는 쪽은 그대로 돈다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-15 | 1 | **`source: delegation`·`parent_run_id`를 넣는 쪽이 생겼다** (Bot UI) — 작업의 `requested_by`(`server_bot:<run_id>`)를 읽어 `Engine.start(parent_run_id=…)`로 넘긴다. **모르면 넣지 않는다**(선택 칸 규칙 그대로). 형식은 그대로다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **PC 위임을 기다리다 이어 가는 쪽이 생겼다** (서버 실행기) — `run_resumed.reason`의 아는 값에 **`delegation`**을 더했다. 실패·거절로 돌아와 오류 경계로 가는 길도 「이어 간 것」이라 같은 까닭을 쓴다 (`withdraw`와 같은 결). 열린 문자열이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |
 | 2026-10-15 | 1 | **PC 위임의 예약을 풀었다** — `source: delegation`·`parent_run_id`·`waiting_for: delegation`이 이제 아는 값이고, `run_waiting`에 선택 칸 `job_id`(C12 짝 칸과 같은 것)를 적었다. `RunInfo.parent_run_id`를 더해 **CON-01이 서버 실행 ↔ PC 실행을 오간다** — Center가 `run_started`에서 읽어 담는다. 선택 칸이라 받는 쪽은 그대로 돈다 | [0062](../decisions/0062-pc-delegation.md) |

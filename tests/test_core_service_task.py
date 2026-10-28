@@ -10,6 +10,7 @@
 | `CenterServiceCaller`는 C15 일감으로 올리고 결과를 기다려 `ack`한다 — 앱 주소·키를 모른다 | ADR-0102 |
 | 실패는 C15 코드 그대로, `retry.on`이 읽을 숫자로도 | 오류 경계·재시도가 코드에 걸려 있다 |
 | 엔진 → Center → 일꾼 한 바퀴가 in-process로 맞물린다 | 조각마다 본 것이 정말 붙는가 |
+| 넘겨받은 일감은 **기다림**이 되고, 결과를 넣으면 동기 호출과 **같은 규칙**으로 이어 간다 | ADR-0103 |
 """
 
 from __future__ import annotations
@@ -21,14 +22,18 @@ import pytest
 
 from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.contracts.events import REQUIRED_DATA_KEYS
-from chaeksas.core.engine import Engine, Run, RunEnv, State
+from chaeksas.core.engine import Engine, EngineError, Run, RunEnv, State
 from chaeksas.core.run_log import RunLog
+from chaeksas.core.run_snapshot import dump, restore
+from chaeksas.core.run_state import WAIT_EXTERNAL_TASK
 from chaeksas.core.services import (
     CenterServiceCaller,
     NoServiceCaller,
     OpCall,
+    OpOutcome,
     RecordingServiceCaller,
     ServiceCallError,
+    ServicePending,
 )
 
 NOW = datetime(2026, 10, 4, 9, 30, tzinfo=UTC)
@@ -440,3 +445,82 @@ def test_the_engine_calls_through_center_to_a_consumer(tmp_path: Any) -> None:
         row = store.row("SELECT input_json, output_json, acked_at FROM external_tasks")
         assert row is not None and row["input_json"] is None and row["acked_at"], "받았으니 값이 지워졌다"
     store.close()
+
+
+# ─────────────────────────── 긴 외부 작업 (ADR-0103) ───────────────────────────
+
+
+class Parking:
+    """올리면 **넘겨받는다**(`ServicePending`) — 서버 실행기의 `park_after_s`가 지난 자리를 흉내 낸다."""
+
+    def __init__(self) -> None:
+        self.calls: list[OpCall] = []
+        self.withdrawn: list[str] = []
+
+    def call(self, request: OpCall) -> Any:
+        self.calls.append(request)
+        raise ServicePending(f"xt_{request.attempt}")
+
+    def withdraw(self, task_id: str) -> None:
+        self.withdrawn.append(task_id)
+
+
+def test_a_handed_back_task_waits_and_its_result_continues_the_run() -> None:
+    service = Parking()
+    engine, run = start(process(), RunEnv(services=service), inputs={"사번": "1"})
+    assert engine.run_until_blocked(run) is State.WAITING
+    ((owner, waiting),) = engine.external_waits(run)
+    assert owner is run and waiting.kind == WAIT_EXTERNAL_TASK and waiting.task_id == "xt_1"
+    assert (waiting.attempt, waiting.call_seq) == (1, 1)
+    assert engine.external_call(run, "xt_1").input == {"emp_no": "1"}
+
+    # 기다리는 동안 담았다가 되살려도 **어느 일감인지** 안다 (스냅샷과 함께 간다).
+    run = restore(dump(run), process=process(), log=run.log, env=RunEnv(services=service))
+    engine.external_done(run, "xt_1", OpOutcome(output={"name": "홍길동", "dept": "재무"}))
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["이름"] == "홍길동"
+    assert len(service.calls) == 1, "끝난 것은 다시 올리지 않는다"
+    kinds = [e.kind for e in run.log.events]
+    assert kinds.count("service_call") == 1, "결과를 넣을 때 한 줄 — 동기 호출과 같다"
+
+
+def test_a_retryable_result_goes_to_the_next_attempt_and_may_wait_again() -> None:
+    call = CALL[:-1] + ', "retry": {"max": 1, "on": [503]}}'
+    service = Parking()
+    engine, run = start(process(call, boundary=True), RunEnv(services=service), inputs={"사번": "1"})
+    engine.run_until_blocked(run)
+    failed = ServiceCallError("의존이 죽었다", code="dependency_down", status=503, retryable=True)
+    assert engine.external_done(run, "xt_1", failed) is State.WAITING
+    assert [c.attempt for c in service.calls] == [1, 2] and {c.call_seq for c in service.calls} == {1}
+    ((_, waiting),) = engine.external_waits(run)
+    assert waiting.task_id == "xt_2" and waiting.attempt == 2
+
+    engine.external_done(run, "xt_2", failed)
+    assert engine.run_until_blocked(run) is State.DONE, "다 실패하면 오류 경계가 받는다"
+    assert run.variables["복구"] == "TASK_FAILED"
+
+
+def test_a_fatal_result_goes_straight_to_the_boundary() -> None:
+    service = Parking()
+    engine, run = start(process(boundary=True), RunEnv(services=service), inputs={"사번": "1"})
+    engine.run_until_blocked(run)
+    engine.external_done(run, "xt_1", ServiceCallError("없는 작업", code="operation_not_found", status=422))
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["복구"] == "TASK_FAILED"
+
+
+def test_cancelling_withdraws_the_waited_task() -> None:
+    service = Parking()
+    engine, run = start(process(), RunEnv(services=service), inputs={"사번": "1"})
+    engine.run_until_blocked(run)
+    engine.cancel(run, reason="사람이 멈췄다")
+    assert service.withdrawn == ["xt_1"]
+    assert engine.external_waits(run) == []
+
+
+def test_a_task_nobody_waits_for_is_refused() -> None:
+    engine, run = start(process(), RunEnv(services=Parking()), inputs={"사번": "1"})
+    engine.run_until_blocked(run)
+    with pytest.raises(EngineError) as caught:
+        engine.external_done(run, "xt_9", OpOutcome(output={}))
+    assert caught.value.code == "not_waiting"
