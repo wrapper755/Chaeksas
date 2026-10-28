@@ -15,10 +15,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from chaeksas.contracts.extension import CALL_TOKEN_SECRET
 from chaeksas.extension_api import ExtensionContext
-
-#: 옛 등록 담당자 키 칸 — 자동화·CI의 환경변수로만 남는다. 키는 호스트가 `utility`로 준다 (ADR-0094 §6).
-REGISTRAR_KEY = "registrar_key"
 
 
 def pending_queue(ctx: ExtensionContext) -> object | None:
@@ -60,7 +58,7 @@ class SelectorRegistration:
         trial = TrialWidget(
             worker,
             registry,
-            service_key=ctx.secret("utility") or ctx.secret(REGISTRAR_KEY),
+            call_token=ctx.secret(CALL_TOKEN_SECRET),
             # **세션은 한 번에 하나다** — 시험을 시작하면 등록 탭이 쥔 것을 놓는다.
             release_other=register.close_browser,
             # 등록 탭에 열린 화면이 있으면 **놓지 않고 이어 쓴다** (C10 `…/plan`).

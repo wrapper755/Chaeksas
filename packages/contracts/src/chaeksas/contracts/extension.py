@@ -53,22 +53,23 @@ KNOWN_PROTOCOLS = frozenset({PROTOCOL_C11, PROTOCOL_HTTP_ADAPTER})
 EDITOR_BUILTIN = "builtin"
 EDITOR_SCHEMA = "schema"
 
-#: 호스트가 소유하는 설정 키의 머리 (C13 — `runtime.<런타임 id>.port`·`service.base_url`).
-#: 확장이 같은 이름을 선언하지 못한다 (E7).
-RESERVED_CONFIG_PREFIXES = ("runtime.", "service.", "storage.")
+#: 호스트가 소유하는 설정 키의 머리 (C13 — `runtime.<런타임 id>.port`·`center.url`).
+#: 확장이 같은 이름을 선언하지 못한다 (E7). `service.`는 옛 머리다 — 지금도 막는다(옛 확장이
+#: 그 이름으로 설정을 선언해 호스트의 값과 섞이지 않게).
+RESERVED_CONFIG_PREFIXES = ("runtime.", "center.", "service.", "storage.")
 RESERVED_CONFIG_PREFIX = RESERVED_CONFIG_PREFIXES[0]
 
 #: 확장이 자기 파일을 둘 폴더를 알려 주는 예약 키 (호스트가 만들어 준다).
 STORAGE_DIR_SETTING = "storage.dir"
 
-#: 서버 부분 주소를 알려 주는 예약 키. **출처는 하나다** (Center 리소스 등록 > 정의).
-SERVICE_URL_SETTING = "service.base_url"
-#: Studio 편집기에만 — 열린 BPM 프로세스(`chk:process.service_keys`)가 이 확장에 준 키 참조 (ADR-0074).
-#: 태스크의 `key_ref`가 비었을 때(「BPM 프로세스 설정을 따름」) 쓴다 — 엔진과 같은 순서다.
-SERVICE_KEY_REF_SETTING = "service.key_ref"
-#: 로컬 런타임 자식에게 같은 값을 물려주는 환경변수 (C13). 이름은 **플랫폼이 정한다** —
-#: 호스트가 확장 이름을 모르고 넣을 수 있어야 한다. **비밀은 넣지 않는다** (키는 세션이 준다).
-SERVICE_URL_ENV = "CHK_RUNTIME__SERVICE_URL"
+#: **Center 주소**를 알려 주는 예약 키 — 확장 클라이언트가 외부 작업(C15)을 올리는 곳 (ADR-0102).
+#: 서버 부분의 주소는 없다 — 누구도 알지 않는다.
+CENTER_URL_SETTING = "center.url"
+#: 호출 토큰을 푸는 비밀 이름 — `ctx.secret(CALL_TOKEN_SECRET)` (C15 「정한 것」).
+CALL_TOKEN_SECRET = "call_token"
+#: 로컬 런타임 자식에게 Center 주소를 물려주는 환경변수 (C13). 이름은 **플랫폼이 정한다**.
+#: **비밀은 넣지 않는다** — 호출 토큰은 세션이 준다 (C10 `call_token`).
+CENTER_URL_ENV = "CHK_RUNTIME__CENTER_URL"
 
 #: `configuration[].scope`, `local_runtimes[].start`, `requires_keys[].purpose`.
 SCOPE_BOT_UI = "bot_ui"

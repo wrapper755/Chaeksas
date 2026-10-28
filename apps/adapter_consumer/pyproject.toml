@@ -1,0 +1,27 @@
+[project]
+name = "chaeksas-adapter-consumer"
+version = "0.1.0"
+description = "어댑터 일꾼 — 외부 확장 정의의 HTTP 어댑터를 돌려 외부 앱을 부르는 범용 일꾼 (C13 §4·C15, ADR-0102)"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "chaeksas-contracts",
+    "chaeksas-core",          # HTTP 어댑터 해석기·외부 확장 정의 검증 (실행하는 쪽과 같은 코드)
+    "chaeksas-service-kit",   # 일꾼 루프·들이기 (C15)
+    "httpx>=0.27",
+]
+
+[project.scripts]
+chk-adapter-consumer = "chaeksas.adapter_consumer.main:main"
+
+[tool.uv.sources]
+chaeksas-contracts = { workspace = true }
+chaeksas-core = { workspace = true }
+chaeksas-service-kit = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# chaeksas는 PEP 420 네임스페이스 — src/chaeksas 밑에 __init__.py를 두지 않는다
+packages = ["src/chaeksas"]

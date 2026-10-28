@@ -336,108 +336,7 @@ function violations(cause: unknown): string {
   return `${cause.message} — ${said}`;
 }
 
-/**
- * 서비스 앱 등록 (CON-07). **일반 `<form>`이 부른다** — JS 없이도 등록된다.
- *
- * `app_id`를 사람이 적지 않는다 — **앱이 자기 manifest로 정한다** (C11). 주소만 받는다.
- */
-export async function registerServiceApp(form: FormData): Promise<void> {
-  const baseUrl = String(form.get("base_url") ?? "").trim();
-  const back = (query: string): Route => `/resources?${query}` as Route;
-  if (!baseUrl) {
-    redirect(back(`error=${encodeURIComponent("API 주소를 적으세요.")}`));
-  }
-  try {
-    await center.registerServiceApp(baseUrl);
-  } catch (cause) {
-    redirect(back(`error=${encodeURIComponent(message(cause))}`));
-  }
-  revalidatePath("/resources", "layout");
-  redirect(back("registered=1"));
-}
-
-/** 주소 바꾸기 — **환경별 주소의 유일한 출처**다 (C7 `PUT`). */
-export async function setServiceAppUrl(form: FormData): Promise<void> {
-  const appId = String(form.get("app_id") ?? "");
-  const baseUrl = String(form.get("base_url") ?? "").trim();
-  const back = (query: string): Route =>
-    `/resources/service-apps/${encodeURIComponent(appId)}?${query}` as Route;
-  if (!baseUrl) {
-    redirect(back(`error=${encodeURIComponent("API 주소를 적으세요.")}`));
-  }
-  try {
-    await center.setServiceAppUrl(appId, baseUrl);
-  } catch (cause) {
-    redirect(back(`error=${encodeURIComponent(message(cause))}`));
-  }
-  revalidatePath("/resources", "layout");
-  redirect(back("moved=1"));
-}
-
-/**
- * 외부 기능 「주소 바꾸기...」 (CON-07 상세 「서버 주소」, C7 §외부 확장 주소, ADR-0097). 정의의 허용
- * 호스트 밖이면 Center가 422로 거절하고 그 까닭을 그 자리에 보인다.
- */
-export async function setExtensionAddress(form: FormData): Promise<void> {
-  const extensionId = String(form.get("extension_id") ?? "");
-  const baseUrl = String(form.get("base_url") ?? "").trim();
-  const back = (query: string): Route =>
-    `/resources/features/${encodeURIComponent(extensionId)}?${query}` as Route;
-  if (!baseUrl) redirect(back(`error=${encodeURIComponent("API 주소를 적으세요.")}`));
-  try {
-    await center.setExtensionAddress(extensionId, baseUrl);
-  } catch (cause) {
-    redirect(back(`error=${encodeURIComponent(message(cause))}`));
-  }
-  revalidatePath("/resources", "layout");
-  redirect(back("moved=1"));
-}
-
-/** 「기본값으로 되돌리기」 — 되돌릴 수 있는 일이라 확인 창 없이 바로 한다. */
-export async function resetExtensionAddress(form: FormData): Promise<void> {
-  const extensionId = String(form.get("extension_id") ?? "");
-  const back = (query: string): Route =>
-    `/resources/features/${encodeURIComponent(extensionId)}?${query}` as Route;
-  try {
-    await center.deleteExtensionAddress(extensionId);
-  } catch (cause) {
-    redirect(back(`error=${encodeURIComponent(message(cause))}`));
-  }
-  revalidatePath("/resources", "layout");
-  redirect(back("reset=1"));
-}
-
-/**
- * 외부 앱 키 「키 넣기...」·「바꾸기...」 (CON-07 상세, C7 §외부 앱 키). **원문은 다시 보이지 않는다** —
- * 돌아가는 주소에 싣지 않고, Center 응답에도 없다.
- */
-export async function putAppKey(form: FormData): Promise<void> {
-  const extensionId = String(form.get("extension_id") ?? "");
-  const slot = String(form.get("slot") ?? "") === "test" ? "test" : "run";
-  const key = String(form.get("key") ?? "").trim();
-  const back = (query: string): Route =>
-    `/resources/features/${encodeURIComponent(extensionId)}?${query}` as Route;
-  if (!key) redirect(back(`error=${encodeURIComponent("키를 넣으세요.")}`));
-  try {
-    await center.setAppKey(extensionId, slot, key);
-  } catch (cause) {
-    redirect(back(`error=${encodeURIComponent(message(cause))}`));
-  }
-  revalidatePath("/resources", "layout");
-  redirect(back(`key_saved=${slot}`));
-}
-
-export async function deleteAppKey(extensionId: string, slot: "run" | "test"): Promise<ActionResult> {
-  try {
-    await center.deleteAppKey(extensionId, slot);
-  } catch (cause) {
-    return { error: message(cause) };
-  }
-  revalidatePath("/resources", "layout");
-  return {};
-}
-
-/** CON-03 「셀렉터 등록」 켜기·끄기 (ADR-0094 §6). 키는 Center가 그 PC에 내려 주고 거둔다. */
+/** CON-03 「셀렉터 등록」 켜기·끄기 — 이 PC의 Tool UI가 셀렉터 등록 작업을 올려도 되나 (C15 §올리기). */
 export async function setSelectorRegistration(botUiId: string, on: boolean): Promise<ActionResult> {
   try {
     await center.setSelectorRegistration(botUiId, on);
@@ -446,22 +345,6 @@ export async function setSelectorRegistration(botUiId: string, on: boolean): Pro
   }
   revalidatePath(`/bot-uis/${botUiId}`);
   return {};
-}
-
-export async function unregisterServiceApp(appId: string): Promise<ActionResult> {
-  try {
-    await center.unregisterServiceApp(appId);
-  } catch (cause) {
-    // 「쓰는 Bot이 있다」면 그 목록까지 보여 준다 (C7 `in_use`).
-    if (cause instanceof CenterError && Array.isArray(cause.body?.detail?.used_by)) {
-      const used = (cause.body.detail.used_by as string[]).join(", ");
-      return { error: `${cause.message} — ${used}` };
-    }
-    return { error: message(cause) };
-  }
-  revalidatePath("/resources", "layout");
-  // 해제한 기능의 상세는 더 없다 — 목록으로 돌아간다.
-  redirect("/resources" as Route);
 }
 
 /**
@@ -487,16 +370,6 @@ export async function deletePackage(packageId: string, version: string): Promise
   revalidatePath("/packages", "layout");
   // CON-02도 같은 패키지 표를 읽는다 (Bot·버전별 준비도) — 지운 줄이 그대로 남으면 안 된다.
   revalidatePath("/bots", "layout");
-  return {};
-}
-
-export async function refreshResources(): Promise<ActionResult> {
-  try {
-    await center.refreshResources();
-  } catch (cause) {
-    return { error: message(cause) };
-  }
-  revalidatePath("/resources", "layout");
   return {};
 }
 
@@ -532,14 +405,20 @@ export async function decideEnrollment(
   enrollmentId: string,
   decision: "approve" | "reject",
   text: string,
+  /** 일꾼(`type: consumer`, C15)만 — 요청한 토픽 안에서 줄인다. 비우면 요청한 것 그대로. */
+  topics?: string[],
 ): Promise<ActionResult> {
   try {
-    if (decision === "approve") await center.approveEnrollment(enrollmentId, text.trim() || undefined);
+    if (decision === "approve") {
+      const wanted = (topics ?? []).map((one) => one.trim()).filter(Boolean);
+      await center.approveEnrollment(enrollmentId, text.trim() || undefined, wanted.length > 0 ? wanted : undefined);
+    }
     else await center.rejectEnrollment(enrollmentId, text.trim() || undefined);
   } catch (cause) {
     return { error: message(cause) };
   }
   revalidatePath("/bot-uis", "layout");
+  revalidatePath("/resources", "layout");
   revalidatePath("/server-runners", "layout");
   revalidatePath("/bots");
   revalidatePath("/center-keys");

@@ -1,51 +1,45 @@
-"""C11을 지키는 FastAPI 앱을 만든다.
+"""C11을 지키는 서비스 앱을 만든다 — **일꾼**이다 (ADR-0102).
 
-새 서비스 앱은 **작업 함수만** 쓴다. 나머지(`/healthz`, `/manifest`, 키 검증·권한, 멱등,
-오류 형식, 사용 기록)는 여기서 계약대로 제공한다 (C11 「`service_kit`이 제공하는 것」).
+새 서비스 앱은 **작업 함수만** 쓴다. 나머지(멱등, 수행 모드·폴백, 오류 형식, 사용 기록, `/healthz`,
+관리 API)는 여기서 계약대로 제공한다 (C11 「`service_kit`이 제공하는 것」). 업무 호출은 HTTP로
+받지 않는다 — `Consumer`(`service_kit.consumer`)가 Center에서 일감을 가져와 `Service.execute()`에 준다.
 
     manifest = ServiceAppManifest(schema=1, app_id="tax-invoice", …)
-    app = create_app(manifest, {"issue": issue_handler}, keys=store)
+    app = create_app(manifest, {"issue": issue_handler})
+    Consumer([app.state.ops], center_url=…, tokens=…).run(stop)
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from pydantic import ValidationError
 
+from chaeksas.contracts.extension import Catalog
+from chaeksas.contracts.external_task import LockedTask
 from chaeksas.contracts.service_app import (
-    Caller,
     CenterRegistration,
     Dependency,
     HealthResponse,
-    KeySelfResponse,
-    Operation,
     OpRequest,
     OpResponse,
-    ServiceAppKey,
     ServiceAppManifest,
     Usage,
     UsageRecord,
-    authorize,
     idempotency_key,
-    key_state,
     resolve_mode,
 )
 from chaeksas.service_kit.admin import DependencyProbe
 from chaeksas.service_kit.admin import create_router as create_admin_router
-from chaeksas.service_kit.center import CenterLink
-from chaeksas.service_kit.center import create_router as create_center_router
-from chaeksas.service_kit.keys import find_key
 from chaeksas.service_kit.stores import (
     IdempotencyStore,
     InMemoryIdempotencyStore,
     InMemoryUsageLog,
-    KeyStore,
     UsageLog,
     body_hash,
 )
@@ -55,7 +49,7 @@ if TYPE_CHECKING:
 
 
 class OpError(Exception):
-    """작업 함수가 계약의 오류 코드로 실패를 알린다.
+    """작업 함수가 계약의 실패 코드로 실패를 알린다 (C11 §오류).
 
     예: `raise OpError("dependency_down", "Neo4j에 닿지 않는다", status=503)`
     """
@@ -78,269 +72,258 @@ class OpResult:
 
 #: 작업 함수. 요청과 **실제로 쓸 모드**를 받고, 결과나 평범한 dict를 돌려준다.
 Handler = Callable[[OpRequest, str], "OpResult | Mapping[str, Any]"]
+#: 기여 자원 카탈로그를 주는 함수 (C15 `PUT …/catalogs/{type}` — 일꾼이 `revision`이 바뀌면 올린다).
+CatalogSource = Callable[[], Catalog]
+
+#: 실패 코드 → 사용 기록의 수 (C11 §오류 — HTTP는 없지만 SVC-01 오류율이 이 수로 센다).
+_STATUS_OF = {
+    "operation_not_found": 404,
+    "idempotency_conflict": 409,
+    "input_invalid": 422,
+    "mode_unsupported": 422,
+    "schema_unsupported": 422,
+    "rate_limited": 429,
+    "internal": 500,
+}
+#: 다시 해 볼 만한 실패 (C11 §오류 「다시 해 볼 만함」).
+RETRYABLE = frozenset({"rate_limited", "dependency_down", "timeout"})
 
 
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def _error(status: int, code: str, message: str, detail: dict[str, Any] | None = None) -> JSONResponse:
-    """C11·C5와 같은 오류 본문: `{code, message, detail}`."""
-    return JSONResponse(status_code=status, content={"code": code, "message": message, "detail": detail or {}})
+@dataclass(frozen=True)
+class Outcome:
+    """일감 하나를 수행한 결과 — `complete`(성공) 또는 `fail`(실패) 하나가 C15로 간다.
 
-
-def _validation_detail(e: ValidationError) -> dict[str, Any]:
-    """`detail`에 넣을 수 있는 모양으로 줄인다.
-
-    pydantic의 `errors()`에는 예외 객체가 섞여 있어 그대로는 JSON이 되지 않는다.
+    `skip`이면 아무것도 보내지 않는다 — 같은 멱등 칸이 **이 앱 안에서 아직 도는 중**이다(잠금이 지나
+    다시 나왔다). 앞의 것이 끝내면 그것이 이긴다 (C15 「먼저 끝낸 쪽이 이긴다」).
     """
-    return {
-        "errors": [
-            {"loc": ".".join(str(p) for p in err["loc"]), "msg": err["msg"], "type": err["type"]}
-            for err in e.errors()
-        ]
-    }
+
+    response: OpResponse | None = None
+    code: str | None = None
+    message: str = ""
+    retryable: bool = False
+    detail: dict[str, Any] = field(default_factory=dict)
+    skip: bool = False
+
+    @property
+    def ok(self) -> bool:
+        return self.response is not None
+
+    def complete_body(self) -> dict[str, Any]:
+        assert self.response is not None
+        body: dict[str, Any] = {
+            "output": self.response.output,
+            "mode_used": self.response.mode_used,
+            "replayed": self.response.replayed,
+        }
+        if self.response.usage is not None:
+            body["usage"] = self.response.usage.to_json_dict()
+        return body
+
+    def fail_body(self) -> dict[str, Any]:
+        body: dict[str, Any] = {"code": self.code or "internal", "message": self.message, "retryable": self.retryable}
+        if self.detail:
+            body["detail"] = self.detail
+        return body
 
 
-def _is_schema_error(e: ValidationError) -> bool:
-    """`schema` 필드 때문에 거부되었나 (별명이라 loc이 둘 중 하나로 온다)."""
-    return any(err["loc"] in (("schema",), ("schema_version",)) for err in e.errors())
+class TopicService(Protocol):
+    """일꾼이 맡는 토픽 하나 — `Service`(C11 앱)와 어댑터 일꾼의 외부 확장이 같은 모양이다 (C15)."""
+
+    @property
+    def app_id(self) -> str: ...
+
+    @property
+    def manifest(self) -> ServiceAppManifest: ...
+
+    @property
+    def catalogs(self) -> Mapping[str, CatalogSource]: ...
+
+    def execute(self, task: LockedTask) -> Outcome: ...
 
 
-def _bearer(request: Request) -> str | None:
-    header = request.headers.get("authorization", "")
-    scheme, _, value = header.partition(" ")
-    return value.strip() if scheme.lower() == "bearer" and value.strip() else None
+@dataclass
+class Service:
+    """서비스 앱 하나의 작업 수행기 — HTTP를 모른다. 일꾼 뼈대(`Consumer`)가 부른다."""
+
+    manifest: ServiceAppManifest
+    handlers: Mapping[str, Handler]
+    idempotency: IdempotencyStore = field(default_factory=InMemoryIdempotencyStore)
+    usage_log: UsageLog = field(default_factory=InMemoryUsageLog)
+    catalogs: Mapping[str, CatalogSource] = field(default_factory=dict)
+    now: Callable[[], str] = _now
+
+    def __post_init__(self) -> None:
+        declared = {op.name for op in self.manifest.operations}
+        if set(self.handlers) != declared:
+            raise ValueError(
+                f"manifest의 작업과 handlers가 다르다: manifest에만 {sorted(declared - set(self.handlers))}, "
+                f"handlers에만 {sorted(set(self.handlers) - declared)}"
+            )
+
+    @property
+    def app_id(self) -> str:
+        return self.manifest.app_id
+
+    def request_of(self, task: LockedTask) -> OpRequest:
+        """C15 `LockedTask` → 작업 함수가 받는 `OpRequest` (C11 §OpRequest)."""
+        return OpRequest.model_validate(
+            {
+                "schema": 1,
+                "mode": task.mode,
+                "run_id": task.idempotency.run_id,
+                "node_id": task.idempotency.node_id,
+                "node_instance": task.idempotency.node_instance,
+                "attempt": task.idempotency.attempt,
+                "call_seq": task.idempotency.call_seq,
+                "caller": task.caller.to_json_dict(),
+                "business_key": task.business_key,
+                "input": task.input,
+                "origin": task.origin,
+            }
+        )
+
+    def execute(self, task: LockedTask) -> Outcome:
+        """일감 하나 — 멱등 → 모드 → 작업 함수 (C11). **예외를 올리지 않는다** — 모두 `Outcome`이다."""
+        started = time.monotonic()
+        operation = task.operation
+        op = self.manifest.operation(operation)
+        try:
+            req = self.request_of(task)
+        except ValidationError as e:
+            return self._fail(task, None, "input_invalid", f"일감이 계약과 맞지 않는다: {e.error_count()}개", started)
+        if op is None or operation not in self.handlers:
+            return self._fail(task, req, "operation_not_found", f"작업 {operation}이 없다", started)
+
+        mode_used, problem = resolve_mode(op, requested=req.mode, origin=req.origin)
+        if problem is not None or mode_used is None:
+            assert problem is not None
+            return self._fail(task, req, problem.code or "mode_unsupported", problem.message, started)
+
+        ikey = idempotency_key(operation, req)
+        outcome, stored = self.idempotency.begin(ikey, body=body_hash(req))
+        if outcome == "conflict":
+            return self._fail(task, req, "idempotency_conflict", "같은 멱등 칸인데 본문이 다르다", started)
+        if outcome == "in_progress":
+            return Outcome(skip=True)
+        if outcome == "replay" and stored is not None:
+            self._record(task, req, mode_used, 200, started, stored.usage)
+            return Outcome(response=stored.model_copy(update={"replayed": True}))
+
+        try:
+            result = self.handlers[operation](req, mode_used)
+        except OpError as e:
+            self.idempotency.abandon(ikey)
+            self._record(task, req, mode_used, e.status, started, None)
+            return Outcome(code=e.code, message=e.message, retryable=e.code in RETRYABLE, detail=dict(e.detail or {}))
+        except Exception as e:  # noqa: BLE001 — 예상 못 한 실패. 멱등 자리를 비워 다시 받을 수 있게 한다
+            self.idempotency.abandon(ikey)
+            self._record(task, req, mode_used, 500, started, None)
+            return Outcome(code="internal", message=f"작업이 예상 못 한 오류로 실패했다: {type(e).__name__}")
+
+        output = result.output if isinstance(result, OpResult) else dict(result)
+        usage = result.usage if isinstance(result, OpResult) else None
+        response = OpResponse(status="ok", output=output, mode_used=mode_used, replayed=False, usage=usage)
+        self.idempotency.finish(ikey, response=response)
+        self._record(task, req, mode_used, 200, started, usage)
+        return Outcome(response=response)
+
+    def _fail(self, task: LockedTask, req: OpRequest | None, code: str, message: str, started: float) -> Outcome:
+        self._record(task, req, "-", _STATUS_OF.get(code, 503), started, None)
+        return Outcome(code=code, message=message, retryable=code in RETRYABLE)
+
+    def _record(
+        self, task: LockedTask, req: OpRequest | None, mode: str, status: int, started: float, usage: Usage | None
+    ) -> None:
+        caller = task.caller
+        self.usage_log.record(
+            UsageRecord(
+                at=self.now(),
+                key_name=f"{caller.type}:{caller.host or '-'}",
+                operation=task.operation,
+                mode=mode,
+                status=status,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                run_id=req.run_id if req is not None else task.idempotency.run_id,
+                caller_type=caller.type,
+                usage=usage,
+            )
+        )
 
 
 def create_app(
     manifest: ServiceAppManifest,
     handlers: Mapping[str, Handler],
     *,
-    keys: KeyStore,
     idempotency: IdempotencyStore | None = None,
     usage_log: UsageLog | None = None,
     health: Callable[[], HealthResponse] | None = None,
     admin_token: str | None = None,
     dependencies: DependencyProbe | None = None,
-    center: CenterRegistration | None = None,
+    center: Callable[[], CenterRegistration] | CenterRegistration | None = None,
     llm: ServiceLlm | None = None,
-    center_link: CenterLink | None = None,
+    catalogs: Mapping[str, CatalogSource] | None = None,
     now: Callable[[], str] = _now,
 ) -> FastAPI:
-    """계약을 지키는 앱 하나.
+    """서비스 앱 하나 — `/healthz`와 관리 API(SVC-00·01·03)를 여는 FastAPI. 작업 수행기는
+    `app.state.ops`(`Service`)이고 일꾼 뼈대가 그것을 부른다.
 
     `handlers`의 열쇠는 manifest의 작업 이름이어야 한다 — 어긋나면 만들 때 바로 멈춘다.
-
-    `admin_token`을 주면 관리 API(`/admin/v1/*`, SVC-00~03)가 열린다. 주지 않으면 그 경로는
-    503이다 — **빈 토큰으로 열리지 않는다** (C11).
-    `dependencies`는 앱이 자기 바깥 의존(Neo4j·LLM …)의 상태를 돌려주는 함수다 (SVC-01).
-    `llm`(모델 연결, C11 §모델 연결)을 주면 관리 상태에 `llm` 한 줄이 저절로 붙는다.
-    `center_link`(C11 §Center가 발급하는 키, ADR-0094)를 주면 Center가 서명한 봉투로 키를 짓는다.
-    주지 않으면 `POST /center/v1/keys`는 503 `center_disabled`이고 키는 관리 API로만 생긴다.
+    `admin_token`을 주면 관리 API가 열린다. 주지 않으면 503이다 — **빈 토큰으로 열리지 않는다** (C11).
+    `center`는 「일꾼으로 들었나」를 알려 주는 것(SVC-01) — 보통 `Consumer.registration`이다.
     """
-    declared = {op.name for op in manifest.operations}
-    if set(handlers) != declared:
-        raise ValueError(
-            f"manifest의 작업과 handlers가 다르다: manifest에만 {sorted(declared - set(handlers))}, "
-            f"handlers에만 {sorted(set(handlers) - declared)}"
-        )
-
-    idem = idempotency or InMemoryIdempotencyStore()
-    log = usage_log or InMemoryUsageLog()
+    service = Service(
+        manifest=manifest,
+        handlers=handlers,
+        idempotency=idempotency or InMemoryIdempotencyStore(),
+        usage_log=usage_log or InMemoryUsageLog(),
+        catalogs=dict(catalogs or {}),
+        now=now,
+    )
 
     app = FastAPI(title=manifest.name, version=manifest.version)
     app.state.manifest = manifest
-    app.state.keys = keys
-    app.state.idempotency = idem
-    app.state.usage_log = log
+    #: 작업 수행기 (`Service`) — 일꾼(`Consumer`)이 부른다. 앱이 제 도메인 객체를 `service`로 둘 수
+    #: 있게 이름을 따로 둔다.
+    app.state.ops = service
+    app.state.idempotency = service.idempotency
+    app.state.usage_log = service.usage_log
     app.state.admin_token = admin_token
     app.state.llm = llm
-    app.state.center_link = center_link
+    app.state.center = center
     started_at = now()
 
     def probe() -> Sequence[Dependency]:
         found = list(dependencies()) if dependencies else []
         if llm is not None:
             found = [*found, llm.dependency()]
-        if center_link is not None:
-            found = [*found, _center_dependency(center_link)]
         return found
+
+    def registration() -> CenterRegistration:
+        found = app.state.center
+        if callable(found):
+            return found()  # type: ignore[no-any-return]
+        return found or CenterRegistration()
 
     app.include_router(
         create_admin_router(
             manifest,
-            keys=keys,
-            usage_log=log,
+            usage_log=service.usage_log,
             started_at=started_at,
             dependencies=probe,
-            center=center,
+            center=registration,
             now=now,
         )
     )
-
-    app.include_router(create_center_router(app_id=manifest.app_id, keys=keys, link=center_link, now=now))
 
     @app.get("/healthz")
     def healthz() -> HealthResponse:
         return health() if health else HealthResponse(status="ok", version=manifest.version)
 
-    @app.get("/manifest")
-    def get_manifest() -> ServiceAppManifest:
-        # 인증 없음 — 비밀이 들어가지 않는다 (C7이 이것을 읽어 리소스 목록을 만든다).
-        return manifest
-
-    def _authenticate(request: Request) -> tuple[ServiceAppKey | None, JSONResponse | None]:
-        raw = _bearer(request)
-        if raw is None:
-            return None, _error(401, "key_missing", "서비스 앱 API 키가 없다")
-        key = find_key(raw, keys.all_keys())
-        if key is None:
-            return None, _error(401, "key_invalid", "모르는 키다")
-        state = key_state(key, now=now())
-        if state != "active":
-            return None, _error(403, f"key_{state}", f"키 「{key.name}」은 {state} 상태다")
-        return key, None
-
-    @app.get("/v1/keys/self")
-    def key_self(request: Request) -> Any:
-        """「연결 테스트」용. **키 원문·해시는 돌려주지 않는다.**"""
-        key, failure = _authenticate(request)
-        if failure is not None:
-            return failure
-        assert key is not None
-        return KeySelfResponse(
-            name=key.name,
-            prefix=key.prefix,
-            allowed_operations=key.allowed_operations,
-            allowed_modes=key.allowed_modes,
-            extra_scopes=key.extra_scopes,
-            expires_at=key.expires_at,
-        )
-
-    @app.post("/v1/ops/{operation}")
-    async def call_operation(operation: str, request: Request) -> Any:
-        started = time.monotonic()
-        key, failure = _authenticate(request)
-        if failure is not None:
-            return failure
-        assert key is not None
-
-        def refuse(status: int, code: str, message: str, detail: dict[str, Any] | None = None) -> JSONResponse:
-            """거부도 사용 기록에 남긴다 — 운영자가 「운영 키로 자율 수행 시도」를 봐야 한다.
-
-            401(키를 모르는 경우)은 남길 키 이름이 없어 기록하지 않는다.
-            """
-            _log_refusal(log, key, operation, status, started, now())
-            return _error(status, code, message, detail)
-
-        op: Operation | None = manifest.operation(operation)
-        if op is None or operation not in handlers:
-            return refuse(404, "operation_not_found", f"작업 {operation}이 없다")
-
-        try:
-            body = await request.json()
-        except ValueError:
-            return refuse(422, "input_invalid", "본문이 JSON이 아니다")
-        try:
-            req = OpRequest.model_validate(body)
-        except ValidationError as e:
-            # 더 높은 schema는 따로 알린다 (부르는 쪽이 재시도하지 않게).
-            if _is_schema_error(e):
-                return refuse(422, "schema_unsupported", "모르는 schema다", _validation_detail(e))
-            return refuse(422, "input_invalid", "요청이 계약과 맞지 않는다", _validation_detail(e))
-
-        denied = authorize(
-            key, operation=operation, mode=req.mode, now=now(), required_scopes=op.required_scopes
-        )
-        if denied:
-            first = denied[0]
-            return refuse(403, first.code or "forbidden", first.message, {"items": first.items})
-
-        mode_used, problem = resolve_mode(op, requested=req.mode, key=key)
-        if problem is not None or mode_used is None:
-            assert problem is not None
-            return refuse(422, problem.code or "mode_unsupported", problem.message, {"items": problem.items})
-
-        ikey = idempotency_key(operation, req)
-        outcome, stored = idem.begin(ikey, body=body_hash(req))
-        if outcome == "conflict":
-            return refuse(409, "idempotency_conflict", "같은 멱등 키인데 본문이 다르다")
-        if outcome == "in_progress":
-            return refuse(409, "in_progress", "같은 멱등 키가 아직 수행 중이다")
-        if outcome == "replay" and stored is not None:
-            _record(log, key, operation, req, mode_used, 200, started, stored.usage, now())
-            return stored.model_copy(update={"replayed": True})
-
-        try:
-            result = handlers[operation](req, mode_used)
-        except OpError as e:
-            idem.abandon(ikey)
-            _record(log, key, operation, req, mode_used, e.status, started, None, now())
-            return _error(e.status, e.code, e.message, e.detail)
-        except Exception as e:  # 예상 못 한 실패 — 멱등 자리를 비워 다시 부를 수 있게 한다
-            idem.abandon(ikey)
-            _record(log, key, operation, req, mode_used, 500, started, None, now())
-            # C11 오류 표에 없는 코드다. 앱의 버그이므로 사람이 보고 고쳐야 한다.
-            return _error(500, "internal", f"작업이 예상 못 한 오류로 실패했다: {type(e).__name__}")
-
-        output = result.output if isinstance(result, OpResult) else dict(result)
-        usage = result.usage if isinstance(result, OpResult) else None
-        response = OpResponse(status="ok", output=output, mode_used=mode_used, replayed=False, usage=usage)
-        idem.finish(ikey, response=response)
-        keys.touch(key, at=now())
-        _record(log, key, operation, req, mode_used, 200, started, usage, now())
-        return response
-
     return app
 
 
-def _center_dependency(link: CenterLink) -> Dependency:
-    """SVC-01 「Center 발급」 — 믿는 Center 서명 키를 받아 두었나 (ADR-0094 §1). 키 값은 없다."""
-    trust = link.trust()
-    if link.problem:
-        return Dependency(name="center", status="degraded", detail=link.problem)
-    if not trust.key_ids:
-        return Dependency(name="center", status="unknown", detail="Center 공개키를 아직 받지 않았다")
-    return Dependency(name="center", status="ok", detail=f"서명 키 {', '.join(trust.key_ids)} ({trust.fetched_at})")
-
-
-def _log_refusal(log: UsageLog, key: ServiceAppKey, operation: str, status: int, started: float, at: str) -> None:
-    """요청을 모델로 읽기 전에도 남길 수 있는 최소 기록 (모드·run_id를 모를 수 있다)."""
-    log.record(
-        UsageRecord(
-            at=at,
-            key_name=key.name,
-            operation=operation,
-            mode="-",
-            status=status,
-            duration_ms=int((time.monotonic() - started) * 1000),
-        )
-    )
-
-
-def _record(
-    log: UsageLog,
-    key: ServiceAppKey,
-    operation: str,
-    req: OpRequest,
-    mode_used: str,
-    status: int,
-    started: float,
-    usage: Usage | None,
-    at: str,
-) -> None:
-    caller: Caller = req.caller
-    log.record(
-        UsageRecord(
-            at=at,
-            key_name=key.name,
-            operation=operation,
-            mode=mode_used,
-            status=status,
-            duration_ms=int((time.monotonic() - started) * 1000),
-            run_id=req.run_id,
-            caller_type=caller.type,
-            usage=usage,
-        )
-    )
+__all__ = ["CatalogSource", "Handler", "OpError", "OpResult", "Outcome", "Service", "TopicService", "create_app"]

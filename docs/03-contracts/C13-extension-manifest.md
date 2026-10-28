@@ -15,14 +15,11 @@
 >
 > **HTTP 어댑터 해석기(§4-2·§4-3)가 돈다** (M5 조각 11) — `chaeksas.core.http_adapter`. 템플릿은 위치마다 다르게 채우고(경로는 조각 하나로 퍼센트 인코딩, 헤더는 제어 문자·`Authorization`/`Host`/`Cookie` 거부, 본문은 **칸 전체가 슬롯이면 값 그대로**), 나가기 전에 `allowed_hosts` → **DNS 한 번 풀어 그 IP로** → 사설·루프백 → https를 본다. 리다이렉트를 따라가지 않고, `max_response_kb`는 **읽는 동안** 끊는다. 키는 참조 이름으로 받아 이 PC에서 풀고 **ASCII가 아니면 거절한다**(헤더에 넣을 수 없다). `AdapterCaller`가 `ServiceCaller` 자리에 들어가므로 **엔진은 서비스 앱인지 외부 앱인지 모른다**.
 >
-> **실행하는 쪽의 연결도 돈다** (M5 조각 12) — Bot UI가 Bot을 띄우기 **전에** `GET /resources?type=service_app`(주소)와 `GET /resources/extensions/{id}`(정의·봉투)를 읽어 **파일로** 실행기에 넘기고, 실행기가 `chaeksas.core.app_directory`로 **봉투를 다시 검증한다**(E6 — 검증되지 않은 정의는 쓰지 않고 사유를 남긴다). **패키지가 고정한 `definition_hash`와 대조해**(C1) 다르면 **시작조차 하지 않는다** — 중간에 알면 이미 한 일을 되돌릴 수 없고, 정의가 바뀌었으면 승인·배포를 다시 받아야 한다. **닿지 못하면 들고 있던 것을 쓰고**(ADR-0007), **404는 버린다**(철회는 보안 동작이라 모르고 멈추는 것보다 철회된 정의로 도는 것이 나쁘다). Bot UI의 실행기는 Center를 부르지 않는다 (ADR-0031).
+> **실행하는 쪽은 정의만 본다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)) — 외부 앱을 **부르는 것은 어댑터 일꾼**이고 실행하는 쪽은 C15로 올린다. 그래도 Bot UI·서버 실행기·Studio는 Bot을 띄우기 **전에** `GET /resources/extensions/{id}`(정의·봉투)를 받아 `chaeksas.core.app_directory`로 **봉투를 다시 검증하고**(E6) **패키지가 고정한 `definition_hash`와 대조해**(C1) 다르면 **시작조차 하지 않는다** — 중간에 알면 이미 한 일을 되돌릴 수 없다. 닿지 못하면 들고 있던 것을 쓰고(ADR-0007), 404는 버린다(철회는 보안 동작이다). 묻는 대상은 매니페스트의 `requires.extensions` **전부**이고 어느 것이 외부인가는 Center의 답이 말해 준다. **서비스 앱 주소는 받지 않는다** — 누구도 들지 않는다.
 >
-> **서버 실행기도 같은 코드로 붙는다** (M7 조각 9) — 받아 두기·캐시는 `core.app_directory.DirectoryCache` 하나이고(두 벌이면 「PC는 되는데 서버는 안 된다」가 된다) **서버 실행기는 제가 Center를 부른다**(ADR-0031은 Bot UI의 **자식 프로세스** 이야기다). 그래서 파일을 거치지 않고 `directory_for()`로 명부를 바로 짓지만 **봉투 검증은 같은 자리에서** 한다. 묻는 대상은 매니페스트의 `requires.extensions` **전부**다 — 어느 것이 외부인가는 **Center의 답이 말해 준다**(내장·사내는 정의 없이 온다). 지금 Studio 내보내기가 `definition_hash`를 적지 않으므로 고정된 것만 물으면 외부 앱을 **하나도** 부를 수 없다 (09-gaps §3-10).
->
-> **Bot UI는 주소를 하트비트 뒤에도 받아 둔다** — Bot을 띄우기 전에만 받으면 **첫 실행 전**에는 명부가 비어, 확장 도구(예: 셀렉터 등록)가 호스트 예약 키 `service.base_url`로 정의의 기본값(배포 이름)을 받아 서버에 닿지 못한다 — 그런데 Bot은 화면이 등록돼야 돈다(현장 리허설, 09-gaps §6). 그래서 하트비트가 성공한 뒤 **10분에 한 번**(처음 붙은 주기는 바로) `GET /resources?type=service_app`을 읽어 둔다. 외부 확장의 정의는 여전히 Bot을 띄우기 전에 받는다(쓰는 Bot이 정한다). 닿지 못하면 들고 있던 것을 쓴다(ADR-0007). **Tool UI도 이 명부를 읽는다**(쓰지 않는다, ADR-0077) — Tool UI는 Center를 부르지 않는다.
+> **어댑터 일꾼**(`chk-adapter-consumer`, `apps/adapter_consumer`)은 같은 정의를 일꾼 토큰으로 받아 봉투를 다시 검증하고 §4를 돌린다. **주소·키는 그 일꾼의 설정이 쥔다** — 확장마다 `CHK_ADAPTER__EXT__<확장>__BASE_URL`(없으면 정의의 `base_url`)·`…__KEY`(키를 받는 앱만)·`…__TEST_BASE_URL`·`…__TEST_KEY`(시험 일감 — `origin: test` — 에 쓴다, 없으면 운영 쪽)·`CHK_ADAPTER__ALLOW_PRIVATE_NETWORK`(정의가 허용해도 일꾼 설정이 또 열어야 사설 IP로 나간다 — 기본 닫힘). OAuth·mTLS 같은 인증을 늘리는 일도 이 일꾼 안의 일이다.
 
 
-> 제안: [ADR-0102](../decisions/0102-calling-outside-is-pull.md) 조각 3 — HTTP 어댑터(§4)는 정의에 그대로 남지만 **어댑터 일꾼**이 돌린다. `base_url`·키는 어댑터 일꾼의 설정이 이기고 Center는 들지 않는다. 아래는 지금 도는 것이다.
 
 ## 목적
 
@@ -42,7 +39,7 @@
 
 외부 확장은 정의 파일만 있다. **서명된 봉투 없이는 쓰이지 않는다.**
 
-정의가 서비스 앱 키를 어느 주소로 보낼지 정하기 때문에, 배포와 같은 관문을 둔다 — **관리자만** 등록하고, 등록하면 Center가 C2 `extension` claim(`{id, version, definition_hash}`)에 서명한다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)). 실행하는 쪽은 봉투로 「Center가 등록한 그 정의인가」를 다시 본다.
+정의가 외부 앱을 부르는 길(허용 호스트·인증 방식·작업)을 정하기 때문에, 배포와 같은 관문을 둔다 — **관리자만** 등록하고, 등록하면 Center가 C2 `extension` claim(`{id, version, definition_hash}`)에 서명한다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)). 실행하는 쪽은 봉투로 「Center가 등록한 그 정의인가」를 다시 본다.
 
 1. 관리자가 CON-07 「확장 추가」에서 정의 파일을 올린다.
 2. Center가 E1·E2·E3·E4·E8을 보고, 지나면 봉투에 서명해 정의와 함께 둔다.
@@ -79,7 +76,7 @@
 | `api` | str | 내장·사내 ✓ | 필요한 `extension_api` 버전 범위 (예: `>=1,<2`) |
 | `service` | Service | | 서버 부분 (아래) |
 | `contributes` | Contributes | ✓ | 기여 (아래) |
-| `requires_keys` | KeyNeed[] | | 이 확장이 쓰는 서비스 앱 키 |
+| `requires_keys` | KeyNeed[] | | 이 확장이 제 앱을 부르나 (이름은 옛것이다 — 키는 없다, 아래 KeyNeed) |
 | `docs_url`, `console_url` | str | | `http(s)://`만 (콘솔이 링크로 보이므로) |
 
 ### Service
@@ -87,7 +84,7 @@
 | 필드 | 뜻 |
 | --- | --- |
 | `protocol` | `chk-c11`(C11을 따르는 서비스 앱) 또는 `http-adapter`(외부 앱, §4) |
-| `base_url` | 기본 주소. **주소의 출처는 하나다:** Center 리소스 등록(C7)의 `base_url`이 있으면 그것을, 없으면 이 값을 쓴다. 클라이언트 설정에 따로 두지 않는다. **외부 확장은 C7 §외부 확장 주소로 덮어쓴다** — 정의의 `allowed_hosts`·`allow_private_network` 안에서만 받는다([ADR-0097](../decisions/0097-external-extension-address-from-center.md)) |
+| `base_url` | 기본 주소. **쓰는 쪽은 그 서버 부분을 부르는 일꾼 하나다** — C11 앱은 제 자리에 떠 있고(누구도 이 주소로 부르지 않는다, 참고로만 남는다), 외부 앱은 어댑터 일꾼이 쓰되 **일꾼 설정의 `BASE_URL`이 이긴다**(정의의 `allowed_hosts`·`allow_private_network` 안에서만, ADR-0102) |
 | `adapter` | `protocol=http-adapter`일 때만 (§4) |
 
 ### Contributes
@@ -145,15 +142,15 @@
   | `runtime.<런타임 id>.token_dir` | 토큰 파일 폴더 (str). 정의에 `token_dir: true`일 때만 |
   | `runtime.<런타임 id>.state` | `off` · `running` · `restarting` · `stopped` (C4 `WorkerState.state`와 같은 낱말) |
   | `storage.dir` | 이 확장이 **자기 파일을 둘 폴더** (호스트가 **제 데이터 폴더 아래에** 만들어 준다 — Bot UI와 Tool UI는 다른 자리다). 밀린 등록 큐처럼 확장이 혼자 들고 있어야 하는 것을 여기 둔다. **비밀은 두지 않는다** (OS 비밀 저장소로 간다) |
-  | `service.base_url` | 이 확장의 **서버 부분 주소**. **출처는 하나다** — Center 리소스 등록(C7)에 있으면 그것을, 없으면 정의의 `service.base_url`을 쓴다. 확장이 설정 칸으로 따로 받지 않는다. Tool UI는 Center를 부르지 않으므로 **Bot UI가 받아 둔 명부**를 읽는다 (같은 출처) |
-  | `service.key_ref` | **Studio 편집기에만** — 지금 열린 BPM 프로세스의 `chk:process.service_keys`가 이 확장에 준 **키 참조 이름**(없으면 `None`). 태스크의 `key_ref`가 비었을 때(「BPM 프로세스 설정을 따름」) 편집기가 시험에 쓸 참조다 — 엔진과 같은 순서. 값은 물을 때마다 열린 BPM 프로세스에서 읽는다. 실행하는 쪽은 채우지 않는다(수행기는 `TaskContext.key_ref`를 받는다). 키 **값**은 `ctx.secret(<참조>)`로 푼다 ([ADR-0074](../decisions/0074-ui-task-editor-runs-on-the-worker.md)). (ADR-0094 §5) Studio의 개발 키는 앱마다 하나라 어느 참조를 넘겨도 이 확장의 서버 부분 앱의 개발 키가 풀린다 — 칸은 그대로 둔다 |
+  | `center.url` | **Center 주소** — 확장 클라이언트가 외부 작업(C15)을 올리는 곳 (ADR-0102). 서버 부분의 주소는 없다. Tool UI는 Bot UI 설정의 주소를 읽는다 |
+  | `center.call_token` | 비밀이라 설정이 아니라 **`ctx.secret("call_token")`**으로 푼다 — 호출 토큰 (C15). Bot UI·Tool UI는 Bot UI가 청한 것, Studio는 Studio가 청한 것 |
 
-  로컬 런타임 자식에게는 같은 주소를 환경변수 **`CHK_RUNTIME__SERVICE_URL`**로 물려준다 (이름은 플랫폼이 정한다 — 호스트가 확장 이름을 모르고 넣을 수 있어야 한다). **비밀은 물려주지 않는다** — 키는 부르는 쪽이 세션마다 준다 (C10 `service_key`, ADR-0013).
+  로컬 런타임 자식에게는 Center 주소를 환경변수 **`CHK_RUNTIME__CENTER_URL`**로 물려준다 (이름은 플랫폼이 정한다 — 호스트가 확장 이름을 모르고 넣을 수 있어야 한다). **비밀은 물려주지 않는다** — 호출 토큰은 부르는 쪽이 세션마다 준다 (C10 `call_token`).
 
-  `runtime.`·`service.`·`storage.`로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7).
+  `runtime.`·`center.`·`storage.`로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7).
 - `configuration`의 `scope`: `bot_ui`, `tool_ui`, `studio`, `server_runner` 중 하나. `tool_ui`는 도구가 쓰는 칸(등록 담당자 키 같은 것)이고 값은 Tool UI 설정(TOL-02)·Tool UI의 비밀 저장소(`chaeksas-tool-ui`)에 있다 (ADR-0077).
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.
-- **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 키(`requires_keys` `utility`)도 이 칸으로 받는다 — **(ADR-0094) 서비스 앱 키는 이 칸으로 받지 않는다** (위 KeyNeed). 비밀 칸은 서비스 앱 키가 **아닌** 비밀(바깥 도구의 암호 같은 것)에만 남는다.
+- **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 서비스 앱 키는 없다 (ADR-0102, 아래 KeyNeed) — 비밀 칸은 바깥 도구의 암호 같은 것에만 쓴다.
 - `editor`: 두 가지 중 하나다.
   - `{"kind": "builtin", "entry": "…"}`: 확장이 준 편집기.
   - `{"kind": "schema"}`: 입력 JSON Schema로 만든 자동 폼 (STU-14 방식).
@@ -172,17 +169,17 @@
 | 필드 | 뜻 |
 | --- | --- |
 | `purpose` | 키를 어디에 쓰나. 두 가지 중 하나다 (아래) |
-| `extra_scopes` | 그 키에 필요한 추가 권한 (C11 키 레코드와 같은 이름, 예: `registry_write`) |
-| `config_key` | `utility`일 때 그 키를 받는 `configuration` 칸. **(ADR-0094) 쓰지 않는다** — 있어도 무시한다 |
+| `extra_scopes` | 그 부르기에 필요한 추가 권한 (예: `registry_write` — Center가 C15 올리기에서 건다) |
+| `config_key` | 옛 칸. **쓰지 않는다** — 있어도 무시한다 |
 
 `purpose` 값:
 
-- `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.
-- `utility`: 확장 도구(Tool UI)가 쓸 때. `configuration`의 `secret` 칸으로 받는다. 값 이름은 그대로다.
+- `run`: BPM 프로세스(그 확장의 태스크)가 작업을 부를 때.
+- `utility`: 확장 도구(Tool UI)가 부를 때.
 
-> [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md): **선언의 뜻은 그대로이고 키를 받는 길만 바뀐다.**
-> - `run` — Center가 배포 대상마다 짓고 내려 준다 (C4 §서비스 앱 키 전달). `extra_scopes`가 있으면 Center가 그 권한을 단다.
-> - `utility` — 사람이 키를 넣지 않는다. 관리자가 CON-03에서 그 PC의 「셀렉터 등록」을 켜면 Center가 (PC × 앱) 키를 `extra_scopes`대로 짓고 그 PC Bot UI에 내려 준다. 호스트가 그것을 **`ctx.secret("utility")`**로 준다(Tool UI는 Bot UI가 받아 둔 것을 읽기만 한다 — ADR-0077). **`config_key`는 쓰지 않는다** — 옛 정의에 적혀 있어도 거부하지 않고 무시한다(호환). 그래서 그 칸이 가리키던 `configuration`의 비밀 칸(UI 자동화의 `registrar_key`)은 확장이 빼고, TOL-02에서도 없어진다.
+> [ADR-0102](../decisions/0102-calling-outside-is-pull.md): **키는 없다 — 선언은 「이 확장이 제 앱을 부른다」는 뜻으로만 남는다.** 바깥 기능은 C15 외부 작업으로 부르므로 아무도 키를 받지 않는다.
+> - `run` — 빌드가 그 확장의 태스크를 쓰는 Bot의 `requires.service_apps`에 그 확장 id로 줄을 적는다(C1). Center는 그 줄로 그 Bot이 그 토픽에 올려도 되는지 본다(C15 `topic_not_required`).
+> - `utility` — 확장 도구(Tool UI)는 Bot UI의 **호출 토큰**으로 올린다(C15). `extra_scopes`(예: `registry_write`)는 키 권한이 아니라 **그 PC의 「셀렉터 등록」 스위치**(CON-03)로 Center가 건다. **`config_key`는 쓰지 않는다** — 옛 정의에 적혀 있어도 거부하지 않고 무시한다(호환).
 
 ## 4. HTTP 어댑터 (`protocol: "http-adapter"`, 외부 확장)
 
@@ -192,7 +189,7 @@
 | --- | --- |
 | `allowed_hosts` | 부를 수 있는 호스트 목록 (정확한 이름, 와일드카드 없음). `base_url`·Center의 `base_url`·`catalog_url`·`health`의 호스트가 모두 이 안에 있어야 한다 |
 | `allow_private_network` | 기본 false. 사설망·루프백·링크 로컬 주소를 부르려면 true여야 하고, 이것도 서명 대상이다 |
-| `auth` | `{type: "bearer" \| "header", name?}`. 값은 BPM 프로세스 키 참조로 푼 키. **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md), `takes_key()`) — 어댑터는 키를 싣지 않고, 사전 점검은 그 앱의 키를 묻지 않고 Center도 짓지 않으며 빌드는 C1 `key_ref`를 적지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
+| `auth` | `{type: "bearer" \| "header", name?}`. 값은 어댑터 일꾼 설정의 키(`CHK_ADAPTER__EXT__<확장>__KEY`). **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md), `takes_key()`) — 어댑터는 키를 싣지 않고 빌드는 C1 `key_ref`를 적지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
 | `limits` | `{timeout_s: 60, max_response_kb: 1024}` |
 | `health` | 선택. `{path, expect_status: 200}`. 없으면 Center는 상태를 「확인 전」으로 둔다 |
 | `operations` | 아래 Operation[] |
@@ -227,9 +224,9 @@ Operation:
 - 쓸 수 있는 변수: `{{input.<필드>}}`, `{{run_id}}`, `{{node_id}}`, `{{idempotency_key}}`(C11 멱등 키 문자열). 그 밖의 변수·식은 정의 검사에서 거부한다.
 - 출력 경로와 `error_when`의 `path`는 **제한된 JSONPath**만 쓴다: `$`, `.이름`, `[숫자]`. 필터·식·와일드카드는 쓸 수 없다.
 
-### 4-3. 호출 규칙 (해석기 `core.http_adapter`)
+### 4-3. 호출 규칙 (해석기 `core.http_adapter` — 어댑터 일꾼이 돌린다)
 
-1. 주소를 만든다: 리소스 등록의 `base_url`(없으면 정의의 `base_url`) + `path`.
+1. 주소를 만든다: 어댑터 일꾼 설정의 `BASE_URL`(시험 일감이면 `TEST_BASE_URL`, 없으면 정의의 `base_url`) + `path`.
 2. **https만 쓴다.** `allow_private_network: true`이고 호스트가 사설 주소인 경우만 http를 허용한다.
 3. 호스트가 `allowed_hosts`에 있는지 본다.
 4. **DNS를 한 번 풀고 그 IP로 접속한다** (DNS 재바인딩 방지). `allow_private_network=false`면 루프백(127.0.0.0/8, ::1), 사설(10/8, 172.16/12, 192.168/16, fc00::/7), 링크 로컬(169.254/16, fe80::/10)을 거부한다. 이 규칙은 같은 PC의 Worker(127.0.0.1:8899)도 막는다.
@@ -262,9 +259,6 @@ Operation:
   "schema": 2, "id": "ui-automation", "version": "0.4.0", "name": "UI 자동화", "publisher": "Chaeksas",
   "tier": "builtin", "api": ">=1,<2",
   "service": {"protocol": "chk-c11", "base_url": "http://svc-uia:8000"},
-  "requires_keys": [
-    {"purpose": "run", "extra_scopes": []},
-    {"purpose": "utility", "extra_scopes": ["registry_write"], "config_key": "registrar_key"}],
   "contributes": {
     "task_types": [{"id": "ui_task", "label": "UI 태스크", "icon": "mouse-pointer-click", "bpmn": "serviceTask",
                     "editor": {"kind": "builtin", "entry": "ui_automation.client:UiTaskEditor"},
@@ -278,8 +272,6 @@ Operation:
     "bot_ui.local_runtimes": [{"id": "worker", "label": "Worker 프로세스", "entry": "ui_automation.worker:serve",
                                "port_setting": "CHK_WORKER__LOCAL_API__PORT", "default_port": 8899,
                                "health": "/v1/health", "token_dir": true, "start": "on_demand"}],
-    "configuration": [{"key": "registrar_key", "label": "등록 담당자 키", "scope": "tool_ui",
-                       "schema": {"type": "string"}, "secret": true}],
     "preflight": [{"id": "pages-registered", "entry": "ui_automation.client:PagesRegisteredCheck"}],
     "console.pages": [{"id": "overview", "label": "개요", "module": "ui-automation/overview"}],
     "resources": [{"type": "ui_page", "label": "UI 화면", "catalog_url": "/v1/catalog"}]
@@ -337,6 +329,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 2 | `requires_keys`에 키가 없다 — `run`은 빌드가 `requires.service_apps` 줄을 적는 뜻, `extra_scopes`는 Center가 PC 스위치로 건다. 외부 앱은 **어댑터 일꾼**이 부른다 — 주소·키는 그 일꾼 설정(`CHK_ADAPTER__EXT__<확장>__*`), 실행하는 쪽은 정의 검증·고정만. 예약 키 `service.base_url`·`service.key_ref` → `center.url`·`call_token` 비밀, `CHK_RUNTIME__SERVICE_URL` → `CHK_RUNTIME__CENTER_URL`. 예약 접두 `service.` → `center.` | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | `requires_keys`의 키는 Center가 내려 준다 — `run`은 배포 대상마다, `utility`는 CON-03 「셀렉터 등록」을 켠 PC에. `config_key`는 무시한다(호환), 호스트가 `ctx.secret("utility")`로 준다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 2 | `adapter.auth`가 없는 외부 앱은 **키를 받지 않는 앱**이라고 적었다. E3가 `run` 키를 적고 `auth`가 없는 정의를 거부한다 — 키를 실을 자리 없이 키를 요구하던 모순이었다. 칸은 그대로라 schema도 그대로다 | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-24 | 2 | 외부 확장 등록·해제는 **봉투 대신 정의(해제는 `{id, version}`)를 받고 Center가 서명한다**. `DELETE …/extensions/{id}` 꼴을 없앴다 | [0090](../decisions/0090-center-admin-accounts.md) |

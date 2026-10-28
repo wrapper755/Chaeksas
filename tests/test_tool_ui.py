@@ -3,9 +3,10 @@
 보는 것:
 
 - **Bot UI 자리를 빌려 읽는다** — 데이터 위치 규칙이 Bot UI와 같고(앱끼리 import하지 않아 베꼈다),
-  런타임 포트·끈 확장·앱 주소 명부를 거기서 읽되 **쓰지 않는다**.
+  런타임 포트·끈 확장·**Center 주소**를 거기서 읽되 **쓰지 않는다**.
 - **런타임을 띄우지 않는다** — 답하지 않으면 도구를 열지 않고 까닭과 길을 말한다.
-- 도구의 바깥 세상은 `tool_ui` 호스트이고, 등록 담당자 키는 **도구의 비밀 칸**이다.
+- 도구의 바깥 세상은 `tool_ui` 호스트이고, 도구가 Center에 올릴 때 쓰는 **호출 토큰**은 이 PC
+  Bot UI가 청해 둔 것을 읽기만 한다 (C15, ADR-0102 — 등록 담당자 키·앱 주소 명부는 없어졌다).
 - 묶은 앱에서 Tool UI로 가는 깃발은 **네 자리**(Bot UI 바로가기·Tool UI·묶기 진입·설치 파일)가 같은 글이다.
 """
 
@@ -22,7 +23,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from chaeksas.contracts import SERVICE_URL_SETTING, STORAGE_DIR_SETTING  # noqa: E402
+from chaeksas.contracts import CENTER_URL_SETTING, STORAGE_DIR_SETTING  # noqa: E402
 from chaeksas.core.extensions import ExtensionHost  # noqa: E402
 from chaeksas.tool_ui import places  # noqa: E402
 from chaeksas.tool_ui.credentials import SecretsUnavailable, ToolCredentials, extension_secret_env  # noqa: E402
@@ -106,7 +107,10 @@ def test_a_tool_whose_runtime_does_not_answer_says_why_and_how(tmp_path: Path) -
     assert "기여한 확장이 없습니다" in (down.runtime_problem("nope") or "")
 
 
-def test_the_tool_gets_the_runtime_bot_ui_started_and_its_own_storage(tmp_path: Path) -> None:
+def test_the_tool_gets_the_runtime_bot_ui_started_and_its_own_storage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CHK_BOT_UI__CENTER__URL", raising=False)
     found = tool_host(tmp_path)
     folder = places.runtime_folder("worker", root=found.bot_ui_root)
     folder.mkdir(parents=True)
@@ -118,24 +122,26 @@ def test_the_tool_gets_the_runtime_bot_ui_started_and_its_own_storage(tmp_path: 
     assert values["runtime.worker.state"] == "running"
     # 제 파일은 **제 자리**에 — Bot UI 데이터 폴더에 쓰지 않는다.
     assert Path(values[STORAGE_DIR_SETTING]) == tmp_path / "tool-ui" / "extensions" / BUILTIN
-    assert values[SERVICE_URL_SETTING], "주소는 명부 > 정의 — 명부가 비면 정의의 값"
+    assert CENTER_URL_SETTING in values, "도구가 외부 작업을 올릴 곳 — Bot UI 설정이 없으면 비어 있다"
     assert "registrar_key" not in values, "비밀 칸은 설정으로 가지 않는다"
     assert not (found.bot_ui_root / "extensions").exists()
 
 
-def test_the_service_address_comes_from_what_bot_ui_fetched(tmp_path: Path) -> None:
-    """Tool UI는 Center를 부르지 않는다 — Bot UI가 받아 둔 명부가 정의보다 이긴다 (C13)."""
-    from chaeksas.core.app_directory import DirectoryCache  # noqa: PLC0415
+def test_the_center_address_is_the_one_bot_ui_is_set_to(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tool UI는 Center에 붙지 않는다 — **Bot UI가 붙은 Center**에 올린다 (C13 `center.url`, ADR-0102).
 
+    Bot UI의 설정 파일을 읽기만 하고, Bot UI처럼 환경변수가 이긴다 (같은 규칙 — 어긋나면 여기서 잡는다).
+    """
+    from chaeksas.bot_ui.settings import Settings  # noqa: PLC0415
+
+    monkeypatch.delenv("CHK_BOT_UI__CENTER__URL", raising=False)
     found = tool_host(tmp_path)
-    cache = DirectoryCache(data_dir=found.bot_ui_root)
-    registered = "http://ui-automation.internal:8810"
-    cache.cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache.cache_path.write_text(
-        json.dumps({"apps": {BUILTIN: {"extension_id": BUILTIN, "base_url": registered}}, "extensions": []}),
-        encoding="utf-8",
-    )
-    assert found.service_url(BUILTIN) == registered
+    found.bot_ui_root.mkdir(parents=True)
+    Settings(center_url="http://center.internal:8700").save(found.bot_ui_root / places.BOT_UI_SETTINGS_FILE)
+    assert found.values(BUILTIN)[CENTER_URL_SETTING] == "http://center.internal:8700"
+    monkeypatch.setenv("CHK_BOT_UI__CENTER__URL", "http://elsewhere:8700")
+    assert found.values(BUILTIN)[CENTER_URL_SETTING] == "http://elsewhere:8700"
+    assert Settings.load(found.bot_ui_root / places.BOT_UI_SETTINGS_FILE).center_url == "http://elsewhere:8700"
 
 
 def test_the_context_says_tool_ui_and_resolves_the_tools_own_secret(
@@ -149,15 +155,47 @@ def test_the_context_says_tool_ui_and_resolves_the_tools_own_secret(
 
 
 def test_the_registry_client_reports_the_host_as_caller(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """C11 `caller.type`은 도구를 띄운 호스트다 — Tool UI면 `tool_ui` (ADR-0077)."""
+    """C11 `caller.type`은 도구를 띄운 호스트다 — Tool UI면 `tool_ui` (ADR-0077). 일감은 **Center로** 간다."""
+    import httpx  # noqa: PLC0415
+
     from chaeksas.contracts.service_app import KNOWN_CALLER_TYPES  # noqa: PLC0415
     from chaeksas.ext.ui_automation.client.registration_window import registry_client  # noqa: PLC0415
+    from chaeksas.ext.ui_automation.client.registry_client import RegistryUnreachable  # noqa: PLC0415
 
-    monkeypatch.setenv(extension_secret_env(BUILTIN, "registrar_key"), "uia_test_key")
+    monkeypatch.setenv("CHK_BOT_UI__CENTER__URL", "http://center.test")
+    monkeypatch.setenv(extension_secret_env(BUILTIN, "call_token"), "chk_ctk_tool")
     client = registry_client(tool_host(tmp_path).context(BUILTIN))
     assert client is not None
-    assert client.request("registry_get_page", {"page_id": "p"}, run_id="reg_00000000").caller.type == "tool_ui"
+    sent: list[httpx.Request] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(503, json={"code": "dependency_down"})
+
+    client.client = httpx.Client(base_url="http://center.test", transport=httpx.MockTransport(answer))
+    with pytest.raises(RegistryUnreachable):
+        client.get_page("p")
+    body = json.loads(sent[0].content)
+    assert sent[0].url.path == "/api/v1/external-tasks"
+    assert sent[0].headers["authorization"] == "Bearer chk_ctk_tool"
+    assert (body["topic"], body["caller"]["type"]) == (BUILTIN, "tool_ui")
+    assert body["idempotency"]["run_id"].startswith("reg_"), "등록 세션이다 — Center가 「셀렉터 등록」 스위치를 본다"
     assert "tool_ui" in KNOWN_CALLER_TYPES
+
+
+def test_without_a_center_or_a_call_token_there_is_no_registry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from chaeksas.ext.ui_automation.client.registration_window import registry_client  # noqa: PLC0415
+    from chaeksas.tool_ui import credentials as tool_credentials  # noqa: PLC0415
+
+    monkeypatch.delenv("CHK_BOT_UI__CENTER__URL", raising=False)
+    monkeypatch.setattr(tool_credentials, "bot_ui_call_token", lambda: None)
+    monkeypatch.setenv(extension_secret_env(BUILTIN, "call_token"), "chk_ctk_tool")
+    assert registry_client(tool_host(tmp_path).context(BUILTIN)) is None, "Center 주소가 없다"
+    monkeypatch.setenv("CHK_BOT_UI__CENTER__URL", "http://center.test")
+    monkeypatch.delenv(extension_secret_env(BUILTIN, "call_token"))
+    assert registry_client(tool_host(tmp_path).context(BUILTIN)) is None, "호출 토큰이 없다"
 
 
 def test_parse_spec() -> None:
@@ -274,7 +312,7 @@ class FakeCredentials(ToolCredentials):
 
 
 def test_settings_have_no_registrar_key_field(app: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """등록 담당자 키 칸은 없다 — Center가 이 PC Bot UI에 내려 준다 (TOL-02, ADR-0094 §6)."""
+    """등록 담당자 키 칸은 없다 — 등록은 CON-03 「셀렉터 등록」을 켠 PC의 호출 토큰으로 간다 (TOL-02, C15)."""
     from chaeksas.tool_ui.settings_dialog import NO_FIELDS, ToolSettingsDialog  # noqa: PLC0415
 
     monkeypatch.setenv("CHK_TOOL_UI__DATA_DIR", str(tmp_path))
@@ -285,26 +323,27 @@ def test_settings_have_no_registrar_key_field(app: Any, tmp_path: Path, monkeypa
     assert NO_FIELDS
 
 
-def test_the_utility_key_is_what_bot_ui_received(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """도구용 키는 Bot UI 비밀 저장소의 `util:<앱>`을 **읽기만** 한다 — Bot UI와 같은 이름 규칙이다."""
-    from chaeksas.core.service_keys import utility_name  # noqa: PLC0415
+def test_the_call_token_is_what_bot_ui_asked_for(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """호출 토큰은 Bot UI 비밀 저장소의 `call_token`을 **읽기만** 한다 — Bot UI와 같은 이름 규칙이다 (C15)."""
+    from chaeksas.bot_ui.credentials import CALL_TOKEN as BOT_UI_CALL_TOKEN  # noqa: PLC0415
+    from chaeksas.bot_ui.credentials import SERVICE as BOT_UI_SERVICE  # noqa: PLC0415
     from chaeksas.tool_ui import credentials as tool_credentials  # noqa: PLC0415
 
-    assert tool_credentials.BOT_UI_UTILITY_PREFIX + BUILTIN == utility_name(BUILTIN)
-    from chaeksas.bot_ui.credentials import SERVICE as BOT_UI_SERVICE  # noqa: PLC0415
-
     assert tool_credentials.BOT_UI_SERVICE == BOT_UI_SERVICE
+    assert tool_credentials.BOT_UI_CALL_TOKEN == BOT_UI_CALL_TOKEN
     asked: list[tuple[str, str]] = []
 
     def stored(self: Any, name: str) -> str | None:
         asked.append((self.service, name))
-        return "chk_svc_utility" if self.service == BOT_UI_SERVICE else None
+        return "chk_ctk_from_bot_ui" if self.service == BOT_UI_SERVICE else None
 
-    monkeypatch.delenv(extension_secret_env(BUILTIN, "utility"), raising=False)
+    monkeypatch.delenv(extension_secret_env(BUILTIN, "call_token"), raising=False)
     monkeypatch.setattr(tool_credentials.ToolCredentials, "stored", stored)
     ctx = tool_host(tmp_path).context(BUILTIN)
-    assert ctx.secret("utility") == "chk_svc_utility"
-    assert (BOT_UI_SERVICE, utility_name(BUILTIN)) in asked
+    assert ctx.secret("call_token") == "chk_ctk_from_bot_ui"
+    assert (BOT_UI_SERVICE, BOT_UI_CALL_TOKEN) in asked
+    monkeypatch.setenv(extension_secret_env(BUILTIN, "call_token"), "chk_ctk_env")
+    assert ctx.secret("call_token") == "chk_ctk_env", "환경변수가 먼저다 (자동화·CI)"
 
 
 # ─────────────────────────── 띄우는 길 (ADR-0077 §3·§6) ───────────────────────────

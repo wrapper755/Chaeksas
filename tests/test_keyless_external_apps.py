@@ -5,8 +5,11 @@
 1. **정의가 스스로 어긋나지 않는다** — `requires_keys`에 `run`이 있으면 `adapter.auth`도 있다 (E3).
    Center 등록·STU-15 「정의 파일 열기」가 같은 `validate()`를 쓴다.
 2. **판단은 하나다** (`takes_key`) — `auth`가 없는 외부 앱은 키를 받지 않고, C11은 늘 받는다.
-3. **키를 받지 않는 앱은 키를 묻는 자리에서 빠진다** — B7·매니페스트 `key_ref`·사전 점검. 목록을
-   **주지 않으면** 지금처럼 모든 앱에 묻는다 (모르는 것으로 풀어 주지 않는다).
+3. **키를 받지 않는 앱은 키를 묻는 자리에서 빠진다** — B7·매니페스트 `key_ref`·참조 세기. 목록을
+   **주지 않으면** 지금처럼 모든 앱에 적는다 (모르는 것으로 풀어 주지 않는다).
+
+키 **값**은 이제 어댑터 일꾼의 설정이 든다 (ADR-0102 — `CHK_ADAPTER__EXT__<앱>__KEY`) — 사전 점검이
+「이 PC에 값이 있나」를 묻지 않는다. 그래서 여기 남은 것은 정의·그림·매니페스트의 모양뿐이다.
 """
 
 from __future__ import annotations
@@ -137,11 +140,8 @@ def test_the_build_writes_no_key_reference_for_it(space: Workspace) -> None:
     assert not [v for v in validate_manifest(built) if v.rule == "R4"], "적지 않은 참조는 R4가 묻지 않는다"
 
 
-def test_the_preflight_asks_for_no_value(space: Workspace) -> None:
-    """사전 점검·BUI-10은 `key_apps_of()`로 매니페스트를 읽는다 — 따로 고치지 않아도 빠진다."""
+def test_the_key_reference_counter_skips_it(space: Workspace) -> None:
+    """참조를 세는 자리는 `key_apps_of()` 하나다 — 키를 받지 않는 앱은 거기서도 빠진다."""
     process = space.import_example(EXAMPLES, CREDIT)
-    nothing = lambda _ref: None  # noqa: E731
-    assert preflight.check(build_manifest(process), key_value=nothing).missing_key_refs
-    built = build_manifest(process, keyless_apps={APP})
-    assert preflight.key_apps_of(built) == {}
-    assert preflight.check(built, key_value=nothing).missing_key_refs == ()
+    assert preflight.key_apps_of(build_manifest(process))
+    assert preflight.key_apps_of(build_manifest(process, keyless_apps={APP})) == {}

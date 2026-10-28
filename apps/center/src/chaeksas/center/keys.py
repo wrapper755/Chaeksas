@@ -176,7 +176,8 @@ def get(store: Store, key_id: str) -> KeyRecord | None:
 
 
 def listing(store: Store, *, key_type: str | None = None, state: str | None = None) -> list[KeyRecord]:
-    rows = store.rows("SELECT * FROM center_keys ORDER BY created_at DESC")
+    # 호출 토큰(C15)은 실행마다 생기는 짧은 토큰이라 CON-11 목록에 보이지 않는다.
+    rows = store.rows("SELECT * FROM center_keys WHERE type != 'call_token' ORDER BY created_at DESC")
     found = [_record(r) for r in rows]
     now = now_iso()
     if key_type:

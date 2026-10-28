@@ -4,6 +4,7 @@ requires-python = "==3.12.*"
 
 [manifest]
 members = [
+    "chaeksas-adapter-consumer",
     "chaeksas-bot-ui",
     "chaeksas-center",
     "chaeksas-contracts",
@@ -143,6 +144,25 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/80/fb/0bb75b7039588c074b37ae99f40d9bfddf990ecb2fbc346ebccd2e56b9be/cffi-2.1.1-cp312-cp312-win32.whl", hash = "sha256:046bfc24911b37851ee1b51aab8bffe713d89c68c6a057b09484ce9fd5f69b4e", size = 175292, upload-time = "2026-08-03T21:19:55.566Z" },
     { url = "https://files.pythonhosted.org/packages/d9/79/615cc094e2fb508cade7de88d3b4f6c4ec2bab695c97bce9153dc65aadf5/cffi-2.1.1-cp312-cp312-win_amd64.whl", hash = "sha256:f53e442b08449d42821fa4a4fba000095af9f62742a500f978a9f557ec44339a", size = 185919, upload-time = "2026-08-03T21:19:56.89Z" },
     { url = "https://files.pythonhosted.org/packages/70/c6/d0ea84713fe46b243a436a18fcd47d639732747e21635c8a27191b06dc30/cffi-2.1.1-cp312-cp312-win_arm64.whl", hash = "sha256:7bde5e4cc5c10140859842b9d383af292b22639a4dffb725314baf45968cef80", size = 180093, upload-time = "2026-08-03T21:19:58.155Z" },
+]
+
+[[package]]
+name = "chaeksas-adapter-consumer"
+version = "0.1.0"
+source = { editable = "apps/adapter_consumer" }
+dependencies = [
+    { name = "chaeksas-contracts" },
+    { name = "chaeksas-core" },
+    { name = "chaeksas-service-kit" },
+    { name = "httpx" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chaeksas-contracts", editable = "packages/contracts" },
+    { name = "chaeksas-core", editable = "packages/core" },
+    { name = "chaeksas-service-kit", editable = "packages/service_kit" },
+    { name = "httpx", specifier = ">=0.27" },
 ]
 
 [[package]]
@@ -331,6 +351,7 @@ dependencies = [
     { name = "chaeksas-contracts" },
     { name = "chaeksas-llm" },
     { name = "fastapi" },
+    { name = "httpx" },
 ]
 
 [package.metadata]
@@ -338,6 +359,7 @@ requires-dist = [
     { name = "chaeksas-contracts", editable = "packages/contracts" },
     { name = "chaeksas-llm", editable = "packages/llm" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
 ]
 
 [[package]]

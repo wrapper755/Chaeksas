@@ -224,6 +224,18 @@
   "$id": "urn:chaeksas:contracts:c15-fetch-response",
   "additionalProperties": true,
   "properties": {
+    "consumer_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Consumer Id"
+    },
     "rotated_token": {
       "anyOf": [
         {

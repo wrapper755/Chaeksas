@@ -4,7 +4,7 @@ import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@c
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import { CenterError, center, session } from "@/lib/center";
-import { keyStages, readinessLabel } from "@/lib/summary";
+import { readinessLabel } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { BotUiActions, SelectorRegistration } from "../actions-ui";
 import type { Route } from "next";
@@ -42,14 +42,10 @@ const SOURCE: Record<string, string> = {
   delegation: "위임",
 };
 
-/** 「셀렉터 등록」 한 줄 (ADR-0094 §6). 도구용 키가 어디까지 왔나를 함께 말한다. */
+/** 「셀렉터 등록」 한 줄 — 이 PC의 Tool UI가 셀렉터 등록 작업을 올려도 되나 (C15 §올리기). */
 function selectorLine(info: BotUiInfo): string {
   if (!info.selector_registration) return "꺼짐 — 이 PC의 Tool UI는 셀렉터를 등록할 수 없습니다.";
-  const keys = (info.service_keys ?? []).filter((one) => one.purpose === "utility");
-  if (keys.length === 0) return "켜짐 — 이 PC에 셀렉터 등록 도구가 없거나, Center가 아직 키를 짓지 않았습니다.";
-  return keys
-    .map((one) => (one.stage === "received" ? `켜짐 — ${one.app_id} 키 받음` : `켜짐 — ${one.app_id} 키를 보내는 중`))
-    .join(" · ");
+  return "켜짐 — 이 PC의 Tool UI가 셀렉터 등록 작업을 올릴 수 있습니다.";
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -153,18 +149,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
       cell: (row) => {
         const label = info ? readinessOf(row, info) : null;
         if (!label) return "보고 없음";
-        // 「서비스 앱 키 받지 못함」이면 **Center 쪽 까닭**을 붙인다 (ADR-0094) — 현장에서 할 일은 없다.
-        const why = label === "서비스 앱 키 받지 못함" && info ? keyStages(info.service_keys, row.bpm_process_id) : [];
-        return (
-          <span title={why.join("\n")} className="inline-flex flex-col gap-1">
-            <StatusBadge group="Bot 준비" label={label} />
-            {why.map((line) => (
-              <span key={line} className="text-caption text-text-muted">
-                {line}
-              </span>
-            ))}
-          </span>
-        );
+        return <StatusBadge group="Bot 준비" label={label} />;
       },
     },
   ];

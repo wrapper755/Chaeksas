@@ -3,18 +3,6 @@
   "additionalProperties": true,
   "description": "`GET /api/v1/consumers`의 한 줄 (CON-07 「일꾼」).",
   "properties": {
-    "app_id": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "App Id"
-    },
     "approved_at": {
       "anyOf": [
         {
@@ -26,6 +14,13 @@
       ],
       "default": null,
       "title": "Approved At"
+    },
+    "apps": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Apps",
+      "type": "array"
     },
     "consumer_id": {
       "title": "Consumer Id",
@@ -65,18 +60,6 @@
       },
       "title": "Topics",
       "type": "array"
-    },
-    "version": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Version"
     }
   },
   "required": [

@@ -9,7 +9,6 @@
 | 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
 | 관련 화면 | STU-08·13, BUI-09, TOL-03~05 |
 
-> 제안: [ADR-0102](../decisions/0102-calling-outside-is-pull.md) 조각 4 — 세션의 `service_key`(UI 자동화 앱 키)는 **호출 토큰**(C15)으로 바뀌고 앱 주소는 넘기지 않는다. 아래는 지금 도는 것이다.
 
 ## 목적
 
@@ -74,7 +73,7 @@
 | `headed` | bool | | 기본 false. Studio 시험은 true 권장 |
 | `heal` | bool | | 자가 치유 사용. 기본 true |
 | `report` | bool | | 닫을 때 UI 자동화 앱에 보고할까 (C8). 기본 true. **셀렉터 시험(TOL-05)에서 끈다** — 통계에 넣지 않을 뿐 아니라 아예 보내지 않는다 |
-| `service_key` | str | Bot·Studio만 ✓ | **UI 자동화 앱 API 키 값.** 부르는 쪽이 BPM 프로세스의 키 참조를 풀어 넣는다 (ADR-0013). Worker는 이 값을 세션 동안 메모리에만 두고, 디스크·로그에 남기지 않는다 |
+| `call_token` | str | Bot·Studio·등록 세션 ✓ | **호출 토큰** (C15 — [ADR-0102](../decisions/0102-calling-outside-is-pull.md)). Worker는 이것으로 Center에 계획·치유·보고를 올린다(C8). 부르는 쪽이 넣는다 — Bot UI의 실행기 자식은 제어 파일로 받은 것, Studio는 제 키로 청한 것, Tool UI는 Bot UI 비밀 저장소의 것. Worker는 이 값을 세션 동안 메모리에만 두고, 디스크·로그에 남기지 않는다. 옛 이름 `service_key`로 오면 받지 않는다(422) |
 
 → 201 SessionInfo `{session_id, session_secret, page_id, current_url, plan_source: "server" | "cache", steps_run: 0, mutating_steps_ok: 0, planned_steps}`
 
@@ -170,7 +169,7 @@
 | `GET /v1/registration/{session_id}/pick/events` | **고른 것을 비워 가져온다** (한 번 준 것은 다시 주지 않는다) |
 | `POST /v1/registration/{session_id}/highlight` | `{locators: [로케이터…]}` → 그 요소를 화면에 표시 (TOL-03 5번) |
 | `POST /v1/registration/{session_id}/verify` | `{ladders: {시맨틱 키: [로케이터…]}}` → 칸별 통과·실패 |
-| `POST /v1/registration/{session_id}/plan` | **등록 세션에 계획을 싣는다** (TOL-05 「시험」이 등록 탭의 화면을 이어 쓴다) `{page_id, heal?, report?, service_key}` → `SessionInfo`(`plan_source`). 그 뒤 §3 스텝을 **시맨틱 키로** 받고 수행 모드는 `deterministic`이다. 다시 부르면 **나중 것이 이긴다**(다른 화면으로 바꿔 시험한다). 받아 오기 실패는 세션을 열 때와 같다(§2 — 4xx는 앱의 코드 그대로, 닿지 못하고 캐시도 없으면 502 `ui_automation_unreachable`). 계획의 `platform`이 열린 화면과 다르면 409 `platform_mismatch`. **분석·검증은 계속 된다**(계획이 있어도 등록 세션이다). 보고는 닫을 때 `origin: test`로 간다 |
+| `POST /v1/registration/{session_id}/plan` | **등록 세션에 계획을 싣는다** (TOL-05 「시험」이 등록 탭의 화면을 이어 쓴다) `{page_id, heal?, report?, call_token}` → `SessionInfo`(`plan_source`). 그 뒤 §3 스텝을 **시맨틱 키로** 받고 수행 모드는 `deterministic`이다. 다시 부르면 **나중 것이 이긴다**(다른 화면으로 바꿔 시험한다). 받아 오기 실패는 세션을 열 때와 같다(§2 — 거절은 Center·앱의 코드 그대로, 닿지 못하고 캐시도 없으면 502 `ui_automation_unreachable`). 계획의 `platform`이 열린 화면과 다르면 409 `platform_mismatch`. **분석·검증은 계속 된다**(계획이 있어도 등록 세션이다). 보고는 닫을 때 `origin: test`로 간다 |
 
 **`business_key`는 Worker가 짓는다** (`reg_<hex8>`) — 등록 화면이 실행 키를 흉내 낼 일이 없다. 등록 세션은 `page_id`가 없어 **열 때는** 계획(C8)을 받아 오지 않는다 — 시험할 때 `…/plan`으로 싣는다.
 
@@ -228,6 +227,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | 세션의 `service_key` → `call_token`(호출 토큰) — Worker는 UI 자동화 앱의 주소·키를 모르고 Center에 올린다 (C8) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-18 | 1 | §5 데스크톱 `pick`(훅 없이 커서·Ctrl 읽기)·`highlight`(`rect` — 물리 픽셀, 그리기는 부르는 쪽) (09-gaps §7-3) | 0072 |
 | 2026-10-18 | 1 | §5 `POST /registration/{id}/plan` — 등록 세션에 계획을 싣는다. BUI-08 「시험」이 등록 탭의 화면을 **놓지 않고** 이어 쓴다 (09-gaps §7-2) | 0014 |
 | 2026-10-18 | 1 | §5 데스크톱 창에서 담기 — `GET /registration/windows`·`POST /registration/desktop`, `analyze` 후보의 `platform`·`control_type`·`class_name`, 데스크톱 `analyze`. 현장 리허설에서 데스크톱 화면을 사람이 등록할 길이 없던 것 (09-gaps §6) | 0033 |

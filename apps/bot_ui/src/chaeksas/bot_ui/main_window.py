@@ -83,7 +83,6 @@ NO_ENDING = "끝 기록이 없습니다 — 실행기가 도중에 멈췄을 수
 
 #: 「준비」의 표기 — `status_map`의 「Bot 준비」에 있는 것만 쓴다 (`docs/07-style-guide.md`).
 READY = "준비됨"
-NO_KEYS = "서비스 앱 키 받지 못함"
 NO_EXTENSION = "확장 없음"
 #: 확장이 **깔려 있는데 사람이 껐다** (ADR-0043). 「확장 없음」과 섞지 않는다 — 고치는 길이
 #: 「다시 깔기」가 아니라 **BUI-11에서 켜기**다. 색도 다르다 (neutral — 고장이 아니다).
@@ -94,15 +93,12 @@ PREFLIGHT_BLOCKED = "사전 점검 실행 불가"
 def readiness_label(found: Preflight) -> tuple[str, str, str]:
     """사전 점검 결과 → `(status_map 표기, 줄에 보일 글, 툴팁)`.
 
-    표기는 색을 고르는 데 쓰므로 **표에 있는 값이어야 한다**. 보일 글에는 빠진 참조 이름을 붙인다
-    (BUI-04 「서비스 앱 키 받지 못함: <참조>」) — 무엇이 빠졌는지 알아야 관리자에게 말할 수 있다.
+    표기는 색을 고르는 데 쓰므로 **표에 있는 값이어야 한다**.
     """
     if not found.blocks:
         return READY, READY, ""
     first = next(f for f in found.findings if f.blocks)
     tip = "\n".join([first.message, *first.items, *([first.fix_hint] if first.fix_hint else [])])
-    if found.missing_key_refs:
-        return NO_KEYS, f"{NO_KEYS}: {', '.join(found.missing_key_refs)}", tip
     if EXTENSION_TURNED_OFF in found.blocked:
         # **「확장 없음」보다 먼저 본다** — 꺼진 것과 없는 것이 함께 걸렸으면 켜는 쪽이 먼저
         # 할 수 있는 일이다 (ADR-0043 — 「다시 깔기」로 안내하면 할 수 없는 일을 시킨다).

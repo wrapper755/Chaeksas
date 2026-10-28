@@ -263,6 +263,7 @@ def _info(store: Store, row: Any) -> EnrollmentInfo:
         decided_at=row["decided_at"],
         reason=row["reason"],
         key_id=row["key_id"],
+        topics=[str(one) for one in request_body.get("topics") or []],
     )
 
 
@@ -355,8 +356,13 @@ def approve(
             (actor, now, record.key_id, dumps(sealed.to_json_dict()), replaced, enrollment_id),
         )
         if kind == CONSUMER:
-            # 일꾼은 `register`가 없다 — **승인이 행을 만든다**. manifest는 들일 때 올린 것이다.
-            manifest = (loads(row["request_json"], {}) or {}).get("manifest")
+            # 일꾼은 `register`가 없다 — **승인이 행을 만든다**. manifest는 들일 때 올린 것이다
+            # (승인된 토픽의 것만 남긴다).
+            manifest = [
+                one
+                for one in (loads(row["request_json"], {}) or {}).get("manifests") or []
+                if isinstance(one, dict) and one.get("app_id") in granted
+            ]
             host_id = host_id or f"csm_{secrets.token_hex(8)}"
             cur.execute(
                 "INSERT INTO consumers (consumer_id, key_id, machine_id, name, topics_json, manifest_json,"

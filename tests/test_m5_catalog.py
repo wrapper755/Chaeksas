@@ -1,29 +1,31 @@
-"""확장 기여 자원 — 카탈로그를 읽어 쌓는다 (C7·C11·C13 §5, M5 조각 10).
+"""확장 기여 자원 — 일꾼이 올린 카탈로그를 쌓는다 (C7·C13 §5·C15, ADR-0102).
 
-진짜 Center와 **진짜 UI 자동화 앱**을 띄워, Center가 그 앱의 `/v1/catalog`를 읽어 「UI 화면」을
-리소스 목록에 싣는 것까지 본다.
+**Center는 카탈로그를 읽으러 가지 않는다.** 서버 부분의 일꾼이 manifest의 `resources`로 종류를 알리고,
+카탈로그는 판(`revision`)이 바뀌면 `PUT /consumers/self/catalogs/{type}`로 올린다 — 진짜 Center와 제품의
+들이기·`Consumer.publish`로 본다.
 
-거듭 보는 것 다섯.
-
-1. **내장 확장의 카탈로그는 서버 부분이 알린다** (C11 `resources`) — 정의가 Center에 없다.
-2. **`revision`이 같으면 다시 쓰지 않는다** — 같은 것을 다시 쓰면 계획 캐시가 공연히 버려진다.
-3. **닿지 못하면 들고 있던 것을 지우지 않는다** — 사유만 남긴다.
-4. **Center는 `data`를 해석하지 않는다** (C13 §5) — 그대로 넘긴다.
-5. **`requires.resources` 누락 검사가 이제 실제로 돈다** — 등록하면 경고가 사라진다.
+| 보는 것 | 왜 |
+| --- | --- |
+| 올린 항목이 목록에 뜨고 **어느 확장**의 것인지 manifest의 `extension`이 말한다 | 내장·사내 확장 정의는 Center에 없다 |
+| Center는 `data`를 해석하지 않는다 | C13 §5 |
+| 종류는 manifest의 `resources`가 정하고 탭이 된다 | CON-07 |
+| **`revision`이 같으면 다시 쓰지 않는다**, 판이 바뀌면 없어진 항목은 지운다 | 계획 캐시를 공연히 버리지 않는다 |
+| 남의 종류·남의 토픽·틀린 모양은 받지 않는다 | 일꾼이 남의 자원을 자처하지 못한다 |
+| `requires.resources` 누락은 경고만, 올리면 사라진다 | 배포를 막는 것은 확장 누락·해시 불일치와 R8뿐이다 |
+| `page_id` → 그 앱의 관리 콘솔 주소로 이어진다 | CON-01 「UI 태스크」 링크 |
 """
 
 from __future__ import annotations
 
 import io
 import json
-import threading
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-import uvicorn
+from consumers import enroll
 from fastapi.testclient import TestClient
 
 from chaeksas.center.api import resources
@@ -36,9 +38,23 @@ READ = "t-read"
 ADMIN = {"Authorization": f"Bearer {TOKEN}"}
 READ_AUTH = {"Authorization": f"Bearer {READ}"}
 AT = "2026-10-08T09:00:00+09:00"
+APP = "demo.pages"
 
 #: 그 자원을 쓰는 BPM 프로세스의 `requires.resources` 한 줄 (C1).
 NEEDS_PAGE = {"type": "ui_page", "id": "erp.order.form"}
+
+MANIFEST: dict[str, Any] = {
+    "schema": 1,
+    "app_id": APP,
+    "name": "화면 레지스트리",
+    "version": "1.0.0",
+    "category": "system",
+    "console_url": "http://127.0.0.1:8599",
+    "operations": [{"name": "noop", "modes": ["deterministic"]}],
+    "extension": {"id": "demo-ui", "version": "1.0.0"},
+    # 앱이 **자기 카탈로그의 종류**를 알린다 (C11) — 탭 이름도 여기서 온다.
+    "resources": [{"type": "ui_page", "catalog_url": "/v1/catalog", "label": "UI 화면"}],
+}
 
 
 @pytest.fixture
@@ -60,82 +76,47 @@ def client(tmp_path: Path, store: Store) -> Iterator[TestClient]:
         yield found
 
 
-# ─────────────────────── 카탈로그를 주는 앱 (손으로 만든 것) ───────────────────────
-
-
-class Catalogue:
-    """카탈로그를 주는 작은 앱. **판과 항목을 시험이 바꿔 가며** Center의 반응을 본다."""
-
-    def __init__(self) -> None:
-        self.revision = 1
-        self.items: list[dict[str, Any]] = [
-            {
-                "type": "ui_page",
-                "id": "erp.order.form",
-                "name": "ERP 주문 입력",
-                "summary": "요소 12개 · 사용 중 9",
-                "updated_at": AT,
-                "data": {"elements": 12, "platform": "web"},
-            }
-        ]
-        self.reads = 0
-        self.fail = False
-
-
 @pytest.fixture
-def app_url() -> Iterator[tuple[str, Catalogue]]:
-    """`service_kit` 앱 + 카탈로그 경로를 127.0.0.1에 띄운다 (C11 `resources`가 가리킨다)."""
-    from fastapi import Response
+def worker(client: TestClient, tmp_path: Path) -> dict[str, str]:
+    """카탈로그를 올릴 일꾼 — `demo.pages` 토픽으로 들었다."""
+    tokens = enroll(client, topics=[APP], manifests=[MANIFEST], folder=tmp_path / "consumer")
+    return {"Authorization": f"Bearer {tokens.token()}"}
 
-    from chaeksas.contracts.service_app import ServiceAppManifest
-    from chaeksas.service_kit.app import create_app as create_service_app
-    from chaeksas.service_kit.stores import InMemoryKeyStore
 
-    state = Catalogue()
-    manifest = ServiceAppManifest.model_validate(
-        {
-            "schema": 1,
-            "app_id": "demo.pages",
-            "name": "화면 레지스트리",
-            "version": "1.0.0",
-            "category": "system",
-            "console_url": "http://127.0.0.1:8599",
-            "operations": [{"name": "noop", "modes": ["deterministic"]}],
-            "extension": {"id": "demo-ui", "version": "1.0.0"},
-            # **이것이 이번 조각의 요점이다** — 앱이 자기 카탈로그를 알린다 (C11).
-            "resources": [{"type": "ui_page", "catalog_url": "/v1/catalog", "label": "UI 화면"}],
-        }
+def page(**over: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "type": "ui_page",
+        "id": "erp.order.form",
+        "name": "ERP 주문 입력",
+        "summary": "요소 12개 · 사용 중 9",
+        "updated_at": AT,
+        "data": {"elements": 12, "platform": "web"},
+    }
+    return body | over
+
+
+def put(
+    client: TestClient,
+    worker: dict[str, str],
+    *,
+    revision: int | None = 1,
+    items: list[dict[str, Any]] | None = None,
+    app_id: str = APP,
+) -> Any:
+    answer = client.put(
+        "/api/v1/consumers/self/catalogs/ui_page",
+        json={
+            "app_id": app_id,
+            "catalog": {"schema": 1, "revision": revision, "items": [page()] if items is None else items},
+        },
+        headers=worker,
     )
-    made = create_service_app(
-        manifest, {"noop": lambda request, caller: {}}, keys=InMemoryKeyStore()
-    )
-
-    @made.get("/v1/catalog")
-    def catalog() -> Any:
-        state.reads += 1
-        if state.fail:
-            return Response(status_code=503)
-        return {"schema": 1, "revision": state.revision, "items": state.items}
-
-    config = uvicorn.Config(made, host="127.0.0.1", port=0, log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    while not server.started:
-        if not thread.is_alive():  # pragma: no cover
-            raise RuntimeError("앱을 띄우지 못했다")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    yield f"http://127.0.0.1:{port}", state
-    server.should_exit = True
-    thread.join(timeout=5)
+    return answer
 
 
-def register_app(client: TestClient, base_url: str) -> dict[str, Any]:
-    answer = client.post(
-        "/api/v1/resources/service-apps", json={"base_url": base_url}, headers=ADMIN
-    )
-    assert answer.status_code in (200, 201), answer.text
-    return dict(answer.json())
+def contributed(client: TestClient) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()["items"]
+    return found
 
 
 def package_zip(requires: dict[str, Any] | None = None) -> bytes:
@@ -181,214 +162,172 @@ def upload(client: TestClient, raw: bytes) -> dict[str, Any]:
     return dict(answer.json())
 
 
-# ─────────────────────────── 읽어 쌓기 (C7·C13 §5) ───────────────────────────
+# ─────────────────────────── 쌓기 (C7·C13 §5) ───────────────────────────
 
 
-def test_the_app_advertises_its_catalog(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
-    """**내장 확장의 카탈로그는 서버 부분이 알린다** (C11 `resources`) — 정의가 Center에 없다."""
-    base, _state = app_url
-    register_app(client, base)
-    found = client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()
-    [one] = found["items"]
+def test_an_uploaded_catalog_becomes_resources(client: TestClient, worker: dict[str, str]) -> None:
+    answer = put(client, worker)
+    assert answer.status_code == 200, answer.text
+    assert answer.json() == {"resource_type": "ui_page", "revision": 1, "stored": True}
+    [one] = contributed(client)
     assert one["resource_type"] == "ui_page" and one["id"] == "erp.order.form"
     assert one["name"] == "ERP 주문 입력" and one["summary"] == "요소 12개 · 사용 중 9"
     assert one["extension_id"] == "demo-ui", "어느 확장이 기여했나 (manifest의 `extension`)"
     assert one["revision"] == 1
 
 
-def test_center_does_not_interpret_the_data(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
+def test_center_does_not_interpret_the_data(client: TestClient, worker: dict[str, str]) -> None:
     """**`data`는 그대로 넘긴다** (C13 §5) — 플랫폼은 확장 고유 내용을 모른다."""
-    base, _state = app_url
-    register_app(client, base)
-    [one] = client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()["items"]
+    put(client, worker)
+    [one] = contributed(client)
     assert one["data"] == {"elements": 12, "platform": "web"}
 
 
-def test_the_kinds_become_tabs(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
-    """CON-07은 **자원 종류마다 탭 하나**다 (C7) — 그 목록이 여기서 온다."""
-    base, _state = app_url
-    register_app(client, base)
-    found = client.get("/api/v1/resources/contributed-kinds", headers=READ_AUTH).json()
-    [one] = found["items"]
-    assert one["resource_type"] == "ui_page" and one["label"] == "UI 화면"
+def test_the_kinds_become_tabs(client: TestClient, worker: dict[str, str]) -> None:
+    """CON-07은 **자원 종류마다 탭 하나**다 (C7) — 종류는 manifest가, 수는 올린 것이 말한다."""
+    found = client.get("/api/v1/resources/contributed-kinds", headers=READ_AUTH).json()["items"]
+    assert [(one["resource_type"], one["label"], one["count"]) for one in found] == [("ui_page", "UI 화면", 0)]
+    put(client, worker)
+    [one] = client.get("/api/v1/resources/contributed-kinds", headers=READ_AUTH).json()["items"]
     assert one["count"] == 1 and one["extensions"] == ["demo-ui"] and one["errors"] == []
 
 
-def test_one_resource_by_id(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
-    base, _state = app_url
-    register_app(client, base)
-    one = client.get(
-        "/api/v1/resources/contributed/ui_page/erp.order.form", headers=READ_AUTH
-    ).json()
+def test_one_resource_by_id(client: TestClient, worker: dict[str, str]) -> None:
+    put(client, worker)
+    one = client.get("/api/v1/resources/contributed/ui_page/erp.order.form", headers=READ_AUTH).json()
     assert one["name"] == "ERP 주문 입력"
-    assert client.get(
-        "/api/v1/resources/contributed/ui_page/없는것", headers=READ_AUTH
-    ).status_code == 404
+    assert client.get("/api/v1/resources/contributed/ui_page/없는것", headers=READ_AUTH).status_code == 404
 
 
-def test_the_same_revision_is_not_rewritten(
-    client: TestClient, store: Store, app_url: tuple[str, Catalogue]
-) -> None:
+def test_the_same_revision_is_not_rewritten(client: TestClient, worker: dict[str, str]) -> None:
     """**판이 같으면 항목을 다시 쓰지 않는다** (C7) — 계획 캐시를 공연히 버리지 않게."""
-    base, state = app_url
-    register_app(client, base)  # 등록이 카탈로그를 한 번 읽는다
-    assert resources.refresh_catalogs(store, force=True) == 0, "같은 판이면 갱신 0"
+    put(client, worker)
+    same = put(client, worker, items=[page(name="몰래 고침")])
+    assert same.json()["stored"] is False
+    assert contributed(client)[0]["name"] == "ERP 주문 입력"
 
-    state.revision = 2
-    state.items[0]["name"] = "ERP 주문 입력 (고침)"
-    assert resources.refresh_catalogs(store, force=True) == 1
-
-    [one] = client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()["items"]
+    put(client, worker, revision=2, items=[page(name="ERP 주문 입력 (고침)")])
+    [one] = contributed(client)
     assert one["name"] == "ERP 주문 입력 (고침)" and one["revision"] == 2
 
 
-def test_items_that_disappear_are_dropped(
-    client: TestClient, store: Store, app_url: tuple[str, Catalogue]
-) -> None:
+def test_a_catalog_without_a_revision_is_always_written(client: TestClient, worker: dict[str, str]) -> None:
+    """판이 없으면 같은지 모른다 — 매번 쓴다."""
+    put(client, worker, revision=None)
+    again = put(client, worker, revision=None, items=[page(name="새 이름")])
+    assert again.json()["stored"] is True and contributed(client)[0]["name"] == "새 이름"
+
+
+def test_items_that_disappear_are_dropped(client: TestClient, worker: dict[str, str]) -> None:
     """카탈로그가 더 안 주는 항목은 지운다 — **그 출처가 준 것으로 맞춘다**."""
-    base, state = app_url
-    register_app(client, base)
-    state.revision = 2
-    state.items = []
-    resources.refresh_catalogs(store, force=True)
-    assert client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()["items"] == []
+    put(client, worker)
+    put(client, worker, revision=2, items=[])
+    assert contributed(client) == []
 
 
-def test_an_unreachable_catalog_keeps_what_we_have(
-    client: TestClient, store: Store, app_url: tuple[str, Catalogue]
+def test_a_catalog_that_sends_another_kind_is_ignored(client: TestClient, worker: dict[str, str]) -> None:
+    """올린 종류만 받는다 — 카탈로그가 남의 종류를 담아 보내도 끼워 넣지 않는다."""
+    put(client, worker, items=[page(id="a", name="A"), {"type": "report", "id": "b", "name": "B"}])
+    assert [one["id"] for one in contributed(client)] == ["a"]
+
+
+def test_a_catalog_for_another_topic_is_refused(client: TestClient, worker: dict[str, str]) -> None:
+    refused = put(client, worker, app_id="hr.payroll")
+    assert refused.status_code == 403 and refused.json()["code"] == "topic_not_granted"
+    broken = client.put(
+        "/api/v1/consumers/self/catalogs/ui_page", json={"app_id": APP, "catalog": {"items": "x"}}, headers=worker
+    )
+    assert broken.status_code == 422 and broken.json()["code"] == "input_invalid"
+    assert put(client, ADMIN).status_code == 403, "일꾼 토큰으로만 올린다"
+    assert contributed(client) == []
+
+
+def test_filtering_by_resource_type(client: TestClient, worker: dict[str, str]) -> None:
+    put(client, worker)
+    picked = client.get("/api/v1/resources?type=contributed&resource_type=ui_page", headers=READ_AUTH)
+    assert len(picked.json()["items"]) == 1
+    other = client.get("/api/v1/resources?type=contributed&resource_type=없는종류", headers=READ_AUTH)
+    assert other.json()["items"] == []
+
+
+def test_the_consumer_publishes_through_the_same_path(
+    client: TestClient, tmp_path: Path, worker: dict[str, str]
 ) -> None:
-    """**닿지 못하면 지우지 않는다** — 사유만 남긴다 (앱이 잠깐 꺼진 것일 수 있다)."""
-    base, state = app_url
-    register_app(client, base)
-    state.fail = True
-    resources.refresh_catalogs(store, force=True)
+    """제품의 `Consumer.publish()`가 같은 길로 올린다 — 시험이 손으로 부른 것과 결과가 같다."""
+    from chaeksas.contracts.extension import Catalog  # noqa: PLC0415
+    from chaeksas.contracts.service_app import ServiceAppManifest  # noqa: PLC0415
+    from chaeksas.service_kit import Consumer, TokenFile  # noqa: PLC0415
+    from chaeksas.service_kit import create_app as create_service_app
 
-    assert len(client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()["items"]) == 1
-    kinds = client.get("/api/v1/resources/contributed-kinds", headers=READ_AUTH).json()["items"]
-    assert kinds[0]["errors"] and "http_503" in kinds[0]["errors"][0]
-
-
-def test_reading_respects_the_interval(
-    client: TestClient, store: Store, app_url: tuple[str, Catalogue]
-) -> None:
-    """**목록을 읽을 때마다 카탈로그를 두드리지 않는다** (5분 간격, C7)."""
-    base, state = app_url
-    register_app(client, base)
-    after_register = state.reads
-    assert after_register == 1, "등록이 한 번 읽는다"
-
-    client.get("/api/v1/resources?type=contributed", headers=READ_AUTH)
-    client.get("/api/v1/resources?type=contributed", headers=READ_AUTH)
-    assert state.reads == after_register, "간격 안이라 다시 읽지 않았다"
-
-    assert resources.refresh_catalogs(store, force=True) >= 0
-    assert state.reads > after_register, "「새로 고침」은 간격을 무시한다"
+    service = create_service_app(
+        ServiceAppManifest.model_validate(MANIFEST),
+        {"noop": lambda _req, _mode: {}},
+        catalogs={"ui_page": lambda: Catalog.model_validate({"schema": 1, "revision": 7, "items": [page()]})},
+    ).state.ops
+    tokens = TokenFile.at(tmp_path / "consumer")
+    Consumer([service], center_url="", tokens=tokens, wait_s=0, client=client).publish()
+    [one] = contributed(client)
+    assert (one["id"], one["revision"], one["extension_id"]) == ("erp.order.form", 7, "demo-ui")
 
 
-def test_refresh_reads_catalogs_too(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
-    base, state = app_url
-    register_app(client, base)
-    before = state.reads
-    assert client.post("/api/v1/resources/refresh", json={}, headers=ADMIN).status_code == 200
-    assert state.reads > before
+# ─────────────────────────── 누락 검사 (C7) ───────────────────────────
 
 
-def test_a_catalog_that_sends_another_kind_is_ignored(
-    client: TestClient, store: Store, app_url: tuple[str, Catalogue]
-) -> None:
-    """선언한 종류만 받는다 — 카탈로그가 남의 종류를 담아 보내도 끼워 넣지 않는다."""
-    base, state = app_url
-    register_app(client, base)
-    state.revision = 3
-    state.items = [
-        {"type": "ui_page", "id": "a", "name": "A"},
-        {"type": "report", "id": "b", "name": "B"},
-    ]
-    resources.refresh_catalogs(store, force=True)
-    found = client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()["items"]
-    assert [one["id"] for one in found] == ["a"]
-
-
-def test_filtering_by_resource_type(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
-    base, _state = app_url
-    register_app(client, base)
-    assert len(
-        client.get("/api/v1/resources?type=contributed&resource_type=ui_page", headers=READ_AUTH)
-        .json()["items"]
-    ) == 1
-    assert client.get(
-        "/api/v1/resources?type=contributed&resource_type=없는종류", headers=READ_AUTH
-    ).json()["items"] == []
-
-
-# ─────────────────────────── 누락 검사가 이제 돈다 (C7) ───────────────────────────
-
-
-def test_a_missing_page_is_warned_then_cleared(
-    client: TestClient, app_url: tuple[str, Catalogue]
-) -> None:
-    """**`requires.resources` 검사가 이제 실제로 돈다** — 등록하면 경고가 사라진다."""
-    base, _state = app_url
+def test_a_missing_page_is_warned_then_cleared(client: TestClient, worker: dict[str, str]) -> None:
+    """**`requires.resources` 검사** — 일꾼이 올리면 경고가 사라진다."""
     info = upload(client, package_zip(requires={"resources": [NEEDS_PAGE]}))
+    before = client.get(f"/api/v1/packages/{info['id']}/{info['version']}/info", headers=READ_AUTH).json()
+    assert [(one["type"], one["reason"]) for one in before["missing_resources"]] == [("resource", "not_found")]
 
-    before = client.get(
-        f"/api/v1/packages/{info['id']}/{info['version']}/info", headers=READ_AUTH
-    ).json()
-    assert [(one["type"], one["reason"]) for one in before["missing_resources"]] == [
-        ("resource", "not_found")
-    ]
-
-    register_app(client, base)
-    after = client.get(
-        f"/api/v1/packages/{info['id']}/{info['version']}/info", headers=READ_AUTH
-    ).json()
+    put(client, worker)
+    after = client.get(f"/api/v1/packages/{info['id']}/{info['version']}/info", headers=READ_AUTH).json()
     assert after["missing_resources"] == []
 
 
-def test_a_missing_page_does_not_block_deployment(
-    client: TestClient, store: Store, app_url: tuple[str, Catalogue]
-) -> None:
+def test_a_missing_page_does_not_block_deployment(client: TestClient, store: Store) -> None:
     """기여 자원 누락은 **배포를 막지 않는다** (C7 — 막는 것은 확장 누락·해시 불일치와 R8)."""
-    from chaeksas.contracts.manifest import Manifest
-    from chaeksas.contracts.resources import blocking_at_deploy, missing
+    from chaeksas.contracts.manifest import Manifest  # noqa: PLC0415
+    from chaeksas.contracts.resources import blocking_at_deploy, missing  # noqa: PLC0415
 
     info = upload(client, package_zip(requires={"resources": [NEEDS_PAGE]}))
-    row = store.row(
-        "SELECT manifest_json FROM packages WHERE id = ? AND version = ?",
-        (info["id"], info["version"]),
-    )
+    row = store.row("SELECT manifest_json FROM packages WHERE id = ? AND version = ?", (info["id"], info["version"]))
     assert row is not None
-    manifest = Manifest.model_validate(json.loads(row["manifest_json"]))
-    found = missing(manifest, resources.index(store, probe=False))
+    found = missing(Manifest.model_validate(json.loads(row["manifest_json"])), resources.index(store, probe=False))
     assert [one.type for one in found] == ["resource"]
     assert blocking_at_deploy(found) == [], "배포는 막지 않는다"
 
 
-def test_used_by_shows_the_packages(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
-    base, _state = app_url
-    register_app(client, base)
+def test_used_by_shows_the_packages(client: TestClient, worker: dict[str, str]) -> None:
+    put(client, worker)
     upload(client, package_zip(requires={"resources": [NEEDS_PAGE]}))
-    one = client.get(
-        "/api/v1/resources/contributed/ui_page/erp.order.form", headers=READ_AUTH
-    ).json()
+    one = client.get("/api/v1/resources/contributed/ui_page/erp.order.form", headers=READ_AUTH).json()
     assert one["used_by"] == ["erp.order-entry@1.0.0"]
 
 
 # ─────────────────── 진짜 UI 자동화 앱으로 (C9 공개 카탈로그) ───────────────────
 
 
-def test_the_real_ui_automation_app_is_read(client: TestClient, tmp_path: Path) -> None:
-    """**진짜 UI 자동화 앱**의 카탈로그를 Center가 읽는다 — 내장 확장의 한 바퀴다.
+def test_the_real_ui_automation_app_publishes_its_kind(client: TestClient, tmp_path: Path) -> None:
+    """**진짜 UI 자동화 앱**의 일꾼이 올린다 — 내장 확장의 한 바퀴다.
 
-    등록된 화면이 없으면 항목도 없다. 요점은 **manifest가 가리킨 경로를 Center가 찾아간다**는
-    것이다 (C11 `resources` → C13 §5).
+    등록된 화면이 없으면 항목도 없다. 요점은 **manifest가 알린 종류가 탭이 되고**, 카탈로그 함수가
+    일꾼의 `publish`로 Center에 닿는다는 것이다 (C11 `resources` → C13 §5 → C15).
     """
-    from chaeksas.ext.ui_automation.service.app import CATALOG_PATH, manifest
+    from chaeksas.ext.ui_automation.service.app import CATALOG_PATH, create  # noqa: PLC0415
+    from chaeksas.service_kit import Consumer  # noqa: PLC0415
 
-    found = manifest()
-    assert [one.catalog_url for one in found.resources] == [CATALOG_PATH]
-    assert [one.type for one in found.resources] == ["ui_page"]
-    assert found.extension is not None and found.extension.id == "ui-automation"
+    app = create(db_path=tmp_path / "uia.sqlite3")
+    ops = app.state.ops
+    assert [one.catalog_url for one in ops.manifest.resources] == [CATALOG_PATH]
+    assert ops.manifest.extension is not None and ops.manifest.extension.id == "ui-automation"
+    assert set(ops.catalogs) == {"ui_page"}
+
+    tokens = enroll(client, topics=[ops.app_id], manifests=[ops.manifest.to_json_dict()], folder=tmp_path / "uia")
+    Consumer([ops], center_url="", tokens=tokens, wait_s=0, client=client).publish()
+    [kind] = client.get("/api/v1/resources/contributed-kinds", headers=READ_AUTH).json()["items"]
+    assert (kind["resource_type"], kind["label"], kind["extensions"], kind["count"]) == (
+        "ui_page", "UI 화면", ["ui-automation"], 0
+    )
 
 
 # ──────── CON-01 「UI 태스크」 → 관리 콘솔 링크 (C3 ↔ C7, `06-screens/center-console.md`) ────────
@@ -409,34 +348,28 @@ def console_of(client: TestClient) -> dict[str, str]:
     }
 
 
-def test_a_page_id_leads_to_the_console_url(client: TestClient, app_url: tuple[str, Catalogue]) -> None:
+def test_a_page_id_leads_to_the_console_url(client: TestClient, worker: dict[str, str]) -> None:
     """**`page_id`에서 관리 콘솔 주소까지 이어진다** (CON-01 「UI 태스크」의 UIA-03 링크).
 
     실행 기록에는 앱이 없다 — C3 `ui_session`은 `page_id`만 가진다. 이을 수 있는 것은 C7의
     **두 모양이 같은 `extension_id`를 들고 있어서**다. 콘솔이 그 조인을 하므로, 여기서는
     **재료가 정말 오는지**를 본다 (오지 않으면 콘솔은 링크를 못 만든다).
     """
-    base, _state = app_url
-    register_app(client, base)
+    put(client, worker)
     # C3 `ui_session.page_id`가 가리키는 그 화면이다.
     assert console_of(client)["erp.order.form"] == "http://127.0.0.1:8599"
 
 
-def test_an_unregistered_page_simply_has_no_link(
-    client: TestClient, store: Store, app_url: tuple[str, Catalogue]
-) -> None:
+def test_an_unregistered_page_simply_has_no_link(client: TestClient, worker: dict[str, str]) -> None:
     """**못 이으면 링크만 없다** (U3) — 줄은 그대로 보인다.
 
     실행은 남았는데 그 화면이 레지스트리에서 지워졌거나(옛 실행) 아직 등록되지 않은 경우다.
     조인이 **조용히 비는** 것이 중요하다 — 터지면 실행 상세에 볼 것이 아무것도 없다.
     """
-    base, state = app_url
-    register_app(client, base)
+    put(client, worker)
     assert "erp.order.form" in console_of(client)
 
-    state.items = []
-    state.revision = 2
-    resources.refresh_catalogs(store, force=True)
+    put(client, worker, revision=2, items=[])
     assert console_of(client) == {}, "그 화면이 없어지면 링크도 없다 (줄은 실행 기록이 들고 있다)"
 
 

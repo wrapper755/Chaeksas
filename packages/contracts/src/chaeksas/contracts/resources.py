@@ -60,36 +60,6 @@ class InstalledOn(ContractModel):
     by_version: dict[str, int] = Field(default_factory=dict)
 
 
-class KeySlot(ContractModel):
-    """관리자가 넣은 외부 앱 키 한 칸 (C7 §외부 앱 키). **원문·앞자리는 없다.**"""
-
-    set: bool = False
-    set_at: Timestamp | None = None
-    set_by: str | None = None
-
-
-class AppKeyState(ContractModel):
-    """외부 앱 키 둘 — 운영(`run`)과 Studio 시험용(`test`) (ADR-0094 §7)."""
-
-    run: KeySlot = Field(default_factory=KeySlot)
-    test: KeySlot = Field(default_factory=KeySlot)
-
-
-class TrustState(ContractModel):
-    """서비스 앱이 Center 발급을 받나 (C11 `GET /center/v1/trust`, ADR-0094 §1)."""
-
-    state: str = "unknown"  # 열린 문자열 (service_keys.TRUST_*)
-    checked_at: Timestamp | None = None
-
-
-class AddressOverride(ContractModel):
-    """Center가 덮어쓴 외부 확장 주소 (C7 §외부 확장 주소, ADR-0097)."""
-
-    base_url: str
-    set_at: Timestamp | None = None
-    set_by: str | None = None
-
-
 class ExtensionResource(ContractModel):
     """확장 하나 (C13 정의에서 모은 것)."""
 
@@ -103,19 +73,14 @@ class ExtensionResource(ContractModel):
     contributes_summary: dict[str, list[str]] = Field(default_factory=dict)
     service_app_id: str | None = None
     installed_on: InstalledOn = Field(default_factory=InstalledOn)
-    # 서버 부분 상태. C11 앱은 `/healthz`, 외부 확장은 **어댑터 `health`**(C13 §4-1)로 본다 —
-    # 선언이 없으면 `unknown`(「확인 전」)이고, 서버 부분이 아예 없으면 `n/a`다.
+    # 서버 부분 상태 — 그 토픽을 가져가는 **일꾼**이 말한다 (C7, ADR-0102). 서버 부분이 아예
+    # 없으면 `n/a`다.
     status: str = "n/a"  # KNOWN_SERVICE_APP_STATUSES + n/a
     status_reasons: list[str] = Field(default_factory=list)
     checked_at: Timestamp | None = None
     # 외부 확장만 — 실행하는 쪽이 받아 검증한다 (C2 `extension` 봉투).
     definition: dict[str, Any] | None = None
     envelope: dict[str, Any] | None = None
-    #: 외부 확장이고 키를 받는 앱일 때만 (C7 §외부 앱 키).
-    app_key: AppKeyState | None = None
-    #: 외부 확장이고 **Center가 주소를 덮어썼을 때만** — 실행하는 쪽은 이것을 명부의 주소로 쓴다
-    #: (C7 §외부 확장 주소). 지금 정의의 허용 호스트 밖이면 싣지 않는다(`address_outside_definition`).
-    address: AddressOverride | None = None
 
 
 class ServiceAppResource(ContractModel):
@@ -126,7 +91,8 @@ class ServiceAppResource(ContractModel):
     version: str | None = None
     category: str | None = None
     extension_id: str | None = None
-    base_url: str | None = None  # 주소의 **유일한 출처**
+    #: **비어 있다** — Center는 서비스 앱의 주소를 모른다 (ADR-0102). 옛 읽는 쪽을 위해 칸만 둔다.
+    base_url: str | None = None
     console_url: str | None = None
     operations: list[Operation] = Field(default_factory=list)
     status: str = "unknown"  # KNOWN_SERVICE_APP_STATUSES
@@ -134,8 +100,8 @@ class ServiceAppResource(ContractModel):
     checked_at: Timestamp | None = None
     manifest_at: Timestamp | None = None
     used_by: list[str] = Field(default_factory=list)  # `id@version`
-    #: C11 앱이 Center 발급을 받나 (ADR-0094 §1). 외부 앱은 없다.
-    trust: TrustState | None = None
+    #: 이 토픽을 가져가는 일꾼 수 (C15).
+    consumers: int = 0
 
     def operation(self, name: str) -> Operation | None:
         return next((o for o in self.operations if o.name == name), None)

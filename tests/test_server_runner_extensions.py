@@ -200,22 +200,22 @@ def test_a_field_of_another_scope_is_not_given(monkeypatch: pytest.MonkeyPatch) 
     assert ext_mod.settings_for(host_with(), "doc-ocr").get("theme") is None
 
 
-def test_a_service_app_key_reference_wins_over_the_extension_secret(monkeypatch: pytest.MonkeyPatch) -> None:
-    """순서는 **Bot UI 실행기와 같다** — 태스크가 적은 키 참조가 먼저다."""
-    monkeypatch.setenv("CHK_SERVER_RUNNER__SVC__OCR_KEY", "from-svc")
+def test_the_call_token_is_this_runners_own_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """확장이 외부 작업을 올릴 토큰(`call_token`)은 **이 실행기의 Center API 키**다 (C15) — 다른 비밀은
+    그 확장의 비밀 칸이다."""
+    monkeypatch.setenv("CHK_SERVER_RUNNER__CENTER_API_KEY", "chk_ctr_runner")
     monkeypatch.setenv(extension_config_env("doc-ocr", "ocr_key"), "from-ext")
 
     secrets = ext_mod.RunnerSecrets(credentials=Credentials(), extension_id="doc-ocr")
-    assert secrets.resolve("ocr_key") == "from-svc"
+    assert secrets.resolve("call_token") == "chk_ctr_runner"
+    assert secrets.resolve("ocr_key") == "from-ext"
 
 
-def test_the_service_url_comes_from_the_held_directory(runner: agent_mod.Agent) -> None:
-    """**출처는 하나다** (C13) — Center 리소스 등록이 정의의 주소를 이긴다."""
-    from_definition = ext_mod.settings_for(host_with(), "doc-ocr")
-    assert from_definition.get("service.base_url") == "https://ocr.example.com"
-
-    registered = ext_mod.settings_for(host_with(), "doc-ocr", service_url="https://ocr.internal")
-    assert registered.get("service.base_url") == "https://ocr.internal"
+def test_extensions_are_told_the_center_address() -> None:
+    """C13 `center.url` — 확장 클라이언트가 외부 작업을 올리는 곳. 서버 부분의 주소는 주지 않는다."""
+    found = ext_mod.settings_for(host_with(), "doc-ocr", center_url="http://center:8800")
+    assert found.get("center.url") == "http://center:8800"
+    assert found.get("service.base_url") is None
 
 
 def test_nothing_is_turned_off_on_the_server() -> None:

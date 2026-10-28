@@ -20,6 +20,7 @@ from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp
 from chaeksas.contracts.enrollment import PublicKey, RotatedKey
+from chaeksas.contracts.extension import Catalog
 from chaeksas.contracts.service_app import Caller, Operation, ServiceAppManifest, Usage
 
 #: 롱폴링 한 번이 물고 있는 가장 긴 시간 (초). 더 길게 달라고 하면 이것으로 깎는다.
@@ -55,6 +56,18 @@ RETRY_STATUS_CODES: dict[int, str] = {503: "dependency_down", 429: "rate_limited
 
 #: 일꾼을 들이는 요청 종류 (`contracts.enrollment.ENROLLMENT_TYPES`에 더한다).
 CONSUMER = "consumer"
+#: 호출 토큰 (C15 「정한 것」) — Bot UI가 제 키로 청해 실행기 자식·Worker·Tool UI에 넘긴다.
+CALL_TOKEN = "call_token"
+CALL_TOKEN_HOURS = 24
+#: 호출 토큰이 열 수 있는 경로의 앞자리 — 밖은 403 `call_token_scope`.
+CALL_TOKEN_PATH = "/api/v1/external-tasks"
+#: 호출 토큰이 **읽을** 수 있는 곳 — 리소스 목록(C7, 도구·편집기가 카탈로그를 읽는다). GET만.
+CALL_TOKEN_READ_PATH = "/api/v1/resources"
+
+#: 등록 세션의 `run_id` 앞자리 (C9 — Tool UI 셀렉터 등록·그 시험). Bot이 없으므로 「그 Bot이 토픽을
+#: 요구하나」 대신 「그 PC에 셀렉터 등록이 켜졌나」를 본다 (C15 §올리기).
+REGISTRATION_RUN_PREFIX = "reg_"
+
 #: Studio 시험 실행의 `run_id` 앞자리 (C11 `run_id` — 「Studio 단독 시험이면 `test_<hex>`」).
 TEST_RUN_PREFIX = "test_"
 
@@ -112,6 +125,13 @@ class ExternalTaskCreate(SchemaVersioned):
     origin: str = ORIGIN_RUN  # KNOWN_ORIGINS
 
 
+class CallToken(ContractModel):
+    """`POST /api/v1/call-tokens`의 응답. **원문은 이때만** 실린다 (Center에는 해시만)."""
+
+    token: str
+    expires_at: Timestamp
+
+
 class ExternalTaskCreated(ContractModel):
     """올리기 응답. 같은 칸으로 다시 올리면 같은 `task_id`·지금 상태가 온다."""
 
@@ -125,6 +145,7 @@ class TaskError(ContractModel):
     code: str
     message: str = ""
     retryable: bool = False
+    detail: dict[str, Any] | None = None  # C11 오류의 `detail` 그대로 (업무 값을 넣지 않는다)
 
 
 class ExternalTaskResult(ContractModel):
@@ -170,6 +191,8 @@ class LockedTask(ContractModel):
 
 class FetchResponse(ContractModel):
     tasks: list[LockedTask] = Field(default_factory=list)
+    #: 이 일꾼의 id — 봉한 새 토큰을 열 때의 salt다 (키 회전과 같은 봉함).
+    consumer_id: str | None = None
     #: 일꾼 토큰 만료 14일 전부터 — 봉한 새 토큰 (C4 §키 회전과 같은 규칙).
     rotated_token: RotatedKey | None = None
 
@@ -185,6 +208,7 @@ class FailRequest(ContractModel):
     code: str
     message: str = ""
     retryable: bool = False
+    detail: dict[str, Any] | None = None  # C11 오류의 `detail` — 부르는 쪽까지 그대로 간다
 
 
 class ExtendRequest(ContractModel):
@@ -200,7 +224,8 @@ class ConsumerVersions(ContractModel):
 class ConsumerEnrollRequest(SchemaVersioned):
     """`POST /api/v1/consumers/enroll` — 일꾼 들이기 요청 (C15 §일꾼 들이기, ADR-0092 §1과 같은 결).
 
-    `manifest`는 들일 때 함께 올린다 — Center가 앱을 읽으러 가지 않는다 (ADR-0102 §3).
+    `manifests`는 들일 때 함께 올린다(토픽마다 하나, `app_id` = 토픽) — Center가 앱을 읽으러 가지
+    않는다 (ADR-0102 §3). 외부 확장 토픽은 비워도 된다(작업 목록은 등록된 정의에서 온다).
     """
 
     machine_id: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -209,7 +234,7 @@ class ConsumerEnrollRequest(SchemaVersioned):
     versions: ConsumerVersions
     public_key: PublicKey
     topics: list[Topic] = Field(min_length=1)
-    manifest: ServiceAppManifest | None = None
+    manifests: list[ServiceAppManifest] = Field(default_factory=list)
 
 
 class ConsumerInfo(ContractModel):
@@ -221,8 +246,15 @@ class ConsumerInfo(ContractModel):
     key_prefix: str | None = None
     approved_at: Timestamp | None = None
     last_fetch_at: Timestamp | None = None
-    app_id: str | None = None
-    version: str | None = None
+    #: 이 일꾼이 올린 manifest들의 `app_id@version`.
+    apps: list[str] = Field(default_factory=list)
+
+
+class CatalogUpload(ContractModel):
+    """`PUT /api/v1/consumers/self/catalogs/{resource_type}` — 그 토픽의 카탈로그 (C13 §5)."""
+
+    app_id: str
+    catalog: Catalog
 
 
 class TopicStatus(ContractModel):
@@ -236,6 +268,10 @@ class TopicStatus(ContractModel):
 
 
 __all__ = [
+    "CALL_TOKEN",
+    "CALL_TOKEN_HOURS",
+    "CALL_TOKEN_PATH",
+    "CALL_TOKEN_READ_PATH",
     "CODE_NO_CONSUMER",
     "CODE_TIMEOUT",
     "CONSUMER",
@@ -256,7 +292,10 @@ __all__ = [
     "STATE_FAILED",
     "STATE_LOCKED",
     "STATE_PENDING",
+    "REGISTRATION_RUN_PREFIX",
     "TEST_RUN_PREFIX",
+    "CallToken",
+    "CatalogUpload",
     "CompleteRequest",
     "ConsumerEnrollRequest",
     "ConsumerInfo",

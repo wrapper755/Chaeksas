@@ -5,9 +5,11 @@
     chk-mock-apps serve --app erp              # 하나만, 그 앱의 기본 포트에
     chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
 
-`serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다. 서비스 앱 주소에 경로가
-붙어도 되므로(`{base_url}/v1/ops/…`) Center 리소스 등록에 `http://127.0.0.1:8010/erp`를
-그대로 넣을 수 있다. 앱 열여섯 개를 따로 띄우지 않아도 된다.
+`serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다 (관리 API·시나리오 제어·웹 화면).
+**업무 호출은 그 포트로 받지 않는다** — `CHK_MOCK_APPS__CENTER__URL`을 주면 C11 앱 열셋이 **일꾼 하나**로
+Center에 붙어 일감을 가져간다 (C15, ADR-0102). 토큰이 없으면 들이기 요청을 보내고 요청 코드를 찍는다 —
+관리자가 CON-07 「일꾼 승인 대기」에서 승인하면 받아 `CHK_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)에 둔다.
+`CHK_MOCK_APPS__CENTER__TOKEN`이 있으면 그것을 쓴다.
 
 예제가 가리키는 **웹 화면**(공급사 포털·사내 신청서·공지)도 같은 포트의 `/site` 밑에 뜬다
 (`sites.py`) — M4 인수 시험이 쓰는 HTML과 **같은 것**이라 현장 PC에서 BUI-06으로 등록하고 Bot이
@@ -27,7 +29,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from chaeksas.mock_apps import catalog, sites
-from chaeksas.mock_apps.c11 import SHARED_KEY_ENV, build
+from chaeksas.mock_apps.c11 import SHARED_PREFIX, Built, build
 from chaeksas.mock_apps.external import apps as external_apps
 from chaeksas.mock_apps.external import definitions
 
@@ -51,64 +53,114 @@ def _list() -> int:
     for app_id, kind, port, used_by in catalog.rows():
         print(f"{app_id:<15} {kind:<5} {port:>9}  {used_by}")
     print()
-    print(f"키는 {SHARED_KEY_ENV} 하나로 전부에 심을 수 있다 (앱마다 다르게: CHK_SVC_<앱>__DEV_KEY).")
+    print(f"업무 호출은 Center에서 가져간다 — {SHARED_PREFIX}CENTER__URL을 주면 일꾼으로 붙는다 (C15).")
     return 0
 
 
-def _one(app_id: str) -> tuple[FastAPI, str]:
-    """앱 하나와 **보여 줄** 키.
-
-    환경변수로 받은 키는 빈 문자열로 돌려준다 — 사람이 이미 아는 값을 열네 번 되읊지 않는다.
-    외부 앱은 키를 발급하지 않는다 (받아서 확인만 한다).
-    """
+def _one(app_id: str) -> tuple[FastAPI, Built | None]:
+    """앱 하나와 (C11이면) 그 작업 수행기. 외부 앱은 그냥 HTTP 서버다 — 어댑터 일꾼이 부른다."""
     mock = catalog.c11(app_id)
     if mock is not None:
         made = build(mock)
-        return made.app, "" if made.key_from_env else made.key
+        return made.app, made
     make = external_apps.BUILDERS.get(app_id)
     if make is None:
         raise KeyError(app_id)
-    return make(), ""
+    return make(), None
+
+
+def start_consumer(built: list[Built], *, center_url: str, folder: Path) -> Any:
+    """C11 모의 앱들을 **일꾼 하나**로 Center에 붙인다 (C15). 토큰이 없으면 들이기를 기다린다.
+
+    돌려주는 것은 멈추는 `threading.Event`다. 들이기·가져가기는 데몬 스레드에서 돈다.
+    """
+    import hashlib  # noqa: PLC0415
+    import platform  # noqa: PLC0415
+    import threading  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    from chaeksas.service_kit import Consumer, Enrollment, TokenFile  # noqa: PLC0415
+
+    tokens = TokenFile.at(folder, env_prefix=SHARED_PREFIX)
+    services = [one.service for one in built]
+    stop = threading.Event()
+
+    def loop() -> None:
+        enroll = Enrollment(
+            center_url=center_url,
+            name="모의 앱",
+            topics=[one.app_id for one in services],
+            manifests=[one.manifest.to_json_dict() for one in services],
+            tokens=tokens,
+            # 서비스 앱은 `core`를 쓰지 않는다 — 기계 id는 이 PC 이름과 데이터 폴더로 짓는다.
+            machine_id=hashlib.sha256(f"{platform.node()}|{folder.resolve()}".encode()).hexdigest(),
+        )
+        told = None
+        while not stop.is_set() and not tokens.token():
+            try:
+                code = enroll.step()
+            except Exception as e:  # noqa: BLE001 — Center가 아직 없을 수 있다
+                _say(f"일꾼 들이기: Center에 닿지 못했다 ({type(e).__name__}) — 다시 해 본다")
+                code = told
+            if code and code != told:
+                _say(f"일꾼 들이기 요청 코드: {code} — Center 콘솔 CON-07 「일꾼 승인 대기」에서 승인하세요")
+                told = code
+            if not tokens.token():
+                time.sleep(3)
+        if stop.is_set():
+            return
+        consumer = Consumer(services, center_url=center_url, tokens=tokens)
+        consumer.publish(force=True)
+        _say(f"일꾼으로 붙었다 — 토픽 {len(services)}개 ({center_url})")
+        consumer.run(stop)
+
+    threading.Thread(target=loop, name="mock-consumer", daemon=True).start()
+    return stop
 
 
 def _serve(app_id: str | None, port: int | None, host: str) -> int:
     import uvicorn  # noqa: PLC0415 — 띄울 때만 든다
 
+    center_url = os.environ.get(f"{SHARED_PREFIX}CENTER__URL", "").strip()
+    folder = Path(os.environ.get(f"{SHARED_PREFIX}DATA_DIR") or ".mock-apps")
     if app_id is not None:
-        app, key = _one(app_id)
+        app, made = _one(app_id)
         chosen = port or catalog.port_of(app_id)
         _say(f"{app_id} → http://{host}:{chosen}")
-        if key:
-            _say(f"  키: {key}")
+        if made is not None and center_url:
+            start_consumer([made], center_url=center_url, folder=folder)
         uvicorn.run(app, host=host, port=chosen, log_level="info")
         return 0
 
     chosen = port or catalog.ALL_IN_ONE_PORT
-    if os.environ.get(SHARED_KEY_ENV, "").strip():
-        _say(f"키는 {SHARED_KEY_ENV}로 받은 것을 쓴다 (앱마다 다르게: CHK_SVC_<앱>__DEV_KEY).")
-    root, keys = all_in_one()
-    for one, key in keys.items():
-        _say(f"{one:<15} → http://{host}:{chosen}/{one}" + (f"   키: {key}" if key else ""))
+    root, built = all_in_one()
+    for one in catalog.ids():
+        _say(f"{one:<15} → http://{host}:{chosen}/{one}")
+    if center_url:
+        start_consumer(built, center_url=center_url, folder=folder)
+    else:
+        _say(f"{SHARED_PREFIX}CENTER__URL이 없다 — 업무 호출을 받지 않는다 (관리 API·시나리오 제어만)")
     _say(f"{'웹 화면':<13} → http://{host}:{chosen}{sites.MOUNT}/  (" + ", ".join(sorted(sites.PAGES)) + ")")
     uvicorn.run(root, host=host, port=chosen, log_level="info")
     return 0
 
 
-def all_in_one() -> tuple[FastAPI, dict[str, str]]:
-    """앱 전부 + 웹 화면을 한 앱에 붙인다. 두 번째 값은 앱마다 그 키 (`serve`가 찍는다)."""
+def all_in_one() -> tuple[FastAPI, list[Built]]:
+    """앱 전부 + 웹 화면을 한 앱에 붙인다. 두 번째 값은 C11 앱들 (일꾼이 맡을 것)."""
     root = FastAPI(title="모의 앱 (전부)")
-    keys: dict[str, str] = {}
+    built: list[Built] = []
     for one in catalog.ids():
-        app, key = _one(one)
+        app, made = _one(one)
         root.mount(f"/{one}", app)
-        keys[one] = key
+        if made is not None:
+            built.append(made)
     root.mount(sites.MOUNT, sites.site_app())
 
     @root.get("/")
     def index() -> dict[str, Any]:
         return {"apps": list(catalog.ids()), "site": sites.MOUNT}
 
-    return root, keys
+    return root, built
 
 
 def _definition(app_id: str, base_url: str, out: Path | None) -> int:

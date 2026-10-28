@@ -28,6 +28,7 @@ from typing import Any
 import platformdirs
 from fastapi import FastAPI
 
+from chaeksas.contracts.extension import Catalog
 from chaeksas.contracts.service_app import (
     MODE_AUTONOMOUS,
     MODE_DETERMINISTIC,
@@ -61,14 +62,8 @@ from chaeksas.ext.ui_automation.contracts.plan import (
 from chaeksas.ext.ui_automation.contracts.registry import PageRegistration
 from chaeksas.ext.ui_automation.service import console, healing, planning
 from chaeksas.ext.ui_automation.service.registry import HasLinks, Registry, RegistryError, now_iso
-from chaeksas.ext.ui_automation.service.store import (
-    Database,
-    RegistryStore,
-    SessionStore,
-    SqliteKeyStore,
-    SqliteTrustStore,
-)
-from chaeksas.service_kit import CenterLink, OpError, OpResult, ServiceLlm, create_app, usage_of
+from chaeksas.ext.ui_automation.service.store import Database, RegistryStore, SessionStore
+from chaeksas.service_kit import OpError, OpResult, ServiceLlm, create_app, usage_of
 
 log = logging.getLogger(__name__)
 
@@ -81,11 +76,11 @@ ENV_PREFIX = "CHK_SVC_UI_AUTOMATION__"
 DEFAULT_PORT = 8000
 DEFAULT_CONSOLE_PORT = 8001
 
-#: 셀렉터가 나가는 작업 (C9) — 이 권한이 없으면 403.
+#: 셀렉터가 나가는 작업 (C9) — Center가 그 PC에 「셀렉터 등록」이 켜졌는지 본다 (C15).
 REGISTRY_WRITE = "registry_write"
 
-#: 공개 카탈로그 경로 (C13 §5). **manifest가 알리는 것과 실제 경로가 한 상수에서 온다** —
-#: 두 곳에 적으면 어긋나고, 어긋나면 Center가 404를 받는다.
+#: 옛 공개 카탈로그 경로 — 이제 **일꾼이 Center에 올린다** (C15 `PUT …/catalogs/ui_page`). manifest의
+#: `catalog_url` 칸은 읽고 무시된다 (C11).
 CATALOG_PATH = "/v1/catalog"
 
 OPERATIONS = (
@@ -170,8 +165,6 @@ class Service:
     llm: ServiceLlm = field(default_factory=ServiceLlm)
     #: UI 세션 기록 (C8 보고 → UIA-01·03). 없으면 남기지 않는다 (시험).
     sessions: SessionStore | None = None
-    #: 키 저장소 — 「배포 전 확인」이 `registry_write` 키가 있나 본다 (C11은 해시만 들고 있다).
-    keys: SqliteKeyStore | None = None
 
     @classmethod
     def open(cls, db: Database, llm: ServiceLlm | None = None) -> Service:
@@ -182,7 +175,6 @@ class Service:
             registry=Registry(pages=pages, stats=stats, revision=revision),
             llm=llm if llm is not None else ServiceLlm(),
             sessions=SessionStore(db=db),
-            keys=SqliteKeyStore(db=db),
         )
 
     def flush(self) -> None:
@@ -428,8 +420,8 @@ class Service:
         """「배포 전 확인」 — **이 앱이 자기 힘으로 볼 수 있는 것만** (C9).
 
         허용 주소·인증 설정은 외부 확장 어댑터의 개념이고(C13 §4) C11 앱에는 없다. 그래서
-        모델 연결·등록 담당자 키·등록된 화면 셋을 본다 — 셋 다 **없으면 무엇이 안 되는지**가
-        분명하다. **막는 것이 아니라 알려 주는 것이다** (경고만).
+        모델 연결·등록된 화면 둘을 본다 — 둘 다 **없으면 무엇이 안 되는지**가 분명하다. 누가
+        등록할 수 있나는 Center의 일이다(CON-03 「셀렉터 등록」). **막는 것이 아니라 알려 주는 것이다**.
         """
         made = [
             DeployCheck(
@@ -439,21 +431,6 @@ class Service:
                 detail=None if self.llm.configured else "치유·목표로 계획이 503이 됩니다 (C11 §모델 연결)",
             )
         ]
-        writers = [
-            key
-            for key in (self.keys.all_keys() if self.keys is not None else [])
-            if REGISTRY_WRITE in key.extra_scopes and not key.revoked_at
-        ]
-        made.append(
-            DeployCheck(
-                id="registrar_key",
-                label="등록 담당자 키",
-                level=CHECK_OK if writers else CHECK_WARN,
-                detail=f"{len(writers)}개"
-                if writers
-                else f"{REGISTRY_WRITE} 권한이 있는 키가 없어 TOL-03에서 등록할 수 없습니다",
-            )
-        )
         pages = len(self.registry.pages)
         made.append(
             DeployCheck(
@@ -475,15 +452,15 @@ def create(
     console_url: str = "",
     llm: ServiceLlm | None = None,
 ) -> FastAPI:
-    """앱 하나. `admin_token`이 없으면 관리 API는 503이다 (C11).
+    """앱 하나 — 관리 API(UIA-01~03 포함)를 연 FastAPI. **업무 호출은 일꾼이 Center에서 가져온다**
+    (C15, `app.state.ops`). `admin_token`이 없으면 관리 API는 503이다 (C11).
 
     모델(`CHK_SVC_UI_AUTOMATION__LLM__*`, C11 §모델 연결)은 치유(`heal`)가 쓴다. 없으면 치유만
-    503 `llm_unavailable`이고 나머지 작업은 돈다.
+    `llm_unavailable`로 실패하고 나머지 작업은 돈다.
     """
     database = Database(path=db_path or (data_dir() / "ui-automation.sqlite3"))
     model = llm if llm is not None else ServiceLlm.from_env(ENV_PREFIX)
     service = Service.open(database, model)
-    keys = service.keys or SqliteKeyStore(db=database)
 
     app = create_app(
         manifest(console_url),
@@ -496,22 +473,63 @@ def create(
             "heal": service.heal,
             "report": service.report,
         },
-        keys=keys,
         admin_token=admin_token or _env("ADMIN_TOKEN"),
         llm=model,
-        # Center 발급 (ADR-0094) — `CHK_SVC_UI_AUTOMATION__CENTER__URL`이 없으면 받지 않는다.
-        center_link=CenterLink.from_env(ENV_PREFIX, store=SqliteTrustStore(db=database)),
+        # 공개 카탈로그 (C13 §5, 셀렉터 없음) — 일꾼이 판이 바뀌면 Center에 올린다 (C9·C15).
+        catalogs={"ui_page": lambda: Catalog.model_validate(service.registry.catalog())},
     )
     app.state.service = service
     # 앱 고유 관리 경로 (UIA-01~03) — 관문은 C11과 같은 `admin_guard` 하나다.
     app.include_router(console.create_router(service))
-
-    @app.get(CATALOG_PATH)
-    def catalog() -> Any:
-        """C13 §5 공통 카탈로그. **인증 없음, 셀렉터 없음** (C9)."""
-        return service.registry.catalog()
-
     return app
+
+
+def start_consumer(app: FastAPI, *, center_url: str, folder: Path) -> Any:
+    """이 앱을 **일꾼**으로 Center에 붙인다 (C15). 토큰이 없으면 들이기를 기다린다(요청 코드를 로그에).
+
+    토큰은 `CHK_SVC_UI_AUTOMATION__CENTER__TOKEN`이 이기고, 아니면 `folder`의 토큰 파일이다.
+    """
+    import hashlib  # noqa: PLC0415
+    import platform  # noqa: PLC0415
+    import threading  # noqa: PLC0415
+    import time  # noqa: PLC0415
+
+    from chaeksas.service_kit import Consumer, Enrollment, TokenFile  # noqa: PLC0415
+
+    tokens = TokenFile.at(folder, env_prefix=ENV_PREFIX)
+    ops = app.state.ops
+    stop = threading.Event()
+
+    def loop() -> None:
+        enroll = Enrollment(
+            center_url=center_url,
+            name=APP_NAME,
+            topics=[APP_ID],
+            manifests=[ops.manifest.to_json_dict()],
+            tokens=tokens,
+            machine_id=hashlib.sha256(f"{platform.node()}|{folder.resolve()}".encode()).hexdigest(),
+        )
+        told = None
+        while not stop.is_set() and not tokens.token():
+            try:
+                code = enroll.step()
+            except Exception as e:  # noqa: BLE001 — Center가 아직 없을 수 있다
+                log.warning("일꾼 들이기: Center에 닿지 못했다 (%s)", type(e).__name__)
+                code = told
+            if code and code != told:
+                log.warning("일꾼 들이기 요청 코드: %s — Center 콘솔 「일꾼 승인 대기」에서 승인하세요", code)
+                told = code
+            if not tokens.token():
+                time.sleep(3)
+        if stop.is_set():
+            return
+        consumer = Consumer([ops], center_url=center_url, tokens=tokens)
+        app.state.center = consumer.registration
+        consumer.publish(force=True)
+        consumer.run(stop)
+
+    threading.Thread(target=loop, name="consumer", daemon=True).start()
+    return stop
 
 
 def main() -> int:
@@ -521,7 +539,13 @@ def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     port = int(_env("PORT") or DEFAULT_PORT)
     host = _env("HOST") or "0.0.0.0"  # noqa: S104 — 서버다 (컨테이너·역방향 프록시 뒤)
-    uvicorn.run(create(), host=host, port=port, log_level="info")
+    app = create()
+    center_url = _env("CENTER__URL")
+    if center_url:
+        start_consumer(app, center_url=center_url, folder=data_dir())
+    else:
+        log.warning("CHK_SVC_UI_AUTOMATION__CENTER__URL이 없다 — 일감을 가져가지 않는다 (관리 API만)")
+    uvicorn.run(app, host=host, port=port, log_level="info")
     return 0
 
 

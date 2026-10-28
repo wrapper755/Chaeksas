@@ -10,14 +10,15 @@ import { splitKeys } from "@/lib/center-keys";
 /**
  * CON-11 Center API 키.
  *
- * **원문은 발급 직후 한 번만** 보인다 (C7). 목록에는 앞자리 16자만 있다. 서비스 앱 키는 여기서
- * 다루지 않는다 — 각 서비스 앱 관리 콘솔이다.
+ * **원문은 발급 직후 한 번만** 보인다 (C7). 목록에는 앞자리 16자만 있다. 일꾼(서비스 앱·어댑터
+ * 일꾼, C15)은 여기서 다루지 않는다 — 「리소스」(CON-07)의 「일꾼 승인 대기」다.
  */
 
 const TYPE_LABEL: Record<string, string> = {
   bot_ui: "Bot UI용",
   studio: "Studio용",
   server_runner: "서버 실행기용",
+  consumer: "일꾼용",
   integration: "연동용",
   relay: "대리 답용",
 };
@@ -84,8 +85,8 @@ export default async function CenterKeysPage() {
         <div>
           <h1 className="text-h1 font-bold">Center API 키</h1>
           <p className="text-body text-text-secondary">
-            Bot UI·Studio·서버 실행기·외부 시스템이 Center에 접속할 때 쓰는 키입니다. 서비스 앱 키는 각 앱의
-            관리 콘솔에서 발급합니다.
+            Bot UI·Studio·서버 실행기·외부 시스템이 Center에 접속할 때 쓰는 키입니다. 서비스 앱·외부 앱의
+            일꾼은 「리소스」에서 승인해 들입니다.
           </p>
           <CenterAddress url={CENTER_PUBLIC_URL} who="Bot UI·Studio·서버 실행기" />
         </div>

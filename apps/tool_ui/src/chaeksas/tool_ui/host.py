@@ -23,18 +23,18 @@ from typing import Any
 import httpx
 
 from chaeksas.contracts import (
+    CENTER_URL_SETTING,
     RESERVED_CONFIG_PREFIX,
     SCOPE_TOOL_UI,
-    SERVICE_URL_SETTING,
     STORAGE_DIR_SETTING,
     LocalRuntime,
     Tool,
 )
-from chaeksas.core.app_directory import DirectoryCache
 from chaeksas.core.extensions import Contribution, ExtensionHost
 from chaeksas.extension_api import HOST_TOOL_UI, ExtensionContext, ToolUiTool
 from chaeksas.tool_ui.credentials import ToolCredentials, ToolSecrets
 from chaeksas.tool_ui.places import (
+    bot_ui_center_url,
     bot_ui_data_dir,
     bot_ui_turned_off,
     data_dir,
@@ -183,14 +183,9 @@ class ToolHost:
 
     # ── 바깥 세상 ──
 
-    def service_url(self, extension_id: str) -> str | None:
-        """서버 부분 주소. **출처는 하나다** (C13) — Bot UI가 받아 둔 명부, 없으면 정의의 값."""
-        registered = DirectoryCache(data_dir=self.bot_ui_root).base_url_of(extension_id=extension_id)
-        if registered:
-            return registered
-        found = self.host.get(extension_id)
-        service = found.manifest.service if found is not None else None
-        return service.base_url if service is not None else None
+    def center_url(self) -> str | None:
+        """도구가 외부 작업을 올릴 Center — **Bot UI의 설정을 읽는다** (Tool UI는 Center에 붙지 않는다)."""
+        return bot_ui_center_url(root=self.bot_ui_root)
 
     def storage_dir(self, extension_id: str) -> Path:
         """확장이 자기 파일을 둘 폴더 (C13 `storage.dir`) — **Tool UI 제 자리**다. 비밀은 두지 않는다."""
@@ -208,7 +203,7 @@ class ToolHost:
                 if item.scope == SCOPE_TOOL_UI and not item.secret:
                     values[item.key] = stored.get(item.key)
         values.update(self.runtime_values(runtime_ids))
-        values[SERVICE_URL_SETTING] = self.service_url(extension_id)
+        values[CENTER_URL_SETTING] = self.center_url()
         values[STORAGE_DIR_SETTING] = str(self.storage_dir(extension_id))
         return values
 

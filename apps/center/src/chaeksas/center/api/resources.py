@@ -1,63 +1,45 @@
 """리소스 목록 — Bot이 실행에 필요로 하는 바깥 자원 (C7, CON-07).
 
-네 종류를 모은다. **셋은 Center가 이미 가진 것에서 계산한다** — 따로 등록받지 않는다.
+네 종류를 모은다. **Center가 이미 가진 것에서 계산한다** — 따로 등록받지 않는다.
 
 | 종류 | 어디서 |
 | --- | --- |
-| 서비스 앱 | 운영자가 등록한 주소 + Center가 읽은 C11 `/manifest`·`/healthz` |
+| 서비스 앱 | 그 앱 id를 토픽으로 승인받은 **일꾼이 올린 manifest** (C15) |
 | 런타임 | `bot_uis`가 등록·하트비트로 보고한 것 (C4) |
-| 확장 | 실행하는 쪽의 보고(`bot_uis`·**`server_runners`** — C4·C12) + 서비스 앱 manifest의 `extension` |
+| 확장 | 실행하는 쪽의 보고(`bot_uis`·`server_runners` — C4·C12) + 일꾼 manifest의 `extension` |
 | | + **외부로 등록된 정의** (C13) |
-| 확장 기여 자원 | 카탈로그를 읽어 쌓은 것 (C13 §5) |
+| 확장 기여 자원 | 일꾼이 올린 카탈로그 (C15 `PUT …/consumers/self/catalogs/{type}`) |
 
-기여 자원의 **출처는 둘이고 모양은 같다** — 내장·사내는 C11 manifest의 `resources`,
-외부는 등록된 정의의 `contributes.resources`다.
+**Center는 바깥 기능을 읽으러 가지 않는다** (ADR-0102) — 주소도 키도 들지 않고, 상태는 그 토픽을
+가져가는 일꾼이 말한다(마지막으로 가져간 때).
 
-**Center는 서비스 앱 키를 갖지 않는다** (ADR-0013) — 읽는 것은 인증이 필요 없는 공개
-정보뿐이다 (`/healthz`·`/manifest`·카탈로그).
+외부 확장은 **서명 봉투로만** 등록·해제된다 (C2 `extension`·`extension_revoke`, C13 E6).
+내장·사내 확장은 설치 파일에 든 것만 쓰고 여기 들어오지 않는다 (E2).
 
-외부 확장은 **서명 봉투로만** 등록·해제된다 (C2 `extension`·`extension_revoke`, C13 E6) —
-정의가 Bot의 키를 어느 주소로 보낼지 정하므로 배포와 같은 관문을 둔다. 내장·사내 확장은
-설치 파일에 든 것만 쓰고 여기 들어오지 않는다 (E2).
-
-**기여 자원의 `data`는 해석하지 않는다** (C13 §5) — 그 모양은 확장이 정하고 Center는 그대로
-넘긴다. 그래서 플랫폼 코드에 「UI 화면」이라는 말이 없다 (ADR-0018).
+**기여 자원의 `data`는 해석하지 않는다** (C13 §5) — 그래서 플랫폼 코드에 「UI 화면」이라는 말이
+없다 (ADR-0018).
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from typing import Any
 
 from chaeksas.center.auth import Caller
 from chaeksas.center.errors import ApiError
-from chaeksas.center.settings import (
-    RESOURCE_CATALOG_S,
-    RESOURCE_MANIFEST_S,
-    RESOURCE_STATUS_S,
-    RESOURCE_TIMEOUT_S,
-)
+from chaeksas.center.settings import ONLINE_WITHIN_S
 from chaeksas.center.storage import Store, dumps, loads, now_iso
-from chaeksas.contracts.extension import ExtensionManifest, HostRefused, resolve_host, takes_key
+from chaeksas.contracts.extension import Catalog
 from chaeksas.contracts.resources import (
-    AddressOverride,
-    AppKeyState,
     ContributedResource,
     ExtensionResource,
     InstalledOn,
     RuntimeHost,
     RuntimeResource,
     ServiceAppResource,
-    TrustState,
 )
 from chaeksas.contracts.service_app import ServiceAppManifest
-from chaeksas.contracts.service_keys import (
-    TRUST_NOT_CONFIGURED,
-    TRUST_OTHER_CENTER,
-    TRUST_PIN_MISMATCH,
-    TRUST_STALE_KEY,
-    TRUST_TRUSTED,
-)
 
 #: 서비스 앱 상태 (C7). 열린 문자열이지만 Center가 짓는 것은 이 넷이다.
 OK = "ok"
@@ -69,358 +51,58 @@ UNKNOWN = "unknown"
 KNOWN_TYPES = ("extension", "service_app", "contributed", "runtime")
 
 
-# ─────────────────────────── 서비스 앱 등록 ───────────────────────────
+# ─────────────────────────── 토픽 — 일꾼이 말하는 상태 (C7·C15) ───────────────────────────
 
 
-def _manifest_of(raw: str | None) -> ServiceAppManifest | None:
+def _manifests_of(raw: str | None) -> list[ServiceAppManifest]:
+    """일꾼 줄의 manifest들 (토픽마다 하나). 깨진 것은 건너뛴다 — 목록을 멈추지 않는다."""
     found = loads(raw)
-    if not found:
-        return None
-    try:
-        return ServiceAppManifest.model_validate(found)
-    except ValueError:
-        # 저장할 때 검증했으므로 여기 오면 계약이 바뀐 것이다 — 목록을 멈추지는 않는다.
-        return None
-
-
-def read_public(base_url: str, *, timeout_s: float = RESOURCE_TIMEOUT_S) -> dict[str, Any]:
-    """서비스 앱의 **공개 정보**를 읽는다 (C11 `/manifest`·`/healthz`, 인증 없음).
-
-    돌려주는 것은 `{manifest?, status, reasons}`다. 닿지 못하면 `status=unreachable`이고
-    **예외를 올리지 않는다** — 앱 하나가 꺼져 있다고 리소스 목록이 멈추면 안 된다.
-    """
-    import httpx  # noqa: PLC0415 — 부를 때만 든다
-
-    out: dict[str, Any] = {"manifest": None, "status": UNREACHABLE, "reasons": []}
-    root = base_url.rstrip("/")
-    try:
-        with httpx.Client(timeout=timeout_s, follow_redirects=False) as client:
-            health = client.get(f"{root}/healthz")
-            if health.status_code >= 400:
-                out["reasons"] = [f"healthz_{health.status_code}"]
-                return out
-            body = health.json() if health.content else {}
-            out["status"] = str(body.get("status") or UNKNOWN)
-            out["reasons"] = [str(one) for one in (body.get("reasons") or [])]
-
-            manifest = client.get(f"{root}/manifest")
-            if manifest.status_code < 400 and manifest.content:
-                out["manifest"] = manifest.json()
-            # Center 발급을 받나 (C11 `GET /center/v1/trust`, ADR-0094). 옛 앱은 그 경로가 없다.
-            trust = client.get(f"{root}/center/v1/trust")
-            out["trust"] = trust.json() if trust.status_code < 400 and trust.content else {}
-    except Exception as e:  # noqa: BLE001 — 주소가 틀렸거나 꺼져 있다
-        out["status"] = UNREACHABLE
-        out["reasons"] = [type(e).__name__]
-    return out
-
-
-def read_adapter_health(
-    definition: dict[str, Any], *, base_url: str | None = None, timeout_s: float = RESOURCE_TIMEOUT_S
-) -> dict[str, Any]:
-    """외부 확장의 어댑터 `health`를 두드린다 (C7, C13 §4-1). `{status, reasons}`.
-
-    **선언이 없으면 두드리지 않는다** — `unknown`(「확인 전」)으로 둔다. 「어디를 봐야 하나」를
-    Center가 지어내지 않는다 (C11의 `/healthz`를 외부 앱에 들이대지 않는다).
-
-    **어댑터와 같은 관문을 지난다** (C13 §4-3 1~4 — 허용 호스트·사설망·https·DNS 고정).
-    규칙이 갈라지지 않게 `contracts`의 `resolve_host`를 그대로 쓴다. 걸리면 두드리지 않고
-    사유만 남긴다 — 정의가 적은 주소라고 Center가 아무 데나 나가지 않는다.
-
-    **예외를 올리지 않는다** — 확장 하나가 꺼져 있다고 리소스 목록이 멈추면 안 된다.
-    """
-    import httpx  # noqa: PLC0415 — 부를 때만 든다
-
-    service = (definition.get("service") or {}) if isinstance(definition, dict) else {}
-    adapter_raw = service.get("adapter") or {}
-    health = adapter_raw.get("health") or {}
-    # Center가 덮어쓴 주소가 있으면 그것으로 간다 (C7 §외부 확장 주소) — 현장이 부르는 곳과 같다.
-    base_url = str(base_url or service.get("base_url") or "").strip()
-    if not health or not health.get("path") or not base_url:
-        # **보지 않았다**는 뜻이다 — 부르는 쪽이 「본 때」를 찍지 않게 `declared`로 갈라 준다.
-        return {"status": UNKNOWN, "reasons": [], "declared": False}
-
-    expect = int(health.get("expect_status") or 200)
-    try:
-        checked = resolve_host(
-            base_url,
-            allowed_hosts=[str(one) for one in (adapter_raw.get("allowed_hosts") or [])],
-            allow_private_network=bool(adapter_raw.get("allow_private_network")),
-            lookup=_getaddrinfo,
-        )
-    except HostRefused as e:
-        return {"status": UNREACHABLE, "reasons": [e.code], "declared": True}
-
-    url = f"{checked.origin}{health['path']}"
-    try:
-        # **리다이렉트를 따라가지 않는다** (§4-3 5번) — 따라가면 관문을 우회한다.
-        with httpx.Client(timeout=timeout_s, follow_redirects=False) as client:
-            answer = client.get(url, headers={"Host": checked.host})
-    except Exception as e:  # noqa: BLE001 — 꺼져 있거나 주소가 틀렸다
-        return {"status": UNREACHABLE, "reasons": [type(e).__name__], "declared": True}
-    if answer.status_code != expect:
-        return {"status": UNREACHABLE, "reasons": [f"health_{answer.status_code}"], "declared": True}
-    return {"status": OK, "reasons": [], "declared": True}
-
-
-def _getaddrinfo(host: str) -> list[str]:
-    """DNS 한 번. `resolve_host`가 이것을 받아 그 IP로 고정한다 (§4-3 4번)."""
-    import socket  # noqa: PLC0415
-
-    out: list[str] = []
-    for one in socket.getaddrinfo(host, None, type=socket.SOCK_STREAM):
-        address = str(one[4][0])
-        if address not in out:
-            out.append(address)
-    return out
-
-
-def _extension_health(store: Store, rows: dict[str, Any], *, probe: bool) -> dict[str, dict[str, Any]]:
-    """외부 확장마다 `{status, reasons, checked_at}`. 때가 됐으면 다시 두드린다 (60초).
-
-    서비스 앱과 **같은 간격**이다 — 목록을 읽을 때마다 바깥으로 나가지 않는다.
-    """
-    out: dict[str, dict[str, Any]] = {}
-    now = now_iso()
-    stored = {
-        str(row["id"]): row for row in store.rows("SELECT * FROM extension_health")
-    }
-    for key, registered in rows.items():
-        was = stored.get(key)
-        if probe and (was is None or _due(was["checked_at"], now, RESOURCE_STATUS_S)):
-            definition = json.loads(registered["definition_json"])
-            moved = _address_of(store, key, definition)[0]
-            found = read_adapter_health(definition, base_url=moved.base_url if moved else None)
-            if not found["declared"]:
-                # 선언이 없으면 **본 적이 없다** — 「본 때」를 찍으면 확인한 것처럼 보인다.
-                out[key] = {"status": UNKNOWN, "reasons": [], "checked_at": None}
-                continue
-            with store.tx() as cur:
-                cur.execute(
-                    "INSERT INTO extension_health (id, status, status_reasons, checked_at)"
-                    " VALUES (?, ?, ?, ?)"
-                    " ON CONFLICT(id) DO UPDATE SET status = excluded.status,"
-                    " status_reasons = excluded.status_reasons, checked_at = excluded.checked_at",
-                    (key, found["status"], dumps(found["reasons"]), now),
-                )
-            out[key] = {"status": found["status"], "reasons": found["reasons"], "checked_at": now}
-        elif was is not None:
-            out[key] = {
-                "status": str(was["status"]),
-                "reasons": loads(was["status_reasons"], []) or [],
-                "checked_at": str(was["checked_at"]),
-            }
-        else:
-            # 아직 한 번도 못 봤다 — 「확인 전」이고 **「응답 없음」이 아니다.**
-            out[key] = {"status": UNKNOWN, "reasons": [], "checked_at": None}
-    return out
-
-
-def register(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ServiceAppResource, bool]:
-    """`POST /resources/service-apps` — 주소를 받아 **바로 manifest를 읽어 본다** (C7).
-
-    읽지 못하거나 C11과 맞지 않으면 등록하지 않는다 — 「등록은 됐는데 아무것도 모른다」를
-    만들지 않는다 (422 `manifest_unreachable`·`manifest_invalid`).
-    """
-    base_url = str(raw.get("base_url") or "").strip()
-    if not base_url:
-        raise ApiError(422, "input_invalid", "`base_url`이 필요하다")
-
-    probed = read_public(base_url)
-    if probed["manifest"] is None:
-        raise ApiError(
-            422,
-            "manifest_unreachable",
-            f"manifest를 읽지 못했다 ({base_url})",
-            {"reasons": probed["reasons"]},
-        )
-    try:
-        manifest = ServiceAppManifest.model_validate(probed["manifest"])
-    except ValueError as e:
-        raise ApiError(
-            422, "manifest_invalid", "manifest가 C11과 맞지 않는다", {"error": str(e).splitlines()[0]}
-        ) from e
-
-    app_id = manifest.app_id
-    before = store.row("SELECT app_id FROM service_apps WHERE app_id = ?", (app_id,))
-    now = now_iso()
-    with store.tx() as cur:
-        if before is None:
-            cur.execute(
-                "INSERT INTO service_apps (app_id, base_url, manifest_json, manifest_at, status,"
-                " status_reasons, checked_at, registered_at, registered_by)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    app_id,
-                    base_url,
-                    dumps(probed["manifest"]),
-                    now,
-                    probed["status"],
-                    dumps(probed["reasons"]),
-                    now,
-                    now,
-                    found.actor,
-                ),
-            )
-        else:
-            # 같은 앱을 다시 등록하면 주소를 고친 것으로 본다 (PUT과 같은 결과).
-            cur.execute(
-                "UPDATE service_apps SET base_url = ?, manifest_json = ?, manifest_at = ?,"
-                " status = ?, status_reasons = ?, checked_at = ? WHERE app_id = ?",
-                (
-                    base_url,
-                    dumps(probed["manifest"]),
-                    now,
-                    probed["status"],
-                    dumps(probed["reasons"]),
-                    now,
-                    app_id,
-                ),
-            )
-    # manifest를 읽은 그 자리에서 **카탈로그도 읽는다** — 등록하자마자 기여 자원이 보여야
-    # 「등록했는데 왜 경고가 그대로인가」가 생기지 않는다 (C7 누락 검사).
-    refresh_catalogs(store, force=True)
-    return service_app(store, app_id), before is None
-
-
-def set_base_url(store: Store, app_id: str, raw: dict[str, Any]) -> ServiceAppResource:
-    """`PUT /resources/service-apps/{id}` — **주소의 유일한 출처**를 고친다 (C7)."""
-    _must_app(store, app_id)
-    base_url = str(raw.get("base_url") or "").strip()
-    if not base_url:
-        raise ApiError(422, "input_invalid", "`base_url`이 필요하다")
-
-    probed = read_public(base_url)
-    if probed["manifest"] is not None:
+    items = found if isinstance(found, list) else ([found] if isinstance(found, dict) else [])
+    out = []
+    for one in items:
         try:
-            manifest = ServiceAppManifest.model_validate(probed["manifest"])
-        except ValueError as e:
-            raise ApiError(422, "manifest_invalid", "manifest가 C11과 맞지 않는다") from e
-        if manifest.app_id != app_id:
-            # 다른 앱을 가리키는 주소다 — 조용히 바꾸면 그 Bot들이 엉뚱한 앱을 부른다.
-            raise ApiError(
-                422,
-                "manifest_invalid",
-                f"그 주소의 앱은 {manifest.app_id}다 ({app_id}가 아니다)",
-            )
-
-    now = now_iso()
-    with store.tx() as cur:
-        cur.execute(
-            "UPDATE service_apps SET base_url = ?, status = ?, status_reasons = ?, checked_at = ?"
-            " WHERE app_id = ?",
-            (base_url, probed["status"], dumps(probed["reasons"]), now, app_id),
-        )
-        if probed["manifest"] is not None:
-            cur.execute(
-                "UPDATE service_apps SET manifest_json = ?, manifest_at = ? WHERE app_id = ?",
-                (dumps(probed["manifest"]), now, app_id),
-            )
-    refresh_catalogs(store, force=True)
-    return service_app(store, app_id)
+            out.append(ServiceAppManifest.model_validate(one))
+        except ValueError:
+            continue
+    return out
 
 
-def unregister(store: Store, app_id: str) -> None:
-    """`DELETE /resources/service-apps/{id}`. **쓰는 Bot이 있으면 409** (C7 `in_use`)."""
-    _must_app(store, app_id)
-    users = _used_by(store, app_id)
-    if users:
-        raise ApiError(
-            409,
-            "in_use",
-            f"이 앱을 쓰는 Bot이 {len(users)}개 있다",
-            {"used_by": users},
-        )
-    with store.tx() as cur:
-        cur.execute("DELETE FROM service_apps WHERE app_id = ?", (app_id,))
+def topic_state(store: Store, topic: str, *, now: str | None = None) -> tuple[str, int, str | None]:
+    """`(상태, 일꾼 수, 마지막으로 가져간 때)` — 일꾼이 없으면 `unknown`, 있는데 90초 넘게 조용하면
+    `unreachable`, 아니면 `ok` (C7 §리소스 모으는 방식)."""
+    at = datetime.fromisoformat(now or now_iso())
+    count, last = 0, None
+    for row in store.rows("SELECT topics_json, last_fetch_at FROM consumers"):
+        if topic not in (loads(row["topics_json"], []) or []):
+            continue
+        count += 1
+        seen = row["last_fetch_at"]
+        if seen and (last is None or datetime.fromisoformat(seen) > datetime.fromisoformat(last)):
+            last = seen
+    if count == 0:
+        return UNKNOWN, 0, None
+    if last is None or datetime.fromisoformat(last) < at - timedelta(seconds=ONLINE_WITHIN_S):
+        return UNREACHABLE, count, last
+    return OK, count, last
 
 
-def refresh(store: Store, raw: dict[str, Any]) -> list[ServiceAppResource]:
-    """`POST /resources/refresh` — **간격을 무시하고 바로** 다시 읽는다 (C7)."""
-    app_id = raw.get("id")
-    rows = (
-        store.rows("SELECT * FROM service_apps WHERE app_id = ?", (str(app_id),))
-        if app_id
-        else store.rows("SELECT * FROM service_apps ORDER BY app_id")
-    )
-    for row in rows:
-        _probe_into(store, row, force=True)
-    # 외부 확장의 `health`와 카탈로그도 함께 — 「새로 고침」은 **간격을 무시한다** (C7).
-    if not app_id:
-        with store.tx() as cur:
-            cur.execute("DELETE FROM extension_health")
-        _extension_health(store, _external_rows(store), probe=True)
-    refresh_catalogs(store, force=True)
-    return [service_app(store, str(row["app_id"])) for row in rows]
+def app_manifests(store: Store) -> dict[str, tuple[ServiceAppManifest, str]]:
+    """app_id → (manifest, 올린 때). 같은 토픽을 둘이 맡으면 **나중에 승인된 쪽**이 이긴다."""
+    out: dict[str, tuple[ServiceAppManifest, str]] = {}
+    for row in store.rows("SELECT topics_json, manifest_json, approved_at FROM consumers ORDER BY approved_at"):
+        granted = set(loads(row["topics_json"], []) or [])
+        for one in _manifests_of(row["manifest_json"]):
+            if one.app_id in granted:
+                out[one.app_id] = (one, str(row["approved_at"]))
+    return out
 
 
-def _probe_into(store: Store, row: Any, *, force: bool = False) -> None:
-    """그 앱의 상태·manifest를 **때가 됐으면** 다시 읽는다 (C7 60초 / 10분).
-
-    목록을 읽을 때마다 부르므로, 간격을 지키는 것이 요점이다 — 콘솔을 새로 고칠 때마다
-    모든 앱을 두드리면 안 된다.
-    """
-    now = now_iso()
-    if not force and not _due(row["checked_at"], now, RESOURCE_STATUS_S):
-        return
-    probed = read_public(str(row["base_url"]))
-    wants_manifest = force or _due(row["manifest_at"], now, RESOURCE_MANIFEST_S)
-    with store.tx() as cur:
-        cur.execute(
-            "UPDATE service_apps SET status = ?, status_reasons = ?, checked_at = ? WHERE app_id = ?",
-            (probed["status"], dumps(probed["reasons"]), now, row["app_id"]),
-        )
-        if "trust" in probed:
-            cur.execute(
-                "UPDATE service_apps SET trust_json = ? WHERE app_id = ?",
-                (dumps({"state": _trust_state(store, probed["trust"]), "checked_at": now}), row["app_id"]),
-            )
-        if wants_manifest and probed["manifest"] is not None:
-            cur.execute(
-                "UPDATE service_apps SET manifest_json = ?, manifest_at = ? WHERE app_id = ?",
-                (dumps(probed["manifest"]), now, row["app_id"]),
-            )
-
-
-def _trust_state(store: Store, trust: dict[str, Any]) -> str:
-    """앱이 말한 `CenterTrust`를 C7 `trust.state`로 (ADR-0094 §1)."""
-    from chaeksas.center import signer  # noqa: PLC0415
-    from chaeksas.center.api import signing  # noqa: PLC0415
-
-    if not trust.get("center_url"):
-        return TRUST_NOT_CONFIGURED
-    ids = set(trust.get("key_ids") or [])
-    if not ids:
-        return TRUST_PIN_MISMATCH if trust.get("pinned") else TRUST_STALE_KEY
-    if signer.current_key_id(store) in ids:
-        return TRUST_TRUSTED
-    ours = {one.key_id for one in signing.admin_keys(store)}
-    return TRUST_STALE_KEY if ids & ours else TRUST_OTHER_CENTER
-
-
-def _due(at: str | None, now: str, seconds: int) -> bool:
-    if not at:
-        return True
-    from datetime import datetime  # noqa: PLC0415
-
-    return (datetime.fromisoformat(now) - datetime.fromisoformat(at)).total_seconds() >= seconds
-
-
-def _must_app(store: Store, app_id: str) -> Any:
-    row = store.row("SELECT * FROM service_apps WHERE app_id = ?", (app_id,))
-    if row is None:
-        raise ApiError(404, "not_found", f"서비스 앱 {app_id}가 없다")
-    return row
-
-
-# ─────────────────────────── 모아 주기 ───────────────────────────
+# ─────────────────────────── 서비스 앱 ───────────────────────────
 
 
 def _approved_manifests(store: Store) -> list[dict[str, Any]]:
     """승인·배포 대상이 되는 패키지의 C1 매니페스트 (「이것을 쓰는 Bot」을 세는 바탕)."""
-    rows = store.rows(
-        "SELECT id, version, manifest_json FROM packages WHERE kind = 'bpm_process' ORDER BY id, version"
-    )
+    rows = store.rows("SELECT id, version, manifest_json FROM packages WHERE kind = 'bpm_process' ORDER BY id, version")
     out = []
     for row in rows:
         found = loads(row["manifest_json"], {}) or {}
@@ -450,37 +132,41 @@ def _extension_used_by(store: Store, extension_id: str) -> list[str]:
 
 def service_app(store: Store, app_id: str) -> ServiceAppResource:
     """서비스 앱 하나 (C7 `GET /resources/service-apps/{id}`)."""
-    row = _must_app(store, app_id)
-    return _service_app_of(store, row)
-
-
-def _service_app_of(store: Store, row: Any) -> ServiceAppResource:
-    manifest = _manifest_of(row["manifest_json"])
-    return ServiceAppResource(
-        app_id=str(row["app_id"]),
-        name=manifest.name if manifest else None,
-        version=manifest.version if manifest else None,
-        category=manifest.category if manifest else None,
-        extension_id=manifest.extension.id if manifest and manifest.extension else None,
-        base_url=str(row["base_url"]),
-        console_url=manifest.console_url if manifest else None,
-        operations=list(manifest.operations) if manifest else [],
-        status=str(row["status"]),
-        status_reasons=loads(row["status_reasons"], []) or [],
-        checked_at=row["checked_at"],
-        manifest_at=row["manifest_at"],
-        used_by=_used_by(store, str(row["app_id"])),
-        trust=TrustState.model_validate(loads(row["trust_json"])) if row["trust_json"] else None,
-    )
+    found = next((one for one in service_apps(store) if one.app_id == app_id), None)
+    if found is None:
+        raise ApiError(404, "not_found", f"서비스 앱 {app_id}가 없다 — 그 토픽을 맡은 일꾼이 없다")
+    return found
 
 
 def service_apps(store: Store, *, probe: bool = True) -> list[ServiceAppResource]:
-    rows = store.rows("SELECT * FROM service_apps ORDER BY app_id")
-    if probe:
-        for row in rows:
-            _probe_into(store, row)
-        rows = store.rows("SELECT * FROM service_apps ORDER BY app_id")
-    return [_service_app_of(store, row) for row in rows]
+    """서비스 앱 — 일꾼이 올린 manifest에서 (C7). `probe`는 옛 이름이라 받기만 한다 (두드릴 곳이 없다)."""
+    del probe
+    out = []
+    # 외부 확장 토픽의 manifest(어댑터 일꾼이 정의에서 지어 올린 것)는 **서비스 앱이 아니다** — 그 확장의
+    # 줄(`ExtensionResource`)에 이미 있다. 작업·모드 대조(C15)에만 쓴다.
+    external = set(_external_rows(store))
+    for app_id, (manifest, at) in sorted(app_manifests(store).items()):
+        if app_id in external:
+            continue
+        state, count, last = topic_state(store, app_id)
+        out.append(
+            ServiceAppResource(
+                app_id=app_id,
+                name=manifest.name,
+                version=manifest.version,
+                category=manifest.category,
+                extension_id=manifest.extension.id if manifest.extension else None,
+                console_url=manifest.console_url,
+                operations=list(manifest.operations),
+                status=state,
+                status_reasons=[] if state == OK else (["no_consumer"] if count == 0 else ["consumer_quiet"]),
+                checked_at=last,
+                manifest_at=at,
+                used_by=_used_by(store, app_id),
+                consumers=count,
+            )
+        )
+    return out
 
 
 def runtimes(store: Store) -> list[RuntimeResource]:
@@ -503,25 +189,16 @@ def runtimes(store: Store) -> list[RuntimeResource]:
 
 
 def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
-    """확장 — 실행하는 쪽의 보고와 서비스 앱 manifest를 **합친** 것 (C7).
-
-    외부 확장(서명된 정의 등록, C13)은 아직 없다 — 그때 `definition`·`envelope`가 붙는다.
-    """
+    """확장 — 실행하는 쪽의 보고와 일꾼 manifest와 외부 정의를 **합친** 것 (C7)."""
     found: dict[str, dict[str, Any]] = {}
 
-    # 1) 실행하는 쪽이 보고한 것 — 몇 대에 깔렸는지는 여기서만 안다.
-    #    **PC와 서버를 함께 센다** (C7 `InstalledOn`이 「C4·C12 보고」라고 적어 두었다) — 서버
-    #    실행기만 가진 확장을 빼면 그것을 요구하는 서버 Bot의 **배포가 막힌다**(확장 누락은
-    #    배포를 막는 셋 중 하나다). 서버 실행기는 칸이 하나다 (등록이 넣고 하트비트가 고친다).
+    # 1) 실행하는 쪽이 보고한 것 — 몇 대에 깔렸는지는 여기서만 안다. **PC와 서버를 함께 센다**.
     reports = [
         (loads(row["state_json"], {}) or {}).get("extensions")
         or (loads(row["runtimes_json"], {}) or {}).get("extensions")
         or []
         for row in store.rows("SELECT runtimes_json, state_json FROM bot_uis")
-    ] + [
-        loads(row["extensions_json"], []) or []
-        for row in store.rows("SELECT extensions_json FROM server_runners")
-    ]
+    ] + [loads(row["extensions_json"], []) or [] for row in store.rows("SELECT extensions_json FROM server_runners")]
     for installed in reports:
         for one in installed:
             if not isinstance(one, dict) or not one.get("id"):
@@ -533,29 +210,29 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
             slot["versions"][version] = slot["versions"].get(version, 0) + 1
             slot["hash"] = slot["hash"] or one.get("definition_hash")
 
-    # 2) 서비스 앱 manifest의 `extension` — 서버 부분이 있는 확장은 여기서 이름·버전이 온다.
+    # 2) 일꾼 manifest의 `extension` — 서버 부분이 있는 확장은 여기서 이름·버전이 온다.
     apps = {one.extension_id: one for one in service_apps(store, probe=probe) if one.extension_id}
-
     # 3) Center에 **외부로 등록된** 정의 (C13) — 이름·등급·어댑터는 정의가 원본이다.
     external = _external_rows(store)
-    # 외부 확장의 상태는 **어댑터 `health`**로 본다 (C7) — C11 `/healthz`를 들이대지 않는다.
-    health = _extension_health(store, external, probe=probe)
 
     out = []
     for key in sorted(set(found) | set(apps) | set(external)):
-        address, address_problem = (None, None)
         slot = found.get(key, {"versions": {}, "hosts": 0, "hash": None})
         app = apps.get(key)
         registered = external.get(key)
         definition = json.loads(registered["definition_json"]) if registered is not None else None
-        if definition is not None:
-            address, address_problem = _address_of(store, key, definition)
         versions = slot["versions"]
+        # 서버 부분 상태는 **그 토픽의 일꾼**이 말한다 — C11 앱은 앱 id, 외부 확장은 확장 id가 토픽이다.
+        if app is not None:
+            status, reasons, checked = app.status, list(app.status_reasons), app.checked_at
+        elif definition is not None:
+            status, count, checked = topic_state(store, key)
+            reasons = [] if status == OK else (["no_consumer"] if count == 0 else ["consumer_quiet"])
+        else:
+            status, reasons, checked = "n/a", [], None
         out.append(
             ExtensionResource(
                 id=key,
-                # 등록된 정의가 있으면 그것이 원본이다. 없으면 보고된 판 중 **가장 많이
-                # 깔린 것**을 적는다 (분포는 `installed_on`에 있다).
                 version=(
                     str(definition["version"])
                     if definition
@@ -563,137 +240,20 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
                 ),
                 name=(definition.get("name") if definition else None) or (app.name if app else None),
                 publisher=definition.get("publisher") if definition else None,
-                # 등록된 것은 외부뿐이다 (E2) — 보고만 있는 것은 설치 파일에 든 내장이다.
                 tier=str(definition["tier"]) if definition else "builtin",
-                definition_hash=(
-                    str(registered["definition_hash"]) if registered is not None else slot["hash"]
-                ),
+                definition_hash=(str(registered["definition_hash"]) if registered is not None else slot["hash"]),
                 protocol=_protocol_of(definition, app),
                 contributes_summary=_contributes_of(definition),
                 service_app_id=app.app_id if app else None,
                 installed_on=InstalledOn(hosts=int(slot["hosts"]), by_version=dict(versions)),
-                # C11 앱이 있으면 그 앱의 `/healthz`가, 외부 확장이면 어댑터 `health`가 말한다.
-                # 둘 다 없으면 서버 부분이 없는 것이라 `n/a`다.
-                status=app.status if app else (health[key]["status"] if key in health else "n/a"),
-                status_reasons=(
-                    app.status_reasons if app else (health[key]["reasons"] if key in health else [])
-                )
-                + ([address_problem] if address_problem else []),
-                checked_at=(
-                    app.checked_at if app else (health[key]["checked_at"] if key in health else None)
-                ),
+                status=status,
+                status_reasons=reasons,
+                checked_at=checked,
                 definition=definition,
                 envelope=json.loads(registered["envelope_json"]) if registered is not None else None,
-                # 외부 앱 키 — 넣었는지·언제·누가만 (C7 §외부 앱 키, 원문 없음).
-                app_key=_app_key_of(store, key, definition),
-                address=address,
             )
         )
     return out
-
-
-# ─────────────────────────── 외부 확장 주소 (C7 §외부 확장 주소, ADR-0097) ───────────────────────────
-
-#: 덮어쓴 주소가 지금 정의의 허용 호스트 밖이다 — 내려 주지 않는다 (`status_reasons`에 남는다).
-ADDRESS_OUTSIDE = "address_outside_definition"
-
-
-def _check_address(base_url: str, definition: dict[str, Any], *, lookup: Any = None) -> str:
-    """정의의 허용 호스트 안인가 — **어댑터와 같은 관문**(`resolve_host`)을 지난다. 다듬은 주소를 준다.
-
-    `lookup`이 없으면 DNS를 보지 않고 「허용 호스트·http(s)」만 본다 (목록을 읽을 때마다 풀지 않는다).
-    DNS를 풀지 못한 것은 막지 않는다 — 부르는 곳에서는 풀릴 수 있고, 부를 때 같은 관문이 다시 본다.
-    """
-    from urllib.parse import urlsplit  # noqa: PLC0415
-
-    value = base_url.strip().rstrip("/")
-    parts = urlsplit(value)
-    if parts.path or parts.query or parts.fragment or parts.username or parts.password:
-        raise ApiError(422, "host_not_allowed", f"주소에는 경로·쿼리를 적지 않는다 (어댑터가 버린다): {base_url}")
-    adapter = ((definition.get("service") or {}).get("adapter") or {}) if isinstance(definition, dict) else {}
-    allowed = [str(one) for one in (adapter.get("allowed_hosts") or [])]
-    private_ok = bool(adapter.get("allow_private_network"))
-    if parts.scheme == "http" and not private_ok:
-        # DNS를 보기 전에 막는다 — 풀리지 않는 갈래로 http가 새어 들어오지 않게 (§4-3 2번).
-        raise ApiError(422, "host_not_allowed", f"https만 쓴다: {base_url}", {"allowed_hosts": allowed})
-    try:
-        resolve_host(
-            value,
-            allowed_hosts=allowed,
-            allow_private_network=private_ok,
-            # DNS를 보지 않을 때는 「풀리지 않는다」로 둔다 — 그 갈래는 막지 않는다.
-            lookup=lookup or _no_lookup,
-        )
-    except HostRefused as e:
-        if not e.retryable:
-            raise ApiError(422, "host_not_allowed", str(e), {"allowed_hosts": allowed}) from e
-    return value
-
-
-def _no_lookup(host: str) -> list[str]:
-    raise OSError("조회하지 않음")
-
-
-def _address_of(
-    store: Store, extension_id: str, definition: dict[str, Any]
-) -> tuple[AddressOverride | None, str | None]:
-    """덮어쓴 주소와, 내려 주지 못하는 까닭. 덮어쓰지 않았으면 `(None, None)`."""
-    row = store.row("SELECT * FROM extension_addresses WHERE extension_id = ?", (extension_id,))
-    if row is None:
-        return None, None
-    try:
-        _check_address(str(row["base_url"]), definition)
-    except ApiError:
-        # 새 판의 허용 호스트가 바뀌었다 — **내려 주지 않고**(기본값이 쓰인다) 지우지도 않는다.
-        return None, ADDRESS_OUTSIDE
-    return AddressOverride(base_url=str(row["base_url"]), set_at=row["set_at"], set_by=row["set_by"]), None
-
-
-def set_address(store: Store, extension_id: str, raw: dict[str, Any], *, by: str) -> ExtensionResource:
-    """`PUT /resources/extensions/{id}/address` — 정의의 허용 호스트 안에서만 받는다."""
-    registered = _external_rows(store).get(extension_id)
-    if registered is None:
-        raise ApiError(404, "not_found", f"등록된 외부 확장이 아니다: {extension_id}")
-    definition = json.loads(registered["definition_json"])
-    if ((definition.get("service") or {}).get("protocol")) != "http-adapter":
-        raise ApiError(404, "not_found", f"주소를 부르는 외부 확장이 아니다: {extension_id}")
-    base_url = str(raw.get("base_url") or "").strip()
-    if not base_url:
-        raise ApiError(422, "host_not_allowed", "주소가 비었다 — 기본값으로 돌아가려면 DELETE")
-    value = _check_address(base_url, definition, lookup=_getaddrinfo)
-    with store.tx() as cur:
-        cur.execute(
-            "INSERT INTO extension_addresses (extension_id, base_url, set_at, set_by) VALUES (?, ?, ?, ?)"
-            " ON CONFLICT (extension_id) DO UPDATE SET base_url = excluded.base_url,"
-            " set_at = excluded.set_at, set_by = excluded.set_by",
-            (extension_id, value, now_iso(), by),
-        )
-        # 상태는 **새 주소로** 다시 본다 — 옛 주소의 「응답 없음」을 들고 있지 않는다.
-        cur.execute("DELETE FROM extension_health WHERE id = ?", (extension_id,))
-    return extension(store, extension_id)
-
-
-def delete_address(store: Store, extension_id: str) -> ExtensionResource:
-    """`DELETE /resources/extensions/{id}/address` — 정의의 `base_url`(기본값)로 돌아간다."""
-    if _external_rows(store).get(extension_id) is None:
-        raise ApiError(404, "not_found", f"등록된 외부 확장이 아니다: {extension_id}")
-    with store.tx() as cur:
-        cur.execute("DELETE FROM extension_addresses WHERE extension_id = ?", (extension_id,))
-        cur.execute("DELETE FROM extension_health WHERE id = ?", (extension_id,))
-    return extension(store, extension_id)
-
-
-def _app_key_of(store: Store, extension_id: str, definition: dict[str, Any] | None) -> AppKeyState | None:
-    if definition is None:
-        return None
-    try:
-        if not takes_key(ExtensionManifest.model_validate(definition)):
-            return None
-    except ValueError:  # pragma: no cover — 등록할 때 검증했다
-        return None
-    from chaeksas.center import service_keys  # noqa: PLC0415 — 순환 import를 피한다
-
-    return service_keys.external_state(store, extension_id)
 
 
 def _protocol_of(definition: dict[str, Any] | None, app: ServiceAppResource | None) -> str | None:
@@ -719,117 +279,52 @@ def _contributes_of(definition: dict[str, Any] | None) -> dict[str, list[str]]:
 # ─────────────────────────── 확장 기여 자원 (C7·C13 §5) ───────────────────────────
 
 
-def _catalog_sources(store: Store, *, probe: bool) -> list[dict[str, Any]]:
-    """읽을 카탈로그들 — **출처가 둘**이고 모양은 같다 (C7 §리소스 모으는 방식).
-
-    | 출처 | 어디서 |
-    | --- | --- |
-    | 서비스 앱 manifest의 `resources` (C11) | 내장·사내 확장. **정의가 Center에 없어서** 서버 부분이 알린다 |
-    | 등록된 외부 정의의 `contributes.resources` (C13) | 외부 확장. 정의가 Center에 있다 |
-
-    주소는 **Center의 리소스 등록(`base_url`)이 이긴다** — 환경별 주소의 유일한 출처다
-    (C13 `service.base_url`). 등록이 없으면 정의의 `base_url`을 쓴다.
-    """
-    out: list[dict[str, Any]] = []
-    apps = {one.app_id: one for one in service_apps(store, probe=probe)}
-
-    for row in store.rows("SELECT app_id, base_url, manifest_json FROM service_apps ORDER BY app_id"):
-        found = _manifest_of(row["manifest_json"])
-        if found is None:
-            continue
-        for one in found.resources:
-            out.append(
-                {
-                    "source": f"app:{row['app_id']}:{one.type}",
-                    "resource_type": one.type,
-                    "label": one.label or one.type,
-                    "extension_id": found.extension.id if found.extension else None,
-                    "url": f"{str(row['base_url']).rstrip('/')}{one.catalog_url}",
-                }
-            )
-
-    for row in store.rows(
-        "SELECT id, definition_json FROM extensions WHERE revoked_json IS NULL ORDER BY id"
-    ):
-        definition = json.loads(row["definition_json"])
-        service = definition.get("service") or {}
-        declared = (definition.get("contributes") or {}).get("resources") or []
-        for one in declared:
-            if not isinstance(one, dict) or not one.get("catalog_url"):
-                continue
-            # 등록된 서비스 앱이 있으면 그 주소가 이긴다 (출처는 하나다).
-            app = apps.get(str(service.get("app_id") or ""))
-            base = (app.base_url if app else None) or str(service.get("base_url") or "")
-            if not base:
-                continue
-            out.append(
-                {
-                    "source": f"ext:{row['id']}:{one.get('type')}",
-                    "resource_type": str(one.get("type") or ""),
-                    "label": str(one.get("label") or one.get("type") or ""),
-                    "extension_id": str(row["id"]),
-                    "url": f"{base.rstrip('/')}{one['catalog_url']}",
-                }
-            )
-    return out
-
-
-def read_catalog(url: str, *, timeout_s: float = RESOURCE_TIMEOUT_S) -> dict[str, Any]:
-    """카탈로그 하나를 읽는다 (C13 §5). 닿지 못하면 `error`를 담아 돌려준다 — 올리지 않는다."""
-    import httpx  # noqa: PLC0415
-
-    try:
-        with httpx.Client(timeout=timeout_s, follow_redirects=False) as client:
-            answer = client.get(url)
-        if answer.status_code >= 400:
-            return {"error": f"http_{answer.status_code}"}
-        return {"body": answer.json() if answer.content else {}}
-    except Exception as e:  # noqa: BLE001 — 앱이 꺼져 있을 수 있다
-        return {"error": type(e).__name__}
-
-
-def refresh_catalogs(store: Store, *, force: bool = False, probe: bool = False) -> int:
-    """카탈로그들을 **때가 됐으면** 다시 읽는다 (C7 — 5분). 돌려주는 것은 갱신한 수다.
+def put_catalog(
+    store: Store, *, consumer: Any, resource_type: str, raw: dict[str, Any], now: str | None = None
+) -> dict[str, Any]:
+    """`PUT /consumers/self/catalogs/{type}` (C15) — 일꾼이 올린 카탈로그를 쌓는다.
 
     **`revision`이 같으면 항목을 다시 쓰지 않는다** (C7) — 같은 것을 다시 쓰면 Studio·Worker의
-    계획 캐시가 공연히 버려진다. 닿지 못한 것은 **들고 있던 항목을 지우지 않고** 사유만 남긴다.
+    계획 캐시가 공연히 버려진다. 승인된 토픽의 것만 받는다.
     """
-    from chaeksas.contracts.extension import Catalog  # noqa: PLC0415
-
-    now = now_iso()
-    changed = 0
-    for source in _catalog_sources(store, probe=probe):
-        before = store.row("SELECT * FROM catalog_reads WHERE source = ?", (source["source"],))
-        if not force and before is not None and not _due(before["read_at"], now, RESOURCE_CATALOG_S):
-            continue
-
-        got = read_catalog(source["url"])
-        if "error" in got:
-            _note_read(store, source, revision=before["revision"] if before else None, at=now, error=got["error"])
-            continue
-        try:
-            catalog = Catalog.model_validate(got["body"])
-        except ValueError as e:
-            _note_read(store, source, revision=None, at=now, error=f"invalid:{type(e).__name__}")
-            continue
-
-        same = before is not None and before["revision"] is not None and before["revision"] == catalog.revision
-        _note_read(store, source, revision=catalog.revision, at=now, error=None)
-        if same:
-            continue  # 판이 그대로다 — 항목을 다시 쓰지 않는다
-        _store_items(store, source, catalog, at=now)
-        changed += 1
-    return changed
-
-
-def _note_read(store: Store, source: dict[str, Any], *, revision: Any, at: str, error: str | None) -> None:
+    app_id = str(raw.get("app_id") or "")
+    if app_id not in set(loads(consumer["topics_json"], []) or []):
+        raise ApiError(403, "topic_not_granted", f"승인받지 않은 토픽이다: {app_id or '(없음)'}")
+    try:
+        catalog = Catalog.model_validate(raw.get("catalog") or {})
+    except ValueError as e:
+        raise ApiError(
+            422, "input_invalid", "카탈로그가 C13 §5와 맞지 않는다", {"error": str(e).splitlines()[0]}
+        ) from e
+    extension_id = _extension_of(store, app_id)
+    source = {
+        "source": f"consumer:{app_id}:{resource_type}",
+        "resource_type": resource_type,
+        "extension_id": extension_id,
+    }
+    at = now or now_iso()
+    before = store.row("SELECT * FROM catalog_reads WHERE source = ?", (source["source"],))
+    same = before is not None and before["revision"] is not None and before["revision"] == catalog.revision
     with store.tx() as cur:
         cur.execute("DELETE FROM catalog_reads WHERE source = ?", (source["source"],))
         cur.execute(
             "INSERT INTO catalog_reads (source, resource_type, extension_id, revision, read_at, error)"
-            " VALUES (?, ?, ?, ?, ?, ?)",
-            (source["source"], source["resource_type"], source["extension_id"], revision, at, error),
+            " VALUES (?, ?, ?, ?, ?, NULL)",
+            (source["source"], resource_type, extension_id, catalog.revision, at),
         )
+    if not same:
+        _store_items(store, source, catalog, at=at)
+    return {"resource_type": resource_type, "revision": catalog.revision, "stored": not same}
+
+
+def _extension_of(store: Store, app_id: str) -> str | None:
+    """카탈로그를 올린 토픽의 확장 — C11 앱이면 manifest의 `extension`, 외부 확장이면 그 id."""
+    found = app_manifests(store).get(app_id)
+    if found is not None and found[0].extension is not None:
+        return found[0].extension.id
+    if app_id in _external_rows(store):
+        return app_id
+    return None
 
 
 def _store_items(store: Store, source: dict[str, Any], catalog: Any, *, at: str) -> None:
@@ -869,12 +364,8 @@ def _store_items(store: Store, source: dict[str, Any], catalog: Any, *, at: str)
 
 
 def contributed(store: Store, *, resource_type: str | None = None, probe: bool = False) -> list[ContributedResource]:
-    """확장이 기여한 자원 (C7). **Center는 `data`를 해석하지 않는다** (C13 §5).
-
-    읽는 쪽이 부를 때 **때가 됐으면** 다시 읽는다 (5분) — 콘솔을 새로 고칠 때마다 모든
-    카탈로그를 두드리지 않는다.
-    """
-    refresh_catalogs(store, probe=probe)
+    """확장이 기여한 자원 (C7). **Center는 `data`를 해석하지 않는다** (C13 §5)."""
+    del probe
     rows = store.rows(
         "SELECT * FROM contributed_resources ORDER BY resource_type, id"
         if resource_type is None
@@ -912,30 +403,36 @@ def _resource_used_by(store: Store, resource_type: str, resource_id: str) -> lis
 
 
 def catalog_kinds(store: Store) -> list[dict[str, Any]]:
-    """지금 알고 있는 기여 자원 종류들 (CON-07 탭 하나씩). 읽기 실패도 함께 보인다.
-
-    **때가 됐으면 먼저 읽는다** — 아직 한 번도 읽지 않은 종류를 「항목 0개」로 보이면
-    「없다」로 읽힌다.
-    """
-    refresh_catalogs(store)
+    """지금 알고 있는 기여 자원 종류들 (CON-07 탭 하나씩) — 일꾼 manifest·외부 정의가 선언한 것."""
     out: dict[str, dict[str, Any]] = {}
-    for source in _catalog_sources(store, probe=False):
-        slot = out.setdefault(
-            source["resource_type"],
-            {"resource_type": source["resource_type"], "label": source["label"], "extensions": [], "errors": []},
-        )
-        if source["extension_id"] and source["extension_id"] not in slot["extensions"]:
-            slot["extensions"].append(source["extension_id"])
-        read = store.row("SELECT error FROM catalog_reads WHERE source = ?", (source["source"],))
-        if read is not None and read["error"]:
-            slot["errors"].append(f"{source['source']}: {read['error']}")
-    for one in out.values():
-        one["count"] = len(
-            store.rows(
-                "SELECT id FROM contributed_resources WHERE resource_type = ?", (one["resource_type"],)
+    for manifest, _ in app_manifests(store).values():
+        for one in manifest.resources:
+            slot = out.setdefault(
+                one.type, {"resource_type": one.type, "label": one.label or one.type, "extensions": [], "errors": []}
             )
+            if manifest.extension and manifest.extension.id not in slot["extensions"]:
+                slot["extensions"].append(manifest.extension.id)
+    for key, row in _external_rows(store).items():
+        definition = json.loads(row["definition_json"])
+        for declared in (definition.get("contributes") or {}).get("resources") or []:
+            if not isinstance(declared, dict) or not declared.get("type"):
+                continue
+            slot = out.setdefault(
+                str(declared["type"]),
+                {
+                    "resource_type": str(declared["type"]),
+                    "label": str(declared.get("label") or declared["type"]),
+                    "extensions": [],
+                    "errors": [],
+                },
+            )
+            if key not in slot["extensions"]:
+                slot["extensions"].append(key)
+    for kind in out.values():
+        kind["count"] = len(
+            store.rows("SELECT id FROM contributed_resources WHERE resource_type = ?", (kind["resource_type"],))
         )
-    return sorted(out.values(), key=lambda one: str(one["resource_type"]))
+    return sorted(out.values(), key=lambda kind: str(kind["resource_type"]))
 
 
 # ─────────────────────────── 외부 확장 등록 (C13·C2) ───────────────────────────
@@ -951,8 +448,7 @@ def _refuse(problems: list[Any], *, status: int = 422) -> None:
         first.message,
         detail={
             "violations": [
-                {"rule": p.rule, "code": p.code, "message": p.message, "items": list(p.items or [])}
-                for p in problems
+                {"rule": p.rule, "code": p.code, "message": p.message, "items": list(p.items or [])} for p in problems
             ]
         },
     )
@@ -985,9 +481,7 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
     try:
         manifest = ExtensionManifest.model_validate(definition)
     except ValueError as e:
-        raise ApiError(
-            422, "input_invalid", "확장 정의가 C13과 맞지 않는다", {"error": str(e).splitlines()[0]}
-        ) from e
+        raise ApiError(422, "input_invalid", "확장 정의가 C13과 맞지 않는다", {"error": str(e).splitlines()[0]}) from e
 
     # E1·E2·E3 — 외부 확장에 코드 기여가 없고, 등급이 external이고, 어댑터 선언이 안전한가.
     _refuse(validate(manifest, from_center=True))
@@ -1000,9 +494,7 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
     computed = definition_hash(definition)
     body = json.dumps(definition, ensure_ascii=False, sort_keys=True)
 
-    before = store.row(
-        "SELECT * FROM extensions WHERE id = ? AND version = ?", (manifest.id, manifest.version)
-    )
+    before = store.row("SELECT * FROM extensions WHERE id = ? AND version = ?", (manifest.id, manifest.version))
     if before is not None:
         if before["revoked_json"]:
             # **철회된 판은 되살아나지 않는다** (배포·패키지와 같은 규칙, C2).
@@ -1027,14 +519,11 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
     return extension(store, manifest.id), True
 
 
-def revoke_extension(
-    store: Store, extension_id: str, version: str, *, reason: str, by: str
-) -> ExtensionResource:
+def revoke_extension(store: Store, extension_id: str, version: str, *, reason: str, by: str) -> ExtensionResource:
     """`DELETE /resources/extensions` — Center가 `extension_revoke` 봉투를 지어 서명한다 (C13·C2, ADR-0090).
 
-    **쓰는 Bot이 있어도 막지 않는다** (C13) — 서비스 앱 등록 해제(`in_use`)와 다르다. 그쪽은
-    장부 정리지만 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라, 쓰는 쪽이 있을 때
-    더 거둬야 한다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).
+    **쓰는 Bot이 있어도 막지 않는다** (C13) — 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라,
+    쓰는 쪽이 있을 때 더 거둬야 한다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).
     """
     from chaeksas.center import signer  # noqa: PLC0415
 
@@ -1057,23 +546,13 @@ def revoke_extension(
                 "UPDATE extensions SET revoked_json = ?, revoked_by = ? WHERE id = ? AND version = ?",
                 (json.dumps(envelope.to_json_dict(), ensure_ascii=False), by, extension_id, version),
             )
-        if not _external_rows(store).get(extension_id):
-            # 그 외부 확장의 판이 하나도 남지 않았다 — 넣어 둔 키도 지운다 (C7 §외부 앱 키).
-            from chaeksas.center import service_keys  # noqa: PLC0415 — 순환 import를 피한다
-
-            service_keys.forget_external(store, extension_id)
-            # 덮어쓴 주소도 (C7 §외부 확장 주소).
-            with store.tx() as cur:
-                cur.execute("DELETE FROM extension_addresses WHERE extension_id = ?", (extension_id,))
     # **철회된 것은 목록에서 빠지므로** `extension()`으로는 찾을 수 없다 — 저장된 줄에서 짓는다.
     return _revoked_info(store, extension_id, version)
 
 
 def _revoked_info(store: Store, extension_id: str, version: str) -> ExtensionResource:
     """철회된 확장 하나 (철회 응답에만 쓴다 — 목록에는 뜨지 않는다)."""
-    row = store.row(
-        "SELECT * FROM extensions WHERE id = ? AND version = ?", (extension_id, version)
-    )
+    row = store.row("SELECT * FROM extensions WHERE id = ? AND version = ?", (extension_id, version))
     if row is None:  # pragma: no cover — 방금 본 줄이다
         raise ApiError(404, "not_found", f"등록된 확장이 없다: {extension_id}@{version}")
     definition = json.loads(row["definition_json"])
@@ -1097,9 +576,7 @@ def _registered_manifests(store: Store) -> list[Any]:
     from chaeksas.contracts.extension import ExtensionManifest  # noqa: PLC0415
 
     out = []
-    for row in store.rows(
-        "SELECT definition_json FROM extensions WHERE revoked_json IS NULL ORDER BY id, version"
-    ):
+    for row in store.rows("SELECT definition_json FROM extensions WHERE revoked_json IS NULL ORDER BY id, version"):
         try:
             out.append(ExtensionManifest.model_validate(json.loads(row["definition_json"])))
         except ValueError:  # pragma: no cover — 등록할 때 검증했다
@@ -1110,31 +587,23 @@ def _registered_manifests(store: Store) -> list[Any]:
 def _external_rows(store: Store) -> dict[str, Any]:
     """id → 가장 최근에 등록된(철회되지 않은) 외부 확장 줄."""
     out: dict[str, Any] = {}
-    for row in store.rows(
-        "SELECT * FROM extensions WHERE revoked_json IS NULL ORDER BY id, at"
-    ):
+    for row in store.rows("SELECT * FROM extensions WHERE revoked_json IS NULL ORDER BY id, at"):
         out[str(row["id"])] = row  # 같은 id는 나중 것이 이긴다
     return out
 
 
 def index(store: Store, *, probe: bool = False) -> Any:
-    """누락 검사에 넘길 리소스 묶음 (C7 `ResourceIndex`).
-
-    **기본은 두드리지 않는다** — 패키지 목록을 읽을 때마다 서비스 앱을 깨우지 않는다.
-    """
+    """누락 검사에 넘길 리소스 묶음 (C7 `ResourceIndex`)."""
     from chaeksas.contracts.resources import ResourceIndex  # noqa: PLC0415
 
     return ResourceIndex(
         extensions=extensions(store, probe=probe),
         service_apps=service_apps(store, probe=probe),
-        # 누락 검사는 **카탈로그를 두드리지 않는다** — 들고 있는 것으로 센다.
-        contributed=contributed(store, probe=probe) if probe else _cached_contributed(store),
+        contributed=_cached_contributed(store),
     )
 
 
-def listing(
-    store: Store, *, type: str | None = None, resource_type: str | None = None
-) -> dict[str, Any]:
+def listing(store: Store, *, type: str | None = None, resource_type: str | None = None) -> dict[str, Any]:
     """`GET /resources?type=[&resource_type=]` (C7 §목록 응답 공통 — `{items, fetched_at}`)."""
     if type is not None and type not in KNOWN_TYPES:
         raise ApiError(422, "input_invalid", f"모르는 리소스 종류다: {type}")
@@ -1182,11 +651,7 @@ def _cached_contributed(store: Store) -> list[ContributedResource]:
 def contributed_resource(store: Store, resource_type: str, resource_id: str) -> ContributedResource:
     """`GET /resources/contributed/{type}/{id}` (C7)."""
     found = next(
-        (
-            one
-            for one in contributed(store, resource_type=resource_type)
-            if one.id == resource_id
-        ),
+        (one for one in contributed(store, resource_type=resource_type) if one.id == resource_id),
         None,
     )
     if found is None:
@@ -1207,14 +672,12 @@ __all__ = [
     "extensions",
     "index",
     "listing",
-    "read_public",
-    "refresh",
-    "register",
+    "app_manifests",
+    "put_catalog",
     "register_extension",
     "revoke_extension",
     "runtimes",
     "service_app",
     "service_apps",
-    "set_base_url",
-    "unregister",
+    "topic_state",
 ]

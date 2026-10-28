@@ -15,7 +15,6 @@ import logging
 import os
 from dataclasses import dataclass
 
-from chaeksas.core import service_keys
 from chaeksas.server_runner import secret_file
 
 log = logging.getLogger(__name__)
@@ -37,10 +36,6 @@ ENV_LLM_API_KEY = "CHK_SERVER_RUNNER__LLM__API_KEY"
 SMTP_PASSWORD = "smtp-password"
 ENV_SMTP_PASSWORD = "CHK_SERVER_RUNNER__SMTP__PASSWORD"
 
-#: 서비스 앱 키는 **참조 이름**으로 둔다 (ADR-0013 §3). Bot UI·Studio와 같은 규칙이다.
-SERVICE_APP_PREFIX = "svc:"
-ENV_SERVICE_APP_PREFIX = "CHK_SERVER_RUNNER__SVC__"
-
 #: 확장의 설정 칸 (C13 `configuration`, `scope: server_runner`)과 그 비밀 칸.
 #: **이름 규칙은 Bot UI의 것과 같다** (`CHK_BOT_UI__EXT__…` — ADR-0064 §2): 서버에는 설정 파일이
 #: 없어 비밀이 아닌 칸도 환경변수로 온다.
@@ -55,11 +50,6 @@ class SecretsUnavailable(RuntimeError):
 def _env_name(text: str) -> str:
     """환경변수 이름으로 쓸 수 있게 — 영대문자·숫자·`_`."""
     return "".join(one if one.isalnum() else "_" for one in text).upper()
-
-
-def service_key_env(ref: str) -> str:
-    """그 키 참조를 줄 환경변수 이름 (사전 점검이 사람에게 보여 준다)."""
-    return f"{ENV_SERVICE_APP_PREFIX}{_env_name(ref)}"
 
 
 def extension_config_env(extension_id: str, key: str) -> str:
@@ -156,18 +146,6 @@ class Credentials:
         """메일 서버 비밀번호. 환경변수가 먼저다 (서버의 주 경로)."""
         return self.get(SMTP_PASSWORD, env=ENV_SMTP_PASSWORD)
 
-    def service_app_key(self, ref: str, bot: str | None = None) -> str | None:
-        """서비스 앱 키 하나 (참조 이름 → 값). Bot UI와 같은 순서다 — 환경변수 → Center가 그 Bot에
-        내려 준 키(`svc:<Bot>:<참조>`, ADR-0094) → 옛 자리(`svc:<참조>`)."""
-        found = os.environ.get(service_key_env(ref))
-        if found:
-            return found
-        if bot:
-            delivered = self.get(service_keys.run_name(bot, ref))
-            if delivered:
-                return delivered
-        return self.get(f"{SERVICE_APP_PREFIX}{ref}")
-
     def delete(self, name: str) -> None:
         backend = self._keyring()
         if backend is None:
@@ -176,10 +154,6 @@ class Credentials:
             backend.delete_password(self.service, name)  # type: ignore[attr-defined]
         except Exception as e:  # noqa: BLE001 — 없는 비밀을 지우는 것은 오류가 아니다
             log.debug("비밀을 지우지 못했다 (%s): %s", name, e)
-
-    def for_bot(self, bot: str) -> BotCredentials:
-        """그 Bot의 실행이 쓰는 창구 — 참조 이름을 **그 Bot이 받은 키**로 푼다 (ADR-0094 §8)."""
-        return BotCredentials(credentials=self, bot=bot)
 
     def extension_secret(self, extension_id: str, key: str) -> str | None:
         """확장의 비밀 설정 칸 (C13 `configuration[].secret`). Bot UI와 같은 규칙이다."""
@@ -190,34 +164,17 @@ class Credentials:
 
 
 
-@dataclass(frozen=True)
-class BotCredentials:
-    """한 Bot에 묶인 창구. 확장·바깥 앱 명부가 참조 이름만 넘겨도 그 Bot의 키가 풀린다."""
-
-    credentials: Credentials
-    bot: str
-
-    def service_app_key(self, ref: str) -> str | None:
-        return self.credentials.service_app_key(ref, self.bot)
-
-    def extension_secret(self, extension_id: str, key: str) -> str | None:
-        return self.credentials.extension_secret(extension_id, key)
-
 __all__ = [
-    "BotCredentials",
     "CENTER_API_KEY",
     "ENV_CENTER_API_KEY",
     "ENV_EXTENSION_PREFIX",
     "ENV_LLM_API_KEY",
-    "ENV_SERVICE_APP_PREFIX",
     "ENV_SMTP_PASSWORD",
     "EXTENSION_PREFIX",
     "LLM_API_KEY",
     "SERVICE",
-    "SERVICE_APP_PREFIX",
     "SMTP_PASSWORD",
     "Credentials",
     "SecretsUnavailable",
     "extension_config_env",
-    "service_key_env",
 ]

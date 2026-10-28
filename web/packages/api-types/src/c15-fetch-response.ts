@@ -3,6 +3,7 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 export interface FetchResponse {
+  consumer_id?: string | null;
   rotated_token?: RotatedKey | null;
   tasks?: LockedTask[];
   [k: string]: unknown;

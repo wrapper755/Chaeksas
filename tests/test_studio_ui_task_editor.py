@@ -53,7 +53,7 @@ CATALOG: dict[str, Any] = {
 
 
 class FakeHttp:
-    """`GET /v1/catalog`를 흉내 낸다."""
+    """Center `GET /api/v1/resources?type=contributed&resource_type=ui_page`를 흉내 낸다 (C7, ADR-0102)."""
 
     def __init__(self, *, body: Any = None, status: int = 200, fail: bool = False) -> None:
         self.body = CATALOG if body is None else body
@@ -61,7 +61,7 @@ class FakeHttp:
         self.fail = fail
         self.calls = 0
 
-    def get(self, url: str) -> Any:
+    def get(self, url: str, **_: Any) -> Any:
         import httpx  # noqa: PLC0415
 
         self.calls += 1
@@ -87,7 +87,7 @@ def app() -> Any:
 def made(app: Any) -> Any:
     editor = UiTaskEditor()
     http = FakeHttp()
-    editor.catalog = Catalog(base_url="http://app", client=http)
+    editor.catalog = Catalog(base_url="http://center", token="t-call", client=http)
     editor.reload()
     yield editor, http
     editor.close()
@@ -109,7 +109,7 @@ def test_the_catalog_has_no_selectors() -> None:
 def test_an_unreachable_server_keeps_the_last_list(app: Any) -> None:
     """**비행기에서도 태스크를 고칠 수 있어야 한다.**"""
     http = FakeHttp()
-    catalog = Catalog(base_url="http://app", client=http)
+    catalog = Catalog(base_url="http://center", token="t-call", client=http)
     assert catalog.reload()
     http.fail = True
     assert not catalog.reload()
@@ -118,9 +118,9 @@ def test_an_unreachable_server_keeps_the_last_list(app: Any) -> None:
 
 
 def test_no_address_is_said_not_guessed(app: Any) -> None:
-    catalog = Catalog(base_url=None)
+    catalog = Catalog(base_url=None, token="t-call")
     assert not catalog.reload()
-    assert "주소를 모릅니다" in catalog.last_error
+    assert "Center 주소" in catalog.last_error
 
 
 # ─────────────────────────── 고르기 ───────────────────────────
@@ -134,7 +134,7 @@ def test_the_screens_come_from_the_catalog(made: Any) -> None:
 
 def test_offline_is_said_on_the_screen(app: Any) -> None:
     editor = UiTaskEditor()
-    editor.catalog = Catalog(base_url="http://app", client=FakeHttp(fail=True))
+    editor.catalog = Catalog(base_url="http://center", token="t-call", client=FakeHttp(fail=True))
     editor.reload()
     assert "(오프라인)" in editor.source.text()
     editor.close()

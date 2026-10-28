@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-10-28) — 모델(`contracts.external_task`)·Center 표(15판)·API·롱폴링·일꾼 승인이 돌고 `tests/test_center_external_tasks.py`가 지킨다. **부르는 쪽과 일꾼은 아직 붙지 않았다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md) 조각 2~4) — 그때까지 서비스 앱 호출은 C11 `POST /v1/ops`(Push)로 돈다 |
+| 상태 | **구현됨** (2026-10-29) — Center(`api/external_tasks.py`, 15판)와 양쪽이 돈다: 부르는 쪽은 `core.services.CenterServiceCaller`(서버 실행기·실행기 자식·Studio)와 UI 자동화의 `worker/plans.py`·`client/registry_client.py`(`CenterOps`, 토픽 `ui-automation`), 일꾼은 `service_kit.consumer`(서비스 앱·모의 앱)와 어댑터 일꾼 `chk-adapter-consumer`(`apps/adapter_consumer`). `tests/test_center_external_tasks.py`·`test_c15_round_trip.py`·`test_service_kit_consumer.py`·`test_adapter_consumer.py`가 지킨다. 남은 것은 긴 작업(ADR-0102 조각 6)이다 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기·실행기 자식 프로세스·Studio·Worker·Tool UI → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
 | 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
@@ -23,6 +23,7 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 
 | 엔드포인트 | 인증 | 뜻 |
 | --- | --- | --- |
+| `POST /api/v1/call-tokens` | Bot UI·Studio의 Center API 키 | 호출 토큰 받기 (24시간) |
 | `POST /api/v1/external-tasks` | 호출 토큰 · Bot UI·서버 실행기·Studio의 Center API 키 | 일감 올리기 (멱등) |
 | `GET /api/v1/external-tasks/{task_id}?wait_s=` | 올린 쪽 | 결과 기다리기 (롱폴링). 아직이면 `wait_s`(최대 25) 뒤 `state: pending` |
 | `POST /api/v1/external-tasks/{task_id}/ack` | 올린 쪽 | 결과를 받았다 → 값을 지운다 |
@@ -32,7 +33,8 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 | `POST /api/v1/consumers/tasks/{task_id}/complete` | 잠근 일꾼 | 끝냈다 + 출력 |
 | `POST /api/v1/consumers/tasks/{task_id}/fail` | 잠근 일꾼 | 실패 + 사유 |
 | `POST /api/v1/consumers/tasks/{task_id}/extend` | 잠근 일꾼 | 잠금 늘리기 |
-| `PUT /api/v1/consumers/self/manifest` | 일꾼 토큰 | manifest·기여 자원 카탈로그 올리기 (C11 `ServiceAppManifest` 모양 그대로) |
+| `PUT /api/v1/consumers/self/manifest` | 일꾼 토큰 | manifest 올리기 (C11 `ServiceAppManifest` 모양 그대로) |
+| `PUT /api/v1/consumers/self/catalogs/{resource_type}` | 일꾼 토큰 | 기여 자원 카탈로그 올리기 (C13 §5 `Catalog`) |
 
 - **연결은 늘 Center 쪽으로 나간다.** Center는 일꾼에게도, 부르는 쪽에게도 먼저 연결하지 않는다.
 - 크기 한도: 입력·출력 각 1 MB (C11과 같다).
@@ -63,7 +65,7 @@ Center가 받기 전에 보는 것 (「불러도 되나」, ADR-0102 §5):
 | 검사 | 거절 |
 | --- | --- |
 | `run_id`가 이 호출자의 실행인가 (C3 소유. Studio는 `test_…`만) | 403 `run_not_owned` |
-| 그 실행의 Bot이 이 토픽을 요구하는가 (배포된 C1) | 403 `topic_not_required` |
+| 그 실행의 Bot이 이 토픽을 요구하는가 (배포된 C1) — **등록 세션은 예외**: Bot UI 쪽의 `run_id`가 `reg_…`(Tool UI 셀렉터 등록·그 시험)이면 Bot이 없으므로 이 검사 대신 **그 PC에 「셀렉터 등록」(CON-03)이 켜졌는가**를 본다 | 403 `topic_not_required` / `registration_off` |
 | 이 토픽에 들인 일꾼의 manifest가 이 작업·모드를 받는가 | 422 `operation_not_found` / `mode_unsupported` |
 | 작업이 `required_scopes`를 적었으면 그 호스트에 켜졌는가 (예: `registry_write` = CON-03 「셀렉터 등록」) | 403 `scope_missing` |
 | 자율 수행인데 Studio가 아니다 | 403 `mode_not_allowed` |
@@ -78,7 +80,7 @@ Center가 받기 전에 보는 것 (「불러도 되나」, ADR-0102 §5):
 | `mode_used` | str | C11과 같다 |
 | `replayed` | bool | 일꾼이 저장해 둔 결과를 돌려줬다 |
 | `usage` | object | C11·C3 `llm_usage`와 같다 |
-| `error` | object | `failed`일 때 `{code, message, retryable}` |
+| `error` | object | `failed`일 때 `{code, message, retryable, detail?}` — `detail`은 C11 오류의 `detail` 그대로다(예: C9 `has_links`의 끊길 경로). 업무 값을 넣지 않는다 |
 | `deliveries` | int | 몇 번 나갔나 (잠금이 지나 다시 나가면 +1) |
 
 | `state` | 뜻 | 부르는 쪽 |
@@ -106,21 +108,28 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ### 끝내기
 
-- `complete` `{output, mode_used, replayed, usage}` · `fail` `{code, message, retryable}` · `extend` `{lock_s}`.
+- `complete` `{output, mode_used, replayed, usage}` · `fail` `{code, message, retryable, detail?}` · `extend` `{lock_s}`.
 - **먼저 끝낸 쪽이 이긴다.** 잠금이 지난 일꾼의 `complete`도 그 일감이 아직 끝나지 않았으면 받는다(값을 잃지 않으려고). 이미 끝났으면 409 `already_completed` — 일꾼은 버리면 된다(멱등이라 같은 일이다).
 - 잠근 일꾼이 아니면 403 `not_locked_by_you`. 거둔 일감이면 409 `cancelled` — 일꾼은 하던 일을 멈춰도 된다.
+- 일꾼이 쥔 일감이 오래 걸리면 `extend`로 늘린다 — `service_kit`은 잠금의 절반이 지날 때마다 늘린다.
 - `output`에 manifest `output_schema.required`의 칸이 빠졌으면 Center가 422 `output_invalid`로 막는다 — 일꾼의 버그를 부르는 쪽의 업무 실패로 넘기지 않는다.
 
 ### 일꾼 들이기
 
-`POST /api/v1/consumers/enroll` `{name, topics: [str], public_key, request_code, manifest}` — 관리자가 CON-07 「일꾼 승인 대기」에서 같은 요청 코드를 승인하면 일꾼 토큰을 그 공개키로 봉해 내려 준다(봉함·요청 코드는 `contracts.enrollment` 한 자리 — ADR-0092). 토픽은 **승인할 때** 정해진다(일꾼이 적은 것을 관리자가 줄일 수 있다). 외부 확장 토픽은 그 정의가 Center에 등록되어 있어야 한다(E6).
+`POST /api/v1/consumers/enroll` `{machine_id, name, os, versions, public_key, topics: [str], manifests: [ServiceAppManifest]}` — 일꾼 하나가 **토픽 여럿**을 맡을 수 있다(모의 앱 열셋, 어댑터 일꾼이 외부 확장 여럿을 맡는 것). manifest는 토픽마다 하나(`app_id` = 토픽)이고 외부 확장 토픽은 비워도 된다(작업 목록은 등록된 정의에서 온다). 관리자가 CON-07 「일꾼 승인 대기」에서 같은 요청 코드를 승인하면 일꾼 토큰을 그 공개키로 봉해 내려 준다(봉함·요청 코드는 `contracts.enrollment` 한 자리 — ADR-0092). 토픽은 **승인할 때** 정해진다(일꾼이 적은 것을 관리자가 줄일 수 있다). 외부 확장 토픽은 그 정의가 Center에 등록되어 있어야 한다(E6).
+
+### manifest·카탈로그 올리기
+
+- `PUT /api/v1/consumers/self/manifest` — 본문은 ServiceAppManifest 하나. 그 `app_id`가 승인된 토픽 밖이면 403 `topic_not_granted`. 같은 `app_id`의 것을 바꾼다. 판이 바뀌면 일꾼이 뜰 때 다시 올린다.
+- `PUT /api/v1/consumers/self/catalogs/{resource_type}` `{app_id, catalog}` — C13 §5 `Catalog`. Center는 `revision`이 같으면 다시 쓰지 않는다(C7). 승인된 토픽의 것만 받는다. 이 카탈로그가 C7 기여 자원·Studio STU-13의 고를 거리가 된다 — **Center도 Studio도 앱의 주소를 모른다.**
 
 ## 부르는 쪽의 규칙
 
-- **엔진은 모른다.** `ServiceCaller` 자리에 「Center에 올리고 기다리는」 구현이 들어갈 뿐이다. 기다리는 동안 부르는 쪽은 결과 기다리기를 되풀이한다(조각 2). 서버 실행기가 기다리는 동안 스레드를 놓는 것은 조각 6이다.
+- **엔진은 모른다.** `ServiceCaller` 자리에 「Center에 올리고 기다리는」 구현이 들어갈 뿐이다. 기다리는 동안 부르는 쪽은 결과 기다리기를 되풀이한다. 서버 실행기가 기다리는 동안 스레드를 놓는 것은 아직이다 (ADR-0102 조각 6).
 - **멱등 칸은 C11과 같은 규칙으로 짓는다** — 재시작 뒤에도 같은 값이 되게 한다(원칙 9). 그래서 되살린 실행은 새 일감이 아니라 **같은 일감의 결과**를 받는다.
 - 실행이 취소되면 기다리던 일감을 `cancel`한다.
-- 실행 기록(C3 `service_call`)은 지금과 같은 칸에 `task_id`·`deliveries`를 더한다(업무 값 없음).
+- 실행 기록(C3 `service_call`)은 지금과 같은 칸이다(업무 값 없음). `key_ref`는 빈 글이다(키가 없다).
+- **누가 무엇으로 올리나**: 서버 실행기·Studio는 제 Center API 키, Bot UI의 실행기 자식 프로세스·Worker·Tool UI는 호출 토큰(아래 「정한 것」). Studio가 Worker를 빌려 UI 태스크 편집기를 시험할 때(STU-13)는 Studio가 **제 키로 호출 토큰을 청해** 세션에 넣는다 — 호출 토큰은 청한 키와 같은 신원이다(Studio면 `test_…`만).
 
 ## 예시
 
@@ -176,7 +185,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ## 정한 것 (처음에 미정이던 셋)
 
-- **호출 토큰은 하트비트 답에 봉해 싣는다** (C4 `call_token` — 조각 2). Bot UI의 공개키로 봉하고(키 회전과 같은 봉함), 수명은 24시간이며 만료 2시간 전부터 새것을 싣는다. **호출 토큰으로 부르면 Center는 그 Bot UI의 Center API 키로 부른 것과 같이 본다** — 소유(C3)·배포 대조가 같은 신원으로 돈다. 그래서 조각 1의 Center는 Bot UI·서버 실행기·Studio의 **Center API 키로도** 올리기를 받는다(호출 토큰이 그 위에 얹힌다). 호출 토큰은 올리기·기다리기·ack·거두기 밖을 모두 403으로 막는다.
+- **호출 토큰은 Bot UI(또는 Studio)가 제 Center API 키로 청한다** — `POST /api/v1/call-tokens` → `{token, expires_at}`(수명 24시간). 봉하지 않는다: 청하는 길이 이미 그 Bot UI의 키로 인증된 연결이라 다른 응답과 같은 길로 온다(환경변수 키처럼 **공개키가 없는 Bot UI도** 받을 수 있어야 한다 — 하트비트 봉함으로는 그 Bot UI가 못 받는다). Bot UI는 실행을 띄울 때 하나 청해 실행기 자식에게 제어 파일로 넘기고(만료 2시간 전부터 새것을 같은 길로 넣는다), Worker에는 C10 세션으로, Tool UI에는 Bot UI 비밀 저장소의 `call_token`으로 준다. **호출 토큰으로 부르면 Center는 그 Bot UI의 Center API 키로 부른 것과 같이 본다** — 소유(C3)·배포 대조가 같은 신원으로 돈다. 호출 토큰은 `/api/v1/external-tasks`와 **리소스 목록 읽기**(`GET /api/v1/resources…` — 도구·편집기가 C9 카탈로그를 읽는 자리) 밖을 모두 403 `call_token_scope`로 막는다. 서버 실행기·Studio는 제 프로세스 안에서 부르므로 제 Center API 키를 쓴다.
 - **롱폴링 상한은 설정의 기본 200** (`CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` — 올리는 쪽·일꾼의 기다림을 함께 센다). 한 번 가져가기에 잠글 수 있는 수는 **10건까지**(`max_tasks`가 그보다 크면 10으로 깎는다).
 - **어댑터 일꾼은 C13 「전송」의 바깥 앱 명부를 일꾼 토큰으로 받는다** (조각 3) — 승인된 토픽의 외부 확장 정의·봉투만 준다. 받은 쪽은 봉투를 다시 검증한다(E6).
 - 출력 검사는 **`output_schema.required`의 칸이 다 있는가**까지다 — 계약 패키지에 JSON Schema 검증기를 두지 않는다(입력 쪽도 그렇다). 더 깊은 모양은 일꾼과 엔진의 `output` 매핑이 본다.
@@ -192,4 +201,5 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | **구현됨** — 부르는 쪽(서버 실행기·실행기 자식·Studio·Worker·Tool UI)과 일꾼(`service_kit`·어댑터 일꾼)이 붙었다. 옛 Push 길(C11 `/v1/ops`·어댑터 직접 호출·서비스 앱 키 배달)은 걷었다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-28 | 1 | 처음 씀 (초안) | [0102](../decisions/0102-calling-outside-is-pull.md) |

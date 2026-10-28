@@ -259,27 +259,12 @@ def studio_extensions() -> Any:
     return Extensions.load()
 
 
-def test_a_missing_service_app_key_blocks_the_run(tmp_path: Path) -> None:
-    """ADR-0013 §사전 점검 — 키가 없으면 그 태스크에서 죽는다. **시작하기 전에** 막는다."""
-    from chaeksas.core.preflight import MISSING_KEYS  # noqa: PLC0415
-    from chaeksas.studio.preflight import KEY_FIX_HINT, PREFLIGHT_RULE, readiness  # noqa: PLC0415
-
-    found = readiness(opened(tmp_path, "bx36_legacy_migration"), key_value=lambda _ref: None)
-
-    assert [v.code for v in found] == [MISSING_KEYS]
-    only = found[0]
-    assert only.blocks
-    assert only.rule == PREFLIGHT_RULE, "B 규칙과 갈라 보여야 한다 (그림의 흠이 아니다)"
-    # UI 태스크의 앱(ui-automation)도 키 줄이다 — 그 확장이 키를 받는다 (ADR-0094, 빌드가 적는다).
-    assert only.items == ["it-crm", "it-legacy-ui"], "무엇이 빠졌는지 말해야 고칠 수 있다"
-    assert KEY_FIX_HINT in only.message, "어디서 고치는지도 말한다 (STU-10)"
-
-
-def test_registering_the_key_clears_it(tmp_path: Path) -> None:
+def test_a_bot_that_calls_service_apps_is_not_blocked_for_keys(tmp_path: Path) -> None:
+    """ADR-0102 — 서비스 앱 키가 없어졌다. 서비스 앱·UI 태스크를 쓰는 그림이라도 **키로 막지 않는다**."""
     from chaeksas.studio.preflight import readiness  # noqa: PLC0415
 
-    found = readiness(opened(tmp_path, "bx36_legacy_migration"), key_value=lambda _ref: "chk_svc_x")
-    assert not [v for v in found if v.blocks]
+    found = readiness(opened(tmp_path, "bx36_legacy_migration"))
+    assert not [v for v in found if v.blocks], [str(v) for v in found]
 
 
 def test_a_diagram_that_calls_nothing_says_nothing(tmp_path: Path) -> None:
@@ -292,7 +277,6 @@ def test_a_diagram_that_calls_nothing_says_nothing(tmp_path: Path) -> None:
     ext = studio_extensions()
     found = readiness(
         opened(tmp_path, "fx19_manual_task_pc"),
-        key_value=lambda _ref: None,
         host=ext.host,
         context=ext.context,
     )
@@ -303,7 +287,7 @@ def test_unsaved_edits_are_admitted_not_hidden(tmp_path: Path) -> None:
     """요구 사항은 **저장된 파일**에서 모은다 — 방금 더한 키 참조를 「없다」고 하면 엉뚱한 데를 고친다."""
     from chaeksas.studio.preflight import UNSAVED, readiness  # noqa: PLC0415
 
-    found = readiness(opened(tmp_path, "fx19_manual_task_pc"), key_value=lambda _ref: None, dirty=True)
+    found = readiness(opened(tmp_path, "fx19_manual_task_pc"), dirty=True)
 
     assert [v.message for v in found] == [UNSAVED]
     assert not found[0].blocks, "저장하지 않았다는 것으로 실행을 막지는 않는다"
@@ -324,7 +308,6 @@ def test_a_broken_extension_check_warns_without_blocking(tmp_path: Path) -> None
 
     found = readiness(
         opened(tmp_path, "fx19_manual_task_pc"),
-        key_value=lambda _ref: None,
         host=Host(),
         context=lambda _id: object(),  # type: ignore[arg-type,return-value]
     )
@@ -478,7 +461,6 @@ def test_an_unpinned_external_definition_warns_but_does_not_block(tmp_path: Path
     # BX-32는 `ext-helpdesk`(외부)를 쓰고, 지금 그림에는 고정이 없다.
     found = readiness(
         opened(tmp_path, "bx32_customer_inquiry"),
-        key_value=lambda _ref: "chk_svc_x",
         external_ids=("ext-helpdesk",),
     )
     only = [v for v in found if v.code == "definition_unpinned"]
@@ -496,7 +478,7 @@ def test_nothing_is_said_when_we_do_not_know_what_is_external(tmp_path: Path) ->
     """
     from chaeksas.studio.preflight import readiness  # noqa: PLC0415
 
-    found = readiness(opened(tmp_path, "bx32_customer_inquiry"), key_value=lambda _ref: "chk_svc_x")
+    found = readiness(opened(tmp_path, "bx32_customer_inquiry"))
     assert [v for v in found if v.code == "definition_unpinned"] == []
 
 
@@ -517,7 +499,7 @@ def test_a_pinned_drawing_says_nothing(tmp_path: Path) -> None:
     entry = process.entry_definition
     assert entry is not None and entry.process is not None
     assert [v.code for v in readiness(
-        process, key_value=lambda _ref: "chk_svc_x", external_ids=("ext-helpdesk",)
+        process, external_ids=("ext-helpdesk",)
     ) if v.code == "definition_unpinned"] == ["definition_unpinned"], "고정 전에는 경고한다"
 
     # 앱에서는 캔버스가 이 일을 한다 (ADR-0022) — 시험이라 글로 바꿔 심는다.
@@ -535,7 +517,7 @@ def test_a_pinned_drawing_says_nothing(tmp_path: Path) -> None:
     needs = {one.id: one.definition_hash for one in collect_needs(again)}
     assert needs["ext-helpdesk"] == "sha256:" + "a" * 64, "그림의 고정이 매니페스트로 간다"
     assert [v for v in readiness(
-        again, key_value=lambda _ref: "chk_svc_x", external_ids=("ext-helpdesk",)
+        again, external_ids=("ext-helpdesk",)
     ) if v.code == "definition_unpinned"] == []
 
 

@@ -6,6 +6,19 @@
       "title": "Code",
       "type": "string"
     },
+    "detail": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Detail"
+    },
     "message": {
       "default": "",
       "title": "Message",

@@ -81,19 +81,15 @@ def run_test(window: MainWindow, *, mode: str | None = None) -> None:
 
     # 확장 태스크·데스크톱 AI 태스크가 이 PC Bot UI의 Worker를 쓴다 (STU-10 「Worker」).
     tasks = window.extensions.tasks()
-    # 바깥 앱 한 벌 — **실행마다 한 번** 받는다 (케이스마다 Center를 두드리지 않게).
-    # 받지 못한 것은 로그에 적고 그 앱을 부르는 순간 분명히 실패한다 (C7·C13 「전송」).
-    # 키는 **그 앱의 개발 키**다 — 없으면 Center에 청한다 (ADR-0094 §5).
-    keys = window.dev_keys()
-    apps = services.from_settings(window.settings, secrets=keys.resolver(window.key_apps()))
-    directory = apps.directory()
-    for why in apps.problems:
-        window.say(f"바깥 앱: {why}")
-    for app_id, why in sorted(keys.problems.items()):
-        window.say(f"{app_id}의 개발 키를 받지 못했습니다: {why}")
+    # 서비스 태스크는 Center에 외부 작업으로 올린다 (C15, ADR-0102) — Studio 키로, 시험 일감이다.
+    # 키가 없으면 호출기가 없고 그 태스크는 부르는 순간 분명히 실패한다.
+    apps = services.from_settings(window.settings)
+    caller = apps.caller()
+    if caller is None:
+        window.say("서비스 앱: Center 주소·Studio 키가 설정되지 않았습니다 (STU-10)")
     for plan in plans:
         plan.extensions = tasks
-        plan.apps = directory
+        plan.services = caller
 
     window.receiver.start()
     window.queue = plans

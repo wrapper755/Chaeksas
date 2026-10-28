@@ -92,10 +92,6 @@ PICK_POLL_MS = 400
 PORT_SETTING = "runtime.worker.port"
 TOKEN_DIR_SETTING = "runtime.worker.token_dir"
 
-#: 옛 등록 담당자 키 칸 — 정의에서 빠졌고 자동화·CI의 환경변수로만 남는다 (ADR-0094 §6).
-REGISTRAR_KEY = "registrar_key"
-#: 호스트가 도구용 키를 주는 이름 (C13 KeyNeed `utility`, ADR-0094 §6).
-UTILITY_SECRET = "utility"
 
 #: 레지스트리를 부를 수 없을 때의 한 줄. **왜 안 되는지와 어디서 고치는지**를 적는다.
 NO_REGISTRY = (
@@ -1211,24 +1207,22 @@ def summary_of(result: VerifyResult) -> str:
 
 
 def registry_client(ctx: Any) -> Any:
-    """레지스트리를 부르는 쪽 (C9). **주소·키가 없으면 `None`** — 등록이 꺼진다.
+    """레지스트리를 부르는 쪽 (C9). **Center 주소·호출 토큰이 없으면 `None`** — 등록이 꺼진다.
 
-    주소의 출처는 하나다 (C13 예약 키 `service.base_url`), 키는 호스트가 `utility`로 준다(ADR-0094 §6). C11
-    `caller.type`은 **도구를 띄운 호스트**다 (`ctx.host` — Tool UI면 `tool_ui`).
+    둘 다 호스트가 준다 (C13 `center.url`·비밀 `call_token`). 등록 작업은 그 PC에 「셀렉터 등록」
+    (CON-03)이 켜졌을 때만 Center가 받는다 (C15). C11 `caller.type`은 **도구를 띄운 호스트**다.
     """
-    from chaeksas.contracts import SERVICE_URL_SETTING  # noqa: PLC0415
+    from chaeksas.contracts.extension import CALL_TOKEN_SECRET, CENTER_URL_SETTING  # noqa: PLC0415
     from chaeksas.ext.ui_automation.client.registry_client import RegistryClient  # noqa: PLC0415
 
-    base_url = ctx.setting(SERVICE_URL_SETTING)
-    # 도구용 키는 Center가 이 PC Bot UI에 내려 준 것을 호스트가 준다 (ADR-0094 §6 — CON-03
-    # 「셀렉터 등록」). 옛 설정 칸·환경변수(`registrar_key`)는 자동화·CI를 위해 그다음에 본다.
-    api_key = ctx.secret(UTILITY_SECRET) or ctx.secret(REGISTRAR_KEY)
-    if not base_url or not api_key:
+    base_url = ctx.setting(CENTER_URL_SETTING)
+    token = ctx.secret(CALL_TOKEN_SECRET)
+    if not base_url or not token:
         return None
     host = getattr(ctx, "host", None)
     if host:
-        return RegistryClient(base_url=str(base_url), api_key=str(api_key), caller_type=str(host))
-    return RegistryClient(base_url=str(base_url), api_key=str(api_key))
+        return RegistryClient(base_url=str(base_url), call_token=str(token), caller_type=str(host))
+    return RegistryClient(base_url=str(base_url), call_token=str(token))
 
 
 def worker_client(settings: Any) -> Any:

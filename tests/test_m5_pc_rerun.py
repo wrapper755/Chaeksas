@@ -24,14 +24,12 @@ from __future__ import annotations
 
 import json
 import os
-import threading
 import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-import uvicorn
 from conftest import FakeCredentials
 from fastapi.testclient import TestClient
 from stub_model import StubModel
@@ -39,6 +37,7 @@ from stub_model import StubModel
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from center_admin import approve, deploy_id  # noqa: E402
+from consumers import enroll  # noqa: E402
 from waiting import wait_for  # noqa: E402
 
 from chaeksas.bot_ui.agent import Agent, load_extensions  # noqa: E402
@@ -52,7 +51,6 @@ from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
 from chaeksas.core.packages import installed  # noqa: E402
 from chaeksas.core.run_log import RunLog, log_path  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
-from chaeksas.mock_apps.c11 import SHARED_KEY_ENV  # noqa: E402
 from chaeksas.mock_apps.c11 import build as build_mock  # noqa: E402
 from chaeksas.studio.packaging import default_name, export  # noqa: E402
 from chaeksas.studio.workspace import Workspace  # noqa: E402
@@ -65,7 +63,6 @@ ADMIN = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 CENTER_URL = "http://testserver"
 
 #: 모의 앱이 받는 키 하나 (`samples/README.md`).
-DEV_KEY = "chk_svc_pcrerunkey00000000000000000000000000"
 
 
 def pc_examples() -> list[str]:
@@ -112,46 +109,28 @@ def field_answers(example: str) -> dict[str, dict[str, Any]]:
 # ─────────────────────────── 판 깔기 ───────────────────────────
 
 
-@pytest.fixture(scope="session")
-def mock_apps() -> Iterator[dict[str, str]]:
-    """모의 C11 앱들을 한 포트에 띄운다 (`samples/mock_apps`).
-
-    PC 예제 중 BX-36이 `crm`을 쓴다. **확장이 Center에 없으면 배포가 막히므로**(C7 누락 검사)
-    서비스 앱을 등록해 그 확장을 알려야 한다 — 사내 확장의 정의는 Center에 없고 manifest의
-    `extension` 칸이 출처다.
-    """
-    from fastapi import FastAPI  # noqa: PLC0415
-
-    os.environ[SHARED_KEY_ENV] = DEV_KEY
-    root = FastAPI(title="모의 서비스 앱 (PC 재통과)")
-    for one in catalog.C11_APPS:
-        root.mount(f"/{one.app_id}", build_mock(one).app)
-    server = uvicorn.Server(uvicorn.Config(root, host="127.0.0.1", port=0, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 30
-    while not server.started and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert server.started, "모의 앱이 뜨지 않았다"
-    base = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
-    yield {one.app_id: f"{base}/{one.app_id}" for one in catalog.C11_APPS}
-    server.should_exit = True
-    thread.join(timeout=10)
-
-
 @pytest.fixture
-def center(tmp_path: Path, mock_apps: dict[str, str]) -> Iterator[TestClient]:
-    """진짜 Center + 등록된 모의 앱들. 서명 키는 Center가 처음 뜰 때 만든다 (ADR-0090)."""
+def center(tmp_path: Path) -> Iterator[TestClient]:
+    """진짜 Center + **일꾼으로 들인** 모의 앱들. 서명 키는 Center가 처음 뜰 때 만든다 (ADR-0090).
+
+    PC 예제 중 BX-36이 `crm`을 쓴다. **확장이 Center에 없으면 배포가 막히므로**(C7 누락 검사) 모의 앱을
+    일꾼으로 들여 manifest를 올린다 — 사내 확장의 정의는 Center에 없고 manifest의 `extension` 칸이
+    출처다 (ADR-0102 — 주소를 넣는 칸은 없다). 여기서는 일꾼을 **돌리지 않는다** — 끝까지 도는 FX-19는
+    서비스 앱을 부르지 않는다.
+    """
     store = Store(tmp_path / "center.sqlite3")
     settings = CenterSettings(
         db_path=tmp_path / "center.sqlite3", package_dir=tmp_path / "packages", admin_token=ADMIN_TOKEN
     )
     with TestClient(create_app(settings, store=store)) as client:
-        for app_id, base_url in mock_apps.items():
-            answer = client.post(
-                "/api/v1/resources/service-apps", json={"base_url": base_url}, headers=ADMIN
-            )
-            assert answer.status_code < 400, f"{app_id}: {answer.text}"
+        manifests = [build_mock(one).service.manifest.to_json_dict() for one in catalog.C11_APPS]
+        enroll(
+            client,
+            topics=[one["app_id"] for one in manifests],
+            manifests=manifests,
+            name="모의 앱",
+            folder=tmp_path / "mock-apps",
+        )
         yield client
     store.close()
 

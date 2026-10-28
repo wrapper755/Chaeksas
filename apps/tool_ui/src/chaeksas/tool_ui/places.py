@@ -67,8 +67,25 @@ def bot_ui_turned_off(*, root: Path | None = None) -> tuple[str, ...]:
     return tuple(one for one in found if isinstance(one, str) and one)
 
 
+def bot_ui_center_url(*, root: Path | None = None) -> str | None:
+    """Bot UI가 붙은 Center 주소 (C13 `center.url`) — 도구가 외부 작업을 올리는 곳 (ADR-0102).
+
+    **읽기만 한다.** Bot UI처럼 환경변수 `CHK_BOT_UI__CENTER__URL`이 이긴다(같은 규칙).
+    """
+    found = os.environ.get("CHK_BOT_UI__CENTER__URL")
+    if found:
+        return found
+    try:
+        raw = json.loads((root or bot_ui_data_dir()).joinpath(BOT_UI_SETTINGS_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    url = raw.get("center_url") if isinstance(raw, dict) else None
+    return url if isinstance(url, str) and url else None
+
+
 __all__ = [
     "BOT_UI_SETTINGS_FILE",
+    "bot_ui_center_url",
     "DISABLED_EXTENSIONS",
     "ENV_PREFIX",
     "RUNTIME_FILE",

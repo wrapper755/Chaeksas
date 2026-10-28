@@ -15,7 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
 
-from chaeksas.contracts import SERVICE_URL_ENV
+from chaeksas.contracts import CENTER_URL_ENV
 
 #: 포트를 쓸 수 없을 때의 종료 코드 — Bot UI가 「포트 <p> 사용 중」으로 바꿔 보인다 (ADR-0023).
 EXIT_PORT_IN_USE = 2
@@ -24,29 +24,31 @@ EXIT_PORT_IN_USE = 2
 
 
 def plans_for(token_dir: Path, base_url: str) -> object:
-    """세션 하나의 계획·보고 길을 만드는 함수 (C8).
+    """세션 하나의 계획·보고 길을 만드는 함수 (C8 — C15 외부 작업으로 오간다).
 
-    **키는 세션이 준다** (C10 `service_key`) — Worker는 키를 저장하지 않는다. 주소가
-    비어 있으면 `None`이라 계획을 받아 올 수 없다 (「없는데 된 척」하지 않는다).
+    `base_url`은 **Center 주소**다. 호출 토큰은 세션이 준다 (C10 `call_token`) — Worker는 저장하지
+    않는다. 주소나 토큰이 없으면 `None`이라 계획을 받아 올 수 없다 (「없는데 된 척」하지 않는다).
     """
     from chaeksas.ext.ui_automation.contracts.worker_local import SessionRequest  # noqa: PLC0415
     from chaeksas.ext.ui_automation.worker.plans import (  # noqa: PLC0415
         QUEUE_DIR,
-        HttpOps,
+        CenterOps,
         PlanCache,
         PlanService,
         ReportQueue,
     )
 
     def make(request: SessionRequest) -> object | None:
-        if not base_url or not request.service_key:
+        if not base_url or not request.call_token:
             return None
         return PlanService(
-            ops=HttpOps(
+            ops=CenterOps(
                 base_url=base_url,
-                api_key=request.service_key,
+                call_token=request.call_token,
                 business_key=request.business_key,
                 mode=request.mode,
+                bpm_process_id=request.caller.bpm_process_id,
+                version=request.caller.version,
             ),
             cache=PlanCache(folder=token_dir / "plans"),
             queue=ReportQueue(folder=token_dir / QUEUE_DIR),
@@ -94,8 +96,8 @@ def serve(*, port: int, token_dir: Path | None = None) -> int:
     브라우저 백엔드는 Playwright가 깔려 있을 때만 붙는다. 없으면 세션을 열 때 503
     `browser_unavailable`이다 — **없는 것을 되는 척하지 않는다.**
 
-    계획·보고(C8)는 UI 자동화 앱 주소(`CHK_WORKER__SERVICE_URL`)와 **세션이 준 키**가 함께
-    있을 때만 돈다.
+    계획·보고(C8)는 Center 주소(`CHK_RUNTIME__CENTER_URL`)와 **세션이 준 호출 토큰**이 함께
+    있을 때만 돈다 (C15).
     """
     import uvicorn  # noqa: PLC0415 — 띄울 때만 든다
 
@@ -109,7 +111,7 @@ def serve(*, port: int, token_dir: Path | None = None) -> int:
         token=token,
         admin_token=admin,
         backend=cast("Backend | None", found),
-        plans_factory=cast("Any", plans_for(where, os.environ.get(SERVICE_URL_ENV, ""))),
+        plans_factory=cast("Any", plans_for(where, os.environ.get(CENTER_URL_ENV, ""))),
         unsent=unsent_counter(where),
     )
     app = create_app(worker)

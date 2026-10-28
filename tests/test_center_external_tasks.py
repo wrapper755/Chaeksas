@@ -179,7 +179,7 @@ def consumer(
         "topics": topics or [TOPIC],
     }
     if manifest is not None:
-        body["manifest"] = manifest
+        body["manifests"] = [manifest]
     made = center.post("/api/v1/consumers/enroll", json=body)
     assert made.status_code == 201, made.text
     enrollment_id = made.json()["enrollment_id"]
@@ -364,7 +364,7 @@ def test_a_console_lists_consumers_and_topics(center: TestClient, field: str) ->
     consumer(center)
     post(center, field)
     listed = center.get("/api/v1/consumers", headers=ADMIN).json()
-    assert [(one["topics"], one["app_id"]) for one in listed] == [([TOPIC], TOPIC)]
+    assert [(one["topics"], one["apps"]) for one in listed] == [([TOPIC], [f"{TOPIC}@2.0.0"])]
     topic = center.get("/api/v1/external-topics", headers=ADMIN).json()
     assert topic[0]["topic"] == TOPIC and topic[0]["consumers"] == 1 and topic[0]["waiting"] == 1
     assert center.get("/api/v1/consumers", headers=bearer(field)).status_code == 403

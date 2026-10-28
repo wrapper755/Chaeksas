@@ -3,7 +3,7 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 /**
- * `POST /v1/ops/{operation}` 요청.
+ * 작업 함수가 받는 요청 — 일꾼 뼈대가 C15 `LockedTask`에서 짓는다 (C11 §OpRequest).
  */
 export interface OpRequest {
   attempt: number;
@@ -16,6 +16,7 @@ export interface OpRequest {
   mode: string;
   node_id: string;
   node_instance: number;
+  origin?: string;
   run_id: string;
   /**
    * 이 계약의 schema 번호

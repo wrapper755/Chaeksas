@@ -3,7 +3,7 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 /**
- * `POST /v1/ops/{operation}` 응답 (200).
+ * 작업 함수의 결과 — 뼈대가 C15 `complete`로 옮긴다.
  */
 export interface OpResponse {
   mode_used: string;

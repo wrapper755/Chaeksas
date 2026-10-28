@@ -6,13 +6,12 @@
  * `GET /api/v1/consumers`의 한 줄 (CON-07 「일꾼」).
  */
 export interface ConsumerInfo {
-  app_id?: string | null;
   approved_at?: string | null;
+  apps?: string[];
   consumer_id: string;
   key_prefix?: string | null;
   last_fetch_at?: string | null;
   name: string;
   topics?: string[];
-  version?: string | null;
   [k: string]: unknown;
 }

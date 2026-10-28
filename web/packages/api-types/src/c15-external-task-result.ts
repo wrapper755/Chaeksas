@@ -23,6 +23,9 @@ export interface ExternalTaskResult {
  */
 export interface TaskError {
   code: string;
+  detail?: {
+    [k: string]: unknown;
+  } | null;
   message?: string;
   retryable?: boolean;
   [k: string]: unknown;

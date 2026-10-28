@@ -58,9 +58,7 @@ def test_credentials_use_the_folder_when_named(
     assert found.available
     found.set_enroll_secret("private")
     found.set_center_api_key("chk_key")
-    found.set("svc:bot-a:crm", "app-key")
     again = Credentials()  # 다시 떠도 남는다 (볼륨)
     assert again.enroll_secret() == "private"
     assert again.center_api_key() == "chk_key"
-    assert again.service_app_key("crm", "bot-a") == "app-key"
-    assert not again.center_key_from_env()  # 환경변수 키가 아니므로 회전·서비스 앱 키를 받는다
+    assert not again.center_key_from_env()  # 환경변수 키가 아니므로 회전을 받는다

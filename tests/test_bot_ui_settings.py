@@ -143,16 +143,6 @@ def test_saving_without_a_store_fails_loudly(monkeypatch: Any) -> None:
         found.set_center_api_key("chk_ctr_x")
 
 
-def test_service_app_keys_are_kept_by_reference_name(monkeypatch: Any) -> None:
-    """ADR-0013 §3 — BPM 프로세스 속성에는 **참조 이름**만 있고 값은 여기 있다."""
-    from conftest import FakeCredentials  # noqa: PLC0415
-
-    found = FakeCredentials()
-    found.set_service_app_key("finance-invoice", "chk_svc_abc")
-    assert found.service_app_key("finance-invoice") == "chk_svc_abc"
-    assert found.service_app_key("없는-참조") is None
-
-
 # ─────────────────────────── 자동 시작 ───────────────────────────
 
 

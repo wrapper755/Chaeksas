@@ -676,10 +676,10 @@ def test_the_ready_column_says_turned_off_not_missing() -> None:
 
     m = install_bot(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
 
-    off = run_preflight(m, key_value=lambda _ref: None, host=host_with(builtin(), off=("doc-ocr",)))
+    off = run_preflight(m, host=host_with(builtin(), off=("doc-ocr",)))
     assert readiness_label(off)[0] == EXTENSION_OFF
 
-    absent = run_preflight(m, key_value=lambda _ref: None, host=host_with())
+    absent = run_preflight(m, host=host_with())
     assert readiness_label(absent)[0] == NO_EXTENSION
 
 

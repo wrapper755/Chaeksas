@@ -38,6 +38,7 @@ import pytest
 import uvicorn
 from canned_answers import canned
 from center_admin import register_extension
+from consumers import mock_fleet
 from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -47,8 +48,8 @@ from chaeksas.center.settings import Settings as CenterSettings  # noqa: E402
 from chaeksas.center.storage import Store  # noqa: E402
 from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
 from chaeksas.core.app_directory import AppDirectory  # noqa: E402
+from chaeksas.core.services import CenterServiceCaller  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
-from chaeksas.mock_apps.c11 import SHARED_KEY_ENV  # noqa: E402
 from chaeksas.mock_apps.c11 import build as build_mock
 from chaeksas.mock_apps.external import apps as external_apps  # noqa: E402
 from chaeksas.mock_apps.external import definitions as external_defs  # noqa: E402
@@ -63,7 +64,6 @@ DOCS = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples"
 EXAMPLES = DOCS / "bpmn"
 
 #: 모의 앱이 받는 키 하나 (`samples/README.md`). 그림의 키 참조는 모두 이 값으로 풀린다.
-DEV_KEY = "chk_svc_m5acceptancekey000000000000000000000"
 
 ADMIN_TOKEN = "t-admin"
 ADMIN = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
@@ -100,25 +100,31 @@ def serve(app: Any) -> tuple[str, Any, threading.Thread]:
     return f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}", server, thread
 
 
+@dataclass(frozen=True)
+class MockApps:
+    """띄운 모의 앱 — 시나리오를 바꿀 주소(`urls`)와 일꾼이 맡을 C11 앱(`built`)."""
+
+    urls: dict[str, str]
+    built: list[Any]
+
+
 @pytest.fixture(scope="session")
-def mock_apps() -> Iterator[dict[str, str]]:
-    """모의 앱 열여섯 개를 띄운다 — `{app_id: base_url}`.
+def mock_apps() -> Iterator[MockApps]:
+    """모의 앱을 띄운다.
 
-    **TestClient로 끼우지 않는다** — Studio의 엔진이 `httpx`로 진짜 요청을 보내고, 어댑터는
-    호스트를 IP로 풀어 그 IP로 접속한다 (C13 §4-3). 진짜 소켓이어야 그 길이 시험된다.
-
-    C11 앱 열넷은 **한 포트**에 `/<app_id>`로 모은다 (주소에 경로가 붙어도 C11은 그대로
-    이어 붙인다). 외부 앱 둘은 **각자 포트**다 — `AdapterCaller`는 `base_url`의 **경로를
-    버리고** 호스트·포트만 쓰므로(§4-3의 DNS 고정이 origin 단위다), 경로 접두사 뒤에 둘 수
-    없다. 진짜 외부 앱이 제 주소를 갖는 모양과 같다.
+    C11 앱 열셋은 **업무 호출을 HTTP로 받지 않는다** — 일꾼이 Center에서 가져간다(ADR-0102, `center`가
+    붙인다). 그래도 한 포트에 띄우는 것은 **시나리오 제어**(`/mock/v1/scenario`, 모의만의 길) 때문이다.
+    외부 앱 둘은 **각자 포트**다 — 어댑터 일꾼이 진짜 소켓으로 부른다 (C13 §4-3).
     """
     from fastapi import FastAPI  # noqa: PLC0415
 
-    os.environ[SHARED_KEY_ENV] = DEV_KEY
     held = []
     root = FastAPI(title="모의 서비스 앱 (M5 인수 시험)")
+    built = []
     for one in catalog.C11_APPS:
-        root.mount(f"/{one.app_id}", build_mock(one).app)
+        made = build_mock(one)
+        built.append(made)
+        root.mount(f"/{one.app_id}", made.app)
     shared, server, thread = serve(root)
     held.append((server, thread))
 
@@ -128,7 +134,7 @@ def mock_apps() -> Iterator[dict[str, str]]:
         held.append((server, thread))
         found[app_id] = base
 
-    yield found
+    yield MockApps(urls=found, built=built)
     for server, thread in held:
         server.should_exit = True
         thread.join(timeout=10)
@@ -143,11 +149,11 @@ CASE_SCENARIOS: dict[tuple[str, str], tuple[str, str]] = {
 }
 
 
-def scenario(apps: dict[str, str], app_id: str, name: str) -> None:
+def scenario(apps: MockApps, app_id: str, name: str) -> None:
     """모의 앱의 거짓 데이터를 고른다 (모의만의 길 — C11에는 없다, `samples/README.md`)."""
     import httpx  # noqa: PLC0415
 
-    answer = httpx.post(f"{apps[app_id]}/mock/v1/scenario", json={"name": name}, timeout=10)
+    answer = httpx.post(f"{apps.urls[app_id]}/mock/v1/scenario", json={"name": name}, timeout=10)
     assert answer.status_code == 200, answer.text
 
 
@@ -165,16 +171,17 @@ class Center:
     url: str
     client: httpx.Client
     studio_key: str
+    stops: list[threading.Event]
 
 
 @pytest.fixture(scope="session")
 def center(
-    tmp_path_factory: pytest.TempPathFactory, mock_apps: dict[str, str]
+    tmp_path_factory: pytest.TempPathFactory, mock_apps: MockApps
 ) -> Iterator[Center]:
-    """진짜 Center + 등록된 모의 앱들.
+    """진짜 Center + 일꾼으로 붙은 모의 앱들.
 
-    여기서 운영자가 하는 일을 시험이 그대로 한다 — **주소를 넣고**(C7), 외부 확장 정의를
-    **등록한다**(C13 E6 — 봉투는 Center가 짓는다). 둘 다 하지 않으면 Studio가 그 앱을 부를 수 없다.
+    여기서 운영자가 하는 일을 시험이 그대로 한다 — 외부 확장 정의를 **등록하고**(C13 E6 — 봉투는 Center가
+    짓는다), **일꾼을 승인해 들인다**(C15 — 모의 앱 일꾼 하나, 어댑터 일꾼 하나). 주소를 넣는 칸은 없다.
     """
     root = tmp_path_factory.mktemp("center")
     store = Store(root / "center.sqlite3")
@@ -183,21 +190,22 @@ def center(
     )
     url, server, thread = serve(create_app(settings, store=store))
     with httpx.Client(base_url=url, timeout=30.0) as client:
-        for one in catalog.C11_APPS:
-            answer = client.post(
-                "/api/v1/resources/service-apps",
-                json={"base_url": mock_apps[one.app_id]},
-                headers=ADMIN,
-            )
-            assert answer.status_code < 400, f"{one.app_id}: {answer.text}"
-
         for app_id, make in external_defs.BUILDERS.items():
-            register_extension(client, make(mock_apps[app_id]), headers=ADMIN)
+            register_extension(client, make(mock_apps.urls[app_id]), headers=ADMIN)
+        stops = mock_fleet(
+            client,
+            center_url=url,
+            built=mock_apps.built,
+            external_ids=list(external_defs.BUILDERS),
+            folder=root / "workers",
+        )
 
         studio_key = client.post(
             "/api/v1/center-keys", json={"name": "Studio", "type": "studio"}, headers=ADMIN
         ).json()["key"]
-        yield Center(url=url, client=client, studio_key=studio_key)
+        yield Center(url=url, client=client, studio_key=studio_key, stops=stops)
+    for one in stops:
+        one.set()
     server.should_exit = True
     thread.join(timeout=10)
     store.close()
@@ -205,20 +213,26 @@ def center(
 
 @pytest.fixture(scope="session")
 def directory(center: Center) -> AppDirectory:
-    """Studio가 받아 든 바깥 앱 한 벌 — **봉투를 다시 검증한 것**만 들어 있다."""
-    found = Services(
-        reader=CenterReader(base_url=center.url, api_key=center.studio_key, client=center.client),
-        # 그림의 키 참조는 모두 모의 앱의 개발 키로 풀린다 (ADR-0013 — 값은 그림에 없다).
-        secrets=lambda ref: DEV_KEY,
-    )
+    """Studio가 받아 든 외부 확장 정의 — **봉투를 다시 검증한 것**만 들어 있다."""
+    found = Services(reader=CenterReader(base_url=center.url, api_key=center.studio_key, client=center.client))
     made = found.directory()
     assert not found.problems, found.problems
     return made
 
 
-def test_center_knows_every_mock_app(directory: AppDirectory) -> None:
-    """등록이 안 된 앱은 부를 수 없다 — 열넷 모두 주소가 있어야 한다 (C7)."""
-    assert set(directory.addresses) == {one.app_id for one in catalog.C11_APPS}
+@pytest.fixture(scope="session")
+def caller(center: Center) -> CenterServiceCaller:
+    """서비스 태스크가 부르는 자리 — Studio 키로 Center에 외부 작업을 올린다 (C15)."""
+    found = Services(reader=CenterReader(base_url=center.url, api_key=center.studio_key)).caller()
+    assert found is not None
+    return found
+
+
+def test_center_knows_every_mock_app(center: Center) -> None:
+    """일꾼이 올린 manifest가 곧 리소스다 (C7) — 열셋 모두 **일꾼이 맡고 있어야** 부를 수 있다."""
+    found = center.client.get("/api/v1/resources?type=service_app", headers=ADMIN).json()["items"]
+    assert {one["app_id"] for one in found} == {one.app_id for one in catalog.C11_APPS}
+    assert all(one["consumers"] >= 1 for one in found)
 
 
 def test_both_external_definitions_survive_re_verification(directory: AppDirectory) -> None:
@@ -325,9 +339,9 @@ def drive(run: CaseRun, *, timeout_ms: int = 60_000) -> Outcome:
 def run_all(
     tmp_path: Path,
     example: str,
-    directory: AppDirectory,
+    caller: CenterServiceCaller,
     model: StubModel,
-    apps: dict[str, str],
+    apps: MockApps,
     *,
     center_url: str,
     mode: str = AUTONOMOUS,
@@ -349,7 +363,7 @@ def run_all(
                 case=case,
                 mode=mode,
                 settings=replace(settings),
-                apps=directory,
+                services=caller,
             )
             out.append((case, drive(CaseRun(plan, receiver))))
     finally:
@@ -384,9 +398,9 @@ def test_bx33_fails_on_the_branch_it_is_meant_to_fail_on(
     app: Any,
     tmp_path: Path,
     center: Center,
-    directory: AppDirectory,
+    caller: CenterServiceCaller,
     model: StubModel,
-    mock_apps: dict[str, str],
+    mock_apps: MockApps,
 ) -> None:
     """BX-33은 **일부러** 그렇게 두었다 (ADR-0039, 그 예제의 「배운 것」).
 
@@ -394,7 +408,7 @@ def test_bx33_fails_on_the_branch_it_is_meant_to_fail_on(
     그 결재를 지나 끝까지 가고, 「위키 읽기」(낮음)는 이름이 비어 **식 오류로 멈춘다** —
     실행 전 검사 B11이 미리 경고하는 바로 그 자리다. 둘 다 그렇게 되어야 한다.
     """
-    found = run_all(tmp_path, BY_DESIGN, directory, model, mock_apps, center_url=center.url)
+    found = run_all(tmp_path, BY_DESIGN, caller, model, mock_apps, center_url=center.url)
     by_name = {case.name: outcome for case, outcome in found}
     assert set(by_name) == {"위키 읽기", "ERP 쓰기"}, sorted(by_name)
     assert by_name["ERP 쓰기"].verdict in (PASS, NO_EXPECT), by_name["ERP 쓰기"].detail
@@ -407,13 +421,13 @@ def test_the_model_is_really_asked(
     app: Any,
     tmp_path: Path,
     center: Center,
-    directory: AppDirectory,
-    mock_apps: dict[str, str],
+    caller: CenterServiceCaller,
+    mock_apps: MockApps,
     model: StubModel,
 ) -> None:
     """정해 둔 답이 **정말 모델을 거쳐** 오는가 — 스텁이 안 불리면 시험이 거짓말을 한다."""
     before = model.asked
-    results = run_all(tmp_path, "bx13_return_processing", directory, model, mock_apps, center_url=center.url)
+    results = run_all(tmp_path, "bx13_return_processing", caller, model, mock_apps, center_url=center.url)
     assert results
     assert model.asked > before, "AI 태스크가 모델을 부르지 않았다"
 
@@ -423,8 +437,8 @@ def test_an_m5_example_passes_all_its_cases(
     app: Any,
     tmp_path: Path,
     center: Center,
-    directory: AppDirectory,
-    mock_apps: dict[str, str],
+    caller: CenterServiceCaller,
+    mock_apps: MockApps,
     model: StubModel,
     example: str,
 ) -> None:
@@ -434,7 +448,7 @@ def test_an_m5_example_passes_all_its_cases(
     만들지 않으므로 연동용 키·등록된 Bot UI·배포된 BX-17이 필요하지 않다. 위임 결과는 케이스가
     적는다 (C14 `delegations`).
     """
-    results = run_all(tmp_path, example, directory, model, mock_apps, center_url=center.url)
+    results = run_all(tmp_path, example, caller, model, mock_apps, center_url=center.url)
     assert results, f"{example}: 돌릴 케이스가 없다"
     bad = [(c.name, o.verdict, o.detail) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert not bad, f"{example}: {bad}"
@@ -445,14 +459,14 @@ def test_a_remaining_example_still_fails_for_the_written_reason(
     app: Any,
     tmp_path: Path,
     center: Center,
-    directory: AppDirectory,
+    caller: CenterServiceCaller,
     model: StubModel,
-    mock_apps: dict[str, str],
+    mock_apps: MockApps,
     example: str,
 ) -> None:
     """아직 안 되는 것은 **안 된다고 적어 둔다** — 조용히 초록이 되면 목록이 썩는다."""
     if example == "bx36_legacy_migration":
         pytest.skip("데스크톱 예제 — Windows 몫이다")
-    results = run_all(tmp_path, example, directory, model, mock_apps, center_url=center.url)
+    results = run_all(tmp_path, example, caller, model, mock_apps, center_url=center.url)
     bad = [(c.name, o.verdict) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert bad, f"{example}: 이제 통과한다 — REMAINING에서 지운다 ({REMAINING[example]})"

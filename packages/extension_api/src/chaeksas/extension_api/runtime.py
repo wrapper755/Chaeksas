@@ -89,8 +89,12 @@ class TaskContext:
     properties: Mapping[str, Any] = field(default_factory=dict)
     #: UI 세션처럼 실행을 잇는 키 (C10).
     business_key: str | None = None
-    #: 서비스 앱 키 **참조 이름** (ADR-0013). 값은 `extension.secret(key_ref)`로 푼다.
+    #: 옛 칸 — 서비스 앱 키가 없어졌다 (ADR-0102). 엔진이 채우지 않는다.
     key_ref: str | None = None
+    #: 이 실행의 BPM 프로세스(패키지 id)와 판 (C3·C11 `caller`) — 확장이 외부 작업을 올릴 때
+    #: Center가 「그 Bot이 이 토픽을 요구하나」를 본다 (C15).
+    bpm_process_id: str | None = None
+    version: str | None = None
 
 
 @dataclass(frozen=True)

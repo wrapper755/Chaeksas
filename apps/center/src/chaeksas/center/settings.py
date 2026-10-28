@@ -23,14 +23,6 @@ DEFAULT_RUNNER_HEARTBEAT_S = 10
 MAX_REQUEST_KB = 256
 MAX_PACKAGE_MB = 200
 
-#: 서비스 앱 상태·manifest를 다시 읽는 간격 (C7 §리소스 모으는 방식).
-#: 「새로 고침」은 이것을 무시하고 바로 읽는다.
-RESOURCE_STATUS_S = 60
-RESOURCE_MANIFEST_S = 600
-#: 확장 기여 자원 카탈로그를 다시 읽는 간격 (C7 — 5분).
-RESOURCE_CATALOG_S = 300
-#: Center가 서비스 앱을 읽을 때 기다리는 시간. 짧게 — 한 앱이 느려도 목록이 멈추면 안 된다.
-RESOURCE_TIMEOUT_S = 5.0
 
 ENV_PREFIX = "CHK_CENTER__"
 
@@ -50,8 +42,6 @@ def data_dir() -> Path:
 #: 외부 작업 롱폴링을 함께 물고 있을 수 있는 수 (C15 「정한 것」 — 올리는 쪽·일꾼을 함께 센다).
 DEFAULT_EXTERNAL_TASK_WAITERS = 200
 
-#: 서비스 앱 키를 맞추는 간격 (초) — 서비스 앱 상태를 보는 주기와 같다 (C7).
-DEFAULT_RECONCILE_S = 60
 
 
 @dataclass(frozen=True)
@@ -74,8 +64,6 @@ class Settings:
     #: 만들어 로그와 데이터 폴더의 파일에 둔다. 아이디를 비우면 `admin`이다.
     first_admin_username: str | None = None
     first_admin_password: str | None = None
-    #: 서비스 앱 키 맞추기 간격 (초, ADR-0094 §3). **0이면 배경에서 돌지 않는다** — 시험은 손으로 부른다.
-    service_keys_reconcile_s: int = 0
     #: 외부 작업 롱폴링 상한 (C15) — 넘으면 503 `too_many_waiters`.
     external_task_max_waiters: int = DEFAULT_EXTERNAL_TASK_WAITERS
 
@@ -99,7 +87,6 @@ class Settings:
             read_token=_env("READ_TOKEN"),
             first_admin_username=_env("FIRST_ADMIN__USERNAME"),
             first_admin_password=_env("FIRST_ADMIN__PASSWORD"),
-            service_keys_reconcile_s=int(_env("SERVICE_KEYS__RECONCILE_S") or DEFAULT_RECONCILE_S),
             external_task_max_waiters=int(
                 _env("EXTERNAL_TASKS__MAX_WAITERS") or DEFAULT_EXTERNAL_TASK_WAITERS
             ),

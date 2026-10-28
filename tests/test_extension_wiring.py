@@ -61,17 +61,24 @@ def test_the_runner_hands_the_worker_place_to_the_extension(monkeypatch: pytest.
     assert context.setting("runtime.worker.port") == 9123
     assert context.host == "bot_ui"
     monkeypatch.setattr(
-        "chaeksas.bot_ui.credentials.Credentials.service_app_key", lambda self, ref: f"값-{ref}"
+        "chaeksas.bot_ui.credentials.Credentials.extension_secret", lambda self, ext, ref: f"{ext}/{ref}"
     )
-    assert context.secret("purchase-erp-ui") == "값-purchase-erp-ui", "키 참조는 BUI-10의 서비스 앱 키로 푼다"
+    assert context.secret("note") == "ui-automation/note", "그 확장의 비밀 칸으로 푼다"
+    assert context.secret("call_token") is None, "호출 토큰은 Bot UI가 넘긴 것만 — 없으면 없다 (C15)"
 
 
-def test_runner_secrets_fall_back_to_the_extension_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runner_secrets_give_the_call_token_and_extension_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`call_token`은 이 실행의 호출 토큰(C15 — 제어 파일로 갈아 넣는다), 나머지는 그 확장의 비밀 칸이다."""
     from chaeksas.bot_ui.credentials import Credentials  # noqa: PLC0415
+    from chaeksas.bot_ui.runner_main import CallTokenHolder  # noqa: PLC0415
 
-    monkeypatch.setattr(Credentials, "service_app_key", lambda self, ref: None)
     monkeypatch.setattr(Credentials, "extension_secret", lambda self, ext, ref: f"{ext}/{ref}")
-    assert RunnerSecrets(Credentials(), "ui-automation").resolve("registrar_key") == "ui-automation/registrar_key"
+    holder = CallTokenHolder(value="chk_ctr_first")
+    found = RunnerSecrets(Credentials(), "ui-automation", call_token=holder)
+    assert found.resolve("note") == "ui-automation/note"
+    assert found.resolve("call_token") == "chk_ctr_first"
+    holder.value = "chk_ctr_renewed"
+    assert found.resolve("call_token") == "chk_ctr_renewed", "새 토큰을 그 자리에서 쓴다"
 
 
 def test_the_extension_settings_ride_in_a_file_not_on_the_command_line(tmp_path: Path) -> None:
@@ -103,9 +110,9 @@ def test_studio_and_bot_ui_agree_on_where_the_bot_ui_lives(monkeypatch: pytest.M
     assert bot_ui_data_dir() == data_dir()
 
 
-def test_studio_resolves_key_references_from_the_environment_first(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CHK_STUDIO__SVC__TEST_UI", "chk_svc_dev")
-    assert StudioSecrets().resolve("test-ui") == "chk_svc_dev"
+def test_studio_resolves_extension_secrets_from_the_environment_first(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CHK_STUDIO__EXT__UI_AUTOMATION__NOTE", "from-env")
+    assert StudioSecrets(extension_id="ui-automation").resolve("note") == "from-env"
 
 
 def test_studio_runs_get_the_extension_tasks() -> None:

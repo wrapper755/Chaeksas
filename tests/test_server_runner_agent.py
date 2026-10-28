@@ -425,14 +425,6 @@ def test_the_key_is_read_from_the_environment_first(monkeypatch: pytest.MonkeyPa
     assert Credentials().center_api_key() == "chk_ctr_fromenv"
 
 
-def test_service_key_env_name(monkeypatch: pytest.MonkeyPatch) -> None:
-    from chaeksas.server_runner.credentials import service_key_env
-
-    assert service_key_env("erp-key") == "CHK_SERVER_RUNNER__SVC__ERP_KEY"
-    monkeypatch.setenv("CHK_SERVER_RUNNER__SVC__ERP_KEY", "secret")
-    assert Credentials().service_app_key("erp-key") == "secret"
-
-
 @pytest.mark.parametrize(
     ("status", "code", "expected"),
     [
@@ -553,49 +545,26 @@ class _DeadCenter:
         raise Unreachable("꺼져 있다")
 
 
-def test_the_app_directory_is_read_by_the_runner_itself(tmp_path: Path) -> None:
-    """주소는 **C7 리소스 등록**에서 오고 실행기가 **직접** 읽는다 (파일을 거치지 않는다).
+def test_service_calls_go_to_center_as_external_tasks(tmp_path: Path) -> None:
+    """서비스 태스크는 **Center에 외부 작업으로** 올린다 (C15, ADR-0102) — 주소·키를 묻지 않는다.
 
-    Bot UI는 자식 프로세스에 `--services` 파일로 건네지만(ADR-0031) 이 프로세스가 엔진을
-    돌리므로 건넬 곳이 없다. **같은 `DirectoryCache`를 쓴다** — 두 벌이면 「PC는 되는데
-    서버는 안 된다」가 된다.
+    토큰은 이 실행기의 Center API 키이고 **부를 때마다 읽는다**(회전으로 바뀐다). **누가 부르는가**가
+    PC와 다르다 (C11 `caller.type`) — 앱의 기록에 그대로 남는다.
     """
-    made = agent_mod.Agent(
-        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, _Resources())
-    )
+    from chaeksas.core.services import CenterServiceCaller  # noqa: PLC0415
+
+    found = _Resources()
+    client = cast(Any, found)
+    client.api_key = "chk_ctr_first"
+    made = agent_mod.Agent(settings=Settings(data_path=tmp_path / "runner", center_url="http://c:8800"), client=client)
     env = made.run_env(_FakeBot(requires=_CALLS_ERP))
 
-    others = env.services.others  # type: ignore[attr-defined]
-    assert others.addresses.base_url("erp") == "http://127.0.0.1:9/erp"
-    # **누가 부르는가**가 PC와 다르다 (C11 `caller.type`) — 앱의 기록에 그대로 남는다.
-    assert others.caller_type == "server_runner"
-
-
-def test_an_unreachable_center_uses_the_directory_we_held(tmp_path: Path) -> None:
-    """**Center가 꺼졌다고 업무가 멈추지 않는다** (ADR-0007) — 받아 둔 주소로 간다."""
-    bot = _FakeBot(requires=_CALLS_ERP)
-    good = _Resources()
-    agent_mod.Agent(
-        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, good)
-    ).run_env(bot)
-    assert good.asked == 1
-
-    offline = agent_mod.Agent(
-        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, _DeadCenter())
-    )
-    env = offline.run_env(bot)
-    assert env.services.others.addresses.base_url("erp") == good.base_url  # type: ignore[attr-defined]
-
-
-def test_a_bot_that_calls_nothing_gets_an_empty_directory(tmp_path: Path) -> None:
-    """부르는 것이 없으면 **묻지 않는다** — 하트비트마다 Center를 두드리지 않는다."""
-    found = _Resources()
-    made = agent_mod.Agent(
-        settings=Settings(data_path=tmp_path / "runner"), client=cast(Any, found)
-    )
-    env = made.run_env(_FakeBot())
-    assert found.asked == 0
-    assert env.services.others.addresses.base_url("erp") is None  # type: ignore[attr-defined]
+    services = env.services
+    assert isinstance(services, CenterServiceCaller)
+    assert services.base_url == "http://c:8800" and services.caller_type == "server_runner"
+    client.api_key = "chk_ctr_rotated"
+    assert services.token() == "chk_ctr_rotated", "회전한 키를 그 자리에서 쓴다"
+    assert found.asked == 0, "서비스 앱 주소를 묻지 않는다"
 
 
 def test_the_register_answer_already_carries_the_admin_keys(

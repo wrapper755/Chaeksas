@@ -23,7 +23,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from chaeksas.bot_ui.credentials import ENV_LLM_API_KEY
+from chaeksas.bot_ui.credentials import ENV_CALL_TOKEN, ENV_LLM_API_KEY
 from chaeksas.contracts.bot_ui import CurrentRun
 from chaeksas.core import control, outputs, requests
 from chaeksas.core.packages import InstalledBot, write_inputs
@@ -64,6 +64,7 @@ def runner_args(
     llm_model: str = "",
     extensions_path: Path | None = None,
     services_path: Path | None = None,
+    center_url: str = "",
     approval_where: str = "field",
     off_extensions: tuple[str, ...] = (),
     smtp: Any = None,
@@ -119,6 +120,9 @@ def runner_args(
         args += ["--extensions", str(extensions_path)]
     if services_path is not None:
         args += ["--services", str(services_path)]
+    if center_url:
+        # 서비스 태스크를 올릴 곳 (C15). **호출 토큰은 명령줄에 없다** — 환경변수·제어 파일로 간다.
+        args += ["--center-url", center_url]
     for extension_id in off_extensions:
         # 사람이 BUI-11에서 끈 확장 (ADR-0043) — 자식도 기여를 내지 않게 **id만** 넘긴다.
         args += ["--off", extension_id]
@@ -142,20 +146,6 @@ class Request:
         return self.layer == "confirmation"
 
 
-#: 앱이 **키를 거부한** 상태 코드 (C11 오류표 — 401 `key_invalid`, 403 `key_revoked`·`key_expired`).
-#: **값이 이 PC에 없는 것(`key_missing`)은 여기 없다** — 그것은 사전 점검이 할 말이다 (ADR-0052).
-KEY_REFUSED_STATUS = (401, 403)
-
-
-@dataclass(frozen=True)
-class KeyRefusal:
-    """서비스 앱이 키를 거부한 호출 하나 — 실행 기록에서 읽은 것 (C3 `service_call`)."""
-
-    app_id: str
-    key_ref: str
-    status: int
-
-
 @dataclass
 class Running:
     """지금 돌고 있는 Bot 하나 (실행 자리, ADR-0014)."""
@@ -177,8 +167,8 @@ class Running:
     _failure: str = ""
     #: 현장에서 먼저 답한 Center 결재 — Bot UI가 Center에서 거둔다 (`answered_in_field`, ADR-0038).
     field_answered: list[str] = field(default_factory=list)
-    #: 앱이 키를 거부한 호출 — `(앱, 참조)`마다 하나다 (재시도가 여러 줄을 남긴다).
-    _refusals: dict[tuple[str, str], KeyRefusal] = field(default_factory=dict)
+    #: 지금 실행기가 쓰는 호출 토큰 (C15) — 새것이면 제어 파일로 넣는다 (`give_call_token`).
+    call_token: str | None = None
     #: **PC 위임의 결과** — 실행기가 출력 파일에 쓴 것을 `cleanup()`이 들고 온다 (ADR-0062 §4).
     #: 위임이 아니거나 실패했으면 비어 있다. 올리는 것은 `agent._finished`다.
     outputs: dict[str, Any] = field(default_factory=dict)
@@ -237,12 +227,6 @@ class Running:
         """답을 기다리는 결재·확인 (BUI-04 「결재 창 열기」·CMN-01)."""
         return list(self._pendings.values())
 
-    @property
-    def key_refusals(self) -> list[KeyRefusal]:
-        """앱이 키를 거부한 호출들 (BUI-05, ADR-0052). **끝난 뒤에도 남는다** — 실패한 실행을
-        거둘 때 알리는 자리가 여기를 읽는다."""
-        return list(self._refusals.values())
-
     def read(self) -> None:
         """기록 파일에서 **늘어난 줄만** 읽어 지금 상태를 고친다."""
         if not self.log_path.is_file():
@@ -269,15 +253,6 @@ class Running:
             )
         elif kind in ("human_answered", "human_timeout", "human_withdrawn"):
             self._pendings.pop(str(data.get("request_id") or ""), None)
-        elif kind == "service_call":
-            # **묻지 않고 안다** (ADR-0052) — 앱이 키를 거부한 것은 실행이 이미 겪었다.
-            # 거부만 본다: 값이 이 PC에 없는 것은 `status`가 없어 0으로 남고, 그것은
-            # 「앱이 거부했다」가 아니라 사전 점검의 「서비스 앱 키 받지 못함」이다.
-            status = int(data.get("status") or 0)
-            key_ref = str(data.get("key_ref") or "")
-            app_id = str(data.get("app_id") or "")
-            if status in KEY_REFUSED_STATUS and key_ref:
-                self._refusals[(app_id, key_ref)] = KeyRefusal(app_id=app_id, key_ref=key_ref, status=status)
         elif kind == "run_finished":
             self._finished = str(data.get("status") or "success")
             # **업무 값은 없다** — `sanitize()`를 지난 `message`·`code`뿐이다 (C3, 원칙 6).
@@ -307,6 +282,11 @@ class Running:
         if asked is not None and asked.where == "center" and request_id not in self.field_answered:
             # Center 결재함에도 올라가 있다 — 거두지 않으면 결재자가 끝난 것에 또 답한다.
             self.field_answered.append(request_id)
+
+    def give_call_token(self, token: str) -> None:
+        """새 호출 토큰 (C15) — 24시간짜리라 오래 기다리는 실행에는 갈아 넣는다. 값은 제어 파일에만."""
+        control.call_token(self.control_path, token)
+        self.call_token = token
 
     def withdraw(self, request_id: str, *, reason: str) -> None:
         """Center 결재가 답 없이 끝났다 — 회수·만료 (ADR-0038). **답이 아니다.**"""
@@ -382,6 +362,8 @@ class Launcher:
         run_id: str | None = None,
         extensions: dict[str, dict[str, Any]] | None = None,
         services_path: Path | None = None,
+        center_url: str = "",
+        call_token: str | None = None,
         approval_where: str = "field",
         off_extensions: tuple[str, ...] = (),
     ) -> Running:
@@ -393,8 +375,9 @@ class Launcher:
         `off_extensions`는 사람이 BUI-11에서 끈 확장 id다 (ADR-0043) — **실행마다 지금 설정을
         받는다**(실행기를 띄우는 이 객체는 한 번 만들어 두고 쓴다).
 
-        `services_path`는 바깥 앱 명부다 (C7 주소 + 외부 확장 정의·봉투, C13 「전송」) — 부르는
-        쪽이 Center에서 받아 써 둔다. **봉투는 실행기가 다시 검증한다.**
+        `services_path`는 외부 확장 정의·봉투다 (C13 「전송」) — **봉투는 실행기가 다시 검증한다.**
+        `center_url`·`call_token`은 서비스 태스크를 Center에 올리는 데 쓴다 (C15) — 토큰은
+        **환경변수로** 물려준다(명령줄은 프로세스 목록에 뜬다).
         """
         if self.busy:
             raise RuntimeError("이미 실행 중입니다 (PC 한 대에 Bot 하나, ADR-0014)")
@@ -428,6 +411,7 @@ class Launcher:
             webhook_hosts=self.webhook_hosts,
             extensions_path=extensions_path,
             services_path=services_path,
+            center_url=center_url,
             approval_where=approval_where,
             off_extensions=off_extensions,
         )
@@ -437,7 +421,11 @@ class Launcher:
             name=f"실행기 {bot.id}",
             log_path=run_dir(self.data_dir) / f"{made}.runner.log",
             # **환경을 통째로 물려준다** — 키만 주면 PATH도 없는 자식이 된다.
-            env={**os.environ, ENV_LLM_API_KEY: self.llm_key} if self.llm_key else None,
+            env={
+                **os.environ,
+                **({ENV_LLM_API_KEY: self.llm_key} if self.llm_key else {}),
+                **({ENV_CALL_TOKEN: call_token} if call_token else {}),
+            },
         )
         child.start()
         self.running = Running(
@@ -448,6 +436,7 @@ class Launcher:
             child=child,
             job_id=job_id,
             data_dir=self.data_dir,
+            call_token=call_token,
         )
         log.info("Bot %s@%s 실행 (run_id %s)", bot.id, bot.version, made)
         return self.running

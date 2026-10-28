@@ -1,7 +1,8 @@
 """UI 자동화 한 바퀴 — 등록 → 계획 → 실행 → 보고 → 승격 (M4 조각 11).
 
-여기만 **진짜 넷을 한 줄로** 붙인다: 진짜 UI 자동화 앱(in-process), 진짜 Worker, 진짜
-Chromium, 진짜 화면 하나. 조각마다 가짜로 본 것이 **정말 맞물리는지**는 이것만 안다.
+여기만 **진짜 다섯을 한 줄로** 붙인다: 진짜 소켓 Center, 그 일꾼인 진짜 UI 자동화 앱, 진짜 Worker,
+진짜 Chromium, 진짜 화면 하나. 조각마다 가짜로 본 것이 **정말 맞물리는지**는 이것만 안다. Worker는
+앱을 모른다 — Center 주소와 세션이 준 **호출 토큰**으로 C15 외부 작업을 올린다 (ADR-0102).
 
 거듭 보는 것 다섯.
 
@@ -9,21 +10,23 @@ Chromium, 진짜 화면 하나. 조각마다 가짜로 본 것이 **정말 맞�
 2. **사다리는 Worker가 로컬에서 탄다** — 첫 칸이 깨져도 다음 칸으로 간다.
 3. **읽은 값은 보고에 들어가지 않는다** (원칙 6).
 4. **`test` 보고는 승격 통계에 넣지 않는다** — 실행 보고 세 번이어야 올라간다.
-5. 자연어 목표는 **아직 없다** — 422로 분명히 거절한다 (되는 척하지 않는다).
+5. 결정 수행의 목표는 **거절한다** — `mode_unsupported`로 분명히 (되는 척하지 않는다).
+
+보고는 결과를 기다리지 않는다(C15 `want_result: false`) — 승격은 일꾼이 가져갈 때까지 기다려 본다.
 """
 
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Iterator
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
+from uia_center import BOT, VERSION, UiaCenter, running
 
-from chaeksas.contracts.service_app import ServiceAppKey
+from chaeksas.ext.ui_automation.client.registry_client import RegistryClient, RegistryProblem
 from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec
 from chaeksas.ext.ui_automation.contracts.registry import ElementHint, PageRegistration
 from chaeksas.ext.ui_automation.contracts.worker_local import (
@@ -31,14 +34,10 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     SessionRequest,
     StepRequest,
 )
-from chaeksas.ext.ui_automation.service.app import REGISTRY_WRITE, create
-from chaeksas.ext.ui_automation.service.store import Database, SqliteKeyStore
-from chaeksas.ext.ui_automation.worker.app import Worker
+from chaeksas.ext.ui_automation.worker import plans_for
+from chaeksas.ext.ui_automation.worker.app import Worker, WorkerProblem
 from chaeksas.ext.ui_automation.worker.browser import BrowserBackend, available
-from chaeksas.ext.ui_automation.worker.plans import HttpOps, PlanCache, PlanService, ReportQueue
-from chaeksas.service_kit import hash_key
 
-KEY = "chk_svc_" + "e" * 40
 PAGE_ID = "erp.order.form"
 RUN = "run_20261005_120000_abcdef"
 
@@ -80,32 +79,29 @@ def site() -> Iterator[str]:
 
 
 @pytest.fixture
-def served(tmp_path: Path) -> Any:
-    """진짜 UI 자동화 앱 + 등록 담당자 키."""
-    path = tmp_path / "uia.sqlite3"
-    app = create(db_path=path, admin_token="t-admin")
-    SqliteKeyStore(db=Database(path=path)).add(
-        ServiceAppKey(
-            name="시험",
-            hash=hash_key(KEY),
-            prefix=KEY[:16],
-            allowed_operations=["*"],
-            allowed_modes=["deterministic", "autonomous"],
-            extra_scopes=[REGISTRY_WRITE],
-            created_at="2026-10-05T09:00:00+09:00",
-        )
-    )
-    return app
+def center(tmp_path: Path) -> Iterator[UiaCenter]:
+    """진짜 Center + 그 일꾼인 UI 자동화 앱."""
+    with running(tmp_path) as found:
+        yield found
 
 
-def register(app: Any, site: str, *, broken: bool = False) -> None:
+@pytest.fixture
+def token(center: UiaCenter) -> str:
+    """현장 PC 하나의 호출 토큰 — 「셀렉터 등록」을 켰고 그 토픽을 요구하는 Bot이 배포돼 있다."""
+    return str(center.pc_token())
+
+
+@pytest.fixture
+def registry(center: UiaCenter, token: str) -> RegistryClient:
+    return RegistryClient(base_url=center.url, call_token=token)
+
+
+def register(registry: RegistryClient, site: str, *, broken: bool = False) -> None:
     """화면 하나를 등록한다. `broken`이면 **첫 칸이 깨진 사다리**를 함께 넣는다."""
-    from chaeksas.ext.ui_automation.client.registry_client import RegistryClient
-
     qty = [LocatorSpec(type="css", value="#qty")]
     if broken:
         qty = [LocatorSpec(type="css", value="#없는것", priority=1), *qty]
-    RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(app)).register(
+    registry.register(
         PageRegistration(
             schema=1,
             page_id=PAGE_ID,
@@ -126,24 +122,13 @@ def register(app: Any, site: str, *, broken: bool = False) -> None:
 
 
 @pytest.fixture
-def worker(served: Any, tmp_path: Path) -> Iterator[Worker]:
-    """진짜 Worker + 진짜 브라우저 백엔드. 계획·보고는 그 앱으로 간다."""
+def worker(center: UiaCenter, tmp_path: Path) -> Iterator[Worker]:
+    """진짜 Worker + 진짜 브라우저 백엔드. 계획·보고는 **제품과 같은 길**(`plans_for`)로 Center에 간다."""
     backend = BrowserBackend(headless=True)
-    client = TestClient(served)
-
-    def plans(request: SessionRequest) -> PlanService:
-        return PlanService(
-            ops=HttpOps(
-                base_url="http://app",
-                api_key=request.service_key or "",
-                business_key=request.business_key,
-                client=client,
-            ),
-            cache=PlanCache(folder=tmp_path / "plans"),
-            queue=ReportQueue(folder=tmp_path / "reports"),
-        )
-
-    made = Worker(token="t", admin_token="a", backend=backend, plans_factory=plans)
+    made = Worker(
+        token="t", admin_token="a", backend=backend,
+        plans_factory=plans_for(tmp_path / "worker", center.url),  # type: ignore[arg-type]
+    )
     try:
         yield made
     finally:
@@ -152,16 +137,18 @@ def worker(served: Any, tmp_path: Path) -> Iterator[Worker]:
         backend.shutdown()
 
 
-def opened(worker: Worker, site: str, *, attempt: int = 1) -> tuple[str, str]:
+def opened(worker: Worker, site: str, token: str, *, attempt: int = 1) -> tuple[str, str]:
     """세션 하나. **실행마다 다른 `business_key`**다 (C10) — 멱등 키의 뿌리다."""
     request = SessionRequest(
         schema=1,
-        caller=Caller(type="bot", run_id=RUN, node_id="Task_Fill", attempt=attempt),
+        caller=Caller(
+            type="bot", run_id=RUN, node_id="Task_Fill", attempt=attempt, bpm_process_id=BOT, version=VERSION
+        ),
         mode="deterministic",
         business_key=f"{RUN}:Task_Fill:1:{attempt}",
         page_id=PAGE_ID,
         start_url=site,
-        service_key=KEY,
+        call_token=token,
     )
     info, _ = worker.open(request)
     return info.session_id, info.session_secret
@@ -170,10 +157,10 @@ def opened(worker: Worker, site: str, *, attempt: int = 1) -> tuple[str, str]:
 # ─────────────────────────── 한 바퀴 ───────────────────────────
 
 
-def test_a_registered_page_can_be_driven(served: Any, worker: Worker, site: str) -> None:
+def test_a_registered_page_can_be_driven(registry: RegistryClient, worker: Worker, site: str, token: str) -> None:
     """등록 → 계획 → 조작·읽기 → 닫기. **한 줄로 맞물린다.**"""
-    register(served, site)
-    session_id, secret = opened(worker, site)
+    register(registry, site)
+    session_id, secret = opened(worker, site, token)
     assert worker.session is not None and worker.session.plan is not None
     assert worker.session.plan_source == "server"
     assert set(worker.session.plan.locators) >= {"order.qty"}
@@ -189,59 +176,72 @@ def test_a_registered_page_can_be_driven(served: Any, worker: Worker, site: str)
     assert closed.steps_run == 2
 
 
-def test_the_ladder_falls_back_locally(served: Any, worker: Worker, site: str) -> None:
+def test_the_ladder_falls_back_locally(registry: RegistryClient, worker: Worker, site: str, token: str) -> None:
     """**첫 칸이 깨져도 다음 칸으로 간다** — 폴백 도중에는 네트워크를 타지 않는다 (C8)."""
-    register(served, site, broken=True)
-    session_id, secret = opened(worker, site)
+    register(registry, site, broken=True)
+    session_id, secret = opened(worker, site, token)
     found = worker.step(session_id, secret, StepRequest(semantic_key="order.qty", action="fill", value="7"))
     assert found.ok
     assert found.fallback_depth == 1, "두 번째 칸으로 내려갔다"
 
 
-def test_an_unregistered_key_is_refused(served: Any, worker: Worker, site: str) -> None:
+def test_an_unregistered_key_is_refused(registry: RegistryClient, worker: Worker, site: str, token: str) -> None:
     """등록하지 않은 요소는 **계획이 거절한다** (C8 `unknown_semantic_key`)."""
-    register(served, site)
-    session_id, secret = opened(worker, site)
-    from chaeksas.ext.ui_automation.worker.app import WorkerProblem
-
+    register(registry, site)
+    session_id, secret = opened(worker, site, token)
     with pytest.raises(WorkerProblem) as caught:
         worker.step(session_id, secret, StepRequest(semantic_key="order.없는것", action="click"))
     assert caught.value.code == "unknown_semantic_key"
 
 
-def test_the_report_carries_no_business_value(served: Any, worker: Worker, site: str) -> None:
-    """**읽은 값은 보고에 들어가지 않는다** (원칙 6) — 합계 금액이 서버로 가면 안 된다."""
-    register(served, site)
-    session_id, secret = opened(worker, site)
+def test_the_report_carries_no_business_value(
+    center: UiaCenter, registry: RegistryClient, worker: Worker, site: str, token: str
+) -> None:
+    """**읽은 값은 보고에 들어가지 않는다** (원칙 6) — 합계 금액이 Center로도 앱으로도 가면 안 된다."""
+    register(registry, site)
+    session_id, secret = opened(worker, site, token)
     worker.step(session_id, secret, StepRequest(semantic_key="order.qty", action="fill", value="7"))
     worker.step(session_id, secret, StepRequest(semantic_key="order.total", action="read"))
     assert worker.session is not None
     raw = worker.session.report().model_dump_json()
     assert "1,200,000" not in raw and '"7"' not in raw
     assert PAGE_ID in raw
+    assert worker.close(session_id, secret).report == "sent"
+    stored = str([dict(row) for row in center.store.rows("SELECT input_json, output_json FROM external_tasks")])
+    assert "1,200,000" not in stored, "Center에 남은 일감에도 없다"
 
 
-def test_three_runs_promote_through_the_whole_chain(served: Any, worker: Worker, site: str) -> None:
+def wait_for_status(registry: RegistryClient, key: str, status: str) -> str:
+    """보고는 결과를 기다리지 않는다 — 일꾼이 가져가 승격할 때까지 본다."""
+    deadline = time.monotonic() + 15
+    while True:
+        found, _ = registry.get_page(PAGE_ID)
+        now = found.locators[key][0].status
+        if now == status or time.monotonic() > deadline:
+            return now
+        time.sleep(0.1)
+
+
+def test_three_runs_promote_through_the_whole_chain(
+    registry: RegistryClient, worker: Worker, site: str, token: str
+) -> None:
     """보고가 통계를 올리고 **세 번째에 승격**한다 (C8·C9) — 끝에서 끝까지."""
-    from chaeksas.ext.ui_automation.client.registry_client import RegistryClient
-
-    register(served, site)
-    reader = RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(served))
+    register(registry, site)
     for attempt in (1, 2, 3):
-        session_id, secret = opened(worker, site, attempt=attempt)
+        session_id, secret = opened(worker, site, token, attempt=attempt)
         worker.step(session_id, secret, StepRequest(semantic_key="order.qty", action="fill", value="7"))
         assert worker.close(session_id, secret).report == "sent"
 
-    found, _ = reader.get_page(PAGE_ID)
-    assert found.locators["order.qty"][0].status == "active", "세 번 연속 성공이면 올라간다"
+    assert wait_for_status(registry, "order.qty", "active") == "active", "세 번 연속 성공이면 올라간다"
+    found, _ = registry.get_page(PAGE_ID)
     assert found.locators["order.save"][0].status == "unverified", "쓰지 않은 것은 그대로다"
 
 
-def test_a_trial_run_can_keep_its_hands_off_the_server(served: Any, worker: Worker, site: str) -> None:
+def test_a_trial_run_can_keep_its_hands_off_the_server(
+    center: UiaCenter, registry: RegistryClient, worker: Worker, site: str, token: str
+) -> None:
     """BUI-08의 「결과를 서버에 보고」가 꺼져 있으면 **아예 보내지 않는다** (C10 `report`)."""
-    from chaeksas.ext.ui_automation.client.registry_client import RegistryClient
-
-    register(served, site)
+    register(registry, site)
     request = SessionRequest(
         schema=1,
         caller=Caller(type="selector_registration"),
@@ -250,24 +250,22 @@ def test_a_trial_run_can_keep_its_hands_off_the_server(served: Any, worker: Work
         page_id=PAGE_ID,
         start_url=site,
         report=False,
-        service_key=KEY,
+        call_token=token,
     )
     info, _ = worker.open(request)
     worker.step(info.session_id, info.session_secret, StepRequest(semantic_key="order.qty", action="fill", value="7"))
     closed = worker.close(info.session_id, info.session_secret)
     assert closed.report == "queued", "보내지 않았다 — 디스크 큐에만 남는다"
 
-    found, _ = RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(served)).get_page(PAGE_ID)
+    assert not center.store.rows("SELECT 1 FROM external_tasks WHERE operation = 'report'"), "Center에도 없다"
+    found, _ = registry.get_page(PAGE_ID)
     assert found.locators["order.qty"][0].status == "unverified", "통계가 움직이지 않았다"
 
 
-def test_a_goal_in_deterministic_mode_is_refused(served: Any, worker: Worker, site: str) -> None:
+def test_a_goal_in_deterministic_mode_is_refused(registry: RegistryClient, site: str) -> None:
     """결정 수행은 목표로 계획하지 않는다 — LLM을 몰래 부르지 않는다 (C8, ADR-0035)."""
-    from chaeksas.ext.ui_automation.client.registry_client import RegistryClient, RegistryProblem
-
-    register(served, site)
-    client = RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(served))
+    register(registry, site)
     with pytest.raises(RegistryProblem) as caught:
-        client.call("plan", {"page_id": PAGE_ID, "goal": "수량을 넣고 저장"})
+        registry.call("plan", {"page_id": PAGE_ID, "goal": "수량을 넣고 저장"})
     assert caught.value.code == "mode_unsupported"
     assert caught.value.permanent

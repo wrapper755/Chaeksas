@@ -62,8 +62,6 @@ export interface BotRow {
   pcs: number;
   /** 살아 있는 PC 배포 **건수** (툴팁). 같은 PC에 옛 배포가 살아 있으면 `pcs`보다 크다. */
   deployments: number;
-  /** 필요한 서비스 앱 키 참조 (C1 `requires.service_apps`). */
-  key_refs: string[];
   /** Center에 없는 리소스 (C5 — 배포 때 거부된다). */
   missing: string[];
 }
@@ -155,12 +153,6 @@ export function deployedPcs(
   );
   return { pcs: new Set(mine.map((one) => String(one.target.id))).size, deployments: mine.length };
 }
-/** C1 `requires.service_apps` — 상속 참조와 태스크가 따로 적은 참조를 **함께** 센다. */
-export function keyRefsOf(one: PackageInfo): string[] {
-  const needs = one.manifest?.requires?.service_apps ?? [];
-  const found = needs.flatMap((need) => [need.key_ref, ...(need.task_key_refs ?? [])]);
-  return [...new Set(found.filter((ref): ref is string => Boolean(ref)))];
-}
 
 // ───────────────────────────── CON-12 서버 실행 ─────────────────────────────
 
@@ -237,7 +229,6 @@ const EXTENSION_MISSING_CODES = new Set([
 /** 준비 상태의 알맹이 — C4·C12의 `Readiness`가 **같은 모양**이라 둘 다 들어온다. */
 interface ReadinessLike {
   ready?: boolean;
-  missing_key_refs?: string[];
   blocked?: string[];
 }
 
@@ -254,8 +245,6 @@ export function readinessLabel(
 ): { label: string; detail: string[] } | null {
   if (!found) return null;
   if (found.ready) return { label: "준비됨", detail: [] };
-  const missing = found.missing_key_refs ?? [];
-  if (missing.length > 0) return { label: "서비스 앱 키 받지 못함", detail: missing };
   const blocked = found.blocked ?? [];
   if (blocked.includes("extension_turned_off")) return { label: "확장 꺼짐", detail: blocked };
   // **설정이 없는 것은 확장 문제가 아니다** (C1 `requires.settings`, ADR-0059) — 고치는 길이
@@ -265,37 +254,6 @@ export function readinessLabel(
   if (blocked.some((code) => EXTENSION_MISSING_CODES.has(code)))
     return { label: "확장 없음", detail: blocked };
   return { label: "사전 점검 실행 불가", detail: blocked };
-}
-
-/** 서비스 앱 키 하나가 어디까지 왔나 (C5 `BotUiInfo.service_keys`·C12 `ServerRunnerInfo.service_keys`). */
-export interface ServiceKeyStageLike {
-  app_id: string;
-  bpm_process_id?: string | null;
-  purpose?: string;
-  stage: string;
-  error?: string | null;
-}
-
-const KEY_STAGE: Record<string, string> = {
-  app_pending: "Center가 앱에 아직 맡기지 못함",
-  sent: "보냄 — 현장이 받기를 기다림",
-  received: "현장이 받음",
-};
-
-/**
- * 「서비스 앱 키 받지 못함」의 **Center 쪽 까닭** (CON-03·CON-12 툴팁, ADR-0094). 그 Bot의 키가
- * Center에 아예 없으면 「Center가 짓지 않음」이다 — 현장이 공개키 없이(환경변수 키) 들어왔거나,
- * 앱이 Center 발급을 받지 않는다(CON-07이 할 일로 말한다).
- */
-export function keyStages(keys: ServiceKeyStageLike[] | undefined, bot: string): string[] {
-  const mine = (keys ?? []).filter((one) => one.bpm_process_id === bot && (one.purpose ?? "run") === "run");
-  if (mine.length === 0) {
-    return ["Center가 이 Bot의 키를 짓지 않았습니다 — 이 PC가 환경변수 키로 들어왔거나, 앱이 Center 발급을 받지 않습니다 (리소스 화면)"];
-  }
-  return mine.map((one) => {
-    const said = KEY_STAGE[one.stage] ?? one.stage;
-    return `${one.app_id}: ${said}${one.error ? ` (${one.error})` : ""}`;
-  });
 }
 
 /**
@@ -357,7 +315,7 @@ export function botLimitRows(
 /**
  * 「대기 이유」 (CON-12 목록의 대기열 표) — C12 §Center가 작업을 나누는 규칙 3.
  *
- * Center가 적는 사유는 `per_bot_limit`과 `keys_pending`(키 받는 중, ADR-0094)이다. 사유 없이 남은 작업은 아직 보지도
+ * Center가 적는 사유는 `per_bot_limit`이다. 사유 없이 남은 작업은 아직 보지도
  * 않은 것이라 「전체 상한」이고, 실행기가 **모두 멈춰 있으면** 빈자리가 0인 까닭이 상한이
  * 아니라 사람이 멈춘 것이므로 그렇게 말한다 (`free_slots`가 `paused`면 0을 준다).
  *
@@ -373,8 +331,6 @@ export function queueReason(
     const limit = perBotLimit(deployments, job.bpm_process_id);
     return limit === null ? "Bot별 상한" : `Bot별 상한 ${limit}`;
   }
-  // 키를 받은 실행기가 아직 없다 (C12 규칙 5, ADR-0094) — 기다리면 풀린다.
-  if (job.state_reason === "keys_pending") return "키 받는 중";
   if (job.state_reason) return job.state_reason;
   if (runners.length > 0 && runners.every((one) => one.paused)) return "일시 중지";
   return "전체 상한";

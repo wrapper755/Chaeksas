@@ -3,10 +3,14 @@ import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
+import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
+import type { ConsumerInfo } from "@chaeksas/api-types/c15-consumer-info";
+import type { TopicStatus } from "@chaeksas/api-types/c15-topic-status";
 import { CenterError, center, session, type ContributedKind } from "@/lib/center";
 import type { FeatureRow } from "@/lib/features";
 import { Shell } from "@/components/Shell";
-import { registerExtension, registerServiceApp } from "@/app/actions";
+import { Enrollments } from "@/components/Enrollments";
+import { registerExtension } from "@/app/actions";
 import { loadFeatures } from "./load";
 import { RefreshResources } from "./tools";
 
@@ -20,6 +24,9 @@ import { RefreshResources } from "./tools";
  *
  * 기여 자원 탭의 칸은 카탈로그의 **공통 칸**(id·이름·요약·갱신)뿐이다 — `data`는 확장 고유
  * 내용이라 Center도 콘솔도 해석하지 않는다 (C13 §5, ADR-0018).
+ *
+ * 서비스 앱·외부 앱은 **일꾼**으로 Center에 들어온다 (C15, ADR-0102) — 「기능」 탭 아래에
+ * 「일꾼 승인 대기」·「토픽」·「일꾼」이 있다. 주소·키를 넣는 칸은 없다(일꾼의 설정에만 있다).
  */
 
 /** C7 상태 → `status_map` 「서비스 앱」 묶음의 표기. 모르는 값은 그대로 (원칙 10). */
@@ -51,7 +58,6 @@ export default async function ResourcesPage({
   searchParams: Promise<{
     tab?: string;
     error?: string;
-    registered?: string;
     extension?: string;
     revoked?: string;
   }>;
@@ -65,6 +71,10 @@ export default async function ResourcesPage({
   let packages: PackageInfo[] = [];
   let kinds: ContributedKind[] = [];
   let failure: string | null = null;
+  let enrollments: EnrollmentInfo[] = [];
+  let consumers: ConsumerInfo[] = [];
+  let topics: TopicStatus[] = [];
+  let consumerFailure: string | null = null;
   // 어떤 기여 탭이 있는지는 **Center가 안다** (확장이 기여한 종류). 탭 이름을 화면이 짓지 않는다.
   try {
     kinds = (await center.contributedKinds()).items;
@@ -87,6 +97,18 @@ export default async function ResourcesPage({
     }
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
+  }
+  // 일꾼은 「기능」 탭에만 — 못 읽어도 기능 목록은 보여야 하니 따로 잡는다.
+  try {
+    if (!contributedTab) {
+      [enrollments, consumers, topics] = await Promise.all([
+        center.enrollments("consumer"),
+        center.consumers(),
+        center.externalTopics(),
+      ]);
+    }
+  } catch (cause) {
+    consumerFailure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
 
   const shortfall = packages
@@ -137,9 +159,6 @@ export default async function ResourcesPage({
       ) : null}
       {failure ? <ErrorBanner message={failure} /> : null}
       {asked.error ? <ErrorBanner message={asked.error} /> : null}
-      {asked.registered ? (
-        <p className="mb-4 text-body text-status-completed-fg">서비스 앱을 등록했습니다.</p>
-      ) : null}
       {asked.extension ? (
         <p className="mb-4 text-body text-status-completed-fg">기능을 등록했습니다.</p>
       ) : null}
@@ -150,7 +169,19 @@ export default async function ResourcesPage({
       {contributedTab ? (
         <Contributed kind={contributedTab} items={items} />
       ) : (
-        <Features rows={rows} admin={found.mode === "admin"} />
+        <>
+          <Enrollments
+            id="consumer-enrollments"
+            title="일꾼 승인 대기"
+            rows={enrollments}
+            where="일꾼 로그"
+            withTopics
+            canDecide={found.mode === "admin"}
+            nameHelp="사람이 알아볼 일꾼 이름. 비우면 요청이 보낸 이름을 씁니다."
+          />
+          <Features rows={rows} admin={found.mode === "admin"} />
+          <Workers topics={topics} consumers={consumers} failure={consumerFailure} />
+        </>
       )}
     </Shell>
   );
@@ -199,7 +230,7 @@ function Features({ rows, admin }: { rows: FeatureRow[]; admin: boolean }) {
       {rows.length === 0 ? (
         <EmptyState
           title="쓸 수 있는 기능이 없습니다."
-          hint="외부 기능은 「기능 추가 (외부)」로, 서비스 앱은 「서비스 앱 추가」로 등록합니다."
+          hint="외부 기능은 「기능 추가 (외부)」로 등록합니다. 서비스 앱은 일꾼으로 들어옵니다 — 일꾼을 띄우면 「일꾼 승인 대기」에 요청이 옵니다."
         />
       ) : (
         <DataTable columns={columns} rows={rows} rowKey={(row) => row.key} caption="기능" />
@@ -225,30 +256,72 @@ function Features({ rows, admin }: { rows: FeatureRow[]; admin: boolean }) {
         </section>
       ) : null}
 
-      {admin ? (
-        <section id="add-service-app" className="flex flex-col gap-2">
-          <h2 className="text-h2 font-semibold">서비스 앱 추가</h2>
-          <p className="text-body-sm text-text-muted">
-            주소만 넣으세요 — Center가 앱 이름과 어느 기능의 서버인지를 읽어 그 기능의 줄에 붙입니다.
-            읽지 못하면 등록하지 않습니다.
-          </p>
-          <form action={registerServiceApp} className="flex max-w-xl flex-wrap items-end gap-2">
-            <label className="flex flex-1 flex-col gap-1 text-body-sm">
-              <span className="text-text-muted">API 주소 *</span>
-              <input
-                type="url"
-                name="base_url"
-                required
-                placeholder="http://svc-uia:8000"
-                className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
-              />
-            </label>
-            <Button type="submit" variant="primary">
-              등록
-            </Button>
-          </form>
-        </section>
-      ) : null}
+    </div>
+  );
+}
+
+/**
+ * 「토픽」·「일꾼」 (C15) — 바깥 기능 쪽에서 Center로 들어온 일꾼과, 토픽마다 일감이 밀려 있나.
+ *
+ * 일감이 기다리는데 가져가는 일꾼이 없거나 오래 조용하면 **그 토픽을 부르는 Bot이 기한까지 기다리다
+ * 실패한다** — 그래서 「기다리는 일감」과 「가장 오래 기다린 때」를 함께 보인다.
+ */
+function Workers({
+  topics,
+  consumers,
+  failure,
+}: {
+  topics: TopicStatus[];
+  consumers: ConsumerInfo[];
+  failure: string | null;
+}) {
+  const topicColumns: Array<Column<TopicStatus>> = [
+    { key: "topic", header: "토픽", mono: true },
+    { key: "consumers", header: "일꾼", width: "8ch", cell: (row) => String(row.consumers ?? 0) },
+    { key: "last_fetch_at", header: "마지막으로 가져간 때", width: "18ch", cell: (row) => time(row.last_fetch_at) },
+    { key: "waiting", header: "기다리는 일감", width: "12ch", cell: (row) => String(row.waiting ?? 0) },
+    {
+      key: "oldest_waiting_since",
+      header: "가장 오래 기다린 일감",
+      width: "18ch",
+      cell: (row) => time(row.oldest_waiting_since),
+    },
+  ];
+  const consumerColumns: Array<Column<ConsumerInfo>> = [
+    { key: "name", header: "이름" },
+    { key: "topics", header: "토픽", mono: true, cell: (row) => (row.topics ?? []).join(", ") || "—" },
+    {
+      key: "apps",
+      header: "올린 manifest",
+      mono: true,
+      cell: (row) => (Array.isArray(row.apps) ? row.apps.map(String).join(", ") : "") || "—",
+    },
+    { key: "key_prefix", header: "키 앞자리", width: "14ch", mono: true, cell: (row) => row.key_prefix ?? "—" },
+    { key: "approved_at", header: "승인한 때", width: "14ch", cell: (row) => time(row.approved_at) },
+    { key: "last_fetch_at", header: "마지막으로 가져간 때", width: "18ch", cell: (row) => time(row.last_fetch_at) },
+  ];
+  return (
+    <div className="mt-6 flex flex-col gap-6">
+      {failure ? <ErrorBanner message={`일꾼을 읽지 못했습니다: ${failure}`} /> : null}
+      <section className="flex flex-col gap-2">
+        <h2 className="text-h2 font-semibold">토픽</h2>
+        {topics.length === 0 ? (
+          <EmptyState title="일꾼이 맡은 토픽이 없습니다." hint="일꾼을 승인하면 그 토픽이 여기 보입니다." />
+        ) : (
+          <DataTable columns={topicColumns} rows={topics} rowKey={(row) => row.topic} caption="토픽" />
+        )}
+      </section>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-h2 font-semibold">일꾼</h2>
+        {consumers.length === 0 ? (
+          <EmptyState
+            title="들인 일꾼이 없습니다."
+            hint="서비스 앱이나 어댑터 일꾼에 Center 주소를 넣고 띄우면 「일꾼 승인 대기」에 요청이 옵니다."
+          />
+        ) : (
+          <DataTable columns={consumerColumns} rows={consumers} rowKey={(row) => row.consumer_id} caption="일꾼" />
+        )}
+      </section>
     </div>
   );
 }

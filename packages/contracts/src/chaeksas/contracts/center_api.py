@@ -29,7 +29,6 @@ from chaeksas.contracts.bot_ui import (
 )
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.resources import MissingResource
-from chaeksas.contracts.service_keys import ServiceKeyStatus
 from chaeksas.contracts.signing import TARGET_ANY, AdminKey, Envelope, verify, verify_time
 
 #: 헤더 이름 — 문자열을 코드 곳곳에 흩어 두지 않는다 (프로토타입에서 문서의 `X-Bot-Id`와
@@ -259,8 +258,6 @@ class BotUiInfo(ContractModel):
     key: BotUiKey | None = None
     #: CON-03 「셀렉터 등록」 (ADR-0094 §6).
     selector_registration: bool = False
-    #: 이 PC에 내려 줄 서비스 앱 키가 어디까지 왔나 (ADR-0094 — CON-03 「준비」 툴팁).
-    service_keys: list[ServiceKeyStatus] = Field(default_factory=list)
 
 
 # ─────────────────────────── 배포 ───────────────────────────

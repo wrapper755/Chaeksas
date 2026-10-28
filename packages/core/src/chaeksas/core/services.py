@@ -1,8 +1,9 @@
-"""서비스 앱 태스크가 바깥 앱을 부르는 자리 — C11 (`chk:serviceCall`).
+"""서비스 앱 태스크가 바깥 앱을 부르는 자리 — `chk:serviceCall` (C11·C15).
 
 보내기(`core.senders`)와 같은 꼴이다. 엔진은 **무엇을 부를지**만 만들고, 실제로 부르는 일은
-실행하는 쪽이 끼우는 어댑터가 한다. 그래야 주소·키·비밀을 엔진이 들고 있지 않는다
-([ADR-0013](../../../../docs/decisions/0013-api-keys.md) — 키 값은 실행하는 쪽의 비밀 저장소에만).
+실행하는 쪽이 끼우는 어댑터가 한다. 제품의 어댑터는 `CenterServiceCaller` 하나다 — Center에
+외부 작업으로 올리고 일꾼이 끝내기를 기다린다 ([ADR-0102](../../../../docs/decisions/0102-calling-outside-is-pull.md)).
+부르는 쪽은 바깥 앱의 주소도 키도 모른다.
 
 **어댑터를 주지 않으면 부르지 않고 실패한다.** 조용히 건너뛰면 업무가 안 돌아간 채로 흘러간다.
 
@@ -12,12 +13,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
-from chaeksas.contracts.service_app import Caller, OpRequest, OpResponse
+from chaeksas.contracts.service_app import Caller
 
 #: C11 §오류 — 다시 불러 볼 만한 상태 코드. `chk:serviceCall.retry.on`의 기본값이기도 하다.
 RETRYABLE_STATUS = (429, 503, 504)
@@ -70,20 +72,6 @@ class OpCall:
     bpm_process_id: str = ""
     version: str = "0.0.0"
 
-    def request(self, caller: Caller) -> OpRequest:
-        """C11 `OpRequest`. 멱등 키 `(operation, run_id, node_id, node_instance, attempt, call_seq)`."""
-        return OpRequest(
-            schema=1,
-            mode=self.mode,
-            run_id=self.run_id,
-            node_id=self.node_id,
-            node_instance=self.node_instance,
-            attempt=self.attempt,
-            call_seq=self.call_seq,
-            caller=caller,
-            input=dict(self.input),
-        )
-
 
 @dataclass(frozen=True)
 class OpOutcome:
@@ -95,17 +83,6 @@ class OpOutcome:
     replayed: bool = False
     duration_ms: int = 0
     usage: Mapping[str, Any] | None = None
-
-    @classmethod
-    def of(cls, response: OpResponse, *, duration_ms: int, status: int = 200) -> OpOutcome:
-        return cls(
-            output=dict(response.output),
-            status=status,
-            mode_used=response.mode_used,
-            replayed=response.replayed,
-            duration_ms=duration_ms,
-            usage=response.usage.model_dump() if response.usage else None,
-        )
 
     def event_data(self, call: OpCall) -> dict[str, Any]:
         """C3 `service_call`의 `data` (필수 키는 C3 표 그대로). **업무 값은 담지 않는다.**"""
@@ -167,101 +144,146 @@ class RecordingServiceCaller:
         )
 
 
-# ─────────────────────────── 진짜로 부르는 것 (HTTP) ───────────────────────────
+# ─────────────────────────── 진짜로 부르는 것 — C15 외부 작업 ───────────────────────────
+
+#: C15 실패 코드 → C14 `retry.on`이 읽는 HTTP 숫자 (C14 — `dependency_down`=503·`rate_limited`=429·`timeout`=504).
+STATUS_OF_CODE = {"dependency_down": 503, "rate_limited": 429, "timeout": 504, "no_consumer": 504}
+#: 결과를 한 번 기다릴 때 물고 있는 시간 (초, C15 상한).
+_WAIT_S = 25
+#: 기한 뒤에도 Center가 만료를 적을 때까지 더 기다려 주는 여유 (초).
+_SLACK_S = 30.0
 
 
-class Addresses(Protocol):
-    """`app_id` → 주소, `key_ref` → 키 값. 실행하는 쪽(Bot UI·Studio)이 준다.
-
-    키 값은 **여기서만** 나온다 — 엔진·BPM 프로세스·실행 기록은 참조 이름만 안다 (ADR-0013).
-    """
-
-    def base_url(self, app_id: str) -> str | None: ...
-
-    def key(self, key_ref: str) -> str | None: ...
+TokenSource = Any  # () -> str | None — 부를 때마다 읽는다(호출 토큰은 24시간마다 바뀐다)
 
 
 @dataclass
-class HttpServiceCaller:
-    """C11 `POST /v1/ops/{operation}`를 부른다.
+class CenterServiceCaller:
+    """`chk:serviceCall`을 **Center에 외부 작업으로 올리고** 결과를 기다린다 (C15, ADR-0102).
 
-    `client`를 넣으면 그것을 쓴다 (시험에서 ASGI로 바로 붙인다 — `apps/center` 시험과 같은 수법).
+    부르는 쪽은 서비스 앱·외부 앱의 주소도 키도 모른다 — Center 주소와 토큰(서버 실행기·Studio는
+    제 Center API 키, Bot UI의 실행기 자식은 호출 토큰)뿐이다. 엔진은 무엇이 바뀌었는지 모른다 —
+    `ServiceCaller` 자리에 들어갈 뿐이다.
+
+    - 같은 멱등 칸(C11 여섯 칸)이면 Center가 **같은 일감**을 돌려준다 — 되살린 실행이 다시 불러도
+      한 번만 수행된다 (원칙 9).
+    - 실패는 C15 `error.code`를 그대로 싣고, `retry.on`이 읽게 HTTP 숫자로도 옮긴다(`STATUS_OF_CODE`).
+    - 결과를 받으면 `ack`한다 — 그래야 Center가 업무 값을 지운다 (C15 셋째 규칙).
     """
 
-    addresses: Addresses
+    base_url: str
+    token: TokenSource
     caller_type: str = "bot_ui"  # C11 `caller.type`
     host: str = ""
     default_timeout_s: float = 60.0
-    client: Any | None = None  # httpx.Client
+    client: Any | None = None  # httpx.Client (시험은 ASGI로 바로 붙인다)
+    sleep: Any = time.sleep
+
+    def _client(self) -> Any:
+        import httpx  # noqa: PLC0415 — 부를 때만 든다
+
+        return self.client or httpx.Client(base_url=self.base_url, timeout=_WAIT_S + 15.0)
+
+    def _headers(self) -> dict[str, str]:
+        token = self.token() if callable(self.token) else self.token
+        if not token:
+            raise ServiceCallError("Center에 올릴 토큰이 없다 (호출 토큰·Center API 키)", code="token_missing")
+        return {"Authorization": f"Bearer {token}"}
 
     def call(self, request: OpCall) -> OpOutcome:
-        import httpx  # noqa: PLC0415 — 부를 때만 든다 (화면 없는 실행에서 시작이 빨라진다)
+        import httpx  # noqa: PLC0415
 
-        base = self.addresses.base_url(request.app_id)
-        if not base:
-            raise ServiceCallError(f"서비스 앱 주소를 모른다: {request.app_id} (리소스 목록·설정 확인)")
-        if request.key_ref is None:
-            raise ServiceCallError(f"{request.app_id}: 키 참조가 없다 (B7)", code="key_missing")
-        key = self.addresses.key(request.key_ref)
-        if not key:
-            raise ServiceCallError(
-                f"키 참조 「{request.key_ref}」의 값이 이 PC에 없다", code="key_missing"
-            )
-
-        caller = Caller(
-            type=self.caller_type,
-            host=self.host,
-            bpm_process_id=request.bpm_process_id,
-            version=request.version,
-        )
-        payload = request.request(caller).to_json_dict()
-        timeout = request.timeout_s or self.default_timeout_s
+        timeout = int(request.timeout_s or self.default_timeout_s)
+        body = {
+            "schema": 1,
+            "topic": request.app_id,
+            "operation": request.operation,
+            "mode": request.mode,
+            "idempotency": {
+                "run_id": request.run_id,
+                "node_id": request.node_id,
+                "node_instance": request.node_instance,
+                "attempt": request.attempt,
+                "call_seq": request.call_seq,
+            },
+            "caller": Caller(
+                type=self.caller_type, host=self.host, bpm_process_id=request.bpm_process_id, version=request.version
+            ).to_json_dict(),
+            "input": dict(request.input),
+            "timeout_s": timeout,
+            "origin": "test" if request.run_id.startswith("test_") else "run",
+        }
         own = self.client is None
-        client = self.client or httpx.Client(timeout=timeout)
+        client = self._client()
         started = time.monotonic()
         try:
-            response = client.post(
-                f"{base.rstrip('/')}/v1/ops/{request.operation}",
-                json=payload,
-                # 키·토큰은 ASCII만 (CLAUDE.md §5 — 헤더에 한글을 넣지 않는다).
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-            )
+            made = client.post("/api/v1/external-tasks", json=body, headers=self._headers())
+            if made.status_code >= 400:
+                raise _refused(request, made)
+            task_id = str(made.json()["task_id"])
+            until = started + timeout + _SLACK_S
+            while True:
+                got = client.get(
+                    f"/api/v1/external-tasks/{task_id}", params={"wait_s": _WAIT_S}, headers=self._headers()
+                )
+                if got.status_code == 503:
+                    self.sleep(1.0)  # 롱폴링 상한 — 잠깐 쉬고 다시 건다
+                    continue
+                if got.status_code >= 400:
+                    raise _refused(request, got)
+                result = got.json()
+                if result.get("state") in ("completed", "failed", "expired", "cancelled"):
+                    break
+                if time.monotonic() > until:
+                    raise ServiceCallError(
+                        f"{request.app_id}/{request.operation}: 기한이 지났는데 끝나지 않았다", code="timeout",
+                        status=504, retryable=True,
+                    )
+            with contextlib.suppress(httpx.HTTPError):
+                client.post(f"/api/v1/external-tasks/{task_id}/ack", headers=self._headers())
         except httpx.HTTPError as e:
-            raise ServiceCallError(
-                f"{request.app_id}에 닿지 못했다 ({type(e).__name__})", retryable=True
-            ) from e
+            raise ServiceCallError(f"Center에 닿지 못했다 ({type(e).__name__})", retryable=True) from e
         finally:
             if own:
                 client.close()
         duration_ms = int((time.monotonic() - started) * 1000)
+        state = result.get("state")
+        if state != "completed":
+            error = result.get("error") or {}
+            code = str(error.get("code") or state or "failed")
+            raise ServiceCallError(
+                str(error.get("message") or f"{request.app_id}/{request.operation}: {state}"),
+                code=code,
+                status=STATUS_OF_CODE.get(code),
+                retryable=bool(error.get("retryable")),
+            )
+        return OpOutcome(
+            output=dict(result.get("output") or {}),
+            status=200,
+            mode_used=str(result.get("mode_used") or request.mode),
+            replayed=bool(result.get("replayed")),
+            duration_ms=duration_ms,
+            usage=result.get("usage") or None,
+        )
 
-        if response.status_code >= 400:
-            raise _problem(request, response)
-        try:
-            found = OpResponse.model_validate(response.json())
-        except ValueError as e:
-            raise ServiceCallError(f"{request.app_id}의 응답이 C11 모양이 아니다: {e}") from e
-        return OpOutcome.of(found, duration_ms=duration_ms, status=response.status_code)
 
-
-def _problem(call: OpCall, response: Any) -> ServiceCallError:
-    """C11 §오류의 본문(`{code, message, detail}`)을 예외로 바꾼다."""
+def _refused(call: OpCall, response: Any) -> ServiceCallError:
+    """Center가 올리기를 거절했다 (C15 §오류) — 「불러도 되나」는 다시 해도 같다."""
     code, message = None, None
     try:
-        body = response.json()
-        code, message = body.get("code"), body.get("message")
+        found = response.json()
+        code, message = found.get("code"), found.get("message")
     except ValueError:
         pass
-    shown = message or f"{call.app_id}이 {response.status_code}를 돌려줬다"
-    retryable = response.status_code in RETRYABLE_STATUS and code not in FATAL_CODES
-    return ServiceCallError(shown, code=code, status=response.status_code, retryable=retryable)
+    shown = message or f"Center가 {call.app_id}/{call.operation}을 {response.status_code}로 거절했다"
+    return ServiceCallError(shown, code=code, status=response.status_code, retryable=False)
 
 
 __all__ = [
     "FATAL_CODES",
     "RETRYABLE_STATUS",
-    "Addresses",
-    "HttpServiceCaller",
+    "STATUS_OF_CODE",
+    "CenterServiceCaller",
     "NoServiceCaller",
     "OpCall",
     "OpOutcome",

@@ -38,7 +38,6 @@ from chaeksas.contracts.signing import sign
 from chaeksas.core.packages import CENTER, INSTALL_SOURCE_NAME, SOURCE_LABELS, installed
 from chaeksas.server_runner import agent as agent_mod
 from chaeksas.server_runner.center_client import CenterClient
-from chaeksas.server_runner.credentials import Credentials
 from chaeksas.server_runner.settings import Settings
 
 ADMIN = {"Authorization": "Bearer t-admin"}
@@ -340,10 +339,10 @@ def _public_keys(store: Store) -> list[Any]:
 # ─────────────────────────── 준비 상태 (C12 `readiness`) ───────────────────────────
 
 
-def test_readiness_names_the_missing_key_ref(
+def test_a_bot_that_calls_a_service_app_is_ready_without_keys(
     center: TestClient, store: Store, runner: agent_mod.Agent
 ) -> None:
-    """키 참조가 이 서버에 없으면 **그 이름을 올린다** (C12 — CON-12가 보인다)."""
+    """서비스 앱은 Center에 외부 작업으로 올린다 (ADR-0102) — **키가 없다고 막지 않는다**."""
     runner.tick()
     info = approved(
         center, requires={"service_apps": [{"app_id": "erp", "operations": ["issue"], "key_ref": "erp-key"}]}
@@ -353,29 +352,8 @@ def test_readiness_names_the_missing_key_ref(
 
     found = runner.readiness()
     assert [r.bpm_process_id for r in found] == [BOT]
-    assert found[0].ready is False
-    assert found[0].missing_key_refs == ["erp-key"]
-
-
-def test_readiness_sees_the_key_once_it_is_there(
-    center: TestClient,
-    store: Store,
-    runner: agent_mod.Agent,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """키를 주면 **다음에 묻는 쪽이 「준비됨」을 본다** — 캐시가 그것을 막으면 안 된다."""
-    runner.tick()
-    info = approved(
-        center, requires={"service_apps": [{"app_id": "erp", "operations": ["issue"], "key_ref": "erp-key"}]}
-    )
-    deploy(center, info, target=runner.server_runner_id)
-    runner.tick()
-    assert runner.readiness()[0].ready is False
-
-    monkeypatch.setenv("CHK_SERVER_RUNNER__SVC__ERP_KEY", "secret")
-    runner.credentials = Credentials()
-    runner._readiness.clear()  # noqa: SLF001 — 설치·키가 바뀌면 비우는 그 자리다
-    assert runner.readiness()[0].ready is True
+    assert found[0].ready is True
+    assert found[0].missing_key_refs == []
 
 
 def test_readiness_is_empty_without_installs(runner: agent_mod.Agent) -> None:

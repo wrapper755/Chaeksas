@@ -8,13 +8,14 @@ import { Shell } from "@/components/Shell";
 /**
  * SVC-03 사용 기록.
  *
- * **업무 값이 없다** (계약 원칙 6 — 키·작업·결과·소요만). 그래서 이 표에 「입력」 열이 없다.
- * 좁히기와 「키별 합계」는 다음에 붙인다.
+ * **업무 값이 없다** (계약 원칙 6 — 부른 쪽·작업·결과·소요만). 그래서 이 표에 「입력」 열이 없다.
+ * 「부른 쪽」은 일감의 `caller`(`<종류>:<호스트>`)다 — 앱 키는 없다 (C15, ADR-0102).
+ * 좁히기와 「부른 쪽별 합계」는 다음에 붙인다.
  */
 
 const MODE_LABEL: Record<string, string> = { autonomous: "자율", deterministic: "결정" };
 
-/** HTTP 상태 → status_map 「작업」 표기. 403은 「거절」이다 (키 권한에 막힌 것). */
+/** HTTP 상태 → status_map 「작업」 표기. 403은 「거절」이다 (권한에 막힌 것). */
 function outcome(status: number): string {
   if (status < 300) return "수락";
   if (status === 403) return "거절";
@@ -45,7 +46,7 @@ export default async function UsagePage() {
 
   const columns: Array<Column<UsageRecord>> = [
     { key: "at", header: "시각", width: "20ch", cell: (row) => moment(row.at) },
-    { key: "key_name", header: "키 이름", width: "20ch", mono: true },
+    { key: "key_name", header: "부른 쪽", width: "24ch", mono: true },
     { key: "operation", header: "작업", width: "14ch", mono: true },
     { key: "mode", header: "수행 모드", width: "10ch", cell: (row) => MODE_LABEL[row.mode] ?? row.mode },
     {
@@ -83,7 +84,7 @@ export default async function UsagePage() {
 
       {failure ? <ErrorBanner message={failure} /> : null}
       {rows.length === 0 && !failure ? (
-        <EmptyState title="호출 기록이 없습니다." hint="키를 발급하고 BPM 프로세스에서 이 앱을 부르면 쌓입니다." />
+        <EmptyState title="호출 기록이 없습니다." hint="BPM 프로세스가 이 앱을 부르고 일꾼이 그 일감을 가져가면 쌓입니다." />
       ) : rows.length > 0 ? (
         <DataTable columns={columns} rows={rows} rowKey={(row, index) => `${row.at}-${index}`} caption="사용 기록" />
       ) : null}

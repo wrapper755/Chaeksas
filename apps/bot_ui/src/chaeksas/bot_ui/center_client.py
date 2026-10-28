@@ -28,7 +28,8 @@ from chaeksas.contracts.bot_ui import (
     RegisterResponse,
 )
 from chaeksas.contracts.enrollment import EnrollStatus
-from chaeksas.contracts.resources import ExtensionResource, ServiceAppResource
+from chaeksas.contracts.external_task import CallToken
+from chaeksas.contracts.resources import ExtensionResource
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,8 @@ API = "/api/v1/bot-ui"
 APPROVALS = "/api/v1/approvals"
 #: 리소스 목록도 C7 경로다 — 주소와 외부 확장 정의를 읽는다 (Bot UI 키로, C5 권한표).
 RESOURCES = "/api/v1/resources"
+#: 호출 토큰 (C15) — Bot UI 키로 청한다.
+CALL_TOKENS = "/api/v1/call-tokens"
 #: 요청 크기 한도 (C4 — 256 KB). 넘으면 보내기 전에 막는다.
 MAX_REQUEST_KB = 256
 #: 한 번의 요청을 기다리는 시간. 하트비트 주기(30초)보다 넉넉히 짧게.
@@ -170,15 +173,9 @@ class CenterClient:
             self._send(f"/{request_id}", None, method="DELETE", api=APPROVALS, params={"reason": reason})
         )
 
-    def service_apps(self) -> list[ServiceAppResource]:
-        """서비스 앱 리소스 목록 (C7 `GET /resources?type=service_app`) — **주소의 유일한 출처**다.
-
-        Bot UI 키로 읽는다 (C5 권한표). **앱을 깨우지 않는다** — Center가 들고 있는 것을 준다.
-        """
-        found = self._send(
-            "", None, method="GET", api=RESOURCES, params={"type": "service_app"}
-        )
-        return [ServiceAppResource.model_validate(one) for one in found.get("items") or []]
+    def call_token(self) -> CallToken:
+        """호출 토큰 (C15 `POST /call-tokens`) — 실행기 자식·Worker·Tool UI가 외부 작업을 올릴 때 쓴다."""
+        return CallToken.model_validate(self._send("", {}, api=CALL_TOKENS))
 
     def extension(self, extension_id: str) -> ExtensionResource:
         """확장 하나 (C7 `GET /resources/extensions/{id}`). 외부면 **정의와 봉투**가 함께 온다.

@@ -102,7 +102,6 @@ def inspect(
 def readiness(
     owner: BpmProcess,
     *,
-    key_value: Callable[[str], str | None],
     host: ExtensionHost | None = None,
     context: Callable[[str], ExtensionContext] | None = None,
     dirty: bool = False,
@@ -155,9 +154,7 @@ def readiness(
         )
         return out
 
-    found = platform.check(
-        manifest, key_value=key_value, host=host, context=context, fix_hint=KEY_FIX_HINT
-    )
+    found = platform.check(manifest, host=host, context=context)
     for finding in found.findings:
         hint = f" ({finding.fix_hint})" if finding.fix_hint else ""
         out.append(

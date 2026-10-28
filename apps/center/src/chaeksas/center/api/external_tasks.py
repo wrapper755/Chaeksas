@@ -33,11 +33,14 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from chaeksas.center import enrollments, keys
-from chaeksas.center.api import bot_ui, deployments, server_runner
+from chaeksas.center.api import bot_ui, deployments, resources, server_runner
 from chaeksas.center.auth import Caller, require_console
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
+from chaeksas.contracts.center_keys import BoundTo
 from chaeksas.contracts.external_task import (
+    CALL_TOKEN,
+    CALL_TOKEN_HOURS,
     CODE_NO_CONSUMER,
     CODE_TIMEOUT,
     CONSUMER,
@@ -47,6 +50,7 @@ from chaeksas.contracts.external_task import (
     MAX_VALUE_BYTES,
     MAX_WAIT_S,
     PURGE_AFTER_DAYS,
+    REGISTRATION_RUN_PREFIX,
     RETRYABLE_CODES,
     STATE_CANCELLED,
     STATE_COMPLETED,
@@ -55,6 +59,7 @@ from chaeksas.contracts.external_task import (
     STATE_LOCKED,
     STATE_PENDING,
     TEST_RUN_PREFIX,
+    CallToken,
     CompleteRequest,
     ConsumerInfo,
     ExtendRequest,
@@ -121,7 +126,23 @@ class Poster:
 
 
 def poster_of(store: Store, found: Caller) -> Poster:
-    """올릴 수 있는 쪽인가 (C15 §전송). 등록되지 않은 Bot UI·실행기는 409 `not_registered`."""
+    """올릴 수 있는 쪽인가 (C15 §전송). 등록되지 않은 Bot UI·실행기는 409 `not_registered`.
+
+    **호출 토큰은 그것을 청한 쪽으로 본다** — 소유(C3)·배포 대조가 그 Bot UI(또는 Studio)의 키로 돈다.
+    """
+    if found.key is not None and found.key.type == CALL_TOKEN:
+        bound = found.key.bound_to
+        if bound is not None and bound.type == STUDIO:
+            parent = keys.get(store, bound.id)
+            if parent is None or parent.state(now=now_iso()) != "active":
+                raise ApiError(409, "not_registered", "호출 토큰을 청한 Studio 키가 없다")
+            return Poster(key_id=parent.key_id, kind=STUDIO, host_id=None)
+        row = (
+            store.row("SELECT key_id FROM bot_uis WHERE bot_ui_id = ?", (bound.id,)) if bound is not None else None
+        )
+        if bound is None or row is None or not row["key_id"]:
+            raise ApiError(409, "not_registered", "호출 토큰을 청한 Bot UI가 없다")
+        return Poster(key_id=str(row["key_id"]), kind="bot_ui", host_id=bound.id)
     if found.key is None or found.key.type not in POSTER_KEY_TYPES:
         raise ApiError(403, "wrong_key_type", "외부 작업은 Bot UI·서버 실행기·Studio의 Center API 키로 올린다")
     kind = found.key.type
@@ -133,16 +154,38 @@ def poster_of(store: Store, found: Caller) -> Poster:
     return Poster(key_id=found.key.key_id, kind=kind, host_id=host_id)
 
 
+def issue_call_token(store: Store, found: Caller, *, now: str | None = None) -> CallToken:
+    """`POST /call-tokens` — Bot UI·Studio만, 24시간 (C15 「정한 것」). 지난 토큰은 이때 지운다."""
+    if found.key is None or found.key.type not in ("bot_ui", STUDIO):
+        raise ApiError(403, "wrong_key_type", "호출 토큰은 Bot UI·Studio의 Center API 키로 청한다")
+    if found.key.type == STUDIO:
+        bound = BoundTo(type=STUDIO, id=found.key.key_id, name=found.key.name)
+    else:
+        bot_ui_id = bot_ui.id_for_key(store, found.key.key_id)
+        if bot_ui_id is None:
+            raise ApiError(409, "not_registered", "등록되지 않은 Center API 키다")
+        bound = BoundTo(type="bot_ui", id=bot_ui_id, name=found.key.name)
+    at = now or now_iso()
+    with store.tx() as cur:
+        cur.execute(
+            "DELETE FROM center_keys WHERE type = ? AND expires_at <= ?", (CALL_TOKEN, _later(at, -86400))
+        )
+    record, raw = keys.issue(
+        store,
+        name=f"호출 토큰 · {found.key.name}",
+        key_type=CALL_TOKEN,
+        expires_at=_later(at, CALL_TOKEN_HOURS * 3600),
+        bound=bound,
+    )
+    assert record.expires_at is not None
+    return CallToken(token=raw, expires_at=record.expires_at)
+
+
 def _topic_manifest(store: Store, topic: str) -> ServiceAppManifest | None:
     """그 토픽에 들인 일꾼이 올린 manifest (가장 최근에 승인된 것). 없으면 `None` — 그때는 작업을
-    대조하지 않는다 (아무도 없으면 기한에 `no_consumer`로 실패한다)."""
-    for row in store.rows("SELECT topics_json, manifest_json FROM consumers ORDER BY approved_at DESC"):
-        if topic in (loads(row["topics_json"], []) or []) and row["manifest_json"]:
-            try:
-                return ServiceAppManifest.model_validate(loads(row["manifest_json"]))
-            except ValueError:
-                continue
-    return None
+    대조하지 않는다 (아무도 없으면 기한에 `no_consumer`로 실패한다). 고르는 규칙은 리소스 목록과 같다."""
+    found = resources.app_manifests(store).get(topic)
+    return found[0] if found is not None else None
 
 
 def _owns_the_run(store: Store, *, run_id: str, key_id: str) -> bool:
@@ -181,6 +224,12 @@ def _authorize(store: Store, poster: Poster, task: ExternalTaskCreate) -> int:
     if poster.kind == STUDIO:
         if not run_id.startswith(TEST_RUN_PREFIX):
             raise ApiError(403, "run_not_owned", f"Studio는 시험 실행(`{TEST_RUN_PREFIX}…`)으로만 올린다")
+    elif poster.kind == "bot_ui" and run_id.startswith(REGISTRATION_RUN_PREFIX):
+        # 등록 세션 (C9 — Tool UI 셀렉터 등록·그 시험). Bot이 없다 — 그 PC의 스위치가 관문이다.
+        if task.mode == "autonomous":
+            raise ApiError(403, "mode_not_allowed", "자율 수행은 Studio에서만 올린다")
+        if not _selector_registration_on(store, poster.host_id):
+            raise ApiError(403, "registration_off", "이 PC에는 「셀렉터 등록」이 켜져 있지 않다 (CON-03)")
     else:
         if run_id.startswith(TEST_RUN_PREFIX) or not _owns_the_run(store, run_id=run_id, key_id=poster.key_id):
             raise ApiError(403, "run_not_owned", "이 키의 실행이 아니다")
@@ -485,6 +534,8 @@ def fail(store: Store, consumer: Any, task_id: str, body: FailRequest, *, now: s
     sweep(store, now=now)
     row = _consumer_task(store, consumer, task_id)
     error = {"code": body.code, "message": body.message, "retryable": body.retryable and body.code in RETRYABLE_CODES}
+    if body.detail:
+        error["detail"] = body.detail
     _finish(
         store, task_id, state=STATE_FAILED, output=None, extra={"error": error}, acked=not row["want_result"], now=now
     )
@@ -534,24 +585,32 @@ def extend(store: Store, consumer: Any, task_id: str, body: ExtendRequest, *, no
 
 
 def put_manifest(store: Store, consumer: Any, raw: dict[str, Any]) -> ConsumerInfo:
-    """manifest·카탈로그를 다시 올린다 (판이 바뀌었다). `app_id`가 승인된 토픽 밖이면 403."""
+    """manifest 하나를 다시 올린다 (판이 바뀌었다). `app_id`가 승인된 토픽 밖이면 403."""
     try:
         manifest = ServiceAppManifest.model_validate(raw)
     except ValueError as e:
         raise ApiError(422, "input_invalid", "manifest가 C11과 맞지 않는다", {"error": str(e).splitlines()[0]}) from e
     if manifest.app_id not in set(loads(consumer["topics_json"], []) or []):
         raise ApiError(403, "topic_not_granted", f"승인받지 않은 토픽이다: {manifest.app_id}")
+    held = [one for one in _held_manifests(consumer) if one.get("app_id") != manifest.app_id]
+    held.append(manifest.to_json_dict())
     with store.tx() as cur:
         cur.execute(
             "UPDATE consumers SET manifest_json = ? WHERE consumer_id = ?",
-            (dumps(manifest.to_json_dict()), consumer["consumer_id"]),
+            (dumps(sorted(held, key=lambda one: str(one.get("app_id")))), consumer["consumer_id"]),
         )
     return _consumer_info(store, store.row("SELECT * FROM consumers WHERE consumer_id = ?", (consumer["consumer_id"],)))
 
 
+def _held_manifests(row: Any) -> list[dict[str, Any]]:
+    found = loads(row["manifest_json"])
+    if isinstance(found, dict):
+        return [found]
+    return [one for one in (found or []) if isinstance(one, dict)]
+
+
 def _consumer_info(store: Store, row: Any) -> ConsumerInfo:
     record = keys.get(store, str(row["key_id"]))
-    manifest = loads(row["manifest_json"], {}) or {}
     return ConsumerInfo(
         consumer_id=row["consumer_id"],
         name=row["name"],
@@ -559,8 +618,7 @@ def _consumer_info(store: Store, row: Any) -> ConsumerInfo:
         key_prefix=record.prefix if record else None,
         approved_at=row["approved_at"],
         last_fetch_at=row["last_fetch_at"],
-        app_id=manifest.get("app_id"),
-        version=manifest.get("version"),
+        apps=[f"{one.get('app_id')}@{one.get('version')}" for one in _held_manifests(row)],
     )
 
 
@@ -683,6 +741,11 @@ def _model(model: Any, raw: dict[str, Any]) -> Any:
         raise ApiError(422, "input_invalid", "본문이 계약과 맞지 않는다", {"error": str(e).splitlines()[0]}) from e
 
 
+@router.post("/call-tokens", status_code=201)
+def post_call_token(request: Request) -> Any:
+    return issue_call_token(_store(request), _caller(request))
+
+
 @router.post("/external-tasks")
 async def post_task(request: Request) -> Any:
     made, fresh = create(_store(request), _caller(request), await _body(request))
@@ -701,7 +764,7 @@ async def get_task(request: Request, task_id: str, wait_s: int = 0) -> Any:
         return now if now.state in FINAL_STATES else None
 
     done = await _until(request, wait_s, check)
-    return done or result(store, found, task_id)
+    return (done or result(store, found, task_id)).to_json_dict()
 
 
 @router.post("/external-tasks/{task_id}/ack")
@@ -734,7 +797,9 @@ async def post_fetch(request: Request) -> Any:
     consumer = consumer_of(store, found)
     wanted: FetchRequest = _model(FetchRequest, await _body(request))
     tasks = await _until(request, wanted.wait_s, lambda: take(store, consumer, wanted))
-    return FetchResponse(tasks=tasks or [], rotated_token=rotation(store, found, consumer))
+    return FetchResponse(
+        tasks=tasks or [], consumer_id=str(consumer["consumer_id"]), rotated_token=rotation(store, found, consumer)
+    )
 
 
 @router.post("/consumers/tasks/{task_id}/complete")
@@ -767,6 +832,13 @@ async def put_self_manifest(request: Request) -> Any:
     store = _store(request)
     consumer = consumer_of(store, _caller(request))
     return put_manifest(store, consumer, await _body(request))
+
+
+@router.put("/consumers/self/catalogs/{resource_type}")
+async def put_self_catalog(request: Request, resource_type: str) -> Any:
+    store = _store(request)
+    consumer = consumer_of(store, _caller(request))
+    return resources.put_catalog(store, consumer=consumer, resource_type=resource_type, raw=await _body(request))
 
 
 @router.get("/consumers")

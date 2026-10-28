@@ -1,4 +1,4 @@
-"""UI 자동화 앱과 말하는 길 — 계획·치유·보고 (C8).
+"""UI 자동화 앱과 말하는 길 — 계획·치유·보고 (C8). **Center의 외부 작업으로 오간다** (C15, ADR-0102).
 
 세 번만 오간다. 그 사이의 사다리는 **로컬에서** 돈다 (`ladder.py`).
 
@@ -13,9 +13,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,7 +33,7 @@ from chaeksas.ext.ui_automation.contracts.plan import (
 
 log = logging.getLogger(__name__)
 
-#: C8의 세 작업 (C11 서비스 앱 작업이다).
+#: C8의 세 작업 (C11 서비스 앱 작업 — 토픽 `ui-automation`의 작업이다).
 OP_PLAN = "plan"
 OP_HEAL = "heal"
 OP_REPORT = "report"
@@ -50,24 +52,35 @@ class Ops(Protocol):
     def call(self, operation: str, body: dict[str, Any], *, call_seq: int) -> dict[str, Any]: ...
 
 
-@dataclass
-class HttpOps:
-    """C11로 UI 자동화 앱을 부른다 (Worker 쪽).
+#: 계획·치유·보고가 걸리는 토픽 (C8·C15) — UI 자동화 앱이 일꾼으로 가져간다.
+TOPIC = "ui-automation"
+#: 결과를 한 번 기다릴 때 물고 있는 시간 (초, C15 상한).
+_WAIT_S = 25
 
-    - **키는 세션이 준다** (C10 `service_key` — 부르는 쪽이 키 참조를 풀어 넣는다, ADR-0013).
-      Worker는 세션 동안 메모리에만 두고 디스크·로그에 남기지 않는다.
-    - 멱등 키는 `(run_id, node_id, node_instance, attempt, call_seq)`다 (C11). UI 세션
-      하나가 한 `business_key`를 쓰므로 그것을 `run_id`·`node_id`로 쪼개 싣는다.
-    - **5xx·연결 실패는 `OpsUnreachable`**(캐시·큐로 간다), **4xx는 `OpsRefused`**(다시
-      보내도 소용없다).
+
+@dataclass
+class CenterOps:
+    """C15 외부 작업으로 UI 자동화 앱의 작업을 올린다 (Worker 쪽, ADR-0102).
+
+    - **Worker는 앱의 주소도 키도 모른다** — Center 주소(`CHK_RUNTIME__CENTER_URL`)와 세션이 준
+      **호출 토큰**(C10 `call_token`)뿐이다. 토큰은 세션 동안 메모리에만 둔다.
+    - 멱등 칸은 `(run_id, node_id, node_instance, attempt, call_seq)`다 (C11·C15). UI 세션 하나가
+      한 `business_key`를 쓰므로 그것을 `run_id`·`node_id`로 쪼개 싣는다.
+    - **닿지 못함·Center 상한·일꾼 없음·다시 해 볼 만한 실패는 `OpsUnreachable`**(캐시·큐로 간다),
+      **거절·고칠 실패는 `OpsRefused`**(다시 보내도 소용없다).
+    - `report`는 **결과를 기다리지 않는다** (`want_result: false`) — Center가 받으면 보낸 것이다.
     """
 
     base_url: str
-    api_key: str
+    call_token: str
     business_key: str
     mode: str = "deterministic"
     caller_version: str | None = None
-    timeout_s: float = 30.0
+    #: C11 `caller.type` — Worker가 올리면 `worker`, 도구(TOL-03)가 올리면 그 호스트 (`tool_ui`).
+    caller_type: str = "worker"
+    bpm_process_id: str | None = None
+    version: str | None = None
+    timeout_s: float = 120.0
     client: Any = None  # httpx.Client (시험이 끼운다)
 
     def ids(self) -> tuple[str, str, int, int]:
@@ -83,38 +96,72 @@ class HttpOps:
         import httpx  # noqa: PLC0415 — 부를 때만 든다
 
         run_id, node_id, instance, attempt = self.ids()
+        wait = operation != OP_REPORT
         payload = {
             "schema": 1,
+            "topic": TOPIC,
+            "operation": operation,
             "mode": self.mode,
-            "run_id": run_id,
-            "node_id": node_id,
-            "node_instance": instance,
-            "attempt": attempt,
-            "call_seq": call_seq,
-            "caller": {"type": "worker", "version": self.caller_version},
+            "idempotency": {
+                "run_id": run_id,
+                "node_id": node_id,
+                "node_instance": instance,
+                "attempt": attempt,
+                "call_seq": call_seq,
+            },
+            "caller": {
+                "type": self.caller_type,
+                "version": self.version or self.caller_version,
+                "bpm_process_id": self.bpm_process_id,
+            },
             "business_key": self.business_key,
             "input": body,
+            "want_result": wait,
+            "origin": "test" if run_id.startswith("test_") else "run",
         }
+        headers = {"Authorization": f"Bearer {self.call_token}"}
         own = self.client is None
-        client = self.client or httpx.Client(timeout=self.timeout_s)
+        client = self.client or httpx.Client(base_url=self.base_url, timeout=_WAIT_S + 15.0)
         try:
-            response = client.post(
-                f"{self.base_url.rstrip('/')}/v1/ops/{operation}",
-                json=payload,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-            )
+            made = client.post("/api/v1/external-tasks", json=payload, headers=headers)
+            _raise_for(made)
+            if not wait:
+                return {}
+            task_id = str(made.json()["task_id"])
+            until = time.monotonic() + self.timeout_s
+            while True:
+                got = client.get(f"/api/v1/external-tasks/{task_id}", params={"wait_s": _WAIT_S}, headers=headers)
+                _raise_for(got)
+                result = got.json()
+                if result.get("state") in ("completed", "failed", "expired", "cancelled"):
+                    break
+                if time.monotonic() > until:
+                    raise OpsUnreachable(f"UI 자동화 앱이 {operation}을 끝내지 않았다 (기한)", code="timeout")
+            with contextlib.suppress(httpx.HTTPError):
+                client.post(f"/api/v1/external-tasks/{task_id}/ack", headers=headers)
         except httpx.HTTPError as e:
-            raise OpsUnreachable(f"UI 자동화 앱에 닿지 못했다 ({type(e).__name__})") from e
+            raise OpsUnreachable(f"Center에 닿지 못했다 ({type(e).__name__})") from e
         finally:
             if own:
                 client.close()
+        state = result.get("state")
+        if state == "completed":
+            return dict(result.get("output") or {})
+        error = result.get("error") or {}
+        code = str(error.get("code") or state or "")
+        message = str(error.get("message") or f"{operation}: {state}")
+        if state == "expired" or error.get("retryable"):
+            raise OpsUnreachable(message, code=code)
+        detail = error.get("detail")
+        raise OpsRefused(message, status=422, code=code, detail=detail if isinstance(detail, dict) else None)
 
-        if 400 <= response.status_code < 500:
-            raise OpsRefused(_message(response), status=response.status_code, code=_code(response))
-        if response.status_code >= 500:
-            raise OpsUnreachable(_message(response), code=_code(response))
-        found = response.json()
-        return dict(found.get("output") or {}) if isinstance(found, dict) else {}
+
+def _raise_for(response: Any) -> None:
+    """Center의 거절 — 4xx는 `OpsRefused`, 5xx(롱폴링 상한 등)는 `OpsUnreachable`."""
+    if 400 <= response.status_code < 500:
+        raise OpsRefused(_message(response), status=response.status_code, code=_code(response))
+    if response.status_code >= 500:
+        raise OpsUnreachable(_message(response), code=_code(response))
 
 
 def _code(response: Any) -> str:
@@ -148,10 +195,13 @@ class OpsUnreachable(RuntimeError):
 class OpsRefused(RuntimeError):
     """앱이 4xx로 거부했다 — **다시 보내도 소용없다**."""
 
-    def __init__(self, message: str, *, status: int = 400, code: str = "") -> None:
+    def __init__(
+        self, message: str, *, status: int = 400, code: str = "", detail: dict[str, Any] | None = None
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
+        self.detail = detail or {}
 
 
 def plan_key(page_id: str, platform: str, steps: list[PlanStep], revision: int) -> str:
@@ -329,7 +379,8 @@ __all__ = [
     "OP_PLAN",
     "OP_REPORT",
     "QUEUE_DIR",
-    "HttpOps",
+    "TOPIC",
+    "CenterOps",
     "Ops",
     "OpsRefused",
     "OpsUnreachable",

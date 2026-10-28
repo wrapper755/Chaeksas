@@ -34,7 +34,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (  # noqa: E402
     StepResult,
 )
 
-KEY = "chk_svc_" + "t" * 40
+TOKEN = "chk_ctk_" + "t" * 40
 
 
 class FakeWorker:
@@ -103,7 +103,7 @@ def app() -> Any:
 @pytest.fixture
 def made(app: Any) -> Any:
     worker = FakeWorker()
-    widget = TrialWidget(worker, FakeRegistry(), service_key=KEY)
+    widget = TrialWidget(worker, FakeRegistry(), call_token=TOKEN)
     widget.page_id.setCurrentText("erp.order.form")
     yield widget, worker
     widget.close()
@@ -142,7 +142,7 @@ def test_a_goal_is_off_and_says_why(made: Any) -> None:
 
 
 def test_warnings_from_the_registry_are_shown(app: Any) -> None:
-    widget = TrialWidget(FakeWorker(), FakeRegistry(warnings=["order.qty 실패가 잦습니다"]), service_key=KEY)
+    widget = TrialWidget(FakeWorker(), FakeRegistry(warnings=["order.qty 실패가 잦습니다"]), call_token=TOKEN)
     widget.page_id.setCurrentText("erp.order.form")
     widget.fetch()
     assert "경고: order.qty 실패가 잦습니다" in text(widget)
@@ -176,7 +176,7 @@ def test_the_read_value_stays_on_the_screen(made: Any) -> None:
             StepResult(ok=True, semantic_key="order.total", action="read", text="합계 1,200,000원"),
         ]
     )
-    widget = TrialWidget(worker, FakeRegistry(), service_key=KEY)
+    widget = TrialWidget(worker, FakeRegistry(), call_token=TOKEN)
     widget.page_id.setCurrentText("erp.order.form")
     widget.fetch()
     widget.run()
@@ -190,7 +190,7 @@ def test_an_escalation_stops_and_is_not_called_a_failure(made: Any) -> None:
         results=[StepResult(ok=False, semantic_key="order.qty", action="click", escalated=True,
                             error="사다리가 모두 실패했다")]
     )
-    widget = TrialWidget(worker, FakeRegistry(), service_key=KEY)
+    widget = TrialWidget(worker, FakeRegistry(), call_token=TOKEN)
     widget.page_id.setCurrentText("erp.order.form")
     widget.fetch()
     widget.run()
@@ -204,7 +204,7 @@ def test_a_fallback_is_shown(made: Any) -> None:
     worker = FakeWorker(
         results=[StepResult(ok=True, semantic_key="order.qty", action="click", fallback_depth=2, healed=True)]
     )
-    widget = TrialWidget(worker, FakeRegistry(), service_key=KEY)
+    widget = TrialWidget(worker, FakeRegistry(), call_token=TOKEN)
     widget.page_id.setCurrentText("erp.order.form")
     widget._add_step("order.qty", "click", "")  # noqa: SLF001
     widget.run()
@@ -254,15 +254,18 @@ def test_the_session_is_a_registration_one(made: Any) -> None:
     sent = worker.opened[0]
     assert sent.caller.type == "selector_registration"
     assert sent.business_key.startswith("reg_")
-    assert sent.service_key == KEY, "계획을 받아 오려면 키가 있어야 한다"
+    assert sent.call_token == TOKEN, "계획을 받아 오려면 호출 토큰이 있어야 한다 (C15)"
 
 
-def test_without_a_key_it_does_not_pretend(app: Any) -> None:
-    widget = TrialWidget(FakeWorker(), FakeRegistry(), service_key=None)
+def test_without_a_call_token_it_does_not_pretend(app: Any) -> None:
+    """호출 토큰이 없으면 세션을 열지 않고 **어디를 고치면 되는지** 말한다 (C15, CON-03)."""
+    worker = FakeWorker()
+    widget = TrialWidget(worker, FakeRegistry(), call_token=None)
     widget.page_id.setCurrentText("erp.order.form")
     widget.fetch()
     widget.run()
-    assert "셀렉터 등록이 허락되지 않아" in text(widget)
+    assert "호출 토큰이 없어" in text(widget) and "셀렉터 등록" in text(widget)
+    assert worker.opened == [], "계획 없이 세션을 열지 않는다"
     widget.close()
 
 
@@ -291,7 +294,7 @@ def test_starting_a_trial_releases_the_other_tab(app: Any) -> None:
     """**세션은 한 번에 하나다** (ADR-0014) — 등록 탭이 쥐고 있으면 놓게 한다."""
     released: list[bool] = []
     widget = TrialWidget(
-        FakeWorker(), FakeRegistry(), service_key=KEY, release_other=lambda: released.append(True)
+        FakeWorker(), FakeRegistry(), call_token=TOKEN, release_other=lambda: released.append(True)
     )
     widget.page_id.setCurrentText("erp.order.form")
     widget.fetch()
@@ -309,7 +312,7 @@ class SharingWorker(FakeWorker):
         self.loaded: list[tuple[str, str, bool, bool]] = []
 
     def load_plan(self, session_id: str, secret: str, page_id: str, *, heal: bool, report: bool,
-                  service_key: str | None) -> SessionInfo:
+                  call_token: str | None) -> SessionInfo:
         self.loaded.append((session_id, page_id, heal, report))
         return SessionInfo(session_id=session_id, session_secret=secret, plan_source="cache")
 
@@ -319,7 +322,7 @@ def test_an_open_registration_screen_is_reused_and_never_closed(app: Any) -> Non
     worker = SharingWorker()
     released: list[bool] = []
     widget = TrialWidget(
-        worker, FakeRegistry(), service_key=KEY,
+        worker, FakeRegistry(), call_token=TOKEN,
         release_other=lambda: released.append(True), borrow=lambda: ("ses_reg", "reg-secret"),
     )
     widget.page_id.setCurrentText("erp.order.form")
@@ -337,7 +340,7 @@ def test_an_open_registration_screen_is_reused_and_never_closed(app: Any) -> Non
 
 def test_without_an_open_registration_screen_the_trial_opens_its_own(app: Any) -> None:
     worker = SharingWorker()
-    widget = TrialWidget(worker, FakeRegistry(), service_key=KEY, borrow=lambda: None)
+    widget = TrialWidget(worker, FakeRegistry(), call_token=TOKEN, borrow=lambda: None)
     widget.page_id.setCurrentText("erp.order.form")
     widget.fetch()
     widget.run()
@@ -347,7 +350,7 @@ def test_without_an_open_registration_screen_the_trial_opens_its_own(app: Any) -
 
 def test_try_from_the_registration_tab_keeps_only_the_chosen_rows(app: Any) -> None:
     """BUI-06 「시험...」 — 고른 줄만 스텝 표에 남는다 (없으면 전부)."""
-    widget = TrialWidget(SharingWorker(), FakeRegistry(), service_key=KEY)
+    widget = TrialWidget(SharingWorker(), FakeRegistry(), call_token=TOKEN)
     widget.prefill("erp.order.form", ["order.total"])
     keys = [getattr(widget.steps.item(row, 0), "text", str)() for row in range(widget.steps.rowCount())]
     assert keys == ["order.total"]

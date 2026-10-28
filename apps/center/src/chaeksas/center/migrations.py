@@ -252,6 +252,20 @@ MIGRATIONS: tuple[Step, ...] = (
             " approved_at TEXT NOT NULL, approved_by TEXT NOT NULL, last_fetch_at TEXT)",
         ),
     ),
+    Step(
+        16,
+        "Center는 바깥 기능의 주소도 키도 들지 않는다 — 서비스 앱 등록·키·외부 앱 키·주소 덮어쓰기를 걷는다 (ADR-0102)",
+        (
+            # 서비스 앱은 일꾼으로 들어온다(`consumers`) — 주소 등록·상태 읽기가 없다.
+            "DROP TABLE IF EXISTS service_apps",
+            "DROP TABLE IF EXISTS extension_health",
+            # 서비스 앱 키·외부 앱 키(암호문)와 그 감싸는 키 — 키는 일꾼 쪽에만 있다.
+            "DROP TABLE IF EXISTS service_keys",
+            "DROP TABLE IF EXISTS external_app_keys",
+            "DROP TABLE IF EXISTS center_secrets",
+            "DROP TABLE IF EXISTS extension_addresses",
+        ),
+    ),
 )
 
 

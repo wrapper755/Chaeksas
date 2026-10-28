@@ -235,6 +235,8 @@ class EnrollmentInfo(ContractModel):
     decided_at: Timestamp | None = None
     reason: str | None = None
     key_id: str | None = None
+    #: 일꾼(`type: consumer`, C15)만 — 요청한 토픽. 승인할 때 이 안에서 줄일 수 있다.
+    topics: list[str] = Field(default_factory=list)
 
 
 class EnrollmentApproveRequest(ContractModel):

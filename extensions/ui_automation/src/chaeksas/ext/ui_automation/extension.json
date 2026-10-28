@@ -11,10 +11,6 @@
     "protocol": "chk-c11",
     "base_url": "http://svc-uia:8000"
   },
-  "requires_keys": [
-    {"purpose": "run", "extra_scopes": []},
-    {"purpose": "utility", "extra_scopes": ["registry_write"]}
-  ],
   "contributes": {
     "task_types": [
       {

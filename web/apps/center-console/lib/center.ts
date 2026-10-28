@@ -29,6 +29,8 @@ import type { DependentInfo } from "@chaeksas/api-types/c5-dependent-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 import type { EnrollmentDecision } from "@chaeksas/api-types/c5-enrollment-decision";
+import type { ConsumerInfo } from "@chaeksas/api-types/c15-consumer-info";
+import type { TopicStatus } from "@chaeksas/api-types/c15-topic-status";
 import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
 import type { RunListing } from "@chaeksas/api-types/c3-run-listing";
@@ -59,11 +61,6 @@ export class CenterError extends Error {
   ) {
     super(message);
   }
-}
-
-function appKeyPath(extensionId: string, slot: "run" | "test"): string {
-  const base = `/api/v1/resources/extensions/${encodeURIComponent(extensionId)}/app-key`;
-  return slot === "test" ? `${base}/test` : base;
 }
 
 export async function session(): Promise<Session | null> {
@@ -188,40 +185,17 @@ export const center = {
 
   serviceApp: (appId: string) =>
     call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
-  registerServiceApp: (baseUrl: string) =>
-    call<ServiceAppResource>("/api/v1/resources/service-apps", {
-      method: "POST",
-      body: JSON.stringify({ base_url: baseUrl }),
-    }),
-  setServiceAppUrl: (appId: string, baseUrl: string) =>
-    call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`, {
-      method: "PUT",
-      body: JSON.stringify({ base_url: baseUrl }),
-    }),
-  /** 외부 앱 키 넣기·바꾸기 (C7 §외부 앱 키). `slot`: 운영 `run` / Studio 시험용 `test`. 응답에 원문은 없다. */
-  setAppKey: (extensionId: string, slot: "run" | "test", key: string) =>
-    call<unknown>(appKeyPath(extensionId, slot), { method: "PUT", body: JSON.stringify({ key }) }),
-  deleteAppKey: (extensionId: string, slot: "run" | "test") =>
-    call<unknown>(appKeyPath(extensionId, slot), { method: "DELETE" }),
-  /** 외부 기능 주소 덮어쓰기 (C7 §외부 확장 주소, ADR-0097) — 정의의 허용 호스트 밖이면 422. */
-  setExtensionAddress: (extensionId: string, baseUrl: string) =>
-    call<unknown>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}/address`, {
-      method: "PUT",
-      body: JSON.stringify({ base_url: baseUrl }),
-    }),
-  /** 덮어쓴 주소를 지운다 — 정의의 기본값으로 돌아간다. */
-  deleteExtensionAddress: (extensionId: string) =>
-    call<unknown>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}/address`, { method: "DELETE" }),
-  /** CON-03 「셀렉터 등록」 (C5 `PUT /bot-uis/{id}/utility`, ADR-0094 §6). */
+  /** CON-03 「셀렉터 등록」 (C5 `PUT /bot-uis/{id}/utility`) — 이 PC가 셀렉터 등록 작업을 올려도 되나 (C15 §올리기). */
   setSelectorRegistration: (botUiId: string, on: boolean) =>
     call<unknown>(`/api/v1/bot-uis/${encodeURIComponent(botUiId)}/utility`, {
       method: "PUT",
       body: JSON.stringify({ selector_registration: on }),
     }),
-  unregisterServiceApp: (appId: string) =>
-    call<void>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`, { method: "DELETE" }),
-  refreshResources: () =>
-    call<unknown>("/api/v1/resources/refresh", { method: "POST", body: JSON.stringify({}) }),
+
+  /** 들인 일꾼 (C15, CON-07 「일꾼」). */
+  consumers: () => call<ConsumerInfo[]>("/api/v1/consumers"),
+  /** 토픽마다 일꾼 수·마지막으로 가져간 때·기다리는 일감 (C15, CON-07 「토픽」). */
+  externalTopics: () => call<TopicStatus[]>("/api/v1/external-topics"),
 
   /** 결재함 (C6·CON-04). */
   /** 결재함 (C6). `assignee`는 그 이름이 담당자에 있는 것만 (ADR-0080) — 콘솔은 거르기만 한다. */
@@ -349,15 +323,16 @@ export const center = {
   purgeCenterKey: (keyId: string) => call<void>(`/api/v1/center-keys/${keyId}/purge`, { method: "POST" }),
 
   /**
-   * 등록 요청 (C5 §등록 승인, ADR-0092) — CON-03·CON-12 「승인 대기」. 기본은 대기 중인 것만.
+   * 등록 요청 (C5 §등록 승인, ADR-0092) — CON-03·CON-12 「승인 대기」·CON-07 「일꾼 승인 대기」. 기본은 대기 중인 것만.
    * 사람은 키를 보지 않는다 — 승인 응답에도 원문이 없다.
    */
-  enrollments: (type: "bot_ui" | "server_runner" | "studio") =>
+  enrollments: (type: "bot_ui" | "server_runner" | "studio" | "consumer") =>
     call<EnrollmentInfo[]>(`/api/v1/enrollments?type=${type}`),
-  approveEnrollment: (id: string, name?: string) =>
+  /** `topics`는 일꾼(`type: consumer`)만 — 요청한 토픽 안에서 줄인다. 비우면 요청한 것 그대로 (C5). */
+  approveEnrollment: (id: string, name?: string, topics?: string[]) =>
     call<EnrollmentDecision>(`/api/v1/enrollments/${encodeURIComponent(id)}/approve`, {
       method: "POST",
-      body: JSON.stringify(name ? { name } : {}),
+      body: JSON.stringify({ ...(name ? { name } : {}), ...(topics && topics.length > 0 ? { topics } : {}) }),
     }),
   rejectEnrollment: (id: string, reason?: string) =>
     call<EnrollmentInfo>(`/api/v1/enrollments/${encodeURIComponent(id)}/reject`, {

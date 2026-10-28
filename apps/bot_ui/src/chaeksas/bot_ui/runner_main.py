@@ -27,8 +27,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from chaeksas.bot_ui.credentials import Credentials
+from chaeksas.bot_ui.credentials import ENV_CALL_TOKEN, Credentials
 from chaeksas.bot_ui.runtimes import HostSettings
+from chaeksas.contracts.extension import CALL_TOKEN_SECRET
 from chaeksas.core import control, outputs, requests
 from chaeksas.core.app_directory import AppDirectory, read_directory
 from chaeksas.core.engine import WHERE_CENTER, WHERE_FIELD, Engine, EngineError, Run, RunEnv, State
@@ -43,6 +44,7 @@ from chaeksas.core.senders import (
     WebhookConfig,
     make_sender,
 )
+from chaeksas.core.services import CenterServiceCaller
 from chaeksas.extension_api import HOST_BOT_UI
 
 log = logging.getLogger(__name__)
@@ -57,19 +59,32 @@ STEPS_PER_TICK = 50
 SOURCE_DELEGATION = "delegation"
 
 
+@dataclass
+class CallTokenHolder:
+    """이 실행의 호출 토큰 (C15) — 처음 것은 환경변수로, 새것은 제어 파일로 온다 (Bot UI가 갈아 넣는다)."""
+
+    value: str | None = None
+
+    def __call__(self) -> str | None:
+        return self.value
+
+
 @dataclass(frozen=True)
 class RunnerSecrets:
     """`extension_api.Secrets` — 실행기에서 확장이 묻는 이름을 푼다 (ADR-0013).
 
-    태스크의 **서비스 앱 키 참조**(BUI-10)가 먼저, 아니면 그 확장의 비밀 칸이다.
+    `call_token`은 이 실행의 호출 토큰(C15), 나머지는 그 확장의 비밀 칸이다.
     """
 
-    credentials: Any  # `Credentials` 또는 그 Bot에 묶인 `BotCredentials`
+    credentials: Any  # `Credentials`
     extension_id: str
+    call_token: CallTokenHolder | None = None
 
     def resolve(self, ref: str) -> str | None:
-        found: str | None = self.credentials.service_app_key(ref)
-        return found or self.credentials.extension_secret(self.extension_id, ref)
+        if ref == CALL_TOKEN_SECRET:
+            return self.call_token() if self.call_token is not None else None
+        found: str | None = self.credentials.extension_secret(self.extension_id, ref)
+        return found
 
 
 def extension_tasks(
@@ -77,7 +92,7 @@ def extension_tasks(
     *,
     host: ExtensionHost | None = None,
     off: Sequence[str] = (),
-    bot: str | None = None,
+    call_token: CallTokenHolder | None = None,
 ) -> HostTasks:
     """이 실행의 확장 — 설치된 것을 읽고, Bot UI가 넘긴 확장별 설정(Worker 자리 등)을 붙인다.
 
@@ -85,28 +100,25 @@ def extension_tasks(
     넘긴다(`--off`). 그런 Bot은 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
     """
     loaded = host if host is not None else load_host(off=off)
-    # **그 Bot이 받은 키로** 푼다 (ADR-0094 §8) — 두 Bot이 같은 참조 이름을 써도 키가 다르다.
-    credentials: Any = Credentials().for_bot(bot) if bot else Credentials()
+    credentials: Any = Credentials()
 
     def make_context(extension_id: str) -> Any:
         return loaded.context(
             extension_id,
             host=HOST_BOT_UI,
             settings=HostSettings(values=dict(values.get(extension_id) or {})),
-            secrets=RunnerSecrets(credentials=credentials, extension_id=extension_id),
+            secrets=RunnerSecrets(credentials=credentials, extension_id=extension_id, call_token=call_token),
         )
 
     return HostTasks(host=loaded, make_context=make_context)
 
 
-def app_directory(path: Path | None, bot: str | None = None) -> AppDirectory:
-    """부를 수 있는 바깥 앱들 (C13 「전송」) — Bot UI가 Center에서 받아 파일로 건넨 것.
+def app_directory(path: Path | None) -> AppDirectory:
+    """검증된 외부 확장 정의 (C13 「전송」) — Bot UI가 Center에서 받아 파일로 건넨 것.
 
     **봉투를 다시 검증한다** — `read_directory`가 통과한 것만 싣고 나머지는 사유를 남긴다.
-    키 값은 파일에 없다. **참조 이름**을 BUI-10의 서비스 앱 키로 푼다 (ADR-0013).
     """
-    found = Credentials()
-    return read_directory(path, secrets=found.for_bot(bot).service_app_key if bot else found.service_app_key)
+    return read_directory(path)
 
 
 def refuse_unusable(package: InstalledBot, directory: AppDirectory) -> None:
@@ -156,6 +168,8 @@ class Runner:
     engine: Engine = None  # type: ignore[assignment]
     run: Run | None = None
     stopping: bool = False
+    #: 이 실행의 호출 토큰 (C15) — 제어 파일로 새것이 오면 바꾼다.
+    call_token: CallTokenHolder = field(default_factory=CallTokenHolder)
     #: 요청 파일에 이미 쓴 결재 — 두 번 올리지 않는다.
     _posted: set[str] = field(default_factory=set)
 
@@ -272,6 +286,9 @@ class Runner:
                     # 답이 폼에 안 맞는다 — **실행을 죽이지 않는다**. 화면이 다시 묻는다.
                     run.log.emit("log", level="warn", message=f"답을 받지 못했다: {e}")
                 acted = True
+            if command.kind == control.CALL_TOKEN and command.token:
+                # 새 호출 토큰 (C15) — 다음 외부 작업부터 이것으로 올린다.
+                self.call_token.value = command.token
             if command.kind == control.WITHDRAW:
                 try:
                     # 답 없이 끝남 — 오류 경계가 있으면 그리로, 없으면 실패 (C6, ADR-0038).
@@ -321,8 +338,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--extensions", type=Path, default=None, help="확장별 설정 JSON 파일")
     # 사람이 BUI-11에서 끈 확장 (ADR-0043) — 끌 id는 Bot UI가 준다.
     parser.add_argument("--off", action="append", default=[], help="끈 확장 id (여러 번)")
-    # 부를 수 있는 바깥 앱 — 주소·Admin 공개키·외부 확장 정의와 봉투 (C13 「전송」).
-    parser.add_argument("--services", type=Path, default=None, help="바깥 앱 명부 JSON 파일")
+    # 외부 확장 정의와 봉투·Admin 공개키 (C13 「전송」) — 고정한 해시와 대조한다.
+    parser.add_argument("--services", type=Path, default=None, help="외부 확장 명부 JSON 파일")
+    # 서비스 태스크를 올릴 Center (C15). 호출 토큰은 환경변수·제어 파일로 온다.
+    parser.add_argument("--center-url", default="")
     # 보내기 (BUI-03 「보내기」, ADR-0059). **비밀번호는 명령줄에 없다** — 이 프로세스가
     # 비밀 저장소에서 읽는다 (서비스 앱 키와 같은 길).
     parser.add_argument("--smtp-host", default="")
@@ -340,12 +359,13 @@ def main(argv: list[str] | None = None) -> int:
     # 모델 키는 **환경변수로** 받는다 (설정 파일·명령줄에 두지 않는다, CLAUDE.md §5).
     import os  # noqa: PLC0415
 
-    directory = app_directory(found.services, bot=package.manifest.id)
+    directory = app_directory(found.services)
     for app_id, why in sorted(directory.problems.items()):
         # **조용히 사라지지 않는다** — 쓰지 못한 정의는 이유와 함께 기록에 남는다.
         log.warning("외부 확장 정의를 쓰지 못한다 (%s): %s", app_id, why)
     refuse_unusable(package, directory)
 
+    token = CallTokenHolder(value=os.environ.get(ENV_CALL_TOKEN) or None)
     runner = Runner(
         run_id=found.run_id,
         package=package,
@@ -356,6 +376,7 @@ def main(argv: list[str] | None = None) -> int:
         job_id=found.job_id,
         queued_s=found.queued_s,
         parent_run_id=found.parent_run_id,
+        call_token=token,
         env=make_env(
             package,
             output_dir=output_dir,
@@ -367,10 +388,13 @@ def main(argv: list[str] | None = None) -> int:
             extensions=extension_tasks(
                 json.loads(found.extensions.read_text(encoding="utf-8")) if found.extensions else {},
                 off=list(found.off),
-                bot=package.manifest.id,
+                call_token=token,
             ),
             approval_where=found.approval_where,
-            directory=directory,
+            # 서비스 태스크는 Center에 외부 작업으로 올린다 (C15) — 바깥 앱의 주소·키는 모른다.
+            services=CenterServiceCaller(base_url=found.center_url, token=token, caller_type="bot_ui")
+            if found.center_url
+            else None,
             # 보내기 — **서버 실행기와 같은 함수**가 짓는다 (ADR-0059). 설정이 비면
             # `chk:email`·`chk:webhook`이 **보내지 않고 실패한다**.
             sender=make_sender(

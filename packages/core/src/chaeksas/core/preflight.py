@@ -2,7 +2,7 @@
 
 보는 것은 두 갈래다.
 
-- **플랫폼 점검**: 서비스 앱 키 참조가 이 PC에 있나, 그림이 쓰는 **확장 태스크 종류**를 수행할 수
+- **플랫폼 점검**: 그림이 쓰는 **확장 태스크 종류**를 수행할 수
   있나, 깔린 확장의 판이 맞나, `web`·`desktop` AI 태스크의 눈과 손을 줄 확장이 있나 (ADR-0037).
   어느 확장도 모르는 것이라 여기 둔다.
 - **확장 점검**: `preflight` 기여가 한다 (C13·ADR-0018 — 예: 「쓰는 화면이 레지스트리에 있나」).
@@ -38,7 +38,6 @@ from chaeksas.extension_api import (
 LOG = logging.getLogger(__name__)
 
 #: 플랫폼 점검 코드. C4 `Readiness.blocked`와 BUI-04 「준비」가 이 이름을 쓴다.
-MISSING_KEYS = "missing_service_app_keys"
 TASK_TYPES_UNSUPPORTED = "task_types_unsupported"
 #: 그 종류의 확장이 **깔려 있는데 사람이 꺼 뒀다** (ADR-0043). 고치는 길이 위와 다르다 — 켜면 된다.
 EXTENSION_TURNED_OFF = "extension_turned_off"
@@ -68,21 +67,14 @@ class Preflight:
         """막는 점검의 코드들 — C4 `Readiness.blocked`에 그대로 싣는다."""
         return tuple(f.id for f in self.findings if f.blocks)
 
-    @property
-    def missing_key_refs(self) -> tuple[str, ...]:
-        """이 PC에 값이 없는 서비스 앱 키 참조 — C4 `Readiness.missing_key_refs`."""
-        found = next((f for f in self.findings if f.id == MISSING_KEYS), None)
-        return found.items if found else ()
-
-
 def key_apps_of(manifest: Manifest) -> dict[str, str]:
     """그 Bot이 쓰는 `서비스 앱 키 참조 → 앱 id` (C1 `requires.service_apps`).
 
     BPM 프로세스가 상속하는 `key_ref`와 태스크가 따로 적은 `task_key_refs`를 함께 센다 — 둘 다
     실행 중에 풀어야 하므로 **하나만 없어도 그 태스크가 죽는다**. 적힌 순서를 지키고 중복은 뺀다.
 
-    **참조를 세는 자리는 하나다** — 점검(값이 있나)·BUI-10(표)·만료 묻기(ADR-0052)가 모두
-    이것을 쓴다. 어긋나면 「점검은 통과했는데 창에는 없는 키」가 생긴다.
+    **키 값은 이제 아무도 묻지 않는다** (ADR-0102 — 서비스 앱 키가 없어졌다). 이름은 확장 점검
+    (`PreflightTarget.key_refs`)이 받는 칸이라 남는다.
     """
     out: dict[str, str] = {}
     for need in manifest.requires.service_apps:
@@ -95,33 +87,6 @@ def key_apps_of(manifest: Manifest) -> dict[str, str]:
 def key_refs_of(manifest: Manifest) -> tuple[str, ...]:
     """그 Bot이 쓰는 서비스 앱 키 참조 이름 모두 — `key_apps_of()`의 이름들이다."""
     return tuple(key_apps_of(manifest))
-
-
-def _check_keys(
-    manifest: Manifest,
-    key_value: Callable[[str], str | None],
-    *,
-    fix_hint: str | None,
-) -> Finding | None:
-    """키 참조마다 **값이 있나**만 본다 — 맞는 키인지는 앱에 물어야 안다 (BUI-10 「확인」)."""
-    missing = []
-    for ref in key_refs_of(manifest):
-        try:
-            value = key_value(ref)
-        except Exception as e:  # noqa: BLE001 - 비밀 저장소가 없는 PC도 있다 (막지 않는다)
-            LOG.warning("키 참조 %s를 풀지 못했다: %s", ref, e)
-            value = None
-        if not value:
-            missing.append(ref)
-    if not missing:
-        return None
-    return Finding(
-        id=MISSING_KEYS,
-        severity=SEVERITY_BLOCK,
-        message=f"서비스 앱 키 {len(missing)}개가 이 PC에 없습니다",
-        items=tuple(missing),
-        fix_hint=fix_hint,
-    )
 
 
 def _check_settings(manifest: Manifest, have: Sequence[str]) -> Finding | None:
@@ -315,7 +280,6 @@ def _extension_findings(
 def check(
     manifest: Manifest,
     *,
-    key_value: Callable[[str], str | None],
     host: ExtensionHost | None = None,
     context: Callable[[str], ExtensionContext] | None = None,
     fix_hint: str | None = None,
@@ -323,23 +287,17 @@ def check(
 ) -> Preflight:
     """그 Bot을 이 PC에서 지금 돌릴 수 있나.
 
-    - `key_value`: 키 참조 이름 → 값(없으면 `None`). Bot UI는 `Credentials.service_app_key`,
-      Studio는 `StudioCredentials` 쪽이다 — **값을 가진 쪽은 실행하는 쪽이다** (ADR-0013).
     - `host`: 없으면 확장 점검과 확장·환경 점검을 건너뛴다 (확장 없는 Bot UI도 Bot은 돈다).
     - `context`: 확장 id → 그 확장의 바깥 세상. `host`가 있어도 이것이 없으면 **확장 점검만**
       건너뛴다 (플랫폼 점검은 그대로 돈다).
-    - `fix_hint`: 키가 없을 때 「어떻게 고치나」 한 줄. 화면 이름이 들어가므로 **부르는 쪽이 적는다**
-      (Bot UI는 BUI-10, Studio는 STU-10).
+    - `fix_hint`: 옛 칸이다 — 받기만 한다 (서비스 앱 키 점검이 없어졌다, ADR-0102).
     - `settings`: 이 PC·서버가 **갖춘** 설정 이름들 (C1 `requires.settings`의 값들 — 지금은
       `smtp`). 주지 않으면 그 점검을 건너뛴다 — **모르는 것으로 막지 않는다** (ADR-0059 §4).
     """
     findings: list[Finding] = []
     skipped: list[str] = []
 
-    keys = _check_keys(manifest, key_value, fix_hint=fix_hint)
-    if keys is not None:
-        findings.append(keys)
-
+    del fix_hint
     if settings is not None:
         found = _check_settings(manifest, settings)
         if found is not None:

@@ -4,6 +4,9 @@
 
 export interface FailRequest {
   code: string;
+  detail?: {
+    [k: string]: unknown;
+  } | null;
   message?: string;
   retryable?: boolean;
   [k: string]: unknown;

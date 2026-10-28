@@ -2,32 +2,20 @@
 
 단일 원본: `docs/03-contracts/C11-service-app-common.md`. 구현 뼈대는 `packages/service_kit/`.
 
-**서비스 앱은 확장의 서버 부분이다** (ADR-0018). 부르는 쪽이 앱마다 다른 방식을 배우지 않도록
-`/healthz`·`/manifest`·`POST /v1/ops/{작업}` 세 가지로 고정한다.
+**서비스 앱은 확장의 서버 부분이고 일꾼이다** (ADR-0018·ADR-0102). 업무 호출은 C15 외부 작업으로
+오고 앱은 HTTP로 업무 호출을 받지 않는다 — 앱 안의 키도 없다(「불러도 되나」는 Center가 배포로 가린다).
 
-두 가지가 이 계약의 핵심이다.
-
-- **키는 앱이 스스로 발급·검증한다** (ADR-0013). Center는 서비스 앱 키를 모른다.
 - **수행 모드는 받는 쪽이 바꾸지 않는다** (README 원칙 7). 유일한 예외가 폴백이고, 그것도
-  **호출한 키가 자율 수행을 허용할 때만** 일어나며 응답 `mode_used`로 드러난다.
+  **시험 일감(`origin: test`)일 때만** 일어나며 결과 `mode_used`로 드러난다.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from datetime import datetime
 from typing import Annotated, Any
 
 from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp, Violation
-from chaeksas.contracts.service_keys import IssuedFor
-
-#: 서비스 앱 API 키 — `chk_svc_` + 무작위 40자. 앞자리 16자만 화면·기록에 남긴다.
-#: 앱 id를 키에 넣지 않는다 (앞자리가 키마다 달라야 구별된다).
-KEY_PREFIX = "chk_svc_"
-KEY_RANDOM_LEN = 40
-PREFIX_LEN = 16
 
 #: 기본값들.
 DEFAULT_TIMEOUT_S = 60
@@ -46,20 +34,10 @@ KNOWN_CALLER_TYPES = frozenset({"bot_ui", "server_runner", "studio", "tool_ui", 
 KNOWN_CATEGORIES = frozenset({"business", "system"})
 KNOWN_HEALTH_STATUSES = frozenset({"ok", "degraded"})
 
-#: 오류 코드 (C11 「오류」 표). 부르는 쪽의 재시도 판단이 이 값에 걸려 있다.
-NO_RETRY_CODES = frozenset(
-    {"key_missing", "key_invalid", "key_revoked", "key_expired", "operation_not_allowed",
-     "mode_not_allowed", "scope_missing", "operation_not_found", "idempotency_conflict", "input_invalid",
-     "mode_unsupported", "schema_unsupported"}
-)
-RETRY_CODES = frozenset({"in_progress", "rate_limited", "dependency_down", "timeout"})
+#: 실패 코드 중 다시 해 볼 만한 것 (C11 §오류 — 부르는 쪽 재시도가 이것에 걸려 있다).
+RETRY_CODES = frozenset({"rate_limited", "dependency_down", "timeout"})
 
 OperationName = Annotated[str, Field(pattern=OPERATION_PATTERN)]
-
-
-def prefix_of(key: str) -> str:
-    """키 원문 → 화면·기록에 남기는 앞자리 (`chk_svc_` + 무작위 8자)."""
-    return key[:PREFIX_LEN]
 
 
 class HealthResponse(ContractModel):
@@ -98,24 +76,20 @@ class ExtensionRef(ContractModel):
 
 
 class ResourceCatalog(ContractModel):
-    """이 앱이 **자기 기여 자원 카탈로그**를 어디서 주는지 (C7 §리소스 모으는 방식).
+    """이 앱이 **자기 기여 자원 카탈로그**를 내는 종류 (C7 §리소스 모으는 방식).
 
-    확장 정의(C13 `contributes.resources`)에도 같은 것이 있지만, **내장·사내 확장의 정의는
-    Center에 없다** — 설치 파일에 들어 있고 Center는 실행하는 쪽의 보고로 `{id, version}`만
-    안다. 그래서 **서버 부분이 자기 카탈로그를 알린다**: 서버 쪽 자원을 가장 잘 아는 것이
-    서버 부분이고, Center는 이미 `/manifest`를 읽고 있어 길을 새로 내지 않는다.
-
-    `catalog_url`은 이 앱의 `base_url` 기준 상대 경로다 (주소의 유일한 출처는 Center의 리소스
-    등록이다 — C13 `service.base_url`). 응답 형식은 C13 §5 `Catalog`다.
+    **내장·사내 확장의 정의는 Center에 없어**(설치 파일에 들어 있다) 서버 부분이 자기 카탈로그를
+    알린다 — 일꾼이 `PUT /consumers/self/catalogs/{type}`으로 올린다 (C15, ADR-0102). 응답 형식은
+    C13 §5 `Catalog`다. `catalog_url`은 옛 manifest를 읽기 위해 남은 칸이고 Center는 그 주소를 부르지 않는다.
     """
 
     type: str  # 자원 종류 (예: ui_page). 확장이 정한다
-    catalog_url: str  # `base_url` 기준 상대 경로 (`/`로 시작)
+    catalog_url: str  # 옛 칸 — Center는 부르지 않는다 (`/`로 시작)
     label: str | None = None  # 화면에 보일 이름 (CON-07 탭 제목)
 
 
 class ServiceAppManifest(SchemaVersioned):
-    """`GET /manifest` — 인증 없음 (비밀이 없다). Center가 리소스 목록에 쓴다 (C7)."""
+    """앱이 하는 일 — 일꾼이 `PUT /consumers/self/manifest`로 올리고 Center가 리소스 목록·작업 대조에 쓴다 (C7·C15)."""
 
     app_id: str
     name: str
@@ -149,7 +123,7 @@ class Usage(ContractModel):
 
 
 class OpRequest(SchemaVersioned):
-    """`POST /v1/ops/{operation}` 요청."""
+    """작업 함수가 받는 요청 — 일꾼 뼈대가 C15 `LockedTask`에서 짓는다 (C11 §OpRequest)."""
 
     mode: str  # MODES. **받는 쪽은 바꾸지 않는다** (원칙 7)
     run_id: str
@@ -160,10 +134,12 @@ class OpRequest(SchemaVersioned):
     caller: Caller
     business_key: str | None = None  # UI 자동화처럼 세션을 잇는 키 (C10)
     input: dict[str, Any] = Field(default_factory=dict)
+    #: `run` | `test` — 시험 일감이면 앱이 시험 쪽으로 보낼지 정한다 (C15, ADR-0102 §6).
+    origin: str = "run"
 
 
 class OpResponse(ContractModel):
-    """`POST /v1/ops/{operation}` 응답 (200)."""
+    """작업 함수의 결과 — 뼈대가 C15 `complete`로 옮긴다."""
 
     status: str = "ok"
     output: dict[str, Any] = Field(default_factory=dict)
@@ -172,56 +148,15 @@ class OpResponse(ContractModel):
     usage: Usage | None = None
 
 
-class ServiceAppKey(ContractModel):
-    """앱 안의 키 레코드. **원문은 저장하지 않는다** (해시만).
-
-    `GET /v1/keys/self`는 이 중 원문·해시를 뺀 것을 돌려준다 (「연결 테스트」용).
-    """
-
-    name: str
-    hash: str
-    prefix: str
-    allowed_operations: list[str] = Field(default_factory=lambda: ["*"])
-    # 운영(Bot UI·서버 실행기)은 deterministic만, 개발(Studio)은 둘 다.
-    allowed_modes: list[str] = Field(default_factory=lambda: [MODE_DETERMINISTIC])
-    extra_scopes: list[str] = Field(default_factory=list)  # 앱별 추가 권한 (예: registry_write)
-    created_at: Timestamp | None = None
-    expires_at: Timestamp | None = None
-    last_used_at: Timestamp | None = None
-    revoked_at: Timestamp | None = None
-    #: 누가 지었나 — `admin`(관리 API) / `center`(Center 발급, ADR-0094). 없으면 `admin`이다.
-    issued_by: str | None = None
-    #: Center가 지은 키면 Center의 id (`svk_<hex8>`). 이름(`name`)도 이 값이다.
-    center_key_id: str | None = None
-    #: Center가 지은 키면 누구를 위해서인가 (SVC-02 「발급」 열).
-    issued_for: IssuedFor | None = None
-
-    def allows_operation(self, name: str) -> bool:
-        return "*" in self.allowed_operations or name in self.allowed_operations
-
-    def allows_mode(self, mode: str) -> bool:
-        return mode in self.allowed_modes
-
-
-class KeySelfResponse(ContractModel):
-    """`GET /v1/keys/self` — 키 원문·해시는 돌려주지 않는다."""
-
-    name: str
-    prefix: str
-    allowed_operations: list[str] = Field(default_factory=list)
-    allowed_modes: list[str] = Field(default_factory=list)
-    extra_scopes: list[str] = Field(default_factory=list)
-    expires_at: Timestamp | None = None
-
-
 class UsageRecord(ContractModel):
     """사용 기록 한 줄 (앱 안, SVC-03). **입력·출력 값은 기록하지 않는다.**"""
 
     at: Timestamp
+    #: 부른 쪽 — `<caller.type>:<caller.host>` (키가 없어졌다, ADR-0102).
     key_name: str
     operation: str
     mode: str
-    status: int  # HTTP 코드
+    status: int  # 200 = 끝냄, 그 밖은 실패 (C11 §오류의 코드에 맞춘 수)
     duration_ms: int
     run_id: str | None = None
     caller_type: str | None = None
@@ -242,72 +177,13 @@ def idempotency_key(operation: str, req: OpRequest) -> IdempotencyKey:
     return (operation, req.run_id, req.node_id, req.node_instance, req.attempt, req.call_seq)
 
 
-def key_state(key: ServiceAppKey, *, now: str) -> str:
-    """`active` / `revoked` / `expired`. 폐기가 만료보다 앞선다."""
-    if key.revoked_at is not None:
-        return "revoked"
-    if key.expires_at is not None and datetime.fromisoformat(key.expires_at) <= datetime.fromisoformat(now):
-        return "expired"
-    return "active"
-
-
-def authorize(
-    key: ServiceAppKey,
-    *,
-    operation: str,
-    mode: str,
-    now: str,
-    required_scopes: Sequence[str] = (),
-) -> list[Violation]:
-    """키가 이 작업·모드를 부를 수 있나. 비어 있으면 통과.
-
-    - 폐기·만료 → `key_revoked` / `key_expired` (403)
-    - 작업이 키 권한 밖 → `operation_not_allowed` (403)
-    - 모드가 키 권한 밖 → `mode_not_allowed` (403). **운영 키로 자율 수행을 부르는 것을 막는다.**
-    - 작업이 요구하는 추가 권한이 없음 → `scope_missing` (403).
-    """
-    state = key_state(key, now=now)
-    if state != "active":
-        return [Violation(rule="C11", code=f"key_{state}", message=f"키 {key.prefix}는 {state} 상태다")]
-    out = []
-    if not key.allows_operation(operation):
-        out.append(
-            Violation(
-                rule="C11",
-                code="operation_not_allowed",
-                message=f"키 「{key.name}」은 작업 {operation}을 부를 수 없다",
-                items=sorted(key.allowed_operations),
-            )
-        )
-    if not key.allows_mode(mode):
-        out.append(
-            Violation(
-                rule="C11",
-                code="mode_not_allowed",
-                message=f"키 「{key.name}」은 {mode} 수행을 허용하지 않는다",
-                items=sorted(key.allowed_modes),
-            )
-        )
-    missing = [one for one in required_scopes if one not in key.extra_scopes]
-    if missing:
-        out.append(
-            Violation(
-                rule="C11",
-                code="scope_missing",
-                message=f"작업 {operation}에는 {', '.join(missing)} 권한이 필요하다",
-                items=missing,
-            )
-        )
-    return out
-
-
-def resolve_mode(op: Operation, *, requested: str, key: ServiceAppKey) -> tuple[str | None, Violation | None]:
+def resolve_mode(op: Operation, *, requested: str, origin: str = "run") -> tuple[str | None, Violation | None]:
     """실제로 쓸 모드를 정한다. `(모드, None)` 또는 `(None, 위반)`.
 
     - 작업이 요청한 모드를 지원하면 그대로 쓴다 (받는 쪽은 모드를 바꾸지 않는다).
     - 지원하지 않으면 `mode_unsupported` (422). **단 하나의 예외**가 폴백이다:
-      결정 수행을 요청했는데 작업이 `fallback="autonomous"`이고 **키가 자율 수행을 허용하면**
-      자율 수행으로 넘어간다. 운영 키(결정 수행만)면 폴백하지 않고 실패한다.
+      결정 수행을 요청했는데 작업이 `fallback="autonomous"`이고 **시험 일감이면**(`origin: test` —
+      Studio 시험 실행) 자율 수행으로 넘어간다. 현장 일감이면 폴백하지 않고 실패한다.
     """
     if op.supports(requested):
         return requested, None
@@ -315,7 +191,7 @@ def resolve_mode(op: Operation, *, requested: str, key: ServiceAppKey) -> tuple[
         requested == MODE_DETERMINISTIC
         and op.fallback == MODE_AUTONOMOUS
         and op.supports(MODE_AUTONOMOUS)
-        and key.allows_mode(MODE_AUTONOMOUS)
+        and origin == "test"
     ):
         return MODE_AUTONOMOUS, None
     return None, Violation(
@@ -380,41 +256,6 @@ class AdminStatus(SchemaVersioned):
     center: CenterRegistration = Field(default_factory=CenterRegistration)
 
 
-class AdminKeyInfo(ContractModel):
-    """키 하나 (SVC-02). `ServiceAppKey`에서 **`hash`를 뺀 것** + `state`."""
-
-    name: str
-    prefix: str
-    allowed_operations: list[str] = Field(default_factory=list)
-    allowed_modes: list[str] = Field(default_factory=list)
-    extra_scopes: list[str] = Field(default_factory=list)
-    created_at: Timestamp | None = None
-    expires_at: Timestamp | None = None
-    last_used_at: Timestamp | None = None
-    revoked_at: Timestamp | None = None
-    state: str  # active / expired / revoked
-    issued_by: str | None = None
-    center_key_id: str | None = None
-    issued_for: IssuedFor | None = None
-
-
-class AdminKeyCreateRequest(ContractModel):
-    """`POST /admin/v1/keys`. 기본 권한은 **결정 수행만**이다 (운영 키가 자율 수행을 못 하게)."""
-
-    name: str
-    allowed_operations: list[str] = Field(default_factory=lambda: ["*"])
-    allowed_modes: list[str] = Field(default_factory=lambda: [MODE_DETERMINISTIC])
-    extra_scopes: list[str] = Field(default_factory=list)
-    expires_at: Timestamp | None = None
-    note: str | None = None
-
-
-class AdminKeyCreated(AdminKeyInfo):
-    """발급 응답. **원문 `key`는 이 응답에만 실린다** (SVC-02 — 다시 볼 수 없다)."""
-
-    key: str
-
-
 class UsagePage(ContractModel):
     """`GET /admin/v1/usage` (SVC-03). 최근 것부터. **입력·출력 값은 없다** (계약 원칙 6)."""
 
@@ -422,20 +263,3 @@ class UsagePage(ContractModel):
     total: int = 0
 
 
-def admin_key_info(key: ServiceAppKey, *, now: str) -> AdminKeyInfo:
-    """저장된 키 레코드 → 화면에 보일 모양. **해시를 빼는 유일한 길로 둔다.**"""
-    return AdminKeyInfo(
-        name=key.name,
-        prefix=key.prefix,
-        allowed_operations=key.allowed_operations,
-        allowed_modes=key.allowed_modes,
-        extra_scopes=key.extra_scopes,
-        created_at=key.created_at,
-        expires_at=key.expires_at,
-        last_used_at=key.last_used_at,
-        revoked_at=key.revoked_at,
-        state=key_state(key, now=now),
-        issued_by=key.issued_by,
-        center_key_id=key.center_key_id,
-        issued_for=key.issued_for,
-    )

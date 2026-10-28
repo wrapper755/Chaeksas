@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import secrets
-import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -29,7 +28,7 @@ from chaeksas.bot_ui.runtimes import BUSY, RESERVED, HostSettings, RuntimeUnavai
 from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
-from chaeksas.contracts import SERVICE_URL_ENV, SERVICE_URL_SETTING, STORAGE_DIR_SETTING
+from chaeksas.contracts import CALL_TOKEN_SECRET, CENTER_URL_ENV, CENTER_URL_SETTING, STORAGE_DIR_SETTING
 from chaeksas.contracts.bot_ui import (
     DEFAULT_HEARTBEAT_S,
     ApprovalAck,
@@ -67,15 +66,13 @@ from chaeksas.core import build_info, machine, requests
 from chaeksas.core.app_directory import DirectoryCache
 from chaeksas.core.deploy import APPLIED, Deployer
 from chaeksas.core.extensions import ExtensionHost
-from chaeksas.core.key_check import key_facts
 from chaeksas.core.packages import InstalledBot, find, installed
-from chaeksas.core.preflight import Preflight, key_apps_of
+from chaeksas.core.preflight import Preflight
 from chaeksas.core.preflight import check as run_preflight
 from chaeksas.core.processes import Supervisor
 from chaeksas.core.run_log import run_dir
 from chaeksas.core.run_shipping import HttpUploader, Shipment
 from chaeksas.core.run_shipping import Queue as RunQueue
-from chaeksas.core.service_keys import ReceivedKeys
 from chaeksas.extension_api import HOST_BOT_UI, ExtensionContext
 
 log = logging.getLogger(__name__)
@@ -101,16 +98,8 @@ TRAY_IDLE = "대기"
 #: Bot 차례인데 Worker를 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중 (ADR-0014 §4).
 TRAY_WORKER_BUSY = "Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다"
 
-#: 사전 점검이 키가 없다고 할 때 「어떻게 고치나」 (BUI-10). 화면 이름은 **부르는 쪽이** 적는다.
-KEY_FIX_HINT = (
-    "Center가 배포와 함께 내려 줍니다 — 곧 받습니다. 오래 이러면 관리자에게 알리세요 "
-    "(이 PC가 환경변수로 Center 키를 받았다면 서비스 앱 키도 환경변수 CHK_BOT_UI__SVC__<참조>로 받습니다)"
-)
-
-#: 서비스 앱 키 만료를 묻는 제한 시간 (ADR-0052). **BUI-10 「확인」보다 짧다** — 하트비트는
-#: 화면과 같은 자리에서 돌아, 기다리는 만큼 창이 멈춘다.
-KEY_ASK_TIMEOUT_S = 3.0
-
+#: 호출 토큰을 새로 청하는 때 — 만료까지 이만큼 남으면 (C15 「정한 것」 — 2시간 전).
+CALL_TOKEN_RENEW_S = 2 * 3600
 
 @dataclass(frozen=True)
 class ExtensionSecrets:
@@ -121,13 +110,13 @@ class ExtensionSecrets:
 
     credentials: Credentials
     extension_id: str
+    #: 호출 토큰을 주는 쪽 (C15) — `call_token`을 물으면 이것이 답한다 (C13 예약 비밀).
+    call_token: Any = None
 
     def resolve(self, ref: str) -> str | None:
+        if ref == CALL_TOKEN_SECRET:
+            return self.call_token() if self.call_token is not None else None
         return self.credentials.extension_secret(self.extension_id, ref)
-
-
-#: 서비스 앱 주소를 다시 받는 간격 (초) — Center가 manifest를 다시 읽는 간격과 같다 (C7).
-DIRECTORY_REFRESH_S = 600.0
 
 
 def now_iso() -> str:
@@ -218,13 +207,10 @@ class Agent:
     #: 하트비트마다 OS 비밀 저장소를 두드리면 주기가 느려진다 (C4 「바뀌었을 때만 보내도 됨」).
     _preflights: dict[tuple[str, str], Preflight] = field(default_factory=dict)
     #: 서비스 앱 주소를 마지막으로 받아 둔 때 (`time.monotonic`). 처음 붙은 주기는 바로 받는다.
-    _directory_at: float | None = None
+    #: 호출 토큰 (C15) — `(원문, 만료)`. 메모리에 들고, Tool UI가 읽게 비밀 저장소에도 둔다.
+    _call_token: tuple[str, str] | None = None
     #: 이 실행에 묶은 로컬 런타임 — 끝나면 푼다.
     _reserved: list[str] = field(default_factory=list)
-    #: 서비스 앱 키 참조마다 만료를 **물어본 날짜** (ADR-0052 — 하루 한 번, 주기마다 하나).
-    #: 알린 날짜는 `notices`가 따로 쥔다 (묻는 것과 알리는 것은 다른 일이다).
-    _keys_asked_on: dict[str, str] = field(default_factory=dict)
-    _received: ReceivedKeys | None = None
 
     def runtimes(self) -> LocalRuntimes:
         """확장이 기여한 로컬 런타임들. **띄우지는 않는다** — 필요할 때 `ensure()`가 띄운다."""
@@ -254,9 +240,9 @@ class Agent:
             )
 
     def _runtime_env(self, extension_id: str) -> dict[str, str]:
-        """로컬 런타임 자식에게 물려줄 것 — **주소뿐이다** (키는 세션이 준다, ADR-0013)."""
-        found = self.service_url(extension_id)
-        return {SERVICE_URL_ENV: found} if found else {}
+        """로컬 런타임 자식에게 물려줄 것 — **Center 주소뿐이다** (호출 토큰은 세션이 준다, C10)."""
+        del extension_id
+        return {CENTER_URL_ENV: self.settings.center_url} if self.settings.center_url else {}
 
     @property
     def supervisors(self) -> dict[str, Supervisor]:
@@ -274,14 +260,16 @@ class Agent:
             extension_id,
             host=HOST_BOT_UI,
             settings=HostSettings(values=self.extension_values(extension_id, runtime_ids=runtime_ids)),
-            secrets=ExtensionSecrets(credentials=self.credentials, extension_id=extension_id),
+            secrets=ExtensionSecrets(
+                credentials=self.credentials, extension_id=extension_id, call_token=self.call_token
+            ),
         )
 
     def extension_values(self, extension_id: str, *, runtime_ids: tuple[str, ...] = ()) -> dict[str, object]:
         """확장에게 줄 설정 — **그 확장의 칸 + 호스트가 채우는 예약 키** (C13). 비밀은 없다."""
         values: dict[str, object] = dict(self.settings.extension(extension_id))
         values.update(self.runtimes().host_settings(runtime_ids))
-        values[SERVICE_URL_SETTING] = self.service_url(extension_id)
+        values[CENTER_URL_SETTING] = self.settings.center_url
         values[STORAGE_DIR_SETTING] = str(self.storage_dir(extension_id))
         return values
 
@@ -324,10 +312,8 @@ class Agent:
         if found is None:
             found = run_preflight(
                 bot.manifest,
-                key_value=self.credentials.for_bot(bot.id).service_app_key,
                 host=self.host,
                 context=self.extension_context if self.host is not None else None,
-                fix_hint=KEY_FIX_HINT,
                 # **갖춘 설정은 이쪽만 안다** (C1 `requires.settings`, ADR-0059 §4) — 메일을
                 # 보내는 Bot인데 SMTP가 없으면 **띄우기 전에** 막는다.
                 settings=self.settings.ready_settings(),
@@ -338,11 +324,7 @@ class Agent:
         return found
 
     def invalidate_preflight(self) -> None:
-        """키·설치·확장이 바뀌었다 — 다음에 묻는 쪽이 다시 점검한다.
-
-        BUI-10에서 키를 넣거나 지웠을 때, 배포를 적용했을 때 부른다. **빠진 키를 등록하면 다음
-        하트비트에 「준비됨」이 올라가야 한다** — 캐시가 그것을 막으면 안 된다.
-        """
+        """설치·확장·설정이 바뀌었다 — 다음에 묻는 쪽이 다시 점검한다."""
         self._preflights.clear()
 
     def readiness(self) -> list[Readiness]:
@@ -361,7 +343,6 @@ class Agent:
                     bpm_process_id=bot.id,
                     version=bot.version,
                     ready=not found.blocks,
-                    missing_key_refs=list(found.missing_key_refs),
                     blocked=list(found.blocked),
                 )
             )
@@ -415,11 +396,10 @@ class Agent:
         return table
 
     def run_services(self, bot: InstalledBot, run_id: str) -> Path | None:
-        """실행기에게 줄 **바깥 앱 명부** (C7 주소 + 외부 확장 정의·봉투, C13 「전송」).
+        """실행기에게 줄 **외부 확장 정의·봉투** (C13 「전송」) — 고정한 해시와 대조하려고.
 
-        Bot을 띄우기 **전에** 받는다 — 실행기는 Center를 부르지 않는다 (ADR-0031). 닿지 못하면
-        들고 있던 것을 쓰고(ADR-0007), 받지 못한 사유는 기록에 남는다. **봉투 검증은 실행기가**
-        한다 (C13 — 파일이 손을 타도 검증되지 않은 정의는 쓰이지 않는다).
+        Bot을 띄우기 **전에** 받는다. 닿지 못하면 들고 있던 것을 쓰고(ADR-0007), **봉투 검증은
+        실행기가** 한다 (C13). 주소·키는 없다 — 바깥 앱은 Center에 외부 작업으로 올린다 (ADR-0102).
         """
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 
@@ -436,21 +416,39 @@ class Agent:
             keys=list(self.store.state.admin_keys),
         )
         for why in found.problems:
-            log.warning("바깥 앱 명부: %s", why)
+            log.warning("외부 확장 명부: %s", why)
         return made
 
-    def service_url(self, extension_id: str) -> str | None:
-        """확장의 서버 부분 주소. **출처는 하나다** (C13) — Center 리소스 등록이 있으면 그것,
-        없으면 정의의 `service.base_url`.
-        """
-        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+    def call_token(self, *, fresh_for_s: float = CALL_TOKEN_RENEW_S) -> str | None:
+        """호출 토큰 (C15 「정한 것」) — 실행기 자식·Worker·Tool UI가 외부 작업을 올릴 때 쓴다.
 
+        Bot UI가 **제 Center API 키로** 청한다(24시간). 만료가 `fresh_for_s` 안으로 들어오면 새로
+        청한다. 닿지 못하면 들고 있던 것을 준다(아직 살아 있으면). **Tool UI가 읽게** 비밀 저장소에도
+        둔다 (`credentials.set_call_token`).
+        """
+        held = self._call_token
+        now = datetime.now(UTC)
+        if held is not None and datetime.fromisoformat(held[1]) - now > timedelta(seconds=fresh_for_s):
+            return held[0]
+        try:
+            got = self.client().call_token()
+        except Exception as e:  # noqa: BLE001 — 닿지 못해도 들고 있던 것이 있으면 그것을 쓴다
+            log.warning("호출 토큰을 받지 못했다: %s", e)
+            if held is not None and datetime.fromisoformat(held[1]) > now:
+                return held[0]
+            return None
+        self._call_token = (got.token, got.expires_at)
+        try:
+            self.credentials.set_call_token(got.token)
+        except Exception as e:  # noqa: BLE001 — Tool UI 몫은 못 줘도 실행은 된다
+            log.warning("호출 토큰을 비밀 저장소에 두지 못했다: %s", e)
+        return got.token
+
+    def service_url(self, extension_id: str) -> str | None:
+        """확장 정의에 적힌 서버 부분 주소 — **보여 주기만 한다** (BUI-11). 아무도 이 주소로 부르지
+        않는다 (ADR-0102 — 바깥 기능은 Center에 외부 작업으로 올린다)."""
         found = self.host.get(extension_id) if self.host is not None else None
         service = found.manifest.service if found is not None else None
-        # 들고 있는 명부를 먼저 본다 — **Center를 여기서 부르지 않는다** (화면마다 묻지 않게).
-        registered = DirectoryCache(data_dir=data_dir()).base_url_of(extension_id=extension_id)
-        if registered:
-            return registered
         return service.base_url if service is not None else None
 
     def storage_dir(self, extension_id: str) -> Path:
@@ -720,32 +718,7 @@ class Agent:
             approval_acks=list(self.store.state.pending_approval_acks),
             extensions=list(self.extensions),
             unsent_events=self.runs().unsent_count(),
-            service_key_acks=list(self.received_keys().pending),
         )
-
-    def received_keys(self) -> ReceivedKeys:
-        """Center가 내려 준 서비스 앱 키의 자리와 보낼 ack (ADR-0094 — 서버 실행기와 같은 코드)."""
-        if self._received is None:
-            from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
-
-            self._received = ReceivedKeys.at(data_dir())
-        return self._received
-
-    def _take_service_keys(self, request: HeartbeatRequest, response: HeartbeatResponse) -> None:
-        """하트비트 답의 서비스 앱 키를 받아 둔다 (C4 §서비스 앱 키 전달). 바뀌면 사전 점검을 다시 잰다."""
-        held = self.received_keys()
-        held.sent(request.service_key_acks)
-        if self.credentials.center_key_from_env():
-            return  # 공개키를 보내지 않았다 — Center가 싣지 않는다 (환경변수 키를 쓴다)
-        changed = held.take(
-            response.service_keys,
-            response.drop_service_keys,
-            secret=self.credentials.enroll_secret(),
-            put=self.credentials.set,
-            delete=self.credentials.delete,
-        )
-        if changed:
-            self.invalidate_preflight()
 
     def api_key(self) -> str:
         return self.credentials.center_api_key() or ""
@@ -766,48 +739,6 @@ class Agent:
             log.warning("실행 기록을 보내지 못했다: %s", found.error)
         return found
 
-    def ask_service_key(self) -> str | None:
-        """서비스 앱 키 **하나**에게 만료를 묻는다 (C11 `GET /v1/keys/self`, ADR-0052).
-
-        **점검 밖이다** — `core.preflight`는 그대로 서버를 부르지 않는다. 좁히는 것 다섯:
-
-        - **설치된 Bot이 실제로 쓰는 참조만** (BUI-10에 등록만 해 둔 키는 묻지 않는다).
-        - **들고 있는 주소만** (`DirectoryCache.base_url_of`) — 이것 때문에 Center를 두드리지 않는다.
-        - **주기마다 많아야 하나**, 참조마다 하루 한 번. 하트비트는 화면과 같은 자리에서 돈다.
-        - **닿지 못한 것은 알릴 거리가 아니다** (ADR-0007) — 조용히 다음 날 다시 묻는다.
-        - **거부는 여기서 말하지 않는다** — 실행 기록이 말한다 (목소리를 둘 두지 않는다).
-
-        물어본 참조를 돌려준다 (없으면 `None`). 알릴지는 `notices`가 정한다.
-        """
-        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
-
-        now = now_iso()
-        today = now[:10]
-        held = DirectoryCache(data_dir=data_dir())
-        for bot in installed(data_dir()):
-            for ref, app_id in key_apps_of(bot.manifest).items():
-                if self._keys_asked_on.get(ref) == today:
-                    continue
-                base_url = held.base_url_of(app_id=app_id) if app_id else None
-                try:
-                    key = self.credentials.service_app_key(ref, bot.id)
-                except Exception as e:  # noqa: BLE001 - 비밀 저장소가 없는 PC도 있다
-                    log.warning("키 참조 %s를 풀지 못했다: %s", ref, e)
-                    key = None
-                if not key or not base_url:
-                    # 값·주소가 없는 것은 **여기서 알릴 거리가 아니다** (사전 점검·BUI-10의 일).
-                    continue
-                self._keys_asked_on[ref] = today
-                try:
-                    facts = key_facts(base_url, key, timeout_s=KEY_ASK_TIMEOUT_S)
-                except Exception as e:  # noqa: BLE001 - 주기를 깨뜨리지 않는다
-                    log.warning("서비스 앱 키 %s의 만료를 묻지 못했다: %s", ref, e)
-                    return ref
-                if facts.answered and not facts.refused:
-                    self.notices.service_key_expiring(ref=ref, expires_at=facts.expires_at, now=now)
-                return ref
-        return None
-
     def beat(self) -> HeartbeatResponse | None:
         """한 주기. 닿지 못하면 `None`을 돌려주고 **실행은 계속한다** (ADR-0007).
 
@@ -817,8 +748,6 @@ class Agent:
         self._tell_runtimes()
         # 돌고 있는 Bot을 들여다보고, 자리가 비면 대기열에서 다음을 올린다 (조각 4a).
         self.pump()
-        # **Center보다 먼저 묻는다** — Center가 꺼져 있어도 서비스 앱 키는 만료된다 (ADR-0052).
-        self.ask_service_key()
 
         if not self.credentials.center_api_key():
             # **키가 없다 — 등록 요청을 보내고 승인을 기다린다** (C4 §등록 요청과 승인).
@@ -873,7 +802,6 @@ class Agent:
             expires_at=response.key_expires_at, now=self.last_beat_at, within_days=self._key_notice_days()
         )
         self._take_rotated(response)
-        self._take_service_keys(request, response)
         # 보낸 ack는 Center가 받았다 (같은 요청에 실어 보냈으므로).
         self.store.ack_sent(request.job_acks)
         self.store.deployments_sent(request.deployment_results)
@@ -885,31 +813,17 @@ class Agent:
         # 「복구」는 **보낸 것까지** 말한다 — 끊겨 있던 동안 쌓인 기록이 나갔다는 뜻이다 (BUI-05).
         self.notices.connection(online=True, shipped=shipped.sent)
         self.ship_approvals()
-        self.refresh_directory()
+        self._renew_call_token()
         return response
 
-    def refresh_directory(self, *, force: bool = False) -> None:
-        """C7 서비스 앱 주소를 받아 둔다 — **하트비트 뒤에, 10분에 한 번** (C13 「전송」).
-
-        Bot을 띄우기 전에만 받으면 첫 실행 전에는 명부가 비어 확장 도구(셀렉터 등록 — Tool UI도
-        이 명부를 읽는다)가 서버에 닿지 못한다 — 그런데 Bot은 화면이 등록돼야 돈다 (09-gaps §6,
-        현장 리허설). 외부 확장 정의는 여기서 받지 않는다(쓰는 Bot이 정한다 — `run_services`).
-        **닿지 못하면 들고 있던 것을 쓴다.**
-        """
-        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
-
-        now = time.monotonic()
-        if not force and self._directory_at is not None and now - self._directory_at < DIRECTORY_REFRESH_S:
+    def _renew_call_token(self) -> None:
+        """돌고 있는 실행의 호출 토큰이 곧 끝나면 새것을 제어 파일로 넣는다 (C15 「정한 것」 — 2시간 전)."""
+        running = self.runner().running
+        if running is None:
             return
-        self._directory_at = now
-        try:
-            found = DirectoryCache.using(data_dir(), self.client())
-            found.refresh()
-        except Exception as e:  # noqa: BLE001 — 명부를 못 받아도 하트비트는 끝났다
-            log.warning("서비스 앱 주소를 받아 두지 못했다 (들고 있던 것을 쓴다): %s", e)
-            return
-        for why in found.problems:
-            log.warning("서비스 앱 주소: %s", why)
+        token = self.call_token()
+        if token and token != running.call_token:
+            running.give_call_token(token)
 
     # ── 지시 처리 (C4 HeartbeatResponse) ──
 
@@ -1025,8 +939,7 @@ class Agent:
                 continue
             bot = find(data_dir(), one.bpm_process_id, one.version)
             name = bot.name if bot is not None else one.bpm_process_id
-            missing = self.preflight(bot).missing_key_refs if bot is not None else ()
-            self.notices.deployed(bot=name, version=one.version, missing_keys=missing)
+            self.notices.deployed(bot=name, version=one.version)
 
     def deployer(self) -> Deployer:
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
@@ -1185,25 +1098,13 @@ class Agent:
         if launcher.running is not None:
             # 기다리는 결재·확인마다 알림 하나 (BUI-05) — **현장에서 답할 것만** 여기서 알린다.
             self.notices.requests(launcher.running.pendings, bot=launcher.running.bot.name)
-            self._tell_key_refusals(launcher.running)
             self.current_run = launcher.running.current()
             return
         self._start_next()
 
-    def _tell_key_refusals(self, running: Running) -> None:
-        """앱이 키를 거부했으면 알린다 (BUI-05, ADR-0052).
-
-        **묻지 않고 기록에서 읽은 것이다** — 실행이 이미 그 앱에 물었다. 돌고 있을 때와 거둘 때
-        둘 다 부른다: 한 틱 안에 거부당하고 끝난 실행은 `pump()`이 못 보고 지나간다.
-
-        **비어 있어도 부른다** — `notices`가 그때 지난 실행의 것을 잊는다 (`requests()`와 같은 결).
-        """
-        self.notices.service_keys_refused(running.key_refusals, bot=running.bot.name, run_id=running.run_id)
-
     def _finished(self, done: Running) -> None:
         """끝난 실행 하나를 거둔다 — Center 작업이면 결과를 ack한다 (C4)."""
         log.info("Bot %s 끝남 (%s)", done.bot.id, done.finished or "unknown")
-        self._tell_key_refusals(done)
         if done.finished == "failed":
             # 실패는 사람이 알아야 한다 (BUI-05). 사유는 **기록에 적힌 한 줄**이다 (C3).
             self.notices.run_failed(bot=done.bot.name, why=done.failure)
@@ -1286,6 +1187,9 @@ class Agent:
                 run_id=run.run_id,
                 extensions=extensions,
                 services_path=services_path,
+                # 서비스 태스크는 Center에 외부 작업으로 올린다 (C15) — 주소와 호출 토큰.
+                center_url=self.settings.center_url,
+                call_token=self.call_token(),
                 # `location: follow` 결재를 어디서 답하나 — BUI-03 「원격 결재」 (ADR-0038).
                 approval_where="center" if self.settings.remote_approval else "field",
                 # 사람이 BUI-11에서 끈 확장 — 자식도 같은 것을 끈다 (ADR-0043).

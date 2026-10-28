@@ -3,7 +3,7 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 /**
- * `GET /manifest` — 인증 없음 (비밀이 없다). Center가 리소스 목록에 쓴다 (C7).
+ * 앱이 하는 일 — 일꾼이 `PUT /consumers/self/manifest`로 올리고 Center가 리소스 목록·작업 대조에 쓴다 (C7·C15).
  */
 export interface ServiceAppManifest {
   app_id: string;
@@ -48,15 +48,11 @@ export interface Operation {
   [k: string]: unknown;
 }
 /**
- * 이 앱이 **자기 기여 자원 카탈로그**를 어디서 주는지 (C7 §리소스 모으는 방식).
+ * 이 앱이 **자기 기여 자원 카탈로그**를 내는 종류 (C7 §리소스 모으는 방식).
  *
- * 확장 정의(C13 `contributes.resources`)에도 같은 것이 있지만, **내장·사내 확장의 정의는
- * Center에 없다** — 설치 파일에 들어 있고 Center는 실행하는 쪽의 보고로 `{id, version}`만
- * 안다. 그래서 **서버 부분이 자기 카탈로그를 알린다**: 서버 쪽 자원을 가장 잘 아는 것이
- * 서버 부분이고, Center는 이미 `/manifest`를 읽고 있어 길을 새로 내지 않는다.
- *
- * `catalog_url`은 이 앱의 `base_url` 기준 상대 경로다 (주소의 유일한 출처는 Center의 리소스
- * 등록이다 — C13 `service.base_url`). 응답 형식은 C13 §5 `Catalog`다.
+ * **내장·사내 확장의 정의는 Center에 없어**(설치 파일에 들어 있다) 서버 부분이 자기 카탈로그를
+ * 알린다 — 일꾼이 `PUT /consumers/self/catalogs/{type}`으로 올린다 (C15, ADR-0102). 응답 형식은
+ * C13 §5 `Catalog`다. `catalog_url`은 옛 manifest를 읽기 위해 남은 칸이고 Center는 그 주소를 부르지 않는다.
  */
 export interface ResourceCatalog {
   catalog_url: string;
