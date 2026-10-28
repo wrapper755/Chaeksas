@@ -630,3 +630,36 @@ def test_an_answer_waits_for_a_free_slot_instead_of_being_refused(
     drain(runner)
     assert store.get(run_id) is None, "자리가 비었는데 이어 가지 않았다"
     assert [one.request_id for one in runner.pending_approval_acks] in ([], [request_id])
+
+
+def test_a_cancelled_run_takes_its_approval_with_it_for_good(
+    center: TestClient, center_store: CenterStore, settings: Settings, key: str, store: Store
+) -> None:
+    """**취소된 실행의 결재는 회수된 채로 남는다** (C6 `run_ended`) — 다시 열리지 않는다.
+
+    Center가 `run_finished`를 받아 거두면 그 회수가 하트비트로 내려가는데, 실행기는 그
+    실행을 이미 닫아 기다리는 이가 없다. 그때 `not_waiting`으로 거절하면 Center가 「거절은
+    되돌림」으로 읽어 결재를 `open`으로 되살렸다 — 결재함에 승인 대기로 보이고, 답하면 아무
+    효과 없이 200이었다 (운영 Center, 2026-10-28).
+    """
+    runner = runner_of(settings, key, center, store)
+    ready(center, center_store, runner)
+    job = make_job(center)
+    run_id = until_waiting(runner)
+    runner.tick()  # 결재를 올린다
+    (request_id,) = [one["request_id"] for one in center.get("/api/v1/approvals?state=open", headers=READ).json()]
+
+    assert center.delete(f"/api/v1/jobs/{job['job_id']}", headers=ADMIN).status_code == 202
+    drain(runner)
+    for _ in range(3):  # 회수가 내려가고 ack가 올라가는 몇 주기
+        runner.tick()
+
+    found = center.get(f"/api/v1/approvals/{request_id}", headers=READ).json()
+    assert found["state"] == "withdrawn" and found["withdraw_reason"] == "run_ended", found
+    assert center.get(f"/api/v1/runs/{run_id}", headers=READ).json()["status"] == "cancelled"
+    refused = center.post(
+        f"/api/v1/approvals/{request_id}/answer",
+        json={"schema": 1, "decision": "approve", "answer": ANSWER, "answered_by": "박결재"},
+        headers=ADMIN,
+    )
+    assert refused.status_code == 409, refused.text

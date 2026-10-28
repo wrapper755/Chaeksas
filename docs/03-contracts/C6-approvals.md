@@ -120,11 +120,14 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 **상태 전이 규칙:**
 
 - `rejected_by_host`는 **곧바로 `open`으로 돌아간다.** 거절 사유는 콘솔에 남겨, 결재자가 고쳐서 다시 답한다. 실행하는 쪽은 계속 기다린다.
+  **되돌리는 것은 답(`answered`)뿐이다.** 회수·만료(`withdrawn`·`expired`)는 답이 아니라서 실행하는 쪽이 기다리지 않아도 할 일이 없다 — 그 ack는 `accepted`가 무엇이든 「받아 갔다」로 적고 상태를 바꾸지 않는다. 실행하는 쪽도 기다리지 않는 회수·만료에는 `accepted: true`로 답한다.
+  **실행이 끝났으면 되돌리지 않는다** — 답의 거절이 와도 C3 `run_finished`를 받은 실행이면 `open`이 아니라 `withdrawn`(`run_ended`)이다. 기다리는 이가 없는 결재를 다시 열면 결재함에 「대기」로 보이고 답해도 아무 일이 없다.
 - **자동 회수:** Center는 다음 경우 그 실행의 `open` 결재를 `withdrawn`으로 바꾼다.
   - C3 `run_finished`를 받았을 때 (`run_ended`)
   - 작업이 `bot_ui_lost`가 되었을 때 (`host_lost`)
 
   이렇게 해서 답할 수는 있지만 전달될 곳이 없는 결재가 결재함에 남지 않게 한다.
+  **끝난 실행의 결재에 온 답은 받지 않는다** — `run_finished`보다 결재가 늦게 닿았거나 위의 규칙 전에 다시 열린 것이 `open`으로 남아 있으면, 답이 오는 그 자리에서 `run_ended`로 거두고 409 `not_open`이다. 하트비트도 그런 결재를 쓸어 거둔다.
 - **관리자 회수(`admin_withdraw`)의 효과:** 실행하는 쪽은 이 결재를 "답 없이 끝남"으로 받는다. 그 노드에 오류 경계 이벤트가 있으면 그쪽으로 가고, 없으면 실행이 실패로 끝난다 (CON-04 「그 실행은 실패로 끝납니다」). 현장에서 먼저 답해서 회수된 경우는 실행에 영향이 없다.
 
 ### AnswerRequest
@@ -172,7 +175,7 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 | 403 | `not_owner` / `run_owner_mismatch` | 다른 키가 만든 결재·실행 | 버그 |
 | 403 | `not_assignee` | 대리 답의 그 사람이 담당자가 아님 (담당자 없는 결재 포함), 또는 `?assignee=`가 그 사람과 다름 | 연동하는 쪽: 답하지 못한다고 사람에게 알린다 |
 | 404 | `not_found` | | |
-| 409 | `already_answered` / `not_open` | 이미 답함, 회수·만료됨 | 콘솔: 목록을 새로 고친다 |
+| 409 | `already_answered` / `not_open` | 이미 답함, 회수·만료됨, **실행이 끝남** (그 자리에서 `run_ended`로 거둔다) | 콘솔: 목록을 새로 고친다 |
 | 409 | `review_changed` | `if_review_digest`가 지금 결재의 지문과 다르다 | 연동하는 쪽: 결재를 다시 읽어 사람에게 다시 보인다 |
 | 409 | `idempotency_conflict` | 같은 `request_id`에 다른 키·본문 | 버그 |
 | 422 | `answer_invalid` (`detail.fields`) | 폼과 맞지 않는 답 | 콘솔: 칸마다 오류를 표시한다 |
@@ -188,6 +191,7 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-28 | 1 | **회수는 다시 열리지 않는다** (형식은 그대로다) — 서버 실행기가 이미 닫은 실행의 회수에 `not_waiting`으로 답하자 Center가 「거절은 되돌림」으로 읽어 취소된 실행의 결재를 `open`으로 되살렸다(답하면 효과 없이 200). 되돌림은 답에만, 끝난 실행의 결재는 되돌리지 않고 답은 409 `not_open`, 하트비트가 남은 것을 쓸어 거둔다 | — |
 | 2026-10-20 | 1 | **내용 고정** — `ApprovalInfo.review_digest`(값을 지워도 남는다), `AnswerRequest.if_review_digest?`, 409 `review_changed`. 선택 칸이라 schema는 그대로다 | [0083](../decisions/0083-review-digest.md) |
 | 2026-10-20 | 1 | **결재 담당자·대리 답이 돈다** (형식은 그대로다). 그러면서 결재 읽기가 **권한표를 따라갔다** — 코드가 「키면 무엇이든」(`require_read`)이라 Bot UI·서버 실행기 키도 남의 검토 자료를 읽을 수 있었다. 이제 콘솔 토큰과 대리 답용 키(담당인 것만)뿐이다 | [0080](../decisions/0080-approval-assignees.md), [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-20 | 1 | **결재 담당자·대리 답** — `assignees[]`·`?assignee=`, 대리 답용 키와 `X-CHK-On-Behalf-Of`(담당자일 때만), `answered_via`·`requested_by`, 오류 `on_behalf_required`·`not_assignee`·`on_behalf_invalid`. 모두 선택 칸이라 schema는 그대로다 | [0080](../decisions/0080-approval-assignees.md), [0081](../decisions/0081-answering-on-behalf.md) |

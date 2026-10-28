@@ -390,6 +390,89 @@ def test_a_lost_queue_takes_its_approvals_with_it(
     assert found["state"] == "withdrawn" and found["withdraw_reason"] == "host_lost"
 
 
+
+def finish_run(client: TestClient, host: dict[str, Any], *, status: str = "cancelled") -> None:
+    """C3 `run_started`·`run_finished` 두 줄 — 그 실행이 끝났다."""
+    sent = client.post(
+        f"/api/v1/runs/{RUN}/events",
+        json=[
+            {"schema": 1, "run_id": RUN, "seq": 1, "ts": "2026-10-06T09:15:00+09:00",
+             "kind": "run_started", "data": {"bpm_process_id": BOT, "version": "1.0.0", "run_location": "pc",
+                        "executor": "bot_ui", "mode": "deterministic", "source": "job"}},
+            {"schema": 1, "run_id": RUN, "seq": 2, "ts": "2026-10-06T09:20:00+09:00",
+             "kind": "run_finished", "data": {"status": status, "duration_s": 12.5, "ai_tasks": 0,
+                        "replayed_tasks": 0, "ui_tasks": 0, "service_calls": 0,
+                        "human_requests": 1}},
+        ],
+        headers=host["auth"],
+    )
+    assert sent.status_code == 200, sent.text
+
+
+def test_a_refused_withdrawal_does_not_reopen_the_approval(client: TestClient, host: dict[str, Any]) -> None:
+    """**되돌리는 것은 답뿐이다** (C6) — 회수에 `not_waiting`이 와도 `open`이 되지 않는다.
+
+    서버 실행기가 이미 닫은 실행의 회수에 그렇게 답해 취소된 실행의 결재가 되살아났다.
+    """
+    put(client, host)
+    finish_run(client, host)
+    down = client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=host["auth"]).json()
+    assert [one["state"] for one in down["approvals"]] == ["withdrawn"]
+
+    client.post(
+        "/api/v1/bot-ui/heartbeat",
+        json=heartbeat_body(approval_acks=[{"request_id": REQUEST, "accepted": False, "reason": "not_waiting"}]),
+        headers=host["auth"],
+    )
+    found = client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()
+    assert found["state"] == "withdrawn" and found["withdraw_reason"] == "run_ended"
+    again = client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=host["auth"]).json()
+    assert again["approvals"] == [], "받아 간 것으로 적었다 — 다시 내려가지 않는다"
+
+
+def test_a_refused_answer_of_an_ended_run_is_withdrawn_not_reopened(
+    client: TestClient, host: dict[str, Any]
+) -> None:
+    """답이 내려가는 사이 실행이 끝났다 — 거절이 와도 **다시 열지 않고 거둔다** (C6)."""
+    put(client, host)
+    client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=ADMIN)
+    finish_run(client, host)  # 이미 답했으니 `run_ended`로 거두지 않는다
+    client.post(
+        "/api/v1/bot-ui/heartbeat",
+        json=heartbeat_body(approval_acks=[{"request_id": REQUEST, "accepted": False, "reason": "not_waiting"}]),
+        headers=host["auth"],
+    )
+    found = client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()
+    assert found["state"] == "withdrawn" and found["withdraw_reason"] == "run_ended"
+
+
+def test_an_open_approval_of_an_ended_run_refuses_an_answer(
+    client: TestClient, store: Store, host: dict[str, Any]
+) -> None:
+    """`run_finished` 뒤에도 `open`인 결재(늦게 닿았거나 옛 규칙으로 다시 열린 것)에 온 답은 409다.
+
+    받아 두면 기다리는 이가 없어 **효과 없이 200**이다. 그 자리에서 `run_ended`로 거둔다.
+    """
+    finish_run(client, host)
+    put(client, host)  # 실행이 끝난 뒤에 닿았다
+    assert client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()["state"] == "open"
+
+    refused = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=ADMIN)
+    assert refused.status_code == 409 and refused.json()["code"] == "not_open", refused.text
+    found = client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()
+    assert found["state"] == "withdrawn" and found["withdraw_reason"] == "run_ended"
+
+
+def test_the_heartbeat_sweeps_open_approvals_of_ended_runs(client: TestClient, host: dict[str, Any]) -> None:
+    """답을 기다리지 않아도 **하트비트가 쓸어 거둔다** — 결재함·가상 직원 일괄에 남지 않는다."""
+    finish_run(client, host)
+    put(client, host)
+    client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=host["auth"])
+    assert client.get("/api/v1/approvals?state=open", headers=READ_AUTH).json() == []
+    found = client.get(f"/api/v1/approvals/{REQUEST}", headers=READ_AUTH).json()
+    assert found["state"] == "withdrawn" and found["withdraw_reason"] == "run_ended"
+
+
 # ─────────────────────────── 하트비트가 답을 나른다 (C4) ───────────────────────────
 
 
