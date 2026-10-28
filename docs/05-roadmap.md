@@ -19,7 +19,7 @@
 | M6 | 첫 릴리스 | **진행 중** | 시나리오 3 Windows 현장 PC 통과 (1·2·4는 M7, ADR-0055) | M5 |
 | M7 | 서버 실행 | **진행 중** (**기준 여섯이 모두 찼다** — PC 위임은 [ADR-0062](decisions/0062-pc-delegation.md), 확장 태스크는 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)가 닫았고 **09-gaps §3에 남은 것이 없다**) | 서버 실행기, 서버 Bot 동시 실행, 상태 저장·재개, PC 위임, CON-12 | M6 |
 | M8 | 건넬 수 있게, 고칠 수 있게 | **아직** | Windows 설치 파일(빌드·CI 산출물·자동 시작·판 올리기), Center 저장소 옮기기 수단 | M7 |
-| M9 | 바깥 기능은 Pull로 | **아직** (결정만 — ADR-0102) | C15 외부 작업, 일꾼이 된 서비스 앱, 어댑터 일꾼, UI 자동화의 외부 작업, 주소·키 칸 없는 CON-07 | M7 |
+| M9 | 바깥 기능은 Pull로 | **진행 중** (조각 1 끝 — ADR-0102) | C15 외부 작업, 일꾼이 된 서비스 앱, 어댑터 일꾼, UI 자동화의 외부 작업, 주소·키 칸 없는 CON-07 | M7 |
 
 M5에 남은 한 줄은 **그 단계를 막지 않는다** — Windows에서만 도는 예제 하나(BX-36)이고
 이유가 아래에 적혀 있다.
@@ -247,12 +247,12 @@ CI에 산출물 잡이 없다.
 
 ## M9. 바깥 기능은 Pull로
 
-> 상태: **결정만 들어갔다** ([ADR-0102](decisions/0102-calling-outside-is-pull.md), 계약 [C15](03-contracts/C15-external-tasks.md) 초안). 코드는 아직 Push다.
+> 상태: **조각 1이 끝났다** ([ADR-0102](decisions/0102-calling-outside-is-pull.md), 계약 [C15](03-contracts/C15-external-tasks.md) 합의) — Center가 일감을 받고 일꾼을 들인다. 부르는 쪽·일꾼은 아직 Push다.
 > BPM 프로세스가 네트워크 건너 바깥 기능을 부르는 길을 모두 Center의 외부 작업으로 바꾼다 — 부르는 쪽은 올리고
 > 기다리고, 일꾼이 가져가 끝낸다. Center 콘솔에서 바깥 기능의 주소·키를 넣는 칸이 없어지는 것이 끝이다.
 > 한 조각이 끝날 때마다 옛 길을 **그 조각에서 걷는다** (두 길을 나란히 두지 않는다).
 
-- [ ] 조각 1 — **C15 합의**: 계약 모델, Center 외부 작업 표(옮기기 한 단계)·API·롱폴링, 일꾼 승인
+- [x] 조각 1 — **C15 합의**: 계약 모델(`contracts.external_task`), Center 외부 작업 표(15판)·API·롱폴링(새 일감·끝내기가 종을 울린다, 상한 200), 일꾼 승인(요청 코드 → 토큰을 봉해 내려 준다, 토픽은 승인할 때) — `tests/test_center_external_tasks.py`
 - [ ] 조각 2 — **서비스 앱**: `service_kit` 가져가기 루프, 모의 앱 13개, 부르는 쪽 셋(서버 실행기·실행기 자식·Studio)의 `ServiceCaller`. C11 `/v1/ops`·서비스 앱 키 배달(ADR-0094)을 걷는다. M3·M5·M7 묶음이 초록
 - [ ] 조각 3 — **어댑터 일꾼** (`chk-adapter-consumer`): 외부 앱 둘(모의), Center의 외부 앱 키·외부 확장 주소 덮어쓰기를 걷는다
 - [ ] 조각 4 — **UI 자동화**: 계획·치유·보고·등록·공개 카탈로그를 외부 작업으로, Worker·Tool UI는 호출 토큰. M4 묶음과 `test_ui_end_to_end.py`가 초록

@@ -24,6 +24,7 @@ from chaeksas.center.api import (
     delegations,
     deployments,
     enrollments,
+    external_tasks,
     jobs,
     messages,
     package_access,
@@ -122,11 +123,13 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         )
 
     app.state.authenticate = authenticate
+    app.state.external_waiters = external_tasks.Waiters(settings.external_task_max_waiters)
     app.add_exception_handler(ApiError, handle)
     app.include_router(bot_ui.router)
     app.include_router(enrollments.router)
     app.include_router(server_runner.router)
     app.include_router(delegations.router)
+    app.include_router(external_tasks.router)
     app.include_router(runs.router)
 
     @app.get("/healthz")

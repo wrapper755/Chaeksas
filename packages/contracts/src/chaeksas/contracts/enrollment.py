@@ -55,7 +55,7 @@ ROTATE_NOTICE_DAYS = 7
 REASON_MAX = 200
 
 #: 요청할 수 있는 종류 — 만드는 키 종류와 같다 (C7). Studio도 같은 길이다 (ADR-0093).
-ENROLLMENT_TYPES = frozenset({"bot_ui", "server_runner", "studio"})
+ENROLLMENT_TYPES = frozenset({"bot_ui", "server_runner", "studio", "consumer"})  # consumer = C15 일꾼
 #: 알려진 상태 (열린 문자열).
 KNOWN_ENROLLMENT_STATES = frozenset({"pending", "approved", "rejected", "expired"})
 
@@ -241,6 +241,8 @@ class EnrollmentApproveRequest(ContractModel):
     """`POST /enrollments/{id}/approve` — `name`을 비우면 요청의 이름을 쓴다."""
 
     name: str | None = None
+    #: 일꾼(C15)만 — 승인할 토픽. 비우면 요청한 그대로, 적으면 **요청한 것 안에서만** 줄인다.
+    topics: list[str] | None = None
 
 
 class EnrollmentRejectRequest(ContractModel):

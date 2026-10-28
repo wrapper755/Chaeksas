@@ -23,6 +23,8 @@ from chaeksas.contracts import (
     Envelope,
     EventBatchResponse,
     ExtensionManifest,
+    ExternalTaskCreate,
+    FetchResponse,
     HeartbeatRequest,
     HeartbeatResponse,
     Manifest,
@@ -51,6 +53,8 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C13-extension-manifest", 0, Catalog),  # 공통 카탈로그 형식
     ("C13-extension-manifest", 1, ExtensionManifest),  # 내장 확장
     ("C13-extension-manifest", 2, ExtensionManifest),  # 외부 확장
+    ("C15-external-tasks", 0, ExternalTaskCreate),  # 일감 올리기
+    ("C15-external-tasks", 1, FetchResponse),  # 일꾼이 받은 것
 ]
 
 

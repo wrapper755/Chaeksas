@@ -7,5 +7,6 @@
  */
 export interface EnrollmentApproveRequest {
   name?: string | null;
+  topics?: string[] | null;
   [k: string]: unknown;
 }

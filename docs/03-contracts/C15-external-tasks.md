@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **초안** (2026-10-28) — 글만 있다. 모델·Center 표·API는 [ADR-0102](../decisions/0102-calling-outside-is-pull.md) 조각 1에서 짓는다. 그때까지 서비스 앱 호출은 C11 `POST /v1/ops`(Push)로 돈다 |
+| 상태 | **합의** (2026-10-28) — 모델(`contracts.external_task`)·Center 표(15판)·API·롱폴링·일꾼 승인이 돌고 `tests/test_center_external_tasks.py`가 지킨다. **부르는 쪽과 일꾼은 아직 붙지 않았다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md) 조각 2~4) — 그때까지 서비스 앱 호출은 C11 `POST /v1/ops`(Push)로 돈다 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기·실행기 자식 프로세스·Studio·Worker·Tool UI → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
-| 코드 위치 | `packages/contracts/external_task.py` (아직 없다) |
+| 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0062](../decisions/0062-pc-delegation.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 관련 화면 | CON-07 리소스 (일꾼 승인·토픽 상태), CON-01 (실행 상세의 서비스 호출) |
 
@@ -23,7 +23,7 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 
 | 엔드포인트 | 인증 | 뜻 |
 | --- | --- | --- |
-| `POST /api/v1/external-tasks` | 호출 토큰 · 서버 실행기·Studio의 Center API 키 | 일감 올리기 (멱등) |
+| `POST /api/v1/external-tasks` | 호출 토큰 · Bot UI·서버 실행기·Studio의 Center API 키 | 일감 올리기 (멱등) |
 | `GET /api/v1/external-tasks/{task_id}?wait_s=` | 올린 쪽 | 결과 기다리기 (롱폴링). 아직이면 `wait_s`(최대 25) 뒤 `state: pending` |
 | `POST /api/v1/external-tasks/{task_id}/ack` | 올린 쪽 | 결과를 받았다 → 값을 지운다 |
 | `POST /api/v1/external-tasks/{task_id}/cancel` | 올린 쪽 | 거두기 (실행이 취소됐다) |
@@ -36,7 +36,7 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 
 - **연결은 늘 Center 쪽으로 나간다.** Center는 일꾼에게도, 부르는 쪽에게도 먼저 연결하지 않는다.
 - 크기 한도: 입력·출력 각 1 MB (C11과 같다).
-- 롱폴링 연결 상한: `CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` (기본값은 설정 모델에). 넘으면 503 `too_many_waiters` — 일꾼은 잠깐 쉬고 다시 건다.
+- 롱폴링 연결 상한: `CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` (기본 200, 설정 모델에). 넘으면 503 `too_many_waiters` — 잠깐 쉬고 다시 건다.
 
 ## 모델
 
@@ -109,7 +109,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 - `complete` `{output, mode_used, replayed, usage}` · `fail` `{code, message, retryable}` · `extend` `{lock_s}`.
 - **먼저 끝낸 쪽이 이긴다.** 잠금이 지난 일꾼의 `complete`도 그 일감이 아직 끝나지 않았으면 받는다(값을 잃지 않으려고). 이미 끝났으면 409 `already_completed` — 일꾼은 버리면 된다(멱등이라 같은 일이다).
 - 잠근 일꾼이 아니면 403 `not_locked_by_you`. 거둔 일감이면 409 `cancelled` — 일꾼은 하던 일을 멈춰도 된다.
-- `output`이 manifest의 `output_schema`와 다르면 Center가 422로 막는다 — 일꾼의 버그를 부르는 쪽의 업무 실패로 넘기지 않는다.
+- `output`에 manifest `output_schema.required`의 칸이 빠졌으면 Center가 422 `output_invalid`로 막는다 — 일꾼의 버그를 부르는 쪽의 업무 실패로 넘기지 않는다.
 
 ### 일꾼 들이기
 
@@ -174,12 +174,14 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 | 422 | `operation_not_found` / `mode_unsupported` / `output_invalid` | manifest와 다름 |
 | 503 | `too_many_waiters` | 롱폴링 상한 |
 
-## 미정
+## 정한 것 (처음에 미정이던 셋)
 
-> 미정: 호출 토큰을 Bot UI·Studio가 받는 길 — 하트비트 응답에 봉해 싣는 것이 제안이다(서비스 앱 키를 나르던 자리, ADR-0094). 수명과 회전.
-> 미정: 롱폴링 상한의 기본값과, 한 일꾼이 한 번에 잠글 수 있는 수.
-> 미정: 일꾼이 Center에서 외부 확장 정의를 받는 경로 — C13 「전송」(바깥 앱 명부)을 일꾼 토큰으로 열지, 따로 둘지.
-> 제안: CON-07 토픽 상태 — 일꾼 수 · 마지막으로 가져간 때 · 쌓인 일감 · 가장 오래 기다린 일감.
+- **호출 토큰은 하트비트 답에 봉해 싣는다** (C4 `call_token` — 조각 2). Bot UI의 공개키로 봉하고(키 회전과 같은 봉함), 수명은 24시간이며 만료 2시간 전부터 새것을 싣는다. **호출 토큰으로 부르면 Center는 그 Bot UI의 Center API 키로 부른 것과 같이 본다** — 소유(C3)·배포 대조가 같은 신원으로 돈다. 그래서 조각 1의 Center는 Bot UI·서버 실행기·Studio의 **Center API 키로도** 올리기를 받는다(호출 토큰이 그 위에 얹힌다). 호출 토큰은 올리기·기다리기·ack·거두기 밖을 모두 403으로 막는다.
+- **롱폴링 상한은 설정의 기본 200** (`CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` — 올리는 쪽·일꾼의 기다림을 함께 센다). 한 번 가져가기에 잠글 수 있는 수는 **10건까지**(`max_tasks`가 그보다 크면 10으로 깎는다).
+- **어댑터 일꾼은 C13 「전송」의 바깥 앱 명부를 일꾼 토큰으로 받는다** (조각 3) — 승인된 토픽의 외부 확장 정의·봉투만 준다. 받은 쪽은 봉투를 다시 검증한다(E6).
+- 출력 검사는 **`output_schema.required`의 칸이 다 있는가**까지다 — 계약 패키지에 JSON Schema 검증기를 두지 않는다(입력 쪽도 그렇다). 더 깊은 모양은 일꾼과 엔진의 `output` 매핑이 본다.
+
+> 제안: CON-07 토픽 상태 — 일꾼 수 · 마지막으로 가져간 때 · 쌓인 일감 · 가장 오래 기다린 일감 (조각 5).
 
 ## 호환 규칙
 

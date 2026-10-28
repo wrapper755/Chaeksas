@@ -229,6 +229,20 @@ from chaeksas.contracts.extension import (
 from chaeksas.contracts.extension import check_api as check_extension_api
 from chaeksas.contracts.extension import check_size as check_extension_size
 from chaeksas.contracts.extension import validate as validate_extension
+from chaeksas.contracts.external_task import (
+    CompleteRequest,
+    ConsumerEnrollRequest,
+    ConsumerInfo,
+    ExtendRequest,
+    ExternalTaskCreate,
+    ExternalTaskCreated,
+    ExternalTaskResult,
+    FailRequest,
+    FetchRequest,
+    FetchResponse,
+    LockedTask,
+    TopicStatus,
+)
 from chaeksas.contracts.hashing import (
     FloatInPayloadError,
     canonical_json,
@@ -357,6 +371,18 @@ from chaeksas.contracts.signing import (
 )
 
 __all__ = [
+    "CompleteRequest",
+    "ConsumerEnrollRequest",
+    "ConsumerInfo",
+    "ExtendRequest",
+    "ExternalTaskCreate",
+    "ExternalTaskCreated",
+    "ExternalTaskResult",
+    "FailRequest",
+    "FetchRequest",
+    "FetchResponse",
+    "LockedTask",
+    "TopicStatus",
     "default_key_ref",
     "StudioEnrollRequest",
     "EnrollRequest",

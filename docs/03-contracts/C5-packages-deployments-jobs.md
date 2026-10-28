@@ -291,7 +291,7 @@ PC(Bot UI)·서버 실행기·**Studio**가 보낸 **등록 요청**(C4·C12 §�
 | 메서드·경로 | 뜻 |
 | --- | --- |
 | `GET /enrollments?type=bot_ui\|server_runner\|studio&state=pending` | 요청 목록 (`state`는 쉼표로 여럿, 기본 `pending`) |
-| `POST /enrollments/{enrollment_id}/approve` `{name?}` | 승인. `name`을 비우면 요청의 `name`을 쓴다 |
+| `POST /enrollments/{enrollment_id}/approve` `{name?, topics?}` | 승인. `name`을 비우면 요청의 `name`을 쓴다. `topics`는 **일꾼(`type: consumer`, C15)만** — 비우면 요청한 토픽 그대로, 적으면 요청한 것 안에서만 줄인다(밖이면 422 `topic_not_requested`, 남는 것이 없으면 422 `topics_empty`). 일꾼은 `register`가 없어 **승인이 `consumers` 행을 만들고**, 같은 기계를 다시 승인하면 옛 키를 폐기하고 같은 `consumer_id`를 잇는다 |
 | `POST /enrollments/{enrollment_id}/reject` `{reason?}` | 거절. 사유는 요청한 쪽에 그대로 보인다 (200자까지) |
 
 EnrollmentInfo 필드:

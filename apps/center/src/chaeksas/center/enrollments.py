@@ -42,6 +42,7 @@ from chaeksas.contracts.enrollment import (
     seal,
     valid_public_key,
 )
+from chaeksas.contracts.external_task import CONSUMER, ConsumerEnrollRequest
 from chaeksas.contracts.server_runner import ServerRunnerEnrollRequest
 
 #: 요청 종류 → 키 묶기를 지킬 표 (C4·C12 — 규칙은 `host_keys`에 하나다). **Studio는 표가 없다** —
@@ -53,6 +54,7 @@ MODELS: dict[str, Any] = {
     "bot_ui": EnrollRequest,
     "server_runner": ServerRunnerEnrollRequest,
     STUDIO: StudioEnrollRequest,
+    CONSUMER: ConsumerEnrollRequest,
 }
 
 
@@ -202,8 +204,24 @@ def _studio_keys(store: Store, machine_id: str) -> list[keys.KeyRecord]:
     ]
 
 
+def _consumer_of(store: Store, machine_id: str) -> Any | None:
+    """그 기계의 일꾼 행 (C15). 일꾼은 `register`가 없어 **승인이 행을 만든다**."""
+    return store.row("SELECT * FROM consumers WHERE machine_id = ?", (machine_id,))
+
+
 def _existing_info(store: Store, kind: str, machine_id: str) -> ExistingHost | None:
     """그 기계가 이미 들어와 있으면 — 승인하면 그 자리를 이어받고 옛 키는 폐기된다."""
+    if kind == CONSUMER:
+        found = _consumer_of(store, machine_id)
+        if found is None:
+            return None
+        record = keys.get(store, str(found["key_id"]))
+        return ExistingHost(
+            id=str(found["consumer_id"]),
+            name=str(found["name"]),
+            key_prefix=record.prefix if record else None,
+            last_seen=found["last_fetch_at"],
+        )
     if kind == STUDIO:
         held = _studio_keys(store, machine_id)
         if not held:
@@ -272,12 +290,28 @@ def _pending(store: Store, enrollment_id: str) -> Any:
     return row
 
 
-def approve(store: Store, enrollment_id: str, *, name: str | None, actor: str) -> EnrollmentDecision:
+def _granted_topics(row: Any, wanted: list[str] | None) -> list[str]:
+    """승인할 토픽 (C15 §일꾼 들이기) — 비우면 요청한 그대로, 적으면 **요청한 것 안에서만** 줄인다."""
+    asked = list((loads(row["request_json"], {}) or {}).get("topics") or [])
+    if not wanted:
+        return asked
+    outside = sorted(set(wanted) - set(asked))
+    if outside:
+        raise ApiError(422, "topic_not_requested", "일꾼이 요청하지 않은 토픽은 줄 수 없다", {"topics": outside})
+    return [one for one in asked if one in set(wanted)]
+
+
+def approve(
+    store: Store, enrollment_id: str, *, name: str | None, actor: str, topics: list[str] | None = None
+) -> EnrollmentDecision:
     """승인 (C5). 키를 만들어 **그 기계에 미리 묶고** 요청의 공개키로 봉해 둔다."""
     row = _pending(store, enrollment_id)
     kind = str(row["type"])
     machine_id = str(row["machine_id"])
     shown = (name or "").strip() or str(row["name"])
+    granted = _granted_topics(row, topics) if kind == CONSUMER else []
+    if kind == CONSUMER and not granted:
+        raise ApiError(422, "topics_empty", "토픽 없이 일꾼을 들일 수 없다")
 
     replaced = None
     host_id = None
@@ -286,6 +320,12 @@ def approve(store: Store, enrollment_id: str, *, name: str | None, actor: str) -
         for old in _studio_keys(store, machine_id):
             keys.revoke(store, old.key_id)
             replaced = old.key_id
+    old_consumer = _consumer_of(store, machine_id) if kind == CONSUMER else None
+    if old_consumer is not None:
+        # 같은 기계를 다시 들였다 — 옛 키를 폐기하고 **같은 `consumer_id`**를 잇는다 (토픽은 새로 준 것).
+        replaced = str(old_consumer["key_id"])
+        host_id = str(old_consumer["consumer_id"])
+        keys.revoke(store, replaced)
     other = _existing(store, kind, machine_id) if kind in TABLES else None
     if other is not None:
         table = TABLES[kind]
@@ -314,6 +354,27 @@ def approve(store: Store, enrollment_id: str, *, name: str | None, actor: str) -
             " sealed_json = ?, replaced_key_id = ? WHERE enrollment_id = ?",
             (actor, now, record.key_id, dumps(sealed.to_json_dict()), replaced, enrollment_id),
         )
+        if kind == CONSUMER:
+            # 일꾼은 `register`가 없다 — **승인이 행을 만든다**. manifest는 들일 때 올린 것이다.
+            manifest = (loads(row["request_json"], {}) or {}).get("manifest")
+            host_id = host_id or f"csm_{secrets.token_hex(8)}"
+            cur.execute(
+                "INSERT INTO consumers (consumer_id, key_id, machine_id, name, topics_json, manifest_json,"
+                " approved_at, approved_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+                " ON CONFLICT (consumer_id) DO UPDATE SET key_id = excluded.key_id, name = excluded.name,"
+                " topics_json = excluded.topics_json, manifest_json = excluded.manifest_json,"
+                " approved_at = excluded.approved_at, approved_by = excluded.approved_by",
+                (
+                    host_id,
+                    record.key_id,
+                    machine_id,
+                    shown,
+                    dumps(granted),
+                    dumps(manifest) if manifest else None,
+                    now,
+                    actor,
+                ),
+            )
     return EnrollmentDecision(key_id=record.key_id, host_id=host_id, replaced_key_id=replaced)
 
 
@@ -400,6 +461,7 @@ def adopt_successor(store: Store, key: keys.KeyRecord) -> None:
     with store.tx() as cur:
         for table in TABLES.values():
             cur.execute(f"UPDATE {table.name} SET key_id = ? WHERE key_id = ?", (key.key_id, old_id))  # noqa: S608
+        cur.execute("UPDATE consumers SET key_id = ? WHERE key_id = ?", (key.key_id, old_id))
         cur.execute("UPDATE center_keys SET sealed_json = NULL WHERE key_id = ?", (key.key_id,))
     keys.revoke(store, old_id)
 

@@ -1,0 +1,88 @@
+{
+  "$id": "urn:chaeksas:contracts:c15-consumer-info",
+  "additionalProperties": true,
+  "description": "`GET /api/v1/consumers`의 한 줄 (CON-07 「일꾼」).",
+  "properties": {
+    "app_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "App Id"
+    },
+    "approved_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Approved At"
+    },
+    "consumer_id": {
+      "title": "Consumer Id",
+      "type": "string"
+    },
+    "key_prefix": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Key Prefix"
+    },
+    "last_fetch_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Fetch At"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "topics": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Topics",
+      "type": "array"
+    },
+    "version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Version"
+    }
+  },
+  "required": [
+    "consumer_id",
+    "name"
+  ],
+  "title": "ConsumerInfo",
+  "type": "object"
+}

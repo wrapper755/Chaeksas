@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "Usage": {
+      "additionalProperties": true,
+      "description": "LLM 사용량. 이름은 C3 `llm_usage`와 같다. **금액은 넣지 않는다.**",
+      "properties": {
+        "input_tokens": {
+          "default": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "output_tokens": {
+          "default": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c15-complete-request",
+  "additionalProperties": true,
+  "properties": {
+    "mode_used": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mode Used"
+    },
+    "output": {
+      "additionalProperties": true,
+      "title": "Output",
+      "type": "object"
+    },
+    "replayed": {
+      "default": false,
+      "title": "Replayed",
+      "type": "boolean"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Usage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "title": "CompleteRequest",
+  "type": "object"
+}

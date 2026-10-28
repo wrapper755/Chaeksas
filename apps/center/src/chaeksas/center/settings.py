@@ -47,6 +47,9 @@ def data_dir() -> Path:
     return Path(platformdirs.user_data_dir("chaeksas", appauthor=False)) / "center"
 
 
+#: 외부 작업 롱폴링을 함께 물고 있을 수 있는 수 (C15 「정한 것」 — 올리는 쪽·일꾼을 함께 센다).
+DEFAULT_EXTERNAL_TASK_WAITERS = 200
+
 #: 서비스 앱 키를 맞추는 간격 (초) — 서비스 앱 상태를 보는 주기와 같다 (C7).
 DEFAULT_RECONCILE_S = 60
 
@@ -73,6 +76,8 @@ class Settings:
     first_admin_password: str | None = None
     #: 서비스 앱 키 맞추기 간격 (초, ADR-0094 §3). **0이면 배경에서 돌지 않는다** — 시험은 손으로 부른다.
     service_keys_reconcile_s: int = 0
+    #: 외부 작업 롱폴링 상한 (C15) — 넘으면 503 `too_many_waiters`.
+    external_task_max_waiters: int = DEFAULT_EXTERNAL_TASK_WAITERS
 
     def data_folder(self) -> Path | None:
         """DB가 있는 폴더 — 첫 비밀번호 파일을 둔다. 메모리 DB면 `None`."""
@@ -95,4 +100,7 @@ class Settings:
             first_admin_username=_env("FIRST_ADMIN__USERNAME"),
             first_admin_password=_env("FIRST_ADMIN__PASSWORD"),
             service_keys_reconcile_s=int(_env("SERVICE_KEYS__RECONCILE_S") or DEFAULT_RECONCILE_S),
+            external_task_max_waiters=int(
+                _env("EXTERNAL_TASKS__MAX_WAITERS") or DEFAULT_EXTERNAL_TASK_WAITERS
+            ),
         )

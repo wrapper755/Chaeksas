@@ -33,7 +33,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | — (닫았다). 「기한은 간다」는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)이 코드로도 사실로 만들었다 (주기만큼 늦을 수 있다고 C12에 적었다). **PC 위임도 본문이 되어 양쪽이 돈다** ([ADR-0062](decisions/0062-pc-delegation.md) — §3-13). 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
 | C13 | **구현됨** | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다: 호스트·Studio·Bot UI·콘솔·Center) |
 | C14 | **구현됨** | `contracts.bpmn_ext` B1~B16 + `contracts.dmn` | — (닫았다 — 엔진이 수행하고 Studio가 편집·검사하고 예제 50개가 이 형식이다. schema 1에서 **쓰지 않기로 적은 것**은 범위 결정이다) |
-| C15 | **초안** | 없다 | 전부 — [ADR-0102](decisions/0102-calling-outside-is-pull.md) 조각 1(모델·Center 표·API·일꾼 승인)에서 「합의」, 조각 2~4에서 양쪽이 붙어 「구현됨」 (§3-17) |
+| C15 | **합의** | `contracts.external_task`, Center `api/external_tasks.py` (15판) | 부르는 쪽(서버 실행기·실행기 자식·Studio·Worker·Tool UI)과 일꾼(`service_kit`·어댑터 일꾼) — [ADR-0102](decisions/0102-calling-outside-is-pull.md) 조각 2~4 (§3-17) |
 
 **열넷이 모두 「구현됨」이다** (C12가 M7 다섯째 조각에서 올라왔다). 상태 셋의 뜻은 [03-contracts/README](03-contracts/README.md) §상태에 적었다 — 적혀 있지 않아 올릴 때마다 사람이 다시 물었다.
 
@@ -51,11 +51,11 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ### 3-17. 바깥 기능을 부르는 길이 아직 Push다 — **열려 있다**
 
-[ADR-0102](decisions/0102-calling-outside-is-pull.md)가 「네트워크를 건너는 바깥 호출은 모두 Pull」로 정했고 [C15](03-contracts/C15-external-tasks.md)는 초안이다.
+[ADR-0102](decisions/0102-calling-outside-is-pull.md)가 「네트워크를 건너는 바깥 호출은 모두 Pull」로 정했고 [C15](03-contracts/C15-external-tasks.md)는 **합의**다(조각 1 — Center 쪽이 돈다).
 지금 코드는 옛 길 그대로다 — C11 `POST /v1/ops`, HTTP 어댑터 직접 호출, 서비스 앱 키 배달(ADR-0094), 외부 앱
 키·주소를 Center가 든다(ADR-0094 §7·ADR-0097), Worker → UI 자동화 앱 직접 호출(C8·C9). 조각 여섯은
-[05-roadmap](05-roadmap.md) M9에 있다. **먼저 정할 것**은 C15 「미정」 셋 — 호출 토큰을 받는 길, 롱폴링 상한,
-어댑터 일꾼이 정의를 받는 길이다.
+[05-roadmap](05-roadmap.md) M9에 있다. 처음에 미정이던 셋(호출 토큰을 받는 길·롱폴링 상한·어댑터 일꾼이
+정의를 받는 길)은 C15 「정한 것」에 적었다. **다음은 조각 2**(서비스 앱)다.
 
 ### 3-13. PC 위임 — **닫았다**
 

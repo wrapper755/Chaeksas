@@ -1,0 +1,282 @@
+{
+  "$defs": {
+    "ConsumerVersions": {
+      "additionalProperties": true,
+      "description": "일꾼의 판 — 무엇을 돌리는가는 열린 사전이다 (앱 판·`service_kit` 판 등).",
+      "properties": {
+        "consumer": {
+          "title": "Consumer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "consumer"
+      ],
+      "title": "ConsumerVersions",
+      "type": "object"
+    },
+    "ExtensionRef": {
+      "additionalProperties": true,
+      "description": "이 서비스 앱이 어느 확장의 서버 부분인가 (C13). 내장·사내 확장이면 넣는다.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "title": "ExtensionRef",
+      "type": "object"
+    },
+    "Operation": {
+      "additionalProperties": true,
+      "description": "작업 하나. Studio가 이것만 보고 서비스 앱 태스크 편집기(STU-14)를 만든다.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "fallback": {
+          "default": "none",
+          "title": "Fallback",
+          "type": "string"
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Schema"
+        },
+        "modes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Modes",
+          "type": "array"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Schema"
+        },
+        "required_scopes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Required Scopes",
+          "type": "array"
+        },
+        "server_ok": {
+          "default": true,
+          "title": "Server Ok",
+          "type": "boolean"
+        },
+        "timeout_s": {
+          "default": 60,
+          "title": "Timeout S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Operation",
+      "type": "object"
+    },
+    "ResourceCatalog": {
+      "additionalProperties": true,
+      "description": "이 앱이 **자기 기여 자원 카탈로그**를 어디서 주는지 (C7 §리소스 모으는 방식).\n\n확장 정의(C13 `contributes.resources`)에도 같은 것이 있지만, **내장·사내 확장의 정의는\nCenter에 없다** — 설치 파일에 들어 있고 Center는 실행하는 쪽의 보고로 `{id, version}`만\n안다. 그래서 **서버 부분이 자기 카탈로그를 알린다**: 서버 쪽 자원을 가장 잘 아는 것이\n서버 부분이고, Center는 이미 `/manifest`를 읽고 있어 길을 새로 내지 않는다.\n\n`catalog_url`은 이 앱의 `base_url` 기준 상대 경로다 (주소의 유일한 출처는 Center의 리소스\n등록이다 — C13 `service.base_url`). 응답 형식은 C13 §5 `Catalog`다.",
+      "properties": {
+        "catalog_url": {
+          "title": "Catalog Url",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "catalog_url"
+      ],
+      "title": "ResourceCatalog",
+      "type": "object"
+    },
+    "ServiceAppManifest": {
+      "additionalProperties": true,
+      "description": "`GET /manifest` — 인증 없음 (비밀이 없다). Center가 리소스 목록에 쓴다 (C7).",
+      "properties": {
+        "app_id": {
+          "title": "App Id",
+          "type": "string"
+        },
+        "category": {
+          "title": "Category",
+          "type": "string"
+        },
+        "console_url": {
+          "title": "Console Url",
+          "type": "string"
+        },
+        "extension": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExtensionRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "operations": {
+          "items": {
+            "$ref": "#/$defs/Operation"
+          },
+          "title": "Operations",
+          "type": "array"
+        },
+        "resources": {
+          "items": {
+            "$ref": "#/$defs/ResourceCatalog"
+          },
+          "title": "Resources",
+          "type": "array"
+        },
+        "schema": {
+          "description": "이 계약의 schema 번호",
+          "title": "Schema",
+          "type": "integer"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema",
+        "app_id",
+        "name",
+        "version",
+        "category",
+        "console_url"
+      ],
+      "title": "ServiceAppManifest",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c15-consumer-enroll-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/consumers/enroll` — 일꾼 들이기 요청 (C15 §일꾼 들이기, ADR-0092 §1과 같은 결).\n\n`manifest`는 들일 때 함께 올린다 — Center가 앱을 읽으러 가지 않는다 (ADR-0102 §3).",
+  "properties": {
+    "machine_id": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Machine Id",
+      "type": "string"
+    },
+    "manifest": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ServiceAppManifest"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "os": {
+      "title": "Os",
+      "type": "string"
+    },
+    "public_key": {
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "title": "Public Key",
+      "type": "string"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "topics": {
+      "items": {
+        "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Topics",
+      "type": "array"
+    },
+    "versions": {
+      "$ref": "#/$defs/ConsumerVersions"
+    }
+  },
+  "required": [
+    "schema",
+    "machine_id",
+    "name",
+    "os",
+    "versions",
+    "public_key",
+    "topics"
+  ],
+  "title": "ConsumerEnrollRequest",
+  "type": "object"
+}

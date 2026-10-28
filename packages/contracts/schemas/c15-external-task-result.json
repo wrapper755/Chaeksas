@@ -1,0 +1,130 @@
+{
+  "$defs": {
+    "TaskError": {
+      "additionalProperties": true,
+      "description": "실패·만료의 사유. 코드는 C11 오류 코드 그대로 오거나 `no_consumer`·`timeout`이다.",
+      "properties": {
+        "code": {
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "default": "",
+          "title": "Message",
+          "type": "string"
+        },
+        "retryable": {
+          "default": false,
+          "title": "Retryable",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "code"
+      ],
+      "title": "TaskError",
+      "type": "object"
+    },
+    "Usage": {
+      "additionalProperties": true,
+      "description": "LLM 사용량. 이름은 C3 `llm_usage`와 같다. **금액은 넣지 않는다.**",
+      "properties": {
+        "input_tokens": {
+          "default": 0,
+          "title": "Input Tokens",
+          "type": "integer"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "output_tokens": {
+          "default": 0,
+          "title": "Output Tokens",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model"
+      ],
+      "title": "Usage",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c15-external-task-result",
+  "additionalProperties": true,
+  "description": "`GET /api/v1/external-tasks/{task_id}` — 결과 기다리기 (C15 §결과).",
+  "properties": {
+    "deliveries": {
+      "default": 0,
+      "title": "Deliveries",
+      "type": "integer"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TaskError"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "mode_used": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mode Used"
+    },
+    "output": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Output"
+    },
+    "replayed": {
+      "default": false,
+      "title": "Replayed",
+      "type": "boolean"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Usage"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "task_id",
+    "state"
+  ],
+  "title": "ExternalTaskResult",
+  "type": "object"
+}

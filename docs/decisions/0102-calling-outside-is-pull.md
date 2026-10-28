@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-28) — 결정만 들어갔다. 계약은 [C15](../03-contracts/C15-external-tasks.md) **초안**이고 코드는 아직 Push 그대로다 (§7 조각 순서) |
+| 상태 | 수락 (2026-10-28) — 조각 1이 들어갔다: [C15](../03-contracts/C15-external-tasks.md) **합의**, Center가 일감을 받고 일꾼을 들인다. 부르는 쪽·일꾼은 아직 Push 그대로다 (§7 조각 순서) |
 | 날짜 | 2026-10-28 |
 | 관련 | 계약 C15(새), C7·C8·C9·C10·C11·C13·C14, [ADR-0007](0007-client-initiated-communication.md)·[0010](0010-service-apps.md)·[0052](0052-service-app-key-notices.md)·[0091](0091-external-apps-without-auth-take-no-key.md)·[0092](0092-keys-are-issued-and-delivered-by-center.md)·[0094](0094-service-app-keys-ride-the-deployment.md)·[0097](0097-external-extension-address-from-center.md), 화면 CON-07·STU-10·STU-14·TOL-02 |
 

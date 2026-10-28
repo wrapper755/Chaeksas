@@ -1,0 +1,172 @@
+{
+  "$defs": {
+    "Caller": {
+      "additionalProperties": true,
+      "description": "누가 부르는가. `type`은 열린 문자열 (KNOWN_CALLER_TYPES).",
+      "properties": {
+        "bpm_process_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bpm Process Id"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Caller",
+      "type": "object"
+    },
+    "Idempotency": {
+      "additionalProperties": true,
+      "description": "C11 멱등 키에서 `operation`을 뺀 다섯 칸 (`operation`은 일감에 따로 있다).",
+      "properties": {
+        "attempt": {
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "call_seq": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Call Seq",
+          "type": "integer"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "node_instance": {
+          "minimum": 1,
+          "title": "Node Instance",
+          "type": "integer"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "node_id",
+        "node_instance",
+        "attempt"
+      ],
+      "title": "Idempotency",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c15-external-task-create",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/external-tasks` — 일감 올리기 (C15 §올리기).",
+  "properties": {
+    "business_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Business Key"
+    },
+    "caller": {
+      "$ref": "#/$defs/Caller"
+    },
+    "idempotency": {
+      "$ref": "#/$defs/Idempotency"
+    },
+    "input": {
+      "additionalProperties": true,
+      "title": "Input",
+      "type": "object"
+    },
+    "mode": {
+      "title": "Mode",
+      "type": "string"
+    },
+    "operation": {
+      "title": "Operation",
+      "type": "string"
+    },
+    "origin": {
+      "default": "run",
+      "title": "Origin",
+      "type": "string"
+    },
+    "schema": {
+      "description": "이 계약의 schema 번호",
+      "title": "Schema",
+      "type": "integer"
+    },
+    "timeout_s": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Timeout S"
+    },
+    "topic": {
+      "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$",
+      "title": "Topic",
+      "type": "string"
+    },
+    "want_result": {
+      "default": true,
+      "title": "Want Result",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema",
+    "topic",
+    "operation",
+    "mode",
+    "idempotency",
+    "caller"
+  ],
+  "title": "ExternalTaskCreate",
+  "type": "object"
+}

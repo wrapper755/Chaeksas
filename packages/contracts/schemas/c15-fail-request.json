@@ -1,0 +1,25 @@
+{
+  "$id": "urn:chaeksas:contracts:c15-fail-request",
+  "additionalProperties": true,
+  "properties": {
+    "code": {
+      "title": "Code",
+      "type": "string"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
+    },
+    "retryable": {
+      "default": false,
+      "title": "Retryable",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "code"
+  ],
+  "title": "FailRequest",
+  "type": "object"
+}

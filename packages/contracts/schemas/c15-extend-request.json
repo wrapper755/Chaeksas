@@ -1,0 +1,16 @@
+{
+  "$id": "urn:chaeksas:contracts:c15-extend-request",
+  "additionalProperties": true,
+  "properties": {
+    "lock_s": {
+      "minimum": 1,
+      "title": "Lock S",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "lock_s"
+  ],
+  "title": "ExtendRequest",
+  "type": "object"
+}

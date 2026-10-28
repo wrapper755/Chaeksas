@@ -1,0 +1,50 @@
+{
+  "$id": "urn:chaeksas:contracts:c15-topic-status",
+  "additionalProperties": true,
+  "description": "`GET /api/v1/external-topics`의 한 줄 (C15 「정한 것」의 제안 — CON-07 토픽 상태).",
+  "properties": {
+    "consumers": {
+      "default": 0,
+      "title": "Consumers",
+      "type": "integer"
+    },
+    "last_fetch_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Fetch At"
+    },
+    "oldest_waiting_since": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Oldest Waiting Since"
+    },
+    "topic": {
+      "title": "Topic",
+      "type": "string"
+    },
+    "waiting": {
+      "default": 0,
+      "title": "Waiting",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "topic"
+  ],
+  "title": "TopicStatus",
+  "type": "object"
+}
