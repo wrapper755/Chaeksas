@@ -93,6 +93,18 @@ def test_qss_differs_by_theme_and_uses_tokens() -> None:
     assert tokens.DARK["bg.canvas"] not in light
 
 
+def test_work_areas_are_cards_split_by_gaps() -> None:
+    """STU-01 — 영역은 카드(바탕 + 테두리)이고 사이는 틈이다. 분할자에 선을 긋지 않는다(두 겹이 된다)."""
+    for theme, colors in ((THEME_LIGHT, tokens.LIGHT), (THEME_DARK, tokens.DARK)):
+        sheet = qss(theme)
+        card = sheet.split("QFrame#Pane, QTabWidget#PaneTabs::pane {", 1)[1].split("}", 1)[0]
+        assert colors["bg.surface"] in card
+        assert f"1px solid {colors['border.default']}" in card
+        for rule in ("QSplitter::handle:horizontal", "QSplitter::handle:vertical"):
+            assert "border" not in sheet.split(rule, 1)[1].split("}", 1)[0], rule
+        assert "QFrame#Rule" in sheet
+
+
 def test_group_box_titles_have_room_and_labels_take_the_box_color() -> None:
     """테두리 입힌 QGroupBox는 제목 자리·::title이 없으면 제목이 첫 줄과 겹친다 (이슈 #3).
 
@@ -170,6 +182,34 @@ def test_apply_theme_sets_stylesheet_and_palette(app: Any) -> None:
 
     assert apply_theme(app, choice=THEME_LIGHT) == THEME_LIGHT
     assert app.styleSheet() == qss(THEME_LIGHT)
+
+
+def test_widgets_hearing_the_palette_change_already_see_the_new_theme(app: Any) -> None:
+    """팔레트 변경을 받은 위젯이 `current()`로 물으면 새 테마다 — 캔버스가 그렇게 묻는다 (ADR-0101)."""
+    from PySide6.QtCore import QEvent, QObject
+    from PySide6.QtWidgets import QWidget
+
+    from chaeksas.qt.theme import current
+
+    heard: list[str] = []
+
+    class Ear(QObject):
+        def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+            if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+                heard.append(current(app))
+            return False
+
+    widget, ear = QWidget(), Ear()
+    widget.installEventFilter(ear)
+    widget.show()
+    try:
+        apply_theme(app, choice=THEME_DARK)
+        assert heard and heard[-1] == THEME_DARK
+        apply_theme(app, choice=THEME_LIGHT)
+        assert heard[-1] == THEME_LIGHT
+    finally:
+        widget.close()
+        apply_theme(app, choice=THEME_LIGHT)
 
 
 def test_the_app_font_is_unhinted(app: Any) -> None:

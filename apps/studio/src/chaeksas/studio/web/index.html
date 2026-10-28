@@ -11,12 +11,39 @@
   <link rel="stylesheet" href="vendor/assets/bpmn-js.css">
   <link rel="stylesheet" href="vendor/assets/bpmn-font/css/bpmn-embedded.css">
   <style>
-    /* 그림은 테마와 상관없이 **밝게 둔다** — bpmn-js의 선·글자가 검정이다 (ADR-0073).
-       `--chk-*`를 넣는 쪽은 아직 없고 기본값(흰색)이 쓰인다. */
-    html, body { margin: 0; height: 100%; background: var(--chk-bg, #ffffff); }
+    /* 그림도 창의 테마를 따른다 (ADR-0101) — `--chk-*`는 캔버스(canvas.py)가 토큰에서 넣는다.
+       넣기 전(페이지가 막 뜬 때)에는 bpmn-js 기본값이 쓰인다. */
+    html, body { margin: 0; height: 100%; background: var(--chk-surface, white); }
     #canvas { height: 100%; }
-    .djs-palette { background: var(--chk-surface, #ffffff); }
+    /* 포커스 테두리는 Chromium 기본(리눅스에서는 주황)이 캔버스 둘레에 뜬다 — 카드 테두리가 영역을 말한다. */
+    .djs-container svg:focus { outline: none; }
+    /* 팔레트·문맥 메뉴·선택 윤곽은 bpmn-js의 `--bio-*`를 쓴다 — 테마가 들어온 뒤에만 덮는다. */
+    html[data-chk-theme] .bio-theme-parent {
+      --bio-surface: var(--chk-surface);
+      --bio-surface-overlay: var(--chk-surface);
+      --bio-surface-subtle: var(--chk-subtle);
+      --bio-surface-medium: var(--chk-subtle);
+      --bio-text: var(--chk-text);
+      --bio-text-subtle: var(--chk-text-muted);
+      --bio-text-subtlest: var(--chk-text-muted);
+      --bio-border: var(--chk-border-strong);
+      --bio-border-disabled: var(--chk-border);
+      --bio-primary: var(--chk-accent);
+      --bio-primary-surface: var(--chk-accent-subtle);
+      --bio-selected-surface: var(--chk-accent-subtle);
+      --bio-focus: var(--chk-accent);
+      --bio-focus-surface: var(--chk-accent-subtle);
+      --bio-canvas-accent: var(--chk-accent);
+    }
   </style>
+  <script>
+    /** 캔버스(canvas.py)가 테마 색을 넣는 자리 (ADR-0101) — `{CSS 변수: 색}`. 다리보다 먼저 있어야 한다. */
+    window.chkTheme = (vars) => {
+      const root = document.documentElement;
+      for (const [name, value] of Object.entries(vars || {})) root.style.setProperty(name, String(value));
+      root.dataset.chkTheme = "1";
+    };
+  </script>
   <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
   <script src="vendor/bpmn-modeler.production.min.js"></script>
   <script src="chk-moddle.js"></script>
@@ -118,6 +145,12 @@
   async function boot() {
     const modeler = new BpmnJS({
       container: "#canvas",
+      // 그림의 선·채움·글자를 테마 변수로 그린다 (ADR-0101) — 테마를 바꿔도 다시 그리지 않는다.
+      bpmnRenderer: {
+        defaultFillColor: "var(--chk-surface, white)",
+        defaultStrokeColor: "var(--chk-line, black)",
+        defaultLabelColor: "var(--chk-text, black)",
+      },
       // `chk:*`를 타입으로 다룬다 — 설명은 C14 모델에서 생성한다 (scripts/gen_moddle.py).
       moddleExtensions: { chk: window.CHK_MODDLE },
     });

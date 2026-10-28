@@ -64,6 +64,14 @@ def resolve(choice: str, *, app: QApplication | None = None) -> str:
     return THEME_DARK if app.styleHints().colorScheme() == Qt.ColorScheme.Dark else THEME_LIGHT
 
 
+def current(app: QApplication) -> str:
+    """이 앱에 지금 입혀진 테마 (`light`/`dark`) — `apply_theme`이 적어 둔 고른 값을 다시 푼다.
+
+    창 밖에 그리는 것(캔버스의 웹 페이지)이 창과 같은 색을 쓰려고 묻는다.
+    """
+    return resolve(str(getattr(app, "_chk_theme_choice", THEME_SYSTEM)), app=app)
+
+
 def qss(theme: str) -> str:
     """그 테마의 QSS (생성물). QSS에는 변수가 없어 테마마다 파일이 하나씩이다."""
     name = f"theme-{THEME_DARK if theme == THEME_DARK else THEME_LIGHT}.qss"
@@ -165,6 +173,9 @@ def apply_theme(app: QApplication, *, choice: str = THEME_SYSTEM) -> str:
     theme = resolve(choice, app=app)
     load_translations(app)
     load_fonts()
+    # 지금 고른 값을 적어 둔다 — 「시스템 따름」에서 밝게로 바꾼 뒤에는 OS를 따라가지 않는다 (ADR-0073).
+    # 팔레트보다 **먼저** 적는다 — 팔레트 변경을 받은 위젯이 `current()`로 새 테마를 묻는다 (ADR-0101).
+    app._chk_theme_choice = choice  # type: ignore[attr-defined]
     app.setPalette(palette(theme))
     app.setStyleSheet(qss(theme))
     # 스타일시트를 입히면 Qt가 클래스 글꼴을 시스템 기본값으로 되돌린다 — 힌팅 끄기는 그 **뒤에** 한다.
@@ -173,8 +184,6 @@ def apply_theme(app: QApplication, *, choice: str = THEME_SYSTEM) -> str:
         # PySide6 타입 정보는 클래스 이름 인자를 모른다 (`font(str)` 없음, `setFont`는 bytes만) — 실행은 된다.
         app.setFont(unhinted(app.font(widget_class)), widget_class)  # type: ignore[call-overload, arg-type]
 
-    # 지금 고른 값을 적어 둔다 — 「시스템 따름」에서 밝게로 바꾼 뒤에는 OS를 따라가지 않는다 (ADR-0073).
-    app._chk_theme_choice = choice  # type: ignore[attr-defined]
     if choice == THEME_SYSTEM:
         hints = app.styleHints()
         # 같은 app에 여러 번 붙지 않게 한 번만 잇는다.
@@ -268,6 +277,7 @@ __all__ = [
     "THEME_LIGHT",
     "THEME_SYSTEM",
     "apply_theme",
+    "current",
     "icon",
     "load_fonts",
     "load_translations",
