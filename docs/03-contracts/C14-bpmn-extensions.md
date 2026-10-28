@@ -9,6 +9,8 @@
 | 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0018](../decisions/0018-extensions.md), [0026](../decisions/0026-file-paths-and-file-list-task.md) |
 | 관련 화면 | STU-04 속성 패널(「JSON」 탭이 이 모델로 검증한다), STU-06, STU-07, STU-13, STU-14 |
 
+> 제안: [ADR-0102](../decisions/0102-calling-outside-is-pull.md) — `chk:serviceCall`은 뜻이 그대로이고 `app_id`가 C15 토픽이다. `key_ref`·`chk:process.service_keys`는 쓰는 곳이 없어져 판을 올릴 때 지운다. 아래는 지금 도는 것이다.
+
 ## 목적
 
 BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다. 예를 들면 AI 태스크의 목표·결과 필드, 결재 폼, 서비스 앱 호출, 확장 태스크가 여기에 들어간다. 표준 BPMN 도구(bpmn-js)로 열고 그릴 수 있어야 하고, 엔진은 이 속성만 보고 실행할 수 있어야 한다.

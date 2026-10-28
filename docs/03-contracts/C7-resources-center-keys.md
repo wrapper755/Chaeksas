@@ -10,6 +10,8 @@
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 관련 화면 | CON-07 리소스, CON-11 Center API 키, STU-03 리소스 탐색기, STU-13·14·15, BUI-11, TOL-03 |
 
+> 제안: [ADR-0102](../decisions/0102-calling-outside-is-pull.md) — 서비스 앱 주소 등록·`/manifest`·`/healthz` 읽기, **외부 앱 키(운영·시험용)**, **외부 확장 주소 덮어쓰기**는 없어진다. 주소·키는 일꾼만 들고, manifest·카탈로그는 일꾼이 올리며(C15 `PUT …/consumers/self/manifest`) 상태는 「마지막으로 가져간 때」가 말한다. 아래는 **지금 도는 것**이다.
+
 ## 목적
 
 이 계약은 두 가지를 정한다.

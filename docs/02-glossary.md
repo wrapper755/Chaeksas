@@ -159,6 +159,19 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | UI 화면 | `ui_page` | UI 자동화 앱에 등록된 화면 |
 | 런타임 | `runtime` | Bot UI가 가진 실행 능력 (Worker 버전, 브라우저, 데스크톱 백엔드) |
 
+## 5-1. 외부 작업 ([ADR-0102](decisions/0102-calling-outside-is-pull.md), C15)
+
+BPM 프로세스가 네트워크 건너의 기능을 부를 때 Center에 **일감을 올려 두고, 그 기능 쪽이 가져가 끝낸 뒤 결과를 돌려준다** (Pull). 부르는 쪽이 기능의 주소·키를 알지 않는다.
+
+| 화면 표기 | 코드 | 뜻 |
+| --- | --- | --- |
+| 외부 작업 | `external_task` | Center에 올린 일감 하나. 서비스 앱 태스크 호출 한 번이 하나다. 멱등 키는 C11과 같은 여섯 칸이다 |
+| 토픽 | `topic` | 일감이 걸리는 이름. **앱 id**(C11 앱 id 또는 외부 확장 id)와 같다 — BPMN `chk:serviceCall.app_id`가 그대로 토픽이다 |
+| 일꾼 | `consumer` | 토픽을 지켜보다 일감을 가져가(잠금) 수행하고 끝냈다고 알리는 **상시 프로세스**. 서비스 앱이 일꾼이 되고, 외부 앱은 어댑터 일꾼이 맡는다. Center가 승인해 들인다 |
+| 어댑터 일꾼 | `adapter_consumer` | Chaeksas가 주는 범용 일꾼. 외부 확장 정의의 HTTP 어댑터를 읽어 외부 앱을 부른다. **외부 앱의 주소·키는 이 일꾼만 든다** — 외부 앱이 있는 망 안에 띄워도 된다 |
+| 잠금 | `lock` | 일꾼이 일감을 가져가면 그 일꾼만 끝낼 수 있는 시간. 지나면 다른 일꾼에게 다시 나간다 (그래서 **최소 한 번 실행**이다) |
+| 호출 토큰 | `call_token` | 실행하는 쪽(실행기 자식 프로세스·Worker·Tool UI)이 외부 작업을 **올리고 결과를 기다리는 데만** 쓰는 Center 토큰. Bot UI·Studio가 Center에서 받아 넘긴다 |
+
 ## 6. 키와 설정 ([ADR-0013](decisions/0013-api-keys.md))
 
 | 화면 표기 | 코드 | 뜻 |
@@ -191,3 +204,5 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | lease, dispatcher | 서버가 작업을 배분하던 옛 구조 | Center 작업(`job`) + UI 세션 |
 | 대시보드 | 읽기 전용이던 옛 구조 | Center 콘솔 |
 | 등록 토큰 | Center API 키로 바뀜 | Center API 키 |
+| Worker·워커 (외부 작업을 가져가는 쪽을 가리켜) | Worker 프로세스(UI 자동화의 손)와 겹친다 | 일꾼 (`consumer`) |
+| External Task Worker, 작업 게시판 | 제품 이름·비유 | 외부 작업 · 토픽 · 일꾼 |

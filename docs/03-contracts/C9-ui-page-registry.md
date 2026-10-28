@@ -9,6 +9,8 @@
 | 관련 ADR | [0010](../decisions/0010-service-apps.md) §5, [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0042](../decisions/0042-extension-contributed-panels.md)(콘솔 화면) |
 | 관련 화면 | TOL-03·04·05, UIA-01·02·03, CON-07 「UI 화면」, STU-03·13 |
 
+> 제안: [ADR-0102](../decisions/0102-calling-outside-is-pull.md) 조각 4 — 네 작업은 C15 외부 작업으로 오가고, 공개 카탈로그는 앱이 Center에 **올린다**(Center가 읽으러 가지 않는다). 아래는 지금 도는 것이다.
+
 ## 목적
 
 자동화할 화면과 그 요소(시맨틱 키), 요소마다의 로케이터 사다리를 등록·조회·삭제한다. 결과물은 UI 자동화 앱이 소유한다. 통계·승격·폐기 판단이 거기 있기 때문이다 (C8).

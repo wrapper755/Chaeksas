@@ -10,6 +10,8 @@
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 관련 화면 | STU-14, STU-10 「서비스 앱」, SVC-00~03, CON-03, CON-07 |
 
+> 제안: [ADR-0102](../decisions/0102-calling-outside-is-pull.md) — 서비스 앱은 **일꾼**이 된다: `POST /v1/ops`·앱 안의 키(`/v1/keys/self`·`/center/v1/keys`)·`/manifest` 읽기 대신 C15 가져가기 루프로 같은 작업을 수행한다. 작업 모양(`input`·`output`·수행 모드·멱등 칸·오류 코드)은 그대로 C15가 싣는다. 아래는 **지금 도는 것**이다 (조각 2까지).
+
 ## 목적
 
 **서비스 앱은 확장의 서버 부분이다** ([ADR-0018](../decisions/0018-extensions.md)). 내장·사내 확장의 서비스 앱은 이 계약을 따르고, 이 계약을 따르지 않는 외부 앱은 확장 정의의 HTTP 어댑터(C13 §4)로 붙인다. BPM 프로세스가 부르는 서비스 앱(대부분 LLM 앱)이 늘어나도, 부르는 쪽은 **한 가지 방식**으로 부르고 관리하게 한다. 이 계약을 지키면 Studio가 manifest를 읽어 서비스 앱 태스크 편집기(STU-14)를 자동으로 만들고, 서비스 앱 관리 콘솔은 `service_kit`이 같은 모양으로 제공한다.

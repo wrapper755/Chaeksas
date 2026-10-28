@@ -9,6 +9,8 @@
 | 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
 | 관련 화면 | STU-08·13, BUI-09, TOL-03~05 |
 
+> 제안: [ADR-0102](../decisions/0102-calling-outside-is-pull.md) 조각 4 — 세션의 `service_key`(UI 자동화 앱 키)는 **호출 토큰**(C15)으로 바뀌고 앱 주소는 넘기지 않는다. 아래는 지금 도는 것이다.
+
 ## 목적
 
 같은 PC의 Worker 프로세스에 UI 자동화를 맡기는 경계다. **부르는 쪽은 시맨틱 키로만 말한다.** 셀렉터(물리 로케이터)는 이 경계를 넘지 않는다. 로케이터 사다리와 치유는 Worker와 UI 자동화 앱 사이(C8)의 일이다. 예외는 셀렉터 등록용 엔드포인트(§5)뿐이다.

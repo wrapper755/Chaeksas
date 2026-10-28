@@ -15,6 +15,8 @@
 > 계획은 `(page_id, platform, steps 해시, revision)`으로 캐시하고 **자율 수행은 캐시하지 않는다**.
 > 모델이 없으면 치유·계획이 503 `llm_unavailable`이고 Worker는 전환한다.
 
+> 제안: [ADR-0102](../decisions/0102-calling-outside-is-pull.md) 조각 4 — 계획·치유·보고는 Worker가 **C15 외부 작업**(토픽 `ui-automation`)으로 올리고 UI 자동화 앱이 일꾼으로 가져간다. 모양(본문)은 그대로이고 전송만 바뀐다. 아래는 지금 도는 것이다.
+
 ## 목적
 
 UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.

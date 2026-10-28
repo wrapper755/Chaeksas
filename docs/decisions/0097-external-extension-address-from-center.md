@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨(ADR-0102) — 원래 수락. 외부 앱 주소는 어댑터 일꾼만 든다. **코드는 C15 조각 3까지 이대로 돈다** |
 | 날짜 | 2026-10-25 |
 | 관련 | 계약 C13·C7, [ADR-0060](0060-pinning-external-definitions.md)·[ADR-0091](0091-external-apps-without-auth-take-no-key.md)·[ADR-0094](0094-service-app-keys-ride-the-deployment.md), 바깥 요청 NowView R4 |
 
