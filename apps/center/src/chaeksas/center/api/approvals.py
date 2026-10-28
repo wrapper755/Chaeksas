@@ -11,6 +11,7 @@
    `open`으로 돌아가고 사유만 남는다. 결재자가 고쳐서 다시 답한다.
 3. **답할 곳이 없어진 결재는 자동으로 회수한다** — 실행이 끝났거나(`run_ended`) Bot UI가
    대기열을 잃으면(`host_lost`). 답은 할 수 있는데 전달될 데가 없는 결재를 남기지 않는다.
+   **끝난 실행의 결재는 다시 열리지 않는다** — 2의 되돌림은 답에만, 실행이 도는 동안에만이다.
 """
 
 from __future__ import annotations
@@ -242,6 +243,10 @@ def answer(store: Store, found: Caller, request_id: str, raw: dict[str, Any]) ->
     else:
         raise ApiError(403, "admin_only", "결재에 답하려면 관리자 토큰이나 대리 답용 키가 필요하다")
     _refuse_if_not_open(store, row)
+    if _run_ended(store, str(row["run_id"])):
+        # 기다리는 이가 없다 — 받아 두면 효과 없이 200이 된다 (C6). 그 자리에서 거둔다.
+        _set_withdrawn(store, request_id, AUTO_WITHDRAW_REASONS["run_finished"])
+        raise ApiError(409, "not_open", "실행이 끝난 결재다")
 
     try:
         request = AnswerRequest.model_validate(raw)
@@ -346,6 +351,25 @@ def withdraw_for_run(store: Store, run_id: str, *, event: str) -> int:
     return len(rows)
 
 
+def withdraw_ended_runs(store: Store) -> int:
+    """**끝난 실행인데 `open`인 결재**를 거둔다 — 하트비트마다 쓴다 (C6 `run_ended`).
+
+    `withdraw_for_run`은 `run_finished`가 닿는 그 자리에서만 돈다. 결재가 그보다 늦게 닿았거나
+    (보내기 차례는 정해져 있지 않다) 되돌림 규칙이 고쳐지기 전에 다시 열린 것은 거기서 빠진다.
+    """
+    rows = store.rows("SELECT request_id, run_id FROM approvals WHERE state = ?", (OPEN,))
+    ended = [row for row in rows if _run_ended(store, str(row["run_id"]))]
+    for row in ended:
+        _set_withdrawn(store, str(row["request_id"]), AUTO_WITHDRAW_REASONS["run_finished"])
+    return len(ended)
+
+
+def _run_ended(store: Store, run_id: str) -> bool:
+    """C3 `run_finished`를 받은 실행인가 — 요약에 `finished_at`이 있다 (`runs.ingest`가 거두는 기준과 같다)."""
+    found = store.row("SELECT summary_json FROM runs WHERE run_id = ?", (run_id,))
+    return found is not None and bool((loads(found["summary_json"], {}) or {}).get("finished_at"))
+
+
 def reclaim_host(store: Store, *, host_id: str, reason: str) -> int:
     """그 **올린 쪽**이 사라졌다 — 기다리는 결재를 모두 거둔다 (C6 `host_lost`).
 
@@ -416,20 +440,36 @@ def heartbeat(
     """
     _apply_acks(store, host_id=host_id, acks=acks)
     expire_due(store)
+    withdraw_ended_runs(store)
     purge_values(store)
     return _to_dispatch(store, host_id=host_id)
 
 
 def _apply_acks(store: Store, *, host_id: str, acks: list[ApprovalAck]) -> None:
-    """`approval_acks` (C4). **거절은 `open`으로 되돌린다** (C6)."""
+    """`approval_acks` (C4). **답의 거절은 `open`으로 되돌린다** (C6).
+
+    **되돌리는 것은 답뿐이다** — 회수·만료는 실행하는 쪽이 기다리지 않아도 할 일이 없으므로
+    거절 ack도 「받아 갔다」로 적는다. 그리고 **끝난 실행의 답은 되돌리지 않고 거둔다** — 다시
+    열면 결재함에 「대기」로 보이고 답해도 아무 일이 없다 (서버 실행기가 이미 닫은 실행의 회수에
+    `not_waiting`으로 답해 취소된 실행의 결재가 되살아났다).
+    """
     for ack in acks:
         row = store.row(
             "SELECT * FROM approvals WHERE request_id = ? AND host_id = ?", (ack.request_id, host_id)
         )
         if row is None:
             continue  # 모르는 결재이거나 **남의 것**이다
+        reopen = not ack.accepted and row["state"] == ANSWERED
+        if reopen and _run_ended(store, str(row["run_id"])):
+            with store.tx() as cur:
+                cur.execute(
+                    "UPDATE approvals SET state = ?, withdraw_reason = ?, delivered = 0, delivery_accepted = 0,"
+                    " delivery_reason = ? WHERE request_id = ?",
+                    (WITHDRAWN, AUTO_WITHDRAW_REASONS["run_finished"], ack.reason, ack.request_id),
+                )
+            continue
         with store.tx() as cur:
-            if ack.accepted:
+            if not reopen:
                 cur.execute(
                     "UPDATE approvals SET delivered = 1, delivery_accepted = 1, delivery_reason = NULL"
                     " WHERE request_id = ?",
@@ -549,5 +589,6 @@ __all__ = [
     "listing",
     "purge_values",
     "withdraw",
+    "withdraw_ended_runs",
     "withdraw_for_run",
 ]

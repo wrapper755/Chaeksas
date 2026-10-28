@@ -847,7 +847,9 @@ class Agent:
         """답이 정해진 결재를 실행에 넣는다 (C6) — **기다리던 실행이 이어 간다**.
 
         **지금 기다리지 않는 답은 `not_waiting`으로 돌려보낸다** (C6 — Center가 다시 연다).
-        회수·만료는 **답이 아니다** — 오류 경계로 간다 (ADR-0038).
+        회수·만료는 **답이 아니다** — 오류 경계로 간다 (ADR-0038). 기다리는 실행이 없으면 할 일이
+        없으니 **받았다고만 한다**(Bot UI와 같다) — 거절로 적으면 Center가 취소된 실행의 회수를
+        `open`으로 되살렸다 (C6 §상태 전이).
 
         **빈자리가 없으면 넣지 않고 ack도 하지 않는다** (메시지·타이머와 같은 결) — 기다리던
         실행은 자리를 놓았으므로 이어 가면 **다시 쥔다**. 상한을 넘기면
@@ -859,9 +861,11 @@ class Agent:
         for one in found:
             worker = self._waiting_for(one.request_id)
             if worker is None:
-                self.pending_approval_acks.append(
-                    ApprovalAck(request_id=one.request_id, accepted=False, reason="not_waiting")
-                )
+                if one.state == "answered":
+                    ack = ApprovalAck(request_id=one.request_id, accepted=False, reason="not_waiting")
+                else:
+                    ack = ApprovalAck(request_id=one.request_id, accepted=True)
+                self.pending_approval_acks.append(ack)
                 continue
             if self.free_slots() <= 0:
                 log.info("결재 %s의 답을 넣을 자리가 없다 — 다음 주기에", one.request_id)
