@@ -122,6 +122,40 @@ def test_the_canvas_reports_what_it_holds(canvas: Any) -> None:
     assert stats["dirty"] is False, "불러온 직후는 「저장 안 한 변경」이 아니다"
 
 
+def sized(canvas: Any, width: int, height: int) -> None:
+    """캔버스를 그 크기로 띄우고 페이지가 크기를 받을 때까지 기다린다."""
+    from PySide6.QtCore import QEventLoop, QTimer
+
+    canvas.resize(width, height)
+    canvas.show()
+    loop = QEventLoop()
+    QTimer.singleShot(500, loop.quit)
+    loop.exec()
+
+
+def test_opening_shows_the_diagram_at_normal_zoom_in_the_middle(canvas: Any) -> None:
+    """STU-01 [C] — 열면 보통 크기(100%)이고, 화면에 들어가는 그림은 가운데에 온다."""
+    sized(canvas, 1600, 900)
+    canvas.call_sync("importXML", (EXAMPLES / "fx02_business_rule.bpmn").read_text(encoding="utf-8"))
+    stats = canvas.call_sync("stats")
+    view, inner = stats["view"], stats["inner"]
+    assert stats["scale"] == pytest.approx(1)
+    assert inner["width"] + 240 <= view["width"], "이 예제는 화면에 들어간다"
+    for axis, size in (("x", "width"), ("y", "height")):
+        assert inner[axis] + inner[size] / 2 == pytest.approx(view[axis] + view[size] / 2, abs=1)
+
+
+def test_a_wide_diagram_starts_from_the_left_at_normal_zoom(canvas: Any) -> None:
+    """그림이 화면보다 넓으면 시작 쪽을 맞춘다 — 가운데를 맞추면 시작 이벤트가 밖에 있다."""
+    sized(canvas, 400, 600)
+    canvas.call_sync("importXML", (EXAMPLES / "fx02_business_rule.bpmn").read_text(encoding="utf-8"))
+    stats = canvas.call_sync("stats")
+    view, inner = stats["view"], stats["inner"]
+    assert stats["scale"] == pytest.approx(1)
+    assert inner["width"] > view["width"]
+    assert inner["x"] - view["x"] == pytest.approx(120, abs=1)
+
+
 def test_an_empty_diagram_gets_our_process_id_and_name(canvas: Any) -> None:
     """STU-05 — 새 BPM 프로세스는 빈 정의 하나로 시작한다."""
     canvas.create_empty("Proc_new_one", "새 업무")

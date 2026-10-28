@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import pytest
 from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from chaeksas.studio import file_actions
@@ -33,9 +34,14 @@ MINIMAL = """<?xml version="1.0" encoding="UTF-8"?>
 @dataclass
 class FakeExplorer:
     refreshed: list[str] = field(default_factory=list)
+    listed: list[str] = field(default_factory=list)
 
-    def refresh(self, *, opened: str = "") -> None:
+    def refresh(self, *, opened: str = "", adding: Any = ()) -> None:
         self.refreshed.append(opened)
+
+    def unlist(self, process_id: str) -> None:
+        self.listed.remove(process_id)
+        self.refresh()
 
 
 @dataclass
@@ -74,6 +80,7 @@ class FakeTable:
 @dataclass
 class FakeSettings:
     last_opened: str = ""
+    open_processes: tuple[str, ...] = ()
     saved: int = 0
 
     def save(self) -> None:
@@ -123,7 +130,9 @@ def opened(tmp_path: Path, *names: str, entry: str | None = None) -> FakeWindow:
         workspace.save_definition(made, name, MINIMAL.format(process_id=f"Proc_{Path(name).stem}"))
     again = workspace.find("a.b")
     assert again is not None
-    return FakeWindow(workspace=workspace, process=again, definition=again.definitions[0].path)
+    window = FakeWindow(workspace=workspace, process=again, definition=again.definitions[0].path)
+    window.explorer.listed.append(again.id)
+    return window
 
 
 def test_making_the_open_definition_the_entry_writes_the_record(tmp_path: Path) -> None:
@@ -209,6 +218,35 @@ def test_closing_empties_the_window_and_forgets_the_last_opened(tmp_path: Path) 
     assert window.said[-1] == "닫았습니다: 한글 이름"
 
 
+def test_closing_takes_the_process_off_the_explorer_list(tmp_path: Path) -> None:
+    """STU-02 — 닫으면 목록에서 빠지고 설정에도 남는다. **파일은 지우지 않는다**."""
+    window = opened(tmp_path, "main.bpmn")
+    window.settings.open_processes = ("a.b",)
+    file_actions.close_process(window)  # type: ignore[arg-type]
+    assert window.explorer.listed == [] and not window.settings.open_processes
+    assert window.workspace.find("a.b") is not None
+
+
+def test_opening_a_file_of_the_work_folder_lists_its_process_again(tmp_path: Path, monkeypatch: Any) -> None:
+    """「BPM 프로세스 열기...」 — 이미 어느 BPM 프로세스의 정의면 가져오지 않고 그것을 연다."""
+    window = opened(tmp_path, "main.bpmn", "sub.bpmn")
+    assert window.process is not None
+    sub = window.process.definitions[1].path
+    file_actions.close_process(window)  # type: ignore[arg-type]
+    starts: list[Path | None] = []
+
+    def pick(_window: Any, start: Path | None = None) -> Path:
+        starts.append(start)
+        return sub
+
+    monkeypatch.setattr(file_actions, "pick_bpmn_file", pick)
+    monkeypatch.setattr(NewProcessDialog, "ask", staticmethod(lambda *_a, **_k: pytest.fail("가져오면 안 된다")))
+    file_actions.open_process(window)  # type: ignore[arg-type]
+    assert starts == [window.workspace.root]
+    assert window.process is not None and window.process.id == "a.b"
+    assert window.definition == sub and window.explorer.refreshed[-1].endswith("sub.bpmn")
+
+
 def test_closing_during_a_test_run_is_refused(tmp_path: Path) -> None:
     window = opened(tmp_path, "main.bpmn")
     window.running = object()
@@ -250,7 +288,7 @@ def test_a_definition_with_di_opens_as_saved(tmp_path: Path) -> None:
 
 
 def test_importing_a_file_makes_a_process_and_opens_it(tmp_path: Path, monkeypatch: Any) -> None:
-    """「파일에서 BPM 프로세스 가져오기...」 — 파일 → STU-05 → 연다."""
+    """「BPM 프로세스 열기...」로 바깥 파일을 고르면 가져온다 — 파일 → STU-05 → 연다."""
     window = opened(tmp_path, "main.bpmn")
     source = tmp_path / "바깥.bpmn"
     source.write_text(MINIMAL.format(process_id="Proc_out"), encoding="utf-8")
@@ -260,12 +298,12 @@ def test_importing_a_file_makes_a_process_and_opens_it(tmp_path: Path, monkeypat
         seen.update(kwargs)
         return workspace.create("c.d", first=kwargs["imported"])
 
-    monkeypatch.setattr(file_actions, "pick_bpmn_file", lambda _window: source)
+    monkeypatch.setattr(file_actions, "pick_bpmn_file", lambda _window, _start=None: source)
     monkeypatch.setattr(NewProcessDialog, "ask", staticmethod(ask))
     opened_paths: list[str] = []
     monkeypatch.setattr(file_actions, "open_definition", lambda _w, path: opened_paths.append(path))
 
-    file_actions.import_file(window)  # type: ignore[arg-type]
+    file_actions.open_process(window)  # type: ignore[arg-type]
 
     assert seen == {"imported": source}
     assert opened_paths and opened_paths[0].endswith("c.d/process/바깥.bpmn")
@@ -274,6 +312,6 @@ def test_importing_a_file_makes_a_process_and_opens_it(tmp_path: Path, monkeypat
 
 def test_importing_stops_when_no_file_is_picked(tmp_path: Path, monkeypatch: Any) -> None:
     window = opened(tmp_path, "main.bpmn")
-    monkeypatch.setattr(file_actions, "pick_bpmn_file", lambda _window: None)
-    file_actions.import_file(window)  # type: ignore[arg-type]
+    monkeypatch.setattr(file_actions, "pick_bpmn_file", lambda _window, _start=None: None)
+    file_actions.open_process(window)  # type: ignore[arg-type]
     assert window.said == [] and window.workspace.find("c.d") is None

@@ -50,6 +50,25 @@
     };
   };
 
+  /** 왼쪽 팔레트가 가리는 너비 (그림을 그 옆에서 시작한다). */
+  const PALETTE_GAP = 120;
+
+  /**
+   * 열 때의 자리 (STU-01 [C]) — **보통 크기(100%)**, 그림이 화면 가운데에 온다. 그림이 화면보다
+   * 넓으면 가로는 시작 쪽(왼쪽, 팔레트 옆)을 맞춘다 — 가운데를 맞추면 시작 이벤트가 밖에 있다.
+   */
+  const centerAtNormalZoom = (canvas) => {
+    canvas.zoom(1);
+    const { inner, outer } = canvas.viewbox();
+    const fits = inner.width + 2 * PALETTE_GAP <= outer.width;
+    canvas.viewbox({
+      x: fits ? inner.x + inner.width / 2 - outer.width / 2 : inner.x - PALETTE_GAP,
+      y: inner.y + inner.height / 2 - outer.height / 2,
+      width: outer.width,
+      height: outer.height,
+    });
+  };
+
   /**
    * 새 노드를 놓을 자리 — 보이는 자리의 가운데에서 시작해 **겹치지 않을 때까지** 비낀다.
    * 여러 개를 잇달아 더해도 한 점에 쌓이지 않는다.
@@ -158,7 +177,7 @@
       async importXML(xml) {
         const laid = await laidOutXml(xml);
         const found = await modeler.importXML(laid.xml);
-        modeler.get("canvas").zoom("fit-viewport");
+        centerAtNormalZoom(modeler.get("canvas"));
         // 배치했으면 디스크와 다르다 — 「저장 안 한 변경」으로 둔다(창이 `laid_out`을 보고 표시한다).
         dirty = laid.laidOut;
         return {
@@ -330,7 +349,15 @@
         return { ok: Boolean(found) };
       },
       async stats() {
-        return { elements: modeler.get("elementRegistry").getAll().length, dirty };
+        const box = modeler.get("canvas").viewbox();
+        return {
+          elements: modeler.get("elementRegistry").getAll().length,
+          dirty,
+          // 보이는 자리 — 시험이 「보통 크기로 가운데에 떴나」를 본다.
+          scale: box.scale,
+          view: { x: box.x, y: box.y, width: box.width, height: box.height },
+          inner: { x: box.inner.x, y: box.inner.y, width: box.inner.width, height: box.inner.height },
+        };
       },
       /** 노드에 상태 색을 입힌다 (실행 표시, STU-09). `states`는 {노드 id: 상태}. */
       async mark(states) {

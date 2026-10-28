@@ -214,7 +214,8 @@ def split(window: MainWindow, plan: Plan) -> bool:
         return False
     window.dirty = True
     window.retitle()
-    window.explorer.refresh(opened=definition.as_posix())
+    # 새로 만든 PC Bot도 목록에 올린다 (STU-02 — 목록은 연·만든 BPM 프로세스다).
+    window.explorer.refresh(opened=definition.as_posix(), adding=(plan.pc_id,))
     canvas.call("select", changed)
     window.say(done_message(plan, str(node.get("name") or plan.node_id)))
     return True

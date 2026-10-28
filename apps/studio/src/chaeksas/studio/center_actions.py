@@ -205,7 +205,9 @@ def open_center_resources(window: MainWindow) -> None:
     if window.process is not None:
         # 설치가 `process.json`과 `libs/`를 바꿨다 — 창이 들고 있는 것을 **디스크에서** 다시 읽는다.
         window.process = window.workspace.read(window.process.folder, window.process.group)
-        window.explorer.refresh(opened=window.process.id)
+        window.explorer.refresh(
+            opened=window.definition.as_posix() if window.definition is not None else ""
+        )
         # STU-03의 줄에 「설치됨」이 붙고 셋이 켜져야 한다 (ADR-0051) — 설치·제거 **뒤**도
         # Center를 읽는 때다 (열 때마다가 아니라 바뀐 때다).
         refresh_resources(window, reader=reader)

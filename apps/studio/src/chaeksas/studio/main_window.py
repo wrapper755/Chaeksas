@@ -17,8 +17,8 @@ import logging
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QCloseEvent, QKeySequence
+from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QPalette
 from PySide6.QtWidgets import (
     QDockWidget,
     QMainWindow,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QSplitter,
     QTabWidget,
+    QToolBar,
     QVBoxLayout,
     QWidget,
 )
@@ -73,6 +74,12 @@ log = logging.getLogger(__name__)
 TITLE = "Chaeksas Studio"
 NO_PROCESS = "(BPM 프로세스를 선택하거나 새로 만드세요)"
 DEFAULT_SIZE = (1400, 860)
+#: 도구 모음의 실행 단추 (STU-01 [B]) — 실행 중에는 수행 모드에 맞는 중지 글이 된다 (U5).
+RUN_TEXT = "실행..."
+STOP_TEXTS = {
+    run_dialog.AUTONOMOUS: "자율 수행 중지",
+    run_dialog.DETERMINISTIC: "결정 수행 중지",
+}
 
 PACKAGE_FILTER = "패키지 (*.zip)"
 #: 캔버스가 바뀐 뒤 「변수」 탭이 그림을 다시 읽기까지 (ms) — 끌기 한 번에 여러 번 바뀐다.
@@ -116,7 +123,7 @@ class MainWindow(QMainWindow):
             lambda payload, x, y: center_actions.drop_on_canvas(self, payload, x, y)
         )
 
-        self.explorer = Explorer(self.workspace, self)
+        self.explorer = Explorer(self.workspace, self, listed=settings.open_processes)
         self.explorer.opening.connect(self.open_definition)
 
         # STU-03. **받는 일은 이 창이 한다** — 탐색기는 돌아온 것을 그리기만 한다.
@@ -168,6 +175,7 @@ class MainWindow(QMainWindow):
 
         self._build_layout()
         self._build_menus()
+        self._build_toolbar()
         self._restore_layout()
         # 뿌리는 선언에서 오므로 **Center 없이도** 바로 그린다 (빈 상자를 말없이 두지 않는다).
         # 목록은 정의를 열 때·「새로 고침」에 채운다 — 뜨면서 Center를 두드리지 않는다.
@@ -186,6 +194,9 @@ class MainWindow(QMainWindow):
         tabs.addTab(self.explorer, "BPM 프로세스")
         tabs.addTab(self.resource_tree, "리소스")
         dock.setWidget(tabs)
+        # STU-01 [E] — 왼쪽 고정, 제목 줄 없음 (띄우기·닫기·옮기기가 없다 — 닫아 잃어버릴 일이 없다).
+        dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
+        dock.setTitleBarWidget(QWidget(dock))
         self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, dock)
 
         self.explorer_dock = dock
@@ -233,13 +244,13 @@ class MainWindow(QMainWindow):
         self.properties.setVisible(not found.properties_collapsed)
 
     def toggle_properties(self) -> None:
-        """도구 → 「속성 패널 접기」 (Ctrl+Shift+P). 체크가 곧 접힌 상태다."""
+        """보기 → 「속성 패널 접기」 (Ctrl+Shift+P). 체크가 곧 접힌 상태다."""
         collapsed = self.collapse_action.isChecked()
         self.properties.setVisible(not collapsed)
         self.say("속성 패널을 접었습니다." if collapsed else "속성 패널을 펼쳤습니다.")
 
     def reset_layout(self) -> None:
-        """도구 → 「레이아웃 초기화」 — 담아 둔 것을 **지우고** 기본 배치로 돌린다.
+        """보기 → 「레이아웃 초기화」 — 담아 둔 것을 **지우고** 기본 배치로 돌린다.
 
         지우기만 하면 다음에 뜰 때나 돌아오므로, 지금 창도 함께 되돌린다.
         """
@@ -261,7 +272,10 @@ class MainWindow(QMainWindow):
         files = bar.addMenu("파일")
         self._add(files, "새 BPM 프로세스...", self.new_process, QKeySequence.StandardKey.New)
         self._add(
-            files, "파일에서 BPM 프로세스 가져오기...", lambda: file_actions.import_file(self)
+            files,
+            "BPM 프로세스 열기...",
+            lambda: file_actions.open_process(self),
+            QKeySequence.StandardKey.Open,
         )
         self.close_action = self._add(
             files,
@@ -296,8 +310,12 @@ class MainWindow(QMainWindow):
         self._add(files, "종료", self.close)
 
         edit = bar.addMenu("편집")
-        self._add(edit, "실행 취소", lambda: self.canvas.call("undo"), QKeySequence.StandardKey.Undo)
-        self._add(edit, "다시 실행", lambda: self.canvas.call("redo"), QKeySequence.StandardKey.Redo)
+        self.undo_action = self._add(
+            edit, "실행 취소", lambda: self.canvas.call("undo"), QKeySequence.StandardKey.Undo
+        )
+        self.redo_action = self._add(
+            edit, "다시 실행", lambda: self.canvas.call("redo"), QKeySequence.StandardKey.Redo
+        )
 
         run = bar.addMenu("실행")
         self.run_action = self._add(run, "실행...", lambda: run_actions.run_test(self), QKeySequence("F5"))
@@ -311,23 +329,21 @@ class MainWindow(QMainWindow):
         )
         self.stop_action = self._add(run, "실행 중지", lambda: run_actions.stop_test(self))
         self.stop_action.setEnabled(False)
-        self._add(run, "실행 전 검사", self.run_preflight, QKeySequence("F6"))
+        self.preflight_action = self._add(run, "실행 전 검사", self.run_preflight, QKeySequence("F6"))
 
         settings = bar.addMenu("설정")
         self._add(settings, "설정...", self.open_settings, QKeySequence("Ctrl+,"))
 
         view = bar.addMenu("보기")
-        self._add(view, "BPM 프로세스 탐색기", self.show_explorer, QKeySequence("Ctrl+E"))
-        self._add(view, "리소스", self.show_resources, QKeySequence("Ctrl+Shift+E"))
+        self.collapse_action = self._add(
+            view, "속성 패널 접기", self.toggle_properties, QKeySequence("Ctrl+Shift+P")
+        )
+        self.collapse_action.setCheckable(True)
+        self._add(view, "레이아웃 초기화", self.reset_layout)
+        self._add(view, "로그 지우기", self.log_view.clear, QKeySequence("Ctrl+L"))
 
         tools = bar.addMenu("도구")
         self._add(tools, "확장...", self.open_extensions)
-        self.collapse_action = self._add(
-            tools, "속성 패널 접기", self.toggle_properties, QKeySequence("Ctrl+Shift+P")
-        )
-        self.collapse_action.setCheckable(True)
-        self._add(tools, "레이아웃 초기화", self.reset_layout)
-        self._add(tools, "로그 지우기", self.log_view.clear, QKeySequence("Ctrl+L"))
 
     def refresh_catalog(self) -> None:
         """Center 리소스 목록을 받아 꽂는다 — 하는 일은 `center_actions`에 있다."""
@@ -336,16 +352,6 @@ class MainWindow(QMainWindow):
     def refresh_resources(self, *, reader: services.CenterReader | None) -> None:
         """받아 둔 것으로 STU-03을 그린다 (`reader`가 `None`이면 두드리지 않는다)."""
         center_actions.refresh_resources(self, reader=reader)
-
-    def show_explorer(self) -> None:
-        """보기 → 「BPM 프로세스 탐색기」 (Ctrl+E). 독의 탭을 앞으로 내고 포커스를 준다."""
-        self.explorer_tabs.setCurrentWidget(self.explorer)
-        self.explorer.setFocus()
-
-    def show_resources(self) -> None:
-        """보기 → 「리소스」 (Ctrl+Shift+E)."""
-        self.explorer_tabs.setCurrentWidget(self.resource_tree)
-        self.resource_tree.setFocus()
 
     def dev_keys(self) -> DevKeys:
         """개발 키 한 벌 — 승인된 Studio 키로 Center에 청한다 (ADR-0094 §5). 누를 때마다 새로 짓는다."""
@@ -477,6 +483,80 @@ class MainWindow(QMainWindow):
         self.refresh_resources(reader=services.from_settings(self.settings).reader)
         self.say("확장을 바꿨습니다 — 「실행 전 검사」로 확인하세요.")
 
+    def _build_toolbar(self) -> None:
+        """STU-01 [B] — 메뉴와 **같은 동작**(같은 켜짐·체크)을 아이콘 + 글자 단추로. 고정이라 옮기거나 감출 수 없다.
+
+        「실행...」만 따로다 — 실행 중에는 그 자리가 중지 단추가 된다 (U5, `show_running`).
+        """
+        bar = QToolBar("도구 모음", self)
+        bar.setObjectName("mainToolbar")
+        bar.setMovable(False)
+        bar.setFloatable(False)
+        bar.toggleViewAction().setVisible(False)
+        bar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.run_tool_action = QAction(RUN_TEXT, self)
+        self.run_tool_action.triggered.connect(self._run_or_stop)
+        bar.addAction(self.save_action)
+        bar.addSeparator()
+        bar.addActions([self.undo_action, self.redo_action])
+        bar.addSeparator()
+        bar.addActions([self.preflight_action, self.run_tool_action])
+        bar.addSeparator()
+        bar.addAction(self.collapse_action)
+        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, bar)
+        self.toolbar = bar
+        self._paint_icons()
+
+    def _paint_icons(self) -> None:
+        """도구 모음 아이콘을 **지금 팔레트의 글자색**으로 칠한다 (팔레트는 토큰에서 온다).
+
+        테마가 바뀌면 다시 부른다 (`changeEvent`) — 칠한 색이 아이콘에 박혀 있어서다. 실행 중 단추는
+        강조색 바탕이라 그 위의 글자색(`primary.fg` = 팔레트 `HighlightedText`)으로 칠한다.
+        """
+        from chaeksas.qt.theme import icon  # noqa: PLC0415
+
+        colors = self.palette()
+        plain = colors.color(QPalette.ColorRole.ButtonText).name()
+        on_accent = colors.color(QPalette.ColorRole.HighlightedText).name()
+        for action, name in (
+            (self.save_action, "save"),
+            (self.undo_action, "undo-2"),
+            (self.redo_action, "redo-2"),
+            (self.preflight_action, "list-checks"),
+            (self.collapse_action, "panel-right-close"),
+        ):
+            action.setIcon(icon(name, plain))
+            # 메뉴와 같은 동작이지만 아이콘은 도구 모음에만 — 메뉴에서는 체크 표시(「속성 패널 접기」)를 가린다.
+            action.setIconVisibleInMenu(False)
+        running = self.run_tool_action.text() != RUN_TEXT
+        self.run_tool_action.setIcon(
+            icon("square", on_accent) if running else icon("play", plain)
+        )
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802 — Qt 이름 그대로
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+            if hasattr(self, "toolbar"):
+                self._paint_icons()
+        super().changeEvent(event)
+
+    def _run_or_stop(self) -> None:
+        if self.running is not None:
+            run_actions.stop_test(self)
+        else:
+            run_actions.run_test(self)
+
+    def show_running(self, mode: str | None) -> None:
+        """U5 — 실행 중이면 도구 모음의 「실행...」이 강조색 중지 단추가 된다. `None`이면 되돌린다."""
+        action = self.run_tool_action
+        action.setText(STOP_TEXTS.get(mode, "실행 중지") if mode is not None else RUN_TEXT)
+        self._paint_icons()
+        button = self.toolbar.widgetForAction(action)
+        if button is not None:
+            # 스타일시트는 처음 보일 때 한 번 입힌다 — 속성을 바꾼 뒤 다시 칠한다 (`set_role`과 같은 까닭).
+            button.setProperty("running", mode is not None)
+            button.style().unpolish(button)
+            button.style().polish(button)
+
     def _add(
         self,
         menu: QMenu,
@@ -540,7 +620,7 @@ class MainWindow(QMainWindow):
             if path.is_file():
                 self.open_definition(self.settings.last_opened)
                 return
-        self.say("열린 BPM 프로세스가 없습니다 — 탐색기에서 고르거나 새로 만드세요.")
+        self.say("열린 BPM 프로세스가 없습니다 — 파일 → BPM 프로세스 열기...로 열거나 새로 만드세요.")
         self.explorer.setFocus()
 
     # ── 속성 패널 (STU-04) ──
@@ -820,7 +900,7 @@ class MainWindow(QMainWindow):
             return
         self.process = dialog.saved
         self.retitle()
-        self.explorer.refresh(opened=self.definition.name if self.definition else "")
+        self.explorer.refresh(opened=self.definition.as_posix() if self.definition else "")
         self.say(f"BPM 프로세스 정보를 저장했습니다: {dialog.saved.display} (v{dialog.saved.version})")
         if dialog.process_patch is None or entry is None or drawn is None:
             return
@@ -903,4 +983,4 @@ class MainWindow(QMainWindow):
         event.accept()
 
 
-__all__ = ["DEFAULT_SIZE", "NO_PROCESS", "TITLE", "MainWindow"]
+__all__ = ["DEFAULT_SIZE", "NO_PROCESS", "RUN_TEXT", "STOP_TEXTS", "TITLE", "MainWindow"]

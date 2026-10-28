@@ -22,7 +22,7 @@ import pytest
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QStringListModel  # noqa: E402
-from PySide6.QtWidgets import QComboBox, QLineEdit  # noqa: E402
+from PySide6.QtWidgets import QComboBox, QLineEdit, QStyleOptionViewItem  # noqa: E402
 
 from chaeksas.contracts.bpmn_ext import Case, InputDecl, ProcessInfo, read_process  # noqa: E402
 from chaeksas.studio.case_dialog import CaseDialog  # noqa: E402
@@ -41,8 +41,12 @@ from chaeksas.studio.variables import (  # noqa: E402
 )
 from chaeksas.studio.variables_tab import (  # noqa: E402
     DEFAULT,
+    INPUTS,
+    MADE,
     NAME,
     NOW,
+    OTHER,
+    OUTPUTS,
     REQUIRED,
     RUNNING,
     SOURCE,
@@ -177,17 +181,17 @@ def test_the_tab_shows_inputs_outputs_and_what_the_drawing_makes(app: Any) -> No
         outputs=["결과"],
     )
     tab = shown(app, info, {"판정": ["신용 판정"], "결과": ["끝"]})
-    assert tab.inputs_group.text(NAME) == "입력 (1)"
-    assert tab.outputs_group.text(NAME) == "출력 (1)"
+    assert tab.sections.tabText(INPUTS) == "입력 (1)"
+    assert tab.sections.tabText(OUTPUTS) == "출력 (1)"
     # 출력에 이미 있는 이름(「결과」)은 「그림이 만드는 변수」에 다시 적지 않는다.
-    assert tab.made_group.text(NAME).startswith("그림이 만드는 변수 (1)")
+    assert tab.sections.tabText(MADE) == "그림이 만드는 변수 (1)"
     made = tab.made_group.child(0)
     assert made is not None and (made.text(NAME), made.text(SOURCE)) == ("판정", "신용 판정")
     row = tab.inputs_group.child(0)
     assert row is not None and row.text(DEFAULT) == "3"
     assert row.checkState(REQUIRED).name == "Checked"
-    assert tab.tree.isColumnHidden(NOW), "값이 오기 전에는 「지금 값」 열이 없다"
-    assert tab.other_group.isHidden()
+    assert tab.inputs_tree.isColumnHidden(NOW), "값이 오기 전에는 「지금 값」 열이 없다"
+    assert not tab.sections.isTabVisible(OTHER)
     assert not tab.unapplied and not tab.apply_button.isEnabled()
 
 
@@ -198,12 +202,12 @@ def test_a_virtual_worker_source_pins_and_locks_the_type(app: Any) -> None:
     item = tab.inputs_group.child(0)
     assert item is not None
     item.setText(NAME, "감독자")
-    kind, source = tab.tree.itemWidget(item, TYPE), tab.tree.itemWidget(item, SOURCE)
-    assert isinstance(kind, QComboBox) and isinstance(source, QComboBox)
-    source.setCurrentIndex(source.findData("virtual_worker.supervisors"))
-    assert kind.currentText() == "list" and not kind.isEnabled()
-    source.setCurrentIndex(source.findData("caller"))
-    assert kind.isEnabled()
+    tab.set_source(item, "virtual_worker.supervisors")
+    assert item.text(TYPE) == "list" and tab.type_pinned(item)
+    assert item.text(SOURCE) != "virtual_worker.supervisors", "칸에는 사람이 읽는 이름이 보인다"
+    assert tab.input_rows()[0].source == "virtual_worker.supervisors"
+    tab.set_source(item, "caller")
+    assert not tab.type_pinned(item)
 
 
 def test_applying_emits_the_whole_process_and_a_problem_blocks_it(app: Any) -> None:
@@ -233,7 +237,7 @@ def test_outputs_can_be_added_and_dropped(app: Any) -> None:
     assert item is not None
     item.setText(NAME, "결과")
     assert tab.output_names() == ["결과"] and tab.unapplied
-    tab.tree.setCurrentItem(item)
+    tab.outputs_tree.setCurrentItem(item)
     tab._drop()  # noqa: SLF001 — 「줄 삭제」
     assert tab.output_names() == [] and not tab.unapplied
 
@@ -245,8 +249,9 @@ def test_a_reason_locks_editing_but_keeps_the_table(app: Any) -> None:
     assert not tab.add_input.isEnabled() and not tab.apply_button.isEnabled()
     item = tab.inputs_group.child(0)
     assert item is not None
-    kind = tab.tree.itemWidget(item, TYPE)
-    assert isinstance(kind, QComboBox) and not kind.isEnabled()
+    assert tab.inputs_tree.itemDelegate().createEditor(  # 잠겨 있으면 칸을 열지 않는다
+        tab.inputs_tree.viewport(), QStyleOptionViewItem(), tab.inputs_tree.indexFromItem(item, TYPE)
+    ) is None
     tab._new_input()  # noqa: SLF001
     assert tab.inputs_group.childCount() == 1, "잠겨 있으면 줄을 더하지 않는다"
 
@@ -254,15 +259,15 @@ def test_a_reason_locks_editing_but_keeps_the_table(app: Any) -> None:
 def test_values_fill_the_now_column_and_the_rest_goes_to_other(app: Any) -> None:
     tab = shown(app, info_of(inputs=[{"name": "건", "type": "string"}], outputs=["결과"]))
     tab.show_values({"건": "가", "오늘": "2026-10-26"})
-    assert not tab.tree.isColumnHidden(NOW)
+    assert not tab.inputs_tree.isColumnHidden(NOW)
     first = tab.inputs_group.child(0)
     output = tab.outputs_group.child(0)
     other = tab.other_group.child(0)
     assert first is not None and first.text(NOW) == '"가"'
     assert output is not None and output.text(NOW) == "—", "아직 없는 이름"
-    assert other is not None and other.text(NAME) == "오늘" and not tab.other_group.isHidden()
+    assert other is not None and other.text(NAME) == "오늘" and tab.sections.isTabVisible(OTHER)
     tab.clear_values()
-    assert tab.tree.isColumnHidden(NOW) and tab.other_group.isHidden()
+    assert tab.inputs_tree.isColumnHidden(NOW) and not tab.sections.isTabVisible(OTHER)
 
 
 def test_values_stay_until_another_definition_is_shown(app: Any) -> None:
@@ -296,6 +301,45 @@ def test_without_a_process_nothing_is_editable(app: Any) -> None:
     tab.show_definition(None, {}, key="")
     assert tab.locked and not tab.add_input.isEnabled()
     assert tab.patch() == (None, "열린 BPM 프로세스가 없습니다.")
+
+
+def test_one_section_at_a_time_with_buttons_that_fit_it(app: Any) -> None:
+    """STU-01 「변수」 탭 [S]·[B] — 무리 하나만 보이고 단추는 그 무리에 맞는 것만, 강조색은 「적용」 하나."""
+    tab = shown(app, info_of(inputs=[{"name": "건", "type": "string"}]), {"판정": ["신용 판정"]})
+    assert tab.sections.currentIndex() == INPUTS and tab.stack.currentIndex() == INPUTS
+    assert not tab.add_input.isHidden() and tab.add_output.isHidden() and not tab.drop_row.isHidden()
+    tab.sections.setCurrentIndex(OUTPUTS)
+    assert tab.add_input.isHidden() and not tab.add_output.isHidden()
+    tab.sections.setCurrentIndex(MADE)
+    assert tab.stack.currentIndex() == MADE
+    assert tab.add_input.isHidden() and tab.add_output.isHidden() and tab.drop_row.isHidden()
+    assert {b.objectName() for b in (tab.add_input, tab.add_output, tab.drop_row)} == {"Secondary"}
+    assert tab.apply_button.objectName() != "Secondary"
+
+
+def test_finding_filters_what_the_drawing_makes(app: Any) -> None:
+    tab = shown(app, info_of(), {"판정": ["신용 판정"], "금액": ["계산"], "결재의견": ["팀장 승인"]})
+    tab.find_box.setText("승인")
+    shown_names = [one.text(NAME) for one in (tab.made_group.child(i) for i in range(3)) if one and not one.isHidden()]
+    assert shown_names == ["결재의견"], "만드는 곳으로도 찾는다"
+    tab.find_box.clear()
+    assert all(not tab.made_group.child(i).isHidden() for i in range(3))  # type: ignore[union-attr]
+
+
+def test_cells_read_as_text_and_open_an_editor_when_pressed(app: Any) -> None:
+    """STU-01 「변수」 탭 [T] — 평소에는 글자, 누르면 그 자리의 편집기 (타입·값 출처는 콤보)."""
+    tab = shown(app, info_of(inputs=[{"name": "건", "type": "string"}]))
+    item = tab.inputs_group.child(0)
+    assert item is not None and item.text(TYPE) == "string" and item.text(SOURCE) == "부르는 쪽"
+    assert tab.inputs_tree.itemWidget(item, TYPE) is None, "콤보를 늘 그려 두지 않는다"
+    delegate, viewport = tab.inputs_tree.itemDelegate(), tab.inputs_tree.viewport()
+    kind = delegate.createEditor(viewport, QStyleOptionViewItem(), tab.inputs_tree.indexFromItem(item, TYPE))
+    assert isinstance(kind, QComboBox)
+    kind.setCurrentText("int")
+    delegate.setModelData(kind, tab.inputs_tree.model(), tab.inputs_tree.indexFromItem(item, TYPE))
+    assert item.text(TYPE) == "int" and tab.unapplied
+    name = delegate.createEditor(viewport, QStyleOptionViewItem(), tab.inputs_tree.indexFromItem(item, NAME))
+    assert isinstance(name, QLineEdit)
 
 
 # ─────────────────────────── 케이스 (STU-07) ───────────────────────────

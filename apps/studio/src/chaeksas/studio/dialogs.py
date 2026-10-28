@@ -65,13 +65,14 @@ NO_OPEN_DEFINITION = "열린 정의가 없습니다"
 #: 「예제에서 가져오기」를 끌 때 옆에 적는 까닭 — 예제는 체크아웃에만 있다 (설치본에는 없다).
 NO_EXAMPLES = "예제를 찾지 못했습니다"
 
-#: 「파일에서 BPM 프로세스 가져오기」 안내 — 따라가지 않는 것을 미리 말한다 (STU-05).
+#: 파일에서 가져올 때(「BPM 프로세스 열기...」) 안내 — 따라가지 않는 것을 미리 말한다 (STU-05).
 FILE_HINT = "그 파일 하나만 가져옵니다. 쓰는 결정(DMN)·호출 대상은 실행 전 검사가 알려 줍니다."
 
 
-def pick_bpmn_file(parent: QWidget | None) -> Path | None:
-    """STU-01 「파일에서 BPM 프로세스 가져오기...」의 첫 걸음 — 가져올 `.bpmn` 하나."""
-    path, _ = QFileDialog.getOpenFileName(parent, "가져올 BPMN 파일", "", "BPMN (*.bpmn)")
+def pick_bpmn_file(parent: QWidget | None, start: Path | None = None) -> Path | None:
+    """STU-01 「BPM 프로세스 열기...」의 첫 걸음 — `.bpmn` 하나 (`start` 폴더에서 시작한다)."""
+    where = start.as_posix() if start is not None else ""
+    path, _ = QFileDialog.getOpenFileName(parent, "BPM 프로세스 열기", where, "BPMN (*.bpmn)")
     return Path(path) if path else None
 
 
@@ -82,7 +83,7 @@ class NewProcessDialog(QDialog):
     복사」면 **그 파일을 작업 폴더가 복사한다** (`Workspace.create`의 `first`) — 그때 `made`의
     진입 정의가 이미 디스크에 있다.
 
-    **「파일에서 BPM 프로세스 가져오기...」도 이 창이다** (`imported`) — 파일은 메뉴가 먼저
+    **「BPM 프로세스 열기...」가 가져올 때도 이 창이다** (`imported`) — 파일은 메뉴가 먼저
     고르고, 창은 「첫 정의」 대신 그 파일을 보이며 이름·id를 그림에서 채워 둔다.
 
     **「예제에서 가져오기」는 「첫 정의」의 셋째 줄이다** — 고른 예제로 id·이름을 채우되 사람이

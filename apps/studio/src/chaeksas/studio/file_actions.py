@@ -243,16 +243,25 @@ def save_process_as(window: MainWindow) -> None:
         open_definition(window, entry.path.as_posix())
 
 
-def import_file(window: MainWindow) -> None:
-    """STU-01 「파일에서 BPM 프로세스 가져오기...」 — 파일을 고르고 STU-05로 id·이름을 받는다.
+def open_process(window: MainWindow) -> None:
+    """STU-01 「BPM 프로세스 열기...」 (Ctrl+O) — `.bpmn` 하나를 고른다 (작업 폴더에서 시작).
 
-    파일은 **그 하나만** 진입 정의로 복사한다 (`Workspace.create`의 `first` — 원본은 읽기만
-    한다). 그림 좌표가 없으면 **열 때** 캔버스가 배치한다 (ADR-0088).
+    **이미 어느 BPM 프로세스의 정의면** 그것을 연다(탐색기 목록에 올라간다). 아니면 **가져온다**
+    — STU-05로 id·이름을 받아 그 파일 **하나만** 진입 정의로 복사한다 (`Workspace.create`의
+    `first` — 원본은 읽기만 한다). 그림 좌표가 없으면 **열 때** 캔버스가 배치한다 (ADR-0088).
+    BPM 프로세스 없이 파일만 열지 않는다 (U1).
     """
-    if not may_discard(window):
-        return
-    picked = pick_bpmn_file(window)
+    picked = pick_bpmn_file(window, window.workspace.root)
     if picked is None:
+        return
+    target = picked.resolve()
+    for group in window.workspace.groups():
+        for one in group.processes:
+            for definition in one.definitions:
+                if definition.path.resolve() == target:
+                    open_definition(window, definition.path.as_posix())
+                    return
+    if not may_discard(window):
         return
     # 같은 id가 있으면 창이 「기존 것을 바꾸기」를 묻는다 — 상태 줄이 무엇을 했는지 가른다.
     known = {one.id for group in window.workspace.groups() for one in group.processes}
@@ -270,7 +279,9 @@ def import_file(window: MainWindow) -> None:
 
 
 def close_process(window: MainWindow) -> None:
-    """STU-01 「BPM 프로세스 닫기」 (Ctrl+W) — 캔버스를 비우고 **다음에 띄울 때도 열지 않는다**.
+    """STU-01 「BPM 프로세스 닫기」 (Ctrl+W) — 캔버스를 비우고 **탐색기 목록에서 뺀다**.
+
+    다음에 띄울 때도 열지 않는다. 파일은 지우지 않는다 — 다시 올리는 길은 `open_process`다.
 
     저장 안 한 변경은 같은 관문(`may_discard`)이 묻는다. 시험 실행 중이면 닫지 않는다 — 실행이
     그 그림에 노드 상태를 칠하고, 끝나면 그 BPM 프로세스의 기록을 쓴다.
@@ -289,20 +300,23 @@ def close_process(window: MainWindow) -> None:
     except CanvasError as e:
         window.say(f"캔버스를 비우지 못했습니다: {e}")
         return
+    closed_id = window.process.id
     window.process, window.definition, window.dirty = None, None, False
     window.properties.show_nothing()
     window.preflight.setRowCount(0)
     window.retitle()
-    window.explorer.refresh()
+    # STU-02 — 닫으면 목록에서도 빠진다 (작업 폴더의 파일은 그대로다).
+    window.explorer.unlist(closed_id)
     remember_last_opened(window)
     window.say(f"닫았습니다: {closed}")
 
 
 def remember_last_opened(window: MainWindow) -> None:
-    """마지막으로 열었던 정의를 설정에 남긴다 (다음에 그것을 연다). **닫았으면 비운다**."""
+    """마지막으로 열었던 정의와 탐색기 목록을 설정에 남긴다 (다음에 그대로 뜬다). **닫았으면 비운다**."""
     opened = window.definition.as_posix() if window.definition is not None else ""
-    if opened != window.settings.last_opened:
-        window.settings = replace(window.settings, last_opened=opened)
+    listed = tuple(window.explorer.listed)
+    if (opened, listed) != (window.settings.last_opened, window.settings.open_processes):
+        window.settings = replace(window.settings, last_opened=opened, open_processes=listed)
         window.settings.save()
 
 
@@ -315,12 +329,12 @@ __all__ = [
     "NO_PROCESS",
     "add_definition",
     "close_process",
-    "import_file",
     "inherited_keys",
     "make_entry",
     "may_discard",
     "new_process",
     "open_definition",
+    "open_process",
     "remember_last_opened",
     "save",
     "save_process_as",

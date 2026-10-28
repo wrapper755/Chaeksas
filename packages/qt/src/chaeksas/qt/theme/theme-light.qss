@@ -68,6 +68,12 @@ QPushButton#Danger {
   color: #FFFFFF;
 }
 
+QToolButton[running="true"] {
+  background-color: #2552C7;
+  color: #FFFFFF;
+  border-radius: 6px;
+}
+
 QLineEdit, QComboBox, QPlainTextEdit, QTextEdit, QSpinBox {
   background-color: #FFFFFF;
   color: #1A1D23;
@@ -158,6 +164,18 @@ QTableView::item:selected, QTreeView::item:selected, QListView::item:selected {
   background-color: #E8EEFC;
   color: #1A1D23;
 }
+
+/* 펼친 메뉴(메뉴 막대·문맥 메뉴) — 테두리가 없으면 흰 바탕 위에서 메뉴가 어디까지인지 안 보인다. */
+QMenu {
+  background-color: #FFFFFF;
+  color: #1A1D23;
+  border: 1px solid #B9C0CA;
+  padding: 4px 0;
+}
+QMenu::item { padding: 4px 24px 4px 12px; }
+QMenu::item:selected { background-color: #2552C7; color: #FFFFFF; }
+QMenu::item:disabled { color: #5F6875; }
+QMenu::separator { height: 1px; background-color: #DDE1E6; margin: 4px 8px; }
 
 QToolTip {
   background-color: #1A1D23;
