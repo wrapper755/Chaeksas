@@ -270,6 +270,27 @@ def test_post_fetch_complete_result_ack(center: TestClient, store: Store, field:
     assert row["acked_at"] and row["state"] == "completed"  # 누가·언제·성패는 남는다
 
 
+def test_posting_again_after_ack_queues_it_again(center: TestClient, field: str) -> None:
+    """받아 간 뒤 같은 칸으로 다시 올리면 **다시 줄에 선다** — 값을 지운 옛 일감을 돌려주면 빈 결과다.
+
+    반복 안의 UI 태스크가 차례마다 같은 칸으로 계획을 올린다(엔진은 반복 중에 `node_instance`를
+    올리지 않는다, ADR-0082). 일꾼은 멱등 칸으로 저장해 둔 결과를 다시 준다.
+    """
+    token = consumer(center)
+    task_id = post(center, field).json()["task_id"]
+    fetch(center, token)
+    finish = f"/api/v1/consumers/tasks/{task_id}/complete"
+    center.post(finish, json={"output": {"receipt": "R-1"}}, headers=bearer(token))
+    assert center.post(f"/api/v1/external-tasks/{task_id}/ack", headers=bearer(field)).status_code == 200
+
+    again = post(center, field)
+    assert again.status_code == 201 and again.json() == {"task_id": task_id, "state": "pending"}
+    assert [one["task_id"] for one in fetch(center, token)["tasks"]] == [task_id]
+    center.post(finish, json={"output": {"receipt": "R-1"}}, headers=bearer(token))
+    seen = center.get(f"/api/v1/external-tasks/{task_id}", headers=bearer(field)).json()
+    assert seen["state"] == "completed" and seen["output"] == {"receipt": "R-1"}
+
+
 def test_someone_elses_task_is_not_found(center: TestClient, field: str) -> None:
     task_id = post(center, field).json()["task_id"]
     _, other = pc(center, machine="8" * 64)

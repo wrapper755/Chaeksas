@@ -13,7 +13,6 @@
  */
 import { describe, expect, it } from "vitest";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
-import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";

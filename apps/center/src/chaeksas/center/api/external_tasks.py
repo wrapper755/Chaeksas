@@ -285,14 +285,20 @@ def create(
     at = now or now_iso()
     sweep(store, now=at)
 
-    existing = store.row("SELECT poster_key_id, body_hash, state FROM external_tasks WHERE task_id = ?", (task_id,))
+    existing = store.row(
+        "SELECT poster_key_id, body_hash, state, acked_at FROM external_tasks WHERE task_id = ?", (task_id,)
+    )
     if existing is not None:
         if existing["poster_key_id"] != poster.key_id or existing["body_hash"] != digest:
             raise ApiError(409, "idempotency_conflict", "같은 멱등 칸에 다른 본문이다", {"task_id": task_id})
-        return ExternalTaskCreated(task_id=task_id, state=str(existing["state"])), False
-
+        if existing["acked_at"] is None:
+            return ExternalTaskCreated(task_id=task_id, state=str(existing["state"])), False
     timeout = _authorize(store, poster, task)
     with store.tx() as cur:
+        if existing is not None:
+            # **받아 간 뒤에 다시 올렸다** — 값은 이미 지웠으니 옛 일감을 돌려주면 빈 결과다. 다시 줄에
+            # 세운다: 일꾼이 멱등 칸으로 저장해 둔 결과를 다시 준다 (C15 「최소 한 번」).
+            cur.execute("DELETE FROM external_tasks WHERE task_id = ?", (task_id,))
         cur.execute(
             "INSERT INTO external_tasks (task_id, topic, operation, mode, origin, idempotency_json, caller_json,"
             " business_key, body_hash, poster_key_id, want_result, input_json, state, created_at, deadline)"

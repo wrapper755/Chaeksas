@@ -10,7 +10,6 @@
  */
 
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
-import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { RunEvent } from "@chaeksas/api-types/c3-run-event";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
