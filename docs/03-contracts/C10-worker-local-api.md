@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 실행 중 Bot(Bot UI의 실행기)·Studio·Bot UI(Worker 관리)·셀렉터 등록(Tool UI — ADR-0077) → Worker 프로세스 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (worker_local.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
-| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창) |
+| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0106](../decisions/0106-pc-escalation-asks-a-person.md)(전환 → 사람 확인) |
 | 관련 화면 | STU-08·13, BUI-09, TOL-03~05 |
 
 
@@ -125,7 +125,7 @@
 | `data` | 읽기 결과 구조. `read_table`이면 `{headers: [글], rows: [[글]]}` — 칸은 **보이는 글 그대로**다 (첫 줄이 `headers`, 나머지가 `rows`). **UI 자동화 앱으로 보내지 않는다** |
 | `fallback_depth` | 몇 번째 로케이터로 성공했나. 0이 건강한 상태 |
 | `healed` | 치유로 성공했나 |
-| `escalated` | **전환.** 자가 치유 한도를 넘어 사람 확인이 필요하다. 오류와 구분한다. PC Bot은 확인(CMN-01)으로 넘긴다 |
+| `escalated` | **전환.** 자가 치유 한도를 넘어 사람 확인이 필요하다. 오류와 구분한다. PC Bot은 확인(CMN-01)으로 넘긴다 — 수행기가 `escalate: confirmation`으로 실패를 올리면 엔진이 그 자리에서 현장 확인 하나로 멈추고, 「계속」은 **다시 하지 않고 넘어간다**(결과 변수 없음), 「중단」은 오류 경계 `ESCALATED`다 ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)). 서버 실행은 늘 오류 경계다 |
 | `error_code`, `error` | 실패 시 (예: `element_not_found`, `page_mismatch`, `timeout`) |
 | `current_url`, `duration_ms` | |
 
@@ -228,6 +228,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
 | 2026-10-29 | 1 | 세션의 `service_key` → `call_token`(호출 토큰) — Worker는 UI 자동화 앱의 주소·키를 모르고 Center에 올린다 (C8) | [0102](../decisions/0102-calling-outside-is-pull.md) |
+| 2026-10-29 | 1 | `escalated` — PC 엔진이 정말 확인(CMN-01)으로 넘긴다고 적었다(「계속」은 다시 하지 않는다). 모양은 그대로 | [0106](../decisions/0106-pc-escalation-asks-a-person.md) |
 | 2026-10-18 | 1 | §5 데스크톱 `pick`(훅 없이 커서·Ctrl 읽기)·`highlight`(`rect` — 물리 픽셀, 그리기는 부르는 쪽) (09-gaps §7-3) | 0072 |
 | 2026-10-18 | 1 | §5 `POST /registration/{id}/plan` — 등록 세션에 계획을 싣는다. BUI-08 「시험」이 등록 탭의 화면을 **놓지 않고** 이어 쓴다 (09-gaps §7-2) | 0014 |
 | 2026-10-18 | 1 | §5 데스크톱 창에서 담기 — `GET /registration/windows`·`POST /registration/desktop`, `analyze` 후보의 `platform`·`control_type`·`class_name`, 데스크톱 `analyze`. 현장 리허설에서 데스크톱 화면을 사람이 등록할 길이 없던 것 (09-gaps §6) | 0033 |

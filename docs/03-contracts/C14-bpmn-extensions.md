@@ -283,7 +283,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | 메시지 시작·받기·경계·중간 받기 | `messageRef` → `bpmn:message name`. 받기 태스크 외의 받기(경계·중간 받기)도 상관 키는 `chk:receive{correlation}`로 둔다 | 외부 시스템이 Center 메시지 API로 보낸다 (C12, PC는 Bot UI 메시지 수신). 상관 키가 없으면 메시지 시작만 깨운다 |
 | 신호 | `signalRef` | 한 실행 안의 가지 사이에서만 |
 | 이정표 | `intermediateThrowEvent`에 **이벤트 정의를 두지 않는다** | 지나가기만 하면서 실행 기록에 `node_state`(`task_type: milestone`)를 남긴다. 「어디까지 왔는지」를 콘솔·Studio가 이것으로 보인다. 노드 `name`이 이정표 이름이다 (id 접두어 `Ms_`) |
-| 오류 경계 | `errorRef` → `bpmn:error errorCode` | 표준 코드: `TASK_FAILED`(AI·UI·서비스 앱 태스크 실패), `SEND_FAILED`(메일·웹훅), `ESCALATED`(UI 태스크 전환 — 확장의 `escalate: confirmation` — 과 AI 태스크의 확인 트리거를 흐름으로 받을 때. **PC에서 사람 확인으로 바로 넘기는 길은 아직 없다** — 지금은 PC·서버 모두 이 경계다), `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`(Center 결재가 답 없이 끝남 — 관리자 회수·만료, C6·[ADR-0038](../decisions/0038-approval-request-channel.md)), `DELEGATION_FAILED`(예약). 오류 경로에는 `error_code`, `error_message`, `failed_task` 변수가 생긴다 |
+| 오류 경계 | `errorRef` → `bpmn:error errorCode` | 표준 코드: `TASK_FAILED`(AI·UI·서비스 앱 태스크 실패), `SEND_FAILED`(메일·웹훅), `ESCALATED`(UI 태스크 전환 — 확장의 `escalate: confirmation` — 과 AI 태스크의 확인 트리거를 흐름으로 받을 때. **PC 실행에서는 이 경계를 이름으로 달아 둔 경우에만 여기로 오고**, 달지 않았으면 그 자리에서 현장 확인(CMN-01)으로 멈춘다 — 「계속」은 다시 하지 않고 결과 없이 넘어가고 「중단」이 이 코드의 업무 실패다(코드 없는 경계가 받는다, [ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)). 서버는 늘 이 경계다), `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`(Center 결재가 답 없이 끝남 — 관리자 회수·만료, C6·[ADR-0038](../decisions/0038-approval-request-channel.md)), `DELEGATION_FAILED`(예약). 오류 경로에는 `error_code`, `error_message`, `failed_task` 변수가 생긴다 |
 | 조건 시작 | `conditionalEventDefinition` | **schema 1에서 쓰지 않는다** (프로토타입의 폴더 감시). 외부 시스템 메시지나 타이머로 바꾼다 |
 
 ## 시험 케이스 형식 (Studio, 패키지에 넣지 않음)
@@ -310,7 +310,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 - `process`(선택): 이 케이스 파일이 시험하는 BPM 프로세스 id (`Proc_<파일>`). Studio는 정의 옆에 두므로 비워도 된다.
 - `messages`(선택): 시작 뒤 `after_s`초에 보내는 메시지. Center 메시지 API(C12)와 같은 모양(`name`, `correlation`, `payload`)이다. 받기 태스크·경계·중간 받기를 시험할 때 쓴다. 받을 곳이 없으면 `no_receiver`로 기록만 하고 케이스를 실패시키지 않는다.
 
-- `approvals`는 노드 id → 폼 응답이다.
+- `approvals`는 노드 id → 폼 응답이다. **PC 실행의 전환 확인**(UI 태스크 전환·AI 태스크 확인 트리거)도 **그 태스크의 노드 id**로 적는다 — `{"decision": "approve"}`가 「계속」(결과 없이 넘어간다), `reject`가 「중단」(`ESCALATED`). **적지 않으면 「중단」으로 친다**(기다리지 않는다 — 적지 않은 위임과 같은 결이고, 경계를 시험하는 길이다). `manual` 케이스는 결재처럼 기다린다 ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)).
 - `answered_by`(선택): 노드 id → **답한 사람** 이름. 그림이 `answered_by_as`로 받는 값이다. 적지 않으면 「시험 케이스」다 — Studio에는 「Studio 사용자」가 없어 지어내지 않는다 ([ADR-0096](../decisions/0096-answerer-into-variables.md)).
 - `inputs`에는 **출처가 가상 직원인 입력도** 다른 입력처럼 적는다 — 현장에서는 Center가 넣는 값을 시험에서는 케이스가 적는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
 - `delegations`(선택): 노드 id → **PC 위임이 돌려주는 값**(그 Bot이 선언한 `outputs`). Studio에는 부를 PC Bot의 그림이 없고(다른 패키지다) 있다 해도 UI 태스크라 설계자 PC에서 화면을 만지게 되므로, **케이스가 결과를 적는다** — 결재 답·메시지와 같은 결이다 ([ADR-0062](../decisions/0062-pc-delegation.md) §2). **적어 두지 않은 위임은 그 자리에서 실패**다(기다리지 않는다 — 기다리게 두면 끝나지 않는다: 현장 PC도 Center도 없다). 사유 코드는 **`DELEGATION_FAILED`**, 진짜 PC 실행이 실패했을 때와 **같은 것**이다 — 그래서 적어 두지 않는 것이 **그림의 오류 경계를 시험하는 길**이다. `manual`은 이것을 막지 않는다(결재는 사람이 창에서 답할 수 있지만 위임은 Studio에 답할 사람이 없다).
@@ -423,3 +423,4 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 | 2026-10-05 | 1 | UI 태스크 스텝 `value`의 `{변수}`·`{변수.키}`를 수행기가 채운다고 적었다 — 채우지 않아 `{신청.이름}`이 글자 그대로 입력되고 있었다 (M4 인수 시험에서 발견) | 0033 |
 | 2026-10-07 | 1 | 수동 작업(확인)은 **늘 현장**이고 서버 BPM 프로세스에 넣을 수 없다고 바로잡았다 — 「서버에서는 Center 결재함으로 간다」가 C1 R2(`human.confirmation=false`)·C6(확인은 올리지 않는다)와 어긋나 있었다. 결재 현장 연결을 설계하다 드러났다 | [0038](../decisions/0038-approval-request-channel.md) |
 | 2026-10-25 | 1 | **답한 사람** `chk:approval.answered_by_as`·`answered_via_as`(선택)와 케이스 `answered_by`(선택)를 더했다 — B2가 이름을, B11이 출처를 본다. 선택 칸이라 **옛 그림은 그대로 읽힌다** (바깥 요청 NowView R1) | [0096](../decisions/0096-answerer-into-variables.md) |
+| 2026-10-29 | 1 | **PC 전환 → 사람 확인** — 오류 경계 `ESCALATED`는 PC에서 이름으로 달았을 때만 받고, 아니면 현장 확인으로 멈춘다(「계속」 = 결과 없이 넘어감, 「중단」 = `ESCALATED`). 케이스 `approvals`가 그 태스크 노드 id로 답하고 **적지 않으면 「중단」**이다. 칸은 그대로다 | [0106](../decisions/0106-pc-escalation-asks-a-person.md) |
