@@ -93,6 +93,14 @@ GATEWAY_KINDS = frozenset({"ExclusiveGateway", "ParallelGateway", "InclusiveGate
 EVENT_KINDS = frozenset(
     {"StartEvent", "IntermediateCatchEvent", "IntermediateThrowEvent", "BoundaryEvent", "EndEvent", "ReceiveTask"}
 )
+#: 파일 출력 편집기를 붙이는 요소 (C14 §파일 출력 — `chk:dataOutput`).
+DATA_OBJECT_KINDS = frozenset({"DataObjectReference"})
+#: 정의 자체 — 「기본값」 탭(`chk:defaults`)을 붙인다. 빈 상태의 단추로만 들어온다.
+PROCESS_KINDS = frozenset({"Process"})
+#: 편집기가 `chk:<이름>` 하나를 **통째로** 쓰고, `None`이면 그 요소를 지우는 자리.
+WHOLE_OR_NONE = ("defaults", "dataOutput")
+#: 빈 상태의 단추 (STU-04).
+PROCESS_BUTTON = "BPM 프로세스 기본값"
 
 
 def kind_label(bpmn_type: str) -> str:
@@ -196,6 +204,8 @@ class Properties(QWidget):
 
     #: `(노드 id, 고칠 것)` — 메인 창이 캔버스에 넘긴다.
     applying = Signal(str, dict)
+    #: 빈 상태의 「BPM 프로세스 기본값」 — 메인 창이 열린 정의를 읽어 `show_element`로 보인다.
+    process_wanted = Signal()
 
     def __init__(self, parent: QWidget | None = None, extensions: Any = None) -> None:
         super().__init__(parent)
@@ -208,6 +218,7 @@ class Properties(QWidget):
         #: 편집기를 담은 스크롤 영역 — 탭에 들어가는 것은 이것이다 (STU-14).
         self._editor_holder: QScrollArea | None = None
         self._editor_baseline: dict[str, Any] = {}
+        self._editor_baseline_body: Any = None
         #: 그 편집기가 고치는 자리 — `"task"`(STU-13) 또는 `"serviceCall"`(STU-14).
         self._editor_key = ""
         #: 반복 편집기 — 다른 편집기와 **함께** 붙으므로 자리가 따로다 (`chk:loop`만 만진다).
@@ -229,6 +240,11 @@ class Properties(QWidget):
         self.head = QLabel(EMPTY_TEXT, self)
         self.head.setWordWrap(True)
         self.head.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        self.process_button = QPushButton(PROCESS_BUTTON, self)
+        self.process_button.setObjectName("Secondary")
+        self.process_button.setToolTip("열린 정의 자체 — 모든 AI 태스크의 기본값(chk:defaults)을 고칩니다.")
+        self.process_button.clicked.connect(self.process_wanted)
+        self.process_button.setEnabled(False)
 
         self.name_box = QLineEdit(self)
         self.doc_box = QPlainTextEdit(self)
@@ -271,6 +287,7 @@ class Properties(QWidget):
 
         layout = QVBoxLayout(self)
         layout.addWidget(self.head)
+        layout.addWidget(self.process_button)
         layout.addWidget(self.tabs, 1)
         layout.addLayout(bottom)
 
@@ -288,6 +305,7 @@ class Properties(QWidget):
         self.node_id = ""
         self.loaded = {}
         self.head.setText(EMPTY_TEXT)
+        self.process_button.setVisible(True)
         self.tabs.setVisible(False)
         self.error.setText("")
         self.apply_button.setEnabled(False)
@@ -301,6 +319,7 @@ class Properties(QWidget):
             f"<b>{found.get('name') or self.node_id}</b> · {kind_label(bpmn_type)}"
             f" <span style='opacity:0.6'>{self.node_id}</span>"
         )
+        self.process_button.setVisible(False)
         self.tabs.setVisible(True)
         self.name_box.setText(str(found.get("name") or ""))
         self.doc_box.setPlainText(str(found.get("documentation") or ""))
@@ -316,6 +335,10 @@ class Properties(QWidget):
         self.error.setText("")
         self.apply_button.setEnabled(False)
 
+    def set_definition_open(self, opened: bool) -> None:
+        """열린 정의가 있나 — 없으면 「BPM 프로세스 기본값」을 끈다 (메인 창이 메뉴와 함께 부른다)."""
+        self.process_button.setEnabled(opened)
+
     def _show_editor(self, chk: dict[str, Any]) -> None:
         """태스크에 맞는 편집기를 탭으로 끼운다.
 
@@ -327,6 +350,12 @@ class Properties(QWidget):
           `type`으로 찾아 붙일 뿐이다 (ADR-0018).
         """
         self._detach_editor()
+        if str(self.loaded.get("type") or "") in PROCESS_KINDS:
+            self._attach_defaults_editor(chk)
+            return
+        if str(self.loaded.get("type") or "") in DATA_OBJECT_KINDS:
+            self._attach_data_output_editor(chk)
+            return
         if str(self.loaded.get("type") or "") in GATEWAY_KINDS:
             self._attach_gateway_editor()
             return
@@ -414,6 +443,22 @@ class Properties(QWidget):
         made.load({"calledElement": str(self.loaded.get("calledElement") or ""), "call": _body_of(chk, "call") or {}})
         self._attach(made, TAB_LABEL, key="call")
 
+    def _attach_defaults_editor(self, chk: dict[str, Any]) -> None:
+        """정의 자체 — `chk:defaults`만. `chk:process`는 「변수」 탭·STU-06·STU-15의 것이다."""
+        from chaeksas.studio.defaults_editor import TAB_LABEL, DefaultsEditor  # noqa: PLC0415
+
+        made = DefaultsEditor(self)
+        made.load(_body_of(chk, "defaults"))
+        self._attach(made, TAB_LABEL, key="defaults")
+
+    def _attach_data_output_editor(self, chk: dict[str, Any]) -> None:
+        """데이터 객체 — `chk:dataOutput`. 아직 없는 데이터 객체에도 붙는다 (켜고 적용하면 생긴다)."""
+        from chaeksas.studio.data_output_editor import TAB_LABEL, DataOutputEditor  # noqa: PLC0415
+
+        made = DataOutputEditor(self, names=self.known_names)
+        made.load(_body_of(chk, "dataOutput"))
+        self._attach(made, TAB_LABEL, key="dataOutput")
+
     def _attach_gateway_editor(self) -> None:
         """게이트웨이 — 표준 `default`(기본 흐름) 하나. 흐름 요약은 캔버스가 준다 (`gateway`)."""
         from chaeksas.studio.gateway_editor import TAB_LABEL, GatewayEditor  # noqa: PLC0415
@@ -479,7 +524,10 @@ class Properties(QWidget):
     def _attach(self, found: Any, label: str, *, key: str) -> None:
         self._editor = found
         self._editor_key = key
-        self._editor_baseline = dict(found.dump())
+        made = found.dump()
+        # `defaults`·`dataOutput`는 `None`(없음)을 돌려줄 수 있다 — 그 둘은 이것과 견준다.
+        self._editor_baseline_body = made
+        self._editor_baseline = dict(made) if isinstance(made, Mapping) else {}
         changed = getattr(found, "changed", None)
         if changed is not None:
             changed.connect(self._refresh_apply)
@@ -510,6 +558,7 @@ class Properties(QWidget):
         self._editor = None
         self._editor_key = ""
         self._editor_baseline = {}
+        self._editor_baseline_body = None
 
     def _editor_patch(self) -> tuple[dict[str, Any] | None, str | None]:
         """편집기가 바꾼 것 → `chk.task.data`. 오류가 있으면 **「적용」을 막는다**."""
@@ -590,6 +639,20 @@ class Properties(QWidget):
         if bpmn_type in SCRIPT_KINDS and self.script_box.toPlainText() != (self.loaded.get("script") or ""):
             changes["script"] = self.script_box.toPlainText()
 
+        if self._editor_key in WHOLE_OR_NONE and self._editor is not None:
+            # 본문 통째로, 비우면 `None` — 그림에 없던 것을 지우라고 보내지 않는다(걸음만 는다).
+            whole = self._editor.dump()
+            if whole != self._editor_baseline_body:
+                errors, _ = self._editor.problems()
+                if errors:
+                    return {}, errors[0]
+                existed = _body_of(dict(self.loaded.get("chk") or {}), self._editor_key) is not None
+                if whole is not None:
+                    changes["chk"] = {self._editor_key: json.dumps(whole, ensure_ascii=False, indent=2)}
+                elif existed:
+                    changes["chk"] = {self._editor_key: None}
+            return changes, None
+
         data, problem = self._editor_patch()
         if problem is not None:
             return {}, problem
@@ -631,8 +694,7 @@ class Properties(QWidget):
             # `chk:task`는 `{type, extension, data}` **통째로** 오간다 — 본문만 보내면
             # 고칠 때마다 `type`·`extension`이 날아간다 (C1 — 패키지가 그 확장을 요구하지 않게 된다).
             task = _task_of(dict(self.loaded.get("chk") or {})) or {}
-            whole = {**task, "data": data}
-            changes["chk"] = {"task": json.dumps(whole, ensure_ascii=False, indent=2)}
+            changes["chk"] = {"task": json.dumps({**task, "data": data}, ensure_ascii=False, indent=2)}
             return changes, None
 
         text = self.json_box.toPlainText()
@@ -676,11 +738,14 @@ class Properties(QWidget):
 __all__ = [
     "CALL_KINDS",
     "CONDITION_KINDS",
+    "DATA_OBJECT_KINDS",
     "EMPTY_TEXT",
     "EVENT_KINDS",
     "GATEWAY_KINDS",
     "KINDS",
     "LOOP_KINDS",
+    "PROCESS_BUTTON",
+    "PROCESS_KINDS",
     "SCRIPT_KINDS",
     "SEND_KINDS",
     "Properties",

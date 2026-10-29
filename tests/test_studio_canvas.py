@@ -838,3 +838,41 @@ def test_a_receive_task_message_round_trips(canvas: Any) -> None:
     assert process.message_name(node.message_ref) == "입금"
     receive = node.prop("receive")
     assert receive is not None and receive.correlation == "주문번호"
+
+
+def test_a_data_output_round_trips_and_goes_away(canvas: Any) -> None:
+    """STU-04 「파일 출력」 — 데이터 객체의 `chk:dataOutput`이 캔버스로 오가고 `None`이면 사라진다."""
+    from chaeksas.contracts.bpmn_ext import DataOutput
+
+    canvas.call_sync("importXML", (EXAMPLES / "bx01_invoice_reconciliation.bpmn").read_text(encoding="utf-8"))
+    found = canvas.call_sync("properties", "Data_Table")
+    assert found["type"] == "DataObjectReference" and "dataOutput" in found["chk"]
+
+    body = {"path": "결과/대사.csv", "format": "csv", "variables": ["대사표"], "append": True, "store_as": "대사파일"}
+    canvas.call_sync("setProperties", "Data_Table", {"chk": {"dataOutput": json.dumps(body, ensure_ascii=False)}})
+    node = next(n for n in read_process(canvas.save_xml()).all_nodes() if n.id == "Data_Table")
+    assert node.prop("dataOutput") == DataOutput.model_validate(body)
+
+    canvas.call_sync("setProperties", "Data_Table", {"chk": {"dataOutput": None}})
+    node = next(n for n in read_process(canvas.save_xml()).all_nodes() if n.id == "Data_Table")
+    assert node.prop("dataOutput") is None
+
+
+def test_the_defaults_round_trip_beside_the_process_info(canvas: Any) -> None:
+    """STU-04 「기본값」 — 정의 자체의 `chk:defaults`만 바꿔도 `chk:process`는 남는다."""
+    from chaeksas.contracts.bpmn_ext import Defaults
+
+    canvas.create_empty("Proc_defaults", "기본값 시험")
+    process = {"run_location": "server", "outputs": ["결과"]}
+    canvas.call_sync("setProperties", "Proc_defaults", {"chk": {"process": json.dumps(process, ensure_ascii=False)}})
+    assert canvas.call_sync("properties", "Proc_defaults")["type"] == "Process"
+
+    body = {"limits": {"max_steps": 12}, "forbidden_actions": ["삭제하지 않는다"]}
+    canvas.call_sync("setProperties", "Proc_defaults", {"chk": {"defaults": json.dumps(body, ensure_ascii=False)}})
+    drawn = read_process(canvas.save_xml())
+    assert drawn.defaults == Defaults.model_validate(body)
+    assert drawn.info.run_location == "server" and drawn.info.outputs == ["결과"]
+
+    canvas.call_sync("setProperties", "Proc_defaults", {"chk": {"defaults": None}})
+    drawn = read_process(canvas.save_xml())
+    assert drawn.defaults is None and drawn.info.outputs == ["결과"]
