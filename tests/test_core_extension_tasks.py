@@ -22,6 +22,7 @@ from typing import Any
 
 import pytest
 
+from chaeksas.contracts.approvals import request_id_for
 from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.core.engine import Engine, RunEnv, State
 from chaeksas.core.run_log import RunLog, summarize
@@ -181,15 +182,106 @@ def test_a_business_failure_goes_to_the_error_boundary(tmp_path: Path) -> None:
     assert run.variables.get("error_code") == "screen_changed"
 
 
-def test_an_escalation_reaches_the_escalated_boundary(tmp_path: Path) -> None:
-    """확장의 **전환**(`escalate: confirmation`)은 `ESCALATED`다 — C14의 경계가 그 코드로 받는다 (ADR-0105).
+def escalating() -> FakeExecutor:
+    return FakeExecutor(
+        outputs={"읽은값": "버려진다"},
+        fail=TaskFailed("ui_escalated", "화면을 확인해 주세요", escalate="confirmation"),
+    )
 
-    확장이 준 코드(`ui_escalated`)를 그대로 올리면 `ESCALATED` 경계가 받지 못한다.
+
+#: 서버 실행 — 확인에 답할 사람이 없다 (C1 R2).
+ON_SERVER = WITH_BOUNDARY.replace('"run_location": "pc"', '"run_location": "server"')
+
+#: `ESCALATED`를 **이름으로** 받는 경계 — 흐름으로 받겠다고 적은 그림 (ADR-0106 §2).
+NAMED_ESCALATED = WITH_BOUNDARY.replace(
+    '<bpmn:process id="Proc_ext"',
+    '<bpmn:error id="Err_Esc" name="ESCALATED" errorCode="ESCALATED" />\n  <bpmn:process id="Proc_ext"',
+).replace('<bpmn:errorEventDefinition id="err" />', '<bpmn:errorEventDefinition id="err" errorRef="Err_Esc" />')
+
+
+def test_on_the_server_an_escalation_reaches_the_escalated_boundary(tmp_path: Path) -> None:
+    """서버에서 확장의 **전환**(`escalate: confirmation`)은 `ESCALATED`다 — C14의 경계가 그 코드로 받는다
+    (ADR-0105·0106). 확장이 준 코드(`ui_escalated`)를 그대로 올리면 `ESCALATED` 경계가 받지 못한다.
     """
-    executor = FakeExecutor(fail=TaskFailed("ui_escalated", "화면을 확인해 주세요", escalate="confirmation"))
-    run = run_it(tmp_path, WITH_BOUNDARY, Host({"demo_task": executor}))
+    run = run_it(tmp_path, ON_SERVER, Host({"demo_task": escalating()}))
     assert run.state == State.DONE
     assert run.variables.get("error_code") == "ESCALATED"
+    assert not run.pendings, "서버는 사람에게 묻지 않는다"
+
+
+def test_a_named_escalated_boundary_wins_over_asking_on_a_pc(tmp_path: Path) -> None:
+    """PC여도 그림이 `ESCALATED`를 **이름으로** 받으면 확인을 띄우지 않는다 (ADR-0106 §2)."""
+    run = run_it(tmp_path, NAMED_ESCALATED, Host({"demo_task": escalating()}))
+    assert run.state == State.DONE and not run.pendings
+    assert run.variables.get("error_code") == "ESCALATED"
+
+
+def test_on_a_pc_an_escalation_asks_a_person_in_the_field(tmp_path: Path) -> None:
+    """PC에서는 **그 자리에서 현장 확인 하나**로 멈춘다 (C10 `escalated`, ADR-0106) — `manualTask`와 같은 요청."""
+    run = run_it(tmp_path, PROCESS, Host({"demo_task": escalating()}))
+    assert run.state == State.WAITING
+    (pending,) = run.pendings.values()
+    assert pending.escalation and pending.layer == "confirmation" and pending.where == "field"
+    assert pending.node_id == "Task_Ext" and pending.form is None
+    assert pending.request_id == request_id_for(RUN, "Task_Ext", 1), "결재·확인과 같은 규칙이다"
+    assert pending.title == "실행 확인 요청 — 확장 태스크"
+    assert pending.description == "화면을 확인해 주세요"
+    asked = [one for one in events(tmp_path) if one["kind"] == "human_requested"]
+    assert asked and asked[-1]["data"]["layer"] == "confirmation" and asked[-1]["data"]["where"] == "field"
+
+
+def test_continue_passes_the_task_without_doing_it_again(tmp_path: Path) -> None:
+    """「계속」은 **다시 하지 않고 넘어간다** — 결과 변수도 `decision`도 채우지 않는다 (ADR-0106 §4)."""
+    executor = escalating()
+    engine = Engine()
+    run = engine.start(
+        read_process(PROCESS), run_id=RUN, log=RunLog(run_id=RUN, path=tmp_path / "run.jsonl"),
+        env=RunEnv(extensions=Host({"demo_task": executor})),
+    )
+    engine.run_until_blocked(run)
+    (request_id,) = run.pendings
+    assert engine.run_until_blocked(run) is State.WAITING
+    engine.answer(run, request_id, {"decision": "approve"}, answered_by="현장")
+    assert engine.run_until_blocked(run) is State.DONE
+    assert len(executor.seen) == 1, "다시 하면 입력이 두 번 들어간다"
+    assert "읽은값" not in run.variables and "decision" not in run.variables
+    finished = [one for one in events(tmp_path) if one["kind"] == "run_finished"][-1]["data"]
+    assert finished["confirmations"] == 1, "확인으로 센다 (CON-02 확인률)"
+
+
+@pytest.mark.parametrize(("xml", "state"), [(PROCESS, State.FAILED), (WITH_BOUNDARY, State.DONE)])
+def test_stop_is_an_escalated_failure(tmp_path: Path, xml: str, state: State) -> None:
+    """「중단」은 `ESCALATED` 업무 실패다 — 코드 없는 경계가 받고, 없으면 실행이 실패로 끝난다 (ADR-0106 §5)."""
+    engine = Engine()
+    run = engine.start(
+        read_process(xml), run_id=RUN, log=RunLog(run_id=RUN, path=tmp_path / "run.jsonl"),
+        env=RunEnv(extensions=Host({"demo_task": escalating()})),
+    )
+    engine.run_until_blocked(run)
+    (request_id,) = run.pendings
+    engine.answer(run, request_id, {"decision": "reject"}, answered_by="현장")
+    assert engine.run_until_blocked(run) is state
+    if state is State.DONE:
+        assert run.variables["error_code"] == "ESCALATED"
+        assert "화면을 확인해 주세요" in run.variables["error_message"]
+    else:
+        assert run.error is not None and run.error.code == "ESCALATED"
+
+
+def test_an_escalation_answer_is_a_decision(tmp_path: Path) -> None:
+    from chaeksas.core.engine import EngineError
+
+    engine = Engine()
+    run = engine.start(
+        read_process(PROCESS), run_id=RUN, log=RunLog(run_id=RUN, path=tmp_path / "run.jsonl"),
+        env=RunEnv(extensions=Host({"demo_task": escalating()})),
+    )
+    engine.run_until_blocked(run)
+    (request_id,) = run.pendings
+    with pytest.raises(EngineError) as caught:
+        engine.answer(run, request_id, {"메모": "봤다"}, answered_by="현장")
+    assert caught.value.code == "answer_incomplete"
+    assert request_id in run.pendings, "틀린 답은 요청을 지우지 않는다"
 
 
 def test_a_missing_extension_is_a_setup_error(tmp_path: Path) -> None:

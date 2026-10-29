@@ -15,6 +15,9 @@
 | `expected` | 끝난 뒤 C14 비교 규칙(`matches`)으로 판정. 비면 **비교하지 않는다** |
 | `manual` | 자동 응답을 쓰지 않는다 — 실제 결재 창은 3e-4다 (지금은 기다리다 시간이 지난다) |
 
+**PC 전환 확인**(ADR-0106)은 `approvals`에 그 태스크 노드 id로 적고, **적지 않으면 「중단」**이다 —
+적지 않은 위임과 같은 결이라 `ESCALATED` 경계를 시험하는 길이 된다.
+
 자율 수행이 배운 것(`Run.learned`)은 **패키지 안 `memory/specs.json`**에 적는다 (ADR-0028) —
 엔진은 파일을 쓰지 않으므로 그 일이 여기 있다.
 """
@@ -32,8 +35,10 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from chaeksas.contracts.bpmn_ext import CASE_ANSWERER, Case, CaseFile, CaseMessage, duration_hours, matches
 from chaeksas.core.delegation import DelegationCall, DelegationError
 from chaeksas.core.engine import (
+    DECISION_KEY,
     DELEGATION_FINISHED,
     ERROR_DELEGATION_FAILED,
+    ESCALATION_STOP,
     Engine,
     EngineError,
     Run,
@@ -401,6 +406,10 @@ class CaseRun(QObject):
         if case is not None and not case.manual:
             for request_id, pending in list(run.pendings.items()):
                 answer = case.approvals.get(pending.node_id)
+                if answer is None and pending.escalation:
+                    # **적지 않은 전환 확인은 「중단」이다** (ADR-0106) — 적지 않은 위임과 같은 결이라
+                    # `ESCALATED` 경계를 시험하는 길이 된다. 기다리면 답할 사람이 없어 끝나지 않는다.
+                    answer = {DECISION_KEY: ESCALATION_STOP}
                 if answer is None:
                     continue  # **적지 않은 결재는 기다린다** (기한 초과 시험, C14)
                 self.said.emit(f"[케이스] 결재 자동 응답: {pending.node_id}")

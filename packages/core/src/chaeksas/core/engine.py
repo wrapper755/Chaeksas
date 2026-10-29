@@ -65,6 +65,7 @@ from chaeksas.core.run_state import (
     ERROR_APPROVAL_WITHDRAWN,
     ERROR_CODE_VAR,
     ERROR_DELEGATION_FAILED,
+    ERROR_ESCALATED,
     ERROR_MESSAGE_VAR,
     ERROR_SEND_FAILED,
     ERROR_TASK_FAILED,
@@ -102,6 +103,10 @@ from chaeksas.core.run_state import (
 from chaeksas.core.services import OpCall, OpOutcome, ServiceCallError
 
 log = logging.getLogger(__name__)
+
+#: PC 전환 확인의 답 (C6 `decision`, ADR-0106) — 「계속」·「중단」.
+ESCALATION_CONTINUE = "approve"
+ESCALATION_STOP = "reject"
 
 
 def _as_duration(value: str, *, node_id: str) -> timedelta:
@@ -1025,6 +1030,8 @@ class Engine:
             raise EngineError(
                 f"기다리는 요청이 아니다: {request_id} (기다리는 것: {waiting})", code="not_waiting"
             )
+        if pending.escalation:
+            return self._escalation_answered(run, pending, token, answer, answered_by, answered_via)
 
         missing = _missing_fields(pending.form, answer)
         if missing:
@@ -1056,6 +1063,55 @@ class Engine:
             return self._handle_failure(context, EngineError(e.reason, node_id=node.id, code="expr_error"))
         except EngineError as e:
             # 답 뒤에 쓰는 파일이 실패할 수 있다 — 그것도 오류 경계가 받는다.
+            return self._handle_failure(context, e)
+
+    def _escalation_answered(
+        self,
+        run: Run,
+        pending: Pending,
+        token: Token,
+        answer: Mapping[str, Any],
+        answered_by: str,
+        answered_via: str | None,
+    ) -> State:
+        """PC 전환의 확인에 답이 왔다 (ADR-0106).
+
+        「계속」(`approve`)은 그 태스크를 **다시 하지 않고 지나간다** — 사람이 화면에서 마쳤다고 본다.
+        결과 변수는 채우지 않고 `decision`도 변수에 넣지 않는다(그림이 적은 이름이 아니다).
+        「중단」(`reject`)은 `ESCALATED` 업무 실패로 오류 경계에 넘긴다 — 없으면 실행 실패다.
+        """
+        decision = answer.get(DECISION_KEY)
+        if decision not in (ESCALATION_CONTINUE, ESCALATION_STOP):
+            raise EngineError(
+                f"전환 확인의 답은 decision(approve·reject) 하나다: {decision!r}",
+                node_id=pending.node_id,
+                code="answer_incomplete",
+            )
+        run.log.emit(
+            "human_answered",
+            node_id=pending.node_id,
+            request_id=pending.request_id,
+            answered_by=answered_by,
+            **({"answered_via": answered_via} if answered_via else {}),
+        )
+        del run.pendings[pending.request_id]
+        token.waiting_for = None
+        self.disarm(run, token.id)
+        node = run.node(pending.node_id)
+        context = Context(engine=self, run=run, token=token, node=node)
+        if decision == ESCALATION_STOP:
+            error = TaskFailed(
+                f"사람이 중단을 골랐습니다 ({pending.description or '전환'})",
+                node_id=node.id,
+                code=ERROR_ESCALATED,
+            )
+            return self._handle_failure(context, error)
+        context.emit("log", level="info", message="사람이 계속을 골랐다 — 다시 하지 않고 넘어간다")
+        try:
+            return self._apply(context, Go())
+        except ExprError as e:
+            return self._handle_failure(context, EngineError(e.reason, node_id=node.id, code="expr_error"))
+        except EngineError as e:
             return self._handle_failure(context, e)
 
     def delegation_done(
@@ -1238,7 +1294,10 @@ __all__ = [
     "ERROR_APPROVAL_EXPIRED",
     "ERROR_APPROVAL_WITHDRAWN",
     "ERROR_DELEGATION_FAILED",
+    "ERROR_ESCALATED",
     "ERROR_SEND_FAILED",
+    "ESCALATION_CONTINUE",
+    "ESCALATION_STOP",
     "ERROR_TASK_FAILED",
     "FAILED_TASK_VAR",
     "MAX_STEPS",
