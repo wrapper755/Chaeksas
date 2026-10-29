@@ -48,13 +48,13 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | 요소 | JSON 필드 | 뜻 |
 | --- | --- | --- |
 | `chk:process` | `run_location`(`server`\|`pc`), `extensions`(`[{id, version, definition_hash?}]` — **외부 확장은 `definition_hash`로 정의를 고정한다**: 적어 두면 빌드가 C1 `requires.extensions`로 그대로 옮기고, 받는 쪽이 「승인받은 그 정의인가」를 대조한다. **비워 두면 고정하지 않는다** — 막지 않고 Studio가 경고한다, [ADR-0060](../decisions/0060-pinning-external-definitions.md). 적는 자리는 STU-15다), `inputs`(`[{name, type, required, description, default?, source?}]` — 메시지 본문으로 들어오는 값도 여기에 선언. `source`는 **값을 누가 넣나**, 아래 「입력의 값 출처」), `outputs`(`[name]`) | BPM 프로세스 정보 (STU-06). 패키지 매니페스트(C1)는 빌드 때 이것을 모아 만든다 |
-| `chk:defaults` | `limits`(`{timeout_s, max_steps}`), `forbidden_actions[]`, `confirm_triggers[]`, `web`(`{profile, session}`), `desktop`(`{app}` — 띄울 앱 이름) | 모든 AI·UI 태스크의 기본값. 태스크에 적은 값이 이긴다. 확장 태스크(`chk:task`)에는 `web`·`desktop`이 **속성의 기본값**으로 넘어간다 — 태스크 속성에 같은 이름이 없을 때만 엔진이 채운다 ([ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
+| `chk:defaults` | `limits`(`{timeout_s, max_steps}`), `forbidden_actions[]`, `confirm_triggers[]`, `web`(`{profile, session}`), `desktop`(`{app}` — 띄울 앱 이름) | 모든 AI 태스크의 기본값. 태스크에 적은 값이 이긴다 — `limits`는 칸마다, 목록 둘은 태스크에 하나라도 적었으면 그것만 ([ADR-0105](../decisions/0105-ai-task-limits-and-instructions.md)). 확장 태스크(`chk:task`)에는 `web`·`desktop`이 **속성의 기본값**으로 넘어간다 — 태스크 속성에 같은 이름이 없을 때만 엔진이 채운다 ([ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 
 ## 태스크 종류와 속성
 
 | 태스크 종류 (화면) | BPMN 요소 | 속성 요소 | 필드 |
 | --- | --- | --- | --- |
-| AI 태스크 | `serviceTask` | `chk:aiTask` | `goal`(Markdown — `## 상황`·`## 할 일`·`## 판단하지 않는 것`·`## 반환` 권장), `domain`(`llm`\|`api`\|`doc`\|`web`\|`desktop`), `tools[]`, `params`(업무 파라미터, 재생 때 그대로 쓰인다), `results`(`{이름: 타입}`), `replay`(`plan`\|`full`\|`none`, 기본 `plan` — 아래 「재생」), `limits`, `forbidden_actions[]`, `confirm_triggers[]`, `web`/`desktop`(환경 설정) |
+| AI 태스크 | `serviceTask` | `chk:aiTask` | `goal`(Markdown — `## 상황`·`## 할 일`·`## 판단하지 않는 것`·`## 반환` 권장), `domain`(`llm`\|`api`\|`doc`\|`web`\|`desktop`), `tools[]`, `params`(업무 파라미터, 재생 때 그대로 쓰인다), `results`(`{이름: 타입}`), `replay`(`plan`\|`full`\|`none`, 기본 `plan` — 아래 「재생」), `limits`(`timeout_s`·`max_steps` — 아래 「한도와 지시문」), `forbidden_actions[]`, `confirm_triggers[]`, `web`/`desktop`(환경 설정) |
 | UI 태스크 (UI 자동화 확장) | `serviceTask` | `chk:task` `type="ui_task"` `extension="ui-automation"` | `page_id`, `start_url?`, `steps[]`(`{key, action, value?, result?, navigates?}`), `goal?`(자율 수행 전용 — 스텝 대신 목표 한 줄. 쓸 값은 목표 안에 `{이름}`으로 적고 **이름만** 모델에 간다, [ADR-0035](../decisions/0035-ui-goal-planning.md)), `results?`(목표 모드: 읽은 값을 담을 변수 이름들), `heal`(기본 true). 읽기 스텝의 `result` 변수: `read_table`은 **줄 목록**(`[{머리글: 값}]`), `read`와 표의 칸은 **수 모양이면 수**다 ([ADR-0036](../decisions/0036-screen-read-values.md), C10), `close_browser`. 스텝 `value`의 `{변수}`·`{변수.키}`(사전 안의 값)는 **수행기가 실행 시점의 변수로 채운다** — 사전·목록 값은 JSON으로, `{{`·`}}`는 중괄호 글자. 모르는 이름이면 업무 실패다 (글자 그대로 입력하지 않는다, [ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
 | 서비스 앱 태스크 | `serviceTask` | `chk:serviceCall` | `app_id`, `operation`, `input`(`{필드: 식}`), `output`(`{변수: 필드}`), `timeout_s`, `retry`(`{max, on: [503, 429]}` — C15 실패 코드 `dependency_down`=503·`rate_limited`=429·`timeout`=504로 읽는다) |
 | 다른 확장 태스크 | `serviceTask` | `chk:task` `type="<확장 태스크 종류>"` `extension="<id>"` | 그 확장의 계약이 정한 JSON |
@@ -225,6 +225,17 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 - `append: true`는 `md`·`txt`·`csv`만 된다 (`json`·`xlsx`는 이어 붙일 수 없다 — 검사 오류). `csv`를 이어 쓸 때는 열 이름 줄을 다시 쓰지 않는다.
 - 파일은 **UTF-8**로 쓴다 (`csv`는 Excel이 바로 열 수 있게 BOM을 붙인다). 줄 끝은 `\n`이다.
 
+### AI 태스크의 한도와 지시문
+
+[ADR-0105](../decisions/0105-ai-task-limits-and-instructions.md). 값은 태스크 → `chk:defaults` 순이다.
+
+| 칸 | 엔진이 하는 일 | 넘거나 걸리면 |
+| --- | --- | --- |
+| `limits.max_steps` | 모델에게 물을 수 있는 횟수 (기본 8, `web`·`desktop`은 30) | 실행 오류 (경계로 받지 않는다) |
+| `limits.timeout_s` | 자율 수행 루프의 벽시계 한도(초). 모델에게 묻기 전·도구를 부르기 전에 본다 — **하던 호출을 끊지 않는다**. 재생에는 걸지 않는다 | 업무 실패 `TASK_FAILED` |
+| `forbidden_actions[]` | 첫 물음에 「## 하지 않을 것」으로 붙인다. **지시문이다 — 막는 장치가 아니다**(막는 것은 `tools[]` 허용 목록이다) | — |
+| `confirm_triggers[]` | 첫 물음에 번호를 매겨 붙이고, 그 상황이면 결과 대신 `{"_confirm": 번호}`만 내라고 한다 | 업무 실패 `ESCALATED` — 메시지는 그 번호의 트리거 글 |
+
 ### AI 태스크가 보는 값
 
 **`web`·`desktop` AI 태스크의 도구** ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md)): 그 환경을 기여한 확장(C13 `agent_environments`)의 도구가 **저절로 허용 목록에 더해진다** — `tools[]`에 적지 않는다. 데스크톱은 `desktop_look`(가린 UIA 트리)과 `desktop_act`(`target` 로케이터 조건·`action`·`value?`)다. 앱은 `desktop.app`(기본값 `chk:defaults.desktop.app`)이고, 그 PC Worker의 `desktop-apps.json`에 창 조건이 있어야 붙는다 (C10). 환경이 없는 PC에서는 그림·설치 오류다. UI 동작 하나가 한 단계라 **기본 `max_steps`는 30**이다 (다른 domain은 8). 단계 한도는 태스크의 `limits` → `chk:defaults.limits` → 기본값 순으로 정한다.
@@ -272,7 +283,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | 메시지 시작·받기·경계·중간 받기 | `messageRef` → `bpmn:message name`. 받기 태스크 외의 받기(경계·중간 받기)도 상관 키는 `chk:receive{correlation}`로 둔다 | 외부 시스템이 Center 메시지 API로 보낸다 (C12, PC는 Bot UI 메시지 수신). 상관 키가 없으면 메시지 시작만 깨운다 |
 | 신호 | `signalRef` | 한 실행 안의 가지 사이에서만 |
 | 이정표 | `intermediateThrowEvent`에 **이벤트 정의를 두지 않는다** | 지나가기만 하면서 실행 기록에 `node_state`(`task_type: milestone`)를 남긴다. 「어디까지 왔는지」를 콘솔·Studio가 이것으로 보인다. 노드 `name`이 이정표 이름이다 (id 접두어 `Ms_`) |
-| 오류 경계 | `errorRef` → `bpmn:error errorCode` | 표준 코드: `TASK_FAILED`(AI·UI·서비스 앱 태스크 실패), `SEND_FAILED`(메일·웹훅), `ESCALATED`(UI 태스크 전환을 사람 확인 대신 흐름으로 받을 때), `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`(Center 결재가 답 없이 끝남 — 관리자 회수·만료, C6·[ADR-0038](../decisions/0038-approval-request-channel.md)), `DELEGATION_FAILED`(예약). 오류 경로에는 `error_code`, `error_message`, `failed_task` 변수가 생긴다 |
+| 오류 경계 | `errorRef` → `bpmn:error errorCode` | 표준 코드: `TASK_FAILED`(AI·UI·서비스 앱 태스크 실패), `SEND_FAILED`(메일·웹훅), `ESCALATED`(UI 태스크 전환 — 확장의 `escalate: confirmation` — 과 AI 태스크의 확인 트리거를 흐름으로 받을 때. **PC에서 사람 확인으로 바로 넘기는 길은 아직 없다** — 지금은 PC·서버 모두 이 경계다), `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`(Center 결재가 답 없이 끝남 — 관리자 회수·만료, C6·[ADR-0038](../decisions/0038-approval-request-channel.md)), `DELEGATION_FAILED`(예약). 오류 경로에는 `error_code`, `error_message`, `failed_task` 변수가 생긴다 |
 | 조건 시작 | `conditionalEventDefinition` | **schema 1에서 쓰지 않는다** (프로토타입의 폴더 감시). 외부 시스템 메시지나 타이머로 바꾼다 |
 
 ## 시험 케이스 형식 (Studio, 패키지에 넣지 않음)

@@ -56,6 +56,9 @@ FAILED_TASK_VAR = "failed_task"
 #: 표준 오류 코드 (C14 §이벤트).
 ERROR_TASK_FAILED = "TASK_FAILED"
 ERROR_SEND_FAILED = "SEND_FAILED"
+#: **전환** — 사람이 봐야 할 상황이다: UI 태스크의 전환(확장의 `escalate: confirmation`)과 AI 태스크의
+#: 확인 트리거 (C14, ADR-0105). 업무 실패라 오류 경계가 받는다.
+ERROR_ESCALATED = "ESCALATED"
 #: Center 결재가 답 없이 끝남 — 관리자 회수·만료 (C14·C6, ADR-0038). 오류 경계가 받는다.
 ERROR_APPROVAL_WITHDRAWN = "APPROVAL_WITHDRAWN"
 ERROR_APPROVAL_EXPIRED = "APPROVAL_EXPIRED"
@@ -538,6 +541,7 @@ __all__ = [
     "CODE_UNSUPPORTED",
     "DECISION_KEY",
     "ERROR_CODE_VAR",
+    "ERROR_ESCALATED",
     "ERROR_MESSAGE_VAR",
     "ERROR_SEND_FAILED",
     "ERROR_TASK_FAILED",

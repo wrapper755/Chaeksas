@@ -3,8 +3,11 @@
 속성 패널이 `chk:aiTask`가 있는 태스크를 만나면 탭으로 끼운다. **규약은 결재·보내기·STU-14와 같다**
 (`load`/`dump`/`problems`/`changed`).
 
-- **적어 둔 것을 조용히 바꾸지 않는다.** 편집기가 다루지 않는 칸(`forbidden_actions`·`confirm_triggers`·
-  `limits.timeout_s`·`web` — 계약에 있지만 엔진·환경이 아직 읽지 않는다)은 읽은 그대로 돌려준다.
+- **적어 둔 것을 조용히 바꾸지 않는다.** 편집기가 다루지 않는 칸(`web` — 계약에 있지만 웹 환경을 주는
+  확장이 없다)은 읽은 그대로 돌려준다.
+- 「지시문」(`forbidden_actions`·`confirm_triggers`)과 「제한 시간」(`limits.timeout_s`)은 엔진이 읽는다
+  ([ADR-0105](../../../../docs/decisions/0105-ai-task-limits-and-instructions.md)) — 금지 행동은 **모델에게
+  주는 말일 뿐**이라 화면도 그렇게 말한다. 비우면 BPM 프로세스 기본값(`chk:defaults`)을 따른다.
   업무 파라미터도 그 줄을 고치지 않았으면 **읽은 값 그대로** 간다(글로 보였다 되읽으면 모양이 바뀔 수 있다).
 - 「적용」을 막는 것은 **엔진·검사가 거부할 것**뿐이다 — 결과 이름(빈 칸·겹침·변수 규칙, B8 타입),
   업무 파라미터(빈 이름·겹침·타입에 맞지 않는 값), 도구 없는 `replay: full`(B12), 서버에서 웹·데스크톱(B6).
@@ -86,6 +89,9 @@ VISIBLE_ROWS = 3
 SERVER_NO_SCREEN = "서버 BPM 프로세스는 웹·데스크톱 AI 태스크를 쓸 수 없습니다 (실행 전 검사 B6)."
 SCREEN_TOOLS_NOTE = "이 환경의 도구(화면 보기·조작)는 저절로 허용됩니다 — 여기 고르지 않습니다."
 NO_WEB_ENVIRONMENT = "웹 환경을 주는 확장이 아직 없습니다 — 실행 전 사전 점검이 막습니다."
+FORBIDDEN_NOTE = "모델에게 주는 말입니다 — 막지는 않습니다. 막으려면 허용 도구를 줄이세요."
+CONFIRM_NOTE = "모델이 이 상황을 만나면 멈추고, ESCALATED로 오류 경계에 넘깁니다. 경계를 다세요."
+INSTRUCTIONS_NOTE = "줄마다 하나. 비우면 BPM 프로세스 기본값을 따릅니다."
 
 _TRUE = {"true", "예", "참", "1", "yes"}
 _FALSE = {"false", "아니오", "거짓", "0", "no"}
@@ -167,6 +173,14 @@ class AiTaskEditor(QWidget):
         self.drop_result = QPushButton("줄 삭제", self)
         self.drop_result.setObjectName("Secondary")
 
+        # 지시문 (ADR-0105)
+        self.forbidden_box = QPlainTextEdit(self)
+        self.forbidden_box.setPlaceholderText("예: 삭제 버튼을 누르지 않는다")
+        self.forbidden_box.setFixedHeight(lines * 4)
+        self.confirm_box = QPlainTextEdit(self)
+        self.confirm_box.setPlaceholderText("예: 로그인 화면이 나타남")
+        self.confirm_box.setFixedHeight(lines * 4)
+
         # 재생·실행 제한
         self.replay_picks: dict[str, QRadioButton] = {}
         self.replay_group = QButtonGroup(self)
@@ -180,6 +194,13 @@ class AiTaskEditor(QWidget):
         self.max_steps_box.setRange(0, 500)
         self.max_steps_box.setSpecialValueText("기본")
         self.max_steps_box.setToolTip("비우면 BPM 프로세스 기본값, 그것도 없으면 8단계(웹·데스크톱은 30단계)입니다.")
+        self.timeout_box = QSpinBox(self)
+        self.timeout_box.setRange(0, 86_400)
+        self.timeout_box.setSpecialValueText("없음")
+        self.timeout_box.setToolTip(
+            "비우면 BPM 프로세스 기본값, 그것도 없으면 한도가 없습니다. 넘으면 업무 실패(TASK_FAILED)입니다 —"
+            " 하던 호출은 끊지 않고 다음 일을 시작하기 전에 멈춥니다."
+        )
 
         self.warning = QLabel("", self)
         self.warning.setWordWrap(True)
@@ -206,6 +227,7 @@ class AiTaskEditor(QWidget):
                                          "재생 때도 같은 값이 갑니다. 값은 타입에 맞게 — list·dict는 JSON."))
         layout.addWidget(self._table_box("결과 필드", self.results, self.add_result, self.drop_result,
                                          "모델이 돌려줄 필드입니다. 같은 이름의 변수가 됩니다."))
+        layout.addWidget(self._instructions_box())
         layout.addWidget(self._replay_box())
         layout.addWidget(self.note)
         layout.addWidget(self.warning)
@@ -270,6 +292,20 @@ class AiTaskEditor(QWidget):
         column.addWidget(table)
         return box
 
+    def _instructions_box(self) -> QGroupBox:
+        box = QGroupBox("지시문", self)
+        column = QVBoxLayout(box)
+        _tight(column)
+        form = QFormLayout()
+        form.setContentsMargins(0, 0, 0, 0)
+        form.addRow("하지 않을 것", self.forbidden_box)
+        form.addRow("", _muted(FORBIDDEN_NOTE, box))
+        form.addRow("멈추고 넘길 상황", self.confirm_box)
+        form.addRow("", _muted(CONFIRM_NOTE, box))
+        column.addLayout(form)
+        column.addWidget(_muted(INSTRUCTIONS_NOTE, box))
+        return box
+
     def _replay_box(self) -> QGroupBox:
         box = QGroupBox("재생·실행 제한", self)
         column = QVBoxLayout(box)
@@ -284,6 +320,7 @@ class AiTaskEditor(QWidget):
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
         form.addRow("최대 단계", self.max_steps_box)
+        form.addRow("제한 시간(초)", self.timeout_box)
         column.addLayout(form)
         return box
 
@@ -303,6 +340,9 @@ class AiTaskEditor(QWidget):
         self.drop_result.clicked.connect(lambda: self._drop_row(self.results))
         self.replay_group.buttonToggled.connect(self._touched)
         self.max_steps_box.valueChanged.connect(self._touched)
+        self.timeout_box.valueChanged.connect(self._touched)
+        self.forbidden_box.textChanged.connect(self._touched)
+        self.confirm_box.textChanged.connect(self._touched)
 
     # ── 규약 ──
 
@@ -347,6 +387,10 @@ class AiTaskEditor(QWidget):
         limits = body.get("limits")
         steps = limits.get("max_steps") if isinstance(limits, Mapping) else None
         self.max_steps_box.setValue(steps if isinstance(steps, int) and steps > 0 else 0)
+        timeout = limits.get("timeout_s") if isinstance(limits, Mapping) else None
+        self.timeout_box.setValue(timeout if isinstance(timeout, int) and timeout > 0 else 0)
+        self.forbidden_box.setPlainText(_lines_of(body.get("forbidden_actions")))
+        self.confirm_box.setPlainText(_lines_of(body.get("confirm_triggers")))
         self._quiet = False
         self._refresh()
 
@@ -365,7 +409,10 @@ class AiTaskEditor(QWidget):
         _put(out, "replay", replay if replay != REPLAY_DEFAULT or "replay" in self._loaded else None)
         limits = dict(self._loaded["limits"]) if isinstance(self._loaded.get("limits"), Mapping) else {}
         _put(limits, "max_steps", self.max_steps_box.value() or None)
+        _put(limits, "timeout_s", self.timeout_box.value() or None)
         _put(out, "limits", limits or None)
+        for key, box in (("forbidden_actions", self.forbidden_box), ("confirm_triggers", self.confirm_box)):
+            _put(out, key, _lines(box) or ([] if key in self._loaded else None))
         desktop = dict(self._loaded["desktop"]) if isinstance(self._loaded.get("desktop"), Mapping) else {}
         _put(desktop, "app", self.app_box.text().strip() or None)
         _put(out, "desktop", desktop or None)
@@ -662,6 +709,22 @@ def _parse(text: str, kind: str) -> tuple[Any, str]:
     return None, f"타입을 모릅니다: {kind}"
 
 
+def _lines(box: QPlainTextEdit) -> list[str]:
+    """줄마다 하나 — 빈 줄은 버린다."""
+    return [line.strip() for line in box.toPlainText().splitlines() if line.strip()]
+
+
+def _lines_of(value: Any) -> str:
+    return "\n".join(str(one) for one in value) if isinstance(value, list) else ""
+
+
+def _muted(text: str, parent: QWidget) -> QLabel:
+    label = QLabel(text, parent)
+    label.setWordWrap(True)
+    set_role(label, "muted")
+    return label
+
+
 def _put(out: dict[str, Any], key: str, value: Any) -> None:
     """값이 없으면 칸을 **지운다** (빈 글·빈 목록을 그림에 남기지 않는다)."""
     if value is None:
@@ -676,7 +739,9 @@ def _tight(layout: Any) -> None:
 
 
 __all__ = [
+    "CONFIRM_NOTE",
     "DOMAINS",
+    "FORBIDDEN_NOTE",
     "GOAL_OUTLINE",
     "NO_WEB_ENVIRONMENT",
     "REPLAYS",

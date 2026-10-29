@@ -397,3 +397,147 @@ def test_the_model_sees_the_values_the_goal_names() -> None:
     assert found["청구서"] == "청구/1.pdf"
     assert found["서식"] == "세금계산서", "업무 파라미터도 함께 간다"
     assert "비밀스러운값" not in found, "목표에 없는 변수는 가지 않는다"
+
+
+# ─────────────────────────── 한도와 지시문 (ADR-0105) ───────────────────────────
+
+
+def with_defaults(defaults: dict[str, Any], ai: str = AI, *, boundary: bool = False) -> Any:
+    """`chk:defaults`를 단 그림 — 기본값은 모든 AI 태스크에 간다 (C14)."""
+    xml = SHELL.replace(
+        "<chk:process>{{}}</chk:process>",
+        "<chk:process>{{}}</chk:process><chk:defaults>"
+        + json.dumps(defaults, ensure_ascii=False).replace("{", "{{").replace("}", "}}")
+        + "</chk:defaults>",
+    )
+    catcher = (
+        '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_Ai">'
+        "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
+        '<bpmn:scriptTask id="Task_Recover" scriptFormat="chk-expr">'
+        "<bpmn:script>복구 = error_code</bpmn:script></bpmn:scriptTask>"
+        '<bpmn:endEvent id="End_2"/>' + flow("f3", "Bnd_Fail", "Task_Recover") + flow("f4", "Task_Recover", "End_2")
+        if boundary
+        else ""
+    )
+    body = (
+        '<bpmn:startEvent id="Start_1"/>'
+        f'<bpmn:serviceTask id="Task_Ai"><bpmn:extensionElements><chk:aiTask>{ai}'
+        "</chk:aiTask></bpmn:extensionElements></bpmn:serviceTask>"
+        '<bpmn:endEvent id="End_1"/>' + flow("f1", "Start_1", "Task_Ai") + flow("f2", "Task_Ai", "End_1") + catcher
+    )
+    return read_process(xml.format(body=body))
+
+
+def test_forbidden_actions_and_confirm_triggers_go_into_the_first_question() -> None:
+    """**지시문이다** — 금지 행동은 「하지 않을 것」, 확인 트리거는 번호를 매겨 붙는다 (ADR-0105)."""
+    (_, user) = opening_messages(
+        spec(forbidden_actions=["삭제 버튼을 누르지 않는다"], confirm_triggers=["로그인 화면", "캡차"])
+    )
+    text = user["content"]
+    assert "## 하지 않을 것\n- 삭제 버튼을 누르지 않는다" in text
+    assert '{"_confirm": 번호}' in text and "1. 로그인 화면\n2. 캡차" in text
+    assert text.index("## 하지 않을 것") < text.index("## 반환"), "반환 형식이 마지막이다"
+
+
+def test_without_instructions_the_question_is_unchanged() -> None:
+    (_, user) = opening_messages(spec())
+    assert "하지 않을 것" not in user["content"] and "_confirm" not in user["content"]
+
+
+def test_defaults_reach_every_ai_task_and_the_task_wins() -> None:
+    """`chk:defaults`의 목록은 태스크가 비었을 때만 쓴다 — **태스크에 적은 값이 이긴다** (C14)."""
+    defaults = {"forbidden_actions": ["파일을 지우지 않는다"], "confirm_triggers": ["로그인 화면"]}
+    model = RecordingLlm(replies=[answer(공급사="한빛상사", 금액=1)])
+    engine, run = start(with_defaults(defaults), RunEnv(llm=model))
+    assert engine.run_until_blocked(run) is State.DONE
+    asked = model.asked[0][1]["content"]
+    assert "- 파일을 지우지 않는다" in asked and "1. 로그인 화면" in asked
+
+    own = json.dumps({**json.loads(AI), "forbidden_actions": ["메일을 보내지 않는다"]}, ensure_ascii=False)
+    model = RecordingLlm(replies=[answer(공급사="한빛상사", 금액=1)])
+    engine, run = start(with_defaults(defaults, own), RunEnv(llm=model))
+    assert engine.run_until_blocked(run) is State.DONE
+    asked = model.asked[0][1]["content"]
+    assert "- 메일을 보내지 않는다" in asked and "파일을 지우지 않는다" not in asked
+    assert "1. 로그인 화면" in asked, "다른 목록은 여전히 기본값이다"
+
+
+def test_limits_merge_field_by_field() -> None:
+    from chaeksas.contracts.bpmn_ext import Defaults
+    from chaeksas.core.nodes import with_ai_defaults
+
+    merged = with_ai_defaults(
+        spec(limits={"max_steps": 3}), Defaults.model_validate({"limits": {"timeout_s": 60, "max_steps": 9}})
+    )
+    assert merged.limits is not None
+    assert (merged.limits.timeout_s, merged.limits.max_steps) == (60, 3)
+    assert with_ai_defaults(spec(), None) == spec()
+
+
+def test_a_confirm_trigger_is_escalated_to_the_error_boundary() -> None:
+    """모델이 `{"_confirm": 번호}`로 멈추면 **`ESCALATED`** — 메시지는 그림에 적힌 트리거 글이다."""
+    ai = json.dumps({**json.loads(AI), "confirm_triggers": ["로그인 화면", "캡차"]}, ensure_ascii=False)
+    model = RecordingLlm(replies=[answer(_confirm=2)])
+    engine, run = start(process(ai, boundary=True), RunEnv(llm=model))
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["복구"] == "ESCALATED"
+    assert run.variables["error_message"].endswith("확인 트리거: 캡차")
+
+
+@pytest.mark.parametrize("picked", [0, 7, "2", True])
+def test_an_unknown_trigger_number_still_escalates(picked: Any) -> None:
+    with pytest.raises(AgentError, match="모르는 번호") as caught:
+        run_agent(spec(confirm_triggers=["로그인 화면"]), llm=RecordingLlm(replies=[answer(_confirm=picked)]), tools={})
+    assert caught.value.escalated and caught.value.business
+
+
+def test_the_confirm_key_means_nothing_without_triggers() -> None:
+    """트리거를 적지 않은 태스크는 `_confirm`을 달라고 한 적이 없다 — 보통의 틀린 답이다."""
+    with pytest.raises(AgentError, match="결과 필드가 맞지 않는다") as caught:
+        run_agent(spec(), llm=RecordingLlm(replies=[answer(_confirm=1)]), tools={})
+    assert not caught.value.escalated
+
+
+def test_the_plan_replay_hears_the_same_triggers() -> None:
+    """재생 `plan`의 마지막 추출도 **같은 물음**이다 — 같은 답(전환)을 받는다."""
+    from chaeksas.core.agent import Trace, finish_from
+
+    model = RecordingLlm(replies=[answer(_confirm=1)])
+    with pytest.raises(AgentError) as caught:
+        finish_from(spec(confirm_triggers=["로그인 화면"]), Trace(), llm=model)
+    assert caught.value.escalated
+    assert "1. 로그인 화면" in model.asked[0][1]["content"]
+
+
+def test_the_time_limit_is_a_business_failure_and_does_not_cut_a_call() -> None:
+    """**하던 호출을 끊지 않는다** — 다음 일을 시작하기 전에 본다 (ADR-0105)."""
+    now = [0.0]
+    calls: list[str] = []
+
+    def slow(**_: Any) -> str:
+        calls.append("pdf")
+        now[0] += 50
+        return "ㅇ"
+
+    model = RecordingLlm(replies=[wants("pdf_text_tool", path="a.pdf") for _ in range(5)])
+    with pytest.raises(AgentError, match="120초 안에 끝내지 못했다") as caught:
+        run_agent(spec(limits={"timeout_s": 120}), llm=model, tools={"pdf_text_tool": slow}, clock=lambda: now[0])
+    assert caught.value.business, "느린 모델·앱은 흐름으로 대처할 거리다"
+    assert calls == ["pdf", "pdf", "pdf"], "세 번째 호출이 한도를 넘겼지만 끝까지 갔다"
+    assert len(model.asked) == 3
+
+
+def test_the_time_limit_reaches_the_error_boundary_from_the_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    import chaeksas.core.agent as agent_module
+
+    ticks = iter(range(0, 10_000, 100))
+    monkeypatch.setattr(agent_module, "_monotonic", lambda: float(next(ticks)))
+    model = RecordingLlm(replies=[wants("pdf_text_tool", path="a.pdf") for _ in range(8)])
+    engine, run = start(
+        with_defaults({"limits": {"timeout_s": 150}}, boundary=True),
+        RunEnv(llm=model, tools={"pdf_text_tool": lambda **_: "ㅇ"}),
+    )
+    assert engine.run_until_blocked(run) is State.DONE
+    assert run.variables["복구"] == "TASK_FAILED"
+    assert "150초 안에 끝내지 못했다" in run.variables["error_message"]
+    assert len(model.asked) < 8, "한도가 루프를 멈췄다 (답이 바닥난 것이 아니다)"

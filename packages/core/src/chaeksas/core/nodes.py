@@ -32,6 +32,7 @@ from chaeksas.contracts.bpmn_ext import (
     ExtensionTask,
     FileList,
     Flow,
+    Limits,
     Node,
     Rule,
     ServiceCall,
@@ -52,6 +53,7 @@ from chaeksas.core.replay import replay_steps, to_spec
 from chaeksas.core.run_state import (
     CODE_PATH_DENIED,
     CODE_UNSUPPORTED,
+    ERROR_ESCALATED,
     ERROR_SEND_FAILED,
     ERROR_TASK_FAILED,
     WAIT_DELEGATION,
@@ -80,7 +82,7 @@ from chaeksas.core.run_state import (
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest
 from chaeksas.core.services import RETRYABLE_STATUS, OpCall, OpOutcome, ServiceCallError, ServicePending
 from chaeksas.core.tools import ToolDef
-from chaeksas.extension_api import RUN_LOCATION_PC, ExtensionEvent, TaskContext
+from chaeksas.extension_api import ESCALATE_CONFIRMATION, RUN_LOCATION_PC, ExtensionEvent, TaskContext
 from chaeksas.extension_api import TaskFailed as ExtensionTaskFailed
 
 #: 웹훅 본문 적는 법 (C14 — `all` | `fields:[…]` | `template:"…"`).
@@ -459,7 +461,7 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
     except ExtensionTaskFailed as e:
         # **실패한 태스크도 남긴다** (ADR-0041) — 전환으로 끝난 UI 태스크가 가장 보고 싶은 줄이다.
         write_extension_events(context, e.events)
-        raise TaskFailed(e.message or str(e), node_id=node.id, code=e.code or ERROR_TASK_FAILED) from e
+        raise TaskFailed(e.message or str(e), node_id=node.id, code=_failure_code(e)) from e
     write_extension_events(context, outcome.events)
     for name, value in dict(outcome.outputs).items():
         run.variables[name] = value
@@ -469,6 +471,17 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
         message=f"{spec.type} 태스크: 변수 {len(outcome.outputs)}개",
     )
     return Go()
+
+
+def _failure_code(error: ExtensionTaskFailed) -> str:
+    """확장의 실패를 오류 경계 코드로 — **전환은 `ESCALATED`**다 (C14, ADR-0105).
+
+    확장이 준 코드(`ui_escalated` 등)를 그대로 올리면 C14의 `ESCALATED` 경계가 그것을 받지 못한다.
+    확장의 코드는 메시지와 실행 기록(확장이 남긴 줄)에 남는다.
+    """
+    if error.escalate == ESCALATE_CONFIRMATION:
+        return ERROR_ESCALATED
+    return error.code or ERROR_TASK_FAILED
 
 
 #: 엔진이 붙이는 C3 칸 — 확장이 `data`에 적어 보내도 쓰지 않는다 (ADR-0041).
@@ -555,6 +568,7 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
     값은 업무 값이라 담지 않는다 (원칙 6).
     """
     run, node = context.run, context.node
+    spec = with_ai_defaults(spec, run.process.defaults)
     session = _open_environment(context, spec) if spec.domain in PC_ONLY_DOMAINS else None
     tools: Mapping[str, Any] = run.env.tools
     if session is not None:
@@ -580,12 +594,14 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
             tools=tools,
             on_step=note,
             context=_seen_by(context, spec),
-            max_steps=_max_steps(run, spec),
+            max_steps=_max_steps(spec),
         )
     except PathDenied as e:
         # 도구가 실행 폴더 밖을 짚었다 — 고쳐야 할 설정이다 (경계로 받지 않는다).
         raise EngineError(str(e), node_id=node.id, code=CODE_PATH_DENIED) from e
     except AgentError as e:
+        if e.escalated:
+            raise TaskFailed(str(e), node_id=node.id, code=ERROR_ESCALATED) from e
         if e.business:
             raise TaskFailed(str(e), node_id=node.id) from e
         raise EngineError(str(e), node_id=node.id, code="agent_error") from e
@@ -624,16 +640,35 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
     return Go()
 
 
-def _max_steps(run: Run, spec: AiTask) -> int | None:
-    """단계 한도 — 태스크 > `chk:defaults.limits` > 환경 기본값 (C14 — 기본값은 모든 AI 태스크에 간다).
+def with_ai_defaults(spec: AiTask, defaults: Defaults | None) -> AiTask:
+    """`chk:defaults`를 채운 AI 태스크 — **태스크에 적은 값이 이긴다** (C14, ADR-0105).
+
+    `limits`는 칸마다(`timeout_s`·`max_steps`), 목록 둘(`forbidden_actions`·`confirm_triggers`)은
+    태스크에 하나라도 적었으면 그것만 쓴다. `web`·`desktop`은 환경을 열 때 따로 합친다.
+    """
+    if defaults is None:
+        return spec
+    own, given = spec.limits or Limits(), defaults.limits or Limits()
+    limits = Limits(
+        timeout_s=own.timeout_s or given.timeout_s,
+        max_steps=own.max_steps or given.max_steps,
+    )
+    return spec.model_copy(
+        update={
+            "limits": limits if (limits.timeout_s or limits.max_steps) else spec.limits,
+            "forbidden_actions": spec.forbidden_actions or list(defaults.forbidden_actions),
+            "confirm_triggers": spec.confirm_triggers or list(defaults.confirm_triggers),
+        }
+    )
+
+
+def _max_steps(spec: AiTask) -> int | None:
+    """단계 한도 — 태스크 > `chk:defaults.limits` > 환경 기본값 (`spec`은 이미 기본값을 채운 것이다).
 
     화면을 다루는 AI 태스크(`web`·`desktop`)는 UI 동작 하나가 한 단계라 기본이 더 크다 (ADR-0037).
     """
     if spec.limits is not None and spec.limits.max_steps:
         return spec.limits.max_steps
-    defaults = run.process.defaults
-    if defaults is not None and defaults.limits is not None and defaults.limits.max_steps:
-        return defaults.limits.max_steps
     return DEFAULT_MAX_STEPS_SCREEN if spec.domain in PC_ONLY_DOMAINS else None
 
 
