@@ -157,6 +157,29 @@ _SLACK_S = 30.0
 TokenSource = Any  # () -> str | None — 부를 때마다 읽는다(호출 토큰은 24시간마다 바뀐다)
 
 
+class ServicePending(RuntimeError):  # noqa: N818 — 실패가 아니라 「아직」이다
+    """**아직 끝나지 않았다** — 기다림으로 넘긴다 (ADR-0103, `park_after_s`를 준 부르는 쪽만).
+
+    엔진은 이것을 받으면 그 노드에서 `external_task`로 멈추고 자리를 놓는다. 결과는 실행하는 쪽이
+    `CenterServiceCaller.result(task_id)`로 묻고 `Engine.external_done()`으로 넣는다.
+    """
+
+    def __init__(self, task_id: str) -> None:
+        super().__init__(f"외부 작업 {task_id}이 아직 끝나지 않았다")
+        self.task_id = task_id
+
+
+class ServiceResultLost(RuntimeError):  # noqa: N818
+    """끝났는데 **값이 이미 지워졌다** — 받아 가고(`ack`) 담기 전에 죽은 자리다 (ADR-0103 §5).
+
+    같은 멱등 칸으로 **다시 올리면** Center가 다시 줄에 세우고 일꾼이 저장해 둔 결과를 다시 준다.
+    """
+
+
+#: 끝난 일감의 상태 (C15).
+FINAL_STATES = frozenset({"completed", "failed", "expired", "cancelled"})
+
+
 @dataclass
 class CenterServiceCaller:
     """`chk:serviceCall`을 **Center에 외부 작업으로 올리고** 결과를 기다린다 (C15, ADR-0102).
@@ -169,6 +192,8 @@ class CenterServiceCaller:
       한 번만 수행된다 (원칙 9).
     - 실패는 C15 `error.code`를 그대로 싣고, `retry.on`이 읽게 HTTP 숫자로도 옮긴다(`STATUS_OF_CODE`).
     - 결과를 받으면 `ack`한다 — 그래야 Center가 업무 값을 지운다 (C15 셋째 규칙).
+    - **`park_after_s`를 주면 그만큼만 기다린다** — 끝나지 않으면 `ServicePending`이다(ADR-0103,
+      서버 실행기만). 그다음은 `result()`·`ack()`·`withdraw()`로 실행하는 쪽이 이어 간다.
     """
 
     base_url: str
@@ -178,6 +203,8 @@ class CenterServiceCaller:
     default_timeout_s: float = 60.0
     client: Any | None = None  # httpx.Client (시험은 ASGI로 바로 붙인다)
     sleep: Any = time.sleep
+    #: 이만큼 기다려 끝나지 않으면 기다림으로 넘긴다 (초). `None`이면 끝날 때까지 기다린다.
+    park_after_s: float | None = None
 
     def _client(self) -> Any:
         import httpx  # noqa: PLC0415 — 부를 때만 든다
@@ -190,11 +217,8 @@ class CenterServiceCaller:
             raise ServiceCallError("Center에 올릴 토큰이 없다 (호출 토큰·Center API 키)", code="token_missing")
         return {"Authorization": f"Bearer {token}"}
 
-    def call(self, request: OpCall) -> OpOutcome:
-        import httpx  # noqa: PLC0415
-
-        timeout = int(request.timeout_s or self.default_timeout_s)
-        body = {
+    def _body(self, request: OpCall) -> dict[str, Any]:
+        return {
             "schema": 1,
             "topic": request.app_id,
             "operation": request.operation,
@@ -210,30 +234,33 @@ class CenterServiceCaller:
                 type=self.caller_type, host=self.host, bpm_process_id=request.bpm_process_id, version=request.version
             ).to_json_dict(),
             "input": dict(request.input),
-            "timeout_s": timeout,
+            "timeout_s": int(request.timeout_s or self.default_timeout_s),
             "origin": "test" if request.run_id.startswith("test_") else "run",
         }
+
+    def call(self, request: OpCall) -> OpOutcome:
+        import httpx  # noqa: PLC0415
+
+        timeout = int(request.timeout_s or self.default_timeout_s)
         own = self.client is None
         client = self._client()
         started = time.monotonic()
         try:
-            made = client.post("/api/v1/external-tasks", json=body, headers=self._headers())
+            made = client.post("/api/v1/external-tasks", json=self._body(request), headers=self._headers())
             if made.status_code >= 400:
                 raise _refused(request, made)
             task_id = str(made.json()["task_id"])
             until = started + timeout + _SLACK_S
+            park = None if self.park_after_s is None else started + self.park_after_s
             while True:
-                got = client.get(
-                    f"/api/v1/external-tasks/{task_id}", params={"wait_s": _WAIT_S}, headers=self._headers()
-                )
-                if got.status_code == 503:
-                    self.sleep(1.0)  # 롱폴링 상한 — 잠깐 쉬고 다시 건다
+                wait_s = _WAIT_S if park is None else max(0, min(_WAIT_S, int(park - time.monotonic())))
+                result = self._get(client, request, task_id, wait_s=wait_s)
+                if result is None:
                     continue
-                if got.status_code >= 400:
-                    raise _refused(request, got)
-                result = got.json()
-                if result.get("state") in ("completed", "failed", "expired", "cancelled"):
+                if result.get("state") in FINAL_STATES:
                     break
+                if park is not None and time.monotonic() >= park:
+                    raise ServicePending(task_id)
                 if time.monotonic() > until:
                     raise ServiceCallError(
                         f"{request.app_id}/{request.operation}: 기한이 지났는데 끝나지 않았다", code="timeout",
@@ -246,25 +273,86 @@ class CenterServiceCaller:
         finally:
             if own:
                 client.close()
-        duration_ms = int((time.monotonic() - started) * 1000)
-        state = result.get("state")
-        if state != "completed":
-            error = result.get("error") or {}
-            code = str(error.get("code") or state or "failed")
-            raise ServiceCallError(
-                str(error.get("message") or f"{request.app_id}/{request.operation}: {state}"),
-                code=code,
-                status=STATUS_OF_CODE.get(code),
-                retryable=bool(error.get("retryable")),
-            )
-        return OpOutcome(
-            output=dict(result.get("output") or {}),
-            status=200,
-            mode_used=str(result.get("mode_used") or request.mode),
-            replayed=bool(result.get("replayed")),
-            duration_ms=duration_ms,
-            usage=result.get("usage") or None,
+        return _outcome(request, result, duration_ms=int((time.monotonic() - started) * 1000))
+
+    def _get(self, client: Any, request: OpCall, task_id: str, *, wait_s: int) -> dict[str, Any] | None:
+        """일감의 지금 모습. 롱폴링 상한(503)이면 잠깐 쉬고 `None`."""
+        got = client.get(f"/api/v1/external-tasks/{task_id}", params={"wait_s": wait_s}, headers=self._headers())
+        if got.status_code == 503:
+            self.sleep(1.0)
+            return None
+        if got.status_code >= 400:
+            raise _refused(request, got)
+        found: dict[str, Any] = got.json()
+        return found
+
+    # ── 기다림으로 넘긴 뒤 (ADR-0103 — 실행하는 쪽이 부른다) ──
+
+    def result(self, request: OpCall, task_id: str, *, waited_s: float = 0.0) -> OpOutcome | None:
+        """넘긴 일감을 **한 번** 본다 — 끝났으면 결과, 아직이면 `None`. 기다리지 않는다.
+
+        실패는 `ServiceCallError`(동기 호출과 같다), **값을 잃었으면 `ServiceResultLost`**다.
+        닿지 못하면 `None`이다 — 다음 주기에 또 본다 (실패로 바꾸지 않는다).
+        """
+        import httpx  # noqa: PLC0415
+
+        own = self.client is None
+        client = self._client()
+        try:
+            result = self._get(client, request, task_id, wait_s=0)
+        except httpx.HTTPError:
+            return None
+        finally:
+            if own:
+                client.close()
+        if result is None or result.get("state") not in FINAL_STATES:
+            return None
+        if result.get("state") == "completed" and "output" not in result:
+            raise ServiceResultLost(f"외부 작업 {task_id}의 값이 이미 지워졌다")
+        return _outcome(request, result, duration_ms=int(waited_s * 1000))
+
+    def ack(self, task_id: str) -> None:
+        """받았다 — Center가 값을 지운다 (C15). 닿지 못해도 그만이다 (7일에 지운다)."""
+        self._post_quietly(f"/api/v1/external-tasks/{task_id}/ack")
+
+    def withdraw(self, task_id: str) -> None:
+        """**거둔다** — 기다리던 쪽이 없어졌다 (ADR-0103 §4). 닿지 못하면 기한에 저절로 끝난다."""
+        self._post_quietly(f"/api/v1/external-tasks/{task_id}/cancel")
+
+    def _post_quietly(self, path: str) -> None:
+        import httpx  # noqa: PLC0415
+
+        own = self.client is None
+        client = self._client()
+        try:
+            client.post(path, headers=self._headers())
+        except (httpx.HTTPError, ServiceCallError):
+            pass
+        finally:
+            if own:
+                client.close()
+
+
+def _outcome(request: OpCall, result: Mapping[str, Any], *, duration_ms: int) -> OpOutcome:
+    """끝난 일감 → 결과 (또는 실패). 동기 호출과 넘긴 뒤가 **같은 함수**를 쓴다."""
+    state = result.get("state")
+    if state != "completed":
+        error = result.get("error") or {}
+        code = str(error.get("code") or state or "failed")
+        raise ServiceCallError(
+            str(error.get("message") or f"{request.app_id}/{request.operation}: {state}"),
+            code=code,
+            status=STATUS_OF_CODE.get(code),
+            retryable=bool(error.get("retryable")),
         )
+    return OpOutcome(
+        output=dict(result.get("output") or {}),
+        status=200,
+        mode_used=str(result.get("mode_used") or request.mode),
+        replayed=bool(result.get("replayed")),
+        duration_ms=duration_ms,
+        usage=result.get("usage") or None,
+    )
 
 
 def _refused(call: OpCall, response: Any) -> ServiceCallError:
@@ -282,6 +370,7 @@ def _refused(call: OpCall, response: Any) -> ServiceCallError:
 __all__ = [
     "FATAL_CODES",
     "RETRYABLE_STATUS",
+    "FINAL_STATES",
     "STATUS_OF_CODE",
     "CenterServiceCaller",
     "NoServiceCaller",
@@ -290,4 +379,6 @@ __all__ = [
     "RecordingServiceCaller",
     "ServiceCallError",
     "ServiceCaller",
+    "ServicePending",
+    "ServiceResultLost",
 ]

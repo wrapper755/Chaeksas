@@ -49,7 +49,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 계약 열다섯의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)는 조각 2~4로 양쪽이 붙었고 **긴 작업 하나가 남았다**.
 
-### 3-17. 바깥 기능을 부르는 길 (Pull) — **긴 작업만 열려 있다**
+### 3-17. 바깥 기능을 부르는 길 (Pull) — **C14의 옛 칸만 남았다**
 
 [ADR-0102](decisions/0102-calling-outside-is-pull.md)가 「네트워크를 건너는 바깥 호출은 모두 Pull」로 정했고 [C15](03-contracts/C15-external-tasks.md)는 **구현됨**이다.
 부르는 쪽 다섯(서버 실행기·실행기 자식·Studio는 `core.services.CenterServiceCaller`, Worker·Tool UI는 UI 자동화의
@@ -57,8 +57,9 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 옛 길(C11 `POST /v1/ops`·`/manifest`·앱 안의 키, HTTP 어댑터 직접 호출, 서비스 앱 키 배달 ADR-0094, Center의 외부 앱
 키·주소 덮어쓰기 ADR-0097)은 걷었다. 남은 것:
 
-- **긴 작업** (조각 6) — 서버 실행기가 외부 작업을 기다리는 동안 스레드를 놓지 않는다(부르는 쪽이 결과 기다리기를
-  되풀이한다). 그때까지 `timeout_s`가 C11과 같은 상한이다.
+- ~~긴 작업~~ (조각 6) — **닫았다** ([ADR-0103](decisions/0103-long-external-tasks.md)): 서버 실행기는 한 번 기다려
+  (`PARK_AFTER_S`, 기본 20초) 끝나지 않은 일감을 다섯째 기다림 `external_task`로 넘기고 자리를 놓는다. 결과는
+  하트비트 주기마다 C15로 묻고, 걷히면 거두고, 받아 간 값을 잃으면 같은 칸으로 다시 올린다.
 - **C14의 옛 칸** — `chk:serviceCall.key_ref`·`chk:process.service_keys`는 읽고 무시하며 C14 판을 올릴 때 지운다
   (ADR-0102 §2). 그때까지 B7은 이름 규칙만 본다(R4와 같다) — 업무 예제 55개가 모두 적고 있어 「적혀 있다」는
   경고는 두지 않았다. 지우려면 예제 생성기(`exdsl.py`)가 먼저 적지 않아야 한다.

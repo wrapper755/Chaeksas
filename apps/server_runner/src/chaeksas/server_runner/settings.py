@@ -30,6 +30,8 @@ DEFAULT_CENTER_URL = "http://localhost:8800"
 DEFAULT_HEARTBEAT_S = 10
 #: 닿지 못했을 때 다시 걸기까지 (ADR-0007 — 부르는 쪽이 다시 온다). 주기보다 길게 둔다.
 DEFAULT_RETRY_S = 30
+#: 외부 작업을 **이만큼 기다려 끝나지 않으면** 기다림으로 넘기고 자리를 놓는다 (초, ADR-0103).
+DEFAULT_PARK_AFTER_S = 20.0
 #: 기본 모델 (ADR-0027). **이 앱의 기본값은 이 앱이 가진다** — Bot UI의 것을 import하지 않는다
 #: (앱끼리 import하지 않는다). 둘이 어긋나면 `docs/04-setup.md` §6의 표가 원본이다.
 DEFAULT_LLM_MODEL = "qwen2.5:7b"
@@ -85,6 +87,8 @@ class Settings:
     #: 웹훅을 보낼 수 있는 호스트. **기본은 비어 있고 비면 아무 데도 보내지 않는다** (ADR-0059 §2).
     #: **사설망을 여는 스위치는 두지 않는다** — 한 번 켜면 모든 Bot의 모든 웹훅에 적용된다.
     webhook_allowed_hosts: tuple[str, ...] = ()
+    #: 외부 작업을 이만큼 기다려 끝나지 않으면 기다림으로 넘긴다 (ADR-0103). 0이면 바로 넘긴다.
+    park_after_s: float = DEFAULT_PARK_AFTER_S
 
     def smtp(self) -> SmtpConfig:
         """보내기 설정 한 벌 — **Bot UI와 같은 모양**이다 (`core.senders`)."""
@@ -141,6 +145,7 @@ class Settings:
             # 여럿은 **쉼표**로 가른다 — 호스트 이름에는 `os.pathsep`(`:`)이 들어갈 수 있다
             # (`host:port`를 적는 실수를 섞지 않으려고 폴더 목록과 규칙을 다르게 둔다).
             webhook_allowed_hosts=_hosts(_env("WEBHOOK__ALLOWED_HOSTS")),
+            park_after_s=max(0.0, float(_env("PARK_AFTER_S") or DEFAULT_PARK_AFTER_S)),
         )
 
 

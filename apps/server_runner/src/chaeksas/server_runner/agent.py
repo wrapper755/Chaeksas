@@ -70,7 +70,13 @@ from chaeksas.core.run_log import log_path
 from chaeksas.core.run_shipping import HttpUploader, Queue, ShipError
 from chaeksas.core.seen import Seen
 from chaeksas.core.senders import make_sender
-from chaeksas.core.services import CenterServiceCaller
+from chaeksas.core.services import (
+    CenterServiceCaller,
+    OpOutcome,
+    ServiceCallError,
+    ServicePending,
+    ServiceResultLost,
+)
 from chaeksas.server_runner.center_client import (
     CenterClient,
     CenterProblem,
@@ -375,6 +381,8 @@ class Agent:
         # **하트비트 뒤에 깨운다** (ADR-0061) — 깨운 실행은 그 자리에서 돌기 시작하고 **다음
         # 주기의 `running[]`**에 올라간다 (지금 보낸 보고를 뒤늦게 고치지 않는다).
         self.wake_due()
+        # 넘겨받은 외부 작업도 **같은 자리에서** 묻는다 (ADR-0103) — 타이머와 같은 결이다.
+        self.wake_external()
         return True
 
     # ── 배포 설치 (C2 V1~V7, C12) ──
@@ -639,6 +647,8 @@ class Agent:
             token=lambda: self.client.api_key,
             caller_type=HOST_KIND,
             host=self.name(),
+            # **오래 걸리면 기다림으로 넘긴다** (ADR-0103) — 짧은 것은 그 자리에서 끝난다.
+            park_after_s=self.settings.park_after_s,
         )
 
     def run_env(self, bot: Any) -> RunEnv:
@@ -707,6 +717,47 @@ class Agent:
             if found.wake():
                 woken += 1
                 log.info("실행 %s를 깨웠다 (타이머)", found.run_id)
+        return woken
+
+    def wake_external(self) -> int:
+        """**넘겨받은 외부 작업이 끝났으면 넣고 이어 간다** — 이어 간 수를 돌려준다 (ADR-0103 §2).
+
+        기다리는 실행은 스레드를 놓았으므로 결과를 볼 사람이 없다 — 타이머(`wake_due`)처럼 이
+        쓸기가 그 일을 한다. 관문도 같다: **빈자리가 없거나 그 실행을 미는 스레드가 돌면** 묻지도
+        넣지도 않고 다음 주기에 본다. 넣은 **뒤에** `ack`한다 — 넣기 전에 지우면 잃는다.
+
+        **값을 잃은 일감**(넣고 ack한 뒤 담기 전에 죽었다)은 같은 칸으로 다시 올린다(§5) — Center가
+        다시 줄에 세우고 일꾼이 저장해 둔 결과를 다시 준다. 닿지 못하면 다음 주기에 또 본다.
+        """
+        caller = self.services()
+        woken = 0
+        for found in sorted(self.workers.values(), key=lambda one: one.run_id):
+            for task_id in found.external_tasks():
+                if self.free_slots() <= 0:
+                    return woken
+                if self._busy(found, f"외부 작업 {task_id}의 결과"):
+                    break
+                call = found.external_call(task_id)
+                result: OpOutcome | ServiceCallError | None
+                try:
+                    result = caller.result(call, task_id)
+                except ServiceCallError as e:
+                    result = e
+                except ServiceResultLost:
+                    log.info("외부 작업 %s의 값을 잃었다 — 같은 칸으로 다시 올린다", task_id)
+                    try:
+                        result = caller.call(call)
+                    except ServicePending:
+                        continue  # 다시 줄에 섰다 — 같은 일감 id다
+                    except ServiceCallError as e:
+                        result = e
+                if result is None:
+                    continue
+                found.external_done(task_id, result)
+                caller.ack(task_id)
+                woken += 1
+                log.info("외부 작업 %s의 결과를 실행 %s에 넣었다", task_id, found.run_id)
+                break  # 그 실행은 이제 돈다 — 나머지는 다음 주기에 (같은 `Run`을 둘이 밀지 않는다)
         return woken
 
     def collect(self) -> None:

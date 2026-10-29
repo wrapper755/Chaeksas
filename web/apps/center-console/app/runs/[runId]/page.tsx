@@ -69,6 +69,7 @@ const WAITING_FOR: Record<string, string> = {
   message: "메시지",
   timer: "타이머",
   delegation: "PC 위임",
+  external_task: "외부 작업",
 };
 
 /** C3 `run_resumed.reason` → 표기. 없으면 「—」다 (선택 칸이다). */
@@ -79,6 +80,7 @@ const RESUME_REASON: Record<string, string> = {
   restart: "실행기 재시작",
   withdraw: "결재 회수",
   delegation: "PC 위임이 끝남",
+  external_task: "외부 작업이 끝남",
 };
 
 const NODE_STATE: Record<string, string> = {

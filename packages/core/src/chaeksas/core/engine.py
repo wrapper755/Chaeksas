@@ -37,6 +37,7 @@ from chaeksas.contracts.bpmn_ext import (
     DataOutput,
     Node,
     ProcessInfo,
+    ServiceCall,
     VirtualWorkerIdentity,
     duration_hours,
 )
@@ -50,7 +51,7 @@ from chaeksas.core.delegation import (
 from chaeksas.core.expr import ExprError, evaluate
 from chaeksas.core.files import FileTaskError, PathDenied, Workspace, write_output
 from chaeksas.core.helpers import bind
-from chaeksas.core.nodes import DEFAULT_HANDLERS
+from chaeksas.core.nodes import DEFAULT_HANDLERS, service_attempts, service_call_of
 from chaeksas.core.run_log import RunLog, summarize
 from chaeksas.core.run_state import (
     BUILTIN_NOW,
@@ -70,6 +71,7 @@ from chaeksas.core.run_state import (
     FAILED_TASK_VAR,
     MAX_STEPS,
     WAIT_DELEGATION,
+    WAIT_EXTERNAL_TASK,
     WAIT_MESSAGE,
     WAIT_SIGNAL,
     WAIT_TIMER,
@@ -97,6 +99,7 @@ from chaeksas.core.run_state import (
     task_type,
     utc_now,
 )
+from chaeksas.core.services import OpCall, OpOutcome, ServiceCallError
 
 log = logging.getLogger(__name__)
 
@@ -770,6 +773,9 @@ class Engine:
         if reason:
             run.log.emit("log", level="warn", message=reason)
         run.pendings.clear()
+        for waiting in run.waits.values():
+            if waiting.kind == WAIT_EXTERNAL_TASK and waiting.task_id:
+                _withdraw_external(run, waiting)  # 받을 쪽이 없어진다 (ADR-0103 §4)
         run.waits.clear()
         for child in run.children.values():
             self.cancel(child)
@@ -979,6 +985,8 @@ class Engine:
                 message=f"맡긴 작업을 거둔다 (작업 {dropped.job_id})",
             )
             run.env.delegate.withdraw(dropped.job_id)
+        if dropped is not None and dropped.kind == WAIT_EXTERNAL_TASK and dropped.task_id:
+            _withdraw_external(run, dropped)
         if key.startswith("sub:"):
             inside = key[len("sub:") :]
             run.tokens = [t for t in run.tokens if inside not in t.scope]
@@ -1119,6 +1127,55 @@ class Engine:
         except EngineError as e:
             return self._handle_failure(context, e)
 
+    # ── 긴 외부 작업 (ADR-0103) ──
+
+    def external_waits(self, run: Run) -> list[tuple[Run, Waiting]]:
+        """기다리는 외부 작업 — 호출이 띄운 **안쪽 실행까지** (`(그 기다림을 쥔 실행, 기다림)`)."""
+        found = [(run, w) for w in run.waits.values() if w.kind == WAIT_EXTERNAL_TASK and w.task_id]
+        for child in run.children.values():
+            if not child.finished:
+                found.extend(self.external_waits(child))
+        return found
+
+    def external_call(self, run: Run, task_id: str) -> OpCall:
+        """그 일감을 낸 호출 — 결과를 묻거나 **같은 칸으로 다시 올릴 때** 쓴다."""
+        owner, waiting, token, node = self._external(run, task_id)
+        spec: ServiceCall = node.prop("serviceCall")
+        context = Context(engine=self, run=owner, token=token, node=node)
+        return service_call_of(context, spec, attempt=waiting.attempt, call_seq=waiting.call_seq)
+
+    def external_done(self, run: Run, task_id: str, result: OpOutcome | ServiceCallError) -> State:
+        """**넘겨받은 외부 작업이 끝났다** — 동기 호출과 **같은 규칙**으로 이어 간다 (ADR-0103 §3).
+
+        끝났으면 `chk:serviceCall.output`대로 담고, 실패면 `retry`가 받는 것은 다음 `attempt`로
+        다시 올린다(또 오래 걸리면 또 기다린다). 다 실패하면 `TaskFailed` — 오류 경계가 받는다.
+        """
+        owner, waiting, token, node = self._external(run, task_id)
+        spec: ServiceCall = node.prop("serviceCall")
+        owner.waits.pop(waiting.key, None)
+        token.waiting_for = None
+        self.disarm(owner, token.id)
+        context = Context(engine=self, run=owner, token=token, node=node)
+        try:
+            outcome = service_attempts(
+                context, spec, call_seq=waiting.call_seq, first=waiting.attempt, done=result
+            )
+            return self._apply(context, outcome)
+        except ExprError as e:
+            return self._handle_failure(context, EngineError(e.reason, node_id=node.id, code="expr_error"))
+        except EngineError as e:
+            return self._handle_failure(context, e)
+
+    def _external(self, run: Run, task_id: str) -> tuple[Run, Waiting, Token, Node]:
+        for owner, waiting in self.external_waits(run):
+            if waiting.task_id != task_id:
+                continue
+            token = next((t for t in owner.tokens if t.waiting_for == waiting.key), None)
+            if token is not None:
+                return owner, waiting, token, owner.node(waiting.node_id)
+        tasks = ", ".join(w.task_id or "?" for _, w in self.external_waits(run)) or "없음"
+        raise EngineError(f"기다리는 외부 작업이 아니다: {task_id} (기다리는 것: {tasks})", code="not_waiting")
+
     def withdraw(self, run: Run, request_id: str, *, reason: str) -> State:
         """Center 결재가 **답 없이 끝났다** — 관리자 회수·만료 (C6, ADR-0038).
 
@@ -1156,6 +1213,16 @@ class Engine:
         del run.pendings[request_id]
         return self._fail(run, EngineError("결재 시간이 지났다", node_id=pending.node_id, code="human_timeout"))
 
+
+
+def _withdraw_external(run: Run, waiting: Waiting) -> None:
+    """기다리던 외부 작업을 거둔다 (ADR-0103 §4). 거둘 길이 없는 부르는 쪽이면 그만이다(기한에 끝난다)."""
+    withdraw = getattr(run.env.services, "withdraw", None)
+    run.log.emit(
+        "log", node_id=waiting.node_id, level="info", message=f"기다리던 외부 작업을 거둔다 ({waiting.task_id})"
+    )
+    if callable(withdraw):
+        withdraw(waiting.task_id)
 
 __all__ = [
     "BUILTIN_NOW",
@@ -1197,6 +1264,7 @@ __all__ = [
     "TaskFailed",
     "Token",
     "WAIT_DELEGATION",
+    "WAIT_EXTERNAL_TASK",
     "WAIT_MESSAGE",
     "WAIT_SIGNAL",
     "WAIT_TIMER",

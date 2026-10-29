@@ -119,7 +119,7 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 | `schema`, `status` | `status`는 열린 문자열. 알려진 값: `running`, `paused`, `draining`, `error` |
 | `capacity` | `{max, running}`. `running`은 기다리는 실행을 뺀 수 |
 | `running[]` | `{run_id, bpm_process_id, version, node_id, started_at, job_id?}` |
-| `waiting[]` | `{run_id, bpm_process_id, version, waiting_for: "approval" \| "message" \| "timer" \| "delegation", request_id?, message_name?, correlation?, until?, job_id?, since}` |
+| `waiting[]` | `{run_id, bpm_process_id, version, waiting_for: "approval" \| "message" \| "timer" \| "delegation" \| "external_task", request_id?, message_name?, correlation?, until?, job_id?, task_id?, since}` |
 | `job_acks[]` | C4와 같은 모양. `result`: `started`, `rejected`, `expired`, `cancelled`, `cancel_refused` |
 | `approval_acks[]`, `deployment_results[]` | C4와 같다 |
 | `readiness[]` | 배포된 서버 Bot별 준비 상태 (C4 Readiness와 같은 모양: 확장). 바뀌었을 때만 |
@@ -130,7 +130,7 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 | `unsent_events` | |
 
 **`waiting[]`의 짝 칸은 비울 수 없다** — `approval`이면 `request_id`, `message`면
-`message_name`, `timer`면 `until`, **`delegation`이면 `job_id`**다 (§PC 위임). 같은 실행이 `running[]`과 `waiting[]`에 함께 있을 수도
+`message_name`, `timer`면 `until`, **`delegation`이면 `job_id`**다 (§PC 위임), **`external_task`면 `task_id`**다 (§긴 외부 작업). 같은 실행이 `running[]`과 `waiting[]`에 함께 있을 수도
 없다(쥐면서 놓을 수는 없다 — 자리 셈이 틀어진다). `capacity.running`은 `running[]`의 길이와
 같아야 한다. 보내는 쪽과 받는 쪽이 **같은 함수**로 본다 (`validate_heartbeat()`).
 
@@ -262,6 +262,16 @@ Center는 메시지를 이렇게 처리한다.
 - 서버 실행이 취소되면 **그 위임 작업도 거둔다** — `POST …/delegations/{job_id}/cancel`(실행기 키). **C5 취소 경로를 쓰지 않는다**: 그 길의 관문은 관리자·연동용 키인데 거두려는 쪽은 실행기 키다. 위임 요청과 같은 결로 **제 관문**(실행기 키·등록·**그 위임의 임자**)을 여기서 지나고 Center 안에서 작업 취소 함수를 부른다 — 권한표를 넓히면 실행기 키로 **남의 작업**까지 취소할 수 있게 된다. 남의 위임은 **404**다(있다는 것조차 알리지 않는다). 이미 시작된 PC 실행은 끝까지 가고(C5 — 「시작된 작업의 취소는 거절」, 409 `already_started`) 그 결과는 받는 쪽이 없으므로 **버린다**. **서버 대상 위임은 시작됐어도 거둔다** — 작업 취소가 대상 종류로 가르므로(C5, ADR-0063) 그 실행은 `cancelled`로 닫힌다. 그래서 **일괄 취소는 접수 실행의 작업을 취소하는 것**이다 ([ADR-0084](../decisions/0084-cancelling-a-batch.md) — 끝난 건은 그대로, 아직 맡기지 않은 건은 맡겨지지 않는다).
 - **배포 때 한 가지를 더 본다** — `requires.delegations`의 Bot이 **승인된 패키지로 Center에 있어야** 한다 (422 `delegation_not_approved`. C1 R8처럼 배포 시점에 본다 — 매니페스트만으로는 알 수 없다). 판을 비운 위임은 **승인된 판이 하나라도 있으면** 통과다. **PC에 배포됐는가는 묻지 않는다**: 서버 Bot을 먼저 배포하는 순서를 막으면 안 되고, 실제 관문은 위임을 요청할 때다.
 
+### 긴 외부 작업 (서버 Bot → 일꾼)
+
+서비스 앱·외부 앱의 작업은 C15 외부 작업으로 부른다. **오래 걸리는 것은 기다리는 동안 자리를 놓는다** ([ADR-0103](../decisions/0103-long-external-tasks.md)).
+
+- 실행기는 올린 일감을 **한 번 기다린다**(`CHK_SERVER_RUNNER__PARK_AFTER_S`, 기본 20초). 그 안에 끝나면 지금처럼 이어 간다.
+- 끝나지 않으면 그 실행은 `waiting[]`의 **`external_task`** 갈래로 넘어가고(짝 칸 `task_id`) 자리를 쥐지 않는다. 스냅샷에 그 일감과 재시도에 쓸 `attempt`·`call_seq`가 함께 담긴다.
+- 결과는 **실행기가 하트비트 주기마다 묻는다** — C15 `GET /external-tasks/{task_id}`. 이 계약에 내려오는 칸은 없다. 끝난 것은 **빈자리가 있고 그 실행을 미는 스레드가 없을 때만** 넣고(결재·메시지·위임과 같은 관문), 넣은 뒤 C15 `ack`를 보낸다.
+- 실행 취소·끊는 경계로 기다림이 걷히면 C15 `cancel`로 **그 일감을 거둔다**. 닿지 못하면 일감은 기한에 저절로 끝난다.
+- 넣고 `ack`한 뒤 스냅샷을 담기 전에 죽어 **되살린 실행이 값이 지워진 일감을 기다리면**, 같은 멱등 칸으로 다시 올린다(C15 — Center가 다시 줄에 세우고 일꾼이 저장해 둔 결과를 다시 준다).
+
 ### 재시작과 유실
 
 세부는 [ADR-0054](../decisions/0054-server-run-state-and-concurrency.md)가 정했다. 계약이 보는 것만 여기 적는다.
@@ -358,6 +368,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | **§긴 외부 작업** — `waiting[]`에 `external_task` 갈래와 짝 칸 `task_id`. 결과는 실행기가 C15로 묻고 이 계약에 내려오는 칸은 없다. 선택 칸이라 옛 Center는 그대로 돈다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-29 | 1 | §서비스 앱 키와 작업 나누기 규칙 5(`keys_pending`)를 걷었다 — 서버 실행기는 서비스 앱을 C15 외부 작업으로 부른다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | 하트비트 `jobs[].virtual_worker?` — 작업의 가상 직원을 붙인다. `MessageRequest.virtual_worker?`(메시지 시작). 선택 칸이라 옛 실행기는 그대로 돈다(출처가 가상 직원인 입력만 비어 있다) | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | §서비스 앱 키 — 하트비트 `service_keys[]`·`drop_service_keys[]`·`service_key_acks[]` (C4와 같다), `"*"` 배포는 실행기마다 키, 작업 나누기 규칙 5(키를 받지 못한 실행기는 건너뛴다 — `keys_pending`) | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
