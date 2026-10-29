@@ -12,6 +12,10 @@
 - **허용하지 않은 도구를 부르거나 단계 한도를 넘은 것은 실행 오류**다 — 그림·설정이 잘못된
   것이라 경계로 받지 않는다.
 
+한도와 지시문은 [ADR-0105](../../../../docs/decisions/0105-ai-task-limits-and-instructions.md)다 —
+시간 한도(`limits.timeout_s`)를 넘으면 업무 실패, 금지 행동은 **지시문일 뿐**이고, 확인 트리거에
+걸리면 모델이 `{"_confirm": 번호}`로 멈춰 **전환**(`escalated`)이 된다.
+
 **값은 실행 기록에 담지 않는다** (원칙 6). 단계는 C3 `agent`로, 사용량은 `llm_usage`로 남고
 둘 다 값이 없다.
 """
@@ -19,6 +23,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -43,6 +48,9 @@ RESULT_TYPES: dict[str, tuple[type, ...]] = {
     "dict": (dict,),
 }
 
+#: 확인 트리거에 걸렸을 때 모델이 결과 대신 내는 칸 (C14 §한도와 지시문, ADR-0105).
+CONFIRM_KEY = "_confirm"
+
 #: 도구 하나 — 이름 있는 인자를 받아 **글**을 돌려준다 (모델에게 다시 넣어야 하므로).
 Tool = Callable[..., str]
 
@@ -53,11 +61,15 @@ SYSTEM_PROMPT = (
 
 
 class AgentError(RuntimeError):
-    """운전사가 멈춰야 하는 문제. `business`면 업무 실패(오류 경계가 받는다)다."""
+    """운전사가 멈춰야 하는 문제. `business`면 업무 실패(오류 경계가 받는다)다.
 
-    def __init__(self, message: str, *, business: bool = False) -> None:
+    `escalated`는 **확인 트리거에 걸렸다**는 뜻이다 — 엔진이 `ESCALATED`로 올린다 (ADR-0105).
+    """
+
+    def __init__(self, message: str, *, business: bool = False, escalated: bool = False) -> None:
         super().__init__(message)
-        self.business = business
+        self.business = business or escalated
+        self.escalated = escalated
 
 
 @dataclass
@@ -120,7 +132,18 @@ def opening_messages(spec: AiTask, *, context: Mapping[str, Any] | None = None) 
     목표 문장이 아니라 파라미터로 두어야 재생이 그 문장에 묶이지 않는다 (예제 FX-01·BX-02).
     """
     wanted = ", ".join(f"{name}({kind})" for name, kind in spec.results.items()) or "없음"
-    user = [spec.goal, "", f"## 반환\n다음 필드를 가진 JSON 객체 하나: {wanted}"]
+    user = [spec.goal]
+    if spec.forbidden_actions:
+        # **지시문이다 — 막는 장치가 아니다** (ADR-0105). 막는 것은 도구 허용 목록이다.
+        user += ["", "## 하지 않을 것", *(f"- {one}" for one in spec.forbidden_actions)]
+    if spec.confirm_triggers:
+        user += [
+            "",
+            "## 멈추고 사람에게 넘길 때",
+            f'다음 상황 중 하나를 만나면 하던 일을 멈추고 결과 대신 {{"{CONFIRM_KEY}": 번호}}만 낸다.',
+            *(f"{index}. {one}" for index, one in enumerate(spec.confirm_triggers, start=1)),
+        ]
+    user += ["", f"## 반환\n다음 필드를 가진 JSON 객체 하나: {wanted}"]
     context = spec.params if context is None else context
     if context:
         # 업무 파라미터(`chk:aiTask.params`)는 **값**이다 — 모델에는 주되 기록에는 남기지 않는다.
@@ -139,6 +162,7 @@ def run_agent(
     max_steps: int | None = None,
     on_step: Callable[[int, str, str], None] | None = None,
     context: Mapping[str, Any] | None = None,
+    clock: Callable[[], float] | None = None,
 ) -> Outcome:
     """자율 수행 — 모델에게 묻고, 허용된 도구를 빌려 주고, 마지막 JSON을 검증해 돌려준다.
 
@@ -147,11 +171,22 @@ def run_agent(
     않는 꼴이 된다.
     """
     limit = max_steps or (spec.limits.max_steps if spec.limits and spec.limits.max_steps else DEFAULT_MAX_STEPS)
+    timeout_s = spec.limits.timeout_s if spec.limits and spec.limits.timeout_s else None
+    clock = clock or _monotonic
+    started = clock()
+
+    def in_time() -> None:
+        # **하던 호출을 끊지 않는다** — 다음 일을 시작하기 전에만 본다 (ADR-0105).
+        if timeout_s is not None and clock() - started > timeout_s:
+            raise AgentError(f"{timeout_s}초 안에 끝내지 못했다 (`limits.timeout_s`를 보라)", business=True)
+
     available = tool_specs(spec, tools)
     messages = opening_messages(spec, context=context)
     trace = Trace()
 
     for step in range(1, limit + 1):
+        if step > 1:
+            in_time()
         try:
             reply = llm.ask(messages, tools=available)
         except LlmError as e:
@@ -165,12 +200,13 @@ def run_agent(
             if on_step is not None:
                 on_step(step, "finish", "")
             trace.answer = reply.text
-            return Outcome(results=check_results(spec, reply.text), trace=trace)
+            return Outcome(results=finished(spec, reply.text), trace=trace)
 
         if on_step is not None:
             on_step(step, "plan", ",".join(c.name for c in reply.tool_calls))
         messages.append(_assistant_message(reply))
         for call in reply.tool_calls:
+            in_time()
             result = _use_tool(spec, tools, call)
             trace.steps.append(Step(tool=call.name, arguments=dict(call.arguments), result=result))
             if on_step is not None:
@@ -178,6 +214,11 @@ def run_agent(
             messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
 
     raise AgentError(f"{limit}단계 안에 끝내지 못했다 (`limits.max_steps`를 보라)")
+
+
+def _monotonic() -> float:
+    """시간 한도의 시계 — 시험이 바꿔 끼울 수 있게 부를 때 찾는다."""
+    return time.monotonic()
 
 
 def finish_from(
@@ -211,7 +252,7 @@ def finish_from(
     trace.output_tokens += reply.output_tokens
     if on_step is not None:
         on_step(len(trace.steps) + 1, "extract", "")
-    return Outcome(results=check_results(spec, reply.text), trace=trace, replayed=True)
+    return Outcome(results=finished(spec, reply.text), trace=trace, replayed=True)
 
 
 def _assistant_message(reply: Reply) -> dict[str, Any]:
@@ -251,6 +292,23 @@ def _call(tool: Tool, name: str, arguments: Mapping[str, Any]) -> str:
         raise
     except Exception as e:  # noqa: BLE001 — 도구가 무엇을 낼지 모른다
         raise AgentError(f"도구 {name}이 실패했다: {e}", business=True) from e
+
+
+def finished(spec: AiTask, text: str) -> dict[str, Any]:
+    """모델의 마지막 답 — 확인 트리거에 걸렸으면 **전환**, 아니면 결과 필드를 검증한다.
+
+    트리거를 적지 않은 태스크에서는 `_confirm`을 보지 않는다 — 그런 칸을 달라고 한 적이 없다.
+    메시지에는 **그림에 적힌 트리거 글**만 싣는다 (업무 값이 아니다 — 원칙 6).
+    """
+    if spec.confirm_triggers:
+        body = _as_json(text)
+        if CONFIRM_KEY in body:
+            picked = body[CONFIRM_KEY]
+            index = picked if isinstance(picked, int) and not isinstance(picked, bool) else 0
+            if 1 <= index <= len(spec.confirm_triggers):
+                raise AgentError(f"확인 트리거: {spec.confirm_triggers[index - 1]}", escalated=True)
+            raise AgentError("확인 트리거에 걸렸다 (모델이 모르는 번호를 냈다)", escalated=True)
+    return check_results(spec, text)
 
 
 def check_results(spec: AiTask, text: str) -> dict[str, Any]:
@@ -298,6 +356,7 @@ def tool_names(specs: Sequence[ToolSpec]) -> list[str]:
 
 
 __all__ = [
+    "CONFIRM_KEY",
     "DEFAULT_MAX_STEPS",
     "RESULT_TYPES",
     "SYSTEM_PROMPT",
@@ -308,6 +367,7 @@ __all__ = [
     "Trace",
     "check_results",
     "finish_from",
+    "finished",
     "opening_messages",
     "run_agent",
     "tool_names",

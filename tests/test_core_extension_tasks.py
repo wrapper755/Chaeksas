@@ -181,6 +181,17 @@ def test_a_business_failure_goes_to_the_error_boundary(tmp_path: Path) -> None:
     assert run.variables.get("error_code") == "screen_changed"
 
 
+def test_an_escalation_reaches_the_escalated_boundary(tmp_path: Path) -> None:
+    """확장의 **전환**(`escalate: confirmation`)은 `ESCALATED`다 — C14의 경계가 그 코드로 받는다 (ADR-0105).
+
+    확장이 준 코드(`ui_escalated`)를 그대로 올리면 `ESCALATED` 경계가 받지 못한다.
+    """
+    executor = FakeExecutor(fail=TaskFailed("ui_escalated", "화면을 확인해 주세요", escalate="confirmation"))
+    run = run_it(tmp_path, WITH_BOUNDARY, Host({"demo_task": executor}))
+    assert run.state == State.DONE
+    assert run.variables.get("error_code") == "ESCALATED"
+
+
 def test_a_missing_extension_is_a_setup_error(tmp_path: Path) -> None:
     """**경계로 받지 않는다** — 그 PC에 확장이 없는 것이고 재시도로 풀리지 않는다."""
     run = run_it(tmp_path, WITH_BOUNDARY, Host({}))

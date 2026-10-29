@@ -143,13 +143,48 @@ def test_defaults_are_not_written() -> None:
     assert made.dump() == {"goal": "바뀐 목표", "domain": "llm"}
 
 
-def test_max_steps_keeps_the_timeout_it_does_not_show() -> None:
+def test_limits_are_written_field_by_field() -> None:
     made = loaded(BODY)
+    assert (made.max_steps_box.value(), made.timeout_box.value()) == (6, 20)
     made.max_steps_box.setValue(0)
     assert made.dump()["limits"] == {"timeout_s": 20}
-    made = loaded({"goal": "g", "domain": "llm", "limits": {"max_steps": 4}})
-    made.max_steps_box.setValue(0)
+    made.timeout_box.setValue(0)
     assert "limits" not in made.dump()
+    made = loaded({"goal": "g", "domain": "llm"})
+    made.timeout_box.setValue(90)
+    assert made.dump()["limits"] == {"timeout_s": 90}
+
+
+def test_instructions_are_one_per_line() -> None:
+    """지시문은 **줄마다 하나**이고 빈 줄은 버린다 — 엔진이 읽는다 (ADR-0105)."""
+    made = loaded(BODY)
+    assert made.forbidden_box.toPlainText() == "삭제"
+    assert made.confirm_box.toPlainText() == "100만원 이상"
+    made.forbidden_box.setPlainText("삭제\n\n  메일을 보내지 않는다  ")
+    made.confirm_box.setPlainText("")
+    out = made.dump()
+    assert out["forbidden_actions"] == ["삭제", "메일을 보내지 않는다"]
+    # 비우면 BPM 프로세스 기본값을 따른다 — 그림에 칸이 있었으면 빈 목록으로 남는다(뜻이 같다).
+    assert out["confirm_triggers"] == []
+    made = loaded({"goal": "g", "domain": "llm"})
+    made.confirm_box.setPlainText("\n")
+    assert "confirm_triggers" not in made.dump()
+
+
+def test_an_empty_instruction_list_that_was_written_stays() -> None:
+    body = {"goal": "g", "domain": "llm", "forbidden_actions": []}
+    assert loaded(body).dump() == body
+
+
+def test_the_form_says_forbidden_actions_do_not_block() -> None:
+    """금지 행동은 **모델에게 주는 말일 뿐**이다 — 화면이 「막아 준다」고 읽히면 안 된다."""
+    from PySide6.QtWidgets import QLabel
+
+    from chaeksas.studio.ai_task_editor import CONFIRM_NOTE, FORBIDDEN_NOTE
+
+    texts = [one.text() for one in loaded(BODY).findChildren(QLabel)]
+    assert FORBIDDEN_NOTE in texts and "막지는 않습니다" in FORBIDDEN_NOTE
+    assert CONFIRM_NOTE in texts and "ESCALATED" in CONFIRM_NOTE
 
 
 def test_the_outline_goes_only_into_an_empty_goal() -> None:
