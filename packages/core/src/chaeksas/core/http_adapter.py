@@ -326,11 +326,14 @@ class AdapterCaller:
         except AdapterError:
             raise
         except httpx.HTTPError as e:
-            # **결과를 모르는 실패**다 — 멱등이 아니면 다시 부르지 않는다 (§4-1).
+            # **결과를 모르는 실패**다 — 멱등이 아니면 다시 부르지 않는다 (§4-1). 연결 단계에서 막혔으면
+            # 요청이 나가지 않았으므로 모름이 아니다 (ADR-0107 — 사람에게 물을 거리가 아니다).
+            sent = not isinstance(e, httpx.ConnectError | httpx.ConnectTimeout)
             raise AdapterError(
                 f"{request.app_id}에 닿지 못했다 ({type(e).__name__})",
                 code="unreachable",
                 retryable=bool(operation.idempotent),
+                outcome_unknown=sent and not operation.idempotent,
             ) from e
         finally:
             if own:

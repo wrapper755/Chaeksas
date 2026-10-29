@@ -433,6 +433,7 @@ def test_a_result_unknown_failure_is_retried_only_when_idempotent() -> None:
     with pytest.raises(AdapterError) as caught:
         once.call(op_call())
     assert caught.value.code == "unreachable" and caught.value.retryable is False
+    assert caught.value.outcome_unknown is False, "연결 단계에서 막혔으면 요청이 나가지 않았다 (ADR-0107)"
 
     safe = definition(
         adapter={
@@ -455,6 +456,50 @@ def test_a_result_unknown_failure_is_retried_only_when_idempotent() -> None:
     with pytest.raises(AdapterError) as caught:
         again.call(op_call())
     assert caught.value.retryable is True
+
+
+@pytest.mark.parametrize(
+    "error", ["ReadTimeout", "RemoteProtocolError", "WriteError"], ids=["read-timeout", "dropped", "write"]
+)
+def test_a_failure_after_sending_is_outcome_unknown_unless_idempotent(error: str) -> None:
+    """보낸 뒤 답을 못 받았으면 **처리됐는지 모른다** — C15 `outcome_unknown`으로 간다 (ADR-0107)."""
+    import httpx
+
+    class Lost:
+        def stream(self, *args: Any, **kwargs: Any) -> Any:
+            raise getattr(httpx, error)("답이 없다")
+
+        def close(self) -> None:
+            return
+
+    def call_with(found: Any) -> AdapterError:
+        caller = AdapterCaller(
+            definitions={APP: found},
+            addresses=Addresses("http://127.0.0.1:9", "ocr-secret-1"),
+            client=Lost(),
+            resolver=lambda host: ["127.0.0.1"],
+        )
+        with pytest.raises(AdapterError) as caught:
+            caller.call(op_call())
+        return caught.value
+
+    unknown = call_with(definition())
+    assert (unknown.code, unknown.retryable, unknown.outcome_unknown) == ("unreachable", False, True)
+
+    safe = definition(
+        adapter={
+            "operations": [
+                {
+                    "name": "read_invoice",
+                    "modes": ["deterministic"],
+                    "idempotent": True,
+                    "request": {"method": "GET", "path": "/a"},
+                }
+            ]
+        }
+    )
+    again = call_with(safe)
+    assert (again.retryable, again.outcome_unknown) == (True, False), "다시 불러도 안전하면 모름이 아니다"
 
 
 def test_a_mode_the_definition_did_not_allow_is_refused(server: tuple[int, type[Echo]]) -> None:

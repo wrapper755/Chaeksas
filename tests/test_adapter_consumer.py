@@ -204,6 +204,29 @@ def test_without_a_key_it_stops_before_going_out(credit: str, hits: Hits) -> Non
     assert hits.urls == []
 
 
+def test_a_lost_answer_goes_up_as_outcome_unknown(credit: str, hits: Hits) -> None:
+    """보낸 뒤 답을 못 받으면 C15 `fail`에 결과 모름을 싣는다 (C13 §4-1, ADR-0107)."""
+    import httpx
+
+    class Lost:
+        def stream(self, *args: Any, **kwargs: Any) -> Any:
+            raise httpx.ReadTimeout("답이 없다")
+
+        def close(self) -> None:
+            return
+
+    one = service(credit, hits)
+    # 모의 신용 조회는 멱등이다 — 같은 정의를 멱등이 아닌 것으로 바꿔 본다.
+    raw = definitions.BUILDERS[APP](credit)
+    for op in raw["service"]["adapter"]["operations"]:
+        op["idempotent"] = False
+    one.definition = ExtensionManifest.model_validate(raw)
+    one.client = Lost()
+    done = one.execute(task())
+    assert (done.code, done.retryable, done.outcome_unknown) == ("unreachable", False, True)
+    assert done.fail_body()["outcome_unknown"] is True
+
+
 def test_a_business_failure_frees_the_slot(credit: str, hits: Hits) -> None:
     """모의 앱은 200에 `status: "not_found"`로 답한다 — `error_when`이 실패로 바꾼다."""
     one = service(credit, hits)

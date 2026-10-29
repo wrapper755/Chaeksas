@@ -1103,9 +1103,22 @@ class Engine:
             error = TaskFailed(
                 f"사람이 중단을 골랐습니다 ({pending.description or '전환'})",
                 node_id=node.id,
-                code=ERROR_ESCALATED,
+                # 서비스 호출의 결과 모름은 서버와 같은 코드다 (ADR-0107 — 그림의 경계를 바꾸지 않는다).
+                code=ERROR_TASK_FAILED if pending.retry_attempt else ERROR_ESCALATED,
             )
             return self._handle_failure(context, error)
+        if pending.retry_attempt:
+            # **서비스 호출의 결과 모름** (ADR-0107) — 사람이 「처리되지 않았다」를 봤다. 다음 번째로 다시 부른다.
+            context.emit("log", level="info", message="사람이 계속을 골랐다 — 다시 부른다")
+            try:
+                outcome = service_attempts(
+                    context, node.prop("serviceCall"), call_seq=pending.retry_call_seq, first=pending.retry_attempt
+                )
+                return self._apply(context, outcome)
+            except ExprError as e:
+                return self._handle_failure(context, EngineError(e.reason, node_id=node.id, code="expr_error"))
+            except EngineError as e:
+                return self._handle_failure(context, e)
         context.emit("log", level="info", message="사람이 계속을 골랐다 — 다시 하지 않고 넘어간다")
         try:
             return self._apply(context, Go())

@@ -492,27 +492,32 @@ def _failure_code(error: ExtensionTaskFailed) -> str:
     return error.code or ERROR_TASK_FAILED
 
 
-def asks_a_person(context: Context) -> bool:
-    """전환을 **사람 확인**으로 넘기나 (ADR-0106) — PC 실행이고 그림이 `ESCALATED`를 이름으로 받지 않을 때.
+def asks_a_person(context: Context, *, code: str = ERROR_ESCALATED) -> bool:
+    """전환을 **사람 확인**으로 넘기나 (ADR-0106) — PC 실행이고 그림이 `code`를 이름으로 받지 않을 때.
 
-    서버에는 확인에 답할 사람이 없다 (C1 R2) — 늘 오류 경계다. 그림이 `ESCALATED` 경계를 달았으면 흐름으로
+    서버에는 확인에 답할 사람이 없다 (C1 R2) — 늘 오류 경계다. 그림이 그 코드의 경계를 달았으면 흐름으로
     받겠다고 적은 것이다. **코드를 적지 않은 경계**는 「전환을 흐름으로」라고 말하지 않았으므로 확인을 띄운다.
+    서비스 호출의 결과 모름은 `TASK_FAILED`로 묻는다 (ADR-0107 — 「중단」이 그 코드다).
     """
     run, node = context.run, context.node
     if (run.process.info.run_location or RUN_LOCATION_PC) == RUN_LOCATION_SERVER:
         return False
-    named = run.process.errors.get(ERROR_ESCALATED)
+    named = run.process.errors.get(code)
     return not any(
         "errorEventDefinition" in b.event_definitions and named is not None and b.error_ref == named
         for b in run.boundaries(node.id)
     )
 
 
-def escalate_to_person(context: Context, message: str) -> Outcome:
+def escalate_to_person(
+    context: Context, message: str, *, retry_attempt: int = 0, retry_call_seq: int = 0
+) -> Outcome:
     """그 자리에서 **현장 확인 하나**로 멈춘다 (ADR-0106, C10 `escalated`·C13 §4).
 
     요청은 `manualTask`의 확인과 같은 모양이라(C6 `confirmation`, 늘 현장) Bot UI·CMN-01이 그대로
     띄우고 답을 나른다. 답은 `Engine.answer`가 받는다 — 「계속」은 넘어가고 「중단」은 `ESCALATED`다.
+    `retry_attempt`가 있으면 서비스 호출의 결과 모름이다 (ADR-0107) — 「계속」은 그 번째로 다시 부르고
+    「중단」은 `TASK_FAILED`다.
     """
     run, node = context.run, context.node
     instance = context.instance()
@@ -527,6 +532,8 @@ def escalate_to_person(context: Context, message: str) -> Outcome:
         where=WHERE_FIELD,
         description=message or None,
         escalation=True,
+        retry_attempt=retry_attempt,
+        retry_call_seq=retry_call_seq,
     )
     context.emit("log", level="warn", message=f"전환 — 사람 확인으로 넘긴다: {message}")
     context.emit("human_requested", layer="confirmation", request_id=request_id, where=WHERE_FIELD)
@@ -814,7 +821,8 @@ def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:
     결과를 돌려준다 (C11 §전송).
 
     마지막까지 실패하면 `TaskFailed`라서 **오류 경계가 받는다** (`TASK_FAILED`). 키가 틀렸거나
-    없는 작업을 부른 것(`FATAL_CODES`)은 다시 불러도 똑같으므로 바로 그만둔다.
+    없는 작업을 부른 것(`FATAL_CODES`)은 다시 불러도 똑같으므로 바로 그만둔다. 마지막 실패가 **결과
+    모름**(C15 `outcome_unknown`)이고 PC 실행이면 먼저 사람에게 묻는다 (ADR-0107 — 「계속」은 다시 부른다).
 
     **끝나지 않은 채 넘겨받으면 기다린다** (`ServicePending`, ADR-0103 — 서버 실행기만) — 이어 가는
     것은 `Engine.external_done()`이고 **같은 `service_attempts()`**로 돈다.
@@ -862,7 +870,9 @@ def service_attempts(
     attempts = (retry.max if retry else 0) + 1
 
     last: ServiceCallError | None = None
-    for attempt in range(first, attempts + 1):
+    tried = first
+    for attempt in range(first, max(attempts, first) + 1):
+        tried = attempt
         call = service_call_of(context, spec, attempt=attempt, call_seq=call_seq)
         try:
             if done is not None:
@@ -907,6 +917,14 @@ def service_attempts(
         return Go()
 
     assert last is not None
+    if last.outcome_unknown and asks_a_person(context, code=ERROR_TASK_FAILED):
+        return escalate_to_person(
+            context,
+            f"{spec.app_id}/{spec.operation}의 결과를 모릅니다 — 외부 앱에서 처리됐는지 확인하세요. "
+            f"처리되지 않았으면 「계속」(다시 부른다), 처리됐으면 「중단」입니다. ({last})",
+            retry_attempt=tried + 1,
+            retry_call_seq=call_seq,
+        )
     raise TaskFailed(f"{spec.app_id}/{spec.operation}: {last}", node_id=node.id) from last
 
 

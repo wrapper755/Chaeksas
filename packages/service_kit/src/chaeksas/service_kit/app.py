@@ -105,6 +105,8 @@ class Outcome:
     code: str | None = None
     message: str = ""
     retryable: bool = False
+    #: 결과 모름 (C15, ADR-0107) — 요청이 상대에게 닿았을 수 있는데 답을 받지 못했다.
+    outcome_unknown: bool = False
     detail: dict[str, Any] = field(default_factory=dict)
     skip: bool = False
 
@@ -125,6 +127,8 @@ class Outcome:
 
     def fail_body(self) -> dict[str, Any]:
         body: dict[str, Any] = {"code": self.code or "internal", "message": self.message, "retryable": self.retryable}
+        if self.outcome_unknown:
+            body["outcome_unknown"] = True
         if self.detail:
             body["detail"] = self.detail
         return body

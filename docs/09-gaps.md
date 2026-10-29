@@ -47,16 +47,20 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열다섯의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. **남은 것은 §3-19 하나다** — 그 길을 닫다 드러난 「어댑터의 결과 모름」이다.
+계약 열다섯의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. **남은 계약 공백은 없다.**
 
-### 3-19. 어댑터의 결과 모름 → PC는 확인 — **남았다**
+### 3-19. 어댑터의 결과 모름 → PC는 확인 — **닫았다**
 
-C13 §4-1은 `idempotent: false`인 어댑터 작업이 결과를 모르는 실패(시간 초과·연결 끊김)를 만나면 「PC는 확인, 서버는
-오류 경계」라고 적었다. 어댑터는 이제 C15를 거쳐 어댑터 일꾼이 부르고, 일꾼은 그 실패를 **다시 부르지 않는 업무
-실패**(`AdapterError(code="unreachable", retryable=False)` → C15 실패 결과)로 올린다 — 부르는 쪽(`CenterServiceCaller`)은
-「결과를 모른다」를 알 길이 없어 `TASK_FAILED`가 된다. 확장 수행기의 전환은 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)의
-길로 이미 돈다. **먼저 정할 것**: C15 실패 결과에 「결과 모름」을 싣는가(칸 하나), 그러면 서비스 호출(`chk:serviceCall`)도
-같은 확인으로 멈추는가.
+[ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md). C15 `fail`·결과 `error`에 **`outcome_unknown`** 칸 하나를
+더했다(`retryable`과 함께 참일 수 없다 — Center가 지운다). 어댑터 해석기(`core.http_adapter`)가 `idempotent: false` 작업에서
+요청을 **보낸 뒤** 답을 못 받았을 때(읽기 시간 초과·끊김)만 싣고 — 연결 단계 실패(`ConnectError`·`ConnectTimeout`)는
+요청이 나가지 않아 모름이 아니다 — 어댑터 일꾼이 `service_kit.Outcome`으로 나르며 `CenterServiceCaller`가
+`ServiceCallError.outcome_unknown`으로 옮긴다. 엔진의 `chk:serviceCall`은 재시도를 다 쓴 마지막 실패가 모름이고 **PC
+실행**이면 ADR-0106과 같은 현장 확인으로 멈춘다(`Pending.retry_attempt`·`retry_call_seq`) — 「계속」은 `attempt`를 올려
+**같은 `call_seq`로 다시 부르고**(새 일감, 출력이 채워진다), 「중단」은 서버와 같은 `TASK_FAILED`다. `TASK_FAILED`를 이름으로
+받는 경계가 있으면 묻지 않고, 서버는 그대로 오류 경계다(BX-32가 그 모양이다). 남겨 둔 것: 잠금이 지나 만료된 일감
+(`expired`·`timeout`)도 결과를 모르는 경우지만 Center는 작업이 멱등인지 몰라 표시하지 않는다. C11 서비스 앱은 아직
+그 칸을 싣지 않는다.
 
 ### 3-18. PC에서 전환을 사람 확인으로 넘기는 길 — **닫았다**
 
@@ -66,7 +70,7 @@ C13 §4-1은 `idempotent: false`인 어댑터 작업이 결과를 모르는 실�
 **다시 하지 않고 결과 없이** 넘어가고(`Engine._escalation_answered`), 「중단」은 `ESCALATED` 업무 실패다. 그림이
 `ESCALATED`를 이름으로 받는 경계를 달았으면 확인을 띄우지 않고, 서버는 늘 오류 경계다. Studio 시험 실행은 케이스
 `approvals`가 그 태스크 노드 id로 답하고 **적지 않으면 「중단」**이다. 남은 것: CMN-01 [R]의 「시도한 로케이터 표」는
-확장이 넘길 자리가 없어 비어 있다(사유는 [D] 한 줄), C13 §4-1의 어댑터 쪽은 §3-19.
+확장이 넘길 자리가 없어 비어 있다(사유는 [D] 한 줄). C13 §4-1의 어댑터 쪽은 §3-19가 닫았다.
 
 ### 3-17. 바깥 기능을 부르는 길 (Pull) — **닫았다**
 

@@ -539,7 +539,12 @@ def fail(store: Store, consumer: Any, task_id: str, body: FailRequest, *, now: s
     """실패했다. `retryable`은 **아는 코드일 때만** 믿는다 (C15 — 503·429·`timeout`만)."""
     sweep(store, now=now)
     row = _consumer_task(store, consumer, task_id)
-    error = {"code": body.code, "message": body.message, "retryable": body.retryable and body.code in RETRYABLE_CODES}
+    error: dict[str, Any] = {
+        "code": body.code, "message": body.message, "retryable": body.retryable and body.code in RETRYABLE_CODES
+    }
+    # **다시 불러도 안전하면 모름이 아니다** (ADR-0107) — 둘이 함께 참이면 부르는 쪽이 두 길을 다 탄다.
+    if body.outcome_unknown and not error["retryable"]:
+        error["outcome_unknown"] = True
     if body.detail:
         error["detail"] = body.detail
     _finish(

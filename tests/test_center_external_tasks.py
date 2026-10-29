@@ -443,6 +443,7 @@ def test_taken_but_not_finished_fails_with_timeout(center: TestClient, store: St
         "code": "timeout",
         "message": seen["error"]["message"],
         "retryable": True,
+        "outcome_unknown": False,
     }
 
 
@@ -457,6 +458,34 @@ def test_a_failure_is_only_retryable_for_known_codes(center: TestClient, field: 
     )
     seen = center.get(f"/api/v1/external-tasks/{task_id}", headers=bearer(field)).json()
     assert seen["state"] == "failed" and seen["error"]["retryable"] is False
+
+
+def slot(node_id: str) -> dict[str, Any]:
+    return {"run_id": RUN, "node_id": node_id, "node_instance": 1, "attempt": 1}
+
+
+def test_outcome_unknown_reaches_the_caller_but_not_with_retryable(center: TestClient, field: str) -> None:
+    """결과 모름은 그대로 간다 — 다시 불러도 안전하다고 하면 지운다 (C15, ADR-0107)."""
+    token = consumer(center)
+    lost = post(center, field, idempotency=slot("Task_Lost")).json()["task_id"]
+    fetch(center, token)
+    center.post(
+        f"/api/v1/consumers/tasks/{lost}/fail",
+        json={"code": "unreachable", "message": "답이 없다", "outcome_unknown": True},
+        headers=bearer(token),
+    )
+    seen = center.get(f"/api/v1/external-tasks/{lost}", headers=bearer(field)).json()
+    assert seen["error"]["outcome_unknown"] is True and seen["error"]["retryable"] is False
+
+    both = post(center, field, idempotency=slot("Task_Both")).json()["task_id"]
+    fetch(center, token)
+    center.post(
+        f"/api/v1/consumers/tasks/{both}/fail",
+        json={"code": "dependency_down", "message": "죽었다", "retryable": True, "outcome_unknown": True},
+        headers=bearer(token),
+    )
+    seen = center.get(f"/api/v1/external-tasks/{both}", headers=bearer(field)).json()
+    assert seen["error"]["retryable"] is True and seen["error"].get("outcome_unknown", False) is False
 
 
 def test_a_missing_required_output_is_the_consumers_bug(center: TestClient, field: str) -> None:

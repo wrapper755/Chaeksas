@@ -179,7 +179,10 @@ class AdapterService:
             found = caller.call(call)
         except ServiceCallError as e:
             self.idempotency.abandon(key)
-            return Outcome(code=e.code or "operation_failed", message=str(e), retryable=e.retryable)
+            return Outcome(
+                code=e.code or "operation_failed", message=str(e), retryable=e.retryable,
+                outcome_unknown=e.outcome_unknown,
+            )
         except Exception:
             # 자리를 비워 두지 않으면 다시 온 일감이 모두 「수행 중」으로 건너뛰어진다
             self.idempotency.abandon(key)
