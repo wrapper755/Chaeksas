@@ -50,6 +50,8 @@ known-first-party = ["chaeksas"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# 서버 쪽 시험 — CI의 Windows 잡은 `-m "not server"`로 뺀다 (`tests/ci_scope.py`, ADR-0104).
+markers = ["server: 서버(Center·서버 실행기·일꾼) 쪽 시험 — Linux에서만 돈다"]
 
 [tool.mypy]
 python_version = "3.12"
