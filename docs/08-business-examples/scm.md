@@ -25,7 +25,7 @@
 | 출처 | 프로토타입 시나리오 1 (끝남 — 케이스 3/3) → 검토를 서비스 앱으로 바꿔 다시 씀 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `vendor_registration` — 구매 포털의 등록 신청 |
-| 서비스 앱·키 참조 | `ext-credit` → `purchase-credit`, `compliance` → `purchase-compliance`, `erp` → `purchase-erp` |
+| 서비스 앱 | `compliance`, `erp`, `ext-credit` |
 | 확장 | ext-credit, compliance, erp |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx10_vendor_onboarding_review.bpmn) · [시험 케이스](cases/bx10_vendor_onboarding_review.cases.json) |
@@ -107,7 +107,7 @@
 
 - 포함 게이트웨이(조건에 맞는 가지만 동시에) + 포함 합류
 - 돌지 않은 가지의 변수는 없음 → 스크립트에서 None 처리
-- 서비스 앱 3개(사내 2·외부 1)와 키 참조 3개
+- 서비스 앱 3개(사내 2·외부 1)
 - 선택형 결재 칸(choice)
 
 **주의**
@@ -126,7 +126,7 @@
 | 출처 | 프로토타입 시나리오 5(입찰 마감, 제안만 됨) → 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 작업 지시 — 입찰 공고 발행 시 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx11_bid_collection.bpmn) · [시험 케이스](cases/bx11_bid_collection.cases.json) |
@@ -230,7 +230,7 @@
 | 출처 | 프로토타입 시나리오 6 (제안만 됨) + 기능 예제 discount_policy.dmn |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | BPM 프로세스 호출 — 견적(BX-15)·주문 처리에서 부름 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx12_shipping_fee.bpmn) · [시험 케이스](cases/bx12_shipping_fee.cases.json) · [DMN](bpmn/shipping_fee.dmn) |
@@ -300,7 +300,7 @@
 | 출처 | 프로토타입 시나리오 7 (제안만 됨 — 폴더 감시 조건 시작 → 여기서는 메시지 시작) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `return_request` — 쇼핑몰 반품 신청 |
-| 서비스 앱·키 참조 | `shop` → `sales-shop` |
+| 서비스 앱 | `shop` |
 | 확장 | shop |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx13_return_processing.bpmn) · [시험 케이스](cases/bx13_return_processing.cases.json) |
@@ -399,7 +399,7 @@
 | 출처 | 프로토타입 시나리오 8 (제안만 됨 — 웹 세션·프로필 유지) → UI 태스크로 |
 | 실행 위치 | **PC (Bot)** |
 | 시작 | 타이머 — 매일 08:00 (PC Bot) |
-| 서비스 앱·키 참조 | `ui-automation` → `purchase-portal` |
+| 서비스 앱 | 없음 |
 | 확장 | ui-automation |
 | 마일스톤 | **M4** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → Bot UI 실행 |
 | 파일 | [BPMN](bpmn/bx14_supplier_portal_orders.bpmn) · [시험 케이스](cases/bx14_supplier_portal_orders.cases.json) |
@@ -481,7 +481,7 @@ API가 없는 웹 화면, 사내 인증서·2단계 인증이 걸린 브라우�
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `quote_request` — CRM의 견적 요청 |
-| 서비스 앱·키 참조 | `erp` → `sales-erp`, `crm` → `sales-crm` |
+| 서비스 앱 | `crm`, `erp` |
 | 확장 | erp, crm |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx15_quotation.bpmn) · [시험 케이스](cases/bx15_quotation.cases.json) |
@@ -568,7 +568,7 @@ API·계산·결재 — 서버.
 | 출처 | 새로 설계 — 서버와 PC를 나누는 대표 예 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 매일 07:00 |
-| 서비스 앱·키 참조 | `wms` → `scm-wms` |
+| 서비스 앱 | `wms` |
 | 확장 | wms |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx16_reorder_proposal.bpmn) · [시험 케이스](cases/bx16_reorder_proposal.cases.json) |
@@ -638,7 +638,7 @@ API·계산·결재 — 서버.
 | 출처 | 새로 설계 — BX-16의 PC 쪽 |
 | 실행 위치 | **PC (Bot)** |
 | 시작 | 작업 지시 — BX-16이 **PC 위임**으로 만든다 (어느 PC인지는 Center가 고른다) |
-| 서비스 앱·키 참조 | `ui-automation` → `purchase-erp-ui` |
+| 서비스 앱 | 없음 |
 | 확장 | ui-automation |
 | 마일스톤 | **M4** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → Bot UI 실행 |
 | 파일 | [BPMN](bpmn/bx17_erp_po_entry.bpmn) · [시험 케이스](cases/bx17_erp_po_entry.cases.json) |

@@ -10,9 +10,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "ext-credit": "finance-credit"
-  },
   "extensions": [
     {
       "id": "ext-credit",

@@ -12,10 +12,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "directory": "sec-directory",
-    "erp": "sec-erp"
-  },
   "extensions": [
     {
       "id": "directory",

@@ -222,11 +222,14 @@ def test_the_process_info_round_trips_through_the_canvas(canvas: Any) -> None:
     from chaeksas.contracts.bpmn_ext import ProcessInfo
 
     canvas.create_empty("Proc_info", "청구서 점검")
-    info = ProcessInfo(
-        run_location="pc",
-        service_keys={"ext-credit": "finance-credit"},
-        inputs=[{"name": "금액", "type": "number", "required": True}],  # type: ignore[list-item]
-        outputs=["승인"],
+    # 옛 칸(`service_keys`, ADR-0102)은 **모르는 칸**이다 — 그것도 왕복해 남아야 한다 (C14 B7이 말한다).
+    info = ProcessInfo.model_validate(
+        {
+            "run_location": "pc",
+            "service_keys": {"ext-credit": "finance-credit"},
+            "inputs": [{"name": "금액", "type": "number", "required": True}],
+            "outputs": ["승인"],
+        }
     )
     made = canvas.call_sync(
         "setProperties",
@@ -243,7 +246,7 @@ def test_the_process_info_round_trips_through_the_canvas(canvas: Any) -> None:
     # 저장한 XML을 계약이 다시 읽어도 같다 (글자가 아니라 **뜻**으로 본다).
     again = read_process(canvas.save_xml())
     assert again.info.run_location == "pc"
-    assert again.info.service_keys == {"ext-credit": "finance-credit"}
+    assert again.info.model_extra == {"service_keys": {"ext-credit": "finance-credit"}}
     assert [one.name for one in again.info.inputs] == ["금액"]
     assert again.info.outputs == ["승인"]
 
@@ -394,7 +397,7 @@ def test_a_service_app_operation_becomes_a_service_call(canvas: Any) -> None:
     call = next(n for n in read_process(canvas.save_xml()).all_nodes() if n.id == node_id).prop("serviceCall")
     assert call is not None
     assert (call.app_id, call.operation) == ("svc-invoice", "issue")
-    assert call.key_ref is None, "키 참조는 BPM 프로세스에서 상속한다 (ADR-0013)"
+    assert not call.model_extra, "키 참조는 없다 (ADR-0102)"
 
 
 def shape_at(xml_text: str, node_id: str) -> tuple[str | None, str | None] | None:

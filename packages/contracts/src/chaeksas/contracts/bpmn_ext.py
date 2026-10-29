@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 from xml.etree import ElementTree
@@ -37,7 +37,6 @@ from chaeksas.contracts._base import (
 )
 from chaeksas.contracts.approvals import KNOWN_FIELD_TYPES, FormField
 from chaeksas.contracts.manifest import (
-    KEY_REF_PATTERN,
     KNOWN_DOMAINS,
     PC_ONLY_DOMAINS,
     ExtensionNeed,
@@ -181,7 +180,6 @@ class ProcessInfo(ContractModel):
     """`chk:process` — BPM 프로세스 정보 (STU-06). 빌드가 이것을 모아 C1 매니페스트를 만든다."""
 
     run_location: RunLocation | None = None
-    service_keys: dict[str, str] = Field(default_factory=dict)  # {app_id: key_ref}
     extensions: list[ExtensionNeed] = Field(default_factory=list)
     inputs: list[InputDecl] = Field(default_factory=list)
     outputs: list[str] = Field(default_factory=list)
@@ -237,13 +235,12 @@ class Retry(ContractModel):
 
 
 class ServiceCall(ContractModel):
-    """`chk:serviceCall` — 서비스 앱 태스크 (C11). **키 값은 넣지 않는다** (참조 이름만)."""
+    """`chk:serviceCall` — 서비스 앱 태스크. C15 외부 작업으로 간다(`app_id` = 토픽). **키는 없다** (ADR-0102)."""
 
     app_id: str
     operation: str
     input: dict[str, str] = Field(default_factory=dict)  # {필드: 식}
     output: dict[str, str] = Field(default_factory=dict)  # {변수: 필드}
-    key_ref: str | None = None  # 없으면 프로세스의 service_keys를 상속
     timeout_s: int | None = None
     retry: Retry | None = None
 
@@ -1339,23 +1336,30 @@ def _check_b6(process: BpmnProcess, task_type_locations: Mapping[str, Sequence[s
     ]
 
 
-def _check_b7(process: BpmnProcess, keyless_apps: Collection[str] | None) -> list[Violation]:
-    out: list[Violation] = []
+#: B7 — 옛 칸 (ADR-0102). 서비스 앱 키가 없어 아무도 보지 않는다. 모델에서 걷었으므로 옛 그림의
+#: 값은 모르는 칸(`model_extra`)으로 남는다 (원칙 3).
+OLD_KEY_FIELDS = {"process": "service_keys", "serviceCall": "key_ref"}
+
+
+def _check_b7(process: BpmnProcess) -> list[Violation]:
+    """옛 칸이 적혀 있으면 경고 한 줄 — **거부하지 않는다** (옛 그림도 그대로 읽히고 돈다)."""
+    where: list[str] = []
+    if OLD_KEY_FIELDS["process"] in (process.info.model_extra or {}):
+        where.append(f"chk:process.{OLD_KEY_FIELDS['process']}")
     for node in process.all_nodes():
         call: ServiceCall | None = node.prop("serviceCall")
-        if call is None:
-            continue
-        if keyless_apps is not None and call.app_id in keyless_apps:
-            # 키를 받지 않는 앱 (C13 `auth`가 없는 외부 앱, ADR-0091) — 참조를 적었다면 이름만 본다.
-            if call.key_ref and not re.fullmatch(KEY_REF_PATTERN, call.key_ref):
-                out.append(_error("B7", f"{node.id}: 키 참조 이름이 규칙에 맞지 않는다", items=[call.key_ref]))
-            continue
-        # **적지 않은 것은 흠이 아니다** — 빌드·엔진이 C1 기본값(`default_key_ref`)을 쓴다 (ADR-0094).
-        # 적었으면 이름 규칙만 본다.
-        key_ref = call.key_ref or process.info.service_keys.get(call.app_id)
-        if key_ref and not re.fullmatch(KEY_REF_PATTERN, key_ref):
-            out.append(_error("B7", f"{node.id}: 키 참조 이름이 규칙에 맞지 않는다", items=[key_ref]))
-    return out
+        if call is not None and OLD_KEY_FIELDS["serviceCall"] in (call.model_extra or {}):
+            where.append(f"{node.id}: chk:serviceCall.{OLD_KEY_FIELDS['serviceCall']}")
+    if not where:
+        return []
+    return [
+        _warn(
+            "B7",
+            "키 참조는 쓰지 않는다 — 서비스 앱 키가 없어졌다 (ADR-0102). 그 칸을 지워도 된다",
+            code="old_key_field",
+            items=where,
+        )
+    ]
 
 
 def _check_b8(process: BpmnProcess) -> list[Violation]:
@@ -1619,7 +1623,6 @@ def validate(
     called_processes: Mapping[str, Sequence[str]] | None = None,
     delegated_outputs: Mapping[str, Sequence[str]] | None = None,
     extension_task_vars: Callable[[ExtensionTask], Iterable[str]] | None = None,
-    keyless_apps: Collection[str] | None = None,
 ) -> list[Violation]:
     """C14 검사 규칙 B1~B14. 오류와 경고를 **함께** 돌려준다 (`Violation.severity`).
 
@@ -1634,8 +1637,6 @@ def validate(
     - `delegated_outputs`: **PC 위임**으로 부르는 Bot의 `bpm_process_id` → 그 패키지가 선언한
       `outputs` (C1). 남의 패키지 매니페스트라 계약이 스스로 알 수 없다 — 없으면 그 대조를
       건너뛴다 (ADR-0062). **모르는 것으로 막지 않는다.**
-    - `keyless_apps`: **키를 받지 않는 앱** id들 (C13 `auth`가 없는 외부 앱, ADR-0091). B7이 그 앱에는
-      키 참조를 묻지 않는다. 정의는 Center에 있어 계약이 모른다 — 없으면 **모든 앱에 묻는다**.
 
     여기서 하지 않는 것:
     - **확장 태스크의 속 내용** (`chk:task`의 JSON). 그 확장의 계약이 검사한다 — 예를 들어 UI
@@ -1648,7 +1649,7 @@ def validate(
         *_check_b3(process),
         *_check_b4_b5(process),
         *_check_b6(process, task_type_locations),
-        *_check_b7(process, keyless_apps),
+        *_check_b7(process),
         *_check_b8(process),
         *_check_b9_b10(process),
         *_check_b11(process, extension_task_vars),

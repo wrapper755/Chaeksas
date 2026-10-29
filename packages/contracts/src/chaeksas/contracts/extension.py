@@ -702,19 +702,6 @@ def _check_e3(m: ExtensionManifest) -> list[Violation]:
     return out
 
 
-def takes_key(m: ExtensionManifest) -> bool:
-    """그 확장의 서버 부분이 **키를 받는가** (ADR-0091).
-
-    HTTP 어댑터에 `auth`가 없으면 받지 않는다 — 어댑터가 키를 실을 자리가 없다. 그런 앱은 B7·사전
-    점검·BUI-10·STU-06이 키를 묻지 않고 빌드가 C1 `key_ref`를 적지 않는다. C11 서비스 앱은 늘
-    받는다 (키 발급·검증이 공통 계약이다).
-    """
-    svc = m.service
-    if svc is None or svc.adapter is None:
-        return True
-    return svc.adapter.auth is not None
-
-
 def _check_shape(m: ExtensionManifest) -> list[Violation]:
     """타입만으로는 못 보는 모양 — 아는 값인가, 짝이 맞나.
 

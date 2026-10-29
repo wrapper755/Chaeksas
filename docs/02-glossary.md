@@ -180,7 +180,7 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때 Center에 **일�
 | 대리 답용 키 | `relay_key` | Center API 키의 한 종류 (`type: relay`). 연동하는 쪽이 **사람 대신 결재에 답할 때만** 쓴다 — 결재 읽기·답뿐이고, 그 사람(`X-CHK-On-Behalf-Of`)이 결재 담당자일 때만 받는다 ([ADR-0081](decisions/0081-answering-on-behalf.md)) |
 | Center API 키 | `center_api_key` | Center 콘솔에서 발급. **Bot UI 설정에 등록**해 Center 등록·하트비트·다운로드에 쓴다 (Studio용도 따로 발급). 키가 곧 그 Bot UI의 신원 |
 | 서비스 앱 API 키 | `service_api_key` | **각 서비스 앱의 관리 콘솔에서 발급.** 허용 작업·허용 수행 모드·만료를 가진다. Center는 발급·저장하지 않는다 |
-| 키 참조 | `key_ref` | BPM 프로세스 속성에 적던 키의 이름. **쓰는 곳이 없다** — 서비스 앱 키가 없어졌다 ([ADR-0102](decisions/0102-calling-outside-is-pull.md)). 옛 그림·패키지를 읽기 위해 칸만 남는다 (C1·C14) |
+| 키 참조 | `key_ref` | BPM 프로세스 속성에 적던 키의 이름. **없어졌다** — 서비스 앱 키가 없다 ([ADR-0102](decisions/0102-calling-outside-is-pull.md)). 옛 그림·패키지에 적혀 있으면 모르는 칸으로 읽고 보지 않는다 (C14 B7이 경고한다). C3 `service_call.key_ref`는 늘 빈 글이다 |
 | 환경변수 접두사 | — | `CHK_` 하나. 중첩은 `__` (예: `CHK_CENTER__PORT`) |
 | 포트 | — | 구성요소마다 기본값이 있고, 설정 파일 또는 환경변수로 바꾼다 ([04-setup.md](04-setup.md) §6) |
 

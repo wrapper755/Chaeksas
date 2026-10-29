@@ -73,7 +73,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 
 | id | 이름 | 실행 위치 | 시작 | 확장 | 이 예제로 확인하는 것 |
 | --- | --- | --- | --- | --- | --- |
-| [BX-10](scm.md#bx-10-신규-거래처-등록-심사) | 신규 거래처 등록 심사 | 서버 | 메시지 `vendor_registration` | ext-credit, compliance, erp | 포함 게이트웨이(조건에 맞는 가지만 동시에) + 포함 합류; 돌지 않은 가지의 변수는 없음 → 스크립트에서 None 처리; 서비스 앱 3개(사내 2·외부 1)와 키 참조 3개 |
+| [BX-10](scm.md#bx-10-신규-거래처-등록-심사) | 신규 거래처 등록 심사 | 서버 | 메시지 `vendor_registration` | ext-credit, compliance, erp | 포함 게이트웨이(조건에 맞는 가지만 동시에) + 포함 합류; 돌지 않은 가지의 변수는 없음 → 스크립트에서 None 처리; 서비스 앱 3개(사내 2·외부 1) |
 | [BX-11](scm.md#bx-11-입찰-접수와-마감) | 입찰 접수와 마감 | 서버 | 작업 지시 | — | 받기 태스크 루프 + 경계 타이머(마감) + 경계 메시지(취소, 상관 키 `입찰번호`); 루프백 흐름; 경계 타이머에 **고정 시각** (기간이 아니라) |
 | [BX-12](scm.md#bx-12-배송비-계산) | 배송비 계산 | 서버 | BPM 프로세스 호출 | — | DMN 결정표(FIRST, 다중 출력); 공유 BPM 프로세스 (BX-15가 호출); 경계값 케이스 |
 | [BX-13](scm.md#bx-13-반품-처리) | 반품 처리 | 서버 | 메시지 `return_request` | shop | 메시지 시작 + 받기 태스크(상관 키); 받기 태스크의 중단 타이머(자동 취소); AI 분류 → 스크립트 계산 → 서비스 앱 작업 |
@@ -102,7 +102,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [BX-32](ops.md#bx-32-고객-문의-답변-초안) | 고객 문의 답변 초안 | 서버 | 메시지 `cs_inquiry` | kb-search, ext-helpdesk | 외부 확장 `idempotent:false` 작업 — 자동 재시도 없음; 실패·결과 모름을 오류 경계로 받아 사람 확인 결재로; RAG형 근거 검색 + 초안 |
 | [BX-33](ops.md#bx-33-it-권한-신청) | IT 권한 신청 | 서버 | 메시지 `access_request` | directory | DMN이 결재선 길이를 정함; 결재 3단계 — 중간 반려 시 바로 끝으로; 기본값 있는 결재 칸(`기간`) |
 | [BX-34](ops.md#bx-34-장애-알림-대응) | 장애 알림 대응 | 서버 | 메시지 `monitor_alert` | observability | 중단 타이머 경계 연쇄(에스컬레이션 사다리); 결재를 「확인 버튼」으로 쓰기; 받기 태스크로 끝내기 |
-| [BX-35](ops.md#bx-35-voc-주간-분석) | VOC 주간 분석 | 서버 | 타이머 | ext-helpdesk | 묶음 단위 병렬 AI (비용·시간 조절); 같은 외부 확장을 읽기 전용 키로 (`cs-helpdesk-read`); AI 두 단계 — 대량 분류 → 요약 |
+| [BX-35](ops.md#bx-35-voc-주간-분석) | VOC 주간 분석 | 서버 | 타이머 | ext-helpdesk | 묶음 단위 병렬 AI (비용·시간 조절); AI 두 단계 — 대량 분류 → 요약 |
 | [BX-36](ops.md#bx-36-레거시-화면-데이터-이관) | 레거시 화면 데이터 이관 | PC | PC Bot 수동 실행 | ui-automation, crm | UI 태스크(등록 화면)와 AI 데스크톱 자율 태스크를 한 BPM 프로세스에; PC BPM 프로세스에서 서비스 앱 호출; upsert로 재실행 안전 |
 
 ### 기능 예제 ([feature-examples.md](feature-examples.md))
@@ -129,7 +129,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [FX-17](feature-examples.md#fx-17-웹훅-보내기) | 웹훅 보내기 | 서버 | 수동 실행 | — | `chk:webhook` body `fields:[…]`; `SEND_FAILED` |
 | [FX-18](feature-examples.md#fx-18-병렬-반복) | 병렬 반복 | 서버 | 수동 실행 | web-reader | `isSequential=false`; 결과 순서 = 입력 순서 (C14); PC에서는 차례로 돈다 |
 | [FX-19](feature-examples.md#fx-19-수동-확인-pc) | 수동 확인 (PC) | PC | PC Bot 수동 실행 | — | `manualTask` + `chk:approval` (칸 없음) |
-| [FX-20](feature-examples.md#fx-20-외부-확장-http-어댑터-호출) | 외부 확장 HTTP 어댑터 호출 | 서버 | 수동 실행 | ext-credit | 외부 확장 어댑터; 태스크 단위 `key_ref` (BPM 프로세스 기본 대신); Admin 서명된 정의만 사용 |
+| [FX-20](feature-examples.md#fx-20-외부-확장-http-어댑터-호출) | 외부 확장 HTTP 어댑터 호출 | 서버 | 수동 실행 | ext-credit | 외부 확장 어댑터; Admin 서명된 정의만 사용 |
 | [FX-21](feature-examples.md#fx-21-결정표-적중-정책-uniqueany) | 결정표 적중 정책 (UNIQUE·ANY) | 서버 | 수동 실행 | — | DMN 적중 정책 `UNIQUE`; DMN 적중 정책 `ANY` (겹치는 줄, 같은 결과); 맞는 줄 없음 = 모든 출력 `None` |
 | [FX-22](feature-examples.md#fx-22-파일-출력--csv-덧붙이기와-txt) | 파일 출력 — csv 덧붙이기와 txt | 서버 | 수동 실행 | — | 파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만); 파일 출력 `txt` + `template`; 쓴 파일을 `chk:fileList`로 되세기 |
 | [FX-23](feature-examples.md#fx-23-재생-모드-셋-planfullnone) | 재생 모드 셋 (plan·full·none) | 서버 | 수동 실행 | — | 재생 모드 `plan`(기본)·`full`·`none`을 한 그림에서; `full`은 도구가 있어야 한다 (B12); `none`은 되밟지 않는다 |
@@ -196,8 +196,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | UI 자동화 확장 (내장) | BX-04, BX-14, BX-17, BX-36, FX-15, FX-16 |
 | 외부 확장 (HTTP 어댑터) | BX-06, BX-10, BX-32, BX-35, FX-20 |
 | 사내 확장 서비스 앱 | BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-36, FX-10, FX-18 |
-| 태스크 단위 키 참조 | FX-20 |
-| 한 프로세스에 키 참조 여러 개 | BX-10, BX-15, BX-22, BX-23, BX-32, BX-36 |
+| 한 프로세스에 서비스 앱 여러 개 | BX-10, BX-15, BX-22, BX-23, BX-32 |
 | 프로세스 기본값 (금지 행동·확인 트리거) | BX-01, BX-04, BX-14, BX-17, BX-36 |
 | 업무 파라미터 | BX-02, BX-05, BX-07, BX-14, BX-20, BX-23, FX-01, FX-08, FX-10 |
 | 다른 예제를 호출 (공유 BPM 프로세스) | BX-15, BX-21, BX-30, FX-03 |

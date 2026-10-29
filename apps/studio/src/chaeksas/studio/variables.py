@@ -155,7 +155,7 @@ def build_inputs(rows: Sequence[InputRow]) -> list[InputDecl]:
 def process_patch(info: ProcessInfo, inputs: Sequence[InputRow], outputs: Sequence[str]) -> str:
     """캔버스에 넘길 `chk:process` 본문 (JSON 글 — `setProperties`의 규약).
 
-    **읽은 것을 통째로 되돌려 쓴다** — `run_location`·`extensions`·`service_keys`처럼 이 탭이
+    **읽은 것을 통째로 되돌려 쓴다** — `run_location`·`extensions`처럼 이 탭이
     모르는 칸이 사라지지 않게 (STU-06·STU-15와 같은 자리).
     """
     made = info.model_copy(deep=True)

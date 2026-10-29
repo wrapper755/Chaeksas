@@ -106,12 +106,12 @@ def test_the_call_pairs_names_with_themselves() -> None:
     assert body == {"delegate": {"bpm_process_id": "order-pc"}, "input": {"발주": "발주"}, "output": {"번호": "번호"}}
 
 
-def test_the_pc_bot_takes_only_the_moved_extensions_keys() -> None:
+def test_the_pc_bot_takes_only_the_moved_extensions_pin_and_no_keys() -> None:
     plan = Plan(node_id="Task_Erp", pc_id="order-pc", pc_name="", inputs=[("발주", "list")], outputs=["번호"])
     info = server().info
     body = json.loads(split_actions.pc_process(plan, info, "ui-automation"))
     assert body["run_location"] == "pc"
-    assert body["service_keys"] == {"ui-automation": "erp-ui"}, "쓰지 않는 키를 사전 점검이 요구하지 않게"
+    assert "service_keys" not in body, "옛 키 참조는 옮기지 않는다 (ADR-0102)"
     assert [one["id"] for one in body["extensions"]] == ["ui-automation"]
     assert body["inputs"] == [{"name": "발주", "type": "list", "required": True}]
     assert body["outputs"] == ["번호"]
@@ -245,7 +245,7 @@ def test_splitting_builds_the_pc_bot_then_delegates_in_place(tmp_path: Path, can
     built = entry.process
     assert built.id == "Proc_order_pc"
     assert built.info.run_location == "pc" and built.info.outputs == ["번호"]
-    assert built.info.service_keys == {"ui-automation": "erp-ui"}
+    assert "service_keys" not in (built.info.model_extra or {}), "옛 키 참조는 옮기지 않는다"
     moved = next(n for n in built.all_nodes() if n.kind == "serviceTask")
     task = moved.prop("task")
     assert task.type == "ui_task" and task.extension == "ui-automation" and task.data == {"page_id": "erp.po"}

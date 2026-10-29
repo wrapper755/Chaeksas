@@ -99,7 +99,7 @@ EXAMPLES.append(Example(
              "결재 `show`를 문자열 하나로 쓰면 아무것도 안 보였다 — 배열로 (C14 B2).",
              "케이스가 하나뿐이었다 — 「문제 없는 달」·「청구서 없음」을 처음부터 둔다."],
     samples="프로토타입 `samples/invoice_reconciliation/2026-08/` — 청구서 PDF 7장(양식 3종), `ledger_2026-08.xlsx` 7줄. 심어 둔 문제: 금액 +90,000(유니스오피스), 미입고(삼정), 미등록 PO-2608-011(네오소재), 중복(대성테크 재발행), 부가세 180,000(코리아플러스), 미청구 발주 005·007. 새 저장소로 옮길 때 `samples/`에 복사한다.",
-    service_keys={}, extensions=[],
+    extensions=[],
 ))
 
 # ───────────────────────────── BX-02 ─────────────────────────────
@@ -262,7 +262,7 @@ EXAMPLES.append(Example(
               template="# 세금계산서 발행 보고 — {대상월}\n\n- 건수: {건수}\n- 포털 합계: {포털합계}\n"
                        "- 회계 시트 합계: {시트합계}\n- 검증: {검증통과} {검증메모}\n",
               store_as="보고서경로")],
-    service_keys={"ui-automation": "finance-tax"}, extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}],
+    extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}],
     defaults={"forbidden_actions": ["포털에서 수정·삭제 링크를 누르지 않는다", "발행대장의 머리글과 합계 수식 칸을 고치지 않는다"],
               "confirm_triggers": ["포털 로그인 화면이 나타남"], "web": {"profile": "supplier-portal"}},
     variables=[("거래내역", "list", "Task_ReadPortal", "표의 줄"), ("포털합계", "int", "Task_Sum", ""), ("시트합계", "int", "Task_ReadTotal", ""),
@@ -370,7 +370,7 @@ EXAMPLES.append(Example(
     flows=[f("Start", "Task_Credit"), f("Task_Credit", "Task_Grade"), f("Task_Grade", "Task_Pick"), f("Task_Pick", "Gw_Risk"),
            f("Gw_Risk", "Task_Alert", "위험수 > 0", "있음"), f("Gw_Risk", "End", default=True, name="없음"), f("Task_Alert", "End")],
     data=[out("Data_Result", "신용 조회 결과", "Task_Pick", "신용/{오늘}_신용조회.xlsx", "xlsx", variables=["결과표"], sheet="결과", store_as="결과경로")],
-    service_keys={"ext-credit": "finance-credit"}, extensions=[{"id": "ext-credit", "version": ">=1,<2"}],
+    extensions=[{"id": "ext-credit", "version": ">=1,<2"}],
     decisions=[Decision("credit_grade", "신용 등급 분류", [("신용점수", "score", "number"), ("연체", "overdue", "boolean")],
                         [("grade", "string")],
                         [(["-", "true"], ['"위험"'], "연체가 있으면 점수와 무관하게 위험"),
@@ -475,7 +475,7 @@ ERP에서 만기가 지난 매출채권을 가져와 거래처마다 연체 단�
            f("Gw_Escalate", "Approve_Legal", "len(이관대상) > 0", "있음"), f("Gw_Escalate", "End", default=True, name="없음"),
            f("Approve_Legal", "Gw_Transfer"), f("Gw_Transfer", "Task_Transfer", "이관", "이관"), f("Gw_Transfer", "End", default=True, name="보류"),
            f("Task_Transfer", "End")],
-    service_keys={"erp": "finance-ar"}, extensions=[{"id": "erp", "version": ">=1,<2"}],
+    extensions=[{"id": "erp", "version": ">=1,<2"}],
     decisions=[Decision("dunning_stage", "연체 단계", [("연체일수", "연체일수", "number"), ("금액", "금액", "number")], [("단계", "string")],
                         [([">= 90", "-"], ['"이관검토"'], ""), (["-", ">= 100000000"], ['"이관검토"'], ""),
                          (["[30..90)", "-"], ['"2차"'], ""), (["[1..30)", "-"], ['"1차"'], "")])],

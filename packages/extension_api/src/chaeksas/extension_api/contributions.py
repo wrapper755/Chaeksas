@@ -139,7 +139,7 @@ class PreflightTarget:
 
     extension: ExtensionContext
     manifest: Manifest
-    #: 쓰려는 서비스 앱 키 참조 이름들 (값이 있나 보려고). 값은 `extension.secret()`로 푼다.
+    #: 옛 칸 — 서비스 앱 키가 없어졌다 (ADR-0102). 호스트가 채우지 않아 **늘 비어 있다**.
     key_refs: tuple[str, ...] = field(default_factory=tuple)
 
 

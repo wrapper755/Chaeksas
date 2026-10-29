@@ -132,13 +132,11 @@ def call_body(plan: Plan) -> str:
 
 
 def pc_process(plan: Plan, server: ProcessInfo, extension: str | None) -> str:
-    """PC Bot의 `chk:process` — 옮긴 노드의 **확장에 해당하는 것만** 서버에서 가져온다.
+    """PC Bot의 `chk:process` — 옮긴 노드의 **확장에 해당하는 것만** 서버에서 가져온다 (ADR-0071 4).
 
-    쓰지 않는 키 참조를 옮기면 사전 점검이 그 키를 요구한다 (ADR-0071 4).
+    키 참조는 옮기지 않는다 — 키가 없다 (ADR-0102, C14 B7).
     """
     body: dict[str, Any] = {"run_location": "pc"}
-    if extension and extension in server.service_keys:
-        body["service_keys"] = {extension: server.service_keys[extension]}
     pins = [one.to_json_dict() for one in server.extensions if one.id == extension]
     if pins:
         body["extensions"] = pins

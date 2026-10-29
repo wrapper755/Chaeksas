@@ -10,9 +10,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "pc",
-  "service_keys": {
-    "ui-automation": "purchase-portal"
-  },
   "extensions": [
     {
       "id": "ui-automation",

@@ -11,7 +11,7 @@
 
 ## 목적
 
-패키지(zip) 안의 `manifest.json`이 "이 패키지가 무엇이고, 어디서 돌며, 실행하려면 무엇이 있어야 하는가"를 말한다. Center는 이것으로 업로드를 검사하고, Bot UI·서버 실행기는 이것으로 설치 전 사전 점검을 한다. **키 값은 들어가지 않는다** — 키 참조 이름만 들어간다.
+패키지(zip) 안의 `manifest.json`이 "이 패키지가 무엇이고, 어디서 돌며, 실행하려면 무엇이 있어야 하는가"를 말한다. Center는 이것으로 업로드를 검사하고, Bot UI·서버 실행기는 이것으로 설치 전 사전 점검을 한다. **키 값도 키 참조도 들어가지 않는다** — 바깥 기능은 Center의 외부 작업으로 부른다 (C15, ADR-0102).
 
 ## 전송
 
@@ -76,7 +76,7 @@
 | `tools` | str[] | 쓰는 도구 이름 전체 (AI 태스크의 허용 도구 합) |
 | `domains` | str[] | AI 태스크 대상 환경 합: `llm` `api` `doc` `web` `desktop` |
 | `settings` | str[] | 실행하는 쪽이 갖춰야 할 설정 이름: `llm` `vlm` `smtp` |
-| `service_apps` | ServiceAppNeed[] | 부르는 서비스 앱과 **키 참조** (아래). UI 태스크가 있으면 `ui-automation`이 들어간다 |
+| `service_apps` | ServiceAppNeed[] | 부르는 서비스 앱(= C15 토픽)과 작업 (아래). UI 태스크가 있으면 `ui-automation`이 들어간다 |
 | `resources` | `{type, id}`[] | 확장이 기여한 자원 중 쓰는 것 (예: `{type: "ui_page", id: "erp.order.form"}`). Center 리소스 목록(C7 확장 기여 자원)과 대조 |
 | `extensions` | `{id, version, definition_hash?}`[] | 쓰는 확장과 버전 범위 (C13). 외부 확장이면 `definition_hash`로 정의를 고정한다. Studio가 채운다 |
 | `task_types` | `{id, extension, run_locations?}`[] | 쓰는 태스크 종류 중 **확장이 기여한 것**과, 그 확장 정의에 적힌 실행 위치. Studio가 빌드할 때 확장 정의에서 옮겨 적는다. Center는 이것으로 R2를 판정하고, 실행하는 쪽은 자기 확장 정의로 다시 확인한다. **`run_locations`는 아는 쪽이 준다 — 모르면 넣지 않는다**: 빌드하는 PC에 그 확장이 깔려 있지 않거나 꺼져 있으면(ADR-0043) 적을 값이 없다 |
@@ -91,11 +91,9 @@
 | --- | --- | --- | --- |
 | `app_id` | str | ✓ | 서비스 앱 id (C11 manifest의 `app_id`) |
 | `operations` | str[] | ✓ | 부르는 작업 이름 |
-| `key_ref` | str | | BPM 프로세스 단위 **키 참조 이름**. 키를 받지 않는 앱(C13 `auth`가 없는 외부 앱)에는 적지 않는다. **옛 패키지를 읽는 칸이다** — 키는 없다(아래, ADR-0102). `^[a-z0-9][a-z0-9-]{0,39}$` (1~40자, 소문자·숫자·`-`). **적지 않으면 빌드가 기본값을 적는다**(`default_key_ref`) — BPM 프로세스 id에서 `.`·`_`를 `-`로 바꾸고 40자로 자른 것 (예: `finance.invoice-issue` → `finance-invoice-issue`) |
-| `task_key_refs` | str[] | | 태스크에서 다르게 지정한 참조 (예외). 옛 패키지를 읽는 칸이다 |
 
-> [ADR-0102](../decisions/0102-calling-outside-is-pull.md): **형식은 그대로이고 키는 없다.** 바깥 기능은 Center의 외부 작업으로 부르므로(C15) 현장에 키가 없다.
-> - `key_ref`·`task_key_refs`는 **옛 패키지를 읽기 위해 남은 칸**이다 — 빌드가 여전히 적고(`default_key_ref`) R4가 형식을 보지만 **아무도 이 이름으로 키를 찾지 않는다**. 실행 기록의 `key_ref`는 빈 글이다 (C15).
+> [ADR-0102](../decisions/0102-calling-outside-is-pull.md): **키가 없다.** 바깥 기능은 Center의 외부 작업으로 부르므로(C15) 현장에 키가 없고, 매니페스트에도 키 참조 칸이 없다.
+> - 옛 패키지에 적힌 `key_ref`·`task_key_refs`는 **모르는 칸으로 받아 두고 보지 않는다**(원칙 3) — 거부하지 않으므로 옛 패키지도 그대로 올라가고 설치된다. 빌드는 적지 않는다.
 > - `app_id`가 곧 **토픽**이다 — Center는 배포된 Bot의 `requires.service_apps`(와 `requires.extensions`)에 있는 토픽만 그 Bot이 올리게 둔다(C15 「불러도 되나」). `operations`는 그 안의 허용 작업이다(비면 모든 작업).
 
 ### HumanNeeds
@@ -146,8 +144,8 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 | R2 | `run_location=server`면: `requires.domains`에 `web`·`desktop` 없음, `requires.task_types[]`가 **`run_locations`를 적었으면** 거기에 `server`가 있음 (예: `ui_task`는 `pc`만이라 불가), `human.approval_field=false`, `human.confirmation=false` | 422 `server_incompatible` + 걸린 항목 목록 |
 | R3 | `run_location=server`인 BPM 프로세스가 `run_location=pc`인 **공유 BPM 프로세스**를 부르면 **거부**다. PC 위임의 길이 아니다 — 패키지에 복사해 넣은 정의는 **PC에서 돌릴 길이 없다**(작업은 배포된 패키지를 가리키고 공유 BPM 프로세스에는 진입이 없다, R1). 위임은 `requires.delegations`로 적는다 ([ADR-0062](../decisions/0062-pc-delegation.md)) | 422 `delegation_not_supported` |
 | R8 | (Center, 배포 때) `run_location=server`면 `requires.service_apps[].operations`가 모두 C11 manifest에서 `server_ok=true`이고 결정 수행을 지원한다 (리소스 목록 C7과 대조). 업로드 때는 경고만 | 배포 422 `operation_not_server_ok` / `operation_not_deterministic` |
-| R4 | 적힌 `key_ref`·`task_key_refs`는 이름 규칙을 따른다. 규칙상 `_`가 없어 키 값(`chk_…`)은 들어갈 수 없다 | 422 `invalid_key_ref` |
-| R5 | `manifest.json`·BPMN 어디에도 키 값·비밀 값이 없다 (Studio 빌드가 보장, Center는 R4만 검사) | — |
+| R4 | (없앴다 — 키 참조 칸이 없다, ADR-0102. 번호는 다시 쓰지 않는다) | — |
+| R5 | `manifest.json`·BPMN 어디에도 키 값·비밀 값이 없다 (Studio 빌드가 보장한다) | — |
 | R6 | `content_hash`가 실제 내용과 같다 (C2) | 422 `hash_mismatch` |
 
 **R7은 없어졌다** — 툴팩 해시를 검사하던 규칙이고 툴팩 갈래가 사라졌다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)). **번호는 다시 쓰지 않는다** (오류 코드는 사람이 기억한다).
@@ -193,7 +191,7 @@ PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드�
     "domains": ["llm", "doc"],
     "settings": ["llm"],
     "service_apps": [
-      {"app_id": "tax-invoice", "operations": ["issue"], "key_ref": "finance-invoice"}
+      {"app_id": "tax-invoice", "operations": ["issue"]}
     ],
     "resources": [],
     "task_types": [],
@@ -226,7 +224,7 @@ PC Bot (UI 태스크가 있음):
   "requires": {
     "domains": ["llm"],
     "service_apps": [
-      {"app_id": "ui-automation", "operations": ["plan", "heal", "report"], "key_ref": "erp-order"}
+      {"app_id": "ui-automation", "operations": ["plan", "heal", "report"]}
     ],
     "resources": [{"type": "ui_page", "id": "erp.order.form"}],
     "task_types": [{"id": "ui_task", "extension": "ui-automation", "run_locations": ["pc"]}],
@@ -262,12 +260,13 @@ PC Bot (UI 태스크가 있음):
 | `kind`: `employee` / `process-lib` / `toolpack` / `template` | `bpm_process` / `process_lib` (`toolpack`·`template` 없음 — 도구는 확장이 기여한다, [ADR-0050](../decisions/0050-no-toolpack-kind.md)) |
 | 실행 위치 없음 (전부 PC) | `run_location` (기본 `server`) |
 | `hitl.business` / `hitl.execution` | `human.approval_center` / `approval_field` / `confirmation` (서버 검사에 필요) |
-| 서비스 앱·화면 의존 없음 | `requires.service_apps`(키 참조 포함), `requires.extensions`·`task_types`·`resources` |
+| 서비스 앱·화면 의존 없음 | `requires.service_apps`, `requires.extensions`·`task_types`·`resources` |
 
 ## 변경 이력
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | `requires.service_apps[].key_ref`·`task_key_refs`와 **R4를 걷었다** — 빌드가 적지 않고, 옛 패키지에 적혀 있으면 모르는 칸으로 받아 두고 보지 않는다(원칙 3). 선택 칸을 걷은 것이고 받는 쪽이 옛 칸을 거부하지 않으므로 **판을 올리지 않는다** (C4의 키 칸을 걷을 때와 같은 결) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `key_ref`·`task_key_refs`는 옛 패키지를 읽는 칸으로만 남는다(키가 없다). `app_id`가 C15 토픽이고 배포된 Bot이 올려도 되는 토픽을 정한다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | `inputs[].source?`(값 출처 — C14)를 옮긴다. 없으면 부르는 쪽이다 (옛 패키지와 같다) | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | `key_ref`는 Center가 내려 준 키를 찾는 이름(형식은 그대로), `operations`가 그 키의 허용 작업(비면 모든 작업), `task_key_refs`는 같은 키의 다른 이름, 적지 않으면 `default_key_ref`, 키를 받는 확장의 태스크도 줄이 된다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |

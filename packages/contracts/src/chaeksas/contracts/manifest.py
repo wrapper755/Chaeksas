@@ -6,7 +6,6 @@ Studio(빌드)·Center(업로드)·Bot UI·서버 실행기(설치)가 **같은 
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal
 
@@ -35,18 +34,6 @@ KNOWN_DOMAINS = frozenset({"llm", "api", "doc", "web", "desktop"})
 
 #: 서버에서 돌 수 없는 AI 태스크 대상 환경 (R2·C14 B6, `core`의 사전 점검·AI 태스크도 본다).
 PC_ONLY_DOMAINS = frozenset({"web", "desktop"})
-
-#: `key_ref` 이름 규칙 (R4). `_`가 없으므로 키 값(`chk_…`)은 들어갈 수 없다.
-KEY_REF_PATTERN = r"^[a-z0-9][a-z0-9-]{0,39}$"
-
-
-def default_key_ref(bpm_process_id: str) -> str:
-    """키 참조 이름의 기본값 — BPM 프로세스(패키지) id의 `.`·`_`를 `-`로, 40자까지 (C1).
-
-    **그림에 적지 않으면 이 이름이다** — 빌드·엔진·실행하는 쪽이 같은 함수를 쓴다 (ADR-0094 — STU-06의
-    「서비스 앱 키」 섹션이 없어져 사람이 미리 적지 않는다).
-    """
-    return re.sub(r"[._]", "-", bpm_process_id).lower()[:40]
 
 PackageId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,99}$")]
 SemVer = Annotated[str, Field(pattern=r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")]
@@ -82,14 +69,13 @@ class ManifestInput(ContractModel):
 
 
 class ServiceAppNeed(ContractModel):
-    """부르는 서비스 앱과 **키 참조**. 키 값은 절대 들어가지 않는다 (R5)."""
+    """부르는 서비스 앱(= C15 토픽)과 작업. **키도 키 참조도 없다** (ADR-0102).
+
+    옛 패키지의 `key_ref`·`task_key_refs`는 모르는 칸으로 받아 두고 보지 않는다 (원칙 3).
+    """
 
     app_id: str
     operations: list[str]
-    # 이름 규칙은 타입이 아니라 R4(`validate()`)가 검사한다 — 위반에 `invalid_key_ref` 코드를 붙이려고.
-    # **없으면 키를 받지 않는 앱이다** (C13 `auth`가 없는 외부 앱, ADR-0091) — 받는 쪽은 묻지 않는다.
-    key_ref: str | None = None
-    task_key_refs: list[str] = Field(default_factory=list)
 
 
 class ResourceRef(ContractModel):
@@ -306,23 +292,6 @@ def _check_r12(m: Manifest) -> list[Violation]:
     ]
 
 
-def _check_r4(m: Manifest) -> list[Violation]:
-    out = []
-    for need in m.requires.service_apps:
-        refs = [*([] if need.key_ref is None else [need.key_ref]), *need.task_key_refs]
-        bad = [r for r in refs if not re.fullmatch(KEY_REF_PATTERN, r)]
-        if bad:
-            out.append(
-                Violation(
-                    rule="R4",
-                    code="invalid_key_ref",
-                    message=f"{need.app_id}의 키 참조 이름이 규칙({KEY_REF_PATTERN})에 맞지 않는다",
-                    items=bad,
-                )
-            )
-    return out
-
-
 def _check_r9(m: Manifest) -> list[Violation]:
     """시작 방법의 `kind`가 계약에 적힌 다섯 중 하나인가 (C1 R9).
 
@@ -396,7 +365,7 @@ def validate(
       폴더면 `chaeksas.contracts.hashing.content_hash_dir(root)`, zip이면 `content_hash_zip(path)`.
 
     여기서 하지 않는 것:
-    - **R5** (키 값·비밀이 없음) — Studio 빌드가 보장한다. Center는 R4만 본다 (C1 검사 규칙 표).
+    - **R5** (키 값·비밀이 없음) — Studio 빌드가 보장한다 (C1 검사 규칙 표).
     - **R8** (서버 배포 때 작업이 `server_ok`·결정 수행인지) — Center가 배포 시점에 C11 manifest·
       리소스 목록(C7)과 대조한다. 매니페스트만으로는 알 수 없다.
     """
@@ -404,7 +373,6 @@ def validate(
         *_check_r1(m),
         *_check_r2(m),
         *_check_r3(m, lib_locations or {}),
-        *_check_r4(m),
         *_check_r6(m, computed_hash),
         *_check_r9(m),
         *_check_r10(m),

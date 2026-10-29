@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-28) — 조각 1~5가 들어갔다(2026-10-29): [C15](../03-contracts/C15-external-tasks.md) **구현됨** — Center가 일감을 받고 일꾼을 들이며, 부르는 쪽 셋(서버 실행기·실행기 자식·Studio)과 일꾼(서비스 앱·모의 앱·어댑터 일꾼·UI 자동화)이 모두 이 길로 돈다. C11 `/v1/ops`·서비스 앱 키 배달·외부 앱 키/주소는 걷었다. 조각 6(긴 작업)도 들어갔다 — [ADR-0103](0103-long-external-tasks.md) (§7 조각 순서) |
+| 상태 | 수락 (2026-10-28) — 조각 1~5가 들어갔다(2026-10-29): [C15](../03-contracts/C15-external-tasks.md) **구현됨** — Center가 일감을 받고 일꾼을 들이며, 부르는 쪽 셋(서버 실행기·실행기 자식·Studio)과 일꾼(서비스 앱·모의 앱·어댑터 일꾼·UI 자동화)이 모두 이 길로 돈다. C11 `/v1/ops`·서비스 앱 키 배달·외부 앱 키/주소는 걷었다. 조각 6(긴 작업)도 들어갔다 — [ADR-0103](0103-long-external-tasks.md) (§7 조각 순서). §2의 옛 칸(C14 `key_ref`·`service_keys`, C1 `key_ref`·`task_key_refs`)도 걷었다(2026-10-29) — **판은 올리지 않았다**: 선택 칸이고 받는 쪽이 모르는 칸을 받아 두므로(계약 원칙 3) 옛 그림·패키지가 그대로 읽힌다. B7이 경고 한 줄로 말한다 |
 | 날짜 | 2026-10-28 |
 | 관련 | 계약 C15(새), C7·C8·C9·C10·C11·C13·C14, [ADR-0007](0007-client-initiated-communication.md)·[0010](0010-service-apps.md)·[0052](0052-service-app-key-notices.md)·[0091](0091-external-apps-without-auth-take-no-key.md)·[0092](0092-keys-are-issued-and-delivered-by-center.md)·[0094](0094-service-app-keys-ride-the-deployment.md)·[0097](0097-external-extension-address-from-center.md), 화면 CON-07·STU-10·STU-14·TOL-02 |
 

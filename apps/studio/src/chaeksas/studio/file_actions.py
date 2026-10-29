@@ -26,7 +26,6 @@ from chaeksas.qt.messages import ask_unsaved
 from chaeksas.studio.canvas import CanvasError
 from chaeksas.studio.dialogs import NewProcessDialog, pick_bpmn_file
 from chaeksas.studio.workspace import (
-    BpmProcess,
     WorkspaceError,
     check_definition_name,
     definition_process_id,
@@ -43,18 +42,6 @@ DISCARD_TEXT = "저장하지 않은 변경사항이 있습니다. 저장할까�
 LAID_OUT = "그림 좌표가 없어 자동 배치했습니다 — 저장하면 파일에 남습니다."
 #: 시험 실행 중에는 닫지 않는다 — 실행이 그 그림에 노드 상태를 칠한다.
 CLOSE_WHILE_RUNNING = "시험 실행 중에는 닫을 수 없습니다 — 먼저 「실행 중지」를 누르세요."
-
-
-def inherited_keys(process: BpmProcess) -> dict[str, str]:
-    """그 BPM 프로세스가 적어 둔 키 참조 `{app_id: 참조}` (`chk:process.service_keys`).
-
-    STU-14가 「프로세스 설정을 따름 (<참조>)」에 보인다. **값은 담지 않는다** (ADR-0013).
-    """
-    found: dict[str, str] = {}
-    for definition in process.definitions:
-        if definition.process is not None:
-            found.update(definition.process.info.service_keys)
-    return found
 
 
 def may_discard(window: MainWindow) -> bool:
@@ -105,7 +92,6 @@ def open_definition(window: MainWindow, path_text: str) -> None:
             window.say(LAID_OUT)
         # STU-14가 고를 거리는 **정의를 열 때** 받는다 (노드를 고를 때마다 두드리지 않게).
         window.refresh_catalog()
-        window.properties.service_keys = inherited_keys(process)
         entry = process.entry_definition
         window.properties.run_location = (
             entry.process.info.run_location if entry is not None and entry.process is not None else None
@@ -329,7 +315,6 @@ __all__ = [
     "NO_PROCESS",
     "add_definition",
     "close_process",
-    "inherited_keys",
     "make_entry",
     "may_discard",
     "new_process",

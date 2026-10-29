@@ -98,7 +98,6 @@ class Example:
     data: list[DataOut] = field(default_factory=list)
     variables: list[tuple[str, str, str, str]] = field(default_factory=list)  # 이름, 타입, 출처, 뜻
     inputs: list[tuple[str, str, bool, str]] = field(default_factory=list)  # 이름, 타입, 필수, 뜻
-    service_keys: dict[str, str] = field(default_factory=dict)
     extensions: list[dict[str, str]] = field(default_factory=list)
     defaults: dict[str, Any] = field(default_factory=dict)
     decisions: list[Decision] = field(default_factory=list)
@@ -324,10 +323,8 @@ def validate(ex: Example) -> list[str]:
                 for t in n.props["task"]["results"].values():
                     if t not in ("string", "int", "number", "bool", "list", "dict", "date"):
                         errs.append(f"{n.id} 결과 타입 {t} (C14 B8)")
-            if n.kind == "svc":
-                app = n.props["task"]["app_id"]
-                if app not in ex.service_keys and not n.props["task"].get("key_ref"):
-                    errs.append(f"{n.id} 서비스 앱 {app} 키 참조 없음")
+            if n.kind == "svc" and "key_ref" in n.props["task"]:
+                errs.append(f"{n.id} key_ref — 키가 없다 (ADR-0102, C14)")
         kinds = {n.id: n.kind for n in nodes}
         for b in bnds:
             if kinds.get(b.attached) in ("start", "end", "throw", "catch", "xgw", "igw", "pgw", None):
@@ -703,7 +700,7 @@ def to_bpmn(ex: Example) -> str:
         data_by_writer.setdefault(d.writer, []).append(d)
     msgs, sigs, errs = collect_refs(ex)
     pid = "Proc_" + ex.file
-    proc_meta = dict(run_location=ex.run_location, service_keys=ex.service_keys,
+    proc_meta = dict(run_location=ex.run_location,
                      extensions=ex.extensions, outputs=ex.outputs,
                      inputs=[dict(name=i[0], type=i[1], required=i[2], description=i[3], **({'default': i[4]} if len(i) > 4 else {}),
                                   **({'source': ex.input_sources[i[0]]} if i[0] in ex.input_sources else {})) for i in ex.inputs])
@@ -941,8 +938,6 @@ def node_summary(n: Node) -> str:
     if k == "svc":
         t = p["task"]
         s = f"`{t['app_id']}`.`{t['operation']}` · 입력 {', '.join(t['input'])} → {', '.join(t['output'])}"
-        if t.get("key_ref"):
-            s += f" · 키 참조 `{t['key_ref']}`(태스크 지정)"
         if p.get("loop"):
             s += f" · 반복({'병렬' if p['loop'].get('parallel') else '차례'}) `{p['loop']['collection']}`"
         return s
@@ -983,15 +978,13 @@ def node_summary(n: Node) -> str:
 
 def to_card(ex: Example, bpmn_rel: str, cases_rel: str) -> str:
     loc = "서버 (서버 Bot)" if ex.run_location == "server" else "PC (Bot)"
-    keys = [f"`{a}` → `{b}`" for a, b in ex.service_keys.items()]
-    keys += [f"`{n.props['task']['app_id']}` → `{n.props['task']['key_ref']}` (태스크 지정)"
-             for n in all_nodes(ex.nodes) if n.kind == "svc" and n.props["task"].get("key_ref")]
-    keys_txt = ", ".join(keys) or "없음"
+    apps = sorted({n.props["task"]["app_id"] for n in all_nodes(ex.nodes) if n.kind == "svc"})
+    apps_txt = ", ".join(f"`{a}`" for a in apps) or "없음"
     L = [f"## {ex.id}. {ex.name}", ""]
     L += ["| 항목 | 값 |", "| --- | --- |",
           f"| 분야 | {ex.dept} |", f"| 출처 | {ex.origin} |", f"| 실행 위치 | **{loc}** |",
           f"| 시작 | {md_cell(ex.trigger)} |",
-          f"| 서비스 앱·키 참조 | {keys_txt} |",
+          f"| 서비스 앱 | {apps_txt} |",
           f"| 확장 | {', '.join(e['id'] for e in ex.extensions) or '없음 (플랫폼 기본 태스크만)'} |",
           f"| 마일스톤 | {ex.milestone} |",
           f"| 파일 | [BPMN]({bpmn_rel}) · [시험 케이스]({cases_rel})" + "".join(f" · [DMN](bpmn/{d.id}.dmn)" for d in ex.decisions) + " |", ""]

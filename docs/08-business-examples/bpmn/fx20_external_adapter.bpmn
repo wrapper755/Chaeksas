@@ -10,7 +10,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {},
   "extensions": [
     {
       "id": "ext-credit",
@@ -41,8 +40,7 @@
   },
   "output": {
     "결과": "result"
-  },
-  "key_ref": "finance-credit-test"
+  }
 }</chk:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>

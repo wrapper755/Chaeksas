@@ -25,7 +25,7 @@
 | 출처 | 프로토타입 시나리오 4 (진행 중이던 것 — 호출 3개, 사전 점검까지) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `contract_review` — 전자계약 시스템의 검토 요청 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx30_contract_review.bpmn) · [시험 케이스](cases/bx30_contract_review.cases.json) |
@@ -134,7 +134,7 @@
 | 출처 | 프로토타입 시나리오 4의 호출 대상 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | BPM 프로세스 호출 — BX-30 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx37_clause_review.bpmn) · [시험 케이스](cases/bx37_clause_review.cases.json) |
@@ -211,7 +211,7 @@ AI만 — 서버.
 | 출처 | 프로토타입 example_operator(운영 비서) 확장 → 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `ops_request` — 사내 요청 메일함·메신저 봇이 보냄 |
-| 서비스 앱·키 참조 | `ticketing` → `ops-ticket` |
+| 서비스 앱 | `ticketing` |
 | 확장 | ticketing |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx31_request_triage.bpmn) · [시험 케이스](cases/bx31_request_triage.cases.json) |
@@ -294,7 +294,7 @@ AI·메시지 — 서버.
 | 출처 | 새로 설계 — 외부 확장(멱등 아님) 예 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `cs_inquiry` — 외부 고객센터 SaaS의 웹훅 |
-| 서비스 앱·키 참조 | `kb-search` → `cs-kb`, `ext-helpdesk` → `cs-helpdesk` |
+| 서비스 앱 | `ext-helpdesk`, `kb-search` |
 | 확장 | kb-search, ext-helpdesk |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx32_customer_inquiry.bpmn) · [시험 케이스](cases/bx32_customer_inquiry.cases.json) |
@@ -380,7 +380,7 @@ AI·메시지 — 서버.
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `access_request` — 포털 권한 신청 |
-| 서비스 앱·키 참조 | `directory` → `it-directory` |
+| 서비스 앱 | `directory` |
 | 확장 | directory |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx33_access_request.bpmn) · [시험 케이스](cases/bx33_access_request.cases.json) · [DMN](bpmn/access_risk.dmn) |
@@ -457,7 +457,7 @@ AI·메시지 — 서버.
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `monitor_alert` — 모니터링 시스템 웹훅 |
-| 서비스 앱·키 참조 | `observability` → `ops-observability` |
+| 서비스 앱 | `observability` |
 | 확장 | observability |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx34_incident_alert.bpmn) · [시험 케이스](cases/bx34_incident_alert.cases.json) |
@@ -546,7 +546,7 @@ AI·메시지 — 서버.
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 매주 월요일 07:00 |
-| 서비스 앱·키 참조 | `ext-helpdesk` → `cs-helpdesk-read` |
+| 서비스 앱 | `ext-helpdesk` |
 | 확장 | ext-helpdesk |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx35_voc_weekly.bpmn) · [시험 케이스](cases/bx35_voc_weekly.cases.json) |
@@ -625,13 +625,12 @@ AI·메시지 — 서버.
 **이 예제로 확인하는 것**
 
 - 묶음 단위 병렬 AI (비용·시간 조절)
-- 같은 외부 확장을 읽기 전용 키로 (`cs-helpdesk-read`)
 - AI 두 단계 — 대량 분류 → 요약
 
 **주의**
 
 - 한 건씩 반복하면 LLM 호출이 수백 번 — 묶음으로 나눈다. 묶음 크기는 모델 문맥과 출력 길이로 정한다.
-- 같은 서비스 앱이라도 BPM 프로세스마다 다른 키 참조(읽기 전용 키)를 쓸 수 있다 (ADR-0013 옵션 C).
+- 외부 앱의 키는 BPM 프로세스에 없다 — 어댑터 일꾼의 설정이다 (ADR-0102). 읽기만 하는 길이 따로 필요하면 그 일꾼이 가른다.
 
 ---
 
@@ -643,7 +642,7 @@ AI·메시지 — 서버.
 | 출처 | 프로토타입 데스크톱 작업(work_desktop_ui)·시나리오 3의 교훈 → 새로 설계 |
 | 실행 위치 | **PC (Bot)** |
 | 시작 | PC Bot 수동 실행 — 이관 기간에 담당자가 묶음마다 |
-| 서비스 앱·키 참조 | `ui-automation` → `it-legacy-ui`, `crm` → `it-crm` |
+| 서비스 앱 | `crm` |
 | 확장 | ui-automation, crm |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → Bot UI 실행 |
 | 파일 | [BPMN](bpmn/bx36_legacy_migration.bpmn) · [시험 케이스](cases/bx36_legacy_migration.cases.json) |

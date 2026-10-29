@@ -53,7 +53,7 @@ class PlainSettings:
 class LiveSettings:
     """`extension_api.Settings` — **물을 때마다** 다시 짓는다 (편집기는 한 번 만들어 다시 쓴다).
 
-    열린 BPM 프로세스가 바뀌면 `service.key_ref`가, Bot UI가 Worker를 다시 띄우면 포트가 바뀐다.
+    Bot UI가 Worker를 다시 띄우면 포트가 바뀐다.
     """
 
     values: Callable[[], Mapping[str, Any]]

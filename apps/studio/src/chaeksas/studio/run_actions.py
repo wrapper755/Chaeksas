@@ -67,7 +67,6 @@ def run_test(window: MainWindow, *, mode: str | None = None) -> None:
         # **PC 위임이 받을 값**은 그 Bot의 매니페스트가 아는 것이라 Center에서 받아 둔 것을
         # 쓴다 (C1 → B14, ADR-0062). 못 받았으면 그 대조만 건너뛴다.
         delegated_outputs=window.delegated_outputs(),
-        keyless_apps=window.keyless_apps(),
     ) + window.readiness()
     blocking = [v for v in violations if v.blocks]
     if blocking:

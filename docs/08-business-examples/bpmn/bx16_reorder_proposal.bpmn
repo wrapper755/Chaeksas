@@ -11,9 +11,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "wms": "scm-wms"
-  },
   "extensions": [
     {
       "id": "wms",
