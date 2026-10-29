@@ -149,6 +149,7 @@ class MainWindow(QMainWindow):
         self.extensions.call_tokens = self.call_tokens
         self.properties = Properties(self, extensions=self.extensions)
         self.properties.applying.connect(self._apply_properties)
+        self.properties.process_wanted.connect(self._show_process)
         # STU-04 「호출」이 고를 정의 — **고를 때마다** 열린 BPM 프로세스에서 읽는다 (설치 뒤에도 맞게).
         self.properties.call_targets = lambda: local_targets(self.process)
         self.canvas.selected.connect(self._on_selected)
@@ -589,6 +590,7 @@ class MainWindow(QMainWindow):
         self.entry_action.setEnabled(
             found is not None and (entry is None or entry.path != found.path)
         )
+        self.properties.set_definition_open(self.definition is not None)
 
     def _on_dirty(self, dirty: bool) -> None:
         self.dirty = dirty
@@ -624,6 +626,25 @@ class MainWindow(QMainWindow):
                 self.properties.show_nothing()
 
         self.canvas.call("properties", node_id, then=done)
+
+    def _show_process(self) -> None:
+        """STU-04 빈 상태의 「BPM 프로세스 기본값」 — 열린 정의 자체를 패널에 보인다.
+
+        정의의 id는 **캔버스의 그림**에서 읽는다(파일은 저장 전일 수 있다) — 「변수」 탭의 「적용」과 같은 길.
+        """
+        try:
+            drawn = read_process(self.canvas.save_xml())
+        except (CanvasError, BpmnReadError) as e:
+            self.say(f"BPM 프로세스를 읽지 못했습니다: {e}")
+            return
+
+        def done(found: dict[str, object]) -> None:
+            if found.get("ok") and found.get("found"):
+                self.properties.show_element(found)
+            else:
+                self.say("캔버스에서 BPM 프로세스를 찾지 못했습니다.")
+
+        self.canvas.call("properties", drawn.id, then=done)
 
     def _apply_properties(self, node_id: str, changes: dict[str, object]) -> None:
         def done(found: dict[str, object]) -> None:
