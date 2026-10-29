@@ -416,7 +416,7 @@ id 규칙(「id는 소문자·숫자·`.`·`_`·`-`만 쓰고 소문자나 숫�
 
 ## STU-10 설정
 
-> 상태: **분류 다섯이 모두 돈다** (`apps/studio/settings_dialog.py`) — 「외형」·「LLM」·「Center」·「확장별 설정」·「Worker」. **「서비스 앱」 분류는 없다** — 서비스 앱 키·Studio 개발 키·외부 앱 시험용 키가 없어졌다([ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 시험 실행의 서비스 앱 태스크도 Center에 일감으로 올라가고(`origin: test`) 시험 쪽으로 보낼지는 일꾼이 정한다. **쓰는 곳이 있는 칸만 둔다** ([ADR-0073](../decisions/0073-studio-settings-only-what-is-used.md)) — 「메일」(시험 실행은 메일을 담아 두기만 한다, C14)·「비밀」(툴팩이 없다, ADR-0050)과 「LLM」의 공급자(OpenAI 호환 하나, ADR-0027)·temperature(현장에 그 칸이 없어 시험만 다른 답을 낸다)·화면 인식 모델, 「외형」의 캔버스 팔레트(bpmn-js가 스스로 접는다)는 **두지 않는다**. 다시 넣으려면 읽는 곳을 먼저 만든다.
+> 상태: **분류 다섯이 모두 돈다** (`apps/studio/settings_dialog.py`) — 「외형」·「LLM」·「Center」·「확장별 설정」·「Worker」. **「서비스 앱」 분류는 없다** — 서비스 앱 키·Studio 개발 키·외부 앱 시험용 키가 없어졌다([ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 옛 설정 파일의 `service_keys`는 읽지 않고 다음 저장에서 빠진다(비밀 저장소의 옛 값은 지우지 않는다 — BUI-10과 같다). 시험 실행의 서비스 앱 태스크도 Center에 일감으로 올라가고(`origin: test`) 시험 쪽으로 보낼지는 일꾼이 정한다. **쓰는 곳이 있는 칸만 둔다** ([ADR-0073](../decisions/0073-studio-settings-only-what-is-used.md)) — 「메일」(시험 실행은 메일을 담아 두기만 한다, C14)·「비밀」(툴팩이 없다, ADR-0050)과 「LLM」의 공급자(OpenAI 호환 하나, ADR-0027)·temperature(현장에 그 칸이 없어 시험만 다른 답을 낸다)·화면 인식 모델, 「외형」의 캔버스 팔레트(bpmn-js가 스스로 접는다)는 **두지 않는다**. 다시 넣으려면 읽는 곳을 먼저 만든다.
 
 > 「Center」 분류가 **이 모양으로 돈다** ([ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md) — 들어오는 일은 STU-16 `connect_dialog.py`, 요청·키 받기는 `center_enroll.py`).
 

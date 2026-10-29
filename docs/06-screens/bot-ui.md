@@ -195,7 +195,7 @@ Tool UI의 도구로 옮겼다 → [TOL-03](tool-ui.md#tol-03-ui-셀렉터-등�
 
 ## BUI-10 서비스 앱 키 — 없어졌다
 
-서비스 앱 키가 없어 화면이 없다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)) — Bot은 바깥 기능을 Center의 외부 작업(C15)으로 부른다. 실행기 자식 프로세스·Worker·Tool UI는 Bot UI가 제 Center API 키로 청한 **호출 토큰**(24시간)으로 올리고, 「불러도 되나」는 Center가 배포로 가린다. 「도구」 메뉴의 「서비스 앱 키...」도 없다. 사람이 넣을 것은 없다.
+서비스 앱 키가 없어 화면이 없다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)) — Bot은 바깥 기능을 Center의 외부 작업(C15)으로 부른다. 실행기 자식 프로세스·Worker·Tool UI는 Bot UI가 제 Center API 키로 청한 **호출 토큰**(24시간)으로 올리고, 「불러도 되나」는 Center가 배포로 가린다. 「도구」 메뉴의 「서비스 앱 키...」도 없다. 사람이 넣을 것은 없다. 옛 설정 파일의 `service_keys`(참조 이름 목록)는 **읽지 않고** 다음 저장에서 빠진다 — OS 비밀 저장소에 남은 옛 키 값은 Bot UI가 지우지 않는다(목록을 뽑을 수 없는 저장소라 이름을 잃으면 찾을 길이 없다 — 지우려면 그 OS의 자격 증명 관리자에서 사람이 지운다).
 
 ## BUI-11 확장
 

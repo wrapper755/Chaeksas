@@ -510,3 +510,13 @@ def test_the_model_key_for_runs_comes_from_the_vault(monkeypatch: pytest.MonkeyP
     assert runner._llm_key() == "sk-stored"
     monkeypatch.setenv("CHK_STUDIO__LLM__API_KEY", "sk-env")
     assert runner._llm_key() == "sk-env"
+
+
+def test_an_old_files_service_keys_are_not_read_and_drop_out_on_save(tmp_path: Path) -> None:
+    """옛 STU-10 「서비스 앱」 칸(`service_keys`)은 읽지 않는다 (ADR-0102). 다음 저장에서 빠진다."""
+    path = tmp_path / "settings.json"
+    path.write_text('{"theme": "dark", "service_keys": [{"ref": "fin", "app_id": "erp"}]}', encoding="utf-8")
+    found = Settings.load(path)
+    assert found.theme == "dark", "옛 칸 하나로 나머지를 버리지 않는다"
+    found.save(path)
+    assert "service_keys" not in path.read_text(encoding="utf-8")
