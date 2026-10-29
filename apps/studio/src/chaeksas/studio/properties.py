@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from pydantic import ValidationError
@@ -40,7 +41,7 @@ from PySide6.QtWidgets import (
 
 from chaeksas.contracts.bpmn_ext import ELEMENT_MODELS
 from chaeksas.qt.theme import set_role
-from chaeksas.studio.service_catalog import Catalog
+from chaeksas.studio.service_catalog import CallTarget, Catalog
 
 EMPTY_TEXT = "캔버스에서 요소를 선택하면 속성을 편집할 수 있습니다."
 
@@ -79,6 +80,8 @@ APPROVAL_KINDS = frozenset({"UserTask", "ManualTask"})
 SEND_KINDS = frozenset({"SendTask"})
 #: 보내기 편집기가 고르는 `chk:` 요소 — 하나만 남긴다.
 SEND_CHANNELS = ("email", "webhook")
+#: 호출 편집기를 붙이는 요소 (표준 `calledElement` + C14 `chk:call`).
+CALL_KINDS = frozenset({"CallActivity"})
 
 
 #: `chk:*`를 갖지 않는 게이트웨이 — 가지의 조건은 나가는 순서 흐름에 있다 (C14).
@@ -208,6 +211,9 @@ class Properties(QWidget):
         #: 변수 이름 칸의 고를 거리 — 「변수」 탭의 이름 (STU-04). 메인 창이 그림을 읽을 때 채우고
         #: 편집기들이 **같은 모델**을 본다 (열린 편집기의 목록도 따라 바뀐다).
         self.known_names = QStringListModel(self)
+        #: 이 패키지에서 부를 수 있는 정의 (`call_editor.local_targets`) — 메인 창이 열린 BPM
+        #: 프로세스에서 **고를 때마다** 읽게 꽂는다(설치·저장 뒤에도 낡지 않게). `None`이면 모른다.
+        self.call_targets: Callable[[], Mapping[str, CallTarget] | None] = lambda: None
 
         self.head = QLabel(EMPTY_TEXT, self)
         self.head.setWordWrap(True)
@@ -308,6 +314,9 @@ class Properties(QWidget):
           `type`으로 찾아 붙일 뿐이다 (ADR-0018).
         """
         self._detach_editor()
+        if str(self.loaded.get("type") or "") in CALL_KINDS:
+            self._attach_call_editor(chk)
+            return
         if "serviceCall" in chk:
             self._attach_service_editor(chk)
             return
@@ -372,6 +381,19 @@ class Properties(QWidget):
         bodies = {name: _body_of(chk, name) for name in SEND_CHANNELS}
         made.load({name: body for name, body in bodies.items() if body is not None})
         self._attach(made, TAB_LABEL, key="send")
+
+    def _attach_call_editor(self, chk: dict[str, Any]) -> None:
+        """BPM 프로세스 호출 (`calledElement` + `chk:call`). 위임 대상은 Center 목록(`catalog.bots`)이다."""
+        from chaeksas.studio.call_editor import TAB_LABEL, CallEditor  # noqa: PLC0415
+
+        made = CallEditor(
+            self,
+            run_location=self.run_location,
+            targets=self.call_targets(),
+            bots=self.catalog.bots,
+        )
+        made.load({"calledElement": str(self.loaded.get("calledElement") or ""), "call": _body_of(chk, "call") or {}})
+        self._attach(made, TAB_LABEL, key="call")
 
     def _attach(self, found: Any, label: str, *, key: str) -> None:
         self._editor = found
@@ -458,6 +480,13 @@ class Properties(QWidget):
                 # STU-14·결재·AI 태스크는 `chk:<이름>` **통째로** 쓴다 (`data` 같은 포장이 없다).
                 changes["chk"] = {self._editor_key: json.dumps(data, ensure_ascii=False, indent=2)}
                 return changes, None
+            if self._editor_key == "call":
+                # 표준 속성 하나와 `chk:call` **통째로** — 바뀐 쪽만 보낸다(빈 `chk:call`을 새로 달지 않는다).
+                if data["calledElement"] != str(self.loaded.get("calledElement") or ""):
+                    changes["calledElement"] = data["calledElement"]
+                if data["call"] != (_body_of(dict(self.loaded.get("chk") or {}), "call") or {}):
+                    changes["chk"] = {"call": json.dumps(data["call"], ensure_ascii=False, indent=2)}
+                return changes, None
             if self._editor_key == "send":
                 # 고른 채널 하나만 남긴다 — 다른 쪽이 그림에 있었으면 `None`으로 적어 캔버스가 지운다.
                 before = dict(self.loaded.get("chk") or {})
@@ -511,6 +540,7 @@ class Properties(QWidget):
 
 
 __all__ = [
+    "CALL_KINDS",
     "CONDITION_KINDS",
     "EMPTY_TEXT",
     "GATEWAY_KINDS",
