@@ -6,8 +6,14 @@
 name: CI
 
 # main에 푸시할 때는 돌리지 않는다 — 머지 전에 PR에서 이미 한 번 돌았다 (CI는 PR당 한 번).
+#
+# **Windows는 PR마다 돌지 않는다** (ADR-0108) — PR은 Linux만, Windows + Linux는 주 1회(월요일
+# 09:00 KST, main)와 수동 실행(workflow_dispatch — OS를 타는 것을 만진 PR이면 그 브랜치에서 누른다).
+# Windows 쪽 타입은 Linux 잡의 `mypy --platform win32`가 PR마다 본다.
 on:
   pull_request:
+  schedule:
+    - cron: "0 0 * * 1"
   workflow_dispatch:
 
 # 같은 브랜치에 연달아 푸시하면 앞의 실행을 끊는다 (무료 한도 절약).
@@ -22,7 +28,8 @@ jobs:
     strategy:
       fail-fast: false # 한쪽이 깨져도 다른 쪽 결과를 봐야 한다
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # PR은 Linux만, 주간·수동 실행은 둘 다 (ADR-0108).
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
 
     steps:
       - uses: actions/checkout@v7
@@ -110,7 +117,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["ubuntu-latest"]' || '["ubuntu-latest", "windows-latest"]') }}
     defaults:
       run:
         working-directory: web

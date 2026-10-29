@@ -48,3 +48,15 @@ def test_windows_ci_leaves_out_server_tests_and_linux_runs_all() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     assert 'uv run pytest -m "not server"' in workflow, "Windows 잡이 서버 시험을 뺀다"
     assert "uv run pytest\n" in workflow, "Linux 잡은 전부 돈다"
+
+
+def test_windows_runs_weekly_and_by_hand_not_on_every_pr() -> None:
+    """ADR-0108 — PR은 Linux만, 주 1회·수동 실행이 Windows까지 돈다. 두 잡(파이썬·웹)이 같은 규칙이다."""
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    assert "schedule:" in workflow and "workflow_dispatch:" in workflow
+    rule = (
+        "os: ${{ fromJSON(github.event_name == 'pull_request' && '[\"ubuntu-latest\"]'"
+        " || '[\"ubuntu-latest\", \"windows-latest\"]') }}"
+    )
+    assert workflow.count(rule) == 2, "테스트·웹 두 매트릭스가 같은 규칙을 쓴다"
+    assert "os: [ubuntu-latest, windows-latest]" not in workflow
