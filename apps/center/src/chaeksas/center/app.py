@@ -10,20 +10,19 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
-from chaeksas.center import accounts, keys, service_keys, signer
+from chaeksas.center import accounts, keys, signer
 from chaeksas.center.api import (
     approvals,
     bot_ui,
     delegations,
     deployments,
     enrollments,
+    external_tasks,
     jobs,
     messages,
     package_access,
@@ -41,7 +40,6 @@ from chaeksas.center.auth import (
     require_admin,
     require_approval_read,
     require_console,
-    require_key_type,
     require_package_read,
     require_read,
     require_upload,
@@ -66,7 +64,6 @@ from chaeksas.contracts.center_api import (
 )
 from chaeksas.contracts.center_keys import CenterKeyCreated, CenterKeyCreateRequest
 from chaeksas.contracts.center_keys import validate_create as validate_key_create
-from chaeksas.contracts.service_keys import StudioServiceKeyRequest
 
 API = "/api/v1"
 
@@ -74,30 +71,9 @@ API = "/api/v1"
 def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     """Center 앱 하나. `store`를 주면 그것을 쓴다 (시험은 메모리 DB를 준다)."""
     # 모든 JSON 응답에 charset=utf-8 (PowerShell 5.1이 한글을 깨뜨리지 않게, 이슈 #3)
-    @asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        # 서비스 앱 키 맞추기 (ADR-0094 §3) — 간격이 0이면 돌지 않는다(시험은 손으로 부른다).
-        if settings.service_keys_reconcile_s > 0:
-            app.state.reconciler.start()
-        yield
-        app.state.reconciler.stop()
-
-    app = FastAPI(
-        title="Chaeksas Center", version="0.1.0", default_response_class=Utf8JSONResponse, lifespan=lifespan
-    )
+    app = FastAPI(title="Chaeksas Center", version="0.1.0", default_response_class=Utf8JSONResponse)
     app.state.settings = settings
     app.state.store = store or Store(settings.db_path)
-    #: 서비스 앱에 키 봉투를 보내는 함수 — 시험은 바꿔 끼운다 (`app.state.service_key_send`).
-    app.state.service_key_send = service_keys.http_send
-    app.state.reconciler = service_keys.Reconciler(
-        app.state.store,
-        send=lambda base, envelope: app.state.service_key_send(base, envelope),
-        every_s=max(settings.service_keys_reconcile_s, 1),
-    )
-
-    def kick() -> None:
-        """배포·철회·PC 상태가 바뀌었다 — 다음 주기를 기다리지 않고 맞춘다."""
-        app.state.reconciler.kick()
     # 첫 비밀번호 파일을 두는 곳 — **DB를 제가 열었을 때만**. 저장소를 받았으면(시험) 설정의
     # 기본 경로가 이 PC의 진짜 데이터 폴더일 수 있다.
     data_folder = settings.data_folder() if store is None else None
@@ -122,11 +98,13 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         )
 
     app.state.authenticate = authenticate
+    app.state.external_waiters = external_tasks.Waiters(settings.external_task_max_waiters)
     app.add_exception_handler(ApiError, handle)
     app.include_router(bot_ui.router)
     app.include_router(enrollments.router)
     app.include_router(server_runner.router)
     app.include_router(delegations.router)
+    app.include_router(external_tasks.router)
     app.include_router(runs.router)
 
     @app.get("/healthz")
@@ -238,9 +216,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         if record is None:
             raise ApiError(404, "not_found", f"키 {key_id}가 없다")
         keys.revoke(app.state.store, key_id)
-        # Studio 키면 그 개발 키도 거둔다 (ADR-0094 §5). PC·서버 키면 맞추기가 그 대상의 키를 거둔다.
-        service_keys.revoke_for_studio_key(app.state.store, key_id)
-        kick()
         found = keys.get(app.state.store, key_id)
         assert found is not None
         return found.info(now=now_iso())
@@ -263,7 +238,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             raise ApiError(404, "not_found", f"키 {key_id}가 없다")
         if not keys.unbind(app.state.store, key_id):
             raise ApiError(409, "not_bound", "묶여 있지 않다")
-        kick()
         return keys.get(app.state.store, key_id).info(now=now_iso())  # type: ignore[union-attr]
 
     # ─────────────────── Bot UI 현황 (C5·CON-03) ───────────────────
@@ -279,7 +253,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         require_admin(authenticate(request))
         if not bot_ui.set_disabled(app.state.store, bot_ui_id, disabled=True):
             raise ApiError(404, "not_found", f"Bot UI {bot_ui_id}가 없다")
-        kick()  # 그 PC의 서비스 앱 키를 거둔다 (ADR-0094 §3)
         return {"bot_ui_id": bot_ui_id, "disabled": True}
 
     @app.post(f"{API}/bot-uis/{{bot_ui_id}}/enable")
@@ -287,21 +260,19 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         require_admin(authenticate(request))
         if not bot_ui.set_disabled(app.state.store, bot_ui_id, disabled=False):
             raise ApiError(404, "not_found", f"Bot UI {bot_ui_id}가 없다")
-        kick()
         return {"bot_ui_id": bot_ui_id, "disabled": False}
 
     @app.put(f"{API}/bot-uis/{{bot_ui_id}}/utility")
     async def set_bot_ui_utility(request: Request, bot_ui_id: str) -> Any:
-        """CON-03 「셀렉터 등록」 (C5, ADR-0094 §6). 켜면 그 PC에 도구용 키를 짓고, 끄면 거둔다."""
+        """CON-03 「셀렉터 등록」 (C5). 켠 PC만 등록 세션(`reg_…`)의 외부 작업을 올린다 (C15)."""
         require_admin(authenticate(request))
         body = await _json(request)
         on = body.get("selector_registration")
         if not isinstance(on, bool):
             raise ApiError(422, "input_invalid", "selector_registration은 참·거짓이어야 한다")
-        if not service_keys.set_selector_registration(app.state.store, bot_ui_id, on=on):
+        if not bot_ui.set_selector_registration(app.state.store, bot_ui_id, on=on):
             raise ApiError(404, "not_found", f"Bot UI {bot_ui_id}가 없다")
-        kick()
-        return {"bot_ui_id": bot_ui_id, **service_keys.selector_registration(app.state.store, bot_ui_id)}
+        return {"bot_ui_id": bot_ui_id, "selector_registration": on}
 
     # ─────────────────── 서버 실행기 (C12·CON-12) ───────────────────
 
@@ -328,7 +299,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def mark_runner_lost(request: Request, runner_id: str) -> Any:
         require_admin(authenticate(request))
         found = server_runner.mark_lost(app.state.store, runner_id)
-        kick()  # 그 실행기의 서비스 앱 키를 거둔다
         return found
 
     # ─────────────────── 패키지 (C5) ───────────────────
@@ -443,7 +413,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         found = require_admin(authenticate(request))
         wanted = _model(DeploymentRequest, await _json(request))
         made = deployments.create(app.state.store, wanted, by=found.actor, package_dir=settings.package_dir)
-        kick()  # 배포가 서비스 앱 키를 데리고 간다 (ADR-0094 §3)
         return made
 
     @app.delete(f"{API}/deployments")
@@ -451,7 +420,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         found = require_admin(authenticate(request))
         wanted = _model(DeploymentRevokeRequest, await _json(request))
         made = deployments.revoke(app.state.store, wanted.deployment_id, reason=wanted.reason, by=found.actor)
-        kick()  # 철회가 키를 거둔다
         return made
 
     @app.get(f"{API}/deployments")
@@ -506,94 +474,10 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             app.state.store, wanted.id, wanted.version, reason=wanted.reason, by=found.actor
         )
 
-    @app.put(f"{API}/resources/extensions/{{extension_id}}/app-key")
-    async def put_external_app_key(request: Request, extension_id: str) -> Any:
-        """외부 앱 **운영 키** 넣기·바꾸기 (C7 §외부 앱 키). 응답에 원문은 없다."""
-        found = require_admin(authenticate(request))
-        state = service_keys.set_external_key(
-            app.state.store, extension_id, service_keys.SLOT_RUN, str((await _json(request)).get("key") or ""),
-            by=found.actor,
-        )
-        kick()
-        return state
-
-    @app.delete(f"{API}/resources/extensions/{{extension_id}}/app-key")
-    def delete_external_app_key(request: Request, extension_id: str) -> Any:
-        require_admin(authenticate(request))
-        state = service_keys.delete_external_key(app.state.store, extension_id, service_keys.SLOT_RUN)
-        kick()
-        return state
-
-    @app.put(f"{API}/resources/extensions/{{extension_id}}/app-key/test")
-    async def put_external_test_key(request: Request, extension_id: str) -> Any:
-        """외부 앱 **시험용 키** — Studio 시험 실행에만 간다 (ADR-0094 §7)."""
-        found = require_admin(authenticate(request))
-        return service_keys.set_external_key(
-            app.state.store, extension_id, service_keys.SLOT_TEST, str((await _json(request)).get("key") or ""),
-            by=found.actor,
-        )
-
-    @app.delete(f"{API}/resources/extensions/{{extension_id}}/app-key/test")
-    def delete_external_test_key(request: Request, extension_id: str) -> Any:
-        require_admin(authenticate(request))
-        return service_keys.delete_external_key(app.state.store, extension_id, service_keys.SLOT_TEST)
-
-    @app.put(f"{API}/resources/extensions/{{extension_id}}/address")
-    async def put_extension_address(request: Request, extension_id: str) -> Any:
-        """외부 확장 주소 덮어쓰기 — 정의의 허용 호스트 안에서만 (C7 §외부 확장 주소, ADR-0097)."""
-        found = require_admin(authenticate(request))
-        return resources.set_address(app.state.store, extension_id, await _json(request), by=found.actor)
-
-    @app.delete(f"{API}/resources/extensions/{{extension_id}}/address")
-    def delete_extension_address(request: Request, extension_id: str) -> Any:
-        """덮어쓴 주소를 지운다 — 정의의 `base_url`로 돌아간다."""
-        require_admin(authenticate(request))
-        return resources.delete_address(app.state.store, extension_id)
-
-    @app.post(f"{API}/studio/service-keys")
-    async def studio_service_key(request: Request) -> Any:
-        """Studio 개발 키 (C5 §Studio 개발 키, ADR-0094 §5). **Studio 키만** 부른다."""
-        record = require_key_type(authenticate(request), "studio")
-        wanted = _model(StudioServiceKeyRequest, await _json(request))
-        return service_keys.studio_key(
-            app.state.store,
-            center_key_id=record.key_id,
-            center_key_name=record.name,
-            app_id=wanted.app_id,
-            public_key=wanted.public_key,
-            send=app.state.service_key_send,
-        )
-
     @app.get(f"{API}/signing-keys")
     def public_signing_keys() -> Any:
-        """믿는 키 목록 — **인증 없음**(공개키다). 서비스 앱이 Center를 믿으려고 받는다 (C7·C11, ADR-0094)."""
+        """믿는 키 목록 — **인증 없음**(공개키다). 어댑터 일꾼이 외부 확장 봉투를 다시 검증하려고 받는다 (C7)."""
         return [one.to_json_dict() for one in signing.admin_keys(app.state.store)]
-
-    @app.post(f"{API}/resources/service-apps")
-    async def register_service_app(request: Request) -> Any:
-        """주소를 등록한다 — Center가 **바로 manifest를 읽어 본다** (C7)."""
-        found = require_admin(authenticate(request))
-        info, created = resources.register(app.state.store, found, await _json(request))
-        return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
-
-    @app.put(f"{API}/resources/service-apps/{{app_id}}")
-    async def put_service_app(request: Request, app_id: str) -> Any:
-        """주소 바꾸기 — **환경별 주소의 유일한 출처**다 (C7)."""
-        require_admin(authenticate(request))
-        return resources.set_base_url(app.state.store, app_id, await _json(request))
-
-    @app.delete(f"{API}/resources/service-apps/{{app_id}}", status_code=204)
-    def delete_service_app(request: Request, app_id: str) -> Response:
-        require_admin(authenticate(request))
-        resources.unregister(app.state.store, app_id)
-        return Response(status_code=204)
-
-    @app.post(f"{API}/resources/refresh")
-    async def refresh_resources(request: Request) -> Any:
-        """간격을 무시하고 바로 다시 읽는다 (C7 「새로 고침」)."""
-        require_admin(authenticate(request))
-        found = resources.refresh(app.state.store, await _json(request))
-        return {"items": [one.to_json_dict() for one in found], "fetched_at": now_iso()}
 
     # ─────────────────── 결재 (C6·CON-04) ───────────────────
 

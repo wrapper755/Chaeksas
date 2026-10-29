@@ -54,7 +54,7 @@
   },
   "$id": "urn:chaeksas:contracts:c11-op-request",
   "additionalProperties": true,
-  "description": "`POST /v1/ops/{operation}` 요청.",
+  "description": "작업 함수가 받는 요청 — 일꾼 뼈대가 C15 `LockedTask`에서 짓는다 (C11 §OpRequest).",
   "properties": {
     "attempt": {
       "minimum": 1,
@@ -99,6 +99,11 @@
       "minimum": 1,
       "title": "Node Instance",
       "type": "integer"
+    },
+    "origin": {
+      "default": "run",
+      "title": "Origin",
+      "type": "string"
     },
     "run_id": {
       "title": "Run Id",

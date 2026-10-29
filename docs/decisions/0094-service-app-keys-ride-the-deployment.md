@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-25) — 계약·화면·코드가 들어갔다 (`center/service_keys.py`·`service_kit/center.py`·`core/service_keys.py`·`studio/dev_keys.py`, 시험 `tests/test_service_keys.py`) |
+| 상태 | 대체됨(ADR-0102) — 원래 수락 (2026-10-25), 계약·화면·코드가 들어갔다 (`center/service_keys.py`·`service_kit/center.py`·`core/service_keys.py`·`studio/dev_keys.py`, 시험 `tests/test_service_keys.py`). **코드는 C15 조각 2·3까지 이대로 돈다** |
 | 날짜 | 2026-10-25 |
 | 관련 | [ADR-0092](0092-keys-are-issued-and-delivered-by-center.md) §3·§4(이것이 구체화한다), [ADR-0093](0093-studio-is-let-in-by-approval.md) §5(Tool UI 미정), [ADR-0090](0090-center-admin-accounts.md)(Center 서명 키), [ADR-0091](0091-external-apps-without-auth-take-no-key.md), [ADR-0052](0052-service-app-key-notices.md), [ADR-0077](0077-tool-ui.md), 계약 C1·C2·C4·C5·C7·C11·C12·C13, 화면 BUI-10·STU-06·STU-10·TOL-02·SVC-02·CON-07 |
 

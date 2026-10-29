@@ -10,6 +10,8 @@
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 관련 화면 | CON-07 리소스, CON-11 Center API 키, STU-03 리소스 탐색기, STU-13·14·15, BUI-11, TOL-03 |
 
+> [ADR-0102](../decisions/0102-calling-outside-is-pull.md) (2026-10-29): 서비스 앱 주소 등록·`/manifest`·`/healthz` 읽기, 외부 앱 키(운영·시험용), 외부 확장 주소 덮어쓰기는 **없다**. 주소·키는 일꾼만 들고, manifest·카탈로그는 일꾼이 올리며(C15 `PUT …/consumers/self/manifest`) 상태는 「마지막으로 가져간 때」가 말한다.
+
 ## 목적
 
 이 계약은 두 가지를 정한다.
@@ -29,33 +31,22 @@
 
 **2. Center API 키 관리** (CON-11).
 
-> 상태: **고정 네 종류와 CON-07이 돈다** (M5 조각 8) — 서비스 앱 등록·주소 바꾸기·해제·새로 고침, `GET /resources`의 확장·서비스 앱·확장 기여 자원·런타임, 누락 검사를 패키지 정보(`missing_resources`)와 배포 거부에 이었다. **런타임·확장은 따로 등록받지 않는다** — Center가 이미 가진 것(C4 보고, 서비스 앱 manifest)에서 모은다. **외부 확장 등록·해제도 돈다** (조각 9 — 관리자가 정의를 올리면 Center가 봉투에 서명한다, C13 E6·ADR-0090). Center API 키 관리는 M2부터 돈다.
->
-> **외부 확장의 상태도 돈다** — 어댑터 `health`를 선언한 대로(`{path, expect_status}`) 두드리고, **선언이 없으면 두드리지 않고 「확인 전」으로 둔다** (C11의 `/healthz`를 외부 앱에 들이대지 않는다). 나갈 때는 **어댑터와 같은 관문**(C13 §4-3 1~4)을 지난다 — Center는 `core`를 import할 수 없어 `contracts`의 `resolve_host`를 양쪽이 함께 쓴다. 등록 때 E3가 「허용 호스트 밖·http」를 이미 막으므로, 이 관문이 실제로 잡는 것은 **허용된 이름이 사설 IP로 풀리는 경우**다.
->
-> **확장이 기여한 자원도 돈다** (조각 10) — Center가 카탈로그를 읽어 쌓고 CON-07에 종류마다 탭이 생긴다. **출처는 둘이고 모양은 같다**: 내장·사내는 C11 manifest의 `resources`(그 칸을 이 조각에서 더했다 — 정의가 Center에 없기 때문이다), 외부는 등록된 정의의 `contributes.resources`. **`revision`이 같으면 항목을 다시 쓰지 않고**(계획 캐시를 공연히 버리지 않게), **닿지 못하면 들고 있던 것을 지우지 않는다**(사유만 남긴다). 서비스 앱을 등록·주소 변경하는 그 자리에서 카탈로그도 읽는다 — 그래야 「등록했는데 왜 경고가 그대로인가」가 생기지 않는다. `requires.resources` 누락 검사가 이제 실제로 돈다 (배포는 막지 않는다).
+> 상태: **돈다.** 2026-10-29부터 **Center는 바깥 기능을 읽으러 가지 않는다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)) — 서비스 앱은 C15 **일꾼**으로 들어와 manifest·카탈로그를 **올리고**, 살아 있음은 「마지막으로 가져간 때」가 말한다. 외부 확장은 정의를 등록하고(관리자 — Center가 봉투에 서명한다, C13 E6·ADR-0090) 그 토픽을 **어댑터 일꾼**이 가져간다. **런타임·확장은 따로 등록받지 않는다** — C4·C12 보고와 일꾼이 올린 manifest에서 모은다. Center API 키 관리는 M2부터 돈다.
 
 **플랫폼 계약은 특정 확장을 모른다** (ADR-0018). 확장이 기여한 자원은 C13 §5의 **공통 카탈로그 형식**으로만 다룬다. 예를 들어 「UI 화면」의 모양은 UI 자동화 확장(C9)이 정하고, Center는 해석하지 않고 넘긴다.
 
-**Center는 서비스 앱 키를 지어 앱에는 해시만 맡긴다** ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md), C11 §Center가 발급하는 키). 원문은 짓는 자리에서 배포 대상에 봉하고 버리므로 Center DB에는 봉한 덩이가 ack까지만 남는다. **원문을 오래 드는 것은 외부 앱 키뿐**이다(§외부 앱 키). 서비스 앱에서 읽는 것은 인증이 필요 없는 공개 정보다.
-
-- C11 `/healthz`, `/manifest`, `/center/v1/trust`
-- 외부 확장 어댑터의 `health`
-- 확장의 공개 카탈로그
-
-앱에 보내는 것은 Center가 서명한 봉투(`POST /center/v1/keys`)뿐이다.
+**Center는 바깥 기능의 주소도 키도 들지 않는다** (ADR-0102). 서비스 앱 키는 없어졌고(「누가 불러도 되나」는 배포가 가린다 — C15 §올리기), 외부 앱의 주소·키는 어댑터 일꾼의 설정에만 있다. Center에서 나가는 연결도 없다 — 일꾼이 Center로 들어온다.
 
 ## 리소스 모으는 방식
 
 | 종류 | 출처 | 갱신 |
 | --- | --- | --- |
-| 확장 | 내장·사내: 서비스 앱 `/manifest`의 `extension` 필드와 실행하는 쪽의 보고(C4·C12 `extensions`). 외부: 서명된 정의 등록(C13) | 등록·보고 때 |
-| 서비스 앱 | 내장·사내: 운영자가 CON-07에서 주소를 등록하고 Center가 `/manifest`·`/healthz`를 읽는다. 외부: 외부 확장 등록과 함께 생기고, 상태는 어댑터 `health`로 본다 (없으면 「확인 전」) | 상태 60초, manifest 10분, 「새로 고침」 즉시 (`CHK_CENTER__RESOURCE__POLL_S`) |
-| 확장 기여 자원 | 확장 정의의 `resources[].catalog_url` (C13 §5) | 5분마다, 「새로 고침」. `revision`이 같으면 건너뛴다 |
+| 확장 | 내장·사내: 일꾼 manifest의 `extension` 필드와 실행하는 쪽의 보고(C4·C12 `extensions`). 외부: 서명된 정의 등록(C13) | 등록·보고·manifest 올림 때 |
+| 서비스 앱 | 내장·사내: 그 앱 id를 토픽으로 승인받은 **일꾼이 올린 manifest** (C15). 외부: 외부 확장 등록과 함께 생기고 작업 목록은 정의의 어댑터 작업에서 만든다 | 일꾼이 올릴 때 |
+| 확장 기여 자원 | **일꾼이 올린 카탈로그** (C15 `PUT …/consumers/self/catalogs/{type}`) — 내장·사내는 서비스 앱이, 외부는 어댑터 일꾼이 정의의 `contributes.resources[].catalog_url`을 읽어 올린다. Center가 외부 주소를 읽지 않는다 | 올릴 때. `revision`이 같으면 다시 쓰지 않는다 |
 | 런타임 | Bot UI 등록·하트비트(C4), 서버 실행기(C12) | 하트비트 때 |
 
-- 서버끼리의 연결(Center → 서비스 앱)은 서버망 안의 일이라 ADR-0007(현장 PC → 서버)과 부딪히지 않는다.
-- Center가 외부 주소를 읽을 때도 C13 §4-3의 호출 규칙을 지킨다: `allowed_hosts`, https, 리다이렉트 금지, 사설망 차단, 크기 상한.
+- **상태는 토픽이 말한다** — 그 앱 id를 가져가는 일꾼이 하나라도 있고 마지막으로 가져간 지 90초 안이면 `ok`, 일꾼은 있는데 그보다 오래면 `unreachable`, 들인 일꾼이 없으면 `unknown`(「확인 전」). 외부 확장도 같다(어댑터 일꾼).
 
 ## 전송
 
@@ -67,28 +58,9 @@
 | `GET /resources/extensions/{id}` | 읽기 | 확장 하나 (C13) |
 | `GET /resources/service-apps/{app_id}` | 읽기 | 서비스 앱 하나 (manifest 전체) |
 | `GET /resources/contributed/{resource_type}/{id}` | 읽기 | 확장 기여 자원 하나 |
-| `POST /resources/service-apps` `{base_url}` | 관리자 토큰 | 내장·사내 서비스 앱 등록. Center가 바로 manifest를 읽어 본다 |
-| `PUT /resources/service-apps/{app_id}` `{base_url}` | 관리자 토큰 | 주소 바꾸기 (환경별 주소의 유일한 출처) |
-| `DELETE /resources/service-apps/{app_id}` | 관리자 토큰 | 등록 해제. 쓰는 Bot이 있으면 409 `in_use` |
-| `POST /resources/refresh` `{type?, id?}` | 관리자 토큰 | 바로 다시 읽기 |
+| `GET /signing-keys` | **없음** (공개키다) | 믿는 키 목록 (C2 `AdminKey[]` — 하트비트의 `admin_keys`와 같은 것). 어댑터 일꾼이 외부 확장 봉투를 다시 검증하려고 받는다 |
 
-외부 확장의 등록·해제는 C13 경로(관리자만 — Center가 봉투에 서명한다)로 한다.
-
-**ADR-0094** —
-
-| 메서드·경로 | 인증 | 뜻 |
-| --- | --- | --- |
-| `GET /signing-keys` | **없음** (공개키다) | 믿는 키 목록 (C2 `AdminKey[]` — 하트비트의 `admin_keys`와 같은 것). 서비스 앱이 Center를 믿으려고 받는다 (C11) |
-| `PUT /resources/extensions/{id}/app-key` `{key}` | 관리자 (계정 세션·관리자 토큰) | 외부 앱 **운영 키** 넣기·바꾸기 (§외부 앱 키). 응답에 원문은 없다 |
-| `DELETE /resources/extensions/{id}/app-key` | 관리자 | 운영 키 지우기 |
-| `PUT /resources/extensions/{id}/app-key/test` `{key}`, `DELETE …/app-key/test` | 관리자 | **시험용 키** 넣기·바꾸기·지우기 — Studio 시험 실행에만 간다 (§외부 앱 키) |
-
-**ADR-0097** —
-
-| 메서드·경로 | 인증 | 뜻 |
-| --- | --- | --- |
-| `PUT /resources/extensions/{id}/address` `{base_url}` | 관리자 (계정 세션·관리자 토큰) | 외부 확장 **주소 덮어쓰기** (§외부 확장 주소). 정의의 허용 호스트 밖이면 422 `host_not_allowed` |
-| `DELETE /resources/extensions/{id}/address` | 관리자 | 덮어쓴 주소를 지운다 — 정의의 `base_url`(기본값)로 돌아간다 |
+외부 확장의 등록·해제는 C13 경로(관리자만 — Center가 봉투에 서명한다)로 한다. 서비스 앱을 **등록하는 길은 없다** — 일꾼 승인(C5 `POST /enrollments/{id}/approve`, `type: consumer`)이 그 자리다.
 
 ## 모델
 
@@ -101,13 +73,11 @@
 | `contributes_summary` | 기여 지점별 이름 (예: `task_types: [ui_task]`) |
 | `service_app_id`? | 서버 부분 |
 | `installed_on` | 이 확장을 가진 Bot UI·서버 실행기 수와 버전 분포 (C4·C12 보고. Studio는 세지 않음) |
-| `status` | 서버 부분 상태. 값은 `ServiceAppResource.status`와 같고 **서버 부분이 아예 없으면 `n/a`**다. C11 앱은 그 앱의 `/healthz`, 외부 확장은 **어댑터 `health`**(C13 §4-1)로 본다 — 선언이 없으면 `unknown`(「확인 전」)이다 |
+| `status` | 서버 부분 상태. 값은 `ServiceAppResource.status`와 같고 **서버 부분이 아예 없으면 `n/a`**다. 그 토픽을 가져가는 일꾼으로 본다 (§리소스 모으는 방식) |
 | `status_reasons`, `checked_at`? | 상태의 사유와 마지막으로 본 때. 서버 부분이 없으면 비어 있다 |
 | `definition`, `envelope` | 외부 확장만. 실행하는 쪽이 받아 검증한다 |
-| `app_key` | 외부 확장이고 키를 받는 앱일 때만(ADR-0091 `takes_key()`). `{run: KeySlot, test: KeySlot}` — KeySlot은 `{set: bool, set_at?, set_by?}`. **원문·앞자리는 없다** (§외부 앱 키) |
-| `address`? | 외부 확장이고 **Center가 주소를 덮어썼을 때만** `{base_url, set_at, set_by}` (§외부 확장 주소). 없으면 정의의 `service.base_url`을 쓴다 |
 
-외부 확장의 상태를 볼 때 Center는 **어댑터와 같은 관문을 지난다** (C13 §4-3 1~4 — 허용 호스트·사설망·https·DNS 고정). 규칙이 갈라지지 않게 `contracts`의 같은 함수(`resolve_host`)를 쓴다. 관문에 걸리면 두드리지 않고 `unreachable`에 사유를 남긴다 — **정의가 적은 주소라고 해서 Center가 아무 데나 나가지 않는다.**
+외부 확장의 상태도 **Center가 두드리지 않는다** — 그 토픽의 일꾼(어댑터 일꾼)이 말한다 (§리소스 모으는 방식).
 
 ### ServiceAppResource
 
@@ -115,13 +85,13 @@
 | --- | --- |
 | `app_id`, `name`, `version`, `category` | C11 manifest (외부는 C13 정의) |
 | `extension_id` | 어느 확장의 서버 부분인가 |
-| `base_url` | **주소의 유일한 출처** (C13 Service) |
-| `console_url` | http(s)만 |
+| `base_url` | **없다**(빈 값) — Center는 서비스 앱의 주소를 모른다. 옛 읽는 쪽이 깨지지 않게 칸은 둔다 |
+| `console_url` | http(s)만 — 일꾼이 올린 manifest의 값 |
 | `operations` | C11 Operation 목록 (외부는 어댑터 Operation에서 만든 같은 모양) |
 | `status` | `ok` / `degraded` / `unreachable` / `unknown` (열린 문자열). 화면 표기는 「정상」 / 「저하」 / 「응답 없음」 / 「확인 전」 |
-| `status_reasons`, `checked_at`, `manifest_at` | |
+| `status_reasons`, `checked_at`, `manifest_at` | `checked_at`은 마지막으로 가져간 때, `manifest_at`은 manifest를 올린 때 |
+| `consumers` | 이 토픽을 가져가는 일꾼 수 |
 | `used_by` | 이 앱을 쓰는 BPM 프로세스 (`id@version`, 승인·배포된 것) |
-| `trust` | `{state, checked_at?}` — 이 앱이 Center 발급을 받나 (C11 `GET /center/v1/trust`를 상태와 같이 60초마다 본다). `state`는 열린 문자열, 알려진 값 `trusted`(이 Center의 지금 서명 키를 믿는다) `not_configured`(앱에 `CENTER__URL`이 없다) `other_center`(다른 주소를 믿는다) `stale_key`(지금 서명 키를 아직 모른다) `pin_mismatch`(앱의 `KEY_PIN`이 이 Center의 키와 다르다 — 서명 키를 바꾼 뒤 앱 설정을 고치지 않았다) `unknown`(묻지 못했다·외부 앱). `trusted`가 아니면 Center는 그 앱의 키를 짓지 않고 CON-07 「할 일」로 말한다 |
 
 ### ContributedResource (확장 기여 자원)
 
@@ -159,31 +129,9 @@
 - 업로드할 때는 경고만 한다 (CON-02 띠).
 - **배포할 때는** C1 R8에 걸리는 것(서버 BPM 프로세스의 작업)과 확장 누락·해시 불일치만 거부한다. 서비스 앱이 잠시 응답이 없다고 배포를 막지는 않는다.
 
-## 외부 앱 키
+## 외부 앱 키 · 외부 확장 주소 — 없다
 
-> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §7, ADR-0092 §4).
-
-외부 앱의 키는 우리가 발급할 수 없어서 관리자가 CON-07에서 **한 번** 넣는다.
-
-- 받는 것은 키를 받는 외부 확장(`takes_key()`)뿐이다. 아니면 422 `takes_no_key`. 키는 ASCII여야 한다(어댑터가 거절한다 — C13 §4) — 아니면 422 `key_not_ascii`.
-- Center는 **서명 키와 같은 자리에 암호화해** 둔다. 응답·목록·화면 어디에도 원문이 다시 나오지 않는다 — `app_key`에는 넣었는지·언제·누가만 있다.
-- 그 확장을 쓰는 Bot의 **배포 대상마다** 같은 원문을 봉해 하트비트로 내려 준다 (C4 §서비스 앱 키 전달 `source: external`). 바꾸면 모든 대상에 새로 내려 주고(옛 것은 `replaces`), 지우면 `drop_service_keys`로 보낸다.
-- **운영 키는 Studio에 내려 주지 않는다** (ADR-0094 §7).
-- **시험용 키는 따로 넣는다** — 같은 보관·같은 규칙(ASCII·원문 다시 안 보임)이고 **Studio에만** 간다(C5 §Studio 개발 키). 배포 대상에는 늘 운영 키가 간다. 시험용 키가 없으면 Studio가 「관리자가 시험용 키를 넣지 않았습니다」라고 말하고, 환경변수 `CHK_STUDIO__SVC__<참조>`가 있으면 그것이 이긴다.
-- 외부 확장을 등록 해제하면 그 키도 지운다.
-
-## 외부 확장 주소
-
-> 상태: **돈다** (2026-10-25, [ADR-0097](../decisions/0097-external-extension-address-from-center.md)).
-
-C13은 「Center 리소스 등록의 `base_url`이 이긴다」고 적었다. 서비스 앱은 등록이 곧 주소이고, **외부 확장은 이 칸으로 덮어쓴다** — 정의를 한 벌로 두고 환경(= 연결한 Center)마다 주소를 고르게 하려고다.
-
-- 받는 것은 **등록된 외부 확장**(`http-adapter`)뿐이다. 아니면 404 `not_found`.
-- **정의를 넓히지 않는다.** 주소는 그 정의의 `allowed_hosts`·`allow_private_network`로 **어댑터와 같은 관문**(`contracts.extension.resolve_host`)을 지나야 받는다 — 허용 호스트 밖·사설망·`https`가 아닌 공용 주소는 422 `host_not_allowed`. Center에서 이름이 풀리지 않는 것(DNS)만은 막지 않는다 — 부르는 곳(PC·서버)에서는 풀릴 수 있고, 부를 때 같은 관문이 다시 본다. 경로·쿼리는 받지 않는다(어댑터가 `base_url`의 경로를 버린다) — 422 `host_not_allowed`.
-- 실행하는 쪽(Bot UI·서버 실행기·Studio)은 `ExtensionResource.address.base_url`을 **명부의 주소**로 넣는다(`core.app_directory`). 그래서 어댑터가 정의의 값보다 먼저 쓴다 — 코드가 하나다. **부를 때도 그 정의의 허용 호스트로 다시 본다** — Center가 틀린 주소를 주어도 서명된 정의 밖으로는 나가지 않는다.
-- Center의 상태 점검(어댑터 `health`)도 덮어쓴 주소로 간다.
-- **새 판을 등록해 허용 호스트가 바뀌어 덮어쓴 주소가 밖이 되면** Center는 그 주소를 **내려 주지 않고**(정의의 기본값이 쓰인다) `status_reasons`에 `address_outside_definition`을 남긴다. 지우지는 않는다(다음 판에서 다시 맞을 수 있다 — 사람이 지운다).
-- 외부 확장을 등록 해제하면 덮어쓴 주소도 지운다.
+외부 앱의 키와 주소는 **어댑터 일꾼의 설정**에만 있다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md), C13 §4) — Center에 넣는 칸(`PUT …/app-key`·`…/app-key/test`·`…/address`)은 없다. 시험용 키라는 것도 없다: Studio 시험 실행의 일감은 `origin: test`이고, 어댑터 일꾼이 확장마다 시험 쪽 주소·키를 따로 둘 수 있다 (ADR-0102 §6).
 
 ## Center API 키 관리 (CON-11)
 
@@ -237,6 +185,7 @@ CenterKeyInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | **Center는 바깥 기능을 읽으러 가지 않는다** — 서비스 앱 등록·주소·해제·`/manifest`·`/healthz`·`trust` 읽기, 외부 앱 키(운영·시험용), 외부 확장 주소 덮어쓰기, 어댑터 `health` 두드리기를 걷었다. 서비스 앱·기여 자원은 일꾼이 올리고 상태는 토픽이 말한다(`consumers` 칸). `base_url`은 빈다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | §외부 확장 주소 — `PUT/DELETE …/extensions/{id}/address`, `ExtensionResource.address{base_url, set_at, set_by}`, 사유 `address_outside_definition`. 선택 칸이라 schema는 그대로다 | [0097](../decisions/0097-external-extension-address-from-center.md) |
 | 2026-10-25 | 1 | `GET /signing-keys`(인증 없음), §외부 앱 키(운영 `PUT/DELETE …/extensions/{id}/app-key`·시험용 `…/app-key/test`, `ExtensionResource.app_key{run, test}`), `trust`의 `pin_mismatch`, `ServiceAppResource.trust` | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | `bot_ui`·`server_runner` 키는 등록 승인이 만든다 — `CenterKeyInfo.enrollment_id?`. 이 경로로 발급하는 길은 자동화·시험용으로 남는다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |

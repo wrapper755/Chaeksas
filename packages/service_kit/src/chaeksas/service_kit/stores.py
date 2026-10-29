@@ -1,4 +1,4 @@
-"""키·멱등·사용 기록 저장소 — 인터페이스와 메모리 구현.
+"""멱등·사용 기록 저장소 — 인터페이스와 메모리 구현.
 
 앱마다 실제 저장소(SQLite 등)를 끼울 수 있게 프로토콜로 두고, 뼈대·시험용으로 메모리
 구현을 함께 준다. 멱등 저장소가 C11의 「같은 멱등 키로 다시 오면 수행하지 않는다」를 담당한다.
@@ -7,11 +7,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol
 
-from chaeksas.contracts.service_app import OpRequest, OpResponse, ServiceAppKey, UsageRecord
+from chaeksas.contracts.service_app import OpRequest, OpResponse, UsageRecord
 
 BeginOutcome = Literal["new", "replay", "in_progress", "conflict"]
 
@@ -34,27 +33,6 @@ def body_hash(req: OpRequest) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-class KeyStore(Protocol):
-    """키 저장소. 폐기·만료된 키도 돌려준다 (401과 403을 구분하려고)."""
-
-    def all_keys(self) -> Iterator[ServiceAppKey]: ...
-
-    def touch(self, key: ServiceAppKey, *, at: str) -> None:
-        """`last_used_at` 갱신."""
-
-    def add(self, key: ServiceAppKey) -> None:
-        """새 키를 넣는다 (관리 API 발급, SVC-02)."""
-        ...
-
-    def revoke(self, key: ServiceAppKey, *, at: str) -> None:
-        """폐기 시각을 남긴다. **지우지 않는다** — 사용 기록이 이름을 가리킨다."""
-        ...
-
-    def put(self, key: ServiceAppKey) -> None:
-        """같은 해시의 레코드를 바꾼다 (Center 발급 키의 허용 작업·만료 고치기, ADR-0094)."""
-        ...
-
-
 class IdempotencyStore(Protocol):
     """멱등 저장소."""
 
@@ -70,26 +48,6 @@ class UsageLog(Protocol):
     """사용 기록 (SVC-03). **입력·출력 값은 기록하지 않는다.**"""
 
     def record(self, entry: UsageRecord) -> None: ...
-
-
-@dataclass
-class InMemoryKeyStore:
-    keys: list[ServiceAppKey] = field(default_factory=list)
-
-    def all_keys(self) -> Iterator[ServiceAppKey]:
-        return iter(list(self.keys))
-
-    def touch(self, key: ServiceAppKey, *, at: str) -> None:
-        key.last_used_at = at
-
-    def add(self, key: ServiceAppKey) -> None:
-        self.keys.append(key)
-
-    def revoke(self, key: ServiceAppKey, *, at: str) -> None:
-        key.revoked_at = at
-
-    def put(self, key: ServiceAppKey) -> None:
-        self.keys = [key if one.hash == key.hash else one for one in self.keys]
 
 
 @dataclass

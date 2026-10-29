@@ -1,7 +1,7 @@
 """관리 콘솔이 앱을 읽는 길 — UIA-01 개요 (C9 §관리 콘솔이 읽는 길, ADR-0042).
 
-**관문은 하나다** — C11 관리 API와 같은 관리자 토큰(`service_kit.admin_guard`). 콘솔은 서비스
-앱 키를 갖지 않으므로(ADR-0013) `registry_write` 키 대신 더 강한 관리자 토큰으로 읽는다.
+**관문은 하나다** — C11 관리 API와 같은 관리자 토큰(`service_kit.admin_guard`). 앱에는 업무 키가
+없다 (ADR-0102 — 업무 호출은 일꾼이 Center에서 가져온다). 그래서 관리 경로를 여는 것은 관리자 토큰뿐이다.
 
 거듭 보는 것 넷.
 
@@ -9,6 +9,9 @@
 2. 셈은 레지스트리를 **그대로** 센 것이다 (공개 카탈로그와 같은 규칙).
 3. 세션 기록은 **보고가 도착한 것만**이고 **시험은 따로 센다** (C8 `origin: test`).
 4. 「배포 전 확인」은 **이 앱이 자기 힘으로 볼 수 있는 것만**이고 **막지 않는다**.
+
+없앤 시험: 「업무 키로도 못 본다」·「등록 담당자 키 점검」 셋 — 앱에 키가 없어졌다(누가 등록하나는
+Center의 CON-03 「셀렉터 등록」이다). 「아무 토큰으로도 안 열린다」는 남은 관문 시험이 본다.
 """
 
 from __future__ import annotations
@@ -20,7 +23,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from chaeksas.contracts.service_app import Caller, OpRequest, ServiceAppKey
+from chaeksas.contracts.service_app import Caller, OpRequest
 from chaeksas.ext.ui_automation.contracts.console import (
     CHECK_OK,
     CHECK_WARN,
@@ -41,9 +44,9 @@ from chaeksas.ext.ui_automation.contracts.registry import (
     LocatorStats,
     PageRegistration,
 )
-from chaeksas.ext.ui_automation.service.app import REGISTRY_WRITE, Service, create
+from chaeksas.ext.ui_automation.service.app import Service, create
 from chaeksas.ext.ui_automation.service.store import MAX_SESSIONS, Database, SessionStore
-from chaeksas.service_kit import ServiceLlm, issue
+from chaeksas.service_kit import ServiceLlm
 
 ADMIN = {"Authorization": "Bearer t-admin"}
 AT = "2026-10-09T10:15:00+00:00"
@@ -100,18 +103,6 @@ def test_the_console_path_is_closed_without_the_admin_token(made: tuple[TestClie
     client, _ = made
     assert client.get("/admin/v1/overview").status_code == 401
     assert client.get("/admin/v1/overview", headers={"Authorization": "Bearer nope"}).status_code == 403
-
-
-def test_a_business_key_cannot_read_the_console_path(made: tuple[TestClient, Service]) -> None:
-    """**진짜 업무 키로도 못 본다** — 키를 가진 Bot이 콘솔 자료를 읽지 못한다 (C11 권한 경계).
-
-    `registry_write`까지 있는 키로 해 본다 — 셀렉터를 보는 권한이어도 관리 경로는 다른 문이다.
-    """
-    client, service = made
-    assert service.keys is not None
-    raw, record = issue("등록 담당자", extra_scopes=[REGISTRY_WRITE])
-    service.keys.add(record)
-    assert client.get("/admin/v1/overview", headers={"Authorization": f"Bearer {raw}"}).status_code == 403
 
 
 def test_the_path_is_disabled_without_an_admin_token_at_all(tmp_path: Path) -> None:
@@ -250,39 +241,19 @@ def test_old_records_fall_off(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def test_the_checks_say_what_is_missing_and_do_not_block(made: tuple[TestClient, Service]) -> None:
     client, service = made
     found = {one.id: one for one in overview(client).checks}
-    assert set(found) == {"llm", "registrar_key", "pages"}
-    assert all(one.level == CHECK_WARN for one in found.values()), "빈 앱이면 셋 다 경고다"
-    assert found["registrar_key"].detail and REGISTRY_WRITE in found["registrar_key"].detail
-    # **막지 않는다** — 앱은 그대로 돈다 (업무 호출이 살아 있다).
+    assert set(found) == {"llm", "pages"}, "누가 등록하나는 Center의 일이다 (CON-03 「셀렉터 등록」)"
+    assert all(one.level == CHECK_WARN for one in found.values()), "빈 앱이면 둘 다 경고다"
+    assert found["pages"].detail and "TOL-03" in found["pages"].detail
+    # **막지 않는다** — 앱은 그대로 돈다.
     assert client.get("/healthz").status_code == 200
     assert service.registry.pages == {}
 
 
-def test_a_registrar_key_turns_its_check_green(made: tuple[TestClient, Service]) -> None:
+def test_registered_pages_turn_their_check_green(made: tuple[TestClient, Service]) -> None:
     client, service = made
-    assert service.keys is not None
-    service.keys.add(
-        ServiceAppKey(name="등록 담당자", hash="a" * 64, prefix="chk_svc_111111", extra_scopes=[REGISTRY_WRITE])
-    )
-    service.keys.add(ServiceAppKey(name="운영", hash="b" * 64, prefix="chk_svc_222222"))
+    service.registry.register(page())
     found = {one.id: one for one in overview(client).checks}
-    assert found["registrar_key"].level == CHECK_OK
-    assert found["registrar_key"].detail == "1개", "권한 없는 키는 세지 않는다"
-
-
-def test_a_revoked_registrar_key_does_not_count(made: tuple[TestClient, Service]) -> None:
-    client, service = made
-    assert service.keys is not None
-    service.keys.add(
-        ServiceAppKey(
-            name="떠난 사람",
-            hash="c" * 64,
-            prefix="chk_svc_333333",
-            extra_scopes=[REGISTRY_WRITE],
-            revoked_at=AT,
-        )
-    )
-    assert {one.id: one.level for one in overview(client).checks}["registrar_key"] == CHECK_WARN
+    assert (found["pages"].level, found["pages"].detail) == (CHECK_OK, "1개")
 
 
 # ─────────── UIA-02 셀렉터 (화면 목록·화면 하나·경로) ───────────

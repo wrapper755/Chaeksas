@@ -130,7 +130,7 @@ def session_body(**extra: Any) -> dict[str, Any]:
         "mode": "deterministic",
         "business_key": business_key(RUN, "Task_Fill"),
         "page_id": "erp.order.form",
-        "service_key": "sk-값",
+        "call_token": "chk_ctk_test",
     }
     body.update(extra)
     return body
@@ -532,11 +532,12 @@ def test_a_registration_session_takes_a_plan_and_runs_steps_without_reopening() 
     headers = {TOKEN_HEADER: TOKEN, SESSION_HEADER: opened["session_secret"]}
     where = f"/v1/registration/{opened['session_id']}/plan"
 
-    body = {"page_id": "erp.order.form", "report": True, "service_key": "sk"}
+    body = {"page_id": "erp.order.form", "report": True, "call_token": "chk_ctk_reg"}
     loaded = client.post(where, json=body, headers=headers)
     assert loaded.status_code == 200, loaded.text
     assert loaded.json()["session_id"] == opened["session_id"], "새 세션을 열지 않는다"
     assert worker.session is not None and worker.session.request.mode == "deterministic"
+    assert worker.session.request.call_token == "chk_ctk_reg", "계획·보고를 올릴 호출 토큰을 세션에 싣는다 (C10)"
 
     step = client.post(
         f"/v1/sessions/{opened['session_id']}/steps",

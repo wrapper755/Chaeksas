@@ -35,11 +35,10 @@ from PySide6.QtWidgets import (
 
 from chaeksas.contracts import Violation
 from chaeksas.contracts.bpmn_ext import BpmnProcess, BpmnReadError, read_process
-from chaeksas.core.preflight import key_apps_of
 from chaeksas.qt.theme.tokens import SPACE_2
 from chaeksas.studio import (
+    call_token,
     center_actions,
-    dev_keys,
     export_actions,
     file_actions,
     layout,
@@ -50,13 +49,10 @@ from chaeksas.studio import (
 )
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
-from chaeksas.studio.checks import refs_in
 from chaeksas.studio.connect_dialog import CenterConnectDialog
-from chaeksas.studio.dev_keys import DevKeys
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extension_dialog import StudioExtensionsDialog, pin_patch
 from chaeksas.studio.extensions import Extensions
-from chaeksas.studio.packaging import build_manifest
 from chaeksas.studio.preflight import Preflight, inspect, readiness, summarize
 from chaeksas.studio.process_dialog import ProcessInfoDialog
 from chaeksas.studio.properties import Properties
@@ -148,8 +144,8 @@ class MainWindow(QMainWindow):
         self.log_view.setReadOnly(True)
 
         self.extensions = Extensions.load(off=settings.disabled_extensions, configured=settings.extensions)
-        self.extensions.process_key_refs = self.process_key_refs
-        self.extensions.dev_keys = self.dev_keys
+        self.extensions.center_url = lambda: self.settings.center_url or None
+        self.extensions.call_tokens = self.call_tokens
         self.properties = Properties(self, extensions=self.extensions)
         self.properties.applying.connect(self._apply_properties)
         self.canvas.selected.connect(self._on_selected)
@@ -363,25 +359,13 @@ class MainWindow(QMainWindow):
         """받아 둔 것으로 STU-03을 그린다 (`reader`가 `None`이면 두드리지 않는다)."""
         center_actions.refresh_resources(self, reader=reader)
 
-    def dev_keys(self) -> DevKeys:
-        """개발 키 한 벌 — 승인된 Studio 키로 Center에 청한다 (ADR-0094 §5). 누를 때마다 새로 짓는다."""
-        return dev_keys.from_settings(self.settings)
-
-    def key_apps(self) -> dict[str, str]:
-        """열린 BPM 프로세스의 `{키 참조: 앱}` — 빌드가 짓는 매니페스트와 **같은 것**이다 (C1)."""
-        if self.process is None:
-            return {}
-        try:
-            made = build_manifest(
-                self.process,
-                task_type_locations=self.task_type_locations(),
-                keyless_apps=self.keyless_apps(),
-                key_extensions=self.key_extensions(),
-            )
-        except Exception as e:  # noqa: BLE001 — 진입 정의가 없는 등 — 그때는 키를 풀 앱을 모른다
-            log.debug("매니페스트를 짓지 못했다: %s", e)
-            return {}
-        return key_apps_of(made)
+    def call_tokens(self) -> str | None:
+        """호출 토큰 (C15) — Worker가 Studio를 대신해 외부 작업을 올릴 때. 설정이 바뀌면 새로 짓는다."""
+        held = getattr(self, "_call_tokens", None)
+        if held is None or held.base_url != (self.settings.center_url or "").strip():
+            held = call_token.from_settings(self.settings)
+            self._call_tokens = held
+        return held() if held is not None else None
 
     def process_key_refs(self) -> dict[str, str]:
         """열린 BPM 프로세스의 `chk:process.service_keys` — 편집기의 `service.key_ref` (ADR-0074).
@@ -444,8 +428,7 @@ class MainWindow(QMainWindow):
 
     def open_settings(self) -> None:
         """STU-10. 저장하면 이 창의 설정도 바뀐다 (다음 시험 실행부터 쓴다)."""
-        refs = refs_in(self.process.definitions) if self.process is not None else []
-        dialog = StudioSettingsDialog(self.settings, self.extensions, refs=refs, parent=self)
+        dialog = StudioSettingsDialog(self.settings, self.extensions, parent=self)
         if dialog.exec() and dialog.saved is not None:
             if dialog.saved.theme != self.settings.theme:
                 self._apply_theme(dialog.saved.theme)
@@ -729,8 +712,6 @@ class MainWindow(QMainWindow):
             return []
         return readiness(
             self.process,
-            # 참조를 **그 앱의 개발 키로** 푼다 — 없으면 Center에 청한다 (ADR-0094 §5).
-            key_value=self.dev_keys().resolver(self.key_apps()),
             host=self.extensions.host,
             context=self.extensions.context,
             dirty=self.dirty,

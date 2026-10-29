@@ -28,9 +28,9 @@ describe("keyActions", () => {
 
 describe("splitKeys", () => {
   it("승인이 만드는 종류는 아래, 나머지는 위 — 순서는 그대로", () => {
-    const rows = ["bot_ui", "integration", "studio", "relay", "server_runner", "someday"].map((type) => ({ type }));
+    const rows = ["bot_ui", "integration", "studio", "relay", "server_runner", "consumer", "someday"].map((type) => ({ type }));
     const { integration, enrolled } = splitKeys(rows);
     expect(integration.map((row) => row.type)).toEqual(["integration", "relay", "someday"]);
-    expect(enrolled.map((row) => row.type)).toEqual(["bot_ui", "studio", "server_runner"]);
+    expect(enrolled.map((row) => row.type)).toEqual(["bot_ui", "studio", "server_runner", "consumer"]);
   });
 });

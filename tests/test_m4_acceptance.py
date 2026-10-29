@@ -1,10 +1,11 @@
 """M4 인수 시험 — 업무 예제의 M4 묶음을 **Studio 시험 실행**으로 돌린다 (조각 15).
 
-로드맵의 M4 기준이다. M3과 다른 점은 **UI 태스크가 진짜로 돈다**는 것이다 — 진짜 UI 자동화
-앱(in-process), 진짜 Worker, 진짜 Chromium, 시험이 띄운 진짜 화면. 데스크톱 예제는 Windows에서
-진짜 UIA로 시험이 띄운 진짜 창(`fake_desktop_apps.py`)을 만진다.
+로드맵의 M4 기준이다. M3과 다른 점은 **UI 태스크가 진짜로 돈다**는 것이다 — 진짜 소켓 Center와
+그 일꾼인 진짜 UI 자동화 앱(C15, ADR-0102), 진짜 Worker, 진짜 Chromium, 시험이 띄운 진짜 화면.
+Worker는 Studio가 청한 **호출 토큰**으로 계획·보고를 Center에 올린다 (`test_…` 실행). 데스크톱 예제는
+Windows에서 진짜 UIA로 시험이 띄운 진짜 창(`fake_desktop_apps.py`)을 만진다.
 
-**바깥에 나가지 않는다.** 앱도 화면도 127.0.0.1이고, 예제가 가리키는 화면은 시험이 그 자리에서
+**바깥에 나가지 않는다.** Center도 앱도 화면도 127.0.0.1이고, 예제가 가리키는 화면은 시험이 그 자리에서
 만들어 레지스트리에 등록한다 (사람이 BUI-06에서 하는 일을 시험이 대신한다).
 
 **묶음 목록은 예제에서 읽는다** — `README.md`의 표를 사람이 옮겨 적으면 어긋난다.
@@ -28,12 +29,11 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
-from fastapi.testclient import TestClient
+from uia_center import UiaCenter, running
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from chaeksas.contracts.bpmn_ext import Case  # noqa: E402
-from chaeksas.contracts.service_app import ServiceAppKey  # noqa: E402
 from chaeksas.ext.ui_automation.client.agent_env import DesktopEnvironment  # noqa: E402
 from chaeksas.ext.ui_automation.client.registry_client import RegistryClient  # noqa: E402
 from chaeksas.ext.ui_automation.client.task import UiTaskExecutor  # noqa: E402
@@ -42,21 +42,12 @@ from chaeksas.ext.ui_automation.contracts.registry import (  # noqa: E402
     ElementHint,
     PageRegistration,
 )
-from chaeksas.ext.ui_automation.service.app import REGISTRY_WRITE, create  # noqa: E402
-from chaeksas.ext.ui_automation.service.store import Database, SqliteKeyStore  # noqa: E402
-from chaeksas.ext.ui_automation.worker import desktop  # noqa: E402
+from chaeksas.ext.ui_automation.worker import desktop, plans_for  # noqa: E402
 from chaeksas.ext.ui_automation.worker.app import Worker  # noqa: E402
 from chaeksas.ext.ui_automation.worker.browser import BrowserBackend, available  # noqa: E402
 from chaeksas.ext.ui_automation.worker.desktop import AppLauncher, DesktopBackend  # noqa: E402
-from chaeksas.ext.ui_automation.worker.plans import (  # noqa: E402
-    HttpOps,
-    PlanCache,
-    PlanService,
-    ReportQueue,
-)
 from chaeksas.ext.ui_automation.worker.routing import RoutingBackend  # noqa: E402
 from chaeksas.mock_apps import sites  # noqa: E402
-from chaeksas.service_kit import hash_key  # noqa: E402
 from chaeksas.studio.run_dialog import AUTONOMOUS  # noqa: E402
 from chaeksas.studio.runner import NO_EXPECT, PASS, CaseRun, Outcome, Plan, read_cases  # noqa: E402
 from chaeksas.studio.settings import Settings  # noqa: E402
@@ -64,12 +55,6 @@ from chaeksas.studio.workspace import Workspace  # noqa: E402
 
 DOCS = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples"
 EXAMPLES = DOCS / "bpmn"
-
-#: 이 PC의 키 저장소에 든 UI 자동화 앱 키. 예제마다 **참조 이름이 다르다**
-#: (`test-ui`·`purchase-portal` …) — 이름을 값으로 푸는 것은 PC의 몫이라, 시험은 어느
-#: 이름이든 같은 키를 준다 (ADR-0013 — BPM 프로세스에는 이름만 있다).
-KEY = "chk_svc_" + "m" * 40
-
 
 def bundle() -> list[str]:
     """M4 묶음의 예제 파일 이름 — `README.md`의 표에서 읽는다 (M3 인수 시험과 같은 수법)."""
@@ -219,34 +204,30 @@ def registrations(site: str) -> list[PageRegistration]:
 
 
 @pytest.fixture
-def app(tmp_path: Path, site: str) -> Any:
-    path = tmp_path / "uia.sqlite3"
-    made = create(db_path=path, admin_token="t-admin")
-    SqliteKeyStore(db=Database(path=path)).add(
-        ServiceAppKey(
-            name="인수 시험",
-            hash=hash_key(KEY),
-            prefix=KEY[:16],
-            allowed_operations=["*"],
-            allowed_modes=["deterministic", "autonomous"],
-            extra_scopes=[REGISTRY_WRITE],
-            created_at="2026-10-05T09:00:00+09:00",
-        )
-    )
-    client = RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(made))
-    for page in registrations(site):
-        client.register(page)
-    return made
+def app(tmp_path: Path, site: str) -> Iterator[UiaCenter]:
+    """Center + 그 일꾼인 UI 자동화 앱. 화면 등록은 「셀렉터 등록」을 켠 PC의 도구가 한다 (TOL-03)."""
+    with running(tmp_path / "center") as center:
+        client = registrar(center)
+        for page in registrations(site):
+            client.register(page)
+        yield center
+
+
+def registrar(center: UiaCenter) -> RegistryClient:
+    return RegistryClient(base_url=center.url, call_token=center.pc_token(deployed=False))
 
 
 class Secrets:
-    """`extension_api` 바깥 세상 — **키 참조 이름**을 값으로 푼다 (ADR-0013).
+    """`extension_api` 바깥 세상 — 확장이 묻는 비밀은 **호출 토큰** 하나다 (C15 `call_token`).
 
-    이 PC에는 UI 자동화 앱 키가 하나다. 예제가 어떤 이름으로 가리키든 그 키를 준다.
+    Studio가 제 키로 청한 것이다 — 시험 실행(`test_…`)만 올린다.
     """
 
+    def __init__(self, token: str) -> None:
+        self.token = token
+
     def secret(self, ref: str) -> str | None:
-        return KEY if ref else None
+        return self.token if ref == "call_token" else None
 
 
 class Direct:
@@ -272,7 +253,8 @@ class Direct:
 class Host:
     """`core.run_state.ExtensionTasks` — 태스크 종류로 수행기를, AI 태스크 domain으로 환경을 준다."""
 
-    def __init__(self, worker: Worker) -> None:
+    def __init__(self, worker: Worker, token: str) -> None:
+        self._secrets = Secrets(token)
         self._executor = UiTaskExecutor(client=Direct(worker))  # type: ignore[arg-type]
         # 데스크톱 AI 태스크의 눈과 손 — 같은 Worker 위에서 돈다 (ADR-0037).
         self._desktop = DesktopEnvironment(client=Direct(worker))  # type: ignore[arg-type]
@@ -287,35 +269,25 @@ class Host:
         return "ui-automation" if domain == "desktop" else None
 
     def context(self, extension_id: str) -> Any:
-        return Secrets()
+        return self._secrets
 
 
 @pytest.fixture
-def host(app: Any, tmp_path: Path) -> Iterator[Host]:
+def host(app: UiaCenter, tmp_path: Path) -> Iterator[Host]:
     if not available():
         pytest.skip("Playwright가 없다")
     backend = BrowserBackend(headless=True)
     yield from _host(app, tmp_path, backend)
 
 
-def _host(app: Any, tmp_path: Path, backend: Any) -> Iterator[Host]:
-    client = TestClient(app)
-
-    def plans(request: Any) -> PlanService:
-        return PlanService(
-            ops=HttpOps(
-                base_url="http://app",
-                api_key=request.service_key or "",
-                business_key=request.business_key,
-                client=client,
-            ),
-            cache=PlanCache(folder=tmp_path / "plans"),
-            queue=ReportQueue(folder=tmp_path / "reports"),
-        )
-
-    worker = Worker(token="t", admin_token="a", backend=backend, plans_factory=plans)
+def _host(app: UiaCenter, tmp_path: Path, backend: Any) -> Iterator[Host]:
+    """Worker는 **제품과 같은 길**(`plans_for`)로 계획·보고를 Center에 올린다 — 큐는 `tmp_path/reports`."""
+    worker = Worker(
+        token="t", admin_token="a", backend=backend,
+        plans_factory=plans_for(tmp_path, app.url),  # type: ignore[arg-type]
+    )
     try:
-        yield Host(worker)
+        yield Host(worker, app.studio_token())
     finally:
         if worker.session is not None:
             worker.force_close(worker.session.session_id)
@@ -389,7 +361,7 @@ NEEDS_BROWSER = {"bx04_tax_invoice_issue"}
 
 
 @pytest.fixture
-def desktop_host(request: pytest.FixtureRequest, app: Any, tmp_path: Path) -> Iterator[Host]:
+def desktop_host(request: pytest.FixtureRequest, app: UiaCenter, tmp_path: Path) -> Iterator[Host]:
     """그 예제의 가짜 앱 창을 띄우고, Worker는 **경로 백엔드**로 웹·데스크톱을 함께 쓴다 (ADR-0033)."""
     example = str(request.param)
     if not desktop.available():
@@ -403,7 +375,7 @@ def desktop_host(request: pytest.FixtureRequest, app: Any, tmp_path: Path) -> It
         yield from _launched_by_worker(app, tmp_path, which, tag)
         return
     page = page_for(tag)
-    RegistryClient(base_url="http://app", api_key=KEY, client=TestClient(app)).register(page)
+    registrar(app).register(page)
     # 시험 프로세스의 offscreen을 물려주지 않는다 — 창이 보여야 UIA가 본다.
     env = {k: v for k, v in os.environ.items() if k != "QT_QPA_PLATFORM"}
     proc = subprocess.Popen([sys.executable, str(FAKE_APPS), which, tag], env=env)
@@ -420,7 +392,7 @@ def desktop_host(request: pytest.FixtureRequest, app: Any, tmp_path: Path) -> It
         proc.wait(10)
 
 
-def _launched_by_worker(app: Any, tmp_path: Path, which: str, tag: str) -> Iterator[Host]:
+def _launched_by_worker(app: UiaCenter, tmp_path: Path, which: str, tag: str) -> Iterator[Host]:
     """**창을 시험이 띄우지 않는다** — Worker가 그 PC의 앱 설정(`desktop-apps.json`)으로 띄운다 (C10)."""
     title = "^" + re.escape("계산기" + tag) + "$"
     apps = tmp_path / "desktop-apps.json"
@@ -723,13 +695,15 @@ def test_a_desktop_example_passes_all_its_cases(qt: Any, tmp_path: Path, desktop
 
 
 @pytest.mark.skipif(not available(), reason="Playwright가 없다")
-def test_the_read_values_do_not_reach_the_report(qt: Any, tmp_path: Path, host: Host) -> None:
-    """화면에서 읽은 값은 **BPM 프로세스 변수로** 가고 보고에는 안 간다 (원칙 6)."""
+def test_the_read_values_do_not_reach_the_report(qt: Any, tmp_path: Path, app: UiaCenter, host: Host) -> None:
+    """화면에서 읽은 값은 **BPM 프로세스 변수로** 가고 보고에는 안 간다 (원칙 6) — Center에 남은 일감에도."""
     results = run_all(tmp_path, "fx15_web_form", host)
     assert results and results[0][1].verdict in (PASS, NO_EXPECT)
-    sent = list((tmp_path / "reports").glob("*.json")) + list(
-        (tmp_path / "reports-rejected").glob("*.json")
-    )
-    for one in sent:
-        raw = one.read_text(encoding="utf-8")
+    sent = [one.read_text(encoding="utf-8") for one in (tmp_path / "reports").glob("*.json")] + [
+        one.read_text(encoding="utf-8") for one in (tmp_path / "reports-rejected").glob("*.json")
+    ]
+    rows = app.store.rows("SELECT operation, input_json, output_json FROM external_tasks")
+    assert any(row["operation"] == "report" for row in rows), "보고가 Center로 갔다"
+    sent += [str(row["input_json"]) + str(row["output_json"]) for row in rows]
+    for raw in sent:
         assert "R-2026-0042" not in raw and "02-1234-5678" not in raw

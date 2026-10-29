@@ -2,9 +2,9 @@
 
 **Bot UI 실행기와 서버 실행기가 같은 코드를 쓴다** — 둘이 꽂는 것이 달라지면 「PC에서는
 되는데 서버에서 안 된다」가 된다. 다른 것은 **부르는 쪽이 넘기는 값**뿐이다 (출력 폴더,
-모델 주소·키, 확장, 바깥 앱 한 벌, 누가 부르는가, `location: follow` 결재를 어디서 답하나).
+모델 주소·키, 확장, Center에 올리는 호출기, `location: follow` 결재를 어디서 답하나).
 
-**주소·키 값은 여기까지만 온다** — BPM 프로세스와 실행 기록에는 참조 이름만 있다 (ADR-0013).
+**바깥 앱의 주소·키는 여기 오지도 않는다** — 서비스 태스크는 Center에 외부 작업으로 올린다 (ADR-0102).
 """
 
 from __future__ import annotations
@@ -12,7 +12,6 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from chaeksas.core.app_directory import AppDirectory
 from chaeksas.core.delegation import Delegator
 from chaeksas.core.engine import WHERE_FIELD, RunEnv
 from chaeksas.core.extensions import HostTasks
@@ -21,6 +20,7 @@ from chaeksas.core.llm import NoLlm, OpenAiCompatibleLlm
 from chaeksas.core.packages import InstalledBot
 from chaeksas.core.replay import read_memory
 from chaeksas.core.senders import NoSender, Sender
+from chaeksas.core.services import ServiceCaller
 from chaeksas.core.tools import builtin_tools
 
 
@@ -35,8 +35,7 @@ def make_env(
     llm_model: str,
     extensions: HostTasks | None = None,
     approval_where: str = WHERE_FIELD,
-    directory: AppDirectory | None = None,
-    caller_type: str = "bot_ui",
+    services: ServiceCaller | None = None,
     sender: Sender | None = None,
     delegate: Delegator | None = None,
 ) -> RunEnv:
@@ -68,11 +67,10 @@ def make_env(
     if extensions is not None:
         # 확장 태스크·`web`·`desktop` AI 태스크 (ADR-0018·ADR-0037) — 없으면 그림·설치 오류가 된다.
         made = replace(made, extensions=extensions)
-    if directory is not None:
-        # `chk:serviceCall` — 서비스 앱(C11)과 외부 앱(C13 어댑터)이 **같은 자리**로 간다.
-        # `caller_type`은 **누가 부르는가**다 (C11 `caller.type`) — 앱의 기록·수행 모드 판단이
-        # 그 값에 걸려 있어 서버 실행기가 「PC가 불렀다」고 말하면 안 된다.
-        made = replace(made, services=directory.caller(caller_type=caller_type))
+    if services is not None:
+        # `chk:serviceCall` — 서비스 앱(C11)과 외부 앱(C13)이 **같은 자리**로 간다: Center의 외부
+        # 작업(C15). 없으면 `NoServiceCaller`가 남아 부르지 않고 실패한다.
+        made = replace(made, services=services)
     if delegate is not None:
         # **PC 위임을 맡기는 포트 하나** (ADR-0062 §2) — 엔진은 어디에 맡기는지 모른다.
         made = replace(made, delegate=delegate)

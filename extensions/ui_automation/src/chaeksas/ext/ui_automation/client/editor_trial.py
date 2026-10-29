@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts import SERVICE_KEY_REF_SETTING
+from chaeksas.contracts.extension import CALL_TOKEN_SECRET
 from chaeksas.ext.ui_automation.client.task import (
     TEMPLATE,
     WORKER_PORT_SETTING,
@@ -97,16 +97,15 @@ class EditorTrial:
         folder = self.ctx.setting(WORKER_TOKEN_DIR_SETTING)
         return WorkerClient(token_dir=Path(str(folder)) if folder else Path.cwd(), port=int(port))
 
-    def key(self, key_ref: str) -> str:
-        """태스크의 키 참조, 비면 BPM 프로세스 설정(`service.key_ref`) — **엔진과 같은 순서**다."""
-        ref = key_ref.strip() or str(self.ctx.setting(SERVICE_KEY_REF_SETTING) or "")
-        if not ref:
-            raise NotReady(
-                "UI 자동화 앱 키 참조가 없습니다 — 태스크의 「키 참조」나 BPM 프로세스 정보(STU-06)에 적으세요."
-            )
-        found = self.ctx.secret(ref)
+    def key(self, key_ref: str = "") -> str:
+        """호출 토큰 (C15) — Studio가 제 키로 청한 것. Worker가 이것으로 계획·치유를 Center에 올린다.
+
+        `key_ref`는 옛 칸이라 받기만 한다 (ADR-0102 — 서비스 앱 키가 없어졌다).
+        """
+        del key_ref
+        found = self.ctx.secret(CALL_TOKEN_SECRET)
         if not found:
-            raise NotReady(f"키 참조 {ref}의 값이 없습니다 — 설정 › 서비스 앱 키에 개발용 키를 넣으세요.")
+            raise NotReady("호출 토큰을 받지 못했습니다 — 설정 › Center에서 Studio를 연결하세요.")
         return str(found)
 
     def _request(self, spec: Mapping[str, Any], *, mode: str, key: str, **more: Any) -> SessionRequest:
@@ -114,14 +113,15 @@ class EditorTrial:
             schema=1,
             caller=Caller(type=CALLER_STUDIO),
             mode=mode,
-            business_key=f"stu_{secrets.token_hex(4)}",
+            # Studio의 일감은 `test_…` 실행만 올라간다 (C15 §올리기) — 시험 표시도 된다.
+            business_key=f"test_{secrets.token_hex(4)}",
             page_id=str(spec.get("page_id") or ""),
             start_url=spec.get("start_url") or None,
             app=_desktop_app(dict(spec)),
             headed=True,
             heal=bool(spec.get("heal", True)),
             report=False,
-            service_key=key,
+            call_token=key,
             **more,
         )
 

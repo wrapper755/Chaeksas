@@ -9,6 +9,7 @@
 | 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0018](../decisions/0018-extensions.md), [0026](../decisions/0026-file-paths-and-file-list-task.md) |
 | 관련 화면 | STU-04 속성 패널(「JSON」 탭이 이 모델로 검증한다), STU-06, STU-07, STU-13, STU-14 |
 
+
 ## 목적
 
 BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다. 예를 들면 AI 태스크의 목표·결과 필드, 결재 폼, 서비스 앱 호출, 확장 태스크가 여기에 들어간다. 표준 BPMN 도구(bpmn-js)로 열고 그릴 수 있어야 하고, 엔진은 이 속성만 보고 실행할 수 있어야 한다.
@@ -29,7 +30,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
    - **식에 두지 않는 것:** 디스크·환경·네트워크를 읽는 함수 (`파일목록()`·`설정()`). 재생(결정 수행)이 같은 값을 내야 한다 — 그런 일은 태스크·프로세스 입력으로 옮긴다 (ADR-0025 §식에 두지 않는 것).
    - **스크립트**(`scriptTask`)에는 `변수 = 식`만 쓴다. 반복·분기는 BPMN으로 그린다.
 7. **템플릿:** 파일 경로·메일 제목·본문·`dataOutput.template`은 식이 아니라 **텍스트에 `{변수}`를 끼운 것**이다. 중괄호 안에는 **변수 이름 하나만** 올 수 있고 식은 쓸 수 없다. `{{`·`}}`는 중괄호 한 개다. 값이 `None`이면 빈 칸으로 들어가고, 모르는 이름은 실행 오류다 (ADR-0025 §1).
-8. **비밀·키 값은 넣지 않는다.** 서비스 앱 키는 참조 이름만 쓴다 (C1·ADR-0013).
+8. **비밀·키 값은 넣지 않는다.** 서비스 앱 키는 없다 — 바깥 기능은 C15 외부 작업으로 부른다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)).
 9. **엔진이 늘 주는 변수**가 있다. 선언하지 않아도 식·템플릿에서 쓸 수 있고, 검사 B11이 「출처 없음」으로 보지 않는다.
 
    | 이름 | 값 |
@@ -55,7 +56,7 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 | --- | --- | --- | --- |
 | AI 태스크 | `serviceTask` | `chk:aiTask` | `goal`(Markdown — `## 상황`·`## 할 일`·`## 판단하지 않는 것`·`## 반환` 권장), `domain`(`llm`\|`api`\|`doc`\|`web`\|`desktop`), `tools[]`, `params`(업무 파라미터, 재생 때 그대로 쓰인다), `results`(`{이름: 타입}`), `replay`(`plan`\|`full`\|`none`, 기본 `plan` — 아래 「재생」), `limits`, `forbidden_actions[]`, `confirm_triggers[]`, `web`/`desktop`(환경 설정) |
 | UI 태스크 (UI 자동화 확장) | `serviceTask` | `chk:task` `type="ui_task"` `extension="ui-automation"` | `page_id`, `start_url?`, `steps[]`(`{key, action, value?, result?, navigates?}`), `goal?`(자율 수행 전용 — 스텝 대신 목표 한 줄. 쓸 값은 목표 안에 `{이름}`으로 적고 **이름만** 모델에 간다, [ADR-0035](../decisions/0035-ui-goal-planning.md)), `results?`(목표 모드: 읽은 값을 담을 변수 이름들), `heal`(기본 true). 읽기 스텝의 `result` 변수: `read_table`은 **줄 목록**(`[{머리글: 값}]`), `read`와 표의 칸은 **수 모양이면 수**다 ([ADR-0036](../decisions/0036-screen-read-values.md), C10), `close_browser`. 스텝 `value`의 `{변수}`·`{변수.키}`(사전 안의 값)는 **수행기가 실행 시점의 변수로 채운다** — 사전·목록 값은 JSON으로, `{{`·`}}`는 중괄호 글자. 모르는 이름이면 업무 실패다 (글자 그대로 입력하지 않는다, [ADR-0033](../decisions/0033-desktop-app-and-window.md)) |
-| 서비스 앱 태스크 | `serviceTask` | `chk:serviceCall` | `app_id`, `operation`, `input`(`{필드: 식}`), `output`(`{변수: 필드}`), `key_ref?`(없으면 프로세스의 `service_keys`를 상속), `timeout_s`, `retry`(`{max, on: [503, 429]}`) |
+| 서비스 앱 태스크 | `serviceTask` | `chk:serviceCall` | `app_id`, `operation`, `input`(`{필드: 식}`), `output`(`{변수: 필드}`), `key_ref?`(**쓰지 않는다** — 읽고 무시한다, ADR-0102), `timeout_s`, `retry`(`{max, on: [503, 429]}` — C15 실패 코드 `dependency_down`=503·`rate_limited`=429·`timeout`=504로 읽는다) |
 | 다른 확장 태스크 | `serviceTask` | `chk:task` `type="<확장 태스크 종류>"` `extension="<id>"` | 그 확장의 계약이 정한 JSON |
 | 결재 | `userTask` | `chk:approval` | `title`, `description`, `show`(**변수 이름 배열** — 문자열 하나로 쓰면 검사 오류), `fields[]`(C6 Form과 같다: `{key, label, type: bool\|number\|text\|choice, choices?, required, default?}`), `location`(`follow`\|`center`\|`field`), `expires`(ISO 기간 또는 변수 이름), `assignees`(**결재 담당자** — 이름 배열 또는 변수 이름 하나, 아래 「결재 담당자」), `answered_by_as?`·`answered_via_as?`(**답한 사람**이 들어갈 변수, 아래 「답한 사람」) |
 | 수동 작업 (사람 확인) | `manualTask` | `chk:approval` | 결재와 같은 형식. 화면에는 「확인」으로 보인다. **늘 현장에서 답한다** (화면 앞 사람만 답할 수 있다, C6) — `location`에 `center`를 적으면 **B12 경고**다. **서버 BPM 프로세스에는 넣을 수 없다** (C1 R2 `human.confirmation=false`) |
@@ -337,7 +338,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | B4 | 반복에 `collect_into`가 있다 | 오류 |
 | B5 | 파일 출력에 `store_as`가 있고 `template`·`variables` 중 하나가 있다. `xlsx`에 `template`를 쓰지 않고, `csv`의 `variables`는 이름 하나이며, `append`는 `md`·`txt`·`csv`에만 있다. 파일 목록에 `store_as`가 있고 `pattern`에 경로 구분자가 없다 | 오류 |
 | B6 | 실행 위치가 `server`면 UI 태스크·`web`/`desktop` 도메인 AI 태스크·`location: field` 결재·**확인(`manualTask`)**이 없다 (C1 R2 — 확인은 늘 현장이라 서버에는 답할 사람이 없다, ADR-0015) | 오류 |
-| B7 | 서비스 앱 태스크에 **적힌** 키 참조(자기 것 또는 프로세스 `service_keys`)가 이름 규칙(C1 R4)을 따른다. **적지 않은 것은 흠이 아니다** — 빌드·엔진이 C1 기본값(`default_key_ref` — BPM 프로세스 id에서 `.`·`_`를 `-`로)을 쓴다 ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) — STU-06 「서비스 앱 키」 섹션이 없어져 사람이 미리 적지 않는다). **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)은 묻지 않는다 — 어느 앱인지는 계약이 모르므로 부르는 쪽이 `keyless_apps`로 주고, 주지 않으면 모든 앱에 묻는다 ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)) | 오류 |
+| B7 | 적힌 `chk:serviceCall.key_ref`·`chk:process.service_keys`의 **이름 규칙만** 본다(C1 R4와 같다). 서비스 앱 키는 없어졌으므로([ADR-0102](../decisions/0102-calling-outside-is-pull.md)) 이 칸은 **옛 그림을 읽기 위해 남았고** 실행은 쓰지 않는다 — 적혀 있다는 것만으로는 경고하지 않는다(업무 예제가 모두 적고 있어 경고가 뜻을 잃는다) | 오류 |
 | B8 | 결과 필드 타입이 `string`·`int`·`number`·`bool`·`list`·`dict`·`date` 중 하나다. 입력의 `source`가 아는 값이고 그 출처의 타입과 맞다(`virtual_worker.supervisors`는 `list`, 나머지는 `string`). 번호처럼 보이는 문자열(예: 발주번호 `PO-2608-001`)을 `int`로 두면 경고 | 오류 / 경고 |
 | B9 | 연결되지 않은 노드가 없다 (들어오는 흐름·나가는 흐름) | 오류 |
 | B10 | 노드 id가 생성형(`Activity_[0-9a-z]{7}`)이면 경고 | 경고 |
@@ -383,6 +384,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | `chk:serviceCall`은 C15 외부 작업으로 간다(`app_id` = 토픽). `key_ref`·`service_keys`는 쓰지 않고 B7은 이름 규칙만 본다(R4와 같다). `retry.on`은 C15 실패 코드로 읽는다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | **입력의 값 출처** `chk:process.inputs[].source`(선택 — 없으면 부르는 쪽)를 더했다. `virtual_worker.*`는 Center가 넣고 부르는 쪽은 줄 수 없다. B8이 출처와 타입을 본다. 선택 칸이라 **옛 그림은 그대로 읽힌다** (바깥 요청 NowView R7). 그리고 **담당자 변수의 값이 `None`이면 `assignees_missing`**이다 — 전에는 「담당자 없음」으로 받았다 | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | B7은 **적힌** 키 참조의 이름만 본다 — 적지 않은 것은 C1 기본값이다 (빌드·엔진이 같은 `default_key_ref`) | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | B7이 **키를 받지 않는 앱**(C13 `auth`가 없는 외부 앱)에는 키 참조를 묻지 않는다. 그 목록은 부르는 쪽이 준다(Studio는 STU-14의 고를 거리에서) | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |

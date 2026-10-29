@@ -18,9 +18,9 @@
 | --- | --- | --- |
 | 무엇인가 | 사내 확장의 **서버 부분** | 우리 계약을 모르는 **남의 API** 흉내 |
 | 뼈대 | `packages/service_kit` (C11) | 없다 — 평범한 FastAPI |
-| 붙는 길 | `HttpServiceCaller` (C11) | **HTTP 어댑터** (C13 §4) |
-| Center에 어떻게 아는가 | 운영자가 **주소를 등록**하면 Center가 `/manifest`를 읽는다 (C7) | Admin이 **서명한 정의**를 등록한다 (C13 E6) |
-| 키 | 앱이 스스로 발급·검증 (ADR-0013) | 받아서 확인만 한다 |
+| 붙는 길 | **일꾼**으로 Center에서 일감을 가져간다 (C15, `service_kit.consumer`) | **어댑터 일꾼**(`chk-adapter-consumer`)이 HTTP 어댑터로 부른다 (C13 §4·C15) |
+| Center에 어떻게 아는가 | 일꾼이 들어올 때 **manifest를 올린다** (C15 — 관리자가 CON-07 「일꾼 승인 대기」에서 승인) | 관리자가 **정의**를 등록하고 Center가 서명한다 (C13 E6) |
+| 키 | 없다 — 「불러도 되나」는 Center가 배포로 가린다 (ADR-0102) | 어댑터 일꾼 설정의 키를 받아서 확인만 한다 (`CHK_MOCK_EXT_<앱>__TOKEN`을 주면 그 값만 받는다) |
 
 외부 앱이 C11로 답하면 어댑터가 하는 일(템플릿 채우기·제한 JSONPath로 읽기·`error_when`)을
 하나도 시험하지 못한다. 그래서 일부러 남의 API처럼 생겼다 — 낙타 표기(`bizNo`), 자기만의
@@ -35,9 +35,9 @@ uv run chk-mock-apps serve                # 전부 한 포트(8010)에, /<app_id
 uv run chk-mock-apps serve --app erp      # 하나만, 그 앱의 기본 포트에
 ```
 
-`serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다. 서비스 앱 주소에 경로가
-붙어도 되므로(`{base_url}/v1/ops/…`) Center 리소스 등록에 `http://127.0.0.1:8010/erp`를
-그대로 넣을 수 있다. 앱 열다섯 개를 따로 띄우지 않아도 된다.
+`serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다(관리 API·시나리오 제어·웹 화면·외부 앱 둘).
+**C11 앱 열셋의 업무 호출은 그 포트로 받지 않는다** — 아래 「Center에 붙기」대로 일꾼 하나가 Center에서 가져간다.
+앱 열다섯 개를 따로 띄우지 않아도 된다.
 
 ### 웹 화면 (`/site`)
 
@@ -54,18 +54,17 @@ BX-04의 다른 한쪽인 **회계 프로그램**(데스크톱)은 `uv run pytho
 기본 포트는 `docs/04-setup.md` §6의 「다음 서비스 앱: 8010부터 10씩」을 따른다
 (`catalog.port_of`가 유일한 자리다, ADR-0011). 옮기려면 `CHK_SVC_<앱 id>__PORT`.
 
-### 키
+### Center에 붙기 (일꾼)
 
 ```bash
-CHK_MOCK_APPS__DEV_KEY=chk_svc_… uv run chk-mock-apps serve
+CHK_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 uv run chk-mock-apps serve
 ```
 
-이 하나로 **모든 모의 앱이 그 키를 받는다**. 앱마다 다르게 하려면 `CHK_SVC_<앱 id>__DEV_KEY`가
-이긴다. 둘 다 없으면 앱이 띄울 때 하나 만들어 화면에 보여 준다 (개발용이다 — 비밀 저장소가
-아니다). 부르는 쪽은 그 값을 키 참조 이름으로 넣는다 (`CHK_BOT_UI__SVC__<참조>` 또는 OS 비밀
-저장소, BUI-10·STU-10).
-
-`app_id`의 `-`는 환경변수에서 `_`가 된다 (`kb-search` → `CHK_SVC_KB_SEARCH__…`).
+C11 앱 열셋이 **일꾼 하나**로 Center에 붙는다 (C15, [ADR-0102](../docs/decisions/0102-calling-outside-is-pull.md)) —
+토픽 열셋을 한 토큰으로 맡는다. 토큰이 없으면 들이기 요청을 보내고 **요청 코드를 화면에 찍는다**. 관리자가
+CON-07 「일꾼 승인 대기」에서 같은 코드를 승인하면 토큰을 받아 `CHK_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)에
+둔다. `CHK_MOCK_APPS__CENTER__TOKEN`이 있으면 그것을 쓴다(시험·CI). 주소를 주지 않으면 업무 호출을 받지
+않는다(관리 API·시나리오 제어만). **키는 없다** — 모의 앱도, 부르는 쪽도.
 
 ### 외부 확장 등록
 
@@ -75,9 +74,22 @@ CHK_MOCK_APPS__DEV_KEY=chk_svc_… uv run chk-mock-apps serve
 uv run chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
 ```
 
-그 파일을 `chk-admin sign-extension`으로 서명해 Center에 등록한다 (C13 E6 — **서명이 유일한
-관문**이다). 모의 앱은 127.0.0.1에 뜨므로 정의가 `allow_private_network: true`를 켠다. 주소를
-진짜 외부 호스트로 주면 그 칸은 저절로 꺼진다.
+그 파일을 관리자가 CON-07 「기능 추가 (외부)」로 올리면 Center가 서명해 등록한다 (C13 E6, ADR-0090).
+모의 앱은 127.0.0.1에 뜨므로 정의가 `allow_private_network: true`를 켠다. 주소를 진짜 외부 호스트로
+주면 그 칸은 저절로 꺼진다.
+
+외부 앱을 부르는 것은 **어댑터 일꾼**이다 — 주소·키는 그 일꾼의 설정에만 있다 (`docs/04-setup.md` §5):
+
+```bash
+CHK_ADAPTER__CENTER__URL=http://127.0.0.1:8800 \
+CHK_ADAPTER__EXTENSIONS=ext-credit,ext-helpdesk \
+CHK_ADAPTER__ALLOW_PRIVATE_NETWORK=1 \
+uv run chk-adapter-consumer
+```
+
+127.0.0.1로 나가려면 정의의 `allow_private_network`와 일꾼의 `CHK_ADAPTER__ALLOW_PRIVATE_NETWORK` **둘 다** 열어야
+한다. 키를 확인하게 하려면 앱에 `CHK_MOCK_EXT_CREDIT__TOKEN`(`ext-helpdesk`는 `CHK_MOCK_EXT_HELPDESK__TOKEN`)을, 일꾼에
+같은 값을 `CHK_ADAPTER__EXT__EXT_CREDIT__KEY`로 준다. 이 일꾼도 들일 때 요청 코드를 찍고 CON-07에서 승인한다.
 
 ## 거짓 데이터는 **케이스가 정한다**
 

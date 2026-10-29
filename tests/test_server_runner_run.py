@@ -595,14 +595,14 @@ def test_a_job_whose_external_definition_was_revoked_does_not_start(
 def test_the_runner_reads_the_addresses_itself_before_it_starts(
     center: TestClient, store: Store, runner: agent_mod.Agent
 ) -> None:
-    """실행기가 **제 손으로** C7을 읽어 명부를 짓는다 — 파일을 거치지 않는다 (ADR-0031 각주).
+    """실행기가 **제 손으로** 외부 확장 정의를 받아 명부를 짓는다 — 파일을 거치지 않는다 (ADR-0031 각주).
 
-    그 Bot이 부르는 앱만 담는다 (여기 그림은 아무것도 부르지 않으므로 **묻지도 않는다**).
+    그 Bot이 쓰는 확장만 묻는다 (여기 그림은 아무것도 쓰지 않으므로 **묻지도 않는다**).
     """
     ready_runner(center, store, runner)
     bot = next(one for one in runner.installed_bots() if one.id == BOT)
     made = runner.app_directory(bot)
-    assert made.addresses == {} and made.externals == {}
+    assert made.externals == {}
     assert not (runner.settings.data_path / CACHE_NAME).exists(), "부를 것이 없으면 받아 두지 않는다"
 
 

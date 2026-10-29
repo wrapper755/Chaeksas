@@ -77,7 +77,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 
 | 화면 표기 | 코드 | 뜻 |
 | --- | --- | --- |
-| BPM 프로세스 (운영 화면: Bot) | `bpm_process` | **사용자가 만들고 배포하는 업무 단위.** 진입 정의와 하위 정의, 학습 자료(재생 명세), 시험 케이스, 서비스 앱 키 참조를 묶은 것 |
+| BPM 프로세스 (운영 화면: Bot) | `bpm_process` | **사용자가 만들고 배포하는 업무 단위.** 진입 정의와 하위 정의, 학습 자료(재생 명세), 시험 케이스를 묶은 것 |
 | 프로세스 정의 | `process_definition` | BPMN 2.0 파일 하나. BPM 프로세스 하나는 진입 정의 1개 + 하위 정의 0개 이상 |
 | 실행 위치 | `run_location` | BPM 프로세스 속성. **서버**(`server`, **기본값**, 서버 우선 — [ADR-0016](decisions/0016-server-first.md)): / **PC**(`pc`: Bot UI에서 하나씩, 끝날 때까지 — UI 조작·현장 확인·PC 전용 자원이 필요할 때만) / 서버 쪽: 서버 실행기에서 동시 실행, 기다리는 동안 상태 저장). [ADR-0015](decisions/0015-run-location.md) |
 | 서버 Bot | `server_bot` | 운영 화면에서 실행 위치가 「서버」인 BPM 프로세스를 부르는 이름 (확정). PC 쪽은 그냥 「Bot」 |
@@ -95,7 +95,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 출력 폴더 | `output_dir` | 실행 하나가 파일을 쓰는 곳이자 BPM 프로세스가 적는 **상대 경로의 기준**. 쓰기는 이 안만 된다 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
 | 읽기 허용 폴더 | `readable` | 파일 목록이 들여다볼 수 있는 폴더. 실행하는 쪽(Bot UI 설정·Studio)이 정한다 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
 | 시험 케이스 | `case` | 입력 + 기대 결과 + 결재 자동 응답. Studio 시험 실행의 판정 기준 |
-| 사전 점검 | `preflight` | 실행 전에 각 노드를 ok / warning / blocked로 판정 (서비스 앱 키 참조가 이 PC에 있는지도 포함) |
+| 사전 점검 | `preflight` | 실행 전에 각 노드를 ok / warning / blocked로 판정 (확장 태스크 종류·갖춰야 할 설정·AI 환경) |
 | 재생 | `replay` | 성공한 AI 태스크의 **도구 차례**를 다시 밟는 것 (결정 수행의 한 형태). 태스크마다 `plan`(마지막 추출만 모델) / `full`(모델 0회) / `none`을 고른다 ([ADR-0028](decisions/0028-replay-memory.md)) |
 | 재생 명세 | `replay_spec` | 자율 수행이 남긴 도구 차례와 마지막 답. 패키지 안 `memory/specs.json`에 들어가고 도구 인자는 `{변수}` 템플릿이다 |
 | 자율 수행 | `autonomous` | 수행 모드. AI가 방법을 찾아 수행하고 결과를 학습 자료로 남긴다. **Studio에서 개발 목적으로 실행할 때** |
@@ -116,7 +116,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | --- | --- | --- | --- |
 | AI 태스크 | `ai_task` | ServiceTask | AI(LLM). 목표·허용 도구·결과 필드 |
 | UI 태스크 | `ui_task` | ServiceTask | Worker 프로세스 (REST 요청). 화면 + 시맨틱 키 + 동작 목록 |
-| 서비스 앱 태스크 | `service_task` | ServiceTask | 서비스 앱. 앱 + 작업 + 입력·출력 매핑 (키는 BPM 프로세스의 키 참조를 상속) |
+| 서비스 앱 태스크 | `service_task` | ServiceTask | 서비스 앱. 앱 + 작업 + 입력·출력 매핑 (C15 외부 작업으로 부른다 — 키는 없다) |
 | 결재 | `approval` | UserTask | 사람 (Center 또는 현장 PC) |
 | 파일 목록 | `file_list` | ServiceTask | 실행 엔진 내장. 폴더를 훑어 파일 경로 목록을 만든다 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
 | 스크립트·규칙·메일·웹훅 | — | ScriptTask, BusinessRuleTask(DMN), SendTask, ReceiveTask | 실행 엔진 내장 |
@@ -159,6 +159,19 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | UI 화면 | `ui_page` | UI 자동화 앱에 등록된 화면 |
 | 런타임 | `runtime` | Bot UI가 가진 실행 능력 (Worker 버전, 브라우저, 데스크톱 백엔드) |
 
+## 5-1. 외부 작업 ([ADR-0102](decisions/0102-calling-outside-is-pull.md), C15)
+
+BPM 프로세스가 네트워크 건너의 기능을 부를 때 Center에 **일감을 올려 두고, 그 기능 쪽이 가져가 끝낸 뒤 결과를 돌려준다** (Pull). 부르는 쪽이 기능의 주소·키를 알지 않는다.
+
+| 화면 표기 | 코드 | 뜻 |
+| --- | --- | --- |
+| 외부 작업 | `external_task` | Center에 올린 일감 하나. 서비스 앱 태스크 호출 한 번이 하나다. 멱등 키는 C11과 같은 여섯 칸이다 |
+| 토픽 | `topic` | 일감이 걸리는 이름. **앱 id**(C11 앱 id 또는 외부 확장 id)와 같다 — BPMN `chk:serviceCall.app_id`가 그대로 토픽이다 |
+| 일꾼 | `consumer` | 토픽을 지켜보다 일감을 가져가(잠금) 수행하고 끝냈다고 알리는 **상시 프로세스**. 서비스 앱이 일꾼이 되고, 외부 앱은 어댑터 일꾼이 맡는다. Center가 승인해 들인다 |
+| 어댑터 일꾼 | `adapter_consumer` | Chaeksas가 주는 범용 일꾼. 외부 확장 정의의 HTTP 어댑터를 읽어 외부 앱을 부른다. **외부 앱의 주소·키는 이 일꾼만 든다** — 외부 앱이 있는 망 안에 띄워도 된다 |
+| 잠금 | `lock` | 일꾼이 일감을 가져가면 그 일꾼만 끝낼 수 있는 시간. 지나면 다른 일꾼에게 다시 나간다 (그래서 **최소 한 번 실행**이다) |
+| 호출 토큰 | `call_token` | 실행하는 쪽(실행기 자식 프로세스·Worker·Tool UI)이 외부 작업을 **올리고 결과를 기다리는 데만** 쓰는 Center 토큰. Bot UI가 제 Center API 키로 청해(24시간) 넘긴다 |
+
 ## 6. 키와 설정 ([ADR-0013](decisions/0013-api-keys.md))
 
 | 화면 표기 | 코드 | 뜻 |
@@ -167,7 +180,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | 대리 답용 키 | `relay_key` | Center API 키의 한 종류 (`type: relay`). 연동하는 쪽이 **사람 대신 결재에 답할 때만** 쓴다 — 결재 읽기·답뿐이고, 그 사람(`X-CHK-On-Behalf-Of`)이 결재 담당자일 때만 받는다 ([ADR-0081](decisions/0081-answering-on-behalf.md)) |
 | Center API 키 | `center_api_key` | Center 콘솔에서 발급. **Bot UI 설정에 등록**해 Center 등록·하트비트·다운로드에 쓴다 (Studio용도 따로 발급). 키가 곧 그 Bot UI의 신원 |
 | 서비스 앱 API 키 | `service_api_key` | **각 서비스 앱의 관리 콘솔에서 발급.** 허용 작업·허용 수행 모드·만료를 가진다. Center는 발급·저장하지 않는다 |
-| 키 참조 | `key_ref` | BPM 프로세스 속성에 적는 키의 이름 (예: `finance-invoice`). 값은 Bot UI·Studio의 비밀 저장소에 있다 (확정, ADR-0013 §3) |
+| 키 참조 | `key_ref` | BPM 프로세스 속성에 적던 키의 이름. **쓰는 곳이 없다** — 서비스 앱 키가 없어졌다 ([ADR-0102](decisions/0102-calling-outside-is-pull.md)). 옛 그림·패키지를 읽기 위해 칸만 남는다 (C1·C14) |
 | 환경변수 접두사 | — | `CHK_` 하나. 중첩은 `__` (예: `CHK_CENTER__PORT`) |
 | 포트 | — | 구성요소마다 기본값이 있고, 설정 파일 또는 환경변수로 바꾼다 ([04-setup.md](04-setup.md) §6) |
 
@@ -191,3 +204,5 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ Bot UI   (Cent
 | lease, dispatcher | 서버가 작업을 배분하던 옛 구조 | Center 작업(`job`) + UI 세션 |
 | 대시보드 | 읽기 전용이던 옛 구조 | Center 콘솔 |
 | 등록 토큰 | Center API 키로 바뀜 | Center API 키 |
+| Worker·워커 (외부 작업을 가져가는 쪽을 가리켜) | Worker 프로세스(UI 자동화의 손)와 겹친다 | 일꾼 (`consumer`) |
+| External Task Worker, 작업 게시판 | 제품 이름·비유 | 외부 작업 · 토픽 · 일꾼 |

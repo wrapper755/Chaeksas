@@ -1,12 +1,12 @@
-"""STU-10 설정 — 「외형」·「LLM」·「Center」·「확장별 설정」·「Worker」·「서비스 앱 키」 (ADR-0073).
+"""STU-10 설정 — 「외형」·「LLM」·「Center」·「확장별 설정」·「Worker」 (ADR-0073 — 「서비스 앱」은 없다, ADR-0102).
 
 보는 것:
 
 1. **키는 설정 파일에 들어가지 않는다** — 이름·주소는 파일에, 값은 OS 비밀 저장소에 (ADR-0013).
 2. **「저장」을 누를 때까지 아무것도 바뀌지 않는다**, 비밀 저장소가 없으면 **창을 닫지 않는다**.
-3. 「연결 테스트」는 진짜 모양으로 묻는다 — 키 상태는 **진짜 UI 자동화 앱**(`/v1/keys/self`), Center는
-   **진짜 Center**의 리소스 목록(C7 `GET /resources?type=service_app`)에 대고.
-4. 시험 실행이 같은 비밀 창고를 쓴다 (`StudioSecrets`·모델 키).
+3. 「연결 테스트」는 진짜 모양으로 묻는다 — Center는 **진짜 Center**의 리소스 목록
+   (C7 `GET /resources?type=service_app`)에 대고.
+4. 시험 실행이 같은 비밀 창고를 쓴다 (`StudioSecrets`·모델 키), 호출 토큰은 Studio가 제 키로 청한다 (C15).
 """
 
 from __future__ import annotations
@@ -24,16 +24,10 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from chaeksas.contracts.service_app import ServiceAppKey  # noqa: E402
-from chaeksas.ext.ui_automation.service.app import create  # noqa: E402
-from chaeksas.ext.ui_automation.service.store import Database, SqliteKeyStore  # noqa: E402
-from chaeksas.service_kit import hash_key  # noqa: E402
 from chaeksas.studio.checks import (  # noqa: E402
     WorkerPlace,
     center_status,
-    key_status,
     llm_status,
-    refs_in,
     worker_status,
 )
 from chaeksas.studio.credentials import (  # noqa: E402
@@ -49,11 +43,8 @@ from chaeksas.studio.settings_dialog import (  # noqa: E402
     THEMES,
     StudioSettingsDialog,
 )
-from chaeksas.studio.workspace import Workspace  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
-GOOD = "chk_svc_" + "a" * 40
-REVOKED = "chk_svc_" + "r" * 40
 
 
 class Vault:
@@ -118,30 +109,6 @@ def dialog(settings: Settings, extensions: Extensions, vault: Vault | None, **kw
     return made
 
 
-def center_hands_out(monkeypatch: pytest.MonkeyPatch, raw: str) -> list[str]:
-    """Center 대신 — Studio가 청한 개발 키를 **그 요청의 공개키로** 봉해 준다 (C5 §Studio 개발 키)."""
-    from chaeksas.contracts.enrollment import seal  # noqa: PLC0415
-    from chaeksas.contracts.service_keys import StudioServiceKey  # noqa: PLC0415
-    from chaeksas.studio import dev_keys  # noqa: PLC0415
-
-    asked: list[str] = []
-
-    def made(base_url: str, api_key: str) -> Any:
-        def fetch(app_id: str, public_key: str) -> StudioServiceKey:
-            asked.append(app_id)
-            return StudioServiceKey(
-                app_id=app_id,
-                service_key_id="svk_00000001",
-                sealed_key=seal(public_key, raw, salt="svk_00000001"),
-                expires_at="2099-01-01T00:00:00+00:00",
-            )
-
-        return fetch
-
-    monkeypatch.setattr(dev_keys, "http_fetch", made)
-    return asked
-
-
 def approved(vault: Vault) -> Vault:
     """승인된 Studio 키가 있다 (ADR-0093)."""
     vault.set_password("chaeksas-studio", "center", "chk_ctr_studio")
@@ -157,7 +124,7 @@ def test_only_the_categories_something_reads_are_listed(
     """ADR-0073 — 메일·비밀은 읽는 곳이 없어 없고, 남은 분류에 「(아직)」이 없다."""
     found = dialog(settings, extensions, Vault())
     labels = [found.categories.item(i).text() for i in range(found.categories.count())]
-    assert labels == list(CATEGORIES) == ["외형", "LLM", "Center", "확장별 설정", "Worker", "서비스 앱"]
+    assert labels == list(CATEGORIES) == ["외형", "LLM", "Center", "확장별 설정", "Worker"]
     assert found.categories.currentItem().text() == "LLM", "처음에는 모델 칸을 연다"
 
 
@@ -419,53 +386,6 @@ def test_the_center_key_env_var_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     assert Credentials(vault).stored_center_api_key() == "chk_ctr_stored", "자리 글은 저장된 것만 본다"
 
 
-def test_the_apps_table_is_read_only_and_starts_from_the_open_process(
-    qt: Any, settings: Settings, extensions: Extensions
-) -> None:
-    """「서비스 앱」 (ADR-0094 §5) — 값·참조 칸이 없다. 앱마다 개발 키를 **받았나**만 보인다."""
-    vault = Vault()
-    held = '{"key": "chk_svc_x", "expires_at": "2026-11-01T00:00:00+00:00"}'
-    vault.set_password("chaeksas-studio", "dev:ui-automation", held)
-    found = dialog(settings, extensions, vault, refs=[("test-ui", "ui-automation"), ("fin", "crm")])
-    assert found.app_rows() == [("crm", "아직 받지 않음", ""), ("ui-automation", "받음 — 2026-11-01까지", "")]
-    assert not hasattr(found, "keys") and not hasattr(found, "add_key")
-    found.save()
-    assert found.saved is not None, "고칠 칸이 없으니 저장을 막을 것도 없다"
-
-
-def test_the_key_test_asks_center_for_a_dev_key_and_the_app_accepts_it(
-    qt: Any, settings: Settings, extensions: Extensions, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """「연결 테스트」 — 키가 없으면 Center에 청하고, 받은 키로 **진짜 UI 자동화 앱**의 `/v1/keys/self`에 묻는다."""
-    path = tmp_path / "uia.sqlite3"
-    app = create(db_path=path, admin_token="t")
-    SqliteKeyStore(db=Database(path=path)).add(
-        ServiceAppKey(name="svk_00000001", hash=hash_key(GOOD), prefix=GOOD[:16], allowed_operations=["*"],
-                      allowed_modes=["deterministic", "autonomous"], created_at="2026-10-05T09:00:00+09:00")
-    )
-    asked = center_hands_out(monkeypatch, GOOD)
-    vault = approved(Vault())
-    start = replace(settings, center_url="http://center.test")
-    found = dialog(start, extensions, vault, refs=[("test-ui", "ui-automation")], client=TestClient(app))
-    found._center_reader = lambda: None  # type: ignore[method-assign]
-    found.test_keys()
-    assert asked == ["ui-automation"]
-    assert found.app_rows() == [("ui-automation", "정상 — 허용: 결정·자율", "자율·결정")]
-    assert ("chaeksas-studio", "dev:ui-automation") in vault.values, "받은 키는 비밀 저장소에 둔다"
-    assert GOOD not in settings.path.read_text(encoding="utf-8") if settings.path.exists() else True
-
-
-def test_without_a_studio_key_the_table_says_why(
-    qt: Any, settings: Settings, extensions: Extensions, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv(ENV_CENTER_API_KEY, raising=False)
-    found = dialog(settings, extensions, Vault(), refs=[("test-ui", "ui-automation")])
-    found._center_reader = lambda: None  # type: ignore[method-assign]
-    found.test_keys()
-    [(app, said, _)] = found.app_rows()
-    assert app == "ui-automation" and said.startswith("받지 못함") and "Center" in said
-
-
 # ─────────────────────────── 확인들 ───────────────────────────
 
 
@@ -551,25 +471,33 @@ def test_the_worker_page_shows_the_place_the_runs_use(qt: Any, settings: Setting
     assert Path(found.worker_tokens.text()) == folder
 
 
-def test_key_status_without_key_or_address() -> None:
-    assert key_status("http://a", None) == "없음"
-    assert key_status(None, GOOD) == "주소를 모름"
-
-
-def test_refs_come_from_the_drawing(tmp_path: Path) -> None:
-    made = Workspace(tmp_path / "ws").ensure().import_example(EXAMPLES, "bx17_erp_po_entry")
-    assert ("purchase-erp-ui", "ui-automation") in refs_in(made.definitions)
-
-
 # ─────────────────────────── 시험 실행이 같은 창고를 쓴다 ───────────────────────────
 
 
-def test_runs_read_the_same_vault(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runs_resolve_the_call_token_and_extension_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`call_token`은 Studio가 청한 호출 토큰이고(C15), 나머지는 그 확장의 비밀 칸이다."""
     vault = Vault()
-    vault.set_password("chaeksas-studio", "svc:test-ui", GOOD)
-    assert StudioSecrets(credentials=Credentials(vault)).resolve("test-ui") == GOOD
-    monkeypatch.setenv("CHK_STUDIO__SVC__TEST_UI", "chk_svc_from_env")
-    assert StudioSecrets(credentials=Credentials(vault)).resolve("test-ui") == "chk_svc_from_env", "환경변수가 먼저"
+    vault.set_password("chaeksas-studio", "ext:ui-automation:note", "비밀")
+    found = StudioSecrets(credentials=Credentials(vault), extension_id="ui-automation", call_tokens=lambda: "chk_ctr_x")
+    assert found.resolve("call_token") == "chk_ctr_x"
+    assert found.resolve("note") == "비밀"
+    assert StudioSecrets(credentials=Credentials(vault)).resolve("call_token") is None, "청하는 쪽이 없으면 없다"
+
+
+def test_studio_asks_center_for_a_call_token_and_keeps_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Studio 키로 `POST /call-tokens` — 받은 것은 만료 2시간 전까지 다시 청하지 않는다 (C15)."""
+    from chaeksas.studio.call_token import PATH, CallTokens  # noqa: PLC0415
+
+    asked: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked.append(f"{request.method} {request.url.path} {request.headers.get('authorization')}")
+        return httpx.Response(201, json={"token": "chk_ctr_" + "t" * 40, "expires_at": "2099-01-01T00:00:00+00:00"})
+
+    tokens = CallTokens(base_url="http://c", api_key="chk_ctr_studio", client=mock(answer))
+    assert tokens() == "chk_ctr_" + "t" * 40
+    assert tokens() == "chk_ctr_" + "t" * 40
+    assert asked == [f"POST {PATH} Bearer chk_ctr_studio"], "한 번만 청한다"
 
 
 def test_the_model_key_for_runs_comes_from_the_vault(monkeypatch: pytest.MonkeyPatch) -> None:

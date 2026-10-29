@@ -19,7 +19,7 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 
-from chaeksas.center import enrollments, host_keys, keys, service_keys
+from chaeksas.center import enrollments, host_keys, keys
 from chaeksas.center.api import approvals, deployments, jobs, signing
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
@@ -183,12 +183,6 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
         store, host_id=str(found["bot_ui_id"]), results=request.deployment_results
     )
 
-    # 서비스 앱 키는 **나르기만** 한다 (ADR-0094 §3) — 짓고 거두는 것은 맞추기가 한다.
-    host_id = str(found["bot_ui_id"])
-    service_keys.apply_acks(store, target_type="bot_ui", target_id=host_id, acks=request.service_key_acks)
-    service_keys.note_missing(store, target_type="bot_ui", target_id=host_id, readiness=request.readiness)
-    keys_out, drops = service_keys.deliveries(store, target_type="bot_ui", target_id=host_id)
-
     disabled = bool(found["disabled"])
     # 작업은 ack 반영 → 만료 → 맞추기 → 고르기 순이다 (C4·C5, `api/jobs.py`).
     dispatch, cancels = jobs.heartbeat(
@@ -213,8 +207,6 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
         rotated_key=enrollments.rotation_for(store, key, host_id=str(found["bot_ui_id"])),
         # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4).
         key_expires_at=key.expires_at,
-        service_keys=keys_out,
-        drop_service_keys=drops,
     )
 
 
@@ -263,7 +255,6 @@ def bot_ui_listing(store: Store) -> list[BotUiInfo]:
                 if record
                 else None,
                 selector_registration=bool(row["selector_registration"]),
-                service_keys=service_keys.status_of(store, target_type="bot_ui", target_id=str(row["bot_ui_id"])),
             )
         )
     return out
@@ -303,3 +294,12 @@ async def _json(request: Request) -> dict[str, Any]:
     if not isinstance(body, dict):
         raise ApiError(422, "input_invalid", "본문의 최상위가 객체가 아니다")
     return body
+
+def set_selector_registration(store: Store, bot_ui_id: str, *, on: bool) -> bool:
+    """CON-03 「셀렉터 등록」 스위치 — 켠 PC만 등록 세션의 외부 작업을 올린다 (C15)."""
+    with store.tx() as cur:
+        cur.execute(
+            "UPDATE bot_uis SET selector_registration = ? WHERE bot_ui_id = ?", (1 if on else 0, bot_ui_id)
+        )
+        return cur.rowcount > 0
+

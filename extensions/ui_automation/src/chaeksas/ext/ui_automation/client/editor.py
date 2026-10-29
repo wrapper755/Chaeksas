@@ -138,11 +138,12 @@ class UiTaskEditor(QWidget):
     # ── `extension_api.TaskEditor` ──
 
     def widget(self, ctx: ExtensionContext) -> object:
-        """Studio가 부른다 — 주소는 **호스트가** 준다 (C13 예약 키 `service.base_url`)."""
-        from chaeksas.contracts import SERVICE_URL_SETTING  # noqa: PLC0415
+        """Studio가 부른다 — 카탈로그는 **Center에서** 읽는다 (C13 `center.url`·호출 토큰, C9)."""
+        from chaeksas.contracts.extension import CALL_TOKEN_SECRET, CENTER_URL_SETTING  # noqa: PLC0415
 
-        found = ctx.setting(SERVICE_URL_SETTING)
+        found = ctx.setting(CENTER_URL_SETTING)
         self.catalog.base_url = str(found) if found else None
+        self.catalog.token = ctx.secret(CALL_TOKEN_SECRET)
         self._ctx = ctx
         self.reload()
         return self

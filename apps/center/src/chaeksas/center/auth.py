@@ -35,6 +35,7 @@ from chaeksas.contracts.accounts import ROLE_ADMIN, SESSION_PREFIX
 from chaeksas.contracts.approvals import normalize_name
 from chaeksas.contracts.center_api import ON_BEHALF_HEADER, on_behalf_violation
 from chaeksas.contracts.center_keys import RELAY_KEY_TYPE
+from chaeksas.contracts.external_task import CALL_TOKEN, CALL_TOKEN_PATH, CALL_TOKEN_READ_PATH
 
 #: 콘솔(BFF)이 로그인한 사용자 이름을 싣는 헤더. **값은 UTF-8 퍼센트 인코딩** (C5).
 ACTOR_HEADER = "X-CHK-Actor"
@@ -138,6 +139,10 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
     state = record.state(now=now_iso())
     if state != "active":
         raise ApiError(403, f"key_{state}", f"키 「{record.name}」은 {state} 상태다")
+    if record.type == CALL_TOKEN and not _call_token_may(request):
+        # 호출 토큰은 외부 작업을 올리고 기다리는 데와 **리소스 목록 읽기**만 (C15) — 실행 기록·하트비트·
+        # 결재·패키지를 열지 않는다. 리소스 목록은 도구·편집기가 카탈로그(C9)를 읽는 자리다.
+        raise ApiError(403, "call_token_scope", "호출 토큰으로는 외부 작업을 올리고 리소스 목록을 읽기만 한다")
     keys.touch(store, record.key_id)
     # 회전한 새 키로 첫 요청이면 행을 새 키로 옮긴다 (C4 §키 회전) — 하트비트가 행을 찾기 **전에**.
     enrollments.adopt_successor(store, record)
@@ -148,6 +153,13 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
     # 키로 부를 때는 X-CHK-Actor를 믿지 않는다 (C5). 사람 대신 부르는 키만 On-Behalf-Of를 듣는다.
     on_behalf = _on_behalf(request) if record.type in ON_BEHALF_KEY_TYPES else None
     return Caller(kind="key", actor=record.name, key=record, on_behalf=on_behalf)
+
+
+def _call_token_may(request: Request) -> bool:
+    path = request.url.path
+    if path.startswith(CALL_TOKEN_PATH):
+        return True
+    return request.method == "GET" and path.startswith(CALL_TOKEN_READ_PATH)
 
 
 def require_admin(found: Caller) -> Caller:

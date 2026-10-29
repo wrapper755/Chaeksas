@@ -30,7 +30,6 @@ from typing import Any
 from PySide6.QtCore import QObject, QTimer, Signal
 
 from chaeksas.contracts.bpmn_ext import CASE_ANSWERER, Case, CaseFile, CaseMessage, duration_hours, matches
-from chaeksas.core.app_directory import AppDirectory
 from chaeksas.core.delegation import DelegationCall, DelegationError
 from chaeksas.core.engine import (
     DELEGATION_FINISHED,
@@ -231,10 +230,9 @@ class Plan:
     #: 확장 태스크·`web`·`desktop` AI 태스크를 수행할 쪽 (C13·ADR-0018·ADR-0037) —
     #: `Extensions.tasks()`. 없으면 그 태스크를 만났을 때 분명히 실패한다 (그림·설치 오류).
     extensions: Any = None
-    #: 바깥 앱 한 벌 (`studio.services.Services.directory()`) — 주소는 Center 리소스 등록,
-    #: 외부 확장은 검증된 정의다 (C7·C13 「전송」). 없으면 서비스 앱 태스크가 **분명히
-    #: 실패한다** — 조용히 지나가지 않는다 (`NoServiceCaller`).
-    apps: AppDirectory | None = None
+    #: 서비스 태스크를 Center에 외부 작업으로 올리는 호출기 (`studio.services.Services.caller()`, C15).
+    #: 없으면 서비스 앱 태스크가 **분명히 실패한다** — 조용히 지나가지 않는다 (`NoServiceCaller`).
+    services: Any = None
 
 
 class CaseRun(QObject):
@@ -294,10 +292,9 @@ class CaseRun(QObject):
         extra: dict[str, Any] = {}
         if self.plan.extensions is not None:
             extra["extensions"] = self.plan.extensions
-        if self.plan.apps is not None:
-            # 외부 확장은 어댑터로, 서비스 앱은 C11로 (`RoutedCaller`) — **엔진은 어느 쪽인지
-            # 모른다** (C13 §4).
-            extra["services"] = self.plan.apps.caller(caller_type="studio")
+        if self.plan.services is not None:
+            # 서비스 태스크는 Center에 외부 작업으로 올린다 (C15) — **엔진은 어디로 가는지 모른다**.
+            extra["services"] = self.plan.services
         return RunEnv(
             workspace=space,
             sender=self.adapter,

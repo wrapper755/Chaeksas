@@ -6,7 +6,7 @@
 
 막는 것 일곱 (§4-3). 하나라도 빠지면 정의 하나가 Bot의 키를 엉뚱한 곳으로 보낼 수 있다.
 
-1. 주소는 **리소스 등록의 `base_url`이 이긴다** (없으면 정의의 것). 환경별 주소의 출처는 하나다.
+1. 주소는 **어댑터 일꾼 설정의 `base_url`이 이긴다** (없으면 정의의 것). 부르는 것은 어댑터 일꾼뿐이다 (ADR-0102).
 2. **https만.** `allow_private_network`이고 호스트가 사설 주소일 때만 http를 허용한다.
 3. 호스트가 `allowed_hosts`에 **정확히** 있어야 한다 (와일드카드 없음).
 4. **DNS를 한 번 풀고 그 IP로 접속한다** — 푼 뒤에 DNS가 바뀌어도 그 IP로 간다 (재바인딩
@@ -269,7 +269,7 @@ class AdapterCaller:
     `definitions`는 **봉투가 검증된** 정의들이다 (`{확장 id: ExtensionManifest}`) — 검증은
     실행하는 쪽이 받아올 때 한다 (C13 전송, E6). 여기서는 검증된 것만 받는다.
 
-    `addresses`는 `core.services.Addresses`와 같다 — 주소와 키 값을 준다 (ADR-0013).
+    `addresses`는 `base_url(app_id)`·`key(key_ref)`를 가진 것 — **어댑터 일꾼의 설정**이 준다 (C13 §4, ADR-0102).
     """
 
     definitions: dict[str, ExtensionManifest]
@@ -475,28 +475,10 @@ def _idempotency_key(call: OpCall) -> str:
     return f"{call.operation}:{call.run_id}:{call.node_id}:{call.node_instance}:{call.attempt}:{call.call_seq}"
 
 
-@dataclass(frozen=True)
-class RoutedCaller:
-    """외부 확장은 어댑터로, 나머지는 C11로 보낸다.
-
-    **엔진은 어느 쪽인지 모른다** — `chk:serviceCall`은 `app_id`만 적고, 이름 공간이 하나라
-    (C13 「전송」) 그 id가 어느 길로 가는지는 여기서 갈린다.
-    """
-
-    adapter: AdapterCaller
-    others: Any  # ServiceCaller (C11 `HttpServiceCaller`)
-
-    def call(self, request: OpCall) -> OpOutcome:
-        side = self.adapter if self.adapter.knows(request.app_id) else self.others
-        found: OpOutcome = side.call(request)
-        return found
-
-
 __all__ = [
     "AdapterCaller",
     "AdapterError",
     "Resolved",
-    "RoutedCaller",
     "fill_body",
     "fill_header",
     "fill_path",

@@ -391,38 +391,6 @@
       "title": "Readiness",
       "type": "object"
     },
-    "ServiceKeyAck": {
-      "additionalProperties": true,
-      "description": "받았다(또는 지웠다). `accepted: false`면 `reason`.",
-      "properties": {
-        "accepted": {
-          "title": "Accepted",
-          "type": "boolean"
-        },
-        "reason": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Reason"
-        },
-        "service_key_id": {
-          "title": "Service Key Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "service_key_id",
-        "accepted"
-      ],
-      "title": "ServiceKeyAck",
-      "type": "object"
-    },
     "Versions": {
       "additionalProperties": true,
       "properties": {
@@ -578,13 +546,6 @@
       "description": "이 계약의 schema 번호",
       "title": "Schema",
       "type": "integer"
-    },
-    "service_key_acks": {
-      "items": {
-        "$ref": "#/$defs/ServiceKeyAck"
-      },
-      "title": "Service Key Acks",
-      "type": "array"
     },
     "status": {
       "title": "Status",

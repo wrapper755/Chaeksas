@@ -15,7 +15,6 @@ import {
   SAMPLE,
   SCAN,
   deployedPcs,
-  keyRefsOf,
   percent,
   placeOf,
   summarize,
@@ -25,7 +24,7 @@ import {
 } from "@/lib/summary";
 
 // 세는 일은 `lib/summary.ts`에 있다 (화면을 모르는 자리 — 시험이 그것을 잰다).
-export { NO_RUNS, SAMPLE, SCAN, deployedPcs, keyRefsOf, percent, summarize };
+export { NO_RUNS, SAMPLE, SCAN, deployedPcs, percent, summarize };
 export type { BotRow, RunFields };
 
 /**
@@ -129,7 +128,6 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
           name: one.name ?? null,
           status: one.status,
           run_location: one.run_location ?? null,
-          key_refs: keyRefsOf(one),
           // `id`에 판이 붙어 온다 (C5 — `version` 칸이 따로 없다). 사유도 함께 보인다.
           missing: (one.missing_resources ?? []).map((gone) => `${gone.type} ${gone.id} (${gone.reason})`),
           blocked: unusable.length,
@@ -249,11 +247,6 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
             {row.pcs}대
           </span>
         ),
-    },
-    {
-      key: "key_refs",
-      header: "서비스 앱 키 참조",
-      cell: (row) => (row.key_refs.length === 0 ? <span className="text-text-muted">—</span> : row.key_refs.join(", ")),
     },
     // 승인은 **이 줄에서** 한다 (ADR-0090 — Center가 서명한다). 배포는 「배포」 화면 한 곳이다.
     ...(found.mode === "admin"

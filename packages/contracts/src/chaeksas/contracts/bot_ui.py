@@ -18,7 +18,6 @@ from pydantic import Field
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp
 from chaeksas.contracts.bpmn_ext import VirtualWorkerIdentity
 from chaeksas.contracts.enrollment import PublicKey, RotatedKey
-from chaeksas.contracts.service_keys import ServiceKeyAck, ServiceKeyDelivery
 from chaeksas.contracts.signing import AdminKey
 
 #: 하트비트 기본 간격과 온라인 판정 (CON-03).
@@ -225,8 +224,6 @@ class HeartbeatRequest(SchemaVersioned):
     extensions: list[ExtensionState] = Field(default_factory=list)
     approval_acks: list[ApprovalAck] = Field(default_factory=list)
     unsent_events: int | None = None
-    #: 받은(또는 지운) 서비스 앱 키 (C4 §서비스 앱 키 전달, ADR-0094).
-    service_key_acks: list[ServiceKeyAck] = Field(default_factory=list)
 
 
 class JobDispatch(ContractModel):
@@ -276,7 +273,3 @@ class HeartbeatResponse(ContractModel):
     #: 이 키의 만료 (C7). **주기마다 싣는다** — 「생략 = 그대로」로 두면 운영자가 기간을
     #: 늘려 줘도 Bot UI가 그것을 모른다.
     key_expires_at: Timestamp | None = None
-    #: 봉한 서비스 앱 키 (C4 §서비스 앱 키 전달). ack가 올 때까지 매번 실린다.
-    service_keys: list[ServiceKeyDelivery] = Field(default_factory=list)
-    #: 지울 `service_key_id`. ack가 올 때까지 실린다.
-    drop_service_keys: list[str] = Field(default_factory=list)

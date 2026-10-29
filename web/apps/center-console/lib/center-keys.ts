@@ -24,8 +24,8 @@ export function keyActions(row: Pick<CenterKeyInfo, "state" | "bound_to" | "enro
   return { actions };
 }
 
-/** 승인이 만드는 종류 (ADR-0092·0093) — CON-11 「승인으로 들인 키」 표. */
-const ENROLLED_TYPES = new Set(["bot_ui", "studio", "server_runner"]);
+/** 승인이 만드는 종류 (ADR-0092·0093, 일꾼은 C15) — CON-11 「승인으로 들인 키」 표. */
+const ENROLLED_TYPES = new Set(["bot_ui", "studio", "server_runner", "consumer"]);
 
 /**
  * CON-11의 두 표로 가른다 — 「연동 키」(「새 키...」가 만드는 것)와 「승인으로 들인 키」.

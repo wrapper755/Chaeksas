@@ -1,12 +1,13 @@
 """실행기에게 내려보내는 길 — 제어 파일 한 벌 ([ADR-0031](../../../../docs/decisions/0031-runner-control-file.md)).
 
 올라오는 것은 **실행 기록**(C3 `runs/<run_id>.jsonl`)이 그대로 쓰인다 (결재 요청만 예외 — 요청
-파일, ADR-0038). 내려가는 것만 여기 있다: 중지, **결재 답**, **회수**(답 없이 끝남).
+파일, ADR-0038). 내려가는 것만 여기 있다: 중지, **결재 답**, **회수**(답 없이 끝남), **새 호출 토큰**
+(C15 — 24시간짜리라 오래 기다리는 실행에는 Bot UI가 갈아 넣는다).
 
 - 한 줄에 하나씩 **덧붙인다** (JSON Lines). 읽는 쪽은 읽은 자리를 `.sent`에 남겨 **두 번
   답하지 않는다** (실행 기록 보내기와 같은 수법).
 - **값은 여기에만 있다.** 결재 답은 업무 값이라 실행 기록에 담기지 않는다 (원칙 6) — 이 파일은
-  그 PC 안에만 있고 Center로 가지 않는다.
+  그 PC 안에만 있고 Center로 가지 않는다. 호출 토큰도 그렇다 — 실행이 끝나면 파일째 지운다.
 """
 
 from __future__ import annotations
@@ -27,6 +28,8 @@ STOP = "stop"
 ANSWER = "answer"
 #: Center 결재가 답 없이 끝났다 — 관리자 회수·만료 (ADR-0038). **답이 아니다.**
 WITHDRAW = "withdraw"
+#: 새 호출 토큰 (C15) — 실행기가 Center에 외부 작업을 올릴 때 쓴다.
+CALL_TOKEN = "call_token"
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ class Command:
     answered_by: str = ""
     answered_via: str = ""  # 대리 답이면 그 키 이름 (C6, ADR-0081) — 모르면 빈 글
     reason: str = ""
+    token: str = ""
 
     @property
     def is_stop(self) -> bool:
@@ -67,6 +71,8 @@ def send(path: Path, command: Command) -> None:
             body["answered_via"] = command.answered_via
     if command.kind == WITHDRAW:
         body |= {"request_id": command.request_id, "reason": command.reason}
+    if command.kind == CALL_TOKEN:
+        body |= {"token": command.token}
     with path.open("a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps(body, ensure_ascii=False) + "\n")
 
@@ -88,6 +94,10 @@ def answer(
 
 def withdraw(path: Path, request_id: str, *, reason: str) -> None:
     send(path, Command(kind=WITHDRAW, request_id=request_id, reason=reason))
+
+
+def call_token(path: Path, token: str) -> None:
+    send(path, Command(kind=CALL_TOKEN, token=token))
 
 
 def take(path: Path) -> list[Command]:
@@ -117,6 +127,7 @@ def take(path: Path) -> list[Command]:
                 answered_by=str(found.get("answered_by") or ""),
                 answered_via=str(found.get("answered_via") or ""),
                 reason=str(found.get("reason") or ""),
+                token=str(found.get("token") or ""),
             )
         )
     if out:

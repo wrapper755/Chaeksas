@@ -37,11 +37,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 import uvicorn
 from canned_answers import canned
 from center_admin import approve, deploy_id, register_extension
-from fastapi.testclient import TestClient
+from consumers import mock_fleet
 from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -54,13 +55,11 @@ from chaeksas.center.storage import Store  # noqa: E402
 from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
 from chaeksas.core.senders import WebhookConfig  # noqa: E402
 from chaeksas.mock_apps import catalog  # noqa: E402
-from chaeksas.mock_apps.c11 import SHARED_KEY_ENV  # noqa: E402
 from chaeksas.mock_apps.c11 import build as build_mock  # noqa: E402
 from chaeksas.mock_apps.external import apps as external_apps  # noqa: E402
 from chaeksas.mock_apps.external import definitions as external_definitions  # noqa: E402
 from chaeksas.server_runner import agent as agent_mod  # noqa: E402
 from chaeksas.server_runner.center_client import CenterClient  # noqa: E402
-from chaeksas.server_runner.credentials import service_key_env  # noqa: E402
 from chaeksas.server_runner.settings import Settings as RunnerSettings  # noqa: E402
 from chaeksas.studio.packaging import default_name, export  # noqa: E402
 from chaeksas.studio.receiver import Receiver  # noqa: E402
@@ -73,10 +72,6 @@ EXAMPLES = DOCS / "bpmn"
 ADMIN_TOKEN = "t-admin"
 ADMIN = {"Authorization": f"Bearer {ADMIN_TOKEN}"}
 READ = {"Authorization": "Bearer t-read"}
-CENTER_URL = "http://testserver"
-
-#: 모의 앱이 받는 키 하나 (`samples/README.md`).
-DEV_KEY = "chk_svc_m7rerunkey000000000000000000000000000"
 
 #: 한 예제를 끝까지 보는 데 주는 시간. 스레드가 돌고 하트비트가 오가는 시간이다.
 WAIT_S = 90.0
@@ -164,86 +159,56 @@ def serve(app: Any) -> tuple[str, Any, threading.Thread]:
     return f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}", server, thread
 
 
+@dataclass(frozen=True)
+class MockApps:
+    """띄운 모의 앱 — 일꾼이 맡을 C11 앱(`built`)과 외부 앱 주소(`external`)."""
+
+    built: list[Any]
+    external: dict[str, str]
+
+
 @pytest.fixture(scope="session")
-def mock_apps() -> Iterator[tuple[dict[str, str], dict[str, str]]]:
-    """모의 앱들을 띄운다 (`samples/mock_apps`). `(C11 앱들, 외부 앱들)`.
+def mock_apps() -> Iterator[MockApps]:
+    """모의 앱들 (`samples/mock_apps`).
 
-    **확장이 Center에 없으면 배포가 막히므로**(C7 누락 검사) 둘 다 알려야 한다 — 사내 확장은
-    서비스 앱 manifest의 `extension` 칸이 출처이고, **외부 확장은 서명 봉투로 등록한다**
-    (C13 E6). 외부 둘(`ext-credit`·`ext-helpdesk`)은 `service_kit`을 쓰지 않으므로 C11로
-    등록할 수 없다.
-
-    C11 앱 열넷은 **한 포트**에 `/<app_id>`로 모으고, 외부 앱 둘은 **각자 포트**다 (M5 인수
-    시험과 같은 까닭) — `AdapterCaller`는 `base_url`의 **경로를 버리고** 호스트·포트만 쓰므로
-    (§4-3의 DNS 고정이 origin 단위다) 경로 접두사 뒤에 둘 수 없다.
+    C11 앱 열셋은 **업무 호출을 HTTP로 받지 않는다** — 일꾼이 Center에서 가져간다(C15, ADR-0102 —
+    `center`가 붙인다). 외부 앱 둘은 **각자 포트**에 띄운다 — 어댑터 일꾼이 진짜 소켓으로 부르고
+    `AdapterCaller`는 `base_url`의 **경로를 버린다**(§4-3의 DNS 고정이 origin 단위다).
     """
-    from fastapi import FastAPI  # noqa: PLC0415
-
-    os.environ[SHARED_KEY_ENV] = DEV_KEY
     held = []
-    root = FastAPI(title="모의 서비스 앱 (서버 재통과)")
-    for one in catalog.C11_APPS:
-        root.mount(f"/{one.app_id}", build_mock(one).app)
-    shared, server, thread = serve(root)
-    held.append((server, thread))
-
+    built = [build_mock(one) for one in catalog.C11_APPS]
     external: dict[str, str] = {}
     for app_id, make in external_apps.BUILDERS.items():
         base, one_server, one_thread = serve(make())
         held.append((one_server, one_thread))
         external[app_id] = base
 
-    yield {one.app_id: f"{shared}/{one.app_id}" for one in catalog.C11_APPS}, external
+    yield MockApps(built=built, external=external)
     for one_server, one_thread in held:
         one_server.should_exit = True
         one_thread.join(timeout=10)
 
 
-#: 모의 앱 등록을 다시 해 보는 횟수. **Center가 읽지 못하면 등록하지 않는다**(C7) — 그것은
-#: 옳은 동작이고, 느린 러너에서 `/manifest` 읽기가 Center의 5초를 넘기는 일이 있다
-#: (Windows CI에서 한 번 겪었다 — 앱 열넷을 **시험마다** 등록하고 그 위에 예제가 돈다).
-REGISTER_TRIES = 3
+@dataclass
+class CenterHandle:
+    """시험이 띄운 Center — **진짜 소켓이다**. 서버 실행기가 외부 작업을 Center 주소로 올리고(C15)
+    일꾼이 제 스레드에서 롱폴링하므로 httpx.Client로는 안 된다."""
 
+    url: str
+    client: httpx.Client
+    store: Store
 
-def register_app(client: Any, app_id: str, base_url: str) -> None:
-    """서비스 앱 하나를 등록한다 — **닿지 못한 것은 다시 해 본다** (ADR-0007과 같은 결).
-
-    다시 해도 안 되면 **그 자리에서 말한다** — 조용히 넘어가면 그 앱을 쓰는 예제가 배포에서
-    막히고(C7 누락 검사) 까닭이 「확장이 없다」로 보인다.
-    """
-    for attempt in range(1, REGISTER_TRIES + 1):
-        answer = client.post(
-            "/api/v1/resources/service-apps", json={"base_url": base_url}, headers=ADMIN
-        )
-        if answer.status_code < 400:
-            return
-        reachable = answer.json().get("code") not in ("manifest_unreachable", "healthz_unreachable")
-        assert not reachable, f"{app_id}: {answer.text}"
-        if attempt < REGISTER_TRIES:
-            time.sleep(0.5 * attempt)
-    pytest.fail(f"{app_id}: 모의 앱을 {REGISTER_TRIES}번 등록해 봤지만 Center가 읽지 못했다")
-
-
-def prepare_center(client: Any, mock_apps: tuple[dict[str, str], dict[str, str]]) -> None:
-    """모의 앱·외부 확장을 등록한다 (봉투는 Center가 짓는다 — ADR-0090).
-
-    **부르는 쪽이 둘이다** — 묶음의 `center`와 BX-16 전용 시험이다. 베끼면 한쪽만 고쳐져
-    「여기서는 되는데 저기서는 안 된다」가 된다.
-    """
-    c11, external = mock_apps
-    for app_id, base_url in c11.items():
-        register_app(client, app_id, base_url)
-    for app_id, base_url in external.items():
-        # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`).
-        register_extension(client, external_definitions.BUILDERS[app_id](base_url), headers=ADMIN)
+    def __iter__(self) -> Iterator[Any]:  # `client, store = center`
+        return iter((self.client, self.store))
 
 
 @pytest.fixture
-def center(
-    tmp_path: Path, mock_apps: tuple[dict[str, str], dict[str, str]]
-) -> Iterator[tuple[TestClient, Store]]:
-    """진짜 Center + 등록된 모의 앱들. `(client, store)` — 서명 키는 Center가 처음 뜰 때 만든다."""
-    c11, external = mock_apps
+def center(tmp_path: Path, mock_apps: MockApps) -> Iterator[CenterHandle]:
+    """진짜 Center + 일꾼으로 붙은 모의 앱들 — 서명 키는 Center가 처음 뜰 때 만든다.
+
+    운영자가 하는 일을 시험이 그대로 한다 — 외부 확장 정의를 **등록하고**(C13 E6, 봉투는 Center가
+    짓는다) **일꾼을 승인해 들인다**(C15). 주소·키를 넣는 칸은 없다.
+    """
     store = Store(tmp_path / "center.sqlite3")
     settings = CenterSettings(
         db_path=tmp_path / "center.sqlite3",
@@ -251,9 +216,24 @@ def center(
         admin_token=ADMIN_TOKEN,
         read_token="t-read",
     )
-    with TestClient(create_app(settings, store=store)) as client:
-        prepare_center(client, mock_apps)
-        yield client, store
+    url, server, thread = serve(create_app(settings, store=store))
+    stops: list[threading.Event] = []
+    with httpx.Client(base_url=url, timeout=30.0) as client:
+        for app_id, base_url in mock_apps.external.items():
+            # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`).
+            register_extension(client, external_definitions.BUILDERS[app_id](base_url), headers=ADMIN)
+        stops = mock_fleet(
+            client,
+            center_url=url,
+            built=mock_apps.built,
+            external_ids=list(external_definitions.BUILDERS),
+            folder=tmp_path / "workers",
+        )
+        yield CenterHandle(url=url, client=client, store=store)
+    for one in stops:
+        one.set()
+    server.should_exit = True
+    thread.join(timeout=10)
     store.close()
 
 
@@ -270,35 +250,6 @@ def model() -> Iterator[StubModel]:
     """
     with StubModel(canned) as made:
         yield made
-
-
-def service_key_refs() -> list[str]:
-    """예제가 쓰는 서비스 앱 키 **참조 이름** 전부 — **그림에서 읽는다**.
-
-    사람이 옮겨 적으면 예제가 늘 때 묶음이 조용히 뒤처진다 (대상 목록과 같은 결).
-    **두 자리에 있다** — BPM 프로세스가 상속하는 `service_keys`와 태스크가 따로 적은
-    `chk:serviceCall.key_ref`다 (C1 `key_ref`·`task_key_refs` — 사전 점검도 둘을 센다).
-    """
-    found: set[str] = set()
-    for path in sorted(EXAMPLES.glob("*.bpmn")):
-        process = read_process(path.read_text(encoding="utf-8"))
-        found |= {ref for ref in process.info.service_keys.values() if ref}
-        for node in process.all_nodes():
-            call = node.prop("serviceCall")
-            if call is not None and call.key_ref:
-                found.add(call.key_ref)
-    return sorted(found)
-
-
-@pytest.fixture(autouse=True)
-def service_keys(monkeypatch: pytest.MonkeyPatch) -> None:
-    """참조마다 키 값을 **환경변수로** 준다 — 운영자가 서버에서 하는 일이다 (ADR-0013).
-
-    모의 앱은 키 하나를 받으므로(`CHK_MOCK_APPS__DEV_KEY`) 값은 모두 같다. **설정 파일에는
-    넣지 않는다** — 참조 이름만 BPM 프로세스에 있고 값은 이 서버만 안다.
-    """
-    for ref in service_key_refs():
-        monkeypatch.setenv(service_key_env(ref), DEV_KEY)
 
 
 class BundleSettings(RunnerSettings):
@@ -347,7 +298,7 @@ def mail() -> Iterator[Any]:
 @pytest.fixture
 def runner(
     tmp_path: Path,
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     model: StubModel,
     mail: Any,
     receiver: Receiver,
@@ -367,7 +318,7 @@ def runner(
         "/api/v1/center-keys", json={"name": "시험 서버", "type": "server_runner"}, headers=ADMIN
     ).json()["key"]
     settings = BundleSettings(
-        center_url=CENTER_URL,
+        center_url=center.url,
         name="재통과 서버",
         max_concurrency=4,
         data_path=tmp_path / "runner",
@@ -386,7 +337,7 @@ def runner(
     settings.runs_dir.mkdir(parents=True, exist_ok=True)
     return agent_mod.Agent(
         settings=settings,
-        client=CenterClient(base_url=CENTER_URL, api_key=key, client=client),
+        client=CenterClient(base_url=center.url, api_key=key, client=client),
     )
 
 
@@ -413,7 +364,7 @@ def packaged(tmp_path: Path, example: str) -> Path:
 
 
 def approve_delegation_targets(
-    center: tuple[TestClient, Store], tmp_path: Path, example: str
+    center: CenterHandle, tmp_path: Path, example: str
 ) -> None:
     """그 예제가 **PC 위임으로 부르는 Bot**을 올려 승인해 둔다 (ADR-0062).
 
@@ -440,7 +391,7 @@ def approve_delegation_targets(
 
 
 def deploy(
-    center: tuple[TestClient, Store], runner: agent_mod.Agent, zip_path: Path
+    center: CenterHandle, runner: agent_mod.Agent, zip_path: Path
 ) -> dict[str, Any]:
     """업로드 → **승인** → **배포** → 하트비트로 설치까지 (C2 V1~V7).
 
@@ -476,7 +427,7 @@ def deploy(
 
 
 def dispatch(
-    center: tuple[TestClient, Store], info: dict[str, Any], inputs: dict[str, Any]
+    center: CenterHandle, info: dict[str, Any], inputs: dict[str, Any]
 ) -> str:
     """Center 작업 지시 하나 (C5 — `id`를 비우면 Center가 고른다)."""
     client, _ = center
@@ -497,7 +448,7 @@ def dispatch(
 
 
 def _answer_open_approvals(
-    client: TestClient, answers: dict[str, dict[str, Any]], run_id: str | None
+    client: httpx.Client, answers: dict[str, dict[str, Any]], run_id: str | None
 ) -> int:
     """Center 결재함에 올라온 것에 답한다 (C6 — 서버의 창구는 Center만이다).
 
@@ -528,7 +479,7 @@ def _answer_open_approvals(
     return given
 
 
-def _post_message(client: TestClient, message: dict[str, Any]) -> bool:
+def _post_message(client: httpx.Client, message: dict[str, Any]) -> bool:
     """외부 시스템이 메시지를 넣는다 (C12 §메시지).
 
     **받을 실행이 아직 없으면 422 `no_receiver`**다 — 그때는 아직 때가 아니라는 뜻이라
@@ -551,7 +502,7 @@ def _post_message(client: TestClient, message: dict[str, Any]) -> bool:
 
 
 def run_to_the_end(
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     runner: agent_mod.Agent,
     job_id: str,
     *,
@@ -663,7 +614,7 @@ def test_every_server_example_is_in_the_bundle_or_has_a_reason() -> None:
 def test_every_server_example_deploys_and_installs(
     example: str,
     tmp_path: Path,
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     runner: agent_mod.Agent,
 ) -> None:
     """**배포 길은 44개 전부가 지나간다** — 막힌 것은 *도는 것*이지 배포가 아니다.
@@ -682,7 +633,7 @@ def test_every_server_example_deploys_and_installs(
 def test_a_server_example_runs_through_center_and_the_runner(
     example: str,
     tmp_path: Path,
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -705,7 +656,7 @@ def test_a_server_example_runs_through_center_and_the_runner(
 
 def test_bx33_fails_on_purpose_on_the_server_too(
     tmp_path: Path,
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -866,7 +817,7 @@ def deploy_to_pc(client: Any, bot_ui_id: str, example: str, tmp_path: Path) -> s
 
 def test_bx16_delegates_a_part_to_a_pc_and_continues(
     tmp_path: Path,
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -927,11 +878,11 @@ def test_bx16_delegates_a_part_to_a_pc_and_continues(
 FX24 = "fx24_batch_intake"
 
 
-def batch_children(client: TestClient, child: str) -> list[dict[str, Any]]:
+def batch_children(client: httpx.Client, child: str) -> list[dict[str, Any]]:
     return [one for one in client.get("/api/v1/jobs", headers=READ).json() if one["bpm_process_id"] == child]
 
 
-def bind_virtual_worker(client: TestClient, intake: str) -> None:
+def bind_virtual_worker(client: httpx.Client, intake: str) -> None:
     """접수 Bot을 가상 직원에 **먼저** 묶는다 — 일괄 결재의 담당자가 그 감독자다 (ADR-0099).
 
     FX-24의 `감독자`는 값 출처가 가상 직원인 **필수** 입력이라 묶지 않고 돌리면 시작조차 하지 않는다.
@@ -945,7 +896,7 @@ def bind_virtual_worker(client: TestClient, intake: str) -> None:
 
 def test_fx24_starts_one_server_bot_per_approved_item(
     tmp_path: Path,
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -998,7 +949,7 @@ def test_fx24_starts_one_server_bot_per_approved_item(
 
 def test_fx24_starts_nothing_when_the_batch_is_rejected(
     tmp_path: Path,
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
@@ -1015,7 +966,7 @@ def test_fx24_starts_nothing_when_the_batch_is_rejected(
 
 def test_cancelling_the_batch_cancels_the_child_that_has_not_run(
     tmp_path: Path,
-    center: tuple[TestClient, Store],
+    center: CenterHandle,
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:

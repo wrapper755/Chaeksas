@@ -1,10 +1,10 @@
 # 서비스 앱 관리 콘솔 화면 설계
 
-**서비스 앱마다 자기 관리 콘솔(웹)을 가진다** ([ADR-0013](../decisions/0013-api-keys.md)). 서비스 앱 API 키는 Center가 배포와 함께 짓고, 여기서는 보고 비상 폐기한다 ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md)). 공통 화면(SVC)은 `packages/service_kit`이 제공하고, 앱 고유 화면은 앱이 더한다. 첫 사례는 UI 자동화 앱(UIA)이다.
+**서비스 앱마다 자기 관리 콘솔(웹)을 가진다** ([ADR-0013](../decisions/0013-api-keys.md)). 서비스 앱은 Center에 **일꾼**으로 들어와 일감을 가져간다 ([C15](../03-contracts/C15-external-tasks.md), [ADR-0102](../decisions/0102-calling-outside-is-pull.md)) — **서비스 앱 API 키는 없다**(「누가 불러도 되나」는 Center가 배포로 가린다). 그래서 이 콘솔에 키 화면이 없다. 공통 화면(SVC)은 `packages/service_kit`이 제공하고, 앱 고유 화면은 앱이 더한다. 첫 사례는 UI 자동화 앱(UIA)이다.
 
-Center 콘솔은 서비스 앱 키 원문을 다루지 않는다(외부 앱 키만 CON-07에 넣는다). Center 리소스 목록(CON-07)에서 각 관리 콘솔로 링크를 건다.
+일꾼을 들이는 것은 Center 콘솔 CON-07 「일꾼 승인 대기」다. Center 리소스 목록(CON-07)에서 각 관리 콘솔로 링크를 건다.
 
-> 구현: `service_kit`(Python)은 **관리 API**(`/admin/v1/status`·`keys`·`usage`)를 제공하고, 화면은 Next.js 앱 `web/apps/svc-console` 한 벌이 그린다. 서비스 앱마다 같은 콘솔을 설정만 바꿔 띄우고(포트 = API + 1), 접속한 앱의 `app_id`에 맞는 고유 화면(예: UIA)만 켠다 ([ADR-0017](../decisions/0017-web-nextjs-design-system.md)).
+> 구현: `service_kit`(Python)은 **관리 API**(`/admin/v1/status`·`usage`)를 제공하고, 화면은 Next.js 앱 `web/apps/svc-console` 한 벌이 그린다. 서비스 앱마다 같은 콘솔을 설정만 바꿔 띄우고(포트 = API + 1), 접속한 앱의 `app_id`에 맞는 고유 화면(예: UIA)만 켠다 ([ADR-0017](../decisions/0017-web-nextjs-design-system.md)).
 공통 원칙·상태 표기는 [README.md](README.md) §2·§3.
 
 ## SVC-00 공통 틀
@@ -19,10 +19,12 @@ Center 콘솔은 서비스 앱 키 원문을 다루지 않는다(외부 앱 키�
 
 | 영역 | 내용 |
 | --- | --- |
-| [N] 탐색 | 공통: 「상태」(SVC-01) / 「API 키」(SVC-02) / 「사용 기록」(SVC-03) · 그 아래 앱 고유 메뉴 (UI 자동화 앱: 「개요」·「셀렉터」·「모니터링」) |
+| [N] 탐색 | 공통: 「상태」(SVC-01) / 「사용 기록」(SVC-03) · 그 아래 앱 고유 메뉴 (UI 자동화 앱: 「개요」·「셀렉터」·「모니터링」) |
 | [A] 위 막대 | 앱 이름, 버전, 상태(정상·저하), 「새로 고침」 |
 
-**로그인:** 관리자 토큰(앱 설정)으로 들어간다 (OIDC는 나중). 키 폐기는 로그인한 관리자만.
+**로그인:** 관리자 토큰(앱 설정)으로 들어간다 (OIDC는 나중). 보기 전용 토큰은 없다.
+
+> SVC-02(API 키)는 없다 — 서비스 앱 키가 없어졌다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 번호는 다시 쓰지 않는다.
 
 ## SVC-01 상태
 
@@ -33,36 +35,17 @@ Center 콘솔은 서비스 앱 키 원문을 다루지 않는다(외부 앱 키�
 | 「의존」 | LLM 게이트웨이, DB 등 바깥 의존의 상태 (`DependencyProbe`가 앱마다 돌려준다) |
 | 「Center 등록」 | Center 리소스 목록에 올라가 있는지, 마지막 보고 시각 |
 
-## SVC-02 API 키
-
-이 서비스 앱을 부르는 키를 **보고 비상 폐기하는** 자리다. 키는 Center가 배포와 함께 짓고 이 앱에는 해시만 온다 ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md), C11 §Center가 발급하는 키) — 그래서 **「새 키」가 없다.** 관리 API의 발급(`POST /admin/v1/keys`)은 자동화·시험·Center를 믿지 않는 앱을 위해 남고 화면에는 없다.
-
-| 열 | 내용 |
-| --- | --- |
-| 「이름」 | Center가 지은 키는 `svk_<hex8>`(Center의 id), 관리 API로 만든 키는 그 이름 |
-| 「발급」 | 「Center — <Bot> → <PC·서버 이름>」 / 「Center — Studio <이름> (개발)」 / 「Center — <PC 이름> (셀렉터 등록)」 / 「관리자」 (C11 `issued_by`·`issued_for`) |
-| 「배포」 | 처음 지은 배포 id (판을 올려도 바뀌지 않는다) |
-| 「허용 작업」 | 「모든 작업」 또는 작업 목록 |
-| 「허용 모드」 | 「결정」(현장) / 「자율 · 결정」(Studio 개발 키) |
-| 「추가 권한」 | 예: `registry_write` (셀렉터 등록) |
-| 「앞자리」 | 앞 16자 (`chk_svc_` + 무작위 8자) |
-| 「만든 날」 / 「만료」 / 「마지막 사용」 | |
-| 「상태」 | 사용 중 / 만료 / 폐기됨 |
-
-- **「배포 없이 생긴 키」를 띠로 보인다** — Center가 지었는데 `issued_for`가 배포·Studio·셀렉터 등록 어디에도 묶이지 않은 것, 그리고 「관리자」 발급 키. Center가 뚫렸을 때 드러나는 자리다 (ADR-0092 「보안 대가」). 띠는 「누가 왜 만들었는지 확인하세요. 모르면 폐기하세요」라고 말한다.
-- 「폐기할 키」를 고르고 「폐기...」(확인 창, 기본 「취소」): 「이 키를 쓰는 Bot의 호출이 바로 거부됩니다.」 Center가 지은 키면 한 줄 더: 「Center가 다시 발급하지 않습니다 — 이 Bot을 다시 쓰려면 Center에서 배포를 철회하고 다시 배포하세요.」
-- 앱이 Center 발급을 받지 않으면(`CHK_SVC_<APP>__CENTER__URL`이 없다) 머리글 아래 「이 앱은 Center 발급을 받지 않습니다 — 키는 관리 API로만 생깁니다」.
-- SVC-01 「의존」 표에 `center` 줄이 생긴다 — 「서명 키 <key_id> (<받은 때>)」 / 「Center 공개키를 아직 받지 않았다」 / 받지 못한 까닭 (C11 §Center가 발급하는 키).
-
 ## SVC-03 사용 기록
 
 | 열 | 내용 |
 | --- | --- |
-| 시각 / 키 이름 / 작업 / 수행 모드 / 결과(성공·실패·거부) / 소요 / Bot·실행 id(있으면) | 업무 값은 기록하지 않는다 (키·작업·결과만) |
+| 시각 / 부른 쪽 / 작업 / 수행 모드 / 결과(성공·실패·거부) / 소요 / 실행 id(있으면) / LLM | 업무 값은 기록하지 않는다 (부른 쪽·작업·결과만) |
+
+「부른 쪽」은 일감의 `caller`를 `<종류>:<호스트>`로 적은 것이다 (예: `bot_ui:bui_…`, `server_runner:srv_…`, `studio:…` — C11 `UsageRecord.key_name`에 담긴다).
 
 「실행 id」는 **CON-01 실행 상세로 가는 링크**다 ([ADR-0075](../decisions/0075-service-console-links-to-center-console.md)) — Center 콘솔 주소는 이 콘솔의 설정 `CHK_SVC_CONSOLE__CENTER_CONSOLE_URL`(브라우저가 여는 주소)이 주고, **없으면 링크만 없다**. C3 `run_id` 모양(`run_…`·`test_…`)일 때만 잇는다.
 
-필터: 키, 작업, 결과, 기간. 「키별 합계」 탭: 키마다 호출 수·실패 수·LLM 사용량(토큰).
+> 제안: 필터(부른 쪽, 작업, 결과, 기간)와 「부른 쪽별 합계」 탭(호출 수·실패 수·LLM 사용량). 지금은 최근 100건 목록뿐이다.
 
 ## UI 자동화 앱 고유 화면 (UIA)
 

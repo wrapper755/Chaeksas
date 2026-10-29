@@ -124,7 +124,7 @@ class Settings:
     smtp_attachment_mb: float = DEFAULT_ATTACHMENT_MB
     #: 웹훅을 보낼 수 있는 호스트. **기본은 비어 있고 비면 아무 데도 보내지 않는다** (ADR-0059 §2).
     webhook_allowed_hosts: tuple[str, ...] = ()
-    #: BUI-10에 등록한 서비스 앱 키 참조 (**이름만** — 값은 OS 비밀 저장소다).
+    #: 옛 BUI-10 칸 — 읽고 그대로 되써 둘 뿐 쓰는 곳이 없다 (C15, ADR-0102).
     service_keys: tuple[ServiceKeyRef, ...] = ()
     runtimes: tuple[RuntimeSettings, ...] = field(
         default_factory=lambda: (RuntimeSettings(runtime_id="worker", port=DEFAULT_WORKER_PORT),)

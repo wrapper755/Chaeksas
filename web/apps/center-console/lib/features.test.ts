@@ -5,7 +5,7 @@
  * 1. **쓸 수 없는 것이 맨 위**다.
  * 2. **PC는 그 기능을 쓰는 Bot이 배포된 곳만** 센다.
  * 3. **외부 기능은 PC를 세지 않는다** (코드가 없다).
- * 4. 서버 주소가 없다는 것은 **누락 검사**가 말해 준다 — 확장 없이도 줄이 생긴다.
+ * 4. 서버 부분이 없다는 것은 **누락 검사**가 말해 준다 — 확장 없이도 줄이 생기고 할 일은 「일꾼을 들이세요」다.
  */
 import { describe, expect, it } from "vitest";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
@@ -13,7 +13,7 @@ import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
 import type { RuntimeResource } from "@chaeksas/api-types/c7-runtime-resource";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
-import { ADDRESS_OUTSIDE, type FeatureInput, addressOf, featureRows } from "./features";
+import { type FeatureInput, featureRows } from "./features";
 
 function bot(id: string, extensions: string[], missing: Array<{ type: string; id: string }> = []): PackageInfo {
   return {
@@ -53,9 +53,9 @@ const UIA: ExtensionResource = {
 const UIA_APP: ServiceAppResource = {
   app_id: "ui-automation",
   extension_id: "ui-automation",
-  base_url: "http://svc-uia:8000",
   console_url: "http://localhost:8001",
   status: "ok",
+  consumers: 1,
 };
 
 function input(over: Partial<FeatureInput> = {}): FeatureInput {
@@ -74,7 +74,7 @@ describe("featureRows", () => {
       }),
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ usable: "쓸 수 있음", todos: [], serverUrl: "http://svc-uia:8000", usedBy: ["order"] });
+    expect(rows[0]).toMatchObject({ usable: "쓸 수 있음", todos: [], consumers: 1, usedBy: ["order"] });
   });
 
   it("PC는 그 Bot이 배포된 곳만 센다 — 받지 않은 PC에 없는 것은 할 일이 아니다", () => {
@@ -132,7 +132,7 @@ describe("featureRows", () => {
     expect(rows[0]).toMatchObject({ usable: "쓸 수 있음", todos: [], external: true });
   });
 
-  it("서버 주소가 없다는 것은 누락 검사가 말한다 — 확장 줄에도, 아무도 모르는 앱에도", () => {
+  it("서버 부분이 없다는 것은 누락 검사가 말한다 — 확장 줄에도, 아무도 모르는 앱에도", () => {
     const reported: ExtensionResource = { id: "ui-automation", tier: "builtin", version: "1.0.0", status: "n/a" };
     const rows = featureRows(
       input({
@@ -144,8 +144,8 @@ describe("featureRows", () => {
       }),
     );
     expect(rows.map((one) => [one.id, one.todos.map((todo) => todo.kind)])).toEqual([
-      ["tax-invoice", ["add_address"]],
-      ["ui-automation", ["add_address"]],
+      ["tax-invoice", ["add_consumer"]],
+      ["ui-automation", ["add_consumer"]],
     ]);
   });
 
@@ -156,75 +156,19 @@ describe("featureRows", () => {
   });
 
   it("확장 없는 서비스 앱도 같은 표에 한 줄이다", () => {
-    const app: ServiceAppResource = { app_id: "tax-invoice", name: "세금계산서", status: "ok", base_url: "http://tax" };
+    const app = { app_id: "tax-invoice", name: "세금계산서", status: "ok", consumers: 2 } as ServiceAppResource;
     const rows = featureRows(input({ serviceApps: [app] }));
-    expect(rows[0]).toMatchObject({ key: "app:tax-invoice", usable: "쓸 수 있음", serverUrl: "http://tax" });
+    expect(rows[0]).toMatchObject({ key: "app:tax-invoice", usable: "쓸 수 있음", consumers: 2 });
   });
 
-  it("외부 앱 키가 없으면 할 일이고, 시험용 키는 운영과 상관없다 (ADR-0094 §7)", () => {
-    const external = {
-      id: "ext-credit",
-      tier: "external",
-      version: "0.1.0",
-      status: "ok",
-      app_key: { run: { set: false }, test: { set: true, set_at: "2026-10-25T00:00:00+00:00", set_by: "admin" } },
-    } as unknown as ExtensionResource;
-    const [row] = featureRows(input({ extensions: [external] }));
-    expect(row).toMatchObject({ usable: "쓸 수 없음", appKey: { run: { set: false }, test: { set: true, setBy: "admin" } } });
-    expect(row?.todos.map((one) => one.kind)).toEqual(["add_app_key"]);
+  it("일꾼이 조용하면 할 일이고, 들인 일꾼이 없으면 확인 전이다 (C7 — 상태는 토픽이 말한다)", () => {
+    const quiet = { ...UIA_APP, status: "unreachable", checked_at: "2026-10-25T00:00:00+00:00" } as ServiceAppResource;
+    const [down] = featureRows(input({ extensions: [{ ...UIA, status: "unreachable" }], serviceApps: [quiet] }));
+    expect(down).toMatchObject({ usable: "쓸 수 없음" });
+    expect(down?.todos.map((one) => one.kind)).toEqual(["server_down"]);
 
-    const ready = { ...external, app_key: { run: { set: true }, test: { set: false } } } as unknown as ExtensionResource;
-    expect(featureRows(input({ extensions: [ready] }))[0]).toMatchObject({ usable: "쓸 수 있음", todos: [] });
-  });
-
-  it("앱이 Center 발급을 받지 않으면 할 일이다 — 받거나 모르면 말하지 않는다 (ADR-0094 §1)", () => {
-    const app = (state: string) => ({ ...UIA_APP, trust: { state } }) as unknown as ServiceAppResource;
-    const kinds = (state: string) =>
-      featureRows(input({ extensions: [UIA], serviceApps: [app(state)] }))[0]?.todos.map((one) => one.kind);
-    expect(kinds("not_configured")).toEqual(["app_not_trusting"]);
-    expect(kinds("pin_mismatch")).toEqual(["app_not_trusting"]);
-    expect(kinds("trusted")).toEqual([]);
-    expect(kinds("unknown")).toEqual([]);
-  });
-});
-
-describe("addressOf (ADR-0097)", () => {
-  const definition = {
-    service: {
-      protocol: "http-adapter",
-      base_url: "https://www.nowview.work",
-      adapter: { allowed_hosts: ["www.nowview.work", "localhost"] },
-    },
-  };
-  const external = { id: "nowview-sc01", tier: "external", version: "0.1.0", status: "ok", definition } as unknown as ExtensionResource;
-
-  it("덮어쓰지 않았으면 정의의 기본값이고 허용 호스트를 함께 준다", () => {
-    expect(addressOf(external)).toEqual({
-      url: "https://www.nowview.work",
-      source: "default",
-      setAt: null,
-      setBy: null,
-      allowedHosts: ["www.nowview.work", "localhost"],
-    });
-  });
-
-  it("Center가 덮어썼으면 그 주소와 누가·언제다", () => {
-    const moved = {
-      ...external,
-      address: { base_url: "http://localhost:3000", set_at: "2026-10-25T00:00:00+00:00", set_by: "admin" },
-    } as unknown as ExtensionResource;
-    expect(addressOf(moved)).toMatchObject({ url: "http://localhost:3000", source: "center", setBy: "admin" });
-    expect(featureRows(input({ extensions: [moved] }))[0]?.address?.source).toBe("center");
-  });
-
-  it("바꾼 주소를 지금 정의가 허용하지 않으면 기본값이고 그렇게 말한다", () => {
-    const outside = { ...external, status_reasons: [ADDRESS_OUTSIDE] } as unknown as ExtensionResource;
-    expect(addressOf(outside)).toMatchObject({ url: "https://www.nowview.work", source: "outside" });
-  });
-
-  it("서버를 부르지 않는 외부 기능과 내장 기능은 칸이 없다", () => {
-    const noServer = { ...external, definition: { service: { protocol: "http-adapter" } } } as unknown as ExtensionResource;
-    expect(addressOf(noServer)).toBeNull();
-    expect(featureRows(input({ extensions: [UIA], serviceApps: [UIA_APP] }))[0]?.address).toBeNull();
+    const none = { ...UIA_APP, status: "unknown", consumers: 0 } as ServiceAppResource;
+    const [unknown] = featureRows(input({ extensions: [{ ...UIA, status: "unknown" }], serviceApps: [none] }));
+    expect(unknown).toMatchObject({ usable: "확인 전", todos: [], consumers: 0 });
   });
 });

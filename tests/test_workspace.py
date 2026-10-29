@@ -22,6 +22,8 @@ MEMBERS = {
     "apps/bot_ui": "chaeksas.bot_ui",
     "apps/tool_ui": "chaeksas.tool_ui",
     "apps/server_runner": "chaeksas.server_runner",
+    # 외부 앱을 부르는 범용 일꾼 (C13 §4·C15, ADR-0102).
+    "apps/adapter_consumer": "chaeksas.adapter_consumer",
     "apps/center": "chaeksas.center",
     "extensions/ui_automation": "chaeksas.ext.ui_automation",
     # 제품이 아니다 — 업무 예제가 부르는 모의 앱 (01-architecture §8).

@@ -243,83 +243,6 @@
       "title": "Sealed",
       "type": "object"
     },
-    "ServiceKeyDelivery": {
-      "additionalProperties": true,
-      "description": "하트비트 답에 실린 봉한 키 하나 (C4 §서비스 앱 키 전달).",
-      "properties": {
-        "app_id": {
-          "title": "App Id",
-          "type": "string"
-        },
-        "bpm_process_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Bpm Process Id"
-        },
-        "expires_at": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Expires At"
-        },
-        "key_refs": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Key Refs",
-          "type": "array"
-        },
-        "purpose": {
-          "default": "run",
-          "title": "Purpose",
-          "type": "string"
-        },
-        "replaces": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Replaces"
-        },
-        "sealed_key": {
-          "$ref": "#/$defs/Sealed"
-        },
-        "service_key_id": {
-          "title": "Service Key Id",
-          "type": "string"
-        },
-        "source": {
-          "default": "center",
-          "title": "Source",
-          "type": "string"
-        }
-      },
-      "required": [
-        "service_key_id",
-        "app_id",
-        "sealed_key"
-      ],
-      "title": "ServiceKeyDelivery",
-      "type": "object"
-    },
     "VirtualWorkerIdentity": {
       "additionalProperties": true,
       "description": "**가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).\n\nCenter가 서버 작업을 내려줄 때 붙인다(C12 `JobDispatch.virtual_worker`, ADR-0099). 실행하는\n쪽이 출처가 `virtual_worker.*`인 입력의 값으로 푼다 (`core.engine.sourced_inputs`).",
@@ -394,13 +317,6 @@
       "title": "Disabled",
       "type": "boolean"
     },
-    "drop_service_keys": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Drop Service Keys",
-      "type": "array"
-    },
     "jobs": {
       "items": {
         "$ref": "#/$defs/JobDispatch"
@@ -439,13 +355,6 @@
     "server_time": {
       "title": "Server Time",
       "type": "string"
-    },
-    "service_keys": {
-      "items": {
-        "$ref": "#/$defs/ServiceKeyDelivery"
-      },
-      "title": "Service Keys",
-      "type": "array"
     }
   },
   "required": [

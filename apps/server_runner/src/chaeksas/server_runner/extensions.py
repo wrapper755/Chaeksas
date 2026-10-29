@@ -9,22 +9,22 @@
 (`core.preflight`). 적어 둔 것만 서버에서 돈다.
 
 확장에게 가는 것은 셋이다 — 자기 설정 칸(`scope: server_runner`인 것만, **환경변수로**),
-서버 부분 주소(`service.base_url`), 비밀(서비스 앱 키 참조가 먼저). **화면이 없어 설정 파일이
+Center 주소(`center.url`), 비밀(`call_token`은 이 실행기의 Center API 키, 나머지는 그 확장의 비밀
+칸 — ADR-0102). **화면이 없어 설정 파일이
 없으므로**(`docs/04-setup.md` §6) 설정은 환경변수뿐이고 이름 규칙은 **Bot UI의 것과 같다**.
 """
 
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from chaeksas.contracts import SERVICE_URL_SETTING
-from chaeksas.contracts.extension import SCOPE_SERVER_RUNNER
+from chaeksas.contracts.extension import CALL_TOKEN_SECRET, CENTER_URL_SETTING, SCOPE_SERVER_RUNNER
 from chaeksas.core.extensions import ExtensionHost, HostTasks, load_host
 from chaeksas.extension_api import HOST_SERVER_RUNNER, RUN_LOCATION_SERVER, ExtensionContext
-from chaeksas.server_runner.credentials import BotCredentials, Credentials, extension_config_env
+from chaeksas.server_runner.credentials import Credentials, extension_config_env
 
 
 def load(*, host: ExtensionHost | None = None) -> ExtensionHost:
@@ -51,31 +51,31 @@ class PlainSettings:
 class RunnerSecrets:
     """`extension_api.Secrets` — 확장이 묻는 이름을 푼다 (ADR-0013).
 
-    **서비스 앱 키 참조가 먼저**이고(BUI-10과 같은 순서) 아니면 그 확장의 비밀 설정 칸이다.
-    확장마다 이름 공간이 갈라져 있어 남의 비밀을 가져갈 수 없다.
+    `call_token`은 **이 실행기의 Center API 키**다 (서버 실행기는 제 키로 외부 작업을 올린다, C15).
+    나머지는 그 확장의 비밀 설정 칸이다 — 확장마다 이름 공간이 갈라져 있어 남의 비밀을 가져갈 수 없다.
     """
 
-    credentials: Credentials | BotCredentials
+    credentials: Credentials
     extension_id: str
 
     def resolve(self, ref: str) -> str | None:
-        return self.credentials.service_app_key(ref) or self.credentials.extension_secret(
-            self.extension_id, ref
-        )
+        if ref == CALL_TOKEN_SECRET:
+            return self.credentials.center_api_key()
+        return self.credentials.extension_secret(self.extension_id, ref)
 
 
 def settings_for(
     host: ExtensionHost,
     extension_id: str,
     *,
-    service_url: str | None = None,
+    center_url: str | None = None,
     environ: Mapping[str, str] | None = None,
 ) -> PlainSettings:
     """그 확장의 설정 칸 + 호스트가 채우는 예약 키 (C13).
 
     - 칸은 `scope: server_runner`인 것만. 값은 **환경변수**(`CHK_SERVER_RUNNER__EXT__<확장>__<칸>`)
       이고 없으면 `None`이다. **비밀 칸은 넣지 않는다** — 그것은 `Secrets`가 푼다 (ADR-0013).
-    - `service.base_url`은 **출처가 하나다** (C13) — Center 리소스 등록이 정의의 값을 이긴다.
+    - `center.url`은 이 실행기가 붙은 Center다 (C13 — 확장 클라이언트가 외부 작업을 올리는 곳).
     - `runtime.<id>.*`는 **없다** (ADR-0064 — 서버는 런타임을 띄우지 않는다).
     """
     env = environ if environ is not None else os.environ
@@ -86,27 +86,22 @@ def settings_for(
             if item.scope != SCOPE_SERVER_RUNNER or item.secret:
                 continue
             values[item.key] = env.get(extension_config_env(extension_id, item.key))
-        service = found.manifest.service
-        values[SERVICE_URL_SETTING] = service_url or (
-            service.base_url if service is not None else None
-        )
+        values[CENTER_URL_SETTING] = center_url
     return PlainSettings(values=values)
 
 
 def tasks(
     *,
     host: ExtensionHost | None = None,
-    service_url: Callable[[str], str | None] | None = None,
-    credentials: Credentials | BotCredentials | None = None,
+    center_url: str | None = None,
+    credentials: Credentials | None = None,
 ) -> HostTasks:
     """엔진의 `RunEnv.extensions` — 확장 호스트를 꽂는다 (ADR-0018 — 엔진은 확장을 모른다).
 
-    `service_url`은 실행기가 **제 손으로 받아 둔 바깥 앱 명부**가 답한다 (C7·C13 「전송」,
-    `DirectoryCache.base_url_of`) — 확장 id로 묻는 것이라 **실행마다 다르지 않아** 이 하나를
-    모든 실행이 함께 쓴다. 주지 않으면 정의에 적힌 주소를 쓴다.
+    `center_url`은 이 실행기가 붙은 Center다 — 모든 실행이 함께 쓴다.
     """
     loaded = load(host=host)
-    creds: Credentials | BotCredentials = credentials if credentials is not None else Credentials()
+    creds: Credentials = credentials if credentials is not None else Credentials()
 
     def make_context(extension_id: str) -> ExtensionContext:
         return loaded.context(
@@ -115,7 +110,7 @@ def tasks(
             settings=settings_for(
                 loaded,
                 extension_id,
-                service_url=service_url(extension_id) if service_url is not None else None,
+                center_url=center_url,
             ),
             secrets=RunnerSecrets(credentials=creds, extension_id=extension_id),
         )

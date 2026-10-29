@@ -1,24 +1,24 @@
-"""바깥 앱 한 벌 — **주소와 검증된 외부 확장 정의** (C13 「전송」, C7).
+"""검증된 외부 확장 정의 한 벌 (C13 「전송」).
+
+**주소도 키도 없다** (ADR-0102) — 바깥 앱은 C15 외부 작업으로 부르고(`core.services.CenterServiceCaller`)
+외부 앱의 주소·키는 어댑터 일꾼의 설정에만 있다. 여기 남은 일은 **정의를 받아 다시 검증하고
+고정한 해시와 대조하는 것**이다 — 실행하는 쪽(시작 전 `unusable`)과 어댑터 일꾼(돌릴 정의)이 같은
+코드를 쓴다.
 
 **이 모듈에 두 쪽이 있다.**
 
-- **받아 두는 쪽** (`DirectoryCache`) — Center에서 주소와 정의·봉투를 받아 들고 있다가,
-  그 Bot이 쓰는 것만 골라 준다. Bot UI는 **파일로** 실행기(자식 프로세스)에 건네고
-  (실행기는 Center를 부르지 않는다 — ADR-0031), **서버 실행기는 제가 Center를 부르므로**
-  파일을 거치지 않고 명부를 바로 짓는다 (`directory_for`).
-- **읽는 쪽** (`AppDirectory`·`build`·`read_directory`) — 받은 것을 **다시 검증해**
-  `RunEnv.services`를 짓는다.
+- **받아 두는 쪽** (`DirectoryCache`) — Center에서 정의·봉투를 받아 들고 있다가, 그 Bot이 쓰는
+  것만 골라 준다. Bot UI는 **파일로** 실행기(자식 프로세스)에 건네고, **서버 실행기는 제가
+  Center를 부르므로** 파일을 거치지 않고 바로 짓는다 (`directory_for`).
+- **읽는 쪽** (`AppDirectory`·`build`·`read_directory`) — 받은 것을 **다시 검증한다**.
 
 **둘이 한 자리에 있는 것이 요점이다** — 두 벌이면 「PC는 되는데 서버는 안 된다」가 된다.
 
-지키는 것 넷.
+지키는 것 둘.
 
 - **봉투를 다시 검증한다** (C13 「전송」, E6). Center가 보관한 정의와 봉투를 그대로 받아
   `verify_external`로 본다 — 관리자 토큰만 새어도 Bot의 키가 다른 주소로 새는 일을 막는 관문이
   배포와 같아야 한다. **검증되지 않은 정의는 쓰지 않는다** (사유는 `problems`에 남는다).
-- **주소의 출처는 하나다** (C13) — Center 리소스 등록이 이기고, 없으면 정의의 `base_url`이다
-  (그 폴백은 `AdapterCaller`가 한다). C11 서비스 앱은 등록된 주소밖에 없다.
-- **키 값은 여기 없다.** 참조 이름만 오고, 값은 실행하는 쪽이 준 `secrets`가 푼다 (ADR-0013).
 - **매니페스트가 고정한 해시와 대조한다** (C1 `requires.extensions[].definition_hash`) — 정의가
   바뀌었으면 그 Bot은 승인·배포를 다시 받아야 한다. 몰래 새 정의로 돌리지 않는다.
 """
@@ -26,7 +26,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -34,7 +34,6 @@ from typing import Any
 from chaeksas.contracts.extension import ExtensionManifest, definition_hash, verify_external
 from chaeksas.contracts.manifest import ExtensionNeed, Manifest
 from chaeksas.contracts.signing import AdminKey, Envelope
-from chaeksas.core.services import ServiceCaller
 
 #: 파일 모양의 판 — 실행하는 쪽과 실행기가 같은 것을 본다.
 SCHEMA = 1
@@ -56,42 +55,16 @@ class External:
 
 @dataclass(frozen=True)
 class AppDirectory:
-    """부를 수 있는 바깥 앱들. `core.services.Addresses`로 그대로 쓰인다.
+    """검증을 지난 외부 확장 정의들."""
 
-    `secrets`는 `key_ref` → 키 값이다 (없으면 키를 풀지 못한다 — 부르는 일이 분명히 실패한다).
-    """
-
-    addresses: Mapping[str, str] = field(default_factory=dict)
     externals: Mapping[str, External] = field(default_factory=dict)
     #: 쓰지 못한 정의와 그 사유 (`{확장 id: 사유}`) — 조용히 사라지지 않는다.
     problems: Mapping[str, str] = field(default_factory=dict)
-    secrets: Callable[[str], str | None] | None = None
-
-    # ── `Addresses` ──
-
-    def base_url(self, app_id: str) -> str | None:
-        """**Center 리소스 등록만** 돌려준다 — 정의의 값으로 떨어지는 것은 어댑터가 한다."""
-        return self.addresses.get(app_id)
-
-    def key(self, key_ref: str) -> str | None:
-        return self.secrets(key_ref) if self.secrets is not None else None
-
-    # ── 쓰는 쪽 ──
 
     @property
     def definitions(self) -> dict[str, ExtensionManifest]:
         """`AdapterCaller`에게 줄 **검증된** 정의들."""
         return {app_id: one.manifest for app_id, one in self.externals.items()}
-
-    def caller(self, *, caller_type: str = "bot_ui", client: Any = None) -> ServiceCaller:
-        """`RunEnv.services` 하나 — 외부 확장은 어댑터로, 나머지는 C11로 간다."""
-        from chaeksas.core.http_adapter import AdapterCaller, RoutedCaller  # noqa: PLC0415 - 순환 피함
-        from chaeksas.core.services import HttpServiceCaller  # noqa: PLC0415
-
-        return RoutedCaller(
-            adapter=AdapterCaller(definitions=self.definitions, addresses=self, client=client),
-            others=HttpServiceCaller(addresses=self, caller_type=caller_type, client=client),
-        )
 
     def unusable(self, needs: Sequence[ExtensionNeed]) -> list[str]:
         """매니페스트가 요구하는 외부 확장 중 **쓸 수 없는 것**과 그 사유 (C1).
@@ -117,37 +90,17 @@ class AppDirectory:
         return out
 
 
-def external_addresses(entries: Iterable[Mapping[str, Any]]) -> dict[str, str]:
-    """외부 확장 묶음에서 **Center가 덮어쓴 주소**만 → `{확장 id: 주소}` (C7 §외부 확장 주소, ADR-0097).
-
-    덮어쓰지 않았으면 담지 않는다 — 그러면 어댑터가 정의의 `base_url`로 떨어진다.
-    """
-    out: dict[str, str] = {}
-    for one in entries:
-        extension_id = str((one.get("definition") or {}).get("id") or "")
-        if extension_id and one.get("base_url"):
-            out[extension_id] = str(one["base_url"])
-    return out
-
-
-def read_directory(
-    path: Path | None,
-    *,
-    secrets: Callable[[str], str | None] | None = None,
-) -> AppDirectory:
+def read_directory(path: Path | None) -> AppDirectory:
     """실행하는 쪽이 쓴 파일을 읽어 **검증된 것만** 담는다. 파일이 없으면 빈 명부다."""
     if path is None or not path.is_file():
-        return AppDirectory(secrets=secrets)
+        return AppDirectory()
     raw = json.loads(path.read_text(encoding="utf-8"))
-    return build(raw, secrets=secrets)
+    return build(raw)
 
 
-def build(raw: Mapping[str, Any], *, secrets: Callable[[str], str | None] | None = None) -> AppDirectory:
+def build(raw: Mapping[str, Any]) -> AppDirectory:
     """파일 내용 하나를 명부로. **봉투를 검증하고 통과한 것만** 싣는다."""
     keys = [AdminKey.model_validate(one) for one in raw.get("keys") or []]
-    addresses = {
-        str(app_id): str(base) for app_id, base in (raw.get("addresses") or {}).items() if base
-    }
     externals: dict[str, External] = {}
     problems: dict[str, str] = {}
 
@@ -174,19 +127,13 @@ def build(raw: Mapping[str, Any], *, secrets: Callable[[str], str | None] | None
             continue
         externals[manifest.id] = External(manifest=manifest, definition_hash=definition_hash(definition))
 
-    return AppDirectory(addresses=addresses, externals=externals, problems=problems, secrets=secrets)
+    return AppDirectory(externals=externals, problems=problems)
 
 
-def to_json_dict(
-    *,
-    addresses: Mapping[str, str],
-    keys: Sequence[AdminKey],
-    extensions: Sequence[Mapping[str, Any]],
-) -> dict[str, Any]:
-    """실행하는 쪽이 쓸 파일 내용. **키 값·업무 값은 넣지 않는다** (ADR-0013, 원칙 6)."""
+def to_json_dict(*, keys: Sequence[AdminKey], extensions: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """실행하는 쪽이 쓸 파일 내용. **키 값·업무 값은 넣지 않는다** (원칙 6)."""
     return {
         "schema": SCHEMA,
-        "addresses": {str(app_id): str(base) for app_id, base in addresses.items() if base},
         "keys": [one.to_json_dict() for one in keys],
         "extensions": [dict(one) for one in extensions],
     }
@@ -215,11 +162,6 @@ def extension_ids(manifest: Manifest) -> list[str]:
     return sorted({need.id for need in manifest.requires.extensions})
 
 
-def app_ids(manifest: Manifest) -> list[str]:
-    """부르는 **서비스 앱**들 (C11). 외부 앱은 주소가 정의에 있어 여기 없다."""
-    return sorted({need.app_id for need in manifest.requires.service_apps})
-
-
 @dataclass
 class DirectoryCache:
     """바깥 앱 명부 — 받아 두고, 그 Bot이 쓸 것을 만든다.
@@ -230,8 +172,6 @@ class DirectoryCache:
     """
 
     data_dir: Path
-    #: 서비스 앱 주소를 주는 쪽 — `() -> [ServiceAppResource]` (C7). 없으면 Center를 부르지 않는다.
-    fetch_apps: Any = None
     #: 외부 확장 하나를 주는 쪽 — `(id) -> ExtensionResource` (C7).
     fetch_extension: Any = None
     #: 마지막으로 받지 못한 사유 (화면·기록이 말할 거리).
@@ -239,59 +179,36 @@ class DirectoryCache:
 
     @classmethod
     def using(cls, data_dir: Path, client: Any = None) -> DirectoryCache:
-        """`service_apps()`·`extension(id)`를 가진 것(Center 클라이언트)을 꽂는다.
-
-        **없는 것은 꽂지 않는다** — 그러면 그쪽은 부르지 않고 들고 있던 것을 쓴다.
-        """
-        return cls(
-            data_dir=data_dir,
-            fetch_apps=getattr(client, "service_apps", None),
-            fetch_extension=getattr(client, "extension", None),
-        )
+        """`extension(id)`를 가진 것(Center 클라이언트)을 꽂는다. 없으면 들고 있던 것을 쓴다."""
+        return cls(data_dir=data_dir, fetch_extension=getattr(client, "extension", None))
 
     @property
     def cache_path(self) -> Path:
         return self.data_dir / CACHE_NAME
 
     def cached(self) -> dict[str, Any]:
-        """들고 있는 것 — `{apps: {app_id: {base_url, extension_id}}, extensions: [...]}`."""
+        """들고 있는 것 — `{extensions: [...]}`."""
         try:
             raw = json.loads(self.cache_path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            return {"apps": {}, "extensions": []}
-        return {"apps": dict(raw.get("apps") or {}), "extensions": list(raw.get("extensions") or [])}
+            return {"extensions": []}
+        return {"extensions": list(raw.get("extensions") or [])}
 
     def _save(self, held: dict[str, Any]) -> None:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         self.cache_path.write_text(json.dumps(held, ensure_ascii=False), encoding="utf-8")
 
-    def base_url_of(self, *, app_id: str | None = None, extension_id: str | None = None) -> str | None:
-        """들고 있는 주소 하나. **Center를 부르지 않는다** (화면을 그릴 때마다 묻지 않게)."""
-        apps = self.cached()["apps"]
-        if app_id and apps.get(app_id, {}).get("base_url"):
-            return str(apps[app_id]["base_url"])
-        if extension_id:
-            for one in apps.values():
-                if one.get("extension_id") == extension_id and one.get("base_url"):
-                    return str(one["base_url"])
-        return None
-
     def refresh(self, *, externals: Iterable[str] = ()) -> dict[str, Any]:
         """Center에서 받아 들고 있는 것을 고친다.
 
-        **한 가지를 받지 못해도 나머지는 받는다** — 주소를 못 읽었다고 정의까지 버리지 않는다.
+        **한 가지를 받지 못해도 나머지는 받는다.**
         """
         self.problems = []
         held = self.cached()
-        apps: dict[str, Any] = dict(held["apps"])
         extensions: dict[str, dict[str, Any]] = {
             str((one.get("definition") or {}).get("id") or ""): one for one in held["extensions"]
         }
 
-        got = self._service_apps()
-        if got is not None:
-            # 목록 전체를 받았다 — **해제된 앱은 사라져야 한다** (낡은 주소로 부르지 않게).
-            apps = got
         for extension_id in externals:
             found, drop = self._definition(extension_id)
             if found is not None:
@@ -300,24 +217,9 @@ class DirectoryCache:
                 # Center가 **모른다고 답했다** — 철회·삭제다. 들고 있던 것을 버린다.
                 extensions.pop(extension_id, None)
 
-        held = {"apps": apps, "extensions": [extensions[key] for key in sorted(extensions) if key]}
+        held = {"extensions": [extensions[key] for key in sorted(extensions) if key]}
         self._save(held)
         return held
-
-    def _service_apps(self) -> dict[str, Any] | None:
-        """C7 리소스 등록의 주소들. 받지 못하면 `None` (들고 있던 것을 그대로 둔다)."""
-        if self.fetch_apps is None:
-            return None
-        try:
-            found = self.fetch_apps()
-        except Exception as e:  # noqa: BLE001 — 닿지 못할 수 있다 (`core.deploy`와 같은 결)
-            self.problems.append(f"서비스 앱 주소를 받지 못했습니다 — {e}")
-            return None
-        return {
-            one.app_id: {"base_url": one.base_url, "extension_id": one.extension_id}
-            for one in found
-            if one.base_url
-        }
 
     def _definition(self, extension_id: str) -> tuple[dict[str, Any] | None, bool]:
         """외부 확장 하나 → `(정의와 봉투, 버려야 하나)`. 봉투 검증은 **읽는 쪽이** 한다."""
@@ -335,12 +237,7 @@ class DirectoryCache:
         if found.definition is None or found.envelope is None:
             # 내장·사내 확장이다 — 정의는 설치 파일에 있다 (C13). 받을 것이 없다.
             return None, False
-        entry: dict[str, Any] = {"definition": found.definition, "envelope": found.envelope}
-        if found.address is not None:
-            # Center가 덮어쓴 주소 (C7 §외부 확장 주소) — 명부의 주소로 간다. 어댑터가 부를 때
-            # 그 정의의 허용 호스트로 **다시 본다** (서명된 정의 밖으로는 나가지 않는다).
-            entry["base_url"] = found.address.base_url
-        return entry, False
+        return {"definition": found.definition, "envelope": found.envelope}, False
 
     # ── 그 Bot이 쓸 것만 ──
 
@@ -349,27 +246,16 @@ class DirectoryCache:
     ) -> dict[str, Any] | None:
         """그 Bot이 쓸 명부 하나. 쓸 것이 없으면 `None`.
 
-        **담는 것은 그 Bot이 쓰는 것뿐이다** — 다른 Bot이 부르는 앱의 주소·정의는 넣지 않는다.
+        **담는 것은 그 Bot이 쓰는 것뿐이다** — 다른 Bot이 쓰는 정의는 넣지 않는다.
         """
-        wanted, externals = set(app_ids(manifest)), set(extension_ids(manifest))
-        if not wanted and not externals:
+        externals = set(extension_ids(manifest))
+        if not externals:
             return None
         held = self.refresh(externals=sorted(externals)) if refresh else self.cached()
         chosen = [
             one for one in held["extensions"] if str((one.get("definition") or {}).get("id") or "") in externals
         ]
-        return to_json_dict(
-            addresses={
-                **{
-                    app_id: str(one["base_url"])
-                    for app_id, one in held["apps"].items()
-                    if app_id in wanted and one.get("base_url")
-                },
-                **external_addresses(chosen),
-            },
-            keys=list(keys),
-            extensions=chosen,
-        )
+        return to_json_dict(keys=list(keys), extensions=chosen)
 
     def write_for(
         self, manifest: Manifest, *, path: Path, keys: Sequence[AdminKey], refresh: bool = True
@@ -390,7 +276,6 @@ class DirectoryCache:
         manifest: Manifest,
         *,
         keys: Sequence[AdminKey],
-        secrets: Callable[[str], str | None] | None = None,
         refresh: bool = True,
     ) -> AppDirectory:
         """그 Bot이 쓸 명부를 **그 자리에서** 짓는다 (서버 실행기 — 파일을 거치지 않는다).
@@ -399,7 +284,7 @@ class DirectoryCache:
         길이 되면 안 된다 (C13 E6). 부르는 것이 없으면 **빈 명부**다.
         """
         body = self.body_for(manifest, keys=keys, refresh=refresh)
-        return build(body or {}, secrets=secrets)
+        return build(body or {})
 
 
 __all__ = [
@@ -409,10 +294,8 @@ __all__ = [
     "AppDirectory",
     "DirectoryCache",
     "External",
-    "app_ids",
     "build",
     "extension_ids",
-    "external_addresses",
     "external_ids",
     "read_directory",
     "to_json_dict",

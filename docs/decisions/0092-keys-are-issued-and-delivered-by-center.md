@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-25). **§2(Studio·Tool UI 계정 로그인)는 [ADR-0093](0093-studio-is-let-in-by-approval.md)이 대체** — Studio도 요청 코드를 관리자가 승인해 들인다 |
+| 상태 | 수락 (2026-10-25). **§2(Studio·Tool UI 계정 로그인)는 [ADR-0093](0093-studio-is-let-in-by-approval.md)이 대체** — Studio도 요청 코드를 관리자가 승인해 들인다. **§3·§4(서비스 앱 키·외부 앱 키)는 [ADR-0102](0102-calling-outside-is-pull.md)가 대체** — 코드는 C15 조각 2·3까지 이대로 돈다 |
 | 날짜 | 2026-10-25 |
 | 관련 | [ADR-0013](0013-api-keys.md)(이것이 대체한다), [ADR-0090](0090-center-admin-accounts.md)(계정·Center 서명 키), [ADR-0007](0007-client-initiated-communication.md), [ADR-0052](0052-service-app-key-notices.md), [ADR-0077](0077-tool-ui.md), [ADR-0091](0091-external-apps-without-auth-take-no-key.md), 계약 C1·C4·C5·C7·C11·C12·C13, 화면 아래 「바뀌는 것」 |
 

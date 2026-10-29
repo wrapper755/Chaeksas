@@ -89,8 +89,8 @@ class Caller(ContractModel):
 class SessionRequest(SchemaVersioned):
     """`POST /v1/sessions` — 세션 열기.
 
-    `service_key`는 **값**이다 (부르는 쪽이 키 참조를 풀어 넣는다, ADR-0013). Worker는 세션
-    동안 메모리에만 두고 디스크·로그에 남기지 않는다.
+    `call_token`은 **호출 토큰 값**이다 (C15 — Worker는 이것으로 계획·치유·보고를 Center에 올린다).
+    Worker는 세션 동안 메모리에만 두고 디스크·로그에 남기지 않는다.
     """
 
     SCHEMA: ClassVar[int] = 1
@@ -113,7 +113,7 @@ class SessionRequest(SchemaVersioned):
     heal: bool = True
     #: 닫을 때 보고할까 (C8). **셀렉터 시험(TOL-05)은 끈다** — 아예 보내지 않는다.
     report: bool = True
-    service_key: str | None = None
+    call_token: str | None = None
 
 
 class SessionInfo(ContractModel):

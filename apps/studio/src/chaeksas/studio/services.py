@@ -1,26 +1,17 @@
-"""Studio가 바깥 앱을 부르는 길 — Center 리소스 목록에서 주소를, 등록된 정의에서 외부 앱을.
+"""Studio가 Center를 **읽는** 길과, 시험 실행이 서비스 태스크를 올리는 길 (C7·C15).
 
-Bot UI 쪽과 **같은 것을 본다** (`core.app_directory`) — 주소는 C7 리소스 등록, 외부 확장은
-C13으로 등록된 정의와 봉투다. 그래서 Studio 시험 실행과 배포된 Bot이 같은 앱을 같은 규칙으로
-부르고, 봉투도 같은 `verify_external`로 검증된다. 다른 것은 셋뿐이다.
+- **서비스 태스크는 Center에 외부 작업으로 올린다** (`CenterServiceCaller`, ADR-0102) — Studio의
+  Center API 키로, `run_id`가 `test_…`이고 일감은 `origin: test`다. 바깥 앱의 주소도 키도 모른다
+  (시험용 키라는 것이 없다 — 시험 쪽으로 보낼지는 일꾼이 정한다).
+- 외부 확장은 **정의만** 받아 검증한다 (`core.app_directory` — Bot UI와 같은 코드). 들고 있지 않는다
+  — 닿지 못하면 **그 자리에서 말한다** (Studio는 현장이 아니라 개발 도구다).
 
-- **파일로 넘기지 않는다.** Bot UI는 실행기(자식 프로세스)에 파일로 주지만 (ADR-0031),
-  Studio는 엔진을 제 안에서 돌리므로 명부를 그대로 들고 쓴다.
-- **들고 있지 않는다.** Center에 닿지 못하면 **그 자리에서 말한다** — Studio는 현장이 아니라
-  개발 도구다. 낡은 주소로 조용히 부르는 것보다 「Center에 닿지 못했습니다」가 낫다
-  (ADR-0007의 「들고 있던 것을 쓴다」는 현장 쪽 규칙이다).
-- **키는 Studio의 비밀 저장소에서** 푼다 (`StudioCredentials.service_key`, STU-10 「서비스 앱 키」).
-
-이 모듈이 Center를 부르는 것은 **읽기만**이다 (명부는 세 번, STU-03 리소스 탐색기가 뿌리마다
-한 번 더). 외부 확장의 정의·봉투는 리소스 목록이 이미 싣고 오므로 확장마다 따로 묻지 않는다
-(C7 `ExtensionResource`). **쓰는 쪽은 `upload.py` 하나다** — 그래서 「Center로 올리기」를
-붙여도 이 길이 쓰는 길로 바뀌지 않는다.
+이 모듈이 Center를 부르는 것은 **읽기만**이다 (올리기는 C15 호출기, 패키지 올리기는 `upload.py`).
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
@@ -33,7 +24,8 @@ from chaeksas.contracts.resources import (
     ServiceAppResource,
 )
 from chaeksas.contracts.signing import AdminKey
-from chaeksas.core.app_directory import AppDirectory, build, external_addresses, to_json_dict
+from chaeksas.core.app_directory import AppDirectory, build, to_json_dict
+from chaeksas.core.services import CenterServiceCaller
 
 log = logging.getLogger(__name__)
 
@@ -137,31 +129,26 @@ class CenterReader:
 
 @dataclass
 class Services:
-    """시험 실행에 줄 바깥 앱 명부를 짓는다."""
+    """시험 실행에 줄 것 — 서비스 태스크를 올리는 호출기와 검증된 외부 확장 정의."""
 
     reader: CenterReader | None = None
-    #: `key_ref` → 키 값 (`StudioCredentials.service_key`). 없으면 키를 풀지 못한다.
-    secrets: Callable[[str], str | None] | None = None
     #: 마지막으로 못 받은 사유들 (STU-09 「로그」가 그대로 찍는다).
     problems: list[str] = field(default_factory=list)
 
-    def directory(self) -> AppDirectory:
-        """Center가 아는 바깥 앱 한 벌.
+    def caller(self) -> CenterServiceCaller | None:
+        """서비스 태스크가 부르는 자리 — Studio의 Center API 키로 Center에 올린다 (C15)."""
+        if self.reader is None:
+            return None
+        return CenterServiceCaller(
+            base_url=self.reader.base_url, token=self.reader.api_key, caller_type="studio", client=self.reader.client
+        )
 
-        **한 가지를 못 받아도 나머지는 담는다** — 외부 정의를 못 읽었다고 주소까지 버리지
-        않는다. 담지 못한 것은 `problems`에 남고, 그 앱을 부르는 순간 분명히 실패한다
-        (조용히 지나가지 않는다).
-        """
+    def directory(self) -> AppDirectory:
+        """검증된 외부 확장 정의 (고정한 해시와 대조할 때 쓴다). 못 받은 것은 `problems`에 남는다."""
         self.problems = []
         if self.reader is None:
             self.problems.append("Center 주소·Studio 키가 설정되지 않았습니다 (STU-10)")
-            return self._build({}, [], [])
-
-        addresses: dict[str, str] = {}
-        try:
-            addresses = {one.app_id: one.base_url for one in self.reader.service_apps() if one.base_url}
-        except CenterUnreachable as e:
-            self.problems.append(f"서비스 앱 주소를 받지 못했습니다 — {e}")
+            return AppDirectory()
 
         entries: list[dict[str, Any]] = []
         try:
@@ -171,10 +158,7 @@ class Services:
                 if one.definition is None or one.envelope is None:
                     self.problems.append(f"{one.id}: 정의·봉투가 함께 오지 않았습니다")
                     continue
-                entry: dict[str, Any] = {"definition": one.definition, "envelope": one.envelope}
-                if one.address is not None:
-                    entry["base_url"] = one.address.base_url  # Center가 덮어쓴 주소 (ADR-0097)
-                entries.append(entry)
+                entries.append({"definition": one.definition, "envelope": one.envelope})
         except CenterUnreachable as e:
             self.problems.append(f"외부 확장 정의를 받지 못했습니다 — {e}")
 
@@ -186,13 +170,7 @@ class Services:
                 # 공개키가 없으면 **어느 봉투도 검증되지 않는다** — 정의를 받아도 못 쓴다.
                 self.problems.append(f"Admin 공개키를 받지 못했습니다 — {e}")
 
-        # Center가 덮어쓴 외부 확장 주소도 **같은 명부**로 간다 — 현장과 같은 코드다 (ADR-0097).
-        return self._build({**addresses, **external_addresses(entries)}, keys, entries)
-
-    def _build(
-        self, addresses: dict[str, str], keys: list[AdminKey], entries: list[dict[str, Any]]
-    ) -> AppDirectory:
-        made = build(to_json_dict(addresses=addresses, keys=keys, extensions=entries), secrets=self.secrets)
+        made = build(to_json_dict(keys=keys, extensions=entries))
         # 봉투 검증에서 떨어진 것도 사람이 봐야 한다 (`AppDirectory.problems`).
         self.problems += [f"{app_id}: {why}" for app_id, why in sorted(made.problems.items())]
         return made
@@ -206,17 +184,14 @@ def reader_for(settings: Any, api_key: str | None) -> CenterReader | None:
     return CenterReader(base_url=base, api_key=api_key)
 
 
-def from_settings(settings: Any, *, secrets: Callable[[str], str | None] | None = None) -> Services:
+def from_settings(settings: Any) -> Services:
     """STU-10 설정과 비밀 저장소에서 한 벌 (`main_window`가 실행마다 한 번 짓는다).
 
-    키는 **환경변수가 먼저**다 (`CHK_STUDIO__CENTER_API_KEY`·`CHK_STUDIO__SVC__<참조>`) —
-    개발·CI에서 덮어쓰기 쉬우라고 (`credentials.py`와 같은 규칙).
+    키는 **환경변수가 먼저**다 (`CHK_STUDIO__CENTER_API_KEY`) — `credentials.py`와 같은 규칙.
     """
     from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 — 순환 피함
 
-    store = StudioCredentials()
-    # 시험 실행은 참조를 **그 앱의 개발 키로** 푼다 (`dev_keys`, ADR-0094 §5) — 주지 않으면 옛 자리만.
-    return Services(reader=reader_for(settings, store.center_api_key()), secrets=secrets or store.service_key)
+    return Services(reader=reader_for(settings, StudioCredentials().center_api_key()))
 
 
 __all__ = [

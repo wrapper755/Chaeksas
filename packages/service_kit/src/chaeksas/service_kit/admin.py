@@ -3,8 +3,7 @@
 **업무 호출과 권한이 다르다.** 서비스 앱 API 키로는 부를 수 없고, 앱 설정의 **관리자 토큰**으로만
 부른다. 관리자 토큰이 없으면 관리 API 전체가 503이다 — 빈 토큰으로 열리지 않는다.
 
-키 발급·폐기가 여기 있다 (ADR-0013: **키는 그 앱의 관리 콘솔에서 발급한다**. Center는 서비스 앱
-키를 모른다).
+앱 안의 키는 없다 (ADR-0102) — 업무 호출은 C15로 오고 「불러도 되나」는 Center가 가린다.
 """
 
 from __future__ import annotations
@@ -16,24 +15,16 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
 
 from chaeksas.contracts.service_app import (
-    AdminKeyCreated,
-    AdminKeyCreateRequest,
-    AdminKeyInfo,
     AdminStatus,
     CenterRegistration,
     Dependency,
     OperationStatus,
-    ServiceAppKey,
     ServiceAppManifest,
     UsagePage,
-    admin_key_info,
 )
-from chaeksas.contracts.service_keys import CENTER_KEY_PREFIX
-from chaeksas.service_kit import keys as key_tools
-from chaeksas.service_kit.stores import KeyStore, UsageLog
+from chaeksas.service_kit.stores import UsageLog
 
 #: 통계를 세는 창 (SVC-01 「최근 24시간 호출 수·오류율」).
 STATS_WINDOW_H = 24
@@ -117,11 +108,10 @@ def operation_stats(manifest: ServiceAppManifest, log: UsageLog, *, now: str) ->
 def create_router(
     manifest: ServiceAppManifest,
     *,
-    keys: KeyStore,
     usage_log: UsageLog,
     started_at: str,
     dependencies: DependencyProbe | None = None,
-    center: CenterRegistration | None = None,
+    center: Callable[[], CenterRegistration] | None = None,
     now: Callable[[], str] = _now,
 ) -> APIRouter:
     """관리 API 경로 묶음. `create_app()`이 붙인다."""
@@ -146,64 +136,8 @@ def create_router(
             uptime_s=max(uptime, 0),
             operations=operation_stats(manifest, usage_log, now=at),
             dependencies=list(dependencies()) if dependencies else [],
-            center=center or CenterRegistration(),
+            center=center() if center else CenterRegistration(),
         )
-
-    @router.get("/keys")
-    def list_keys(request: Request) -> Any:
-        """**원문·해시는 돌려주지 않는다** (C11)."""
-        refused = admin_guard(request)
-        if refused is not None:
-            return refused
-        at = now()
-        return [admin_key_info(key, now=at) for key in keys.all_keys()]
-
-    @router.post("/keys", status_code=201)
-    async def create_key(request: Request) -> Any:
-        refused = admin_guard(request)
-        if refused is not None:
-            return refused
-        try:
-            body = await request.json()
-        except ValueError:
-            return _error(422, "input_invalid", "본문이 JSON이 아니다")
-        try:
-            wanted = AdminKeyCreateRequest.model_validate(body)
-        except ValidationError as e:
-            return _error(422, "input_invalid", "요청이 계약과 맞지 않는다", {"errors": e.error_count()})
-
-        # 이름은 앱 안에서 유일하다 — 키 참조 이름과 맞추기를 권하므로 겹치면 어느 키인지 모른다.
-        # `svk_`는 Center가 지은 키의 이름이다 (ADR-0094) — 사람이 같은 이름을 쓰면 어느 키인지 모른다.
-        if wanted.name.startswith(CENTER_KEY_PREFIX):
-            return _error(409, "name_reserved", f"「{CENTER_KEY_PREFIX}」로 시작하는 이름은 Center가 쓴다")
-        if any(key.name == wanted.name for key in keys.all_keys()):
-            return _error(409, "name_conflict", f"키 이름 「{wanted.name}」이 이미 있다")
-
-        raw, record = key_tools.issue(
-            wanted.name,
-            allowed_operations=wanted.allowed_operations,
-            allowed_modes=wanted.allowed_modes,
-            extra_scopes=wanted.extra_scopes,
-            created_at=now(),
-            expires_at=wanted.expires_at,
-        )
-        keys.add(record)
-        # **원문은 이 응답에만** 실린다 (SVC-02 — 다시 볼 수 없다).
-        return AdminKeyCreated(**admin_key_info(record, now=now()).model_dump(), key=raw)
-
-    @router.delete("/keys/{name}")
-    def revoke_key(request: Request, name: str) -> Any:
-        """폐기. **지우지 않는다** — 사용 기록이 가리키는 이름을 남겨 둔다."""
-        refused = admin_guard(request)
-        if refused is not None:
-            return refused
-        found: ServiceAppKey | None = next((k for k in keys.all_keys() if k.name == name), None)
-        if found is None:
-            return _error(404, "not_found", f"키 「{name}」이 없다")
-        if found.revoked_at is None:
-            keys.revoke(found, at=now())
-        after = next((k for k in keys.all_keys() if k.name == name), found)
-        return admin_key_info(after, now=now())
 
     @router.get("/usage")
     def usage(request: Request, limit: int = USAGE_DEFAULT_LIMIT) -> Any:
@@ -218,4 +152,4 @@ def create_router(
     return router
 
 
-__all__ = ["AdminKeyInfo", "DependencyProbe", "create_router", "operation_stats"]
+__all__ = ["DependencyProbe", "create_router", "operation_stats"]

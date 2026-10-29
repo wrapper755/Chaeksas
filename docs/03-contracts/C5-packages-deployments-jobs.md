@@ -64,15 +64,17 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `POST/DELETE /deployments` (Center가 서명) | — | ✓ | — | — | — |
 | `GET /deployments`, `GET /admin-keys` | ✓ | ✓ | — | — | — |
 | `GET /resources…` (C7·C13, 확장 정의 포함) | ✓ | ✓ | ✓ | ✓ | — |
-| `POST/PUT/DELETE /resources/service-apps…`, `POST /resources/refresh` | — | ✓ | — | — | — |
 | `POST/DELETE /resources/extensions` (Center가 C2 `extension` 봉투에 서명) | — | ✓ | — | — | — |
 | `GET /server-runners` | ✓ | ✓ | — | — | — |
 | `POST /server-runners/{id}/pause·resume·mark-lost` (C12) | — | ✓ | — | — | — |
 | `GET /bot-uis…` (CON-03), `POST /bot-uis/{id}/disable·enable` | GET만 ✓ | ✓ | — | — | — |
-| `PUT /bot-uis/{id}/utility` (「셀렉터 등록」, ADR-0094 §6) | — | ✓ | — | — | — |
-| `POST /studio/service-keys` (개발 키, ADR-0094 §5) | — | — | ✓ | — | — |
+| `PUT /bot-uis/{id}/utility` (「셀렉터 등록」, ADR-0102 §5) | — | ✓ | — | — | — |
+| `POST /call-tokens` (C15 호출 토큰) | — | — | ✓ | Bot UI 키만 | — |
+| `POST /external-tasks`, `GET·POST /external-tasks/{id}…` (C15 — 부르는 쪽) | — | — | 호출 토큰·Studio 키 | 서버 실행기 키·호출 토큰 | — |
+| `/consumers/fetch·tasks…·self…` (C15 — 일꾼) | 일꾼 토큰만 | | | | |
+| `POST /consumers/enroll`, `GET /consumers/enroll/{id}` (C15) | 인증 없음 | | | | |
+| `GET /consumers`, `GET /external-topics` (CON-07) | ✓ | ✓ | — | — | — |
 | `GET /signing-keys` (C7) | 인증 없음 | | | | |
-| `PUT/DELETE /resources/extensions/{id}/app-key`, `…/app-key/test` (C7 §외부 앱 키) | — | ✓ | — | — | — |
 | `POST /bot-ui/enroll`, `POST /server-runner/enroll`, `GET …/enroll/{id}` (C4·C12) | 인증 없음 | | | | |
 | `GET /enrollments` (§등록 승인) | ✓ | ✓ | — | — | — |
 | `POST /enrollments/{id}/approve·reject` | — | ✓ | — | — | — |
@@ -208,7 +210,7 @@ DeploymentInfo 필드: `deployment_id`, `target{type,id}`, `bpm_process_id`, `ve
 - `signed_by`·`signed_at`·`not_before`·`expires_at`·`max_concurrency`는 **봉투에서 읽는다** (Center가 따로 짓지 않는다). `signed_by`는 서명한 키의 `key_id`다 (지금은 늘 Center 키라 사람을 말하지 않는다 — 사람은 `deployed_by`다).
 - `revoked_at`은 철회 봉투의 `revoked_at`이다. 행은 지우지 않으므로 철회된 배포도 목록에 남는다 (`active=true`로 거른다).
 
-- **배포·철회가 서비스 앱 키를 데리고 다닌다** ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §3). 배포하면 Center가 그 대상에 (Bot × 대상 × 앱) 키를 지어 앱에 해시를 맡기고(C11 §Center가 발급하는 키) 하트비트로 봉해 내려 준다(C4 §서비스 앱 키 전달). 철회해 그 대상의 그 Bot 배포가 하나도 남지 않으면 키를 폐기한다. 판을 올린 새 배포는 같은 키를 이어 쓴다. **키를 짓지 못해도 배포는 막지 않는다**(앱이 잠시 답하지 않는 것으로 배포를 막지 않는 것과 같은 결 — C7 `blocking_at_deploy`) — 그 대상의 준비가 「키를 받지 못함」으로 말하고 다음 맞추기에서 다시 짓는다. PC를 비활성화·묶음 풀기·유실 처리해도 그 대상의 키를 모두 폐기한다.
+- 배포·철회는 **키를 데리고 다니지 않는다** — 바깥 기능은 Center의 외부 작업으로 부르고(C15) 불러도 되는가는 Center가 배포를 보고 판단한다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)).
 
 - **M6까지:** `target.type=server_runner` 배포는 422 `server_runner_not_available` (서버 실행은 M7부터, ADR-0016). 작업 지시도 같은 코드로 막고 **스위치는 한 자리다** (`SERVER_RUNNER_AVAILABLE` — 한쪽만 켜면 「작업은 만들어지는데 배포가 없다」가 된다).
 
@@ -291,7 +293,7 @@ PC(Bot UI)·서버 실행기·**Studio**가 보낸 **등록 요청**(C4·C12 §�
 | 메서드·경로 | 뜻 |
 | --- | --- |
 | `GET /enrollments?type=bot_ui\|server_runner\|studio&state=pending` | 요청 목록 (`state`는 쉼표로 여럿, 기본 `pending`) |
-| `POST /enrollments/{enrollment_id}/approve` `{name?}` | 승인. `name`을 비우면 요청의 `name`을 쓴다 |
+| `POST /enrollments/{enrollment_id}/approve` `{name?, topics?}` | 승인. `name`을 비우면 요청의 `name`을 쓴다. `topics`는 **일꾼(`type: consumer`, C15)만** — 비우면 요청한 토픽 그대로, 적으면 요청한 것 안에서만 줄인다(밖이면 422 `topic_not_requested`, 남는 것이 없으면 422 `topics_empty`). 일꾼은 `register`가 없어 **승인이 `consumers` 행을 만들고**, 같은 기계를 다시 승인하면 옛 키를 폐기하고 같은 `consumer_id`를 잇는다 |
 | `POST /enrollments/{enrollment_id}/reject` `{reason?}` | 거절. 사유는 요청한 쪽에 그대로 보인다 (200자까지) |
 
 EnrollmentInfo 필드:
@@ -330,19 +332,6 @@ Studio도 Bot UI와 **같은 길**로 들어온다 (C4 §등록 요청과 승인
 - 봉함을 받았다는 표시는 **그 키로 처음 부른 것**이다 (Bot UI의 `register` 자리) — 그때 Center가 봉해 둔 것을 지운다. 24시간 안에 부르지 않으면 키를 폐기한다 (C4와 같다).
 - 자동화·CI가 쓰는 Studio용 키는 관리자 토큰으로 발급한다(C7 `POST /center-keys`) — 화면에는 없다.
 
-#### Studio 개발 키
-
-> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §5). Center `service_keys.studio_key`, Studio `studio/dev_keys.py`(시험 실행·사전 점검·편집기 시험·STU-10 「서비스 앱」이 같은 한 벌을 쓴다). 시험: `tests/test_service_keys.py`·`tests/test_studio_settings_dialog.py`.
-
-| 메서드·경로 | 인증 | 뜻 |
-| --- | --- | --- |
-| `POST /studio/service-keys` `{app_id, public_key}` | Studio 키 | 그 앱의 개발 키 하나. 응답 `{app_id, service_key_id, sealed_key, expires_at}` — `sealed_key`는 C4 §봉함(HKDF `salt`는 `service_key_id`), `public_key`는 Studio가 **그때 만든** X25519 공개키다 |
-
-- 개발 키: 허용 작업 `*`, 허용 모드 자율·결정, 만료 7일, C11 `issued_for.kind: studio`. 같은 (Studio 키 × 앱)에 새로 청하면 Center가 옛 것을 앱에서 폐기한다. Studio 키를 폐기하면 그 개발 키도 모두 폐기한다.
-- **외부 앱이면 관리자가 넣은 「시험용 키」를** 봉해 준다(C7 §외부 앱 키 — `service_key_id`는 `xak_…`, `expires_at`은 지금 + 7일로 Studio가 다시 청할 때를 정한다). 시험용 키가 없으면 404 `no_test_key`. 운영 키는 주지 않는다.
-- C11 앱은 앱이 Center를 믿지 않으면 409 `app_not_trusting_center`(C7 `trust`), 앱에 닿지 못하면 503 `app_unreachable` — Studio는 그 까닭을 그대로 말한다.
-- 원문은 응답에만 봉해 실리고 Center에는 남지 않는다 (Studio에는 하트비트가 없어 ack를 기다리지 않는다).
-
 ## Bot UI 현황 (CON-03)
 
 콘솔이 PC마다 하나인 Bot UI의 상태를 본다. 값은 **Bot UI가 하트비트로 보고한 그대로**이고 (C4),
@@ -354,7 +343,7 @@ Center는 온라인 판정과 키 정보만 더한다. 보기 전용이다 — �
 | `GET /bot-uis` | 읽기·관리자 토큰 | 목록 (BotUiInfo[]) |
 | `POST /bot-uis/{bot_ui_id}/disable` | 관리자 토큰 | 새 작업·배포를 보내지 않는다. **하트비트는 계속 받는다** (C4 `disabled`) |
 | `POST /bot-uis/{bot_ui_id}/enable` | 관리자 토큰 | 되돌리기 |
-| `PUT /bot-uis/{bot_ui_id}/utility` `{selector_registration: bool}` | 관리자 | ([ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md) §6). 켜면 Center가 그 PC가 보고한 확장 중 `requires_keys`에 `utility`가 있는 앱마다 (PC × 앱) 키를 지어 내려 주고, 끄면 폐기하고 `drop_service_keys`로 보낸다. `BotUiInfo.utility`에 `{selector_registration, keys: [{app_id, state}]}`로 보인다 |
+| `PUT /bot-uis/{bot_ui_id}/utility` `{selector_registration: bool}` | 관리자 토큰 | 「셀렉터 등록」 스위치 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md) §5). 켠 PC의 Bot UI 쪽만 등록 세션(`run_id`가 `reg_…`)의 외부 작업을 올릴 수 있고 `registry_write`를 받는다(C15 「불러도 되나」·C9). 키를 짓지 않는다. 응답 `{bot_ui_id, selector_registration}`, `BotUiInfo.selector_registration`에 보인다. 없는 PC면 404 |
 
 BotUiInfo 필드:
 
@@ -369,6 +358,7 @@ BotUiInfo 필드:
 | `status`, `current_run`, `queue`, `worker`, `readiness`, `extensions` | 마지막 하트비트의 내용 (C4). 아직 하트비트가 없으면 비어 있다 |
 | `deployment_results` | 그 Bot UI가 보고한 **최근 배치 결정** (C4 `DeploymentResult`, 최신순 최대 20건). CON-03 「최근 배치 결정」. 마지막 하트비트만이 아니라 **Center가 쌓아 둔 것**이다 — 한 주기 뒤면 사라지는 값을 운영자가 보지 못하면 「왜 설치가 안 됐나」를 영영 알 수 없다 |
 | `key` | 그 Bot UI가 쓰는 Center API 키 `{prefix, expires_at, state}` — **원문·해시는 주지 않는다** (C7) |
+| `selector_registration` | CON-03 「셀렉터 등록」이 켜졌나 (위 `PUT …/utility`) |
 
 ## 가상 직원 (CON-13)
 
@@ -466,6 +456,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | **바깥 호출이 C15로** — §Studio 개발 키(`POST /studio/service-keys`)·외부 앱 키(`…/app-key`)·서비스 앱 등록(`POST/PUT/DELETE /resources/service-apps`·`/resources/refresh`)을 걷었다. 권한표에 호출 토큰·외부 작업·일꾼 줄. 배포는 키를 짓지 않는다. 승인 본문에 `topics?`(일꾼) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | **연동용 키가 가상 직원을 읽는다**(전부 — 실행·작업 목록·결재 검토 자료는 넓히지 않는다, ADR-0098 §4). `JobCreateRequest.virtual_worker?`·`JobInfo.virtual_worker?`, 오류 `input_not_from_caller`·`virtual_worker_mismatch`, 접수 Bot 하나를 여러 가상 직원이 쓴다, §가상 직원 「신원」 | [0098](../decisions/0098-virtual-worker-identity.md)·[0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | 배포·철회가 서비스 앱 키를 데리고 다닌다, §Studio 개발 키(`POST /studio/service-keys`), `PUT /bot-uis/{id}/utility`(「셀렉터 등록」), 권한표 줄 넷 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | **Studio 등록 요청과 승인** — `POST/GET /studio/enroll`, `GET /enrollments?type=studio`. 계정 권한·Studio 로그인(바로 아래 줄)을 걷어 낸다 | [0093](../decisions/0093-studio-is-let-in-by-approval.md) |

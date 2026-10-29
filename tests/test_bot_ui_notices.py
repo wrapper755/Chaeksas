@@ -18,10 +18,7 @@
 
 from __future__ import annotations
 
-import json
 import os
-from collections.abc import Sequence
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -29,17 +26,15 @@ from typing import Any
 import pytest
 from conftest import FakeCredentials
 
-from chaeksas.bot_ui import agent as module_agent
 from chaeksas.bot_ui import notices as module
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.center_client import KeyRejected, Unreachable
 from chaeksas.bot_ui.notices import Notice, Notices
 from chaeksas.bot_ui.runner import Request, Running
-from chaeksas.bot_ui.settings import ServiceKeyRef, Settings, data_dir
+from chaeksas.bot_ui.settings import Settings, data_dir
 from chaeksas.bot_ui.store import Store
 from chaeksas.contracts.bot_ui import DeploymentResult, HeartbeatResponse, JobDispatch, QueueItem, RegisterResponse
-from chaeksas.contracts.manifest import Manifest, ServiceAppNeed
-from chaeksas.core.key_check import KeyFacts
+from chaeksas.contracts.manifest import Manifest
 from chaeksas.core.packages import InstalledBot
 from chaeksas.core.processes import ChildProcess
 
@@ -187,7 +182,7 @@ def test_a_deployment_does_not_ask_for_keys() -> None:
     found.deployed(bot="청구서 처리", version="1.2.0")
     assert found.take()[0].text == "청구서 처리 1.2.0을 설치했습니다"
 
-    found.deployed(bot="청구서 처리", version="1.2.0", missing_keys=["fin-erp", "fin-crm"])
+    found.deployed(bot="청구서 처리", version="1.2.0")
     told = found.take()
     assert [one.text for one in told] == ["청구서 처리 1.2.0을 설치했습니다"]
 
@@ -537,29 +532,23 @@ def test_without_a_tray_the_status_bar_is_the_notice_place(qt_app: Any, tmp_path
 
 
 def test_clicking_a_notice_opens_what_it_points_at(qt_app: Any, tmp_path: Path, monkeypatch: Any) -> None:
-    """누르면 **그 알림이 가리키는 자리**가 열린다 (BUI-05 — 결재는 CMN-01, 키는 BUI-04 「Bot」 탭)."""
+    """누르면 **그 알림이 가리키는 자리**가 열린다 (BUI-05 — 결재는 CMN-01)."""
     from chaeksas.bot_ui.app import BotUiApp
     from chaeksas.bot_ui.main_window import MainWindow
 
     agent = agent_with(tmp_path)
     made = BotUiApp(qt_app, agent)
     opened: list[str] = []
-    monkeypatch.setattr(MainWindow, "show_bots", lambda _self: opened.append("keys"))
     monkeypatch.setattr(MainWindow, "open_approval", lambda _self: opened.append("approval"))
     try:
-        agent.notices.service_keys_refused([a_refusal()], bot="청구서 처리", run_id="run_1")
-        made.show_notices()
-        made.on_notice_clicked()
-        assert opened == ["keys"]
-
         agent.notices.requests([Request(request_id="r1", node_id="A")], bot="청구서 처리")
         made.show_notices()
         made.on_notice_clicked()
-        assert opened == ["keys", "approval"]
+        assert opened == ["approval"]
 
         # 누를 거리가 없는 알림 뒤에는 **아무 일도 일어나지 않는다**.
         made.on_notice_clicked()
-        assert opened == ["keys", "approval"]
+        assert opened == ["approval"]
     finally:
         made.window.close()
 
@@ -578,285 +567,3 @@ def test_the_heartbeat_problem_signal_does_not_make_its_own_notice(qt_app: Any, 
         assert not agent.notices.pending
     finally:
         made.window.close()
-
-
-# ─────────────────────── 서비스 앱 키 (BUI-05, ADR-0052) ───────────────────────
-#
-# 반쪽이 둘이고 **묻는 때가 다르다**: 거부는 실행 기록에서 읽고(실행이 이미 물었다), 만료 임박만
-# 주기가 하루 한 번 묻는다.
-
-APP_ID = "tax-invoice"
-KEY_REF = "finance-invoice"
-SOON = "2026-10-15T09:00:00+09:00"  # NOW에서 닷새 뒤 — 서비스 앱 키는 7일 전부터 알린다 (ADR-0094)
-
-
-def a_refusal(*, status: int = 403, app_id: str = APP_ID, ref: str = KEY_REF) -> Any:
-    from chaeksas.bot_ui.runner import KeyRefusal
-
-    return KeyRefusal(app_id=app_id, key_ref=ref, status=status)
-
-
-def test_a_refused_service_app_key_is_told_with_what_to_do() -> None:
-    """BUI-05 — 「<앱>이 키 <참조>를 거부했습니다」. **까닭은 넣지 않는다**(할 일이 같다)."""
-    found = Notices()
-    found.service_keys_refused([a_refusal()], bot="청구서 처리", run_id="run_1")
-    [one] = found.take()
-    assert one.kind == module.SERVICE_KEY_REFUSED
-    assert one.text == "tax-invoice이 키 finance-invoice를 거부했습니다 — 관리자에게 알리세요"
-    assert (one.action, one.sticky, one.level) == (module.ACTION_KEYS, True, "error")
-
-
-def test_the_same_refusal_is_told_once_per_run_and_again_in_the_next_run() -> None:
-    """재시도가 `service_call` 줄을 여럿 남긴다 — 한 실행에서는 한 번이다.
-
-    **새 실행이 또 거부당하면 다시 알린다**: 지난 알림이 아니라 방금 실패한 업무다.
-    """
-    found = Notices()
-    found.service_keys_refused([a_refusal(), a_refusal(status=401)], bot="청구서 처리", run_id="run_1")
-    assert len(found.take()) == 1, "앱·참조가 같으면 한 줄"
-    found.service_keys_refused([a_refusal()], bot="청구서 처리", run_id="run_1")
-    assert not found.take(), "같은 실행에서는 다시 알리지 않는다"
-
-    found.service_keys_refused([a_refusal()], bot="청구서 처리", run_id="run_2")
-    assert [one.kind for one in found.take()] == [module.SERVICE_KEY_REFUSED]
-
-
-def test_an_expiring_service_app_key_is_told_once_a_day_per_ref() -> None:
-    """하루 한 번, 참조마다 — Center가 14일 전부터 새 키를 주므로 **7일 전까지 오지 않았을 때만** (ADR-0094)."""
-    found = Notices()
-    found.service_key_expiring(ref=KEY_REF, expires_at=SOON, now=NOW)
-    [one] = found.take()
-    assert one.kind == module.SERVICE_KEY_EXPIRING
-    assert one.text == (
-        "서비스 앱 키 finance-invoice가 2026-10-15에 만료되는데 Center가 아직 새 키를 주지 않았습니다"
-        " — Center 연결을 확인하세요"
-    )
-    assert (one.action, one.level, one.seconds) == (module.ACTION_KEYS, "warning", module.LONG_S)
-
-    found.service_key_expiring(ref=KEY_REF, expires_at=SOON, now="2026-10-10T09:00:30+09:00")
-    assert not found.take(), "같은 날에는 다시 알리지 않는다"
-    found.service_key_expiring(ref="ops-scan", expires_at=SOON, now=NOW)
-    assert [one.kind for one in found.take()] == [module.SERVICE_KEY_EXPIRING], "다른 참조는 따로 센다"
-    found.service_key_expiring(ref=KEY_REF, expires_at=SOON, now="2026-10-11T09:00:00+09:00")
-    assert found.take(), "날이 바뀌면 다시"
-
-
-def test_a_service_app_key_that_is_not_near_its_end_is_not_told() -> None:
-    """**없으면 「만료 없음」**이고, 이미 만료된 것은 「거부」가 말한다 (목소리를 둘 두지 않는다)."""
-    found = Notices()
-    found.service_key_expiring(ref=KEY_REF, expires_at=None, now=NOW)
-    found.service_key_expiring(ref=KEY_REF, expires_at="2027-10-10T09:00:00+09:00", now=NOW)
-    found.service_key_expiring(ref=KEY_REF, expires_at="2026-10-01T09:00:00+09:00", now=NOW)
-    assert not found.take()
-
-
-# ── 거부를 읽는 자리 (C3 `service_call`) ──
-
-
-def a_running(tmp_path: Path, *, run_id: str = "run_1") -> Running:
-    return Running(
-        bot=install_bot(),
-        run_id=run_id,
-        source="manual",
-        started_at=NOW,
-        child=ChildProcess(args=["true"], log_path=tmp_path / "runner.log"),
-        data_dir=data_dir(),
-    )
-
-
-def call_data(**more: Any) -> dict[str, Any]:
-    """C3 `service_call`의 `data` (필수 키는 계약 표 그대로)."""
-    return {
-        "app_id": APP_ID,
-        "operation": "issue",
-        "mode": "deterministic",
-        "mode_used": "deterministic",
-        "status": 403,
-        "duration_ms": 12,
-        "key_ref": KEY_REF,
-        "node_instance": 1,
-        "attempt": 1,
-        "call_seq": 1,
-        **more,
-    }
-
-
-@pytest.mark.parametrize("status", [401, 403])
-def test_the_run_log_says_the_app_refused_the_key(tmp_path: Path, status: int) -> None:
-    """**묻지 않고 안다** — 401·403은 앱이 분명히 거부한 것이다 (C11 오류표)."""
-    running = a_running(tmp_path)
-    running._apply("service_call", "task_1", call_data(status=status), NOW)  # noqa: SLF001
-    assert running.key_refusals == [a_refusal(status=status)]
-
-
-def test_a_key_missing_on_this_pc_is_not_a_refusal(tmp_path: Path) -> None:
-    """값이 이 PC에 없는 것은 **사전 점검이 할 말**이다 (「서비스 앱 키 없음: <참조>」).
-
-    뭉치면 키를 넣으면 될 일에 「앱이 거부했다」고 한다 — 앱은 불린 적도 없다.
-    """
-    running = a_running(tmp_path)
-    running._apply(  # noqa: SLF001 - 닿지 못한 호출은 `status`가 0으로 남는다
-        "service_call", "task_1", call_data(status=0, error_code="key_missing"), NOW
-    )
-    running._apply("service_call", "task_1", call_data(status=503, error_code="dependency_down"), NOW)  # noqa: SLF001
-    assert running.key_refusals == [], "앱이 거부한 것만 본다"
-
-
-def test_retries_of_the_same_call_make_one_refusal(tmp_path: Path) -> None:
-    running = a_running(tmp_path)
-    for attempt in (1, 2, 3):
-        running._apply("service_call", "task_1", call_data(attempt=attempt), NOW)  # noqa: SLF001
-    assert len(running.key_refusals) == 1
-
-
-def test_the_agent_tells_a_refusal_even_when_the_run_is_already_over(tmp_path: Path) -> None:
-    """한 틱 안에 거부당하고 끝난 실행은 `pump()`이 못 본다 — 거둘 때도 본다."""
-    agent = agent_with(tmp_path)
-    running = a_running(tmp_path)
-    running._apply("service_call", "task_1", call_data(), NOW)  # noqa: SLF001
-    running._apply("run_finished", None, {"status": "failed", "message": "키가 거부되었습니다"}, NOW)  # noqa: SLF001
-
-    agent._finished(running)  # noqa: SLF001
-    assert [one.kind for one in agent.notices.take()] == [module.SERVICE_KEY_REFUSED, module.RUN_FAILED]
-
-
-# ── 만료 임박을 묻는 자리 (C11 `GET /v1/keys/self`) ──
-
-
-def install_bot_calling_an_app(*, bot_id: str = "fin.invoice", ref: str = KEY_REF) -> InstalledBot:
-    """그 Bot이 **실제로 쓰는** 키 참조 하나 (C1 `requires.service_apps`)."""
-    bot = install_bot(bot_id=bot_id)
-    needs = [ServiceAppNeed(app_id=APP_ID, operations=["issue"], key_ref=ref)]
-    manifest = bot.manifest.model_copy(
-        update={"requires": bot.manifest.requires.model_copy(update={"service_apps": needs})}
-    )
-    (bot.folder / "manifest.json").write_text(manifest.model_dump_json(), encoding="utf-8")
-    return InstalledBot(manifest=manifest, folder=bot.folder)
-
-
-def hold_address(*, app_id: str = APP_ID, base_url: str = "http://app.test") -> None:
-    """Center에서 받아 **들고 있는** 주소 (C7 — 묻기 위해 Center를 두드리지 않는다)."""
-    from chaeksas.core.app_directory import CACHE_NAME
-
-    path = data_dir() / CACHE_NAME
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps({"apps": {app_id: {"base_url": base_url}}, "extensions": []}, ensure_ascii=False),
-        encoding="utf-8",
-    )
-
-
-def agent_asking(tmp_path: Path, monkeypatch: Any, facts: Any, *, refs: Sequence[str] = (KEY_REF,)) -> Any:
-    """키를 가진 Agent + 묻는 길을 바꿔 끼운 것. 물어본 주소·키 참조를 적어 둔다."""
-    agent = agent_with(tmp_path)
-    for ref in refs:
-        agent.credentials.set_service_app_key(ref, "chk_svc_" + "a" * 40)
-    asked: list[tuple[str | None, str | None]] = []
-
-    def fake(base_url: str | None, key: str | None, **_more: Any) -> Any:
-        asked.append((base_url, key))
-        if isinstance(facts, Exception):
-            raise facts
-        return facts
-
-    monkeypatch.setattr(module_agent, "key_facts", fake)
-    return agent, asked
-
-
-def test_an_expiring_service_app_key_is_asked_for_and_told(tmp_path: Path, monkeypatch: Any) -> None:
-    """만료일은 **그 앱만 안다** (C11) — 묻지 않으면 미리 알릴 수 없다."""
-    install_bot_calling_an_app()
-    hold_address()
-    agent, asked = agent_asking(tmp_path, monkeypatch, KeyFacts(line="정상", answered=True, expires_at=SOON_FROM_TODAY))
-
-    assert agent.ask_service_key() == KEY_REF
-    assert asked == [("http://app.test", "chk_svc_" + "a" * 40)], "들고 있는 주소로 묻는다"
-    [one] = agent.notices.take()
-    assert one.kind == module.SERVICE_KEY_EXPIRING
-
-
-def test_only_one_key_is_asked_per_round_and_once_a_day(tmp_path: Path, monkeypatch: Any) -> None:
-    """하트비트는 **화면과 같은 자리**에서 돈다 — 한 주기에 여럿을 물으면 그만큼 멈춘다."""
-    install_bot_calling_an_app(bot_id="fin.invoice", ref=KEY_REF)
-    install_bot_calling_an_app(bot_id="ops.scan", ref="ops-key")
-    hold_address()
-    agent, asked = agent_asking(
-        tmp_path, monkeypatch, KeyFacts(line="정상", answered=True), refs=(KEY_REF, "ops-key")
-    )
-
-    first, second, third = agent.ask_service_key(), agent.ask_service_key(), agent.ask_service_key()
-    assert {first, second} == {KEY_REF, "ops-key"}, "주기마다 하나씩"
-    assert third is None and len(asked) == 2, "같은 날에는 다시 묻지 않는다"
-
-
-def test_a_key_without_a_held_address_is_not_asked(tmp_path: Path, monkeypatch: Any) -> None:
-    """**닿을 데를 모르면 묻지 않는다** — 이것 때문에 Center를 두드리지 않는다 (ADR-0052)."""
-    install_bot_calling_an_app()
-    agent, asked = agent_asking(tmp_path, monkeypatch, KeyFacts(line="정상", answered=True))
-
-    assert agent.ask_service_key() is None
-    assert asked == []
-
-
-def test_a_key_no_installed_bot_uses_is_not_asked(tmp_path: Path, monkeypatch: Any) -> None:
-    """BUI-10에 **등록만 해 둔** 키는 묻지 않는다 — 쓰는 Bot이 없으면 알릴 거리도 없다."""
-    hold_address()
-    agent, asked = agent_asking(tmp_path, monkeypatch, KeyFacts(line="정상", answered=True), refs=("남은-키",))
-    agent.settings = replace(agent.settings, service_keys=(ServiceKeyRef(ref="남은-키", app_id=APP_ID),))
-
-    assert agent.ask_service_key() is None
-    assert asked == []
-
-
-@pytest.mark.parametrize(
-    "facts",
-    [
-        KeyFacts(line="앱에 닿지 못함"),
-        KeyFacts(line="폐기됨", answered=True, refused=True),
-        KeyFacts(line="정상", answered=True, expires_at="2027-10-10T09:00:00+09:00"),
-    ],
-    ids=["unreachable", "refused", "far-off"],
-)
-def test_what_the_asking_does_not_tell(tmp_path: Path, monkeypatch: Any, facts: Any) -> None:
-    """닿지 못한 것은 알릴 거리가 아니고(ADR-0007), **거부는 실행 기록이 말한다**."""
-    install_bot_calling_an_app()
-    hold_address()
-    agent, _asked = agent_asking(tmp_path, monkeypatch, facts)
-
-    assert agent.ask_service_key() == KEY_REF
-    assert not agent.notices.pending
-
-
-def test_asking_does_not_break_the_round(tmp_path: Path, monkeypatch: Any) -> None:
-    """주기가 깨지면 하트비트·대기열이 멈춘다 — 묻다 터진 것은 기록만 남긴다."""
-    install_bot_calling_an_app()
-    hold_address()
-    agent, _asked = agent_asking(tmp_path, monkeypatch, ValueError("깨진 답"))
-
-    assert agent.ask_service_key() == KEY_REF
-    assert not agent.notices.pending
-
-
-def test_keys_are_asked_even_when_center_is_down(tmp_path: Path, monkeypatch: Any) -> None:
-    """**Center보다 먼저 묻는다** — Center가 꺼져 있어도 서비스 앱 키는 만료된다."""
-    install_bot_calling_an_app()
-    hold_address()
-    agent, asked = agent_asking(tmp_path, monkeypatch, KeyFacts(line="정상", answered=True, expires_at=SOON_FROM_TODAY))
-    agent.client_factory = lambda _url, _key: FakeCenter(fail=Unreachable("닿지 못합니다"))
-    agent.store.state.bot_ui_id = "bui_1"
-
-    assert agent.beat() is None
-    assert len(asked) == 1
-    assert module.SERVICE_KEY_EXPIRING in [one.kind for one in agent.notices.take()]
-
-
-def test_refusals_of_past_runs_are_forgotten(tmp_path: Path) -> None:
-    """들고 있는 것이 PC 수명만큼 자라지 않는다 — 실행이 바뀌면 잊는다 (`requests()`와 같은 결)."""
-    agent = agent_with(tmp_path)
-    first = a_running(tmp_path, run_id="run_1")
-    first._apply("service_call", "task_1", call_data(), NOW)  # noqa: SLF001
-    agent._tell_key_refusals(first)  # noqa: SLF001
-    agent.notices.take()
-
-    agent._tell_key_refusals(a_running(tmp_path, run_id="run_2"))  # noqa: SLF001 - 거부가 없는 실행
-    assert not agent.notices._refusals_told  # noqa: SLF001

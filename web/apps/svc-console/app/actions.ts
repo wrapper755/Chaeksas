@@ -2,7 +2,6 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { revalidatePath } from "next/cache";
 import { svc, SvcError } from "@/lib/svc";
 import { COOKIE_NAME, seal } from "@/lib/session";
 
@@ -12,8 +11,6 @@ import { COOKIE_NAME, seal } from "@/lib/session";
 
 export interface ActionResult {
   error?: string;
-  /** 발급한 키 원문 — **이 응답에만 실린다** (SVC-02). */
-  secret?: { name: string; key: string };
 }
 
 function message(cause: unknown): string {
@@ -44,14 +41,4 @@ export async function login(_previous: ActionResult, form: FormData): Promise<Ac
 export async function logout(): Promise<void> {
   (await cookies()).delete(COOKIE_NAME);
   redirect("/login");
-}
-
-export async function revokeKey(name: string): Promise<ActionResult> {
-  try {
-    await svc.revokeKey(name);
-  } catch (cause) {
-    return { error: message(cause) };
-  }
-  revalidatePath("/keys");
-  return {};
 }

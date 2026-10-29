@@ -2,39 +2,32 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
+| 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) — 2026-10-29부터 **일꾼**이다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)): 앱은 C15로 Center에서 일감을 가져가고 HTTP로 업무 호출을 받지 않는다 |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | Bot UI(실행 중 Bot)·서버 실행기·Studio·Worker 프로세스 → 모든 서비스 앱 |
-| 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py` (import `chaeksas.contracts.service_app`), 받는 쪽 뼈대 `packages/service_kit/` (import `chaeksas.service_kit`, [ADR-0019](../decisions/0019-package-names.md)), **부르는 쪽 `chaeksas.core.services`** (서비스 앱 태스크 — 멱등 키·재시도·C3 `service_call` 기록). 보기: 진짜 앱은 `extensions/ui_automation/.../service/app.py`, 업무 예제가 부르는 **모의 앱 열넷**은 [`samples/`](../../samples/README.md) |
-| JSON Schema | [`c11-service-app-manifest.json`](../../packages/contracts/schemas/c11-service-app-manifest.json) · [`c11-op-request.json`](../../packages/contracts/schemas/c11-op-request.json) · [`c11-op-response.json`](../../packages/contracts/schemas/c11-op-response.json) · [`c11-health-response.json`](../../packages/contracts/schemas/c11-health-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
-| 관련 화면 | STU-14, STU-10 「서비스 앱」, SVC-00~03, CON-03, CON-07 |
+| 보내는 쪽 → 받는 쪽 | 서비스 앱(일꾼) → Center (C15 가져가기·끝내기). 업무 호출의 모양은 부르는 쪽이 C15로 Center에 올린 것이다 |
+| 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py`, 받는 쪽 뼈대 `packages/service_kit/` (`service_kit.consumer` — 가져가기 루프·들이기), **부르는 쪽 `chaeksas.core.services`** (`CenterServiceCaller` — 멱등 칸·재시도·C3 `service_call` 기록). 보기: 진짜 앱은 `extensions/ui_automation/.../service/app.py`, 업무 예제가 부르는 **모의 앱 열셋**은 [`samples/`](../../samples/README.md) |
+| JSON Schema | [`c11-service-app-manifest.json`](../../packages/contracts/schemas/c11-service-app-manifest.json) · [`c11-op-request.json`](../../packages/contracts/schemas/c11-op-request.json) · [`c11-op-response.json`](../../packages/contracts/schemas/c11-op-response.json) · [`c11-health-response.json`](../../packages/contracts/schemas/c11-health-response.json) |
+| 관련 ADR | [0010](../decisions/0010-service-apps.md), [0015](../decisions/0015-run-location.md), [0102](../decisions/0102-calling-outside-is-pull.md) |
+| 관련 화면 | STU-14, SVC-00·01·03, CON-07 |
 
 ## 목적
 
-**서비스 앱은 확장의 서버 부분이다** ([ADR-0018](../decisions/0018-extensions.md)). 내장·사내 확장의 서비스 앱은 이 계약을 따르고, 이 계약을 따르지 않는 외부 앱은 확장 정의의 HTTP 어댑터(C13 §4)로 붙인다. BPM 프로세스가 부르는 서비스 앱(대부분 LLM 앱)이 늘어나도, 부르는 쪽은 **한 가지 방식**으로 부르고 관리하게 한다. 이 계약을 지키면 Studio가 manifest를 읽어 서비스 앱 태스크 편집기(STU-14)를 자동으로 만들고, 서비스 앱 관리 콘솔은 `service_kit`이 같은 모양으로 제공한다.
+**서비스 앱은 확장의 서버 부분이다** ([ADR-0018](../decisions/0018-extensions.md)). 내장·사내 확장의 서비스 앱은 이 계약을 따르고, 이 계약을 따르지 않는 외부 앱은 확장 정의의 HTTP 어댑터(C13 §4)를 **어댑터 일꾼**이 돌려 붙인다. 서비스 앱이 늘어나도 부르는 쪽은 **한 가지 방식**(C15 외부 작업)으로 부르고, Studio는 manifest로 서비스 앱 태스크 편집기(STU-14)를 만들며, 관리 콘솔은 `service_kit`이 같은 모양으로 제공한다.
 
 ## 전송
 
-| 엔드포인트 | 인증 | 뜻 |
+| 길 | 인증 | 뜻 |
 | --- | --- | --- |
-| `GET /healthz` | 없음 | 살아 있는지 |
-| `GET /manifest` | 없음 (비밀 없음) | 앱 정보와 작업 목록 |
-| `POST /v1/ops/{operation}` | **서비스 앱 API 키** | 작업 호출 |
-| `GET /v1/keys/self` | 서비스 앱 API 키 | 이 키의 이름·허용 작업·허용 모드·만료 (Studio·Bot UI 「연결 테스트」용, 키 원문은 돌려주지 않음) |
-| `GET /center/v1/trust` | 없음 (비밀 없음) | 이 앱이 Center 발급을 받나 (§Center가 발급하는 키) |
-| `POST /center/v1/keys` | **Center 서명 봉투** | Center가 키를 짓고·고치고·폐기한다 (§Center가 발급하는 키) |
-| 관리 콘솔 (웹) | 관리자 토큰 | SVC-00~03 (+ 앱 고유 화면). 기본 포트 = API 포트 + 1 |
+| C15 `POST /api/v1/consumers/enroll`·`fetch`·`…/complete·fail·extend` | 일꾼 토큰 | 들이기, 일감 가져가기·끝내기 |
+| C15 `PUT /api/v1/consumers/self/manifest`·`…/catalogs/{type}` | 일꾼 토큰 | manifest(작업 목록)·기여 자원 카탈로그 올리기 |
+| `GET /healthz` | 없음 | 살아 있는지 (운영자·컨테이너 점검용 — **Center는 읽지 않는다**) |
+| 관리 콘솔 (웹) | 관리자 토큰 | SVC-00·01·03 (+ 앱 고유 화면). 기본 포트 = API 포트 + 1 |
 
-- 인증: `Authorization: Bearer <서비스 앱 API 키>`. 키는 **Center가 짓고 앱에는 해시만 맡긴다** (§Center가 발급하는 키, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md)). 앱이 **스스로 검증**한다 (해시 저장). 관리 API의 발급(`POST /admin/v1/keys`)은 자동화·시험·Center를 믿지 않는 앱을 위해 남고 SVC-02 화면에는 없다.
-- 키 형식: `chk_svc_<무작위 40자>`. **앞자리 = 앞 16자**(`chk_svc_` + 무작위 8자)만 화면·기록에 남긴다. 앱 id는 키에 넣지 않는다 (앞자리가 키마다 달라야 구별된다). Center API 키도 같은 규칙으로 `chk_ctr_…` (C4).
-- 멱등성: **멱등 키 = `(operation, run_id, node_id, node_instance, attempt, call_seq)`.** 같은 키로 다시 오면 수행하지 않고 저장된 결과를 그대로 돌려준다 (`replayed: true`). 같은 키인데 본문(`input`·`mode`)의 해시가 다르면 409 `idempotency_conflict`. 보관 기간 기본 7일 (`CHK_SVC_<APP>__IDEMPOTENCY_DAYS`).
-  - `node_instance`: 같은 노드가 한 실행 안에서 몇 번째로 실행되는가 (BPMN 반복·다중 인스턴스). 1부터.
-  - `attempt`: 같은 노드 인스턴스의 재시도 번호. 1부터.
-  - `call_seq`: 한 노드 인스턴스·시도 안에서 같은 작업을 여러 번 부를 때의 일련번호 (기본 1). 예: UI 세션 안의 치유 호출들 (C8).
-  - **부르는 쪽은 재시작 뒤에도 `node_instance`·`attempt`·`call_seq`를 같은 값으로 다시 만들 수 있어야 한다.** 그래야 같은 키로 다시 불러 한 번만 수행된다 (contracts README 원칙 9). 서버 실행기는 **기다릴 때 상태를 담고 되살려** 이 셋이 저절로 같은 값이 되게 한다 — 호출마다 따로 적어 두지 않는다 ([ADR-0054](../decisions/0054-server-run-state-and-concurrency.md)).
-- 시간 제한: 작업마다 manifest의 `timeout_s` (기본 60). schema 1은 동기 호출만. 더 긴 작업은 나중에 비동기 방식을 추가한다.
-- 크기 한도: 요청·응답 각 1 MB (서비스 앱 설정 `CHK_SVC_<APP>__MAX_BODY_MB`).
+- **앱은 업무 호출을 HTTP로 받지 않는다.** `POST /v1/ops`·`/manifest`·앱 안의 API 키(`/v1/keys/self`·`/center/v1/keys`·`/center/v1/trust`)는 없다. 「누가 불러도 되나」는 Center가 배포로 가린다 (C15 §올리기).
+- 멱등: **멱등 칸 = `(operation, run_id, node_id, node_instance, attempt, call_seq)`** (C15 `idempotency` + `operation`). 같은 칸으로 다시 오면(`delivery` ≥ 2 — 잠금이 지나 다시 나갔다) 수행하지 않고 저장된 결과를 그대로 끝낸다 (`replayed: true`). 같은 칸인데 본문(`input`·`mode`) 해시가 다르면 실패 `idempotency_conflict`. 보관 기간 기본 7일 (`CHK_SVC_<APP>__IDEMPOTENCY_DAYS`).
+  - **부르는 쪽은 재시작 뒤에도 `node_instance`·`attempt`·`call_seq`를 같은 값으로 다시 만들어야 한다** (contracts README 원칙 9) — 그래야 Center가 같은 일감을 돌려준다.
+- 시간 제한: 작업마다 manifest의 `timeout_s` (기본 60). C15 일감의 기한이 된다.
+- 크기 한도: 입력·출력 각 1 MB (C15).
 
 ## 모델
 
@@ -46,7 +39,7 @@
 | `version` | str | |
 | `reasons` | str[] | |
 
-### `GET /manifest` 응답 (ServiceAppManifest)
+### ServiceAppManifest (일꾼이 Center에 올린다)
 
 | 필드 | 타입 | 필수 | 뜻 |
 | --- | --- | --- | --- |
@@ -63,190 +56,74 @@
 | ResourceCatalog 필드 | 타입 | 뜻 |
 | --- | --- | --- |
 | `type` | str | 자원 종류 (예: `ui_page`). 확장이 정한다 |
-| `catalog_url` | str | 이 앱의 `base_url` 기준 **상대 경로** (`/`로 시작). 응답 형식은 C13 §5 `Catalog` |
+| `catalog_url` | str | **쓰지 않는다** (읽고 무시한다 — 카탈로그는 일꾼이 Center에 올린다, C15 §카탈로그). 옛 앱이 적어 보내도 거부하지 않는다 |
 | `label` | str | 화면에 보일 이름 (CON-07 탭 제목). 없으면 `type`을 쓴다 |
 
-**왜 manifest가 이것을 알리나.** 확장 정의(C13 `contributes.resources`)에도 같은 것이 있지만 **내장·사내 확장의 정의는 Center에 없다** — 설치 파일에 들어 있고 Center는 실행하는 쪽의 보고로 `{id, version}`만 안다 (C7 §리소스 모으는 방식). 서버 쪽 자원을 가장 잘 아는 것은 서버 부분이고, Center는 이미 `/manifest`를 읽으므로 길을 새로 내지 않는다. 외부 확장은 정의가 Center에 있으니 거기서 읽는다 — 두 출처가 같은 모양이다.
+**왜 manifest가 이것을 알리나.** 확장 정의(C13 `contributes.resources`)에도 같은 것이 있지만 **내장·사내 확장의 정의는 Center에 없다** — 설치 파일에 들어 있고 Center는 실행하는 쪽의 보고로 `{id, version}`만 안다 (C7 §리소스 모으는 방식). 서버 쪽 자원을 가장 잘 아는 것은 서버 부분이라 **일꾼이 manifest와 함께 알리고 항목은 카탈로그로 올린다** (C15). 외부 확장은 정의가 Center에 있으니 거기서 읽는다 — 두 출처가 같은 모양이다.
 
 | Operation 필드 | 타입 | 뜻 |
 | --- | --- | --- |
 | `name` | str | `^[a-z][a-z0-9_]{0,63}$` |
 | `description` | str | STU-14에 보이는 설명 |
 | `modes` | (`autonomous` \| `deterministic`)[] | 지원하는 수행 모드 |
-| `fallback` | `none` \| `autonomous` | 결정 수행이 실패했을 때. **기본 `none`** (운영에서 LLM이 몰래 개입하지 않게). `autonomous`여도 **호출한 키가 자율 수행을 허용할 때만** 넘어간다. 운영 키(결정 수행만)면 폴백하지 않고 실패한다 |
+| `fallback` | `none` \| `autonomous` | 결정 수행이 실패했을 때. **기본 `none`** (운영에서 LLM이 몰래 개입하지 않게). `autonomous`여도 **시험 일감(`origin: test` — Studio 시험 실행)일 때만** 넘어간다. 현장 일감이면 폴백하지 않고 실패한다 |
 | `input_schema` / `output_schema` | JSON Schema | STU-14 입력·출력 표의 원본 |
 | `timeout_s` | int | 기본 60 |
 | `server_ok` | bool | 서버 실행기에서 불러도 되는가 (기본 true. 현장 PC에서만 의미 있는 작업은 false) |
-| `required_scopes` | str[] | 이 작업을 부르려면 키에 있어야 하는 **추가 권한** (키의 `extra_scopes`). 비어 있으면 아무 키나 부를 수 있다. 예: UI 자동화 앱의 `registry_*`는 `registry_write`를 요구한다 (C9) |
+| `required_scopes` | str[] | 이 작업을 부르려면 부르는 쪽에 켜져 있어야 하는 **추가 권한**. 비어 있으면 「불러도 되나」(C15)를 지난 누구나. 예: UI 자동화 앱의 `registry_*`는 `registry_write`를 요구한다 (C9 — CON-03 「셀렉터 등록」을 켠 PC) |
 
-**추가 권한은 작업이 선언하고 앱 뼈대가 건다** — 작업 함수가 키를 들여다보지 않는다. 없으면 403 `scope_missing`.
+**추가 권한은 작업이 선언하고 Center가 건다** (C15 §올리기) — 일꾼·작업 함수는 부른 쪽을 들여다보지 않는다. 없으면 403 `scope_missing`.
 
-### `POST /v1/ops/{operation}` 요청 (OpRequest)
+### OpRequest (가져간 일감 → 작업 함수)
 
-| 필드 | 타입 | 필수 | 뜻 |
-| --- | --- | --- | --- |
-| `schema` | int | ✓ | 1 |
-| `mode` | `autonomous` \| `deterministic` | ✓ | 수행 모드. **받는 쪽은 바꾸지 않는다** (원칙 7) |
-| `run_id` | str | ✓ | 실행 id (C3). Studio 단독 시험이면 `test_<hex>` |
-| `node_id` | str | ✓ | BPMN 노드 id |
-| `node_instance` | int | ✓ | 이 실행에서 이 노드의 몇 번째 실행인가. 1부터 |
-| `attempt` | int | ✓ | 1부터. 재시도마다 +1 |
-| `call_seq` | int | | 1부터 (기본 1). 같은 노드 인스턴스·시도 안에서 같은 작업을 여러 번 부를 때 +1 |
-| `caller` | object | ✓ | `{type, host, bpm_process_id, version}`. `bpm_process_id`는 **패키지 id**다 (C3와 같은 값, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)). `type`은 열린 문자열, 알려진 값 `bot_ui` `server_runner` `studio` `worker` · `tool_ui`(Tool UI의 도구가 부를 때, [ADR-0077](../decisions/0077-tool-ui.md)) |
-| `business_key` | str | | UI 자동화처럼 세션을 잇는 키 (`<run_id>:<node_id>:<node_instance>:<attempt>`, C10) |
-| `input` | object | ✓ | `input_schema`를 따름 |
+일꾼 뼈대가 C15 `LockedTask`를 이 모양으로 바꿔 작업 함수에 준다 — 작업 함수는 Center를 모른다.
 
-### 응답 (OpResponse, 200)
-
-| 필드 | 타입 | 뜻 |
+| 필드 | 뜻 | `LockedTask`의 |
 | --- | --- | --- |
-| `status` | `ok` | |
-| `output` | object | `output_schema`를 따름 |
-| `mode_used` | `autonomous` \| `deterministic` | 실제로 쓴 모드. 폴백이 일어났을 때만 `mode`와 다르다 → 부르는 쪽이 C3 `service_call.mode_used`에 남김 |
-| `replayed` | bool | 이전 호출 결과를 돌려준 것인가 (멱등) |
-| `usage` | object | `{model, input_tokens, output_tokens}` — C3 `llm_usage`와 같은 이름 (LLM을 안 썼으면 생략) |
+| `schema` | 1 | |
+| `mode` | 수행 모드. **받는 쪽은 바꾸지 않는다** (원칙 7 — 폴백은 위 `fallback`뿐) | `mode` |
+| `run_id`·`node_id`·`node_instance`·`attempt`·`call_seq` | 멱등 칸 | `idempotency` |
+| `caller` | `{type, host, bpm_process_id, version}`. `bpm_process_id`는 **패키지 id**다 (C3, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)). `type`은 열린 문자열 — `bot_ui` `server_runner` `studio` `worker` `tool_ui` | `caller` |
+| `business_key` | UI 자동화처럼 세션을 잇는 키 (C10) | `business_key` |
+| `input` | `input_schema`를 따름 | `input` |
+| `origin` | `run` \| `test` — 시험 일감이면 앱이 시험 쪽으로 보낼지 정한다 (ADR-0102 §6) | `origin` |
 
-### 서비스 앱 API 키 (앱 안의 레코드)
+### OpResponse (작업 함수 → 끝내기)
 
-| 필드 | 뜻 |
-| --- | --- |
-| `name` | 사람이 알아볼 이름. BPM 프로세스의 키 참조 이름과 맞추기를 권장 |
-| `hash` | 키 원문의 해시 (원문은 저장하지 않음) |
-| `prefix` | 앞자리 16자 (`chk_svc_` + 무작위 8자) |
-| `allowed_operations` | `*` 또는 작업 이름 목록 |
-| `allowed_modes` | `deterministic`(운영: Bot UI·서버 실행기용) / `autonomous`+`deterministic`(개발: Studio용) |
-| `extra_scopes` | 앱별 추가 권한 (예: UI 자동화 앱 `registry_write` — UI 셀렉터 등록 담당자용) |
-| `expires_at`, `created_at`, `last_used_at`, `revoked_at` | |
-| `issued_by` | `admin`(관리 API로 발급) \| `center`(Center가 발급). 지금 있는 키는 모두 `admin`이다 |
-| `center_key_id` | Center가 발급한 키면 Center의 id (`svk_<hex8>`). 그 키의 이름(`name`)도 이 값이다 |
-| `issued_for` | Center가 발급한 키면 **누구를 위해서인가** — 아래 IssuedFor. SVC-02 「발급」 열과 「배포 없이 생긴 키」가 이것을 본다 |
+| 필드 | 뜻 | C15 끝내기의 |
+| --- | --- | --- |
+| `output` | `output_schema`를 따름 | `complete.output` |
+| `mode_used` | 실제로 쓴 모드. 폴백이 일어났을 때만 `mode`와 다르다 | `complete.mode_used` |
+| `replayed` | 저장된 결과를 돌려준 것인가 (멱등) | `complete.replayed` |
+| `usage` | `{model, input_tokens, output_tokens}` — C3 `llm_usage`와 같은 이름 | `complete.usage` |
+
+작업 함수가 실패를 올리면(`OpError(status, code, message)`) 뼈대가 C15 `fail`로 옮긴다 — `retryable`은 아래 표의 「다시 해 볼 만함」이다.
 
 ### 사용 기록 (앱 안, SVC-03)
 
-시각 / 키 이름 / 작업 / 수행 모드 / 결과(HTTP 코드) / 소요 / `run_id` / `caller.type` / LLM 사용량. **입력·출력 값은 기록하지 않는다.**
+시각 / 부른 쪽(`caller.type`·`host`) / 작업 / 수행 모드 / 결과(`ok` 또는 실패 코드) / 소요 / `run_id` / 몇 번째로 나갔나(`delivery`) / LLM 사용량. **입력·출력 값은 기록하지 않는다.**
 
-## 관리 API (`/admin/v1/*`, SVC-00~03)
+## 관리 API (`/admin/v1/*`, SVC-00·01·03)
 
-관리 콘솔이 쓰는 API. **업무 호출(`/v1/ops`)과 권한이 다르다** — 서비스 앱 API 키로는 부를 수 없고,
-앱 설정의 **관리자 토큰**으로만 부른다 (`Authorization: Bearer <관리자 토큰>`). 화면은
-`web/apps/svc-console` 한 벌이 그린다 (ADR-0017).
+관리 콘솔이 쓰는 API. 앱 설정의 **관리자 토큰**으로만 부른다 (`Authorization: Bearer <관리자 토큰>`). 화면은 `web/apps/svc-console` 한 벌이 그린다 (ADR-0017).
 
 | 메서드·경로 | 뜻 | 화면 |
 | --- | --- | --- |
-| `GET /admin/v1/status` | 앱 요약·작업별 최근 통계·의존 상태·Center 등록 여부 | SVC-01 |
-| `GET /admin/v1/keys` | 키 목록 (**원문·해시 없음**) | SVC-02 |
-| `POST /admin/v1/keys` | 발급. 응답에 **원문 `key`가 한 번만** 실린다 | SVC-02 |
-| `DELETE /admin/v1/keys/{name}` | 폐기 (지우지 않고 `revoked_at`을 남긴다) | SVC-02 |
+| `GET /admin/v1/status` | 앱 요약·작업별 최근 통계·의존 상태·Center 연결 | SVC-01 |
 | `GET /admin/v1/usage?limit=` | 사용 기록 (최근 것부터). **입력·출력 값은 없다** | SVC-03 |
 
 AdminStatus:
 
 | 필드 | 뜻 |
 | --- | --- |
-| `app_id`, `name`, `version`, `category`, `console_url` | manifest와 같은 값 (C11 `/manifest`) |
-| `extension` | `{id, version}` — 이 앱이 **어느 확장의 서버 부분인가** (manifest와 같은 값). 관리 콘솔이 이것으로 그 확장의 고유 화면(C13 `console.pages`)을 고른다 — 콘솔 한 벌이 모든 앱을 그리기 때문이다 ([ADR-0042](../decisions/0042-extension-contributed-panels.md)). 확장의 서버 부분이 아니면 없다 |
+| `app_id`, `name`, `version`, `category`, `console_url` | manifest와 같은 값 |
+| `extension` | `{id, version}` — 이 앱이 **어느 확장의 서버 부분인가**. 관리 콘솔이 이것으로 그 확장의 고유 화면(C13 `console.pages`)을 고른다 ([ADR-0042](../decisions/0042-extension-contributed-panels.md)) |
 | `started_at`, `uptime_s` | 가동 시간 |
 | `operations` | 작업마다 `{name, description, modes, fallback, server_ok, calls_24h, errors_24h, error_rate}` — 수는 **앱 안의 사용 기록**에서 센다 |
-| `dependencies` | 바깥 의존마다 `{name, status, detail?}` (예: LLM 게이트웨이, DB). `status`는 `ok`·`degraded`·`unreachable`·`unknown` |
-| `center` | `{registered, base_url?, last_reported_at?}` — Center 리소스 목록(C7)에 올라가 있는지 |
+| `dependencies` | 바깥 의존마다 `{name, status, detail?}`. `status`는 `ok`·`degraded`·`unreachable`·`unknown`. 일꾼이면 `center` 줄이 붙는다(마지막으로 가져간 때·들인 상태) |
+| `center` | `{registered, base_url?, last_reported_at?}` — `registered`는 **일꾼으로 들었나**, `last_reported_at`은 마지막으로 가져간 때 |
 
-AdminKeyInfo: `ServiceAppKey`에서 **`hash`를 뺀 것** + `state`(`active`·`expired`·`revoked`).
-발급 응답(AdminKeyCreated)은 거기에 `key`(원문)를 더한다.
-
-- 키 이름은 앱 안에서 **유일하다** — 같은 이름으로 다시 발급하면 409 `name_conflict`. BPM
-  프로세스의 키 참조 이름과 맞추기를 권하므로(SVC-02), 이름이 겹치면 어느 키인지 알 수 없다.
-- 관리자 토큰이 설정되지 않았으면 관리 API 전체가 503 `admin_disabled`다. **빈 토큰으로 열리지
-  않는다.**
-
-## Center가 발급하는 키
-
-> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md), [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) §3). 사람이 SVC-02에서 키를 발급해 PC마다 붙여 넣던 일을 없앤다. Center가 키 원문을 짓고 **앱에는 해시만** 맡기며, 원문은 배포 대상에 봉해서만 나간다 (C4 §서비스 앱 키 전달).
-
-### 앱이 Center를 믿는 방법
-
-| 설정 | 뜻 |
-| --- | --- |
-| `CHK_SVC_<APP>__CENTER__URL` | Center 주소. **비우면 Center 발급을 받지 않는다** — `POST /center/v1/keys`가 503 `center_disabled`이고, 키는 관리 API로만 생긴다 (자동화·시험·다른 조직이 운영하는 앱) |
-| `CHK_SVC_<APP>__CENTER__KEY_PIN` | **선택.** 믿을 Center 서명 키의 `key_id` 하나 (ADR-0094 §1). 있으면 받은 목록에 그 키가 있을 때만 믿고, 없으면 목록을 받지 않고 관리 상태(`dependencies`의 `center` 줄)에 까닭을 남긴다. 비우면 HTTPS만 믿는다(기본) |
-
-- 앱은 **뜰 때**, 그리고 **모르는 `key_id`의 봉투를 받았을 때**(5분에 한 번까지) `GET <Center>/api/v1/signing-keys`(C7 — 인증 없음)로 믿는 키 목록(C2 `AdminKey[]`)을 받아 **앱의 저장소에 남긴다.** Center에 닿지 못하면 들고 있던 목록으로 검증한다.
-- `revoked_at`이 붙은 키가 서명한 봉투는 받지 않는다 (C2 V2와 같다).
-
-### `GET /center/v1/trust`
-
-인증 없음. Center가 서비스 앱을 등록할 때와 상태를 볼 때(60초) 읽는다 (C7 `ServiceAppResource.trust`).
-
-| 필드 | 타입 | 뜻 |
-| --- | --- | --- |
-| `center_url` | str? | 설정된 Center 주소. 없으면 Center 발급을 받지 않는 앱이다 |
-| `key_ids` | str[] | 지금 믿는 Center 서명 키 id |
-| `fetched_at` | str? | 그 목록을 마지막으로 받은 때 |
-| `pinned` | bool | `KEY_PIN`을 쓰나. 쓰는데 목록에 그 키가 없으면 `key_ids`가 비고 Center는 `pin_mismatch`로 본다 (C7 `trust`) |
-
-Center는 `center_url`이 자기 주소와 다르거나 `key_ids`에 지금 서명하는 키가 없으면 그 앱에 키를 짓지 않고 CON-07 「할 일」로 말한다.
-
-### `POST /center/v1/keys`
-
-본문은 **C2 봉투 하나**(`payload.kind: service_key`)다. 앱은 현장이 배포 봉투를 볼 때와 **같은 `verify()`**(C2 V1~V4)를 쓰고 아래를 더 본다.
-
-| ServiceKeyClaim 필드 | 타입 | 뜻 |
-| --- | --- | --- |
-| `kind` | `service_key` | |
-| `action` | `issue` \| `update` \| `revoke` | 짓기 / 허용 작업·만료 고치기 (판을 올려도 같은 키 — ADR-0094 §3) / 폐기 |
-| `app_id` | str | **이 앱이어야 한다.** 아니면 422 `wrong_app` |
-| `center_key_id` | str | `svk_<hex8>`. 키 레코드의 `name`이 된다 |
-| `hash` · `prefix` | str | `issue`에만. 원문의 SHA-256(앱이 저장하는 것과 같다)과 앞자리 16자. **원문은 오지 않는다** |
-| `allowed_operations` · `allowed_modes` · `extra_scopes` · `expires_at` | | `issue`·`update`. 뜻은 키 레코드와 같다 |
-| `issued_for` | IssuedFor | `issue`에만 |
-| `reason` | str? | `revoke`일 때 (`deployment_revoked` `target_disabled` `target_unbound` `rotated` `reissued` `studio_key_revoked` `utility_off` — 열린 문자열) |
-| `not_after` | str | 이 봉투를 받아도 되는 마지막 때 (지은 때 + 10분). 지나면 403 `envelope_expired` |
-
-| IssuedFor 필드 | 뜻 |
-| --- | --- |
-| `kind` | `deployment`(현장 실행 키) \| `studio`(개발 키) \| `utility`(Tool UI 도구 — ADR-0094 §6). 열린 문자열 |
-| `bpm_process_id` · `deployment_id` | `deployment`일 때. 키를 처음 지은 배포 (판을 올려도 바뀌지 않는다) |
-| `target` | `{type: "bot_ui" \| "server_runner", id, name}` — `deployment`·`utility`일 때. `name`은 SVC-02에 보일 이름이다 (앱은 PC 이름을 모른다) |
-| `center_key` | `{key_id, name}` — `studio`일 때. 승인된 Studio 키 (ADR-0093) |
-
-응답: `200 {center_key_id, state}` (`state`는 C11 `key_state()`의 값).
-
-- **멱등이다.** 같은 `center_key_id`·같은 `hash`로 다시 `issue`하면 같은 200이다. 같은 id인데 `hash`가 다르면 409 `key_conflict`. 이미 폐기된 것을 다시 `revoke`하면 200이다. 그래서 Center는 앱이 답하지 않을 때 **같은 봉투를 그대로 다시 보낸다**(`not_after` 안에서 — 지나면 새로 짓는다).
-- `update`·`revoke`가 모르는 `center_key_id`를 가리키면 404 `key_not_found`다. Center는 그것을 「이미 없다」로 보고 지나간다.
-- Center가 짓는 키는 **관리 API의 이름 규칙과 겹치지 않는다** — `svk_`로 시작하는 이름은 관리 API가 받지 않는다(409 `name_reserved`).
-
-| 상태 | `code` | 언제 |
-| --- | --- | --- |
-| 401 | `center_signature_invalid` | V1~V3 실패, 모르는 `key_id`(목록을 다시 받아도 없다) |
-| 403 | `center_key_revoked` / `envelope_expired` | 버린 키가 서명함 / `not_after`가 지남 |
-| 409 | `key_conflict` | 같은 `center_key_id`, 다른 `hash` |
-| 422 | `wrong_app` / `wrong_kind` | 다른 앱의 봉투 / `kind`가 `service_key`가 아님 |
-| 503 | `center_disabled` | `CENTER__URL`이 없다 |
-
-## 예시
-
-```http
-POST /v1/ops/issue HTTP/1.1
-Authorization: Bearer chk_svc_tax-invo_…
-Content-Type: application/json
-
-{
-  "schema": 1,
-  "mode": "deterministic",
-  "run_id": "run_20261001_103000_d4e5f6",
-  "node_id": "Task_issue",
-  "node_instance": 1,
-  "attempt": 1,
-  "caller": {"type": "server_runner", "host": "srv_01", "bpm_process_id": "finance.invoice-issue", "version": "1.0.0"},
-  "input": {"buyer_biz_no": "123-45-67890", "amount": 1100000}
-}
-```
-
-응답:
-
-```json
-{"status": "ok", "output": {"invoice_no": "2026100100001"}, "mode_used": "deterministic", "replayed": false,
- "usage": {"model": "local-7b", "input_tokens": 0, "output_tokens": 0}}
-```
+- 관리자 토큰이 설정되지 않았으면 관리 API 전체가 503 `admin_disabled`다. **빈 토큰으로 열리지 않는다.**
 
 ## 모델 연결
 
@@ -273,39 +150,34 @@ Content-Type: application/json
 - 쓴 양은 작업 응답의 `usage`(`model`·`input_tokens`·`output_tokens`)로 돌려준다. 한 작업에서 여러 번 물었으면 더한다. **금액은 넣지 않는다.**
 - 모델에 보내는 화면 정보는 부르는 쪽이 **가린 것**만이다 (원칙 6). 앱은 받은 입력을 저장하지 않는다.
 
-## 오류
+## 오류 (실패 코드)
 
-모든 오류 본문: `{"code": "<기계용 코드>", "message": "<사람용 한 줄>", "detail": {…}}`
+작업 함수·뼈대가 C15 `fail`의 `code`로 올린다. 부르는 쪽은 그대로 받는다 (C15 §결과).
 
-| 상태 코드 | `code` | 언제 | 부르는 쪽이 할 일 |
-| --- | --- | --- | --- |
-| 401 | `key_missing` / `key_invalid` | 키 없음·모름 | 재시도하지 않음. 「키 참조 <이름>의 값이 틀렸습니다」 (BUI-05, STU-08) |
-| 403 | `key_revoked` / `key_expired` | 폐기·만료 | 재시도하지 않음. 키 교체 안내 |
-| 403 | `operation_not_allowed` / `mode_not_allowed` | 키 권한 밖 (예: 운영 키로 자율 수행) | 재시도하지 않음 |
-| 403 | `scope_missing` | 작업이 요구하는 추가 권한이 키에 없음 (`required_scopes`) | 재시도하지 않음. 그 권한이 있는 키로 바꾼다 |
-| 404 | `operation_not_found` | 없는 작업 | 재시도하지 않음. 「작업 정의가 바뀌었습니다」 (STU-14) |
-| 409 | `in_progress` | 같은 멱등 키가 아직 수행 중 | `Retry-After` 뒤 같은 요청을 다시 |
-| 409 | `idempotency_conflict` | 같은 멱등 키인데 본문이 다름 | 버그. 재시도하지 않음 (`node_instance`·`attempt` 관리 확인) |
-| 422 | `input_invalid` / `mode_unsupported` / `schema_unsupported` | 입력이 스키마와 다름, 작업이 그 모드를 지원 안 함 | 재시도하지 않음. 실행 실패 (또는 오류 경계 이벤트) |
-| 429 | `rate_limited` | 너무 많음 | `Retry-After` 뒤 같은 요청 |
-| 503 | `dependency_down` | 앱의 의존(LLM·DB)이 죽음 | 태스크 재시도 정책대로 `attempt`를 올려 다시 |
-| 503 | `llm_unavailable` | 모델이 필요한 작업인데 앱에 모델이 설정되지 않음 (또는 키·모델 이름이 틀림) | 재시도해도 풀리지 않는다. 앱 운영자가 `CHK_SVC_<APP>__LLM__*`를 고친다 |
-| 504 | `timeout` | `timeout_s` 초과 | 같은 `attempt`로 한 번 다시 (멱등이라 안전), 그 뒤 실패 |
+| `code` | 언제 | 다시 해 볼 만함 |
+| --- | --- | --- |
+| `operation_not_found` | 없는 작업 (manifest가 바뀌었다) | 아니다 |
+| `idempotency_conflict` | 같은 멱등 칸인데 본문이 다름 | 아니다 (버그 — `node_instance`·`attempt` 관리 확인) |
+| `input_invalid` / `mode_unsupported` / `schema_unsupported` | 입력이 스키마와 다름, 작업이 그 모드를 지원 안 함 | 아니다 (업무 실패 — 오류 경계) |
+| `rate_limited` | 앱의 의존이 너무 많다고 함 | **그렇다** (C14 `retry.on` 429) |
+| `dependency_down` | 앱의 의존(LLM·DB)이 죽음 | **그렇다** (C14 `retry.on` 503) |
+| `llm_unavailable` | 모델이 필요한 작업인데 앱에 모델이 설정되지 않음 | 아니다 — 앱 운영자가 `CHK_SVC_<APP>__LLM__*`를 고친다 |
+| `internal` | 작업 함수가 예상하지 못한 예외 | 아니다 |
 
 ## 호환 규칙
 
-- 서비스 앱은 모르는 요청 필드를 무시한다. 부르는 쪽은 모르는 응답 필드를 무시한다.
+- 일꾼은 모르는 일감 칸을 무시한다. 부르는 쪽은 모르는 결과 칸을 무시한다.
 - 작업의 `input_schema`에 **필수 필드를 추가**하는 것은 깨는 변경이다 → 새 작업 이름(`issue_v2`)으로 낸다. 선택 필드 추가는 괜찮다.
-- `schema`가 더 높은 요청은 422 `schema_unsupported`.
 
 ## `service_kit`이 제공하는 것
 
-새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: `/healthz`, `/manifest`(작업 함수의 타입에서 생성), 키 검증·권한·멱등 저장소, 오류 형식, 사용 기록, 관리 콘솔 공통 화면(SVC-00~03), 모델 연결(`CHK_SVC_<APP>__LLM__*`), 설정(`CHK_SVC_<APP>__…`), 포트(API 8000·8010…, 콘솔 +1).
+새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: 가져가기 루프(`Consumer` — 들이기·토큰 보관·manifest와 카탈로그 올리기·잠금 늘리기·끝내기), 멱등 저장소, 오류 형식, 사용 기록, `/healthz`, 관리 콘솔 공통 화면(SVC-00·01·03), 모델 연결(`CHK_SVC_<APP>__LLM__*`), 설정(`CHK_SVC_<APP>__CENTER__URL`·`…__CENTER__TOKEN`·`…__DATA_DIR`), 포트(관리 API 8000·8010…, 콘솔 +1).
 
 ## 변경 이력
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | **앱이 일꾼이 된다** — `POST /v1/ops`·`/manifest`·앱 안의 키(`/v1/keys/self`·`/center/v1/keys`·`/center/v1/trust`)·관리 API의 키 발급을 걷고 C15 가져가기로 같은 작업을 수행한다. 폴백은 시험 일감일 때만, 추가 권한은 Center가 건다, 카탈로그는 일꾼이 올린다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | §Center가 발급하는 키 — `CENTER__URL`, `GET /center/v1/trust`, `POST /center/v1/keys`(C2 봉투 `service_key`, 해시만), 키 레코드 `issued_by`·`center_key_id`·`issued_for`. 새 경로·선택 칸이라 옛 부르는 쪽은 그대로다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-03 | 1 | 관리 API(`/admin/v1/status`·`keys`·`usage`)의 경로·모델·권한을 적었다 — ADR-0017이 경로만 말하고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |
 | 2026-10-05 | 1 | 모델 연결(`CHK_SVC_<APP>__LLM__*`)과 503 `llm_unavailable`, 관리 상태의 `llm` 의존 줄을 적었다 — 서비스 앱은 `core`를 쓸 수 없어 모델 클라이언트를 `chaeksas.llm`으로 내렸다. 모델 칸은 새로 생긴 것이라 기존 앱은 영향이 없다 | 0034 |

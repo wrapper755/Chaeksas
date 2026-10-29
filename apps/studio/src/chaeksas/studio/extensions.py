@@ -27,10 +27,10 @@ from typing import Any
 import platformdirs
 
 from chaeksas.contracts import (
+    CALL_TOKEN_SECRET,
+    CENTER_URL_SETTING,
     RESERVED_CONFIG_PREFIX,
     SCOPE_STUDIO,
-    SERVICE_KEY_REF_SETTING,
-    SERVICE_URL_SETTING,
 )
 from chaeksas.core.extensions import ExtensionHost, HostTasks
 from chaeksas.extension_api import HOST_STUDIO, ExtensionContext, Settings
@@ -92,29 +92,23 @@ def bot_ui_data_dir() -> Path:
 
 @dataclass(frozen=True)
 class StudioSecrets:
-    """`extension_api.Secrets` — Studio 시험 실행의 키 참조를 푼다 (ADR-0013).
+    """`extension_api.Secrets` — Studio에서 확장이 묻는 비밀을 푼다 (ADR-0013).
 
-    **환경변수가 먼저**(개발·CI), 그다음 OS 비밀 저장소 — STU-10 「서비스 앱 키」가 넣은 곳이다.
-    없으면 `None` — 확장이 사람에게 알린다.
+    `call_token`은 **Studio가 제 키로 청한 호출 토큰**이다 (C15 — Worker가 Studio를 대신해 올린다).
+    나머지는 그 확장의 비밀 설정 칸이다(STU-10 「확장별 설정」, 환경변수가 먼저). 없으면 `None`.
     """
 
     credentials: StudioCredentials = field(default_factory=StudioCredentials)
-    #: 이 확장의 비밀 설정 칸으로도 찾는다 (STU-10 「확장별 설정」, ADR-0073). 비면 키 참조만.
     extension_id: str = ""
-    #: 개발 키를 청하는 쪽 (ADR-0094 §5) — 메인 창이 준다. 없으면 청하지 않는다.
-    dev_keys: Callable[[], Any] | None = None
+    #: 호출 토큰을 주는 쪽 (`studio.call_token.CallTokens`) — 메인 창이 준다. 없으면 `None`이다.
+    call_tokens: Callable[[], str | None] | None = None
 
     def resolve(self, ref: str) -> str | None:
-        """Bot UI 실행기와 **같은 순서**다 — 서비스 앱 키 참조가 먼저, 그다음 그 확장의 비밀 칸,
-        마지막으로 **이 확장의 서버 부분 앱의 개발 키**다 (앱마다 하나라 참조와 상관없다)."""
-        found = self.credentials.service_key(ref)
-        if found or not self.extension_id:
-            return found
-        found = self.credentials.extension_secret(self.extension_id, ref)
-        if found or self.dev_keys is None:
-            return found
-        made = self.dev_keys()
-        return made.key_for(self.extension_id) if made is not None else None
+        if ref == CALL_TOKEN_SECRET:
+            return self.call_tokens() if self.call_tokens is not None else None
+        if not self.extension_id:
+            return None
+        return self.credentials.extension_secret(self.extension_id, ref)
 
 
 def installed_host(off: Iterable[str] = ()) -> ExtensionHost:
@@ -138,11 +132,10 @@ class Extensions:
     loader: Callable[[Iterable[str]], ExtensionHost] = field(default_factory=lambda: installed_host)
     #: STU-10 「확장별 설정」에 사람이 넣은 값 — `Settings.extensions` (비밀은 없다, ADR-0073).
     configured: dict[str, dict[str, Any]] = field(default_factory=dict)
-    #: 열린 BPM 프로세스의 `chk:process.service_keys` (`{확장·앱 id: 참조}`) — 메인 창이 준다.
-    #: 편집기의 예약 키 `service.key_ref`가 여기서 온다 (ADR-0074).
-    process_key_refs: Callable[[], Mapping[str, str]] = field(default_factory=lambda: dict)
-    #: 개발 키를 청하는 쪽 (ADR-0094 §5) — 메인 창이 준다.
-    dev_keys: Callable[[], Any] | None = None
+    #: Center 주소 (`center.url`) — 메인 창이 준다(STU-10 설정). 없으면 `None`이다.
+    center_url: Callable[[], str | None] = field(default_factory=lambda: lambda: None)
+    #: 호출 토큰을 주는 쪽 (C15) — 메인 창이 준다.
+    call_tokens: Callable[[], str | None] | None = None
     _editors: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -169,7 +162,7 @@ class Extensions:
         return found.value.label if found is not None else task_type
 
     def settings_for(self, extension_id: str) -> Settings:
-        """그 확장의 Studio 설정 + 예약 키. **주소의 출처는 하나다** (C13).
+        """그 확장의 Studio 설정 + 예약 키 (C13 — `center.url`).
 
         칸의 값은 STU-10 「확장별 설정」이 넣은 것이고, 넣지 않은 칸은 `None`이다. **비밀 칸은
         여기 오지 않는다** — `secrets.resolve(<칸>)`으로 푼다 (Bot UI와 같다).
@@ -181,8 +174,7 @@ class Extensions:
             for item in found.manifest.contributes.configuration:
                 if item.scope == SCOPE_STUDIO and not item.secret:
                     values[item.key] = stored.get(item.key) or None
-            service = found.manifest.service
-            values[SERVICE_URL_SETTING] = service.base_url if service is not None else None
+            values[CENTER_URL_SETTING] = self.center_url()
         return PlainSettings(values=values)
 
     def runtime_settings(self, extension_id: str, *, root: Path | None = None) -> dict[str, Any]:
@@ -211,37 +203,22 @@ class Extensions:
                 out[f"{head}.token_dir"] = str(folder)
         return out
 
-    def service_url(self, app_id: str) -> str | None:
-        """그 서비스 앱의 주소 — 그 앱을 서버 부분으로 가진 확장의 `service.base_url` (C13).
-
-        > 상태: 확장의 서버 부분 주소는 Center 리소스 목록(C7)에서 온다 (`services.py`).
-        """
-        found = self.host.get(app_id)
-        service = found.manifest.service if found is not None else None
-        return service.base_url if service is not None else None
-
     def _values(self, extension_id: str) -> dict[str, Any]:
         values = dict(getattr(self.settings_for(extension_id), "values", {}))
         values.update(self.runtime_settings(extension_id))
         return values
 
     def editor_context(self, extension_id: str) -> ExtensionContext:
-        """확장 편집기의 바깥 세상 — **시험 실행과 같은 것**에 `service.key_ref`를 더한다 (ADR-0074).
+        """확장 편집기의 바깥 세상 — **시험 실행과 같은 것**이다 (ADR-0074).
 
         편집기가 「이 스텝까지 시험」·「계획 세워 보기」로 Worker를 부를 때 시험 실행과 같은 Worker·같은
-        키를 본다. 값은 물을 때마다 읽는다 (`LiveSettings`).
+        호출 토큰을 본다. 값은 물을 때마다 읽는다 (`LiveSettings`).
         """
-
-        def values() -> dict[str, Any]:
-            found = self._values(extension_id)
-            found[SERVICE_KEY_REF_SETTING] = self.process_key_refs().get(extension_id) or None
-            return found
-
         return self.host.context(
             extension_id,
             host=HOST_STUDIO,
-            settings=LiveSettings(values=values),
-            secrets=StudioSecrets(extension_id=extension_id, dev_keys=self.dev_keys),
+            settings=LiveSettings(values=lambda: self._values(extension_id)),
+            secrets=StudioSecrets(extension_id=extension_id, call_tokens=self.call_tokens),
         )
 
     def context(self, extension_id: str) -> ExtensionContext:
@@ -255,7 +232,7 @@ class Extensions:
             extension_id,
             host=HOST_STUDIO,
             settings=PlainSettings(values=values),
-            secrets=StudioSecrets(extension_id=extension_id, dev_keys=self.dev_keys),
+            secrets=StudioSecrets(extension_id=extension_id, call_tokens=self.call_tokens),
         )
 
     def tasks(self) -> HostTasks:

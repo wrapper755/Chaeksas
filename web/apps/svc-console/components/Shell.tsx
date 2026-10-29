@@ -27,7 +27,6 @@ type NavItem =
 
 const COMMON: NavItem[] = [
   { label: "상태", href: "/status" },
-  { label: "API 키", href: "/keys" },
   { label: "사용 기록", href: "/usage" },
 ];
 

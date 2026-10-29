@@ -1,16 +1,18 @@
-"""리소스 목록 — 서비스 앱 등록과 네 종류 모으기 (C7, M5 조각 8).
+"""리소스 목록 — 서비스 앱과 네 종류 모으기 (C7·C15, ADR-0102).
 
-진짜 Center를 in-process로 띄우고, **진짜 서비스 앱**(`service_kit`으로 만든 것)을
-127.0.0.1에 올려 Center가 그 공개 정보를 읽게 한다.
+**Center는 바깥 기능을 읽으러 가지 않는다.** 서비스 앱은 그 앱 id를 토픽으로 승인받은 **일꾼이 올린
+manifest**에서 오고(들일 때·`PUT /consumers/self/manifest`), 상태는 그 일꾼이 **마지막으로 가져간 때**가
+말한다. 진짜 Center를 in-process로 띄우고 제품의 들이기(`consumers.enroll`)로 일꾼을 들인다.
 
-거듭 보는 것 다섯.
-
-1. **등록은 manifest를 읽어 본 뒤에** 된다 — 읽지 못하면 422다 (「등록은 됐는데 아무것도
-   모른다」를 만들지 않는다).
-2. **주소는 한 곳에서만 바뀐다** — 다른 앱을 가리키는 주소로 바꾸면 거부한다.
-3. **쓰는 Bot이 있으면 해제하지 못한다** (409 `in_use`).
-4. **툴팩·런타임·확장은 따로 등록받지 않는다** — Center가 이미 가진 것에서 모은다.
-5. **서비스 앱이 꺼져 있다고 배포를 막지 않는다** — 막는 것은 확장 누락·해시 불일치뿐이다.
+| 보는 것 | 왜 |
+| --- | --- |
+| 일꾼이 없으면 서비스 앱도 없다, 들이면 manifest가 그대로 뜬다 | 「등록은 됐는데 아무것도 모른다」가 없다 |
+| 상태는 일꾼이 말한다 — 가져간 적 없음·90초 조용함은 `unreachable`, 가져가면 `ok` | Center가 앱을 두드리지 않는다 |
+| manifest는 **승인된 토픽의 것만** 받는다, 틀린 모양은 422 | 일꾼이 남의 앱을 자처하지 못한다 |
+| 주소로 등록하는 길(`POST /resources/service-apps`)이 없다 | 주소·키를 Center가 들지 않는다 |
+| 같은 토픽을 둘이 맡으면 일꾼 수가 둘, 나중에 승인된 쪽의 manifest | CON-07 「일꾼 수」 |
+| 런타임·확장은 따로 등록받지 않는다 — Center가 이미 가진 것에서 모은다 | C7 |
+| 서비스 앱 누락은 **경고만**, 일꾼이 붙으면 읽기만 해도 사라진다 | 막는 것은 확장 누락·해시 불일치뿐이다 |
 """
 
 from __future__ import annotations
@@ -18,14 +20,13 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-import threading
 import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-import uvicorn
+from consumers import enroll
 from fastapi.testclient import TestClient
 
 from chaeksas.center.api import resources
@@ -38,10 +39,10 @@ READ = "t-read"
 ADMIN = {"Authorization": f"Bearer {TOKEN}"}
 READ_AUTH = {"Authorization": f"Bearer {READ}"}
 AT = "2026-10-07T09:00:00+09:00"
+APP = "demo.directory"
 
-#: 데모 앱을 쓰는 BPM 프로세스의 `requires.service_apps` 한 줄.
-#: `key_ref`는 **필수이고 이름 규칙을 따른다** (C1 R4 — 키 값이 섞여 들어가지 못하게).
-NEEDS_DEMO = {"app_id": "demo.directory", "operations": ["lookup"], "key_ref": "demo-key"}
+#: 데모 앱을 쓰는 BPM 프로세스의 `requires.service_apps` 한 줄 (C1). 키 참조는 없다 (ADR-0102).
+NEEDS_DEMO = {"app_id": APP, "operations": ["lookup"]}
 
 
 @pytest.fixture
@@ -63,48 +64,49 @@ def client(tmp_path: Path, store: Store) -> Iterator[TestClient]:
         yield found
 
 
-# ─────────────────────────── 진짜 서비스 앱 하나 ───────────────────────────
+# ─────────────────────────── 일꾼 하나 ───────────────────────────
 
 
-@pytest.fixture
-def app_url(monkeypatch: Any) -> Iterator[str]:
-    """`service_kit`으로 만든 진짜 앱을 127.0.0.1에 띄운다 — Center가 HTTP로 읽는다."""
-    from chaeksas.contracts.service_app import ServiceAppManifest
-    from chaeksas.service_kit.app import create_app as create_service_app
-    from chaeksas.service_kit.stores import InMemoryKeyStore
+def manifest(**over: Any) -> dict[str, Any]:
+    """일꾼이 올리는 C11 manifest — 앱이 자기 id를 정한다."""
+    body: dict[str, Any] = {
+        "schema": 1,
+        "app_id": APP,
+        "name": "사원 디렉터리",
+        "version": "1.0.0",
+        "category": "business",
+        "console_url": "http://127.0.0.1:8599/console",
+        "operations": [
+            {
+                "name": "lookup",
+                "description": "사번으로 사원을 찾는다",
+                "modes": ["deterministic", "autonomous"],
+                "server_ok": True,
+            }
+        ],
+    }
+    return body | over
 
-    manifest = ServiceAppManifest.model_validate(
-        {
-            "schema": 1,
-            "app_id": "demo.directory",
-            "name": "사원 디렉터리",
-            "version": "1.0.0",
-            "category": "business",
-            "console_url": "http://127.0.0.1:8599/console",
-            "operations": [
-                {
-                    "name": "lookup",
-                    "description": "사번으로 사원을 찾는다",
-                    "modes": ["deterministic", "autonomous"],
-                    "server_ok": True,
-                }
-            ],
-        }
+
+def consumer(
+    client: TestClient, tmp_path: Path, *, name: str = "c1", topics: list[str] | None = None, **over: Any
+) -> dict[str, str]:
+    """일꾼 하나를 들인다 (요청 → 관리자 승인 → 봉한 토큰) — 일꾼 토큰 헤더를 돌려준다."""
+    tokens = enroll(
+        client, topics=topics or [APP], manifests=[manifest(**over)], name=f"일꾼 {name}", folder=tmp_path / name
     )
-    made = create_service_app(
-        manifest, {"lookup": lambda request, caller: {"이름": "홍길동"}}, keys=InMemoryKeyStore()
-    )
-    config = uvicorn.Config(made, host="127.0.0.1", port=0, log_level="warning")
-    server = uvicorn.Server(config)
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    while not server.started:
-        if not thread.is_alive():  # pragma: no cover — 띄우지 못했다
-            raise RuntimeError("서비스 앱을 띄우지 못했다")
-    port = server.servers[0].sockets[0].getsockname()[1]
-    yield f"http://127.0.0.1:{port}"
-    server.should_exit = True
-    thread.join(timeout=5)
+    return {"Authorization": f"Bearer {tokens.token()}"}
+
+
+def fetch(client: TestClient, worker: dict[str, str], topic: str = APP) -> None:
+    """일꾼이 한 번 가져간다 — 이것이 「살아 있다」는 신호다 (C7 상태)."""
+    answer = client.post("/api/v1/consumers/fetch", json={"topics": [topic], "wait_s": 0}, headers=worker)
+    assert answer.status_code == 200, answer.text
+
+
+def service_apps(client: TestClient) -> list[dict[str, Any]]:
+    found: list[dict[str, Any]] = client.get("/api/v1/resources?type=service_app", headers=READ_AUTH).json()["items"]
+    return found
 
 
 # ─────────────────────────── 패키지 거리 ───────────────────────────
@@ -186,98 +188,87 @@ def register_bot_ui(client: TestClient, *, name: str = "현장 PC 1", seed: str 
     return str(answer.json()["bot_ui_id"])
 
 
-# ─────────────────────────── 서비스 앱 등록 (C7) ───────────────────────────
+# ─────────────────────────── 서비스 앱 = 일꾼이 올린 manifest (C7·C15) ───────────────────────────
 
 
-def test_registering_reads_the_manifest(client: TestClient, app_url: str) -> None:
-    """**등록은 manifest를 읽어 본 뒤에** 된다 — 앱이 자기 id를 정한다 (C11)."""
-    answer = client.post(
-        "/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN
-    )
-    assert answer.status_code == 201, answer.text
-    found = answer.json()
-    assert found["app_id"] == "demo.directory"
+def test_no_consumer_means_no_service_app(client: TestClient) -> None:
+    assert service_apps(client) == []
+    missing = client.get(f"/api/v1/resources/service-apps/{APP}", headers=READ_AUTH)
+    assert missing.status_code == 404 and missing.json()["code"] == "not_found"
+
+
+def test_enrolling_a_consumer_brings_its_manifest(client: TestClient, tmp_path: Path) -> None:
+    """들일 때 올린 manifest가 그대로 뜬다 — 앱이 자기 id·작업을 정한다 (C11)."""
+    consumer(client, tmp_path)
+    [found] = service_apps(client)
+    assert found["app_id"] == APP
     assert found["name"] == "사원 디렉터리" and found["category"] == "business"
-    assert found["status"] == "ok", "방금 읽었으니 상태를 안다"
     assert [one["name"] for one in found["operations"]] == ["lookup"]
-    assert found["base_url"] == app_url
+    assert found["consumers"] == 1 and found["manifest_at"]
+    assert "base_url" not in found or not found["base_url"], "Center는 앱의 주소를 모른다"
 
 
-def test_an_unreachable_app_is_not_registered(client: TestClient) -> None:
-    """읽지 못하면 등록하지 않는다 — 「등록은 됐는데 아무것도 모른다」를 만들지 않는다."""
-    answer = client.post(
-        "/api/v1/resources/service-apps",
-        json={"base_url": "http://127.0.0.1:9"},  # 아무도 듣지 않는 포트
-        headers=ADMIN,
-    )
-    assert answer.status_code == 422 and answer.json()["code"] == "manifest_unreachable"
-    assert client.get("/api/v1/resources?type=service_app", headers=READ_AUTH).json()["items"] == []
+def test_the_status_is_what_the_consumer_says(client: TestClient, tmp_path: Path, store: Store) -> None:
+    """**가져간 때**가 상태다 — 들었지만 가져간 적 없으면 `unreachable`, 가져가면 `ok`, 90초 조용하면 다시."""
+    worker = consumer(client, tmp_path)
+    [quiet] = service_apps(client)
+    assert (quiet["status"], quiet["status_reasons"]) == ("unreachable", ["consumer_quiet"])
+    assert quiet.get("checked_at") is None
 
+    fetch(client, worker)
+    [alive] = service_apps(client)
+    assert alive["status"] == "ok" and alive["status_reasons"] == [] and alive["checked_at"]
 
-def test_only_the_admin_registers(client: TestClient, app_url: str) -> None:
-    assert client.post(
-        "/api/v1/resources/service-apps", json={"base_url": app_url}, headers=READ_AUTH
-    ).status_code == 403
-
-
-def test_the_address_has_one_source(client: TestClient, app_url: str) -> None:
-    """`PUT`이 **주소의 유일한 출처**다 (C7). 다른 앱을 가리키면 거부한다."""
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
-
-    moved = client.put(
-        "/api/v1/resources/service-apps/demo.directory",
-        json={"base_url": f"{app_url}/"},
-        headers=ADMIN,
-    )
-    assert moved.status_code == 200
-
-    # 닿지 못하는 주소로는 바꿀 수 있다 (환경을 먼저 바꾸고 앱을 띄울 수 있다).
-    later = client.put(
-        "/api/v1/resources/service-apps/demo.directory",
-        json={"base_url": "http://127.0.0.1:9"},
-        headers=ADMIN,
-    )
-    assert later.status_code == 200
-    assert later.json()["status"] == "unreachable"
-    assert later.json()["name"] == "사원 디렉터리", "마지막으로 읽은 manifest는 남는다"
-
-
-def test_an_app_in_use_cannot_be_unregistered(client: TestClient, app_url: str) -> None:
-    """**쓰는 Bot이 있으면 해제하지 못한다** (409 `in_use`)."""
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
-    assert client.delete(
-        "/api/v1/resources/service-apps/demo.directory", headers=ADMIN
-    ).status_code == 204
-
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
-    upload(
-        client,
-        package_zip(requires={"service_apps": [NEEDS_DEMO]}),
-    )
-    blocked = client.delete("/api/v1/resources/service-apps/demo.directory", headers=ADMIN)
-    assert blocked.status_code == 409 and blocked.json()["code"] == "in_use"
-    assert blocked.json()["detail"]["used_by"] == ["hr.onboarding@1.0.0"]
-
-
-def test_used_by_shows_the_packages(client: TestClient, app_url: str) -> None:
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
-    upload(
-        client,
-        package_zip(requires={"service_apps": [NEEDS_DEMO]}),
-    )
-    found = client.get("/api/v1/resources/service-apps/demo.directory", headers=READ_AUTH).json()
-    assert found["used_by"] == ["hr.onboarding@1.0.0"]
-
-
-def test_refresh_reads_again_right_away(client: TestClient, app_url: str, store: Store) -> None:
-    """「새로 고침」은 간격을 무시한다 (C7)."""
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
     with store.tx() as cur:
-        cur.execute("UPDATE service_apps SET status = 'unknown', status_reasons = '[]'")
+        cur.execute("UPDATE consumers SET last_fetch_at = '2026-01-01T00:00:00+00:00'")
+    [gone] = service_apps(client)
+    assert gone["status"] == "unreachable" and gone["checked_at"] == "2026-01-01T00:00:00+00:00"
 
-    answer = client.post("/api/v1/resources/refresh", json={}, headers=ADMIN)
-    assert answer.status_code == 200
-    assert [one["status"] for one in answer.json()["items"]] == ["ok"]
+
+def test_the_consumer_replaces_its_manifest(client: TestClient, tmp_path: Path) -> None:
+    """판이 바뀌면 일꾼이 다시 올린다 — 주소가 아니라 **manifest가** 바뀌는 단위다."""
+    worker = consumer(client, tmp_path)
+    answer = client.put("/api/v1/consumers/self/manifest", json=manifest(version="1.1.0"), headers=worker)
+    assert answer.status_code == 200, answer.text
+    assert answer.json()["apps"] == [f"{APP}@1.1.0"]
+    assert [one["version"] for one in service_apps(client)] == ["1.1.0"]
+
+
+def test_a_manifest_outside_the_granted_topics_is_refused(client: TestClient, tmp_path: Path) -> None:
+    """일꾼이 승인받지 않은 앱을 자처하지 못한다."""
+    worker = consumer(client, tmp_path)
+    other = client.put("/api/v1/consumers/self/manifest", json=manifest(app_id="hr.payroll"), headers=worker)
+    assert other.status_code == 403 and other.json()["code"] == "topic_not_granted"
+    broken = client.put("/api/v1/consumers/self/manifest", json={"app_id": APP}, headers=worker)
+    assert broken.status_code == 422 and broken.json()["code"] == "input_invalid"
+    assert [one["app_id"] for one in service_apps(client)] == [APP]
+
+
+def test_only_a_consumer_token_uploads_a_manifest(client: TestClient) -> None:
+    assert client.put("/api/v1/consumers/self/manifest", json=manifest(), headers=ADMIN).status_code == 403
+
+
+def test_there_is_no_address_registration_anymore(client: TestClient) -> None:
+    """주소로 등록하는 길이 없다 (ADR-0102) — Center는 앱의 주소도 키도 들지 않는다."""
+    made = client.post("/api/v1/resources/service-apps", json={"base_url": "http://127.0.0.1:9"}, headers=ADMIN)
+    assert made.status_code in (404, 405)
+    assert client.post("/api/v1/resources/refresh", json={}, headers=ADMIN).status_code in (404, 405)
+
+
+def test_two_consumers_on_one_topic_are_counted(client: TestClient, tmp_path: Path) -> None:
+    """같은 토픽을 둘이 맡을 수 있다 — 일꾼 수가 늘고, manifest는 **나중에 승인된 쪽**이다."""
+    consumer(client, tmp_path, name="c1")
+    second = consumer(client, tmp_path, name="c2", version="2.0.0")
+    fetch(client, second)
+    [found] = service_apps(client)
+    assert found["consumers"] == 2 and found["version"] == "2.0.0" and found["status"] == "ok"
+
+
+def test_used_by_shows_the_packages(client: TestClient, tmp_path: Path) -> None:
+    consumer(client, tmp_path)
+    upload(client, package_zip(requires={"service_apps": [NEEDS_DEMO]}))
+    found = client.get(f"/api/v1/resources/service-apps/{APP}", headers=READ_AUTH).json()
+    assert found["used_by"] == ["hr.onboarding@1.0.0"]
 
 
 # ─────────────────────────── 모으는 종류 (C7) ───────────────────────────
@@ -293,16 +284,27 @@ def test_runtimes_come_from_bot_ui_reports(client: TestClient) -> None:
     assert one["versions"]["worker"] == "0.3.0"
 
 
-def test_extensions_merge_reports_and_manifests(client: TestClient, app_url: str) -> None:
-    """확장은 **실행하는 쪽의 보고와 서비스 앱 manifest를 합친** 것이다 (C7)."""
+def test_extensions_merge_reports_and_manifests(client: TestClient, tmp_path: Path) -> None:
+    """확장은 **실행하는 쪽의 보고와 일꾼 manifest를 합친** 것이다 (C7)."""
     register_bot_ui(client)
     register_bot_ui(client, name="현장 PC 2", seed="pc2")
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
+    consumer(client, tmp_path)
 
     found = client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()
     one = next(x for x in found["items"] if x["id"] == "ui-automation")
     assert one["installed_on"] == {"hosts": 2, "by_version": {"0.1.0": 2}}, "몇 대에 깔렸나"
     assert one["status"] == "n/a", "서버 부분이 없는 확장이다"
+
+
+def test_an_extensions_server_part_status_comes_from_its_consumer(client: TestClient, tmp_path: Path) -> None:
+    """manifest가 `extension`을 적으면 그 확장의 서버 부분이다 — 상태·연결 방식이 그 일꾼에서 온다."""
+    register_bot_ui(client)
+    worker = consumer(client, tmp_path, app_id="uia", extension={"id": "ui-automation", "version": "0.1.0"},
+                      topics=["uia"])
+    fetch(client, worker, topic="uia")
+    found = client.get("/api/v1/resources/extensions/ui-automation", headers=READ_AUTH).json()
+    assert (found["service_app_id"], found["protocol"], found["status"]) == ("uia", "chk-c11", "ok")
+    assert found["installed_on"]["hosts"] == 1
 
 
 def test_a_pc_is_counted_once_even_if_a_second_key_tries_to_register(client: TestClient) -> None:
@@ -332,19 +334,19 @@ def test_a_pc_is_counted_once_even_if_a_second_key_tries_to_register(client: Tes
     assert one["installed_on"] == {"hosts": 1, "by_version": {"0.1.0": 1}}
 
 
-def test_an_app_without_an_extension_is_not_an_extension(client: TestClient, app_url: str) -> None:
+def test_an_app_without_an_extension_is_not_an_extension(client: TestClient, tmp_path: Path) -> None:
     """서비스 앱이 `extension`을 적지 않으면 **확장 목록에 끼지 않는다** (C11 manifest).
 
     확장이 아닌 서비스 앱도 있다 — 모든 앱을 확장으로 세면 「확장 1개」가 거짓이 된다.
     """
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
+    consumer(client, tmp_path)
     found = client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()
     assert [one["id"] for one in found["items"]] == []
 
 
-def test_the_whole_list_has_every_kind(client: TestClient, app_url: str) -> None:
+def test_the_whole_list_has_every_kind(client: TestClient, tmp_path: Path) -> None:
     register_bot_ui(client)
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
+    consumer(client, tmp_path)
 
     found = client.get("/api/v1/resources", headers=READ_AUTH).json()
     assert found["fetched_at"]
@@ -361,8 +363,8 @@ def test_an_unknown_type_is_refused(client: TestClient) -> None:
     assert client.get("/api/v1/resources?type=없는것", headers=READ_AUTH).status_code == 422
 
 
-def test_contributed_is_empty_for_now(client: TestClient) -> None:
-    """확장 기여 자원은 아직 모으지 않는다 — **빈 목록이 「없다」는 뜻은 아니다**."""
+def test_contributed_is_empty_until_a_consumer_uploads_a_catalog(client: TestClient) -> None:
+    """기여 자원은 일꾼이 카탈로그를 올려야 생긴다 (`test_m5_catalog.py`)."""
     assert client.get("/api/v1/resources?type=contributed", headers=READ_AUTH).json()["items"] == []
 
 
@@ -383,7 +385,7 @@ def test_a_missing_service_app_is_a_warning_on_the_package(client: TestClient) -
     """업로드할 때는 **경고만** 한다 (C7) — 패키지 정보에 실린다."""
     info = upload(
         client,
-        package_zip(requires={"service_apps": [{"app_id": "없는앱", "operations": ["lookup"], "key_ref": "demo-key"}]}),
+        package_zip(requires={"service_apps": [{"app_id": "없는앱", "operations": ["lookup"]}]}),
     )
     found = client.get(
         f"/api/v1/packages/{info['id']}/{info['version']}/info", headers=READ_AUTH
@@ -393,8 +395,8 @@ def test_a_missing_service_app_is_a_warning_on_the_package(client: TestClient) -
     ]
 
 
-def test_registering_the_app_clears_the_warning(client: TestClient, app_url: str) -> None:
-    """누락은 **읽을 때** 센다 — 앱을 등록하면 다시 읽기만 해도 사라진다."""
+def test_a_consumer_clears_the_warning(client: TestClient, tmp_path: Path) -> None:
+    """누락은 **읽을 때** 센다 — 일꾼이 붙으면 다시 읽기만 해도 사라진다."""
     info = upload(
         client,
         package_zip(requires={"service_apps": [NEEDS_DEMO]}),
@@ -404,19 +406,19 @@ def test_registering_the_app_clears_the_warning(client: TestClient, app_url: str
     ).json()
     assert before["missing_resources"]
 
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
+    consumer(client, tmp_path)
     after = client.get(
         f"/api/v1/packages/{info['id']}/{info['version']}/info", headers=READ_AUTH
     ).json()
     assert after["missing_resources"] == []
 
 
-def test_a_missing_operation_is_noticed(client: TestClient, app_url: str) -> None:
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
+def test_a_missing_operation_is_noticed(client: TestClient, tmp_path: Path) -> None:
+    consumer(client, tmp_path)
     info = upload(
         client,
         package_zip(
-            requires={"service_apps": [{"app_id": "demo.directory", "operations": ["없는작업"], "key_ref": "demo-key"}]}
+            requires={"service_apps": [{"app_id": APP, "operations": ["없는작업"]}]}
         ),
     )
     found = client.get(
@@ -427,12 +429,14 @@ def test_a_missing_operation_is_noticed(client: TestClient, app_url: str) -> Non
     ]
 
 
-def test_index_does_not_poke_the_apps(client: TestClient, app_url: str, store: Store) -> None:
-    """패키지 목록을 읽을 때마다 서비스 앱을 깨우지 않는다 (`probe=False`)."""
-    client.post("/api/v1/resources/service-apps", json={"base_url": app_url}, headers=ADMIN)
-    with store.tx() as cur:
-        cur.execute("UPDATE service_apps SET checked_at = NULL, status = 'unknown'")
-    resources.index(store, probe=False)
-    row = store.row("SELECT status FROM service_apps")
+def test_a_quiet_consumer_does_not_block_deployment(client: TestClient, tmp_path: Path, store: Store) -> None:
+    """서비스 앱이 잠시 조용한 것으로는 막지 않는다 — 막는 것은 확장 누락·해시 불일치와 R8뿐이다 (C7)."""
+    from chaeksas.contracts.manifest import Manifest  # noqa: PLC0415
+    from chaeksas.contracts.resources import blocking_at_deploy, missing  # noqa: PLC0415
+
+    consumer(client, tmp_path)  # 들었지만 한 번도 가져가지 않았다 — `unreachable`
+    info = upload(client, package_zip(requires={"service_apps": [NEEDS_DEMO]}))
+    row = store.row("SELECT manifest_json FROM packages WHERE id = ? AND version = ?", (info["id"], info["version"]))
     assert row is not None
-    assert row["status"] == "unknown", "두드리지 않았다"
+    found = missing(Manifest.model_validate(json.loads(row["manifest_json"])), resources.index(store))
+    assert blocking_at_deploy(found) == []

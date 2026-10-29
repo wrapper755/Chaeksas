@@ -11,8 +11,10 @@
  * - **PC를 세는 것은 그 기능을 쓰는 Bot이 배포된 곳만**이다 — 그 Bot을 받지 않은 PC에 없는
  *   것은 할 일이 아니다.
  * - **외부 기능은 PC를 세지 않는다** — 코드가 없어 깔 것이 없다 (C13 E1).
- * - 서버 주소가 없다는 것은 **패키지의 누락 검사**(C7 `missing_resources`)가 말해 준다 — Center는
- *   내장·사내 확장의 정의를 갖지 않아 「서버가 필요한가」를 스스로 알 수 없다.
+ * - 서버 부분이 없다는 것은 **패키지의 누락 검사**(C7 `missing_resources`)가 말해 준다 — 서비스 앱은
+ *   그 토픽을 승인받은 **일꾼이 manifest를 올려야** 생긴다 (C15, ADR-0102). 할 일은 「일꾼을 들이세요」다.
+ * - 서버 상태는 **토픽이 말한다** — 그 토픽을 가져가는 일꾼이 있고 마지막으로 가져간 지 오래지 않으면
+ *   `ok`다 (C7). Center는 바깥 기능을 읽으러 가지 않는다.
  */
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
@@ -23,21 +25,7 @@ import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-reso
 /** `status_map` 「기능」의 표기. */
 export type Usable = "쓸 수 있음" | "쓸 수 없음" | "확인 전";
 
-export type TodoKind =
-  | "add_address"
-  | "server_down"
-  | "missing_on_hosts"
-  | "off_on_hosts"
-  | "wrong_version"
-  | "add_app_key"
-  | "app_not_trusting";
-
-/** 외부 앱 키 한 칸 (C7 `app_key` — 원문 없음). */
-export interface KeySlotView {
-  set: boolean;
-  setAt: string | null;
-  setBy: string | null;
-}
+export type TodoKind = "add_consumer" | "server_down" | "missing_on_hosts" | "off_on_hosts" | "wrong_version";
 
 export interface Todo {
   kind: TodoKind;
@@ -54,50 +42,15 @@ export interface FeatureRow {
   external: boolean;
   usable: Usable;
   todos: Todo[];
-  /** C11 서비스 앱이면 그 앱 (주소·관리 콘솔·주소 바꾸기). */
+  /** C11 서비스 앱이면 그 앱 (관리 콘솔). */
   serviceAppId: string | null;
-  serverUrl: string | null;
   consoleUrl: string | null;
-  /** 서버 상태를 본 때 (확인 전이면 없다). */
+  /** 이 기능의 토픽을 가져가는 일꾼 수 (C7 `consumers`). 서버 부분이 없으면 없다. */
+  consumers: number | null;
+  /** 일꾼이 마지막으로 가져간 때 (C7 `checked_at` — 들인 일꾼이 없으면 없다). */
   checkedAt: string | null;
   /** 이 기능을 요구하는 Bot (`<id>`) — 해제 확인 창이 쓴다. */
   usedBy: string[];
-  /** 외부 기능이고 키를 받는 앱일 때만 — 운영 키·Studio 시험용 키 (ADR-0094 §7). */
-  appKey: { run: KeySlotView; test: KeySlotView } | null;
-  /** C11 앱이 Center 발급을 받나 (C7 `trust.state`, ADR-0094 §1). 모르면 없다. */
-  trust: string | null;
-  /** 외부 기능이고 서버를 부를 때만 — 「서버 주소」 칸 (C7 §외부 확장 주소, ADR-0097). */
-  address: AddressView | null;
-}
-
-/** 외부 기능의 주소 — 지금 쓰는 것과 그 출처. */
-export interface AddressView {
-  /** 현장이 지금 쓰는 주소 (덮어쓴 것이 있으면 그것, 아니면 정의의 기본값). */
-  url: string;
-  /** `default`: 정의의 기본값 · `center`: Center에서 바꿈 · `outside`: 바꾼 주소를 지금 정의가 허용하지 않아 기본값. */
-  source: "default" | "center" | "outside";
-  setAt: string | null;
-  setBy: string | null;
-  /** 정의의 허용 호스트 — 「주소 바꾸기」 창이 한 줄로 보인다. */
-  allowedHosts: string[];
-}
-
-/** Center가 덮어쓴 주소를 지금 정의가 허용하지 않는다 (C7 `status_reasons`). */
-export const ADDRESS_OUTSIDE = "address_outside_definition";
-
-/** 외부 기능의 「서버 주소」 (ADR-0097). 서버를 부르지 않는(어댑터가 없는) 외부 기능은 `null`. */
-export function addressOf(ext: ExtensionResource): AddressView | null {
-  const service = (ext.definition as { service?: { base_url?: unknown; adapter?: { allowed_hosts?: unknown } } } | null)
-    ?.service;
-  if (!service?.adapter) return null;
-  const fallback = typeof service.base_url === "string" ? service.base_url : "";
-  const allowedHosts = Array.isArray(service.adapter.allowed_hosts) ? service.adapter.allowed_hosts.map(String) : [];
-  const override = ext.address ?? null;
-  if (override) {
-    return { url: override.base_url, source: "center", setAt: override.set_at ?? null, setBy: override.set_by ?? null, allowedHosts };
-  }
-  const outside = (ext.status_reasons ?? []).includes(ADDRESS_OUTSIDE);
-  return { url: fallback, source: outside ? "outside" : "default", setAt: null, setBy: null, allowedHosts };
 }
 
 export interface FeatureInput {
@@ -108,7 +61,7 @@ export interface FeatureInput {
   deployments: DeploymentInfo[];
 }
 
-export const ADD_ADDRESS_HREF = "/resources#add-service-app";
+export const ADD_CONSUMER_HREF = "/resources#consumer-enrollments";
 
 const DOWN = new Set(["unreachable"]);
 const UNKNOWN = new Set(["unknown", ""]);
@@ -181,39 +134,10 @@ function hostTodos(row: ExtensionResource, input: FeatureInput, bots: PackageInf
   return out;
 }
 
-function slotOf(raw: unknown): KeySlotView {
-  const one = (raw ?? {}) as { set?: boolean; set_at?: string | null; set_by?: string | null };
-  return { set: Boolean(one.set), setAt: one.set_at ?? null, setBy: one.set_by ?? null };
-}
-
-function appKeyOf(ext: ExtensionResource): FeatureRow["appKey"] {
-  const raw = (ext as { app_key?: { run?: unknown; test?: unknown } | null }).app_key;
-  if (!raw) return null;
-  return { run: slotOf(raw.run), test: slotOf(raw.test) };
-}
-
-function trustOf(app: ServiceAppResource | null): string | null {
-  const raw = (app as { trust?: { state?: string } | null } | null)?.trust;
-  return raw?.state ?? null;
-}
-
-/** 「이 앱이 Center 발급을 받지 않습니다」 — 받지 않으면 Center가 그 앱의 키를 짓지 못한다 (ADR-0094 §1). */
-export const TRUST_TODO: Record<string, string> = {
-  not_configured: "이 앱이 Center 발급을 받지 않습니다 — 앱 설정에 Center 주소(CHK_SVC_<APP>__CENTER__URL)를 넣으세요",
-  other_center: "이 앱은 다른 Center를 믿습니다 — 앱 설정의 Center 주소를 확인하세요",
-  stale_key: "이 앱이 Center의 새 서명 키를 아직 모릅니다 — 앱을 다시 시작하세요",
-  pin_mismatch: "앱 설정의 CENTER__KEY_PIN이 이 Center의 서명 키와 다릅니다 — 앱 설정을 고치세요",
-};
-
-function trustTodos(trust: string | null): Todo[] {
-  const text = trust ? TRUST_TODO[trust] : undefined;
-  return text ? [{ kind: "app_not_trusting", text }] : [];
-}
-
 function serverTodos(status: string, checkedAt: string | null | undefined): Todo[] {
   if (DOWN.has(status)) {
     const at = shortTime(checkedAt);
-    return [{ kind: "server_down", text: `서버가 응답하지 않습니다${at ? ` (${at})` : ""}` }];
+    return [{ kind: "server_down", text: `일꾼이 가져가지 않습니다${at ? ` (마지막 ${at})` : ""}` }];
   }
   return [];
 }
@@ -224,7 +148,7 @@ function verdict(todos: Todo[], status: string, hasServer: boolean): Usable {
   return "쓸 수 있음";
 }
 
-/** 누락 검사가 「서버 주소가 없다」고 한 서비스 앱 id들 (C7 `missing_resources`). */
+/** 누락 검사가 「없다」고 한 서비스 앱 id들 (C7 `missing_resources`) — 그 토픽을 맡은 일꾼이 manifest를 올리지 않았다. */
 function missingApps(packages: PackageInfo[]): Set<string> {
   const out = new Set<string>();
   for (const one of packages) {
@@ -233,6 +157,12 @@ function missingApps(packages: PackageInfo[]): Set<string> {
     }
   }
   return out;
+}
+
+/** 그 토픽을 가져가는 일꾼 수 (C7 `ServiceAppResource.consumers`). */
+function consumersOf(app: ServiceAppResource): number {
+  const raw = (app as { consumers?: unknown }).consumers;
+  return typeof raw === "number" ? raw : 0;
 }
 
 const RANK: Record<Usable, number> = { "쓸 수 없음": 0, "확인 전": 1, "쓸 수 있음": 2 };
@@ -255,31 +185,24 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
     const hasServer = status !== "n/a";
     const bots = botsUsing(input.packages, ext.id, app?.app_id ?? null);
     const todos: Todo[] = [];
-    // 서버 주소가 없다 — 누락 검사가 **확장 id와 같은 서비스 앱**을 찾지 못했다 (내장 확장은 대개 같다).
+    // 서버 부분이 없다 — 누락 검사가 **확장 id와 같은 서비스 앱**을 찾지 못했다 (내장 확장은 대개 같다).
     if (!app && !external && missing.has(ext.id)) {
-      todos.push({ kind: "add_address", text: "서버 주소를 넣으세요", href: ADD_ADDRESS_HREF });
+      todos.push({ kind: "add_consumer", text: "일꾼을 들이세요", href: ADD_CONSUMER_HREF });
     }
     todos.push(...serverTodos(status, ext.checked_at));
-    const appKey = external ? appKeyOf(ext) : null;
-    // 외부 앱 키가 없다 — 관리자가 한 번 넣는다 (C7 §외부 앱 키). 시험용 키는 운영과 상관없다.
-    if (appKey && !appKey.run.set) todos.push({ kind: "add_app_key", text: "외부 앱 키를 넣으세요", href: "#app-key" });
-    todos.push(...trustTodos(trustOf(app)));
     if (!external) todos.push(...hostTodos(ext, input, bots));
     rows.push({
       key: ext.id,
       id: ext.id,
       name: ext.name ?? ext.id,
       external,
-      usable: verdict(todos, status, hasServer || todos.some((one) => one.kind === "add_address")),
+      usable: verdict(todos, status, hasServer || todos.some((one) => one.kind === "add_consumer")),
       todos,
       serviceAppId: app?.app_id ?? null,
-      serverUrl: app?.base_url ?? null,
       consoleUrl: app?.console_url ?? null,
+      consumers: app ? consumersOf(app) : null,
       checkedAt: ext.checked_at ?? null,
       usedBy: bots.map((one) => one.id),
-      appKey,
-      trust: trustOf(app),
-      address: external ? addressOf(ext) : null,
     });
   }
 
@@ -287,7 +210,7 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
   for (const app of input.serviceApps) {
     if (claimedApps.has(app.app_id)) continue;
     const status = String(app.status ?? "");
-    const todos = [...serverTodos(status, app.checked_at), ...trustTodos(trustOf(app))];
+    const todos = serverTodos(status, app.checked_at);
     rows.push({
       key: `app:${app.app_id}`,
       id: app.app_id,
@@ -296,17 +219,14 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       usable: verdict(todos, status, true),
       todos,
       serviceAppId: app.app_id,
-      serverUrl: app.base_url ?? null,
       consoleUrl: app.console_url ?? null,
+      consumers: consumersOf(app),
       checkedAt: app.checked_at ?? null,
       usedBy: botsUsing(input.packages, null, app.app_id).map((one) => one.id),
-      appKey: null,
-      trust: trustOf(app),
-      address: null,
     });
   }
 
-  // 누락 검사가 말하는데 아무 줄에도 없는 서비스 앱 — Center가 아직 그 기능을 모른다.
+  // 누락 검사가 말하는데 아무 줄에도 없는 서비스 앱 — 그 토픽을 맡은 일꾼이 아직 들어오지 않았다.
   for (const id of missing) {
     if (rows.some((one) => one.id === id || one.serviceAppId === id)) continue;
     rows.push({
@@ -315,15 +235,12 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
       name: id,
       external: false,
       usable: "쓸 수 없음",
-      todos: [{ kind: "add_address", text: "서버 주소를 넣으세요", href: ADD_ADDRESS_HREF }],
+      todos: [{ kind: "add_consumer", text: "일꾼을 들이세요", href: ADD_CONSUMER_HREF }],
       serviceAppId: null,
-      serverUrl: null,
       consoleUrl: null,
+      consumers: 0,
       checkedAt: null,
       usedBy: botsUsing(input.packages, null, id).map((one) => one.id),
-      appKey: null,
-      trust: null,
-      address: null,
     });
   }
 

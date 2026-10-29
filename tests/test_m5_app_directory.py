@@ -1,15 +1,16 @@
-"""실행하는 쪽의 연결 — 받아서 **다시 검증하고** 꽂는다 (C13 「전송」, M5 조각 12).
+"""외부 확장 정의 — 받아서 **다시 검증하고** 대조한다, 그리고 어댑터 일꾼까지 한 바퀴 (C13 「전송」·C15).
 
-진짜 Center를 in-process로 띄우고, **Center의 서명 키**로 서명하고(ADR-0090), **진짜 외부 앱**을 127.0.0.1에
-띄워 Bot UI → 실행기 → 어댑터까지 한 바퀴를 본다.
+진짜 Center를 띄우고, **Center의 서명 키**로 서명하고(ADR-0090), **진짜 외부 앱**을 127.0.0.1에 띄워
+실행기 → Center → **어댑터 일꾼** → 외부 앱까지 한 바퀴를 본다 (ADR-0102 — 실행하는 쪽은 외부 앱을
+부르지 않는다).
 
 거듭 보는 것 다섯.
 
 1. **봉투가 관문이다** — 손댄 정의·모르는 키·봉투 없는 정의는 쓰지 않는다 (C2 V1~V3, E6).
 2. **패키지가 고정한 해시여야 한다** (C1) — 정의가 바뀌면 실행 **전에** 거절한다.
 3. **닿지 못하면 들고 있던 것을 쓴다** (ADR-0007). **404는 버린다** (철회는 보안 동작이다).
-4. **엔진은 어느 쪽인지 모른다** — 외부 확장은 어댑터로, 서비스 앱은 C11로 갈린다.
-5. **그 Bot이 쓰는 것만** 파일에 담는다 (키 값은 담지 않는다, ADR-0013).
+4. **외부 앱의 키는 어댑터 일꾼만 안다** — 실행하는 쪽·Center·실행 기록 어디에도 없다.
+5. **그 Bot이 쓰는 것만** 파일에 담는다.
 """
 
 from __future__ import annotations
@@ -36,7 +37,6 @@ from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.signing import sign
 from chaeksas.core.app_directory import (
     DirectoryCache,
-    app_ids,
     build,
     extension_ids,
     external_ids,
@@ -143,7 +143,7 @@ def envelope_for(key: Any, found: dict[str, Any], **over: Any) -> Any:
     return sign(claim, key, signed_at=AT)
 
 
-def register(client: TestClient, found: dict[str, Any]) -> Any:
+def register(client: Any, found: dict[str, Any]) -> Any:
     """관리자가 정의를 올린다 — 봉투는 Center가 짓는다 (ADR-0090)."""
     return register_extension(client, found, expect=None)
 
@@ -239,7 +239,6 @@ def test_a_signed_definition_is_usable(client: TestClient, key: Any, ocr: tuple[
     found = definition(port)
     made = build(
         to_json_dict(
-            addresses={},
             keys=public_keys(client),
             extensions=[{"definition": found, "envelope": envelope_for(key, found).to_json_dict()}],
         )
@@ -258,7 +257,7 @@ def test_a_tampered_definition_is_refused(client: TestClient, key: Any, ocr: tup
     tampered = {**found, "service": {**found["service"], "base_url": "https://evil.example.com"}}
     made = build(
         to_json_dict(
-            addresses={}, keys=public_keys(client),
+            keys=public_keys(client),
             extensions=[{"definition": tampered, "envelope": envelope.to_json_dict()}],
         )
     )
@@ -273,7 +272,7 @@ def test_an_unknown_key_is_refused(ocr: tuple[int, type[Ocr]]) -> None:
     stranger = Ed25519PrivateKey.generate()
     made = build(
         to_json_dict(
-            addresses={}, keys=[],
+            keys=[],
             extensions=[{"definition": found, "envelope": envelope_for(stranger, found).to_json_dict()}],
         )
     )
@@ -301,7 +300,7 @@ def test_a_changed_definition_is_unusable_for_that_package(
     newer = definition(port, version="1.1.0")  # Center에 올라온 새 판
     made = build(
         to_json_dict(
-            addresses={}, keys=public_keys(client),
+            keys=public_keys(client),
             extensions=[{"definition": newer, "envelope": envelope_for(key, newer).to_json_dict()}],
         )
     )
@@ -323,67 +322,6 @@ def test_a_builtin_extension_is_not_checked_here(client: TestClient) -> None:
         requires={"extensions": [{"id": "ui-automation", "version": ">=0.4,<1"}]}
     ).requires.extensions
     assert build({}).unusable(needs) == []
-
-
-# ─────────────────────────── 꽂기 (엔진은 어느 쪽인지 모른다) ───────────────────────────
-
-
-def test_the_engine_calls_the_external_app_through_the_adapter(
-    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path
-) -> None:
-    """한 바퀴 — 파일로 받은 정의를 검증하고, 어댑터로 **진짜** 외부 앱을 부른다."""
-    port, echo = ocr
-    found = definition(port)
-    path = tmp_path / "services.json"
-    path.write_text(
-        json.dumps(
-            to_json_dict(
-                addresses={}, keys=public_keys(client),
-                extensions=[{"definition": found, "envelope": envelope_for(key, found).to_json_dict()}],
-            )
-        ),
-        encoding="utf-8",
-    )
-
-    directory = read_directory(path, secrets=lambda ref: "ocr-secret-1" if ref == "ocr-key" else None)
-    outcome = directory.caller().call(op_call())
-
-    assert outcome.output == {"biz_no": "123-45-67890"}
-    assert echo.seen["path"] == "/v2/invoice"
-    assert echo.seen["headers"]["authorization"] == "Bearer ocr-secret-1"
-    # 주소는 정의의 것이다 — 외부 앱은 C11이 아니라 Center 리소스 등록에 없다.
-    assert echo.seen["body"] == {"url": "https://files.example.com/a.pdf", "ref": op_call().run_id}
-
-
-def test_an_unverified_definition_is_not_called(key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path) -> None:
-    """검증되지 않은 정의는 **부르지 않는다** — C11 쪽으로 가고 주소를 모른다고 실패한다."""
-    from chaeksas.core.services import ServiceCallError
-
-    port, echo = ocr
-    found = definition(port)
-    path = tmp_path / "services.json"
-    # 공개키를 싣지 않았다 → 봉투를 검증할 수 없다.
-    path.write_text(
-        json.dumps(
-            to_json_dict(
-                addresses={}, keys=[],
-                extensions=[{"definition": found, "envelope": envelope_for(key, found).to_json_dict()}],
-            )
-        ),
-        encoding="utf-8",
-    )
-    directory = read_directory(path, secrets=lambda ref: "ocr-secret-1")
-    with pytest.raises(ServiceCallError):
-        directory.caller().call(op_call())
-    assert echo.seen == {}, "검증되지 않았으면 **나가지 않는다**"
-
-
-def test_a_service_app_goes_to_c11_not_the_adapter(tmp_path: Path) -> None:
-    """서비스 앱(C11)은 어댑터로 가지 않는다 — 주소는 Center 등록에서 온다."""
-    directory = build({"addresses": {"svc-erp": "https://127.0.0.1:1"}, "keys": [], "extensions": []})
-    assert directory.base_url("svc-erp") == "https://127.0.0.1:1"
-    caller = directory.caller()
-    assert not caller.adapter.knows("svc-erp")  # type: ignore[attr-defined]
 
 
 # ─────────────────────────── Bot UI가 받아 온다 (C7) ───────────────────────────
@@ -423,9 +361,6 @@ def test_an_unreachable_center_uses_what_we_held(
     good.refresh(externals=[APP])
 
     class Dead:
-        def service_apps(self) -> list[Any]:
-            raise Unreachable("닿지 못했습니다")
-
         def extension(self, extension_id: str) -> Any:
             raise Unreachable("닿지 못했습니다")
 
@@ -451,9 +386,6 @@ def test_a_revoked_definition_is_dropped(
     assert made.cached()["extensions"], "들고 있다"
 
     class Revoked:
-        def service_apps(self) -> list[Any]:
-            return []
-
         def extension(self, extension_id: str) -> Any:
             raise CenterProblem("없다", code="not_found", status=404)
 
@@ -488,7 +420,7 @@ def test_a_bot_that_calls_nothing_gets_no_file(tmp_path: Path) -> None:
 
 
 def test_what_the_manifest_asks_for(ocr: tuple[int, type[Ocr]]) -> None:
-    """외부 확장은 `definition_hash`가 적힌 것이고, 서비스 앱은 따로 센다 (C1)."""
+    """외부 확장은 `definition_hash`가 적힌 것이다 (C1)."""
     port, _ = ocr
     found = manifest(
         definition(port),
@@ -501,7 +433,6 @@ def test_what_the_manifest_asks_for(ocr: tuple[int, type[Ocr]]) -> None:
         },
     )
     assert external_ids(found) == [APP]
-    assert app_ids(found) == ["svc-erp"]
     # **정의를 받아 볼 대상은 전부다** — 지금 내보내기는 `definition_hash`를 적지 않으므로
     # 고정된 것만 물으면 외부 앱을 하나도 부를 수 없다. 어느 것이 외부인가는 Center의 답이
     # 말해 준다 (내장·사내는 정의 없이 와서 담기지 않는다).
@@ -544,9 +475,8 @@ def test_the_server_runner_builds_the_directory_without_a_file(
         tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
     )
 
-    good = made.directory_for(asked, keys=public_keys(client), secrets=lambda ref: "svc-key")
+    good = made.directory_for(asked, keys=public_keys(client))
     assert set(good.externals) == {APP}
-    assert good.key("erp-key") == "svc-key", "키는 실행하는 쪽이 푼다 (명부에 값이 없다)"
 
     without_keys = made.directory_for(asked, keys=[])
     assert without_keys.externals == {}
@@ -594,7 +524,7 @@ def services_file(path: Path, client: TestClient, key: Any, found: dict[str, Any
     path.write_text(
         json.dumps(
             to_json_dict(
-                addresses={}, keys=public_keys(client),
+                keys=public_keys(client),
                 extensions=[{"definition": found, "envelope": envelope_for(key, found).to_json_dict()}],
             )
         ),
@@ -603,48 +533,75 @@ def services_file(path: Path, client: TestClient, key: Any, found: dict[str, Any
     return path
 
 
-def test_the_runner_calls_the_external_app_end_to_end(
-    client: TestClient, key: Any, ocr: tuple[int, type[Ocr]], tmp_path: Path, monkeypatch: Any
+def test_the_runner_calls_the_external_app_through_the_adapter_consumer(
+    ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
-    """한 바퀴 — 패키지 → 명부 검증 → 엔진 → **진짜 외부 앱** → 변수 → C3 기록."""
-    from chaeksas.bot_ui.runner_main import Runner, app_directory, refuse_unusable
-    from chaeksas.core.engine import State
-    from chaeksas.core.packages import InstalledBot
-    from chaeksas.core.run_env import make_env
-    from chaeksas.core.run_log import RunLog, log_path
+    """한 바퀴 — 패키지 → 엔진 → **Center(C15)** → 어댑터 일꾼 → **진짜 외부 앱** → 변수 → C3 기록.
+
+    실행하는 쪽(Studio 키, `test_…` 실행)은 외부 앱의 주소도 키도 모른다. 키는 **어댑터 일꾼의
+    설정**(`CHK_ADAPTER__EXT__EXT_OCR__KEY`)에만 있고, 외부 앱이 받은 `Authorization`이 그것이다.
+    """
+    import httpx  # noqa: PLC0415
+    from consumers import enroll, serve, start  # noqa: PLC0415
+
+    from chaeksas.adapter_consumer.adapter import AdapterService, ext_env  # noqa: PLC0415
+    from chaeksas.adapter_consumer.main import load_definitions  # noqa: PLC0415
+    from chaeksas.bot_ui.runner_main import Runner  # noqa: PLC0415
+    from chaeksas.core.engine import State  # noqa: PLC0415
+    from chaeksas.core.packages import InstalledBot  # noqa: PLC0415
+    from chaeksas.core.run_env import make_env  # noqa: PLC0415
+    from chaeksas.core.run_log import RunLog, log_path  # noqa: PLC0415
+    from chaeksas.core.services import CenterServiceCaller  # noqa: PLC0415
 
     port, echo = ocr
     found = definition(port)
-    package = InstalledBot.read(package_at(tmp_path / "bot", found))
-    path = services_file(tmp_path / "run.services.json", client, key, found)
-    # 키 값은 실행기가 OS 비밀 저장소·환경변수에서 푼다 (ADR-0013).
-    monkeypatch.setenv("CHK_BOT_UI__SVC__OCR_KEY", "ocr-secret-1")
-
-    directory = app_directory(path)
-    refuse_unusable(package, directory)  # 쓸 수 있다 — 그림대로 돈다
-    data_dir = tmp_path / "data"
-    runner = Runner(
-        run_id="run_20261008_090000_a1b2c3",
-        package=package,
-        data_dir=data_dir,
-        inputs={"파일": "https://files.example.com/a.pdf"},
-        env=make_env(
-            package,
-            output_dir=tmp_path / "out",
-            readable=(),
-            llm_model="",
-            directory=directory,
-        ),
+    store = Store(tmp_path / "center.sqlite3")
+    app = create_app(
+        Settings(db_path=tmp_path / "center.sqlite3", package_dir=tmp_path / "pkg", admin_token=TOKEN), store=store
     )
-    assert runner.drive(deadline_s=20) is State.DONE
+    url, server, thread = serve(app)
+    try:
+        with httpx.Client(base_url=url, timeout=30) as http:
+            assert register(http, found).status_code == 201
+            tokens = enroll(http, topics=[APP], folder=tmp_path / "adapter")
+            studio = http.post("/api/v1/center-keys", json={"name": "설계자", "type": "studio"}, headers=ADMIN)
+            studio_key = str(studio.json()["key"])
+            [loaded] = load_definitions(url, str(tokens.token()), [APP], client=http)
+        service = AdapterService(
+            definition=loaded.definition,
+            environ={ext_env(APP, "KEY"): "ocr-secret-1", "CHK_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"},
+        )
+        _, stop = start([service], center_url=url, tokens=tokens)
+        try:
+            package = InstalledBot.read(package_at(tmp_path / "bot", found))
+            data_dir = tmp_path / "data"
+            runner = Runner(
+                run_id="test_20261008_090000_a1b2c3",
+                package=package,
+                data_dir=data_dir,
+                inputs={"파일": "https://files.example.com/a.pdf"},
+                env=make_env(
+                    package,
+                    output_dir=tmp_path / "out",
+                    readable=(),
+                    llm_model="",
+                    services=CenterServiceCaller(base_url=url, token=studio_key, caller_type="studio"),
+                ),
+            )
+            assert runner.drive(deadline_s=30) is State.DONE
+        finally:
+            stop.set()
+    finally:
+        server.should_exit = True
+        thread.join(timeout=5)
     assert runner.run is not None
     assert runner.run.variables["사업자번호"] == "123-45-67890"
-    assert echo.seen["headers"]["authorization"] == "Bearer ocr-secret-1"
+    assert echo.seen["headers"]["authorization"] == "Bearer ocr-secret-1", "키는 어댑터 일꾼의 설정에서 왔다"
 
     calls = [one for one in RunLog.read(log_path(data_dir, runner.run_id)) if one.kind == "service_call"]
     assert len(calls) == 1
     assert calls[0].data["app_id"] == "ext-ocr"
-    assert calls[0].data["key_ref"] == "ocr-key", "**참조 이름만** 기록에 간다 (ADR-0013)"
+    assert calls[0].data["key_ref"] == "", "키가 없다 — 참조 이름도 기록에 가지 않는다 (ADR-0102)"
     assert "123-45-67890" not in json.dumps(calls[0].data, ensure_ascii=False), "업무 값은 기록에 없다"
 
 
@@ -668,137 +625,19 @@ def test_the_runner_refuses_to_start_when_the_definition_changed(
     assert caught.value.code == "extension_definition_unusable"
 
 
-# ─────────────────────────── 외부 확장 주소 (C7 §외부 확장 주소, ADR-0097) ───────────────────────────
+# ─────────────────────────── 외부 확장 주소·키 — Center에 없다 (ADR-0102) ───────────────────────────
 
 
-def _two_hosts(port: int, **over: Any) -> dict[str, Any]:
-    """기본 주소는 **아무도 듣지 않는 곳**이고 허용 호스트는 둘이다 — 덮어쓴 주소로만 닿는다."""
-    found = definition(port, **over)
-    found["service"]["base_url"] = "http://localhost:9"
-    found["service"]["adapter"]["allowed_hosts"] = ["127.0.0.1", "localhost"]
-    return found
-
-
-def _address(client: TestClient, base_url: str, *, headers: dict[str, str] = ADMIN) -> Any:
-    return client.put(f"/api/v1/resources/extensions/{APP}/address", json={"base_url": base_url}, headers=headers)
-
-
-def test_center_moves_the_address_and_the_adapter_follows_it(
-    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
-) -> None:
-    """**정의 하나로 환경을 넘는다** — Center가 덮어쓴 주소로 어댑터가 정말 부른다 (ADR-0097)."""
-    port, echo = ocr
-    found = _two_hosts(port)
-    assert register(client, found).status_code == 201
-
-    moved = _address(client, f"http://127.0.0.1:{port}/")
-    assert moved.status_code == 200, moved.text
-    assert moved.json()["address"]["base_url"] == f"http://127.0.0.1:{port}", "끝의 /는 다듬는다"
-    assert moved.json()["address"]["set_by"]
-
-    made = DirectoryCache.using(
-        tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
-    )
-    directory = made.directory_for(manifest(found), keys=public_keys(client), secrets=lambda ref: "ocr-secret-1")
-    assert directory.base_url(APP) == f"http://127.0.0.1:{port}"
-    assert directory.caller().call(op_call()).output == {"biz_no": "123-45-67890"}
-    assert echo.seen["path"] == "/v2/invoice"
-
-    # Bot UI가 실행기에 건네는 파일에도 같은 주소가 간다.
-    path = made.write_for(manifest(found), path=tmp_path / "run.services.json", keys=public_keys(client))
-    assert path is not None and read_directory(path).base_url(APP) == f"http://127.0.0.1:{port}"
-
-
-def test_an_address_outside_the_definition_is_refused(client: TestClient, ocr: tuple[int, type[Ocr]]) -> None:
-    """**정의를 넓히지 않는다** — 허용 호스트 밖·경로·공용 http는 422다."""
-    port, _ = ocr
-    assert register(client, _two_hosts(port)).status_code == 201
-    for bad in ("https://evil.example.com", f"http://127.0.0.1:{port}/api", "", "ftp://127.0.0.1"):
-        refused = _address(client, bad)
-        assert refused.status_code == 422, bad
-        assert refused.json()["code"] == "host_not_allowed", bad
-    assert client.get(f"/api/v1/resources/extensions/{APP}", headers=ADMIN).json().get("address") is None
-
-
-def test_only_an_admin_moves_the_address(client: TestClient, ocr: tuple[int, type[Ocr]]) -> None:
-    port, _ = ocr
-    assert register(client, _two_hosts(port)).status_code == 201
-    assert _address(client, f"http://127.0.0.1:{port}", headers={"Authorization": "Bearer t-read"}).status_code == 403
-    assert client.put(
-        "/api/v1/resources/extensions/no-such/address", json={"base_url": "https://a.example"}, headers=ADMIN
-    ).status_code == 404
-
-
-def test_resetting_goes_back_to_the_definition(
-    client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
-) -> None:
-    port, _ = ocr
-    found = _two_hosts(port)
-    assert register(client, found).status_code == 201
-    assert _address(client, f"http://127.0.0.1:{port}").status_code == 200
-
-    reset = client.delete(f"/api/v1/resources/extensions/{APP}/address", headers=ADMIN)
-    assert reset.status_code == 200 and reset.json().get("address") is None
-    made = DirectoryCache.using(
-        tmp_path / "data", CenterClient(base_url="http://center", api_key=TOKEN, client=client)
-    )
-    # 덮어쓴 것이 없으면 명부에 담지 않는다 — 어댑터가 정의의 기본값으로 떨어진다.
-    assert made.directory_for(manifest(found), keys=public_keys(client)).base_url(APP) is None
-
-
-def test_a_new_version_that_no_longer_allows_the_address_stops_sending_it(
-    client: TestClient, ocr: tuple[int, type[Ocr]]
-) -> None:
-    """새 판의 허용 호스트 밖이 되면 **내려 주지 않고** 사유를 남긴다 — 지우지는 않는다."""
-    port, _ = ocr
-    assert register(client, _two_hosts(port)).status_code == 201
-    assert _address(client, "http://localhost:3000").status_code == 200
-
-    narrower = _two_hosts(port, version="1.1.0")
-    narrower["service"]["adapter"]["allowed_hosts"] = ["127.0.0.1"]
-    narrower["service"]["base_url"] = f"http://127.0.0.1:{port}"
-    assert register(client, narrower).status_code == 201
-
-    got = client.get(f"/api/v1/resources/extensions/{APP}", headers=ADMIN).json()
-    assert got["version"] == "1.1.0"
-    assert got.get("address") is None
-    assert "address_outside_definition" in got["status_reasons"]
-
-
-def test_revoking_the_extension_forgets_the_address(
-    client: TestClient, store: Store, ocr: tuple[int, type[Ocr]]
-) -> None:
-    from center_admin import revoke_extension
-
-    port, _ = ocr
-    found = _two_hosts(port)
-    assert register(client, found).status_code == 201
-    assert _address(client, f"http://127.0.0.1:{port}").status_code == 200
-    revoke_extension(client, APP, found["version"])
-    assert store.row("SELECT * FROM extension_addresses WHERE extension_id = ?", (APP,)) is None
-
-
-def test_studio_uses_the_address_center_moved(client: TestClient, ocr: tuple[int, type[Ocr]]) -> None:
-    """Studio 시험 실행도 **같은 명부**다 — 로컬 덮어쓰기는 없다 (ADR-0097)."""
-    from chaeksas.studio.services import CenterReader, Services
-
-    port, _ = ocr
-    assert register(client, _two_hosts(port)).status_code == 201
-    assert _address(client, f"http://127.0.0.1:{port}").status_code == 200
-
-    made = Services(reader=CenterReader(base_url="http://center", api_key=TOKEN, client=client))
-    directory = made.directory()
-    assert set(directory.externals) == {APP}, made.problems
-    assert directory.base_url(APP) == f"http://127.0.0.1:{port}"
-
-
-def test_center_checks_health_at_the_address_it_moved(client: TestClient, ocr: tuple[int, type[Ocr]]) -> None:
-    """상태 점검도 **현장이 부르는 곳**으로 간다 — 기본 주소는 아무도 듣지 않는다."""
-    port, _ = ocr
-    found = _two_hosts(port)
-    found["service"]["adapter"]["health"] = {"path": "/health"}
-    assert register(client, found).status_code == 201
-    assert _address(client, f"http://127.0.0.1:{port}").status_code == 200
-
-    got = client.get(f"/api/v1/resources/extensions/{APP}", headers=ADMIN).json()
-    assert got["status"] == "ok", got["status_reasons"]
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("PUT", "/api/v1/resources/extensions/ext-ocr/address"),
+        ("PUT", "/api/v1/resources/extensions/ext-ocr/app-key"),
+        ("PUT", "/api/v1/resources/extensions/ext-ocr/app-key/test"),
+        ("POST", "/api/v1/resources/service-apps"),
+    ],
+)
+def test_center_has_no_place_for_outside_addresses_or_keys(client: TestClient, method: str, path: str) -> None:
+    """주소·키는 **어댑터 일꾼의 설정에만** 있다 — Center에 넣는 길이 없다 (C7)."""
+    answer = client.request(method, path, json={"base_url": "https://x", "key": "k"}, headers=ADMIN)
+    assert answer.status_code in (404, 405)

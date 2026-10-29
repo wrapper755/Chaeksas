@@ -5,8 +5,8 @@ import { Button, ConfirmDialog, ErrorBanner } from "@chaeksas/ui";
 import { setBotUiDisabled, setSelectorRegistration } from "@/app/actions";
 
 /**
- * CON-03 「셀렉터 등록」 (ADR-0094 §6) — 켜면 Center가 이 PC Bot UI에 도구용 키를 내려 주고 Tool UI가
- * 그것을 읽는다. 권한이 **사람이 아니라 PC**에 붙으므로 켤 때 확인 창이고 기본은 「취소」다 (U9).
+ * CON-03 「셀렉터 등록」 — 켜면 이 PC의 Tool UI가 셀렉터 등록 작업을 Center에 올릴 수 있다
+ * (C15 §올리기 — 등록 세션은 Bot이 없어 「그 PC에 켜졌나」를 본다). 권한이 **사람이 아니라 PC**에 붙으므로 켤 때 확인 창이고 기본은 「취소」다 (U9).
  */
 export function SelectorRegistration({ botUiId, on }: { botUiId: string; on: boolean }) {
   const [asking, setAsking] = useState(false);

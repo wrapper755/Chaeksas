@@ -15,6 +15,7 @@
 > 계획은 `(page_id, platform, steps 해시, revision)`으로 캐시하고 **자율 수행은 캐시하지 않는다**.
 > 모델이 없으면 치유·계획이 503 `llm_unavailable`이고 Worker는 전환한다.
 
+
 ## 목적
 
 UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
@@ -27,13 +28,12 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 
 ## 전송
 
-- **C11 서비스 앱 공통 규칙을 그대로 따른다.** 세 동작은 UI 자동화 앱의 작업(operation)이다.
-  - `POST /v1/ops/plan`
-  - `POST /v1/ops/heal`
-  - `POST /v1/ops/report`
-- 인증: 세션 요청에 실려 온 **UI 자동화 앱 API 키**(C10 `service_key`). BPM 프로세스의 키 참조를 Bot 쪽에서 푼 값이다.
-- OpRequest 공통 필드(`mode`, `run_id`, `node_id`, `node_instance`, `attempt`)는 C10 세션 요청의 값을 그대로 쓴다. `caller.type`은 `worker`이고 `business_key`는 C10의 4단 형식이다.
-- **`call_seq`(C11):** 한 UI 세션 안에서 같은 작업을 여러 번 부르므로, Worker가 세션마다 작업별 일련번호를 매긴다. 그래야 C11 멱등 키가 겹치지 않는다.
+- **C15 외부 작업으로 오간다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 세 동작은 토픽 `ui-automation`의 작업(operation)이고 UI 자동화 앱이 **일꾼**으로 가져간다 (C11).
+  - `plan`·`heal` — 결과를 기다린다 (`want_result: true`)
+  - `report` — 기다리지 않는다 (`want_result: false` — 보고 큐는 Center에 **올라간 것**을 보낸 것으로 친다)
+- 인증: 세션 요청에 실려 온 **호출 토큰**(C10 `call_token`). Worker는 앱의 주소·키를 모르고 Center 주소만 안다(`CHK_RUNTIME__CENTER_URL`, C13).
+- 일감의 멱등 칸(`run_id`, `node_id`, `node_instance`, `attempt`)과 `mode`는 C10 세션 요청의 값을 그대로 쓴다. `caller.type`은 `worker`이고 `business_key`는 C10의 4단 형식이다.
+- **`call_seq`(C11):** 한 UI 세션 안에서 같은 작업을 여러 번 부르므로, Worker가 세션마다 작업별 일련번호를 매긴다. 그래야 C15 멱등 칸이 겹치지 않는다.
   - `plan`: 1, 다시 계획하면 2, 3…
   - `heal`: 세션 안 치유 호출마다 1, 2, 3… (`heal_attempt`와는 따로 센다)
   - `report`: 1
@@ -231,6 +231,7 @@ C11 오류 형식을 따른다. 이 계약에서 더하는 코드는 다음과 �
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | 전송이 C15 외부 작업이 됐다 — 토픽 `ui-automation`, `report`는 결과를 기다리지 않는다, 인증은 호출 토큰 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-01 | 1 | 초안. 프로토타입의 계획·치유·보고를 C11 작업으로 옮겼다. 그 과정에서 바뀐 것: 작업 임차 없앰, `business_key`·수행 모드 필수, 보고에서 읽은 값 제거, 스냅샷의 업무 값 가리기, `revision`으로 캐시 | 0008, 0010, 0013 |
 | 2026-10-01 | 1 | 검토 반영: 세션 안 작업별 `call_seq`, 보고 재전송은 5xx만·4xx는 보내지 못한 보고로, 모르는 화면 보고도 받음, `origin: test`는 승격에서 제외, 치유 기본값·운영에서 막는 법 명시 | 0018 |
 | 2026-10-03 | 1 | 데스크톱 로케이터에 `class_name` 전략과 `control_type` 조건을 더했다. 기본 우선순위도 바뀐다 — `control_name`이 2에서 **3**으로 내려간다 (화면 언어에 따라 달라지므로). 구현이 아직 없어 schema는 그대로 1 | 0020 |

@@ -5,38 +5,41 @@
 1. 모델에게 가는 것은 **시맨틱 정보와 이름**뿐이다 — 업무 값도 셀렉터도 없다 (원칙 6·ADR-0008).
 2. 앱이 거른다 — 등록된 요소·할 수 있는 동작·값 규칙·이름 규칙. 어긋나면 422 `goal_plan_invalid`.
 3. 결정 수행은 목표로 계획하지 않는다 (앱·Worker·수행기 셋 다).
-4. **한 바퀴:** 수행기 → Worker → 앱(모델) → `planned_steps` → 수행기가 채워 하나씩 → 읽은 값은 변수로.
+4. **한 바퀴:** 수행기 → Worker → Center(C15 외부 작업) → 앱(일꾼, 모델) → `planned_steps` → 수행기가
+   채워 하나씩 → 읽은 값은 변수로. 자율 수행은 **Studio 시험 실행만** 올린다(C15) — 그래서 한 바퀴는
+   Studio 호출 토큰과 `test_…` 실행이다.
+
+앱의 답만 볼 때는 작업 수행기(`app.state.ops`)를 바로 부른다. C15 실패에는 HTTP 상태가 없다 — **코드**로 본다.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-from fastapi.testclient import TestClient
+from uia_center import UiaCenter, execute, running
 
-from chaeksas.contracts.service_app import ServiceAppKey
 from chaeksas.ext.ui_automation.client.registry_client import RegistryClient
 from chaeksas.ext.ui_automation.client.task import UiTaskExecutor, goal_values
 from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec
 from chaeksas.ext.ui_automation.contracts.registry import CatalogEntry, ElementHint, PageRegistration
 from chaeksas.ext.ui_automation.contracts.worker_local import Caller, SessionRequest
-from chaeksas.ext.ui_automation.service.app import REGISTRY_WRITE, create
+from chaeksas.ext.ui_automation.service.app import create
 from chaeksas.ext.ui_automation.service.planning import MAX_STEPS, GoalPlanInvalid, messages_for, steps_from
-from chaeksas.ext.ui_automation.service.store import Database, SqliteKeyStore
+from chaeksas.ext.ui_automation.worker import plans_for
 from chaeksas.ext.ui_automation.worker.app import Worker, WorkerProblem
 from chaeksas.ext.ui_automation.worker.ladder import Match
-from chaeksas.ext.ui_automation.worker.plans import HttpOps, PlanCache, PlanService, ReportQueue
 from chaeksas.extension_api import ExtensionContext, TaskContext, TaskFailed
 from chaeksas.llm import RecordingLlm, Reply
-from chaeksas.service_kit import ServiceLlm, hash_key
+from chaeksas.service_kit import Outcome, ServiceLlm
 
-KEY = "chk_svc_" + "g" * 40
 PAGE = "intranet.request.form"
-RUN = "run_20261005_110000_a1b2c3"
+#: Studio 시험 실행 — 자율 수행은 여기서만 Center에 올라간다 (C15).
+RUN = "test_20261005_a1b2c3"
 SECRET_VALUE = "수량-7731"
 GOAL = "{신청.수량}을 수량 칸에 넣고 상신한 뒤 접수 메시지를 읽는다"
 
@@ -147,67 +150,49 @@ def test_an_unusable_answer_is_invalid(text: str, why: str) -> None:
 # ─────────────────────────── 앱 ───────────────────────────
 
 
-def served(tmp_path: Path, model: RecordingLlm | None) -> TestClient:
-    path = tmp_path / "uia.sqlite3"
-    llm = ServiceLlm(model, model="m-plan") if model is not None else ServiceLlm()
-    app = create(db_path=path, admin_token="t-admin", llm=llm)
-    SqliteKeyStore(db=Database(path=path)).add(
-        ServiceAppKey(
-            name="개발",
-            hash=hash_key(KEY),
-            prefix=KEY[:16],
-            allowed_operations=["*"],
-            allowed_modes=["deterministic", "autonomous"],
-            extra_scopes=[REGISTRY_WRITE],
-            created_at="2026-10-05T09:00:00+09:00",
-        )
-    )
-    client = TestClient(app)
-    RegistryClient(base_url="http://app", api_key=KEY, client=client).register(page())
-    return client
+def llm_of(model: RecordingLlm | None) -> ServiceLlm:
+    return ServiceLlm(model, model="m-plan") if model is not None else ServiceLlm()
 
 
-def plan_call(client: TestClient, *, mode: str = "autonomous", **extra: Any) -> Any:
-    body = {
-        "schema": 1,
-        "mode": mode,
-        "run_id": RUN,
-        "node_id": "Task_Form",
-        "node_instance": 1,
-        "attempt": 1,
-        "caller": {"type": "worker"},
-        "input": {"page_id": PAGE, "goal": GOAL, "values": ["신청.수량"], "results": ["접수결과"], **extra},
-    }
-    return client.post("/v1/ops/plan", json=body, headers={"Authorization": f"Bearer {KEY}"})
+def served(tmp_path: Path, model: RecordingLlm | None) -> Any:
+    app = create(db_path=tmp_path / "uia.sqlite3", admin_token="t-admin", llm=llm_of(model))
+    made = execute(app, "registry_register", {"page": page().to_json_dict()}, run_id="reg_00000001")
+    assert made.ok, made
+    return app
+
+
+def plan_call(app: Any, *, mode: str = "autonomous", **extra: Any) -> Outcome:
+    body = {"page_id": PAGE, "goal": GOAL, "values": ["신청.수량"], "results": ["접수결과"], **extra}
+    found: Outcome = execute(app, "plan", body, mode=mode, run_id=RUN, node_id="Task_Form", origin="test")
+    return found
 
 
 def test_the_app_plans_from_a_goal_and_reports_usage(tmp_path: Path) -> None:
-    client = served(tmp_path, RecordingLlm(replies=[said(GOOD)]))
-    answer = plan_call(client)
-    assert answer.status_code == 200, answer.text
-    body = answer.json()
-    assert [one["semantic_key"] for one in body["output"]["steps"]] == ["form.qty", "form.submit", "result.message"]
-    assert set(body["output"]["locators"]) == {"form.qty", "form.submit", "result.message"}
-    assert body["usage"] == {"model": "m-plan", "input_tokens": 200, "output_tokens": 40}
+    answer = plan_call(served(tmp_path, RecordingLlm(replies=[said(GOOD)])))
+    assert answer.ok and answer.response is not None, answer
+    output = answer.response.output
+    assert [one["semantic_key"] for one in output["steps"]] == ["form.qty", "form.submit", "result.message"]
+    assert set(output["locators"]) == {"form.qty", "form.submit", "result.message"}
+    assert answer.complete_body()["usage"] == {"model": "m-plan", "input_tokens": 200, "output_tokens": 40}
 
 
 def test_the_app_refuses_a_goal_in_deterministic_mode(tmp_path: Path) -> None:
     model = RecordingLlm(replies=[said(GOOD)])
     answer = plan_call(served(tmp_path, model), mode="deterministic")
-    assert (answer.status_code, answer.json()["code"]) == (422, "mode_unsupported")
+    assert (answer.ok, answer.code) == (False, "mode_unsupported")
     assert not model.asked, "결정 수행은 LLM을 부르지 않는다"
 
 
-def test_an_invalid_plan_is_422_with_reasons(tmp_path: Path) -> None:
-    client = served(tmp_path, RecordingLlm(replies=[said([{"semantic_key": "form.nope", "action": "click"}])]))
-    answer = plan_call(client)
-    assert (answer.status_code, answer.json()["code"]) == (422, "goal_plan_invalid")
-    assert answer.json()["detail"]["reasons"]
+def test_an_invalid_plan_fails_goal_plan_invalid(tmp_path: Path) -> None:
+    model = RecordingLlm(replies=[said([{"semantic_key": "form.nope", "action": "click"}])])
+    answer = plan_call(served(tmp_path, model))
+    assert (answer.ok, answer.code, answer.retryable) == (False, "goal_plan_invalid", False)
+    assert "form.nope" in answer.message, "까닭이 말에 남는다"
 
 
-def test_without_a_model_a_goal_is_503(tmp_path: Path) -> None:
+def test_without_a_model_a_goal_fails_llm_unavailable(tmp_path: Path) -> None:
     answer = plan_call(served(tmp_path, None))
-    assert (answer.status_code, answer.json()["code"]) == (503, "llm_unavailable")
+    assert (answer.ok, answer.code) == (False, "llm_unavailable")
 
 
 # ─────────────────────────── 한 바퀴 ───────────────────────────
@@ -276,18 +261,23 @@ class _Settings:
 
 
 class _Secrets:
+    """호출 토큰(C15)만 준다 — 이름은 `call_token`이다."""
+
+    def __init__(self, token: str) -> None:
+        self.token = token
+
     def resolve(self, ref: str) -> str | None:
-        return KEY
+        return self.token if ref == "call_token" else None
 
 
-def context(mode: str, properties: dict[str, Any], inputs: dict[str, Any]) -> TaskContext:
+def context(mode: str, properties: dict[str, Any], inputs: dict[str, Any], *, token: str = "") -> TaskContext:
     extension = ExtensionContext(
         extension_id="ui-automation",
         extension_version="0.1.0",
         api_version="1",
         host="studio",
         settings=_Settings(),
-        secrets=_Secrets(),
+        secrets=_Secrets(token),
         log=logging.getLogger("시험"),
     )
     return TaskContext(
@@ -297,31 +287,30 @@ def context(mode: str, properties: dict[str, Any], inputs: dict[str, Any]) -> Ta
         mode=mode,
         properties={"page_id": PAGE, **properties},
         inputs=inputs,
-        key_ref="test-ui",
     )
 
 
-def wired(tmp_path: Path, model: RecordingLlm) -> tuple[UiTaskExecutor, Direct, Screen]:
-    client = served(tmp_path, model)
+@pytest.fixture
+def center(tmp_path: Path) -> Iterator[UiaCenter]:
+    """Center + UI 자동화 앱(일꾼). 모델은 시험마다 `center.app.state.service.llm`에 끼운다."""
+    with running(tmp_path) as found:
+        RegistryClient(base_url=found.url, call_token=found.pc_token(deployed=False)).register(page())
+        yield found
+
+
+def wired(tmp_path: Path, center: UiaCenter, model: RecordingLlm) -> tuple[UiTaskExecutor, Direct, Screen, str]:
+    center.app.state.service.llm = llm_of(model)
     screen = Screen()
-
-    def plans(request: SessionRequest) -> PlanService:
-        return PlanService(
-            ops=HttpOps(base_url="http://app", api_key=request.service_key or "", business_key=request.business_key,
-                        mode=request.mode, client=client),
-            cache=PlanCache(folder=tmp_path / "plans"),
-            queue=ReportQueue(folder=tmp_path / "reports"),
-        )
-
-    direct = Direct(Worker(token="t", admin_token="a", backend=Backend(screen), plans_factory=plans))
-    return UiTaskExecutor(client=direct), direct, screen  # type: ignore[arg-type]
+    factory = plans_for(tmp_path / "worker", center.url)
+    direct = Direct(Worker(token="t", admin_token="a", backend=Backend(screen), plans_factory=factory))  # type: ignore[arg-type]
+    return UiTaskExecutor(client=direct), direct, screen, center.studio_token()  # type: ignore[arg-type]
 
 
-def test_a_goal_runs_end_to_end_and_the_value_never_leaves(tmp_path: Path) -> None:
+def test_a_goal_runs_end_to_end_and_the_value_never_leaves(tmp_path: Path, center: UiaCenter) -> None:
     model = RecordingLlm(replies=[said(GOOD)])
-    executor, direct, screen = wired(tmp_path, model)
+    executor, direct, screen, token = wired(tmp_path, center, model)
     found = executor.execute(
-        context("autonomous", {"goal": GOAL, "results": ["접수결과"]}, {"신청": {"수량": SECRET_VALUE}})
+        context("autonomous", {"goal": GOAL, "results": ["접수결과"]}, {"신청": {"수량": SECRET_VALUE}}, token=token)
     )
     assert screen.done == [
         f"form.qty:fill:{SECRET_VALUE}",
@@ -333,31 +322,35 @@ def test_a_goal_runs_end_to_end_and_the_value_never_leaves(tmp_path: Path) -> No
     assert SECRET_VALUE not in asked, "업무 값은 모델로 나가지 않는다 (원칙 6)"
     assert SECRET_VALUE not in direct.opened[0].model_dump_json(), "세션 요청에도 값은 없다 — 이름뿐"
     assert direct.opened[0].values == ["신청.수량"]
+    rows = center.store.rows("SELECT input_json FROM external_tasks")
+    assert SECRET_VALUE not in json.dumps([row["input_json"] for row in rows], ensure_ascii=False), (
+        "Center에 남은 일감에도 값은 없다"
+    )
 
 
-def test_an_invalid_plan_is_a_business_failure_before_touching_the_screen(tmp_path: Path) -> None:
+def test_an_invalid_plan_is_a_business_failure_before_touching_the_screen(tmp_path: Path, center: UiaCenter) -> None:
     model = RecordingLlm(replies=[said([{"semantic_key": "form.nope", "action": "click"}])])
-    executor, _, screen = wired(tmp_path, model)
+    executor, _, screen, token = wired(tmp_path, center, model)
     with pytest.raises(TaskFailed) as caught:
-        executor.execute(context("autonomous", {"goal": GOAL}, {"신청": {"수량": "1"}}))
+        executor.execute(context("autonomous", {"goal": GOAL}, {"신청": {"수량": "1"}}, token=token))
     assert caught.value.code == "goal_plan_invalid"
     assert screen.done == [], "화면에 손대기 전에 멈춘다"
 
 
-def test_a_goal_only_task_fails_in_deterministic_mode_without_asking(tmp_path: Path) -> None:
+def test_a_goal_only_task_fails_in_deterministic_mode_without_asking(tmp_path: Path, center: UiaCenter) -> None:
     model = RecordingLlm(replies=[said(GOOD)])
-    executor, direct, _ = wired(tmp_path, model)
+    executor, direct, _, token = wired(tmp_path, center, model)
     with pytest.raises(TaskFailed) as caught:
-        executor.execute(context("deterministic", {"goal": GOAL}, {"신청": {"수량": "1"}}))
+        executor.execute(context("deterministic", {"goal": GOAL}, {"신청": {"수량": "1"}}, token=token))
     assert caught.value.code == "ui_goal_needs_autonomous"
     assert not direct.opened and not model.asked
 
 
-def test_deterministic_mode_runs_the_written_steps_even_if_a_goal_is_there(tmp_path: Path) -> None:
+def test_deterministic_mode_runs_the_written_steps_even_if_a_goal_is_there(tmp_path: Path, center: UiaCenter) -> None:
     model = RecordingLlm(replies=[said(GOOD)])
-    executor, direct, screen = wired(tmp_path, model)
+    executor, direct, screen, token = wired(tmp_path, center, model)
     steps = [{"key": "form.submit", "action": "click"}]
-    executor.execute(context("deterministic", {"goal": GOAL, "steps": steps}, {"신청": {"수량": "1"}}))
+    executor.execute(context("deterministic", {"goal": GOAL, "steps": steps}, {"신청": {"수량": "1"}}, token=token))
     assert screen.done == ["form.submit:click:None"]
     assert direct.opened[0].goal is None and not model.asked
 

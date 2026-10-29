@@ -1,4 +1,4 @@
-"""비밀 값 — **OS 비밀 저장소에만** 둔다 (CLAUDE.md §5, BUI-03·BUI-10).
+"""비밀 값 — **OS 비밀 저장소에만** 둔다 (CLAUDE.md §5, BUI-03).
 
 설정 파일·실행 기록·코드에 넣지 않는다. Windows는 자격 증명 관리자, Linux는 Secret Service,
 macOS는 키체인 — `keyring`이 그 차이를 덮는다.
@@ -13,8 +13,6 @@ import logging
 import os
 from dataclasses import dataclass
 
-from chaeksas.core import service_keys
-
 log = logging.getLogger(__name__)
 
 #: `keyring`의 서비스 이름. 한 PC에 여러 Bot UI를 두지 않으므로 하나로 충분하다.
@@ -28,17 +26,18 @@ ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
 #: 연다. 환경변수 길은 없다 — 이것을 쓰는 것은 승인으로 들어온 PC뿐이다.
 ENROLL_SECRET = "enroll_secret"
 
-#: 서비스 앱 키는 **참조 이름**으로 저장한다 (BUI-10, ADR-0013 §3).
-SERVICE_APP_PREFIX = "svc:"
-#: 서비스 앱 키를 환경변수로도 읽는다 (개발·CI). Studio의 `CHK_STUDIO__SVC__…`와 같은 규칙.
-ENV_SERVICE_APP_PREFIX = "CHK_BOT_UI__SVC__"
+#: 호출 토큰 (C15) — Bot UI가 청해 두면 **Tool UI가 읽는다** (Tool UI는 Center를 부르지 않는다).
+CALL_TOKEN = "call_token"
+#: 실행기 자식에게 **첫** 호출 토큰을 물려주는 환경변수 (명령줄은 프로세스 목록에 뜬다).
+#: 새것은 제어 파일로 간다 (`core.control.CALL_TOKEN`).
+ENV_CALL_TOKEN = "CHK_BOT_UI__CALL_TOKEN"
 
 #: 모델 키 (ADR-0027). 실행기에게는 **환경변수로** 건넨다 (명령줄에 두지 않는다).
 LLM_API_KEY = "llm-api-key"
 ENV_LLM_API_KEY = "CHK_BOT_UI__LLM__API_KEY"
 
 #: SMTP 비밀번호 (BUI-03 「보내기」, ADR-0059). **설정 파일·명령줄에 넣지 않는다** —
-#: 실행기(자식 프로세스)가 이 저장소에서 제 손으로 읽는다 (서비스 앱 키와 같은 길).
+#: 실행기(자식 프로세스)가 이 저장소에서 제 손으로 읽는다.
 SMTP_PASSWORD = "smtp-password"
 ENV_SMTP_PASSWORD = "CHK_BOT_UI__SMTP__PASSWORD"
 
@@ -51,11 +50,6 @@ ENV_EXTENSION_PREFIX = "CHK_BOT_UI__EXT__"
 def _env_name(text: str) -> str:
     """환경변수 이름으로 쓸 수 있게 — 영대문자·숫자·`_`."""
     return "".join(one if one.isalnum() else "_" for one in text).upper()
-
-
-def service_key_env(ref: str) -> str:
-    """그 키 참조를 개발·CI에서 줄 환경변수 이름 (BUI-10이 사람에게 보여 준다)."""
-    return f"{ENV_SERVICE_APP_PREFIX}{_env_name(ref)}"
 
 
 class SecretsUnavailable(RuntimeError):
@@ -172,72 +166,22 @@ class Credentials:
     def set_extension_secret(self, extension_id: str, key: str, value: str) -> None:
         self.set(f"{EXTENSION_PREFIX}{extension_id}:{key}", value.strip())
 
-    def service_app_key(self, ref: str, bot: str | None = None) -> str | None:
-        """**키 참조 이름**으로 찾는다 (C1 `key_ref`).
+    def call_token(self) -> str | None:
+        """Bot UI가 청해 둔 호출 토큰 (C15) — Tool UI가 읽는다."""
+        return self.get(CALL_TOKEN)
 
-        찾는 순서: 환경변수 `CHK_BOT_UI__SVC__<참조>`(개발·CI) → **Center가 그 Bot에 내려 준 키**
-        (`svc:<Bot>:<참조>`, ADR-0094 — 두 Bot이 같은 참조를 써도 키가 다르다) → 사람이 BUI-10에
-        넣은 옛 자리(`svc:<참조>`).
-        """
-        found = os.environ.get(service_key_env(ref))
-        if found:
-            return found
-        if bot:
-            delivered = self.get(service_keys.run_name(bot, ref))
-            if delivered:
-                return delivered
-        return self.get(f"{SERVICE_APP_PREFIX}{ref}")
+    def set_call_token(self, value: str) -> None:
+        self.set(CALL_TOKEN, value.strip())
 
-    def for_bot(self, bot: str) -> BotCredentials:
-        """그 Bot의 실행이 쓰는 창구 — 참조 이름을 **그 Bot이 받은 키**로 푼다 (ADR-0094 §8)."""
-        return BotCredentials(credentials=self, bot=bot)
-
-    def utility_key(self, app_id: str) -> str | None:
-        """도구(Tool UI)용 키 — CON-03 「셀렉터 등록」을 켜면 Center가 내려 준다 (ADR-0094 §6)."""
-        return self.get(service_keys.utility_name(app_id))
-
-    def stored_service_app_key(self, ref: str) -> str | None:
-        """**비밀 저장소에 들어 있는** 값만 (환경변수는 보지 않는다).
-
-        BUI-10이 「저장됨」과 「환경변수」를 가려 말하는 데 쓴다 — 환경변수로 도는 PC에서 「저장됨」
-        이라고 하면, 환경변수를 지운 다음에 왜 안 되는지 알 수 없다.
-        """
-        return self.get(f"{SERVICE_APP_PREFIX}{ref}")
-
-    def set_service_app_key(self, ref: str, value: str) -> None:
-        self.set(f"{SERVICE_APP_PREFIX}{ref}", value.strip())
-
-    def delete_service_app_key(self, ref: str) -> None:
-        """BUI-10에서 줄을 지웠다 — 저장소에 남겨 두면 보이지 않는 키가 계속 쓰인다."""
-        self.delete(f"{SERVICE_APP_PREFIX}{ref}")
-
-
-
-@dataclass(frozen=True)
-class BotCredentials:
-    """한 Bot에 묶인 창구. 확장·바깥 앱 명부가 참조 이름만 넘겨도 그 Bot의 키가 풀린다."""
-
-    credentials: Credentials
-    bot: str
-
-    def service_app_key(self, ref: str) -> str | None:
-        return self.credentials.service_app_key(ref, self.bot)
-
-    def extension_secret(self, extension_id: str, key: str) -> str | None:
-        return self.credentials.extension_secret(extension_id, key)
 
 __all__ = [
-    "BotCredentials",
     "CENTER_API_KEY",
-    "ENV_SERVICE_APP_PREFIX",
     "ENV_EXTENSION_PREFIX",
     "EXTENSION_PREFIX",
     "ENV_CENTER_API_KEY",
     "ENV_LLM_API_KEY",
     "LLM_API_KEY",
     "SERVICE",
-    "SERVICE_APP_PREFIX",
     "Credentials",
     "SecretsUnavailable",
-    "service_key_env",
 ]

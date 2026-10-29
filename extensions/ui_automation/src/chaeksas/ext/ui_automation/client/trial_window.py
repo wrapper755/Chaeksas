@@ -82,7 +82,7 @@ class TrialWidget(QWidget):
         self,
         client: Any,
         registry: Any = None,
-        service_key: str | None = None,
+        call_token: str | None = None,
         release_other: Any = None,
         borrow: Any = None,
         parent: QWidget | None = None,
@@ -90,7 +90,7 @@ class TrialWidget(QWidget):
         super().__init__(parent)
         self._client = client
         self._registry = registry
-        self._service_key = service_key
+        self._call_token = call_token
         #: 다른 탭이 쥔 UI 세션을 놓게 하는 길 (세션은 한 번에 하나다, ADR-0014).
         self._release_other = release_other
         #: 등록 탭이 지금 연 화면 `(session_id, secret)` — 있으면 그것을 이어 쓴다 (TOL-05).
@@ -240,10 +240,10 @@ class TrialWidget(QWidget):
         if not steps:
             self.say("스텝이 없습니다 — 「가져오기」를 누르거나 줄을 더하세요.")
             return
-        if not self._service_key:
+        if not self._call_token:
             self.say(
-                "이 PC는 셀렉터 등록이 허락되지 않아 계획을 받아 올 수 없습니다"
-                " (Center 콘솔 「Bot UI 현황」 → 「셀렉터 등록」)."
+                "호출 토큰이 없어 계획을 받아 올 수 없습니다 — 이 PC의 Bot UI가 Center에 붙어 있어야 합니다"
+                " (등록 작업은 Center 콘솔 「Bot UI 현황」 → 「셀렉터 등록」을 켠 PC만)."
             )
             return
 
@@ -309,7 +309,7 @@ class TrialWidget(QWidget):
             headed=True,
             heal=self.heal.isChecked(),
             report=self.report.isChecked(),
-            service_key=self._service_key,
+            call_token=self._call_token,
         )
         try:
             info = self._client.open(request)
@@ -332,7 +332,7 @@ class TrialWidget(QWidget):
                 page_id,
                 heal=self.heal.isChecked(),
                 report=self.report.isChecked(),
-                service_key=self._service_key,
+                call_token=self._call_token,
             )
         except Exception as e:  # noqa: BLE001
             self.say(f"시작하지 못했습니다 — {e}")

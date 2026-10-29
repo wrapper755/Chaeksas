@@ -57,7 +57,7 @@ Bot UI가 **등록 요청**을 보내 관리자의 승인으로 Center API 키�
 
 ### 봉함
 
-받는 쪽 공개키로만 열리는 한 덩이다. 승인으로 받는 키, 아래 키 회전, 서비스 앱 키(§서비스 앱 키 전달)가 **같은 봉함**을 쓴다.
+받는 쪽 공개키로만 열리는 한 덩이다. 승인으로 받는 키와 아래 키 회전이 **같은 봉함**을 쓴다 (C15 일꾼 토큰도 같다).
 
 | 칸 | 뜻 |
 | --- | --- |
@@ -97,37 +97,13 @@ Bot UI가 **등록 요청**을 보내 관리자의 승인으로 Center API 키�
 - 새 키의 만료는 그때부터 1년이고 묶인 PC·`bot_ui_id`는 그대로다.
 - 공개키를 모르는 Bot UI(환경변수로 키를 받은 것)는 회전하지 않는다.
 
-### 서비스 앱 키 전달
+### 서비스 앱 키 전달 — 없다
 
-> 상태: **돈다** (2026-10-25, [ADR-0094](../decisions/0094-service-app-keys-ride-the-deployment.md), ADR-0092 §3·§4). Center `center/service_keys.py`(맞추기·나르기·ack), 현장 `core.service_keys.ReceivedKeys`(Bot UI·서버 실행기가 같은 코드). 시험: `tests/test_service_keys.py`.
+Bot은 서비스 앱을 C15 외부 작업으로 부르므로 **현장은 서비스 앱 키를 받지 않는다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 하트비트에 `service_keys[]`·`drop_service_keys[]`·`service_key_acks[]`는 없다 — 옛 Bot UI가 `service_key_acks[]`를 보내도 받는 쪽은 모르는 칸으로 무시하고(원칙 3), 옛 Center가 보내도 새 Bot UI가 무시한다. 선택 칸을 걷은 것이라 판을 올리지 않는다.
 
-Center가 이 PC에 배포한 Bot이 부르는 앱의 키를 **위의 봉함으로** 하트비트 답에 실어 준다. Center가 언제 짓고 거두나는 ADR-0094 §3(맞추기)이고, 앱에 맡기는 길은 C11 §Center가 발급하는 키다. **하트비트는 나르기만 한다.**
+### 호출 토큰
 
-- 공개키를 아는 PC(등록 요청으로 들어왔거나 `RegisterRequest.public_key`를 보낸 것)에만 싣는다. 환경변수로 Center 키를 받은 PC는 지금처럼 `CHK_BOT_UI__SVC__<참조>`로 받는다.
-- Bot UI는 열어서 OS 비밀 저장소에 **(Bot, 참조 이름)**으로 둔다(`chaeksas-bot-ui`의 `svc:<bpm_process_id>:<key_ref>`, `utility`는 `util:<app_id>`). 두 Bot이 같은 참조 이름을 써도 키가 다르다.
-- 받았으면 다음 하트비트의 `service_key_acks[]`에 `accepted: true`로 적는다. Center는 그때 **봉한 덩이를 지운다**(원문은 처음부터 두지 않는다). ack가 올 때까지 주기마다 같은 것을 싣는다.
-- 열지 못하면(봉함이 틀렸다 — 공개키가 바뀌었다) `accepted: false`, `reason: unsealable`. Center는 그 키를 폐기하고 새로 짓는다.
-- `replaces`가 있으면 새 키를 넣은 뒤 그 키를 지운다(회전). 옛 키는 앱에서 Center가 폐기한다.
-- `drop_service_keys[]`에 오면 비밀 저장소에서 지우고 같은 `service_key_acks[]`로 알린다. 그 Bot의 사전 점검 캐시를 비운다(지금 `invalidate_preflight()`를 부르는 자리와 같다).
-- **외부 앱 키**(ADR-0094 §7)도 같은 모양으로 온다 — `source: external`. 같은 원문이 그 앱을 쓰는 모든 대상에 간다.
-
-| ServiceKeyDelivery 필드 | 타입 | 뜻 |
-| --- | --- | --- |
-| `service_key_id` | str | `svk_<hex8>` (C11 `center_key_id`). 외부 앱 키면 `xak_<hex8>` |
-| `purpose` | str | `run`(Bot이 부를 때) \| `utility`(Tool UI 도구 — ADR-0094 §6). 열린 문자열 |
-| `source` | str | `center`(Center가 지었다) \| `external`(관리자가 넣은 외부 앱 키) |
-| `app_id` | str | 서비스 앱 id (외부면 확장 id) |
-| `bpm_process_id` | str? | `run`일 때. 이 키를 쓰는 Bot |
-| `key_refs` | str[] | `run`일 때. 그 Bot의 매니페스트가 이 앱에 적은 참조 이름 (C1 `requires.service_apps[].key_ref`) |
-| `sealed_key` | Sealed | 위 §봉함. HKDF `salt`는 `service_key_id` |
-| `expires_at` | str? | 없으면 만료 없음 (외부 앱 키) |
-| `replaces` | str? | 이 키가 대신하는 옛 `service_key_id` (회전·다시 짓기) |
-
-| ServiceKeyAck 필드 | 뜻 |
-| --- | --- |
-| `service_key_id` | |
-| `accepted` | bool |
-| `reason` | `accepted: false`일 때 (`unsealable` `store_unavailable` — 열린 문자열). `store_unavailable`이면 Center는 다시 짓지 않고 계속 싣는다(비밀 저장소가 돌아오면 받는다) |
+실행기 자식 프로세스·Worker·Tool UI가 외부 작업을 올릴 때 쓰는 토큰은 Bot UI가 **제 Center API 키로** `POST /api/v1/call-tokens`를 불러 받는다 (C15 「정한 것」). 하트비트에 싣지 않는다 — 공개키가 없는 Bot UI(환경변수 키)도 받아야 한다.
 
 ## 키 묶기
 
@@ -192,14 +168,13 @@ Center가 이 PC에 배포한 Bot이 부르는 앱의 키를 **위의 봉함으�
 | `extensions` | `{id, version, definition_hash, enabled, off}`[] | | 설치된 확장. 바뀌었을 때만 (C13) |
 | `approval_acks` | ApprovalAck[] | | 받아 간 결재 답 |
 | `unsent_events` | int | | 아직 못 보낸 실행 이벤트 줄 수 (C3) |
-| `service_key_acks` | ServiceKeyAck[] | | 받은(또는 지운) 서비스 앱 키 (§서비스 앱 키 전달) |
 
 | 모델 | 필드 |
 | --- | --- |
 | CurrentRun | `run_id`, `bpm_process_id`, `version`, `node_id`, `state`(열린 문자열: `running` `waiting_approval` `waiting_confirmation`), `started_at`, `source`(`job`\|`manual`\|`watch`\|`schedule`\|`message`, 예약: `delegation`), `job_id`? |
 | Queue | `max`(int), `items`: `{queue_id, source, bpm_process_id, version?, job_id?, requested_at, expires_at?}`[] (순서대로) |
 | WorkerState | `state`(`running`\|`off`(필요할 때 시작, 아직 안 띄움)\|`restarting`\|`stopped`), `reserved_for`?(C10 예약 `run_id`), `version`, `restarts`(연속 재시작 횟수), `session`(`idle`\|`bot`\|`studio`\|`selector_registration`) |
-| Readiness | `bpm_process_id`, `version`, `ready`(bool), `missing_key_refs`(str[]), `blocked`(str[] — 사전 점검 막힘 코드) — (ADR-0094) Center가 키를 내려 주면 `missing_key_refs`는 「사람이 넣지 않았다」가 아니라 **「아직 받지 못했다」**이고, Center는 이미 ack받은 참조가 여기 오면 그 키를 다시 짓는다 (하루 한 번까지) |
+| Readiness | `bpm_process_id`, `version`, `ready`(bool), `missing_key_refs`(str[] — **늘 비어 있다**: 서비스 앱 키가 없어졌다, ADR-0102. 옛 Center가 읽어도 깨지지 않게 칸은 둔다), `blocked`(str[] — 사전 점검 막힘 코드) |
 | JobAck | `job_id`, `result`(`queued`\|`started`\|`rejected`\|`expired`\|`cancelled`\|`cancel_refused`), `position`?(queued일 때 대기열 순번), `run_id`?(started일 때), `reason`?(rejected일 때: `queue_full` `no_deployment` `not_ready` `bot_ui_shutdown` `server_location` `cancelled_on_pc`(현장에서 대기열 항목을 취소함); `cancel_refused`일 때: `already_started`), `outputs?`(**PC 위임이 돌려주는 값** — 아래) |
 | ApprovalAck | `request_id`, `accepted`(bool), `reason`? |
 | DeploymentResult | `deployment_id`, `bpm_process_id`, `version`, `result`(`applied`\|`rejected`), `reason`?, `at` |
@@ -229,8 +204,6 @@ Center가 이 PC에 배포한 Bot이 부르는 앱의 키를 **위의 봉함으�
 | `disabled` | bool | true면 Bot UI는 새 작업·배포를 받지 않는다. 하트비트는 계속 받으므로 실행 중 Bot과 대기열은 콘솔에 계속 보인다 (CON-03 「비활성화」) |
 | `rotated_key` | `{sealed_key, expires_at}`? | 만료 14일 전부터 새 키 (§키 회전). 새 키로 첫 요청이 올 때까지 주기마다 싣는다 |
 | `key_expires_at` | str? | 등록 응답과 같은 값. **주기마다 싣는다** — 운영자가 키 기간을 늘려 주면 다음 주기에 바로 안다 (「생략 = 그대로」로 두면 늘어난 것을 모른다) |
-| `service_keys` | ServiceKeyDelivery[] | 봉한 서비스 앱 키 (§서비스 앱 키 전달). ack가 올 때까지 매번 실린다 |
-| `drop_service_keys` | str[] | 지울 `service_key_id` (배포 철회·「셀렉터 등록」 끔·외부 앱 키 지움). ack가 올 때까지 실린다 |
 
 **키 만료일은 Center만 안다** — 그래서 내려 준다. 받는 쪽은 그것으로 BUI-05 「Center API 키 만료 임박」을 띄우고(**회전을 받는 PC는 7일 전까지 새 키가 오지 않았을 때만** — Center에 닿지 못했다는 뜻이다. 회전하지 않는 PC는 14일 전부터. 둘 다 **하루 한 번** — 주기마다 띄우면 30초에 한 번 같은 말을 한다), 이미 만료된 키는 **알리지 않는다**(그때는 Center가 거부하고 「키 거부」가 말한다). 값이 **없는 것은 「만료가 없다」는 뜻**이고 「모른다」가 아니다 — Center는 만료 없는 키도 발급한다 (C7).
 
@@ -322,7 +295,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 | `POST /api/bots/enroll` + 공용 enroll 토큰, `bot_id`를 경로로 | `register` + Bot UI별 Center API 키, 신원은 키로 |
 | `current_runs[]` (여러 건) | `current_run` 1건 + `queue` |
 | Worker 상태 없음 | `worker` |
-| 준비 상태 없음 | `readiness` (서비스 앱 키 참조 누락 포함) |
+| 준비 상태 없음 | `readiness` |
 | 작업 `pending/dispatched/accepted/rejected` | `queued`·`expired`·`cancelled` 추가, 취소 지시 `cancel_jobs` |
 | 상태 닫힌 목록 → 422 | 열린 문자열 |
 
@@ -330,6 +303,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | §서비스 앱 키 전달을 걷었다(`service_keys[]`·`drop_service_keys[]`·`service_key_acks[]`), §호출 토큰(`POST /call-tokens`), `missing_key_refs`는 늘 빈다. 선택 칸을 걷은 것이라 판을 올리지 않는다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | `JobDispatch.virtual_worker?`를 적었다 — 모델이 C12와 같아 보일 뿐 Bot UI에는 실리지 않는다 | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | §서비스 앱 키 전달 — 응답 `service_keys[]`·`drop_service_keys[]`, 요청 `service_key_acks[]`, `missing_key_refs`의 뜻이 「받지 못함」으로. 선택 칸이라 옛 Bot UI는 그대로 돈다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 1 | **등록 요청과 승인** — `POST/GET …/enroll`(인증 없음, 요청 코드·봉함), `RegisterRequest.public_key?`, `HeartbeatResponse.rotated_key?`, 오류 `public_key_invalid`·`enroll_rate_limited`·`enroll_queue_full`. 선택 칸·새 경로라 옛 Bot UI는 그대로 돈다 | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |

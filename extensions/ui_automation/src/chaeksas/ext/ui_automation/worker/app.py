@@ -628,7 +628,7 @@ class Worker:
         *,
         heal: bool = True,
         report: bool = False,
-        service_key: str | None = None,
+        call_token: str | None = None,
     ) -> SessionInfo:
         """등록 세션에 **계획을 싣는다** (C10 §5 `…/plan`, TOL-05) — 시험이 등록 탭의 화면을 이어 쓴다.
 
@@ -644,12 +644,14 @@ class Worker:
                 "mode": "deterministic",
                 "heal": heal,
                 "report": report,
-                "service_key": service_key,
+                "call_token": call_token,
             }
         )
         plans = self._plans_for(request)
         if plans is None:
-            raise WorkerProblem(502, "ui_automation_unreachable", "UI 자동화 앱으로 가는 길이 없습니다")
+            raise WorkerProblem(
+                502, "ui_automation_unreachable", "UI 자동화 앱으로 가는 길이 없습니다 (Center 주소·호출 토큰)"
+            )
         plan, source = self._fetch_plan(request, plans)
         finder = self.backend.finder(found.request.business_key) if self.backend else None
         opened = DESKTOP if getattr(finder, "window", None) is not None else WEB
@@ -1003,7 +1005,7 @@ def create_app(worker: Worker, screen: ScreenThread | None = None) -> FastAPI:
             str(body.get("page_id") or ""),
             heal=bool(body.get("heal", True)),
             report=bool(body.get("report", False)),
-            service_key=str(body["service_key"]) if body.get("service_key") else None,
+            call_token=str(body["call_token"]) if body.get("call_token") else None,
         )
 
     @router.post("/registration/{session_id}/analyze")

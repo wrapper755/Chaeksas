@@ -1,7 +1,8 @@
 """모의 앱 하나를 C11 서비스 앱으로 만드는 공통 자리.
 
-앱 모듈은 **작업 함수만** 쓴다 (`Op`). 키 검증·권한·멱등·오류 형식·사용 기록·관리 API는
-`service_kit`이 계약대로 준다 (CLAUDE.md §5 — 직접 FastAPI를 쓰지 않는다).
+앱 모듈은 **작업 함수만** 쓴다 (`Op`). 멱등·오류 형식·사용 기록·관리 API와 **일꾼 루프**는
+`service_kit`이 계약대로 준다 (CLAUDE.md §5 — 직접 FastAPI를 쓰지 않는다, ADR-0102 — 업무 호출은
+C15로 Center에서 가져간다).
 
 여기서 더하는 것은 두 가지뿐이다.
 
@@ -21,7 +22,7 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import FastAPI
@@ -33,11 +34,9 @@ from chaeksas.contracts.service_app import (
     ExtensionRef,
     Operation,
     OpRequest,
-    ServiceAppKey,
     ServiceAppManifest,
-    prefix_of,
 )
-from chaeksas.service_kit import CenterLink, InMemoryKeyStore, OpError, create_app, hash_key, issue
+from chaeksas.service_kit import OpError, Service, create_app
 
 log = logging.getLogger(__name__)
 
@@ -50,10 +49,8 @@ SCENARIO_PATH = "/mock/v1/scenario"
 #: 모든 앱이 두 수행 모드를 받는다 — Bot은 결정 수행, Studio 시험 실행은 자율 수행이다.
 BOTH_MODES = (MODE_DETERMINISTIC, MODE_AUTONOMOUS)
 
-#: 앱 열여섯 개에 키를 하나씩 심는 것은 개발에서 쓸 수 없다. 이 환경변수 하나를 주면
-#: **모든 모의 앱이 그 키를 받는다**. 앱마다 다르게 하려면 `CHK_SVC_<앱>__DEV_KEY`가 이긴다.
-SHARED_KEY_ENV = "CHK_MOCK_APPS__DEV_KEY"
-#: 모든 모의 앱이 함께 읽는 접두사 (`CHK_MOCK_APPS__CENTER__URL`).
+#: 모든 모의 앱이 함께 읽는 접두사 (`CHK_MOCK_APPS__CENTER__URL`·`…__CENTER__TOKEN`). 모의 앱 열셋은
+#: **일꾼 하나**다 — 토픽 열셋을 한 토큰으로 맡는다 (C15 §일꾼 들이기).
 SHARED_PREFIX = "CHK_MOCK_APPS__"
 
 
@@ -148,44 +145,28 @@ class Built:
     mock: MockApp
     app: FastAPI
     scenario: Scenario
-    #: 발급한 키 원문. 환경변수로 받은 것이면 그 값이고, 만든 것이면 새 값이다.
-    #: **기록·응답에 넣지 않는다** — 띄운 사람에게 한 번 보여 주려고만 들고 있다.
-    key: str = field(repr=False, default="")
-    #: 환경변수로 받은 키인가. 받은 것이면 띄울 때 되읊지 않는다 (사람이 이미 안다).
-    key_from_env: bool = False
+
+    @property
+    def service(self) -> Service:
+        """일꾼이 부르는 작업 수행기 (`service_kit.Service`)."""
+        found: Service = self.app.state.ops
+        return found
 
 
 def build(mock: MockApp, *, console_url: str = "", admin_token: str | None = None) -> Built:
-    """모의 앱 하나를 만든다.
+    """모의 앱 하나를 만든다 — 관리 API·시나리오 제어가 붙은 FastAPI와 그 작업 수행기.
 
-    키는 `CHK_SVC_<앱>__DEV_KEY` → `CHK_MOCK_APPS__DEV_KEY` 순으로 받고, 둘 다 없으면
-    **그 자리에서 하나 만든다** (개발 편의). 만든 값은 띄운 사람에게 한 번 보여 준다 —
-    비밀 저장소가 아니라 개발용이다.
+    업무 호출은 받지 않는다 — 일꾼(`service_kit.Consumer`)이 Center에서 가져와 `Built.service`에 준다.
     """
     scenario = Scenario(allowed=mock.scenarios)
-    keys = InMemoryKeyStore()
-    given = (mock.env("DEV_KEY") or os.environ.get(SHARED_KEY_ENV, "")).strip()
-    if given:
-        raw = given
-        record = ServiceAppKey(
-            name="dev", hash=hash_key(raw), prefix=prefix_of(raw), allowed_modes=list(BOTH_MODES)
-        )
-    else:
-        raw, record = issue("dev", allowed_modes=list(BOTH_MODES))
-    keys.add(record)
-
     handlers = {one.name: _handler(one, scenario) for one in mock.ops}
     app = create_app(
         mock.manifest(console_url=console_url),
         handlers,
-        keys=keys,
         admin_token=admin_token or mock.env("ADMIN_TOKEN"),
-        # Center 발급 (C11 §Center가 발급하는 키, ADR-0094) — 앱마다 `CHK_SVC_<앱>__CENTER__URL`,
-        # 없으면 모든 모의 앱이 함께 쓰는 `CHK_MOCK_APPS__CENTER__URL`. 둘 다 없으면 받지 않는다.
-        center_link=CenterLink.from_env(mock.env_prefix) or CenterLink.from_env(SHARED_PREFIX),
     )
     _mount_scenario(app, scenario)
-    return Built(mock=mock, app=app, scenario=scenario, key=raw, key_from_env=bool(given))
+    return Built(mock=mock, app=app, scenario=scenario)
 
 
 def _handler(op: Op, scenario: Scenario) -> Callable[[OpRequest, str], Mapping[str, Any]]:

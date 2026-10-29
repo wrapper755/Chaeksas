@@ -70,7 +70,7 @@ from chaeksas.core.run_log import log_path
 from chaeksas.core.run_shipping import HttpUploader, Queue, ShipError
 from chaeksas.core.seen import Seen
 from chaeksas.core.senders import make_sender
-from chaeksas.core.service_keys import ReceivedKeys
+from chaeksas.core.services import CenterServiceCaller
 from chaeksas.server_runner.center_client import (
     CenterClient,
     CenterProblem,
@@ -104,7 +104,6 @@ STATUS_ERROR = "error"
 #: 배포 대상 종류 (C2 §배포 대상 규칙) — 서버는 `"*"`도 받는다 (ADR-0046).
 HOST_KIND = "server_runner"
 #: 키가 없을 때 「어떻게 고치나」 한 줄 (사전 점검이 사람에게 보여 준다).
-KEY_FIX_HINT = "환경변수 CHK_SERVER_RUNNER__SVC__<참조>로 키를 주세요"
 
 
 @dataclass
@@ -113,7 +112,7 @@ class Agent:
 
     settings: Settings
     client: CenterClient
-    #: 비밀 창고 — 서비스 앱 키 참조를 푼다 (사전 점검이 「값이 있나」를 묻는다).
+    #: 비밀 창고 — SMTP 비밀번호 등 (서비스 앱 키는 없다 — C15).
     credentials: Credentials = field(default_factory=Credentials)
     #: Center가 준 신원 (C12). 등록 전에는 비어 있다.
     server_runner_id: str = ""
@@ -145,7 +144,6 @@ class Agent:
 
     #: 사전 점검 결과 캐시 — **설치가 바뀌면 비운다** (안 비우면 키를 넣어도 영원히 막힌다).
     _readiness: dict[tuple[str, str], Readiness] = field(default_factory=dict)
-    _received: ReceivedKeys | None = None
     #: 지금 들고 있는 실행들 (`run_id` → 일꾼). 끝난 것은 거두고 ack를 쌓는다.
     workers: dict[str, Worker] = field(default_factory=dict)
     #: 아직 올리지 못한 작업 ack (C4). **올릴 때까지 들고 있는다** — 끝난 실행의 결과가
@@ -207,14 +205,13 @@ class Agent:
     def extensions(self) -> HostTasks:
         """엔진의 `RunEnv.extensions`·사전 점검이 쓰는 **같은 하나** (ADR-0064).
 
-        주소는 **받아 둔 바깥 앱 명부**가 답한다 (C7·C13 「전송」) — 확장 id로 묻는 것이라
-        실행마다 다르지 않다. **Center를 부르지 않는다.**
+        확장에게 주는 주소는 **이 실행기가 붙은 Center**다 (C13 `center.url`, ADR-0102). **Center를
+        부르지 않는다.**
         """
         if self._tasks is None:
-            held = DirectoryCache(data_dir=self.settings.data_path)
             self._tasks = extension_tasks(
                 host=self.extension_host(),
-                service_url=lambda where: held.base_url_of(extension_id=where),
+                center_url=self.settings.center_url,
                 credentials=self.credentials,
             )
         return self._tasks
@@ -369,7 +366,6 @@ class Agent:
         self._came_online()
         self._apply(answer)
         self._take_rotated(answer)
-        self._take_service_keys(request, answer)
         # **하트비트 뒤에** 한다 (C3 §전송·ADR-0038) — 실행 중에 보내면 느린 Center가 업무를
         # 붙잡는다. 결재를 먼저 올려야 다음 주기에 답이 내려올 수 있다.
         self.post_approvals()
@@ -430,7 +426,7 @@ class Agent:
     def readiness(self) -> list[Readiness]:
         """설치된 Bot별 준비 상태 (C12 — C4와 같은 모양).
 
-        **서버를 부르지 않는다** (ADR-0013 — 하트비트마다 돈다). 키는 「값이 있나」까지만 본다.
+        **서버를 부르지 않는다** (하트비트마다 돈다).
 
         **확장까지 본다** (ADR-0064) — 태스크 종류·확장 판·AI 환경 셋이다. 호스트가 **실행
         위치를 쥐므로**(`run_locations`에 `server`가 없는 종류는 기여를 내지 않는다) 그런 Bot은
@@ -444,8 +440,6 @@ class Agent:
             if found is None:
                 checked = run_preflight(
                     bot.manifest,
-                    key_value=self.credentials.for_bot(bot.id).service_app_key,
-                    fix_hint=KEY_FIX_HINT,
                     # **갖춘 설정은 이쪽만 안다** (C1 `requires.settings`, ADR-0059 §4) —
                     # 메일을 보내는 Bot인데 SMTP가 없으면 시작하기 전에 막는다.
                     settings=self.settings.ready_settings(),
@@ -456,7 +450,6 @@ class Agent:
                     bpm_process_id=bot.id,
                     version=bot.version,
                     ready=not checked.blocks,
-                    missing_key_refs=list(checked.missing_key_refs),
                     blocked=list(checked.blocked),
                 )
                 self._readiness[key] = found
@@ -577,7 +570,7 @@ class Agent:
             return JobAck(job_id=job.job_id, result="rejected", reason="no_deployment")
         ready = self._ready_for(bot)
         if ready is not None and not ready.ready:
-            # **준비되지 않은 Bot은 띄우지 않는다** (ADR-0013 — 키·확장이 빠졌다).
+            # **준비되지 않은 Bot은 띄우지 않는다** (ADR-0013 — 확장·설정이 빠졌다).
             return JobAck(job_id=job.job_id, result="rejected", reason="not_ready")
 
         directory = self.app_directory(bot)
@@ -592,7 +585,7 @@ class Agent:
         found = Worker(
             bot=bot,
             data_dir=self.settings.data_path,
-            env=self.run_env(bot, directory=directory),
+            env=self.run_env(bot),
             job_id=job.job_id,
             inputs=dict(job.inputs),
             # **위임으로 받은 작업은 출처가 다르다** (C3 `source: delegation`, ADR-0082) — 그것을
@@ -620,37 +613,36 @@ class Agent:
         )
 
     def app_directory(self, bot: Any) -> AppDirectory:
-        """그 Bot이 부르는 **바깥 앱 한 벌** (C13 「전송」, C7) — 주소와 검증된 외부 확장 정의.
+        """그 Bot이 쓰는 **검증된 외부 확장 정의** (C13 「전송」) — 고정한 해시와 대조하려고.
 
-        **Bot UI와 같은 코드가 받아 둔다** (`core.app_directory.DirectoryCache`) — 두 벌이면
-        「PC는 되는데 서버는 안 된다」가 된다. 다른 것은 **파일을 거치지 않는 것**뿐이다:
-        Bot UI는 자식 프로세스에 `--services`로 건네지만 여기서는 이 프로세스가 엔진을 돌린다
-        (ADR-0031의 「실행기는 Center를 부르지 않는다」는 그 자식 이야기다).
-
-        **닿지 못하면 들고 있던 것을 쓰고**(ADR-0007) **404는 버린다**(철회는 보안 동작이다).
-        봉투는 **받은 쪽에서 다시 검증한다** (C13 E6 — `build`가 한다). 키 값은 명부에 없고
-        **참조 이름**을 이 서버의 비밀 창고가 푼다 (ADR-0013).
+        **Bot UI와 같은 코드가 받아 둔다** (`core.app_directory.DirectoryCache`). 주소·키는 없다 —
+        바깥 앱은 Center에 외부 작업으로 올린다 (ADR-0102). **닿지 못하면 들고 있던 것을 쓰고**
+        (ADR-0007) **404는 버린다**(철회는 보안 동작이다). 봉투는 **받은 쪽에서 다시 검증한다** (E6).
         """
         found = DirectoryCache.using(self.settings.data_path, self.client)
-        made = found.directory_for(
-            bot.manifest,
-            # Admin 공개키는 Center가 준 것이다 (C12 등록·하트비트) — 배포 검증과 같은 창고.
-            keys=list(self.admin_keys),
-            # **그 Bot이 받은 키로** 푼다 (ADR-0094 §8).
-            secrets=self.credentials.for_bot(bot.id).service_app_key,
-        )
+        # Admin 공개키는 Center가 준 것이다 (C12 등록·하트비트) — 배포 검증과 같은 창고.
+        made = found.directory_for(bot.manifest, keys=list(self.admin_keys))
         for why in found.problems:
-            log.warning("바깥 앱 명부: %s", why)
+            log.warning("외부 확장 명부: %s", why)
         for app_id, why in sorted(made.problems.items()):
             # **조용히 사라지지 않는다** — 쓰지 못한 정의는 이유와 함께 로그에 남는다.
             log.warning("외부 확장 정의를 쓰지 못한다 (%s): %s", app_id, why)
         return made
 
-    def run_env(self, bot: Any, *, directory: AppDirectory | None = None) -> RunEnv:
-        """그 실행이 바깥 세계에 닿는 자리 — **Bot UI 실행기와 같은 함수**가 짓는다.
+    def services(self) -> CenterServiceCaller:
+        """서비스 태스크가 부르는 자리 — **Center에 외부 작업으로 올린다** (C15, ADR-0102).
 
-        `directory`를 주면 그것을 쓴다 — 작업을 받는 쪽이 **시작 전에** 이미 지었으므로
-        (`_take_one`) 같은 것을 두 번 받지 않는다.
+        토큰은 이 실행기의 Center API 키이고 **부를 때마다 읽는다**(회전으로 바뀐다).
+        """
+        return CenterServiceCaller(
+            base_url=self.settings.center_url,
+            token=lambda: self.client.api_key,
+            caller_type=HOST_KIND,
+            host=self.name(),
+        )
+
+    def run_env(self, bot: Any) -> RunEnv:
+        """그 실행이 바깥 세계에 닿는 자리 — **Bot UI 실행기와 같은 함수**가 짓는다.
 
         모델·읽기 폴더는 **설정이 정한다** (Bot UI는 BUI-03이 정하는 자리다). 주지 않으면
         `NoLlm`·`PathDenied`로 **분명히 실패한다** — 조용히 넘어가지 않는다 (ADR-0027·0032).
@@ -670,15 +662,13 @@ class Agent:
             llm_url=self.settings.llm_base_url,
             llm_key=self.credentials.llm_api_key() or "",
             llm_model=self.settings.llm_model,
-            directory=directory if directory is not None else self.app_directory(bot),
+            services=self.services(),
             # 보내기 — **Bot UI와 같은 함수**가 짓는다 (ADR-0059).
             sender=make_sender(
                 smtp=self.settings.smtp(),
                 webhook=self.settings.webhook(),
                 password=self.credentials.smtp_password() or "",
             ),
-            # 누가 부르는가 (C11 `caller.type`) — 앱의 기록에 「서버 실행기」로 남는다.
-            caller_type=HOST_KIND,
             # 서버 실행기의 결재 창구는 **Center만**이다 (C12).
             approval_where=WHERE_CENTER,
             # **PC 위임은 Center에 맡긴다** (ADR-0062) — 어느 PC인가도 Center가 고른다.
@@ -690,16 +680,9 @@ class Agent:
         )
 
     def extensions_for(self, bot: Any) -> HostTasks:
-        """그 Bot의 실행이 쓰는 확장 — 확장이 묻는 참조 이름을 **그 Bot이 받은 키로** 푼다 (ADR-0094 §8).
-
-        호스트는 사전 점검과 **같은 하나**다(`extensions()` — 점검과 실행이 같은 호스트를 본다).
-        """
-        held = DirectoryCache(data_dir=self.settings.data_path)
-        return extension_tasks(
-            host=self.extension_host(),
-            service_url=lambda where: held.base_url_of(extension_id=where),
-            credentials=self.credentials.for_bot(bot.id),
-        )
+        """그 Bot의 실행이 쓰는 확장 — 사전 점검과 **같은 하나**다 (점검과 실행이 같은 호스트를 본다)."""
+        del bot
+        return self.extensions()
 
     def wake_due(self) -> int:
         """**시각이 된 타이머로 기다리는 실행을 깨운다** — 깨운 수를 돌려준다 (ADR-0061).
@@ -1119,30 +1102,7 @@ class Agent:
             delegation_acks=list(self.pending_delegation_acks),
             restored=list(self.restored),
             unsent_events=self.unsent_events(),
-            service_key_acks=list(self.received_keys().pending),
         )
-
-    def received_keys(self) -> ReceivedKeys:
-        """Center가 내려 준 서비스 앱 키의 자리와 보낼 ack (ADR-0094 — Bot UI와 같은 코드)."""
-        if self._received is None:
-            self._received = ReceivedKeys.at(self.settings.data_path)
-        return self._received
-
-    def _take_service_keys(self, request: Any, answer: Any) -> None:
-        """하트비트 답의 서비스 앱 키를 받아 둔다. 바뀌었으면 사전 점검을 다시 잰다."""
-        held = self.received_keys()
-        held.sent(request.service_key_acks)
-        if self.credentials.center_key_from_env():
-            return  # 공개키를 보내지 않았다 — Center가 싣지 않는다 (환경변수 키를 쓴다)
-        changed = held.take(
-            list(getattr(answer, "service_keys", []) or []),
-            list(getattr(answer, "drop_service_keys", []) or []),
-            secret=self.credentials.enroll_secret(),
-            put=self.credentials.set,
-            delete=self.credentials.delete,
-        )
-        if changed:
-            self._readiness.clear()
 
     def _acks_delivered(self) -> None:
         """실어 올린 ack가 Center에 닿았다 — 멱등 기억이 **그때부터** 잊을 준비를 한다.
@@ -1242,7 +1202,6 @@ def build(
 __all__ = [
     "CORE_VERSION",
     "HOST_KIND",
-    "KEY_FIX_HINT",
     "RUNNER_VERSION",
     "STATUS_ERROR",
     "STATUS_PAUSED",

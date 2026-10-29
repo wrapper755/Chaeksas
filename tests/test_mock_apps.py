@@ -4,8 +4,8 @@
 
 1. **예제가 부르는 것을 다 갖췄나** — 목록을 손으로 적지 않고 **예제 BPMN에서 읽어** 대조한다.
    예제가 새 앱을 부르기 시작하면 여기서 바로 드러난다.
-2. **C11을 지키나** — 키 없이는 안 되고, `/manifest`는 비밀 없이 열리고, 관리 API는 토큰이
-   없으면 503이다 (빈 토큰으로 열리지 않는다).
+2. **C11을 지키나** — 업무 호출을 HTTP로 받지 않고(일꾼이 Center에서 가져와 `Built.service`에
+   준다, ADR-0102), 앱 안의 키가 없고, 관리 API는 토큰이 없으면 503이다 (빈 토큰으로 열리지 않는다).
 3. **거짓 데이터가 케이스의 기대값과 맞물리나** — 숫자를 눈으로 맞추지 않고 **예제의 DMN을
    실제로 돌려** 본다. 케이스가 바뀌면 깨져야 한다.
 4. **외부 앱은 C11이 아니다** — 정의가 C13 검사(E1·E3)를 지나고, **진짜 어댑터**가 그 정의로
@@ -27,20 +27,21 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-import httpx
 import pytest
 import uvicorn
 from fastapi.testclient import TestClient
 
 from chaeksas.contracts.dmn import Decision, read_decisions
 from chaeksas.contracts.extension import ExtensionManifest, validate
-from chaeksas.contracts.service_app import OpRequest, ServiceAppManifest
+from chaeksas.contracts.external_task import LockedTask
+from chaeksas.contracts.service_app import OpRequest
 from chaeksas.core.http_adapter import AdapterCaller, AdapterError
 from chaeksas.core.services import OpCall
 from chaeksas.mock_apps import catalog
-from chaeksas.mock_apps.c11 import SCENARIO_PATH, MockApp, build
+from chaeksas.mock_apps.c11 import SCENARIO_PATH, Built, MockApp, build
 from chaeksas.mock_apps.external import apps as external_apps
 from chaeksas.mock_apps.external import definitions
+from chaeksas.service_kit import Outcome, Service
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples"
 BPMN = EXAMPLES / "bpmn"
@@ -102,31 +103,36 @@ def test_the_example_count_matches_the_handoff_tally(examples: dict[str, set[str
 # ─────────────────────────── C11 (뼈대가 주는 것) ───────────────────────────
 
 
-def client_for(mock: MockApp, **over: Any) -> tuple[TestClient, str]:
+def client_for(mock: MockApp, **over: Any) -> tuple[TestClient, Built]:
+    """관리 API·시나리오 제어를 부를 HTTP와, 일꾼이 부르는 작업 수행기를 함께 준다."""
     made = build(mock, **over)
-    return TestClient(made.app), made.key
+    return TestClient(made.app), made
 
 
-def call(client: TestClient, key: str, operation: str, payload: dict[str, Any], **over: Any) -> httpx.Response:
+def call(app: Built, operation: str, payload: dict[str, Any], **over: Any) -> Outcome:
+    """일꾼이 하는 그대로 — C15 `LockedTask` 하나를 `Built.service`에 준다."""
+    slot = {"run_id": RUN_ID, "node_id": "Task_1", "node_instance": 1, "attempt": 1}
+    slot.update({k: over.pop(k) for k in list(over) if k in slot})
     body: dict[str, Any] = {
-        "schema": 1,
+        "task_id": "et_mock",
+        "topic": app.mock.app_id,
+        "operation": operation,
         "mode": "deterministic",
-        "run_id": RUN_ID,
-        "node_id": "Task_1",
-        "node_instance": 1,
-        "attempt": 1,
+        "origin": "run",
+        "idempotency": slot,
         "caller": {"type": "bot_ui", "host": "PC-1"},
         "input": payload,
+        "lock_until": "2026-10-08T09:10:00+09:00",
+        "deadline": "2026-10-08T09:10:00+09:00",
+        **over,
     }
-    body.update(over)
-    found: httpx.Response = client.post(f"/v1/ops/{operation}", json=body, headers={"Authorization": f"Bearer {key}"})
-    return found
+    return app.service.execute(LockedTask.model_validate(body))
 
 
-def output(client: TestClient, key: str, operation: str, payload: dict[str, Any], **over: Any) -> dict[str, Any]:
-    response = call(client, key, operation, payload, **over)
-    assert response.status_code == 200, response.text
-    found: dict[str, Any] = response.json()["output"]
+def output(app: Built, operation: str, payload: dict[str, Any], **over: Any) -> dict[str, Any]:
+    done = call(app, operation, payload, **over)
+    assert done.ok, done.fail_body()
+    found: dict[str, Any] = done.complete_body()["output"]
     return found
 
 
@@ -134,8 +140,8 @@ def output(client: TestClient, key: str, operation: str, payload: dict[str, Any]
 def test_c11_manifest_is_valid(mock: MockApp) -> None:
     """manifest가 C11 모양이고, **확장을 알린다** — 사내 확장의 정의는 Center에 없으므로
     이 칸이 C7 「확장」 목록의 출처다 (조각 10)."""
-    client, _ = client_for(mock)
-    found = ServiceAppManifest.model_validate(client.get("/manifest").json())
+    found = build(mock).service.manifest
+    assert isinstance(build(mock).service, Service)
     assert found.app_id == mock.app_id
     assert found.extension is not None and found.extension.id == mock.app_id
     assert [one.name for one in found.operations] == [one.name for one in mock.ops]
@@ -144,19 +150,12 @@ def test_c11_manifest_is_valid(mock: MockApp) -> None:
 
 
 @pytest.mark.parametrize("mock", catalog.C11_APPS, ids=lambda m: m.app_id)
-def test_healthz_and_manifest_need_no_key(mock: MockApp) -> None:
-    """Center가 주소만으로 읽는 두 길 (C7 — 읽지 못하면 등록하지 않는다)."""
+def test_healthz_is_the_only_open_path_and_no_business_port(mock: MockApp) -> None:
+    """앱은 업무 포트를 열지 않는다 (ADR-0102) — manifest는 일꾼이 Center에 올린다."""
     client, _ = client_for(mock)
     assert client.get("/healthz").json()["status"] == "ok"
-    assert client.get("/manifest").status_code == 200
-
-
-@pytest.mark.parametrize("mock", catalog.C11_APPS, ids=lambda m: m.app_id)
-def test_an_operation_needs_a_key(mock: MockApp) -> None:
-    client, _ = client_for(mock)
-    response = client.post(f"/v1/ops/{mock.ops[0].name}", json={})
-    assert response.status_code == 401
-    assert response.json()["code"] == "key_missing"
+    assert client.get("/manifest").status_code == 404
+    assert client.post(f"/v1/ops/{mock.ops[0].name}", json={}).status_code == 404
 
 
 def test_the_admin_api_is_closed_without_a_token() -> None:
@@ -169,30 +168,12 @@ def test_the_admin_api_is_closed_without_a_token() -> None:
     assert found.json()["app_id"] == catalog.C11_APPS[0].app_id
 
 
-def test_a_shared_dev_key_covers_every_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    """앱 열여섯 개에 키를 하나씩 심는 것은 개발에서 쓸 수 없다 (`CHK_MOCK_APPS__DEV_KEY`)."""
-    monkeypatch.setenv("CHK_MOCK_APPS__DEV_KEY", "chk_svc_devdevdev")
-    for mock in catalog.C11_APPS:
-        made = build(mock)
-        assert made.key == "chk_svc_devdevdev", mock.app_id
-        # 받은 키는 띄울 때 되읊지 않는다 (사람이 이미 안다).
-        assert made.key_from_env is True, mock.app_id
-
-
-def test_a_generated_key_is_shown_because_nobody_knows_it_yet(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("CHK_MOCK_APPS__DEV_KEY", raising=False)
-    monkeypatch.delenv("CHK_SVC_WMS__DEV_KEY", raising=False)
-    made = build(catalog.c11("wms") or catalog.C11_APPS[0])
-    assert made.key.startswith("chk_svc_")
-    assert made.key_from_env is False
-
-
 def test_the_same_call_twice_is_replayed_not_redone() -> None:
     """멱등은 뼈대가 준다 — 두 번째는 `replayed`다 (C11)."""
-    client, key = client_for(catalog.c11("ticketing") or catalog.C11_APPS[0])
+    _, app = client_for(catalog.c11("ticketing") or catalog.C11_APPS[0])
     payload = {"queue": "장비", "priority": "높음", "title": "요약", "body": "본문"}
-    first = call(client, key, "create_ticket", payload).json()
-    again = call(client, key, "create_ticket", payload).json()
+    first = call(app, "create_ticket", payload).complete_body()
+    again = call(app, "create_ticket", payload).complete_body()
     assert again["replayed"] is True
     assert again["output"]["id"] == first["output"]["id"]
 
@@ -222,10 +203,10 @@ def test_apps_without_scenarios_only_know_the_default() -> None:
 def test_bx08_overdue_data_lands_on_the_stages_the_case_expects() -> None:
     """BX-08: 「평소」는 이관건수 0, 「이관 1건」은 1. **DMN을 진짜로 돌려** 센다."""
     stage = decision("dunning_stage")
-    client, key = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
+    client, app = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
 
     def stages() -> list[str]:
-        items = output(client, key, "list_overdue_receivables", {"기준일": "2026-10-08"})["items"]
+        items = output(app, "list_overdue_receivables", {"기준일": "2026-10-08"})["items"]
         return [stage.decide({"연체일수": one["연체일수"], "금액": one["금액"]})["단계"] for one in items]
 
     평소 = stages()
@@ -233,8 +214,8 @@ def test_bx08_overdue_data_lands_on_the_stages_the_case_expects() -> None:
     assert 평소.count("이관검토") == 0
 
     client.post(SCENARIO_PATH, json={"name": "이관1건"})
-    # 멱등 키가 같으면 앞의 답이 되돌아온다 — 노드 인스턴스를 올려 다시 묻는다.
-    items = output(client, key, "list_overdue_receivables", {"기준일": "2026-10-08"}, node_instance=2)["items"]
+    # 멱등 칸이 같으면 앞의 답이 되돌아온다 — 노드 인스턴스를 올려 다시 묻는다.
+    items = output(app, "list_overdue_receivables", {"기준일": "2026-10-08"}, node_instance=2)["items"]
     이관 = [stage.decide({"연체일수": one["연체일수"], "금액": one["금액"]})["단계"] for one in items]
     assert 이관.count("이관검토") == 1, 이관
 
@@ -244,24 +225,23 @@ def test_bx24_ledgers_give_the_balances_the_cases_expect() -> None:
 
     E002의 3이 BX-21 「잔여 부족」(20일 신청)을 막는 숫자이기도 하다.
     """
-    client, key = client_for(catalog.c11("hris") or catalog.C11_APPS[0])
-    # `node_instance`를 올려 묻는다 — 멱등 키가 같은데 입력이 다르면 409다 (C11, 그게 맞다).
+    _, app = client_for(catalog.c11("hris") or catalog.C11_APPS[0])
+    # `node_instance`를 올려 묻는다 — 멱등 칸이 같은데 입력이 다르면 `idempotency_conflict`다 (C11, 그게 맞다).
     for i, (emp_id, wanted) in enumerate((("E001", 11.5), ("E002", 3)), start=1):
-        ledger = output(client, key, "get_leave_ledger", {"emp_id": emp_id}, node_instance=i)["ledger"]
+        ledger = output(app, "get_leave_ledger", {"emp_id": emp_id}, node_instance=i)["ledger"]
         assert ledger["발생"] - ledger["사용"] - ledger["예정"] == wanted, emp_id
 
 
 def test_an_unknown_employee_is_bad_input_not_a_crash() -> None:
-    client, key = client_for(catalog.c11("hris") or catalog.C11_APPS[0])
-    response = call(client, key, "get_leave_ledger", {"emp_id": "E999"})
-    assert response.status_code == 422
-    assert response.json()["code"] == "input_invalid"
+    _, app = client_for(catalog.c11("hris") or catalog.C11_APPS[0])
+    response = call(app, "get_leave_ledger", {"emp_id": "E999"})
+    assert (response.code, response.retryable) == ("input_invalid", False)
 
 
 def test_bx16_stock_has_exactly_two_items_below_safety() -> None:
     """BX-16 「부족 2품목」 — BPM 프로세스의 식이 `qty < safety`를 센다."""
-    client, key = client_for(catalog.c11("wms") or catalog.C11_APPS[0])
-    items = output(client, key, "list_stock", {})["items"]
+    _, app = client_for(catalog.c11("wms") or catalog.C11_APPS[0])
+    items = output(app, "list_stock", {})["items"]
     short = [one for one in items if one["qty"] < one["safety"]]
     assert len(short) == 2, items
 
@@ -269,8 +249,8 @@ def test_bx16_stock_has_exactly_two_items_below_safety() -> None:
 def test_bx23_has_three_people_and_each_lands_on_a_different_nudge() -> None:
     """BX-23 「3명」 — 메일 세 통. `남은일수`가 DMN의 세 갈래를 한 번에 지난다."""
     nudge = decision("training_nudge")
-    client, key = client_for(catalog.c11("lms") or catalog.C11_APPS[0])
-    items = output(client, key, "list_incomplete", {})["items"]
+    _, app = client_for(catalog.c11("lms") or catalog.C11_APPS[0])
+    items = output(app, "list_incomplete", {})["items"]
     assert len(items) == 3
     stages = [nudge.decide({"남은일수": one["남은일수"]})["단계"] for one in items]
     assert sorted(stages) == ["본인안내", "인사팀보고", "팀장참조"], stages
@@ -284,39 +264,38 @@ def test_bx15_prices_make_the_shipping_fee_the_case_expects() -> None:
     DMN `shipping_fee`는 20kg를 넘기면 6000이다 — 단가표의 무게가 그 선을 넘으면 기대값이 깨진다.
     """
     fee = decision("shipping_fee")
-    client, key = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
+    _, app = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
     품목 = [{"코드": "P-100", "수량": 10}]
-    prices = output(client, key, "get_prices", {"codes": 품목})["prices"]
+    prices = output(app, "get_prices", {"codes": 품목})["prices"]
     단가 = {one["코드"]: one for one in prices}
     무게 = round(sum(x["수량"] * 단가[x["코드"]]["무게"] for x in 품목), 2)
     assert fee.decide({"등급": "일반", "지역": "수도권", "무게": 무게})["fee"] == 3000
 
 
 def test_an_unknown_item_code_is_bad_input() -> None:
-    client, key = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
-    response = call(client, key, "get_prices", {"codes": [{"코드": "P-없음", "수량": 1}]})
-    assert response.status_code == 422
+    _, app = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
+    response = call(app, "get_prices", {"codes": [{"코드": "P-없음", "수량": 1}]})
+    assert response.code == "input_invalid"
 
 
 def test_bx22_erp_keeps_failing_for_one_employee_only() -> None:
-    """BX-22 「ERP 실패」 — 모의 ERP가 E009에만 503을 돌려준다 (재시도해도 같다).
+    """BX-22 「ERP 실패」 — 모의 ERP가 E009에만 `dependency_down`으로 실패한다 (재시도해도 같다).
 
-    503이라 BPM 프로세스의 `retry.on`이 두 번 다시 부르고, 다 떨어지면 오류 경계가 받는다.
+    다시 해 볼 만한 실패라 BPM 프로세스의 `retry.on`이 두 번 다시 부르고, 다 떨어지면 오류 경계가 받는다.
     """
-    client, key = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
-    assert output(client, key, "disable_user", {"emp_id": "E008"})["result"]["회수됨"] is True
-    # 재시도는 `attempt`만 올라간다 (C11) — 멱등 자리가 비워져 같은 요청이 다시 돈다.
+    _, app = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
+    assert output(app, "disable_user", {"emp_id": "E008"})["result"]["회수됨"] is True
+    # 재시도는 `attempt`만 올라간다 (C11) — 실패는 멱등 자리를 비워 같은 일감이 다시 돈다.
     for attempt in (1, 2, 3):
-        broken = call(client, key, "disable_user", {"emp_id": "E009"}, node_instance=2, attempt=attempt)
-        assert broken.status_code == 503, broken.text
-        assert broken.json()["code"] == "dependency_down"
+        broken = call(app, "disable_user", {"emp_id": "E009"}, node_instance=2, attempt=attempt)
+        assert (broken.code, broken.retryable) == ("dependency_down", True), broken.fail_body()
 
 
 def test_bx22_directory_recovers_even_for_the_broken_employee() -> None:
     """실패수 1·실패=[{시스템: ERP}]가 되려면 메일·VPN은 **되어야** 한다."""
-    client, key = client_for(catalog.c11("directory") or catalog.C11_APPS[0])
-    assert output(client, key, "disable_mail", {"emp_id": "E009"})["result"]["회수됨"] is True
-    assert output(client, key, "disable_vpn", {"emp_id": "E009"})["result"]["회수됨"] is True
+    _, app = client_for(catalog.c11("directory") or catalog.C11_APPS[0])
+    assert output(app, "disable_mail", {"emp_id": "E009"})["result"]["회수됨"] is True
+    assert output(app, "disable_vpn", {"emp_id": "E009"})["result"]["회수됨"] is True
 
 
 def test_bx10_acme_is_not_on_the_sanctions_list() -> None:
@@ -324,52 +303,52 @@ def test_bx10_acme_is_not_on_the_sanctions_list() -> None:
 
     제재로도 반려가 되게 해 두면 무엇이 반려를 만들었는지 시험이 구별하지 못한다.
     """
-    client, key = client_for(catalog.c11("compliance") or catalog.C11_APPS[0])
-    assert output(client, key, "screen_sanctions", {"name": "Acme Trading"})["hits"] == []
-    hit = output(client, key, "screen_sanctions", {"name": "제재상사"}, node_instance=2)["hits"]
+    _, app = client_for(catalog.c11("compliance") or catalog.C11_APPS[0])
+    assert output(app, "screen_sanctions", {"name": "Acme Trading"})["hits"] == []
+    hit = output(app, "screen_sanctions", {"name": "제재상사"}, node_instance=2)["hits"]
     assert len(hit) == 1
 
 
 def test_bx36_upsert_counts_what_it_was_given() -> None:
     """BX-36 「5건 묶음」이 `{"count": 5}`를 기대한다."""
-    client, key = client_for(catalog.c11("crm") or catalog.C11_APPS[0])
+    _, app = client_for(catalog.c11("crm") or catalog.C11_APPS[0])
     customers = [{"이름": f"고객{i}"} for i in range(5)]
-    assert output(client, key, "upsert_customers", {"customers": customers})["result"]["count"] == 5
+    assert output(app, "upsert_customers", {"customers": customers})["result"]["count"] == 5
 
 
 def test_bx32_search_finds_something_for_the_case_body() -> None:
     """BX-32 「배송 문의」가 `근거부족: false`를 기대한다 — 근거가 비면 안 된다."""
-    client, key = client_for(catalog.c11("kb-search") or catalog.C11_APPS[0])
-    hits = output(client, key, "search", {"query": "주문한 지 5일 지났어요", "top_k": 5})["hits"]
+    _, app = client_for(catalog.c11("kb-search") or catalog.C11_APPS[0])
+    hits = output(app, "search", {"query": "주문한 지 5일 지났어요", "top_k": 5})["hits"]
     assert hits, "근거가 비었다"
     assert len(hits) <= 5
 
 
 def test_search_does_not_make_things_up_when_nothing_matches() -> None:
-    client, key = client_for(catalog.c11("kb-search") or catalog.C11_APPS[0])
-    assert output(client, key, "search", {"query": "양자컴퓨터 임대 문의", "top_k": 5})["hits"] == []
+    _, app = client_for(catalog.c11("kb-search") or catalog.C11_APPS[0])
+    assert output(app, "search", {"query": "양자컴퓨터 임대 문의", "top_k": 5})["hits"] == []
 
 
 def test_bx34_logs_come_back_for_the_service_in_the_case() -> None:
-    client, key = client_for(catalog.c11("observability") or catalog.C11_APPS[0])
-    assert output(client, key, "recent_logs", {"service": "payment-api", "minutes": 15})["lines"]
+    _, app = client_for(catalog.c11("observability") or catalog.C11_APPS[0])
+    assert output(app, "recent_logs", {"service": "payment-api", "minutes": 15})["lines"]
 
 
 def test_fx18_head_is_200_for_the_case_url() -> None:
     """FX-18 「5개」가 정상 5를 기대한다."""
-    client, key = client_for(catalog.c11("web-reader") or catalog.C11_APPS[0])
-    assert output(client, key, "head", {"url": "https://example.com"})["status"] == 200
+    _, app = client_for(catalog.c11("web-reader") or catalog.C11_APPS[0])
+    assert output(app, "head", {"url": "https://example.com"})["status"] == 200
 
 
 def test_the_web_reader_refuses_things_that_are_not_urls() -> None:
-    client, key = client_for(catalog.c11("web-reader") or catalog.C11_APPS[0])
-    assert call(client, key, "head", {"url": "회의실 예약 어떻게 해요?"}).status_code == 422
+    _, app = client_for(catalog.c11("web-reader") or catalog.C11_APPS[0])
+    assert call(app, "head", {"url": "회의실 예약 어떻게 해요?"}).code == "input_invalid"
 
 
 def test_the_web_reader_says_it_did_not_really_read() -> None:
     """모의가 읽은 척하면 「요약이 왜 이상한가」를 쫓게 된다."""
-    client, key = client_for(catalog.c11("web-reader") or catalog.C11_APPS[0])
-    summary = output(client, key, "summarize_url", {"url": "https://example.com/a"})["summary"]
+    _, app = client_for(catalog.c11("web-reader") or catalog.C11_APPS[0])
+    summary = output(app, "summarize_url", {"url": "https://example.com/a"})["summary"]
     assert "실제로 가져오지 않" in summary
 
 
@@ -378,14 +357,14 @@ def test_the_web_reader_says_it_did_not_really_read() -> None:
 
 def test_mail_and_reply_bodies_do_not_come_back() -> None:
     """보낸 것·첨부한 것의 **내용**은 응답에 없다. 건수·번호만 돌려준다."""
-    erp, erp_key = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
+    _, erp = client_for(catalog.c11("erp") or catalog.C11_APPS[0])
     mails = [{"받는사람": "a@example.com", "제목": "독촉", "본문": "비밀스러운 금액 이야기"}]
-    found = output(erp, erp_key, "send_customer_mail", {"메일": mails})
+    found = output(erp, "send_customer_mail", {"메일": mails})
     assert found["result"] == {"보낸건수": 1, "실패": []}
     assert "비밀스러운" not in json.dumps(found, ensure_ascii=False)
 
-    crm, crm_key = client_for(catalog.c11("crm") or catalog.C11_APPS[0])
-    attached = output(crm, crm_key, "attach_document", {"request_id": "Q-01", "file": "견적/가나상사.md"})
+    _, crm = client_for(catalog.c11("crm") or catalog.C11_APPS[0])
+    attached = output(crm, "attach_document", {"request_id": "Q-01", "file": "견적/가나상사.md"})
     assert "가나상사" not in json.dumps(attached, ensure_ascii=False)
 
 
@@ -686,3 +665,15 @@ def test_links_on_the_pages_stay_under_the_mount() -> None:
 
     for path, html in sites.PAGES.items():
         assert 'href="/' not in html and 'action="/' not in html, path
+
+
+def test_all_in_one_hands_every_c11_app_to_one_consumer() -> None:
+    """한 포트의 모든 앱 = **일꾼 하나** (C15) — C11 앱 열셋이 토픽이 되고 외부 앱 둘은 빠진다.
+
+    외부 앱은 어댑터 일꾼(`apps/adapter_consumer`)이 HTTP로 부른다 — 일꾼의 토픽이 아니다.
+    """
+    from chaeksas.mock_apps.cli import all_in_one  # noqa: PLC0415
+
+    _, built = all_in_one()
+    assert sorted(one.service.app_id for one in built) == sorted(one.app_id for one in catalog.C11_APPS)
+    assert not set(external_apps.BUILDERS) & {one.service.app_id for one in built}

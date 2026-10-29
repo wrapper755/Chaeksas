@@ -43,20 +43,11 @@ def manifest(**requires: Any) -> Manifest:
     return Manifest.model_validate({**BASE, "requires": Requires(**requires).to_json_dict()})
 
 
-def never(_ref: str) -> str | None:
-    """이 PC에 키가 하나도 없다."""
-    return None
-
-
-def always(_ref: str) -> str | None:
-    return "chk_svc_abc1234567890"
-
-
 # ─────────────────────────── 키 참조 ───────────────────────────
 
 
 def test_key_refs_count_both_the_inherited_and_the_task_ones() -> None:
-    """C1 — 프로세스가 상속하는 `key_ref`와 태스크가 적은 `task_key_refs` **둘 다** 풀어야 한다."""
+    """C1 — 이름만 센다 (확장 점검 `PreflightTarget.key_refs`가 받는 칸이다)."""
     m = manifest(
         service_apps=[
             ServiceAppNeed(app_id="erp", operations=["create"], key_ref="fin-erp", task_key_refs=["fin-erp-ro"]),
@@ -66,55 +57,11 @@ def test_key_refs_count_both_the_inherited_and_the_task_ones() -> None:
     assert preflight.key_refs_of(m) == ("fin-erp", "fin-erp-ro", "fin-crm")
 
 
-def test_the_same_reference_is_counted_once() -> None:
-    m = manifest(
-        service_apps=[
-            ServiceAppNeed(app_id="erp", operations=["a"], key_ref="shared"),
-            ServiceAppNeed(app_id="crm", operations=["b"], key_ref="shared", task_key_refs=["shared"]),
-        ]
-    )
-    assert preflight.key_refs_of(m) == ("shared",)
-
-
-def test_a_missing_key_blocks_and_says_which_one() -> None:
-    """무엇이 빠졌는지 말해야 고칠 수 있다 (BUI-04 「서비스 앱 키 없음: <참조>」)."""
+def test_a_service_app_bot_needs_no_key_on_this_pc() -> None:
+    """ADR-0102 — 서비스 앱은 Center에 외부 작업으로 올린다. **키가 없다고 막지 않는다.**"""
     m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"], key_ref="fin-erp")])
-    found = preflight.check(m, key_value=never, fix_hint="BUI-10에서 등록하세요")
-
-    assert found.blocks
-    assert found.missing_key_refs == ("fin-erp",)
-    assert found.blocked == (preflight.MISSING_KEYS,)
-    only = found.findings[0]
-    assert only.severity == SEVERITY_BLOCK
-    assert only.fix_hint == "BUI-10에서 등록하세요"
-
-
-def test_a_registered_key_is_ready() -> None:
-    m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"], key_ref="fin-erp")])
-    found = preflight.check(m, key_value=always)
-    assert not found.blocks
-    assert found.missing_key_refs == () and found.blocked == ()
-
-
-def test_an_empty_value_counts_as_missing() -> None:
-    """빈 글자는 키가 아니다 — 보내면 401이 날 뿐이다."""
-    m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"], key_ref="fin-erp")])
-    assert preflight.check(m, key_value=lambda _ref: "").blocks
-
-
-def test_a_secret_store_that_throws_does_not_crash_the_check() -> None:
-    """비밀 저장소가 잠긴 PC도 있다 — 점검이 터지는 대신 「없다」고 본다."""
-
-    def locked(_ref: str) -> str | None:
-        raise RuntimeError("저장소가 잠겼습니다")
-
-    m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"], key_ref="fin-erp")])
-    found = preflight.check(m, key_value=locked)
-    assert found.missing_key_refs == ("fin-erp",)
-
-
-def test_a_bot_that_calls_nothing_needs_no_keys() -> None:
-    assert not preflight.check(manifest(), key_value=never).blocks
+    found = preflight.check(m)
+    assert not found.blocks and found.blocked == ()
 
 
 # ─────────────────────────── 확장·태스크 종류·AI 환경 ───────────────────────────
@@ -123,7 +70,7 @@ def test_a_bot_that_calls_nothing_needs_no_keys() -> None:
 def test_a_task_type_no_extension_contributes_blocks() -> None:
     """C13 — 종류가 없으면 엔진이 `node_kind_unsupported`로 끝낸다. 시작하기 전에 말한다."""
     m = manifest(task_types=[TaskTypeNeed(id="ui_task", extension="ui-automation", run_locations=["pc"])])
-    found = preflight.check(m, key_value=never, host=ExtensionHost())
+    found = preflight.check(m, host=ExtensionHost())
 
     assert found.blocked == (preflight.TASK_TYPES_UNSUPPORTED,)
     assert found.findings[0].items == ("ui_task (ui-automation 확장)",)
@@ -140,20 +87,20 @@ def test_an_extension_with_no_local_code_does_not_block() -> None:
         extensions=[ExtensionNeed(id="crm", version=">=1,<2")],
         service_apps=[ServiceAppNeed(app_id="crm", operations=["upsert"], key_ref="it-crm")],
     )
-    found = preflight.check(m, key_value=always, host=ExtensionHost())
+    found = preflight.check(m, host=ExtensionHost())
     assert not found.blocks, "코드가 필요 없는 확장이 깔려 있지 않다고 막으면 안 된다"
 
 
 def test_a_pc_only_domain_with_no_environment_blocks() -> None:
     """ADR-0037 — `web`·`desktop` AI 태스크는 확장이 눈과 손을 준다."""
-    found = preflight.check(manifest(domains=["desktop"]), key_value=never, host=ExtensionHost())
+    found = preflight.check(manifest(domains=["desktop"]), host=ExtensionHost())
     assert found.blocked == (preflight.MISSING_ENVIRONMENT,)
     assert found.findings[0].items == ("desktop",)
 
 
 def test_the_other_domains_need_no_environment() -> None:
     """`llm`·`api`·`doc`은 엔진이 제 길로 간다 (모델·HTTP·도구)."""
-    found = preflight.check(manifest(domains=["llm", "api", "doc"]), key_value=never, host=ExtensionHost())
+    found = preflight.check(manifest(domains=["llm", "api", "doc"]), host=ExtensionHost())
     assert not found.blocks
 
 
@@ -202,7 +149,7 @@ def context(_extension_id: str) -> Any:
 
 def test_an_extension_check_runs_and_sees_the_key_refs() -> None:
     m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"], key_ref="fin-erp")])
-    found = preflight.check(m, key_value=always, host=FakeHost(Noisy()), context=context)
+    found = preflight.check(m, host=FakeHost(Noisy()), context=context)
 
     assert [(f.id, f.message) for f in found.findings] == [("pages", "키 참조 1개")]
     assert not found.blocks, "경고는 막지 않는다"
@@ -210,7 +157,7 @@ def test_an_extension_check_runs_and_sees_the_key_refs() -> None:
 
 def test_a_check_that_throws_is_skipped_not_fatal() -> None:
     """`PreflightCheck` 규약 — **점검이 실행을 막지 않는다.** 사유만 남는다."""
-    found = preflight.check(manifest(), key_value=never, host=FakeHost(Broken(), Noisy()), context=context)
+    found = preflight.check(manifest(), host=FakeHost(Broken(), Noisy()), context=context)
 
     assert not found.blocks
     assert len(found.skipped) == 1 and "아직 못 만들었다" in found.skipped[0]
@@ -218,21 +165,20 @@ def test_a_check_that_throws_is_skipped_not_fatal() -> None:
 
 
 def test_an_extension_check_can_block() -> None:
-    found = preflight.check(manifest(), key_value=never, host=FakeHost(Blocking()), context=context)
+    found = preflight.check(manifest(), host=FakeHost(Blocking()), context=context)
     assert found.blocks and found.blocked == ("pages",)
 
 
 def test_without_a_context_only_the_platform_checks_run() -> None:
-    """확장에 줄 바깥 세상을 못 만드는 쪽도 있다 — 그래도 키 점검은 돌아야 한다."""
-    m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"], key_ref="fin-erp")])
-    found = preflight.check(m, key_value=never, host=FakeHost(Blocking()), context=None)
-    assert found.blocked == (preflight.MISSING_KEYS,)
+    """확장에 줄 바깥 세상을 못 만드는 쪽도 있다 — 그때 확장 점검은 건너뛴다(막지 않는다)."""
+    found = preflight.check(manifest(), host=FakeHost(Blocking()), context=None)
+    assert not found.blocks
 
 
 def test_without_a_host_the_extension_and_platform_extension_checks_are_skipped() -> None:
     """확장이 없는 Bot UI도 Bot은 돈다."""
     m = manifest(domains=["desktop"], task_types=[TaskTypeNeed(id="ui_task", extension="x", run_locations=["pc"])])
-    assert not preflight.check(m, key_value=never, host=None).blocks
+    assert not preflight.check(m, host=None).blocks
 
 
 # ─────────────────────────── 진짜 예제로 ───────────────────────────
@@ -243,11 +189,11 @@ EXAMPLES = Path("docs/08-business-examples/bpmn")
 
 
 @pytest.mark.parametrize("example", ["bx36_legacy_migration"])
-def test_a_real_example_is_blocked_by_the_key_and_nothing_else(example: str, tmp_path: Path) -> None:
-    """BX-36은 `it-crm` 키 하나와 `ui_task`·`desktop`을 쓴다.
+def test_a_real_example_is_not_blocked(example: str, tmp_path: Path) -> None:
+    """BX-36은 서비스 앱(`it-crm`)과 `ui_task`·`desktop`을 쓴다.
 
-    설치된 확장(`ui-automation`)이 종류와 환경을 주므로 **막는 것은 키뿐이어야 한다**. 이것이
-    깨지면 거짓 차단이 생긴 것이다 — 올바른 Bot이 「실행 불가」가 된다.
+    설치된 확장(`ui-automation`)이 종류와 환경을 주고 서비스 앱 키는 없어졌으므로(ADR-0102) **막는 것이
+    없어야 한다**. 이것이 깨지면 거짓 차단이 생긴 것이다 — 올바른 Bot이 「실행 불가」가 된다.
     """
     from chaeksas.core.extensions import load_host  # noqa: PLC0415
     from chaeksas.studio.packaging import export  # noqa: PLC0415
@@ -259,8 +205,7 @@ def test_a_real_example_is_blocked_by_the_key_and_nothing_else(example: str, tmp
         m = Manifest.model_validate_json(archive.read("manifest.json"))
 
     host = load_host()
-    assert preflight.check(m, key_value=never, host=host).blocked == (preflight.MISSING_KEYS,)
-    assert not preflight.check(m, key_value=always, host=host).blocks
+    assert not preflight.check(m, host=host).blocks
 
 
 # ─────────────────────────── 사람이 끈 확장 (ADR-0043) ───────────────────────────
@@ -314,10 +259,10 @@ def test_a_turned_off_extension_gets_its_own_finding() -> None:
     """
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
 
-    on = preflight.check(m, key_value=never, host=_host_with(OCR))
+    on = preflight.check(m, host=_host_with(OCR))
     assert not on.blocks
 
-    off = preflight.check(m, key_value=never, host=_host_with(OCR, off=("doc-ocr",)))
+    off = preflight.check(m, host=_host_with(OCR, off=("doc-ocr",)))
     assert off.blocked == (preflight.EXTENSION_TURNED_OFF,)
     assert off.findings[0].items == ("ocr_task (문서 인식 확장)",)
     assert off.findings[0].fix_hint == "확장 목록에서 그 확장을 켜세요"
@@ -326,7 +271,7 @@ def test_a_turned_off_extension_gets_its_own_finding() -> None:
 def test_a_missing_extension_still_says_install_it() -> None:
     """꺼 둔 것이 아니면 안내가 그대로다 — 깔려 있지 않으면 켤 수가 없다."""
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
-    found = preflight.check(m, key_value=never, host=ExtensionHost())
+    found = preflight.check(m, host=ExtensionHost())
     assert found.blocked == (preflight.TASK_TYPES_UNSUPPORTED,)
     assert "판으로 올리세요" in (found.findings[0].fix_hint or "")
 
@@ -339,17 +284,17 @@ def test_a_turned_off_ai_environment_says_turn_it_on() -> None:
     """
     m = manifest(domains=["desktop"])
 
-    on = preflight.check(m, key_value=never, host=_host_with(DESKTOP_ENV))
+    on = preflight.check(m, host=_host_with(DESKTOP_ENV))
     assert not on.blocks
 
-    off = preflight.check(m, key_value=never, host=_host_with(DESKTOP_ENV, off=("doc-ocr",)))
+    off = preflight.check(m, host=_host_with(DESKTOP_ENV, off=("doc-ocr",)))
     assert off.blocked == (preflight.EXTENSION_TURNED_OFF,)
     assert off.findings[0].items == ("desktop (문서 인식 확장)",)
     assert off.findings[0].fix_hint == "확장 목록에서 그 확장을 켜세요"
 
 
 def test_an_absent_ai_environment_still_says_install_it() -> None:
-    found = preflight.check(manifest(domains=["desktop"]), key_value=never, host=ExtensionHost())
+    found = preflight.check(manifest(domains=["desktop"]), host=ExtensionHost())
     assert found.blocked == (preflight.MISSING_ENVIRONMENT,)
     assert "설치하세요" in (found.findings[0].fix_hint or "")
 
@@ -374,7 +319,7 @@ def test_a_pc_only_task_type_gets_its_own_finding_on_the_server() -> None:
     """
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
 
-    found = preflight.check(m, key_value=never, host=_server_host(OCR))
+    found = preflight.check(m, host=_server_host(OCR))
     assert found.blocked == (preflight.TASK_TYPES_WRONG_LOCATION,)
     assert found.findings[0].items == ("ocr_task (문서 인식 확장 — pc)",)
     assert "실행 위치를" in (found.findings[0].fix_hint or "")
@@ -391,13 +336,13 @@ def test_a_task_type_that_declares_the_server_is_not_blocked_there() -> None:
     server_ocr = {**OCR, "contributes": {"task_types": [task]}}
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc", "server"])])
 
-    assert not preflight.check(m, key_value=never, host=_server_host(server_ocr)).blocks
+    assert not preflight.check(m, host=_server_host(server_ocr)).blocks
 
 
 def test_an_absent_extension_on_the_server_does_not_say_bot_ui() -> None:
     """**서버에서 「Bot UI를 올리세요」는 할 수 없는 일을 시키는 셈이다** — 그 자리에 Bot UI가 없다."""
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["server"])])
-    found = preflight.check(m, key_value=never, host=ExtensionHost(run_location="server"))
+    found = preflight.check(m, host=ExtensionHost(run_location="server"))
 
     assert found.blocked == (preflight.TASK_TYPES_UNSUPPORTED,)
     assert "서버 실행기" in (found.findings[0].fix_hint or "")
@@ -408,7 +353,7 @@ def test_an_absent_extension_on_the_server_does_not_say_bot_ui() -> None:
 def test_the_pc_wording_is_unchanged_when_nobody_holds_a_run_location() -> None:
     """실행 위치를 쥐지 않은 호스트(Studio·Bot UI)의 안내는 **그대로다**."""
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
-    found = preflight.check(m, key_value=never, host=ExtensionHost())
+    found = preflight.check(m, host=ExtensionHost())
 
     assert "이 PC에서" in found.findings[0].message
     assert "Bot UI 판으로 올리세요" in (found.findings[0].fix_hint or "")
@@ -421,11 +366,11 @@ def test_a_bot_that_sends_mail_needs_smtp() -> None:
     """**메일을 보내는 Bot은 SMTP가 있어야 띄운다** — 실행 중에 알면 늦다 (ADR-0059 §4)."""
     m = Manifest.model_validate({**BASE, "requires": {"settings": ["smtp"]}})
 
-    blocked = preflight.check(m, key_value=never, settings=())
+    blocked = preflight.check(m, settings=())
     assert blocked.blocks and blocked.blocked == (preflight.SETTINGS_MISSING,)
     assert blocked.findings[0].items == ("smtp",)
 
-    assert not preflight.check(m, key_value=never, settings=("smtp",)).blocks
+    assert not preflight.check(m, settings=("smtp",)).blocks
 
 
 def test_not_knowing_what_is_configured_does_not_block() -> None:
@@ -434,8 +379,8 @@ def test_not_knowing_what_is_configured_does_not_block() -> None:
     Studio처럼 「그 자리가 없는」 쪽이 있기 때문이다 (시험 실행은 진짜로 보내지 않는다).
     """
     m = Manifest.model_validate({**BASE, "requires": {"settings": ["smtp"]}})
-    assert not preflight.check(m, key_value=never).blocks
+    assert not preflight.check(m).blocks
 
 
 def test_a_bot_that_sends_nothing_does_not_ask_for_smtp() -> None:
-    assert not preflight.check(manifest(), key_value=never, settings=()).blocks
+    assert not preflight.check(manifest(), settings=()).blocks

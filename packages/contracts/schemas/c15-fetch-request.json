@@ -1,0 +1,46 @@
+{
+  "$id": "urn:chaeksas:contracts:c15-fetch-request",
+  "additionalProperties": true,
+  "description": "`POST /api/v1/consumers/fetch` — 가져가기 (롱폴링).",
+  "properties": {
+    "lock_s": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Lock S"
+    },
+    "max_tasks": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Max Tasks",
+      "type": "integer"
+    },
+    "topics": {
+      "items": {
+        "pattern": "^[a-z0-9][a-z0-9.-]{0,63}$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Topics",
+      "type": "array"
+    },
+    "wait_s": {
+      "default": 25,
+      "minimum": 0,
+      "title": "Wait S",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "topics"
+  ],
+  "title": "FetchRequest",
+  "type": "object"
+}

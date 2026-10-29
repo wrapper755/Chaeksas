@@ -143,8 +143,6 @@ class BotUiApp:
         self.show_window()
         if action == notices.ACTION_APPROVAL:
             self.window.open_approval()
-        elif action == notices.ACTION_KEYS:
-            self.window.show_bots()
         elif action == notices.ACTION_SETTINGS:
             self.open_settings()
 

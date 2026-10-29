@@ -59,7 +59,8 @@ def read_catalog(raw: dict[str, Any]) -> list[UiPage]:
     """`GET /v1/catalog` 본문 → 화면 목록. 모르는 칸은 지나간다 (열린 모양이다)."""
     out = []
     for item in raw.get("items") or []:
-        if item.get("type") != "ui_page":
+        # Center의 기여 자원(C7 `ContributedResource`)은 `resource_type`, 카탈로그(C13 §5)는 `type`이다.
+        if (item.get("type") or item.get("resource_type")) != "ui_page":
             continue
         data = item.get("data") or {}
         out.append(
@@ -88,7 +89,10 @@ def read_catalog(raw: dict[str, Any]) -> list[UiPage]:
 class Catalog:
     """화면 목록 한 벌. **마지막으로 읽은 것**을 들고 있는다."""
 
+    #: **Center 주소** (C13 `center.url`) — 카탈로그는 앱이 Center에 올린 것을 읽는다 (C9·C15).
     base_url: str | None = None
+    #: Center를 읽을 토큰 — 호출 토큰 (C15). 없으면 읽지 못한다.
+    token: str | None = None
     timeout_s: float = 10.0
     client: Any = None  # httpx.Client (시험이 끼운다)
 
@@ -101,14 +105,18 @@ class Catalog:
         """다시 읽는다 → 성공했나. **실패해도 들고 있던 것은 버리지 않는다.**"""
         import httpx  # noqa: PLC0415 — 읽을 때만 든다
 
-        if not self.base_url:
+        if not self.base_url or not self.token:
             self.offline = True
-            self.last_error = "UI 자동화 앱 주소를 모릅니다"
+            self.last_error = "Center 주소·호출 토큰을 모릅니다"
             return False
         own = self.client is None
         client = self.client or httpx.Client(timeout=self.timeout_s)
         try:
-            answer = client.get(f"{self.base_url.rstrip('/')}/v1/catalog")
+            answer = client.get(
+                f"{self.base_url.rstrip('/')}/api/v1/resources",
+                params={"type": "contributed", "resource_type": "ui_page"},
+                headers={"Authorization": f"Bearer {self.token}"},
+            )
         except httpx.HTTPError as e:
             self.offline = True
             self.last_error = f"닿지 못했습니다 ({type(e).__name__})"

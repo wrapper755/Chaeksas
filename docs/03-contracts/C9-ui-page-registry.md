@@ -4,32 +4,37 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 레지스트리·공개 카탈로그와 관리 콘솔이 읽는 길까지 돈다) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | UI 자동화 확장의 Tool UI 도구 「UI 셀렉터 등록」(직접 호출 — [ADR-0077](../decisions/0077-tool-ui.md)) → UI 자동화 앱, UI 자동화 앱 관리 콘솔(UIA-02) → UI 자동화 앱, Center(공개 카탈로그 읽기) → UI 자동화 앱 |
+| 보내는 쪽 → 받는 쪽 | UI 자동화 확장의 Tool UI 도구 「UI 셀렉터 등록」([ADR-0077](../decisions/0077-tool-ui.md)) → Center(C15 외부 작업, 토픽 `ui-automation`) ← UI 자동화 앱(일꾼), UI 자동화 앱 → Center(공개 카탈로그 올리기), UI 자동화 앱 관리 콘솔(UIA-02) → UI 자동화 앱 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (registry.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md) §5, [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0042](../decisions/0042-extension-contributed-panels.md)(콘솔 화면) |
 | 관련 화면 | TOL-03·04·05, UIA-01·02·03, CON-07 「UI 화면」, STU-03·13 |
+
+
+> 전송 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)): 네 작업은 **C15 외부 작업**(토픽 `ui-automation`)으로 오간다 — Tool UI 도구는 Bot UI의 **호출 토큰**으로 올리고 `run_id`는 `reg_<hex8>`(등록 세션 — Center는 그 PC에 「셀렉터 등록」이 켜졌는지 본다, C15). 공개 카탈로그는 앱이 Center에 **올리고**(C15 `PUT …/catalogs/ui_page`) Studio(STU-13)·Center는 Center에서 읽는다 — 아무도 앱의 주소를 모른다. 아래 본문의 「키」·`registry_write` 키는 이제 **그 PC의 「셀렉터 등록」 스위치**다.
 
 ## 목적
 
 자동화할 화면과 그 요소(시맨틱 키), 요소마다의 로케이터 사다리를 등록·조회·삭제한다. 결과물은 UI 자동화 앱이 소유한다. 통계·승격·폐기 판단이 거기 있기 때문이다 (C8).
 
-> 상태: 네 작업과 공개 카탈로그가 **돈다** (`extensions/ui_automation/service/app.py`, 저장은 SQLite 한 파일). 부르는 쪽은 `client/registry_client.py`다. 추가 권한은 작업이 `required_scopes`로 선언하고 `service_kit`이 건다 (C11). **관리 콘솔이 읽는 길도 돈다** — 경로 다섯(UIA-01~03)과 UI 세션 기록이다 (아래).
+> 상태: 네 작업과 공개 카탈로그가 **돈다** (`extensions/ui_automation/service/app.py`, 저장은 SQLite 한 파일). 부르는 쪽은 `client/registry_client.py`다. 추가 권한은 작업이 `required_scopes`로 선언하고 **Center가 올리기에서 건다** (C15 §올리기). **관리 콘솔이 읽는 길도 돈다** — 경로 다섯(UIA-01~03)과 UI 세션 기록이다 (아래).
 
 ## 전송
 
 | 경로 | 인증 | 뜻 |
 | --- | --- | --- |
-| `GET /v1/catalog` | **없음** | 공개 카탈로그. **셀렉터 없음.** Center 리소스 목록(C7)이 읽는다 |
-| `POST /v1/ops/registry_list_pages` | 서비스 앱 키 (아무 권한) | 화면 목록 (TOL-03 「화면 ID」 콤보) |
-| `POST /v1/ops/registry_get_page` | 서비스 앱 키 + **`registry_write`** | 화면 하나 전체. 로케이터 포함 |
-| `POST /v1/ops/registry_register` | 서비스 앱 키 + `registry_write` | 등록·추가 |
-| `POST /v1/ops/registry_delete` | 서비스 앱 키 + `registry_write` | 삭제 |
+| C15 `PUT /api/v1/consumers/self/catalogs/ui_page` (앱 → Center) | 일꾼 토큰 | 공개 카탈로그 올리기. **셀렉터 없음.** `revision`이 바뀌었을 때만 올리고 Center 리소스 목록(C7)이 그것을 보인다 |
+| 작업 `registry_list_pages` | 호출 토큰 (C15) | 화면 목록 (TOL-03 「화면 ID」 콤보) |
+| 작업 `registry_get_page` | 호출 토큰 + **`registry_write`** | 화면 하나 전체. 로케이터 포함 |
+| 작업 `registry_register` | 호출 토큰 + `registry_write` | 등록·추가 |
+| 작업 `registry_delete` | 호출 토큰 + `registry_write` | 삭제 |
 
-- **누가 부르나:** 레지스트리 작업은 **UI 자동화 확장의 도구(클라이언트 코드)가 UI 자동화 앱을 직접** 부른다 (`caller.type`은 도구를 띄운 호스트 — Tool UI면 **`tool_ui`**, ADR-0077). 키는 확장 설정의 등록 담당자 키(C13 `configuration` 비밀 칸)를 쓴다. Worker는 브라우저 일(열기·분석·고르기·검증, C10 §5)만 하고 레지스트리를 부르지 않는다.
+작업은 C15 외부 작업으로 올린다 (토픽 `ui-automation`, `operation`이 작업 이름이다).
+
+- **누가 부르나:** 레지스트리 작업은 **UI 자동화 확장의 도구(클라이언트 코드)가 Center에 올린다** (`caller.type`은 도구를 띄운 호스트 — Tool UI면 **`tool_ui`**, ADR-0077). 토큰은 그 PC Bot UI가 청한 **호출 토큰**이다(C15 「정한 것」 — 앱의 주소도 키도 모른다). Worker는 브라우저 일(열기·분석·고르기·검증, C10 §5)만 하고 레지스트리를 부르지 않는다.
 - **멱등 키:** 등록·삭제 **동작마다** 새 `run_id` `reg_<hex8>`를 만든다 (`node_id: "registry"`, `node_instance: 1`, `attempt`는 재시도마다 +1, `call_seq: 1`).
-- 작업 호출은 C11을 따른다. `mode`는 `deterministic`로 보낸다 (등록은 LLM을 쓰지 않는다). manifest에는 두 모드를 모두 선언한다.
-- `registry_write`는 SVC-02에서 키를 발급할 때 고르는 추가 권한이다. 등록 담당자 개인 키(BUI-03)에만 준다. **운영용 Bot 키에는 주지 않는다.**
-- 셀렉터(물리 정보)는 `registry_get_page`와 `registry_register`에만 나온다. 둘 다 `registry_write` 권한이 있는 키만 부를 수 있다. 공개 카탈로그와 C7 리소스 목록에는 셀렉터가 나오지 않는다.
+- 작업 본문(입력·출력·멱등·오류)은 C11을 따른다. `mode`는 `deterministic`로 보낸다 (등록은 LLM을 쓰지 않는다). manifest에는 두 모드를 모두 선언한다.
+- `registry_write`는 **그 PC의 「셀렉터 등록」 스위치**다 (CON-03, C5 `PUT /bot-uis/{id}/utility`). 켜진 PC의 Bot UI 쪽에서 올린 것만 Center가 받고(아니면 403 `scope_missing`), `reg_` 실행은 그 스위치가 꺼져 있으면 아예 받지 않는다(403 `registration_off`, C15). **운영 PC에는 켜지 않는다.**
+- 셀렉터(물리 정보)는 `registry_get_page`와 `registry_register`에만 나온다. 둘 다 `registry_write`가 켜진 쪽만 부를 수 있다. 공개 카탈로그와 C7 리소스 목록에는 셀렉터가 나오지 않는다.
 
 ## 모델
 
@@ -111,7 +116,7 @@
 | `registry_list_pages` | `{platform?, query?}` | `[{page_id, name, platform, element_count, revision, updated_at}]` |
 | `registry_get_page` | `{page_id}` | PageRegistration (모든 로케이터와 각 `status`·통계 `{success, fail, last_success_at}`) + `revision` |
 
-### 공개 카탈로그 `GET /v1/catalog` (C13 §5 공통 형식)
+### 공개 카탈로그 (C13 §5 공통 형식 — 앱이 C15 `PUT …/catalogs/ui_page`로 올린다)
 
 ```json
 {
@@ -132,8 +137,8 @@
 }
 ```
 
-- **서버망 안에서만 연다.** 역방향 프록시에서 `/v1/catalog`의 바깥 노출을 막는다 (C13 §5).
-- 최상위 `revision`은 어느 화면이든 바뀌면 오른다. Center는 이 값이 같으면 다시 읽지 않는다.
+- **앱은 이것을 HTTP로 열지 않는다** — 일꾼이 Center에 올리고, Studio(STU-13)·Center 리소스 목록은 Center에서 읽는다.
+- 최상위 `revision`은 어느 화면이든 바뀌면 오른다. 앱은 이 값이 바뀌었을 때만 올리고, Center는 같으면 다시 쓰지 않는다.
 - 들어가는 것: 요소 이름·종류·동작·관계·로케이터 상태 개수.
 - 들어가지 않는 것: 셀렉터, `description` 원문(치유 프롬프트용), 통계 세부.
 
@@ -150,8 +155,8 @@
 | `GET /admin/v1/sessions?limit=` | 같음 | UIA-03 — 이력·요약·폴백 깊이 분포. `limit` 기본 100·최대 1000 |
 
 - **관문은 C11 관리 API와 같다** (`service_kit.admin_guard`) — 관리자 토큰이 없으면 503 `admin_disabled`, 없는 토큰은 401, 틀린 토큰은 403이다. **업무 키로는 못 부른다** (`registry_write` 키여도 403).
-- 왜 관리자 토큰인가: **콘솔은 서비스 앱 키를 갖지 않는다** ([ADR-0013](../decisions/0013-api-keys.md)). 셀렉터를 보는 작업(`registry_get_page`)은 `registry_write` 키의 일이고, 콘솔이 그 키를 들고 있으면 「키를 발급하는 화면이 키를 쓰는」 꼴이 된다. 관리자 토큰은 키를 발급하는 토큰이라 이미 더 강하다.
-- **읽기만 한다.** 등록·삭제는 §전송의 작업(`/v1/ops/registry_*`)이고 셀렉터 등록 도구(TOL-03)의 일이다.
+- 왜 관리자 토큰인가: **콘솔은 BPM 프로세스의 길이 아니다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md) §1 — 운영자가 앱 옆에 띄우는 화면이라 C15를 거치지 않는다). 셀렉터를 보는 작업(`registry_get_page`)은 「셀렉터 등록」이 켜진 PC의 일이고, 콘솔은 그 길을 쓰지 않고 앱의 관리 API를 관리자 토큰으로 읽는다.
+- **읽기만 한다.** 등록·삭제는 §전송의 작업(C15로 올리는 `registry_*`)이고 셀렉터 등록 도구(TOL-03)의 일이다.
 - **대체된 것(`deprecated`)도 준다** — 무엇이 밀려났는지 보는 화면이다 (UIA-02).
 - **「치유가 더했다」는 표시는 레지스트리에 없다** — 보고가 적어 둔 것(`healed[].locator`·`supersedes`)에서 모은다. 그래서 화면의 「자가 치유」 열과 「대체 관계」는 **세션 기록이 있어야** 보인다.
 - 「화면 간 경로 탐색」은 **최단 하나**를 앱이 **너비 우선**으로 찾는다 ([ADR-0040](../decisions/0040-registry-storage-sqlite.md)) — 길이 없으면 빈 목록이고 **지어내지 않는다**.
@@ -237,6 +242,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | 전송이 C15 외부 작업이 됐다 — 호출 토큰·`reg_` 실행, `registry_write`는 CON-03 스위치, 공개 카탈로그는 앱이 Center에 올린다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-09 | 1 | 「관리 콘솔이 읽는 길」에 UIA-02·03의 경로 넷(`pages`·`pages/{id}`·`path`·`sessions`)을 더했다. 세션 기록이 **봉투의 `caller`·`mode`도** 적는다 (UIA-03 표의 네 열). 치유 표시·대체 관계는 보고에서 모은다 | 0042 |
 | 2026-10-09 | 1 | 「관리 콘솔이 읽는 길」을 적었다 — `GET /admin/v1/overview`(UIA-01), UI 세션 기록(보고가 도착한 것만·시험은 따로·5000줄), 「배포 전 확인」. 관문은 C11 관리 API와 같은 관리자 토큰이다 | 0042 |
 | 2026-10-01 | 1 | 초안. 프로토타입 화면 등록을 C11 작업으로 옮겼다. 그 과정에서 바뀐 것: `registry_write` 권한, 셀렉터 없는 공개 카탈로그, `revision`, 삭제 때 끊길 경로를 확인하는 단계 | 0010, 0012, 0013 |

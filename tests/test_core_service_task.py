@@ -1,11 +1,15 @@
-"""서비스 앱 태스크 (`chk:serviceCall`) — C11 호출, 멱등 키, 재시도, C3 기록.
+"""서비스 앱 태스크 (`chk:serviceCall`) — 멱등 칸, 재시도, C3 기록, 그리고 Center로 올리기 (C15).
 
-여기서 거듭 보는 것은 셋이다.
-
-1. **키 값은 어댑터만 안다** — 엔진·BPM 프로세스·실행 기록에는 **참조 이름**만 간다 (ADR-0013).
-2. **멱등 키가 제대로 붙는다** — `(operation, run_id, node_id, node_instance, attempt, call_seq)`.
-   재시도는 `attempt`를 올려 부르고, 서버 실행기가 재시작해도 같은 키라 한 번만 수행된다.
-3. **어댑터가 없으면 부르지 않고 실패한다** — 조용히 건너뛰면 업무가 안 돌아간 채로 흘러간다.
+| 보는 것 | 왜 |
+| --- | --- |
+| `input`·`output`은 적은 것만 오간다 | C14 |
+| 멱등 칸 `(operation, run_id, node_id, node_instance, attempt, call_seq)`이 붙는다 | 한 번만 수행된다 (원칙 9) |
+| 어댑터가 없으면 **부르지 않고 실패**한다 | 조용히 건너뛰면 업무가 안 돈 채로 흘러간다 |
+| 다시 해 볼 만한 실패만 `attempt`를 올려 다시 부른다 | C11 §오류 |
+| 실행 기록에 업무 값이 없다 | 원칙 6 |
+| `CenterServiceCaller`는 C15 일감으로 올리고 결과를 기다려 `ack`한다 — 앱 주소·키를 모른다 | ADR-0102 |
+| 실패는 C15 코드 그대로, `retry.on`이 읽을 숫자로도 | 오류 경계·재시도가 코드에 걸려 있다 |
+| 엔진 → Center → 일꾼 한 바퀴가 in-process로 맞물린다 | 조각마다 본 것이 정말 붙는가 |
 """
 
 from __future__ import annotations
@@ -17,11 +21,10 @@ import pytest
 
 from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.contracts.events import REQUIRED_DATA_KEYS
-from chaeksas.contracts.service_app import Caller, OpResponse, Usage
 from chaeksas.core.engine import Engine, Run, RunEnv, State
 from chaeksas.core.run_log import RunLog
 from chaeksas.core.services import (
-    HttpServiceCaller,
+    CenterServiceCaller,
     NoServiceCaller,
     OpCall,
     RecordingServiceCaller,
@@ -41,7 +44,7 @@ SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 </bpmn:definitions>
 """
 
-#: 키 참조는 프로세스에 적는다 (B7 — 태스크에 `key_ref`가 없으면 여기서 상속한다).
+#: 옛 그림처럼 키 참조를 적어 둔다 — 이제는 부르는 데 쓰지 않는다 (ADR-0102).
 PROPS = '{"service_keys": {"erp": "erp_key"}, "inputs": [{"name": "사번", "type": "string"}]}'
 
 CALL = (
@@ -104,8 +107,8 @@ def test_a_service_task_maps_input_and_output() -> None:
     assert sent.app_id == "erp" and sent.operation == "lookup"
     assert sent.input == {"emp_no": "2026-001"}, "입력은 식으로 계산한다"
     assert sent.mode == "deterministic", "수행 모드는 실행이 정한다 (받는 쪽은 바꾸지 않는다)"
-    # **키 참조만** 간다 — 값은 어댑터가 자기 비밀 저장소에서 푼다 (ADR-0013).
-    assert sent.key_ref == "erp_key"
+    # 키는 가지 않는다 — 참조 이름조차 (ADR-0102, 키는 어댑터 일꾼의 설정이 든다).
+    assert sent.key_ref is None
 
 
 def test_the_idempotency_key_is_filled_in() -> None:
@@ -120,12 +123,13 @@ def test_the_idempotency_key_is_filled_in() -> None:
     assert sent.bpm_process_id == "test.proc"
 
 
-def test_a_task_level_key_ref_wins_over_the_process_one() -> None:
+def test_a_written_key_ref_is_not_sent() -> None:
+    """옛 그림이 적어 둔 `key_ref`·`service_keys`는 **부르는 데 쓰지 않는다** (ADR-0102)."""
     call = CALL[:-1] + ', "key_ref": "erp_운영키"}'
     service = caller()
     engine, run = start(process(call), RunEnv(services=service), inputs={"사번": "1"})
-    engine.run_until_blocked(run)
-    assert service.calls[0].key_ref == "erp_운영키"
+    assert engine.run_until_blocked(run) is State.DONE
+    assert service.calls[0].key_ref is None
 
 
 def test_an_output_the_app_did_not_return_stops_the_run() -> None:
@@ -190,7 +194,7 @@ def test_the_service_call_event_matches_the_contract() -> None:
     (event,) = [e for e in run.log.events if e.kind == "service_call"]
     missing = [k for k in REQUIRED_DATA_KEYS["service_call"] if k not in event.data]
     assert not missing, missing
-    assert event.data["app_id"] == "erp" and event.data["key_ref"] == "erp_key"
+    assert event.data["app_id"] == "erp" and not event.data.get("key_ref"), "키 참조는 실리지 않는다"
     # **업무 값은 없다** (원칙 6) — 사번도 이름도.
     assert "홍길동" not in str(run.log.events) and "2026-001" not in str(run.log.events)
     assert run.log.events[-1].data["service_calls"] == 1, "run_finished의 셈에도 들어간다"
@@ -209,92 +213,230 @@ def test_a_failed_call_is_recorded_too() -> None:
     assert {e.data["error_code"] for e in events} == {"dependency_down"}
 
 
-# ─────────────────────────── HTTP 어댑터 (C11) ───────────────────────────
+# ─────────────────────────── Center로 올리기 (C15) ───────────────────────────
 
 
-class FakeApp:
-    """C11을 흉내 내는 최소 서버. `httpx.Client`가 쓰는 자리만 맞춘다."""
+class FakeCenter:
+    """C15 `external-tasks`를 흉내 내는 최소 Center. `httpx.Client`가 쓰는 자리만 맞춘다.
 
-    def __init__(self, status: int = 200, body: Any = None) -> None:
-        self.status = status
-        self.body = body
-        self.seen: list[dict[str, Any]] = []
+    `results`는 `GET …/external-tasks/{id}`가 차례로 돌려줄 `(상태 코드, 본문)`이다 — 마지막 것이 남는다.
+    """
 
-    def post(self, url: str, *, json: dict[str, Any], headers: dict[str, str]) -> Any:
-        self.seen.append({"url": url, "json": json, "headers": headers})
+    def __init__(self, *results: tuple[int, dict[str, Any]], made: tuple[int, dict[str, Any]] | None = None) -> None:
+        self.results = list(results) or [(200, {"task_id": "et_1", "state": "completed", "output": {}})]
+        self.made = made or (201, {"task_id": "et_1", "state": "pending"})
+        self.posted: list[dict[str, Any]] = []
+        self.gets: list[dict[str, Any]] = []
+        self.acked: list[str] = []
+
+    @staticmethod
+    def _answer(method: str, url: str, status: int, body: dict[str, Any]) -> Any:
         import httpx  # noqa: PLC0415
 
-        return httpx.Response(self.status, json=self.body, request=httpx.Request("POST", url))
+        return httpx.Response(status, json=body, request=httpx.Request(method, f"http://center{url}"))
 
-    def close(self) -> None:  # pragma: no cover — 쓰지 않는다 (client를 넣어 주므로)
-        pass
+    def post(self, url: str, *, headers: dict[str, str], json: dict[str, Any] | None = None) -> Any:
+        if url.endswith("/ack"):
+            self.acked.append(url)
+            return self._answer("POST", url, 200, {})
+        self.posted.append({"url": url, "json": json, "headers": headers})
+        return self._answer("POST", url, *self.made)
 
-
-class Book:
-    def __init__(self, url: str | None = "http://erp.test", key: str | None = "chk_svc_abcdefgh00") -> None:
-        self.url, self._key = url, key
-
-    def base_url(self, app_id: str) -> str | None:
-        return self.url
-
-    def key(self, key_ref: str) -> str | None:
-        return self._key
+    def get(self, url: str, *, params: dict[str, Any], headers: dict[str, str]) -> Any:
+        self.gets.append({"url": url, "params": params})
+        status, body = self.results.pop(0) if len(self.results) > 1 else self.results[0]
+        return self._answer("GET", url, status, body)
 
 
 def op_call(**kwargs: Any) -> OpCall:
     defaults: dict[str, Any] = {
         "app_id": "erp", "operation": "lookup", "mode": "deterministic",
-        "input": {"emp_no": "1"}, "run_id": RUN_ID, "node_id": "Task_Call", "key_ref": "erp_key",
+        "input": {"emp_no": "1"}, "run_id": RUN_ID, "node_id": "Task_Call",
+        "bpm_process_id": "hr.lookup", "version": "1.2.0",
     }
     return OpCall(**{**defaults, **kwargs})
 
 
-def test_the_http_adapter_speaks_c11() -> None:
-    app = FakeApp(
-        body=OpResponse(
-            output={"name": "홍길동"}, mode_used="deterministic",
-            usage=Usage(model="local-7b", input_tokens=10, output_tokens=2),
-        ).to_json_dict()
+def center_caller(center: Any, **kwargs: Any) -> CenterServiceCaller:
+    sleeps: list[float] = []
+    return CenterServiceCaller(
+        base_url="http://center", token=kwargs.pop("token", "chk_ck_server"), client=center,
+        sleep=sleeps.append, **kwargs,
     )
-    found = HttpServiceCaller(addresses=Book(), caller_type="studio", host="pc1", client=app).call(op_call())
-    assert found.output == {"name": "홍길동"}
+
+
+def test_a_call_becomes_an_external_task_and_its_result_comes_back() -> None:
+    center = FakeCenter(
+        (200, {"task_id": "et_1", "state": "pending"}),
+        (200, {"task_id": "et_1", "state": "completed", "output": {"name": "홍길동"}, "mode_used": "deterministic",
+               "replayed": True, "usage": {"model": "local-7b", "input_tokens": 10, "output_tokens": 2}}),
+    )
+    found = center_caller(center, caller_type="server_runner", host="srv_01").call(
+        op_call(node_instance=2, attempt=3, call_seq=4)
+    )
+    assert found.output == {"name": "홍길동"} and found.replayed is True
     assert found.usage is not None and found.usage["model"] == "local-7b"
 
-    (sent,) = app.seen
-    assert sent["url"] == "http://erp.test/v1/ops/lookup"
-    assert sent["headers"]["Authorization"] == "Bearer chk_svc_abcdefgh00"
-    assert sent["json"]["caller"] == {
-        "type": "studio", "host": "pc1", "bpm_process_id": "", "version": "0.0.0"
-    }
-    assert sent["json"]["node_instance"] == 1 and sent["json"]["attempt"] == 1
+    (sent,) = center.posted
+    assert sent["url"] == "/api/v1/external-tasks"
+    assert sent["headers"]["Authorization"] == "Bearer chk_ck_server"
+    body = sent["json"]
+    assert (body["topic"], body["operation"], body["mode"], body["origin"]) == ("erp", "lookup", "deterministic", "run")
+    assert body["idempotency"] == {
+        "run_id": RUN_ID, "node_id": "Task_Call", "node_instance": 2, "attempt": 3, "call_seq": 4,
+    }, "C11 여섯 칸이 그대로 간다 — Center가 같은 칸이면 같은 일감을 준다"
+    assert body["caller"] == {"type": "server_runner", "host": "srv_01", "bpm_process_id": "hr.lookup",
+                              "version": "1.2.0"}
+    assert body["input"] == {"emp_no": "1"} and body["timeout_s"] == 60
+    assert "key_ref" not in str(body), "부르는 쪽은 앱의 키를 모른다"
+    assert [one["url"] for one in center.gets] == ["/api/v1/external-tasks/et_1"] * 2, "끝날 때까지 기다린다"
+    assert center.acked == ["/api/v1/external-tasks/et_1/ack"], "받았으면 ack — Center가 값을 지운다"
+
+
+def test_a_studio_test_run_is_a_test_task_and_the_token_is_read_each_time() -> None:
+    center = FakeCenter()
+    reads: list[int] = []
+
+    def token() -> str:
+        reads.append(1)
+        return "chk_call_token"
+
+    center_caller(center, token=token).call(op_call(run_id="test_20261004_093000_abc123", timeout_s=5))
+    body = center.posted[0]["json"]
+    assert body["origin"] == "test", "시험 일감이라 일꾼이 폴백·시험 주소를 고를 수 있다"
+    assert body["timeout_s"] == 5
+    assert len(reads) >= 3, "호출 토큰은 24시간마다 바뀐다 — 부를 때마다 읽는다"
 
 
 @pytest.mark.parametrize(
-    ("status", "code", "retryable"),
-    [(503, "dependency_down", True), (429, "rate_limited", True), (401, "key_invalid", False),
-     (422, "input_invalid", False), (504, "timeout", True)],
+    ("code", "retryable", "status"),
+    [("dependency_down", True, 503), ("rate_limited", True, 429), ("timeout", True, 504),
+     ("no_consumer", False, 504), ("input_invalid", False, None)],
 )
-def test_http_errors_say_whether_to_try_again(status: int, code: str, retryable: bool) -> None:
-    """C11 §오류 표 — 다시 불러 볼 것과 사람이 고쳐야 할 것을 가른다."""
-    app = FakeApp(status=status, body={"code": code, "message": "안 된다"})
+def test_a_failure_carries_the_code_and_a_status_retry_on_can_read(
+    code: str, retryable: bool, status: int | None
+) -> None:
+    """C15 `error`가 그대로 오고, `retry.on`이 읽게 HTTP 숫자로도 옮긴다 (C14)."""
+    center = FakeCenter((200, {"task_id": "et_1", "state": "failed",
+                               "error": {"code": code, "message": "안 된다", "retryable": retryable}}))
     with pytest.raises(ServiceCallError) as caught:
-        HttpServiceCaller(addresses=Book(), client=app).call(op_call())
-    assert caught.value.code == code
-    assert caught.value.retryable is retryable
+        center_caller(center).call(op_call())
+    assert (caught.value.code, caught.value.retryable, caught.value.status) == (code, retryable, status)
+    assert center.acked, "실패도 받았으면 ack한다"
 
 
-def test_a_missing_address_or_key_fails_before_any_request() -> None:
-    app = FakeApp()
-    with pytest.raises(ServiceCallError, match="주소를 모른다"):
-        HttpServiceCaller(addresses=Book(url=None), client=app).call(op_call())
-    with pytest.raises(ServiceCallError, match="이 PC에 없다"):
-        HttpServiceCaller(addresses=Book(key=None), client=app).call(op_call())
-    assert not app.seen, "주소·키가 없으면 아예 보내지 않는다"
+def test_a_refusal_is_not_retried_and_nothing_is_awaited() -> None:
+    """「불러도 되나」는 다시 해도 같다 — Center의 코드를 그대로 싣는다."""
+    center = FakeCenter(made=(403, {"code": "topic_not_required", "message": "이 Bot은 erp를 요구하지 않는다"}))
+    with pytest.raises(ServiceCallError) as caught:
+        center_caller(center).call(op_call())
+    assert (caught.value.code, caught.value.status, caught.value.retryable) == ("topic_not_required", 403, False)
+    assert "요구하지 않는다" in str(caught.value)
+    assert center.gets == []
 
 
-def test_the_caller_model_is_the_contract_one() -> None:
-    """C11 `OpRequest`를 그대로 만든다 — 모델이 검사해 준다."""
-    request = op_call(node_instance=2, attempt=3, call_seq=4).request(Caller(type="bot_ui"))
-    assert request.schema_version == 1
-    assert (request.node_instance, request.attempt, request.call_seq) == (2, 3, 4)
-    assert request.to_json_dict()["schema"] == 1, "전선 위에서는 `schema`다 (별명)"
+def test_the_long_poll_limit_is_waited_out() -> None:
+    """롱폴링 상한(503)은 실패가 아니다 — 잠깐 쉬고 다시 건다."""
+    center = FakeCenter(
+        (503, {"code": "too_many_waiters"}),
+        (200, {"task_id": "et_1", "state": "completed", "output": {"name": "홍길동"}}),
+    )
+    assert center_caller(center).call(op_call()).output == {"name": "홍길동"}
+    assert len(center.gets) == 2
+
+
+def test_without_a_token_nothing_is_sent() -> None:
+    center = FakeCenter()
+    with pytest.raises(ServiceCallError) as caught:
+        center_caller(center, token=lambda: None).call(op_call())
+    assert caught.value.code == "token_missing"
+    assert center.posted == []
+
+
+def test_an_unreachable_center_is_worth_trying_again() -> None:
+    import httpx  # noqa: PLC0415
+
+    class Down:
+        def post(self, *_a: Any, **_k: Any) -> Any:
+            raise httpx.ConnectError("닿지 못함")
+
+    with pytest.raises(ServiceCallError) as caught:
+        center_caller(Down()).call(op_call())
+    assert caught.value.retryable is True
+
+
+def test_a_task_that_never_finishes_times_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    """기한(+여유)이 지나도 끝나지 않으면 `timeout`으로 실패한다 — 영원히 기다리지 않는다."""
+    import chaeksas.core.services as services  # noqa: PLC0415
+
+    clock = iter([0.0, 10.0, 1000.0, 1000.0, 1000.0])
+
+    class Clock:
+        @staticmethod
+        def monotonic() -> float:
+            return next(clock)
+
+    monkeypatch.setattr(services, "time", Clock)
+    center = FakeCenter((200, {"task_id": "et_1", "state": "locked"}))
+    with pytest.raises(ServiceCallError) as caught:
+        center_caller(center).call(op_call(timeout_s=30))
+    assert (caught.value.code, caught.value.retryable, caught.value.status) == ("timeout", True, 504)
+
+
+# ─────────────────────────── 진짜 Center와 일꾼 (in-process) ───────────────────────────
+
+
+class FinishOnPost:
+    """Center `TestClient` 앞에 서서, 일감이 올라가면 **그 자리에서 일꾼을 한 바퀴** 돌린다.
+
+    스레드·롱폴링 없이 한 바퀴를 본다 — 롱폴링과 진짜 소켓은 `test_c15_round_trip.py`가 본다.
+    """
+
+    def __init__(self, center: Any, consumer: Any) -> None:
+        self.center, self.consumer = center, consumer
+
+    def post(self, url: str, **kw: Any) -> Any:
+        answer = self.center.post(url, **kw)
+        if url == "/api/v1/external-tasks":
+            self.consumer.run_once(wait_s=0)
+        return answer
+
+    def get(self, url: str, **kw: Any) -> Any:
+        return self.center.get(url, **kw)
+
+
+def test_the_engine_calls_through_center_to_a_consumer(tmp_path: Any) -> None:
+    """엔진 → `CenterServiceCaller` → Center → 일꾼의 작업 함수 → 변수. 엔진은 무엇이 바뀌었는지 모른다."""
+    from consumers import ADMIN, enroll  # noqa: PLC0415
+    from fastapi.testclient import TestClient  # noqa: PLC0415
+
+    from chaeksas.center.app import create_app as create_center  # noqa: PLC0415
+    from chaeksas.center.settings import Settings as CenterSettings  # noqa: PLC0415
+    from chaeksas.center.storage import Store  # noqa: PLC0415
+    from chaeksas.contracts.service_app import ServiceAppManifest  # noqa: PLC0415
+    from chaeksas.service_kit import Consumer, create_app  # noqa: PLC0415
+
+    manifest = ServiceAppManifest.model_validate(
+        {"schema": 1, "app_id": "erp", "name": "ERP", "version": "1.0.0", "category": "business",
+         "console_url": "", "operations": [{"name": "lookup", "modes": ["deterministic"]}]}
+    )
+    erp = create_app(manifest, {"lookup": lambda req, mode: {"name": f"사원 {req.input['emp_no']}", "dept": "재무"}})
+    store = Store(tmp_path / "center.sqlite3")
+    settings = CenterSettings(admin_token="t-admin", package_dir=tmp_path / "pkg")
+    with TestClient(create_center(settings, store=store)) as center:
+        tokens = enroll(center, topics=["erp"], manifests=[manifest.to_json_dict()], folder=tmp_path / "c")
+        consumer = Consumer([erp.state.ops], center_url="", tokens=tokens, wait_s=0, client=center)
+        key = center.post("/api/v1/center-keys", json={"name": "설계자", "type": "studio"}, headers=ADMIN)
+        caller = CenterServiceCaller(
+            base_url="", token=key.json()["key"], caller_type="studio", client=FinishOnPost(center, consumer)
+        )
+        engine = Engine()
+        run = engine.start(
+            process(), run_id="test_20261004_093000_abc123", log=RunLog(run_id="test_20261004_093000_abc123"), now=NOW,
+            env=RunEnv(services=caller), inputs={"사번": "2026-001"}, mode="deterministic",
+        )
+        assert engine.run_until_blocked(run) is State.DONE, run.error
+        assert run.variables["이름"] == "사원 2026-001" and run.variables["부서"] == "재무"
+        row = store.row("SELECT input_json, output_json, acked_at FROM external_tasks")
+        assert row is not None and row["input_json"] is None and row["acked_at"], "받았으니 값이 지워졌다"
+    store.close()

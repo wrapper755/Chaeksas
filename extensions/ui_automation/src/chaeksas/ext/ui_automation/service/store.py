@@ -18,8 +18,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-from chaeksas.contracts.service_app import ServiceAppKey
-from chaeksas.contracts.signing import AdminKey
 from chaeksas.ext.ui_automation.contracts.console import FallbackSpread, SessionCounts, SessionRow
 from chaeksas.ext.ui_automation.contracts.plan import (
     ORIGIN_TEST,
@@ -112,64 +110,6 @@ class Database:
             found.commit()
         finally:
             found.close()
-
-
-@dataclass
-class SqliteKeyStore:
-    """`service_kit.KeyStore` — **해시만** 들고 있는다 (C11)."""
-
-    db: Database
-
-    def all_keys(self) -> Iterator[ServiceAppKey]:
-        with self.db.connect() as found:
-            rows = found.execute("SELECT key_json FROM app_keys").fetchall()
-        for row in rows:
-            yield ServiceAppKey.model_validate_json(row["key_json"])
-
-    def add(self, key: ServiceAppKey) -> None:
-        self._put(key)
-
-    def touch(self, key: ServiceAppKey, *, at: str) -> None:
-        self._put(key.model_copy(update={"last_used_at": at}))
-
-    def revoke(self, key: ServiceAppKey, *, at: str) -> None:
-        """**지우지 않는다** — 사용 기록이 이름을 가리킨다 (C11)."""
-        self._put(key.model_copy(update={"revoked_at": at}))
-
-    def put(self, key: ServiceAppKey) -> None:
-        self._put(key)
-
-    def _put(self, key: ServiceAppKey) -> None:
-        with self.db.connect() as found:
-            found.execute(
-                "INSERT INTO app_keys (key_hash, key_json) VALUES (?, ?) "
-                "ON CONFLICT (key_hash) DO UPDATE SET key_json = excluded.key_json",
-                (key.hash, key.model_dump_json()),
-            )
-
-
-@dataclass
-class SqliteTrustStore:
-    """`service_kit.TrustStore` — 받아 둔 Center 공개키 (ADR-0094 §1). 다시 띄워도 남는다."""
-
-    db: Database
-
-    def load(self) -> tuple[list[AdminKey], str | None]:
-        with self.db.connect() as found:
-            row = found.execute("SELECT value FROM meta WHERE name = 'center_trust'").fetchone()
-        if row is None:
-            return [], None
-        body = json.loads(row["value"])
-        return [AdminKey.model_validate(one) for one in body.get("keys", [])], body.get("fetched_at")
-
-    def save(self, keys: list[AdminKey], *, fetched_at: str) -> None:
-        value = json.dumps({"keys": [one.to_json_dict() for one in keys], "fetched_at": fetched_at})
-        with self.db.connect() as found:
-            found.execute(
-                "INSERT INTO meta (name, value) VALUES ('center_trust', ?) "
-                "ON CONFLICT (name) DO UPDATE SET value = excluded.value",
-                (value,),
-            )
 
 
 @dataclass
@@ -380,6 +320,4 @@ __all__ = [
     "Database",
     "RegistryStore",
     "SessionStore",
-    "SqliteKeyStore",
-    "SqliteTrustStore",
 ]

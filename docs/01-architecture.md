@@ -35,15 +35,16 @@
 | 확장 API (`extension_api`) | 패키지 | 모든 클라이언트·실행하는 쪽 | 확장이 구현하는 안정 인터페이스: 태스크 종류·수행기, Studio 편집기, Tool UI 도구, 로컬 런타임, 사전 점검, HTTP 어댑터 해석 규격 ([ADR-0018](decisions/0018-extensions.md)) | 특정 확장의 로직 |
 | 확장 (`extensions/*`, 외부 정의) | 확장 | 곳곳 (기여 지점) | BPM 프로세스에 공통 기능을 더함. 서버 부분(서비스 앱) + 클라이언트 기여. 확장 정의 C13 | 플랫폼 흐름 |
 | 모델 클라이언트 (`llm`) | 패키지 | 모델을 부르는 모든 곳 (`core`, 서비스 앱) | OpenAI 호환 `/v1/chat/completions` 어댑터와 그 모양(`Reply`·`ToolSpec`·`LlmError`). **맨 아래** — 우리 멤버를 하나도 모른다 ([ADR-0034](decisions/0034-service-app-model-connection.md)) | 도구 루프·결과 검증·궤적(`core.agent`), 주소·키 보관 |
-| 서비스 앱 뼈대 (`service_kit`) | 패키지 | 서비스 앱 | API 키 발급·검증, 관리 API(상태·키·사용 기록 — 화면은 `web/apps/svc-console`), `/healthz`, `/manifest`, 작업 호출 틀(수행 모드), 로깅 | 업무 로직 |
+| 서비스 앱 뼈대 (`service_kit`) | 패키지 | 서비스 앱 | **일꾼**(`service_kit.consumer` — Center 들이기·가져가기 루프·manifest·카탈로그 올리기, C15), 작업 틀(수행 모드·멱등·오류 형식), 관리 API(상태·사용 기록 — 화면은 `web/apps/svc-console`), `/healthz`, 로깅 | 업무 로직, 업무 호출을 받는 포트 |
+| 어댑터 일꾼 (`adapter_consumer`, `chk-adapter-consumer`) | 프로세스 (서버) | 서버 또는 외부 앱이 있는 망 | 외부 확장 정의(C13)의 HTTP 어댑터를 C15 일꾼으로 돌린다. **외부 앱의 주소·키는 이 일꾼의 설정에만** 있다 ([ADR-0102](decisions/0102-calling-outside-is-pull.md) §4) | 정의 등록(Center) |
 | Studio | 화면 | 설계자 PC | BPM 프로세스 편집(BPMN), 시험 실행(자율 수행·재생), 학습, 패키지 빌드·업로드 | 배포 결정 |
-| **Bot UI** | 화면 (트레이) | 현장 PC, 설계자 PC | Center 등록·하트비트(Center API 키), **Bot 다운로드·설치·실행**(결정 수행, 실행 자리 하나 + 대기열), **Worker 프로세스 시작·감시·재시작**, 로컬 결재·확인 창, 서비스 앱 키 값 보관, 「도구」 바로가기(Tool UI를 띄운다) | 셀렉터 보관, 화면 조작 자체, **확장 도구의 창**(Tool UI의 일) |
+| **Bot UI** | 화면 (트레이) | 현장 PC, 설계자 PC | Center 등록·하트비트(Center API 키), **Bot 다운로드·설치·실행**(결정 수행, 실행 자리 하나 + 대기열), **Worker 프로세스 시작·감시·재시작**, 로컬 결재·확인 창, C15 호출 토큰 받기(실행기 자식·Worker·Tool UI에 넘긴다), 「도구」 바로가기(Tool UI를 띄운다) | 셀렉터 보관, 화면 조작 자체, **확장 도구의 창**(Tool UI의 일) |
 | **Tool UI** | 화면 | 현장 PC, 설계자 PC (Bot UI와 함께 설치) | 확장이 기여한 **도구**를 띄운다(첫 도구: **UI 셀렉터 등록**). 도구 설정·비밀(`scope: tool_ui`) 보관 ([ADR-0077](decisions/0077-tool-ui.md)) | 로컬 런타임 기동(Bot UI가 띄운 것을 빌려 쓴다), Center 연결, 확장 켜기·끄기(BUI-11) |
 | 실행기 | 프로세스 | 현장 PC | 실행 중인 Bot 하나 (Bot UI의 자식, 동시에 하나만, [ADR-0014](decisions/0014-one-bot-per-pc.md)) | 다른 실행, 대기열 |
 | **Worker** (UI 자동화 확장의 로컬 런타임) | 프로세스 (서버) | 현장 PC, 설계자 PC | 127.0.0.1 REST: UI 세션, 로케이터 사다리 실행, 치유 제안 검증, 셀렉터 등록용 분석·선택·검증 | 화면(GUI), 그래프 쓰기, 업무 판단 |
-| 서버 실행기 | 프로세스 (서버) | 서버 | 실행 위치 「서버」인 BPM 프로세스를 동시 실행(상한 있음), 기다리는 동안 실행 상태 저장·재개, Center API 키로 등록·하트비트, 서비스 앱 키 값 보관(서버 비밀 저장소) | UI 태스크, 웹·데스크톱 AI 태스크, 현장 결재·확인 |
-| Center | 서버 | 서버 | 패키지 레지스트리, **관리자 계정**, 승인·배포 봉투 서명(서버의 키, [ADR-0090](decisions/0090-center-admin-accounts.md)), Bot UI 등록·상태, 배포, 작업, 결재 창구, 실행 이력, 리소스 목록, Center API 키, 콘솔 | BPMN 해석, 비밀(서비스 앱 키) 저장 |
-| 서비스 앱 (확장의 서버 부분) | 서버 | 서버 또는 외부 | BPM 프로세스가 API로 맡기는 일 (C11, 외부 앱은 HTTP 어댑터), 자기 API 키 발급·검증, 관리 콘솔 | 프로세스 흐름, 작업 배분 |
+| 서버 실행기 | 프로세스 (서버) | 서버 | 실행 위치 「서버」인 BPM 프로세스를 동시 실행(상한 있음), 기다리는 동안 실행 상태 저장·재개, Center API 키로 등록·하트비트, 바깥 기능은 제 Center API 키로 C15에 올린다 | UI 태스크, 웹·데스크톱 AI 태스크, 현장 결재·확인 |
+| Center | 서버 | 서버 | 패키지 레지스트리, **관리자 계정**, 승인·배포 봉투 서명(서버의 키, [ADR-0090](decisions/0090-center-admin-accounts.md)), Bot UI 등록·상태, 배포, 작업, 결재 창구, 실행 이력, 리소스 목록, Center API 키, **외부 작업 대기열·일꾼 승인**(C15), 콘솔 | BPMN 해석, 바깥 기능의 주소·키 |
+| 서비스 앱 (확장의 서버 부분) | 서버 | 서버 또는 외부 | BPM 프로세스가 맡기는 일을 Center에서 가져가 수행 (C11 일꾼, C15. 외부 앱은 어댑터 일꾼), 관리 콘솔 | 프로세스 흐름, 작업 배분(Center가 한다) |
 | UI 자동화 앱 (첫 내장 확장의 서버 부분) | 서버 | 서버 | 화면·요소·로케이터 그래프, 실행 계획, 치유 제안, 승격, 관리 콘솔(셀렉터·모니터링) | 브라우저 실행 |
 
 ## 3. 태스크별 호출 경로
@@ -51,14 +52,14 @@
 | 태스크 종류 | 경로 | 서버 호출 시점 |
 | --- | --- | --- |
 | AI 태스크 | Bot(실행기, core) → LLM 게이트웨이, 도구. 결정 수행이면 재생 명세로 LLM 없이 | 자율 수행: LLM 호출마다. 결정 수행: 값 추출 때만 |
-| UI 태스크 | Bot → Worker 프로세스(REST, 127.0.0.1) → UI 자동화 앱 | 계획을 받을 때, 모든 로케이터가 실패했을 때, 끝날 때 보고 |
-| 서비스 앱 태스크 | Bot → 서비스 앱 `POST /v1/ops/{작업}` (서비스 앱 API 키, 수행 모드) | 태스크 한 번에 한 번 |
+| UI 태스크 | Bot → Worker 프로세스(REST, 127.0.0.1) → Center 외부 작업(토픽 `ui-automation`, 호출 토큰) ← UI 자동화 앱(일꾼) | 계획을 받을 때, 모든 로케이터가 실패했을 때, 끝날 때 보고 |
+| 서비스 앱 태스크 | Bot → Center `POST /api/v1/external-tasks`(토픽 = `app_id`, 수행 모드) ← 서비스 앱·어댑터 일꾼이 가져가 끝낸다 → Bot이 결과를 기다려 받는다 (C15, [ADR-0102](decisions/0102-calling-outside-is-pull.md)) | 태스크 한 번에 한 번 (올리기 + 결과 기다리기) |
 | 결재 | Bot → Bot UI → Center (하트비트로 답 수신) 또는 현장 PC 결재 창. PC Bot은 답이 올 때까지 실행 자리를 쥐고 기다린다 | 요청·답 |
 | (서버 실행) PC 위임 (제안) | 서버 실행기 → Center 작업 → Bot UI 대기열 → PC Bot → 결과가 Center를 거쳐 서버 실행기로. 서버 Bot은 상태 저장 후 대기 ([ADR-0016](decisions/0016-server-first.md) §3) | 위임 요청·결과 |
-| (서버 실행) 모든 태스크 | 서버 실행기(core) → LLM·서비스 앱. 결재는 Center 결재함만, 기다리는 동안 상태 저장 | 태스크 종류별로 위와 같음 |
+| (서버 실행) 모든 태스크 | 서버 실행기(core) → LLM·Center 외부 작업(서비스 앱). 결재는 Center 결재함만, 기다리는 동안 상태 저장 | 태스크 종류별로 위와 같음 |
 
 - **수행 모드:** Studio 개발 실행 = 자율 수행, Bot UI의 Bot 실행 = 결정 수행. 실행 주체가 정하고, Worker·서비스 앱은 받은 모드를 따른다 ([ADR-0010](decisions/0010-service-apps.md)).
-- **서비스 앱 키:** BPM 프로세스 속성의 키 참조를 실행하는 쪽(Bot UI / Studio / 서버 실행기)이 자기 비밀 저장소에서 풀어 쓴다. UI 태스크는 Bot이 푼 키를 Worker 세션 요청에 실어 보낸다 ([ADR-0013](decisions/0013-api-keys.md), 제안).
+- **서비스 앱 키는 없다** ([ADR-0102](decisions/0102-calling-outside-is-pull.md)). 부르는 쪽은 Center에 올릴 때 **호출 토큰**을 쓴다 — 서버 실행기·Studio는 제 Center API 키, 실행기 자식·Worker·Tool UI는 Bot UI가 청해 넘긴 호출 토큰(24시간). 「불러도 되나」는 Center가 배포에서 가린다 (C15).
 
 ## 4. 통신 규칙
 
@@ -108,7 +109,7 @@ llm ◀── core, service_kit   (맨 아래 — chaeksas의 아무것도 impor
 | Bot UI 로그인 시 자동 시작 | 작업 스케줄러 「로그온 시」 (현재 사용자, [ADR-0023](decisions/0023-bot-ui-process-supervision.md)) | XDG autostart | 트레이 하나만 |
 | 자식 프로세스 관리 (Bot UI → Worker, 실행기) | 자식마다 Job Object (`KILL_ON_JOB_CLOSE`) | 프로세스 그룹 | 공통 헬퍼 하나로 ([ADR-0023](decisions/0023-bot-ui-process-supervision.md)) |
 | 무인 실행 (로그인 없이) | Windows 서비스 — UI 태스크 불가 | systemd | **나중에 검토** |
-| 비밀 저장 (Center 키, 서비스 앱 키 값) | Windows 자격 증명 관리자 (`keyring`) | Secret Service (`keyring`) | |
+| 비밀 저장 (Center 키, 호출 토큰, 모델 키) | Windows 자격 증명 관리자 (`keyring`) | Secret Service (`keyring`) | |
 | 사용자 데이터 위치 | `%LOCALAPPDATA%\Chaeksas\` | `~/.local/share/chaeksas/` | `platformdirs` |
 
 ## 7. 저장소
@@ -118,8 +119,10 @@ llm ◀── core, service_kit   (맨 아래 — chaeksas의 아무것도 impor
 | 패키지 파일 (zip) | Center 파일 저장소 | DB에는 메타데이터만. 비밀 없음 |
 | Bot UI·배포·작업·결재·실행 이력·리소스·Center API 키(해시) | Center DB | SQLite로 시작, PostgreSQL 호환 |
 | 화면·요소·로케이터·인텐트 | UI 자동화 앱의 SQLite 한 파일 (`service/store.py`) | 화면 하나를 JSON 한 덩이로, 성적만 따로. **그래프 저장소를 두지 않는다** ([ADR-0040](decisions/0040-registry-storage-sqlite.md)) |
-| 서비스 앱 API 키(해시)·사용 기록 | 각 서비스 앱 | |
-| 서비스 앱 키 값, Center 키 값 | Bot UI·Studio PC의 OS 비밀 저장소, 서버 실행기는 서버의 비밀 저장소·환경변수 | |
+| 서비스 앱 사용 기록·멱등 결과 | 각 서비스 앱 | |
+| 외부 작업(일감)의 입력·출력 | Center DB | 부른 쪽이 받으면(`ack`) 지우고, 못 받은 것은 7일에 지운다 (C15) |
+| Center 키 값, 일꾼 토큰 | Bot UI·Studio PC의 OS 비밀 저장소, 서버 실행기는 서버의 비밀 저장소·환경변수, 일꾼은 데이터 폴더의 토큰 파일(`0600`)·환경변수 | |
+| 외부 앱의 주소·키 | 어댑터 일꾼의 설정(환경변수) | Center·현장은 모른다 |
 | 서버 실행 상태 (기다리는 실행) | 서버 실행기 저장소 (SQLite로 시작) | 재시작 후 이어 가기 |
 | 재생 기억(성공 궤적) | **패키지 안 `memory/specs.json`** (C1) | Studio가 자율 수행으로 만들어 넣고, 배포된 Bot은 **읽기만** 한다 ([ADR-0028](decisions/0028-replay-memory.md)) |
 | 실행 기록·보고 버퍼 | 현장 PC 로컬 큐 | 전송 후 삭제 |

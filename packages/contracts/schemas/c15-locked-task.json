@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "Caller": {
+      "additionalProperties": true,
+      "description": "누가 부르는가. `type`은 열린 문자열 (KNOWN_CALLER_TYPES).",
+      "properties": {
+        "bpm_process_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bpm Process Id"
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Host"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "Caller",
+      "type": "object"
+    },
+    "Idempotency": {
+      "additionalProperties": true,
+      "description": "C11 멱등 키에서 `operation`을 뺀 다섯 칸 (`operation`은 일감에 따로 있다).",
+      "properties": {
+        "attempt": {
+          "minimum": 1,
+          "title": "Attempt",
+          "type": "integer"
+        },
+        "call_seq": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Call Seq",
+          "type": "integer"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "node_instance": {
+          "minimum": 1,
+          "title": "Node Instance",
+          "type": "integer"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "node_id",
+        "node_instance",
+        "attempt"
+      ],
+      "title": "Idempotency",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c15-locked-task",
+  "additionalProperties": true,
+  "description": "일꾼이 받은 일감 하나.",
+  "properties": {
+    "business_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Business Key"
+    },
+    "caller": {
+      "$ref": "#/$defs/Caller"
+    },
+    "deadline": {
+      "title": "Deadline",
+      "type": "string"
+    },
+    "delivery": {
+      "default": 1,
+      "title": "Delivery",
+      "type": "integer"
+    },
+    "idempotency": {
+      "$ref": "#/$defs/Idempotency"
+    },
+    "input": {
+      "additionalProperties": true,
+      "title": "Input",
+      "type": "object"
+    },
+    "lock_until": {
+      "title": "Lock Until",
+      "type": "string"
+    },
+    "mode": {
+      "title": "Mode",
+      "type": "string"
+    },
+    "operation": {
+      "title": "Operation",
+      "type": "string"
+    },
+    "origin": {
+      "title": "Origin",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "topic": {
+      "title": "Topic",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "topic",
+    "operation",
+    "mode",
+    "origin",
+    "idempotency",
+    "caller",
+    "lock_until",
+    "deadline"
+  ],
+  "title": "LockedTask",
+  "type": "object"
+}

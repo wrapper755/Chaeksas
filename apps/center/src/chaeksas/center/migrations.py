@@ -230,6 +230,42 @@ MIGRATIONS: tuple[Step, ...] = (
         "작업이 어느 가상 직원의 일인가 — id만 남기고 값은 내려줄 때 읽는다 (C5 `virtual_worker`, ADR-0099)",
         ("ALTER TABLE jobs ADD COLUMN virtual_worker TEXT",),
     ),
+    Step(
+        15,
+        "외부 작업과 일꾼 — 바깥 기능은 Pull로 (C15, ADR-0102)",
+        (
+            # 일감 하나. **값(`input_json`·`output_json`)은 결과를 부른 쪽이 받으면 지운다** (원칙 6 예외).
+            "CREATE TABLE external_tasks ("
+            " task_id TEXT PRIMARY KEY, topic TEXT NOT NULL, operation TEXT NOT NULL, mode TEXT NOT NULL,"
+            " origin TEXT NOT NULL, idempotency_json TEXT NOT NULL, caller_json TEXT NOT NULL,"
+            " business_key TEXT, body_hash TEXT NOT NULL, poster_key_id TEXT NOT NULL,"
+            " want_result INTEGER NOT NULL, input_json TEXT, output_json TEXT, result_json TEXT,"
+            " state TEXT NOT NULL, created_at TEXT NOT NULL, deadline TEXT NOT NULL,"
+            " locked_by TEXT, lockers_json TEXT, lock_until TEXT, deliveries INTEGER NOT NULL DEFAULT 0,"
+            " finished_at TEXT, acked_at TEXT)",
+            "CREATE INDEX external_tasks_waiting ON external_tasks (topic, state, created_at)",
+            "CREATE INDEX external_tasks_poster ON external_tasks (poster_key_id)",
+            # 일꾼 하나 — 키는 `center_keys`(종류 `consumer`)이고 토픽은 **승인할 때** 정해진다.
+            "CREATE TABLE consumers ("
+            " consumer_id TEXT PRIMARY KEY, key_id TEXT NOT NULL UNIQUE, machine_id TEXT NOT NULL UNIQUE,"
+            " name TEXT NOT NULL, topics_json TEXT NOT NULL, manifest_json TEXT,"
+            " approved_at TEXT NOT NULL, approved_by TEXT NOT NULL, last_fetch_at TEXT)",
+        ),
+    ),
+    Step(
+        16,
+        "Center는 바깥 기능의 주소도 키도 들지 않는다 — 서비스 앱 등록·키·외부 앱 키·주소 덮어쓰기를 걷는다 (ADR-0102)",
+        (
+            # 서비스 앱은 일꾼으로 들어온다(`consumers`) — 주소 등록·상태 읽기가 없다.
+            "DROP TABLE IF EXISTS service_apps",
+            "DROP TABLE IF EXISTS extension_health",
+            # 서비스 앱 키·외부 앱 키(암호문)와 그 감싸는 키 — 키는 일꾼 쪽에만 있다.
+            "DROP TABLE IF EXISTS service_keys",
+            "DROP TABLE IF EXISTS external_app_keys",
+            "DROP TABLE IF EXISTS center_secrets",
+            "DROP TABLE IF EXISTS extension_addresses",
+        ),
+    ),
 )
 
 

@@ -2,7 +2,7 @@
 
 흐름은 하나다 (01-architecture §3).
 
-1. `chk:task`의 UI 태스크 속성(C14)과 `key_ref`로 푼 서비스 앱 키를 들고
+1. `chk:task`의 UI 태스크 속성(C14)과 호출 토큰(C15 — Worker가 계획·치유·보고를 Center에 올린다)을 들고
 2. 127.0.0.1의 Worker에 세션을 열고 (`business_key`가 세션을 잇는다)
 3. 스텝을 하나씩 보낸다 — **사다리는 Worker가 로컬에서** 탄다 (C8)
 4. 닫으면서 받은 요약으로 C3 `ui_session` 한 줄을 만들어 **엔진에게 준다** — 줄을 쓰는 것은
@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from chaeksas.contracts.extension import CALL_TOKEN_SECRET
 from chaeksas.ext.ui_automation.contracts.plan import LocatorSpec
 from chaeksas.ext.ui_automation.contracts.registration import (
     AnalyzeRequest,
@@ -180,12 +181,12 @@ class WorkerClient:
         *,
         heal: bool = True,
         report: bool = False,
-        service_key: str | None = None,
+        call_token: str | None = None,
     ) -> SessionInfo:
         """등록 세션에 계획을 싣는다 (C10 §5 `…/plan`) — 시험이 등록 탭의 화면을 이어 쓴다."""
         body: dict[str, Any] = {"page_id": page_id, "heal": heal, "report": report}
-        if service_key:
-            body["service_key"] = service_key
+        if call_token:
+            body["call_token"] = call_token
         return SessionInfo.model_validate(
             self.call("POST", f"/v1/registration/{session_id}/plan", body=body, secret=secret)
         )
@@ -324,7 +325,8 @@ class UiTaskExecutor:
                     node_id=ctx.node_id,
                     node_instance=ctx.node_instance,
                     attempt=attempt,
-                    bpm_process_id=spec.get("bpm_process_id"),
+                    bpm_process_id=ctx.bpm_process_id or spec.get("bpm_process_id"),
+                    version=ctx.version,
                 ),
                 mode=str(ctx.mode),
                 business_key=key,
@@ -333,7 +335,8 @@ class UiTaskExecutor:
                 # 데스크톱 앱 이름 — `chk:defaults.desktop`이 엔진을 거쳐 속성 기본값으로 온다 (ADR-0033).
                 app=_desktop_app(spec),
                 heal=bool(spec.get("heal", True)),
-                service_key=ctx.extension.secret(ctx.key_ref) if ctx.key_ref else None,
+                # 호출 토큰 (C15) — Worker가 이것으로 계획·치유·보고를 Center에 올린다 (C8).
+                call_token=ctx.extension.secret(CALL_TOKEN_SECRET),
                 # 목표 모드: **이름만** 간다 — 값은 아래에서 이쪽이 채운다 (원칙 6).
                 goal=goal,
                 values=values,

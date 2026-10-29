@@ -1,14 +1,15 @@
-"""레지스트리를 부르는 쪽 — TOL-03이 UI 자동화 앱을 직접 부른다 (C9·C11).
+"""레지스트리를 부르는 쪽 — TOL-03이 UI 자동화 앱의 등록 작업을 올린다 (C9·C15).
 
-**Worker는 레지스트리를 모른다** (C9) — 브라우저 일만 한다. 등록·삭제·조회는 이 확장의
-도구(Tool UI, ADR-0077)가 자기 키(등록 담당자 키, C13 `registrar_key`)로 직접 부른다.
+**Worker는 레지스트리를 모른다** (C9) — 브라우저 일만 한다. 등록·삭제·조회는 이 확장의 도구(Tool UI,
+ADR-0077)가 **Center에 외부 작업으로** 올린다 (ADR-0102) — 앱의 주소도 키도 모른다. 토큰은 이 PC
+Bot UI가 청한 **호출 토큰**이고, 등록 작업(`registry_write`)은 그 PC에 「셀렉터 등록」(CON-03)이 켜졌을
+때만 Center가 받는다.
 
-- 작업 호출은 C11 그대로다 — `POST /v1/ops/<작업>`에 `{schema, mode, run_id, node_id, …}`.
-  **등록은 LLM을 쓰지 않으니 `mode`는 늘 `deterministic`**이다.
-- **멱등 키는 동작마다 새로 만든다** (`reg_<hex8>`). 재시도는 `attempt`를 올려 같은 `run_id`로
+- **등록은 LLM을 쓰지 않으니 `mode`는 늘 `deterministic`**이다.
+- **멱등 칸은 동작마다 새로 만든다** (`reg_<hex8>`). 재시도는 `attempt`를 올려 같은 `run_id`로
   보낸다 — 같은 등록이 두 번 들어가지 않는다.
-- **4xx는 다시 보내지 않는다** (큐에 쌓지 않는다). 한 번 거부된 것은 다시 보내도 같은 답이다.
-- 키는 **값으로만** 들고 있고 어디에도 적지 않는다 (ADR-0013·원칙 6).
+- **거절은 다시 보내지 않는다** (큐에 쌓지 않는다). 한 번 거부된 것은 다시 보내도 같은 답이다.
+- 토큰은 **값으로만** 들고 있고 어디에도 적지 않는다 (원칙 6).
 """
 
 from __future__ import annotations
@@ -18,13 +19,14 @@ import secrets
 from dataclasses import dataclass, field
 from typing import Any
 
-from chaeksas.contracts.service_app import MODE_DETERMINISTIC, Caller, OpRequest, OpResponse
+from chaeksas.contracts.service_app import MODE_DETERMINISTIC
 from chaeksas.ext.ui_automation.contracts.registry import (
     DeletionResult,
     PageBrief,
     PageRegistration,
     RegistrationResult,
 )
+from chaeksas.ext.ui_automation.worker.plans import CenterOps, OpsRefused, OpsUnreachable
 
 log = logging.getLogger(__name__)
 
@@ -62,11 +64,13 @@ class RegistryUnreachable(RegistryProblem):
 
 @dataclass
 class RegistryClient:
-    """UI 자동화 앱 하나를 부른다 (C9의 네 작업)."""
+    """UI 자동화 앱의 C9 네 작업을 Center에 올린다."""
 
+    #: **Center 주소** (C13 `center.url`).
     base_url: str
-    api_key: str
-    timeout_s: float = 15.0
+    #: 호출 토큰 (C15).
+    call_token: str
+    timeout_s: float = 30.0
     #: 시험이 끼우는 자리 (httpx.Client 또는 TestClient).
     client: Any = None
     caller_version: str | None = None
@@ -80,7 +84,7 @@ class RegistryClient:
         return [PageBrief.model_validate(one) for one in found.get("pages", [])]
 
     def get_page(self, page_id: str) -> tuple[PageRegistration, list[str]]:
-        """화면 하나 전체. **셀렉터가 들어 있다** — `registry_write` 키만 부를 수 있다 (C9)."""
+        """화면 하나 전체. **셀렉터가 들어 있다** — 「셀렉터 등록」을 켠 PC만 부를 수 있다 (C9)."""
         found = self.call("registry_get_page", {"page_id": page_id})
         return PageRegistration.model_validate(found["page"]), list(found.get("warnings", []))
 
@@ -96,61 +100,27 @@ class RegistryClient:
 
     # ── 부르기 ──
 
-    def request(self, operation: str, payload: dict[str, Any], *, run_id: str) -> OpRequest:
-        """C11 요청 하나. **재시도는 `attempt`를 올린다** — 같은 `run_id`로."""
-        self._attempts[run_id] = self._attempts.get(run_id, 0) + 1
-        return OpRequest(
-            schema=1,
-            mode=MODE_DETERMINISTIC,  # 등록은 LLM을 쓰지 않는다 (C9)
-            run_id=run_id,
-            node_id=NODE_ID,
-            node_instance=1,
-            attempt=self._attempts[run_id],
-            call_seq=1,
-            caller=Caller(type=self.caller_type, version=self.caller_version),
-            input={key: value for key, value in payload.items() if value is not None},
-        )
-
     def call(self, operation: str, payload: dict[str, Any], *, run_id: str | None = None) -> dict[str, Any]:
-        import httpx  # noqa: PLC0415 — 부를 때만 든다
-
-        body = self.request(operation, payload, run_id=run_id or new_run_id())
-        own = self.client is None
-        client = self.client or httpx.Client(timeout=self.timeout_s)
-        try:
-            response = client.post(
-                f"{self.base_url.rstrip('/')}/v1/ops/{operation}",
-                json=body.to_json_dict(),
-                headers={"Authorization": f"Bearer {self.api_key}"},
-            )
-        except httpx.HTTPError as e:
-            raise RegistryUnreachable(f"UI 자동화 앱에 닿지 못했습니다 ({type(e).__name__})") from e
-        finally:
-            if own:
-                client.close()
-        return _checked(response)
-
-
-def _checked(response: Any) -> dict[str, Any]:
-    """C11 응답 → 출력. 오류는 **코드를 들고** 올린다 (다시 보낼지 판단해야 한다)."""
-    if response.status_code >= 400:
-        body = _body(response)
-        raise RegistryProblem(
-            str(body.get("message") or f"앱이 거부했습니다 ({response.status_code})"),
-            code=str(body.get("code") or ""),
-            status=response.status_code,
-            detail=body.get("detail"),
+        """C15 일감 하나. **재시도는 `attempt`를 올린다** — 같은 `run_id`로."""
+        run = run_id or new_run_id()
+        self._attempts[run] = self._attempts.get(run, 0) + 1
+        ops = CenterOps(
+            base_url=self.base_url,
+            call_token=self.call_token,
+            business_key=f"{run}:{NODE_ID}:1:{self._attempts[run]}",
+            mode=MODE_DETERMINISTIC,  # 등록은 LLM을 쓰지 않는다 (C9)
+            caller_version=self.caller_version,
+            caller_type=self.caller_type,
+            timeout_s=self.timeout_s,
+            client=self.client,
         )
-    found = OpResponse.model_validate(_body(response))
-    return dict(found.output)
-
-
-def _body(response: Any) -> dict[str, Any]:
-    try:
-        found = response.json()
-    except ValueError:
-        return {}
-    return dict(found) if isinstance(found, dict) else {}
+        body = {key: value for key, value in payload.items() if value is not None}
+        try:
+            return ops.call(operation, body, call_seq=1)
+        except OpsRefused as e:
+            raise RegistryProblem(str(e), code=e.code, status=e.status, detail=e.detail) from e
+        except OpsUnreachable as e:
+            raise RegistryUnreachable(f"UI 자동화 앱에 닿지 못했습니다 — {e}", code=e.code) from e
 
 
 __all__ = [

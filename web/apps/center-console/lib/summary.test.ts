@@ -13,18 +13,15 @@
  */
 import { describe, expect, it } from "vitest";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
-import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
 import {
-  keyStages,
   NO_RUNS,
   SAMPLE,
   botLimitRows,
   deployedPcs,
   elapsed,
-  keyRefsOf,
   percent,
   placeOf,
   queueReason,
@@ -156,26 +153,6 @@ describe("deployedPcs", () => {
       "1.0.0",
     );
     expect(found).toEqual({ pcs: 1, deployments: 1 });
-  });
-});
-
-describe("keyRefsOf", () => {
-  it("상속 참조와 태스크가 따로 적은 참조를 **함께**, 겹치면 한 번만", () => {
-    const info = {
-      manifest: {
-        requires: {
-          service_apps: [
-            { app_id: "a", operations: ["x"], key_ref: "ref-a", task_key_refs: ["ref-b", "ref-a"] },
-            { app_id: "b", operations: ["y"], key_ref: "ref-c" },
-          ],
-        },
-      },
-    } as PackageInfo;
-    expect(keyRefsOf(info)).toEqual(["ref-a", "ref-b", "ref-c"]);
-  });
-
-  it("매니페스트가 없으면 빈 목록이다 (0이 아니라 없는 것이다)", () => {
-    expect(keyRefsOf({} as PackageInfo)).toEqual([]);
   });
 });
 
@@ -323,7 +300,6 @@ describe("botLimitRows", () => {
         } as Partial<ServerRunnerInfo>),
         [serverDeployment()],
       )[0]?.readiness?.label;
-    expect(ready({ missing_key_refs: ["crm-key"] })).toBe("서비스 앱 키 받지 못함");
     expect(ready({ blocked: ["extension_turned_off"] })).toBe("확장 꺼짐");
     expect(ready({ blocked: ["task_types_unsupported"] })).toBe("확장 없음");
     expect(ready({ blocked: ["something_else"] })).toBe("사전 점검 실행 불가");
@@ -375,10 +351,6 @@ describe("readinessLabel", () => {
 
   it("준비됐으면 그렇게만 말한다", () => {
     expect(readinessLabel(row({ ready: true }))?.label).toBe("준비됨");
-  });
-
-  it("키가 빠진 것이 가장 앞이다 (고치는 길이 BUI-10이다)", () => {
-    expect(readinessLabel(row({ missing_key_refs: ["fin-erp"] }))?.label).toBe("서비스 앱 키 받지 못함");
   });
 
   it("**설정 없음을 확장 문제로 뭉치지 않는다** — 고치는 길이 다르다 (ADR-0059)", () => {
@@ -461,25 +433,6 @@ describe("resumes", () => {
       event(5, "run_waiting", { waiting_for: "message" }),
     ]);
     expect(waitTotals(rows)).toEqual({ resumed: 2, seconds: 30 });
-  });
-});
-
-describe("keyStages — 「서비스 앱 키 받지 못함」의 Center 쪽 까닭 (ADR-0094)", () => {
-  it("그 Bot의 실행 키만 단계로 말한다", () => {
-    const keys = [
-      { app_id: "crm", bpm_process_id: "fin.a", purpose: "run", stage: "app_pending", error: "unreachable" },
-      { app_id: "erp", bpm_process_id: "fin.a", purpose: "run", stage: "sent" },
-      { app_id: "crm", bpm_process_id: "fin.b", purpose: "run", stage: "received" },
-      { app_id: "ui-automation", purpose: "utility", stage: "received" },
-    ];
-    expect(keyStages(keys, "fin.a")).toEqual([
-      "crm: Center가 앱에 아직 맡기지 못함 (unreachable)",
-      "erp: 보냄 — 현장이 받기를 기다림",
-    ]);
-  });
-
-  it("Center에 그 Bot의 키가 아예 없으면 짓지 않은 까닭을 말한다", () => {
-    expect(keyStages([], "fin.a")[0]).toContain("짓지 않았습니다");
   });
 });
 

@@ -4,8 +4,9 @@
 
 거듭 보는 것 다섯.
 
-1. **Studio 시험 실행과 같은 길이다** — `caller: studio`, 키는 태스크 참조 → BPM 프로세스 설정
-   (`service.key_ref`) 순서(엔진과 같다), Worker 자리는 예약 키.
+1. **Studio 시험 실행과 같은 길이다** — `caller: studio`, `test_…` 실행, Worker가 Center에 올릴 때
+   쓰는 것은 Studio가 청한 **호출 토큰**(비밀 이름 `call_token`, C15)이고 Worker 자리는 예약 키다.
+   (옛 「태스크 키 참조 → BPM 프로세스 `service.key_ref`」 순서는 서비스 앱 키와 함께 없어졌다 — ADR-0102.)
 2. **보고하지 않는다**(`report: false`), **끝나면 닫는다** — 실패해도.
 3. **값은 누를 때 묻고, 화면에 손대기 전에 채운다** — 취소하면 아무것도 열지 않는다.
 4. **계획 세워 보기는 스텝을 돌리지 않는다**, 이름만 보낸다.
@@ -33,7 +34,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (  # noqa: E402
     StepResult,
 )
 
-GOOD_KEY = "chk_svc_" + "a" * 40
+TOKEN = "chk_ctk_" + "a" * 40
 
 
 @dataclass
@@ -43,7 +44,7 @@ class Ctx:
     values: dict[str, Any] = field(
         default_factory=lambda: {"runtime.worker.port": 8899, "runtime.worker.token_dir": "."}
     )
-    keys: dict[str, str] = field(default_factory=lambda: {"proc-ui": GOOD_KEY})
+    keys: dict[str, str] = field(default_factory=lambda: {"call_token": TOKEN})
     asked: list[str] = field(default_factory=list)
 
     def setting(self, key: str, default: Any = None) -> Any:
@@ -82,7 +83,7 @@ class FakeWorker:
 def trial(ctx: Ctx | None = None, worker: FakeWorker | None = None) -> tuple[EditorTrial, list[str], FakeWorker]:
     lines: list[str] = []
     found = worker or FakeWorker()
-    made = EditorTrial(ctx=ctx or Ctx(values={"service.key_ref": "proc-ui"}), worker=found, say=lines.append)  # type: ignore[arg-type]
+    made = EditorTrial(ctx=ctx or Ctx(values={}), worker=found, say=lines.append)  # type: ignore[arg-type]
     return made, lines, found
 
 
@@ -102,29 +103,27 @@ def test_a_trial_is_a_studio_session_that_does_not_report() -> None:
     request = worker.opened[0]
     assert request.caller.type == "studio" and request.mode == "deterministic"
     assert request.report is False, "설계자가 돌려 본 것이 통계를 건드리지 않는다"
-    assert request.service_key == GOOD_KEY
+    assert request.call_token == TOKEN, "Worker가 이것으로 계획을 Center에 올린다 (C15)"
+    assert request.business_key.startswith("test_"), "Studio는 시험 실행으로만 올린다"
     assert worker.sent[0].value == "한빛상사", "점으로 따라가는 이름도 채운다"
     assert "    12,000" in lines, "읽은 값은 결과 상자에만"
     assert worker.closed == 1 and lines[-1].startswith("결과: 성공 — 2/2")
 
 
-def test_the_task_key_ref_wins_over_the_process_one() -> None:
-    """엔진과 같은 순서 — 태스크의 `key_ref`, 비면 `chk:process.service_keys`."""
-    ctx = Ctx(
-        values={"runtime.worker.port": 1, "service.key_ref": "proc-ui"}, keys={"own": "k-own", "proc-ui": "k-proc"}
-    )
+def test_the_call_token_is_asked_by_its_name_and_an_old_key_ref_is_ignored() -> None:
+    """비밀은 `call_token` 하나다 — 태스크에 옛 `key_ref`가 남아 있어도 그 이름으로 묻지 않는다."""
+    ctx = Ctx(values={"runtime.worker.port": 1}, keys={"own": "k-own", "call_token": TOKEN})
     made, _, worker = trial(ctx)
     made.run({**SPEC, "key_ref": "own"}, STEPS[1:], {})
-    made.run(SPEC, STEPS[1:], {})
-    assert [one.service_key for one in worker.opened] == ["k-own", "k-proc"]
+    assert [one.call_token for one in worker.opened] == [TOKEN]
+    assert ctx.asked == ["call_token"]
 
 
 @pytest.mark.parametrize(
     ("ctx", "says"),
     [
-        (Ctx(values={"service.key_ref": "proc-ui"}), "Worker 자리를 모릅니다"),
-        (Ctx(values={"runtime.worker.port": 1}), "키 참조가 없습니다"),
-        (Ctx(values={"runtime.worker.port": 1, "service.key_ref": "nobody"}), "nobody의 값이 없습니다"),
+        (Ctx(values={}), "Worker 자리를 모릅니다"),
+        (Ctx(values={"runtime.worker.port": 1}, keys={}), "호출 토큰을 받지 못했습니다"),
     ],
 )
 def test_what_is_missing_is_said_before_anything_opens(ctx: Ctx, says: str) -> None:
@@ -183,7 +182,7 @@ def editor(app: Any) -> Any:
 
 
 def plug(editor: UiTaskEditor, worker: FakeWorker) -> None:
-    editor._ctx = Ctx(values={"runtime.worker.port": 1, "service.key_ref": "proc-ui"})  # type: ignore[assignment]  # noqa: SLF001
+    editor._ctx = Ctx(values={"runtime.worker.port": 1})  # type: ignore[assignment]  # noqa: SLF001
     editor.make_trial = lambda ctx: EditorTrial(ctx=ctx, worker=worker, say=editor.trial_output.appendPlainText)  # type: ignore[arg-type]
     editor._sync()  # noqa: SLF001
 
@@ -236,17 +235,18 @@ def test_freezing_puts_the_plan_in_the_table_and_turns_goal_mode_off(editor: UiT
 # ─────────────────────────── Studio가 주는 문맥 ───────────────────────────
 
 
-def test_studio_gives_editors_the_run_context_and_the_process_key_ref(monkeypatch: pytest.MonkeyPatch) -> None:
-    """편집기 문맥은 시험 실행과 같다 — 거기에 `service.key_ref`가 **물을 때마다** 붙는다."""
+def test_studio_gives_editors_the_run_context_and_its_call_token() -> None:
+    """편집기 문맥은 시험 실행과 같다 — Worker 자리, 그리고 호출 토큰을 **물을 때마다** 청하는 쪽."""
     from chaeksas.studio.extensions import Extensions, StudioSecrets  # noqa: PLC0415
 
     found = Extensions.load()
-    refs = {"ui-automation": "first"}
-    found.process_key_refs = lambda: refs
+    tokens = ["first"]
+    found.call_tokens = lambda: tokens[0]
     ctx = found.editor_context("ui-automation")
-    assert ctx.setting("service.key_ref") == "first"
     assert ctx.setting("runtime.worker.port"), "Worker 자리는 시험 실행과 같은 것"
-    refs["ui-automation"] = "second"
-    assert ctx.setting("service.key_ref") == "second", "열린 BPM 프로세스가 바뀌면 따라간다"
+    assert ctx.secret("call_token") == "first"
+    tokens[0] = "second"
+    assert ctx.secret("call_token") == "second", "토큰이 바뀌면(24시간) 따라간다"
     assert isinstance(ctx.secrets, StudioSecrets) and ctx.secrets.extension_id == "ui-automation"
-    assert found.context("ui-automation").setting("service.key_ref") is None, "시험 실행은 TaskContext.key_ref를 쓴다"
+    assert found.context("ui-automation").secret("call_token") == "second", "시험 실행도 같은 토큰이다"
+    assert ctx.setting("service.key_ref") is None, "옛 예약 키는 없다"

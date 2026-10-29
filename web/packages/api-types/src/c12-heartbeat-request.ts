@@ -24,7 +24,6 @@ export interface ServerRunnerHeartbeatRequest {
    * 이 계약의 schema 번호
    */
   schema: number;
-  service_key_acks?: ServiceKeyAck[];
   status: string;
   unsent_events?: number | null;
   versions?: RunnerVersions | null;
@@ -131,15 +130,6 @@ export interface RunningRun {
   run_id: string;
   started_at: string;
   version: string;
-  [k: string]: unknown;
-}
-/**
- * 받았다(또는 지웠다). `accepted: false`면 `reason`.
- */
-export interface ServiceKeyAck {
-  accepted: boolean;
-  reason?: string | null;
-  service_key_id: string;
   [k: string]: unknown;
 }
 /**
