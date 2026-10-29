@@ -20,8 +20,10 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from chaeksas.contracts.bpmn_ext import INPUT_SOURCE_CALLER, BpmnProcess
 from chaeksas.contracts.center_api import PackageInfo
 from chaeksas.contracts.extension import ExtensionManifest
+from chaeksas.contracts.manifest import ManifestInput
 from chaeksas.contracts.resources import ServiceAppResource
 from chaeksas.contracts.service_app import MODE_DETERMINISTIC
 
@@ -104,6 +106,107 @@ class App:
 
 
 @dataclass(frozen=True)
+class CallInput:
+    """호출 대상이 받는 입력 하나 (C14 `chk:process.inputs` · C1 `inputs`)."""
+
+    name: str
+    required: bool = False
+    has_default: bool = False
+    #: **값을 Center가 넣는다** (`source`, ADR-0099) — 부르는 쪽이 넘기면 엔진·Center가 거절한다
+    #: (`input_not_from_caller`).
+    from_center: bool = False
+
+
+@dataclass(frozen=True)
+class CallTarget:
+    """Call Activity가 부를 것 하나 (STU-04 「호출」).
+
+    셋 다 같은 모양이다 — 이 패키지의 정의·설치된 공유 정의(`id` = BPMN process id)와
+    위임으로 부르는 Bot(`id` = 패키지 id, C14 `delegate.bpm_process_id`).
+    """
+
+    id: str
+    name: str = ""
+    #: 어디서 왔나 — 화면에 그대로 보인다 (「이 패키지」·「공유 (`<id>@<판>`)」).
+    where: str = ""
+    #: Bot의 실행 위치 (C1). **판마다 다르면 `None`** — 모른다.
+    run_location: str | None = None
+    #: Bot의 진입 process id (C1) — 위임 호출의 `calledElement`에 적는다 (C14 — 읽는 사람에게 뜻이 있다).
+    process_id: str | None = None
+    inputs: tuple[CallInput, ...] = ()
+    outputs: tuple[str, ...] = ()
+
+    @property
+    def label(self) -> str:
+        name = f" — {self.name}" if self.name and self.name != self.id else ""
+        where = f" · {self.where}" if self.where else ""
+        return f"{self.id}{name}{where}"
+
+
+def target_of(process: BpmnProcess, where: str) -> CallTarget:
+    """정의 하나 → 고를 거리. 받는 것·내놓는 것은 **그 정의가 선언한 것**이다 (B14가 보는 것과 같다)."""
+    return CallTarget(
+        id=process.id,
+        name=process.name or "",
+        where=where,
+        run_location=process.info.run_location,
+        process_id=process.id,
+        inputs=tuple(
+            CallInput(one.name, one.required, one.has_default, not one.from_caller) for one in process.info.inputs
+        ),
+        outputs=tuple(process.info.outputs),
+    )
+
+
+#: 위임 대상의 실행 위치 표기 (STU-04 「호출」).
+RUN_LOCATION_LABEL = {"server": "서버", "pc": "PC"}
+
+
+def delegation_targets(packages: Iterable[PackageInfo]) -> dict[str, CallTarget]:
+    """Bot 패키지 목록 → 위임 대상 (C1 매니페스트, ADR-0062).
+
+    **판이 여럿이면 합친다** (`declared_outputs`와 같은 결 — 그림이 판을 비우면 「배포된 판」이고
+    어느 판일지 여기서는 모른다). 출력은 어느 판이든 선언한 것, 필수 입력은 **어느 판이든 필수**인
+    것(경고만 한다), Center가 넣는 입력은 **모든 판이 그렇게 선언한** 것(막는 쪽이라 좁게 잡는다).
+    실행 위치·`process_id`가 판마다 다르면 모른다(`None`). 매니페스트 없는 줄은 건너뛴다.
+    """
+    found: dict[str, list[PackageInfo]] = {}
+    for one in packages:
+        if one.manifest is not None:
+            found.setdefault(one.id, []).append(one)
+    out: dict[str, CallTarget] = {}
+    for bot, rows in sorted(found.items()):
+        manifests = [row.manifest for row in rows if row.manifest is not None]
+        locations = {m.run_location for m in manifests}
+        process_ids = {m.process_id for m in manifests}
+        names: dict[str, list[ManifestInput]] = {}
+        for m in manifests:
+            for decl in m.inputs:
+                names.setdefault(decl.name, []).append(decl)
+        inputs = tuple(
+            CallInput(
+                name,
+                required=any(i.required for i in decls),
+                has_default=all(i.default is not None for i in decls),
+                from_center=len(decls) == len(manifests)
+                and all(i.source not in (None, INPUT_SOURCE_CALLER) for i in decls),
+            )
+            for name, decls in names.items()
+        )
+        location = next(iter(locations)) if len(locations) == 1 else None
+        out[bot] = CallTarget(
+            id=bot,
+            name=next((row.name for row in reversed(rows) if row.name), ""),
+            where=RUN_LOCATION_LABEL.get(location or "", ""),
+            run_location=location,
+            process_id=next(iter(process_ids)) if len(process_ids) == 1 else None,
+            inputs=inputs,
+            outputs=tuple(sorted({name for m in manifests for name in m.outputs})),
+        )
+    return out
+
+
+@dataclass(frozen=True)
 class Catalog:
     """고를 거리 한 벌. **고를 것이 없으면 그렇게 말한다** (빈 콤보를 두지 않는다)."""
 
@@ -115,6 +218,9 @@ class Catalog:
     #: 그림에서 보려면 **남의 패키지 매니페스트**가 필요하고, 그것을 아는 것은 Center뿐이다.
     #: **못 받으면 비어 있고**, 그러면 B14가 그 대조를 건너뛴다 (모르는 것으로 막지 않는다).
     bot_outputs: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    #: **위임으로 부를 수 있는 Bot** — `bpm_process_id` → 고를 거리 (STU-04 「호출」, ADR-0062).
+    #: 같은 C5 목록의 매니페스트에서 짓는다. **못 받으면 비어 있고** 편집기는 id를 직접 받는다.
+    bots: Mapping[str, CallTarget] = field(default_factory=dict)
 
     def app(self, app_id: str) -> App | None:
         return next((one for one in self.apps if one.app_id == app_id), None)
@@ -235,6 +341,7 @@ def build(
     problems: Iterable[str] = (),
     bot_outputs: Mapping[str, tuple[str, ...]] | None = None,
     external_status: Mapping[str, str] | None = None,
+    bots: Mapping[str, CallTarget] | None = None,
 ) -> Catalog:
     """고를 거리 한 벌 — 앱 id 순이다 (콤보가 흔들리지 않게).
 
@@ -251,6 +358,7 @@ def build(
         apps=tuple(sorted(apps, key=lambda one: one.app_id)),
         problems=tuple(problems),
         bot_outputs=dict(bot_outputs or {}),
+        bots=dict(bots or {}),
     )
 
 
@@ -290,10 +398,14 @@ def from_center(reader: Any) -> Catalog:
     except CenterUnreachable as e:
         problems.append(f"서비스 앱 목록을 받지 못했습니다 — {e}")
     bot_outputs: dict[str, tuple[str, ...]] = {}
+    bots: dict[str, CallTarget] = {}
     try:
         # **PC 위임이 받을 값을 그림 검사에서 보려면** 그 Bot의 매니페스트가 필요하다
         # (C1 `outputs` → C14 B14, ADR-0062). 리소스 목록(C7)에는 그것이 없어 C5를 읽는다.
-        bot_outputs = declared_outputs(reader.packages(KIND_BPM_PROCESS))
+        # 같은 목록이 STU-04 「호출」의 고를 거리도 준다.
+        packages = list(reader.packages(KIND_BPM_PROCESS))
+        bot_outputs = declared_outputs(packages)
+        bots = delegation_targets(packages)
     except CenterUnreachable as e:
         problems.append(f"Bot 패키지 목록을 받지 못했습니다 — {e}")
     try:
@@ -313,6 +425,7 @@ def from_center(reader: Any) -> Catalog:
         problems=problems,
         bot_outputs=bot_outputs,
         external_status=external_status,
+        bots=bots,
     )
 
 
@@ -390,9 +503,14 @@ __all__ = [
     "KIND_BPM_PROCESS",
     "KIND_C11",
     "KIND_EXTERNAL",
+    "RUN_LOCATION_LABEL",
     "declared_outputs",
+    "delegation_targets",
+    "target_of",
     "UNKNOWN",
     "App",
+    "CallInput",
+    "CallTarget",
     "Catalog",
     "Field_",
     "Operation",

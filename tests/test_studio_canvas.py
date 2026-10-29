@@ -275,6 +275,23 @@ def added(
     return str(box["id"])
 
 
+def test_called_element_and_chk_call_round_trip(canvas: Any) -> None:
+    """STU-04 「호출」 — 표준 `calledElement`도 `properties`·`setProperties`로 오간다 (`chk:call`과 함께)."""
+    canvas.create_empty("Proc_call", "호출 시험")
+    node_id = added(canvas, {}, "ERP 입력", bpmn="bpmn:CallActivity", attrs={"calledElement": "Proc_erp"})
+    found = canvas.call_sync("properties", node_id)
+    assert found["type"] == "CallActivity" and found["calledElement"] == "Proc_erp"
+
+    call = {"delegate": {"bpm_process_id": "other-bot"}, "output": {"결과": "결과코드"}}
+    patch = {"calledElement": "Proc_other", "chk": {"call": json.dumps(call, ensure_ascii=False)}}
+    canvas.call_sync("setProperties", node_id, patch)
+    assert canvas.call_sync("properties", node_id)["calledElement"] == "Proc_other"
+    node = next(n for n in read_process(canvas.save_xml()).all_nodes() if n.id == node_id)
+    assert node.called_element == "Proc_other"
+    spec = node.prop("call")
+    assert spec is not None and spec.delegate is not None and spec.delegate.bpm_process_id == "other-bot"
+
+
 def test_a_resource_becomes_a_node_in_one_undo_step(canvas: Any) -> None:
     """STU-03 「캔버스에 추가」 — `chk:*`를 달고 **한 번에** 만든다.
 

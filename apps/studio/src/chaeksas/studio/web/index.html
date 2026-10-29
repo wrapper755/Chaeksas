@@ -270,6 +270,8 @@
           documentation: (bo.documentation || []).map((d) => d.text || "").join("\n"),
           condition: (bo.conditionExpression && bo.conditionExpression.body) || "",
           script: bo.script || "",
+          // 호출(`callActivity`)이 부르는 것 — 표준 속성이라 `chk`와 따로 싣는다 (STU-04 「호출」).
+          calledElement: bo.calledElement || "",
           chk,
         };
       },
@@ -296,6 +298,7 @@
           plain.conditionExpression = body ? moddle.create("bpmn:FormalExpression", { body }) : undefined;
         }
         if ("script" in patch) plain.script = String(patch.script || "");
+        if ("calledElement" in patch) plain.calledElement = String(patch.calledElement || "") || undefined;
         if (Object.keys(plain).length) modeling.updateProperties(element, plain);
 
         if (patch.chk) {

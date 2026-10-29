@@ -47,6 +47,7 @@ from chaeksas.studio import (
     run_dialog,
     services,
 )
+from chaeksas.studio.call_editor import local_targets
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.connect_dialog import CenterConnectDialog
@@ -148,6 +149,8 @@ class MainWindow(QMainWindow):
         self.extensions.call_tokens = self.call_tokens
         self.properties = Properties(self, extensions=self.extensions)
         self.properties.applying.connect(self._apply_properties)
+        # STU-04 「호출」이 고를 정의 — **고를 때마다** 열린 BPM 프로세스에서 읽는다 (설치 뒤에도 맞게).
+        self.properties.call_targets = lambda: local_targets(self.process)
         self.canvas.selected.connect(self._on_selected)
 
         self.preflight = Preflight(self)
