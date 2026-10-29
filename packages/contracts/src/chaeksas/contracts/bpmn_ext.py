@@ -111,6 +111,11 @@ def is_var_name(name: str) -> bool:
     return bool(_VAR.match(name))
 
 
+def looks_like_code(name: str) -> bool:
+    """번호·코드처럼 보이는 이름인가 (B8 경고 — `int`보다 문자열이 맞을 때가 많다)."""
+    return bool(_LOOKS_LIKE_CODE.search(name))
+
+
 # ─────────────────────────── 프로세스 수준 ───────────────────────────
 
 
@@ -1386,7 +1391,7 @@ def _check_b8(process: BpmnProcess) -> list[Violation]:
         for name, kind in ai.results.items():
             if kind not in VALUE_TYPES:
                 out.append(_error("B8", f"{node.id}의 결과 {name} 타입을 모른다: {kind}", items=sorted(VALUE_TYPES)))
-            elif kind == "int" and _LOOKS_LIKE_CODE.search(name):
+            elif kind == "int" and looks_like_code(name):
                 out.append(
                     _warn("B8", f"{node.id}의 결과 {name}이 번호·코드처럼 보이는데 int다 (문자열이 아닐까)")
                 )
