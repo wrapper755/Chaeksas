@@ -311,6 +311,9 @@ class Properties(QWidget):
         if "serviceCall" in chk:
             self._attach_service_editor(chk)
             return
+        if "aiTask" in chk:
+            self._attach_ai_task_editor(chk)
+            return
         if "approval" in chk or str(self.loaded.get("type") or "") in APPROVAL_KINDS:
             self._attach_approval_editor(chk)
             return
@@ -339,6 +342,14 @@ class Properties(QWidget):
         made = ServiceTaskEditor(self.catalog, self, names=self.known_names)
         made.load(_body_of(chk, "serviceCall") or {})
         self._attach(made, TAB_LABEL, key="serviceCall")
+
+    def _attach_ai_task_editor(self, chk: dict[str, Any]) -> None:
+        """AI 태스크 (`chk:aiTask`). 서버 BPM 프로세스면 웹·데스크톱을 끈다 (B6과 같은 판정)."""
+        from chaeksas.studio.ai_task_editor import TAB_LABEL, AiTaskEditor  # noqa: PLC0415
+
+        made = AiTaskEditor(self, run_location=self.run_location, names=self.known_names)
+        made.load(_body_of(chk, "aiTask") or {})
+        self._attach(made, TAB_LABEL, key="aiTask")
 
     def _attach_approval_editor(self, chk: dict[str, Any]) -> None:
         """결재·확인 (`chk:approval`) — 아직 없는 사람 태스크에도 붙는다 (적용하면 생긴다)."""
@@ -443,8 +454,8 @@ class Properties(QWidget):
         if problem is not None:
             return {}, problem
         if data is not None:
-            if self._editor_key in ("serviceCall", "approval"):
-                # STU-14·결재는 `chk:<이름>` **통째로** 쓴다 (`data` 같은 포장이 없다).
+            if self._editor_key in ("serviceCall", "approval", "aiTask"):
+                # STU-14·결재·AI 태스크는 `chk:<이름>` **통째로** 쓴다 (`data` 같은 포장이 없다).
                 changes["chk"] = {self._editor_key: json.dumps(data, ensure_ascii=False, indent=2)}
                 return changes, None
             if self._editor_key == "send":

@@ -111,6 +111,7 @@ from chaeksas.contracts.bpmn_ext import (
     duration_hours,
     expression_vars,
     is_var_name,
+    looks_like_code,
     read_process,
     server_blockers,
 )
@@ -662,6 +663,7 @@ __all__ = [
     "duration_hours",
     "expression_vars",
     "is_var_name",
+    "looks_like_code",
     "matches_expected",
     "read_decisions",
     "read_process",
