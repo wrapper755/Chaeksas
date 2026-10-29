@@ -82,7 +82,13 @@ from chaeksas.core.run_state import (
 from chaeksas.core.senders import EmailMessage, SendError, WebhookRequest
 from chaeksas.core.services import RETRYABLE_STATUS, OpCall, OpOutcome, ServiceCallError, ServicePending
 from chaeksas.core.tools import ToolDef
-from chaeksas.extension_api import ESCALATE_CONFIRMATION, RUN_LOCATION_PC, ExtensionEvent, TaskContext
+from chaeksas.extension_api import (
+    ESCALATE_CONFIRMATION,
+    RUN_LOCATION_PC,
+    RUN_LOCATION_SERVER,
+    ExtensionEvent,
+    TaskContext,
+)
 from chaeksas.extension_api import TaskFailed as ExtensionTaskFailed
 
 #: 웹훅 본문 적는 법 (C14 — `all` | `fields:[…]` | `template:"…"`).
@@ -461,6 +467,8 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
     except ExtensionTaskFailed as e:
         # **실패한 태스크도 남긴다** (ADR-0041) — 전환으로 끝난 UI 태스크가 가장 보고 싶은 줄이다.
         write_extension_events(context, e.events)
+        if e.escalate == ESCALATE_CONFIRMATION and asks_a_person(context):
+            return escalate_to_person(context, e.message or str(e))
         raise TaskFailed(e.message or str(e), node_id=node.id, code=_failure_code(e)) from e
     write_extension_events(context, outcome.events)
     for name, value in dict(outcome.outputs).items():
@@ -482,6 +490,47 @@ def _failure_code(error: ExtensionTaskFailed) -> str:
     if error.escalate == ESCALATE_CONFIRMATION:
         return ERROR_ESCALATED
     return error.code or ERROR_TASK_FAILED
+
+
+def asks_a_person(context: Context) -> bool:
+    """전환을 **사람 확인**으로 넘기나 (ADR-0106) — PC 실행이고 그림이 `ESCALATED`를 이름으로 받지 않을 때.
+
+    서버에는 확인에 답할 사람이 없다 (C1 R2) — 늘 오류 경계다. 그림이 `ESCALATED` 경계를 달았으면 흐름으로
+    받겠다고 적은 것이다. **코드를 적지 않은 경계**는 「전환을 흐름으로」라고 말하지 않았으므로 확인을 띄운다.
+    """
+    run, node = context.run, context.node
+    if (run.process.info.run_location or RUN_LOCATION_PC) == RUN_LOCATION_SERVER:
+        return False
+    named = run.process.errors.get(ERROR_ESCALATED)
+    return not any(
+        "errorEventDefinition" in b.event_definitions and named is not None and b.error_ref == named
+        for b in run.boundaries(node.id)
+    )
+
+
+def escalate_to_person(context: Context, message: str) -> Outcome:
+    """그 자리에서 **현장 확인 하나**로 멈춘다 (ADR-0106, C10 `escalated`·C13 §4).
+
+    요청은 `manualTask`의 확인과 같은 모양이라(C6 `confirmation`, 늘 현장) Bot UI·CMN-01이 그대로
+    띄우고 답을 나른다. 답은 `Engine.answer`가 받는다 — 「계속」은 넘어가고 「중단」은 `ESCALATED`다.
+    """
+    run, node = context.run, context.node
+    instance = context.instance()
+    request_id = request_id_for(run.run_id, node.id, instance)
+    run.pendings[request_id] = Pending(
+        request_id=request_id,
+        node_id=node.id,
+        layer="confirmation",
+        title=f"실행 확인 요청 — {node.name or node.id}",
+        form=None,
+        node_instance=instance,
+        where=WHERE_FIELD,
+        description=message or None,
+        escalation=True,
+    )
+    context.emit("log", level="warn", message=f"전환 — 사람 확인으로 넘긴다: {message}")
+    context.emit("human_requested", layer="confirmation", request_id=request_id, where=WHERE_FIELD)
+    return Wait(key=request_id)
 
 
 #: 엔진이 붙이는 C3 칸 — 확장이 `data`에 적어 보내도 쓰지 않는다 (ADR-0041).
@@ -601,6 +650,8 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
         raise EngineError(str(e), node_id=node.id, code=CODE_PATH_DENIED) from e
     except AgentError as e:
         if e.escalated:
+            if asks_a_person(context):
+                return escalate_to_person(context, str(e))
             raise TaskFailed(str(e), node_id=node.id, code=ERROR_ESCALATED) from e
         if e.business:
             raise TaskFailed(str(e), node_id=node.id) from e

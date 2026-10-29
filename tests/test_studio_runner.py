@@ -615,3 +615,57 @@ def test_the_dialog_describes_the_case_in_one_line() -> None:
     assert describe(Case(name="x", inputs={}, expected={"b": 1})) == "입력 0개 · 기대 결과 1개"
 
 
+
+
+# ─────────────────────────── PC 전환 확인 (ADR-0106 §6) ───────────────────────────
+
+
+def escalated_run(case_run: CaseRun, tmp_path: Path, *, boundary: bool) -> Any:
+    """PC 그림의 확장 태스크가 전환으로 멈춘 실행 — **케이스 묶음 엔진**으로 띄운다.
+
+    Studio에서 진짜로 전환을 내려면 Worker·화면이나 모델이 필요하다. 여기서 보는 것은 케이스가
+    **어떻게 답하는가**뿐이라 가짜 수행기로 그 자리를 만든다.
+    """
+    from test_core_extension_tasks import PROCESS, RUN, WITH_BOUNDARY, FakeExecutor, Host  # noqa: PLC0415
+
+    from chaeksas.contracts.bpmn_ext import read_process  # noqa: PLC0415
+    from chaeksas.core.engine import RunEnv, State  # noqa: PLC0415
+    from chaeksas.core.run_log import RunLog  # noqa: PLC0415
+    from chaeksas.extension_api import TaskFailed  # noqa: PLC0415
+
+    executor = FakeExecutor(fail=TaskFailed("ui_escalated", "화면을 확인해 주세요", escalate="confirmation"))
+    run = case_run.engine.start(
+        read_process(WITH_BOUNDARY if boundary else PROCESS),
+        run_id=RUN,
+        log=RunLog(run_id=RUN, path=tmp_path / "esc.jsonl"),
+        env=RunEnv(extensions=Host({"demo_task": executor})),
+    )
+    assert case_run.engine.run_until_blocked(run) is State.WAITING
+    return run
+
+
+@pytest.mark.parametrize(
+    ("approvals", "manual", "name", "after"),
+    [
+        ({"Task_Ext": {"decision": "approve"}}, False, "계속", "DONE"),
+        ({"Task_Ext": {"decision": "reject"}}, False, "중단", "FAILED"),
+        ({}, False, "경계", "DONE"),  # 적지 않으면 「중단」 — 경계를 시험하는 길
+        ({}, True, "수동", "WAITING"),  # `manual`은 결재처럼 기다린다
+    ],
+)
+def test_a_case_answers_an_escalation_by_the_task_node_id(
+    app: Any, tmp_path: Path, approvals: dict[str, Any], manual: bool, name: str, after: str
+) -> None:
+    """케이스 `approvals`가 **그 태스크 노드 id**로 답하고, 적지 않으면 「중단」이다 (C14, ADR-0106)."""
+    made, settings = studio(tmp_path, "fx03b_amount_branch")
+    definition = made.entry_definition
+    assert definition is not None
+    case = Case(name=name, approvals=approvals, manual=manual)
+    case_run = CaseRun(Plan(process=made, definition=definition, case=case, settings=settings))
+    run = escalated_run(case_run, tmp_path, boundary=name == "경계")
+    moved = case_run._unblock(run)
+    assert moved is (after != "WAITING")
+    case_run.engine.run_until_blocked(run)
+    assert run.state.name == after
+    if name == "경계":
+        assert run.variables["error_code"] == "ESCALATED"

@@ -223,6 +223,9 @@ class Pending:
     expires_at: str | None = None
     #: C6 `assignees` — 결재 담당자를 **만들 때** 푼 이름들 (ADR-0080). 비면 담당자 없음.
     assignees: list[str] = field(default_factory=list)
+    #: **PC 전환이 낸 확인**이다 (ADR-0106) — `manualTask`가 아니라 태스크가 멈춘 자리다.
+    #: 「계속」은 결과 없이 넘어가고 「중단」은 `ESCALATED` 업무 실패다 (`Engine.answer`).
+    escalation: bool = False
 
 
 @dataclass(frozen=True)
