@@ -82,6 +82,8 @@ SEND_KINDS = frozenset({"SendTask"})
 SEND_CHANNELS = ("email", "webhook")
 #: 호출 편집기를 붙이는 요소 (표준 `calledElement` + C14 `chk:call`).
 CALL_KINDS = frozenset({"CallActivity"})
+#: 반복 편집기를 붙이는 요소 (C14 §반복 — AI·UI·서비스 앱·규칙 태스크와 호출). 다른 편집기 **옆에** 붙는다.
+LOOP_KINDS = frozenset({"ServiceTask", "BusinessRuleTask", "CallActivity"})
 
 
 #: `chk:*`를 갖지 않는 게이트웨이 — 가지의 조건은 나가는 순서 흐름에 있다 (C14).
@@ -203,6 +205,10 @@ class Properties(QWidget):
         self._editor_baseline: dict[str, Any] = {}
         #: 그 편집기가 고치는 자리 — `"task"`(STU-13) 또는 `"serviceCall"`(STU-14).
         self._editor_key = ""
+        #: 반복 편집기 — 다른 편집기와 **함께** 붙으므로 자리가 따로다 (`chk:loop`만 만진다).
+        self._loop_editor: Any = None
+        self._loop_holder: QScrollArea | None = None
+        self._loop_baseline: dict[str, Any] = {}
         #: STU-14가 고를 거리 (Center 리소스 목록). 메인 창이 실행·선택 전에 채운다.
         self.catalog: Catalog = Catalog()
         #: 열린 BPM 프로세스의 실행 위치 (`chk:process.run_location`) — 결재 편집기가 서버에서
@@ -273,6 +279,7 @@ class Properties(QWidget):
 
     def show_nothing(self) -> None:
         self._detach_editor()
+        self._detach_loop_editor()
         self.node_id = ""
         self.loaded = {}
         self.head.setText(EMPTY_TEXT)
@@ -297,6 +304,7 @@ class Properties(QWidget):
         self.json_box.setPlaceholderText(empty_chk_hint(bpmn_type))
         self.json_box.setPlainText(as_text(dict(found.get("chk") or {})))
         self._show_editor(dict(found.get("chk") or {}))
+        self._show_loop_editor(dict(found.get("chk") or {}))
 
         self._show_row(self.condition_row, bpmn_type in CONDITION_KINDS)
         self._show_row(self.script_row, bpmn_type in SCRIPT_KINDS)
@@ -395,6 +403,51 @@ class Properties(QWidget):
         made.load({"calledElement": str(self.loaded.get("calledElement") or ""), "call": _body_of(chk, "call") or {}})
         self._attach(made, TAB_LABEL, key="call")
 
+    def _show_loop_editor(self, chk: dict[str, Any]) -> None:
+        """반복을 쓸 수 있는 요소에 「반복」 탭을 **하나 더** 끼운다 — 다른 편집기 탭 뒤에, 고르지는 않는다."""
+        self._detach_loop_editor()
+        if str(self.loaded.get("type") or "") not in LOOP_KINDS:
+            return
+        from chaeksas.studio.loop_editor import TAB_LABEL, LoopEditor  # noqa: PLC0415
+
+        made = LoopEditor(self, run_location=self.run_location, names=self.known_names)
+        made.load({"multiInstance": str(self.loaded.get("multiInstance") or ""), "loop": _body_of(chk, "loop")})
+        self._loop_editor = made
+        self._loop_baseline = dict(made.dump())
+        made.changed.connect(self._refresh_apply)
+        holder = self._holder_for(made)
+        self._loop_holder = holder
+        self.tabs.insertTab(self.tabs.indexOf(self.json_box), holder, TAB_LABEL)
+
+    def _detach_loop_editor(self) -> None:
+        found = self._loop_editor
+        if found is None:
+            return
+        try:
+            found.changed.disconnect(self._refresh_apply)
+        except (RuntimeError, TypeError):  # pragma: no cover — 이미 끊겼다
+            pass
+        holder = self._loop_holder
+        if holder is not None:
+            index = self.tabs.indexOf(holder)
+            if index >= 0:
+                self.tabs.removeTab(index)
+            holder.takeWidget()
+            holder.deleteLater()
+        self._loop_holder = None
+        found.setParent(None)
+        self._loop_editor = None
+        self._loop_baseline = {}
+
+    def _holder_for(self, found: QWidget) -> QScrollArea:
+        """**세로로 스크롤되게 담는다** — 창이 낮아도 편집기의 표가 한 줄로 찌그러지지 않는다."""
+        holder = QScrollArea(self)
+        holder.setWidgetResizable(True)
+        holder.setFrameShape(QFrame.Shape.NoFrame)
+        holder.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        holder.setWidget(found)
+        return holder
+
     def _attach(self, found: Any, label: str, *, key: str) -> None:
         self._editor = found
         self._editor_key = key
@@ -402,12 +455,7 @@ class Properties(QWidget):
         changed = getattr(found, "changed", None)
         if changed is not None:
             changed.connect(self._refresh_apply)
-        # **세로로 스크롤되게 담는다** — 창이 낮아도 편집기의 표가 한 줄로 찌그러지지 않는다.
-        holder = QScrollArea(self)
-        holder.setWidgetResizable(True)
-        holder.setFrameShape(QFrame.Shape.NoFrame)
-        holder.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        holder.setWidget(found)
+        holder = self._holder_for(found)
         self._editor_holder = holder
         self.tabs.insertTab(1, holder, label)
         self.tabs.setCurrentIndex(1)
@@ -460,7 +508,49 @@ class Properties(QWidget):
     # ── 적용 ──
 
     def patch(self) -> tuple[dict[str, Any], str | None]:
-        """고친 것만 모은다. 틀린 JSON이면 `(빈 것, 사유)`."""
+        """고친 것만 모은다. 틀린 JSON이면 `(빈 것, 사유)`.
+
+        반복 편집기의 것은 **마지막에 얹는다** — 다른 편집기가 고친 `chk:*`와 한 묶음으로 가되
+        `chk:loop` 자리만 쓴다 (서로의 칸을 지우지 않는다).
+        """
+        changes, problem = self._patch_main()
+        if problem is not None:
+            return {}, problem
+        loop, problem = self._loop_patch()
+        if problem is not None:
+            return {}, problem
+        if loop:
+            if "multiInstance" in loop:
+                changes["multiInstance"] = loop["multiInstance"]
+            if "loop" in loop:
+                changes["chk"] = {**changes.get("chk", {}), "loop": loop["loop"]}
+        return changes, None
+
+    def _loop_patch(self) -> tuple[dict[str, Any], str | None]:
+        """반복 편집기가 바꾼 것 → `{"multiInstance": …, "loop": 글 | None}` 중 바뀐 쪽만."""
+        found = self._loop_editor
+        if found is None:
+            return {}, None
+        wanted = dict(found.dump())
+        if wanted == self._loop_baseline:
+            return {}, None
+        errors, _ = found.problems()
+        if errors:
+            return {}, errors[0]
+        out: dict[str, Any] = {}
+        if wanted["multiInstance"] != self._loop_baseline.get("multiInstance"):
+            out["multiInstance"] = wanted["multiInstance"]
+        if wanted["loop"] != self._loop_baseline.get("loop"):
+            body = wanted["loop"]
+            # 그림에 없던 것을 지우라고 보내지 않는다 — 캔버스는 없는 것을 지우며 걸음만 늘린다.
+            had = _body_of(dict(self.loaded.get("chk") or {}), "loop") is not None
+            if body is not None:
+                out["loop"] = json.dumps(body, ensure_ascii=False, indent=2)
+            elif had:
+                out["loop"] = None
+        return out, None
+
+    def _patch_main(self) -> tuple[dict[str, Any], str | None]:
         changes: dict[str, Any] = {}
         if self.name_box.text() != (self.loaded.get("name") or ""):
             changes["name"] = self.name_box.text()
@@ -545,6 +635,7 @@ __all__ = [
     "EMPTY_TEXT",
     "GATEWAY_KINDS",
     "KINDS",
+    "LOOP_KINDS",
     "SCRIPT_KINDS",
     "SEND_KINDS",
     "Properties",

@@ -60,6 +60,12 @@
   // 되돌린다(`chk:aiTask`). C14 모델의 이름은 뒤쪽이므로 경계에서 바꿔 준다.
   const toName = (type) => { const n = String(type).slice(4); return n[0].toLowerCase() + n.slice(1); };
   const toType = (name) => `chk:${name[0].toUpperCase()}${name.slice(1)}`;
+  /** 반복 표시 → `""`(없음·표준 loop) | `"sequential"` | `"parallel"` — 엔진(`is_sequential`)과 같은 읽기. */
+  const multiInstanceOf = (bo) => {
+    const found = bo.loopCharacteristics;
+    if (!found || found.$type !== "bpmn:MultiInstanceLoopCharacteristics") return "";
+    return found.isSequential ? "sequential" : "parallel";
+  };
 
   /**
    * `chk:*` 하나의 속성 — `chk:task`만 `type`·`extension`이 XML 속성이고 나머지는 본문뿐이다
@@ -272,6 +278,8 @@
           script: bo.script || "",
           // 호출(`callActivity`)이 부르는 것 — 표준 속성이라 `chk`와 따로 싣는다 (STU-04 「호출」).
           calledElement: bo.calledElement || "",
+          // 반복 표시 — 표준 `multiInstanceLoopCharacteristics` (STU-04 「반복」, C14 §반복).
+          multiInstance: multiInstanceOf(bo),
           chk,
         };
       },
@@ -299,6 +307,22 @@
         }
         if ("script" in patch) plain.script = String(patch.script || "");
         if ("calledElement" in patch) plain.calledElement = String(patch.calledElement || "") || undefined;
+        if ("multiInstance" in patch) {
+          const mode = String(patch.multiInstance || "");
+          const had = bo.loopCharacteristics;
+          if (!mode) {
+            plain.loopCharacteristics = undefined;
+          } else if (had && had.$type === "bpmn:MultiInstanceLoopCharacteristics") {
+            // 있던 표시는 갈아 끼우지 않는다 — 안쪽에 적힌 것이 있으면 남긴다.
+            if (multiInstanceOf(bo) !== mode) {
+              modeling.updateModdleProperties(element, had, { isSequential: mode === "sequential" });
+            }
+          } else {
+            plain.loopCharacteristics = moddle.create("bpmn:MultiInstanceLoopCharacteristics", {
+              isSequential: mode === "sequential",
+            });
+          }
+        }
         if (Object.keys(plain).length) modeling.updateProperties(element, plain);
 
         if (patch.chk) {

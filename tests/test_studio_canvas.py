@@ -22,7 +22,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox --disable-gpu")
 os.environ.setdefault("QTWEBENGINE_DISABLE_SANDBOX", "1")
 
-from chaeksas.contracts.bpmn_ext import read_process  # noqa: E402
+from chaeksas.contracts.bpmn_ext import Loop, read_process  # noqa: E402
 from chaeksas.studio.canvas import VIEW_PAGE, WEB_DIR, Canvas, CanvasError  # noqa: E402
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
@@ -290,6 +290,29 @@ def test_called_element_and_chk_call_round_trip(canvas: Any) -> None:
     assert node.called_element == "Proc_other"
     spec = node.prop("call")
     assert spec is not None and spec.delegate is not None and spec.delegate.bpm_process_id == "other-bot"
+
+
+def test_the_loop_marker_and_chk_loop_round_trip(canvas: Any) -> None:
+    """STU-04 「반복」 — 표준 반복 표시(`isSequential`)도 `properties`·`setProperties`로 오가고, 끄면 둘 다 사라진다."""
+    canvas.create_empty("Proc_loop", "반복 시험")
+    node_id = added(canvas, {}, "신용 조회")
+    assert canvas.call_sync("properties", node_id)["multiInstance"] == ""
+
+    loop = {"collection": "거래처목록", "item": "거래처", "result": "신용", "collect_into": "신용목록"}
+    canvas.call_sync(
+        "setProperties", node_id, {"multiInstance": "parallel", "chk": {"loop": json.dumps(loop, ensure_ascii=False)}}
+    )
+    assert canvas.call_sync("properties", node_id)["multiInstance"] == "parallel"
+    node = next(n for n in read_process(canvas.save_xml()).all_nodes() if n.id == node_id)
+    assert node.is_sequential is False and node.prop("loop") == Loop.model_validate(loop)
+
+    canvas.call_sync("setProperties", node_id, {"multiInstance": "sequential"})
+    node = next(n for n in read_process(canvas.save_xml()).all_nodes() if n.id == node_id)
+    assert node.is_sequential is True and node.prop("loop") is not None, "표시만 바꾸면 본문은 남는다"
+
+    canvas.call_sync("setProperties", node_id, {"multiInstance": "", "chk": {"loop": None}})
+    node = next(n for n in read_process(canvas.save_xml()).all_nodes() if n.id == node_id)
+    assert node.is_sequential is None and node.prop("loop") is None
 
 
 def test_a_resource_becomes_a_node_in_one_undo_step(canvas: Any) -> None:
