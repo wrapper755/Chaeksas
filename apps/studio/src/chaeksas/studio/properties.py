@@ -86,8 +86,13 @@ CALL_KINDS = frozenset({"CallActivity"})
 LOOP_KINDS = frozenset({"ServiceTask", "BusinessRuleTask", "CallActivity"})
 
 
-#: `chk:*`를 갖지 않는 게이트웨이 — 가지의 조건은 나가는 순서 흐름에 있다 (C14).
+#: `chk:*`를 갖지 않는 게이트웨이 — 가지의 조건은 나가는 순서 흐름에 있다 (C14). 「게이트웨이」 탭은
+#: 표준 `default`(기본 흐름)만 고친다.
 GATEWAY_KINDS = frozenset({"ExclusiveGateway", "ParallelGateway", "InclusiveGateway"})
+#: 이벤트 편집기를 붙이는 요소 (C14 §이벤트 — 표준 이벤트 정의의 칸과 `chk:receive`).
+EVENT_KINDS = frozenset(
+    {"StartEvent", "IntermediateCatchEvent", "IntermediateThrowEvent", "BoundaryEvent", "EndEvent", "ReceiveTask"}
+)
 
 
 def kind_label(bpmn_type: str) -> str:
@@ -101,7 +106,7 @@ def empty_chk_hint(bpmn_type: str) -> str:
     if bpmn_type in GATEWAY_KINDS:
         return (
             "게이트웨이에는 chk:* 설정이 없습니다.\n"
-            "가지마다의 조건식은 나가는 순서 흐름을 골라 「폼」 탭에서 봅니다."
+            "가지마다의 조건식은 나가는 순서 흐름을 골라 「폼」 탭에서, 기본 흐름은 「게이트웨이」 탭에서 봅니다."
         )
     return (
         "이 요소에는 chk:* 설정이 없습니다.\n"
@@ -322,6 +327,12 @@ class Properties(QWidget):
           `type`으로 찾아 붙일 뿐이다 (ADR-0018).
         """
         self._detach_editor()
+        if str(self.loaded.get("type") or "") in GATEWAY_KINDS:
+            self._attach_gateway_editor()
+            return
+        if str(self.loaded.get("type") or "") in EVENT_KINDS:
+            self._attach_event_editor(chk)
+            return
         if str(self.loaded.get("type") or "") in CALL_KINDS:
             self._attach_call_editor(chk)
             return
@@ -402,6 +413,23 @@ class Properties(QWidget):
         )
         made.load({"calledElement": str(self.loaded.get("calledElement") or ""), "call": _body_of(chk, "call") or {}})
         self._attach(made, TAB_LABEL, key="call")
+
+    def _attach_gateway_editor(self) -> None:
+        """게이트웨이 — 표준 `default`(기본 흐름) 하나. 흐름 요약은 캔버스가 준다 (`gateway`)."""
+        from chaeksas.studio.gateway_editor import TAB_LABEL, GatewayEditor  # noqa: PLC0415
+
+        made = GatewayEditor(self, kind=str(self.loaded.get("type") or ""))
+        made.load(dict(self.loaded.get("gateway") or {}))
+        self._attach(made, TAB_LABEL, key="gateway")
+
+    def _attach_event_editor(self, chk: dict[str, Any]) -> None:
+        """이벤트·받기 태스크 — 표준 이벤트 정의의 칸(`event`)과 `chk:receive`."""
+        from chaeksas.studio.event_editor import TAB_LABEL, TAB_RECEIVE, EventEditor  # noqa: PLC0415
+
+        bpmn_type = str(self.loaded.get("type") or "")
+        made = EventEditor(self, names=self.known_names)
+        made.load({"type": bpmn_type, "event": self.loaded.get("event") or {}, "receive": _body_of(chk, "receive")})
+        self._attach(made, TAB_RECEIVE if bpmn_type == "ReceiveTask" else TAB_LABEL, key="event")
 
     def _show_loop_editor(self, chk: dict[str, Any]) -> None:
         """반복을 쓸 수 있는 요소에 「반복」 탭을 **하나 더** 끼운다 — 다른 편집기 탭 뒤에, 고르지는 않는다."""
@@ -577,6 +605,22 @@ class Properties(QWidget):
                 if data["call"] != (_body_of(dict(self.loaded.get("chk") or {}), "call") or {}):
                     changes["chk"] = {"call": json.dumps(data["call"], ensure_ascii=False, indent=2)}
                 return changes, None
+            if self._editor_key == "gateway":
+                if data["default"] != str(dict(self.loaded.get("gateway") or {}).get("default") or ""):
+                    changes["default"] = data["default"]
+                return changes, None
+            if self._editor_key == "event":
+                # 바뀐 칸만 — 캔버스는 칸마다 명령 하나라 같은 값을 다시 보내면 걸음만 는다.
+                before = dict(self.loaded.get("event") or {})
+                event = {key: value for key, value in data["event"].items() if value != before.get(key)}
+                if event:
+                    changes["event"] = event
+                had = _body_of(dict(self.loaded.get("chk") or {}), "receive")
+                if data["receive"] != had and (data["receive"] is not None or had is not None):
+                    body = data["receive"]
+                    text = None if body is None else json.dumps(body, ensure_ascii=False, indent=2)
+                    changes["chk"] = {"receive": text}
+                return changes, None
             if self._editor_key == "send":
                 # 고른 채널 하나만 남긴다 — 다른 쪽이 그림에 있었으면 `None`으로 적어 캔버스가 지운다.
                 before = dict(self.loaded.get("chk") or {})
@@ -633,6 +677,7 @@ __all__ = [
     "CALL_KINDS",
     "CONDITION_KINDS",
     "EMPTY_TEXT",
+    "EVENT_KINDS",
     "GATEWAY_KINDS",
     "KINDS",
     "LOOP_KINDS",

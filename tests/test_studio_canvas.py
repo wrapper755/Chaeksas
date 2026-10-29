@@ -713,3 +713,128 @@ def test_the_diagram_follows_the_app_theme_without_reloading(canvas: Any) -> Non
         assert canvas.call_sync("stats")["elements"] == before["elements"]
     finally:
         apply_theme(app, choice="light")
+
+
+#: STU-04 「게이트웨이」·「이벤트」 왕복용 — 표준 이벤트 정의를 골고루 단 작은 그림 (좌표는 배치기가 짓는다).
+EVENTS_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Defs" targetNamespace="t">
+  <bpmn:message id="Msg_order" name="주문 접수" />
+  <bpmn:message id="Msg_shared" name="함께 쓰는 이름" />
+  <bpmn:error id="Err_task" name="TASK_FAILED" errorCode="TASK_FAILED" />
+  <bpmn:process id="Proc_events" isExecutable="true">
+    <bpmn:startEvent id="Start"><bpmn:messageEventDefinition messageRef="Msg_order" /></bpmn:startEvent>
+    <bpmn:exclusiveGateway id="Gw" />
+    <bpmn:serviceTask id="Task" name="신용 조회" />
+    <bpmn:boundaryEvent id="Timer_b" attachedToRef="Task">
+      <bpmn:timerEventDefinition><bpmn:timeDuration>PT30M</bpmn:timeDuration></bpmn:timerEventDefinition>
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Error_b" attachedToRef="Task">
+      <bpmn:errorEventDefinition errorRef="Err_task" />
+    </bpmn:boundaryEvent>
+    <bpmn:intermediateCatchEvent id="Wait">
+      <bpmn:messageEventDefinition messageRef="Msg_shared" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateCatchEvent id="Other">
+      <bpmn:messageEventDefinition messageRef="Msg_shared" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:intermediateThrowEvent id="Throw"><bpmn:signalEventDefinition /></bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End" />
+    <bpmn:sequenceFlow id="F0" sourceRef="Start" targetRef="Gw" />
+    <bpmn:sequenceFlow id="F_big" name="큰 금액" sourceRef="Gw" targetRef="Task">
+      <bpmn:conditionExpression>금액 &gt; 100</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="F_else" sourceRef="Gw" targetRef="Throw" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Task" targetRef="Wait" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Wait" targetRef="Other" />
+    <bpmn:sequenceFlow id="F3" sourceRef="Other" targetRef="End" />
+    <bpmn:sequenceFlow id="F4" sourceRef="Throw" targetRef="End" />
+    <bpmn:sequenceFlow id="F5" sourceRef="Timer_b" targetRef="End" />
+    <bpmn:sequenceFlow id="F6" sourceRef="Error_b" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>
+"""
+
+
+def node_in(xml: str, node_id: str) -> tuple[Any, Any]:
+    process = read_process(xml)
+    return process, next(n for n in process.all_nodes() if n.id == node_id)
+
+
+def test_the_gateway_default_round_trips(canvas: Any) -> None:
+    """STU-04 「게이트웨이」 — 흐름 요약을 주고, 표준 `default`가 `setProperties`로 오간다."""
+    canvas.call_sync("importXML", EVENTS_XML)
+    found = canvas.call_sync("properties", "Gw")["gateway"]
+    assert found["default"] == "" and [one["from"] for one in found["incoming"]] == ["Start"]
+    assert {one["id"]: (one["to"], one["condition"]) for one in found["outgoing"]} == {
+        "F_big": ("신용 조회", "금액 > 100"), "F_else": ("Throw", ""),
+    }
+    assert canvas.call_sync("properties", "Task")["gateway"] is None
+
+    canvas.call_sync("setProperties", "Gw", {"default": "F_else"})
+    assert canvas.call_sync("properties", "Gw")["gateway"]["default"] == "F_else"
+    flows = {f.id: f for f in read_process(canvas.save_xml()).flows}
+    assert flows["F_else"].is_default and not flows["F_big"].is_default
+
+    canvas.call_sync("setProperties", "Gw", {"default": ""})
+    assert not any(f.is_default for f in read_process(canvas.save_xml()).flows)
+
+
+def test_event_fields_are_shown_as_the_engine_reads_them(canvas: Any) -> None:
+    canvas.call_sync("importXML", EVENTS_XML)
+    start = canvas.call_sync("properties", "Start")["event"]
+    assert start["definition"] == "Message" and start["message"] == "주문 접수"
+    timer = canvas.call_sync("properties", "Timer_b")["event"]
+    assert timer["definition"] == "Timer" and timer["attachedTo"] == "신용 조회"
+    assert timer["timer"] == {"kind": "timeDuration", "value": "PT30M"} and timer["cancelActivity"] is True
+    assert canvas.call_sync("properties", "Error_b")["event"]["error"] == "TASK_FAILED"
+    assert canvas.call_sync("properties", "End")["event"]["definition"] == ""
+    assert canvas.call_sync("properties", "Gw")["event"] is None
+
+
+def test_event_fields_round_trip_through_the_canvas(canvas: Any) -> None:
+    """타이머·중단·오류 코드·신호 이름이 bpmn-js 명령으로 바뀌고 계약이 같은 뜻으로 읽는다."""
+    canvas.call_sync("importXML", EVENTS_XML)
+    timer_patch = {"timer": {"kind": "timeDuration", "value": "P1D"}, "cancelActivity": False}
+    canvas.call_sync("setProperties", "Timer_b", {"event": timer_patch})
+    canvas.call_sync("setProperties", "Error_b", {"event": {"error": "ESCALATED"}})
+    canvas.call_sync("setProperties", "Throw", {"event": {"signal": "검토 끝"}})
+    process, timer = node_in(canvas.save_xml(), "Timer_b")
+    assert timer.timer is not None and (timer.timer.kind, timer.timer.value) == ("timeDuration", "P1D")
+    assert timer.cancel_activity is False
+    _, error = node_in(canvas.save_xml(), "Error_b")
+    assert process.errors.get("ESCALATED") == error.error_ref, "없던 코드는 bpmn:error를 만든다"
+    _, throw = node_in(canvas.save_xml(), "Throw")
+    assert process.signal_name(throw.signal_ref) == "검토 끝"
+
+    canvas.call_sync("setProperties", "Error_b", {"event": {"error": ""}})
+    _, error = node_in(canvas.save_xml(), "Error_b")
+    assert error.error_ref is None, "비우면 코드 없는 경계 — 모든 업무 실패를 받는다"
+
+
+def test_renaming_a_message_points_elsewhere_and_leaves_the_shared_one(canvas: Any) -> None:
+    """함께 쓰던 `bpmn:message`의 이름을 바꾸지 않는다 — 이 이벤트만 다른 이름을 가리킨다."""
+    canvas.call_sync("importXML", EVENTS_XML)
+    canvas.call_sync("setProperties", "Wait", {"event": {"message": "결산 완료"}})
+    process, wait = node_in(canvas.save_xml(), "Wait")
+    _, other = node_in(canvas.save_xml(), "Other")
+    assert process.message_name(wait.message_ref) == "결산 완료"
+    assert process.message_name(other.message_ref) == "함께 쓰는 이름"
+
+    canvas.call_sync("setProperties", "Other", {"event": {"message": "주문 접수"}})
+    process, other = node_in(canvas.save_xml(), "Other")
+    assert other.message_ref == "Msg_order", "같은 이름이 있으면 그것을 가리킨다"
+
+
+def test_a_receive_task_message_round_trips(canvas: Any) -> None:
+    canvas.create_empty("Proc_recv", "받기 시험")
+    node_id = added(canvas, {}, "입금 받기", bpmn="bpmn:ReceiveTask")
+    assert canvas.call_sync("properties", node_id)["event"]["definition"] == "Message"
+    canvas.call_sync(
+        "setProperties", node_id,
+        {"event": {"message": "입금"}, "chk": {"receive": json.dumps({"correlation": "주문번호"}, ensure_ascii=False)}},
+    )
+    assert canvas.call_sync("properties", node_id)["event"]["message"] == "입금"
+    process, node = node_in(canvas.save_xml(), node_id)
+    assert process.message_name(node.message_ref) == "입금"
+    receive = node.prop("receive")
+    assert receive is not None and receive.correlation == "주문번호"

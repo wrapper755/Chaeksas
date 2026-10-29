@@ -212,6 +212,122 @@
       };
     });
 
+    /** 노드를 사람이 읽는 말로 — 이름, 없으면 id. */
+    const labelOf = (bo) => String((bo && (bo.name || bo.id)) || "");
+
+    /**
+     * 게이트웨이가 보는 것 (STU-04 「게이트웨이」) — 기본 흐름과 들어오고 나가는 흐름.
+     * 조건식은 **읽기만** 한다 — 고치는 자리는 그 흐름의 「폼」 탭 하나다.
+     */
+    const gatewayOf = (bo) => {
+      if (!/Gateway$/.test(String(bo.$type || ""))) return null;
+      return {
+        default: (bo.default && bo.default.id) || "",
+        incoming: (bo.incoming || []).map((f) => ({ id: f.id, from: labelOf(f.sourceRef) })),
+        outgoing: (bo.outgoing || []).map((f) => ({
+          id: f.id,
+          name: f.name || "",
+          to: labelOf(f.targetRef),
+          condition: (f.conditionExpression && f.conditionExpression.body) || "",
+        })),
+      };
+    };
+
+    /** 첫 이벤트 정의 — 엔진처럼 하나만 본다. */
+    const definitionOf = (bo) => ((bo.eventDefinitions || [])[0]) || null;
+    const TIMER_KINDS = ["timeDate", "timeDuration", "timeCycle"];
+
+    /**
+     * 이벤트·받기 태스크가 보는 것 (STU-04 「이벤트」·「받기」). 이름은 **정의 수준 요소의 이름**이다
+     * (`bpmn:message name` 등 — 엔진·매니페스트가 그것을 쓴다, C12).
+     */
+    const eventOf = (bo) => {
+      const type = String(bo.$type || "");
+      if (!/Event$/.test(type) && type !== "bpmn:ReceiveTask") return null;
+      const found = definitionOf(bo);
+      const out = {
+        definition: found ? String(found.$type).replace("bpmn:", "").replace("EventDefinition", "") : "",
+        attachedTo: bo.attachedToRef ? labelOf(bo.attachedToRef) : "",
+        cancelActivity: bo.cancelActivity !== false,
+        timer: null,
+        message: "",
+        signal: "",
+        error: "",
+      };
+      if (type === "bpmn:ReceiveTask") {
+        out.definition = "Message";
+        out.message = (bo.messageRef && bo.messageRef.name) || "";
+        return out;
+      }
+      if (!found) return out;
+      if (found.$type === "bpmn:TimerEventDefinition") {
+        const kind = TIMER_KINDS.find((k) => found[k]) || "";
+        out.timer = { kind, value: kind ? String(found[kind].body || "") : "" };
+      }
+      if (found.messageRef) out.message = found.messageRef.name || "";
+      if (found.signalRef) out.signal = found.signalRef.name || "";
+      if (found.errorRef) out.error = found.errorRef.errorCode || "";
+      return out;
+    };
+
+    /**
+     * 그 이름의 정의 수준 요소(`bpmn:Message` 등) — **있으면 가리키고 없으면 만든다**. 다른 이벤트와
+     * 함께 쓰던 요소의 이름을 바꾸면 그쪽까지 바뀌므로 이름을 고치지 않는다.
+     */
+    const rootNamed = (element, type, prefix, key, value, extra) => {
+      const modeling = modeler.get("modeling");
+      const moddle = modeler.get("moddle");
+      const definitions = modeler.getDefinitions();
+      const roots = definitions.rootElements || [];
+      const found = roots.find((r) => r.$type === type && r[key] === value);
+      if (found) return found;
+      const id = moddle.ids ? moddle.ids.nextPrefixed(prefix) : `${prefix}${Math.random().toString(36).slice(2, 9)}`;
+      const made = moddle.create(type, { id, ...extra });
+      made.$parent = definitions;
+      modeling.updateModdleProperties(element, definitions, { rootElements: [...roots, made] });
+      return made;
+    };
+
+    /** `setProperties`의 `event` — 바뀐 칸만 온다. */
+    const setEvent = (element, patch) => {
+      const modeling = modeler.get("modeling");
+      const moddle = modeler.get("moddle");
+      const bo = element.businessObject;
+      const found = definitionOf(bo);
+      if ("cancelActivity" in patch && bo.$type === "bpmn:BoundaryEvent") {
+        modeling.updateProperties(element, { cancelActivity: Boolean(patch.cancelActivity) });
+      }
+      if ("message" in patch) {
+        const name = String(patch.message || "");
+        const ref = name ? rootNamed(element, "bpmn:Message", "Message_", "name", name, { name }) : undefined;
+        if (bo.$type === "bpmn:ReceiveTask") modeling.updateProperties(element, { messageRef: ref });
+        else if (found) modeling.updateModdleProperties(element, found, { messageRef: ref });
+      }
+      if (!found) return;
+      if (patch.timer) {
+        const kind = String(patch.timer.kind || "");
+        const props = {};
+        for (const k of TIMER_KINDS) props[k] = undefined;
+        if (TIMER_KINDS.includes(kind)) {
+          props[kind] = moddle.create("bpmn:FormalExpression", { body: String(patch.timer.value || "") });
+        }
+        modeling.updateModdleProperties(element, found, props);
+      }
+      if ("signal" in patch) {
+        const name = String(patch.signal || "");
+        const ref = name ? rootNamed(element, "bpmn:Signal", "Signal_", "name", name, { name }) : undefined;
+        modeling.updateModdleProperties(element, found, { signalRef: ref });
+      }
+      if ("error" in patch) {
+        // 코드가 비면 **코드 없는 경계** — 모든 업무 실패를 받는다 (C14).
+        const code = String(patch.error || "");
+        const ref = code
+          ? rootNamed(element, "bpmn:Error", "Error_", "errorCode", code, { name: code, errorCode: code })
+          : undefined;
+        modeling.updateModdleProperties(element, found, { errorRef: ref });
+      }
+    };
+
     const api = {
       async importXML(xml) {
         const laid = await laidOutXml(xml);
@@ -280,6 +396,10 @@
           calledElement: bo.calledElement || "",
           // 반복 표시 — 표준 `multiInstanceLoopCharacteristics` (STU-04 「반복」, C14 §반복).
           multiInstance: multiInstanceOf(bo),
+          // 게이트웨이의 기본 흐름·흐름 요약 (STU-04 「게이트웨이」) — 게이트웨이가 아니면 `null`.
+          gateway: gatewayOf(bo),
+          // 이벤트 정의의 칸 (STU-04 「이벤트」·「받기」) — 이벤트·받기 태스크가 아니면 `null`.
+          event: eventOf(bo),
           chk,
         };
       },
@@ -323,7 +443,13 @@
             });
           }
         }
+        if ("default" in patch) {
+          // 게이트웨이의 기본 흐름 — 흐름 id로 오고 그 흐름을 가리킨다 (빈 글이면 기본 없음).
+          const flow = modeler.get("elementRegistry").get(String(patch.default || ""));
+          plain.default = flow ? flow.businessObject : undefined;
+        }
         if (Object.keys(plain).length) modeling.updateProperties(element, plain);
+        if (patch.event) setEvent(element, patch.event);
 
         if (patch.chk) {
           let holder = bo.extensionElements;
