@@ -282,7 +282,13 @@ PostgreSQL은 쓰지 않는다). 컨테이너에서는 `/data/center.sqlite3`·`
 
 트레이가 필요한 BUI-01 「도구」·BUI-11 「확장...」은 그래서 **양쪽 모두** 건너뛴다. 거꾸로 트레이가 **없어야** 도는 U15 알림 자리 시험은 양쪽에서 돈다.
 
-그래서 **CI의 Windows가 Linux보다 열넷을 더 돈다** (건너뛰는 것이 44개 ↔ 58개). 양쪽의 「통과 + 건너뜀」 합은 모은 시험 수로 같다 — 셈을 적을 때 그것으로 맞춰 본다.
+그래서 같은 시험 묶음이면 **Windows가 Linux보다 OS 전용 시험만큼 더 돈다** (건너뛰는 것이 49개 ↔ 64개 — #196 CI).
+
+**그런데 CI의 Windows 잡은 같은 묶음이 아니다 — 서버 시험을 뺀다** ([ADR-0104](decisions/0104-windows-ci-runs-the-client-side.md)). 서버(Center·서버 실행기·일꾼·서비스 앱·모의 앱·M7 묶음)는 Linux에서만 돌므로 그 파일들을 `tests/ci_scope.py`의 `SERVER_SIDE`에 적고, `conftest.py`가 `server` 표시를 붙이며 Windows 잡은 `uv run pytest -m "not server"`로 돈다. 표시로 빠진 시험은 **건너뜀이 아니라 「선택 해제」**라 셈에 따로 나온다(`… deselected`). 그래서 Linux는 「통과 + 건너뜀 = 모은 시험 수」이고 Windows는 「통과 + 건너뜀 + 선택 해제 = 모은 시험 수」다 — 셈을 적을 때 그것으로 맞춰 본다.
+
+- **기본은 양쪽이다** — 새 시험 파일은 적지 않으면 Windows에서도 돈다.
+- **엔진(`core`)과 PC 쪽 코드가 걸린 시험은 서버로 적지 않는다** — PC Bot은 Windows에서 엔진을 돌린다. `tests/test_ci_scope.py`가 서버 파일이 Bot UI·Tool UI·Qt·Worker·UI 자동화 클라이언트를 import하지 않는지 본다.
+- Windows 개발 PC에서 CI와 같은 것을 보려면 `uv run pytest -m "not server"`, 전부는 그냥 `uv run pytest`다.
 
 ### Qt 창 시험에 `TestClient`를 붙이지 않는다
 
@@ -304,6 +310,10 @@ exit 139). 죽는 자리는 **돌던 시험과 무관한 곳**이라 — 우리 
 - 진짜 Center로 보는 것은 **Qt 없는 시험**에 둔다 (설치·제거·내보내기처럼 값이 큰 길).
 - 창을 띄웠으면 그 시험 안에서 **닫고 `deleteLater()`**로 치운다 — 뒤 시험이 도는 중에 Qt
   객체가 죽으면 같은 꼴로 터진다.
+- **진짜 소켓 서버를 띄우는 fixture는 `session`이 아니라 `module`이다** — `session`이면 그 파일이 끝난 뒤에도
+  uvicorn 스레드가 살아 **뒤의 Qt 시험과 한 프로세스에 겹친다**. M5 인수 시험의 서버 넷(모의 앱·외부 앱 둘·Center)이
+  그랬고, Windows CI가 서버 시험을 빼 순서가 바뀌자 STU-04 캔버스 fixture에서 `access violation`으로 죽었다
+  (ADR-0104 PR). 같은 파일 안에서만 나눠 쓰는 것이라 `module`로 잃는 것이 없다 (M3의 모델 스텁이 처음부터 그렇다).
 
 **그리고 시험은 안 듣는 포트로 전화하지 않는다.** 같은 병의 다른 얼굴을 Windows에서 봤다 —
 STU-13 편집기가 열릴 때 공개 카탈로그(C9)를 읽는데 주소는 **확장 정의**가 주므로 Qt 단위

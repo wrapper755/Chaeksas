@@ -108,7 +108,7 @@ class MockApps:
     built: list[Any]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def mock_apps() -> Iterator[MockApps]:
     """모의 앱을 띄운다.
 
@@ -174,7 +174,7 @@ class Center:
     stops: list[threading.Event]
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def center(
     tmp_path_factory: pytest.TempPathFactory, mock_apps: MockApps
 ) -> Iterator[Center]:
@@ -211,7 +211,7 @@ def center(
     store.close()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def directory(center: Center) -> AppDirectory:
     """Studio가 받아 든 외부 확장 정의 — **봉투를 다시 검증한 것**만 들어 있다."""
     found = Services(reader=CenterReader(base_url=center.url, api_key=center.studio_key, client=center.client))
@@ -220,7 +220,7 @@ def directory(center: Center) -> AppDirectory:
     return made
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def caller(center: Center) -> CenterServiceCaller:
     """서비스 태스크가 부르는 자리 — Studio 키로 Center에 외부 작업을 올린다 (C15)."""
     found = Services(reader=CenterReader(base_url=center.url, api_key=center.studio_key)).caller()
@@ -278,7 +278,7 @@ def test_bx16_delegates_to_the_pc_bot_that_declares_the_outputs() -> None:
 # ─────────────────────────── 스텁 모델 ───────────────────────────
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def model() -> Iterator[StubModel]:
     with StubModel(canned) as made:
         yield made

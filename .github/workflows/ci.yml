@@ -59,8 +59,15 @@ jobs:
             libnss3 libnspr4 libasound2t64 libxcomposite1 libxdamage1 libxrandr2 \
             libxkbfile1 libxtst6 libcups2t64 libatk1.0-0t64 libatk-bridge2.0-0t64 libgbm1
 
+      # 서버 시험(Center·서버 실행기·일꾼)은 Linux에서만 돈다 — 서버는 Windows에서 돌지 않는다
+      # (ADR-0104, 목록은 `tests/ci_scope.py`). Windows는 클라이언트 쪽과 엔진만 본다.
       - name: 테스트
+        if: runner.os == 'Linux'
         run: uv run pytest
+
+      - name: 테스트 (서버 시험 빼고)
+        if: runner.os == 'Windows'
+        run: uv run pytest -m "not server"
 
       - name: ruff
         run: uv run ruff check .
