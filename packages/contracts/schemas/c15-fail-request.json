@@ -24,6 +24,11 @@
       "title": "Message",
       "type": "string"
     },
+    "outcome_unknown": {
+      "default": false,
+      "title": "Outcome Unknown",
+      "type": "boolean"
+    },
     "retryable": {
       "default": false,
       "title": "Retryable",

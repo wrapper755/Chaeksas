@@ -27,6 +27,7 @@ export interface TaskError {
     [k: string]: unknown;
   } | null;
   message?: string;
+  outcome_unknown?: boolean;
   retryable?: boolean;
   [k: string]: unknown;
 }

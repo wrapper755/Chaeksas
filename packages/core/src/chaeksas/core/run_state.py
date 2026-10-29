@@ -226,6 +226,10 @@ class Pending:
     #: **PC 전환이 낸 확인**이다 (ADR-0106) — `manualTask`가 아니라 태스크가 멈춘 자리다.
     #: 「계속」은 결과 없이 넘어가고 「중단」은 `ESCALATED` 업무 실패다 (`Engine.answer`).
     escalation: bool = False
+    #: **서비스 호출의 결과 모름이 낸 확인**이면 「계속」이 다시 부를 번째와 그 호출의 `call_seq` (ADR-0107).
+    #: 0이면 아니다 — 「계속」은 위의 전환처럼 넘어간다.
+    retry_attempt: int = 0
+    retry_call_seq: int = 0
 
 
 @dataclass(frozen=True)

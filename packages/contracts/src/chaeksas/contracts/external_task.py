@@ -145,6 +145,8 @@ class TaskError(ContractModel):
     code: str
     message: str = ""
     retryable: bool = False
+    #: 요청이 상대에게 닿았을 수 있는데 답을 받지 못했다 — `retryable`과 함께 참이 아니다 (ADR-0107).
+    outcome_unknown: bool = False
     detail: dict[str, Any] | None = None  # C11 오류의 `detail` 그대로 (업무 값을 넣지 않는다)
 
 
@@ -208,6 +210,8 @@ class FailRequest(ContractModel):
     code: str
     message: str = ""
     retryable: bool = False
+    #: 결과 모름 (ADR-0107) — 어댑터 일꾼이 `idempotent: false` 작업에서 보낸 뒤 답을 못 받았을 때.
+    outcome_unknown: bool = False
     detail: dict[str, Any] | None = None  # C11 오류의 `detail` — 부르는 쪽까지 그대로 간다
 
 

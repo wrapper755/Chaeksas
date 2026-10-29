@@ -209,10 +209,10 @@ Operation:
 
 `idempotent: false`인 작업이 결과를 모르는 실패를 만나면 이렇게 처리한다.
 
-- PC: 확인(`confirmation`)으로 넘긴다.
-- 서버: 실행 실패 또는 오류 경계 이벤트로 보낸다.
+- PC: 확인(`confirmation`)으로 넘긴다. 「계속」은 `attempt`를 올려 다시 부르고, 「중단」은 업무 실패(`TASK_FAILED`)다.
+- 서버: 실행 실패 또는 오류 경계 이벤트로 보낸다(`TASK_FAILED`).
 
-> 미정: 이 처리는 아직 없다 — 어댑터는 C15를 거치며 결과 모름을 「다시 부르지 않는 업무 실패」(`TASK_FAILED`)로 올리고, C15 결과에 「결과를 모른다」는 표시가 없다 (09-gaps §3-19). **확장 로컬 수행기**가 `TaskFailed(escalate="confirmation")`로 올리는 것은 위 규칙대로 돈다 — PC는 확인, 서버는 오류 경계 `ESCALATED` ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)).
+어댑터 일꾼은 요청을 **보낸 뒤** 답을 받지 못한 실패(읽기 시간 초과·끊김)를 C15 `fail`에 `code: unreachable`·`outcome_unknown: true`로 올린다 — 연결 단계에서 실패해 요청이 나가지 않았으면 모름이 아니다. 부르는 쪽(`chk:serviceCall`)이 그 칸을 보고 위처럼 가른다 (C15 「결과 모름」, [ADR-0107](../decisions/0107-outcome-unknown-asks-a-person.md)). **확장 로컬 수행기**가 `TaskFailed(escalate="confirmation")`로 올리는 것도 같은 결이다 — PC는 확인, 서버는 오류 경계 `ESCALATED` ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)).
 
 ### 4-2. 템플릿 규칙 (주입 막기)
 
@@ -352,6 +352,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 | 2026-10-05 | 2 | 호스트가 채우는 **예약 설정 키**(`runtime.<id>.port`·`token_dir`·`state`)를 적었다 — 유틸리티가 띄워진 런타임을 설정으로 받는다. 같은 이름을 확장이 선언하면 거부한다 (E7). 새 칸이 아니라 호스트가 주는 값이라 schema는 그대로 | 0018, 0024 |
 | 2026-10-03 | **2** | `bot_ui.local_runtimes`의 `command`(명령 배열)를 **`entry`**(진입점 문자열)로 **바꿨다.** 명령줄은 Bot UI가 만들고, 자기 실행 파일을 자식으로 다시 띄운다. 필드의 뜻이 바뀌었으므로 schema를 올린다 | 0024 |
 | 2026-10-29 | 2 | §4-1 「결과 모름 → PC는 확인」이 어댑터 길(C15)에서는 아직 없다고 「미정」으로 적었다. 확장 수행기의 `escalate: confirmation`은 그대로 돈다 | [0106](../decisions/0106-pc-escalation-asks-a-person.md) |
+| 2026-10-29 | 2 | §4-1의 어댑터 길을 닫았다 — 어댑터 일꾼이 C15 `outcome_unknown`을 싣고 PC는 확인 뒤 다시 부른다(「중단」은 `TASK_FAILED`). 연결 단계 실패는 모름이 아니다 | [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |
 
 검토 반영 내용:
 

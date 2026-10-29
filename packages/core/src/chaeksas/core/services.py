@@ -38,6 +38,7 @@ class ServiceCallError(RuntimeError):
     """서비스 앱 호출이 실패했다.
 
     `retryable`이 참이면 엔진이 `chk:serviceCall.retry`에 따라 `attempt`를 올려 다시 부른다.
+    `outcome_unknown`이면 **처리됐는지 모른다** (C15, ADR-0107) — PC 실행은 사람에게 묻는다.
     """
 
     def __init__(
@@ -47,11 +48,13 @@ class ServiceCallError(RuntimeError):
         code: str | None = None,
         status: int | None = None,
         retryable: bool = False,
+        outcome_unknown: bool = False,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.status = status
         self.retryable = retryable
+        self.outcome_unknown = outcome_unknown and not retryable
 
 
 @dataclass(frozen=True)
@@ -344,6 +347,7 @@ def _outcome(request: OpCall, result: Mapping[str, Any], *, duration_ms: int) ->
             code=code,
             status=STATUS_OF_CODE.get(code),
             retryable=bool(error.get("retryable")),
+            outcome_unknown=bool(error.get("outcome_unknown")),
         )
     return OpOutcome(
         output=dict(result.get("output") or {}),

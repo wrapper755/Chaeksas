@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기·실행기 자식 프로세스·Studio·Worker·Tool UI → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
 | 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0062](../decisions/0062-pc-delegation.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0102](../decisions/0102-calling-outside-is-pull.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0062](../decisions/0062-pc-delegation.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0102](../decisions/0102-calling-outside-is-pull.md), [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |
 | 관련 화면 | CON-07 리소스 (일꾼 승인·토픽 상태), CON-01 (실행 상세의 서비스 호출) |
 
 ## 목적
@@ -80,7 +80,7 @@ Center가 받기 전에 보는 것 (「불러도 되나」, ADR-0102 §5):
 | `mode_used` | str | C11과 같다 |
 | `replayed` | bool | 일꾼이 저장해 둔 결과를 돌려줬다 |
 | `usage` | object | C11·C3 `llm_usage`와 같다 |
-| `error` | object | `failed`일 때 `{code, message, retryable, detail?}` — `detail`은 C11 오류의 `detail` 그대로다(예: C9 `has_links`의 끊길 경로). 업무 값을 넣지 않는다 |
+| `error` | object | `failed`일 때 `{code, message, retryable, outcome_unknown, detail?}` — `detail`은 C11 오류의 `detail` 그대로다(예: C9 `has_links`의 끊길 경로). 업무 값을 넣지 않는다. `outcome_unknown`(기본 false)은 **요청이 상대에게 닿았을 수 있는데 답을 받지 못했다**는 뜻이다 — 아래 「결과 모름」 |
 | `deliveries` | int | 몇 번 나갔나 (잠금이 지나 다시 나가면 +1) |
 
 | `state` | 뜻 | 부르는 쪽 |
@@ -88,11 +88,18 @@ Center가 받기 전에 보는 것 (「불러도 되나」, ADR-0102 §5):
 | `pending` | 아직 아무도 가져가지 않았다 | 다시 기다린다 |
 | `locked` | 일꾼이 가져갔다 | 다시 기다린다 |
 | `completed` | 끝났다 | 출력을 변수에 담고 `ack` |
-| `failed` | 일꾼이 실패라고 했다 | `retryable`이면 C14 `retry`대로 `attempt`를 올려 **새 일감**, 아니면 업무 실패(`TaskFailed`, 오류 경계) |
+| `failed` | 일꾼이 실패라고 했다 | `retryable`이면 C14 `retry`대로 `attempt`를 올려 **새 일감**, 아니면 업무 실패(`TaskFailed`, 오류 경계). `outcome_unknown`이면 PC 실행은 먼저 사람에게 묻는다(「결과 모름」) |
 | `expired` | 기한이 지났다 — `error.code`가 `no_consumer`(아무도 안 가져갔다) 또는 `timeout`(가져갔는데 안 끝났다) | 업무 실패 |
 | `cancelled` | 올린 쪽이 거뒀다 | — |
 
 C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는 이렇게 읽는다: 503 → `dependency_down`, 429 → `rate_limited`. 이 둘과 `timeout`만 `retryable: true`일 수 있다.
+
+#### 결과 모름 (`outcome_unknown`, [ADR-0107](../decisions/0107-outcome-unknown-asks-a-person.md))
+
+- **싣는 쪽**: 일꾼이 `fail`에 적는다. 지금 적는 것은 어댑터 일꾼 하나다 — `idempotent: false` 작업이 요청을 **보낸 뒤** 답을 받지 못했을 때(읽기 시간 초과·끊김, 코드 `unreachable`, C13 §4-1). 연결 단계에서 실패해 요청이 나가지 않았으면 적지 않는다.
+- **`retryable`과 함께 참일 수 없다** — 다시 불러도 안전하면 모름이 아니다. Center는 `retryable`이 참이면 지운다.
+- **부르는 쪽**: PC 실행의 `chk:serviceCall`은 마지막 실패가 이것이면 현장 확인(C6 `confirmation`)으로 멈춘다 — 「계속」은 `attempt`를 올려 **새 일감**으로 다시 부르고, 「중단」은 업무 실패(`TASK_FAILED`)다. 그림이 그 노드에 `TASK_FAILED`를 이름으로 받는 경계를 달았으면 묻지 않는다. 서버 실행은 묻지 않고 업무 실패다(C14).
+- 만료(`expired`)에는 적지 않는다 — Center는 작업이 멱등인지 모른다.
 
 ### 가져가기 (`FetchRequest` → `FetchResponse`)
 
@@ -108,7 +115,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ### 끝내기
 
-- `complete` `{output, mode_used, replayed, usage}` · `fail` `{code, message, retryable, detail?}` · `extend` `{lock_s}`.
+- `complete` `{output, mode_used, replayed, usage}` · `fail` `{code, message, retryable, outcome_unknown?, detail?}` · `extend` `{lock_s}`.
 - **먼저 끝낸 쪽이 이긴다.** 잠금이 지난 일꾼의 `complete`도 그 일감이 아직 끝나지 않았으면 받는다(값을 잃지 않으려고). 이미 끝났으면 409 `already_completed` — 일꾼은 버리면 된다(멱등이라 같은 일이다).
 - 잠근 일꾼이 아니면 403 `not_locked_by_you`. 거둔 일감이면 409 `cancelled` — 일꾼은 하던 일을 멈춰도 된다.
 - 일꾼이 쥔 일감이 오래 걸리면 `extend`로 늘린다 — `service_kit`은 잠금의 절반이 지날 때마다 늘린다.
@@ -201,6 +208,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-29 | 1 | `fail`·결과 `error`에 **`outcome_unknown`**(기본 false)을 더했다 — 요청이 닿았을 수 있는데 답을 못 받았다. 어댑터 일꾼이 `idempotent: false` 작업에서 적고, PC의 `chk:serviceCall`은 사람에게 묻는다. 선택 칸이라 판은 그대로다 | [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |
 | 2026-10-29 | 1 | **받아 간(`ack`) 일감을 같은 본문으로 다시 올리면 다시 줄에 선다**(옛 일감을 돌려주면 빈 결과다). 서버 실행기가 긴 작업을 기다림으로 넘기고 `GET`으로 묻는다 — 경로·모양은 그대로다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-29 | 1 | **구현됨** — 부르는 쪽(서버 실행기·실행기 자식·Studio·Worker·Tool UI)과 일꾼(`service_kit`·어댑터 일꾼)이 붙었다. 옛 Push 길(C11 `/v1/ops`·어댑터 직접 호출·서비스 앱 키 배달)은 걷었다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-28 | 1 | 처음 씀 (초안) | [0102](../decisions/0102-calling-outside-is-pull.md) |

@@ -237,7 +237,9 @@ def test_an_operation_failure_goes_back_as_fail(center: TestClient, consumer: Co
     consumer.run_once(wait_s=0)
     found = seen(center, studio, task_id)
     assert found["state"] == "failed"
-    assert found["error"] == {"code": "input_invalid", "message": "사업자 번호가 틀렸다", "retryable": False}
+    assert found["error"] == {
+        "code": "input_invalid", "message": "사업자 번호가 틀렸다", "retryable": False, "outcome_unknown": False
+    }
 
 
 def test_a_slot_still_running_sends_nothing(
