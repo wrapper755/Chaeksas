@@ -12,9 +12,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "web-reader": "ops-web-reader"
-  },
   "extensions": [
     {
       "id": "web-reader",

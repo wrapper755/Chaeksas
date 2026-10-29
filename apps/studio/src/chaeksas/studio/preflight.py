@@ -60,9 +60,8 @@ def inspect(
     *,
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
     delegated_outputs: Mapping[str, Sequence[str]] | None = None,
-    keyless_apps: Collection[str] = (),
 ) -> list[Violation]:
-    """B1~B15. 작업 폴더가 있으면 DMN·호출 대조까지 한다 (B14).
+    """B1~B16. 작업 폴더가 있으면 DMN·호출 대조까지 한다 (B14).
 
     `task_type_locations`는 확장 호스트가 주는 `{종류: [실행 위치]}`다 — B6이 **확장 태스크를**
     서버에서 되는지 보는 데 쓴다. 주지 않으면 B6이 확장 태스크를 건너뛰므로 Studio는 늘 준다
@@ -72,16 +71,12 @@ def inspect(
     남의 패키지 매니페스트라 작업 폴더에 없고 **Center만 안다**. 받아 둔 것을 **부르는 쪽이**
     넘긴다 (이 모듈은 서버를 부르지 않는다 — `readiness()`와 같은 결). 주지 않거나 비어 있으면
     B14가 그 대조를 건너뛴다 — **모르는 것으로 막지 않는다.**
-
-    `keyless_apps`는 **키를 받지 않는 앱**이다 (C13 `auth`가 없는 외부 앱, ADR-0091) — B7이 그 앱에
-    키 참조를 묻지 않는다. 받아 둔 STU-14 고를 거리에서 부르는 쪽이 넘긴다.
     """
     if owner is None:
         violations = validate_bpmn(
             process,
             task_type_locations=task_type_locations,
             delegated_outputs=delegated_outputs or None,
-            keyless_apps=keyless_apps,
         )
     else:
         violations = validate_bpmn(
@@ -94,7 +89,6 @@ def inspect(
             # **빈 사전은 주지 않는다** — 「아무 Bot도 아무것도 선언하지 않았다」가 되어
             # 멀쩡한 위임이 모두 막힌다. 못 받았으면 `None`이고 그러면 건너뛴다.
             delegated_outputs=delegated_outputs or None,
-            keyless_apps=keyless_apps,
         )
     return violations + check_expressions(process)
 
@@ -106,16 +100,15 @@ def readiness(
     context: Callable[[str], ExtensionContext] | None = None,
     dirty: bool = False,
     external_ids: Collection[str] = (),
-    keyless_apps: Collection[str] = (),
 ) -> list[Violation]:
     """사전 점검 — **이 PC에서 지금 돌릴 수 있나** (`core.preflight`, ADR-0013).
 
-    Bot UI와 **같은 러너**를 쓴다 (BUI-04 「준비」가 쓰는 것) — 키 참조·확장 태스크 종류·`web`·
+    Bot UI와 **같은 러너**를 쓴다 (BUI-04 「준비」가 쓰는 것) — 갖춰야 할 설정·확장 태스크 종류·`web`·
     `desktop` AI 환경과 확장이 기여한 점검(C13)이다. 결과를 `Violation`으로 옮겨 검사 탭이 한
     모양만 다루게 한다.
 
     요구 사항은 **저장된 파일**에서 모은다 (`packaging.collect_requires`가 작업 폴더를 읽는다).
-    그래서 `dirty`면 그렇게 말해 준다 — 방금 더한 키 참조를 「없다」고 하거나, 방금 지운 것을
+    그래서 `dirty`면 그렇게 말해 준다 — 방금 더한 태스크의 요구를 「없다」고 하거나, 방금 지운 것을
     「있다」고 하면 사람이 엉뚱한 데를 고친다.
 
     **그림을 읽지 못하면 조용히 통과시키지 않는다** — 점검할 수 없었다고 경고로 남긴다.
@@ -124,9 +117,6 @@ def readiness(
     준다** — 외부 확장은 이 PC에 깔리지 않아 호스트가 모르고(`host.get()`이 `None`이다),
     점검은 **서버를 부르지 않는다**. 메인 창이 받아 둔 리소스 목록(C7)에서 넘긴다. 주지 않으면
     **그 경고를 하지 않는다** — 모르는 것으로 경고를 지어내지 않는다.
-
-    `keyless_apps`(**키를 받지 않는 앱**, ADR-0091)도 같은 자리에서 온다 — 매니페스트가 그 앱에
-    키 참조를 적지 않으므로 키 점검이 묻지 않는다.
     """
     from chaeksas.studio.packaging import PackageError, build_manifest  # noqa: PLC0415 - 순환 피함
 
@@ -139,7 +129,6 @@ def readiness(
         manifest = build_manifest(
             owner,
             task_type_locations=None if host is None else host.task_type_locations(),
-            keyless_apps=keyless_apps,
             key_extensions=None if host is None else host.key_extensions(),
         )
     except (PackageError, AssertionError, ValueError) as e:

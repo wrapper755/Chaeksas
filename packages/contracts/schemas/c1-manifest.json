@@ -368,36 +368,17 @@
     },
     "ServiceAppNeed": {
       "additionalProperties": true,
-      "description": "부르는 서비스 앱과 **키 참조**. 키 값은 절대 들어가지 않는다 (R5).",
+      "description": "부르는 서비스 앱(= C15 토픽)과 작업. **키도 키 참조도 없다** (ADR-0102).\n\n옛 패키지의 `key_ref`·`task_key_refs`는 모르는 칸으로 받아 두고 보지 않는다 (원칙 3).",
       "properties": {
         "app_id": {
           "title": "App Id",
           "type": "string"
-        },
-        "key_ref": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Key Ref"
         },
         "operations": {
           "items": {
             "type": "string"
           },
           "title": "Operations",
-          "type": "array"
-        },
-        "task_key_refs": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Task Key Refs",
           "type": "array"
         }
       },

@@ -19,7 +19,7 @@
 | M6 | 첫 릴리스 | **진행 중** | 시나리오 3 Windows 현장 PC 통과 (1·2·4는 M7, ADR-0055) | M5 |
 | M7 | 서버 실행 | **진행 중** (**기준 여섯이 모두 찼다** — PC 위임은 [ADR-0062](decisions/0062-pc-delegation.md), 확장 태스크는 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)가 닫았고 **09-gaps §3에 남은 것이 없다**) | 서버 실행기, 서버 Bot 동시 실행, 상태 저장·재개, PC 위임, CON-12 | M6 |
 | M8 | 건넬 수 있게, 고칠 수 있게 | **아직** | Windows 설치 파일(빌드·CI 산출물·자동 시작·판 올리기), Center 저장소 옮기기 수단 | M7 |
-| M9 | 바깥 기능은 Pull로 | **진행 중** (조각 1~6 끝 — ADR-0102·0103, C14 옛 칸만 남음) | C15 외부 작업, 일꾼이 된 서비스 앱, 어댑터 일꾼, UI 자동화의 외부 작업, 주소·키 칸 없는 CON-07 | M7 |
+| M9 | 바깥 기능은 Pull로 | **끝** (조각 1~6과 C14·C1의 옛 키 칸 — ADR-0102·0103) | C15 외부 작업, 일꾼이 된 서비스 앱, 어댑터 일꾼, UI 자동화의 외부 작업, 주소·키 칸 없는 CON-07 | M7 |
 
 M5에 남은 한 줄은 **그 단계를 막지 않는다** — Windows에서만 도는 예제 하나(BX-36)이고
 이유가 아래에 적혀 있다.
@@ -247,7 +247,7 @@ CI에 산출물 잡이 없다.
 
 ## M9. 바깥 기능은 Pull로
 
-> 상태: **조각 1~6이 끝났다** (긴 작업은 [ADR-0103](decisions/0103-long-external-tasks.md), [ADR-0102](decisions/0102-calling-outside-is-pull.md), 계약 [C15](03-contracts/C15-external-tasks.md) 구현됨) — Center가 일감을 받고 일꾼을 들이며, 부르는 쪽(서버 실행기·실행기 자식·Studio·Worker·Tool UI)과 일꾼(서비스 앱·모의 앱·어댑터 일꾼)이 붙었다. 옛 Push 길은 걷었다.
+> 상태: **끝났다** — 조각 1~6과 옛 키 칸 걷기 (긴 작업은 [ADR-0103](decisions/0103-long-external-tasks.md), [ADR-0102](decisions/0102-calling-outside-is-pull.md), 계약 [C15](03-contracts/C15-external-tasks.md) 구현됨) — Center가 일감을 받고 일꾼을 들이며, 부르는 쪽(서버 실행기·실행기 자식·Studio·Worker·Tool UI)과 일꾼(서비스 앱·모의 앱·어댑터 일꾼)이 붙었다. 옛 Push 길은 걷었다. 그림·매니페스트의 키 참조 칸(C14 `key_ref`·`service_keys`, C1 `key_ref`·`task_key_refs`·R4)도 걷었다.
 > BPM 프로세스가 네트워크 건너 바깥 기능을 부르는 길을 모두 Center의 외부 작업으로 바꾼다 — 부르는 쪽은 올리고
 > 기다리고, 일꾼이 가져가 끝낸다. Center 콘솔에서 바깥 기능의 주소·키를 넣는 칸이 없어지는 것이 끝이다.
 > 한 조각이 끝날 때마다 옛 길을 **그 조각에서 걷는다** (두 길을 나란히 두지 않는다).
@@ -258,6 +258,7 @@ CI에 산출물 잡이 없다.
 - [x] 조각 4 — **UI 자동화**: 계획·치유·보고·등록·공개 카탈로그를 외부 작업으로, Worker·Tool UI는 호출 토큰. M4 묶음과 `test_ui_end_to_end.py`가 초록 — **됐다**: Worker의 `CenterOps`(`worker/plans.py`, 토픽 `ui-automation`)·`client/registry_client.py`, 등록 작업은 CON-03 「셀렉터 등록」(`PUT /bot-uis/{id}/utility`)이 켜진 PC만, 카탈로그는 앱이 Center에 올린다
 - [x] 조각 5 — **화면**: CON-07(주소·키 칸 → 일꾼 승인·토픽 상태), STU-10, TOL-02 — 화면 문서를 먼저 고친다 — **된다**: CON-07은 기능 목록·일꾼 승인 대기·토픽 표, STU-10·TOL-02에 서비스 앱 키 칸이 없고, CON-02의 「서비스 앱 키 참조」 열도 걷었다
 - [x] 조각 6 — **긴 작업**: 서버 실행기가 외부 작업을 기다리는 동안 스레드를 놓는다 (다섯째 기다림) — **돈다** ([ADR-0103](decisions/0103-long-external-tasks.md)): 한 번 기다려 끝나지 않으면 `external_task`로 멈추고 결과는 하트비트 주기마다 묻는다. M7 묶음이 서비스 호출 예제 넷을 **모든 호출을 넘긴 채로** 끝까지 돌린다
+- [x] 옛 키 칸 — C14 `chk:serviceCall.key_ref`·`chk:process.service_keys`, C1 `requires.service_apps[].key_ref`·`task_key_refs`·R4를 걷었다. 예제 생성기가 더 적지 않고(`key_ref`를 적으면 거부한다), 옛 파일은 모르는 칸으로 읽어 **B7이 경고 한 줄**로 말한다. 판은 올리지 않았다(선택 칸 — 원칙 3) — `tests/test_contracts_bpmn_ext.py`·`test_contracts.py`
 
 ## 나중에 (범위 밖, 기록만)
 

@@ -262,7 +262,6 @@ from chaeksas.contracts.manifest import (
     ServiceAppNeed,
     TaskTypeNeed,
     Trigger,
-    default_key_ref,
     validate,
 )
 from chaeksas.contracts.replay import (
@@ -374,7 +373,6 @@ __all__ = [
     "FetchResponse",
     "LockedTask",
     "TopicStatus",
-    "default_key_ref",
     "StudioEnrollRequest",
     "EnrollRequest",
     "EnrollStatus",

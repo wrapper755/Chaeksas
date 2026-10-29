@@ -11,10 +11,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "pc",
-  "service_keys": {
-    "ui-automation": "it-legacy-ui",
-    "crm": "it-crm"
-  },
   "extensions": [
     {
       "id": "ui-automation",

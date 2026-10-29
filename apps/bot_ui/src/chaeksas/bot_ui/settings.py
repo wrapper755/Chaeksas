@@ -61,22 +61,6 @@ def data_dir() -> Path:
 
 
 @dataclass(frozen=True)
-class ServiceKeyRef:
-    """BUI-10에 등록한 키 참조 하나 — **이름만** 둔다 (값은 OS 비밀 저장소다, ADR-0013).
-
-    설치된 Bot의 매니페스트에서도 참조를 읽을 수 있지만(C1 `requires.service_apps`), 그것만으로는
-    부족하다: 비밀 저장소는 **목록을 뽑을 수 없어서** 쓰는 Bot이 없는 참조는 화면에 뜨지 않고,
-    지울 수도 없게 된다 (보이지 않는 키가 남는다). Studio의 `Settings.service_keys`와 같은 꼴이다.
-    """
-
-    ref: str
-    app_id: str = ""
-
-    def to_json_dict(self) -> dict[str, Any]:
-        return {"ref": self.ref, "app_id": self.app_id}
-
-
-@dataclass(frozen=True)
 class RuntimeSettings:
     """로컬 런타임 하나의 설정 (BUI-03). 지금은 Worker 프로세스뿐이다 (확장이 기여한다)."""
 
@@ -124,8 +108,6 @@ class Settings:
     smtp_attachment_mb: float = DEFAULT_ATTACHMENT_MB
     #: 웹훅을 보낼 수 있는 호스트. **기본은 비어 있고 비면 아무 데도 보내지 않는다** (ADR-0059 §2).
     webhook_allowed_hosts: tuple[str, ...] = ()
-    #: 옛 BUI-10 칸 — 읽고 그대로 되써 둘 뿐 쓰는 곳이 없다 (C15, ADR-0102).
-    service_keys: tuple[ServiceKeyRef, ...] = ()
     runtimes: tuple[RuntimeSettings, ...] = field(
         default_factory=lambda: (RuntimeSettings(runtime_id="worker", port=DEFAULT_WORKER_PORT),)
     )
@@ -191,7 +173,6 @@ class Settings:
             "smtp_sender": self.smtp_sender,
             "smtp_attachment_mb": self.smtp_attachment_mb,
             "webhook_allowed_hosts": list(self.webhook_allowed_hosts),
-            "service_keys": [one.to_json_dict() for one in self.service_keys],
             "runtimes": [r.to_json_dict() for r in self.runtimes],
             "extensions": {key: dict(value) for key, value in self.extensions.items()},
             "disabled_extensions": list(self.disabled_extensions),
@@ -270,11 +251,6 @@ class Settings:
             webhook_allowed_hosts=tuple(
                 str(one).strip() for one in raw.get("webhook_allowed_hosts", []) if str(one).strip()
             ),
-            service_keys=tuple(
-                ServiceKeyRef(ref=str(one["ref"]), app_id=str(one.get("app_id") or ""))
-                for one in raw.get("service_keys", [])
-                if isinstance(one, dict) and one.get("ref")
-            ),
             runtimes=runtimes or base.runtimes,
             extensions={
                 str(key): dict(value)
@@ -309,7 +285,6 @@ __all__ = [
     "START_ALWAYS",
     "START_WHEN_NEEDED",
     "RuntimeSettings",
-    "ServiceKeyRef",
     "Settings",
     "data_dir",
 ]

@@ -10,9 +10,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "erp": "finance-ar"
-  },
   "extensions": [
     {
       "id": "erp",

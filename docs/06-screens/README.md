@@ -87,7 +87,7 @@
 5. **시험** — 시험 케이스를 만들고 자율 수행으로 실행한다 (UI 태스크는 같은 PC의 Bot UI가 띄운 Worker 프로세스가 처리). AI 태스크는 학습되어 재생 명세가 생기고, 결정 수행(재생)으로 운영과 같은 방식을 미리 확인한다. [STU-07](studio.md#stu-07-시험-케이스), [STU-08](studio.md#stu-08-실행-대화상자), [STU-09](studio.md#stu-09-실행-표시와-결과)
 6. **올리기** — 패키지로 Center에 올린다 (후보 상태). 패키지에는 키가 없다. [STU-01](studio.md#stu-01-메인-창) 파일 메뉴, [CON-02](center-console.md#con-02-bot-현황)
 7. **승인·배포** — 관리자가 콘솔에서 승인하고([CON-02](center-console.md#con-02-bot-현황)), PC Bot은 Bot UI에, 서버 Bot은 서버 실행기에 배포한다([CON-15](center-console.md#con-15-배포-신규)). 봉투는 Center가 서명한다.
-8. **적용** — PC: Bot UI가 하트비트로 배포를 받아 Bot을 설치하고 사전 점검(키 참조·확장 포함)을 한다 ([BUI-04](bot-ui.md#bui-04-bot-탭-실행대기열설치된-bot), [CON-03](center-console.md#con-03-bot-ui-현황)). 서버: 서버 실행기가 배포를 받는다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
+8. **적용** — PC: Bot UI가 하트비트로 배포를 받아 Bot을 설치하고 사전 점검(확장 포함)을 한다 ([BUI-04](bot-ui.md#bui-04-bot-탭-실행대기열설치된-bot), [CON-03](center-console.md#con-03-bot-ui-현황)). 서버: 서버 실행기가 배포를 받는다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
 9. **작업 지시** — 운영자가 콘솔에서 작업을 만들거나, 외부 시스템(연동용 키)·감시 모드·일정·메시지로 시작된다. [CON-05](center-console.md#con-05-작업-지시)
 10. **실행** — PC: Bot UI가 Bot을 결정 수행으로 실행한다. 한 PC에서 실행 중인 Bot은 하나이고 나머지는 대기열에서 기다린다 ([ADR-0014](../decisions/0014-one-bot-per-pc.md), [BUI-01](bot-ui.md#bui-01-트레이), [BUI-09](bot-ui.md#bui-09-로컬-런타임-탭-worker-프로세스-등)). 서버: 서버 실행기가 여러 건을 동시에 실행한다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
 11. **결재** — 결재자가 콘솔 결재함 또는 현장 PC 창에서 답한다. [CON-04](center-console.md#con-04-결재함), [CMN-01](#5-공용-창-cmn-01-결재--확인-창)

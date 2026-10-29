@@ -34,7 +34,6 @@ from chaeksas.contracts.manifest import (
     ServiceAppNeed,
     TaskTypeNeed,
     Trigger,
-    default_key_ref,
     validate,
 )
 from chaeksas.studio.workspace import BpmProcess, Definition
@@ -65,7 +64,6 @@ def collect_requires(
     definitions: Sequence[Definition] | None = None,
     inside: Collection[str] | None = None,
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
-    keyless_apps: Collection[str] = (),
     key_extensions: Collection[str] | None = None,
 ) -> Requires:
     """그림에서 「무엇이 필요한가」를 모은다 (C1 `requires`).
@@ -79,16 +77,11 @@ def collect_requires(
     (`ExtensionHost.task_type_locations()`). **표에 없는 종류는 넣지 않는다** — 그림은 태스크
     종류의 실행 위치를 모르고, 확장 정의만 안다 (ADR-0018).
 
-    `keyless_apps`는 **키를 받지 않는 앱**이다 (C13 `auth`가 없는 외부 앱, ADR-0091) — 그 앱에는
-    `key_ref`를 적지 않는다. 정의는 Center에 있어 부르는 쪽이 STU-14 고를 거리에서 넘긴다.
-    주지 않으면 모든 앱에 적는다 (모르는 것으로 풀어 주지 않는다).
-
-    **키 참조는 빌드가 짓는다** (ADR-0094) — 그림에 적힌 것(태스크의 `key_ref` → `chk:process.
-    service_keys`)이 없으면 C1 기본값(`default_key_ref`)이다. STU-06의 「서비스 앱 키」 섹션이 없어져
-    사람이 미리 적지 않기 때문이다. 확장 태스크도 **그 확장이 키를 받으면** 서버 부분 앱의 줄이
-    된다 (`key_extensions` — 호스트의 `key_extensions()`). 주지 않으면 그림에 참조가 적힌 확장만이다.
+    **키 참조는 적지 않는다** (ADR-0102 — 키가 없다. 옛 그림의 `key_ref`·`service_keys`는 보지 않는다).
+    `requires.service_apps`의 줄은 C15 토픽이다 — 서비스 앱 태스크가 부르는 앱, 그리고 서버 부분을
+    부르는 확장(`key_extensions` — 호스트의 `key_extensions()`)의 태스크다. 주지 않으면 확장
+    태스크는 줄을 만들지 않는다 (그 토픽은 `requires.extensions`로도 열린다, C15).
     """
-    default_ref = default_key_ref(process.id)
     domains: set[str] = set()
     tools: set[str] = set()
     settings: set[str] = set()
@@ -124,39 +117,15 @@ def collect_requires(
             if call is not None:
                 before = apps.get(call.app_id)
                 operations = sorted({*(before.operations if before else []), call.operation})
-                if call.app_id in keyless_apps:
-                    # **키를 받지 않는 앱**에는 참조를 적지 않는다 (C13 `auth` 없음, ADR-0091) —
-                    # 적으면 사전 점검·BUI-10이 보내지도 않을 키를 넣으라고 막는다.
-                    apps[call.app_id] = ServiceAppNeed(app_id=call.app_id, operations=operations)
-                else:
-                    key_ref = call.key_ref or found.info.service_keys.get(call.app_id, "") or default_ref
-                    task_keys = sorted(
-                        {*(before.task_key_refs if before else []), *([call.key_ref] if call.key_ref else [])}
-                    )
-                    apps[call.app_id] = ServiceAppNeed(
-                        app_id=call.app_id,
-                        operations=operations,
-                        key_ref=(before.key_ref if before else "") or key_ref,
-                        task_key_refs=task_keys,
-                    )
+                apps[call.app_id] = ServiceAppNeed(app_id=call.app_id, operations=operations)
             task = node.prop("task")
-            if task is not None and task.extension and task.extension not in keyless_apps:
-                written = str(task.data.get("key_ref") or "")
-                takes = (key_extensions is not None and task.extension in key_extensions) or bool(
-                    written or found.info.service_keys.get(task.extension)
+            if task is not None and task.extension and key_extensions is not None and task.extension in key_extensions:
+                # 확장의 서버 부분 앱 — **작업은 적지 않는다**(빈 목록 = 그 앱의 모든 작업). 어느
+                # 작업을 부르는지는 확장이 안다 (ADR-0018). Center는 비면 「모든 작업」으로 짓는다.
+                before = apps.get(task.extension)
+                apps[task.extension] = ServiceAppNeed(
+                    app_id=task.extension, operations=list(before.operations) if before else []
                 )
-                if takes:
-                    # 확장의 서버 부분 앱 — **작업은 적지 않는다**(빈 목록 = 그 앱의 모든 작업). 어느
-                    # 작업을 부르는지는 확장이 안다 (ADR-0018). Center는 비면 「모든 작업」으로 짓는다.
-                    before = apps.get(task.extension)
-                    key_ref = written or found.info.service_keys.get(task.extension, "") or default_ref
-                    task_keys = sorted({*(before.task_key_refs if before else []), *([written] if written else [])})
-                    apps[task.extension] = ServiceAppNeed(
-                        app_id=task.extension,
-                        operations=list(before.operations) if before else [],
-                        key_ref=(before.key_ref if before else "") or key_ref,
-                        task_key_refs=task_keys,
-                    )
             if task is not None:
                 # **어느 실행 위치에서 되는지는 확장이 안다** (ADR-0018) — 호스트가 준 표에
                 # 없으면 **넣지 않는다**. 빈 목록을 적으면 R2가 「서버에서 안 된다」로 읽는다.
@@ -300,7 +269,6 @@ def build_manifest(
     by: str = "studio",
     core: str = "0.1.0",
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
-    keyless_apps: Collection[str] = (),
     key_extensions: Collection[str] | None = None,
 ) -> Manifest:
     """C1 매니페스트 (`content_hash`는 아직 비어 있다 — 파일을 모은 뒤 채운다)."""
@@ -323,7 +291,6 @@ def build_manifest(
         requires=collect_requires(
             process,
             task_type_locations=task_type_locations,
-            keyless_apps=keyless_apps,
             key_extensions=key_extensions,
         ),
         human=collect_human(process),
@@ -355,7 +322,6 @@ def build_lib_manifest(
     by: str = "studio",
     core: str = "0.1.0",
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
-    keyless_apps: Collection[str] = (),
 ) -> Manifest:
     """공유 BPM 프로세스 패키지의 매니페스트 (C1 `kind=process_lib`, STU-12).
 
@@ -377,7 +343,6 @@ def build_lib_manifest(
             definitions=chosen,
             inside=within,
             task_type_locations=task_type_locations,
-            keyless_apps=keyless_apps,
         ),
         human=collect_human(process, definitions=chosen),
         provides=collect_provides(chosen),
@@ -443,11 +408,10 @@ def export_lib(
     *,
     by: str = "studio",
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
-    keyless_apps: Collection[str] = (),
 ) -> Path:
     """공유 BPM 프로세스 패키지 zip 하나 (STU-12 「내보내기」)."""
     manifest = build_lib_manifest(
-        process, definitions, by=by, task_type_locations=task_type_locations, keyless_apps=keyless_apps
+        process, definitions, by=by, task_type_locations=task_type_locations
     )
     files = gather_lib(process, definitions)
     blocking = [v for v in check_lib(process, manifest, files) if v.blocks]
@@ -490,7 +454,6 @@ def export(
     *,
     by: str = "studio",
     task_type_locations: Mapping[str, Sequence[str]] | None = None,
-    keyless_apps: Collection[str] = (),
     key_extensions: Collection[str] | None = None,
 ) -> Path:
     """패키지 zip 하나를 만든다. `content_hash`는 **파일에서 계산한다** (C2·R6)."""
@@ -498,7 +461,6 @@ def export(
         process,
         by=by,
         task_type_locations=task_type_locations,
-        keyless_apps=keyless_apps,
         key_extensions=key_extensions,
     )
     files = gather(process)

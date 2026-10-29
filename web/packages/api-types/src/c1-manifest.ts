@@ -118,13 +118,13 @@ export interface ResourceRef {
   [k: string]: unknown;
 }
 /**
- * 부르는 서비스 앱과 **키 참조**. 키 값은 절대 들어가지 않는다 (R5).
+ * 부르는 서비스 앱(= C15 토픽)과 작업. **키도 키 참조도 없다** (ADR-0102).
+ *
+ * 옛 패키지의 `key_ref`·`task_key_refs`는 모르는 칸으로 받아 두고 보지 않는다 (원칙 3).
  */
 export interface ServiceAppNeed {
   app_id: string;
-  key_ref?: string | null;
   operations: string[];
-  task_key_refs?: string[];
   [k: string]: unknown;
 }
 /**

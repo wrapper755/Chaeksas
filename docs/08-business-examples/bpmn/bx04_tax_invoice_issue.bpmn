@@ -10,9 +10,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "pc",
-  "service_keys": {
-    "ui-automation": "finance-tax"
-  },
   "extensions": [
     {
       "id": "ui-automation",

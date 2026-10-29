@@ -53,14 +53,6 @@ def data_dir() -> Path:
 
 
 @dataclass(frozen=True)
-class ServiceKeyRef:
-    """STU-10 「서비스 앱 키」의 한 줄 — **이름만**이다. 값은 OS 비밀 저장소에 있다 (ADR-0013)."""
-
-    ref: str
-    app_id: str = ""
-
-
-@dataclass(frozen=True)
 class Settings:
     """STU-10. 환경변수가 **파일보다 세다** (개발·CI에서 덮어쓰기 쉬우라고)."""
 
@@ -82,8 +74,6 @@ class Settings:
     last_opened: str = ""
     #: STU-02 탐색기 목록에 올린 BPM 프로세스 id (올린 차례). 닫으면 빠진다.
     open_processes: tuple[str, ...] = ()
-    #: STU-10 「서비스 앱 키」의 줄들 (참조 이름·서비스 앱). **값은 여기 없다.**
-    service_keys: tuple[ServiceKeyRef, ...] = ()
     #: STU-15에서 **사람이 꺼 둔** 확장 id ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)).
     #: **Studio의 것이다** — Bot UI는 제 설정에 따로 둔다 (개발 도구의 실험이 현장 실행을 멈추지
     #: 않는다). 판은 적지 않는다 — 올려도 꺼 둔 채로 있는 것이 사람의 뜻이다.
@@ -153,12 +143,6 @@ class Settings:
             values["extensions"] = {
                 str(name): dict(found) for name, found in raw["extensions"].items() if isinstance(found, dict)
             }
-        if isinstance(raw.get("service_keys"), list):
-            values["service_keys"] = tuple(
-                ServiceKeyRef(ref=str(one.get("ref") or ""), app_id=str(one.get("app_id") or ""))
-                for one in raw["service_keys"]
-                if isinstance(one, dict) and one.get("ref")
-            )
         return replace(self, **values)
 
     def from_env(self) -> Settings:
@@ -184,9 +168,8 @@ class Settings:
     def save(self, path: Path | None = None) -> Path:
         file = path or self.path
         file.parent.mkdir(parents=True, exist_ok=True)
-        skip = ("data_dir", "readable_dirs", "writable_dirs", "service_keys")
+        skip = ("data_dir", "readable_dirs", "writable_dirs")
         body = {k: v for k, v in asdict(self).items() if k not in skip}
-        body["service_keys"] = [{"ref": one.ref, "app_id": one.app_id} for one in self.service_keys]
         body["readable_dirs"] = [p.as_posix() for p in self.readable_dirs]
         body["writable_dirs"] = [p.as_posix() for p in self.writable_dirs]
         file.write_text(

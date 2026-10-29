@@ -272,19 +272,12 @@ def test_r3_needs_lib_locations_and_is_skipped_without_them() -> None:
     assert [x.code for x in v] == ["delegation_not_supported"]
 
 
-def test_r4_key_ref_with_underscore_is_caught() -> None:
-    """규칙상 `_`가 없으므로 키 값(`chk_ctr_…`)이 키 참조 자리에 들어갈 수 없다."""
-    m = manifest(requires=Requires(service_apps=[
-        ServiceAppNeed(app_id="tax-invoice", operations=["issue"], key_ref="chk_ctr_secret_value")]))
-    v = validate(m)
-    assert [x.code for x in v] == ["invalid_key_ref"]
-    assert v[0].items == ["chk_ctr_secret_value"]
-
-
-def test_r4_checks_task_key_refs_too() -> None:
-    m = manifest(requires=Requires(service_apps=[
-        ServiceAppNeed(app_id="a", operations=["x"], key_ref="ok-ref", task_key_refs=["Bad Ref"])]))
-    assert validate(m)[0].items == ["Bad Ref"]
+def test_an_old_packages_key_refs_are_read_and_not_looked_at() -> None:
+    """R4는 없다 (ADR-0102) — 옛 패키지의 `key_ref`·`task_key_refs`는 모르는 칸으로 받아 둔다 (원칙 3)."""
+    need = ServiceAppNeed.model_validate(
+        {"app_id": "a", "operations": ["x"], "key_ref": "Bad Ref", "task_key_refs": ["chk_x"]})
+    assert validate(manifest(requires=Requires(service_apps=[need]))) == []
+    assert ServiceAppNeed(app_id="a", operations=["x"]).to_json_dict() == {"app_id": "a", "operations": ["x"]}
 
 
 def test_r6_hash_mismatch_is_caught_only_when_computed() -> None:

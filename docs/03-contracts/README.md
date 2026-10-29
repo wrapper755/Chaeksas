@@ -61,7 +61,7 @@ C8·C9·C10은 **확장이 소유한 계약**이라 모듈이 `extensions/ui_aut
 
 | 계약 | 모듈 | 검사 함수 | 문서 예시 시험 |
 | --- | --- | --- | --- |
-| C1 | `chaeksas.contracts.manifest` | `validate()` — R1·R2·R3·R4·R6·R7 (R5는 Studio, R8은 Center 배포 때) | `tests/test_contract_examples.py` |
+| C1 | `chaeksas.contracts.manifest` | `validate()` — R1·R2·R3·R6·R7 (R5는 Studio, R8은 Center 배포 때) | `tests/test_contract_examples.py` |
 | C2 | `chaeksas.contracts.hashing` | `canonical_json()`, `content_hash_dir()`·`content_hash_zip()` | 같음 |
 | C2 | `chaeksas.contracts.signing` | `sign()`, `verify()`(V1~V4), `verify_time()`(V5), `verify_target()`(V6), `verify_package()`(V7), `verify_admin_key_addition()`(V8) | 같음 |
 | C3 | `chaeksas.contracts.events` | `missing_data_keys()` — 줄 단위 거부용 | 같음 |

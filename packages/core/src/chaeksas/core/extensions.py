@@ -402,10 +402,11 @@ class ExtensionHost:
         return next((c for c in self.task_types() if c.value.id == task_type_id), None)
 
     def key_extensions(self) -> list[str]:
-        """**서비스 앱 키를 받는** 켜진 확장 — 서버 부분이 있고 `requires_keys`에 `run`을 적었다 (C13).
+        """서버 부분을 **부르는** 켜진 확장 — 서버 부분이 있고 `requires_keys`에 `run`을 적었다 (C13).
 
-        빌드가 그 확장의 태스크를 쓰는 Bot에 `requires.service_apps` 줄을 적어야 Center가 그 Bot의
-        키를 짓는다 (ADR-0094). 서버 부분의 앱 id는 확장 id와 같다고 본다 (내장 확장이 그렇다).
+        빌드가 그 확장의 태스크를 쓰는 Bot에 `requires.service_apps` 줄(= C15 토픽)을 적는다 —
+        Center는 그 줄에 있는 토픽만 그 Bot이 올리게 둔다 (ADR-0102). 이름은 키를 받던 때의 것이다.
+        서버 부분의 앱 id는 확장 id와 같다고 본다 (내장 확장이 그렇다).
         """
         return sorted(
             e.id

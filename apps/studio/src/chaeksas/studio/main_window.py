@@ -367,21 +367,6 @@ class MainWindow(QMainWindow):
             self._call_tokens = held
         return held() if held is not None else None
 
-    def process_key_refs(self) -> dict[str, str]:
-        """열린 BPM 프로세스의 `chk:process.service_keys` — 편집기의 `service.key_ref` (ADR-0074).
-
-        저장된 파일 기준이다(키 참조는 STU-06에서 고쳐 저장한다). 정의가 여럿이면 먼저 적힌 것.
-        """
-        found: dict[str, str] = {}
-        for definition in self.process.definitions if self.process is not None else ():
-            drawn = getattr(definition, "process", None)
-            if drawn is None:
-                continue
-            for owner, ref in drawn.info.service_keys.items():
-                if ref:
-                    found.setdefault(str(owner), str(ref))
-        return found
-
     def _apply_theme(self, choice: str) -> None:
         """STU-10 「외형」 — **저장하는 그 자리에서** 창 전체에 입힌다 (ADR-0073)."""
         from PySide6.QtWidgets import QApplication  # noqa: PLC0415
@@ -699,13 +684,13 @@ class MainWindow(QMainWindow):
         return self.extensions.host.task_type_locations()
 
     def key_extensions(self) -> list[str]:
-        """키를 받는 켜진 확장 (C13 `requires_keys` `run`) — 빌드가 그 확장의 앱 줄을 적는다 (ADR-0094)."""
+        """서버 부분을 부르는 켜진 확장 (C13 `requires_keys` `run`) — 빌드가 그 확장의 토픽 줄을 적는다 (C15)."""
         return self.extensions.host.key_extensions()
 
     def readiness(self) -> list[Violation]:
         """사전 점검 — **이 PC에서 돌 수 있나** (`core.preflight`, ADR-0013).
 
-        키 값은 Studio 비밀 저장소에서, 확장은 호스트에서 온다. 시험 실행과 **같은 것을 본다**
+        확장은 호스트에서 온다. 시험 실행과 **같은 것을 본다**
         (`Extensions.context`) — 점검이 다른 설정을 보면 「점검은 통과했는데 실행이 안 된다」가 된다.
         """
         if self.process is None:
@@ -718,15 +703,7 @@ class MainWindow(QMainWindow):
             # **어느 확장이 외부인가는 받아 둔 리소스 목록이 안다** (C7) — 외부 확장은 이 PC에
             # 깔리지 않아 호스트가 모른다. 점검은 서버를 부르지 않으므로 여기서 넘긴다 (ADR-0060).
             external_ids=self.properties.catalog.external_ids(),
-            keyless_apps=self.keyless_apps(),
         )
-
-    def keyless_apps(self) -> tuple[str, ...]:
-        """**키를 받지 않는 앱** (C13 `auth`가 없는 외부 앱, ADR-0091) — B7·매니페스트·사전 점검·
-        STU-06이 **같은 목록**을 본다. 받아 둔 고를 거리(STU-14)에서 꺼내고, 못 받았으면 비어 있어
-        모든 앱에 키를 묻는다.
-        """
-        return self.properties.catalog.keyless_ids()
 
     def delegated_outputs(self) -> dict[str, tuple[str, ...]]:
         """PC 위임으로 부르는 Bot들이 **선언한 `outputs`** (C1 → C14 B14, ADR-0062).
@@ -760,7 +737,6 @@ class MainWindow(QMainWindow):
             self.process,
             task_type_locations=self.task_type_locations(),
             delegated_outputs=self.delegated_outputs(),
-            keyless_apps=self.keyless_apps(),
         ) + self.readiness()
         self.preflight.show_result(found, violations)
         self.bottom_tabs.setCurrentWidget(self.preflight)

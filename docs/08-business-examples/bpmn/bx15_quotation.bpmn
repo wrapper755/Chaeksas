@@ -11,10 +11,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "erp": "sales-erp",
-    "crm": "sales-crm"
-  },
   "extensions": [
     {
       "id": "erp",

@@ -25,7 +25,7 @@
 | 출처 | 프로토타입 업무 A (실제로 만들어 돌림) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 매월 1일 09:00 (`0 9 1 * *`), 또는 작업 지시(대상월 지정) |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx01_invoice_reconciliation.bpmn) · [시험 케이스](cases/bx01_invoice_reconciliation.cases.json) |
@@ -154,7 +154,7 @@
 | 출처 | 프로토타입 업무 B (실제로 만들어 돌림) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 평일 09:00 (`0 9 * * 1-5`) |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx02_morning_fx_report.bpmn) · [시험 케이스](cases/bx02_morning_fx_report.cases.json) |
@@ -262,7 +262,7 @@
 | 출처 | 프로토타입 업무 C (실제로 만들어 돌림) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `expense_request` — 경비 시스템이 Center 메시지 API로 보냄 (C12) |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx03_expense_approval.bpmn) · [시험 케이스](cases/bx03_expense_approval.cases.json) |
@@ -354,7 +354,7 @@
 | 출처 | 프로토타입 시나리오 3 (실제로 만들어 돌림) |
 | 실행 위치 | **PC (Bot)** |
 | 시작 | 타이머 — 매월 1일 09:00, 또는 PC Bot 수동 실행 |
-| 서비스 앱·키 참조 | `ui-automation` → `finance-tax` |
+| 서비스 앱 | 없음 |
 | 확장 | ui-automation |
 | 마일스톤 | **M4** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → Bot UI 실행 |
 | 파일 | [BPMN](bpmn/bx04_tax_invoice_issue.bpmn) · [시험 케이스](cases/bx04_tax_invoice_issue.cases.json) |
@@ -440,7 +440,7 @@
 | 출처 | 프로토타입 시나리오 9 (제안만 됨) → 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 매월 말일 18:00 (`0 18 L * *`) |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx05_month_end_close.bpmn) · [시험 케이스](cases/bx05_month_end_close.cases.json) |
@@ -549,7 +549,7 @@
 | 출처 | 프로토타입 시나리오 10 (제안만 됨) → 외부 확장으로 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 작업 지시 — 거래처 목록(최대 50곳)을 입력으로 |
-| 서비스 앱·키 참조 | `ext-credit` → `finance-credit` |
+| 서비스 앱 | `ext-credit` |
 | 확장 | ext-credit |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx06_bulk_credit_check.bpmn) · [시험 케이스](cases/bx06_bulk_credit_check.cases.json) · [DMN](bpmn/credit_grade.dmn) |
@@ -628,7 +628,7 @@
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 매주 월요일 08:30 (`30 8 * * 1`) |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx07_corporate_card_review.bpmn) · [시험 케이스](cases/bx07_corporate_card_review.cases.json) · [DMN](bpmn/card_policy.dmn) |
@@ -744,7 +744,7 @@
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 평일 10:00 (`0 10 * * 1-5`) |
-| 서비스 앱·키 참조 | `erp` → `finance-ar` |
+| 서비스 앱 | `erp` |
 | 확장 | erp |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx08_receivable_dunning.bpmn) · [시험 케이스](cases/bx08_receivable_dunning.cases.json) · [DMN](bpmn/dunning_stage.dmn) |

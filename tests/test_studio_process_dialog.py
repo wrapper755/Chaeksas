@@ -228,7 +228,7 @@ def test_saving_builds_one_patch_that_keeps_what_the_window_does_not_know(space:
     assert window.process_patch is not None
     found = json.loads(window.process_patch)
     assert found["run_location"] == "pc"
-    assert found.get("service_keys", {}) == window.info.service_keys, "적힌 참조는 그대로 간다"
+    assert "service_keys" not in found, "키 참조는 없다 (ADR-0102) — 창이 지어 넣지 않는다"
     assert [one["name"] for one in found["inputs"]] == [one.name for one in window.info.inputs]
 
 
@@ -277,16 +277,17 @@ def test_the_split_button_stands_beside_to_pc_and_asks_first(space: Workspace, m
     assert found.to_split.isHidden(), "PC에서는 나눌 까닭이 없다"
 
 
-# ─────────────────────────── 「서비스 앱 키」 섹션은 없다 (ADR-0094) ───────────────────────────
+# ─────────────────────────── 「서비스 앱 키」 섹션은 없다 (ADR-0102) ───────────────────────────
 
 
 def test_there_is_no_key_table_and_a_written_reference_survives(space: Workspace) -> None:
-    """키는 Center가 내려 준다 — 표가 없고, 그림에 이미 적힌 참조는 **지우지 않는다** (옛 그림이 그대로 빌드된다)."""
+    """키가 없다 — 표가 없고, 옛 그림에 적힌 참조는 **조용히 지우지 않는다** (모르는 칸으로 남는다, C14 B7)."""
     process = imported(space)
     entry = process.entry_definition
     assert entry is not None
     drawn = read_process(entry.path.read_text(encoding="utf-8"))
-    drawn.info.service_keys = {"ext-credit": "applied-ref"}
+    assert drawn.info.model_extra is not None
+    drawn.info.model_extra["service_keys"] = {"ext-credit": "applied-ref"}  # 옛 칸 — 모르는 칸으로 남는다
     window = ProcessInfoDialog(process, space, editable=True, drawn=drawn)
     assert not hasattr(window, "keys") and not hasattr(window, "drop_key")
     window.save()

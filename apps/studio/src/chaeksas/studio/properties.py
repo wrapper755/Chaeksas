@@ -198,9 +198,6 @@ class Properties(QWidget):
         self._editor_key = ""
         #: STU-14가 고를 거리 (Center 리소스 목록). 메인 창이 실행·선택 전에 채운다.
         self.catalog: Catalog = Catalog()
-        #: BPM 프로세스가 적어 둔 키 참조 `{app_id: 참조}` (`chk:process.service_keys`) —
-        #: STU-14가 「프로세스 설정을 따름 (<참조>)」에 보인다. **값은 없다** (ADR-0013).
-        self.service_keys: dict[str, str] = {}
         #: 열린 BPM 프로세스의 실행 위치 (`chk:process.run_location`) — 결재 편집기가 서버에서
         #: 「현장 PC에서만」을 끈다 (B6과 같은 판정). 메인 창이 정의를 열 때 채운다.
         self.run_location: str | None = None

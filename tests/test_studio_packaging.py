@@ -101,13 +101,13 @@ def test_a_mail_task_asks_for_smtp(tmp_path: Path) -> None:
     assert collect_requires(imported(tmp_path, "fx03b_amount_branch")).settings == []
 
 
-def test_a_service_app_call_becomes_a_requirement_with_a_key_reference(tmp_path: Path) -> None:
-    """**키 값이 아니라 참조 이름**이 간다 (C1 R5 — 패키지에 비밀을 넣지 않는다)."""
+def test_a_service_app_call_becomes_a_requirement_without_a_key_reference(tmp_path: Path) -> None:
+    """줄은 C15 토픽과 작업뿐이다 — **키도 키 참조도 없다** (ADR-0102)."""
     found = collect_requires(imported(tmp_path, CREDIT))
     (app,) = found.service_apps
     assert app.app_id == "ext-credit"
     assert app.operations == ["lookup"]
-    assert app.key_ref == "finance-credit"
+    assert app.to_json_dict() == {"app_id": "ext-credit", "operations": ["lookup"]}
 
 
 def test_a_task_types_run_locations_come_from_the_extension_table(tmp_path: Path) -> None:

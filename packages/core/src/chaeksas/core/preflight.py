@@ -67,27 +67,6 @@ class Preflight:
         """막는 점검의 코드들 — C4 `Readiness.blocked`에 그대로 싣는다."""
         return tuple(f.id for f in self.findings if f.blocks)
 
-def key_apps_of(manifest: Manifest) -> dict[str, str]:
-    """그 Bot이 쓰는 `서비스 앱 키 참조 → 앱 id` (C1 `requires.service_apps`).
-
-    BPM 프로세스가 상속하는 `key_ref`와 태스크가 따로 적은 `task_key_refs`를 함께 센다 — 둘 다
-    실행 중에 풀어야 하므로 **하나만 없어도 그 태스크가 죽는다**. 적힌 순서를 지키고 중복은 뺀다.
-
-    **키 값은 이제 아무도 묻지 않는다** (ADR-0102 — 서비스 앱 키가 없어졌다). 이름은 확장 점검
-    (`PreflightTarget.key_refs`)이 받는 칸이라 남는다.
-    """
-    out: dict[str, str] = {}
-    for need in manifest.requires.service_apps:
-        for ref in (need.key_ref, *need.task_key_refs):
-            if ref:
-                out.setdefault(ref, need.app_id)
-    return out
-
-
-def key_refs_of(manifest: Manifest) -> tuple[str, ...]:
-    """그 Bot이 쓰는 서비스 앱 키 참조 이름 모두 — `key_apps_of()`의 이름들이다."""
-    return tuple(key_apps_of(manifest))
-
 
 def _check_settings(manifest: Manifest, have: Sequence[str]) -> Finding | None:
     """그 Bot이 요구하는 설정이 이 PC·서버에 갖춰져 있나 (C1 `requires.settings`).
@@ -259,7 +238,6 @@ def _extension_findings(
     *,
     host: ExtensionHost,
     context: Callable[[str], ExtensionContext],
-    key_refs: tuple[str, ...],
 ) -> tuple[list[Finding], list[str]]:
     """확장이 기여한 점검들을 돌린다. **하나가 터지면 그것만 빼고 간다.**"""
     findings: list[Finding] = []
@@ -267,7 +245,7 @@ def _extension_findings(
     for found in host.preflight_checks():
         where = found.extension_id
         try:
-            target = PreflightTarget(extension=context(where), manifest=manifest, key_refs=key_refs)
+            target = PreflightTarget(extension=context(where), manifest=manifest)
             got: Sequence[Finding] = found.value.check(target)
         except Exception as e:  # noqa: BLE001 - 점검이 실행을 막지 않는다 (규약)
             LOG.warning("확장 %s의 사전 점검을 돌리지 못했다: %s", where, e)
@@ -309,9 +287,7 @@ def check(
             if found is not None:
                 findings.append(found)
         if context is not None:
-            more, could_not = _extension_findings(
-                manifest, host=host, context=context, key_refs=key_refs_of(manifest)
-            )
+            more, could_not = _extension_findings(manifest, host=host, context=context)
             findings.extend(more)
             skipped.extend(could_not)
 

@@ -145,7 +145,7 @@ FX("FX-10", "fx10_operator_routing", "요청 라우팅 (운영 비서)", "프로
    boundaries=[bnd("Bnd_Rate", "Task_Rate", "error", "실패", error="TASK_FAILED"), bnd("Bnd_Answer", "Task_Answer", "error", "실패", error="TASK_FAILED"),
                bnd("Bnd_Web", "Task_Web", "error", "실패", error="TASK_FAILED")],
    inputs=[("요청", "string", True, "직원 메시지"), ("회신주소", "string", True, "")],
-   service_keys={"web-reader": "ops-web-reader"}, extensions=[{"id": "web-reader", "version": ">=1,<2"}],
+   extensions=[{"id": "web-reader", "version": ">=1,<2"}],
    cases=[Case("환율", {"요청": "오늘 달러 환율?", "회신주소": {"$test_receiver": "reply"}}, {"intent": "exchange_rate"}),
           Case("질문", {"요청": "회의실 예약 어떻게 해요?", "회신주소": {"$test_receiver": "reply"}}, {"intent": "answer"})],
    features=["메시지 시작 + AI 라우팅", "가지마다 오류 경계 → 한 실패 처리로 합류", "웹 읽기는 서버에서 확장(서비스 앱)으로 — 서버에서 `domain: web` 불가"],
@@ -218,7 +218,7 @@ FX("FX-15", "fx15_web_form", "웹 양식 제출 (PC)", "프로토타입 example_
    [f("Start", "Task_Prepare"), f("Task_Prepare", "Task_Submit"), f("Task_Submit", "Gw_Submitted"),
     f("Gw_Submitted", "Task_Lookup", "'접수' in 제출메시지", "예"), f("Gw_Submitted", "Task_NotSubmitted", default=True, name="아니오"),
     f("Task_Lookup", "End"), f("Task_NotSubmitted", "End")],
-   service_keys={"ui-automation": "test-ui"}, extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}], 
+   extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}], 
    cases=[Case("시험 페이지", {}, {"제출메시지": "*", "연락처": "*"})],
    features=["UI 태스크 fill/click/read (C10 동작)", "화면 이동(`navigates`)", "읽은 문구로 분기"],
    lessons=["프로토타입은 WEB AI 태스크(자율)였다 — 등록 화면이면 UI 태스크로."])
@@ -234,7 +234,7 @@ FX("FX-16", "fx16_web_review_field", "현장 확인 (PC 결재 위치)", "프로
     script("Task_Skip", "건너뜀", "메모 = '사용자 보류'"), end("End")],
    [f("Start", "Task_Collect"), f("Task_Collect", "Approve_Review"), f("Approve_Review", "Gw_Ok"),
     f("Gw_Ok", "Task_Follow", "승인", "예"), f("Gw_Ok", "Task_Skip", default=True, name="아니오"), f("Task_Follow", "End"), f("Task_Skip", "End")],
-   service_keys={"ui-automation": "test-ui"}, extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}], 
+   extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}], 
    cases=[Case("승인", {}, {"승인": True}, {"Approve_Review": {"승인": True}}), Case("사람이 확인", {}, {}, manual=True)],
    features=["결재 위치 `field` (BUI-04 창)", "확인 중에도 실행 자리 유지"],
    lessons=["며칠 걸릴 수 있는 결재는 `field`로 두지 않는다 — 서버 BPM 프로세스로 옮기고 `center`. 실행 전 검사가 `field` + 긴 시간 제한을 경고한다."])
@@ -256,7 +256,7 @@ FX("FX-18", "fx18_parallel_loop", "병렬 반복", "새로 — 프로토타입 �
                         loop=dict(collection="주소목록", item="주소", result="상태", collect_into="상태목록", parallel=True)),
     script("Task_Count", "정상 수", "정상 = len([s for s in 상태목록 if s == 200])"), end("End")],
    [f("Start", "Task_Check"), f("Task_Check", "Task_Count"), f("Task_Count", "End")],
-   service_keys={"web-reader": "ops-web-reader"}, extensions=[{"id": "web-reader", "version": ">=1,<2"}],
+   extensions=[{"id": "web-reader", "version": ">=1,<2"}],
    inputs=[("주소목록", "list", True, "")],
    cases=[Case("5개", {"주소목록": ["https://example.com"] * 5}, {"정상": 5})],
    features=["`isSequential=false`", "결과 순서 = 입력 순서 (C14)", "PC에서는 차례로 돈다"],
@@ -275,13 +275,13 @@ FX("FX-19", "fx19_manual_task_pc", "수동 확인 (PC)", "프로토타입 manual
             "PC에서 `field`로 둘 때는 몇 분 안에 끝나는 일만. 며칠 걸릴 수 있으면 서버 BPM 프로세스 + Center 결재함 (BX-20)."])
 
 FX("FX-20", "fx20_external_adapter", "외부 확장 HTTP 어댑터 호출", "새로 — ADR-0018", "server", "수동 실행",
-   "우리 계약을 따르지 않는 외부 앱을 C13 HTTP 어댑터 정의로 부른다. 키는 서버 실행기의 비밀 저장소에서 `key_ref`로.", SRV,
-   [start("Start"), svc("Task_Lookup", "외부 조회", "ext-credit", "lookup", {"biz_no": "사업자번호"}, {"결과": "result"}, key_ref="finance-credit-test"),
+   "우리 계약을 따르지 않는 외부 앱을 C13 HTTP 어댑터 정의로 부른다. 주소·키는 어댑터 일꾼의 설정이고 BPM 프로세스에는 없다 (ADR-0102).", SRV,
+   [start("Start"), svc("Task_Lookup", "외부 조회", "ext-credit", "lookup", {"biz_no": "사업자번호"}, {"결과": "result"}),
     end("End")],
    [f("Start", "Task_Lookup"), f("Task_Lookup", "End")],
    extensions=[{"id": "ext-credit", "version": ">=1,<2"}], inputs=[("사업자번호", "string", True, "")], 
    cases=[Case("모의 서버", {"사업자번호": "123-45-67890"}, {"결과": {"score": 780}})],
-   features=["외부 확장 어댑터", "태스크 단위 `key_ref` (BPM 프로세스 기본 대신)", "Admin 서명된 정의만 사용"],
+   features=["외부 확장 어댑터", "Admin 서명된 정의만 사용"],
    lessons=["외부 정의의 `allowed_hosts` 밖으로는 어댑터가 부르지 않는다 (C13 §4-3)."])
 
 FX("FX-21", "fx21_hit_policies", "결정표 적중 정책 (UNIQUE·ANY)", "새로 — 커버리지 구멍 (M7 조각 29)", "server", "수동 실행",

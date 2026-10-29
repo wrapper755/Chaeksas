@@ -405,16 +405,30 @@ def test_b6_asks_the_host_about_extension_task_locations() -> None:
     assert "B6" in codes(xml, task_type_locations={"ui_task": ["pc"]})
 
 
-def test_b7_only_checks_the_name_of_a_written_key_ref() -> None:
-    """적지 않은 참조는 흠이 아니다 — 빌드·엔진이 C1 기본값을 쓴다 (ADR-0094). 적었으면 이름 규칙을 본다."""
-    task = ('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-            '<chk:serviceCall>{"app_id": "erp", "operation": "read"}</chk:serviceCall>'
-            "</bpmn:extensionElements></bpmn:serviceTask>")
-    assert "B7" not in codes(wrap(line(task)))
-    ok = wrap(line(task), process_json='{"run_location": "pc", "service_keys": {"erp": "erp-reader"}}')
-    assert "B7" not in codes(ok)
-    bad = wrap(line(task), process_json='{"run_location": "pc", "service_keys": {"erp": "ERP_Reader"}}')
-    assert "B7" in codes(bad)
+def test_b7_warns_about_the_old_key_fields_and_still_reads_them() -> None:
+    """옛 칸(`key_ref`·`service_keys`)은 **거부하지 않고 말한다** — 키가 없다 (ADR-0102, C14 B7)."""
+    def task(call: str) -> str:
+        return ('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
+                f"<chk:serviceCall>{call}</chk:serviceCall>"
+                "</bpmn:extensionElements></bpmn:serviceTask>")
+    plain = task('{"app_id": "erp", "operation": "read"}')
+    assert "B7" not in codes(wrap(line(plain)))
+
+    old = wrap(line(task('{"app_id": "erp", "operation": "read", "key_ref": "ERP_Reader"}')),
+               process_json='{"run_location": "pc", "service_keys": {"erp": "erp-reader"}}')
+    found = [v for v in validate(read_process(old)) if v.rule == "B7"]
+    assert len(found) == 1 and not found[0].blocks, "경고 한 줄이다 — 이름 규칙은 더 보지 않는다"
+    assert found[0].code == "old_key_field"
+    assert found[0].items == ["chk:process.service_keys", "T: chk:serviceCall.key_ref"]
+    process = read_process(old)
+    assert process.info.model_extra == {"service_keys": {"erp": "erp-reader"}}, "모르는 칸으로 받아 둔다"
+
+
+def test_no_example_writes_the_old_key_fields() -> None:
+    """업무 예제는 옛 칸을 적지 않는다 — 생성기(`exdsl.py`)가 `key_ref`를 거부한다."""
+    for path in sorted((EXAMPLES / "bpmn").glob("*.bpmn")):
+        text = path.read_text(encoding="utf-8")
+        assert "service_keys" not in text and "key_ref" not in text, path.name
 
 
 def test_b8_result_types_and_code_like_names() -> None:

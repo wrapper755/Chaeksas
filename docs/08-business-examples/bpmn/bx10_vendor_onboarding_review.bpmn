@@ -11,11 +11,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "ext-credit": "purchase-credit",
-    "compliance": "purchase-compliance",
-    "erp": "purchase-erp"
-  },
   "extensions": [
     {
       "id": "ext-credit",

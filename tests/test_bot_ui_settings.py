@@ -6,6 +6,7 @@ Windows CI에서도 이 파일이 돈다. **OS 전용 길은 그 OS에서만** �
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import xml.etree.ElementTree as ET
@@ -22,7 +23,6 @@ from chaeksas.bot_ui.settings import (
     DEFAULT_WORKER_PORT,
     START_ALWAYS,
     RuntimeSettings,
-    ServiceKeyRef,
     Settings,
 )
 from chaeksas.core import machine
@@ -78,17 +78,26 @@ def test_environment_variables_win(monkeypatch: Any, tmp_path: Path) -> None:
 
 
 def test_saving_never_writes_a_secret(tmp_path: Path) -> None:
-    """설정 파일에는 **값이 없다**. 키 참조 이름(BUI-10)은 비밀이 아니다 (ADR-0013 §3).
-
-    이름은 들어가야 한다 — 그것으로 OS 비밀 저장소를 찾는다. 들어가면 안 되는 것은 값이다.
-    """
-    made = replace(Settings(), service_keys=(ServiceKeyRef(ref="finance-invoice", app_id="erp-finance"),))
-    path = made.save(tmp_path / "settings.json")
+    """설정 파일에는 **값이 없다** (ADR-0013 §3) — 비밀은 OS 비밀 저장소다."""
+    path = Settings().save(tmp_path / "settings.json")
     text = path.read_text(encoding="utf-8")
-    assert "finance-invoice" in text
     assert "chk_" not in text
     for word in ("api_key", "secret", "token", "password"):
         assert word not in text.lower()
+
+
+
+def test_an_old_files_service_keys_are_not_read_and_drop_out_on_save(tmp_path: Path) -> None:
+    """옛 BUI-10 칸(`service_keys`)은 읽지 않는다 — 서비스 앱 키가 없다 (ADR-0102). 다음 저장에서 빠진다."""
+    path = tmp_path / "settings.json"
+    path.write_text(
+        '{"center_url": "http://old:8800", "service_keys": [{"ref": "finance-invoice", "app_id": "erp"}]}',
+        encoding="utf-8",
+    )
+    found = Settings.from_json_dict(json.loads(path.read_text(encoding="utf-8")))
+    assert found.center_url == "http://old:8800", "옛 칸 하나로 나머지를 버리지 않는다"
+    found.save(path)
+    assert "service_keys" not in path.read_text(encoding="utf-8")
 
 
 # ─────────────────────────── PC 고유값 ───────────────────────────

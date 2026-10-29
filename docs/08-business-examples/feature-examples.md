@@ -43,7 +43,7 @@
 | 출처 | 프로토타입 example_api |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx01_api_call.bpmn) · [시험 케이스](cases/fx01_api_call.cases.json) |
@@ -110,7 +110,7 @@ GET으로 한 번 불러 `rates.KRW`를 꺼낸다.
 | 출처 | 프로토타입 example_business_rule + discount_policy.dmn |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx02_business_rule.bpmn) · [시험 케이스](cases/fx02_business_rule.cases.json) · [DMN](bpmn/discount_policy.dmn) |
@@ -174,7 +174,7 @@ GET으로 한 번 불러 `rates.KRW`를 꺼낸다.
 | 출처 | 프로토타입 example_call_mapping |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx03_call_mapping.bpmn) · [시험 케이스](cases/fx03_call_mapping.cases.json) |
@@ -223,7 +223,7 @@ GET으로 한 번 불러 `rates.KRW`를 꺼낸다.
 | 출처 | 프로토타입 example_call_mapping의 하위 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | BPM 프로세스 호출 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx03b_amount_branch.bpmn) · [시험 케이스](cases/fx03b_amount_branch.cases.json) |
@@ -274,7 +274,7 @@ GET으로 한 번 불러 `rates.KRW`를 꺼낸다.
 | 출처 | 프로토타입 example_conditional_start |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 5분마다 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx04_folder_poll.bpmn) · [시험 케이스](cases/fx04_folder_poll.cases.json) |
@@ -333,7 +333,7 @@ GET으로 한 번 불러 `rates.KRW`를 꺼낸다.
 | 출처 | 프로토타입 example_desktop |
 | 실행 위치 | **PC (Bot)** |
 | 시작 | PC Bot 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M4** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → Bot UI 실행 |
 | 파일 | [BPMN](bpmn/fx05_desktop_autonomous.bpmn) · [시험 케이스](cases/fx05_desktop_autonomous.cases.json) |
@@ -406,7 +406,7 @@ GET으로 한 번 불러 `rates.KRW`를 꺼낸다.
 | 출처 | 프로토타입 example_document |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx06_document_read.bpmn) · [시험 케이스](cases/fx06_document_read.cases.json) |
@@ -474,7 +474,7 @@ PDF 한 장에서 정해진 값을 읽는다.
 | 출처 | 프로토타입 example_email |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx07_email.bpmn) · [시험 케이스](cases/fx07_email.cases.json) |
@@ -529,7 +529,7 @@ PDF 한 장에서 정해진 값을 읽는다.
 | 출처 | 프로토타입 example_error_boundary |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx08_error_boundary.bpmn) · [시험 케이스](cases/fx08_error_boundary.cases.json) |
@@ -599,7 +599,7 @@ API 조회가 실패하면 기본값을 쓰고, 어느 쪽이든 사람이 확�
 | 출처 | 프로토타입 example_loop |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx09_sequential_loop.bpmn) · [시험 케이스](cases/fx09_sequential_loop.cases.json) |
@@ -675,7 +675,7 @@ API 조회가 실패하면 기본값을 쓰고, 어느 쪽이든 사람이 확�
 | 출처 | 프로토타입 example_operator |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `work_request` |
-| 서비스 앱·키 참조 | `web-reader` → `ops-web-reader` |
+| 서비스 앱 | `web-reader` |
 | 확장 | web-reader |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx10_operator_routing.bpmn) · [시험 케이스](cases/fx10_operator_routing.cases.json) |
@@ -792,7 +792,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 프로토타입 example_parallel |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx11_parallel.bpmn) · [시험 케이스](cases/fx11_parallel.cases.json) |
@@ -842,7 +842,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 프로토타입 example_schedule |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 매일 09:00 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx12_daily_report.bpmn) · [시험 케이스](cases/fx12_daily_report.cases.json) |
@@ -889,7 +889,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 프로토타입 example_signal |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx13_signal.bpmn) · [시험 케이스](cases/fx13_signal.cases.json) |
@@ -959,7 +959,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 프로토타입 example_timer |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx14_timers.bpmn) · [시험 케이스](cases/fx14_timers.cases.json) |
@@ -1010,7 +1010,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 프로토타입 example_web_form |
 | 실행 위치 | **PC (Bot)** |
 | 시작 | PC Bot 수동 실행 |
-| 서비스 앱·키 참조 | `ui-automation` → `test-ui` |
+| 서비스 앱 | 없음 |
 | 확장 | ui-automation |
 | 마일스톤 | **M4** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → Bot UI 실행 |
 | 파일 | [BPMN](bpmn/fx15_web_form.bpmn) · [시험 케이스](cases/fx15_web_form.cases.json) |
@@ -1061,7 +1061,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 프로토타입 example_web_review |
 | 실행 위치 | **PC (Bot)** |
 | 시작 | PC Bot 수동 실행 |
-| 서비스 앱·키 참조 | `ui-automation` → `test-ui` |
+| 서비스 앱 | 없음 |
 | 확장 | ui-automation |
 | 마일스톤 | **M4** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → Bot UI 실행 |
 | 파일 | [BPMN](bpmn/fx16_web_review_field.bpmn) · [시험 케이스](cases/fx16_web_review_field.cases.json) |
@@ -1112,7 +1112,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 프로토타입 example_webhook |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx17_webhook.bpmn) · [시험 케이스](cases/fx17_webhook.cases.json) |
@@ -1168,7 +1168,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 새로 — 프로토타입 공백 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | `web-reader` → `ops-web-reader` |
+| 서비스 앱 | `web-reader` |
 | 확장 | web-reader |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx18_parallel_loop.bpmn) · [시험 케이스](cases/fx18_parallel_loop.cases.json) |
@@ -1222,7 +1222,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 프로토타입 manualTask 사용 예 |
 | 실행 위치 | **PC (Bot)** |
 | 시작 | PC Bot 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → Bot UI 실행 |
 | 파일 | [BPMN](bpmn/fx19_manual_task_pc.bpmn) · [시험 케이스](cases/fx19_manual_task_pc.cases.json) |
@@ -1270,14 +1270,14 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 새로 — ADR-0018 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | `ext-credit` → `finance-credit-test` (태스크 지정) |
+| 서비스 앱 | `ext-credit` |
 | 확장 | ext-credit |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx20_external_adapter.bpmn) · [시험 케이스](cases/fx20_external_adapter.cases.json) |
 
 **업무 배경과 목표**
 
-우리 계약을 따르지 않는 외부 앱을 C13 HTTP 어댑터 정의로 부른다. 키는 서버 실행기의 비밀 저장소에서 `key_ref`로.
+우리 계약을 따르지 않는 외부 앱을 C13 HTTP 어댑터 정의로 부른다. 주소·키는 어댑터 일꾼의 설정이고 BPM 프로세스에는 없다 (ADR-0102).
 
 **왜 서버에서 도는가**
 
@@ -1294,7 +1294,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | id | 이름 | 종류 | 핵심 속성 | 다음 |
 | --- | --- | --- | --- | --- |
 | `Start` | 시작 | 시작 이벤트 | — | Task_Lookup |
-| `Task_Lookup` | 외부 조회 | 서비스 앱 태스크 | `ext-credit`.`lookup` · 입력 biz_no → 결과 · 키 참조 `finance-credit-test`(태스크 지정) | End |
+| `Task_Lookup` | 외부 조회 | 서비스 앱 태스크 | `ext-credit`.`lookup` · 입력 biz_no → 결과 | End |
 | `End` | 끝 | 끝 이벤트 | — |  |
 
 **시험 케이스**
@@ -1306,7 +1306,6 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 **이 예제로 확인하는 것**
 
 - 외부 확장 어댑터
-- 태스크 단위 `key_ref` (BPM 프로세스 기본 대신)
 - Admin 서명된 정의만 사용
 
 **주의**
@@ -1323,7 +1322,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 새로 — 커버리지 구멍 (M7 조각 29) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx21_hit_policies.bpmn) · [시험 케이스](cases/fx21_hit_policies.cases.json) · [DMN](bpmn/risk_grade.dmn) · [DMN](bpmn/owner_any.dmn) |
@@ -1403,7 +1402,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 새로 — 커버리지 구멍 (M7 조각 30) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx22_append_output.bpmn) · [시험 케이스](cases/fx22_append_output.cases.json) |
@@ -1473,7 +1472,7 @@ USD/KRW 환율을 조회해 한 문장으로 답한다.
 | 출처 | 새로 — 커버리지 구멍 (M7 조각 31) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 수동 실행 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx23_replay_modes.bpmn) · [시험 케이스](cases/fx23_replay_modes.cases.json) |
@@ -1583,7 +1582,7 @@ AI 태스크 셋을 나란히 두고 **결정 수행에서 서로 다르게 돈�
 | 출처 | 새로 — 가상 직원·일괄 기동 (ADR-0079·0082) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 작업 지시 — 인입 목록을 받는다 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx24_batch_intake.bpmn) · [시험 케이스](cases/fx24_batch_intake.cases.json) |
@@ -1653,7 +1652,7 @@ AI 태스크 셋을 나란히 두고 **결정 수행에서 서로 다르게 돈�
 | 출처 | 새로 — FX-24가 맡기는 서버 Bot (ADR-0082) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 작업 지시 — FX-24가 **위임**으로 만든다 |
-| 서비스 앱·키 참조 | 없음 |
+| 서비스 앱 | 없음 |
 | 확장 | 없음 (플랫폼 기본 태스크만) |
 | 마일스톤 | **M3** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/fx25_batch_item.bpmn) · [시험 케이스](cases/fx25_batch_item.cases.json) |

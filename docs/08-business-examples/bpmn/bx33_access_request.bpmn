@@ -11,9 +11,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "directory": "it-directory"
-  },
   "extensions": [
     {
       "id": "directory",

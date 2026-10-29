@@ -189,7 +189,7 @@
 | --- | --- |
 | `allowed_hosts` | 부를 수 있는 호스트 목록 (정확한 이름, 와일드카드 없음). `base_url`·Center의 `base_url`·`catalog_url`·`health`의 호스트가 모두 이 안에 있어야 한다 |
 | `allow_private_network` | 기본 false. 사설망·루프백·링크 로컬 주소를 부르려면 true여야 하고, 이것도 서명 대상이다 |
-| `auth` | `{type: "bearer" \| "header", name?}`. 값은 어댑터 일꾼 설정의 키(`CHK_ADAPTER__EXT__<확장>__KEY`). **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md), `takes_key()`) — 어댑터는 키를 싣지 않고 빌드는 C1 `key_ref`를 적지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
+| `auth` | `{type: "bearer" \| "header", name?}`. 값은 어댑터 일꾼 설정의 키(`CHK_ADAPTER__EXT__<확장>__KEY`). **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)) — 어댑터 일꾼은 키를 싣지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
 | `limits` | `{timeout_s: 60, max_response_kb: 1024}` |
 | `health` | 선택. `{path, expect_status: 200}`. 없으면 Center는 상태를 「확인 전」으로 둔다 |
 | `operations` | 아래 Operation[] |

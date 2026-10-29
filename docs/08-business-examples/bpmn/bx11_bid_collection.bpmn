@@ -12,7 +12,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {},
   "extensions": [],
   "outputs": [],
   "inputs": [

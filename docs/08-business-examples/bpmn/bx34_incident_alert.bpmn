@@ -12,9 +12,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {
-    "observability": "ops-observability"
-  },
   "extensions": [
     {
       "id": "observability",

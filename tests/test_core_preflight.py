@@ -43,23 +43,12 @@ def manifest(**requires: Any) -> Manifest:
     return Manifest.model_validate({**BASE, "requires": Requires(**requires).to_json_dict()})
 
 
-# ─────────────────────────── 키 참조 ───────────────────────────
-
-
-def test_key_refs_count_both_the_inherited_and_the_task_ones() -> None:
-    """C1 — 이름만 센다 (확장 점검 `PreflightTarget.key_refs`가 받는 칸이다)."""
-    m = manifest(
-        service_apps=[
-            ServiceAppNeed(app_id="erp", operations=["create"], key_ref="fin-erp", task_key_refs=["fin-erp-ro"]),
-            ServiceAppNeed(app_id="crm", operations=["upsert"], key_ref="fin-crm"),
-        ]
-    )
-    assert preflight.key_refs_of(m) == ("fin-erp", "fin-erp-ro", "fin-crm")
+# ─────────────────────────── 서비스 앱 ───────────────────────────
 
 
 def test_a_service_app_bot_needs_no_key_on_this_pc() -> None:
     """ADR-0102 — 서비스 앱은 Center에 외부 작업으로 올린다. **키가 없다고 막지 않는다.**"""
-    m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"], key_ref="fin-erp")])
+    m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"])])
     found = preflight.check(m)
     assert not found.blocks and found.blocked == ()
 
@@ -85,7 +74,7 @@ def test_an_extension_with_no_local_code_does_not_block() -> None:
     """
     m = manifest(
         extensions=[ExtensionNeed(id="crm", version=">=1,<2")],
-        service_apps=[ServiceAppNeed(app_id="crm", operations=["upsert"], key_ref="it-crm")],
+        service_apps=[ServiceAppNeed(app_id="crm", operations=["upsert"])],
     )
     found = preflight.check(m, host=ExtensionHost())
     assert not found.blocks, "코드가 필요 없는 확장이 깔려 있지 않다고 막으면 안 된다"
@@ -147,11 +136,12 @@ def context(_extension_id: str) -> Any:
     return object()
 
 
-def test_an_extension_check_runs_and_sees_the_key_refs() -> None:
-    m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"], key_ref="fin-erp")])
+def test_an_extension_check_runs_and_its_old_key_refs_are_empty() -> None:
+    """`PreflightTarget.key_refs`는 옛 칸이라 **늘 비어 있다** (ADR-0102 — 키가 없다)."""
+    m = manifest(service_apps=[ServiceAppNeed(app_id="erp", operations=["a"])])
     found = preflight.check(m, host=FakeHost(Noisy()), context=context)
 
-    assert [(f.id, f.message) for f in found.findings] == [("pages", "키 참조 1개")]
+    assert [(f.id, f.message) for f in found.findings] == [("pages", "키 참조 0개")]
     assert not found.blocks, "경고는 막지 않는다"
 
 

@@ -22,7 +22,7 @@
 | 출처 | 프로토타입 시나리오 2 (끝남 — 케이스 3/3, 재생 3/3) |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `new_hire` — 인사 시스템의 입사 확정 |
-| 서비스 앱·키 참조 | `directory` → `hr-directory` |
+| 서비스 앱 | `directory` |
 | 확장 | directory |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx20_employee_onboarding.bpmn) · [시험 케이스](cases/bx20_employee_onboarding.cases.json) |
@@ -119,7 +119,7 @@
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `leave_request` — 그룹웨어 휴가 신청 |
-| 서비스 앱·키 참조 | `hris` → `hr-hris` |
+| 서비스 앱 | `hris` |
 | 확장 | hris |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx21_leave_request.bpmn) · [시험 케이스](cases/bx21_leave_request.cases.json) |
@@ -189,7 +189,7 @@
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 메시지 `employee_left` — 인사 시스템이 퇴사 처리 때 한 사람씩 보냄 |
-| 서비스 앱·키 참조 | `directory` → `sec-directory`, `erp` → `sec-erp` |
+| 서비스 앱 | `directory`, `erp` |
 | 확장 | directory, erp |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx22_offboarding_access.bpmn) · [시험 케이스](cases/bx22_offboarding_access.cases.json) |
@@ -271,7 +271,7 @@ API만 쓴다 — 서버. 세 시스템을 동시에.
 | 출처 | 새로 설계 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | 타이머 — 매주 수요일 10:00 |
-| 서비스 앱·키 참조 | `lms` → `hr-lms`, `mailer` → `hr-mailer` |
+| 서비스 앱 | `lms`, `mailer` |
 | 확장 | lms, mailer |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx23_training_reminder.bpmn) · [시험 케이스](cases/bx23_training_reminder.cases.json) · [DMN](bpmn/training_nudge.dmn) |
@@ -350,7 +350,7 @@ API·메일 — 서버.
 | 출처 | 새로 설계 — 호출 대상 |
 | 실행 위치 | **서버 (서버 Bot)** |
 | 시작 | BPM 프로세스 호출 — BX-21 등 |
-| 서비스 앱·키 참조 | `hris` → `hr-hris` |
+| 서비스 앱 | `hris` |
 | 확장 | hris |
 | 마일스톤 | **M5** Studio 시험 실행에서 처음 통과 → M5 Center 배포 → M7 서버 실행기 |
 | 파일 | [BPMN](bpmn/bx24_leave_balance.bpmn) · [시험 케이스](cases/bx24_leave_balance.cases.json) |

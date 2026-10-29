@@ -10,7 +10,6 @@
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
-  "service_keys": {},
   "extensions": [],
   "outputs": [
     "배송비",
