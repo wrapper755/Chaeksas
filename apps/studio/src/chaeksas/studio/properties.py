@@ -75,6 +75,10 @@ CONDITION_KINDS = frozenset({"SequenceFlow"})
 SCRIPT_KINDS = frozenset({"ScriptTask"})
 #: 결재·확인 편집기를 붙이는 요소 (C14 `chk:approval` — 결재는 userTask, 확인은 manualTask).
 APPROVAL_KINDS = frozenset({"UserTask", "ManualTask"})
+#: 보내기 편집기를 붙이는 요소 (C14 `chk:email`·`chk:webhook`).
+SEND_KINDS = frozenset({"SendTask"})
+#: 보내기 편집기가 고르는 `chk:` 요소 — 하나만 남긴다.
+SEND_CHANNELS = ("email", "webhook")
 
 
 #: `chk:*`를 갖지 않는 게이트웨이 — 가지의 조건은 나가는 순서 흐름에 있다 (C14).
@@ -310,6 +314,9 @@ class Properties(QWidget):
         if "approval" in chk or str(self.loaded.get("type") or "") in APPROVAL_KINDS:
             self._attach_approval_editor(chk)
             return
+        if any(name in chk for name in SEND_CHANNELS) or str(self.loaded.get("type") or "") in SEND_KINDS:
+            self._attach_send_editor(chk)
+            return
         if self.extensions is None:
             return
         task = _task_of(chk)
@@ -345,6 +352,15 @@ class Properties(QWidget):
         made.load(_body_of(chk, "approval") or {})
         manual = str(self.loaded.get("type") or "") == "ManualTask"
         self._attach(made, TAB_CONFIRMATION if manual else TAB_APPROVAL, key="approval")
+
+    def _attach_send_editor(self, chk: dict[str, Any]) -> None:
+        """보내기 (`chk:email`·`chk:webhook`) — 아직 없는 보내기 태스크에도 붙는다 (적용하면 생긴다)."""
+        from chaeksas.studio.send_editor import TAB_LABEL, SendEditor  # noqa: PLC0415
+
+        made = SendEditor(self, names=self.known_names)
+        bodies = {name: _body_of(chk, name) for name in SEND_CHANNELS}
+        made.load({name: body for name, body in bodies.items() if body is not None})
+        self._attach(made, TAB_LABEL, key="send")
 
     def _attach(self, found: Any, label: str, *, key: str) -> None:
         self._editor = found
@@ -431,6 +447,13 @@ class Properties(QWidget):
                 # STU-14·결재는 `chk:<이름>` **통째로** 쓴다 (`data` 같은 포장이 없다).
                 changes["chk"] = {self._editor_key: json.dumps(data, ensure_ascii=False, indent=2)}
                 return changes, None
+            if self._editor_key == "send":
+                # 고른 채널 하나만 남긴다 — 다른 쪽이 그림에 있었으면 `None`으로 적어 캔버스가 지운다.
+                before = dict(self.loaded.get("chk") or {})
+                sent: dict[str, Any] = {name: None for name in SEND_CHANNELS if name in before and name not in data}
+                sent.update({name: json.dumps(body, ensure_ascii=False, indent=2) for name, body in data.items()})
+                changes["chk"] = sent
+                return changes, None
             # `chk:task`는 `{type, extension, data}` **통째로** 오간다 — 본문만 보내면
             # 고칠 때마다 `type`·`extension`이 날아간다 (C1 — 패키지가 그 확장을 요구하지 않게 된다).
             task = _task_of(dict(self.loaded.get("chk") or {})) or {}
@@ -482,6 +505,7 @@ __all__ = [
     "GATEWAY_KINDS",
     "KINDS",
     "SCRIPT_KINDS",
+    "SEND_KINDS",
     "Properties",
     "as_text",
     "check_chk",
