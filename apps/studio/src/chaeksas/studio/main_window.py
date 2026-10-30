@@ -51,6 +51,7 @@ from chaeksas.studio.call_editor import local_targets
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.connect_dialog import CenterConnectDialog
+from chaeksas.studio.dmn_table import decisions_of
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extension_dialog import StudioExtensionsDialog, pin_patch
 from chaeksas.studio.extensions import Extensions
@@ -152,6 +153,8 @@ class MainWindow(QMainWindow):
         self.properties.process_wanted.connect(self._show_process)
         # STU-04 「호출」이 고를 정의 — **고를 때마다** 열린 BPM 프로세스에서 읽는다 (설치 뒤에도 맞게).
         self.properties.call_targets = lambda: local_targets(self.process)
+        # STU-04 「규칙」이 고를 결정표 — 같은 결로 고를 때마다 읽는다 (STU-04a에서 저장한 뒤에도 맞게).
+        self.properties.decision_tables = lambda: decisions_of(self.process)
         self.canvas.selected.connect(self._on_selected)
 
         self.preflight = Preflight(self)

@@ -149,15 +149,22 @@ class BpmProcess:
         (`processes()`와 같은 결).
         """
         found: dict[str, Decision] = {}
-        for path in [
-            *sorted((self.folder / LIBS_DIR).glob("*.dmn")),
-            *sorted((self.folder / "process").glob("*.dmn")),
-        ]:
+        for path, _received in self.decision_files():
             try:
                 found.update(read_decisions(path.read_text(encoding="utf-8")))
             except DmnReadError:
                 continue  # 읽기 오류는 실행 전 검사가 말한다 (여기서 터뜨리지 않는다)
         return found
+
+    def decision_files(self) -> list[tuple[Path, bool]]:
+        """결정표 파일들을 **읽는 차례대로** — `(경로, 받은 것인가)`. 받은 `libs/`가 먼저, 내 `process/`가 뒤다.
+
+        `decisions()`와 STU-04 「규칙」 탭(`dmn_table.catalog`)이 **같은 차례**를 쓴다 — 뒤의 것이 이긴다.
+        """
+        return [
+            *((path, True) for path in sorted((self.folder / LIBS_DIR).glob("*.dmn"))),
+            *((path, False) for path in sorted((self.folder / "process").glob("*.dmn"))),
+        ]
 
     def processes(self) -> dict[str, BpmnProcess]:
         """호출(`callActivity`)이 찾을 다른 정의 — `RunEnv.processes`.
