@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-12). 모델·검사 규칙(E1~E8)과 **기여 지점마다 읽는 쪽**이 있다 — 확장 호스트(`core.extensions`), Studio(팔레트·편집기·`studio.resource_views`), PC 실행기(`bot_ui.panels`·로컬 런타임), Tool UI(`tool_ui.tools`), 콘솔(`console.pages` 생성물), Center(외부 확장 등록·어댑터 `health`) |
+| 상태 | **구현됨** (2026-10-12). 모델·검사 규칙(E1~E8)과 **기여 지점마다 읽는 쪽**이 있다 — 확장 호스트(`core.extensions`), Studio(팔레트·편집기·`studio.resource_views`), PC 실행기(`bot_ui.panels`·로컬 런타임), Tool UI(`tool_ui.tools`), 콘솔(`console.pages` 생성물), Center(외부 확장 등록) |
 | schema | 2 (1은 `local_runtimes.command`를 쓰던 것 — 아래 변경 이력) |
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·PC 실행기·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
 | 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |
@@ -188,11 +188,11 @@
 
 | 필드 | 뜻 |
 | --- | --- |
-| `allowed_hosts` | 부를 수 있는 호스트 목록 (정확한 이름, 와일드카드 없음). `base_url`·Center의 `base_url`·`catalog_url`·`health`의 호스트가 모두 이 안에 있어야 한다 |
+| `allowed_hosts` | 부를 수 있는 호스트 목록 (정확한 이름, 와일드카드 없음). `base_url`·`catalog_url`·`health`의 호스트가 모두 이 안에 있어야 한다 |
 | `allow_private_network` | 기본 false. 사설망·루프백·링크 로컬 주소를 부르려면 true여야 하고, 이것도 서명 대상이다 |
 | `auth` | `{type: "bearer" \| "header", name?}`. 값은 어댑터 일꾼 설정의 키(`CHK_ADAPTER__EXT__<확장>__KEY`). **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)) — 어댑터 일꾼은 키를 싣지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
 | `limits` | `{timeout_s: 60, max_response_kb: 1024}` |
-| `health` | 선택. `{path, expect_status: 200}`. 없으면 Center는 상태를 「확인 전」으로 둔다 |
+| `health` | 선택. `{path, expect_status: 200}`. **지금 읽는 쪽이 없다** — Center는 외부 앱을 두드리지 않고 상태를 토픽에서 읽는다(C7·C15, [ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 받아 두기만 한다 |
 | `operations` | 아래 Operation[] |
 
 Operation:

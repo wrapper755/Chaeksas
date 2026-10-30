@@ -29,7 +29,7 @@
 ├─ memory/specs.json        # 재생 명세 (학습 자료)
 ├─ preflight.json           # Studio가 계산한 사전 점검 결과 (노드별 ok/warning/blocked)
 ├─ libs/                    # 복사해 넣은 공유 BPM 프로세스 (requires.libs) — 정의(.bpmn)와 그것이 쓰는 결정표(.dmn)
-└─ SIGNATURE                # Admin 승인 서명 (C2, 있을 때만)
+└─ SIGNATURE                # 승인 서명 — Center가 짓는다 (C2, 있을 때만)
 ```
 
 시험 케이스·실행 기록·비밀은 넣지 않는다.

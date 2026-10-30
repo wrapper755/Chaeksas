@@ -119,7 +119,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 - `complete` `{output, mode_used, replayed, usage}` · `fail` `{code, message, retryable, outcome_unknown?, detail?}` · `extend` `{lock_s}`.
 - **먼저 끝낸 쪽이 이긴다.** 잠금이 지난 일꾼의 `complete`도 그 일감이 아직 끝나지 않았으면 받는다(값을 잃지 않으려고). 이미 끝났으면 409 `already_completed` — 일꾼은 버리면 된다(멱등이라 같은 일이다).
 - 잠근 일꾼이 아니면 403 `not_locked_by_you`. 거둔 일감이면 409 `cancelled` — 일꾼은 하던 일을 멈춰도 된다.
-- 일꾼이 쥔 일감이 오래 걸리면 `extend`로 늘린다 — `service_kit`은 잠금의 절반이 지날 때마다 늘린다.
+- 일꾼이 쥔 일감이 오래 걸리면 `extend`로 늘릴 수 있다. **`service_kit`은 늘리지 않는다** — 가져갈 때 `lock_s`를 비워 작업 `timeout_s`만큼 잡으므로 늘릴 일이 없다(`service_kit/consumer.py`). 지금 `extend`를 부르는 일꾼은 없다.
 - `output`에 manifest `output_schema.required`의 칸이 빠졌으면 Center가 422 `output_invalid`로 막는다 — 일꾼의 버그를 부르는 쪽의 업무 실패로 넘기지 않는다.
 
 ### 콘솔이 보는 일감 (`ExternalTaskInfo`)

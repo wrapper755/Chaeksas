@@ -15,6 +15,8 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 **「문서에 돈다고 적혀 있다」와 「부르는 쪽이 있다」는 다르다.**
 
+**2026-10-31에 한 번 더 대조했다** (main `dacdc3b`) — §3과 로드맵의 코드 항목이 다 비었는데, 지난번 §3-20(타이머 시작을 깨우는 자리)이 목록에 없다가 코드를 대조하다 나왔기 때문이다. 계약 열다섯은 칸·상태값·트리거마다 **쓰는 쪽과 읽는 쪽**을 `git grep`으로 세었고(`tests/`와 계약 모듈은 뺐다), 화면 문서는 라벨 글을 코드에서 찾았고, 업무 예제는 55개의 `chk:*`를 모두 읽어 쓰인 키를 셌다. 새로 찾은 것은 §3-21~27·§8·§9이고, 대조하다 찾은 **낡은 줄은 그 자리에서 고쳤다**(§2).
+
 ## 1. 계약 문서 상태
 
 | 계약 | 문서 머리말 | 코드 | 「구현됨」까지 남은 것 |
@@ -25,7 +27,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C4 | **구현됨** | `contracts.bot_ui`, Center·PC 실행기 양쪽 | — (`reserved_for`를 채웠고 `key_expires_at`으로 BUI-05 Center API 키 만료를 닫았다) |
 | C5 | **구현됨** | `contracts.center_api`, Center 전부 | — (닫았다 — 지원 종료·참조·삭제, 그리고 **권한표**까지. 패키지 쪽은 키 종류를 보는 관문이 따로 있다: `auth.require_upload`·`require_package_read`·`api.package_access.guard_download`) |
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
-| C7 | **구현됨** | `contracts.resources`·`center_keys` | — (닫았다 — 외부 확장은 어댑터 `health`로 본다) |
+| C7 | **구현됨** | `contracts.resources`·`center_keys` | — (닫았다 — 상태는 토픽에서 온다, C15). `requires.resources`를 짓는 쪽이 없어 `used_by`가 빈다 — §3-24 |
 | C8 | **구현됨** | **`ext.ui_automation.contracts.plan`** | — (닫았다) |
 | C9 | **구현됨** | **`ext.ui_automation.contracts.registry`·`console`** | — (관리 콘솔이 읽는 길도 돈다) |
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
@@ -43,11 +45,85 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 2. 문서가 코드와 어긋난 자리 (코드를 고치는 일이 아니다)
 
-**없다.** 마지막 하나(§2-5 — C3 `run_started.bpm_process_id`가 패키지 id인가 그림의 process id인가)는 패키지 id로 정해 엔진·계약을 맞췄다 ([ADR-0086](decisions/0086-run-identity-is-the-package-id.md)).
+**2026-10-31 대조에서 찾은 것은 그 자리에서 고쳤다** — ADR-0090 뒤에 남은 「Admin」 글(C1 패키지 구성·C4 `admin_keys`·C12 §설치·BUI-11·계약 README의 C2·C5 줄), 계약 README의 C12 「(제안)」·C14 「B1~B14」, C5 `server_runner_not_available`의 「M7까지」, C14 `DELEGATION_FAILED`의 「(예약)」, ADR-0102 뒤에 남은 것(C7 머리말의 어댑터 `health`·`ToolpackResource`·내지 않는 오류 코드 넷, C13 상태 줄·`allowed_hosts`의 「Center의 `base_url`」·`health` 칸), C15·C11의 「`service_kit`이 잠금을 늘린다」(늘리지 않는다), CON-04 상태 줄의 「현장에서 올라오는 결재가 없다」, UIA·Worker 화면 문서의 코드 경로, 화면 README의 WRK 대응, STU-04 스크립트의 「Python」, STU-05의 「서버 실행은 M7부터」, 업무 예제 README의 「실행 — 아직 없음」과 닫힌 공백 넷. **코드가 문서와 다르고 문서가 맞는 것**은 고치지 않고 §3·§8에 적었다(§3-22가 그 꼴이다).
+
+그 전의 마지막 하나(§2-5 — C3 `run_started.bpm_process_id`가 패키지 id인가 그림의 process id인가)는 패키지 id로 정해 엔진·계약을 맞췄다 ([ADR-0086](decisions/0086-run-identity-is-the-package-id.md)).
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열다섯의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. **남은 계약 공백은 없다.**
+계약 열다섯의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. 그 뒤 2026-10-31 대조가 **새로 일곱**(§3-21~27)을 찾았다 — 넷(§3-21~24)은 업무에 닿고, §3-25는 엔진의 흠, §3-26·27은 작은 칸과 「미정」 모음이다.
+
+### 3-21. PC BPM 프로세스로 메시지를 넣는 길이 없다
+
+**무엇이 없나.** C12 「C4와 다른 점」 표는 PC 쪽 메시지를 「PC 실행기 메시지 수신(8790)」으로 적었고, C14 §이벤트도 「PC는 PC 실행기 메시지 수신」이라고 적었으며, ADR-0014 §1도 메시지 수신을 PC 실행기 대기열의 출처로 든다. 그런데 **받는 쪽이 아무 데도 없다.** 그래서 실행 위치가 `pc`인 그림의 받기 태스크·메시지 중간 받기·경계는 영원히 기다리고(타이머 경계가 없으면), 메시지 시작 트리거는 울리지 않는다. 그림 검사도 이것을 말하지 않는다 — B6은 반대쪽(서버에서 못 하는 것)만 본다.
+
+**근거.**
+- Center `api/messages.py`는 **서버 실행기만** 고른다 — 기다리는 실행은 `server_runners` 행에서 찾고(:145), 메시지 시작은 `target: {"type": "server_runner"}`로 작업을 만든다(:220). C4 하트비트 응답에는 `messages[]`가 없다.
+- PC 실행기에는 설정 칸만 있다 — `bot_ui/settings.py:23` `DEFAULT_WEBHOOK_PORT = 8790`·`webhook_port`를 읽는 곳이 없고, BUI-03 「나중에」 탭이 「메시지 수신 포트 — … M5」를 꺼 둔 채 보인다(`settings_dialog.py:502-512`).
+- `contracts.bpmn_ext.server_blockers`(:1304)는 서버의 막힘만 센다. PC에서 메시지를 받는 그림을 막는 검사는 없다.
+- 업무 예제 중 메시지를 받는 16개는 **모두** `run_location: server`라 예제가 이 길을 밟지 않는다.
+
+**먼저 정할 것.** 「PC도 Center를 거쳐 받는다」(C12 §메시지와 같은 길 — C4 하트비트 응답에 `messages[]`·ack, PC 실행기 → 제어 파일 → 실행 프로세스. 8790과 「나중에」 탭은 걷는다)인가, 「PC 그림은 메시지를 받지 않는다」(B 검사로 막고 C12·C14·ADR-0014의 줄을 걷는다)인가. ADR-0102(바깥에서 들어오는 길은 Center)와 ADR-0007(밀지 않는다)은 첫째 쪽을 가리킨다.
+
+### 3-22. 지원 종료가 돌던 배포를 멈춘다 (문서가 맞고 코드가 다르다)
+
+**무엇이 어긋났나.** C5 §패키지는 「**이미 배포된 것은 그대로 돈다** — 내려받기도 그대로 된다. 돌고 있는 것을 세우는 것은 배포 철회다」라고 적었다. 그런데 Center가 활성 배포를 고르는 자리가 모두 `p.status = 'approved'`로 거른다. 그래서 「지원 종료...」를 누르면 그 판의 **봉투가 하트비트에서 사라지고**, 작업 지시·일정·PC 위임이 그 판을 「배포되지 않음」으로 보며, 내려받기도 막힌다.
+
+**근거.** `center/api/deployments.py:343`(`envelopes_for` — 하트비트 `deployments[]`)·`:360`(`versions_for` — `/jobs`의 판 풀기)·`targets_for`·`versions_deployed_to`(위임), `api/timers.py:90`(일정 쓸기), `api/package_access.py:8`(내려받기 관문이 「`envelopes_for`와 같다」). 시험은 「새로 배포할 수 없다」만 본다(`tests/test_m5_deploy.py:247`, `test_center_api.py:96`) — 「돌던 것이 그대로 도는가」를 보는 시험이 없다.
+
+**먼저 정할 것.** 없다 — 계약이 정했다(ADR-0090 이전부터의 C5 규칙). 고르는 다섯 자리를 `status IN (approved, deprecated)`로 바꾸고 「지원 종료 뒤에도 하트비트·작업·일정이 그대로」를 시험으로 묶는 일이다. 다섯 자리가 같은 조건을 따로 적고 있어서 **한 함수로 모으는 것**도 함께 본다(`_target_sql`처럼).
+
+### 3-23. 승인·배포가 철회돼도 현장이 그 BPM 프로세스를 끄지 않는다
+
+**무엇이 없나.** C2 §검증 규칙은 「서명 키를 버리거나 패키지 승인이 철회되면, 실행하는 쪽은 **다음 하트비트에서 해당 BPM 프로세스를 비활성으로 돌린다**」, C4는 「PC 실행기는 목록과 설치 상태를 맞춘다」고 적었다. 그런데 현장은 **내려온 것만 설치하고, 사라진 것을 보지 않는다.** Center는 철회된 배포를 목록에서 빼고(`envelopes_for`) 작업도 보내지 않지만, PC의 「지금 실행...」(BUI-04)은 철회·만료된 패키지를 그대로 띄운다.
+
+**근거.** `core/deploy.py`의 `Deployer.apply`(:110-153)는 받은 봉투를 설치하거나 거부할 뿐 「목록에 없어진 배포」를 다루는 걸음이 없고, 설치 뒤 `expires_at`을 다시 보지 않는다. `bot_ui/agent.py:913`은 `deployments`가 비면 그냥 돌아간다. 수동 실행은 `agent.enqueue_manual`(:1234). `apps/bot_ui`·`apps/server_runner`·`packages/core`에서 `revoke`는 Center API 키 폐기 코드에만 나온다.
+
+**먼저 정할 것.** 「목록에서 빠졌다」를 **언제 믿나** — 하트비트가 닿지 못한 것(ADR-0007 — 오프라인에도 돈다)과 「Center가 빈 목록을 줬다」를 가려야 한다. 그리고 비활성의 뜻(설치는 남기고 「실행 불가」로 보인다 — C2는 「파일은 지우지 않는다」)과 BUI-04 표기. 만료(`expires_at`)는 Center 없이도 현장이 알 수 있어 따로 닫을 수 있다.
+
+### 3-24. `requires.resources`를 짓는 쪽이 없다
+
+**무엇이 없나.** C1 `requires.resources`(BPM 프로세스가 쓰는 확장 기여 자원 — UI 화면 등)를 **네 곳이 읽는데 쓰는 곳이 없다.** 그래서 C7 기여 자원의 `used_by`가 늘 비고(CON-07 「쓰는 BPM 프로세스」 열), C7 누락 검사의 `resource/not_found`가 울리지 않고, UI 자동화 확장의 사전 점검이 화면을 하나도 보지 못한다.
+
+**근거.** 읽는 쪽 — Center `api/packages.py:207`(`missing`)·`api/deployments.py:277`(`blocking_at_deploy`)·`api/resources.py:392-409`(`used_by`), `extensions/ui_automation/…/client/preflight.py:33`. 쓰는 쪽 — Studio `packaging.py:160-169`의 `Requires(...)`에 `resources`가 없고, `ResourceRef`를 만드는 코드가 계약 패키지 밖에 없다.
+
+**먼저 정할 것.** 그림의 어디서 자원 id를 모으나. 후보는 확장이 선언한 칸(`creates_task_field` — STU-03 「캔버스에 추가」가 자원 id를 넣는 자리, ADR-0045)이다. 그 칸을 읽으면 플랫폼이 확장의 `data`를 해석하지 않고도(C13 §5) 모을 수 있다.
+
+### 3-25. 종료(terminate) 끝 이벤트를 엔진이 일반 끝으로 돈다
+
+**무엇이 없나.** BX-11(`bx11_bid_collection.bpmn:173`)이 `terminateEventDefinition`을 쓰고 커버리지 표가 「끝 — 종료(terminate) | BX-11」로 센다. 그런데 엔진의 `handle_end`(`core/nodes.py:108-118`)는 그 토큰만 지운다 — **다른 가지의 토큰이 살아 있으면 실행이 끝나지 않는다.** `packages/core`·`packages/contracts`에 `terminat`가 없고(OS 프로세스 끄기뿐) C14 §이벤트에도 이 요소가 없다. 「모르는 노드는 실패」 규칙도 못 잡는다(요소가 `endEvent`라서다). 시험이 없다.
+
+**먼저 정할 것.** 엔진이 짓나(남은 토큰·기다림을 걷고 `success`로 끝낸다 — 경계·위임·외부 작업을 걷는 길은 취소가 이미 갖고 있다), 아니면 C14 schema 1에서 쓰지 않기로 하고 B 검사로 막나. BX-11은 그림에 가지가 하나라 지금도 결과가 같다.
+
+### 3-26. 싣기만 하고 아무도 읽지 않는 칸 · 읽는데 아무도 싣지 않는 칸
+
+하나하나는 작고 업무를 막지 않는다. 다만 §3-20이 바로 이 꼴이었다 — 「칸이 있다」가 「돈다」로 읽힌다. 고르는 사람이 「짓는다 / 걷는다 / 둔다(까닭을 적는다)」를 칸마다 정한다.
+
+| 칸 | 쓰는 쪽 | 읽는 쪽 | 비고 |
+| --- | --- | --- | --- |
+| C1 `triggers[kind=signal]`·`[kind=conditional]` | Studio `packaging.py:258-260` | 없음 | 신호는 「한 실행 안의 가지 사이에서만」(C14)이라 시작을 울릴 수 없고, 조건 시작은 schema 1에서 쓰지 않는다(C14). Studio 이벤트 편집기는 신호 시작에 경고하지만(`event_editor.py` `SIGNAL_START`) **그림 검사(B)는 둘 다 말하지 않는다** |
+| C1 `requires.core`·`runtimes`·`os` | 없음 | CON-06 표시뿐(`packages/[packageId]/[version]/page.tsx:33-42`) | C1은 「설치 전 사전 점검에 쓴다」고 적었지만 `core/preflight.py`는 `settings`·`domains`만 본다 |
+| C1 `preflight.json`·C5 `PackageInfo.preflight` | 없음 — Studio zip은 `process`·`memory`·`libs`만(`packaging.py:42`), Center도 채우지 않는다 | 없음 | 걷거나 짓는다 |
+| C3 `source: message`·`watch` | 없음 — 메시지 시작 작업도 `job_source()`가 `job`으로 적는다(`contracts/center_api.py:114-125`, `requested_by`가 부른 쪽 이름이다) | PC 실행기 표기(`main_window.py:131-132`) | 메시지로 시작한 실행을 CON-01이 가를 수 없다. `watch`는 감시 모드가 아무 데도 없다(§8 BUI-01) |
+| C3 `llm_usage` | 엔진(`core/agent.py`·`nodes.py`) | 없음 | ADR-0027은 「Center가 가격표로 계산」이라 적었다. Center·콘솔에 읽는 곳이 없다. C3 `service_call`·`mode_used`도 CON-01이 그리지 않는다(`runs/[runId]/page.tsx:167-171`) |
+| C3 `kind: data`(`data.vars`, 켠 경우에만) | 없음, 켜는 설정도 없다 | 없음 | |
+| C3 `run_started.queued_s`·C4 `WorkerState.restarts`·`session` | PC 실행기·서버 실행기 | Center·콘솔에 없음 | 표시만의 칸 — CON-01·CON-03이 보이지 않는다 |
+| C4 `runtimes.browsers`·`desktop_backend` | 없음 — PC 실행기는 `Runtimes(extensions=…)`만(`agent.py:525`·`:637`) | Center C7 `RuntimeResource`(`api/resources.py:183-184`), CON-03 「런타임」 열(`bot-uis/page.tsx:49`) | 읽는데 싣지 않는다 — CON-03 열이 늘 빈다 |
+| C8 `policy.navigation_timeout_ms` | 계획(기본 30000) | 없음 — `worker/browser.py:169`·`:188`의 `page.goto`가 제한 시간 없이 Playwright 기본값을 쓴다 | 나머지 정책 칸은 `worker/ladder.py`가 읽는다 |
+| C8 보고 `attempts[].matched_count` | 없음 — `worker/app.py:520-525`가 싣지 않는다 | 없음 | |
+| C10 `browser_profile` | 없음 | 없음 | C10에 설명이 비어 있다 |
+| C11 사용 기록 `delivery` (SVC-03 열), C15 `LockedTask.delivery` | Center | 없음 — `UsageRecord`(`contracts/service_app.py:151-163`)에 칸이 없다 | C11 문서가 그 열을 약속한다 |
+| C12 하트비트 `restored[]` | 서버 실행기 첫 하트비트(`agent.py:337`) | 없음 — Center가 `state_json`에 담고(`api/server_runner.py:210`) 다음 하트비트가 덮는다 | CON-12가 「재시작 때 되살린 실행」을 보일 재료다 |
+| C12 `status: draining`·`error` | 없음 — `running`·`paused`만(`agent.py:1138`, `STATUS_ERROR`는 정의뿐) | 콘솔 표기(`lib/summary.ts:173`) | SIGTERM에도 `draining`을 보내지 않는다 |
+| C13 `adapter.health` | 확장 정의 | 없음 (ADR-0102로 Center가 두드리지 않는다. Center 저장소에 `extension_health` 표의 `CREATE`가 1판 기준선에 남았다 — `storage.py:218`, 16판이 지운다) | 문서는 고쳤다(C13 §4-1) |
+| C13 `bot_ui.local_runtimes[].start`·BUI-03 「시작: 항상」 | 확장 정의·설정 창(`settings_dialog.py:594`) | 없음 — 런타임은 `Runtimes.ensure()`로만 뜨고 부르는 곳은 실행 전(`agent.py:388`)·도구·「시작」 단추(`main_window.py:755`·`775`)다 | 「항상」이 「필요할 때」와 같다 |
+| C15 `POST …/consumers/tasks/{id}/extend` | — | 부르는 일꾼 없음 | 문서는 고쳤다(C15·C11 — `service_kit`은 늘리지 않는다) |
+| `contracts.bpmn_ext.ERROR_CODES` | — | 없음 — Studio는 제 목록(`event_editor.py:55`)을 쓴다 | 계약 쪽 목록은 결재 코드 둘이 빠진 채 낡았다. 두 벌을 하나로 |
+
+### 3-27. 「미정」으로 적혀 있는데 이 목록에 없던 것
+
+- **PC 자식에 가상 직원 값이 가지 않는다** — C14 §입력의 값 출처, C4 `JobDispatch.virtual_worker`, [ADR-0099](decisions/0099-input-value-source.md) §3 「> 미정」. PC 실행기에 `virtual_worker`를 다루는 코드가 없다. 그래서 PC BPM 프로세스가 `virtual_worker.*` 출처 입력을 필수로 선언하면 위임으로 받은 작업도 시작하지 못한다. 먼저 정할 것: ADR이 적은 「C4 실행기 파일에 싣는다」 하나다.
+- **CON-07 「할 일」을 확장 정의에서 짓기** — `06-screens/center-console.md` CON-07 「> 미정」: Center가 내장·사내 확장의 정의를 갖지 않는다. 그리고 **「PC N대에서 시작되지 않음」**은 C4 보고에 확장별 로컬 런타임 상태 칸이 없어 짓지 못한다(같은 절 「아직 없는 것 하나」 — `WorkerState`는 Worker 하나뿐이다). 먼저 정할 것: C4에 `runtimes.extensions[].runtime_state`를 더하나, C13 정의를 Center로 올리나.
 
 ### 3-20. 타이머 시작을 깨우는 자리 — **닫았다**
 
@@ -254,3 +330,60 @@ M6의 첫째 기준(「**시나리오 3**(BX-04)이 Windows 현장 PC에서 Cent
 | 자리 | 화면 | 남은 것 | 먼저 정할 것 |
 | --- | --- | --- | --- |
 | 7-11 | STU-04 「요소별 편집기」의 나머지 | 폼이 있는 것은 **AI 태스크**(`ai_task_editor.py`)·**결재·확인**(`approval_editor.py`)·**보내기**(`send_editor.py` — 메일·웹훅)·**BPM 프로세스 호출**(`call_editor.py` — PC 위임 포함)·**반복**(`loop_editor.py` — 다른 편집기 탭 옆에 하나 더)·**게이트웨이**(`gateway_editor.py` — 기본 흐름)·**이벤트·받기 태스크**(`event_editor.py` — 타이머·메시지·신호·오류·경계의 중단, `chk:receive`)·**데이터 객체**(`data_output_editor.py` — `chk:dataOutput`)·**BPM 프로세스(정의) 자체**(`defaults_editor.py` — `chk:defaults`, 빈 상태의 「BPM 프로세스 기본값」 단추로 들어간다. `chk:process`는 「변수」 탭·STU-06·STU-15가 고치므로 다시 만들지 않았다)·**규칙 태스크**(`rule_editor.py` — `chk:rule`의 결정·입력·출력 짝. 결정표 격자는 따로 뜨는 창 STU-04a `decision_dialog.py`이고 창의 「저장」이 `.dmn`을 바로 쓴다, [ADR-0109](decisions/0109-studio-writes-decision-tables.md))·서비스 앱 태스크(STU-14)·확장 태스크(STU-13)·순서 흐름의 조건식·스크립트 태스크다 — 화면 문서의 표는 그 폼들을 약속하는데 상태 줄이 없어 「돈다」로 읽혔다(2026-10-23, 결재 폼이 「이름·설명」만 보여 드러났다). **AI 태스크 폼의 「재생 명세」 한 줄·「명세 잊기」**(속성 패널이 열린 정의의 process id로 `memory/specs.json`을 읽는다 — `replay_specs.py`, 잊기는 「적용」을 기다리지 않고 시험 실행 중에는 꺼진다)와 **목표 미리보기**(엔진과 같은 `goal_names`로 모델에게 가는 이름)까지 와서 **화면 문서가 약속한 폼은 다 돈다**. 「재생 검증 결과」는 명세에 그런 칸이 없어 문서에서 뺐다. 남은 것은 웹 환경 칸뿐이고 웹 환경을 주는 확장이 생길 때의 일이다 | 없다 — 요소마다 C14 모델이 칸을 정해 두었다. 보내기·AI 태스크는 화면 문서가 C14에 없거나 **엔진이 읽지 않는** 칸(웹훅 헤더·메일 HTML 여부, AI의 시작 주소·로그인·창 제목·「복합」 환경·환경별 도구 검증)을 약속하고 있어 **계약에 있고 엔진이 읽는 칸만으로** 문서를 다시 썼다. `chk:aiTask`의 `forbidden_actions`·`confirm_triggers`·`limits.timeout_s`는 **엔진이 읽고 폼에도 있다** ([ADR-0105](decisions/0105-ai-task-limits-and-instructions.md)). C14에 있는데 쓰이지 않는 것은 `web`(웹 환경을 주는 확장이 없다)뿐이다 — 정의 폼도 그것과 「창 숨김」(계약에 없다)을 두지 않고, 그림에 있는 `web`은 남기고 말한다. 이벤트도 같은 원칙으로 다시 썼다 — 「수신 주소」·조건 이벤트의 식·확인 주기·「다음 실행 미리보기」(주기)는 두지 않았고, 시작 타이머의 주기는 **매니페스트(C1 `triggers`)에 실리고 배포되면 Center가 그 일정으로 깨운다**고 폼이 말한다(§3-20 — 주기는 Center와 같은 `contracts.schedule`로 본다) |
+
+## 8. 화면 문서가 약속했는데 코드에 없는 것 (2026-10-31 대조)
+
+§7은 화면 문서가 스스로 「아직」이라 적은 것이었다. 이번에는 **상태 줄이 「돈다」인데** 표의 단추·칸·문구가 코드에 없는 것을 모았다. 화면 문서의 라벨 글을 코드에서 찾고 손으로 읽어 맞췄다. 정직한 「아직」인데 여기 없던 것(STU-05 「실행 위치」, STU-07 `delegations` 칸, BUI-11 「필요한 키」·주소 줄, CON-07 「PC N대에서 시작되지 않음」)도 함께 둔다.
+
+| 자리 | 화면 | 약속한 것 | 코드 근거 | 먼저 정할 것 |
+| --- | --- | --- | --- | --- |
+| 8-1 | CON-05 「새 작업」 | 서버 BPM 프로세스면 PC 고르기 대신 「서버 실행기에서 실행 — 동시 실행 상한 <n>」 | `app/jobs/new/page.tsx:26-30`이 PC 배포만 거르고(주석 「서버 실행기 대상 작업은 M7이다」), `app/actions.ts:210`이 `target: {type: "bot_ui"}`로 고정한다. Center는 받는다(`api/jobs.py:241-258`) | 없다 — **콘솔에서 서버 작업을 만들 길이 없는 것**이라 무겁다 |
+| 8-2 | CON-05 「중지」 | 도는 서버 실행(`accepted`)의 「중지」·확인 문구 「도는 실행을 멈춥니다…」·「중지 요청함」, PC면 끄고 까닭 | `app/jobs/labels.ts:39` `CANCELLABLE`에 `accepted`가 없다 → 목록(`page.tsx:143`)·상세(`[jobId]/page.tsx:121`)가 단추를 숨긴다. Center는 202로 받는다(ADR-0063, `api/jobs.py:356`) | 없다 |
+| 8-3 | CON-01 목록 「시작 방식」 | 작업·감시·수동·일정·메시지 | `app/runs/page.tsx:154`가 `row.source`를 그대로 — 일정이 만든 실행이 `schedule`로 보인다. 표기는 CON-03 상세에 있다(`bot-uis/[botUiId]/page.tsx:36-43`) | 없다 — 표기를 한 자리로 |
+| 8-4 | CON-01 상세 | 노드 타임라인의 가로 막대·이어 돌기 점선, 요약의 「재생」·「LLM 단계」 | `app/runs/[runId]/page.tsx:385-441`은 표뿐이고 요약에 `replayed_tasks`가 없다(목록은 쓴다 — `runs/page.tsx:164-165`). 「사람 개입」의 「폼 키」는 C3 `human_requested`에 폼 칸이 없어(`contracts/events.py:37` — `layer`·`request_id`·`where`) **문서가 고칠 쪽**이다 | 「폼 키」를 문서에서 걷는다 |
+| 8-5 | CON-00 위 막대 | 「새로 고침」 | `components/Shell.tsx`에 로그아웃뿐 | 없다 |
+| 8-6 | CON-11 | 키 목록 필터 「종류」·「상태」 | `app/center-keys/page.tsx`가 `searchParams`를 읽지 않는다 | 없다 |
+| 8-7 | CON-03 목록 | 오프라인 줄의 실행·대기열 칸에 「마지막 보고 <시각> 기준」 | `app/bot-uis/page.tsx:40-43`·`:129-137` — 상세에만 있다(`[botUiId]/page.tsx:214`). 「런타임」 열은 §3-26(C4 `runtimes.browsers`)이라 빈다 | 없다 |
+| 8-8 | CON-07 | 기여 자원 줄의 상세(「이 화면을 쓰는 BPM 프로세스」·「셀렉터 보기」 → UIA-02), 「할 일」 → CON-03 **그 PC들만** | `app/resources/page.tsx:334-372` `Contributed`는 평평한 표, `lib/features.ts:131-133`은 필터 없는 `/bot-uis`. 「쓰는 BPM 프로세스」는 §3-24 때문에 늘 빈다 | §3-24가 먼저다 |
+| 8-9 | CON-02 | (흠) 사람에게 마크다운 별표가 보인다 | `app/bots/page.tsx:326` JSX 글 「셈은 \*\*끝난 실행\*\*만 셉니다」 | 없다 |
+| 8-10 | UIA-01·02·03 | 빈 상태·안내가 TOL-03·TOL-05를 가리킨다 | `svc-console/app/ext/ui-automation/selectors/page.tsx:27`·`:31`(BUI-06), `overview/page.tsx:118`·`monitoring/page.tsx:42`(BUI-08) — ADR-0077로 폐기된 id다 | 없다 |
+| 8-11 | UIA-03 상세 | 「시도한 로케이터·실패 사유 표」, UIA-02 실패율 경고의 「해당 요소로 이동」 | `monitoring/page.tsx:227-230`은 한 줄 띠, `selectors/page.tsx:233-237`은 링크 없는 글 | 재료(C8 `attempts`)는 있다 |
+| 8-12 | STU-02 | 줄 종류별 문맥 메뉴(「정의 삭제...」·「BPM 프로세스 삭제...」·「다른 그룹으로 이동...」·「새 그룹...」·「그룹 삭제」·「새로 고침」), 끌어 옮기기, 삭제 확인 | `explorer.py:146`이 `CustomContextMenu`를 켜지만 `customContextMenuRequested`를 잇는 곳이 없다(유일한 연결은 `resources.py:639` — STU-03). `workspace.py`에 정의·BPM 프로세스·그룹을 지우거나 옮기는 함수가 없다 | 지우기의 범위(케이스·학습 자료)와 「다른 정의가 부르면 거부」를 B14와 같은 함수로 볼지 |
+| 8-13 | STU-02 「학습·검증」 | 「AI 태스크 N개 · 학습 a/N · 재생 검증 v/N · 케이스 통과 p/S」 | `explorer.py:39-47`이 「AI 태스크 N개 · 정의 N개」 — docstring이 「아직 비어 있다」고 적었는데 화면 문서에는 상태 줄이 없다 | 「재생 검증」은 명세에 칸이 없어 7-11에서 이미 걷었다 — 같이 걷을지 |
+| 8-14 | STU-04 스크립트 | 「상세 편집」 창·문법 검사·Ctrl+Enter | `properties.py:266-267`의 글상자뿐 (「Python」이라던 낡은 글은 고쳤다) | 문법 검사는 `core.expr`가 있다 |
+| 8-15 | STU-05 | 「실행 위치」 라디오 | `dialogs.py`에 칸이 없다 — 화면 문서가 「아직」이라 적었다(그림 칸이라 캔버스를 거쳐야 한다, ADR-0022) | 만든 직후 캔버스에 넘기는 길 |
+| 8-16 | STU-07 | PC 위임 결과(`delegations`)를 칸으로 | 화면 문서가 「아직」이라 적었다 — 지금은 파일에 적은 것을 남기기만 한다 | 없다 |
+| 8-17 | STU-08 | 「Worker」·「서비스 앱」 줄 | `run_dialog.py:15`가 「M4·M5에 그 쪽이 생기면 채운다」 — 두 쪽이 다 생겼다. Worker 확인은 `checks.py`에 있고 설정 창만 쓴다 | 서비스 앱 줄은 C15로 무엇을 보일지(일꾼이 붙었나 — C7 토픽 상태) |
+| 8-18 | STU-09 | 상태 막대 「실행 중: <노드 이름>」·「완료: <도달한 종료> · 변수 N개 · …」, 사전 점검을 로그에 `[정상]`·`[경고]`… | `run_actions.py:126`은 케이스 이름, `:148`은 마지막 결과 글. 사전 점검은 「검사」 탭으로 간다(`main_window.show_preflight`) — **로그 문구는 문서가 고칠 쪽**이다 | 로그 문구를 문서에서 걷는다 |
+| 8-19 | BUI-01 트레이 | 2-2 「오늘 실행 N (완료 x, 실패 y)」, 5 「보내지 못한 기록 N건」, 2-1 「등록을 마치면 실행됩니다」, 경과 시간·「연결 끊김 (마지막 <시각>)」 | `tray.py:121-177` — 없다. `core/run_shipping.py:131`이 BUI-05용 재료를 이미 준다 | 없다 |
+| 8-20 | BUI-04 | 「맨 앞으로」·「제거...」·「새로 고침」, 「지금 실행...」의 입력 창·「맨 앞에 넣기」·「대기열에 넣었습니다 (N번째)」 | `main_window.py:247-290`의 단추는 결재 창·중지·취소·지금 실행·파일 설치뿐이고 `run_selected`(:597-608)는 입력 없이 넣는다. `agent.enqueue_manual(front=…)`(:1234)은 이미 있다. 설치 제거 함수가 없다 | 입력 창은 CON-05와 같은 규칙(매니페스트 `inputs`)으로 |
+| 8-21 | BUI-01·04 「감시」 | 「감시 시작」↔「감시 중지」, 상태 「감시 중」, 대기열 출처 「감시 트리거」 (`bot-ui.md:13`·`42`·`124`·`127`) | PC 실행기에 감시가 없다 — 남은 것은 표기 하나(`main_window.py:132`) | **걷는 쪽으로 보인다** — 일정은 Center가 쥐고(ADR-0110), 폴더 감시인 조건 시작은 schema 1에서 쓰지 않는다(C14). 걷으면 C3·C4 `source: watch`도 함께(§3-26) |
+| 8-22 | BUI-03 「나중에」 | 「메시지 수신 포트」·「툴팩 비밀」을 끈 채 보인다 | `settings_dialog.py:502-512` — 툴팩은 [ADR-0050](decisions/0050-no-toolpack-kind.md)으로 없어졌고(Studio는 ADR-0073으로 걷었다) 메시지 수신은 §3-21에 달렸다 | §3-21 |
+| 8-23 | BUI-11 | 「필요한 키」·서버 부분 「주소」 줄 | 화면 문서가 「아직 보인다」고 적었다(`bot-ui.md:215`, 코드 `extension_dialog.py:103`·`:290`·`:326`). 같은 문서 `:213`(「주소는 보이지 않는다」)과 `:228`(「상세의 서버 부분은 주소만 말한다」)이 서로 다르다 | ADR-0102 뒤라 걷는 쪽 — 문서 둘을 한 가지로 |
+| 8-24 | TOL-03 | BPM 프로세스가 도는 동안 브라우저 단추를 **미리** 끄고 「BPM 프로세스 실행 중 — 끝나면 쓸 수 있습니다」 | 그 글이 없다 — `registration_window.py:1064-1065`는 부른 뒤 실패해야 「Worker가 사용 중입니다」라고 한다 | C10 `status.reserved_for`를 Tool UI가 읽는다 |
+| 8-25 | TOL-03·05 | 8번 「아직 등록되지 않은 화면을 가리켰습니다」, 10번 「…계획 캐시도 함께 버렸습니다」, TOL-05 「서버에 보낼 보고: N bytes」·「자가 치유:」 섹션 | 8번은 C9 등록 결과에 실을 칸이 없다. 10번은 큐만 버린다(`registration_window.py:811-817`). TOL-05는 「· 자가 치유」 한 마디(`trial_window.py:282`) | 8번은 C9에 경고 칸이 필요한가 |
+| 8-26 | CMN-01 확인 | 한 줄 「응답 입력」, 「직접 처리했음」, 시간 초과 기록 「결재 요청이 시간 초과로 취소되었습니다.」 | `packages/qt/…/approval.py:205-209`는 「계속」·「중단」 둘뿐 | 「직접 처리했음」이 엔진에서 무엇인가(「계속」과 다른가) — ADR-0106은 둘만 정했다 |
+| 8-27 | CMN-01 [R] | 「끝낸 스텝」 표 열 | ADR-0112 §5는 (순서·요소·동작), 화면 문서와 코드는 「결과」까지 넷(`ui_automation/client/task.py:81`) | ADR과 문서 중 어느 쪽을 맞추나 (작다) |
+
+## 9. 업무 예제가 밟지 않는 기능 (2026-10-31 대조)
+
+예제 55개의 `chk:*` JSON을 모두 읽어 쓰인 키를 세고 이벤트·게이트웨이 요소를 찾았다. 커버리지 표(`_source/build.py:279-388`)는 **노드 종류 + 칸 하나**로 행을 짓고 런타임 응답은 보지 못하므로, 아래는 표에 행이 없거나 행이 있어도 0인 것이다. **케이스 형식이 서비스 응답을 지어낼 수 없다** — 케이스 키는 `inputs`·`expected`·`approvals`·`manual`·`messages`·`delegations`뿐이라 「서비스가 실패·보류·결과 모름」을 예제가 시험하지 못하고 설명 글로만 적는다(BX-32의 「실패·결과 모름을 오류 경계로」가 그렇다 — 케이스는 정상 길 하나다). 아래 기능은 대부분 **단위·통합 시험은 있다** — 빠진 것은 「예제가 오라클」인 자리다.
+
+| 기능 | 예제 | 코드 | 시험 |
+| --- | --- | --- | --- |
+| 종료(terminate) 끝 | BX-11이 쓰지만 엔진이 짓지 않는다 | §3-25 | 없음 |
+| `ESCALATED` 오류 경계·PC 전환 확인 (ADR-0106·0112) | 0 — 경계 코드는 `TASK_FAILED`·`SEND_FAILED`·`DELEGATION_FAILED`뿐 | `core/nodes.py:470-543`, `engine.py:1068-1107` | `test_core_extension_tasks.py`·`test_core_ai_task.py` |
+| 서비스 호출 결과 모름 (ADR-0107) | 0 (BX-32는 경계만) | `nodes.py:939-945` | `test_core_service_outcome_unknown.py` |
+| 긴 외부 작업 `WAIT_EXTERNAL_TASK` (ADR-0103) | 0 | `run_state.py:86`, `nodes.py:904-911` | `test_core_service_task.py`·`test_m7_server_rerun.py` |
+| 결재 `expires`·`APPROVAL_EXPIRED`/`WITHDRAWN` 경계 | 0 | `bpmn_ext.py:262`, `engine.py:1251` | `test_approval_channel.py` |
+| 결재 `location: follow`(기본값) | 0 — 23개 모두 `center`·`field`를 적었다 | `bpmn_ext.py:261` | `test_approval_channel.py` |
+| `answered_by_as`·`answered_via_as` (ADR-0096) | 0 | `bpmn_ext.py:264-269` | `test_core_engine.py` |
+| 입력 출처 `virtual_worker.id` (ADR-0099) | 0 (`.name`·`.supervisors`만 — FX-24·25) | `bpmn_ext.py:164-168` | `test_core_engine.py` |
+| 웹훅 본문 `all`·`template:` | 0 — 6개 모두 `fields:[…]` | `bpmn_ext.py:296` | `test_core_senders.py` |
+| 메시지 중간 받기 | 0 — 중간 받기는 타이머·신호뿐 | `nodes.py:1088` | |
+| 타이머 `timeDate`·ISO 반복 `R[n]/…` 시작 | 0 — 시작 12개 모두 5필드 cron | `engine.py:855-872`, `contracts/schedule.py` | `test_center_timers.py`·`test_core_events.py` |
+| 태스크 단위 AI 덮어쓰기(`aiTask.forbidden_actions`·`confirm_triggers`·`web`·`desktop`) | 0 — `chk:defaults`만 쓴다 | `nodes.py:723-735` | `test_core_ai_task.py` |
+| 작은 칸 — `email.cc`·`serviceCall.timeout_s`·`call.delegate.version`·`.bot_ui`·`fileList.limit`·`web.session` | 0 | `bpmn_ext.py:154`·`249`·`284`·`318-320`·`364` | 일부 |
+| AI 태스크 `web` | 0 (표가 이미 「없음」) | 웹 환경을 주는 확장이 없다 | |
+
+**표의 주석 하나가 낡았다** — `build.py:375`가 「**없음**인 요소는 C14 schema 1에서 쓰지 않거나(조건 시작)」라고 적지만 표에 조건 시작 행이 없다(생성기 글이라 다음 생성기 조각에서 고친다).

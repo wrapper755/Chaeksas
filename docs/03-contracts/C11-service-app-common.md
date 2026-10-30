@@ -171,7 +171,7 @@ AdminStatus:
 
 ## `service_kit`이 제공하는 것
 
-새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: 가져가기 루프(`Consumer` — 들이기·토큰 보관·manifest와 카탈로그 올리기·잠금 늘리기·끝내기), 멱등 저장소, 오류 형식, 사용 기록, `/healthz`, 관리 콘솔 공통 화면(SVC-00·01·03), 모델 연결(`CHK_SVC_<APP>__LLM__*`), 설정(`CHK_SVC_<APP>__CENTER__URL`·`…__CENTER__TOKEN`·`…__DATA_DIR`), 포트(관리 API 8000·8010…, 콘솔 +1).
+새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: 가져가기 루프(`Consumer` — 들이기·토큰 보관·manifest와 카탈로그 올리기·끝내기 — 잠금은 늘리지 않고 작업 `timeout_s`만큼 잡는다, C15), 멱등 저장소, 오류 형식, 사용 기록, `/healthz`, 관리 콘솔 공통 화면(SVC-00·01·03), 모델 연결(`CHK_SVC_<APP>__LLM__*`), 설정(`CHK_SVC_<APP>__CENTER__URL`·`…__CENTER__TOKEN`·`…__DATA_DIR`), 포트(관리 API 8000·8010…, 콘솔 +1).
 
 ## 변경 이력
 
