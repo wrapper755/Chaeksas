@@ -48,6 +48,7 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C4-bot-ui-center", 1, HeartbeatResponse),
     ("C5-packages-deployments-jobs", 0, VirtualWorkerInfo),  # 가상 직원 (ADR-0085)
     ("C6-approvals", 0, ApprovalCreateRequest),
+    ("C6-approvals", 1, TypeAdapter(dict[str, Any])),  # 표 값이 든 검토 자료 (ADR-0112)
     ("C12-server-runner-center", 0, ServerRunnerHeartbeatRequest),
     ("C12-server-runner-center", 1, MessageRequest),  # 외부 시스템이 넣는 메시지
     ("C13-extension-manifest", 0, Catalog),  # 공통 카탈로그 형식
@@ -88,6 +89,16 @@ def test_every_json_example_is_covered() -> None:
         found = len(json_blocks(doc))
         covered = sum(1 for d, _, _ in EXAMPLES if d == doc)
         assert found == covered, f"{doc}: 문서에 예시 {found}개, 표에 {covered}개"
+
+
+def test_c6_table_example_reads_as_a_table() -> None:
+    """C6 「표 값」 예시는 `as_table`이 표로 읽는다 — 문서와 코드가 같은 모양을 말한다 (ADR-0112)."""
+    from chaeksas.contracts.approvals import as_table
+
+    review = json.loads(json_blocks("C6-approvals")[1])
+    assert as_table(review["요소"]) is None
+    found = as_table(review["시도한 로케이터"])
+    assert found is not None and found[0] == ["순서", "출처", "종류", "결과"]
 
 
 def test_c1_example_passes_validate() -> None:

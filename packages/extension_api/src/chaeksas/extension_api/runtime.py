@@ -133,6 +133,9 @@ class TaskFailed(Exception):
       (C13 §4의 `idempotent: false` 처리). 서버 실행에서는 오류 경계로 간다.
     - `events`는 **실패해도 남길 줄**이다 (ADR-0041) — UI 태스크가 전환(사람에게 넘김)으로
       끝난 것이 CON-01에서 가장 보고 싶은 줄이다.
+    - `review`는 **전환할 때 사람에게 보일 검토 자료**다 (ADR-0112) — C6 `review`와 같은 모양(이름 →
+      값)이고 표는 `review_table()`로 짓는다. 엔진이 PC 확인(CMN-01)의 검토 자료로 옮길 뿐 **실행
+      기록에는 쓰지 않는다**. 오류 경계로 가면 버려지고, `escalate`가 없으면 쓰이지 않는다.
     """
 
     def __init__(
@@ -143,6 +146,7 @@ class TaskFailed(Exception):
         retryable: bool = False,
         escalate: str | None = None,
         events: Sequence[ExtensionEvent] = (),
+        review: Mapping[str, Any] | None = None,
     ):
         super().__init__(message)
         self.code = code
@@ -150,3 +154,4 @@ class TaskFailed(Exception):
         self.retryable = retryable
         self.escalate = escalate
         self.events: tuple[ExtensionEvent, ...] = tuple(events)
+        self.review: dict[str, Any] = dict(review or {})

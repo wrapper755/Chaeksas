@@ -12,8 +12,9 @@
 from __future__ import annotations
 
 #: 이 `extension_api`가 제공하는 인터페이스 버전 (SemVer).
+# 1.5: `TaskFailed(review=…)`·`review_table` — 전환할 때 사람에게 보일 검토 자료 (ADR-0112)
 # 1.4: `ToolUiTool`·`HOST_TOOL_UI` — 도구는 Tool UI가 띄운다 (ADR-0077). `BotUiUtility`는 같은 모양의 옛 이름
 # 1.3: `BotUiPanel` — 확장이 플랫폼 화면에 칸을 그린다 (ADR-0042)
 # 1.2: `ExtensionEvent`·`TaskOutcome.events`·`TaskFailed(events=…)` (ADR-0041)
 # 1.1: `agent_environments` (ADR-0037)
-API_VERSION = "1.4.0"
+API_VERSION = "1.5.0"

@@ -6,7 +6,7 @@
 | schema | 2 (1은 `local_runtimes.command`를 쓰던 것 — 아래 변경 이력) |
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·PC 실행기·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
 | 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |
-| 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md), [0042](../decisions/0042-extension-contributed-panels.md), [0077](../decisions/0077-tool-ui.md) |
+| 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md), [0042](../decisions/0042-extension-contributed-panels.md), [0077](../decisions/0077-tool-ui.md), [0112](../decisions/0112-escalation-review-from-extensions.md) |
 | 관련 화면 | BUI-01·03·09·11, TOL-01·02, STU-03·14·15, CON-07, SVC-00 |
 
 > 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`를 **관리자가 부르면** E1·E2·E3을 검사하고 **Center가 C2 `extension`·`extension_revoke` 봉투에 서명해**(ADR-0090) 정의와 봉투를 **그대로** 보관한다 — 실행하는 쪽이 다시 검증한다(E6). CON-07 「확장」 탭에서 정의 파일 하나를 올린다. **E4·E8은 외부 확장으로 띄울 수 없다** — `task_types`·`agent_environments`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
@@ -156,6 +156,7 @@
   - `{"kind": "schema"}`: 입력 JSON Schema로 만든 자동 폼 (STU-14 방식).
 - `executor`: `{"entry": "…"}`. `extension_api.TaskExecutor`를 구현한다.
   - **실행 기록에 남기려면 `TaskOutcome.events[]`에 담는다** (C3 §확장이 남기는 이벤트, [ADR-0041](../decisions/0041-extension-run-events.md)). 확장은 `ExtensionEvent{kind, data}`만 주고 **줄은 엔진이 쓴다** — `run_id`·`seq`·`ts`·`node_id`는 엔진이 붙이고, `data`는 엔진이 거른다(원칙 6). 실패했을 때 남길 것은 `TaskFailed(…, events=[…])`에 싣는다. 알려진 `kind`인데 필수 키가 빠지면 **그 줄만 버려진다** (업무는 깨지지 않는다). 확장이 파일이나 `seq`를 만지는 길은 없다.
+  - **전환할 때 사람에게 보일 것은 `TaskFailed(…, escalate="confirmation", review={…})`에 싣는다** ([ADR-0112](../decisions/0112-escalation-review-from-extensions.md), `extension_api` 1.5). 모양은 C6 `review`(이름 → 값)이고 표는 `review_table(headers, rows)`로 짓는다(C6 표 값). 엔진은 PC 확인 요청의 `review`로 **옮기기만** 하고 실행 기록에는 쓰지 않는다. 오류 경계로 가면(서버·`ESCALATED`를 이름으로 받는 경계) 버린다. `escalate`가 없으면 쓰지 않는다. 비밀은 넣지 않는다 — 결재 요청 파일에 그대로 간다.
 - **`entry` 형식: `"<모듈>:<이름>"`.** 모듈은 확장 이름 공간(`chaeksas.ext`) 밑에서 찾는다 — `ui_automation.client:UiTaskExecutor`는 `chaeksas.ext.ui_automation.client.UiTaskExecutor`다 ([ADR-0019](../decisions/0019-package-names.md)). 가리키는 것은 **인자 없이 만들 수 있는 클래스**(또는 이미 만들어진 객체)이고, 확장 호스트가 만들어 `extension_api`의 모양인지 확인한 뒤 켠다.
   - 확장 호스트는 **그 확장의 패키지 안**만 허용한다. 정의가 다른 모듈(`os:getcwd` 같은 것)을 가리켜 import시킬 수 없다.
 - `console.pages`: 그 서비스 앱 관리 콘솔(SVC-00 왼쪽 탐색)에 붙는 **앱 고유 화면**이다. 콘솔은 접속한 앱의 `app_id`(C11 `/admin/v1/status`)로 어느 확장의 기여인지 고른다 — 콘솔 한 벌이 모든 서비스 앱을 그리기 때문이다.
@@ -331,6 +332,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-30 | 2 | 수행기가 전환할 때 **사람에게 보일 검토 자료**(`TaskFailed(review=…)`)를 넘긴다 — `extension_api` **1.5**. 정의는 그대로다 | [0112](../decisions/0112-escalation-review-from-extensions.md) |
 | 2026-10-29 | 2 | `requires_keys`에 키가 없다 — `run`은 빌드가 `requires.service_apps` 줄을 적는 뜻, `extra_scopes`는 Center가 PC 스위치로 건다. 외부 앱은 **어댑터 일꾼**이 부른다 — 주소·키는 그 일꾼 설정(`CHK_ADAPTER__EXT__<확장>__*`), 실행하는 쪽은 정의 검증·고정만. 예약 키 `service.base_url`·`service.key_ref` → `center.url`·`call_token` 비밀, `CHK_RUNTIME__SERVICE_URL` → `CHK_RUNTIME__CENTER_URL`. 예약 접두 `service.` → `center.` | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | `requires_keys`의 키는 Center가 내려 준다 — `run`은 배포 대상마다, `utility`는 CON-03 「셀렉터 등록」을 켠 PC에. `config_key`는 무시한다(호환), 호스트가 `ctx.secret("utility")`로 준다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 2 | `adapter.auth`가 없는 외부 앱은 **키를 받지 않는 앱**이라고 적었다. E3가 `run` 키를 적고 `auth`가 없는 정의를 거부한다 — 키를 실을 자리 없이 키를 요구하던 모순이었다. 칸은 그대로라 schema도 그대로다 | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |

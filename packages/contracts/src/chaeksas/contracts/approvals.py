@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from pydantic import Field, model_validator
@@ -81,6 +81,38 @@ def review_digest(review: Mapping[str, Any] | None) -> str:
     """
     body = json.dumps(dict(review or {}), sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+#: 표 값의 열쇠 (C6 「표 값」, ADR-0112) — **정확히 이 둘**일 때만 표다.
+TABLE_KEYS = frozenset({"headers", "rows"})
+
+
+def review_table(headers: Sequence[str], rows: Sequence[Sequence[Any]]) -> dict[str, Any]:
+    """검토 자료의 표 값 하나 — `{"headers": [글], "rows": [[값]]}` (C6, ADR-0112).
+
+    줄마다 칸 수가 머리줄과 같아야 한다 — 다르면 표가 아니라 사전으로 읽히므로 여기서 막는다.
+    """
+    head = [str(one) for one in headers]
+    body = [list(row) for row in rows]
+    for number, row in enumerate(body, start=1):
+        if len(row) != len(head):
+            raise ValueError(f"표의 {number}번째 줄은 칸이 {len(row)}개다 (머리줄 {len(head)}개)")
+    return {"headers": head, "rows": body}
+
+
+def as_table(value: Any) -> tuple[list[str], list[list[Any]]] | None:
+    """검토 자료 값 하나가 표 값이면 `(머리줄, 줄들)`, 아니면 `None` (C6 「표 값」).
+
+    **뜻을 어림하지 않는다** — 열쇠가 정확히 `headers`·`rows`이고 칸 수가 맞을 때만 표다.
+    """
+    if not isinstance(value, Mapping) or set(value) != TABLE_KEYS:
+        return None
+    headers, rows = value["headers"], value["rows"]
+    if not isinstance(headers, list) or not isinstance(rows, list):
+        return None
+    if not all(isinstance(row, list) and len(row) == len(headers) for row in rows):
+        return None
+    return [str(one) for one in headers], [list(row) for row in rows]
 
 
 def request_id_for(run_id: str, node_id: str, node_instance: int) -> str:

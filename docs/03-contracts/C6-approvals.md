@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | PC 실행기(실행 중 BPM 프로세스)·서버 실행기 → Center ↔ Center 콘솔(결재함) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/approvals.py` (import `chaeksas.contracts.approvals`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c6-approval-create-request.json`](../../packages/contracts/schemas/c6-approval-create-request.json) · [`c6-approval-info.json`](../../packages/contracts/schemas/c6-approval-info.json) · [`c6-answer-request.json`](../../packages/contracts/schemas/c6-answer-request.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0080](../decisions/0080-approval-assignees.md)·[0081](../decisions/0081-answering-on-behalf.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0080](../decisions/0080-approval-assignees.md)·[0081](../decisions/0081-answering-on-behalf.md), [0112](../decisions/0112-escalation-review-from-extensions.md) |
 | 관련 화면 | CON-04 결재함, CMN-01, BUI-05, STU-04(결재 위치) |
 
 ## 목적
@@ -186,11 +186,23 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 
 - 상태 값은 열린 문자열이다. 모르는 필드는 무시한다.
 - `review`의 값 타입은 자유다 (문자열·숫자·목록). 콘솔은 문자열은 글자로, 목록은 글머리표로 보인다 (CMN-01과 같은 규칙).
+- **표 값** ([ADR-0112](../decisions/0112-escalation-review-from-extensions.md)): `{"headers": [글], "rows": [[값]]}` — 열쇠가 **정확히 그 둘**이고 줄마다 칸 수가 머리줄과 같을 때만 표다 (`contracts.approvals.review_table`·`as_table`). 아니면 보통 사전처럼 「열쇠: 값」 줄이다. CMN-01은 표를 읽기 전용 표로 그린다. 지금 이 모양을 싣는 것은 **확장이 전환할 때 낸 확인**뿐이고 확인은 Center로 올라가지 않으므로, 콘솔 결재 화면(CON-04)은 아직 표로 그리지 않는다.
+
+```json
+{
+  "요소": "save_button",
+  "시도한 로케이터": {
+    "headers": ["순서", "출처", "종류", "결과"],
+    "rows": [[1, "사다리", "test_id", "찾지 못함"], [2, "사다리", "role", "여러 개 맞음 (2)"], [3, "치유", "", "제안 없음"]]
+  }
+}
+```
 
 ## 변경 이력
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-30 | 1 | `review`의 **표 값**(`{headers, rows}`)을 정했다 — 확장이 전환할 때 낸 확인의 검토 자료(CMN-01 [R]). 값 타입이 원래 자유라 schema는 그대로다 | [0112](../decisions/0112-escalation-review-from-extensions.md) |
 | 2026-10-28 | 1 | **회수는 다시 열리지 않는다** (형식은 그대로다) — 서버 실행기가 이미 닫은 실행의 회수에 `not_waiting`으로 답하자 Center가 「거절은 되돌림」으로 읽어 취소된 실행의 결재를 `open`으로 되살렸다(답하면 효과 없이 200). 되돌림은 답에만, 끝난 실행의 결재는 되돌리지 않고 답은 409 `not_open`, 하트비트가 남은 것을 쓸어 거둔다 | — |
 | 2026-10-20 | 1 | **내용 고정** — `ApprovalInfo.review_digest`(값을 지워도 남는다), `AnswerRequest.if_review_digest?`, 409 `review_changed`. 선택 칸이라 schema는 그대로다 | [0083](../decisions/0083-review-digest.md) |
 | 2026-10-20 | 1 | **결재 담당자·대리 답이 돈다** (형식은 그대로다). 그러면서 결재 읽기가 **권한표를 따라갔다** — 코드가 「키면 무엇이든」(`require_read`)이라 Bot UI·서버 실행기 키도 남의 검토 자료를 읽을 수 있었다. 이제 콘솔 토큰과 대리 답용 키(담당인 것만)뿐이다 | [0080](../decisions/0080-approval-assignees.md), [0081](../decisions/0081-answering-on-behalf.md) |

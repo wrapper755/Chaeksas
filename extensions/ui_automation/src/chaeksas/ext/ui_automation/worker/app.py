@@ -508,6 +508,8 @@ class Worker:
             error=attempt.error,
             current_url=finder.url(),
             duration_ms=attempt.duration_ms,
+            # 찾지 못했을 때만 — 무엇을 해 봤나 (종류·결과 코드, ADR-0112).
+            attempts=attempt.attempts if attempt.escalated else [],
         )
 
     def _remember(self, found: Session, attempt: Any) -> None:

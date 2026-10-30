@@ -128,6 +128,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ PC 실행기  
 | 결재 (업무 개입) | `approval` | BPMN UserTask. 업무상 사람이 결정해야 하는 것. Center로 올려 다른 사람이 답할 수 있다 |
 | 확인 (실행 개입) | `confirmation` | 실행 중 막힘(OTP, 애매한 클릭, Worker 응답 없음). 화면 앞 사람만 답할 수 있어 Center로 올리지 않는다 |
 | 전환 | `escalation` | 자동 치유가 한도를 넘어 사람에게 넘기는 것. 확인으로 이어진다 |
+| 검토 자료 | `review` | 결재·확인 창(CMN-01 [R])에 보이는 값 — 이름 → 값 (C6). 결재는 폼의 「표시 변수」, 전환한 확인은 확장이 준 것이다. 값 하나가 **표 값**(`{headers, rows}`)이면 표로 그린다 ([ADR-0112](decisions/0112-escalation-review-from-extensions.md)) |
 | 결재 담당자 | `assignee` | 그 결재에 답할 사람. 그림(`chk:approval.assignees`)이 이름으로 정하고 C6에 실린다. 콘솔은 거르기만 하고, 대리 답은 담당자일 때만 받는다 ([ADR-0080](decisions/0080-approval-assignees.md)) |
 | 감독자 | `supervisor` | 가상 직원(§2-1)의 결재에 답하는 **사람**. 접수 BPM 프로세스의 일괄 결재 담당자가 된다 — 그림은 출처가 `virtual_worker.supervisors`인 입력(`assignees: "감독자"`)으로 가상 직원 자원의 목록을 그대로 받는다 (ADR-0099) |
 | 대리 답 | `on_behalf_of` | 연동하는 쪽(예: 대화 창구)이 **사람 대신** 결재 답을 Center에 나르는 것. 답한 사람(행위자)은 그 사람이고, 지나온 길(경로)은 키 이름이다 — 둘을 따로 적는다. 「위임」(`delegate`, PC 위임)과 다른 말이다 |

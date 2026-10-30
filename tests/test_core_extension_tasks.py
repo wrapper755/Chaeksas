@@ -25,8 +25,9 @@ import pytest
 from chaeksas.contracts.approvals import request_id_for
 from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.core.engine import Engine, RunEnv, State
+from chaeksas.core.requests import create_request
 from chaeksas.core.run_log import RunLog, summarize
-from chaeksas.extension_api import ExtensionEvent, TaskContext, TaskFailed, TaskOutcome
+from chaeksas.extension_api import ExtensionEvent, TaskContext, TaskFailed, TaskOutcome, review_table
 
 RUN = "run_20261005_120000_abcdef"
 
@@ -228,6 +229,41 @@ def test_on_a_pc_an_escalation_asks_a_person_in_the_field(tmp_path: Path) -> Non
     assert pending.description == "화면을 확인해 주세요"
     asked = [one for one in events(tmp_path) if one["kind"] == "human_requested"]
     assert asked and asked[-1]["data"]["layer"] == "confirmation" and asked[-1]["data"]["where"] == "field"
+
+
+#: 확장이 사람에게 보이라고 준 검토 자료 (ADR-0112) — 표 하나와 글 하나.
+SHOWN = {
+    "요소": "주문.저장",
+    "시도한 로케이터": review_table(
+        ["순서", "종류", "결과"], [[1, "role", "찾지 못함"], [2, "css", "여러 개 맞음 (2)"]]
+    ),
+}
+
+
+def reviewing() -> FakeExecutor:
+    return FakeExecutor(
+        fail=TaskFailed("ui_escalated", "화면을 확인해 주세요", escalate="confirmation", review=SHOWN),
+    )
+
+
+def test_the_extensions_review_reaches_the_field_request_but_not_the_log(tmp_path: Path) -> None:
+    """확장의 검토 자료는 **확인 요청의 C6 `review`**로 가고(CMN-01 [R]) 실행 기록에는 없다 (ADR-0112, 원칙 6)."""
+    run = run_it(tmp_path, PROCESS, Host({"demo_task": reviewing()}))
+    (pending,) = run.pendings.values()
+    assert pending.review == SHOWN
+    # 실행 프로세스가 `.field-requests.jsonl`에 쓰는 본문 그대로다 (ADR-0078).
+    assert create_request(run, pending).review == SHOWN
+    logged = json.dumps(events(tmp_path), ensure_ascii=False)
+    assert "주문.저장" not in logged and "여러 개 맞음" not in logged and "시도한 로케이터" not in logged
+
+
+@pytest.mark.parametrize("xml", [ON_SERVER, NAMED_ESCALATED], ids=["server", "named-boundary"])
+def test_the_review_is_dropped_when_the_boundary_takes_it(tmp_path: Path, xml: str) -> None:
+    """오류 경계로 가면 보일 사람이 없다 — 검토 자료는 **어디에도 가지 않는다** (ADR-0112 §4)."""
+    run = run_it(tmp_path, xml, Host({"demo_task": reviewing()}))
+    assert run.state == State.DONE and not run.pendings
+    assert "주문.저장" not in json.dumps(events(tmp_path), ensure_ascii=False)
+    assert "주문.저장" not in json.dumps(run.variables, ensure_ascii=False, default=str)
 
 
 def test_continue_passes_the_task_without_doing_it_again(tmp_path: Path) -> None:

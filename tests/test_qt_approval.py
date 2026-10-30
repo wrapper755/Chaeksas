@@ -17,13 +17,14 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from chaeksas.contracts.approvals import Form, FormField  # noqa: E402
+from chaeksas.contracts.approvals import Form, FormField, as_table, review_table  # noqa: E402
 from chaeksas.qt.approval import (  # noqa: E402
     APPROVE,
     CONFIRMATION,
     REJECT,
     ApprovalDialog,
     as_text,
+    review_tables,
     review_text,
 )
 
@@ -139,3 +140,36 @@ def test_a_confirmation_says_continue_or_stop(app: Any) -> None:
     dialog = ApprovalDialog(None, title="로그인 확인", layer=CONFIRMATION)
     assert dialog.is_confirmation
     assert dialog.ok.text() == "계속" and dialog.no.text() == "중단"
+
+
+# ─────────────────────── 표 값 (C6, ADR-0112) ───────────────────────
+
+
+def test_only_the_exact_shape_is_a_table() -> None:
+    """**뜻을 어림하지 않는다** — 열쇠가 정확히 `headers`·`rows`이고 칸 수가 맞을 때만 표다."""
+    assert as_table(review_table(["a", "b"], [[1, 2]])) == (["a", "b"], [[1, 2]])
+    assert as_table({"headers": ["a"], "rows": [[1, 2]]}) is None, "칸 수가 다르다"
+    assert as_table({"headers": ["a"], "rows": [[1]], "note": "x"}) is None, "열쇠가 더 있다"
+    assert as_table({"headers": "a", "rows": []}) is None
+    assert as_table([["a"], [1]]) is None
+    with pytest.raises(ValueError, match="칸이"):
+        review_table(["a", "b"], [[1]])
+
+
+def test_a_table_value_is_drawn_as_a_table_and_the_rest_as_text(app: Any) -> None:
+    """CMN-01 [R] — 표는 표로, 나머지는 지금처럼 글로 (ADR-0112)."""
+    review = {"요소": "주문.저장", "시도한 로케이터": review_table(["순서", "결과"], [[1, "찾지 못함"], [2, True]])}
+    assert review_tables(review) == [("시도한 로케이터", ["순서", "결과"], [[1, "찾지 못함"], [2, True]])]
+    assert review_text(review) == "[요소]\n주문.저장", "표는 글 상자에 들어가지 않는다"
+
+    dialog = ApprovalDialog(None, title="실행 확인 요청 — 주문 저장", review=review, layer=CONFIRMATION)
+    (table,) = dialog.review_tables
+    assert (table.rowCount(), table.columnCount()) == (2, 2)
+    cell = table.item(1, 1)
+    assert cell is not None and cell.text() == "예", "칸도 따옴표 없이 읽는 말로"
+    assert table.editTriggers() == table.EditTrigger.NoEditTriggers, "읽기 전용"
+
+
+def test_a_review_without_tables_draws_no_table(app: Any) -> None:
+    dialog = ApprovalDialog(None, review={"합계": 1000})
+    assert dialog.review_tables == []
