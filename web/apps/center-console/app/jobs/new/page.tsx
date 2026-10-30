@@ -5,6 +5,7 @@ import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ManifestInput } from "@chaeksas/api-types/c5-package-info";
 import { fromCaller } from "@/lib/inputs";
+import { runsOnServer, serverLimit, serverVersions } from "@/lib/jobs";
 import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { createJob } from "@/app/actions";
@@ -15,6 +16,10 @@ import { createJob } from "@/app/actions";
  * **두 걸음이고 둘 다 JS 없이 돈다.** 먼저 GET 폼으로 BPM 프로세스 → PC 실행기 → 버전을 고르면(주소에
  * 남는다), 그 버전의 매니페스트(C1 `inputs`)로 입력 칸을 그린 POST 폼이 나온다.
  *
+ * - **서버 BPM 프로세스면 PC 실행기 칸이 없다** — 「서버 실행기에서 실행 — 동시 실행 상한 <n>」이고
+ *   실행기는 Center가 빈자리로 고른다(`target.id = "*"`, C5 `JobTarget`). 판이 둘 이상 배포돼
+ *   있으면 PC와 같이 버전을 고르게 한다.
+ *
  * - PC 실행기는 **그 BPM 프로세스가 배포된 곳만** 고를 수 있다. 고를 곳이 없으면 「이 PC 실행기에 유효한
  *   배포가 없습니다」 — 만들어 봐야 422 `no_deployment`다. **PC 배포는 전체(`*`) 대상이 없다**
  *   (ADR-0046) — 봉투 하나가 PC 하나를 가리키므로 여기서 풀 것이 없다.
@@ -23,11 +28,6 @@ import { createJob } from "@/app/actions";
  */
 
 const FIELD = "h-9 border border-border-strong bg-bg-surface px-2 text-body";
-
-/** PC 배포만 — 서버 실행기 대상 작업은 M7이다 (C5 `server_runner_not_available`). */
-function pcDeployments(all: DeploymentInfo[]): DeploymentInfo[] {
-  return all.filter((one) => one.target.type === "bot_ui");
-}
 
 /** 그 BPM 프로세스가 배포된 PC 실행기들. **PC 배포는 대상이 하나씩**이라 풀 것이 없다 (ADR-0046). */
 function deployedTo(deployments: DeploymentInfo[], bot: string, botUis: BotUiInfo[]): BotUiInfo[] {
@@ -98,21 +98,26 @@ export default async function NewJobPage({
   let botUis: BotUiInfo[] = [];
   let failure: string | null = asked.error ?? null;
   try {
-    deployments = pcDeployments(await center.deployments({ active: true }));
+    deployments = await center.deployments({ active: true });
     botUis = await center.botUis();
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
 
   const bots = [...new Set(deployments.map((one) => one.bpm_process_id))].sort();
-  const places = bot ? deployedTo(deployments, bot, botUis) : [];
-  const versions = bot && botUi ? versionsFor(deployments, bot, botUi) : [];
+  const server = bot ? runsOnServer(deployments, bot) : false;
+  const places = bot && !server ? deployedTo(deployments, bot, botUis) : [];
+  const versions = server
+    ? serverVersions(deployments, bot)
+    : bot && botUi
+      ? versionsFor(deployments, bot, botUi)
+      : [];
   const mustPick = versions.length > 1;
   const pickedVersion = asked.version ?? "";
   const version = mustPick && versions.includes(pickedVersion) ? pickedVersion : "";
   // 입력 칸은 이 버전의 매니페스트로 그린다 (배포가 하나면 그것).
   const shown = version || (versions.length === 1 ? (versions[0] ?? "") : "");
-  const ready = Boolean(bot && botUi && shown);
+  const ready = Boolean(bot && (server || botUi) && shown);
 
   let inputs: ManifestInput[] = [];
   if (ready) {
@@ -151,7 +156,12 @@ export default async function NewJobPage({
             ))}
           </select>
         </label>
-        {bot ? (
+        {server ? (
+          <p className="flex h-9 items-center text-body">
+            {/* 상한은 판의 배포가 정한다 — 판을 아직 고르지 않았으면 말하지 않는다. */}
+            서버 실행기에서 실행{shown ? ` — 동시 실행 상한 ${serverLimit(deployments, bot, shown)}` : ""}
+          </p>
+        ) : bot ? (
           <label className="flex flex-col gap-1 text-body-sm">
             <span className="text-text-muted">PC 실행기</span>
             <select name="bot_ui" defaultValue={botUi} className={FIELD}>
@@ -184,10 +194,10 @@ export default async function NewJobPage({
 
       {bots.length === 0 && !failure ? (
         <p className="text-body text-text-secondary">
-          PC에 배포된 BPM 프로세스가 없습니다. 「배포」에서 배포한 뒤 만드세요.
+          배포된 BPM 프로세스가 없습니다. 「배포」에서 배포한 뒤 만드세요.
         </p>
       ) : null}
-      {bot && places.length === 0 ? (
+      {bot && !server && places.length === 0 ? (
         <ErrorBanner message="이 BPM 프로세스가 배포된 PC 실행기가 없습니다 — 「배포」에서 배포한 뒤 만드세요." />
       ) : null}
       {bot && botUi && versions.length === 0 ? (
@@ -198,7 +208,8 @@ export default async function NewJobPage({
       {ready ? (
         <form action={createJob} className="flex max-w-2xl flex-col gap-4">
           <input type="hidden" name="bot" value={bot} />
-          <input type="hidden" name="bot_ui" value={botUi} />
+          <input type="hidden" name="bot_ui" value={server ? "" : botUi} />
+          <input type="hidden" name="place" value={server ? "server" : "pc"} />
           <input type="hidden" name="version" value={version} />
           <input type="hidden" name="inputs_from" value={shown} />
           <p className="text-body">

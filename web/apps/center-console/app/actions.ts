@@ -188,12 +188,14 @@ export async function createJob(form: FormData): Promise<void> {
   const bot = String(form.get("bot") ?? "");
   const botUi = String(form.get("bot_ui") ?? "");
   const version = String(form.get("version") ?? "");
+  // 서버 BPM 프로세스는 실행기를 고르지 않는다 — Center가 빈자리로 보낸다 (C5 `JobTarget`).
+  const server = form.get("place") === "server";
   const picked = `bot=${encodeURIComponent(bot)}&bot_ui=${encodeURIComponent(botUi)}&version=${encodeURIComponent(version)}`;
   const back = (query: string): Route => `/jobs/new?${picked}&${query}` as Route;
 
   let inputs: Record<string, unknown>;
   try {
-    // 입력 칸은 **그 PC 실행기에 배포된 버전**의 매니페스트로 그렸다 (`version`을 비워 보내도).
+    // 입력 칸은 **그 대상에 배포된 버전**의 매니페스트로 그렸다 (`version`을 비워 보내도).
     const shown = String(form.get("inputs_from") ?? "") || version;
     const declared = shown ? fromCaller((await center.packageInfo(bot, shown)).manifest?.inputs ?? []) : [];
     inputs = readInputs(declared, form);
@@ -207,9 +209,9 @@ export async function createJob(form: FormData): Promise<void> {
   try {
     const job = await center.createJob({
       bpm_process_id: bot,
-      target: { type: "bot_ui", id: botUi },
+      target: server ? { type: "server_runner", id: "*" } : { type: "bot_ui", id: botUi },
       inputs,
-      // 비우면 그 PC 실행기에 배포된 버전으로 Center가 채운다 (C5).
+      // 비우면 그 대상에 배포된 버전으로 Center가 채운다 (C5).
       version: version || null,
       // `datetime-local`은 시간대가 없다 — 콘솔 서버의 시간대로 읽어 ISO로 보낸다.
       expires_at: expires ? new Date(expires).toISOString() : null,
@@ -220,6 +222,8 @@ export async function createJob(form: FormData): Promise<void> {
     redirect(back(`error=${encodeURIComponent(message(cause))}`));
   }
   revalidatePath("/jobs", "layout");
+  // 서버 작업은 CON-12의 「대기열」에도 보인다.
+  if (server) revalidatePath("/server-runners", "layout");
   redirect(`/jobs/${encodeURIComponent(made)}?created=1` as Route);
 }
 

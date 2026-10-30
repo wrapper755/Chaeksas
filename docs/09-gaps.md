@@ -329,8 +329,8 @@ M6의 첫째 기준(「**시나리오 3**(BX-04)이 Windows 현장 PC에서 Cent
 
 | 자리 | 화면 | 약속한 것 | 코드 근거 | 먼저 정할 것 |
 | --- | --- | --- | --- | --- |
-| 8-1 | CON-05 「새 작업」 | 서버 BPM 프로세스면 PC 고르기 대신 「서버 실행기에서 실행 — 동시 실행 상한 <n>」 | `app/jobs/new/page.tsx:26-30`이 PC 배포만 거르고(주석 「서버 실행기 대상 작업은 M7이다」), `app/actions.ts:210`이 `target: {type: "bot_ui"}`로 고정한다. Center는 받는다(`api/jobs.py:241-258`) | 없다 — **콘솔에서 서버 작업을 만들 길이 없는 것**이라 무겁다 |
-| 8-2 | CON-05 「중지」 | 도는 서버 실행(`accepted`)의 「중지」·확인 문구 「도는 실행을 멈춥니다…」·「중지 요청함」, PC면 끄고 까닭 | `app/jobs/labels.ts:39` `CANCELLABLE`에 `accepted`가 없다 → 목록(`page.tsx:143`)·상세(`[jobId]/page.tsx:121`)가 단추를 숨긴다. Center는 202로 받는다(ADR-0063, `api/jobs.py:356`) | 없다 |
+| 8-1 | CON-05 「새 작업」 | 서버 BPM 프로세스면 PC 고르기 대신 「서버 실행기에서 실행 — 동시 실행 상한 <n>」 | **닫았다** — 서버에 배포된 BPM 프로세스면 PC 칸 대신 그 글이 보이고(<n>은 배포의 `max_concurrency`, 없으면 「기본」) `target: {type: "server_runner", id: "*"}`로 만든다. 판단은 `lib/jobs.ts`(`runsOnServer`·`serverVersions`·`serverLimit`, vitest `jobs.test.ts`) | — |
+| 8-2 | CON-05 「중지」 | 도는 서버 실행(`accepted`)의 「중지」·확인 문구 「도는 실행을 멈춥니다…」·「중지 요청함」, PC면 끄고 까닭 | **닫았다** — 단추는 `lib/jobs.ts`의 `cancelControl()` 하나가 정한다(취소·중지·끈 단추, vitest). 「중지...」는 확인 창(기본 「취소」)을 거쳐 같은 `DELETE /jobs/{id}`를 부르고, 상태 옆 글이 「중지 요청함 — 다음 하트비트에 반영」이다. PC면 끈 단추에 까닭(목록은 툴팁, 상세는 한 줄) | — |
 | 8-3 | CON-01 목록 「시작 방식」 | 작업·감시·수동·일정·메시지 | `app/runs/page.tsx:154`가 `row.source`를 그대로 — 일정이 만든 실행이 `schedule`로 보인다. 표기는 CON-03 상세에 있다(`bot-uis/[botUiId]/page.tsx:36-43`) | 없다 — 표기를 한 자리로 |
 | 8-4 | CON-01 상세 | 노드 타임라인의 가로 막대·이어 돌기 점선, 요약의 「재생」·「LLM 단계」 | `app/runs/[runId]/page.tsx:385-441`은 표뿐이고 요약에 `replayed_tasks`가 없다(목록은 쓴다 — `runs/page.tsx:164-165`). 「사람 개입」의 「폼 키」는 C3 `human_requested`에 폼 칸이 없어(`contracts/events.py:37` — `layer`·`request_id`·`where`) **문서가 고칠 쪽**이다 | 「폼 키」를 문서에서 걷는다 |
 | 8-5 | CON-00 위 막대 | 「새로 고침」 | `components/Shell.tsx`에 로그아웃뿐 | 없다 |

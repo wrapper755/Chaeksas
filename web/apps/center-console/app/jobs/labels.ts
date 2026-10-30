@@ -35,9 +35,6 @@ export const REASON_LABEL: Record<string, string> = {
   paused: "일시 중지",
 };
 
-/** 취소할 수 있는 상태 (C5 「취소」 표 — 그 밖은 409). */
-export const CANCELLABLE = new Set(["pending", "dispatched", "queued"]);
-
 /** PC 위임의 요청자 예약값 (C5 `server_bot:<run_id>`). */
 const SERVER_BOT = "server_bot:";
 
@@ -74,11 +71,16 @@ export function delegatedFrom(job: JobInfo): string | null {
  * 상태 옆에 붙는 한 줄 — 취소의 진행, 대기열 순번 (CON-05).
  *
  * - 취소를 요청했는데 아직 상태가 그대로면 「취소 요청함 — 다음 하트비트에 반영」.
+ * - 도는 서버 실행(`accepted`)을 멈춰 달라고 했으면 「중지 요청함 — 다음 하트비트에 반영」
+ *   (ADR-0063 — 실행기가 닫으면 「취소됨」이 된다).
  * - 그사이 시작됐으면 작업은 「수락」 그대로이고 「취소 못 함 — 이미 시작됨」.
  * - 대기열이면 「PC 실행기 대기열 N번째 — 실행 중 <BPM 프로세스>」 (PC 실행기가 보고한 지금 실행).
  */
 export function stateNote(job: JobInfo, botUis: BotUiInfo[]): string | null {
   if (job.cancel_result === "refused_already_started") return "취소 못 함 — 이미 시작됨";
+  if (job.cancel_requested && job.state === "accepted" && job.target.type === "server_runner") {
+    return "중지 요청함 — 다음 하트비트에 반영";
+  }
   if (job.cancel_requested && job.state !== "cancelled") return "취소 요청함 — 다음 하트비트에 반영";
   if (job.state === "queued" && job.queue_position) {
     const host = botUis.find((one) => one.bot_ui_id === job.target.id);
