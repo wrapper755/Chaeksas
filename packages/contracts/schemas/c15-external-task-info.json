@@ -1,0 +1,119 @@
+{
+  "$id": "urn:chaeksas:contracts:c15-external-task-info",
+  "additionalProperties": true,
+  "description": "`GET /api/v1/external-tasks?run_id=`의 한 줄 — 콘솔이 보는 일감 (CON-01 「외부 작업」).\n\n**업무 값은 없다** (원칙 6) — 입력·출력·오류 글은 싣지 않고 코드만 싣는다. 자리(`node_id`·\n`node_instance`·`attempt`·`call_seq`)는 멱등 칸에서 온다.",
+  "properties": {
+    "acked_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Acked At"
+    },
+    "attempt": {
+      "default": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "call_seq": {
+      "default": 1,
+      "title": "Call Seq",
+      "type": "integer"
+    },
+    "consumers": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Consumers",
+      "type": "array"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "deliveries": {
+      "default": 0,
+      "title": "Deliveries",
+      "type": "integer"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "mode": {
+      "title": "Mode",
+      "type": "string"
+    },
+    "node_id": {
+      "title": "Node Id",
+      "type": "string"
+    },
+    "node_instance": {
+      "default": 1,
+      "title": "Node Instance",
+      "type": "integer"
+    },
+    "operation": {
+      "title": "Operation",
+      "type": "string"
+    },
+    "origin": {
+      "title": "Origin",
+      "type": "string"
+    },
+    "outcome_unknown": {
+      "default": false,
+      "title": "Outcome Unknown",
+      "type": "boolean"
+    },
+    "state": {
+      "title": "State",
+      "type": "string"
+    },
+    "task_id": {
+      "title": "Task Id",
+      "type": "string"
+    },
+    "topic": {
+      "title": "Topic",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "topic",
+    "operation",
+    "mode",
+    "origin",
+    "node_id",
+    "state",
+    "created_at"
+  ],
+  "title": "ExternalTaskInfo",
+  "type": "object"
+}

@@ -10,7 +10,8 @@
   엔진이 읽지 않는 정의(조건·끝 이벤트의 오류·종료 …)는 칸 없이 그렇다고 말한다.
 
 - 타이머의 종류는 **자리가 정한다** — 시작은 주기(`timeCycle`), 경계·중간은 기한(`timeDuration`)이다
-  (C14). 그림이 다른 종류를 적었으면 경고하고, 값을 고치면 그 자리의 종류로 쓴다.
+  (C14). 그림이 다른 종류를 적었으면 경고하고, 값을 고치면 그 자리의 종류로 쓴다. 주기는 **Center가 일정을
+  쓸 때와 같은 함수**(`contracts.schedule`, C1 R13)로 본다 — 여기서 받은 식이 올릴 때 막히지 않는다.
 - 이름(메시지·신호·오류 코드)은 **같은 이름의 정의를 가리킨다** — 캔버스가 없으면 만든다. 다른 이벤트와
   함께 쓰던 정의의 이름은 바꾸지 않는다.
 """
@@ -33,6 +34,7 @@ from PySide6.QtWidgets import (
 )
 
 from chaeksas.contracts.bpmn_ext import duration_hours, is_var_name
+from chaeksas.contracts.schedule import cycle_problem
 from chaeksas.core.run_state import (
     ERROR_APPROVAL_EXPIRED,
     ERROR_APPROVAL_WITHDRAWN,
@@ -104,7 +106,8 @@ CATCH_UNDEFINED = (
     "중간 받기에 이벤트 정의가 없습니다 — 엔진이 멈춥니다 (event_undefined). 바꾸기 메뉴로 정의를 고르세요."
 )
 START_TIMER_NOTE = (
-    "패키지의 시작 방법(C1 triggers)에 실립니다 — 현장에서 이 일정으로 깨우는 자리는 아직 없습니다 (09-gaps)."
+    "패키지의 시작 방법(C1 triggers)에 실립니다 — 배포되면 Center가 이 일정으로 작업을 만들어 깨웁니다"
+    " (시간대는 Center 설정, ADR-0110)."
 )
 MESSAGE_NOTE = "외부 시스템은 Center 메시지 API로 이 이름을 보냅니다 (C12)."
 SIGNAL_NOTE = "한 실행 안의 가지 사이에서만 오갑니다."
@@ -349,8 +352,8 @@ class EventEditor(QWidget):
             errors.append("타이머 값을 적으세요.")
         elif wanted == DURATION and duration_hours(value) is None and not is_var_name(value):
             errors.append(f"기한은 ISO 기간(PT30M·P3D)이나 변수 이름이어야 합니다: {value}")
-        elif wanted == CYCLE and not _is_cycle(value):
-            errors.append(f"주기는 5필드 cron(0 9 * * 1-5)이나 ISO R/…이어야 합니다: {value}")
+        elif wanted == CYCLE and (why := cycle_problem(value)) is not None:
+            errors.append(f"주기는 5필드 cron(0 9 * * 1-5)이나 ISO R/…이어야 합니다: {why}")
 
     def _timer_preview(self) -> str:
         value = self.timer_box.text().strip()
@@ -433,13 +436,6 @@ class EventEditor(QWidget):
         if self.bpmn_type == "IntermediateCatchEvent":
             return CATCH_UNDEFINED
         return ""
-
-
-def _is_cycle(value: str) -> bool:
-    """C14 §이벤트 — 5필드 cron 또는 ISO 반복(`R/…`·`R5/…`)."""
-    if value.startswith("R") and "/" in value:
-        return True
-    return len(value.split()) == 5
 
 
 def _after(hours: float) -> str:

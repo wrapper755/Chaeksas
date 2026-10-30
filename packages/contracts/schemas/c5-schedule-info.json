@@ -1,0 +1,113 @@
+{
+  "$id": "urn:chaeksas:contracts:c5-schedule-info",
+  "additionalProperties": true,
+  "description": "`GET /schedules`의 한 줄 — 타이머로 시작하는 배포 하나의 일정 (C5 §일정, CON-02 「일정」, ADR-0110).\n\n서버 Bot은 (Bot, 버전)마다 한 줄이고 `target_id`가 없다 (실행기는 Center가 고른다). PC Bot은 배포된\nPC마다 한 줄이다. **센 것은 Center가 쓸 때와 같은 함수다** (`contracts.schedule`) — 화면이 따로 세면\n「다음 차례」가 일정과 어긋난다.",
+  "properties": {
+    "bpm_process_id": {
+      "title": "Bpm Process Id",
+      "type": "string"
+    },
+    "expression": {
+      "title": "Expression",
+      "type": "string"
+    },
+    "last_error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Error"
+    },
+    "last_job_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Job Id"
+    },
+    "last_missed": {
+      "default": 0,
+      "title": "Last Missed",
+      "type": "integer"
+    },
+    "last_slot": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Last Slot"
+    },
+    "next_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next At"
+    },
+    "problem": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Problem"
+    },
+    "target_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Id"
+    },
+    "target_type": {
+      "title": "Target Type",
+      "type": "string"
+    },
+    "timezone": {
+      "title": "Timezone",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "bpm_process_id",
+    "version",
+    "target_type",
+    "expression",
+    "timezone"
+  ],
+  "title": "ScheduleInfo",
+  "type": "object"
+}

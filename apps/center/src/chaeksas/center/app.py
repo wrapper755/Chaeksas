@@ -31,6 +31,7 @@ from chaeksas.center.api import (
     runs,
     server_runner,
     signing,
+    timers,
     virtual_workers,
 )
 from chaeksas.center.auth import (
@@ -73,6 +74,8 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     # 모든 JSON 응답에 charset=utf-8 (PowerShell 5.1이 한글을 깨뜨리지 않게, 이슈 #3)
     app = FastAPI(title="Chaeksas Center", version="0.1.0", default_response_class=Utf8JSONResponse)
     app.state.settings = settings
+    # 일정의 시간대는 **뜰 때** 푼다 (ADR-0110 §3) — 틀린 이름으로 뜬 Center의 일정이 하트비트마다 터지지 않게.
+    settings.zone()
     app.state.store = store or Store(settings.db_path)
     # 첫 비밀번호 파일을 두는 곳 — **DB를 제가 열었을 때만**. 저장소를 받았으면(시험) 설정의
     # 기본 경로가 이 PC의 진짜 데이터 폴더일 수 있다.
@@ -529,6 +532,12 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         """작업 지시. **서명이 없다** — 배포와 달리 「언제 돌려라」일 뿐이다 (C5 권한표)."""
         info, created = jobs.create(app.state.store, authenticate(request), await _json(request))
         return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
+
+    @app.get(f"{API}/schedules")
+    def list_schedules(request: Request) -> Any:
+        # 일정은 콘솔이 본다 (C5 §일정, CON-02) — 현장 키로 남의 일정을 읽지 못한다.
+        require_console(authenticate(request))
+        return [one.to_json_dict() for one in timers.schedules(app.state.store, tz=settings.zone())]
 
     @app.get(f"{API}/jobs")
     def list_jobs(

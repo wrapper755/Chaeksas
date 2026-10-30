@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from datetime import tzinfo
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import platformdirs
 
@@ -42,6 +44,9 @@ def data_dir() -> Path:
 #: 외부 작업 롱폴링을 함께 물고 있을 수 있는 수 (C15 「정한 것」 — 올리는 쪽·일꾼을 함께 센다).
 DEFAULT_EXTERNAL_TASK_WAITERS = 200
 
+#: 타이머 시작의 cron을 읽는 벽시계 (ADR-0110 §3) — Center 한 벌에 하나다. IANA 이름이다.
+DEFAULT_TIMEZONE = "Asia/Seoul"
+
 
 
 @dataclass(frozen=True)
@@ -66,6 +71,15 @@ class Settings:
     first_admin_password: str | None = None
     #: 외부 작업 롱폴링 상한 (C15) — 넘으면 503 `too_many_waiters`.
     external_task_max_waiters: int = DEFAULT_EXTERNAL_TASK_WAITERS
+    #: 타이머 시작의 시간대 (ADR-0110 §3). 풀 수 없으면 Center가 뜨지 않는다 (`zone()`).
+    timezone: str = DEFAULT_TIMEZONE
+
+    def zone(self) -> tzinfo:
+        """일정의 시간대. **풀 수 없으면 실패한다** — 틀린 시간대로 조용히 도는 일정은 없다."""
+        try:
+            return ZoneInfo(self.timezone)
+        except (ZoneInfoNotFoundError, ValueError) as e:
+            raise ValueError(f"{ENV_PREFIX}TIMEZONE 「{self.timezone}」을 풀 수 없다 (IANA 이름이어야 한다)") from e
 
     def data_folder(self) -> Path | None:
         """DB가 있는 폴더 — 첫 비밀번호 파일을 둔다. 메모리 DB면 `None`."""
@@ -90,4 +104,5 @@ class Settings:
             external_task_max_waiters=int(
                 _env("EXTERNAL_TASKS__MAX_WAITERS") or DEFAULT_EXTERNAL_TASK_WAITERS
             ),
+            timezone=_env("TIMEZONE") or DEFAULT_TIMEZONE,
         )

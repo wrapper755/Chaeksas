@@ -27,6 +27,7 @@ SERVER_SIDE = frozenset({
     "test_center_server_runner",
     "test_center_sql_portable",
     "test_center_storage_threads",
+    "test_center_timers",
     "test_center_virtual_workers",
     # 서버 실행기 (`test_server_runner_delegation`은 PC를 자식 프로세스로 돌려 양쪽이다)
     "test_server_runner_agent",

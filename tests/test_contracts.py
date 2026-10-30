@@ -324,7 +324,8 @@ def test_r9_a_trigger_kind_outside_the_contract_is_caught() -> None:
 
 
 def test_r9_passes_every_kind_the_contract_lists() -> None:
-    kinds = [Trigger(kind=k) for k in sorted(KNOWN_TRIGGER_KINDS)]
+    # 타이머에는 식이 있어야 한다 — 그것은 R13이 본다 (ADR-0110).
+    kinds = [Trigger(kind=k, expression="0 9 * * *" if k == "timer" else None) for k in sorted(KNOWN_TRIGGER_KINDS)]
     assert validate(manifest(triggers=kinds)) == []
 
 

@@ -61,7 +61,7 @@
 | [0050](0050-no-toolpack-kind.md) | 툴팩이라는 패키지 갈래를 두지 않는다 — 도구는 확장이 기여하고, 코드는 설치 파일로만 온다 (`provides.tools`·`requires.toolpacks`·`requires.secrets`도 함께 빠진다) | 수락 |
 | [0051](0051-shared-process-conveniences.md) | STU-03의 공유 BPM 프로세스 뿌리는 Center 목록이고 설치 여부를 줄에 덧붙인다 — 부르기·보기·복사는 설치된 판에서만, 읽기 전용은 뷰어 한 벌을 더 실어 지킨다 | 수락 |
 | [0052](0052-service-app-key-notices.md) | 서비스 앱 키의 「거부」는 실행 기록에서 읽고(묻지 않는다), 「만료 임박」만 쓰는 키에 하루 한 번 묻는다 — 사전 점검은 그대로 서버를 부르지 않는다 | 대체됨(ADR-0102) |
-| [0053](0053-no-watch-mode-in-studio.md) | Studio에 감시 모드를 두지 않는다 — 일정(cron)을 읽는 자리는 현장 하나이고, 트리거가 깨우는 그림은 시험 케이스의 `messages`로 본다 | 수락 |
+| [0053](0053-no-watch-mode-in-studio.md) | Studio에 감시 모드를 두지 않는다 — 일정(cron)을 읽는 자리는 현장 하나이고, 트리거가 깨우는 그림은 시험 케이스의 `messages`로 본다 | 수락 (일정을 읽는 자리는 [0110](0110-center-keeps-the-schedule.md)이 Center로 정했다) |
 | [0054](0054-server-run-state-and-concurrency.md) | 서버 실행기는 기다리는 실행의 `Run`을 JSON 한 덩이로 SQLite에 담고(그림·기록·바깥 세계·도우미는 다시 꽂는다), 도는 실행은 한 프로세스 안에서 실행마다 스레드 하나로 돈다 (s10) | 수락 |
 | [0055](0055-m6-field-scenario-is-scenario-3.md) | M6의 현장 기준은 시나리오 3(BX-04) 하나다 — 서버 Bot인 1·2·4는 M7 인수 시험이 덮는다 | 수락 |
 | [0056](0056-bounded-seen-maps.md) | 멱등 기억(`seen_jobs`·메시지)은 ack가 Center에 닿은 뒤 두 주기에 잊는다 — 닿지 않은 ack는 버리지 않고(업무가 두 번 일어난다), 작업과 메시지가 한 자리를 쓴다 | 수락 |
@@ -118,3 +118,4 @@
 | [0107](0107-outcome-unknown-asks-a-person.md) | **결과를 모르는 외부 작업 실패는 C15 칸 하나로 싣고, PC는 사람 확인 뒤 다시 부른다** — C15 `fail`·결과 `error`에 `outcome_unknown`(`retryable`과 함께 참일 수 없다). 어댑터 일꾼이 `idempotent: false` 작업에서 요청을 보낸 뒤 답을 못 받았을 때 싣는다(연결 단계 실패는 아니다). PC의 `chk:serviceCall`은 현장 확인으로 멈추고 「계속」은 `attempt`를 올려 다시 부르기, 「중단」은 `TASK_FAILED`다. `TASK_FAILED`를 이름으로 받는 경계가 있으면 묻지 않고, 서버는 늘 오류 경계다 | 수락 |
 | [0108](0108-windows-ci-weekly.md) | **Windows CI는 PR마다 돌리지 않고 주 1회와 수동 실행으로 돌린다** — PR은 Linux만, 주간(월요일 09:00 KST, main)·`workflow_dispatch`가 Windows + Linux. `mypy --platform win32`는 PR마다 Linux에서. OS를 타는 것을 만진 PR은 손으로 돌린다. Windows 셈은 주간·수동 실행 값으로 적는다 | 수락 |
 | [0109](0109-studio-writes-decision-tables.md) | **결정표(.dmn)는 Studio가 파일로 직접 쓰고, 격자는 따로 뜨는 창(STU-04a)에서 고친다** — 속성 패널 「규칙」 탭은 `chk:rule`(결정·입력·출력 짝)을, 창의 「저장」은 `.dmn`을 바로 쓴다(캔버스 실행 취소 밖). 고치는 결정표 하나만 바꾸고 모르는 것·id는 그대로 둔다. 칸 검증은 `contracts.dmn`과 같은 함수, 마지막 관문은 다시 읽기. 받은 `libs/*.dmn`은 읽기 전용, 있는 결정의 ID는 바꾸지 않는다 | 수락 |
+| [0110](0110-center-keeps-the-schedule.md) | **타이머 시작의 일정은 Center가 쥐고 작업으로 만든다** — 하트비트를 받을 때 분마다 한 번 배포된 매니페스트의 `triggers[kind=timer]`를 쓸어 `POST /jobs`와 같은 함수로 작업을 만든다(밀지 않는다). 서버 Bot은 (Bot, 버전)마다 한 번·실행기는 Center가, PC Bot은 배포된 PC마다. 시간대는 Center 한 벌에 하나(`CHK_CENTER__TIMEZONE`, 기본 `Asia/Seoul`). 놓친 차례는 가장 최근 한 번만, 배포 전 차례는 없다, `expires_at`은 다음 차례. 차례는 기본 키로 먼저 잡고 멱등 키도 일정·차례로 짓는다. `requested_by` `timer:<식>` → `source: schedule`. 식은 `contracts.schedule` 하나(C1 R13) | 수락 |

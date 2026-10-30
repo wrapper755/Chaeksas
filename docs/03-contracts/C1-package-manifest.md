@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Studio(빌드) → Center(업로드·검사·보관) → Bot UI·서버 실행기(설치·사전 점검) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/manifest.py` (import `chaeksas.contracts.manifest`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c1-manifest.json`](../../packages/contracts/schemas/c1-manifest.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md) |
+| 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0110](../decisions/0110-center-keeps-the-schedule.md) |
 
 ## 목적
 
@@ -131,8 +131,11 @@
 - **`conditional`·`signal`로 시작하는 그림은 schema 1의 범위 밖이다** (C14 §이벤트 — 조건 시작은
   쓰지 않고, 신호는 한 실행 안의 가지 사이에서만 간다). 그래도 **`none`으로 뭉개지 않고 그린 대로
   적는다** — 「작업 지시로 시작한다」고 적어 주면 왜 안 도는지 아무도 모른다.
-- **실행하는 쪽은 `triggers`로 일정을 잡지 않는다.** 타이머 일정은 BPMN의 `timeCycle`을 읽고
-  (C14 §이벤트), 메시지는 상관 키까지 봐야 한다 (C12). `triggers`는 **보여 주고 고르는 값**이다.
+- **타이머 일정은 Center가 `triggers`로 쓴다** ([ADR-0110](../decisions/0110-center-keeps-the-schedule.md),
+  C5 §일정) — Center는 그림을 읽지 않으므로 Studio가 `timeCycle` 본문을 `expression`에 옮겨 둔 것이
+  일정의 원본이다. 읽는 문법은 `contracts.schedule` 하나이고 **R13이 올릴 때 같은 함수로 본다**.
+  실행하는 쪽(Bot UI·서버 실행기)은 일정을 잡지 않는다 — 일정이 만든 것은 평범한 작업이다.
+  메시지 시작도 Center가 `triggers`의 이름으로 고른다(C12 — 상관 키는 Center가 기다리는 실행과 맞춘다).
 
 ## 검사 규칙
 
@@ -153,6 +156,7 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 | R10 | `requires.delegations`가 있으면 `run_location=server`다 — **PC 위임은 서버 Bot만 한다** (PC 실행은 그 PC의 자리를 끝까지 쥐므로 PC가 PC를 기다리면 서로를 기다린다, [ADR-0014](../decisions/0014-one-bot-per-pc.md)). C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지 않는다** | 422 `delegation_not_from_pc` + 걸린 Bot 목록 |
 | R11 | `requires.settings`가 아는 값 중 하나다 (`llm`·`vlm`·`smtp`) — **R9와 같은 까닭**이다: 그림에서 기계가 옮기는 값이고(`chk:email` → `smtp`) 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다(`core.preflight`). 모르는 이름은 그 점검을 **아무 말 없이 지나가** 준비되지 않은 Bot이 실행된다 | 422 `unknown_setting` + 걸린 값 목록 |
 | R12 | `requires.delegations`에 **자기 `id`가 없다** — 자기 자신에게 위임하지 않는다 (끝나지 않는 되부름이다, [ADR-0082](../decisions/0082-batch-start.md)). 그림은 자기 패키지 id를 모르므로 매니페스트가 본다 | 422 `delegation_to_self` + 그 항목 |
+| R13 | `triggers[kind=timer].expression`을 **Center가 읽을 수 있다** — 5필드 cron(`*`·수·`a-b`·`/n`·쉼표, 일 칸 `L`, 요일 0~7) 또는 ISO `R[n]/<시작>/<기간>`·`R[n]/<기간>`(1분 이상). **R9와 같은 까닭**이다: 일정은 Center가 이 식으로 쓰므로(C5 §일정) 읽지 못하는 식은 그 Bot을 **아무 말 없이 영영 돌지 않게** 한다. 읽는 함수는 `contracts.schedule` 하나다 ([ADR-0110](../decisions/0110-center-keeps-the-schedule.md)) | 422 `timer_expression_invalid` + 걸린 식과 까닭 |
 
 **R2는 모르는 것을 막지 않는다.** 태스크 종류의 실행 위치는 **확장 정의만** 안다 (C13
 `task_types[].run_locations`, ADR-0018) — 빌드하는 PC에 그 확장이 없거나 꺼져 있으면 Studio가
@@ -266,6 +270,7 @@ PC Bot (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-30 | 1 | **타이머 일정을 Center가 `triggers`로 쓴다** — 「실행하는 쪽은 `triggers`로 일정을 잡지 않는다」를 그대로 두되 일정을 쥐는 자리가 Center임을 적었고, **R13**(타이머 식을 읽을 수 있다)을 더했다. 칸은 그대로다. 예제의 식은 모두 지난다(`0 18 L * *` 포함) | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | `requires.service_apps[].key_ref`·`task_key_refs`와 **R4를 걷었다** — 빌드가 적지 않고, 옛 패키지에 적혀 있으면 모르는 칸으로 받아 두고 보지 않는다(원칙 3). 선택 칸을 걷은 것이고 받는 쪽이 옛 칸을 거부하지 않으므로 **판을 올리지 않는다** (C4의 키 칸을 걷을 때와 같은 결) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `key_ref`·`task_key_refs`는 옛 패키지를 읽는 칸으로만 남는다(키가 없다). `app_id`가 C15 토픽이고 배포된 Bot이 올려도 되는 토픽을 정한다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | `inputs[].source?`(값 출처 — C14)를 옮긴다. 없으면 부르는 쪽이다 (옛 패키지와 같다) | [0099](../decisions/0099-input-value-source.md) |

@@ -66,7 +66,7 @@
 | 수행 모드 | 자율 수행 / 결정 수행 | 글자로만 표시 (색 없음) |
 | API 키 (Center) | 사용 중 / 만료 / 폐기됨 | done / warning / neutral |
 | 패키지 | 후보 / 승인됨 / 지원 종료 / 철회 / 로컬만 | waiting / done / warning / failed / neutral |
-| 서명·준비·온라인·UI 세션·배치 결정·가상 직원·관리자 계정·배포·등록 요청·기능 | `tokens.json` `status_map` 참고 | — |
+| 서명·준비·온라인·UI 세션·외부 작업·배치 결정·가상 직원·관리자 계정·배포·등록 요청·기능 | `tokens.json` `status_map` 참고 | — |
 | 결재 | 대기 / 답함 / 시간 초과 / 회수됨 (실행하는 쪽이 답을 거절하면 다시 「대기」 + 안내 띠) | waiting / done / warning / neutral |
 | 작업 | 대기 / 전달됨 / 대기열 / 수락 / 거절 / 만료 / 취소됨 | neutral / active / waiting / done / failed / warning / neutral |
 | 로케이터 | 사용 중(active) / 검증 전(unverified) / 대체됨(deprecated) | done / waiting / neutral |

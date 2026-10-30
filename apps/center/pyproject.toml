@@ -9,6 +9,8 @@ dependencies = [
     "uvicorn>=0.32",
     "platformdirs>=4.3",
     "python-multipart>=0.0.12", # 패키지 업로드 (multipart/form-data)
+    # 타이머 일정의 시간대 (ADR-0110) — Windows에는 OS 시간대 자료가 없어 zoneinfo가 이것을 읽는다.
+    "tzdata>=2024.1; sys_platform == 'win32'",
 ]
 
 [tool.uv.sources]

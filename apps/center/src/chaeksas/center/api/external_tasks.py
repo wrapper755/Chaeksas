@@ -65,6 +65,7 @@ from chaeksas.contracts.external_task import (
     ExtendRequest,
     ExternalTaskCreate,
     ExternalTaskCreated,
+    ExternalTaskInfo,
     ExternalTaskResult,
     FailRequest,
     FetchRequest,
@@ -658,6 +659,46 @@ def topics(store: Store, *, now: str | None = None) -> list[TopicStatus]:
     return [found[name] for name in sorted(found)]
 
 
+def for_run(store: Store, *, run_id: str) -> list[ExternalTaskInfo]:
+    """그 실행이 올린 일감들, 올린 순 (C15 `GET /external-tasks?run_id=`, CON-01 「외부 작업」).
+
+    **업무 값은 싣지 않는다** (원칙 6) — 입력·출력·오류 글·`detail`은 두고 코드만 옮긴다. 일꾼은 이름으로
+    보인다(콘솔은 id로 사람을 찾지 않는다). 실행 id는 멱등 칸에 있어 **글로 찾지 않고 읽어서 가른다**
+    — `LIKE`로 JSON을 뒤지면 다른 칸의 같은 글에도 걸린다.
+    """
+    names = {str(row["consumer_id"]): str(row["name"]) for row in store.rows("SELECT consumer_id, name FROM consumers")}
+    out = []
+    for row in store.rows("SELECT * FROM external_tasks ORDER BY created_at, task_id"):
+        key = loads(row["idempotency_json"], {}) or {}
+        if key.get("run_id") != run_id:
+            continue
+        held = [str(row["locked_by"])] if row["locked_by"] else sorted(loads(row["lockers_json"], []) or [])
+        error = loads(row["result_json"], {}) or {}
+        error = error.get("error") if isinstance(error, dict) else None
+        out.append(
+            ExternalTaskInfo(
+                task_id=str(row["task_id"]),
+                topic=str(row["topic"]),
+                operation=str(row["operation"]),
+                mode=str(row["mode"]),
+                origin=str(row["origin"]),
+                node_id=str(key.get("node_id", "")),
+                node_instance=int(key.get("node_instance", 1)),
+                attempt=int(key.get("attempt", 1)),
+                call_seq=int(key.get("call_seq", 1)),
+                state=str(row["state"]),
+                created_at=row["created_at"],
+                finished_at=row["finished_at"],
+                acked_at=row["acked_at"],
+                deliveries=int(row["deliveries"] or 0),
+                consumers=[names.get(one, one) for one in held],
+                error_code=str(error["code"]) if isinstance(error, dict) and error.get("code") else None,
+                outcome_unknown=bool(isinstance(error, dict) and error.get("outcome_unknown")),
+            )
+        )
+    return out
+
+
 # ─────────────────────────── 롱폴링 ───────────────────────────
 
 
@@ -856,6 +897,14 @@ async def put_self_catalog(request: Request, resource_type: str) -> Any:
 def get_consumers(request: Request) -> Any:
     require_console(_caller(request))
     return consumers(_store(request))
+
+
+@router.get("/external-tasks")
+def get_tasks_of_run(request: Request, run_id: str = "") -> Any:
+    require_console(_caller(request))
+    if not run_id:
+        raise ApiError(422, "input_invalid", "`run_id`가 있어야 한다 — 일감을 한 번에 다 주지 않는다")
+    return for_run(_store(request), run_id=run_id)
 
 
 @router.get("/external-topics")

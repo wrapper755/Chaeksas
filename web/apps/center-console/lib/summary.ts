@@ -14,6 +14,8 @@ import type { RunEvent } from "@chaeksas/api-types/c3-run-event";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
+import type { ScheduleInfo } from "@chaeksas/api-types/c5-schedule-info";
+import type { ExternalTaskInfo } from "@chaeksas/api-types/c15-external-task-info";
 
 /** 준비도를 재는 표본 (화면 문서 — 「최근 20회 실행 기준」). */
 export const SAMPLE = 20;
@@ -440,4 +442,57 @@ export type Place = "server" | "pc";
 
 export function placeOf(runLocation: string | null | undefined): Place {
   return runLocation === "pc" ? "pc" : "server";
+}
+
+
+// ─────────────────────────── CON-02 「일정」 (C5 §일정, ADR-0110) ───────────────────────────
+
+/**
+ * 그 탭의 일정 — **대상 종류로** 가른다 (서버 실행기 ↔ 「서버」, Bot UI ↔ 「PC」).
+ *
+ * 매니페스트의 실행 위치로 가르지 않는 것은 **일정은 배포에서 오기** 때문이다 — Center가 쓰는 것과
+ * 같은 줄을 보인다. 정렬은 Center가 한 그대로다 (Bot·버전·대상).
+ */
+export function schedulesOf(rows: ScheduleInfo[], place: Place): ScheduleInfo[] {
+  const wanted = place === "server" ? "server_runner" : "bot_ui";
+  return rows.filter((row) => row.target_type === wanted);
+}
+
+/** 「결과」 칸 — 작업을 만들었으면 그 상태, 거부됐으면 그 코드 (화면 문서). */
+export function scheduleResult(
+  row: ScheduleInfo,
+  stateOf: (jobId: string) => string | undefined,
+): { label: string; refused: boolean } {
+  if (row.problem) return { label: "읽지 못하는 식 — 다시 올리세요", refused: true };
+  if (row.last_error) return { label: `만들지 못함 — ${row.last_error}`, refused: true };
+  if (!row.last_job_id) return { label: "—", refused: false };
+  return { label: stateOf(row.last_job_id) ?? "—", refused: false };
+}
+
+/** 일정이 만든 작업의 요청자 (C5 예약값 `timer:<식>`) → 「일정 <식>」. 아니면 `null`. */
+export function timerRequester(requestedBy: string | null | undefined): string | null {
+  const found = requestedBy ?? "";
+  return found.startsWith("timer:") ? `일정 ${found.slice("timer:".length)}` : null;
+}
+
+// ─────────────────────────── CON-01 「외부 작업」 (C15) ───────────────────────────
+
+/** C15 일감 상태 → `status_map` 「외부 작업」 표기 (**열린 문자열**이라 모르는 값은 그대로 보인다). */
+export const TASK_STATE: Record<string, string> = {
+  pending: "기다림",
+  locked: "일꾼이 처리 중",
+  completed: "끝남",
+  failed: "실패",
+  expired: "만료",
+  cancelled: "거둠",
+};
+
+/**
+ * 「노드」 칸 — 반복 안이면 「#<차례>」, 다시 부른 것이면 「(<n>번째)」를 붙인다 (화면 문서).
+ * 첫 차례·첫 시도는 붙이지 않는다 (모든 줄에 「#1」이 서면 읽을 것이 늘 뿐이다).
+ */
+export function taskPlace(row: Pick<ExternalTaskInfo, "node_id" | "node_instance" | "attempt">): string {
+  const instance = (row.node_instance ?? 1) > 1 ? ` #${row.node_instance}` : "";
+  const attempt = (row.attempt ?? 1) > 1 ? ` (${row.attempt}번째)` : "";
+  return `${row.node_id}${instance}${attempt}`;
 }

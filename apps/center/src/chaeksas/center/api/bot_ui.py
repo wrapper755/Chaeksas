@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import json
 import secrets
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Any
 
 from fastapi import APIRouter, Request
 
 from chaeksas.center import enrollments, host_keys, keys
-from chaeksas.center.api import approvals, deployments, jobs, signing
+from chaeksas.center.api import approvals, deployments, jobs, signing, timers
+from chaeksas.center.api.timers import DEFAULT_ZONE
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import MAX_REQUEST_KB, ONLINE_WITHIN_S
@@ -142,7 +143,9 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
     )
 
 
-def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_interval_s: int) -> HeartbeatResponse:
+def heartbeat(
+    store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_interval_s: int, zone: tzinfo | None = None
+) -> HeartbeatResponse:
     """30초마다. 상태를 덮어쓰고, 내려줄 지시를 응답에 싣는다.
 
     배포 봉투와 작업이 여기 실려 내려간다. 결재(C6)는 아직이다.
@@ -184,6 +187,8 @@ def heartbeat(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_i
     )
 
     disabled = bool(found["disabled"])
+    # **일정을 먼저 쓴다** (ADR-0110) — 이번 차례의 작업이 이 하트비트로 바로 내려간다.
+    timers.sweep(store, tz=zone or DEFAULT_ZONE)
     # 작업은 ack 반영 → 만료 → 맞추기 → 고르기 순이다 (C4·C5, `api/jobs.py`).
     dispatch, cancels = jobs.heartbeat(
         store, bot_ui_id=str(found["bot_ui_id"]), request=request, disabled=disabled
@@ -280,7 +285,8 @@ async def post_heartbeat(request: Request) -> Any:
     store: Store = request.app.state.store
     found: Caller = request.app.state.authenticate(request)
     body = await _json(request)
-    return heartbeat(store, found, body, heartbeat_interval_s=request.app.state.settings.heartbeat_interval_s)
+    settings = request.app.state.settings
+    return heartbeat(store, found, body, heartbeat_interval_s=settings.heartbeat_interval_s, zone=settings.zone())
 
 
 async def _json(request: Request) -> dict[str, Any]:

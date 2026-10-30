@@ -305,6 +305,14 @@ def test_a_plain_job_is_not_a_delegation(tmp_path: Path) -> None:
     assert item.source == "job" and found.store.state.parents == {}
 
 
+def test_a_timer_job_is_queued_as_a_schedule(tmp_path: Path) -> None:
+    """Center의 일정이 만든 작업은 출처가 `schedule`이다 (ADR-0110) — `requested_by`의 `timer:`가 말한다."""
+    found = agent(tmp_path)
+    found.take_job(job("job_tmr").model_copy(update={"requested_by": "timer:0 9 1 * *"}))
+    (item,) = found.queue
+    assert item.source == "schedule" and found.store.state.parents == {}
+
+
 def test_the_parent_survives_a_restart(tmp_path: Path) -> None:
     """다시 켜도 **맡긴 실행을 안다** — 대기열이 남는 자리에 함께 남는다 (C4)."""
     first = agent(tmp_path)

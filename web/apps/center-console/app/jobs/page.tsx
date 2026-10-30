@@ -1,3 +1,4 @@
+import { timerRequester } from "@/lib/summary";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
@@ -109,7 +110,8 @@ export default async function JobsPage({
             서버 Bot ({from})
           </Link>
         ) : (
-          row.requested_by
+          // 일정이 만든 작업은 「일정 <식>」이다 (C5 예약값 `timer:`, ADR-0110).
+          timerRequester(row.requested_by) ?? row.requested_by
         );
       },
     },

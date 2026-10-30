@@ -41,7 +41,7 @@ from chaeksas.contracts.bot_ui import (
     JobDispatch,
     Readiness,
 )
-from chaeksas.contracts.center_api import delegated_run
+from chaeksas.contracts.center_api import delegated_run, job_source
 from chaeksas.contracts.enrollment import SealError, open_sealed, public_of
 from chaeksas.contracts.server_runner import (
     Capacity,
@@ -95,8 +95,6 @@ from chaeksas.server_runner.worker import ACK_STARTED, EMPTY_COUNTS, Worker, reo
 
 log = logging.getLogger(__name__)
 
-#: 위임으로 받은 작업의 출처 (C3 `run_started.source`) — Bot UI와 같은 값이다.
-SOURCE_DELEGATION = "delegation"
 
 #: 보고하는 판 (C12 `versions`) — 설치된 dist-info다. **서버 실행기는 묶지 않는다** (ADR-0067).
 CORE_VERSION = build_info.package_version("chaeksas-core")
@@ -596,9 +594,9 @@ class Agent:
             env=self.run_env(bot),
             job_id=job.job_id,
             inputs=dict(job.inputs),
-            # **위임으로 받은 작업은 출처가 다르다** (C3 `source: delegation`, ADR-0082) — 그것을
-            # 말해 주는 것은 작업의 `requested_by` 하나다(Bot UI와 같은 `delegated_run`).
-            source=SOURCE_DELEGATION if delegated_run(job.requested_by) else "job",
+            # **위임·일정으로 받은 작업은 출처가 다르다** (C3 `source: delegation`·`schedule`,
+            # ADR-0082·ADR-0110) — 말해 주는 것은 작업의 `requested_by` 하나다(Bot UI와 같은 `job_source`).
+            source=job_source(job.requested_by),
             parent_run_id=delegated_run(job.requested_by),
             # 작업에 가상 직원이 있으면 Center가 붙여 보냈다 (ADR-0099).
             virtual_worker=job.virtual_worker,

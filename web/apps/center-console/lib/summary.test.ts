@@ -16,6 +16,9 @@ import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
+import type { ScheduleInfo } from "@chaeksas/api-types/c5-schedule-info";
+// 생성된 표만 읽는다 — `@chaeksas/ui` 전체를 들이면 React 구성요소까지 따라온다.
+import { STATUS_MAP } from "../../../packages/ui/src/status-map";
 import {
   NO_RUNS,
   SAMPLE,
@@ -29,7 +32,12 @@ import {
   resumes,
   runnerStatus,
   serverDeployments,
+  scheduleResult,
+  schedulesOf,
   summarize,
+  TASK_STATE,
+  taskPlace,
+  timerRequester,
   waitTotals,
 } from "./summary";
 
@@ -442,5 +450,54 @@ describe("placeOf", () => {
     expect(placeOf("server")).toBe("server");
     expect(placeOf(null)).toBe("server");
     expect(placeOf(undefined)).toBe("server");
+  });
+});
+
+// ─────────────────────────── CON-02 「일정」·CON-01 「외부 작업」 ───────────────────────────
+
+describe("CON-02 일정 (C5 §일정)", () => {
+  const server = {
+    bpm_process_id: "hr.training-reminder",
+    version: "1.0.0",
+    target_type: "server_runner",
+    expression: "0 10 * * 3",
+    timezone: "Asia/Seoul",
+    last_missed: 0,
+  } as ScheduleInfo;
+  const pc = { ...server, bpm_process_id: "fin.tax", target_type: "bot_ui", target_id: "pc_1" } as ScheduleInfo;
+
+  it("탭은 대상 종류로 가른다", () => {
+    expect(schedulesOf([server, pc], "server")).toEqual([server]);
+    expect(schedulesOf([server, pc], "pc")).toEqual([pc]);
+  });
+
+  it("결과는 작업 상태, 거부는 코드, 읽지 못한 식은 다시 올리라고 한다", () => {
+    const state = (id: string) => (id === "job_a" ? "수락" : undefined);
+    expect(scheduleResult({ ...server, last_job_id: "job_a" }, state)).toEqual({ label: "수락", refused: false });
+    expect(scheduleResult({ ...server, last_error: "input_not_from_caller" }, state)).toEqual({
+      label: "만들지 못함 — input_not_from_caller",
+      refused: true,
+    });
+    expect(scheduleResult({ ...server, problem: "cron 분 칸" }, state).refused).toBe(true);
+    expect(scheduleResult(server, state)).toEqual({ label: "—", refused: false });
+  });
+
+  it("일정이 만든 작업의 요청자는 「일정 <식>」이다", () => {
+    expect(timerRequester("timer:0 9 * * *")).toBe("일정 0 9 * * *");
+    expect(timerRequester("server_bot:run_1")).toBeNull();
+    expect(timerRequester(null)).toBeNull();
+  });
+});
+
+describe("CON-01 외부 작업 (C15)", () => {
+  it("반복 차례와 다시 부른 것만 붙인다", () => {
+    expect(taskPlace({ node_id: "Task_a", node_instance: 1, attempt: 1 })).toBe("Task_a");
+    expect(taskPlace({ node_id: "Task_a", node_instance: 3, attempt: 2 })).toBe("Task_a #3 (2번째)");
+  });
+
+  it("상태 표기는 status_map 「외부 작업」의 것이다", () => {
+    for (const label of Object.values(TASK_STATE)) {
+      expect(Object.keys(STATUS_MAP["외부 작업"])).toContain(label);
+    }
   });
 });

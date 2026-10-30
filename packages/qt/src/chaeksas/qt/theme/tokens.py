@@ -291,6 +291,14 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
         "진행 중": "active",
         "시험": "neutral",
     },
+    "외부 작업": {
+        "기다림": "waiting",
+        "일꾼이 처리 중": "active",
+        "끝남": "done",
+        "실패": "failed",
+        "만료": "warning",
+        "거둠": "neutral",
+    },
     "배치 결정": {
         "적용": "done",
         "거부": "failed",
