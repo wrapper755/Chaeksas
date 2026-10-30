@@ -1,6 +1,6 @@
 # Worker 화면 설계
 
-> Worker 프로세스는 **UI 자동화 확장의 로컬 런타임**이다 ([ADR-0018](../decisions/0018-extensions.md)). 코드는 `extensions/ui_automation/worker/`.
+> Worker 프로세스는 **UI 자동화 확장의 로컬 런타임**이다 ([ADR-0018](../decisions/0018-extensions.md)). 코드는 `extensions/ui_automation/src/chaeksas/ext/ui_automation/worker/`.
 
 **Worker는 화면이 없는 서버 프로세스다** ([ADR-0012](../decisions/0012-bot-ui.md)). PC 실행기가 띄우고 감시하며, 실행 중인 BPM 프로세스·Studio가 127.0.0.1의 REST API(계약 C10)로 UI 자동화를 요청한다.
 

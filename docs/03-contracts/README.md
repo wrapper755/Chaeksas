@@ -35,19 +35,19 @@
 | # | 계약 | 누가 → 누구 | 상태 | 프로토타입 참고 ([대응표](../reference/README.md)) |
 | --- | --- | --- | --- | --- |
 | [C1](C1-package-manifest.md) | 패키지 매니페스트 (실행 위치 `run_location` 기본 `server`, 부르는 서비스 앱(= C15 토픽), 키 값 없음) | Studio → Center → PC 실행기·서버 실행기 | **구현됨** | Studio·BPM 프로세스 `packages/protocol/…/manifest.py` |
-| [C2](C2-signing-envelope.md) | 해시·서명 봉투 | Admin → Center → PC 실행기 | **구현됨** | Studio·BPM 프로세스 `packages/protocol/…/hashing.py`, `signing.py` |
+| [C2](C2-signing-envelope.md) | 해시·서명 봉투 | Center(관리자 계정의 승인·배포) → PC 실행기·서버 실행기 | **구현됨** | Studio·BPM 프로세스 `packages/protocol/…/hashing.py`, `signing.py` |
 | [C3](C3-run-events.md) | 실행 이벤트 (실행 위치 포함) | PC 실행기(실행 중 BPM 프로세스)·서버 실행기 → Center | **구현됨** | Studio·BPM 프로세스 `packages/protocol/…/events.py` |
 | [C4](C4-bot-ui-center.md) | Center API: PC 실행기 (Center API 키 인증·등록·하트비트 — 실행 중 BPM 프로세스 1건과 대기열 보고) | PC 실행기 ↔ Center | **구현됨** | Center `api/bots.py`, `schemas/api.py` |
-| [C5](C5-packages-deployments-jobs.md) | Center API: 패키지·배포·작업 (배포 대상 PC 실행기 / 서버 실행기, 서버 배포의 동시 실행 상한, 작업 상태에 「대기열」, 거절 사유 「대기열 가득」) | Studio·Admin·PC 실행기·서버 실행기 ↔ Center | **구현됨** | Center `api/packages.py`, `deployments.py`, `jobs.py` |
+| [C5](C5-packages-deployments-jobs.md) | Center API: 패키지·배포·작업 (배포 대상 PC 실행기 / 서버 실행기, 서버 배포의 동시 실행 상한, 작업 상태에 「대기열」, 거절 사유 「대기열 가득」) | Studio·콘솔·PC 실행기·서버 실행기 ↔ Center | **구현됨** | Center `api/packages.py`, `deployments.py`, `jobs.py` |
 | [C6](C6-approvals.md) | Center API: 결재 | PC 실행기·서버 실행기 ↔ Center ↔ 콘솔 | **구현됨** | Center `api/hitl.py` |
 | [C7](C7-resources-center-keys.md) | Center API: 리소스 (확장·서비스 앱·확장 기여 자원·런타임) + Center API 키 관리 | 서비스 앱·PC 실행기·Studio ↔ Center | **구현됨** | 없음 |
 | [C8](C8-ui-automation-plan-heal-report.md) | UI 자동화 앱: 계획·치유·보고 (데스크톱 로케이터 `class_name`·`control_type`) | Worker ↔ UI 자동화 앱 | **구현됨** | Worker `src/contracts/plan.py`, `healing.py`, `report.py` |
 | [C9](C9-ui-page-registry.md) | UI 자동화 앱: 화면 레지스트리 (작업은 C15 토픽 `ui-automation`) | Tool UI 셀렉터 등록 → Center ← UI 자동화 앱 | **구현됨** | Worker `src/contracts/registry.py` |
 | [C10](C10-worker-local-api.md) | Worker 로컬 API (UI 세션, 셀렉터 등록용 분석·선택·검증, 상태, 잠금 화면 `session_locked`) | 실행 중 BPM 프로세스·Studio·PC 실행기·Tool UI → Worker 프로세스 | **구현됨** | Worker `src/local_api/` |
 | [C11](C11-service-app-common.md) | 서비스 앱 공통 (일꾼 — healthz·manifest·작업 모양·수행 모드·멱등, 관리 콘솔 최소 기능) | 모든 서비스 앱(일꾼) → Center (C15) | **구현됨** | 없음 ([ADR-0010](../decisions/0010-service-apps.md), [ADR-0013](../decisions/0013-api-keys.md)) |
-| [C12](C12-server-runner-center.md) | Center API: 서버 실행기 (Center API 키 인증·등록·하트비트, 실행 중·기다리는 실행·대기열 보고, 일시 중지, 메시지, PC 위임 요청·결과(제안)) | 서버 실행기 ↔ Center | **구현됨** (M7) | 없음 ([ADR-0015](../decisions/0015-run-location.md)) |
+| [C12](C12-server-runner-center.md) | Center API: 서버 실행기 (Center API 키 인증·등록·하트비트, 실행 중·기다리는 실행·대기열 보고, 일시 중지, 메시지, PC 위임 요청·결과) | 서버 실행기 ↔ Center | **구현됨** (M7) | 없음 ([ADR-0015](../decisions/0015-run-location.md)) |
 | [C13](C13-extension-manifest.md) | 확장 정의 (`extension.json`: 등급, 서버 부분, 기여 지점, 외부 앱 HTTP 어댑터) | 확장 → Studio·PC 실행기·실행기·서버 실행기·Center | **구현됨** | 없음 ([ADR-0018](../decisions/0018-extensions.md)) |
-| [C14](C14-bpmn-extensions.md) | BPMN 확장 속성 (`chk:*` — 태스크 종류별 속성, 반복·파일 출력·이벤트 규칙, 시험 케이스 형식·비교 규칙, 실행 전 검사 B1~B14) | Studio → 패키지 → 실행기·서버 실행기, Center 업로드 검사 | **구현됨** | Studio `agentworks:*` 확장 속성 ([업무 예제](../08-business-examples/README.md)가 이 형식으로 쓰였다) |
+| [C14](C14-bpmn-extensions.md) | BPMN 확장 속성 (`chk:*` — 태스크 종류별 속성, 반복·파일 출력·이벤트 규칙, 시험 케이스 형식·비교 규칙, 실행 전 검사 B1~B16) | Studio → 패키지 → 실행기·서버 실행기, Center 업로드 검사 | **구현됨** | Studio `agentworks:*` 확장 속성 ([업무 예제](../08-business-examples/README.md)가 이 형식으로 쓰였다) |
 | [C15](C15-external-tasks.md) | Center API: 외부 작업 (올리기·기다리기·가져가기(롱폴링)·끝내기, 일꾼 들이기 — 바깥 기능을 부르는 길이 모두 Pull, [ADR-0102](../decisions/0102-calling-outside-is-pull.md)) | 서버 실행기·실행 프로세스·Studio·Worker·Tool UI → Center ← 일꾼 | **구현됨** | 없음 |
 
 새 계약 문서는 [template.md](template.md)를 복사해 `C<번호>-<이름>.md`로 만든다.

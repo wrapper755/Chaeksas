@@ -49,7 +49,7 @@
 
 ## UI 자동화 앱 고유 화면 (UIA)
 
-> UI 자동화 확장이 기여하는 콘솔 화면이다 (`console.pages`, [ADR-0018](../decisions/0018-extensions.md)). 화면에서 읽어 온 업무 값은 보고에 없으므로(C8) 여기에도 보이지 않는다. 「셀렉터 시험」(TOL-05) 보고는 「시험」으로 따로 표시하고 승격 통계에 넣지 않는다. 코드는 `extensions/ui_automation/console/`. 외부 확장(외부 앱)은 이 콘솔을 쓰지 않고 자기 콘솔 링크만 CON-07에 보인다.
+> UI 자동화 확장이 기여하는 콘솔 화면이다 (`console.pages`, [ADR-0018](../decisions/0018-extensions.md)). 화면에서 읽어 온 업무 값은 보고에 없으므로(C8) 여기에도 보이지 않는다. 「셀렉터 시험」(TOL-05) 보고는 「시험」으로 따로 표시하고 승격 통계에 넣지 않는다. 화면 코드는 `web/apps/svc-console/app/ext/ui-automation/`(고르는 표는 `lib/console-modules.ts`·생성물 `console-pages.generated.ts`), 읽는 길은 `extensions/ui_automation/…/service/console.py`. 외부 확장(외부 앱)은 이 콘솔을 쓰지 않고 자기 콘솔 링크만 CON-07에 보인다.
 >
 > 상태: **셋 다 돈다.** 탐색 줄은 기여에서 오고(콘솔이 확장 정의의 `console.pages`를 빌드 시점 레지스트리로 읽어 접속한 앱의 `extension.id`로 고른다, [ADR-0042](../decisions/0042-extension-contributed-panels.md) §2), 자료는 **C9 §관리 콘솔이 읽는 길**에서 오며 **관리자 토큰**으로만 열린다 (콘솔은 서비스 앱 키를 갖지 않는다, ADR-0013). 세 화면 모두 **보기 전용**이고 좁히기·경로 탐색·상세는 **JS 없이** 돈다 (일반 `<form method="get">`·`<details>`).
 

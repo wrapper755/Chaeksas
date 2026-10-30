@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 외부 확장은 어댑터 `health`로 본다) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 상태는 토픽에서 온다, C15) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Center ↔ 서비스 앱(공개 정보 읽기), Studio·PC 실행기·서버 실행기·Center 콘솔 → Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/resources.py`, `…/center_keys.py` (import `chaeksas.contracts.resources`, [ADR-0019](../decisions/0019-package-names.md)) |
@@ -104,11 +104,10 @@
 | `data` | 확장 고유 내용. Center는 해석하지 않는다 (UI 화면이면 C9 카탈로그 항목) |
 | `used_by` | 이 자원을 쓰는 BPM 프로세스 (C1 `requires.resources`와 대조) |
 
-### ToolpackResource, RuntimeResource
+### RuntimeResource
 
 | 모델 | 필드 |
 | --- | --- |
-| ToolpackResource | `id`, `version`, `status`, `tools`(`[{name, domain, description}]`), `content_hash` |
 | RuntimeResource | `host{type: bot_ui \| server_runner, id, name}`, `os`, `versions{bot_ui?, core, worker?}`, `browsers[]`, `desktop_backend`?, `extensions[]` |
 
 ### 목록 응답 공통
@@ -169,13 +168,11 @@ CenterKeyInfo 필드:
 | 상태 코드 | `code` | 언제 |
 | --- | --- | --- |
 | 404 | `not_found` | |
-| 409 | `in_use` | 쓰는 서비스 앱·확장 해제 |
 | 409 | `not_revoked` | 폐기되지 않은 키를 지우려 함 (`POST /center-keys/{key_id}/purge`) |
 | 409 | `id_conflict` | 같은 `id`가 이미 있음 (확장과 서비스 앱이 같은 이름 공간) |
-| 422 | `manifest_unreachable` / `manifest_invalid` | 등록 때 manifest를 읽지 못하거나 C11과 맞지 않음 |
+| 422 | `manifest_invalid` | 일꾼이 올린 manifest가 C11과 맞지 않음 |
 | 422 | `host_not_allowed` | 외부 주소가 `allowed_hosts` 밖이거나 사설망 |
 | 422 | `key_type_unknown` | |
-| 422 | `takes_no_key` / `key_not_ascii` | 키를 받지 않는 외부 앱에 키를 넣음 / ASCII가 아닌 키 (§외부 앱 키) |
 
 ## 호환 규칙
 

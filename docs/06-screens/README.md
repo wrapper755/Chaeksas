@@ -182,7 +182,7 @@ Studio 시험 실행과 PC 실행기의 BPM 프로세스 실행에서 같은 창
 | UIA-03 | 모니터링 | UI 자동화 앱 관리 콘솔 | 서비스 앱 관리자 | M4 | 프로토타입 |
 | CMN-01 | 결재 / 확인 창 | Studio, PC 실행기 | 결재자, 현장 PC 사용자 | M3 | 프로토타입 |
 
-폐기된 ID: BOT-01~05 → BUI-01~05, WRK-01~05 → BUI-02·06·07·08·01/09 ([worker.md](worker.md)), CON-08~10 → UIA-01~03, ADM-01~06 → CON-02·06(승인)·CON-14(계정)·CON-15(배포)·CON-07(외부 확장) — Admin 명령·창은 없어졌다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)).
+폐기된 ID: BOT-01~05 → BUI-01~05, WRK-01~05 → BUI-02·TOL-03·TOL-04·TOL-05·BUI-01/09 (BUI-06~08은 [ADR-0077](../decisions/0077-tool-ui.md)로 TOL-03~05가 됐다) ([worker.md](worker.md)), CON-08~10 → UIA-01~03, ADM-01~06 → CON-02·06(승인)·CON-14(계정)·CON-15(배포)·CON-07(외부 확장) — Admin 명령·창은 없어졌다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)).
 
 ## 7. 열린 질문
 

@@ -475,7 +475,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 | 422 | `intake_unknown` / `intake_not_server` / `intake_not_gated` | 가상 직원의 접수 BPM 프로세스가 승인된 판이 없거나·서버 BPM 프로세스가 아니거나·결재 없는 일괄 기동이 있다 (C14 B16, ADR-0085). 배포 쪽의 `intake_not_gated`는 409다 |
 | 409 | `id_conflict` | 같은 `id`의 가상 직원이 있다 |
 | 422 | `on_behalf_invalid` | `X-CHK-On-Behalf-Of`가 비었거나 200자를 넘거나 예약 앞머리로 시작함 (ADR-0081) |
-| 422 | `server_runner_not_available` | 서버 실행기 대상 (M7까지, ADR-0016). **배포와 작업 지시가 같다** — 상태 충돌이 아니라 **아직 없는 기능**이라 배포 쪽에서도 422다 |
+| 422 | `server_runner_not_available` | 서버 실행기 대상 — M7까지 쓰던 코드이고 지금은 내지 않는다(`SERVER_RUNNER_AVAILABLE`가 켜져 있다, ADR-0016). **배포와 작업 지시가 같다** — 상태 충돌이 아니라 **아직 없는 기능**이라 배포 쪽에서도 422다 |
 | 422 | `not_a_zip`, `manifest_missing`, `manifest_invalid`, `zip_too_many_entries`, `zip_unsafe_path`, `zip_too_large` | 업로드한 zip의 형식 오류. **400이 아니라 422다** — 본문은 읽혔고 내용이 계약과 맞지 않는다 |
 
 ## 호환 규칙

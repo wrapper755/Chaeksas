@@ -147,7 +147,7 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 | 필드 | 타입 | 뜻 |
 | --- | --- | --- |
 | `bot_ui_id` | str | `bui_<hex8>` |
-| `admin_keys` | AdminKey[] | 배포 서명 검증용 Admin 공개키 (C2). 철회된 키도 `revoked_at`과 함께 |
+| `admin_keys` | AdminKey[] | 배포 서명 검증용 공개키 — Center 서명 키와 사람이 서명하던 때의 옛 Admin 키 (C2). 철회된 키도 `revoked_at`과 함께 |
 | `heartbeat_interval_s` | int | 기본 30 |
 | `server_time` | str | 시계 차이 확인용 |
 | `key_expires_at` | str? | **이 키가 언제 만료되나** (C7). 없으면 만료가 없는 키다 — 「모른다」가 아니다 |
