@@ -1,7 +1,7 @@
 {
   "$id": "urn:chaeksas:contracts:c5-virtual-worker-request",
   "additionalProperties": true,
-  "description": "`POST /virtual-workers`·`PUT /virtual-workers/{id}` — 사람이 아닌 업무 주체 (ADR-0085).\n\n**기동 허용 목록은 없다** — 접수 Bot의 서명된 `requires.delegations`가 그것이다 (ADR-0079).",
+  "description": "`POST /virtual-workers`·`PUT /virtual-workers/{id}` — 사람이 아닌 업무 주체 (ADR-0085).\n\n**기동 허용 목록은 없다** — 접수 BPM 프로세스의 서명된 `requires.delegations`가 그것이다 (ADR-0079).",
   "properties": {
     "id": {
       "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",

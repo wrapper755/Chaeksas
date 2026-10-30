@@ -3,7 +3,7 @@
 단일 원본: `docs/03-contracts/C7-resources-center-keys.md` 「Center API 키 관리」.
 
 키 **원문은 발급 응답에 한 번만** 실린다. Center는 해시만 저장하고, 그 뒤로는 앞자리
-(`prefix`)만 보인다. 키가 그 Bot UI의 신원이므로(ADR-0013) 다른 PC에서 쓰면 409다 (C4).
+(`prefix`)만 보인다. 키가 그 PC 실행기의 신원이므로(ADR-0013) 다른 PC에서 쓰면 409다 (C4).
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ KEY_PREFIX = "chk_ctr_"
 KEY_RANDOM_LEN = 40
 PREFIX_LEN = 16
 
-#: 기본 만료는 1년. 만료 14일 전부터 CON-11과 그 Bot UI 알림(BUI-05)에 보인다.
+#: 기본 만료는 1년. 만료 14일 전부터 CON-11과 그 PC 실행기 알림(BUI-05)에 보인다.
 DEFAULT_EXPIRY_DAYS = 365
 EXPIRY_WARNING_DAYS = 14
 
@@ -73,7 +73,7 @@ def expires_soon(*, now: str, expires_at: str | None, within_days: int = EXPIRY_
 
 
 class BoundTo(ContractModel):
-    """키가 묶인 곳. Bot UI용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4)."""
+    """키가 묶인 곳. PC 실행기용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4)."""
 
     type: str
     id: str
@@ -110,7 +110,7 @@ class CenterKeyInfo(ContractModel):
 class CenterKeyCreated(CenterKeyInfo):
     """발급 응답 — 여기에만 원문 `key`가 실린다. 다시 볼 수 없다.
 
-    받는 쪽(운영자)은 이 값을 Bot UI·Studio 설정이나 OS 비밀 저장소에 넣는다.
+    받는 쪽(운영자)은 이 값을 PC 실행기·Studio 설정이나 OS 비밀 저장소에 넣는다.
     **기록·로그에 남기지 않는다.**
     """
 

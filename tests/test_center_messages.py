@@ -42,7 +42,7 @@ AT = "2026-10-13T09:00:00+09:00"
 #: 업무 예제 BX-11 — 실행 위치 `server`, 메시지 `bid_quote`를 상관 키 `입찰번호`로 기다린다.
 BID = Path("docs/08-business-examples/bpmn/bx11_bid_collection.bpmn")
 BID_BOT = "scm.bid-collection"
-#: 업무 예제 BX-13 — **메시지 시작**(`return_request`)으로 도는 서버 Bot이다.
+#: 업무 예제 BX-13 — **메시지 시작**(`return_request`)으로 도는 서버 BPM 프로세스이다.
 RETURN = Path("docs/08-business-examples/bpmn/bx13_return_processing.bpmn")
 RETURN_BOT = "scm.return-processing"
 VERSION = "1.0.0"
@@ -376,7 +376,7 @@ def test_a_message_start_becomes_a_job(
 ) -> None:
     """기다리는 실행이 없고 **메시지 시작 트리거**면 작업이 생긴다 (C12 §메시지).
 
-    작업으로 바꾸는 것이 중요하다 — 배포 검사·빈자리·Bot별 상한이 **작업 쪽 한 자리**에
+    작업으로 바꾸는 것이 중요하다 — 배포 검사·빈자리·BPM 프로세스별 상한이 **작업 쪽 한 자리**에
     남는다. `payload`가 그 작업의 `inputs`가 된다.
     """
     deploy(
@@ -408,7 +408,7 @@ def test_a_message_start_becomes_a_job(
 def test_a_message_start_with_two_bots_refuses_to_choose(
     center: TestClient, runner_key: str, runner: str
 ) -> None:
-    """같은 이름으로 시작하는 서버 Bot이 둘이면 **고르지 않는다** (422 `receiver_ambiguous`)."""
+    """같은 이름으로 시작하는 서버 BPM 프로세스가 둘이면 **고르지 않는다** (422 `receiver_ambiguous`)."""
     for bot in (RETURN_BOT, f"{RETURN_BOT}-2"):
         deploy(
             center,
@@ -429,7 +429,7 @@ def test_a_message_start_with_two_bots_refuses_to_choose(
 def test_an_undeployed_bot_is_not_a_receiver(
     center: TestClient, runner_key: str, runner: str
 ) -> None:
-    """배포되지 않은 Bot은 **메시지로도 돌지 않는다** — 작업과 같은 관문이다 (C5)."""
+    """배포되지 않은 BPM 프로세스는 **메시지로도 돌지 않는다** — 작업과 같은 관문이다 (C5)."""
     response = put_message(center, name="return_request", correlation="RT-003", payload={})
     assert response.status_code == 422
     assert response.json()["code"] == "no_receiver"
@@ -441,7 +441,7 @@ def test_an_undeployed_bot_is_not_a_receiver(
 def test_only_admin_and_integration_keys_may_put_messages(
     center: TestClient, runner_key: str, runner: str
 ) -> None:
-    """현장 키로는 메시지를 넣을 수 없다 — 키 하나로 **남의 Bot을 깨울 수 있으면** 안 된다."""
+    """현장 키로는 메시지를 넣을 수 없다 — 키 하나로 **남의 BPM 프로세스를 깨울 수 있으면** 안 된다."""
     heartbeat(center, runner_key, waiting=[waiting_row()])
     body: dict[str, Any] = {
         "name": "bid_quote",
@@ -624,7 +624,7 @@ def test_a_message_start_carries_on_behalf_of_into_the_job(
 ) -> None:
     """연동용 키가 실은 사람은 작업의 `on_behalf_of`로 **적기만** 한다 (ADR-0081).
 
-    `requested_by`는 키 이름 그대로다 — Bot UI가 그 칸의 `server_bot:`로 위임을 가르므로
+    `requested_by`는 키 이름 그대로다 — PC 실행기가 그 칸의 `server_bot:`로 위임을 가르므로
     바깥에서 온 글을 그 칸에 넣지 않는다. 그 앞머리로 시작하는 이름은 422다.
     """
     deploy(

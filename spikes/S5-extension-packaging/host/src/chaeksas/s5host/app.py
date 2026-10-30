@@ -1,4 +1,4 @@
-"""S5 호스트 (Bot UI·Studio 흉내). 확장은 엔트리 포인트 `chaeksas.extensions`로만 찾는다.
+"""S5 호스트 (PC 실행기·Studio 흉내). 확장은 엔트리 포인트 `chaeksas.extensions`로만 찾는다.
 
     s5host --selftest <결과.json> [--studio]     # 자동 점검 후 종료
     s5host --local-runtime <확장>:<런타임> --port <p>  # 확장의 로컬 런타임으로 동작 (자기 자신을 다시 띄움)

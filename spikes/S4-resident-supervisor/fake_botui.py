@@ -1,4 +1,4 @@
-"""가짜 Bot UI: Worker(손자 포함)와 실행기(손자 포함)를 띄우고 pid를 알린 뒤 가만히 있는다.
+"""가짜 PC 실행기: Worker(손자 포함)와 실행기(손자 포함)를 띄우고 pid를 알린 뒤 가만히 있는다.
 
     python fake_botui.py <job|nojob> <port> <token-dir>
 

@@ -2,11 +2,11 @@
 
 보는 것:
 
-1. **목록은 정의에서 온다** — 이 창에 확장 이름이 없다. 「쓰는 Bot」은 설치된 Bot이 말한 것이다.
+1. **목록은 정의에서 온다** — 이 창에 확장 이름이 없다. 「쓰는 BPM 프로세스」은 설치된 BPM 프로세스가 말한 것이다.
 2. **「사람이 껐다」는 「흠이 있다」와 다르다** — 표기도 색도 갈라진다 (`status_map` 「확장」).
-3. **끄기는 그 자리에서 저장된다** — Bot UI **제 설정**에 적히고(Studio와 다른 자리), 확장을
+3. **끄기는 그 자리에서 저장된다** — PC 실행기 **제 설정**에 적히고(Studio와 다른 자리), 확장을
    다시 읽어 기여가 빠지고, **사전 점검 캐시가 비워진다**(안 비우면 꺼도 「준비됨」이 올라간다).
-   쓰는 Bot이 있으면 **몇 개가 실행 불가가 되는지 말하고** 기본은 「취소」다.
+   쓰는 BPM 프로세스가 있으면 **몇 개가 실행 불가가 되는지 말하고** 기본은 「취소」다.
 4. **끄고 켤 수 없는 줄**은 외부 확장(Center의 일이다)과 이 PC에 **없는** 확장이다.
 5. **요구하는데 없는 확장도 줄로 보인다** (「필요하지만 없음」) — 목록에 없으면 왜 막혔는지 모른다.
 6. **외부 확장은 봉투를 다시 검증한다** (C13 E6) — 서명이 맞지 않으면 「서명 확인 안 됨」이고,
@@ -168,7 +168,7 @@ def install_bot(
     task_types: list[TaskTypeNeed] | None = None,
     domains: list[str] | None = None,
 ) -> Manifest:
-    """설치된 Bot 하나 — **매니페스트 파일만** 둔다 (`bots.installed()`가 그것을 읽는다)."""
+    """설치된 BPM 프로세스 하나 — **매니페스트 파일만** 둔다 (`bots.installed()`가 그것을 읽는다)."""
     manifest = Manifest.model_validate(
         {
             "schema": 1,
@@ -282,9 +282,9 @@ def test_the_list_draws_what_the_definition_says(tmp_path: Path) -> None:
 
 
 def test_used_by_counts_the_installed_bots(tmp_path: Path) -> None:
-    """「쓰는 Bot」은 **설치된 Bot이 말한 것**이다 (C1 `requires.extensions`).
+    """「쓰는 BPM 프로세스」은 **설치된 BPM 프로세스가 말한 것**이다 (C1 `requires.extensions`).
 
-    그림에 확장을 적지 않는 길(`requires.domains`의 AI 환경)도 함께 센다 — 끄면 멈출 Bot이다.
+    그림에 확장을 적지 않는 길(`requires.domains`의 AI 환경)도 함께 센다 — 끄면 멈출 BPM 프로세스이다.
     """
     install_bot(extensions=[ExtensionNeed(id="doc-ocr", version=">=1,<2")])
     install_bot(bot_id="ops.scan", name="현장 스캔", domains=["desktop"])
@@ -295,9 +295,9 @@ def test_used_by_counts_the_installed_bots(tmp_path: Path) -> None:
 
 
 def test_an_extension_nobody_uses_says_so(tmp_path: Path) -> None:
-    """**지우라고 하지 않는다** — 쓰는 Bot이 없을 뿐이다 (BUI-10 「쓰는 Bot 없음」과 같은 결)."""
+    """**지우라고 하지 않는다** — 쓰는 BPM 프로세스가 없을 뿐이다 (BUI-10 「쓰는 BPM 프로세스 없음」과 같은 결)."""
     window = dialog(host_with(builtin()), tmp_path=tmp_path)
-    assert cell(window, 0, USED_BY).text() == "쓰는 Bot 없음"
+    assert cell(window, 0, USED_BY).text() == "쓰는 BPM 프로세스 없음"
 
 
 def test_turned_off_and_broken_are_different_states(tmp_path: Path) -> None:
@@ -385,7 +385,7 @@ def _row(definition: dict[str, Any], *, off: tuple[str, ...] = ()) -> Any:
 
 
 def test_turning_off_saves_to_the_bot_ui_settings_right_away(tmp_path: Path, monkeypatch: Any) -> None:
-    """**「저장」이 없다** — 누르는 그 자리에서 Bot UI **제 설정**에 적힌다 (Studio와 다른 자리)."""
+    """**「저장」이 없다** — 누르는 그 자리에서 PC 실행기 **제 설정**에 적힌다 (Studio와 다른 자리)."""
     say_yes(monkeypatch)
     window = dialog(host_with(builtin()), tmp_path=tmp_path)
     window.table.selectRow(0)
@@ -439,7 +439,7 @@ def test_turning_off_makes_the_next_heartbeat_say_it(tmp_path: Path, monkeypatch
 
 
 def test_turning_off_says_how_many_bots_stop(tmp_path: Path) -> None:
-    """쓰는 Bot이 있으면 **몇 개가 실행 불가가 되는지** 말하고 **기본은 「취소」**다 (U4)."""
+    """쓰는 BPM 프로세스가 있으면 **몇 개가 실행 불가가 되는지** 말하고 **기본은 「취소」**다 (U4)."""
     install_bot(extensions=[ExtensionNeed(id="doc-ocr", version=">=1,<2")])
     window = dialog(host_with(builtin()), tmp_path=tmp_path)
     window.table.selectRow(0)
@@ -457,7 +457,7 @@ def test_the_confirmation_names_the_bots(tmp_path: Path, modal_question: list[tu
 
     assert modal_question, "확인 창을 띄워야 한다"
     _title, text = modal_question[-1]
-    assert "Bot 1개가 실행 불가가 됩니다" in text
+    assert "BPM 프로세스 1개가 실행 불가가 됩니다" in text
     assert "청구서 처리" in text
 
 
@@ -493,7 +493,7 @@ def test_an_external_extension_is_not_turned_off_here(tmp_path: Path) -> None:
 
 
 def test_an_external_definition_with_a_bad_envelope_says_so(tmp_path: Path) -> None:
-    """**봉투를 다시 검증한다** — 관리자 토큰만 새어도 Bot의 키가 다른 주소로 가면 안 된다."""
+    """**봉투를 다시 검증한다** — 관리자 토큰만 새어도 BPM 프로세스의 키가 다른 주소로 가면 안 된다."""
     definition = external()
     envelope, _keys = signed(definition)
     hold_directory({"definition": definition, "envelope": envelope})
@@ -508,7 +508,7 @@ def test_refresh_keeps_what_we_hold_when_center_cannot_be_called(tmp_path: Path)
     """ADR-0007 — 현장 PC다. 부르지 못하면 **들고 있던 것을 쓰고** 사유만 말한다.
 
     여기서는 Center API 키가 없는 PC다 (Studio는 이런 자리에서 그냥 「설정하세요」로 끝낸다 —
-    현장은 그럴 수 없다. 들고 있는 정의로 Bot이 계속 돌아야 한다).
+    현장은 그럴 수 없다. 들고 있는 정의로 BPM 프로세스가 계속 돌아야 한다).
     """
     definition = external()
     envelope, keys = signed(definition)
@@ -529,7 +529,7 @@ def test_refresh_keeps_what_we_hold_when_center_cannot_be_called(tmp_path: Path)
 
 
 def test_refresh_takes_the_definition_from_center(tmp_path: Path) -> None:
-    """「새로 고침」은 **설치된 Bot이 요구하는 외부 확장만** 받는다 (명부의 규칙이다).
+    """「새로 고침」은 **설치된 BPM 프로세스가 요구하는 외부 확장만** 받는다 (명부의 규칙이다).
 
     받은 것은 들고 있는 명부에 남아, 다음에 창을 열 때 Center 없이도 보인다.
     """
@@ -684,8 +684,8 @@ def test_the_ready_column_says_turned_off_not_missing() -> None:
 
 
 def test_the_ready_label_has_its_own_color() -> None:
-    """`status_map` 「Bot 준비」에 있는 표기만 쓴다 — 「확장 꺼짐」은 **고장이 아니다**."""
-    ready = tokens.STATUS_MAP["Bot 준비"]
+    """`status_map` 「BPM 프로세스 준비」에 있는 표기만 쓴다 — 「확장 꺼짐」은 **고장이 아니다**."""
+    ready = tokens.STATUS_MAP["BPM 프로세스 준비"]
     assert ready[EXTENSION_OFF] == "neutral"
     assert ready[NO_EXTENSION] == "failed"
 

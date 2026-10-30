@@ -5,7 +5,7 @@
 /**
  * 발급 응답 — 여기에만 원문 `key`가 실린다. 다시 볼 수 없다.
  *
- * 받는 쪽(운영자)은 이 값을 Bot UI·Studio 설정이나 OS 비밀 저장소에 넣는다.
+ * 받는 쪽(운영자)은 이 값을 PC 실행기·Studio 설정이나 OS 비밀 저장소에 넣는다.
  * **기록·로그에 남기지 않는다.**
  */
 export interface CenterKeyCreated {
@@ -24,7 +24,7 @@ export interface CenterKeyCreated {
   [k: string]: unknown;
 }
 /**
- * 키가 묶인 곳. Bot UI용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4).
+ * 키가 묶인 곳. PC 실행기용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4).
  */
 export interface BoundTo {
   first_seen?: string | null;

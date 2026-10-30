@@ -113,7 +113,7 @@ class CaseDelegator:
     """PC 위임을 **케이스가 적어 둔 결과로** 끝낸다 (`RunEnv.delegate`, ADR-0062 §2
     — `docs/decisions/0062-pc-delegation.md`).
 
-    **Studio는 남의 패키지를 돌리지 않는다** — 부를 PC Bot의 그림은 다른 작업 폴더에 있고,
+    **Studio는 남의 패키지를 돌리지 않는다** — 부를 PC BPM 프로세스의 그림은 다른 작업 폴더에 있고,
     있다 해도 UI 태스크라 설계자 PC에서 화면을 만지게 된다. 그래서 결재 답·메시지와 **같은
     결**로 케이스가 결과를 적는다 (C14 `delegations`).
 

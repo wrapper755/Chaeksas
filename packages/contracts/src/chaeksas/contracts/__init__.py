@@ -10,7 +10,7 @@
 | C1 | `manifest` | 패키지 매니페스트 + 검사 규칙 `validate()` |
 | C2 | `hashing`, `signing` | `canonical_json`·`content_hash`, 서명 봉투 + 검증 규칙 V1~V8 |
 | C3 | `events` | 실행 이벤트 (`kind`는 열린 문자열) |
-| C4 | `bot_ui` | Bot UI 등록·하트비트 |
+| C4 | `bot_ui` | PC 실행기 등록·하트비트 |
 | C5 | `center_api`, `accounts` | 패키지·배포·작업 + 배포·작업 검사, 관리자 계정·로그인 세션 |
 | C6 | `approvals` | 결재 요청·답 + 폼으로 답 검증 |
 | C7 | `resources`, `center_keys` | 리소스 목록 + 누락 검사, Center API 키 |

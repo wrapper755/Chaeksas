@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | 실행 중 Bot(Bot UI의 실행기)·Studio·Bot UI(Worker 관리)·셀렉터 등록(Tool UI — ADR-0077) → Worker 프로세스 |
+| 보내는 쪽 → 받는 쪽 | 실행 중 BPM 프로세스(실행 프로세스)·Studio·PC 실행기(Worker 관리)·셀렉터 등록(Tool UI — ADR-0077) → Worker 프로세스 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (worker_local.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
 | 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0106](../decisions/0106-pc-escalation-asks-a-person.md)(전환 → 사람 확인) |
 | 관련 화면 | STU-08·13, BUI-09, TOL-03~05 |
@@ -21,17 +21,17 @@
 
   | 토큰 | 파일 | 누가 읽나 | 쓰는 곳 |
   | --- | --- | --- | --- |
-  | 사용 토큰 | `worker.token` | 실행기, Studio, Bot UI | 헤더 `X-CHK-Local-Token`. 세션·상태 API |
-  | 관리 토큰 | `worker.admin.token` | **Bot UI만** (Studio·실행기는 읽지 않는다) | 헤더 `X-CHK-Local-Admin`. `/v1/admin/*` |
+  | 사용 토큰 | `worker.token` | 실행기, Studio, PC 실행기 | 헤더 `X-CHK-Local-Token`. 세션·상태 API |
+  | 관리 토큰 | `worker.admin.token` | **PC 실행기만** (Studio·실행기는 읽지 않는다) | 헤더 `X-CHK-Local-Admin`. `/v1/admin/*` |
 
 - **세션 비밀:** 세션을 열면 응답에 `session_secret`이 온다. 그 세션의 스텝·이동·닫기 요청은 헤더 `X-CHK-Session`에 이 값을 실어야 한다. 다른 호출자가 남의 세션을 조작하거나 닫지 못하게 하려는 것이다.
 - **기동:**
-  1. Bot UI가 두 토큰 파일을 쓴다.
-  2. Worker를 띄운다. **Bot UI가 자기 실행 파일을 자식으로 다시 띄우고**(`--local-runtime ui-automation:worker --port <p> --token-dir <폴더>`), 그 자식이 확장의 진입점을 부른다 (C13 `bot_ui.local_runtimes[].entry`, [ADR-0024](../decisions/0024-desktop-packaging-extensions.md)). 개발 환경에서는 같은 인자로 `python -m chaeksas.bot_ui`다 — 설치 파일로 묶은 앱 안에는 `chk-worker` 같은 콘솔 스크립트가 없다.
+  1. PC 실행기가 두 토큰 파일을 쓴다.
+  2. Worker를 띄운다. **PC 실행기가 자기 실행 파일을 자식으로 다시 띄우고**(`--local-runtime ui-automation:worker --port <p> --token-dir <폴더>`), 그 자식이 확장의 진입점을 부른다 (C13 `bot_ui.local_runtimes[].entry`, [ADR-0024](../decisions/0024-desktop-packaging-extensions.md)). 개발 환경에서는 같은 인자로 `python -m chaeksas.bot_ui`다 — 설치 파일로 묶은 앱 안에는 `chk-worker` 같은 콘솔 스크립트가 없다.
   3. `GET /v1/health`가 200이 될 때까지 기다린다 (최대 30초).
   4. Worker가 죽으면 다시 띄운다 (최대 3회 연속, BUI-09).
 - **UI 세션은 한 번에 하나다** (ADR-0014 §4). 열려 있는 세션이 있으면, 다른 쪽이 세션을 열 때 409 `worker_busy`를 받는다.
-- **실행 예약:** Bot UI는 Bot 실행을 시작할 때 Worker를 그 실행에 예약하고(§4), 실행이 끝나면 푼다. 예약된 동안에는 그 `run_id`의 세션만 열 수 있다. 그래서 한 Bot의 UI 태스크 사이 빈틈에 Studio나 셀렉터 등록이 Worker를 가져가지 못한다.
+- **실행 예약:** PC 실행기는 BPM 프로세스 실행을 시작할 때 Worker를 그 실행에 예약하고(§4), 실행이 끝나면 푼다. 예약된 동안에는 그 `run_id`의 세션만 열 수 있다. 그래서 한 BPM 프로세스의 UI 태스크 사이 빈틈에 Studio나 셀렉터 등록이 Worker를 가져가지 못한다.
 - **유휴 시간 제한:** 세션에 10분 동안 요청이 없으면 Worker가 닫는다 (`CHK_WORKER__SESSION_IDLE_S`). 부르는 쪽이 죽어서 세션이 계속 남는 것을 막는다.
 - **멱등성:**
   - 세션 열기는 같은 `business_key`로 다시 오면 열려 있는 그 세션을 돌려준다 (200, `session_secret`도 같다).
@@ -54,7 +54,7 @@
 | `recent_sessions[]` | 최근 20개 요약 — `{session_id, business_key, caller, page_id?, result, steps, fallback_depth_max, healed, at?}`. BUI-09 「최근 UI 세션」 표의 열이 그대로 여기 있다 (시각·요청한 쪽·화면·결과·폴백 깊이·치유). **그 표를 그리는 것은 이 확장이 기여한 칸이다** — 플랫폼은 이 본문을 해석하지 않는다 ([ADR-0042](../decisions/0042-extension-contributed-panels.md)) |
 | `unsent_reports` | UI 자동화 앱에 아직 못 보낸 보고 수 |
 
-### 2. UI 세션 (Bot·Studio)
+### 2. UI 세션 (BPM 프로세스·Studio)
 
 **`POST /v1/sessions` — 세션 열기**
 
@@ -64,7 +64,7 @@
 | `caller` | object | ✓ | `{type, run_id, node_id, node_instance, attempt, bpm_process_id, version}`. `type`은 열린 문자열이고 알려진 값은 `bot`, `studio`, `selector_registration`. `selector_registration`이면 `run_id` 등 실행 필드는 비운다 (§5) |
 | `mode` | `autonomous` \| `deterministic` | ✓ | 수행 모드. Worker는 바꾸지 않고 UI 자동화 앱에 그대로 전달한다 |
 | `business_key` | str | ✓ | `<run_id>:<node_id>:<node_instance>:<attempt>`. 셀렉터 등록이면 `reg_<hex8>`. 계획·보고·실행 기록을 잇는 키다 (C3 `ui_session`, C8, C11 멱등 키와 같은 구성) |
-| `page_id` | str | Bot·Studio만 ✓ | 시작 화면 |
+| `page_id` | str | BPM 프로세스·Studio만 ✓ | 시작 화면 |
 | `start_url` | str | | 비우면 화면의 기본 주소, 또는 이미 열린 화면에서 이어서 |
 | `browser_profile` | str | | |
 | `app` | str | | 데스크톱 앱 이름 (UI 태스크의 `desktop.app`, C14). 비우면 계획에 실린 화면의 `app`을 쓴다 (C8·C9) |
@@ -73,7 +73,7 @@
 | `headed` | bool | | 기본 false. Studio 시험은 true 권장 |
 | `heal` | bool | | 자가 치유 사용. 기본 true |
 | `report` | bool | | 닫을 때 UI 자동화 앱에 보고할까 (C8). 기본 true. **셀렉터 시험(TOL-05)에서 끈다** — 통계에 넣지 않을 뿐 아니라 아예 보내지 않는다 |
-| `call_token` | str | Bot·Studio·등록 세션 ✓ | **호출 토큰** (C15 — [ADR-0102](../decisions/0102-calling-outside-is-pull.md)). Worker는 이것으로 Center에 계획·치유·보고를 올린다(C8). 부르는 쪽이 넣는다 — Bot UI의 실행기 자식은 제어 파일로 받은 것, Studio는 제 키로 청한 것, Tool UI는 Bot UI 비밀 저장소의 것. Worker는 이 값을 세션 동안 메모리에만 두고, 디스크·로그에 남기지 않는다. 옛 이름 `service_key`로 오면 받지 않는다(422) |
+| `call_token` | str | BPM 프로세스·Studio·등록 세션 ✓ | **호출 토큰** (C15 — [ADR-0102](../decisions/0102-calling-outside-is-pull.md)). Worker는 이것으로 Center에 계획·치유·보고를 올린다(C8). 부르는 쪽이 넣는다 — 실행 프로세스는 제어 파일로 받은 것, Studio는 제 키로 청한 것, Tool UI는 PC 실행기 비밀 저장소의 것. Worker는 이 값을 세션 동안 메모리에만 두고, 디스크·로그에 남기지 않는다. 옛 이름 `service_key`로 오면 받지 않는다(422) |
 
 → 201 SessionInfo `{session_id, session_secret, page_id, current_url, plan_source: "server" | "cache", steps_run: 0, mutating_steps_ok: 0, planned_steps}`
 
@@ -125,7 +125,7 @@
 | `data` | 읽기 결과 구조. `read_table`이면 `{headers: [글], rows: [[글]]}` — 칸은 **보이는 글 그대로**다 (첫 줄이 `headers`, 나머지가 `rows`). **UI 자동화 앱으로 보내지 않는다** |
 | `fallback_depth` | 몇 번째 로케이터로 성공했나. 0이 건강한 상태 |
 | `healed` | 치유로 성공했나 |
-| `escalated` | **전환.** 자가 치유 한도를 넘어 사람 확인이 필요하다. 오류와 구분한다. PC Bot은 확인(CMN-01)으로 넘긴다 — 수행기가 `escalate: confirmation`으로 실패를 올리면 엔진이 그 자리에서 현장 확인 하나로 멈추고, 「계속」은 **다시 하지 않고 넘어간다**(결과 변수 없음), 「중단」은 오류 경계 `ESCALATED`다 ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)). 서버 실행은 늘 오류 경계다 |
+| `escalated` | **전환.** 자가 치유 한도를 넘어 사람 확인이 필요하다. 오류와 구분한다. PC BPM 프로세스는 확인(CMN-01)으로 넘긴다 — 수행기가 `escalate: confirmation`으로 실패를 올리면 엔진이 그 자리에서 현장 확인 하나로 멈추고, 「계속」은 **다시 하지 않고 넘어간다**(결과 변수 없음), 「중단」은 오류 경계 `ESCALATED`다 ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)). 서버 실행은 늘 오류 경계다 |
 | `error_code`, `error` | 실패 시 (예: `element_not_found`, `page_mismatch`, `timeout`) |
 | `current_url`, `duration_ms` | |
 
@@ -146,14 +146,14 @@
 | **성공한 조작 스텝이 하나도 없었다** (읽기만 했거나 처음이었다) | `attempt`를 +1 하고 새 세션으로 그 UI 태스크를 처음부터 한 번 다시 한다 |
 | 조작 스텝이 하나라도 성공했다 | 다시 하면 같은 입력이 두 번 들어갈 수 있다. **자동으로 다시 하지 않고 확인(`confirmation`)으로 넘긴다**: 「화면 조작 도중 Worker가 다시 시작되었습니다. 화면 상태를 확인한 뒤 계속/중단을 고르세요」 |
 
-### 4. Worker 관리 (Bot UI만, 관리 토큰)
+### 4. Worker 관리 (PC 실행기만, 관리 토큰)
 
 | 경로 | 뜻 |
 | --- | --- |
-| `POST /v1/admin/reserve` `{run_id}` | 실행 예약. 이미 다른 세션이 열려 있으면 409 `worker_busy` — **Bot UI는 Bot을 시작하지 않고 대기열 맨 앞에서 기다린다** (셀렉터 등록·Studio 시험이 끝나면 다음 주기에 다시 묻는다, ADR-0014 §4). Bot UI는 이 경로를 UI 자동화 확장 정의의 `reserve` 선언(C13)으로 안다 |
+| `POST /v1/admin/reserve` `{run_id}` | 실행 예약. 이미 다른 세션이 열려 있으면 409 `worker_busy` — **PC 실행기는 BPM 프로세스를 시작하지 않고 대기열 맨 앞에서 기다린다** (셀렉터 등록·Studio 시험이 끝나면 다음 주기에 다시 묻는다, ADR-0014 §4). PC 실행기는 이 경로를 UI 자동화 확장 정의의 `reserve` 선언(C13)으로 안다 |
 | `DELETE /v1/admin/reserve` | 예약 풀기 (실행이 끝났을 때. 열린 세션도 닫는다) |
 | `DELETE /v1/admin/sessions/{id}` | 세션 강제 닫기 (실행기가 죽었을 때 정리) |
-| `POST /v1/admin/shutdown` | 열린 세션을 닫고 보고를 저장한 뒤 종료 (Bot UI 종료 순서, BUI-01) |
+| `POST /v1/admin/shutdown` | 열린 세션을 닫고 보고를 저장한 뒤 종료 (PC 실행기 종료 순서, BUI-01) |
 
 ### 5. 셀렉터 등록 (Tool UI의 도구)
 
@@ -201,12 +201,12 @@
 | 401 | `token_invalid` / `session_secret_invalid` | Worker가 다시 떠서 토큰이 바뀜, 남의 세션 | 토큰 파일을 다시 읽고 한 번 재시도. 세션 비밀이 틀렸으면 버그 |
 | 403 | `admin_only` | 사용 토큰으로 `/v1/admin/*` 호출 | 버그 |
 | 404 | `session_not_found` | 세션이 닫힘 (유휴 시간 초과, Worker 재시작) | §3 |
-| 409 | `worker_busy` (`detail.holder`) / `reserved` (`detail.run_id`) | 다른 쪽이 세션을 쥐었거나 Worker가 다른 실행에 예약됨 | Studio: STU-08 「Worker 사용 중」. 셀렉터 등록: TOL-03 「Bot 실행 중」 |
+| 409 | `worker_busy` (`detail.holder`) / `reserved` (`detail.run_id`) | 다른 쪽이 세션을 쥐었거나 Worker가 다른 실행에 예약됨 | Studio: STU-08 「Worker 사용 중」. 셀렉터 등록: TOL-03 「BPM 프로세스 실행 중」 |
 | 422 | `instruction_not_allowed` / `value_required` / `value_not_allowed` / `unknown_semantic_key` | 요청 모양이 틀림 | 재시도하지 않음 |
 | 502 | `ui_automation_unreachable` | UI 자동화 앱에 닿지 못하고 캐시도 없음 | 태스크 재시도 정책을 따른다 |
 | 409 | `app_not_running` (`detail.app`) | 데스크톱 화면의 창이 없고 띄우는 방법도 설정돼 있지 않음 (`desktop-apps.json`에 그 이름이 없거나 띄워도 창이 안 생김) | 재시도하지 않는다. 확인(CMN-01) — 「<앱>을 띄운 뒤 계속」 |
 | 409 | `window_ambiguous` (`detail.count`) | 창 조건에 맞는 창이 여럿 | 재시도하지 않는다. 창 조건(C9 `window`)을 좁힌다 |
-| 503 | `browser_unavailable` | 브라우저를 띄우지 못함 (데스크톱이면 UIA를 쓸 수 없는 PC) | Bot UI에 알리고 확인으로 넘긴다 |
+| 503 | `browser_unavailable` | 브라우저를 띄우지 못함 (데스크톱이면 UIA를 쓸 수 없는 PC) | PC 실행기에 알리고 확인으로 넘긴다 |
 | 503 | `session_locked` | **화면이 잠겨 있다.** 잠긴 동안 Worker는 화면 조작·캡처를 하지 않는다 | **재시도 가능.** 풀리거나 스텝 시간 제한에 닿을 때까지 기다린다 (아래) |
 
 ### `session_locked` (잠금 화면)

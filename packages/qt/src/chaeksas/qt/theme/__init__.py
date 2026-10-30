@@ -1,6 +1,6 @@
 """Qt 테마 — 웹과 **같은 토큰**으로 밝게/어둡게 (ADR-0017 §2·§3).
 
-쓰는 쪽은 한 줄이면 된다. Studio·Bot UI가 시작할 때 부른다.
+쓰는 쪽은 한 줄이면 된다. Studio·PC 실행기가 시작할 때 부른다.
 
     app = QApplication(sys.argv)
     apply_theme(app)                       # 설정이 「시스템 따름」일 때
@@ -34,7 +34,7 @@ if TYPE_CHECKING:  # QApplication을 타입으로만 쓴다 (import 비용을 �
 
 LOG = logging.getLogger(__name__)
 
-#: 설정에 저장하는 값 (스타일 가이드 §4-2 — STU-10 「외형」, Bot UI도 같다).
+#: 설정에 저장하는 값 (스타일 가이드 §4-2 — STU-10 「외형」, PC 실행기도 같다).
 THEME_SYSTEM = "system"
 THEME_LIGHT = "light"
 THEME_DARK = "dark"

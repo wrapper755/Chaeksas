@@ -235,7 +235,7 @@ def info_of(store: Store, run_id: str) -> RunInfo:
 
 
 def bot_ui_of(store: Store, owner_key_id: str | None) -> str | None:
-    """그 기록을 보낸 키가 묶인 Bot UI (C3 `RunInfo.bot_ui_id`, CON-01).
+    """그 기록을 보낸 키가 묶인 PC 실행기 (C3 `RunInfo.bot_ui_id`, CON-01).
 
     **읽을 때 찾는다** — 요약에 적어 두지 않는다 (`missing_resources`·`dependents`와 같은 결).
     키를 다시 묶으면 적어 둔 값은 낡고, 어느 쪽이 원본인지 흐려진다.
@@ -285,9 +285,9 @@ def listing(
     virtual_worker: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> RunListing:
-    """최근 실행부터 (CON-01 목록). 좁히기는 상태·BPM 프로세스·실행 위치·**Bot UI**다.
+    """최근 실행부터 (CON-01 목록). 좁히기는 상태·BPM 프로세스·실행 위치·**PC 실행기**다.
 
-    「Bot UI」는 **보낸 키가 묶인 PC**다 (C3 소유 → C4 키 묶기) — 요약에 적어 둔 값이 아니라
+    「PC 실행기」는 **보낸 키가 묶인 PC**다 (C3 소유 → C4 키 묶기) — 요약에 적어 둔 값이 아니라
     읽을 때 찾는다. Studio가 보낸 기록은 그 좁히기에 걸리지 않는다 (묶인 PC가 없다).
     """
     rows = store.rows(
@@ -306,7 +306,7 @@ def listing(
     if virtual_worker:
         from chaeksas.center.api import virtual_workers  # noqa: PLC0415 — 순환 import를 피한다
 
-        # 접수 Bot의 실행(일괄)과 **그 자식** — 읽을 때 잇는다 (C5 §가상 직원, ADR-0085).
+        # 접수 BPM 프로세스의 실행(일괄)과 **그 자식** — 읽을 때 잇는다 (C5 §가상 직원, ADR-0085).
         intake, batches = virtual_workers.runs_of(store, virtual_worker)
         found = [one for one in found if one.bpm_process_id in intake or one.parent_run_id in batches]
     return RunListing(runs=found[: max(1, min(limit, MAX_LIMIT))], total=len(found))

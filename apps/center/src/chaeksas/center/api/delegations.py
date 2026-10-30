@@ -1,4 +1,4 @@
-"""C12 §PC 위임 — 서버 Bot이 **배포된 PC Bot**을 Center 작업으로 부른다 (ADR-0062).
+"""C12 §PC 위임 — 서버 BPM 프로세스가 **배포된 PC BPM 프로세스**을 Center 작업으로 부른다 (ADR-0062).
 
 받는 쪽의 태도가 ADR에 또렷이 적혀 있다 — 그대로 옮긴다.
 
@@ -200,7 +200,7 @@ def _response(job_id: str, target_type: str, bot_ui_id: str, state: str) -> Dele
 def _to_server(
     store: Store, found: Caller, request: DelegationRequest, *, runner_id: str, version: str, key: str
 ) -> tuple[DelegationResponse, bool]:
-    """**서버 Bot에 맡긴다** (ADR-0082) — 서버 실행기 대상 작업 하나. 실행기는 내려줄 때 고른다.
+    """**서버 BPM 프로세스에 맡긴다** (ADR-0082) — 서버 실행기 대상 작업 하나. 실행기는 내려줄 때 고른다.
 
     고르는 규칙·상한·대기열은 **작업 쪽 한 자리**에 남는다 (`POST /jobs`와 같은 함수 — PC와 같다).
     """
@@ -209,7 +209,7 @@ def _to_server(
     if request.bot_ui:
         # 어느 PC인가는 PC 대상에만 뜻이 있다 — 대상이 서버로 옮겨 갔을 수 있다. 업무 실패로 알린다.
         raise ApiError(
-            422, "bot_ui_for_server", f"{request.bpm_process_id}@{version}은 서버 Bot이다 — PC를 고를 수 없다"
+            422, "bot_ui_for_server", f"{request.bpm_process_id}@{version}은 서버 BPM 프로세스이다 — PC를 고를 수 없다"
         )
     if not deployments.targets_for(
         store, bpm_process_id=request.bpm_process_id, version=version, target_type=SERVER
@@ -322,7 +322,7 @@ def finish(
 ) -> bool:
     """PC 쪽이 끝났다 — 결과를 담아 둔다. **위임이 아니면 거짓**이다.
 
-    부르는 쪽은 작업 ack를 받는 자리다 (C4 — 그 조각에서 잇는다). 값은 그 Bot이 **선언한
+    부르는 쪽은 작업 ack를 받는 자리다 (C4 — 그 조각에서 잇는다). 값은 그 BPM 프로세스가 **선언한
     `outputs`만** 올라온다 (C1).
     """
     row = store.row("SELECT job_id FROM delegations WHERE job_id = ?", (job_id,))

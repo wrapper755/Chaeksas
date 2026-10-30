@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | Worker 프로세스 → UI 자동화 앱 (실행 중 Bot·Studio를 대신해서) |
+| 보내는 쪽 → 받는 쪽 | Worker 프로세스 → UI 자동화 앱 (실행 중 BPM 프로세스·Studio를 대신해서) |
 | 코드 위치 | `extensions/ui_automation/contracts/plan.py` — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)). 계획·치유·보고가 한 파일에 있다 |
 | 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0010](../decisions/0010-service-apps.md) §5, [0013](../decisions/0013-api-keys.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0035](../decisions/0035-ui-goal-planning.md)(목표로 계획) |
 | 관련 화면 | STU-13, TOL-04·05, UIA-02·03, CON-01 「UI 태스크」 |
@@ -50,7 +50,7 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
   | 작업 | 자율 수행 | 결정 수행 |
   | --- | --- | --- |
   | `plan` | `steps` 또는 `goal` (LLM이 계획) | **`steps`만.** `goal`을 보내면 422 `mode_unsupported` |
-  | `heal` | 가능 | 가능. 치유는 폴백이 아니라 **UI 자동화 확장의 정해진 기능**이다. UI 태스크마다 켜고 끈다 (STU-13 「자가 치유 사용」, 기본 켬, C10 `heal`). 결정 수행 Bot이 치유(LLM)를 쓸 수 있으면 사전 점검이 「이 Bot은 UI 태스크에서 자가 치유(LLM)를 쓸 수 있습니다」를 알린다. 운영에서 막으려면 운영 키의 허용 작업에서 `heal`을 빼면 된다 (403 → 전환). manifest에 두 모드를 모두 선언한다. 제안은 반드시 Worker가 로컬에서 검증한 뒤에만 쓴다 |
+  | `heal` | 가능 | 가능. 치유는 폴백이 아니라 **UI 자동화 확장의 정해진 기능**이다. UI 태스크마다 켜고 끈다 (STU-13 「자가 치유 사용」, 기본 켬, C10 `heal`). 결정 수행 BPM 프로세스가 치유(LLM)를 쓸 수 있으면 사전 점검이 「이 BPM 프로세스는 UI 태스크에서 자가 치유(LLM)를 쓸 수 있습니다」를 알린다. 운영에서 막으려면 운영 키의 허용 작업에서 `heal`을 빼면 된다 (403 → 전환). manifest에 두 모드를 모두 선언한다. 제안은 반드시 Worker가 로컬에서 검증한 뒤에만 쓴다 |
   | `report` | 가능 | 가능 |
 
 ## 모델
@@ -185,7 +185,7 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | 필드 | 뜻 |
 | --- | --- |
 | `business_key`, `page_id`, `plan_id`, `revision` | |
-| `origin` | `run`(Bot·Studio 실행) \| `test`(셀렉터 등록의 「셀렉터 시험」 TOL-05). **`test` 보고는 승격 통계에 넣지 않는다.** UIA-03에서 따로 보인다 |
+| `origin` | `run`(BPM 프로세스·Studio 실행) \| `test`(셀렉터 등록의 「셀렉터 시험」 TOL-05). **`test` 보고는 승격 통계에 넣지 않는다.** UIA-03에서 따로 보인다 |
 | `status` | `succeeded` / `escalated` / `failed` (열린 문자열) |
 | `steps_completed`, `steps_total` | |
 | `attempts[]` | `{semantic_key, locator_key, succeeded, elapsed_ms, matched_count?, failure_reason?}`. 서버가 로케이터 통계를 갱신한다 |
@@ -205,7 +205,7 @@ UI 태스크 한 번(UI 세션)은 UI 자동화 앱과 세 번 오간다.
 | 치유 등록 | `healed`의 로케이터는 `unverified`로 사다리에 더한다. 조회는 `unverified`도 쓰므로 바로 실행된다 |
 | 승격 | `unverified` 로케이터가 실행에서 **3회 연속 성공**하면 `active`로 올리고, 그 항목의 `supersedes`를 `deprecated`로 내린다 (`CHK_SVC_UI_AUTOMATION__PROMOTE_AFTER`) |
 | 강등 | `active` 로케이터가 최근 N회(기본 10) 실패율 50%를 넘으면 경고만 한다 (UIA-02 띠). 자동 강등은 하지 않는다 |
-| 전환 | `escalation`은 UIA-03 「전환」으로 보인다. 사람 확인은 PC Bot이 현장에서 처리하므로(CMN-01) 서버는 기록만 한다 |
+| 전환 | `escalation`은 UIA-03 「전환」으로 보인다. 사람 확인은 PC BPM 프로세스가 현장에서 처리하므로(CMN-01) 서버는 기록만 한다 |
 
 ## 오류
 

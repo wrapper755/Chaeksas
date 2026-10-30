@@ -226,7 +226,7 @@ def _check_service_apps(m: Manifest, index: ResourceIndex) -> list[MissingResour
             if op is None:
                 out.append(MissingResource(type="operation", id=op_id, reason="not_found"))
                 continue
-            # 실행하는 쪽(Bot UI·서버 실행기)은 결정 수행으로 부른다.
+            # 실행하는 쪽(PC 실행기·서버 실행기)은 결정 수행으로 부른다.
             if "deterministic" not in op.modes:
                 out.append(MissingResource(type="operation", id=op_id, reason="not_deterministic"))
             if server and not op.server_ok:

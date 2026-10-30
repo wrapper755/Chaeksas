@@ -420,7 +420,7 @@ def delegating(tmp_path: Path) -> tuple[Any, Any, Settings]:
 def test_a_case_gives_the_delegation_result_and_the_run_finishes(app: Any, tmp_path: Path) -> None:
     """**케이스가 적어 둔 결과로 위임이 끝난다** (ADR-0062 §2 — 증명할 다섯의 마지막).
 
-    Studio에는 부를 PC Bot의 그림이 없고(다른 패키지다) 있다 해도 UI 태스크라 설계자 PC에서
+    Studio에는 부를 PC BPM 프로세스의 그림이 없고(다른 패키지다) 있다 해도 UI 태스크라 설계자 PC에서
     화면을 만지게 된다. 그래서 결재 답·메시지와 **같은 결**로 케이스가 결과를 적는다.
     **Center도 남의 패키지도 없이** 끝까지 간다.
     """
@@ -513,7 +513,7 @@ def test_a_value_the_graph_reads_but_the_case_does_not_return_fails(
 ) -> None:
     """**적은 값이 오지 않으면 업무 실패**다 — 빈 값으로 이어 가지 않는다 (ADR-0062 §2).
 
-    현장에서는 「그 Bot의 판이 바뀌었다」가 이 꼴이다. 여기서는 경계가 그것을 받는다.
+    현장에서는 「그 BPM 프로세스의 판이 바뀌었다」가 이 꼴이다. 여기서는 경계가 그것을 받는다.
     """
     made, definition, settings = delegating(tmp_path)
     case = Case(

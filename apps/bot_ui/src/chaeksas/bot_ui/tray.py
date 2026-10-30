@@ -33,12 +33,12 @@ DOT_PX = 26
 
 #: 트레이 상태 글 → `status_map`의 (묶음, 표기). 색을 그 표에서만 가져온다.
 STATUS_TOKENS: dict[str, tuple[str, str]] = {
-    TRAY_UNREGISTERED: ("Bot UI", "등록 전"),
-    TRAY_DISCONNECTED: ("Bot UI", "연결 끊김"),
-    TRAY_KEY_REVOKED: ("Bot UI", "키 폐기됨"),
-    TRAY_KEY_EXPIRED: ("Bot UI", "키 만료"),
-    TRAY_DISABLED: ("Bot UI", "비활성"),
-    TRAY_ERROR: ("Bot", "오류"),
+    TRAY_UNREGISTERED: ("PC 실행기", "등록 전"),
+    TRAY_DISCONNECTED: ("PC 실행기", "연결 끊김"),
+    TRAY_KEY_REVOKED: ("PC 실행기", "키 폐기됨"),
+    TRAY_KEY_EXPIRED: ("PC 실행기", "키 만료"),
+    TRAY_DISABLED: ("PC 실행기", "비활성"),
+    TRAY_ERROR: ("BPM 프로세스", "오류"),
 }
 
 
@@ -50,10 +50,10 @@ def status_color(status: str, *, current_theme: str = theme.THEME_LIGHT) -> str:
         if found:
             return found
     if status.startswith("실행 중") or status.startswith("셀렉터 등록"):
-        return theme.status_color("Bot", "실행 중", theme=current_theme) or "#000000"
+        return theme.status_color("BPM 프로세스", "실행 중", theme=current_theme) or "#000000"
     if status.endswith("대기") or status.startswith("대기"):
-        return theme.status_color("Bot", "대기", theme=current_theme) or "#000000"
-    return theme.status_color("Bot UI", "연결됨", theme=current_theme) or "#000000"
+        return theme.status_color("BPM 프로세스", "대기", theme=current_theme) or "#000000"
+    return theme.status_color("PC 실행기", "연결됨", theme=current_theme) or "#000000"
 
 
 def tray_icon(status: str, *, current_theme: str = theme.THEME_LIGHT) -> QIcon:
@@ -110,7 +110,7 @@ class Tray(QSystemTrayIcon):
         """상태가 바뀔 때마다 (하트비트마다) 부른다."""
         status = self._agent.tray_status()
         self.setIcon(tray_icon(status, current_theme=self._theme))
-        self.setToolTip(f"Chaeksas Bot UI · {status}")
+        self.setToolTip(f"Chaeksas PC 실행기 · {status}")
         self._rebuild(status)
 
     def _info(self, text: str) -> None:
@@ -124,11 +124,11 @@ class Tray(QSystemTrayIcon):
         self._menu.clear()
         agent = self._agent
 
-        self._info(f"Chaeksas Bot UI · {agent.settings.name or machine.pc_name()} · {status}")
+        self._info(f"Chaeksas PC 실행기 · {agent.settings.name or machine.pc_name()} · {status}")
 
         run = agent.current_run
         if run is None:
-            self._info("실행 중인 Bot 없음")
+            self._info("실행 중인 BPM 프로세스 없음")
         else:
             node = f" @ {run.node_id}" if run.node_id else ""
             self._info(f"실행 중: {run.bpm_process_id} {run.version}{node}")

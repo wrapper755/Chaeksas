@@ -29,7 +29,7 @@ export { NO_RUNS, SAMPLE, SCAN, deployedPcs, percent, summarize };
 export type { BotRow, RunFields };
 
 /**
- * CON-02 Bot 현황 — Bot(BPM 프로세스)·버전별 준비도.
+ * CON-02 BPM 프로세스 현황 — BPM 프로세스·버전별 준비도.
  *
  * **Center가 집계를 갖고 있지 않다.** 실행 요약(C3 `RunInfo`)·보고된 준비 상태(C4
  * `readiness`)·누락 리소스(C5 `missing_resources`)를 **콘솔에서 묶어** 보인다 — Center에 집계
@@ -45,13 +45,13 @@ export type { BotRow, RunFields };
 /** 탭 — 실행 위치 (C1 `run_location`). 서버가 먼저다 (서버 우선, ADR-0016). */
 const TABS: Array<{ place: Place; label: string }> = [
   { place: "server", label: "서버" },
-  { place: "pc", label: "PC (Bot UI)" },
+  { place: "pc", label: "PC (PC 실행기)" },
 ];
 
 
 /**
  * 「확인률」은 C3 요약의 **`confirmations`**(확인만 센 수)로 잰다. 그 칸은 **선택 칸**이라
- * 옛 Bot UI가 보낸 기록에는 없다 — 그런 실행은 **분모에도 넣지 않는다**(`confirm_sample`).
+ * 옛 PC 실행기가 보낸 기록에는 없다 — 그런 실행은 **분모에도 넣지 않는다**(`confirm_sample`).
  * 0으로 세면 「확인이 없었다」와 「세지 않았다」가 같아져 확인률이 조용히 낮아진다.
  */
 export const CONFIRM_NOTE =
@@ -101,7 +101,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
   let pcs: BotUiInfo[] = [];
   let failure: string | null = null;
   try {
-    // Bot·배포·보고된 준비 상태는 **한 번에** 읽는다 (서로를 기다릴 일이 없다).
+    // BPM 프로세스·배포·보고된 준비 상태는 **한 번에** 읽는다 (서로를 기다릴 일이 없다).
     const [packages, botUis, deployments] = await Promise.all([
       center.packages({ kind: "bpm_process" }),
       center.botUis(),
@@ -109,7 +109,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
     ]);
     pcs = botUis as BotUiInfo[];
 
-    // 실행 요약은 **Bot마다** 묻는다 — 한 번에 받아 오면 판이 많은 Bot의 옛 판이 잘린다.
+    // 실행 요약은 **BPM 프로세스마다** 묻는다 — 한 번에 받아 오면 판이 많은 BPM 프로세스의 옛 판이 잘린다.
     const ids = [...new Set(packages.map((one) => one.id))];
     const sampled = await Promise.all(
       ids.map(async (id) => summarize((await center.runs({ bpm_process_id: id, limit: SCAN })).runs ?? [])),
@@ -139,7 +139,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
           ],
           ...deployedPcs(deployments as DeploymentInfo[], one.id, one.version),
           // **실행 요약은 제 칸만 덮는다** (`RunFields`) — 위에서 센 「실행 불가」·「배포된
-          // Bot UI」가 살아 있어야 한다.
+          // PC 실행기」가 살아 있어야 한다.
           ...(counts.get(key) ?? NO_RUNS),
         } as BotRow;
       })
@@ -160,7 +160,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
   const columns: Array<Column<BotRow>> = [
     {
       key: "id",
-      header: "Bot",
+      header: "BPM 프로세스",
       mono: true,
       cell: (row) => (
         <Link className="underline" href={packageHref(row)}>
@@ -237,7 +237,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
     { key: "last_success", header: "최근 성공", width: "18ch", cell: (row) => time(row.last_success) },
     {
       key: "pcs",
-      header: "배포된 Bot UI",
+      header: "배포된 PC 실행기",
       width: "14ch",
       align: "right",
       // **건수가 아니라 PC 수**다 (ADR-0046). 건수는 툴팁에 — 같은 PC에 옛 배포가 살아 있으면
@@ -263,15 +263,15 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
       : []),
   ];
 
-  // 「배포된 Bot UI」는 PC Bot의 것이다 — 서버 Bot은 PC에 배포하지 않는다.
+  // 「배포된 PC 실행기」는 PC BPM 프로세스의 것이다 — 서버 BPM 프로세스는 PC에 배포하지 않는다.
   const shown = place === "pc" ? columns : columns.filter((column) => column.key !== "pcs");
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/bots">
       <header className="mb-4">
-        <h1 className="text-h1 font-bold">Bot 현황</h1>
+        <h1 className="text-h1 font-bold">BPM 프로세스 현황</h1>
         <p className="text-body text-text-secondary">
-          Bot {bots}개, 버전 {versions}개 · 준비도는 최근 {SAMPLE}회 실행 기준
+          BPM 프로세스 {bots}개, 버전 {versions}개 · 준비도는 최근 {SAMPLE}회 실행 기준
         </p>
       </header>
 
@@ -296,7 +296,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
         <ErrorBanner message={failure} />
       ) : rows.length === 0 ? (
         <EmptyState
-          title={place === "server" ? "올라온 서버 Bot이 없습니다." : "올라온 PC Bot이 없습니다."}
+          title={place === "server" ? "올라온 서버 BPM 프로세스가 없습니다." : "올라온 PC BPM 프로세스가 없습니다."}
           hint="Studio에서 「Center로 올리기」로 올리세요."
         />
       ) : (
@@ -320,11 +320,11 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
             columns={shown}
             rows={rows}
             rowKey={(row) => `${row.id}@${row.version}`}
-            caption="Bot·버전별 준비도"
+            caption="BPM 프로세스·버전별 준비도"
           />
           <p className="text-body-sm text-text-muted">
             {CONFIRM_NOTE} 셈은 **끝난 실행**만 셉니다 — 도는 중인 실행은 표본에 들어가지 않습니다.
-            Bot마다 최근 {SCAN}건을 훑어 버전별로 {SAMPLE}회까지 셉니다 (그보다 적으면 표본 수가
+            BPM 프로세스마다 최근 {SCAN}건을 훑어 버전별로 {SAMPLE}회까지 셉니다 (그보다 적으면 표본 수가
             작게 보입니다).
           </p>
 
@@ -338,7 +338,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
         </div>
       )}
 
-      {/* 서버 Bot이 도는 곳 — 서버 실행기 목록·승인 대기·대기열 (옛 CON-12 목록). */}
+      {/* 서버 BPM 프로세스가 도는 곳 — 서버 실행기 목록·승인 대기·대기열 (옛 CON-12 목록). */}
       {place === "server" ? (
         <div className="mt-8">
           <ServerRunners admin={found.mode === "admin"} />

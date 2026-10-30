@@ -309,7 +309,7 @@ class StudioSettingsDialog(QDialog):
     def _worker_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        intro = QLabel("UI 태스크는 이 PC의 Bot UI가 관리하는 Worker 프로세스가 처리합니다.")
+        intro = QLabel("UI 태스크는 이 PC의 PC 실행기가 관리하는 Worker 프로세스가 처리합니다.")
         intro.setWordWrap(True)
         layout.addWidget(intro)
         self.worker = worker_place(self._runtime_values())

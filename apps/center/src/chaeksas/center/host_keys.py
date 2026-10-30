@@ -1,6 +1,6 @@
 """키 묶기 — Center API 키 ↔ 기계 ↔ 행, **양방향으로 하나씩** (C4·C12 「키 묶기」).
 
-Bot UI(C4)와 서버 실행기(C12)가 **같은 규칙**을 쓴다. C12가 「키 묶기는 C4와 같다」고 적어
+PC 실행기(C4)와 서버 실행기(C12)가 **같은 규칙**을 쓴다. C12가 「키 묶기는 C4와 같다」고 적어
 두었으므로 규칙이 두 군데 있으면 한쪽만 고쳐져 갈라진다 — 그래서 표 이름만 다르게 받고
 판정은 여기 하나다.
 
@@ -45,7 +45,7 @@ class HostTable:
     unbind_label: str = "묶음 풀기"
 
 
-#: C4 Bot UI (`bot_uis`) — 키 종류 `bot_ui`.
+#: C4 PC 실행기 (`bot_uis`) — 키 종류 `bot_ui`.
 BOT_UI = HostTable(name="bot_uis", id_column="bot_ui_id", label="PC", unbind_label="PC 묶음 풀기")
 #: C12 서버 실행기 (`server_runners`) — 키 종류 `server_runner`.
 SERVER_RUNNER = HostTable(

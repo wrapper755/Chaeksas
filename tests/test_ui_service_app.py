@@ -7,7 +7,7 @@
 | 보는 것 | 왜 |
 | --- | --- |
 | 등록·셀렉터가 나가는 작업은 「셀렉터 등록」을 켠 PC만 (`registry_write`) | 셀렉터가 나간다 (C9·C15) |
-| 목록·보고는 추가 권한이 없다 | BUI-06 콤보·실행 중 Bot의 보고 (C8) |
+| 목록·보고는 추가 권한이 없다 | BUI-06 콤보·실행 중 BPM 프로세스의 보고 (C8) |
 | 공개 카탈로그(Center에 올라간 것)에는 셀렉터가 없다 | 호출 토큰이면 누구나 읽는다 (C13 §5) |
 | 등록은 더하기다, 바뀐 것이 없으면 `revision`도 안 오른다 | Worker 계획 캐시 (C9) |
 | 다시 띄워도 남는다 (SQLite) | 메모리에만 있으면 되는 척이다 |
@@ -267,7 +267,7 @@ def test_a_test_report_does_not_count(center: UiaCenter, writer: RegistryClient)
 
 
 def test_a_report_needs_no_extra_scope(center: UiaCenter, writer: RegistryClient) -> None:
-    """보고는 **실행 중 Bot의 호출 토큰**으로 온다 — 「셀렉터 등록」을 요구하면 안 된다 (C8)."""
+    """보고는 **실행 중 BPM 프로세스의 호출 토큰**으로 온다 — 「셀렉터 등록」을 요구하면 안 된다 (C8)."""
     writer.register(page())
     bot = CenterOps(
         base_url=center.url,

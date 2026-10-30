@@ -14,7 +14,7 @@
   키 회전이 같은 것을 쓴다.
 - 오가는 모양 (요청 상태·콘솔이 보는 한 줄·결정).
 
-Bot UI·서버 실행기의 요청 본문은 각자의 `RegisterRequest`에 `public_key`를 더한 것이라 그쪽
+PC 실행기·서버 실행기의 요청 본문은 각자의 `RegisterRequest`에 `public_key`를 더한 것이라 그쪽
 모듈(`bot_ui`·`server_runner`)에 있다.
 """
 
@@ -173,7 +173,7 @@ class StudioVersions(ContractModel):
 class StudioEnrollRequest(SchemaVersioned):
     """`POST /api/v1/studio/enroll` — Studio의 등록 요청 (C5 §Studio 등록 요청과 승인, ADR-0093).
 
-    Bot UI의 `EnrollRequest`와 같은 결이다 — 등록(`register`)이 없는 Studio라 그 칸만 따로 둔다.
+    PC 실행기의 `EnrollRequest`와 같은 결이다 — 등록(`register`)이 없는 Studio라 그 칸만 따로 둔다.
     """
 
     machine_id: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]

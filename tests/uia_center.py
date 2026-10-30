@@ -9,7 +9,7 @@
 | --- | --- |
 | `running()` | Center + UI 자동화 앱(일꾼으로 들인 것) |
 | `UiaCenter.studio_token()` | Studio 키 → 호출 토큰. `test_…` 실행만 올린다, 등록 권한 없음 |
-| `UiaCenter.pc_token()` | 등록된 Bot UI 키 → 호출 토큰. 「셀렉터 등록」(`reg_…`)·Bot `BOT` 배포(`run_…`) |
+| `UiaCenter.pc_token()` | 등록된 PC 실행기 키 → 호출 토큰. 「셀렉터 등록」(`reg_…`)·BPM 프로세스 `BOT` 배포(`run_…`) |
 | `UiaCenter.catalog()` | Center에 올라간 공개 카탈로그(C7 기여 자원 `ui_page`) — 일꾼이 지금 올리게 하고 읽는다 |
 | `execute()` | 앱의 작업 수행기(`app.state.ops`)를 Center 없이 바로 부른다 — 작업 함수만 볼 때 |
 """
@@ -40,7 +40,8 @@ from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 from chaeksas.ext.ui_automation.service.app import APP_ID, create
 from chaeksas.service_kit import Outcome, ServiceLlm
 
-#: 등록된 PC에 배포해 두는 Bot — 매니페스트가 토픽 `ui-automation`을 요구한다 (C15 「그 Bot이 요구하나」).
+#: 등록된 PC에 배포해 두는 BPM 프로세스 — 매니페스트가 토픽 `ui-automation`을 요구한다
+#: (C15 「그 BPM 프로세스가 요구하나」).
 BOT = "uia.trial"
 VERSION = "1.0.0"
 AT = "2026-10-29T09:00:00+09:00"
@@ -114,7 +115,10 @@ class UiaCenter:
             return self._call_token(http, self._key(http, name="설계자", kind="studio"))
 
     def pc_token(self, *, selector_registration: bool = True, deployed: bool = True) -> str:
-        """등록된 Bot UI 하나의 호출 토큰. 「셀렉터 등록」을 켜면 `reg_…`를, Bot을 배포하면 `run_…`을 올린다."""
+        """등록된 PC 실행기 하나의 호출 토큰.
+
+        「셀렉터 등록」을 켜면 `reg_…`를, BPM 프로세스를 배포하면 `run_…`을 올린다.
+        """
         self._pcs += 1
         with self.http() as http:
             key = self._key(http, name=f"현장 {self._pcs}", kind="bot_ui")

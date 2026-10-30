@@ -1,7 +1,7 @@
-"""Bot UI ↔ Center 한 바퀴 (C4) — **실제 Center를 붙여** 돈다.
+"""PC 실행기 ↔ Center 한 바퀴 (C4) — **실제 Center를 붙여** 돈다.
 
 `TestClient`(httpx 클라이언트다)를 `CenterClient`에 그대로 끼워 Center 앱을 물린다. 그래서
-「Bot UI가 등록하고 하트비트를 보내면 Center 콘솔(CON-03)에 보인다」는 M2 기준을 Windows 실기
+「PC 실행기가 등록하고 하트비트를 보내면 Center 콘솔(CON-03)에 보인다」는 M2 기준을 Windows 실기
 없이도 여기서 지킨다 — 남은 것은 트레이·자동 시작 같은 OS 동작뿐이다.
 """
 
@@ -67,7 +67,7 @@ def make_agent(center: TestClient, tmp_path: Path, *, key: str | None, name: str
 
     return Agent(
         settings=Settings(name=name, center_url=BASE_URL),
-        # `load`로 만든다 — 다시 켠 Bot UI와 같은 길이다 (상태 파일을 읽는다).
+        # `load`로 만든다 — 다시 켠 PC 실행기와 같은 길이다 (상태 파일을 읽는다).
         store=Store.load(tmp_path / "state.json"),
         credentials=FakeCredentials(key),
         client_factory=factory,
@@ -97,7 +97,7 @@ def test_register_then_heartbeat_shows_up_in_the_console_listing(center: TestCli
 
 
 def test_registering_twice_keeps_the_same_bot_ui_id(center: TestClient, tmp_path: Path) -> None:
-    """등록은 멱등이다 (C4) — 켤 때마다 불러도 Bot UI가 늘어나지 않는다."""
+    """등록은 멱등이다 (C4) — 켤 때마다 불러도 PC 실행기가 늘어나지 않는다."""
     agent = make_agent(center, tmp_path, key=issue_key(center))
     first = agent.register()
     second = agent.register()
@@ -128,7 +128,7 @@ def test_beat_registers_first_if_needed(center: TestClient, tmp_path: Path) -> N
 
 
 def test_a_key_bound_to_another_pc_is_refused(center: TestClient, tmp_path: Path) -> None:
-    """키는 처음 등록한 PC에 묶인다 (C4) — 새어도 다른 Bot UI를 사칭할 수 없다."""
+    """키는 처음 등록한 PC에 묶인다 (C4) — 새어도 다른 PC 실행기를 사칭할 수 없다."""
     key = issue_key(center)
     make_agent(center, tmp_path, key=key).register()
 
@@ -335,7 +335,7 @@ def test_without_a_key_nothing_is_shipped(tmp_path: Path, monkeypatch: pytest.Mo
 
 
 def test_the_agent_asks_center_for_a_call_token_and_keeps_it(center: TestClient, tmp_path: Path) -> None:
-    """실행기 자식·Worker·Tool UI가 외부 작업을 올릴 토큰 — **제 Center API 키로** 청하고(24시간)
+    """실행 프로세스·Worker·Tool UI가 외부 작업을 올릴 토큰 — **제 Center API 키로** 청하고(24시간)
     만료 2시간 전까지는 다시 청하지 않는다. 공개키가 없는(환경변수) 키도 받는다."""
     agent = make_agent(center, tmp_path, key=issue_key(center))
     assert agent.beat() is not None

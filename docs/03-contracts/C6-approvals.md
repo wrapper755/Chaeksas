@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | Bot UI(실행 중 Bot)·서버 실행기 → Center ↔ Center 콘솔(결재함) |
+| 보내는 쪽 → 받는 쪽 | PC 실행기(실행 중 BPM 프로세스)·서버 실행기 → Center ↔ Center 콘솔(결재함) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/approvals.py` (import `chaeksas.contracts.approvals`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c6-approval-create-request.json`](../../packages/contracts/schemas/c6-approval-create-request.json) · [`c6-approval-info.json`](../../packages/contracts/schemas/c6-approval-info.json) · [`c6-answer-request.json`](../../packages/contracts/schemas/c6-answer-request.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0080](../decisions/0080-approval-assignees.md)·[0081](../decisions/0081-answering-on-behalf.md) |
@@ -15,24 +15,24 @@
 BPM 프로세스의 결재(UserTask)를 Center 결재함으로 올린다. 결재자가 콘솔에서 답하면, 실행하는 쪽이 그 답을 받아 실행을 이어 간다.
 
 > 상태: **Center 쪽·결재함(CON-04)·현장 연결이 돈다** ([ADR-0038](../decisions/0038-approval-request-channel.md)).
-> - 엔진이 `where`를 고른다 (`location` + 실행하는 쪽의 기본값 — Bot UI는 BUI-03 「원격 결재」).
-> - `center`면 실행기가 요청 파일(`runs/<run_id>.requests.jsonl`)에 이 계약의 `ApprovalCreateRequest`를 그대로 쓰고, Bot UI가 하트비트 뒤에 올린다.
+> - 엔진이 `where`를 고른다 (`location` + 실행하는 쪽의 기본값 — PC 실행기는 BUI-03 「원격 결재」).
+> - `center`면 실행기가 요청 파일(`runs/<run_id>.requests.jsonl`)에 이 계약의 `ApprovalCreateRequest`를 그대로 쓰고, PC 실행기가 하트비트 뒤에 올린다.
 > - 현장(`field`) 결재·확인도 같은 본문을 `runs/<run_id>.field-requests.jsonl`에 쓴다 ([ADR-0078](../decisions/0078-field-approval-shows-what-to-judge.md)) — **올리지 않고** CMN-01이 제목·설명·검토 자료를 읽는다. 끝나면 지운다.
 > - 답·회수·만료는 하트비트(`approvals[]`)로 내려와 제어 파일을 거쳐 실행기에 간다. 받아 간 것은 `approval_acks`로 알린다 — 지금 기다리지 않는 결재의 답은 `accepted: false`(`not_waiting`)다.
 > - 회수·만료는 실행하는 쪽에 **답 없이 끝남**(`TaskFailed` `APPROVAL_WITHDRAWN`·`APPROVAL_EXPIRED`)으로 간다. 오류 경계가 있으면 그리로, 없으면 실행이 실패로 끝난다.
-> - 현장에서 먼저 답하면 Bot UI가 `DELETE …?reason=answered_in_field`로 거둔다.
+> - 현장에서 먼저 답하면 PC 실행기가 `DELETE …?reason=answered_in_field`로 거둔다.
 >
 > 상태: **결재 담당자·대리 답도 돈다** ([ADR-0080](../decisions/0080-approval-assignees.md)·[ADR-0081](../decisions/0081-answering-on-behalf.md)) — 엔진이 그림의 담당자를 풀어 싣고(서버 스냅샷에도 간다), Center가 `?assignee=`로 거르고 대리 답용 키를 담당자와 대조하며, `answered_via`가 하트비트를 거쳐 C3 `human_answered`까지 간다. CON-04에 「담당」 칸·거르기가 있다.
 > - **결재 읽기는 콘솔 토큰과 대리 답용 키뿐이다** — 권한표 그대로다. 실행하는 쪽 키로는 읽지 못한다(검토 자료가 업무 값이다. 답은 하트비트로 받는다).
 
-- **Center로 올라가는 것은 결재(`approval`)뿐이다.** 확인(실행 중 막힘, `confirmation`)은 화면 앞 사람만 답할 수 있으므로 올리지 않는다 (용어집 §3). 서버 Bot에는 확인이 없다 (C1 R2).
-- PC Bot은 답이 올 때까지 실행 자리를 쥐고 기다린다 (ADR-0014 §5). 서버 Bot은 상태를 저장하고 기다린다 (ADR-0015).
+- **Center로 올라가는 것은 결재(`approval`)뿐이다.** 확인(실행 중 막힘, `confirmation`)은 화면 앞 사람만 답할 수 있으므로 올리지 않는다 (용어집 §3). 서버 BPM 프로세스에는 확인이 없다 (C1 R2).
+- PC BPM 프로세스는 답이 올 때까지 실행 자리를 쥐고 기다린다 (ADR-0014 §5). 서버 BPM 프로세스는 상태를 저장하고 기다린다 (ADR-0015).
 
 ## 전송
 
 | 메서드·경로 | 인증 | 뜻 |
 | --- | --- | --- |
-| `POST /api/v1/approvals` | Bot UI·서버 실행기 키 | 결재 요청 올리기 |
+| `POST /api/v1/approvals` | PC 실행기·서버 실행기 키 | 결재 요청 올리기 |
 | `DELETE /api/v1/approvals/{request_id}` | 올린 쪽 키 (`reason: "answered_in_field"` 또는 `"run_ended"`) / 관리자 토큰 (`reason: "admin_withdraw"`) | 회수 |
 | `GET /api/v1/approvals?state=&bpm_process_id=&host=&assignee=` | 읽기·관리자 토큰 / 대리 답용 키 (**담당인 것만**) | 결재함 목록 |
 | `GET /api/v1/approvals/{request_id}` | 읽기·관리자 토큰 / 대리 답용 키 (**담당인 것만**, 아니면 404) | 하나 |
@@ -40,7 +40,7 @@ BPM 프로세스의 결재(UserTask)를 Center 결재함으로 올린다. 결재
 
 **답 전달:**
 
-- PC: C4 하트비트 응답 `approvals[]`로 내려가고, Bot UI가 `approval_acks[]`로 받았다고 알린다.
+- PC: C4 하트비트 응답 `approvals[]`로 내려가고, PC 실행기가 `approval_acks[]`로 받았다고 알린다.
 - 서버: C12 (M7).
 - **ack가 올 때까지 매번 다시 내려간다** (`delivered = 0`이면 다시 싣는다). 그래서 실행하는 쪽은 **지금 넣을 수 없는 답을 ack하지 않고 그냥 둔다** — 서버 실행기에서는 **빈자리가 없을 때**가 그렇다(기다리던 실행이 이어 가면 자리를 다시 쥐므로 상한을 넘기면 하트비트가 스스로 막힌다, C12). **거절로 적지 않는다**: `accepted: false`는 결재를 `open`으로 되돌리며 **답을 지우므로**(아래) 사람이 답한 결재가 버려진다. ack하지 않으면 다음 주기에 그대로 다시 온다.
 
@@ -114,8 +114,8 @@ Form: `fields: [{key, label, type: "bool" | "number" | "text" | "choice", choice
 | `open` | 대기 | 답을 기다림 |
 | `answered` | 답함 | |
 | `expired` | 시간 초과 | |
-| `withdrawn` | 회수됨 | `withdraw_reason`: `answered_in_field`(현장에서 먼저 답함), `run_ended`(실행이 끝남·취소됨), `admin_withdraw`(관리자 회수), `host_lost`(Bot UI 기록 유실) |
-| `rejected_by_host` | Bot 거절 | 실행하는 쪽이 답을 받아들이지 못함 (`delivery_reason`) |
+| `withdrawn` | 회수됨 | `withdraw_reason`: `answered_in_field`(현장에서 먼저 답함), `run_ended`(실행이 끝남·취소됨), `admin_withdraw`(관리자 회수), `host_lost`(PC 실행기 기록 유실) |
+| `rejected_by_host` | BPM 프로세스 거절 | 실행하는 쪽이 답을 받아들이지 못함 (`delivery_reason`) |
 
 **상태 전이 규칙:**
 

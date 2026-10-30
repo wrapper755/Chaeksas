@@ -1,7 +1,7 @@
-"""배포 한 바퀴 — 관리자 배포 → Center 서명 → Bot UI 설치 (C2·C4·C5, M5 조각 2).
+"""배포 한 바퀴 — 관리자 배포 → Center 서명 → PC 실행기 설치 (C2·C4·C5, M5 조각 2).
 
 **서명이 관문**이라는 것을 끝에서 끝까지 본다. 진짜 Center를 in-process로 띄우고, 관리자가
-배포하면 **Center가 제 키로 서명하고**(ADR-0090), 진짜 Bot UI 쪽 코드가 받아 설치한다.
+배포하면 **Center가 제 키로 서명하고**(ADR-0090), 진짜 PC 실행기 쪽 코드가 받아 설치한다.
 
 거듭 보는 것 다섯.
 
@@ -211,7 +211,7 @@ def sealed(center: Center, info: dict[str, Any], *, deployment_id: str, **over: 
 
 
 def deployer(center: Center, tmp_path: Path, **extra: Any) -> Deployer:
-    """Bot UI 쪽 — 패키지는 **진짜 Center에서** 받는다."""
+    """PC 실행기 쪽 — 패키지는 **진짜 Center에서** 받는다."""
 
     def fetch(package_id: str, version: str) -> Path:
         answer = center.client.get(
@@ -572,7 +572,7 @@ def test_a_bot_ui_key_gets_only_the_package_deployed_to_it(center: Center) -> No
     ).status_code == 403
 
 
-# ─────────────────────────── Bot UI 설치 (C2 V1~V7) ───────────────────────────
+# ─────────────────────────── PC 실행기 설치 (C2 V1~V7) ───────────────────────────
 
 
 def test_a_signed_deployment_installs(center: Center, tmp_path: Path) -> None:
@@ -753,7 +753,7 @@ def test_a_manually_installed_bot_says_so(tmp_path: Path) -> None:
 def test_an_unmarked_folder_is_not_called_a_manual_install(tmp_path: Path) -> None:
     """**모르는 것은 「수동 설치」라고 하지 않는다** (`bots.py`의 원칙).
 
-    `install()`만 거친 폴더 — 표식을 남기기 전에 설치된 Bot이 이 꼴이다. 배포로 온 것일
+    `install()`만 거친 폴더 — 표식을 남기기 전에 설치된 BPM 프로세스가 이 꼴이다. 배포로 온 것일
     수도 있으므로 둘 중 하나로 단정하지 않는다.
     """
     data_dir = tmp_path / "botui"
@@ -826,7 +826,7 @@ def test_the_mark_does_not_make_the_bot_unreadable(tmp_path: Path) -> None:
 
 
 def _envelopes(center: Center) -> list[dict[str, Any]]:
-    """이 Bot UI에게 내려갈 배포 봉투 (C4) — Center가 고른 그대로."""
+    """이 PC 실행기에게 내려갈 배포 봉투 (C4) — Center가 고른 그대로."""
     from chaeksas.center.api.deployments import envelopes_for
 
     return envelopes_for(center.client.app.state.store, target_type="bot_ui", target_id=BOT_UI)
@@ -852,7 +852,7 @@ def _all_envelopes(center: Center) -> list[dict[str, Any]]:
 def test_the_heartbeat_carries_the_envelope_and_keys(center: Center, tmp_path: Path) -> None:
     """**저장된 JSON 그대로** 내려온다 — 다시 직렬화하면 서명이 깨진다 (C4).
 
-    Bot UI가 받은 것을 그대로 `Deployer`에 넘겨 설치되는 것까지 본다.
+    PC 실행기가 받은 것을 그대로 `Deployer`에 넘겨 설치되는 것까지 본다.
     """
     from conftest import FakeCredentials
 
@@ -867,7 +867,7 @@ def test_the_heartbeat_carries_the_envelope_and_keys(center: Center, tmp_path: P
     row = store.row("SELECT envelope_json FROM deployments WHERE deployment_id = ?", (made["deployment_id"],))
     stored = json.loads(row["envelope_json"])
 
-    # Center가 그 Bot UI에게 줄 것 (하트비트 응답의 `deployments`).
+    # Center가 그 PC 실행기에게 줄 것 (하트비트 응답의 `deployments`).
     body = {
         "server_time": AT,
         "deployments": _envelopes(center),

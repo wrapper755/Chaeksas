@@ -1,12 +1,12 @@
-"""실행기 — **Bot 하나를 돌리는 자식 프로세스** (ADR-0023, 진입점 `chk-bot-runner`).
+"""실행 프로세스 — **BPM 프로세스 하나를 돌리는 자식 프로세스** (ADR-0023, 진입점 `chk-bot-runner`).
 
-Bot UI는 이것을 띄우기만 하고 기다리지 않는다. 주고받는 길은 파일 한 벌이다 (ADR-0031).
+PC 실행기는 이것을 띄우기만 하고 기다리지 않는다. 주고받는 길은 파일 한 벌이다 (ADR-0031).
 
 - 올라오는 것: **실행 기록** `runs/<run_id>.jsonl` (C3) — 노드 상태·결재 요청·끝남.
 - 내려가는 것: **제어 파일** `runs/<run_id>.control.jsonl` — 중지와 결재 답.
 - **PC 위임으로 받은 작업이면** 끝날 때 `runs/<run_id>.outputs.json`에 결과를 쓴다
   (C4 `JobAck.outputs`, ADR-0062 §4) — 실행 변수를 아는 것은 이 프로세스뿐이고 실행 기록에는
-  업무 값이 없다 (원칙 6). Bot UI가 ack에 실어 올리고 그 자리에서 지운다.
+  업무 값이 없다 (원칙 6). PC 실행기가 ack에 실어 올리고 그 자리에서 지운다.
 
 **스레드를 만들지 않는다.** 엔진은 한 걸음씩 돌고(`step()`), 멈추면(`blocked()`) 제어 파일을
 보고 타이머를 본다. 사람을 기다리는 동안에도 같은 자리를 돈다 (ADR-0014 — 자리를 쥔다).
@@ -61,7 +61,7 @@ SOURCE_DELEGATION = "delegation"
 
 @dataclass
 class CallTokenHolder:
-    """이 실행의 호출 토큰 (C15) — 처음 것은 환경변수로, 새것은 제어 파일로 온다 (Bot UI가 갈아 넣는다)."""
+    """이 실행의 호출 토큰 (C15) — 처음 것은 환경변수로, 새것은 제어 파일로 온다 (PC 실행기가 갈아 넣는다)."""
 
     value: str | None = None
 
@@ -71,7 +71,7 @@ class CallTokenHolder:
 
 @dataclass(frozen=True)
 class RunnerSecrets:
-    """`extension_api.Secrets` — 실행기에서 확장이 묻는 이름을 푼다 (ADR-0013).
+    """`extension_api.Secrets` — 실행 프로세스에서 확장이 묻는 이름을 푼다 (ADR-0013).
 
     `call_token`은 이 실행의 호출 토큰(C15), 나머지는 그 확장의 비밀 칸이다.
     """
@@ -94,10 +94,10 @@ def extension_tasks(
     off: Sequence[str] = (),
     call_token: CallTokenHolder | None = None,
 ) -> HostTasks:
-    """이 실행의 확장 — 설치된 것을 읽고, Bot UI가 넘긴 확장별 설정(Worker 자리 등)을 붙인다.
+    """이 실행의 확장 — 설치된 것을 읽고, PC 실행기가 넘긴 확장별 설정(Worker 자리 등)을 붙인다.
 
-    **사람이 BUI-11에서 끈 확장은 여기서도 기여를 내지 않는다** (ADR-0043) — 끌 id는 Bot UI가
-    넘긴다(`--off`). 그런 Bot은 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
+    **사람이 BUI-11에서 끈 확장은 여기서도 기여를 내지 않는다** (ADR-0043) — 끌 id는 PC 실행기가
+    넘긴다(`--off`). 그런 BPM 프로세스는 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
     """
     loaded = host if host is not None else load_host(off=off)
     credentials: Any = Credentials()
@@ -114,7 +114,7 @@ def extension_tasks(
 
 
 def app_directory(path: Path | None) -> AppDirectory:
-    """검증된 외부 확장 정의 (C13 「전송」) — Bot UI가 Center에서 받아 파일로 건넨 것.
+    """검증된 외부 확장 정의 (C13 「전송」) — PC 실행기가 Center에서 받아 파일로 건넨 것.
 
     **봉투를 다시 검증한다** — `read_directory`가 통과한 것만 싣고 나머지는 사유를 남긴다.
     """
@@ -124,7 +124,7 @@ def app_directory(path: Path | None) -> AppDirectory:
 def refuse_unusable(package: InstalledBot, directory: AppDirectory) -> None:
     """매니페스트가 요구하는 외부 확장을 쓸 수 없으면 **시작하지 않는다** (C1·C13).
 
-    중간에 알면 이미 한 일을 되돌릴 수 없다. 정의가 바뀌었으면 그 Bot은 승인·배포를 다시
+    중간에 알면 이미 한 일을 되돌릴 수 없다. 정의가 바뀌었으면 그 BPM 프로세스는 승인·배포를 다시
     받아야 한다 — 몰래 새 정의로 돌리지 않는다.
     """
     unusable = directory.unusable(package.manifest.requires.extensions)
@@ -195,7 +195,7 @@ class Runner:
     def _post_requests(self, run: Run) -> None:
         """새 결재·확인의 본문을 요청 파일에 쓴다.
 
-        `where=center`는 올릴 파일로(ADR-0038 — Bot UI가 나른다), 현장 것은 **결재 창이 읽을
+        `where=center`는 올릴 파일로(ADR-0038 — PC 실행기가 나른다), 현장 것은 **결재 창이 읽을
         파일로** 간다(ADR-0078 — 제목·검토 자료를 아는 것은 여기뿐이다).
         """
         for pending in list(run.pendings.values()):
@@ -233,7 +233,7 @@ class Runner:
         그리고 **성공했을 때만**이다: 실패·취소는 돌려줄 값이 없고(서버 쪽은 그것을 업무
         실패로 다룬다) 쓰면 값만 더 오래 남는다.
 
-        **거르는 자리는 그 Bot이 선언한 `outputs`다** (C1) — 그것이 곧 「부르는 쪽이 받을
+        **거르는 자리는 그 BPM 프로세스가 선언한 `outputs`다** (C1) — 그것이 곧 「부르는 쪽이 받을
         것」이다. 선언이 없으면 빈 벌을 쓴다(「끝났는데 돌려줄 것이 없다」도 사실이다 — 그러면
         서버 그림이 읽는 값이 없어 그쪽에서 업무 실패가 된다).
         """
@@ -314,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    parser = argparse.ArgumentParser(prog="chk-bot-runner", description="Bot 하나를 돌린다")
+    parser = argparse.ArgumentParser(prog="chk-bot-runner", description="BPM 프로세스 하나를 돌린다")
     parser.add_argument("--package", required=True, type=Path, help="풀어 놓은 패키지 폴더")
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--data-dir", required=True, type=Path)
@@ -325,7 +325,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--job-id", default=None)
     # C3 `run_started.parent_run_id` — 맡긴 서버 실행 (ADR-0062 §6). 위임이 아니면 주지 않는다.
     parser.add_argument("--parent-run-id", default=None)
-    # C3 `run_started.queued_s` — Bot UI가 대기열에서 기다린 초를 알려 준다 (모르면 안 준다).
+    # C3 `run_started.queued_s` — PC 실행기가 대기열에서 기다린 초를 알려 준다 (모르면 안 준다).
     parser.add_argument("--queued-s", type=float, default=None)
     parser.add_argument("--output-dir", type=Path, default=None)
     parser.add_argument("--readable", type=Path, action="append", default=[])
@@ -336,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--approval-where", default=WHERE_FIELD, choices=(WHERE_FIELD, WHERE_CENTER))
     # 확장별 설정 (그 칸 + 예약 키 — Worker 자리). **비밀은 없다** (키는 참조 이름으로 푼다).
     parser.add_argument("--extensions", type=Path, default=None, help="확장별 설정 JSON 파일")
-    # 사람이 BUI-11에서 끈 확장 (ADR-0043) — 끌 id는 Bot UI가 준다.
+    # 사람이 BUI-11에서 끈 확장 (ADR-0043) — 끌 id는 PC 실행기가 준다.
     parser.add_argument("--off", action="append", default=[], help="끈 확장 id (여러 번)")
     # 외부 확장 정의와 봉투·Admin 공개키 (C13 「전송」) — 고정한 해시와 대조한다.
     parser.add_argument("--services", type=Path, default=None, help="외부 확장 명부 JSON 파일")
@@ -413,7 +413,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     state = runner.drive()
     # **쓰는 것이 먼저다** — 제어·요청 파일을 치우는 것과 달리 이것은 **올릴 것을 남기는**
-    # 일이다 (Bot UI가 읽어 ack에 싣고 그 자리에서 지운다, ADR-0062 §4).
+    # 일이다 (PC 실행기가 읽어 ack에 싣고 그 자리에서 지운다, ADR-0062 §4).
     runner.post_outputs()
     control.clear(runner.control)
     requests.clear(runner.requests)

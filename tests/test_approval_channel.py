@@ -1,4 +1,4 @@
-"""결재의 현장 연결 (ADR-0038) — 엔진 → 요청 파일 → Bot UI → Center → 하트비트 → 제어 파일.
+"""결재의 현장 연결 (ADR-0038) — 엔진 → 요청 파일 → PC 실행기 → Center → 하트비트 → 제어 파일.
 
 거듭 보는 것 넷.
 
@@ -7,7 +7,7 @@
 3. **회수·만료는 답이 아니다** — 「답 없이 끝남」으로 오류 경계가 받거나 실행이 실패한다.
 4. **현장에서 먼저 답하면 Center에서 거둔다** (`answered_in_field`).
 
-뒤쪽 한 바퀴는 **진짜 실행기(자식 프로세스)와 진짜 Center 앱**으로 돈다.
+뒤쪽 한 바퀴는 **진짜 실행 프로세스와 진짜 Center 앱**으로 돈다.
 """
 
 from __future__ import annotations
@@ -114,7 +114,7 @@ def requested(run: Run) -> dict[str, Any]:
     [
         ("center", "field", "center"),  # BPM 프로세스가 정한 것이 이긴다
         ("field", "center", "field"),
-        ("follow", "center", "center"),  # 「Bot UI 설정을 따름」 — BUI-03 「원격 결재」
+        ("follow", "center", "center"),  # 「PC 실행기 설정을 따름」 — BUI-03 「원격 결재」
         ("follow", "field", "field"),
     ],
 )
@@ -221,7 +221,7 @@ def test_a_duration_becomes_a_deadline_from_the_run_clock() -> None:
 
 
 def test_the_request_body_is_the_c6_contract_as_is() -> None:
-    """요청 파일의 한 줄은 C6 `ApprovalCreateRequest` 그대로다 — Bot UI는 짓지 않고 나른다."""
+    """요청 파일의 한 줄은 C6 `ApprovalCreateRequest` 그대로다 — PC 실행기는 짓지 않고 나른다."""
     _, run = waiting(approval_process(location="center"))
     assert run.pending is not None
     body = requests.create_request(run, run.pending).to_json_dict()
@@ -437,7 +437,7 @@ def make_agent(
 
 
 def raised(agent: Agent, center: TestClient) -> dict[str, Any]:
-    """실행기가 요청 파일에 쓰면 Bot UI가 하트비트 뒤에 올린다 — 결재함(CON-04)에 보인다."""
+    """실행기가 요청 파일에 쓰면 PC 실행기가 하트비트 뒤에 올린다 — 결재함(CON-04)에 보인다."""
     assert agent.beat() is not None  # 등록하고 실행기를 띄운다
     running = agent.runner().running
     assert running is not None

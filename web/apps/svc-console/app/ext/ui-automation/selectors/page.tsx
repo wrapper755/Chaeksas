@@ -8,7 +8,7 @@ import { Shell } from "@/components/Shell";
 /**
  * UIA-02 셀렉터 — 화면을 골라 그 화면의 로케이터 전부를 본다 (대체된 것 포함).
  *
- * **보기 전용**이다. 등록·삭제는 Bot UI 「도구」 → 「UI 셀렉터 등록」(BUI-06)의 일이다 (C9).
+ * **보기 전용**이다. 등록·삭제는 PC 실행기 「도구」 → 「UI 셀렉터 등록」(BUI-06)의 일이다 (C9).
  * 좁히기·경로 탐색은 **JS 없이** 일반 `<form method="get">`으로 돈다 (CON-05와 같은 결).
  */
 
@@ -24,7 +24,7 @@ const PLATFORM_LABEL: Record<string, string> = { web: "웹", desktop: "데스크
 
 const NO_PAGES = {
   title: "등록된 화면이 없습니다.",
-  hint: "Bot UI 「도구」 → 「UI 셀렉터 등록」(BUI-06)으로 등록하세요.",
+  hint: "PC 실행기 「도구」 → 「UI 셀렉터 등록」(BUI-06)으로 등록하세요.",
 };
 const NO_LOCATORS = {
   title: "이 화면에 등록된 로케이터가 없습니다.",

@@ -1,7 +1,7 @@
 """실행 하나를 돌리는 일꾼 — **스레드 하나** (C12, ADR-0054 §5
 — `docs/decisions/0054-server-run-state-and-concurrency.md`).
 
-PC와 **모양이 다르다**: Bot UI는 Bot 하나마다 **자식 프로세스**를 띄우고(ADR-0023) 제어
+PC와 **모양이 다르다**: PC 실행기는 BPM 프로세스 하나마다 **자식 프로세스**를 띄우고(ADR-0023) 제어
 파일로 말을 건넨다. 서버는 한 프로세스 안에서 **실행마다 스레드 하나**다 — 협력 루프는
 막히는 걸음 하나가 루프 전체를 세워 상한 10이 사실상 1이 되는 것을 스파이크가 재 보았다
 (`spikes/s10-server-runner-state/`).
@@ -498,8 +498,8 @@ class Worker:
             # **시작했다는 것부터 적는다** — 이것이 없으면 다시 뜬 실행기가 죽은 실행을 모른다.
             self.store.mark_running(
                 self.run_id,
-                # **패키지 id다** (C1 — Bot의 신원). 그림의 `process.id`가 아니다 — 되살릴 때
-                # `find()`가, Center의 Bot별 상한이 이 이름으로 찾는다.
+                # **패키지 id다** (C1 — BPM 프로세스의 신원). 그림의 `process.id`가 아니다 — 되살릴 때
+                # `find()`가, Center의 BPM 프로세스별 상한이 이 이름으로 찾는다.
                 bpm_process_id=self.bot.id,
                 version=run.version,
                 job_id=self.job_id,
@@ -552,7 +552,7 @@ class Worker:
     def _emit_waiting(self, run: Run) -> None:
         """**기다리기 시작했다**는 줄 하나 (C3 `run_waiting`).
 
-        PC Bot은 이 줄이 없다 (C3) — 기다리는 동안에도 실행 자리를 쥐고 있어 `node_state:
+        PC BPM 프로세스는 이 줄이 없다 (C3) — 기다리는 동안에도 실행 자리를 쥐고 있어 `node_state:
         waiting`만으로 뜻이 통한다. 서버는 **스레드를 놓으므로**(ADR-0054 §5) 기다린 사실이
         기록에 없으면 CON-01이 「이 실행이 무엇을 얼마나 기다렸나」를 영영 모른다.
 
@@ -661,8 +661,8 @@ class Worker:
     def _measure(self, run: Run) -> Snapshot:
         """`Run`을 읽어 모습 하나를 만든다. **도는 스레드에서만 부른다.**
 
-        `bpm_process_id`는 **패키지 id**다 (C1 — Bot의 신원). 그림의 `process.id`를 올리면
-        배포·작업·Bot별 상한이 쓰는 이름과 갈라져 CON-12가 다른 이름을 보인다.
+        `bpm_process_id`는 **패키지 id**다 (C1 — BPM 프로세스의 신원). 그림의 `process.id`를 올리면
+        배포·작업·BPM 프로세스별 상한이 쓰는 이름과 갈라져 CON-12가 다른 이름을 보인다.
         """
         return Snapshot(
             run_id=self.run_id,
@@ -706,8 +706,8 @@ class Worker:
             return None
         common = {
             "run_id": self.run_id,
-            # **패키지 id다** (`_measure`와 같다) — 그림의 `process.id`를 올리면 Center의 Bot별
-            # 상한·메시지 찾기가 쓰는 이름과 갈라진다 (C1 — Bot의 신원은 패키지 id다).
+            # **패키지 id다** (`_measure`와 같다) — 그림의 `process.id`를 올리면 Center의 BPM 프로세스별
+            # 상한·메시지 찾기가 쓰는 이름과 갈라진다 (C1 — BPM 프로세스의 신원은 패키지 id다).
             "bpm_process_id": self.bot.id,
             "version": run.version,
             "since": now_iso(),
@@ -745,10 +745,10 @@ class Worker:
         return None
 
     def delegated_outputs(self) -> dict[str, Any]:
-        """맡겨진 실행이 **성공으로 끝났으면** 그 Bot이 선언한 `outputs`만 (C4 `JobAck.outputs`).
+        """맡겨진 실행이 **성공으로 끝났으면** 그 BPM 프로세스가 선언한 `outputs`만 (C4 `JobAck.outputs`).
 
         위임이 아니거나 성공이 아니면 **비운다** — 업무 값을 실을 일이 없다 (원칙 6의 예외는 좁게,
-        Bot UI 실행기와 같은 `core.outputs.pick`이 거른다 — ADR-0062 §4).
+        실행 프로세스와 같은 `core.outputs.pick`이 거른다 — ADR-0062 §4).
         """
         if not self.parent_run_id or self.snapshot().finished != "success":
             return {}

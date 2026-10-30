@@ -1,7 +1,7 @@
 """실행기의 심장 — 등록하고 주기마다 하트비트를 보낸다 (C12).
 
 **배포를 설치하고, 작업을 받아 돌리고, 기록을 Center로 보낸다** (M7 조각 3·4-①). 설치는
-Bot UI와 **같은 코드**(`core.deploy`·`core.packages`)이고 다른 것은 `host_kind`뿐이다 —
+PC 실행기와 **같은 코드**(`core.deploy`·`core.packages`)이고 다른 것은 `host_kind`뿐이다 —
 서버는 `"*"` 대상 배포도 받는다 (ADR-0046).
 
 실행 하나는 **스레드 하나**다 (`worker.Worker`, ADR-0054 §5). 자리 셈은 **기다리는 실행을
@@ -155,7 +155,7 @@ class Agent:
     pending_acks: list[JobAck] = field(default_factory=list)
     #: 이미 받은 작업 (`job_id` → 마지막 ack). **두 번 돌리지 않는다** (C4 멱등).
     #: **무한히 자라지 않는다** — ack가 Center에 닿고 몇 주기가 지나면 잊는다 (`core.seen`,
-    #: ADR-0056). 메시지도, **Bot UI도** 같은 것을 쓴다 (ADR-0057 — 규칙이 갈라지면 한쪽만 고친다).
+    #: ADR-0056). 메시지도, **PC 실행기도** 같은 것을 쓴다 (ADR-0057 — 규칙이 갈라지면 한쪽만 고친다).
     seen_jobs: Seen[JobAck] = field(default_factory=Seen)
     #: 기다리는 실행을 담아 두는 곳 (ADR-0054 §3). 없으면 담지 않는다 (시험·한 번 돌리기).
     store: Store | None = None
@@ -221,7 +221,7 @@ class Agent:
         return self._tasks
 
     def machine_id(self) -> str:
-        """C12 `machine_id` — **Bot UI와 같은 함수**다 (`core.machine`). 원값은 보내지 않는다."""
+        """C12 `machine_id` — **PC 실행기와 같은 함수**다 (`core.machine`). 원값은 보내지 않는다."""
         return machine.machine_id(self.settings.data_path)
 
     def name(self) -> str:
@@ -305,8 +305,8 @@ class Agent:
             os=machine.os_label(),
             versions=self.versions(),
             max_concurrency=self.settings.max_concurrency,
-            # **이 서버에 깔린 확장** (C12 — Bot UI의 C4와 같은 모양, `host.states()` 하나다).
-            # 싣지 않으면 C7이 그 확장을 모르고, 그것을 요구하는 Bot의 **배포가 막힌다**
+            # **이 서버에 깔린 확장** (C12 — PC 실행기의 C4와 같은 모양, `host.states()` 하나다).
+            # 싣지 않으면 C7이 그 확장을 모르고, 그것을 요구하는 BPM 프로세스의 **배포가 막힌다**
             # (「확장 누락」은 배포를 막는 셋 중 하나다). CON-12 상세도 이 목록을 그린다.
             extensions=self.extension_host().states(),
             public_key=self._public_key(),
@@ -386,7 +386,7 @@ class Agent:
     # ── 배포 설치 (C2 V1~V7, C12) ──
 
     def deployer(self) -> Deployer:
-        """배포를 적용하는 쪽. **Bot UI와 같은 코드**이고 다른 것은 `host_kind`뿐이다."""
+        """배포를 적용하는 쪽. **PC 실행기와 같은 코드**이고 다른 것은 `host_kind`뿐이다."""
         return Deployer(
             data_dir=self.settings.data_path,
             host_id=self.server_runner_id,
@@ -407,7 +407,7 @@ class Agent:
     def install_deployments(self, envelopes: list[dict[str, Any]]) -> list[DeploymentResult]:
         """내려온 배포를 적용한다. **거부도 보고하고**(사유와 함께) 기다림은 보고하지 않는다.
 
-        설치가 바뀌면 사전 점검 캐시를 비운다 — 새로 깔린 Bot의 준비 상태를 다음 하트비트가
+        설치가 바뀌면 사전 점검 캐시를 비운다 — 새로 깔린 BPM 프로세스의 준비 상태를 다음 하트비트가
         올려야 한다.
         """
         if not envelopes:
@@ -430,12 +430,12 @@ class Agent:
         return installed(self.settings.data_path)
 
     def readiness(self) -> list[Readiness]:
-        """설치된 Bot별 준비 상태 (C12 — C4와 같은 모양).
+        """설치된 BPM 프로세스별 준비 상태 (C12 — C4와 같은 모양).
 
         **서버를 부르지 않는다** (하트비트마다 돈다).
 
         **확장까지 본다** (ADR-0064) — 태스크 종류·확장 판·AI 환경 셋이다. 호스트가 **실행
-        위치를 쥐므로**(`run_locations`에 `server`가 없는 종류는 기여를 내지 않는다) 그런 Bot은
+        위치를 쥐므로**(`run_locations`에 `server`가 없는 종류는 기여를 내지 않는다) 그런 BPM 프로세스는
         `task_types_wrong_location`으로 **시작 전에** 막힌다 — 전에는 배포·시작까지 가서 실행
         중에 `node_kind_unsupported`로 죽었다. **실행과 같은 호스트**를 쓴다.
         """
@@ -447,7 +447,7 @@ class Agent:
                 checked = run_preflight(
                     bot.manifest,
                     # **갖춘 설정은 이쪽만 안다** (C1 `requires.settings`, ADR-0059 §4) —
-                    # 메일을 보내는 Bot인데 SMTP가 없으면 시작하기 전에 막는다.
+                    # 메일을 보내는 BPM 프로세스인데 SMTP가 없으면 시작하기 전에 막는다.
                     settings=self.settings.ready_settings(),
                     host=self.extension_host(),
                     context=self.extensions().context,
@@ -572,11 +572,11 @@ class Agent:
 
         bot = find(self.settings.data_path, job.bpm_process_id, job.version)
         if bot is None:
-            # **없는 Bot은 조용히 넘기지 않는다** (C4) — 배포가 아직 안 왔을 수 있다.
+            # **없는 BPM 프로세스는 조용히 넘기지 않는다** (C4) — 배포가 아직 안 왔을 수 있다.
             return JobAck(job_id=job.job_id, result="rejected", reason="no_deployment")
         ready = self._ready_for(bot)
         if ready is not None and not ready.ready:
-            # **준비되지 않은 Bot은 띄우지 않는다** (ADR-0013 — 확장·설정이 빠졌다).
+            # **준비되지 않은 BPM 프로세스는 띄우지 않는다** (ADR-0013 — 확장·설정이 빠졌다).
             return JobAck(job_id=job.job_id, result="rejected", reason="not_ready")
 
         directory = self.app_directory(bot)
@@ -595,7 +595,7 @@ class Agent:
             job_id=job.job_id,
             inputs=dict(job.inputs),
             # **위임·일정으로 받은 작업은 출처가 다르다** (C3 `source: delegation`·`schedule`,
-            # ADR-0082·ADR-0110) — 말해 주는 것은 작업의 `requested_by` 하나다(Bot UI와 같은 `job_source`).
+            # ADR-0082·ADR-0110) — 말해 주는 것은 작업의 `requested_by` 하나다(PC 실행기와 같은 `job_source`).
             source=job_source(job.requested_by),
             parent_run_id=delegated_run(job.requested_by),
             # 작업에 가상 직원이 있으면 Center가 붙여 보냈다 (ADR-0099).
@@ -619,9 +619,9 @@ class Agent:
         )
 
     def app_directory(self, bot: Any) -> AppDirectory:
-        """그 Bot이 쓰는 **검증된 외부 확장 정의** (C13 「전송」) — 고정한 해시와 대조하려고.
+        """그 BPM 프로세스가 쓰는 **검증된 외부 확장 정의** (C13 「전송」) — 고정한 해시와 대조하려고.
 
-        **Bot UI와 같은 코드가 받아 둔다** (`core.app_directory.DirectoryCache`). 주소·키는 없다 —
+        **PC 실행기와 같은 코드가 받아 둔다** (`core.app_directory.DirectoryCache`). 주소·키는 없다 —
         바깥 앱은 Center에 외부 작업으로 올린다 (ADR-0102). **닿지 못하면 들고 있던 것을 쓰고**
         (ADR-0007) **404는 버린다**(철회는 보안 동작이다). 봉투는 **받은 쪽에서 다시 검증한다** (E6).
         """
@@ -650,9 +650,9 @@ class Agent:
         )
 
     def run_env(self, bot: Any) -> RunEnv:
-        """그 실행이 바깥 세계에 닿는 자리 — **Bot UI 실행기와 같은 함수**가 짓는다.
+        """그 실행이 바깥 세계에 닿는 자리 — **실행 프로세스와 같은 함수**가 짓는다.
 
-        모델·읽기 폴더는 **설정이 정한다** (Bot UI는 BUI-03이 정하는 자리다). 주지 않으면
+        모델·읽기 폴더는 **설정이 정한다** (PC 실행기는 BUI-03이 정하는 자리다). 주지 않으면
         `NoLlm`·`PathDenied`로 **분명히 실패한다** — 조용히 넘어가지 않는다 (ADR-0027·0032).
 
         **보내기도 설정이 정한다** (ADR-0059) — SMTP 주소·보내는 주소가 없으면 `chk:email`이
@@ -671,7 +671,7 @@ class Agent:
             llm_key=self.credentials.llm_api_key() or "",
             llm_model=self.settings.llm_model,
             services=self.services(),
-            # 보내기 — **Bot UI와 같은 함수**가 짓는다 (ADR-0059).
+            # 보내기 — **PC 실행기와 같은 함수**가 짓는다 (ADR-0059).
             sender=make_sender(
                 smtp=self.settings.smtp(),
                 webhook=self.settings.webhook(),
@@ -680,7 +680,7 @@ class Agent:
             # 서버 실행기의 결재 창구는 **Center만**이다 (C12).
             approval_where=WHERE_CENTER,
             # **PC 위임은 Center에 맡긴다** (ADR-0062) — 어느 PC인가도 Center가 고른다.
-            # Bot UI는 이 포트를 꽂지 않는다 (PC가 PC를 기다리면 서로를 기다릴 수 있다).
+            # PC 실행기는 이 포트를 꽂지 않는다 (PC가 PC를 기다리면 서로를 기다릴 수 있다).
             delegate=CenterDelegator(client=self.client, on_withdraw=self.withdraw_later),
             # **확장 태스크** (C13·ADR-0064) — 호스트가 실행 위치를 쥐어 서버에서 돌 수 있는
             # 종류만 수행기를 낸다. 없는 종류는 엔진이 설치 오류로 올린다.
@@ -688,7 +688,7 @@ class Agent:
         )
 
     def extensions_for(self, bot: Any) -> HostTasks:
-        """그 Bot의 실행이 쓰는 확장 — 사전 점검과 **같은 하나**다 (점검과 실행이 같은 호스트를 본다)."""
+        """그 BPM 프로세스의 실행이 쓰는 확장 — 사전 점검과 **같은 하나**다 (점검과 실행이 같은 호스트를 본다)."""
         del bot
         return self.extensions()
 
@@ -880,7 +880,7 @@ class Agent:
 
         **지금 기다리지 않는 답은 `not_waiting`으로 돌려보낸다** (C6 — Center가 다시 연다).
         회수·만료는 **답이 아니다** — 오류 경계로 간다 (ADR-0038). 기다리는 실행이 없으면 할 일이
-        없으니 **받았다고만 한다**(Bot UI와 같다) — 거절로 적으면 Center가 취소된 실행의 회수를
+        없으니 **받았다고만 한다**(PC 실행기와 같다) — 거절로 적으면 Center가 취소된 실행의 회수를
         `open`으로 되살렸다 (C6 §상태 전이).
 
         **빈자리가 없으면 넣지 않고 ack도 하지 않는다** (메시지·타이머와 같은 결) — 기다리던
@@ -1142,7 +1142,7 @@ class Agent:
             running=running,
             waiting=waiting,
             versions=self.versions(),
-            # **설치된 Bot별 준비 상태** (C12) — 캐시하고 설치·키가 바뀌면 비운다.
+            # **설치된 BPM 프로세스별 준비 상태** (C12) — 캐시하고 설치·키가 바뀌면 비운다.
             readiness=self.readiness(),
             deployment_results=list(self.pending_results),
             job_acks=list(self.pending_acks),

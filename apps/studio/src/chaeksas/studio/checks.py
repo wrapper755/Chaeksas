@@ -94,7 +94,7 @@ def center_status(base_url: str, api_key: str | None, *, client: Any = None) -> 
 
 @dataclass(frozen=True)
 class WorkerPlace:
-    """Studio가 쓰는 Worker 자리 — Bot UI가 남긴 것 (`Extensions.runtime_settings`)."""
+    """Studio가 쓰는 Worker 자리 — PC 실행기가 남긴 것 (`Extensions.runtime_settings`)."""
 
     port: int | None
     token_dir: str | None
@@ -114,7 +114,7 @@ def worker_status(place: WorkerPlace, *, client: Any = None) -> str:
     except Exception as e:  # noqa: BLE001
         if _reachable(e):
             raise
-        return "Bot UI가 꺼져 있거나 Worker가 떠 있지 않습니다."
+        return "PC 실행기가 꺼져 있거나 Worker가 떠 있지 않습니다."
     if answer.status_code >= 400:
         return f"포트 {place.port}의 무언가가 {answer.status_code}로 답했습니다 — Worker가 아닐 수 있습니다"
     try:

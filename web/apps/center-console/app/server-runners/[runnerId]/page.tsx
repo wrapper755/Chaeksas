@@ -10,10 +10,10 @@ import { fullTime, time } from "../../bot-uis/page";
 import { ServerRunnerActions } from "../actions-ui";
 
 /**
- * CON-12 서버 실행 (상세) — 서버 실행기·실행 중·기다리는 실행·Bot별 상한.
+ * CON-12 서버 실행 (상세) — 서버 실행기·실행 중·기다리는 실행·BPM 프로세스별 상한.
  *
  * 「실행 중」·「기다리는 실행」·「확장」·「준비」는 **실행기가 하트비트로 보고한 그대로**이고
- * (C12), 「Bot별 상한」의 상한은 **배포 봉투**에 적힌 것이다 (C5). 두 쪽을 여기서 맞춰 보인다 —
+ * (C12), 「BPM 프로세스별 상한」의 상한은 **배포 봉투**에 적힌 것이다 (C5). 두 쪽을 여기서 맞춰 보인다 —
  * 「배포는 했는데 왜 안 도나」가 한 화면에서 풀려야 한다 (CON-03과 같은 결).
  *
  * **「대기열」은 여기 없다** — 서버 작업은 내려가기 전까지 어느 실행기에도 묶이지 않으므로
@@ -118,7 +118,7 @@ export default async function ServerRunnerPage({
         </Link>
       ),
     },
-    { key: "bpm_process_id", header: "서버 Bot" },
+    { key: "bpm_process_id", header: "서버 BPM 프로세스" },
     { key: "version", header: "버전", width: "10ch", mono: true },
     // 「현재 노드」는 보고가 늦으면 비어 있다 — 0이나 빈 글로 꾸미지 않는다.
     { key: "node_id", header: "현재 노드", width: "20ch", mono: true, cell: (row) => row.node_id ?? "—" },
@@ -144,7 +144,7 @@ export default async function ServerRunnerPage({
         </Link>
       ),
     },
-    { key: "bpm_process_id", header: "서버 Bot" },
+    { key: "bpm_process_id", header: "서버 BPM 프로세스" },
     { key: "waiting_for", header: "기다리는 것", cell: waitingFor },
     {
       key: "since",
@@ -179,7 +179,7 @@ export default async function ServerRunnerPage({
   ];
 
   const limitColumns: Array<Column<(typeof limits)[number]>> = [
-    { key: "bot", header: "서버 Bot" },
+    { key: "bot", header: "서버 BPM 프로세스" },
     { key: "version", header: "배포 버전", width: "12ch", mono: true },
     {
       key: "limit",
@@ -200,7 +200,7 @@ export default async function ServerRunnerPage({
           <span
             title={row.readiness.detail.join("\n") || undefined}
           >
-            <StatusBadge group="Bot 준비" label={row.readiness.label} />
+            <StatusBadge group="BPM 프로세스 준비" label={row.readiness.label} />
           </span>
         ) : (
           "보고 없음"
@@ -243,7 +243,7 @@ export default async function ServerRunnerPage({
         <h1 className="text-h1 font-bold">{info?.name ?? wanted}</h1>
         <p className="text-body text-text-secondary">
           <Link className="underline" href="/bots?tab=server">
-            Bot 현황 (서버)
+            BPM 프로세스 현황 (서버)
           </Link>
           으로 돌아가기
         </p>
@@ -365,7 +365,7 @@ export default async function ServerRunnerPage({
             </p>
           </Section>
 
-          <Section title="Bot별 상한">
+          <Section title="BPM 프로세스별 상한">
             {limits.length === 0 ? (
               <p className="text-body-sm text-text-muted">
                 이 실행기에 걸린 활성 배포가 없습니다. 「배포」에서 배포하세요.
@@ -375,7 +375,7 @@ export default async function ServerRunnerPage({
                 columns={limitColumns}
                 rows={limits}
                 rowKey={(row) => `${row.bot}@${row.version}`}
-                caption="Bot별 상한"
+                caption="BPM 프로세스별 상한"
               />
             )}
           </Section>

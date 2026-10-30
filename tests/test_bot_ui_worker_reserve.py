@@ -1,7 +1,7 @@
-"""Bot UI가 Bot 실행 동안 Worker를 그 실행에 묶는다 — C13 `reserve`, C10 §4, ADR-0014 §4 (M4 조각 27).
+"""PC 실행기가 BPM 프로세스 실행 동안 Worker를 그 실행에 묶는다 — C13 `reserve`, C10 §4, ADR-0014 §4 (M4 조각 27).
 
-1. **진짜 Worker(HTTP)** 에 확장 정의의 선언대로 예약·풀기 — Bot UI는 C10을 모른다.
-2. 다른 쪽(셀렉터 등록·Studio 시험)이 세션을 쥐고 있으면 409 → **Bot은 시작하지 않고 기다린다**
+1. **진짜 Worker(HTTP)** 에 확장 정의의 선언대로 예약·풀기 — PC 실행기는 C10을 모른다.
+2. 다른 쪽(셀렉터 등록·Studio 시험)이 세션을 쥐고 있으면 409 → **BPM 프로세스는 시작하지 않고 기다린다**
    (강제로 닫지 않는다). 풀리면 다음 주기에 시작하고, 끝나면 예약을 푼다.
 """
 
@@ -55,7 +55,7 @@ class Backend:
 
 @pytest.fixture
 def worker() -> Iterator[tuple[Worker, int]]:
-    """진짜 Worker 앱을 진짜 HTTP로 — 토큰은 Bot UI가 읽는 그 자리(`runtimes/worker`)에 쓴다."""
+    """진짜 Worker 앱을 진짜 HTTP로 — 토큰은 PC 실행기가 읽는 그 자리(`runtimes/worker`)에 쓴다."""
     import uvicorn  # noqa: PLC0415
 
     token, admin = write_tokens(token_dir_for("worker"))
@@ -112,7 +112,7 @@ def test_reserving_and_releasing_a_real_worker(worker: tuple[Worker, int]) -> No
 
 
 def test_a_held_session_makes_the_bot_wait_not_close_it(worker: tuple[Worker, int]) -> None:
-    """셀렉터 등록 중이면 Bot이 기다린다 (ADR-0014 §4) — 그 세션을 강제로 닫지 않는다."""
+    """셀렉터 등록 중이면 BPM 프로세스가 기다린다 (ADR-0014 §4) — 그 세션을 강제로 닫지 않는다."""
     made, port = worker
     made.open(SessionRequest(schema=1, caller=Caller(type="selector_registration"), mode="autonomous",
                              business_key="reg_1a2b3c4d"))

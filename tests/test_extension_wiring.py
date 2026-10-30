@@ -1,11 +1,11 @@
-"""실제 Studio·Bot UI 실행기가 확장을 엔진에 꽂는다 (`HostTasks`, ADR-0018·ADR-0037).
+"""실제 Studio·실행 프로세스가 확장을 엔진에 꽂는다 (`HostTasks`, ADR-0018·ADR-0037).
 
 지금까지 인수 시험은 Worker를 HTTP 없이 불렀다. 여기서는 **실제 길**을 본다.
 
 1. 규칙 — 없는 태스크 종류는 `None`, 예약 키로 Worker 자리를 알려 준다, 키 참조를 푼다.
-2. **Bot UI 한 바퀴 (Windows):** Bot UI가 그 Bot이 쓰는 확장의 Worker를 **자식으로 띄우고**, 실행기
+2. **PC 실행기 한 바퀴 (Windows):** PC 실행기가 그 BPM 프로세스가 쓰는 확장의 Worker를 **자식으로 띄우고**, 실행기
    (자식)가 진짜 HTTP로 그 Worker에 붙어 FX-05(계산기)를 끝까지 돈다.
-3. **Studio 한 바퀴 (Windows):** Bot UI가 띄운 Worker를 Studio가 `runtime.json`·토큰 파일로 찾아 쓴다.
+3. **Studio 한 바퀴 (Windows):** PC 실행기가 띄운 Worker를 Studio가 `runtime.json`·토큰 파일로 찾아 쓴다.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def test_the_runner_hands_the_worker_place_to_the_extension(monkeypatch: pytest.
         "chaeksas.bot_ui.credentials.Credentials.extension_secret", lambda self, ext, ref: f"{ext}/{ref}"
     )
     assert context.secret("note") == "ui-automation/note", "그 확장의 비밀 칸으로 푼다"
-    assert context.secret("call_token") is None, "호출 토큰은 Bot UI가 넘긴 것만 — 없으면 없다 (C15)"
+    assert context.secret("call_token") is None, "호출 토큰은 PC 실행기가 넘긴 것만 — 없으면 없다 (C15)"
 
 
 def test_runner_secrets_give_the_call_token_and_extension_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -91,7 +91,7 @@ def test_the_extension_settings_ride_in_a_file_not_on_the_command_line(tmp_path:
 
 
 def test_studio_finds_the_worker_the_bot_ui_started(tmp_path: Path) -> None:
-    """포트는 Bot UI가 런타임 폴더에 남긴 `runtime.json` — 없으면 기여의 기본 포트."""
+    """포트는 PC 실행기가 런타임 폴더에 남긴 `runtime.json` — 없으면 기여의 기본 포트."""
     found = Extensions.load()
     values = found.runtime_settings("ui-automation", root=tmp_path)
     assert values["runtime.worker.port"] == 8899, "없으면 기본 포트"
@@ -102,7 +102,7 @@ def test_studio_finds_the_worker_the_bot_ui_started(tmp_path: Path) -> None:
 
 
 def test_studio_and_bot_ui_agree_on_where_the_bot_ui_lives(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Studio는 Bot UI를 import하지 않는다 — 같은 규칙을 따로 쓰므로 어긋나면 여기서 잡는다."""
+    """Studio는 PC 실행기를 import하지 않는다 — 같은 규칙을 따로 쓰므로 어긋나면 여기서 잡는다."""
     from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415
 
     assert bot_ui_data_dir() == data_dir()
@@ -219,7 +219,7 @@ def model() -> Iterator[CalcModel]:
 
 @needs_desktop
 def test_the_bot_ui_starts_the_worker_and_the_runner_uses_it(tmp_path: Path, model: CalcModel) -> None:
-    """Bot UI → (자식) Worker, Bot UI → (자식) 실행기 → HTTP → Worker → 진짜 창. **가짜가 없다** (모델 빼고)."""
+    """PC 실행기 → (자식) Worker, PC 실행기 → (자식) 실행기 → HTTP → Worker → 진짜 창. **가짜가 없다** (모델 빼고)."""
     from chaeksas.bot_ui.agent import Agent  # noqa: PLC0415
     from chaeksas.bot_ui.runtimes import token_dir_for  # noqa: PLC0415
     from chaeksas.bot_ui.settings import RuntimeSettings, Settings, data_dir  # noqa: PLC0415
@@ -266,7 +266,7 @@ def test_the_bot_ui_starts_the_worker_and_the_runner_uses_it(tmp_path: Path, mod
 
 @needs_desktop
 def test_a_studio_run_uses_the_worker_the_bot_ui_started(tmp_path: Path, model: CalcModel) -> None:
-    """Studio는 Worker를 띄우지 않는다 — Bot UI가 띄운 것을 `runtime.json`·토큰 파일로 찾는다 (STU-10)."""
+    """Studio는 Worker를 띄우지 않는다 — PC 실행기가 띄운 것을 `runtime.json`·토큰 파일로 찾는다 (STU-10)."""
     from chaeksas.bot_ui.runtimes import Runtimes, token_dir_for  # noqa: PLC0415
     from chaeksas.bot_ui.settings import RuntimeSettings, Settings  # noqa: PLC0415
     from chaeksas.contracts.bpmn_ext import read_process  # noqa: PLC0415
@@ -298,7 +298,7 @@ def test_a_studio_run_uses_the_worker_the_bot_ui_started(tmp_path: Path, model: 
 
 
 def test_an_unreachable_worker_is_a_retryable_business_failure(tmp_path: Path) -> None:
-    """Bot UI가 Worker를 못 띄웠거나 꺼져 있으면 — 실행기가 죽지 않고 오류 경계가 받는다."""
+    """PC 실행기가 Worker를 못 띄웠거나 꺼져 있으면 — 실행기가 죽지 않고 오류 경계가 받는다."""
     from chaeksas.ext.ui_automation.client.agent_env import DesktopEnvironment  # noqa: PLC0415
     from chaeksas.ext.ui_automation.client.task import WorkerClient  # noqa: PLC0415
     from chaeksas.extension_api import TaskContext, TaskFailed  # noqa: PLC0415

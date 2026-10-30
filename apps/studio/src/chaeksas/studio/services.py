@@ -3,7 +3,7 @@
 - **서비스 태스크는 Center에 외부 작업으로 올린다** (`CenterServiceCaller`, ADR-0102) — Studio의
   Center API 키로, `run_id`가 `test_…`이고 일감은 `origin: test`다. 바깥 앱의 주소도 키도 모른다
   (시험용 키라는 것이 없다 — 시험 쪽으로 보낼지는 일꾼이 정한다).
-- 외부 확장은 **정의만** 받아 검증한다 (`core.app_directory` — Bot UI와 같은 코드). 들고 있지 않는다
+- 외부 확장은 **정의만** 받아 검증한다 (`core.app_directory` — PC 실행기와 같은 코드). 들고 있지 않는다
   — 닿지 못하면 **그 자리에서 말한다** (Studio는 현장이 아니라 개발 도구다).
 
 이 모듈이 Center를 부르는 것은 **읽기만**이다 (올리기는 C15 호출기, 패키지 올리기는 `upload.py`).
@@ -46,7 +46,7 @@ class CenterUnreachable(RuntimeError):
 class CenterReader:
     """Center를 **읽기만** 하는 작은 클라이언트.
 
-    Bot UI의 `CenterClient`를 쓰지 않는다 — 앱끼리 import하지 않는다 (01-architecture §5).
+    PC 실행기의 `CenterClient`를 쓰지 않는다 — 앱끼리 import하지 않는다 (01-architecture §5).
     여기서 필요한 것은 몇 경로뿐이라 따로 두는 쪽이 싸다.
     """
 

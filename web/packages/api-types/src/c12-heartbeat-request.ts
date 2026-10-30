@@ -75,7 +75,7 @@ export interface DeploymentResult {
  * **`enabled`와 `off`는 다른 것을 말한다** ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)):
  * `off`는 **사람이 껐다**(멀쩡한데 일부러 안 쓴다), `enabled=false`인데 `off`가 아니면 **흠이
  * 있다**(정의·판이 맞지 않는다). 화면이 「꺼짐」과 「호환 안 됨」을 가르는 자리다. 뜻을 바꾸지
- * 않고 칸을 더한 것이라 옛 Bot UI가 보낸 값(`off` 없음)도 그대로 읽힌다.
+ * 않고 칸을 더한 것이라 옛 PC 실행기가 보낸 값(`off` 없음)도 그대로 읽힌다.
  */
 export interface ExtensionState {
   definition_hash?: string | null;
@@ -110,7 +110,7 @@ export interface MessageAck {
   [k: string]: unknown;
 }
 /**
- * 설치된 Bot 하나의 준비 상태.
+ * 설치된 BPM 프로세스 하나의 준비 상태.
  */
 export interface Readiness {
   blocked?: string[];

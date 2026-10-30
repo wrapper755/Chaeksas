@@ -5,7 +5,7 @@
 /**
  * `GET /bot-uis`의 한 줄 (CON-03).
  *
- * 상태 값은 **Bot UI가 하트비트로 보고한 그대로**다 (C4). Center가 더하는 것은 온라인
+ * 상태 값은 **PC 실행기가 하트비트로 보고한 그대로**다 (C4). Center가 더하는 것은 온라인
  * 판정(`online`)과 키 정보(`key`)뿐이다.
  */
 export interface BotUiInfo {
@@ -62,7 +62,7 @@ export interface DeploymentResult {
  * **`enabled`와 `off`는 다른 것을 말한다** ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)):
  * `off`는 **사람이 껐다**(멀쩡한데 일부러 안 쓴다), `enabled=false`인데 `off`가 아니면 **흠이
  * 있다**(정의·판이 맞지 않는다). 화면이 「꺼짐」과 「호환 안 됨」을 가르는 자리다. 뜻을 바꾸지
- * 않고 칸을 더한 것이라 옛 Bot UI가 보낸 값(`off` 없음)도 그대로 읽힌다.
+ * 않고 칸을 더한 것이라 옛 PC 실행기가 보낸 값(`off` 없음)도 그대로 읽힌다.
  */
 export interface ExtensionState {
   definition_hash?: string | null;
@@ -73,7 +73,7 @@ export interface ExtensionState {
   [k: string]: unknown;
 }
 /**
- * 그 Bot UI가 쓰는 Center API 키 (C7). **원문·해시는 주지 않는다.**
+ * 그 PC 실행기가 쓰는 Center API 키 (C7). **원문·해시는 주지 않는다.**
  */
 export interface BotUiKey {
   expires_at?: string | null;
@@ -100,7 +100,7 @@ export interface QueueItem {
   [k: string]: unknown;
 }
 /**
- * 설치된 Bot 하나의 준비 상태.
+ * 설치된 BPM 프로세스 하나의 준비 상태.
  */
 export interface Readiness {
   blocked?: string[];

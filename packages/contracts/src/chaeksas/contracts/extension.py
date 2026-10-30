@@ -93,7 +93,7 @@ AGENT_ENVIRONMENT_DOMAINS = frozenset({"web", "desktop"})
 
 #: 확장이 칸을 낼 수 있는 **플랫폼이 미리 정한 자리** (C13 `bot_ui.panels[].surface`, ADR-0042).
 #: BUI-09 런타임 칸 아래가 지금 하나뿐이다. **열린 문자열이다** — 모르는 자리는 호스트가
-#: 조용히 무시한다 (새 확장이 가리키는 자리를 옛 Bot UI가 모를 수 있다).
+#: 조용히 무시한다 (새 확장이 가리키는 자리를 옛 PC 실행기가 모를 수 있다).
 SURFACE_BOT_UI_RUNTIMES = "bot_ui.runtimes"
 PANEL_SURFACES = frozenset({SURFACE_BOT_UI_RUNTIMES})
 
@@ -181,8 +181,8 @@ class Tool(ContractModel):
     id: str
     label: str
     entry: str
-    #: 이 도구가 쓰는 로컬 런타임 id. **Tool UI는 띄우지 않는다** — Bot UI가 띄운 것을 빌린다.
-    #: Bot UI 「도구」 바로가기는 이것을 먼저 띄운 뒤 Tool UI를 연다.
+    #: 이 도구가 쓰는 로컬 런타임 id. **Tool UI는 띄우지 않는다** — PC 실행기가 띄운 것을 빌린다.
+    #: PC 실행기 「도구」 바로가기는 이것을 먼저 띄운 뒤 Tool UI를 연다.
     needs_runtime: str | None = None
 
 
@@ -206,7 +206,7 @@ class Panel(ContractModel):
 class RuntimeCall(ContractModel):
     """런타임에 보내는 관리 호출 하나 — `{path, header, token_file}`.
 
-    Bot UI는 런타임의 계약(C10 등)을 **모르고** 이 선언대로만 부른다. 토큰은 런타임 폴더의
+    PC 실행기는 런타임의 계약(C10 등)을 **모르고** 이 선언대로만 부른다. 토큰은 런타임 폴더의
     `token_file`에서 **부를 때마다** 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다 (ADR-0023).
     """
 
@@ -216,18 +216,18 @@ class RuntimeCall(ContractModel):
 
 
 class RuntimeReserve(RuntimeCall):
-    """실행 예약 방법 — Bot UI가 런타임의 계약을 모른 채 실행 동안 그 런타임을 묶는다 (ADR-0014 §4).
+    """실행 예약 방법 — PC 실행기가 런타임의 계약을 모른 채 실행 동안 그 런타임을 묶는다 (ADR-0014 §4).
 
     `POST <path>` `{run_id}`로 예약하고 `DELETE <path>`로 푼다. 관리 토큰은 런타임 폴더의
-    `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — Bot은 기다린다.
+    `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — BPM 프로세스는 기다린다.
     """
 
 
 class LocalRuntime(ContractModel):
-    """Bot UI가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).
+    """PC 실행기가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).
 
     **명령줄은 확장이 적지 않는다** (schema 2, ADR-0024). `entry`가 런타임을 실행하는 코드를
-    가리키고, Bot UI가 **자기 실행 파일을 자식으로 다시 띄워** 그 `entry`를 부른다 — 설치
+    가리키고, PC 실행기가 **자기 실행 파일을 자식으로 다시 띄워** 그 `entry`를 부른다 — 설치
     파일로 묶은 앱 안에는 콘솔 스크립트가 없기 때문이다.
 
     포트를 코드에 적지 않는다 — 설정 이름(`port_setting`)과 기본값만 둔다 (CLAUDE.md §5).
@@ -247,7 +247,7 @@ class LocalRuntime(ContractModel):
     #: 상태를 묻는 방법 (선택). `GET <path>` → BUI-09가 보일 것. **본문은 런타임의 말이다** —
     #: 호스트는 뜻을 아는 칸만 읽는다 (`reserved_for`·`unsent_reports`, ADR-0018).
     status: RuntimeCall | None = None
-    #: 곱게 끄는 방법 (선택). `POST <path>` — Bot UI 종료 순서가 프로세스를 끄기 **전에** 부른다.
+    #: 곱게 끄는 방법 (선택). `POST <path>` — PC 실행기 종료 순서가 프로세스를 끄기 **전에** 부른다.
     shutdown: RuntimeCall | None = None
 
 
@@ -924,7 +924,7 @@ def verify_external(
     """E6. 외부 정의의 봉투(C2 `extension`)가 검증되고 `definition_hash`가 맞는가.
 
     **실행하는 쪽은 Center에서 받은 정의의 봉투를 다시 검증한다** (C13 「전송」). 관리자 토큰만
-    새어도 Bot의 키·업무 값이 다른 주소로 새는 일을 막으려고, 배포와 같은 관문을 둔다.
+    새어도 BPM 프로세스의 키·업무 값이 다른 주소로 새는 일을 막으려고, 배포와 같은 관문을 둔다.
 
     `verify()`가 봉투 자체를 보고(V1~V4, `kind`까지), 여기서는 그 봉투가 **이 정의**에 대한
     것인지(해시·id·버전)를 본다. `extension` claim에는 시간 창이 없어 V5는 쓰지 않는다.

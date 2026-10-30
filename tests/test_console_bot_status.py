@@ -1,4 +1,4 @@
-"""CON-02 Bot 현황이 읽을 것이 Center에 다 있다 (M6 조각 18).
+"""CON-02 BPM 프로세스 현황이 읽을 것이 Center에 다 있다 (M6 조각 18).
 
 화면은 **집계를 Center에 두지 않는다** — 패키지(C5)·실행 요약(C3)·보고된 준비 상태(C4)를
 콘솔에서 묶어 그린다. Center에 집계 표를 두면 실행이 올 때마다 낡고 원본이 흐려진다
@@ -54,7 +54,7 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
 
 
 def package(*, requires: dict[str, Any] | None = None) -> bytes:
-    """C1 매니페스트가 든 작은 Bot 패키지 (해시는 실제로 계산해 넣는다)."""
+    """C1 매니페스트가 든 작은 BPM 프로세스 패키지 (해시는 실제로 계산해 넣는다)."""
     manifest: dict[str, Any] = {
         "schema": 1,
         "kind": "bpm_process",
@@ -189,7 +189,7 @@ def deploy_row(client: TestClient, *, deployment_id: str, bot_ui: str) -> None:
 
 
 def register(client: TestClient, *, readiness: list[dict[str, Any]]) -> None:
-    """Bot UI 하나가 등록하고 **준비 상태를 보고한다** (C4 `readiness`)."""
+    """PC 실행기 하나가 등록하고 **준비 상태를 보고한다** (C4 `readiness`)."""
     made = client.post("/api/v1/center-keys", json={"name": "현장 PC", "type": "bot_ui"}, headers=ADMIN)
     key = made.json()["key"]
     pc = {"Authorization": f"Bearer {key}"}
@@ -222,7 +222,7 @@ def register(client: TestClient, *, readiness: list[dict[str, Any]]) -> None:
 def test_the_nav_opens_the_page() -> None:
     """탐색의 꺼진 줄이 **주소를 갖는다** — 화면이 생겼으니 「아직 없습니다」가 남아 있으면 거짓말이다."""
     shell = (CONSOLE / "components" / "Shell.tsx").read_text(encoding="utf-8")
-    assert '{ label: "Bot 현황", href: "/bots" }' in shell
+    assert '{ label: "BPM 프로세스 현황", href: "/bots" }' in shell
     assert "CON-02는 아직" not in shell
     assert (CONSOLE / "app" / "bots" / "page.tsx").is_file()
 
@@ -231,7 +231,7 @@ def test_the_nav_opens_the_page() -> None:
 
 
 def test_the_version_rows_come_from_the_package_listing(client: TestClient) -> None:
-    """Bot·버전·실행 위치·상태·**서비스 앱 키 참조**가 한 번 읽어서 다 온다."""
+    """BPM 프로세스·버전·실행 위치·상태·**서비스 앱 키 참조**가 한 번 읽어서 다 온다."""
     upload(
         client,
         package(
@@ -298,7 +298,7 @@ def test_the_confirmation_count_comes_through_for_the_rate(client: TestClient) -
     **`null`과 0을 가른다**.
     """
     send_run(client, "run_20261010_140000_eeeeee", human=3, confirmations=1)
-    send_run(client, "run_20261010_150000_ffffff", human=2)  # 옛 Bot UI — 안 보냈다
+    send_run(client, "run_20261010_150000_ffffff", human=2)  # 옛 PC 실행기 — 안 보냈다
     found = client.get(f"/api/v1/runs?bpm_process_id={BOT}&limit=200", headers=READ).json()["runs"]
     by_id = {one["run_id"]: one for one in found}
     assert by_id["run_20261010_140000_eeeeee"]["confirmations"] == 1
@@ -316,7 +316,7 @@ def test_a_running_run_has_no_counts_to_average(client: TestClient) -> None:
 
 
 def test_runs_of_another_bot_do_not_leak_into_the_sample(client: TestClient) -> None:
-    """좁히기가 되는 덕에 **Bot마다** 물어 판이 많은 Bot의 옛 판이 잘리지 않는다."""
+    """좁히기가 되는 덕에 **BPM 프로세스마다** 물어 판이 많은 BPM 프로세스의 옛 판이 잘리지 않는다."""
     send_run(client, "run_20261010_130000_dddddd")
     found = client.get("/api/v1/runs?bpm_process_id=ops.scan", headers=READ).json()
     assert found["runs"] == []
@@ -326,7 +326,7 @@ def test_runs_of_another_bot_do_not_leak_into_the_sample(client: TestClient) -> 
 
 
 def test_deployment_rows_carry_the_pc_the_version_went_to(client: TestClient) -> None:
-    """「배포된 Bot UI」의 재료 (C5 `DeploymentInfo.target`) — **PC 하나씩** 온다.
+    """「배포된 PC 실행기」의 재료 (C5 `DeploymentInfo.target`) — **PC 하나씩** 온다.
 
     **PC 배포에 전체(`*`) 대상은 없다** (ADR-0046) — 그래서 콘솔은 `target.id`를 겹치지 않게
     세면 끝이고 Center가 대상을 풀어 줄 필요가 없다. 같은 PC에 배포가 둘이면 **건수는 2,
@@ -355,13 +355,13 @@ def test_deployment_rows_carry_the_pc_the_version_went_to(client: TestClient) ->
 
 
 def test_the_column_counts_pcs_and_does_not_resolve_a_wildcard(client: TestClient) -> None:
-    """화면이 **수를 센다** — 「배포」(건수)가 아니라 「배포된 Bot UI」다 (ADR-0046).
+    """화면이 **수를 센다** — 「배포」(건수)가 아니라 「배포된 PC 실행기」다 (ADR-0046).
 
     **셈 자체는 이제 `web`의 vitest가 잰다** (`lib/summary.test.ts`) — 여기서는 파이썬이 볼 수
     있는 것만 본다: 열 이름이 바뀌었는가, 화면이 그 함수를 쓰는가, `*`를 푸는 코드가 사라졌는가.
     """
     page = (CONSOLE / "app" / "bots" / "page.tsx").read_text(encoding="utf-8")
-    assert 'header: "배포된 Bot UI"' in page
+    assert 'header: "배포된 PC 실행기"' in page
     assert 'header: "배포"' not in page, "건수로 보이던 열은 없다"
     assert "deployedPcs" in page
 
@@ -388,7 +388,7 @@ def test_the_run_summary_does_not_overwrite_the_deployment_and_blocked_counts(
     )
     deploy_row(client, deployment_id="dep_44444444", bot_ui="bui_cccc3333")
 
-    # 같은 (Bot, 버전)에 대해 셋이 **함께** 온다 — 그래서 한 줄에 다 들어가야 한다.
+    # 같은 (BPM 프로세스, 버전)에 대해 셋이 **함께** 온다 — 그래서 한 줄에 다 들어가야 한다.
     assert client.get(f"/api/v1/runs?bpm_process_id={BOT}", headers=READ).json()["runs"]
     assert client.get("/api/v1/bot-uis", headers=READ).json()[0]["readiness"]
     assert client.get("/api/v1/deployments?active=true", headers=READ).json()

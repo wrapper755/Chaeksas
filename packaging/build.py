@@ -1,4 +1,4 @@
-"""데스크톱 앱을 묶는다 — Studio·Bot UI ([ADR-0024](../docs/decisions/0024-desktop-packaging-extensions.md)).
+"""데스크톱 앱을 묶는다 — Studio·PC 실행기 ([ADR-0024](../docs/decisions/0024-desktop-packaging-extensions.md)).
 
     uv run --group build python packaging/build.py              # 둘 다
     uv run --group build python packaging/build.py bot-ui       # 하나만
@@ -28,7 +28,7 @@ OS에서는 PyInstaller가 받지 않는다. 개발 PC(Linux)에서 돌리면 **
 실행 파일 옆 `chaeksas-build.json`에 적고, `--selftest`가 **되읽은 판**이 다르면 빌드를 멈춘다.
 `core`와 그 앱의 dist-info도 넣는다 — 안 넣으면 묶은 앱이 `core`의 판을 `0.0.0`으로 올린다.
 
-**Bot UI는 로컬 런타임을 정말 띄워 본다** (`--start-runtimes`) — 묶은 실행 파일이 자신을
+**PC 실행기는 로컬 런타임을 정말 띄워 본다** (`--start-runtimes`) — 묶은 실행 파일이 자신을
 `--local-runtime`으로 다시 띄워 `health`가 답하는지까지 본다. `entry`가 풀리는 것만으로는
 현장에서 유틸리티를 처음 열 때에야 아는 일이 남는다.
 
@@ -87,7 +87,7 @@ class App:
     title: str = ""  # 설치·시작 메뉴에 보이는 이름
     dir_name: str = ""  # %LOCALAPPDATA%\Programs\Chaeksas\<여기>
     autostart_task: str | None = None  # 제거할 때 지울 작업 스케줄러 이름
-    #: 같은 실행 파일을 `--tool-ui`로 여는 시작 메뉴 바로가기 이름 (ADR-0077 §6 — Bot UI만).
+    #: 같은 실행 파일을 `--tool-ui`로 여는 시작 메뉴 바로가기 이름 (ADR-0077 §6 — PC 실행기만).
     tool_ui_shortcut: str | None = None
 
     @property
@@ -100,7 +100,7 @@ APPS = (
         "bot-ui", "ChaeksasBotUI", "botui_main.py", "chaeksas-bot-ui",
         starts_runtimes=True,
         app_id="2F476024-75DF-4DDE-A28C-A05E0E1909CB",
-        title="Chaeksas Bot UI",
+        title="Chaeksas PC 실행기",
         dir_name="BotUI",
         # 이름은 앱이 쓰는 그 자리에서 읽는다 — 베끼면 이름을 바꿀 때 지우지 못한 작업이 남는다.
         autostart_task=TASK_NAME,
@@ -245,6 +245,8 @@ def installer_defines(app: App, version: str) -> list[str]:
         "AppKey": app.key,
         "AppId": app.app_id,
         "AppName": app.title,
+        # 설치 파일 이름은 **ASCII**로 둔다 — 표시 이름(한글)은 바로가기·제거 목록에만 쓴다 (ADR-0111).
+        "AppFileName": app.name,
         "AppExe": app.exe.name,
         "AppDirName": app.dir_name,
         "AppVersion": version,
@@ -281,7 +283,7 @@ def make_installer(app: App, version: str) -> Path:
     done = subprocess.run(args, cwd=ROOT, check=False, env=child_env())
     if done.returncode:
         raise SystemExit(f"{app.key}: 설치 파일을 만들지 못했다 (iscc 끝 코드 {done.returncode})")
-    made = INSTALLERS / f"{app.title.replace(' ', '')}-setup-{version}.exe"
+    made = INSTALLERS / f"{app.name}-setup-{version}.exe"
     if not made.exists():  # pragma: no cover — 스크립트의 OutputBaseFilename과 어긋나면
         raise SystemExit(f"{app.key}: 설치 파일이 없다: {made}")
     return made

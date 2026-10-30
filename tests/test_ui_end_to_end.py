@@ -87,7 +87,7 @@ def center(tmp_path: Path) -> Iterator[UiaCenter]:
 
 @pytest.fixture
 def token(center: UiaCenter) -> str:
-    """현장 PC 하나의 호출 토큰 — 「셀렉터 등록」을 켰고 그 토픽을 요구하는 Bot이 배포돼 있다."""
+    """현장 PC 하나의 호출 토큰 — 「셀렉터 등록」을 켰고 그 토픽을 요구하는 BPM 프로세스가 배포돼 있다."""
     return str(center.pc_token())
 
 

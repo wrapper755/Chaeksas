@@ -1,12 +1,12 @@
 """비밀 값 — 환경변수가 먼저, 그다음 OS 비밀 저장소 (CLAUDE.md §5).
 
 **서버에서는 환경변수가 주 경로다.** 컨테이너·systemd가 그렇게 준다. 그래도 저장소를 쓸 수
-있으면 읽는다 — 개발 PC에서 Bot UI·Studio와 같은 방식으로 다룰 수 있게. **운영자가 비밀 폴더
+있으면 읽는다 — 개발 PC에서 PC 실행기·Studio와 같은 방식으로 다룰 수 있게. **운영자가 비밀 폴더
 (`CHK_SERVER_RUNNER__SECRETS_DIR`)를 적으면 그것이 저장소 자리에 들어간다** (ADR-0100) — OS 비밀
 저장소가 없는 컨테이너에서도 등록 승인·키 회전·서비스 앱 키 받기가 돈다.
 
 설정 파일·실행 기록·코드에는 넣지 않는다. **쓰기는 저장소가 없으면 분명히 실패한다** (평문으로
-흘리지 않는다 — Bot UI와 같은 태도다).
+흘리지 않는다 — PC 실행기와 같은 태도다).
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from chaeksas.server_runner import secret_file
 
 log = logging.getLogger(__name__)
 
-#: `keyring`의 서비스 이름 (Bot UI·Studio와 가른다 — 한 PC에 셋이 있을 수 있다).
+#: `keyring`의 서비스 이름 (PC 실행기·Studio와 가른다 — 한 PC에 셋이 있을 수 있다).
 SERVICE = "chaeksas-server-runner"
 
 #: Center API 키 (C12 — 「서버 실행기용」 종류).
@@ -37,7 +37,7 @@ SMTP_PASSWORD = "smtp-password"
 ENV_SMTP_PASSWORD = "CHK_SERVER_RUNNER__SMTP__PASSWORD"
 
 #: 확장의 설정 칸 (C13 `configuration`, `scope: server_runner`)과 그 비밀 칸.
-#: **이름 규칙은 Bot UI의 것과 같다** (`CHK_BOT_UI__EXT__…` — ADR-0064 §2): 서버에는 설정 파일이
+#: **이름 규칙은 PC 실행기의 것과 같다** (`CHK_BOT_UI__EXT__…` — ADR-0064 §2): 서버에는 설정 파일이
 #: 없어 비밀이 아닌 칸도 환경변수로 온다.
 EXTENSION_PREFIX = "ext:"
 ENV_EXTENSION_PREFIX = "CHK_SERVER_RUNNER__EXT__"
@@ -156,7 +156,7 @@ class Credentials:
             log.debug("비밀을 지우지 못했다 (%s): %s", name, e)
 
     def extension_secret(self, extension_id: str, key: str) -> str | None:
-        """확장의 비밀 설정 칸 (C13 `configuration[].secret`). Bot UI와 같은 규칙이다."""
+        """확장의 비밀 설정 칸 (C13 `configuration[].secret`). PC 실행기와 같은 규칙이다."""
         return self.get(
             f"{EXTENSION_PREFIX}{extension_id}:{key}",
             env=extension_config_env(extension_id, key),

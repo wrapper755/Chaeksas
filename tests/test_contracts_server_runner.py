@@ -208,7 +208,7 @@ def test_jobs_come_in_arrival_order() -> None:
 
 
 def test_per_bot_limit_is_skipped_not_blocking() -> None:
-    """상한에 걸린 Bot 하나가 **대기열 전체를 멈추지 않는다** (C12 §3 — 건너뛰고 다음을 본다)."""
+    """상한에 걸린 BPM 프로세스 하나가 **대기열 전체를 멈추지 않는다** (C12 §3 — 건너뛰고 다음을 본다)."""
     taken, skipped = pick_jobs(
         [("job_1", "busy"), ("job_2", "free")],
         slots=5,
@@ -219,7 +219,7 @@ def test_per_bot_limit_is_skipped_not_blocking() -> None:
 
 
 def test_picking_counts_what_it_just_picked() -> None:
-    """같은 Bot을 연달아 고를 때 **고른 것도 센다** — 아니면 한 번에 상한을 넘겨 보낸다."""
+    """같은 BPM 프로세스를 연달아 고를 때 **고른 것도 센다** — 아니면 한 번에 상한을 넘겨 보낸다."""
     queued = [(f"job_{i}", "a") for i in range(1, 8)]
     taken, skipped = pick_jobs(queued, slots=7, running_per_bot={}, per_bot_limit={"a": 2})
     assert taken == ["job_1", "job_2"]

@@ -1,4 +1,4 @@
-"""가짜 실행기 프로세스: Bot(BPM 프로세스) 하나를 돌리는 흉내 (표준 라이브러리만).
+"""가짜 실행 프로세스: BPM 프로세스 하나를 돌리는 흉내 (표준 라이브러리만).
 
     python fake_runner.py <normal|hang|ignore-stop|spawn|crash|poll> [초]
 

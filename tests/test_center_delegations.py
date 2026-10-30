@@ -1,4 +1,4 @@
-"""C12 §PC 위임 — 서버 Bot이 **배포된 PC Bot**을 Center 작업으로 맡긴다 (ADR-0062).
+"""C12 §PC 위임 — 서버 BPM 프로세스가 **배포된 PC BPM 프로세스**을 Center 작업으로 맡긴다 (ADR-0062).
 
 보는 것은 **Center가 결정하는 자리들**이다.
 
@@ -10,7 +10,7 @@
 | **같은 자리는 한 번만** 작업이 된다 | 되살린 실행이 다시 요청한다 (ADR-0054) |
 | 남의 실행 이름으로 **맡길 수 없다** | `requested_by: server_bot:<run_id>`가 거짓이 되면 안 된다 (C3 소유) |
 | 결과는 **ack가 올 때까지** 내려오고, ack가 오면 **값이 지워진다** | 원칙 6의 예외는 좁게 쓴다 |
-| 위임하는 Bot은 그 PC Bot이 **승인되어 있어야** 배포된다 | C1 R8처럼 배포 시점에 본다 |
+| 위임하는 BPM 프로세스는 그 PC BPM 프로세스가 **승인되어 있어야** 배포된다 | C1 R8처럼 배포 시점에 본다 |
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 ADMIN = {"Authorization": "Bearer t-admin"}
 AT = "2026-10-13T09:00:00+09:00"
 VERSION = "1.0.0"
-#: 맡길 PC Bot과 맡기는 서버 Bot.
+#: 맡길 PC BPM 프로세스와 맡기는 서버 BPM 프로세스.
 PC_BOT = "fin.erp-input"
 SERVER_BOT = "fin.invoice"
 RUN = "run_20261015_090000_aaaaaa"
@@ -98,7 +98,7 @@ PC_KEYS: dict[str, str] = {}
 
 
 def pc(center: TestClient, *, name: str, machine: str) -> str:
-    """등록된 활성 Bot UI 하나 — 돌려주는 것은 `bot_ui_id`다 (C4)."""
+    """등록된 활성 PC 실행기 하나 — 돌려주는 것은 `bot_ui_id`다 (C4)."""
     key = new_key(center, name=name, kind="bot_ui")
     made = center.post(
         "/api/v1/bot-ui/register",
@@ -213,7 +213,7 @@ def beat(center: TestClient, runner_key: str, **over: Any) -> dict[str, Any]:
 
 @pytest.fixture
 def ready(center: TestClient, runner: str) -> str:
-    """PC Bot이 승인·배포된 PC 하나. 돌려주는 것은 `bot_ui_id`다."""
+    """PC BPM 프로세스가 승인·배포된 PC 하나. 돌려주는 것은 `bot_ui_id`다."""
     info = upload(center, bot=PC_BOT, where="pc")
     one = pc(center, name="현장 1", machine="7" * 64)
     answer = deploy_to_pc(center, info, one)
@@ -503,7 +503,7 @@ def test_a_delegation_wait_needs_its_job_id(center: TestClient, runner_key: str,
 def test_deploying_a_delegating_bot_needs_the_pc_bot_approved(
     center: TestClient, runner: str
 ) -> None:
-    """위임하는 Bot은 그 PC Bot이 **승인되어 있어야** 배포된다 (C1 R8처럼 배포 때 본다)."""
+    """위임하는 BPM 프로세스는 그 PC BPM 프로세스가 **승인되어 있어야** 배포된다 (C1 R8처럼 배포 때 본다)."""
     server = upload(center, bot=SERVER_BOT, where="server",
                     delegations=[f"{PC_BOT}@{VERSION}"])
     wanted = {
@@ -711,7 +711,7 @@ def test_a_started_server_job_takes_the_cancel_and_waits_for_the_runner(
     assert (closed["state"], closed["cancel_result"]) == ("cancelled", "cancelled")
 
 
-# ─────────────── 서버 Bot에 맡기기·반복 (일괄 기동, ADR-0082) ───────────────
+# ─────────────── 서버 BPM 프로세스에 맡기기·반복 (일괄 기동, ADR-0082) ───────────────
 
 CHILD_BOT = "ops.intake-item"
 
@@ -728,7 +728,7 @@ def deploy_to_server(center: TestClient, info: dict[str, Any], runner_id: str) -
 
 @pytest.fixture
 def server_child(center: TestClient, runner: str) -> str:
-    """서버 Bot 하나가 승인·배포되어 있다. 돌려주는 것은 그 실행기 id다."""
+    """서버 BPM 프로세스 하나가 승인·배포되어 있다. 돌려주는 것은 그 실행기 id다."""
     info = upload(center, bot=CHILD_BOT, where="server")
     answer = deploy_to_server(center, info, runner)
     assert answer.status_code in (200, 201), answer.text

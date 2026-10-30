@@ -24,7 +24,7 @@ RUN_LOCATION_SERVER = "server"
 HOST_STUDIO = "studio"
 HOST_BOT_UI = "bot_ui"
 HOST_SERVER_RUNNER = "server_runner"
-#: Tool UI — 확장의 도구를 띄우는 창 (ADR-0077). 런타임을 띄우지 않고 Bot UI 것을 빌린다.
+#: Tool UI — 확장의 도구를 띄우는 창 (ADR-0077). 런타임을 띄우지 않고 PC 실행기 것을 빌린다.
 HOST_TOOL_UI = "tool_ui"
 
 #: 결과를 모르는 실패를 사람에게 넘기는 방법 (C13 §4 — PC는 확인, 서버는 오류 경계).
@@ -92,7 +92,7 @@ class TaskContext:
     #: 옛 칸 — 서비스 앱 키가 없어졌다 (ADR-0102). 엔진이 채우지 않는다.
     key_ref: str | None = None
     #: 이 실행의 BPM 프로세스(패키지 id)와 판 (C3·C11 `caller`) — 확장이 외부 작업을 올릴 때
-    #: Center가 「그 Bot이 이 토픽을 요구하나」를 본다 (C15).
+    #: Center가 「그 BPM 프로세스가 이 토픽을 요구하나」를 본다 (C15).
     bpm_process_id: str | None = None
     version: str | None = None
 

@@ -15,7 +15,7 @@ import { splitKeys } from "@/lib/center-keys";
  */
 
 const TYPE_LABEL: Record<string, string> = {
-  bot_ui: "Bot UI용",
+  bot_ui: "PC 실행기용",
   studio: "Studio용",
   server_runner: "서버 실행기용",
   consumer: "일꾼용",
@@ -43,7 +43,7 @@ export default async function CenterKeysPage() {
   let rows: CenterKeyInfo[] = [];
   let failure: string | null = null;
   try {
-    // 「승인 대기」는 여기 없다 — Bot UI·Studio는 「PC 현황」, 서버 실행기는 「Bot 현황」 서버 탭 (CON-11).
+    // 「승인 대기」는 여기 없다 — PC 실행기·Studio는 「PC 현황」, 서버 실행기는 「BPM 프로세스 현황」 서버 탭 (CON-11).
     rows = await center.centerKeys();
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
@@ -85,10 +85,10 @@ export default async function CenterKeysPage() {
         <div>
           <h1 className="text-h1 font-bold">Center API 키</h1>
           <p className="text-body text-text-secondary">
-            Bot UI·Studio·서버 실행기·외부 시스템이 Center에 접속할 때 쓰는 키입니다. 서비스 앱·외부 앱의
+            PC 실행기·Studio·서버 실행기·외부 시스템이 Center에 접속할 때 쓰는 키입니다. 서비스 앱·외부 앱의
             일꾼은 「리소스」에서 승인해 들입니다.
           </p>
-          <CenterAddress url={CENTER_PUBLIC_URL} who="Bot UI·Studio·서버 실행기" />
+          <CenterAddress url={CENTER_PUBLIC_URL} who="PC 실행기·Studio·서버 실행기" />
         </div>
       </header>
 
@@ -123,7 +123,7 @@ export default async function CenterKeysPage() {
             {enrolled.length === 0 ? (
               <EmptyState
                 title="승인으로 들인 키가 없습니다."
-                hint="Bot UI·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — Bot UI·Studio는 「PC 현황」, 서버 실행기는 「Bot 현황」의 「서버」 탭에서 승인합니다."
+                hint="PC 실행기·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — PC 실행기·Studio는 「PC 현황」, 서버 실행기는 「BPM 프로세스 현황」의 「서버」 탭에서 승인합니다."
               />
             ) : (
               <DataTable

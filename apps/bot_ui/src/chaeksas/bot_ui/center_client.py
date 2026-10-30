@@ -1,4 +1,4 @@
-"""Center에 등록·하트비트 (C4). **연결은 늘 Bot UI → Center다** (ADR-0007).
+"""Center에 등록·하트비트 (C4). **연결은 늘 PC 실행기 → Center다** (ADR-0007).
 
 이 모듈이 Center와 말하는 유일한 곳이다. 화면은 여기를 직접 부르지 않는다 (`agent.py`가 부른다).
 
@@ -34,11 +34,11 @@ from chaeksas.contracts.resources import ExtensionResource
 log = logging.getLogger(__name__)
 
 API = "/api/v1/bot-ui"
-#: 결재는 Bot UI 경로가 아니라 C6 경로다 (올린 쪽 키로).
+#: 결재는 PC 실행기 경로가 아니라 C6 경로다 (올린 쪽 키로).
 APPROVALS = "/api/v1/approvals"
-#: 리소스 목록도 C7 경로다 — 주소와 외부 확장 정의를 읽는다 (Bot UI 키로, C5 권한표).
+#: 리소스 목록도 C7 경로다 — 주소와 외부 확장 정의를 읽는다 (PC 실행기 키로, C5 권한표).
 RESOURCES = "/api/v1/resources"
-#: 호출 토큰 (C15) — Bot UI 키로 청한다.
+#: 호출 토큰 (C15) — PC 실행기 키로 청한다.
 CALL_TOKENS = "/api/v1/call-tokens"
 #: 요청 크기 한도 (C4 — 256 KB). 넘으면 보내기 전에 막는다.
 MAX_REQUEST_KB = 256
@@ -161,7 +161,7 @@ class CenterClient:
         return HeartbeatResponse.model_validate(self._send("/heartbeat", request.to_json_dict()))
 
     def create_approval(self, body: dict[str, Any]) -> ApprovalInfo:
-        """결재를 Center 결재함에 올린다 (C6 `POST /approvals`). **본문은 실행기가 쓴 그대로**다.
+        """결재를 Center 결재함에 올린다 (C6 `POST /approvals`). **본문은 실행 프로세스가 쓴 그대로**다.
 
         멱등 — 같은 `request_id`·같은 본문이면 기존 결재를 돌려준다 (200).
         """
@@ -174,7 +174,7 @@ class CenterClient:
         )
 
     def call_token(self) -> CallToken:
-        """호출 토큰 (C15 `POST /call-tokens`) — 실행기 자식·Worker·Tool UI가 외부 작업을 올릴 때 쓴다."""
+        """호출 토큰 (C15 `POST /call-tokens`) — 실행 프로세스·Worker·Tool UI가 외부 작업을 올릴 때 쓴다."""
         return CallToken.model_validate(self._send("", {}, api=CALL_TOKENS))
 
     def extension(self, extension_id: str) -> ExtensionResource:
@@ -189,7 +189,7 @@ class CenterClient:
     def download_package(self, package_id: str, version: str) -> bytes:
         """패키지 zip (C5 `GET /packages/{id}/{v}`). 승인된 것이면 `SIGNATURE`가 들어 있다.
 
-        **Bot UI 경로가 아니라 C5 경로**다 — 자기 배포분만 받을 수 있다 (C5 권한표).
+        **PC 실행기 경로가 아니라 C5 경로**다 — 자기 배포분만 받을 수 있다 (C5 권한표).
         """
         import httpx  # noqa: PLC0415 — 부를 때만 든다
 

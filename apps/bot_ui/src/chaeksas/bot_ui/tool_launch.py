@@ -1,10 +1,10 @@
 """「도구」 바로가기 — 확장의 도구는 **Tool UI가** 띄운다 (ADR-0077).
 
-Bot UI는 그 도구가 쓰는 런타임을 먼저 띄우고(`Runtimes.ensure`) Tool UI를 **따로** 띄울 뿐이다.
+PC 실행기는 그 도구가 쓰는 런타임을 먼저 띄우고(`Runtimes.ensure`) Tool UI를 **따로** 띄울 뿐이다.
 
-- **자식으로 감시하지 않는다** — `core.processes`(Job Object·프로세스 그룹)에 넣지 않는다. Bot UI를
+- **자식으로 감시하지 않는다** — `core.processes`(Job Object·프로세스 그룹)에 넣지 않는다. PC 실행기를
   다시 띄워도 도구 창은 남아야 한다(그 사이 Worker가 다시 뜨는 것은 Tool UI가 받는다).
-- Bot UI는 Tool UI를 **import하지 않는다**(앱끼리 import하지 않는다) — 명령줄만 안다.
+- PC 실행기는 Tool UI를 **import하지 않는다**(앱끼리 import하지 않는다) — 명령줄만 안다.
   묶은 앱에서는 **같은 실행 파일**이 `--tool-ui`로 Tool UI가 되고(`packaging/botui_main.py`),
   소스 실행에서는 `python -m chaeksas.tool_ui`다.
 - 한 세션에 하나만 뜨는 것은 Tool UI가 지킨다 — 이미 떠 있으면 그 창이 `--open`을 받는다.
@@ -39,7 +39,7 @@ def launch(command: list[str]) -> None:
         "stdout": subprocess.DEVNULL,
         "stderr": subprocess.DEVNULL,
         "close_fds": True,
-        # 한글을 찍다 죽지 않게 (Bot UI의 다른 자식과 같다 — ADR-0023).
+        # 한글을 찍다 죽지 않게 (PC 실행기의 다른 자식과 같다 — ADR-0023).
         "env": {**os.environ, "PYTHONUTF8": "1"},
     }
     if sys.platform == "win32":

@@ -7,7 +7,7 @@
   xmlns:chk="urn:chaeksas:bpmn:1"
   id="Defs_fx24_batch_intake" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:error id="Err_DELEGATION_FAILED" name="DELEGATION_FAILED" errorCode="DELEGATION_FAILED" />
-  <bpmn:process id="Proc_fx24_batch_intake" name="일괄 기동 — 접수 Bot" isExecutable="true">
+  <bpmn:process id="Proc_fx24_batch_intake" name="일괄 기동 — 접수 BPM 프로세스" isExecutable="true">
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",

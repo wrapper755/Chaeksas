@@ -208,7 +208,7 @@ def test_extension_values_go_to_the_file_and_secrets_to_the_vault(qt: Any, setti
 
 
 def test_runs_see_what_was_put_in(monkeypatch: pytest.MonkeyPatch) -> None:
-    """시험 실행·사전 점검이 쓰는 `context()`가 그 값을 본다 — 비밀은 `secrets`로만 (Bot UI와 같다)."""
+    """시험 실행·사전 점검이 쓰는 `context()`가 그 값을 본다 — 비밀은 `secrets`로만 (PC 실행기와 같다)."""
     vault = Vault()
     vault.set_password("chaeksas-studio", "ext:demo-ext:token", "tok-stored")
     monkeypatch.setattr("chaeksas.studio.credentials.StudioCredentials._keyring", lambda self: vault)
@@ -460,7 +460,7 @@ def test_worker_status() -> None:
 
 
 def test_the_worker_page_shows_the_place_the_runs_use(qt: Any, settings: Settings, extensions: Extensions) -> None:
-    """시험 실행이 쓰는 자리와 **같은 것**을 보인다 (Bot UI가 남긴 `runtime.json`, 없으면 기본 포트)."""
+    """시험 실행이 쓰는 자리와 **같은 것**을 보인다 (PC 실행기가 남긴 `runtime.json`, 없으면 기본 포트)."""
     from chaeksas.studio.extensions import bot_ui_data_dir  # noqa: PLC0415
 
     folder = bot_ui_data_dir() / "runtimes" / "worker"

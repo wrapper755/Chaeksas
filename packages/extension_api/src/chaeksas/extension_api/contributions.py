@@ -5,9 +5,9 @@
 
 **Qt를 import하지 않는다.** 화면을 만드는 기여(`TaskEditor`·`ToolUiTool`·`BotUiPanel`)는 위젯을 `object`로
 돌려준다. `core`가 이 패키지를 쓰는데 `core`는 Qt를 모르기 때문이다 (01-architecture §5).
-위젯을 받아 붙이는 것은 Studio·Bot UI·Tool UI의 몫이다.
+위젯을 받아 붙이는 것은 Studio·PC 실행기·Tool UI의 몫이다.
 
-로컬 런타임(`bot_ui.local_runtimes`)은 **다른 프로세스에서** 돈다. 띄우고 감시하는 것은 Bot UI이고
+로컬 런타임(`bot_ui.local_runtimes`)은 **다른 프로세스에서** 돈다. 띄우고 감시하는 것은 PC 실행기이고
 (C13, BUI-09·11), 확장이 주는 것은 그 자식 프로세스 안에서 불릴 진입점 하나(`LocalRuntimeEntry`)다.
 """
 
@@ -63,7 +63,7 @@ class TaskEditor(Protocol):
 class ToolUiTool(Protocol):
     """Tool UI의 도구 하나 (`tool_ui.tools`, TOL-01 — 예: TOL-03~05 셀렉터 등록, ADR-0077).
 
-    Tool UI가 탭 하나에 붙인다. 로컬 런타임이 필요하면 **Bot UI가 띄운 것**을 예약 키
+    Tool UI가 탭 하나에 붙인다. 로컬 런타임이 필요하면 **PC 실행기가 띄운 것**을 예약 키
     (`runtime.<id>.*`)로 받는다 — 도구도 Tool UI도 런타임을 띄우지 않는다.
     """
 
@@ -105,10 +105,10 @@ class BotUiPanel(Protocol):
 class LocalRuntimeEntry(Protocol):
     """로컬 런타임의 진입점 (`bot_ui.local_runtimes[].entry`, ADR-0024).
 
-    **Bot UI가 자기 실행 파일을 자식으로 다시 띄워** 이것을 부른다 — 설치 파일로 묶은 앱 안에는
+    **PC 실행기가 자기 실행 파일을 자식으로 다시 띄워** 이것을 부른다 — 설치 파일로 묶은 앱 안에는
     콘솔 스크립트가 없기 때문이다. 불린 쪽은 화면 없는 서버로 돌다가 종료 코드를 돌려준다.
 
-    - `port`: Bot UI가 정한 포트 (설정 `port_setting`, 없으면 `default_port`).
+    - `port`: PC 실행기가 정한 포트 (설정 `port_setting`, 없으면 `default_port`).
     - `token_dir`: 로컬 토큰 파일을 둘 폴더. 정의에 `token_dir: true`일 때만 온다 (C10).
     - 127.0.0.1에만 바인드한다. 같은 PC의 다른 프로그램도 토큰으로 막는다 (01-architecture §4).
     - 함수여도 되고 클래스여도 된다 (호스트가 인자 없이 만든 뒤 부른다).

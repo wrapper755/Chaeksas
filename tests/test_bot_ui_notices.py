@@ -5,7 +5,7 @@
 1. **알릴 거리를 아는 쪽(Agent)과 띄우는 쪽(화면)이 갈려 있다** — `Notices`는 Qt를 모르고,
    화면은 쌓인 것을 거둬 가 띄울 뿐이다.
 2. **같은 말을 주기마다 띄우지 않는다** — 연결·런타임은 **바뀔 때만**, 같은 알림은 한 번만.
-3. **문구가 BUI-05 표 그대로다** — Bot 이름·순번·사유가 들어가고, 「사람이 볼 때까지」는 sticky다.
+3. **문구가 BUI-05 표 그대로다** — BPM 프로세스 이름·순번·사유가 들어가고, 「사람이 볼 때까지」는 sticky다.
 4. **알릴 거리가 생기는 자리가 Agent에 붙어 있다** — 실패·배포·만료·키 거부·대기열.
 5. **기다리는 동안 만료된 작업은 버린다** (C4 `expired`) — 붙이기 전까지 `expires_at`을 아무도
    보지 않아 지난 작업이 그대로 돌았다.
@@ -120,7 +120,7 @@ def test_a_runtime_that_was_restarted_and_then_gave_up() -> None:
     told = found.take()
     assert told[0].kind == module.RUNTIME_GAVE_UP
     assert "포트가 쓰이고 있습니다" in told[0].text
-    assert "UI 태스크가 있는 Bot은 실행되지 않습니다" in told[0].text
+    assert "UI 태스크가 있는 BPM 프로세스는 실행되지 않습니다" in told[0].text
     assert told[0].sticky, "사람이 볼 때까지 — 이 PC에서 UI 태스크가 아예 안 돈다"
 
 

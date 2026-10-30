@@ -367,7 +367,7 @@ def test_it_makes_the_file_with_a_header(tmp_path: Path) -> None:
 
 
 def test_it_appends_without_touching_what_is_there(tmp_path: Path) -> None:
-    """**사람의 장부를 Bot이 덮지 않는다** — 할 수 있는 일은 끝에 붙이는 것뿐이다."""
+    """**사람의 장부를 BPM 프로세스가 덮지 않는다** — 할 수 있는 일은 끝에 붙이는 것뿐이다."""
     tool = writer(tmp_path)
     tool.run(path="장부.xlsx", rows=[{"주문번호": "A1", "금액": 100}])
     tool.run(path="장부.xlsx", rows=[{"주문번호": "A2", "금액": 200}])

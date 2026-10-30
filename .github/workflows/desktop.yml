@@ -1,4 +1,4 @@
-# 데스크톱 산출물 — Studio·Bot UI를 PyInstaller onedir로 묶는다 (ADR-0024).
+# 데스크톱 산출물 — Studio·PC 실행기를 PyInstaller onedir로 묶는다 (ADR-0024).
 #
 # **푸시마다 돌지 않는다.** 묶는 데 몇 분이 걸리고(스파이크 S5: onedir 77초, WebEngine 포함
 # 143초) 모든 PR에 붙으면 CI 비용이 커진다. 사람이 단추로 돌리거나 태그를 밀 때만 돈다.

@@ -177,7 +177,7 @@ def test_an_operation_without_a_schema_has_no_fields(catalog: Catalog) -> None:
 
 
 def test_a_mode_that_is_not_deterministic_is_flagged(catalog: Catalog) -> None:
-    """Bot에서 돌지 않는 작업 — STU-14가 경고한다."""
+    """BPM 프로세스에서 돌지 않는 작업 — STU-14가 경고한다."""
     app = catalog.app("hris")
     assert app is not None
     assert app.operation("register_leave").deterministic_ok is True  # type: ignore[union-attr]
@@ -281,7 +281,7 @@ def test_the_editor_keeps_what_a_person_wrote_outside_the_schema(app: Any, catal
 
 
 def test_there_is_no_key_choice_and_a_written_reference_is_kept(app: Any, catalog: Catalog) -> None:
-    """키는 Center가 (Bot × 대상 × 앱)마다 내려 준다 — 태스크가 다른 참조를 적을 칸이 없다 (ADR-0094 §4).
+    """키는 Center가 (BPM 프로세스 × 대상 × 앱)마다 내려 준다 — 태스크가 다른 참조를 적을 칸이 없다 (ADR-0094 §4).
     옛 그림에 적힌 참조는 **조용히 바꾸지 않는다**."""
     made = editor(app, catalog, CALL)
     assert not hasattr(made, "follow_key") and not hasattr(made, "key_box")
@@ -327,7 +327,7 @@ def test_an_empty_output_row_blocks_apply(app: Any, catalog: Catalog) -> None:
 def test_an_operation_that_cannot_run_deterministically_warns(app: Any, catalog: Catalog) -> None:
     made = editor(app, catalog, {"app_id": "hris", "operation": "get_leave_ledger"})
     _, warnings = made.problems()
-    assert any("Bot(결정 수행)에서 실행할 수 없습니다" in one for one in warnings)
+    assert any("BPM 프로세스(결정 수행)에서 실행할 수 없습니다" in one for one in warnings)
 
 
 def test_filling_expected_inputs_does_not_overwrite_what_is_there(app: Any, catalog: Catalog) -> None:
@@ -485,7 +485,7 @@ def package(bot: str, *, version: str = "1.0.0", outputs: list[str] | None = Non
 
 
 def test_the_declared_outputs_come_from_the_manifest() -> None:
-    """**그 Bot이 선언한 `outputs`**가 곧 「부르는 쪽이 받을 것」이다 (C1)."""
+    """**그 BPM 프로세스가 선언한 `outputs`**가 곧 「부르는 쪽이 받을 것」이다 (C1)."""
     from chaeksas.studio.service_catalog import declared_outputs
 
     found = declared_outputs([package("fin.erp-input", outputs=["결과코드"])])

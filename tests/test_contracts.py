@@ -333,7 +333,7 @@ def test_r11_a_setting_outside_the_contract_is_caught() -> None:
     """**R9와 같은 까닭이다** — `requires.settings`는 그림에서 기계가 옮기는 값이다.
 
     모르는 이름이 들어오면 「이 호스트가 갖췄나」 점검이 **아무 말 없이 지나가** 준비되지
-    않은 Bot이 실행되고 그 태스크에서 죽는다 (`core.preflight`). R9를 만들기 전
+    않은 BPM 프로세스가 실행되고 그 태스크에서 죽는다 (`core.preflight`). R9를 만들기 전
     `triggers[].kind`가 겪은 그 꼴이다.
     """
     v = validate(manifest(requires=Requires(settings=["smtp", "mailgun", "ftp"])))
@@ -357,7 +357,7 @@ def test_built_by_stays_an_open_string() -> None:
 
 
 def test_r10_only_a_server_bot_can_delegate_to_a_pc() -> None:
-    """**PC 위임은 서버 Bot만** 한다 (R10, [ADR-0062](../docs/decisions/0062-pc-delegation.md)).
+    """**PC 위임은 서버 BPM 프로세스만** 한다 (R10, [ADR-0062](../docs/decisions/0062-pc-delegation.md)).
 
     PC 실행은 그 PC의 자리를 끝까지 쥐므로(ADR-0014) PC가 다른 PC를 기다리면 서로를 기다린다.
     C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지 않는다**.
@@ -381,7 +381,7 @@ def test_r12_a_bot_does_not_delegate_to_itself() -> None:
 
 
 def test_r10_says_nothing_when_nothing_is_delegated() -> None:
-    """PC Bot은 흔하다 — 위임이 없으면 이 규칙은 입을 닫는다."""
+    """PC BPM 프로세스는 흔하다 — 위임이 없으면 이 규칙은 입을 닫는다."""
     assert validate(manifest(run_location="pc")) == []
 
 

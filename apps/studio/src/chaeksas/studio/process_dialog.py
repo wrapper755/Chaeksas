@@ -58,7 +58,7 @@ TITLE = "BPM 프로세스 정보"
 DEFAULT_SIZE = (720, 440)
 
 #: 실행 위치 (ADR-0015). 글은 STU-05와 **같은 말**을 쓴다.
-LOCATIONS = (("server", "서버 — 대부분의 업무. 여러 건 동시에"), ("pc", "PC (Bot UI) — 화면 조작·현장 확인"))
+LOCATIONS = (("server", "서버 — 대부분의 업무. 여러 건 동시에"), ("pc", "PC (PC 실행기) — 화면 조작·현장 확인"))
 #: 생략하면 서버다 (C1 R1·ADR-0016).
 DEFAULT_LOCATION = "server"
 

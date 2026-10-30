@@ -1,6 +1,6 @@
-"""설치된 Bot — 패키지(C1 zip)를 풀어 두고 목록으로 보인다 (BUI-04 「설치된 Bot」).
+"""설치된 BPM 프로세스 — 패키지(C1 zip)를 풀어 두고 목록으로 보인다 (BUI-04 「설치된 BPM 프로세스」).
 
-**Bot UI와 서버 실행기가 같은 코드를 쓴다.** 푸는 자리·경로 검사·「출처」 표식이 두 군데
+**PC 실행기와 서버 실행기가 같은 코드를 쓴다.** 푸는 자리·경로 검사·「출처」 표식이 두 군데
 있으면 「PC에서는 되는데 서버에서 안 된다」가 된다 — 앱끼리 import할 수 없어 여기 `core`에
 둔다 (`core.machine`이 같은 까닭으로 올라온 자리다). 어느 폴더에 푸는지는
 **부르는 쪽이 `data_dir`로** 정한다.
@@ -31,7 +31,7 @@ from chaeksas.contracts.signing import Envelope
 
 log = logging.getLogger(__name__)
 
-#: 설치된 Bot이 사는 곳 (`data_dir()/bots/<id>/<버전>/`).
+#: 설치된 BPM 프로세스가 사는 곳 (`data_dir()/bots/<id>/<버전>/`).
 BOTS_DIR = "bots"
 #: 패키지 안의 승인 봉투 (C2) — 설치하면 폴더에 그대로 남는다.
 SIGNATURE_NAME = "SIGNATURE"
@@ -66,7 +66,7 @@ class UnusablePackage(RuntimeError):
 
 @dataclass(frozen=True)
 class InstalledBot:
-    """설치된 Bot 하나."""
+    """설치된 BPM 프로세스 하나."""
 
     manifest: Manifest
     folder: Path
@@ -273,7 +273,7 @@ def installed(data_dir: Path) -> list[InstalledBot]:
 
 
 def find(data_dir: Path, bot_id: str, version: str | None = None) -> InstalledBot | None:
-    """그 Bot. 판을 적지 않으면 **가장 최근에 설치된 것**이 아니라 **판 이름이 가장 큰 것**이다."""
+    """그 BPM 프로세스. 판을 적지 않으면 **가장 최근에 설치된 것**이 아니라 **판 이름이 가장 큰 것**이다."""
     found = [one for one in installed(data_dir) if one.id == bot_id]
     if version:
         return next((one for one in found if one.version == version), None)

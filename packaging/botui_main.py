@@ -1,4 +1,4 @@
-"""PyInstaller 진입 스크립트 — Bot UI ([ADR-0024](../docs/decisions/0024-desktop-packaging-extensions.md)).
+"""PyInstaller 진입 스크립트 — PC 실행기 ([ADR-0024](../docs/decisions/0024-desktop-packaging-extensions.md)).
 
 **콘솔 스크립트(`chk-bot-ui`)를 묶지 않는다** — PyInstaller는 모듈이 아니라 **스크립트 하나**를
 받는다. 그래서 진입점을 부르는 얇은 파일을 둔다.
@@ -8,10 +8,10 @@
 
 **Tool UI도 이 실행 파일이다** ([ADR-0077](../docs/decisions/0077-tool-ui.md) §6) — `--tool-ui`로 불리면
 Tool UI의 `main`으로 간다. 실행 파일을 늘리지 않으려는 것이고(파이썬·Qt·DPI 선언을 함께 쓴다),
-**가르는 자리가 여기**인 까닭은 앱끼리 import하지 않기 때문이다 (Bot UI가 Tool UI를 모른다).
+**가르는 자리가 여기**인 까닭은 앱끼리 import하지 않기 때문이다 (PC 실행기가 Tool UI를 모른다).
 
-**QtWebEngine을 import하지 않는다** — Studio만 쓴다 (Bot UI는 모든 현장 PC에 깔리므로 작게
-둔다: Studio 551MB ↔ Bot UI 113MB).
+**QtWebEngine을 import하지 않는다** — Studio만 쓴다 (PC 실행기는 모든 현장 PC에 깔리므로 작게
+둔다: Studio 551MB ↔ PC 실행기 113MB).
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ TOOL_UI_FLAG = "--tool-ui"
 
 
 def run(argv: list[str]) -> int:
-    """깃발로 가른다 — `--tool-ui`면 Tool UI, 아니면 Bot UI(로컬 런타임·빌드 검사 포함)."""
+    """깃발로 가른다 — `--tool-ui`면 Tool UI, 아니면 PC 실행기(로컬 런타임·빌드 검사 포함)."""
     if TOOL_UI_FLAG in argv:
         from chaeksas.tool_ui.app import main as tool_ui  # noqa: PLC0415 — 고른 쪽만 싣는다
 
@@ -36,6 +36,6 @@ def run(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     # 묶인 앱이 자식을 띄울 때 **같은 실행 파일이 다시 돌아 창이 여럿 뜨는 것**을 막는다
-    # (PyInstaller 권고). Bot UI는 자기 실행 파일로 로컬 런타임을 띄운다 (C13·ADR-0024).
+    # (PyInstaller 권고). PC 실행기는 자기 실행 파일로 로컬 런타임을 띄운다 (C13·ADR-0024).
     multiprocessing.freeze_support()
     sys.exit(run(list(sys.argv)))

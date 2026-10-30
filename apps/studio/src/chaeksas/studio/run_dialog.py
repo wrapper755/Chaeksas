@@ -133,7 +133,7 @@ class RunDialog(QDialog):
         self.autonomous = QRadioButton("자율 수행 — AI가 방법을 찾고, 성공하면 학습한다", self)
         self.autonomous.setChecked(True)
         self.deterministic = QRadioButton(
-            "결정 수행 (재생) — 학습된 대로 LLM 없이 수행한다. Bot과 같은 방식", self
+            "결정 수행 (재생) — 학습된 대로 LLM 없이 수행한다. BPM 프로세스와 같은 방식", self
         )
         missing = unlearned(process, definition)
         self.deterministic.setEnabled(not missing)

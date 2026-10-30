@@ -1,4 +1,4 @@
-"""C4. Center API: Bot UI 등록·하트비트.
+"""C4. Center API: PC 실행기 등록·하트비트.
 
 단일 원본: `docs/03-contracts/C4-bot-ui-center.md`.
 
@@ -77,7 +77,7 @@ class ExtensionState(ContractModel):
     **`enabled`와 `off`는 다른 것을 말한다** ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)):
     `off`는 **사람이 껐다**(멀쩡한데 일부러 안 쓴다), `enabled=false`인데 `off`가 아니면 **흠이
     있다**(정의·판이 맞지 않는다). 화면이 「꺼짐」과 「호환 안 됨」을 가르는 자리다. 뜻을 바꾸지
-    않고 칸을 더한 것이라 옛 Bot UI가 보낸 값(`off` 없음)도 그대로 읽힌다.
+    않고 칸을 더한 것이라 옛 PC 실행기가 보낸 값(`off` 없음)도 그대로 읽힌다.
     """
 
     id: str
@@ -169,7 +169,7 @@ class WorkerState(ContractModel):
 
 
 class Readiness(ContractModel):
-    """설치된 Bot 하나의 준비 상태."""
+    """설치된 BPM 프로세스 하나의 준비 상태."""
 
     bpm_process_id: str
     version: str
@@ -187,7 +187,7 @@ class JobAck(ContractModel):
     run_id: str | None = None  # started일 때
     reason: str | None = None  # rejected·cancel_refused일 때 (KNOWN_JOB_ACK_REASONS)
     #: **PC 위임이 돌려주는 값** (C12 §PC 위임, [ADR-0062](../decisions/0062-pc-delegation.md)).
-    #: 원칙 6의 **명시한 예외**라 좁게 쓴다: **그 Bot이 선언한 `outputs`만**(C1), **끝났을
+    #: 원칙 6의 **명시한 예외**라 좁게 쓴다: **그 BPM 프로세스가 선언한 `outputs`만**(C1), **끝났을
     #: 때만**(`finished`·`failed`…), 그리고 **위임으로 받은 작업만**이다. 평범한 작업은 비운다 —
     #: Center는 위임이 아닌 작업의 `outputs`를 **버린다**.
     outputs: dict[str, Any] = Field(default_factory=dict)
@@ -237,8 +237,8 @@ class JobDispatch(ContractModel):
     requested_at: Timestamp
     expires_at: Timestamp | None = None
     note: str | None = None
-    #: **가상 직원 신원** — 그 Bot이 가상 직원의 접수 Bot이면 Center가 내려줄 때 붙인다 (C12,
-    #: ADR-0098). 저장하지 않는다. 접수 Bot은 서버에서만 돌아 **Bot UI에는 오지 않는다**.
+    #: **가상 직원 신원** — 그 BPM 프로세스가 가상 직원의 접수 BPM 프로세스이면 Center가 내려줄 때 붙인다 (C12,
+    #: ADR-0098). 저장하지 않는다. 접수 BPM 프로세스는 서버에서만 돌아 **PC 실행기에는 오지 않는다**.
     virtual_worker: VirtualWorkerIdentity | None = None
 
 
@@ -271,5 +271,5 @@ class HeartbeatResponse(ContractModel):
     #: 만료 14일 전부터 새 키 (C4 §키 회전). 새 키로 첫 요청이 올 때까지 주기마다 싣는다.
     rotated_key: RotatedKey | None = None
     #: 이 키의 만료 (C7). **주기마다 싣는다** — 「생략 = 그대로」로 두면 운영자가 기간을
-    #: 늘려 줘도 Bot UI가 그것을 모른다.
+    #: 늘려 줘도 PC 실행기가 그것을 모른다.
     key_expires_at: Timestamp | None = None

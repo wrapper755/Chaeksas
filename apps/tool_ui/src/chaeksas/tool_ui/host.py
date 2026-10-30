@@ -2,13 +2,13 @@
 
 **Qt를 모른다** — 화면(`window.py`)과 갈라 판단을 시험할 수 있게 한다.
 
-- **로컬 런타임은 띄우지 않는다.** Bot UI가 띄운 것을 Studio와 같은 길(`runtime.json`·토큰 파일)로
+- **로컬 런타임은 띄우지 않는다.** PC 실행기가 띄운 것을 Studio와 같은 길(`runtime.json`·토큰 파일)로
   찾아 예약 키 `runtime.<id>.*`를 채운다. 그 런타임이 `health`에 답하지 않으면 **도구를 열지 않고**
   까닭과 길을 말한다(「없는데 된 척」하지 않는다).
-- 서버 주소(`service.base_url`)는 **Bot UI가 받아 둔 명부**를 읽는다 — Tool UI는 Center를 부르지
+- 서버 주소(`service.base_url`)는 **PC 실행기가 받아 둔 명부**를 읽는다 — Tool UI는 Center를 부르지
   않는다. 출처는 그대로 하나다 (Center 리소스 등록 > 정의).
-- 끈 확장은 **Bot UI의 목록**을 따른다 (BUI-11이 이 PC의 유일한 켜기·끄기다, ADR-0043).
-- Bot 실행과의 차례는 **런타임이 가른다** (Worker는 세션 하나·예약, C10) — 여기서 조정하지 않는다.
+- 끈 확장은 **PC 실행기의 목록**을 따른다 (BUI-11이 이 PC의 유일한 켜기·끄기다, ADR-0043).
+- BPM 프로세스 실행과의 차례는 **런타임이 가른다** (Worker는 세션 하나·예약, C10) — 여기서 조정하지 않는다.
 """
 
 from __future__ import annotations
@@ -51,14 +51,14 @@ HEALTH_TIMEOUT_S = 1.0
 
 #: 런타임이 답하지 않을 때 (TOL-01). **까닭과 길을 함께 말한다** (U3).
 RUNTIME_DOWN = (
-    "{label}가 답하지 않습니다 (127.0.0.1:{port}) — Bot UI를 켜고 Bot UI 「도구」에서 이 도구를 열면 "
-    "Bot UI가 {label}를 띄웁니다"
+    "{label}가 답하지 않습니다 (127.0.0.1:{port}) — PC 실행기를 켜고 PC 실행기 「도구」에서 이 도구를 열면 "
+    "PC 실행기가 {label}를 띄웁니다"
 )
 RUNTIME_UNKNOWN = "이 도구가 쓰는 로컬 런타임({runtime})을 기여한 확장이 없습니다"
 
 
 def healthy(port: int, path: str, *, timeout_s: float = HEALTH_TIMEOUT_S) -> bool:
-    """그 런타임의 `health`가 200으로 답하나 (Bot UI의 `runtimes.healthy`와 같은 물음)."""
+    """그 런타임의 `health`가 200으로 답하나 (PC 실행기의 `runtimes.healthy`와 같은 물음)."""
     try:
         answer = httpx.get(f"http://{LOCAL_HOST}:{port}{path}", timeout=timeout_s)
     except httpx.HTTPError:
@@ -95,7 +95,7 @@ class ToolHost:
     host: ExtensionHost
     settings: ToolSettings = field(default_factory=ToolSettings)
     credentials: ToolCredentials = field(default_factory=ToolCredentials)
-    #: Bot UI 데이터 폴더 — **읽기만** 한다 (런타임 자리·앱 주소 명부·끈 확장).
+    #: PC 실행기 데이터 폴더 — **읽기만** 한다 (런타임 자리·앱 주소 명부·끈 확장).
     bot_ui_root: Path = field(default_factory=bot_ui_data_dir)
     #: Tool UI 제 데이터 폴더 (`storage.dir`가 여기 아래다).
     root: Path = field(default_factory=data_dir)
@@ -111,7 +111,7 @@ class ToolHost:
         root: Path | None = None,
         loader: Callable[[Iterable[str]], ExtensionHost] = installed_host,
     ) -> ToolHost:
-        """설치된 확장을 읽는다 — **Bot UI에서 끈 것은 빼고** (ADR-0043·0077)."""
+        """설치된 확장을 읽는다 — **PC 실행기에서 끈 것은 빼고** (ADR-0043·0077)."""
         bot_ui = bot_ui_root or bot_ui_data_dir()
         return cls(
             host=loader(bot_ui_turned_off(root=bot_ui)),
@@ -141,7 +141,7 @@ class ToolHost:
         return next((c.value for c in self.host.local_runtimes() if c.value.id == runtime_id), None)
 
     def runtime_port(self, runtime: LocalRuntime) -> int:
-        """Bot UI가 남긴 포트 → 그 런타임의 설정 환경변수 → 기여의 기본 포트 (Studio와 같은 순서)."""
+        """PC 실행기가 남긴 포트 → 그 런타임의 설정 환경변수 → 기여의 기본 포트 (Studio와 같은 순서)."""
         found = runtime_port(runtime.id, root=self.bot_ui_root)
         if found:
             return found
@@ -163,7 +163,7 @@ class ToolHost:
         return None
 
     def runtime_values(self, runtime_ids: Iterable[str]) -> dict[str, Any]:
-        """예약 키 `runtime.<id>.*` (C13) — **Bot UI가 띄운 것**을 가리킨다.
+        """예약 키 `runtime.<id>.*` (C13) — **PC 실행기가 띄운 것**을 가리킨다.
 
         `state`는 Tool UI가 감시하지 않으므로 「답했다」를 `running`으로만 적는다(모르면 `off`).
         """
@@ -184,7 +184,7 @@ class ToolHost:
     # ── 바깥 세상 ──
 
     def center_url(self) -> str | None:
-        """도구가 외부 작업을 올릴 Center — **Bot UI의 설정을 읽는다** (Tool UI는 Center에 붙지 않는다)."""
+        """도구가 외부 작업을 올릴 Center — **PC 실행기의 설정을 읽는다** (Tool UI는 Center에 붙지 않는다)."""
         return bot_ui_center_url(root=self.bot_ui_root)
 
     def storage_dir(self, extension_id: str) -> Path:

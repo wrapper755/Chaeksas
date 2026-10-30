@@ -39,7 +39,7 @@ NO_TOOLS = "이 PC의 확장이 더한 도구가 없습니다."
 TOOL_BROKEN = "이 도구를 열지 못했습니다 —"
 TOOL_NO_WIDGET = "이 도구가 화면을 주지 않았습니다."
 RUNTIME_UP = "{label} 127.0.0.1:{port} · 실행 중"
-RUNTIME_OFF = "{label} 꺼짐 — Bot UI 「도구」에서 열면 Bot UI가 띄웁니다"
+RUNTIME_OFF = "{label} 꺼짐 — PC 실행기 「도구」에서 열면 PC 실행기가 띄웁니다"
 
 
 class ToolWindow(QMainWindow):

@@ -132,7 +132,7 @@ def create(
 def _accept(store: Store, raw: Any, *, package_dir: Path | None = None) -> DeploymentInfo:
     """서명된 `deployment` 봉투를 받아 둔다 — 사람이 서명하던 때부터 같은 관문이다.
 
-    `package_dir`가 있으면 **가상 직원의 접수 Bot 관문**도 본다 (ADR-0085 §2 — 그 판의 그림을 읽는다).
+    `package_dir`가 있으면 **가상 직원의 접수 BPM 프로세스 관문**도 본다 (ADR-0085 §2 — 그 판의 그림을 읽는다).
     """
     envelope = _envelope(raw)
     keys = admin_keys(store)
@@ -218,7 +218,7 @@ def targets_for(store: Store, *, bpm_process_id: str, version: str, target_type:
 
 
 def versions_deployed_to(store: Store, *, bpm_process_id: str, target_type: str) -> list[str]:
-    """그 Bot이 그 종류의 대상에 배포된 판들 (C5) — 위임이 판을 비웠을 때 고를 거리다."""
+    """그 BPM 프로세스가 그 종류의 대상에 배포된 판들 (C5) — 위임이 판을 비웠을 때 고를 거리다."""
     rows = store.rows(
         "SELECT DISTINCT d.version AS v FROM deployments d"
         " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
@@ -230,10 +230,10 @@ def versions_deployed_to(store: Store, *, bpm_process_id: str, target_type: str)
 
 
 def _refuse_unapproved_delegations(manifest: Manifest | None, store: Store) -> None:
-    """**PC 위임으로 부르는 Bot이 승인되어 있어야** 한다 (C12 §PC 위임, ADR-0062).
+    """**PC 위임으로 부르는 BPM 프로세스가 승인되어 있어야** 한다 (C12 §PC 위임, ADR-0062).
 
     C1 R8처럼 **배포 시점에** 본다 — 매니페스트만으로는 알 수 없다. 반대로 **PC에 배포됐는가는
-    묻지 않는다**: 서버 Bot을 먼저 배포하는 순서를 막으면 안 되고, 실제 관문은 위임을 요청할
+    묻지 않는다**: 서버 BPM 프로세스를 먼저 배포하는 순서를 막으면 안 되고, 실제 관문은 위임을 요청할
     때다 (그때 `no_deployment`로 거절한다).
 
     판을 비운 위임(`<id>`)은 **승인된 판이 하나라도 있으면** 통과다 — 어느 판으로 돌릴지는
@@ -261,7 +261,7 @@ def _refuse_unapproved_delegations(manifest: Manifest | None, store: Store) -> N
     raise ApiError(
         422,
         "delegation_not_approved",
-        f"PC 위임으로 부르는 Bot이 승인되지 않았다: {missing[0]}",
+        f"PC 위임으로 부르는 BPM 프로세스가 승인되지 않았다: {missing[0]}",
         {"delegations": missing},
     )
 
@@ -319,7 +319,7 @@ def listing(
 
     좁히는 기준은 `envelopes_for`와 **같다** (ADR-0046) — 보이는 것과 내려가는 것이 어긋나면
     CON-03의 「배포」가 그 PC가 받지 못할 것을 보인다. 묻는 쪽이 종류를 적지 않으면 **PC**다
-    (`GET /deployments?target_id=`는 Bot UI id를 받는다).
+    (`GET /deployments?target_id=`는 PC 실행기 id를 받는다).
     """
     rows = store.rows("SELECT * FROM deployments ORDER BY at DESC")
     out = [_row(store, one) for one in rows]
@@ -365,7 +365,7 @@ def versions_for(store: Store, *, target_type: str, target_id: str, bpm_process_
 
 
 def server_versions(store: Store, *, bpm_process_id: str) -> list[str]:
-    """그 Bot이 **어느 서버 실행기에든** 활성으로 배포된 버전들 (C5 작업 만들기).
+    """그 BPM 프로세스가 **어느 서버 실행기에든** 활성으로 배포된 버전들 (C5 작업 만들기).
 
     `id`를 비운 서버 작업은 Center가 실행기를 고르므로(C5 `JobTarget`) 「어느 서버에
     배포됐나」가 아니라 **어디든 배포돼 있나**를 묻는다. `"*"` 배포도 센다 (ADR-0046).
@@ -382,10 +382,10 @@ def server_versions(store: Store, *, bpm_process_id: str) -> list[str]:
 
 
 def server_message_starts(store: Store, *, name: str) -> list[str]:
-    """그 이름의 **메시지 시작 트리거**를 가진, 서버에 배포된 Bot id들 (C12 §메시지).
+    """그 이름의 **메시지 시작 트리거**를 가진, 서버에 배포된 BPM 프로세스 id들 (C12 §메시지).
 
     고르는 기준은 `server_versions`와 같다 (승인된 패키지의 철회되지 않은 서버 배포) — 배포되지
-    않은 Bot은 메시지로도 돌지 않는다. 트리거는 **매니페스트가 말한다** (C1 `triggers[]`) —
+    않은 BPM 프로세스는 메시지로도 돌지 않는다. 트리거는 **매니페스트가 말한다** (C1 `triggers[]`) —
     Center가 그림을 읽지 않는다.
 
     버전은 돌려주지 않는다. **작업을 만드는 쪽이 고르게** 둔다 (`_resolved_version` — 둘 이상이면
@@ -427,7 +427,7 @@ def downloadable_by(store: Store, *, target_type: str, target_id: str) -> set[tu
 
 
 def max_concurrency_for(store: Store, *, bpm_process_id: str) -> int | None:
-    """그 Bot의 **동시 실행 상한** — 서명된 배포 봉투가 정한다 (C2 `max_concurrency`, C12 §3).
+    """그 BPM 프로세스의 **동시 실행 상한** — 서명된 배포 봉투가 정한다 (C2 `max_concurrency`, C12 §3).
 
     Center가 짓지 않는다 — 봉투에 적힌 값이고, 없으면 `None`이라 부르는 쪽이 계약의 기본값
     (5)을 쓴다. 활성 배포가 여럿이면 **가장 작은 값**이다 (가장 조심스러운 쪽을 따른다).
@@ -470,7 +470,7 @@ def results_of(store: Store, *, host_id: str, limit: int = RECENT_RESULTS) -> li
 def remember_results(store: Store, *, host_id: str, results: Sequence[DeploymentResult]) -> None:
     """하트비트가 실어 온 배치 결정을 쌓는다 (C4).
 
-    **같은 `(deployment_id, at)`은 한 번만** — Bot UI가 보내 놓고 응답을 못 받아 다시 보내도
+    **같은 `(deployment_id, at)`은 한 번만** — PC 실행기가 보내 놓고 응답을 못 받아 다시 보내도
     목록이 부풀지 않는다.
     """
     for one in results:

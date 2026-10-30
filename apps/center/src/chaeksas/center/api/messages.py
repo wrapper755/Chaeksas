@@ -1,7 +1,7 @@
 """메시지 — 「이 일이 일어났다」 (C12 §메시지, `POST /api/v1/messages`).
 
 **서명이 없다** (작업과 같다, C5 권한표) — 무엇을 실행해도 되는가는 배포가 정했고, 메시지는
-이미 배포된 Bot을 깨우거나 그 Bot의 시작 이벤트를 울리는 말일 뿐이다. 관문은 토큰 권한이다
+이미 배포된 BPM 프로세스를 깨우거나 그 BPM 프로세스의 시작 이벤트를 울리는 말일 뿐이다. 관문은 토큰 권한이다
 (관리자 토큰·연동용 키).
 
 **가는 길이 둘이다.**
@@ -11,7 +11,7 @@
 | 기다리는 실행이 있다 | `delivered_to: "run"` | 그 실행기의 하트비트 `messages[]`로 내려간다 |
 | 메시지 시작 트리거다 | `delivered_to: "new_job"` | **`POST /jobs`와 같은 함수**로 작업을 만든다 |
 
-둘째를 작업으로 바꾸는 것이 중요하다 — 그래야 배포 검사·빈자리·Bot별 상한이 **한 자리**에
+둘째를 작업으로 바꾸는 것이 중요하다 — 그래야 배포 검사·빈자리·BPM 프로세스별 상한이 **한 자리**에
 남는다 (여기서 따로 실행을 띄우면 상한을 모르는 둘째 길이 생긴다).
 
 Center는 메시지를 **밀지 않는다** (ADR-0007) — 하트비트 응답에 실어 두고 **ack가 올 때까지
@@ -62,8 +62,8 @@ def _guard(found: Caller) -> str:
     """부를 수 있는 쪽인가 — 돌려주는 것은 멱등 키의 범위이자 「자기 것」의 주인이다.
 
     **작업과 같은 권한이다** (C5 권한표) — 관리자 토큰이거나 연동용 키다. 읽기 토큰은 GET만이고,
-    현장 키(Bot UI·서버 실행기·Studio)로는 메시지를 넣을 수 없다 (넣을 수 있으면 현장 키 하나로
-    남의 Bot을 깨울 수 있다).
+    현장 키(PC 실행기·서버 실행기·Studio)로는 메시지를 넣을 수 없다 (넣을 수 있으면 현장 키 하나로
+    남의 BPM 프로세스를 깨울 수 있다).
     """
     if found.is_admin:
         return jobs.owner_of(found)
@@ -191,8 +191,8 @@ def _to_new_job(
 ) -> MessageResponse:
     """메시지 시작 — **작업으로 바꾼다** (C12 §메시지).
 
-    배포 검사·버전 고르기·빈자리·Bot별 상한을 **작업 쪽 한 자리**에 남긴다. 둘 이상의 서버
-    Bot이 같은 이름을 받으면 **고르지 않고** 422 `receiver_ambiguous`다 (C5의
+    배포 검사·버전 고르기·빈자리·BPM 프로세스별 상한을 **작업 쪽 한 자리**에 남긴다. 둘 이상의 서버
+    BPM 프로세스가 같은 이름을 받으면 **고르지 않고** 422 `receiver_ambiguous`다 (C5의
     `version_ambiguous`와 같은 결 — 부르는 쪽이 `POST /jobs`로 정하면 된다).
     """
     bots = deployments.server_message_starts(store, name=request.name)
@@ -200,13 +200,13 @@ def _to_new_job(
         raise ApiError(
             422,
             "no_receiver",
-            f"메시지 「{request.name}」을 기다리는 실행도, 그 이름으로 시작하는 서버 Bot도 없다",
+            f"메시지 「{request.name}」을 기다리는 실행도, 그 이름으로 시작하는 서버 BPM 프로세스도 없다",
         )
     if len(bots) > 1:
         raise ApiError(
             422,
             "receiver_ambiguous",
-            f"메시지 「{request.name}」으로 시작하는 서버 Bot이 둘 이상이다",
+            f"메시지 「{request.name}」으로 시작하는 서버 BPM 프로세스가 둘 이상이다",
             {"bpm_process_ids": bots},
         )
 

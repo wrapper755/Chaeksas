@@ -18,7 +18,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-#: 실행 파일 옆에 찍는 파일 이름 — Studio·Bot UI가 같다.
+#: 실행 파일 옆에 찍는 파일 이름 — Studio·PC 실행기가 같다.
 STAMP_NAME = "chaeksas-build.json"
 
 #: 판 모양 — PEP 440 공개 판(`1.2.3`·`1.2.3rc1`·`1.2.3.post1`·`1.2.3.dev4`)에 **로컬 판**

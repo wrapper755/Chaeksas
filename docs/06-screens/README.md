@@ -5,7 +5,7 @@
 
 ## 0. 구현 기술과 모양
 
-- 웹 화면(Center 콘솔, 서비스 앱 관리 콘솔)은 **Next.js**, 데스크톱(Studio, Bot UI, Tool UI)은 **PySide6**. 둘 다 같은 디자인 토큰(`design/tokens.json`)과 [스타일 가이드](../07-style-guide.md)를 따른다 ([ADR-0017](../decisions/0017-web-nextjs-design-system.md)).
+- 웹 화면(Center 콘솔, 서비스 앱 관리 콘솔)은 **Next.js**, 데스크톱(Studio, PC 실행기, Tool UI)은 **PySide6**. 둘 다 같은 디자인 토큰(`design/tokens.json`)과 [스타일 가이드](../07-style-guide.md)를 따른다 ([ADR-0017](../decisions/0017-web-nextjs-design-system.md)).
 - 이 폴더의 화면 설계서는 **무엇을 어디에 보이는가**를 정하고, **어떻게 보이는가**(색·글자·구성요소)는 스타일 가이드가 정한다.
 
 ## 1. 문서 구성
@@ -13,8 +13,8 @@
 | 파일 | 앱 | 화면 ID |
 | --- | --- | --- |
 | [studio.md](studio.md) | Studio (Windows 데스크톱, BPM 프로세스 설계) | STU-01 ~ STU-16 |
-| [bot-ui.md](bot-ui.md) | Bot UI (Windows 트레이 기반 GUI, 항상 실행) | BUI-01 ~ BUI-11 (BUI-06~08 폐기 → TOL-03~05) |
-| [tool-ui.md](tool-ui.md) | Tool UI (Windows 데스크톱, 확장이 기여한 도구를 띄움 — Bot UI와 함께 설치, [ADR-0077](../decisions/0077-tool-ui.md)) | TOL-01 ~ TOL-05 |
+| [bot-ui.md](bot-ui.md) | PC 실행기 (Windows 트레이 기반 GUI, 항상 실행) | BUI-01 ~ BUI-11 (BUI-06~08 폐기 → TOL-03~05) |
+| [tool-ui.md](tool-ui.md) | Tool UI (Windows 데스크톱, 확장이 기여한 도구를 띄움 — PC 실행기와 함께 설치, [ADR-0077](../decisions/0077-tool-ui.md)) | TOL-01 ~ TOL-05 |
 | [worker.md](worker.md) | Worker 프로세스 — **화면 없음**. 예전 WRK 화면 ID가 어디로 갔는지만 적음 | (WRK-* 폐기) |
 | [center-console.md](center-console.md) | Center 콘솔 (웹) — 관리자 계정으로 승인·배포까지 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) | CON-00 ~ CON-15 (CON-08~10 폐기) |
 | [service-app-console.md](service-app-console.md) | 서비스 앱 관리 콘솔 (웹, 앱마다) | SVC-00 ~ SVC-03, UIA-01 ~ UIA-03 |
@@ -56,13 +56,13 @@
 | 대상 | 상태 (화면 표기) | 색 토큰 |
 | --- | --- | --- |
 | 실행·노드 | 대기 / 실행 중 / 기다리는 중(서버) / 완료 / 실패 / 재생됨 / 취소됨 | neutral / active / waiting / done / failed / replayed / neutral |
-| Bot (BPM 프로세스 실행) | 대기 / 대기열 N번째 / 실행 중 / 결재 대기 / 확인 대기 / 오류 / 실행 불가(사전 점검) | neutral / waiting / active / waiting / waiting / failed / failed |
-| Bot UI | 연결됨 / 연결 끊김 / 등록 전 / 키 폐기됨 / 키 만료 / 비활성 | done / warning / neutral / failed / failed / neutral |
-| Bot UI 실행 자리 | 비어 있음 / 실행 중 · 대기 N건 / 셀렉터 등록 중 | neutral / active / active |
+| BPM 프로세스 (BPM 프로세스 실행) | 대기 / 대기열 N번째 / 실행 중 / 결재 대기 / 확인 대기 / 오류 / 실행 불가(사전 점검) | neutral / waiting / active / waiting / waiting / failed / failed |
+| PC 실행기 | 연결됨 / 연결 끊김 / 등록 전 / 키 폐기됨 / 키 만료 / 비활성 | done / warning / neutral / failed / failed / neutral |
+| PC 실행기 실행 자리 | 비어 있음 / 실행 중 · 대기 N건 / 셀렉터 등록 중 | neutral / active / active |
 | 실행 위치 | PC / 서버 | 글자로만 표시 (색 없음) |
 | 서버 실행기 | 동작 / 일시 중지 / 정리 중 / 오류 / 오프라인 | done / neutral / active / failed / warning |
 | 확장 | 켜짐 / 꺼짐 / 호환 안 됨 / 필요하지만 없음 | done / neutral / warning / failed |
-| Worker 프로세스 | 실행 중 / 꺼 둠 / 예약됨 / 요청 처리 중 / 셀렉터 등록 중 / 다시 띄우는 중 / 멈춤 / (Studio에서 볼 때) Bot UI가 꺼져 있음 | done / neutral / active / active / active / warning / failed / warning |
+| Worker 프로세스 | 실행 중 / 꺼 둠 / 예약됨 / 요청 처리 중 / 셀렉터 등록 중 / 다시 띄우는 중 / 멈춤 / (Studio에서 볼 때) PC 실행기가 꺼져 있음 | done / neutral / active / active / active / warning / failed / warning |
 | 수행 모드 | 자율 수행 / 결정 수행 | 글자로만 표시 (색 없음) |
 | API 키 (Center) | 사용 중 / 만료 / 폐기됨 | done / warning / neutral |
 | 패키지 | 후보 / 승인됨 / 지원 종료 / 철회 / 로컬만 | waiting / done / warning / failed / neutral |
@@ -79,23 +79,23 @@
 
 새 업무 하나가 만들어져 운영되기까지 거치는 화면이다.
 
-0. **준비 (서버)** — 설치하는 사람이 `.env`에 첫 관리자 아이디·비밀번호를 적고 Center를 띄운다. 관리자가 Center 콘솔에 들어가([CON-00](center-console.md#con-00-공통-틀)) 외부 확장 정의를 등록하고, 서비스 앱·어댑터 일꾼을 띄워(Center 주소만 준다) 로그의 요청 코드와 같은 줄을 [CON-07](center-console.md#con-07-리소스-신규) 「일꾼 승인 대기」에서 승인한다 — 외부 앱의 주소·키는 어댑터 일꾼의 설정에만 넣는다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 서버 Bot을 쓸 거면 서버 실행기에 Center 주소를 주고 띄운 뒤, 로그의 요청 코드와 같은 줄을 [CON-12](center-console.md#con-12-서버-실행-신규-m7) 「승인 대기」에서 승인한다 (컨테이너는 환경변수로 키를 준다 — C12).
-1. **준비 (PC)** — 설치 담당자가 Bot UI 설정에 Center 주소를 넣고([BUI-03](bot-ui.md#bui-03-설정등록)) 화면에 뜬 요청 코드를 관리자에게 알리면, 관리자가 [CON-03](center-console.md#con-03-bot-ui-현황) 「승인 대기」에서 같은 코드를 승인한다 — 키는 Center가 내려 준다 ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). **서비스 앱 키는 없다** — Bot은 바깥 기능을 Center의 외부 작업으로 부르고, 불러도 되는가는 7 「배포」가 정한다 (C15). 셀렉터를 등록할 PC는 CON-03에서 「셀렉터 등록」을 켠다.
+0. **준비 (서버)** — 설치하는 사람이 `.env`에 첫 관리자 아이디·비밀번호를 적고 Center를 띄운다. 관리자가 Center 콘솔에 들어가([CON-00](center-console.md#con-00-공통-틀)) 외부 확장 정의를 등록하고, 서비스 앱·어댑터 일꾼을 띄워(Center 주소만 준다) 로그의 요청 코드와 같은 줄을 [CON-07](center-console.md#con-07-리소스-신규) 「일꾼 승인 대기」에서 승인한다 — 외부 앱의 주소·키는 어댑터 일꾼의 설정에만 넣는다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 서버 BPM 프로세스를 쓸 거면 서버 실행기에 Center 주소를 주고 띄운 뒤, 로그의 요청 코드와 같은 줄을 [CON-12](center-console.md#con-12-서버-실행-신규-m7) 「승인 대기」에서 승인한다 (컨테이너는 환경변수로 키를 준다 — C12).
+1. **준비 (PC)** — 설치 담당자가 PC 실행기 설정에 Center 주소를 넣고([BUI-03](bot-ui.md#bui-03-설정등록)) 화면에 뜬 요청 코드를 관리자에게 알리면, 관리자가 [CON-03](center-console.md#con-03-pc-현황) 「승인 대기」에서 같은 코드를 승인한다 — 키는 Center가 내려 준다 ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). **서비스 앱 키는 없다** — BPM 프로세스는 바깥 기능을 Center의 외부 작업으로 부르고, 불러도 되는가는 7 「배포」가 정한다 (C15). 셀렉터를 등록할 PC는 CON-03에서 「셀렉터 등록」을 켠다.
 2. **UI 셀렉터 등록** (화면 조작이 필요할 때) — 등록 담당자가 Tool UI에서 UI 자동화 확장의 도구로 화면 요소를 등록한다. [TOL-03](tool-ui.md#tol-03-ui-셀렉터-등록-구-bui-06)
 3. **BPM 프로세스 만들기** — 설계자가 Studio에서 새 BPM 프로세스를 만들고 실행 위치를 정한다 — 기본은 서버, 화면 조작·현장 확인이 필요하면 PC ([ADR-0016](../decisions/0016-server-first.md)). [STU-05](studio.md#stu-05-새-bpm-프로세스), [STU-06](studio.md#stu-06-bpm-프로세스-정보)
 4. **그리기** — BPMN을 그리고 태스크마다 속성을 채운다. UI 태스크는 등록된 화면·요소를 고르고, 서비스 앱 태스크는 리소스 탐색기의 작업을 고른다. [STU-01](studio.md#stu-01-메인-창), [STU-03](studio.md#stu-03-리소스-탐색기), [STU-13](studio.md#stu-13-ui-태스크-편집기-신규), [STU-14](studio.md#stu-14-서비스-앱-태스크-편집기-신규)
-5. **시험** — 시험 케이스를 만들고 자율 수행으로 실행한다 (UI 태스크는 같은 PC의 Bot UI가 띄운 Worker 프로세스가 처리). AI 태스크는 학습되어 재생 명세가 생기고, 결정 수행(재생)으로 운영과 같은 방식을 미리 확인한다. [STU-07](studio.md#stu-07-시험-케이스), [STU-08](studio.md#stu-08-실행-대화상자), [STU-09](studio.md#stu-09-실행-표시와-결과)
-6. **올리기** — 패키지로 Center에 올린다 (후보 상태). 패키지에는 키가 없다. [STU-01](studio.md#stu-01-메인-창) 파일 메뉴, [CON-02](center-console.md#con-02-bot-현황)
-7. **승인·배포** — 관리자가 콘솔에서 승인하고([CON-02](center-console.md#con-02-bot-현황)), PC Bot은 Bot UI에, 서버 Bot은 서버 실행기에 배포한다([CON-15](center-console.md#con-15-배포-신규)). 봉투는 Center가 서명한다.
-8. **적용** — PC: Bot UI가 하트비트로 배포를 받아 Bot을 설치하고 사전 점검(확장 포함)을 한다 ([BUI-04](bot-ui.md#bui-04-bot-탭-실행대기열설치된-bot), [CON-03](center-console.md#con-03-bot-ui-현황)). 서버: 서버 실행기가 배포를 받는다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
+5. **시험** — 시험 케이스를 만들고 자율 수행으로 실행한다 (UI 태스크는 같은 PC의 PC 실행기가 띄운 Worker 프로세스가 처리). AI 태스크는 학습되어 재생 명세가 생기고, 결정 수행(재생)으로 운영과 같은 방식을 미리 확인한다. [STU-07](studio.md#stu-07-시험-케이스), [STU-08](studio.md#stu-08-실행-대화상자), [STU-09](studio.md#stu-09-실행-표시와-결과)
+6. **올리기** — 패키지로 Center에 올린다 (후보 상태). 패키지에는 키가 없다. [STU-01](studio.md#stu-01-메인-창) 파일 메뉴, [CON-02](center-console.md#con-02-bpm-프로세스-현황)
+7. **승인·배포** — 관리자가 콘솔에서 승인하고([CON-02](center-console.md#con-02-bpm-프로세스-현황)), PC BPM 프로세스는 PC 실행기에, 서버 BPM 프로세스는 서버 실행기에 배포한다([CON-15](center-console.md#con-15-배포-신규)). 봉투는 Center가 서명한다.
+8. **적용** — PC: PC 실행기가 하트비트로 배포를 받아 BPM 프로세스를 설치하고 사전 점검(확장 포함)을 한다 ([BUI-04](bot-ui.md#bui-04-bpm-프로세스-탭-실행대기열설치된-bpm-프로세스), [CON-03](center-console.md#con-03-pc-현황)). 서버: 서버 실행기가 배포를 받는다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
 9. **작업 지시** — 운영자가 콘솔에서 작업을 만들거나, 외부 시스템(연동용 키)·감시 모드·일정·메시지로 시작된다. [CON-05](center-console.md#con-05-작업-지시)
-10. **실행** — PC: Bot UI가 Bot을 결정 수행으로 실행한다. 한 PC에서 실행 중인 Bot은 하나이고 나머지는 대기열에서 기다린다 ([ADR-0014](../decisions/0014-one-bot-per-pc.md), [BUI-01](bot-ui.md#bui-01-트레이), [BUI-09](bot-ui.md#bui-09-로컬-런타임-탭-worker-프로세스-등)). 서버: 서버 실행기가 여러 건을 동시에 실행한다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
+10. **실행** — PC: PC 실행기가 BPM 프로세스를 결정 수행으로 실행한다. 한 PC에서 실행 중인 BPM 프로세스는 하나이고 나머지는 대기열에서 기다린다 ([ADR-0014](../decisions/0014-one-bot-per-pc.md), [BUI-01](bot-ui.md#bui-01-트레이), [BUI-09](bot-ui.md#bui-09-로컬-런타임-탭-worker-프로세스-등)). 서버: 서버 실행기가 여러 건을 동시에 실행한다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
 11. **결재** — 결재자가 콘솔 결재함 또는 현장 PC 창에서 답한다. [CON-04](center-console.md#con-04-결재함), [CMN-01](#5-공용-창-cmn-01-결재--확인-창)
-12. **확인** — 운영자가 실행 로그·Bot 현황을, 서비스 앱 관리자가 셀렉터 상태·사용 기록을 본다. [CON-01](center-console.md#con-01-실행-로그), [CON-02](center-console.md#con-02-bot-현황), [UIA-02](service-app-console.md#uia-02-셀렉터), [SVC-03](service-app-console.md#svc-03-사용-기록)
+12. **확인** — 운영자가 실행 로그·BPM 프로세스 현황을, 서비스 앱 관리자가 셀렉터 상태·사용 기록을 본다. [CON-01](center-console.md#con-01-실행-로그), [CON-02](center-console.md#con-02-bpm-프로세스-현황), [UIA-02](service-app-console.md#uia-02-셀렉터), [SVC-03](service-app-console.md#svc-03-사용-기록)
 
 ## 5. 공용 창 CMN-01: 결재 / 확인 창
 
-Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packages/qt`). 항상 위에 뜬다.
+Studio 시험 실행과 PC 실행기의 BPM 프로세스 실행에서 같은 창을 쓴다 (`packages/qt`). 항상 위에 뜬다.
 
 ```
 +--------------------------------------------------+
@@ -121,8 +121,8 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 
 - 시간 초과: 창을 닫고 로그에 「결재 요청이 시간 초과로 취소되었습니다.」를 남긴다.
 - 시험 케이스의 「결재 자동 응답」이 있으면 창을 띄우지 않는다.
-- Bot UI는 [T]·[D]·[R]·[F]를 **실행기가 쓴 C6 본문**에서 읽는다 (현장은 `runs/<run_id>.field-requests.jsonl`, 원격은 `.requests.jsonl` — [ADR-0078](../decisions/0078-field-approval-shows-what-to-judge.md)). 본문이 아직 없으면 그림의 폼만으로 띄우고 제목은 「<Bot> — <노드>」다.
-- 결재가 Center로 올라간 경우(원격 결재) Bot UI는 창을 바로 띄우지 않고 트레이 알림 「결재가 Center 결재함으로 올라갔습니다 — 여기서 답하려면 누르세요」를 띄운다. 알림이나 BUI-04 「지금 실행」 줄의 「결재 창 열기」를 누르면 CMN-01이 열린다. 현장에서 먼저 답하면 Center 요청은 회수된다.
+- PC 실행기는 [T]·[D]·[R]·[F]를 **실행기가 쓴 C6 본문**에서 읽는다 (현장은 `runs/<run_id>.field-requests.jsonl`, 원격은 `.requests.jsonl` — [ADR-0078](../decisions/0078-field-approval-shows-what-to-judge.md)). 본문이 아직 없으면 그림의 폼만으로 띄우고 제목은 「<BPM 프로세스> — <노드>」다.
+- 결재가 Center로 올라간 경우(원격 결재) PC 실행기는 창을 바로 띄우지 않고 트레이 알림 「결재가 Center 결재함으로 올라갔습니다 — 여기서 답하려면 누르세요」를 띄운다. 알림이나 BUI-04 「지금 실행」 줄의 「결재 창 열기」를 누르면 CMN-01이 열린다. 현장에서 먼저 답하면 Center 요청은 회수된다.
 
 ## 6. 화면 목록 총괄
 
@@ -144,17 +144,17 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 | STU-14 | 서비스 앱 태스크 편집기 | Studio | 설계자 | M5 | 신규 |
 | STU-15 | 확장 | Studio | 설계자 | M4 | 신규 (ADR-0018) |
 | STU-16 | Center에 연결 | Studio | 설계자 | — | 신규 (ADR-0093) |
-| BUI-01 | 트레이 | Bot UI | 현장 PC 사용자 | M2 | 프로토타입 Bot 트레이 + Worker 트레이 |
-| BUI-02 | 메인 창 | Bot UI | 현장 PC 사용자 | M2 | 프로토타입 로그 창 확장 |
-| BUI-03 | 설정·등록 | Bot UI | 설치 담당자 | M2 | 신규 |
-| BUI-04 | Bot 탭 (실행·대기열·설치된 Bot) | Bot UI | 현장 PC 사용자 | M4 | 신규 |
-| BUI-05 | 알림 | Bot UI | 현장 PC 사용자 | M3 | 프로토타입 |
+| BUI-01 | 트레이 | PC 실행기 | 현장 PC 사용자 | M2 | 프로토타입 Bot 트레이 + Worker 트레이 |
+| BUI-02 | 메인 창 | PC 실행기 | 현장 PC 사용자 | M2 | 프로토타입 로그 창 확장 |
+| BUI-03 | 설정·등록 | PC 실행기 | 설치 담당자 | M2 | 신규 |
+| BUI-04 | BPM 프로세스 탭 (실행·대기열·설치된 BPM 프로세스) | PC 실행기 | 현장 PC 사용자 | M4 | 신규 |
+| BUI-05 | 알림 | PC 실행기 | 현장 PC 사용자 | M3 | 프로토타입 |
 | BUI-06 | (폐기 → TOL-03) | — | — | — | — |
 | BUI-07 | (폐기 → TOL-04) | — | — | — | — |
 | BUI-08 | (폐기 → TOL-05) | — | — | — | — |
-| BUI-09 | 로컬 런타임 탭 (Worker 프로세스 등) | Bot UI | 현장 PC 사용자 | M4 | 신규 |
-| BUI-10 | 서비스 앱 키 — **없어졌다** (ADR-0102, 서비스 앱 키가 없다) | Bot UI | — | M5 | 폐기 |
-| BUI-11 | 확장 | Bot UI | 설치 담당자 | M4 | 신규 (ADR-0018) |
+| BUI-09 | 로컬 런타임 탭 (Worker 프로세스 등) | PC 실행기 | 현장 PC 사용자 | M4 | 신규 |
+| BUI-10 | 서비스 앱 키 — **없어졌다** (ADR-0102, 서비스 앱 키가 없다) | PC 실행기 | — | M5 | 폐기 |
+| BUI-11 | 확장 | PC 실행기 | 설치 담당자 | M4 | 신규 (ADR-0018) |
 | TOL-01 | Tool UI 창 | Tool UI | UI 셀렉터 등록 담당자 | M8 | 신규 (ADR-0077) |
 | TOL-02 | Tool UI 설정 | Tool UI | UI 셀렉터 등록 담당자 | M8 | 신규 (ADR-0077) |
 | TOL-03 | UI 셀렉터 등록 (구 BUI-06) | Tool UI | UI 셀렉터 등록 담당자 | M4 | 프로토타입 Worker 화면 등록 |
@@ -162,8 +162,8 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 | TOL-05 | 셀렉터 시험 (구 BUI-08) | Tool UI | UI 셀렉터 등록 담당자 | M4 | 프로토타입 |
 | CON-00 | 공통 틀 | Center 콘솔 | 모두 | M2 | 프로토타입 |
 | CON-01 | 실행 로그 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
-| CON-02 | Bot 현황 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
-| CON-03 | Bot UI 현황 | Center 콘솔 | 운영자 | M2 | 프로토타입 확장 |
+| CON-02 | BPM 프로세스 현황 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
+| CON-03 | PC 실행기 현황 | Center 콘솔 | 운영자 | M2 | 프로토타입 확장 |
 | CON-04 | 결재함 | Center 콘솔 | 결재자 | M5 | 프로토타입 |
 | CON-05 | 작업 지시 | Center 콘솔 | 운영자 | M5 | 프로토타입 확장 (만들기 추가) |
 | CON-06 | 공통 패키지 | Center 콘솔 | 운영자 | M5 | 프로토타입 |
@@ -180,7 +180,7 @@ Studio 시험 실행과 Bot UI의 Bot 실행에서 같은 창을 쓴다 (`packag
 | UIA-01 | 개요 | UI 자동화 앱 관리 콘솔 | 서비스 앱 관리자 | M4 | 프로토타입 (UI 자동화 서버 화면) |
 | UIA-02 | 셀렉터 | UI 자동화 앱 관리 콘솔 | UI 셀렉터 등록 담당자 | M4 | 프로토타입 |
 | UIA-03 | 모니터링 | UI 자동화 앱 관리 콘솔 | 서비스 앱 관리자 | M4 | 프로토타입 |
-| CMN-01 | 결재 / 확인 창 | Studio, Bot UI | 결재자, 현장 PC 사용자 | M3 | 프로토타입 |
+| CMN-01 | 결재 / 확인 창 | Studio, PC 실행기 | 결재자, 현장 PC 사용자 | M3 | 프로토타입 |
 
 폐기된 ID: BOT-01~05 → BUI-01~05, WRK-01~05 → BUI-02·06·07·08·01/09 ([worker.md](worker.md)), CON-08~10 → UIA-01~03, ADM-01~06 → CON-02·06(승인)·CON-14(계정)·CON-15(배포)·CON-07(외부 확장) — Admin 명령·창은 없어졌다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)).
 

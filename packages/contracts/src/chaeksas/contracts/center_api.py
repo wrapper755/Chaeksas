@@ -85,7 +85,7 @@ TARGET_TYPE_FOR_RUN_LOCATION = {"pc": "bot_ui", "server": "server_runner"}
 #: `requested_by`의 예약값 앞머리 — **PC 위임이 만든 작업**이다 (`server_bot:<run_id>`,
 #: [ADR-0062](../decisions/0062-pc-delegation.md) §6).
 #:
-#: **자리는 여기 하나다** — 적는 쪽(Center의 위임 API)과 읽는 쪽(Bot UI가 「이 작업이 위임인가」를
+#: **자리는 여기 하나다** — 적는 쪽(Center의 위임 API)과 읽는 쪽(PC 실행기가 「이 작업이 위임인가」를
 #: 가른다)이 같은 글을 봐야 한다. 두 자리에 적어 두면 한쪽을 고치는 날 **PC가 위임을 평범한
 #: 작업으로 돌려** 결과를 아무도 못 받는다.
 DELEGATION_REQUESTER_PREFIX = "server_bot:"
@@ -115,7 +115,7 @@ def job_source(requested_by: str | None) -> str:
     """작업을 받아 띄운 실행의 출처 (C3 `run_started.source`·C4 `queue[].source`).
 
     위임이면 `delegation`, 일정이면 `schedule`, 그 밖은 `job`이다 — 말해 주는 것은 `requested_by`
-    하나다. Bot UI와 서버 실행기가 이 함수를 같이 쓴다.
+    하나다. PC 실행기와 서버 실행기가 이 함수를 같이 쓴다.
     """
     found = requested_by or ""
     if found.startswith(DELEGATION_REQUESTER_PREFIX):
@@ -139,7 +139,7 @@ def on_behalf_violation(name: str) -> Violation | None:
 
 
 def delegated_run(requested_by: str | None) -> str | None:
-    """`requested_by`가 PC 위임이면 **맡긴 서버 실행**, 아니면 `None` (Bot UI가 읽는다)."""
+    """`requested_by`가 PC 위임이면 **맡긴 서버 실행**, 아니면 `None` (PC 실행기가 읽는다)."""
     found = requested_by or ""
     if not found.startswith(DELEGATION_REQUESTER_PREFIX):
         return None
@@ -244,7 +244,7 @@ class DependentInfo(ContractModel):
 
 
 class BotUiKey(ContractModel):
-    """그 Bot UI가 쓰는 Center API 키 (C7). **원문·해시는 주지 않는다.**"""
+    """그 PC 실행기가 쓰는 Center API 키 (C7). **원문·해시는 주지 않는다.**"""
 
     prefix: str
     expires_at: Timestamp | None = None
@@ -254,7 +254,7 @@ class BotUiKey(ContractModel):
 class BotUiInfo(ContractModel):
     """`GET /bot-uis`의 한 줄 (CON-03).
 
-    상태 값은 **Bot UI가 하트비트로 보고한 그대로**다 (C4). Center가 더하는 것은 온라인
+    상태 값은 **PC 실행기가 하트비트로 보고한 그대로**다 (C4). Center가 더하는 것은 온라인
     판정(`online`)과 키 정보(`key`)뿐이다.
     """
 
@@ -339,7 +339,7 @@ class RevokeRequest(ContractModel):
 
 
 class ExtensionRevokeRequest(ContractModel):
-    """`DELETE /resources/extensions` — 관리자만 (C7·C13). 그 판을 쓰는 Bot은 실행 불가가 된다."""
+    """`DELETE /resources/extensions` — 관리자만 (C7·C13). 그 판을 쓰는 BPM 프로세스는 실행 불가가 된다."""
 
     id: str
     version: str
@@ -491,8 +491,8 @@ class JobCreateRequest(ContractModel):
     expires_at: Timestamp | None = None
     note: str | None = Field(default=None, max_length=MAX_NOTE_CHARS)
     idempotency_key: str | None = None
-    #: **어느 가상 직원의 일인가** (가상 직원 id, ADR-0099). 그 가상 직원의 `intake`가 이 Bot이어야
-    #: 한다. 비우면 그 Bot의 가상 직원이 하나뿐일 때만 그것이다. 값(이름·감독자)은 Center가 채운다.
+    #: **어느 가상 직원의 일인가** (가상 직원 id, ADR-0099). 그 가상 직원의 `intake`가 이 BPM 프로세스이어야
+    #: 한다. 비우면 그 BPM 프로세스의 가상 직원이 하나뿐일 때만 그것이다. 값(이름·감독자)은 Center가 채운다.
     virtual_worker: str | None = None
 
 
@@ -522,7 +522,8 @@ class JobInfo(JobCreateRequest):
 class ScheduleInfo(ContractModel):
     """`GET /schedules`의 한 줄 — 타이머로 시작하는 배포 하나의 일정 (C5 §일정, CON-02 「일정」, ADR-0110).
 
-    서버 Bot은 (Bot, 버전)마다 한 줄이고 `target_id`가 없다 (실행기는 Center가 고른다). PC Bot은 배포된
+    서버 BPM 프로세스는 (BPM 프로세스, 버전)마다 한 줄이고 `target_id`가 없다 (실행기는 Center가 고른다).
+    PC BPM 프로세스는 배포된
     PC마다 한 줄이다. **센 것은 Center가 쓸 때와 같은 함수다** (`contracts.schedule`) — 화면이 따로 세면
     「다음 차례」가 일정과 어긋난다.
     """
@@ -557,20 +558,20 @@ VirtualWorkerId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$")]
 class VirtualWorkerRequest(ContractModel):
     """`POST /virtual-workers`·`PUT /virtual-workers/{id}` — 사람이 아닌 업무 주체 (ADR-0085).
 
-    **기동 허용 목록은 없다** — 접수 Bot의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
+    **기동 허용 목록은 없다** — 접수 BPM 프로세스의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
     """
 
     id: VirtualWorkerId
     name: str = Field(min_length=1)
     #: 감독자 이름들 — C6 담당자와 같은 정규화(`approvals.normalize_assignees`)를 거쳐 저장한다.
     supervisors: list[str] = Field(default_factory=list)
-    #: 접수 Bot의 **패키지 id** (C1 `id`). 판은 배포가 정한다.
+    #: 접수 BPM 프로세스의 **패키지 id** (C1 `id`). 판은 배포가 정한다.
     intake: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,99}$")
     state: str = "active"  # 열린 문자열 (KNOWN_VIRTUAL_WORKER_STATES)
 
 
 class VirtualWorkerBatch(ContractModel):
-    """일괄 하나 = 접수 Bot 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다."""
+    """일괄 하나 = 접수 BPM 프로세스 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다."""
 
     run_id: str
     status: str | None = None  # C3 `RunInfo.status`와 같은 값

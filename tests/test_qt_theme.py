@@ -293,14 +293,14 @@ def test_fonts_ship_with_the_license() -> None:
 
 
 def test_status_color_matches_the_status_map() -> None:
-    assert status_color("Bot", "실행 중") == tokens.LIGHT["status.active.solid"]
-    assert status_color("Bot", "실행 중", part="bg") == tokens.LIGHT["status.active.bg"]
-    assert status_color("Bot", "실행 중", theme=THEME_DARK) == tokens.DARK["status.active.solid"]
+    assert status_color("BPM 프로세스", "실행 중") == tokens.LIGHT["status.active.solid"]
+    assert status_color("BPM 프로세스", "실행 중", part="bg") == tokens.LIGHT["status.active.bg"]
+    assert status_color("BPM 프로세스", "실행 중", theme=THEME_DARK) == tokens.DARK["status.active.solid"]
 
 
 def test_status_color_of_an_unknown_label_is_none() -> None:
     """상태 값은 열린 문자열이다 (계약 원칙 10) — 모르는 값 하나로 화면이 깨지지 않는다."""
-    assert status_color("Bot", "처음 보는 상태") is None
+    assert status_color("BPM 프로세스", "처음 보는 상태") is None
     assert status_color("없는 묶음", "실행 중") is None
 
 

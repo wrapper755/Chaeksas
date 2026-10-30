@@ -275,7 +275,7 @@ def test_registering_without_a_key_is_not_pretended(made: Any) -> None:
 
 
 def test_closing_releases_the_ui_session(made: Any) -> None:
-    """세션은 한 번에 하나다 (ADR-0014) — 창을 닫으면 Bot이 쓸 수 있어야 한다."""
+    """세션은 한 번에 하나다 (ADR-0014) — 창을 닫으면 BPM 프로세스가 쓸 수 있어야 한다."""
     widget, worker = made
     opened(widget)
     widget.release()
@@ -294,7 +294,7 @@ def test_reset_keeps_the_browser(made: Any) -> None:
 
 
 def test_a_busy_worker_is_explained(app: Any) -> None:
-    """Bot이 쓰는 중이면 창은 열려 있고 **왜 안 되는지** 안내 줄이 말한다."""
+    """BPM 프로세스가 쓰는 중이면 창은 열려 있고 **왜 안 되는지** 안내 줄이 말한다."""
     widget = RegistrationWidget(FakeWorker(refuse=RuntimeError("worker_busy: 다른 쪽이 쥐고 있습니다")))
     widget.start_url.setText("https://erp.example/")
     widget.open_browser()

@@ -1,7 +1,7 @@
 [project]
 name = "chaeksas-s5host"
 version = "0.1.0"
-description = "S5 시험용 호스트 — Bot UI·Studio 흉내. 확장을 엔트리 포인트로만 찾는다 (특정 확장을 import하지 않는다)"
+description = "S5 시험용 호스트 — PC 실행기·Studio 흉내. 확장을 엔트리 포인트로만 찾는다 (특정 확장을 import하지 않는다)"
 requires-python = ">=3.12,<3.13"
 dependencies = ["pyside6>=6.8"]
 

@@ -2,7 +2,7 @@
 
 | 보는 것 | 왜 |
 | --- | --- |
-| 접수 Bot에 **결재 없는 일괄 기동**(C14 B16)이 있으면 묶이지 않는다 | 무인 승인은 없다 (ADR-0079) |
+| 접수 BPM 프로세스에 **결재 없는 일괄 기동**(C14 B16)이 있으면 묶이지 않는다 | 무인 승인은 없다 (ADR-0079) |
 | 묶인 뒤 **새 판**도 그것이 있으면 배포되지 않는다 | 묶을 때만 보면 다음 판이 빠져나간다 |
 | 대리 답용 키는 **감독하는 것만** 읽는다 | 키가 새도 남의 가상 직원이 보이지 않는다 (ADR-0081) |
 | 일괄·자식은 **읽을 때** 잇는다 | 저장하면 실행이 오갈 때마다 낡는다 |
@@ -32,7 +32,7 @@ READ = {"Authorization": "Bearer t-read"}
 AT = "2026-10-20T09:00:00+09:00"
 INTAKE = "fx24-batch-intake"
 ROOT = Path(__file__).resolve().parent.parent
-#: 결재를 지나 반복 위임하는 접수 Bot — 업무 예제 그대로다.
+#: 결재를 지나 반복 위임하는 접수 BPM 프로세스 — 업무 예제 그대로다.
 GATED = (ROOT / "docs/08-business-examples/bpmn/fx24_batch_intake.bpmn").read_text(encoding="utf-8")
 #: **결재 없이** 목록으로 바로 반복 위임한다 — B16이 걸린다.
 UNGATED = """<?xml version="1.0" encoding="UTF-8"?>
@@ -182,7 +182,7 @@ def test_a_relay_key_reads_only_what_its_person_supervises(center: TestClient) -
 
 
 def test_batches_and_children_are_joined_when_read(center: TestClient, store: Store) -> None:
-    """일괄 = 접수 Bot 실행, 자식 = `parent_run_id`가 그 실행인 것 — 읽을 때 센다."""
+    """일괄 = 접수 BPM 프로세스 실행, 자식 = `parent_run_id`가 그 실행인 것 — 읽을 때 센다."""
     approved(center, bot=INTAKE, bpmn=GATED)
     register(center)
     batch, other = "run_20261020_091500_aaaaaa", "run_20261020_091600_bbbbbb"
@@ -269,7 +269,7 @@ def test_other_keys_still_cannot_read_virtual_workers(center: TestClient) -> Non
 
 
 def test_one_intake_bot_is_shared_by_many_virtual_workers(center: TestClient, store: Store) -> None:
-    """**접수 Bot 하나를 여러 가상 직원이 쓴다** (ADR-0099) — 어느 쪽 일인지는 작업이 id로 말한다."""
+    """**접수 BPM 프로세스 하나를 여러 가상 직원이 쓴다** (ADR-0099) — 어느 쪽 일인지는 작업이 id로 말한다."""
     from chaeksas.center.api.virtual_workers import pick  # noqa: PLC0415
     from chaeksas.center.errors import ApiError  # noqa: PLC0415
 

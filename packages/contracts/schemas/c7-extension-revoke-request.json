@@ -1,7 +1,7 @@
 {
   "$id": "urn:chaeksas:contracts:c7-extension-revoke-request",
   "additionalProperties": true,
-  "description": "`DELETE /resources/extensions` — 관리자만 (C7·C13). 그 판을 쓰는 Bot은 실행 불가가 된다.",
+  "description": "`DELETE /resources/extensions` — 관리자만 (C7·C13). 그 판을 쓰는 BPM 프로세스는 실행 불가가 된다.",
   "properties": {
     "id": {
       "title": "Id",

@@ -6,7 +6,8 @@
 
 규칙은 ADR-0110 그대로다.
 
-- 서버 Bot은 **(Bot, 버전)마다 차례 하나에 작업 하나**이고 실행기는 Center가 고른다. PC Bot은 배포된 PC마다다.
+- 서버 BPM 프로세스는 **(BPM 프로세스, 버전)마다 차례 하나에 작업 하나**이고 실행기는 Center가 고른다.
+  PC BPM 프로세스는 배포된 PC마다다.
 - 놓친 차례는 **가장 최근 한 번만** 쏘고 나머지는 `missed`로 센다. 배포 전의 차례는 차례가 아니다.
 - 작업의 `expires_at`은 **다음 차례**다.
 - 차례는 `timer_fires`의 기본 키로 **먼저 잡고** 작업을 만든다. 작업의 멱등 키도 일정·차례로 짓는다 —
@@ -45,13 +46,13 @@ FINISH_WITHIN = timedelta(days=1)
 #: 시간대를 받지 못한 자리(하트비트를 직접 부르는 시험)의 시간대 — 설정의 기본값과 같다.
 DEFAULT_ZONE: tzinfo = ZoneInfo(DEFAULT_TIMEZONE)
 
-#: 서버 Bot의 일정은 실행기마다가 아니라 **하나**다 (Center가 실행기를 고른다).
+#: 서버 BPM 프로세스의 일정은 실행기마다가 아니라 **하나**다 (Center가 실행기를 고른다).
 ANY_RUNNER = "*"
 
 
 @dataclass(frozen=True)
 class Plan:
-    """일정 하나 — (대상, Bot, 버전, 식). `anchor`는 그 대상에 지금 살아 있는 배포 중 **가장 이른 때**다."""
+    """일정 하나 — (대상, BPM 프로세스, 버전, 식). `anchor`는 그 대상에 지금 살아 있는 배포 중 **가장 이른 때**다."""
 
     key: str
     bpm_process_id: str

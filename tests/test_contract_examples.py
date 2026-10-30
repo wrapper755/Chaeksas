@@ -39,8 +39,8 @@ DOCS = Path(__file__).resolve().parent.parent / "docs" / "03-contracts"
 
 # (문서, 예시 번호, 모델) — 번호는 문서에 나오는 순서. 예시를 더하면 여기도 더한다.
 EXAMPLES: list[tuple[str, int, Any]] = [
-    ("C1-package-manifest", 0, Manifest),  # 서버 Bot
-    ("C1-package-manifest", 1, Manifest),  # PC Bot
+    ("C1-package-manifest", 0, Manifest),  # 서버 BPM 프로세스
+    ("C1-package-manifest", 1, Manifest),  # PC BPM 프로세스
     ("C2-signing-envelope", 0, Envelope),  # 배포 봉투
     ("C3-run-events", 0, TypeAdapter(list[RunEvent])),  # 이벤트 배치
     ("C3-run-events", 1, EventBatchResponse),  # 응답

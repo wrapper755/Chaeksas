@@ -28,7 +28,7 @@ from chaeksas.contracts.resources import ServiceAppResource
 from chaeksas.contracts.service_app import MODE_DETERMINISTIC
 
 #: 구분 — 화면에 그대로 보인다 (STU-14 「서비스 앱」 콤보).
-#: C1 패키지 갈래 — **Bot**이다 (위임 대상은 따로 배포된 PC Bot이다, ADR-0062).
+#: C1 패키지 갈래 — **BPM 프로세스**이다 (위임 대상은 따로 배포된 PC BPM 프로세스이다, ADR-0062).
 KIND_BPM_PROCESS = "bpm_process"
 
 KIND_C11 = "서비스 앱"
@@ -63,7 +63,7 @@ class Operation:
 
     @property
     def deterministic_ok(self) -> bool:
-        """Bot(결정 수행)에서 부를 수 있나. 아니면 STU-14가 경고한다."""
+        """BPM 프로세스(결정 수행)에서 부를 수 있나. 아니면 STU-14가 경고한다."""
         return MODE_DETERMINISTIC in self.modes
 
     @property
@@ -122,16 +122,16 @@ class CallTarget:
     """Call Activity가 부를 것 하나 (STU-04 「호출」).
 
     셋 다 같은 모양이다 — 이 패키지의 정의·설치된 공유 정의(`id` = BPMN process id)와
-    위임으로 부르는 Bot(`id` = 패키지 id, C14 `delegate.bpm_process_id`).
+    위임으로 부르는 BPM 프로세스(`id` = 패키지 id, C14 `delegate.bpm_process_id`).
     """
 
     id: str
     name: str = ""
     #: 어디서 왔나 — 화면에 그대로 보인다 (「이 패키지」·「공유 (`<id>@<판>`)」).
     where: str = ""
-    #: Bot의 실행 위치 (C1). **판마다 다르면 `None`** — 모른다.
+    #: BPM 프로세스의 실행 위치 (C1). **판마다 다르면 `None`** — 모른다.
     run_location: str | None = None
-    #: Bot의 진입 process id (C1) — 위임 호출의 `calledElement`에 적는다 (C14 — 읽는 사람에게 뜻이 있다).
+    #: BPM 프로세스의 진입 process id (C1) — 위임 호출의 `calledElement`에 적는다 (C14 — 읽는 사람에게 뜻이 있다).
     process_id: str | None = None
     inputs: tuple[CallInput, ...] = ()
     outputs: tuple[str, ...] = ()
@@ -163,7 +163,7 @@ RUN_LOCATION_LABEL = {"server": "서버", "pc": "PC"}
 
 
 def delegation_targets(packages: Iterable[PackageInfo]) -> dict[str, CallTarget]:
-    """Bot 패키지 목록 → 위임 대상 (C1 매니페스트, ADR-0062).
+    """BPM 프로세스 패키지 목록 → 위임 대상 (C1 매니페스트, ADR-0062).
 
     **판이 여럿이면 합친다** (`declared_outputs`와 같은 결 — 그림이 판을 비우면 「배포된 판」이고
     어느 판일지 여기서는 모른다). 출력은 어느 판이든 선언한 것, 필수 입력은 **어느 판이든 필수**인
@@ -213,12 +213,12 @@ class Catalog:
     apps: tuple[App, ...] = ()
     #: 받지 못한 것들 (화면이 그대로 보인다).
     problems: tuple[str, ...] = ()
-    #: **PC 위임으로 부를 수 있는 Bot**의 `bpm_process_id` → 그 패키지가 선언한 `outputs`
-    #: (C1 → C14 B14, ADR-0062). 실행 전 검사가 「그 Bot이 돌려주지 않는 값을 받는다」를
+    #: **PC 위임으로 부를 수 있는 BPM 프로세스**의 `bpm_process_id` → 그 패키지가 선언한 `outputs`
+    #: (C1 → C14 B14, ADR-0062). 실행 전 검사가 「그 BPM 프로세스가 돌려주지 않는 값을 받는다」를
     #: 그림에서 보려면 **남의 패키지 매니페스트**가 필요하고, 그것을 아는 것은 Center뿐이다.
     #: **못 받으면 비어 있고**, 그러면 B14가 그 대조를 건너뛴다 (모르는 것으로 막지 않는다).
     bot_outputs: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
-    #: **위임으로 부를 수 있는 Bot** — `bpm_process_id` → 고를 거리 (STU-04 「호출」, ADR-0062).
+    #: **위임으로 부를 수 있는 BPM 프로세스** — `bpm_process_id` → 고를 거리 (STU-04 「호출」, ADR-0062).
     #: 같은 C5 목록의 매니페스트에서 짓는다. **못 받으면 비어 있고** 편집기는 id를 직접 받는다.
     bots: Mapping[str, CallTarget] = field(default_factory=dict)
 
@@ -400,14 +400,14 @@ def from_center(reader: Any) -> Catalog:
     bot_outputs: dict[str, tuple[str, ...]] = {}
     bots: dict[str, CallTarget] = {}
     try:
-        # **PC 위임이 받을 값을 그림 검사에서 보려면** 그 Bot의 매니페스트가 필요하다
+        # **PC 위임이 받을 값을 그림 검사에서 보려면** 그 BPM 프로세스의 매니페스트가 필요하다
         # (C1 `outputs` → C14 B14, ADR-0062). 리소스 목록(C7)에는 그것이 없어 C5를 읽는다.
         # 같은 목록이 STU-04 「호출」의 고를 거리도 준다.
         packages = list(reader.packages(KIND_BPM_PROCESS))
         bot_outputs = declared_outputs(packages)
         bots = delegation_targets(packages)
     except CenterUnreachable as e:
-        problems.append(f"Bot 패키지 목록을 받지 못했습니다 — {e}")
+        problems.append(f"BPM 프로세스 패키지 목록을 받지 못했습니다 — {e}")
     try:
         for one in reader.extensions():
             if one.definition is None:

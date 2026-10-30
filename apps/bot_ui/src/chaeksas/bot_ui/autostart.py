@@ -26,16 +26,16 @@ from xml.sax.saxutils import escape
 log = logging.getLogger(__name__)
 
 #: 작업 스케줄러·`.desktop`에서 쓰는 이름. 바꾸면 **옛 등록이 남는다.**
-TASK_NAME = "Chaeksas Bot UI"
+TASK_NAME = "Chaeksas PC 실행기"
 DESKTOP_FILE = "chaeksas-bot-ui.desktop"
 
 
 def launch_command() -> list[str]:
-    """Bot UI를 띄우는 명령. 설치 파일(PyInstaller)로 묶였으면 그 실행 파일 하나다 (ADR-0024)."""
+    """PC 실행기를 띄우는 명령. 설치 파일(PyInstaller)로 묶였으면 그 실행 파일 하나다 (ADR-0024)."""
     if getattr(sys, "frozen", False):  # pragma: no cover - 묶인 뒤에만
         return [sys.executable]
     if sys.platform == "win32":
-        # `python.exe`로 등록하면 로그온 때 콘솔 창이 같이 뜨고, 그 창을 닫으면 Bot UI도 꺼진다 (이슈 #3).
+        # `python.exe`로 등록하면 로그온 때 콘솔 창이 같이 뜨고, 그 창을 닫으면 PC 실행기도 꺼진다 (이슈 #3).
         # 같은 폴더의 `pythonw.exe`(콘솔 없는 판)가 있으면 그것을 쓴다.
         windowless = Path(sys.executable).with_name("pythonw.exe")
         if windowless.exists():

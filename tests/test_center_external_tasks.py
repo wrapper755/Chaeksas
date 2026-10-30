@@ -5,7 +5,7 @@
 | 일꾼은 **요청 코드 승인**으로 들고, 토큰은 **봉해서** 받는다 | 사람이 토큰을 옮기지 않는다 (ADR-0092) |
 | 토픽은 **승인할 때** 정해진다 — 요청한 것 안에서만 줄인다 | 일꾼이 제 손으로 남의 토픽을 열지 못한다 |
 | 같은 멱등 칸은 **같은 일감**이다 | 되살린 실행이 다시 올린다 (원칙 9) |
-| **그 Bot이 그 토픽을 요구할 때만** 올린다 | 「불러도 되나」가 배포 한 자리다 |
+| **그 BPM 프로세스가 그 토픽을 요구할 때만** 올린다 | 「불러도 되나」가 배포 한 자리다 |
 | 자율 수행은 **Studio의 시험 실행만** | 운영에서 LLM이 몰래 끼지 않는다 |
 | 잠금이 지나면 **다시 나간다**, 먼저 끝낸 쪽이 이긴다 | 최소 한 번 실행 |
 | 기한이 지나면 `no_consumer`·`timeout`으로 **실패한다** | 조용히 쌓이지 않는다 |
@@ -98,7 +98,7 @@ def new_key(center: TestClient, *, name: str, kind: str) -> str:
 
 
 def pc(center: TestClient, *, machine: str = "7" * 64) -> tuple[str, str]:
-    """등록된 Bot UI — `(bot_ui_id, 키)`."""
+    """등록된 PC 실행기 — `(bot_ui_id, 키)`."""
     key = new_key(center, name="현장 1", kind="bot_ui")
     made = center.post(
         "/api/v1/bot-ui/register",
@@ -221,7 +221,7 @@ def fetch(center: TestClient, token: str, **over: Any) -> dict[str, Any]:
 
 @pytest.fixture
 def field(center: TestClient) -> str:
-    """그 토픽을 요구하는 Bot이 배포된 PC의 키."""
+    """그 토픽을 요구하는 BPM 프로세스가 배포된 PC의 키."""
     bot_ui_id, key = pc(center)
     deployed(center, bot_ui_id)
     return key

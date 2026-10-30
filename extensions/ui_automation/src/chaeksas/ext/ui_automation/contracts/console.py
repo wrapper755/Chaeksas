@@ -192,7 +192,7 @@ class SessionRow(SchemaVersioned):
     caller: str = ""
     #: 수행 모드 (C11 `mode`). **받는 쪽은 바꾸지 않는다** (원칙 7).
     mode: str = ""
-    #: 어느 Bot이었나 (C11 `caller.bpm_process_id`).
+    #: 어느 BPM 프로세스이었나 (C11 `caller.bpm_process_id`).
     bpm_process_id: str | None = None
     #: 어느 PC였나 (C11 `caller.host`).
     host: str | None = None

@@ -1,19 +1,19 @@
 """가상 직원 — 사람이 아닌 업무 주체 (C5 §가상 직원, ADR-0085).
 
-**저장하는 것은 등록뿐이다.** 일괄(접수 Bot 실행)·자식 실행·작업은 **읽을 때** 이어 붙인다
+**저장하는 것은 등록뿐이다.** 일괄(접수 BPM 프로세스 실행)·자식 실행·작업은 **읽을 때** 이어 붙인다
 (`dependents`·`bot_ui_of`와 같은 결) — 저장하면 실행이 오갈 때마다 낡는다.
 
 셋이 뼈대다.
 
-1. **관문** — 접수 Bot에 「결재 없는 일괄 기동」(C14 B16)이 없어야 묶이고, 묶인 뒤 새 판도
+1. **관문** — 접수 BPM 프로세스에 「결재 없는 일괄 기동」(C14 B16)이 없어야 묶이고, 묶인 뒤 새 판도
    그것이 없어야 배포된다. 그림은 **Center가 저장된 zip에서 읽는다** — 내보낸 쪽을 믿지 않는다.
-2. **기동 허용 목록은 없다** — 접수 Bot의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
+2. **기동 허용 목록은 없다** — 접수 BPM 프로세스의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
 3. **대리 답용 키는 감독하는 것만** 읽는다 — `X-CHK-On-Behalf-Of`의 사람이 감독자일 때 (ADR-0081).
    **연동용 키는 전부** 읽는다 — 회사 시스템이 가상 직원 카드를 그린다 (ADR-0098).
 
 그리고 **신원** — 작업은 어느 가상 직원의 일인지 id만 들고(`pick`, ADR-0099) 서버 실행기로
 내려갈 때 그 가상 직원의 값을 붙인다(`identity_of`, C12 `JobDispatch.virtual_worker`). 값은
-저장하지 않고 읽을 때 붙인다. **접수 Bot 하나를 여러 가상 직원이 쓸 수 있다.**
+저장하지 않고 읽을 때 붙인다. **접수 BPM 프로세스 하나를 여러 가상 직원이 쓸 수 있다.**
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def entry_gate(package_dir: Path, file_name: str) -> list[str]:
 
 
 def _check_intake(store: Store, package_dir: Path, intake: str) -> None:
-    """묶어도 되는가 — 승인된 판이 있고·서버 Bot이고·**승인된 판마다** B16이 없다 (ADR-0085 §2)."""
+    """묶어도 되는가 — 승인된 판이 있고·서버 BPM 프로세스이고·**승인된 판마다** B16이 없다 (ADR-0085 §2)."""
     rows = store.rows(
         "SELECT version, run_location, file_name FROM packages WHERE id = ? AND status = ?",
         (intake, APPROVED),
@@ -72,7 +72,9 @@ def _check_intake(store: Store, package_dir: Path, intake: str) -> None:
     if not rows:
         raise ApiError(422, "intake_unknown", f"{intake}의 승인된 판이 없다")
     if any(row["run_location"] != "server" for row in rows):
-        raise ApiError(422, "intake_not_server", f"{intake}는 서버 Bot이 아니다 — 접수 Bot은 서버에서 돈다")
+        raise ApiError(
+            422, "intake_not_server", f"{intake}는 서버 BPM 프로세스가 아니다 — 접수 BPM 프로세스는 서버에서 돈다"
+        )
     found = {str(row["version"]): entry_gate(package_dir, str(row["file_name"])) for row in rows}
     bad = {version: messages for version, messages in found.items() if messages}
     if bad:
@@ -85,7 +87,7 @@ def _check_intake(store: Store, package_dir: Path, intake: str) -> None:
 
 
 def deploy_gate(store: Store, package_dir: Path, *, bot: str, version: str) -> None:
-    """배포하려는 판이 **활성 가상 직원의 접수 Bot**이면 B16이 없어야 한다 (409, ADR-0085 §2)."""
+    """배포하려는 판이 **활성 가상 직원의 접수 BPM 프로세스**이면 B16이 없어야 한다 (409, ADR-0085 §2)."""
     if store.row("SELECT id FROM virtual_workers WHERE intake = ? AND state = 'active'", (bot,)) is None:
         return
     row = store.row("SELECT file_name FROM packages WHERE id = ? AND version = ?", (bot, version))
@@ -96,7 +98,7 @@ def deploy_gate(store: Store, package_dir: Path, *, bot: str, version: str) -> N
         raise ApiError(
             409,
             "intake_not_gated",
-            f"{bot}@{version}은 가상 직원의 접수 Bot인데 결재 없는 일괄 기동이 있다 (C14 B16)",
+            f"{bot}@{version}은 가상 직원의 접수 BPM 프로세스인데 결재 없는 일괄 기동이 있다 (C14 B16)",
             {"violations": {version: messages}},
         )
 
@@ -138,7 +140,7 @@ def create(store: Store, package_dir: Path, raw: Any) -> VirtualWorkerInfo:
 
 
 def update(store: Store, package_dir: Path, worker_id: str, raw: Any) -> VirtualWorkerInfo:
-    """`PUT /virtual-workers/{id}` — 본문 전체로 바꾼다. 접수 Bot이 바뀌면 관문을 다시 본다."""
+    """`PUT /virtual-workers/{id}` — 본문 전체로 바꾼다. 접수 BPM 프로세스가 바뀌면 관문을 다시 본다."""
     before = _must(store, worker_id)
     request = _parse(raw, path_id=worker_id)
     if request.intake != before["intake"]:
@@ -166,7 +168,7 @@ def reader(found: Caller) -> str | None:
     """읽을 수 있는 쪽 — 콘솔 토큰·연동용 키면 `None`(전부), 대리 답용 키면 **그 사람**(감독하는 것만).
 
     **연동용 키는 전부다** (ADR-0098) — 가상 직원에는 「자기 것」이 없고, 그 키는 이미 어느
-    Bot이든 작업을 낼 수 있어 묶임을 보는 것으로 힘이 늘지 않는다. `X-CHK-On-Behalf-Of`를
+    BPM 프로세스이든 작업을 낼 수 있어 묶임을 보는 것으로 힘이 늘지 않는다. `X-CHK-On-Behalf-Of`를
     실어도 거르지 않는다(연동용 키의 그 헤더는 주장이라 적기만 한다, ADR-0081).
     """
     if found.kind in ("admin", "read"):
@@ -181,8 +183,8 @@ def reader(found: Caller) -> str | None:
 def pick(store: Store, *, bot: str, requested: str | None) -> str | None:
     """작업의 가상 직원 id (C5 `virtual_worker`, ADR-0099 §2).
 
-    적었으면 **그 가상 직원의 `intake`가 이 Bot**이어야 한다 — 아니면(없는 id도) 422
-    `virtual_worker_mismatch`. 비웠으면 그 Bot을 접수 Bot으로 쓰는 가상 직원이 **정확히 하나**일
+    적었으면 **그 가상 직원의 `intake`가 이 BPM 프로세스**이어야 한다 — 아니면(없는 id도) 422
+    `virtual_worker_mismatch`. 비웠으면 그 BPM 프로세스를 접수 BPM 프로세스로 쓰는 가상 직원이 **정확히 하나**일
     때만 그것이다 — 여럿인데 고르지 않은 것을 조용히 고르지 않는다.
     """
     if requested:
@@ -191,7 +193,7 @@ def pick(store: Store, *, bot: str, requested: str | None) -> str | None:
             raise ApiError(
                 422,
                 "virtual_worker_mismatch",
-                f"가상 직원 {requested}의 접수 Bot이 {bot}이 아니다",
+                f"가상 직원 {requested}의 접수 BPM 프로세스가 {bot}이 아니다",
                 {"virtual_worker": requested, "bpm_process_id": bot},
             )
         return requested
@@ -235,9 +237,9 @@ def get(store: Store, worker_id: str, *, on_behalf: str | None = None) -> Virtua
 
 
 def runs_of(store: Store, worker_id: str) -> tuple[set[str], set[str]]:
-    """그 가상 직원의 **접수 Bot 이름**과 **일괄(접수 실행) id들** — `?virtual_worker=`가 쓴다.
+    """그 가상 직원의 **접수 BPM 프로세스 이름**과 **일괄(접수 실행) id들** — `?virtual_worker=`가 쓴다.
 
-    실행 기록도 패키지 id로 말한다 (C3, ADR-0086) — 접수 Bot의 패키지 id 하나로 고른다.
+    실행 기록도 패키지 id로 말한다 (C3, ADR-0086) — 접수 BPM 프로세스의 패키지 id 하나로 고른다.
     """
     row = _must(store, worker_id)
     names = {str(row["intake"])}
@@ -250,7 +252,7 @@ def runs_of(store: Store, worker_id: str) -> tuple[set[str], set[str]]:
 
 
 def job_belongs(row: Any, *, intake: set[str], batches: set[str]) -> bool:
-    """그 작업이 이 가상 직원의 것인가 — 접수 Bot의 작업이거나 **그 일괄이 맡긴 작업**이다."""
+    """그 작업이 이 가상 직원의 것인가 — 접수 BPM 프로세스의 작업이거나 **그 일괄이 맡긴 작업**이다."""
     if row["bpm_process_id"] in intake:
         return True
     requested = str(row["requested_by"] or "")
@@ -269,7 +271,7 @@ def _supervisors_of(row: Any) -> list[str]:
 
 
 def _batches(store: Store, intake: str) -> list[VirtualWorkerBatch]:
-    """최근 일괄 — 접수 Bot의 실행과 그 자식(`parent_run_id`), 열린 결재를 **읽을 때** 센다."""
+    """최근 일괄 — 접수 BPM 프로세스의 실행과 그 자식(`parent_run_id`), 열린 결재를 **읽을 때** 센다."""
     names = {intake}
     summaries = [
         (str(one["run_id"]), loads(one["summary_json"], {}) or {}, str(one["first_seen_at"]))

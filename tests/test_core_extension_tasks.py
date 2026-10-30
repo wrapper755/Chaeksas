@@ -150,7 +150,7 @@ def test_the_outputs_become_variables(tmp_path: Path) -> None:
 
 
 def test_the_executor_sees_the_contract_shape(tmp_path: Path) -> None:
-    """C14 속성과 **이 실행의 Bot·판**이 간다 — 확장이 외부 작업을 올릴 때 Center가 대조한다 (C15)."""
+    """C14 속성과 **이 실행의 BPM 프로세스·판**이 간다 — 확장이 외부 작업을 올릴 때 Center가 대조한다 (C15)."""
     executor = FakeExecutor()
     run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
     seen = executor.seen[0]
@@ -158,7 +158,7 @@ def test_the_executor_sees_the_contract_shape(tmp_path: Path) -> None:
     assert seen.run_id == RUN and seen.node_id == "Task_Ext"
     assert seen.business_key == f"{RUN}:Task_Ext:1:1", "C10 세션을 잇는 키다"
     assert seen.key_ref is None, "서비스 앱 키가 없어졌다 (ADR-0102)"
-    assert seen.bpm_process_id, "그 실행의 Bot(패키지 id)이 간다"
+    assert seen.bpm_process_id, "그 실행의 BPM 프로세스(패키지 id)가 간다"
     assert seen.mode == "autonomous" or seen.mode == "deterministic"
     assert seen.run_location == "pc"
 

@@ -1,6 +1,6 @@
-"""PC 예제 재통과 — **Center 배포 → Bot UI 실행**으로 한 번 더 (M5 조각 15).
+"""PC 예제 재통과 — **Center 배포 → PC 실행기 실행**으로 한 번 더 (M5 조각 15).
 
-로드맵 M5 인수 시험의 두 번째 칸이다: 「PC 예제는 Center 배포 → Bot UI 실행으로 다시 통과」.
+로드맵 M5 인수 시험의 두 번째 칸이다: 「PC 예제는 Center 배포 → PC 실행기 실행으로 다시 통과」.
 M3·M4·M5 묶음에서 **실행 위치가 `pc`인 예제**가 그 대상이고, 목록은 예제에서 읽는다.
 
 Studio 시험 실행(M3·M4·M5 인수 시험)과 **무엇이 다른가**가 이 파일의 요점이다.
@@ -8,13 +8,13 @@ Studio 시험 실행(M3·M4·M5 인수 시험)과 **무엇이 다른가**가 이
 | | Studio 시험 실행 | 여기 |
 | --- | --- | --- |
 | 무엇이 그림을 받나 | 작업 폴더에서 바로 | **서명된 패키지**가 Center를 거쳐 설치된다 (C2·C5) |
-| 무엇이 엔진을 도나 | Studio 프로세스 안 (`QTimer`) | **실행기 자식 프로세스** (ADR-0023·0031) |
+| 무엇이 엔진을 도나 | Studio 프로세스 안 (`QTimer`) | **실행 프로세스** (ADR-0023·0031) |
 | 입력은 어디서 | 시험 케이스 | **Center 작업 지시**의 `inputs` (C5) |
 | 결재·확인 | 케이스가 답한다 | **제어 파일**(현장) 또는 하트비트(Center, ADR-0038) |
 | 무엇을 볼 수 있나 | 변수와 기대값 | **실행 기록**(C3)뿐 — 업무 값은 거기 없다 (원칙 6) |
 
 마지막 줄이 중요하다. **여기서는 기대값을 볼 수 없다** — C3에 업무 값을 남기지 않기 때문이다.
-그래서 보는 것은 「그 Bot이 Center를 거쳐 설치되고, 작업으로 시작되고, 끝까지 돌아, 끝났다고
+그래서 보는 것은 「그 BPM 프로세스가 Center를 거쳐 설치되고, 작업으로 시작되고, 끝까지 돌아, 끝났다고
 Center에 알렸는가」다. 업무 결과가 맞는지는 Studio 시험 실행이 본다 (같은 그림·같은 엔진이다).
 
 **바깥에 나가지 않는다** — Center는 in-process, 모델·모의 앱은 127.0.0.1이다.
@@ -147,7 +147,7 @@ def model() -> Iterator[StubModel]:
 def agent(
     center: TestClient, tmp_path: Path, model: StubModel, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[Agent]:
-    """진짜 Bot UI — Center는 in-process, 실행기는 **진짜 자식 프로세스**다."""
+    """진짜 PC 실행기 — Center는 in-process, 실행기는 **진짜 자식 프로세스**다."""
     client = center
     data_dir = tmp_path / "botui"
     monkeypatch.setattr("chaeksas.bot_ui.settings.data_dir", lambda: data_dir)
@@ -158,8 +158,8 @@ def agent(
     def factory(base_url: str, api_key: str) -> CenterClient:
         return CenterClient(base_url=CENTER_URL, api_key=api_key, client=client)
 
-    # **확장을 싣는다** — 평소 Bot UI와 같다 (`make_agent`). 싣지 않으면 하트비트가 확장을
-    # 보고하지 않고, Center가 모르는 확장을 요구하는 Bot은 **배포가 막힌다** (C7 누락 검사).
+    # **확장을 싣는다** — 평소 PC 실행기와 같다 (`make_agent`). 싣지 않으면 하트비트가 확장을
+    # 보고하지 않고, Center가 모르는 확장을 요구하는 BPM 프로세스는 **배포가 막힌다** (C7 누락 검사).
     host = load_extensions()
     made = Agent(
         settings=BotUiSettings(
@@ -202,7 +202,7 @@ def deploy(center: TestClient, agent: Agent, zip_path: Path) -> dict[str, Any]:
     info = dict(answer.json())
     approve(client, info["id"], info["version"], headers=ADMIN)
 
-    # Bot UI가 등록되어야 배포 대상이 생긴다 (C4 — 키 하나 ↔ PC 하나).
+    # PC 실행기가 등록되어야 배포 대상이 생긴다 (C4 — 키 하나 ↔ PC 하나).
     assert agent.beat() is not None
     assert agent.bot_ui_id, "등록되지 않았다"
 
@@ -250,7 +250,7 @@ def _pumped(agent: Agent) -> bool:
 def pumping(agent: Agent, check: Any, *, timeout_s: float = 60.0) -> bool:
     """`pump()`를 돌리며 기다린다 — **기다리는 것은 기록 파일에서 읽힌다** (ADR-0031).
 
-    Bot UI는 실행기를 기다리지 않는다. 올라오는 것은 실행 기록이고, 그것을 읽는 자리가
+    PC 실행기는 실행기를 기다리지 않는다. 올라오는 것은 실행 기록이고, 그것을 읽는 자리가
     `pump()`다 (트레이의 주기가 부르는 것과 같다).
     """
     until = time.monotonic() + timeout_s
@@ -391,7 +391,7 @@ def test_a_pc_example_deploys_and_runs(
     assert running is not None, "실행기가 뜨지 않았다"
     answer_everything(agent, running, field_answers(example))
     status, events = finished(agent, running)
-    # 실행기가 쓰는 말은 `success`다 — Bot UI가 그것을 작업 결과 `finished`로 옮긴다 (C4).
+    # 실행기가 쓰는 말은 `success`다 — PC 실행기가 그것을 작업 결과 `finished`로 옮긴다 (C4).
     assert status == "success", f"{example}: {status} (기록: {[e.kind for e in events]})"
 
     kinds = [e.kind for e in events]

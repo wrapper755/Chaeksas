@@ -1,6 +1,6 @@
-"""작업 지시 한 바퀴 — Center `/jobs` → 하트비트 → Bot UI 대기열 (C4·C5, M5 조각 3).
+"""작업 지시 한 바퀴 — Center `/jobs` → 하트비트 → PC 실행기 대기열 (C4·C5, M5 조각 3).
 
-진짜 Center를 in-process로 띄우고, 진짜 Bot UI 쪽 `Agent`가 **진짜 HTTP로** 하트비트를
+진짜 Center를 in-process로 띄우고, 진짜 PC 실행기 쪽 `Agent`가 **진짜 HTTP로** 하트비트를
 주고받는다. 배포(조각 2)와 달리 **봉투가 없다** — 작업은 「무엇을 실행해도 되는가」가 아니라
 「언제 돌려라」라서 토큰 권한이 관문이다 (C5 권한표).
 
@@ -54,7 +54,7 @@ READ_AUTH = {"Authorization": f"Bearer {READ}"}
 
 @dataclass
 class World:
-    """Center 하나 + 그 Center에 등록된 Bot UI 하나 + 배포된 Bot 하나."""
+    """Center 하나 + 그 Center에 등록된 PC 실행기 하나 + 배포된 BPM 프로세스 하나."""
 
     center: Center
     client: TestClient
@@ -78,7 +78,7 @@ class World:
         """취소 — 응답 코드까지 본다 (200과 202가 다른 뜻이다)."""
         return self.client.delete(f"/api/v1/jobs/{job_id}", headers=ADMIN_AUTH)
 
-    # ── Bot UI 쪽 ──
+    # ── PC 실행기 쪽 ──
 
     def beat(self) -> HeartbeatResponse:
         """하트비트 한 번 — **진짜 HTTP로** 오가고, 받은 지시를 진짜 `Agent`가 처리한다.
@@ -167,7 +167,7 @@ def world(tmp_path: Path) -> World:
     client = TestClient(create_app(settings, store=store))
     center = Center(client=client, token=TOKEN)
 
-    # Bot UI를 **진짜로 등록한다** — 신원은 키가 정한다 (C4).
+    # PC 실행기를 **진짜로 등록한다** — 신원은 키가 정한다 (C4).
     raw = issue_key(client, name="현장 PC 1", key_type="bot_ui")
     agent = Agent(
         settings=BotSettings(queue_max=2),
@@ -229,7 +229,7 @@ def test_a_server_runner_job_needs_a_server_deployment(world: World) -> None:
     """서버 실행은 열렸다 (M7) — 막는 것은 **배포가 없다**는 것뿐이다.
 
     스위치(`SERVER_RUNNER_AVAILABLE`)를 켜기 전에는 `server_runner_not_available`이었다.
-    이제는 배포 검사가 관문이다 — 이 Bot은 **PC에** 배포돼 있고 서버에는 없다.
+    이제는 배포 검사가 관문이다 — 이 BPM 프로세스는 **PC에** 배포돼 있고 서버에는 없다.
     """
     with pytest.raises(CenterProblem) as caught:
         world.new_job(target={"type": "server_runner", "id": "*"})
@@ -451,7 +451,7 @@ def test_a_finished_job_cannot_be_cancelled(world: World) -> None:
 
 
 def test_a_lost_queue_is_noticed(world: World) -> None:
-    """Bot UI가 비정상 종료로 대기열을 잃으면 작업이 영원히 `queued`로 남는다 — 그걸 막는다."""
+    """PC 실행기가 비정상 종료로 대기열을 잃으면 작업이 영원히 `queued`로 남는다 — 그걸 막는다."""
     made = world.new_job()
     world.beat()
     world.beat()

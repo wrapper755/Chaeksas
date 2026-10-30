@@ -60,7 +60,7 @@ def get_runner_enroll(request: Request, enrollment_id: str) -> Any:
 
 @router.post("/studio/enroll", status_code=201)
 async def post_studio_enroll(request: Request) -> Any:
-    """Studio의 등록 요청 (C5 §Studio 등록 요청과 승인, ADR-0093) — Bot UI와 같은 길이다."""
+    """Studio의 등록 요청 (C5 §Studio 등록 요청과 승인, ADR-0093) — PC 실행기와 같은 길이다."""
     return enrollments.request(_store(request), kind="studio", body=await _json(request), remote_addr=_remote(request))
 
 

@@ -119,7 +119,7 @@ MIGRATIONS: tuple[Step, ...] = (
     ),
     Step(
         6,
-        "위임 대상 종류 — 서버 Bot에도 맡긴다 (C12 §PC 위임, ADR-0082). 옛 행은 모두 PC다",
+        "위임 대상 종류 — 서버 BPM 프로세스에도 맡긴다 (C12 §PC 위임, ADR-0082). 옛 행은 모두 PC다",
         ("ALTER TABLE delegations ADD COLUMN target_type TEXT NOT NULL DEFAULT 'bot_ui'",),
     ),
     Step(

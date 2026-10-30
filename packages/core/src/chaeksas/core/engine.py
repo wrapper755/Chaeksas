@@ -6,7 +6,7 @@
 (ADR-0087). 어느 쪽이든 **한 번에 토큰 하나씩** 번갈아 밟는다 (ADR-0014·C14 §반복).
 
 사람을 기다리면 그 토큰만 멈춘다 (`State.WAITING`). 엔진은 스레드를 만들지 않는다 — 부르는
-쪽(Bot UI·Studio)이 `step()`을 돈다.
+쪽(PC 실행기·Studio)이 `step()`을 돈다.
 
 세 모듈로 나뉘어 있고, **쓰는 쪽은 여기 하나만 보면 된다** (나머지를 다시 내보낸다).
 
@@ -203,8 +203,8 @@ class Engine:
         """실행을 만들고 `run_started`를 남긴다. 토큰은 시작 이벤트에 놓인다.
 
         `job_id`·`case_id`·`queued_s`·`parent_run_id`는 C3 `run_started`의 선택 칸이다 —
-        **그 자리에서 아는 쪽이** 준다 (작업 지시·대기열은 Bot UI, 케이스는 Studio,
-        **맡긴 서버 실행은 작업의 `requested_by`를 읽은 Bot UI**다 — ADR-0062 §6).
+        **그 자리에서 아는 쪽이** 준다 (작업 지시·대기열은 PC 실행기, 케이스는 Studio,
+        **맡긴 서버 실행은 작업의 `requested_by`를 읽은 PC 실행기**다 — ADR-0062 §6).
 
         `bpm_process_id`는 **패키지 id**다 (ADR-0086) — 엔진은 자기가 도는 패키지를 모르므로
         실행하는 쪽이 `version`과 함께 준다. 주지 않으면 그림의 process id를 쓴다.
@@ -898,7 +898,7 @@ class Engine:
         correlation: Any = None,
         payload: Mapping[str, Any] | None = None,
     ) -> State:
-        """메시지를 넣는다 (C12 Center 메시지 API·Bot UI 수신이 부른다).
+        """메시지를 넣는다 (C12 Center 메시지 API·PC 실행기 수신이 부른다).
 
         **상관 키가 맞는 것만** 깨운다. 받을 곳이 없으면 아무 일도 없다 — 케이스가 `no_receiver`로
         기록만 하고 실패시키지 않는 것과 같은 태도다 (C14 시험 케이스 형식).
@@ -925,7 +925,7 @@ class Engine:
         return run.state
 
     def tick(self, run: Run, now: datetime | None = None) -> State:
-        """시간이 된 타이머를 울린다. 부르는 쪽(Bot UI·서버 실행기)이 주기적으로 부른다."""
+        """시간이 된 타이머를 울린다. 부르는 쪽(PC 실행기·서버 실행기)이 주기적으로 부른다."""
         at = now or run.env.clock()
         for found in run.due(at):
             if found.key in run.waits:
@@ -1173,7 +1173,7 @@ class Engine:
             )
             return self._handle_failure(context, error)
 
-        # **적은 것만 오간다** (C14 `chk:call.output` — `{내 변수: 그 Bot의 출력}`).
+        # **적은 것만 오간다** (C14 `chk:call.output` — `{내 변수: 그 BPM 프로세스의 출력}`).
         given = dict(outputs or {})
         mapping = spec.output if spec is not None else {}
         missing = [theirs for theirs in mapping.values() if theirs not in given]

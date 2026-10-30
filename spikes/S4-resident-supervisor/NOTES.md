@@ -4,10 +4,10 @@
 
 ## 확인하려 한 것
 
-ADR-0012·0014의 제안 「Bot 실행은 Bot UI의 자식 프로세스(실행기) 하나, 목적은 격리」를 Windows에서 확정할 수 있는가 — 자식 관리가 과하게 복잡하면 Bot UI 안의 스레드 실행으로 되돌린다는 조건이 있었다.
+ADR-0012·0014의 제안 「BPM 프로세스 실행은 PC 실행기의 자식 프로세스(실행기) 하나, 목적은 격리」를 Windows에서 확정할 수 있는가 — 자식 관리가 과하게 복잡하면 PC 실행기 안의 스레드 실행으로 되돌린다는 조건이 있었다.
 
-- Bot UI가 Worker 프로세스·실행기를 띄우고 감시·재시작·강제 종료 (C10 기동 절차 포함)
-- 대기열에서 다음 Bot으로 넘어가기, 실행 중 Bot → Worker REST
+- PC 실행기가 Worker 프로세스·실행기를 띄우고 감시·재시작·강제 종료 (C10 기동 절차 포함)
+- 대기열에서 다음 BPM 프로세스로 넘어가기, 실행 중 BPM 프로세스 → Worker REST
 - 잠금 화면·로그오프 때의 동작, 로그온 자동 시작
 
 ## 환경
@@ -23,13 +23,13 @@ ADR-0012·0014의 제안 「Bot 실행은 Bot UI의 자식 프로세스(실행�
 | 파일 | 하는 일 |
 | --- | --- |
 | `winjob.py` | Job Object 헬퍼. 자식마다 Job 하나, `KILL_ON_JOB_CLOSE`, 일시 정지로 만들고 Job에 넣은 뒤 깨움, 나무째 종료 |
-| `supervisor.py` | Bot UI 핵심만: Worker 기동(토큰 파일 → `/v1/health` 대기)·감시·재시작(연속 3회), 실행기 하나로 대기열 처리(시간 초과 → stdin `stop` → 2초 → 나무째 종료) |
+| `supervisor.py` | PC 실행기 핵심만: Worker 기동(토큰 파일 → `/v1/health` 대기)·감시·재시작(연속 3회), 실행기 하나로 대기열 처리(시간 초과 → stdin `stop` → 2초 → 나무째 종료) |
 | `fake_worker.py` | 가짜 Worker (127.0.0.1 REST, 토큰 검사, `/v1/admin/crash`, 포트 실패 시 종료 코드 2) |
 | `fake_runner.py` | 가짜 실행기 (normal·hang·spawn·crash·poll) |
-| `fake_botui.py` | 강제 종료 시험용 가짜 Bot UI |
+| `fake_botui.py` | 강제 종료 시험용 가짜 PC 실행기 |
 | `probe.py` | 자동 시험 → `outputs/result.json` |
 | `lock_target.py`, `lock_probe.py` | 잠금 화면 시험 (3초마다 UIA·클릭·키·캡처·REST) → `outputs/lock.jsonl` |
-| `resident_botui.py` | 숨은 창을 가진 상주 가짜 Bot UI. 로그오프·잠금 알림 기록 → `outputs/logoff.jsonl` |
+| `resident_botui.py` | 숨은 창을 가진 상주 가짜 PC 실행기. 로그오프·잠금 알림 기록 → `outputs/logoff.jsonl` |
 | `autostart_probe.py`, `wts.py` | 자동 시작 시각 기록, WTS 세션 정보 (잠금 플래그·로그온 시각) |
 
 ```bash
@@ -43,7 +43,7 @@ uv run spikes/S4-resident-supervisor/lock_probe.py 180     # 실행 중에 Win+L
 
 | 시험 | 결과 |
 | --- | --- |
-| Bot UI 강제 종료(TerminateProcess), Job 없이 | Worker·실행기의 런처·인터프리터·손자 **6개 모두 고아로 남음** |
+| PC 실행기 강제 종료(TerminateProcess), Job 없이 | Worker·실행기의 런처·인터프리터·손자 **6개 모두 고아로 남음** |
 | 같은 시험, 자식마다 Job | **6개 모두 함께 죽음** |
 | 대기열 6건: 보통 → 협조 중지 → 멈춤 → 손자 남김 → 비정상 종료 → 보통 | 순서대로 전부 처리, 11.7초. 협조 중지는 stdin `stop`으로 스스로 끝남(1.1초), 멈춤·손자 남김은 2초 유예 뒤 나무째 강제 종료(손자도 죽음), 비정상 종료(코드 7)도 다음으로 넘어감 |
 | Worker 강제 종료 → 재시작 | 1.6초 만에 다시 건강. 토큰 파일이 바뀜. 그 사이 실행기의 REST 호출 42번 중 2번 실패 |
@@ -98,5 +98,5 @@ uv run spikes/S4-resident-supervisor/lock_probe.py 180     # 실행 중에 Win+L
 - Linux (프로세스 그룹·`PR_SET_PDEATHSIG`, XDG autostart).
 - 진짜 설치 파일(S5)로 자동 시작 — 가상환경 런처가 아닌 실행 파일로.
 - 원격 데스크톱 연결 끊김·최소화, 빠른 사용자 전환, 절전·최대 절전에서 돌아올 때.
-- 로그오프 중 Center에 「거절 — Bot UI 종료」를 보낼 시간이 있는지 (ADR-0014 §2 「종료 시」).
+- 로그오프 중 Center에 「거절 — PC 실행기 종료」를 보낼 시간이 있는지 (ADR-0014 §2 「종료 시」).
 - 토큰 파일 ACL(현재 사용자만 읽기, C10).

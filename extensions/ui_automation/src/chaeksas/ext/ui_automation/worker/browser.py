@@ -143,7 +143,7 @@ class BrowserFinder:
 class BrowserBackend:
     """C10 `Backend` — 세션마다 브라우저 탭 하나.
 
-    **Bot 실행은 한 번에 하나**(ADR-0014)라 열린 탭도 하나다. 시험 실행은 `headed=True`로
+    **BPM 프로세스 실행은 한 번에 하나**(ADR-0014)라 열린 탭도 하나다. 시험 실행은 `headed=True`로
     사람이 보게 둔다 (STU-08).
     """
 

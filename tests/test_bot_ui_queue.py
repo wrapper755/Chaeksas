@@ -97,7 +97,7 @@ def test_cancelling_a_started_job_is_refused(tmp_path: Path) -> None:
 
     acks = found.cancel_jobs(["job_1"])
     assert [(a.result, a.reason) for a in acks] == [("cancel_refused", "already_started")]
-    assert found.current_run is not None, "실행 중 Bot을 멈추지 않는다"
+    assert found.current_run is not None, "실행 중 BPM 프로세스를 멈추지 않는다"
 
 
 def test_cancelling_on_the_pc_tells_center_why(tmp_path: Path) -> None:
@@ -121,7 +121,7 @@ def test_cancelling_a_manual_item_needs_no_ack(tmp_path: Path) -> None:
 
 
 def test_only_one_run_at_a_time(tmp_path: Path) -> None:
-    """ADR-0014 — PC 한 대에 실행 중 Bot은 하나다."""
+    """ADR-0014 — PC 한 대에 실행 중 BPM 프로세스는 하나다."""
     found = agent(tmp_path)
     found.enqueue_manual("a")
     found.enqueue_manual("b")
@@ -292,7 +292,7 @@ def test_a_delegated_job_is_queued_as_a_delegation(tmp_path: Path) -> None:
     found.take_job(delegated("job_dlg"))
     (item,) = found.queue
     assert item.source == "delegation"
-    # 맡긴 서버 실행은 **Bot UI 안에만** 둔다 — C4 `QueueItem`에 칸을 더하지 않는다
+    # 맡긴 서버 실행은 **PC 실행기 안에만** 둔다 — C4 `QueueItem`에 칸을 더하지 않는다
     # (Center는 `requested_by`로 이미 알고, 대기열 보고에 쓸 데가 없다).
     assert found.store.state.parents[item.queue_id] == "run_20261015_090000_aaaaaa"
 

@@ -2,7 +2,7 @@
 
 올라오는 것은 **실행 기록**(C3 `runs/<run_id>.jsonl`)이 그대로 쓰인다 (결재 요청만 예외 — 요청
 파일, ADR-0038). 내려가는 것만 여기 있다: 중지, **결재 답**, **회수**(답 없이 끝남), **새 호출 토큰**
-(C15 — 24시간짜리라 오래 기다리는 실행에는 Bot UI가 갈아 넣는다).
+(C15 — 24시간짜리라 오래 기다리는 실행에는 PC 실행기가 갈아 넣는다).
 
 - 한 줄에 하나씩 **덧붙인다** (JSON Lines). 읽는 쪽은 읽은 자리를 `.sent`에 남겨 **두 번
   답하지 않는다** (실행 기록 보내기와 같은 수법).
@@ -58,7 +58,7 @@ def _read_path(path: Path) -> Path:
 
 
 def send(path: Path, command: Command) -> None:
-    """지시 한 줄을 덧붙인다 (Bot UI 쪽)."""
+    """지시 한 줄을 덧붙인다 (PC 실행기 쪽)."""
     path.parent.mkdir(parents=True, exist_ok=True)
     body: dict[str, Any] = {"kind": command.kind}
     if command.kind == ANSWER:

@@ -1,6 +1,6 @@
 """확장 호스트 — 확장을 찾아 기여를 등록하고, 켜지 않을 것은 사유와 함께 남긴다 (ADR-0018).
 
-M1 완료 기준의 한 줄을 이 파일이 지킨다: "빈 내장 확장 하나가 Studio·Bot UI에 태스크 종류·
+M1 완료 기준의 한 줄을 이 파일이 지킨다: "빈 내장 확장 하나가 Studio·PC 실행기에 태스크 종류·
 유틸리티를 기여함". 플랫폼이 특정 확장을 import하지 않는 것은 `test_import_direction.py`가 본다.
 """
 
@@ -97,7 +97,7 @@ def test_the_run_location_table_only_holds_task_types_that_are_turned_on(host: E
 def test_builtin_declares_the_worker_as_a_local_runtime(host: ExtensionHost) -> None:
     """Worker는 플랫폼의 구성요소가 아니라 확장이 선언한 로컬 런타임이다 (ADR-0018)."""
     runtimes = {c.value.id: c.value for c in host.local_runtimes()}
-    # schema 2 — 명령줄이 아니라 진입점이다 (Bot UI가 자기 실행 파일을 다시 띄운다, ADR-0024).
+    # schema 2 — 명령줄이 아니라 진입점이다 (PC 실행기가 자기 실행 파일을 다시 띄운다, ADR-0024).
     assert runtimes["worker"].entry == "ui_automation.worker:serve"
     assert runtimes["worker"].default_port == 8899
     assert runtimes["worker"].port_setting == "CHK_WORKER__LOCAL_API__PORT"
@@ -111,7 +111,7 @@ def test_other_contribution_points(host: ExtensionHost) -> None:
     assert [c.value.id for c in host.console_pages()] == ["overview", "selectors", "monitoring"]
     assert [c.value.id for c in host.panels("bot_ui.runtimes")] == ["recent-ui-sessions"]
     assert [c.value.id for c in host.preflight()] == ["pages-registered"]
-    # 등록 담당자 키 칸은 없다 — Center가 이 PC Bot UI에 내려 주고 호스트가 준다 (ADR-0094 §6).
+    # 등록 담당자 키 칸은 없다 — Center가 이 PC PC 실행기에 내려 주고 호스트가 준다 (ADR-0094 §6).
     assert host.configuration(scope="tool_ui") == []
     assert host.configuration(scope="bot_ui") == []
     assert host.configuration(scope="server_runner") == []
@@ -240,7 +240,7 @@ def test_resolved_code_matches_the_interface(host: ExtensionHost) -> None:
 
 
 def test_local_runtime_entry_resolves(host: ExtensionHost) -> None:
-    """Bot UI가 자식으로 다시 떴을 때 쓰는 길 (`--local-runtime ui-automation:worker`)."""
+    """PC 실행기가 자식으로 다시 떴을 때 쓰는 길 (`--local-runtime ui-automation:worker`)."""
     entry = host.local_runtime(BUILTIN_ID, "worker")
     assert isinstance(entry, LocalRuntimeEntry)
     with pytest.raises(LookupError, match="로컬 런타임이 아니다"):
@@ -329,7 +329,7 @@ def test_incompatible_api_is_not_enabled() -> None:
 
 
 def test_duplicate_id_loses_to_the_one_already_loaded(host: ExtensionHost) -> None:
-    """이름 공간은 하나다 (C13). **먼저 켜진 쪽이 남는다** — 실행 중인 Bot이 쓰고 있다."""
+    """이름 공간은 하나다 (C13). **먼저 켜진 쪽이 남는다** — 실행 중인 BPM 프로세스가 쓰고 있다."""
     again = install(host, definition(id=BUILTIN_ID, tier="internal"))
     assert again is not None and not again.enabled
     assert [p.code for p in again.problems] == ["id_conflict"]
@@ -621,7 +621,7 @@ BOTH_AND_PC: dict[str, Any] = {
 def test_a_host_that_holds_a_run_location_only_contributes_what_runs_there() -> None:
     """**거르는 자리가 하나다** (ADR-0064) — 수행기·사전 점검·위치 표가 같은 것을 본다.
 
-    서버 실행기는 로컬 런타임을 띄우지 않으므로(런타임은 Bot UI의 것이다) PC 전용 종류는
+    서버 실행기는 로컬 런타임을 띄우지 않으므로(런타임은 PC 실행기의 것이다) PC 전용 종류는
     서버에서 **없는 것**이 된다. 「깔려 있는데 못 돈다」는 사전 점검이 따로 말한다.
     """
     server = ExtensionHost(run_location="server")

@@ -22,7 +22,7 @@ const CHECK_LABEL: Record<string, string> = { ok: "정상", warn: "경고" };
 
 const PROMOTION_HINT = "검증 전 로케이터는 연속 3회 정상 동작하면 자동으로 사용 중으로 올라갑니다.";
 /** C8 보고는 세션이 **끝날 때** 온다 — 그래서 앱은 도는 세션을 모른다 (현장의 BUI-09가 안다). */
-const RUNNING_HINT = "지금 도는 세션은 여기서 알 수 없습니다 — 보고는 세션이 끝날 때 옵니다 (현장 Bot UI의 BUI-09가 보여 줍니다).";
+const RUNNING_HINT = "지금 도는 세션은 여기서 알 수 없습니다 — 보고는 세션이 끝날 때 옵니다 (현장 PC 실행기의 BUI-09가 보여 줍니다).";
 const LLM_HINT = "주소와 키는 보이지 않습니다 (C11). 계획과 치유가 같은 모델을 씁니다.";
 
 function Summary({ label, children }: { label: string; children: React.ReactNode }) {

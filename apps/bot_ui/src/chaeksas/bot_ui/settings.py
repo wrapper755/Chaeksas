@@ -1,4 +1,4 @@
-"""Bot UI 설정 — 환경변수 `CHK_BOT_UI__*` (ADR-0011), 값은 설정 파일에 저장 (BUI-03).
+"""PC 실행기 설정 — 환경변수 `CHK_BOT_UI__*` (ADR-0011), 값은 설정 파일에 저장 (BUI-03).
 
 **포트·경로를 코드에 직접 쓰지 않는다.** 기본값은 여기 한 곳에만 둔다 (`docs/04-setup.md` §6).
 **비밀은 여기 두지 않는다** — Center API 키는 OS 비밀 저장소다 (`secrets.py`, CLAUDE.md §5).
@@ -74,7 +74,7 @@ class RuntimeSettings:
 
 @dataclass(frozen=True)
 class Settings:
-    """Bot UI 한 벌의 설정.
+    """PC 실행기 한 벌의 설정.
 
     `load()`로 파일에서 읽고, 환경변수가 **덮어쓴다** (CI·개발에서 편하게). 저장은 `save()`.
     """
@@ -83,7 +83,7 @@ class Settings:
     #: 표시 이름 (기본: PC 이름). C4 `name`.
     name: str | None = None
     autostart: bool = True
-    #: 결재를 Center로 올린다 (BUI-03 「실행」 — BPM 프로세스가 「Bot UI 설정을 따름」일 때만).
+    #: 결재를 Center로 올린다 (BUI-03 「실행」 — BPM 프로세스가 「PC 실행기 설정을 따름」일 때만).
     remote_approval: bool = False
     signed_only: bool = True
     queue_max: int = DEFAULT_QUEUE_MAX
@@ -93,10 +93,10 @@ class Settings:
     #: 아니라 OS 비밀 저장소에 둔다 (CLAUDE.md §5).
     llm_base_url: str = ""
     llm_model: str = DEFAULT_LLM_MODEL
-    #: Bot이 **읽을 수 있는 폴더** (BUI-03 「파일」, ADR-0026). 비어 있으면 아무것도 못 읽는다.
+    #: BPM 프로세스가 **읽을 수 있는 폴더** (BUI-03 「파일」, ADR-0026). 비어 있으면 아무것도 못 읽는다.
     readable_dirs: tuple[Path, ...] = ()
-    #: Bot이 출력 폴더 **밖에 쓸 수 있는 폴더** (BUI-03 「파일」, ADR-0032). 기본은 비어 있다 —
-    #: 적은 폴더 안의 파일은 Bot이 고칠 수 있다.
+    #: BPM 프로세스가 출력 폴더 **밖에 쓸 수 있는 폴더** (BUI-03 「파일」, ADR-0032). 기본은 비어 있다 —
+    #: 적은 폴더 안의 파일은 BPM 프로세스가 고칠 수 있다.
     writable_dirs: tuple[Path, ...] = ()
     #: 보내기 (BUI-03 「보내기」, ADR-0059). **비우면 `chk:email`이 보내지 않고 실패한다.**
     #: 비밀번호는 여기 없다 — OS 비밀 저장소다 (`credentials.smtp_password()`).
@@ -115,7 +115,7 @@ class Settings:
     #: **비밀 칸은 여기 들어오지 않는다** — OS 비밀 저장소로 간다 (`credentials.py`).
     extensions: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     #: 사람이 꺼 둔 확장 id (BUI-11, [ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)).
-    #: **Studio의 것과 다른 자리다** — 개발 도구에서 끈 것이 현장 Bot을 멈추면 안 된다. 판은
+    #: **Studio의 것과 다른 자리다** — 개발 도구에서 끈 것이 현장 BPM 프로세스를 멈추면 안 된다. 판은
     #: 적지 않는다 (올려도 꺼 둔 채로 있는 것이 사람의 뜻이다).
     disabled_extensions: tuple[str, ...] = ()
 

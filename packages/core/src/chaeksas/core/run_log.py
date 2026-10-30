@@ -68,7 +68,7 @@ class RunLog:
 
     run_id: str
     path: Path | None = None
-    #: 파일 말고 더 보낼 곳 (Center 보내기·Bot UI 화면).
+    #: 파일 말고 더 보낼 곳 (Center 보내기·PC 실행기 화면).
     sinks: list[EventSink] = field(default_factory=list)
     clock: Callable[[], str] = now_iso
 
@@ -127,7 +127,7 @@ class RunLog:
 
     @classmethod
     def read(cls, path: Path) -> Iterator[RunEvent]:
-        """jsonl을 다시 읽는다 (Bot UI 「실행 기록」·Studio 로그 탭)."""
+        """jsonl을 다시 읽는다 (PC 실행기 「실행 기록」·Studio 로그 탭)."""
         with path.open(encoding="utf-8") as f:
             for line in f:
                 if line.strip():

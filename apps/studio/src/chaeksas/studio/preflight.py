@@ -67,7 +67,7 @@ def inspect(
     서버에서 되는지 보는 데 쓴다. 주지 않으면 B6이 확장 태스크를 건너뛰므로 Studio는 늘 준다
     (STU-06의 셈과 **같은 표**여야 한다 — 어긋나면 창이 「바꿔도 된다」고 하고 F6이 막는다).
 
-    `delegated_outputs`는 **PC 위임으로 부르는 Bot이 선언한 `outputs`**다 (C1, ADR-0062) —
+    `delegated_outputs`는 **PC 위임으로 부르는 BPM 프로세스가 선언한 `outputs`**다 (C1, ADR-0062) —
     남의 패키지 매니페스트라 작업 폴더에 없고 **Center만 안다**. 받아 둔 것을 **부르는 쪽이**
     넘긴다 (이 모듈은 서버를 부르지 않는다 — `readiness()`와 같은 결). 주지 않거나 비어 있으면
     B14가 그 대조를 건너뛴다 — **모르는 것으로 막지 않는다.**
@@ -86,7 +86,7 @@ def inspect(
                 other.id: list(other.info.outputs) for other in owner.processes().values()
             },
             task_type_locations=task_type_locations,
-            # **빈 사전은 주지 않는다** — 「아무 Bot도 아무것도 선언하지 않았다」가 되어
+            # **빈 사전은 주지 않는다** — 「아무 BPM 프로세스도 아무것도 선언하지 않았다」가 되어
             # 멀쩡한 위임이 모두 막힌다. 못 받았으면 `None`이고 그러면 건너뛴다.
             delegated_outputs=delegated_outputs or None,
         )
@@ -103,7 +103,7 @@ def readiness(
 ) -> list[Violation]:
     """사전 점검 — **이 PC에서 지금 돌릴 수 있나** (`core.preflight`, ADR-0013).
 
-    Bot UI와 **같은 러너**를 쓴다 (BUI-04 「준비」가 쓰는 것) — 갖춰야 할 설정·확장 태스크 종류·`web`·
+    PC 실행기와 **같은 러너**를 쓴다 (BUI-04 「준비」가 쓰는 것) — 갖춰야 할 설정·확장 태스크 종류·`web`·
     `desktop` AI 환경과 확장이 기여한 점검(C13)이다. 결과를 `Violation`으로 옮겨 검사 탭이 한
     모양만 다루게 한다.
 

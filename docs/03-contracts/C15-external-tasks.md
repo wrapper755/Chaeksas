@@ -2,9 +2,9 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-29) — Center(`api/external_tasks.py`, 15판)와 양쪽이 돈다: 부르는 쪽은 `core.services.CenterServiceCaller`(서버 실행기·실행기 자식·Studio)와 UI 자동화의 `worker/plans.py`·`client/registry_client.py`(`CenterOps`, 토픽 `ui-automation`), 일꾼은 `service_kit.consumer`(서비스 앱·모의 앱)와 어댑터 일꾼 `chk-adapter-consumer`(`apps/adapter_consumer`). `tests/test_center_external_tasks.py`·`test_c15_round_trip.py`·`test_service_kit_consumer.py`·`test_adapter_consumer.py`가 지킨다. 서버 실행기는 긴 작업을 기다림으로 넘긴다(ADR-0103) |
+| 상태 | **구현됨** (2026-10-29) — Center(`api/external_tasks.py`, 15판)와 양쪽이 돈다: 부르는 쪽은 `core.services.CenterServiceCaller`(서버 실행기·실행 프로세스·Studio)와 UI 자동화의 `worker/plans.py`·`client/registry_client.py`(`CenterOps`, 토픽 `ui-automation`), 일꾼은 `service_kit.consumer`(서비스 앱·모의 앱)와 어댑터 일꾼 `chk-adapter-consumer`(`apps/adapter_consumer`). `tests/test_center_external_tasks.py`·`test_c15_round_trip.py`·`test_service_kit_consumer.py`·`test_adapter_consumer.py`가 지킨다. 서버 실행기는 긴 작업을 기다림으로 넘긴다(ADR-0103) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | 서버 실행기·실행기 자식 프로세스·Studio·Worker·Tool UI → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
+| 보내는 쪽 → 받는 쪽 | 서버 실행기·실행 프로세스·Studio·Worker·Tool UI → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
 | 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0062](../decisions/0062-pc-delegation.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0102](../decisions/0102-calling-outside-is-pull.md), [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |
 | 관련 화면 | CON-07 리소스 (일꾼 승인·토픽 상태), CON-01 (실행 상세의 「외부 작업」) |
@@ -23,12 +23,12 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 
 | 엔드포인트 | 인증 | 뜻 |
 | --- | --- | --- |
-| `POST /api/v1/call-tokens` | Bot UI·Studio의 Center API 키 | 호출 토큰 받기 (24시간) |
-| `POST /api/v1/external-tasks` | 호출 토큰 · Bot UI·서버 실행기·Studio의 Center API 키 | 일감 올리기 (멱등) |
+| `POST /api/v1/call-tokens` | PC 실행기·Studio의 Center API 키 | 호출 토큰 받기 (24시간) |
+| `POST /api/v1/external-tasks` | 호출 토큰 · PC 실행기·서버 실행기·Studio의 Center API 키 | 일감 올리기 (멱등) |
 | `GET /api/v1/external-tasks/{task_id}?wait_s=` | 올린 쪽 | 결과 기다리기 (롱폴링). 아직이면 `wait_s`(최대 25) 뒤 `state: pending` |
 | `POST /api/v1/external-tasks/{task_id}/ack` | 올린 쪽 | 결과를 받았다 → 값을 지운다 |
 | `POST /api/v1/external-tasks/{task_id}/cancel` | 올린 쪽 | 거두기 (실행이 취소됐다) |
-| `POST /api/v1/consumers/enroll` | 없음 (요청 코드) | 일꾼 들이기 요청 — Bot UI 등록과 같은 승인 (ADR-0092 §1) |
+| `POST /api/v1/consumers/enroll` | 없음 (요청 코드) | 일꾼 들이기 요청 — PC 실행기 등록과 같은 승인 (ADR-0092 §1) |
 | `POST /api/v1/consumers/fetch` | 일꾼 토큰 | 가져가기 (롱폴링, 최대 25초). 하트비트를 겸한다 |
 | `POST /api/v1/consumers/tasks/{task_id}/complete` | 잠근 일꾼 | 끝냈다 + 출력 |
 | `POST /api/v1/consumers/tasks/{task_id}/fail` | 잠근 일꾼 | 실패 + 사유 |
@@ -66,7 +66,7 @@ Center가 받기 전에 보는 것 (「불러도 되나」, ADR-0102 §5):
 | 검사 | 거절 |
 | --- | --- |
 | `run_id`가 이 호출자의 실행인가 (C3 소유. Studio는 `test_…`만) | 403 `run_not_owned` |
-| 그 실행의 Bot이 이 토픽을 요구하는가 (배포된 C1) — **등록 세션은 예외**: Bot UI 쪽의 `run_id`가 `reg_…`(Tool UI 셀렉터 등록·그 시험)이면 Bot이 없으므로 이 검사 대신 **그 PC에 「셀렉터 등록」(CON-03)이 켜졌는가**를 본다 | 403 `topic_not_required` / `registration_off` |
+| 그 실행의 BPM 프로세스가 이 토픽을 요구하는가 (배포된 C1) — **등록 세션은 예외**: PC 실행기 쪽의 `run_id`가 `reg_…`(Tool UI 셀렉터 등록·그 시험)이면 BPM 프로세스가 없으므로 이 검사 대신 **그 PC에 「셀렉터 등록」(CON-03)이 켜졌는가**를 본다 | 403 `topic_not_required` / `registration_off` |
 | 이 토픽에 들인 일꾼의 manifest가 이 작업·모드를 받는가 | 422 `operation_not_found` / `mode_unsupported` |
 | 작업이 `required_scopes`를 적었으면 그 호스트에 켜졌는가 (예: `registry_write` = CON-03 「셀렉터 등록」) | 403 `scope_missing` |
 | 자율 수행인데 Studio가 아니다 | 403 `mode_not_allowed` |
@@ -154,7 +154,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 - **멱등 칸은 C11과 같은 규칙으로 짓는다** — 재시작 뒤에도 같은 값이 되게 한다(원칙 9). 그래서 되살린 실행은 새 일감이 아니라 **같은 일감의 결과**를 받는다.
 - 실행이 취소되면 기다리던 일감을 `cancel`한다.
 - 실행 기록(C3 `service_call`)은 지금과 같은 칸이다(업무 값 없음). `key_ref`는 빈 글이다(키가 없다).
-- **누가 무엇으로 올리나**: 서버 실행기·Studio는 제 Center API 키, Bot UI의 실행기 자식 프로세스·Worker·Tool UI는 호출 토큰(아래 「정한 것」). Studio가 Worker를 빌려 UI 태스크 편집기를 시험할 때(STU-13)는 Studio가 **제 키로 호출 토큰을 청해** 세션에 넣는다 — 호출 토큰은 청한 키와 같은 신원이다(Studio면 `test_…`만).
+- **누가 무엇으로 올리나**: 서버 실행기·Studio는 제 Center API 키, 실행 프로세스·Worker·Tool UI는 호출 토큰(아래 「정한 것」). Studio가 Worker를 빌려 UI 태스크 편집기를 시험할 때(STU-13)는 Studio가 **제 키로 호출 토큰을 청해** 세션에 넣는다 — 호출 토큰은 청한 키와 같은 신원이다(Studio면 `test_…`만).
 
 ## 예시
 
@@ -210,7 +210,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ## 정한 것 (처음에 미정이던 셋)
 
-- **호출 토큰은 Bot UI(또는 Studio)가 제 Center API 키로 청한다** — `POST /api/v1/call-tokens` → `{token, expires_at}`(수명 24시간). 봉하지 않는다: 청하는 길이 이미 그 Bot UI의 키로 인증된 연결이라 다른 응답과 같은 길로 온다(환경변수 키처럼 **공개키가 없는 Bot UI도** 받을 수 있어야 한다 — 하트비트 봉함으로는 그 Bot UI가 못 받는다). Bot UI는 실행을 띄울 때 하나 청해 실행기 자식에게 제어 파일로 넘기고(만료 2시간 전부터 새것을 같은 길로 넣는다), Worker에는 C10 세션으로, Tool UI에는 Bot UI 비밀 저장소의 `call_token`으로 준다. **호출 토큰으로 부르면 Center는 그 Bot UI의 Center API 키로 부른 것과 같이 본다** — 소유(C3)·배포 대조가 같은 신원으로 돈다. 호출 토큰은 `/api/v1/external-tasks`와 **리소스 목록 읽기**(`GET /api/v1/resources…` — 도구·편집기가 C9 카탈로그를 읽는 자리) 밖을 모두 403 `call_token_scope`로 막는다. 서버 실행기·Studio는 제 프로세스 안에서 부르므로 제 Center API 키를 쓴다.
+- **호출 토큰은 PC 실행기(또는 Studio)가 제 Center API 키로 청한다** — `POST /api/v1/call-tokens` → `{token, expires_at}`(수명 24시간). 봉하지 않는다: 청하는 길이 이미 그 PC 실행기의 키로 인증된 연결이라 다른 응답과 같은 길로 온다(환경변수 키처럼 **공개키가 없는 PC 실행기도** 받을 수 있어야 한다 — 하트비트 봉함으로는 그 PC 실행기가 못 받는다). PC 실행기는 실행을 띄울 때 하나 청해 실행 프로세스에게 제어 파일로 넘기고(만료 2시간 전부터 새것을 같은 길로 넣는다), Worker에는 C10 세션으로, Tool UI에는 PC 실행기 비밀 저장소의 `call_token`으로 준다. **호출 토큰으로 부르면 Center는 그 PC 실행기의 Center API 키로 부른 것과 같이 본다** — 소유(C3)·배포 대조가 같은 신원으로 돈다. 호출 토큰은 `/api/v1/external-tasks`와 **리소스 목록 읽기**(`GET /api/v1/resources…` — 도구·편집기가 C9 카탈로그를 읽는 자리) 밖을 모두 403 `call_token_scope`로 막는다. 서버 실행기·Studio는 제 프로세스 안에서 부르므로 제 Center API 키를 쓴다.
 - **롱폴링 상한은 설정의 기본 200** (`CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` — 올리는 쪽·일꾼의 기다림을 함께 센다). 한 번 가져가기에 잠글 수 있는 수는 **10건까지**(`max_tasks`가 그보다 크면 10으로 깎는다).
 - **어댑터 일꾼은 C13 「전송」의 바깥 앱 명부를 일꾼 토큰으로 받는다** (조각 3) — 승인된 토픽의 외부 확장 정의·봉투만 준다. 받은 쪽은 봉투를 다시 검증한다(E6).
 - 출력 검사는 **`output_schema.required`의 칸이 다 있는가**까지다 — 계약 패키지에 JSON Schema 검증기를 두지 않는다(입력 쪽도 그렇다). 더 깊은 모양은 일꾼과 엔진의 `output` 매핑이 본다.

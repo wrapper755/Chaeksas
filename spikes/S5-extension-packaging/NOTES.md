@@ -1,10 +1,10 @@
-# S5 확장 로딩 — 설치 파일로 묶은 Studio·Bot UI에서 엔트리 포인트 확장
+# S5 확장 로딩 — 설치 파일로 묶은 Studio·PC 실행기에서 엔트리 포인트 확장
 
 결론 → [ADR-0024](../../docs/decisions/0024-desktop-packaging-extensions.md) (제안)
 
 ## 확인하려 한 것
 
-ADR-0018: 확장은 엔트리 포인트 그룹 `chaeksas.extensions`로 찾고, 내장 확장은 설치 파일에 함께 들어간다. 그렇다면 PyInstaller로 묶은 Studio·Bot UI 안에서
+ADR-0018: 확장은 엔트리 포인트 그룹 `chaeksas.extensions`로 찾고, 내장 확장은 설치 파일에 함께 들어간다. 그렇다면 PyInstaller로 묶은 Studio·PC 실행기 안에서
 
 1. 엔트리 포인트가 보이는가 (패키지 메타데이터 `*.dist-info`가 들어가야 한다)
 2. 문자열 진입점(C13 `entry`)으로 동적 import하는 확장 모듈, PEP 420 네임스페이스 `chaeksas.*`가 빠지지 않는가
@@ -25,7 +25,7 @@ ADR-0018: 확장은 엔트리 포인트 그룹 `chaeksas.extensions`로 찾고, 
 | 폴더 | 배포 이름 | 뜻 |
 | --- | --- | --- |
 | `ext_s5demo/` | `chaeksas-ext-s5demo` (`chaeksas.ext.s5demo`) | 내장 확장 흉내. 엔트리 포인트 `chaeksas.extensions: s5demo`, 기여는 문자열 진입점 (Qt 유틸리티, 로컬 런타임), 데이터 파일 `extension.json` |
-| `host/` | `chaeksas-s5host` (`chaeksas.s5host`) | Bot UI·Studio 흉내. **확장을 import하지 않고** 엔트리 포인트로만 찾는다. `--selftest`, `--local-runtime <확장>:<id>` |
+| `host/` | `chaeksas-s5host` (`chaeksas.s5host`) | PC 실행기·Studio 흉내. **확장을 import하지 않고** 엔트리 포인트로만 찾는다. `--selftest`, `--local-runtime <확장>:<id>` |
 
 ## 파일
 
@@ -67,7 +67,7 @@ uv pip install --python .venv ./host ./ext_s5demo pyinstaller
 6. **onefile은 쓰지 않는다.** 실행할 때마다 `%TEMP%\_MEI…`에 풀어서 warm 시작이 onedir의 2.6배(3.4초 vs 1.3초)이고, 로컬 런타임을 띄울 때마다 또 푼다. 강제 종료 뒤 남은 `_MEI` 폴더·프로세스는 이번 시험에서는 없었다.
 7. **Claude 앱 패키지 밖(작업 스케줄러)에서도 B·C 모두 통과.** 묶인 실행 파일은 자기 안의 Python만 쓰므로 S4의 가상화 문제가 없다.
 8. 크기 내역:
-   - Bot UI(E): `opengl32sw.dll` 20MB(소프트웨어 OpenGL — 가상 PC·원격 데스크톱용), Qt6Core·Gui·Widgets 각 6~10MB, `Qt6Quick.dll` 6MB(위젯 앱인데 훅이 넣음).
+   - PC 실행기(E): `opengl32sw.dll` 20MB(소프트웨어 OpenGL — 가상 PC·원격 데스크톱용), Qt6Core·Gui·Widgets 각 6~10MB, `Qt6Quick.dll` 6MB(위젯 앱인데 훅이 넣음).
    - Studio(C): `Qt6WebEngineCore.dll` 194MB, **개발자 도구 리소스 `qtwebengine_devtools_resources*.pak` 83MB** (뺄 후보), `icudtl.dat` 10MB.
 9. 빌드 시간: onedir 77초, WebEngine 포함 143초 (`--clean`).
 
@@ -77,4 +77,4 @@ uv pip install --python .venv ./host ./ext_s5demo pyinstaller
 - 크기 줄이기 실제 시험 (devtools pak·Qt Quick 제외 뒤에도 도는지).
 - Linux 묶음.
 - 사내 확장(다른 저장소)을 `installer/extensions.toml`로 넣는 흐름 (ADR-0018 §5) — 옵션 계산 방식은 같다.
-- Studio PC에 Bot UI도 설치할 때 두 묶음이 PySide6를 따로 갖는 것 (공유 여부).
+- Studio PC에 PC 실행기도 설치할 때 두 묶음이 PySide6를 따로 갖는 것 (공유 여부).

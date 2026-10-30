@@ -5,7 +5,8 @@
 /**
  * `GET /schedules`의 한 줄 — 타이머로 시작하는 배포 하나의 일정 (C5 §일정, CON-02 「일정」, ADR-0110).
  *
- * 서버 Bot은 (Bot, 버전)마다 한 줄이고 `target_id`가 없다 (실행기는 Center가 고른다). PC Bot은 배포된
+ * 서버 BPM 프로세스는 (BPM 프로세스, 버전)마다 한 줄이고 `target_id`가 없다 (실행기는 Center가 고른다).
+ * PC BPM 프로세스는 배포된
  * PC마다 한 줄이다. **센 것은 Center가 쓸 때와 같은 함수다** (`contracts.schedule`) — 화면이 따로 세면
  * 「다음 차례」가 일정과 어긋난다.
  */

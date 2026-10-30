@@ -1,7 +1,7 @@
-"""Bot UI 앱 조립 — 트레이·창·하트비트 스레드 (BUI-01·02·03).
+"""PC 실행기 앱 조립 — 트레이·창·하트비트 스레드 (BUI-01·02·03).
 
 **트레이가 없는 환경이면 메인 창을 띄운다** (U15). 종료 순서는 BUI-01 10번 그대로다:
-새 요청 막기 → 대기열의 Center 작업을 「거절 — Bot UI 종료」로 보고 → 실행기 취소 →
+새 요청 막기 → 대기열의 Center 작업을 「거절 — PC 실행기 종료」로 보고 → 실행 프로세스 취소 →
 Worker 프로세스 종료 → 앱 종료.
 """
 
@@ -28,7 +28,7 @@ from chaeksas.qt import theme
 
 log = logging.getLogger(__name__)
 
-#: 종료할 때 실행 중 Bot을 기다리는 시간 (BUI-01 — 최대 20초).
+#: 종료할 때 실행 중 BPM 프로세스를 기다리는 시간 (BUI-01 — 최대 20초).
 SHUTDOWN_WAIT_S = 20
 
 #: 알림 등급 → 트레이 아이콘 (BUI-05).
@@ -174,7 +174,7 @@ class BotUiApp:
             answer = QMessageBox.question(
                 self.window,
                 "종료할까요?",
-                f"실행 중인 Bot {running}을 멈추고, 대기열 {waiting}건"
+                f"실행 중인 BPM 프로세스 {running}을 멈추고, 대기열 {waiting}건"
                 f"(Center 작업 {center_jobs}건은 Center로 돌려보냄)을 버리고 종료할까요?",
                 QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Ok,
                 QMessageBox.StandardButton.Cancel,  # 기본은 「취소」
@@ -187,13 +187,13 @@ class BotUiApp:
     def shutdown(self) -> None:
         """종료 순서 (BUI-01 10번). 화면 없이도 부를 수 있게 떼어 두었다."""
         agent = self.agent
-        # 1. 새 요청 막기 — 하트비트를 멈추고, **대기열에서 새 Bot을 띄우지 않는다**.
+        # 1. 새 요청 막기 — 하트비트를 멈추고, **대기열에서 새 BPM 프로세스를 띄우지 않는다**.
         agent.stopping = True
         self.worker.stop()
         self.thread.quit()
         self.thread.wait(SHUTDOWN_WAIT_S * 1000)
 
-        # 2. 대기열의 Center 작업을 「거절 — Bot UI 종료」로 보고한다 (C4 `bot_ui_shutdown`).
+        # 2. 대기열의 Center 작업을 「거절 — PC 실행기 종료」로 보고한다 (C4 `bot_ui_shutdown`).
         pending = [item for item in list(agent.queue) if item.job_id]
         for item in pending:
             agent.store.remember_ack(
@@ -209,7 +209,7 @@ class BotUiApp:
             except Exception as e:  # noqa: BLE001 — 종료 중이다. 막지 않는다
                 log.warning("종료 보고를 보내지 못했다 (다음에 보낸다): %s", e)
 
-        # 3. 실행기 취소 — **협조 중지를 먼저** 준다 (돌던 Bot이 `cancelled`를 남길 틈, ADR-0031).
+        # 3. 실행 프로세스 취소 — **협조 중지를 먼저** 준다 (돌던 BPM 프로세스가 `cancelled`를 남길 틈, ADR-0031).
         if agent.runner().running is not None:
             agent.runner().stop()
         # 4. 로컬 런타임(Worker 프로세스 등) 종료 (ADR-0023 — 트리째).
@@ -224,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     """`chk-bot-ui` 진입점.
 
     `--local-runtime <확장 id>:<런타임 id>`로 불리면 **화면 없이** 그 런타임으로 돈다 —
-    Bot UI가 자기 실행 파일을 그렇게 자식으로 다시 띄운다 (C13·ADR-0024).
+    PC 실행기가 자기 실행 파일을 그렇게 자식으로 다시 띄운다 (C13·ADR-0024).
 
     `--selftest [파일]`은 **묶은 실행 파일의 빌드 검사**다 (ADR-0024) — 확장이 다 보이는지
     보고 끝난다. 화면을 띄우지 않는다.
@@ -236,7 +236,7 @@ def main(argv: list[str] | None = None) -> int:
     if RUNTIME_FLAG in args:
         return run_local_runtime(args)
     app = QApplication(args)
-    app.setApplicationName("Chaeksas Bot UI")
+    app.setApplicationName("Chaeksas PC 실행기")
     # 창을 닫아도 트레이에서 돈다 (BUI-02).
     app.setQuitOnLastWindowClosed(False)
     return BotUiApp(app, make_agent()).run()

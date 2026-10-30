@@ -247,7 +247,7 @@ def test_the_listing_keeps_the_counts_the_sender_counted(client: Any) -> None:
 def test_the_confirmation_count_is_optional_and_kept_as_sent(client: Any) -> None:
     """CON-02 「확인률」 — **보낸 쪽이 가른 셈**을 그대로 둔다 (C3 `confirmations`).
 
-    **옛 Bot UI가 안 보내면 `None`**이다 — 0으로 채우면 「확인이 없었다」와 「세지 않았다」가
+    **옛 PC 실행기가 안 보내면 `None`**이다 — 0으로 채우면 「확인이 없었다」와 「세지 않았다」가
     같아져 확인률이 조용히 낮아진다.
     """
     post(client, [started(), event(2, "run_finished", status="success", duration_s=2, ai_tasks=0,
@@ -267,7 +267,7 @@ def test_the_confirmation_count_is_optional_and_kept_as_sent(client: Any) -> Non
 
 
 def test_the_run_says_which_pc_sent_it(client: Any) -> None:
-    """CON-01 「Bot UI」 — **Center가 읽을 때 채운다** (보낸 키 → C4 키 묶기).
+    """CON-01 「PC 실행기」 — **Center가 읽을 때 채운다** (보낸 키 → C4 키 묶기).
 
     보내는 쪽이 제 id를 적지 않는다 (신원은 키다, C4) — 그래서 본문에 없는 값이 나온다.
     """

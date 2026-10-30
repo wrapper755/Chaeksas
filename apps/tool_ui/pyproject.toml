@@ -1,7 +1,7 @@
 [project]
 name = "chaeksas-tool-ui"
 version = "0.1.0"
-description = "Tool UI — 확장이 기여한 도구를 띄우는 창 (ADR-0077). 로컬 런타임은 Bot UI가 띄운 것을 빌린다"
+description = "Tool UI — 확장이 기여한 도구를 띄우는 창 (ADR-0077). 로컬 런타임은 PC 실행기가 띄운 것을 빌린다"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "chaeksas-contracts",

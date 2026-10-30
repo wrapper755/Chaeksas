@@ -66,7 +66,7 @@ export default async function DeploymentsPage({
     },
     {
       key: "bot",
-      header: "Bot@버전",
+      header: "BPM 프로세스@버전",
       mono: true,
       cell: (row) => `${row.bpm_process_id}@${row.version}`,
     },
@@ -155,7 +155,7 @@ export default async function DeploymentsPage({
       ) : rows.length === 0 ? (
         <EmptyState
           title="배포가 없습니다."
-          hint={found.mode === "admin" ? "승인된 Bot을 「새 배포...」로 배포하세요." : "관리자가 배포하면 여기 보입니다."}
+          hint={found.mode === "admin" ? "승인된 BPM 프로세스를 「새 배포...」로 배포하세요." : "관리자가 배포하면 여기 보입니다."}
         />
       ) : (
         <DataTable columns={columns} rows={rows} rowKey={(row) => row.deployment_id} caption="배포" />

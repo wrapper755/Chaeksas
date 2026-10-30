@@ -332,7 +332,9 @@ def test_a_failure_carries_the_code_and_a_status_retry_on_can_read(
 
 def test_a_refusal_is_not_retried_and_nothing_is_awaited() -> None:
     """「불러도 되나」는 다시 해도 같다 — Center의 코드를 그대로 싣는다."""
-    center = FakeCenter(made=(403, {"code": "topic_not_required", "message": "이 Bot은 erp를 요구하지 않는다"}))
+    center = FakeCenter(
+        made=(403, {"code": "topic_not_required", "message": "이 BPM 프로세스는 erp를 요구하지 않는다"})
+    )
     with pytest.raises(ServiceCallError) as caught:
         center_caller(center).call(op_call())
     assert (caught.value.code, caught.value.status, caught.value.retryable) == ("topic_not_required", 403, False)

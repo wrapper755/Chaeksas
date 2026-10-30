@@ -188,7 +188,7 @@ class CenterServiceCaller:
     """`chk:serviceCall`을 **Center에 외부 작업으로 올리고** 결과를 기다린다 (C15, ADR-0102).
 
     부르는 쪽은 서비스 앱·외부 앱의 주소도 키도 모른다 — Center 주소와 토큰(서버 실행기·Studio는
-    제 Center API 키, Bot UI의 실행기 자식은 호출 토큰)뿐이다. 엔진은 무엇이 바뀌었는지 모른다 —
+    제 Center API 키, 실행 프로세스는 호출 토큰)뿐이다. 엔진은 무엇이 바뀌었는지 모른다 —
     `ServiceCaller` 자리에 들어갈 뿐이다.
 
     - 같은 멱등 칸(C11 여섯 칸)이면 Center가 **같은 일감**을 돌려준다 — 되살린 실행이 다시 불러도

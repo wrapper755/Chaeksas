@@ -22,7 +22,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C1 | **구현됨** | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | — (닫았다 — Studio가 `Provides`를 짓고 CON-06이 읽는다). — (닫았다). `definition_hash`는 **STU-15에서 사람이 고정한다**([ADR-0060](decisions/0060-pinning-external-definitions.md) — 고정하지 않으면 경고만 한다), `requires.settings`는 Studio가 그림에서 채운다 (`chk:email` → `smtp`, [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)) |
 | C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
 | C3 | **구현됨** | `contracts.events`·`core.run_log` | — (닫았다: `ui_session`은 [ADR-0041](decisions/0041-extension-run-events.md), `case_id`·`queued_s`는 아는 쪽이 넣는다, `confirmations`는 **세는 쪽**이 가르고 `bot_ui_id`는 **Center가 읽을 때** 채운다) |
-| C4 | **구현됨** | `contracts.bot_ui`, Center·Bot UI 양쪽 | — (`reserved_for`를 채웠고 `key_expires_at`으로 BUI-05 Center API 키 만료를 닫았다) |
+| C4 | **구현됨** | `contracts.bot_ui`, Center·PC 실행기 양쪽 | — (`reserved_for`를 채웠고 `key_expires_at`으로 BUI-05 Center API 키 만료를 닫았다) |
 | C5 | **구현됨** | `contracts.center_api`, Center 전부 | — (닫았다 — 지원 종료·참조·삭제, 그리고 **권한표**까지. 패키지 쪽은 키 종류를 보는 관문이 따로 있다: `auth.require_upload`·`require_package_read`·`api.package_access.guard_download`) |
 | C6 | **구현됨** | `contracts.approvals`, Center·현장 | — (닫았다) |
 | C7 | **구현됨** | `contracts.resources`·`center_keys` | — (닫았다 — 외부 확장은 어댑터 `health`로 본다) |
@@ -31,7 +31,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 | C10 | **구현됨** | **`ext.ui_automation.contracts.worker_local`** | — (`recent_sessions[]`를 BUI-09가 그린다) |
 | C11 | **구현됨** | `contracts.service_app`·`service_kit`(`service_kit.consumer` — 일꾼) | — (닫았다) |
 | C12 | **구현됨** (M7) | `contracts.server_runner`·`core.run_snapshot` + **양쪽** — 등록·하트비트·운영 API·배포 설치·작업 실행·저장·재개·결재·**메시지**가 돈다 | — (닫았다). 「기한은 간다」는 [ADR-0061](decisions/0061-waking-runs-whose-timer-is-due.md)이 코드로도 사실로 만들었다 (주기만큼 늦을 수 있다고 C12에 적었다). **PC 위임도 본문이 되어 양쪽이 돈다** ([ADR-0062](decisions/0062-pc-delegation.md) — §3-13). 담고 되살리는 모양은 [ADR-0054](decisions/0054-server-run-state-and-concurrency.md)가 정했고, **재시작을 건너 메시지가 두 번 들어가던 자리**는 [ADR-0058](decisions/0058-absorbed-messages-travel-with-the-snapshot.md)이 닫았다 (ADR-0056이 「재 보지 않았다」고 적어 둔 것 — 재 보니 정말 두 번이었다) |
-| C13 | **구현됨** | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다: 호스트·Studio·Bot UI·콘솔·Center) |
+| C13 | **구현됨** | `contracts.extension`·`core.extensions` | — (닫았다 — 기여 지점마다 읽는 쪽이 있다: 호스트·Studio·PC 실행기·콘솔·Center) |
 | C14 | **구현됨** | `contracts.bpmn_ext` B1~B16 + `contracts.dmn` | — (닫았다 — 엔진이 수행하고 Studio가 편집·검사하고 예제 55개가 이 형식이다. schema 1에서 **쓰지 않기로 적은 것**은 범위 결정이다) |
 | C15 | **구현됨** | `contracts.external_task`, Center `api/external_tasks.py` (15판) + **양쪽** — 부르는 쪽 `core.services.CenterServiceCaller`·UI 자동화 `CenterOps`, 일꾼 `service_kit.consumer`·`apps/adapter_consumer` | — (조각 2~4가 닫았고 긴 작업은 [ADR-0103](decisions/0103-long-external-tasks.md)이 닫았다, §3-17) |
 
@@ -51,17 +51,17 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ### 3-20. 타이머 시작을 깨우는 자리 — **닫았다**
 
-[ADR-0110](decisions/0110-center-keeps-the-schedule.md). 시작 타이머는 C1 `triggers[]`에 실리기만 하고 **그 일정으로 Bot을
-시작하는 쪽이 아무 데도 없었다**(C14는 「서버 실행기·Bot UI의 일정이 읽는다」고 적었는데 둘 다 그 코드가 없었다) — 타이머로
+[ADR-0110](decisions/0110-center-keeps-the-schedule.md). 시작 타이머는 C1 `triggers[]`에 실리기만 하고 **그 일정으로 BPM 프로세스를
+시작하는 쪽이 아무 데도 없었다**(C14는 「서버 실행기·PC 실행기의 일정이 읽는다」고 적었는데 둘 다 그 코드가 없었다) — 타이머로
 시작하는 업무 예제 열(BX-01·02·04·05·07·08·14·16·23·35)이 현장에서 작업 지시 없이는 돌지 않았다. 09-gaps에는 §3이 아니라
 §4-5의 「감시 모드」와 7-11에 지나가는 말로만 있었다. **Center가 쥔다** — 하트비트를 받을 때 분마다 한 번 배포된 매니페스트의
 타이머를 쓸어 `POST /jobs`와 같은 함수로 작업을 만든다(`center/api/timers.py`, 저장소 17판 `timer_fires`·`timer_sweeps`).
 놓친 차례는 가장 최근 한 번, 배포 전 차례는 없다, `expires_at`은 다음 차례, 차례는 기본 키로 먼저 잡고 멱등 키도 일정·차례로
 짓는다. 식은 `contracts.schedule` 하나이고 **C1 R13**이 올릴 때, Studio 이벤트 편집기가 고칠 때 같은 함수로 본다. 일정이 만든
-작업은 `requested_by` `timer:<식>`이고 Bot UI·서버 실행기가 실행 기록의 `source`를 **`schedule`**로 적는다(`job_source`).
+작업은 `requested_by` `timer:<식>`이고 PC 실행기·서버 실행기가 실행 기록의 `source`를 **`schedule`**로 적는다(`job_source`).
 BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `tests/test_m7_server_rerun.py`가 본다. 콘솔은 CON-02 「일정」(C5 `GET /schedules` — 다음 차례·마지막
 차례·놓친 차례·만들지 못한 코드)이 보이고, 같은 묶음에서 CON-01 「외부 작업」(C15 `GET /external-tasks?run_id=` — 일감이
-기다리는지·일꾼이 쥐었는지·다시 나갔는지)도 더했다. 남겨 둔 것: Bot마다 다른 시간대(ADR-0110 「다시 볼 조건」).
+기다리는지·일꾼이 쥐었는지·다시 나갔는지)도 더했다. 남겨 둔 것: BPM 프로세스마다 다른 시간대(ADR-0110 「다시 볼 조건」).
 
 ### 3-19. 어댑터의 결과 모름 → PC는 확인 — **닫았다**
 
@@ -80,7 +80,7 @@ BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `te
 
 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md). 확장의 `escalate: confirmation`(UI 태스크 `ui_escalated`·
 `worker_restarted`)과 AI 태스크의 확인 트리거가 **PC 실행이면** 그 자리에서 현장 확인 하나로 멈춘다(`core.nodes`의
-`asks_a_person`·`escalate_to_person` — `manualTask`와 같은 요청이라 Bot UI·실행기 자식·CMN-01은 그대로다). 「계속」은
+`asks_a_person`·`escalate_to_person` — `manualTask`와 같은 요청이라 PC 실행기·실행 프로세스·CMN-01은 그대로다). 「계속」은
 **다시 하지 않고 결과 없이** 넘어가고(`Engine._escalation_answered`), 「중단」은 `ESCALATED` 업무 실패다. 그림이
 `ESCALATED`를 이름으로 받는 경계를 달았으면 확인을 띄우지 않고, 서버는 늘 오류 경계다. Studio 시험 실행은 케이스
 `approvals`가 그 태스크 노드 id로 답하고 **적지 않으면 「중단」**이다. 남은 것: CMN-01 [R]의 「시도한 로케이터 표」는
@@ -89,7 +89,7 @@ BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `te
 ### 3-17. 바깥 기능을 부르는 길 (Pull) — **닫았다**
 
 [ADR-0102](decisions/0102-calling-outside-is-pull.md)가 「네트워크를 건너는 바깥 호출은 모두 Pull」로 정했고 [C15](03-contracts/C15-external-tasks.md)는 **구현됨**이다.
-부르는 쪽 다섯(서버 실행기·실행기 자식·Studio는 `core.services.CenterServiceCaller`, Worker·Tool UI는 UI 자동화의
+부르는 쪽 다섯(서버 실행기·실행 프로세스·Studio는 `core.services.CenterServiceCaller`, Worker·Tool UI는 UI 자동화의
 `CenterOps`)과 일꾼(`service_kit.consumer` — 서비스 앱·모의 앱 열셋, 어댑터 일꾼 `chk-adapter-consumer`)이 붙었고,
 옛 길(C11 `POST /v1/ops`·`/manifest`·앱 안의 키, HTTP 어댑터 직접 호출, 서비스 앱 키 배달 ADR-0094, Center의 외부 앱
 키·주소 덮어쓰기 ADR-0097)은 걷었다. 남았던 둘도 닫았다:
@@ -115,12 +115,12 @@ BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `te
 (실행기·Center, 마지막 하나는 **PC를 진짜 자식 프로세스로 돌려** 현장이 만든 값이 서버 변수에
 담기는 것까지 본다). **업무 예제에도 들어왔다** — BX-16이 쓰던 사내 확장 우회(`center-jobs`)를
 걷어내고 `chk:call.delegate`로 다시 썼다(2026-10-16). 그 예제가 제품 흠 하나를 드러냈다:
-`import_example`이 **위임 대상까지 작업 폴더로 끌어와** 매니페스트가 그 Bot의 요구사항을 제
-것처럼 모았다(BX-16이 BX-17의 `ui_task`를 요구해 서버 Bot이 `not_ready`가 됐다).
+`import_example`이 **위임 대상까지 작업 폴더로 끌어와** 매니페스트가 그 BPM 프로세스의 요구사항을 제
+것처럼 모았다(BX-16이 BX-17의 `ui_task`를 요구해 서버 BPM 프로세스가 `not_ready`가 됐다).
 
-**B14의 `delegated_outputs`도 왔다** — Studio가 Center에서 Bot 패키지 목록(C5)을 받아 매니페스트의
+**B14의 `delegated_outputs`도 왔다** — Studio가 Center에서 BPM 프로세스 패키지 목록(C5)을 받아 매니페스트의
 `outputs`를 모아 실행 전 검사에 넘긴다(`service_catalog.declared_outputs` → `preflight.inspect`).
-그래서 「그 Bot이 돌려주지 않는 값을 받는다」를 **그림에서** 안다 — 실행할 때 알면 늦다.
+그래서 「그 BPM 프로세스가 돌려주지 않는 값을 받는다」를 **그림에서** 안다 — 실행할 때 알면 늦다.
 **판이 여럿이면 합친다**(막는 검사라 좁게 잡으면 멀쩡한 그림을 거부한다 — 그림이 판을 적지 않으면
 「배포된 판」이라는 뜻이고 어느 판이 배포될지 Studio는 모른다), **매니페스트가 없는 줄은 건너뛰고**,
 **못 받으면 그 대조만 건너뛴다**(빈 사전을 그대로 넘기면 「아무것도 선언하지 않았다」가 되어
@@ -161,12 +161,12 @@ BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `te
 
 **계약은 늘지 않았다** — `run_locations`에 `server`를 적는 것이 이미 「런타임도 화면도 필요
 없다」는 약속이라, 새 칸(`needs_runtime`)을 더하지 않았다. 더하면 **띄울 것을 고르는 길이 둘**이
-된다(Bot UI는 확장 단위로 띄운다) — 값이 같고 거르는 자리만 다른 목록은 조용히 갈라진다.
+된다(PC 실행기는 확장 단위로 띄운다) — 값이 같고 거르는 자리만 다른 목록은 조용히 갈라진다.
 
 **함께 드러난 것 하나** — Center의 C7 확장 자원이 `bot_uis`만 읽고 있었다. 계약은 처음부터
 「C4·**C12** 보고」라고 적어 두었는데(C7 `installed_on`) 코드가 덜 됐고, 실행기도 등록에
 `extensions=[]`를 싣고 있었다. 그래서 **서버에만 깔린 확장은 Center가 모르고**, 그것을 요구하는
-멀쩡한 서버 Bot의 **배포가 「확장 누락」으로 막혔다**. 양쪽을 고쳤다.
+멀쩡한 서버 BPM 프로세스의 **배포가 「확장 누락」으로 막혔다**. 양쪽을 고쳤다.
 
 남은 두 가지는 **공백이 아니라 선언의 일**이다: 서버에서 돌 태스크 종류를 가진 확장이 아직
 하나도 없고(내장은 `ui-automation` 하나, `ui_task`는 PC 전용이다), 그 길이 정말 열렸는지는
@@ -220,11 +220,11 @@ CON-07 상세 「서버 주소」에서 넣고 **정의의 허용 호스트 안�
 
 ### 4-9. CON-02 — 콘솔 집계 시험
 
-**화면·「확인률」·「배포된 Bot UI」를 닫았다** (`app/bots`). 확인률은 C3 `run_finished`에 선택 칸 `confirmations`를 더해 잰다 — 가르는 것은 **세는 쪽의 일**이고(Center는 줄을 다시 읽어 세지 않는다) 보내지 않은 옛 기록은 **분모에서 빠진다**.
+**화면·「확인률」·「배포된 PC 실행기」를 닫았다** (`app/bots`). 확인률은 C3 `run_finished`에 선택 칸 `confirmations`를 더해 잰다 — 가르는 것은 **세는 쪽의 일**이고(Center는 줄을 다시 읽어 세지 않는다) 보내지 않은 옛 기록은 **분모에서 빠진다**.
 
-**「배포된 Bot UI」도 닫았다** ([ADR-0046](decisions/0046-no-wildcard-pc-deployment.md)). 여기 적혀 있던 「먼저 정할 것」(**C5가 대상을 푸는 길**)은 **없었다** — 「그룹 배포」는 계약에도 코드에도 아예 없고, 전체(`*`) 배포는 **PC 쪽에 없다**(C2는 `"*"`를 서버 배포에만 주고 `DeploymentTarget.matches`·V6도 그렇다). 그래서 PC 배포는 전부 `bot_ui_id` 하나를 가리키고 「배포된 Bot UI」는 **`target.id`를 겹치지 않게 센 수**다. 재료는 CON-02가 이미 받아 둔 둘(C5 배포 목록·Bot UI 목록)로 끝났고 **계약이 늘지 않았다**. 함께 고친 것 둘: Center 네 자리가 대상 종류를 가리지 않고 `"*"`를 풀던 것(이제 한 함수가 짓고 `POST /deployments`는 409 `wrong_target`), 그리고 `summarize`가 **제가 세지 않은 칸**(`blocked`·`deployments`)을 0으로 들고 돌아와 실제 값을 덮던 것(끝난 실행이 있는 판은 「실행 불가」가 늘 0이었다).
+**「배포된 PC 실행기」도 닫았다** ([ADR-0046](decisions/0046-no-wildcard-pc-deployment.md)). 여기 적혀 있던 「먼저 정할 것」(**C5가 대상을 푸는 길**)은 **없었다** — 「그룹 배포」는 계약에도 코드에도 아예 없고, 전체(`*`) 배포는 **PC 쪽에 없다**(C2는 `"*"`를 서버 배포에만 주고 `DeploymentTarget.matches`·V6도 그렇다). 그래서 PC 배포는 전부 `bot_ui_id` 하나를 가리키고 「배포된 PC 실행기」는 **`target.id`를 겹치지 않게 센 수**다. 재료는 CON-02가 이미 받아 둔 둘(C5 배포 목록·PC 실행기 목록)로 끝났고 **계약이 늘지 않았다**. 함께 고친 것 둘: Center 네 자리가 대상 종류를 가리지 않고 `"*"`를 풀던 것(이제 한 함수가 짓고 `POST /deployments`는 409 `wrong_target`), 그리고 `summarize`가 **제가 세지 않은 칸**(`blocked`·`deployments`)을 0으로 들고 돌아와 실제 값을 덮던 것(끝난 실행이 있는 판은 「실행 불가」가 늘 0이었다).
 
-- **콘솔 집계 함수의 셈을 vitest가 잰다** (`web`에서 `pnpm test`, CI 웹 잡에 한 걸음). **2026-10-11에 「시험 판을 들이지 않는다」로 정했던 것을 2026-10-13에 뒤집었다** — 들이지 않는 쪽의 값은 「CI가 짧다」였고, 치른 값은 **덮어쓰기 흠**(끝난 실행이 있는 판의 「실행 불가」·「배포된 Bot UI」가 늘 0이던 것)이었다. 글로 막는 것은 같은 흠의 재발까지이고 **셈이 틀리는 것은 못 막는다**. 들이면서 한 일 둘: 세는 코드를 **화면을 모르는 모듈**로 갈랐고(`lib/summary.ts` — 페이지는 `server-only`를 끌고 와 단위 시험에서 부를 수 없다), 브라우저·React를 **띄우지 않게** 했다(jsdom·플러그인이 없어 CI에 느는 것은 몇 초다). 재는 것은 성공률·재생률·**확인률의 분모**·최근 20회 끊기·최근 성공 시각·`RunFields`가 남의 칸을 들고 오지 않는가·PC 수 세기·키 참조 모으기다.
+- **콘솔 집계 함수의 셈을 vitest가 잰다** (`web`에서 `pnpm test`, CI 웹 잡에 한 걸음). **2026-10-11에 「시험 판을 들이지 않는다」로 정했던 것을 2026-10-13에 뒤집었다** — 들이지 않는 쪽의 값은 「CI가 짧다」였고, 치른 값은 **덮어쓰기 흠**(끝난 실행이 있는 판의 「실행 불가」·「배포된 PC 실행기」가 늘 0이던 것)이었다. 글로 막는 것은 같은 흠의 재발까지이고 **셈이 틀리는 것은 못 막는다**. 들이면서 한 일 둘: 세는 코드를 **화면을 모르는 모듈**로 갈랐고(`lib/summary.ts` — 페이지는 `server-only`를 끌고 와 단위 시험에서 부를 수 없다), 브라우저·React를 **띄우지 않게** 했다(jsdom·플러그인이 없어 CI에 느는 것은 몇 초다). 재는 것은 성공률·재생률·**확인률의 분모**·최근 20회 끊기·최근 성공 시각·`RunFields`가 남의 칸을 들고 오지 않는가·PC 수 세기·키 참조 모으기다.
 
 ## 5. 공백은 아니지만 적어 둘 것
 
@@ -236,7 +236,7 @@ CON-07 상세 「서버 주소」에서 넣고 **정의의 허용 호스트 안�
 
 ## 6. M6 첫째 — 현장 시나리오 3: 돌았다, 사람이 한 번 더 (CI가 못 보는 자리)
 
-M6의 첫째 기준(「**시나리오 3**(BX-04)이 Windows 현장 PC에서 Center 배포를 거쳐 통과」)을 **2026-10-17에 Windows 11 PC(일반 사용자, 한글 사용자 이름)에서 돌렸다** — Studio 올리기 → Admin 승인·배포 서명 → Bot UI 설치·「준비됨」 → Center 작업 지시 → 포털 표 읽기(Chromium) → 회계 프로그램 4줄 입력(UIA) → 합계 검산 → 메일 (`success`, 약 50초). 서버 Bot인 시나리오 1·2·4는 M7 인수 시험으로 넘겼다 ([ADR-0055](decisions/0055-m6-field-scenario-is-scenario-3.md)). 그 PC에서 막힌 것 중 **제품의 흠은 고쳤고**(Worker 화면 스레드·예제 폴더·설정 저장 뒤 사전 점검·SMTP 주소 검사), 환경 쪽은 `04-setup` §7에 적었다. **사람이 할 길이 없어 Claude가 대신한 자리 하나**(§6-1)도 닫았으므로, 남은 것은 **사람이 그 길로 한 번 더 돌리는 것**뿐이다 — 그때 이 기준을 체크한다. (첫 실행 전 앱 주소 명부는 Bot UI가 하트비트 뒤에 받아 두게 해 닫았고(C13 「전송」), 이름 없는 표의 「역할 + 이름」 칸은 이름을 브라우저 규칙대로 짓게 해 닫았다.)
+M6의 첫째 기준(「**시나리오 3**(BX-04)이 Windows 현장 PC에서 Center 배포를 거쳐 통과」)을 **2026-10-17에 Windows 11 PC(일반 사용자, 한글 사용자 이름)에서 돌렸다** — Studio 올리기 → Admin 승인·배포 서명 → PC 실행기 설치·「준비됨」 → Center 작업 지시 → 포털 표 읽기(Chromium) → 회계 프로그램 4줄 입력(UIA) → 합계 검산 → 메일 (`success`, 약 50초). 서버 BPM 프로세스인 시나리오 1·2·4는 M7 인수 시험으로 넘겼다 ([ADR-0055](decisions/0055-m6-field-scenario-is-scenario-3.md)). 그 PC에서 막힌 것 중 **제품의 흠은 고쳤고**(Worker 화면 스레드·예제 폴더·설정 저장 뒤 사전 점검·SMTP 주소 검사), 환경 쪽은 `04-setup` §7에 적었다. **사람이 할 길이 없어 Claude가 대신한 자리 하나**(§6-1)도 닫았으므로, 남은 것은 **사람이 그 길로 한 번 더 돌리는 것**뿐이다 — 그때 이 기준을 체크한다. (첫 실행 전 앱 주소 명부는 PC 실행기가 하트비트 뒤에 받아 두게 해 닫았고(C13 「전송」), 이름 없는 표의 「역할 + 이름」 칸은 이름을 브라우저 규칙대로 짓게 해 닫았다.)
 
 ### 6-1. BUI-06이 데스크톱 화면을 담지 못했다 — 닫았다
 
@@ -244,7 +244,7 @@ M6의 첫째 기준(「**시나리오 3**(BX-04)이 Windows 현장 PC에서 Cent
 
 ## 7. 화면 문서에 「아직」으로 적힌 자리 (M6 셋째 기준)
 
-§1~§4는 계약·화면을 **코드의 호출자**로 대조했다. 이번에는 거꾸로 **화면 문서의 「상태」 줄이 「아직」이라고 적은 것**을 모았다(2026-10-18) — 화면이 문서와 **맞기는 하지만**(문서가 「아직」이라고 정직하게 적었다) 기준의 뜻은 「문서가 약속한 화면이 돈다」라서 여기 둔다. 대조하다 **낡은 「아직」 셋**(C10 §2의 데스크톱 분석, STU-01 [C]·STU-14의 끌어다 놓기)은 그 자리에서 고쳤다. 먼저 정할 것이 없던 하나(BUI-04 「최근 실행」 — BUI-02가 읽는 기록 파일에서 그 Bot의 마지막 실행을 고른다)는 **닫았다**. 7-3(BUI-06 데스크톱 「직접 고르기」·「표시」)도 **닫았다** — 전역 훅 없이 커서·Ctrl을 읽고 테두리는 Bot UI가 띄운다(스파이크 s11, [ADR-0072](decisions/0072-desktop-pick-without-hooks.md)). 7-2(BUI-08이 등록 탭의 화면을 이어 쓰기·BUI-06 「시험...」)도 **닫았다** — 등록 세션에 계획을 싣는 길(C10 `…/plan`)을 더했다. 7-4(STU-06 「나누기」)도 **닫았다** — 노드 하나를 새 PC Bot으로 옮기고 그 자리를 위임 호출로 바꾼다([ADR-0071](decisions/0071-splitting-a-task-into-a-pc-bot.md)). 7-5(STU-10 나머지 분류)도 **닫았다** — 칸마다 읽는 곳을 대조해 테마·확장별 설정은 켜고, 읽는 곳이 없는 메일·비밀·공급자·temperature·화면 인식 모델·캔버스 팔레트는 화면 문서에서 걷었다([ADR-0073](decisions/0073-studio-settings-only-what-is-used.md)). 7-6(STU-13 「이 스텝까지 시험」·계획 굳히기)도 **닫았다** — Studio 시험 실행이 이미 Worker에 직접 붙으므로 Bot UI로 넘기지 않고 편집기에 같은 문맥(Worker 자리·개발용 키·`service.key_ref`)을 주었다([ADR-0074](decisions/0074-ui-task-editor-runs-on-the-worker.md)). 7-7(서비스 앱 콘솔 → CON-01)도 **닫았다** — Center 콘솔 주소는 서비스 앱 콘솔의 설정 하나로 받고 C11은 그대로다([ADR-0075](decisions/0075-service-console-links-to-center-console.md)). 7-8(ADM 창)은 닫았다 — 지금은 Admin 창도 CLI도 없고 관리자가 Center 콘솔에 계정으로 들어와 Center가 대신 서명한다([ADR-0090](decisions/0090-center-admin-accounts.md)). 대조하다 **CLI에 서버 배포 서명이 없던 것**(`deploy --server`)을 찾아 함께 메웠다. 7-10(셀렉터 등록을 Bot UI 밖으로)도 **닫았다** — 확장의 도구는 Tool UI가 띄우고 Worker는 Bot UI 것을 빌린다(`apps/tool_ui`, 기여 지점 `tool_ui.tools`, [ADR-0077](decisions/0077-tool-ui.md)).
+§1~§4는 계약·화면을 **코드의 호출자**로 대조했다. 이번에는 거꾸로 **화면 문서의 「상태」 줄이 「아직」이라고 적은 것**을 모았다(2026-10-18) — 화면이 문서와 **맞기는 하지만**(문서가 「아직」이라고 정직하게 적었다) 기준의 뜻은 「문서가 약속한 화면이 돈다」라서 여기 둔다. 대조하다 **낡은 「아직」 셋**(C10 §2의 데스크톱 분석, STU-01 [C]·STU-14의 끌어다 놓기)은 그 자리에서 고쳤다. 먼저 정할 것이 없던 하나(BUI-04 「최근 실행」 — BUI-02가 읽는 기록 파일에서 그 BPM 프로세스의 마지막 실행을 고른다)는 **닫았다**. 7-3(BUI-06 데스크톱 「직접 고르기」·「표시」)도 **닫았다** — 전역 훅 없이 커서·Ctrl을 읽고 테두리는 PC 실행기가 띄운다(스파이크 s11, [ADR-0072](decisions/0072-desktop-pick-without-hooks.md)). 7-2(BUI-08이 등록 탭의 화면을 이어 쓰기·BUI-06 「시험...」)도 **닫았다** — 등록 세션에 계획을 싣는 길(C10 `…/plan`)을 더했다. 7-4(STU-06 「나누기」)도 **닫았다** — 노드 하나를 새 PC BPM 프로세스로 옮기고 그 자리를 위임 호출로 바꾼다([ADR-0071](decisions/0071-splitting-a-task-into-a-pc-bot.md)). 7-5(STU-10 나머지 분류)도 **닫았다** — 칸마다 읽는 곳을 대조해 테마·확장별 설정은 켜고, 읽는 곳이 없는 메일·비밀·공급자·temperature·화면 인식 모델·캔버스 팔레트는 화면 문서에서 걷었다([ADR-0073](decisions/0073-studio-settings-only-what-is-used.md)). 7-6(STU-13 「이 스텝까지 시험」·계획 굳히기)도 **닫았다** — Studio 시험 실행이 이미 Worker에 직접 붙으므로 PC 실행기로 넘기지 않고 편집기에 같은 문맥(Worker 자리·개발용 키·`service.key_ref`)을 주었다([ADR-0074](decisions/0074-ui-task-editor-runs-on-the-worker.md)). 7-7(서비스 앱 콘솔 → CON-01)도 **닫았다** — Center 콘솔 주소는 서비스 앱 콘솔의 설정 하나로 받고 C11은 그대로다([ADR-0075](decisions/0075-service-console-links-to-center-console.md)). 7-8(ADM 창)은 닫았다 — 지금은 Admin 창도 CLI도 없고 관리자가 Center 콘솔에 계정으로 들어와 Center가 대신 서명한다([ADR-0090](decisions/0090-center-admin-accounts.md)). 대조하다 **CLI에 서버 배포 서명이 없던 것**(`deploy --server`)을 찾아 함께 메웠다. 7-10(셀렉터 등록을 PC 실행기 밖으로)도 **닫았다** — 확장의 도구는 Tool UI가 띄우고 Worker는 PC 실행기 것을 빌린다(`apps/tool_ui`, 기여 지점 `tool_ui.tools`, [ADR-0077](decisions/0077-tool-ui.md)).
 
 | 자리 | 화면 | 남은 것 | 먼저 정할 것 |
 | --- | --- | --- | --- |

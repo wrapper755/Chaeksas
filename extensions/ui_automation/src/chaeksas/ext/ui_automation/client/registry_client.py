@@ -2,7 +2,7 @@
 
 **Worker는 레지스트리를 모른다** (C9) — 브라우저 일만 한다. 등록·삭제·조회는 이 확장의 도구(Tool UI,
 ADR-0077)가 **Center에 외부 작업으로** 올린다 (ADR-0102) — 앱의 주소도 키도 모른다. 토큰은 이 PC
-Bot UI가 청한 **호출 토큰**이고, 등록 작업(`registry_write`)은 그 PC에 「셀렉터 등록」(CON-03)이 켜졌을
+PC 실행기가 청한 **호출 토큰**이고, 등록 작업(`registry_write`)은 그 PC에 「셀렉터 등록」(CON-03)이 켜졌을
 때만 Center가 받는다.
 
 - **등록은 LLM을 쓰지 않으니 `mode`는 늘 `deterministic`**이다.

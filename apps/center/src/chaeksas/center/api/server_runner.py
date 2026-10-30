@@ -6,11 +6,11 @@
 C4와 **다른 것 셋**이 여기 있다 (C12 표·ADR-0054 —
 `docs/decisions/0054-server-run-state-and-concurrency.md`):
 
-| | C4 Bot UI | C12 서버 실행기 |
+| | C4 PC 실행기 | C12 서버 실행기 |
 | --- | --- | --- |
 | 실행 자리 | `current_run` 하나 (ADR-0014) | `capacity` + `running[]` — 상한까지 여럿 |
 | 기다리는 실행 | 자리를 쥔다 | **`waiting[]`로 빠져 자리를 놓는다** |
-| 대기열 | Bot UI가 가진다 | **Center가 가진다** — 실행기는 빈자리만큼만 받는다 |
+| 대기열 | PC 실행기가 가진다 | **Center가 가진다** — 실행기는 빈자리만큼만 받는다 |
 
 **같은 것은 같은 코드로 한다** — 키 묶기는 `center.host_keys`, 배포 봉투·배치 결정은
 `api.deployments`, 결재는 `api.approvals`가 C4와 **같은 함수**로 다룬다. 베끼면 한쪽만 고쳐져
@@ -157,7 +157,7 @@ def register(
         # **등록 응답에도 싣는다** (C12 §등록) — 실행기는 공개키를 메모리에만 두고, 다시 뜨면
         # **첫 하트비트보다 먼저** 담아 둔 실행을 되살린다 (ADR-0054). 되살린 실행이 바깥 앱
         # 명부를 지을 때 공개키가 없으면 외부 확장의 봉투를 **한 번도** 검증할 수 없다 (C13 E6).
-        # Bot UI는 공개키를 제 저장소에 들고 있어 이 자리가 비어도 괜찮다 (C4).
+        # PC 실행기는 공개키를 제 저장소에 들고 있어 이 자리가 비어도 괜찮다 (C4).
         admin_keys=signing.admin_keys(store),
         heartbeat_interval_s=heartbeat_interval_s,
         server_time=now_iso(),
@@ -343,7 +343,7 @@ def _key_of(store: Store, key_id: str) -> dict[str, str | None]:
 
 
 def readiness_of(store: Store, runner_id: str) -> list[Readiness]:
-    """그 실행기가 보고한 Bot별 준비 상태 (C12 `readiness`, CON-12 「Bot별 상한」)."""
+    """그 실행기가 보고한 BPM 프로세스별 준비 상태 (C12 `readiness`, CON-12 「BPM 프로세스별 상한」)."""
     row = store.row(
         "SELECT state_json FROM server_runners WHERE server_runner_id = ?", (runner_id,)
     )

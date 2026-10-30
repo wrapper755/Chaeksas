@@ -1,13 +1,13 @@
 """BUI-11 확장 — 이 PC에 설치된 확장과 각 확장이 더한 것 (C13, ADR-0018).
 
-- **Bot UI는 어느 확장인지 모른다** — 표와 상세의 글은 모두 정의(`extension.json`)에서 온다.
+- **PC 실행기는 어느 확장인지 모른다** — 표와 상세의 글은 모두 정의(`extension.json`)에서 온다.
   이 파일에 확장 이름이 없다 (`tests/test_import_direction.py`가 막는다).
-- **끄고 켜는 것 말고는 읽기만 한다.** 끈 목록은 **Bot UI 제 설정**이다 (ADR-0043) — Studio(STU-15)의
-  것과 **다른 자리**다. 개발 도구에서 끈 것이 현장 Bot을 멈추면 안 된다.
+- **끄고 켜는 것 말고는 읽기만 한다.** 끈 목록은 **PC 실행기 제 설정**이다 (ADR-0043) — Studio(STU-15)의
+  것과 **다른 자리**다. 개발 도구에서 끈 것이 현장 BPM 프로세스를 멈추면 안 된다.
 - **「저장」이 없다** (BUI-10과 같은 결) — 누르는 그 자리에서 설정에 적고 확장을 다시 읽는다.
   다시 읽으면 사전 점검 캐시도 비워진다 — 안 비우면 꺼도 「준비됨」이 하트비트로 계속 올라간다.
-- **BUI-11에만 있는 것 둘**: 「쓰는 Bot」 열(설치된 Bot 중 그 확장을 요구하는 것)과, 끄기 전에
-  「<Bot> N개가 실행 불가가 됩니다」를 묻는 확인 창(기본 「취소」). 설치된 Bot이 요구하는데 **이 PC에
+- **BUI-11에만 있는 것 둘**: 「쓰는 BPM 프로세스」 열(설치된 BPM 프로세스 중 그 확장을 요구하는 것)과, 끄기 전에
+  「<BPM 프로세스> N개가 실행 불가가 됩니다」를 묻는 확인 창(기본 「취소」). 설치된 BPM 프로세스가 요구하는데 **이 PC에
   없는** 확장도 줄로 보인다 (「필요하지만 없음」) — 목록에 없으면 왜 실행이 막히는지 알 수 없다.
 - **외부 확장은 들고 있는 명부에서 온다** (C7 → `services.py`). 「새로 고침」만 Center를 부르고,
   **닿지 못하면 들고 있던 것을 쓴다** (ADR-0007 — 현장 PC다. Studio는 그 자리에서 말한다).
@@ -66,7 +66,7 @@ TITLE = "확장"
 #: 처음 크기 (표 6열 + 상세).
 DEFAULT_SIZE = (900, 620)
 
-COLUMNS = ("확장", "등급", "버전", "기여", "상태", "쓰는 Bot")
+COLUMNS = ("확장", "등급", "버전", "기여", "상태", "쓰는 BPM 프로세스")
 NAME, TIER, VERSION, SUMMARY, STATE, USED_BY = range(len(COLUMNS))
 
 #: 등급 (C13 `tier`) — 콘솔(CON-07)·STU-15와 같은 말을 쓴다.
@@ -111,16 +111,16 @@ NO_SELECTION = "확장을 고르면 그 확장이 더한 것을 봅니다."
 
 #: 끄고 켤 수 없는 줄의 까닭 (U3 — 끄고 가까이에 적는다).
 NO_TOGGLE_EXTERNAL = "외부 확장은 Center에 등록된 정의입니다 — 끄고 켜는 일은 Center에서 합니다 (C13 E6)."
-NO_TOGGLE_ABSENT = "이 PC에 없는 확장입니다 — 그 확장이 깔린 Bot UI 판으로 올리세요."
+NO_TOGGLE_ABSENT = "이 PC에 없는 확장입니다 — 그 확장이 깔린 PC 실행기 판으로 올리세요."
 NO_TOGGLE_NOTHING = "확장을 고르세요."
 
 
 @dataclass(frozen=True)
 class ExtensionRow:
-    """표의 한 줄. `loaded`가 없으면 **설치된 Bot이 요구하는데 이 PC에 없는** 확장이다."""
+    """표의 한 줄. `loaded`가 없으면 **설치된 BPM 프로세스가 요구하는데 이 PC에 없는** 확장이다."""
 
     loaded: LoadedExtension | None
-    #: 이 확장을 쓰는 설치된 Bot의 이름들 (C1 `requires.extensions` + AI 환경 주인).
+    #: 이 확장을 쓰는 설치된 BPM 프로세스의 이름들 (C1 `requires.extensions` + AI 환경 주인).
     used_by: tuple[str, ...] = ()
     #: 없는 확장 줄에만 — 요구한 id와 판 범위.
     wanted_id: str = ""
@@ -154,7 +154,7 @@ def state_of(row: ExtensionRow) -> tuple[str, str, str]:
         return (
             STATE_ABSENT,
             STATE_ABSENT,
-            f"설치된 Bot이 요구하지만 이 PC에 없습니다{wanted} — 그 확장이 깔린 Bot UI 판으로 올리세요.",
+            f"설치된 BPM 프로세스가 요구하지만 이 PC에 없습니다{wanted} — 그 확장이 깔린 PC 실행기 판으로 올리세요.",
         )
     if loaded.off:
         return STATE_OFF, STATE_OFF, "사람이 껐습니다 (BUI-11). 「켜기」로 되돌립니다."
@@ -183,11 +183,11 @@ def summary_of(manifest: ExtensionManifest) -> str:
 def users(
     bots: Sequence[InstalledBot], needed: Callable[[InstalledBot], set[str]]
 ) -> dict[str, tuple[str, ...]]:
-    """확장 id → 그 확장을 쓰는 설치된 Bot 이름들.
+    """확장 id → 그 확장을 쓰는 설치된 BPM 프로세스 이름들.
 
     **「무엇이 그 확장을 쓰는가」는 Agent가 안다** (`needed_extensions`) — `requires.extensions`에
     적힌 것과, `requires.domains`의 `web`·`desktop` AI 환경을 기여한 확장이다 (ADR-0037). 그림에
-    확장을 적지 않아도 끄면 멈추는 Bot이라 함께 센다.
+    확장을 적지 않아도 끄면 멈추는 BPM 프로세스라 함께 센다.
     """
     out: dict[str, list[str]] = {}
     for bot in bots:
@@ -197,7 +197,7 @@ def users(
 
 
 def wanted_versions(bots: Sequence[InstalledBot]) -> dict[str, str]:
-    """확장 id → 설치된 Bot이 요구한 판 범위 (C1 `requires.extensions[].version`)."""
+    """확장 id → 설치된 BPM 프로세스가 요구한 판 범위 (C1 `requires.extensions[].version`)."""
     out: dict[str, str] = {}
     for bot in bots:
         for need in bot.manifest.requires.extensions:
@@ -248,11 +248,11 @@ def detail_sections(
                 STATE_ABSENT,
                 [
                     f"{row.wanted_id}" + (f" (요구 판: {row.wanted_version})" if row.wanted_version else ""),
-                    "설치된 Bot이 요구하지만 이 PC에 없습니다 — 끄고 켤 수 없습니다.",
-                    "확장은 Bot UI 설치 파일에 들어 있습니다 (ADR-0018 §3) — 그 확장이 깔린 판으로 올리세요.",
+                    "설치된 BPM 프로세스가 요구하지만 이 PC에 없습니다 — 끄고 켤 수 없습니다.",
+                    "확장은 PC 실행기 설치 파일에 들어 있습니다 (ADR-0018 §3) — 그 확장이 깔린 판으로 올리세요.",
                 ],
             ),
-            ("쓰는 Bot", list(row.used_by) or [NOTHING]),
+            ("쓰는 BPM 프로세스", list(row.used_by) or [NOTHING]),
         ]
 
     m = loaded.manifest
@@ -295,7 +295,7 @@ def detail_sections(
         for one in m.contributes.bot_ui_local_runtimes
     ]
     out.append(("로컬 런타임", runtime_lines or [NOTHING]))
-    out.append(("쓰는 Bot", list(row.used_by) or ["쓰는 Bot 없음"]))
+    out.append(("쓰는 BPM 프로세스", list(row.used_by) or ["쓰는 BPM 프로세스 없음"]))
     return out
 
 
@@ -315,7 +315,7 @@ def _contribution_lines(m: ExtensionManifest) -> list[str]:
 def _service_lines(m: ExtensionManifest, service_url: str | None) -> list[str]:
     """서버 부분과 주소.
 
-    **상태는 적지 않는다** — 서비스 앱이 살아 있나는 Center가 60초마다 보는 것이고(C7), Bot UI는
+    **상태는 적지 않는다** — 서비스 앱이 살아 있나는 Center가 60초마다 보는 것이고(C7), PC 실행기는
     명부에서 주소만 받아 둔다. 모르는 것을 「정상」이라고 하지 않는다 (CON-07에서 본다).
     """
     if m.service is None:
@@ -361,7 +361,7 @@ def external_from(
 ) -> tuple[list[LoadedExtension], list[str]]:
     """들고 있는 명부의 외부 확장 정의들 → 읽어 들인 확장 + 못 읽은 사유.
 
-    **봉투를 다시 검증한다** (C13 E6) — 정의가 Bot의 키를 어느 주소로 보낼지 정하므로, 실행기와
+    **봉투를 다시 검증한다** (C13 E6) — 정의가 BPM 프로세스의 키를 어느 주소로 보낼지 정하므로, 실행 프로세스와
     같은 관문을 화면도 통과시킨다. 검증에 걸린 것은 **지우지 않고** 「서명 확인 안 됨」으로 보인다.
     """
     host = ExtensionHost(api_version=api_version)
@@ -481,7 +481,7 @@ class ExtensionsDialog(QDialog):
                 manifest.version if manifest is not None else (row.wanted_version or "—"),
                 summary_of(manifest) if manifest is not None else "—",
                 shown,
-                str(len(row.used_by)) if row.used_by else "쓰는 Bot 없음",
+                str(len(row.used_by)) if row.used_by else "쓰는 BPM 프로세스 없음",
             )
             for column, text in enumerate(texts):
                 item = QTableWidgetItem(text)
@@ -567,7 +567,7 @@ class ExtensionsDialog(QDialog):
     def set_off(self, off: bool) -> None:
         """고른 확장을 끄거나 켠다 — **설정에 적고 확장을 다시 읽는다.**
 
-        **끄기는 되돌릴 수 있지만 조용히 하지 않는다** — 쓰는 Bot이 있으면 몇 개가 실행 불가가
+        **끄기는 되돌릴 수 있지만 조용히 하지 않는다** — 쓰는 BPM 프로세스가 있으면 몇 개가 실행 불가가
         되는지 말하고 확인 창의 기본은 「취소」다 (BUI-10 「삭제...」와 같은 결).
         """
         row = self.selected()
@@ -589,16 +589,18 @@ class ExtensionsDialog(QDialog):
         self.note.setText(
             f"{row.name}을 {'껐습니다' if off else '켰습니다'}."
             + (
-                " 이 확장의 태스크를 쓰는 Bot은 사전 점검에서 막히고, 「도구」의 그 도구도 사라집니다."
+                " 이 확장의 태스크를 쓰는 BPM 프로세스는 사전 점검에서 막히고, 「도구」의 그 도구도 사라집니다."
                 if off
                 else ""
             )
         )
 
     def _confirm_off(self, row: ExtensionRow) -> bool:
-        warning = f"확장 「{row.name}」을 이 Bot UI에서 끕니다. 기여(태스크 종류·도구·점검)가 모두 빠집니다."
+        warning = f"확장 「{row.name}」을 이 PC 실행기에서 끕니다. 기여(태스크 종류·도구·점검)가 모두 빠집니다."
         if row.used_by:
-            warning += f"\n\n이 확장을 쓰는 Bot {len(row.used_by)}개가 실행 불가가 됩니다: " + ", ".join(row.used_by)
+            warning += (
+                f"\n\n이 확장을 쓰는 BPM 프로세스 {len(row.used_by)}개가 실행 불가가 됩니다: " + ", ".join(row.used_by)
+            )
         answer = QMessageBox.question(
             self,
             "확장을 끌까요?",
@@ -619,7 +621,7 @@ class ExtensionsDialog(QDialog):
         """Center에서 외부 확장 정의를 다시 받는다 (C7 → 명부).
 
         **닿지 못하면 들고 있던 것을 쓴다** (ADR-0007) — 사유는 표 아래 한 줄로 말한다. 받는 것은
-        **설치된 Bot이 요구하는 확장**뿐이다 (명부의 규칙이 그렇다 — 필요한 것만 받는다).
+        **설치된 BPM 프로세스가 요구하는 확장**뿐이다 (명부의 규칙이 그렇다 — 필요한 것만 받는다).
         어느 것이 외부인가는 **Center의 답이 말해 준다** (`extension_ids` — 내장·사내는 정의
         없이 와서 담기지 않는다).
         """
@@ -641,7 +643,7 @@ class ExtensionsDialog(QDialog):
         got = (
             f"외부 확장 {len(self.external)}개를 들고 있습니다."
             if wanted
-            else "이 PC의 Bot이 쓰는 외부 확장이 없습니다."
+            else "이 PC의 BPM 프로세스가 쓰는 외부 확장이 없습니다."
         )
         self.note.setText(f"{got} {' / '.join(said)}" if said else got)
 

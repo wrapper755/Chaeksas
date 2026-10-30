@@ -12,9 +12,9 @@ import { fullTime, time } from "@/app/bot-uis/page";
 import { CancelQueuedJob } from "@/app/server-runners/queue-cancel";
 
 /**
- * 서버 실행기 목록·승인 대기·대기열 — CON-02 「Bot 현황」의 「서버」 탭이 그린다 (CON-12 「목록」).
+ * 서버 실행기 목록·승인 대기·대기열 — CON-02 「BPM 프로세스 현황」의 「서버」 탭이 그린다 (CON-12 「목록」).
  *
- * **목록과 상세로 나눈다** — 「실행 중」·「기다리는 실행」·「Bot별 상한」은 **실행기 하나의
+ * **목록과 상세로 나눈다** — 「실행 중」·「기다리는 실행」·「BPM 프로세스별 상한」은 **실행기 하나의
  * 것**이라 상세(`/server-runners/<id>`)에 있다.
  *
  * **「대기열」만 여기 있다.** 서버 작업은 **내려가기 전까지 어느 실행기에도 묶이지 않으므로**
@@ -36,8 +36,8 @@ export async function ServerRunners({ admin }: { admin: boolean }) {
     enrollments = await center.enrollments("server_runner");
     // 대기열은 **종류로** 좁힌다 — 아직 대상이 없는 작업이라 `target_id`로는 못 찾는다 (C12).
     queue = await center.jobs({ state: QUEUED_STATE, target_type: "server_runner" });
-    // 「Bot별 상한 n」의 n은 **배포 봉투**에 있다 (C12 규칙 3). 활성 배포를 한 번 읽고
-    // **서버 것만** 남긴다 — 같은 Bot이 PC에도 배포돼 있으면 PC 봉투의 상한을 보일 수 있다.
+    // 「BPM 프로세스별 상한 n」의 n은 **배포 봉투**에 있다 (C12 규칙 3). 활성 배포를 한 번 읽고
+    // **서버 것만** 남긴다 — 같은 BPM 프로세스가 PC에도 배포돼 있으면 PC 봉투의 상한을 보일 수 있다.
     deployments = serverDeployments(await center.deployments({ active: true }));
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
@@ -130,7 +130,7 @@ export async function ServerRunners({ admin }: { admin: boolean }) {
     },
     {
       key: "bpm_process_id",
-      header: "서버 Bot",
+      header: "서버 BPM 프로세스",
       cell: (row) => `${row.bpm_process_id}@${row.version ?? "(배포된 버전)"}`,
     },
     { key: "requested_at", header: "요청 시각", width: "16ch", cell: (row) => time(row.requested_at) },

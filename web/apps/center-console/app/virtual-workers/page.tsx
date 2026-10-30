@@ -9,7 +9,7 @@ import { createVirtualWorker } from "@/app/actions";
 /**
  * CON-13 가상 직원 (목록).
  *
- * 사람이 아닌 업무 주체 — 접수 Bot과 감독자를 묶는다 (C5 §가상 직원, ADR-0085). 일괄·자식은
+ * 사람이 아닌 업무 주체 — 접수 BPM 프로세스와 감독자를 묶는다 (C5 §가상 직원, ADR-0085). 일괄·자식은
  * 상세에서 보인다 — **Center가 읽을 때 이어 붙인 것**이고 콘솔이 세지 않는다.
  */
 
@@ -49,7 +49,7 @@ export default async function VirtualWorkersPage({
       ),
     },
     { key: "id", header: "id", width: "20ch", mono: true },
-    { key: "intake", header: "접수 Bot", mono: true },
+    { key: "intake", header: "접수 BPM 프로세스", mono: true },
     { key: "supervisors", header: "감독자", cell: (row) => (row.supervisors ?? []).join(", ") || "—" },
     {
       key: "state",
@@ -64,7 +64,7 @@ export default async function VirtualWorkersPage({
       <header className="mb-4">
         <h1 className="text-h1 font-bold">가상 직원</h1>
         <p className="text-body text-text-secondary">
-          접수 Bot과 감독자를 묶은 업무 주체입니다. 일괄은 접수 Bot 실행 한 번입니다.
+          접수 BPM 프로세스와 감독자를 묶은 업무 주체입니다. 일괄은 접수 BPM 프로세스 실행 한 번입니다.
         </p>
       </header>
 
@@ -95,11 +95,11 @@ export default async function VirtualWorkersPage({
               <input name="supervisors" className={INPUT} />
             </label>
             <label className="flex flex-col gap-1 text-body-sm">
-              <span className="text-text-muted">접수 Bot (패키지 id) *</span>
+              <span className="text-text-muted">접수 BPM 프로세스 (패키지 id) *</span>
               <input name="intake" required className={INPUT} />
             </label>
             <p className="text-caption text-text-muted">
-              접수 Bot에 결재 없는 일괄 기동이 있으면 등록되지 않습니다.
+              접수 BPM 프로세스에 결재 없는 일괄 기동이 있으면 등록되지 않습니다.
             </p>
             <div>
               <Button type="submit" variant="primary">

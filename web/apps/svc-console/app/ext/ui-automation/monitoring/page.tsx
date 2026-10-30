@@ -9,7 +9,7 @@ import { Shell } from "@/components/Shell";
 /**
  * UIA-03 모니터링 — UI 세션(= UI 태스크 한 번) 기록. 출처는 Worker가 보낸 보고 (C8).
  *
- * **보기 전용**이다 — 전환은 현장 Bot UI가 확인으로 처리한다 (프로토타입의 「BPM이 받아감」
+ * **보기 전용**이다 — 전환은 현장 PC 실행기가 확인으로 처리한다 (프로토타입의 「BPM이 받아감」
  * 단추는 없다). 상세는 `<details>`로 펼친다 (JS 없이 돈다).
  *
  * **업무 값은 없다** — 읽은 값·입력한 글자는 C8 보고에 담기지 않는다 (원칙 6).
@@ -25,7 +25,7 @@ const STATUS_LABEL: Record<string, string> = {
   failed: "실패",
 };
 const CALLER_LABEL: Record<string, string> = {
-  bot_ui: "Bot",
+  bot_ui: "BPM 프로세스",
   studio: "Studio",
   worker: "Worker",
   server_runner: "서버 실행기",
@@ -33,13 +33,13 @@ const CALLER_LABEL: Record<string, string> = {
 const MODE_LABEL: Record<string, string> = { autonomous: "자율 수행", deterministic: "결정 수행" };
 
 const ESCALATION_HINT =
-  "전환 = 자가 치유가 한도를 넘어 현장 PC(Bot UI)의 확인으로 넘어간 것 (오류가 아닙니다).";
+  "전환 = 자가 치유가 한도를 넘어 현장 PC(PC 실행기)의 확인으로 넘어간 것 (오류가 아닙니다).";
 /** C8 보고는 세션이 **끝날 때** 온다 — 그래서 도는 세션은 여기서 알 수 없다. */
 const RUNNING_HINT =
-  "지금 도는 세션은 여기서 알 수 없습니다 — 보고는 세션이 끝날 때 옵니다 (현장 Bot UI의 BUI-09가 보여 줍니다).";
+  "지금 도는 세션은 여기서 알 수 없습니다 — 보고는 세션이 끝날 때 옵니다 (현장 PC 실행기의 BUI-09가 보여 줍니다).";
 const NO_SESSIONS = {
   title: "아직 UI 세션 보고가 없습니다.",
-  hint: "Bot이 UI 태스크를 돌리거나 BUI-08 「셀렉터 시험」에서 보고를 켜면 쌓입니다.",
+  hint: "BPM 프로세스가 UI 태스크를 돌리거나 BUI-08 「셀렉터 시험」에서 보고를 켜면 쌓입니다.",
 };
 const NO_FALLBACK = "아직 성공한 실행 기록이 없습니다.";
 
@@ -125,8 +125,8 @@ export default async function UiAutomationMonitoringPage() {
         return <RunLink base={CENTER_CONSOLE_URL} runId={runIdOfBusinessKey(key)} text={key ?? "—"} />;
       },
     },
-    { key: "bpm_process_id", header: "Bot", cell: (row) => row.bpm_process_id ?? "—" },
-    { key: "host", header: "Bot UI", cell: (row) => row.host ?? "—" },
+    { key: "bpm_process_id", header: "BPM 프로세스", cell: (row) => row.bpm_process_id ?? "—" },
+    { key: "host", header: "PC 실행기", cell: (row) => row.host ?? "—" },
     {
       key: "caller",
       header: "요청 쪽",

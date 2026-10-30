@@ -260,7 +260,7 @@ def test_a_message_continues_the_waiting_run(
         "bid_quote",
         BID,
     )
-    # **패키지 id다** (C1 — Bot의 신원). 그림의 `process.id`가 아니다.
+    # **패키지 id다** (C1 — BPM 프로세스의 신원). 그림의 `process.id`가 아니다.
     assert row["bpm_process_id"] == BOT
     # 기다리는 실행은 **자리를 쥐지 않는다** (ADR-0054 §5).
     assert listed[0]["capacity"]["running"] == 0

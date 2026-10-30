@@ -52,7 +52,7 @@ export function KeyTools() {
               className="border border-border-strong bg-bg-surface px-3 text-body"
               style={{ height: "var(--size-control-md)", borderRadius: "var(--radius-md)" }}
             >
-              {/* Bot UI용·서버 실행기용·Studio용은 여기서 발급하지 않는다 — 등록 승인이 만든다 (ADR-0092·0093). */}
+              {/* PC 실행기용·서버 실행기용·Studio용은 여기서 발급하지 않는다 — 등록 승인이 만든다 (ADR-0092·0093). */}
               <option value="integration">연동용</option>
               <option value="relay">대리 답용</option>
             </select>
@@ -161,7 +161,7 @@ export function KeyMenu({ row }: { row: CenterKeyInfo }) {
       <ConfirmDialog
         open={asking === "revoke"}
         title="이 키를 폐기할까요?"
-        description="이 키를 쓰는 쪽의 요청이 바로 거부됩니다. 실행 중인 Bot은 끝까지 돕니다. 되돌릴 수 없습니다."
+        description="이 키를 쓰는 쪽의 요청이 바로 거부됩니다. 실행 중인 BPM 프로세스는 끝까지 돕니다. 되돌릴 수 없습니다."
         confirmLabel="폐기"
         onConfirm={() => run(() => revokeCenterKey(row.key_id))}
         onCancel={() => setAsking(null)}

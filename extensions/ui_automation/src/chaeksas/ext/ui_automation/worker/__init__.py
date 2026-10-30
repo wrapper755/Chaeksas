@@ -1,10 +1,10 @@
 """Worker 로컬 런타임 — 127.0.0.1 REST, 로케이터 사다리, 셀렉터 등록용 분석
 
-이 패키지는 **다른 프로세스에서** 돈다. Bot UI가 자기 실행 파일을 `--local-runtime
+이 패키지는 **다른 프로세스에서** 돈다. PC 실행기가 자기 실행 파일을 `--local-runtime
 ui-automation:worker`로 다시 띄우고, 그 자식이 `extension.json`의 `entry`(`serve`)를 풀어
 부른다 ([ADR-0024](../../../../../../docs/decisions/0024-desktop-packaging-extensions.md)).
 
-Bot UI·실행기와 주고받는 것은 C10(로컬 API)이고, UI 자동화 앱과는 C8로 말한다. 서버 부분을
+PC 실행기·실행기와 주고받는 것은 C10(로컬 API)이고, UI 자동화 앱과는 C8로 말한다. 서버 부분을
 import하지 않는다 — HTTP로만 부른다 (`tests/test_import_direction.py`가 막는다).
 """
 
@@ -17,7 +17,7 @@ from typing import Any, cast
 
 from chaeksas.contracts import CENTER_URL_ENV
 
-#: 포트를 쓸 수 없을 때의 종료 코드 — Bot UI가 「포트 <p> 사용 중」으로 바꿔 보인다 (ADR-0023).
+#: 포트를 쓸 수 없을 때의 종료 코드 — PC 실행기가 「포트 <p> 사용 중」으로 바꿔 보인다 (ADR-0023).
 EXIT_PORT_IN_USE = 2
 
 

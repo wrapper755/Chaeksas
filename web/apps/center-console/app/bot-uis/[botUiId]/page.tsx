@@ -11,10 +11,10 @@ import type { Route } from "next";
 import { fullTime, runtimeLabel, running, statusLabel, time, workerLabel } from "../page";
 
 /**
- * CON-03 PC 현황 — Bot UI 상세 — 대기열·배포·확장·최근 배치 결정.
+ * CON-03 PC 현황 — PC 실행기 상세 — 대기열·배포·확장·최근 배치 결정.
  *
- * 대기열·확장은 **Bot UI가 하트비트로 보고한 그대로**이고 보기 전용이다 (Center 작업을
- * 취소하는 곳은 CON-05다). 배포는 Center가 가진 것, 「준비」는 Bot UI가 보고한 것이라
+ * 대기열·확장은 **PC 실행기가 하트비트로 보고한 그대로**이고 보기 전용이다 (Center 작업을
+ * 취소하는 곳은 CON-05다). 배포는 Center가 가진 것, 「준비」는 PC 실행기가 보고한 것이라
  * **두 쪽을 여기서 맞춰 보인다** — 「배포는 했는데 왜 안 도나」가 한 화면에서 풀려야 한다.
  */
 
@@ -70,7 +70,7 @@ function validity(row: DeploymentInfo): string {
  * 보고된 확장 하나의 상태 (C4 `ExtensionState` → `status_map` 「확장」, ADR-0043).
  *
  * **`off`가 참이면 「꺼짐」, 아니면 「호환 안 됨」이다** — `enabled`는 「지금 쓰이는가」라서 둘을
- * 가르지 못한다. 옛 Bot UI는 `off`를 보내지 않으므로 없으면 흠으로 읽는다 (원칙 3).
+ * 가르지 못한다. 옛 PC 실행기는 `off`를 보내지 않으므로 없으면 흠으로 읽는다 (원칙 3).
  */
 function extensionState(row: NonNullable<BotUiInfo["extensions"]>[number]): string {
   if (row.enabled !== false) return "켜짐";
@@ -78,7 +78,7 @@ function extensionState(row: NonNullable<BotUiInfo["extensions"]>[number]): stri
 }
 
 /**
- * 그 배포가 이 PC에서 **돌 준비가 됐는가** — Bot UI가 보고한 `readiness`에서 찾는다 (C4).
+ * 그 배포가 이 PC에서 **돌 준비가 됐는가** — PC 실행기가 보고한 `readiness`에서 찾는다 (C4).
  * 아직 보고가 없으면 「확인 전」이 아니라 **없는 것으로 둔다** (모르는 것을 안다고 하지 않는다).
  *
  * 가르는 것은 `lib/summary.ts`의 `readinessLabel` **하나**다 — CON-12가 같은 일을 하므로
@@ -118,7 +118,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
     { key: "order", header: "순서", width: "7ch", align: "right" },
     {
       key: "bpm_process_id",
-      header: "Bot",
+      header: "BPM 프로세스",
       cell: (row) => `${row.bpm_process_id}${row.version ? `@${row.version}` : ""}`,
     },
     { key: "source", header: "출처", width: "10ch", cell: (row) => SOURCE[row.source] ?? row.source },
@@ -139,7 +139,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
         </Link>
       ),
     },
-    { key: "bpm_process_id", header: "Bot" },
+    { key: "bpm_process_id", header: "BPM 프로세스" },
     { key: "version", header: "버전", width: "10ch", mono: true },
     { key: "validity", header: "유효 기간", width: "26ch", cell: validity },
     {
@@ -149,7 +149,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
       cell: (row) => {
         const label = info ? readinessOf(row, info) : null;
         if (!label) return "보고 없음";
-        return <StatusBadge group="Bot 준비" label={label} />;
+        return <StatusBadge group="BPM 프로세스 준비" label={label} />;
       },
     },
   ];
@@ -202,7 +202,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
       {failure ? <ErrorBanner message={failure} /> : null}
 
       {!info && !failure ? (
-        <EmptyState title="그 Bot UI가 없습니다." hint="목록에서 다시 고르세요." />
+        <EmptyState title="그 PC 실행기가 없습니다." hint="목록에서 다시 고르세요." />
       ) : null}
 
       {info ? (
@@ -216,7 +216,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
             </p>
           ) : null}
           {info.disabled ? (
-            <ErrorBanner message="비활성화됨 — 이 PC에 새 작업·배포를 보내지 않습니다. 실행 중인 Bot은 끝까지 돕니다." />
+            <ErrorBanner message="비활성화됨 — 이 PC에 새 작업·배포를 보내지 않습니다. 실행 중인 BPM 프로세스는 끝까지 돕니다." />
           ) : null}
 
           <Section title="요약">
@@ -226,7 +226,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
                 <StatusBadge group="온라인" label={info.online ? "온라인" : "오프라인"} />
               </dd>
               <dt className="text-text-muted">상태</dt>
-              <dd>{info.status ? <StatusBadge group="Bot" label={statusLabel(info.status)} /> : "—"}</dd>
+              <dd>{info.status ? <StatusBadge group="BPM 프로세스" label={statusLabel(info.status)} /> : "—"}</dd>
               <dt className="text-text-muted">실행 중</dt>
               <dd>{running(info)}</dd>
               <dt className="text-text-muted">Worker 프로세스</dt>
@@ -243,7 +243,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
               <dd>{info.os}</dd>
               <dt className="text-text-muted">버전</dt>
               <dd className="font-mono">
-                Bot UI {info.versions.bot_ui} · core {info.versions.core}
+                PC 실행기 {info.versions.bot_ui} · core {info.versions.core}
                 {info.versions.worker ? ` · Worker ${info.versions.worker}` : ""}
                 {/* 어디서 도는지 (C4 `versions.build`, ADR-0067) — 없으면 묶지 않은 것이다. */}
                 {info.versions.build
@@ -283,7 +283,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
           <Section title="배포">
             {deployments.length === 0 ? (
               <p className="text-body-sm text-text-muted">
-                이 Bot UI에 걸린 활성 배포가 없습니다. 「배포」에서 배포하세요.
+                이 PC 실행기에 걸린 활성 배포가 없습니다. 「배포」에서 배포하세요.
               </p>
             ) : (
               <DataTable
@@ -317,7 +317,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
 
           <Section title="최근 배치 결정">
             {results.length === 0 ? (
-              <p className="text-body-sm text-text-muted">Bot UI가 올린 배치 결정이 아직 없습니다.</p>
+              <p className="text-body-sm text-text-muted">PC 실행기가 올린 배치 결정이 아직 없습니다.</p>
             ) : (
               <DataTable
                 columns={resultColumns}

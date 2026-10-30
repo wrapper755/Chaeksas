@@ -2,8 +2,8 @@
 
 - **Studio는 어느 확장인지 모른다** — 표와 상세의 글은 모두 정의(`extension.json`)에서 온다.
   이 파일에 확장 이름이 없다 (`tests/test_import_direction.py`가 막는다).
-- **끄고 켜는 것 말고는 읽기만 한다.** 끈 목록은 **Studio 설정**에 있다 (ADR-0043) — Bot UI는 제
-  설정에 따로 둔다. 개발 도구에서 끈 것이 그 PC의 현장 Bot을 멈추면 안 된다.
+- **끄고 켜는 것 말고는 읽기만 한다.** 끈 목록은 **Studio 설정**에 있다 (ADR-0043) — PC 실행기는 제
+  설정에 따로 둔다. 개발 도구에서 끈 것이 그 PC의 현장 BPM 프로세스를 멈추면 안 된다.
 - **끄면 그 자리에서 사라진다** — 호스트를 다시 읽어 기여(태스크 종류·편집기·런타임·점검)가
   한꺼번에 빠진다. 다음 「실행 전 검사」가 「확장이 꺼져 있습니다」로 막는다 (`core.preflight`).
 - **켜지지 않은 확장도 조용히 사라지지 않는다** — 사유(`problems`)를 상세에 그대로 보인다.
@@ -85,7 +85,7 @@ POINT_LABEL = {
     "studio.editors": "속성 편집기",
     "studio.resource_views": "리소스 탐색기 뿌리",
     "tool_ui.tools": "Tool UI 도구",
-    "bot_ui.panels": "Bot UI 화면 칸",
+    "bot_ui.panels": "PC 실행기 화면 칸",
     "bot_ui.local_runtimes": "로컬 런타임",
     "configuration": "설정 칸",
     "preflight": "사전 점검",
@@ -535,7 +535,7 @@ class StudioExtensionsDialog(QDialog):
     def refresh_external(self) -> None:
         """Center에 등록된 외부 확장 정의를 다시 받는다 (C7 리소스 목록).
 
-        **봉투를 다시 검증한다** (`add_external` → C13 E6) — 정의가 Bot의 키를 어느 주소로 보낼지
+        **봉투를 다시 검증한다** (`add_external` → C13 E6) — 정의가 BPM 프로세스의 키를 어느 주소로 보낼지
         정하므로 Studio도 봉투 서명을 직접 본다. 닿지 못하면 **그 자리에서 말한다**
         (들고 있지 않는다 — Studio는 현장이 아니라 개발 도구다, `services.py`).
         """

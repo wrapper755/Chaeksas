@@ -74,7 +74,7 @@ class DesktopEnvironment:
         try:
             info = self._open(worker, ctx, app, studio=studio)
         except WorkerUnreachable as e:
-            # Worker가 없다 (Bot UI가 띄우지 못했거나 꺼져 있다) — 다시 해 볼 만한 업무 실패다.
+            # Worker가 없다 (PC 실행기가 띄우지 못했거나 꺼져 있다) — 다시 해 볼 만한 업무 실패다.
             raise TaskFailed("worker_unreachable", str(e), retryable=True) from e
         return DesktopSession(worker=worker, info=info)
 

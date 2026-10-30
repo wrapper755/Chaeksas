@@ -57,7 +57,7 @@ NEEDS_RESULT = ("read", "read_table", "read_options", "read_selection")
 #: 자율 수행이 꺼져 있는 이유 (U3 — 왜 꺼졌는지 말한다).
 #: 목표로 계획의 도움말 (STU-13 [G], ADR-0035).
 GOAL_HELP = (
-    "자율 수행(Studio 시험)에서만 돕니다. Bot(결정 수행)에서는 실패합니다. "
+    "자율 수행(Studio 시험)에서만 돕니다. BPM 프로세스(결정 수행)에서는 실패합니다. "
     "쓸 값은 목표 안에 {이름}으로 적습니다 — 그 이름만 모델에 갑니다."
 )
 
@@ -176,7 +176,7 @@ class UiTaskEditor(QWidget):
         out: dict[str, Any] = {"page_id": self.page_id.currentText().strip()}
         if self.start_url.text().strip():
             out["start_url"] = self.start_url.text().strip()
-        # 키 참조 칸은 없다 — 키는 Center가 그 Bot의 UI 자동화 앱 키 하나를 내려 준다 (ADR-0094 §4).
+        # 키 참조 칸은 없다 — 키는 Center가 그 BPM 프로세스의 UI 자동화 앱 키 하나를 내려 준다 (ADR-0094 §4).
         # 옛 그림에 적힌 참조는 **조용히 바꾸지 않고** 그대로 둔다.
         if self._loaded.get("key_ref"):
             out["key_ref"] = str(self._loaded["key_ref"])
@@ -222,7 +222,7 @@ class UiTaskEditor(QWidget):
         second = QHBoxLayout()
         self.heal = QCheckBox("자가 치유 사용")
         self.heal.setChecked(True)
-        self.heal.setToolTip("켜 두면 결정 수행 Bot도 실패한 요소에 한해 LLM 치유를 씁니다.")
+        self.heal.setToolTip("켜 두면 결정 수행 BPM 프로세스도 실패한 요소에 한해 LLM 치유를 씁니다.")
         self.close_browser = QCheckBox("실행 후 브라우저 닫기")
         for checkbox in (self.heal, self.close_browser):
             checkbox.toggled.connect(lambda *_: self._sync())
@@ -282,7 +282,9 @@ class UiTaskEditor(QWidget):
         self.plan_button.setToolTip(PLAN_HELP)
         self.plan_button.clicked.connect(self.try_plan)
         self.freeze_button = QPushButton("스텝으로 굳히기")
-        self.freeze_button.setToolTip("받은 스텝을 표에 넣고 목표로 계획을 끕니다 — Bot(결정 수행)이 그 스텝을 돕니다.")
+        self.freeze_button.setToolTip(
+            "받은 스텝을 표에 넣고 목표로 계획을 끕니다 — BPM 프로세스(결정 수행)가 그 스텝을 돕니다."
+        )
         self.freeze_button.clicked.connect(self.freeze)
         row.addWidget(self.use_goal)
         row.addWidget(self.goal, 3)

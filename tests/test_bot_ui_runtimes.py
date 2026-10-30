@@ -1,11 +1,11 @@
-"""로컬 런타임과 확장 유틸리티 — Bot UI가 확장이 기여한 것을 띄우고 연다 (C13, BUI-09).
+"""로컬 런타임과 확장 유틸리티 — PC 실행기가 확장이 기여한 것을 띄우고 연다 (C13, BUI-09).
 
-**Bot UI는 UI 자동화를 모른다.** 기여 목록을 읽어 명령줄을 만들고, 띄우고, 답할 때까지
+**PC 실행기는 UI 자동화를 모른다.** 기여 목록을 읽어 명령줄을 만들고, 띄우고, 답할 때까지
 기다릴 뿐이다. 그래서 여기 시험도 가짜 확장 하나로 돈다 — 진짜 Worker를 띄우지 않는다.
 
 거듭 보는 것 다섯.
 
-1. **명령줄은 Bot UI가 만든다** (C13) — 확장은 진입점만 준다. 토큰은 **폴더로만** 간다.
+1. **명령줄은 PC 실행기가 만든다** (C13) — 확장은 진입점만 준다. 토큰은 **폴더로만** 간다.
 2. **답할 때까지 기다린다** — 떴다고 바로 쓰지 않는다 (「없는데 된 척」하지 않는다).
 3. 못 띄우면 **유틸리티를 열지 않는다** — 빈 창을 띄워 놓고 「안 되네」 하게 두지 않는다.
 4. 호스트가 **예약 설정 키**로 런타임 자리를 알려 준다 (`runtime.<id>.*`).
@@ -117,7 +117,7 @@ def make(*, dies: bool = False, healthy: bool = True, monkeypatch: Any = None) -
 
 
 def test_the_host_builds_the_command_line() -> None:
-    """확장은 진입점만 준다 — **명령줄은 Bot UI가 만든다** (ADR-0024)."""
+    """확장은 진입점만 준다 — **명령줄은 PC 실행기가 만든다** (ADR-0024)."""
     args = runtime_args("demo:helper", port=9911, token_dir=Path("/tmp/t"))
     assert args[0] == sys.executable
     assert RUNTIME_FLAG in args
@@ -269,7 +269,7 @@ def menu_texts(window: Any) -> list[str]:
 
 
 def test_the_tools_menu_comes_from_the_extensions(window: Any) -> None:
-    """Bot UI는 어느 확장인지 모른다 — 기여 목록을 그대로 그린다 (ADR-0018)."""
+    """PC 실행기는 어느 확장인지 모른다 — 기여 목록을 그대로 그린다 (ADR-0018)."""
     assert "요소 담기..." in menu_texts(window)
 
 
@@ -348,7 +348,7 @@ def modal_boxes(monkeypatch: Any) -> list[tuple[str, str]]:
 
 
 def test_the_runtime_leaves_its_port_for_studio(monkeypatch: Any) -> None:
-    """같은 PC의 Studio가 Bot UI가 띄운 런타임을 찾는다 (STU-10 「Worker」) — 포트를 런타임 폴더에 남긴다."""
+    """같은 PC의 Studio가 PC 실행기가 띄운 런타임을 찾는다 (STU-10 「Worker」) — 포트를 런타임 폴더에 남긴다."""
     import json  # noqa: PLC0415
 
     from chaeksas.bot_ui.runtimes import RUNTIME_FILE, token_dir_for  # noqa: PLC0415

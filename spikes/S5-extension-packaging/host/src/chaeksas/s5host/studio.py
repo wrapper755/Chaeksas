@@ -1,4 +1,4 @@
-"""Studio 흉내 부분: QtWebEngine. Bot UI 묶음에는 들어가지 않게 app.py는 이 모듈을 문자열로만 부른다."""
+"""Studio 흉내 부분: QtWebEngine. PC 실행기 묶음에는 들어가지 않게 app.py는 이 모듈을 문자열로만 부른다."""
 
 import time
 

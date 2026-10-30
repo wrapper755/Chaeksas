@@ -10,7 +10,7 @@
 | 관련 화면 | TOL-03·04·05, UIA-01·02·03, CON-07 「UI 화면」, STU-03·13 |
 
 
-> 전송 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)): 네 작업은 **C15 외부 작업**(토픽 `ui-automation`)으로 오간다 — Tool UI 도구는 Bot UI의 **호출 토큰**으로 올리고 `run_id`는 `reg_<hex8>`(등록 세션 — Center는 그 PC에 「셀렉터 등록」이 켜졌는지 본다, C15). 공개 카탈로그는 앱이 Center에 **올리고**(C15 `PUT …/catalogs/ui_page`) Studio(STU-13)·Center는 Center에서 읽는다 — 아무도 앱의 주소를 모른다. 아래 본문의 「키」·`registry_write` 키는 이제 **그 PC의 「셀렉터 등록」 스위치**다.
+> 전송 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)): 네 작업은 **C15 외부 작업**(토픽 `ui-automation`)으로 오간다 — Tool UI 도구는 PC 실행기의 **호출 토큰**으로 올리고 `run_id`는 `reg_<hex8>`(등록 세션 — Center는 그 PC에 「셀렉터 등록」이 켜졌는지 본다, C15). 공개 카탈로그는 앱이 Center에 **올리고**(C15 `PUT …/catalogs/ui_page`) Studio(STU-13)·Center는 Center에서 읽는다 — 아무도 앱의 주소를 모른다. 아래 본문의 「키」·`registry_write` 키는 이제 **그 PC의 「셀렉터 등록」 스위치**다.
 
 ## 목적
 
@@ -30,10 +30,10 @@
 
 작업은 C15 외부 작업으로 올린다 (토픽 `ui-automation`, `operation`이 작업 이름이다).
 
-- **누가 부르나:** 레지스트리 작업은 **UI 자동화 확장의 도구(클라이언트 코드)가 Center에 올린다** (`caller.type`은 도구를 띄운 호스트 — Tool UI면 **`tool_ui`**, ADR-0077). 토큰은 그 PC Bot UI가 청한 **호출 토큰**이다(C15 「정한 것」 — 앱의 주소도 키도 모른다). Worker는 브라우저 일(열기·분석·고르기·검증, C10 §5)만 하고 레지스트리를 부르지 않는다.
+- **누가 부르나:** 레지스트리 작업은 **UI 자동화 확장의 도구(클라이언트 코드)가 Center에 올린다** (`caller.type`은 도구를 띄운 호스트 — Tool UI면 **`tool_ui`**, ADR-0077). 토큰은 그 PC PC 실행기가 청한 **호출 토큰**이다(C15 「정한 것」 — 앱의 주소도 키도 모른다). Worker는 브라우저 일(열기·분석·고르기·검증, C10 §5)만 하고 레지스트리를 부르지 않는다.
 - **멱등 키:** 등록·삭제 **동작마다** 새 `run_id` `reg_<hex8>`를 만든다 (`node_id: "registry"`, `node_instance: 1`, `attempt`는 재시도마다 +1, `call_seq: 1`).
 - 작업 본문(입력·출력·멱등·오류)은 C11을 따른다. `mode`는 `deterministic`로 보낸다 (등록은 LLM을 쓰지 않는다). manifest에는 두 모드를 모두 선언한다.
-- `registry_write`는 **그 PC의 「셀렉터 등록」 스위치**다 (CON-03, C5 `PUT /bot-uis/{id}/utility`). 켜진 PC의 Bot UI 쪽에서 올린 것만 Center가 받고(아니면 403 `scope_missing`), `reg_` 실행은 그 스위치가 꺼져 있으면 아예 받지 않는다(403 `registration_off`, C15). **운영 PC에는 켜지 않는다.**
+- `registry_write`는 **그 PC의 「셀렉터 등록」 스위치**다 (CON-03, C5 `PUT /bot-uis/{id}/utility`). 켜진 PC의 PC 실행기 쪽에서 올린 것만 Center가 받고(아니면 403 `scope_missing`), `reg_` 실행은 그 스위치가 꺼져 있으면 아예 받지 않는다(403 `registration_off`, C15). **운영 PC에는 켜지 않는다.**
 - 셀렉터(물리 정보)는 `registry_get_page`와 `registry_register`에만 나온다. 둘 다 `registry_write`가 켜진 쪽만 부를 수 있다. 공개 카탈로그와 C7 리소스 목록에는 셀렉터가 나오지 않는다.
 
 ## 모델
@@ -104,7 +104,7 @@
 입력: `{page_id, semantic_key?, force: false}`. `semantic_key`가 없으면 화면 전체를 지운다.
 
 - **잘못 만든 것을 없애는 길이다.** 화면 개편용이 아니다. 개편은 재등록(사다리를 더함)과 `deprecated` 판정으로 한다. 지우면 그 화면의 통계·승격·치유 이력이 사라진다.
-- **배포된 Bot이 쓰는지는 UI 자동화 앱이 모른다** (Center가 안다). 그래서 도구는 지우기 전에 Center 리소스 목록(C7 `ContributedResource.used_by`)을 읽어 「이 화면을 쓰는 Bot <N>개 — 지우면 그 Bot의 UI 태스크가 실패합니다」를 보이고 확인을 받는다. 실행 중에 지워져도 보고는 걸리지 않는다 (C8 재전송 규칙).
+- **배포된 BPM 프로세스가 쓰는지는 UI 자동화 앱이 모른다** (Center가 안다). 그래서 도구는 지우기 전에 Center 리소스 목록(C7 `ContributedResource.used_by`)을 읽어 「이 화면을 쓰는 BPM 프로세스 <N>개 — 지우면 그 BPM 프로세스의 UI 태스크가 실패합니다」를 보이고 확인을 받는다. 실행 중에 지워져도 보고는 걸리지 않는다 (C8 재전송 규칙).
 - 다른 화면의 요소가 이것을 가리키면(`navigates_to`, `depends_on`), `force=false`일 때 409 `has_links`와 함께 끊길 경로 목록을 돌려준다. 사람이 두 번째로 확인하면(U9) `force=true`로 다시 보낸다.
 
 출력 (DeletionResult): `{page_id, semantic_key?, elements, locators, broken_links: [{page_id, semantic_key, kind}], revision}`. 되돌릴 수 없는 일이라 숫자로 남긴다.
@@ -172,7 +172,7 @@
 - 같은 `business_key`가 다시 오면 **나중 것이 이긴다** (재시도는 `attempt`가 달라 다른 키다).
 - **업무 값은 없다** — C8 보고 자체가 읽은 값·입력한 글자를 담지 않는다 (원칙 6).
 - **최근 5000줄까지** 들고 오래된 것부터 버린다. 모니터링 자료라 영원히 쌓을 이유가 없다.
-- **봉투가 말해 주는 것도 함께 적는다** — `caller.type`(요청 쪽)·`mode`(수행 모드)·`caller.bpm_process_id`(Bot)·`caller.host`(Bot UI). C8 보고에는 없고 C11 호출(`OpRequest`)에는 있다. UIA-03 표의 그 네 열이 여기서 온다.
+- **봉투가 말해 주는 것도 함께 적는다** — `caller.type`(요청 쪽)·`mode`(수행 모드)·`caller.bpm_process_id`(BPM 프로세스)·`caller.host`(PC 실행기). C8 보고에는 없고 C11 호출(`OpRequest`)에는 있다. UIA-03 표의 그 네 열이 여기서 온다.
 - 「폴백 깊이 분포」는 `attempts`를 요소별로 세어 만든다 — `0`이 **1순위 로케이터로 바로 성공**한 것이고, **끝까지 실패한 요소는 깊이가 아니다** (전환·실패로 센다).
 
 ### 배포 전 확인 (UIA-01)

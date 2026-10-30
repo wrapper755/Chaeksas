@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 
 from chaeksas.contracts.service_app import MODE_AUTONOMOUS, MODE_DETERMINISTIC
 
-#: 두 모드 다 받는다 — Bot은 결정 수행, Studio 시험 실행은 자율 수행이다.
+#: 두 모드 다 받는다 — BPM 프로세스는 결정 수행, Studio 시험 실행은 자율 수행이다.
 BOTH = [MODE_DETERMINISTIC, MODE_AUTONOMOUS]
 
 #: 외부 앱이 「받았지만 처리하지 못했다」고 알리는 상태 코드 — 같은 요청을 다시 보내도 된다.

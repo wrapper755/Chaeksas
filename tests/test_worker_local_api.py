@@ -151,7 +151,7 @@ def head(secret: str) -> dict[str, str]:
 
 
 def test_health_answers_without_a_token() -> None:
-    """기동 확인이 토큰을 요구하면 Bot UI가 Worker가 떴는지 알 수 없다 (C10 기동 절차)."""
+    """기동 확인이 토큰을 요구하면 PC 실행기가 Worker가 떴는지 알 수 없다 (C10 기동 절차)."""
     _, client = make()
     found = client.get("/v1/health")
     assert found.status_code == 200 and found.json()["status"] == "ok"
@@ -408,11 +408,11 @@ def test_without_a_backend_nothing_is_pretended() -> None:
     assert found.status_code == 503 and found.json()["code"] == "browser_unavailable"
 
 
-# ─────────────────────────── 예약 (Bot UI만) ───────────────────────────
+# ─────────────────────────── 예약 (PC 실행기만) ───────────────────────────
 
 
 def test_a_reservation_keeps_others_out() -> None:
-    """한 Bot의 UI 태스크 사이 빈틈을 다른 쪽이 가져가지 못한다 (C10 §전송)."""
+    """한 BPM 프로세스의 UI 태스크 사이 빈틈을 다른 쪽이 가져가지 못한다 (C10 §전송)."""
     _, client = make()
     client.post("/v1/admin/reserve", json={"run_id": RUN}, headers={ADMIN_HEADER: ADMIN})
 
@@ -458,7 +458,7 @@ def test_the_status_says_who_holds_it() -> None:
 
 
 def test_the_worker_really_comes_up_on_loopback(tmp_path: Path) -> None:
-    """진짜로 띄워 `/v1/health`가 200이 될 때까지 기다린다 — Bot UI가 하는 그대로.
+    """진짜로 띄워 `/v1/health`가 200이 될 때까지 기다린다 — PC 실행기가 하는 그대로.
 
     **127.0.0.1에만** 떠야 한다. 다른 PC에서 닿으면 그 PC의 화면을 남이 조작할 수 있다.
     """
@@ -579,4 +579,4 @@ def test_only_a_registration_session_takes_a_plan_and_it_needs_a_page() -> None:
         json={"page_id": "erp.order.form"},
         headers={TOKEN_HEADER: TOKEN, SESSION_HEADER: bot["session_secret"]},
     )
-    assert refused.status_code == 403, "실행 중인 Bot의 세션은 바꾸지 못한다"
+    assert refused.status_code == 403, "실행 중인 BPM 프로세스의 세션은 바꾸지 못한다"

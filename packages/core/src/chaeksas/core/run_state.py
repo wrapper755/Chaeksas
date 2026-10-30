@@ -5,7 +5,7 @@
 수행기는 이 모듈만 보고, 엔진이 수행기를 모아 꽂는다.
 
 **바깥 세계는 `RunEnv` 한 곳으로 모은다** — 파일(`Workspace`), 보내기 어댑터(`Sender`), 같은
-패키지의 DMN 결정. 실행하는 쪽(Bot UI·Studio 시험 실행·서버 실행기)이 정해서 준다. 주지 않으면
+패키지의 DMN 결정. 실행하는 쪽(PC 실행기·Studio 시험 실행·서버 실행기)이 정해서 준다. 주지 않으면
 파일도 못 쓰고 메일도 못 보낸다 — **조용히 아무 데나 쓰거나 안 보내지 않는다** (ADR-0026).
 
 쓰는 쪽은 `chaeksas.core.engine`에서 한꺼번에 들면 된다 (그쪽이 여기 것을 다시 내보낸다).
@@ -264,7 +264,7 @@ class RunEnv:
     #: **PC 위임**을 맡기는 쪽 (C12 §PC 위임, ADR-0062). 기본은 **맡기지 못한다** — 서버
     #: 실행기는 Center에 요청하는 것을, Studio 시험 실행은 케이스가 적어 둔 결과를 꽂는다.
     delegate: Delegator = field(default_factory=NoDelegator)
-    #: `location: follow` 결재를 어디서 답하나 — **실행하는 쪽의 기본값** (ADR-0038). Bot UI는
+    #: `location: follow` 결재를 어디서 답하나 — **실행하는 쪽의 기본값** (ADR-0038). PC 실행기는
     #: BUI-03 「원격 결재」, 서버 실행기는 `center`. 엔진은 설정 파일을 읽지 않는다. 기본은 현장.
     approval_where: str = "field"
 
@@ -274,7 +274,7 @@ class ExtensionTasks(Protocol):
     """확장 태스크 수행기를 찾아 주는 쪽 (ADR-0018).
 
     **엔진은 확장을 모른다** — 태스크 종류 이름으로 묻고, 받은 것을 부를 뿐이다. 실행하는
-    쪽(Bot UI 실행기·Studio 시험 실행)이 확장 호스트를 끼워 준다.
+    쪽(실행 프로세스·Studio 시험 실행)이 확장 호스트를 끼워 준다.
     """
 
     def executor(self, task_type: str) -> Any | None:
@@ -345,7 +345,7 @@ class Run:
     #: 노드마다 서비스 앱을 몇 번 불렀는지 (C11 멱등 키의 `call_seq`).
     call_seqs: dict[str, int] = field(default_factory=dict)
     #: 자율 수행이 이번에 **배운 것** (ADR-0028). Studio가 실행이 끝난 뒤 패키지에 적는다 —
-    #: 엔진은 파일을 쓰지 않는다 (배포된 Bot은 기억을 읽기만 한다).
+    #: 엔진은 파일을 쓰지 않는다 (배포된 BPM 프로세스는 기억을 읽기만 한다).
     learned: list[ReplaySpec] = field(default_factory=list)
     helpers: Mapping[str, Callable[..., Any]] = field(default_factory=dict)
 

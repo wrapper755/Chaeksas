@@ -12,13 +12,13 @@ import { createJob } from "@/app/actions";
 /**
  * CON-05 「새 작업」 — 관리자 모드만.
  *
- * **두 걸음이고 둘 다 JS 없이 돈다.** 먼저 GET 폼으로 Bot → Bot UI → 버전을 고르면(주소에
+ * **두 걸음이고 둘 다 JS 없이 돈다.** 먼저 GET 폼으로 BPM 프로세스 → PC 실행기 → 버전을 고르면(주소에
  * 남는다), 그 버전의 매니페스트(C1 `inputs`)로 입력 칸을 그린 POST 폼이 나온다.
  *
- * - Bot UI는 **그 Bot이 배포된 곳만** 고를 수 있다. 고를 곳이 없으면 「이 Bot UI에 유효한
+ * - PC 실행기는 **그 BPM 프로세스가 배포된 곳만** 고를 수 있다. 고를 곳이 없으면 「이 PC 실행기에 유효한
  *   배포가 없습니다」 — 만들어 봐야 422 `no_deployment`다. **PC 배포는 전체(`*`) 대상이 없다**
  *   (ADR-0046) — 봉투 하나가 PC 하나를 가리키므로 여기서 풀 것이 없다.
- * - 같은 Bot UI에 그 Bot의 배포가 둘 이상이면 **버전을 고르게 한다** (`version_ambiguous`).
+ * - 같은 PC 실행기에 그 BPM 프로세스의 배포가 둘 이상이면 **버전을 고르게 한다** (`version_ambiguous`).
  *   하나면 비워 보낸다 — Center가 배포된 버전으로 채운다 (C5).
  */
 
@@ -29,7 +29,7 @@ function pcDeployments(all: DeploymentInfo[]): DeploymentInfo[] {
   return all.filter((one) => one.target.type === "bot_ui");
 }
 
-/** 그 Bot이 배포된 Bot UI들. **PC 배포는 대상이 하나씩**이라 풀 것이 없다 (ADR-0046). */
+/** 그 BPM 프로세스가 배포된 PC 실행기들. **PC 배포는 대상이 하나씩**이라 풀 것이 없다 (ADR-0046). */
 function deployedTo(deployments: DeploymentInfo[], bot: string, botUis: BotUiInfo[]): BotUiInfo[] {
   const ids = new Set(
     deployments.filter((one) => one.bpm_process_id === bot).map((one) => String(one.target.id)),
@@ -141,7 +141,7 @@ export default async function NewJobPage({
       {/* 1. 고르기 — GET이라 주소에 남고 JS가 없어도 돈다. */}
       <form className="mb-6 flex flex-wrap items-end gap-3" method="get">
         <label className="flex flex-col gap-1 text-body-sm">
-          <span className="text-text-muted">Bot</span>
+          <span className="text-text-muted">BPM 프로세스</span>
           <select name="bot" defaultValue={bot} className={FIELD}>
             <option value="">(고르세요)</option>
             {bots.map((one) => (
@@ -153,7 +153,7 @@ export default async function NewJobPage({
         </label>
         {bot ? (
           <label className="flex flex-col gap-1 text-body-sm">
-            <span className="text-text-muted">Bot UI</span>
+            <span className="text-text-muted">PC 실행기</span>
             <select name="bot_ui" defaultValue={botUi} className={FIELD}>
               <option value="">(고르세요)</option>
               {places.map((one) => (
@@ -184,14 +184,14 @@ export default async function NewJobPage({
 
       {bots.length === 0 && !failure ? (
         <p className="text-body text-text-secondary">
-          PC에 배포된 Bot이 없습니다. 「배포」에서 배포한 뒤 만드세요.
+          PC에 배포된 BPM 프로세스가 없습니다. 「배포」에서 배포한 뒤 만드세요.
         </p>
       ) : null}
       {bot && places.length === 0 ? (
-        <ErrorBanner message="이 Bot이 배포된 Bot UI가 없습니다 — 「배포」에서 배포한 뒤 만드세요." />
+        <ErrorBanner message="이 BPM 프로세스가 배포된 PC 실행기가 없습니다 — 「배포」에서 배포한 뒤 만드세요." />
       ) : null}
       {bot && botUi && versions.length === 0 ? (
-        <ErrorBanner message="이 Bot UI에 유효한 배포가 없습니다." />
+        <ErrorBanner message="이 PC 실행기에 유효한 배포가 없습니다." />
       ) : null}
 
       {/* 2. 만들기 — 서버 액션. 입력 칸의 타입은 서버가 매니페스트를 다시 읽어 맞춘다. */}
@@ -209,7 +209,7 @@ export default async function NewJobPage({
           <fieldset className="flex flex-col gap-3 border border-border-default p-3">
             <legend className="px-1 text-body font-medium">입력 변수</legend>
             {inputs.length === 0 ? (
-              <p className="text-body-sm text-text-muted">이 Bot은 받는 입력을 적어 두지 않았습니다.</p>
+              <p className="text-body-sm text-text-muted">이 BPM 프로세스는 받는 입력을 적어 두지 않았습니다.</p>
             ) : (
               inputs.map((one) => <InputField key={one.name} input={one} />)
             )}

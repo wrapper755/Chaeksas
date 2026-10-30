@@ -9,7 +9,7 @@ import { Shell } from "@/components/Shell";
 /**
  * CON-06 공통 패키지 (목록).
  *
- * **Bot이 아닌 패키지만** 둔다 — `bpm_process`는 Bot이라 CON-02의 몫이다. 지금 그런 종류는
+ * **BPM 프로세스가 아닌 패키지만** 둔다 — `bpm_process`는 BPM 프로세스라 CON-02의 몫이다. 지금 그런 종류는
  * 공유 BPM 프로세스 하나다 (C5 `kind` — 도구 묶음은 패키지가 아니다, ADR-0050).
  */
 
@@ -18,7 +18,7 @@ export const COMMON_KINDS = ["process_lib"] as const;
 
 export const KIND_LABEL: Record<string, string> = {
   process_lib: "공유 BPM 프로세스",
-  bpm_process: "Bot",
+  bpm_process: "BPM 프로세스",
 };
 
 /** C5 상태 → `status_map`의 「패키지」 표기. 모르는 값은 **그대로 보인다** (원칙 10). */
@@ -104,7 +104,7 @@ export default async function PackagesPage() {
       <header className="mb-4">
         <h1 className="text-h1 font-bold">공통 패키지</h1>
         <p className="text-body text-text-secondary">
-          Bot이 아닌 패키지 — 여러 Bot이 가져다 쓰는 공유 BPM 프로세스입니다.
+          BPM 프로세스가 아닌 패키지 — 여러 BPM 프로세스가 가져다 쓰는 공유 BPM 프로세스입니다.
         </p>
       </header>
 
