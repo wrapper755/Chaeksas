@@ -184,7 +184,7 @@ def test_operation_not_found() -> None:
 
 
 def test_operation_must_support_deterministic() -> None:
-    """실행하는 쪽(Bot UI·서버 실행기)은 결정 수행으로 부른다."""
+    """실행하는 쪽(PC 실행기·서버 실행기)은 결정 수행으로 부른다."""
     m = manifest(requires={"service_apps": [
         {"app_id": "ui-automation", "operations": ["plan"], "key_ref": "erp"}]})
     have = index(service_apps=[app(op("plan", modes=["autonomous"]))])

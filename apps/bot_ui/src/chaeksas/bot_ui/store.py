@@ -1,6 +1,6 @@
 """디스크에 남겨 두는 상태 — **작업이 사라지지 않게** (C4 「맞추기 규칙」).
 
-Bot UI가 꺼졌다 켜져도 대기열과 아직 Center가 확인하지 않은 ack가 남아 있어야 한다.
+PC 실행기가 꺼졌다 켜져도 대기열과 아직 Center가 확인하지 않은 ack가 남아 있어야 한다.
 그래서 이것만 파일에 둔다.
 
 | 저장하는 것 | 왜 |
@@ -122,7 +122,7 @@ class Store:
             raw = json.loads(path.read_text(encoding="utf-8"))
             return cls(path=path, state=State.from_json_dict(raw))
         except (OSError, ValueError) as e:
-            # 깨진 상태 때문에 Bot UI가 안 뜨면 더 나쁘다. 비우고 뜬다 — 대기열은 Center가
+            # 깨진 상태 때문에 PC 실행기가 안 뜨면 더 나쁘다. 비우고 뜬다 — 대기열은 Center가
             # 두 주기 뒤 `bot_ui_lost`로 정리한다 (C4).
             log.error("상태 파일을 읽지 못해 비우고 시작한다 (%s): %s", path, e)
             return cls(path=path)

@@ -154,7 +154,7 @@ def _excel_parser(workspace: Workspace, path: str, sheet: str = "", max_rows: in
 
 
 def _excel_writer(workspace: Workspace, path: str, rows: Any, sheet: str = "", key: str = "") -> str:
-    """엑셀 한 장에 줄을 **덧붙인다** (ADR-0032). 사람의 장부를 Bot이 덮지 않는다.
+    """엑셀 한 장에 줄을 **덧붙인다** (ADR-0032). 사람의 장부를 BPM 프로세스가 덮지 않는다.
 
     - **기존 줄을 고치거나 지우지 않는다.** 할 수 있는 일은 끝에 붙이는 것뿐이다.
     - 파일이 없으면 만든다 (첫 줄은 칸 이름).

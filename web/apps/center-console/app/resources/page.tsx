@@ -17,7 +17,7 @@ import { RefreshResources } from "./tools";
 /**
  * CON-07 리소스 — 「기능」 하나와 확장이 기여한 자원 종류마다 탭 하나.
  *
- * 관리자가 여기서 묻는 것은 하나다: **이 기능을 Bot이 지금 쓸 수 있나, 안 되면 무엇을 하나.**
+ * 관리자가 여기서 묻는 것은 하나다: **이 기능을 BPM 프로세스가 지금 쓸 수 있나, 안 되면 무엇을 하나.**
  * 그래서 목록은 「이름 / 쓸 수 있나 / 할 일」 세 칸이고, 그 기능이 안에서 어떻게 도는지(서비스
  * 앱인지 외부 앱인지·무엇을 기여하나·어떤 로컬 런타임을 띄우나)는 보이지 않는다
  * (`docs/06-screens/center-console.md` CON-07). 셈은 `lib/features.ts`가 한다.
@@ -128,7 +128,7 @@ export default async function ResourcesPage({
         <div>
           <h1 className="text-h1 font-bold">리소스</h1>
           <p className="text-body text-text-secondary">
-            Bot이 실행에 쓰는 바깥 기능입니다. 쓸 수 없으면 할 일이 함께 보입니다.
+            BPM 프로세스가 실행에 쓰는 바깥 기능입니다. 쓸 수 없으면 할 일이 함께 보입니다.
             {fetchedAt ? ` · 확인 ${time(fetchedAt)}` : ""}
           </p>
         </div>
@@ -154,7 +154,7 @@ export default async function ResourcesPage({
 
       {shortfall.length > 0 ? (
         <div className="mb-4">
-          <ErrorBanner message={`Bot이 요구하지만 쓸 수 없는 기능: ${shortfall.join(" · ")}`} />
+          <ErrorBanner message={`BPM 프로세스가 요구하지만 쓸 수 없는 기능: ${shortfall.join(" · ")}`} />
         </div>
       ) : null}
       {failure ? <ErrorBanner message={failure} /> : null}
@@ -263,7 +263,7 @@ function Features({ rows, admin }: { rows: FeatureRow[]; admin: boolean }) {
 /**
  * 「토픽」·「일꾼」 (C15) — 바깥 기능 쪽에서 Center로 들어온 일꾼과, 토픽마다 일감이 밀려 있나.
  *
- * 일감이 기다리는데 가져가는 일꾼이 없거나 오래 조용하면 **그 토픽을 부르는 Bot이 기한까지 기다리다
+ * 일감이 기다리는데 가져가는 일꾼이 없거나 오래 조용하면 **그 토픽을 부르는 BPM 프로세스가 기한까지 기다리다
  * 실패한다** — 그래서 「기다리는 일감」과 「가장 오래 기다린 때」를 함께 보인다.
  */
 function Workers({
@@ -341,7 +341,7 @@ function Contributed({ kind, items }: { kind: ContributedKind; items: Contribute
     { key: "updated_at", header: "마지막 갱신", width: "16ch", cell: (row) => time(row.updated_at) },
     {
       key: "used_by",
-      header: "쓰는 Bot",
+      header: "쓰는 BPM 프로세스",
       cell: (row) => ((row.used_by ?? []).length > 0 ? (row.used_by ?? []).join(", ") : "—"),
     },
   ];

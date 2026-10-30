@@ -1,7 +1,7 @@
 """플랫폼 화면에 끼우는 칸 — BUI-09 「최근 UI 세션」 (`bot_ui.panels`, ADR-0042).
 
-**이 표는 플랫폼이 그릴 수 없다.** 열(화면·폴백 깊이·치유)이 UI 자동화의 말이라, Bot UI가
-그리면 Bot UI가 이 확장을 알게 된다 (ADR-0018). 그래서 Bot UI는 자리(`surface`)만 주고
+**이 표는 플랫폼이 그릴 수 없다.** 열(화면·폴백 깊이·치유)이 UI 자동화의 말이라, PC 실행기가
+그리면 PC 실행기가 이 확장을 알게 된다 (ADR-0018). 그래서 PC 실행기는 자리(`surface`)만 주고
 **칸 안은 여기서** 그린다.
 
 규약은 Studio 편집기(STU-13)와 같고 `refresh()`가 하나 더 있다 — **주기는 호스트가 정한다**
@@ -39,7 +39,7 @@ STATUS_TIMEOUT_S = 1.0
 MAX_ROWS = 20
 
 CALLER_LABEL = {
-    CALLER_BOT: "Bot",
+    CALLER_BOT: "BPM 프로세스",
     CALLER_STUDIO: "Studio",
     CALLER_REGISTRATION: "셀렉터 등록",
 }
@@ -133,7 +133,7 @@ class RecentSessionsPanel:
     def _status(self) -> Status | None:
         try:
             return Status.model_validate(self._worker.call("GET", "/v1/status"))
-        except Exception as e:  # noqa: BLE001 — 화면 한 칸이 Bot UI를 깨면 안 된다
+        except Exception as e:  # noqa: BLE001 — 화면 한 칸이 PC 실행기를 깨면 안 된다
             log.debug("Worker 상태를 읽지 못했다: %s", e)
             return None
 

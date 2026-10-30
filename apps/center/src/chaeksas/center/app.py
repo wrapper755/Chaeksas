@@ -243,7 +243,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             raise ApiError(409, "not_bound", "묶여 있지 않다")
         return keys.get(app.state.store, key_id).info(now=now_iso())  # type: ignore[union-attr]
 
-    # ─────────────────── Bot UI 현황 (C5·CON-03) ───────────────────
+    # ─────────────────── PC 실행기 현황 (C5·CON-03) ───────────────────
 
     @app.get(f"{API}/bot-uis")
     def list_bot_uis(request: Request) -> Any:
@@ -255,14 +255,14 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def disable_bot_ui(request: Request, bot_ui_id: str) -> Any:
         require_admin(authenticate(request))
         if not bot_ui.set_disabled(app.state.store, bot_ui_id, disabled=True):
-            raise ApiError(404, "not_found", f"Bot UI {bot_ui_id}가 없다")
+            raise ApiError(404, "not_found", f"PC 실행기 {bot_ui_id}가 없다")
         return {"bot_ui_id": bot_ui_id, "disabled": True}
 
     @app.post(f"{API}/bot-uis/{{bot_ui_id}}/enable")
     def enable_bot_ui(request: Request, bot_ui_id: str) -> Any:
         require_admin(authenticate(request))
         if not bot_ui.set_disabled(app.state.store, bot_ui_id, disabled=False):
-            raise ApiError(404, "not_found", f"Bot UI {bot_ui_id}가 없다")
+            raise ApiError(404, "not_found", f"PC 실행기 {bot_ui_id}가 없다")
         return {"bot_ui_id": bot_ui_id, "disabled": False}
 
     @app.put(f"{API}/bot-uis/{{bot_ui_id}}/utility")
@@ -274,7 +274,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         if not isinstance(on, bool):
             raise ApiError(422, "input_invalid", "selector_registration은 참·거짓이어야 한다")
         if not bot_ui.set_selector_registration(app.state.store, bot_ui_id, on=on):
-            raise ApiError(404, "not_found", f"Bot UI {bot_ui_id}가 없다")
+            raise ApiError(404, "not_found", f"PC 실행기 {bot_ui_id}가 없다")
         return {"bot_ui_id": bot_ui_id, "selector_registration": on}
 
     # ─────────────────── 서버 실행기 (C12·CON-12) ───────────────────
@@ -436,7 +436,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def list_resources(
         request: Request, type: str | None = None, resource_type: str | None = None
     ) -> Any:
-        """리소스 목록. 읽기·관리자 토큰과 Studio·Bot UI·서버 실행기 키가 읽는다 (C7)."""
+        """리소스 목록. 읽기·관리자 토큰과 Studio·PC 실행기·서버 실행기 키가 읽는다 (C7)."""
         require_read(authenticate(request))
         return resources.listing(app.state.store, type=type, resource_type=resource_type)
 
@@ -566,7 +566,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.post(f"{API}/virtual-workers")
     async def create_virtual_worker(request: Request) -> Any:
-        """등록 — **접수 Bot에 결재 없는 일괄 기동이 없어야** 묶인다 (C14 B16)."""
+        """등록 — **접수 BPM 프로세스에 결재 없는 일괄 기동이 없어야** 묶인다 (C14 B16)."""
         require_admin(authenticate(request))
         made = virtual_workers.create(app.state.store, settings.package_dir, await _json(request))
         return Utf8JSONResponse(status_code=201, content=made.to_json_dict())

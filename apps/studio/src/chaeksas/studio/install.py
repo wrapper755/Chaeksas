@@ -10,7 +10,8 @@
 - **자리는 작업 폴더의 `libs/`다.** PC 공용 저장소를 두지 않는다 — 패키지와 같은 자리라
   내보내기(`packaging.INCLUDED`)와 실행기(`bot_ui/runner_main.py`)가 **이미 그것을 안다**.
   그래서 시험 실행과 현장이 **같은 파일**을 본다.
-- **설치는 Bot 하나에 하는 일이다.** 판을 Bot마다 쥐어야 다른 Bot을 건드리지 않고 올릴 수 있다.
+- **설치는 BPM 프로세스 하나에 하는 일이다.** 판을 BPM 프로세스마다 쥐어야 다른 BPM 프로세스를 건드리지 않고
+  올릴 수 있다.
 - **Center를 읽기만 한다** (C5 `GET /packages/{id}/{version}`). 쓰는 길은 `upload.py` 하나다.
 - **아무 패키지나 풀지 않는다** — `kind=process_lib`이고 id·버전이 받으려던 것과 같아야 한다
   (`bpm_process` 패키지를 lib으로 풀면 진입 정의가 남의 `libs/`에서 돌게 된다).
@@ -148,7 +149,7 @@ def remove(workspace: Workspace, process: BpmProcess | None, *, package_id: str)
 
 
 def installed_of(process: BpmProcess | None) -> dict[str, InstalledLib]:
-    """열린 BPM 프로세스에 받아 둔 판들 `{패키지 id: 받아 둔 것}` (ADR-0048 — 설치는 Bot마다다).
+    """열린 BPM 프로세스에 받아 둔 판들 `{패키지 id: 받아 둔 것}` (ADR-0048 — 설치는 BPM 프로세스마다다).
 
     **「설치돼 있나」를 묻는 자리는 이 함수 하나다** (ADR-0051) — STU-11의 「설치본」 열과
     STU-03의 부르기·보기·복사가 같은 것을 본다.

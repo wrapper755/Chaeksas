@@ -185,7 +185,7 @@ def test_v6_server_wildcard_matches_every_server_runner() -> None:
     private, _ = admin()
     env = sign(deployment_payload(target={"type": "server_runner", "id": "*"}), private, signed_at=NOW)
     assert verify_target(env, runner_kind="server_runner", runner_id="srv_anything") == []
-    # 와일드카드는 서버 실행기에만 쓴다 — Bot UI는 받지 않는다
+    # 와일드카드는 서버 실행기에만 쓴다 — PC 실행기는 받지 않는다
     assert [v.code for v in verify_target(env, runner_kind="bot_ui", runner_id="bui_a81c22d0")] == ["wrong_target"]
 
 

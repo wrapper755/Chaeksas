@@ -2,9 +2,9 @@
 
 **설정 파일에 넣지 않는다** (CLAUDE.md §5). OS 비밀 저장소의 `chaeksas-tool-ui`에 두고, 읽기는
 **환경변수가 먼저**다 (`CHK_TOOL_UI__EXT__<확장>__<칸>`, 개발·CI). 저장소가 없으면 저장이 **분명히
-실패한다** — 평문으로 흘리지 않는다 (Bot UI·Studio와 같은 규칙, 이름 공간은 따로다).
+실패한다** — 평문으로 흘리지 않는다 (PC 실행기·Studio와 같은 규칙, 이름 공간은 따로다).
 
-Bot UI에 넣어 두었던 등록 담당자 키는 **옮기지 않는다** — 그쪽 저장소는 다른 사람의 것일 수 있다.
+PC 실행기에 넣어 두었던 등록 담당자 키는 **옮기지 않는다** — 그쪽 저장소는 다른 사람의 것일 수 있다.
 """
 
 from __future__ import annotations
@@ -16,9 +16,9 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-#: OS 비밀 저장소에서 Tool UI가 쓰는 이름 (Bot UI는 `chaeksas-bot-ui`, Studio는 `chaeksas-studio`).
+#: OS 비밀 저장소에서 Tool UI가 쓰는 이름 (PC 실행기는 `chaeksas-bot-ui`, Studio는 `chaeksas-studio`).
 SERVICE = "chaeksas-tool-ui"
-#: 확장의 비밀 설정 칸 — 확장마다 이름 공간을 가른다 (`ext:<확장>:<칸>`, Bot UI·Studio와 같은 규칙).
+#: 확장의 비밀 설정 칸 — 확장마다 이름 공간을 가른다 (`ext:<확장>:<칸>`, PC 실행기·Studio와 같은 규칙).
 EXTENSION_PREFIX = "ext:"
 ENV_EXTENSION_PREFIX = "CHK_TOOL_UI__EXT__"
 
@@ -34,14 +34,14 @@ def extension_secret_env(extension_id: str, key: str) -> str:
 
 #: 호출 토큰을 푸는 이름 (C13 예약 비밀 `call_token`, C15).
 CALL_TOKEN_SECRET = "call_token"
-#: Bot UI의 비밀 저장소와 그 안의 호출 토큰 이름 — Bot UI(`credentials.CALL_TOKEN`)와 **같은 규칙**이다.
+#: PC 실행기의 비밀 저장소와 그 안의 호출 토큰 이름 — PC 실행기(`credentials.CALL_TOKEN`)와 **같은 규칙**이다.
 #: 앱끼리 import하지 않으므로 여기 한 번 더 적고 시험이 대조한다.
 BOT_UI_SERVICE = "chaeksas-bot-ui"
 BOT_UI_CALL_TOKEN = "call_token"
 
 
 def bot_ui_call_token() -> str | None:
-    """이 PC Bot UI가 청해 둔 호출 토큰 (C15). 없으면 `None` — Bot UI가 아직 Center에 붙지 않았다."""
+    """이 PC PC 실행기가 청해 둔 호출 토큰 (C15). 없으면 `None` — PC 실행기가 아직 Center에 붙지 않았다."""
     return ToolCredentials(service=BOT_UI_SERVICE).stored(BOT_UI_CALL_TOKEN)
 
 
@@ -121,7 +121,7 @@ class ToolSecrets:
 
     def resolve(self, ref: str) -> str | None:
         if ref == CALL_TOKEN_SECRET:
-            # 호출 토큰 — 환경변수가 먼저(자동화·CI), 아니면 **이 PC Bot UI가 청해 둔 것**을 읽기만 한다
+            # 호출 토큰 — 환경변수가 먼저(자동화·CI), 아니면 **이 PC PC 실행기가 청해 둔 것**을 읽기만 한다
             # (C15). 그 토큰으로 올린 등록 작업은 CON-03 「셀렉터 등록」을 켠 PC에서만 받는다.
             found = os.environ.get(extension_secret_env(self.extension_id, ref))
             return found or bot_ui_call_token()

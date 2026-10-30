@@ -308,11 +308,11 @@ class Receive(ContractModel):
 class Delegate(ContractModel):
     """`chk:call.delegate` — **PC 위임** ([ADR-0062](../decisions/0062-pc-delegation.md)).
 
-    부르는 것은 **따로 올리고 따로 배포한 PC Bot 패키지**다 — 이 패키지 안의 정의가 아니다.
+    부르는 것은 **따로 올리고 따로 배포한 PC BPM 프로세스 패키지**다 — 이 패키지 안의 정의가 아니다.
     그래서 `calledElement`가 가리키는 것을 패키지 안에서 찾지 않는다 (B14).
     """
 
-    #: 부를 PC Bot 패키지 id (C1 — Bot의 신원은 패키지 id다).
+    #: 부를 PC BPM 프로세스 패키지 id (C1 — BPM 프로세스의 신원은 패키지 id다).
     bpm_process_id: str
     #: 판. **비우면 배포된 판** (작업 지시와 같은 규칙 — 둘 이상이면 Center가 거절한다).
     version: str | None = None
@@ -736,8 +736,8 @@ class Case(ContractModel):
     #: 노드 id → 폼 응답. 없는 결재는 **답하지 않고 기다린다** (기한 초과 시험).
     approvals: dict[str, dict[str, Any]] = Field(default_factory=dict)
     messages: list[CaseMessage] = Field(default_factory=list)
-    #: 노드 id → **PC 위임이 돌려주는 값** (그 Bot이 선언한 `outputs`, ADR-0062).
-    #: Studio에는 부를 PC Bot의 그림이 없어 **케이스가 결과를 적는다**. 적지 않은 위임은
+    #: 노드 id → **PC 위임이 돌려주는 값** (그 BPM 프로세스가 선언한 `outputs`, ADR-0062).
+    #: Studio에는 부를 PC BPM 프로세스의 그림이 없어 **케이스가 결과를 적는다**. 적지 않은 위임은
     #: **그 자리에서 실패**다 — 결재처럼 기다리게 두면 끝나지 않는다(현장 PC가 없다).
     delegations: dict[str, dict[str, Any]] = Field(default_factory=dict)
     #: 노드 id → **답한 사람** (ADR-0096). 적지 않은 결재는 `CASE_ANSWERER`가 답한 것이 된다.
@@ -1593,7 +1593,7 @@ def _check_delegation(
     (ADR-0014) PC가 다른 PC를 기다리면 둘이 서로를 기다릴 수 있다. C1에도 같은 규칙이 있다
     (매니페스트를 보는 쪽은 그림을 읽지 않는다).
 
-    받을 값은 **그 Bot이 선언한 `outputs`**와 맞춰 보는데, 그것은 **남의 패키지 매니페스트**라
+    받을 값은 **그 BPM 프로세스가 선언한 `outputs`**와 맞춰 보는데, 그것은 **남의 패키지 매니페스트**라
     여기서 알 수 없다 — 부르는 쪽이 주면 보고 **주지 않으면 건너뛴다** (`called_processes`와
     같은 규칙). 모르는 것으로 막지 않는다.
     """
@@ -1639,7 +1639,7 @@ def validate(
       모른다** (ADR-0018).
     - `dmn_decisions`: 결정 id → 입력·출력 이름. 없으면 B14의 DMN 대조를 건너뛴다.
     - `called_processes`: `calledElement` → 그 BPM 프로세스의 `outputs`. 없으면 호출 대조를 건너뛴다.
-    - `delegated_outputs`: **PC 위임**으로 부르는 Bot의 `bpm_process_id` → 그 패키지가 선언한
+    - `delegated_outputs`: **PC 위임**으로 부르는 BPM 프로세스의 `bpm_process_id` → 그 패키지가 선언한
       `outputs` (C1). 남의 패키지 매니페스트라 계약이 스스로 알 수 없다 — 없으면 그 대조를
       건너뛴다 (ADR-0062). **모르는 것으로 막지 않는다.**
 
@@ -1671,7 +1671,7 @@ def _check_b16(process: BpmnProcess) -> list[Violation]:
     반복이 붙은 위임 호출마다 본다. ① 그 `collection`을 `show`하는 결재(관문)를 지나지 않고
     닿는 길이 있나, ② 관문과 반복 사이에서 그 목록을 다시 만드나. 막지 않는다 — 사람 없이 도는
     정상 그림도 있고, 확장 태스크가 만드는 변수는 플랫폼이 모른다(ADR-0018). 막는 것은 가상
-    직원이 접수 Bot을 묶을 때다(ADR-0079 결정 3).
+    직원이 접수 BPM 프로세스를 묶을 때다(ADR-0079 결정 3).
     """
     out: list[Violation] = []
     scope_of: dict[str, tuple[str, list[Node], list[Flow]]] = {}

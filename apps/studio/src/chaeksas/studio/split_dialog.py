@@ -1,7 +1,7 @@
 """STU-06a 「PC BPM 프로세스로 나누기」 창 (ADR-0071).
 
 **고르고 확인만 한다** — 그림을 바꾸는 일은 `split_actions.split()`이 캔버스로 한다. 창은 옮길 노드·
-새 PC Bot의 id·이름과 입력·출력 이름을 받아 `Plan` 하나를 돌려준다.
+새 PC BPM 프로세스의 id·이름과 입력·출력 이름을 받아 `Plan` 하나를 돌려준다.
 
 미리 채우는 것은 **플랫폼이 세는 이름뿐**이다 (`split_actions.suggested`). 확장·AI 태스크는 다 알지
 못하므로 그렇게 말하고 사람이 적게 둔다 — 이름을 지어내지 않는다.
@@ -85,7 +85,7 @@ class SplitDialog(QDialog):
 
         form = QFormLayout()
         form.addRow("옮길 노드", self.node_box)
-        form.addRow("새 PC Bot id", self.id_box)
+        form.addRow("새 PC BPM 프로세스 id", self.id_box)
         form.addRow("이름", self.name_box)
 
         buttons = QDialogButtonBox(self)
@@ -96,10 +96,10 @@ class SplitDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        layout.addWidget(QLabel("입력 — PC Bot이 받는 값 (위임 호출이 같은 이름으로 넘긴다)", self))
+        layout.addWidget(QLabel("입력 — PC BPM 프로세스가 받는 값 (위임 호출이 같은 이름으로 넘긴다)", self))
         layout.addWidget(self.inputs)
         layout.addLayout(_right(add_input))
-        layout.addWidget(QLabel("출력 — PC Bot이 돌려주는 값 (같은 이름의 변수로 돌아온다)", self))
+        layout.addWidget(QLabel("출력 — PC BPM 프로세스가 돌려주는 값 (같은 이름의 변수로 돌아온다)", self))
         layout.addWidget(self.outputs)
         layout.addLayout(_right(add_output))
         layout.addWidget(self.hint)

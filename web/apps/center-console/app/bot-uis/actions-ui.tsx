@@ -6,7 +6,7 @@ import { setBotUiDisabled, setSelectorRegistration } from "@/app/actions";
 
 /**
  * CON-03 「셀렉터 등록」 — 켜면 이 PC의 Tool UI가 셀렉터 등록 작업을 Center에 올릴 수 있다
- * (C15 §올리기 — 등록 세션은 Bot이 없어 「그 PC에 켜졌나」를 본다). 권한이 **사람이 아니라 PC**에 붙으므로 켤 때 확인 창이고 기본은 「취소」다 (U9).
+ * (C15 §올리기 — 등록 세션은 BPM 프로세스가 없어 「그 PC에 켜졌나」를 본다). 권한이 **사람이 아니라 PC**에 붙으므로 켤 때 확인 창이고 기본은 「취소」다 (U9).
  */
 export function SelectorRegistration({ botUiId, on }: { botUiId: string; on: boolean }) {
   const [asking, setAsking] = useState(false);
@@ -82,8 +82,8 @@ export function BotUiActions({ botUiId, disabled }: { botUiId: string; disabled:
       {error ? <ErrorBanner message={error} /> : null}
       <ConfirmDialog
         open={asking}
-        title="이 Bot UI를 비활성화할까요?"
-        description="이 PC에 새 작업·배포를 보내지 않습니다. 실행 중인 Bot은 끝까지 돕니다."
+        title="이 PC 실행기를 비활성화할까요?"
+        description="이 PC에 새 작업·배포를 보내지 않습니다. 실행 중인 BPM 프로세스는 끝까지 돕니다."
         confirmLabel="비활성화"
         onConfirm={() => apply(true)}
         onCancel={() => setAsking(false)}

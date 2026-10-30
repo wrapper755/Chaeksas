@@ -1,7 +1,7 @@
 """사전 점검 — 실행 전에 이 PC에서 볼 수 있는 것 (`core.preflight`, ADR-0013 §사전 점검).
 
 여기서 보는 것은 **무엇을 막고 무엇을 막지 않는가**다. 거짓 차단은 거짓 통과보다 나쁘다 —
-올바른 Bot이 「실행 불가」로 멈추면 사람이 고칠 것이 없다.
+올바른 BPM 프로세스가 「실행 불가」로 멈추면 사람이 고칠 것이 없다.
 """
 
 from __future__ import annotations
@@ -166,7 +166,7 @@ def test_without_a_context_only_the_platform_checks_run() -> None:
 
 
 def test_without_a_host_the_extension_and_platform_extension_checks_are_skipped() -> None:
-    """확장이 없는 Bot UI도 Bot은 돈다."""
+    """확장이 없는 PC 실행기도 BPM 프로세스는 돈다."""
     m = manifest(domains=["desktop"], task_types=[TaskTypeNeed(id="ui_task", extension="x", run_locations=["pc"])])
     assert not preflight.check(m, host=None).blocks
 
@@ -183,7 +183,7 @@ def test_a_real_example_is_not_blocked(example: str, tmp_path: Path) -> None:
     """BX-36은 서비스 앱(`it-crm`)과 `ui_task`·`desktop`을 쓴다.
 
     설치된 확장(`ui-automation`)이 종류와 환경을 주고 서비스 앱 키는 없어졌으므로(ADR-0102) **막는 것이
-    없어야 한다**. 이것이 깨지면 거짓 차단이 생긴 것이다 — 올바른 Bot이 「실행 불가」가 된다.
+    없어야 한다**. 이것이 깨지면 거짓 차단이 생긴 것이다 — 올바른 BPM 프로세스가 「실행 불가」가 된다.
     """
     from chaeksas.core.extensions import load_host  # noqa: PLC0415
     from chaeksas.studio.packaging import export  # noqa: PLC0415
@@ -245,7 +245,7 @@ OCR = {
 def test_a_turned_off_extension_gets_its_own_finding() -> None:
     """**고치는 길이 다르다** — 깔려 있는데 꺼 둔 것은 켜면 되고, 없는 것은 판을 올려야 한다.
 
-    한 칸으로 뭉치면 켜면 될 일에 「Bot UI를 다시 깔라」고 안내하게 된다 (ADR-0043).
+    한 칸으로 뭉치면 켜면 될 일에 「PC 실행기를 다시 깔라」고 안내하게 된다 (ADR-0043).
     """
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
 
@@ -330,30 +330,30 @@ def test_a_task_type_that_declares_the_server_is_not_blocked_there() -> None:
 
 
 def test_an_absent_extension_on_the_server_does_not_say_bot_ui() -> None:
-    """**서버에서 「Bot UI를 올리세요」는 할 수 없는 일을 시키는 셈이다** — 그 자리에 Bot UI가 없다."""
+    """**서버에서 「PC 실행기를 올리세요」는 할 수 없는 일을 시키는 셈이다** — 그 자리에 PC 실행기가 없다."""
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["server"])])
     found = preflight.check(m, host=ExtensionHost(run_location="server"))
 
     assert found.blocked == (preflight.TASK_TYPES_UNSUPPORTED,)
     assert "서버 실행기" in (found.findings[0].fix_hint or "")
-    assert "Bot UI" not in (found.findings[0].fix_hint or "")
+    assert "PC 실행기" not in (found.findings[0].fix_hint or "")
     assert "서버에서 수행할 수 없습니다" in found.findings[0].message
 
 
 def test_the_pc_wording_is_unchanged_when_nobody_holds_a_run_location() -> None:
-    """실행 위치를 쥐지 않은 호스트(Studio·Bot UI)의 안내는 **그대로다**."""
+    """실행 위치를 쥐지 않은 호스트(Studio·PC 실행기)의 안내는 **그대로다**."""
     m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
     found = preflight.check(m, host=ExtensionHost())
 
     assert "이 PC에서" in found.findings[0].message
-    assert "Bot UI 판으로 올리세요" in (found.findings[0].fix_hint or "")
+    assert "PC 실행기 판으로 올리세요" in (found.findings[0].fix_hint or "")
 
 
 # ─────────────────── 갖춰야 할 설정 (C1 `requires.settings`, ADR-0059) ───────────────────
 
 
 def test_a_bot_that_sends_mail_needs_smtp() -> None:
-    """**메일을 보내는 Bot은 SMTP가 있어야 띄운다** — 실행 중에 알면 늦다 (ADR-0059 §4)."""
+    """**메일을 보내는 BPM 프로세스는 SMTP가 있어야 띄운다** — 실행 중에 알면 늦다 (ADR-0059 §4)."""
     m = Manifest.model_validate({**BASE, "requires": {"settings": ["smtp"]}})
 
     blocked = preflight.check(m, settings=())

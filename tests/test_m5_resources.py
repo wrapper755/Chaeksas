@@ -310,7 +310,7 @@ def test_an_extensions_server_part_status_comes_from_its_consumer(client: TestCl
 def test_a_pc_is_counted_once_even_if_a_second_key_tries_to_register(client: TestClient) -> None:
     """PC 하나는 한 번만 세어진다 — 같은 `machine_id`를 다른 키가 등록하면 409다 (C4 「키 묶기」).
 
-    PC 하나에 Bot UI 행이 둘 생기면 「확장이 깔린 PC 수」와 런타임 수가 함께 부푼다.
+    PC 하나에 PC 실행기 행이 둘 생기면 「확장이 깔린 PC 수」와 런타임 수가 함께 부푼다.
     """
     register_bot_ui(client)
     made = client.post("/api/v1/center-keys", json={"name": "같은 PC 두 번째 키", "type": "bot_ui"}, headers=ADMIN)
@@ -369,7 +369,7 @@ def test_contributed_is_empty_until_a_consumer_uploads_a_catalog(client: TestCli
 
 
 def test_a_bot_ui_key_can_read_resources(client: TestClient) -> None:
-    """실행하는 쪽도 리소스를 읽는다 (C7 §전송 — 권한에 Bot UI 키가 있다)."""
+    """실행하는 쪽도 리소스를 읽는다 (C7 §전송 — 권한에 PC 실행기 키가 있다)."""
     made = client.post(
         "/api/v1/center-keys", json={"name": "PC 키", "type": "bot_ui"}, headers=ADMIN
     )

@@ -2,12 +2,12 @@
 
 보는 것:
 
-- **Bot UI 자리를 빌려 읽는다** — 데이터 위치 규칙이 Bot UI와 같고(앱끼리 import하지 않아 베꼈다),
+- **PC 실행기 자리를 빌려 읽는다** — 데이터 위치 규칙이 PC 실행기와 같고(앱끼리 import하지 않아 베꼈다),
   런타임 포트·끈 확장·**Center 주소**를 거기서 읽되 **쓰지 않는다**.
 - **런타임을 띄우지 않는다** — 답하지 않으면 도구를 열지 않고 까닭과 길을 말한다.
 - 도구의 바깥 세상은 `tool_ui` 호스트이고, 도구가 Center에 올릴 때 쓰는 **호출 토큰**은 이 PC
-  Bot UI가 청해 둔 것을 읽기만 한다 (C15, ADR-0102 — 등록 담당자 키·앱 주소 명부는 없어졌다).
-- 묶은 앱에서 Tool UI로 가는 깃발은 **네 자리**(Bot UI 바로가기·Tool UI·묶기 진입·설치 파일)가 같은 글이다.
+  PC 실행기가 청해 둔 것을 읽기만 한다 (C15, ADR-0102 — 등록 담당자 키·앱 주소 명부는 없어졌다).
+- 묶은 앱에서 Tool UI로 가는 깃발은 **네 자리**(PC 실행기 바로가기·Tool UI·묶기 진입·설치 파일)가 같은 글이다.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ def tool_host(tmp_path: Path, *, up: bool = True, off: tuple[str, ...] = ()) -> 
 
 
 def test_tool_ui_and_bot_ui_agree_on_where_the_bot_ui_lives(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """Tool UI는 Bot UI를 import하지 않는다 — 같은 규칙을 따로 쓰므로 어긋나면 여기서 잡는다."""
+    """Tool UI는 PC 실행기를 import하지 않는다 — 같은 규칙을 따로 쓰므로 어긋나면 여기서 잡는다."""
     from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415
 
     monkeypatch.delenv("CHK_BOT_UI__DATA_DIR", raising=False)
@@ -101,7 +101,7 @@ def test_a_tool_whose_runtime_does_not_answer_says_why_and_how(tmp_path: Path) -
     problem = down.runtime_problem("worker")
     assert problem is not None
     assert problem == RUNTIME_DOWN.format(label="Worker 프로세스", port=8899)
-    assert "Bot UI" in problem, "길을 말한다 — Bot UI 「도구」에서 열면 Bot UI가 띄운다"
+    assert "PC 실행기" in problem, "길을 말한다 — PC 실행기 「도구」에서 열면 PC 실행기가 띄운다"
     assert tool_host(tmp_path, up=True).runtime_problem("worker") is None
     assert down.runtime_problem(None) is None, "런타임이 필요 없는 도구는 그대로 열린다"
     assert "기여한 확장이 없습니다" in (down.runtime_problem("nope") or "")
@@ -118,19 +118,19 @@ def test_the_tool_gets_the_runtime_bot_ui_started_and_its_own_storage(
 
     values = found.values(BUILTIN, runtime_ids=("worker",))
     assert values["runtime.worker.port"] == 9555
-    assert Path(values["runtime.worker.token_dir"]) == folder, "토큰은 Bot UI가 띄운 Worker의 것이다"
+    assert Path(values["runtime.worker.token_dir"]) == folder, "토큰은 PC 실행기가 띄운 Worker의 것이다"
     assert values["runtime.worker.state"] == "running"
-    # 제 파일은 **제 자리**에 — Bot UI 데이터 폴더에 쓰지 않는다.
+    # 제 파일은 **제 자리**에 — PC 실행기 데이터 폴더에 쓰지 않는다.
     assert Path(values[STORAGE_DIR_SETTING]) == tmp_path / "tool-ui" / "extensions" / BUILTIN
-    assert CENTER_URL_SETTING in values, "도구가 외부 작업을 올릴 곳 — Bot UI 설정이 없으면 비어 있다"
+    assert CENTER_URL_SETTING in values, "도구가 외부 작업을 올릴 곳 — PC 실행기 설정이 없으면 비어 있다"
     assert "registrar_key" not in values, "비밀 칸은 설정으로 가지 않는다"
     assert not (found.bot_ui_root / "extensions").exists()
 
 
 def test_the_center_address_is_the_one_bot_ui_is_set_to(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Tool UI는 Center에 붙지 않는다 — **Bot UI가 붙은 Center**에 올린다 (C13 `center.url`, ADR-0102).
+    """Tool UI는 Center에 붙지 않는다 — **PC 실행기가 붙은 Center**에 올린다 (C13 `center.url`, ADR-0102).
 
-    Bot UI의 설정 파일을 읽기만 하고, Bot UI처럼 환경변수가 이긴다 (같은 규칙 — 어긋나면 여기서 잡는다).
+    PC 실행기의 설정 파일을 읽기만 하고, PC 실행기처럼 환경변수가 이긴다 (같은 규칙 — 어긋나면 여기서 잡는다).
     """
     from chaeksas.bot_ui.settings import Settings  # noqa: PLC0415
 
@@ -239,7 +239,7 @@ def test_the_window_does_not_open_a_tool_without_its_runtime(app: Any, tmp_path:
     window = ToolWindow(tool_host(tmp_path, up=False))
     assert window.open_tool(BUILTIN, TOOL) is False
     assert window.tabs.count() == 0
-    assert "Bot UI" in window.problem.text(), "까닭을 그 자리에 쓴다 (U3)"
+    assert "PC 실행기" in window.problem.text(), "까닭을 그 자리에 쓴다 (U3)"
     window.close()
 
 
@@ -324,7 +324,7 @@ def test_settings_have_no_registrar_key_field(app: Any, tmp_path: Path, monkeypa
 
 
 def test_the_call_token_is_what_bot_ui_asked_for(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """호출 토큰은 Bot UI 비밀 저장소의 `call_token`을 **읽기만** 한다 — Bot UI와 같은 이름 규칙이다 (C15)."""
+    """호출 토큰은 PC 실행기 비밀 저장소의 `call_token`을 **읽기만** 한다 — PC 실행기와 같은 이름 규칙이다 (C15)."""
     from chaeksas.bot_ui.credentials import CALL_TOKEN as BOT_UI_CALL_TOKEN  # noqa: PLC0415
     from chaeksas.bot_ui.credentials import SERVICE as BOT_UI_SERVICE  # noqa: PLC0415
     from chaeksas.tool_ui import credentials as tool_credentials  # noqa: PLC0415
@@ -358,7 +358,7 @@ def _botui_main() -> Any:
 
 
 def test_the_tool_ui_flag_is_the_same_text_in_all_four_places() -> None:
-    """Bot UI 바로가기·Tool UI·묶기 진입·설치 파일 — 하나라도 다르면 묶은 앱에서야 Bot UI가 뜬다."""
+    """PC 실행기 바로가기·Tool UI·묶기 진입·설치 파일 — 하나라도 다르면 묶은 앱에서야 PC 실행기가 뜬다."""
     from chaeksas.bot_ui import tool_launch  # noqa: PLC0415
     from chaeksas.tool_ui import app as tool_app  # noqa: PLC0415
 
@@ -411,7 +411,7 @@ def test_tool_ui_reads_only_the_open_flag() -> None:
 
 
 def test_only_bot_ui_gets_the_tool_ui_shortcut() -> None:
-    """Tool UI는 Bot UI 설치에 함께 든다 (ADR-0077 §6) — Studio 설치에는 없다."""
+    """Tool UI는 PC 실행기 설치에 함께 든다 (ADR-0077 §6) — Studio 설치에는 없다."""
     spec = importlib.util.spec_from_file_location("installer_tests", ROOT / "tests" / "test_installer.py")
     assert spec is not None and spec.loader is not None
     installer = importlib.util.module_from_spec(spec)

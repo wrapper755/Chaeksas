@@ -23,7 +23,7 @@
   },
   "$id": "urn:chaeksas:contracts:c5-studio-enroll-request",
   "additionalProperties": true,
-  "description": "`POST /api/v1/studio/enroll` — Studio의 등록 요청 (C5 §Studio 등록 요청과 승인, ADR-0093).\n\nBot UI의 `EnrollRequest`와 같은 결이다 — 등록(`register`)이 없는 Studio라 그 칸만 따로 둔다.",
+  "description": "`POST /api/v1/studio/enroll` — Studio의 등록 요청 (C5 §Studio 등록 요청과 승인, ADR-0093).\n\nPC 실행기의 `EnrollRequest`와 같은 결이다 — 등록(`register`)이 없는 Studio라 그 칸만 따로 둔다.",
   "properties": {
     "machine_id": {
       "pattern": "^[0-9a-f]{64}$",

@@ -4,14 +4,14 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — `Provides`를 Studio가 짓고 CON-06이 읽는다) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | Studio(빌드) → Center(업로드·검사·보관) → Bot UI·서버 실행기(설치·사전 점검) |
+| 보내는 쪽 → 받는 쪽 | Studio(빌드) → Center(업로드·검사·보관) → PC 실행기·서버 실행기(설치·사전 점검) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/manifest.py` (import `chaeksas.contracts.manifest`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c1-manifest.json`](../../packages/contracts/schemas/c1-manifest.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0110](../decisions/0110-center-keeps-the-schedule.md) |
 
 ## 목적
 
-패키지(zip) 안의 `manifest.json`이 "이 패키지가 무엇이고, 어디서 돌며, 실행하려면 무엇이 있어야 하는가"를 말한다. Center는 이것으로 업로드를 검사하고, Bot UI·서버 실행기는 이것으로 설치 전 사전 점검을 한다. **키 값도 키 참조도 들어가지 않는다** — 바깥 기능은 Center의 외부 작업으로 부른다 (C15, ADR-0102).
+패키지(zip) 안의 `manifest.json`이 "이 패키지가 무엇이고, 어디서 돌며, 실행하려면 무엇이 있어야 하는가"를 말한다. Center는 이것으로 업로드를 검사하고, PC 실행기·서버 실행기는 이것으로 설치 전 사전 점검을 한다. **키 값도 키 참조도 들어가지 않는다** — 바깥 기능은 Center의 외부 작업으로 부른다 (C15, ADR-0102).
 
 ## 전송
 
@@ -41,7 +41,7 @@
 | 필드 | 타입 | 필수 | 뜻 | 추가된 schema |
 | --- | --- | --- | --- | --- |
 | `schema` | int | ✓ | 이 계약의 schema 번호. 지금 1 | 1 |
-| `kind` | `"bpm_process"` \| `"process_lib"` | ✓ | 패키지 종류. 운영 화면에서 `bpm_process`가 Bot / 서버 Bot이다. **도구 묶음(툴팩)은 패키지가 아니다** — 도구는 확장이 기여한다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)) | 1 |
+| `kind` | `"bpm_process"` \| `"process_lib"` | ✓ | 패키지 종류. 운영 화면에서 `bpm_process`가 BPM 프로세스 / 서버 BPM 프로세스이다. **도구 묶음(툴팩)은 패키지가 아니다** — 도구는 확장이 기여한다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)) | 1 |
 | `id` | str | ✓ | 소문자·숫자·`.` `_` `-`, 1~100자, 첫 글자는 소문자·숫자 | 1 |
 | `version` | str | ✓ | SemVer (`1.2.0`, `1.2.0-rc.1`) | 1 |
 | `name` | str | | 화면 표시 이름 | 1 |
@@ -81,7 +81,7 @@
 | `extensions` | `{id, version, definition_hash?}`[] | 쓰는 확장과 버전 범위 (C13). 외부 확장이면 `definition_hash`로 정의를 고정한다. Studio가 채운다 |
 | `task_types` | `{id, extension, run_locations?}`[] | 쓰는 태스크 종류 중 **확장이 기여한 것**과, 그 확장 정의에 적힌 실행 위치. Studio가 빌드할 때 확장 정의에서 옮겨 적는다. Center는 이것으로 R2를 판정하고, 실행하는 쪽은 자기 확장 정의로 다시 확인한다. **`run_locations`는 아는 쪽이 준다 — 모르면 넣지 않는다**: 빌드하는 PC에 그 확장이 깔려 있지 않거나 꺼져 있으면(ADR-0043) 적을 값이 없다 |
 | `libs` | str[] | 복사해 넣은 공유 BPM 프로세스 `<id>@<version>` |
-| `delegations` | str[] | **PC 위임**으로 부르는 PC Bot `<id>@<version>` 또는 `<id>`(판을 비우면 배포된 판). 복사해 넣는 것이 **아니다** — 따로 올리고 따로 배포한 Bot이라 `libs/`에 들어가지 않는다 ([ADR-0062](../decisions/0062-pc-delegation.md)). Studio가 그림(`chk:call.delegate`)에서 모은다 |
+| `delegations` | str[] | **PC 위임**으로 부르는 PC BPM 프로세스 `<id>@<version>` 또는 `<id>`(판을 비우면 배포된 판). 복사해 넣는 것이 **아니다** — 따로 올리고 따로 배포한 BPM 프로세스라 `libs/`에 들어가지 않는다 ([ADR-0062](../decisions/0062-pc-delegation.md)). Studio가 그림(`chk:call.delegate`)에서 모은다 |
 | `runtimes` | str[] | 예: `node>=20`, `chromium` |
 | `os` | str[] | `windows` `linux`. 비면 제한 없음 |
 
@@ -94,7 +94,7 @@
 
 > [ADR-0102](../decisions/0102-calling-outside-is-pull.md): **키가 없다.** 바깥 기능은 Center의 외부 작업으로 부르므로(C15) 현장에 키가 없고, 매니페스트에도 키 참조 칸이 없다.
 > - 옛 패키지에 적힌 `key_ref`·`task_key_refs`는 **모르는 칸으로 받아 두고 보지 않는다**(원칙 3) — 거부하지 않으므로 옛 패키지도 그대로 올라가고 설치된다. 빌드는 적지 않는다.
-> - `app_id`가 곧 **토픽**이다 — Center는 배포된 Bot의 `requires.service_apps`(와 `requires.extensions`)에 있는 토픽만 그 Bot이 올리게 둔다(C15 「불러도 되나」). `operations`는 그 안의 허용 작업이다(비면 모든 작업).
+> - `app_id`가 곧 **토픽**이다 — Center는 배포된 BPM 프로세스의 `requires.service_apps`(와 `requires.extensions`)에 있는 토픽만 그 BPM 프로세스가 올리게 둔다(C15 「불러도 되나」). `operations`는 그 안의 허용 작업이다(비면 모든 작업).
 
 ### HumanNeeds
 
@@ -126,7 +126,7 @@
 - **이름과 식은 다른 칸이다.** `name`은 이벤트 **이름**이고(C12 메시지 API가 이 이름으로 보낸다),
   타이머 식은 `expression`에 싣는다. 한 칸에 둘을 담으면 `timer` 트리거의 `name`을 메시지
   이름으로 읽어 **영원히 오지 않는 메시지를 보낸다**.
-- **`none`은 「시작 이벤트에 정의가 없다」는 뜻**이다. 그 Bot은 작업 지시(C5 `/jobs`)나 수동
+- **`none`은 「시작 이벤트에 정의가 없다」는 뜻**이다. 그 BPM 프로세스는 작업 지시(C5 `/jobs`)나 수동
   실행으로만 시작한다.
 - **`conditional`·`signal`로 시작하는 그림은 schema 1의 범위 밖이다** (C14 §이벤트 — 조건 시작은
   쓰지 않고, 신호는 한 실행 안의 가지 사이에서만 간다). 그래도 **`none`으로 뭉개지 않고 그린 대로
@@ -134,12 +134,12 @@
 - **타이머 일정은 Center가 `triggers`로 쓴다** ([ADR-0110](../decisions/0110-center-keeps-the-schedule.md),
   C5 §일정) — Center는 그림을 읽지 않으므로 Studio가 `timeCycle` 본문을 `expression`에 옮겨 둔 것이
   일정의 원본이다. 읽는 문법은 `contracts.schedule` 하나이고 **R13이 올릴 때 같은 함수로 본다**.
-  실행하는 쪽(Bot UI·서버 실행기)은 일정을 잡지 않는다 — 일정이 만든 것은 평범한 작업이다.
+  실행하는 쪽(PC 실행기·서버 실행기)은 일정을 잡지 않는다 — 일정이 만든 것은 평범한 작업이다.
   메시지 시작도 Center가 `triggers`의 이름으로 고른다(C12 — 상관 키는 Center가 기다리는 실행과 맞춘다).
 
 ## 검사 규칙
 
-Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)가 **같은 함수**(`contracts.manifest.validate`)로 검사한다.
+Studio(빌드 때), Center(업로드 때), PC 실행기·서버 실행기(설치 때)가 **같은 함수**(`contracts.manifest.validate`)로 검사한다.
 
 | # | 규칙 | 위반 시 |
 | --- | --- | --- |
@@ -153,10 +153,10 @@ Studio(빌드 때), Center(업로드 때), Bot UI·서버 실행기(설치 때)�
 
 **R7은 없어졌다** — 툴팩 해시를 검사하던 규칙이고 툴팩 갈래가 사라졌다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)). **번호는 다시 쓰지 않는다** (오류 코드는 사람이 기억한다).
 | R9 | `triggers[].kind`가 위 다섯 중 하나다 | 422 `unknown_trigger_kind` + 걸린 값 목록 |
-| R10 | `requires.delegations`가 있으면 `run_location=server`다 — **PC 위임은 서버 Bot만 한다** (PC 실행은 그 PC의 자리를 끝까지 쥐므로 PC가 PC를 기다리면 서로를 기다린다, [ADR-0014](../decisions/0014-one-bot-per-pc.md)). C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지 않는다** | 422 `delegation_not_from_pc` + 걸린 Bot 목록 |
-| R11 | `requires.settings`가 아는 값 중 하나다 (`llm`·`vlm`·`smtp`) — **R9와 같은 까닭**이다: 그림에서 기계가 옮기는 값이고(`chk:email` → `smtp`) 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다(`core.preflight`). 모르는 이름은 그 점검을 **아무 말 없이 지나가** 준비되지 않은 Bot이 실행된다 | 422 `unknown_setting` + 걸린 값 목록 |
+| R10 | `requires.delegations`가 있으면 `run_location=server`다 — **PC 위임은 서버 BPM 프로세스만 한다** (PC 실행은 그 PC의 자리를 끝까지 쥐므로 PC가 PC를 기다리면 서로를 기다린다, [ADR-0014](../decisions/0014-one-bot-per-pc.md)). C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지 않는다** | 422 `delegation_not_from_pc` + 걸린 BPM 프로세스 목록 |
+| R11 | `requires.settings`가 아는 값 중 하나다 (`llm`·`vlm`·`smtp`) — **R9와 같은 까닭**이다: 그림에서 기계가 옮기는 값이고(`chk:email` → `smtp`) 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다(`core.preflight`). 모르는 이름은 그 점검을 **아무 말 없이 지나가** 준비되지 않은 BPM 프로세스가 실행된다 | 422 `unknown_setting` + 걸린 값 목록 |
 | R12 | `requires.delegations`에 **자기 `id`가 없다** — 자기 자신에게 위임하지 않는다 (끝나지 않는 되부름이다, [ADR-0082](../decisions/0082-batch-start.md)). 그림은 자기 패키지 id를 모르므로 매니페스트가 본다 | 422 `delegation_to_self` + 그 항목 |
-| R13 | `triggers[kind=timer].expression`을 **Center가 읽을 수 있다** — 5필드 cron(`*`·수·`a-b`·`/n`·쉼표, 일 칸 `L`, 요일 0~7) 또는 ISO `R[n]/<시작>/<기간>`·`R[n]/<기간>`(1분 이상). **R9와 같은 까닭**이다: 일정은 Center가 이 식으로 쓰므로(C5 §일정) 읽지 못하는 식은 그 Bot을 **아무 말 없이 영영 돌지 않게** 한다. 읽는 함수는 `contracts.schedule` 하나다 ([ADR-0110](../decisions/0110-center-keeps-the-schedule.md)) | 422 `timer_expression_invalid` + 걸린 식과 까닭 |
+| R13 | `triggers[kind=timer].expression`을 **Center가 읽을 수 있다** — 5필드 cron(`*`·수·`a-b`·`/n`·쉼표, 일 칸 `L`, 요일 0~7) 또는 ISO `R[n]/<시작>/<기간>`·`R[n]/<기간>`(1분 이상). **R9와 같은 까닭**이다: 일정은 Center가 이 식으로 쓰므로(C5 §일정) 읽지 못하는 식은 그 BPM 프로세스를 **아무 말 없이 영영 돌지 않게** 한다. 읽는 함수는 `contracts.schedule` 하나다 ([ADR-0110](../decisions/0110-center-keeps-the-schedule.md)) | 422 `timer_expression_invalid` + 걸린 식과 까닭 |
 
 **R2는 모르는 것을 막지 않는다.** 태스크 종류의 실행 위치는 **확장 정의만** 안다 (C13
 `task_types[].run_locations`, ADR-0018) — 빌드하는 PC에 그 확장이 없거나 꺼져 있으면 Studio가
@@ -176,7 +176,7 @@ PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드�
 
 ## 예시
 
-서버 Bot (기본):
+서버 BPM 프로세스 (기본):
 
 ```json
 {
@@ -213,7 +213,7 @@ PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드�
 }
 ```
 
-PC Bot (UI 태스크가 있음):
+PC BPM 프로세스 (UI 태스크가 있음):
 
 ```json
 {

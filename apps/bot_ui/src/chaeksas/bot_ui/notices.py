@@ -12,7 +12,7 @@
 - 「사람이 볼 때까지」는 `sticky`다. 밀리초는 **참고값**이다 — Windows는 표시 시간을 제 설정대로
   쓴다. 그래서 급한 알림은 **알림 센터에 남는 것**으로 지킨다 (운영자가 나중에 본다).
 - 문구는 `06-screens/bot-ui.md`의 BUI-05 표가 원본이다. **런타임 이름은 확장이 준 `label`**을
-  쓴다 — 플랫폼 코드에 「Worker」라고 적으면 Bot UI가 어느 확장인지 아는 셈이다 (ADR-0018).
+  쓴다 — 플랫폼 코드에 「Worker」라고 적으면 PC 실행기가 어느 확장인지 아는 셈이다 (ADR-0018).
 
 """
 
@@ -70,8 +70,8 @@ class Notice:
 
 
 def _bot(name: str) -> str:
-    """Bot 이름이 비면 그렇게 쓴다 — **모르는 것을 지어내지 않는다**."""
-    return name or "Bot"
+    """BPM 프로세스 이름이 비면 그렇게 쓴다 — **모르는 것을 지어내지 않는다**."""
+    return name or "BPM 프로세스"
 
 
 def _app(app_id: str) -> str:
@@ -274,7 +274,7 @@ class Notices:
                     kind=RUNTIME_GAVE_UP,
                     text=(
                         f"{label}를 띄울 수 없습니다 — {why or '사유를 모릅니다'}. "
-                        "UI 태스크가 있는 Bot은 실행되지 않습니다"
+                        "UI 태스크가 있는 BPM 프로세스는 실행되지 않습니다"
                     ),
                     action=ACTION_WINDOW,
                     sticky=True,

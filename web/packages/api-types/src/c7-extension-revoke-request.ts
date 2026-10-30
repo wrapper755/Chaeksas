@@ -3,7 +3,7 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 /**
- * `DELETE /resources/extensions` — 관리자만 (C7·C13). 그 판을 쓰는 Bot은 실행 불가가 된다.
+ * `DELETE /resources/extensions` — 관리자만 (C7·C13). 그 판을 쓰는 BPM 프로세스는 실행 불가가 된다.
  */
 export interface ExtensionRevokeRequest {
   id: string;

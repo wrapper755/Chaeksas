@@ -738,7 +738,7 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         try:
             run = engine.start(
                 process, run_id=log.run_id, log=log, now=NOW, env=env, inputs=dummy_inputs(process),
-                # 접수 Bot(FX-24)의 담당자는 **가상 직원의 감독자**다 — 현장에서는 Center가 붙인다 (ADR-0099).
+                # 접수 BPM 프로세스(FX-24)의 담당자는 **가상 직원의 감독자**다 — 현장에서는 Center가 붙인다 (ADR-0099).
                 sourced=sourced_inputs(process.info, DUMMY_WORKER),
             )
         except EngineError as e:
@@ -797,7 +797,7 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         "fx13_signal.bpmn",  # 신호 받기
         "fx14_timers.bpmn",  # 중간 받기 타이머 + 타이머 경계
         "fx19_manual_task_pc.bpmn",
-        "fx24_batch_intake.bpmn",  # 접수 Bot — 일괄 결재를 기다린다 (ADR-0079·0082)
+        "fx24_batch_intake.bpmn",  # 접수 BPM 프로세스 — 일괄 결재를 기다린다 (ADR-0079·0082)
     ], waiting
 
 

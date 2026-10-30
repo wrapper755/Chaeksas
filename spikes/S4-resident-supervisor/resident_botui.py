@@ -1,4 +1,4 @@
-"""상주 가짜 Bot UI: 숨은 창 + Worker·실행기 자식. 로그오프·잠금 알림을 받으면 기록한다.
+"""상주 가짜 PC 실행기: 숨은 창 + Worker·실행 프로세스. 로그오프·잠금 알림을 받으면 기록한다.
 
     pythonw resident_botui.py   → outputs/logoff.jsonl
 

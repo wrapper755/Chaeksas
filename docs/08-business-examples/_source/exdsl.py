@@ -189,9 +189,9 @@ def recv(id, name, message, correlation, payload=None):
 def call(id, name, called, input, output, delegate=None, loop=None):
     """다른 BPM 프로세스 호출. `delegate`를 주면 **위임**이다 (C14 `chk:call.delegate`).
 
-    위임의 대상은 **패키지 안의 정의가 아니라 따로 배포된 Bot**이라(ADR-0062) `called`는
-    읽는 사람을 위한 표시로만 남는다 — 검사가 패키지 안에서 찾지 않는다 (B14). PC Bot이든
-    서버 Bot이든 같은 칸이다 — 어디서 도는지는 대상 패키지가 정한다 (ADR-0082). `loop`를 주면
+    위임의 대상은 **패키지 안의 정의가 아니라 따로 배포된 BPM 프로세스**이라(ADR-0062) `called`는
+    읽는 사람을 위한 표시로만 남는다 — 검사가 패키지 안에서 찾지 않는다 (B14). PC BPM 프로세스이든
+    서버 BPM 프로세스이든 같은 칸이다 — 어디서 도는지는 대상 패키지가 정한다 (ADR-0082). `loop`를 주면
     차례마다 하나씩 맡긴다 (**일괄 기동**).
     """
     task = dict(input=input, output=output)
@@ -944,7 +944,7 @@ def node_summary(n: Node) -> str:
     if k in ("appr", "manual"):
         t = p["task"]
         fl = ", ".join(f"`{x['key']}`({x['type']}{'*' if x['required'] else ''})" for x in t["fields"])
-        loc = {"follow": "Bot UI 설정을 따름", "center": "Center 결재함", "field": "현장 PC"}[t["location"]]
+        loc = {"follow": "PC 실행기 설정을 따름", "center": "Center 결재함", "field": "현장 PC"}[t["location"]]
         return f"「{t['title']}」 · 보임 {', '.join(t['show'])} · 칸 {fl} · {loc}"
     if k == "rule":
         t = p["task"]
@@ -977,7 +977,7 @@ def node_summary(n: Node) -> str:
 
 
 def to_card(ex: Example, bpmn_rel: str, cases_rel: str) -> str:
-    loc = "서버 (서버 Bot)" if ex.run_location == "server" else "PC (Bot)"
+    loc = "서버 (서버 BPM 프로세스)" if ex.run_location == "server" else "PC (BPM 프로세스)"
     apps = sorted({n.props["task"]["app_id"] for n in all_nodes(ex.nodes) if n.kind == "svc"})
     apps_txt = ", ".join(f"`{a}`" for a in apps) or "없음"
     L = [f"## {ex.id}. {ex.name}", ""]

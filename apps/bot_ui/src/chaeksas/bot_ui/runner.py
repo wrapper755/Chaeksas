@@ -1,13 +1,13 @@
-"""실행기를 띄우고 들여다본다 (Bot UI 쪽, ADR-0023·ADR-0031).
+"""실행 프로세스를 띄우고 들여다본다 (PC 실행기 쪽, ADR-0023·ADR-0031).
 
-**Bot UI는 실행기를 기다리지 않는다.** 띄워 놓고, 지금 상태는 **실행 기록 파일**을 읽어 안다
-(C3) — 실행기가 멈춰도 화면은 멈추지 않는다.
+**PC 실행기는 실행 프로세스를 기다리지 않는다.** 띄워 놓고, 지금 상태는 **실행 기록 파일**을 읽어 안다
+(C3) — 실행 프로세스가 멈춰도 화면은 멈추지 않는다.
 
 - 띄우기·끝내기·Job Object는 `core.processes.ChildProcess`가 한다 (ADR-0023).
 - 내려보내는 것(중지·결재 답)은 제어 파일 (`core.control`).
 - 올라오는 것(노드 상태·결재 요청·끝남)은 실행 기록 (`core.run_log`).
 
-**PC 한 대에 실행 중인 Bot은 하나**다 (ADR-0014) — 이 모듈도 하나만 들고 있는다.
+**PC 한 대에 실행 중인 BPM 프로세스는 하나**다 (ADR-0014) — 이 모듈도 하나만 들고 있는다.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ log = logging.getLogger(__name__)
 #: 협조 중지에 주는 유예 (초). 지나면 Job 나무째 끝낸다 (ADR-0023).
 STOP_GRACE_S = 5.0
 
-#: 실행기 진입점 (ADR-0024 — **같은 실행 파일**을 쓴다. 개발에서는 모듈로 부른다).
+#: 실행 프로세스 진입점 (ADR-0024 — **같은 실행 파일**을 쓴다. 개발에서는 모듈로 부른다).
 RUNNER_MODULE = "chaeksas.bot_ui.runner_main"
 
 #: C3 `run_started.run_id` 모양 — 운영 실행은 `run_`으로 시작한다.
@@ -70,7 +70,7 @@ def runner_args(
     smtp: Any = None,
     webhook_hosts: tuple[str, ...] = (),
 ) -> list[str]:
-    """실행기 명령줄. **업무 값은 싣지 않는다** — 입력은 파일로 준다 (원칙 6)."""
+    """실행 프로세스 명령줄. **업무 값은 싣지 않는다** — 입력은 파일로 준다 (원칙 6)."""
     args = [
         sys.executable,
         "-m",
@@ -148,7 +148,7 @@ class Request:
 
 @dataclass
 class Running:
-    """지금 돌고 있는 Bot 하나 (실행 자리, ADR-0014)."""
+    """지금 돌고 있는 BPM 프로세스 하나 (실행 자리, ADR-0014)."""
 
     bot: InstalledBot
     run_id: str
@@ -165,11 +165,11 @@ class Running:
     _finished: str = ""
     #: 실패로 끝났을 때 기록에 적힌 한 줄 (C3 `run_finished`의 `message`·`code`).
     _failure: str = ""
-    #: 현장에서 먼저 답한 Center 결재 — Bot UI가 Center에서 거둔다 (`answered_in_field`, ADR-0038).
+    #: 현장에서 먼저 답한 Center 결재 — PC 실행기가 Center에서 거둔다 (`answered_in_field`, ADR-0038).
     field_answered: list[str] = field(default_factory=list)
-    #: 지금 실행기가 쓰는 호출 토큰 (C15) — 새것이면 제어 파일로 넣는다 (`give_call_token`).
+    #: 지금 실행 프로세스가 쓰는 호출 토큰 (C15) — 새것이면 제어 파일로 넣는다 (`give_call_token`).
     call_token: str | None = None
-    #: **PC 위임의 결과** — 실행기가 출력 파일에 쓴 것을 `cleanup()`이 들고 온다 (ADR-0062 §4).
+    #: **PC 위임의 결과** — 실행 프로세스가 출력 파일에 쓴 것을 `cleanup()`이 들고 온다 (ADR-0062 §4).
     #: 위임이 아니거나 실패했으면 비어 있다. 올리는 것은 `agent._finished`다.
     outputs: dict[str, Any] = field(default_factory=dict)
 
@@ -183,19 +183,19 @@ class Running:
 
     @property
     def requests_path(self) -> Path:
-        """올라갈 결재 요청 (ADR-0038) — 실행기가 쓰고 Bot UI가 나른다."""
+        """올라갈 결재 요청 (ADR-0038) — 실행 프로세스가 쓰고 PC 실행기가 나른다."""
         return requests.requests_path(self.data_dir, self.run_id)
 
     @property
     def field_requests_path(self) -> Path:
-        """현장 결재·확인의 본문 (ADR-0078) — 실행기가 쓰고 결재 창이 **읽기만** 한다."""
+        """현장 결재·확인의 본문 (ADR-0078) — 실행 프로세스가 쓰고 결재 창이 **읽기만** 한다."""
         return requests.field_requests_path(self.data_dir, self.run_id)
 
     def body_of(self, request_id: str) -> dict[str, Any] | None:
         """그 요청의 C6 본문 — 제목·설명·폼·검토 자료 (CMN-01, ADR-0078).
 
         현장 것과 **Center로 올라간 것 둘 다** 본다 — 올라간 결재도 여기서 답할 수 있다
-        (ADR-0038). 실행기가 아직 쓰지 않았으면(기록 줄이 먼저 쓰인다) `None`이다.
+        (ADR-0038). 실행 프로세스가 아직 쓰지 않았으면(기록 줄이 먼저 쓰인다) `None`이다.
         """
         for path in (self.field_requests_path, self.requests_path):
             found = requests.find(path, request_id)
@@ -205,7 +205,7 @@ class Running:
 
     @property
     def outputs_path(self) -> Path:
-        """올라갈 위임 결과 (ADR-0062 §4) — 실행기가 쓰고 Bot UI가 나른다."""
+        """올라갈 위임 결과 (ADR-0062 §4) — 실행 프로세스가 쓰고 PC 실행기가 나른다."""
         return outputs.outputs_path(self.data_dir, self.run_id)
 
     @property
@@ -295,9 +295,9 @@ class Running:
     def stop(self, *, grace_s: float = STOP_GRACE_S) -> int | None:
         """협조 중지 → 유예 → Job 나무째 (ADR-0023).
 
-        **유예를 기다려 준다.** 바로 끝내 버리면 실행기가 `run_finished(cancelled)`를 남길
+        **유예를 기다려 준다.** 바로 끝내 버리면 실행 프로세스가 `run_finished(cancelled)`를 남길
         틈이 없어, 「무엇을 하다 멈췄는지」가 기록에서 사라진다. 기다려도 안 끝나면 그때
-        나무째 끝낸다 (멈춰 버린 실행기도 있다).
+        나무째 끝낸다 (멈춰 버린 실행 프로세스도 있다).
         """
         control.stop(self.control_path)
         until = time.monotonic() + grace_s
@@ -305,13 +305,13 @@ class Running:
             time.sleep(0.05)
         if not self.child.alive:
             return self.child.poll()
-        log.warning("실행기가 %.1f초 안에 멈추지 않았다 — 나무째 끝낸다", grace_s)
+        log.warning("실행 프로세스가 %.1f초 안에 멈추지 않았다 — 나무째 끝낸다", grace_s)
         return self.child.stop(timeout_s=1.0)
 
     def cleanup(self) -> None:
         """끝난 뒤 치운다. **실행 기록은 남긴다** (Center로 가야 한다).
 
-        요청 파일도 지운다 — 실행기가 죽으면 스스로 못 지우고, **검토 자료에는 업무 값이 있다**.
+        요청 파일도 지운다 — 실행 프로세스가 죽으면 스스로 못 지우고, **검토 자료에는 업무 값이 있다**.
 
         **위임 결과는 치우기 전에 들고 온다** (ADR-0062 §4) — 읽기와 지우기를 한 걸음으로
         묶어야(`outputs.take`) 값이 디스크에 남는 길이 생기지 않는다. 올리지 못한 ack는
@@ -325,7 +325,7 @@ class Running:
 
 @dataclass
 class Launcher:
-    """실행기를 띄우는 쪽. **한 번에 하나** (ADR-0014)."""
+    """실행 프로세스를 띄우는 쪽. **한 번에 하나** (ADR-0014)."""
 
     data_dir: Path
     readable: tuple[Path, ...] = ()
@@ -333,7 +333,7 @@ class Launcher:
     writable: tuple[Path, ...] = ()
     llm_url: str = ""
     llm_model: str = ""
-    #: 모델 키 — 실행기에게 **환경변수로** 건넨다 (명령줄·설정 파일에 두지 않는다).
+    #: 모델 키 — 실행 프로세스에게 **환경변수로** 건넨다 (명령줄·설정 파일에 두지 않는다).
     llm_key: str = ""
     #: 보내기 (BUI-03 「보내기」, ADR-0059). `SmtpConfig` 또는 `None`. **비밀번호는 없다** —
     #: 자식이 이 PC의 비밀 저장소에서 제 손으로 읽는다.
@@ -367,20 +367,20 @@ class Launcher:
         approval_where: str = "field",
         off_extensions: tuple[str, ...] = (),
     ) -> Running:
-        """Bot 하나를 띄운다. 이미 돌고 있으면 거절한다 — 대기열은 부르는 쪽이 본다.
+        """BPM 프로세스 하나를 띄운다. 이미 돌고 있으면 거절한다 — 대기열은 부르는 쪽이 본다.
 
         `extensions`는 확장별 설정(그 칸 + 예약 키 — Worker 자리)이다. **비밀은 없다** — 키는
-        실행기가 OS 비밀 저장소에서 참조 이름으로 푼다 (ADR-0013).
+        실행 프로세스가 OS 비밀 저장소에서 참조 이름으로 푼다 (ADR-0013).
 
         `off_extensions`는 사람이 BUI-11에서 끈 확장 id다 (ADR-0043) — **실행마다 지금 설정을
-        받는다**(실행기를 띄우는 이 객체는 한 번 만들어 두고 쓴다).
+        받는다**(실행 프로세스를 띄우는 이 객체는 한 번 만들어 두고 쓴다).
 
-        `services_path`는 외부 확장 정의·봉투다 (C13 「전송」) — **봉투는 실행기가 다시 검증한다.**
+        `services_path`는 외부 확장 정의·봉투다 (C13 「전송」) — **봉투는 실행 프로세스가 다시 검증한다.**
         `center_url`·`call_token`은 서비스 태스크를 Center에 올리는 데 쓴다 (C15) — 토큰은
         **환경변수로** 물려준다(명령줄은 프로세스 목록에 뜬다).
         """
         if self.busy:
-            raise RuntimeError("이미 실행 중입니다 (PC 한 대에 Bot 하나, ADR-0014)")
+            raise RuntimeError("이미 실행 중입니다 (PC 한 대에 BPM 프로세스 하나, ADR-0014)")
 
         made = run_id or new_run_id()
         inputs_path: Path | None = None
@@ -418,7 +418,7 @@ class Launcher:
         factory = self.make_child or ChildProcess
         child = factory(
             args=args,
-            name=f"실행기 {bot.id}",
+            name=f"실행 프로세스 {bot.id}",
             log_path=run_dir(self.data_dir) / f"{made}.runner.log",
             # **환경을 통째로 물려준다** — 키만 주면 PATH도 없는 자식이 된다.
             env={
@@ -438,7 +438,7 @@ class Launcher:
             data_dir=self.data_dir,
             call_token=call_token,
         )
-        log.info("Bot %s@%s 실행 (run_id %s)", bot.id, bot.version, made)
+        log.info("BPM 프로세스 %s@%s 실행 (run_id %s)", bot.id, bot.version, made)
         return self.running
 
     def tick(self) -> Running | None:

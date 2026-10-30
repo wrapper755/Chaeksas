@@ -8,14 +8,14 @@
 
 | | PC 재통과 (M5) | 여기 |
 | --- | --- | --- |
-| 무엇이 엔진을 도나 | Bot UI의 **자식 프로세스** | 실행기의 **스레드 하나** (ADR-0054 §5) |
+| 무엇이 엔진을 도나 | PC 실행기의 **자식 프로세스** | 실행기의 **스레드 하나** (ADR-0054 §5) |
 | 동시 실행 | PC 하나에 하나 (ADR-0014) | 상한까지 여러 건 |
-| 대기열 | Bot UI가 가짐 | **Center가 가짐** (C12) |
+| 대기열 | PC 실행기가 가짐 | **Center가 가짐** (C12) |
 | 결재 창구 | 제어 파일(현장) 또는 Center | **Center만** (C12) |
-| 메시지 | Bot UI 수신 | **Center 메시지 API** (C12 §메시지) |
+| 메시지 | PC 실행기 수신 | **Center 메시지 API** (C12 §메시지) |
 
 **업무 값은 볼 수 없다** — C3에 남기지 않기 때문이다 (원칙 6). 그래서 여기서 보는 것은 「그
-Bot이 Center를 거쳐 설치되고, 작업으로 시작되고, 끝까지 돌아, 끝났다고 Center가 아는가」다
+BPM 프로세스가 Center를 거쳐 설치되고, 작업으로 시작되고, 끝까지 돌아, 끝났다고 Center가 아는가」다
 (C5 `run_status`). 업무 결과가 맞는지는 Studio 시험 실행(M3·M4·M5 인수 시험)이 본다 — 같은
 그림·같은 엔진이다.
 
@@ -255,7 +255,7 @@ def model() -> Iterator[StubModel]:
 class BundleSettings(RunnerSettings):
     """묶음만 쓰는 설정 — **웹훅의 사설망을 연다** (ADR-0059 §2).
 
-    제품 설정에는 그 스위치가 **없다**: 한 번 켜면 모든 Bot의 모든 웹훅에 적용되어 사내 아무
+    제품 설정에는 그 스위치가 **없다**: 한 번 켜면 모든 BPM 프로세스의 모든 웹훅에 적용되어 사내 아무
     주소로나 업무 값이 나간다. 그래서 켜는 자리를 **묶음에 둔다** — ADR이 「시험과 Studio 시험
     수신기만 켠다」고 적어 둔 그 자리다. 막는 규칙 자체는 `tests/test_core_senders.py`가 본다.
 
@@ -272,7 +272,7 @@ def receiver() -> Iterator[Receiver]:
     """웹훅을 받는 **시험 수신기** — 케이스의 `$test_receiver`가 가리키는 곳 (C14).
 
     **Studio의 것과 같은 코드**다 (`studio.receiver`) — 받는 모양이 묶음마다 다를 이유가 없다.
-    127.0.0.1에 뜨므로 **배포된 Bot의 규칙으로는 보낼 수 없는 주소**다: 그래서 아래 `runner`가
+    127.0.0.1에 뜨므로 **배포된 BPM 프로세스의 규칙으로는 보낼 수 없는 주소**다: 그래서 아래 `runner`가
     사설망을 열어 준다 (ADR-0059 §2 — 제품 설정에는 그 스위치가 없다).
     """
     made = Receiver().start()
@@ -310,7 +310,7 @@ def runner(
 
     메일은 127.0.0.1의 작은 SMTP 서버로 가고 **암호화하지 않는다**(`none` — 시험 서버가 TLS를
     모른다. 사내 중계기를 쓰는 현장과 같은 고름이다). **웹훅 허용 호스트는 비워 둔다** —
-    `$test_receiver`는 Studio 전용이고(C14) 배포된 Bot은 사설망으로 보내지 않으므로, 웹훅을
+    `$test_receiver`는 Studio 전용이고(C14) 배포된 BPM 프로세스는 사설망으로 보내지 않으므로, 웹훅을
     쓰는 예제는 이 묶음에서 돌 수 없다 (`REMAINING`).
     """
     client, _ = center
@@ -345,7 +345,7 @@ def runner(
 
 
 def make_samples_for(runner: agent_mod.Agent, bot: str) -> None:
-    """그 Bot의 **출력 폴더 아래에** 표본 파일을 만든다 — **M3와 같은 자리**다
+    """그 BPM 프로세스의 **출력 폴더 아래에** 표본 파일을 만든다 — **M3와 같은 자리**다
     (`tests/sample_files.py`).
 
     저장소에 이진 파일을 두지 않으므로 묶음이 만든다. **상대 경로의 기준이 출력 폴더**이므로
@@ -366,9 +366,9 @@ def packaged(tmp_path: Path, example: str) -> Path:
 def approve_delegation_targets(
     center: CenterHandle, tmp_path: Path, example: str
 ) -> None:
-    """그 예제가 **PC 위임으로 부르는 Bot**을 올려 승인해 둔다 (ADR-0062).
+    """그 예제가 **PC 위임으로 부르는 BPM 프로세스**을 올려 승인해 둔다 (ADR-0062).
 
-    배포가 그것을 **R8처럼 본다** — 승인되지 않은 Bot을 맡기는 그림은 422
+    배포가 그것을 **R8처럼 본다** — 승인되지 않은 BPM 프로세스를 맡기는 그림은 422
     `delegation_not_approved`다. 그림에서 읽으므로(`requires.delegations`) 위임을 쓰는 예제가
     늘어도 이 자리는 그대로다. 패키지 id는 예제 파일 이름의 `_`를 `-`로 바꾼 것이다 (C1 `id`).
     """
@@ -575,12 +575,12 @@ REMAINING: dict[str, str] = {
 ELSEWHERE: dict[str, str] = {
     "fx24_batch_intake": (
         "`test_fx24_starts_one_server_bot_per_approved_item`가 본다 — **일괄 기동**이라(ADR-0082) "
-        "맡길 서버 Bot(FX-25)도 같은 실행기에 배포되어 있어야 한다. 묶음은 예제 하나만 배포하므로 "
+        "맡길 서버 BPM 프로세스(FX-25)도 같은 실행기에 배포되어 있어야 한다. 묶음은 예제 하나만 배포하므로 "
         "거기서는 위임이 `no_deployment`로 실패해 오류 경계로 간다. "
     ),
     "bx16_reorder_proposal": (
         "`test_bx16_delegates_a_part_to_a_pc_and_continues`가 본다 — **PC 위임**이라(ADR-0062) "
-        "맡긴 작업을 끝내 줄 PC가 있어야 한다(등록된 Bot UI·배포된 BX-17·그 PC의 작업 ack). "
+        "맡긴 작업을 끝내 줄 PC가 있어야 한다(등록된 PC 실행기·배포된 BX-17·그 PC의 작업 ack). "
         "아무도 끝내 주지 않으면 그 실행은 영원히 기다리므로 파라미터 묶음에 넣지 않는다. "
     ),
 }
@@ -772,7 +772,7 @@ def test_the_canned_answers_are_the_shared_ones() -> None:
     assert found is not None and found["판정"]["승인"] is True
 
 
-# ─────────── BX-16: 서버 Bot이 PC에 **한 부분을 맡긴다** (전용 발판, ADR-0062) ───────────
+# ─────────── BX-16: 서버 BPM 프로세스가 PC에 **한 부분을 맡긴다** (전용 발판, ADR-0062) ───────────
 
 #: 맡길 PC 예제 — 그 PC에 **배포돼 있어야** 위임이 작업이 된다 (C5 `no_deployment`).
 BX16_TARGET = "bx17_erp_po_entry"
@@ -781,11 +781,11 @@ BX16_TARGET = "bx17_erp_po_entry"
 PC_KEYS: dict[str, str] = {}
 
 def register_a_pc(client: Any) -> str:
-    """등록된 Bot UI 하나 — 작업이 갈 PC다 (C4 「키 묶기」). `bot_ui_id`를 준다.
+    """등록된 PC 실행기 하나 — 작업이 갈 PC다 (C4 「키 묶기」). `bot_ui_id`를 준다.
 
     **하트비트까지 보낸다** — 확장을 보고하지 않으면 Center가 `ui-automation`을 몰라 그것을
     요구하는 BX-17의 **배포가 막힌다** (C7 누락 검사). `Agent`를 쓰지 않고 C4를 직접 부른다 —
-    여기서 보는 것은 Bot UI가 아니라 **작업이 만들어지나**다.
+    여기서 보는 것은 PC 실행기가 아니라 **작업이 만들어지나**다.
     """
     from chaeksas.core.extensions import load_host
 
@@ -826,7 +826,7 @@ class FakePc:
     """맡겨진 PC 작업을 **끝내 주는 가짜 PC** (C4 — `JobAck.outputs`는 **선언한 것만**).
 
     고르는 기준은 **`requested_by`** 하나다 (`server_bot:<run_id>` — 「이 작업이 위임인가」를
-    말해 주는 자리이고 그 글은 `contracts.center_api`에 한 자리다, ADR-0062 §4). 진짜 Bot UI를
+    말해 주는 자리이고 그 글은 `contracts.center_api`에 한 자리다, ADR-0062 §4). 진짜 PC 실행기를
     띄우지 않는다 — 그쪽 한 바퀴는 `test_server_runner_delegation.py`가 **진짜 자식 프로세스**로
     본다. 여기서 보는 것은 **예제의 그림이 그 길과 맞물리나**다.
     """
@@ -897,11 +897,11 @@ def test_bx16_delegates_a_part_to_a_pc_and_continues(
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
-    """BX-16 — **서버 Bot이 한 부분을 PC에 맡기고 결과로 이어 간다** (ADR-0062).
+    """BX-16 — **서버 BPM 프로세스가 한 부분을 PC에 맡기고 결과로 이어 간다** (ADR-0062).
 
     전에는 이 자리를 사내 확장 서비스 앱(`center-jobs`)으로 메우고 있었고, 그래서 발판이 넷
     필요했다 — **소켓 Center**(모의 앱이 제 스레드에서 `POST /jobs`를 불러야 했다)·연동용 키·
-    등록된 Bot UI·배포된 BX-17. **위임이 본문이 되어 앞의 둘이 없어졌다**: 맡기는 것은 실행기
+    등록된 PC 실행기·배포된 BX-17. **위임이 본문이 되어 앞의 둘이 없어졌다**: 맡기는 것은 실행기
     자신이고(`CenterDelegator`) 작업을 만드는 것은 Center다. 남은 둘은 그대로다 — 맡길 PC가
     **등록돼 있고** 그 PC에 BX-17이 **배포돼 있어야** 한다 (C5 `no_deployment`).
 
@@ -959,7 +959,7 @@ def batch_children(client: httpx.Client, child: str) -> list[dict[str, Any]]:
 
 
 def bind_virtual_worker(client: httpx.Client, intake: str) -> None:
-    """접수 Bot을 가상 직원에 **먼저** 묶는다 — 일괄 결재의 담당자가 그 감독자다 (ADR-0099).
+    """접수 BPM 프로세스를 가상 직원에 **먼저** 묶는다 — 일괄 결재의 담당자가 그 감독자다 (ADR-0099).
 
     FX-24의 `감독자`는 값 출처가 가상 직원인 **필수** 입력이라 묶지 않고 돌리면 시작조차 하지 않는다.
     가상 직원이 하나뿐이라 작업에 id를 적지 않아도 Center가 그것을 고른다. 케이스의 감독자와 같다.
@@ -976,7 +976,7 @@ def test_fx24_starts_one_server_bot_per_approved_item(
     runner: agent_mod.Agent,
     receiver: Receiver,
 ) -> None:
-    """**접수 Bot 실행 한 번 = 일괄** — 감독자가 승인하면 건마다 서버 Bot 작업이 하나씩 생긴다.
+    """**접수 BPM 프로세스 실행 한 번 = 일괄** — 감독자가 승인하면 건마다 서버 BPM 프로세스 작업이 하나씩 생긴다.
 
     보는 것은 넷이다: 일괄 결재가 **담당자(감독자)로 걸러지나**, 승인 뒤 **건마다 작업 하나**인가
     (차례마다 멱등 키가 달라 2건째부터 같은 작업이 돌아오지 않는다), 자식이 **같은 실행기에서**

@@ -111,7 +111,7 @@ def center(tmp_path: Path) -> Iterator[TestClient]:
 
 @pytest.fixture
 def studio_key(center: TestClient) -> str:
-    """CON-11에서 **Studio용**으로 발급한 키 한 개 (ADR-0013 — Bot UI의 것과 값이 다르다)."""
+    """CON-11에서 **Studio용**으로 발급한 키 한 개 (ADR-0013 — PC 실행기의 것과 값이 다르다)."""
     created = center.post(
         "/api/v1/center-keys", json={"name": "설계자 PC", "type": "studio"}, headers=ADMIN
     )

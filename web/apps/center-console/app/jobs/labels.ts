@@ -26,12 +26,12 @@ export const REASON_LABEL: Record<string, string> = {
   queue_full: "대기열 가득",
   no_deployment: "배포 없음",
   not_ready: "준비 안 됨",
-  bot_ui_shutdown: "Bot UI 종료",
-  bot_ui_lost: "Bot UI 기록 유실",
-  server_location: "서버 실행 Bot",
+  bot_ui_shutdown: "PC 실행기 종료",
+  bot_ui_lost: "PC 실행기 기록 유실",
+  server_location: "서버 실행 BPM 프로세스",
   cancelled_on_pc: "현장에서 취소",
   global_limit: "서버 실행기 빈자리 없음",
-  per_bot_limit: "Bot별 동시 실행 상한",
+  per_bot_limit: "BPM 프로세스별 동시 실행 상한",
   paused: "일시 중지",
 };
 
@@ -53,7 +53,7 @@ export function location(job: JobInfo): string {
   return job.target.type === "server_runner" ? "서버" : "PC";
 }
 
-/** 대상 — Bot UI 이름, 서버면 「서버」. 이름은 바뀌므로 읽을 때 찾는다. */
+/** 대상 — PC 실행기 이름, 서버면 「서버」. 이름은 바뀌므로 읽을 때 찾는다. */
 export function targetName(job: JobInfo, botUis: BotUiInfo[]): string {
   if (job.target.type === "server_runner") return "서버";
   const id = job.target.id ?? "";
@@ -75,7 +75,7 @@ export function delegatedFrom(job: JobInfo): string | null {
  *
  * - 취소를 요청했는데 아직 상태가 그대로면 「취소 요청함 — 다음 하트비트에 반영」.
  * - 그사이 시작됐으면 작업은 「수락」 그대로이고 「취소 못 함 — 이미 시작됨」.
- * - 대기열이면 「Bot UI 대기열 N번째 — 실행 중 <Bot>」 (Bot UI가 보고한 지금 실행).
+ * - 대기열이면 「PC 실행기 대기열 N번째 — 실행 중 <BPM 프로세스>」 (PC 실행기가 보고한 지금 실행).
  */
 export function stateNote(job: JobInfo, botUis: BotUiInfo[]): string | null {
   if (job.cancel_result === "refused_already_started") return "취소 못 함 — 이미 시작됨";
@@ -83,7 +83,7 @@ export function stateNote(job: JobInfo, botUis: BotUiInfo[]): string | null {
   if (job.state === "queued" && job.queue_position) {
     const host = botUis.find((one) => one.bot_ui_id === job.target.id);
     const running = host?.current_run?.bpm_process_id;
-    return `Bot UI 대기열 ${job.queue_position}번째${running ? ` — 실행 중 ${running}` : ""}`;
+    return `PC 실행기 대기열 ${job.queue_position}번째${running ? ` — 실행 중 ${running}` : ""}`;
   }
   return null;
 }

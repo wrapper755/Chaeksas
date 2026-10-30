@@ -15,10 +15,10 @@ from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
 
-#: `keyring`의 서비스 이름. 한 PC에 여러 Bot UI를 두지 않으므로 하나로 충분하다.
+#: `keyring`의 서비스 이름. 한 PC에 여러 PC 실행기를 두지 않으므로 하나로 충분하다.
 SERVICE = "chaeksas-bot-ui"
 
-#: Center API 키 (C4 — 「Bot UI용」 종류). 개발·CI용 환경변수.
+#: Center API 키 (C4 — 「PC 실행기용」 종류). 개발·CI용 환경변수.
 CENTER_API_KEY = "center_api_key"
 ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
 
@@ -26,18 +26,18 @@ ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
 #: 연다. 환경변수 길은 없다 — 이것을 쓰는 것은 승인으로 들어온 PC뿐이다.
 ENROLL_SECRET = "enroll_secret"
 
-#: 호출 토큰 (C15) — Bot UI가 청해 두면 **Tool UI가 읽는다** (Tool UI는 Center를 부르지 않는다).
+#: 호출 토큰 (C15) — PC 실행기가 청해 두면 **Tool UI가 읽는다** (Tool UI는 Center를 부르지 않는다).
 CALL_TOKEN = "call_token"
-#: 실행기 자식에게 **첫** 호출 토큰을 물려주는 환경변수 (명령줄은 프로세스 목록에 뜬다).
+#: 실행 프로세스에게 **첫** 호출 토큰을 물려주는 환경변수 (명령줄은 프로세스 목록에 뜬다).
 #: 새것은 제어 파일로 간다 (`core.control.CALL_TOKEN`).
 ENV_CALL_TOKEN = "CHK_BOT_UI__CALL_TOKEN"
 
-#: 모델 키 (ADR-0027). 실행기에게는 **환경변수로** 건넨다 (명령줄에 두지 않는다).
+#: 모델 키 (ADR-0027). 실행 프로세스에게는 **환경변수로** 건넨다 (명령줄에 두지 않는다).
 LLM_API_KEY = "llm-api-key"
 ENV_LLM_API_KEY = "CHK_BOT_UI__LLM__API_KEY"
 
 #: SMTP 비밀번호 (BUI-03 「보내기」, ADR-0059). **설정 파일·명령줄에 넣지 않는다** —
-#: 실행기(자식 프로세스)가 이 저장소에서 제 손으로 읽는다.
+#: 실행 프로세스가 이 저장소에서 제 손으로 읽는다.
 SMTP_PASSWORD = "smtp-password"
 ENV_SMTP_PASSWORD = "CHK_BOT_UI__SMTP__PASSWORD"
 
@@ -167,7 +167,7 @@ class Credentials:
         self.set(f"{EXTENSION_PREFIX}{extension_id}:{key}", value.strip())
 
     def call_token(self) -> str | None:
-        """Bot UI가 청해 둔 호출 토큰 (C15) — Tool UI가 읽는다."""
+        """PC 실행기가 청해 둔 호출 토큰 (C15) — Tool UI가 읽는다."""
         return self.get(CALL_TOKEN)
 
     def set_call_token(self, value: str) -> None:

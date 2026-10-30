@@ -226,7 +226,7 @@ def test_windows_autostart_really_registers() -> None:  # pragma: no cover - 실
     기본으로 돌리지 않는다 — CI 러너는 작업 등록이 막혀 있을 수 있고(실제로 막혔다), 시험이
     그 PC의 설정을 바꾸게 두어서도 안 된다. Windows PC에서 확인할 때 `CHK_TEST_AUTOSTART=1`로 켠다.
     """
-    found = autostart_module.WindowsTaskScheduler(task_name="Chaeksas Bot UI 시험")
+    found = autostart_module.WindowsTaskScheduler(task_name="Chaeksas PC 실행기 시험")
     try:
         found.enable()
         assert found.enabled()
@@ -268,7 +268,7 @@ def test_the_model_address_is_saved_but_the_key_is_not(tmp_path: Path) -> None:
 
 
 def test_readable_dirs_survive_a_restart(tmp_path: Path) -> None:
-    """Bot이 읽을 수 있는 곳은 **여기 적은 폴더뿐**이다 (ADR-0026)."""
+    """BPM 프로세스가 읽을 수 있는 곳은 **여기 적은 폴더뿐**이다 (ADR-0026)."""
     folders = (tmp_path / "공유", tmp_path / "청구서")
     path = replace(Settings(), readable_dirs=folders).save(tmp_path / "settings.json")
 
@@ -284,7 +284,7 @@ def test_without_a_model_address_the_default_is_empty() -> None:
 def test_the_model_key_goes_to_the_secret_store_and_an_env_var_wins(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """읽기는 환경변수가 먼저다 (개발·CI). 실행기에는 환경변수로 건넨다."""
+    """읽기는 환경변수가 먼저다 (개발·CI). 실행 프로세스에는 환경변수로 건넨다."""
     from chaeksas.bot_ui.credentials import ENV_LLM_API_KEY, Credentials
 
     monkeypatch.setenv(ENV_LLM_API_KEY, "sk-from-env")

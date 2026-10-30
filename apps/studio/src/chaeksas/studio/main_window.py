@@ -738,7 +738,7 @@ class MainWindow(QMainWindow):
         )
 
     def delegated_outputs(self) -> dict[str, tuple[str, ...]]:
-        """PC 위임으로 부르는 Bot들이 **선언한 `outputs`** (C1 → C14 B14, ADR-0062).
+        """PC 위임으로 부르는 BPM 프로세스들이 **선언한 `outputs`** (C1 → C14 B14, ADR-0062).
 
         **창은 Center를 부르지 않는다** — 받아 둔 카탈로그에서 꺼낸다 (「새로 고침」·정의를 열
         때·설정을 저장한 뒤에 받는다). 못 받았으면 **비어 있고** 그러면 B14가 그 대조를
@@ -915,7 +915,7 @@ class MainWindow(QMainWindow):
         self.say("실행 위치·키 참조는 그림에 적용했습니다 — 「저장」(Ctrl+S)으로 파일에 씁니다.")
 
     def split_to_pc(self) -> None:
-        """STU-06a — 서버에서 못 하는 노드 하나를 새 PC Bot으로 옮긴다 (ADR-0071).
+        """STU-06a — 서버에서 못 하는 노드 하나를 새 PC BPM 프로세스로 옮긴다 (ADR-0071).
 
         진입 정의가 열려 있고 실행 위치가 「서버」일 때만 한다(그 밖은 까닭을 말한다). 창은 고르기만
         하고 그림은 `split_actions.split()`이 **캔버스로** 바꾼다.

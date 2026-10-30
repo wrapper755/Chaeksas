@@ -128,7 +128,7 @@ def test_a_task_types_run_locations_come_from_the_extension_table(tmp_path: Path
 def test_a_server_process_with_an_extension_task_is_not_falsely_rejected(tmp_path: Path) -> None:
     """**올리기가 막히던 버그** (C1 R2) — 「확장 태스크가 있다」만으로 422를 받으면 안 된다.
 
-    빈 목록은 `"server" not in []`이라 참이어서, 실행 위치가 server인 Bot에 확장 태스크가
+    빈 목록은 `"server" not in []`이라 참이어서, 실행 위치가 server인 BPM 프로세스에 확장 태스크가
     하나라도 있으면 **그 확장이 서버를 지원하든 말든** Center 업로드가 거부했다. 설계자가
     보는 것은 `manifest_invalid` + 태스크 종류 이름뿐이라 고칠 데를 알 수 없다.
     """
@@ -189,7 +189,7 @@ def delegating(tmp_path: Path) -> BpmProcess:
 def test_a_delegated_call_is_not_a_lib(tmp_path: Path) -> None:
     """**PC 위임은 `libs`가 아니다** ([ADR-0062](../docs/decisions/0062-pc-delegation.md)).
 
-    복사해 넣는 것이 아니라 **따로 배포된 Bot**이다. `libs`에 넣으면 없는 공유 BPM 프로세스를
+    복사해 넣는 것이 아니라 **따로 배포된 BPM 프로세스**이다. `libs`에 넣으면 없는 공유 BPM 프로세스를
     요구하는 패키지가 되어 설치가 막히고, R3이 「PC 정의를 부른다」고 읽는다.
     """
     found = collect_requires(delegating(tmp_path))
@@ -198,7 +198,7 @@ def test_a_delegated_call_is_not_a_lib(tmp_path: Path) -> None:
 
 
 def test_a_delegating_package_passes_the_manifest_rules(tmp_path: Path) -> None:
-    """서버 Bot이면 R10이 입을 닫는다 — 올리는 길이 막히지 않는다 (C1)."""
+    """서버 BPM 프로세스이면 R10이 입을 닫는다 — 올리는 길이 막히지 않는다 (C1)."""
     made = build_manifest(delegating(tmp_path))
     assert made.run_location == "server"
     assert made.requires.delegations == ["fin.erp-input@1.2.0"]
@@ -288,7 +288,7 @@ def test_the_dmn_next_to_the_drawing_goes_in(tmp_path: Path) -> None:
 
 
 def test_test_cases_do_not_go_in(tmp_path: Path) -> None:
-    """케이스는 작업 폴더에만 있다 (C1) — 배포된 Bot이 시험 입력을 들고 다니지 않는다."""
+    """케이스는 작업 폴더에만 있다 (C1) — 배포된 BPM 프로세스가 시험 입력을 들고 다니지 않는다."""
     made = imported(tmp_path, EXPENSE)
     case_file = made.folder / "cases" / f"{EXPENSE}.cases.json"
     case_file.parent.mkdir(parents=True, exist_ok=True)

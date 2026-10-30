@@ -1,4 +1,4 @@
-"""CMN-01 결재 / 확인 창 — **Studio와 Bot UI가 같은 창을 쓴다** (`docs/06-screens/README.md` §5).
+"""CMN-01 결재 / 확인 창 — **Studio와 PC 실행기가 같은 창을 쓴다** (`docs/06-screens/README.md` §5).
 
 같은 폼(C6)을 두 곳에서 그리므로 여기 한 곳에 둔다. 다르게 그리면 개발 실행과 운영 실행에서
 사람이 다른 것을 보게 된다.

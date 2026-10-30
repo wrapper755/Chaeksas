@@ -75,7 +75,7 @@ class Settings:
     #: STU-02 탐색기 목록에 올린 BPM 프로세스 id (올린 차례). 닫으면 빠진다.
     open_processes: tuple[str, ...] = ()
     #: STU-15에서 **사람이 꺼 둔** 확장 id ([ADR-0043](../../../../../docs/decisions/0043-turned-off-extensions.md)).
-    #: **Studio의 것이다** — Bot UI는 제 설정에 따로 둔다 (개발 도구의 실험이 현장 실행을 멈추지
+    #: **Studio의 것이다** — PC 실행기는 제 설정에 따로 둔다 (개발 도구의 실험이 현장 실행을 멈추지
     #: 않는다). 판은 적지 않는다 — 올려도 꺼 둔 채로 있는 것이 사람의 뜻이다.
     disabled_extensions: tuple[str, ...] = ()
     #: STU-10 「외형」의 테마 (ADR-0073). 모르는 값은 `apply_theme`이 「시스템 따름」으로 읽는다.

@@ -1,4 +1,4 @@
-"""Bot UI의 사전 점검 — 준비되지 않은 Bot은 **띄우지 않고** 그 까닭을 Center에 올린다 (ADR-0013, C4).
+"""PC 실행기의 사전 점검 — 준비되지 않은 BPM 프로세스는 **띄우지 않고** 그 까닭을 Center에 올린다 (ADR-0013, C4).
 
 서비스 앱 키는 없어졌다 (ADR-0102 — 바깥 기능은 C15로 Center를 거쳐 부르고 「불러도 되나」는 배포가
 가린다). 그래서 막는 까닭으로는 **사람이 끈 확장**을 쓴다 — BX-36이 UI 태스크를 쓰니 `ui-automation`을
@@ -7,7 +7,7 @@
 | 보는 것 | 왜 |
 | --- | --- |
 | 하트비트 `readiness`가 막힘 코드를 싣는다 | 올리지 않으면 CON-03이 「왜 안 돌았나」를 모른다 |
-| 준비되지 않은 Bot은 자리를 쥐지 않고 대기열에서 빠진다 | 대기열에 남기면 영원히 막힌다 |
+| 준비되지 않은 BPM 프로세스는 자리를 쥐지 않고 대기열에서 빠진다 | 대기열에 남기면 영원히 막힌다 |
 | Center 작업이면 `rejected`·`not_ready`로 ack한다 | 사람이 Center에서 까닭을 본다 |
 | 고치면(확장을 켜면) **다음 주기에** 돈다 | 점검 캐시가 그것을 막으면 안 된다 |
 | 「준비」 표기는 `status_map`에 있는 말만 | CLAUDE.md §5 |
@@ -33,7 +33,7 @@ OFF = "ui-automation"
 
 
 def install_example(tmp_path: Path) -> InstalledBot:
-    """Studio처럼 내보내고 Bot UI에 설치한다 (배포 길은 `test_m5_pc_rerun.py`가 본다)."""
+    """Studio처럼 내보내고 PC 실행기에 설치한다 (배포 길은 `test_m5_pc_rerun.py`가 본다)."""
     from chaeksas.studio.packaging import export  # noqa: PLC0415
     from chaeksas.studio.workspace import Workspace  # noqa: PLC0415
 
@@ -99,7 +99,7 @@ def test_a_ready_bot_starts(tmp_path: Path) -> None:
 
 
 class _FakeChild:
-    """실행기 자식 대신 — **띄웠나**까지만 본다 (실제 실행은 M4·M5 인수 시험이 본다)."""
+    """실행 프로세스 대신 — **띄웠나**까지만 본다 (실제 실행은 M4·M5 인수 시험이 본다)."""
 
     def __init__(self, **_: Any) -> None:
         self.started = 0
@@ -144,4 +144,4 @@ def test_the_readiness_label_only_uses_words_from_the_status_map() -> None:
     ]
     for one in cases:
         token, _shown, _tip = readiness_label(one)
-        assert theme.status_color("Bot 준비", token) is not None, f"표에 없는 표기: {token}"
+        assert theme.status_color("BPM 프로세스 준비", token) is not None, f"표에 없는 표기: {token}"

@@ -5,7 +5,7 @@
 하나**라 `dump()`가 `{"calledElement": 글, "call": 본문}`을 준다.
 
 - 갈래가 둘이다 — **이 패키지에서 부르기**(이 패키지의 정의·`libs/`에 받아 둔 공유 정의, 엔진이
-  `RunEnv.processes`로 찾는 것과 같다)와 **다른 Bot에 맡기기**(`delegate` — 실행 위치가 서버일 때만,
+  `RunEnv.processes`로 찾는 것과 같다)와 **다른 BPM 프로세스에 맡기기**(`delegate` — 실행 위치가 서버일 때만,
   B14). 갈래를 바꾸면 다른 쪽 설정은 지운다(위임이 남으면 엔진은 `calledElement`를 보지 않는다).
 - **기한·「실패하면」 칸을 두지 않는다** (ADR-0062 §3) — 기한은 타이머 경계, 실패는 오류 경계다.
 - 「채우기」는 **대상이 선언한 것**에서 오고 **빈 자리만** 더한다(있는 줄을 덮지 않는다).
@@ -62,7 +62,7 @@ VISIBLE_ROWS = 3
 HERE = "이 패키지"
 NOT_IN_PACKAGE = "(패키지에 없음)"
 PC_NO_DELEGATE = "PC BPM 프로세스에서는 위임할 수 없습니다 (실행 전 검사 B14)."
-SERVER_BOT_NO_PC = "대상이 서버 Bot이라 PC를 고르지 않습니다 — 적으면 Center가 거절합니다 (bot_ui_for_server)."
+SERVER_BOT_NO_PC = "대상이 서버 BPM 프로세스라 PC를 고르지 않습니다 — 적으면 Center가 거절합니다 (bot_ui_for_server)."
 BOUNDARY_NOTE = (
     "기한은 타이머(중단) 경계, 실패는 오류 경계로 받습니다 (위임 실패는 DELEGATION_FAILED) — 경계를 다세요."
 )
@@ -103,7 +103,7 @@ class CallEditor(QWidget):
         self.run_location = run_location
         #: 이 패키지에서 부를 수 있는 것. `None`이면 모른다 (대조를 건너뛴다).
         self.targets = None if targets is None else dict(targets)
-        #: 위임으로 부를 수 있는 Bot (Center). 비어 있으면 모른다.
+        #: 위임으로 부를 수 있는 BPM 프로세스 (Center). 비어 있으면 모른다.
         self.bots = dict(bots or {})
         self._loaded: dict[str, Any] = {}
         self._called = ""
@@ -111,7 +111,7 @@ class CallEditor(QWidget):
 
         self.mode_picks = {
             MODE_LOCAL: QRadioButton("이 패키지에서 부르기", self),
-            MODE_DELEGATE: QRadioButton("다른 Bot에 맡기기 (위임)", self),
+            MODE_DELEGATE: QRadioButton("다른 BPM 프로세스에 맡기기 (위임)", self),
         }
         self.mode_group = QButtonGroup(self)
         for one in self.mode_picks.values():
@@ -126,7 +126,7 @@ class CallEditor(QWidget):
         self.bot_box.setEditable(True)
         line = self.bot_box.lineEdit()
         if line is not None:
-            line.setPlaceholderText("Bot 패키지 id (필수)")
+            line.setPlaceholderText("BPM 프로세스 패키지 id (필수)")
         for target in self.bots.values():
             self.bot_box.addItem(target.label, target.id)
         self.version_box = QLineEdit(self)
@@ -187,7 +187,7 @@ class CallEditor(QWidget):
         self.delegate_box = QGroupBox("위임", self)
         form = QFormLayout(self.delegate_box)
         _tight(form)
-        form.addRow("Bot", self.bot_box)
+        form.addRow("BPM 프로세스", self.bot_box)
         form.addRow("판", self.version_box)
         form.addRow("대상 PC", self.bot_ui_box)
         form.addRow("", self.bot_ui_note)
@@ -259,7 +259,7 @@ class CallEditor(QWidget):
         return MODE_DELEGATE if self.mode_picks[MODE_DELEGATE].isChecked() else MODE_LOCAL
 
     def bot_id(self) -> str:
-        """고른 Bot — 목록 줄이면 그 id, 적은 글이면 글 그대로 (Center 목록을 못 받았을 때)."""
+        """고른 BPM 프로세스 — 목록 줄이면 그 id, 적은 글이면 글 그대로 (Center 목록을 못 받았을 때)."""
         text = self.bot_box.currentText().strip()
         index = self.bot_box.findText(text)
         if index >= 0 and self.bot_box.itemData(index):
@@ -287,7 +287,7 @@ class CallEditor(QWidget):
             _put(delegate, "bot_ui", self.bot_ui_box.text().strip() or None)
             call["delegate"] = delegate
             found = self.bots.get(bot)
-            # **읽는 사람에게 뜻이 있다** (C14) — Bot을 바꿀 때만 그 Bot의 진입 process id를 적는다.
+            # **읽는 사람에게 뜻이 있다** (C14) — BPM 프로세스를 바꿀 때만 그 BPM 프로세스의 진입 process id를 적는다.
             # 모르면 비운다(다른 것의 이름이 남으면 거짓말이 된다). 바꾸지 않았으면 적힌 그대로다.
             if changed:
                 called = found.process_id if found is not None and found.process_id else ""
@@ -307,7 +307,7 @@ class CallEditor(QWidget):
             if self.run_location != "server":
                 errors.append(PC_NO_DELEGATE)
             if not self.bot_id():
-                errors.append("맡길 Bot을 고르세요 (bpm_process_id).")
+                errors.append("맡길 BPM 프로세스를 고르세요 (bpm_process_id).")
             if target is not None and target.run_location == "server" and self.bot_ui_box.text().strip():
                 errors.append(SERVER_BOT_NO_PC)
         else:

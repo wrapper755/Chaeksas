@@ -5,7 +5,7 @@ C13의 `bot_ui.local_runtimes[].command`는 `["chk-worker"]`처럼 **PATH의 명
 
 1. `chk-worker`를 PATH에서 찾을 수 있나 → 없을 것이다 (설치 파일로 배포하면 PATH에 없다)
 2. **자기 자신을 다시 실행**해서 자식을 띄울 수 있나 (`sys.executable` + 인자) → 이것이 되면
-   묶인 Bot UI가 로컬 런타임을 띄울 길이 있다
+   묶인 PC 실행기가 로컬 런타임을 띄울 길이 있다
 """
 
 from __future__ import annotations

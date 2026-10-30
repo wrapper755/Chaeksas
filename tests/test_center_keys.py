@@ -1,6 +1,6 @@
 """C7 Center API 키 관리 (CON-11).
 
-키가 그 Bot UI의 신원이므로(ADR-0013), **원문은 발급 응답에 한 번만** 실리고 그 뒤로는
+키가 그 PC 실행기의 신원이므로(ADR-0013), **원문은 발급 응답에 한 번만** 실리고 그 뒤로는
 앞자리만 보인다. 여기서는 그 규칙과 상태 계산을 고정한다.
 """
 
@@ -104,7 +104,7 @@ def test_revoked_wins_over_expired() -> None:
 
 
 def test_expiry_warning_window() -> None:
-    """만료 14일 전부터 CON-11과 그 Bot UI 알림(BUI-05)에 보인다."""
+    """만료 14일 전부터 CON-11과 그 PC 실행기 알림(BUI-05)에 보인다."""
     assert EXPIRY_WARNING_DAYS == 14
     assert expires_soon(now=NOW, expires_at="2026-10-10T10:00:00+09:00")
     assert expires_soon(now=NOW, expires_at="2026-10-15T10:00:00+09:00")  # 14일 경계
@@ -125,7 +125,7 @@ def test_default_expiry_is_a_year() -> None:
 
 
 def test_bound_to_records_the_machine() -> None:
-    """Bot UI용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4). 다른 PC에서 쓰면 409."""
+    """PC 실행기용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4). 다른 PC에서 쓰면 409."""
     k = info(bound_to={"type": "bot_ui", "id": "bui_a81c22d0", "name": "현장PC-1",
                        "machine_name": "FACTORY-PC-01", "first_seen": NOW})
     assert k.bound_to is not None

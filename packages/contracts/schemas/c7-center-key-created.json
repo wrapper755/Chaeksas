@@ -2,7 +2,7 @@
   "$defs": {
     "BoundTo": {
       "additionalProperties": true,
-      "description": "키가 묶인 곳. Bot UI용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4).",
+      "description": "키가 묶인 곳. PC 실행기용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4).",
       "properties": {
         "first_seen": {
           "anyOf": [
@@ -59,7 +59,7 @@
   },
   "$id": "urn:chaeksas:contracts:c7-center-key-created",
   "additionalProperties": true,
-  "description": "발급 응답 — 여기에만 원문 `key`가 실린다. 다시 볼 수 없다.\n\n받는 쪽(운영자)은 이 값을 Bot UI·Studio 설정이나 OS 비밀 저장소에 넣는다.\n**기록·로그에 남기지 않는다.**",
+  "description": "발급 응답 — 여기에만 원문 `key`가 실린다. 다시 볼 수 없다.\n\n받는 쪽(운영자)은 이 값을 PC 실행기·Studio 설정이나 OS 비밀 저장소에 넣는다.\n**기록·로그에 남기지 않는다.**",
   "properties": {
     "bound_to": {
       "anyOf": [

@@ -1,10 +1,10 @@
 """확장이 플랫폼 화면에 칸을 그린다 (C13 `bot_ui.panels`, ADR-0042) — BUI-09 「최근 UI 세션」.
 
-**플랫폼은 칸 안을 모른다.** Bot UI는 자리(`surface`)만 주고, 표의 열(화면·폴백 깊이·치유)은
+**플랫폼은 칸 안을 모른다.** PC 실행기는 자리(`surface`)만 주고, 표의 열(화면·폴백 깊이·치유)은
 확장이 그린다 (ADR-0018). 그래서 여기서 보는 것은 셋이다.
 
 1. 호스트가 **자리 이름으로** 칸을 고른다 — 모르는 자리를 가리키는 칸은 조용히 사라진다.
-2. Bot UI가 그 칸을 BUI-09에 끼우고 **주기마다 `refresh()`를 부른다** (패널이 타이머를 만들지
+2. PC 실행기가 그 칸을 BUI-09에 끼우고 **주기마다 `refresh()`를 부른다** (패널이 타이머를 만들지
    않는다). `runtime`을 적은 칸은 그 런타임이 떠 있을 때만 보인다.
 3. 칸이 터져도 **화면은 산다** — 그 칸만 접고 사유를 보인다.
 """
@@ -119,7 +119,7 @@ def test_the_rows_are_the_columns_the_screen_asks_for() -> None:
     """BUI-09 문서의 열 그대로다 — 시각·요청한 쪽·화면·결과·폴백 깊이·치유."""
     assert COLUMNS == ("시각", "요청한 쪽", "화면", "결과", "폴백 깊이", "치유")
     rows = rows_of(Status(recent_sessions=[brief(), brief(caller="studio", result="escalated", healed=True)]))
-    assert rows[0] == ("09:15:30", "Bot", "erp.order.form", "성공", "1", "아니오")
+    assert rows[0] == ("09:15:30", "BPM 프로세스", "erp.order.form", "성공", "1", "아니오")
     assert rows[1] == ("09:15:30", "Studio", "erp.order.form", "사람에게 전환", "1", "예")
 
 
@@ -165,7 +165,7 @@ def test_a_worker_we_cannot_reach_says_so_and_does_not_raise(app: Any, agent: Ag
     assert panel._note.text() == UNREACHABLE
 
 
-# ─────────────────── Bot UI가 끼운다 (BUI-09) ───────────────────
+# ─────────────────── PC 실행기가 끼운다 (BUI-09) ───────────────────
 
 
 def boxes(window: Any) -> dict[str, Any]:
@@ -220,7 +220,7 @@ def test_the_host_refreshes_the_panel_when_the_runtime_is_up(app: Any, agent: Ag
 
 
 def test_a_broken_panel_only_folds_its_own_box(app: Any, agent: Agent, monkeypatch: Any) -> None:
-    """**확장이 깨져도 Bot UI는 산다** — 그 칸만 접고 사유를 보인다."""
+    """**확장이 깨져도 PC 실행기는 산다** — 그 칸만 접고 사유를 보인다."""
     from PySide6.QtWidgets import QLabel  # noqa: PLC0415
 
     from chaeksas.bot_ui.main_window import PANEL_BROKEN, MainWindow  # noqa: PLC0415

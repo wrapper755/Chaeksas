@@ -34,7 +34,7 @@ def _imports(path: Path) -> set[str]:
 
 @pytest.mark.parametrize("name", sorted(SERVER_SIDE))
 def test_a_server_file_does_not_run_client_code(name: str) -> None:
-    """PC에서 도는 코드(Bot UI·Tool UI·Qt·Worker·UI 자동화 클라이언트)를 부르면 그 파일은 양쪽이다."""
+    """PC에서 도는 코드(PC 실행기·Tool UI·Qt·Worker·UI 자동화 클라이언트)를 부르면 그 파일은 양쪽이다."""
     used = _imports(TESTS / f"{name}.py")
     client = sorted(m for m in used if any(m == c or m.startswith(c + ".") for c in CLIENT_MODULES))
     assert client == [], f"{name}은 클라이언트 코드를 쓴다 — 서버 목록에서 뺀다"

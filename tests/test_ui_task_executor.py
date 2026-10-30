@@ -236,7 +236,7 @@ def test_a_step_that_escalates_goes_to_a_human(
 def test_the_session_is_closed_even_when_a_step_fails(
     tmp_path: Path, worker: tuple[Worker, TestClient, Screen, Plans]
 ) -> None:
-    """닫지 않으면 자리가 묶인다 (유휴 시간이 올 때까지 다음 Bot이 못 쓴다)."""
+    """닫지 않으면 자리가 묶인다 (유휴 시간이 올 때까지 다음 BPM 프로세스가 못 쓴다)."""
     made, http, screen, _ = worker
     screen.missing = {"#주문.저장"}
     with pytest.raises(TaskFailed):
@@ -334,7 +334,7 @@ def test_a_changed_token_is_read_again(tmp_path: Path) -> None:
 
 
 def test_an_unreachable_worker_is_retryable(tmp_path: Path) -> None:
-    """Bot UI가 Worker를 못 띄웠다 — 다시 해 볼 만하다 (다음 주기에 뜬다)."""
+    """PC 실행기가 Worker를 못 띄웠다 — 다시 해 볼 만하다 (다음 주기에 뜬다)."""
     client = WorkerClient(token_dir=tmp_path, port=1)
     with pytest.raises(TaskFailed) as caught:
         UiTaskExecutor(client=client).execute(context())

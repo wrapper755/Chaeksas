@@ -243,7 +243,7 @@ def test_b12_warns_when_a_confirmation_names_assignees() -> None:
 
 
 def _batch(*, before: str = "", show: str = '["건들"]', approval: bool = True) -> str:
-    """접수 Bot 모양 — 목록을 만들고 (결재하고) 반복 위임으로 기동한다 (ADR-0082)."""
+    """접수 BPM 프로세스 모양 — 목록을 만들고 (결재하고) 반복 위임으로 기동한다 (ADR-0082)."""
     gate = (
         '<bpmn:userTask id="Ap"><bpmn:extensionElements>'
         f'<chk:approval>{{"title": "일괄 승인", "show": {show}}}</chk:approval>'
@@ -679,7 +679,7 @@ def test_a_delegated_call_only_works_from_a_server_process() -> None:
 
 
 def test_a_delegated_call_is_matched_against_what_that_bot_declares() -> None:
-    """받을 값은 **그 Bot이 선언한 `outputs`**와 맞춰 본다 (C1). **모르면 건너뛴다.**"""
+    """받을 값은 **그 BPM 프로세스가 선언한 `outputs`**와 맞춰 본다 (C1). **모르면 건너뛴다.**"""
     xml = wrap(line(DELEGATION), process_json=SERVER)
     assert "B14" not in codes(xml, delegated_outputs={"fin.erp-input": ("결과코드", "처리시각")})
     found = validate(read_process(xml), delegated_outputs={"fin.erp-input": ("처리시각",)})
@@ -687,7 +687,7 @@ def test_a_delegated_call_is_matched_against_what_that_bot_declares() -> None:
     assert found[0].items == ["결과코드"]
     # 주지 않으면 대조하지 않는다 — 남의 매니페스트라 계약이 스스로 알 수 없다.
     assert "B14" not in codes(xml)
-    # 다른 Bot의 것만 알아도 막지 않는다.
+    # 다른 BPM 프로세스의 것만 알아도 막지 않는다.
     assert "B14" not in codes(xml, delegated_outputs={"other.bot": ()})
 
 
@@ -757,7 +757,7 @@ def test_case_file_reads_messages_and_approvals() -> None:
 def test_a_case_can_write_down_what_a_delegation_returns() -> None:
     """**케이스가 PC 위임의 결과를 적는다** (ADR-0062 §2).
 
-    Studio에는 부를 PC Bot의 그림이 없다 (다른 패키지다) — 결재 답·메시지와 같은 결이다.
+    Studio에는 부를 PC BPM 프로세스의 그림이 없다 (다른 패키지다) — 결재 답·메시지와 같은 결이다.
     """
     found = CaseFile.model_validate(
         {

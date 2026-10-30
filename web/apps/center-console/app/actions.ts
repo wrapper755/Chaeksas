@@ -193,7 +193,7 @@ export async function createJob(form: FormData): Promise<void> {
 
   let inputs: Record<string, unknown>;
   try {
-    // 입력 칸은 **그 Bot UI에 배포된 버전**의 매니페스트로 그렸다 (`version`을 비워 보내도).
+    // 입력 칸은 **그 PC 실행기에 배포된 버전**의 매니페스트로 그렸다 (`version`을 비워 보내도).
     const shown = String(form.get("inputs_from") ?? "") || version;
     const declared = shown ? fromCaller((await center.packageInfo(bot, shown)).manifest?.inputs ?? []) : [];
     inputs = readInputs(declared, form);
@@ -209,7 +209,7 @@ export async function createJob(form: FormData): Promise<void> {
       bpm_process_id: bot,
       target: { type: "bot_ui", id: botUi },
       inputs,
-      // 비우면 그 Bot UI에 배포된 버전으로 Center가 채운다 (C5).
+      // 비우면 그 PC 실행기에 배포된 버전으로 Center가 채운다 (C5).
       version: version || null,
       // `datetime-local`은 시간대가 없다 — 콘솔 서버의 시간대로 읽어 ISO로 보낸다.
       expires_at: expires ? new Date(expires).toISOString() : null,
@@ -368,7 +368,7 @@ export async function deletePackage(packageId: string, version: string): Promise
     return { error: message(cause) };
   }
   revalidatePath("/packages", "layout");
-  // CON-02도 같은 패키지 표를 읽는다 (Bot·버전별 준비도) — 지운 줄이 그대로 남으면 안 된다.
+  // CON-02도 같은 패키지 표를 읽는다 (BPM 프로세스·버전별 준비도) — 지운 줄이 그대로 남으면 안 된다.
   revalidatePath("/bots", "layout");
   return {};
 }
@@ -574,7 +574,7 @@ export async function createDeployment(form: FormData): Promise<void> {
     expires_at: when("expires_at"),
   };
 
-  if (!botId || !version) fail("배포할 Bot과 버전을 고르세요.");
+  if (!botId || !version) fail("배포할 BPM 프로세스와 버전을 고르세요.");
   let targets: Array<{ type: string; id: string }>;
   let limit: number | undefined;
   if (place === "server") {
@@ -585,7 +585,7 @@ export async function createDeployment(form: FormData): Promise<void> {
     if (limit !== undefined && !(Number.isInteger(limit) && limit >= 1)) fail("동시 실행 상한은 1 이상의 정수입니다.");
   } else {
     targets = form.getAll("bot_ui").map((one) => ({ type: "bot_ui", id: String(one) })).filter((one) => one.id);
-    if (targets.length === 0) fail("배포할 Bot UI를 하나 이상 고르세요.");
+    if (targets.length === 0) fail("배포할 PC 실행기를 하나 이상 고르세요.");
   }
 
   const done: string[] = [];

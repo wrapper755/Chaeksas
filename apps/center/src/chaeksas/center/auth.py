@@ -5,7 +5,7 @@
 | 콘솔 「보기 전용」 계정 | 세션 토큰 (`chk_ses_…`) | **GET만** |
 | 콘솔 「관리자」 계정 | 세션 토큰 | 쓰기 전부 — 승인·배포·외부 확장은 Center가 서명한다 (ADR-0090) |
 | 자동화(스크립트·시험) | 관리자·읽기 토큰 | 위의 둘과 같다. 설정하지 않으면 그 길이 닫힌다 |
-| Bot UI·Studio·서버 실행기 | Center API 키 (종류별) | 자기 일만 |
+| PC 실행기·Studio·서버 실행기 | Center API 키 (종류별) | 자기 일만 |
 
 **「자기 일만」은 키 종류로 가른다.** 토큰이 맞는지만 보는 `require_read`로는 C5 권한표를
 지킬 수 없다 — 패키지 쪽은 종류를 보는 관문(`require_upload`·`require_package_read`)과,
@@ -42,7 +42,7 @@ ACTOR_HEADER = "X-CHK-Actor"
 
 #: 패키지를 올리고 목록·정보를 볼 수 있는 Center API 키 종류 (C5 권한표).
 #:
-#: **Studio만이다.** 실행하는 쪽(Bot UI·서버 실행기)은 배포를 하트비트로 받으므로 목록을 볼
+#: **Studio만이다.** 실행하는 쪽(PC 실행기·서버 실행기)은 배포를 하트비트로 받으므로 목록을 볼
 #: 일이 없고(내려받기만 한다), 연동용 키는 작업만 만든다.
 PACKAGE_KEY_TYPE = "studio"
 
@@ -147,7 +147,7 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
     # 회전한 새 키로 첫 요청이면 행을 새 키로 옮긴다 (C4 §키 회전) — 하트비트가 행을 찾기 **전에**.
     enrollments.adopt_successor(store, record)
     # 승인으로 받은 키가 처음 쓰였다 — 봉해 둔 것을 지운다. Studio는 `register`가 없어 이 자리가
-    # 받았다는 표시다 (C5 §Studio 등록 요청과 승인). Bot UI·서버 실행기도 여기서 먼저 지워진다.
+    # 받았다는 표시다 (C5 §Studio 등록 요청과 승인). PC 실행기·서버 실행기도 여기서 먼저 지워진다.
     if record.enrollment_id:
         enrollments.delivered(store, record, public_key=None)
     # 키로 부를 때는 X-CHK-Actor를 믿지 않는다 (C5). 사람 대신 부르는 키만 On-Behalf-Of를 듣는다.
@@ -235,7 +235,7 @@ def require_upload(found: Caller) -> Caller:
 def require_package_read(found: Caller) -> Caller:
     """패키지 목록·정보·참조에 필요한 권한 — 콘솔 토큰 또는 **Studio용 키만** (C5 권한표).
 
-    `require_read`와 다른 것은 **키 종류를 본다**는 점이다. Bot UI 키로 패키지 표 전체를
+    `require_read`와 다른 것은 **키 종류를 본다**는 점이다. PC 실행기 키로 패키지 표 전체를
     읽을 수 있으면 「무엇이 올라와 있나」가 현장 PC에 다 보인다.
     """
     if found.kind in ("admin", "read") or _package_key(found):
@@ -248,7 +248,7 @@ def require_package_read(found: Caller) -> Caller:
 
 
 def require_key_type(found: Caller, wanted: str) -> keys.KeyRecord:
-    """그 종류의 Center API 키로 불렀는가 (C4 — Bot UI용 키만 받는다)."""
+    """그 종류의 Center API 키로 불렀는가 (C4 — PC 실행기용 키만 받는다)."""
     if found.key is None:
         raise ApiError(403, "wrong_key_type", f"{wanted} 종류의 Center API 키로 불러야 한다")
     if found.key.type != wanted:

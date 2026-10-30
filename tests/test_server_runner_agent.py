@@ -3,7 +3,7 @@
 **양쪽을 한 줄로 본다** — 실행기의 `agent.tick()`이 ASGI로 붙은 진짜 Center를 부른다. 그래서
 C12가 「구현됨」으로 가는 조건(보내는 쪽과 받는 쪽이 다 있고 시험이 지킨다)을 이 파일이 센다.
 
-**아직 Bot을 돌리지 않는다** (다음 조각) — 그러므로 여기서 보는 것은 「살아 있다고 말하고,
+**아직 BPM 프로세스를 돌리지 않는다** (다음 조각) — 그러므로 여기서 보는 것은 「살아 있다고 말하고,
 자리를 정직하게 세고, 지시를 받아 두는가」다. 받고도 돌리지 않는 것을 **`started` ack로
 거짓말하지 않는지**까지 본다.
 """
@@ -106,7 +106,7 @@ def test_it_reports_no_running_work(settings: Settings, key: str, center: TestCl
 
 
 def test_the_machine_id_is_the_shared_rule(settings: Settings, key: str, center: TestClient) -> None:
-    """`machine_id`는 **Bot UI와 같은 함수**다 (`core.machine`) — 원값은 보내지 않는다."""
+    """`machine_id`는 **PC 실행기와 같은 함수**다 (`core.machine`) — 원값은 보내지 않는다."""
     from chaeksas.core import machine
 
     found = build(settings, key, center)
@@ -231,7 +231,7 @@ def test_pause_is_heard_and_reported_back(
 def test_a_job_for_an_uninstalled_bot_is_refused_not_dropped(
     settings: Settings, key: str, center: TestClient, store: Store
 ) -> None:
-    """깔리지 않은 Bot의 작업은 **거절하고 그렇게 말한다** (C4) — 조용히 버리지 않는다.
+    """깔리지 않은 BPM 프로세스의 작업은 **거절하고 그렇게 말한다** (C4) — 조용히 버리지 않는다.
 
     버리면 Center가 「넘겼는데 소식이 없다」로 두 주기 뒤 `runner_lost`를 적는다. 거짓
     `started`를 보내는 것은 더 나쁘다 — Center가 도는 줄 알고 기다린다.
@@ -454,7 +454,7 @@ def test_center_errors_are_split_by_what_to_do(status: int, code: str | None, ex
 
 
 def test_the_outside_world_comes_from_the_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """모델·읽기 폴더는 **설정이 정한다** — Bot UI는 BUI-03이 정하는 자리다 (ADR-0027·0032).
+    """모델·읽기 폴더는 **설정이 정한다** — PC 실행기는 BUI-03이 정하는 자리다 (ADR-0027·0032).
 
     **주지 않으면 기본값이 남아 부르지 않고 실패한다**(조용히 넘어가지 않는다)는 것이 요점이라,
     여기서는 「준 것이 정말 `RunEnv`에 닿았는가」를 본다.
@@ -508,14 +508,14 @@ def test_the_model_key_is_not_in_the_settings(tmp_path: Path, monkeypatch: pytes
 # ─────────────────────── 바깥 앱 명부 (M7 조각 9) ───────────────────────
 
 
-#: `erp` 하나를 부르는 Bot (C1 `requires.service_apps` — 키는 **참조 이름**이다).
+#: `erp` 하나를 부르는 BPM 프로세스 (C1 `requires.service_apps` — 키는 **참조 이름**이다).
 _CALLS_ERP = {"service_apps": [{"app_id": "erp", "operations": ["get"], "key_ref": "fin-erp"}]}
 
 
 class _Resources:
     """C7 리소스 목록만 주는 Center — **실행기가 제 손으로 읽는다**는 것을 본다.
 
-    `extension()`은 404다 (외부 확장이 없는 Bot) — 404는 **들고 있던 것을 버리는** 쪽이고
+    `extension()`은 404다 (외부 확장이 없는 BPM 프로세스) — 404는 **들고 있던 것을 버리는** 쪽이고
     여기서는 버릴 것이 없다.
     """
 
@@ -599,13 +599,13 @@ class _FakeBot:
     folder = Path(__file__).resolve().parent
 
     def __init__(self, *, requires: dict[str, Any] | None = None) -> None:
-        #: 기본은 **바깥 앱을 부르지 않는** Bot이다 (C1 `requires`).
+        #: 기본은 **바깥 앱을 부르지 않는** BPM 프로세스이다 (C1 `requires`).
         self.manifest = Manifest.model_validate(
             {
                 "schema": 1,
                 "id": "fx.sample",
                 "version": "1.0.0",
-                "name": "시험 Bot",
+                "name": "시험 BPM 프로세스",
                 "kind": "bpm_process",
                 "run_location": "server",
                 "entry": "main.bpmn",
@@ -651,7 +651,7 @@ def test_the_sender_comes_from_the_settings(tmp_path: Path, monkeypatch: pytest.
 
 
 def test_the_runner_plugs_the_sender_in(tmp_path: Path) -> None:
-    """실행기가 그 설정으로 어댑터를 짓는다 — **Bot UI와 같은 함수**다 (`make_sender`)."""
+    """실행기가 그 설정으로 어댑터를 짓는다 — **PC 실행기와 같은 함수**다 (`make_sender`)."""
     settings = Settings(
         data_path=tmp_path / "runner",
         smtp_host="smtp.example.com",
@@ -678,7 +678,7 @@ def test_without_smtp_the_mail_task_fails_clearly(tmp_path: Path) -> None:
 
 
 def test_a_mail_bot_without_smtp_is_not_ready(tmp_path: Path) -> None:
-    """메일을 보내는 Bot은 SMTP가 없으면 **사전 점검이 막는다** (C1 `requires.settings`)."""
+    """메일을 보내는 BPM 프로세스는 SMTP가 없으면 **사전 점검이 막는다** (C1 `requires.settings`)."""
     settings = Settings(data_path=tmp_path / "runner")
     assert settings.ready_settings() == ()
     assert Settings(

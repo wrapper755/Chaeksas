@@ -11,7 +11,7 @@
 1. **PC 쪽을 다 지은 뒤 서버 쪽을 바꾼다** — 서버 쪽은 캔버스에만 적용된다(디스크는 그대로).
 2. **이름을 지어내지 않는다** — 미리 채우는 것은 세는 이름뿐이고 짝은 같은 이름이다.
 3. **옮긴 노드의 확장 것만** 키 참조·고정을 가져간다.
-4. 나눈 서버 그림은 **B6을 지나고**, 위임 호출은 PC Bot이 선언한 출력과 맞는다 (B14).
+4. 나눈 서버 그림은 **B6을 지나고**, 위임 호출은 PC BPM 프로세스가 선언한 출력과 맞는다 (B14).
 """
 
 from __future__ import annotations
@@ -235,7 +235,7 @@ def test_splitting_builds_the_pc_bot_then_delegates_in_place(tmp_path: Path, can
     erp, prepare, check = (node_named(drawn_server, n) for n in ("ERP 입력", "준비", "현장 확인"))
     plan = Plan(node_id=erp, pc_id="order-pc", pc_name="발주 PC", inputs=[("확정", "list")], outputs=["번호"])
     assert split_actions.split(window, plan) is True  # type: ignore[arg-type]
-    assert window.explorer.added == ["order-pc"]  # STU-02 — 만든 PC Bot도 목록에 올린다
+    assert window.explorer.added == ["order-pc"]  # STU-02 — 만든 PC BPM 프로세스도 목록에 올린다
 
     # PC 쪽 — 새 작업 폴더, 시작 → 옮긴 노드(본문 그대로) → 끝.
     pc = window.workspace.find("order-pc")
@@ -268,7 +268,7 @@ def test_splitting_builds_the_pc_bot_then_delegates_in_place(tmp_path: Path, can
     blocked = [item for v in errors if v.rule == "B6" for item in v.items]
     assert not any(item.startswith(f"{erp}:") for item in blocked), "옮긴 노드는 더 B6에 걸리지 않는다"
     assert any("현장 결재" in item for item in blocked), "옮기지 않은 것은 그대로 걸린다 — 하나씩 나눈다"
-    assert not [v for v in errors if v.rule == "B14"], "위임 출력이 PC Bot이 선언한 것과 맞는다"
+    assert not [v for v in errors if v.rule == "B14"], "위임 출력이 PC BPM 프로세스가 선언한 것과 맞는다"
 
 
 def test_a_taken_id_changes_nothing(tmp_path: Path, canvas: Any) -> None:

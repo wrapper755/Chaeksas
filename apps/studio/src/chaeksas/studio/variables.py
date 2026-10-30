@@ -119,7 +119,7 @@ def _name_problem(kind: str, names: Iterable[str]) -> str:
 def problem(inputs: Sequence[InputRow], outputs: Sequence[str]) -> str:
     """「적용」을 막는 흠 — **첫 하나만** (C14 B2·B8과 같은 규칙). 빈 글이면 괜찮다.
 
-    입력과 출력에 같은 이름은 된다 — 받은 값을 고쳐 내놓는 Bot이 있다.
+    입력과 출력에 같은 이름은 된다 — 받은 값을 고쳐 내놓는 BPM 프로세스가 있다.
     """
     found = _name_problem("입력", (row.name for row in inputs))
     if found:

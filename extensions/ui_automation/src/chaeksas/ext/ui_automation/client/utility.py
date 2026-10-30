@@ -1,14 +1,14 @@
 """「UI 셀렉터 등록」 (TOL-03~05) — Tool UI의 도구 (`tool_ui.tools`, ADR-0077).
 
 ADR-0018로 이것은 플랫폼의 고유 기능이 아니라 **이 확장이 기여하는 도구**이고, ADR-0077로 그
-도구를 띄우는 것은 Bot UI가 아니라 **Tool UI**다. 그래서 Tool UI·Bot UI 코드에 셀렉터·화면
+도구를 띄우는 것은 PC 실행기가 아니라 **Tool UI**다. 그래서 Tool UI·PC 실행기 코드에 셀렉터·화면
 레지스트리라는 말이 나오지 않는다.
 
 창 하나에 탭 둘이다 — 「등록」(TOL-03·07)과 「시험」(TOL-05). **UI 세션은 한 번에 하나**라
 (ADR-0014) 한쪽이 열려 있으면 다른 쪽이 놓게 한다.
 
 Worker가 어디 있는지는 **호스트가 설정으로 알려 준다** (C13 예약 키 `runtime.worker.*`) —
-`needs_runtime: "worker"`라서 **Bot UI가 띄워 둔 것**을 Tool UI가 빌려 쓴다(Tool UI는 띄우지 않는다).
+`needs_runtime: "worker"`라서 **PC 실행기가 띄워 둔 것**을 Tool UI가 빌려 쓴다(Tool UI는 띄우지 않는다).
 """
 
 from __future__ import annotations

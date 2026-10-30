@@ -1,4 +1,4 @@
-"""리소스 목록 — Bot이 실행에 필요로 하는 바깥 자원 (C7, CON-07).
+"""리소스 목록 — BPM 프로세스가 실행에 필요로 하는 바깥 자원 (C7, CON-07).
 
 네 종류를 모은다. **Center가 이미 가진 것에서 계산한다** — 따로 등록받지 않는다.
 
@@ -101,7 +101,7 @@ def app_manifests(store: Store) -> dict[str, tuple[ServiceAppManifest, str]]:
 
 
 def _approved_manifests(store: Store) -> list[dict[str, Any]]:
-    """승인·배포 대상이 되는 패키지의 C1 매니페스트 (「이것을 쓰는 Bot」을 세는 바탕)."""
+    """승인·배포 대상이 되는 패키지의 C1 매니페스트 (「이것을 쓰는 BPM 프로세스」을 세는 바탕)."""
     rows = store.rows("SELECT id, version, manifest_json FROM packages WHERE kind = 'bpm_process' ORDER BY id, version")
     out = []
     for row in rows:
@@ -457,7 +457,7 @@ def _refuse(problems: list[Any], *, status: int = 422) -> None:
 def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ExtensionResource, bool]:
     """`POST /resources/extensions` — 정의를 받아 **Center가 `extension` 봉투로 서명한다** (C13 E6, ADR-0090).
 
-    관문은 관리자 계정이다. 검사(E1·E2·E3·E4·E8)를 모두 지난 정의에만 서명한다 — 정의가 Bot의
+    관문은 관리자 계정이다. 검사(E1·E2·E3·E4·E8)를 모두 지난 정의에만 서명한다 — 정의가 BPM 프로세스의
     키를 어느 주소로 보낼지 정하므로 배포와 같은 관문이다. 봉투는 정의와 함께 그대로 두고
     실행하는 쪽이 다시 검증한다(E6).
     """
@@ -522,7 +522,7 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
 def revoke_extension(store: Store, extension_id: str, version: str, *, reason: str, by: str) -> ExtensionResource:
     """`DELETE /resources/extensions` — Center가 `extension_revoke` 봉투를 지어 서명한다 (C13·C2, ADR-0090).
 
-    **쓰는 Bot이 있어도 막지 않는다** (C13) — 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라,
+    **쓰는 BPM 프로세스가 있어도 막지 않는다** (C13) — 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라,
     쓰는 쪽이 있을 때 더 거둬야 한다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).
     """
     from chaeksas.center import signer  # noqa: PLC0415
@@ -625,7 +625,7 @@ def extension(store: Store, extension_id: str) -> ExtensionResource:
     found = next((one for one in extensions(store) if one.id == extension_id), None)
     if found is None:
         raise ApiError(404, "not_found", f"확장 {extension_id}가 없다")
-    # 「이 확장을 쓰는 Bot」은 상세에서만 센다 (목록마다 매니페스트를 다 읽지 않게).
+    # 「이 확장을 쓰는 BPM 프로세스」은 상세에서만 센다 (목록마다 매니페스트를 다 읽지 않게).
     extra = dict(found.to_json_dict())
     extra["used_by"] = _extension_used_by(store, extension_id)
     return ExtensionResource.model_validate(extra)

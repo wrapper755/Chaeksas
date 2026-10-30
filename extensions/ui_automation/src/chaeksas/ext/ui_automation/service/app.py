@@ -354,7 +354,7 @@ class Service:
         promoted = self.registry.apply(found)
         self.flush()
         if self.sessions is not None:
-            # 봉투가 말해 주는 것도 함께 적는다 (UIA-03의 「Bot」·「Bot UI」·「요청 쪽」·「수행 모드」) —
+            # 봉투가 말해 주는 것도 함께 적는다 (UIA-03의 「BPM 프로세스」·「PC 실행기」·「요청 쪽」·「수행 모드」) —
             # C8 보고에는 없고 C11 호출에는 있다.
             self.sessions.record(
                 found,
@@ -439,7 +439,7 @@ class Service:
                 level=CHECK_OK if pages else CHECK_WARN,
                 detail=f"{pages}개"
                 if pages
-                else "Bot UI 「도구」 → 「UI 셀렉터 등록」(TOL-03)으로 등록하세요",
+                else "PC 실행기 「도구」 → 「UI 셀렉터 등록」(TOL-03)으로 등록하세요",
             )
         )
         return made

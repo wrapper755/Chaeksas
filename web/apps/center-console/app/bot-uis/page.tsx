@@ -11,9 +11,9 @@ import { Enrollments } from "@/components/Enrollments";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
 /**
- * CON-03 PC 현황 — Bot UI(목록)와 Studio. 표가 둘이고 각각 위에 그 프로그램의 「승인 대기」가 있다.
+ * CON-03 PC 현황 — PC 실행기(목록)와 Studio. 표가 둘이고 각각 위에 그 프로그램의 「승인 대기」가 있다.
  *
- * Bot UI 값은 **Bot UI가 하트비트로 보고한 그대로**다 (C4·C5 `BotUiInfo`). Center가 더하는 것은
+ * PC 실행기 값은 **PC 실행기가 하트비트로 보고한 그대로**다 (C4·C5 `BotUiInfo`). Center가 더하는 것은
  * 온라인 판정과 키 정보뿐이다. 상세(대기열·배포·확장·최근 배치 결정)는 이름을 누르면 열린다.
  */
 
@@ -103,7 +103,7 @@ export default async function BotUisPage() {
     },
     {
       key: "name",
-      header: "Bot UI 이름",
+      header: "PC 실행기 이름",
       cell: (row) => (
         <Link className="underline" href={`/bot-uis/${encodeURIComponent(row.bot_ui_id)}`}>
           {row.name}
@@ -116,9 +116,9 @@ export default async function BotUisPage() {
       width: "14ch",
       cell: (row) =>
         row.disabled ? (
-          <StatusBadge group="Bot UI" label="비활성" />
+          <StatusBadge group="PC 실행기" label="비활성" />
         ) : row.status ? (
-          <StatusBadge group="Bot" label={statusLabel(row.status)} />
+          <StatusBadge group="BPM 프로세스" label={statusLabel(row.status)} />
         ) : (
           "—"
         ),
@@ -177,9 +177,9 @@ export default async function BotUisPage() {
         <div>
           <h1 className="text-h1 font-bold">PC 현황</h1>
           <p className="text-body text-text-secondary">
-            현장 PC에서 Center에 붙는 Bot UI(Bot을 돌린다)와 Studio(Bot을 만든다)입니다.
+            현장 PC에서 Center에 붙는 PC 실행기(BPM 프로세스를 돌린다)와 Studio(BPM 프로세스를 만든다)입니다.
           </p>
-          <CenterAddress url={CENTER_PUBLIC_URL} who="Bot UI·Studio" />
+          <CenterAddress url={CENTER_PUBLIC_URL} who="PC 실행기·Studio" />
         </div>
       </header>
 
@@ -189,16 +189,16 @@ export default async function BotUisPage() {
         <div className="flex flex-col gap-8">
           <section className="flex flex-col gap-3">
             <h2 className="text-h2 font-semibold">
-              Bot UI{rows.length > 0 ? ` · ${online}/${rows.length} 온라인` : ""}
+              PC 실행기{rows.length > 0 ? ` · ${online}/${rows.length} 온라인` : ""}
             </h2>
             <Enrollments rows={enrollments} where="현장 화면" canDecide={found.mode === "admin"} />
             {rows.length === 0 ? (
               <EmptyState
-                title="등록된 Bot UI가 없습니다."
-                hint="현장 PC의 Bot UI 설정에 Center 주소를 넣으면 등록 요청을 보냅니다. 현장 화면의 요청 코드와 같은 줄을 위의 「승인 대기」에서 승인하세요."
+                title="등록된 PC 실행기가 없습니다."
+                hint="현장 PC의 PC 실행기 설정에 Center 주소를 넣으면 등록 요청을 보냅니다. 현장 화면의 요청 코드와 같은 줄을 위의 「승인 대기」에서 승인하세요."
               />
             ) : (
-              <DataTable columns={columns} rows={rows} rowKey={(row) => row.bot_ui_id} caption="Bot UI 목록" />
+              <DataTable columns={columns} rows={rows} rowKey={(row) => row.bot_ui_id} caption="PC 실행기 목록" />
             )}
           </section>
 

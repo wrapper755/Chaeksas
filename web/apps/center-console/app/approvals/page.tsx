@@ -26,7 +26,7 @@ export const WITHDRAW_LABEL: Record<string, string> = {
   answered_in_field: "현장에서 먼저 답함",
   run_ended: "실행이 끝남",
   admin_withdraw: "관리자 회수",
-  host_lost: "Bot UI 기록 유실",
+  host_lost: "PC 실행기 기록 유실",
 };
 
 export function time(value: string | null | undefined): string {
@@ -36,7 +36,7 @@ export function time(value: string | null | undefined): string {
   return `${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
-/** 실행하는 곳 — Bot UI 이름, 서버면 「서버」 (CON-04). */
+/** 실행하는 곳 — PC 실행기 이름, 서버면 「서버」 (CON-04). */
 export function where(row: ApprovalInfo): string {
   if (row.host.type === "server_runner") return "서버";
   return row.host.name ?? row.host.id;
@@ -107,7 +107,7 @@ export default async function ApprovalsPage({
     { key: "host", header: "실행하는 곳", width: "16ch", cell: where },
     {
       key: "bpm_process_id",
-      header: "Bot",
+      header: "BPM 프로세스",
       cell: (row) => `${row.bpm_process_id}@${row.version}`,
     },
     {

@@ -1,11 +1,11 @@
-"""C4. Bot UI 등록·하트비트.
+"""C4. PC 실행기 등록·하트비트.
 
-**연결은 항상 Bot UI → Center다** (ADR-0007). 지시(배포·작업·결재 답)는 하트비트 **응답**에
+**연결은 항상 PC 실행기 → Center다** (ADR-0007). 지시(배포·작업·결재 답)는 하트비트 **응답**에
 실려 내려간다 — Center가 현장 PC로 먼저 연결하지 않는다.
 
 신원은 키로 정한다 (C4): 경로·본문에 `bot_ui_id`를 넣지 않는다. 키는 처음 등록한 PC에 묶이고,
-다른 PC에서 쓰면 409 — 키가 새어도 다른 Bot UI를 사칭할 수 없다. **묶기는 두 방향 모두 하나씩**
-이라 같은 PC를 다른 키가 등록하는 것도 409다 (C4 「키 묶기」) — 그러지 않으면 PC 하나에 Bot UI
+다른 PC에서 쓰면 409 — 키가 새어도 다른 PC 실행기를 사칭할 수 없다. **묶기는 두 방향 모두 하나씩**
+이라 같은 PC를 다른 키가 등록하는 것도 409다 (C4 「키 묶기」) — 그러지 않으면 PC 하나에 PC 실행기
 행이 둘 생겨 CON-03에 두 줄로 보이고, C7 리소스의 PC 수가 부풀고, 작업이 하트비트를 보내지
 않는 쪽으로 간다.
 """
@@ -44,7 +44,7 @@ from chaeksas.contracts.center_api import BotUiInfo, BotUiKey
 
 router = APIRouter(prefix="/api/v1/bot-ui", tags=["bot-ui"])
 
-#: 키 종류 (C4 — Bot UI용 키만 받는다).
+#: 키 종류 (C4 — PC 실행기용 키만 받는다).
 KEY_TYPE = "bot_ui"
 #: 키 묶기를 지킬 표 (C4 「키 묶기」 — 규칙은 `center.host_keys`에 하나다).
 TABLE = host_keys.BOT_UI
@@ -55,10 +55,10 @@ def new_bot_ui_id() -> str:
 
 
 def id_for_key(store: Store, key_id: str) -> str | None:
-    """그 키 id로 등록된 Bot UI의 `bot_ui_id` (C4 — **키가 신원이다**). 등록 전이면 `None`.
+    """그 키 id로 등록된 PC 실행기의 `bot_ui_id` (C4 — **키가 신원이다**). 등록 전이면 `None`.
 
     `bot_uis` 표를 아는 자리를 하나로 둔다 — 내려받기 관문(`api.package_access`)과 실행
-    기록의 「Bot UI」 열(`api.runs`)이 같은 길로 묻는다. 베껴 두면 키 묶기 규칙이 갈라진다.
+    기록의 「PC 실행기」 열(`api.runs`)이 같은 길로 묻는다. 베껴 두면 키 묶기 규칙이 갈라진다.
     """
     return host_keys.id_for_key(store, TABLE, key_id)
 
@@ -216,9 +216,9 @@ def heartbeat(
 
 
 def bot_ui_listing(store: Store) -> list[BotUiInfo]:
-    """CON-03 「Bot UI 현황」 (C5 `BotUiInfo`).
+    """CON-03 「PC 실행기 현황」 (C5 `BotUiInfo`).
 
-    상태는 **Bot UI가 하트비트로 보고한 그대로** 싣고, Center가 더하는 것은 온라인 판정과
+    상태는 **PC 실행기가 하트비트로 보고한 그대로** 싣고, Center가 더하는 것은 온라인 판정과
     키 정보뿐이다. 키는 앞자리·만료·상태만 준다 — 원문·해시는 주지 않는다 (C7).
     """
     now = datetime.fromisoformat(now_iso())
@@ -266,7 +266,7 @@ def bot_ui_listing(store: Store) -> list[BotUiInfo]:
 
 
 def set_disabled(store: Store, bot_ui_id: str, *, disabled: bool) -> bool:
-    """CON-03 「비활성화」. 비활성이어도 **하트비트는 계속 받는다** (실행 중 Bot을 봐야 한다)."""
+    """CON-03 「비활성화」. 비활성이어도 **하트비트는 계속 받는다** (실행 중 BPM 프로세스를 봐야 한다)."""
     with store.tx() as cur:
         cur.execute("UPDATE bot_uis SET disabled = ? WHERE bot_ui_id = ?", (1 if disabled else 0, bot_ui_id))
         return cur.rowcount > 0

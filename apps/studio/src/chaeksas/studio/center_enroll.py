@@ -1,6 +1,6 @@
 """STU-10 「Center」 — Studio도 요청 코드를 관리자가 승인해 들인다 (C5 §Studio 등록 요청과 승인, ADR-0093).
 
-Bot UI와 **같은 길**이다 (C4 §등록 요청과 승인): 키 쌍을 만들어 비밀 반쪽을 OS 비밀 저장소에 두고,
+PC 실행기와 **같은 길**이다 (C4 §등록 요청과 승인): 키 쌍을 만들어 비밀 반쪽을 OS 비밀 저장소에 두고,
 등록 요청을 보내 요청 코드를 띄운다. 관리자가 콘솔 「Center API 키」(CON-11)의 「승인 대기」에서 같은
 코드를 승인하면 봉한 Studio 키를 받아 열어 비밀 저장소에 둔다. **아이디·비밀번호는 없다.**
 
@@ -64,7 +64,7 @@ def _when(text: str | None) -> str:
 
 
 def waiting_text(found: EnrollStatus) -> str:
-    """상태 줄 (STU-10 — Bot UI의 BUI-03과 같은 말)."""
+    """상태 줄 (STU-10 — PC 실행기의 BUI-03과 같은 말)."""
     if found.state == "pending":
         return f"승인을 기다립니다 — 관리자에게 요청 코드 {found.code}를 알려 주세요 ({_when(found.expires_at)}까지)"
     if found.state == "rejected":

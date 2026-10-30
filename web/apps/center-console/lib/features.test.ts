@@ -3,7 +3,7 @@
  * 거듭 보는 것 넷.
  *
  * 1. **쓸 수 없는 것이 맨 위**다.
- * 2. **PC는 그 기능을 쓰는 Bot이 배포된 곳만** 센다.
+ * 2. **PC는 그 기능을 쓰는 BPM 프로세스가 배포된 곳만** 센다.
  * 3. **외부 기능은 PC를 세지 않는다** (코드가 없다).
  * 4. 서버 부분이 없다는 것은 **누락 검사**가 말해 준다 — 확장 없이도 줄이 생기고 할 일은 「일꾼을 들이세요」다.
  */
@@ -77,7 +77,7 @@ describe("featureRows", () => {
     expect(rows[0]).toMatchObject({ usable: "쓸 수 있음", todos: [], consumers: 1, usedBy: ["order"] });
   });
 
-  it("PC는 그 Bot이 배포된 곳만 센다 — 받지 않은 PC에 없는 것은 할 일이 아니다", () => {
+  it("PC는 그 BPM 프로세스가 배포된 곳만 센다 — 받지 않은 PC에 없는 것은 할 일이 아니다", () => {
     const rows = featureRows(
       input({
         extensions: [UIA],

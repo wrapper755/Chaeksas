@@ -108,7 +108,7 @@ def test_the_first_problem_is_said() -> None:
     assert "기본값" in problem([InputRow(name="수", type="int", default="셋")], [])
     assert "출력의 이름" in problem([], [""])
     assert "같은 이름의 출력" in problem([], ["결과", "결과"])
-    # 입력과 출력에 같은 이름은 된다 — 받은 값을 고쳐 내놓는 Bot이 있다.
+    # 입력과 출력에 같은 이름은 된다 — 받은 값을 고쳐 내놓는 BPM 프로세스가 있다.
     assert problem([InputRow(name="건")], ["건"]) == ""
 
 

@@ -7,11 +7,11 @@
   덧붙인다. `where=center`인 것만 쓴다 (현장 결재는 올릴 이유가 없다).
 - **현장 결재·확인은 `runs/<run_id>.field-requests.jsonl`에** 같은 본문으로 쓴다
   ([ADR-0078](../../../../docs/decisions/0078-field-approval-shows-what-to-judge.md)) — 올리지 않고
-  Bot UI의 결재 창(CMN-01)이 **읽기만** 한다. 제목·설명·검토 자료를 아는 것은 엔진뿐이라,
+  PC 실행기의 결재 창(CMN-01)이 **읽기만** 한다. 제목·설명·검토 자료를 아는 것은 엔진뿐이라,
   이것이 없으면 현장 결재자는 무엇을 승인하는지 모르고 누른다. 파일을 가른 것은 **올리는 길이
   현장 결재를 나를 수 없게** 하려고다 (한 파일에 섞으면 고르는 자리가 하나 더 생긴다).
-- Bot UI가 하트비트 뒤에 읽어 `POST /approvals`로 올리고, 보낸 자리를 `.sent`에 남긴다 —
-  **Bot UI는 내용을 짓지 않고 나르기만** 한다 (배포 봉투를 다루는 방식과 같다).
+- PC 실행기가 하트비트 뒤에 읽어 `POST /approvals`로 올리고, 보낸 자리를 `.sent`에 남긴다 —
+  **PC 실행기는 내용을 짓지 않고 나르기만** 한다 (배포 봉투를 다루는 방식과 같다).
 - 끝나면 지운다 — 업무 값이 PC에 남지 않는다 (제어 파일과 같다).
 """
 
@@ -73,7 +73,7 @@ def append(path: Path, body: Mapping[str, Any]) -> None:
 
 
 def unsent(path: Path) -> list[tuple[int, dict[str, Any]]]:
-    """아직 안 보낸 줄 `(줄 번호, 본문)` (Bot UI 쪽). 반쯤 쓰인 줄은 다음에 다시 본다."""
+    """아직 안 보낸 줄 `(줄 번호, 본문)` (PC 실행기 쪽). 반쯤 쓰인 줄은 다음에 다시 본다."""
     if not path.is_file():
         return []
     mark = _sent_path(path)
@@ -95,7 +95,7 @@ def unsent(path: Path) -> list[tuple[int, dict[str, Any]]]:
 
 
 def find(path: Path, request_id: str) -> dict[str, Any] | None:
-    """그 요청의 본문 (Bot UI 결재 창 쪽). 없거나 아직 쓰는 중이면 `None` — 부르는 쪽이 견딘다."""
+    """그 요청의 본문 (PC 실행기 결재 창 쪽). 없거나 아직 쓰는 중이면 `None` — 부르는 쪽이 견딘다."""
     if not path.is_file():
         return None
     for raw in path.read_text(encoding="utf-8").splitlines():

@@ -5,7 +5,7 @@
 /**
  * `POST /api/v1/studio/enroll` — Studio의 등록 요청 (C5 §Studio 등록 요청과 승인, ADR-0093).
  *
- * Bot UI의 `EnrollRequest`와 같은 결이다 — 등록(`register`)이 없는 Studio라 그 칸만 따로 둔다.
+ * PC 실행기의 `EnrollRequest`와 같은 결이다 — 등록(`register`)이 없는 Studio라 그 칸만 따로 둔다.
  */
 export interface StudioEnrollRequest {
   machine_id: string;

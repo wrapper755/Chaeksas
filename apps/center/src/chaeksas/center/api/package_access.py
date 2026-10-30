@@ -5,7 +5,7 @@
 | 관리자 토큰 | 전부 |
 | 읽기 토큰 | **없다** — 콘솔 「보기 전용」은 목록·정보까지다 (파일은 받지 않는다) |
 | Studio 키 | 전부 — 올린 쪽이고, 공유 BPM 프로세스·툴팩을 가져다 쓴다 |
-| Bot UI·서버 실행기 키 | **자기에게 배포된 것만** (고르는 기준은 `envelopes_for`와 같다) |
+| PC 실행기·서버 실행기 키 | **자기에게 배포된 것만** (고르는 기준은 `envelopes_for`와 같다) |
 | 연동용 키 | 없다 — 작업만 만든다 |
 
 세 모듈 위에 앉으므로 **따로 둔다**. `api.packages`는 `api.deployments`가 이미 import하고
@@ -38,7 +38,7 @@ def _target(store: Store, key: Any) -> tuple[str | None, str]:
     """
     if key.type == "bot_ui":
         found = bot_ui.id_for_key(store, key.key_id)
-        return found, "이 키로 등록된 Bot UI가 없다 — 먼저 register를 부르세요"
+        return found, "이 키로 등록된 PC 실행기가 없다 — 먼저 register를 부르세요"
     found = server_runner.id_for_key(store, key.key_id)
     return found, "이 키로 등록된 서버 실행기가 없다 — 먼저 register를 부르세요"
 

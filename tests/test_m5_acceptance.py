@@ -243,7 +243,7 @@ def test_both_external_definitions_survive_re_verification(directory: AppDirecto
 
 # ─────────────────────────── BX-16: PC 위임 ───────────────────────────
 
-#: BX-16이 맡기는 **PC Bot 패키지 id**와 그 예제 파일. 패키지 id는 파일 이름이 아니다 —
+#: BX-16이 맡기는 **PC BPM 프로세스 패키지 id**와 그 예제 파일. 패키지 id는 파일 이름이 아니다 —
 #: C1 `id`에 밑줄이 들어갈 수 없어 `-`다 (그 예제의 「배운 것」에 있다).
 BX16_TARGET = "bx17-erp-po-entry"
 BX16_TARGET_EXAMPLE = "bx17_erp_po_entry"
@@ -253,7 +253,7 @@ def test_bx16_delegates_to_the_pc_bot_that_declares_the_outputs() -> None:
     """**그림과 대상이 맞물리나** (ADR-0062, C14 `chk:call.delegate`).
 
     전에는 이 자리를 사내 확장 서비스 앱(`center-jobs`)으로 메우고 있었고, 그래서 시험이
-    **진짜 소켓 Center·연동용 키·등록된 Bot UI·배포된 BX-17** 넷을 세워야 했다. 위임이
+    **진짜 소켓 Center·연동용 키·등록된 PC 실행기·배포된 BX-17** 넷을 세워야 했다. 위임이
     본문이 된 뒤로는 그 발판이 **필요하지 않다** — Studio 시험 실행은 케이스의 `delegations`로
     돈다. 진짜 Center·진짜 PC를 거치는 한 바퀴는 `test_server_runner_delegation.py`가 본다.
 
@@ -445,7 +445,7 @@ def test_an_m5_example_passes_all_its_cases(
     """케이스가 **모두 통과**한다 — 서비스 앱은 진짜로 불린다.
 
     **BX-16의 Center 발판은 없어졌다** — PC 위임이 본문이 되어(ADR-0062) 그 예제가 작업을
-    만들지 않으므로 연동용 키·등록된 Bot UI·배포된 BX-17이 필요하지 않다. 위임 결과는 케이스가
+    만들지 않으므로 연동용 키·등록된 PC 실행기·배포된 BX-17이 필요하지 않다. 위임 결과는 케이스가
     적는다 (C14 `delegations`).
     """
     results = run_all(tmp_path, example, caller, model, mock_apps, center_url=center.url)

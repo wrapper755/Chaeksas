@@ -1,4 +1,4 @@
-"""Bot UI가 Bot을 실행한다 (M3 조각 4a) — 설치 → 실행기(자식 프로세스) → 결재 → 끝.
+"""PC 실행기가 BPM 프로세스를 실행한다 (M3 조각 4a) — 설치 → 실행 프로세스 → 결재 → 끝.
 
 **진짜 자식 프로세스를 띄운다.** 여기가 ADR-0023·ADR-0031이 맞는지 보는 자리다 — 가짜로
 바꾸면 「띄우고, 기록으로 보고, 파일로 답한다」가 정말 되는지 모른다.
@@ -6,10 +6,10 @@
 거듭 보는 것 다섯.
 
 1. **패키지는 Studio가 만든 그대로**다 — 시험이 따로 zip을 짜지 않는다 (C1).
-2. **올라오는 길은 실행 기록 하나**다 (C3) — Bot UI는 파일을 읽어 지금 노드와 결재 요청을 안다.
+2. **올라오는 길은 실행 기록 하나**다 (C3) — PC 실행기는 파일을 읽어 지금 노드와 결재 요청을 안다.
 3. **내려가는 길은 제어 파일**이다 (ADR-0031) — 답과 중지.
 4. **값은 기록에 없다** (원칙 6) — 결재 답은 제어 파일에만 있고, 끝나면 지운다.
-5. **PC 한 대에 Bot 하나** (ADR-0014).
+5. **PC 한 대에 BPM 프로세스 하나** (ADR-0014).
 """
 
 from __future__ import annotations
@@ -119,7 +119,7 @@ def test_a_bot_runs_to_the_end_in_a_child_process(tmp_path: Path) -> None:
     running = launcher.start(bot, inputs={"등급": "A", "금액": 1000})
     assert launcher.busy
 
-    assert wait_for(lambda: not running.alive), "실행기가 끝나지 않았다"
+    assert wait_for(lambda: not running.alive), "실행 프로세스가 끝나지 않았다"
     done = wait_for(lambda: launcher.tick() is not None)
     assert done and launcher.running is None
     assert running.finished == "success", running.finished
@@ -183,7 +183,7 @@ def test_stopping_a_waiting_bot_ends_it_as_cancelled(tmp_path: Path) -> None:
 
 
 def test_only_one_bot_runs_at_a_time(tmp_path: Path) -> None:
-    """PC 한 대에 Bot 하나 (ADR-0014) — 나머지는 대기열이 본다."""
+    """PC 한 대에 BPM 프로세스 하나 (ADR-0014) — 나머지는 대기열이 본다."""
     data_dir = tmp_path / "botui"
     bot = install(data_dir, packaged(tmp_path, MANUAL))
     launcher = Launcher(data_dir=data_dir)
@@ -306,7 +306,7 @@ def test_the_bot_tab_shows_what_is_installed_and_runs_it(
     assert window.bots_table.rowCount() == 1
     assert _cell(window, 0, 0) == bot.name
     assert _cell(window, 0, 3) == "서명 없음"
-    assert not window.run_button.isEnabled(), "고른 Bot이 없으면 꺼져 있다"
+    assert not window.run_button.isEnabled(), "고른 BPM 프로세스가 없으면 꺼져 있다"
     assert not window.stop_button.isEnabled()
 
     window.bots_table.selectRow(0)
@@ -364,7 +364,7 @@ def test_installing_a_broken_package_does_not_crash_the_window(
 
 
 def test_the_settings_reach_the_runner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """BUI-03이 정한 것이 실행기까지 간다 — **키는 환경변수로**, 주소는 명령줄로 (조각 4c)."""
+    """BUI-03이 정한 것이 실행 프로세스까지 간다 — **키는 환경변수로**, 주소는 명령줄로 (조각 4c)."""
     from dataclasses import replace as _replace
 
     from chaeksas.bot_ui.agent import Agent
@@ -415,7 +415,7 @@ def test_the_settings_reach_the_runner(tmp_path: Path, monkeypatch: pytest.Monke
 
 
 def test_the_runner_is_told_how_long_the_item_waited() -> None:
-    """C3 `run_started.queued_s` — **Bot UI만 안다** (요청 시각과 띄우는 시각 사이)."""
+    """C3 `run_started.queued_s` — **PC 실행기만 안다** (요청 시각과 띄우는 시각 사이)."""
     args = runner_args(
         package=Path("/tmp/pkg"),
         run_id="run_20261009_101500_abcdef",
@@ -433,7 +433,7 @@ def test_the_runner_is_told_how_long_the_item_waited() -> None:
 def test_the_runner_turns_off_the_same_extensions_as_the_bot_ui() -> None:
     """ADR-0043 — 사람이 BUI-11에서 끈 확장은 **자식에서도** 기여를 내지 않는다.
 
-    그런 Bot은 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
+    그런 BPM 프로세스는 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
     """
     from chaeksas.bot_ui.runner_main import extension_tasks
 
@@ -450,7 +450,7 @@ def test_the_runner_turns_off_the_same_extensions_as_the_bot_ui() -> None:
     args = runner_args(**common, off_extensions=("ui-automation", "doc-ocr"))
     assert args[args.index("--off") :] == ["--off", "ui-automation", "--off", "doc-ocr"]
 
-    # 실행기 쪽 — 끈 확장은 수행기를 내지 않는다 (「없는 태스크 종류」와 같은 자리로 떨어진다).
+    # 실행 프로세스 쪽 — 끈 확장은 수행기를 내지 않는다 (「없는 태스크 종류」와 같은 자리로 떨어진다).
     assert extension_tasks({}).executor("ui_task") is not None
     assert extension_tasks({}, off=["ui-automation"]).executor("ui_task") is None
 
@@ -555,7 +555,7 @@ DELEGATED = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 def delegated_bot(tmp_path: Path, data_dir: Path) -> Any:
-    """위임받을 PC Bot 하나 — 예제의 진입 정의를 통째로 바꿔 Studio처럼 내보낸다."""
+    """위임받을 PC BPM 프로세스 하나 — 예제의 진입 정의를 통째로 바꿔 Studio처럼 내보낸다."""
     made = Workspace(tmp_path / "studio").ensure().import_example(EXAMPLES, RULE)
     entry = made.entry_definition
     assert entry is not None
@@ -566,7 +566,7 @@ def delegated_bot(tmp_path: Path, data_dir: Path) -> Any:
 
 def ran(launcher: Launcher, running: Any) -> Any:
     """끝날 때까지 기다려 거둔다 — **거두는 그 자리에서** 출력 파일을 들고 온다 (`cleanup`)."""
-    assert wait_for(lambda: not running.alive), "실행기가 끝나지 않았다"
+    assert wait_for(lambda: not running.alive), "실행 프로세스가 끝나지 않았다"
     assert wait_for(lambda: launcher.tick() is not None), "거두지 못했다"
     return running
 
@@ -575,7 +575,7 @@ def test_a_delegated_run_leaves_only_the_declared_outputs(tmp_path: Path) -> Non
     """**선언한 `outputs`만** 올라간다 (C1·C4) — 그것이 「부르는 쪽이 받을 것」이다.
 
     실행 변수를 아는 것은 자식 프로세스뿐이고 실행 기록에는 업무 값이 없다 (원칙 6). 그래서
-    값은 **출력 파일로** 따로 올라오고, Bot UI가 거두며 **그 자리에서 지운다**.
+    값은 **출력 파일로** 따로 올라오고, PC 실행기가 거두며 **그 자리에서 지운다**.
     """
     data_dir = tmp_path / "botui"
     bot = delegated_bot(tmp_path, data_dir)
@@ -620,7 +620,7 @@ def test_a_plain_run_writes_no_outputs_file(tmp_path: Path) -> None:
 def test_the_ack_carries_the_values_and_a_plain_job_does_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """**Bot UI는 나르기만 한다** (C4 `JobAck.outputs`) — 내용을 짓는 것은 실행기다.
+    """**PC 실행기는 나르기만 한다** (C4 `JobAck.outputs`) — 내용을 짓는 것은 실행 프로세스다.
 
     거두는 그 자리(`cleanup`)에서 파일을 읽고 **지운다**. 위임이 아니면 파일이 없어 ack가
     비고, Center는 위임이 아닌 작업의 `outputs`를 **버린다**.
@@ -650,7 +650,7 @@ def test_the_ack_carries_the_values_and_a_plain_job_does_not(
     launcher = agent.runner()
     launcher.make_child = FakeChild
     running = launcher.start(bot, source="delegation", job_id="job_dlg1")
-    # 실행기가 끝내며 쓴 것 (여기서는 그 자리에 바로 쓴다 — 자식이 가짜다).
+    # 실행 프로세스가 끝내며 쓴 것 (여기서는 그 자리에 바로 쓴다 — 자식이 가짜다).
     outputs.write(running.outputs_path, {"결과코드": "OK"})
     RunLog(run_id=running.run_id, path=log_path(data_dir, running.run_id)).emit(
         "run_finished", status="success", duration_s=0.1,
@@ -665,7 +665,7 @@ def test_the_ack_carries_the_values_and_a_plain_job_does_not(
 
 
 def test_a_plain_job_acks_without_values(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """위임이 아니면 올릴 값이 없다 — 실행기가 파일을 쓰지 않았다 (ADR-0062 §4)."""
+    """위임이 아니면 올릴 값이 없다 — 실행 프로세스가 파일을 쓰지 않았다 (ADR-0062 §4)."""
     from chaeksas.bot_ui.agent import Agent
     from chaeksas.bot_ui.settings import Settings
     from chaeksas.bot_ui.store import Store

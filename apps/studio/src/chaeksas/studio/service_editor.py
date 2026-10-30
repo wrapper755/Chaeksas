@@ -12,7 +12,7 @@
 - **적어 둔 것을 조용히 바꾸지 않는다** (STU-13과 같은 규칙). 작업을 바꿔도 사람이 적어 둔
   입력·출력 값은 지우지 않고, 작업 정의에 없는 칸은 **낡았다고 말한다**.
 - **필수 입력이 비면 「적용」을 막는다** (STU-14 검증) — 실행할 때 알면 늦다.
-- **결정 수행을 지원하지 않는 작업은 경고한다** — Bot에서 돌지 않는다 (배포 전 검사도 잡는다).
+- **결정 수행을 지원하지 않는 작업은 경고한다** — BPM 프로세스에서 돌지 않는다 (배포 전 검사도 잡는다).
 - manifest가 입력·출력 칸을 알려 주지 않으면(스키마는 선택 칸이다) **사람이 적게 둔다** —
   없는 칸을 지어내지 않는다.
 - **그림이 부르는 앱이 목록에 없으면 고른 척하지 않는다** — 그 id를 콤보 맨 위에 빨갛게
@@ -285,7 +285,7 @@ class ServiceTaskEditor(QWidget):
         if app is not None and not app.healthy:
             warnings.append(f"「{app.name}」이 지금 응답하지 않습니다 (고를 수는 있습니다).")
         if operation is not None and not operation.deterministic_ok:
-            warnings.append("이 작업은 Bot(결정 수행)에서 실행할 수 없습니다.")
+            warnings.append("이 작업은 BPM 프로세스(결정 수행)에서 실행할 수 없습니다.")
         if operation is not None and not operation.server_ok:
             warnings.append("이 작업은 서버 실행기에서 부를 수 없습니다 (C1 R8).")
         return blocking, warnings

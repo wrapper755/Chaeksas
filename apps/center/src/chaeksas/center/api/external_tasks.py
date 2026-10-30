@@ -2,7 +2,7 @@
 
 | 경로 | 인증 |
 | --- | --- |
-| `POST /external-tasks`, `GET·ack·cancel …/{task_id}` | Bot UI·서버 실행기·Studio의 Center API 키 |
+| `POST /external-tasks`, `GET·ack·cancel …/{task_id}` | PC 실행기·서버 실행기·Studio의 Center API 키 |
 | `POST /consumers/enroll`, `GET …/enroll/{id}` | 없음 — 토큰은 요청의 공개키로 봉해 내려 준다 |
 | `POST /consumers/fetch`, `…/tasks/{id}/complete·fail·extend`, `PUT …/self/manifest` | 일꾼 토큰 |
 | `GET /consumers`, `GET /external-topics` | 콘솔 토큰 |
@@ -13,7 +13,7 @@
 - **최소 한 번 실행이다** — 잠금이 지나면 다시 나간다. 같은 일을 두 번 하지 않는 것은 일꾼의 몫이다.
 - **기한에 실패한다** — 아무도 안 가져가면 `no_consumer`, 가져갔는데 안 끝나면 `timeout`.
 - **값은 받을 때까지만** — `ack`가 오면 입력·출력을 지운다. 못 받은 것은 7일에 지운다.
-- **「불러도 되나」는 배포가 말한다** — 그 실행의 Bot이 그 토픽을 요구하는가(C1). 키마다 허용 작업을
+- **「불러도 되나」는 배포가 말한다** — 그 실행의 BPM 프로세스가 그 토픽을 요구하는가(C1). 키마다 허용 작업을
   달던 일(ADR-0094)이 여기 한 자리로 모인다.
 
 시간을 밀어야 하는 판단(만료·잠금 풀기·청소)은 `sweep()` 하나이고 읽는 자리마다 부른다 — 따로 도는
@@ -82,7 +82,7 @@ from chaeksas.contracts.service_app import DEFAULT_TIMEOUT_S, ServiceAppManifest
 
 router = APIRouter(prefix="/api/v1", tags=["external-tasks"])
 
-#: 부를 수 있는 Center API 키 종류 (C15 §전송). 호출 토큰은 조각 2에서 Bot UI 키의 신원으로 얹힌다.
+#: 부를 수 있는 Center API 키 종류 (C15 §전송). 호출 토큰은 조각 2에서 PC 실행기 키의 신원으로 얹힌다.
 POSTER_KEY_TYPES = frozenset({"bot_ui", "server_runner", "studio"})
 STUDIO = "studio"
 #: 키 종류 → 등록 표 (소유·배포 대조의 대상). Studio는 표가 없다 (C5 §Studio 등록 요청과 승인).
@@ -119,7 +119,7 @@ def _size(value: Any) -> int:
 
 @dataclass(frozen=True)
 class Poster:
-    """올린 쪽. `host_id`는 Bot UI·서버 실행기의 등록 id이고 Studio는 `None`이다."""
+    """올린 쪽. `host_id`는 PC 실행기·서버 실행기의 등록 id이고 Studio는 `None`이다."""
 
     key_id: str
     kind: str
@@ -127,9 +127,9 @@ class Poster:
 
 
 def poster_of(store: Store, found: Caller) -> Poster:
-    """올릴 수 있는 쪽인가 (C15 §전송). 등록되지 않은 Bot UI·실행기는 409 `not_registered`.
+    """올릴 수 있는 쪽인가 (C15 §전송). 등록되지 않은 PC 실행기·실행기는 409 `not_registered`.
 
-    **호출 토큰은 그것을 청한 쪽으로 본다** — 소유(C3)·배포 대조가 그 Bot UI(또는 Studio)의 키로 돈다.
+    **호출 토큰은 그것을 청한 쪽으로 본다** — 소유(C3)·배포 대조가 그 PC 실행기(또는 Studio)의 키로 돈다.
     """
     if found.key is not None and found.key.type == CALL_TOKEN:
         bound = found.key.bound_to
@@ -142,10 +142,10 @@ def poster_of(store: Store, found: Caller) -> Poster:
             store.row("SELECT key_id FROM bot_uis WHERE bot_ui_id = ?", (bound.id,)) if bound is not None else None
         )
         if bound is None or row is None or not row["key_id"]:
-            raise ApiError(409, "not_registered", "호출 토큰을 청한 Bot UI가 없다")
+            raise ApiError(409, "not_registered", "호출 토큰을 청한 PC 실행기가 없다")
         return Poster(key_id=str(row["key_id"]), kind="bot_ui", host_id=bound.id)
     if found.key is None or found.key.type not in POSTER_KEY_TYPES:
-        raise ApiError(403, "wrong_key_type", "외부 작업은 Bot UI·서버 실행기·Studio의 Center API 키로 올린다")
+        raise ApiError(403, "wrong_key_type", "외부 작업은 PC 실행기·서버 실행기·Studio의 Center API 키로 올린다")
     kind = found.key.type
     if kind == STUDIO:
         return Poster(key_id=found.key.key_id, kind=kind, host_id=None)
@@ -156,9 +156,9 @@ def poster_of(store: Store, found: Caller) -> Poster:
 
 
 def issue_call_token(store: Store, found: Caller, *, now: str | None = None) -> CallToken:
-    """`POST /call-tokens` — Bot UI·Studio만, 24시간 (C15 「정한 것」). 지난 토큰은 이때 지운다."""
+    """`POST /call-tokens` — PC 실행기·Studio만, 24시간 (C15 「정한 것」). 지난 토큰은 이때 지운다."""
     if found.key is None or found.key.type not in ("bot_ui", STUDIO):
-        raise ApiError(403, "wrong_key_type", "호출 토큰은 Bot UI·Studio의 Center API 키로 청한다")
+        raise ApiError(403, "wrong_key_type", "호출 토큰은 PC 실행기·Studio의 Center API 키로 청한다")
     if found.key.type == STUDIO:
         bound = BoundTo(type=STUDIO, id=found.key.key_id, name=found.key.name)
     else:
@@ -197,7 +197,7 @@ def _owns_the_run(store: Store, *, run_id: str, key_id: str) -> bool:
 
 
 def _bot_requires(store: Store, poster: Poster, *, bot: str | None, version: str | None, topic: str) -> bool:
-    """그 Bot이 이 호스트에 배포돼 있고 그 판의 매니페스트가 이 토픽을 요구하는가 (C1)."""
+    """그 BPM 프로세스가 이 호스트에 배포돼 있고 그 판의 매니페스트가 이 토픽을 요구하는가 (C1)."""
     if not bot or not version or poster.host_id is None:
         return False
     if version not in deployments.versions_for(
@@ -226,7 +226,7 @@ def _authorize(store: Store, poster: Poster, task: ExternalTaskCreate) -> int:
         if not run_id.startswith(TEST_RUN_PREFIX):
             raise ApiError(403, "run_not_owned", f"Studio는 시험 실행(`{TEST_RUN_PREFIX}…`)으로만 올린다")
     elif poster.kind == "bot_ui" and run_id.startswith(REGISTRATION_RUN_PREFIX):
-        # 등록 세션 (C9 — Tool UI 셀렉터 등록·그 시험). Bot이 없다 — 그 PC의 스위치가 관문이다.
+        # 등록 세션 (C9 — Tool UI 셀렉터 등록·그 시험). BPM 프로세스가 없다 — 그 PC의 스위치가 관문이다.
         if task.mode == "autonomous":
             raise ApiError(403, "mode_not_allowed", "자율 수행은 Studio에서만 올린다")
         if not _selector_registration_on(store, poster.host_id):
@@ -242,7 +242,7 @@ def _authorize(store: Store, poster: Poster, task: ExternalTaskCreate) -> int:
             raise ApiError(
                 403,
                 "topic_not_required",
-                f"이 호스트에 배포된 Bot이 토픽 「{task.topic}」을 요구하지 않는다",
+                f"이 호스트에 배포된 BPM 프로세스가 토픽 「{task.topic}」을 요구하지 않는다",
                 {"bpm_process_id": task.caller.bpm_process_id, "version": task.caller.version},
             )
     manifest = _topic_manifest(store, task.topic)

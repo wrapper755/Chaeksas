@@ -6,7 +6,7 @@
 세 줄이 여기 걸려 있다.
 
 1. 콘솔에서 발급한 Center API 키로 등록 → 하트비트 (C4, CON-11)
-2. **Bot UI별 키로 다른 Bot UI를 사칭할 수 없다**
+2. **PC 실행기별 키로 다른 PC 실행기를 사칭할 수 없다**
 3. 패키지 업로드·목록·내려받기, 해시 검증 (C1, C5)
 """
 
@@ -217,12 +217,12 @@ def test_register_is_idempotent(client: TestClient) -> None:
     again = client.post(
         "/api/v1/bot-ui/register", json=register_body(machine=machine, name="이름 바꿈"), headers=auth
     ).json()
-    assert first["bot_ui_id"] == again["bot_ui_id"], "같은 키·같은 PC면 같은 Bot UI다"
+    assert first["bot_ui_id"] == again["bot_ui_id"], "같은 키·같은 PC면 같은 PC 실행기다"
     assert client.get("/api/v1/bot-uis", headers=READ).json()[0]["name"] == "이름 바꿈"
 
 
 def test_a_key_cannot_be_used_from_another_pc(client: TestClient) -> None:
-    """**M2 기준 — 다른 Bot UI를 사칭할 수 없다.** 키는 처음 등록한 PC에 묶인다 (C4)."""
+    """**M2 기준 — 다른 PC 실행기를 사칭할 수 없다.** 키는 처음 등록한 PC에 묶인다 (C4)."""
     _key_id, raw = issue_key(client)
     auth = {"Authorization": f"Bearer {raw}"}
     client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
@@ -255,7 +255,7 @@ def test_unbinding_lets_a_reinstalled_pc_register(client: TestClient) -> None:
 def test_a_second_key_cannot_register_the_same_pc(client: TestClient) -> None:
     """**PC → 키 방향도 하나다** (C4 「키 묶기」).
 
-    같은 PC에 두 번째 키를 발급해 등록하면 Bot UI 행이 둘 생겼다 — CON-03에 같은 PC가 두
+    같은 PC에 두 번째 키를 발급해 등록하면 PC 실행기 행이 둘 생겼다 — CON-03에 같은 PC가 두
     줄로 보이고, C7 리소스의 PC 수가 부풀고, 작업이 하트비트를 보내지 않는 쪽으로 갔다.
     """
     _a_id, key_a = issue_key(client)
@@ -319,7 +319,7 @@ def test_unbinding_lets_a_new_key_take_over_the_pc(client: TestClient) -> None:
 
     listed = client.get("/api/v1/bot-uis", headers=READ).json()
     assert len(listed) == 1
-    assert listed[0]["key"]["prefix"] == key_b[:16], "이제 새 키의 Bot UI다"
+    assert listed[0]["key"]["prefix"] == key_b[:16], "이제 새 키의 PC 실행기다"
     # 이어받은 자리의 상태는 비운다 — 옛 키가 보고한 것이다 (C4).
     assert listed[0]["status"] is None and listed[0]["online"] is False
 
@@ -343,7 +343,7 @@ def test_only_a_revoked_key_can_be_deleted(client: TestClient) -> None:
 
 
 def test_deleting_a_revoked_key_frees_its_pc_like_unbinding(client: TestClient) -> None:
-    """지운 키가 묶였던 PC는 놓인 자리다 — 새 키가 **같은 Bot UI 자리를 이어받는다** (C4·ADR-0095)."""
+    """지운 키가 묶였던 PC는 놓인 자리다 — 새 키가 **같은 PC 실행기 자리를 이어받는다** (C4·ADR-0095)."""
     key_a_id, key_a = issue_key(client)
     _b_id, key_b = issue_key(client, name="다시 발급한 키")
     machine = machine_id("pc1")
@@ -389,7 +389,7 @@ def test_a_key_that_still_has_its_own_pc_cannot_take_over_another(client: TestCl
 
 
 def test_wrong_key_type_is_refused(client: TestClient) -> None:
-    """Bot UI용 키만 받는다 (C4). Studio용 키로 부르면 403."""
+    """PC 실행기용 키만 받는다 (C4). Studio용 키로 부르면 403."""
     _key_id, raw = issue_key(client, name="설계자 PC", key_type="studio")
     response = client.post(
         "/api/v1/bot-ui/register",
@@ -461,7 +461,7 @@ def test_versions_say_whether_the_pc_runs_a_packed_build(client: TestClient) -> 
 
 
 def test_disabled_bot_ui_still_heartbeats(client: TestClient) -> None:
-    """비활성이어도 하트비트는 받는다 — 실행 중 Bot과 대기열을 콘솔에서 봐야 한다 (CON-03)."""
+    """비활성이어도 하트비트는 받는다 — 실행 중 BPM 프로세스와 대기열을 콘솔에서 봐야 한다 (CON-03)."""
     _key_id, raw = issue_key(client)
     auth = {"Authorization": f"Bearer {raw}"}
     bot_ui_id = client.post(
@@ -495,7 +495,7 @@ def test_deployment_results_are_kept_not_thrown_away(client: TestClient) -> None
     client.post(
         "/api/v1/bot-ui/heartbeat", json=heartbeat_body(deployment_results=[refused]), headers=auth
     )
-    # 다음 주기에는 보내지 않는다 (Bot UI는 보낸 것을 지운다) — 그래도 남아 있어야 한다.
+    # 다음 주기에는 보내지 않는다 (PC 실행기는 보낸 것을 지운다) — 그래도 남아 있어야 한다.
     client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=auth)
 
     found = client.get("/api/v1/bot-uis", headers=READ).json()[0]
@@ -742,7 +742,7 @@ def test_actor_header_is_ignored_for_key_callers(client: TestClient) -> None:
     _key_id, raw = issue_key(client, name="현장 PC 1")
     auth = {"Authorization": f"Bearer {raw}", "X-CHK-Actor": quote("관리자인 척")}
     client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
-    # Bot UI 키로는 올릴 수 없으니, 행위자가 쓰이는 길(업로드)은 막혀 있다. Studio 키가
+    # PC 실행기 키로는 올릴 수 없으니, 행위자가 쓰이는 길(업로드)은 막혀 있다. Studio 키가
     # 올릴 때도 행위자는 **키 이름**이다 — `test_studio_key_uploads_and_reads…`가 본다.
     denied = client.post(
         "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=auth
@@ -761,7 +761,7 @@ def test_read_token_cannot_upload(client: TestClient) -> None:
 def test_studio_key_uploads_and_reads_but_bot_ui_key_does_not(client: TestClient) -> None:
     """올리는 쪽은 Studio다 (C5 권한표) — **관리자 토큰을 설계자 PC에 두지 않는다** (ADR-0013).
 
-    Bot UI 키는 패키지 표를 보지 못한다 — 배포는 하트비트로 받고 내려받기만 한다.
+    PC 실행기 키는 패키지 표를 보지 못한다 — 배포는 하트비트로 받고 내려받기만 한다.
     """
     _key_id, studio = issue_key(client, name="설계자 PC", key_type="studio")
     studio_auth = {"Authorization": f"Bearer {studio}"}
@@ -792,7 +792,7 @@ def test_studio_key_uploads_and_reads_but_bot_ui_key_does_not(client: TestClient
 def test_bot_ui_key_cannot_download_what_is_not_deployed_to_it(client: TestClient) -> None:
     """**자기 배포분만**이다 (C5 권한표). 배포된 것을 받는 길은 `test_m5_deploy.py`가 본다.
 
-    등록 전에도 403이다 — 키는 있지만 아직 어느 Bot UI인지 모른다 (C4).
+    등록 전에도 403이다 — 키는 있지만 아직 어느 PC 실행기인지 모른다 (C4).
     """
     assert upload(client, build_package()).status_code == 201
     _key_id, raw = issue_key(client)
@@ -938,7 +938,7 @@ def test_delete_is_refused_while_another_package_uses_it(client: TestClient, pac
 def test_delete_is_refused_while_a_deployment_points_at_it(client: TestClient) -> None:
     """배포가 가리키면 막는다. **철회된 배포는 세지 않는다** — 행은 남지만 실행을 허용하지 않는다.
 
-    배포 행을 바로 넣는다 — 진짜 배포에는 Admin 키와 등록된 Bot UI가 필요하고 그 길은 C2
+    배포 행을 바로 넣는다 — 진짜 배포에는 Admin 키와 등록된 PC 실행기가 필요하고 그 길은 C2
     시험이 이미 지킨다. 여기서 보는 것은 **삭제가 무엇을 보고 막는가**다.
     """
     info = upload_common(client, package_id="shared.approval", version="1.0.0", kind="process_lib")

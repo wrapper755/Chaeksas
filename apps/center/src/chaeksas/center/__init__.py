@@ -6,7 +6,7 @@
 | --- | --- | --- |
 | C7 | Center API 키 발급·목록·폐기·PC 묶음 풀기 (CON-11) | `keys.py` |
 | C7 | 리소스 목록 — 서비스 앱 등록·주소·해제, 확장·런타임 모으기, 확장 기여 카탈로그 | `api/resources.py` |
-| C4 | Bot UI 등록·하트비트(배포·작업·결재·`readiness`), 현황 목록·상세 (CON-03) | `api/bot_ui.py` |
+| C4 | PC 실행기 등록·하트비트(배포·작업·결재·`readiness`), 현황 목록·상세 (CON-03) | `api/bot_ui.py` |
 | C5 | 패키지 업로드·목록·정보·내려받기 (C1 검사·해시 재계산), 승인·철회 봉투 | `api/packages.py`, `api/signing.py` |
 | C5 | 배포 — Admin 봉투를 받아 두고 하트비트로 **저장된 JSON 그대로** 내려 준다 | `api/deployments.py` |
 | C5 | 작업 지시 `/jobs` — **서명이 없다**, 토큰 권한이 관문이다 | `api/jobs.py` |

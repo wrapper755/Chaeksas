@@ -587,7 +587,7 @@ def test_a_job_whose_external_definition_was_revoked_does_not_start(
 
     job = make_job(center)
     runner.tick()  # 작업을 받는다 — 받고도 띄우지 않는다
-    assert runner.workers == {}, "철회된 외부 정의를 쓰는 Bot을 시작했다"
+    assert runner.workers == {}, "철회된 외부 정의를 쓰는 BPM 프로세스를 시작했다"
     ack = next(one for one in runner.pending_acks if one.job_id == job["job_id"])
     assert (ack.result, ack.reason) == ("rejected", "not_ready")
 
@@ -597,7 +597,7 @@ def test_the_runner_reads_the_addresses_itself_before_it_starts(
 ) -> None:
     """실행기가 **제 손으로** 외부 확장 정의를 받아 명부를 짓는다 — 파일을 거치지 않는다 (ADR-0031 각주).
 
-    그 Bot이 쓰는 확장만 묻는다 (여기 그림은 아무것도 쓰지 않으므로 **묻지도 않는다**).
+    그 BPM 프로세스가 쓰는 확장만 묻는다 (여기 그림은 아무것도 쓰지 않으므로 **묻지도 않는다**).
     """
     ready_runner(center, store, runner)
     bot = next(one for one in runner.installed_bots() if one.id == BOT)
@@ -730,7 +730,7 @@ def test_a_running_run_is_not_asked(center: TestClient, store: Store, runner: ag
     assert runner.wake_due() == 0, "끝난 실행도 깨우지 않는다"
 
 
-# ─────────────── 맡겨진 작업 — 서버 Bot 위임 (ADR-0082) ───────────────
+# ─────────────── 맡겨진 작업 — 서버 BPM 프로세스 위임 (ADR-0082) ───────────────
 
 PARENT = "run_20261020_090000_pppppp"
 
@@ -738,7 +738,7 @@ PARENT = "run_20261020_090000_pppppp"
 def test_a_delegated_job_knows_its_parent_and_sends_its_outputs_back(
     center: TestClient, store: Store, runner: agent_mod.Agent, key: str
 ) -> None:
-    """서버 Bot도 맡겨질 수 있다 — **Bot UI와 같이** 부모를 알고, 성공하면 선언한 값만 올린다."""
+    """서버 BPM 프로세스도 맡겨질 수 있다 — **PC 실행기와 같이** 부모를 알고, 성공하면 선언한 값만 올린다."""
     ready_runner(center, store, runner, zip_bytes=package_zip(outputs=["구분"]))
     made = center.post(
         "/api/v1/server-runner/delegations",

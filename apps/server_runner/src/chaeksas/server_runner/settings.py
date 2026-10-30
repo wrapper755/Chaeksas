@@ -1,6 +1,6 @@
 """서버 실행기 설정 — 환경변수 `CHK_SERVER_RUNNER__*` (ADR-0011).
 
-**화면이 없으므로 설정 파일도 없다** — 서버는 환경변수·compose로 설정한다 (Bot UI의 BUI-03에
+**화면이 없으므로 설정 파일도 없다** — 서버는 환경변수·compose로 설정한다 (PC 실행기의 BUI-03에
 해당하는 자리가 없다). 기본값은 여기 한 곳에만 둔다 (`docs/04-setup.md` §6).
 
 **비밀은 여기 두지 않는다** — Center API 키는 `credentials.py`가 환경변수나 OS 비밀 저장소에서
@@ -32,7 +32,7 @@ DEFAULT_HEARTBEAT_S = 10
 DEFAULT_RETRY_S = 30
 #: 외부 작업을 **이만큼 기다려 끝나지 않으면** 기다림으로 넘기고 자리를 놓는다 (초, ADR-0103).
 DEFAULT_PARK_AFTER_S = 20.0
-#: 기본 모델 (ADR-0027). **이 앱의 기본값은 이 앱이 가진다** — Bot UI의 것을 import하지 않는다
+#: 기본 모델 (ADR-0027). **이 앱의 기본값은 이 앱이 가진다** — PC 실행기의 것을 import하지 않는다
 #: (앱끼리 import하지 않는다). 둘이 어긋나면 `docs/04-setup.md` §6의 표가 원본이다.
 DEFAULT_LLM_MODEL = "qwen2.5:7b"
 
@@ -85,13 +85,13 @@ class Settings:
     smtp_timeout_s: float = DEFAULT_SMTP_TIMEOUT_S
     smtp_attachment_mb: float = DEFAULT_ATTACHMENT_MB
     #: 웹훅을 보낼 수 있는 호스트. **기본은 비어 있고 비면 아무 데도 보내지 않는다** (ADR-0059 §2).
-    #: **사설망을 여는 스위치는 두지 않는다** — 한 번 켜면 모든 Bot의 모든 웹훅에 적용된다.
+    #: **사설망을 여는 스위치는 두지 않는다** — 한 번 켜면 모든 BPM 프로세스의 모든 웹훅에 적용된다.
     webhook_allowed_hosts: tuple[str, ...] = ()
     #: 외부 작업을 이만큼 기다려 끝나지 않으면 기다림으로 넘긴다 (ADR-0103). 0이면 바로 넘긴다.
     park_after_s: float = DEFAULT_PARK_AFTER_S
 
     def smtp(self) -> SmtpConfig:
-        """보내기 설정 한 벌 — **Bot UI와 같은 모양**이다 (`core.senders`)."""
+        """보내기 설정 한 벌 — **PC 실행기와 같은 모양**이다 (`core.senders`)."""
         return SmtpConfig(
             host=self.smtp_host,
             port=self.smtp_port,

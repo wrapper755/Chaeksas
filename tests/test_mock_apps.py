@@ -145,7 +145,7 @@ def test_c11_manifest_is_valid(mock: MockApp) -> None:
     assert found.app_id == mock.app_id
     assert found.extension is not None and found.extension.id == mock.app_id
     assert [one.name for one in found.operations] == [one.name for one in mock.ops]
-    # 두 모드를 다 받는다 — Bot은 결정 수행, Studio 시험 실행은 자율 수행이다.
+    # 두 모드를 다 받는다 — BPM 프로세스는 결정 수행, Studio 시험 실행은 자율 수행이다.
     assert all(set(one.modes) == {"deterministic", "autonomous"} for one in found.operations)
 
 
@@ -398,7 +398,7 @@ def test_an_external_definition_only_opens_the_private_network_for_localhost(app
 
 @pytest.mark.parametrize("app_id", sorted(definitions.BUILDERS))
 def test_an_external_operation_accepts_both_modes(app_id: str) -> None:
-    """외부 작업의 기본은 자율 수행이다 — 결정 수행은 **정의가 명시해야** Bot이 부를 수 있다."""
+    """외부 작업의 기본은 자율 수행이다 — 결정 수행은 **정의가 명시해야** BPM 프로세스가 부를 수 있다."""
     adapter = parsed(app_id, "http://127.0.0.1:8150").adapter
     assert adapter is not None
     assert all(set(one.modes) == {"deterministic", "autonomous"} for one in adapter.operations)

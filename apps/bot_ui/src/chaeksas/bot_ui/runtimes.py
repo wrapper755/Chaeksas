@@ -1,9 +1,9 @@
 """로컬 런타임 — 확장이 기여한 자식 서버를 띄우고 감시한다 (C13, BUI-09, ADR-0024).
 
-지금은 UI 자동화 확장의 **Worker 프로세스** 하나뿐이지만, Bot UI는 그것을 모른다 — 기여
+지금은 UI 자동화 확장의 **Worker 프로세스** 하나뿐이지만, PC 실행기는 그것을 모른다 — 기여
 목록(`bot_ui.local_runtimes`)을 읽어 그대로 띄울 뿐이다 (ADR-0018).
 
-- **명령줄은 Bot UI가 만든다.** 확장은 진입점(`entry`)만 준다. 묶은 앱 안에는 콘솔 스크립트가
+- **명령줄은 PC 실행기가 만든다.** 확장은 진입점(`entry`)만 준다. 묶은 앱 안에는 콘솔 스크립트가
   없으므로 **자기 실행 파일을 자식으로 다시 띄운다** (`--local-runtime <확장>:<런타임>`).
 - 띄우기·끄기·Job Object는 `core.processes`가 한다 (ADR-0023). 여기서 `os.killpg`를 부르지
   않는다.
@@ -74,7 +74,7 @@ RESERVED = "reserved"
 BUSY = "busy"
 SKIPPED = "skipped"
 
-#: 런타임 폴더에 Bot UI가 남기는 자리 정보 (`{"runtime", "port"}`) — 토큰은 런타임이 쓴다.
+#: 런타임 폴더에 PC 실행기가 남기는 자리 정보 (`{"runtime", "port"}`) — 토큰은 런타임이 쓴다.
 RUNTIME_FILE = "runtime.json"
 
 #: 감시자 상태 → 화면 표기. **한 자리에만 둔다** — BUI-09와 BUI-11이 같은 말을 써야 한다
@@ -124,7 +124,7 @@ def healthy(port: int, path: str, *, timeout_s: float = HEALTH_TIMEOUT_S) -> dic
 
 @dataclass
 class Runtimes:
-    """띄운 런타임들. Bot UI 한 벌에 하나다.
+    """띄운 런타임들. PC 실행기 한 벌에 하나다.
 
     `ensure()`가 「켜져 있고 답한다」까지 책임진다 — 부르는 쪽(「도구」 바로가기)은
     **된 척하는 런타임**을 받지 않는다.
@@ -209,8 +209,8 @@ class Runtimes:
     def reserve(self, runtime_id: str, run_id: str) -> str:
         """그 런타임을 이 실행에 묶는다 (C13 `reserve`, ADR-0014 §4) → `RESERVED`·`BUSY`·`SKIPPED`.
 
-        Bot UI는 런타임의 말을 모른다 — 확장 정의가 적은 경로·헤더·토큰 파일대로만 부른다.
-        `BUSY`(409)면 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중이다 — **Bot이 기다린다.**
+        PC 실행기는 런타임의 말을 모른다 — 확장 정의가 적은 경로·헤더·토큰 파일대로만 부른다.
+        `BUSY`(409)면 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중이다 — **BPM 프로세스가 기다린다.**
         닿지 못함 등은 `SKIPPED` — 기록만 하고 실행을 막지 않는다 (그 태스크가 분명히 실패한다).
         """
         call = self._reserve_call(runtime_id)

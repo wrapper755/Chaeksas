@@ -8,7 +8,7 @@
  * 단위 시험에서 부를 수 없다.
  *
  * 지키는 것:
- * - **PC를 세는 것은 그 기능을 쓰는 Bot이 배포된 곳만**이다 — 그 Bot을 받지 않은 PC에 없는
+ * - **PC를 세는 것은 그 기능을 쓰는 BPM 프로세스가 배포된 곳만**이다 — 그 BPM 프로세스를 받지 않은 PC에 없는
  *   것은 할 일이 아니다.
  * - **외부 기능은 PC를 세지 않는다** — 코드가 없어 깔 것이 없다 (C13 E1).
  * - 서버 부분이 없다는 것은 **패키지의 누락 검사**(C7 `missing_resources`)가 말해 준다 — 서비스 앱은
@@ -49,7 +49,7 @@ export interface FeatureRow {
   consumers: number | null;
   /** 일꾼이 마지막으로 가져간 때 (C7 `checked_at` — 들인 일꾼이 없으면 없다). */
   checkedAt: string | null;
-  /** 이 기능을 요구하는 Bot (`<id>`) — 해제 확인 창이 쓴다. */
+  /** 이 기능을 요구하는 BPM 프로세스 (`<id>`) — 해제 확인 창이 쓴다. */
   usedBy: string[];
 }
 
@@ -73,7 +73,7 @@ function shortTime(value: string | null | undefined): string {
   return `${pad(at.getMonth() + 1)}-${pad(at.getDate())} ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
-/** 이 기능을 요구하는 Bot 패키지 — 확장 id 또는 그 서버(서비스 앱) id로. */
+/** 이 기능을 요구하는 BPM 프로세스 패키지 — 확장 id 또는 그 서버(서비스 앱) id로. */
 function botsUsing(packages: PackageInfo[], extensionId: string | null, appId: string | null): PackageInfo[] {
   return packages.filter((one) => {
     if (one.kind && one.kind !== "bpm_process") return false;
@@ -85,7 +85,7 @@ function botsUsing(packages: PackageInfo[], extensionId: string | null, appId: s
   });
 }
 
-/** 그 Bot들이 **지금 배포된** 곳 — `(종류, id)`. 철회된 배포는 세지 않는다. */
+/** 그 BPM 프로세스들이 **지금 배포된** 곳 — `(종류, id)`. 철회된 배포는 세지 않는다. */
 function deployedHosts(deployments: DeploymentInfo[], bots: PackageInfo[]): Array<{ type: string; id: string }> {
   const wanted = new Set(bots.map((one) => one.id));
   const seen = new Map<string, { type: string; id: string }>();
@@ -206,7 +206,7 @@ export function featureRows(input: FeatureInput): FeatureRow[] {
     });
   }
 
-  // 확장에 속하지 않은 서비스 앱 — 사람에게는 둘 다 「Bot이 부르는 기능」이라 같은 표에 둔다.
+  // 확장에 속하지 않은 서비스 앱 — 사람에게는 둘 다 「BPM 프로세스가 부르는 기능」이라 같은 표에 둔다.
   for (const app of input.serviceApps) {
     if (claimedApps.has(app.app_id)) continue;
     const status = String(app.status ?? "");

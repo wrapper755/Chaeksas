@@ -4,7 +4,7 @@ import { cn } from "../cn";
 /**
  * 빈 상태 (스타일 가이드 §3). **다음에 할 일을 말한다** (U12).
  *
- * 「설치된 Bot이 없습니다. Center에서 배포하면 여기에 나타납니다.」
+ * 「설치된 BPM 프로세스가 없습니다. Center에서 배포하면 여기에 나타납니다.」
  */
 export interface EmptyStateProps {
   title: string;

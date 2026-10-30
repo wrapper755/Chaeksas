@@ -1,6 +1,6 @@
 """확장 호스트 — 확장을 찾아 기여를 등록한다 (ADR-0018).
 
-**플랫폼은 특정 확장을 모른다.** Studio·Bot UI·실행기·서버 실행기는 시작할 때 이 호스트를 만들어
+**플랫폼은 특정 확장을 모른다.** Studio·PC 실행기·실행기·서버 실행기는 시작할 때 이 호스트를 만들어
 엔트리 포인트(`chaeksas.extensions`)로 찾은 확장 정의(C13)를 읽고, 기여 지점별 목록을 묻는다.
 확장 이름이 플랫폼 코드에 나오지 않는다 (`tests/test_import_direction.py`가 막는다).
 
@@ -162,7 +162,7 @@ class ExtensionHost:
         #: ../../../../docs/decisions/0064-extension-tasks-on-the-server.md)).
         #:
         #: **주지 않으면 거르지 않는다** — Studio는 양쪽 그림을 다 편집하고(팔레트에 PC 전용도
-        #: 있어야 한다), Bot UI는 PC 그림만 받는다. 거르는 쪽은 **서버 실행기**다: 거기서만
+        #: 있어야 한다), PC 실행기는 PC 그림만 받는다. 거르는 쪽은 **서버 실행기**다: 거기서만
         #: 「깔려 있는데 못 돈다」가 생기고, 걸러 두면 사전 점검이 **시작 전에** 막는다.
         self.run_location = run_location
         self._loaded: list[LoadedExtension] = []
@@ -213,7 +213,7 @@ class ExtensionHost:
     ) -> LoadedExtension | None:
         """Center에서 받은 외부 확장 정의 하나 (C7 리소스 목록).
 
-        **봉투를 다시 검증한다** (C13 E6). 관리자 토큰만 새어도 Bot의 키·업무 값이 다른 주소로
+        **봉투를 다시 검증한다** (C13 E6). 관리자 토큰만 새어도 BPM 프로세스의 키·업무 값이 다른 주소로
         새는 일을 막으려고, 실행하는 쪽이 Admin 서명을 직접 본다.
         """
         problems = verify_external(definition, envelope, keys=keys)
@@ -284,7 +284,7 @@ class ExtensionHost:
     def _conflicts(self, manifest: ExtensionManifest) -> list[Violation]:
         """이미 켠 확장과 겹치는가 (E4, 그리고 하나뿐인 이름 공간).
 
-        **나중에 온 쪽이 진다.** 먼저 켜진 확장이 계속 돌아야 한다 (실행 중인 Bot이 쓰고 있다).
+        **나중에 온 쪽이 진다.** 먼저 켜진 확장이 계속 돌아야 한다 (실행 중인 BPM 프로세스가 쓰고 있다).
 
         **꺼 둔 확장은 세지 않는다** (`enabled()`가 이미 거른다, ADR-0043) — 기여를 내지 않으니
         이름을 쥐고 있지 않다. 껐던 것을 다시 켜서 겹치면 그때 **그쪽이** 켜지지 않는다.
@@ -404,8 +404,8 @@ class ExtensionHost:
     def key_extensions(self) -> list[str]:
         """서버 부분을 **부르는** 켜진 확장 — 서버 부분이 있고 `requires_keys`에 `run`을 적었다 (C13).
 
-        빌드가 그 확장의 태스크를 쓰는 Bot에 `requires.service_apps` 줄(= C15 토픽)을 적는다 —
-        Center는 그 줄에 있는 토픽만 그 Bot이 올리게 둔다 (ADR-0102). 이름은 키를 받던 때의 것이다.
+        빌드가 그 확장의 태스크를 쓰는 BPM 프로세스에 `requires.service_apps` 줄(= C15 토픽)을 적는다 —
+        Center는 그 줄에 있는 토픽만 그 BPM 프로세스가 올리게 둔다 (ADR-0102). 이름은 키를 받던 때의 것이다.
         서버 부분의 앱 id는 확장 id와 같다고 본다 (내장 확장이 그렇다).
         """
         return sorted(
@@ -435,19 +435,19 @@ class ExtensionHost:
         return self._gather(lambda m: m.contributes.studio_resource_views)
 
     def tools(self) -> list[Contribution[Tool]]:
-        """Tool UI의 도구들 (`tool_ui.tools`, ADR-0077) — Bot UI 「도구」 바로가기도 이것을 그린다."""
+        """Tool UI의 도구들 (`tool_ui.tools`, ADR-0077) — PC 실행기 「도구」 바로가기도 이것을 그린다."""
         return self._gather(lambda m: m.contributes.tool_ui_tools)
 
     def panels(self, surface: str) -> list[Contribution[Panel]]:
         """그 자리에 낼 칸들 (`bot_ui.panels`, ADR-0042).
 
         **자리 이름으로만 고른다** — 호스트는 자기가 아는 자리를 묻고, **모르는 자리를 가리키는
-        칸은 조용히 사라진다** (새 확장이 가리키는 자리를 옛 Bot UI가 모를 수 있다).
+        칸은 조용히 사라진다** (새 확장이 가리키는 자리를 옛 PC 실행기가 모를 수 있다).
         """
         return [c for c in self._gather(lambda m: m.contributes.bot_ui_panels) if c.value.surface == surface]
 
     def local_runtimes(self) -> list[Contribution[LocalRuntime]]:
-        """Bot UI가 띄우고 감시할 로컬 프로세스 (BUI-09·11). **선언뿐이다.**"""
+        """PC 실행기가 띄우고 감시할 로컬 프로세스 (BUI-09·11). **선언뿐이다.**"""
         return self._gather(lambda m: m.contributes.bot_ui_local_runtimes)
 
     def configuration(self, *, scope: str | None = None) -> list[Contribution[ConfigurationItem]]:
@@ -597,9 +597,9 @@ class ExtensionHost:
     def local_runtime(self, extension_id: str, runtime_id: str) -> LocalRuntimeEntry:
         """로컬 런타임의 진입점 (`<확장 id>:<런타임 id>`).
 
-        **자식 프로세스 안에서** 쓰는 길이다. Bot UI가 자기 실행 파일을 `--local-runtime
+        **자식 프로세스 안에서** 쓰는 길이다. PC 실행기가 자기 실행 파일을 `--local-runtime
         <확장 id>:<런타임 id>`로 다시 띄우면, 그 자식이 이것으로 진입점을 풀어 부른다
-        (ADR-0024). 띄우고 감시하는 일 자체는 Bot UI의 몫이다.
+        (ADR-0024). 띄우고 감시하는 일 자체는 PC 실행기의 몫이다.
         """
         owner = self.get(extension_id)
         if owner is None or not owner.enabled:
@@ -651,7 +651,7 @@ def load_host(
 
 @dataclass
 class HostTasks:
-    """확장 호스트를 엔진의 `RunEnv.extensions`로 — 실행하는 쪽(Studio 시험 실행·Bot UI 실행기)이 꽂는다.
+    """확장 호스트를 엔진의 `RunEnv.extensions`로 — 실행하는 쪽(Studio 시험 실행·실행 프로세스)이 꽂는다.
 
     엔진은 확장을 모른다 (ADR-0018). 태스크 종류 이름으로 수행기를, AI 태스크 domain으로 환경을
     묻고(ADR-0037), 그 확장의 바깥 세상(`context`)을 받을 뿐이다.

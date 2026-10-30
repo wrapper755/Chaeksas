@@ -1,6 +1,6 @@
 """결재 한 바퀴 — 올리기 → 결재함 → 답하기 → 하트비트 (C4·C6, M5 조각 5).
 
-진짜 Center를 in-process로 띄우고 **진짜 Bot UI 키로** 결재를 올린다. 현장 연결(엔진이
+진짜 Center를 in-process로 띄우고 **진짜 PC 실행기 키로** 결재를 올린다. 현장 연결(엔진이
 `where=center`를 고르고 실행기가 올리는 길)은 다음 조각이라, 여기서는 C6의 경계인
 `POST /approvals`를 직접 두드린다.
 
@@ -122,7 +122,7 @@ def heartbeat_body(**over: Any) -> dict[str, Any]:
 
 @pytest.fixture
 def host(client: TestClient) -> dict[str, Any]:
-    """등록된 Bot UI 하나와 그 키 — 결재를 올리는 쪽."""
+    """등록된 PC 실행기 하나와 그 키 — 결재를 올리는 쪽."""
     raw = issue_key(client)
     bot_ui_id = register(client, raw)
     return {"raw": raw, "auth": {"Authorization": f"Bearer {raw}"}, "bot_ui_id": bot_ui_id}
@@ -368,7 +368,7 @@ def test_a_finished_run_takes_its_approvals_with_it(
 def test_a_lost_queue_takes_its_approvals_with_it(
     client: TestClient, store: Store, host: dict[str, Any]
 ) -> None:
-    """Bot UI가 대기열을 잃으면 그 실행의 결재도 전달될 곳이 없다 (C6 `host_lost`)."""
+    """PC 실행기가 대기열을 잃으면 그 실행의 결재도 전달될 곳이 없다 (C6 `host_lost`)."""
     from chaeksas.center.api import jobs
 
     # 그 실행을 `accepted` 작업으로 만들어 둔다 (작업이 `run_id`를 쥐고 있어야 한다).

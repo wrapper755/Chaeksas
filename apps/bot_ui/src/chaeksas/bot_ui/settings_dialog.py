@@ -74,7 +74,7 @@ class SettingsDialog(QDialog):
         #: 확장 설정 칸 — `(확장 id, 칸 이름)` → `(선언, 입력칸)`.
         self._extension_fields: dict[tuple[str, str], tuple[ConfigurationItem, QLineEdit]] = {}
         self._autostart = autostart_module.autostart()
-        self.setWindowTitle("Bot UI 설정")
+        self.setWindowTitle("PC 실행기 설정")
         self.setMinimumWidth(560)
 
         # 탭마다 내용은 스크롤 영역에, 단추는 탭 밖에 둔다 — 1920×1080을 150%로 쓰면 화면 높이가
@@ -209,7 +209,7 @@ class SettingsDialog(QDialog):
         self.remote_approval = QCheckBox("결재를 Center로 올리기")
         self.remote_approval.setChecked(self._agent.settings.remote_approval)
         self.remote_approval.setToolTip(
-            "BPM 프로세스의 결재 위치가 「Bot UI 설정을 따름」인 결재에만 적용됩니다 (Studio가 정한 것이 우선)."
+            "BPM 프로세스의 결재 위치가 「PC 실행기 설정을 따름」인 결재에만 적용됩니다 (Studio가 정한 것이 우선)."
         )
         form.addRow(self.remote_approval)
 
@@ -220,7 +220,7 @@ class SettingsDialog(QDialog):
         self.queue_max = QSpinBox()
         self.queue_max.setRange(1, 200)
         self.queue_max.setValue(self._agent.settings.queue_max)
-        self.queue_max.setToolTip("실행 자리는 하나로 고정입니다 (PC 한 대에 실행 중 Bot은 하나).")
+        self.queue_max.setToolTip("실행 자리는 하나로 고정입니다 (PC 한 대에 실행 중 BPM 프로세스는 하나).")
         form.addRow("대기열 크기", self.queue_max)
         return box
 
@@ -250,7 +250,7 @@ class SettingsDialog(QDialog):
         return box
 
     def _files_box(self) -> QWidget:
-        """BUI-03 「파일」 (ADR-0026). **여기 적은 폴더만** Bot이 읽을 수 있다."""
+        """BUI-03 「파일」 (ADR-0026). **여기 적은 폴더만** BPM 프로세스가 읽을 수 있다."""
         box = QWidget()
         layout = QVBoxLayout(box)
 
@@ -269,7 +269,7 @@ class SettingsDialog(QDialog):
         buttons.addStretch(1)
         layout.addLayout(buttons)
 
-        where = QLabel(f"출력 폴더: {data_dir() / 'outputs'}/<Bot> (고정)")
+        where = QLabel(f"출력 폴더: {data_dir() / 'outputs'}/<BPM 프로세스> (고정)")
         where.setWordWrap(True)
         where.setEnabled(False)
         layout.addWidget(where)
@@ -295,9 +295,9 @@ class SettingsDialog(QDialog):
         write_buttons.addStretch(1)
         layout.addLayout(write_buttons)
 
-        # **적은 폴더 안의 파일을 Bot이 고칠 수 있다** — 넓히는 일이라 분명히 말한다 (ADR-0032).
+        # **적은 폴더 안의 파일을 BPM 프로세스가 고칠 수 있다** — 넓히는 일이라 분명히 말한다 (ADR-0032).
         warn = QLabel(
-            "비워 두면 Bot은 출력 폴더 안에만 씁니다. 폴더를 적으면 **그 안의 파일을 Bot이 "
+            "비워 두면 BPM 프로세스는 출력 폴더 안에만 씁니다. 폴더를 적으면 **그 안의 파일을 BPM 프로세스가 "
             "고칠 수 있습니다** (공유 장부에 덧붙이는 업무에 필요합니다)."
         )
         warn.setWordWrap(True)
@@ -461,7 +461,7 @@ class SettingsDialog(QDialog):
 
         확장의 `configuration` 기여로 **그 자리에서** 만든다 (C13).
 
-        Bot UI는 어느 확장인지 모른다. 비밀 칸은 값을 보이지 않고 OS 비밀 저장소로 간다
+        PC 실행기는 어느 확장인지 모른다. 비밀 칸은 값을 보이지 않고 OS 비밀 저장소로 간다
         (ADR-0013) — **설정 파일에는 들어가지 않는다.**
         """
         self._extension_fields = {}

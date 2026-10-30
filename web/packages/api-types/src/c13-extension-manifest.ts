@@ -53,10 +53,10 @@ export interface AgentEnvironmentContribution {
   [k: string]: unknown;
 }
 /**
- * Bot UI가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).
+ * PC 실행기가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).
  *
  * **명령줄은 확장이 적지 않는다** (schema 2, ADR-0024). `entry`가 런타임을 실행하는 코드를
- * 가리키고, Bot UI가 **자기 실행 파일을 자식으로 다시 띄워** 그 `entry`를 부른다 — 설치
+ * 가리키고, PC 실행기가 **자기 실행 파일을 자식으로 다시 띄워** 그 `entry`를 부른다 — 설치
  * 파일로 묶은 앱 안에는 콘솔 스크립트가 없기 때문이다.
  *
  * 포트를 코드에 적지 않는다 — 설정 이름(`port_setting`)과 기본값만 둔다 (CLAUDE.md §5).
@@ -76,10 +76,10 @@ export interface LocalRuntime {
   [k: string]: unknown;
 }
 /**
- * 실행 예약 방법 — Bot UI가 런타임의 계약을 모른 채 실행 동안 그 런타임을 묶는다 (ADR-0014 §4).
+ * 실행 예약 방법 — PC 실행기가 런타임의 계약을 모른 채 실행 동안 그 런타임을 묶는다 (ADR-0014 §4).
  *
  * `POST <path>` `{run_id}`로 예약하고 `DELETE <path>`로 푼다. 관리 토큰은 런타임 폴더의
- * `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — Bot은 기다린다.
+ * `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — BPM 프로세스는 기다린다.
  */
 export interface RuntimeReserve {
   header: string;
@@ -90,7 +90,7 @@ export interface RuntimeReserve {
 /**
  * 런타임에 보내는 관리 호출 하나 — `{path, header, token_file}`.
  *
- * Bot UI는 런타임의 계약(C10 등)을 **모르고** 이 선언대로만 부른다. 토큰은 런타임 폴더의
+ * PC 실행기는 런타임의 계약(C10 등)을 **모르고** 이 선언대로만 부른다. 토큰은 런타임 폴더의
  * `token_file`에서 **부를 때마다** 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다 (ADR-0023).
  */
 export interface RuntimeCall {

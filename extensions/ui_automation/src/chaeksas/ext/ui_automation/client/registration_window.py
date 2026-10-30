@@ -95,7 +95,7 @@ TOKEN_DIR_SETTING = "runtime.worker.token_dir"
 
 #: 레지스트리를 부를 수 없을 때의 한 줄. **왜 안 되는지와 어디서 고치는지**를 적는다.
 NO_REGISTRY = (
-    "이 PC는 셀렉터 등록이 허락되지 않았습니다 — 관리자에게 Center 콘솔 「Bot UI 현황」에서 "
+    "이 PC는 셀렉터 등록이 허락되지 않았습니다 — 관리자에게 Center 콘솔 「PC 실행기 현황」에서 "
     "이 PC의 「셀렉터 등록」을 켜 달라고 하세요."
 )
 

@@ -21,9 +21,9 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
 
 @pytest.fixture(autouse=True)
 def _bot_ui_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monkeypatch: Any) -> Iterator[Path]:
-    """**어느 시험도 개발 PC의 Bot UI 데이터 폴더를 쓰지 않는다.**
+    """**어느 시험도 개발 PC의 PC 실행기 데이터 폴더를 쓰지 않는다.**
 
-    기본 위치(Windows `%LOCALAPPDATA%` 밑 `chaeksas/bot-ui`)에 쓰면, 그 PC에서 진짜 Bot UI를 띄웠을 때 시험이 남긴
+    기본 위치(Windows `%LOCALAPPDATA%` 밑 `chaeksas/bot-ui`)에 쓰면, 그 PC에서 진짜 PC 실행기를 띄웠을 때 시험이 남긴
     주소·이름으로 뜬다 (이슈 #3에서 실제로 그랬다). `CHK_BOT_UI__DATA_DIR`는 설정이 읽는 덮어쓰기다.
     """
     path = tmp_path_factory.mktemp("bot-ui-data")
@@ -33,11 +33,11 @@ def _bot_ui_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monk
 
 @pytest.fixture(autouse=True)
 def _studio_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monkeypatch: Any) -> Iterator[Path]:
-    """**어느 시험도 개발 PC의 Studio 데이터 폴더를 쓰지 않는다.** (위 Bot UI와 같은 까닭)
+    """**어느 시험도 개발 PC의 Studio 데이터 폴더를 쓰지 않는다.** (위 PC 실행기와 같은 까닭)
 
     STU-15가 끈 확장 목록을 `settings.json`에 **그 자리에서** 저장하면서 시험이 설정 파일을 쓰게
     됐다 (ADR-0043). 막지 않으면 그 PC에서 진짜 Studio를 띄웠을 때 시험이 꺼 둔 확장이 빠진 채로
-    뜬다 — Bot UI에서 이미 겪은 이슈 #3과 같은 꼴이다.
+    뜬다 — PC 실행기에서 이미 겪은 이슈 #3과 같은 꼴이다.
     """
     path = tmp_path_factory.mktemp("studio-data")
     monkeypatch.setenv("CHK_STUDIO__DATA_DIR", str(path))
@@ -46,7 +46,7 @@ def _studio_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monk
 
 @pytest.fixture(autouse=True)
 def _admin_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monkeypatch: Any) -> Iterator[Path]:
-    """**어느 시험도 개발 PC의 Admin 키 폴더를 쓰지 않는다.** (위 Bot UI와 같은 까닭)
+    """**어느 시험도 개발 PC의 Admin 키 폴더를 쓰지 않는다.** (위 PC 실행기와 같은 까닭)
 
     한 시험이 없는 환경변수 이름(`CHK_ADMIN__HOME`)으로 돌려 놓은 탓에 돌릴 때마다 진짜 폴더에
     「첫 키」가 두 개씩 쌓였다 — Admin이 `--key`로 열두 개 중 하나를 골라야 했고, 그 키들의 암호는
@@ -63,7 +63,7 @@ def _keyring_is_in_memory() -> Iterator[None]:
 
     시나리오 3 현장 리허설에서 사람이 Studio에 넣은 Center 키가 Windows 자격 증명 관리자에 남자,
     「설정이 없으면 …」을 보는 Studio 시험 둘이 그 키를 읽어 그 PC에서만 깨졌다(CI에는 키가 없어
-    지나갔다). 그래서 시험 동안은 `keyring`의 저장소를 **메모리 하나로** 바꿔 끼운다 — Studio·Bot UI·
+    지나갔다). 그래서 시험 동안은 `keyring`의 저장소를 **메모리 하나로** 바꿔 끼운다 — Studio·PC 실행기·
     서버 실행기 모두 이것을 거친다. 「저장소가 없다」를 보는 시험은 `_keyring`을 따로 갈아 끼우므로
     그대로 돈다.
     """

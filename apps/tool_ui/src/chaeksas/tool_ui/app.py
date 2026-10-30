@@ -3,9 +3,9 @@
 들어오는 길은 셋이다.
 
 - 소스 실행: `chk-tool-ui [--open <확장>:<도구>]` 또는 `python -m chaeksas.tool_ui …`
-- 묶은 앱: **Bot UI 실행 파일**이 `--tool-ui`로 불리면 이 `main`으로 간다 (`packaging/botui_main.py`
+- 묶은 앱: **PC 실행기 실행 파일**이 `--tool-ui`로 불리면 이 `main`으로 간다 (`packaging/botui_main.py`
   — 실행 파일을 늘리지 않는다, ADR-0024·0077 §6).
-- Bot UI 「도구」 바로가기: 런타임을 먼저 띄운 뒤 위 둘 중 하나를 `--open`과 함께 **따로** 띄운다.
+- PC 실행기 「도구」 바로가기: 런타임을 먼저 띄운 뒤 위 둘 중 하나를 `--open`과 함께 **따로** 띄운다.
 
 **한 로그인 세션에 하나만** 뜬다 — 이미 떠 있으면 그 창에 `--open`을 넘기고 이 프로세스는 끝난다
 (`QLocalServer`, 이름에 사용자 이름이 들어간다).
@@ -29,7 +29,7 @@ from chaeksas.tool_ui.window import WINDOW_TITLE, ToolWindow
 
 log = logging.getLogger(__name__)
 
-#: 묶은 Bot UI 실행 파일이 Tool UI로 도는 깃발 (ADR-0077 §6). **Tool UI는 이것을 그냥 넘긴다.**
+#: 묶은 PC 실행기 실행 파일이 Tool UI로 도는 깃발 (ADR-0077 §6). **Tool UI는 이것을 그냥 넘긴다.**
 TOOL_UI_FLAG = "--tool-ui"
 OPEN_FLAG = "--open"
 #: 두 번째 실행이 첫 창을 찾는 이름 — 사용자마다 따로다.

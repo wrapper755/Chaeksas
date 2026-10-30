@@ -1,7 +1,7 @@
 """재생 명세를 적고 되밟는다 — C14 §재생, [ADR-0028](../../../../docs/decisions/0028-replay-memory.md).
 
-자율 수행(Studio)이 적고, 결정 수행(Bot UI 운영 실행)이 되밟는다. 명세는 패키지 안
-`memory/specs.json`이고 **배포된 Bot은 읽기만** 한다.
+자율 수행(Studio)이 적고, 결정 수행(PC 실행기 운영 실행)이 되밟는다. 명세는 패키지 안
+`memory/specs.json`이고 **배포된 BPM 프로세스는 읽기만** 한다.
 
 핵심은 **도구 인자를 값이 아니라 `{변수}` 템플릿으로 적는 것**이다. 그래야 입력이 달라져도 같은
 명세가 맞는다 (예제 BX-37·BX-02의 교훈). 되돌려 적는 일은 **어림**이라, 문자열이 변수 값과
@@ -36,7 +36,7 @@ def read_memory(package_dir: Path) -> ReplayMemory:
 
 
 def write_memory(package_dir: Path, memory: ReplayMemory) -> Path:
-    """Studio가 배운 것을 적는다. **배포된 Bot은 이 길을 쓰지 않는다** (읽기만, ADR-0028)."""
+    """Studio가 배운 것을 적는다. **배포된 BPM 프로세스는 이 길을 쓰지 않는다** (읽기만, ADR-0028)."""
     found = package_dir / "memory" / "specs.json"
     found.parent.mkdir(parents=True, exist_ok=True)
     found.write_text(

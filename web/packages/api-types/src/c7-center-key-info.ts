@@ -20,7 +20,7 @@ export interface CenterKeyInfo {
   [k: string]: unknown;
 }
 /**
- * 키가 묶인 곳. Bot UI용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4).
+ * 키가 묶인 곳. PC 실행기용·서버 실행기용 키는 처음 등록한 PC에 묶인다 (C4).
  */
 export interface BoundTo {
   first_seen?: string | null;

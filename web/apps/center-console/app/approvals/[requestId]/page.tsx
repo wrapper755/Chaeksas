@@ -129,7 +129,7 @@ export default async function ApprovalPage({
           {/* 거절은 되돌림이다 — 요청은 다시 「대기」이고, 왜 거절됐는지가 위에 선다 (C6). */}
           {info.delivery_accepted === false && info.delivery_reason ? (
             <ErrorBanner
-              message={`Bot UI가 이전 답을 거절했습니다: ${info.delivery_reason} — 고쳐서 다시 답하세요`}
+              message={`PC 실행기가 이전 답을 거절했습니다: ${info.delivery_reason} — 고쳐서 다시 답하세요`}
             />
           ) : null}
 
@@ -141,7 +141,7 @@ export default async function ApprovalPage({
               </dd>
               <dt className="text-text-muted">실행하는 곳</dt>
               <dd>{where(info)}</dd>
-              <dt className="text-text-muted">Bot</dt>
+              <dt className="text-text-muted">BPM 프로세스</dt>
               <dd>
                 {info.bpm_process_id}@{info.version}
               </dd>

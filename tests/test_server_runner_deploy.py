@@ -3,7 +3,7 @@
 **한 줄로 본다**: 관리자가 배포 → 진짜 Center가 서명(ADR-0090) → 실행기의 `agent.tick()`이 받아
 설치 → 다음 하트비트에 `deployment_results`·`readiness`가 올라간다.
 
-`core.deploy`·`core.packages`는 Bot UI와 **같은 코드**다(`tests/test_m5_deploy.py`가 PC 쪽을
+`core.deploy`·`core.packages`는 PC 실행기와 **같은 코드**다(`tests/test_m5_deploy.py`가 PC 쪽을
 본다). 그러므로 여기서 보는 것은 **서버 쪽에서만 다른 것**이다.
 
 | 다른 것 | 왜 |

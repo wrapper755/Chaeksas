@@ -154,7 +154,7 @@ class RunInfo(ContractModel):
     #: 시작된 실행에만 있다 — CON-01이 이것으로 서버 실행과 오간다. **보낸 쪽이 적은 값**이라
     #: Center는 `run_started`에서 읽어 요약에 담아 둔다 (줄을 다시 읽지 않는다).
     parent_run_id: str | None = None
-    #: 어느 PC가 보냈나 (CON-01 「Bot UI」 필터·열). **Center가 읽을 때 채운다** —
+    #: 어느 PC가 보냈나 (CON-01 「PC 실행기」 필터·열). **Center가 읽을 때 채운다** —
     #: 보내는 쪽은 적지 않는다(신원은 키다, C4). Studio·토큰이 보낸 기록에는 없다.
     bot_ui_id: str | None = None
     events: int = 0

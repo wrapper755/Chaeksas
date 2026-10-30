@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "런타임 코어 — BPMN 실행, 확장 호스트, AI 태스크, 도구, 재생 기억, 설정 로더"
 requires-python = ">=3.12,<3.13"
 # openpyxl: 파일 출력 `format: xlsx` (C14). 순수 파이썬이라 설치 파일이 커지지 않는다.
-# httpx: 서비스 앱 호출 (C11). Bot UI·Center도 같은 것을 쓴다.
+# httpx: 서비스 앱 호출 (C11). PC 실행기·Center도 같은 것을 쓴다.
 # chaeksas-llm: 모델 클라이언트 (ADR-0034 — 서비스 앱과 같은 한 벌).
 dependencies = ["chaeksas-extension-api", "chaeksas-llm", "httpx>=0.27", "openpyxl>=3.1", "pypdf>=5.1"]
 

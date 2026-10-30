@@ -71,7 +71,7 @@ def collect_requires(
     `definitions`를 주면 **그 정의들만** 본다 (공유 BPM 프로세스 패키지는 고른 정의만 담는다).
     `inside`는 「이 패키지 안에 있는 정의 id」로, 그 밖을 부르면 `libs`가 된다.
     **PC 위임은 그 셈에서 빠진다** — `chk:call.delegate`가 붙은 호출은 `delegations`로 가고
-    `libs`에 넣지 않는다 (복사해 넣는 것이 아니라 따로 배포된 Bot이다, ADR-0062).
+    `libs`에 넣지 않는다 (복사해 넣는 것이 아니라 따로 배포된 BPM 프로세스이다, ADR-0062).
 
     `task_type_locations`는 확장 호스트가 주는 `{종류: [실행 위치]}`다
     (`ExtensionHost.task_type_locations()`). **표에 없는 종류는 넣지 않는다** — 그림은 태스크
@@ -138,7 +138,7 @@ def collect_requires(
             sub_call = node.prop("call")
             if sub_call is not None and sub_call.delegate is not None:
                 # **PC 위임은 `libs`가 아니다** (ADR-0062) — 복사해 넣는 것이 아니라 따로
-                # 배포된 Bot이다. `libs`에 넣으면 **없는 공유 BPM 프로세스를 요구하는 패키지**가
+                # 배포된 BPM 프로세스이다. `libs`에 넣으면 **없는 공유 BPM 프로세스를 요구하는 패키지**가
                 # 되어 설치가 막히고, R3이 「PC 정의를 부른다」고 읽는다.
                 #
                 # 판은 **적은 대로** 간다 — 비우면 「배포된 판」이라는 뜻이라(C14) 여기서
@@ -494,7 +494,7 @@ def default_name(process: BpmProcess) -> str:
 
 
 def default_lib_name(process: BpmProcess) -> str:
-    """공유 BPM 프로세스 패키지의 기본 파일 이름 — Bot 패키지와 **한 폴더에서 구별되게**."""
+    """공유 BPM 프로세스 패키지의 기본 파일 이름 — BPM 프로세스 패키지와 **한 폴더에서 구별되게**."""
     return f"{process.id}-lib-{process.version}.zip"
 
 

@@ -7,8 +7,8 @@
 
 **이 모듈에 두 쪽이 있다.**
 
-- **받아 두는 쪽** (`DirectoryCache`) — Center에서 정의·봉투를 받아 들고 있다가, 그 Bot이 쓰는
-  것만 골라 준다. Bot UI는 **파일로** 실행기(자식 프로세스)에 건네고, **서버 실행기는 제가
+- **받아 두는 쪽** (`DirectoryCache`) — Center에서 정의·봉투를 받아 들고 있다가, 그 BPM 프로세스가 쓰는
+  것만 골라 준다. PC 실행기는 **파일로** 실행 프로세스에 건네고, **서버 실행기는 제가
   Center를 부르므로** 파일을 거치지 않고 바로 짓는다 (`directory_for`).
 - **읽는 쪽** (`AppDirectory`·`build`·`read_directory`) — 받은 것을 **다시 검증한다**.
 
@@ -17,10 +17,10 @@
 지키는 것 둘.
 
 - **봉투를 다시 검증한다** (C13 「전송」, E6). Center가 보관한 정의와 봉투를 그대로 받아
-  `verify_external`로 본다 — 관리자 토큰만 새어도 Bot의 키가 다른 주소로 새는 일을 막는 관문이
+  `verify_external`로 본다 — 관리자 토큰만 새어도 BPM 프로세스의 키가 다른 주소로 새는 일을 막는 관문이
   배포와 같아야 한다. **검증되지 않은 정의는 쓰지 않는다** (사유는 `problems`에 남는다).
 - **매니페스트가 고정한 해시와 대조한다** (C1 `requires.extensions[].definition_hash`) — 정의가
-  바뀌었으면 그 Bot은 승인·배포를 다시 받아야 한다. 몰래 새 정의로 돌리지 않는다.
+  바뀌었으면 그 BPM 프로세스는 승인·배포를 다시 받아야 한다. 몰래 새 정의로 돌리지 않는다.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from chaeksas.contracts.signing import AdminKey, Envelope
 #: 파일 모양의 판 — 실행하는 쪽과 실행기가 같은 것을 본다.
 SCHEMA = 1
 
-#: 들고 있는 명부 (Center가 꺼져 있어도 Bot이 돈다).
+#: 들고 있는 명부 (Center가 꺼져 있어도 BPM 프로세스가 돈다).
 CACHE_NAME = "app-directory.json"
 
 #: Center가 **모른다고 답한** 것 — 들고 있던 것을 버린다 (철회·삭제는 보안 동작이다).
@@ -164,7 +164,7 @@ def extension_ids(manifest: Manifest) -> list[str]:
 
 @dataclass
 class DirectoryCache:
-    """바깥 앱 명부 — 받아 두고, 그 Bot이 쓸 것을 만든다.
+    """바깥 앱 명부 — 받아 두고, 그 BPM 프로세스가 쓸 것을 만든다.
 
     **Center를 어떻게 부르는지는 모른다** — `core.deploy`의 `fetch`처럼 **호출 가능한 것**을
     받는다 (`core`는 앱을 import하지 않는다 — `docs/01-architecture.md` §5). 받지 못한 것은
@@ -239,14 +239,14 @@ class DirectoryCache:
             return None, False
         return {"definition": found.definition, "envelope": found.envelope}, False
 
-    # ── 그 Bot이 쓸 것만 ──
+    # ── 그 BPM 프로세스가 쓸 것만 ──
 
     def body_for(
         self, manifest: Manifest, *, keys: Sequence[AdminKey], refresh: bool = True
     ) -> dict[str, Any] | None:
-        """그 Bot이 쓸 명부 하나. 쓸 것이 없으면 `None`.
+        """그 BPM 프로세스가 쓸 명부 하나. 쓸 것이 없으면 `None`.
 
-        **담는 것은 그 Bot이 쓰는 것뿐이다** — 다른 Bot이 쓰는 정의는 넣지 않는다.
+        **담는 것은 그 BPM 프로세스가 쓰는 것뿐이다** — 다른 BPM 프로세스가 쓰는 정의는 넣지 않는다.
         """
         externals = set(extension_ids(manifest))
         if not externals:
@@ -260,9 +260,9 @@ class DirectoryCache:
     def write_for(
         self, manifest: Manifest, *, path: Path, keys: Sequence[AdminKey], refresh: bool = True
     ) -> Path | None:
-        """그 Bot이 쓸 명부를 **파일로** 쓴다 → 실행기의 `--services`. 쓸 것이 없으면 `None`.
+        """그 BPM 프로세스가 쓸 명부를 **파일로** 쓴다 → 실행기의 `--services`. 쓸 것이 없으면 `None`.
 
-        Bot UI가 자식 프로세스에 건네는 길이다 (ADR-0031). 서버 실행기는 `directory_for`다.
+        PC 실행기가 자식 프로세스에 건네는 길이다 (ADR-0031). 서버 실행기는 `directory_for`다.
         """
         body = self.body_for(manifest, keys=keys, refresh=refresh)
         if body is None:
@@ -278,7 +278,7 @@ class DirectoryCache:
         keys: Sequence[AdminKey],
         refresh: bool = True,
     ) -> AppDirectory:
-        """그 Bot이 쓸 명부를 **그 자리에서** 짓는다 (서버 실행기 — 파일을 거치지 않는다).
+        """그 BPM 프로세스가 쓸 명부를 **그 자리에서** 짓는다 (서버 실행기 — 파일을 거치지 않는다).
 
         **봉투는 여기서도 검증된다** (`build`) — 파일을 거치지 않는 것이 관문을 비켜 가는
         길이 되면 안 된다 (C13 E6). 부르는 것이 없으면 **빈 명부**다.

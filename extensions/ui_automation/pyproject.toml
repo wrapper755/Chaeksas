@@ -18,7 +18,7 @@ dependencies = [
 # 확장 호스트가 이 그룹을 읽어 확장을 찾는다 (C13, ADR-0018 §6).
 # 값은 확장의 파이썬 패키지이고, 그 안에 extension.json이 있다.
 [project.scripts]
-# UI 자동화 앱 (서버 부분, C9·C11). Worker 로컬 런타임은 Bot UI가 띄운다 (ADR-0024).
+# UI 자동화 앱 (서버 부분, C9·C11). Worker 로컬 런타임은 PC 실행기가 띄운다 (ADR-0024).
 chk-svc-uia = "chaeksas.ext.ui_automation.service.app:main"
 
 [project.entry-points."chaeksas.extensions"]

@@ -57,7 +57,7 @@ FIELD_TYPES = ("text", "number", "bool", "choice")
 
 #: `chk:approval.location` (C14 `APPROVAL_LOCATIONS`) — 보이는 글.
 LOCATIONS = (
-    ("follow", "Bot UI 설정을 따름"),
+    ("follow", "PC 실행기 설정을 따름"),
     ("center", "Center로 올림"),
     ("field", "현장 PC에서만"),
 )
@@ -147,7 +147,7 @@ class ApprovalEditor(QWidget):
         self.answered_by_box.setPlaceholderText("변수 이름 — 비우면 만들지 않습니다")
         self.answered_by_box.setToolTip(
             "답한 사람의 이름이 이 변수에 들어갑니다 — 콘솔이면 계정 이름, 대리 답이면 그 사람, "
-            "현장이면 Bot UI 표시 이름. 반려여도 채웁니다."
+            "현장이면 PC 실행기 표시 이름. 반려여도 채웁니다."
         )
         self.answered_via_box = QLineEdit(self)
         self.answered_via_box.setPlaceholderText("변수 이름 — 비우면 만들지 않습니다")
@@ -420,7 +420,7 @@ class ApprovalEditor(QWidget):
         if on_server:
             self.location_note.setText(SERVER_NO_FIELD)
         else:
-            self.location_note.setText("여기서 정한 것이 Bot UI의 「결재를 Center로 올리기」보다 우선합니다.")
+            self.location_note.setText("여기서 정한 것이 PC 실행기의 「결재를 Center로 올리기」보다 우선합니다.")
 
     def _add_row(self, found: Mapping[str, Any]) -> None:
         quiet, self._quiet = self._quiet, True

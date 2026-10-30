@@ -2,9 +2,9 @@
 
 여기서 보는 것은 **무엇이 서버로 새지 않는가**다:
 
-- 로컬 런타임은 **띄우지 않는다** — 예약 키 `runtime.<id>.*`가 없다. 런타임은 Bot UI의
+- 로컬 런타임은 **띄우지 않는다** — 예약 키 `runtime.<id>.*`가 없다. 런타임은 PC 실행기의
   것이고(C13 칸 이름이 그렇다) 그 예약은 「PC에 하나」를 전제한 배타 잠금이다 (ADR-0014 §4).
-- `run_locations`에 `server`를 적지 않은 태스크 종류는 **수행기를 내지 않고**, 그런 Bot은
+- `run_locations`에 `server`를 적지 않은 태스크 종류는 **수행기를 내지 않고**, 그런 BPM 프로세스는
   **시작 전에** `not_ready`로 막힌다 (전에는 실행 중에 `node_kind_unsupported`로 죽었다).
 - 설정은 **환경변수뿐**이고(서버에는 설정 파일이 없다) 비밀은 설정에 섞이지 않는다 (ADR-0013).
 """
@@ -88,7 +88,7 @@ def host_with(definition: dict[str, Any] | None = None) -> ExtensionHost:
 
 
 def install(data_path: Path, *, task_type: str) -> None:
-    """그 종류를 요구하는 Bot 하나를 **손으로 설치한다**.
+    """그 종류를 요구하는 BPM 프로세스 하나를 **손으로 설치한다**.
 
     Center를 거치지 않는다 — C1 R2가 업로드에서 이미 막는 꼴이라 **그 길로는 만들 수 없다**.
     현장에서 이것이 생기는 길은 **확장 선언이 승인 뒤에 바뀌는 것**이다 (ADR-0064 §1).
@@ -165,7 +165,7 @@ def test_readiness_and_the_run_share_one_host(runner: agent_mod.Agent) -> None:
     runner.readiness()
     bot = runner.installed_bots()[0]
 
-    # 실행은 그 Bot에 묶인 창구를 받지만(ADR-0094 §8) **호스트는 점검과 같은 하나**다.
+    # 실행은 그 BPM 프로세스에 묶인 창구를 받지만(ADR-0094 §8) **호스트는 점검과 같은 하나**다.
     assert runner.run_env(bot).extensions.host is runner.extensions().host  # type: ignore[attr-defined]
     assert runner.extensions().host is runner.extension_host()
 
@@ -174,7 +174,7 @@ def test_readiness_and_the_run_share_one_host(runner: agent_mod.Agent) -> None:
 
 
 def test_configuration_comes_from_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
-    """서버에는 설정 파일이 없다 — 이름 규칙은 **Bot UI의 것과 같다**."""
+    """서버에는 설정 파일이 없다 — 이름 규칙은 **PC 실행기의 것과 같다**."""
     host = host_with()
     monkeypatch.setenv(extension_config_env("doc-ocr", "quality"), "high")
 

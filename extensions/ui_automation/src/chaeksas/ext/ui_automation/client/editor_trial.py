@@ -1,12 +1,12 @@
 """STU-13의 「이 스텝까지 시험」·「계획 세워 보기」 — **Studio 시험 실행과 같은 길**로 Worker를 부른다.
 
-Bot UI로 넘기지 않는다 (ADR-0074) — Studio 시험 실행이 이미 Bot UI가 띄운 Worker에 직접 붙는다.
+PC 실행기로 넘기지 않는다 (ADR-0074) — Studio 시험 실행이 이미 PC 실행기가 띄운 Worker에 직접 붙는다.
 이 모듈은 Qt를 모른다. 편집기(`editor.py`)가 단추를 잇고 결과 줄을 상자에 쓴다.
 
 지키는 것 넷.
 
 - **보고하지 않는다** (C10 `report: false`) — 설계자가 돌려 본 것이 승격 통계를 건드리지 않게.
-- **끝나면 세션을 닫는다** — Worker의 UI 세션은 하나라(ADR-0014) 쥐고 있으면 Bot이 기다린다.
+- **끝나면 세션을 닫는다** — Worker의 UI 세션은 하나라(ADR-0014) 쥐고 있으면 BPM 프로세스가 기다린다.
 - **읽은 값은 결과 줄에만** 간다 (원칙 6). 어디에도 남기지 않는다.
 - **계획 세워 보기는 스텝을 돌리지 않는다** — 세운 스텝을 받고 바로 닫는다. 표에 넣는 것은 사람이다.
 """
@@ -93,7 +93,7 @@ class EditorTrial:
             return self.worker
         port = self.ctx.setting(WORKER_PORT_SETTING)
         if not port:
-            raise NotReady("Worker 자리를 모릅니다 — 이 PC의 Bot UI가 Worker를 띄워야 합니다.")
+            raise NotReady("Worker 자리를 모릅니다 — 이 PC의 PC 실행기가 Worker를 띄워야 합니다.")
         folder = self.ctx.setting(WORKER_TOKEN_DIR_SETTING)
         return WorkerClient(token_dir=Path(str(folder)) if folder else Path.cwd(), port=int(port))
 

@@ -5,7 +5,7 @@
 1. **도구 인자는 값이 아니라 `{변수}`로 적힌다** — 그래야 입력이 달라져도 같은 명세가 맞는다
    (예제 BX-37·BX-02의 교훈).
 2. **`full`은 모델을 한 번도 부르지 않는다**, `plan`은 마지막 값 추출만 한 번 부른다.
-3. **명세가 없으면 그냥 돈다** — 처음 배포한 Bot이 멈추면 안 된다.
+3. **명세가 없으면 그냥 돈다** — 처음 배포한 BPM 프로세스가 멈추면 안 된다.
 4. **재생이 깨지면 몰래 자율로 넘어가지 않는다** — `TASK_FAILED`로 오류 경계에 넘긴다.
 """
 
@@ -231,7 +231,7 @@ def test_autonomous_runs_never_replay_and_record_what_they_learned() -> None:
 
 
 def test_a_missing_spec_just_runs_the_model() -> None:
-    """처음 배포한 Bot이 멈추면 안 된다 (ADR-0028 §5)."""
+    """처음 배포한 BPM 프로세스가 멈추면 안 된다 (ADR-0028 §5)."""
     model = RecordingLlm(replies=[Reply(text='{"공급사": "처음"}', model="stub-1")])
     engine, run = start(
         process("plan"),

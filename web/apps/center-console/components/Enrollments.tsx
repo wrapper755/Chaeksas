@@ -24,7 +24,7 @@ export function Enrollments({
   id,
 }: {
   rows: EnrollmentInfo[];
-  /** 확인 창 첫 줄이 가리키는 자리 — 「현장 화면」(Bot UI) / 「서버 실행기 로그」. */
+  /** 확인 창 첫 줄이 가리키는 자리 — 「현장 화면」(PC 실행기) / 「서버 실행기 로그」. */
   where: string;
   canDecide: boolean;
   /** 승인 창 「이름」 칸의 도움말 — Studio는 그 이름이 「누가」라서 다르게 말한다 (CON-11). */

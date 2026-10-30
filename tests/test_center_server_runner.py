@@ -438,7 +438,7 @@ def test_a_paused_runner_gets_no_jobs(client: TestClient, store: Store) -> None:
 
 
 def test_the_per_bot_limit_is_skipped_not_blocking(client: TestClient, store: Store) -> None:
-    """상한에 걸린 Bot 하나가 **대기열 전체를 멈추지 않는다** (C12 §3)."""
+    """상한에 걸린 BPM 프로세스 하나가 **대기열 전체를 멈추지 않는다** (C12 §3)."""
     key = issue(client)
     register(client, key)
     for n in range(DEFAULT_PER_BOT_CONCURRENCY):

@@ -18,7 +18,7 @@ log = logging.getLogger(__name__)
 def main(argv: list[str] | None = None) -> int:
     """`chk-studio` 진입점.
 
-    `--selftest [파일]`은 **묶은 실행 파일의 빌드 검사**다 (ADR-0024) — Bot UI와 **같은 깃발·
+    `--selftest [파일]`은 **묶은 실행 파일의 빌드 검사**다 (ADR-0024) — PC 실행기와 **같은 깃발·
     같은 검사**이고(`core.selftest`) 화면을 띄우지 않는다.
     """
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")

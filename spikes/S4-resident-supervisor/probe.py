@@ -25,7 +25,7 @@ R: dict[str, object] = {}
 
 
 def t_orphans(mode: str, port: int) -> dict:
-    """Bot UI가 강제로 죽었을 때 자식·손자가 남는가."""
+    """PC 실행기가 강제로 죽었을 때 자식·손자가 남는가."""
     p = subprocess.Popen([sys.executable, str(HERE / "fake_botui.py"), mode, str(port), str(OUT / f"tok-{mode}")],
                          stdout=subprocess.PIPE)
     pids = json.loads(p.stdout.readline())  # type: ignore[union-attr]

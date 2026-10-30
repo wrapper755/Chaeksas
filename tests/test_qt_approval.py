@@ -1,4 +1,4 @@
-"""CMN-01 결재 / 확인 창 (`packages/qt`) — **Studio와 Bot UI가 같은 창을 쓴다**.
+"""CMN-01 결재 / 확인 창 (`packages/qt`) — **Studio와 PC 실행기가 같은 창을 쓴다**.
 
 거듭 보는 것 넷.
 

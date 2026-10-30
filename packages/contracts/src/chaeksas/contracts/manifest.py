@@ -1,7 +1,7 @@
 """C1. 패키지 매니페스트 — 패키지 zip 루트의 `manifest.json`.
 
 단일 원본: `docs/03-contracts/C1-package-manifest.md`. 검사 규칙은 `validate()`에 있고,
-Studio(빌드)·Center(업로드)·Bot UI·서버 실행기(설치)가 **같은 함수**를 쓴다.
+Studio(빌드)·Center(업로드)·PC 실행기·서버 실행기(설치)가 **같은 함수**를 쓴다.
 """
 
 from __future__ import annotations
@@ -117,9 +117,9 @@ class Requires(ContractModel):
     extensions: list[ExtensionNeed] = Field(default_factory=list)
     task_types: list[TaskTypeNeed] = Field(default_factory=list)
     libs: list[str] = Field(default_factory=list)
-    #: **PC 위임**으로 부르는 PC Bot (`<id>@<version>` 또는 `<id>` — 판을 비우면 배포된 판,
+    #: **PC 위임**으로 부르는 PC BPM 프로세스 (`<id>@<version>` 또는 `<id>` — 판을 비우면 배포된 판,
     #: [ADR-0062](../decisions/0062-pc-delegation.md)). `libs`와 다르다: 복사해 넣는 것이
-    #: 아니라 **따로 올리고 따로 배포한 Bot**이다.
+    #: 아니라 **따로 올리고 따로 배포한 BPM 프로세스**이다.
     delegations: list[str] = Field(default_factory=list)
     runtimes: list[str] = Field(default_factory=list)
     os: list[str] = Field(default_factory=list)
@@ -254,7 +254,7 @@ def _check_r3(m: Manifest, lib_locations: Mapping[str, str]) -> list[Violation]:
 
 
 def _check_r10(m: Manifest) -> list[Violation]:
-    """PC 위임은 **서버 Bot만** 한다 (C1 R10, [ADR-0062](../decisions/0062-pc-delegation.md)).
+    """PC 위임은 **서버 BPM 프로세스만** 한다 (C1 R10, [ADR-0062](../decisions/0062-pc-delegation.md)).
 
     PC 실행은 그 PC의 자리를 끝까지 쥐므로(ADR-0014) PC가 다른 PC를 기다리면 둘이 서로를
     기다릴 수 있다. C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지
@@ -275,7 +275,7 @@ def _check_r10(m: Manifest) -> list[Violation]:
 def _check_r12(m: Manifest) -> list[Violation]:
     """**자기 자신에게 위임하지 않는다** (C1 R12, [ADR-0082](../decisions/0082-batch-start.md)).
 
-    끝나지 않는 되부름이다 — 위임은 결과를 기다리므로 한 건이 같은 Bot을 또 기동하고 그것이
+    끝나지 않는 되부름이다 — 위임은 결과를 기다리므로 한 건이 같은 BPM 프로세스를 또 기동하고 그것이
     또 기동한다. 그림은 자기 패키지 id를 모르므로 **매니페스트가 본다** (`id`와
     `requires.delegations`가 한 자리에 있다).
     """
@@ -317,7 +317,7 @@ def _check_r13(m: Manifest) -> list[Violation]:
     """타이머 시작의 식을 **Center가 읽을 수 있나** (C1 R13, ADR-0110).
 
     R9와 같은 까닭이다 — 일정은 Center가 이 식으로 쓴다(`contracts.schedule`). 읽지 못하는 식을
-    받아 두면 그 Bot은 **아무 말 없이 영영 돌지 않는다**. 읽는 함수가 같아야 「올라갔는데 안 돈다」가
+    받아 두면 그 BPM 프로세스는 **아무 말 없이 영영 돌지 않는다**. 읽는 함수가 같아야 「올라갔는데 안 돈다」가
     없다.
     """
     from chaeksas.contracts.schedule import cycle_problem  # noqa: PLC0415 — 쓰는 자리에서만
@@ -345,7 +345,7 @@ def _check_r11(m: Manifest) -> list[Violation]:
     **R9와 같은 까닭이다** — 갖춰야 할 설정은 사람이 적는 값이 아니라 **그림에서 Studio가
     옮기는 값**이고(`chk:email` → `smtp`), 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다
     (`core.preflight`). 모르는 이름이 들어오면 그 점검은 **아무 말 없이 지나가** 준비되지 않은
-    Bot이 실행되고 그 태스크에서 죽는다. R9를 만들기 전 `triggers[].kind`가 겪은 그 꼴이다.
+    BPM 프로세스가 실행되고 그 태스크에서 죽는다. R9를 만들기 전 `triggers[].kind`가 겪은 그 꼴이다.
 
     열어 두지 않는 것은 **우리가 아는 설정만 점검할 수 있어서**다 — `built.by`처럼 남이 적을
     수 있는 값이 아니다 (그쪽은 열린 문자열이 맞다).

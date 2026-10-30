@@ -1,7 +1,7 @@
 """작업 지시 — 「언제 돌려라」 (C5 `/jobs`).
 
 **서명이 필요 없다.** 배포는 「무엇을 실행해도 되는가」라서 Admin 서명이 유일한 관문이지만
-(C2), 작업은 **이미 배포된 것**을 지금 돌리라는 말일 뿐이다 — 배포되지 않은 Bot은 작업으로도
+(C2), 작업은 **이미 배포된 것**을 지금 돌리라는 말일 뿐이다 — 배포되지 않은 BPM 프로세스는 작업으로도
 돌릴 수 없으므로 토큰 권한(C5 권한표: 관리자 토큰·연동용 키)으로 충분하다.
 
 Center는 작업을 **밀지 않는다** (ADR-0007). 하트비트 응답에 실어 두고 ack를 기다린다 —
@@ -88,7 +88,7 @@ def _scope(found: Caller, *, write: bool) -> str | None:
     - 관리자 토큰: 전부 (쓰기 포함)
     - 읽기 토큰: 전부, **GET만**
     - 연동용 키: 만들기와 **자기 것만** 읽기·취소
-    - 그 밖의 Center API 키(Studio·Bot UI·서버 실행기): 작업은 다루지 못한다
+    - 그 밖의 Center API 키(Studio·PC 실행기·서버 실행기): 작업은 다루지 못한다
     """
     if found.is_admin:
         return None
@@ -189,7 +189,7 @@ def create(
                 now,
                 PENDING,
                 # 연동용 키가 실은 사람 — **주장**이라 적기만 한다 (ADR-0081). `requested_by`는
-                # 그대로 키 이름이다: Bot UI가 그 칸의 `server_bot:`로 위임을 가른다.
+                # 그대로 키 이름이다: PC 실행기가 그 칸의 `server_bot:`로 위임을 가른다.
                 None if by_center else found.on_behalf,
                 virtual_worker,
             ),
@@ -315,7 +315,7 @@ def listing(
     if virtual_worker:
         from chaeksas.center.api import virtual_workers  # noqa: PLC0415 — 순환 import를 피한다
 
-        # 접수 Bot의 작업 + **그 일괄이 맡긴 작업** — 읽을 때 잇는다 (C5 §가상 직원, ADR-0085).
+        # 접수 BPM 프로세스의 작업 + **그 일괄이 맡긴 작업** — 읽을 때 잇는다 (C5 §가상 직원, ADR-0085).
         intake, batches = virtual_workers.runs_of(store, virtual_worker)
         def belongs(row: Any) -> bool:
             return virtual_workers.job_belongs(row, intake=intake, batches=batches)
@@ -343,7 +343,7 @@ def cancel(
 
     `dispatched`·`queued`는 **Center 혼자 끝낼 수 없다** — 그사이 실행을 시작했을 수 있어서,
     현장에 물어보고(`cancel_jobs`) ack를 기다린다. 시작된 것은 거절이고 작업은 `accepted`로
-    남는다 (실행 중인 Bot을 멈추는 것은 schema 1 범위 밖).
+    남는다 (실행 중인 BPM 프로세스를 멈추는 것은 schema 1 범위 밖).
 
     **`by_center`는 Center 안에서 부를 때만 참이다** — `create`와 **같은 결**이다 (지금은
     **PC 위임을 거두는 길**뿐이다, ADR-0062 §5): 그 길은 실행기 키로 들어와 **제 관문**을 이미
@@ -405,7 +405,7 @@ def server_heartbeat(
     """하트비트 한 번 (C12). **대기열은 Center가 가지므로** 빈자리만큼만 골라 보낸다.
 
     C4와 순서는 같다 (ack → 만료 → 맞추기 → 고르기). 다른 것은 **무엇을 「보았다」고 할
-    것인가**다 — Bot UI는 대기열을 올려 주지만 실행기는 `running[]`·`waiting[]`을 올린다.
+    것인가**다 — PC 실행기는 대기열을 올려 주지만 실행기는 `running[]`·`waiting[]`을 올린다.
     """
     acked = _apply_acks(store, host_id=runner_id, acks=request.job_acks)
     _expire_due(store, host_id=runner_id, now=now_iso())
@@ -450,7 +450,7 @@ def _per_bot_limits(store: Store, bots: Iterable[str]) -> dict[str, int]:
 def _running_per_bot(store: Store) -> dict[str, int]:
     """지금 서버에서 도는 수 (BPM 프로세스별) — **실행기 전부를 합쳐** 센다.
 
-    상한은 「이 서버에서 n건」이 아니라 「이 Bot이 한 번에 n건」이다 (C12 §3). 한 실행기만
+    상한은 「이 서버에서 n건」이 아니라 「이 BPM 프로세스가 한 번에 n건」이다 (C12 §3). 한 실행기만
     보면 실행기를 늘릴 때마다 상한이 같이 늘어난다.
     """
     out: dict[str, int] = {}
@@ -484,7 +484,7 @@ def _server_dispatch(
 ) -> list[JobDispatch]:
     """내려줄 작업 — **빈자리만큼만** (C12 §Center가 작업을 나누는 규칙).
 
-    고르는 것은 계약의 `pick_jobs()`다 — **건너뛰고 다음을 본다**(막아 세우면 상한에 걸린 Bot
+    고르는 것은 계약의 `pick_jobs()`다 — **건너뛰고 다음을 본다**(막아 세우면 상한에 걸린 BPM 프로세스
     하나가 대기열 전체를 멈춘다). 건너뛴 까닭은 `state_reason`에 적어 CON-12가 보인다.
 
     고른 작업은 **이 실행기에 묶는다** — 한 실행은 시작한 실행기에 끝까지 머문다 (상태가 그
@@ -690,7 +690,7 @@ def _reconcile(store: Store, *, host_id: str, seen: set[str], lost_reason: str =
     실행하는 쪽이 비정상 종료로 쥔 것을 잃으면 작업은 영원히 `queued`로 남는다. 두 번 연속
     하트비트에서 보이지 않고 ack도 없으면 `rejected` + `lost_reason`이다.
 
-    **무엇을 「보았다」고 할지는 부르는 쪽이 정한다** (`seen`) — Bot UI는 대기열·실행 자리로,
+    **무엇을 「보았다」고 할지는 부르는 쪽이 정한다** (`seen`) — PC 실행기는 대기열·실행 자리로,
     서버 실행기는 `running[]`·`waiting[]`으로 말한다 (C12).
     """
     for row in store.rows(
@@ -724,7 +724,7 @@ def _reconcile(store: Store, *, host_id: str, seen: set[str], lost_reason: str =
 def _to_dispatch(store: Store, *, host_id: str, disabled: bool) -> list[JobDispatch]:
     """내려줄 작업 (C4 `jobs`) — **ack가 올 때까지 매번 실린다**.
 
-    비활성화된 Bot UI에는 **새 작업을 보내지 않는다** (C5 CON-03). 작업은 `pending`으로 남아
+    비활성화된 PC 실행기에는 **새 작업을 보내지 않는다** (C5 CON-03). 작업은 `pending`으로 남아
     기다린다 — 되살리려고 다시 만들 필요가 없다.
     """
     if disabled:

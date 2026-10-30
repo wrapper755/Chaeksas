@@ -2,7 +2,7 @@
   "$defs": {
     "VirtualWorkerBatch": {
       "additionalProperties": true,
-      "description": "일괄 하나 = 접수 Bot 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다.",
+      "description": "일괄 하나 = 접수 BPM 프로세스 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다.",
       "properties": {
         "children": {
           "default": 0,

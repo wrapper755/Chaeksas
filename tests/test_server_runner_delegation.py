@@ -1,4 +1,4 @@
-"""서버 Bot이 **PC Bot에 한 자리를 맡기고 결과를 받아 이어 간다** (C12 §PC 위임, ADR-0062).
+"""서버 BPM 프로세스가 **PC BPM 프로세스에 한 자리를 맡기고 결과를 받아 이어 간다** (C12 §PC 위임, ADR-0062).
 
 한 줄로 본다: 작업 지시 → 서버 실행기가 돌림 → `chk:call.delegate`에서 **Center에 맡기고
 자리를 놓음** → Center가 PC를 골라 작업으로 만듦 → PC가 작업 ack에 값을 실어 올림 →
@@ -50,7 +50,7 @@ AT = "2026-10-13T09:00:00+09:00"
 VERSION = "1.0.0"
 WAIT_S = 20.0
 
-#: 맡기는 서버 Bot과 맡겨지는 PC Bot — **따로 올리고 따로 배포한다** (ADR-0062의 값이다).
+#: 맡기는 서버 BPM 프로세스와 맡겨지는 PC BPM 프로세스 — **따로 올리고 따로 배포한다** (ADR-0062의 값이다).
 SERVER_BOT = "fin.invoice"
 PC_BOT = "fin.erp-input"
 CLAIM = "CLM-2026-001"
@@ -182,7 +182,7 @@ def package_zip(
         "entry": "process/main.bpmn",
         "process_id": process_id,
         # **Studio가 그림에서 모으는 자리다** (C1 `requires.delegations`) — 배포 때 Center가
-        # 「그 PC Bot이 승인되어 있나」를 본다 (422 `delegation_not_approved`).
+        # 「그 PC BPM 프로세스가 승인되어 있나」를 본다 (422 `delegation_not_approved`).
         "requires": {"delegations": delegations or []},
         "inputs": inputs or [],
         "outputs": outputs or [],
@@ -227,7 +227,7 @@ PC_KEYS: dict[str, str] = {}
 
 
 def register_pc(center: TestClient, *, name: str, machine: str) -> str:
-    """등록된 활성 Bot UI 하나 — 돌려주는 것은 `bot_ui_id`다 (C4).
+    """등록된 활성 PC 실행기 하나 — 돌려주는 것은 `bot_ui_id`다 (C4).
 
     **등록돼 있어야 위임이 간다** (ADR-0049 — 배포 대상은 등록된 PC여야 한다).
     """
@@ -250,7 +250,7 @@ def register_pc(center: TestClient, *, name: str, machine: str) -> str:
 
 
 def pc_beat(center: TestClient, bot_ui_id: str, **over: Any) -> dict[str, Any]:
-    """PC 하트비트 (C4) — 이 시험에서 PC는 **이것뿐**이다 (진짜 Bot UI는 M5가 본다)."""
+    """PC 하트비트 (C4) — 이 시험에서 PC는 **이것뿐**이다 (진짜 PC 실행기는 M5가 본다)."""
     made = center.post(
         "/api/v1/bot-ui/heartbeat",
         json={
@@ -573,7 +573,7 @@ def test_waiting_for_a_delegation_leaves_the_slot_for_another_job(
 ) -> None:
     """**상한 1에 위임 하나를 들고도 새 작업을 받는다** (ADR-0062 「증명할 다섯」의 1).
 
-    PC와 거꾸로다 — PC Bot은 결재를 기다려도 자리를 끝까지 쥐지만(ADR-0014) 서버는 놓는다.
+    PC와 거꾸로다 — PC BPM 프로세스는 결재를 기다려도 자리를 끝까지 쥐지만(ADR-0014) 서버는 놓는다.
     """
     settings = settings_at(tmp_path / "runner1", max_concurrency=1)
     runner = agent_mod.build(settings, key, client=center, store=store)
@@ -636,8 +636,8 @@ def test_the_field_outputs_reach_the_server_variables(
     """**PC가 진짜로 돌려 만든 값**이 서버 실행의 변수가 된다 (증명할 다섯의 3).
 
     위의 시험들은 PC를 가짜 하트비트로 흉내 내지만, 값을 만드는 **현장 쪽 길**(실행기가
-    선언한 `outputs`를 출력 파일에 쓰고 Bot UI가 거두며 지운다)은 그렇게는 보이지 않는다.
-    그래서 여기서는 그 Bot을 **진짜 자식 프로세스로** 돌리고, 그 결과를 작업 ack로 올린다.
+    선언한 `outputs`를 출력 파일에 쓰고 PC 실행기가 거두며 지운다)은 그렇게는 보이지 않는다.
+    그래서 여기서는 그 BPM 프로세스를 **진짜 자식 프로세스로** 돌리고, 그 결과를 작업 ack로 올린다.
 
     흉내 내는 것은 **C4 하트비트 한 번**뿐이다 (그 전송은 C4 시험이 본다).
     """
@@ -651,7 +651,7 @@ def test_the_field_outputs_reach_the_server_variables(
     run_id = until_waiting_for_delegation(runner)
     job_id = str(waiting_row(center)["job_id"])
 
-    # ① 그 PC에 Bot을 깔고 **위임으로 받은 작업처럼** 돌린다.
+    # ① 그 PC에 BPM 프로세스를 깔고 **위임으로 받은 작업처럼** 돌린다.
     pc_zip = tmp_path / "pc.zip"
     pc_zip.write_bytes(
         package_zip(

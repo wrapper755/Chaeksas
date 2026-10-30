@@ -10,7 +10,7 @@
 2. **패키지가 고정한 해시여야 한다** (C1) — 정의가 바뀌면 실행 **전에** 거절한다.
 3. **닿지 못하면 들고 있던 것을 쓴다** (ADR-0007). **404는 버린다** (철회는 보안 동작이다).
 4. **외부 앱의 키는 어댑터 일꾼만 안다** — 실행하는 쪽·Center·실행 기록 어디에도 없다.
-5. **그 Bot이 쓰는 것만** 파일에 담는다.
+5. **그 BPM 프로세스가 쓰는 것만** 파일에 담는다.
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ def key(store: Store) -> Any:
 
 
 def public_keys(client: TestClient) -> list[Any]:
-    """Center가 믿는 공개키(Center 키) — Bot UI는 하트비트로 받는다 (C4 `admin_keys`)."""
+    """Center가 믿는 공개키(Center 키) — PC 실행기는 하트비트로 받는다 (C4 `admin_keys`)."""
     from chaeksas.contracts.signing import AdminKey
 
     found = client.get("/api/v1/admin-keys", headers=ADMIN).json()
@@ -294,7 +294,7 @@ def test_a_definition_without_an_envelope_is_refused(ocr: tuple[int, type[Ocr]])
 def test_a_changed_definition_is_unusable_for_that_package(
     client: TestClient, key: Any, ocr: tuple[int, type[Ocr]]
 ) -> None:
-    """정의가 바뀌었으면 그 Bot은 **승인·배포를 다시 받아야 한다** — 몰래 새 정의로 돌지 않는다."""
+    """정의가 바뀌었으면 그 BPM 프로세스는 **승인·배포를 다시 받아야 한다** — 몰래 새 정의로 돌지 않는다."""
     port, _ = ocr
     approved = definition(port)  # 패키지가 승인받을 때 본 정의
     newer = definition(port, version="1.1.0")  # Center에 올라온 새 판
@@ -324,7 +324,7 @@ def test_a_builtin_extension_is_not_checked_here(client: TestClient) -> None:
     assert build({}).unusable(needs) == []
 
 
-# ─────────────────────────── Bot UI가 받아 온다 (C7) ───────────────────────────
+# ─────────────────────────── PC 실행기가 받아 온다 (C7) ───────────────────────────
 
 
 def test_bot_ui_fetches_and_writes_what_the_bot_uses(
@@ -398,7 +398,7 @@ def test_a_revoked_definition_is_dropped(
 def test_only_what_the_manifest_asks_for_goes_in_the_file(
     client: TestClient, ocr: tuple[int, type[Ocr]], tmp_path: Path
 ) -> None:
-    """**필요한 것만 준다** — 다른 Bot이 쓰는 확장의 정의는 담지 않는다."""
+    """**필요한 것만 준다** — 다른 BPM 프로세스가 쓰는 확장의 정의는 담지 않는다."""
     port, _ = ocr
     found = definition(port)
     other = definition(port, id="ext-credit", name="외부 신용")

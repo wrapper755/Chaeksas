@@ -62,7 +62,7 @@ def cross_check(examples: list[Example]) -> list[str]:
                 tgt = n.props["called"].removeprefix("Proc_")
                 if n.props.get("delegate"):
                     # **PC 위임은 패키지 안에서 찾지 않는다** (C14 B14) — 대상은 따로 올리고
-                    # 따로 배포한 Bot이다. `called`는 읽는 사람을 위한 표시이고 `called` 목록
+                    # 따로 배포한 BPM 프로세스이다. `called`는 읽는 사람을 위한 표시이고 `called` 목록
                     # (= `requires.libs`로 가는 공유 정의)에 들어가서는 안 된다.
                     if tgt in e.called:
                         errs.append(f"{e.id}: 위임 대상 {tgt}는 called 목록에 넣지 않는다 (다른 패키지다)")
@@ -130,7 +130,7 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
     if sorted({n.props["called"].removeprefix("Proc_") for n in plain}) != sorted(set(e.called)):
         errs.append(f"{e.id}: called 목록과 호출 노드가 다름")
 
-    # **PC 위임 ↔ 대상 Bot** (C14 `chk:call.delegate`, ADR-0062) — 대상은 다른 패키지라 플랫폼
+    # **PC 위임 ↔ 대상 BPM 프로세스** (C14 `chk:call.delegate`, ADR-0062) — 대상은 다른 패키지라 플랫폼
     # 검사는 들여다보지 않지만, 여기서는 **대상도 예제**라 짝을 맞춰 볼 수 있다. 이 자리가
     # 그래야 하는 까닭: 패키지 id는 **글자로만 가리키는 자리**라 틀려도 실행할 때까지 숨는다
     # (BX-16이 파일 이름을 적어 두었던 일 — 그 예제의 「배운 것」에 있다).
@@ -144,8 +144,8 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
                         f"(패키지 id는 예제 파일 이름의 `_`를 `-`로 바꾼 것이다 — C1 `id`)")
             continue
         if tgt is e:
-            # **자기 자신에게 위임하지 않는다** (C1 R12) — 끝나지 않는 되부름이다. 대상은 PC Bot이든
-            # 서버 Bot이든 된다 — 어디서 도는지는 대상 패키지가 정한다 (ADR-0082).
+            # **자기 자신에게 위임하지 않는다** (C1 R12) — 끝나지 않는 되부름이다. 대상은 PC BPM 프로세스이든
+            # 서버 BPM 프로세스이든 된다 — 어디서 도는지는 대상 패키지가 정한다 (ADR-0082).
             errs.append(f"{e.id}: {n.id} 자기 자신에게 위임한다 (C1 R12)")
         t = n.props["task"]
         tin = {i[0] for i in tgt.inputs}
@@ -377,12 +377,12 @@ def coverage(examples: list[Example]) -> list[str]:
     L += [f"| {a} | {ids(p)} |" for a, p in plat_rows]
     L += ["", "## 마일스톤별 인수 시험 묶음", "",
           "예제가 쓰는 기능으로 자동으로 정한다: 기본 M3(Studio 시험 실행), UI 태스크·데스크톱 → M4, 서비스 앱·확장 → M5. "
-          "처음 통과한 뒤에는 회귀로 계속 돈다. M5에서 PC 예제는 Center 배포 → Bot UI 실행으로, M7에서 서버 예제는 서버 실행기에서 다시 통과해야 한다.", "",
+          "처음 통과한 뒤에는 회귀로 계속 돈다. M5에서 PC 예제는 Center 배포 → PC 실행기 실행으로, M7에서 서버 예제는 서버 실행기에서 다시 통과해야 한다.", "",
           "| 마일스톤 | 처음 통과해야 하는 예제 | 다시 통과 |", "| --- | --- | --- |"]
     by = {}
     for e in examples:
         by.setdefault(first_milestone(e), []).append(e.id)
-    again = {"M5": "PC 예제: Center 배포 → Bot UI", "M7": "서버 예제 전부: 서버 실행기"}
+    again = {"M5": "PC 예제: Center 배포 → PC 실행기", "M7": "서버 예제 전부: 서버 실행기"}
     for k in ("M3", "M4", "M5", "M7"):
         L.append(f"| {k} | {', '.join(by.get(k, [])) or '—'} | {again.get(k, '')} |")
     return L
@@ -399,7 +399,7 @@ def first_milestone(e: Example) -> str:
 
 def set_milestone(e: Example) -> None:
     m = first_milestone(e)
-    tail = "M5 Center 배포 → M7 서버 실행기" if e.run_location == "server" else "M5 Center 배포 → Bot UI 실행"
+    tail = "M5 Center 배포 → M7 서버 실행기" if e.run_location == "server" else "M5 Center 배포 → PC 실행기 실행"
     e.milestone = f"**{m}** Studio 시험 실행에서 처음 통과 → {tail}"
 
 

@@ -3,9 +3,9 @@
 세 가지를 지킨다.
 
 1. **원문은 저장하지 않는다.** 해시만 두고, 발급 응답에 **한 번만** 원문을 싣는다 (CON-11).
-2. **키가 신원이다.** Bot UI는 `bot_ui_id`를 보내지 않는다 — 키로 누구인지 정한다 (C4).
+2. **키가 신원이다.** PC 실행기는 `bot_ui_id`를 보내지 않는다 — 키로 누구인지 정한다 (C4).
 3. **키는 처음 등록한 PC에 묶인다.** 다른 PC에서 같은 키를 쓰면 409 — 키가 새어도 다른
-   Bot UI를 사칭할 수 없다. 운영자가 CON-11에서 묶음을 풀 수 있다.
+   PC 실행기를 사칭할 수 없다. 운영자가 CON-11에서 묶음을 풀 수 있다.
 """
 
 from __future__ import annotations
@@ -205,7 +205,7 @@ def revoke(store: Store, key_id: str) -> bool:
 def purge(store: Store, key_id: str) -> bool:
     """폐기된 키의 행을 지운다 (CON-11 「삭제」, [ADR-0095]). **폐기된 것만** — 아니면 `False`.
 
-    키 행을 가리키는 것(Bot UI·서버 실행기 행의 `key_id`, 실행 기록·결재의 `owner_key_id`,
+    키 행을 가리키는 것(PC 실행기·서버 실행기 행의 `key_id`, 실행 기록·결재의 `owner_key_id`,
     회전의 `successor_id`)은 그대로 둔다 — 모두 키 행이 없을 때를 다룬다. 묶였던 기계 자리는
     「묶음 풀기」처럼 놓인 자리가 된다 (`host_keys._adopt_or_refuse`).
     """

@@ -21,14 +21,14 @@ import type { ExternalTaskInfo } from "@chaeksas/api-types/c15-external-task-inf
 export const SAMPLE = 20;
 
 /**
- * Bot 하나당 훑어보는 실행 수. **버전마다 최근 20회**를 찾으려면 그보다 많이 봐야 한다
- * (한 Bot에 여러 판이 돈다). 그래도 못 채운 버전은 **표본 수가 작게 보인다** — 비어 있는
+ * BPM 프로세스 하나당 훑어보는 실행 수. **버전마다 최근 20회**를 찾으려면 그보다 많이 봐야 한다
+ * (한 BPM 프로세스에 여러 판이 돈다). 그래도 못 채운 버전은 **표본 수가 작게 보인다** — 비어 있는
  * 칸을 「0%」로 그리지 않는 것이 이 화면의 규칙이다.
  */
 export const SCAN = 200;
 /** 끝난 실행의 상태 (C3 `run_finished.status`) — 표본에 넣는 것들. 도는 중·기다리는 중은 세지 않는다. */
 export const FINISHED = new Set(["success", "failed", "cancelled"]);
-/** 한 (Bot, 버전)의 집계 한 줄. */
+/** 한 (BPM 프로세스, 버전)의 집계 한 줄. */
 export interface BotRow {
   id: string;
   version: string;
@@ -50,12 +50,12 @@ export interface BotRow {
   /** `confirmations`를 보낸 끝난 실행 수 — 「확인률」의 분모다 (0이면 재지 않는다). */
   confirm_sample: number;
   last_success: string | null;
-  /** 이 판을 「실행 불가」로 보고한 Bot UI 수 (C4 `readiness.ready === false`). */
+  /** 이 판을 「실행 불가」로 보고한 PC 실행기 수 (C4 `readiness.ready === false`). */
   blocked: number;
   /** 그 PC들이 말한 막은 점검 코드 (툴팁). */
   blocked_codes: string[];
   /**
-   * 이 판이 배포된 **Bot UI(PC) 수** — 살아 있는 PC 배포의 `target.id`를 겹치지 않게 센다.
+   * 이 판이 배포된 **PC 실행기(PC) 수** — 살아 있는 PC 배포의 `target.id`를 겹치지 않게 센다.
    *
    * **PC 배포에는 전체(`*`) 대상이 없다** (ADR-0046) — 봉투 하나가 PC 하나를 가리키므로 풀
    * 것이 없고, 이 수는 어림이 아니라 정확하다. 서버 배포(M7)는 PC가 아니라 세지 않는다.
@@ -77,7 +77,7 @@ export function percent(part: number, whole: number): string | null {
  * **세는 쪽은 제가 세지 않은 칸을 들고 다니지 않는다.** 전에는 반환 타입이 「패키지에서 오는
  * 칸만 뺀 나머지」였던 탓에 `summarize`가 `blocked`·`deployments`까지 **0으로 들고** 돌아왔고,
  * 줄을 짓는 자리에서 그것을 **나중에 펼쳐** 실제 값을 덮었다 — 끝난 실행이 있는 판은
- * 「실행 불가」·「배포된 Bot UI」가 늘 0이고 경고 띠도 뜨지 않았다.
+ * 「실행 불가」·「배포된 PC 실행기」가 늘 0이고 경고 띠도 뜨지 않았다.
  */
 export type RunFields = Pick<
   BotRow,
@@ -100,7 +100,7 @@ export const NO_RUNS: RunFields = {
   confirm_sample: 0,
   last_success: null,
 };
-/** 실행 요약들을 (Bot, 버전)으로 묶어 **최근 20회만** 센다. */
+/** 실행 요약들을 (BPM 프로세스, 버전)으로 묶어 **최근 20회만** 센다. */
 export function summarize(runs: RunInfo[]): Map<string, RunFields> {
   const out = new Map<string, RunFields>();
   const counted = new Map<string, number>();
@@ -131,15 +131,15 @@ export function summarize(runs: RunInfo[]): Map<string, RunFields> {
   return out;
 }
 /**
- * 「배포된 Bot UI」 — 그 판이 **살아 있는 PC 배포로 걸린 PC 수**와 그 건수 (C5).
+ * 「배포된 PC 실행기」 — 그 판이 **살아 있는 PC 배포로 걸린 PC 수**와 그 건수 (C5).
  *
  * **PC 배포는 대상이 `bot_ui_id` 하나씩이다** (ADR-0046) — 그래서 `target.id`를 겹치지 않게
  * 세면 끝이고, Center가 대상을 풀어 줄 필요가 없다. 겹침을 지우는 까닭은 같은 판을 같은 PC에
  * 두 번 배포할 수 있어서다(옛 배포가 살아 있는 채) — 그때 **건수는 PC 수보다 크다**.
  *
- * `target.type`이 `bot_ui`인 것만 센다 — 열의 이름이 「배포된 **Bot UI**」다 (서버 배포는 M7).
+ * `target.type`이 `bot_ui`인 것만 센다 — 열의 이름이 「배포된 **PC 실행기**」다 (서버 배포는 M7).
  *
- * **등록된 Bot UI와 맞춰 보지 않는다.** 세는 것은 「배포가 가리키는 PC」이고, 가리킨 PC가 아직
+ * **등록된 PC 실행기와 맞춰 보지 않는다.** 세는 것은 「배포가 가리키는 PC」이고, 가리킨 PC가 아직
  * 등록하지 않았으면 그것은 **보여야 하는 어긋남**이다 (잘못 서명한 배포가 0대로 숨으면
  * 아무도 못 찾는다). 어느 PC가 정말 있는지는 CON-03이 말한다.
  */
@@ -184,8 +184,8 @@ export function runnerStatus(row: ServerRunnerInfo): string {
  * `GET /deployments?bot_ui=`는 PC 대상만 풀어 주므로(그쪽은 `"*"`가 없다) 서버 쪽은
  * **활성 배포를 한 번 읽어 여기서** 좁힌다 (CON-06이 패키지 종류를 콘솔에서 가리는 것과 같은 결).
  *
- * **종류를 먼저 거르는 것이 요점이다** — 같은 Bot이 PC와 서버에 함께 배포돼 있으면 PC 봉투의
- * 상한을 서버 대기열의 「Bot별 상한 n」으로 보일 수 있다. 대기열은 아직 어느 실행기에도 묶이지
+ * **종류를 먼저 거르는 것이 요점이다** — 같은 BPM 프로세스가 PC와 서버에 함께 배포돼 있으면 PC 봉투의
+ * 상한을 서버 대기열의 「BPM 프로세스별 상한 n」으로 보일 수 있다. 대기열은 아직 어느 실행기에도 묶이지
  * 않아(C12) `runnerId` 없이 부른다.
  */
 export function serverDeployments(all: DeploymentInfo[], runnerId?: string): DeploymentInfo[] {
@@ -196,13 +196,13 @@ export function serverDeployments(all: DeploymentInfo[], runnerId?: string): Dep
   );
 }
 
-/** 지금 그 Bot을 돌리고 있는 실행 수 (C12 `running[]` — **기다리는 실행은 세지 않는다**). */
+/** 지금 그 BPM 프로세스를 돌리고 있는 실행 수 (C12 `running[]` — **기다리는 실행은 세지 않는다**). */
 export function runningOfBot(row: ServerRunnerInfo, bot: string): number {
   return (row.running ?? []).filter((one) => one.bpm_process_id === bot).length;
 }
 
 /**
- * 그 Bot의 **동시 실행 상한** — 배포 봉투에 적힌 값이다 (C12 §Center가 작업을 나누는 규칙 3).
+ * 그 BPM 프로세스의 **동시 실행 상한** — 배포 봉투에 적힌 값이다 (C12 §Center가 작업을 나누는 규칙 3).
  *
  * **적혀 있지 않으면 `null`이다.** 기본값(계약의 `DEFAULT_PER_BOT_CONCURRENCY`)을 여기 베껴
  * 적지 않는다 — 계약 쪽 숫자가 바뀌면 화면만 조용히 거짓말을 한다. 화면은 「기본」이라고 적고
@@ -234,7 +234,7 @@ interface ReadinessLike {
 }
 
 /**
- * 보고된 준비 상태 → `status_map` 「Bot 준비」의 표기와 툴팁 거리 (C4·C12 `Readiness`).
+ * 보고된 준비 상태 → `status_map` 「BPM 프로세스 준비」의 표기와 툴팁 거리 (C4·C12 `Readiness`).
  *
  * 보고가 없으면 **`null`**이다 (「확인 전」이라고 단정하지 않는다 — 모르는 것을 안다고 하지
  * 않는다). 가르는 순서는 BUI-04와 **같고**, **「꺼 뒀다」와 「없다」는 다른 점검이다**
@@ -272,7 +272,7 @@ export function runnerReadiness(
   );
 }
 
-/** CON-12 상세 「Bot별 상한」 한 줄. */
+/** CON-12 상세 「BPM 프로세스별 상한」 한 줄. */
 export interface BotLimitRow {
   bot: string;
   version: string;
@@ -283,13 +283,13 @@ export interface BotLimitRow {
 }
 
 /**
- * 「Bot별 상한」 — **배포가 줄을 정하고**, 실행 수와 준비는 실행기 보고에서 온다.
+ * 「BPM 프로세스별 상한」 — **배포가 줄을 정하고**, 실행 수와 준비는 실행기 보고에서 온다.
  *
- * 줄의 출처가 배포인 까닭: 배포됐는데 실행기가 아직 준비 상태를 올리지 않은 Bot이 **보여야
+ * 줄의 출처가 배포인 까닭: 배포됐는데 실행기가 아직 준비 상태를 올리지 않은 BPM 프로세스가 **보여야
  * 한다** (「배포는 했는데 왜 안 도나」가 이 화면에서 풀려야 한다 — CON-03과 같은 결). 거꾸로
- * `readiness`로 줄을 지으면 그 Bot이 아예 사라진다.
+ * `readiness`로 줄을 지으면 그 BPM 프로세스가 아예 사라진다.
  *
- * 철회된 배포는 부르는 쪽이 `active`로 걸러 온다. 같은 Bot의 판이 둘 이상 살아 있으면 **줄도
+ * 철회된 배포는 부르는 쪽이 `active`로 걸러 온다. 같은 BPM 프로세스의 판이 둘 이상 살아 있으면 **줄도
  * 둘**이다 (실행기는 판마다 따로 준비 상태를 올린다).
  */
 export function botLimitRows(
@@ -330,7 +330,7 @@ export function queueReason(
 ): string {
   if (job.state_reason === "per_bot_limit") {
     const limit = perBotLimit(deployments, job.bpm_process_id);
-    return limit === null ? "Bot별 상한" : `Bot별 상한 ${limit}`;
+    return limit === null ? "BPM 프로세스별 상한" : `BPM 프로세스별 상한 ${limit}`;
   }
   if (job.state_reason) return job.state_reason;
   if (runners.length > 0 && runners.every((one) => one.paused)) return "일시 중지";
@@ -387,7 +387,7 @@ export interface ResumeRow {
 /**
  * C3 `run_waiting`·`run_resumed`를 **짝지어** 기다림 목록을 만든다 (CON-01 「이어 돈 기록」).
  *
- * 두 줄은 **서버 실행만 남긴다** (C3 — PC Bot은 기다리는 동안에도 실행 자리를 쥐고 있어
+ * 두 줄은 **서버 실행만 남긴다** (C3 — PC BPM 프로세스는 기다리는 동안에도 실행 자리를 쥐고 있어
  * `node_state: waiting`만으로 뜻이 통한다). 그래서 PC 실행의 이 표는 늘 비어 있다.
  *
  * **기다린 시간은 보낸 쪽이 센 것(`after_s`)을 쓴다** — Center의 요약이 그렇듯 받는 쪽이 다시
@@ -437,7 +437,7 @@ export function waitTotals(rows: ResumeRow[]): { resumed: number; seconds: numbe
   };
 }
 
-/** CON-02 탭 — Bot이 도는 곳 (C1 `run_location`, **생략하면 서버** — 서버 우선). */
+/** CON-02 탭 — BPM 프로세스가 도는 곳 (C1 `run_location`, **생략하면 서버** — 서버 우선). */
 export type Place = "server" | "pc";
 
 export function placeOf(runLocation: string | null | undefined): Place {
@@ -448,10 +448,10 @@ export function placeOf(runLocation: string | null | undefined): Place {
 // ─────────────────────────── CON-02 「일정」 (C5 §일정, ADR-0110) ───────────────────────────
 
 /**
- * 그 탭의 일정 — **대상 종류로** 가른다 (서버 실행기 ↔ 「서버」, Bot UI ↔ 「PC」).
+ * 그 탭의 일정 — **대상 종류로** 가른다 (서버 실행기 ↔ 「서버」, PC 실행기 ↔ 「PC」).
  *
  * 매니페스트의 실행 위치로 가르지 않는 것은 **일정은 배포에서 오기** 때문이다 — Center가 쓰는 것과
- * 같은 줄을 보인다. 정렬은 Center가 한 그대로다 (Bot·버전·대상).
+ * 같은 줄을 보인다. 정렬은 Center가 한 그대로다 (BPM 프로세스·버전·대상).
  */
 export function schedulesOf(rows: ScheduleInfo[], place: Place): ScheduleInfo[] {
   const wanted = place === "server" ? "server_runner" : "bot_ui";

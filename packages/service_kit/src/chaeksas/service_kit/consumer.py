@@ -107,7 +107,7 @@ class TokenFile:
 
 @dataclass
 class Enrollment:
-    """일꾼 들이기 (C15 §일꾼 들이기 — Bot UI 등록 요청과 같은 결, ADR-0092 §1).
+    """일꾼 들이기 (C15 §일꾼 들이기 — PC 실행기 등록 요청과 같은 결, ADR-0092 §1).
 
     `step()`을 되풀이해 부른다: 처음에는 요청을 보내고 요청 코드를 돌려주며, 승인되면 토큰을 열어
     `TokenFile`에 두고 `None`을 돌려준다(다 됐다).

@@ -1,4 +1,4 @@
-"""사전 점검 — Bot을 띄우기 전에 이 PC에서 볼 수 있는 것을 본다 (ADR-0013 §사전 점검, C4 `Readiness`).
+"""사전 점검 — BPM 프로세스를 띄우기 전에 이 PC에서 볼 수 있는 것을 본다 (ADR-0013 §사전 점검, C4 `Readiness`).
 
 보는 것은 두 갈래다.
 
@@ -10,7 +10,7 @@
 
 규칙 둘이 이 모듈의 모양을 정했다.
 
-- **서버를 부르지 않는다.** Bot UI는 하트비트마다 돌려 `readiness`에 싣는다 (C4) — 한 번이 비싸면
+- **서버를 부르지 않는다.** PC 실행기는 하트비트마다 돌려 `readiness`에 싣는다 (C4) — 한 번이 비싸면
   주기가 느려진다. 확장 점검도 같은 약속을 진다 (`PreflightCheck` 규약).
 - **점검이 실행을 막지 않는다.** 점검 하나가 터지면 그것만 빼고 사유를 `skipped`에 남긴다. 막는
   것은 `severity`가 `block`인 **결과**이고, 그것으로 멈출지는 부르는 쪽이 정한다.
@@ -69,7 +69,7 @@ class Preflight:
 
 
 def _check_settings(manifest: Manifest, have: Sequence[str]) -> Finding | None:
-    """그 Bot이 요구하는 설정이 이 PC·서버에 갖춰져 있나 (C1 `requires.settings`).
+    """그 BPM 프로세스가 요구하는 설정이 이 PC·서버에 갖춰져 있나 (C1 `requires.settings`).
 
     **갖춘 목록은 부르는 쪽이 준다** — 무엇이 갖춰진 것인지는 실행하는 쪽만 안다(SMTP 주소가
     있나 같은 것). 주지 않으면(`None`) **이 점검을 돌리지 않는다** — 모르는 것으로 막지 않는다.
@@ -83,7 +83,7 @@ def _check_settings(manifest: Manifest, have: Sequence[str]) -> Finding | None:
     return Finding(
         id=SETTINGS_MISSING,
         severity=SEVERITY_BLOCK,
-        message=f"이 Bot이 쓰는 설정 {len(missing)}개가 갖춰지지 않았습니다",
+        message=f"이 BPM 프로세스가 쓰는 설정 {len(missing)}개가 갖춰지지 않았습니다",
         items=tuple(missing),
         fix_hint="설정에서 그 자리를 채우세요 (메일은 BUI-03 「보내기」)",
     )
@@ -95,8 +95,8 @@ def _here(host: ExtensionHost) -> str:
 
 
 def _what(host: ExtensionHost) -> str:
-    """「무엇을 새 판으로 올리나」 — 서버에서 「Bot UI를 올리세요」는 할 수 없는 일을 시키는 셈이다."""
-    return "서버 실행기" if host.run_location == RUN_LOCATION_SERVER else "Bot UI"
+    """「무엇을 새 판으로 올리나」 — 서버에서 「PC 실행기를 올리세요」는 할 수 없는 일을 시키는 셈이다."""
+    return "서버 실행기" if host.run_location == RUN_LOCATION_SERVER else "PC 실행기"
 
 
 def _check_task_types(manifest: Manifest, host: ExtensionHost) -> Finding | None:
@@ -117,7 +117,7 @@ def _check_task_types(manifest: Manifest, host: ExtensionHost) -> Finding | None
     if not missing:
         return None
 
-    # **꺼 둔 것을 먼저 가른다** (ADR-0043) — 켜면 될 일에 「Bot UI를 다시 깔라」고 하면
+    # **꺼 둔 것을 먼저 가른다** (ADR-0043) — 켜면 될 일에 「PC 실행기를 다시 깔라」고 하면
     # 사람이 할 수 없는 일을 시키는 셈이다. 주인이 깔려 있는데 꺼져 있으면 고치는 길이 다르다.
     off = [
         f"{need.id} ({owner.manifest.name} 확장)"
@@ -189,9 +189,9 @@ def _check_extensions(manifest: Manifest, host: ExtensionHost) -> Finding | None
     return Finding(
         id=EXTENSIONS_UNUSABLE,
         severity=SEVERITY_BLOCK,
-        message=f"깔린 확장 {len(bad)}개가 이 Bot이 요구하는 판이 아닙니다",
+        message=f"깔린 확장 {len(bad)}개가 이 BPM 프로세스가 요구하는 판이 아닙니다",
         items=tuple(bad),
-        fix_hint=f"{_what(host)}를 새 판으로 올리거나, 그 판에 맞는 Bot을 배포하세요",
+        fix_hint=f"{_what(host)}를 새 판으로 올리거나, 그 판에 맞는 BPM 프로세스를 배포하세요",
     )
 
 
@@ -263,9 +263,9 @@ def check(
     fix_hint: str | None = None,
     settings: Sequence[str] | None = None,
 ) -> Preflight:
-    """그 Bot을 이 PC에서 지금 돌릴 수 있나.
+    """그 BPM 프로세스를 이 PC에서 지금 돌릴 수 있나.
 
-    - `host`: 없으면 확장 점검과 확장·환경 점검을 건너뛴다 (확장 없는 Bot UI도 Bot은 돈다).
+    - `host`: 없으면 확장 점검과 확장·환경 점검을 건너뛴다 (확장 없는 PC 실행기도 BPM 프로세스는 돈다).
     - `context`: 확장 id → 그 확장의 바깥 세상. `host`가 있어도 이것이 없으면 **확장 점검만**
       건너뛴다 (플랫폼 점검은 그대로 돈다).
     - `fix_hint`: 옛 칸이다 — 받기만 한다 (서비스 앱 키 점검이 없어졌다, ADR-0102).

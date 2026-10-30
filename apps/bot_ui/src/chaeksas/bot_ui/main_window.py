@@ -1,12 +1,12 @@
-"""BUI-02 메인 창 + BUI-04 Bot 탭. **창을 닫아도 Bot UI는 트레이에서 돈다.**
+"""BUI-02 메인 창 + BUI-04 BPM 프로세스 탭. **창을 닫아도 PC 실행기는 트레이에서 돈다.**
 
-실행 자리·대기열·**설치된 Bot**·로컬 런타임·상태 줄이 있다. 결재를 기다리는 중이면 「결재 창
+실행 자리·대기열·**설치된 BPM 프로세스**·로컬 런타임·상태 줄이 있다. 결재를 기다리는 중이면 「결재 창
 열기」가 CMN-01을 띄운다 (`packages/qt` — Studio와 **같은 창**이다).
 
-**화면은 Agent에서만 읽는다.** 상태는 실행기가 쓴 기록 파일에서 오고(ADR-0031), 화면은 그것을
-그릴 뿐이다 — 느린 실행기가 화면을 붙잡지 않는다.
+**화면은 Agent에서만 읽는다.** 상태는 실행 프로세스가 쓴 기록 파일에서 오고(ADR-0031), 화면은 그것을
+그릴 뿐이다 — 느린 실행 프로세스가 화면을 붙잡지 않는다.
 
-「준비」 열은 **사전 점검**(`core.preflight`)이 말하는 것이고, 표기는 `status_map`의 「Bot 준비」에
+「준비」 열은 **사전 점검**(`core.preflight`)이 말하는 것이고, 표기는 `status_map`의 「BPM 프로세스 준비」에
 있는 것만 쓴다 (`docs/07-style-guide.md`). 키가 없으면 그 줄에서 바로 BUI-10으로 갈 수 있다.
 """
 
@@ -68,20 +68,20 @@ from chaeksas.qt.approval import ApprovalDialog
 
 log = logging.getLogger(__name__)
 
-WINDOW_TITLE = "Chaeksas Bot UI"
+WINDOW_TITLE = "Chaeksas PC 실행기"
 WINDOW_SIZE = (1000, 720)
 
 #: BUI-04 대기열 표의 열 (「입력 키」의 값은 접는다 — U10).
-QUEUE_COLUMNS = ("#", "Bot", "출처", "요청 시각", "만료", "입력 키")
+QUEUE_COLUMNS = ("#", "BPM 프로세스", "출처", "요청 시각", "만료", "입력 키")
 
-#: BUI-04 설치된 Bot 표의 열. 「최근 실행」은 BUI-02와 같은 기록 파일에서 읽는다.
-BOT_COLUMNS = ("Bot", "버전", "출처", "서명", "준비", "상태", "최근 실행")
+#: BUI-04 설치된 BPM 프로세스 표의 열. 「최근 실행」은 BUI-02와 같은 기록 파일에서 읽는다.
+BOT_COLUMNS = ("BPM 프로세스", "버전", "출처", "서명", "준비", "상태", "최근 실행")
 READY_COLUMN = BOT_COLUMNS.index("준비")
 LAST_RUN_COLUMN = BOT_COLUMNS.index("최근 실행")
 #: 끝 줄이 없는 지난 실행 — 결과를 지어내지 않는다 (BUI-04).
-NO_ENDING = "끝 기록이 없습니다 — 실행기가 도중에 멈췄을 수 있습니다. 「실행 기록」 탭에서 보세요."
+NO_ENDING = "끝 기록이 없습니다 — 실행 프로세스가 도중에 멈췄을 수 있습니다. 「실행 기록」 탭에서 보세요."
 
-#: 「준비」의 표기 — `status_map`의 「Bot 준비」에 있는 것만 쓴다 (`docs/07-style-guide.md`).
+#: 「준비」의 표기 — `status_map`의 「BPM 프로세스 준비」에 있는 것만 쓴다 (`docs/07-style-guide.md`).
 READY = "준비됨"
 NO_EXTENSION = "확장 없음"
 #: 확장이 **깔려 있는데 사람이 껐다** (ADR-0043). 「확장 없음」과 섞지 않는다 — 고치는 길이
@@ -121,7 +121,7 @@ RUNTIME_STATE = STATE_LABELS
 #: 런타임이 `health`로 말하는 「지금 하는 일」 (C10 `session`).
 SESSION_LABEL = {
     "idle": "대기",
-    "bot": "Bot 요청 처리 중",
+    "bot": "BPM 프로세스 요청 처리 중",
     "studio": "Studio 요청 처리 중",
     "selector_registration": "셀렉터 등록 중",
 }
@@ -193,7 +193,7 @@ class MainWindow(QMainWindow):
         self._build_menu()
         tabs = QTabWidget()
         self.tabs = tabs
-        tabs.addTab(self._bots_tab(), "Bot")
+        tabs.addTab(self._bots_tab(), "BPM 프로세스")
         tabs.addTab(self._run_log_tab(), "실행 기록")
         tabs.addTab(self._runtimes_tab(), "로컬 런타임")
         self.setCentralWidget(tabs)
@@ -221,7 +221,7 @@ class MainWindow(QMainWindow):
         tools = self._tools_menu
         tools.clear()
         # 도구는 **확장이 기여하고 Tool UI가 띄운다** (ADR-0018·0077) — 여기는 바로가기뿐이고
-        # Bot UI는 어느 확장인지 모른다. 순서는 트레이와 같다(확장 이름순).
+        # PC 실행기는 어느 확장인지 모른다. 순서는 트레이와 같다(확장 이름순).
         found_tools = self._agent.host.tools() if self._agent.host is not None else []
         for found in sorted(found_tools, key=lambda c: (c.extension_id, c.value.label)):
             action = tools.addAction(f"{found.value.label}...")
@@ -268,7 +268,7 @@ class MainWindow(QMainWindow):
         self.cancel_button.clicked.connect(self.cancel_selected)
         layout.addWidget(self.cancel_button, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        self.bots_title = QLabel("설치된 Bot")
+        self.bots_title = QLabel("설치된 BPM 프로세스")
         layout.addWidget(self.bots_title)
 
         self.bots_table = QTableWidget(0, len(BOT_COLUMNS))
@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
                     found.extension_id, runtime_ids=(runtime,) if runtime else ()
                 )
                 widget = panel.widget(context)
-            except Exception as e:  # noqa: BLE001 — 확장이 깨져도 Bot UI는 산다
+            except Exception as e:  # noqa: BLE001 — 확장이 깨져도 PC 실행기는 산다
                 log.exception("화면 칸을 만들지 못했다: %s", found.value.id)
                 inner.addWidget(QLabel(f"{PANEL_BROKEN} {e}"))
                 made.append(box)
@@ -398,7 +398,7 @@ class MainWindow(QMainWindow):
         agent = self._agent
         run = agent.current_run
         if run is None:
-            self.running_label.setText("실행 중인 Bot이 없습니다.")
+            self.running_label.setText("실행 중인 BPM 프로세스가 없습니다.")
         else:
             node = f" @ {run.node_id}" if run.node_id else ""
             source = SOURCE_LABEL.get(run.source, run.source)
@@ -458,7 +458,7 @@ class MainWindow(QMainWindow):
                 continue
             try:
                 refresh()
-            except Exception:  # noqa: BLE001 — 확장이 깨져도 Bot UI는 산다
+            except Exception:  # noqa: BLE001 — 확장이 깨져도 PC 실행기는 산다
                 log.exception("화면 칸을 다시 그리지 못했다")
 
     def _refresh_runtimes(self) -> None:
@@ -511,7 +511,7 @@ class MainWindow(QMainWindow):
         self.runtime_log.setEnabled(True)
 
     def _reserved_label(self, run_id: str) -> str:
-        """BUI-09 「예약」 — 「예약됨 — <Bot> (<실행 id>)」. **Bot 이름을 모르면 적지 않는다.**"""
+        """BUI-09 「예약」 — 「예약됨 — <BPM 프로세스> (<실행 id>)」. **BPM 프로세스 이름을 모르면 적지 않는다.**"""
         if not run_id:
             return "예약 없음"
         run = self._agent.current_run
@@ -520,16 +520,17 @@ class MainWindow(QMainWindow):
         return f"예약됨 — {run_id}"
 
     def _refresh_bots(self) -> None:
-        """설치된 Bot 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 「최근 실행」은 기록 파일에서 읽는다."""
+        """설치된 BPM 프로세스 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 「최근 실행」은 기록 파일에서 읽는다."""
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 
         self._bots = installed(data_dir())
         latest = last_runs(data_dir())
         running = self._agent.current_run
         self.bots_title.setText(
-            f"설치된 Bot {len(self._bots)}개"
+            f"설치된 BPM 프로세스 {len(self._bots)}개"
             if self._bots
-            else "설치된 Bot이 없습니다. Center에서 이 PC에 배포하거나 「패키지 파일에서 설치...」로 설치하세요."
+            else "설치된 BPM 프로세스가 없습니다. "
+            "Center에서 이 PC에 배포하거나 「패키지 파일에서 설치...」로 설치하세요."
         )
         self.bots_table.setRowCount(len(self._bots))
         for row, bot in enumerate(self._bots):
@@ -545,7 +546,7 @@ class MainWindow(QMainWindow):
             for column, text in enumerate((bot.name, bot.version, bot.source, bot.signature, shown, state)):
                 item = QTableWidgetItem(text)
                 if column == READY_COLUMN:
-                    color = theme.status_color("Bot 준비", token, part="fg")
+                    color = theme.status_color("BPM 프로세스 준비", token, part="fg")
                     if color is not None:
                         item.setForeground(QColor(color))
                     item.setToolTip(tip)
@@ -556,7 +557,7 @@ class MainWindow(QMainWindow):
     def _bots_changed(self) -> None:
         chosen = self.selected_bot()
         self.run_button.setEnabled(chosen is not None)
-        self.run_button.setToolTip("" if chosen else "실행할 Bot을 고르세요.")
+        self.run_button.setToolTip("" if chosen else "실행할 BPM 프로세스를 고르세요.")
 
     def _refresh_running_buttons(self) -> None:
         running = self._agent.runner().running
@@ -614,7 +615,7 @@ class MainWindow(QMainWindow):
         answer = QMessageBox.question(
             self,
             WINDOW_TITLE,
-            f"실행 중인 Bot 「{running.bot.name}」을 멈출까요?",
+            f"실행 중인 BPM 프로세스 「{running.bot.name}」을 멈출까요?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
             QMessageBox.StandardButton.Cancel,
         )
@@ -630,7 +631,7 @@ class MainWindow(QMainWindow):
         if running is None or not running.pendings:
             return
         asked = running.pendings[0]
-        # **무엇을 판단하는지는 실행기가 쓴 본문이 말한다** (ADR-0078) — 제목·설명·검토 자료.
+        # **무엇을 판단하는지는 실행 프로세스가 쓴 본문이 말한다** (ADR-0078) — 제목·설명·검토 자료.
         # 아직 쓰이지 않았으면 그림에서 폼만 읽어 승인·반려라도 할 수 있게 한다.
         body = running.body_of(asked.request_id) or {}
         form = _form_from(body.get("form")) or self._form_of(running, asked.node_id)
@@ -670,7 +671,7 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def show_bots(self) -> None:
-        """BUI-04 「Bot」 탭 — 서비스 앱 키 알림이 가리키는 자리다 (BUI-10은 없다, ADR-0094)."""
+        """BUI-04 「BPM 프로세스」 탭 — 서비스 앱 키 알림이 가리키는 자리다 (BUI-10은 없다, ADR-0094)."""
         self.tabs.setCurrentIndex(0)
         self.refresh()
 

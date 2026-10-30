@@ -1,4 +1,4 @@
-"""Bot UI의 머리 — 등록·하트비트·대기열 (C4, ADR-0014).
+"""PC 실행기의 머리 — 등록·하트비트·대기열 (C4, ADR-0014).
 
 화면이 없는 순수 로직이다. **Qt를 import하지 않는다** — 그래서 화면 없이 시험할 수 있고,
 트레이가 없는 환경에서도 같은 코드가 돈다.
@@ -6,7 +6,7 @@
 실행 자리는 **하나**다 (ADR-0014). 자리가 비어 있으면 Center 작업을 바로 시작한 것으로 ack하고,
 차 있으면 대기열에 넣는다. 대기열이 가득 차면 거절한다 (`queue_full`).
 
-Bot을 실제로 돌리는 것은 자식 프로세스(`chk-bot-runner`, ADR-0023)다. 이 모듈은 **자리와
+BPM 프로세스를 실제로 돌리는 것은 자식 프로세스(`chk-bot-runner`, ADR-0023)다. 이 모듈은 **자리와
 대기열만** 관리하고 `claim_slot()`·`release_slot()`으로 자리를 쥐고 놓는다.
 """
 
@@ -77,11 +77,11 @@ from chaeksas.extension_api import HOST_BOT_UI, ExtensionContext
 
 log = logging.getLogger(__name__)
 
-#: 이 Bot UI의 판 (C4 `versions`, ADR-0067) — **묶은 앱이면 빌드가 찍은 판**, 아니면 dist-info.
+#: 이 PC 실행기의 판 (C4 `versions`, ADR-0067) — **묶은 앱이면 빌드가 찍은 판**, 아니면 dist-info.
 BOT_UI_VERSION = build_info.product_version("chaeksas-bot-ui")
 CORE_VERSION = build_info.package_version("chaeksas-core")
 
-#: 트레이 상태 글 (BUI-01). 색은 `status_map`의 「Bot UI」·「Bot」에서 온다.
+#: 트레이 상태 글 (BUI-01). 색은 `status_map`의 「PC 실행기」·「BPM 프로세스」에서 온다.
 TRAY_UNREGISTERED = "등록 전"
 #: 등록 요청을 보내고 승인을 기다린다 (C4 §등록 요청과 승인) — 뒤에 요청 코드가 붙는다.
 TRAY_AWAITING_APPROVAL = "승인 대기"
@@ -91,7 +91,7 @@ TRAY_KEY_EXPIRED = "키 만료"
 TRAY_DISABLED = "비활성"
 TRAY_ERROR = "오류"
 TRAY_IDLE = "대기"
-#: Bot 차례인데 Worker를 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중 (ADR-0014 §4).
+#: BPM 프로세스 차례인데 Worker를 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중 (ADR-0014 §4).
 TRAY_WORKER_BUSY = "Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다"
 
 #: 호출 토큰을 새로 청하는 때 — 만료까지 이만큼 남으면 (C15 「정한 것」 — 2시간 전).
@@ -158,7 +158,7 @@ def new_run_id() -> str:
 
 @dataclass
 class Agent:
-    """Bot UI 한 벌의 상태와 Center와의 주기.
+    """PC 실행기 한 벌의 상태와 Center와의 주기.
 
     `register()` → `beat()`를 주기마다. 화면은 `tray_status()`·`state`만 읽는다.
     """
@@ -166,7 +166,7 @@ class Agent:
     settings: Settings
     store: Store
     credentials: Credentials = field(default_factory=Credentials)
-    #: 확장 호스트 (ADR-0018). 없으면 확장이 없는 Bot UI다 — 그래도 Bot은 돈다.
+    #: 확장 호스트 (ADR-0018). 없으면 확장이 없는 PC 실행기다 — 그래도 BPM 프로세스는 돈다.
     host: ExtensionHost | None = None
     #: 설치된 확장 (C13). 확장 호스트가 채운다.
     extensions: list[ExtensionState] = field(default_factory=list)
@@ -191,9 +191,9 @@ class Agent:
     worker_status: dict[str, Any] | None = None
     #: 실행 기록 큐 (C3). 처음 쓸 때 만든다 — 설정이 가리키는 폴더를 그때 읽는다.
     _runs: RunQueue | None = None
-    #: 실행기를 띄우는 쪽 (ADR-0023). 마찬가지로 처음 쓸 때 만든다.
+    #: 실행 프로세스를 띄우는 쪽 (ADR-0023). 마찬가지로 처음 쓸 때 만든다.
     _launcher: Launcher | None = None
-    #: 종료 중이다 — **새 Bot을 띄우지 않는다** (BUI-01 종료 순서 「1. 새 요청 막기」).
+    #: 종료 중이다 — **새 BPM 프로세스를 띄우지 않는다** (BUI-01 종료 순서 「1. 새 요청 막기」).
     stopping: bool = False
     #: 로컬 런타임 (C13·BUI-09). 처음 쓸 때 만든다 — 확장 호스트가 있어야 한다.
     _runtimes: LocalRuntimes | None = None
@@ -288,7 +288,7 @@ class Agent:
         return host
 
     def needed_extensions(self, bot: InstalledBot) -> set[str]:
-        """그 Bot이 쓰는 확장 — `requires.extensions` + `requires.domains`의 환경을 기여한 확장 (ADR-0037)."""
+        """그 BPM 프로세스가 쓰는 확장 — `requires.extensions` + `requires.domains`의 환경을 기여한 확장 (ADR-0037)."""
         if self.host is None:
             return set()
         requires = bot.manifest.requires
@@ -299,7 +299,7 @@ class Agent:
     # ── 사전 점검 (ADR-0013 §사전 점검, C4 `readiness`) ──
 
     def preflight(self, bot: InstalledBot) -> Preflight:
-        """그 Bot을 **지금 이 PC에서** 돌릴 수 있나. 결과는 캐시한다.
+        """그 BPM 프로세스를 **지금 이 PC에서** 돌릴 수 있나. 결과는 캐시한다.
 
         확장이 기여한 점검도 함께 돈다 (C13) — 호스트가 없으면 플랫폼 점검만 한다.
         """
@@ -311,11 +311,11 @@ class Agent:
                 host=self.host,
                 context=self.extension_context if self.host is not None else None,
                 # **갖춘 설정은 이쪽만 안다** (C1 `requires.settings`, ADR-0059 §4) — 메일을
-                # 보내는 Bot인데 SMTP가 없으면 **띄우기 전에** 막는다.
+                # 보내는 BPM 프로세스인데 SMTP가 없으면 **띄우기 전에** 막는다.
                 settings=self.settings.ready_settings(),
             )
             for why in found.skipped:
-                log.warning("Bot %s의 사전 점검 하나를 돌리지 못했다: %s", bot.id, why)
+                log.warning("BPM 프로세스 %s의 사전 점검 하나를 돌리지 못했다: %s", bot.id, why)
             self._preflights[key] = found
         return found
 
@@ -324,7 +324,7 @@ class Agent:
         self._preflights.clear()
 
     def readiness(self) -> list[Readiness]:
-        """설치된 Bot별 준비 상태 (C4). 사전 점검 결과를 그대로 옮긴다.
+        """설치된 BPM 프로세스별 준비 상태 (C4). 사전 점검 결과를 그대로 옮긴다.
 
         `blocked`에는 **막은 점검의 코드**가 간다 (C4 — 열린 문자열이다). 사람이 읽을 문구는
         BUI-04가 `Finding`에서 만든다 — Center로는 코드만 보낸다 (원칙 6: 업무 값을 올리지 않는다).
@@ -345,8 +345,8 @@ class Agent:
         return out
 
     def reserve_runtimes(self, bot: InstalledBot, run_id: str) -> list[str] | None:
-        """그 Bot이 쓰는 런타임을 이 실행에 묶는다 (ADR-0014 §4). **하나라도 바쁘면 `None`** —
-        이미 묶은 것은 풀고, Bot은 대기열 맨 앞에서 기다린다."""
+        """그 BPM 프로세스가 쓰는 런타임을 이 실행에 묶는다 (ADR-0014 §4). **하나라도 바쁘면 `None`** —
+        이미 묶은 것은 풀고, BPM 프로세스는 대기열 맨 앞에서 기다린다."""
         if self.host is None:
             return []
         held: list[str] = []
@@ -367,12 +367,12 @@ class Agent:
         self._reserved = []
 
     def run_extensions(self, bot: InstalledBot) -> dict[str, dict[str, object]]:
-        """실행기에게 넘길 확장별 설정. **그 Bot이 쓰는 확장의 로컬 런타임은 먼저 띄운다**.
+        """실행 프로세스에게 넘길 확장별 설정. **그 BPM 프로세스가 쓰는 확장의 로컬 런타임은 먼저 띄운다**.
 
         쓰는 확장은 매니페스트에서 온다 (C1): `requires.extensions`, 그리고 `requires.domains`의
         `web`·`desktop` AI 태스크 — 그 환경을 기여한 확장이다 (ADR-0037, 그림에 확장을 적지 않아도 된다).
 
-        UI 태스크·데스크톱 AI 태스크는 Worker가 떠 있어야 돈다 — 실행기가 띄우지 않는다 (Bot은
+        UI 태스크·데스크톱 AI 태스크는 Worker가 떠 있어야 돈다 — 실행 프로세스가 띄우지 않는다 (BPM 프로세스는
         Worker를 띄우거나 끄지 않는다, CLAUDE.md §5). 못 띄우면 기록만 하고 실행은 보낸다 —
         그 태스크가 「Worker에 닿지 못했다」로 분명히 실패한다 (조용히 넘어가지 않는다).
         """
@@ -387,15 +387,15 @@ class Agent:
                     try:
                         self.runtimes().ensure(runtime_id)
                     except RuntimeUnavailable as e:
-                        log.warning("Bot %s이 쓰는 %s을 띄우지 못했다: %s", bot.id, runtime_id, e)
+                        log.warning("BPM 프로세스 %s이 쓰는 %s을 띄우지 못했다: %s", bot.id, runtime_id, e)
             table[found.id] = self.extension_values(found.id, runtime_ids=runtime_ids)
         return table
 
     def run_services(self, bot: InstalledBot, run_id: str) -> Path | None:
-        """실행기에게 줄 **외부 확장 정의·봉투** (C13 「전송」) — 고정한 해시와 대조하려고.
+        """실행 프로세스에게 줄 **외부 확장 정의·봉투** (C13 「전송」) — 고정한 해시와 대조하려고.
 
-        Bot을 띄우기 **전에** 받는다. 닿지 못하면 들고 있던 것을 쓰고(ADR-0007), **봉투 검증은
-        실행기가** 한다 (C13). 주소·키는 없다 — 바깥 앱은 Center에 외부 작업으로 올린다 (ADR-0102).
+        BPM 프로세스를 띄우기 **전에** 받는다. 닿지 못하면 들고 있던 것을 쓰고(ADR-0007), **봉투 검증은
+        실행 프로세스가** 한다 (C13). 주소·키는 없다 — 바깥 앱은 Center에 외부 작업으로 올린다 (ADR-0102).
         """
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 
@@ -416,9 +416,9 @@ class Agent:
         return made
 
     def call_token(self, *, fresh_for_s: float = CALL_TOKEN_RENEW_S) -> str | None:
-        """호출 토큰 (C15 「정한 것」) — 실행기 자식·Worker·Tool UI가 외부 작업을 올릴 때 쓴다.
+        """호출 토큰 (C15 「정한 것」) — 실행 프로세스·Worker·Tool UI가 외부 작업을 올릴 때 쓴다.
 
-        Bot UI가 **제 Center API 키로** 청한다(24시간). 만료가 `fresh_for_s` 안으로 들어오면 새로
+        PC 실행기가 **제 Center API 키로** 청한다(24시간). 만료가 `fresh_for_s` 안으로 들어오면 새로
         청한다. 닿지 못하면 들고 있던 것을 준다(아직 살아 있으면). **Tool UI가 읽게** 비밀 저장소에도
         둔다 (`credentials.set_call_token`).
         """
@@ -742,7 +742,7 @@ class Agent:
         """
         self.runtimes().tick()
         self._tell_runtimes()
-        # 돌고 있는 Bot을 들여다보고, 자리가 비면 대기열에서 다음을 올린다 (조각 4a).
+        # 돌고 있는 BPM 프로세스를 들여다보고, 자리가 비면 대기열에서 다음을 올린다 (조각 4a).
         self.pump()
 
         if not self.credentials.center_api_key():
@@ -835,7 +835,7 @@ class Agent:
     # ── 결재 (C6, ADR-0038) ──
 
     def apply_approvals(self, found: list[ApprovalDispatch]) -> list[ApprovalAck]:
-        """Center에서 정해진 결재를 실행기로 내려보낸다 — **제어 파일로** (ADR-0031).
+        """Center에서 정해진 결재를 실행 프로세스로 내려보낸다 — **제어 파일로** (ADR-0031).
 
         - 답: 지금 기다리는 것이면 넘기고 받았다고 한다. 아니면 `accepted: false`(`not_waiting`)
           — Center가 다시 열어 결재자가 안다 (조용히 버리지 않는다).
@@ -915,14 +915,14 @@ class Agent:
         found = self.deployer().apply(response.deployments)
         if found:
             self.store.remember_deployments(found)
-            # 설치된 것이 바뀌었다 — 새 Bot의 준비 상태를 다음 하트비트가 알려야 한다.
+            # 설치된 것이 바뀌었다 — 새 BPM 프로세스의 준비 상태를 다음 하트비트가 알려야 한다.
             self.invalidate_preflight()
             self._tell_deployments(found)
 
     def _tell_deployments(self, found: list[DeploymentResult]) -> None:
         """배치 결정을 사람에게 알린다 (BUI-05). **거부는 지나가게 두지 않는다** (sticky).
 
-        설치는 됐는데 **키가 빠져 있으면 그것을 말한다** — 그 Bot은 사전 점검에서 막혀 돌지
+        설치는 됐는데 **키가 빠져 있으면 그것을 말한다** — 그 BPM 프로세스는 사전 점검에서 막혀 돌지
         않으므로, 「설치했습니다」만 띄우면 왜 안 도는지 모른다 (BUI-10으로 보낸다).
         """
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
@@ -1003,7 +1003,7 @@ class Agent:
         """콘솔에서 취소된 작업 (C4 `cancel_jobs`).
 
         대기열에 있으면 빼고 `cancelled`. **이미 시작했으면 멈추지 않고** `cancel_refused`다 —
-        실행 중 Bot을 멈추는 것은 schema 1 범위 밖이다 (C4).
+        실행 중 BPM 프로세스를 멈추는 것은 schema 1 범위 밖이다 (C4).
         """
         made: list[JobAck] = []
         for job_id in job_ids:
@@ -1034,7 +1034,7 @@ class Agent:
     def claim_slot(self, item: QueueItem, *, run_id: str | None = None) -> CurrentRun:
         """대기열에서 하나를 꺼내 실행 자리에 올린다. `run_id`는 예약에 쓴 것을 그대로 받는다."""
         if self.current_run is not None:
-            raise RuntimeError("실행 자리가 이미 차 있다 (PC 한 대에 실행 중 Bot은 하나다)")
+            raise RuntimeError("실행 자리가 이미 차 있다 (PC 한 대에 실행 중 BPM 프로세스는 하나다)")
         if item in self.store.state.queue:
             self.store.state.queue.remove(item)
         run = CurrentRun(
@@ -1059,10 +1059,10 @@ class Agent:
         self.current_run = None
         self.store.save()
 
-    # ── Bot 실행 (조각 4a — ADR-0023·0031) ──
+    # ── BPM 프로세스 실행 (조각 4a — ADR-0023·0031) ──
 
     def runner(self) -> Launcher:
-        """실행기를 띄우는 쪽. **한 번에 하나** (ADR-0014)."""
+        """실행 프로세스를 띄우는 쪽. **한 번에 하나** (ADR-0014)."""
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 
         if self._launcher is None:
@@ -1085,7 +1085,7 @@ class Agent:
     def pump(self) -> None:
         """한 주기 — 돌고 있는 것을 들여다보고, 자리가 비면 대기열에서 다음을 올린다.
 
-        **화면도 하트비트도 이것을 부른다.** 실행기를 기다리지 않으므로 어느 쪽에서 불러도
+        **화면도 하트비트도 이것을 부른다.** 실행 프로세스를 기다리지 않으므로 어느 쪽에서 불러도
         멈추지 않는다 (ADR-0031 — 상태는 기록 파일에서 읽는다).
         """
         launcher = self.runner()
@@ -1101,7 +1101,7 @@ class Agent:
 
     def _finished(self, done: Running) -> None:
         """끝난 실행 하나를 거둔다 — Center 작업이면 결과를 ack한다 (C4)."""
-        log.info("Bot %s 끝남 (%s)", done.bot.id, done.finished or "unknown")
+        log.info("BPM 프로세스 %s 끝남 (%s)", done.bot.id, done.finished or "unknown")
         if done.finished == "failed":
             # 실패는 사람이 알아야 한다 (BUI-05). 사유는 **기록에 적힌 한 줄**이다 (C3).
             self.notices.run_failed(bot=done.bot.name, why=done.failure)
@@ -1110,14 +1110,14 @@ class Agent:
                 "cancelled" if done.finished == "cancelled" else "failed"
             )
             # **PC 위임의 결과를 나르기만 한다** (C4 `JobAck.outputs`, ADR-0062 §4) — 내용을
-            # 짓는 것은 실행기다(선언한 `outputs`만 골라 썼다). 위임이 아니거나 실패했으면
+            # 짓는 것은 실행 프로세스다(선언한 `outputs`만 골라 썼다). 위임이 아니거나 실패했으면
             # 비어 있고, 파일은 `cleanup()`이 읽으며 **그 자리에서 지웠다**.
             self._ack_id(done.job_id, result, run_id=done.run_id, outputs=done.outputs)
         self.release_runtimes()
         self.release_slot()
 
     def _start_next(self) -> None:
-        """대기열에서 다음을 올린다. **없는 Bot은 건너뛰지 않고 거절한다** (C4).
+        """대기열에서 다음을 올린다. **없는 BPM 프로세스는 건너뛰지 않고 거절한다** (C4).
 
         종료 중에는 아무것도 띄우지 않는다 — 종료 순서의 첫 걸음이 「새 요청 막기」다.
         """
@@ -1132,14 +1132,14 @@ class Agent:
 
         bot = find(data_dir(), item.bpm_process_id, item.version)
         if bot is None:
-            # 설치되지 않은 Bot이다 — 조용히 두면 대기열이 영원히 막힌다 (C4 `rejected`).
+            # 설치되지 않은 BPM 프로세스이다 — 조용히 두면 대기열이 영원히 막힌다 (C4 `rejected`).
             self.store.state.queue.remove(item)
             self.store.state.inputs.pop(item.queue_id, None)
             self.store.state.parents.pop(item.queue_id, None)
             if item.job_id:
                 self._ack_id(item.job_id, "rejected", reason="bot_not_installed")
             self.store.save()
-            log.warning("설치되지 않은 Bot이다: %s", item.bpm_process_id)
+            log.warning("설치되지 않은 BPM 프로세스이다: %s", item.bpm_process_id)
             return
 
         ready = self.preflight(bot)
@@ -1152,7 +1152,7 @@ class Agent:
             if item.job_id:
                 self._ack_id(item.job_id, "rejected", reason="not_ready")
             self.store.save()
-            log.warning("Bot %s은 준비되지 않았다: %s", bot.id, ", ".join(ready.blocked))
+            log.warning("BPM 프로세스 %s은 준비되지 않았다: %s", bot.id, ", ".join(ready.blocked))
             return
 
         inputs = dict(self.store.state.inputs.get(item.queue_id) or {})
@@ -1193,7 +1193,7 @@ class Agent:
                 off_extensions=tuple(self.settings.disabled_extensions),
             )
         except Exception as e:  # noqa: BLE001 — 띄우지 못한 것은 실행 실패다
-            log.exception("실행기를 띄우지 못했다")
+            log.exception("실행 프로세스를 띄우지 못했다")
             if item.job_id:
                 self._ack_id(item.job_id, "failed", reason=str(e)[:200])
             self.release_runtimes()
@@ -1322,16 +1322,16 @@ class Agent:
 def load_extensions(off: Iterable[str] = ()) -> ExtensionHost:
     """설치된 확장을 읽는다 (엔트리 포인트 `chaeksas.extensions`, ADR-0018).
 
-    **읽다 실패해도 Bot UI는 뜬다** — 확장 하나가 없다고 Bot을 못 돌리면 더 나쁘다. 못 읽은
+    **읽다 실패해도 PC 실행기는 뜬다** — 확장 하나가 없다고 BPM 프로세스를 못 돌리면 더 나쁘다. 못 읽은
     것은 호스트가 `failures()`로 들고 있고 BUI-11이 보여 준다.
 
-    끌 id는 **부르는 쪽이 준다** (ADR-0043 — 여기서는 Bot UI 설정의 `disabled_extensions`).
+    끌 id는 **부르는 쪽이 준다** (ADR-0043 — 여기서는 PC 실행기 설정의 `disabled_extensions`).
     꺼진 확장은 기여를 하나도 내지 않는다.
     """
     host = ExtensionHost(off=off)
     try:
         host.load_entry_points()
-    except Exception as e:  # noqa: BLE001 — 확장 때문에 Bot UI가 안 뜨면 안 된다
+    except Exception as e:  # noqa: BLE001 — 확장 때문에 PC 실행기가 안 뜨면 안 된다
         log.warning("확장을 읽지 못했다: %s", e)
     for failure in host.failures:
         log.warning("확장을 켜지 못했다: %s", failure)

@@ -4,7 +4,7 @@
 | --- | --- |
 | 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) |
 | schema | 1 |
-| 보내는 쪽 → 받는 쪽 | Center(관리자가 누르면 서버의 키로 서명·보관) → Bot UI·서버 실행기(다시 검증) |
+| 보내는 쪽 → 받는 쪽 | Center(관리자가 누르면 서버의 키로 서명·보관) → PC 실행기·서버 실행기(다시 검증) |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/signing.py`, `…/hashing.py` (import `chaeksas.contracts.signing`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c2-envelope.json`](../../packages/contracts/schemas/c2-envelope.json) · [`c2-claim-deployment.json`](../../packages/contracts/schemas/c2-claim-deployment.json) · [`c2-claim-package.json`](../../packages/contracts/schemas/c2-claim-package.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0006](../decisions/0006-single-contracts-package.md), [0015](../decisions/0015-run-location.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0090](../decisions/0090-center-admin-accounts.md) |
@@ -62,7 +62,7 @@
 | `deployment` | `deployment_id`(`dep_<hex8>`), `target`, `bpm_process_id`, `version`, `content_hash`, `not_before`?, `expires_at`?, `max_concurrency`? | 배포. 필드별 규칙은 아래 |
 | `revoke` | `deployment_id`, `reason`, `revoked_at` | 배포 철회 |
 | `extension` | `id`, `version`, `definition_hash` | 외부 확장 정의 승인 (C13). 정의가 외부 앱을 부르는 길(허용 호스트·인증 방식·작업)을 정하므로 배포와 같은 관문을 둔다 |
-| `extension_revoke` | `id`, `version`, `reason`, `revoked_at` | 외부 확장 승인 철회. 그 정의를 쓰는 Bot은 실행 불가가 된다 |
+| `extension_revoke` | `id`, `version`, `reason`, `revoked_at` | 외부 확장 승인 철회. 그 정의를 쓰는 BPM 프로세스는 실행 불가가 된다 |
 | `service_key` | — | **더 만들지 않는다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md) — 서비스 앱 키가 없어졌다). 이름은 남겨 둔다 — 옛 감사 기록을 읽을 수 있게 |
 | `admin_key` · `admin_key_revoke` | — | **더 만들지 않는다** (ADR-0090 — 믿는 키는 Center가 서버 셸 명령으로 다룬다). 이름은 남겨 둔다 — 옛 감사 기록을 읽을 수 있게 |
 
@@ -89,7 +89,7 @@
 
 ## 검증 규칙
 
-Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를 쓴다.
+Center, PC 실행기, 서버 실행기가 같은 함수(`contracts.signing.verify`)를 쓴다.
 
 | # | 규칙 | 실패 사유 코드 | 누가 검사 |
 | --- | --- | --- | --- |
@@ -104,7 +104,7 @@ Center, Bot UI, 서버 실행기가 같은 함수(`contracts.signing.verify`)를
 | V8 | (admin_key) 서명 키가 추가하려는 키 자신이 아니다 | `self_signed_key` | **쓰지 않는다** (`admin_key`를 더 만들지 않는다, ADR-0090) |
 
 - 실패하면 실행하는 쪽은 설치하지 않는다. C4 `deployment_results`에 `rejected`와 사유 코드를 보낸다 (CON-03 「⛔ 거부」).
-- 서명 키를 버리거나 패키지 승인이 철회되면, 실행하는 쪽은 다음 하트비트에서 해당 Bot을 비활성으로 돌린다. 패키지 파일은 지우지 않는다.
+- 서명 키를 버리거나 패키지 승인이 철회되면, 실행하는 쪽은 다음 하트비트에서 해당 BPM 프로세스를 비활성으로 돌린다. 패키지 파일은 지우지 않는다.
 
 ## 예시
 

@@ -11,7 +11,7 @@ import { Shell } from "@/components/Shell";
  * 값은 **실행하는 쪽이 보낸 이벤트에서** 나온다 (C3). Center가 받을 때 요약을 만들어 두므로
  * 목록을 그릴 때 줄을 다시 읽지 않는다.
  *
- * 좁히기는 상태·Bot·**실행 위치**·**Bot UI**·**최근 n건**이다. 「Bot UI」는 C3 `RunInfo.bot_ui_id`
+ * 좁히기는 상태·BPM 프로세스·**실행 위치**·**PC 실행기**·**최근 n건**이다. 「PC 실행기」는 C3 `RunInfo.bot_ui_id`
  * 인데 **Center가 읽을 때 채우는 값**이다 (보낸 키 → C4 키 묶기) — 보내는 쪽이 제 id를 적지
  * 않는다. 고를 거리(이름)는 CON-03과 같은 `GET /bot-uis`에서 오고, **그 목록을 못 받아도
  * 좁히기는 돈다**(id를 그대로 보인다).
@@ -34,9 +34,9 @@ export const LABEL: Record<string, string> = {
 
 const CHOICES = ["", "running", "waiting", "success", "failed", "cancelled"];
 
-/** C3 `executor` → 화면 표기 (「Bot UI 또는 서버 실행기」 열). **어느 PC인지는 모른다.** */
+/** C3 `executor` → 화면 표기 (「PC 실행기 또는 서버 실행기」 열). **어느 PC인지는 모른다.** */
 const EXECUTOR: Record<string, string> = {
-  bot_ui: "Bot UI",
+  bot_ui: "PC 실행기",
   server_runner: "서버 실행기",
   studio: "Studio",
 };
@@ -52,13 +52,13 @@ function tally(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : String(value);
 }
 
-/** Bot UI 목록을 못 받았을 때 (U3 — 좁히기는 그래도 돈다). */
+/** PC 실행기 목록을 못 받았을 때 (U3 — 좁히기는 그래도 돈다). */
 export const NO_BOT_UI_LIST =
-  "Bot UI 목록을 받지 못해 이름 대신 id로 보입니다 — 좁히기는 그대로 됩니다.";
+  "PC 실행기 목록을 받지 못해 이름 대신 id로 보입니다 — 좁히기는 그대로 됩니다.";
 
 /** Studio·토큰이 보낸 기록에는 PC가 없다는 말 (U3 — 「—」 옆에 까닭을 둔다). */
 export const NO_PC_NOTE =
-  "「Bot UI」가 비어 있는 기록은 PC가 아닌 쪽(Studio 시험 실행)이 보낸 것입니다.";
+  "「PC 실행기」가 비어 있는 기록은 PC가 아닌 쪽(Studio 시험 실행)이 보낸 것입니다.";
 
 export function time(value: string | null | undefined): string {
   if (!value) return "—";
@@ -140,13 +140,13 @@ export default async function RunsPage({
         </Link>
       ),
     },
-    { key: "bpm_process_id", header: "Bot", cell: (row) => row.bpm_process_id ?? "—" },
+    { key: "bpm_process_id", header: "BPM 프로세스", cell: (row) => row.bpm_process_id ?? "—" },
     { key: "version", header: "버전", width: "10ch", cell: (row) => row.version ?? "—" },
     { key: "run_location", header: "실행 위치", width: "10ch", cell: (row) => where(row.run_location) },
     { key: "executor", header: "실행한 쪽", width: "12ch", cell: (row) => EXECUTOR[row.executor ?? ""] ?? "—" },
     {
       key: "bot_ui_id",
-      header: "Bot UI",
+      header: "PC 실행기",
       width: "14ch",
       // 이름을 모르면 **id를 보인다** — 「—」로 지우면 PC를 아는데도 모르는 것처럼 된다.
       cell: (row) => (row.bot_ui_id ? (pcName.get(row.bot_ui_id) ?? row.bot_ui_id) : "—"),
@@ -199,7 +199,7 @@ export default async function RunsPage({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-body-sm">
-          Bot
+          BPM 프로세스
           <input
             name="bpm_process_id"
             defaultValue={query.bpm_process_id ?? ""}
@@ -222,7 +222,7 @@ export default async function RunsPage({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-body-sm">
-          Bot UI
+          PC 실행기
           <select
             name="bot_ui_id"
             defaultValue={query.bot_ui_id ?? ""}
@@ -267,7 +267,7 @@ export default async function RunsPage({
             caption="실행 목록"
             empty={{
               title: "조건에 맞는 실행이 없습니다.",
-              hint: "Studio 시험 실행이나 Bot UI가 보낸 기록이 여기 쌓입니다.",
+              hint: "Studio 시험 실행이나 PC 실행기가 보낸 기록이 여기 쌓입니다.",
             }}
           />
           {rows.length > 0 ? <p className="text-body-sm text-text-muted">{total}건</p> : null}

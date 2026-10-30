@@ -402,7 +402,7 @@ def test_the_worker_names_the_registration_session() -> None:
 
 
 def test_a_bot_session_cannot_be_analyzed() -> None:
-    """실행 중인 Bot의 화면을 등록 화면이 헤집지 못한다."""
+    """실행 중인 BPM 프로세스의 화면을 등록 화면이 헤집지 못한다."""
     worker, client = served()
     body = {
         "schema": 1,

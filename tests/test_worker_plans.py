@@ -2,7 +2,7 @@
 
 거듭 보는 것 넷.
 
-1. **계획은 캐시한다** — 서버에 닿지 못해도 돌던 Bot이 멈추지 않는다 (C10 `plan_source`).
+1. **계획은 캐시한다** — 서버에 닿지 못해도 돌던 BPM 프로세스가 멈추지 않는다 (C10 `plan_source`).
 2. **자율 수행(`goal`)은 캐시하지 않는다** — 같은 목표라도 계획이 다르다.
 3. **보고는 먼저 디스크에 쓰고** 보낸다 — 보내다 죽어도 사라지지 않는다.
 4. **4xx는 다시 보내지 않는다** — 한 번 거부된 것이 큐를 영원히 막는다.
@@ -90,7 +90,7 @@ def test_a_plan_comes_from_the_server_and_is_cached(tmp_path: Path) -> None:
 
 
 def test_an_unreachable_app_falls_back_to_the_cache(tmp_path: Path) -> None:
-    """서버가 꺼져도 돌던 Bot이 멈추지 않는다 (C10 `plan_source: cache`)."""
+    """서버가 꺼져도 돌던 BPM 프로세스가 멈추지 않는다 (C10 `plan_source: cache`)."""
     made = service(tmp_path, FakeApp())
     made.plan(page_id="erp.order.form", platform="web", steps=steps(), revision=3)
 

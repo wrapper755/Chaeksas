@@ -2,14 +2,14 @@
 
 단일 원본: `docs/03-contracts/C12-server-runner-center.md`.
 
-**C4(Bot UI)와 같은 틀이고 다른 것은 셋이다** (ADR-0015·ADR-0054 —
+**C4(PC 실행기)와 같은 틀이고 다른 것은 셋이다** (ADR-0015·ADR-0054 —
 `docs/decisions/0054-server-run-state-and-concurrency.md`).
 
-| | C4 Bot UI | C12 서버 실행기 |
+| | C4 PC 실행기 | C12 서버 실행기 |
 | --- | --- | --- |
 | 실행 자리 | `current_run` 하나 (ADR-0014) | `capacity` + `running[]` — 상한까지 여럿 |
 | 기다리는 실행 | 자리를 쥔다 | **`waiting[]`로 빠져 자리를 놓는다** |
-| 대기열 | Bot UI가 가진다 (`queue`) | **Center가 가진다** — 실행기는 빈자리만큼만 받는다 |
+| 대기열 | PC 실행기가 가진다 (`queue`) | **Center가 가진다** — 실행기는 빈자리만큼만 받는다 |
 
 그래서 **같은 모양인 칸은 C4의 모델을 그대로 쓴다** — `JobAck`·`ApprovalAck`·
 `DeploymentResult`·`Readiness`·`ExtensionState`·`JobDispatch`·`ApprovalDispatch`. 베끼면 한쪽만
@@ -189,7 +189,7 @@ class DelegationAck(ContractModel):
 class DelegationResult(ContractModel):
     """끝난 PC 위임 하나 (C12 §PC 위임) — 하트비트 응답으로 내려간다.
 
-    **`outputs`가 업무 값이다** — 원칙 6의 명시한 예외이고, 올라오는 것은 그 Bot이 **선언한
+    **`outputs`가 업무 값이다** — 원칙 6의 명시한 예외이고, 올라오는 것은 그 BPM 프로세스가 **선언한
     `outputs`만**이다 (C1). `state`가 `finished`가 아니면 실행기가 오류 경계로 넘긴다.
     """
 
@@ -343,7 +343,7 @@ class ServerRunnerInfo(ContractModel):
     running: list[RunningRun] = Field(default_factory=list)
     waiting: list[WaitingRun] = Field(default_factory=list)
     queued: int = 0
-    #: 배포된 서버 Bot별 준비 상태 — 실행기가 보고한 것 그대로 (CON-12 「Bot별 상한」).
+    #: 배포된 서버 BPM 프로세스별 준비 상태 — 실행기가 보고한 것 그대로 (CON-12 「BPM 프로세스별 상한」).
     readiness: list[Readiness] = Field(default_factory=list)
     #: 이 서버에 깔린 확장 (C12 — 등록·하트비트가 보고한다).
     extensions: list[ExtensionState] = Field(default_factory=list)
@@ -488,7 +488,7 @@ def pick_jobs(
     """대기열에서 실어 보낼 작업을 고른다 (C12 §Center가 작업을 나누는 규칙 1~3).
 
     `queued`는 들어온 순서의 `(job_id, bpm_process_id)`다. **BPM 프로세스별 상한을 넘는 작업은
-    건너뛰고 다음 것을 본다** — 막아 세우면 상한에 걸린 Bot 하나가 대기열 전체를 멈춘다.
+    건너뛰고 다음 것을 본다** — 막아 세우면 상한에 걸린 BPM 프로세스 하나가 대기열 전체를 멈춘다.
 
     돌려주는 것은 `(고른 job_id 목록, 건너뛴 job_id → 사유)`다. 사유는 CON-12 「대기 이유」가
     보이는 값이고 `per_bot_limit`이다.

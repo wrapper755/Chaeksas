@@ -1,4 +1,4 @@
-"""UI 태스크 수행기 — Bot이 Worker 프로세스에 UI 조작을 맡긴다 (C10).
+"""UI 태스크 수행기 — BPM 프로세스가 Worker 프로세스에 UI 조작을 맡긴다 (C10).
 
 흐름은 하나다 (01-architecture §3).
 
@@ -77,7 +77,7 @@ NUMBER = re.compile(r"-?(?:0|[1-9]\d{0,2}(?:,\d{3})+|[1-9]\d*)(?:\.\d+)?")
 
 
 class WorkerUnreachable(RuntimeError):
-    """Worker에 닿지 못했다 — Bot UI가 띄우지 못했거나 죽었다."""
+    """Worker에 닿지 못했다 — PC 실행기가 띄우지 못했거나 죽었다."""
 
 
 @dataclass
@@ -273,7 +273,7 @@ class ScreenLocked(RuntimeError):
 class UiTaskExecutor:
     """`task_types[].executor` — `extension_api.TaskExecutor`."""
 
-    #: Bot UI가 토큰 파일을 두는 곳. 실행기가 환경에서 받는다.
+    #: PC 실행기가 토큰 파일을 두는 곳. 실행기가 환경에서 받는다.
     token_dir: Path | None = None
     port: int = DEFAULT_PORT
     client: WorkerClient | None = None
@@ -426,7 +426,7 @@ def read_value(result: StepResult) -> Any:
     return screen_value(result.text or "")
 
 
-#: 호스트가 알려 주는 Worker 자리 (C13 예약 키 — Bot UI가 띄운 로컬 런타임 `worker`).
+#: 호스트가 알려 주는 Worker 자리 (C13 예약 키 — PC 실행기가 띄운 로컬 런타임 `worker`).
 WORKER_PORT_SETTING = "runtime.worker.port"
 WORKER_TOKEN_DIR_SETTING = "runtime.worker.token_dir"
 
@@ -434,7 +434,7 @@ WORKER_TOKEN_DIR_SETTING = "runtime.worker.token_dir"
 def worker_for(ctx: Any, *, token_dir: Path | None = None, port: int | None = None) -> WorkerClient:
     """이 실행의 Worker. **호스트가 알려 준 자리가 먼저다** (C13 `runtime.worker.*`).
 
-    Bot UI 실행기와 Studio는 Bot UI가 띄운 Worker를 쓴다 — 포트·토큰 폴더를 추측하지 않는다.
+    실행 프로세스와 Studio는 PC 실행기가 띄운 Worker를 쓴다 — 포트·토큰 폴더를 추측하지 않는다.
     호스트가 알려 주지 않으면(시험) 넘겨받은 값, 그것도 없으면 기본 포트와 지금 폴더다.
     """
     extension = getattr(ctx, "extension", None)
@@ -460,7 +460,7 @@ def _goal_mode(spec: Mapping[str, Any], mode: str) -> str | None:
         return None
     raise TaskFailed(
         "ui_goal_needs_autonomous",
-        "이 UI 태스크는 목표로만 적혀 있어 결정 수행(Bot)에서 돌 수 없습니다 — 스텝을 적어 주세요",
+        "이 UI 태스크는 목표로만 적혀 있어 결정 수행(BPM 프로세스)에서 돌 수 없습니다 — 스텝을 적어 주세요",
     )
 
 

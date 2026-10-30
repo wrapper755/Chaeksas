@@ -9,7 +9,7 @@ import { statusToken, type StatusGroup, type StatusToken } from "../status-map";
  * 모르는 표기(계약의 상태 값은 열린 문자열이다)는 `neutral`로 보인다.
  */
 export interface StatusBadgeProps {
-  /** 어느 묶음의 상태인가 (`"Bot"`, `"작업"` …). `status_map`의 열쇠다. */
+  /** 어느 묶음의 상태인가 (`"BPM 프로세스"`, `"작업"` …). `status_map`의 열쇠다. */
   group: StatusGroup;
   /** 화면에 그대로 보일 표기 (`"실행 중"`). */
   label: string;

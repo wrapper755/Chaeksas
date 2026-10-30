@@ -12,7 +12,7 @@ Center에 붙어 일감을 가져간다 (C15, ADR-0102). 토큰이 없으면 들
 `CHK_MOCK_APPS__CENTER__TOKEN`이 있으면 그것을 쓴다.
 
 예제가 가리키는 **웹 화면**(공급사 포털·사내 신청서·공지)도 같은 포트의 `/site` 밑에 뜬다
-(`sites.py`) — M4 인수 시험이 쓰는 HTML과 **같은 것**이라 현장 PC에서 BUI-06으로 등록하고 Bot이
+(`sites.py`) — M4 인수 시험이 쓰는 HTML과 **같은 것**이라 현장 PC에서 BUI-06으로 등록하고 BPM 프로세스가
 읽을 수 있다 (예: `http://127.0.0.1:8010/site/transactions`).
 """
 

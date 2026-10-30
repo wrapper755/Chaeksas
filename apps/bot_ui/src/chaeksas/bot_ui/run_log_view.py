@@ -1,9 +1,9 @@
 """BUI-02 「실행 기록」 탭 — `runs/<run_id>.jsonl`을 줄로 그린다.
 
-**원본은 파일이다** (ADR-0031·C3) — 실행기가 먼저 쓰고, 이 화면은 그것을 읽을 뿐이다. 화면이
-기록을 만들지 않으므로, Bot UI를 닫았다 열어도 같은 것이 보인다.
+**원본은 파일이다** (ADR-0031·C3) — 실행 프로세스가 먼저 쓰고, 이 화면은 그것을 읽을 뿐이다. 화면이
+기록을 만들지 않으므로, PC 실행기를 닫았다 열어도 같은 것이 보인다.
 
-줄 형식은 `bot-ui.md`의 「<시각> [<Bot>] <노드> <내용>」이고, **실패한 실행은 한 줄 요약을 먼저**
+줄 형식은 `bot-ui.md`의 「<시각> [<BPM 프로세스>] <노드> <내용>」이고, **실패한 실행은 한 줄 요약을 먼저**
 놓는다 (U13 — 왜 실패했나를 찾으려고 수백 줄을 거슬러 올라가지 않게).
 
 **업무 값은 없다.** `data`는 기록될 때 이미 걸러진 것이고(`core.run_log`의 `sanitize()`), 여기서는
@@ -24,7 +24,7 @@ MAX_LINES = 5000
 #: 최근 몇 개의 실행까지 읽나. 파일이 수천 개여도 화면 한 판이면 충분하다.
 MAX_RUNS = 50
 
-EMPTY = "아직 실행 기록이 없습니다. Bot을 실행하면 여기에 쌓입니다."
+EMPTY = "아직 실행 기록이 없습니다. BPM 프로세스를 실행하면 여기에 쌓입니다."
 
 #: `kind`를 사람 말로. **모르는 종류는 그대로 보인다** (C3 — 받는 쪽은 관대하게).
 KIND_LABEL = {
@@ -70,7 +70,7 @@ def _detail(event: RunEvent) -> str:
 
 
 def line_of(event: RunEvent, bot: str) -> str:
-    """한 줄 — 「<시각> [<Bot>] <노드> <내용>」."""
+    """한 줄 — 「<시각> [<BPM 프로세스>] <노드> <내용>」."""
     kind = KIND_LABEL.get(event.kind, event.kind)
     where = event.node_id or "—"
     detail = _detail(event)
@@ -114,7 +114,7 @@ RESULT_LABEL = {"success": "완료", "failed": "실패", "cancelled": "취소됨
 
 @dataclass(frozen=True)
 class LastRun:
-    """한 Bot의 마지막 실행 (BUI-04 「최근 실행」). `result`가 비면 **끝 줄이 없다**."""
+    """한 BPM 프로세스의 마지막 실행 (BUI-04 「최근 실행」). `result`가 비면 **끝 줄이 없다**."""
 
     run_id: str
     at: str
@@ -127,10 +127,10 @@ def _when(ts: str) -> str:
 
 
 def last_runs(data_dir: Path, *, runs: int = MAX_RUNS) -> dict[str, LastRun]:
-    """Bot마다 **마지막 실행 하나** — BUI-02와 **같은 파일·같은 읽기**다 (원본은 파일이다).
+    """BPM 프로세스마다 **마지막 실행 하나** — BUI-02와 **같은 파일·같은 읽기**다 (원본은 파일이다).
 
     새 파일부터 보므로 처음 만난 것이 마지막이다. 결과는 `run_finished`에서만 읽고 **지어내지 않는다**
-    — 끝 줄이 없는 실행(도는 중이거나 실행기가 멈췄다)은 `result`가 빈다.
+    — 끝 줄이 없는 실행(도는 중이거나 실행 프로세스가 멈췄다)은 `result`가 빈다.
     """
     folder = run_dir(data_dir)
     if not folder.is_dir():

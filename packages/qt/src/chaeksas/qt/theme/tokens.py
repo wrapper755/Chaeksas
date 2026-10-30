@@ -182,7 +182,7 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
         "재생됨": "replayed",
         "취소됨": "neutral",
     },
-    "Bot": {
+    "BPM 프로세스": {
         "대기": "neutral",
         "대기열": "waiting",
         "실행 중": "active",
@@ -194,7 +194,7 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
         "수동 실행 전용": "neutral",
         "비활성": "neutral",
     },
-    "Bot UI": {
+    "PC 실행기": {
         "연결됨": "done",
         "연결 끊김": "warning",
         "등록 전": "neutral",
@@ -208,7 +208,7 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
         "셀렉터 등록 중": "active",
         "다시 띄우는 중": "warning",
         "멈춤": "failed",
-        "Bot UI가 꺼져 있음": "warning",
+        "PC 실행기가 꺼져 있음": "warning",
         "꺼 둠": "neutral",
         "예약됨": "active",
     },
@@ -278,7 +278,7 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
         "서명 불일치": "failed",
         "서명 확인 안 됨": "failed",
     },
-    "Bot 준비": {
+    "BPM 프로세스 준비": {
         "준비됨": "done",
         "확장 없음": "failed",
         "확장 꺼짐": "neutral",

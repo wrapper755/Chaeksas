@@ -399,7 +399,7 @@ def op(report: SessionReport, *, host: str = "재무팀 PC-03") -> dict[str, Any
 
 
 def test_the_report_path_writes_what_the_envelope_said(made: tuple[TestClient, Service]) -> None:
-    """UIA-03의 「Bot」·「Bot UI」·「요청 쪽」·「수행 모드」는 **봉투에서** 온다 (C8 보고에 없다)."""
+    """UIA-03의 「BPM 프로세스」·「PC 실행기」·「요청 쪽」·「수행 모드」는 **봉투에서** 온다 (C8 보고에 없다)."""
     client, service = made
     with_pages(service)
     request = OpRequest.model_validate(op(report("run_20261009_101500_aaaaaa:Task_Fill:1:1")))

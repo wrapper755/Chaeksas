@@ -665,7 +665,7 @@ class Worker:
         return found.info()
 
     def _registering(self, session_id: str, secret: str) -> Session:
-        """등록 세션이어야 한다 — 실행 중인 Bot의 화면을 등록 화면이 헤집지 못하게."""
+        """등록 세션이어야 한다 — 실행 중인 BPM 프로세스의 화면을 등록 화면이 헤집지 못하게."""
         found = self.get(session_id, secret)
         if found.request.caller.type != CALLER_REGISTRATION:
             raise WorkerProblem(403, SESSION_LOCKED, "등록용 세션이 아닙니다")
@@ -754,7 +754,7 @@ class Worker:
         return candidates, picking
 
     def _highlight_desktop(self, found: Session, locators: list[LocatorSpec]) -> dict[str, Any]:
-        """사다리를 차례로 찾아 **정확히 하나**면 그 사각형(물리 픽셀)을 준다 — 그리는 것은 Bot UI다."""
+        """사다리를 차례로 찾아 **정확히 하나**면 그 사각형(물리 픽셀)을 준다 — 그리는 것은 PC 실행기다."""
         finder = self.backend.finder(found.request.business_key) if self.backend else None
         if finder is None:  # pragma: no cover — 세션이 있으면 화면도 있다
             raise WorkerProblem(503, BROWSER_UNAVAILABLE, "열린 화면이 없습니다")
@@ -779,7 +779,7 @@ class Worker:
             raise WorkerProblem(503, BROWSER_UNAVAILABLE, "열린 화면이 없습니다")
         return verify(finder, ladders)
 
-    # ── 관리 (Bot UI만) ──
+    # ── 관리 (PC 실행기만) ──
 
     def reserve(self, run_id: str) -> None:
         self.sweep()
@@ -841,7 +841,7 @@ class Worker:
     # ── 끄기 ──
 
     def shutdown(self) -> dict[str, Any]:
-        """C10 `POST /v1/admin/shutdown` — **닫고 나서** 끈다 (Bot UI 종료 순서, BUI-01 10번).
+        """C10 `POST /v1/admin/shutdown` — **닫고 나서** 끈다 (PC 실행기 종료 순서, BUI-01 10번).
 
         열린 세션을 닫으면 그 보고가 큐에 저장된다 (`_end`) — 그래서 프로세스를 그냥 죽이는
         것과 다르다. 큐를 **비우려 들지는 않는다**: 네트워크를 타는 일이라 종료를 붙잡는다.
@@ -906,7 +906,7 @@ def create_app(worker: Worker, screen: ScreenThread | None = None) -> FastAPI:
 
     @router.get("/health")
     async def health() -> Any:
-        # 긴 스텝 중에도 살아 있다고 답해야 한다 — 못 하면 Bot UI가 멀쩡한 Worker를 다시 띄운다.
+        # 긴 스텝 중에도 살아 있다고 답해야 한다 — 못 하면 PC 실행기가 멀쩡한 Worker를 다시 띄운다.
         await swept()
         return worker.health(sweep=False)
 

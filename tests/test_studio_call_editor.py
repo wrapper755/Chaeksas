@@ -135,7 +135,7 @@ def test_every_example_call_round_trips_and_is_not_blocked() -> None:
     """업무 예제의 호출이 **손대지 않으면 같은 본문으로** 돌아오고, 고칠 것 없이 막히지 않는다.
 
     대상은 예제 폴더의 정의들이다. 위임 대상은 생성기의 이름 규칙(`Proc_<id>`)으로 그 정의를 찾아
-    Bot으로 세운다 — 그래야 출력·입력 대조까지 진짜 예제로 밟는다.
+    BPM 프로세스로 세운다 — 그래야 출력·입력 대조까지 진짜 예제로 밟는다.
     """
     processes = _example_targets()
     targets = {pid: target_of(found, "이 패키지") for pid, found in processes.items()}
@@ -203,7 +203,7 @@ def test_an_empty_bot_is_blocked() -> None:
     made = loaded({"calledElement": "Proc_ship", "call": {}})
     made.mode_picks[MODE_DELEGATE].setChecked(True)
     made.bot_box.setEditText("")
-    assert "맡길 Bot을 고르세요 (bpm_process_id)." in made.problems()[0]
+    assert "맡길 BPM 프로세스를 고르세요 (bpm_process_id)." in made.problems()[0]
 
 
 def test_a_pc_expression_for_a_server_bot_is_blocked() -> None:
@@ -268,7 +268,7 @@ def test_picking_a_bot_writes_its_process_id() -> None:
     made.bot_box.setCurrentIndex(made.bot_box.findData("erp-entry"))
     assert made.dump() == {"calledElement": "Proc_erp_entry", "call": {"delegate": {"bpm_process_id": "erp-entry"}}}
     made.bot_box.setEditText("typed-bot")
-    assert made.dump()["calledElement"] == "", "모르는 Bot이면 남의 이름을 남기지 않는다"
+    assert made.dump()["calledElement"] == "", "모르는 BPM 프로세스이면 남의 이름을 남기지 않는다"
 
 
 def test_fill_adds_only_missing_rows() -> None:

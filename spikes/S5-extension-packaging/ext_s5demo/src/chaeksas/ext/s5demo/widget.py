@@ -1,4 +1,4 @@
-"""확장이 기여하는 Qt 화면 (Bot UI 「도구」 유틸리티 흉내)."""
+"""확장이 기여하는 Qt 화면 (PC 실행기 「도구」 유틸리티 흉내)."""
 
 from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 

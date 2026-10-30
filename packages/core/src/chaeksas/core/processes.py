@@ -1,6 +1,6 @@
 """자식 프로세스 관리 — **공통 헬퍼 한 곳** (CLAUDE.md §5, ADR-0023).
 
-Bot UI가 Worker 프로세스와 실행기를 띄우고 감시·재시작·강제 종료한다. 그 OS 차이를 여기서만 다룬다.
+PC 실행기가 Worker 프로세스와 실행기를 띄우고 감시·재시작·강제 종료한다. 그 OS 차이를 여기서만 다룬다.
 
 | | Windows (주 환경) | Linux·macOS |
 | --- | --- | --- |
@@ -56,7 +56,7 @@ def _windows_job() -> int | None:
     """자식을 담을 Job Object를 만든다. **닫으면 그 안의 프로세스가 모두 죽는다.**
 
     Windows 밖에서는 `None`. 만들지 못해도 (권한·중첩 Job) `None`을 돌려주고 계속 간다 —
-    묶기가 없으면 손자 프로세스가 남을 수 있지만, 그것 때문에 Bot UI가 안 뜨면 더 나쁘다.
+    묶기가 없으면 손자 프로세스가 남을 수 있지만, 그것 때문에 PC 실행기가 안 뜨면 더 나쁘다.
     """
     if sys.platform != "win32":  # pragma: no cover - OS 분기
         return None
@@ -195,7 +195,7 @@ class ChildProcess:
         kwargs: dict[str, Any] = {}
         if sys.platform == "win32":  # pragma: no cover - OS 분기
             # 새 프로세스 그룹: CTRL_BREAK_EVENT를 자식에게만 보낼 수 있다.
-            # 콘솔 창은 띄우지 않는다 (Bot UI는 트레이 앱이다).
+            # 콘솔 창은 띄우지 않는다 (PC 실행기는 트레이 앱이다).
             kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW
             self._job = _windows_job()
         else:

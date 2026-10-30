@@ -9,7 +9,7 @@
    대조한다. 키가 새도 남의 결재를 가로채지 못한다.
 2. **거절은 되돌림이다** — 실행하는 쪽이 답을 받아들이지 못하면(`rejected_by_host`) 곧바로
    `open`으로 돌아가고 사유만 남는다. 결재자가 고쳐서 다시 답한다.
-3. **답할 곳이 없어진 결재는 자동으로 회수한다** — 실행이 끝났거나(`run_ended`) Bot UI가
+3. **답할 곳이 없어진 결재는 자동으로 회수한다** — 실행이 끝났거나(`run_ended`) PC 실행기가
    대기열을 잃으면(`host_lost`). 답은 할 수 있는데 전달될 데가 없는 결재를 남기지 않는다.
    **끝난 실행의 결재는 다시 열리지 않는다** — 2의 되돌림은 답에만, 실행이 도는 동안에만이다.
 """
@@ -61,9 +61,9 @@ ADMIN_WITHDRAW = "admin_withdraw"
 
 
 def _host_key(found: Caller) -> Any:
-    """결재를 올릴 수 있는 키인가 (C6 — Bot UI·서버 실행기만)."""
+    """결재를 올릴 수 있는 키인가 (C6 — PC 실행기·서버 실행기만)."""
     if found.key is None or found.key.type not in HOST_KEY_TYPES:
-        raise ApiError(403, "wrong_key_type", "결재는 Bot UI·서버 실행기 키로 올린다")
+        raise ApiError(403, "wrong_key_type", "결재는 PC 실행기·서버 실행기 키로 올린다")
     return found.key
 
 

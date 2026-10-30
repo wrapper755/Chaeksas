@@ -4,7 +4,7 @@
 `server` 표시를 붙이고, Windows 잡은 `pytest -m "not server"`로 돈다. **기본은 양쪽이다** — 적지 않은
 파일은 Windows에서도 돈다(빠뜨리면 더 보는 쪽으로 틀린다).
 
-**엔진(`core`)은 적지 않는다** — PC Bot은 Bot UI의 실행기 자식으로 Windows에서 엔진을 돌린다.
+**엔진(`core`)은 적지 않는다** — PC BPM 프로세스는 실행 프로세스로 Windows에서 엔진을 돌린다.
 **PC 쪽 코드가 걸린 파일도 적지 않는다** (`test_ci_scope.py`가 import로 본다): 서버 실행기 위임
 시험은 PC를 진짜 자식 프로세스로 돌리고, UI 자동화 앱 시험은 Worker의 부르는 쪽을 함께 본다.
 """

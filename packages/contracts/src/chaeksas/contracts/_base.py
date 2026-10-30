@@ -70,7 +70,7 @@ class ContractModel(BaseModel):
 
         **필수 필드는 `None`이어도 싣는다.** 계약에 「필수이지만 비어 있을 수 있다」고 적은
         자리가 있다 (C4 `current_run` — 실행 자리가 비었다는 뜻을 `null`로 보낸다). 빼 버리면
-        받는 쪽이 「필수 필드 누락」으로 거부한다 — Bot UI 하트비트가 실제로 422로 막혔다.
+        받는 쪽이 「필수 필드 누락」으로 거부한다 — PC 실행기 하트비트가 실제로 422로 막혔다.
         """
         dumped = self.model_dump(exclude_none=True)
         return _with_required_nulls(self, dumped)

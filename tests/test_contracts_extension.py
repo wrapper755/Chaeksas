@@ -434,7 +434,7 @@ def test_panels_are_listed_for_c7() -> None:
 def test_old_command_field_is_refused_not_ignored() -> None:
     """schema 1의 `command`만 적은 정의는 **거부된다** (schema 2에서 `entry`가 필수, ADR-0024).
 
-    조용히 무시하면 Bot UI가 로컬 런타임을 띄우지 못하는데 확장은 켜진 것처럼 보인다.
+    조용히 무시하면 PC 실행기가 로컬 런타임을 띄우지 못하는데 확장은 켜진 것처럼 보인다.
     """
     definition = builtin(
         schema=1, contributes={"bot_ui.local_runtimes": [{"id": "worker", "label": "W", "command": ["chk-worker"]}]}

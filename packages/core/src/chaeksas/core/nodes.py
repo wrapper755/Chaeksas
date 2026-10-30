@@ -242,7 +242,7 @@ def handle_subprocess(context: Context) -> Outcome:
 def handle_approval(context: Context) -> Outcome:
     """`userTask`(결재)·`manualTask`(확인) — 요청을 올리고 **기다린다**.
 
-    PC Bot은 기다리는 동안에도 실행 자리를 쥔다 (ADR-0014). 어디서 답하는지(`where`)는
+    PC BPM 프로세스는 기다리는 동안에도 실행 자리를 쥔다 (ADR-0014). 어디서 답하는지(`where`)는
     `location`과 실행하는 쪽의 기본값(`RunEnv.approval_where`)이 정한다 (ADR-0038). **확인은 늘
     현장이다** — 화면 앞 사람만 답할 수 있다 (C6).
     """
@@ -514,7 +514,7 @@ def escalate_to_person(
 ) -> Outcome:
     """그 자리에서 **현장 확인 하나**로 멈춘다 (ADR-0106, C10 `escalated`·C13 §4).
 
-    요청은 `manualTask`의 확인과 같은 모양이라(C6 `confirmation`, 늘 현장) Bot UI·CMN-01이 그대로
+    요청은 `manualTask`의 확인과 같은 모양이라(C6 `confirmation`, 늘 현장) PC 실행기·CMN-01이 그대로
     띄우고 답을 나른다. 답은 `Engine.answer`가 받는다 — 「계속」은 넘어가고 「중단」은 `ESCALATED`다.
     `retry_attempt`가 있으면 서비스 호출의 결과 모름이다 (ADR-0107) — 「계속」은 그 번째로 다시 부르고
     「중단」은 `TASK_FAILED`다.
@@ -801,7 +801,7 @@ def _replayed(
 ) -> AgentOutcome | None:
     """결정 수행이면 기억을 되밟는다 (C14 §재생, ADR-0028). 쓸 기억이 없으면 `None`.
 
-    **명세가 없다고 실패시키지 않는다** — 처음 배포한 Bot이 멈추면 안 된다. 그냥 모델을 부른다.
+    **명세가 없다고 실패시키지 않는다** — 처음 배포한 BPM 프로세스가 멈추면 안 된다. 그냥 모델을 부른다.
     """
     run, node = context.run, context.node
     if run.mode != "deterministic" or spec.replay == "none" or run.env.memory is None:
@@ -1159,7 +1159,7 @@ def handle_call(context: Context) -> Outcome:
         mode=run.mode,
         executor=run.executor,
         version=run.version,
-        # 안쪽도 **같은 실행**이다 — 바깥 Bot의 이름을 물려받는다 (ADR-0086).
+        # 안쪽도 **같은 실행**이다 — 바깥 BPM 프로세스의 이름을 물려받는다 (ADR-0086).
         bpm_process_id=run.identity,
         nested=True,
     )

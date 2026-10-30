@@ -5,7 +5,7 @@
 /**
  * `POST /virtual-workers`·`PUT /virtual-workers/{id}` — 사람이 아닌 업무 주체 (ADR-0085).
  *
- * **기동 허용 목록은 없다** — 접수 Bot의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
+ * **기동 허용 목록은 없다** — 접수 BPM 프로세스의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
  */
 export interface VirtualWorkerRequest {
   id: string;

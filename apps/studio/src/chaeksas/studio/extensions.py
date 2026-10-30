@@ -7,8 +7,8 @@ Studio는 **어느 확장인지 모른다.** `chk:task`의 `type`으로 기여�
 - 편집기는 **태스크 종류마다 하나**를 만들어 두고 다시 쓴다 (`load()`/`dump()`로 오간다).
 - 서버 주소는 **호스트가 예약 키로** 준다 (C13 `service.base_url`) — 확장이 설정에
   따로 두지 않는다. 출처는 하나다.
-- **시험 실행도 확장을 쓴다** (`tasks()`) — UI 태스크·데스크톱 AI 태스크는 **이 PC의 Bot UI가
-  띄운 로컬 런타임(Worker)** 을 쓴다 (STU-10 「Worker」). 자리는 Bot UI가 런타임 폴더에 남긴
+- **시험 실행도 확장을 쓴다** (`tasks()`) — UI 태스크·데스크톱 AI 태스크는 **이 PC의 PC 실행기가
+  띄운 로컬 런타임(Worker)** 을 쓴다 (STU-10 「Worker」). 자리는 PC 실행기가 런타임 폴더에 남긴
   `runtime.json`(포트)과 토큰 파일이다 — Studio가 띄우지 않는다.
 - 키 참조(ADR-0013)는 **환경변수 `CHK_STUDIO__SVC__<참조>`가 먼저**, 그다음 OS 비밀 저장소
   (`chaeksas-studio`, `svc:<참조>`)다. 값은 개발용 키다 (STU-10 「서비스 앱 키」).
@@ -53,7 +53,7 @@ class PlainSettings:
 class LiveSettings:
     """`extension_api.Settings` — **물을 때마다** 다시 짓는다 (편집기는 한 번 만들어 다시 쓴다).
 
-    Bot UI가 Worker를 다시 띄우면 포트가 바뀐다.
+    PC 실행기가 Worker를 다시 띄우면 포트가 바뀐다.
     """
 
     values: Callable[[], Mapping[str, Any]]
@@ -68,21 +68,21 @@ class NoSecrets:
     """`extension_api.Secrets` — **Studio에는 비밀이 없다**.
 
     설계할 때는 키가 필요 없다 (공개 카탈로그만 읽는다, ADR-0008·C9). 키가 필요한 일은
-    Bot UI·실행기가 한다 (ADR-0013).
+    PC 실행기·실행기가 한다 (ADR-0013).
     """
 
     def resolve(self, ref: str) -> str | None:
         return None
 
 
-#: Bot UI가 런타임 폴더에 남기는 자리 정보 (`{"runtime", "port"}`).
+#: PC 실행기가 런타임 폴더에 남기는 자리 정보 (`{"runtime", "port"}`).
 RUNTIME_FILE = "runtime.json"
 
 
 def bot_ui_data_dir() -> Path:
-    """이 PC Bot UI의 사용자 데이터 위치 — Bot UI와 **같은 규칙**이다 (`CHK_BOT_UI__DATA_DIR`가 이긴다).
+    """이 PC PC 실행기의 사용자 데이터 위치 — PC 실행기와 **같은 규칙**이다 (`CHK_BOT_UI__DATA_DIR`가 이긴다).
 
-    Studio는 Bot UI를 import하지 않는다 (앱끼리 import하지 않는다). 규칙이 어긋나면 시험이 잡는다.
+    Studio는 PC 실행기를 import하지 않는다 (앱끼리 import하지 않는다). 규칙이 어긋나면 시험이 잡는다.
     """
     override = os.environ.get("CHK_BOT_UI__DATA_DIR")
     if override:
@@ -165,7 +165,7 @@ class Extensions:
         """그 확장의 Studio 설정 + 예약 키 (C13 — `center.url`).
 
         칸의 값은 STU-10 「확장별 설정」이 넣은 것이고, 넣지 않은 칸은 `None`이다. **비밀 칸은
-        여기 오지 않는다** — `secrets.resolve(<칸>)`으로 푼다 (Bot UI와 같다).
+        여기 오지 않는다** — `secrets.resolve(<칸>)`으로 푼다 (PC 실행기와 같다).
         """
         found = self.host.get(extension_id)
         values: dict[str, Any] = {}
@@ -178,9 +178,9 @@ class Extensions:
         return PlainSettings(values=values)
 
     def runtime_settings(self, extension_id: str, *, root: Path | None = None) -> dict[str, Any]:
-        """그 확장의 로컬 런타임 자리 — **Bot UI가 띄운 것**을 가리킨다 (C13 예약 키 `runtime.<id>.*`).
+        """그 확장의 로컬 런타임 자리 — **PC 실행기가 띄운 것**을 가리킨다 (C13 예약 키 `runtime.<id>.*`).
 
-        포트는 Bot UI가 런타임 폴더에 남긴 `runtime.json`, 없으면 그 런타임의 설정 환경변수, 그것도
+        포트는 PC 실행기가 런타임 폴더에 남긴 `runtime.json`, 없으면 그 런타임의 설정 환경변수, 그것도
         없으면 기여의 기본 포트다. Studio는 런타임을 띄우지 않는다.
         """
         where = (root or bot_ui_data_dir()) / "runtimes"

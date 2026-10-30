@@ -1,4 +1,4 @@
-"""Bot UI 화면 — 트레이(BUI-01)·설정(BUI-03)·메인 창(BUI-02·04).
+"""PC 실행기 화면 — 트레이(BUI-01)·설정(BUI-03)·메인 창(BUI-02·04).
 
 화면 없이 돈다 (`QT_QPA_PLATFORM=offscreen`). **보이는 글과 켜짐/꺼짐만** 본다 — 그림을 보는
 시험이 아니다. Windows 실기에서 봐야 하는 것(트레이 아이콘 실제 동작, 자동 시작 등록)은
@@ -170,12 +170,12 @@ def test_tray_menu_shows_the_information_rows(app: Any, agent: Agent) -> None:
     texts = [action.text() for action in tray.contextMenu().actions()]
 
     assert any("재무팀 PC-03" in text for text in texts)
-    assert "실행 중인 Bot 없음" in texts
+    assert "실행 중인 BPM 프로세스 없음" in texts
     assert any("대기열 1건 — 다음: erp.order-entry" in text for text in texts)
     assert any("Worker: 꺼 둠" in text for text in texts)
     # 누를 수 있는 것은 이것뿐이다.
     assert {"창 열기", "설정...", "종료"} <= set(texts)
-    assert tray.toolTip() == "Chaeksas Bot UI · 대기 · 대기 1건"
+    assert tray.toolTip() == "Chaeksas PC 실행기 · 대기 · 대기 1건"
 
 
 def test_the_tray_menu_is_rebuilt_on_refresh(app: Any, agent: Agent) -> None:
@@ -350,7 +350,7 @@ def test_main_window_empty_queue_disables_cancel(app: Any, agent: Agent) -> None
     from chaeksas.bot_ui.main_window import MainWindow  # noqa: PLC0415
 
     window = MainWindow(agent)
-    assert window.running_label.text() == "실행 중인 Bot이 없습니다."
+    assert window.running_label.text() == "실행 중인 BPM 프로세스가 없습니다."
     assert not window.cancel_button.isEnabled()
     assert window.cancel_button.toolTip() == "기다리는 실행이 없습니다."
 
@@ -367,8 +367,8 @@ def test_main_window_status_bar_matches_the_spec(app: Any, agent: Agent) -> None
 
 
 def test_shutdown_reports_center_jobs_as_rejected(app: Any, tmp_path: Path) -> None:
-    """종료 순서: 새 요청 막기 → **대기열의 Center 작업을 「거절 — Bot UI 종료」로 보고** →
-    실행기 취소 → Worker 종료 (C4 `bot_ui_shutdown`).
+    """종료 순서: 새 요청 막기 → **대기열의 Center 작업을 「거절 — PC 실행기 종료」로 보고** →
+    실행 프로세스 취소 → Worker 종료 (C4 `bot_ui_shutdown`).
     """
     from PySide6.QtWidgets import QApplication  # noqa: PLC0415
 

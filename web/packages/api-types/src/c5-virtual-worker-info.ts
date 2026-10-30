@@ -17,7 +17,7 @@ export interface VirtualWorkerInfo {
   [k: string]: unknown;
 }
 /**
- * 일괄 하나 = 접수 Bot 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다.
+ * 일괄 하나 = 접수 BPM 프로세스 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다.
  */
 export interface VirtualWorkerBatch {
   children?: number;

@@ -1,11 +1,11 @@
-"""Bot UI가 런타임의 **상태를 묻고 곱게 끈다** — C13 `status`·`shutdown`, C10 §4, §1·§4-2·§3-4·§3-8.
+"""PC 실행기가 런타임의 **상태를 묻고 곱게 끈다** — C13 `status`·`shutdown`, C10 §4, §1·§4-2·§3-4·§3-8.
 
 붙이기 전까지 Worker의 `GET /v1/status`는 **부르는 쪽이 Worker 자신뿐**이었다 — `reserved_for`·
 `unsent_reports`를 아무도 읽지 않아 BUI-09의 칸과 C4 하트비트의 `worker.reserved_for`가 늘
-비어 있었다. 끄기도 그랬다: Bot UI가 프로세스를 그냥 죽여 **열린 세션의 보고를 저장할 틈이
+비어 있었다. 끄기도 그랬다: PC 실행기가 프로세스를 그냥 죽여 **열린 세션의 보고를 저장할 틈이
 없었다**.
 
-Bot UI는 C10을 모른다 — **확장 정의의 선언대로만** 부른다 (ADR-0018). 그래서 여기서 지키는 것은
+PC 실행기는 C10을 모른다 — **확장 정의의 선언대로만** 부른다 (ADR-0018). 그래서 여기서 지키는 것은
 둘이다: 선언이 맞나(계약), 그리고 **진짜 Worker**에 그 선언대로 부르면 되나.
 """
 
@@ -56,7 +56,7 @@ class Backend:
 
 @pytest.fixture
 def worker() -> Iterator[tuple[Worker, int, list[bool]]]:
-    """진짜 Worker 앱을 진짜 HTTP로 — 토큰은 Bot UI가 읽는 그 자리에 쓴다."""
+    """진짜 Worker 앱을 진짜 HTTP로 — 토큰은 PC 실행기가 읽는 그 자리에 쓴다."""
     import uvicorn  # noqa: PLC0415
 
     token, admin = write_tokens(token_dir_for("worker"))
@@ -192,7 +192,7 @@ def test_shutting_down_closes_the_open_session_and_then_stops(
 
 
 def test_shutdown_needs_the_admin_token(worker: tuple[Worker, int, list[bool]]) -> None:
-    """사용 토큰으로는 끌 수 없다 (C10 403 `admin_only`) — 실행 중 Bot이 Worker를 끄지 못한다."""
+    """사용 토큰으로는 끌 수 없다 (C10 403 `admin_only`) — 실행 중 BPM 프로세스가 Worker를 끄지 못한다."""
     import httpx  # noqa: PLC0415
 
     made, port, stopped = worker

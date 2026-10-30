@@ -46,7 +46,7 @@ DEFAULT_SCENARIO = "기본"
 #: 모의 제어 경로 (C11이 아니다 — 위 설명).
 SCENARIO_PATH = "/mock/v1/scenario"
 
-#: 모든 앱이 두 수행 모드를 받는다 — Bot은 결정 수행, Studio 시험 실행은 자율 수행이다.
+#: 모든 앱이 두 수행 모드를 받는다 — BPM 프로세스는 결정 수행, Studio 시험 실행은 자율 수행이다.
 BOTH_MODES = (MODE_DETERMINISTIC, MODE_AUTONOMOUS)
 
 #: 모든 모의 앱이 함께 읽는 접두사 (`CHK_MOCK_APPS__CENTER__URL`·`…__CENTER__TOKEN`). 모의 앱 열셋은

@@ -64,7 +64,7 @@ def run_test(window: MainWindow, *, mode: str | None = None) -> None:
         found.process,
         process,
         task_type_locations=window.task_type_locations(),
-        # **PC 위임이 받을 값**은 그 Bot의 매니페스트가 아는 것이라 Center에서 받아 둔 것을
+        # **PC 위임이 받을 값**은 그 BPM 프로세스의 매니페스트가 아는 것이라 Center에서 받아 둔 것을
         # 쓴다 (C1 → B14, ADR-0062). 못 받았으면 그 대조만 건너뛴다.
         delegated_outputs=window.delegated_outputs(),
     ) + window.readiness()
@@ -78,7 +78,7 @@ def run_test(window: MainWindow, *, mode: str | None = None) -> None:
     if not plans:
         return
 
-    # 확장 태스크·데스크톱 AI 태스크가 이 PC Bot UI의 Worker를 쓴다 (STU-10 「Worker」).
+    # 확장 태스크·데스크톱 AI 태스크가 이 PC PC 실행기의 Worker를 쓴다 (STU-10 「Worker」).
     tasks = window.extensions.tasks()
     # 서비스 태스크는 Center에 외부 작업으로 올린다 (C15, ADR-0102) — Studio 키로, 시험 일감이다.
     # 키가 없으면 호출기가 없고 그 태스크는 부르는 순간 분명히 실패한다.
