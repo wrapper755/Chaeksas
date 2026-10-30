@@ -256,6 +256,62 @@ def test_a_deprecated_package_cannot_be_deployed_again(center: Center) -> None:
     assert caught.value.code == "deprecated"
 
 
+def test_a_deprecated_package_keeps_running_where_it_is_deployed(center: Center) -> None:
+    """지원 종료는 **새 배포만** 막는다 — 이미 배포된 것은 그대로 돈다 (C5 §패키지, 09-gaps §3-22).
+
+    고르는 자리가 모두 `approved` 하나로 걸러, 누르는 순간 봉투가 하트비트에서 사라지고 작업·
+    위임·내려받기가 그 판을 「배포되지 않음」으로 봤다. 고르는 조건은 이제 `live_sql` 하나다.
+    """
+    from chaeksas.center.api import deployments as deployments_api
+
+    store = center.client.app.state.store
+    pc = approved(center)
+    server = approved(center, package_id="erp.night-close", run_location="server")
+    deploy(center, pc)
+    runner = center.client.post(
+        "/api/v1/center-keys", json={"name": "서버 1", "type": "server_runner"},
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    ).json()["key"]
+    registered = center.client.post(
+        "/api/v1/server-runner/register",
+        json={"schema": 1, "machine_id": "7" * 64, "name": "서버 1", "os": "Linux",
+              "versions": {"server_runner": "0.1.0", "core": "0.1.0"}, "max_concurrency": 2},
+        headers={"Authorization": f"Bearer {runner}"},
+    )
+    assert registered.status_code < 400, registered.text
+    deploy(center, server, target_type="server_runner", target=registered.json()["server_runner_id"])
+    before = _envelopes(center)
+
+    for info in (pc, server):
+        center.deprecate(info["id"], info["version"])
+
+    # 하트비트 봉투(C4)는 같은 것이 그대로 내려간다.
+    assert _envelopes(center) == before and len(before) == 1
+    # 작업 지시(C5 `/jobs`)가 판을 푼다 — `version`을 비워도 Center가 채운다.
+    job = center.client.post(
+        "/api/v1/jobs",
+        json={"bpm_process_id": pc["id"], "target": {"type": "bot_ui", "id": BOT_UI}, "inputs": {}},
+        headers={"Authorization": f"Bearer {TOKEN}"},
+    )
+    assert job.status_code == 201, job.text
+    assert job.json()["version"] == pc["version"]
+    assert deployments_api.server_versions(store, bpm_process_id=server["id"]) == [server["version"]]
+    # PC 위임이 고르는 PC(C12)도 그대로다.
+    assert deployments_api.targets_for(
+        store, bpm_process_id=pc["id"], version=pc["version"], target_type="bot_ui"
+    ) == [BOT_UI]
+    assert deployments_api.versions_deployed_to(
+        store, bpm_process_id=pc["id"], target_type="bot_ui"
+    ) == [pc["version"]]
+    # 내려받기도 된다 — 다시 설치해야 하는 PC가 있다.
+    auth = {"Authorization": f"Bearer {center.client.app.state.bot_ui_key}"}
+    assert center.client.get(f"/api/v1/packages/{pc['id']}/{pc['version']}", headers=auth).status_code == 200
+    # 새 배포만 막힌다.
+    with pytest.raises(CenterProblem) as caught:
+        deploy(center, pc)
+    assert caught.value.code == "deprecated"
+
+
 def test_deploying_twice_makes_two_deployments(center: Center) -> None:
     """같은 배포를 두 번 누르면 **두 배포**다 — `deployment_id`를 Center가 새로 짓는다 (ADR-0090 §6).
 
@@ -919,3 +975,158 @@ def test_the_results_ride_the_next_heartbeat(center: Center, tmp_path: Path) -> 
 
     agent.store.deployments_sent(request.deployment_results)
     assert agent.store.state.pending_deployments == [], "보낸 것은 지운다"
+
+
+# ─────────────────────── 목록과 설치를 맞춘다 (C2 §검증 규칙, ADR-0113) ───────────────────────
+
+
+def _installed_one(center: Center, tmp_path: Path, **extra: Any) -> tuple[Deployer, dict[str, Any], dict[str, Any]]:
+    """배포 → 설치 → 맞추기 한 번. `(현장, 패키지, 배포)`."""
+    info = approved(center)
+    made = deploy(center, info, **extra)
+    field = deployer(center, tmp_path)
+    envelopes = _envelopes(center)
+    assert [x.result for x in field.apply(envelopes)] == [APPLIED]
+    assert field.reconcile(envelopes) == []
+    return field, info, made
+
+
+def _finding(field: Deployer, *, now: str | None = None) -> str | None:
+    from chaeksas.core.deploy import deployment_finding
+
+    [bot] = installed(field.data_dir)
+    found = deployment_finding(bot, now=now or AT)
+    return found.id if found is not None else None
+
+
+def test_a_revoked_deployment_turns_the_install_off(center: Center, tmp_path: Path) -> None:
+    """배포를 철회하면 **다음 하트비트에서** 「실행 불가」다 — 파일은 그대로다 (C2 §검증 규칙)."""
+    from chaeksas.core.deploy import DEPLOYMENT_WITHDRAWN, read_standing
+
+    field, _, made = _installed_one(center, tmp_path)
+    assert _finding(field) is None
+    [bot] = installed(field.data_dir)
+    assert read_standing(bot.folder).deployment_ids == (made["deployment_id"],)  # type: ignore[union-attr]
+
+    center.revoke_deployment(made["deployment_id"], reason="결함")
+    gone = field.reconcile(_envelopes(center))
+    assert [one.id for one in gone] == [bot.id]
+    assert _finding(field) == DEPLOYMENT_WITHDRAWN
+    assert installed(field.data_dir), "파일은 지우지 않는다"
+    assert field.reconcile(_envelopes(center)) == [], "빠졌다고는 한 번만 말한다"
+
+
+def test_a_revoked_approval_turns_the_install_off_too(center: Center, tmp_path: Path) -> None:
+    from chaeksas.core.deploy import DEPLOYMENT_WITHDRAWN
+
+    field, info, _ = _installed_one(center, tmp_path)
+    center.revoke_package(info["id"], info["version"], reason="결함")
+    field.reconcile(_envelopes(center))
+    assert _finding(field) == DEPLOYMENT_WITHDRAWN
+
+
+def test_a_retired_signing_key_turns_the_install_off(center: Center, tmp_path: Path) -> None:
+    """서명 키를 버린 것도 같은 길이다 — 봉투가 목록에 있어도 V2로 덮지 못한다 (C2)."""
+    from chaeksas.core.deploy import DEPLOYMENT_WITHDRAWN
+
+    field, _, _ = _installed_one(center, tmp_path)
+    store = center.client.app.state.store
+    old = center_signer.current_key_id(store)
+    center_signer.rotate(store)
+    center_signer.retire(store, old)
+    field.keys = center.admin_keys()
+    field.reconcile(_envelopes(center))
+    assert _finding(field) == DEPLOYMENT_WITHDRAWN
+
+
+def test_a_deprecated_package_stays_on_in_the_field(center: Center, tmp_path: Path) -> None:
+    """지원 종료는 현장을 끄지 않는다 — 봉투가 그대로 내려오기 때문이다 (C5, §3-22)."""
+    field, info, _ = _installed_one(center, tmp_path)
+    center.deprecate(info["id"], info["version"])
+    assert field.reconcile(_envelopes(center)) == []
+    assert _finding(field) is None
+
+
+def test_deploying_the_same_version_again_turns_it_back_on(center: Center, tmp_path: Path) -> None:
+    """철회된 배포가 되살아나는 것이 아니라 **새 배포가 덮는다**."""
+    field, info, made = _installed_one(center, tmp_path)
+    center.revoke_deployment(made["deployment_id"], reason="잘못")
+    field.reconcile(_envelopes(center))
+    deploy(center, info)
+    field.reconcile(_envelopes(center))
+    assert _finding(field) is None
+
+
+def test_without_keys_nothing_is_reconciled(center: Center, tmp_path: Path) -> None:
+    """서명을 볼 수 없으면 맞추지 않는다 — 맞추면 모든 설치가 빠진다."""
+    field, _, _ = _installed_one(center, tmp_path)
+    field.keys = []
+    assert field.reconcile([]) == []
+    assert _finding(field) is None
+
+
+def test_the_field_sees_the_expiry_without_center(center: Center, tmp_path: Path) -> None:
+    """기한은 표식으로 **현장이 혼자** 본다 — Center에 닿지 않아도 지나면 「실행 불가」다."""
+    from chaeksas.core.deploy import DEPLOYMENT_EXPIRED
+
+    ends = (datetime.now(UTC) + timedelta(days=30)).isoformat()
+    field, _, _ = _installed_one(center, tmp_path, expires_at=ends)
+    assert _finding(field) is None
+    later = (datetime.now(UTC) + timedelta(days=31)).isoformat()
+    assert _finding(field, now=later) == DEPLOYMENT_EXPIRED
+
+
+def test_a_manual_install_is_not_governed_by_the_list(tmp_path: Path) -> None:
+    """「수동 설치」는 Center 목록이 들인 것이 아니다 (ADR-0113 §3)."""
+    data = tmp_path / "botui"
+    _manual(data, tmp_path)
+    field = Deployer(data_dir=data, host_id=BOT_UI, keys=[object()], clock=lambda: AT)  # type: ignore[list-item]
+    assert field.reconcile([]) == []
+    assert _finding(field) is None
+
+
+def test_the_pc_runner_refuses_a_withdrawn_bot_and_says_so(center: Center, tmp_path: Path) -> None:
+    """한 바퀴 — 하트비트가 **답한** 빈 목록 → 알림 · `readiness` · BUI-04 「지금 실행...」 거절."""
+    from conftest import FakeCredentials
+
+    from chaeksas.bot_ui.agent import Agent
+    from chaeksas.bot_ui.main_window import readiness_label
+    from chaeksas.bot_ui.notices import DEPLOYMENT_WITHDRAWN as NOTICE
+    from chaeksas.bot_ui.settings import Settings as BotSettings
+    from chaeksas.bot_ui.settings import data_dir
+    from chaeksas.bot_ui.store import Store as BotStore
+    from chaeksas.contracts.bot_ui import HeartbeatResponse
+    from chaeksas.core.deploy import DEPLOYMENT_WITHDRAWN
+
+    info = approved(center)
+    made = deploy(center, info)
+    agent = Agent(
+        settings=BotSettings(),
+        store=BotStore.load(tmp_path / "state.json"),
+        credentials=FakeCredentials("chk_ctr_test"),
+    )
+    agent.store.state.bot_ui_id = BOT_UI
+    field = deployer(center, tmp_path)
+    field.data_dir = data_dir()
+    agent.deployer = lambda: field  # type: ignore[method-assign]
+    keys = [one.to_json_dict() for one in center.admin_keys()]
+
+    def beat() -> None:
+        agent.apply_deployments(
+            HeartbeatResponse.model_validate({"server_time": AT, "deployments": _envelopes(center), "admin_keys": keys})
+        )
+
+    beat()
+    [ready] = agent.readiness()
+    assert ready.ready
+
+    center.revoke_deployment(made["deployment_id"], reason="결함")
+    beat()
+    [ready] = agent.readiness()
+    assert not ready.ready and ready.blocked[0] == DEPLOYMENT_WITHDRAWN
+    assert [n.kind for n in agent.notices.take()].count(NOTICE) == 1
+    [bot] = installed(data_dir())
+    assert readiness_label(agent.preflight(bot))[0] == "배포 철회"
+    with pytest.raises(RuntimeError, match="철회"):
+        agent.enqueue_manual(info["id"], version=info["version"])
+    assert agent.queue == []

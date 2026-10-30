@@ -330,6 +330,29 @@ def test_installing_twice_is_quiet(
     assert runner.pending_results == []
 
 
+def test_a_revoked_deployment_makes_jobs_not_ready(
+    center: TestClient, store: Store, runner: agent_mod.Agent
+) -> None:
+    """철회하면 다음 하트비트에서 「실행 불가」다 — 파일은 남고 작업은 `not_ready` (C12, ADR-0113)."""
+    from chaeksas.contracts.bot_ui import JobDispatch
+    from chaeksas.core.deploy import DEPLOYMENT_WITHDRAWN
+
+    made = deployed(center, store, runner).json()
+    runner.tick()
+    assert runner.readiness()[0].ready is True
+
+    center_admin.revoke_deployment(center, made["deployment_id"])
+    runner.tick()
+    [ready] = runner.readiness()
+    assert ready.ready is False and ready.blocked[0] == DEPLOYMENT_WITHDRAWN
+    assert installed(runner.settings.data_path), "파일은 지우지 않는다"
+    job = JobDispatch.model_validate(
+        {"job_id": "job_1", "bpm_process_id": BOT, "version": "1.0.0", "inputs": {},
+         "requested_at": AT, "requested_by": "admin"}
+    )
+    assert runner._take_one(job).reason == "not_ready"
+
+
 def _public_keys(store: Store) -> list[Any]:
     from chaeksas.center.api import signing as signing_api
 

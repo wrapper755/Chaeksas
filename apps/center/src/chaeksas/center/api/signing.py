@@ -25,6 +25,13 @@ from chaeksas.contracts.signing import AdminKey, Envelope, verify
 STATUS_CANDIDATE = "candidate"
 STATUS_APPROVED = "approved"
 STATUS_REVOKED = "revoked"
+#: 지원 종료 (C5 `PUT …/status`) — **막는 쪽이라 서명이 없다**. 철회(`revoked`)는 서명이 있다.
+STATUS_DEPRECATED = "deprecated"
+
+#: **이미 배포된 것이 그대로 도는** 패키지 상태 (C5 §패키지). 지원 종료는 **새 배포만** 막는다 —
+#: 돌고 있는 것을 세우는 것은 배포 철회다. 그래서 활성 배포를 고르는 자리는 이 둘을 받는다
+#: (`deployments._live_sql`), 새 배포·승인 관문은 `approved` 하나다.
+LIVE_STATUSES = (STATUS_APPROVED, STATUS_DEPRECATED)
 
 
 def _refuse(problems: list[Any]) -> None:
@@ -136,6 +143,8 @@ __all__ = [
     "STATUS_APPROVED",
     "STATUS_REVOKED",
     "STATUS_CANDIDATE",
+    "STATUS_DEPRECATED",
+    "LIVE_STATUSES",
     "active_keys",
     "admin_keys",
     "approve_package",

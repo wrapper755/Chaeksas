@@ -130,7 +130,7 @@ AccountInfo 필드: `username`, `role`, `state`(`active` / `disabled`), `created
 - **받는 값은 `deprecated` 하나뿐이다.** 되돌리는 것은 「다시 허용」이고 그 길은 승인(`PUT …/signature`)이다. 다른 값을 주면 422 `input_invalid`.
 - **`revoked`는 끝이다** — 철회된 것은 되살아나지 않고 더 막을 것도 없다 (409 `package_revoked`).
 - 어느 상태에서든 지원 종료로 갈 수 있고(`candidate`도 — 새 배포를 막는 뜻이다), **두 번 해도 같은 답**이다.
-- **이미 배포된 것은 그대로 돈다** — 내려받기도 그대로 된다 (철회면 410이다). 돌고 있는 것을 세우는 것은 배포 철회다.
+- **이미 배포된 것은 그대로 돈다** — 내려받기도 그대로 된다 (철회면 410이다). 돌고 있는 것을 세우는 것은 배포 철회다. 하트비트 봉투·작업의 판·PC 위임·일정·메시지 시작·내려받기가 활성 배포를 고르는 조건은 **하나**다 — 철회되지 않았고 패키지가 `approved`·`deprecated` ([ADR-0113](../decisions/0113-field-follows-withdrawn-deployments.md) §8).
 
 PackageInfo 필드:
 
@@ -487,6 +487,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | 「이미 배포된 것은 그대로 돈다」를 고르는 조건 하나로 적었다 — Center가 `approved`만 골라 지원 종료가 돌던 배포를 세우던 것을 고쳤다(계약은 그대로다) | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-30 | 1 | **§일정** — 타이머 시작을 Center가 하트비트에서 쓸어 작업으로 만든다. `requested_by`의 예약값 `timer:<식>`(바깥 이름으로 받지 않는다 — `on_behalf_invalid`). 읽기 `GET /schedules`(`ScheduleInfo`, 콘솔 토큰). 권한표에 C15 `GET /external-tasks?run_id=`(CON-01) | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | **바깥 호출이 C15로** — §Studio 개발 키(`POST /studio/service-keys`)·외부 앱 키(`…/app-key`)·서비스 앱 등록(`POST/PUT/DELETE /resources/service-apps`·`/resources/refresh`)을 걷었다. 권한표에 호출 토큰·외부 작업·일꾼 줄. 배포는 키를 짓지 않는다. 승인 본문에 `topics?`(일꾼) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | **연동용 키가 가상 직원을 읽는다**(전부 — 실행·작업 목록·결재 검토 자료는 넓히지 않는다, ADR-0098 §4). `JobCreateRequest.virtual_worker?`·`JobInfo.virtual_worker?`, 오류 `input_not_from_caller`·`virtual_worker_mismatch`, 접수 Bot 하나를 여러 가상 직원이 쓴다, §가상 직원 「신원」 | [0098](../decisions/0098-virtual-worker-identity.md)·[0099](../decisions/0099-input-value-source.md) |

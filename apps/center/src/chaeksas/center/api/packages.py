@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from chaeksas.center.api.signing import STATUS_REVOKED
+from chaeksas.center.api.signing import STATUS_DEPRECATED, STATUS_REVOKED
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import MAX_PACKAGE_MB
 from chaeksas.center.storage import Store, dumps, loads, now_iso
@@ -24,8 +24,6 @@ from chaeksas.contracts.manifest import validate as validate_manifest
 
 #: 업로드된 패키지의 처음 상태 (C5 — 승인은 Admin 서명 봉투로만 올라간다, C2).
 STATUS_CANDIDATE = "candidate"
-#: 지원 종료 (C5 `PUT …/status`) — **막는 쪽이라 서명이 없다**. 철회(`revoked`)는 서명이 있다.
-STATUS_DEPRECATED = "deprecated"
 
 #: zip 안전 검사 한도. 푸는 쪽(현장 PC)을 지키려고 Center가 먼저 본다.
 MAX_ENTRIES = 5000

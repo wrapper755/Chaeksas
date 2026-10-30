@@ -47,6 +47,7 @@ from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.bot_ui.tool_launch import launch, tool_ui_command
 from chaeksas.contracts.approvals import Form
 from chaeksas.contracts.extension import SURFACE_BOT_UI_RUNTIMES
+from chaeksas.core.deploy import DEPLOYMENT_EXPIRED, DEPLOYMENT_WITHDRAWN
 from chaeksas.core.packages import (
     MANUAL,
     InstalledBot,
@@ -88,6 +89,9 @@ NO_EXTENSION = "확장 없음"
 #: 「다시 깔기」가 아니라 **BUI-11에서 켜기**다. 색도 다르다 (neutral — 고장이 아니다).
 EXTENSION_OFF = "확장 꺼짐"
 PREFLIGHT_BLOCKED = "사전 점검 실행 불가"
+#: 배포가 정한 「실행 불가」 (ADR-0113) — 고치는 길은 PC가 아니라 **Center에서 다시 배포**다.
+DEPLOYMENT_GONE = "배포 철회"
+DEPLOYMENT_OVER = "배포 만료"
 
 
 def readiness_label(found: Preflight) -> tuple[str, str, str]:
@@ -99,6 +103,11 @@ def readiness_label(found: Preflight) -> tuple[str, str, str]:
         return READY, READY, ""
     first = next(f for f in found.findings if f.blocks)
     tip = "\n".join([first.message, *first.items, *([first.fix_hint] if first.fix_hint else [])])
+    if DEPLOYMENT_WITHDRAWN in found.blocked:
+        # **배포가 먼저다** — 다시 배포받기 전에는 다른 것을 고쳐도 돌지 않는다 (ADR-0113).
+        return DEPLOYMENT_GONE, DEPLOYMENT_GONE, tip
+    if DEPLOYMENT_EXPIRED in found.blocked:
+        return DEPLOYMENT_OVER, DEPLOYMENT_OVER, tip
     if EXTENSION_TURNED_OFF in found.blocked:
         # **「확장 없음」보다 먼저 본다** — 꺼진 것과 없는 것이 함께 걸렸으면 켜는 쪽이 먼저
         # 할 수 있는 일이다 (ADR-0043 — 「다시 깔기」로 안내하면 할 수 없는 일을 시킨다).

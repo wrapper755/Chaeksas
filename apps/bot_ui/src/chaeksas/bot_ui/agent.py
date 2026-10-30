@@ -64,7 +64,7 @@ from chaeksas.contracts.enrollment import (
 )
 from chaeksas.core import build_info, machine, requests
 from chaeksas.core.app_directory import DirectoryCache
-from chaeksas.core.deploy import APPLIED, Deployer
+from chaeksas.core.deploy import APPLIED, Deployer, deployment_finding
 from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.packages import InstalledBot, find, installed
 from chaeksas.core.preflight import Preflight
@@ -317,6 +317,11 @@ class Agent:
             for why in found.skipped:
                 log.warning("BPM 프로세스 %s의 사전 점검 하나를 돌리지 못했다: %s", bot.id, why)
             self._preflights[key] = found
+        # **배포가 정하는 점검은 캐시하지 않는다** — 기한은 시각이 정한다 (ADR-0113 §4). 맨 앞에
+        # 두어 BUI-04 「준비」가 이것을 먼저 말한다 — 다시 배포받기 전에는 다른 것을 고쳐도 돌지 않는다.
+        standing = deployment_finding(bot)
+        if standing is not None:
+            found = Preflight(findings=(standing, *found.findings), skipped=found.skipped)
         return found
 
     def invalidate_preflight(self) -> None:
@@ -910,14 +915,17 @@ class Agent:
         """
         if response.admin_keys is not None:
             self.store.state.admin_keys = list(response.admin_keys)
-        if not response.deployments:
-            return
-        found = self.deployer().apply(response.deployments)
+        deployer = self.deployer()
+        found = deployer.apply(response.deployments) if response.deployments else []
         if found:
             self.store.remember_deployments(found)
             # 설치된 것이 바뀌었다 — 새 BPM 프로세스의 준비 상태를 다음 하트비트가 알려야 한다.
             self.invalidate_preflight()
             self._tell_deployments(found)
+        # **답한 목록과 설치를 맞춘다** (C2 §검증 규칙·C4, ADR-0113) — 여기는 Center가 **답했을
+        # 때만** 온다(닿지 못하면 들고 있던 판단으로 돈다, ADR-0007). 빈 목록도 목록이다.
+        for bot in deployer.reconcile(response.deployments):
+            self.notices.deployment_withdrawn(bot=bot.name, version=bot.version)
 
     def _tell_deployments(self, found: list[DeploymentResult]) -> None:
         """배치 결정을 사람에게 알린다 (BUI-05). **거부는 지나가게 두지 않는다** (sticky).
@@ -1232,9 +1240,21 @@ class Agent:
         return made
 
     def enqueue_manual(self, bpm_process_id: str, *, version: str | None = None, front: bool = False) -> QueueItem:
-        """수동 실행 (BUI-04 「지금 실행...」). 맨 앞에 넣을 수 있다."""
+        """수동 실행 (BUI-04 「지금 실행...」). 맨 앞에 넣을 수 있다.
+
+        **준비되지 않은 것은 넣지 않는다** — 띄울 때 어차피 버려지니(`_start_next`) 넣는 자리에서
+        까닭을 말한다. 철회·만료된 배포(ADR-0113)가 여기서 막힌다.
+        """
         if len(self.queue) >= self.settings.queue_max:
             raise RuntimeError(f"대기열이 가득 찼습니다 ({self.settings.queue_max}건)")
+        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
+
+        bot = find(data_dir(), bpm_process_id, version)
+        if bot is not None:
+            ready = self.preflight(bot)
+            if ready.blocks:
+                first = next(one for one in ready.findings if one.blocks)
+                raise RuntimeError(" ".join([first.message, *([first.fix_hint] if first.fix_hint else [])]))
         item = QueueItem(
             queue_id=new_queue_id(),
             source="manual",

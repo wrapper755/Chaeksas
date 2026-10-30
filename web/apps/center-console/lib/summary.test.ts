@@ -372,6 +372,11 @@ describe("readinessLabel", () => {
     expect(readinessLabel(row({ blocked: ["task_types_unsupported"] }))?.label).toBe("확장 없음");
   });
 
+  it("배포가 정한 「실행 불가」를 먼저 말한다 (ADR-0113)", () => {
+    expect(readinessLabel(row({ blocked: ["deployment_expired", "extension_turned_off"] }))?.label).toBe("배포 만료");
+    expect(readinessLabel(row({ blocked: ["deployment_withdrawn"] }))?.label).toBe("배포 철회");
+  });
+
   it("모르는 코드는 「사전 점검 실행 불가」다", () => {
     expect(readinessLabel(row({ blocked: ["무엇인가"] }))?.label).toBe("사전 점검 실행 불가");
   });

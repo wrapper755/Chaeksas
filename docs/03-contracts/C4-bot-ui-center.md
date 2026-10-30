@@ -174,7 +174,7 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 | CurrentRun | `run_id`, `bpm_process_id`, `version`, `node_id`, `state`(열린 문자열: `running` `waiting_approval` `waiting_confirmation`), `started_at`, `source`(`job`\|`manual`\|`watch`\|`schedule`\|`message`, 예약: `delegation`), `job_id`? |
 | Queue | `max`(int), `items`: `{queue_id, source, bpm_process_id, version?, job_id?, requested_at, expires_at?}`[] (순서대로) |
 | WorkerState | `state`(`running`\|`off`(필요할 때 시작, 아직 안 띄움)\|`restarting`\|`stopped`), `reserved_for`?(C10 예약 `run_id`), `version`, `restarts`(연속 재시작 횟수), `session`(`idle`\|`bot`\|`studio`\|`selector_registration`) |
-| Readiness | `bpm_process_id`, `version`, `ready`(bool), `missing_key_refs`(str[] — **늘 비어 있다**: 서비스 앱 키가 없어졌다, ADR-0102. 옛 Center가 읽어도 깨지지 않게 칸은 둔다), `blocked`(str[] — 사전 점검 막힘 코드) |
+| Readiness | `bpm_process_id`, `version`, `ready`(bool), `missing_key_refs`(str[] — **늘 비어 있다**: 서비스 앱 키가 없어졌다, ADR-0102. 옛 Center가 읽어도 깨지지 않게 칸은 둔다), `blocked`(str[] — 사전 점검 막힘 코드. 열린 문자열이고 플랫폼 코드에 `deployment_withdrawn`(덮는 배포가 없다)·`deployment_expired`(덮는 배포의 기한이 지났다)가 있다 — C2 §검증 규칙) |
 | JobAck | `job_id`, `result`(`queued`\|`started`\|`rejected`\|`expired`\|`cancelled`\|`cancel_refused`), `position`?(queued일 때 대기열 순번), `run_id`?(started일 때), `reason`?(rejected일 때: `queue_full` `no_deployment` `not_ready` `bot_ui_shutdown` `server_location` `cancelled_on_pc`(현장에서 대기열 항목을 취소함); `cancel_refused`일 때: `already_started`), `outputs?`(**PC 위임이 돌려주는 값** — 아래) |
 | ApprovalAck | `request_id`, `accepted`(bool), `reason`? |
 | DeploymentResult | `deployment_id`, `bpm_process_id`, `version`, `result`(`applied`\|`rejected`), `reason`?, `at` |
@@ -196,7 +196,7 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 | --- | --- | --- |
 | `server_time` | str | |
 | `next_heartbeat_s` | int | 다음 하트비트까지 (기본 30, Center가 부하에 따라 늘릴 수 있음) |
-| `deployments` | Envelope[] | 이 PC 실행기의 **활성 배포 봉투 전체**를 저장된 JSON 그대로 (재직렬화하면 서명이 깨진다). PC 실행기는 목록과 설치 상태를 맞춘다 |
+| `deployments` | Envelope[] | 이 PC 실행기의 **활성 배포 봉투 전체**를 저장된 JSON 그대로 (재직렬화하면 서명이 깨진다). 활성은 철회되지 않았고 패키지가 `approved`·`deprecated`인 배포다 (지원 종료는 새 배포만 막는다, C5). PC 실행기는 목록과 설치 상태를 맞춘다 — 받은 것은 설치하고, **목록에 덮는 봉투가 없는** 「Center 배포」 설치는 파일을 두고 「실행 불가」로 돌린다 (C2 §검증 규칙, ADR-0113). 빈 목록도 목록이다 — 맞추지 않는 것은 답이 없을 때뿐이다 |
 | `admin_keys` | AdminKey[] | 바뀌었을 때만 (생략 = 그대로) |
 | `jobs` | JobDispatch[] | 아직 ack되지 않은 작업. **ack가 올 때까지 매번 실린다** |
 | `cancel_jobs` | str[] | 콘솔에서 취소된 작업 id. 대기열에 있으면 빼고 `cancelled`로 ack. **이미 시작했으면 멈추지 않고** `cancel_refused` + `already_started`로 ack. 작업은 Center에서 `accepted` 그대로 남는다 (C5, 실행 중 BPM 프로세스를 멈추는 것은 schema 1 범위 밖) |
@@ -303,6 +303,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | `deployments`의 「맞춘다」를 풀어 적었다 — 덮는 봉투가 없는 설치는 「실행 불가」, `readiness.blocked`에 `deployment_withdrawn`·`deployment_expired`. 활성에 `deprecated`가 든다(전에도 계약은 그랬고 Center가 어겼다, 09-gaps §3-22). 칸은 그대로다 | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-30 | 1 | `source: schedule` — Center의 일정이 만든 작업(`requested_by` `timer:<식>`)을 대기열에 넣을 때 쓴다(C5 §일정). 값은 처음부터 있었다 | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | §서비스 앱 키 전달을 걷었다(`service_keys[]`·`drop_service_keys[]`·`service_key_acks[]`), §호출 토큰(`POST /call-tokens`), `missing_key_refs`는 늘 빈다. 선택 칸을 걷은 것이라 판을 올리지 않는다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | `JobDispatch.virtual_worker?`를 적었다 — 모델이 C12와 같아 보일 뿐 Bot UI에는 실리지 않는다 | [0099](../decisions/0099-input-value-source.md) |

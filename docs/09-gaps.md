@@ -45,13 +45,13 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ## 2. 문서가 코드와 어긋난 자리 (코드를 고치는 일이 아니다)
 
-**2026-10-31 대조에서 찾은 것은 그 자리에서 고쳤다** — ADR-0090 뒤에 남은 「Admin」 글(C1 패키지 구성·C4 `admin_keys`·C12 §설치·BUI-11·계약 README의 C2·C5 줄), 계약 README의 C12 「(제안)」·C14 「B1~B14」, C5 `server_runner_not_available`의 「M7까지」, C14 `DELEGATION_FAILED`의 「(예약)」, ADR-0102 뒤에 남은 것(C7 머리말의 어댑터 `health`·`ToolpackResource`·내지 않는 오류 코드 넷, C13 상태 줄·`allowed_hosts`의 「Center의 `base_url`」·`health` 칸), C15·C11의 「`service_kit`이 잠금을 늘린다」(늘리지 않는다), CON-04 상태 줄의 「현장에서 올라오는 결재가 없다」, UIA·Worker 화면 문서의 코드 경로, 화면 README의 WRK 대응, STU-04 스크립트의 「Python」, STU-05의 「서버 실행은 M7부터」, 업무 예제 README의 「실행 — 아직 없음」과 닫힌 공백 넷. **코드가 문서와 다르고 문서가 맞는 것**은 고치지 않고 §3·§8에 적었다(§3-22가 그 꼴이다).
+**2026-10-31 대조에서 찾은 것은 그 자리에서 고쳤다** — ADR-0090 뒤에 남은 「Admin」 글(C1 패키지 구성·C4 `admin_keys`·C12 §설치·BUI-11·계약 README의 C2·C5 줄), 계약 README의 C12 「(제안)」·C14 「B1~B14」, C5 `server_runner_not_available`의 「M7까지」, C14 `DELEGATION_FAILED`의 「(예약)」, ADR-0102 뒤에 남은 것(C7 머리말의 어댑터 `health`·`ToolpackResource`·내지 않는 오류 코드 넷, C13 상태 줄·`allowed_hosts`의 「Center의 `base_url`」·`health` 칸), C15·C11의 「`service_kit`이 잠금을 늘린다」(늘리지 않는다), CON-04 상태 줄의 「현장에서 올라오는 결재가 없다」, UIA·Worker 화면 문서의 코드 경로, 화면 README의 WRK 대응, STU-04 스크립트의 「Python」, STU-05의 「서버 실행은 M7부터」, 업무 예제 README의 「실행 — 아직 없음」과 닫힌 공백 넷. **코드가 문서와 다르고 문서가 맞는 것**은 고치지 않고 §3·§8에 적었다(§3-22가 그 꼴이었다 — 닫았다).
 
 그 전의 마지막 하나(§2-5 — C3 `run_started.bpm_process_id`가 패키지 id인가 그림의 process id인가)는 패키지 id로 정해 엔진·계약을 맞췄다 ([ADR-0086](decisions/0086-run-identity-is-the-package-id.md)).
 
 ## 3. 계약 쪽 기능 공백
 
-계약 열다섯의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. 그 뒤 2026-10-31 대조가 **새로 일곱**(§3-21~27)을 찾았다 — 넷(§3-21~24)은 업무에 닿고, §3-25는 엔진의 흠, §3-26·27은 작은 칸과 「미정」 모음이다.
+계약 열다섯의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. 그 뒤 2026-10-31 대조가 **새로 일곱**(§3-21~27)을 찾았다 — 넷(§3-21~24)은 업무에 닿고, §3-25는 엔진의 흠, §3-26·27은 작은 칸과 「미정」 모음이다. 그중 배포의 끝 둘(§3-22·23)은 [ADR-0113](decisions/0113-field-follows-withdrawn-deployments.md)으로 닫았다.
 
 ### 3-21. PC BPM 프로세스로 메시지를 넣는 길이 없다
 
@@ -65,21 +65,13 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 **먼저 정할 것.** 「PC도 Center를 거쳐 받는다」(C12 §메시지와 같은 길 — C4 하트비트 응답에 `messages[]`·ack, PC 실행기 → 제어 파일 → 실행 프로세스. 8790과 「나중에」 탭은 걷는다)인가, 「PC 그림은 메시지를 받지 않는다」(B 검사로 막고 C12·C14·ADR-0014의 줄을 걷는다)인가. ADR-0102(바깥에서 들어오는 길은 Center)와 ADR-0007(밀지 않는다)은 첫째 쪽을 가리킨다.
 
-### 3-22. 지원 종료가 돌던 배포를 멈춘다 (문서가 맞고 코드가 다르다)
+### 3-22. 지원 종료가 돌던 배포를 멈춘다 — 닫았다
 
-**무엇이 어긋났나.** C5 §패키지는 「**이미 배포된 것은 그대로 돈다** — 내려받기도 그대로 된다. 돌고 있는 것을 세우는 것은 배포 철회다」라고 적었다. 그런데 Center가 활성 배포를 고르는 자리가 모두 `p.status = 'approved'`로 거른다. 그래서 「지원 종료...」를 누르면 그 판의 **봉투가 하트비트에서 사라지고**, 작업 지시·일정·PC 위임이 그 판을 「배포되지 않음」으로 보며, 내려받기도 막힌다.
+**닫았다** ([ADR-0113](decisions/0113-field-follows-withdrawn-deployments.md) §8). Center가 활성 배포를 고르는 자리(하트비트 봉투·작업의 판·PC 위임·일정·메시지 시작·내려받기)가 모두 `approved`만 받아 「지원 종료...」가 돌던 판을 세웠다. 조건을 `deployments.live_sql` 하나로 모았고(철회되지 않음 + 패키지가 `approved`·`deprecated`, 상태 묶음은 `signing.LIVE_STATUSES`) 새 배포·승인 관문만 `approved` 하나다. 시험: `test_m5_deploy.py`의 `test_a_deprecated_package_keeps_running_where_it_is_deployed`·`test_a_deprecated_package_stays_on_in_the_field`, `test_center_timers.py`의 `test_a_deprecated_package_keeps_its_schedule`.
 
-**근거.** `center/api/deployments.py:343`(`envelopes_for` — 하트비트 `deployments[]`)·`:360`(`versions_for` — `/jobs`의 판 풀기)·`targets_for`·`versions_deployed_to`(위임), `api/timers.py:90`(일정 쓸기), `api/package_access.py:8`(내려받기 관문이 「`envelopes_for`와 같다」). 시험은 「새로 배포할 수 없다」만 본다(`tests/test_m5_deploy.py:247`, `test_center_api.py:96`) — 「돌던 것이 그대로 도는가」를 보는 시험이 없다.
+### 3-23. 승인·배포가 철회돼도 현장이 그 BPM 프로세스를 끄지 않는다 — 닫았다
 
-**먼저 정할 것.** 없다 — 계약이 정했다(ADR-0090 이전부터의 C5 규칙). 고르는 다섯 자리를 `status IN (approved, deprecated)`로 바꾸고 「지원 종료 뒤에도 하트비트·작업·일정이 그대로」를 시험으로 묶는 일이다. 다섯 자리가 같은 조건을 따로 적고 있어서 **한 함수로 모으는 것**도 함께 본다(`_target_sql`처럼).
-
-### 3-23. 승인·배포가 철회돼도 현장이 그 BPM 프로세스를 끄지 않는다
-
-**무엇이 없나.** C2 §검증 규칙은 「서명 키를 버리거나 패키지 승인이 철회되면, 실행하는 쪽은 **다음 하트비트에서 해당 BPM 프로세스를 비활성으로 돌린다**」, C4는 「PC 실행기는 목록과 설치 상태를 맞춘다」고 적었다. 그런데 현장은 **내려온 것만 설치하고, 사라진 것을 보지 않는다.** Center는 철회된 배포를 목록에서 빼고(`envelopes_for`) 작업도 보내지 않지만, PC의 「지금 실행...」(BUI-04)은 철회·만료된 패키지를 그대로 띄운다.
-
-**근거.** `core/deploy.py`의 `Deployer.apply`(:110-153)는 받은 봉투를 설치하거나 거부할 뿐 「목록에 없어진 배포」를 다루는 걸음이 없고, 설치 뒤 `expires_at`을 다시 보지 않는다. `bot_ui/agent.py:913`은 `deployments`가 비면 그냥 돌아간다. 수동 실행은 `agent.enqueue_manual`(:1234). `apps/bot_ui`·`apps/server_runner`·`packages/core`에서 `revoke`는 Center API 키 폐기 코드에만 나온다.
-
-**먼저 정할 것.** 「목록에서 빠졌다」를 **언제 믿나** — 하트비트가 닿지 못한 것(ADR-0007 — 오프라인에도 돈다)과 「Center가 빈 목록을 줬다」를 가려야 한다. 그리고 비활성의 뜻(설치는 남기고 「실행 불가」로 보인다 — C2는 「파일은 지우지 않는다」)과 BUI-04 표기. 만료(`expires_at`)는 Center 없이도 현장이 알 수 있어 따로 닫을 수 있다.
+**닫았다** ([ADR-0113](decisions/0113-field-follows-withdrawn-deployments.md)). 현장은 **Center가 답한** 하트비트의 `deployments`로 설치를 맞춘다(`Deployer.reconcile` — 닿지 못한 주기에는 바꾸지 않는다, 빈 목록도 목록이다). 「Center 배포」 설치마다 지금 덮는 봉투(V1~V6)를 폴더의 `DEPLOYMENT` 표식에 적고, 없으면 `withdrawn_at`을 적는다 — 버린 서명 키(V2)도 같은 길이다. 사전 점검 `deployment_withdrawn`·`deployment_expired`(기한은 표식으로 현장 시각에, 캐시하지 않는다)가 대기열·BUI-04 「지금 실행...」(넣을 때 거절)·`readiness`·서버 작업(`not_ready`)을 함께 막는다. BUI-04 「준비」에 「배포 철회」·「배포 만료」, BUI-05에 「배포가 철회되어 실행할 수 없습니다」(한 번). 파일은 지우지 않고 도는·기다리는 실행은 건드리지 않는다(세우는 것은 작업 취소 — ADR-0063). 「수동 설치」·「알 수 없음」 출처는 다루지 않는다.
 
 ### 3-24. `requires.resources`를 짓는 쪽이 없다
 

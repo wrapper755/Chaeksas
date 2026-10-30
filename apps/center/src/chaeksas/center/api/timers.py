@@ -25,8 +25,7 @@ from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from chaeksas.center.api import jobs
-from chaeksas.center.api.signing import STATUS_APPROVED
+from chaeksas.center.api import deployments, jobs
 from chaeksas.center.auth import Caller
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import DEFAULT_TIMEZONE
@@ -76,18 +75,19 @@ def _iso(at: datetime) -> str:
 
 
 def plans(store: Store, *, readable_only: bool = True) -> list[Plan]:
-    """살아 있는 배포(승인된 패키지의 철회되지 않은 배포)의 타이머 시작들.
+    """살아 있는 배포(`deployments.live_sql` — 지원 종료도 돈다)의 타이머 시작들.
 
     고르는 기준은 `deployments.envelopes_for`와 같다 — 내려가지 않는 배포의 일정이 돌면 받을 데가 없다.
     읽지 못하는 식은 **쏘지 않는다** (R13이 올릴 때 막으므로 R13 전에 올라간 것뿐이다). 콘솔(`schedules`)은
     그것도 받아 까닭을 보인다 (`readable_only=False`).
     """
+    live, statuses = deployments.live_sql()
     rows = store.rows(
         "SELECT d.target_type AS target_type, d.target_id AS target_id, d.bpm_process_id AS bot,"
         " d.version AS version, d.at AS at, p.manifest_json AS body FROM deployments d"
         " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
-        " WHERE d.revoked_json IS NULL AND p.status = ? ORDER BY d.at",
-        (STATUS_APPROVED,),
+        f" WHERE {live} ORDER BY d.at",
+        statuses,
     )
     found: dict[str, Plan] = {}
     for row in rows:
