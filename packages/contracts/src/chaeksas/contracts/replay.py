@@ -70,6 +70,11 @@ class ReplayMemory(SchemaVersioned):
         kept = [s for s in self.specs if s.key != spec.key]
         return ReplayMemory(schema=self.schema_version, specs=[*kept, spec])
 
+    def without(self, bpm_process_id: str, node_id: str) -> ReplayMemory:
+        """그 노드의 명세를 **뺀** 새 기억 (Studio의 「명세 잊기」, STU-04). 없으면 그대로다."""
+        wanted = spec_key(bpm_process_id, node_id)
+        return ReplayMemory(schema=self.schema_version, specs=[s for s in self.specs if s.key != wanted])
+
 
 __all__ = [
     "REPLAY_DEFAULT",

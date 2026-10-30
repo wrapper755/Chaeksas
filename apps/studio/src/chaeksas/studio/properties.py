@@ -7,8 +7,8 @@
 | 「폼」 | 이름·설명, 흐름 조건식, 스크립트 | 전부 |
 | 「JSON」 | `chk:*` 본문을 **C14 모델로 검증**하며 고친다 | `chk:*`를 가질 수 있는 요소 |
 
-요소별 전용 폼(AI 태스크의 재생 명세·허용 도구, 결재 폼 칸 표, DMN 격자 …)은 다음 조각이다.
-**지금은 JSON 탭이 그 자리를 메운다.**
+요소별 전용 폼은 요소마다 편집기 모듈이 탭으로 끼운다(`*_editor.py` — 규약은 `load`/`dump`/`problems`/`changed`).
+편집기가 없는 요소는 「JSON」 탭이 그 자리를 메운다.
 
 적용은 **bpmn-js의 `modeling`으로** 한다 (캔버스 `setProperties`) — 그래야 실행 취소와
 「저장 안 한 변경」이 함께 움직인다. 표준 속성(이름·설명·조건식·스크립트)은 한 번에 바꿔 실행
@@ -41,6 +41,8 @@ from PySide6.QtWidgets import (
 
 from chaeksas.contracts.bpmn_ext import ELEMENT_MODELS
 from chaeksas.qt.theme import set_role
+from chaeksas.studio.dmn_table import Decisions
+from chaeksas.studio.replay_specs import ReplaySpecs
 from chaeksas.studio.service_catalog import CallTarget, Catalog
 
 EMPTY_TEXT = "캔버스에서 요소를 선택하면 속성을 편집할 수 있습니다."
@@ -97,8 +99,10 @@ EVENT_KINDS = frozenset(
 DATA_OBJECT_KINDS = frozenset({"DataObjectReference"})
 #: 정의 자체 — 「기본값」 탭(`chk:defaults`)을 붙인다. 빈 상태의 단추로만 들어온다.
 PROCESS_KINDS = frozenset({"Process"})
+#: 규칙 편집기(`rule_editor`)가 붙는 요소 — `chk:rule`, 결정표는 STU-04a 창 (ADR-0109).
+RULE_KINDS = frozenset({"BusinessRuleTask"})
 #: 편집기가 `chk:<이름>` 하나를 **통째로** 쓰고, `None`이면 그 요소를 지우는 자리.
-WHOLE_OR_NONE = ("defaults", "dataOutput")
+WHOLE_OR_NONE = ("defaults", "dataOutput", "rule")
 #: 빈 상태의 단추 (STU-04).
 PROCESS_BUTTON = "BPM 프로세스 기본값"
 
@@ -236,6 +240,14 @@ class Properties(QWidget):
         #: 이 패키지에서 부를 수 있는 정의 (`call_editor.local_targets`) — 메인 창이 열린 BPM
         #: 프로세스에서 **고를 때마다** 읽게 꽂는다(설치·저장 뒤에도 낡지 않게). `None`이면 모른다.
         self.call_targets: Callable[[], Mapping[str, CallTarget] | None] = lambda: None
+        #: 열린 BPM 프로세스의 결정표들 (`dmn_table.decisions_of`) — 「규칙」 탭이 **고를 때마다**
+        #: 읽는다(STU-04a에서 저장한 뒤에도 맞게). `None`이면 모른다.
+        self.decision_tables: Callable[[], Decisions | None] = lambda: None
+        #: 열린 정의의 재생 명세 (`replay_specs.specs_of`) — 「AI 태스크」 탭의 「재생 명세」 한 줄과
+        #: 「명세 잊기」가 본다(ADR-0028). `None`이면 열린 BPM 프로세스가 없다.
+        self.replay_specs: Callable[[], ReplaySpecs | None] = lambda: None
+        #: 시험 실행 중인가 — 그동안은 「명세 잊기」를 끈다(끝날 때 같은 파일에 배운 것을 적는다).
+        self.test_running: Callable[[], bool] = lambda: False
 
         self.head = QLabel(EMPTY_TEXT, self)
         self.head.setWordWrap(True)
@@ -335,6 +347,12 @@ class Properties(QWidget):
         self.error.setText("")
         self.apply_button.setEnabled(False)
 
+    def refresh_replay(self) -> None:
+        """시험 실행이 시작·끝났다 — 「AI 태스크」 탭의 「재생 명세」를 다시 읽는다 (방금 배운 것이 보인다)."""
+        refresh = getattr(self._editor, "refresh_spec", None)
+        if callable(refresh):
+            refresh()
+
     def set_definition_open(self, opened: bool) -> None:
         """열린 정의가 있나 — 없으면 「BPM 프로세스 기본값」을 끈다 (메인 창이 메뉴와 함께 부른다)."""
         self.process_button.setEnabled(opened)
@@ -364,6 +382,9 @@ class Properties(QWidget):
             return
         if str(self.loaded.get("type") or "") in CALL_KINDS:
             self._attach_call_editor(chk)
+            return
+        if str(self.loaded.get("type") or "") in RULE_KINDS:
+            self._attach_rule_editor(chk)
             return
         if "serviceCall" in chk:
             self._attach_service_editor(chk)
@@ -404,7 +425,16 @@ class Properties(QWidget):
         """AI 태스크 (`chk:aiTask`). 서버 BPM 프로세스면 웹·데스크톱을 끈다 (B6과 같은 판정)."""
         from chaeksas.studio.ai_task_editor import TAB_LABEL, AiTaskEditor  # noqa: PLC0415
 
-        made = AiTaskEditor(self, run_location=self.run_location, names=self.known_names)
+        loop = _body_of(chk, "loop") or {}
+        made = AiTaskEditor(
+            self,
+            run_location=self.run_location,
+            names=self.known_names,
+            specs=self.replay_specs(),
+            node_id=self.node_id,
+            running=self.test_running,
+            loop_item=str(loop.get("item") or "") if isinstance(loop, dict) else "",
+        )
         made.load(_body_of(chk, "aiTask") or {})
         self._attach(made, TAB_LABEL, key="aiTask")
 
@@ -442,6 +472,14 @@ class Properties(QWidget):
         )
         made.load({"calledElement": str(self.loaded.get("calledElement") or ""), "call": _body_of(chk, "call") or {}})
         self._attach(made, TAB_LABEL, key="call")
+
+    def _attach_rule_editor(self, chk: dict[str, Any]) -> None:
+        """규칙 태스크 — `chk:rule` 통째로. 결정표는 탭의 「결정표 편집...」이 STU-04a 창으로 연다."""
+        from chaeksas.studio.rule_editor import TAB_LABEL, RuleEditor  # noqa: PLC0415
+
+        made = RuleEditor(self, decisions=self.decision_tables, names=self.known_names)
+        made.load(_body_of(chk, "rule"))
+        self._attach(made, TAB_LABEL, key="rule")
 
     def _attach_defaults_editor(self, chk: dict[str, Any]) -> None:
         """정의 자체 — `chk:defaults`만. `chk:process`는 「변수」 탭·STU-06·STU-15의 것이다."""
@@ -746,6 +784,7 @@ __all__ = [
     "LOOP_KINDS",
     "PROCESS_BUTTON",
     "PROCESS_KINDS",
+    "RULE_KINDS",
     "SCRIPT_KINDS",
     "SEND_KINDS",
     "Properties",

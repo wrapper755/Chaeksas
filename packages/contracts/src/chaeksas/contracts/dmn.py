@@ -123,6 +123,11 @@ def _literal(text: str, *, where: str) -> Any:
         raise DmnReadError(f"{where}: 값으로 읽을 수 없다 ({body!r}) — 문자열은 큰따옴표로 감싼다") from None
 
 
+def parse_value(text: str, *, where: str) -> Any:
+    """출력 칸 하나를 읽는다 — 값 하나 (C14). 빈 칸은 「없음」(`None`)이다. Studio 격자가 같은 것으로 본다."""
+    return _literal(text, where=where)
+
+
 def _split_terms(text: str) -> list[str]:
     """쉼표로 나눈다. **따옴표 안의 쉼표는 세지 않는다** (`"유흥","골프"`)."""
     out: list[str] = []
@@ -352,7 +357,7 @@ def _read_table(decision_id: str, name: str | None, table: ElementTree.Element) 
             DecisionRule(
                 id=rule_id,
                 cells=tuple(parse_cell(_text(_child(c, "text")), where=where) for c in cells),
-                values=tuple(_literal(_text(_child(v, "text")), where=where) for v in values),
+                values=tuple(parse_value(_text(_child(v, "text")), where=where) for v in values),
                 description=_text(_child(element, "description")) or None,
             )
         )
@@ -382,5 +387,6 @@ __all__ = [
     "Term",
     "decision_io",
     "parse_cell",
+    "parse_value",
     "read_decisions",
 ]

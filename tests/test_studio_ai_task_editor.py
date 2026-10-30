@@ -301,3 +301,157 @@ def test_the_panel_passes_the_run_location() -> None:
     panel = panel_with({"goal": "g", "domain": "llm"}, run_location="server")
     editor: Any = panel._editor  # noqa: SLF001
     assert not editor.domain_picks["web"].isEnabled()
+
+
+# ── 목표 미리보기 (C14 §AI 태스크가 보는 값) ──
+
+
+def test_the_goal_preview_names_what_the_engine_hands_the_model() -> None:
+    """엔진과 **같은 함수**다 — 변수 공간을 주면 `_seen_by`가 고르는 것과 미리보기가 같다."""
+    from PySide6.QtCore import QStringListModel
+
+    from chaeksas.core.engine import goal_names
+
+    names = QStringListModel(["청구서", "거래처", "합계"])
+    made = AiTaskEditor(names=names, loop_item="건")
+    made.load({"goal": "`청구서`를 읽고 거래처와 오늘 날짜를 적는다.", "domain": "doc",
+               "params": {"통화": "KRW"}})
+    found, item, params = made.preview_names()
+    assert found == ["청구서", "거래처", "오늘"]
+    assert found == goal_names(made.goal_box.toPlainText(), [*names.stringList(), "오늘", "지금", "run_id"])
+    assert (item, params) == ("건", ["통화"])
+    assert made.goal_preview.text() == "모델에게 가는 값: 청구서 · 거래처 · 오늘 · 반복 항목 건 · 업무 파라미터 통화"
+
+    made.goal_box.setPlainText("합계를 낸다")
+    assert made.goal_preview.text().startswith("모델에게 가는 값: 합계")
+    names.setStringList([])  # 「변수」 탭이 바뀌면 따라간다
+    assert made.goal_preview.text() == "모델에게 가는 값: 반복 항목 건 · 업무 파라미터 통화"
+
+
+def test_without_named_variables_the_preview_says_so() -> None:
+    made = loaded({"goal": "요약한다", "domain": "llm"})
+    assert made.goal_preview.text() == "목표에 이름이 나오는 변수가 없습니다 — 모델은 업무 파라미터만 봅니다."
+
+
+def test_the_engine_hands_the_model_what_the_goal_names() -> None:
+    from chaeksas.core.engine import goal_names
+
+    # 낱말 경계를 보지 않는다 — 엔진이 그렇고 미리보기도 그래야 한다.
+    assert goal_names("기간별 합계", ["기간", "합계", "청구서", ""]) == ["기간", "합계"]
+
+
+# ── 재생 명세 (ADR-0028) ──
+
+
+def _write_specs(folder: Path, *specs: dict[str, Any]) -> None:
+    from chaeksas.contracts.replay import ReplayMemory, ReplaySpec
+    from chaeksas.core.replay import write_memory
+
+    write_memory(folder, ReplayMemory(schema=1, specs=[ReplaySpec.model_validate(s) for s in specs]))
+
+
+SPEC = {
+    "bpm_process_id": "Proc_A", "node_id": "Task_Ai", "version": "1.2.0", "model": "qwen",
+    "steps": [
+        {"tool": t, "arguments": {}}
+        for t in ("pdf_text_tool", "image_ocr_tool", "pdf_text_tool", "csv_reader_tool")
+    ],
+}
+OTHER = {**SPEC, "node_id": "Task_Other", "steps": []}
+
+
+def with_specs(folder: Path, body: dict[str, Any] = BODY, *, running: bool = False) -> AiTaskEditor:
+    from chaeksas.studio.replay_specs import specs_of
+
+    made = AiTaskEditor(specs=specs_of(folder, "Proc_A"), node_id="Task_Ai", running=lambda: running)
+    made.load(body)
+    return made
+
+
+def test_the_spec_line_reads_the_package_memory(tmp_path: Path) -> None:
+    _write_specs(tmp_path, SPEC, OTHER)
+    made = with_specs(tmp_path)
+    assert made.spec_line.text() == "명세 있음 · 도구 4단계 · 판 1.2.0"
+    assert made.spec_line.toolTip() == "적을 때 쓴 모델: qwen"
+    assert made.spec_tools.text() == "(pdf_text_tool → image_ocr_tool → pdf_text_tool → …)"
+    assert made.spec_tools.toolTip().endswith("→ csv_reader_tool")
+    assert made.forget_button.isEnabled()
+    # 명세의 도구가 허용 도구에 없으면 경고 — 막지는 않는다(명세는 그림이 아니다).
+    errors, warnings = made.problems()
+    assert errors == []
+    assert any("csv_reader_tool" in w and "허용 도구에 없습니다" in w for w in warnings)
+
+
+def test_no_spec_no_folder_and_a_broken_file_turn_forgetting_off(tmp_path: Path) -> None:
+    from chaeksas.studio.ai_task_editor import SPEC_NO_PROCESS, SPEC_NONE, SPEC_NOT_USED
+
+    made = with_specs(tmp_path)
+    assert made.spec_line.text() == SPEC_NONE and not made.forget_button.isEnabled()
+    made.replay_picks["none"].setChecked(True)
+    assert made.spec_line.text() == SPEC_NOT_USED
+    assert loaded(BODY).spec_line.text() == SPEC_NO_PROCESS
+    (tmp_path / "memory").mkdir(exist_ok=True)
+    (tmp_path / "memory" / "specs.json").write_text("{깨짐", encoding="utf-8")
+    broken = with_specs(tmp_path)
+    assert broken.spec_line.text().startswith("memory/specs.json을 읽지 못했습니다")
+    assert not broken.forget_button.isEnabled()
+
+
+def test_forgetting_asks_first_and_removes_only_this_spec(tmp_path: Path, monkeypatch: Any) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    from chaeksas.core.replay import read_memory
+
+    _write_specs(tmp_path, SPEC, OTHER)
+    made = with_specs(tmp_path)
+    asked: list[Any] = []
+
+    def cancel(*args: Any) -> Any:
+        asked.append(args[-1])  # 기본 단추
+        return QMessageBox.StandardButton.Cancel
+
+    monkeypatch.setattr(QMessageBox, "question", cancel)
+    made.forget_button.click()
+    assert asked == [QMessageBox.StandardButton.Cancel]
+    assert len(read_memory(tmp_path).specs) == 2
+
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
+    changed: list[bool] = []
+    made.changed.connect(lambda: changed.append(True))
+    made.forget_button.click()
+    assert [s.node_id for s in read_memory(tmp_path).specs] == ["Task_Other"]
+    assert not made.forget_button.isEnabled() and made.spec_line.text().startswith("명세 없음")
+    assert changed == []  # 그림은 바뀌지 않았다 — 「적용」할 것이 없다
+
+
+def test_forgetting_is_off_while_a_test_run_goes(tmp_path: Path, monkeypatch: Any) -> None:
+    from PySide6.QtWidgets import QMessageBox
+
+    from chaeksas.core.replay import read_memory
+
+    _write_specs(tmp_path, SPEC)
+    made = with_specs(tmp_path, running=True)
+    assert not made.forget_button.isEnabled()
+    assert made.forget_button.toolTip() == "시험 실행이 끝난 뒤에 잊을 수 있습니다."
+    monkeypatch.setattr(QMessageBox, "question", lambda *a: QMessageBox.StandardButton.Yes)
+    made.forget_spec()
+    assert len(read_memory(tmp_path).specs) == 1
+
+
+def test_the_panel_hands_the_specs_and_refreshes_after_a_run(tmp_path: Path) -> None:
+    from chaeksas.studio.properties import Properties
+    from chaeksas.studio.replay_specs import specs_of
+
+    panel = Properties()
+    panel.replay_specs = lambda: specs_of(tmp_path, "Proc_A")
+    panel.show_element({
+        "id": "Task_Ai", "type": "ServiceTask", "name": "읽기",
+        "chk": {"aiTask": json.dumps(BODY, ensure_ascii=False), "loop": json.dumps({"items": "목록", "item": "건"})},
+    })
+    editor: Any = panel._editor  # noqa: SLF001
+    assert editor.loop_item == "건"
+    assert editor.spec_line.text().startswith("명세 없음")
+    _write_specs(tmp_path, SPEC)  # 시험 실행이 배웠다
+    panel.refresh_replay()
+    assert editor.spec_line.text().startswith("명세 있음")
+    assert panel.patch() == ({}, None)

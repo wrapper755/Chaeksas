@@ -51,6 +51,7 @@ from chaeksas.studio.call_editor import local_targets
 from chaeksas.studio.canvas import Canvas, CanvasError
 from chaeksas.studio.case_dialog import CaseDialog
 from chaeksas.studio.connect_dialog import CenterConnectDialog
+from chaeksas.studio.dmn_table import decisions_of
 from chaeksas.studio.explorer import Explorer
 from chaeksas.studio.extension_dialog import StudioExtensionsDialog, pin_patch
 from chaeksas.studio.extensions import Extensions
@@ -58,6 +59,7 @@ from chaeksas.studio.preflight import Preflight, inspect, readiness, summarize
 from chaeksas.studio.process_dialog import ProcessInfoDialog
 from chaeksas.studio.properties import Properties
 from chaeksas.studio.receiver import Receiver
+from chaeksas.studio.replay_specs import ReplaySpecs, specs_of
 from chaeksas.studio.runner import CaseRun, Outcome, Plan
 from chaeksas.studio.settings import Settings
 from chaeksas.studio.settings_dialog import StudioSettingsDialog
@@ -152,6 +154,11 @@ class MainWindow(QMainWindow):
         self.properties.process_wanted.connect(self._show_process)
         # STU-04 「호출」이 고를 정의 — **고를 때마다** 열린 BPM 프로세스에서 읽는다 (설치 뒤에도 맞게).
         self.properties.call_targets = lambda: local_targets(self.process)
+        # STU-04 「규칙」이 고를 결정표 — 같은 결로 고를 때마다 읽는다 (STU-04a에서 저장한 뒤에도 맞게).
+        self.properties.decision_tables = lambda: decisions_of(self.process)
+        # STU-04 「AI 태스크」의 재생 명세 — 열린 정의의 process id로 고를 때마다 짓는다 (ADR-0028).
+        self.properties.replay_specs = self._replay_specs
+        self.properties.test_running = lambda: self.running is not None
         self.canvas.selected.connect(self._on_selected)
 
         self.preflight = Preflight(self)
@@ -529,6 +536,7 @@ class MainWindow(QMainWindow):
 
     def show_running(self, mode: str | None) -> None:
         """U5 — 실행 중이면 도구 모음의 「실행...」이 강조색 중지 단추가 된다. `None`이면 되돌린다."""
+        self.properties.refresh_replay()  # 「명세 잊기」를 끄고 켠다 — 끝나면 방금 배운 명세가 보인다
         action = self.run_tool_action
         action.setText(STOP_TEXTS.get(mode, "실행 중지") if mode is not None else RUN_TEXT)
         self._paint_icons()
@@ -844,6 +852,12 @@ class MainWindow(QMainWindow):
         self.canvas.call("setProperties", drawn.id, {"chk": {"process": body}}, then=done)
 
     # ── 시험 케이스 · BPM 프로세스 정보 ──
+
+    def _replay_specs(self) -> ReplaySpecs | None:
+        """열린 정의의 재생 명세 자리 — 열린 것이 없거나 정의를 읽지 못했으면 `None`."""
+        opened = self.opened_definition()
+        process = opened.process if opened is not None else None
+        return specs_of(self.process.folder if self.process is not None else None, process.id if process else None)
 
     def opened_definition(self) -> Definition | None:
         """지금 열린 정의 (디스크에서 읽은 것). 없으면 `None`."""

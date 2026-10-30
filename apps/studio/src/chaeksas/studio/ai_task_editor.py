@@ -15,12 +15,17 @@
 - 허용 도구의 고를 거리는 **내장 도구**(`core.tools`)다 — 확장이 기여하는 도구는 없다(ADR-0050).
   `web`·`desktop` 환경의 도구는 **저절로 허용되므로** 여기 적지 않는다 (C14, ADR-0037).
 - 마지막 관문은 계약 모델(`AiTask`)이다 — 여기서 놓친 것도 그것이 잡는다.
+- **목표 미리보기**는 엔진이 모델에게 함께 줄 값의 **이름**이다 — 고르는 함수가 엔진과 같다
+  (`goal_names`, C14 §AI 태스크가 보는 값). 후보는 「변수」 탭의 고를 거리와 실행이 심는 변수다.
+- 「재생 명세」 한 줄은 **열린 작업 폴더의 `memory/specs.json`**을 읽는다 (ADR-0028, `replay_specs`).
+  「명세 잊기」는 그림이 아니라 그 파일을 바꾸므로 **「적용」을 기다리지 않고**, 되돌릴 수 없어 확인 창의
+  기본이 「취소」다. 시험 실행 중에는 끈다(끝날 때 같은 파일에 배운 것을 적는다).
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from pydantic import ValidationError
@@ -36,6 +41,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
@@ -48,12 +54,14 @@ from PySide6.QtWidgets import (
 
 from chaeksas.contracts.bpmn_ext import VALUE_TYPES, AiTask, is_var_name, looks_like_code
 from chaeksas.contracts.manifest import PC_ONLY_DOMAINS
-from chaeksas.contracts.replay import REPLAY_DEFAULT
+from chaeksas.contracts.replay import REPLAY_DEFAULT, ReplaySpec
+from chaeksas.core.engine import BUILTIN_NOW, BUILTIN_RUN_ID, BUILTIN_TODAY, goal_names
 from chaeksas.core.files import Workspace
 from chaeksas.core.tools import builtin_tools
 from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3
 from chaeksas.studio.name_pick import NameDelegate
+from chaeksas.studio.replay_specs import ReplaySpecs, SpecsUnreadable
 
 #: 탭 이름.
 TAB_LABEL = "AI 태스크"
@@ -93,6 +101,24 @@ FORBIDDEN_NOTE = "모델에게 주는 말입니다 — 막지는 않습니다. �
 CONFIRM_NOTE = "이 상황이면 멈춥니다 — PC는 사람 확인, 서버나 ESCALATED 경계가 있으면 오류 경계로."
 INSTRUCTIONS_NOTE = "줄마다 하나. 비우면 BPM 프로세스 기본값을 따릅니다."
 
+#: 실행이 심는 변수 — 목표에 이름이 나오면 이것도 모델에게 간다 (엔진 `_seen_by`).
+SEEDED_NAMES = (BUILTIN_TODAY, BUILTIN_NOW, BUILTIN_RUN_ID)
+GOAL_PREVIEW_NONE = "목표에 이름이 나오는 변수가 없습니다 — 모델은 업무 파라미터만 봅니다."
+
+#: 「재생 명세」 한 줄 (STU-04, ADR-0028).
+SPEC_NONE = "명세 없음 — 자율 수행으로 시험 실행하면 배웁니다."
+SPEC_NOT_USED = "재생하지 않으므로 명세를 쓰지 않습니다."
+SPEC_NO_PROCESS = "열린 BPM 프로세스가 없어 명세를 모릅니다."
+SPEC_RUNNING = "시험 실행이 끝난 뒤에 잊을 수 있습니다."
+#: 도구 차례를 이만큼까지 보이고 나머지는 「…」 (다 보이는 것은 툴팁).
+SPEC_TOOLS_SHOWN = 3
+FORGET_TITLE = "명세 잊기"
+FORGET_TIP = "이 태스크의 명세만 지웁니다 — 「적용」을 기다리지 않고 곧바로 파일에 씁니다."
+FORGET_TEXT = (
+    "이 AI 태스크의 재생 명세(도구 {count}단계)를 지웁니다.\n\n"
+    "되돌릴 수 없습니다. 다시 배우려면 자율 수행으로 시험 실행하세요."
+)
+
 _TRUE = {"true", "예", "참", "1", "yes"}
 _FALSE = {"false", "아니오", "거짓", "0", "no"}
 #: 표 칸에 읽은 값을 붙여 두는 자리 — 줄을 고치지 않았으면 그 값을 그대로 돌려준다.
@@ -115,9 +141,22 @@ class AiTaskEditor(QWidget):
         *,
         run_location: str | None = None,
         names: QStringListModel | None = None,
+        specs: ReplaySpecs | None = None,
+        node_id: str = "",
+        running: Callable[[], bool] = lambda: False,
+        loop_item: str = "",
     ) -> None:
         super().__init__(parent)
         self.run_location = run_location
+        #: 목표 미리보기의 후보 — 「변수」 탭의 고를 거리 (같은 모델을 본다).
+        self.names = names
+        #: 이 태스크의 명세를 찾는 자리 (`None`이면 열린 BPM 프로세스가 없다).
+        self.specs = specs
+        self.node_id = node_id
+        #: 시험 실행 중인가 — 그동안은 「명세 잊기」를 끈다.
+        self.running = running
+        #: 이 노드의 반복 항목 (`chk:loop.item`) — 목표에 없어도 모델에게 간다.
+        self.loop_item = loop_item
         self._loaded: dict[str, Any] = {}
         self._quiet = False
         self._builtin = builtin_tool_descriptions()
@@ -133,6 +172,9 @@ class AiTaskEditor(QWidget):
         self.goal_hint = QLabel("목표에 이름이 나오는 변수와 업무 파라미터만 모델에게 갑니다.", self)
         self.goal_hint.setWordWrap(True)
         set_role(self.goal_hint, "muted")
+        self.goal_preview = QLabel("", self)
+        self.goal_preview.setWordWrap(True)
+        set_role(self.goal_preview, "muted")
 
         self.domain_picks: dict[str, QRadioButton] = {}
         self.domain_group = QButtonGroup(self)
@@ -190,6 +232,14 @@ class AiTaskEditor(QWidget):
             self.replay_picks[value] = one
             self.replay_group.addButton(one)
         self.replay_picks[REPLAY_DEFAULT].setChecked(True)
+        self.spec_line = QLabel("", self)
+        self.spec_line.setWordWrap(True)
+        self.spec_tools = QLabel("", self)
+        self.spec_tools.setWordWrap(True)
+        set_role(self.spec_tools, "muted")
+        self.forget_button = QPushButton(FORGET_TITLE, self)
+        self.forget_button.setObjectName("Secondary")
+        self.forget_button.setToolTip(FORGET_TIP)
         self.max_steps_box = QSpinBox(self)
         self.max_steps_box.setRange(0, 500)
         self.max_steps_box.setSpecialValueText("기본")
@@ -209,11 +259,15 @@ class AiTaskEditor(QWidget):
         self.note.setWordWrap(True)
         set_role(self.note, "muted")
 
+        #: 파일에서 읽은 이 태스크의 명세와 못 읽은 까닭 (`refresh_spec`이 채운다).
+        self._spec: ReplaySpec | None = None
+        self._spec_error = ""
+
         self._build_layout()
         for name in self._builtin:
             self._add_tool_check(name)
         self._wire()
-        self._refresh()
+        self.refresh_spec()
 
     # ── 짜기 ──
 
@@ -242,6 +296,7 @@ class AiTaskEditor(QWidget):
         row.addWidget(self.outline_button)
         column.addLayout(row)
         column.addWidget(self.goal_box)
+        column.addWidget(self.goal_preview)
         return box
 
     def _domain_box(self) -> QGroupBox:
@@ -317,6 +372,11 @@ class AiTaskEditor(QWidget):
             row.addWidget(one)
         row.addStretch(1)
         column.addLayout(row)
+        column.addWidget(self.spec_line)
+        spec_row = QHBoxLayout()
+        spec_row.addWidget(self.spec_tools, 1)
+        spec_row.addWidget(self.forget_button, 0, Qt.AlignmentFlag.AlignTop)
+        column.addLayout(spec_row)
         form = QFormLayout()
         form.setContentsMargins(0, 0, 0, 0)
         form.addRow("최대 단계", self.max_steps_box)
@@ -343,6 +403,9 @@ class AiTaskEditor(QWidget):
         self.timeout_box.valueChanged.connect(self._touched)
         self.forbidden_box.textChanged.connect(self._touched)
         self.confirm_box.textChanged.connect(self._touched)
+        self.forget_button.clicked.connect(self.forget_spec)
+        if self.names is not None:
+            self.names.modelReset.connect(self._refresh_goal_preview)
 
     # ── 규약 ──
 
@@ -460,6 +523,12 @@ class AiTaskEditor(QWidget):
                 warnings.append(f"결과 {name}이 번호·코드처럼 보이는데 int입니다 — 문자열이 아닐까요 (B8).")
             seen.add(name)
 
+        stale = self._spec_tools_not_allowed()
+        if stale:
+            warnings.append(
+                f"명세의 도구 {', '.join(stale)}가 허용 도구에 없습니다 — 결정 수행에서 재생이 실패합니다."
+                " 명세를 잊고 다시 배우세요."
+            )
         if self.replay() == "full" and not self.tools():
             errors.append("도구가 없는 AI 태스크에는 재생 「전부」(full)를 쓸 수 없습니다 (B12).")
         if not errors:
@@ -485,6 +554,70 @@ class AiTaskEditor(QWidget):
         picked = [name for name, check in self.tool_checks.items() if check.isChecked()]
         before = [str(t) for t in self._loaded.get("tools") or []]
         return [n for n in before if n in picked] + [n for n in picked if n not in before]
+
+    def preview_names(self) -> tuple[list[str], str, list[str]]:
+        """목표 미리보기 — `(목표에 이름이 나오는 변수, 반복 항목, 업무 파라미터)` (엔진과 같은 규칙)."""
+        params = [name for name, _value, _ in self._param_rows(with_errors=True) if name]
+        known = list(self.names.stringList()) if self.names is not None else []
+        candidates = [n for n in dict.fromkeys([*known, *SEEDED_NAMES]) if n != self.loop_item and n not in params]
+        return goal_names(self.goal_box.toPlainText(), candidates), self.loop_item, params
+
+    def forget_spec(self) -> None:
+        """「명세 잊기」 — 확인(기본 「취소」) 뒤 이 태스크의 명세 하나만 지운다."""
+        self.refresh_spec()  # 창을 연 뒤 시험 실행이 다시 배웠을 수 있다 — 지울 것을 다시 본다
+        if self.specs is None or self._spec is None or self.running():
+            return
+        answer = QMessageBox.question(
+            self,
+            FORGET_TITLE,
+            FORGET_TEXT.format(count=len(self._spec.steps)),
+            QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.specs.forget(self.node_id)
+        except (SpecsUnreadable, OSError) as e:
+            self.warning.setText(f"명세를 잊지 못했습니다: {e}")
+            return
+        self.refresh_spec()
+
+    def refresh_spec(self) -> None:
+        """「재생 명세」를 파일에서 다시 읽는다 (시험 실행이 끝났을 때 속성 패널이 부른다)."""
+        self._spec, self._spec_error = None, ""
+        if self.specs is not None:
+            try:
+                self._spec = self.specs.find(self.node_id)
+            except SpecsUnreadable as e:
+                self._spec_error = str(e)
+        self._refresh()
+
+    def _show_spec(self) -> None:
+        """읽어 둔 명세를 한 줄로 — 재생 라디오를 바꿀 때마다 파일을 읽지 않는다."""
+        spec = self._spec
+        not_used = self.replay() == "none"
+        self.spec_tools.setText("")
+        self.spec_tools.setToolTip("")
+        self.spec_line.setToolTip("")
+        if self.specs is None:
+            self.spec_line.setText(SPEC_NO_PROCESS)
+        elif self._spec_error:
+            self.spec_line.setText(self._spec_error)
+        elif spec is None:
+            self.spec_line.setText(SPEC_NOT_USED if not_used else SPEC_NONE)
+        else:
+            line = f"명세 있음 · 도구 {len(spec.steps)}단계 · 판 {spec.version}"
+            self.spec_line.setText(f"{line} — {SPEC_NOT_USED}" if not_used else line)
+            if spec.model:
+                self.spec_line.setToolTip(f"적을 때 쓴 모델: {spec.model}")
+            tools = [step.tool for step in spec.steps]
+            more = " → …" if len(tools) > SPEC_TOOLS_SHOWN else ""
+            self.spec_tools.setText(f"({' → '.join(tools[:SPEC_TOOLS_SHOWN])}{more})" if tools else "")
+            self.spec_tools.setToolTip(" → ".join(tools))
+        busy = spec is not None and self.running()
+        self.forget_button.setEnabled(spec is not None and not busy)
+        self.forget_button.setToolTip(SPEC_RUNNING if busy else FORGET_TIP)
 
     def insert_outline(self) -> None:
         """목표가 비었을 때 권장 머리말을 넣는다 (적어 둔 목표를 덮지 않는다)."""
@@ -602,7 +735,27 @@ class AiTaskEditor(QWidget):
         self._refresh()
         self.changed.emit()
 
+    def _spec_tools_not_allowed(self) -> list[str]:
+        """명세에 적힌 도구 가운데 지금 허용 도구에 없는 것 (재생이 그 자리에서 실패한다)."""
+        if self._spec is None or self.domain() in PC_ONLY_DOMAINS:
+            return []  # 웹·데스크톱은 환경의 도구가 저절로 허용된다 — 이름을 여기서 모른다 (ADR-0037)
+        allowed = set(self.tools())
+        return list(dict.fromkeys(step.tool for step in self._spec.steps if step.tool not in allowed))
+
+    def _refresh_goal_preview(self, *_args: object) -> None:
+        found, item, params = self.preview_names()
+        parts = []
+        if found:
+            parts.append(" · ".join(found))
+        if item:
+            parts.append(f"반복 항목 {item}")
+        if params:
+            parts.append(f"업무 파라미터 {', '.join(params)}")
+        self.goal_preview.setText(f"모델에게 가는 값: {' · '.join(parts)}" if found or item else GOAL_PREVIEW_NONE)
+
     def _refresh(self) -> None:
+        self._refresh_goal_preview()
+        self._show_spec()
         domain = self.domain()
         on_server = self.run_location == "server"
         for value in PC_ONLY_DOMAINS:

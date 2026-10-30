@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -599,6 +599,15 @@ def _extension_context(run: Run, spec: ExtensionTask) -> Any:
     return None
 
 
+def goal_names(goal: str, names: Iterable[str]) -> list[str]:
+    """`names` 가운데 목표 글에 **들어 있는** 이름 (C14 §AI 태스크가 보는 값).
+
+    엔진이 모델에게 줄 변수를 고르는 규칙이고, Studio의 목표 미리보기(STU-04)도 이것을 부른다 —
+    둘이 다르면 미리보기가 거짓말을 한다. 낱말 경계를 보지 않는다(`기간`은 「기간별」에도 걸린다).
+    """
+    return [name for name in names if name and name in goal]
+
+
 def _seen_by(context: Context, spec: AiTask) -> dict[str, Any]:
     """모델에게 함께 줄 값 (C14 §AI 태스크가 보는 값).
 
@@ -606,7 +615,7 @@ def _seen_by(context: Context, spec: AiTask) -> dict[str, Any]:
     않는다 — 모델에게 가는 값은 적을수록 좋고(원칙 6), 「주고 싶으면 목표에 쓴다」가 분명하다.
     """
     run, token = context.run, context.token
-    found = {name: value for name, value in run.variables.items() if name in spec.goal}
+    found = {name: run.variables[name] for name in goal_names(spec.goal, run.variables)}
     loop = token.loop
     if loop is not None and loop.item_name in run.variables:
         found[loop.item_name] = run.variables[loop.item_name]
