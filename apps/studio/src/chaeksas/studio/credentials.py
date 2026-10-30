@@ -1,4 +1,4 @@
-"""Studio의 비밀 — 모델 키·Center API 키·서비스 앱 키(개발용) (STU-10, ADR-0013).
+"""Studio의 비밀 — 모델 키·Center API 키·확장의 비밀 칸 (STU-10, ADR-0013). 서비스 앱 키는 없다 (ADR-0102).
 
 **설정 파일에 넣지 않는다** (CLAUDE.md §5). OS 비밀 저장소(`keyring`)의 `chaeksas-studio`에 두고,
 읽기는 **환경변수가 먼저**다 (개발·CI). 저장소가 없으면 저장이 **분명히 실패한다** — 평문으로
@@ -23,7 +23,6 @@ ENV_LLM_API_KEY = "CHK_STUDIO__LLM__API_KEY"
 #: 읽기 전용이고, **Studio용**으로 따로 발급받은 것이다 (PC 실행기의 것과 값이 다르다).
 CENTER_KEY_NAME = "center"
 ENV_CENTER_API_KEY = "CHK_STUDIO__CENTER_API_KEY"
-#: 서비스 앱 키 — 참조 이름마다 하나 (`svc:<참조>`).
 #: 확장의 비밀 설정 칸 — 확장마다 이름 공간을 가른다 (`ext:<확장>:<칸>`, PC 실행기와 같은 규칙).
 EXTENSION_PREFIX = "ext:"
 ENV_EXTENSION_PREFIX = "CHK_STUDIO__EXT__"

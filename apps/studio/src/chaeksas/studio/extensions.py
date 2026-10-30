@@ -10,8 +10,8 @@ Studio는 **어느 확장인지 모른다.** `chk:task`의 `type`으로 기여�
 - **시험 실행도 확장을 쓴다** (`tasks()`) — UI 태스크·데스크톱 AI 태스크는 **이 PC의 PC 실행기가
   띄운 로컬 런타임(Worker)** 을 쓴다 (STU-10 「Worker」). 자리는 PC 실행기가 런타임 폴더에 남긴
   `runtime.json`(포트)과 토큰 파일이다 — Studio가 띄우지 않는다.
-- 키 참조(ADR-0013)는 **환경변수 `CHK_STUDIO__SVC__<참조>`가 먼저**, 그다음 OS 비밀 저장소
-  (`chaeksas-studio`, `svc:<참조>`)다. 값은 개발용 키다 (STU-10 「서비스 앱 키」).
+- 서비스 앱 키는 없다 (ADR-0102) — 바깥 기능은 Studio 키로 Center에 시험 일감을 올린다 (C15,
+  `services.py`). 확장의 비밀 칸만 OS 비밀 저장소(`chaeksas-studio`, `ext:<확장>:<칸>`)에서 푼다.
 """
 
 from __future__ import annotations

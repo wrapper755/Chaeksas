@@ -564,14 +564,14 @@ _ON_PURPOSE = (
 #: 아직 **돌리지는** 못하는 예제와 그 이유. **조용히 빼면 묶음이 거짓말을 한다.**
 #:
 #: **배포·설치는 이것들도 모두 본다** (아래 `test_every_server_example_deploys_and_installs`) —
-#: 막힌 것은 **도는 것**이고, 배포 길은 44개 전부가 지나간다.
+#: 막힌 것은 **도는 것**이고, 배포 길은 서버 예제(`SERVER`) 전부가 지나간다.
 REMAINING: dict[str, str] = {
     "bx33_access_request": _ON_PURPOSE,
 }
 
 #: **묶음이 아니라 전용 시험이 보는 것**. 빠뜨린 것이 아니라 **다른 자리에서 본다** —
-#: 아래 `test_every_server_example_is_in_the_bundle_or_has_a_reason`가 셋을 합쳐 44개와 맞춰
-#: 본다(갈래를 더하면서 조용히 빠지는 일을 막는 자리다).
+#: 아래 `test_every_server_example_is_in_the_bundle_or_has_a_reason`가 셋을 합쳐 그림에서 읽은
+#: 서버 예제 전부(`SERVER`)와 맞춰 본다(갈래를 더하면서 조용히 빠지는 일을 막는 자리다).
 ELSEWHERE: dict[str, str] = {
     "fx24_batch_intake": (
         "`test_fx24_starts_one_server_bot_per_approved_item`가 본다 — **일괄 기동**이라(ADR-0082) "
@@ -601,7 +601,7 @@ def test_every_server_example_is_in_the_bundle_or_has_a_reason() -> None:
     """빼는 것은 **이유와 함께** 적는다 (M4·M5 인수 시험과 같은 자리).
 
     갈래가 셋이다 — 묶음이 도는 것(`GREEN`), **전용 시험이 보는 것**(`ELSEWHERE`), 아직 못
-    도는 것(`REMAINING`). 셋을 합쳐 44개와 맞춰 보므로 **조용히 빠지는 일이 없다**.
+    도는 것(`REMAINING`). 셋을 합쳐 `SERVER` 전부와 맞춰 보므로 **조용히 빠지는 일이 없다**.
     """
     assert set(GREEN) | set(REMAINING) | set(ELSEWHERE) == set(SERVER)
     assert not (set(REMAINING) & set(ELSEWHERE)), "한 예제가 두 갈래에 있다"
@@ -617,7 +617,7 @@ def test_every_server_example_deploys_and_installs(
     center: CenterHandle,
     runner: agent_mod.Agent,
 ) -> None:
-    """**배포 길은 44개 전부가 지나간다** — 막힌 것은 *도는 것*이지 배포가 아니다.
+    """**배포 길은 서버 예제 전부가 지나간다** — 막힌 것은 *도는 것*이지 배포가 아니다.
 
     여기서 새로운 것이 배포 길이다(서버 대상 봉투·`"*"`·C7 누락 검사) — PC 재통과가 여덟 개
     모두 배포까지 보는 것과 같은 결이다. 끝까지 도는 것은 아래 시험이 본다.

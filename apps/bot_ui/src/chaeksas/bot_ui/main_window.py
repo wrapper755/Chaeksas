@@ -7,7 +7,7 @@
 그릴 뿐이다 — 느린 실행 프로세스가 화면을 붙잡지 않는다.
 
 「준비」 열은 **사전 점검**(`core.preflight`)이 말하는 것이고, 표기는 `status_map`의 「BPM 프로세스 준비」에
-있는 것만 쓴다 (`docs/07-style-guide.md`). 키가 없으면 그 줄에서 바로 BUI-10으로 갈 수 있다.
+있는 것만 쓴다 (`docs/07-style-guide.md`).
 """
 
 from __future__ import annotations
@@ -671,7 +671,7 @@ class MainWindow(QMainWindow):
             self.refresh()
 
     def show_bots(self) -> None:
-        """BUI-04 「BPM 프로세스」 탭 — 서비스 앱 키 알림이 가리키는 자리다 (BUI-10은 없다, ADR-0094)."""
+        """BUI-04 「BPM 프로세스」 탭 — 배포·준비 알림이 가리키는 자리다."""
         self.tabs.setCurrentIndex(0)
         self.refresh()
 

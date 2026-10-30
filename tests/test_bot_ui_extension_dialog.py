@@ -295,7 +295,7 @@ def test_used_by_counts_the_installed_bots(tmp_path: Path) -> None:
 
 
 def test_an_extension_nobody_uses_says_so(tmp_path: Path) -> None:
-    """**지우라고 하지 않는다** — 쓰는 BPM 프로세스가 없을 뿐이다 (BUI-10 「쓰는 BPM 프로세스 없음」과 같은 결)."""
+    """**지우라고 하지 않는다** — 쓰는 BPM 프로세스가 없을 뿐이다."""
     window = dialog(host_with(builtin()), tmp_path=tmp_path)
     assert cell(window, 0, USED_BY).text() == "쓰는 BPM 프로세스 없음"
 
@@ -341,11 +341,13 @@ def test_a_definition_that_could_not_be_read_is_said_below_the_table(tmp_path: P
 
 
 def test_the_detail_tells_where_the_keys_go(tmp_path: Path) -> None:
-    """키마다 **넣는 화면까지** 말해 준다 (실행용은 BUI-10, 도구용은 Tool UI 설정 TOL-02)."""
+    """**넣을 키는 없다**고 말한다 (ADR-0102) — 없어진 화면(BUI-10·TOL-02의 키 칸)으로 보내지 않는다."""
     window = dialog(host_with(builtin()), tmp_path=tmp_path)
     shown = window.detail.toPlainText()
 
-    assert "BUI-10" in shown
+    assert "넣을 키 없음" in shown
+    assert "BUI-10" not in shown
+    assert "TOL-02" not in shown
     assert "ocr_read" in shown
 
 
