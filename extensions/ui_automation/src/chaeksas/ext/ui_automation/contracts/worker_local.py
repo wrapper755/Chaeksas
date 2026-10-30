@@ -54,6 +54,16 @@ RESULT_SUCCESS = "success"
 RESULT_ESCALATED = "escalated"
 RESULT_FAILED = "failed"
 
+#: 찾지 못한 스텝에서 해 본 것 (C10 `StepResult.attempts`, ADR-0112) — **값은 싣지 않는다**.
+SOURCE_LADDER = "ladder"
+SOURCE_HEAL = "heal"
+TRIED_NOT_FOUND = "not_found"
+TRIED_AMBIGUOUS = "ambiguous"
+TRIED_ERROR = "error"
+#: 치유 줄만 — 제안하지 못했다 / 닿지 못했다 (`type`이 빈 글이다).
+TRIED_NO_SUGGESTION = "no_suggestion"
+TRIED_UNREACHABLE = "unreachable"
+
 #: 오류 코드 (C10 §오류). 열린 문자열이지만 아는 것은 여기 둔다.
 TOKEN_INVALID = "token_invalid"
 SESSION_SECRET_INVALID = "session_secret_invalid"
@@ -147,6 +157,20 @@ class StepRequest(ContractModel):
     timeout_s: int | None = None
 
 
+class LocatorAttempt(ContractModel):
+    """로케이터 하나를 해 본 결과 — **종류와 결과 코드뿐이다** (C10 경계: 셀렉터는 넘지 않는다).
+
+    예외 글도 셀렉터를 담고 있어 싣지 않는다. 수행기가 전환할 때 CMN-01 검토 자료로 옮긴다 (ADR-0112).
+    """
+
+    source: str = SOURCE_LADDER  # ladder | heal
+    #: 로케이터 종류 (`test_id`·`role`·`css`…). 치유가 제안하지 못했으면 빈 글.
+    type: str = ""
+    result: str = TRIED_NOT_FOUND
+    #: `ambiguous`일 때 몇 개 맞았나.
+    count: int | None = None
+
+
 class StepResult(ContractModel):
     """스텝 하나의 결과.
 
@@ -166,6 +190,8 @@ class StepResult(ContractModel):
     error: str | None = None
     current_url: str | None = None
     duration_ms: int = 0
+    #: 요소를 찾지 못했을 때(전환) 해 본 것 — 사다리 차례대로, 치유가 뒤에 (ADR-0112).
+    attempts: list[LocatorAttempt] = Field(default_factory=list)
 
 
 class SessionSummary(ContractModel):
@@ -307,11 +333,18 @@ __all__ = [
     "SESSION_LOCKED",
     "SESSION_NOT_FOUND",
     "SESSION_SECRET_INVALID",
+    "SOURCE_HEAL",
+    "SOURCE_LADDER",
     "STEP_TIMEOUT_S",
     "SCHEMA_UNSUPPORTED",
     "TOKEN_FILE",
     "TOKEN_HEADER",
     "TOKEN_INVALID",
+    "TRIED_AMBIGUOUS",
+    "TRIED_ERROR",
+    "TRIED_NOT_FOUND",
+    "TRIED_NO_SUGGESTION",
+    "TRIED_UNREACHABLE",
     "UI_AUTOMATION_UNREACHABLE",
     "UNKNOWN_SEMANTIC_KEY",
     "VALUE_NOT_ALLOWED",
@@ -321,6 +354,7 @@ __all__ = [
     "CloseResult",
     "Health",
     "Holder",
+    "LocatorAttempt",
     "SessionBrief",
     "SessionInfo",
     "SessionRequest",

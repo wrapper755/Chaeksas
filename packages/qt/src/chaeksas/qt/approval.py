@@ -8,7 +8,8 @@
 - **폼이 없으면 「승인 / 반려」**다 (C6 — 답은 `decision` 하나).
 - 「보내기」는 **엔진과 같은 `validate_answer`로 본다** — 틀리면 빨간 글자를 보이고 **창을 닫지
   않는다**. 돌려 보고야 아는 일을 없앤다.
-- 검토 자료는 **읽기 전용**이고 JSON 따옴표·`\\n`이 그대로 보이지 않게 푼다.
+- 검토 자료는 **읽기 전용**이고 JSON 따옴표·`\\n`이 그대로 보이지 않게 푼다. **표 값**(C6
+  `{headers, rows}`, ADR-0112)은 표로 그린다 — 뜻은 묻지 않는다(무엇의 표인지는 보낸 쪽이 이름으로 말한다).
 """
 
 from __future__ import annotations
@@ -28,11 +29,13 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from chaeksas.contracts.approvals import Form, FormField, validate_answer
+from chaeksas.contracts.approvals import Form, FormField, as_table, validate_answer
 from chaeksas.qt.theme import set_role
 
 #: 확인(`confirmation`)은 업무 결재가 아니라 **실행 중 막힘**이다 (CMN-01 오른쪽 칸).
@@ -63,7 +66,34 @@ def as_text(value: Any) -> str:
 
 
 def review_text(review: Mapping[str, Any]) -> str:
-    return "\n".join(f"[{name}]\n{as_text(value)}" for name, value in review.items())
+    """표가 아닌 검토 자료 — 표 값은 `review_tables`가 따로 그린다."""
+    return "\n".join(
+        f"[{name}]\n{as_text(value)}" for name, value in review.items() if as_table(value) is None
+    )
+
+
+def review_tables(review: Mapping[str, Any]) -> list[tuple[str, list[str], list[list[Any]]]]:
+    """검토 자료 가운데 **표 값**만 `(이름, 머리줄, 줄들)` (C6 「표 값」, CMN-01 [R])."""
+    out = []
+    for name, value in review.items():
+        table = as_table(value)
+        if table is not None:
+            out.append((str(name), *table))
+    return out
+
+
+def table_widget(headers: list[str], rows: list[list[Any]], parent: QWidget | None = None) -> QTableWidget:
+    """읽기 전용 표 하나. 칸은 `as_text`로 푼다 (따옴표가 보이지 않게)."""
+    table = QTableWidget(len(rows), len(headers), parent)
+    table.setHorizontalHeaderLabels(headers)
+    table.verticalHeader().setVisible(False)
+    table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    for r, row in enumerate(rows):
+        for c, value in enumerate(row):
+            table.setItem(r, c, QTableWidgetItem(as_text(value)))
+    table.resizeColumnsToContents()
+    table.horizontalHeader().setStretchLastSection(True)
+    return table
 
 
 class ApprovalDialog(QDialog):
@@ -100,10 +130,21 @@ class ApprovalDialog(QDialog):
             said.setWordWrap(True)
             layout.addWidget(said)
 
+        #: [R]의 표들 (시험이 본다).
+        self.review_tables: list[QTableWidget] = []
         if review:
-            box = QPlainTextEdit(review_text(review), self)
-            box.setReadOnly(True)
-            layout.addWidget(box, 1)
+            text = review_text(review)
+            if text:
+                box = QPlainTextEdit(text, self)
+                box.setReadOnly(True)
+                layout.addWidget(box, 1)
+            for name, headers, rows in review_tables(review):
+                caption = QLabel(name, self)
+                set_role(caption, "muted")
+                layout.addWidget(caption)
+                table = table_widget(headers, rows, self)
+                self.review_tables.append(table)
+                layout.addWidget(table, 1)
 
         if self.has_fields:
             layout.addLayout(self._fields())
@@ -258,5 +299,6 @@ __all__ = [
     "ApprovalDialog",
     "as_text",
     "comment_row",
+    "review_tables",
     "review_text",
 ]

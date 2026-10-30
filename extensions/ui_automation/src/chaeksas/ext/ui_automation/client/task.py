@@ -44,11 +44,18 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     RESULT_FAILED,
     SESSION_HEADER,
     SESSION_LOCKED,
+    SOURCE_HEAL,
     STEP_TIMEOUT_S,
     TOKEN_FILE,
     TOKEN_HEADER,
+    TRIED_AMBIGUOUS,
+    TRIED_ERROR,
+    TRIED_NO_SUGGESTION,
+    TRIED_NOT_FOUND,
+    TRIED_UNREACHABLE,
     Caller,
     CloseResult,
+    LocatorAttempt,
     SessionInfo,
     SessionRequest,
     StepRequest,
@@ -56,7 +63,7 @@ from chaeksas.ext.ui_automation.contracts.worker_local import (
     business_key,
     can_retry_whole_task,
 )
-from chaeksas.extension_api import ExtensionEvent, TaskContext, TaskFailed, TaskOutcome
+from chaeksas.extension_api import ExtensionEvent, TaskContext, TaskFailed, TaskOutcome, review_table
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +72,20 @@ RESTARTED_MESSAGE = (
     "화면 조작 도중 Worker가 다시 시작되었습니다. 화면 상태를 확인한 뒤 계속/중단을 고르세요."
 )
 ESCALATED_MESSAGE = "화면에서 요소를 찾지 못했습니다. 화면을 확인한 뒤 계속/중단을 고르세요."
+
+#: CMN-01 검토 자료의 이름과 표 머리줄 (ADR-0112) — **값은 없다**: 로케이터 종류·결과, 스텝의 요소·동작뿐이다.
+REVIEW_ELEMENT = "요소"
+REVIEW_TRIED = "시도한 로케이터"
+REVIEW_DONE = "끝낸 스텝"
+TRIED_HEADERS = ("순서", "출처", "종류", "결과")
+DONE_HEADERS = ("순서", "요소", "동작", "결과")
+TRIED_LABELS = {
+    TRIED_NOT_FOUND: "찾지 못함",
+    TRIED_AMBIGUOUS: "여러 개 맞음",
+    TRIED_ERROR: "찾다가 오류",
+    TRIED_NO_SUGGESTION: "제안 없음",
+    TRIED_UNREACHABLE: "닿지 못함",
+}
 
 #: C13 §4의 「결과를 모른다」 — 실행기가 확인(CMN-01)으로 넘긴다.
 ESCALATE_CONFIRMATION = "confirmation"
@@ -296,7 +317,10 @@ class UiTaskExecutor:
                 return self._once(ctx, attempt=ctx.attempt + 1)
             # 조작했다면 같은 입력이 두 번 들어갈 수 있다 — **사람에게 넘긴다**.
             raise TaskFailed(
-                "worker_restarted", RESTARTED_MESSAGE, escalate=ESCALATE_CONFIRMATION
+                "worker_restarted",
+                RESTARTED_MESSAGE,
+                escalate=ESCALATE_CONFIRMATION,
+                review=done_review(self._done),
             ) from e
         except WorkerUnreachable as e:
             raise TaskFailed("worker_unreachable", str(e), retryable=True) from e
@@ -358,7 +382,10 @@ class UiTaskExecutor:
                     if result.escalated:
                         # **실패가 아니다** — 사람이 화면을 보고 정한다 (CMN-01).
                         raise TaskFailed(
-                            "ui_escalated", ESCALATED_MESSAGE, escalate=ESCALATE_CONFIRMATION
+                            "ui_escalated",
+                            ESCALATED_MESSAGE,
+                            escalate=ESCALATE_CONFIRMATION,
+                            review=escalated_review(result),
                         )
                     if not result.ok:
                         raise TaskFailed(
@@ -385,6 +412,38 @@ class UiTaskExecutor:
             e.events = (*e.events, *made)
             raise
         return TaskOutcome(outputs=outputs, events=made)
+
+
+def escalated_review(result: StepResult) -> dict[str, Any]:
+    """전환한 스텝 → CMN-01 검토 자료 (ADR-0112) — 요소 이름과 「시도한 로케이터」 표.
+
+    Worker는 로케이터 **종류와 결과 코드**만 준다 (C10 경계) — 그래서 표에도 셀렉터가 없다.
+    """
+    review: dict[str, Any] = {}
+    if result.semantic_key:
+        review[REVIEW_ELEMENT] = result.semantic_key
+    if result.attempts:
+        rows = [_tried_row(number, one) for number, one in enumerate(result.attempts, start=1)]
+        review[REVIEW_TRIED] = review_table(TRIED_HEADERS, rows)
+    return review
+
+
+def _tried_row(number: int, one: LocatorAttempt) -> list[Any]:
+    said = TRIED_LABELS.get(one.result, one.result)
+    if one.result == TRIED_AMBIGUOUS and one.count:
+        said = f"{said} ({one.count})"
+    return [number, "치유" if one.source == SOURCE_HEAL else "사다리", one.type, said]
+
+
+def done_review(done: list[StepResult]) -> dict[str, Any]:
+    """Worker가 다시 떴을 때 → 「끝낸 스텝」 표 (ADR-0112). **입력한 값은 넣지 않는다** — 동작 이름뿐이다."""
+    if not done:
+        return {}
+    rows = [
+        [number, one.semantic_key or "", one.action or "", "성공" if one.ok else "실패"]
+        for number, one in enumerate(done, start=1)
+    ]
+    return {REVIEW_DONE: review_table(DONE_HEADERS, rows)}
 
 
 def screen_value(text: str) -> Any:
@@ -588,5 +647,7 @@ __all__ = [
     "WorkerClient",
     "WorkerUnreachable",
     "can_retry_whole_task",
+    "done_review",
+    "escalated_review",
     "session_event",
 ]

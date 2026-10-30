@@ -468,7 +468,8 @@ def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
         # **실패한 태스크도 남긴다** (ADR-0041) — 전환으로 끝난 UI 태스크가 가장 보고 싶은 줄이다.
         write_extension_events(context, e.events)
         if e.escalate == ESCALATE_CONFIRMATION and asks_a_person(context):
-            return escalate_to_person(context, e.message or str(e))
+            return escalate_to_person(context, e.message or str(e), review=e.review)
+        # 오류 경계로 가면 확장의 검토 자료는 버린다 — 보일 사람이 없다 (ADR-0112).
         raise TaskFailed(e.message or str(e), node_id=node.id, code=_failure_code(e)) from e
     write_extension_events(context, outcome.events)
     for name, value in dict(outcome.outputs).items():
@@ -510,7 +511,12 @@ def asks_a_person(context: Context, *, code: str = ERROR_ESCALATED) -> bool:
 
 
 def escalate_to_person(
-    context: Context, message: str, *, retry_attempt: int = 0, retry_call_seq: int = 0
+    context: Context,
+    message: str,
+    *,
+    retry_attempt: int = 0,
+    retry_call_seq: int = 0,
+    review: Mapping[str, Any] | None = None,
 ) -> Outcome:
     """그 자리에서 **현장 확인 하나**로 멈춘다 (ADR-0106, C10 `escalated`·C13 §4).
 
@@ -518,6 +524,9 @@ def escalate_to_person(
     띄우고 답을 나른다. 답은 `Engine.answer`가 받는다 — 「계속」은 넘어가고 「중단」은 `ESCALATED`다.
     `retry_attempt`가 있으면 서비스 호출의 결과 모름이다 (ADR-0107) — 「계속」은 그 번째로 다시 부르고
     「중단」은 `TASK_FAILED`다.
+
+    `review`는 확장이 사람에게 보이라고 준 검토 자료다 (ADR-0112, C6 `review`) — 요청에 **옮기기만** 하고
+    `human_requested`에는 싣지 않는다 (실행 기록에 남지 않는다 — 원칙 6).
     """
     run, node = context.run, context.node
     instance = context.instance()
@@ -534,6 +543,7 @@ def escalate_to_person(
         escalation=True,
         retry_attempt=retry_attempt,
         retry_call_seq=retry_call_seq,
+        review=dict(review or {}),
     )
     context.emit("log", level="warn", message=f"전환 — 사람 확인으로 넘긴다: {message}")
     context.emit("human_requested", layer="confirmation", request_id=request_id, where=WHERE_FIELD)

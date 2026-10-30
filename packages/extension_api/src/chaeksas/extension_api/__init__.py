@@ -28,6 +28,7 @@
 버전 규칙은 `_meta`에 있다 — 이름·서명을 바꾸면 주 번호를 올리고, 옛 확장은 「호환 안 됨」이 된다.
 """
 
+from chaeksas.contracts.approvals import review_table
 from chaeksas.extension_api._meta import API_VERSION
 from chaeksas.extension_api.contributions import (
     SEVERITIES,
@@ -95,6 +96,7 @@ __all__ = [
     "TaskContext",
     "TaskFailed",
     "TaskOutcome",
+    "review_table",
     # 기여
     "BotUiPanel",
     "BotUiUtility",

@@ -84,8 +84,12 @@ BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `te
 `asks_a_person`·`escalate_to_person` — `manualTask`와 같은 요청이라 PC 실행기·실행 프로세스·CMN-01은 그대로다). 「계속」은
 **다시 하지 않고 결과 없이** 넘어가고(`Engine._escalation_answered`), 「중단」은 `ESCALATED` 업무 실패다. 그림이
 `ESCALATED`를 이름으로 받는 경계를 달았으면 확인을 띄우지 않고, 서버는 늘 오류 경계다. Studio 시험 실행은 케이스
-`approvals`가 그 태스크 노드 id로 답하고 **적지 않으면 「중단」**이다. 남은 것: CMN-01 [R]의 「시도한 로케이터 표」는
-확장이 넘길 자리가 없어 비어 있다(사유는 [D] 한 줄). C13 §4-1의 어댑터 쪽은 §3-19가 닫았다.
+`approvals`가 그 태스크 노드 id로 답하고 **적지 않으면 「중단」**이다. CMN-01 [R]의 「시도한 로케이터 표」도
+[ADR-0112](decisions/0112-escalation-review-from-extensions.md)로 왔다 — 확장이 `TaskFailed(review=…)`(`extension_api`
+1.5)로 넘기고 엔진이 확인 요청의 C6 `review`로 옮긴다(실행 기록에는 없다). 표는 C6 표 값 `{headers, rows}`이고, Worker는
+C10 `StepResult.attempts`로 로케이터 **종류와 결과 코드만** 준다(셀렉터 값은 경계를 넘지 않는다). C13 §4-1의 어댑터
+쪽은 §3-19가 닫았다. 남겨 둔 것: Center 콘솔(CON-04)은 표 값을 아직 표로 그리지 않는다 — 그 모양을 싣는 확인은 Center로
+올라가지 않는다.
 
 ### 3-17. 바깥 기능을 부르는 길 (Pull) — **닫았다**
 

@@ -339,11 +339,14 @@ def test_an_escalation_is_not_a_failure() -> None:
     """전환은 **사람 확인으로 넘어갈 거리**다 — 실패로 치지 않는다 (C10)."""
     _, client = make(FakeScreen(escalate=True))
     session_id, secret = opened(client)
-    client.post(
+    step = client.post(
         f"/v1/sessions/{session_id}/steps",
         json={"semantic_key": "주문.수량", "action": "fill", "value": "3"},
         headers=head(secret),
-    )
+    ).json()
+    # 무엇을 해 봤나는 **종류와 결과 코드만** 넘는다 — 셀렉터 값(`#0`)은 이 경계를 넘지 않는다 (ADR-0112).
+    assert [(a["source"], a["type"], a["result"]) for a in step["attempts"]] == [("ladder", "css", "not_found")]
+    assert "#0" not in json.dumps(step, ensure_ascii=False)
     summary = client.delete(f"/v1/sessions/{session_id}", headers=head(secret)).json()["summary"]
     assert summary["result"] == "escalated" and summary["escalated"] is True
 

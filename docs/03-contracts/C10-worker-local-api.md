@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 실행 중 BPM 프로세스(실행 프로세스)·Studio·PC 실행기(Worker 관리)·셀렉터 등록(Tool UI — ADR-0077) → Worker 프로세스 |
 | 코드 위치 | `extensions/ui_automation/contracts/` (worker_local.py) — UI 자동화 확장이 소유 ([ADR-0018](../decisions/0018-extensions.md)) |
-| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0106](../decisions/0106-pc-escalation-asks-a-person.md)(전환 → 사람 확인) |
+| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0033](../decisions/0033-desktop-app-and-window.md)(데스크톱 창), [0106](../decisions/0106-pc-escalation-asks-a-person.md)(전환 → 사람 확인), [0112](../decisions/0112-escalation-review-from-extensions.md)(전환 검토 자료) |
 | 관련 화면 | STU-08·13, BUI-09, TOL-03~05 |
 
 
@@ -127,6 +127,7 @@
 | `healed` | 치유로 성공했나 |
 | `escalated` | **전환.** 자가 치유 한도를 넘어 사람 확인이 필요하다. 오류와 구분한다. PC BPM 프로세스는 확인(CMN-01)으로 넘긴다 — 수행기가 `escalate: confirmation`으로 실패를 올리면 엔진이 그 자리에서 현장 확인 하나로 멈추고, 「계속」은 **다시 하지 않고 넘어간다**(결과 변수 없음), 「중단」은 오류 경계 `ESCALATED`다 ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)). 서버 실행은 늘 오류 경계다 |
 | `error_code`, `error` | 실패 시 (예: `element_not_found`, `page_mismatch`, `timeout`) |
+| `attempts` | 선택. **요소를 찾지 못했을 때** 무엇을 해 봤나 — `[{source: "ladder" \| "heal", type, result, count?}]`. `type`은 로케이터 종류(`test_id`·`role`·`css`…)뿐이고 **값은 싣지 않는다**(이 경계의 규칙 — 예외 글도 셀렉터를 담고 있어 싣지 않는다). `result`는 `not_found`·`ambiguous`(`count`개 맞았다)·`error`, 치유 줄은 그 밖에 `no_suggestion`·`unreachable`(`type`이 빈 글). 수행기가 전환할 때 CMN-01 검토 자료로 옮긴다 ([ADR-0112](../decisions/0112-escalation-review-from-extensions.md)) |
 | `current_url`, `duration_ms` | |
 
 **그 밖의 세션 엔드포인트:**
@@ -227,6 +228,7 @@ Worker는 WTS 세션 알림으로 잠금을 안다 ([ADR-0023](../decisions/0023
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-30 | 1 | `StepResult.attempts`(선택) — 찾지 못한 스텝에서 해 본 로케이터의 **종류와 결과 코드**. 값은 넘지 않는다 | [0112](../decisions/0112-escalation-review-from-extensions.md) |
 | 2026-10-29 | 1 | 세션의 `service_key` → `call_token`(호출 토큰) — Worker는 UI 자동화 앱의 주소·키를 모르고 Center에 올린다 (C8) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `escalated` — PC 엔진이 정말 확인(CMN-01)으로 넘긴다고 적었다(「계속」은 다시 하지 않는다). 모양은 그대로 | [0106](../decisions/0106-pc-escalation-asks-a-person.md) |
 | 2026-10-18 | 1 | §5 데스크톱 `pick`(훅 없이 커서·Ctrl 읽기)·`highlight`(`rect` — 물리 픽셀, 그리기는 부르는 쪽) (09-gaps §7-3) | 0072 |

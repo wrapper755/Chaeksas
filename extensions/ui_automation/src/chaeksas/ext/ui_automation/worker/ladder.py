@@ -29,6 +29,16 @@ from chaeksas.ext.ui_automation.contracts.plan import (
     PlanStep,
     Policy,
 )
+from chaeksas.ext.ui_automation.contracts.worker_local import (
+    SOURCE_HEAL,
+    SOURCE_LADDER,
+    TRIED_AMBIGUOUS,
+    TRIED_ERROR,
+    TRIED_NO_SUGGESTION,
+    TRIED_NOT_FOUND,
+    TRIED_UNREACHABLE,
+    LocatorAttempt,
+)
 
 log = logging.getLogger(__name__)
 
@@ -112,6 +122,8 @@ class Attempt:
     tried: list[str] = field(default_factory=list)
     #: 치유가 제안해서 실제로 쓴 로케이터.
     used: LocatorSpec | None = None
+    #: 해 본 것의 **종류와 결과 코드** (C10 `attempts`, ADR-0112) — 값은 없다. 전환할 때만 내보낸다.
+    attempts: list[LocatorAttempt] = field(default_factory=list)
 
 
 def run_step(
@@ -183,7 +195,17 @@ def _climb(
         reasons.append(
             f"{locator.key}: {match.error or ('여러 개 맞았다' if match.count > 1 else '못 찾았다')}"
         )
+        found.attempts.append(_tried(SOURCE_LADDER, locator, match))
     return None, 0, reasons
+
+
+def _tried(source: str, locator: LocatorSpec, match: Match) -> LocatorAttempt:
+    """찾아본 결과 한 줄 — **종류와 코드만** (예외 글에는 셀렉터가 들어 있다)."""
+    if match.error:
+        return LocatorAttempt(source=source, type=locator.type, result=TRIED_ERROR)
+    if match.count > 1:
+        return LocatorAttempt(source=source, type=locator.type, result=TRIED_AMBIGUOUS, count=match.count)
+    return LocatorAttempt(source=source, type=locator.type, result=TRIED_NOT_FOUND)
 
 
 def _heal(
@@ -216,9 +238,12 @@ def _heal(
         if answer is None:
             # 닿지 못했다 — 더 물어도 소용없다 (C8: 앱이 없으면 캐시도 없다).
             found.error_code = "ui_automation_unreachable"
+            found.attempts.append(LocatorAttempt(source=SOURCE_HEAL, result=TRIED_UNREACHABLE))
             return None, 0
         if answer.locator is None:
-            continue  # **정상적인 분기다** — 제안할 것이 없다
+            # **정상적인 분기다** — 제안할 것이 없다
+            found.attempts.append(LocatorAttempt(source=SOURCE_HEAL, result=TRIED_NO_SUGGESTION))
+            continue
         found.tried.append(answer.locator.key)
         match = finder.find(
             answer.locator, timeout_ms=answer.locator.timeout_ms or policy.locator_timeout_ms
@@ -229,6 +254,7 @@ def _heal(
             # 치유로 찾은 것은 사다리 **끝 다음**이다 (0이 건강한 상태라는 뜻을 지킨다).
             return match, len(plan.ladder(step.semantic_key))
         reasons.append(f"{answer.locator.key}: 치유 제안이 맞지 않았다")
+        found.attempts.append(_tried(SOURCE_HEAL, answer.locator, match))
     return None, 0
 
 

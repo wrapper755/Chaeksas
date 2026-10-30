@@ -14,12 +14,15 @@
 
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
+from chaeksas.contracts.approvals import as_table
 from chaeksas.contracts.events import missing_keys
 from chaeksas.ext.ui_automation.client.task import (
     ESCALATE_CONFIRMATION,
@@ -231,6 +234,12 @@ def test_a_step_that_escalates_goes_to_a_human(
 
     assert caught.value.escalate == ESCALATE_CONFIRMATION
     assert caught.value.code == "ui_escalated"
+    # CMN-01에 보일 것 (ADR-0112) — 요소와 「시도한 로케이터」 표. **셀렉터 값은 없다** (C10 경계).
+    review = caught.value.review
+    assert review["요소"] == "주문.저장"
+    tried = as_table(review["시도한 로케이터"])
+    assert tried == (["순서", "출처", "종류", "결과"], [[1, "사다리", "css", "찾지 못함"]])
+    assert "#주문.저장" not in json.dumps(review, ensure_ascii=False)
 
 
 def test_the_session_is_closed_even_when_a_step_fails(
@@ -313,6 +322,12 @@ def test_after_a_restart_a_mutating_task_goes_to_a_human(tmp_path: Path) -> None
     assert caught.value.code == "worker_restarted"
     assert caught.value.escalate == ESCALATE_CONFIRMATION
     assert "확인한 뒤" in str(caught.value)
+    # 무엇까지 했나 (ADR-0112) — 요소·동작뿐이고 **입력한 값은 없다**.
+    assert as_table(caught.value.review["끝낸 스텝"]) == (
+        ["순서", "요소", "동작", "결과"],
+        [[1, "주문.수량", "fill", "성공"]],
+    )
+    assert "3" not in str(caught.value.review["끝낸 스텝"]["rows"][0][1:])
 
 
 # ─────────────────────────── 토큰 (ADR-0023) ───────────────────────────
@@ -435,3 +450,94 @@ def test_read_results_become_variables_by_action() -> None:
     assert read_value(result("read_options", "1\n2")) == "1\n2", "고를 거리의 이름은 글"
     table = result("read_table", "a\tb\n1\t2", {"headers": ["a", "b"], "rows": [["1", "2"]]})
     assert read_value(table) == [{"a": 1, "b": 2}]
+
+
+# ─────────────────── 전환 → 요청 파일 → CMN-01 (ADR-0112) ───────────────────
+
+#: UI 태스크 하나짜리 PC 그림 — 엔진이 진짜 수행기를 부른다.
+UI_PROCESS = """<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  xmlns:chk="urn:chaeksas:bpmn:1" targetNamespace="urn:chaeksas:example">
+  <bpmn:process id="Proc_ui" name="주문 저장" isExecutable="true">
+    <bpmn:extensionElements>
+      <chk:process>{"run_location": "pc", "inputs": [{"name": "수량", "type": "number"}]}</chk:process>
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Start" />
+    <bpmn:serviceTask id="Task_Save" name="주문 저장">
+      <bpmn:extensionElements>
+        <chk:task type="ui_task" extension="ui-automation">{"page_id": "erp.order.form",
+          "steps": [{"key": "주문.수량", "action": "fill", "value": "{수량}"}, {"key": "주문.저장", "action": "click"}]}
+        </chk:task>
+      </bpmn:extensionElements>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End" />
+    <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="Task_Save" />
+    <bpmn:sequenceFlow id="f2" sourceRef="Task_Save" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>
+"""
+
+
+def test_an_escalation_reaches_cmn01_as_a_table_and_not_the_run_log(
+    tmp_path: Path, worker: tuple[Worker, TestClient, Screen, Plans]
+) -> None:
+    """한 바퀴 — UI 태스크가 전환하면 「시도한 로케이터」 표가 **요청 파일**에 실리고 CMN-01이 표로 그린다.
+    실행 기록에는 표도 셀렉터도 없다 (ADR-0112, 원칙 6).
+    """
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+
+    from chaeksas.contracts.bpmn_ext import read_process
+    from chaeksas.core import requests
+    from chaeksas.core.engine import Engine, RunEnv, State
+    from chaeksas.core.run_log import RunLog
+    from chaeksas.qt.approval import CONFIRMATION, ApprovalDialog
+
+    _, http, screen, _ = worker
+    screen.missing = {"#주문.저장"}
+    executor = UiTaskExecutor(client=client_for(tmp_path, http))
+
+    class Host:
+        def executor(self, task_type: str) -> Any | None:
+            return executor if task_type == "ui_task" else None
+
+        def context(self, extension_id: str) -> ExtensionContext:
+            return extension()
+
+    engine = Engine()
+    log_path = tmp_path / "run.jsonl"
+    run = engine.start(
+        read_process(UI_PROCESS),
+        run_id=RUN,
+        log=RunLog(run_id=RUN, path=log_path),
+        env=RunEnv(extensions=Host()),
+        inputs={"수량": 7},
+    )
+    for _ in range(20):
+        if run.state in (State.DONE, State.FAILED) or engine.blocked(run):
+            break
+        engine.step(run)
+    assert run.state == State.WAITING
+    (pending,) = run.pendings.values()
+
+    # 실행 프로세스가 쓰고 PC 실행기가 읽는 길 그대로 (ADR-0078).
+    path = requests.field_requests_path(tmp_path, RUN)
+    requests.append(path, requests.create_request(run, pending).model_dump(mode="json", exclude_none=True))
+    body = requests.find(path, pending.request_id)
+    assert body is not None and body["review"]["요소"] == "주문.저장"
+
+    try:
+        _app = QApplication.instance() or QApplication([])  # noqa: F841 — 창이 살아 있으려면 쥐고 있어야 한다
+    except Exception as e:  # noqa: BLE001
+        pytest.skip(f"Qt를 띄울 수 없다: {type(e).__name__}: {e}")
+    dialog = ApprovalDialog(None, title=body["title"], review=body["review"], layer=CONFIRMATION)
+    (table,) = dialog.review_tables
+    heads = [table.horizontalHeaderItem(c) for c in range(table.columnCount())]
+    cells = [table.item(0, c) for c in range(table.columnCount())]
+    assert [one.text() if one else None for one in heads] == ["순서", "출처", "종류", "결과"]
+    assert [one.text() if one else None for one in cells] == ["1", "사다리", "css", "찾지 못함"]
+
+    logged = log_path.read_text(encoding="utf-8")
+    assert "시도한 로케이터" not in logged and "#주문.저장" not in logged and "찾지 못함" not in logged
+    requests.clear(path)
+    assert not path.exists(), "끝나면 지운다 — 검토 자료가 PC에 남지 않는다"

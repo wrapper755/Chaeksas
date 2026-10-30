@@ -253,6 +253,42 @@ def test_without_a_healer_the_ladder_failure_escalates() -> None:
     assert found.escalated and not found.healed
 
 
+# ─────────────────── 해 본 것 (C10 `attempts`, ADR-0112) ───────────────────
+
+
+def test_attempts_say_what_was_tried_without_the_selector() -> None:
+    """전환하면 사람에게 「무엇을 해 봤나」를 보인다 — **종류와 결과 코드만**, 셀렉터 값은 없다 (C10 경계)."""
+
+    class Erring(FakeScreen):
+        def find(self, locator_: LocatorSpec, *, timeout_ms: int) -> Match:
+            if locator_.type == "xpath":
+                self.looked.append(locator_.key)
+                return Match(error="locator('//div[@id=secret]') timeout")
+            return super().find(locator_, timeout_ms=timeout_ms)
+
+    asked = iter([HealResponse(locator=None), HealResponse(locator=locator("css", ".twice"))])
+    found = run_step(
+        PlanStep(semantic_key=KEY, action="fill", value="3"),
+        plan(
+            [locator("test_id", "qty"), locator("css", "#qty"), locator("xpath", "//div[@id=secret]")],
+            policy=Policy(max_healing_attempts=3),
+        ),
+        Erring({"css|#qty|": 2, "css|.twice|": 2}),
+        heal=lambda request: next(asked, None),
+    )
+    assert found.escalated
+    assert [(a.source, a.type, a.result, a.count) for a in found.attempts] == [
+        ("ladder", "test_id", "not_found", None),
+        ("ladder", "css", "ambiguous", 2),
+        ("ladder", "xpath", "error", None),
+        ("heal", "", "no_suggestion", None),
+        ("heal", "css", "ambiguous", 2),
+        ("heal", "", "unreachable", None),
+    ]
+    dumped = str([a.model_dump() for a in found.attempts])
+    assert "#qty" not in dumped and "secret" not in dumped and "twice" not in dumped
+
+
 # ─────────────────────────── 값 가리기 (원칙 6) ───────────────────────────
 
 
