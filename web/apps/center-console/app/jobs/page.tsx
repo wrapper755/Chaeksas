@@ -6,9 +6,9 @@ import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
+import { cancelControl } from "@/lib/jobs";
 import { CancelJob } from "./cancel";
 import {
-  CANCELLABLE,
   STATES,
   STATE_LABEL,
   botLabel,
@@ -141,7 +141,7 @@ export default async function JobsPage({
       header: "",
       width: "8ch",
       cell: (row) =>
-        CANCELLABLE.has(row.state) && !row.cancel_requested ? <CancelJob jobId={row.job_id} /> : null,
+        <CancelJob jobId={row.job_id} control={cancelControl(row)} />,
     });
   }
 

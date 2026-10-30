@@ -6,9 +6,9 @@ import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
+import { cancelControl } from "@/lib/jobs";
 import { CancelJob } from "../cancel";
 import {
-  CANCELLABLE,
   STATE_LABEL,
   botLabel,
   delegatedFrom,
@@ -76,7 +76,8 @@ export default async function JobPage({
       {failure ? <ErrorBanner message={failure} /> : null}
       {asked.created ? (
         <p className="mb-4 text-body text-status-completed-fg">
-          작업을 만들었습니다. PC 실행기가 다음 하트비트에 받아 갑니다.
+          작업을 만들었습니다. {job?.target.type === "server_runner" ? "서버 실행기" : "PC 실행기"}가 다음
+          하트비트에 받아 갑니다.
         </p>
       ) : null}
 
@@ -118,9 +119,9 @@ export default async function JobPage({
             <Row label="메모">{job.note ?? "—"}</Row>
           </dl>
 
-          {found.mode === "admin" && CANCELLABLE.has(job.state) && !job.cancel_requested ? (
+          {found.mode === "admin" && cancelControl(job) ? (
             <div>
-              <CancelJob jobId={job.job_id} />
+              <CancelJob jobId={job.job_id} control={cancelControl(job)} explain />
             </div>
           ) : null}
 
