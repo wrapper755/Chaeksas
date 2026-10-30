@@ -105,7 +105,7 @@ def runner_args(
         args += ["--llm-url", llm_url, "--llm-model", llm_model]
     if smtp is not None and smtp.host:
         # 보내기 설정 (ADR-0059) — **비밀번호는 넘기지 않는다**. 자식이 이 PC의 비밀
-        # 저장소에서 제 손으로 읽는다 (서비스 앱 키와 같은 길).
+        # 저장소에서 제 손으로 읽는다 (모델 키와 같은 길).
         args += ["--smtp-host", smtp.host, "--smtp-security", smtp.security]
         if smtp.port:
             args += ["--smtp-port", str(smtp.port)]

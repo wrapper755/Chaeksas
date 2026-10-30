@@ -343,7 +343,7 @@ def main(argv: list[str] | None = None) -> int:
     # 서비스 태스크를 올릴 Center (C15). 호출 토큰은 환경변수·제어 파일로 온다.
     parser.add_argument("--center-url", default="")
     # 보내기 (BUI-03 「보내기」, ADR-0059). **비밀번호는 명령줄에 없다** — 이 프로세스가
-    # 비밀 저장소에서 읽는다 (서비스 앱 키와 같은 길).
+    # 비밀 저장소에서 읽는다 (모델 키와 같은 길).
     parser.add_argument("--smtp-host", default="")
     parser.add_argument("--smtp-port", type=int, default=0)
     parser.add_argument("--smtp-security", default=SECURITY_STARTTLS)

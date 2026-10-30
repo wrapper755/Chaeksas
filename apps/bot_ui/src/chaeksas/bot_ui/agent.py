@@ -922,8 +922,8 @@ class Agent:
     def _tell_deployments(self, found: list[DeploymentResult]) -> None:
         """배치 결정을 사람에게 알린다 (BUI-05). **거부는 지나가게 두지 않는다** (sticky).
 
-        설치는 됐는데 **키가 빠져 있으면 그것을 말한다** — 그 BPM 프로세스는 사전 점검에서 막혀 돌지
-        않으므로, 「설치했습니다」만 띄우면 왜 안 도는지 모른다 (BUI-10으로 보낸다).
+        설치된 것은 이름·판을 말한다. 키는 보지 않는다 — 현장에 서비스 앱 키가 없다 (ADR-0102).
+        설치는 됐는데 돌 수 없는 까닭(꺼 둔 확장·없는 태스크 종류)은 사전 점검이 BUI-04 「준비」로 말한다.
         """
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 

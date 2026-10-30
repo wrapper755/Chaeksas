@@ -500,7 +500,7 @@ def test_a_turned_off_extension_does_not_hold_its_task_type_name() -> None:
 
 
 def test_toggling_writes_the_setting_and_reloads_in_place(tmp_path: Path) -> None:
-    """「저장」이 없다 — 누르는 그 자리에서 설정에 적고 호스트를 다시 읽는다 (BUI-10과 같은 결)."""
+    """「저장」이 없다 — 누르는 그 자리에서 설정에 적고 호스트를 다시 읽는다 (BUI-11과 같은 결)."""
     settings = Settings(data_dir=tmp_path)
     window = dialog(host_with(builtin()), settings=settings, extensions=studio_with(builtin()))
     window.set_off(True)

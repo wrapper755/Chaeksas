@@ -75,7 +75,7 @@ def _bot(name: str) -> str:
 
 
 def _app(app_id: str) -> str:
-    """앱 id를 그대로 쓴다 (BUI-10과 같다 — 화면이 이름을 짓지 않는다)."""
+    """앱 id를 그대로 쓴다 (화면이 이름을 짓지 않는다)."""
     return app_id or "서비스 앱"
 
 

@@ -1,7 +1,7 @@
 """Studio 설정 — 환경변수 `CHK_STUDIO__*` (ADR-0011), 값은 설정 파일에 저장 (STU-10).
 
 **포트·경로를 코드에 직접 쓰지 않는다.** 기본값은 여기 한 곳에만 둔다 (`docs/04-setup.md` §6).
-**비밀은 여기 두지 않는다** — Center API 키·서비스 앱 키·모델 키는 OS 비밀 저장소다 (CLAUDE.md §5).
+**비밀은 여기 두지 않는다** — Center API 키·모델 키는 OS 비밀 저장소다 (CLAUDE.md §5).
 """
 
 from __future__ import annotations

@@ -197,7 +197,6 @@ def detail_sections(loaded: LoadedExtension) -> list[tuple[str, list[str]]]:
     keys = [
         f"{PURPOSE_LABEL.get(k.purpose, k.purpose)}"
         + (f" · 더 필요한 권한 {', '.join(k.extra_scopes)}" if k.extra_scopes else "")
-        + (f" · 설정 칸 {k.config_key}" if k.config_key else "")
         for k in m.requires_keys
     ]
     out.append(("필요한 키", keys or [NOTHING]))
@@ -506,7 +505,7 @@ class StudioExtensionsDialog(QDialog):
     def set_off(self, off: bool) -> None:
         """고른 확장을 끄거나 켠다 — **설정에 적고 호스트를 다시 읽는다** (ADR-0043).
 
-        설정은 **그 자리에서** 저장한다 (이 창에는 「저장」이 없다 — BUI-10과 같은 결이다).
+        설정은 **그 자리에서** 저장한다 (이 창에는 「저장」이 없다 — BUI-11과 같은 결이다).
         """
         found = self.selected()
         if found is None or found.manifest.is_external:

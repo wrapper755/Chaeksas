@@ -4,7 +4,7 @@
   이 파일에 확장 이름이 없다 (`tests/test_import_direction.py`가 막는다).
 - **끄고 켜는 것 말고는 읽기만 한다.** 끈 목록은 **PC 실행기 제 설정**이다 (ADR-0043) — Studio(STU-15)의
   것과 **다른 자리**다. 개발 도구에서 끈 것이 현장 BPM 프로세스를 멈추면 안 된다.
-- **「저장」이 없다** (BUI-10과 같은 결) — 누르는 그 자리에서 설정에 적고 확장을 다시 읽는다.
+- **「저장」이 없다** (Studio STU-15와 같은 결) — 누르는 그 자리에서 설정에 적고 확장을 다시 읽는다.
   다시 읽으면 사전 점검 캐시도 비워진다 — 안 비우면 꺼도 「준비됨」이 하트비트로 계속 올라간다.
 - **BUI-11에만 있는 것 둘**: 「쓰는 BPM 프로세스」 열(설치된 BPM 프로세스 중 그 확장을 요구하는 것)과, 끄기 전에
   「<BPM 프로세스> N개가 실행 불가가 됩니다」를 묻는 확인 창(기본 「취소」). 설치된 BPM 프로세스가 요구하는데 **이 PC에
@@ -98,10 +98,11 @@ POINT_LABEL = {
 #: AI 환경은 C7 요약(`contributes_summary`)에 없다 — 상세에서 정의를 직접 읽어 말한다.
 ENVIRONMENT_LABEL = "AI 환경"
 
-#: 키를 쓰는 자리 (C13 `requires_keys[].purpose`) — **넣는 화면까지** 말해 준다.
+#: 제 앱을 부르는 자리 (C13 `requires_keys[].purpose`) — **넣을 키는 없다** (ADR-0102, C15).
+#: 사람이 할 일이 있으면 그 자리까지 말해 준다.
 PURPOSE_LABEL = {
-    "run": "BPM 프로세스가 작업을 부를 때 — BUI-10 「서비스 앱 키」",
-    "utility": "도구가 쓸 때 — Tool UI 설정 TOL-02",
+    "run": "BPM 프로세스가 작업을 부를 때 — 넣을 키 없음 (Center가 배포로 가린다)",
+    "utility": "도구가 쓸 때 — 넣을 키 없음 (더 필요한 권한은 CON-03 「셀렉터 등록」이 켠다)",
 }
 
 #: 외부 확장은 코드를 기여할 수 없다 (C13 E1) — 「기여」 칸에 그렇게 적는다.
@@ -284,7 +285,6 @@ def detail_sections(
     keys = [
         f"{PURPOSE_LABEL.get(k.purpose, k.purpose)}"
         + (f" · 더 필요한 권한 {', '.join(k.extra_scopes)}" if k.extra_scopes else "")
-        + (f" · 설정 칸 {k.config_key}" if k.config_key else "")
         for k in m.requires_keys
     ]
     out.append(("필요한 키", keys or [NOTHING]))
@@ -568,7 +568,7 @@ class ExtensionsDialog(QDialog):
         """고른 확장을 끄거나 켠다 — **설정에 적고 확장을 다시 읽는다.**
 
         **끄기는 되돌릴 수 있지만 조용히 하지 않는다** — 쓰는 BPM 프로세스가 있으면 몇 개가 실행 불가가
-        되는지 말하고 확인 창의 기본은 「취소」다 (BUI-10 「삭제...」와 같은 결).
+        되는지 말하고 확인 창의 기본은 「취소」다 (되돌릴 수 있어도 조용히 하지 않는다).
         """
         row = self.selected()
         if row is None or row.loaded is None or row.is_external:
