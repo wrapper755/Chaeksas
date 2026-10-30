@@ -80,7 +80,7 @@ C8·C9·C10은 **확장이 소유한 계약**이라 모듈이 `extensions/ui_aut
 | C9 | `chaeksas.ext.ui_automation.contracts.registry` | 화면 레지스트리 모델. 서버는 `service/registry.py`(승격 규칙)·`service/store.py`(SQLite), 부르는 쪽은 `client/registry_client.py` | `tests/test_contract_examples.py` |
 | C10 | `chaeksas.ext.ui_automation.contracts.worker_local` | Worker 로컬 API 모델 + `check_step()` (부르는 쪽과 받는 쪽이 **같이 쓴다**). 셀렉터 등록용 모양은 `contracts/registration.py` | 같음 |
 | C13 | **`chaeksas.core.extensions`** | 확장 호스트 — 엔트리 포인트로 찾기, 검사 규칙 적용, 기여 지점별 목록, `entry` 해석(그 확장 패키지 안으로 제한). 인터페이스는 `chaeksas.extension_api` | `tests/test_extension_host.py` |
-| C14 | `chaeksas.contracts.bpmn_ext` | `read_process()`(BPMN 읽기, 표준 라이브러리만), `validate()` — B1~B14(오류·경고), `matches()` — 기대 결과 비교, `available_vars()` — 변수 흐름 | `tests/test_contracts_bpmn_ext.py` (업무 예제 50개를 읽고 검사한다) |
+| C14 | `chaeksas.contracts.bpmn_ext` | `read_process()`(BPMN 읽기, 표준 라이브러리만), `validate()` — B1~B16(오류·경고), `matches()` — 기대 결과 비교, `available_vars()` — 변수 흐름 | `tests/test_contracts_bpmn_ext.py` (업무 예제 55개를 읽고 검사한다) |
 | C15 | `chaeksas.contracts.external_task` + Center `api/external_tasks.py` | `task_id_for()`(멱등 칸 → 같은 일감 id), `body_hash()`(같은 칸·다른 본문 → 409), `missing_outputs()`(출력 검사). 부르는 쪽 `core.services.CenterServiceCaller`·UI 자동화 `worker/plans.py`의 `CenterOps`, 일꾼 `service_kit.consumer`·`apps/adapter_consumer` | `tests/test_center_external_tasks.py`·`tests/test_c15_round_trip.py`·`tests/test_adapter_consumer.py` |
 
 V5~V8은 **역할에 따라 누가 검사하는지가 다르므로** 함수를 나눠 뒀다. Center는 `verify_time(..., check_not_before=False)`로 예약 배포를 받아 두고, 실행하는 쪽만 `not_before`를 본다.
