@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 from chaeksas.contracts.bpmn_ext import ELEMENT_MODELS
 from chaeksas.qt.theme import set_role
 from chaeksas.studio.dmn_table import Decisions
+from chaeksas.studio.replay_specs import ReplaySpecs
 from chaeksas.studio.service_catalog import CallTarget, Catalog
 
 EMPTY_TEXT = "캔버스에서 요소를 선택하면 속성을 편집할 수 있습니다."
@@ -242,6 +243,11 @@ class Properties(QWidget):
         #: 열린 BPM 프로세스의 결정표들 (`dmn_table.decisions_of`) — 「규칙」 탭이 **고를 때마다**
         #: 읽는다(STU-04a에서 저장한 뒤에도 맞게). `None`이면 모른다.
         self.decision_tables: Callable[[], Decisions | None] = lambda: None
+        #: 열린 정의의 재생 명세 (`replay_specs.specs_of`) — 「AI 태스크」 탭의 「재생 명세」 한 줄과
+        #: 「명세 잊기」가 본다(ADR-0028). `None`이면 열린 BPM 프로세스가 없다.
+        self.replay_specs: Callable[[], ReplaySpecs | None] = lambda: None
+        #: 시험 실행 중인가 — 그동안은 「명세 잊기」를 끈다(끝날 때 같은 파일에 배운 것을 적는다).
+        self.test_running: Callable[[], bool] = lambda: False
 
         self.head = QLabel(EMPTY_TEXT, self)
         self.head.setWordWrap(True)
@@ -341,6 +347,12 @@ class Properties(QWidget):
         self.error.setText("")
         self.apply_button.setEnabled(False)
 
+    def refresh_replay(self) -> None:
+        """시험 실행이 시작·끝났다 — 「AI 태스크」 탭의 「재생 명세」를 다시 읽는다 (방금 배운 것이 보인다)."""
+        refresh = getattr(self._editor, "refresh_spec", None)
+        if callable(refresh):
+            refresh()
+
     def set_definition_open(self, opened: bool) -> None:
         """열린 정의가 있나 — 없으면 「BPM 프로세스 기본값」을 끈다 (메인 창이 메뉴와 함께 부른다)."""
         self.process_button.setEnabled(opened)
@@ -413,7 +425,16 @@ class Properties(QWidget):
         """AI 태스크 (`chk:aiTask`). 서버 BPM 프로세스면 웹·데스크톱을 끈다 (B6과 같은 판정)."""
         from chaeksas.studio.ai_task_editor import TAB_LABEL, AiTaskEditor  # noqa: PLC0415
 
-        made = AiTaskEditor(self, run_location=self.run_location, names=self.known_names)
+        loop = _body_of(chk, "loop") or {}
+        made = AiTaskEditor(
+            self,
+            run_location=self.run_location,
+            names=self.known_names,
+            specs=self.replay_specs(),
+            node_id=self.node_id,
+            running=self.test_running,
+            loop_item=str(loop.get("item") or "") if isinstance(loop, dict) else "",
+        )
         made.load(_body_of(chk, "aiTask") or {})
         self._attach(made, TAB_LABEL, key="aiTask")
 

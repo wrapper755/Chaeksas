@@ -51,7 +51,7 @@ from chaeksas.core.delegation import (
 from chaeksas.core.expr import ExprError, evaluate
 from chaeksas.core.files import FileTaskError, PathDenied, Workspace, write_output
 from chaeksas.core.helpers import bind
-from chaeksas.core.nodes import DEFAULT_HANDLERS, service_attempts, service_call_of
+from chaeksas.core.nodes import DEFAULT_HANDLERS, goal_names, service_attempts, service_call_of
 from chaeksas.core.run_log import RunLog, summarize
 from chaeksas.core.run_state import (
     BUILTIN_NOW,
@@ -1346,5 +1346,6 @@ __all__ = [
     "Waiting",
     "Workspace",
     "evaluate",
+    "goal_names",
     "new_run_id",
 ]
