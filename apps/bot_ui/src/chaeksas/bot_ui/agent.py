@@ -1242,19 +1242,18 @@ class Agent:
     def enqueue_manual(self, bpm_process_id: str, *, version: str | None = None, front: bool = False) -> QueueItem:
         """수동 실행 (BUI-04 「지금 실행...」). 맨 앞에 넣을 수 있다.
 
-        **준비되지 않은 것은 넣지 않는다** — 띄울 때 어차피 버려지니(`_start_next`) 넣는 자리에서
-        까닭을 말한다. 철회·만료된 배포(ADR-0113)가 여기서 막힌다.
+        **배포가 끝난 것은 넣지 않는다** (ADR-0113) — 철회·만료는 사람이 PC에서 고칠 수 없으니 넣는
+        자리에서 까닭을 말한다. 다른 사전 점검은 띄울 때(`_start_next`) 본다 — 그 사이에 켜거나
+        채울 수 있다.
         """
         if len(self.queue) >= self.settings.queue_max:
             raise RuntimeError(f"대기열이 가득 찼습니다 ({self.settings.queue_max}건)")
         from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
 
         bot = find(data_dir(), bpm_process_id, version)
-        if bot is not None:
-            ready = self.preflight(bot)
-            if ready.blocks:
-                first = next(one for one in ready.findings if one.blocks)
-                raise RuntimeError(" ".join([first.message, *([first.fix_hint] if first.fix_hint else [])]))
+        ended = deployment_finding(bot) if bot is not None else None
+        if ended is not None:
+            raise RuntimeError(" ".join([ended.message, *([ended.fix_hint] if ended.fix_hint else [])]))
         item = QueueItem(
             queue_id=new_queue_id(),
             source="manual",
