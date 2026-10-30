@@ -266,6 +266,20 @@ MIGRATIONS: tuple[Step, ...] = (
             "DROP TABLE IF EXISTS extension_addresses",
         ),
     ),
+    Step(
+        17,
+        "타이머 시작의 일정 — 쏜 차례와 분마다 한 번의 쓸기 (C5 §일정, ADR-0110)",
+        (
+            # 차례 하나. **기본 키가 잡기다** — 둘이 같이 쓸어도 하나만 넣는다 (ADR-0110 §6).
+            # 잡은 뒤 작업을 만들면 `job_id`, Center가 거부하면 `error`(코드)를 적는다.
+            "CREATE TABLE timer_fires ("
+            " trigger_key TEXT NOT NULL, slot TEXT NOT NULL, bpm_process_id TEXT NOT NULL,"
+            " version TEXT NOT NULL, target_type TEXT NOT NULL, target_id TEXT NOT NULL,"
+            " expression TEXT NOT NULL, missed INTEGER NOT NULL DEFAULT 0, fired_at TEXT NOT NULL,"
+            " job_id TEXT, error TEXT, PRIMARY KEY (trigger_key, slot))",
+            "CREATE TABLE timer_sweeps (id INTEGER PRIMARY KEY CHECK (id = 1), at TEXT NOT NULL)",
+        ),
+    ),
 )
 
 

@@ -8,6 +8,7 @@ import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { PackageActions } from "@/components/PackageActions";
 import { ServerRunners } from "@/components/ServerRunners";
+import { Schedules } from "@/components/Schedules";
 import { STATUS_LABEL, packageHref, time } from "@/app/packages/page";
 import { DeleteVersion } from "./tools";
 import {
@@ -97,6 +98,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
   const place: Place = (await searchParams).tab === "pc" ? "pc" : "server";
 
   let rows: BotRow[] = [];
+  let pcs: BotUiInfo[] = [];
   let failure: string | null = null;
   try {
     // Bot·배포·보고된 준비 상태는 **한 번에** 읽는다 (서로를 기다릴 일이 없다).
@@ -105,6 +107,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
       center.botUis(),
       center.deployments({ active: true }),
     ]);
+    pcs = botUis as BotUiInfo[];
 
     // 실행 요약은 **Bot마다** 묻는다 — 한 번에 받아 오면 판이 많은 Bot의 옛 판이 잘린다.
     const ids = [...new Set(packages.map((one) => one.id))];
@@ -341,6 +344,9 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
           <ServerRunners admin={found.mode === "admin"} />
         </div>
       ) : null}
+
+      {/* [S] 「일정」 — 타이머로 시작하는 그 탭의 배포 (C5 §일정). 없으면 영역이 없다. */}
+      {failure ? null : <Schedules place={place} botUis={pcs} />}
     </Shell>
   );
 }

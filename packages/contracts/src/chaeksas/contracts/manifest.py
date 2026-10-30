@@ -313,6 +313,32 @@ def _check_r9(m: Manifest) -> list[Violation]:
     ]
 
 
+def _check_r13(m: Manifest) -> list[Violation]:
+    """타이머 시작의 식을 **Center가 읽을 수 있나** (C1 R13, ADR-0110).
+
+    R9와 같은 까닭이다 — 일정은 Center가 이 식으로 쓴다(`contracts.schedule`). 읽지 못하는 식을
+    받아 두면 그 Bot은 **아무 말 없이 영영 돌지 않는다**. 읽는 함수가 같아야 「올라갔는데 안 돈다」가
+    없다.
+    """
+    from chaeksas.contracts.schedule import cycle_problem  # noqa: PLC0415 — 쓰는 자리에서만
+
+    bad = [
+        f"{t.expression or ''}: {problem}"
+        for t in m.triggers
+        if t.kind == "timer" and (problem := cycle_problem(t.expression or "")) is not None
+    ]
+    if not bad:
+        return []
+    return [
+        Violation(
+            rule="R13",
+            code="timer_expression_invalid",
+            message="타이머 시작의 식을 읽을 수 없다 (5필드 cron 또는 ISO R/…, C14 §이벤트)",
+            items=bad,
+        )
+    ]
+
+
 def _check_r11(m: Manifest) -> list[Violation]:
     """`requires.settings`가 계약에 적힌 것 중 하나인가 (C1 R11).
 
@@ -378,4 +404,5 @@ def validate(
         *_check_r10(m),
         *_check_r11(m),
         *_check_r12(m),
+        *_check_r13(m),
     ]

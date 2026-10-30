@@ -24,13 +24,14 @@ C4와 **다른 것 셋**이 여기 있다 (C12 표·ADR-0054 —
 from __future__ import annotations
 
 import secrets
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Any
 
 from fastapi import APIRouter, Request
 
 from chaeksas.center import enrollments, host_keys
-from chaeksas.center.api import approvals, deployments, jobs, messages, signing
+from chaeksas.center.api import approvals, deployments, jobs, messages, signing, timers
+from chaeksas.center.api.timers import DEFAULT_ZONE
 from chaeksas.center.auth import Caller, require_key_type
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, dumps, loads, now_iso
@@ -169,7 +170,12 @@ def register(
 
 
 def heartbeat(
-    store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_interval_s: int = DEFAULT_HEARTBEAT_S
+    store: Store,
+    caller: Caller,
+    body: dict[str, Any],
+    *,
+    heartbeat_interval_s: int = DEFAULT_HEARTBEAT_S,
+    zone: tzinfo | None = None,
 ) -> ServerRunnerHeartbeatResponse:
     """기본 10초. 상태를 덮어쓰고, 내려줄 지시를 응답에 싣는다.
 
@@ -228,6 +234,8 @@ def heartbeat(
     deployments.remember_results(store, host_id=runner_id, results=request.deployment_results)
 
     paused = bool(found["paused"])
+    # **일정을 먼저 쓴다** (ADR-0110) — 이번 차례의 작업이 이 하트비트로 바로 내려간다.
+    timers.sweep(store, tz=zone or DEFAULT_ZONE)
     dispatch, cancels = jobs.server_heartbeat(
         store, runner_id=runner_id, request=request, paused=paused
     )
@@ -427,8 +435,9 @@ async def post_heartbeat(request: Request) -> Any:
     store: Store = request.app.state.store
     found: Caller = request.app.state.authenticate(request)
     body = await _json(request)
+    settings = request.app.state.settings
     return heartbeat(
-        store, found, body, heartbeat_interval_s=request.app.state.settings.runner_heartbeat_s
+        store, found, body, heartbeat_interval_s=settings.runner_heartbeat_s, zone=settings.zone()
     )
 
 

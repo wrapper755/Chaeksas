@@ -51,7 +51,7 @@ from chaeksas.contracts.bot_ui import (
     Versions,
     WorkerState,
 )
-from chaeksas.contracts.center_api import delegated_run
+from chaeksas.contracts.center_api import delegated_run, job_source
 from chaeksas.contracts.center_keys import EXPIRY_WARNING_DAYS
 from chaeksas.contracts.enrollment import (
     ROTATE_NOTICE_DAYS,
@@ -80,10 +80,6 @@ log = logging.getLogger(__name__)
 #: 이 Bot UI의 판 (C4 `versions`, ADR-0067) — **묶은 앱이면 빌드가 찍은 판**, 아니면 dist-info.
 BOT_UI_VERSION = build_info.product_version("chaeksas-bot-ui")
 CORE_VERSION = build_info.package_version("chaeksas-core")
-
-#: C3·C4 `source` — **PC 위임으로 받은 작업**이다 (ADR-0062 §6). 「이 작업이 위임인가」는
-#: 작업의 `requested_by`가 말해 주고(`delegated_run`), 그 출처만 끝날 때 결과를 올린다.
-SOURCE_DELEGATION = "delegation"
 
 #: 트레이 상태 글 (BUI-01). 색은 `status_map`의 「Bot UI」·「Bot」에서 온다.
 TRAY_UNREGISTERED = "등록 전"
@@ -985,8 +981,9 @@ class Agent:
         item = QueueItem(
             queue_id=new_queue_id(),
             # **PC 위임으로 받은 작업은 출처가 다르다** (C3·C4 `source: delegation`,
-            # ADR-0062 §6) — 그 출처만 끝날 때 결과를 올린다.
-            source=SOURCE_DELEGATION if parent else "job",
+            # ADR-0062 §6) — 그 출처만 끝날 때 결과를 올린다. 일정이 만든 작업은 `schedule`이다
+            # (ADR-0110) — 가르는 것은 서버 실행기와 같은 `job_source`다.
+            source=job_source(job.requested_by),
             bpm_process_id=job.bpm_process_id,
             version=job.version,
             job_id=job.job_id,

@@ -31,6 +31,8 @@ import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 import type { EnrollmentDecision } from "@chaeksas/api-types/c5-enrollment-decision";
 import type { ConsumerInfo } from "@chaeksas/api-types/c15-consumer-info";
 import type { TopicStatus } from "@chaeksas/api-types/c15-topic-status";
+import type { ExternalTaskInfo } from "@chaeksas/api-types/c15-external-task-info";
+import type { ScheduleInfo } from "@chaeksas/api-types/c5-schedule-info";
 import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
 import type { RunListing } from "@chaeksas/api-types/c3-run-listing";
@@ -196,6 +198,11 @@ export const center = {
   consumers: () => call<ConsumerInfo[]>("/api/v1/consumers"),
   /** 토픽마다 일꾼 수·마지막으로 가져간 때·기다리는 일감 (C15, CON-07 「토픽」). */
   externalTopics: () => call<TopicStatus[]>("/api/v1/external-topics"),
+  /** 그 실행이 올린 일감 (C15, CON-01 「외부 작업」) — 값 없이 자리·상태·일꾼만. */
+  externalTasks: (runId: string) =>
+    call<ExternalTaskInfo[]>(`/api/v1/external-tasks?run_id=${encodeURIComponent(runId)}`),
+  /** 타이머 시작의 일정 (C5 §일정, CON-02 「일정」). */
+  schedules: () => call<ScheduleInfo[]>("/api/v1/schedules"),
 
   /** 결재함 (C6·CON-04). */
   /** 결재함 (C6). `assignee`는 그 이름이 담당자에 있는 것만 (ADR-0080) — 콘솔은 거르기만 한다. */

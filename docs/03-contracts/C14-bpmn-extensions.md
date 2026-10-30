@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio(쓰기) → 패키지(C1 `process/*.bpmn`) → 실행기·서버 실행기(읽기·실행), Center(검사) |
 | 코드 위치 | `chaeksas.contracts.bpmn_ext` — 모델·`read_process()`·`validate()`. DMN 읽기·판정은 `chaeksas.contracts.dmn`. 확장 태스크의 속 내용은 각 확장의 `contracts/` |
-| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0018](../decisions/0018-extensions.md), [0026](../decisions/0026-file-paths-and-file-list-task.md) |
+| 관련 ADR | [0008](../decisions/0008-map-driver-hands-boundary.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0018](../decisions/0018-extensions.md), [0026](../decisions/0026-file-paths-and-file-list-task.md), [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 관련 화면 | STU-04 속성 패널(「JSON」 탭이 이 모델로 검증한다), STU-06, STU-07, STU-13, STU-14 |
 
 
@@ -278,7 +278,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 
 | 종류 | 쓰는 법 | 비고 |
 | --- | --- | --- |
-| 타이머 시작 | `timeCycle` — 5필드 cron(`0 9 * * 1-5`) 또는 ISO `R/…` | 서버 실행기·Bot UI의 일정이 이것을 읽는다 |
+| 타이머 시작 | `timeCycle` — 5필드 cron(`0 9 * * 1-5`, 일 칸 `L`은 그달 마지막 날) 또는 ISO `R[n]/<시작>/<기간>`·`R[n]/<기간>` | **Center의 일정이 이것을 읽는다** — Studio가 C1 `triggers[].expression`으로 옮기고 Center가 차례마다 작업을 만든다 (C5 §일정, [ADR-0110](../decisions/0110-center-keeps-the-schedule.md)). 시간대는 Center 설정, 읽지 못하는 식은 C1 R13이 올릴 때 막는다 |
 | 타이머 경계·중간 | `timeDuration`(ISO `PT30M`, `P3D`) 또는 **변수 이름** | 경계는 `cancelActivity="false"`로 비중단. 경계의 반복(`timeCycle`)은 schema 1에서 지원하지 않는다 |
 | 메시지 시작·받기·경계·중간 받기 | `messageRef` → `bpmn:message name`. 받기 태스크 외의 받기(경계·중간 받기)도 상관 키는 `chk:receive{correlation}`로 둔다 | 외부 시스템이 Center 메시지 API로 보낸다 (C12, PC는 Bot UI 메시지 수신). 상관 키가 없으면 메시지 시작만 깨운다 |
 | 신호 | `signalRef` | 한 실행 안의 가지 사이에서만 |
@@ -395,6 +395,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-30 | 1 | 타이머 시작의 「일정이 읽는다」를 **Center**로 고쳐 적었다 — 서버 실행기·Bot UI에는 그 코드가 없었고 일정은 Center가 쥔다. 식의 문법(`L`·ISO 시작 생략)을 적었다. 그림은 그대로다 | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | `chk:serviceCall.key_ref`·`chk:process.service_keys`를 **걷었다**. 옛 그림에 적혀 있으면 모르는 칸으로 받아 두고(원칙 3) **B7이 경고 한 줄로** 말한다(오류가 아니다 — 이름 규칙은 더 보지 않는다). 업무 예제가 더 적지 않으므로 경고가 뜻을 가진다. 선택 칸을 걷은 것이고 옛 그림이 그대로 읽히므로 **판을 올리지 않는다** (C1·C4와 같은 결) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `chk:serviceCall`은 C15 외부 작업으로 간다(`app_id` = 토픽). `key_ref`·`service_keys`는 쓰지 않고 B7은 이름 규칙만 본다(R4와 같다). `retry.on`은 C15 실패 코드로 읽는다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | **입력의 값 출처** `chk:process.inputs[].source`(선택 — 없으면 부르는 쪽)를 더했다. `virtual_worker.*`는 Center가 넣고 부르는 쪽은 줄 수 없다. B8이 출처와 타입을 본다. 선택 칸이라 **옛 그림은 그대로 읽힌다** (바깥 요청 NowView R7). 그리고 **담당자 변수의 값이 `None`이면 `assignees_missing`**이다 — 전에는 「담당자 없음」으로 받았다 | [0099](../decisions/0099-input-value-source.md) |

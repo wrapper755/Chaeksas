@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | 서버 실행기·실행기 자식 프로세스·Studio·Worker·Tool UI → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
 | 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0062](../decisions/0062-pc-delegation.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0102](../decisions/0102-calling-outside-is-pull.md), [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |
-| 관련 화면 | CON-07 리소스 (일꾼 승인·토픽 상태), CON-01 (실행 상세의 서비스 호출) |
+| 관련 화면 | CON-07 리소스 (일꾼 승인·토픽 상태), CON-01 (실행 상세의 「외부 작업」) |
 
 ## 목적
 
@@ -35,6 +35,7 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 | `POST /api/v1/consumers/tasks/{task_id}/extend` | 잠근 일꾼 | 잠금 늘리기 |
 | `PUT /api/v1/consumers/self/manifest` | 일꾼 토큰 | manifest 올리기 (C11 `ServiceAppManifest` 모양 그대로) |
 | `PUT /api/v1/consumers/self/catalogs/{resource_type}` | 일꾼 토큰 | 기여 자원 카탈로그 올리기 (C13 §5 `Catalog`) |
+| `GET /api/v1/external-tasks?run_id=` | 콘솔 토큰 | 그 실행이 올린 일감들 (`ExternalTaskInfo[]`, 올린 순) — CON-01 「외부 작업」. **업무 값은 없다** |
 
 - **연결은 늘 Center 쪽으로 나간다.** Center는 일꾼에게도, 부르는 쪽에게도 먼저 연결하지 않는다.
 - 크기 한도: 입력·출력 각 1 MB (C11과 같다).
@@ -120,6 +121,23 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 - 잠근 일꾼이 아니면 403 `not_locked_by_you`. 거둔 일감이면 409 `cancelled` — 일꾼은 하던 일을 멈춰도 된다.
 - 일꾼이 쥔 일감이 오래 걸리면 `extend`로 늘린다 — `service_kit`은 잠금의 절반이 지날 때마다 늘린다.
 - `output`에 manifest `output_schema.required`의 칸이 빠졌으면 Center가 422 `output_invalid`로 막는다 — 일꾼의 버그를 부르는 쪽의 업무 실패로 넘기지 않는다.
+
+### 콘솔이 보는 일감 (`ExternalTaskInfo`)
+
+`GET /api/v1/external-tasks?run_id=<id>` — 그 실행(`idempotency.run_id`)의 일감, 올린 순. `run_id`는 필수다(전부를
+한 번에 주지 않는다). 콘솔 토큰(관리자·읽기·세션)만 — 부르는 쪽 키로는 남의 일감 모양이 보이므로 403이다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| `task_id`, `topic`, `operation`, `mode`, `origin` | 올릴 때의 것 |
+| `node_id`, `node_instance`, `attempt`, `call_seq` | 멱등 칸 — 어느 노드의 몇 번째 차례·몇 번째 시도인가 |
+| `state` | 위 상태 (`pending`·`locked`·`completed`·`failed`·`expired`·`cancelled` — 열린 문자열) |
+| `created_at`, `finished_at`?, `acked_at`? | 올린 때·끝난 때·부른 쪽이 받은 때 |
+| `deliveries` | 일꾼에게 나간 횟수 (2 이상이면 잠금이 지나 다시 나갔다) |
+| `consumers` | 쥔 일꾼 **이름** — 지금 쥔 것이 있으면 그것 하나, 아니면 한 번이라도 쥔 것들 |
+| `error_code`?, `outcome_unknown` | 실패·만료의 코드와 「결과 모름」(ADR-0107). **오류 글·`detail`은 싣지 않는다** |
+
+입력·출력·오류 글은 싣지 않는다 (원칙 6) — 값은 부른 쪽이 받으면 지워지고, 남는 것은 누가·언제·성패다.
 
 ### 일꾼 들이기
 
@@ -208,6 +226,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-30 | 1 | **`GET /external-tasks?run_id=`**(콘솔 토큰, `ExternalTaskInfo[]`) — CON-01 「외부 작업」이 일감이 어디서 멈췄는지(기다림·일꾼이 쥠·다시 나감)를 본다. 값·오류 글은 싣지 않는다. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `fail`·결과 `error`에 **`outcome_unknown`**(기본 false)을 더했다 — 요청이 닿았을 수 있는데 답을 못 받았다. 어댑터 일꾼이 `idempotent: false` 작업에서 적고, PC의 `chk:serviceCall`은 사람에게 묻는다. 선택 칸이라 판은 그대로다 | [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |
 | 2026-10-29 | 1 | **받아 간(`ack`) 일감을 같은 본문으로 다시 올리면 다시 줄에 선다**(옛 일감을 돌려주면 빈 결과다). 서버 실행기가 긴 작업을 기다림으로 넘기고 `GET`으로 묻는다 — 경로·모양은 그대로다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-29 | 1 | **구현됨** — 부르는 쪽(서버 실행기·실행기 자식·Studio·Worker·Tool UI)과 일꾼(`service_kit`·어댑터 일꾼)이 붙었다. 옛 Push 길(C11 `/v1/ops`·어댑터 직접 호출·서비스 앱 키 배달)은 걷었다 | [0102](../decisions/0102-calling-outside-is-pull.md) |

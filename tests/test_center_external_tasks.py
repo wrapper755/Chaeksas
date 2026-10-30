@@ -559,3 +559,46 @@ def test_too_many_waiters_is_refused() -> None:
     assert caught.value.status == 503 and caught.value.code == "too_many_waiters"
     waiters.leave()
     waiters.enter()
+
+
+# ─────────────────────────── 콘솔이 보는 일감 (CON-01 「외부 작업」) ───────────────────────────
+
+
+def test_the_console_sees_where_a_runs_tasks_stand(center: TestClient, store: Store, field: str) -> None:
+    """그 실행의 일감이 **어디서 멈췄는지** — 기다림·쥔 일꾼·다시 나감 — 가 보이고 값은 없다 (C15)."""
+    first = consumer(center, seed="a")
+    second = consumer(center, seed="b")
+    waiting = post(center, field, idempotency={**task_body()["idempotency"], "node_id": "Task_wait"}).json()
+    task_id = post(center, field).json()["task_id"]
+    other = post(center, field, idempotency={**task_body()["idempotency"], "run_id": "run_20261030_000000_other0"})
+    assert other.status_code in (200, 201), other.text
+    fetch(center, first, lock_s=1, max_tasks=1)  # 먼저 올린 `Task_wait`을 쥔다
+    api.take(store, consumer_row(store, second), FetchRequest(topics=[TOPIC]), now=later(5))
+
+    listed = center.get(f"/api/v1/external-tasks?run_id={RUN}", headers=ADMIN)
+    assert listed.status_code == 200, listed.text
+    rows = {one["task_id"]: one for one in listed.json()}
+    assert set(rows) == {waiting["task_id"], task_id}, "다른 실행의 일감은 보이지 않는다"
+    taken = rows[waiting["task_id"]]
+    assert taken["node_id"] == "Task_wait" and taken["state"] == "locked"
+    assert taken["deliveries"] == 2 and taken["consumers"] == ["일꾼 b"]  # 잠금이 지나 다시 나갔다
+    assert all("input" not in one and "output" not in one for one in rows.values()), "업무 값은 없다"
+
+
+def test_a_failed_task_shows_its_code_but_not_its_words(center: TestClient, field: str) -> None:
+    token = consumer(center)
+    task_id = post(center, field).json()["task_id"]
+    fetch(center, token)
+    center.post(
+        f"/api/v1/consumers/tasks/{task_id}/fail",
+        json={"code": "upstream_error", "message": "거래처 PO-101이 없다", "outcome_unknown": True},
+        headers=bearer(token),
+    )
+    (row,) = center.get(f"/api/v1/external-tasks?run_id={RUN}", headers=ADMIN).json()
+    assert row["state"] == "failed" and row["error_code"] == "upstream_error" and row["outcome_unknown"]
+    assert "PO-101" not in str(row)
+
+
+def test_only_the_console_lists_a_runs_tasks(center: TestClient, field: str) -> None:
+    assert center.get(f"/api/v1/external-tasks?run_id={RUN}", headers=bearer(field)).status_code == 403
+    assert center.get("/api/v1/external-tasks", headers=ADMIN).status_code == 422

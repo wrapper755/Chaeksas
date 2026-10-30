@@ -303,6 +303,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-30 | 1 | `source: schedule` — Center의 일정이 만든 작업(`requested_by` `timer:<식>`)을 대기열에 넣을 때 쓴다(C5 §일정). 값은 처음부터 있었다 | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | §서비스 앱 키 전달을 걷었다(`service_keys[]`·`drop_service_keys[]`·`service_key_acks[]`), §호출 토큰(`POST /call-tokens`), `missing_key_refs`는 늘 빈다. 선택 칸을 걷은 것이라 판을 올리지 않는다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | `JobDispatch.virtual_worker?`를 적었다 — 모델이 C12와 같아 보일 뿐 Bot UI에는 실리지 않는다 | [0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | §서비스 앱 키 전달 — 응답 `service_keys[]`·`drop_service_keys[]`, 요청 `service_key_acks[]`, `missing_key_refs`의 뜻이 「받지 못함」으로. 선택 칸이라 옛 Bot UI는 그대로 돈다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |

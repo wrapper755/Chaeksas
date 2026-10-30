@@ -5,8 +5,9 @@ import type { RunEvent } from "@chaeksas/api-types/c3-run-event";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
+import type { ExternalTaskInfo } from "@chaeksas/api-types/c15-external-task-info";
 import { CenterError, center, session } from "@/lib/center";
-import { FINISHED, type ResumeRow, duration, resumes, waitTotals } from "@/lib/summary";
+import { FINISHED, TASK_STATE, type ResumeRow, duration, resumes, taskPlace, waitTotals } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { LABEL, seconds, time, where } from "../page";
 
@@ -173,6 +174,18 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
   const totals = waitTotals(waits);
   const ended = FINISHED.has(info?.status ?? "");
 
+  // 「외부 작업」 — 그 실행이 Center에 올린 일감 (C15). **어디서 멈췄는지**(기다림·일꾼이 쥠·다시
+  // 나감)는 실행 기록에 없고 Center의 일감에만 있다. 못 읽어도 나머지 상세는 그린다.
+  let tasks: ExternalTaskInfo[] = [];
+  let tasksFailed = false;
+  if (info) {
+    try {
+      tasks = await center.externalTasks(decodeURIComponent(runId));
+    } catch {
+      tasksFailed = true;
+    }
+  }
+
   // UI 태스크가 없으면 **리소스 목록을 두드리지 않는다.** 읽지 못해도 실행 상세는 그려야 하니
   // (여기서 실패하면 운영자가 볼 것이 아무것도 없다) 못 읽으면 링크만 없다.
   let consoles = new Map<string, string>();
@@ -302,6 +315,49 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
     },
   ];
 
+  const taskColumns: Array<Column<ExternalTaskInfo>> = [
+    { key: "node_id", header: "노드", mono: true, cell: (row) => taskPlace(row) },
+    {
+      key: "topic",
+      header: "토픽",
+      mono: true,
+      // 일꾼이 없거나 조용한지는 CON-07 「토픽」 표가 말한다.
+      cell: (row) => (
+        <Link className="underline" href="/resources">
+          {row.topic}
+        </Link>
+      ),
+    },
+    { key: "operation", header: "작업", mono: true },
+    {
+      key: "state",
+      header: "상태",
+      width: "16ch",
+      cell: (row) => <StatusBadge group="외부 작업" label={TASK_STATE[row.state] ?? row.state} />,
+    },
+    { key: "created_at", header: "올린 때", width: "14ch", cell: (row) => time(row.created_at) },
+    {
+      key: "consumers",
+      header: "가져간 일꾼",
+      cell: (row) => ((row.consumers ?? []).length > 0 ? (row.consumers ?? []).join(", ") : "—"),
+    },
+    {
+      key: "deliveries",
+      header: "건넨 횟수",
+      width: "10ch",
+      align: "right",
+      // 2 이상이면 잠금이 지나 다시 나간 것이다 (C15 — 최소 한 번).
+      cell: (row) => String(row.deliveries ?? 0),
+    },
+    { key: "finished_at", header: "끝난 때", width: "14ch", cell: (row) => time(row.finished_at) },
+    {
+      key: "error_code",
+      header: "오류 코드",
+      cell: (row) =>
+        row.error_code ? `${row.error_code}${row.outcome_unknown ? " (결과 모름)" : ""}` : "—",
+    },
+  ];
+
   const logColumns: Array<Column<RunEvent>> = [
     { key: "ts", header: "시각", width: "14ch", cell: (row) => time(row.ts) },
     { key: "level", header: "수준", width: "8ch", cell: (row) => String(row.data?.level ?? "info") },
@@ -401,6 +457,25 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
                 rowKey={(row) => String(row.seq)}
                 caption="기다림 (서버 실행)"
               />
+            </Section>
+          ) : null}
+
+          {/*
+            「외부 작업」 — **일감이 있을 때만 보인다** (화면 문서). PC·서버·시험 실행이 같은 모양이다
+            (셋 다 C15로 부른다). 값은 오지 않는다 (원칙 6).
+          */}
+          {tasksFailed ? (
+            <Section title="외부 작업">
+              <p className="text-body-sm text-text-muted">외부 작업을 읽지 못했습니다.</p>
+            </Section>
+          ) : tasks.length > 0 ? (
+            <Section title="외부 작업">
+              <DataTable columns={taskColumns} rows={tasks} rowKey={(row) => row.task_id} caption="외부 작업" />
+              <p className="text-body-sm text-text-muted">
+                바깥 기능은 Center에 일감을 올리고 그 토픽의 일꾼이 가져갑니다. 「기다림」이 오래면 일꾼이
+                없거나 조용한 것입니다 — 「리소스」의 「토픽」 표를 보세요. 7일이 지나 지워진 일감은 보이지
+                않습니다.
+              </p>
             </Section>
           ) : null}
 

@@ -719,6 +719,45 @@ def test_bx33_fails_on_purpose_on_the_server_too(
     assert found.get("error_code") == "expr_error", found
 
 
+#: 타이머로 시작하는 서버 예제 — **작업 지시 없이** Center의 일정이 깨운다 (ADR-0110).
+#: BX-23(매주 수요일 10시)은 입력이 없어 케이스 값을 넣을 자리가 없다 — 일정이 그대로 돌릴 수 있다.
+TIMER_STARTED = "bx23_training_reminder"
+
+
+def test_a_timer_example_starts_without_a_job_order(
+    tmp_path: Path,
+    center: CenterHandle,
+    runner: agent_mod.Agent,
+) -> None:
+    """서명 → 배포 → 설치 → **Center의 일정이 쓸어 작업을 만든다** → 실행 → Center가 안다.
+
+    시계를 돌리지 않는다 — 배포가 **여드레 전에** 생긴 것으로 옮기면 그 사이 수요일 10시가 지났다.
+    쓸기는 하트비트가 하는 그것이고(분마다 한 번의 관문만 건너뛴다) 실행 기록의 출처는 `schedule`이다.
+    """
+    from datetime import UTC, timedelta  # noqa: PLC0415
+
+    from chaeksas.center.api import timers  # noqa: PLC0415
+
+    client, store = center
+    info = deploy(center, runner, packaged(tmp_path, TIMER_STARTED))
+    assert case_inputs(TIMER_STARTED) == {}, "일정은 입력을 비워 만든다 — 입력이 있는 예제는 이 시험에 맞지 않다"
+    make_samples_for(runner, str(info["id"]))
+    week_ago = (datetime.now(UTC) - timedelta(days=8)).isoformat()
+    with store.tx() as cur:
+        cur.execute("UPDATE deployments SET at = ? WHERE bpm_process_id = ?", (week_ago, info["id"]))
+    assert client.get("/api/v1/jobs", headers=READ).json() == [], "아무도 작업을 지시하지 않았다"
+
+    made = timers.sweep(store, tz=timers.DEFAULT_ZONE, force=True)
+    assert len(made) == 1, made
+    done = run_to_the_end(center, runner, made[0], answers={}, messages=[])
+    assert done["run_status"] == "success", done
+    assert done["requested_by"].startswith("timer:"), done
+    found = client.get(f"/api/v1/runs/{done['run_id']}", headers=READ).json()
+    assert found["source"] == "schedule", found
+    # 같은 차례는 다시 쏘지 않는다.
+    assert timers.sweep(store, tz=timers.DEFAULT_ZONE, force=True) == []
+
+
 def test_the_canned_answers_are_the_shared_ones() -> None:
     """짜 둔 답의 **자리가 하나다** (`tests/canned_answers.py`) — M3·M5와 같은 것을 쓴다.
 

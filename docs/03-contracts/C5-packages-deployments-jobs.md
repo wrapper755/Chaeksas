@@ -6,8 +6,8 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | Studio·Center 콘솔·외부 시스템·Bot UI·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py`, `…/accounts.py` (import `chaeksas.contracts.center_api`·`chaeksas.contracts.accounts`, [ADR-0019](../decisions/0019-package-names.md)) |
-| JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-deployment-request.json`](../../packages/contracts/schemas/c5-deployment-request.json) · [`c5-login-request.json`](../../packages/contracts/schemas/c5-login-request.json) · [`c5-session-info.json`](../../packages/contracts/schemas/c5-session-info.json) · [`c5-account-info.json`](../../packages/contracts/schemas/c5-account-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-schedule-info.json`](../../packages/contracts/schemas/c5-schedule-info.json) · [`c5-deployment-request.json`](../../packages/contracts/schemas/c5-deployment-request.json) · [`c5-login-request.json`](../../packages/contracts/schemas/c5-login-request.json) · [`c5-session-info.json`](../../packages/contracts/schemas/c5-session-info.json) · [`c5-account-info.json`](../../packages/contracts/schemas/c5-account-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 관련 화면 | STU-01(올리기), CON-00(로그인)·02·03·05·06·11·12·14·15 |
 
 ## 목적
@@ -73,7 +73,8 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `POST /external-tasks`, `GET·POST /external-tasks/{id}…` (C15 — 부르는 쪽) | — | — | 호출 토큰·Studio 키 | 서버 실행기 키·호출 토큰 | — |
 | `/consumers/fetch·tasks…·self…` (C15 — 일꾼) | 일꾼 토큰만 | | | | |
 | `POST /consumers/enroll`, `GET /consumers/enroll/{id}` (C15) | 인증 없음 | | | | |
-| `GET /consumers`, `GET /external-topics` (CON-07) | ✓ | ✓ | — | — | — |
+| `GET /consumers`, `GET /external-topics` (CON-07), `GET /external-tasks?run_id=` (CON-01) | ✓ | ✓ | — | — | — |
+| `GET /schedules` (§일정, CON-02) | ✓ | ✓ | — | — | — |
 | `GET /signing-keys` (C7) | 인증 없음 | | | | |
 | `POST /bot-ui/enroll`, `POST /server-runner/enroll`, `GET …/enroll/{id}` (C4·C12) | 인증 없음 | | | | |
 | `GET /enrollments` (§등록 승인) | ✓ | ✓ | — | — | — |
@@ -241,7 +242,7 @@ JobInfo는 위 필드에 다음을 더한다.
 | 필드 | 뜻 |
 | --- | --- |
 | `job_id` | `job_<hex8>` |
-| `requested_by` | 사람 이름, 키 이름, 또는 예약값 `server_bot:<run_id>` (PC 위임) |
+| `requested_by` | 사람 이름, 키 이름, 또는 예약값 `server_bot:<run_id>` (PC 위임)·`timer:<식>` (일정 — 아래 §일정) |
 | `on_behalf_of`? | 연동용 키가 `X-CHK-On-Behalf-Of`로 실어 보낸 사람 이름 (**주장** — Center가 대조하지 않는다). 메시지 시작으로 만든 작업에는 그 메시지의 것을 옮긴다 (ADR-0081) |
 | `requested_at` | |
 | `state`, `state_reason`? | 아래 상태 표 |
@@ -283,6 +284,36 @@ JobInfo는 위 필드에 다음을 더한다.
 - **가르는 것은 대상 종류 하나다** — 판정은 계약이 쥔다 (`cancel_outcome(state, target_type)`). 서버 실행은 **화면을 만지지 않으므로**(R2가 UI 태스크를 막는다) 엔진 취소가 곧 `cancelled` 기록이다.
 - **Center가 혼자 `cancelled`로 적지 않는다** (`dispatched`와 같은 결) — 정말 멈췄는지는 현장만 안다. 실행기가 오프라인이면 취소 요청은 남고 **돌아오면 반영된다**; 돌아오지 않으면 CON-12 「유실 처리」가 닫는다 (C12).
 - 서버 실행이 취소되면 **그 실행이 맡긴 PC 위임도 거둬진다** ([ADR-0062](../decisions/0062-pc-delegation.md) §5).
+
+### 일정 (타이머 시작)
+
+> 상태: **돈다** (2026-10-30, [ADR-0110](../decisions/0110-center-keeps-the-schedule.md)) — `center/api/timers.py`, 식은 `contracts.schedule`.
+
+**타이머로 시작하는 Bot은 Center가 작업을 만들어 깨운다.** 엔드포인트는 없다 — Center가 하트비트(C4·C12)를
+받을 때 **분마다 한 번** 살아 있는 배포(승인된 패키지의 철회되지 않은 배포)의 매니페스트 `triggers[kind=timer]`
+(C1)를 쓸고, 차례가 된 것을 `POST /jobs`와 **같은 함수**로 작업으로 만든다(배포 검사·버전·빈자리·Bot별 상한·
+만료·대기열이 그대로다). 받아 가는 길은 하트비트 그대로다 (밀지 않는다, ADR-0007).
+
+| 무엇 | 규칙 |
+| --- | --- |
+| 하나로 세는 것 | 서버 Bot은 **(Bot, 버전)마다 차례 하나에 작업 하나**이고 `target`은 `{type: "server_runner"}`(실행기는 Center가 고른다) — 서버 실행기 몇 대에 배포했든 한 번이다. PC Bot은 **배포된 PC마다** 작업 하나(`target.id` = 그 PC)다 |
+| 시간대 | Center 한 벌에 하나 — `CHK_CENTER__TIMEZONE`(IANA 이름, 기본 `Asia/Seoul`). 풀 수 없으면 Center가 뜨지 않는다. 없는 시각(서머타임 건너뛰기)은 건너뛰고 두 번 오는 시각은 한 번이다 |
+| 놓친 차례 | Center가 꺼져 있었거나 하트비트가 없어 지나친 차례는 **가장 최근 한 번만** 쏜다. 세는 시작은 **그 대상의 살아 있는 배포 중 가장 이른 것이 생긴 때**와 지난 차례 중 늦은 쪽이다 — 배포 전의 차례는 차례가 아니다. 400일보다 먼 것은 보지 않는다 |
+| 작업 본문 | `inputs`는 **비운다**(기본값과 값 출처가 채운다), `version`은 그 배포의 것, `note`는 `일정 <식> — <차례 벽시계>`, **`expires_at`은 다음 차례**(다음 차례가 없으면 비운다), `idempotency_key`는 `tmr_<일정 해시 16자>_<차례 UTC yyyymmddTHHMMZ>` |
+| 누가 | `requested_by`는 `timer:<식>`이다. 실행하는 쪽은 그것을 보고 실행 기록의 `source`를 **`schedule`**로 적는다(C3·C4) |
+| 두 번 쏘지 않기 | 차례 하나를 먼저 잡고(Center 저장소의 기본 키) 작업을 만든다. 잡은 뒤 작업 없이 멈췄으면 다음 쓸기가 **같은 멱등 키로** 마저 만든다 |
+| 만들지 못하면 | Center가 거부한 코드(`input_not_from_caller` 등)를 그 차례에 적고 다음 차례를 기다린다 — 다른 Bot의 일정을 막지 않는다 |
+
+**읽기 — `GET /schedules`** (콘솔 토큰, CON-02 「일정」) → `ScheduleInfo[]`. 살아 있는 배포의 타이머 시작마다 한 줄이다
+(서버 Bot은 (Bot, 버전)마다, PC Bot은 PC마다 — 위 「하나로 세는 것」과 같다). 「다음 차례」는 **쓸 때와 같은 함수**로 센다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| `bpm_process_id`, `version`, `target_type`, `target_id`? | 대상. 서버는 `target_id`가 없다(Center가 고른다) |
+| `expression`, `timezone` | 식과 Center의 시간대 |
+| `problem`? | 식을 읽지 못하는 까닭(R13 전에 올라간 판). 있으면 쏘지 않고 아래 칸이 비어 있다 |
+| `next_at`? | 다음 차례. 더 오지 않으면(`R3/…`을 다 썼다) 없음 |
+| `last_slot`?, `last_job_id`?, `last_missed`, `last_error`? | 마지막으로 쏜 차례·그 작업·그때 건너뛴 차례 수·작업을 만들지 못한 코드 |
 
 ## 등록 승인 (CON-03·CON-12·CON-11)
 
@@ -456,6 +487,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-30 | 1 | **§일정** — 타이머 시작을 Center가 하트비트에서 쓸어 작업으로 만든다. `requested_by`의 예약값 `timer:<식>`(바깥 이름으로 받지 않는다 — `on_behalf_invalid`). 읽기 `GET /schedules`(`ScheduleInfo`, 콘솔 토큰). 권한표에 C15 `GET /external-tasks?run_id=`(CON-01) | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | **바깥 호출이 C15로** — §Studio 개발 키(`POST /studio/service-keys`)·외부 앱 키(`…/app-key`)·서비스 앱 등록(`POST/PUT/DELETE /resources/service-apps`·`/resources/refresh`)을 걷었다. 권한표에 호출 토큰·외부 작업·일꾼 줄. 배포는 키를 짓지 않는다. 승인 본문에 `topics?`(일꾼) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | **연동용 키가 가상 직원을 읽는다**(전부 — 실행·작업 목록·결재 검토 자료는 넓히지 않는다, ADR-0098 §4). `JobCreateRequest.virtual_worker?`·`JobInfo.virtual_worker?`, 오류 `input_not_from_caller`·`virtual_worker_mismatch`, 접수 Bot 하나를 여러 가상 직원이 쓴다, §가상 직원 「신원」 | [0098](../decisions/0098-virtual-worker-identity.md)·[0099](../decisions/0099-input-value-source.md) |
 | 2026-10-25 | 1 | 배포·철회가 서비스 앱 키를 데리고 다닌다, §Studio 개발 키(`POST /studio/service-keys`), `PUT /bot-uis/{id}/utility`(「셀렉터 등록」), 권한표 줄 넷 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |

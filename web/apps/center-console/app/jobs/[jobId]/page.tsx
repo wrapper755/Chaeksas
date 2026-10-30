@@ -1,3 +1,4 @@
+import { timerRequester } from "@/lib/summary";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ErrorBanner, StatusBadge } from "@chaeksas/ui";
@@ -97,7 +98,7 @@ export default async function JobPage({
                   서버 Bot ({from})
                 </Link>
               ) : (
-                job.requested_by
+                timerRequester(job.requested_by) ?? job.requested_by
               )}
             </Row>
             <Row label="요청 시각">{time(job.requested_at)}</Row>

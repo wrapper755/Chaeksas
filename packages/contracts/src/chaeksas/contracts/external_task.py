@@ -241,6 +241,33 @@ class ConsumerEnrollRequest(SchemaVersioned):
     manifests: list[ServiceAppManifest] = Field(default_factory=list)
 
 
+class ExternalTaskInfo(ContractModel):
+    """`GET /api/v1/external-tasks?run_id=`의 한 줄 — 콘솔이 보는 일감 (CON-01 「외부 작업」).
+
+    **업무 값은 없다** (원칙 6) — 입력·출력·오류 글은 싣지 않고 코드만 싣는다. 자리(`node_id`·
+    `node_instance`·`attempt`·`call_seq`)는 멱등 칸에서 온다.
+    """
+
+    task_id: str
+    topic: str
+    operation: str
+    mode: str
+    origin: str
+    node_id: str
+    node_instance: int = 1
+    attempt: int = 1
+    call_seq: int = 1
+    state: str  # KNOWN_STATES
+    created_at: Timestamp
+    finished_at: Timestamp | None = None
+    acked_at: Timestamp | None = None
+    deliveries: int = 0
+    #: 쥐었던 일꾼의 이름 — 지금 쥔 것이 있으면 그것 하나, 아니면 한 번이라도 쥔 것들.
+    consumers: list[str] = Field(default_factory=list)
+    error_code: str | None = None
+    outcome_unknown: bool = False
+
+
 class ConsumerInfo(ContractModel):
     """`GET /api/v1/consumers`의 한 줄 (CON-07 「일꾼」)."""
 
@@ -303,6 +330,7 @@ __all__ = [
     "CompleteRequest",
     "ConsumerEnrollRequest",
     "ConsumerInfo",
+    "ExternalTaskInfo",
     "ConsumerVersions",
     "ExtendRequest",
     "ExternalTaskCreate",

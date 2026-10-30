@@ -98,7 +98,31 @@ def delegation_requester(run_id: str) -> str:
 
 #: Center가 짓는 주체 이름의 앞머리 — 바깥에서 온 사람 이름이 이것으로 시작하면 받지 않는다.
 #: 받아 두면 기록을 읽는 쪽이 「Center가 지은 주체」와 가를 수 없다 (ADR-0081).
-RESERVED_ACTOR_PREFIXES: tuple[str, ...] = (DELEGATION_REQUESTER_PREFIX, "vw:")
+RESERVED_ACTOR_PREFIXES: tuple[str, ...] = (DELEGATION_REQUESTER_PREFIX, "vw:", "timer:")
+
+#: `requested_by`의 예약값 앞머리 — **타이머 시작이 만든 작업**이다 (`timer:<식>`,
+#: [ADR-0110](../decisions/0110-center-keeps-the-schedule.md) §8). 적는 쪽은 Center의 일정,
+#: 읽는 쪽은 실행하는 쪽이다(실행 기록의 `source: schedule`) — 위임 앞머리와 같은 까닭으로 여기 하나다.
+TIMER_REQUESTER_PREFIX = "timer:"
+
+
+def timer_requester(expression: str) -> str:
+    """타이머 식 → `requested_by` (Center가 적는다)."""
+    return f"{TIMER_REQUESTER_PREFIX}{expression}"
+
+
+def job_source(requested_by: str | None) -> str:
+    """작업을 받아 띄운 실행의 출처 (C3 `run_started.source`·C4 `queue[].source`).
+
+    위임이면 `delegation`, 일정이면 `schedule`, 그 밖은 `job`이다 — 말해 주는 것은 `requested_by`
+    하나다. Bot UI와 서버 실행기가 이 함수를 같이 쓴다.
+    """
+    found = requested_by or ""
+    if found.startswith(DELEGATION_REQUESTER_PREFIX):
+        return "delegation"
+    if found.startswith(TIMER_REQUESTER_PREFIX):
+        return "schedule"
+    return "job"
 
 
 def on_behalf_violation(name: str) -> Violation | None:
@@ -493,6 +517,29 @@ class JobInfo(JobCreateRequest):
     dispatched_at: Timestamp | None = None
     run_id: str | None = None
     run_status: str | None = None  # 실행의 성패는 작업 상태가 아니다 (C3 run_finished가 정한다)
+
+
+class ScheduleInfo(ContractModel):
+    """`GET /schedules`의 한 줄 — 타이머로 시작하는 배포 하나의 일정 (C5 §일정, CON-02 「일정」, ADR-0110).
+
+    서버 Bot은 (Bot, 버전)마다 한 줄이고 `target_id`가 없다 (실행기는 Center가 고른다). PC Bot은 배포된
+    PC마다 한 줄이다. **센 것은 Center가 쓸 때와 같은 함수다** (`contracts.schedule`) — 화면이 따로 세면
+    「다음 차례」가 일정과 어긋난다.
+    """
+
+    bpm_process_id: str
+    version: str
+    target_type: str  # `bot_ui` | `server_runner`
+    target_id: str | None = None  # PC면 그 PC, 서버면 없음
+    expression: str
+    timezone: str
+    #: 식을 읽지 못하면(R13 전에 올라간 판) 그 까닭. 있으면 쏘지 않는다.
+    problem: str | None = None
+    next_at: Timestamp | None = None  # 더 오지 않으면(`R3/…`을 다 썼다) 없음
+    last_slot: Timestamp | None = None
+    last_job_id: str | None = None
+    last_missed: int = 0
+    last_error: str | None = None  # 작업을 만들지 못한 코드
 
 
 # ─────────────────────────── 가상 직원 (C5 §가상 직원, ADR-0085) ───────────────────────────

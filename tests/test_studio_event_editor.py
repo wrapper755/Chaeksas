@@ -143,6 +143,8 @@ def test_the_preview_says_when(value: str, said: str) -> None:
         ("BoundaryEvent", "30분", "기한은 ISO 기간"),
         ("BoundaryEvent", "2026-11-01T09:00", "기한은 ISO 기간"),
         ("StartEvent", "매일 9시", "주기는 5필드 cron"),
+        # 다섯 칸이어도 Center가 읽지 못하면 막는다 (C1 R13과 같은 함수).
+        ("StartEvent", "0 25 * * *", "주기는 5필드 cron"),
     ],
 )
 def test_what_the_engine_cannot_read_blocks_apply(bpmn_type: str, value: str, said: str) -> None:
@@ -155,7 +157,7 @@ def test_what_the_engine_cannot_read_blocks_apply(bpmn_type: str, value: str, sa
 
 
 @pytest.mark.parametrize("value", ["0 9 * * 1-5", "R/2026-11-01T09:00:00/P1D", "R5/PT1H"])
-def test_a_start_timer_takes_a_cycle_and_says_nobody_wakes_it_yet(value: str) -> None:
+def test_a_start_timer_takes_a_cycle_and_says_center_wakes_it(value: str) -> None:
     made = loaded("StartEvent", event("Timer", timer={"kind": "timeCycle", "value": "0 9 * * *"}))
     made.timer_box.setText(value)
     assert made.problems() == ([], [])

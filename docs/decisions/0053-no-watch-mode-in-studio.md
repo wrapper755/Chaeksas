@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 — 「일정을 읽는 자리」는 [ADR-0110](0110-center-keeps-the-schedule.md)이 **Center**로 정했다(현장의 Bot UI·서버 실행기가 아니다). Studio에 감시 모드를 두지 않는다는 결정은 그대로다 |
 | 날짜 | 2026-10-13 |
 | 관련 | 화면 STU-01(메뉴·도구 모음)·STU-08, 계약 C14 §이벤트(타이머 시작 `timeCycle`)·C1 `triggers`·C3 `source`·C4 `queue[].source`, [ADR-0014](0014-one-bot-per-pc.md), [ADR-0016](0016-server-first.md), `docs/09-gaps.md` §4-5 |
 
