@@ -304,6 +304,15 @@ def test_a_due_timer_becomes_one_job(center: TestClient, store: Store, training:
     assert len(fires(store)) == 1
 
 
+def test_a_deprecated_package_keeps_its_schedule(center: TestClient, store: Store, training: str) -> None:
+    """지원 종료는 **새 배포만** 막는다 — 돌던 일정은 그대로 돈다 (C5 §패키지, 09-gaps §3-22)."""
+    said = center.put(f"/api/v1/packages/{TRAINING_BOT}/{VERSION}/status", json={"status": "deprecated"}, headers=ADMIN)
+    assert said.status_code == 200, said.text
+    made = sweep(store, seoul(2026, 10, 28, 10, 0, 30))
+    assert len(made) == 1
+    assert job(center, made[0])["bpm_process_id"] == TRAINING_BOT
+
+
 def test_missed_turns_fire_once_the_latest(center: TestClient, store: Store, training: str) -> None:
     """Center가 3주 꺼져 있었다 — **가장 최근 한 번만** 쏘고 나머지는 센다 (ADR-0110 §4)."""
     made = sweep(store, seoul(2026, 11, 13, 12))

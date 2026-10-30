@@ -247,6 +247,10 @@ export function readinessLabel(
   if (!found) return null;
   if (found.ready) return { label: "준비됨", detail: [] };
   const blocked = found.blocked ?? [];
+  // **배포가 정한 「실행 불가」가 먼저다** (ADR-0113) — 다시 배포받기 전에는 다른 것을 고쳐도 돌지 않는다.
+  // 철회된 배포는 Center 목록에 없어 화면에 줄이 없으므로, 여기 오는 것은 사실상 기한이 지난 것이다.
+  if (blocked.includes("deployment_withdrawn")) return { label: "배포 철회", detail: blocked };
+  if (blocked.includes("deployment_expired")) return { label: "배포 만료", detail: blocked };
   if (blocked.includes("extension_turned_off")) return { label: "확장 꺼짐", detail: blocked };
   // **설정이 없는 것은 확장 문제가 아니다** (C1 `requires.settings`, ADR-0059) — 고치는 길이
   // 「설치하세요」가 아니라 「BUI-03에서 채우세요」다. 적어 두지 않으면 아래 「실행 불가」로

@@ -60,7 +60,7 @@ from chaeksas.contracts.signing import AdminKey
 from chaeksas.core import build_info, machine
 from chaeksas.core import requests as approval_requests
 from chaeksas.core.app_directory import AppDirectory, DirectoryCache
-from chaeksas.core.deploy import Deployer
+from chaeksas.core.deploy import Deployer, deployment_finding
 from chaeksas.core.engine import WHERE_CENTER, EngineError, RunEnv
 from chaeksas.core.extensions import ExtensionHost, HostTasks
 from chaeksas.core.packages import InstalledBot, find, installed
@@ -405,19 +405,23 @@ class Agent:
         return target
 
     def install_deployments(self, envelopes: list[dict[str, Any]]) -> list[DeploymentResult]:
-        """내려온 배포를 적용한다. **거부도 보고하고**(사유와 함께) 기다림은 보고하지 않는다.
+        """내려온 배포를 적용하고 목록과 설치를 맞춘다. **거부도 보고하고**(사유와 함께) 기다림은 보고하지 않는다.
 
         설치가 바뀌면 사전 점검 캐시를 비운다 — 새로 깔린 BPM 프로세스의 준비 상태를 다음 하트비트가
         올려야 한다.
         """
-        if not envelopes:
-            return []
         if not self.admin_keys:
             # **공개키가 없으면 서명을 볼 수 없다** — 설치하지 않고 다음 주기를 기다린다
             # (하트비트가 `admin_keys`를 준다). 거부로 보고하면 멀쩡한 배포가 영원히 닫힌다.
-            log.info("Admin 공개키가 아직 없다 — 배포 %d건을 다음 주기에 본다", len(envelopes))
+            if envelopes:
+                log.info("Admin 공개키가 아직 없다 — 배포 %d건을 다음 주기에 본다", len(envelopes))
             return []
-        found = self.deployer().apply(envelopes)
+        deployer = self.deployer()
+        found = deployer.apply(envelopes) if envelopes else []
+        # **답한 목록과 설치를 맞춘다** (C2 §검증 규칙, ADR-0113) — 빈 목록도 목록이다. 여기는
+        # 하트비트가 답했을 때만 온다. 빠진 것은 `readiness`가 `deployment_withdrawn`으로 막는다
+        # (캐시 밖이라 비울 것이 없다). 도는·기다리는 실행은 건드리지 않는다 (ADR-0113 §6).
+        deployer.reconcile(envelopes)
         if found:
             self._readiness.clear()
             for one in found:
@@ -459,6 +463,15 @@ class Agent:
                     blocked=list(checked.blocked),
                 )
                 self._readiness[key] = found
+            # **배포가 정하는 점검은 캐시하지 않는다** — 기한은 시각이 정한다 (ADR-0113 §4).
+            standing = deployment_finding(bot)
+            if standing is not None:
+                found = Readiness(
+                    bpm_process_id=bot.id,
+                    version=bot.version,
+                    ready=False,
+                    blocked=[standing.id, *found.blocked],
+                )
             out.append(found)
         return out
 

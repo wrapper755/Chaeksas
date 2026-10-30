@@ -104,7 +104,12 @@ Center, PC 실행기, 서버 실행기가 같은 함수(`contracts.signing.verif
 | V8 | (admin_key) 서명 키가 추가하려는 키 자신이 아니다 | `self_signed_key` | **쓰지 않는다** (`admin_key`를 더 만들지 않는다, ADR-0090) |
 
 - 실패하면 실행하는 쪽은 설치하지 않는다. C4 `deployment_results`에 `rejected`와 사유 코드를 보낸다 (CON-03 「⛔ 거부」).
-- 서명 키를 버리거나 패키지 승인이 철회되면, 실행하는 쪽은 다음 하트비트에서 해당 BPM 프로세스를 비활성으로 돌린다. 패키지 파일은 지우지 않는다.
+- 서명 키를 버리거나 패키지 승인이 철회되면, 실행하는 쪽은 다음 하트비트에서 해당 BPM 프로세스를 비활성으로 돌린다. 패키지 파일은 지우지 않는다. 배포 철회도 같다 ([ADR-0113](../decisions/0113-field-follows-withdrawn-deployments.md)):
+  - **맞추는 것은 Center가 답한 하트비트뿐이다** — 닿지 못하거나 키가 거부되면 아무것도 바꾸지 않는다 (ADR-0007). 답의 `deployments`(C4·C12)는 활성 배포 **전체**라 빈 목록도 목록이다.
+  - 「Center 배포」로 설치된 `(id, version)`마다 **지금 설치를 허락할 봉투**(V1~V4·V5a·V5b·V6을 지난 것)가 하나라도 있으면 덮였다. 없으면 비활성이다 — V2 `revoked_key`로 빠진 것도 같다. 같은 판을 다시 배포하면 새 봉투가 다시 덮는다.
+  - 덮는 봉투의 `expires_at`은 **실행하는 쪽이 제 시각으로** 계속 본다(가장 늦은 것, 하나라도 없으면 기한 없음) — 지나면 Center 없이도 비활성이다.
+  - 비활성은 **새로 시작하지 않는다**는 뜻이다(사전 점검 `deployment_withdrawn`·`deployment_expired`, C4 `readiness`). 도는·기다리는 실행은 그대로이고, 세우는 것은 작업 취소다 (ADR-0063).
+  - 「수동 설치」·출처를 모르는 설치는 다루지 않는다 — Center 목록이 들인 것이 아니다.
 
 ## 예시
 
@@ -148,6 +153,7 @@ Center, PC 실행기, 서버 실행기가 같은 함수(`contracts.signing.verif
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | §검증 규칙의 「비활성으로 돌린다」를 풀어 적었다 — 언제 믿나(답한 하트비트만)·무엇이 덮나·기한은 현장이 본다·도는 실행은 그대로. 배포 철회도 같다 | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-29 | 1 | Claim `service_key`를 더 만들지 않는다 — 서비스 앱 키가 없어졌다 (Center가 앱에 키를 맡기지 않는다) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | Claim `service_key` — Center가 서비스 앱에 키를 맡기는 봉투 (C11) | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-24 | 1 | **서명하는 것이 Center가 됐다.** 관리자 계정이 누르면 Center가 서버의 키로 봉투를 짓는다. 바깥 봉투를 받는 길·Admin 키 추가·철회(`admin_key`·`admin_key_revoke`, V8)·첫 키 부트스트랩을 없앴다. 봉투 모양과 V1~V7, 현장의 검증은 **그대로**다 — 믿는 키 목록에 Center 키가 들어갔을 뿐이다 | 0090 |

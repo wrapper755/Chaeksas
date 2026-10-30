@@ -36,6 +36,7 @@ CONFIRMATION_NEEDED = "confirmation_needed"
 RUN_FAILED = "run_failed"
 DEPLOYED = "deployed"
 DEPLOY_REFUSED = "deploy_refused"
+DEPLOYMENT_WITHDRAWN = "deployment_withdrawn"
 CENTER_OFFLINE = "center_offline"
 CENTER_BACK = "center_back"
 KEY_REJECTED = "key_rejected"
@@ -180,6 +181,18 @@ class Notices:
             Notice(
                 kind=DEPLOY_REFUSED,
                 text=f"배포를 거부했습니다 — {why}",
+                action=ACTION_WINDOW,
+                sticky=True,
+                level="warning",
+            )
+        )
+
+    def deployment_withdrawn(self, *, bot: str, version: str) -> None:
+        """Center가 답한 목록에서 빠졌다 (ADR-0113) — **한 번만** 온다(빠진 때를 표식에 적는다)."""
+        self.add(
+            Notice(
+                kind=DEPLOYMENT_WITHDRAWN,
+                text=f"{_bot(bot)} {version}의 배포가 철회되어 실행할 수 없습니다",
                 action=ACTION_WINDOW,
                 sticky=True,
                 level="warning",
@@ -332,6 +345,7 @@ __all__ = [
     "CONFIRMATION_NEEDED",
     "DEPLOYED",
     "DEPLOY_REFUSED",
+    "DEPLOYMENT_WITHDRAWN",
     "KEY_REJECTED",
     "LONG_S",
     "MAX_PENDING",

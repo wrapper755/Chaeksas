@@ -383,6 +383,9 @@ def test_a_deployment_result_is_told_and_a_refusal_sticks(tmp_path: Path, monkey
     install_bot()
 
     class FakeDeployer:
+        def reconcile(self, _envelopes: list[dict[str, Any]]) -> list[Any]:
+            return []  # 맞추기는 `test_m5_deploy.py`가 본다 (ADR-0113)
+
         def apply(self, _envelopes: list[dict[str, Any]]) -> list[DeploymentResult]:
             return [
                 DeploymentResult(

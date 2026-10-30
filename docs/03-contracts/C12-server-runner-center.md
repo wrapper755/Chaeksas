@@ -62,7 +62,10 @@ C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_j
 **설치는 PC 실행기와 같은 코드다** (`core.deploy`·`core.packages`) — 다른 것은 `host_kind`뿐이고,
 그래서 서버는 `"*"` 대상 배포도 받는다 (ADR-0046). **믿는 서명 키(C2 — Center 서명 키)가 아직 없으면 설치하지
 않고 기다린다** — 서명을 볼 수 없는데 설치하면 관문이 없는 것과 같고, 거부로 보고하면 멀쩡한
-배포가 영원히 닫힌다 (공개키는 하트비트가 준다).
+배포가 영원히 닫힌다 (공개키는 하트비트가 준다). **목록과 설치를 맞추는 것도 같다** (C2 §검증 규칙,
+ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 설치는 「실행 불가」(`readiness`의
+`deployment_withdrawn`·`deployment_expired`)라 그 작업은 `not_ready`로 거절한다. **도는·기다리는 실행은 그대로다** —
+결재·메시지·타이머로 이어 가고, 세우는 것은 작업 취소다 (ADR-0063).
 
 **운영 API (콘솔 CON-12, 관리자 토큰):**
 
@@ -368,6 +371,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | 설치를 목록과 맞춘다 — 덮는 봉투가 없는 설치는 `not_ready`, 기다리는 실행은 그대로. 칸은 그대로다 | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-29 | 1 | **§긴 외부 작업** — `waiting[]`에 `external_task` 갈래와 짝 칸 `task_id`. 결과는 실행기가 C15로 묻고 이 계약에 내려오는 칸은 없다. 선택 칸이라 옛 Center는 그대로 돈다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-29 | 1 | §서비스 앱 키와 작업 나누기 규칙 5(`keys_pending`)를 걷었다 — 서버 실행기는 서비스 앱을 C15 외부 작업으로 부른다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-26 | 1 | 하트비트 `jobs[].virtual_worker?` — 작업의 가상 직원을 붙인다. `MessageRequest.virtual_worker?`(메시지 시작). 선택 칸이라 옛 실행기는 그대로 돈다(출처가 가상 직원인 입력만 비어 있다) | [0099](../decisions/0099-input-value-source.md) |

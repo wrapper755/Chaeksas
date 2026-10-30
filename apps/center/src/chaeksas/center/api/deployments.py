@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.center import signer
-from chaeksas.center.api.signing import STATUS_APPROVED, admin_keys
+from chaeksas.center.api.signing import LIVE_STATUSES, admin_keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
 from chaeksas.contracts.bot_ui import DeploymentResult
@@ -62,6 +62,18 @@ def _target_sql(target_type: str, target_id: str) -> tuple[str, tuple[str, ...]]
             TARGET_ANY,
         )
     return "d.target_type = ? AND d.target_id = ?", (target_type, target_id)
+
+
+def live_sql() -> tuple[str, tuple[str, ...]]:
+    """**살아 있는 배포**를 고르는 WHERE 조각과 인자 — 철회되지 않았고 패키지가 `LIVE_STATUSES`.
+
+    `deployments d JOIN packages p`를 전제한다. **지원 종료(`deprecated`)도 받는다** (C5 §패키지 —
+    「이미 배포된 것은 그대로 돈다」). 고르는 자리(하트비트 봉투·작업의 판·위임·일정·내려받기·
+    메시지 시작)가 이 조건을 따로 적다가 모두 `approved` 하나로 걸러, 지원 종료가 돌던 것을
+    세웠다 (09-gaps §3-22). 그래서 `_target_sql`처럼 **한 함수로** 짓는다.
+    """
+    marks = ", ".join("?" for _ in LIVE_STATUSES)
+    return f"d.revoked_json IS NULL AND p.status IN ({marks})", LIVE_STATUSES
 
 
 def _registered(store: Store, target: Any) -> bool | None:
@@ -204,27 +216,29 @@ def targets_for(store: Store, *, bpm_process_id: str, version: str, target_type:
     """그 판이 **살아 있는 배포로 걸린 대상 id**들 (C5). PC 위임이 PC를 고를 때 쓴다.
 
     **고르는 기준을 다섯째 자리에 적지 않으려고** 여기 둔다 — `envelopes_for`와 같은 조건
-    (철회되지 않음 + 패키지가 `approved`)이고, 어긋나면 「배포는 됐는데 위임이 안 간다」가 된다
+    (`live_sql`)이고, 어긋나면 「배포는 됐는데 위임이 안 간다」가 된다
     (`_target_sql`의 각주와 같은 결).
     """
+    live, statuses = live_sql()
     rows = store.rows(
         "SELECT DISTINCT d.target_id AS id FROM deployments d"
         " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
-        " WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ?"
+        f" WHERE {live} AND d.target_type = ?"
         "   AND d.bpm_process_id = ? AND d.version = ?",
-        (STATUS_APPROVED, target_type, bpm_process_id, version),
+        (*statuses, target_type, bpm_process_id, version),
     )
     return sorted(str(row["id"]) for row in rows)
 
 
 def versions_deployed_to(store: Store, *, bpm_process_id: str, target_type: str) -> list[str]:
     """그 BPM 프로세스가 그 종류의 대상에 배포된 판들 (C5) — 위임이 판을 비웠을 때 고를 거리다."""
+    live, statuses = live_sql()
     rows = store.rows(
         "SELECT DISTINCT d.version AS v FROM deployments d"
         " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
-        " WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ?"
+        f" WHERE {live} AND d.target_type = ?"
         "   AND d.bpm_process_id = ?",
-        (STATUS_APPROVED, target_type, bpm_process_id),
+        (*statuses, target_type, bpm_process_id),
     )
     return sorted(str(row["v"]) for row in rows)
 
@@ -334,14 +348,16 @@ def listing(
 def envelopes_for(store: Store, *, target_type: str, target_id: str) -> list[dict[str, Any]]:
     """그 대상의 **활성 배포 봉투**를 저장된 JSON 그대로 (C4 — 재직렬화하면 서명이 깨진다).
 
-    **승인이 철회된 패키지의 배포는 빼고 준다** — 받는 쪽이 어차피 거부한다 (C2).
+    **승인이 철회된 패키지의 배포는 빼고 준다** — 받는 쪽은 빠진 배포를 비활성으로 돌린다
+    (C2 §검증 규칙, ADR-0113). **지원 종료는 빼지 않는다** (`live_sql`).
     """
     where, target = _target_sql(target_type, target_id)
+    live, statuses = live_sql()
     rows = store.rows(
         "SELECT d.envelope_json AS body FROM deployments d "
         "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
-        f"WHERE d.revoked_json IS NULL AND p.status = ? AND {where} ORDER BY d.at",
-        (STATUS_APPROVED, *target),
+        f"WHERE {live} AND {where} ORDER BY d.at",
+        (*statuses, *target),
     )
     return [json.loads(one["body"]) for one in rows]
 
@@ -354,12 +370,13 @@ def versions_for(store: Store, *, target_type: str, target_id: str, bpm_process_
     않는다 (C2 V5b — 때를 보는 것은 실행하는 쪽이다).
     """
     where, target = _target_sql(target_type, target_id)
+    live, statuses = live_sql()
     rows = store.rows(
         "SELECT d.version AS version FROM deployments d "
         "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
-        f"WHERE d.revoked_json IS NULL AND p.status = ? AND {where} "
+        f"WHERE {live} AND {where} "
         "AND d.bpm_process_id = ? ORDER BY d.at",
-        (STATUS_APPROVED, *target, bpm_process_id),
+        (*statuses, *target, bpm_process_id),
     )
     return [str(one["version"]) for one in rows]
 
@@ -369,14 +386,15 @@ def server_versions(store: Store, *, bpm_process_id: str) -> list[str]:
 
     `id`를 비운 서버 작업은 Center가 실행기를 고르므로(C5 `JobTarget`) 「어느 서버에
     배포됐나」가 아니라 **어디든 배포돼 있나**를 묻는다. `"*"` 배포도 센다 (ADR-0046).
-    고르는 기준은 `envelopes_for`와 같다 — 승인된 패키지의 철회되지 않은 배포다.
+    고르는 기준은 `envelopes_for`와 같다 (`live_sql`).
     """
+    live, statuses = live_sql()
     rows = store.rows(
         "SELECT DISTINCT d.version AS version FROM deployments d "
         "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
-        "WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ? "
+        f"WHERE {live} AND d.target_type = ? "
         "AND d.bpm_process_id = ? ORDER BY d.version",
-        (STATUS_APPROVED, "server_runner", bpm_process_id),
+        (*statuses, "server_runner", bpm_process_id),
     )
     return [str(one["version"]) for one in rows]
 
@@ -384,18 +402,19 @@ def server_versions(store: Store, *, bpm_process_id: str) -> list[str]:
 def server_message_starts(store: Store, *, name: str) -> list[str]:
     """그 이름의 **메시지 시작 트리거**를 가진, 서버에 배포된 BPM 프로세스 id들 (C12 §메시지).
 
-    고르는 기준은 `server_versions`와 같다 (승인된 패키지의 철회되지 않은 서버 배포) — 배포되지
+    고르는 기준은 `server_versions`와 같다 (`live_sql` — 살아 있는 서버 배포) — 배포되지
     않은 BPM 프로세스는 메시지로도 돌지 않는다. 트리거는 **매니페스트가 말한다** (C1 `triggers[]`) —
     Center가 그림을 읽지 않는다.
 
     버전은 돌려주지 않는다. **작업을 만드는 쪽이 고르게** 둔다 (`_resolved_version` — 둘 이상이면
     `version_ambiguous`다). 여기서 또 고르면 두 자리가 다른 답을 낸다.
     """
+    live, statuses = live_sql()
     rows = store.rows(
         "SELECT DISTINCT d.bpm_process_id AS id, p.manifest_json AS body FROM deployments d "
         "JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version "
-        "WHERE d.revoked_json IS NULL AND p.status = ? AND d.target_type = ?",
-        (STATUS_APPROVED, "server_runner"),
+        f"WHERE {live} AND d.target_type = ?",
+        (*statuses, "server_runner"),
     )
     out = []
     for one in rows:
@@ -416,12 +435,13 @@ def downloadable_by(store: Store, *, target_type: str, target_id: str) -> set[tu
     ([ADR-0050](../../../../../../docs/decisions/0050-no-toolpack-kind.md)).
     """
     where, target = _target_sql(target_type, target_id)
+    live, statuses = live_sql()
     rows = store.rows(
         "SELECT d.bpm_process_id AS id, d.version AS version"
         " FROM deployments d"
         " JOIN packages p ON p.id = d.bpm_process_id AND p.version = d.version"
-        f" WHERE d.revoked_json IS NULL AND p.status = ? AND {where}",
-        (STATUS_APPROVED, *target),
+        f" WHERE {live} AND {where}",
+        (*statuses, *target),
     )
     return {(str(one["id"]), str(one["version"])) for one in rows}
 
@@ -538,6 +558,7 @@ __all__ = [
     "create",
     "envelopes_for",
     "listing",
+    "live_sql",
     "remember_results",
     "results_of",
     "revoke",

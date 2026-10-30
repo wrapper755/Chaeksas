@@ -13,10 +13,15 @@
 - **예약 배포는 때가 될 때까지 두고 본다** (V5b `not_before`) — 거부가 아니다.
 - **남의 배포는 받지 않는다** (V6) — `target`이 나여야 한다.
 - 설치는 **한 번만** 한다. 이미 그 해시로 설치돼 있으면 조용히 지나간다.
+
+그리고 **목록과 설치를 맞춘다** (C2 §검증 규칙·C4 `deployments`, ADR-0113) — Center가 **답한** 목록에
+덮는 봉투가 없는 「Center 배포」 설치는 폴더의 `DEPLOYMENT` 표식에 적어 「실행 불가」로 돌린다
+(`reconcile`). 파일은 지우지 않는다. 기한은 그 표식으로 현장이 혼자 본다 (`deployment_finding`).
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import zipfile
 from dataclasses import dataclass, field
@@ -34,7 +39,16 @@ from chaeksas.contracts.signing import (
     verify_target,
     verify_time,
 )
-from chaeksas.core.packages import CENTER, InstallError, install, installed, write_source
+from chaeksas.core.packages import (
+    CENTER,
+    SOURCE_LABELS,
+    InstalledBot,
+    InstallError,
+    install,
+    installed,
+    write_source,
+)
+from chaeksas.extension_api import SEVERITY_BLOCK, Finding
 
 log = logging.getLogger(__name__)
 
@@ -48,6 +62,13 @@ PENDING = "pending"
 
 #: 아직 때가 아니다 — **거부가 아니라 기다림**이다 (C2 V5b).
 NOT_YET = "not_yet"
+
+#: 「Center 배포」 설치를 **지금 덮는 배포**를 적는 표식 (ADR-0113). 「출처」(`INSTALL_SOURCE`)와 같은 자리다.
+STANDING_NAME = "DEPLOYMENT"
+
+#: 사전 점검 코드 (C4 `Readiness.blocked`, BUI-04 「준비」) — 덮는 배포가 없다 / 덮는 배포의 기한이 지났다.
+DEPLOYMENT_WITHDRAWN = "deployment_withdrawn"
+DEPLOYMENT_EXPIRED = "deployment_expired"
 
 
 def now_iso() -> str:
@@ -65,6 +86,91 @@ def read_signature(package: Path) -> Envelope | None:
         return Envelope.model_validate_json(raw)
     except ValueError:
         return None
+
+
+def _when(text: str) -> datetime:
+    found = datetime.fromisoformat(text)
+    return found if found.tzinfo else found.replace(tzinfo=UTC)
+
+
+@dataclass(frozen=True)
+class Standing:
+    """`DEPLOYMENT` 표식 — 그 설치를 덮는 배포와 그 기한, 빠졌으면 언제 빠졌나 (ADR-0113)."""
+
+    deployment_ids: tuple[str, ...] = ()
+    #: 덮는 배포의 기한 중 **가장 늦은 것**. 하나라도 기한이 없으면 `None`(기한 없음)이다.
+    expires_at: str | None = None
+    #: Center가 답한 목록에서 빠진 때. 빠지지 않았으면 `None`.
+    withdrawn_at: str | None = None
+
+    def problem(self, *, now: str) -> str | None:
+        """막는 까닭 — `DEPLOYMENT_WITHDRAWN`·`DEPLOYMENT_EXPIRED`, 아니면 `None`."""
+        if self.withdrawn_at:
+            return DEPLOYMENT_WITHDRAWN
+        if self.expires_at and _when(self.expires_at) <= _when(now):
+            return DEPLOYMENT_EXPIRED
+        return None
+
+
+def read_standing(folder: Path) -> Standing | None:
+    """표식이 없거나 읽지 못하면 `None` — **모르는 것으로 막지 않는다** (표식 전에 설치된 폴더일 수 있다)."""
+    try:
+        raw = json.loads((folder / STANDING_NAME).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    return Standing(
+        deployment_ids=tuple(str(one) for one in raw.get("deployment_ids") or ()),
+        expires_at=str(raw["expires_at"]) if raw.get("expires_at") else None,
+        withdrawn_at=str(raw["withdrawn_at"]) if raw.get("withdrawn_at") else None,
+    )
+
+
+def write_standing(folder: Path, standing: Standing) -> None:
+    """쓰지 못하면 기록만 남긴다 — 다음 하트비트가 다시 쓴다 (`write_source`와 같은 결)."""
+    body = {
+        "deployment_ids": list(standing.deployment_ids),
+        "expires_at": standing.expires_at,
+        "withdrawn_at": standing.withdrawn_at,
+    }
+    try:
+        (folder / STANDING_NAME).write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8", newline="\n")
+    except OSError as e:
+        log.warning("배포 표식을 남기지 못했다 (%s): %s", folder, e)
+
+
+def _from_center(bot: InstalledBot) -> bool:
+    """**「Center 배포」로 설치된 것만** 목록이 정한다 — 수동 설치·출처 모름은 다루지 않는다 (ADR-0113 §3)."""
+    return bot.source == SOURCE_LABELS[CENTER]
+
+
+def deployment_finding(bot: InstalledBot, *, now: str | None = None) -> Finding | None:
+    """그 설치를 **지금** 띄워도 되나 — 배포가 정하는 사전 점검 하나 (ADR-0113 §4).
+
+    **시각이 정하므로 캐시하지 않는다** — 부르는 쪽이 다른 사전 점검과 따로 붙인다.
+    """
+    if not _from_center(bot):
+        return None
+    standing = read_standing(bot.folder)
+    if standing is None:
+        return None
+    code = standing.problem(now=now or now_iso())
+    if code == DEPLOYMENT_WITHDRAWN:
+        return Finding(
+            id=DEPLOYMENT_WITHDRAWN,
+            severity=SEVERITY_BLOCK,
+            message=f"Center의 배포 목록에 {bot.id} {bot.version}이 없습니다 — 배포나 승인이 철회되었습니다",
+            fix_hint="Center 운영자에게 다시 배포해 달라고 요청하세요",
+        )
+    if code == DEPLOYMENT_EXPIRED:
+        return Finding(
+            id=DEPLOYMENT_EXPIRED,
+            severity=SEVERITY_BLOCK,
+            message=f"{bot.id} {bot.version} 배포의 유효 기간이 지났습니다 ({standing.expires_at})",
+            fix_hint="Center 운영자에게 새로 배포해 달라고 요청하세요",
+        )
+    return None
 
 
 @dataclass
@@ -152,6 +258,61 @@ class Deployer:
             return None  # 같은 해시로 이미 설치돼 있다 — 조용히 지나간다
         return self._install(made, envelope)
 
+    def reconcile(self, envelopes: list[dict[str, Any]]) -> list[InstalledBot]:
+        """**Center가 답한** 목록과 설치를 맞춘다 → 이번에 새로 빠진 설치들 (C2 §검증 규칙, ADR-0113).
+
+        부르는 쪽은 하트비트가 **답했을 때만** 부른다 — 닿지 못한 주기에는 아무것도 바꾸지 않는다
+        (ADR-0007). 빈 목록도 목록이다(C4 — 활성 배포 **전체**다). 덮는 봉투는 **지금 설치를 허락할
+        것**(V1~V6)뿐이라 버린 서명 키(V2)·지난 기한도 여기서 빠진다.
+
+        **믿는 키가 없으면 맞추지 않는다** — 서명을 볼 수 없는데 맞추면 모든 설치가 빠진다.
+        """
+        if not self.keys:
+            return []
+        covering: dict[tuple[str, str], list[tuple[str, str | None]]] = {}
+        for raw in envelopes:
+            try:
+                envelope = Envelope.model_validate(raw)
+            except ValueError:
+                continue
+            if (
+                verify(envelope, keys=self.keys, expect_kind="deployment")
+                or verify_target(envelope, runner_kind=self.host_kind, runner_id=self.host_id)
+                or verify_time(envelope, now=self.clock(), check_not_before=True)
+            ):
+                continue
+            claim = envelope.payload
+            ends = claim.get("expires_at")
+            covering.setdefault((str(claim.get("bpm_process_id") or ""), str(claim.get("version") or "")), []).append(
+                (str(claim.get("deployment_id") or ""), str(ends) if ends else None)
+            )
+
+        withdrawn: list[InstalledBot] = []
+        for bot in installed(self.data_dir):
+            if not _from_center(bot):
+                continue
+            old = read_standing(bot.folder)
+            found = covering.get((bot.id, bot.version))
+            if found:
+                ends = [end for _, end in found]
+                new = Standing(
+                    deployment_ids=tuple(sorted({one for one, _ in found})),
+                    expires_at=None if any(end is None for end in ends) else max(ends, key=lambda e: _when(e or "")),
+                )
+            elif old is not None and old.withdrawn_at:
+                continue  # 이미 빠졌다고 적었다 — 빠진 때를 다시 쓰지 않는다
+            else:
+                new = Standing(
+                    deployment_ids=old.deployment_ids if old else (),
+                    expires_at=old.expires_at if old else None,
+                    withdrawn_at=self.clock(),
+                )
+                withdrawn.append(bot)
+                log.warning("배포 목록에서 %s %s이 빠졌다 — 실행 불가로 돌린다", bot.id, bot.version)
+            if new != old:
+                write_standing(bot.folder, new)
+        return withdrawn
+
     def _already(self, made: Outcome) -> bool:
         wanted = str(made.version)
         for one in installed(self.data_dir):
@@ -200,11 +361,18 @@ class Deployer:
 
 __all__ = [
     "APPLIED",
+    "DEPLOYMENT_EXPIRED",
+    "DEPLOYMENT_WITHDRAWN",
     "NOT_YET",
     "PENDING",
     "REJECTED",
     "SIGNATURE_NAME",
+    "STANDING_NAME",
     "Deployer",
     "Outcome",
+    "Standing",
+    "deployment_finding",
     "read_signature",
+    "read_standing",
+    "write_standing",
 ]
