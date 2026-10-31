@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { DataTable, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
+import { DataTable, ErrorBanner, StatusBadge, statusToken, type Column } from "@chaeksas/ui";
 import type { RunEvent } from "@chaeksas/api-types/c3-run-event";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
@@ -8,6 +8,7 @@ import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-reso
 import type { ExternalTaskInfo } from "@chaeksas/api-types/c15-external-task-info";
 import { CenterError, center, session } from "@/lib/center";
 import { FINISHED, TASK_STATE, type ResumeRow, duration, resumes, taskPlace, waitTotals } from "@/lib/summary";
+import { type NodeBar, type NodeRow, bars, llmSteps, timeline } from "@/lib/timeline";
 import { Shell } from "@/components/Shell";
 import { LABEL, seconds, time, where } from "../page";
 
@@ -93,39 +94,74 @@ const NODE_STATE: Record<string, string> = {
   skipped: "대기",
 };
 
-interface NodeRow {
-  node_id: string;
-  state: string;
-  started_at: string | null;
-  ended_at: string | null;
-  seconds: number | null;
-}
+/** C3 `human_*` 종류 → 표기 (「사람 개입」의 「무엇」). 모르는 종류는 그대로 보인다. */
+const HUMAN_KIND: Record<string, string> = {
+  human_requested: "요청",
+  human_answered: "답",
+  human_timeout: "시간 초과",
+  human_withdrawn: "회수",
+};
 
-/** 노드마다 **처음 시작**과 **마지막 상태**를 모은다 (반복·재시도는 한 줄로 접는다). */
-export function timeline(events: RunEvent[]): NodeRow[] {
-  const byNode = new Map<string, NodeRow>();
-  for (const event of events) {
-    if (event.kind !== "node_state" || !event.node_id) continue;
-    const state = String(event.data?.state ?? "");
-    const found = byNode.get(event.node_id) ?? {
-      node_id: event.node_id,
-      state,
-      started_at: null,
-      ended_at: null,
-      seconds: null,
-    };
-    if (state === "started" && !found.started_at) found.started_at = event.ts;
-    if (state !== "started") found.ended_at = event.ts;
-    found.state = state;
-    byNode.set(event.node_id, found);
-  }
-  return [...byNode.values()].map((row) => ({
-    ...row,
-    seconds:
-      row.started_at && row.ended_at
-        ? (new Date(row.ended_at).getTime() - new Date(row.started_at).getTime()) / 1000
-        : null,
-  }));
+/** C3 `human_requested.layer` → 표기. */
+const HUMAN_LAYER: Record<string, string> = {
+  approval: "결재",
+  confirmation: "확인",
+};
+
+/**
+ * 「노드 타임라인」의 막대 — 노드마다 한 줄 (CON-01).
+ *
+ * 자리는 `lib/timeline.ts`의 `bars()`가 비율로 주고 색은 `status_map`의 「실행·노드」 색이다.
+ * **줄 앞에 노드 id와 상태 글이 있다** — 색만으로 뜻을 전하지 않는다 (스타일 가이드 §7).
+ * 기다린 구간은 점선 테두리로 겹친다. 폭이 0인 막대(대기·재생만 찍힌 노드)는 눈금이다.
+ */
+function Bars({ rows }: { rows: NodeBar[] }) {
+  const pct = (value: number) => `${(value * 100).toFixed(2)}%`;
+  return (
+    <ul className="flex flex-col gap-1" aria-label="노드 타임라인 막대">
+      {rows.map((row) => {
+        const label = NODE_STATE[row.state] ?? row.state;
+        const token = statusToken("실행·노드", label) ?? "neutral";
+        return (
+          <li key={row.node_id} className="grid grid-cols-[minmax(0,16ch)_10ch_1fr] items-center gap-2 text-body-sm">
+            <span className="truncate font-mono" title={row.node_id}>
+              {row.node_id}
+            </span>
+            <span className="text-text-secondary">{label}</span>
+            <span
+              aria-hidden
+              className="relative h-3 overflow-hidden"
+              style={{ backgroundColor: "var(--color-bg-subtle)", borderRadius: "var(--radius-full)" }}
+            >
+              {row.bar ? (
+                <span
+                  className={`absolute inset-y-0 ${row.bar.width === 0 ? "w-px" : ""}`}
+                  style={{
+                    left: pct(row.bar.left),
+                    ...(row.bar.width === 0 ? {} : { width: pct(row.bar.width) }),
+                    backgroundColor: `var(--status-${token}-solid)`,
+                    borderRadius: row.bar.width === 0 ? undefined : "var(--radius-full)",
+                  }}
+                />
+              ) : null}
+              {row.waits.map((wait, index) => (
+                <span
+                  key={index}
+                  className="absolute inset-y-0 border border-dashed"
+                  style={{
+                    left: pct(wait.left),
+                    width: pct(wait.width),
+                    borderColor: "var(--status-waiting-solid)",
+                    backgroundColor: "var(--status-waiting-bg)",
+                  }}
+                />
+              ))}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export function counts(events: RunEvent[]): Record<string, number> {
@@ -163,6 +199,7 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
   }
 
   const nodes = timeline(events);
+  const llm = llmSteps(events);
   const seen = counts(events);
   const agent = events.filter((e) => e.kind === "agent");
   const human = events.filter((e) => e.kind.startsWith("human_"));
@@ -173,6 +210,12 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
   const waits = resumes(events);
   const totals = waitTotals(waits);
   const ended = FINISHED.has(info?.status ?? "");
+  // 도는 실행의 끝은 「지금」이다 — 서버 쪽에서 그릴 때의 시각 (화면은 새로 고침으로 다시 그린다).
+  const nodeBars = bars(nodes, waits, {
+    startedAt: info?.started_at,
+    finishedAt: info?.finished_at,
+    now: new Date().toISOString(),
+  });
 
   // 「외부 작업」 — 그 실행이 Center에 올린 일감 (C15). **어디서 멈췄는지**(기다림·일꾼이 쥠·다시
   // 나감)는 실행 기록에 없고 Center의 일감에만 있다. 못 읽어도 나머지 상세는 그린다.
@@ -225,9 +268,15 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
   const humanColumns: Array<Column<RunEvent>> = [
     { key: "seq", header: "순번", width: "8ch", align: "right" },
     { key: "ts", header: "시각", width: "14ch", cell: (row) => time(row.ts) },
-    { key: "kind", header: "무엇", width: "16ch" },
+    { key: "kind", header: "무엇", width: "12ch", cell: (row) => HUMAN_KIND[row.kind] ?? row.kind },
     { key: "node_id", header: "노드", mono: true, cell: (row) => row.node_id ?? "—" },
-    { key: "layer", header: "종류", width: "10ch", cell: (row) => String(row.data?.layer ?? "—") },
+    {
+      key: "layer",
+      header: "종류",
+      width: "10ch",
+      // `layer`는 요청 줄에만 있다 (C3) — 답·회수 줄은 「—」다.
+      cell: (row) => (row.data?.layer ? (HUMAN_LAYER[String(row.data.layer)] ?? String(row.data.layer)) : "—"),
+    },
   ];
 
   const uiColumns: Array<Column<RunEvent>> = [
@@ -405,6 +454,11 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
               <dd>{seconds(info.duration_s)}</dd>
               <dt className="text-text-muted">AI 태스크 단계</dt>
               <dd>{seen.agent ?? 0}</dd>
+              {/* `run_finished`가 센 것 — 도는 중에는 「—」다 (목록의 셈 열과 같다, C3). */}
+              <dt className="text-text-muted">재생</dt>
+              <dd>{info.replayed_tasks ?? "—"}</dd>
+              <dt className="text-text-muted">LLM 단계</dt>
+              <dd>{llm}</dd>
               <dt className="text-text-muted">UI 태스크</dt>
               <dd>{ui.length}</dd>
               <dt className="text-text-muted">결재·확인</dt>
@@ -437,7 +491,13 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
             {nodes.length === 0 ? (
               <Empty kind="노드" />
             ) : (
-              <DataTable columns={nodeColumns} rows={nodes} rowKey={(row) => row.node_id} caption="노드" />
+              <>
+                <Bars rows={nodeBars} />
+                {waits.length > 0 ? (
+                  <p className="text-body-sm text-text-muted">점선은 그 노드가 기다린 구간입니다 (아래 「이어 돈 기록」).</p>
+                ) : null}
+                <DataTable columns={nodeColumns} rows={nodes} rowKey={(row) => row.node_id} caption="노드" />
+              </>
             )}
           </Section>
 

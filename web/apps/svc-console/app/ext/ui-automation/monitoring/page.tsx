@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { FallbackSpread, SessionRow } from "@chaeksas/api-types/c9-session-page";
 import { runIdOfBusinessKey } from "@/lib/center-link";
+import { type AttemptRow, attemptRows } from "@/lib/ui-automation";
 import { APP_URL, CENTER_CONSOLE_URL, load, reason, svc } from "@/lib/page";
 import { RunLink } from "@/components/RunLink";
 import { Shell } from "@/components/Shell";
@@ -42,6 +43,36 @@ const NO_SESSIONS = {
   hint: "BPM 프로세스가 UI 태스크를 돌리거나 Tool UI 「셀렉터 시험」(TOL-05)에서 보고를 켜면 쌓입니다.",
 };
 const NO_FALLBACK = "아직 성공한 실행 기록이 없습니다.";
+
+/**
+ * 「시도한 로케이터」 표 (C8 `attempts`, 보낸 차례 그대로). **셀렉터가 보인다** — 관리자 토큰으로만
+ * 오는 길이라서다 (C9 §관리 콘솔이 읽는 길). 업무 값은 보고에 없다 (원칙 6).
+ */
+const ATTEMPT_COLUMNS: Array<Column<AttemptRow>> = [
+  { key: "semantic_key", header: "요소", mono: true },
+  { key: "locator_key", header: "로케이터", mono: true },
+  {
+    key: "succeeded",
+    header: "결과",
+    width: "10ch",
+    cell: (row) => <StatusBadge group="UI 세션" label={row.succeeded ? "성공" : "실패"} />,
+  },
+  {
+    key: "matched_count",
+    header: "맞은 수",
+    width: "8ch",
+    align: "right",
+    cell: (row) => (row.matched_count === null ? "—" : String(row.matched_count)),
+  },
+  {
+    key: "elapsed_ms",
+    header: "걸린 시간",
+    width: "10ch",
+    align: "right",
+    cell: (row) => (row.elapsed_ms === null ? "—" : `${row.elapsed_ms}ms`),
+  },
+  { key: "failure_reason", header: "실패 사유", mono: true, cell: (row) => row.failure_reason ?? "—" },
+];
 
 function Summary({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -215,6 +246,7 @@ export default async function UiAutomationMonitoringPage() {
                   const report = row.report ?? {};
                   const healed = (report.healed ?? []) as Array<Record<string, unknown>>;
                   const escalation = report.escalation as Record<string, unknown> | undefined;
+                  const attempts = attemptRows(report);
                   return (
                     <li key={`${report.business_key ?? index}`} className="border border-border-default p-3">
                       <details>
@@ -229,6 +261,20 @@ export default async function UiAutomationMonitoringPage() {
                               message={`전환됨 — ${String(escalation.semantic_key ?? "")}: ${String(escalation.reason ?? "")} (시도 ${String(escalation.attempts ?? "—")})`}
                             />
                           ) : null}
+                          <div>
+                            <h3 className="text-body font-semibold">시도한 로케이터</h3>
+                            {attempts.length > 0 ? (
+                              <DataTable
+                                columns={ATTEMPT_COLUMNS}
+                                rows={attempts}
+                                rowKey={(_row, at) => String(at)}
+                                density="compact"
+                                caption="보낸 차례대로"
+                              />
+                            ) : (
+                              <p className="mt-1 text-body-sm text-text-muted">시도한 로케이터가 없습니다.</p>
+                            )}
+                          </div>
                           {healed.length > 0 ? (
                             <div>
                               <h3 className="text-body font-semibold">자가 치유 내역</h3>
