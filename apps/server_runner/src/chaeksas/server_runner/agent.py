@@ -103,6 +103,8 @@ RUNNER_VERSION = build_info.package_version("chaeksas-server-runner")
 #: 지금 상태 (C12 `status` — 열린 문자열, 아는 값만 쓴다).
 STATUS_RUNNING = "running"
 STATUS_PAUSED = "paused"
+#: 재시작을 받아 도는 실행이 끝나기를 기다린다 (C12 `restart`, ADR-0117).
+STATUS_DRAINING = "draining"
 STATUS_ERROR = "error"
 
 #: 배포 대상 종류 (C2 §배포 대상 규칙) — 서버는 `"*"`도 받는다 (ADR-0046).
@@ -124,6 +126,8 @@ class Agent:
     next_in_s: int = 0
     #: 마지막으로 Center에게 들은 「일시 중지」 (CON-12).
     paused: bool = False
+    #: Center가 「재시작」을 말했다 (ADR-0117) — 한 번 들으면 **끝날 때까지 놓지 않는다**.
+    restarting: bool = False
     #: 사람이 고쳐야 하는 문제 — 여기 담기면 **다시 걸어도 같다** (키·묶기).
     blocked_by: str = ""
     #: 지난 주기에 올리지 못해 **들고 있는** 것 (ADR-0007 — 부르는 쪽이 다시 온다).
@@ -577,7 +581,7 @@ class Agent:
             self._remember_ack(self._take_one(job))
 
     def _take_one(self, job: JobDispatch) -> JobAck:
-        if self.paused:
+        if self.paused or self.restarting:
             # 일시 중지 중에는 **새 작업을 받지 않는다** (C12 `paused`).
             return JobAck(job_id=job.job_id, result="rejected", reason="paused")
         if self.free_slots() <= 0:
@@ -1148,7 +1152,7 @@ class Agent:
         waiting = [one.waiting for one in alive if one.waiting is not None]
         return ServerRunnerHeartbeatRequest(
             schema=1,
-            status=STATUS_PAUSED if self.paused else STATUS_RUNNING,
+            status=STATUS_DRAINING if self.restarting else STATUS_PAUSED if self.paused else STATUS_RUNNING,
             # **`running`은 기다리는 실행을 뺀 수**다 (C12) — `running[]` 길이와 같아야 한다
             # (어긋나면 Center가 422로 거부한다, `validate_heartbeat`).
             capacity=Capacity(max=self.settings.max_concurrency, running=len(running)),
@@ -1202,6 +1206,9 @@ class Agent:
         if answer.paused != self.paused:
             log.info("Center가 %s라고 한다", "일시 중지" if answer.paused else "다시 시작")
         self.paused = answer.paused
+        if answer.restart and not self.restarting:
+            log.info("Center가 재시작하라고 한다 — 새 작업을 받지 않고 도는 실행이 끝나면 끝낸다")
+            self.restarting = True
         if answer.admin_keys is not None:
             # **생략 = 그대로**다 (C4·C12) — `None`이면 들고 있던 것을 지우지 않는다.
             self.admin_keys = list(answer.admin_keys)
@@ -1217,6 +1224,23 @@ class Agent:
         # (거절은 다시 싣지 않는다, C4) 위임 결과는 **ack하지 않으면 다시 내려온다**. 거꾸로
         # 두면 멀쩡한 작업이 큐에서 사라진다.
         self.apply_delegations(list(answer.delegations))
+
+    def restart_ready(self) -> bool:
+        """재시작해도 되나 (ADR-0117) — 자리를 쥔 실행이 없고 **올릴 ack가 없다**.
+
+        기다리는 실행은 저장소에 있어 다시 뜨면 이어 간다 (ADR-0054). ack를 들고 끝나면 Center가
+        끝난 작업을 `accepted`로 들고 있게 되므로 한 주기를 더 기다린다.
+        """
+        if not self.restarting:
+            return False
+        self.collect()
+        return self._running_count() == 0 and not (
+            self.pending_acks
+            or self.pending_approval_acks
+            or self.pending_message_acks
+            or self.pending_delegation_acks
+            or self.pending_results
+        )
 
     # ── 연결 (로그는 바뀔 때만) ──
 
@@ -1238,7 +1262,7 @@ class Agent:
             return f"막혔다: {self.blocked_by}"
         if not self.registered:
             return "등록 전" if self.online else "등록 전 (Center에 닿지 못한다)"
-        where = "일시 중지" if self.paused else "동작"
+        where = "재시작 대기" if self.restarting else "일시 중지" if self.paused else "동작"
         link = "" if self.online else " (Center에 닿지 못한다)"
         return f"{self.server_runner_id} — {where}, 상한 {self.settings.max_concurrency}{link}"
 
@@ -1265,6 +1289,7 @@ __all__ = [
     "CORE_VERSION",
     "HOST_KIND",
     "RUNNER_VERSION",
+    "STATUS_DRAINING",
     "STATUS_ERROR",
     "STATUS_PAUSED",
     "STATUS_RUNNING",

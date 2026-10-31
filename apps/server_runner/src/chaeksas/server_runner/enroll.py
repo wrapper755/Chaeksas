@@ -8,6 +8,8 @@
 - **비밀 저장소가 없으면 요청하지 않는다** — 받은 키를 둘 곳이 없다. 평문 파일로 흘리지 않는다.
 - 보낸 요청은 데이터 폴더의 `enrollment.json`에 둔다 — 다시 떠도 같은 요청을 묻는다. 그 파일에는
   키도 봉함도 없다(요청 id·코드·상태뿐이다).
+- **들이기 비밀이 있으면** (`CHK_SERVER_RUNNER__JOIN_TOKEN`, ADR-0117) 등록 요청에 실어 그 자리에서
+  승인된 키를 받는다 — compose로 Center와 같이 띄운 실행기의 길이다. 사람이 승인하지 않는다.
 """
 
 from __future__ import annotations
@@ -79,10 +81,22 @@ def _secret(agent: Agent) -> str:
 def _ask(agent: Agent, secret: str) -> EnrollStatus:
     public = public_of(secret)
     request = ServerRunnerEnrollRequest(**agent.register_fields(), public_key=public)
-    found = agent.client.enroll(request)
+    join = agent.credentials.join_token()
+    try:
+        found = agent.client.enroll(request, join_token=join)
+    except CenterProblem as e:
+        if e.code == "join_token_invalid":
+            raise CenterProblem(
+                "들이기 비밀이 Center의 것과 다릅니다 — CHK_SERVER_RUNNER__JOIN_TOKEN과 "
+                "Center의 CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN을 같은 값으로 맞추세요"
+            ) from e
+        raise
     if found.code != request_code(public, found.enrollment_id):
         raise CenterProblem("Center가 준 요청 코드가 이 서버가 계산한 것과 다릅니다 — Center 주소를 확인하세요")
     _save(agent, found)
+    if found.state == "approved":
+        log.info("들이기 비밀로 바로 승인되었다")
+        return found
     log.info(
         "Center에 등록 요청을 보냈습니다. 요청 코드 %s — Center 콘솔 「서버 실행」에서 승인하세요 (%s까지)",
         found.code,
@@ -96,15 +110,17 @@ def step(agent: Agent) -> str | None:
     secret = _secret(agent)
     current = _load(agent)
     if current is None or current.state == "expired":
-        _ask(agent, secret)
-        return None
-    try:
-        found = agent.client.enroll_status(current.enrollment_id)
-    except CenterProblem as e:
-        if e.status == 404:
-            _save(agent, None)  # Center가 모르는 요청 — 다음 걸음에 새로 보낸다
+        found = _ask(agent, secret)
+        if found.state != "approved":
             return None
-        raise
+    else:
+        try:
+            found = agent.client.enroll_status(current.enrollment_id)
+        except CenterProblem as e:
+            if e.status == 404:
+                _save(agent, None)  # Center가 모르는 요청 — 다음 걸음에 새로 보낸다
+                return None
+            raise
     if found.state == "rejected":
         _save(agent, None)  # 다시 띄우면 새로 요청한다
         reason = f": {found.reason}" if found.reason else ""

@@ -22,6 +22,7 @@ export interface ServerRunnerInfo {
   queued?: number;
   readiness?: Readiness[];
   registered_at?: string | null;
+  restart_requested_at?: string | null;
   running?: RunningRun[];
   server_runner_id: string;
   status: string;

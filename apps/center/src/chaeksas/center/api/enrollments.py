@@ -23,6 +23,7 @@ from chaeksas.center.auth import Caller, require_admin, require_read
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store
 from chaeksas.contracts.enrollment import EnrollmentApproveRequest, EnrollmentRejectRequest
+from chaeksas.contracts.server_runner import JOIN_TOKEN_HEADER
 
 router = APIRouter(prefix="/api/v1", tags=["enrollments"])
 
@@ -49,7 +50,12 @@ def get_bot_ui_enroll(request: Request, enrollment_id: str) -> Any:
 @router.post("/server-runner/enroll", status_code=201)
 async def post_runner_enroll(request: Request) -> Any:
     return enrollments.request(
-        _store(request), kind="server_runner", body=await _json(request), remote_addr=_remote(request)
+        _store(request),
+        kind="server_runner",
+        body=await _json(request),
+        remote_addr=_remote(request),
+        join_token=request.headers.get(JOIN_TOKEN_HEADER),
+        expected_join_token=request.app.state.settings.server_runner_join_token,
     )
 
 

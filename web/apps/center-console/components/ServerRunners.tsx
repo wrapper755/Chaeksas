@@ -5,11 +5,11 @@ import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@c
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
-import { CENTER_PUBLIC_URL, CenterError, center } from "@/lib/center";
+import { CenterError, center } from "@/lib/center";
 import { queueReason, runnerStatus, serverDeployments } from "@/lib/summary";
-import { CenterAddress } from "@/components/CenterAddress";
 import { fullTime, time } from "@/app/bot-uis/page";
 import { CancelQueuedJob } from "@/app/server-runners/queue-cancel";
+import { RestartRunner } from "@/app/server-runners/actions-ui";
 
 /**
  * 서버 실행기 목록·승인 대기·대기열 — CON-02 「BPM 프로세스 현황」의 「서버」 탭이 그린다 (CON-12 「목록」).
@@ -114,6 +114,25 @@ export async function ServerRunners({ admin }: { admin: boolean }) {
           ? `${row.key_prefix}… ${row.key_expires_at ? `(${fullTime(row.key_expires_at)}까지)` : "(무기한)"}`
           : "—",
     },
+    // 「재시작...」 (ADR-0117) — 같이 배포된 실행기에서 사람이 할 일은 상태를 보고 재시작하는 것뿐이다.
+    ...(admin
+      ? [
+          {
+            key: "restart",
+            header: "",
+            width: "12ch",
+            cell: (row: ServerRunnerInfo) => (
+              <RestartRunner
+                runnerId={row.server_runner_id}
+                name={row.name}
+                online={row.online}
+                requested={Boolean(row.restart_requested_at)}
+                running={row.capacity.running}
+              />
+            ),
+          },
+        ]
+      : []),
   ];
 
   const queueColumns: Array<Column<JobInfo>> = [
@@ -164,12 +183,9 @@ export async function ServerRunners({ admin }: { admin: boolean }) {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-3">
-        <div>
-          <h2 className="text-h2 font-semibold">
-            서버 실행기{rows.length > 0 ? ` · ${online}/${rows.length} 온라인` : ""}
-          </h2>
-          <CenterAddress url={CENTER_PUBLIC_URL} who="서버 실행기" />
-        </div>
+        <h2 className="text-h2 font-semibold">
+          서버 실행기{rows.length > 0 ? ` · ${online}/${rows.length} 온라인` : ""}
+        </h2>
 
         {failure ? <ErrorBanner message={failure} /> : null}
 
@@ -178,7 +194,7 @@ export async function ServerRunners({ admin }: { admin: boolean }) {
         {rows.length === 0 && !failure ? (
           <EmptyState
             title="등록된 서버 실행기가 없습니다."
-            hint="서버 실행기에 Center 주소를 주고 띄우면 등록 요청을 보냅니다. 로그의 요청 코드와 같은 줄을 위의 「승인 대기」에서 승인하세요."
+            hint="Center와 함께 배포된 실행기는 뜨면 스스로 들어옵니다 — 들어오지 않으면 실행기 로그를 보세요."
           />
         ) : rows.length > 0 ? (
           <DataTable

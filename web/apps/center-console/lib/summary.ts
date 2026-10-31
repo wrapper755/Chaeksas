@@ -166,11 +166,13 @@ export function deployedPcs(
  */
 export function runnerStatus(row: ServerRunnerInfo): string {
   if (!row.online) return "오프라인";
+  // 재시작을 요청해 두었으면 실행기가 아직 듣지 못했어도 「재시작 중」이다 (ADR-0117).
+  if (row.restart_requested_at) return "재시작 중";
   if (row.paused) return "일시 중지";
   const table: Record<string, string> = {
     running: "동작",
     paused: "일시 중지",
-    draining: "정리 중",
+    draining: "재시작 중",
     error: "오류",
     offline: "오프라인",
   };
