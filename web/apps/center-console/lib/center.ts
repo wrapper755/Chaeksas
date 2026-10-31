@@ -331,6 +331,9 @@ export const center = {
    */
   enrollments: (type: "bot_ui" | "server_runner" | "studio" | "consumer") =>
     call<EnrollmentInfo[]>(`/api/v1/enrollments?type=${type}`),
+  /** 모든 상태의 등록 요청 — CON-16 「앱 로그」가 이력으로 읽는다 (C5 `state`는 쉼표로 여럿). */
+  enrollmentHistory: () =>
+    call<EnrollmentInfo[]>("/api/v1/enrollments?state=pending,approved,rejected,expired"),
   /** `topics`는 일꾼(`type: consumer`)만 — 요청한 토픽 안에서 줄인다. 비우면 요청한 것 그대로 (C5). */
   approveEnrollment: (id: string, name?: string, topics?: string[]) =>
     call<EnrollmentDecision>(`/api/v1/enrollments/${encodeURIComponent(id)}/approve`, {

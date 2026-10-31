@@ -336,7 +336,7 @@ export function queueReason(
 ): string {
   if (job.state_reason === "per_bot_limit") {
     const limit = perBotLimit(deployments, job.bpm_process_id);
-    return limit === null ? "BPM 프로세스별 상한" : `BPM 프로세스별 상한 ${limit}`;
+    return limit === null ? "프로세스별 상한" : `프로세스별 상한 ${limit}`;
   }
   if (job.state_reason) return job.state_reason;
   if (runners.length > 0 && runners.every((one) => one.paused)) return "일시 중지";

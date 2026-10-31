@@ -40,7 +40,7 @@ export function splitKeys<T extends Pick<CenterKeyInfo, "type">>(rows: T[]): { i
 
 /** 종류 표기 (CON-11 「종류」 열·필터). 필터의 고를 거리도 이 차례다. */
 export const TYPE_LABEL: Record<string, string> = {
-  bot_ui: "PC 실행기용",
+  bot_ui: "Bot용",
   studio: "Studio용",
   server_runner: "서버 실행기용",
   consumer: "일꾼용",

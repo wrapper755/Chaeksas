@@ -326,7 +326,7 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
               <dd>
                 <StatusBadge group="실행·노드" label={LABEL[info.status ?? ""] ?? info.status ?? "—"} />
               </dd>
-              <dt className="text-text-muted">BPM 프로세스</dt>
+              <dt className="text-text-muted">프로세스</dt>
               <dd>
                 {info.bpm_process_id ?? "—"}
                 {info.version ? ` @${info.version}` : ""}

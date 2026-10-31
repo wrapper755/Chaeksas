@@ -87,7 +87,7 @@ export default async function VirtualWorkerPage({ params }: { params: Promise<{ 
           <dl className="mb-6 grid grid-cols-2 gap-x-6 gap-y-1 text-body sm:grid-cols-4">
             <dt className="text-text-muted">id</dt>
             <dd className="font-mono">{info.id}</dd>
-            <dt className="text-text-muted">접수 BPM 프로세스</dt>
+            <dt className="text-text-muted">접수 프로세스</dt>
             <dd className="font-mono">{info.intake}</dd>
             <dt className="text-text-muted">감독자</dt>
             <dd>{(info.supervisors ?? []).join(", ") || "—"}</dd>
@@ -103,7 +103,7 @@ export default async function VirtualWorkerPage({ params }: { params: Promise<{ 
 
           <h2 className="mb-2 text-h2 font-semibold">최근 일괄</h2>
           {(info.batches ?? []).length === 0 ? (
-            <EmptyState title="아직 일괄이 없습니다. 접수 BPM 프로세스가 실행되면 여기 보입니다." />
+            <EmptyState title="아직 일괄이 없습니다. 접수 프로세스가 실행되면 여기 보입니다." />
           ) : (
             <DataTable columns={columns} rows={info.batches ?? []} rowKey={(row) => row.run_id} caption="최근 일괄" />
           )}

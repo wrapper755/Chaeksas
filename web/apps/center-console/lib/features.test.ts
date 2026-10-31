@@ -77,7 +77,7 @@ describe("featureRows", () => {
     expect(rows[0]).toMatchObject({ usable: "쓸 수 있음", todos: [], consumers: 1, usedBy: ["order"] });
   });
 
-  it("PC는 그 BPM 프로세스가 배포된 곳만 센다 — 받지 않은 PC에 없는 것은 할 일이 아니다", () => {
+  it("PC는 그 프로세스가 배포된 곳만 센다 — 받지 않은 PC에 없는 것은 할 일이 아니다", () => {
     const rows = featureRows(
       input({
         extensions: [UIA],

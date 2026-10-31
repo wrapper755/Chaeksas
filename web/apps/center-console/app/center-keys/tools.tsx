@@ -161,7 +161,7 @@ export function KeyMenu({ row }: { row: CenterKeyInfo }) {
       <ConfirmDialog
         open={asking === "revoke"}
         title="이 키를 폐기할까요?"
-        description="이 키를 쓰는 쪽의 요청이 바로 거부됩니다. 실행 중인 BPM 프로세스는 끝까지 돕니다. 되돌릴 수 없습니다."
+        description="이 키를 쓰는 쪽의 요청이 바로 거부됩니다. 실행 중인 프로세스는 끝까지 돕니다. 되돌릴 수 없습니다."
         confirmLabel="폐기"
         onConfirm={() => run(() => revokeCenterKey(row.key_id))}
         onCancel={() => setAsking(null)}

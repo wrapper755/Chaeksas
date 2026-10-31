@@ -40,8 +40,8 @@ export function BotUiActions({ botUiId, disabled }: { botUiId: string; disabled:
       {error ? <ErrorBanner message={error} /> : null}
       <ConfirmDialog
         open={asking}
-        title="이 PC 실행기를 비활성화할까요?"
-        description="이 PC에 새 작업·배포를 보내지 않습니다. 실행 중인 BPM 프로세스는 끝까지 돕니다."
+        title="이 Bot을 비활성화할까요?"
+        description="이 PC에 새 작업·배포를 보내지 않습니다. 실행 중인 프로세스는 끝까지 돕니다."
         confirmLabel="비활성화"
         onConfirm={() => apply(true)}
         onCancel={() => setAsking(false)}

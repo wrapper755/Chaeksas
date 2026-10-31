@@ -37,7 +37,7 @@ export async function Schedules({ place, botUis }: { place: Place; botUis: BotUi
   const zone = rows[0]?.timezone ?? "";
 
   const columns: Array<Column<ScheduleInfo>> = [
-    { key: "bpm_process_id", header: "BPM 프로세스", mono: true },
+    { key: "bpm_process_id", header: "프로세스", mono: true },
     { key: "version", header: "버전", width: "12ch", mono: true },
     {
       key: "target_id",
