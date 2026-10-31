@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { ElementRow, LocatorRow, PageDetail, StrategyStat } from "@chaeksas/api-types/c9-page-detail";
 import type { PageBriefRow } from "@chaeksas/api-types/c9-page-listing";
 import { APP_URL, load, reason, svc } from "@/lib/page";
+import { narrowToKey, warningKey } from "@/lib/ui-automation";
 import { Shell } from "@/components/Shell";
 
 /**
@@ -231,9 +233,31 @@ export default async function UiAutomationSelectorsPage({
           </p>
 
           {(detail.warnings ?? []).length > 0 ? (
-            <ErrorBanner
-              message={`최근 실패율이 높은 사용 중 로케이터 ${detail.warnings!.length}개 — 화면이 바뀌었을 수 있습니다: ${detail.warnings!.join(" / ")}`}
-            />
+            <div className="flex flex-col gap-1">
+              <ErrorBanner
+                message={`최근 실패율이 높은 사용 중 로케이터 ${detail.warnings!.length}개 — 화면이 바뀌었을 수 있습니다`}
+              />
+              {/* 「해당 요소로 이동」 — 시맨틱 키가 좁히기 링크다 (GET 주소, JS 없이 돈다). */}
+              <ul className="flex flex-col gap-1 text-body-sm">
+                {detail.warnings!.map((text) => {
+                  const key = warningKey(text);
+                  return (
+                    <li key={text}>
+                      {key ? (
+                        <>
+                          <Link className="font-mono underline" href={narrowToKey(HERE, detail.page_id, key)}>
+                            {key}
+                          </Link>
+                          {text.slice(key.length)}
+                        </>
+                      ) : (
+                        text
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           ) : null}
 
           <section>
