@@ -1,19 +1,15 @@
 """`chk-mock-apps` — 모의 앱을 띄우고, 외부 확장 정의 파일을 쓴다.
 
     chk-mock-apps list                         # 무엇이 있나, 기본 포트는 몇인가
-    chk-mock-apps serve                        # 전부 한 포트에 (/<app_id> 밑에, 웹 화면은 /site 밑에)
+    chk-mock-apps serve                        # 전부 한 포트에 (/<app_id> 밑에)
     chk-mock-apps serve --app erp              # 하나만, 그 앱의 기본 포트에
     chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
 
-`serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다 (관리 API·시나리오 제어·웹 화면).
+`serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다 (관리 API·시나리오 제어).
 **업무 호출은 그 포트로 받지 않는다** — `CHK_MOCK_APPS__CENTER__URL`을 주면 C11 앱 열셋이 **일꾼 하나**로
 Center에 붙어 일감을 가져간다 (C15, ADR-0102). 토큰이 없으면 들이기 요청을 보내고 요청 코드를 찍는다 —
 관리자가 CON-07 「일꾼 승인 대기」에서 승인하면 받아 `CHK_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)에 둔다.
 `CHK_MOCK_APPS__CENTER__TOKEN`이 있으면 그것을 쓴다.
-
-예제가 가리키는 **웹 화면**(공급사 포털·사내 신청서·공지)도 같은 포트의 `/site` 밑에 뜬다
-(`sites.py`) — M4 인수 시험이 쓰는 HTML과 **같은 것**이라 현장 PC에서 BUI-06으로 등록하고 BPM 프로세스가
-읽을 수 있다 (예: `http://127.0.0.1:8010/site/transactions`).
 """
 
 from __future__ import annotations
@@ -28,7 +24,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from chaeksas.mock_apps import catalog, sites
+from chaeksas.mock_apps import catalog
 from chaeksas.mock_apps.c11 import SHARED_PREFIX, Built, build
 from chaeksas.mock_apps.external import apps as external_apps
 from chaeksas.mock_apps.external import definitions
@@ -140,13 +136,12 @@ def _serve(app_id: str | None, port: int | None, host: str) -> int:
         start_consumer(built, center_url=center_url, folder=folder)
     else:
         _say(f"{SHARED_PREFIX}CENTER__URL이 없다 — 업무 호출을 받지 않는다 (관리 API·시나리오 제어만)")
-    _say(f"{'웹 화면':<13} → http://{host}:{chosen}{sites.MOUNT}/  (" + ", ".join(sorted(sites.PAGES)) + ")")
     uvicorn.run(root, host=host, port=chosen, log_level="info")
     return 0
 
 
 def all_in_one() -> tuple[FastAPI, list[Built]]:
-    """앱 전부 + 웹 화면을 한 앱에 붙인다. 두 번째 값은 C11 앱들 (일꾼이 맡을 것)."""
+    """앱 전부를 한 앱에 붙인다. 두 번째 값은 C11 앱들 (일꾼이 맡을 것)."""
     root = FastAPI(title="모의 앱 (전부)")
     built: list[Built] = []
     for one in catalog.ids():
@@ -154,11 +149,10 @@ def all_in_one() -> tuple[FastAPI, list[Built]]:
         root.mount(f"/{one}", app)
         if made is not None:
             built.append(made)
-    root.mount(sites.MOUNT, sites.site_app())
 
     @root.get("/")
     def index() -> dict[str, Any]:
-        return {"apps": list(catalog.ids()), "site": sites.MOUNT}
+        return {"apps": list(catalog.ids())}
 
     return root, built
 

@@ -1,7 +1,7 @@
 [project]
 name = "chaeksas-bot-ui"
 version = "0.1.0"
-description = "PC 실행기 — 트레이 GUI, BPM 프로세스 다운로드·실행, Worker 프로세스 감시 (확장의 도구는 Tool UI)"
+description = "PC 실행기 — 트레이 GUI, BPM 프로세스 다운로드·실행"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "chaeksas-contracts",

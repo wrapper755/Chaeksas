@@ -47,7 +47,6 @@ from chaeksas.bot_ui.extension_dialog import (  # noqa: E402
     USED_BY,
     VERSION,
     ExtensionsDialog,
-    detail_sections,
     state_of,
 )
 from chaeksas.bot_ui.main_window import EXTENSION_OFF, NO_EXTENSION, readiness_label  # noqa: E402
@@ -81,7 +80,7 @@ def builtin(**over: Any) -> dict[str, Any]:
         "name": "문서 인식",
         "publisher": "Chaeksas",
         "tier": "builtin",
-        "api": ">=1,<2",
+        "api": ">=2,<3",
         "service": {"protocol": "chk-c11", "base_url": "http://svc-ocr:8000"},
         "requires_keys": [{"purpose": "run", "extra_scopes": ["ocr_read"]}],
         "contributes": {
@@ -91,16 +90,6 @@ def builtin(**over: Any) -> dict[str, Any]:
                     "label": "문서 인식",
                     "executor": {"entry": "doc_ocr.client:OcrExecutor"},
                     "run_locations": ["pc"],
-                }
-            ],
-            "agent_environments": [{"domain": "desktop", "entry": "doc_ocr.client:Desktop"}],
-            "bot_ui.local_runtimes": [
-                {
-                    "id": "ocr-worker",
-                    "label": "OCR 프로세스",
-                    "entry": "doc_ocr.worker:serve",
-                    "default_port": 8891,
-                    "health": "/v1/health",
                 }
             ],
         },
@@ -154,9 +143,9 @@ def signed(definition: dict[str, Any]) -> tuple[dict[str, Any], list[AdminKey]]:
 
 
 def host_with(*definitions: dict[str, Any], off: tuple[str, ...] = ()) -> ExtensionHost:
-    host = ExtensionHost(api_version="1.0.0", off=off)
+    host = ExtensionHost(off=off)
     for one in definitions:
-        host.add_installed(json.dumps(one).encode("utf-8"), origin="test", root="chaeksas.ext.ui_automation")
+        host.add_installed(json.dumps(one).encode("utf-8"), origin="test", root="fake_extension")
     return host
 
 
@@ -205,7 +194,7 @@ def hold_directory(*items: dict[str, Any]) -> None:
 def make_agent(host: ExtensionHost, *, keys: list[AdminKey] | None = None, tmp_path: Path) -> Agent:
     """시험용 Agent — **확장을 다시 읽는 길도 시험의 것**이다.
 
-    기본 `load_extensions()`는 엔트리 포인트를 읽어 진짜 설치본(`ui-automation`)을 들여온다.
+    기본 `load_extensions()`는 엔트리 포인트를 읽어 진짜 설치본을 들여온다(지금은 없다).
     끄고 켜기는 확장을 다시 읽으므로 그 길을 바꿔 끼워야 손으로 지은 확장이 그대로 남는다.
     """
     definitions = [one.manifest.model_dump(mode="json", by_alias=True) for one in host.all()]
@@ -282,16 +271,13 @@ def test_the_list_draws_what_the_definition_says(tmp_path: Path) -> None:
 
 
 def test_used_by_counts_the_installed_bots(tmp_path: Path) -> None:
-    """「쓰는 BPM 프로세스」은 **설치된 BPM 프로세스가 말한 것**이다 (C1 `requires.extensions`).
-
-    그림에 확장을 적지 않는 길(`requires.domains`의 AI 환경)도 함께 센다 — 끄면 멈출 BPM 프로세스이다.
-    """
+    """「쓰는 BPM 프로세스」은 **설치된 BPM 프로세스가 말한 것**이다 (C1 `requires.extensions`)."""
     install_bot(extensions=[ExtensionNeed(id="doc-ocr", version=">=1,<2")])
     install_bot(bot_id="ops.scan", name="현장 스캔", domains=["desktop"])
     window = dialog(host_with(builtin()), tmp_path=tmp_path)
 
-    assert cell(window, 0, USED_BY).text() == "2"
-    assert cell(window, 0, USED_BY).toolTip() == "청구서 처리, 현장 스캔"
+    assert cell(window, 0, USED_BY).text() == "1"
+    assert cell(window, 0, USED_BY).toolTip() == "청구서 처리"
 
 
 def test_an_extension_nobody_uses_says_so(tmp_path: Path) -> None:
@@ -330,7 +316,7 @@ def test_an_extension_the_bots_need_but_this_pc_lacks_gets_a_row(tmp_path: Path)
 def test_a_definition_that_could_not_be_read_is_said_below_the_table(tmp_path: Path) -> None:
     """id를 모르니 줄을 만들 수 없다 — 그래도 **조용히 사라지지 않는다** (`LoadFailure`)."""
     host = host_with()
-    host.add_installed(b"{ this is not json", origin="entry_point:broken", root="chaeksas.ext.ui_automation")
+    host.add_installed(b"{ this is not json", origin="entry_point:broken", root="fake_extension")
     window = dialog(host, tmp_path=tmp_path)
 
     assert window.table.rowCount() == 0
@@ -358,22 +344,6 @@ def test_the_detail_says_the_server_part_and_who_watches_it(tmp_path: Path) -> N
 
     assert "http://svc-ocr:8000" in shown
     assert "CON-07" in shown
-
-
-def test_the_detail_lists_the_ai_environment() -> None:
-    """AI 환경은 C7 요약에 없다 (`domain`은 id가 아니다) — 상세는 정의를 직접 읽는다 (ADR-0037)."""
-    found = dict(detail_sections(_row(builtin())))
-    assert "AI 환경: desktop" in found["기여"]
-
-
-def test_the_detail_says_the_runtime_is_off_when_nobody_started_it(tmp_path: Path) -> None:
-    """**띄우지 않는다** — 감시자가 없으면 아직 띄우지 않은 것이다 (BUI-09와 같은 표기)."""
-    window = dialog(host_with(builtin()), tmp_path=tmp_path)
-    shown = window.detail.toPlainText()
-
-    assert "OCR 프로세스 (ocr-worker)" in shown
-    assert "꺼 둠 (필요할 때 시작)" in shown
-    assert "포트 8891" in shown
 
 
 def _row(definition: dict[str, Any], *, off: tuple[str, ...] = ()) -> Any:
@@ -405,7 +375,7 @@ def test_turning_off_saves_to_the_bot_ui_settings_right_away(tmp_path: Path, mon
 
 
 def test_turning_off_drops_every_contribution(tmp_path: Path, monkeypatch: Any) -> None:
-    """꺼지면 기여가 하나도 들어오지 않는다 — 태스크 종류·런타임·AI 환경이 한꺼번에 빠진다."""
+    """꺼지면 기여가 하나도 들어오지 않는다 — 태스크 종류·칸·점검이 한꺼번에 빠진다."""
     say_yes(monkeypatch)
     window = dialog(host_with(builtin()), tmp_path=tmp_path)
     host = window._agent.host
@@ -418,8 +388,6 @@ def test_turning_off_drops_every_contribution(tmp_path: Path, monkeypatch: Any) 
     after = window._agent.host
     assert after is not None
     assert after.task_type("ocr_task") is None
-    assert after.local_runtimes() == []
-    assert after.environment_owner("desktop") is None
 
 
 def test_turning_off_makes_the_next_heartbeat_say_it(tmp_path: Path, monkeypatch: Any) -> None:
@@ -582,21 +550,6 @@ def test_refresh_takes_the_definition_from_center(tmp_path: Path) -> None:
 # ─────────────────────────── 메뉴 (BUI-01·BUI-02) ───────────────────────────
 
 
-def with_utility() -> dict[str, Any]:
-    """도구를 기여하는 확장 — 끄면 「도구」 메뉴(바로가기)에서 사라져야 한다."""
-    return builtin(
-        contributes={
-            "tool_ui.tools": [
-                {
-                    "id": "scan-things",
-                    "label": "문서 담기",
-                    "entry": "doc_ocr.client:Scan",
-                }
-            ]
-        }
-    )
-
-
 def tools_actions(window: Any) -> list[Any]:
     from PySide6.QtWidgets import QMenu
 
@@ -636,34 +589,6 @@ def test_the_tools_menu_opens_this_window(tmp_path: Path) -> None:
     assert asked == [True], "창은 메인 창이 쥔다 — 트레이는 열어 달라고만 한다"
     tray.hide()
     tray.setParent(None)
-
-
-def test_turning_an_extension_off_takes_its_utility_out_of_the_menu(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
-    """「도구」는 기여에서 온다 — 꺼지면 **그 자리에서** 빠져야 한다 (다음에 열면 LookupError다)."""
-    from chaeksas.bot_ui import extension_dialog as module
-    from chaeksas.bot_ui.main_window import MainWindow
-
-    say_yes(monkeypatch)
-    agent = make_agent(host_with(with_utility()), tmp_path=tmp_path)
-    window = MainWindow(agent)
-    try:
-        assert "문서 담기..." in tools_menu(window)
-
-        def turn_it_off(dialog: module.ExtensionsDialog) -> int:
-            dialog.table.selectRow(0)
-            dialog.set_off(True)
-            return 0
-
-        monkeypatch.setattr(module.ExtensionsDialog, "exec", turn_it_off)
-        window.open_extensions()
-
-        texts = tools_menu(window)
-        assert "문서 담기..." not in texts
-        assert texts.count("확장...") == 1, "메뉴를 두 번 그리지 않는다"
-    finally:
-        window.close()
 
 
 # ─────────────────────────── BUI-04 「준비」 ───────────────────────────

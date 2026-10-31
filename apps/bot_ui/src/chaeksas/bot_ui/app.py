@@ -2,15 +2,13 @@
 
 **트레이가 없는 환경이면 메인 창을 띄운다** (U15). 종료 순서는 BUI-01 10번 그대로다:
 새 요청 막기 → 대기열의 Center 작업을 「거절 — PC 실행기 종료」로 보고 → 실행 프로세스 취소 →
-Worker 프로세스 종료 → 앱 종료.
+앱 종료.
 """
 
 from __future__ import annotations
 
-import argparse
 import logging
 import sys
-from pathlib import Path
 
 from PySide6.QtCore import QThread
 from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
@@ -19,7 +17,6 @@ from chaeksas.bot_ui import notices
 from chaeksas.bot_ui.agent import Agent, make_agent
 from chaeksas.bot_ui.heartbeat import HeartbeatWorker
 from chaeksas.bot_ui.main_window import WINDOW_TITLE, MainWindow
-from chaeksas.bot_ui.runtimes import RUNTIME_FLAG, check_start, serve
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
 from chaeksas.bot_ui.tray import Tray
 from chaeksas.contracts.bot_ui import JobAck
@@ -60,8 +57,6 @@ class BotUiApp:
             self.tray.open_window.connect(self.show_window)
             self.tray.messageClicked.connect(self.on_notice_clicked)
             self.tray.open_settings.connect(self.open_settings)
-            # 트레이에서 고른 도구도 **메인 창과 같은 길**로 연다 — 런타임을 띄우고 Tool UI를 띄운다.
-            self.tray.open_tool.connect(self.open_tool)
             self.tray.open_extensions.connect(self.open_extensions)
             self.tray.quit_requested.connect(self.quit)
             self.tray.show()
@@ -94,10 +89,6 @@ class BotUiApp:
         다시 만드는 자리가 거기다."""
         self.window.open_extensions()
         self.refresh()
-
-    def open_tool(self, extension_id: str, tool_id: str) -> None:
-        """트레이 「도구」가 고른 도구 (BUI-01) — **메인 창을 띄우지 않고** Tool UI를 띄운다 (ADR-0077)."""
-        self.window.open_tool(extension_id, tool_id)
 
     def refresh(self) -> None:
         """하트비트가 끝났다 — **GUI 스레드에서** 다시 그린다."""
@@ -212,8 +203,6 @@ class BotUiApp:
         # 3. 실행 프로세스 취소 — **협조 중지를 먼저** 준다 (돌던 BPM 프로세스가 `cancelled`를 남길 틈, ADR-0031).
         if agent.runner().running is not None:
             agent.runner().stop()
-        # 4. 로컬 런타임(Worker 프로세스 등) 종료 (ADR-0023 — 트리째).
-        agent.runtimes().stop_all()
 
     def run(self) -> int:
         self.start()
@@ -223,9 +212,6 @@ class BotUiApp:
 def main(argv: list[str] | None = None) -> int:
     """`chk-bot-ui` 진입점.
 
-    `--local-runtime <확장 id>:<런타임 id>`로 불리면 **화면 없이** 그 런타임으로 돈다 —
-    PC 실행기가 자기 실행 파일을 그렇게 자식으로 다시 띄운다 (C13·ADR-0024).
-
     `--selftest [파일]`은 **묶은 실행 파일의 빌드 검사**다 (ADR-0024) — 확장이 다 보이는지
     보고 끝난다. 화면을 띄우지 않는다.
     """
@@ -233,8 +219,6 @@ def main(argv: list[str] | None = None) -> int:
     args = list(argv if argv is not None else sys.argv)
     if SELFTEST_FLAG in args:
         return run_selftest(args)
-    if RUNTIME_FLAG in args:
-        return run_local_runtime(args)
     app = QApplication(args)
     app.setApplicationName("Chaeksas PC 실행기")
     # 창을 닫아도 트레이에서 돈다 (BUI-02).
@@ -248,26 +232,9 @@ def run_selftest(args: list[str]) -> int:
     **Qt를 띄우지 않는다.** 묶인 앱은 콘솔 없이 뜰 수 있어 결과를 파일로 받는다 — 빌드가
     그 파일을 읽고 하나라도 빠지면 **빌드를 실패시킨다** (빠진 확장은 실행 중에야 드러난다).
     """
-    from chaeksas.core.extensions import load_host  # noqa: PLC0415 — 평소 기동을 무겁게 하지 않는다
-    from chaeksas.core.selftest import main  # noqa: PLC0415
+    from chaeksas.core.selftest import main  # noqa: PLC0415 — 평소 기동을 무겁게 하지 않는다
 
-    # `--start-runtimes`면 기여된 로컬 런타임을 **평소와 같은 길로** 띄워 본다 (`runtimes.check_start`).
-    return main(args[1:], prog="chk-bot-ui", start_runtimes=lambda: check_start(load_host()))
+    return main(args[1:], prog="chk-bot-ui")
 
 
-def run_local_runtime(args: list[str]) -> int:
-    """자식으로 뜬 쪽 (C13 — `--local-runtime <확장>:<런타임> --port <p> --token-dir <폴더>`).
-
-    **Qt를 띄우지 않는다.** 인자를 직접 읽는 것은 Qt가 모르는 깃발이기 때문이다.
-    """
-    parser = argparse.ArgumentParser(prog="chk-bot-ui", add_help=False)
-    parser.add_argument(RUNTIME_FLAG, dest="spec", required=True)
-    parser.add_argument("--port", type=int, required=True)
-    parser.add_argument("--token-dir", dest="token_dir", default=None)
-    found, _ = parser.parse_known_args(args[1:])
-    where = Path(found.token_dir) if found.token_dir else None
-    log.info("로컬 런타임으로 돈다: %s (포트 %s)", found.spec, found.port)
-    return serve(found.spec, port=found.port, token_dir=where)
-
-
-__all__ = ["SHUTDOWN_WAIT_S", "BotUiApp", "main", "run_local_runtime"]
+__all__ = ["SHUTDOWN_WAIT_S", "BotUiApp", "main"]

@@ -34,7 +34,7 @@ __all__ = [  # AdminKey는 C2가 소유한다 — 여기서는 다시 내보내�
 
 # 알려진 값 (모두 열린 문자열).
 KNOWN_BOT_UI_STATUSES = frozenset(
-    {"idle", "running", "waiting_approval", "waiting_confirmation", "selector_registration", "error"}
+    {"idle", "running", "waiting_approval", "waiting_confirmation", "error"}
 )
 KNOWN_RUN_STATES = frozenset({"running", "waiting_approval", "waiting_confirmation"})
 #: 실행이 시작된 까닭. **`delegation`은 PC 위임으로 받은 작업**이다
@@ -42,8 +42,6 @@ KNOWN_RUN_STATES = frozenset({"running", "waiting_approval", "waiting_confirmati
 KNOWN_SOURCES = frozenset(
     {"job", "manual", "watch", "schedule", "message", "delegation"}
 )
-KNOWN_WORKER_STATES = frozenset({"running", "off", "restarting", "stopped"})
-KNOWN_WORKER_SESSIONS = frozenset({"idle", "bot", "studio", "selector_registration"})
 KNOWN_JOB_ACK_RESULTS = frozenset({"queued", "started", "rejected", "expired", "cancelled", "cancel_refused"})
 KNOWN_JOB_ACK_REASONS = frozenset(
     {"queue_full", "no_deployment", "not_ready", "bot_ui_shutdown", "server_location",
@@ -67,7 +65,6 @@ class BuildStamp(ContractModel):
 class Versions(ContractModel):
     bot_ui: str
     core: str
-    worker: str | None = None
     build: BuildStamp | None = None
 
 
@@ -158,16 +155,6 @@ class Queue(ContractModel):
     items: list[QueueItem] = Field(default_factory=list)
 
 
-class WorkerState(ContractModel):
-    """Worker 프로세스 상태. `off`는 "필요할 때 시작, 아직 안 띄움"."""
-
-    state: str  # 열린 문자열 (KNOWN_WORKER_STATES)
-    version: str | None = None
-    restarts: int = 0
-    session: str | None = None  # 열린 문자열 (KNOWN_WORKER_SESSIONS)
-    reserved_for: str | None = None  # C10 예약 run_id
-
-
 class Readiness(ContractModel):
     """설치된 BPM 프로세스 하나의 준비 상태."""
 
@@ -216,7 +203,6 @@ class HeartbeatRequest(SchemaVersioned):
     status: str  # 열린 문자열 (KNOWN_BOT_UI_STATUSES)
     current_run: CurrentRun | None  # 필수 필드이지만 비어 있을 수 있다 (실행 자리 없음)
     queue: Queue
-    worker: WorkerState
     versions: Versions | None = None  # 바뀌었을 때만
     readiness: list[Readiness] = Field(default_factory=list)
     job_acks: list[JobAck] = Field(default_factory=list)

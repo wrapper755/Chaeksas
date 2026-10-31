@@ -1,9 +1,8 @@
-"""Studio의 호출 토큰 (C15 「정한 것」) — Worker가 Studio를 대신해 외부 작업을 올릴 때 쓴다.
+"""Studio의 호출 토큰 (C15 「정한 것」) — 확장 코드가 Studio를 대신해 외부 작업을 올릴 때 쓴다.
 
-UI 태스크 편집기(STU-13)의 「이 스텝까지 시험」·시험 실행의 UI 태스크는 Worker를 빌려 쓴다. Worker는
-계획·치유·보고를 Center에 올리는데(C8), 그때 쓰는 것이 이 토큰이다. **Studio가 제 Center API 키로
-청한다**(24시간) — Worker에게 Studio 키 자체를 넘기지 않는다. 받은 토큰은 Studio와 같은 신원이라
-`test_…` 실행만 올린다 (C15 §올리기).
+확장은 `ctx.secret("call_token")`으로 이것을 받는다. **Studio가 제 Center API 키로 청한다**(24시간)
+— 확장에게 Studio 키 자체를 넘기지 않는다. 받은 토큰은 Studio와 같은 신원이라 `test_…` 실행만
+올린다 (C15 §올리기).
 """
 
 from __future__ import annotations

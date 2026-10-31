@@ -5,7 +5,7 @@
 | 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) — 2026-10-29부터 **일꾼**이다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)): 앱은 C15로 Center에서 일감을 가져가고 HTTP로 업무 호출을 받지 않는다 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서비스 앱(일꾼) → Center (C15 가져가기·끝내기). 업무 호출의 모양은 부르는 쪽이 C15로 Center에 올린 것이다 |
-| 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py`, 받는 쪽 뼈대 `packages/service_kit/` (`service_kit.consumer` — 가져가기 루프·들이기), **부르는 쪽 `chaeksas.core.services`** (`CenterServiceCaller` — 멱등 칸·재시도·C3 `service_call` 기록). 보기: 진짜 앱은 `extensions/ui_automation/.../service/app.py`, 업무 예제가 부르는 **모의 앱 열셋**은 [`samples/`](../../samples/README.md) |
+| 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py`, 받는 쪽 뼈대 `packages/service_kit/` (`service_kit.consumer` — 가져가기 루프·들이기), **부르는 쪽 `chaeksas.core.services`** (`CenterServiceCaller` — 멱등 칸·재시도·C3 `service_call` 기록). 보기: 업무 예제가 부르는 **모의 앱 열셋**은 [`samples/`](../../samples/README.md) |
 | JSON Schema | [`c11-service-app-manifest.json`](../../packages/contracts/schemas/c11-service-app-manifest.json) · [`c11-op-request.json`](../../packages/contracts/schemas/c11-op-request.json) · [`c11-op-response.json`](../../packages/contracts/schemas/c11-op-response.json) · [`c11-health-response.json`](../../packages/contracts/schemas/c11-health-response.json) |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0015](../decisions/0015-run-location.md), [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 관련 화면 | STU-14, SVC-00·01·03, CON-07 |
@@ -44,7 +44,7 @@
 | 필드 | 타입 | 필수 | 뜻 |
 | --- | --- | --- | --- |
 | `schema` | int | ✓ | 1 |
-| `app_id` | str | ✓ | 예: `ui-automation`, `tax-invoice` |
+| `app_id` | str | ✓ | 예: `tax-invoice` |
 | `name` | str | ✓ | 표시 이름 |
 | `version` | str | ✓ | SemVer |
 | `category` | `business` \| `system` | ✓ | 업무용 / 시스템용 |
@@ -55,7 +55,7 @@
 
 | ResourceCatalog 필드 | 타입 | 뜻 |
 | --- | --- | --- |
-| `type` | str | 자원 종류 (예: `ui_page`). 확장이 정한다 |
+| `type` | str | 자원 종류 (예: `seal_specimen`). 확장이 정한다 |
 | `catalog_url` | str | **쓰지 않는다** (읽고 무시한다 — 카탈로그는 일꾼이 Center에 올린다, C15 §카탈로그). 옛 앱이 적어 보내도 거부하지 않는다 |
 | `label` | str | 화면에 보일 이름 (CON-07 탭 제목). 없으면 `type`을 쓴다 |
 
@@ -70,7 +70,7 @@
 | `input_schema` / `output_schema` | JSON Schema | STU-14 입력·출력 표의 원본 |
 | `timeout_s` | int | 기본 60 |
 | `server_ok` | bool | 서버 실행기에서 불러도 되는가 (기본 true. 현장 PC에서만 의미 있는 작업은 false) |
-| `required_scopes` | str[] | 이 작업을 부르려면 부르는 쪽에 켜져 있어야 하는 **추가 권한**. 비어 있으면 「불러도 되나」(C15)를 지난 누구나. 예: UI 자동화 앱의 `registry_*`는 `registry_write`를 요구한다 (C9 — CON-03 「셀렉터 등록」을 켠 PC) |
+| `required_scopes` | str[] | 이 작업을 부르려면 부르는 쪽에 켜져 있어야 하는 **추가 권한**. 비어 있으면 「불러도 되나」(C15)를 지난 누구나. **지금 Center에는 추가 권한을 켜 줄 길이 없다** — 적은 작업은 아무도 올리지 못하고 C15 올리기가 403 `scope_missing`이다 ([ADR-0114](../decisions/0114-remove-ui-automation.md)) |
 
 **추가 권한은 작업이 선언하고 Center가 건다** (C15 §올리기) — 일꾼·작업 함수는 부른 쪽을 들여다보지 않는다. 없으면 403 `scope_missing`.
 
@@ -83,8 +83,8 @@
 | `schema` | 1 | |
 | `mode` | 수행 모드. **받는 쪽은 바꾸지 않는다** (원칙 7 — 폴백은 위 `fallback`뿐) | `mode` |
 | `run_id`·`node_id`·`node_instance`·`attempt`·`call_seq` | 멱등 칸 | `idempotency` |
-| `caller` | `{type, host, bpm_process_id, version}`. `bpm_process_id`는 **패키지 id**다 (C3, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)). `type`은 열린 문자열 — `bot_ui` `server_runner` `studio` `worker` `tool_ui` | `caller` |
-| `business_key` | UI 자동화처럼 세션을 잇는 키 (C10) | `business_key` |
+| `caller` | `{type, host, bpm_process_id, version}`. `bpm_process_id`는 **패키지 id**다 (C3, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)). `type`은 열린 문자열 — `bot_ui` `server_runner` `studio` | `caller` |
+| `business_key` | 여러 호출을 한 업무로 잇는 키 (선택, 부르는 쪽이 정한다) | `business_key` |
 | `input` | `input_schema`를 따름 | `input` |
 | `origin` | `run` \| `test` — 시험 일감이면 앱이 시험 쪽으로 보낼지 정한다 (ADR-0102 §6) | `origin` |
 
@@ -177,6 +177,7 @@ AdminStatus:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | 칸은 그대로다. `caller.type`의 아는 값에서 `worker`·`tool_ui`를 뺐고, `required_scopes`를 켜 줄 길(PC의 「셀렉터 등록」)이 없어졌다고 적었다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-29 | 1 | **앱이 일꾼이 된다** — `POST /v1/ops`·`/manifest`·앱 안의 키(`/v1/keys/self`·`/center/v1/keys`·`/center/v1/trust`)·관리 API의 키 발급을 걷고 C15 가져가기로 같은 작업을 수행한다. 폴백은 시험 일감일 때만, 추가 권한은 Center가 건다, 카탈로그는 일꾼이 올린다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | §Center가 발급하는 키 — `CENTER__URL`, `GET /center/v1/trust`, `POST /center/v1/keys`(C2 봉투 `service_key`, 해시만), 키 레코드 `issued_by`·`center_key_id`·`issued_for`. 새 경로·선택 칸이라 옛 부르는 쪽은 그대로다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-03 | 1 | 관리 API(`/admin/v1/status`·`keys`·`usage`)의 경로·모델·권한을 적었다 — ADR-0017이 경로만 말하고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |

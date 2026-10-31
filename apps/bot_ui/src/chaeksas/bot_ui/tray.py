@@ -49,7 +49,7 @@ def status_color(status: str, *, current_theme: str = theme.THEME_LIGHT) -> str:
         found = theme.status_color(group, label, theme=current_theme)
         if found:
             return found
-    if status.startswith("실행 중") or status.startswith("셀렉터 등록"):
+    if status.startswith("실행 중"):
         return theme.status_color("BPM 프로세스", "실행 중", theme=current_theme) or "#000000"
     if status.endswith("대기") or status.startswith("대기"):
         return theme.status_color("BPM 프로세스", "대기", theme=current_theme) or "#000000"
@@ -77,16 +77,13 @@ def tray_icon(status: str, *, current_theme: str = theme.THEME_LIGHT) -> QIcon:
 class Tray(QSystemTrayIcon):
     """트레이 아이콘과 메뉴 (BUI-01).
 
-    메뉴의 **비활성 줄은 정보**다 (상태·실행 중·대기열·Worker·Center). 누를 수 있는 것은
+    메뉴의 **비활성 줄은 정보**다 (상태·실행 중·대기열·Center). 누를 수 있는 것은
     「창 열기」·「도구」·「설정...」·「종료」뿐이다 — 나머지는 M3~M5에 붙는다.
     """
 
     open_window = Signal()
     open_settings = Signal()
     open_extensions = Signal()
-    #: 확장이 기여한 도구를 열어 달라 — `(확장 id, 도구 id)`. 메인 창이 런타임을 띄우고 **Tool UI를
-    #: 띄운다** (ADR-0077 — 창은 Tool UI가 쥔다).
-    open_tool = Signal(str, str)
     quit_requested = Signal()
 
     def __init__(
@@ -138,17 +135,6 @@ class Tray(QSystemTrayIcon):
             nxt = waiting[0].bpm_process_id
             self._info(f"대기열 {len(waiting)}건 — 다음: {nxt}")
 
-        worker = agent.settings.runtime("worker")
-        state = agent.worker_state()
-        if worker is not None:
-            label = {
-                "running": f"실행 중 (포트 {worker.port})",
-                "restarting": "다시 띄우는 중",
-                "stopped": "멈춤",
-                "off": "꺼 둠 (필요할 때 시작)",
-            }.get(state.state, state.state)
-            self._info(f"Worker: {label}")
-
         last = agent.last_beat_at
         self._info(f"Center: 연결됨 (마지막 {last[11:19]})" if last else "Center: 연결 끊김")
 
@@ -156,19 +142,6 @@ class Tray(QSystemTrayIcon):
         self._menu.addAction("창 열기", self.open_window.emit)
 
         tools = self._menu.addMenu("도구")
-        # 도구는 **확장이 기여하고 Tool UI가 띄운다** (ADR-0018·0077) — 트레이는 바로가기뿐이다.
-        # 이름은 기여가 적은 `label`이고(id가 아니다), **확장 이름순**이다 (BUI-01).
-        found_tools = agent.host.tools() if agent.host is not None else []
-        for found in sorted(found_tools, key=lambda c: (c.extension_id, c.value.label)):
-            entry = tools.addAction(f"{found.value.label}...")
-            entry.setToolTip(f"{found.extension_id} 확장 — Tool UI로 엽니다")
-            entry.triggered.connect(
-                lambda _=False, e=found.extension_id, t=found.value.id: self.open_tool.emit(e, t)
-            )
-        if not found_tools:
-            empty = tools.addAction("확장이 더한 도구가 없습니다")
-            empty.setEnabled(False)
-        tools.addSeparator()
         # 창은 **메인 창이 쥔다** (BUI-02 [K] — 같은 것을 두 번 열지 않는 자리가 거기다).
         tools.addAction("확장...", self.open_extensions.emit)
 

@@ -1,7 +1,7 @@
 """확장 호스트 — 확장을 찾아 기여를 등록하고, 켜지 않을 것은 사유와 함께 남긴다 (ADR-0018).
 
-M1 완료 기준의 한 줄을 이 파일이 지킨다: "빈 내장 확장 하나가 Studio·PC 실행기에 태스크 종류·
-유틸리티를 기여함". 플랫폼이 특정 확장을 import하지 않는 것은 `test_import_direction.py`가 본다.
+저장소에는 확장이 하나도 없다 (ADR-0114) — 내장 확장 자리는 시험용 가짜(`tests/fake_extension.py`)가
+맡는다. 플랫폼이 특정 확장을 import하지 않는 것은 `test_import_direction.py`가 본다.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import logging
 from importlib.metadata import entry_points
 from typing import Any
 
+import fake_extension
 import pytest
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -20,17 +21,14 @@ from chaeksas.core import ExtensionHost, load_host, summarize
 from chaeksas.extension_api import (
     API_VERSION,
     EntryError,
-    LocalRuntimeEntry,
     PreflightCheck,
     TaskEditor,
     TaskExecutor,
-    ToolUiTool,
 )
-from chaeksas.extension_api.entry import module_root
 
-#: 저장소에 있는 하나뿐인 내장 확장. **id로만 부른다** (플랫폼 코드는 import하지 않는다).
-BUILTIN_ID = "ui-automation"
-BUILTIN_ROOT = module_root(BUILTIN_ID)
+#: 시험용 내장 확장 (`tests/fake_extension.py`). **id로만 부른다**.
+BUILTIN_ID = fake_extension.EXTENSION_ID
+BUILTIN_ROOT = fake_extension.ROOT
 NOW = "2026-10-02T09:00:00+09:00"
 
 
@@ -52,33 +50,30 @@ class Secrets:
 
 @pytest.fixture
 def host() -> ExtensionHost:
-    return load_host()
+    found = load_host()
+    found.add_installed(fake_extension.definition_bytes(), origin=f"entry_point:{BUILTIN_ID}", root=BUILTIN_ROOT)
+    return found
 
 
 # ─────────────────────────── 찾기 ───────────────────────────
 
 
-def test_entry_points_find_the_builtin_extension(host: ExtensionHost) -> None:
-    """설치된 확장을 엔트리 포인트(`chaeksas.extensions`)로 찾고, 패키지 안의 정의를 읽는다."""
+def test_no_extension_is_installed_in_this_repository() -> None:
+    """**지금은 확장이 하나도 없다** (ADR-0114). 엔트리 포인트로 찾으면 빈 목록이고 실패도 없다."""
+    found = load_host()
+    assert found.all() == [] and found.failures == []
+
+
+def test_a_builtin_is_read_and_enabled(host: ExtensionHost) -> None:
     found = host.get(BUILTIN_ID)
     assert found is not None, f"확장을 찾지 못했다: {summarize(host)}"
     assert found.enabled, [str(p) for p in found.problems]
-    assert found.origin == f"entry_point:{BUILTIN_ID}"
     assert found.root == BUILTIN_ROOT
     assert found.definition_hash.startswith("sha256:")
     assert host.failures == []
-
-
-def test_builtin_contributes_task_type_and_tool(host: ExtensionHost) -> None:
-    """M1 기준 — Studio에 태스크 종류, Tool UI에 도구가 더해진다 (ADR-0077)."""
     task_types = {c.value.id: c for c in host.task_types()}
-    assert "ui_task" in task_types
-    assert task_types["ui_task"].extension_id == BUILTIN_ID
-    assert task_types["ui_task"].value.run_locations == ["pc"], "UI 태스크는 PC에서만 돈다 (ADR-0015)"
-
-    tools = {c.value.id: c.value for c in host.tools()}
-    assert "selector-registration" in tools
-    assert tools["selector-registration"].needs_runtime == "worker"
+    assert task_types["fake_task"].extension_id == BUILTIN_ID
+    assert task_types["fake_task"].value.run_locations == ["pc"]
 
 
 def test_the_run_location_table_only_holds_task_types_that_are_turned_on(host: ExtensionHost) -> None:
@@ -87,36 +82,20 @@ def test_the_run_location_table_only_holds_task_types_that_are_turned_on(host: E
     그래서 받는 쪽은 **표에 없는 종류를 막지 않는다** — 막으면 그 확장을 끈 PC에서 올바른
     그림이 「서버에서 안 된다」가 된다.
     """
-    assert host.task_type_locations() == {"ui_task": ["pc"]}
+    assert host.task_type_locations() == {"fake_task": ["pc"]}
 
     off = ExtensionHost(off=[BUILTIN_ID])
-    off.load_entry_points()
+    off.add_installed(fake_extension.definition_bytes(), origin="test", root=BUILTIN_ROOT)
     assert off.task_type_locations() == {}, "꺼 둔 확장의 태스크 종류가 표에 남았다"
 
 
-def test_builtin_declares_the_worker_as_a_local_runtime(host: ExtensionHost) -> None:
-    """Worker는 플랫폼의 구성요소가 아니라 확장이 선언한 로컬 런타임이다 (ADR-0018)."""
-    runtimes = {c.value.id: c.value for c in host.local_runtimes()}
-    # schema 2 — 명령줄이 아니라 진입점이다 (PC 실행기가 자기 실행 파일을 다시 띄운다, ADR-0024).
-    assert runtimes["worker"].entry == "ui_automation.worker:serve"
-    assert runtimes["worker"].default_port == 8899
-    assert runtimes["worker"].port_setting == "CHK_WORKER__LOCAL_API__PORT"
-    assert runtimes["worker"].start == "on_demand", "항상 띄우지 않는다 (필요할 때만)"
-
-
 def test_other_contribution_points(host: ExtensionHost) -> None:
-    assert [c.value.resource_type for c in host.resource_views()] == ["ui_page"]
-    assert [c.value.type for c in host.resources()] == ["ui_page"]
-    # 화면 설계서가 적은 셋이다 (UIA-01~03). 콘솔은 이 기여를 읽어 탐색 줄을 만든다 (ADR-0042).
-    assert [c.value.id for c in host.console_pages()] == ["overview", "selectors", "monitoring"]
-    assert [c.value.id for c in host.panels("bot_ui.runtimes")] == ["recent-ui-sessions"]
-    assert [c.value.id for c in host.preflight()] == ["pages-registered"]
-    # 등록 담당자 키 칸은 없다 — Center가 이 PC PC 실행기에 내려 주고 호스트가 준다 (ADR-0094 §6).
-    assert host.configuration(scope="tool_ui") == []
+    assert [c.value.resource_type for c in host.resource_views()] == ["fake_form"]
+    assert host.resources() == []
+    assert [c.value.id for c in host.console_pages()] == ["overview"]
+    assert [c.value.id for c in host.preflight()] == ["always-ok"]
     assert host.configuration(scope="bot_ui") == []
-    assert host.configuration(scope="server_runner") == []
-    # 서버 부분이 C11 서비스 앱이므로 어댑터가 없다 (작업은 앱의 /manifest에서 온다).
-    found = host.get("ui-automation")
+    found = host.get(BUILTIN_ID)
     assert found is not None and found.manifest.adapter is None
 
 
@@ -126,10 +105,10 @@ def test_states_report_what_center_asks_for(host: ExtensionHost) -> None:
     `off`는 **사람이 껐다**이고 `enabled=false`는 **흠이 있다**다 — Center가 「꺼짐」과
     「호환 안 됨」을 가르는 자리다 (ADR-0043).
     """
-    state = host.states()[0]
+    state = next(one for one in host.states() if one.id == BUILTIN_ID)
     assert state.id == BUILTIN_ID
     assert state.enabled is True
-    assert state.definition_hash == host.states()[0].definition_hash
+    assert str(state.definition_hash).startswith("sha256:")
     assert set(state.to_json_dict()) == {"id", "version", "definition_hash", "enabled", "off"}
     assert state.off is False
 
@@ -163,29 +142,32 @@ def test_pyinstaller_hook_is_shipped_with_core() -> None:
 # ───────────────────── 빌드 검사 (`--selftest`, ADR-0024) ─────────────────────
 
 
-def test_selftest_sees_the_installed_extension() -> None:
-    """묶기 전 환경에서도 **같은 검사**가 돈다 (`core.selftest`).
-
-    이것이 보는 것은 ADR-0024가 적어 둔 세 가지 빠짐이다 — 메타데이터(엔트리 포인트가 빈
-    목록)·데이터 파일·서브모듈(`entry` 해석에서 터진다). **인스턴스를 만들지 않고 풀기만**
-    하므로 Qt 없이 돈다.
-    """
+def test_selftest_passes_with_no_extension() -> None:
+    """**지금은 묶을 확장이 없다** (ADR-0114) — `--want`를 주지 않으면 확장이 없어도 통과한다."""
     from chaeksas.core.selftest import check  # noqa: PLC0415
 
     found = check()
     assert found["all_ok"], found
-    assert BUILTIN_ID in " ".join(found["steps"]["entry_points"]["value"]["enabled"])
+    assert found["steps"]["entry_points"]["value"]["enabled"] == []
+
+
+def test_selftest_sees_an_installed_extension(host: ExtensionHost) -> None:
+    """같은 검사가 **확장이 있을 때**도 돈다 — 인스턴스를 만들지 않고 `entry`를 풀기만 한다."""
+    from chaeksas.core.selftest import check  # noqa: PLC0415
+
+    found = check(host=host, want=[BUILTIN_ID])
+    assert found["all_ok"], found
     assert "풀린다" in str(found["steps"]["entries"]["value"])
 
 
-def test_selftest_fails_when_a_wanted_extension_is_missing() -> None:
+def test_selftest_fails_when_a_wanted_extension_is_missing(host: ExtensionHost) -> None:
     """**빌드가 멈춰야 한다** — 묶음에 확장이 빠지면 실행 중에야 드러난다.
 
     `--want`는 빌드하는 쪽이 「무엇이 들어가야 하는가」를 못 박는 자리다 (ADR-0018 §5 포함 목록).
     """
     from chaeksas.core.selftest import check  # noqa: PLC0415
 
-    found = check(want=[BUILTIN_ID, "없는-확장"])
+    found = check(host=host, want=[BUILTIN_ID, "없는-확장"])
     assert not found["all_ok"]
     assert not found["steps"]["entry_points"]["ok"]
     # 기여를 푸는 쪽은 멀쩡하다 — 「무엇이 틀렸나」가 갈라져 보여야 한다.
@@ -204,7 +186,7 @@ def test_selftest_catches_an_entry_that_cannot_be_resolved() -> None:
              "run_locations": ["pc"]}
         ]}),
     )
-    found = check(host=broken)
+    found = check(host=broken, want=["doc-ocr"])
     assert not found["all_ok"]
     assert found["steps"]["entry_points"]["ok"], "확장은 켜져 있다 — 터지는 자리는 entry다"
     assert "ocr_task" in str(found["steps"]["entries"]["value"])
@@ -220,47 +202,22 @@ def test_unknown_entry_point_group_loads_nothing() -> None:
 
 
 def test_resolved_code_matches_the_interface(host: ExtensionHost) -> None:
-    """`entry`가 가리키는 객체가 `extension_api`의 모양인지 호스트가 확인한다.
-
-    편집기·유틸리티는 **Qt 위젯을 만든다** — `QApplication`을 먼저 세운다. 앞선 시험이 세워 둔 것에
-    기대면 이 파일만 돌릴 때 Qt가 프로세스를 죽인다(전체로 돌 때만 통과하던 시험이다).
-    """
-    import os  # noqa: PLC0415
-
-    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from PySide6.QtWidgets import QApplication  # noqa: PLC0415
-
-    _app = QApplication.instance() or QApplication([])
-    assert isinstance(host.executor("ui_task"), TaskExecutor)
-    assert isinstance(host.editor("ui_task"), TaskEditor)
-    assert isinstance(host.tool(BUILTIN_ID, "selector-registration"), ToolUiTool)
+    """`entry`가 가리키는 객체가 `extension_api`의 모양인지 호스트가 확인한다."""
+    assert isinstance(host.executor("fake_task"), TaskExecutor)
+    assert isinstance(host.editor("fake_task"), TaskEditor)
     checks = host.preflight_checks()
     assert len(checks) == 1
     assert isinstance(checks[0].value, PreflightCheck)
 
 
-def test_local_runtime_entry_resolves(host: ExtensionHost) -> None:
-    """PC 실행기가 자식으로 다시 떴을 때 쓰는 길 (`--local-runtime ui-automation:worker`)."""
-    entry = host.local_runtime(BUILTIN_ID, "worker")
-    assert isinstance(entry, LocalRuntimeEntry)
-    with pytest.raises(LookupError, match="로컬 런타임이 아니다"):
-        host.local_runtime(BUILTIN_ID, "nope")
-    with pytest.raises(LookupError):
-        host.local_runtime("nope", "worker")
-
-
 def test_executor_is_made_once_editor_every_time(host: ExtensionHost) -> None:
-    assert host.executor("ui_task") is host.executor("ui_task")
-    assert host.editor("ui_task") is not host.editor("ui_task")
+    assert host.executor("fake_task") is host.executor("fake_task")
+    assert host.editor("fake_task") is not host.editor("fake_task")
 
 
-def test_unknown_task_type_or_tool_raises(host: ExtensionHost) -> None:
+def test_unknown_task_type_raises(host: ExtensionHost) -> None:
     with pytest.raises(LookupError):
         host.executor("nope_task")
-    with pytest.raises(LookupError):
-        host.tool(BUILTIN_ID, "nope")
-    with pytest.raises(LookupError, match="도구가 아니다"):
-        host.tool("nope", "selector-registration")
 
 
 def test_the_old_utilities_key_is_not_read_but_says_so(caplog: pytest.LogCaptureFixture) -> None:
@@ -272,8 +229,7 @@ def test_the_old_utilities_key_is_not_read_but_says_so(caplog: pytest.LogCapture
             definition(contributes={"bot_ui.utilities": [{"id": "u", "label": "u", "entry": "x:Y"}]}),
         )
     assert loaded is not None and loaded.enabled, "옛 열쇠 하나로 확장 전체를 끄지 않는다"
-    assert host.tools() == []
-    assert "tool_ui.tools" in caplog.text and "bot_ui.utilities" in caplog.text
+    assert "bot_ui.utilities" in caplog.text and "ADR-0114" in caplog.text
 
 
 def test_context_carries_settings_and_secrets(host: ExtensionHost) -> None:
@@ -307,7 +263,7 @@ def definition(**over: Any) -> dict[str, Any]:
         "name": "문서 인식",
         "publisher": "사내",
         "tier": "internal",
-        "api": ">=1,<2",
+        "api": ">=2,<3",
         "contributes": {},
     }
     base.update(over)
@@ -343,7 +299,7 @@ def test_duplicate_task_type_loses(host: ExtensionHost) -> None:
         definition(
             contributes={
                 "task_types": [
-                    {"id": "ui_task", "label": "내 UI 태스크", "run_locations": ["pc"],
+                    {"id": "fake_task", "label": "내 시험 태스크", "run_locations": ["pc"],
                      "executor": {"entry": "doc_ocr.client:X"}}
                 ]
             }
@@ -361,12 +317,12 @@ def test_external_definition_with_code_is_not_enabled() -> None:
         definition(
             tier="external",
             api=None,
-            contributes={"tool_ui.tools": [{"id": "u", "label": "u", "entry": "evil:Thing"}]},
+            contributes={"preflight": [{"id": "u", "entry": "evil:Thing"}]},
         ),
     )
     assert loaded is not None and not loaded.enabled
     assert [p.code for p in loaded.problems] == ["external_code_not_allowed"]
-    assert host.tools() == []
+    assert host.preflight() == []
 
 
 def test_entry_cannot_point_outside_the_extension(host: ExtensionHost) -> None:
@@ -395,7 +351,7 @@ def test_entry_pointing_at_the_wrong_shape_is_refused(host: ExtensionHost) -> No
                 "task_types": [
                     {"id": "ocr_task", "label": "OCR", "run_locations": ["pc"],
                      # 편집기를 수행기 자리에 적었다 — execute()가 없다.
-                     "executor": {"entry": "ui_automation.client:UiTaskEditor"}}
+                     "executor": {"entry": "fake_extension:FakeTaskEditor"}}
                 ]
             }
         ),
@@ -545,35 +501,12 @@ def test_tampered_external_definition_is_not_enabled() -> None:
 def test_builtin_tier_from_center_is_not_enabled() -> None:
     """E2 — 내장·사내 확장은 설치 파일에 든 것만. Center에서 내려온 것은 쓰지 않는다."""
     host = ExtensionHost()
-    definition = {**external_definition(), "tier": "builtin", "api": ">=1,<2"}
+    definition = {**external_definition(), "tier": "builtin", "api": ">=2,<3"}
     envelope, keys = signed_envelope(definition)
     loaded = host.add_external(definition, envelope, keys=keys)
     assert loaded is not None and not loaded.enabled
     assert "id_conflict" in [p.code for p in loaded.problems]
 
-
-
-# ─────────────────────────── AI 환경 (ADR-0037) ───────────────────────────
-
-
-def test_the_builtin_contributes_the_desktop_environment(host: ExtensionHost) -> None:
-    from chaeksas.extension_api import AgentEnvironment  # noqa: PLC0415
-
-    found = host.environment("desktop")
-    assert isinstance(found, AgentEnvironment)
-    assert host.environment("desktop") is found, "한 번 만들면 들고 있는다"
-    assert host.environment_owner("desktop") == BUILTIN_ID
-    assert host.environment("web") is None, "웹 AI 환경은 아직 아무도 기여하지 않는다"
-
-
-def test_a_second_desktop_environment_loses(host: ExtensionHost) -> None:
-    """E8 — 한 domain의 눈과 손은 하나다. 나중에 온 확장은 켜지 않는다."""
-    clash = install(
-        host, definition(contributes={"agent_environments": [{"domain": "desktop", "entry": "doc_ocr.client:X"}]})
-    )
-    assert clash is not None and not clash.enabled
-    assert [p.code for p in clash.problems] == ["environment_conflict"]
-    assert host.environment_owner("desktop") == BUILTIN_ID
 
 
 # ─────────────────────────── 사람이 껐다 (ADR-0043) ───────────────────────────

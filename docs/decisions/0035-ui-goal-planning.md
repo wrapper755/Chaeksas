@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨([ADR-0114](0114-remove-ui-automation.md)) — 원래 수락 |
 | 날짜 | 2026-10-05 |
 | 관련 | [ADR-0034](0034-service-app-model-connection.md)(모델 연결), [ADR-0033](0033-desktop-app-and-window.md)(스텝 값 템플릿), [ADR-0027](0027-llm-connection.md) §4(모델이 틀리면 업무 실패), [ADR-0008](0008-map-driver-hands-boundary.md)(시맨틱 키), 계약 C8·C10·C14, 화면 STU-13 |
 

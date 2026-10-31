@@ -26,7 +26,7 @@ from chaeksas.contracts.approvals import request_id_for
 from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.core.engine import Engine, RunEnv, State
 from chaeksas.core.requests import create_request
-from chaeksas.core.run_log import RunLog, summarize
+from chaeksas.core.run_log import RunLog
 from chaeksas.extension_api import ExtensionEvent, TaskContext, TaskFailed, TaskOutcome, review_table
 
 RUN = "run_20261005_120000_abcdef"
@@ -357,8 +357,8 @@ def test_the_values_do_not_reach_the_log(tmp_path: Path) -> None:
 # ──────────────── 확장이 남기는 실행 기록 (C3, ADR-0041) ────────────────
 
 
-def ui_session(**extra: Any) -> dict[str, Any]:
-    """C3 `ui_session`의 `data` — 필수 키 여섯 (C3 48줄)."""
+def ocr_page(**extra: Any) -> dict[str, Any]:
+    """확장이 남기는 줄 하나의 `data` — C3가 모르는 종류(`ocr_page`)라 필수 키를 묻지 않는다."""
     return {
         "business_key": f"{RUN}:Task_Ext:1:1",
         "page_id": "erp.order.form",
@@ -376,24 +376,15 @@ def kinds(tmp_path: Path) -> list[str]:
 
 def test_the_engine_writes_the_line_and_adds_its_own_fields(tmp_path: Path) -> None:
     """확장은 `{kind, data}`만 준다 — `run_id`·`seq`·`ts`·`node_id`는 **엔진이 붙인다**."""
-    executor = FakeExecutor(events=[ExtensionEvent(kind="ui_session", data=ui_session())])
+    executor = FakeExecutor(events=[ExtensionEvent(kind="ocr_page", data=ocr_page())])
     run = run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
     assert run.state == State.DONE
-    line = [one for one in events(tmp_path) if one["kind"] == "ui_session"]
+    line = [one for one in events(tmp_path) if one["kind"] == "ocr_page"]
     assert len(line) == 1
     assert line[0]["run_id"] == RUN
     assert line[0]["node_id"] == "Task_Ext", "어느 노드였나는 엔진만 안다"
     assert line[0]["seq"] >= 1 and line[0]["ts"], "번호와 시각도 엔진이 붙인다"
     assert line[0]["data"]["page_id"] == "erp.order.form", "확장이 준 내용은 그대로 간다"
-
-
-def test_the_summary_counts_the_line(tmp_path: Path) -> None:
-    """`run_finished.ui_tasks`가 이제 센다 — 이 줄이 없을 때는 영원히 0이었다."""
-    executor = FakeExecutor(events=[ExtensionEvent(kind="ui_session", data=ui_session())])
-    run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
-    finished = [one for one in events(tmp_path) if one["kind"] == "run_finished"][-1]
-    assert finished["data"]["ui_tasks"] == 1
-    assert summarize(list(RunLog.read(tmp_path / "run.jsonl")))["ui_tasks"] == 1
 
 
 def test_the_engine_filters_what_the_extension_gave(tmp_path: Path) -> None:
@@ -404,14 +395,14 @@ def test_the_engine_filters_what_the_extension_gave(tmp_path: Path) -> None:
     executor = FakeExecutor(
         events=[
             ExtensionEvent(
-                kind="ui_session",
-                data=ui_session(읽은값={"고객명": "홍길동"}, 메모="적어 둔 말 " * 60),
+                kind="ocr_page",
+                data=ocr_page(읽은값={"고객명": "홍길동"}, 메모="적어 둔 말 " * 60),
             )
         ]
     )
     run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
     raw = (tmp_path / "run.jsonl").read_text(encoding="utf-8")
-    line = [one for one in events(tmp_path) if one["kind"] == "ui_session"][0]
+    line = [one for one in events(tmp_path) if one["kind"] == "ocr_page"][0]
     assert line["data"]["읽은값"] == {"개수": 1}, "사전은 개수만 남는다"
     assert len(line["data"]["메모"]) <= 201, "긴 글은 잘린다"
     assert "홍길동" not in raw, "사전 안의 값은 아예 나가지 않는다"
@@ -423,12 +414,12 @@ def test_the_extension_cannot_set_the_engines_fields(tmp_path: Path) -> None:
     executor = FakeExecutor(
         events=[
             ExtensionEvent(
-                kind="ui_session", data=ui_session(seq=999, run_id="run_20200101_000000_ffffff")
+                kind="ocr_page", data=ocr_page(seq=999, run_id="run_20200101_000000_ffffff")
             )
         ]
     )
     run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
-    line = [one for one in events(tmp_path) if one["kind"] == "ui_session"][0]
+    line = [one for one in events(tmp_path) if one["kind"] == "ocr_page"][0]
     assert line["run_id"] == RUN
     assert line["seq"] != 999 and "seq" not in line["data"]
 
@@ -436,15 +427,14 @@ def test_the_extension_cannot_set_the_engines_fields(tmp_path: Path) -> None:
 def test_a_line_missing_a_required_key_is_dropped_and_the_run_goes_on(tmp_path: Path) -> None:
     """알려진 `kind`인데 필수 키가 빠지면 **그 줄만 버린다** — 업무 실패가 아니다.
     기록 한 줄 때문에 다 된 업무를 깨지 않는다 (C3 「받는 쪽은 관대하게」)."""
-    broken = ui_session()
-    del broken["healed"]
-    executor = FakeExecutor(events=[ExtensionEvent(kind="ui_session", data=broken)])
+    broken = {"model": "m", "input_tokens": 1}  # C3 `llm_usage`의 `output_tokens`가 빠졌다
+    executor = FakeExecutor(events=[ExtensionEvent(kind="llm_usage", data=broken)])
     run = run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
     assert run.state == State.DONE, "실행은 이어 간다"
-    assert "ui_session" not in kinds(tmp_path)
+    assert "llm_usage" not in kinds(tmp_path)
     warned = [
         one for one in events(tmp_path)
-        if one["kind"] == "log" and one["data"]["level"] == "warn" and "healed" in one["data"]["message"]
+        if one["kind"] == "log" and one["data"]["level"] == "warn" and "output_tokens" in one["data"]["message"]
     ]
     assert warned, "왜 버렸는지는 남는다"
 
@@ -463,12 +453,12 @@ def test_a_failed_task_still_leaves_its_line(tmp_path: Path) -> None:
         fail=TaskFailed(
             "ui_escalated",
             "화면을 확인해 주세요",
-            events=[ExtensionEvent(kind="ui_session", data=ui_session(result="escalated"))],
+            events=[ExtensionEvent(kind="ocr_page", data=ocr_page(result="escalated"))],
         )
     )
     run = run_it(tmp_path, WITH_BOUNDARY, Host({"demo_task": executor}))
     assert run.state == State.DONE, "경계가 받아 다른 길로 끝났다"
-    line = [one for one in events(tmp_path) if one["kind"] == "ui_session"]
+    line = [one for one in events(tmp_path) if one["kind"] == "ocr_page"]
     assert line and line[0]["data"]["result"] == "escalated"
 
 

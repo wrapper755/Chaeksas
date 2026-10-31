@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
@@ -172,7 +171,6 @@ def test_tray_menu_shows_the_information_rows(app: Any, agent: Agent) -> None:
     assert any("재무팀 PC-03" in text for text in texts)
     assert "실행 중인 BPM 프로세스 없음" in texts
     assert any("대기열 1건 — 다음: erp.order-entry" in text for text in texts)
-    assert any("Worker: 꺼 둠" in text for text in texts)
     # 누를 수 있는 것은 이것뿐이다.
     assert {"창 열기", "설정...", "종료"} <= set(texts)
     assert tray.toolTip() == "Chaeksas PC 실행기 · 대기 · 대기 1건"
@@ -263,7 +261,7 @@ def test_the_settings_dialog_is_split_into_tabs(app: Any, agent: Agent) -> None:
 
     dialog = SettingsDialog(agent)
     names = [dialog.tabs.tabText(i) for i in range(dialog.tabs.count())]
-    assert names[:6] == ["Center", "실행", "모델", "파일", "보내기", "로컬 런타임"]
+    assert names[:5] == ["Center", "실행", "모델", "파일", "보내기"]
     assert names[-1] == "나중에"
     assert dialog.tabs.currentIndex() == 0
     pages = dialog.tab_pages()
@@ -373,7 +371,6 @@ def test_shutdown_reports_center_jobs_as_rejected(app: Any, tmp_path: Path) -> N
     from PySide6.QtWidgets import QApplication  # noqa: PLC0415
 
     from chaeksas.bot_ui.app import BotUiApp  # noqa: PLC0415
-    from chaeksas.core.processes import ChildProcess, Supervisor  # noqa: PLC0415
 
     agent = Agent(
         settings=Settings(center_url="http://127.0.0.1:9"),  # 보고는 닿지 못한다 — 디스크에 남아야 한다
@@ -383,10 +380,6 @@ def test_shutdown_reports_center_jobs_as_rejected(app: Any, tmp_path: Path) -> N
     agent.store.state.bot_ui_id = "bui_1"
     agent.take_job(job("job_center"))
     agent.enqueue_manual("수동으로 넣은 것")
-
-    worker = Supervisor(child=ChildProcess(args=[sys.executable, "-c", "import time; time.sleep(60)"]))
-    worker.start()
-    agent.supervisors["worker"] = worker
 
     existing = QApplication.instance()
     assert isinstance(existing, QApplication)
@@ -399,8 +392,6 @@ def test_shutdown_reports_center_jobs_as_rejected(app: Any, tmp_path: Path) -> N
     assert [item.job_id for item in agent.queue] == [None]
     # 닿지 못했으니 ack는 디스크에 남아 다음에 간다 (C4).
     assert [a.job_id for a in agent.store.state.pending_acks] == ["job_center"]
-    # Worker는 꺼졌다 (ADR-0023 — 트리째).
-    assert worker.state == "off" and not worker.child.alive
 
 
 def test_saving_settings_clears_the_readiness_cache(app: Any, agent: Agent) -> None:

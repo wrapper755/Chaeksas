@@ -9,8 +9,8 @@
 | 쓰는 말 | 가리키는 것 | 예 |
 | --- | --- | --- |
 | **BPM 프로세스** | 업무 흐름 (BPMN으로 그린 것). 설계 화면과 운영 화면이 **같은 이름**을 쓴다 (예전 운영 화면의 「Bot」, [ADR-0111](decisions/0111-bpm-process-and-pc-runner-names.md)) | 세금계산서 발행 BPM 프로세스 |
-| **<이름> 프로세스** | 프로그램이 도는 단위 (OS 프로세스, 화면 없음) | Worker 프로세스, 실행 프로세스 |
-| **<이름> UI**, 앱 이름 | 사람이 보는 프로그램 (화면 있음) | PC 실행기, Tool UI, Studio, Center 콘솔 |
+| **<이름> 프로세스** | 프로그램이 도는 단위 (OS 프로세스, 화면 없음) | 실행 프로세스 |
+| **<이름> UI**, 앱 이름 | 사람이 보는 프로그램 (화면 있음) | PC 실행기, Studio, Center 콘솔 |
 
 "프로세스"를 단독으로 쓰지 않는다.
 
@@ -19,11 +19,8 @@
 | 화면 표기 | 코드 | 종류 | 뜻 |
 | --- | --- | --- | --- |
 | Studio | `studio` | 화면 | 설계자가 BPM 프로세스를 그리고, 시험 실행(자율 수행·재생)·학습·패키지 빌드를 하는 데스크톱 앱 |
-| **PC 실행기** | `bot_ui` | 화면 (트레이 GUI) | **항상 떠 있는 트레이 기반 GUI 프로그램.** PC 한 대에 하나, Center에 등록되는 단위. ① BPM 프로세스 다운로드 및 실행 ② 확장의 로컬 런타임(Worker 프로세스 등) 실행 관리. 「도구」 메뉴는 Tool UI를 여는 바로가기다 |
-| **Tool UI** | `tool_ui` | 화면 | **확장이 기여한 도구를 띄우는 데스크톱 프로그램** (기본 제공: UI 셀렉터 등록). 트레이 없이 필요할 때만 뜨고, Center에 등록하지 않는다. **로컬 런타임을 띄우지 않고** 같은 PC의 PC 실행기가 띄운 것을 빌려 쓴다. PC 실행기 설치에 함께 들어간다 [ADR-0077](decisions/0077-tool-ui.md) |
-| 도구 | `tool` | 기여 | 확장이 Tool UI에 더하는 화면 하나 (C13 `tool_ui.tools`). 예: UI 셀렉터 등록 |
-| (배포된) BPM 프로세스 | `bot` | 업무 | **Center에서 PC 실행기·서버 실행기로 전달되어 실행되는 BPM 프로세스.** 실행 중인 BPM 프로세스가 Worker·서비스 앱·Center를 부른다. 코드 식별자 `bot`·`bot_ui`는 옛 화면 이름(「Bot」·「Bot UI」)에서 왔고 **그대로 둔다** — 계약 칸·API 경로라 바꾸면 현장과 Center가 서로 못 알아본다 ([ADR-0111](decisions/0111-bpm-process-and-pc-runner-names.md)) |
-| **Worker** | `worker` | 프로세스 (서버, 화면 없음) | **127.0.0.1의 REST API 서버.** PC 실행기가 시작·감시·재시작·종료한다. 실행 중인 BPM 프로세스(과 Studio 개발 실행)의 UI 자동화 요청을 받아 등록된 화면 요소를 로케이터 사다리로 조작하고, 실패하면 치유를 요청한다 |
+| **PC 실행기** | `bot_ui` | 화면 (트레이 GUI) | **항상 떠 있는 트레이 기반 GUI 프로그램.** PC 한 대에 하나, Center에 등록되는 단위. BPM 프로세스를 내려받아 설치하고 하나씩 실행하며, 현장 결재·확인 창을 띄운다. 「도구」 메뉴에는 「확장...」(BUI-11)이 있다 |
+| (배포된) BPM 프로세스 | `bot` | 업무 | **Center에서 PC 실행기·서버 실행기로 전달되어 실행되는 BPM 프로세스.** 실행 중인 BPM 프로세스가 서비스 앱·Center를 부른다. 코드 식별자 `bot`·`bot_ui`는 옛 화면 이름(「Bot」·「Bot UI」)에서 왔고 **그대로 둔다** — 계약 칸·API 경로라 바꾸면 현장과 Center가 서로 못 알아본다 ([ADR-0111](decisions/0111-bpm-process-and-pc-runner-names.md)) |
 | 실행 프로세스 | `runner` (`chk-bot-runner`) | 프로세스 | 실행 중인 BPM 프로세스 하나를 맡는 PC 실행기의 자식 프로세스. **동시에 하나만** 있다 (격리용: BPM 프로세스가 죽어도 PC 실행기는 산다). S4에서 확인 [ADR-0014](decisions/0014-one-bot-per-pc.md) |
 | 서버 실행기 | `server_runner` | 프로세스 (서버, 화면 없음) | 실행 위치가 「서버」인 BPM 프로세스를 **여러 건 동시에** 실행한다. Center가 배포·작업·관리를 하고, 서버 실행기는 Center API 키로 Center에 접속한다 [ADR-0015](decisions/0015-run-location.md) |
 | 실행 자리 | `run_slot` | 개념 | PC 한 대에서 BPM 프로세스가 실행될 수 있는 자리. **하나뿐**이고, 결재·확인을 기다려도 BPM 프로세스가 끝날 때까지 쥔다 [ADR-0014](decisions/0014-one-bot-per-pc.md) |
@@ -32,17 +29,15 @@
 | Center 콘솔 | `console` | 화면 (웹) | Center의 웹 화면. 운영자·결재자가 쓴다 |
 | 관리자 계정 | `account` | Center | Center 콘솔에 들어오는 아이디·비밀번호. 역할은 「관리자」(승인·배포까지 쓰기 전부)·「보기 전용」. 지우지 않고 멈춘다 [ADR-0090](decisions/0090-center-admin-accounts.md) |
 | Center 서명 키 | `signing key` | Center | 승인·배포·외부 확장 봉투에 Center가 대신 서명하는 키. DB에 있고 공개키는 믿는 키 목록(`admin_keys`)으로 현장에 내려간다 [ADR-0090](decisions/0090-center-admin-accounts.md) |
-| **확장** | `extension` | 묶음 | **BPM 프로세스에 공통 기능을 더하는 묶음.** 확장 정의(C13 `extension.json`)로 태스크 종류·작업·Studio 편집기·Tool UI 도구·로컬 런타임 등을 **기여**한다. 등급: 내장 / 사내 / 외부. 첫 내장 확장은 UI 자동화 [ADR-0018](decisions/0018-extensions.md) |
+| **확장** | `extension` | 묶음 | **BPM 프로세스에 공통 기능을 더하는 묶음.** 확장 정의(C13 `extension.json`)로 태스크 종류·작업·Studio 편집기 등을 **기여**한다. 등급: 내장 / 사내 / 외부. **지금 깔린 내장 확장은 없다** ([ADR-0018](decisions/0018-extensions.md), [ADR-0114](decisions/0114-remove-ui-automation.md)) |
 | 확장 정의 | `extension.json` | 파일 | 확장이 무엇을 더하는지 선언 (C13) |
 | 기여 / 기여 지점 | `contributes` | 개념 | 확장이 플랫폼에 끼워 넣는 것 / 끼워 넣을 수 있는 자리 (VS Code의 contribution point와 같은 뜻) |
 | 내장 확장 / 사내 확장 / 외부 확장 | `builtin` / `internal` / `external` | 등급 | 이 저장소에 있음 / 다른 사내 저장소 / 정의 파일만 (외부 앱). 외부 확장은 코드를 기여할 수 없다 |
 | 외부 앱 | `external app` | 서버 | 이 저장소·C11 밖의 서버 앱 (흔히 "외부 LLM 앱"이라 부르는 것). 외부 확장의 서버 부분으로, 관리자가 등록한(Center가 서명한) 확장 정의의 HTTP 어댑터로만 붙는다 |
 | HTTP 어댑터 | `http-adapter` | 개념 | C11을 따르지 않는 외부 앱을 템플릿만으로 부르는 방법 (C13 §4) |
-| 로컬 런타임 | `local_runtime` | 프로세스 | 확장이 기여하고 PC 실행기가 띄워 감시하는 로컬 프로세스. 예: Worker 프로세스 |
-| 확장 호스트 | `extension_host` | 코드 | Studio·PC 실행기·Tool UI·실행기·서버 실행기 안에서 확장을 찾아 기여를 등록하는 부분 (`core`) |
-| 서비스 앱 | `service_app` | 서버 | **확장의 서버 부분. BPM 프로세스가 API 키로 호출하는 서버 앱** (대부분 LLM 앱). 자율·결정 수행 모드를 가진다. 앱마다 **관리 콘솔**이 있다. [ADR-0010](decisions/0010-service-apps.md), [ADR-0013](decisions/0013-api-keys.md) |
+| 확장 호스트 | `extension_host` | 코드 | Studio·PC 실행기·실행 프로세스·서버 실행기·어댑터 일꾼 안에서 확장을 찾아 기여를 등록하는 부분 (`core`) |
+| 서비스 앱 | `service_app` | 서버 | **확장의 서버 부분. BPM 프로세스가 Center의 외부 작업으로 부르는 서버 앱** (대부분 LLM 앱). 자율·결정 수행 모드를 가진다. 앱마다 **관리 콘솔**이 있다. [ADR-0010](decisions/0010-service-apps.md), [ADR-0013](decisions/0013-api-keys.md) |
 | 서비스 앱 관리 콘솔 | `svc_console` | 화면 (웹) | 서비스 앱마다 하나. 상태, API 키 발급·폐기, 사용 기록 (+ 앱 고유 화면) |
-| UI 자동화 앱 | `ui-automation` | 서버 | 첫 내장 확장 「UI 자동화」의 서버 부분(시스템). 화면·요소·로케이터 레지스트리, 실행 계획, 치유 제안. Worker가 BPM 프로세스·Studio를 대신해 호출 |
 | 공통 계약 | `contracts` | 패키지 | 모든 구성요소가 주고받는 데이터 모델의 단일 원본 |
 | 모의 앱 | `mock app` | 개발·시험용 | **업무 예제가 부르는 서비스 앱·외부 앱의 거짓 구현** (`samples/mock_apps`). 제품이 아니고, 답하는 값은 예제 케이스가 정한다. 개발 PC·시험망에서만 띄운다 ([samples/README.md](../samples/README.md)) |
 
@@ -52,26 +47,19 @@
 | --- | --- | --- |
 | 지도 | BPMN (BPM 프로세스 정의) | 순서·분기·결재를 정한다 |
 | 운전사 | AI | 목표에 도달하는 방법을 찾는다 |
-| 실행 | PC 실행기가 BPM 프로세스를 실행 (개발 중에는 Studio) | 태스크를 차례로 수행하며 운전사·손·서비스 앱을 부른다 |
-| 손 | Worker 프로세스 | 실행 중인 BPM 프로세스가 REST로 요청한 화면 조작만 한다 |
+| 실행 | 서버 실행기·PC 실행기가 BPM 프로세스를 실행 (개발 중에는 Studio) | 태스크를 차례로 수행하며 운전사·손·서비스 앱을 부른다 |
+| 손 | 확장이 주는 결정적 수행기 (지금 없음) | 요청받은 일을 정해진 대로만 한다 |
 
 ```
 PC 실행기 (화면, 트레이, 항상 실행)                      ── 현장 PC / 설계자 PC
- ├─ 실행 ─▶ BPM 프로세스 (실행 중)
- │            ├─ AI 태스크        → AI(LLM)
- │            ├─ UI 태스크        → Worker 프로세스 (REST, 127.0.0.1)
- │            │                       └─ Worker → UI 자동화 앱 (서버)
- │            ├─ 서비스 앱 태스크  → 서비스 앱 (REST, 서비스 앱 API 키)
- │            └─ 결재              → Center
- ├─ 시작·감시 ─▶ Worker 프로세스
- └─ 「도구」 바로가기 ─▶ Tool UI (따로 뜨는 화면)
-Tool UI ── 도구: UI 셀렉터 등록 ─▶ Worker API (빌려 씀) + UI 자동화 앱
+ └─ 실행 ─▶ 실행 프로세스 (BPM 프로세스 하나)
+              ├─ AI 태스크        → AI(LLM)
+              ├─ 서비스 앱 태스크  → Center 외부 작업 (호출 토큰) ← 서비스 앱·어댑터 일꾼
+              └─ 결재·확인          → Center 또는 현장 결재 창
 Center ─(하트비트 응답: 배포·작업·결재 답)─▶ PC 실행기   (Center API 키로 인증)
 ```
 
-- BPM 프로세스는 Worker를 띄우지 않는다. Worker 기동·종료는 PC 실행기의 일이다.
-- Worker는 업무를 모른다. "어느 화면의 어느 요소에 무엇을 하라"(시맨틱 키 + 동작)만 받는다.
-- Studio의 개발 실행과 Tool UI의 도구도 같은 PC의 PC 실행기가 관리하는 Worker에 요청한다 — 둘 다 Worker를 띄우지 않는다. 설계자 PC에도 PC 실행기를 설치한다.
+- 「손」을 주는 확장은 지금 깔려 있지 않다 — 화면 조작(UI 자동화 확장)은 걷었고 다시 들인다 ([ADR-0114](decisions/0114-remove-ui-automation.md)).
 
 ## 2. BPM 프로세스와 실행
 
@@ -79,7 +67,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ PC 실행기  
 | --- | --- | --- |
 | BPM 프로세스 | `bpm_process` | **사용자가 만들고 배포하는 업무 단위.** 진입 정의와 하위 정의, 학습 자료(재생 명세), 시험 케이스를 묶은 것 |
 | 프로세스 정의 | `process_definition` | BPMN 2.0 파일 하나. BPM 프로세스 하나는 진입 정의 1개 + 하위 정의 0개 이상 |
-| 실행 위치 | `run_location` | BPM 프로세스 속성. **서버**(`server`, **기본값**, 서버 우선 — [ADR-0016](decisions/0016-server-first.md)): / **PC**(`pc`: PC 실행기에서 하나씩, 끝날 때까지 — UI 조작·현장 확인·PC 전용 자원이 필요할 때만) / 서버 쪽: 서버 실행기에서 동시 실행, 기다리는 동안 상태 저장). [ADR-0015](decisions/0015-run-location.md) |
+| 실행 위치 | `run_location` | BPM 프로세스 속성. **서버**(`server`, **기본값**, 서버 우선 — [ADR-0016](decisions/0016-server-first.md)): / **PC**(`pc`: PC 실행기에서 하나씩, 끝날 때까지 — 현장 확인·PC 전용 자원이 필요할 때만) / 서버 쪽: 서버 실행기에서 동시 실행, 기다리는 동안 상태 저장). [ADR-0015](decisions/0015-run-location.md) |
 | 서버 BPM 프로세스 | `server_bot` | 운영 화면에서 실행 위치가 「서버」인 BPM 프로세스를 부르는 이름 (확정). PC 쪽은 그냥 「BPM 프로세스」 |
 | PC 위임 | `pc_delegation` | 서버 BPM 프로세스의 Call Activity가 **따로 배포된 PC BPM 프로세스**을 부르는 것 (`chk:call.delegate`). Center 작업으로 PC 실행기에 맡기고 서버 BPM 프로세스는 상태를 저장하고 기다린다. 결과는 그 BPM 프로세스가 선언한 `outputs`가 Center를 지나 돌아온다 ([ADR-0062](decisions/0062-pc-delegation.md)). **대상이 서버 BPM 프로세스이어도 같은 칸**이고 어디서 도는지는 대상 패키지의 실행 위치가 정한다 — 그래서 둘을 함께 「위임」이라고도 한다 ([ADR-0082](decisions/0082-batch-start.md)) |
 | 동시 실행 상한 | `max_concurrency` | 서버 실행에만 있다. 서버 실행기 전체(기본 10) + BPM 프로세스별(배포 때, 기본 5) |
@@ -105,7 +93,7 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ PC 실행기  
 
 | 화면 표기 | 코드 | 뜻 |
 | --- | --- | --- |
-| 가상 직원 | `virtual_worker` | **사람이 아닌 업무 주체.** Center에 등록되고(주체 이름 `vw:<id>`, C5 §가상 직원) 접수 BPM 프로세스·감독자를 갖는다. 기동해도 되는 BPM 프로세스는 따로 두지 않는다 — 접수 BPM 프로세스의 서명된 `requires.delegations`다. 그 접수 BPM 프로세스의 실행(일괄)과 자식 실행을 Center가 **읽을 때** 이어 붙인다 ([ADR-0085](decisions/0085-virtual-worker-resource.md)). **배포 단위가 아니다** — 배포 단위는 여전히 BPM 프로세스이다 (§7). 코드에서 `worker`로 줄여 쓰지 않는다 (Worker 프로세스와 겹친다) |
+| 가상 직원 | `virtual_worker` | **사람이 아닌 업무 주체.** Center에 등록되고(주체 이름 `vw:<id>`, C5 §가상 직원) 접수 BPM 프로세스·감독자를 갖는다. 기동해도 되는 BPM 프로세스는 따로 두지 않는다 — 접수 BPM 프로세스의 서명된 `requires.delegations`다. 그 접수 BPM 프로세스의 실행(일괄)과 자식 실행을 Center가 **읽을 때** 이어 붙인다 ([ADR-0085](decisions/0085-virtual-worker-resource.md)). **배포 단위가 아니다** — 배포 단위는 여전히 BPM 프로세스이다 (§6). 코드에서 `worker`로 줄여 쓰지 않는다 (외부 작업의 일꾼과 헷갈린다) |
 | 접수 BPM 프로세스 | `intake_bot` | 가상 직원이 돌리는 **서버 BPM 프로세스**. 인입 → 항목 N건 만들기 → 일괄 결재 → 일괄 기동을 그림으로 그린 것 |
 | 일괄 | `batch` | **접수 BPM 프로세스 실행 한 번.** 일괄 id는 그 실행의 `run_id`이고 항목은 그 실행의 변수(목록)다. 「묶음」이라 쓰지 않는다 (확장·시험 묶음·PC 묶음 풀기가 이미 쓴다) |
 | 일괄 결재 | — | 일괄 안의 결재 하나(C6). 항목 N건을 `show`로 보이고 감독자가 한 번에 승인·반려한다. 새 결재 종류가 아니다 |
@@ -115,7 +103,6 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ PC 실행기  
 | 화면 표기 | 코드 | BPMN 요소 | 누가 수행 |
 | --- | --- | --- | --- |
 | AI 태스크 | `ai_task` | ServiceTask | AI(LLM). 목표·허용 도구·결과 필드 |
-| UI 태스크 | `ui_task` | ServiceTask | Worker 프로세스 (REST 요청). 화면 + 시맨틱 키 + 동작 목록 |
 | 서비스 앱 태스크 | `service_task` | ServiceTask | 서비스 앱. 앱 + 작업 + 입력·출력 매핑 (C15 외부 작업으로 부른다 — 키는 없다) |
 | 결재 | `approval` | UserTask | 사람 (Center 또는 현장 PC) |
 | 파일 목록 | `file_list` | ServiceTask | 실행 엔진 내장. 폴더를 훑어 파일 경로 목록을 만든다 ([ADR-0026](decisions/0026-file-paths-and-file-list-task.md)) |
@@ -126,8 +113,8 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ PC 실행기  
 | 화면 표기 | 코드 | 뜻 |
 | --- | --- | --- |
 | 결재 (업무 개입) | `approval` | BPMN UserTask. 업무상 사람이 결정해야 하는 것. Center로 올려 다른 사람이 답할 수 있다 |
-| 확인 (실행 개입) | `confirmation` | 실행 중 막힘(OTP, 애매한 클릭, Worker 응답 없음). 화면 앞 사람만 답할 수 있어 Center로 올리지 않는다 |
-| 전환 | `escalation` | 자동 치유가 한도를 넘어 사람에게 넘기는 것. 확인으로 이어진다 |
+| 확인 (실행 개입) | `confirmation` | 실행 중 막힘(OTP, 전환, 결과를 모르는 호출). 화면 앞 사람만 답할 수 있어 Center로 올리지 않는다 |
+| 전환 | `escalation` | AI 태스크·확장 태스크가 스스로 풀지 못해 사람에게 넘기는 것 (`ESCALATED`). PC 실행에서는 확인으로 이어진다 |
 | 검토 자료 | `review` | 결재·확인 창(CMN-01 [R])에 보이는 값 — 이름 → 값 (C6). 결재는 폼의 「표시 변수」, 전환한 확인은 확장이 준 것이다. 값 하나가 **표 값**(`{headers, rows}`)이면 표로 그린다 ([ADR-0112](decisions/0112-escalation-review-from-extensions.md)) |
 | 결재 담당자 | `assignee` | 그 결재에 답할 사람. 그림(`chk:approval.assignees`)이 이름으로 정하고 C6에 실린다. 콘솔은 거르기만 하고, 대리 답은 담당자일 때만 받는다 ([ADR-0080](decisions/0080-approval-assignees.md)) |
 | 감독자 | `supervisor` | 가상 직원(§2-1)의 결재에 답하는 **사람**. 접수 BPM 프로세스의 일괄 결재 담당자가 된다 — 그림은 출처가 `virtual_worker.supervisors`인 입력(`assignees: "감독자"`)으로 가상 직원 자원의 목록을 그대로 받는다 (ADR-0099) |
@@ -135,32 +122,16 @@ Center ─(하트비트 응답: 배포·작업·결재 답)─▶ PC 실행기  
 
 > 상태: 감독자는 [ADR-0079](decisions/0079-virtual-worker-is-an-intake-bot.md), 결재 담당자는 [ADR-0080](decisions/0080-approval-assignees.md), 대리 답은 [ADR-0081](decisions/0081-answering-on-behalf.md)이 정한다. 결재 담당자·대리 답(C6)·일괄 기동(ADR-0082)·가상 직원(C5, ADR-0085)이 돈다.
 
-## 4. UI 자동화
-
-| 화면 표기 | 코드 | 뜻 |
-| --- | --- | --- |
-| 화면 | `page` | 자동화 대상 화면 하나. `page_id`로 식별, URL 패턴 또는 창 식별자를 가진다 |
-| 요소 | `element` | 화면 안의 조작 대상. `page_id::semantic_key`로 식별 |
-| 시맨틱 키 | `semantic_key` | 요소의 업무 이름 (`submit_button`). BPMN·AI는 셀렉터 대신 이것을 쓴다 |
-| 로케이터 | `locator` | 요소를 찾는 방법 하나 (role, test_id, css, xpath, automation_id, class_name, control_name) |
-| 사다리 | `ladder` | 한 요소의 로케이터들을 우선순위대로 늘어놓은 것. 앞에서부터 시도 |
-| 동작 | `action` | 요소에 하는 일 8종: fill, click, press, read, read_table, read_options, read_selection, select |
-| UI 셀렉터 등록 | `selector_registry` (기능) | UI 자동화 확장이 Tool UI에 기여하는 도구 (기본 제공). 화면 요소를 담아 검증하고 UI 자동화 앱에 등록·삭제 |
-| 치유 | `healing` | 사다리가 모두 실패했을 때 새 로케이터를 제안받아 로컬에서 검증하는 것 |
-| 승격 | `promotion` | 치유된 로케이터가 연속 3회 성공해 `unverified` → `active`가 되는 것 |
-| 인텐트 | `intent` | 자연어 지시 → 스텝 목록 해석 결과의 캐시 |
-| UI 세션 | `ui_session` | UI 태스크 하나가 Worker에 연 브라우저·창 조작 묶음. 끝날 때 보고 한 건 |
-
-## 5. 리소스 (Center가 목록으로 관리)
+## 4. 리소스 (Center가 목록으로 관리)
 
 | 종류 | 코드 | 예 |
 | --- | --- | --- |
 | 확장 | `extension` | 확장 정의, 등급, 상태, 기여 요약. 서버 부분이 있으면 서비스 앱 항목과 이어짐 |
 | 서비스 앱 | `service_app` | 주소·상태·작업 목록·관리 콘솔 주소 (키는 두지 않음) |
-| UI 화면 | `ui_page` | UI 자동화 앱에 등록된 화면 |
-| 런타임 | `runtime` | PC 실행기가 가진 실행 능력 (Worker 버전, 브라우저, 데스크톱 백엔드) |
+| 기여 자원 | `contributed` | 확장이 카탈로그로 올린 자원. 종류 이름은 확장이 정하고 Center는 `data`를 해석하지 않는다 |
+| 런타임 | `runtime` | PC 실행기가 보고하는 실행 능력 (C4 `runtimes`의 브라우저·데스크톱 백엔드). **지금은 채우는 쪽이 없다** ([09-gaps.md](09-gaps.md)) |
 
-## 5-1. 외부 작업 ([ADR-0102](decisions/0102-calling-outside-is-pull.md), C15)
+## 4-1. 외부 작업 ([ADR-0102](decisions/0102-calling-outside-is-pull.md), C15)
 
 BPM 프로세스가 네트워크 건너의 기능을 부를 때 Center에 **일감을 올려 두고, 그 기능 쪽이 가져가 끝낸 뒤 결과를 돌려준다** (Pull). 부르는 쪽이 기능의 주소·키를 알지 않는다.
 
@@ -171,9 +142,9 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때 Center에 **일�
 | 일꾼 | `consumer` | 토픽을 지켜보다 일감을 가져가(잠금) 수행하고 끝냈다고 알리는 **상시 프로세스**. 서비스 앱이 일꾼이 되고, 외부 앱은 어댑터 일꾼이 맡는다. Center가 승인해 들인다 |
 | 어댑터 일꾼 | `adapter_consumer` | Chaeksas가 주는 범용 일꾼. 외부 확장 정의의 HTTP 어댑터를 읽어 외부 앱을 부른다. **외부 앱의 주소·키는 이 일꾼만 든다** — 외부 앱이 있는 망 안에 띄워도 된다 |
 | 잠금 | `lock` | 일꾼이 일감을 가져가면 그 일꾼만 끝낼 수 있는 시간. 지나면 다른 일꾼에게 다시 나간다 (그래서 **최소 한 번 실행**이다) |
-| 호출 토큰 | `call_token` | 실행하는 쪽(실행 프로세스·Worker·Tool UI)이 외부 작업을 **올리고 결과를 기다리는 데만** 쓰는 Center 토큰. PC 실행기가 제 Center API 키로 청해(24시간) 넘긴다 |
+| 호출 토큰 | `call_token` | 실행하는 쪽(실행 프로세스)이 외부 작업을 **올리고 결과를 기다리는 데만** 쓰는 Center 토큰. PC 실행기가 제 Center API 키로 청해(24시간) 메모리에 들고 넘긴다 |
 
-## 6. 키와 설정 ([ADR-0013](decisions/0013-api-keys.md))
+## 5. 키와 설정 ([ADR-0013](decisions/0013-api-keys.md))
 
 | 화면 표기 | 코드 | 뜻 |
 | --- | --- | --- |
@@ -185,25 +156,22 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때 Center에 **일�
 | 환경변수 접두사 | — | `CHK_` 하나. 중첩은 `__` (예: `CHK_CENTER__PORT`) |
 | 포트 | — | 구성요소마다 기본값이 있고, 설정 파일 또는 환경변수로 바꾼다 ([04-setup.md](04-setup.md) §6) |
 
-## 7. 쓰지 않는 말
+## 6. 쓰지 않는 말
 
 | 말 | 이유 | 대신 |
 | --- | --- | --- |
 | 프로세스 (단독) | BPM 프로세스인지 OS 프로세스인지 모호 | BPM 프로세스 / <이름> 프로세스 |
 | BPM 프로세스 (프로그램을 가리켜) | BPM 프로세스는 업무(BPM 프로세스)다 | PC 실행기 |
-| Worker 앱, Worker 창, Worker 트레이 | Worker는 화면이 없다 | Worker 프로세스. 화면 기능은 Tool UI의 「UI 셀렉터 등록」 |
-| 유틸리티 (확장이 더한 창을 가리켜) | PC 실행기에 붙던 옛 구조 (`bot_ui.utilities`) | 도구 (Tool UI) |
 | 직원, Employee, 에이전트(배포 단위로서) | 배포 단위는 BPM 프로세스다. 「가상 직원」(§2-1)은 배포 단위가 아니라 **업무 주체**라 이 금지에 걸리지 않는다 — 「직원」만 단독으로 쓰지 않는다 | BPM 프로세스 |
 | 묶음 (일괄을 가리켜) | 확장·시험 묶음·PC 묶음 풀기가 이미 쓴다 | 일괄 |
-| `worker` (가상 직원을 가리켜, 경로·칸 이름에서) | Worker 프로세스와 겹친다 | `virtual_worker` |
+| `worker` (가상 직원을 가리켜, 경로·칸 이름에서) | 일꾼(`consumer`)과 헷갈린다 | `virtual_worker` |
 | 에이전트(화면에서) | LLM이 태스크를 수행하는 내부 구성만 뜻한다 | AI 태스크 |
 | RPA 봇, BPM 봇 | 모호 | BPM 프로세스 |
 | LLM 앱 (분류 이름으로) | 서비스 앱 중 LLM을 안 쓰는 것도 있다 | 서비스 앱 |
-| 셀렉터 서버, UI 서버 | 서비스 앱 체계 밖의 이름 | UI 자동화 앱 |
 | 플러그인, 애드온, 모듈(기능 묶음을 가리켜) | 한 개념에 한 단어 | 확장 |
 | HITL (화면에서) | 두 층을 구분하지 못한다 | 결재 / 확인 |
-| lease, dispatcher | 서버가 작업을 배분하던 옛 구조 | Center 작업(`job`) + UI 세션 |
+| lease, dispatcher | 서버가 작업을 배분하던 옛 구조 | Center 작업(`job`) |
 | 대시보드 | 읽기 전용이던 옛 구조 | Center 콘솔 |
 | 등록 토큰 | Center API 키로 바뀜 | Center API 키 |
-| Worker·워커 (외부 작업을 가져가는 쪽을 가리켜) | Worker 프로세스(UI 자동화의 손)와 겹친다 | 일꾼 (`consumer`) |
+| Worker·워커 (외부 작업을 가져가는 쪽을 가리켜) | 한 개념에 한 단어 — 그 쪽은 일꾼이다 | 일꾼 (`consumer`) |
 | External Task Worker, 작업 게시판 | 제품 이름·비유 | 외부 작업 · 토픽 · 일꾼 |

@@ -43,7 +43,6 @@ from PySide6.QtWidgets import (
 
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.center_client import KeyRejected
-from chaeksas.bot_ui.runtimes import STATE_LABELS, RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings import data_dir
 from chaeksas.contracts._base import Violation
 from chaeksas.contracts.extension import (
@@ -87,22 +86,16 @@ POINT_LABEL = {
     "task_types": "태스크 종류",
     "studio.editors": "속성 편집기",
     "studio.resource_views": "리소스 탐색기 뿌리",
-    "tool_ui.tools": "도구 (Tool UI)",
-    "bot_ui.panels": "화면 칸",
-    "bot_ui.local_runtimes": "로컬 런타임",
     "configuration": "설정 칸",
     "preflight": "사전 점검",
     "console.pages": "관리 콘솔 화면",
     "resources": "리소스 갈래",
 }
-#: AI 환경은 C7 요약(`contributes_summary`)에 없다 — 상세에서 정의를 직접 읽어 말한다.
-ENVIRONMENT_LABEL = "AI 환경"
 
 #: 제 앱을 부르는 자리 (C13 `requires_keys[].purpose`) — **넣을 키는 없다** (ADR-0102, C15).
 #: 사람이 할 일이 있으면 그 자리까지 말해 준다.
 PURPOSE_LABEL = {
     "run": "BPM 프로세스가 작업을 부를 때 — 넣을 키 없음 (Center가 배포로 가린다)",
-    "utility": "도구가 쓸 때 — 넣을 키 없음 (더 필요한 권한은 CON-03 「셀렉터 등록」이 켠다)",
 }
 
 #: 외부 확장은 코드를 기여할 수 없다 (C13 E1) — 「기여」 칸에 그렇게 적는다.
@@ -235,12 +228,11 @@ def detail_sections(
     row: ExtensionRow,
     *,
     service_url: str | None = None,
-    runtimes: Mapping[str, str] | None = None,
 ) -> list[tuple[str, list[str]]]:
     """상세에 보일 것 — `(제목, 줄들)`. **창 없이 시험할 수 있게** 순수 함수로 둔다.
 
-    `service_url`은 **들고 있는 명부**가 말한 주소이고(C7 등록이 정의의 `base_url`을 이긴다),
-    `runtimes`는 런타임 id → 지금 상태다. 둘 다 바깥을 부르는 일이라 **창이 미리 재서** 넘긴다.
+    `service_url`은 **들고 있는 명부**가 말한 주소다(C7 등록이 정의의 `base_url`을 이긴다).
+    바깥을 부르는 일이라 **창이 미리 재서** 넘긴다.
     """
     loaded = row.loaded
     if loaded is None:
@@ -289,12 +281,6 @@ def detail_sections(
     ]
     out.append(("필요한 키", keys or [NOTHING]))
 
-    held = runtimes or {}
-    runtime_lines = [
-        f"{one.label} ({one.id}): {held.get(one.id, '상태를 모릅니다')}"
-        for one in m.contributes.bot_ui_local_runtimes
-    ]
-    out.append(("로컬 런타임", runtime_lines or [NOTHING]))
     out.append(("쓰는 BPM 프로세스", list(row.used_by) or ["쓰는 BPM 프로세스 없음"]))
     return out
 
@@ -305,10 +291,6 @@ def _contribution_lines(m: ExtensionManifest) -> list[str]:
         f"{POINT_LABEL.get(point, point)}: {', '.join(ids)}"
         for point, ids in m.contributes_summary().items()
     ]
-    # AI 환경은 C7 요약에 없다 (`domain`은 id가 아니다) — 정의에서 직접 읽는다 (ADR-0037).
-    domains = [one.domain for one in m.contributes.agent_environments]
-    if domains:
-        out.append(f"{ENVIRONMENT_LABEL}: {', '.join(domains)}")
     return out or [NOTHING]
 
 
@@ -526,29 +508,9 @@ class ExtensionsDialog(QDialog):
                 detail_sections(
                     found,
                     service_url=self._agent.service_url(found.id) if found.loaded is not None else None,
-                    runtimes=self._runtime_states(found),
                 )
             )
         )
-
-    def _runtime_states(self, row: ExtensionRow) -> dict[str, str]:
-        """그 확장이 기여한 런타임의 지금 상태 (BUI-09와 **같은 표기**를 쓴다).
-
-        **띄우지 않는다** — 감시자가 없으면 아직 띄우지 않은 것이다 (「꺼 둠」).
-        """
-        agent = self._agent
-        if row.loaded is None or agent.host is None:
-            return {}
-        out: dict[str, str] = {}
-        for runtime in row.loaded.manifest.contributes.bot_ui_local_runtimes:
-            found = agent.runtimes().supervisors.get(runtime.id)
-            state = STATE_LABELS.get(found.state, found.state) if found is not None else STATE_LABELS["off"]
-            try:
-                state += f" · 포트 {port_for(runtime, agent.settings)}"
-            except RuntimeUnavailable:
-                state += " · 포트를 모릅니다"
-            out[runtime.id] = state
-        return out
 
     def _refresh_toggle(self, row: ExtensionRow | None) -> None:
         """「켜기」/「끄기」 중 **할 수 있는 쪽만** 켠다. 못 하면 이유가 말풍선에 있다 (U3)."""

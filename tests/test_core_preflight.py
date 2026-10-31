@@ -58,11 +58,11 @@ def test_a_service_app_bot_needs_no_key_on_this_pc() -> None:
 
 def test_a_task_type_no_extension_contributes_blocks() -> None:
     """C13 — 종류가 없으면 엔진이 `node_kind_unsupported`로 끝낸다. 시작하기 전에 말한다."""
-    m = manifest(task_types=[TaskTypeNeed(id="ui_task", extension="ui-automation", run_locations=["pc"])])
+    m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="doc-ocr", run_locations=["pc"])])
     found = preflight.check(m, host=ExtensionHost())
 
     assert found.blocked == (preflight.TASK_TYPES_UNSUPPORTED,)
-    assert found.findings[0].items == ("ui_task (ui-automation 확장)",)
+    assert found.findings[0].items == ("ocr_task (doc-ocr 확장)",)
 
 
 def test_an_extension_with_no_local_code_does_not_block() -> None:
@@ -80,11 +80,14 @@ def test_an_extension_with_no_local_code_does_not_block() -> None:
     assert not found.blocks, "코드가 필요 없는 확장이 깔려 있지 않다고 막으면 안 된다"
 
 
-def test_a_pc_only_domain_with_no_environment_blocks() -> None:
-    """ADR-0037 — `web`·`desktop` AI 태스크는 확장이 눈과 손을 준다."""
-    found = preflight.check(manifest(domains=["desktop"]), host=ExtensionHost())
+def test_a_screen_domain_always_blocks() -> None:
+    """ADR-0114 — `web`·`desktop` AI 태스크는 **이 판이 돌리지 못한다**. 확장을 묻지 않는다(줄 확장이 없다)."""
+    found = preflight.check(manifest(domains=["desktop", "web"]), host=ExtensionHost())
     assert found.blocked == (preflight.MISSING_ENVIRONMENT,)
-    assert found.findings[0].items == ("desktop",)
+    assert found.findings[0].items == ("desktop", "web")
+    assert "다른 domain" in (found.findings[0].fix_hint or "")
+    # 호스트가 없어도 막는다 — 확장과 무관한 판단이다.
+    assert preflight.check(manifest(domains=["web"]), host=None).blocked == (preflight.MISSING_ENVIRONMENT,)
 
 
 def test_the_other_domains_need_no_environment() -> None:
@@ -167,7 +170,7 @@ def test_without_a_context_only_the_platform_checks_run() -> None:
 
 def test_without_a_host_the_extension_and_platform_extension_checks_are_skipped() -> None:
     """확장이 없는 PC 실행기도 BPM 프로세스는 돈다."""
-    m = manifest(domains=["desktop"], task_types=[TaskTypeNeed(id="ui_task", extension="x", run_locations=["pc"])])
+    m = manifest(task_types=[TaskTypeNeed(id="ocr_task", extension="x", run_locations=["pc"])])
     assert not preflight.check(m, host=None).blocks
 
 
@@ -178,12 +181,12 @@ def test_without_a_host_the_extension_and_platform_extension_checks_are_skipped(
 EXAMPLES = Path("docs/08-business-examples/bpmn")
 
 
-@pytest.mark.parametrize("example", ["bx36_legacy_migration"])
+@pytest.mark.parametrize("example", ["bx22_offboarding_access", "fx19_manual_task_pc"])
 def test_a_real_example_is_not_blocked(example: str, tmp_path: Path) -> None:
-    """BX-36은 서비스 앱(`it-crm`)과 `ui_task`·`desktop`을 쓴다.
+    """서비스 앱·사내 확장을 부르는 예제도, 사람 확인만 하는 PC 예제도 **막는 것이 없어야 한다**.
 
-    설치된 확장(`ui-automation`)이 종류와 환경을 주고 서비스 앱 키는 없어졌으므로(ADR-0102) **막는 것이
-    없어야 한다**. 이것이 깨지면 거짓 차단이 생긴 것이다 — 올바른 BPM 프로세스가 「실행 불가」가 된다.
+    서비스 앱 키는 없어졌고(ADR-0102) 코드 없는 확장이 깔려 있지 않다고 막지 않는다. 이것이 깨지면
+    거짓 차단이 생긴 것이다 — 올바른 BPM 프로세스가 「실행 불가」가 된다.
     """
     from chaeksas.core.extensions import load_host  # noqa: PLC0415
     from chaeksas.studio.packaging import export  # noqa: PLC0415
@@ -205,21 +208,9 @@ def _host_with(definition: dict[str, Any], *, off: tuple[str, ...] = ()) -> Exte
     import json  # noqa: PLC0415
 
     host = ExtensionHost(off=off)
-    host.add_installed(json.dumps(definition).encode("utf-8"), origin="test", root="chaeksas.ext.ui_automation")
+    host.add_installed(json.dumps(definition).encode("utf-8"), origin="test", root="fake_extension")
     return host
 
-
-#: 같은 확장이 AI 환경만 기여한 꼴 (ADR-0037 — 그림에는 `requires.domains`만 적힌다).
-DESKTOP_ENV: dict[str, Any] = {
-    "schema": 2,
-    "id": "doc-ocr",
-    "version": "1.0.0",
-    "name": "문서 인식",
-    "publisher": "Chaeksas",
-    "tier": "builtin",
-    "api": ">=1,<2",
-    "contributes": {"agent_environments": [{"domain": "desktop", "entry": "doc_ocr.client:Desktop"}]},
-}
 
 OCR = {
     "schema": 2,
@@ -228,7 +219,7 @@ OCR = {
     "name": "문서 인식",
     "publisher": "Chaeksas",
     "tier": "builtin",
-    "api": ">=1,<2",
+    "api": ">=2,<3",
     "contributes": {
         "task_types": [
             {
@@ -266,29 +257,6 @@ def test_a_missing_extension_still_says_install_it() -> None:
     assert "판으로 올리세요" in (found.findings[0].fix_hint or "")
 
 
-def test_a_turned_off_ai_environment_says_turn_it_on() -> None:
-    """**그림에 확장을 적지 않는 길도 같이 가른다** (ADR-0037·ADR-0043).
-
-    `desktop` AI 태스크는 매니페스트에 `requires.domains`만 적는다 — 환경을 주는 확장이 꺼져
-    있는데 「환경을 기여하는 확장을 설치하세요」라고 하면, 이미 깔린 것을 또 깔라는 말이 된다.
-    """
-    m = manifest(domains=["desktop"])
-
-    on = preflight.check(m, host=_host_with(DESKTOP_ENV))
-    assert not on.blocks
-
-    off = preflight.check(m, host=_host_with(DESKTOP_ENV, off=("doc-ocr",)))
-    assert off.blocked == (preflight.EXTENSION_TURNED_OFF,)
-    assert off.findings[0].items == ("desktop (문서 인식 확장)",)
-    assert off.findings[0].fix_hint == "확장 목록에서 그 확장을 켜세요"
-
-
-def test_an_absent_ai_environment_still_says_install_it() -> None:
-    found = preflight.check(manifest(domains=["desktop"]), host=ExtensionHost())
-    assert found.blocked == (preflight.MISSING_ENVIRONMENT,)
-    assert "설치하세요" in (found.findings[0].fix_hint or "")
-
-
 # ───────────── 실행 위치가 아닌 태스크 종류 (ADR-0064 — 서버에서만 생긴다) ─────────────
 
 
@@ -296,7 +264,7 @@ def _server_host(definition: dict[str, Any]) -> ExtensionHost:
     import json  # noqa: PLC0415
 
     host = ExtensionHost(run_location="server")
-    host.add_installed(json.dumps(definition).encode("utf-8"), origin="test", root="chaeksas.ext.ui_automation")
+    host.add_installed(json.dumps(definition).encode("utf-8"), origin="test", root="fake_extension")
     return host
 
 

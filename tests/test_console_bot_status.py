@@ -208,7 +208,6 @@ def register(client: TestClient, *, readiness: list[dict[str, Any]]) -> None:
             "status": "idle",
             "current_run": None,
             "queue": {"max": 20, "items": []},
-            "worker": {"state": "off", "restarts": 0},
             "readiness": readiness,
         },
         headers=pc,

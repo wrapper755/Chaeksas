@@ -19,7 +19,7 @@
   <application xmlns="urn:schemas-microsoft-com:asm.v3">
     <windowsSettings>
       <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
-      <!-- ADR-0021: Worker(같은 실행 파일)는 Per-Monitor v2. 앞의 것이 우선, 뒤는 옛 Windows용 -->
+      <!-- ADR-0021: Per-Monitor v2. 앞의 것이 우선, 뒤는 옛 Windows용 -->
       <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
       <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
     </windowsSettings>

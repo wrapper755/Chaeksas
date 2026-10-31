@@ -1,11 +1,11 @@
-# 서버 구성 한 번에 — Center·콘솔·서버 실행기·UI 자동화 앱. `docs/04-setup.md` §6의 포트를 그대로 쓴다.
+# 서버 구성 한 번에 — Center·콘솔·서버 실행기. `docs/04-setup.md` §6의 포트를 그대로 쓴다.
 #
 #   cd deploy
 #   cp .env.example .env     # 토큰을 채운다 (비밀은 저장소에 넣지 않는다)
 #   docker compose up -d
 #
-# 서비스 앱 관리 콘솔(`svc-console`)은 **서비스 앱마다 하나**다 — 여기서는 UI 자동화 앱 하나를
-# 가리킨다 (`CHK_SVC_CONSOLE__APP_URL`). Neo4j·LLM 게이트웨이는 계획 생성(C8)과 함께 온다.
+# 서비스 앱과 그 관리 콘솔(`svc-console`, 서비스 앱마다 하나)은 여기 없다 — 띄울 서비스 앱이
+# 생기면 그 앱과 함께 더한다 (ADR-0114).
 name: chaeksas
 
 services:
@@ -99,55 +99,7 @@ services:
       - center
     restart: unless-stopped
 
-  svc-uia:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.svc-uia
-    depends_on:
-      - center
-    environment:
-      # 관리 API(SVC-00~03)는 **이 토큰이 있어야** 열린다. 없으면 503이다 (C11).
-      CHK_SVC_UI_AUTOMATION__ADMIN_TOKEN: ${CHK_SVC_UI_AUTOMATION__ADMIN_TOKEN:?관리자 토큰을 .env에 넣으세요}
-      CHK_SVC_UI_AUTOMATION__PORT: "8000"
-      CHK_SVC_UI_AUTOMATION__CONSOLE_URL: http://localhost:${CHK_SVC_CONSOLE__HOST_PORT:-8001}
-      # 일감은 Center에서 가져간다 (C15, ADR-0102) — 처음 뜨면 들이기 요청 코드를 로그에 찍는다.
-      # 관리자가 Center 콘솔 CON-07 「일꾼 승인 대기」에서 같은 코드를 승인하면 토큰이 /data에 남는다.
-      CHK_SVC_UI_AUTOMATION__CENTER__URL: http://center:8800
-      # 모델 (치유·목표로 계획이 쓴다, C11 §모델 연결). 비우면 그 작업만 503 llm_unavailable이다.
-      CHK_SVC_UI_AUTOMATION__LLM__BASE_URL: ${CHK_SVC_UI_AUTOMATION__LLM__BASE_URL:-}
-      CHK_SVC_UI_AUTOMATION__LLM__MODEL: ${CHK_SVC_UI_AUTOMATION__LLM__MODEL:-}
-      CHK_SVC_UI_AUTOMATION__LLM__API_KEY: ${CHK_SVC_UI_AUTOMATION__LLM__API_KEY:-}
-    ports:
-      - "${CHK_SVC_UI_AUTOMATION__HOST_PORT:-8000}:8000"
-    volumes:
-      - svc-uia-data:/data
-    restart: unless-stopped
-
-  svc-console:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile.console
-      args:
-        APP: svc-console
-    environment:
-      # 콘솔은 **컨테이너 이름**으로 앱을 부른다 (브라우저가 아니라 콘솔 서버가 부른다, ADR-0017 §1).
-      CHK_SVC_CONSOLE__APP_URL: http://svc-uia:8000
-      # 「실행 id」 → CON-01 링크 (ADR-0075). **브라우저가 여는** 주소라 컨테이너 이름이 아니다.
-      # 호스트 포트 칸에는 `127.0.0.1:8501`처럼 주소가 들어갈 수 있어 그것으로 짓지 않는다.
-      CHK_SVC_CONSOLE__CENTER_CONSOLE_URL: ${CHK_SVC_CONSOLE__CENTER_CONSOLE_URL:-http://localhost:8501}
-      CHK_SVC_CONSOLE__SESSION_SECRET: ${CHK_SVC_CONSOLE__SESSION_SECRET:?세션 비밀을 .env에 넣으세요 (16자 이상)}
-      PORT: "8001"
-      # Next.js standalone은 `HOSTNAME`에 바인드하는데 Docker가 그것을 컨테이너 id로 채운다 —
-      # 그러면 127.0.0.1을 두드리는 HEALTHCHECK가 닿지 못해 늘 unhealthy다.
-      HOSTNAME: "0.0.0.0"
-    ports:
-      - "${CHK_SVC_CONSOLE__HOST_PORT:-8001}:8001"
-    depends_on:
-      - svc-uia
-    restart: unless-stopped
-
 volumes:
   center-data:
   server-runner-data:
   server-runner-secrets:
-  svc-uia-data:

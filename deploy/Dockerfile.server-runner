@@ -26,10 +26,8 @@ COPY apps/center/pyproject.toml apps/center/
 COPY apps/studio/pyproject.toml apps/studio/
 COPY apps/bot_ui/pyproject.toml apps/bot_ui/
 COPY apps/server_runner/pyproject.toml apps/server_runner/
-COPY extensions/ui_automation/pyproject.toml extensions/ui_automation/
 
-# 실행기가 쓰는 것만 (Qt·PySide6는 들어가지 않는다). 내장 확장 ui-automation은 태스크가 PC 전용이라
-# 넣지 않는다 — 서버 BPM 프로세스에는 UI 태스크를 넣을 수 없다 (ADR-0015).
+# 실행기가 쓰는 것만 (Qt·PySide6는 들어가지 않는다).
 RUN uv sync --frozen --no-install-workspace --package chaeksas-server-runner
 
 COPY packages/ packages/

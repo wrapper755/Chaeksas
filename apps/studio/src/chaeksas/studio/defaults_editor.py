@@ -81,8 +81,8 @@ class DefaultsEditor(QWidget):
         self.confirm_box.setPlaceholderText("예: 로그인 화면이 나타남")
         self.confirm_box.setFixedHeight(lines * 4)
         self.app_box = QLineEdit(self)
-        self.app_box.setPlaceholderText("앱 이름 — 그 PC Worker의 desktop-apps.json에 있는 것")
-        self.app_box.setToolTip("데스크톱 AI 태스크와 UI 태스크가 앱 이름을 적지 않았을 때 씁니다 (ADR-0033).")
+        self.app_box.setPlaceholderText("앱 이름 (C14 `desktop.app`)")
+        self.app_box.setToolTip("데스크톱 AI 태스크가 앱 이름을 적지 않았을 때 씁니다 (ADR-0033).")
 
         self.warning = QLabel("", self)
         self.warning.setWordWrap(True)

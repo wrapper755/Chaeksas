@@ -69,13 +69,13 @@ def test_a_bad_chk_element_says_what_is_wrong(text: str, complaint: str) -> None
 def test_an_extension_task_keeps_its_xml_attributes_apart() -> None:
     """`chk:task`만 `type`·`extension`이 XML 속성이다 (C14 §태스크 종류)."""
     found, problem = check_chk(
-        '{"task": {"type": "ui_task", "extension": "ui-automation", "data": {"page_id": "p"}}}'
+        '{"task": {"type": "ocr_task", "extension": "doc-ocr", "data": {"form": "p"}}}'
     )
     assert problem is None
     assert json.loads(found["task"]) == {
-        "type": "ui_task",
-        "extension": "ui-automation",
-        "data": {"page_id": "p"},
+        "type": "ocr_task",
+        "extension": "doc-ocr",
+        "data": {"form": "p"},
     }, "종류까지 함께 간다 — 캔버스가 XML 속성에 쓴다"
 
 
@@ -175,8 +175,8 @@ def test_no_example_breaks_f6_with_the_real_extension_table() -> None:
 
     host = ExtensionHost()
     host.load_entry_points()
+    # 지금은 깔린 확장이 없어 표가 비어 있다 (ADR-0114) — 확장을 들이면 그 표로 다시 걸린다.
     table = host.task_type_locations()
-    assert table, f"설치된 확장의 태스크 종류를 찾지 못했다: {table}"
 
     caught = {}
     for path in sorted(EXAMPLES.glob("*.bpmn")):
@@ -260,10 +260,10 @@ def studio_extensions() -> Any:
 
 
 def test_a_bot_that_calls_service_apps_is_not_blocked_for_keys(tmp_path: Path) -> None:
-    """ADR-0102 — 서비스 앱 키가 없어졌다. 서비스 앱·UI 태스크를 쓰는 그림이라도 **키로 막지 않는다**."""
+    """ADR-0102 — 서비스 앱 키가 없어졌다. 서비스 앱을 쓰는 그림이라도 **키로 막지 않는다**."""
     from chaeksas.studio.preflight import readiness  # noqa: PLC0415
 
-    found = readiness(opened(tmp_path, "bx36_legacy_migration"))
+    found = readiness(opened(tmp_path, "bx22_offboarding_access"))
     assert not [v for v in found if v.blocks], [str(v) for v in found]
 
 
@@ -314,46 +314,6 @@ def test_a_broken_extension_check_warns_without_blocking(tmp_path: Path) -> None
     assert [v.code for v in found] == ["check_skipped"]
     assert not found[0].blocks
     assert "아직 못 만들었다" in found[0].message
-
-
-def test_the_ui_page_check_is_quiet_when_no_page_is_used() -> None:
-    """확장의 점검도 **쓰는 것이 없으면 아무 말도 하지 않는다** (거짓 경고 방지).
-
-    아직 레지스트리(C9)를 부를 수 없어 「모른다」밖에 할 말이 없는데, 그것을 조건 없이 내면
-    UI를 쓰지 않는 그림 전부에 경고가 뜬다.
-    """
-    from chaeksas.ext.ui_automation.client.preflight import (  # noqa: PLC0415
-        UNVERIFIED,
-        PagesRegisteredCheck,
-    )
-    from chaeksas.extension_api import PreflightTarget  # noqa: PLC0415
-
-    none = _manifest_requiring()
-    assert PagesRegisteredCheck().check(PreflightTarget(extension=None, manifest=none)) == ()  # type: ignore[arg-type]
-
-    some = _manifest_requiring({"type": "ui_page", "id": "erp.order.form"})
-    (told,) = PagesRegisteredCheck().check(PreflightTarget(extension=None, manifest=some))  # type: ignore[arg-type]
-    assert told.id == UNVERIFIED and told.items == ("erp.order.form",)
-    assert not told.blocks, "「모른다」로 실행을 막지 않는다"
-
-
-def _manifest_requiring(*resources: dict[str, str]) -> Any:
-    from chaeksas.contracts.manifest import Manifest  # noqa: PLC0415
-
-    return Manifest.model_validate(
-        {
-            "schema": 1,
-            "kind": "bpm_process",
-            "id": "t.one",
-            "version": "1.0.0",
-            "run_location": "pc",
-            "entry": "main.bpmn",
-            "content_hash": "sha256:" + "0" * 64,
-            "human": {"approval_center": False, "approval_field": False, "confirmation": False},
-            "built": {"by": "studio", "at": "2026-10-09T00:00:00+09:00", "core": "0.1.0", "spec_version": 1},
-            "requires": {"resources": list(resources)},
-        }
-    )
 
 
 # ─────────────────────────── 캔버스 왕복 (진짜 bpmn-js) ───────────────────────────

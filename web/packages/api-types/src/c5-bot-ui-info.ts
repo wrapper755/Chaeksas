@@ -24,10 +24,8 @@ export interface BotUiInfo {
   readiness?: Readiness[];
   registered_at: string;
   runtimes?: Runtimes | null;
-  selector_registration?: boolean;
   status?: string | null;
   versions: Versions;
-  worker?: WorkerState | null;
   [k: string]: unknown;
 }
 /**
@@ -120,7 +118,6 @@ export interface Versions {
   bot_ui: string;
   build?: BuildStamp | null;
   core: string;
-  worker?: string | null;
   [k: string]: unknown;
 }
 /**
@@ -132,16 +129,5 @@ export interface Versions {
 export interface BuildStamp {
   built_at: string;
   commit: string;
-  [k: string]: unknown;
-}
-/**
- * Worker 프로세스 상태. `off`는 "필요할 때 시작, 아직 안 띄움".
- */
-export interface WorkerState {
-  reserved_for?: string | null;
-  restarts?: number;
-  session?: string | null;
-  state: string;
-  version?: string | null;
   [k: string]: unknown;
 }

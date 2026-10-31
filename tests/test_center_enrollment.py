@@ -79,7 +79,6 @@ def heartbeat_body() -> dict[str, Any]:
         "status": "idle",
         "current_run": None,
         "queue": {"max": 20, "items": []},
-        "worker": {"state": "off", "restarts": 0},
     }
 
 

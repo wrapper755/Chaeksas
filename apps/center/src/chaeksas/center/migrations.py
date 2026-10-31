@@ -285,6 +285,11 @@ MIGRATIONS: tuple[Step, ...] = (
         "서버 실행기 재시작 — 요청한 시각, 다시 등록하면 지운다 (C12 운영 API, ADR-0117)",
         ("ALTER TABLE server_runners ADD COLUMN restart_requested_at TEXT",),
     ),
+    Step(
+        19,
+        "CON-03 「셀렉터 등록」을 걷는다 — UI 자동화 확장과 함께 (ADR-0114)",
+        ("ALTER TABLE bot_uis DROP COLUMN selector_registration",),
+    ),
 )
 
 

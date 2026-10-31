@@ -26,8 +26,6 @@ ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
 #: 연다. 환경변수 길은 없다 — 이것을 쓰는 것은 승인으로 들어온 PC뿐이다.
 ENROLL_SECRET = "enroll_secret"
 
-#: 호출 토큰 (C15) — PC 실행기가 청해 두면 **Tool UI가 읽는다** (Tool UI는 Center를 부르지 않는다).
-CALL_TOKEN = "call_token"
 #: 실행 프로세스에게 **첫** 호출 토큰을 물려주는 환경변수 (명령줄은 프로세스 목록에 뜬다).
 #: 새것은 제어 파일로 간다 (`core.control.CALL_TOKEN`).
 ENV_CALL_TOKEN = "CHK_BOT_UI__CALL_TOKEN"
@@ -165,13 +163,6 @@ class Credentials:
 
     def set_extension_secret(self, extension_id: str, key: str, value: str) -> None:
         self.set(f"{EXTENSION_PREFIX}{extension_id}:{key}", value.strip())
-
-    def call_token(self) -> str | None:
-        """PC 실행기가 청해 둔 호출 토큰 (C15) — Tool UI가 읽는다."""
-        return self.get(CALL_TOKEN)
-
-    def set_call_token(self, value: str) -> None:
-        self.set(CALL_TOKEN, value.strip())
 
 
 __all__ = [

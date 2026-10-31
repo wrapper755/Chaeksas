@@ -707,19 +707,19 @@ DUMMY_WORKER = VirtualWorkerIdentity(id="dummy", name="자리 값 가상 직원"
 
 
 def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> None:
-    """예제 **55개**를 모두 돌려 본다 (선언한 입력에는 자리 값을 넣는다).
+    """예제 **48개**를 모두 돌려 본다 (선언한 입력에는 자리 값을 넣는다).
 
     중요한 것은 「멈추는 이유가 우리가 아는 것인가」다 — 모르는 이유로 터지면 엔진 쪽 구멍이다.
     **이 수가 조각마다 올라가는 눈금이다** (조각 2: 끝 3·대기 1 → 3b: 끝 11·대기 2 →
     3c: 끝 19·대기 6 → 3d: 끝 20·대기 9 → 3f: 끝 23·대기 9 → M7 조각 29~31: 끝 26·대기 9 →
-    일괄 기동(ADR-0082): 끝 27·대기 10 — 합치면 55개 중 **37개**가 사람이나 끝까지 간다).
+    일괄 기동(ADR-0082): 끝 27·대기 10 → UI 자동화를 걷으며 예제 일곱이 빠짐(ADR-0114): 끝 25·대기 10
+    — 합치면 48개 중 **35개**가 사람이나 끝까지 간다).
 
-    남은 18개는 둘 중 하나다. **UI 자동화(M4)** 5개, 그리고 **자리 값 탓** 13개 — 선언만 보고
-    넣는 `"시험값"`으로는 점 표기·반복·기간이 성립하지 않는다. 진짜 입력은 Studio 시험 실행의
+    남은 13개는 **자리 값 탓**이다 — 선언만 보고 넣는 `"시험값"`으로는 점 표기·반복·기간이 성립하지
+    않는다. 진짜 입력은 Studio 시험 실행의
     케이스에서 온다 (인수 시험).
     """
     known = {
-        "node_kind_unsupported",  # UI 태스크·`desktop` AI 태스크 (M4)
         "no_matching_flow",  # 자리 값으로는 어느 조건도 참이 아닐 수 있다
         # 아래 넷은 **자리 값 탓**이다 (예제가 아니라).
         "expr_error",  # 자리 값이 문자열이라 점 표기·`표를사전`·`기간`이 성립하지 않는다
@@ -756,7 +756,7 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
             reasons[run.error.code] = reasons.get(run.error.code, 0) + 1
             assert run.error.code in known, f"{path.name}: {run.error}"
 
-    assert len(done) + len(waiting) + sum(reasons.values()) == 55
+    assert len(done) + len(waiting) + sum(reasons.values()) == 48
     # 끝까지 가는 것·사람을 기다리는 것 — **다음 조각이 이 목록을 늘린다. 늘면 여기를 고쳐 적는다.**
     assert done == [
         "bx02_morning_fx_report.bpmn",  # API AI 태스크 + 통화마다 범위 점검 (3f)
@@ -764,10 +764,8 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         "bx06_bulk_credit_check.bpmn",  # 규칙(DMN) + 반복 + xlsx 출력 + 메일
         "bx07_corporate_card_review.bpmn",  # AI 분류 반복 + DMN COLLECT + xlsx (3f)
         "bx12_shipping_fee.bpmn",  # 규칙(DMN) 공유 BPM 프로세스
-        "bx17_erp_po_entry.bpmn",
         "bx22_offboarding_access.bpmn",  # 서비스 앱 + 반복
         "bx31_request_triage.bpmn",  # AI 태스크 + 메일
-        "bx36_legacy_migration.bpmn",  # 서비스 앱
         "bx37_clause_review.bpmn",  # 같은 AI 태스크를 한 실행에서 세 번
         "fx01_api_call.bpmn",  # AI 태스크 (`domain: api`) + 업무 파라미터
         "fx02_business_rule.bpmn",  # 규칙(DMN)

@@ -265,18 +265,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             raise ApiError(404, "not_found", f"PC 실행기 {bot_ui_id}가 없다")
         return {"bot_ui_id": bot_ui_id, "disabled": False}
 
-    @app.put(f"{API}/bot-uis/{{bot_ui_id}}/utility")
-    async def set_bot_ui_utility(request: Request, bot_ui_id: str) -> Any:
-        """CON-03 「셀렉터 등록」 (C5). 켠 PC만 등록 세션(`reg_…`)의 외부 작업을 올린다 (C15)."""
-        require_admin(authenticate(request))
-        body = await _json(request)
-        on = body.get("selector_registration")
-        if not isinstance(on, bool):
-            raise ApiError(422, "input_invalid", "selector_registration은 참·거짓이어야 한다")
-        if not bot_ui.set_selector_registration(app.state.store, bot_ui_id, on=on):
-            raise ApiError(404, "not_found", f"PC 실행기 {bot_ui_id}가 없다")
-        return {"bot_ui_id": bot_ui_id, "selector_registration": on}
-
     # ─────────────────── 서버 실행기 (C12·CON-12) ───────────────────
 
     @app.get(f"{API}/server-runners")

@@ -30,7 +30,7 @@ MODES = frozenset({MODE_AUTONOMOUS, MODE_DETERMINISTIC})
 #: 작업 이름 규칙.
 OPERATION_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
 
-KNOWN_CALLER_TYPES = frozenset({"bot_ui", "server_runner", "studio", "tool_ui", "worker"})
+KNOWN_CALLER_TYPES = frozenset({"bot_ui", "server_runner", "studio"})
 KNOWN_CATEGORIES = frozenset({"business", "system"})
 KNOWN_HEALTH_STATUSES = frozenset({"ok", "degraded"})
 
@@ -132,7 +132,7 @@ class OpRequest(SchemaVersioned):
     attempt: int = Field(ge=1)  # 재시도마다 +1
     call_seq: int = Field(default=1, ge=1)  # 한 노드 인스턴스·시도 안에서 여러 번 부를 때
     caller: Caller
-    business_key: str | None = None  # UI 자동화처럼 세션을 잇는 키 (C10)
+    business_key: str | None = None  # 여러 호출을 한 업무로 잇는 키 (선택)
     input: dict[str, Any] = Field(default_factory=dict)
     #: `run` | `test` — 시험 일감이면 앱이 시험 쪽으로 보낼지 정한다 (C15, ADR-0102 §6).
     origin: str = "run"

@@ -33,7 +33,6 @@ KIND_LABEL = {
     "node_state": "노드",
     "service_call": "서비스 앱 호출",
     "ai_task": "AI 태스크",
-    "ui_session": "UI 태스크",
     "human_requested": "사람에게 물음",
     "human_answered": "사람이 답함",
     "error": "오류",

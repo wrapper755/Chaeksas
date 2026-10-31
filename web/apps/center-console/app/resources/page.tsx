@@ -330,7 +330,7 @@ function Workers({
  * 확장이 기여한 자원 하나의 종류 (CON-07 탭).
  *
  * **공통 칸만 그린다** — `data`는 확장 고유 내용이라 콘솔이 해석하지 않는다 (C13 §5). 자원의
- * 자세한 모습은 그 확장의 관리 콘솔에서 본다 (예: UI 자동화 앱의 UIA-02).
+ * 자세한 모습은 그 확장의 관리 콘솔에서 본다.
  */
 function Contributed({ kind, items }: { kind: ContributedKind; items: ContributedResource[] }) {
   const columns: Array<Column<ContributedResource>> = [

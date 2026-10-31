@@ -52,7 +52,6 @@ def reachable(name: str, graph: dict[str, Member]) -> set[str]:
 # (멤버, 의존하면 안 되는 멤버, 근거)
 FORBIDDEN_DEPS = [
     ("chaeksas-center", "chaeksas-core", "§5 — center는 core를 import하지 않는다"),
-    ("chaeksas-ext-ui-automation", "chaeksas-core", "§5 — 확장의 service·worker는 core를 import하지 않는다"),
     ("chaeksas-contracts", "chaeksas-extension-api", "§2 — contracts는 로직·I/O를 모른다"),
     ("chaeksas-extension-api", "chaeksas-core", "§5 — 방향은 extension_api ◀── core"),
     ("chaeksas-service-kit", "chaeksas-core", "§5 — service_kit은 contracts만 본다 (업무 로직·실행을 모른다)"),
@@ -84,7 +83,6 @@ def test_platform_does_not_depend_on_extensions() -> None:
         "chaeksas-core",
         "chaeksas-studio",
         "chaeksas-bot-ui",
-        "chaeksas-tool-ui",
         "chaeksas-server-runner",
         "chaeksas-center",
     ]
@@ -146,13 +144,3 @@ def test_forbidden_import(glob: str, forbidden: str, why: str) -> None:
             if name == forbidden.rstrip(".") or name.startswith(forbidden):
                 offenders.append(f"{py.relative_to(ROOT)}: import {name}")
     assert not offenders, f"{why}\n" + "\n".join(offenders)
-
-
-def test_extension_worker_does_not_import_service() -> None:
-    """Worker(로컬 런타임)는 서버 부분을 import하지 않는다 — HTTP로만 부른다 (C8·C10)."""
-    offenders = []
-    for py in sorted(ROOT.glob("extensions/*/src/**/worker/**/*.py")):
-        for name in imported_names(py):
-            if ".service" in name:
-                offenders.append(f"{py.relative_to(ROOT)}: import {name}")
-    assert not offenders, "\n".join(offenders)

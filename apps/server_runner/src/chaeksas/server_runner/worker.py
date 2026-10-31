@@ -76,7 +76,6 @@ RESUME_EXTERNAL_TASK = "external_task"
 EMPTY_COUNTS: dict[str, Any] = {
     "ai_tasks": 0,
     "replayed_tasks": 0,
-    "ui_tasks": 0,
     "service_calls": 0,
     "human_requests": 0,
 }

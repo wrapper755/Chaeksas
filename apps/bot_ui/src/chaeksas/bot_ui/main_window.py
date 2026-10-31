@@ -1,6 +1,6 @@
 """BUI-02 메인 창 + BUI-04 BPM 프로세스 탭. **창을 닫아도 PC 실행기는 트레이에서 돈다.**
 
-실행 자리·대기열·**설치된 BPM 프로세스**·로컬 런타임·상태 줄이 있다. 결재를 기다리는 중이면 「결재 창
+실행 자리·대기열·**설치된 BPM 프로세스**·상태 줄이 있다. 결재를 기다리는 중이면 「결재 창
 열기」가 CMN-01을 띄운다 (`packages/qt` — Studio와 **같은 창**이다).
 
 **화면은 Agent에서만 읽는다.** 상태는 실행 프로세스가 쓴 기록 파일에서 오고(ADR-0031), 화면은 그것을
@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +21,6 @@ from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -42,11 +40,8 @@ from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.extension_dialog import ExtensionsDialog
 from chaeksas.bot_ui.run_log_view import LastRun, last_runs
 from chaeksas.bot_ui.runner import Running
-from chaeksas.bot_ui.runtimes import STATE_LABELS, RuntimeUnavailable, port_for
 from chaeksas.bot_ui.settings_dialog import SettingsDialog
-from chaeksas.bot_ui.tool_launch import launch, tool_ui_command
 from chaeksas.contracts.approvals import Form
-from chaeksas.contracts.extension import SURFACE_BOT_UI_RUNTIMES
 from chaeksas.core.deploy import DEPLOYMENT_EXPIRED, DEPLOYMENT_WITHDRAWN
 from chaeksas.core.packages import (
     MANUAL,
@@ -119,22 +114,6 @@ def readiness_label(found: Preflight) -> tuple[str, str, str]:
 
 PACKAGE_FILTER = "패키지 (*.zip)"
 
-#: 지금 보여 주는 로컬 런타임 (BUI-09). 확장이 여럿 기여하면 칸이 여럿이 된다 — 아직 하나다.
-RUNTIME_ID = "worker"
-
-#: 확장이 낸 칸을 만들지 못했을 때 (ADR-0042) — **그 칸만 접고 사유를 보인다**.
-PANEL_BROKEN = "이 칸을 그리지 못했습니다 —"
-PANEL_NO_WIDGET = "이 칸이 화면을 주지 않았습니다."
-#: 런타임 상태 표기는 `runtimes.STATE_LABELS` **한 자리**에서 온다 (BUI-09·BUI-11이 같은 말을 쓴다).
-RUNTIME_STATE = STATE_LABELS
-#: 런타임이 `health`로 말하는 「지금 하는 일」 (C10 `session`).
-SESSION_LABEL = {
-    "idle": "대기",
-    "bot": "BPM 프로세스 요청 처리 중",
-    "studio": "Studio 요청 처리 중",
-    "selector_registration": "셀렉터 등록 중",
-}
-
 SOURCE_LABEL = {
     "job": "Center 작업",
     "manual": "수동",
@@ -172,28 +151,12 @@ def _form_from(raw: Any) -> Form | None:
     except ValueError:
         return None
 
-@dataclass
-class ContributedPanel:
-    """확장이 낸 칸 하나 (C13 `bot_ui.panels`) — 상자·그린 쪽·기다리는 런타임.
-
-    **주기를 정하는 쪽은 호스트다** (ADR-0042) — 새로 고침마다 `refresh()`를 부른다. `runtime`을
-    적은 칸은 그 런타임이 떠 있을 때만 보인다.
-    """
-
-    box: QWidget
-    panel: object
-    extension_id: str = ""
-    runtime: str | None = None
-
-
 class MainWindow(QMainWindow):
     """메인 창. 데이터는 `Agent`에서만 읽는다 (화면은 보여 주기만)."""
 
     def __init__(self, agent: Agent) -> None:
         super().__init__()
         self._agent = agent
-        #: 확장이 낸 칸들 (만든 순서대로). 새로 고침마다 이쪽의 `refresh()`를 부른다.
-        self._panels: list[ContributedPanel] = []
         #: 「실행 기록」에 마지막으로 쓴 글 — 같으면 다시 쓰지 않는다 (선택이 날아간다).
         self._run_log_text = ""
         self.setWindowTitle(WINDOW_TITLE)
@@ -204,7 +167,6 @@ class MainWindow(QMainWindow):
         self.tabs = tabs
         tabs.addTab(self._bots_tab(), "BPM 프로세스")
         tabs.addTab(self._run_log_tab(), "실행 기록")
-        tabs.addTab(self._runtimes_tab(), "로컬 런타임")
         self.setCentralWidget(tabs)
 
         self.statusBar().showMessage(agent.status_line())
@@ -229,17 +191,6 @@ class MainWindow(QMainWindow):
         """
         tools = self._tools_menu
         tools.clear()
-        # 도구는 **확장이 기여하고 Tool UI가 띄운다** (ADR-0018·0077) — 여기는 바로가기뿐이고
-        # PC 실행기는 어느 확장인지 모른다. 순서는 트레이와 같다(확장 이름순).
-        found_tools = self._agent.host.tools() if self._agent.host is not None else []
-        for found in sorted(found_tools, key=lambda c: (c.extension_id, c.value.label)):
-            action = tools.addAction(f"{found.value.label}...")
-            action.setToolTip(f"{found.extension_id} 확장 — Tool UI로 엽니다")
-            action.triggered.connect(
-                lambda _=False, e=found.extension_id, t=found.value.id: self.open_tool(e, t)
-            )
-        if tools.actions():
-            tools.addSeparator()
         tools.addAction("확장...", self.open_extensions)
 
     # ── 탭 ──
@@ -299,73 +250,6 @@ class MainWindow(QMainWindow):
         row.addStretch(1)
         layout.addLayout(row)
         return page
-
-    def _runtimes_tab(self) -> QWidget:
-        """BUI-09. 확장이 기여한 로컬 런타임마다 한 칸 (C13) — 지금은 Worker 하나다.
-
-        런타임 칸 아래는 **확장이 그리는 자리**다 (`bot_ui.panels`, `surface: bot_ui.runtimes`,
-        ADR-0042) — 「최근 UI 세션」처럼 열이 확장의 말인 표가 거기 들어온다.
-        """
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        self.runtime_label = QLabel()
-        self.runtime_label.setWordWrap(True)
-        layout.addWidget(self.runtime_label)
-
-        row = QHBoxLayout()
-        self.runtime_start = QPushButton("시작")
-        self.runtime_start.clicked.connect(self.start_runtime)
-        self.runtime_restart = QPushButton("다시 시작...")
-        self.runtime_restart.clicked.connect(self.restart_runtime)
-        self.runtime_log = QPushButton("로그 보기")
-        self.runtime_log.clicked.connect(self.open_runtime_log)
-        row.addWidget(self.runtime_start)
-        row.addWidget(self.runtime_restart)
-        row.addWidget(self.runtime_log)
-        row.addStretch(1)
-        layout.addLayout(row)
-
-        for box in self._panel_boxes(SURFACE_BOT_UI_RUNTIMES):
-            layout.addWidget(box)
-        layout.addStretch(1)
-        return page
-
-    def _panel_boxes(self, surface: str) -> list[QWidget]:
-        """그 자리에 확장이 낸 칸들 (C13 `bot_ui.panels`, ADR-0042).
-
-        **플랫폼은 칸 안을 모른다.** 만들다 실패하면 그 칸만 접고 사유를 보인다 — 화면 전체가
-        깨지지 않는다. 자리를 모르는 칸은 `panels()`가 아예 주지 않는다 (조용히 무시).
-        """
-        agent = self._agent
-        if agent.host is None:
-            return []
-        made: list[QWidget] = []
-        for found in sorted(agent.host.panels(surface), key=lambda c: c.value.label):
-            box = QGroupBox(found.value.label)
-            inner = QVBoxLayout(box)
-            runtime = found.value.runtime
-            try:
-                panel = agent.host.panel(found.extension_id, found.value.id)
-                context = agent.extension_context(
-                    found.extension_id, runtime_ids=(runtime,) if runtime else ()
-                )
-                widget = panel.widget(context)
-            except Exception as e:  # noqa: BLE001 — 확장이 깨져도 PC 실행기는 산다
-                log.exception("화면 칸을 만들지 못했다: %s", found.value.id)
-                inner.addWidget(QLabel(f"{PANEL_BROKEN} {e}"))
-                made.append(box)
-                continue
-            if not isinstance(widget, QWidget):
-                inner.addWidget(QLabel(PANEL_NO_WIDGET))
-                made.append(box)
-                continue
-            inner.addWidget(widget)
-            # `runtime`을 적은 칸은 **그 런타임이 떠 있을 때만** 보인다 (ADR-0042).
-            self._panels.append(
-                ContributedPanel(box=box, panel=panel, extension_id=found.extension_id, runtime=runtime)
-            )
-            made.append(box)
-        return made
 
     def _run_log_tab(self) -> QWidget:
         """BUI-02 「실행 기록」. 원본은 `runs/<run_id>.jsonl`이고 화면은 **읽을 뿐이다**.
@@ -436,97 +320,8 @@ class MainWindow(QMainWindow):
         self._refresh_bots()
         self._refresh_running_buttons()
 
-        self._refresh_runtimes()
-        self._refresh_panels()
         self.refresh_run_log()
         self.statusBar().showMessage(agent.status_line())
-
-    def _refresh_panels(self) -> None:
-        """확장이 낸 칸을 다시 재게 한다 (ADR-0042).
-
-        **주기는 호스트가 정한다** — 패널이 자기 타이머를 만들지 않는다. `runtime`을 적은 칸은
-        그 런타임이 떠 있을 때만 보인다 (꺼져 있을 때 빈 표를 보이는 것보다 칸이 없는 것이
-        정직하다). **한 칸이 터져도 화면은 이어 그린다.**
-
-        **사람이 그 확장을 끄면 칸도 접는다** (ADR-0043 — 꺼진 확장은 기여를 하나도 내지 않는다).
-        칸을 버리지는 않는다 — 다시 켜면 그대로 돌아온다.
-        """
-        host = self._agent.host
-        runtimes = self._agent.runtimes() if host is not None else None
-        for found in self._panels:
-            owner = host.get(found.extension_id) if host is not None and found.extension_id else None
-            up = owner is None or owner.enabled
-            if up and found.runtime and runtimes is not None:
-                supervisor = runtimes.supervisors.get(found.runtime)
-                up = supervisor is not None and supervisor.state == "running"
-            found.box.setVisible(up)
-            if not up:
-                continue
-            refresh = getattr(found.panel, "refresh", None)
-            if not callable(refresh):
-                continue
-            try:
-                refresh()
-            except Exception:  # noqa: BLE001 — 확장이 깨져도 PC 실행기는 산다
-                log.exception("화면 칸을 다시 그리지 못했다")
-
-    def _refresh_runtimes(self) -> None:
-        """BUI-09 — 상태·PID·포트·가동 시간. **모르는 것은 적지 않는다** (답하지 않으면 그렇게 쓴다)."""
-        agent = self._agent
-        runtimes = agent.runtimes()
-        found = runtimes.supervisors.get(RUNTIME_ID)
-        try:
-            _, runtime = runtimes.find(RUNTIME_ID)
-        except RuntimeUnavailable:
-            self.runtime_label.setText("로컬 런타임을 기여한 확장이 없습니다.")
-            for button in (self.runtime_start, self.runtime_restart, self.runtime_log):
-                button.setEnabled(False)
-            return
-
-        port = port_for(runtime, agent.settings)
-        if found is None or found.state == "off":
-            text = f"{runtime.label}: 꺼 둠 (필요할 때 시작) · 포트 {port}"
-        else:
-            where = f"pid {found.child.pid}" if found.child.pid else "pid 모름"
-            uptime = f"{int(found.child.uptime_s)}초"
-            text = (
-                f"{runtime.label}: {RUNTIME_STATE.get(found.state, found.state)} · {where} · "
-                f"포트 {port} · 가동 {uptime} · 다시 띄운 횟수 {found.restarts}"
-            )
-            health = runtimes.health_of(RUNTIME_ID)
-            if health is None:
-                text += " · 아직 답하지 않습니다"
-            else:
-                doing = SESSION_LABEL.get(str(health.get("session") or ""), "대기")
-                text += f" · 버전 {health.get('version') or '모름'} · 지금 하는 일: {doing}"
-                # 「예약」·「밀린 보고」는 런타임의 **상태**가 말해 준다 (C13 `status`). 본문의
-                # 나머지는 확장의 말이라 읽지 않는다 (ADR-0018). **Agent가 하트비트에서 물어
-                # 둔 것**을 읽는다 — 화면이 제 손으로 묻으면 GUI가 그만큼 멈춘다.
-                status = agent.worker_status
-                if status is None:
-                    text += "\n예약·밀린 보고: 아직 묻지 않았습니다"
-                elif not status:
-                    text += "\n예약·밀린 보고: 상태를 받지 못했습니다"
-                else:
-                    held = str(status.get("reserved_for") or "")
-                    text += f"\n예약: {self._reserved_label(held)}"
-                    text += f" · 밀린 보고 {int(status.get('unsent_reports') or 0)}건"
-            if found.last_error:
-                text += f"\n{found.last_error}"
-        self.runtime_label.setText(text)
-        running = found is not None and found.state == "running"
-        self.runtime_start.setEnabled(not running)
-        self.runtime_restart.setEnabled(running)
-        self.runtime_log.setEnabled(True)
-
-    def _reserved_label(self, run_id: str) -> str:
-        """BUI-09 「예약」 — 「예약됨 — <BPM 프로세스> (<실행 id>)」. **BPM 프로세스 이름을 모르면 적지 않는다.**"""
-        if not run_id:
-            return "예약 없음"
-        run = self._agent.current_run
-        if run is not None and run.run_id == run_id:
-            return f"예약됨 — {run.bpm_process_id} ({run_id})"
-        return f"예약됨 — {run_id}"
 
     def _refresh_bots(self) -> None:
         """설치된 BPM 프로세스 목록 (BUI-04 [L]). **모르는 것은 적지 않는다** — 「최근 실행」은 기록 파일에서 읽는다."""
@@ -687,8 +482,7 @@ class MainWindow(QMainWindow):
     def open_extensions(self) -> None:
         """BUI-11. 창이 **그 자리에서** 확장을 끄고 켜므로, 끈 것이 있으면 메뉴를 다시 만든다.
 
-        「도구」의 바로가기 목록이 기여에서 오기 때문이다 (꺼진 확장은 기여를 내지 않는다,
-        ADR-0043). 확장이 낸 칸은 `_refresh_panels`가 다음 주기에 접는다.
+        꺼진 확장은 기여를 내지 않는다 (ADR-0043).
         """
         dialog = ExtensionsDialog(self._agent, self)
         dialog.exec()
@@ -742,79 +536,6 @@ class MainWindow(QMainWindow):
             self._agent.cancel_queued(item.queue_id)
             self.refresh()
 
-    # ── 도구 (확장이 기여하고 Tool UI가 띄운다) ──
-
-    def open_tool(self, extension_id: str, tool_id: str) -> None:
-        """「도구」의 바로가기 (ADR-0077) — **필요한 런타임을 먼저 띄우고** Tool UI를 따로 띄운다.
-
-        못 띄우면 Tool UI를 띄우지 않고 왜 못 열었는지 말한다 — Tool UI는 런타임을 띄우지 않으므로
-        여기서 실패하면 그쪽에서도 열리지 않는다. 창은 Tool UI가 쥔다(한 세션에 하나).
-        """
-        agent = self._agent
-        if agent.host is None:
-            return
-        found = next(
-            (c for c in agent.host.tools() if c.extension_id == extension_id and c.value.id == tool_id), None
-        )
-        if found is None:
-            return
-        needs = found.value.needs_runtime
-        if needs:
-            try:
-                agent.runtimes().ensure(needs)
-            except RuntimeUnavailable as e:
-                QMessageBox.warning(self, found.value.label, str(e))
-                self.refresh()
-                return
-        try:
-            self.launch_tool_ui(tool_ui_command(extension_id, tool_id))
-        except OSError as e:
-            log.exception("Tool UI를 띄우지 못했다")
-            QMessageBox.warning(self, found.value.label, f"Tool UI를 띄우지 못했습니다 — {e}")
-        self.refresh()
-
-    def launch_tool_ui(self, command: list[str]) -> None:
-        """Tool UI를 띄우는 자리 — 시험이 바꿔 끼운다."""
-        launch(command)
-
-    # ── 로컬 런타임 (BUI-09) ──
-
-    def start_runtime(self) -> None:
-        try:
-            self._agent.runtimes().ensure(RUNTIME_ID)
-        except RuntimeUnavailable as e:
-            QMessageBox.warning(self, WINDOW_TITLE, str(e))
-        self.refresh()
-
-    def restart_runtime(self) -> None:
-        """BUI-09 「다시 시작」 — UI 세션이 열려 있으면 확인 창, 기본 「취소」 (U4)."""
-        runtimes = self._agent.runtimes()
-        health = runtimes.health_of(RUNTIME_ID) or {}
-        busy = str(health.get("session") or "idle") != "idle"
-        if busy:
-            doing = SESSION_LABEL.get(str(health.get("session")), str(health.get("session")))
-            answer = QMessageBox.question(
-                self,
-                "다시 시작할까요?",
-                f"지금 {doing}입니다. 다시 시작하면 그 세션이 끊깁니다.",
-                QMessageBox.StandardButton.Cancel | QMessageBox.StandardButton.Yes,
-                QMessageBox.StandardButton.Cancel,  # 기본은 「취소」
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
-        found = runtimes.supervisors.get(RUNTIME_ID)
-        if found is not None:
-            found.stop()
-        self.start_runtime()
-
-    def open_runtime_log(self) -> None:
-        """BUI-09 「로그 보기」 — 폴더를 연다 (파일을 우리가 그리지 않는다)."""
-        from chaeksas.bot_ui.settings import data_dir  # noqa: PLC0415 - 설정이 가리키는 곳
-
-        where = data_dir() / "logs"
-        where.mkdir(parents=True, exist_ok=True)
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(where)))
-
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 — Qt 이름
         """창을 닫아도 **앱은 트레이에서 계속 돈다** (BUI-02). 종료는 트레이 메뉴에서."""
         if self._agent.settings and QSystemTrayIconAvailable():
@@ -832,8 +553,6 @@ def QSystemTrayIconAvailable() -> bool:  # noqa: N802 — Qt 쪽 이름에 맞�
 
 __all__ = [
     "QUEUE_COLUMNS",
-    "RUNTIME_ID",
-    "SESSION_LABEL",
     "SOURCE_LABEL",
     "WINDOW_SIZE",
     "WINDOW_TITLE",

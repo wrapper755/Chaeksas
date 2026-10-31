@@ -12,7 +12,6 @@
 | **`revision`이 같으면 다시 쓰지 않는다**, 판이 바뀌면 없어진 항목은 지운다 | 계획 캐시를 공연히 버리지 않는다 |
 | 남의 종류·남의 토픽·틀린 모양은 받지 않는다 | 일꾼이 남의 자원을 자처하지 못한다 |
 | `requires.resources` 누락은 경고만, 올리면 사라진다 | 배포를 막는 것은 확장 누락·해시 불일치와 R8뿐이다 |
-| `page_id` → 그 앱의 관리 콘솔 주소로 이어진다 | CON-01 「UI 태스크」 링크 |
 """
 
 from __future__ import annotations
@@ -302,92 +301,3 @@ def test_used_by_shows_the_packages(client: TestClient, worker: dict[str, str]) 
     upload(client, package_zip(requires={"resources": [NEEDS_PAGE]}))
     one = client.get("/api/v1/resources/contributed/ui_page/erp.order.form", headers=READ_AUTH).json()
     assert one["used_by"] == ["erp.order-entry@1.0.0"]
-
-
-# ─────────────────── 진짜 UI 자동화 앱으로 (C9 공개 카탈로그) ───────────────────
-
-
-def test_the_real_ui_automation_app_publishes_its_kind(client: TestClient, tmp_path: Path) -> None:
-    """**진짜 UI 자동화 앱**의 일꾼이 올린다 — 내장 확장의 한 바퀴다.
-
-    등록된 화면이 없으면 항목도 없다. 요점은 **manifest가 알린 종류가 탭이 되고**, 카탈로그 함수가
-    일꾼의 `publish`로 Center에 닿는다는 것이다 (C11 `resources` → C13 §5 → C15).
-    """
-    from chaeksas.ext.ui_automation.service.app import CATALOG_PATH, create  # noqa: PLC0415
-    from chaeksas.service_kit import Consumer  # noqa: PLC0415
-
-    app = create(db_path=tmp_path / "uia.sqlite3")
-    ops = app.state.ops
-    assert [one.catalog_url for one in ops.manifest.resources] == [CATALOG_PATH]
-    assert ops.manifest.extension is not None and ops.manifest.extension.id == "ui-automation"
-    assert set(ops.catalogs) == {"ui_page"}
-
-    tokens = enroll(client, topics=[ops.app_id], manifests=[ops.manifest.to_json_dict()], folder=tmp_path / "uia")
-    Consumer([ops], center_url="", tokens=tokens, wait_s=0, client=client).publish()
-    [kind] = client.get("/api/v1/resources/contributed-kinds", headers=READ_AUTH).json()["items"]
-    assert (kind["resource_type"], kind["label"], kind["extensions"], kind["count"]) == (
-        "ui_page", "UI 화면", ["ui-automation"], 0
-    )
-
-
-# ──────── CON-01 「UI 태스크」 → 관리 콘솔 링크 (C3 ↔ C7, `06-screens/center-console.md`) ────────
-
-
-def console_of(client: TestClient) -> dict[str, str]:
-    """콘솔의 `consoleOf`와 **같은 조인** — `page_id` → 그 앱의 관리 콘솔 주소 (두 걸음).
-
-    콘솔이 읽는 것과 같은 두 경로를 읽는다. 이것이 비면 화면에 링크가 없다.
-    """
-    pages = client.get(
-        "/api/v1/resources?type=contributed&resource_type=ui_page", headers=READ_AUTH
-    ).json()["items"]
-    apps = client.get("/api/v1/resources?type=service_app", headers=READ_AUTH).json()["items"]
-    url_of = {one["extension_id"]: one["console_url"] for one in apps if one["extension_id"]}
-    return {
-        one["id"]: url_of[one["extension_id"]] for one in pages if one["extension_id"] in url_of
-    }
-
-
-def test_a_page_id_leads_to_the_console_url(client: TestClient, worker: dict[str, str]) -> None:
-    """**`page_id`에서 관리 콘솔 주소까지 이어진다** (CON-01 「UI 태스크」의 UIA-03 링크).
-
-    실행 기록에는 앱이 없다 — C3 `ui_session`은 `page_id`만 가진다. 이을 수 있는 것은 C7의
-    **두 모양이 같은 `extension_id`를 들고 있어서**다. 콘솔이 그 조인을 하므로, 여기서는
-    **재료가 정말 오는지**를 본다 (오지 않으면 콘솔은 링크를 못 만든다).
-    """
-    put(client, worker)
-    # C3 `ui_session.page_id`가 가리키는 그 화면이다.
-    assert console_of(client)["erp.order.form"] == "http://127.0.0.1:8599"
-
-
-def test_an_unregistered_page_simply_has_no_link(client: TestClient, worker: dict[str, str]) -> None:
-    """**못 이으면 링크만 없다** (U3) — 줄은 그대로 보인다.
-
-    실행은 남았는데 그 화면이 레지스트리에서 지워졌거나(옛 실행) 아직 등록되지 않은 경우다.
-    조인이 **조용히 비는** 것이 중요하다 — 터지면 실행 상세에 볼 것이 아무것도 없다.
-    """
-    put(client, worker)
-    assert "erp.order.form" in console_of(client)
-
-    put(client, worker, revision=2, items=[])
-    assert console_of(client) == {}, "그 화면이 없어지면 링크도 없다 (줄은 실행 기록이 들고 있다)"
-
-
-def test_the_console_links_to_the_app_not_to_one_of_its_pages() -> None:
-    """**확장 화면 경로를 플랫폼이 적지 않는다** (ADR-0042) — 콘솔 주소 그대로 보낸다.
-
-    집계·그리기는 TypeScript라 파이썬이 돌려 보지 못한다 (`web`에 단위 시험 판이 없다 — §4-9).
-    그래서 **글로** 본다: 조인이 있는가, 새 탭으로 여는가, 그리고 UI 자동화의 화면 경로가
-    **들어오지 않았는가**.
-    """
-    page = (
-        Path(__file__).resolve().parent.parent
-        / "web" / "apps" / "center-console" / "app" / "runs" / "[runId]" / "page.tsx"
-    ).read_text(encoding="utf-8")
-
-    assert "consoleOf" in page, "`page_id` → 콘솔 주소 조인"
-    assert 'center.contributed("ui_page")' in page
-    assert 'rel="noreferrer noopener"' in page and 'target="_blank"' in page
-    # 확장 고유 경로·이름이 플랫폼 화면에 들어오면 안 된다 (ADR-0042 — `console.pages`의 일이다).
-    assert "monitoring" not in page
-    assert "ui-automation" not in page

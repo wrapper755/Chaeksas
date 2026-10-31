@@ -25,7 +25,6 @@ from chaeksas.contracts.bot_ui import (
     Readiness,
     Runtimes,
     Versions,
-    WorkerState,
 )
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.resources import MissingResource
@@ -273,15 +272,12 @@ class BotUiInfo(ContractModel):
     status: str | None = None
     current_run: CurrentRun | None = None
     queue: Queue | None = None
-    worker: WorkerState | None = None
     readiness: list[Readiness] = Field(default_factory=list)
     extensions: list[ExtensionState] = Field(default_factory=list)
     #: 최근 배치 결정 (CON-03). **Center가 쌓아 둔 것**이다 — 하트비트 한 주기만 올라오는
     #: 값이라 흘려보내면 「왜 설치가 안 됐나」가 남지 않는다. 최신순 최대 `RECENT_RESULTS`건.
     deployment_results: list[DeploymentResult] = Field(default_factory=list)
     key: BotUiKey | None = None
-    #: CON-03 「셀렉터 등록」 (ADR-0094 §6).
-    selector_registration: bool = False
 
 
 # ─────────────────────────── 배포 ───────────────────────────

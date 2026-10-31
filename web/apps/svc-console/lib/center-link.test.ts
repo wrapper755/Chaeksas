@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { centerRunUrl, isRunId, runIdOfBusinessKey } from "./center-link";
+import { centerRunUrl, isRunId } from "./center-link";
 
 const RUN = "run_20261018_093000_abc123";
 
@@ -10,14 +10,6 @@ describe("「실행 id」 → CON-01 (ADR-0075)", () => {
     expect(isRunId("reg_1a2b3c4d")).toBe(false);
     expect(isRunId("")).toBe(false);
     expect(isRunId(null)).toBe(false);
-  });
-
-  it("business_key의 맨 앞 조각이 run_id다 (C10)", () => {
-    expect(runIdOfBusinessKey(`${RUN}:Task_1:1:1`)).toBe(RUN);
-    expect(runIdOfBusinessKey("reg_1a2b3c4d")).toBeNull();
-    expect(runIdOfBusinessKey("stu_1a2b3c4d")).toBeNull();
-    expect(runIdOfBusinessKey(`${RUN}:Task_1`)).toBeNull();
-    expect(runIdOfBusinessKey(undefined)).toBeNull();
   });
 
   it("주소가 없으면 링크만 없다", () => {

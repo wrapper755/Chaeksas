@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | Studio·Center 콘솔·외부 시스템·PC 실행기·서버 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/center_api.py`, `…/accounts.py` (import `chaeksas.contracts.center_api`·`chaeksas.contracts.accounts`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c5-package-info.json`](../../packages/contracts/schemas/c5-package-info.json) · [`c5-dependent-info.json`](../../packages/contracts/schemas/c5-dependent-info.json) · [`c5-deployment-info.json`](../../packages/contracts/schemas/c5-deployment-info.json) · [`c5-job-create-request.json`](../../packages/contracts/schemas/c5-job-create-request.json) · [`c5-job-info.json`](../../packages/contracts/schemas/c5-job-info.json) · [`c5-schedule-info.json`](../../packages/contracts/schemas/c5-schedule-info.json) · [`c5-deployment-request.json`](../../packages/contracts/schemas/c5-deployment-request.json) · [`c5-login-request.json`](../../packages/contracts/schemas/c5-login-request.json) · [`c5-session-info.json`](../../packages/contracts/schemas/c5-session-info.json) · [`c5-account-info.json`](../../packages/contracts/schemas/c5-account-info.json) · [`c5-error-body.json`](../../packages/contracts/schemas/c5-error-body.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0110](../decisions/0110-center-keeps-the-schedule.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0017](../decisions/0017-web-nextjs-design-system.md), [0046](../decisions/0046-no-wildcard-pc-deployment.md), [0047](../decisions/0047-one-deployment-gate.md), [0049](../decisions/0049-deployment-target-must-exist.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0110](../decisions/0110-center-keeps-the-schedule.md), [0114](../decisions/0114-remove-ui-automation.md) |
 | 관련 화면 | STU-01(올리기), CON-00(로그인)·02·03·05·06·11·12·14·15 |
 
 ## 목적
@@ -68,7 +68,6 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /server-runners` | ✓ | ✓ | — | — | — |
 | `POST /server-runners/{id}/pause·resume·mark-lost` (C12) | — | ✓ | — | — | — |
 | `GET /bot-uis…` (CON-03), `POST /bot-uis/{id}/disable·enable` | GET만 ✓ | ✓ | — | — | — |
-| `PUT /bot-uis/{id}/utility` (「셀렉터 등록」, ADR-0102 §5) | — | ✓ | — | — | — |
 | `POST /call-tokens` (C15 호출 토큰) | — | — | ✓ | PC 실행기 키만 | — |
 | `POST /external-tasks`, `GET·POST /external-tasks/{id}…` (C15 — 부르는 쪽) | — | — | 호출 토큰·Studio 키 | 서버 실행기 키·호출 토큰 | — |
 | `/consumers/fetch·tasks…·self…` (C15 — 일꾼) | 일꾼 토큰만 | | | | |
@@ -145,7 +144,7 @@ PackageInfo 필드:
 | `approved_by`? | 승인한 사람 — 계정 아이디 (ADR-0090). 사람이 서명하던 때의 승인에는 없다 |
 | `preflight` | `{warnings, blocked}` |
 | `manifest` | C1 매니페스트 |
-| `missing_resources` | `[{type: extension \| service_app \| operation \| resource, id, reason}]`. 읽을 때 C7과 대조해 계산한다 (확장 기여 자원은 `resource`이고 id가 `<종류>:<id>`다 — 예: `ui_page:erp.order.form`) |
+| `missing_resources` | `[{type: extension \| service_app \| operation \| resource, id, reason}]`. 읽을 때 C7과 대조해 계산한다 (확장 기여 자원은 `resource`이고 id가 `<종류>:<id>`다 — 예: `seal_specimen:hq.corporate-seal`) |
 | `download_count` | **내어 준 횟수** (기본 0). 관문(권한·배포 대조)을 지나 파일을 내어 줄 때 하나 센다 — **같은 곳이 다시 받아도 센다**(설치를 다시 하거나 캐시를 잃은 경우). 「몇 곳이 쓰나」가 아니라 「얼마나 받아 갔나」다. 쓰는 곳은 `dependents`·배포 목록이 말한다 |
 | `last_downloaded_at`? | 마지막으로 내어 준 때. 한 번도 받지 않았으면 없다 |
 
@@ -277,11 +276,11 @@ JobInfo는 위 필드에 다음을 더한다.
 | `pending` | 200 | 바로 `cancelled` |
 | `dispatched` / `queued` | **202** `cancel_requested: true` | 다음 하트비트에 PC 실행기가 빼내고 `cancelled`로 ack하면 `cancelled`. 그사이 실행을 시작했으면 PC 실행기가 `cancel_refused`로 ack하고, 작업은 **`accepted` 그대로**, `cancel_result: refused_already_started` |
 | `accepted` + 대상 **서버 실행기** | **202** `cancel_requested: true` | 실행기가 다음 하트비트에 **그 실행을 닫고**(기다리는 실행도) `cancelled`로 ack한다. 이미 끝나 가던 것은 `cancel_refused`다 — 현장이 옳다 ([ADR-0063](../decisions/0063-stopping-a-running-server-run.md)) |
-| `accepted` + 대상 **PC** | 409 `already_started` | **PC 실행은 Center에서 멈추지 않는다** — 자리를 끝까지 쥐고(ADR-0014) 화면을 만지는 중일 수 있어, 도중에 끊으면 화면이 반쯤 바뀐 채 남는다. 현장 사람이 BUI-04 「중지」로 멈춘다 (그 사람은 화면을 보고 있다) |
+| `accepted` + 대상 **PC** | 409 `already_started` | **PC 실행은 Center에서 멈추지 않는다** — 자리를 끝까지 쥐고(ADR-0014) 현장 사람이 보며 하는 일(현장 확인·파일)일 수 있어, 도중에 끊으면 반쯤 된 채 남는다. 현장 사람이 BUI-04 「중지」로 멈춘다 (그 사람은 화면을 보고 있다) |
 | 그 밖 | 409 `not_cancellable` | |
 
 - 실행의 성공·실패는 작업 상태가 아니다. C3 `run_finished`로 정해지고 `run_status`에 보인다.
-- **가르는 것은 대상 종류 하나다** — 판정은 계약이 쥔다 (`cancel_outcome(state, target_type)`). 서버 실행은 **화면을 만지지 않으므로**(R2가 UI 태스크를 막는다) 엔진 취소가 곧 `cancelled` 기록이다.
+- **가르는 것은 대상 종류 하나다** — 판정은 계약이 쥔다 (`cancel_outcome(state, target_type)`). 서버 실행은 **현장을 만지지 않으므로**(C1 R2가 `web`·`desktop`·현장 결재·확인을 막는다) 엔진 취소가 곧 `cancelled` 기록이다.
 - **Center가 혼자 `cancelled`로 적지 않는다** (`dispatched`와 같은 결) — 정말 멈췄는지는 현장만 안다. 실행기가 오프라인이면 취소 요청은 남고 **돌아오면 반영된다**; 돌아오지 않으면 CON-12 「유실 처리」가 닫는다 (C12).
 - 서버 실행이 취소되면 **그 실행이 맡긴 PC 위임도 거둬진다** ([ADR-0062](../decisions/0062-pc-delegation.md) §5).
 
@@ -374,7 +373,6 @@ Center는 온라인 판정과 키 정보만 더한다. 보기 전용이다 — �
 | `GET /bot-uis` | 읽기·관리자 토큰 | 목록 (BotUiInfo[]) |
 | `POST /bot-uis/{bot_ui_id}/disable` | 관리자 토큰 | 새 작업·배포를 보내지 않는다. **하트비트는 계속 받는다** (C4 `disabled`) |
 | `POST /bot-uis/{bot_ui_id}/enable` | 관리자 토큰 | 되돌리기 |
-| `PUT /bot-uis/{bot_ui_id}/utility` `{selector_registration: bool}` | 관리자 토큰 | 「셀렉터 등록」 스위치 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md) §5). 켠 PC의 PC 실행기 쪽만 등록 세션(`run_id`가 `reg_…`)의 외부 작업을 올릴 수 있고 `registry_write`를 받는다(C15 「불러도 되나」·C9). 키를 짓지 않는다. 응답 `{bot_ui_id, selector_registration}`, `BotUiInfo.selector_registration`에 보인다. 없는 PC면 404 |
 
 BotUiInfo 필드:
 
@@ -386,10 +384,9 @@ BotUiInfo 필드:
 | `registered_at`, `last_seen_at` | 처음 등록·마지막 하트비트 |
 | `online` | 마지막 하트비트가 **90초 이내**인가 (C4 「온라인 판정」). 오프라인이면 화면이 「마지막 보고 <시각> 기준」을 붙인다 (U8) |
 | `disabled` | 비활성화됨 |
-| `status`, `current_run`, `queue`, `worker`, `readiness`, `extensions` | 마지막 하트비트의 내용 (C4). 아직 하트비트가 없으면 비어 있다 |
+| `status`, `current_run`, `queue`, `readiness`, `extensions` | 마지막 하트비트의 내용 (C4). 아직 하트비트가 없으면 비어 있다 |
 | `deployment_results` | 그 PC 실행기가 보고한 **최근 배치 결정** (C4 `DeploymentResult`, 최신순 최대 20건). CON-03 「최근 배치 결정」. 마지막 하트비트만이 아니라 **Center가 쌓아 둔 것**이다 — 한 주기 뒤면 사라지는 값을 운영자가 보지 못하면 「왜 설치가 안 됐나」를 영영 알 수 없다 |
 | `key` | 그 PC 실행기가 쓰는 Center API 키 `{prefix, expires_at, state}` — **원문·해시는 주지 않는다** (C7) |
-| `selector_registration` | CON-03 「셀렉터 등록」이 켜졌나 (위 `PUT …/utility`) |
 
 ## 가상 직원 (CON-13)
 
@@ -487,6 +484,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | `PUT /bot-uis/{id}/utility`(「셀렉터 등록」)와 `BotUiInfo.worker`·`selector_registration`을 걷었다 — 등록 세션을 여는 UI 자동화 확장이 없다. 권한표 줄 하나가 빠졌다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-31 | 1 | 「이미 배포된 것은 그대로 돈다」를 고르는 조건 하나로 적었다 — Center가 `approved`만 골라 지원 종료가 돌던 배포를 세우던 것을 고쳤다(계약은 그대로다) | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-30 | 1 | **§일정** — 타이머 시작을 Center가 하트비트에서 쓸어 작업으로 만든다. `requested_by`의 예약값 `timer:<식>`(바깥 이름으로 받지 않는다 — `on_behalf_invalid`). 읽기 `GET /schedules`(`ScheduleInfo`, 콘솔 토큰). 권한표에 C15 `GET /external-tasks?run_id=`(CON-01) | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | **바깥 호출이 C15로** — §Studio 개발 키(`POST /studio/service-keys`)·외부 앱 키(`…/app-key`)·서비스 앱 등록(`POST/PUT/DELETE /resources/service-apps`·`/resources/refresh`)을 걷었다. 권한표에 호출 토큰·외부 작업·일꾼 줄. 배포는 키를 짓지 않는다. 승인 본문에 `topics?`(일꾼) | [0102](../decisions/0102-calling-outside-is-pull.md) |

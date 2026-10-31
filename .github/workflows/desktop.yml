@@ -67,8 +67,8 @@ jobs:
           $default = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
           if (-not $found -and -not (Test-Path $default)) { choco install innosetup -y --no-progress }
 
-      # **확장이 다 들어갔는지 빌드가 스스로 본다** — `--want`로 이름을 못 박는다.
-      # 내장 확장은 `ui-automation` 하나다 (사내 확장이 생기면 여기 쉼표로 늘어난다).
+      # **확장이 다 들어갔는지 빌드가 스스로 본다** — 확장이 생기면 `--want <id>`로 이름을 못 박는다.
+      # 지금은 묶을 확장이 없다 (ADR-0114).
       # **판은 태그가 정한다** (ADR-0067) — 태그로 돌면 그 이름을 넘긴다(얕은 체크아웃에서 태그를
       # 찾느라 헤매지 않는다). 단추로 돌리면 빌드가 `<core 판>+g<커밋>`을 찍는다.
       - name: 묶기 + 빌드 검사
@@ -77,7 +77,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           INSTALLER: ${{ runner.os == 'Windows' && '--installer --check-install' || '' }}
-        run: uv run --group build python packaging/build.py ${{ inputs.apps }} --want ui-automation ${VERSION:+--version "$VERSION"} $INSTALLER
+        run: uv run --group build python packaging/build.py ${{ inputs.apps }} ${VERSION:+--version "$VERSION"} $INSTALLER
 
       - name: 산출물 올리기
         uses: actions/upload-artifact@v4

@@ -2,14 +2,14 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-12). 모델·검사 규칙(E1~E8)과 **기여 지점마다 읽는 쪽**이 있다 — 확장 호스트(`core.extensions`), Studio(팔레트·편집기·`studio.resource_views`), PC 실행기(`bot_ui.panels`·로컬 런타임), Tool UI(`tool_ui.tools`), 콘솔(`console.pages` 생성물), Center(외부 확장 등록) |
-| schema | 2 (1은 `local_runtimes.command`를 쓰던 것 — 아래 변경 이력) |
+| 상태 | **구현됨** (2026-10-12). 모델·검사 규칙(E1~E7)과 **기여 지점마다 읽는 쪽**이 있다 — 확장 호스트(`core.extensions`), Studio(팔레트·편집기·`studio.resource_views`), PC 실행기(확장별 설정·사전 점검), 콘솔(`console.pages` 생성물), Center(외부 확장 등록). **지금 설치 파일에 든 내장 확장은 없다** — 호스트 규칙은 시험용 가짜 확장으로 본다 ([ADR-0114](../decisions/0114-remove-ui-automation.md)) |
+| schema | 2 (1은 옛 기여 지점의 명령 배열을 쓰던 것 — 아래 변경 이력) |
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·PC 실행기·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
 | 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |
-| 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md), [0042](../decisions/0042-extension-contributed-panels.md), [0077](../decisions/0077-tool-ui.md), [0112](../decisions/0112-escalation-review-from-extensions.md) |
-| 관련 화면 | BUI-01·03·09·11, TOL-01·02, STU-03·14·15, CON-07, SVC-00 |
+| 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md), [0042](../decisions/0042-extension-contributed-panels.md), [0112](../decisions/0112-escalation-review-from-extensions.md), [0114](../decisions/0114-remove-ui-automation.md) |
+| 관련 화면 | BUI-03·11, STU-03·14·15, CON-07, SVC-00 |
 
-> 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`를 **관리자가 부르면** E1·E2·E3을 검사하고 **Center가 C2 `extension`·`extension_revoke` 봉투에 서명해**(ADR-0090) 정의와 봉투를 **그대로** 보관한다 — 실행하는 쪽이 다시 검증한다(E6). CON-07 「확장」 탭에서 정의 파일 하나를 올린다. **E4·E8은 외부 확장으로 띄울 수 없다** — `task_types`·`agent_environments`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
+> 상태: **외부 확장 등록·해제가 돈다** (M5 조각 9) — `POST/DELETE /resources/extensions`를 **관리자가 부르면** E1·E2·E3을 검사하고 **Center가 C2 `extension`·`extension_revoke` 봉투에 서명해**(ADR-0090) 정의와 봉투를 **그대로** 보관한다 — 실행하는 쪽이 다시 검증한다(E6). CON-07 「확장」 탭에서 정의 파일 하나를 올린다. **E4는 외부 확장으로 띄울 수 없다** — `task_types`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
 >
 > `contributes.resources[].catalog_url`은 Center가 읽어 쌓는다 (M5 조각 10) — 내장 확장의 정의가 Center에 없어 `catalog_url`을 찾을 길이 없던 구멍은 **C11에 카탈로그 칸을 더해** 메웠다 (C11 §모델 연결 아래 `resources`).
 >
@@ -42,7 +42,7 @@
 정의가 외부 앱을 부르는 길(허용 호스트·인증 방식·작업)을 정하기 때문에, 배포와 같은 관문을 둔다 — **관리자만** 등록하고, 등록하면 Center가 C2 `extension` claim(`{id, version, definition_hash}`)에 서명한다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)). 실행하는 쪽은 봉투로 「Center가 등록한 그 정의인가」를 다시 본다.
 
 1. 관리자가 CON-07 「확장 추가」에서 정의 파일을 올린다.
-2. Center가 E1·E2·E3·E4·E8을 보고, 지나면 봉투에 서명해 정의와 함께 둔다.
+2. Center가 E1·E2·E3·E4를 보고, 지나면 봉투에 서명해 정의와 함께 둔다.
 
 | 경로 | 인증 | 뜻 |
 | --- | --- | --- |
@@ -67,13 +67,13 @@
 | 필드 | 타입 | 필수 | 뜻 |
 | --- | --- | --- | --- |
 | `schema` | int | ✓ | 2 |
-| `id` | str | ✓ | `^[a-z][a-z0-9-]{1,49}$`. 서버 부분이 있으면 그 `app_id`와 같다 (예: `ui-automation`) |
+| `id` | str | ✓ | `^[a-z][a-z0-9-]{1,49}$`. 서버 부분이 있으면 그 `app_id`와 같다 (예: `seal-check`) |
 | `version` | str | ✓ | SemVer |
 | `name` | str | ✓ | 화면 표시 이름 |
 | `description` | str | | 화면 표시 설명 |
 | `publisher` | str | ✓ | 화면 표시 제공자 |
 | `tier` | `builtin` \| `internal` \| `external` | ✓ | 등급 (ADR-0018 §3) |
-| `api` | str | 내장·사내 ✓ | 필요한 `extension_api` 버전 범위 (예: `>=1,<2`) |
+| `api` | str | 내장·사내 ✓ | 필요한 `extension_api` 버전 범위 (예: `>=2,<3`) |
 | `service` | Service | | 서버 부분 (아래) |
 | `contributes` | Contributes | ✓ | 기여 (아래) |
 | `requires_keys` | KeyNeed[] | | 이 확장이 제 앱을 부르나 (이름은 옛것이다 — 키는 없다, 아래 KeyNeed) |
@@ -94,61 +94,31 @@
 | `task_types` | `[{id, label, icon, bpmn: "serviceTask", editor, executor, run_locations}]` | Studio 팔레트·속성 패널, 실행기 | 불가 (서비스 앱 태스크로 씀) |
 | `studio.editors` | `[{task_type, entry}]` | Studio | 불가 (자동 폼) |
 | `studio.resource_views` | `[{id, label, resource_type, creates_task_type?, creates_task_field?}]` | STU-03 | 가능 (선언) |
-| `tool_ui.tools` | `[{id, label, entry, needs_runtime?}]` | Tool UI의 탭 하나 (TOL-01), PC 실행기 「도구」 바로가기 ([ADR-0077](../decisions/0077-tool-ui.md)) | 불가 |
-| `bot_ui.panels` | `[{id, label, surface, runtime?, entry}]` | PC 실행기 화면의 **한 칸** (BUI-09, [ADR-0042](../decisions/0042-extension-contributed-panels.md)) | 불가 |
-| `bot_ui.local_runtimes` | `[{id, label, entry, port_setting, default_port, health, token_dir, start, reserve?, status?, shutdown?}]` | PC 실행기 (BUI-09·11) | 불가 |
-| `agent_environments` | `[{domain, entry}]` | 엔진 — `domain: web`·`desktop` AI 태스크의 눈과 손 ([ADR-0037](../decisions/0037-desktop-ai-task-environment.md)) | 불가 |
-| `configuration` | `[{key, label, scope, schema, secret}]` | 설정 화면 칸 (BUI-03 「확장별 설정」, TOL-02, STU-10, 서버 실행기 설정) | 불가 |
+| `configuration` | `[{key, label, scope, schema, secret}]` | 설정 화면 칸 (BUI-03 「확장별 설정」, STU-10, 서버 실행기 설정) | 불가 |
 | `preflight` | `[{id, entry}]` | Studio·PC 실행기·서버 실행기 사전 점검 | 불가 |
 | `console.pages` | `[{id, label, module}]` | 서비스 앱 관리 콘솔 | 불가 (자기 콘솔 링크만) |
 | `resources` | `[{type, label, catalog_url}]` | Center 리소스 목록 (C7) | 가능 |
 
+**걷은 기여 지점** — `bot_ui.utilities`·`tool_ui.tools`·`bot_ui.panels`·`bot_ui.local_runtimes`·`agent_environments`는 아무 호스트도 읽지 않는다 ([ADR-0114](../decisions/0114-remove-ui-automation.md)). 정의에 적혀 있으면 호스트가 **경고 한 줄**을 남기고(`LEGACY_CONTRIBUTION_KEYS` — 모르는 열쇠라고 조용히 사라지지 않게) 그 열쇠만 읽지 않는다. 그 열쇠 하나로 확장을 끄지는 않는다.
+
 필드 설명:
 
-- `run_locations`: 이 태스크 종류를 쓸 수 있는 실행 위치. `ui_task`는 `["pc"]`다.
-  - **`server`를 적는 것은 「로컬 런타임도, 화면도, 예약도 필요 없다」는 약속이다** ([ADR-0064](../decisions/0064-extension-tasks-on-the-server.md)) — 서버 실행기는 **로컬 런타임을 띄우지 않으므로**(`bot_ui.local_runtimes`는 이름대로 PC 실행기의 것이다) 예약 키 `runtime.<id>.*`가 **채워지지 않는다**. 확장 저자만 아는 사실이라 플랫폼은 집행하지 못한다 — 어기면 수행기가 포트를 묻고 `None`을 받는다.
+- `run_locations`: 이 태스크 종류를 쓸 수 있는 실행 위치 (`pc`·`server`).
+  - **`server`를 적는 것은 「화면도, 그 PC에만 있는 자원도 필요 없다」는 약속이다** ([ADR-0064](../decisions/0064-extension-tasks-on-the-server.md)) — 서버 실행기는 동시 실행이 기본이고 현장 사람이 없다. 확장 저자만 아는 사실이라 플랫폼은 집행하지 못한다.
   - 실행하는 쪽은 **제 실행 위치를 적지 않은 종류의 수행기를 내지 않는다.** 그런 BPM 프로세스는 시작 전에 사전 점검이 `task_types_wrong_location`으로 막는다 — 「그 확장이 없다」(`task_types_unsupported`)와 **다른 점검**이다(고치는 길이 다르다: 실행 위치를 PC로 바꾸거나 PC 위임으로 보낸다).
 - `studio.resource_views`: 리소스 탐색기(STU-03)의 뿌리 하나. 목록은 **C7 기여 자원**(`resource_type`)에서 오고, Studio는 항목의 `name`·`summary`만 그린다 — **`data`를 해석하지 않는다** (§5). 그래서 기여 뿌리는 **한 단계**다.
   - `creates_task_type`(선택): 「캔버스에 추가」(끌어다 놓기)가 만들 **태스크 종류 id**. 없으면 그 뿌리에서 태스크를 만들 수 없다.
   - `creates_task_field`(선택): 새 태스크의 `data`에서 **자원 id를 받을 칸 이름**. 선언하면 Studio가 `{"<creates_task_field>": "<자원 id>"}`만 넣고 그 밖은 비운다 — 선언이 없으면 `data`를 비운 채 만들고 사람이 편집기에서 고른다. **플랫폼은 `data`의 모양을 모른다** — 선언대로만 넣는다.
-- `agent_environments[].entry`: `extension_api.AgentEnvironment`. 엔진이 AI 태스크마다 `open(ctx)`로 **세션 하나**를 열어 그 도구(`AgentTool` — 이름·설명·인자 스키마·부를 함수)를 허용 목록에 더해 쓰고, 끝나면 `close()`한다. 한 `domain`은 한 확장만 기여한다 (둘이면 검사 오류 E8).
-- `start`: `on_demand` 또는 `always`.
-- `bot_ui.local_runtimes[].entry`: 런타임을 **실행하는 코드**를 가리킨다 (`entry` 형식은 위와 같고, 그 확장 패키지 안만 가리킬 수 있다). **명령줄을 확장이 적지 않는다** — PC 실행기가 만든다 ([ADR-0024](../decisions/0024-desktop-packaging-extensions.md)).
-  - PC 실행기는 **자기 실행 파일을 자식으로 다시 띄운다**: `<PC 실행기 실행 파일> --local-runtime <확장 id>:<런타임 id> --port <p> --token-dir <폴더>`. 개발 환경(소스 실행)에서는 같은 인자로 `python -m chaeksas.bot_ui`다.
-  - 자식은 그 확장의 `entry`를 풀어 부르고, 그때부터 화면 없는 서버로 돈다 (Worker는 C10).
-  - 왜 명령이 아니라 진입점인가: 설치 파일로 묶은 앱 안에는 콘솔 스크립트(`chk-worker`)가 없다 (PyInstaller는 실행 파일 하나를 만든다). 같은 실행 파일로 띄우면 DPI 선언([ADR-0021](../decisions/0021-worker-dpi-capture.md))·서명·파이썬 런타임을 그대로 함께 쓴다.
-  - 작업 관리자에서는 PC 실행기와 같은 이름으로 보인다. 구별은 명령줄(`--local-runtime …`)로 한다.
-  - `token_dir: true`면 PC 실행기가 그 폴더(`<PC 실행기 데이터>/runtimes/<런타임 id>`)에 **`runtime.json`**(`{runtime, port}`)을 남긴다. 같은 PC의 Studio·Tool UI가 이것과 토큰 파일로 그 런타임을 찾는다 — **둘 다 런타임을 띄우지 않는다** (Tool UI는 ADR-0077).
-  - `reserve`(선택): **실행 예약** 방법 — `{path, header, token_file}`. PC 실행기는 그 런타임을 쓰는 BPM 프로세스를 시작하기 전에 `POST <path>` `{run_id}`(헤더 `<header>: <token_dir의 token_file 내용>`)로 예약하고, 실행이 끝나면 `DELETE <path>`로 푼다 (ADR-0014 §4). PC 실행기는 런타임의 말(C10 등)을 모르고 이 선언대로만 부른다.
-    - 2xx: 예약됨. **409: 다른 쪽이 쓰는 중** — BPM 프로세스는 시작하지 않고 대기열 맨 앞에서 기다린다(다음 주기에 다시 묻는다, 트레이 「Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다」). 닿지 못함·그 밖의 실패는 기록만 하고 실행을 보낸다 (그 태스크가 분명히 실패한다).
-  - `status`(선택): **상태를 묻는 방법** — `{path, header, token_file}`. `GET <path>`로 받은 것을 BUI-09가 보인다. **본문은 런타임의 말이고 호스트는 뜻을 아는 칸만 읽는다** — `reserved_for`(실행 id. C4 하트비트 `worker.reserved_for`로도 올라간다)와 `unsent_reports`(보내지 못한 보고 수) 둘이다. 나머지 칸은 **해석하지 않는다** ([ADR-0018](../decisions/0018-extensions.md)) — 「최근 UI 세션」처럼 확장의 말로 된 것은 **확장이 `bot_ui.panels`로 그린다** ([ADR-0042](../decisions/0042-extension-contributed-panels.md)).
-  - `shutdown`(선택): **곱게 끄는 방법** — `{path, header, token_file}`. `POST <path>`. PC 실행기 종료 순서(BUI-01 10번)가 프로세스를 끄기 **전에** 한 번 부른다 — 런타임이 열린 세션을 닫고 밀린 보고를 저장할 틈을 준다. **답하지 않아도 기다리지 않는다**(짧은 제한 시간 뒤 그대로 끈다) — 끄는 길은 `core.processes`가 늘 쥐고 있다 (ADR-0023).
-  - 관리 호출 셋(`reserve`·`status`·`shutdown`)은 **같은 모양**이다: 경로는 `/`로 시작하고 `token_dir: true`여야 한다 (아니면 검사 오류 `reserve_invalid`·`status_invalid`·`shutdown_invalid`). 토큰은 **부를 때마다** 파일에서 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다.
-  - **실행에 쓰는 런타임:** PC 실행기는 BPM 프로세스를 시작하기 전에 그 BPM 프로세스가 쓰는 확장의 런타임을 띄운다. 쓰는 확장은 매니페스트의 `requires.extensions`와, `requires.domains`의 `web`·`desktop`을 기여한 확장(`agent_environments`)이다. 실행기(자식)에게는 확장별 설정(그 칸 + 예약 키)을 **파일로** 넘긴다 — 비밀은 싣지 않는다.
-- `tool_ui.tools[].needs_runtime`: 그 도구가 쓰는 **로컬 런타임의 id**. **Tool UI는 런타임을 띄우지 않는다** — 같은 PC의 PC 실행기가 띄운 것을 위 `runtime.json`·토큰 파일로 찾고, 떠 있지 않으면 **그 도구를 열지 않고** 까닭과 길(PC 실행기 「도구」에서 열기)을 말한다 (「없는데 된 척」하지 않는다). PC 실행기 「도구」의 바로가기는 이 런타임을 **먼저 띄운 뒤** Tool UI를 따로 띄운다 ([ADR-0077](../decisions/0077-tool-ui.md)).
-  - `entry`: `extension_api.ToolUiTool` — `widget(ctx)`와 `closed()`(탭을 닫을 때 쥔 자원을 놓는다). `bot_ui.utilities`의 `BotUiUtility`와 같은 모양이다.
-  - 도구 사이의 차례·BPM 프로세스 실행과의 차례는 **런타임이 가른다**(Worker는 세션 하나·예약, C10). Tool UI가 따로 조정하지 않는다.
-  - **`bot_ui.utilities`는 걷었다** (ADR-0077) — 아무 호스트도 읽지 않는다. 적은 확장이 있으면 호스트가 **경고 한 줄**을 남긴다(모르는 열쇠라고 조용히 사라지지 않게). 그 열쇠 하나로 확장을 끄지는 않는다.
-- `bot_ui.panels`: 플랫폼 화면의 한 칸을 **확장이 그린다** ([ADR-0042](../decisions/0042-extension-contributed-panels.md)). 「최근 UI 세션」처럼 열 이름·단위가 **확장의 말**인 표가 여기로 온다 — 플랫폼이 그리면 PC 실행기가 그 확장을 알게 된다 ([ADR-0018](../decisions/0018-extensions.md)).
-  - `surface`: **플랫폼이 미리 정한 자리 이름.** 지금 있는 것은 `bot_ui.runtimes`(BUI-09 런타임 칸 아래) 하나다. **모르는 `surface`는 조용히 무시한다** — 새 확장이 가리키는 자리를 옛 PC 실행기가 모를 수 있고, 반대로 옛 자리가 사라졌을 수도 있다. (`surface` 값은 열린 문자열이다 — README 원칙 10.)
-  - `entry`: `extension_api.BotUiPanel`. `widget(ctx)`와 `refresh()` 둘이고 **규약은 STU-13·14 편집기와 같다**. `refresh()`는 **플랫폼이 주기마다** 부른다 — 패널이 자기 타이머를 만들지 않는다 (화면 스레드를 쥐는 쪽은 호스트다).
-  - **플랫폼은 칸 안을 모른다.** 만들다·그리다 실패하면 그 칸만 접고 사유를 보인다 — 화면 전체가 깨지지 않는다.
-  - `runtime`(선택): 그 **로컬 런타임이 떠 있을 때만** 칸을 보인다. 꺼져 있을 때 빈 표를 보이는 것보다 칸이 없는 것이 정직하다.
-- **호스트가 채우는 예약 설정 키** — 띄운 로컬 런타임이 어디 있는지는 **확장이 설정으로 받는다** (`ctx.setting(…)`). 확장이 포트를 다시 계산하거나 토큰 파일 자리를 추측하지 않게 한다. 런타임을 띄우지 않는 호스트(Studio·Tool UI)도 **PC 실행기가 띄운 것**으로 같은 키를 채운다.
+- **호스트가 채우는 예약 설정 키** — 호스트만 아는 자리는 **확장이 설정으로 받는다** (`ctx.setting(…)`). 확장이 데이터 폴더·Center 주소를 다시 계산하거나 추측하지 않게 한다.
 
   | 키 | 값 |
   | --- | --- |
-  | `runtime.<런타임 id>.port` | 호스트가 정한 포트 (int) |
-  | `runtime.<런타임 id>.token_dir` | 토큰 파일 폴더 (str). 정의에 `token_dir: true`일 때만 |
-  | `runtime.<런타임 id>.state` | `off` · `running` · `restarting` · `stopped` (C4 `WorkerState.state`와 같은 낱말) |
-  | `storage.dir` | 이 확장이 **자기 파일을 둘 폴더** (호스트가 **제 데이터 폴더 아래에** 만들어 준다 — PC 실행기와 Tool UI는 다른 자리다). 밀린 등록 큐처럼 확장이 혼자 들고 있어야 하는 것을 여기 둔다. **비밀은 두지 않는다** (OS 비밀 저장소로 간다) |
-  | `center.url` | **Center 주소** — 확장 클라이언트가 외부 작업(C15)을 올리는 곳 (ADR-0102). 서버 부분의 주소는 없다. Tool UI는 PC 실행기 설정의 주소를 읽는다 |
-  | `center.call_token` | 비밀이라 설정이 아니라 **`ctx.secret("call_token")`**으로 푼다 — 호출 토큰 (C15). PC 실행기·Tool UI는 PC 실행기가 청한 것, Studio는 Studio가 청한 것 |
+  | `storage.dir` | 이 확장이 **자기 파일을 둘 폴더** (호스트가 **제 데이터 폴더 아래에** 만들어 준다 — 앱마다 다른 자리다). 밀린 큐처럼 확장이 혼자 들고 있어야 하는 것을 여기 둔다. **비밀은 두지 않는다** (OS 비밀 저장소로 간다) |
+  | `center.url` | **Center 주소** — 확장 클라이언트가 외부 작업(C15)을 올리는 곳 (ADR-0102). 서버 부분의 주소는 없다 |
+  | `center.call_token` | 비밀이라 설정이 아니라 **`ctx.secret("call_token")`**으로 푼다 — 호출 토큰 (C15). PC 실행기는 PC 실행기가 청한 것, Studio는 Studio가 청한 것 |
 
-  로컬 런타임 자식에게는 Center 주소를 환경변수 **`CHK_RUNTIME__CENTER_URL`**로 물려준다 (이름은 플랫폼이 정한다 — 호스트가 확장 이름을 모르고 넣을 수 있어야 한다). **비밀은 물려주지 않는다** — 호출 토큰은 부르는 쪽이 세션마다 준다 (C10 `call_token`).
-
-  `runtime.`·`center.`·`storage.`로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7).
-- `configuration`의 `scope`: `bot_ui`, `tool_ui`, `studio`, `server_runner` 중 하나. `tool_ui`는 도구가 쓰는 칸(등록 담당자 키 같은 것)이고 값은 Tool UI 설정(TOL-02)·Tool UI의 비밀 저장소(`chaeksas-tool-ui`)에 있다 (ADR-0077).
+  `center.`·`storage.`로 시작하는 키는 **호스트가 소유한다** — 확장이 `configuration`에 같은 이름을 선언하면 거부한다 (E7). 옛 머리 `service.`·`runtime.`도 계속 막는다 — 옛 확장이 그 이름으로 칸을 선언해 호스트의 값과 섞이지 않게.
+- `configuration`의 `scope`: `bot_ui`, `studio`, `server_runner` 중 하나. 그 밖의 값은 검사 오류 `unknown_scope`다.
 - `configuration`의 `schema`: JSON Schema. 확장이 설정 칸을 이것으로 선언한다.
 - **`secret: true`인 칸은 OS 비밀 저장소에 둔다** (ADR-0013). 설정 파일·로그에는 남기지 않는다. 서비스 앱 키는 없다 (ADR-0102, 아래 KeyNeed) — 비밀 칸은 바깥 도구의 암호 같은 것에만 쓴다.
 - `editor`: 두 가지 중 하나다.
@@ -157,7 +127,7 @@
 - `executor`: `{"entry": "…"}`. `extension_api.TaskExecutor`를 구현한다.
   - **실행 기록에 남기려면 `TaskOutcome.events[]`에 담는다** (C3 §확장이 남기는 이벤트, [ADR-0041](../decisions/0041-extension-run-events.md)). 확장은 `ExtensionEvent{kind, data}`만 주고 **줄은 엔진이 쓴다** — `run_id`·`seq`·`ts`·`node_id`는 엔진이 붙이고, `data`는 엔진이 거른다(원칙 6). 실패했을 때 남길 것은 `TaskFailed(…, events=[…])`에 싣는다. 알려진 `kind`인데 필수 키가 빠지면 **그 줄만 버려진다** (업무는 깨지지 않는다). 확장이 파일이나 `seq`를 만지는 길은 없다.
   - **전환할 때 사람에게 보일 것은 `TaskFailed(…, escalate="confirmation", review={…})`에 싣는다** ([ADR-0112](../decisions/0112-escalation-review-from-extensions.md), `extension_api` 1.5). 모양은 C6 `review`(이름 → 값)이고 표는 `review_table(headers, rows)`로 짓는다(C6 표 값). 엔진은 PC 확인 요청의 `review`로 **옮기기만** 하고 실행 기록에는 쓰지 않는다. 오류 경계로 가면(서버·`ESCALATED`를 이름으로 받는 경계) 버린다. `escalate`가 없으면 쓰지 않는다. 비밀은 넣지 않는다 — 결재 요청 파일에 그대로 간다.
-- **`entry` 형식: `"<모듈>:<이름>"`.** 모듈은 확장 이름 공간(`chaeksas.ext`) 밑에서 찾는다 — `ui_automation.client:UiTaskExecutor`는 `chaeksas.ext.ui_automation.client.UiTaskExecutor`다 ([ADR-0019](../decisions/0019-package-names.md)). 가리키는 것은 **인자 없이 만들 수 있는 클래스**(또는 이미 만들어진 객체)이고, 확장 호스트가 만들어 `extension_api`의 모양인지 확인한 뒤 켠다.
+- **`entry` 형식: `"<모듈>:<이름>"`.** 모듈은 확장 이름 공간(`chaeksas.ext`) 밑에서 찾는다 — `seal_check.client:SealCheckExecutor`는 `chaeksas.ext.seal_check.client.SealCheckExecutor`다 ([ADR-0019](../decisions/0019-package-names.md)). 가리키는 것은 **인자 없이 만들 수 있는 클래스**(또는 이미 만들어진 객체)이고, 확장 호스트가 만들어 `extension_api`의 모양인지 확인한 뒤 켠다.
   - 확장 호스트는 **그 확장의 패키지 안**만 허용한다. 정의가 다른 모듈(`os:getcwd` 같은 것)을 가리켜 import시킬 수 없다.
 - `console.pages`: 그 서비스 앱 관리 콘솔(SVC-00 왼쪽 탐색)에 붙는 **앱 고유 화면**이다. 콘솔은 접속한 앱의 `app_id`(C11 `/admin/v1/status`)로 어느 확장의 기여인지 고른다 — 콘솔 한 벌이 모든 서비스 앱을 그리기 때문이다.
   - `module`: **`web/` 워크스페이스 안의 화면 모듈 이름.** 콘솔이 **빌드 시점 레지스트리**로 잇는다 (바깥 주소로 동적 `import()`를 열지 않는다 — [ADR-0017](../decisions/0017-web-nextjs-design-system.md)의 「브라우저가 토큰·주소를 모른다」).
@@ -169,18 +139,16 @@
 
 | 필드 | 뜻 |
 | --- | --- |
-| `purpose` | 키를 어디에 쓰나. 두 가지 중 하나다 (아래) |
-| `extra_scopes` | 그 부르기에 필요한 추가 권한 (예: `registry_write` — Center가 C15 올리기에서 건다) |
-| `config_key` | 옛 칸. **쓰지 않는다** — 있어도 무시한다 |
+| `purpose` | 키를 어디에 쓰나. `run` 하나다 (아래) |
+| `extra_scopes` | 그 부르기에 필요한 추가 권한 (C11 `required_scopes`와 짝). **지금 Center에는 이 권한을 켜 줄 길이 없다** — 그런 작업은 C15 올리기에서 403 `scope_missing`이다 |
+| `config_key` | 옛 칸. **쓰지 않는다** — 있어도 무시한다 (호환) |
 
 `purpose` 값:
 
-- `run`: BPM 프로세스(그 확장의 태스크)가 작업을 부를 때.
-- `utility`: 확장 도구(Tool UI)가 부를 때.
+- `run`: BPM 프로세스(그 확장의 태스크)가 작업을 부를 때. 그 밖의 값은 검사 오류 `unknown_purpose`다.
 
 > [ADR-0102](../decisions/0102-calling-outside-is-pull.md): **키는 없다 — 선언은 「이 확장이 제 앱을 부른다」는 뜻으로만 남는다.** 바깥 기능은 C15 외부 작업으로 부르므로 아무도 키를 받지 않는다.
 > - `run` — 빌드가 그 확장의 태스크를 쓰는 BPM 프로세스의 `requires.service_apps`에 그 확장 id로 줄을 적는다(C1). Center는 그 줄로 그 BPM 프로세스가 그 토픽에 올려도 되는지 본다(C15 `topic_not_required`).
-> - `utility` — 확장 도구(Tool UI)는 PC 실행기의 **호출 토큰**으로 올린다(C15). `extra_scopes`(예: `registry_write`)는 키 권한이 아니라 **그 PC의 「셀렉터 등록」 스위치**(CON-03)로 Center가 건다. **`config_key`는 쓰지 않는다** — 옛 정의에 적혀 있어도 거부하지 않고 무시한다(호환).
 
 ## 4. HTTP 어댑터 (`protocol: "http-adapter"`, 외부 확장)
 
@@ -232,7 +200,7 @@ Operation:
 1. 주소를 만든다: 어댑터 일꾼 설정의 `BASE_URL`(시험 일감이면 `TEST_BASE_URL`, 없으면 정의의 `base_url`) + `path`.
 2. **https만 쓴다.** `allow_private_network: true`이고 호스트가 사설 주소인 경우만 http를 허용한다.
 3. 호스트가 `allowed_hosts`에 있는지 본다.
-4. **DNS를 한 번 풀고 그 IP로 접속한다** (DNS 재바인딩 방지). `allow_private_network=false`면 루프백(127.0.0.0/8, ::1), 사설(10/8, 172.16/12, 192.168/16, fc00::/7), 링크 로컬(169.254/16, fe80::/10)을 거부한다. 이 규칙은 같은 PC의 Worker(127.0.0.1:8899)도 막는다.
+4. **DNS를 한 번 풀고 그 IP로 접속한다** (DNS 재바인딩 방지). `allow_private_network=false`면 루프백(127.0.0.0/8, ::1), 사설(10/8, 172.16/12, 192.168/16, fc00::/7), 링크 로컬(169.254/16, fe80::/10)을 거부한다. 이 규칙은 같은 PC의 로컬 서버(127.0.0.1)도 막는다.
 5. **리다이렉트를 따라가지 않는다.** 3xx는 오류(`redirect_not_allowed`)로 처리한다.
 6. 응답은 **읽는 동안** `max_response_kb`를 넘으면 끊는다.
 7. 결과를 C3 `service_call`로 남긴다 (`app_id` = 확장 `id`). 요청·응답 본문은 남기지 않는다.
@@ -245,40 +213,38 @@ Operation:
 {
   "schema": 1,
   "revision": 482,
-  "items": [{"type": "ui_page", "id": "erp.order.form", "name": "ERP 주문 입력",
-             "summary": "요소 12개 · 사용 중 9", "updated_at": "…", "data": {"…": "확장 고유 내용"}}]
+  "items": [{"type": "seal_specimen", "id": "hq.corporate-seal", "name": "본사 법인 인감",
+             "summary": "견본 3장 · 사용 중 2", "updated_at": "…", "data": {"…": "확장 고유 내용"}}]
 }
 ```
 
-- `data`의 모양은 확장이 정한다. 예를 들어 UI 자동화 확장은 C9 카탈로그 항목을 쓴다. Center는 `data`를 해석하지 않고 그대로 Studio에 넘긴다.
-- **비밀·셀렉터·업무 값을 넣지 않는다.** 카탈로그는 서버망 안에서만 연다 (역방향 프록시에서 바깥 노출을 막는다).
+- `data`의 모양은 확장이 정한다. Center는 `data`를 해석하지 않고 그대로 Studio에 넘긴다.
+- **비밀·업무 값을 넣지 않는다.** 카탈로그는 서버망 안에서만 연다 (역방향 프록시에서 바깥 노출을 막는다).
 
 ## 예시
 
-### 내장 확장 (요약)
+### 사내 확장 (요약, 가상의 예)
+
+지금 설치 파일에 든 확장은 없다 (ADR-0114). 아래는 모양을 보이려는 가상의 사내 확장이다.
 
 ```json
 {
-  "schema": 2, "id": "ui-automation", "version": "0.4.0", "name": "UI 자동화", "publisher": "Chaeksas",
-  "tier": "builtin", "api": ">=1,<2",
-  "service": {"protocol": "chk-c11", "base_url": "http://svc-uia:8000"},
+  "schema": 2, "id": "seal-check", "version": "1.2.0", "name": "인감 대조", "publisher": "사내 IT",
+  "tier": "internal", "api": ">=2,<3",
+  "service": {"protocol": "chk-c11", "base_url": "http://svc-seal:8000"},
   "contributes": {
-    "task_types": [{"id": "ui_task", "label": "UI 태스크", "icon": "mouse-pointer-click", "bpmn": "serviceTask",
-                    "editor": {"kind": "builtin", "entry": "ui_automation.client:UiTaskEditor"},
-                    "executor": {"entry": "ui_automation.client:UiTaskExecutor"}, "run_locations": ["pc"]}],
-    "studio.resource_views": [{"id": "ui-pages", "label": "UI 화면", "resource_type": "ui_page",
-                               "creates_task_type": "ui_task", "creates_task_field": "page_id"}],
-    "tool_ui.tools": [{"id": "selector-registration", "label": "UI 셀렉터 등록",
-                       "entry": "ui_automation.client:SelectorRegistration", "needs_runtime": "worker"}],
-    "bot_ui.panels": [{"id": "recent-ui-sessions", "label": "최근 UI 세션", "surface": "bot_ui.runtimes",
-                       "runtime": "worker", "entry": "ui_automation.client:RecentSessionsPanel"}],
-    "bot_ui.local_runtimes": [{"id": "worker", "label": "Worker 프로세스", "entry": "ui_automation.worker:serve",
-                               "port_setting": "CHK_WORKER__LOCAL_API__PORT", "default_port": 8899,
-                               "health": "/v1/health", "token_dir": true, "start": "on_demand"}],
-    "preflight": [{"id": "pages-registered", "entry": "ui_automation.client:PagesRegisteredCheck"}],
-    "console.pages": [{"id": "overview", "label": "개요", "module": "ui-automation/overview"}],
-    "resources": [{"type": "ui_page", "label": "UI 화면", "catalog_url": "/v1/catalog"}]
-  }
+    "task_types": [{"id": "seal_check", "label": "인감 대조", "icon": "stamp", "bpmn": "serviceTask",
+                    "editor": {"kind": "schema"},
+                    "executor": {"entry": "seal_check.client:SealCheckExecutor"}, "run_locations": ["pc", "server"]}],
+    "studio.resource_views": [{"id": "seal-specimens", "label": "인감 견본", "resource_type": "seal_specimen",
+                               "creates_task_type": "seal_check", "creates_task_field": "specimen_id"}],
+    "configuration": [{"key": "scan_dir", "label": "스캔 폴더", "scope": "bot_ui",
+                       "schema": {"type": "string"}, "secret": false}],
+    "preflight": [{"id": "specimens-registered", "entry": "seal_check.client:SpecimensRegisteredCheck"}],
+    "console.pages": [{"id": "overview", "label": "개요", "module": "seal-check/overview"}],
+    "resources": [{"type": "seal_specimen", "label": "인감 견본", "catalog_url": "/v1/catalog"}]
+  },
+  "requires_keys": [{"purpose": "run", "extra_scopes": []}]
 }
 ```
 
@@ -318,8 +284,7 @@ Operation:
 | E4 | `task_types[].id`는 확장 사이에 겹치지 않는다 | 409 `task_type_conflict` |
 | E5 | 확장 호스트는 `api` 범위가 맞지 않는 확장을 켜지 않는다 (목록에 「호환 안 됨」) | — |
 | E6 | 외부 정의의 봉투(C2 `extension`)가 검증되고 `definition_hash`가 맞는다 | 400 `bad_envelope` / `hash_mismatch` |
-| E7 | `configuration[].key`가 `runtime.`·`service.`·`storage.`로 시작하지 않는다 (호스트가 쓰는 이름이다) | 422 `reserved_config_key` |
-| E8 | `agent_environments[].domain`은 확장 사이에 겹치지 않는다 (한 domain의 눈과 손은 하나) | 409 `environment_conflict` |
+| E7 | `configuration[].key`가 `center.`·`storage.`(호스트가 쓰는 이름)와 옛 머리 `service.`·`runtime.`으로 시작하지 않는다 | 422 `reserved_config_key` |
 
 Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬에서 먼저 돌려 보여 준다.
 
@@ -332,6 +297,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 2 | 기여 지점 `tool_ui.tools`·`bot_ui.panels`·`bot_ui.local_runtimes`·`agent_environments`, **E8**, 예약 키 `runtime.<id>.*`, `scope: tool_ui`, `requires_keys[].purpose: utility`를 걷었다 — UI 자동화 확장과 함께. 걷은 열쇠는 호스트가 경고하고 읽지 않는다(`LEGACY_CONTRIBUTION_KEYS`), E7은 옛 머리도 막는다. 열쇠가 모두 선택이라 schema는 그대로이고 `extension_api`는 **2.0.0**이다(이름을 지웠다 — 예시의 `api`는 `>=2,<3`) | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 2 | 수행기가 전환할 때 **사람에게 보일 검토 자료**(`TaskFailed(review=…)`)를 넘긴다 — `extension_api` **1.5**. 정의는 그대로다 | [0112](../decisions/0112-escalation-review-from-extensions.md) |
 | 2026-10-29 | 2 | `requires_keys`에 키가 없다 — `run`은 빌드가 `requires.service_apps` 줄을 적는 뜻, `extra_scopes`는 Center가 PC 스위치로 건다. 외부 앱은 **어댑터 일꾼**이 부른다 — 주소·키는 그 일꾼 설정(`CHK_ADAPTER__EXT__<확장>__*`), 실행하는 쪽은 정의 검증·고정만. 예약 키 `service.base_url`·`service.key_ref` → `center.url`·`call_token` 비밀, `CHK_RUNTIME__SERVICE_URL` → `CHK_RUNTIME__CENTER_URL`. 예약 접두 `service.` → `center.` | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | `requires_keys`의 키는 Center가 내려 준다 — `run`은 배포 대상마다, `utility`는 CON-03 「셀렉터 등록」을 켠 PC에. `config_key`는 무시한다(호환), 호스트가 `ctx.secret("utility")`로 준다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |

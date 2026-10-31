@@ -29,7 +29,6 @@ COPY apps/center/pyproject.toml apps/center/
 COPY apps/studio/pyproject.toml apps/studio/
 COPY apps/bot_ui/pyproject.toml apps/bot_ui/
 COPY apps/server_runner/pyproject.toml apps/server_runner/
-COPY extensions/ui_automation/pyproject.toml extensions/ui_automation/
 
 # Center가 쓰는 것만 설치한다 (Qt·PySide6는 서버에 필요 없다).
 RUN uv sync --frozen --no-install-workspace --package chaeksas-center

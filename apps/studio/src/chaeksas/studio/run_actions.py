@@ -27,7 +27,6 @@ from chaeksas.studio.preflight import inspect
 from chaeksas.studio.run_dialog import RunDialog
 from chaeksas.studio.runner import CaseRun, Outcome
 from chaeksas.studio.runner import summarize as summarize_runs
-from chaeksas.studio.ui_sessions import row_of
 
 if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (창이 이 모듈을 부른다)
     from chaeksas.studio.main_window import MainWindow
@@ -78,7 +77,7 @@ def run_test(window: MainWindow, *, mode: str | None = None) -> None:
     if not plans:
         return
 
-    # 확장 태스크·데스크톱 AI 태스크가 이 PC PC 실행기의 Worker를 쓴다 (STU-10 「Worker」).
+    # 확장 태스크의 수행기 (ADR-0018).
     tasks = window.extensions.tasks()
     # 서비스 태스크는 Center에 외부 작업으로 올린다 (C15, ADR-0102) — Studio 키로, 시험 일감이다.
     # 키가 없으면 호출기가 없고 그 태스크는 부르는 순간 분명히 실패한다.
@@ -94,10 +93,6 @@ def run_test(window: MainWindow, *, mode: str | None = None) -> None:
     window.queue = plans
     window.outcomes = []
     window.log_view.clear()
-    # 「UI 태스크」 탭도 여기서 한 번만 비운다 — **케이스마다 비우지 않는다**. 「모든 케이스
-    # 차례로」에서 3번째 케이스의 전환을 보려는데 마지막 케이스가 표를 덮으면 안 된다
-    # (어느 케이스의 줄인지는 「케이스」 열이 말한다).
-    window.reset_ui_sessions()
     window.variables_running(True)
     window.canvas.mark({})
     next_run(window)
@@ -115,9 +110,6 @@ def next_run(window: MainWindow) -> None:
     running.marked.connect(window.canvas.mark)
     # 지금 값은 「변수」 탭의 정의 표에 열로 붙는다 (STU-01 「변수」 탭).
     running.varied.connect(window.show_variables)
-    # 케이스 이름은 C3 `ui_session`에 없다 — 여기서 넣는다 (STU-09 「UI 태스크」의 「케이스」 열).
-    case_name = plan.case.name if plan.case else ""
-    running.ui_session.connect(lambda event: window.show_ui_session(row_of(event, case=case_name)))
     running.ended.connect(lambda outcome: one_done(window, outcome))
     window.run_action.setEnabled(False)
     window.replay_action.setEnabled(False)

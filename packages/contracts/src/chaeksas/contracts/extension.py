@@ -4,7 +4,7 @@
 `packages/extension_api/`, 찾아 켜는 쪽은 `chaeksas.core.extensions` (확장 호스트).
 
 **플랫폼은 이 파일만 보고 기여를 끼워 넣는다.** 특정 확장 이름을 플랫폼 코드에 쓰지 않는다
-(ADR-0018). 그래서 검사 규칙 E1~E8이 여기 있고, Studio(정의 파일 열기)·Center(등록)·확장
+(ADR-0018). 그래서 검사 규칙 E1~E7이 여기 있고, Studio(정의 파일 열기)·Center(등록)·확장
 호스트(켜기)가 **같은 함수**를 쓴다.
 
 `contributes`의 열쇠는 문서 그대로 점이 든 이름(`studio.editors`)이다. 파이썬 이름만
@@ -53,11 +53,10 @@ KNOWN_PROTOCOLS = frozenset({PROTOCOL_C11, PROTOCOL_HTTP_ADAPTER})
 EDITOR_BUILTIN = "builtin"
 EDITOR_SCHEMA = "schema"
 
-#: 호스트가 소유하는 설정 키의 머리 (C13 — `runtime.<런타임 id>.port`·`center.url`).
-#: 확장이 같은 이름을 선언하지 못한다 (E7). `service.`는 옛 머리다 — 지금도 막는다(옛 확장이
-#: 그 이름으로 설정을 선언해 호스트의 값과 섞이지 않게).
-RESERVED_CONFIG_PREFIXES = ("runtime.", "center.", "service.", "storage.")
-RESERVED_CONFIG_PREFIX = RESERVED_CONFIG_PREFIXES[0]
+#: 호스트가 소유하는 설정 키의 머리 (C13 — `center.url`·`storage.dir`).
+#: 확장이 같은 이름을 선언하지 못한다 (E7). `service.`·`runtime.`은 옛 머리다 — 지금도 막는다(옛
+#: 확장이 그 이름으로 설정을 선언해 호스트의 값과 섞이지 않게, ADR-0114).
+RESERVED_CONFIG_PREFIXES = ("center.", "storage.", "service.", "runtime.")
 
 #: 확장이 자기 파일을 둘 폴더를 알려 주는 예약 키 (호스트가 만들어 준다).
 STORAGE_DIR_SETTING = "storage.dir"
@@ -67,35 +66,17 @@ STORAGE_DIR_SETTING = "storage.dir"
 CENTER_URL_SETTING = "center.url"
 #: 호출 토큰을 푸는 비밀 이름 — `ctx.secret(CALL_TOKEN_SECRET)` (C15 「정한 것」).
 CALL_TOKEN_SECRET = "call_token"
-#: 로컬 런타임 자식에게 Center 주소를 물려주는 환경변수 (C13). 이름은 **플랫폼이 정한다**.
-#: **비밀은 넣지 않는다** — 호출 토큰은 세션이 준다 (C10 `call_token`).
-CENTER_URL_ENV = "CHK_RUNTIME__CENTER_URL"
 
-#: `configuration[].scope`, `local_runtimes[].start`, `requires_keys[].purpose`.
+#: `configuration[].scope`, `requires_keys[].purpose`.
 SCOPE_BOT_UI = "bot_ui"
-#: Tool UI의 도구가 쓰는 칸 (TOL-02, ADR-0077) — 등록 담당자 키처럼 **현장 운영 설정에 섞지 않을 것**.
-SCOPE_TOOL_UI = "tool_ui"
 SCOPE_STUDIO = "studio"
 SCOPE_SERVER_RUNNER = "server_runner"
-CONFIG_SCOPES = frozenset({SCOPE_BOT_UI, SCOPE_TOOL_UI, SCOPE_STUDIO, SCOPE_SERVER_RUNNER})
-START_ON_DEMAND = "on_demand"
-START_ALWAYS = "always"
-KNOWN_STARTS = frozenset({START_ON_DEMAND, START_ALWAYS})
+CONFIG_SCOPES = frozenset({SCOPE_BOT_UI, SCOPE_STUDIO, SCOPE_SERVER_RUNNER})
 PURPOSE_RUN = "run"
-PURPOSE_UTILITY = "utility"
-KNOWN_PURPOSES = frozenset({PURPOSE_RUN, PURPOSE_UTILITY})
+KNOWN_PURPOSES = frozenset({PURPOSE_RUN})
 
 #: 실행 위치 (C1과 같은 값).
 KNOWN_RUN_LOCATIONS = frozenset({"pc", "server"})
-
-#: 확장이 「AI 환경」을 기여할 수 있는 AI 태스크 domain (C13 `agent_environments`, ADR-0037).
-AGENT_ENVIRONMENT_DOMAINS = frozenset({"web", "desktop"})
-
-#: 확장이 칸을 낼 수 있는 **플랫폼이 미리 정한 자리** (C13 `bot_ui.panels[].surface`, ADR-0042).
-#: BUI-09 런타임 칸 아래가 지금 하나뿐이다. **열린 문자열이다** — 모르는 자리는 호스트가
-#: 조용히 무시한다 (새 확장이 가리키는 자리를 옛 PC 실행기가 모를 수 있다).
-SURFACE_BOT_UI_RUNTIMES = "bot_ui.runtimes"
-PANEL_SURFACES = frozenset({SURFACE_BOT_UI_RUNTIMES})
 
 #: HTTP 어댑터 (§4).
 ADAPTER_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE"})
@@ -170,85 +151,11 @@ class ResourceView(ContractModel):
     creates_task_field: str | None = None
 
 
-#: 걷은 기여 지점 (ADR-0077) — 도구는 `tool_ui.tools`로 간다. 적은 확장이 있으면 호스트가 경고한다
-#: (모르는 열쇠라고 **조용히 사라지지 않게**).
-LEGACY_UTILITIES_KEY = "bot_ui.utilities"
-
-
-class Tool(ContractModel):
-    """Tool UI에 더하는 도구 하나 (`tool_ui.tools`, TOL-01 — ADR-0077). 예: UI 셀렉터 등록(TOL-03~05)."""
-
-    id: str
-    label: str
-    entry: str
-    #: 이 도구가 쓰는 로컬 런타임 id. **Tool UI는 띄우지 않는다** — PC 실행기가 띄운 것을 빌린다.
-    #: PC 실행기 「도구」 바로가기는 이것을 먼저 띄운 뒤 Tool UI를 연다.
-    needs_runtime: str | None = None
-
-
-class Panel(ContractModel):
-    """플랫폼 화면의 한 칸을 **확장이 그린다** (BUI-09, ADR-0042).
-
-    열 이름·단위가 **확장의 말**인 표가 여기로 온다 — 플랫폼이 그리면 그 확장을 알게 된다
-    (ADR-0018). `entry`는 `extension_api.BotUiPanel`이다.
-    """
-
-    id: str
-    label: str
-    #: 플랫폼이 미리 정한 자리 이름 (`PANEL_SURFACES`). **모르는 자리는 호스트가 조용히 무시한다.**
-    surface: str
-    #: `"<모듈>:<이름>"` — 위젯을 만드는 것. 그 확장 패키지 안만 가리킬 수 있다.
-    entry: str
-    #: 이 로컬 런타임이 **떠 있을 때만** 칸을 보인다 (선택).
-    runtime: str | None = None
-
-
-class RuntimeCall(ContractModel):
-    """런타임에 보내는 관리 호출 하나 — `{path, header, token_file}`.
-
-    PC 실행기는 런타임의 계약(C10 등)을 **모르고** 이 선언대로만 부른다. 토큰은 런타임 폴더의
-    `token_file`에서 **부를 때마다** 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다 (ADR-0023).
-    """
-
-    path: str
-    header: str
-    token_file: str
-
-
-class RuntimeReserve(RuntimeCall):
-    """실행 예약 방법 — PC 실행기가 런타임의 계약을 모른 채 실행 동안 그 런타임을 묶는다 (ADR-0014 §4).
-
-    `POST <path>` `{run_id}`로 예약하고 `DELETE <path>`로 푼다. 관리 토큰은 런타임 폴더의
-    `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — BPM 프로세스는 기다린다.
-    """
-
-
-class LocalRuntime(ContractModel):
-    """PC 실행기가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).
-
-    **명령줄은 확장이 적지 않는다** (schema 2, ADR-0024). `entry`가 런타임을 실행하는 코드를
-    가리키고, PC 실행기가 **자기 실행 파일을 자식으로 다시 띄워** 그 `entry`를 부른다 — 설치
-    파일로 묶은 앱 안에는 콘솔 스크립트가 없기 때문이다.
-
-    포트를 코드에 적지 않는다 — 설정 이름(`port_setting`)과 기본값만 둔다 (CLAUDE.md §5).
-    """
-
-    id: str
-    label: str
-    #: `"<모듈>:<이름>"` — `extension_api.LocalRuntimeEntry` 모양의 호출 가능한 것.
-    entry: str
-    port_setting: str | None = None
-    default_port: int | None = None
-    health: str | None = None  # 상태 확인 경로 (예: /v1/health)
-    token_dir: bool = False  # 로컬 토큰 파일을 둘 폴더가 필요한가
-    start: str = START_ON_DEMAND
-    #: 실행 예약 방법 (선택). `token_dir`가 있어야 토큰 파일을 읽는다.
-    reserve: RuntimeReserve | None = None
-    #: 상태를 묻는 방법 (선택). `GET <path>` → BUI-09가 보일 것. **본문은 런타임의 말이다** —
-    #: 호스트는 뜻을 아는 칸만 읽는다 (`reserved_for`·`unsent_reports`, ADR-0018).
-    status: RuntimeCall | None = None
-    #: 곱게 끄는 방법 (선택). `POST <path>` — PC 실행기 종료 순서가 프로세스를 끄기 **전에** 부른다.
-    shutdown: RuntimeCall | None = None
+#: 걷은 기여 지점 — 적은 확장이 있으면 호스트가 경고한다 (모르는 열쇠라고 **조용히 사라지지 않게**).
+#: `bot_ui.utilities`는 ADR-0077이, 나머지는 UI 자동화 확장과 함께 ADR-0114가 걷었다.
+LEGACY_CONTRIBUTION_KEYS = (
+    "bot_ui.utilities", "tool_ui.tools", "bot_ui.panels", "bot_ui.local_runtimes", "agent_environments",
+)
 
 
 class ConfigurationItem(ContractModel):
@@ -269,13 +176,6 @@ class PreflightContribution(ContractModel):
     """사전 점검 하나 (`extension_api.PreflightCheck`)."""
 
     id: str
-    entry: str
-
-
-class AgentEnvironmentContribution(ContractModel):
-    """AI 태스크 한 domain의 눈과 손 (`extension_api.AgentEnvironment`, ADR-0037)."""
-
-    domain: str  # AGENT_ENVIRONMENT_DOMAINS
     entry: str
 
 
@@ -301,12 +201,8 @@ class Contributes(ContractModel):
     task_types: list[TaskTypeContribution] = Field(default_factory=list)
     studio_editors: list[StudioEditorContribution] = Field(default_factory=list, alias="studio.editors")
     studio_resource_views: list[ResourceView] = Field(default_factory=list, alias="studio.resource_views")
-    tool_ui_tools: list[Tool] = Field(default_factory=list, alias="tool_ui.tools")
-    bot_ui_panels: list[Panel] = Field(default_factory=list, alias="bot_ui.panels")
-    bot_ui_local_runtimes: list[LocalRuntime] = Field(default_factory=list, alias="bot_ui.local_runtimes")
     configuration: list[ConfigurationItem] = Field(default_factory=list)
     preflight: list[PreflightContribution] = Field(default_factory=list)
-    agent_environments: list[AgentEnvironmentContribution] = Field(default_factory=list)
     console_pages: list[ConsolePage] = Field(default_factory=list, alias="console.pages")
     resources: list[ResourceContribution] = Field(default_factory=list)
 
@@ -414,12 +310,11 @@ class KeyNeed(ContractModel):
     """이 확장이 쓰는 서비스 앱 키 하나.
 
     - `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.
-    - `utility`: Tool UI의 도구가 쓸 때 (ADR-0077). `configuration`의 `secret` 칸으로 받는다.
     """
 
     purpose: str  # KNOWN_PURPOSES
     extra_scopes: list[str] = Field(default_factory=list)
-    config_key: str | None = None  # utility일 때 그 키를 받는 configuration 칸
+    config_key: str | None = None  # 옛 칸 (도구용 키 — ADR-0114가 걷었다). 읽기만 하고 쓰지 않는다
 
 
 class ExtensionManifest(SchemaVersioned):
@@ -469,9 +364,6 @@ class ExtensionManifest(SchemaVersioned):
             "task_types": [t.id for t in c.task_types],
             "studio.editors": [e.task_type for e in c.studio_editors],
             "studio.resource_views": [v.id for v in c.studio_resource_views],
-            "tool_ui.tools": [t.id for t in c.tool_ui_tools],
-            "bot_ui.panels": [p.id for p in c.bot_ui_panels],
-            "bot_ui.local_runtimes": [r.id for r in c.bot_ui_local_runtimes],
             "configuration": [i.key for i in c.configuration],
             "preflight": [p.id for p in c.preflight],
             "console.pages": [p.id for p in c.console_pages],
@@ -626,12 +518,8 @@ def _check_e1(m: ExtensionManifest) -> list[Violation]:
     forbidden = {
         "task_types": [t.id for t in c.task_types],
         "studio.editors": [e.task_type for e in c.studio_editors],
-        "tool_ui.tools": [t.id for t in c.tool_ui_tools],
-        "bot_ui.panels": [p.id for p in c.bot_ui_panels],
-        "bot_ui.local_runtimes": [r.id for r in c.bot_ui_local_runtimes],
         "configuration": [i.key for i in c.configuration],
         "preflight": [p.id for p in c.preflight],
-        "agent_environments": [e.domain for e in c.agent_environments],
         "console.pages": [p.id for p in c.console_pages],
     }
     items = [f"{key}:{id}" for key, ids in forbidden.items() for id in ids]
@@ -721,11 +609,6 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
                              message=f"{m.tier} 확장은 필요한 extension_api 버전 범위(api)를 적는다"))
 
     c = m.contributes
-    for e in m.contributes.agent_environments:
-        if e.domain not in AGENT_ENVIRONMENT_DOMAINS:
-            out.append(Violation(rule="C13", code="unknown_domain",
-                                 message=f"AI 환경을 기여할 수 없는 domain이다: {e.domain}"))
-
     for t in c.task_types:
         if t.editor is not None and t.editor.kind == EDITOR_BUILTIN and not t.editor.entry:
             out.append(Violation(rule="C13", code="editor_entry_missing",
@@ -739,7 +622,7 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
                                  message=f"태스크 종류 {t.id}에 실행 위치가 없다"))
     for item in c.configuration:
         if item.key.startswith(RESERVED_CONFIG_PREFIXES):
-            # E7. 호스트가 띄운 런타임·서버 주소를 이 이름으로 알려 준다 (C13) — 가려지면 안 된다.
+            # E7. 호스트가 Center 주소·저장 폴더를 이 이름으로 알려 준다 (C13) — 가려지면 안 된다.
             out.append(Violation(rule="E7", code="reserved_config_key",
                                  message=f"설정 칸 {item.key}은 호스트가 쓰는 이름이다 "
                                          f"({', '.join(one + '*' for one in RESERVED_CONFIG_PREFIXES)})"))
@@ -747,60 +630,10 @@ def _check_shape(m: ExtensionManifest) -> list[Violation]:
             out.append(Violation(rule="C13", code="unknown_scope",
                                  message=f"설정 칸 {item.key}의 scope를 모른다: {item.scope}",
                                  items=sorted(CONFIG_SCOPES)))
-    for r in m.contributes.bot_ui_local_runtimes:
-        # 관리 호출 셋은 **같은 규칙**이다 — 토큰 파일을 둘 폴더가 있어야 하고 경로가 /로 시작해야 한다.
-        for what, call in (("reserve", r.reserve), ("status", r.status), ("shutdown", r.shutdown)):
-            if call is not None and (not r.token_dir or not call.path.startswith("/")):
-                out.append(Violation(rule="C13", code=f"{what}_invalid",
-                                     message=f"런타임 {r.id}의 {what}은 token_dir가 있고 "
-                                             f"경로가 /로 시작해야 한다"))
-
-    runtime_ids = {rt.id for rt in c.bot_ui_local_runtimes}
-    for panel in c.bot_ui_panels:
-        if not panel.entry:
-            out.append(Violation(rule="C13", code="entry_missing",
-                                 message=f"화면 칸 {panel.id}에 진입점(entry)이 없다"))
-        if panel.surface not in PANEL_SURFACES:
-            # 열린 문자열이라 **거부가 아니다** — 호스트가 모르는 자리를 조용히 무시하므로
-            # 칸이 조용히 사라진다. 정의를 쓰는 사람이 미리 알아야 한다 (ADR-0042).
-            out.append(Violation(rule="C13", code="unknown_surface",
-                                 message=f"화면 칸 {panel.id}의 자리를 이 판은 모른다: {panel.surface}",
-                                 items=sorted(PANEL_SURFACES)))
-        if panel.runtime is not None and panel.runtime not in runtime_ids:
-            # 그 런타임이 떠 있을 때만 보이는 칸인데 런타임이 없으면 **영원히 안 보인다**.
-            out.append(Violation(rule="C13", code="panel_runtime_not_found",
-                                 message=f"화면 칸 {panel.id}이 기다리는 런타임이 이 확장에 없다: {panel.runtime}",
-                                 items=sorted(runtime_ids)))
-
-    for rt in c.bot_ui_local_runtimes:
-        if rt.start not in KNOWN_STARTS:
-            out.append(Violation(rule="C13", code="unknown_start",
-                                 message=f"로컬 런타임 {rt.id}의 start를 모른다: {rt.start}",
-                                 items=sorted(KNOWN_STARTS)))
-        if not rt.entry:
-            out.append(Violation(rule="C13", code="entry_missing",
-                                 message=f"로컬 런타임 {rt.id}에 진입점(entry)이 없다"))
-
-    config_keys = {item.key for item in c.configuration}
     for need in m.requires_keys:
         if need.purpose not in KNOWN_PURPOSES:
             out.append(Violation(rule="C13", code="unknown_purpose",
                                  message=f"모르는 키 용도다: {need.purpose}", items=sorted(KNOWN_PURPOSES)))
-        if need.purpose != PURPOSE_UTILITY:
-            continue
-        # 도구용 키는 Center가 내려 주고 호스트가 `ctx.secret("utility")`로 준다 (ADR-0094 §6) —
-        # `config_key`는 옛 정의의 호환으로만 남는다. **적었으면** 그 칸은 비밀 칸이어야 한다.
-        if not need.config_key:
-            continue
-        if need.config_key not in config_keys:
-            out.append(Violation(rule="C13", code="config_key_not_found",
-                                 message=f"config_key {need.config_key}가 configuration에 없다",
-                                 items=sorted(config_keys)))
-        else:
-            item = next(i for i in c.configuration if i.key == need.config_key)
-            if not item.secret:
-                out.append(Violation(rule="C13", code="key_config_not_secret",
-                                     message=f"키를 받는 칸 {item.key}은 secret: true여야 한다 (OS 비밀 저장소)"))
 
     for field in ("docs_url", "console_url"):
         url: str | None = getattr(m, field)
@@ -853,27 +686,6 @@ def task_type_conflicts(manifests: Iterable[ExtensionManifest]) -> list[Violatio
             items=sorted(ids),
         )
         for task_type, ids in sorted(owners.items())
-        if len(ids) > 1
-    ]
-
-
-def environment_conflicts(manifests: Iterable[ExtensionManifest]) -> list[Violation]:
-    """E8. AI 환경(domain)이 확장 사이에 겹치는가 (409 `environment_conflict`, ADR-0037).
-
-    한 domain의 눈과 손은 하나다 — 둘이면 어느 Worker 세션을 열지 고를 수 없다.
-    """
-    owners: dict[str, list[str]] = {}
-    for m in manifests:
-        for e in m.contributes.agent_environments:
-            owners.setdefault(e.domain, []).append(m.id)
-    return [
-        Violation(
-            rule="E8",
-            code="environment_conflict",
-            message=f"AI 환경 {domain}을 여러 확장이 기여한다",
-            items=sorted(ids),
-        )
-        for domain, ids in sorted(owners.items())
         if len(ids) > 1
     ]
 
@@ -989,7 +801,7 @@ class ResolvedHost(ContractModel):
 
 
 def is_private_ip(ip: str) -> bool:
-    """루프백·사설·링크 로컬·예약 주소인가 (§4-3 4번). 같은 PC의 Worker도 이 규칙이 막는다."""
+    """루프백·사설·링크 로컬·예약 주소인가 (§4-3 4번). 같은 PC의 다른 프로그램도 이 규칙이 막는다."""
     found = ipaddress.ip_address(ip)
     return bool(found.is_loopback or found.is_private or found.is_link_local or found.is_reserved)
 

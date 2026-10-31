@@ -7,29 +7,21 @@ Studio는 **어느 확장인지 모른다.** `chk:task`의 `type`으로 기여�
 - 편집기는 **태스크 종류마다 하나**를 만들어 두고 다시 쓴다 (`load()`/`dump()`로 오간다).
 - 서버 주소는 **호스트가 예약 키로** 준다 (C13 `service.base_url`) — 확장이 설정에
   따로 두지 않는다. 출처는 하나다.
-- **시험 실행도 확장을 쓴다** (`tasks()`) — UI 태스크·데스크톱 AI 태스크는 **이 PC의 PC 실행기가
-  띄운 로컬 런타임(Worker)** 을 쓴다 (STU-10 「Worker」). 자리는 PC 실행기가 런타임 폴더에 남긴
-  `runtime.json`(포트)과 토큰 파일이다 — Studio가 띄우지 않는다.
+- **시험 실행도 확장을 쓴다** (`tasks()`) — 확장 태스크의 수행기를 호스트에서 받는다.
 - 서비스 앱 키는 없다 (ADR-0102) — 바깥 기능은 Studio 키로 Center에 시험 일감을 올린다 (C15,
   `services.py`). 확장의 비밀 칸만 OS 비밀 저장소(`chaeksas-studio`, `ext:<확장>:<칸>`)에서 푼다.
 """
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
-
-import platformdirs
 
 from chaeksas.contracts import (
     CALL_TOKEN_SECRET,
     CENTER_URL_SETTING,
-    RESERVED_CONFIG_PREFIX,
     SCOPE_STUDIO,
 )
 from chaeksas.core.extensions import ExtensionHost, HostTasks
@@ -53,7 +45,7 @@ class PlainSettings:
 class LiveSettings:
     """`extension_api.Settings` — **물을 때마다** 다시 짓는다 (편집기는 한 번 만들어 다시 쓴다).
 
-    PC 실행기가 Worker를 다시 띄우면 포트가 바뀐다.
+    사람이 STU-10에서 설정을 바꾸면 열어 둔 편집기도 새 값을 본다.
     """
 
     values: Callable[[], Mapping[str, Any]]
@@ -75,26 +67,11 @@ class NoSecrets:
         return None
 
 
-#: PC 실행기가 런타임 폴더에 남기는 자리 정보 (`{"runtime", "port"}`).
-RUNTIME_FILE = "runtime.json"
-
-
-def bot_ui_data_dir() -> Path:
-    """이 PC PC 실행기의 사용자 데이터 위치 — PC 실행기와 **같은 규칙**이다 (`CHK_BOT_UI__DATA_DIR`가 이긴다).
-
-    Studio는 PC 실행기를 import하지 않는다 (앱끼리 import하지 않는다). 규칙이 어긋나면 시험이 잡는다.
-    """
-    override = os.environ.get("CHK_BOT_UI__DATA_DIR")
-    if override:
-        return Path(override)
-    return Path(platformdirs.user_data_dir("chaeksas", appauthor=False)) / "bot-ui"
-
-
 @dataclass(frozen=True)
 class StudioSecrets:
     """`extension_api.Secrets` — Studio에서 확장이 묻는 비밀을 푼다 (ADR-0013).
 
-    `call_token`은 **Studio가 제 키로 청한 호출 토큰**이다 (C15 — Worker가 Studio를 대신해 올린다).
+    `call_token`은 **Studio가 제 키로 청한 호출 토큰**이다 (C15).
     나머지는 그 확장의 비밀 설정 칸이다(STU-10 「확장별 설정」, 환경변수가 먼저). 없으면 `None`.
     """
 
@@ -177,42 +154,14 @@ class Extensions:
             values[CENTER_URL_SETTING] = self.center_url()
         return PlainSettings(values=values)
 
-    def runtime_settings(self, extension_id: str, *, root: Path | None = None) -> dict[str, Any]:
-        """그 확장의 로컬 런타임 자리 — **PC 실행기가 띄운 것**을 가리킨다 (C13 예약 키 `runtime.<id>.*`).
-
-        포트는 PC 실행기가 런타임 폴더에 남긴 `runtime.json`, 없으면 그 런타임의 설정 환경변수, 그것도
-        없으면 기여의 기본 포트다. Studio는 런타임을 띄우지 않는다.
-        """
-        where = (root or bot_ui_data_dir()) / "runtimes"
-        out: dict[str, Any] = {}
-        for found in self.host.local_runtimes():
-            if found.extension_id != extension_id:
-                continue
-            runtime = found.value
-            head = f"{RESERVED_CONFIG_PREFIX}{runtime.id}"
-            folder = where / runtime.id
-            port: Any = None
-            try:
-                port = json.loads((folder / RUNTIME_FILE).read_text(encoding="utf-8")).get("port")
-            except (OSError, ValueError):
-                port = None
-            if not port and runtime.port_setting:
-                port = os.environ.get(runtime.port_setting)
-            out[f"{head}.port"] = int(port) if port else runtime.default_port
-            if runtime.token_dir:
-                out[f"{head}.token_dir"] = str(folder)
-        return out
-
     def _values(self, extension_id: str) -> dict[str, Any]:
-        values = dict(getattr(self.settings_for(extension_id), "values", {}))
-        values.update(self.runtime_settings(extension_id))
-        return values
+        return dict(getattr(self.settings_for(extension_id), "values", {}))
 
     def editor_context(self, extension_id: str) -> ExtensionContext:
         """확장 편집기의 바깥 세상 — **시험 실행과 같은 것**이다 (ADR-0074).
 
-        편집기가 「이 스텝까지 시험」·「계획 세워 보기」로 Worker를 부를 때 시험 실행과 같은 Worker·같은
-        호출 토큰을 본다. 값은 물을 때마다 읽는다 (`LiveSettings`).
+        편집기가 바깥을 부를 때 시험 실행과 같은 설정·같은 호출 토큰을 본다. 값은 물을 때마다
+        읽는다 (`LiveSettings`).
         """
         return self.host.context(
             extension_id,
@@ -236,7 +185,7 @@ class Extensions:
         )
 
     def tasks(self) -> HostTasks:
-        """시험 실행의 `RunEnv.extensions` — 확장 태스크와 `web`·`desktop` AI 태스크 (ADR-0018·0037)."""
+        """시험 실행의 `RunEnv.extensions` — 확장 태스크 (ADR-0018)."""
         return HostTasks(host=self.host, make_context=self.context)
 
     def editor(self, task_type: str) -> Any | None:
@@ -264,6 +213,5 @@ __all__ = [
     "NoSecrets",
     "PlainSettings",
     "StudioSecrets",
-    "bot_ui_data_dir",
     "installed_host",
 ]

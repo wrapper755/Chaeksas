@@ -75,7 +75,7 @@ def builtin(**over: Any) -> dict[str, Any]:
         "name": "문서 인식",
         "publisher": "Chaeksas",
         "tier": "builtin",
-        "api": ">=1,<2",
+        "api": ">=2,<3",
         "contributes": {
             "task_types": [
                 {
@@ -179,11 +179,11 @@ def resource(definition: dict[str, Any], envelope: dict[str, Any] | None) -> Ext
 
 
 def host_with(
-    *definitions: dict[str, Any], api_version: str = "1.0.0", off: tuple[str, ...] = ()
+    *definitions: dict[str, Any], api_version: str = "2.0.0", off: tuple[str, ...] = ()
 ) -> ExtensionHost:
     host = ExtensionHost(api_version=api_version, off=off)
     for one in definitions:
-        host.add_installed(json.dumps(one).encode("utf-8"), origin="test", root="chaeksas.ext.ui_automation")
+        host.add_installed(json.dumps(one).encode("utf-8"), origin="test", root="fake_extension")
     return host
 
 
@@ -302,7 +302,7 @@ def test_incompatible_extension_says_why_at_the_top() -> None:
 def test_unreadable_definition_is_said_below_the_table() -> None:
     """정의를 **읽지도 못한** 것은 id가 없어 줄을 만들 수 없다 — 한 줄로 말한다."""
     host = ExtensionHost()
-    host.add_installed(b"not json at all", origin="entry_point:broken", root="chaeksas.ext.ui_automation")
+    host.add_installed(b"not json at all", origin="entry_point:broken", root="fake_extension")
     window = dialog(host)
     assert window.table.rowCount() == 0
     assert "정의를 읽지 못했습니다" in window.note.text()
@@ -401,10 +401,10 @@ def test_refresh_without_center_settings_points_at_stu_10() -> None:
 
 def test_checking_a_definition_file_uses_the_same_rules_as_chk_admin() -> None:
     """E1·E3·E5를 여기서 돌려 본다 — Center에 올리기 전에 알면 싸다."""
-    assert check_definition(json.dumps(external()).encode("utf-8"), api_version="1.0.0") == []
+    assert check_definition(json.dumps(external()).encode("utf-8"), api_version="2.0.0") == []
 
-    coded = external(contributes={"tool_ui.tools": [{"id": "u", "label": "u", "entry": "x:Y"}]})
-    problems = check_definition(json.dumps(coded).encode("utf-8"), api_version="1.0.0")
+    coded = external(contributes={"preflight": [{"id": "u", "entry": "x:Y"}]})
+    problems = check_definition(json.dumps(coded).encode("utf-8"), api_version="2.0.0")
     assert any("external_code_not_allowed" in line for line in problems)
 
     off_host = external(
@@ -419,17 +419,17 @@ def test_checking_a_definition_file_uses_the_same_rules_as_chk_admin() -> None:
             },
         }
     )
-    problems = check_definition(json.dumps(off_host).encode("utf-8"), api_version="1.0.0")
+    problems = check_definition(json.dumps(off_host).encode("utf-8"), api_version="2.0.0")
     assert any("adapter_invalid" in line for line in problems), problems
 
 
 def test_a_file_that_is_not_a_definition_says_so_plainly() -> None:
     """**한 줄로 말한다** — 어디가 깨졌는지는 사유에 담긴다."""
-    broken = check_definition(b"{nope", api_version="1.0.0")
+    broken = check_definition(b"{nope", api_version="2.0.0")
     assert len(broken) == 1
     assert broken[0].startswith("JSON이 아닙니다: ")
-    assert check_definition(b"[]", api_version="1.0.0") == ["최상위가 객체가 아닙니다."]
-    missing = check_definition(b'{"schema": 2, "id": "x"}', api_version="1.0.0")
+    assert check_definition(b"[]", api_version="2.0.0") == ["최상위가 객체가 아닙니다."]
+    missing = check_definition(b'{"schema": 2, "id": "x"}', api_version="2.0.0")
     assert len(missing) == 1
     assert missing[0].startswith("정의가 C13과 맞지 않습니다")
 

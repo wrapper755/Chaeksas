@@ -39,9 +39,9 @@ VERSION = "1.0.0"
 #: 업무 예제 BX-23 — 실행 위치 `server`, **매주 수요일 10시**에 시작한다.
 TRAINING = Path("docs/08-business-examples/bpmn/bx23_training_reminder.bpmn")
 TRAINING_BOT = "hr.training-reminder"
-#: 업무 예제 BX-04 — 실행 위치 `pc`, **매달 1일 9시**에 시작한다.
-INVOICE = Path("docs/08-business-examples/bpmn/bx04_tax_invoice_issue.bpmn")
-INVOICE_BOT = "fin.tax-invoice-issue"
+#: PC 업무 예제의 그림 (FX-19) — 일정은 매니페스트의 `triggers`가 정한다 (**매달 1일 9시**로 올린다).
+INVOICE = Path("docs/08-business-examples/bpmn/fx19_manual_task_pc.bpmn")
+INVOICE_BOT = "ops.monthly-check"
 
 
 def seoul(year: int, month: int, day: int, hour: int = 0, minute: int = 0, second: int = 0) -> datetime:

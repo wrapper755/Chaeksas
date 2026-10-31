@@ -93,7 +93,7 @@ export interface RunningRun {
   [k: string]: unknown;
 }
 /**
- * C4 `Versions`와 **칸이 다르다** — 서버에는 Worker가 없다.
+ * C4 `Versions`와 **칸이 다르다** — 서버 실행기의 판이다.
  */
 export interface RunnerVersions {
   core: string;

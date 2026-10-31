@@ -6,7 +6,7 @@
 
 **엔진(`core`)은 적지 않는다** — PC BPM 프로세스는 실행 프로세스로 Windows에서 엔진을 돌린다.
 **PC 쪽 코드가 걸린 파일도 적지 않는다** (`test_ci_scope.py`가 import로 본다): 서버 실행기 위임
-시험은 PC를 진짜 자식 프로세스로 돌리고, UI 자동화 앱 시험은 Worker의 부르는 쪽을 함께 본다.
+시험은 PC를 진짜 자식 프로세스로 돌린다.
 """
 
 from __future__ import annotations
@@ -47,17 +47,11 @@ SERVER_SIDE = frozenset({
     "test_service_kit_llm",
     "test_adapter_consumer",
     "test_mock_apps",
-    # UI 자동화 앱의 서버 부분 (`test_ui_service_app`은 Worker의 부르는 쪽을 함께 봐 양쪽이다)
-    "test_ui_registry",
-    "test_ui_console",
 })
 
 #: 서버 파일이 import하면 안 되는 것 — PC에서 도는 코드다.
 CLIENT_MODULES = (
     "chaeksas.bot_ui",
-    "chaeksas.tool_ui",
     "chaeksas.qt",
     "PySide6",
-    "chaeksas.ext.ui_automation.worker",
-    "chaeksas.ext.ui_automation.client",
 )

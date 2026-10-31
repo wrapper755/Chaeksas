@@ -95,8 +95,8 @@ RESULT_COLUMNS = ("이름 (변수명)", "타입")
 VISIBLE_ROWS = 3
 
 SERVER_NO_SCREEN = "서버 BPM 프로세스는 웹·데스크톱 AI 태스크를 쓸 수 없습니다 (실행 전 검사 B6)."
-SCREEN_TOOLS_NOTE = "이 환경의 도구(화면 보기·조작)는 저절로 허용됩니다 — 여기 고르지 않습니다."
-NO_WEB_ENVIRONMENT = "웹 환경을 주는 확장이 아직 없습니다 — 실행 전 사전 점검이 막습니다."
+#: 웹·데스크톱 AI 태스크의 눈과 손을 주던 확장을 걷었다 (ADR-0114) — 고를 수는 있지만 돌지 않는다.
+NO_SCREEN_ENVIRONMENT = "웹·데스크톱 AI 태스크는 이 판에서 돌릴 수 없습니다 — 실행 전 사전 점검이 막습니다."
 FORBIDDEN_NOTE = "모델에게 주는 말입니다 — 막지는 않습니다. 막으려면 허용 도구를 줄이세요."
 CONFIRM_NOTE = "이 상황이면 멈춥니다 — PC는 사람 확인, 서버나 ESCALATED 경계가 있으면 오류 경계로."
 INSTRUCTIONS_NOTE = "줄마다 하나. 비우면 BPM 프로세스 기본값을 따릅니다."
@@ -188,7 +188,7 @@ class AiTaskEditor(QWidget):
         set_role(self.domain_note, "muted")
         self.app_box = QLineEdit(self)
         self.app_box.setPlaceholderText("띄울 앱 이름 — 비우면 BPM 프로세스 기본값")
-        self.app_box.setToolTip("그 PC Worker의 desktop-apps.json에 같은 이름의 창 조건이 있어야 붙습니다.")
+        self.app_box.setToolTip("데스크톱 AI 태스크가 띄울 앱 이름입니다 (C14 `desktop.app`).")
 
         self.tool_checks: dict[str, QCheckBox] = {}
         self.tools_column = QVBoxLayout()
@@ -766,9 +766,7 @@ class AiTaskEditor(QWidget):
         if on_server:
             notes.append(SERVER_NO_SCREEN)
         if domain in PC_ONLY_DOMAINS:
-            notes.append(SCREEN_TOOLS_NOTE)
-        if domain == "web":
-            notes.append(NO_WEB_ENVIRONMENT)
+            notes.append(NO_SCREEN_ENVIRONMENT)
         self.domain_note.setText(" ".join(notes))
         self.domain_note.setVisible(bool(notes))
         self._domain_form.setRowVisible(self.app_box, domain == "desktop")
@@ -896,7 +894,7 @@ __all__ = [
     "DOMAINS",
     "FORBIDDEN_NOTE",
     "GOAL_OUTLINE",
-    "NO_WEB_ENVIRONMENT",
+    "NO_SCREEN_ENVIRONMENT",
     "REPLAYS",
     "SERVER_NO_SCREEN",
     "TAB_LABEL",

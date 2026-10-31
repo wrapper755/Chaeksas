@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-01, 독립 검토 반영). §5 사내 확장의 코드 배포(서명된 확장 패키지)는 **제안** · 기여 지점 `bot_ui.utilities`(셀렉터 등록 = Bot UI 유틸리티)는 대체됨([ADR-0077](0077-tool-ui.md) — `tool_ui.tools`, Tool UI가 띄운다) |
+| 상태 | 수락 (2026-10-01, 독립 검토 반영). §5 사내 확장의 코드 배포(서명된 확장 패키지)는 **제안** · 기여 지점 `bot_ui.utilities`(셀렉터 등록 = Bot UI 유틸리티)는 대체됨([ADR-0077](0077-tool-ui.md) — `tool_ui.tools`, Tool UI가 띄운다) · 기여 지점 `tool_ui.tools`·`bot_ui.panels`·`bot_ui.local_runtimes`·`agent_environments`는 걷었다 ([ADR-0114](0114-remove-ui-automation.md)) |
 | 날짜 | 2026-10-01 |
 | 대체 | ADR-0010의 "서비스 앱 = 플랫폼의 한 구성요소" 관점을 넓힌다 (서비스 앱 = 확장의 서버 부분). ADR-0012의 Bot UI ③ "UI 셀렉터 등록"은 Bot UI 고유 기능이 아니라 **UI 자동화 확장이 기여하는 유틸리티**가 된다. 저장소 구성(ADR-0004·0017)의 `services/`, `apps/worker/` 위치 |
 | 관련 | 계약 [C13](../03-contracts/C13-extension-manifest.md), C1·C7·C8·C9·C10·C11, 화면 BUI-01·02·06~11, STU-03·13·15, CON-07 |

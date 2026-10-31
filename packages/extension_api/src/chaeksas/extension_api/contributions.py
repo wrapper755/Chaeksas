@@ -3,19 +3,15 @@
 모두 `Protocol`이다. 확장은 상속하지 않고 모양만 맞추면 된다. 호스트는 `entry`로 찾은 객체가
 이 모양인지 보고 켠다.
 
-**Qt를 import하지 않는다.** 화면을 만드는 기여(`TaskEditor`·`ToolUiTool`·`BotUiPanel`)는 위젯을 `object`로
-돌려준다. `core`가 이 패키지를 쓰는데 `core`는 Qt를 모르기 때문이다 (01-architecture §5).
-위젯을 받아 붙이는 것은 Studio·PC 실행기·Tool UI의 몫이다.
-
-로컬 런타임(`bot_ui.local_runtimes`)은 **다른 프로세스에서** 돈다. 띄우고 감시하는 것은 PC 실행기이고
-(C13, BUI-09·11), 확장이 주는 것은 그 자식 프로세스 안에서 불릴 진입점 하나(`LocalRuntimeEntry`)다.
+**Qt를 import하지 않는다.** 화면을 만드는 기여(`TaskEditor`)는 위젯을 `object`로 돌려준다.
+`core`가 이 패키지를 쓰는데 `core`는 Qt를 모르기 때문이다 (01-architecture §5).
+위젯을 받아 붙이는 것은 Studio의 몫이다.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
 from chaeksas.contracts.manifest import Manifest
@@ -59,64 +55,6 @@ class TaskEditor(Protocol):
         ...
 
 
-@runtime_checkable
-class ToolUiTool(Protocol):
-    """Tool UI의 도구 하나 (`tool_ui.tools`, TOL-01 — 예: TOL-03~05 셀렉터 등록, ADR-0077).
-
-    Tool UI가 탭 하나에 붙인다. 로컬 런타임이 필요하면 **PC 실행기가 띄운 것**을 예약 키
-    (`runtime.<id>.*`)로 받는다 — 도구도 Tool UI도 런타임을 띄우지 않는다.
-    """
-
-    def widget(self, ctx: ExtensionContext) -> object:
-        """탭에 붙일 위젯 (Qt)."""
-        ...
-
-    def closed(self) -> None:
-        """탭을 닫을 때. 잡아 둔 자원(로컬 런타임 세션 등)을 놓는다."""
-        ...
-
-
-#: 옛 이름 (`bot_ui.utilities`, ADR-0077 전) — **모양이 같아** 1.x 약속을 깨지 않으려고 남긴다.
-BotUiUtility = ToolUiTool
-
-
-@runtime_checkable
-class BotUiPanel(Protocol):
-    """플랫폼 화면의 **한 칸** (`bot_ui.panels`, BUI-09의 「최근 UI 세션」 — ADR-0042).
-
-    `ToolUiTool`과 다른 것은 「창이 아니라 남의 화면 안의 칸」이라는 점이다. 그래서 둘이
-    더 있다.
-
-    - **`refresh()`는 호스트가 부른다** — 패널이 자기 타이머를 만들지 않는다 (화면 스레드를
-      쥔 쪽이 주기를 정한다). 느린 일(서버·런타임 호출)은 호스트의 주기 안에 끝나야 한다.
-    - **못 그리면 그 칸만 접힌다.** 호스트는 예외를 잡아 사유를 보이고 화면을 이어 그린다.
-    """
-
-    def widget(self, ctx: ExtensionContext) -> object:
-        """칸에 붙일 위젯 (Qt). 호스트가 자기 화면에 끼운다."""
-        ...
-
-    def refresh(self) -> None:
-        """보일 것을 다시 읽는다. 호스트가 주기마다 부른다."""
-        ...
-
-
-@runtime_checkable
-class LocalRuntimeEntry(Protocol):
-    """로컬 런타임의 진입점 (`bot_ui.local_runtimes[].entry`, ADR-0024).
-
-    **PC 실행기가 자기 실행 파일을 자식으로 다시 띄워** 이것을 부른다 — 설치 파일로 묶은 앱 안에는
-    콘솔 스크립트가 없기 때문이다. 불린 쪽은 화면 없는 서버로 돌다가 종료 코드를 돌려준다.
-
-    - `port`: PC 실행기가 정한 포트 (설정 `port_setting`, 없으면 `default_port`).
-    - `token_dir`: 로컬 토큰 파일을 둘 폴더. 정의에 `token_dir: true`일 때만 온다 (C10).
-    - 127.0.0.1에만 바인드한다. 같은 PC의 다른 프로그램도 토큰으로 막는다 (01-architecture §4).
-    - 함수여도 되고 클래스여도 된다 (호스트가 인자 없이 만든 뒤 부른다).
-    """
-
-    def __call__(self, *, port: int, token_dir: Path | None = None) -> int: ...
-
-
 @dataclass(frozen=True)
 class Finding:
     """사전 점검이 찾은 것 하나. 화면에 한 줄로 보인다 (STU-16·BUI-04)."""
@@ -151,40 +89,3 @@ class PreflightCheck(Protocol):
     """
 
     def check(self, target: PreflightTarget) -> Sequence[Finding]: ...
-
-
-# ─────────────────────────── AI 환경 (`agent_environments`, ADR-0037) ───────────────────────────
-
-
-@dataclass(frozen=True)
-class AgentTool:
-    """AI 태스크에 줄 도구 하나 — 모델에게 알려 줄 설명·인자 모양과, 부를 함수.
-
-    `run`은 **글을 돌려준다** (모델이 읽는다). 모델이 고칠 수 있는 실패(맞는 요소가 여럿 등)는
-    예외가 아니라 글로 알린다. 예외는 「이 도구를 더 쓸 수 없다」는 뜻이다.
-    """
-
-    name: str
-    description: str
-    parameters: Mapping[str, Any]
-    run: Callable[..., str]
-
-
-@runtime_checkable
-class AgentSession(Protocol):
-    """AI 태스크 한 번 동안의 눈과 손. 엔진이 끝나면 **반드시** `close()`한다."""
-
-    def tools(self) -> Sequence[AgentTool]: ...
-
-    def close(self) -> None: ...
-
-
-@runtime_checkable
-class AgentEnvironment(Protocol):
-    """AI 태스크 한 domain(`web`·`desktop`)의 환경 (`agent_environments[].entry`).
-
-    `ctx.properties`에 그 AI 태스크의 환경 칸(`domain`, `desktop.app`, `web.profile`)이 실린다.
-    실패는 `TaskFailed`로 알린다 (앱이 없음 등 — 오류 경계가 받는다).
-    """
-
-    def open(self, ctx: TaskContext) -> AgentSession: ...

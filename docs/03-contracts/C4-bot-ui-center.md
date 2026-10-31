@@ -2,17 +2,17 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 등록·하트비트·배포·작업·결재·`readiness`·`reserved_for`까지 양쪽이 쓴다) — **§등록 요청과 승인·키 회전도 양쪽이 쓴다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) |
+| 상태 | **구현됨** (2026-10-10, [09-gaps](../09-gaps.md) §1 대조 — 등록·하트비트·배포·작업·결재·`readiness`까지 양쪽이 쓴다) — **§등록 요청과 승인·키 회전도 양쪽이 쓴다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | PC 실행기 ↔ Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/bot_ui.py` (import `chaeksas.contracts.bot_ui`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c4-register-request.json`](../../packages/contracts/schemas/c4-register-request.json) · [`c4-register-response.json`](../../packages/contracts/schemas/c4-register-response.json) · [`c4-heartbeat-request.json`](../../packages/contracts/schemas/c4-heartbeat-request.json) · [`c4-heartbeat-response.json`](../../packages/contracts/schemas/c4-heartbeat-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
-| 관련 화면 | BUI-01·03·04·05·09, CON-03·05·11 |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0012](../decisions/0012-bot-ui.md), [0013](../decisions/0013-api-keys.md), [0014](../decisions/0014-one-bot-per-pc.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md), [0114](../decisions/0114-remove-ui-automation.md) |
+| 관련 화면 | BUI-01·03·04·05, CON-03·05·11 |
 
 ## 목적
 
-PC 실행기가 **등록 요청**을 보내 관리자의 승인으로 Center API 키를 받고(§등록 요청과 승인), 그 키로 자기를 등록하고, 30초마다 상태(실행 중 BPM 프로세스 1건, 대기열, Worker 프로세스, 준비 상태)를 보고하며, 그 응답으로 배포·작업·결재 답·취소 지시를 받는다. **연결은 항상 PC 실행기 → Center**다 (ADR-0007).
+PC 실행기가 **등록 요청**을 보내 관리자의 승인으로 Center API 키를 받고(§등록 요청과 승인), 그 키로 자기를 등록하고, 30초마다 상태(실행 중 BPM 프로세스 1건, 대기열, 준비 상태)를 보고하며, 그 응답으로 배포·작업·결재 답·취소 지시를 받는다. **연결은 항상 PC 실행기 → Center**다 (ADR-0007).
 
 ## 전송
 
@@ -103,7 +103,7 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 
 ### 호출 토큰
 
-실행 프로세스·Worker·Tool UI가 외부 작업을 올릴 때 쓰는 토큰은 PC 실행기가 **제 Center API 키로** `POST /api/v1/call-tokens`를 불러 받는다 (C15 「정한 것」). 하트비트에 싣지 않는다 — 공개키가 없는 PC 실행기(환경변수 키)도 받아야 한다.
+실행 프로세스가 외부 작업을 올릴 때 쓰는 토큰은 PC 실행기가 **제 Center API 키로** `POST /api/v1/call-tokens`를 불러 받는다 (C15 「정한 것」). 하트비트에 싣지 않는다 — 공개키가 없는 PC 실행기(환경변수 키)도 받아야 한다. PC 실행기는 그 토큰을 **메모리에만** 들고 비밀 저장소에 두지 않는다.
 
 ## 키 묶기
 
@@ -111,7 +111,7 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 
 - **키 → PC.** 키는 처음 `register`한 PC(`machine_id`)에 묶인다. 묶인 키를 다른 `machine_id`로 쓰면 409 `machine_mismatch` — 키가 새어도 다른 PC 실행기를 사칭할 수 없다.
 - **PC → 키.** 같은 `machine_id`를 다른 키가 등록하면 409 `machine_already_registered`. **키가 혼자서 남의 PC 자리를 가져가지 못한다** — 관문은 운영자다. 옛 키의 「PC 묶음 풀기」(CON-11, C7 `POST /center-keys/{id}/unbind`)를 먼저 해야 한다.
-- **묶음을 풀면 그 PC 실행기 자리도 놓인다.** 새 키가 같은 `machine_id`로 등록하면 그 `bot_ui_id`를 **이어받는다** — 배포·작업·결재·배치 결정이 그 id를 가리키고 있어서, 새 행을 만들면 CON-03에 유령 한 줄이 남고 C7 리소스의 PC 수가 부푼다. 이어받은 자리의 **상태는 비운다** (`status`·`current_run`·`queue`·`worker`·`readiness`는 옛 키가 보고한 것이다 — 다음 하트비트가 채운다). 옛 키는 그 자리를 잃어, 그 키의 `heartbeat`는 409 `not_registered`가 된다.
+- **묶음을 풀면 그 PC 실행기 자리도 놓인다.** 새 키가 같은 `machine_id`로 등록하면 그 `bot_ui_id`를 **이어받는다** — 배포·작업·결재·배치 결정이 그 id를 가리키고 있어서, 새 행을 만들면 CON-03에 유령 한 줄이 남고 C7 리소스의 PC 수가 부푼다. 이어받은 자리의 **상태는 비운다** (`status`·`current_run`·`queue`·`readiness`는 옛 키가 보고한 것이다 — 다음 하트비트가 채운다). 옛 키는 그 자리를 잃어, 그 키의 `heartbeat`는 409 `not_registered`가 된다.
 - **이어받기는 행이 없는 키만 한다.** 이미 다른 PC로 등록된 키(묶음을 푼 뒤 아직 그 행을 가진 키)가 남의 놓인 자리를 가져가려 하면 409 `machine_already_registered` + `detail.reason`=`key_has_another_pc`. 어느 쪽 이력을 버릴지 Center가 짐작하지 않는다 — 그 PC에는 새 키를 발급한다.
 
 `register`가 보는 순서와 결과:
@@ -138,7 +138,7 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 | `machine_id` | str | ✓ | PC 고유값의 SHA-256 (Windows MachineGuid / Linux `/etc/machine-id`). 원값은 보내지 않는다 |
 | `name` | str | ✓ | 표시 이름 (기본: PC 이름) |
 | `os` | str | ✓ | 예: `windows-11-23H2`, `ubuntu-24.04` |
-| `versions` | object | ✓ | `{bot_ui, core, worker, build?}`. `bot_ui`·`worker`는 **산출물의 판**이고(Worker는 같은 실행 파일로 뜬다) 묶은 앱이면 빌드가 찍은 판이다 ([ADR-0067](../decisions/0067-build-stamp.md) — 태그면 `0.2.0`, 태그 없이 묶었으면 `0.1.0+g<커밋>`). `build`(`{commit, built_at}`)는 **묶은 것에서 돈다**는 표시이고 **없으면 묶지 않은 것**(소스·`uv sync`)에서 돈다 — 「모른다」가 아니다 |
+| `versions` | object | ✓ | `{bot_ui, core, build?}`. `bot_ui`는 **산출물의 판**이고 묶은 앱이면 빌드가 찍은 판이다 ([ADR-0067](../decisions/0067-build-stamp.md) — 태그면 `0.2.0`, 태그 없이 묶었으면 `0.1.0+g<커밋>`). `build`(`{commit, built_at}`)는 **묶은 것에서 돈다**는 표시이고 **없으면 묶지 않은 것**(소스·`uv sync`)에서 돈다 — 「모른다」가 아니다 |
 | `runtimes` | object | | `{browsers: ["chromium-130"], desktop_backend: "uia", extensions: [{id, version, enabled, off}]}` — 설치된 확장 (C13) |
 | `public_key` | str? | | X25519 공개키 (base64url). 보내면 Center가 이 PC의 키를 **회전해 준다** (§키 회전). 등록 요청으로 들어온 PC는 Center가 이미 안다 |
 
@@ -157,11 +157,10 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 | 필드 | 타입 | 필수 | 뜻 |
 | --- | --- | --- | --- |
 | `schema` | int | ✓ | 1 |
-| `status` | str | ✓ | **열린 문자열.** 알려진 값: `idle` `running` `waiting_approval` `waiting_confirmation` `selector_registration` `error` |
+| `status` | str | ✓ | **열린 문자열.** 알려진 값: `idle` `running` `waiting_approval` `waiting_confirmation` `error` |
 | `versions` | object | | 바뀌었을 때만 |
 | `current_run` | CurrentRun \| null | ✓ | 실행 자리. **최대 1건** (ADR-0014) |
 | `queue` | Queue | ✓ | 대기열 |
-| `worker` | WorkerState | ✓ | Worker 프로세스 상태 |
 | `readiness` | Readiness[] | | 설치된 BPM 프로세스별 준비 상태 (바뀌었을 때만 보내도 됨) |
 | `job_acks` | JobAck[] | | 이번 주기에 처리한 작업 |
 | `deployment_results` | DeploymentResult[] | | 배포 적용 결정 (CON-03 「최근 배치 결정」) |
@@ -173,7 +172,6 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 | --- | --- |
 | CurrentRun | `run_id`, `bpm_process_id`, `version`, `node_id`, `state`(열린 문자열: `running` `waiting_approval` `waiting_confirmation`), `started_at`, `source`(`job`\|`manual`\|`watch`\|`schedule`\|`message`, 예약: `delegation`), `job_id`? |
 | Queue | `max`(int), `items`: `{queue_id, source, bpm_process_id, version?, job_id?, requested_at, expires_at?}`[] (순서대로) |
-| WorkerState | `state`(`running`\|`off`(필요할 때 시작, 아직 안 띄움)\|`restarting`\|`stopped`), `reserved_for`?(C10 예약 `run_id`), `version`, `restarts`(연속 재시작 횟수), `session`(`idle`\|`bot`\|`studio`\|`selector_registration`) |
 | Readiness | `bpm_process_id`, `version`, `ready`(bool), `missing_key_refs`(str[] — **늘 비어 있다**: 서비스 앱 키가 없어졌다, ADR-0102. 옛 Center가 읽어도 깨지지 않게 칸은 둔다), `blocked`(str[] — 사전 점검 막힘 코드. 열린 문자열이고 플랫폼 코드에 `deployment_withdrawn`(덮는 배포가 없다)·`deployment_expired`(덮는 배포의 기한이 지났다)가 있다 — C2 §검증 규칙) |
 | JobAck | `job_id`, `result`(`queued`\|`started`\|`rejected`\|`expired`\|`cancelled`\|`cancel_refused`), `position`?(queued일 때 대기열 순번), `run_id`?(started일 때), `reason`?(rejected일 때: `queue_full` `no_deployment` `not_ready` `bot_ui_shutdown` `server_location` `cancelled_on_pc`(현장에서 대기열 항목을 취소함); `cancel_refused`일 때: `already_started`), `outputs?`(**PC 위임이 돌려주는 값** — 아래) |
 | ApprovalAck | `request_id`, `accepted`(bool), `reason`? |
@@ -240,14 +238,13 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 {
   "schema": 1,
   "status": "running",
-  "current_run": {"run_id": "run_20261001_101500_a1b2c3", "bpm_process_id": "erp.order-entry",
-                  "version": "2.1.0", "node_id": "Task_fill_order", "state": "running",
+  "current_run": {"run_id": "run_20261001_101500_a1b2c3", "bpm_process_id": "legal.contract-seal",
+                  "version": "2.1.0", "node_id": "Task_check_original", "state": "running",
                   "started_at": "2026-10-01T10:15:00+09:00", "source": "job", "job_id": "job_8f3e"},
   "queue": {"max": 20, "items": [
-    {"queue_id": "q_01", "source": "job", "bpm_process_id": "erp.order-entry", "job_id": "job_9a10",
+    {"queue_id": "q_01", "source": "job", "bpm_process_id": "legal.contract-seal", "job_id": "job_9a10",
      "requested_at": "2026-10-01T10:16:05+09:00", "expires_at": "2026-10-01T18:00:00+09:00"}]},
-  "worker": {"state": "running", "version": "0.3.0", "restarts": 0, "session": "bot"},
-  "readiness": [{"bpm_process_id": "erp.order-entry", "version": "2.1.0", "ready": true,
+  "readiness": [{"bpm_process_id": "legal.contract-seal", "version": "2.1.0", "ready": true,
                  "missing_key_refs": [], "blocked": []}],
   "job_acks": [{"job_id": "job_9a10", "result": "queued", "position": 1}],
   "unsent_events": 0
@@ -284,7 +281,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 ## 호환 규칙
 
-- 모든 값 목록(`status`, `CurrentRun.state`·`source`, `Queue.items[].source`, `WorkerState.state`·`session`, `JobAck.result`·`reason`, `DeploymentResult.result`)은 **열린 문자열**이다. Center는 모르는 값도 저장하고 화면에 그대로 보인다. 모르는 값 하나로 하트비트 전체를 422로 거부하지 않는다 (프로토타입 결함).
+- 모든 값 목록(`status`, `CurrentRun.state`·`source`, `Queue.items[].source`, `JobAck.result`·`reason`, `DeploymentResult.result`)은 **열린 문자열**이다. Center는 모르는 값도 저장하고 화면에 그대로 보인다. 모르는 값 하나로 하트비트 전체를 422로 거부하지 않는다 (프로토타입 결함).
 - 모르는 선택 필드는 무시한다. 더 높은 `schema`는 거부한다.
 - Center는 `current_run`이 2건 이상 오는 경우를 받지 않는다 — 모델이 단일 객체라 표현할 수 없다 (ADR-0014를 계약으로 강제).
 
@@ -294,7 +291,6 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 | --- | --- |
 | `POST /api/bots/enroll` + 공용 enroll 토큰, `bot_id`를 경로로 | `register` + PC 실행기별 Center API 키, 신원은 키로 |
 | `current_runs[]` (여러 건) | `current_run` 1건 + `queue` |
-| Worker 상태 없음 | `worker` |
 | 준비 상태 없음 | `readiness` |
 | 작업 `pending/dispatched/accepted/rejected` | `queued`·`expired`·`cancelled` 추가, 취소 지시 `cancel_jobs` |
 | 상태 닫힌 목록 → 422 | 열린 문자열 |
@@ -303,6 +299,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | 하트비트의 **`worker`(WorkerState)**·`versions.worker`·상태 값 `selector_registration`을 걷었다 — Worker 프로세스를 띄우는 확장이 없다. 옛 PC 실행기가 보내도 받는 쪽은 모르는 칸·모르는 값으로 받아 두므로(원칙 3·10) **판을 올리지 않는다**. 호출 토큰은 PC 실행기 메모리에만 있다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-31 | 1 | `deployments`의 「맞춘다」를 풀어 적었다 — 덮는 봉투가 없는 설치는 「실행 불가」, `readiness.blocked`에 `deployment_withdrawn`·`deployment_expired`. 활성에 `deprecated`가 든다(전에도 계약은 그랬고 Center가 어겼다, 09-gaps §3-22). 칸은 그대로다 | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-30 | 1 | `source: schedule` — Center의 일정이 만든 작업(`requested_by` `timer:<식>`)을 대기열에 넣을 때 쓴다(C5 §일정). 값은 처음부터 있었다 | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | §서비스 앱 키 전달을 걷었다(`service_keys[]`·`drop_service_keys[]`·`service_key_acks[]`), §호출 토큰(`POST /call-tokens`), `missing_key_refs`는 늘 빈다. 선택 칸을 걷은 것이라 판을 올리지 않는다 | [0102](../decisions/0102-calling-outside-is-pull.md) |

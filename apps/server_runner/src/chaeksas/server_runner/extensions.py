@@ -1,9 +1,5 @@
 """서버 실행기가 확장을 꽂는 자리 (C13, ADR-0064).
 
-**로컬 런타임을 띄우지 않는다.** 런타임은 PC 실행기의 것이고(C13 칸 이름이 `bot_ui.local_runtimes`다)
-그 예약(`reserve`)은 **PC에 하나**를 전제한 배타 잠금이다 (ADR-0014 §4) — 서버는 동시 실행이
-기본이라(C12) 맞지 않는다. 그래서 예약 키 `runtime.<id>.*`를 **일부러 채우지 않는다**.
-
 **실행 위치를 호스트가 쥔다** — `run_locations`에 `server`를 적지 않은 태스크 종류는 기여를 내지
 않으므로, 그런 BPM 프로세스는 사전 점검이 `task_types_wrong_location`으로 **시작 전에** 막는다
 (`core.preflight`). 적어 둔 것만 서버에서 돈다.
@@ -76,7 +72,6 @@ def settings_for(
     - 칸은 `scope: server_runner`인 것만. 값은 **환경변수**(`CHK_SERVER_RUNNER__EXT__<확장>__<칸>`)
       이고 없으면 `None`이다. **비밀 칸은 넣지 않는다** — 그것은 `Secrets`가 푼다 (ADR-0013).
     - `center.url`은 이 실행기가 붙은 Center다 (C13 — 확장 클라이언트가 외부 작업을 올리는 곳).
-    - `runtime.<id>.*`는 **없다** (ADR-0064 — 서버는 런타임을 띄우지 않는다).
     """
     env = environ if environ is not None else os.environ
     found = host.get(extension_id)

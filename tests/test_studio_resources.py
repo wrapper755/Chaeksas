@@ -818,8 +818,7 @@ def test_the_roots_are_drawn_without_knocking_on_center(window: Any) -> None:
     """뜨면서 Center를 두드리지 않는다 — 뿌리는 선언에서 오므로 바로 보인다."""
     assert [one.id for one in window.resource_tree.tree.roots] == [
         resources.ROOT_SHARED,
-        "ui-pages",  # 설치된 UI 자동화 확장이 **선언한** 뿌리다
-        resources.ROOT_SERVICE,
+        resources.ROOT_SERVICE,  # 확장이 선언한 뿌리는 지금 없다 (ADR-0114)
     ]
     assert resources.NO_CENTER in window.resource_tree.note.text()
 

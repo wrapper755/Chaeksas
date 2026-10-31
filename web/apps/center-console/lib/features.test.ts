@@ -43,16 +43,16 @@ function pc(id: string, extensions: Array<{ id: string; enabled?: boolean; off?:
 }
 
 const UIA: ExtensionResource = {
-  id: "ui-automation",
-  name: "UI 자동화",
+  id: "web-shop",
+  name: "웹 상점",
   tier: "builtin",
   version: "1.0.0",
   status: "ok",
-  service_app_id: "ui-automation",
+  service_app_id: "web-shop",
 };
-const UIA_APP: ServiceAppResource = {
-  app_id: "ui-automation",
-  extension_id: "ui-automation",
+const CRM_APP: ServiceAppResource = {
+  app_id: "web-shop",
+  extension_id: "web-shop",
   console_url: "http://localhost:8001",
   status: "ok",
   consumers: 1,
@@ -67,10 +67,10 @@ describe("featureRows", () => {
     const rows = featureRows(
       input({
         extensions: [UIA],
-        serviceApps: [UIA_APP],
-        packages: [bot("order", ["ui-automation"])],
+        serviceApps: [CRM_APP],
+        packages: [bot("order", ["web-shop"])],
         deployments: [deployed("order", "bui_00000001")],
-        runtimes: [pc("bui_00000001", [{ id: "ui-automation", enabled: true }])],
+        runtimes: [pc("bui_00000001", [{ id: "web-shop", enabled: true }])],
       }),
     );
     expect(rows).toHaveLength(1);
@@ -81,8 +81,8 @@ describe("featureRows", () => {
     const rows = featureRows(
       input({
         extensions: [UIA],
-        serviceApps: [UIA_APP],
-        packages: [bot("order", ["ui-automation"])],
+        serviceApps: [CRM_APP],
+        packages: [bot("order", ["web-shop"])],
         deployments: [deployed("order", "bui_00000001"), deployed("order", "bui_00000003", true)],
         runtimes: [
           pc("bui_00000001", []),
@@ -99,12 +99,12 @@ describe("featureRows", () => {
     const rows = featureRows(
       input({
         extensions: [UIA],
-        serviceApps: [UIA_APP],
-        packages: [bot("order", ["ui-automation"])],
+        serviceApps: [CRM_APP],
+        packages: [bot("order", ["web-shop"])],
         deployments: [deployed("order", "bui_00000001"), deployed("order", "bui_00000002")],
         runtimes: [
-          pc("bui_00000001", [{ id: "ui-automation", off: true, enabled: false }]),
-          pc("bui_00000002", [{ id: "ui-automation", enabled: false }]),
+          pc("bui_00000001", [{ id: "web-shop", off: true, enabled: false }]),
+          pc("bui_00000002", [{ id: "web-shop", enabled: false }]),
         ],
       }),
     );
@@ -112,10 +112,10 @@ describe("featureRows", () => {
   });
 
   it("서버가 응답하지 않으면 쓸 수 없고, 확인 전이면 확인 전이다", () => {
-    const down = featureRows(input({ extensions: [{ ...UIA, status: "unreachable" }], serviceApps: [UIA_APP] }));
+    const down = featureRows(input({ extensions: [{ ...UIA, status: "unreachable" }], serviceApps: [CRM_APP] }));
     expect(down[0]!.usable).toBe("쓸 수 없음");
     expect(down[0]!.todos[0]!.kind).toBe("server_down");
-    const unknown = featureRows(input({ extensions: [{ ...UIA, status: "unknown" }], serviceApps: [UIA_APP] }));
+    const unknown = featureRows(input({ extensions: [{ ...UIA, status: "unknown" }], serviceApps: [CRM_APP] }));
     expect(unknown[0]!.usable).toBe("확인 전");
   });
 
@@ -133,25 +133,25 @@ describe("featureRows", () => {
   });
 
   it("서버 부분이 없다는 것은 누락 검사가 말한다 — 확장 줄에도, 아무도 모르는 앱에도", () => {
-    const reported: ExtensionResource = { id: "ui-automation", tier: "builtin", version: "1.0.0", status: "n/a" };
+    const reported: ExtensionResource = { id: "web-shop", tier: "builtin", version: "1.0.0", status: "n/a" };
     const rows = featureRows(
       input({
         extensions: [reported],
         packages: [
-          bot("order", ["ui-automation"], [{ type: "service_app", id: "ui-automation" }]),
+          bot("order", ["web-shop"], [{ type: "service_app", id: "web-shop" }]),
           bot("tax", [], [{ type: "service_app", id: "tax-invoice" }]),
         ],
       }),
     );
     expect(rows.map((one) => [one.id, one.todos.map((todo) => todo.kind)])).toEqual([
       ["tax-invoice", ["add_consumer"]],
-      ["ui-automation", ["add_consumer"]],
+      ["web-shop", ["add_consumer"]],
     ]);
   });
 
   it("쓸 수 없는 것이 맨 위다", () => {
     const ok: ExtensionResource = { id: "a-ok", name: "가", tier: "builtin", version: "1", status: "n/a" };
-    const rows = featureRows(input({ extensions: [ok, { ...UIA, status: "unreachable" }], serviceApps: [UIA_APP] }));
+    const rows = featureRows(input({ extensions: [ok, { ...UIA, status: "unreachable" }], serviceApps: [CRM_APP] }));
     expect(rows.map((one) => one.usable)).toEqual(["쓸 수 없음", "쓸 수 있음"]);
   });
 
@@ -162,12 +162,12 @@ describe("featureRows", () => {
   });
 
   it("일꾼이 조용하면 할 일이고, 들인 일꾼이 없으면 확인 전이다 (C7 — 상태는 토픽이 말한다)", () => {
-    const quiet = { ...UIA_APP, status: "unreachable", checked_at: "2026-10-25T00:00:00+00:00" } as ServiceAppResource;
+    const quiet = { ...CRM_APP, status: "unreachable", checked_at: "2026-10-25T00:00:00+00:00" } as ServiceAppResource;
     const [down] = featureRows(input({ extensions: [{ ...UIA, status: "unreachable" }], serviceApps: [quiet] }));
     expect(down).toMatchObject({ usable: "쓸 수 없음" });
     expect(down?.todos.map((one) => one.kind)).toEqual(["server_down"]);
 
-    const none = { ...UIA_APP, status: "unknown", consumers: 0 } as ServiceAppResource;
+    const none = { ...CRM_APP, status: "unknown", consumers: 0 } as ServiceAppResource;
     const [unknown] = featureRows(input({ extensions: [{ ...UIA, status: "unknown" }], serviceApps: [none] }));
     expect(unknown).toMatchObject({ usable: "확인 전", todos: [], consumers: 0 });
   });

@@ -40,7 +40,7 @@ def builtin(**over: Any) -> dict[str, Any]:
         "name": "문서 인식",
         "publisher": "Chaeksas",
         "tier": "builtin",
-        "api": ">=1,<2",
+        "api": ">=2,<3",
         "contributes": {
             "task_types": [
                 {
@@ -157,12 +157,8 @@ def test_catalog_is_schema_versioned() -> None:
     [
         ("task_types", [{"id": "t", "label": "t", "run_locations": ["pc"]}]),
         ("studio.editors", [{"task_type": "t", "entry": "x:Y"}]),
-        ("tool_ui.tools", [{"id": "u", "label": "u", "entry": "x:Y"}]),
-        ("bot_ui.local_runtimes", [{"id": "r", "label": "r", "entry": "x:Y"}]),
         ("configuration", [{"key": "k", "label": "k", "scope": "bot_ui"}]),
         ("preflight", [{"id": "p", "entry": "x:Y"}]),
-        ("agent_environments", [{"domain": "desktop", "entry": "x:Y"}]),
-        ("bot_ui.panels", [{"id": "p", "label": "p", "surface": "bot_ui.runtimes", "entry": "x:Y"}]),
         ("console.pages", [{"id": "c", "label": "c", "module": "m"}]),
     ],
 )
@@ -372,84 +368,26 @@ def test_builtin_editor_needs_an_entry() -> None:
     assert validate_extension(parse(definition)) == []
 
 
-def test_utility_key_must_land_in_a_secret_config_field() -> None:
-    """키를 받는 칸은 OS 비밀 저장소에 둔다 (ADR-0013). 칸이 없으면 호스트가 준다 (ADR-0094 §6)."""
-    definition = builtin(requires_keys=[{"purpose": "utility"}])
-    assert validate_extension(parse(definition)) == []
+def test_only_the_run_purpose_is_known() -> None:
+    """도구용 키(`utility`)는 Tool UI와 함께 걷었다 (ADR-0114) — 적으면 알려 준다."""
+    assert validate_extension(parse(builtin(requires_keys=[{"purpose": "run"}]))) == []
+    assert "unknown_purpose" in codes(builtin(requires_keys=[{"purpose": "utility"}]))
 
-    definition = builtin(requires_keys=[{"purpose": "utility", "config_key": "nope"}])
-    assert "config_key_not_found" in codes(definition)
 
-    definition = builtin(
-        requires_keys=[{"purpose": "utility", "config_key": "k"}],
-        contributes={"configuration": [{"key": "k", "label": "키", "scope": "bot_ui"}]},
+def test_removed_contribution_keys_are_kept_not_read() -> None:
+    """걷은 기여 지점은 **모르는 열쇠**다 — 거부하지 않고 보관만 한다 (호스트가 경고 한 줄을 남긴다)."""
+    found = parse(builtin(contributes={"bot_ui.local_runtimes": [{"id": "worker", "label": "W", "entry": "x:Y"}]}))
+    assert validate_extension(found) == []
+    assert "bot_ui.local_runtimes" not in found.contributes_summary()
+
+
+def test_unknown_scope_is_reported() -> None:
+    assert "unknown_scope" in codes(
+        builtin(contributes={"configuration": [{"key": "k", "label": "k", "scope": "bot"}]})
     )
-    assert "key_config_not_secret" in codes(definition)
-
-    definition = builtin(
-        requires_keys=[{"purpose": "utility", "config_key": "k"}],
-        contributes={"configuration": [{"key": "k", "label": "키", "scope": "bot_ui", "secret": True}]},
-    )
-    assert validate_extension(parse(definition)) == []
-
-
-def test_local_runtime_needs_an_entry() -> None:
-    definition = builtin(contributes={"bot_ui.local_runtimes": [{"id": "r", "label": "r", "entry": ""}]})
-    assert "entry_missing" in codes(definition)
-
-
-# ─────────────────────────── 화면 칸 (ADR-0042) ───────────────────────────
-
-
-def panel(**over: Any) -> dict[str, Any]:
-    base = {"id": "recent", "label": "최근", "surface": "bot_ui.runtimes", "entry": "x:Y"}
-    return base | over
-
-
-def test_a_panel_needs_an_entry_and_a_known_surface() -> None:
-    """**모르는 자리는 거부가 아니라 알려 주기다** — 호스트가 조용히 무시하므로 칸이 사라진다."""
-    assert "entry_missing" in codes(builtin(contributes={"bot_ui.panels": [panel(entry="")]}))
-    assert "unknown_surface" in codes(builtin(contributes={"bot_ui.panels": [panel(surface="nowhere")]}))
-    assert validate_extension(parse(builtin(contributes={"bot_ui.panels": [panel()]}))) == []
-
-
-def test_a_panel_waiting_for_a_runtime_that_is_not_there_is_caught() -> None:
-    """그 런타임이 떠 있을 때만 보이는 칸인데 런타임이 없으면 **영원히 안 보인다.**"""
-    one = builtin(contributes={"bot_ui.panels": [panel(runtime="worker")]})
-    assert "panel_runtime_not_found" in codes(one)
-    both = builtin(
-        contributes={
-            "bot_ui.panels": [panel(runtime="worker")],
-            "bot_ui.local_runtimes": [{"id": "worker", "label": "W", "entry": "x:Serve"}],
-        }
-    )
-    assert validate_extension(parse(both)) == []
-
-
-def test_panels_are_listed_for_c7() -> None:
-    found = parse(builtin(contributes={"bot_ui.panels": [panel()]})).contributes_summary()
-    assert found["bot_ui.panels"] == ["recent"]
-
-
-def test_old_command_field_is_refused_not_ignored() -> None:
-    """schema 1의 `command`만 적은 정의는 **거부된다** (schema 2에서 `entry`가 필수, ADR-0024).
-
-    조용히 무시하면 PC 실행기가 로컬 런타임을 띄우지 못하는데 확장은 켜진 것처럼 보인다.
-    """
-    definition = builtin(
-        schema=1, contributes={"bot_ui.local_runtimes": [{"id": "worker", "label": "W", "command": ["chk-worker"]}]}
-    )
-    with pytest.raises(ValueError, match="entry"):
-        parse(definition)
-
-
-def test_unknown_scope_and_start_are_reported() -> None:
-    definition = builtin(contributes={"configuration": [{"key": "k", "label": "k", "scope": "bot"}]})
-    assert "unknown_scope" in codes(definition)
-    definition = builtin(
-        contributes={"bot_ui.local_runtimes": [{"id": "r", "label": "r", "entry": "x:Y", "start": "someday"}]}
-    )
-    assert "unknown_start" in codes(definition)
+    assert "unknown_scope" in codes(
+        builtin(contributes={"configuration": [{"key": "k", "label": "k", "scope": "tool_ui"}]})
+    ), "Tool UI 칸은 걷었다 (ADR-0114)"
 
 
 def test_doc_urls_must_be_http() -> None:
@@ -535,20 +473,3 @@ def test_e6_envelope_for_another_extension_is_refused() -> None:
 
 
 # ─────────────────────────── AI 환경 (ADR-0037) ───────────────────────────
-
-
-def test_an_agent_environment_needs_a_known_domain() -> None:
-    known = builtin(contributes={"agent_environments": [{"domain": "desktop", "entry": "x:Y"}]})
-    assert "unknown_domain" not in codes(known)
-    odd = builtin(contributes={"agent_environments": [{"domain": "llm", "entry": "x:Y"}]})
-    assert "unknown_domain" in codes(odd), "`llm`·`doc`·`api`는 엔진이 스스로 돈다 — 환경이 없다"
-
-
-def test_e8_one_domain_one_extension() -> None:
-    from chaeksas.contracts.extension import environment_conflicts  # noqa: PLC0415
-
-    first = parse(builtin(contributes={"agent_environments": [{"domain": "desktop", "entry": "x:Y"}]}))
-    second = parse(builtin(id="other-ui", contributes={"agent_environments": [{"domain": "desktop", "entry": "x:Z"}]}))
-    found = environment_conflicts([first, second])
-    assert [v.code for v in found] == ["environment_conflict"]
-    assert environment_conflicts([first]) == []

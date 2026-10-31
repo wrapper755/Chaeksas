@@ -174,7 +174,7 @@ class CenterClient:
         )
 
     def call_token(self) -> CallToken:
-        """호출 토큰 (C15 `POST /call-tokens`) — 실행 프로세스·Worker·Tool UI가 외부 작업을 올릴 때 쓴다."""
+        """호출 토큰 (C15 `POST /call-tokens`) — 실행 프로세스가 외부 작업을 올릴 때 쓴다."""
         return CallToken.model_validate(self._send("", {}, api=CALL_TOKENS))
 
     def extension(self, extension_id: str) -> ExtensionResource:

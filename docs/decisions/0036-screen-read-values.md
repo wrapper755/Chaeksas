@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨([ADR-0114](0114-remove-ui-automation.md)) — 원래 수락 |
 | 날짜 | 2026-10-05 |
 | 관련 | [ADR-0025](0025-expression-language.md)(도우미 `합계`·`표를사전`), [ADR-0033](0033-desktop-app-and-window.md), 계약 C10·C14, 인수 시험 BX-04 |
 

@@ -18,6 +18,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import fake_extension
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -38,14 +39,13 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-exampl
 
 #: 서비스 앱을 키 참조로 부르는 예제 (`ext-credit` / `finance-credit`).
 CREDIT = "bx06_bulk_credit_check"
-#: **데스크톱 AI 태스크**가 있어 서버에서 돌 수 없는 예제 (`PC_ONLY_DOMAINS`) — 플랫폼이
-#: 혼자 아는 것들이다.
-PC_EXAMPLE = "fx05_desktop_autonomous"
-#: **확장 태스크**(UI 태스크)가 있는 예제. 실행 위치는 플랫폼이 모르고 **확장 정의만** 안다
-#: (C13·ADR-0018) — 부르는 쪽이 넘긴 표로 센다.
-EXTENSION_EXAMPLE = "bx04_tax_invoice_issue"
-#: 그 표 (`ExtensionHost.task_type_locations()`가 주는 모양). UI 태스크는 PC에서만 돈다.
-UI_TASK_ON_PC = {"ui_task": ["pc"]}
+#: **현장 확인**이 있어 서버에서 돌 수 없는 예제 — 플랫폼이 혼자 아는 것들이다.
+PC_EXAMPLE = "fx19_manual_task_pc"
+#: **확장 태스크**가 있는 그림 (시험용 확장, `tests/fake_extension.py`). 실행 위치는 플랫폼이
+#: 모르고 **확장 정의만** 안다 (C13·ADR-0018) — 부르는 쪽이 넘긴 표로 센다.
+EXTENSION_EXAMPLE = fake_extension.DRAWING
+#: 그 표 (`ExtensionHost.task_type_locations()`가 주는 모양). 이 태스크는 PC에서만 돈다.
+UI_TASK_ON_PC = {"fake_task": ["pc"]}
 
 
 @pytest.fixture
@@ -54,6 +54,8 @@ def space(tmp_path: Path) -> Workspace:
 
 
 def imported(space: Workspace, example: str = CREDIT) -> BpmProcess:
+    if example == EXTENSION_EXAMPLE:
+        return space.import_example(fake_extension.drawing(space.root.parent / "src"), example)
     return space.import_example(EXAMPLES, example)
 
 
@@ -84,7 +86,7 @@ def test_the_window_and_the_check_count_the_same_things(space: Workspace) -> Non
     entry = process.entry_definition
     assert entry is not None and entry.process is not None
     blockers = server_blockers(entry.process)
-    assert blockers, "데스크톱 AI 태스크가 있는 예제라 서버에서 걸린다"
+    assert blockers, "현장 확인이 있는 예제라 서버에서 걸린다"
 
     # B6은 `run_location`이 server일 때만 말한다 — 같은 목록을 쓴다.
     xml = entry.path.read_text(encoding="utf-8")
@@ -103,10 +105,10 @@ def test_the_window_counts_extension_tasks_from_the_table_it_is_given(space: Wor
     assert dialog(space, process).blockers() == [], "표가 없으면 확장 태스크를 모른다"
 
     found = dialog(space, process, task_type_locations=UI_TASK_ON_PC).blockers()
-    assert found, "UI 태스크가 있는데 세지 못했다"
-    assert all("ui_task" in one for one in found)
+    assert found, "확장 태스크가 있는데 세지 못했다"
+    assert all("fake_task" in one for one in found)
 
-    allowed = dialog(space, process, task_type_locations={"ui_task": ["pc", "server"]}).blockers()
+    allowed = dialog(space, process, task_type_locations={"fake_task": ["pc", "server"]}).blockers()
     assert allowed == [], "확장이 server를 선언했으면 걸리지 않는다"
 
 

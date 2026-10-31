@@ -6,9 +6,9 @@ import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import { CenterError, center, session } from "@/lib/center";
 import { readinessLabel } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
-import { BotUiActions, SelectorRegistration } from "../actions-ui";
+import { BotUiActions } from "../actions-ui";
 import type { Route } from "next";
-import { fullTime, runtimeLabel, running, statusLabel, time, workerLabel } from "../page";
+import { fullTime, runtimeLabel, running, statusLabel, time } from "../page";
 import { sourceLabel } from "@/lib/labels";
 
 /**
@@ -33,12 +33,6 @@ const WHY: Record<string, string> = {
   unsupported_alg: "모르는 서명 방식",
   float_in_payload: "봉투에 소수가 들어 있음",
 };
-
-/** 「셀렉터 등록」 한 줄 — 이 PC의 Tool UI가 셀렉터 등록 작업을 올려도 되나 (C15 §올리기). */
-function selectorLine(info: BotUiInfo): string {
-  if (!info.selector_registration) return "꺼짐 — 이 PC의 Tool UI는 셀렉터를 등록할 수 없습니다.";
-  return "켜짐 — 이 PC의 Tool UI가 셀렉터 등록 작업을 올릴 수 있습니다.";
-}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -203,7 +197,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
           {!info.online ? (
             <p className="text-body-sm text-text-muted">
               {info.last_seen_at
-                ? `오프라인입니다 — 실행·대기열·Worker는 마지막 보고 ${time(info.last_seen_at)} 기준입니다.`
+                ? `오프라인입니다 — 실행·대기열은 마지막 보고 ${time(info.last_seen_at)} 기준입니다.`
                 : "아직 하트비트를 받지 못했습니다 — 실행·대기열은 비어 있습니다."}
             </p>
           ) : null}
@@ -221,22 +215,11 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
               <dd>{info.status ? <StatusBadge group="BPM 프로세스" label={statusLabel(info.status)} /> : "—"}</dd>
               <dt className="text-text-muted">실행 중</dt>
               <dd>{running(info)}</dd>
-              <dt className="text-text-muted">Worker 프로세스</dt>
-              <dd>
-                {info.worker ? (
-                  <StatusBadge group="Worker 프로세스" label={workerLabel(info.worker.state)} />
-                ) : (
-                  "—"
-                )}
-              </dd>
-              <dt className="text-text-muted">Worker 예약</dt>
-              <dd className="font-mono">{info.worker?.reserved_for ?? "—"}</dd>
               <dt className="text-text-muted">OS</dt>
               <dd>{info.os}</dd>
               <dt className="text-text-muted">버전</dt>
               <dd className="font-mono">
                 PC 실행기 {info.versions.bot_ui} · core {info.versions.core}
-                {info.versions.worker ? ` · Worker ${info.versions.worker}` : ""}
                 {/* 어디서 도는지 (C4 `versions.build`, ADR-0067) — 없으면 묶지 않은 것이다. */}
                 {info.versions.build
                   ? ` · 묶음 ${info.versions.build.commit.slice(0, 12)} · ${fullTime(info.versions.build.built_at)}`
@@ -298,13 +281,6 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
                 caption="설치된 확장"
               />
             )}
-          </Section>
-
-          <Section title="셀렉터 등록">
-            <p className="text-body-sm">{selectorLine(info)}</p>
-            {found.mode === "admin" ? (
-              <SelectorRegistration botUiId={info.bot_ui_id} on={info.selector_registration ?? false} />
-            ) : null}
           </Section>
 
           <Section title="최근 배치 결정">

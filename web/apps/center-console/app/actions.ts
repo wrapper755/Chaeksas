@@ -356,17 +356,6 @@ function violations(cause: unknown): string {
   return `${cause.message} — ${said}`;
 }
 
-/** CON-03 「셀렉터 등록」 켜기·끄기 — 이 PC의 Tool UI가 셀렉터 등록 작업을 올려도 되나 (C15 §올리기). */
-export async function setSelectorRegistration(botUiId: string, on: boolean): Promise<ActionResult> {
-  try {
-    await center.setSelectorRegistration(botUiId, on);
-  } catch (cause) {
-    return { error: message(cause) };
-  }
-  revalidatePath(`/bot-uis/${botUiId}`);
-  return {};
-}
-
 /**
  * 패키지 삭제 (CON-06 「삭제...」). **되돌릴 수 없다** — 확인 창을 거쳐서만 온다.
  *

@@ -21,9 +21,9 @@
 `--expect-version`으로 넘기면 묶은 앱이 **읽은** 판이 그것과 같아야 한다. 파일이 안 들어갔거나 앱이
 다른 자리를 읽으면 현장에서 `0.0.0`을 보고서야 안다.
 
-**런타임을 정말 띄워 보는 단계는 앱이 준다** (`--start-runtimes`) — 띄우는 길은 PC 실행기의 것이라
-(`core`는 PC 실행기를 모른다) `main(start_runtimes=…)`로 받는다. 그 앱이 주지 않았는데 깃발이 오면
-**실패로 적는다**(빌드가 「봤다」고 믿으면 안 된다).
+**지금은 묶을 확장이 하나도 없다** ([ADR-0114](../../../../../docs/decisions/0114-remove-ui-automation.md)) —
+그래서 `--want`를 주지 않으면 확장이 없어도 통과한다. 확장을 다시 들이면 빌드가 `--want`로 그 id를
+넘겨 「빠지면 실패」를 되살린다.
 """
 
 from __future__ import annotations
@@ -34,7 +34,6 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts.extension import PANEL_SURFACES
 from chaeksas.core import build_info
 from chaeksas.core.extensions import ExtensionHost, load_host, summarize
 from chaeksas.extension_api.entry import module_root, resolve
@@ -57,18 +56,8 @@ def _entries(host: ExtensionHost) -> list[tuple[str, str, str]]:
             found.append((task.extension_id, f"task_types[{task.value.id}].editor", task.value.editor.entry))
     for editor in host.studio_editors():
         found.append((editor.extension_id, f"studio.editors[{editor.value.task_type}]", editor.value.entry))
-    for env in host.agent_environments():
-        found.append((env.extension_id, f"agent_environments[{env.value.domain}]", env.value.entry))
-    for tool in host.tools():
-        found.append((tool.extension_id, f"tool_ui.tools[{tool.value.id}]", tool.value.entry))
-    for runtime in host.local_runtimes():
-        found.append((runtime.extension_id, f"bot_ui.local_runtimes[{runtime.value.id}]", runtime.value.entry))
     for one in host.preflight():
         found.append((one.extension_id, f"preflight[{one.value.id}]", one.value.entry))
-    # **자리 이름을 베끼지 않는다** — 계약이 쥔 목록을 돈다 (늘면 여기도 함께 본다).
-    for surface in sorted(PANEL_SURFACES):
-        for panel in host.panels(surface):
-            found.append((panel.extension_id, f"bot_ui.panels[{panel.value.id}]", panel.value.entry))
     return found
 
 
@@ -83,22 +72,25 @@ def check(
     """묶은 앱에서 확장이 다 보이나. `{"all_ok": bool, "steps": {...}}`.
 
     `want`를 주면 **그 확장들이 켜져 있어야** 한다 — 빌드하는 쪽이 「무엇이 들어가야 하는가」를
-    안다 (ADR-0018 §5 포함 목록). 주지 않으면 **하나라도 켜져 있으면** 된다: 묶인 앱에
-    엔트리 포인트가 하나도 없는 것이 가장 흔한 실패다.
+    안다 (ADR-0018 §5 포함 목록). 주지 않으면 **확장이 없어도 된다** — 지금은 묶을 확장이
+    없다 (ADR-0114). 읽지 못한 정의(`failures`)·켜지지 않은 확장은 여전히 실패다.
     """
     found = host if host is not None else load_host()
     enabled = [one.id for one in found.enabled()]
     steps: dict[str, Any] = {
         "entry_points": {
-            "ok": bool(enabled) if want is None else set(want) <= set(enabled),
+            "ok": (not found.disabled() and not found.failures) if want is None else set(want) <= set(enabled),
             "value": summarize(found),
         }
     }
 
     bad: list[str] = []
     for extension_id, what, entry in _entries(found):
+        # **호스트가 쥔 뿌리**로 푼다 — 켤 때 본 그 패키지다 (없으면 이름 규칙, ADR-0019).
+        loaded = found.get(extension_id)
+        root = loaded.root if loaded is not None and loaded.root else module_root(extension_id)
         try:
-            resolve(entry, root=module_root(extension_id))
+            resolve(entry, root=root)
         except Exception as e:  # noqa: BLE001 — 무엇이 터져도 빌드를 멈춰야 한다
             bad.append(f"{extension_id} {what} ({entry}): {type(e).__name__}: {e}")
     steps["entries"] = {"ok": not bad, "value": bad or f"{len(_entries(found))}개 모두 풀린다"}
@@ -138,36 +130,15 @@ def run(
     return 0 if found["all_ok"] else 1
 
 
-#: 런타임을 정말 띄워 보라는 깃발 — 빌드가 PC 실행기에만 넘긴다.
-START_RUNTIMES_FLAG = "--start-runtimes"
-
-
-def main(
-    args: Sequence[str],
-    *,
-    prog: str,
-    start_runtimes: Callable[[], dict[str, Any]] | None = None,
-) -> int:
-    """`<앱> --selftest [파일] [--want a,b] [--expect-version 판] [--start-runtimes]` — 두 앱이 부른다."""
+def main(args: Sequence[str], *, prog: str) -> int:
+    """`<앱> --selftest [파일] [--want a,b] [--expect-version 판]` — 두 앱이 부른다."""
     parser = argparse.ArgumentParser(prog=prog, add_help=False)
     parser.add_argument(SELFTEST_FLAG, dest="out", nargs="?", default=None)
     parser.add_argument("--want", dest="want", default=None, help="켜져 있어야 하는 확장 id (쉼표로 여럿)")
     parser.add_argument("--expect-version", dest="expect", default=None, help="찍혀 있어야 하는 판")
-    parser.add_argument(START_RUNTIMES_FLAG, dest="start", action="store_true", help="로컬 런타임을 띄워 본다")
     found, _ = parser.parse_known_args(list(args))
     want = [one.strip() for one in str(found.want).split(",") if one.strip()] if found.want else None
-
-    def runtimes() -> dict[str, dict[str, Any]]:
-        if start_runtimes is None:
-            return {"runtimes": {"ok": False, "value": f"{prog}는 로컬 런타임을 띄우지 않는다"}}
-        return {"runtimes": start_runtimes()}
-
-    return run(
-        Path(found.out) if found.out else None,
-        want=want,
-        expect_version=found.expect,
-        extra=runtimes if found.start else None,
-    )
+    return run(Path(found.out) if found.out else None, want=want, expect_version=found.expect)
 
 
-__all__ = ["SELFTEST_FLAG", "START_RUNTIMES_FLAG", "check", "main", "run"]
+__all__ = ["SELFTEST_FLAG", "check", "main", "run"]

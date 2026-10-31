@@ -2,12 +2,12 @@
 
     uv run --group build python packaging/build.py              # 둘 다
     uv run --group build python packaging/build.py bot-ui       # 하나만
-    uv run --group build python packaging/build.py --want ui-automation
+    uv run --group build python packaging/build.py --want <확장 id>
     uv run --group build python packaging/build.py --version 0.2.0
     uv run --group build python packaging/build.py --installer      # Windows에서만 — 설치 파일까지
 
 **onedir다** (onefile이 아니다) — 설치 프로그램이 그 폴더를 설치한다. 실행마다 압축을 풀면
-기동이 느려지고(warm 1.3초 ↔ 3.4초) 로컬 런타임을 띄울 때마다 또 푼다 (스파이크 S5).
+기동이 느려지고(warm 1.3초 ↔ 3.4초) 자식 프로세스를 띄울 때마다 또 푼다 (스파이크 S5).
 
 **확장 인자를 적지 않는다.** `core`가 주는 PyInstaller 훅(`core/__pyinstaller/`)이 설치된
 엔트리 포인트 `chaeksas.extensions`를 훑어 메타데이터·데이터 파일·서브모듈을 넣는다 — 확장을
@@ -16,8 +16,8 @@
 포함 목록을 설치하는 걸음이 앞에 붙는다.
 
 **묶은 뒤 `--selftest`로 확인한다** (ADR-0024의 빌드 검사) — 확장이 빠지면 **실행 중에야**
-드러나므로, 하나라도 빠지면 여기서 빌드를 실패시킨다. 무엇이 빠졌는지는 `core.selftest`가
-가린다(엔트리 포인트 / `entry` 해석).
+드러나므로, `--want`로 적은 것이 하나라도 빠지면 여기서 빌드를 실패시킨다. 무엇이 빠졌는지는
+`core.selftest`가 가린다(엔트리 포인트 / `entry` 해석). **지금은 묶을 확장이 없다** (ADR-0114).
 
 **Windows에서만 매니페스트를 넣는다** (`app.manifest` — DPI Per-Monitor v2, ADR-0021). 다른
 OS에서는 PyInstaller가 받지 않는다. 개발 PC(Linux)에서 돌리면 **Linux 묶음**이 나온다 — 빌드
@@ -27,10 +27,6 @@ OS에서는 PyInstaller가 받지 않는다. 개발 PC(Linux)에서 돌리면 **
 지금 커밋의 `v*` 태그, 그것도 없으면 `<core 판>+g<커밋>`(고치다 만 파일이 있으면 `.dirty`)이다.
 실행 파일 옆 `chaeksas-build.json`에 적고, `--selftest`가 **되읽은 판**이 다르면 빌드를 멈춘다.
 `core`와 그 앱의 dist-info도 넣는다 — 안 넣으면 묶은 앱이 `core`의 판을 `0.0.0`으로 올린다.
-
-**PC 실행기는 로컬 런타임을 정말 띄워 본다** (`--start-runtimes`) — 묶은 실행 파일이 자신을
-`--local-runtime`으로 다시 띄워 `health`가 답하는지까지 본다. `entry`가 풀리는 것만으로는
-현장에서 유틸리티를 처음 열 때에야 아는 일이 남는다.
 
 **`--installer`면 설치 파일까지 만든다** ([ADR-0068](../docs/decisions/0068-installer-inno-setup-per-user.md)
 — Inno Setup, 사용자별, Windows에서만). 스크립트는 `installer/chaeksas.iss` 하나이고 앱마다 다른 값을
@@ -81,14 +77,11 @@ class App:
     name: str  # 실행 파일·폴더 이름
     script: str
     dist: str  # 그 앱의 배포판 이름 — dist-info를 넣는다 (ADR-0067)
-    starts_runtimes: bool = False  # 로컬 런타임을 띄우는 앱인가 — 빌드 검사가 띄워 본다
     #: 설치 파일 (ADR-0068) — **`app_id`는 바꾸지 않는다**(바꾸면 덮어쓰기가 아니라 두 번째 설치다).
     app_id: str = ""
     title: str = ""  # 설치·시작 메뉴에 보이는 이름
     dir_name: str = ""  # %LOCALAPPDATA%\Programs\Chaeksas\<여기>
     autostart_task: str | None = None  # 제거할 때 지울 작업 스케줄러 이름
-    #: 같은 실행 파일을 `--tool-ui`로 여는 시작 메뉴 바로가기 이름 (ADR-0077 §6 — PC 실행기만).
-    tool_ui_shortcut: str | None = None
 
     @property
     def exe(self) -> Path:
@@ -98,13 +91,11 @@ class App:
 APPS = (
     App(
         "bot-ui", "ChaeksasBotUI", "botui_main.py", "chaeksas-bot-ui",
-        starts_runtimes=True,
         app_id="2F476024-75DF-4DDE-A28C-A05E0E1909CB",
         title="Chaeksas PC 실행기",
         dir_name="BotUI",
         # 이름은 앱이 쓰는 그 자리에서 읽는다 — 베끼면 이름을 바꿀 때 지우지 못한 작업이 남는다.
         autostart_task=TASK_NAME,
-        tool_ui_shortcut="Chaeksas Tool UI",
     ),
     App(
         "studio", "ChaeksasStudio", "studio_main.py", "chaeksas-studio",
@@ -189,11 +180,8 @@ def build(app: App) -> float:
         # 판을 읽는 dist-info (ADR-0067) — 훅은 **확장의** 것만 넣는다.
         "--copy-metadata", "chaeksas-core", "--copy-metadata", app.dist,
     ]
-    if app.tool_ui_shortcut:
-        # Tool UI가 같은 실행 파일로 돈다 (ADR-0077 §6) — 그 판을 읽는 dist-info도 넣는다.
-        args += ["--copy-metadata", "chaeksas-tool-ui"]
     if IS_WINDOWS:
-        # DPI 선언 — 같은 실행 파일로 뜨는 Worker까지 Per-Monitor v2가 된다 (ADR-0021).
+        # DPI 선언 — Per-Monitor v2 (ADR-0021).
         args += ["--manifest", str(HERE / "app.manifest")]
     args.append(str(HERE / app.script))
 
@@ -214,16 +202,12 @@ def selftest(app: App, want: list[str], version: str, exe: Path | None = None) -
     args = [str(exe or app.exe), "--selftest", str(out), "--expect-version", version]
     if want:
         args += ["--want", ",".join(want)]
-    if app.starts_runtimes:
-        args.append("--start-runtimes")
     code = subprocess.run(args, check=False, timeout=600, env=child_env()).returncode
     if not out.exists():
         raise SystemExit(f"{app.key}: `--selftest`가 결과를 남기지 않았다 (끝 코드 {code})")
     found = json.loads(out.read_text(encoding="utf-8"))
     if code != 0 or not found.get("all_ok"):
         print(json.dumps(found, ensure_ascii=False, indent=2))
-        if not found.get("steps", {}).get("runtimes", {}).get("ok", True):
-            raise SystemExit(f"{app.key}: 묶은 앱이 로컬 런타임을 띄우지 못했다 (위 `runtimes`의 log를 보세요)")
         if not found.get("steps", {}).get("build", {}).get("ok", True):
             raise SystemExit(
                 f"{app.key}: 묶은 앱이 읽은 판이 찍은 판({version})과 다르거나 core의 판을 모른다 (ADR-0067)"
@@ -256,8 +240,6 @@ def installer_defines(app: App, version: str) -> list[str]:
     }
     if app.autostart_task:
         found["AutostartTask"] = app.autostart_task
-    if app.tool_ui_shortcut:
-        found["ToolUiName"] = app.tool_ui_shortcut
     return [f"/D{key}={value}" for key, value in found.items()]
 
 
@@ -365,10 +347,6 @@ def main() -> int:
                 "extensions": checked["steps"]["entry_points"]["value"]["enabled"],
                 "installer": None if setup is None else f"{setup.relative_to(ROOT).as_posix()} {size_mb(setup)} MB",
                 "install_check_s": installed_s,
-                "runtimes": [
-                    f"{one['runtime']} {one.get('seconds', '?')}초"
-                    for one in checked["steps"].get("runtimes", {}).get("value", [])
-                ],
             }
         )
 
@@ -378,8 +356,6 @@ def main() -> int:
             f"{one['app']:7} {one['version']}  {one['size_mb']:7.1f} MB  {one['build_s']:6.1f}초"
             f"  확장 {one['extensions']}"
         )
-        if one["runtimes"]:
-            print(f"        런타임 기동 {', '.join(one['runtimes'])}")
         print(f"        {one['exe']}")
         if one["installer"]:
             print(f"        설치 파일 {one['installer']}")

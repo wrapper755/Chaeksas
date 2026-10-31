@@ -78,7 +78,7 @@ DEFINITION: dict[str, Any] = {
     "name": "문서 인식",
     "publisher": "사내",
     "tier": "internal",
-    "api": ">=1,<2",
+    "api": ">=2,<3",
     "contributes": {
         "task_types": [
             {

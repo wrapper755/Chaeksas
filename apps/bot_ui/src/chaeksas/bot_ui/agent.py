@@ -22,13 +22,12 @@ from typing import Any
 
 from chaeksas.bot_ui.center_client import CenterClient, CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import Credentials, SecretsUnavailable
+from chaeksas.bot_ui.host_settings import HostSettings
 from chaeksas.bot_ui.notices import Notices
 from chaeksas.bot_ui.runner import Launcher, Running
-from chaeksas.bot_ui.runtimes import BUSY, RESERVED, HostSettings, RuntimeUnavailable, runtime_ids_of
-from chaeksas.bot_ui.runtimes import Runtimes as LocalRuntimes
 from chaeksas.bot_ui.settings import Settings
 from chaeksas.bot_ui.store import Store
-from chaeksas.contracts import CALL_TOKEN_SECRET, CENTER_URL_ENV, CENTER_URL_SETTING, STORAGE_DIR_SETTING
+from chaeksas.contracts import CALL_TOKEN_SECRET, CENTER_URL_SETTING, STORAGE_DIR_SETTING
 from chaeksas.contracts.bot_ui import (
     DEFAULT_HEARTBEAT_S,
     ApprovalAck,
@@ -49,7 +48,6 @@ from chaeksas.contracts.bot_ui import (
     RegisterResponse,
     Runtimes,
     Versions,
-    WorkerState,
 )
 from chaeksas.contracts.center_api import delegated_run, job_source
 from chaeksas.contracts.center_keys import EXPIRY_WARNING_DAYS
@@ -69,7 +67,6 @@ from chaeksas.core.extensions import ExtensionHost
 from chaeksas.core.packages import InstalledBot, find, installed
 from chaeksas.core.preflight import Preflight
 from chaeksas.core.preflight import check as run_preflight
-from chaeksas.core.processes import Supervisor
 from chaeksas.core.run_log import run_dir
 from chaeksas.core.run_shipping import HttpUploader, Shipment
 from chaeksas.core.run_shipping import Queue as RunQueue
@@ -91,8 +88,6 @@ TRAY_KEY_EXPIRED = "키 만료"
 TRAY_DISABLED = "비활성"
 TRAY_ERROR = "오류"
 TRAY_IDLE = "대기"
-#: BPM 프로세스 차례인데 Worker를 다른 쪽(셀렉터 등록·Studio 시험)이 쓰는 중 (ADR-0014 §4).
-TRAY_WORKER_BUSY = "Worker를 다른 쪽이 쓰는 중 — 끝나면 실행합니다"
 
 #: 호출 토큰을 새로 청하는 때 — 만료까지 이만큼 남으면 (C15 「정한 것」 — 2시간 전).
 CALL_TOKEN_RENEW_S = 2 * 3600
@@ -185,69 +180,23 @@ class Agent:
     last_problem: CenterProblem | None = None
     #: 마지막 하트비트 응답으로 내려온 지시 (화면이 보여 준다).
     jobs_waiting: list[JobDispatch] = field(default_factory=list)
-    #: 런타임이 마지막으로 말한 상태 (C13 `status`). BUI-09가 **이것을 읽는다** — 화면이 제
-    #: 손으로 묻지 않는다(GUI 스레드에서 2초씩 멈춘다). `None`은 아직 묻지 않은 것,
-    #: 빈 사전은 **물었는데 못 받은 것**이다 (둘은 화면에서 다르게 말한다).
-    worker_status: dict[str, Any] | None = None
     #: 실행 기록 큐 (C3). 처음 쓸 때 만든다 — 설정이 가리키는 폴더를 그때 읽는다.
     _runs: RunQueue | None = None
     #: 실행 프로세스를 띄우는 쪽 (ADR-0023). 마찬가지로 처음 쓸 때 만든다.
     _launcher: Launcher | None = None
     #: 종료 중이다 — **새 BPM 프로세스를 띄우지 않는다** (BUI-01 종료 순서 「1. 새 요청 막기」).
     stopping: bool = False
-    #: 로컬 런타임 (C13·BUI-09). 처음 쓸 때 만든다 — 확장 호스트가 있어야 한다.
-    _runtimes: LocalRuntimes | None = None
-    #: 차례가 왔는데 Worker 예약이 409였다 — 대기열 맨 앞에서 기다린다 (ADR-0014 §4).
-    worker_busy: bool = False
     #: 사전 점검 결과 (BUI-04 「준비」·C4 `readiness`). **설치·키·확장이 바뀌면 비운다** —
     #: 하트비트마다 OS 비밀 저장소를 두드리면 주기가 느려진다 (C4 「바뀌었을 때만 보내도 됨」).
     _preflights: dict[tuple[str, str], Preflight] = field(default_factory=dict)
     #: 서비스 앱 주소를 마지막으로 받아 둔 때 (`time.monotonic`). 처음 붙은 주기는 바로 받는다.
-    #: 호출 토큰 (C15) — `(원문, 만료)`. 메모리에 들고, Tool UI가 읽게 비밀 저장소에도 둔다.
+    #: 호출 토큰 (C15) — `(원문, 만료)`. 메모리에만 든다.
     _call_token: tuple[str, str] | None = None
-    #: 이 실행에 묶은 로컬 런타임 — 끝나면 푼다.
-    _reserved: list[str] = field(default_factory=list)
 
-    def runtimes(self) -> LocalRuntimes:
-        """확장이 기여한 로컬 런타임들. **띄우지는 않는다** — 필요할 때 `ensure()`가 띄운다."""
-        if self._runtimes is None:
-            self._runtimes = LocalRuntimes(
-                host=self.host or ExtensionHost(),
-                settings=self.settings,
-                environment=self._runtime_env,
-            )
-        return self._runtimes
-
-    def _tell_runtimes(self) -> None:
-        """런타임이 멈췄거나 그만뒀으면 알린다 (BUI-05).
-
-        **이름은 확장이 준 `label`**이다 (C13) — 플랫폼 코드에 「Worker」라고 적지 않는다
-        (ADR-0018). 아직 띄우지 않은 것(`off`)은 알릴 거리가 아니다.
-        """
-        runtimes = self.runtimes()
-        labels = {runtime.id: runtime.label for _owner, runtime in runtimes.contributions()}
-        for runtime_id, found in runtimes.supervisors.items():
-            self.notices.runtime(
-                runtime_id,
-                label=labels.get(runtime_id, runtime_id),
-                state=found.state,
-                restarts=found.restarts,
-                why=found.last_error or "",
-            )
-
-    def _runtime_env(self, extension_id: str) -> dict[str, str]:
-        """로컬 런타임 자식에게 물려줄 것 — **Center 주소뿐이다** (호출 토큰은 세션이 준다, C10)."""
-        del extension_id
-        return {CENTER_URL_ENV: self.settings.center_url} if self.settings.center_url else {}
-
-    @property
-    def supervisors(self) -> dict[str, Supervisor]:
-        return self.runtimes().supervisors
-
-    def extension_context(self, extension_id: str, *, runtime_ids: tuple[str, ...] = ()) -> ExtensionContext:
+    def extension_context(self, extension_id: str) -> ExtensionContext:
         """확장 코드에 넘길 바깥 세상 (C13).
 
-        설정은 **그 확장의 칸 + 호스트가 채우는 예약 키**(`runtime.<id>.*`)다. 비밀은 OS
+        설정은 **그 확장의 칸 + 호스트가 채우는 예약 키**(`center.url`·`storage.dir`)다. 비밀은 OS
         비밀 저장소에서 확장 이름 공간으로 푼다 — 확장은 값을 묻기만 한다 (ADR-0013).
         """
         if self.host is None:
@@ -255,16 +204,15 @@ class Agent:
         return self.host.context(
             extension_id,
             host=HOST_BOT_UI,
-            settings=HostSettings(values=self.extension_values(extension_id, runtime_ids=runtime_ids)),
+            settings=HostSettings(values=self.extension_values(extension_id)),
             secrets=ExtensionSecrets(
                 credentials=self.credentials, extension_id=extension_id, call_token=self.call_token
             ),
         )
 
-    def extension_values(self, extension_id: str, *, runtime_ids: tuple[str, ...] = ()) -> dict[str, object]:
+    def extension_values(self, extension_id: str) -> dict[str, object]:
         """확장에게 줄 설정 — **그 확장의 칸 + 호스트가 채우는 예약 키** (C13). 비밀은 없다."""
         values: dict[str, object] = dict(self.settings.extension(extension_id))
-        values.update(self.runtimes().host_settings(runtime_ids))
         values[CENTER_URL_SETTING] = self.settings.center_url
         values[STORAGE_DIR_SETTING] = str(self.storage_dir(extension_id))
         return values
@@ -272,9 +220,7 @@ class Agent:
     def reload_extensions(self) -> ExtensionHost:
         """확장을 **다시 읽는다** — BUI-11이 끄고 켠 뒤에 부른다 (ADR-0043).
 
-        꺼진 확장은 기여를 하나도 내지 않으므로 태스크 종류·도구·칸·점검이 한꺼번에 빠진다.
-        **띄워 둔 런타임은 건드리지 않는다** — 감시자를 버리면 돌고 있는 자식 프로세스를 놓친다
-        (종료 때 끌 길이 없어진다). 새 호스트만 꽂아 준다.
+        꺼진 확장은 기여를 하나도 내지 않으므로 태스크 종류·칸·점검이 한꺼번에 빠진다.
 
         사전 점검 캐시도 비운다 — 안 비우면 꺼도 「준비됨」이 하트비트로 계속 올라간다.
         """
@@ -282,19 +228,14 @@ class Agent:
         host = load(self.settings.disabled_extensions)
         self.host = host
         self.extensions = host.states()
-        if self._runtimes is not None:
-            self._runtimes.host = host
         self.invalidate_preflight()
         return host
 
     def needed_extensions(self, bot: InstalledBot) -> set[str]:
-        """그 BPM 프로세스가 쓰는 확장 — `requires.extensions` + `requires.domains`의 환경을 기여한 확장 (ADR-0037)."""
+        """그 BPM 프로세스가 쓰는 확장 — `requires.extensions` (C1)."""
         if self.host is None:
             return set()
-        requires = bot.manifest.requires
-        needed = {need.id for need in requires.extensions}
-        needed |= {owner for owner in map(self.host.environment_owner, requires.domains) if owner}
-        return needed
+        return {need.id for need in bot.manifest.requires.extensions}
 
     # ── 사전 점검 (ADR-0013 §사전 점검, C4 `readiness`) ──
 
@@ -349,52 +290,12 @@ class Agent:
             )
         return out
 
-    def reserve_runtimes(self, bot: InstalledBot, run_id: str) -> list[str] | None:
-        """그 BPM 프로세스가 쓰는 런타임을 이 실행에 묶는다 (ADR-0014 §4). **하나라도 바쁘면 `None`** —
-        이미 묶은 것은 풀고, BPM 프로세스는 대기열 맨 앞에서 기다린다."""
-        if self.host is None:
-            return []
-        held: list[str] = []
-        for extension_id in sorted(self.needed_extensions(bot)):
-            for runtime_id in runtime_ids_of(self.host, extension_id):
-                found = self.runtimes().reserve(runtime_id, run_id)
-                if found == BUSY:
-                    for one in held:
-                        self.runtimes().release(one)
-                    return None
-                if found == RESERVED:
-                    held.append(runtime_id)
-        return held
-
-    def release_runtimes(self) -> None:
-        for runtime_id in self._reserved:
-            self.runtimes().release(runtime_id)
-        self._reserved = []
-
     def run_extensions(self, bot: InstalledBot) -> dict[str, dict[str, object]]:
-        """실행 프로세스에게 넘길 확장별 설정. **그 BPM 프로세스가 쓰는 확장의 로컬 런타임은 먼저 띄운다**.
-
-        쓰는 확장은 매니페스트에서 온다 (C1): `requires.extensions`, 그리고 `requires.domains`의
-        `web`·`desktop` AI 태스크 — 그 환경을 기여한 확장이다 (ADR-0037, 그림에 확장을 적지 않아도 된다).
-
-        UI 태스크·데스크톱 AI 태스크는 Worker가 떠 있어야 돈다 — 실행 프로세스가 띄우지 않는다 (BPM 프로세스는
-        Worker를 띄우거나 끄지 않는다, CLAUDE.md §5). 못 띄우면 기록만 하고 실행은 보낸다 —
-        그 태스크가 「Worker에 닿지 못했다」로 분명히 실패한다 (조용히 넘어가지 않는다).
-        """
+        """실행 프로세스에게 넘길 확장별 설정 (켜진 확장 모두 — 비밀은 없다)."""
+        del bot
         if self.host is None:
             return {}
-        needed = self.needed_extensions(bot)
-        table: dict[str, dict[str, object]] = {}
-        for found in self.host.enabled():
-            runtime_ids = runtime_ids_of(self.host, found.id)
-            if found.id in needed:
-                for runtime_id in runtime_ids:
-                    try:
-                        self.runtimes().ensure(runtime_id)
-                    except RuntimeUnavailable as e:
-                        log.warning("BPM 프로세스 %s이 쓰는 %s을 띄우지 못했다: %s", bot.id, runtime_id, e)
-            table[found.id] = self.extension_values(found.id, runtime_ids=runtime_ids)
-        return table
+        return {found.id: self.extension_values(found.id) for found in self.host.enabled()}
 
     def run_services(self, bot: InstalledBot, run_id: str) -> Path | None:
         """실행 프로세스에게 줄 **외부 확장 정의·봉투** (C13 「전송」) — 고정한 해시와 대조하려고.
@@ -421,11 +322,10 @@ class Agent:
         return made
 
     def call_token(self, *, fresh_for_s: float = CALL_TOKEN_RENEW_S) -> str | None:
-        """호출 토큰 (C15 「정한 것」) — 실행 프로세스·Worker·Tool UI가 외부 작업을 올릴 때 쓴다.
+        """호출 토큰 (C15 「정한 것」) — 실행 프로세스가 외부 작업을 올릴 때 쓴다.
 
         PC 실행기가 **제 Center API 키로** 청한다(24시간). 만료가 `fresh_for_s` 안으로 들어오면 새로
-        청한다. 닿지 못하면 들고 있던 것을 준다(아직 살아 있으면). **Tool UI가 읽게** 비밀 저장소에도
-        둔다 (`credentials.set_call_token`).
+        청한다. 닿지 못하면 들고 있던 것을 준다(아직 살아 있으면). **메모리에만 든다.**
         """
         held = self._call_token
         now = datetime.now(UTC)
@@ -439,10 +339,6 @@ class Agent:
                 return held[0]
             return None
         self._call_token = (got.token, got.expires_at)
-        try:
-            self.credentials.set_call_token(got.token)
-        except Exception as e:  # noqa: BLE001 — Tool UI 몫은 못 줘도 실행은 된다
-            log.warning("호출 토큰을 비밀 저장소에 두지 못했다: %s", e)
         return got.token
 
     def service_url(self, extension_id: str) -> str | None:
@@ -621,13 +517,11 @@ class Agent:
     # ── 등록·하트비트 ──
 
     def versions(self) -> Versions:
-        worker = self.supervisors.get("worker")
         # **묶은 것에서 도는지**는 찍힌 파일이 말한다 — 없으면 `build`를 비운다(체크아웃이다).
         found = build_info.stamp()
         return Versions(
             bot_ui=BOT_UI_VERSION,
             core=CORE_VERSION,
-            worker=None if worker is None else BOT_UI_VERSION,
             build=None if found is None else BuildStamp(commit=found.commit, built_at=found.built_at),
         )
 
@@ -665,30 +559,6 @@ class Agent:
         secret = self.credentials.enroll_secret()
         return public_of(secret) if secret else None
 
-    def worker_state(self) -> WorkerState:
-        """C4 `worker`. 감시자가 없으면 「꺼 둠」(`off`)이다 — 확장이 아직 없는 PC.
-
-        **예약은 런타임이 말하는 것을 싣는다** (C13 `status` → C10 `reserved_for`) — 우리가 예약을
-        걸어 두었더라도 런타임이 다시 떴으면 예약은 사라진다. 상태를 못 받으면 **비운다**
-        (모르는 것을 적지 않는다, CON-03 「예약」).
-        """
-        worker = self.supervisors.get("worker")
-        if worker is None:
-            return WorkerState(state="off", restarts=0, session="idle")
-        # 「지금 무엇을 하나」는 런타임이 `health`로 말해 준다 (C13). 없으면 모른 채 둔다.
-        running = worker.state == "running"
-        health = self.runtimes().health_of("worker") if running else None
-        status = self.runtimes().status_of("worker") if running else None
-        # 화면이 같은 것을 또 묻지 않게 들고 있는다 (BUI-09는 Agent에서만 읽는다).
-        self.worker_status = (status or {}) if running else None
-        return WorkerState(
-            state=worker.state,
-            version=str((health or {}).get("version") or "") or None,
-            restarts=worker.restarts,
-            session=str((health or {}).get("session") or "idle"),
-            reserved_for=str((status or {}).get("reserved_for") or "") or None,
-        )
-
     def wire_status(self) -> str:
         """하트비트에 싣는 `status` (C4의 알려진 값)."""
         if self.current_run is not None:
@@ -711,7 +581,6 @@ class Agent:
             status=self.wire_status(),
             current_run=self.current_run,
             queue=Queue(max=self.settings.queue_max, items=list(self.queue)),
-            worker=self.worker_state(),
             versions=self.versions(),
             readiness=self.readiness(),
             job_acks=list(self.store.state.pending_acks),
@@ -745,8 +614,6 @@ class Agent:
 
         키가 거부되면 예외를 올린다 — 트레이가 「키 폐기됨」을 보여야 하고, 사람이 고쳐야 한다.
         """
-        self.runtimes().tick()
-        self._tell_runtimes()
         # 돌고 있는 BPM 프로세스를 들여다보고, 자리가 비면 대기열에서 다음을 올린다 (조각 4a).
         self.pump()
 
@@ -1121,7 +988,6 @@ class Agent:
             # 짓는 것은 실행 프로세스다(선언한 `outputs`만 골라 썼다). 위임이 아니거나 실패했으면
             # 비어 있고, 파일은 `cleanup()`이 읽으며 **그 자리에서 지웠다**.
             self._ack_id(done.job_id, result, run_id=done.run_id, outputs=done.outputs)
-        self.release_runtimes()
         self.release_slot()
 
     def _start_next(self) -> None:
@@ -1164,20 +1030,11 @@ class Agent:
             return
 
         inputs = dict(self.store.state.inputs.get(item.queue_id) or {})
-        # **읽기만 한다** — 지우는 것은 `claim_slot`이다 (Worker가 바쁘면 여기서 돌아
-        # 나가고 다음 주기에 다시 온다 — 그때 부모를 잃으면 C3가 두 실행을 잇지 못한다).
+        # **읽기만 한다** — 지우는 것은 `claim_slot`이다.
         parent = self.store.state.parents.get(item.queue_id)
         extensions = self.run_extensions(bot)
         run_id = new_run_id()
         services_path = self.run_services(bot, run_id)
-        held = self.reserve_runtimes(bot, run_id)
-        if held is None:
-            # 다른 쪽(셀렉터 등록·Studio 시험)이 Worker를 쓰는 중 — **강제로 닫지 않고 기다린다**
-            # (ADR-0014 §4). 항목은 대기열 맨 앞에 그대로 있고 다음 주기에 다시 묻는다.
-            self.worker_busy = True
-            return
-        self.worker_busy = False
-        self._reserved = held
         run = self.claim_slot(item, run_id=run_id)
         try:
             running = self.runner().start(
@@ -1204,7 +1061,6 @@ class Agent:
             log.exception("실행 프로세스를 띄우지 못했다")
             if item.job_id:
                 self._ack_id(item.job_id, "failed", reason=str(e)[:200])
-            self.release_runtimes()
             self.release_slot()
             return
         self.current_run = running.current()
@@ -1317,8 +1173,6 @@ class Agent:
 
         run = self.current_run
         waiting = len(self.queue)
-        if run is None and waiting and self.worker_busy:
-            return TRAY_WORKER_BUSY
         if run is None:
             return f"{TRAY_IDLE} · 대기 {waiting}건" if waiting else TRAY_IDLE
         if run.state == "waiting_approval":
@@ -1330,9 +1184,6 @@ class Agent:
     def status_line(self) -> str:
         """BUI-02 상태 줄. 해당할 때만 뒤를 붙인다."""
         parts = [self.tray_status(), f"Center {self.settings.center_url}"]
-        worker = self.settings.runtime("worker")
-        if worker is not None and self.worker_state().state == "running":
-            parts.append(f"Worker 127.0.0.1:{worker.port}")
         if self.last_problem is not None:
             parts.append(f"오류: {self.last_problem}")
         return " · ".join(parts)

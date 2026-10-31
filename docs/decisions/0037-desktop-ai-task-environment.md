@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨([ADR-0114](0114-remove-ui-automation.md)) — 원래 수락 |
 | 날짜 | 2026-10-05 |
 | 관련 | [ADR-0008](0008-map-driver-hands-boundary.md)(지도·운전사·손), [ADR-0018](0018-extensions.md)(확장), [ADR-0027](0027-llm-connection.md)(도구 루프), [ADR-0028](0028-replay-memory.md)(재생), [ADR-0033](0033-desktop-app-and-window.md)(창 조건), 계약 C10·C13·C14, 예제 FX-05 |
 

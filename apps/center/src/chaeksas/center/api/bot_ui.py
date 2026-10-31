@@ -38,7 +38,6 @@ from chaeksas.contracts.bot_ui import (
     RegisterResponse,
     Runtimes,
     Versions,
-    WorkerState,
 )
 from chaeksas.contracts.center_api import BotUiInfo, BotUiKey
 
@@ -166,7 +165,6 @@ def heartbeat(
         "status": request.status,
         "current_run": request.current_run.to_json_dict() if request.current_run else None,
         "queue": request.queue.to_json_dict(),
-        "worker": request.worker.to_json_dict(),
         "readiness": [r.to_json_dict() for r in request.readiness],
         "extensions": [e.to_json_dict() for e in request.extensions],
         "unsent_events": request.unsent_events,
@@ -247,7 +245,6 @@ def bot_ui_listing(store: Store) -> list[BotUiInfo]:
                 status=state.get("status"),
                 current_run=CurrentRun.model_validate(state["current_run"]) if state.get("current_run") else None,
                 queue=Queue.model_validate(state["queue"]) if state.get("queue") else None,
-                worker=WorkerState.model_validate(state["worker"]) if state.get("worker") else None,
                 readiness=[Readiness.model_validate(r) for r in state.get("readiness", [])],
                 extensions=[ExtensionState.model_validate(e) for e in state.get("extensions", [])],
                 # 마지막 하트비트가 아니라 **Center가 쌓아 둔 것**이다 (C5 — CON-03이 읽는다).
@@ -259,7 +256,6 @@ def bot_ui_listing(store: Store) -> list[BotUiInfo]:
                 )
                 if record
                 else None,
-                selector_registration=bool(row["selector_registration"]),
             )
         )
     return out
@@ -300,12 +296,3 @@ async def _json(request: Request) -> dict[str, Any]:
     if not isinstance(body, dict):
         raise ApiError(422, "input_invalid", "본문의 최상위가 객체가 아니다")
     return body
-
-def set_selector_registration(store: Store, bot_ui_id: str, *, on: bool) -> bool:
-    """CON-03 「셀렉터 등록」 스위치 — 켠 PC만 등록 세션의 외부 작업을 올린다 (C15)."""
-    with store.tx() as cur:
-        cur.execute(
-            "UPDATE bot_uis SET selector_registration = ? WHERE bot_ui_id = ?", (1 if on else 0, bot_ui_id)
-        )
-        return cur.rowcount > 0
-

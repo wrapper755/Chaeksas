@@ -1,4 +1,4 @@
-"""확장이 구현하는 안정 인터페이스 — 태스크 종류·수행기, 편집기, 도구, 로컬 런타임 (ADR-0018).
+"""확장이 구현하는 안정 인터페이스 — 태스크 종류·수행기, 편집기, 사전 점검 (ADR-0018).
 
 확장을 만드는 쪽은 **이 패키지만** import한다. `core`·`apps/*`는 보지 않는다 (의존 방향은
 `docs/01-architecture.md` §5, `tests/test_import_direction.py`가 막는다).
@@ -7,11 +7,7 @@
 | --- | --- |
 | `task_types[].executor` | `TaskExecutor` |
 | `task_types[].editor`, `studio.editors` | `TaskEditor` (`kind="schema"`면 필요 없다) |
-| `tool_ui.tools` | `ToolUiTool` (Tool UI의 탭 하나, ADR-0077 — 옛 이름 `BotUiUtility`) |
-| `bot_ui.panels` | `BotUiPanel` (플랫폼 화면의 한 칸, ADR-0042) |
 | `preflight` | `PreflightCheck` |
-| `bot_ui.local_runtimes` | `LocalRuntimeEntry` (자식 프로세스에서 불린다) |
-| `agent_environments` | `AgentEnvironment` → `AgentSession`·`AgentTool` (AI 태스크의 눈과 손, ADR-0037) |
 | `studio.resource_views`, `console.pages`, `resources`, `configuration` | (없음 — 선언뿐) |
 | 외부 앱 (`service.adapter`) | (없음 — `core`의 해석기가 부른다. 규격은 `http_adapter`) |
 
@@ -35,18 +31,11 @@ from chaeksas.extension_api.contributions import (
     SEVERITY_BLOCK,
     SEVERITY_INFO,
     SEVERITY_WARN,
-    AgentEnvironment,
-    AgentSession,
-    AgentTool,
-    BotUiPanel,
-    BotUiUtility,
     Finding,
-    LocalRuntimeEntry,
     PreflightCheck,
     PreflightTarget,
     TaskEditor,
     TaskExecutor,
-    ToolUiTool,
 )
 from chaeksas.extension_api.entry import (
     EXTENSION_NAMESPACE,
@@ -61,7 +50,6 @@ from chaeksas.extension_api.runtime import (
     HOST_BOT_UI,
     HOST_SERVER_RUNNER,
     HOST_STUDIO,
-    HOST_TOOL_UI,
     RUN_LOCATION_PC,
     RUN_LOCATION_SERVER,
     ExtensionContext,
@@ -76,10 +64,6 @@ from chaeksas.extension_api.runtime import (
 
 __all__ = [
     "API_VERSION",
-    # AI 환경
-    "AgentEnvironment",
-    "AgentSession",
-    "AgentTool",
     # 수행
     "ESCALATE_CONFIRMATION",
     "ExtensionContext",
@@ -90,7 +74,6 @@ __all__ = [
     "HOST_BOT_UI",
     "HOST_SERVER_RUNNER",
     "HOST_STUDIO",
-    "HOST_TOOL_UI",
     "Secrets",
     "Settings",
     "TaskContext",
@@ -98,10 +81,7 @@ __all__ = [
     "TaskOutcome",
     "review_table",
     # 기여
-    "BotUiPanel",
-    "BotUiUtility",
     "Finding",
-    "LocalRuntimeEntry",
     "PreflightCheck",
     "PreflightTarget",
     "SEVERITIES",
@@ -110,7 +90,6 @@ __all__ = [
     "SEVERITY_WARN",
     "TaskEditor",
     "TaskExecutor",
-    "ToolUiTool",
     # entry 해석
     "EXTENSION_NAMESPACE",
     "EntryError",

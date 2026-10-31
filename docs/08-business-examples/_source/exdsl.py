@@ -133,12 +133,6 @@ def ai(id, name, goal, domain, results, tools=None, params=None, loop=None, **p)
     return Node(id, "ai", name, dict(task=d, loop=loop))
 
 
-def ui(id, name, page_id, steps, loop=None, **p):
-    d = dict(page_id=page_id, steps=steps, heal=True)
-    d.update(p)
-    return Node(id, "ui", name, dict(task=d, loop=loop))
-
-
 def svc(id, name, app_id, operation, input, output, loop=None, **p):
     d = dict(app_id=app_id, operation=operation, input=input, output=output)
     d.update(p)
@@ -255,7 +249,7 @@ def goal(상황, 할일, 판단하지않음=None, 반환=None):
 
 KIND_LABEL = {
     "start": "시작 이벤트", "end": "끝 이벤트", "script": "스크립트", "ai": "AI 태스크",
-    "ui": "UI 태스크", "svc": "서비스 앱 태스크", "appr": "결재", "manual": "수동 확인",
+    "svc": "서비스 앱 태스크", "appr": "결재", "manual": "수동 확인",
     "rule": "규칙(DMN)", "flist": "파일 목록", "mail": "메일 보내기", "hook": "웹훅 보내기", "recv": "메시지 받기",
     "call": "BPM 프로세스 호출", "xgw": "배타 게이트웨이", "igw": "포함 게이트웨이",
     "pgw": "병렬 게이트웨이", "sub": "하위 프로세스", "throw": "중간 던지기", "catch": "중간 받기",
@@ -297,7 +291,7 @@ def validate(ex: Example) -> list[str]:
                     errs.append(f"{where}: {n.id} 조건 없는 흐름이 default가 아님")
             if n.kind == "sub":
                 chk_scope(n.children, n.flows, n.boundaries, n.id)
-            if n.kind in ("ai", "ui", "svc", "rule", "call") and n.props.get("loop") and "collect_into" not in n.props["loop"]:
+            if n.kind in ("ai", "svc", "rule", "call") and n.props.get("loop") and "collect_into" not in n.props["loop"]:
                 errs.append(f"{n.id} 반복에 collect_into 없음")
             if n.kind in ("appr", "manual"):
                 for fd in n.props["task"]["fields"]:
@@ -309,16 +303,8 @@ def validate(ex: Example) -> list[str]:
                     errs.append(f"{n.id} show가 배열이 아님")
                 if ex.run_location == "server" and n.props["task"]["location"] == "field":
                     errs.append(f"{n.id} 서버인데 현장 결재")
-            if ex.run_location == "server" and n.kind == "ui":
-                errs.append(f"{n.id} 서버 BPM 프로세스에 UI 태스크")
             if ex.run_location == "server" and n.kind == "ai" and n.props["task"]["domain"] in ("web", "desktop"):
                 errs.append(f"{n.id} 서버 BPM 프로세스에 web/desktop AI 태스크")
-            if n.kind == "ui":
-                for st in n.props["task"]["steps"]:
-                    if st["action"] not in ("fill", "click", "press", "select", "read", "read_table", "read_options", "read_selection"):
-                        errs.append(f"{n.id} UI 동작 {st['action']} (C10에 없음)")
-                    if "$secret" in str(st.get("value", "")):
-                        errs.append(f"{n.id} UI 스텝 값에 비밀 참조")
             if n.kind == "ai":
                 for t in n.props["task"]["results"].values():
                     if t not in ("string", "int", "number", "bool", "list", "dict", "date"):
@@ -564,12 +550,10 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
         code = escape(p["code"])
         return (f'{ind}<bpmn:scriptTask id="{n.id}" name="{nm}" scriptFormat="chk-expr">\n{io}{dassoc}'
                 f'{ind}  <bpmn:script>{code}</bpmn:script>\n{ind}</bpmn:scriptTask>\n')
-    if k in ("ai", "ui", "svc"):
+    if k in ("ai", "svc"):
         t = dict(p["task"])
         if k == "ai":
             body = ext_el("aiTask", t)
-        elif k == "ui":
-            body = ext_el("task", t, ' type="ui_task" extension="ui-automation"')
         else:
             body = ext_el("serviceCall", t)
         if p.get("loop"):
@@ -928,13 +912,6 @@ def node_summary(n: Node) -> str:
             lp = p["loop"]
             s += f" · 반복({'병렬' if lp.get('parallel') else '차례'}) `{lp['collection']}`→`{lp['collect_into']}`"
         return s
-    if k == "ui":
-        t = p["task"]
-        st = ", ".join(f"{x['action']} `{x['key']}`" for x in t["steps"])
-        s = f"화면 `{t['page_id']}` · {st}"
-        if p.get("loop"):
-            s += f" · 반복 `{p['loop']['collection']}`"
-        return s
     if k == "svc":
         t = p["task"]
         s = f"`{t['app_id']}`.`{t['operation']}` · 입력 {', '.join(t['input'])} → {', '.join(t['output'])}"
@@ -1076,8 +1053,6 @@ def defined_vars(ex: Example) -> set[str]:
             d |= set(t["results"])
         if n.kind in ("svc", "rule", "call"):
             d |= set(t["output"])
-        if n.kind == "ui":
-            d |= {s["result"] for s in t["steps"] if s.get("result")}
         if n.kind in ("appr", "manual"):
             d |= {f["key"] for f in t["fields"]}
         if n.kind == "recv":

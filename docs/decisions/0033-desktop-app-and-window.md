@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 제안 |
+| 상태 | 대체됨([ADR-0114](0114-remove-ui-automation.md)) — 원래 제안 |
 | 날짜 | 2026-10-05 |
 | 관련 | [ADR-0020](0020-windows-desktop-backend.md)(UIA 라이브러리), [ADR-0021](0021-worker-dpi-capture.md)(DPI), [ADR-0023](0023-bot-ui-process-supervision.md)(잠금 화면), 계약 C8·C9·C10·C14, 인수 시험 BX-04·BX-17 |
 

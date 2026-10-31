@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨([ADR-0114](0114-remove-ui-automation.md)) — 원래 수락 |
 | 날짜 | 2026-10-18 |
 | 관련 | 스파이크 `spikes/s11-desktop-pick/`, C10 §5, BUI-06, [ADR-0021](0021-worker-dpi-capture.md), [ADR-0033](0033-desktop-app-and-window.md), 09-gaps §7-3 |
 

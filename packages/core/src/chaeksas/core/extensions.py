@@ -8,7 +8,7 @@
     host.load_entry_points()
     for found in host.task_types():          # Studio 팔레트
         palette.add(found.value.label, task_type=found.value.id)
-    executor = host.executor("ui_task")      # 실행기
+    executor = host.executor("<태스크 종류>")  # 실행기
 
 켜지 않는 경우가 세 가지다. 어느 쪽이든 **조용히 사라지지 않는다** — `disabled()`에 사유(`Violation`)와
 함께 남아 화면에 「호환 안 됨」·「쓸 수 없음」으로 보인다 (BUI-01, STU-15, CON-07).
@@ -24,8 +24,8 @@
 
     host = ExtensionHost(off=settings.disabled_extensions)
 
-**꺼진 확장은 기여를 하나도 내지 않는다** — 태스크 종류·편집기·런타임·점검이 한꺼번에 사라진다.
-늦게(실행할 때) 죽는 것보다 낫다. 그래서 겹침(E4·E8)도 **꺼지지 않은 것들 사이에서만** 본다.
+**꺼진 확장은 기여를 하나도 내지 않는다** — 태스크 종류·편집기·점검이 한꺼번에 사라진다.
+늦게(실행할 때) 죽는 것보다 낫다. 그래서 겹침(E4)도 **꺼지지 않은 것들 사이에서만** 본다.
 
 **코드는 설치 파일에 든 확장(내장·사내)에서만 돌린다** (ADR-0018 §3). 외부 확장의 정의에 `entry`가
 있으면 E1에 걸려 켜지지 않고, 켜진 확장의 `entry`도 그 확장의 패키지 안만 가리킬 수 있다.
@@ -46,19 +46,15 @@ from chaeksas.contracts.bot_ui import ExtensionState
 from chaeksas.contracts.extension import (
     ENTRY_POINT_GROUP,
     EXTENSION_FILE,
-    LEGACY_UTILITIES_KEY,
-    AgentEnvironmentContribution,
+    LEGACY_CONTRIBUTION_KEYS,
     ConfigurationItem,
     ConsolePage,
     ExtensionManifest,
-    LocalRuntime,
-    Panel,
     PreflightContribution,
     ResourceContribution,
     ResourceView,
     StudioEditorContribution,
     TaskTypeContribution,
-    Tool,
     check_api,
     check_size,
     definition_hash,
@@ -68,17 +64,13 @@ from chaeksas.contracts.extension import (
 from chaeksas.contracts.signing import AdminKey, Envelope
 from chaeksas.extension_api import (
     API_VERSION,
-    AgentEnvironment,
-    BotUiPanel,
     EntryError,
     ExtensionContext,
-    LocalRuntimeEntry,
     PreflightCheck,
     Secrets,
     Settings,
     TaskEditor,
     TaskExecutor,
-    ToolUiTool,
 )
 from chaeksas.extension_api.entry import resolve as resolve_entry
 
@@ -168,7 +160,6 @@ class ExtensionHost:
         self._loaded: list[LoadedExtension] = []
         self._failures: list[LoadFailure] = []
         self._executors: dict[str, TaskExecutor] = {}
-        self._environments: dict[str, AgentEnvironment] = {}
 
     # ─────────────────────────── 찾기 ───────────────────────────
 
@@ -179,7 +170,7 @@ class ExtensionHost:
         (C13 「전송」). 설치 파일로 묶을 때 이것이 살아 있는지는 스파이크 S5가 본다.
 
             [project.entry-points."chaeksas.extensions"]
-            ui-automation = "chaeksas.ext.ui_automation"
+            <확장 id> = "chaeksas.ext.<패키지>"
 
         하나가 깨져도 나머지는 켠다 — 사유는 `failures`·`disabled()`에 남는다.
         """
@@ -248,13 +239,10 @@ class ExtensionHost:
             self._failures.append(LoadFailure(origin=origin, message=f"정의가 C13과 맞지 않는다: {summary}"))
             return None
 
-        if LEGACY_UTILITIES_KEY in (manifest.contributes.model_extra or {}):
-            # 걷은 기여 지점 (ADR-0077) — 모르는 열쇠라고 **조용히 사라지게 두지 않는다**.
-            LOG.warning(
-                "확장 %s의 `%s`는 더 읽지 않는다 — 도구는 `tool_ui.tools`로 옮긴다 (ADR-0077)",
-                manifest.id,
-                LEGACY_UTILITIES_KEY,
-            )
+        for legacy in LEGACY_CONTRIBUTION_KEYS:
+            if legacy in (manifest.contributes.model_extra or {}):
+                # 걷은 기여 지점 (ADR-0077·ADR-0114) — 모르는 열쇠라고 **조용히 사라지게 두지 않는다**.
+                LOG.warning("확장 %s의 `%s`는 더 읽지 않는다 — 걷은 기여 지점이다 (ADR-0114)", manifest.id, legacy)
         turned_off = manifest.id in self.off
         problems = (
             []
@@ -309,17 +297,6 @@ class ExtensionHost:
                     items=clashing,
                 )
             )
-        owned = {found.value.domain: found.extension_id for found in self.agent_environments()}
-        doubled = [e.domain for e in manifest.contributes.agent_environments if e.domain in owned]
-        if doubled:
-            out.append(
-                Violation(
-                    rule="E8",
-                    code="environment_conflict",
-                    message=f"AI 환경을 다른 확장이 이미 기여했다 ({', '.join(owned[d] for d in doubled)})",
-                    items=doubled,
-                )
-            )
         return out
 
     # ─────────────────────────── 목록 ───────────────────────────
@@ -346,19 +323,6 @@ class ExtensionHost:
         사전 점검이 그 둘에 **다른 고치는 길**을 안내하려고 쓴다 (`core.preflight`).
         """
         found = [e for e in self._loaded if e.manifest.task_type(task_type_id) is not None]
-        return next((e for e in found if e.enabled), found[0] if found else None)
-
-    def environment_provider(self, domain: str) -> LoadedExtension | None:
-        """그 AI 환경을 기여한 확장 — **꺼 둔 것·흠이 있는 것까지** 본다 (`provider_of`와 같은 결).
-
-        `environment_owner()`는 **지금 쓸 수 있는** 것만 주므로 「없다」와 「꺼 뒀다」를 가르지
-        못한다. 사전 점검이 그 둘에 다른 고치는 길을 안내하려고 쓴다 (ADR-0043).
-        """
-        found = [
-            e
-            for e in self._loaded
-            if any(c.domain == domain for c in e.manifest.contributes.agent_environments)
-        ]
         return next((e for e in found if e.enabled), found[0] if found else None)
 
     @property
@@ -423,10 +387,6 @@ class ExtensionHost:
         """
         return {c.value.id: list(c.value.run_locations) for c in self.task_types()}
 
-    def agent_environments(self) -> list[Contribution[AgentEnvironmentContribution]]:
-        """AI 태스크의 `web`·`desktop` 환경 (C13 `agent_environments`, ADR-0037)."""
-        return self._gather(lambda m: m.contributes.agent_environments)
-
     def studio_editors(self) -> list[Contribution[StudioEditorContribution]]:
         return self._gather(lambda m: m.contributes.studio_editors)
 
@@ -434,24 +394,8 @@ class ExtensionHost:
         """Studio 리소스 탐색기(STU-03)의 갈래들."""
         return self._gather(lambda m: m.contributes.studio_resource_views)
 
-    def tools(self) -> list[Contribution[Tool]]:
-        """Tool UI의 도구들 (`tool_ui.tools`, ADR-0077) — PC 실행기 「도구」 바로가기도 이것을 그린다."""
-        return self._gather(lambda m: m.contributes.tool_ui_tools)
-
-    def panels(self, surface: str) -> list[Contribution[Panel]]:
-        """그 자리에 낼 칸들 (`bot_ui.panels`, ADR-0042).
-
-        **자리 이름으로만 고른다** — 호스트는 자기가 아는 자리를 묻고, **모르는 자리를 가리키는
-        칸은 조용히 사라진다** (새 확장이 가리키는 자리를 옛 PC 실행기가 모를 수 있다).
-        """
-        return [c for c in self._gather(lambda m: m.contributes.bot_ui_panels) if c.value.surface == surface]
-
-    def local_runtimes(self) -> list[Contribution[LocalRuntime]]:
-        """PC 실행기가 띄우고 감시할 로컬 프로세스 (BUI-09·11). **선언뿐이다.**"""
-        return self._gather(lambda m: m.contributes.bot_ui_local_runtimes)
-
     def configuration(self, *, scope: str | None = None) -> list[Contribution[ConfigurationItem]]:
-        """설정 화면의 칸들. `scope`로 거른다 (`bot_ui`·`tool_ui`·`studio`·`server_runner`)."""
+        """설정 화면의 칸들. `scope`로 거른다 (`bot_ui`·`studio`·`server_runner`)."""
         items: list[Contribution[ConfigurationItem]] = self._gather(lambda m: m.contributes.configuration)
         return [c for c in items if scope is None or c.value.scope == scope]
 
@@ -519,32 +463,6 @@ class ExtensionHost:
         self._executors[task_type_id] = executor
         return executor
 
-    def environment(self, domain: str) -> AgentEnvironment | None:
-        """그 domain의 AI 환경. 기여한 확장이 없으면 `None` — 엔진이 그림·설치 오류로 올린다.
-
-        한 domain은 한 확장만 기여한다 (E8 — 나중에 온 확장은 켜지 않는다).
-        """
-        found = [c for c in self.agent_environments() if c.value.domain == domain]
-        if len(found) != 1:
-            if found:
-                LOG.warning("AI 환경 %s을 여러 확장이 기여한다 (E8) — 쓰지 않는다", domain)
-            return None
-        cached = self._environments.get(domain)
-        if cached is not None:
-            return cached
-        owner = self.get(found[0].extension_id)
-        assert owner is not None
-        made: AgentEnvironment = self._instantiate(
-            owner, found[0].value.entry, expect=AgentEnvironment, what="AI 환경"
-        )
-        self._environments[domain] = made
-        return made
-
-    def environment_owner(self, domain: str) -> str | None:
-        """그 AI 환경을 기여한 확장 id — 엔진이 그 확장의 바깥 세상(`context`)을 함께 준다."""
-        found = [c for c in self.agent_environments() if c.value.domain == domain]
-        return found[0].extension_id if len(found) == 1 else None
-
     def editor(self, task_type_id: str) -> TaskEditor | None:
         """Studio 속성 패널에 붙일 편집기. `kind="schema"`면 `None` — 자동 폼을 쓴다 (STU-14).
 
@@ -567,50 +485,6 @@ class ExtensionHost:
             return None
         from_task_type: TaskEditor = self._instantiate(owner, editor.entry, expect=TaskEditor, what="편집기")
         return from_task_type
-
-    def tool(self, extension_id: str, tool_id: str) -> ToolUiTool:
-        """Tool UI의 도구 하나. 탭을 열 때마다 새로 만든다 (ADR-0077)."""
-        found = next(
-            (c for c in self.tools() if c.extension_id == extension_id and c.value.id == tool_id), None
-        )
-        if found is None:
-            raise LookupError(f"기여된 도구가 아니다: {extension_id}:{tool_id}")
-        owner = self.get(found.extension_id)
-        assert owner is not None
-        tool: ToolUiTool = self._instantiate(owner, found.value.entry, expect=ToolUiTool, what="도구")
-        return tool
-
-    def panel(self, extension_id: str, panel_id: str) -> BotUiPanel:
-        """플랫폼 화면의 한 칸을 그릴 것 (`bot_ui.panels`, ADR-0042).
-
-        화면을 만들 때 한 번 만들고 호스트가 들고 있는다 (`refresh()`를 주기마다 부른다).
-        """
-        owner = self.get(extension_id)
-        if owner is None or not owner.enabled:
-            raise LookupError(f"켜진 확장이 아니다: {extension_id}")
-        declared = next((p for p in owner.manifest.contributes.bot_ui_panels if p.id == panel_id), None)
-        if declared is None:
-            raise LookupError(f"확장 {extension_id}에 기여된 화면 칸이 아니다: {panel_id}")
-        made: BotUiPanel = self._instantiate(owner, declared.entry, expect=BotUiPanel, what="화면 칸")
-        return made
-
-    def local_runtime(self, extension_id: str, runtime_id: str) -> LocalRuntimeEntry:
-        """로컬 런타임의 진입점 (`<확장 id>:<런타임 id>`).
-
-        **자식 프로세스 안에서** 쓰는 길이다. PC 실행기가 자기 실행 파일을 `--local-runtime
-        <확장 id>:<런타임 id>`로 다시 띄우면, 그 자식이 이것으로 진입점을 풀어 부른다
-        (ADR-0024). 띄우고 감시하는 일 자체는 PC 실행기의 몫이다.
-        """
-        owner = self.get(extension_id)
-        if owner is None or not owner.enabled:
-            raise LookupError(f"켜진 확장이 아니다: {extension_id}")
-        declared = next((r for r in owner.manifest.contributes.bot_ui_local_runtimes if r.id == runtime_id), None)
-        if declared is None:
-            raise LookupError(f"확장 {extension_id}에 기여된 로컬 런타임이 아니다: {runtime_id}")
-        entry: LocalRuntimeEntry = self._instantiate(
-            owner, declared.entry, expect=LocalRuntimeEntry, what="로컬 런타임 진입점"
-        )
-        return entry
 
     def preflight_checks(self) -> list[Contribution[PreflightCheck]]:
         """사전 점검들. 하나가 만들어지지 않으면 그것만 빼고 기록한다 — 점검이 실행을 막지 않는다."""
@@ -653,12 +527,12 @@ def load_host(
 class HostTasks:
     """확장 호스트를 엔진의 `RunEnv.extensions`로 — 실행하는 쪽(Studio 시험 실행·실행 프로세스)이 꽂는다.
 
-    엔진은 확장을 모른다 (ADR-0018). 태스크 종류 이름으로 수행기를, AI 태스크 domain으로 환경을
-    묻고(ADR-0037), 그 확장의 바깥 세상(`context`)을 받을 뿐이다.
+    엔진은 확장을 모른다 (ADR-0018). 태스크 종류 이름으로 수행기를 묻고, 그 확장의 바깥
+    세상(`context`)을 받을 뿐이다.
 
     - 없는 태스크 종류는 **`None`** 이다 (엔진이 그림·설치 오류로 올린다). 호스트는 `LookupError`를 낸다.
     - `context`의 설정·비밀은 **실행하는 쪽이** 확장마다 갈라 준다 (`make_context`) — 예약 키
-      (`runtime.<id>.*`·`service.base_url`)로 로컬 런타임과 서버 주소를 알려 준다 (C13).
+      (`center.url`·`storage.dir`)도 그때 넣는다 (C13).
     """
 
     host: ExtensionHost
@@ -669,12 +543,6 @@ class HostTasks:
             return self.host.executor(task_type)
         except LookupError:
             return None
-
-    def environment(self, domain: str) -> AgentEnvironment | None:
-        return self.host.environment(domain)
-
-    def environment_owner(self, domain: str) -> str | None:
-        return self.host.environment_owner(domain)
 
     def context(self, extension_id: str) -> ExtensionContext:
         return self.make_context(extension_id)

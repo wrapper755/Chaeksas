@@ -11,7 +11,9 @@
       <chk:process>{
   "run_location": "pc",
   "extensions": [],
-  "outputs": [],
+  "outputs": [
+    "확인됨"
+  ],
   "inputs": []
 }</chk:process>
     </bpmn:extensionElements>

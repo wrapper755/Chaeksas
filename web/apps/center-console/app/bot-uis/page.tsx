@@ -58,21 +58,11 @@ export function statusLabel(status: string): string {
     running: "실행 중",
     waiting_approval: "결재 대기",
     waiting_confirmation: "확인 대기",
-    selector_registration: "실행 중",
     error: "오류",
   };
   return table[status] ?? status;
 }
 
-export function workerLabel(state: string): string {
-  const table: Record<string, string> = {
-    running: "실행 중",
-    off: "꺼 둠",
-    restarting: "다시 띄우는 중",
-    stopped: "멈춤",
-  };
-  return table[state] ?? state;
-}
 
 export default async function BotUisPage() {
   const found = await session();
@@ -135,13 +125,6 @@ export default async function BotUisPage() {
       width: "16ch",
       align: "right",
       cell: (row) => <AsOf row={row}>{`${row.queue?.items?.length ?? 0}건`}</AsOf>,
-    },
-    {
-      key: "worker",
-      header: "Worker 프로세스",
-      width: "18ch",
-      cell: (row) =>
-        row.worker ? <StatusBadge group="Worker 프로세스" label={workerLabel(row.worker.state)} /> : "—",
     },
     { key: "runtimes", header: "런타임", width: "22ch", cell: runtimeLabel },
     {

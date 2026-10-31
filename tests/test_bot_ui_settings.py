@@ -20,9 +20,6 @@ from chaeksas.bot_ui import autostart as autostart_module
 from chaeksas.bot_ui.credentials import ENV_CENTER_API_KEY, Credentials, SecretsUnavailable
 from chaeksas.bot_ui.settings import (
     DEFAULT_QUEUE_MAX,
-    DEFAULT_WORKER_PORT,
-    START_ALWAYS,
-    RuntimeSettings,
     Settings,
 )
 from chaeksas.core import machine
@@ -34,8 +31,6 @@ def test_defaults_come_from_the_setup_doc() -> None:
     """포트·대기열 기본값의 원본은 `docs/04-setup.md` §6이다 (코드에 숫자를 흘리지 않는다)."""
     found = Settings()
     assert found.queue_max == DEFAULT_QUEUE_MAX == 20
-    assert found.runtime("worker") is not None
-    assert found.runtime("worker").port == DEFAULT_WORKER_PORT == 8899  # type: ignore[union-attr]
     assert found.autostart is True and found.signed_only is True
 
 
@@ -45,12 +40,10 @@ def test_settings_round_trip_through_a_file(tmp_path: Path) -> None:
         center_url="http://center:8800",
         name="재무팀 PC-03",
         queue_max=5,
-        runtimes=(RuntimeSettings(runtime_id="worker", port=9000, start=START_ALWAYS),),
     )
     before.save(path)
     after = Settings.load(path)
     assert (after.center_url, after.name, after.queue_max) == ("http://center:8800", "재무팀 PC-03", 5)
-    assert after.runtime("worker").start == START_ALWAYS  # type: ignore[union-attr]
     # UTF-8로 쓴다 (Windows 기본 인코딩은 cp949다 — CLAUDE.md §5).
     assert "재무팀 PC-03" in path.read_text(encoding="utf-8")
 
@@ -68,12 +61,10 @@ def test_environment_variables_win(monkeypatch: Any, tmp_path: Path) -> None:
     Settings(center_url="http://file:8800", queue_max=5).save(path)
     monkeypatch.setenv("CHK_BOT_UI__CENTER__URL", "http://env:8800")
     monkeypatch.setenv("CHK_BOT_UI__QUEUE__MAX", "7")
-    monkeypatch.setenv("CHK_BOT_UI__WORKER__PORT", "9100")
     monkeypatch.setenv("CHK_BOT_UI__AUTOSTART", "false")
 
     found = Settings.load(path)
     assert (found.center_url, found.queue_max) == ("http://env:8800", 7)
-    assert found.runtime("worker").port == 9100  # type: ignore[union-attr]
     assert found.autostart is False
 
 

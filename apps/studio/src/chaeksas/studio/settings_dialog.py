@@ -39,12 +39,7 @@ from chaeksas.contracts import SCOPE_STUDIO, ConfigurationItem
 from chaeksas.qt.theme import THEME_DARK, THEME_LIGHT, THEME_SYSTEM, set_role
 from chaeksas.qt.theme.tokens import SPACE_1
 from chaeksas.studio.center_enroll import StudioEnrollment, connected_text, expires_soon, waiting_text
-from chaeksas.studio.checks import (
-    center_status,
-    llm_status,
-    worker_place,
-    worker_status,
-)
+from chaeksas.studio.checks import center_status, llm_status
 from chaeksas.studio.connect_dialog import CenterConnectDialog
 from chaeksas.studio.credentials import (
     CENTER_KEY_NAME,
@@ -63,9 +58,9 @@ TITLE = "설정"
 MIN_WIDTH = 720
 
 #: 분류 이름 (STU-10 표 순서).
-APPEARANCE, LLM, CENTER, EXTENSIONS, WORKER = ("외형", "LLM", "Center", "확장별 설정", "Worker")
+APPEARANCE, LLM, CENTER, EXTENSIONS = ("외형", "LLM", "Center", "확장별 설정")
 #: 「서비스 앱」 분류는 없다 — 서비스 앱 키가 없어졌다 (ADR-0102). 시험 실행은 Studio 키로 Center에 올린다.
-CATEGORIES = (APPEARANCE, LLM, CENTER, EXTENSIONS, WORKER)
+CATEGORIES = (APPEARANCE, LLM, CENTER, EXTENSIONS)
 
 #: 「외형」 테마 — 저장하는 값과 보이는 글 (스타일 가이드 §4-2).
 THEMES = ((THEME_SYSTEM, "시스템 따름"), (THEME_LIGHT, "밝게"), (THEME_DARK, "어둡게"))
@@ -138,7 +133,6 @@ class StudioSettingsDialog(QDialog):
             LLM: self._llm_page,
             CENTER: self._center_page,
             EXTENSIONS: self._extensions_page,
-            WORKER: self._worker_page,
         }
         return pages[name]()
 
@@ -306,37 +300,6 @@ class StudioSettingsDialog(QDialog):
         self._enrollment().forget()
         self._connect(send_now=True)
 
-    def _worker_page(self) -> QWidget:
-        page = QWidget()
-        layout = QVBoxLayout(page)
-        intro = QLabel("UI 태스크는 이 PC의 PC 실행기가 관리하는 Worker 프로세스가 처리합니다.")
-        intro.setWordWrap(True)
-        layout.addWidget(intro)
-        self.worker = worker_place(self._runtime_values())
-        form = QFormLayout()
-        self.worker_port = QLabel(str(self.worker.port) if self.worker.port else "—")
-        self.worker_tokens = QLabel(self.worker.token_dir or "—")
-        self.worker_tokens.setWordWrap(True)
-        self.worker_tokens.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.worker_state = QLabel("「연결 테스트」를 누르면 확인합니다.")
-        self.worker_state.setWordWrap(True)
-        form.addRow("포트", self.worker_port)
-        form.addRow("토큰 폴더", self.worker_tokens)
-        form.addRow("상태", self.worker_state)
-        layout.addLayout(form)
-        self.worker_test = QPushButton("연결 테스트")
-        self.worker_test.clicked.connect(self.test_worker)
-        layout.addWidget(self.worker_test, 0, Qt.AlignmentFlag.AlignLeft)
-        layout.addStretch(1)
-        return page
-
-    def _runtime_values(self) -> dict[str, Any]:
-        """시험 실행이 쓰는 자리와 **같은 것** (`Extensions.runtime_settings`)."""
-        out: dict[str, Any] = {}
-        for found in self.extensions.host.local_runtimes():
-            out.update(self.extensions.runtime_settings(found.extension_id))
-        return out
-
     def test_llm(self) -> None:
         typed = self.llm_key.text().strip()
         key = typed or self.credentials.llm_api_key()
@@ -353,9 +316,6 @@ class StudioSettingsDialog(QDialog):
         if refused:
             said = "키가 거부되었습니다 — 「다시 요청」으로 새로 승인받으세요"
         self._show_center(said, refused=refused)
-
-    def test_worker(self) -> None:
-        self.worker_state.setText(worker_status(self.worker, client=self.client))
 
     def extension_values(self) -> dict[str, dict[str, Any]]:
         """「확장별 설정」에서 비밀이 **아닌** 칸만 — 비밀은 `save()`가 비밀 저장소로 보낸다.

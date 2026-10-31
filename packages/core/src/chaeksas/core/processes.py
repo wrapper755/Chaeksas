@@ -1,6 +1,6 @@
 """자식 프로세스 관리 — **공통 헬퍼 한 곳** (CLAUDE.md §5, ADR-0023).
 
-PC 실행기가 Worker 프로세스와 실행기를 띄우고 감시·재시작·강제 종료한다. 그 OS 차이를 여기서만 다룬다.
+PC 실행기가 실행 프로세스를 띄우고 감시·재시작·강제 종료한다. 그 OS 차이를 여기서만 다룬다.
 
 | | Windows (주 환경) | Linux·macOS |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ HEALTHY_AFTER_S = 60.0
 #:
 #: Windows에서 자식의 출력을 파일로 돌리면 그 파일의 인코딩이 **시스템 코드페이지**(cp949·cp1252)가
 #: 되어, 한글을 찍는 자식이 `UnicodeEncodeError`로 죽는다 (CI의 Windows가 잡아 줬다). 우리 자식
-#: (Worker·실행기)은 한글로 말하므로 UTF-8을 물려준다. 파이썬이 아닌 자식은 이 값을 무시한다.
+#: (실행 프로세스)은 한글로 말하므로 UTF-8을 물려준다. 파이썬이 아닌 자식은 이 값을 무시한다.
 UTF8_ENV = {"PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
 
 
@@ -293,7 +293,7 @@ class ChildProcess:
 class Supervisor:
     """자식 하나를 감시하고 **죽으면 다시 띄운다** (ADR-0023).
 
-    상태는 C4 `WorkerState.state`와 같은 낱말을 쓴다 — 하트비트에 그대로 실린다.
+    상태 낱말: `running`·`restarting`·`stopped`·`off`.
 
     - `off` — 필요할 때 시작하기로 해 두고 아직 안 띄웠다
     - `running` / `restarting` / `stopped`(연속 실패가 한도를 넘어 그만둠)

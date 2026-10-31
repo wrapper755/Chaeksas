@@ -210,18 +210,6 @@
           "title": "Status",
           "type": "string"
         },
-        "ui_tasks": {
-          "anyOf": [
-            {
-              "type": "integer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Ui Tasks"
-        },
         "version": {
           "anyOf": [
             {

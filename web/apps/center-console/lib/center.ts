@@ -190,13 +190,6 @@ export const center = {
 
   serviceApp: (appId: string) =>
     call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
-  /** CON-03 「셀렉터 등록」 (C5 `PUT /bot-uis/{id}/utility`) — 이 PC가 셀렉터 등록 작업을 올려도 되나 (C15 §올리기). */
-  setSelectorRegistration: (botUiId: string, on: boolean) =>
-    call<unknown>(`/api/v1/bot-uis/${encodeURIComponent(botUiId)}/utility`, {
-      method: "PUT",
-      body: JSON.stringify({ selector_registration: on }),
-    }),
-
   /** 들인 일꾼 (C15, CON-07 「일꾼」). */
   consumers: () => call<ConsumerInfo[]>("/api/v1/consumers"),
   /** 토픽마다 일꾼 수·마지막으로 가져간 때·기다리는 일감 (C15, CON-07 「토픽」). */

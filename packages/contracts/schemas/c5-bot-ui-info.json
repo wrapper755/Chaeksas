@@ -385,18 +385,6 @@
         "core": {
           "title": "Core",
           "type": "string"
-        },
-        "worker": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Worker"
         }
       },
       "required": [
@@ -404,62 +392,6 @@
         "core"
       ],
       "title": "Versions",
-      "type": "object"
-    },
-    "WorkerState": {
-      "additionalProperties": true,
-      "description": "Worker 프로세스 상태. `off`는 \"필요할 때 시작, 아직 안 띄움\".",
-      "properties": {
-        "reserved_for": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Reserved For"
-        },
-        "restarts": {
-          "default": 0,
-          "title": "Restarts",
-          "type": "integer"
-        },
-        "session": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Session"
-        },
-        "state": {
-          "title": "State",
-          "type": "string"
-        },
-        "version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Version"
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "title": "WorkerState",
       "type": "object"
     }
   },
@@ -574,11 +506,6 @@
       ],
       "default": null
     },
-    "selector_registration": {
-      "default": false,
-      "title": "Selector Registration",
-      "type": "boolean"
-    },
     "status": {
       "anyOf": [
         {
@@ -593,17 +520,6 @@
     },
     "versions": {
       "$ref": "#/$defs/Versions"
-    },
-    "worker": {
-      "anyOf": [
-        {
-          "$ref": "#/$defs/WorkerState"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null
     }
   },
   "required": [
