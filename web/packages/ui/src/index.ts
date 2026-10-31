@@ -15,4 +15,5 @@ export { ConfirmDialog, Dialog, type ConfirmDialogProps, type DialogProps } from
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState";
 export { ErrorBanner, type ErrorBannerProps } from "./components/ErrorBanner";
 export { STATUS_MAP, STATUS_TOKENS, statusToken, type StatusGroup, type StatusToken } from "./status-map";
+export { BpmMark } from "./bpm-mark";
 export { cn } from "./cn";

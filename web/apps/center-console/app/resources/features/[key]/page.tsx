@@ -41,11 +41,6 @@ export default async function FeaturePage({
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/resources">
-      <p className="mb-2 text-body-sm">
-        <Link className="underline" href="/resources">
-          리소스
-        </Link>
-      </p>
       {failure ? <ErrorBanner message={failure} /> : null}
       {asked.error ? <ErrorBanner message={asked.error} /> : null}
 

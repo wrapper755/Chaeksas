@@ -3,21 +3,29 @@
 from typing import Final
 
 LIGHT: Final[dict[str, str]] = {
-    "bg.canvas": "#F6F7F9",
+    "bg.canvas": "#F3F4F7",
     "bg.surface": "#FFFFFF",
-    "bg.subtle": "#EEF0F3",
-    "bg.inverse": "#1A1D23",
-    "border.default": "#DDE1E6",
-    "border.strong": "#B9C0CA",
-    "text.primary": "#1A1D23",
-    "text.secondary": "#4A5361",
-    "text.muted": "#5F6875",
+    "bg.subtle": "#E8E8E8",
+    "bg.inverse": "#0A0A0A",
+    "border.default": "#D5D5D5",
+    "border.strong": "#AEAEAE",
+    "text.primary": "#0A0A0A",
+    "text.secondary": "#45484D",
+    "text.muted": "#656565",
     "text.inverse": "#FFFFFF",
-    "primary": "#2552C7",
-    "primary.hover": "#1D44A8",
-    "primary.subtle": "#E8EEFC",
+    "primary": "#5152C1",
+    "primary.hover": "#423FAD",
+    "primary.subtle": "#E6EAFF",
     "primary.fg": "#FFFFFF",
-    "focus": "#2552C7",
+    "focus": "#757CD3",
+    "chrome.bg": "#0F1830",
+    "chrome.fg": "#F4F5F9",
+    "chrome.muted": "#AAB0C5",
+    "chrome.hover": "#26335C",
+    "chrome.border": "#3C4B8B",
+    "chrome.side": "#26325F",
+    "chrome.side.hover": "#313E73",
+    "chrome.edge": "#7E7FB3",
     "status.neutral.fg": "#4A5361",
     "status.neutral.bg": "#EEF0F3",
     "status.neutral.solid": "#7D8693",
@@ -43,21 +51,29 @@ LIGHT: Final[dict[str, str]] = {
 }
 
 DARK: Final[dict[str, str]] = {
-    "bg.canvas": "#0F1115",
-    "bg.surface": "#171A20",
-    "bg.subtle": "#20242C",
-    "bg.inverse": "#E8EAEE",
-    "border.default": "#2C313A",
-    "border.strong": "#3D444F",
-    "text.primary": "#E8EAEE",
-    "text.secondary": "#B4BBC6",
-    "text.muted": "#939CA9",
+    "bg.canvas": "#090A0C",
+    "bg.surface": "#171717",
+    "bg.subtle": "#262626",
+    "bg.inverse": "#FAFAFA",
+    "border.default": "#3C3C3C",
+    "border.strong": "#585858",
+    "text.primary": "#FAFAFA",
+    "text.secondary": "#C4C4C4",
+    "text.muted": "#A1A1A1",
     "text.inverse": "#0F1115",
-    "primary": "#7AA2FF",
-    "primary.hover": "#9AB8FF",
-    "primary.subtle": "#1B2A4D",
-    "primary.fg": "#0F1115",
-    "focus": "#7AA2FF",
+    "primary": "#8B94F4",
+    "primary.hover": "#9FA9FC",
+    "primary.subtle": "#222546",
+    "primary.fg": "#0C0E1C",
+    "focus": "#7078C7",
+    "chrome.bg": "#0A1124",
+    "chrome.fg": "#F4F5F9",
+    "chrome.muted": "#AAB0C5",
+    "chrome.hover": "#1C2647",
+    "chrome.border": "#2F3C6C",
+    "chrome.side": "#1E2850",
+    "chrome.side.hover": "#283463",
+    "chrome.edge": "#6A6CA3",
     "status.neutral.fg": "#B4BBC6",
     "status.neutral.bg": "#232831",
     "status.neutral.solid": "#8A93A1",
@@ -83,21 +99,29 @@ DARK: Final[dict[str, str]] = {
 }
 
 # 색 상수는 **밝게** 값이다. 테마를 따라야 하면 colors()를 쓴다.
-BG_CANVAS: Final = "#F6F7F9"
+BG_CANVAS: Final = "#F3F4F7"
 BG_SURFACE: Final = "#FFFFFF"
-BG_SUBTLE: Final = "#EEF0F3"
-BG_INVERSE: Final = "#1A1D23"
-BORDER_DEFAULT: Final = "#DDE1E6"
-BORDER_STRONG: Final = "#B9C0CA"
-TEXT_PRIMARY: Final = "#1A1D23"
-TEXT_SECONDARY: Final = "#4A5361"
-TEXT_MUTED: Final = "#5F6875"
+BG_SUBTLE: Final = "#E8E8E8"
+BG_INVERSE: Final = "#0A0A0A"
+BORDER_DEFAULT: Final = "#D5D5D5"
+BORDER_STRONG: Final = "#AEAEAE"
+TEXT_PRIMARY: Final = "#0A0A0A"
+TEXT_SECONDARY: Final = "#45484D"
+TEXT_MUTED: Final = "#656565"
 TEXT_INVERSE: Final = "#FFFFFF"
-PRIMARY: Final = "#2552C7"
-PRIMARY_HOVER: Final = "#1D44A8"
-PRIMARY_SUBTLE: Final = "#E8EEFC"
+PRIMARY: Final = "#5152C1"
+PRIMARY_HOVER: Final = "#423FAD"
+PRIMARY_SUBTLE: Final = "#E6EAFF"
 PRIMARY_FG: Final = "#FFFFFF"
-FOCUS: Final = "#2552C7"
+FOCUS: Final = "#757CD3"
+CHROME_BG: Final = "#0F1830"
+CHROME_FG: Final = "#F4F5F9"
+CHROME_MUTED: Final = "#AAB0C5"
+CHROME_HOVER: Final = "#26335C"
+CHROME_BORDER: Final = "#3C4B8B"
+CHROME_SIDE: Final = "#26325F"
+CHROME_SIDE_HOVER: Final = "#313E73"
+CHROME_EDGE: Final = "#7E7FB3"
 STATUS_NEUTRAL_FG: Final = "#4A5361"
 STATUS_NEUTRAL_BG: Final = "#EEF0F3"
 STATUS_NEUTRAL_SOLID: Final = "#7D8693"
@@ -143,11 +167,11 @@ SIZE_CONTROL_MD: Final = 32
 SIZE_CONTROL_LG: Final = 40
 SIZE_ROW_COMPACT: Final = 32
 SIZE_ROW_DEFAULT: Final = 36
-SIZE_NAV_WIDTH: Final = 232
+SIZE_NAV_WIDTH: Final = 224
 SIZE_NAV_COLLAPSED: Final = 64
-SIZE_TOPBAR_HEIGHT: Final = 56
+SIZE_TOPBAR_HEIGHT: Final = 48
 
-FONT_FAMILY_SANS: Final = "\"Pretendard Variable\", Pretendard, \"Malgun Gothic\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", system-ui, sans-serif"  # noqa: E501
+FONT_FAMILY_SANS: Final = "Geist, \"Pretendard Variable\", Pretendard, \"Malgun Gothic\", \"Apple SD Gothic Neo\", \"Noto Sans KR\", system-ui, sans-serif"  # noqa: E501
 FONT_FAMILY_MONO: Final = "\"JetBrains Mono\", D2Coding, Consolas, \"Noto Sans Mono\", monospace"
 FONT_SIZE_CAPTION: Final = 12
 FONT_SIZE_BODY_SM: Final = 13

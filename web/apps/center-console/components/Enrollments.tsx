@@ -126,7 +126,7 @@ export function Enrollments({
   const row = asking?.row;
   return (
     <section id={id} className="mb-6 flex flex-col gap-2">
-      <h2 className="text-h2 font-bold">{title}</h2>
+      <h2 className="text-h2 font-semibold">{title}</h2>
       <p className="text-body-sm text-text-secondary">승인을 기다리는 요청 {rows.length}건</p>
       {error ? <ErrorBanner message={error} /> : null}
       <DataTable columns={columns} rows={rows} rowKey={(one) => one.enrollment_id} caption={title} />

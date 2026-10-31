@@ -119,20 +119,17 @@ export default async function ResourcesPage({
 
   const tabClass = (on: boolean) =>
     on
-      ? "border border-border-strong bg-bg-subtle px-3 py-1 text-body"
-      : "border border-border-default px-3 py-1 text-body text-text-secondary";
+      ? "rounded-md border border-transparent bg-primary-subtle px-3 py-1 text-body font-semibold text-primary"
+      : "rounded-md border border-border-default bg-bg-surface px-3 py-1 text-body text-text-secondary hover:bg-bg-subtle";
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/resources">
-      <header className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-h1 font-bold">리소스</h1>
-          <p className="text-body text-text-secondary">
-            BPM 프로세스가 실행에 쓰는 바깥 기능입니다. 쓸 수 없으면 할 일이 함께 보입니다.
-            {fetchedAt ? ` · 확인 ${time(fetchedAt)}` : ""}
-          </p>
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-4">
+        <h1 className="text-h1 font-bold">리소스</h1>
+        <div className="flex items-center gap-3">
+          {fetchedAt ? <span className="text-body-sm text-text-muted">확인 {time(fetchedAt)}</span> : null}
+          {found.mode === "admin" ? <RefreshResources /> : null}
         </div>
-        {found.mode === "admin" ? <RefreshResources /> : null}
       </header>
 
       <nav className="mb-4 flex flex-wrap gap-2" aria-label="리소스 종류">
@@ -237,7 +234,7 @@ function Features({ rows, admin }: { rows: FeatureRow[]; admin: boolean }) {
       )}
 
       {admin ? (
-        <section className="flex flex-col gap-2">
+        <section className="flex flex-col gap-2 rounded-lg border border-border-default bg-bg-surface p-5 shadow-sm">
           <h2 className="text-h2 font-semibold">기능 추가 (외부)</h2>
           <p className="text-body-sm text-text-muted">
             외부 확장 정의 파일을 올리세요. 검사를 지나면 Center가 서명해 등록합니다.

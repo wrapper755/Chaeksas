@@ -12,7 +12,7 @@ import { lastReportNote } from "@/lib/labels";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
 /**
- * CON-03 PC 현황 — PC 실행기(목록)와 Studio. 표가 둘이고 각각 위에 그 프로그램의 「승인 대기」가 있다.
+ * CON-03 데스크톱 앱 — PC 실행기(목록)와 Studio. 표가 둘이고 각각 위에 그 프로그램의 「승인 대기」가 있다.
  *
  * PC 실행기 값은 **PC 실행기가 하트비트로 보고한 그대로**다 (C4·C5 `BotUiInfo`). Center가 더하는 것은
  * 온라인 판정과 키 정보뿐이다. 상세(대기열·배포·확장·최근 배치 결정)는 이름을 누르면 열린다.
@@ -129,7 +129,7 @@ export default async function BotUisPage() {
     { key: "runtimes", header: "런타임", width: "22ch", cell: runtimeLabel },
     {
       key: "key",
-      header: "Center API 키",
+      header: "API 키",
       width: "26ch",
       mono: true,
       cell: (row) =>
@@ -158,14 +158,9 @@ export default async function BotUisPage() {
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/bot-uis">
-      <header className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-h1 font-bold">PC 현황</h1>
-          <p className="text-body text-text-secondary">
-            현장 PC에서 Center에 붙는 PC 실행기(BPM 프로세스를 돌린다)와 Studio(BPM 프로세스를 만든다)입니다.
-          </p>
-          <CenterAddress url={CENTER_PUBLIC_URL} who="PC 실행기·Studio" />
-        </div>
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-4">
+        <h1 className="text-h1 font-bold">데스크톱 앱</h1>
+        <CenterAddress url={CENTER_PUBLIC_URL} who="PC 실행기·Studio" />
       </header>
 
       {failure ? (
@@ -204,7 +199,7 @@ export default async function BotUisPage() {
               <DataTable columns={studioColumns} rows={studios} rowKey={(row) => row.key_id} caption="Studio 목록" />
             )}
             <p className="text-caption text-text-muted">
-              폐기·삭제는 「Center API 키」의 「승인으로 들인 키」에서 합니다.
+              폐기·삭제는 「API 키」의 「승인으로 들인 키」에서 합니다.
             </p>
           </section>
         </div>

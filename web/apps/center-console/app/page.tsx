@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 
-/** 첫 화면. 로그인했으면 PC 현황(CON-03)으로 보낸다 — M2에서 도는 화면이다. */
+/** 첫 화면. 로그인했으면 데스크톱 앱(CON-03)으로 보낸다 — M2에서 도는 화면이다. */
 export default function Home() {
   redirect("/bot-uis");
 }

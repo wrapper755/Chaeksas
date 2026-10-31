@@ -12,7 +12,7 @@ import { fullTime, runtimeLabel, running, statusLabel, time } from "../page";
 import { sourceLabel } from "@/lib/labels";
 
 /**
- * CON-03 PC 현황 — PC 실행기 상세 — 대기열·배포·확장·최근 배치 결정.
+ * CON-03 데스크톱 앱 — PC 실행기 상세 — 대기열·배포·확장·최근 배치 결정.
  *
  * 대기열·확장은 **PC 실행기가 하트비트로 보고한 그대로**이고 보기 전용이다 (Center 작업을
  * 취소하는 곳은 CON-05다). 배포는 Center가 가진 것, 「준비」는 PC 실행기가 보고한 것이라
@@ -177,12 +177,6 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
     <Shell mode={found.mode} actor={found.actor} current="/bot-uis">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">{info?.name ?? wanted}</h1>
-        <p className="text-body text-text-secondary">
-          <Link className="underline" href="/bot-uis">
-            PC 현황
-          </Link>
-          으로 돌아가기
-        </p>
       </header>
 
       {failure ? <ErrorBanner message={failure} /> : null}
@@ -231,7 +225,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
               <dd>{time(info.last_seen_at)}</dd>
               <dt className="text-text-muted">처음 등록</dt>
               <dd>{time(info.registered_at)}</dd>
-              <dt className="text-text-muted">Center API 키</dt>
+              <dt className="text-text-muted">API 키</dt>
               <dd className="font-mono">
                 {info.key ? `${info.key.prefix}…` : "—"}
                 {info.key?.expires_at ? ` (${fullTime(info.key.expires_at)}까지)` : " (무기한)"}

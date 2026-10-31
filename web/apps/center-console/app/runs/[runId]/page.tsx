@@ -11,7 +11,7 @@ import { Shell } from "@/components/Shell";
 import { LABEL, seconds, time, where } from "../page";
 
 /**
- * CON-01 실행 로그 (상세).
+ * CON-01 로그 (상세).
  *
  * **이벤트가 원본이다** — 요약·타임라인·단계 표는 모두 같은 줄에서 만든다. 값은 애초에 오지
  * 않는다 (원칙 6 — 보내는 쪽이 `sanitize()`로 걸렀다).
@@ -310,15 +310,9 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/runs">
-      <header className="mb-4 flex items-end justify-between gap-4">
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-h1 font-bold font-mono">{decodeURIComponent(runId)}</h1>
-          <p className="text-body text-text-secondary">
-            <Link className="underline" href="/runs">
-              실행 로그
-            </Link>
-            로 돌아가기
-          </p>
         </div>
       </header>
 

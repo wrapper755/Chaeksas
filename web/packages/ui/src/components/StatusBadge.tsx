@@ -20,7 +20,7 @@ export function StatusBadge({ group, label, className }: StatusBadgeProps) {
   const token: StatusToken = statusToken(group, label) ?? "neutral";
   return (
     <span
-      className={cn("inline-flex items-center gap-2 px-2 py-1 text-caption whitespace-nowrap", className)}
+      className={cn("inline-flex items-center gap-2 rounded-full px-2 py-1 text-caption whitespace-nowrap", className)}
       style={{
         color: `var(--status-${token}-fg)`,
         backgroundColor: `var(--status-${token}-bg)`,

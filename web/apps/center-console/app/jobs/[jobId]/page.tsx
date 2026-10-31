@@ -65,12 +65,6 @@ export default async function JobPage({
     <Shell mode={found.mode} actor={found.actor} current="/jobs">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">작업 {job?.job_id ?? ""}</h1>
-        <p className="text-body text-text-secondary">
-          <Link className="underline" href="/jobs">
-            작업 지시
-          </Link>
-          로 돌아가기
-        </p>
       </header>
 
       {failure ? <ErrorBanner message={failure} /> : null}
@@ -125,7 +119,7 @@ export default async function JobPage({
             </div>
           ) : null}
 
-          <details className="border border-border-default p-3">
+          <details className="rounded-lg border border-border-default bg-bg-surface p-3">
             <summary className="cursor-pointer text-body font-medium">입력 (업무 데이터)</summary>
             {Object.keys(job.inputs ?? {}).length === 0 ? (
               <p className="mt-2 text-body-sm text-text-muted">입력이 없습니다.</p>
@@ -142,7 +136,7 @@ export default async function JobPage({
             )}
           </details>
 
-          <details className="border border-border-default p-3">
+          <details className="rounded-lg border border-border-default bg-bg-surface p-3">
             <summary className="cursor-pointer text-body font-medium">전체 JSON (입력 제외)</summary>
             <pre className="mt-2 overflow-x-auto text-body-sm">{JSON.stringify(withoutInputs, null, 2)}</pre>
           </details>

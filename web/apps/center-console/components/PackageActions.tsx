@@ -66,7 +66,7 @@ export function PackageActions({ packageId, version, status }: { packageId: stri
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap gap-2">
+      <div className="flex gap-2 whitespace-nowrap">
         {asks.map((one) => (
           <Button
             key={one}

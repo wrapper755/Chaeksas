@@ -17,7 +17,7 @@ export function EmptyState({ title, hint, action, className }: EmptyStateProps) 
   return (
     <div
       className={cn(
-        "flex flex-col items-center gap-2 border border-border-default bg-bg-surface px-6 py-12 text-center",
+        "flex flex-col items-center gap-2 border border-border-default bg-bg-surface px-6 py-12 text-center shadow-sm",
         className,
       )}
       style={{ borderRadius: "var(--radius-lg)" }}

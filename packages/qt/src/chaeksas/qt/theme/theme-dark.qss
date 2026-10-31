@@ -1,15 +1,15 @@
 /* 생성 파일: design/tokens.json에서 만든다. 직접 고치지 말고 원본을 고친 뒤 scripts/gen_tokens.py (dark) */
 
 QWidget {
-  background-color: #0F1115;
-  color: #E8EAEE;
-  font-family: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  background-color: #090A0C;
+  color: #FAFAFA;
+  font-family: Geist, "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
   font-size: 14px;
 }
 
 QFrame#Surface, QGroupBox, QDialog {
-  background-color: #171A20;
-  border: 1px solid #2C313A;
+  background-color: #171717;
+  border: 1px solid #3C3C3C;
   border-radius: 8px;
 }
 
@@ -28,39 +28,39 @@ QGroupBox::title {
   left: 12px;
   top: 12px;
   padding: 0 0 0 8px;
-  border-left: 3px solid #7AA2FF;
-  color: #E8EAEE;
+  border-left: 3px solid #8B94F4;
+  color: #FAFAFA;
 }
 
 /* QWidget 배경이 글자 위젯에도 칠해져 흰 상자 안에 회색 칸이 생긴다 — 글자는 놓인 곳의 배경을 따른다. */
 QLabel, QCheckBox, QRadioButton { background-color: transparent; }
 
-QLabel#Secondary { color: #B4BBC6; }
-QLabel#Muted { color: #939CA9; }
+QLabel#Secondary { color: #C4C4C4; }
+QLabel#Muted { color: #A1A1A1; }
 
 /* 글자의 뜻은 `role` 속성으로 준다 (스타일 가이드 §4-2) — 「빨간 글자로 이유」(U3)가 여기서 빨갛다. */
 QLabel[role="error"] { color: #FF9A8F; }
 QLabel[role="warning"] { color: #F5B65C; }
-QLabel[role="muted"] { color: #939CA9; }
+QLabel[role="muted"] { color: #A1A1A1; }
 QLabel[role="h2"] { font-size: 20px; font-weight: 600; }
 
 QPushButton {
-  background-color: #7AA2FF;
-  color: #0F1115;
+  background-color: #8B94F4;
+  color: #0C0E1C;
   border: none;
   border-radius: 6px;
   min-height: 32px;
   padding: 0 12px;
   font-weight: 500;
 }
-QPushButton:hover { background-color: #9AB8FF; }
-QPushButton:focus { border: 2px solid #7AA2FF; }
-QPushButton:disabled { background-color: #20242C; color: #939CA9; }
+QPushButton:hover { background-color: #9FA9FC; }
+QPushButton:focus { border: 2px solid #7078C7; }
+QPushButton:disabled { background-color: #262626; color: #A1A1A1; }
 
 QPushButton#Secondary {
-  background-color: #171A20;
-  color: #E8EAEE;
-  border: 1px solid #3D444F;
+  background-color: #171717;
+  color: #FAFAFA;
+  border: 1px solid #585858;
 }
 
 QPushButton#Danger {
@@ -69,21 +69,21 @@ QPushButton#Danger {
 }
 
 QToolButton[running="true"] {
-  background-color: #7AA2FF;
-  color: #0F1115;
+  background-color: #8B94F4;
+  color: #0C0E1C;
   border-radius: 6px;
 }
 
 QLineEdit, QComboBox, QPlainTextEdit, QTextEdit, QSpinBox {
-  background-color: #171A20;
-  color: #E8EAEE;
-  border: 1px solid #3D444F;
+  background-color: #171717;
+  color: #FAFAFA;
+  border: 1px solid #585858;
   border-radius: 6px;
   min-height: 32px;
   padding: 0 8px;
 }
 QLineEdit:focus, QComboBox:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus {
-  border: 2px solid #7AA2FF;
+  border: 2px solid #7078C7;
 }
 
 /* QSpinBox에 테두리·둥근 모서리를 입히면 기본 ▲▼ 단추가 그 테두리 위에 그대로 겹쳐 잘린다 (이슈 #3, 150%).
@@ -93,7 +93,7 @@ QSpinBox::up-button, QSpinBox::down-button {
   subcontrol-origin: border;
   width: 20px;
   border: none;
-  border-left: 1px solid #2C313A;
+  border-left: 1px solid #3C3C3C;
   background-color: transparent;
 }
 QSpinBox::up-button {
@@ -106,7 +106,7 @@ QSpinBox::down-button {
   margin: 0 1px 1px 0;
   border-bottom-right-radius: 6px;
 }
-QSpinBox::up-button:hover, QSpinBox::down-button:hover { background-color: #20242C; }
+QSpinBox::up-button:hover, QSpinBox::down-button:hover { background-color: #262626; }
 /* 단추를 꾸미면 Qt가 기본 화살표를 그리지 않는다 — 생성한 SVG를 쓴다. `@THEME_DIR@`는 테마를 읽을 때
    그 패키지 폴더의 실제 경로로 바뀐다 (chaeksas.qt.theme.qss). */
 QSpinBox::up-arrow {
@@ -125,44 +125,44 @@ QSpinBox::down-arrow {
 QCheckBox::indicator, QRadioButton::indicator {
   width: 16px;
   height: 16px;
-  border: 1px solid #3D444F;
-  background-color: #171A20;
+  border: 1px solid #585858;
+  background-color: #171717;
 }
 QCheckBox::indicator { border-radius: 4px; }
 QRadioButton::indicator { border-radius: 8px; }  /* 지름의 절반 = 동그라미 */
-QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: #7AA2FF; }
+QCheckBox::indicator:hover, QRadioButton::indicator:hover { border-color: #8B94F4; }
 QCheckBox::indicator:checked {
-  background-color: #7AA2FF;
-  border-color: #7AA2FF;
+  background-color: #8B94F4;
+  border-color: #8B94F4;
   image: url(@THEME_DIR@/check-dark.svg);
 }
 QRadioButton::indicator:checked {
-  background-color: #171A20;
-  border-color: #7AA2FF;
+  background-color: #171717;
+  border-color: #8B94F4;
   image: url(@THEME_DIR@/dot-dark.svg);
 }
 QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
-  background-color: #20242C;
-  border-color: #2C313A;
+  background-color: #262626;
+  border-color: #3C3C3C;
 }
 
 QHeaderView::section {
-  background-color: #20242C;
-  color: #B4BBC6;
+  background-color: #262626;
+  color: #C4C4C4;
   border: none;
-  border-bottom: 1px solid #2C313A;
+  border-bottom: 1px solid #3C3C3C;
   height: 32px;
   padding: 0 8px;
 }
 QTableView, QTreeView, QListView {
-  background-color: #171A20;
-  alternate-background-color: #0F1115;
-  border: 1px solid #2C313A;
+  background-color: #171717;
+  alternate-background-color: #090A0C;
+  border: 1px solid #3C3C3C;
   border-radius: 8px;
 }
 QTableView::item:selected, QTreeView::item:selected, QListView::item:selected {
-  background-color: #1B2A4D;
-  color: #E8EAEE;
+  background-color: #222546;
+  color: #FAFAFA;
 }
 
 /* 작업 영역(STU-01) — 영역마다 카드(흰 바탕 + 테두리)이고 사이는 바탕색 틈이 가른다. 선을 긋지 않는다
@@ -171,8 +171,8 @@ QSplitter::handle, QMainWindow::separator { background-color: transparent; }
 QSplitter::handle:horizontal, QMainWindow::separator:horizontal { width: 8px; }
 QSplitter::handle:vertical, QMainWindow::separator:vertical { height: 8px; }
 QFrame#Pane, QTabWidget#PaneTabs::pane {
-  background-color: #171A20;
-  border: 1px solid #2C313A;
+  background-color: #171717;
+  border: 1px solid #3C3C3C;
   border-radius: 8px;
 }
 QTabWidget#PaneTabs::pane { top: -1px; border-top-left-radius: 0; }
@@ -184,29 +184,29 @@ QTabWidget#PaneTabs > QStackedWidget > QWidget > QAbstractScrollArea {
 }
 
 /* 무리 아래 선 (STU-01 「변수」 탭) — 작은 탭과 그 아래 표를 가른다. */
-QFrame#Rule { background-color: #2C313A; border: none; max-height: 1px; min-height: 1px; }
+QFrame#Rule { background-color: #3C3C3C; border: none; max-height: 1px; min-height: 1px; }
 
 /* 펼친 메뉴(메뉴 막대·문맥 메뉴) — 테두리가 없으면 흰 바탕 위에서 메뉴가 어디까지인지 안 보인다. */
 QMenu {
-  background-color: #171A20;
-  color: #E8EAEE;
-  border: 1px solid #3D444F;
+  background-color: #171717;
+  color: #FAFAFA;
+  border: 1px solid #585858;
   padding: 4px 0;
 }
 QMenu::item { padding: 4px 24px 4px 12px; }
-QMenu::item:selected { background-color: #7AA2FF; color: #0F1115; }
-QMenu::item:disabled { color: #939CA9; }
-QMenu::separator { height: 1px; background-color: #2C313A; margin: 4px 8px; }
+QMenu::item:selected { background-color: #8B94F4; color: #0C0E1C; }
+QMenu::item:disabled { color: #A1A1A1; }
+QMenu::separator { height: 1px; background-color: #3C3C3C; margin: 4px 8px; }
 
 QToolTip {
-  background-color: #E8EAEE;
+  background-color: #FAFAFA;
   color: #0F1115;
   border: none;
   padding: 4px 8px;
 }
 
 QProgressBar {
-  background-color: #20242C;
+  background-color: #262626;
   border: none;
   border-radius: 9999px;
   height: 8px;

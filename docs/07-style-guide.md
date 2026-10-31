@@ -31,9 +31,10 @@
 | `text.primary` / `text.secondary` / `text.muted` | 본문 / 표 머리·보조 설명 / 설명 줄·빈 상태 (모두 바탕 셋 위에서 4.5:1 이상 확인됨) |
 | `primary` / `primary.hover` / `primary.subtle` / `primary.fg` | 주 단추·링크·선택된 메뉴 / 위에 올림 / 선택 바탕 / 주 단추 글자 |
 | `focus` | 포커스 테두리 (2px, 2px 띄움) |
+| `chrome.bg` / `chrome.fg` / `chrome.muted` / `chrome.hover` / `chrome.border` / `chrome.side` / `chrome.side.hover` / `chrome.edge` | 웹 콘솔의 **남색 틀**(위 막대·왼쪽 탐색, §4-1) — 위 막대 바탕(가장 짙다) / 글자 / 보조 글자 / 위 막대에서 올림 / 구분선 / 왼쪽 탐색 바탕(위 막대보다 분명히 밝다 — 비슷하면 둘의 경계가 보이지 않는다) / 탐색에서 올림 / 위 막대 아래 띠(라벤더 2px — 위 막대와 탐색을 가른다). 남색 단계는 로그인 배경 그림(ADR-0120)에서 골랐다(`.chrome-side`가 탐색에 바꿔 끼운다). 틀 안에서는 `.chrome`이 `bg.surface`·`text.*`·`border.*`를 이것으로 바꿔 끼워 구성요소를 그대로 쓴다 (글자는 바탕·`chrome.hover` 위 둘 다 4.5:1 이상 확인됨) |
 | `danger.fg` | 위험 단추 글자 (`status.failed.solid` 바탕 위) |
 
-브랜드 색은 `primary` 하나다. 그 밖의 색은 모두 **상태 색**이다.
+브랜드 색은 `primary` 하나다(남보라 — NowView와 같은 값, [ADR-0119](decisions/0119-match-nowview-style.md)). 남색 틀(`chrome.*`)은 틀에만 쓴다. 그 밖의 색은 모두 **상태 색**이다.
 
 ### 2-2. 색 — 상태 7가지
 
@@ -55,7 +56,7 @@
 
 | 토큰 | 값 | 쓰임 |
 | --- | --- | --- |
-| `font.family.sans` | **Pretendard** (OFL, 앱에 포함) → 맑은 고딕 → 시스템 | 모든 글자 |
+| `font.family.sans` | **Geist**(라틴) → **Pretendard**(한글) (둘 다 OFL, 앱에 포함) → 맑은 고딕 → 시스템 | 모든 글자. 웹은 영문·숫자가 Geist, 한글이 Pretendard다(NowView와 같은 모양). 데스크톱은 Geist를 등록하지 않아 Pretendard로 그린다 |
 | `font.family.mono` | JetBrains Mono → D2Coding → Consolas | id, 키 앞자리, 로그, JSON, 코드 |
 | `size.display` 30 / `h1` 24 / `h2` 20 / `h3` 18 | 제목 (굵기 600~700, 줄 높이 1.3) | 페이지 제목 = h1, 섹션 = h2·h3 |
 | `size.body-lg` 16 | | 대화상자 본문 |
@@ -65,7 +66,7 @@
 
 - 숫자 열은 `font-variant-numeric: tabular-nums` + 오른쪽 정렬.
 - 글꼴 파일은 저장소에 포함한다 (Windows 현장 PC에 Pretendard가 없으므로). **외부 CDN 금지** — 사내망이다.
-  - 웹: `web/packages/ui/src/fonts/`의 가변 woff2 하나를 `@font-face`로 자체 호스팅한다. 패밀리 이름을 토큰의 글꼴 스택에 적힌 이름(`Pretendard Variable`)과 **같게** 선언해, 화면 코드가 토큰만 보면 되게 한다.
+  - 웹: `web/packages/ui/src/fonts/`의 가변 woff2(`GeistVariable-latin` — 라틴 부분 집합, `PretendardVariable`)를 `@font-face`로 자체 호스팅한다. 패밀리 이름을 토큰의 글꼴 스택에 적힌 이름(`Geist`, `Pretendard Variable`)과 **같게** 선언해, 화면 코드가 토큰만 보면 되게 한다.
   - 데스크톱: `packages/qt/src/chaeksas/qt/fonts/`의 **굵기별 정적 OTF**를 `load_fonts()`가 등록한다 (Qt는 가변 글꼴의 굵기 축을 고르게 다루지 못한다).
   - 라이선스 파일(SIL OFL 1.1)을 글꼴과 함께 둔다.
 
@@ -75,10 +76,10 @@
 | --- | --- |
 | 간격 (4px 단위) | `space.1`=4, `2`=8, `3`=12, `4`=16, `5`=20, `6`=24, `8`=32, `10`=40, `12`=48, `16`=64 |
 | 둥글기 | `radius.sm` 4 (배지 안쪽·체크) / `md` 6 (단추·입력칸) / `lg` 8 (패널·카드) / `xl` 12 (대화상자) / `full` (배지·점) |
-| 그림자 | `sm` 카드 / `md` 펼침 메뉴·팝오버 / `lg` 대화상자. 평소 패널은 그림자 없이 선으로 |
+| 그림자 | `sm` 카드(표·빈 상태 — 선 + 옅은 그림자로 연회색 바탕에서 떠 보이게, NowView와 같은 결) / `md` 펼침 메뉴·팝오버 / `lg` 대화상자 |
 | 컨트롤 높이 | `control.sm` 28 / `md` **32**(기본) / `lg` 40 |
 | 표 줄 높이 | `row.default` 36 / `row.compact` 32 (Studio·PC 실행기 표) |
-| 콘솔 틀 | 왼쪽 탐색 `nav.width` 232 (접으면 64), 위 막대 `topbar.height` 56, 본문 여백 24 |
+| 콘솔 틀 | 왼쪽 탐색 `nav.width` 224 (접으면 64), 위 막대 `topbar.height` 48, 본문 여백 24 |
 | 움직임 | `motion.fast` 120ms (올림·포커스), `base` 200ms (펼침·대화상자). 운영체제의 "동작 줄이기"를 따른다 |
 
 ## 3. 구성요소
@@ -101,7 +102,9 @@
 | **Timeline** | CON-01 노드 막대: 상태 `solid` 색, 재생됨은 점선, 이어 돈 지점은 세로 점선 | `RunTimeline` | Studio 캔버스 표시 |
 | **LogView** | mono 13px, 최대 5000줄, 실패 줄은 `failed.fg` | `LogView` | `ChkLogView` |
 | **Section (묶음)** | 한 화면 안의 기능 묶음. 제목은 **카드 안쪽 맨 위**에 `text.primary`·굵게(`weight.bold`)·`size.body-lg`로, 왼쪽에 `primary` 세로 막대(3px)를 둔다. 제목과 내용 사이는 `space.3`, 묶음과 묶음 사이도 `space.3`. 테두리 위에 걸친 회색 제목은 쓰지 않는다 — 내용과 붙어 보이고 묶음이 갈리지 않는다 | — | `QGroupBox` 스타일 |
-| **Tabs / Nav** | 선택된 것은 `primary.subtle` 바탕 + `primary` 글자 + 굵게 | `Tabs`, `SideNav` | `QTabWidget` 스타일 |
+| **Tabs / Nav** | 탭은 둥근 알약(`radius.md`) — 선택된 것은 `primary.subtle` 바탕 + `primary` 글자 + 굵게, 나머지는 흰 바탕 + 선. 웹 콘솔의 왼쪽 탐색(남색 틀)은 고른 줄이 `primary` 바탕 + `primary.fg` 글자다 | `Tabs`, `SideNav` | `QTabWidget` 스타일 |
+
+- **웹 화면에서 손으로 쓴 칸·묶음도 같은 모양이다** — `<select>`·`<input>`·`<textarea>`는 입력칸(Field)처럼 `radius.md` + `border.strong`, `details`·`fieldset` 묶음은 카드처럼 `radius.lg` + `bg.surface`. 상태 배지는 `radius.full`. 섹션 제목(h2)은 굵기 `semibold` 하나다.
 
 ## 4. 배치
 
@@ -109,15 +112,17 @@
 
 ```
 +------------------------------------------------------------------+
-| [N] side nav 232px | [T] top bar 56px: title | env | user | [Refresh]
-|                    +---------------------------------------------+
-|                    | [H] page header: h1 + one-line description   |
-|                    |                         [secondary] [primary]|
-|                    | [F] filter bar (collapsible)                 |
+| [T] top bar 48px (full width, chrome): mark | user | [Refresh]   |
++--------------------+---------------------------------------------+
+| [N] side nav 224px |
+| (chrome)           | [H] header band (white): crumb               |
+|                    |     h1                         [sec] [prim]  |
+|                    | [F] filter card            [Reset] [Narrow]  |
 |                    | [B] body: table → detail below / side panel  |
 +------------------------------------------------------------------+
 ```
 
+- **틀은 NowView와 같다** ([ADR-0119](decisions/0119-match-nowview-style.md)) — 화면 폭 전체의 남색 위 막대(48)와 그 아래 남색 왼쪽 탐색(224)이 고정이고, 본문만 스크롤한다. 탐색은 위 막대보다 밝은 남색이고 위 막대 아래에 라벤더 띠(`chrome.edge`)가 있어 둘이 갈린다. 본문 바탕은 `bg.canvas`(연회색), 카드·표는 `bg.surface`(흰색). 본문 맨 위는 **흰 머리 띠**(`bg.surface`, 아래 `border.default`)에 지금 자리(「상위 메뉴 › 메뉴 줄」, `body` 보조 글자)와 제목 한 줄만 담고(설명 줄은 없다 — 화면 전용 단추·링크는 제목 오른쪽), 필터는 흰 카드(`radius.lg`) 하나에 담는다. 탐색의 고른 줄은 `primary` 바탕에 `primary.fg` 글자다. 탐색의 상위 메뉴는 `body` 굵게, 하위 메뉴는 `body.sm`으로 들여 쓰고 왼쪽에 `chrome.border` 세로선을 둔다.
 - 기준 폭 1280 이상, 최소 1024에서 깨지지 않는다. **결재함(CON-04)은 휴대폰(360px)에서도 답할 수 있어야** 한다 (결재자가 밖에 있을 수 있다). 그 밖의 페이지는 좁은 화면에서 읽기만 되면 된다.
 - 목록 → 고르면 아래에 상세 (프로토타입 습관 유지). 상세가 길면 오른쪽 패널(폭 480).
 - 쓰기 단추는 「관리자」 모드에서만 보인다 (CON-00 쓰기 권한).
@@ -161,6 +166,14 @@
 - 크기 16 (본문 옆), 20 (단추·탐색). 선 굵기 기본(2)을 바꾸지 않는다.
 - 아이콘만 있는 단추는 툴팁·`aria-label` 필수.
 
+### 6-1. BPM 흐름 마크
+
+화면에 제품 이름을 쓰지 않는다 — 「Chaeksas」는 저장소 이름이다 ([ADR-0118](decisions/0118-no-product-name-on-screens.md)). 그 자리(웹 콘솔 탐색 맨 위·로그인 제목 위·브라우저 탭)에는 **BPM 흐름 마크**를 둔다: 시작 이벤트(빈 원) → 태스크(채운 둥근 네모) → 배타 게이트웨이(빈 마름모) → 끝 이벤트(굵은 원), 색은 `primary` 하나.
+
+- 원본은 `design/bpm-mark.svg` 하나(`currentColor`)다. `scripts/gen_tokens.py`가 웹 구성요소 `BpmMark`(`web/packages/ui/src/bpm-mark.tsx`)와 콘솔마다 탭 아이콘 `app/icon.svg`(밝게·어둡게 `primary`)를 짓는다 — **생성물이니 직접 고치지 않는다**.
+- 그림만 있는 자리에는 툴팁·`aria-label`로 이름을 준다(「Center 콘솔」, 서비스 앱 이름). 글 옆에 붙는 자리(로그인 제목)는 장식이라 읽지 않는다.
+- 데스크톱(Studio·PC 실행기·Tool UI) 아이콘은 아직 이것으로 바꾸지 않았다.
+
 ## 7. 구현 규칙 (코드 리뷰 체크리스트)
 
 - [ ] 색·크기·간격 값을 직접 쓰지 않았다 (`#`, `px` 검색). 토큰만.
@@ -174,6 +187,6 @@
 ## 8. 바꾸는 법
 
 1. `design/tokens.json`을 고친다 (새 토큰은 이름 규칙 `<분류>.<이름>[.<변형>]`).
-2. 생성기를 돌린다 (`uv run python scripts/gen_tokens.py`) → `web/packages/ui/src/tokens.css`, `packages/qt/…/theme/{tokens.py,theme-light.qss,theme-dark.qss}`, `design/preview.html`이 바뀐다. **모두 생성물이니 직접 고치지 않는다.**
+2. 생성기를 돌린다 (`uv run python scripts/gen_tokens.py`) → `web/packages/ui/src/tokens.css`, `packages/qt/…/theme/{tokens.py,theme-light.qss,theme-dark.qss}`, `design/preview.html`, BPM 흐름 마크(§6-1)가 바뀐다. **모두 생성물이니 직접 고치지 않는다.**
 3. 명암비 검사가 통과해야 한다 (생성기가 §2의 기준으로 검사하고, 실패하면 **아무것도 쓰지 않고** 멈춘다). `--check`가 CI와 pytest에 들어 있다.
 4. 이 문서의 표를 함께 고친다.

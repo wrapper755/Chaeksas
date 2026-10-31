@@ -1,14 +1,14 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
-import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
-import { CenterAddress } from "@/components/CenterAddress";
+import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { KeyMenu, KeyTools } from "./tools";
 import { STATE_LABEL, TYPE_LABEL, keyFilter, splitKeys } from "@/lib/center-keys";
 
 /**
- * CON-11 Center API 키.
+ * CON-11 API 키.
  *
  * **원문은 발급 직후 한 번만** 보인다 (C7). 목록에는 앞자리 16자만 있다. 일꾼(서비스 앱·어댑터
  * 일꾼, C15)은 여기서 다루지 않는다 — 「리소스」(CON-07)의 「일꾼 승인 대기」다.
@@ -38,7 +38,7 @@ export default async function CenterKeysPage({
   let rows: CenterKeyInfo[] = [];
   let failure: string | null = null;
   try {
-    // 「승인 대기」는 여기 없다 — PC 실행기·Studio는 「PC 현황」, 서버 실행기는 「BPM 프로세스 현황」 서버 탭 (CON-11).
+    // 「승인 대기」는 여기 없다 — PC 실행기·Studio는 「데스크톱 앱」, 서버 실행기는 「BPM 프로세스」 서버 탭 (CON-11).
     rows = await center.centerKeys(filter);
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
@@ -76,24 +76,17 @@ export default async function CenterKeysPage({
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/center-keys">
-      <header className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-h1 font-bold">Center API 키</h1>
-          <p className="text-body text-text-secondary">
-            PC 실행기·Studio·서버 실행기·외부 시스템이 Center에 접속할 때 쓰는 키입니다. 서비스 앱·외부 앱의
-            일꾼은 「리소스」에서 승인해 들입니다.
-          </p>
-          <CenterAddress url={CENTER_PUBLIC_URL} who="PC 실행기·Studio·서버 실행기" />
-        </div>
+      <header className="mb-4 flex flex-wrap items-end justify-between gap-4">
+        <h1 className="text-h1 font-bold">API 키</h1>
       </header>
 
-      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
+      <form className="filter-card flex flex-wrap items-end gap-3" method="get">
         <label className="flex flex-col gap-1 text-body-sm">
           종류
           <select
             name="type"
             defaultValue={filter.type ?? ""}
-            className="h-9 border border-border-default bg-bg-surface px-2"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             <option value="">(전체)</option>
             {Object.entries(TYPE_LABEL).map(([value, label]) => (
@@ -108,7 +101,7 @@ export default async function CenterKeysPage({
           <select
             name="state"
             defaultValue={filter.state ?? ""}
-            className="h-9 border border-border-default bg-bg-surface px-2"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             <option value="">(전체)</option>
             {Object.entries(STATE_LABEL).map(([value, label]) => (
@@ -118,6 +111,9 @@ export default async function CenterKeysPage({
             ))}
           </select>
         </label>
+        <Link href="/center-keys" className="ml-auto inline-flex h-9 items-center rounded-md px-3 text-body text-text-secondary hover:bg-bg-subtle">
+          초기화
+        </Link>
         <Button type="submit" variant="secondary">
           좁히기
         </Button>
@@ -158,7 +154,7 @@ export default async function CenterKeysPage({
             ) : enrolled.length === 0 ? (
               <EmptyState
                 title="승인으로 들인 키가 없습니다."
-                hint="PC 실행기·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — PC 실행기·Studio는 「PC 현황」, 서버 실행기는 「BPM 프로세스 현황」의 「서버」 탭에서 승인합니다."
+                hint="PC 실행기·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — PC 실행기·Studio는 「데스크톱 앱」, 서버 실행기는 「BPM 프로세스」의 「서버」 탭에서 승인합니다."
               />
             ) : (
               <DataTable

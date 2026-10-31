@@ -132,19 +132,16 @@ export default async function ApprovalsPage({
     <Shell mode={found.mode} actor={found.actor} current="/approvals">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">결재함</h1>
-        <p className="text-body text-text-secondary">
-          실행하는 쪽이 올린 결재입니다. 답하면 다음 하트비트에 받아 갑니다.
-        </p>
       </header>
 
       {/* 필터는 JS 없이도 돈다 — GET 폼이 주소에 남긴다. */}
-      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
+      <form className="filter-card flex flex-wrap items-end gap-3" method="get">
         <label className="flex flex-col gap-1 text-body-sm">
           <span className="text-text-muted">상태</span>
           <select
             name="state"
             defaultValue={state}
-            className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             {STATES.map((one) => (
               <option key={one.value} value={one.value}>
@@ -158,7 +155,7 @@ export default async function ApprovalsPage({
           <select
             name="host"
             defaultValue={host}
-            className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             <option value="">(전체)</option>
             {hosts.map((one) => (
@@ -175,9 +172,12 @@ export default async function ApprovalsPage({
             name="assignee"
             defaultValue={assignee}
             placeholder="(전체)"
-            className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           />
         </label>
+        <Link href="/approvals" className="ml-auto inline-flex h-9 items-center rounded-md px-3 text-body text-text-secondary hover:bg-bg-subtle">
+          초기화
+        </Link>
         <Button type="submit" variant="secondary">
           보기
         </Button>

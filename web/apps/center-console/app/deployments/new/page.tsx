@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, ErrorBanner } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
@@ -54,17 +53,11 @@ export default async function NewDeploymentPage({
     <Shell mode={found.mode} actor={found.actor} current="/deployments">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">새 배포</h1>
-        <p className="text-body text-text-secondary">
-          <Link className="underline" href="/deployments">
-            배포
-          </Link>
-          로 돌아가기
-        </p>
       </header>
 
       {failure ? <ErrorBanner message={failure} /> : null}
 
-      <form className="mb-6 flex flex-wrap items-end gap-3" method="get">
+      <form className="filter-card flex flex-wrap items-end gap-3" method="get">
         <label className="flex flex-col gap-1 text-body-sm">
           <span className="text-text-muted">BPM 프로세스@버전 (승인된 것)</span>
           <select name="bot" defaultValue={bot} className={FIELD}>
@@ -84,7 +77,7 @@ export default async function NewDeploymentPage({
 
       {approved.length === 0 && !failure ? (
         <p className="text-body text-text-secondary">
-          승인된 BPM 프로세스가 없습니다. 「BPM 프로세스 현황」에서 먼저 승인하세요.
+          승인된 BPM 프로세스가 없습니다. 「BPM 프로세스」에서 먼저 승인하세요.
         </p>
       ) : null}
 
@@ -94,7 +87,7 @@ export default async function NewDeploymentPage({
           <input type="hidden" name="place" value={server ? "server" : "pc"} />
 
           {server ? (
-            <fieldset className="flex flex-col gap-3 border border-border-default p-3">
+            <fieldset className="flex flex-col gap-3 rounded-lg border border-border-default bg-bg-surface p-3">
               <legend className="px-1 text-body font-medium">대상 — 서버 실행기</legend>
               <label className="flex flex-col gap-1 text-body-sm">
                 <span className="text-text-muted">실행기</span>
@@ -115,7 +108,7 @@ export default async function NewDeploymentPage({
               </label>
             </fieldset>
           ) : (
-            <fieldset className="flex flex-col gap-2 border border-border-default p-3">
+            <fieldset className="flex flex-col gap-2 rounded-lg border border-border-default bg-bg-surface p-3">
               <legend className="px-1 text-body font-medium">대상 — PC 실행기 (여럿 고를 수 있습니다)</legend>
               {pcs.length === 0 ? (
                 <p className="text-body-sm text-text-muted">

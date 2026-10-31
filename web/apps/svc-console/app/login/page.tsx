@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { Button, ErrorBanner, Field } from "@chaeksas/ui";
+import { BpmMark, Button, ErrorBanner, Field } from "@chaeksas/ui";
 import { login, type ActionResult } from "@/app/actions";
 
 /**
@@ -12,26 +12,29 @@ import { login, type ActionResult } from "@/app/actions";
 export default function LoginPage() {
   const [result, action, pending] = useActionState<ActionResult, FormData>(login, {});
   return (
-    <main className="mx-auto flex min-h-screen max-w-[480px] flex-col justify-center gap-4 p-6">
-      <h1 className="text-h1 font-bold">서비스 앱 관리 콘솔</h1>
-      <p className="text-body text-text-secondary">
-        앱 설정의 관리자 토큰으로 들어갑니다. 이 콘솔에는 보기 전용이 없습니다 — API 키를 다루기 때문입니다.
-      </p>
-      {result.error ? <ErrorBanner message={result.error} /> : null}
-      <form action={action} className="flex flex-col gap-4">
-        <Field
-          label="관리자 토큰"
-          name="token"
-          type="password"
-          required
-          autoComplete="off"
-          help="앱 서버의 CHK_SVC_<APP>__ADMIN_TOKEN."
-        />
-        <Field label="이름" name="actor" help="화면에 보일 이름입니다 (비우면 「관리자」)." />
-        <Button type="submit" variant="primary" disabled={pending}>
-          {pending ? "확인 중..." : "들어가기"}
-        </Button>
-      </form>
+    <main className="flex min-h-screen items-center justify-center p-6">
+      <div className="flex w-full max-w-[480px] flex-col gap-4 rounded-xl border border-border-default bg-bg-surface p-8 shadow-sm">
+        <BpmMark className="h-8 w-auto self-center text-primary" />
+        <h1 className="text-h1 font-bold">서비스 앱 관리 콘솔</h1>
+        <p className="text-body text-text-secondary">
+          앱 설정의 관리자 토큰으로 들어갑니다. 이 콘솔에는 보기 전용이 없습니다 — API 키를 다루기 때문입니다.
+        </p>
+        {result.error ? <ErrorBanner message={result.error} /> : null}
+        <form action={action} className="flex flex-col gap-4">
+          <Field
+            label="관리자 토큰"
+            name="token"
+            type="password"
+            required
+            autoComplete="off"
+            help="앱 서버의 CHK_SVC_<APP>__ADMIN_TOKEN."
+          />
+          <Field label="이름" name="actor" help="화면에 보일 이름입니다 (비우면 「관리자」)." />
+          <Button type="submit" variant="primary" disabled={pending}>
+            {pending ? "확인 중..." : "들어가기"}
+          </Button>
+        </form>
+      </div>
     </main>
   );
 }

@@ -30,7 +30,7 @@ export function DeleteVersion({ rows }: { rows: Array<{ id: string; version: str
           <select
             value={chosen}
             onChange={(event) => setChosen(event.target.value)}
-            className="h-9 border border-border-default bg-bg-surface px-2"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             <option value="">(고르세요)</option>
             {rows.map((row) => (

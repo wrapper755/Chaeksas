@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Button, ErrorBanner } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
@@ -66,7 +65,7 @@ function InputField({ input }: { input: ManifestInput }) {
           name={name}
           rows={3}
           placeholder={input.type === "list" ? "[...] (JSON)" : "{...} (JSON)"}
-          className="border border-border-strong bg-bg-surface p-2 font-mono text-body-sm"
+          className="rounded-md border border-border-strong bg-bg-surface p-2 font-mono text-body-sm"
         />
       ) : (
         <input
@@ -133,18 +132,12 @@ export default async function NewJobPage({
     <Shell mode={found.mode} actor={found.actor} current="/jobs">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">새 작업</h1>
-        <p className="text-body text-text-secondary">
-          <Link className="underline" href="/jobs">
-            작업 지시
-          </Link>
-          로 돌아가기
-        </p>
       </header>
 
       {failure ? <ErrorBanner message={failure} /> : null}
 
       {/* 1. 고르기 — GET이라 주소에 남고 JS가 없어도 돈다. */}
-      <form className="mb-6 flex flex-wrap items-end gap-3" method="get">
+      <form className="filter-card flex flex-wrap items-end gap-3" method="get">
         <label className="flex flex-col gap-1 text-body-sm">
           <span className="text-text-muted">BPM 프로세스</span>
           <select name="bot" defaultValue={bot} className={FIELD}>
@@ -217,7 +210,7 @@ export default async function NewJobPage({
             {version || `(배포된 버전) ${shown}`}
           </p>
 
-          <fieldset className="flex flex-col gap-3 border border-border-default p-3">
+          <fieldset className="flex flex-col gap-3 rounded-lg border border-border-default bg-bg-surface p-3">
             <legend className="px-1 text-body font-medium">입력 변수</legend>
             {inputs.length === 0 ? (
               <p className="text-body-sm text-text-muted">이 BPM 프로세스는 받는 입력을 적어 두지 않았습니다.</p>
@@ -229,7 +222,7 @@ export default async function NewJobPage({
               <textarea
                 name="extra"
                 rows={2}
-                className="border border-border-strong bg-bg-surface p-2 font-mono text-body-sm"
+                className="rounded-md border border-border-strong bg-bg-surface p-2 font-mono text-body-sm"
               />
             </label>
           </fieldset>

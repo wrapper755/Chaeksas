@@ -23,7 +23,7 @@ export function ErrorBanner({ message, code, details, action, className }: Error
   return (
     <div
       role="alert"
-      className={cn("border px-4 py-3", className)}
+      className={cn("rounded-lg border px-4 py-3", className)}
       style={{
         borderRadius: "var(--radius-lg)",
         borderColor: "var(--status-failed-solid)",

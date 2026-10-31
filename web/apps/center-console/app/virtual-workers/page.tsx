@@ -63,9 +63,6 @@ export default async function VirtualWorkersPage({
     <Shell mode={found.mode} actor={found.actor} current="/virtual-workers">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">가상 직원</h1>
-        <p className="text-body text-text-secondary">
-          접수 BPM 프로세스와 감독자를 묶은 업무 주체입니다. 일괄은 접수 BPM 프로세스 실행 한 번입니다.
-        </p>
       </header>
 
       {asked.error ? <ErrorBanner message={asked.error} /> : null}
@@ -78,8 +75,8 @@ export default async function VirtualWorkersPage({
       )}
 
       {found.mode === "admin" ? (
-        <section className="mt-6 flex max-w-xl flex-col gap-3">
-          <h2 className="text-h2 font-bold">새 가상 직원</h2>
+        <section className="mt-6 flex max-w-xl flex-col gap-3 rounded-lg border border-border-default bg-bg-surface p-5 shadow-sm">
+          <h2 className="text-h2 font-semibold">새 가상 직원</h2>
           {/* 일반 폼 + 서버 액션 — JS 없이도 된다. 거부되면 사유가 위에 보인다 (B16 포함). */}
           <form action={createVirtualWorker} className="flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-body-sm">

@@ -17,6 +17,14 @@
   --color-primary-subtle: var(--primary-subtle);
   --color-primary-fg: var(--primary-fg);
   --color-focus: var(--focus);
+  --color-chrome-bg: var(--chrome-bg);
+  --color-chrome-fg: var(--chrome-fg);
+  --color-chrome-muted: var(--chrome-muted);
+  --color-chrome-hover: var(--chrome-hover);
+  --color-chrome-border: var(--chrome-border);
+  --color-chrome-side: var(--chrome-side);
+  --color-chrome-side-hover: var(--chrome-side-hover);
+  --color-chrome-edge: var(--chrome-edge);
   --color-status-neutral-fg: var(--status-neutral-fg);
   --color-status-neutral-bg: var(--status-neutral-bg);
   --color-status-neutral-solid: var(--status-neutral-solid);

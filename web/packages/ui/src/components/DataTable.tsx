@@ -55,7 +55,7 @@ export function DataTable<T>({
 
   return (
     <div
-      className={cn("overflow-auto border border-border-default bg-bg-surface", className)}
+      className={cn("overflow-auto border border-border-default bg-bg-surface shadow-sm", className)}
       style={{ borderRadius: "var(--radius-lg)" }}
     >
       <table className="w-full border-collapse text-body">

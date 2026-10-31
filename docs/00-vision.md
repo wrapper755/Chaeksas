@@ -72,7 +72,7 @@ BPM 프로세스가 호출하는 서버 기능은 **서비스 앱**으로 늘려
 
 | 질문 | 상태 |
 | --- | --- |
-| 제품 이름 "Chaeksas"를 사용자 화면에도 쓰는가, 저장소 이름만인가? | 미정 |
+| 제품 이름 "Chaeksas"를 사용자 화면에도 쓰는가, 저장소 이름만인가? | **확정: 저장소 이름만이다.** 화면에는 쓰지 않고 웹 콘솔의 머리는 BPM 흐름 마크다 ([ADR-0118](decisions/0118-no-product-name-on-screens.md)) |
 | 배포 단위의 화면 이름 | **확정: 설계·운영 화면 모두 "BPM 프로세스"** ([ADR-0012](decisions/0012-bot-ui.md), [ADR-0111](decisions/0111-bpm-process-and-pc-runner-names.md)) |
 | 서비스 앱 키를 어디에 지정하나 | **확정: 서비스 앱 키는 없다** — 바깥 기능은 Center의 외부 작업으로 부르고 「불러도 되나」는 Center가 배포로 가린다 ([ADR-0102](decisions/0102-calling-outside-is-pull.md)) |
 | PC 한 대에서 BPM 프로세스 여러 개를 동시에 돌리는가 | **확정: 아니다. 실행 중인 BPM 프로세스는 하나, 나머지는 PC 실행기 대기열** [ADR-0014](decisions/0014-one-bot-per-pc.md) |

@@ -16,6 +16,70 @@ body {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-body);
   line-height: 1.5;
+  /* 한글은 낱자마다 줄을 바꾸지 않고 띄어쓰기에서 바꾼다 — 좁은 표 칸에서 「서\n버\n실\n행」이 된다.
+     띄어쓰기 없는 긴 id·주소는 넘칠 때만 끊는다(`anywhere`는 표 칸의 최소 폭까지 줄여 다시 낱자로 갈린다). */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+/* 표 머리는 한 줄로 둔다 — 짧은 이름이 둘로 갈리면 열이 무엇인지 읽기 어렵다. */
+th {
+  white-space: nowrap;
+}
+
+/* 남색 틀 (웹 콘솔의 위 막대·탐색, 스타일 가이드 §4-1) — 안쪽의 토큰을 틀 색으로 바꿔 끼운다.
+   구성요소(Button 등)를 고치지 않고 그대로 쓰려는 것이다. 값은 토큰(`chrome.*`)에서만 온다. */
+.chrome {
+  /* Tailwind 유틸리티는 `--color-*`를 읽고 그 값은 :root에서 이미 풀려 내려온다 — 그래서 원래 변수가
+     아니라 유틸리티 쪽 변수를 바꿔 끼운다. */
+  --color-bg-surface: var(--chrome-bg);
+  --color-bg-subtle: var(--chrome-hover);
+  --color-border-default: var(--chrome-border);
+  --color-border-strong: var(--chrome-border);
+  --color-text-primary: var(--chrome-fg);
+  --color-text-secondary: var(--chrome-muted);
+  --color-text-muted: var(--chrome-muted);
+  background-color: var(--chrome-bg);
+  color: var(--chrome-fg);
+  color-scheme: dark;
+}
+
+/* 왼쪽 탐색은 위 막대보다 분명히 밝은 남색이다 — 비슷하면 경계가 보이지 않는다. 위 막대 아래의
+   라벤더 띠(`chrome.edge`)가 둘을 한 번 더 가른다. 색은 로그인 배경 그림에서 골랐다 (스타일 가이드 §2-1). */
+.chrome.chrome-side {
+  --color-bg-surface: var(--chrome-side);
+  --color-bg-subtle: var(--chrome-side-hover);
+  background-color: var(--chrome-side);
+}
+
+/* 본문 머리 띠 (CON-00 [H], 스타일 가이드 §4-1) — 틀이 넣는 「지금 자리」 줄과 바로 뒤의 제목 `<header>`를
+   본문 폭 전체의 흰 띠 하나로 칠한다. 화면은 제목 `<header>`만 쓰고 띠를 모른다. 유틸리티(`mb-4` 등)보다
+   이겨야 해서 레이어 밖에 둔다. 제목이 바로 뒤에 없으면 줄 혼자 띠가 된다. */
+.page-main > .page-crumb {
+  margin: calc(var(--space-6) * -1) calc(var(--space-6) * -1) var(--space-6);
+  padding: var(--space-5) var(--space-6);
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+}
+.page-main > .page-crumb:has(+ header) {
+  margin-bottom: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: 0;
+}
+.page-main > .page-crumb + header {
+  margin: 0 calc(var(--space-6) * -1) var(--space-6);
+  padding: 0 var(--space-6) var(--space-6);
+  background-color: var(--bg-surface);
+  border-bottom: 1px solid var(--border-default);
+}
+
+/* 필터 카드 (CON-00 [F]) — 목록 위 조건을 흰 카드 하나에 담는다. */
+.filter-card {
+  margin-bottom: var(--space-6);
+  padding: var(--space-4);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
 }
 
 /* 포커스 표시는 지우지 않는다 (스타일 가이드 §7 — 키보드로만 쓰는 사람이 있다). */
