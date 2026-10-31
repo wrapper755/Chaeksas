@@ -1,6 +1,6 @@
 /** CON-11 줄 동작 (`lib/center-keys.ts`) — 폐기·묶음 풀기가 **그 줄의 키에만** 걸리는가. */
 import { describe, expect, it } from "vitest";
-import { keyActions, splitKeys } from "./center-keys";
+import { keyActions, keyFilter, splitKeys } from "./center-keys";
 
 const pc = { id: "bui_1", type: "bot_ui", name: "재무팀 PC-03" };
 
@@ -32,5 +32,20 @@ describe("splitKeys", () => {
     const { integration, enrolled } = splitKeys(rows);
     expect(integration.map((row) => row.type)).toEqual(["integration", "relay", "someday"]);
     expect(enrolled.map((row) => row.type)).toEqual(["bot_ui", "studio", "server_runner", "consumer"]);
+  });
+});
+
+describe("keyFilter", () => {
+  it("아는 종류·상태만 남긴다", () => {
+    expect(keyFilter({ type: "integration", state: "revoked" })).toEqual({ type: "integration", state: "revoked" });
+    expect(keyFilter({ type: "consumer" })).toEqual({ type: "consumer" });
+  });
+
+  it("모르는 값·빈 값은 버린다 — 「(전체)」로 돌아간다", () => {
+    expect(keyFilter({ type: "call_token", state: "gone" })).toEqual({});
+    expect(keyFilter({ type: "", state: "" })).toEqual({});
+    expect(keyFilter({})).toEqual({});
+    // 프로토타입 키로 새지 않는다.
+    expect(keyFilter({ type: "toString" })).toEqual({});
   });
 });

@@ -115,7 +115,7 @@ export default async function UiAutomationOverviewPage() {
               <Summary label="자가 치유">{sessions?.healed ?? 0}건</Summary>
             </div>
             <p className="mt-2 text-body-sm text-text-secondary">
-              {RUNNING_HINT} 셀렉터 시험(BUI-08) 보고 {sessions?.test ?? 0}건은 위 수에 들어가지 않습니다.
+              {RUNNING_HINT} 셀렉터 시험(TOL-05) 보고 {sessions?.test ?? 0}건은 위 수에 들어가지 않습니다.
             </p>
           </section>
 

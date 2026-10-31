@@ -331,14 +331,14 @@ M6의 첫째 기준(「**시나리오 3**(BX-04)이 Windows 현장 PC에서 Cent
 | --- | --- | --- | --- | --- |
 | 8-1 | CON-05 「새 작업」 | 서버 BPM 프로세스면 PC 고르기 대신 「서버 실행기에서 실행 — 동시 실행 상한 <n>」 | **닫았다** — 서버에 배포된 BPM 프로세스면 PC 칸 대신 그 글이 보이고(<n>은 배포의 `max_concurrency`, 없으면 「기본」) `target: {type: "server_runner", id: "*"}`로 만든다. 판단은 `lib/jobs.ts`(`runsOnServer`·`serverVersions`·`serverLimit`, vitest `jobs.test.ts`) | — |
 | 8-2 | CON-05 「중지」 | 도는 서버 실행(`accepted`)의 「중지」·확인 문구 「도는 실행을 멈춥니다…」·「중지 요청함」, PC면 끄고 까닭 | **닫았다** — 단추는 `lib/jobs.ts`의 `cancelControl()` 하나가 정한다(취소·중지·끈 단추, vitest). 「중지...」는 확인 창(기본 「취소」)을 거쳐 같은 `DELETE /jobs/{id}`를 부르고, 상태 옆 글이 「중지 요청함 — 다음 하트비트에 반영」이다. PC면 끈 단추에 까닭(목록은 툴팁, 상세는 한 줄) | — |
-| 8-3 | CON-01 목록 「시작 방식」 | 작업·감시·수동·일정·메시지 | `app/runs/page.tsx:154`가 `row.source`를 그대로 — 일정이 만든 실행이 `schedule`로 보인다. 표기는 CON-03 상세에 있다(`bot-uis/[botUiId]/page.tsx:36-43`) | 없다 — 표기를 한 자리로 |
+| 8-3 | CON-01 목록 「시작 방식」 | 작업·감시·수동·일정·메시지 | **닫았다** — 표기는 `lib/labels.ts`의 `sourceLabel()` 하나(C3 `KNOWN_SOURCES` 일곱, 모르는 값은 그대로, vitest `labels.test.ts`)이고 CON-01 목록과 CON-03 상세 대기열 「출처」가 같이 쓴다 | — |
 | 8-4 | CON-01 상세 | 노드 타임라인의 가로 막대·이어 돌기 점선, 요약의 「재생」·「LLM 단계」 | `app/runs/[runId]/page.tsx:385-441`은 표뿐이고 요약에 `replayed_tasks`가 없다(목록은 쓴다 — `runs/page.tsx:164-165`). 「사람 개입」의 「폼 키」는 C3 `human_requested`에 폼 칸이 없어(`contracts/events.py:37` — `layer`·`request_id`·`where`) **문서가 고칠 쪽**이다 | 「폼 키」를 문서에서 걷는다 |
-| 8-5 | CON-00 위 막대 | 「새로 고침」 | `components/Shell.tsx`에 로그아웃뿐 | 없다 |
-| 8-6 | CON-11 | 키 목록 필터 「종류」·「상태」 | `app/center-keys/page.tsx`가 `searchParams`를 읽지 않는다 | 없다 |
-| 8-7 | CON-03 목록 | 오프라인 줄의 실행·대기열 칸에 「마지막 보고 <시각> 기준」 | `app/bot-uis/page.tsx:40-43`·`:129-137` — 상세에만 있다(`[botUiId]/page.tsx:214`). 「런타임」 열은 §3-26(C4 `runtimes.browsers`)이라 빈다 | 없다 |
+| 8-5 | CON-00 위 막대 | 「새로 고침」 | **닫았다** — 아이디·역할 옆, 「로그아웃」 앞에 `components/Refresh.tsx`(`router.refresh()` — 다시 읽는 것은 서버 쪽이라 브라우저에 토큰이 오지 않는다) | — |
+| 8-6 | CON-11 | 키 목록 필터 「종류」·「상태」 | **닫았다** — GET 폼과 「좁히기」(JS 없음), 두 표에 함께 걸린다. 주소의 값은 `lib/center-keys.ts`의 `keyFilter()`가 아는 것만 남겨 Center `?type=&state=`로 넘긴다(vitest). 좁혀 빈 표는 「조건에 맞는 키가 없습니다.」 | — |
+| 8-7 | CON-03 목록 | 오프라인 줄의 실행·대기열 칸에 「마지막 보고 <시각> 기준」 | **닫았다** — 두 칸 아래 작은 글로 붙는다(`lib/labels.ts`의 `lastReportNote()`, vitest — 온라인·보고 없음이면 붙이지 않는다). 「런타임」 열은 §3-26(C4 `runtimes.browsers`)이라 그대로 빈다 | — |
 | 8-8 | CON-07 | 기여 자원 줄의 상세(「이 화면을 쓰는 BPM 프로세스」·「셀렉터 보기」 → UIA-02), 「할 일」 → CON-03 **그 PC들만** | `app/resources/page.tsx:334-372` `Contributed`는 평평한 표, `lib/features.ts:131-133`은 필터 없는 `/bot-uis`. 「쓰는 BPM 프로세스」는 §3-24 때문에 늘 빈다 | §3-24가 먼저다 |
-| 8-9 | CON-02 | (흠) 사람에게 마크다운 별표가 보인다 | `app/bots/page.tsx:326` JSX 글 「셈은 \*\*끝난 실행\*\*만 셉니다」 | 없다 |
-| 8-10 | UIA-01·02·03 | 빈 상태·안내가 TOL-03·TOL-05를 가리킨다 | `svc-console/app/ext/ui-automation/selectors/page.tsx:27`·`:31`(BUI-06), `overview/page.tsx:118`·`monitoring/page.tsx:42`(BUI-08) — ADR-0077로 폐기된 id다 | 없다 |
+| 8-9 | CON-02 | (흠) 사람에게 마크다운 별표가 보인다 | **닫았다** — 별표를 걷어 「셈은 끝난 실행만 셉니다」 | — |
+| 8-10 | UIA-01·02·03 | 빈 상태·안내가 TOL-03·TOL-05를 가리킨다 | **닫았다** — 화면 문서 그대로 「Tool UI 「UI 셀렉터 등록」(TOL-03)으로 등록하세요.」·「TOL-03에서 요소를 더하세요.」·「셀렉터 시험(TOL-05) 보고 N건은…」·「Tool UI 「셀렉터 시험」(TOL-05)에서 보고를 켜면 쌓입니다.」 | — |
 | 8-11 | UIA-03 상세 | 「시도한 로케이터·실패 사유 표」, UIA-02 실패율 경고의 「해당 요소로 이동」 | `monitoring/page.tsx:227-230`은 한 줄 띠, `selectors/page.tsx:233-237`은 링크 없는 글 | 재료(C8 `attempts`)는 있다 |
 | 8-12 | STU-02 | 줄 종류별 문맥 메뉴(「정의 삭제...」·「BPM 프로세스 삭제...」·「다른 그룹으로 이동...」·「새 그룹...」·「그룹 삭제」·「새로 고침」), 끌어 옮기기, 삭제 확인 | `explorer.py:146`이 `CustomContextMenu`를 켜지만 `customContextMenuRequested`를 잇는 곳이 없다(유일한 연결은 `resources.py:639` — STU-03). `workspace.py`에 정의·BPM 프로세스·그룹을 지우거나 옮기는 함수가 없다 | 지우기의 범위(케이스·학습 자료)와 「다른 정의가 부르면 거부」를 B14와 같은 함수로 볼지 |
 | 8-13 | STU-02 「학습·검증」 | 「AI 태스크 N개 · 학습 a/N · 재생 검증 v/N · 케이스 통과 p/S」 | `explorer.py:39-47`이 「AI 태스크 N개 · 정의 N개」 — docstring이 「아직 비어 있다」고 적었는데 화면 문서에는 상태 줄이 없다 | 「재생 검증」은 명세에 칸이 없어 7-11에서 이미 걷었다 — 같이 걷을지 |

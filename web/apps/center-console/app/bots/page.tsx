@@ -323,7 +323,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
             caption="BPM 프로세스·버전별 준비도"
           />
           <p className="text-body-sm text-text-muted">
-            {CONFIRM_NOTE} 셈은 **끝난 실행**만 셉니다 — 도는 중인 실행은 표본에 들어가지 않습니다.
+            {CONFIRM_NOTE} 셈은 끝난 실행만 셉니다 — 도는 중인 실행은 표본에 들어가지 않습니다.
             BPM 프로세스마다 최근 {SCAN}건을 훑어 버전별로 {SAMPLE}회까지 셉니다 (그보다 적으면 표본 수가
             작게 보입니다).
           </p>

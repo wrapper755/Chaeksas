@@ -5,7 +5,7 @@ import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
 import { KeyMenu, KeyTools } from "./tools";
-import { splitKeys } from "@/lib/center-keys";
+import { STATE_LABEL, TYPE_LABEL, keyFilter, splitKeys } from "@/lib/center-keys";
 
 /**
  * CON-11 Center API 키.
@@ -14,20 +14,8 @@ import { splitKeys } from "@/lib/center-keys";
  * 일꾼, C15)은 여기서 다루지 않는다 — 「리소스」(CON-07)의 「일꾼 승인 대기」다.
  */
 
-const TYPE_LABEL: Record<string, string> = {
-  bot_ui: "PC 실행기용",
-  studio: "Studio용",
-  server_runner: "서버 실행기용",
-  consumer: "일꾼용",
-  integration: "연동용",
-  relay: "대리 답용",
-};
-
-export const STATE_LABEL: Record<string, string> = {
-  active: "사용 중",
-  expired: "만료",
-  revoked: "폐기됨",
-};
+/** 필터로 좁혔는데 빈 표 — 「아직 없다」와 가른다(그 안내는 좁히지 않았을 때만 맞다). */
+const NO_MATCH = "조건에 맞는 키가 없습니다.";
 
 function day(value: string | null | undefined): string {
   if (!value) return "—";
@@ -36,15 +24,22 @@ function day(value: string | null | undefined): string {
   return `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`;
 }
 
-export default async function CenterKeysPage() {
+export default async function CenterKeysPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string; state?: string }>;
+}) {
   const found = await session();
   if (!found) redirect("/login");
+  // 필터 「종류」·「상태」 (CON-11 「키 목록」) — 다른 목록처럼 GET 폼이고 Center가 거른다.
+  const filter = keyFilter(await searchParams);
+  const filtered = Boolean(filter.type || filter.state);
 
   let rows: CenterKeyInfo[] = [];
   let failure: string | null = null;
   try {
     // 「승인 대기」는 여기 없다 — PC 실행기·Studio는 「PC 현황」, 서버 실행기는 「BPM 프로세스 현황」 서버 탭 (CON-11).
-    rows = await center.centerKeys();
+    rows = await center.centerKeys(filter);
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -92,6 +87,42 @@ export default async function CenterKeysPage() {
         </div>
       </header>
 
+      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
+        <label className="flex flex-col gap-1 text-body-sm">
+          종류
+          <select
+            name="type"
+            defaultValue={filter.type ?? ""}
+            className="h-9 border border-border-default bg-bg-surface px-2"
+          >
+            <option value="">(전체)</option>
+            {Object.entries(TYPE_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-body-sm">
+          상태
+          <select
+            name="state"
+            defaultValue={filter.state ?? ""}
+            className="h-9 border border-border-default bg-bg-surface px-2"
+          >
+            <option value="">(전체)</option>
+            {Object.entries(STATE_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Button type="submit" variant="secondary">
+          좁히기
+        </Button>
+      </form>
+
       {failure ? (
         <ErrorBanner message={failure} />
       ) : (
@@ -108,7 +139,9 @@ export default async function CenterKeysPage() {
                 </Button>
               )}
             </div>
-            {integration.length === 0 ? (
+            {integration.length === 0 && filtered ? (
+              <EmptyState title={NO_MATCH} />
+            ) : integration.length === 0 ? (
               <EmptyState
                 title="발급한 연동 키가 없습니다."
                 hint="외부 시스템이 작업을 만들거나 결재에 대신 답하게 하려면 「새 키...」로 만드세요."
@@ -120,7 +153,9 @@ export default async function CenterKeysPage() {
 
           <section className="flex flex-col gap-3">
             <h2 className="text-h2 font-semibold">승인으로 들인 키</h2>
-            {enrolled.length === 0 ? (
+            {enrolled.length === 0 && filtered ? (
+              <EmptyState title={NO_MATCH} />
+            ) : enrolled.length === 0 ? (
               <EmptyState
                 title="승인으로 들인 키가 없습니다."
                 hint="PC 실행기·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — PC 실행기·Studio는 「PC 현황」, 서버 실행기는 「BPM 프로세스 현황」의 「서버」 탭에서 승인합니다."

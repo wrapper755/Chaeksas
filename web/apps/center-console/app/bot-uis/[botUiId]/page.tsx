@@ -9,6 +9,7 @@ import { Shell } from "@/components/Shell";
 import { BotUiActions, SelectorRegistration } from "../actions-ui";
 import type { Route } from "next";
 import { fullTime, runtimeLabel, running, statusLabel, time, workerLabel } from "../page";
+import { sourceLabel } from "@/lib/labels";
 
 /**
  * CON-03 PC 현황 — PC 실행기 상세 — 대기열·배포·확장·최근 배치 결정.
@@ -31,15 +32,6 @@ const WHY: Record<string, string> = {
   unsigned_package: "승인 서명 없음",
   unsupported_alg: "모르는 서명 방식",
   float_in_payload: "봉투에 소수가 들어 있음",
-};
-
-const SOURCE: Record<string, string> = {
-  job: "작업",
-  manual: "수동",
-  watch: "감시",
-  schedule: "일정",
-  message: "메시지",
-  delegation: "위임",
 };
 
 /** 「셀렉터 등록」 한 줄 — 이 PC의 Tool UI가 셀렉터 등록 작업을 올려도 되나 (C15 §올리기). */
@@ -121,7 +113,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
       header: "BPM 프로세스",
       cell: (row) => `${row.bpm_process_id}${row.version ? `@${row.version}` : ""}`,
     },
-    { key: "source", header: "출처", width: "10ch", cell: (row) => SOURCE[row.source] ?? row.source },
+    { key: "source", header: "출처", width: "10ch", cell: (row) => sourceLabel(row.source) },
     { key: "requested_at", header: "요청 시각", width: "16ch", cell: (row) => time(row.requested_at) },
     { key: "expires_at", header: "만료", width: "16ch", cell: (row) => (row.expires_at ? time(row.expires_at) : "—") },
   ];
