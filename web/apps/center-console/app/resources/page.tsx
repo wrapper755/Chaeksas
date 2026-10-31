@@ -6,6 +6,7 @@ import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-res
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 import type { ConsumerInfo } from "@chaeksas/api-types/c15-consumer-info";
 import type { TopicStatus } from "@chaeksas/api-types/c15-topic-status";
+import type { ExtensionFolderItem, ExtensionFolderScan } from "@chaeksas/api-types/c7-extension-folder-scan";
 import { CenterError, center, session, type ContributedKind } from "@/lib/center";
 import type { FeatureRow } from "@/lib/features";
 import { Shell } from "@/components/Shell";
@@ -75,6 +76,7 @@ export default async function ResourcesPage({
   let consumers: ConsumerInfo[] = [];
   let topics: TopicStatus[] = [];
   let consumerFailure: string | null = null;
+  let folder: ExtensionFolderScan | null = null;
   // 어떤 기여 탭이 있는지는 **Center가 안다** (확장이 기여한 종류). 탭 이름을 화면이 짓지 않는다.
   try {
     kinds = (await center.contributedKinds()).items;
@@ -109,6 +111,12 @@ export default async function ResourcesPage({
     }
   } catch (cause) {
     consumerFailure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
+  }
+  // 확장 폴더도 따로 잡는다 — 못 읽으면 칸이 없을 뿐이다 (ADR-0121).
+  try {
+    if (!contributedTab) folder = await center.extensionFolder();
+  } catch {
+    folder = null;
   }
 
   const shortfall = packages
@@ -177,6 +185,7 @@ export default async function ResourcesPage({
             nameHelp="사람이 알아볼 일꾼 이름. 비우면 요청이 보낸 이름을 씁니다."
           />
           <Features rows={rows} admin={found.mode === "admin"} />
+          {folder?.configured ? <ExtensionFolder scan={folder} /> : null}
           <Workers topics={topics} consumers={consumers} failure={consumerFailure} />
         </>
       )}
@@ -254,6 +263,47 @@ function Features({ rows, admin }: { rows: FeatureRow[]; admin: boolean }) {
       ) : null}
 
     </div>
+  );
+}
+
+const FOLDER_OUTCOME: Record<string, string> = {
+  registered: "등록함",
+  unchanged: "이미 있음",
+  skipped: "건너뜀",
+  refused: "거절",
+};
+
+/**
+ * 「확장 폴더」 (ADR-0121) — Center가 **뜰 때** 폴더의 정의 파일을 들인 결과. 고치는 단추는 없다 —
+ * 파일을 바꾸고 Center를 다시 띄우는 것이 고치는 길이다.
+ */
+function ExtensionFolder({ scan }: { scan: ExtensionFolderScan }) {
+  const items = scan.items ?? [];
+  const columns: Array<Column<ExtensionFolderItem>> = [
+    { key: "file", header: "파일", mono: true },
+    {
+      key: "extension",
+      header: "확장",
+      mono: true,
+      cell: (row) => (row.id ? `${row.id}@${row.version ?? "?"}` : "—"),
+    },
+    { key: "outcome", header: "결과", width: "10ch", cell: (row) => FOLDER_OUTCOME[row.outcome] ?? row.outcome },
+    { key: "message", header: "사유", cell: (row) => row.message ?? "" },
+  ];
+  return (
+    <section className="mt-6 flex flex-col gap-2 rounded-lg border border-border-default bg-bg-surface p-5 shadow-sm">
+      <h2 className="text-h2 font-semibold">확장 폴더</h2>
+      <p className="text-body-sm text-text-muted">
+        Center가 뜰 때 <span className="font-mono">{scan.dir}</span>을 읽었습니다 ({time(scan.scanned_at)})
+      </p>
+      {scan.problem ? (
+        <ErrorBanner message={scan.problem} />
+      ) : items.length === 0 ? (
+        <p className="text-body text-text-muted">폴더에 확장 정의 파일(*.extension.json)이 없습니다.</p>
+      ) : (
+        <DataTable columns={columns} rows={items} rowKey={(row) => row.file} caption="확장 폴더" />
+      )}
+    </section>
   );
 }
 

@@ -7,6 +7,7 @@ import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
 import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
+import type { ExtensionFolderScan } from "@chaeksas/api-types/c7-extension-folder-scan";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
 
 /**
@@ -190,6 +191,8 @@ export const center = {
 
   serviceApp: (appId: string) =>
     call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
+  /** Center가 뜰 때 확장 폴더를 읽은 결과 (C7, ADR-0121, CON-07 「확장 폴더」). */
+  extensionFolder: () => call<ExtensionFolderScan>("/api/v1/resources/extension-folder"),
   /** 들인 일꾼 (C15, CON-07 「일꾼」). */
   consumers: () => call<ConsumerInfo[]>("/api/v1/consumers"),
   /** 토픽마다 일꾼 수·마지막으로 가져간 때·기다리는 일감 (C15, CON-07 「토픽」). */

@@ -28,11 +28,14 @@ export default async function FeaturePage({
 
   let row: FeatureRow | null = null;
   let version = "";
+  let source: string | undefined;
   let failure: string | null = null;
   try {
     const got = await loadFeatures();
     row = got.rows.find((one) => one.key === wanted) ?? null;
-    version = got.input.extensions.find((one) => one.id === wanted)?.version ?? "";
+    const ext = got.input.extensions.find((one) => one.id === wanted);
+    version = ext?.version ?? "";
+    source = ext?.source ?? undefined;
     if (!row) failure = "그런 기능이 없습니다.";
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
@@ -97,6 +100,12 @@ export default async function FeaturePage({
                     "—"
                   )}
                 </dd>
+              </>
+            ) : null}
+            {row.external && source ? (
+              <>
+                <dt className="text-text-muted">출처</dt>
+                <dd>{source === "folder" ? "확장 폴더 (Center가 뜰 때 들였습니다)" : "콘솔 (「기능 추가 (외부)」)"}</dd>
               </>
             ) : null}
             <dt className="text-text-muted">id</dt>
