@@ -227,7 +227,8 @@ describe("runnerStatus", () => {
   });
 
   it("아는 값은 표기로, 모르는 값은 그대로 (열린 문자열이다)", () => {
-    expect(runnerStatus(runner({ status: "draining" }))).toBe("정리 중");
+    expect(runnerStatus(runner({ status: "draining" }))).toBe("재시작 중");
+    expect(runnerStatus(runner({ restart_requested_at: "2026-10-31T00:00:00+00:00" }))).toBe("재시작 중");
     expect(runnerStatus(runner({ status: "error" }))).toBe("오류");
     expect(runnerStatus(runner({ status: "wedged" }))).toBe("wedged");
   });

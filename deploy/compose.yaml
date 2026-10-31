@@ -22,6 +22,8 @@ services:
       # 자동화(스크립트)용 토큰 — 비우면 그 길이 닫힌다. 콘솔은 계정으로 들어온다.
       CHK_CENTER__ADMIN_TOKEN: ${CHK_CENTER__ADMIN_TOKEN:-}
       CHK_CENTER__READ_TOKEN: ${CHK_CENTER__READ_TOKEN:-}
+      # 같이 뜨는 서버 실행기를 승인 없이 들이는 비밀 (ADR-0117) — 아래 실행기와 **같은 값**이다.
+      CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN: ${CHK_SERVER_RUNNER__JOIN_TOKEN:?들이기 비밀을 .env에 넣으세요 (CHK_SERVER_RUNNER__JOIN_TOKEN)}
       CHK_CENTER__PORT: "8800"
     ports:
       # 컨테이너 안의 포트는 문서의 기본값 그대로 두고, **호스트 쪽만** 바꿀 수 있게 한다
@@ -41,9 +43,10 @@ services:
       CHK_SERVER_RUNNER__CENTER_URL: http://center:8800
       # 콘솔 「서버 실행」에 보일 이름. 비우면 컨테이너 호스트 이름(무작위 글자)이 된다.
       CHK_SERVER_RUNNER__NAME: ${CHK_SERVER_RUNNER__NAME:-server-runner}
-      # Center API 키는 **등록 승인으로 받는다** — 처음 뜨면 요청 코드를 로그에 찍는다
-      # (`docker compose logs server-runner`). 콘솔 「서버 실행」 → 「승인 대기」에서 같은 코드를 승인한다.
-      # 받은 키·서비스 앱 키는 볼륨 `server-runner-secrets`에 간다 (ADR-0100 — 이미지가 정해 둔 자리).
+      # Center API 키는 **들이기 비밀로 바로 받는다** (ADR-0117) — Center와 같은 값을 등록 요청에 싣고,
+      # 맞으면 Center가 그 자리에서 승인한다. 사람이 승인하지 않는다.
+      # 받은 키는 볼륨 `server-runner-secrets`에 간다 (ADR-0100 — 이미지가 정해 둔 자리).
+      CHK_SERVER_RUNNER__JOIN_TOKEN: ${CHK_SERVER_RUNNER__JOIN_TOKEN:?들이기 비밀을 .env에 넣으세요 (CHK_SERVER_RUNNER__JOIN_TOKEN)}
       # 아래 값을 채우면 그 키가 이기고 등록 요청·회전·서비스 앱 키 받기를 하지 않는다 (CI·자동화용).
       CHK_SERVER_RUNNER__CENTER_API_KEY: ${CHK_SERVER_RUNNER__CENTER_API_KEY:-}
       CHK_SERVER_RUNNER__MAX_CONCURRENCY: ${CHK_SERVER_RUNNER__MAX_CONCURRENCY:-}

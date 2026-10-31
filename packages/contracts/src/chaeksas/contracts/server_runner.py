@@ -49,6 +49,10 @@ DEFAULT_MAX_CONCURRENCY = 10
 #: BPM 프로세스 하나가 한 번에 도는 수의 기본 상한 (배포의 `max_concurrency`, ADR-0016).
 DEFAULT_PER_BOT_CONCURRENCY = 5
 
+#: 같이 배포된 실행기가 등록 요청에 싣는 **들이기 비밀**의 헤더 (C12 §등록 요청과 승인, ADR-0117).
+#: 본문이 아니라 헤더다 — 요청 본문은 「승인 대기」를 위해 저장된다.
+JOIN_TOKEN_HEADER = "X-CHK-Join-Token"
+
 ServerRunnerId = Annotated[str, Field(pattern=r"^srv_[0-9a-f]{8}$")]
 
 # 알려진 값 (모두 열린 문자열).
@@ -263,6 +267,9 @@ class ServerRunnerHeartbeatResponse(ContractModel):
     rotated_key: RotatedKey | None = None
     #: 이 키의 만료 (C7). **주기마다 싣는다** (C4와 같다).
     key_expires_at: Timestamp | None = None
+    #: 참이면 **재시작** (CON-02 「재시작」, ADR-0117) — 새 작업을 받지 않고 자리를 쥔 실행이 끝나면
+    #: 스스로 끝난다. 다시 띄우는 것은 감독하는 쪽(compose·systemd)이다.
+    restart: bool = False
 
 
 # ─────────────────────────── 메시지 (외부 시스템 → Center) ───────────────────────────
@@ -357,6 +364,8 @@ class ServerRunnerInfo(ContractModel):
     key_prefix: str | None = None
     key_expires_at: Timestamp | None = None
     unsent_events: int | None = None
+    #: 운영자가 「재시작」을 누른 시각 (ADR-0117). 실행기가 다시 등록하면 지워진다.
+    restart_requested_at: Timestamp | None = None
 
 
 # ─────────────────────────── 검사 ───────────────────────────

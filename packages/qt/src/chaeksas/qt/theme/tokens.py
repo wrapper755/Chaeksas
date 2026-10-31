@@ -205,7 +205,7 @@ STATUS_MAP: Final[dict[str, dict[str, str]]] = {
     "서버 실행기": {
         "동작": "done",
         "일시 중지": "neutral",
-        "정리 중": "active",
+        "재시작 중": "active",
         "오류": "failed",
         "오프라인": "warning",
     },

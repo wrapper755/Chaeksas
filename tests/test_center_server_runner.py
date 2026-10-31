@@ -429,6 +429,36 @@ def test_only_as_many_as_there_are_free_slots(client: TestClient, store: Store) 
     assert len(answer["jobs"]) == 2, "빈자리만큼만 내려 준다 (C12)"
 
 
+def test_restart_is_told_until_the_runner_registers_again(client: TestClient, store: Store) -> None:
+    """「재시작」 (ADR-0117) — 하트비트마다 싣고 작업은 싣지 않는다. **다시 등록하면 지운다**."""
+    key = issue(client)
+    runner_id = register(client, key)["server_runner_id"]
+    _insert_job(store, job_id="job_a", target_id="")
+    first = client.post(f"/api/v1/server-runners/{runner_id}/restart", headers=ADMIN)
+    assert first.status_code == 200, first.text
+    # 두 번 눌러도 처음 시각이 남는다.
+    again = client.post(f"/api/v1/server-runners/{runner_id}/restart", headers=ADMIN)
+    assert again.json()["restart_requested_at"] == first.json()["restart_requested_at"]
+    listed = client.get("/api/v1/server-runners", headers=ADMIN).json()[0]
+    assert listed["restart_requested_at"] == first.json()["restart_requested_at"]
+
+    answer = beat(client, key)
+    assert answer["restart"] is True and answer["jobs"] == []
+    assert beat(client, key)["restart"] is True  # 응답 하나를 잃어도 다음에 다시 온다
+
+    register(client, key)
+    assert beat(client, key)["restart"] is False
+    assert client.get("/api/v1/server-runners", headers=ADMIN).json()[0]["restart_requested_at"] is None
+
+
+def test_restart_needs_the_admin_token_and_a_known_runner(client: TestClient) -> None:
+    key = issue(client)
+    runner_id = register(client, key)["server_runner_id"]
+    refused = client.post(f"/api/v1/server-runners/{runner_id}/restart", headers=READ)
+    assert refused.status_code == 403
+    assert client.post("/api/v1/server-runners/srv_deadbeef/restart", headers=ADMIN).status_code == 404
+
+
 def test_a_paused_runner_gets_no_jobs(client: TestClient, store: Store) -> None:
     key = issue(client)
     runner_id = register(client, key)["server_runner_id"]

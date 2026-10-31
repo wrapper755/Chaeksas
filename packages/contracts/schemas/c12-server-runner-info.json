@@ -422,6 +422,18 @@
       "default": null,
       "title": "Registered At"
     },
+    "restart_requested_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Restart Requested At"
+    },
     "running": {
       "items": {
         "$ref": "#/$defs/RunningRun"

@@ -121,7 +121,7 @@ def register(
             cur.execute(
                 "UPDATE server_runners SET key_id = ?, machine_id = ?, name = ?, os = ?,"
                 " versions_json = ?, max_concurrency = ?, extensions_json = ?, last_seen_at = NULL,"
-                " state_json = NULL, lost_at = NULL WHERE server_runner_id = ?",
+                " state_json = NULL, lost_at = NULL, restart_requested_at = NULL WHERE server_runner_id = ?",
                 (
                     key.key_id,
                     request.machine_id,
@@ -135,9 +135,11 @@ def register(
             )
         else:
             # **다시 떠도 「유실 처리」를 지운다** — 운영자가 닫아 둔 실행기가 돌아왔다.
+            # **「재시작」도 지운다** (ADR-0117) — 다시 등록했다는 것이 다시 떴다는 표시다.
             cur.execute(
                 "UPDATE server_runners SET machine_id = ?, name = ?, os = ?, versions_json = ?,"
-                " max_concurrency = ?, extensions_json = ?, lost_at = NULL WHERE server_runner_id = ?",
+                " max_concurrency = ?, extensions_json = ?, lost_at = NULL, restart_requested_at = NULL"
+                " WHERE server_runner_id = ?",
                 (
                     request.machine_id,
                     request.name,
@@ -234,10 +236,12 @@ def heartbeat(
     deployments.remember_results(store, host_id=runner_id, results=request.deployment_results)
 
     paused = bool(found["paused"])
+    # 재시작을 요청해 두었으면 **작업을 싣지 않는다** (ADR-0117) — 곧 끝날 프로세스다.
+    restart = found["restart_requested_at"] is not None
     # **일정을 먼저 쓴다** (ADR-0110) — 이번 차례의 작업이 이 하트비트로 바로 내려간다.
     timers.sweep(store, tz=zone or DEFAULT_ZONE)
     dispatch, cancels = jobs.server_heartbeat(
-        store, runner_id=runner_id, request=request, paused=paused
+        store, runner_id=runner_id, request=request, paused=paused or restart
     )
     return ServerRunnerHeartbeatResponse(
         server_time=now_iso(),
@@ -261,6 +265,7 @@ def heartbeat(
         rotated_key=enrollments.rotation_for(store, key, host_id=runner_id),
         # **주기마다 싣는다** — 운영자가 기간을 늘려 주면 다음 주기에 바로 안다 (C4·C12).
         key_expires_at=key.expires_at,
+        restart=restart,
     )
 
 
@@ -323,6 +328,7 @@ def runner_listing(store: Store) -> list[ServerRunnerInfo]:
                 registered_at=str(row["registered_at"]),
                 **_key_of(store, str(row["key_id"])),
                 unsent_events=state.get("unsent_events"),
+                restart_requested_at=row["restart_requested_at"],
             )
         )
     return out
@@ -371,6 +377,26 @@ def set_paused(store: Store, runner_id: str, *, paused: bool) -> bool:
             (1 if paused else 0, runner_id),
         )
         return cur.rowcount > 0
+
+
+def request_restart(store: Store, runner_id: str) -> str | None:
+    """CON-02 「재시작」 (C12 운영 API, ADR-0117). 요청 시각을 돌려준다 — 없는 실행기면 `None`.
+
+    **다음 하트비트 응답의 `restart`로 전달되고** 그때부터 작업을 싣지 않는다. 지우는 것은 그
+    실행기의 다음 `register`다 — 응답 하나를 잃어도 다음 하트비트가 다시 싣는다. 두 번 눌러도
+    처음 시각이 남는다.
+    """
+    at = now_iso()
+    with store.tx() as cur:
+        cur.execute(
+            "UPDATE server_runners SET restart_requested_at = COALESCE(restart_requested_at, ?)"
+            " WHERE server_runner_id = ?",
+            (at, runner_id),
+        )
+        if cur.rowcount == 0:
+            return None
+    row = store.row("SELECT restart_requested_at FROM server_runners WHERE server_runner_id = ?", (runner_id,))
+    return str(row["restart_requested_at"]) if row is not None else at
 
 
 def mark_lost(store: Store, runner_id: str) -> dict[str, Any]:
@@ -452,6 +478,7 @@ __all__ = [
     "new_server_runner_id",
     "readiness_of",
     "register",
+    "request_restart",
     "router",
     "runner_listing",
     "set_paused",

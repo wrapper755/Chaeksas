@@ -358,6 +358,51 @@ def test_without_a_key_it_asks_center_and_is_let_in_by_approval(
     assert found.registered
 
 
+def test_a_bundled_runner_is_let_in_by_the_join_token(
+    settings: Settings, store: Store, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: Any
+) -> None:
+    """같이 배포된 실행기 (ADR-0117) — 들이기 비밀이 맞으면 **첫 걸음에** 키를 받는다."""
+    from chaeksas.server_runner import enroll  # noqa: PLC0415
+
+    center_settings = CenterSettings(
+        admin_token="t-admin", package_dir=tmp_path / "pkg", server_runner_join_token="j" * 43
+    )
+    with TestClient(create_app(center_settings, store=store)) as joined:
+        found = build(settings, "", joined)
+        found.credentials = MemoryCredentials()
+        caplog.set_level("INFO")
+        monkeypatch.setenv("CHK_SERVER_RUNNER__JOIN_TOKEN", "j" * 43)
+        key = enroll.step(found)
+        assert key is not None and key.startswith("chk_ctr_")
+        assert "j" * 43 not in caplog.text
+        found.client.api_key = key
+        assert found.tick() is True and found.registered
+
+        # 틀린 비밀은 사람에게 무엇을 맞출지 말한다.
+        other = build(settings, "", joined)
+        other.credentials = MemoryCredentials()
+        monkeypatch.setenv("CHK_SERVER_RUNNER__JOIN_TOKEN", "x" * 43)
+        (settings.data_path / enroll.STATE_FILE).unlink(missing_ok=True)
+        with pytest.raises(CenterProblem, match="CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN"):
+            enroll.step(other)
+
+
+def test_restart_drains_then_says_ready(settings: Settings, key: str, center: TestClient) -> None:
+    """「재시작」 (ADR-0117) — 들으면 `draining`이고, 도는 실행·올릴 ack가 없으면 끝내도 된다."""
+    found = build(settings, key, center)
+    found.tick()
+    found.tick()
+    assert found.restart_ready() is False
+
+    center.post(f"/api/v1/server-runners/{found.server_runner_id}/restart", headers=ADMIN)
+    found.tick()
+    assert found.restarting is True
+    found.tick()
+    listed = center.get("/api/v1/server-runners", headers=READ).json()[0]
+    assert listed["status"] == agent_mod.STATUS_DRAINING
+    assert found.restart_ready() is True
+
+
 def test_once_prints_a_line_without_the_key(
     monkeypatch: pytest.MonkeyPatch, capsys: Any, tmp_path: Path, key: str, center: TestClient
 ) -> None:

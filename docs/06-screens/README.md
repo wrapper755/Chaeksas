@@ -58,7 +58,7 @@
 | PC 실행기 | 연결됨 / 연결 끊김 / 등록 전 / 키 폐기됨 / 키 만료 / 비활성 | done / warning / neutral / failed / failed / neutral |
 | PC 실행기 실행 자리 | 비어 있음 / 실행 중 · 대기 N건 | neutral / active |
 | 실행 위치 | PC / 서버 | 글자로만 표시 (색 없음) |
-| 서버 실행기 | 동작 / 일시 중지 / 정리 중 / 오류 / 오프라인 | done / neutral / active / failed / warning |
+| 서버 실행기 | 동작 / 일시 중지 / 재시작 중 / 오류 / 오프라인 | done / neutral / active / failed / warning |
 | 확장 | 켜짐 / 꺼짐 / 호환 안 됨 / 필요하지만 없음 | done / neutral / warning / failed |
 | 수행 모드 | 자율 수행 / 결정 수행 | 글자로만 표시 (색 없음) |
 | API 키 (Center) | 사용 중 / 만료 / 폐기됨 | done / warning / neutral |

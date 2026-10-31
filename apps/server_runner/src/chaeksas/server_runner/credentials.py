@@ -25,6 +25,8 @@ SERVICE = "chaeksas-server-runner"
 #: Center API 키 (C12 — 「서버 실행기용」 종류).
 CENTER_API_KEY = "center_api_key"
 ENV_CENTER_API_KEY = "CHK_SERVER_RUNNER__CENTER_API_KEY"
+#: 같이 배포된 실행기를 승인 없이 들이는 비밀 (C12 §등록 요청과 승인, ADR-0117) — **환경변수로만** 온다.
+ENV_JOIN_TOKEN = "CHK_SERVER_RUNNER__JOIN_TOKEN"
 #: 등록 요청에 쓴 키 쌍의 비밀 반쪽 (C12 §등록 요청과 승인).
 ENROLL_SECRET = "enroll_secret"
 
@@ -131,6 +133,10 @@ class Credentials:
         """키가 환경변수로 오는가 — 그러면 등록 요청도 회전도 하지 않는다."""
         return bool(os.environ.get(ENV_CENTER_API_KEY))
 
+    def join_token(self) -> str | None:
+        """들이기 비밀 (ADR-0117). 저장소에 두지 않는다 — Center와 같은 `.env`에서 온다."""
+        return os.environ.get(ENV_JOIN_TOKEN) or None
+
     def enroll_secret(self) -> str | None:
         """등록 요청에 쓴 키 쌍의 비밀 반쪽 — 비밀 저장소에만 있다 (환경변수 길이 없다)."""
         return self.get(ENROLL_SECRET)
@@ -168,6 +174,7 @@ __all__ = [
     "CENTER_API_KEY",
     "ENV_CENTER_API_KEY",
     "ENV_EXTENSION_PREFIX",
+    "ENV_JOIN_TOKEN",
     "ENV_LLM_API_KEY",
     "ENV_SMTP_PASSWORD",
     "EXTENSION_PREFIX",

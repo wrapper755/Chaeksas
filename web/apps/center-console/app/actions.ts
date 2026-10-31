@@ -87,6 +87,22 @@ export async function setRunnerPaused(runnerId: string, paused: boolean): Promis
 }
 
 /**
+ * 서버 실행기 재시작 (CON-02 「서버」 탭, C12, ADR-0117).
+ *
+ * 실행기는 새 작업을 받지 않고 도는 실행이 끝나면 **스스로 끝난다** — 다시 띄우는 것은 compose다.
+ */
+export async function restartRunner(runnerId: string): Promise<ActionResult> {
+  try {
+    await center.restartRunner(runnerId);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/server-runners", "layout");
+  revalidatePath("/bots");
+  return {};
+}
+
+/**
  * 유실 처리 (CON-12, C12 `mark-lost`) — **되돌릴 수 없다.**
  *
  * 그 실행기의 실행을 `failed`(`runner_lost`)로 닫고 결재를 회수한다 (C6 `host_lost`).
