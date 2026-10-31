@@ -75,6 +75,9 @@ class Settings:
     external_task_max_waiters: int = DEFAULT_EXTERNAL_TASK_WAITERS
     #: 타이머 시작의 시간대 (ADR-0110 §3). 풀 수 없으면 Center가 뜨지 않는다 (`zone()`).
     timezone: str = DEFAULT_TIMEZONE
+    #: 확장 폴더 (ADR-0121) — Center가 **뜰 때** 여기의 `*.extension.json`을 콘솔 등록과 같은 관문으로 들인다.
+    #: 비면 그 길이 닫힌다.
+    extensions_dir: Path | None = None
 
     def zone(self) -> tzinfo:
         """일정의 시간대. **풀 수 없으면 실패한다** — 틀린 시간대로 조용히 도는 일정은 없다."""
@@ -92,6 +95,7 @@ class Settings:
         port = _env("PORT")
         db = _env("DB_PATH")
         packages = _env("PACKAGE_DIR")
+        extensions_dir = _env("EXTENSIONS_DIR")
         return cls(
             port=int(port) if port else DEFAULT_PORT,
             host=_env("HOST") or "0.0.0.0",  # noqa: S104
@@ -108,4 +112,5 @@ class Settings:
                 _env("EXTERNAL_TASKS__MAX_WAITERS") or DEFAULT_EXTERNAL_TASK_WAITERS
             ),
             timezone=_env("TIMEZONE") or DEFAULT_TIMEZONE,
+            extensions_dir=Path(extensions_dir) if extensions_dir else None,
         )

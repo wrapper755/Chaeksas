@@ -268,6 +268,8 @@ from chaeksas.contracts.replay import (
 )
 from chaeksas.contracts.resources import (
     ContributedResource,
+    ExtensionFolderItem,
+    ExtensionFolderScan,
     ExtensionResource,
     InstalledOn,
     MissingResource,
@@ -501,6 +503,8 @@ __all__ = [
     "CenterKeyCreated",
     "CenterKeyInfo",
     "ContributedResource",
+    "ExtensionFolderItem",
+    "ExtensionFolderScan",
     "ExtensionResource",
     "InstalledOn",
     "MissingResource",  # `Operation`은 C11이 소유한다

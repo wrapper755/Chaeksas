@@ -22,6 +22,7 @@ from chaeksas.contracts import (
     Catalog,
     Envelope,
     EventBatchResponse,
+    ExtensionFolderScan,
     ExtensionManifest,
     ExternalTaskCreate,
     FetchResponse,
@@ -49,6 +50,7 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C5-packages-deployments-jobs", 0, VirtualWorkerInfo),  # 가상 직원 (ADR-0085)
     ("C6-approvals", 0, ApprovalCreateRequest),
     ("C6-approvals", 1, TypeAdapter(dict[str, Any])),  # 표 값이 든 검토 자료 (ADR-0112)
+    ("C7-resources-center-keys", 0, ExtensionFolderScan),  # 확장 폴더 (ADR-0121)
     ("C12-server-runner-center", 0, ServerRunnerHeartbeatRequest),
     ("C12-server-runner-center", 1, MessageRequest),  # 외부 시스템이 넣는 메시지
     ("C13-extension-manifest", 0, Catalog),  # 공통 카탈로그 형식

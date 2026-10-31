@@ -41,8 +41,10 @@
 
 정의가 외부 앱을 부르는 길(허용 호스트·인증 방식·작업)을 정하기 때문에, 배포와 같은 관문을 둔다 — **관리자만** 등록하고, 등록하면 Center가 C2 `extension` claim(`{id, version, definition_hash}`)에 서명한다 ([ADR-0090](../decisions/0090-center-admin-accounts.md)). 실행하는 쪽은 봉투로 「Center가 등록한 그 정의인가」를 다시 본다.
 
-1. 관리자가 CON-07 「확장 추가」에서 정의 파일을 올린다.
-2. Center가 E1·E2·E3·E4를 보고, 지나면 봉투에 서명해 정의와 함께 둔다.
+1. 관리자가 CON-07 「확장 추가」에서 정의 파일을 올린다. **또는** 배포가 정의 파일(`*.extension.json`)을 Center의 **확장 폴더**(`CHK_CENTER__EXTENSIONS_DIR`)에 복사해 두면 Center가 **뜰 때** 들인다 ([ADR-0121](../decisions/0121-extension-folder.md) — 폴더에 쓸 수 있는 사람을 관리자로 본다. 파일에는 정의만 있다).
+2. Center가 E1·E2·E3·E4를 보고, 지나면 봉투에 서명해 정의와 함께 둔다. 두 길이 **같은 관문**이다.
+
+확장 폴더는 덮어쓰지도 되돌리지도 않는다 — 같은 판·같은 내용은 그대로, 같은 판에 다른 내용·철회된 판은 거절, **더 높은 판이 이미 있으면 건너뛴다**. 폴더에서 지운 파일의 등록은 남는다(해제는 사람이 한다). 잘못된 파일은 Center를 막지 않고 사유가 C7 `GET /resources/extension-folder`로 나온다.
 
 | 경로 | 인증 | 뜻 |
 | --- | --- | --- |
@@ -297,6 +299,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 2 | 외부 확장은 **확장 폴더**로도 들어온다 — Center가 뜰 때 읽고 콘솔 등록과 같은 관문을 지난다. 모양은 그대로다 | [0121](../decisions/0121-extension-folder.md) |
 | 2026-10-31 | 2 | 기여 지점 `tool_ui.tools`·`bot_ui.panels`·`bot_ui.local_runtimes`·`agent_environments`, **E8**, 예약 키 `runtime.<id>.*`, `scope: tool_ui`, `requires_keys[].purpose: utility`를 걷었다 — UI 자동화 확장과 함께. 걷은 열쇠는 호스트가 경고하고 읽지 않는다(`LEGACY_CONTRIBUTION_KEYS`), E7은 옛 머리도 막는다. 열쇠가 모두 선택이라 schema는 그대로이고 `extension_api`는 **2.0.0**이다(이름을 지웠다 — 예시의 `api`는 `>=2,<3`) | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 2 | 수행기가 전환할 때 **사람에게 보일 검토 자료**(`TaskFailed(review=…)`)를 넘긴다 — `extension_api` **1.5**. 정의는 그대로다 | [0112](../decisions/0112-escalation-review-from-extensions.md) |
 | 2026-10-29 | 2 | `requires_keys`에 키가 없다 — `run`은 빌드가 `requires.service_apps` 줄을 적는 뜻, `extra_scopes`는 Center가 PC 스위치로 건다. 외부 앱은 **어댑터 일꾼**이 부른다 — 주소·키는 그 일꾼 설정(`CHK_ADAPTER__EXT__<확장>__*`), 실행하는 쪽은 정의 검증·고정만. 예약 키 `service.base_url`·`service.key_ref` → `center.url`·`call_token` 비밀, `CHK_RUNTIME__SERVICE_URL` → `CHK_RUNTIME__CENTER_URL`. 예약 접두 `service.` → `center.` | [0102](../decisions/0102-calling-outside-is-pull.md) |

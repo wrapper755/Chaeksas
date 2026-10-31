@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
-from chaeksas.center import accounts, keys, signer
+from chaeksas.center import accounts, extension_folder, keys, signer
 from chaeksas.center.api import (
     approvals,
     bot_ui,
@@ -91,6 +91,9 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             password=settings.first_admin_password,
             data_dir=data_folder,
         )
+
+    # 확장 폴더도 **뜰 때** 들인다 (ADR-0121) — 서명 키가 갖춰진 뒤에. 잘못된 파일은 사유만 남고 Center는 뜬다.
+    app.state.extension_folder = extension_folder.scan(app.state.store, settings.extensions_dir)
 
     def authenticate(request: Request) -> Caller:
         return caller(
@@ -446,6 +449,12 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def get_contributed(request: Request, resource_type: str, resource_id: str) -> Any:
         require_read(authenticate(request))
         return resources.contributed_resource(app.state.store, resource_type, resource_id)
+
+    @app.get(f"{API}/resources/extension-folder")
+    def get_extension_folder(request: Request) -> Any:
+        """Center가 마지막으로 뜰 때 확장 폴더를 읽은 결과 (C7, ADR-0121)."""
+        require_read(authenticate(request))
+        return app.state.extension_folder.to_json_dict()
 
     @app.get(f"{API}/resources/extensions/{{extension_id}}")
     def get_extension(request: Request, extension_id: str) -> Any:

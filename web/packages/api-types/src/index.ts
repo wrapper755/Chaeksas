@@ -83,6 +83,7 @@ export const CONTRACT_MODULES = [
   "c7-center-key-created",
   "c7-center-key-info",
   "c7-contributed-resource",
+  "c7-extension-folder-scan",
   "c7-extension-resource",
   "c7-extension-revoke-request",
   "c7-runtime-resource",

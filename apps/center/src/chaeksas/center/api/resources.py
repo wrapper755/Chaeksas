@@ -251,9 +251,17 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
                 checked_at=checked,
                 definition=definition,
                 envelope=json.loads(registered["envelope_json"]) if registered is not None else None,
+                source=_source_of(registered),
             )
         )
     return out
+
+
+def _source_of(row: Any) -> str | None:
+    """외부 확장 줄이 어디서 들어왔나 (C7, ADR-0121). 비어 있으면 콘솔(API) 등록이다."""
+    if row is None:
+        return None
+    return str(row["source"] or "console")
 
 
 def _protocol_of(definition: dict[str, Any] | None, app: ServiceAppResource | None) -> str | None:
@@ -454,12 +462,14 @@ def _refuse(problems: list[Any], *, status: int = 422) -> None:
     )
 
 
-def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ExtensionResource, bool]:
+def register_extension(
+    store: Store, found: Caller, raw: dict[str, Any], *, source: str | None = None
+) -> tuple[ExtensionResource, bool]:
     """`POST /resources/extensions` — 정의를 받아 **Center가 `extension` 봉투로 서명한다** (C13 E6, ADR-0090).
 
     관문은 관리자 계정이다. 검사(E1·E2·E3·E4)를 모두 지난 정의에만 서명한다 — 정의가 BPM 프로세스의
     키를 어느 주소로 보낼지 정하므로 배포와 같은 관문이다. 봉투는 정의와 함께 그대로 두고
-    실행하는 쪽이 다시 검증한다(E6).
+    실행하는 쪽이 다시 검증한다(E6). 확장 폴더도 **이 함수 하나**를 지난다 — `source="folder"` (ADR-0121).
     """
     from chaeksas.center import signer  # noqa: PLC0415
     from chaeksas.center.api.signing import admin_keys  # noqa: PLC0415 — 순환 import를 피한다
@@ -511,8 +521,8 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO extensions (id, version, definition_json, envelope_json, definition_hash,"
-            " revoked_json, at, registered_by) VALUES (?, ?, ?, ?, ?, NULL, ?, ?)",
-            (manifest.id, manifest.version, body, envelope_body, computed, now_iso(), found.actor),
+            " revoked_json, at, registered_by, source) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)",
+            (manifest.id, manifest.version, body, envelope_body, computed, now_iso(), found.actor, source),
         )
     return extension(store, manifest.id), True
 
@@ -566,6 +576,7 @@ def _revoked_info(store: Store, extension_id: str, version: str) -> ExtensionRes
         status="n/a",
         definition=definition,
         envelope=json.loads(row["envelope_json"]),
+        source=_source_of(row),
     )
 
 

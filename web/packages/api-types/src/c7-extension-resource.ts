@@ -23,6 +23,7 @@ export interface ExtensionResource {
   protocol?: string | null;
   publisher?: string | null;
   service_app_id?: string | null;
+  source?: string | null;
   status?: string;
   status_reasons?: string[];
   tier: string;

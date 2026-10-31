@@ -1,0 +1,127 @@
+{
+  "$defs": {
+    "ExtensionFolderItem": {
+      "additionalProperties": true,
+      "description": "확장 폴더의 파일 하나를 읽은 결과 (ADR-0121). 읽지 못했으면 `id`·`version`이 없다.",
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "file": {
+          "title": "File",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Message"
+        },
+        "outcome": {
+          "title": "Outcome",
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "required": [
+        "file",
+        "outcome"
+      ],
+      "title": "ExtensionFolderItem",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c7-extension-folder-scan",
+  "additionalProperties": true,
+  "description": "`GET /resources/extension-folder` — Center가 **마지막으로 뜰 때** 확장 폴더를 읽은 결과 (ADR-0121).",
+  "properties": {
+    "configured": {
+      "default": false,
+      "title": "Configured",
+      "type": "boolean"
+    },
+    "dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dir"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/ExtensionFolderItem"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "problem": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Problem"
+    },
+    "scanned_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scanned At"
+    }
+  },
+  "title": "ExtensionFolderScan",
+  "type": "object"
+}
