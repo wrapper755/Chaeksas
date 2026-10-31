@@ -8,6 +8,9 @@ import { CenterError, center, session } from "@/lib/center";
 import { readinessLabel } from "@/lib/summary";
 import { Shell } from "@/components/Shell";
 import { BotUiActions } from "../actions-ui";
+import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
+import { KeyLine } from "@/components/KeyLine";
+import { keyByPrefix } from "@/lib/center-keys";
 import type { Route } from "next";
 import { fullTime, runtimeLabel, running, statusLabel, time } from "../page";
 import { sourceLabel } from "@/lib/labels";
@@ -73,9 +76,12 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
   let info: BotUiInfo | null = null;
   let deployments: DeploymentInfo[] = [];
   let failure: string | null = null;
+  let key: CenterKeyInfo | null = null;
   try {
     info = (await center.botUis()).find((row) => row.bot_ui_id === wanted) ?? null;
     deployments = await center.deployments({ botUi: wanted, active: true });
+    // 이 PC의 키 — 폐기는 여기서 한다 (ADR-0124). 보고에 실린 앞자리로 잇는다.
+    if (info?.key) key = keyByPrefix(await center.centerKeys({ type: "bot_ui" }), "bot_ui", info.key.prefix);
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -213,9 +219,13 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
               <dt className="text-text-muted">처음 등록</dt>
               <dd>{time(info.registered_at)}</dd>
               <dt className="text-text-muted">API 키</dt>
-              <dd className="font-mono">
-                {info.key ? `${info.key.prefix}…` : "—"}
-                {info.key?.expires_at ? ` (${fullTime(info.key.expires_at)}까지)` : " (무기한)"}
+              <dd>
+                <KeyLine
+                  prefix={info.key?.prefix}
+                  until={info.key?.expires_at ? fullTime(info.key?.expires_at) : null}
+                  row={key}
+                  admin={found.mode === "admin"}
+                />
               </dd>
             </dl>
           </Section>

@@ -71,7 +71,6 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "관리",
     items: [
-      { label: "API 키", href: "/center-keys" },
       // 계정을 보는 것도 관리자의 일이다 (C5 `GET /accounts`) — 보기 전용에는 줄이 없다.
       { label: "관리자 계정", href: "/accounts", adminOnly: true },
     ],

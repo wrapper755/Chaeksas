@@ -17,8 +17,6 @@ import { COOKIE_NAME, seal } from "@/lib/session";
 
 export interface ActionResult {
   error?: string;
-  /** 발급한 키 원문 — **이 응답에만 실린다** (CON-11). */
-  secret?: { name: string; key: string };
 }
 
 function message(cause: unknown): string {
@@ -322,18 +320,11 @@ export async function deletePackage(packageId: string, version: string): Promise
   return {};
 }
 
-export async function createCenterKey(_previous: ActionResult, form: FormData): Promise<ActionResult> {
-  const name = String(form.get("name") ?? "").trim();
-  const type = String(form.get("type") ?? "bot_ui");
-  if (!name) return { error: "이름을 입력하세요." };
-  try {
-    const created = await center.createCenterKey({ name, type });
-    revalidatePath("/center-keys");
-    // 원문은 화면에 한 번만 보이고, 어디에도 저장하지 않는다.
-    return { secret: { name: created.name, key: created.key } };
-  } catch (cause) {
-    return { error: message(cause) };
-  }
+/** 키 동작은 그 키가 가리키는 화면에 있다 (ADR-0124) — 그 화면들을 다시 그린다. */
+function revalidateKeys() {
+  revalidatePath("/bot-uis", "layout");
+  revalidatePath("/server-runners", "layout");
+  revalidatePath("/resources");
 }
 
 export async function revokeCenterKey(keyId: string): Promise<ActionResult> {
@@ -342,7 +333,7 @@ export async function revokeCenterKey(keyId: string): Promise<ActionResult> {
   } catch (cause) {
     return { error: message(cause) };
   }
-  revalidatePath("/center-keys");
+  revalidateKeys();
   return {};
 }
 
@@ -365,18 +356,17 @@ export async function decideEnrollment(
   revalidatePath("/resources", "layout");
   revalidatePath("/server-runners", "layout");
   revalidatePath("/bots");
-  revalidatePath("/center-keys");
   return {};
 }
 
-/** CON-11 「삭제...」 — 폐기된 키의 행을 지운다 (C7 `purge`, ADR-0095). */
+/** 키 「삭제...」 — 폐기된 키의 행을 지운다 (C7 `purge`, ADR-0095). */
 export async function deleteCenterKey(keyId: string): Promise<ActionResult> {
   try {
     await center.purgeCenterKey(keyId);
   } catch (cause) {
     return { error: message(cause) };
   }
-  revalidatePath("/center-keys");
+  revalidateKeys();
   return {};
 }
 
@@ -386,7 +376,7 @@ export async function unbindCenterKey(keyId: string): Promise<ActionResult> {
   } catch (cause) {
     return { error: message(cause) };
   }
-  revalidatePath("/center-keys");
+  revalidateKeys();
   return {};
 }
 

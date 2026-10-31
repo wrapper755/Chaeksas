@@ -9,6 +9,9 @@ import { botLimitRows, elapsed, runnerStatus, serverDeployments } from "@/lib/su
 import { Shell } from "@/components/Shell";
 import { fullTime, time } from "../../bot-uis/page";
 import { ServerRunnerActions } from "../actions-ui";
+import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
+import { KeyLine } from "@/components/KeyLine";
+import { keyByPrefix } from "@/lib/center-keys";
 
 /**
  * CON-12 서버 실행 (상세) — 서버 실행기·실행 중·기다리는 실행·BPM 프로세스별 상한.
@@ -76,10 +79,15 @@ export default async function ServerRunnerPage({
   let info: ServerRunnerInfo | null = null;
   let deployments: DeploymentInfo[] = [];
   let failure: string | null = null;
+  let key: CenterKeyInfo | null = null;
   try {
     // 목록 한 줄이 상세의 재료를 다 들고 있다 (C12 — 실행기별 읽기 경로가 따로 없다).
     info = (await center.serverRunners()).find((row) => row.server_runner_id === wanted) ?? null;
     deployments = serverDeployments(await center.deployments({ active: true }), wanted);
+    // 이 실행기의 키 — 폐기는 여기서 한다 (ADR-0124). 보고에 실린 앞자리로 잇는다.
+    if (info?.key_prefix) {
+      key = keyByPrefix(await center.centerKeys({ type: "server_runner" }), "server_runner", info.key_prefix);
+    }
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -285,9 +293,13 @@ export default async function ServerRunnerPage({
               <dt className="text-text-muted">처음 등록</dt>
               <dd>{time(info.registered_at)}</dd>
               <dt className="text-text-muted">API 키</dt>
-              <dd className="font-mono">
-                {info.key_prefix ? `${info.key_prefix}…` : "—"}
-                {info.key_expires_at ? ` (${fullTime(info.key_expires_at)}까지)` : " (무기한)"}
+              <dd>
+                <KeyLine
+                  prefix={info.key_prefix}
+                  until={info.key_expires_at ? fullTime(info.key_expires_at) : null}
+                  row={key}
+                  admin={found.mode === "admin"}
+                />
               </dd>
             </dl>
 

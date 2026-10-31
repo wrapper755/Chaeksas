@@ -1,6 +1,6 @@
-/** CON-11 줄 동작 (`lib/center-keys.ts`) — 폐기·묶음 풀기가 **그 줄의 키에만** 걸리는가. */
+/** 키 줄 동작 (`lib/center-keys.ts`) — 폐기·묶음 풀기가 **그 줄의 키에만** 걸리는가. */
 import { describe, expect, it } from "vitest";
-import { keyActions, keyFilter, splitKeys } from "./center-keys";
+import { consoleIssuedKeys, currentKey, folderKey, keyActions } from "./center-keys";
 
 const pc = { id: "bui_1", type: "bot_ui", name: "재무팀 PC-03" };
 
@@ -26,26 +26,55 @@ describe("keyActions", () => {
   });
 });
 
-describe("splitKeys", () => {
-  it("승인이 만드는 종류는 아래, 나머지는 위 — 순서는 그대로", () => {
-    const rows = ["bot_ui", "integration", "studio", "relay", "server_runner", "consumer", "someday"].map((type) => ({ type }));
-    const { integration, enrolled } = splitKeys(rows);
-    expect(integration.map((row) => row.type)).toEqual(["integration", "relay", "someday"]);
-    expect(enrolled.map((row) => row.type)).toEqual(["bot_ui", "studio", "server_runner", "consumer"]);
+const key = (name: string, type: string, state: string, created_at: string, prefix = "") => ({
+  name,
+  type,
+  state,
+  created_at,
+  prefix,
+});
+
+describe("currentKey", () => {
+  it("사용 중인 것이 이긴다", () => {
+    const rows = [key("a", "relay", "revoked", "2026-11-02"), key("a", "relay", "active", "2026-11-01")];
+    expect(currentKey(rows)?.state).toBe("active");
+  });
+
+  it("다 폐기됐으면 가장 최근 것", () => {
+    const rows = [key("a", "relay", "revoked", "2026-10-01"), key("a", "relay", "revoked", "2026-10-31")];
+    expect(currentKey(rows)?.created_at).toBe("2026-10-31");
+    expect(currentKey([])).toBeNull();
   });
 });
 
-describe("keyFilter", () => {
-  it("아는 종류·상태만 남긴다", () => {
-    expect(keyFilter({ type: "integration", state: "revoked" })).toEqual({ type: "integration", state: "revoked" });
-    expect(keyFilter({ type: "consumer" })).toEqual({ type: "consumer" });
+describe("folderKey", () => {
+  const keys = [
+    key("worker", "consumer", "revoked", "2026-10-30"),
+    key("worker", "consumer", "active", "2026-10-31"),
+    key("nowview-relay", "relay", "active", "2026-10-31"),
+    // 같은 이름이라도 앞자리가 있으면 콘솔에서 발급한 것 — 폴더 줄과 잇지 않는다.
+    key("nowview-relay", "relay", "active", "2026-11-01", "chk_ctr_abcd1234"),
+  ];
+
+  it("일꾼 줄은 일꾼용 키, 키 줄은 연동용·대리 답용 키", () => {
+    expect(folderKey({ kind: "consumer", id: "worker" }, keys)?.created_at).toBe("2026-10-31");
+    expect(folderKey({ kind: "key", id: "nowview-relay" }, keys)?.prefix).toBe("");
   });
 
-  it("모르는 값·빈 값은 버린다 — 「(전체)」로 돌아간다", () => {
-    expect(keyFilter({ type: "call_token", state: "gone" })).toEqual({});
-    expect(keyFilter({ type: "", state: "" })).toEqual({});
-    expect(keyFilter({})).toEqual({});
-    // 프로토타입 키로 새지 않는다.
-    expect(keyFilter({ type: "toString" })).toEqual({});
+  it("키가 없는 줄은 null — 거둔 확장·읽지 못한 파일", () => {
+    expect(folderKey({ kind: "extension", id: "ext-credit" }, keys)).toBeNull();
+    expect(folderKey({ kind: "consumer", id: null }, keys)).toBeNull();
+    expect(folderKey({ kind: "key", id: "worker" }, keys)).toBeNull();
+  });
+});
+
+describe("consoleIssuedKeys", () => {
+  it("앞자리가 있는 연동용·대리 답용만", () => {
+    const keys = [
+      key("test1", "integration", "active", "2026-10-31", "chk_ctr_1"),
+      key("nowview-integration", "integration", "active", "2026-10-31"),
+      key("pc", "bot_ui", "active", "2026-10-31", "chk_ctr_2"),
+    ];
+    expect(consoleIssuedKeys(keys).map((row) => row.name)).toEqual(["test1"]);
   });
 });

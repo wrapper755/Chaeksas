@@ -32,7 +32,6 @@ import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 import type { EnrollmentDecision } from "@chaeksas/api-types/c5-enrollment-decision";
 import type { ExternalTaskInfo } from "@chaeksas/api-types/c15-external-task-info";
 import type { ScheduleInfo } from "@chaeksas/api-types/c5-schedule-info";
-import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
 import type { RunListing } from "@chaeksas/api-types/c3-run-listing";
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
@@ -288,8 +287,6 @@ export const center = {
     const suffix = search.size > 0 ? `?${search}` : "";
     return call<CenterKeyInfo[]>(`/api/v1/center-keys${suffix}`);
   },
-  createCenterKey: (body: { name: string; type: string; expires_at?: string }) =>
-    call<CenterKeyCreated>("/api/v1/center-keys", { method: "POST", body: JSON.stringify(body) }),
   revokeCenterKey: (keyId: string) => call<CenterKeyInfo>(`/api/v1/center-keys/${keyId}`, { method: "DELETE" }),
 
   /** 가상 직원 (C5 §가상 직원·CON-13). 일괄·자식은 **Center가 읽을 때** 이어 붙인다 — 콘솔이 세지 않는다. */

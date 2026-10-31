@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | [studio.md](studio.md) | Studio (Windows 데스크톱, BPM 프로세스 설계) | STU-01 ~ STU-16 |
 | [bot-ui.md](bot-ui.md) | PC 실행기 (Windows 트레이 기반 GUI, 항상 실행) | BUI-01 ~ BUI-11 (BUI-06~10 폐기) |
-| [center-console.md](center-console.md) | Center 콘솔 (웹) — 관리자 계정으로 승인·배포까지 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) | CON-00 ~ CON-15 (CON-08~10 폐기) |
+| [center-console.md](center-console.md) | Center 콘솔 (웹) — 관리자 계정으로 승인·배포까지 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) | CON-00 ~ CON-15 (CON-08~11 폐기) |
 | [service-app-console.md](service-app-console.md) | 서비스 앱 관리 콘솔 (웹, 앱마다) | SVC-00 ~ SVC-03 |
 | 이 파일 §5 | 여러 앱이 같이 쓰는 창 | CMN-01 |
 
@@ -158,7 +158,7 @@ Studio 시험 실행과 PC 실행기의 BPM 프로세스 실행에서 같은 창
 | CON-05 | 작업 지시 | Center 콘솔 | 운영자 | M5 | 프로토타입 확장 (만들기 추가) |
 | CON-06 | 공통 패키지 | Center 콘솔 | 운영자 | M5 | 프로토타입 |
 | CON-07 | 리소스 | Center 콘솔 | 운영자 | M5 | 신규 |
-| CON-11 | API 키 (Center API 키) | Center 콘솔 | 운영자 | M2 | 신규 |
+| CON-11 | API 키 — 없어짐 (ADR-0124, 키 동작은 대상 화면으로) | Center 콘솔 | 운영자 | M2 | 폐기 |
 | CON-12 | 서버 실행 | Center 콘솔 | 운영자 | M7 | 신규 |
 | CON-13 | 가상 직원 | Center 콘솔 | 운영자·감독자 | — | 신규 ([ADR-0085](../decisions/0085-virtual-worker-resource.md)) |
 | CON-14 | 관리자 계정 | Center 콘솔 | 관리자 | — | 신규 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) |
