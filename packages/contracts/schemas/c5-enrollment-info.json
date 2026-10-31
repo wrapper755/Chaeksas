@@ -154,13 +154,6 @@
       "title": "State",
       "type": "string"
     },
-    "topics": {
-      "items": {
-        "type": "string"
-      },
-      "title": "Topics",
-      "type": "array"
-    },
     "type": {
       "title": "Type",
       "type": "string"

@@ -7,9 +7,9 @@
 
 `serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다 (관리 API·시나리오 제어).
 **업무 호출은 그 포트로 받지 않는다** — `CHK_MOCK_APPS__CENTER__URL`을 주면 C11 앱 열셋이 **일꾼 하나**로
-Center에 붙어 일감을 가져간다 (C15, ADR-0102). 토큰이 없으면 들이기 요청을 보내고 요청 코드를 찍는다 —
-관리자가 CON-07 「일꾼 승인 대기」에서 승인하면 받아 `CHK_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)에 둔다.
-`CHK_MOCK_APPS__CENTER__TOKEN`이 있으면 그것을 쓴다.
+Center에 붙어 일감을 가져간다 (C15, ADR-0102). **들이기는 없다** (ADR-0122) — Center 일꾼 폴더에
+`chk-center consumer-file mock-apps --topics <앱 id들>`로 파일을 짓고 받은 토큰을 `CHK_MOCK_APPS__CENTER__TOKEN`
+(또는 `CHK_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)의 `consumer-token.json`)에 둔다. 없으면 붙지 않고 말한다.
 """
 
 from __future__ import annotations
@@ -66,45 +66,27 @@ def _one(app_id: str) -> tuple[FastAPI, Built | None]:
 
 
 def start_consumer(built: list[Built], *, center_url: str, folder: Path) -> Any:
-    """C11 모의 앱들을 **일꾼 하나**로 Center에 붙인다 (C15). 토큰이 없으면 들이기를 기다린다.
+    """C11 모의 앱들을 **일꾼 하나**로 Center에 붙인다 (C15). 들이기는 없다 — 토큰이 있어야 붙는다 (ADR-0122).
 
-    돌려주는 것은 멈추는 `threading.Event`다. 들이기·가져가기는 데몬 스레드에서 돈다.
+    토큰은 Center 일꾼 폴더에 `chk-center consumer-file mock-apps --topics <모의 앱 id들>`로 파일을 짓고 받은
+    원문이다(`CHK_MOCK_APPS__CENTER__TOKEN` 또는 데이터 폴더의 `consumer-token.json`). 없으면 붙지 않고 말한다.
+    돌려주는 것은 멈추는 `threading.Event`다. 가져가기는 데몬 스레드에서 돈다.
     """
-    import hashlib  # noqa: PLC0415
-    import platform  # noqa: PLC0415
     import threading  # noqa: PLC0415
-    import time  # noqa: PLC0415
 
-    from chaeksas.service_kit import Consumer, Enrollment, TokenFile  # noqa: PLC0415
+    from chaeksas.service_kit import Consumer, TokenFile  # noqa: PLC0415
 
     tokens = TokenFile.at(folder, env_prefix=SHARED_PREFIX)
     services = [one.service for one in built]
     stop = threading.Event()
+    if not tokens.token():
+        _say(
+            f"일꾼 토큰이 없다 — Center 일꾼 폴더에 파일을 짓고(chk-center consumer-file mock-apps --topics"
+            f" {','.join(one.app_id for one in services)}) 받은 토큰을 {SHARED_PREFIX}CENTER__TOKEN에 넣으세요"
+        )
+        return stop
 
     def loop() -> None:
-        enroll = Enrollment(
-            center_url=center_url,
-            name="모의 앱",
-            topics=[one.app_id for one in services],
-            manifests=[one.manifest.to_json_dict() for one in services],
-            tokens=tokens,
-            # 서비스 앱은 `core`를 쓰지 않는다 — 기계 id는 이 PC 이름과 데이터 폴더로 짓는다.
-            machine_id=hashlib.sha256(f"{platform.node()}|{folder.resolve()}".encode()).hexdigest(),
-        )
-        told = None
-        while not stop.is_set() and not tokens.token():
-            try:
-                code = enroll.step()
-            except Exception as e:  # noqa: BLE001 — Center가 아직 없을 수 있다
-                _say(f"일꾼 들이기: Center에 닿지 못했다 ({type(e).__name__}) — 다시 해 본다")
-                code = told
-            if code and code != told:
-                _say(f"일꾼 들이기 요청 코드: {code} — Center 콘솔 CON-07 「일꾼 승인 대기」에서 승인하세요")
-                told = code
-            if not tokens.token():
-                time.sleep(3)
-        if stop.is_set():
-            return
         consumer = Consumer(services, center_url=center_url, tokens=tokens)
         consumer.publish(force=True)
         _say(f"일꾼으로 붙었다 — 토픽 {len(services)}개 ({center_url})")

@@ -129,7 +129,6 @@ from chaeksas.contracts.center_api import (
     DeploymentRequest,
     DeploymentRevokeRequest,
     ErrorBody,
-    ExtensionRevokeRequest,
     JobCreateRequest,
     JobInfo,
     JobTarget,
@@ -225,7 +224,6 @@ from chaeksas.contracts.extension import check_size as check_extension_size
 from chaeksas.contracts.extension import validate as validate_extension
 from chaeksas.contracts.external_task import (
     CompleteRequest,
-    ConsumerEnrollRequest,
     ConsumerInfo,
     ExtendRequest,
     ExternalTaskCreate,
@@ -235,6 +233,7 @@ from chaeksas.contracts.external_task import (
     FailRequest,
     FetchRequest,
     FetchResponse,
+    FolderConsumer,
     LockedTask,
     TopicStatus,
 )
@@ -267,6 +266,8 @@ from chaeksas.contracts.replay import (
     ReplayStep,
 )
 from chaeksas.contracts.resources import (
+    ConsumerFolderItem,
+    ConsumerFolderScan,
     ContributedResource,
     ExtensionResource,
     InstalledOn,
@@ -357,8 +358,8 @@ from chaeksas.contracts.signing import (
 
 __all__ = [
     "CompleteRequest",
-    "ConsumerEnrollRequest",
     "ConsumerInfo",
+    "FolderConsumer",
     "ExtendRequest",
     "ExternalTaskCreate",
     "ExternalTaskCreated",
@@ -460,7 +461,6 @@ __all__ = [
     "WhoAmI",
     "DeploymentRequest",
     "DeploymentRevokeRequest",
-    "ExtensionRevokeRequest",
     "RevokeRequest",
     "DEPLOYMENT_REFUSAL_STATUS",
     "ENVELOPE_REFUSAL_STATUS",
@@ -501,6 +501,8 @@ __all__ = [
     "CenterKeyCreated",
     "CenterKeyInfo",
     "ContributedResource",
+    "ConsumerFolderItem",
+    "ConsumerFolderScan",
     "ExtensionResource",
     "InstalledOn",
     "MissingResource",  # `Operation`은 C11이 소유한다

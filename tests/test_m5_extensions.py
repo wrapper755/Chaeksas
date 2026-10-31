@@ -1,10 +1,11 @@
-"""외부 확장 등록 — 관리자가 올리고 Center가 서명한다 (C13·C2, M5 조각 9, ADR-0090).
+"""외부 확장 등록 — 그 토픽을 맡은 일꾼이 올리고 Center가 서명한다 (C13·C2·C15, ADR-0090·0122).
 
-진짜 Center를 in-process로 띄우고 관리자로 정의를 올린다 — 봉투는 **Center가 짓는다**.
+진짜 Center를 in-process로 띄우고 **일꾼이** 정의를 올린다(`center_admin.register_extension`) — 봉투는
+**Center가 짓는다**. 콘솔·API로 등록·해제하는 길은 없다.
 
 거듭 보는 것 다섯.
 
-1. **관리자만 등록한다** — 읽기 토큰으로는 안 된다.
+1. **그 토픽의 일꾼만 올린다** — 읽기·관리자 토큰으로는 안 된다.
 2. **봉투는 그 정의에 대한 것이다** — 실행하는 쪽이 같은 검증(E6)으로 다시 본다. 같은 판에 다른
    정의가 오면 `id_conflict`다.
 3. **외부 확장에 코드 기여를 넣을 수 없다** (E1) — 내장·사내는 등록할 수 없다 (E2).
@@ -221,14 +222,11 @@ def test_the_same_definition_twice_is_idempotent(client: TestClient) -> None:
     assert len(client.get("/api/v1/resources?type=extension", headers=READ_AUTH).json()["items"]) == 1
 
 
-def test_a_read_token_cannot_register(client: TestClient) -> None:
+def test_only_a_worker_uploads(client: TestClient) -> None:
     found = definition()
-    answer = client.post(
-        "/api/v1/resources/extensions",
-        json={"definition": found},
-        headers=READ_AUTH,
-    )
-    assert answer.status_code == 403
+    for headers in (READ_AUTH, ADMIN):
+        answer = client.put("/api/v1/consumers/self/extension", json={"definition": found}, headers=headers)
+        assert answer.status_code == 403
 
 
 # ─────────────────────────── 겹침 (E4) ───────────────────────────
@@ -252,18 +250,6 @@ def test_conflicting_contributions_cannot_even_be_declared(client: TestClient) -
 # ─────────────────────────── 철회 (C13·C2) ───────────────────────────
 
 
-def test_revoking_names_the_version(client: TestClient) -> None:
-    """무엇을 거두는지 **판까지** 적어야 한다 — 비우면 422다."""
-    register(client, definition())
-    answer = client.request("DELETE", "/api/v1/resources/extensions", json={}, headers=ADMIN)
-    assert answer.status_code == 422 and answer.json()["code"] == "input_invalid"
-
-
-def test_a_read_token_cannot_revoke(client: TestClient) -> None:
-    register(client, definition())
-    revoke_extension(client, "ext-ocr", "1.0.0", headers=READ_AUTH, expect=403)
-
-
 def test_a_revoked_extension_drops_out_of_the_list(client: TestClient) -> None:
     found = definition()
     register(client, found)
@@ -281,7 +267,11 @@ def test_a_revoked_version_never_comes_back(client: TestClient) -> None:
 
 
 def test_revoking_something_unregistered_is_404(client: TestClient) -> None:
-    revoke_extension(client, "없는것", "1.0.0", expect=404)
+    from chaeksas.center.errors import ApiError  # noqa: PLC0415
+
+    with pytest.raises(ApiError) as caught:
+        revoke_extension(client, "없는것", "1.0.0")
+    assert caught.value.status == 404
 
 
 # ─────────────────────────── 보고와 합쳐지는가 (C7) ───────────────────────────
@@ -323,13 +313,13 @@ def extension_row(client: TestClient, extension_id: str = "ext-ocr") -> Any:
     return next(one for one in found if one["id"] == extension_id)
 
 
-def test_an_extension_nobody_takes_is_unknown(client: TestClient) -> None:
-    """들인 일꾼이 없으면 「확인 전」이다 — **Center는 외부 앱을 두드리지 않는다** (C7)."""
+def test_an_extension_whose_worker_never_fetched_is_not_ok(client: TestClient) -> None:
+    """올린 일꾼이 아직 가져가지 않았으면 「쓸 수 없음」이다 — **Center는 외부 앱을 두드리지 않는다** (C7)."""
     found = definition()
     assert register(client, found).status_code == 201
     row = extension_row(client, found["id"])
-    assert row["status"] == "unknown"
-    assert row["status_reasons"] == ["no_consumer"] and row.get("checked_at") is None
+    assert row["status"] == "unreachable"
+    assert row["status_reasons"] == ["consumer_quiet"] and row.get("checked_at") is None
 
 
 def test_an_extension_whose_adapter_consumer_fetches_is_ok(client: TestClient, tmp_path: Path) -> None:

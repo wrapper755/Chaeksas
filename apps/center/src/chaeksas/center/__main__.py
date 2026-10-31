@@ -90,6 +90,34 @@ def hosts(argv: list[str]) -> int:
         conn.close()
 
 
+def consumer_file(argv: list[str]) -> int:
+    """`chk-center consumer-file <이름> --topics a,b [--dir 폴더]` — 일꾼 폴더의 파일을 짓는다 (ADR-0122).
+
+    파일에는 토큰의 **해시만** 쓰고 원문은 **여기서 한 번만** 찍는다 — 그 값을 일꾼의 `…CENTER__TOKEN`에 넣는다.
+    Center를 다시 띄워야 들어온다.
+    """
+    import argparse  # noqa: PLC0415
+
+    from chaeksas.center.consumer_folder import write_file  # noqa: PLC0415
+    from chaeksas.center.settings import Settings  # noqa: PLC0415
+
+    parser = argparse.ArgumentParser(prog="chk-center consumer-file", description="일꾼 폴더의 일꾼 파일을 짓는다")
+    parser.add_argument("name", help="일꾼 이름 — 파일 이름(<이름>.consumer.json)이기도 하다")
+    parser.add_argument("--topics", required=True, help="맡을 토픽 (쉼표로) — 서비스 앱 id·외부 확장 id")
+    parser.add_argument("--dir", type=Path, default=None, help="일꾼 폴더 (기본: CHK_CENTER__CONSUMERS_DIR)")
+    found = parser.parse_args(argv)
+    topics = [one.strip() for one in str(found.topics).split(",") if one.strip()]
+    folder = found.dir or Settings.from_env().consumers_dir
+    if not topics or folder is None:
+        print("토픽과 일꾼 폴더가 필요하다")
+        return 2
+    path, raw = write_file(folder, found.name, topics)
+    print(f"일꾼 파일을 썼다: {path}")
+    print(f"토큰 (이번 한 번만 보인다 — 일꾼의 …CENTER__TOKEN에 넣으세요): {raw}")
+    print("Center를 다시 띄우면 들어온다.")
+    return 0
+
+
 def main() -> int:
     import uvicorn
 
@@ -101,6 +129,8 @@ def main() -> int:
         return signing_key(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "hosts":
         return hosts(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "consumer-file":
+        return consumer_file(sys.argv[2:])
 
     settings = Settings.from_env()
     try:

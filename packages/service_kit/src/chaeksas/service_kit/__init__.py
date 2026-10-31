@@ -22,7 +22,7 @@ from chaeksas.service_kit.app import (
     TopicService,
     create_app,
 )
-from chaeksas.service_kit.consumer import Consumer, Enrollment, TokenFile, start_in_thread
+from chaeksas.service_kit.consumer import Consumer, TokenFile, start_in_thread
 from chaeksas.service_kit.llm import LLM_UNAVAILABLE, LlmSettings, ServiceLlm, usage_of
 from chaeksas.service_kit.stores import (
     IdempotencyStore,
@@ -37,7 +37,6 @@ __all__ = [
     "CatalogSource",
     "Consumer",
     "DependencyProbe",
-    "Enrollment",
     "Handler",
     "IdempotencyStore",
     "InMemoryIdempotencyStore",

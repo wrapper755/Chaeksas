@@ -39,9 +39,8 @@ from typing import Any
 
 import httpx
 import pytest
-import uvicorn
 from canned_answers import canned
-from center_admin import approve, deploy_id, register_extension
+from center_admin import approve, deploy_id
 from consumers import mock_fleet
 from stub_model import StubModel
 
@@ -148,15 +147,11 @@ def case_delegations(example: str) -> dict[str, Any]:
 
 
 def serve(app: Any) -> tuple[str, Any, threading.Thread]:
-    """ASGI 앱 하나를 127.0.0.1의 빈 포트에 띄운다 (M5 인수 시험과 같은 것)."""
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 30
-    while not server.started and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert server.started, "앱이 뜨지 않았다"
-    return f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}", server, thread
+    """ASGI 앱 하나를 127.0.0.1의 빈 포트에 띄운다 — 일꾼 도우미가 그 Center의 저장소를 찾게 같은 자리를 쓴다."""
+    from consumers import serve as consumers_serve  # noqa: PLC0415
+
+    found: tuple[str, Any, threading.Thread] = consumers_serve(app)
+    return found
 
 
 @dataclass(frozen=True)
@@ -219,14 +214,17 @@ def center(tmp_path: Path, mock_apps: MockApps) -> Iterator[CenterHandle]:
     url, server, thread = serve(create_app(settings, store=store))
     stops: list[threading.Event] = []
     with httpx.Client(base_url=url, timeout=30.0) as client:
-        for app_id, base_url in mock_apps.external.items():
-            # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`).
-            register_extension(client, external_definitions.BUILDERS[app_id](base_url), headers=ADMIN)
+        # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`). 올리는 것은 어댑터
+        # 일꾼이다 (ADR-0122).
+        definitions = [
+            external_definitions.BUILDERS[app_id](base_url) for app_id, base_url in mock_apps.external.items()
+        ]
         stops = mock_fleet(
             client,
             center_url=url,
             built=mock_apps.built,
             external_ids=list(external_definitions.BUILDERS),
+            definitions=definitions,
             folder=tmp_path / "workers",
         )
         yield CenterHandle(url=url, client=client, store=store)

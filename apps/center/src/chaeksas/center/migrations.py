@@ -290,6 +290,11 @@ MIGRATIONS: tuple[Step, ...] = (
         "CON-03 「셀렉터 등록」을 걷는다 — UI 자동화 확장과 함께 (ADR-0114)",
         ("ALTER TABLE bot_uis DROP COLUMN selector_registration",),
     ),
+    Step(
+        20,
+        "외부 확장이 어디서 들어왔나 — 콘솔(NULL)·일꾼(`worker`, 맡은 일꾼이 빠지면 거둔다) (ADR-0122)",
+        ("ALTER TABLE extensions ADD COLUMN source TEXT",),
+    ),
 )
 
 

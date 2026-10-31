@@ -20,7 +20,6 @@ export interface EnrollmentInfo {
   remote_addr?: string | null;
   requested_at: string;
   state: string;
-  topics?: string[];
   type: string;
   versions?: {
     [k: string]: unknown;

@@ -19,7 +19,7 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp
-from chaeksas.contracts.enrollment import PublicKey, RotatedKey
+from chaeksas.contracts.enrollment import RotatedKey
 from chaeksas.contracts.extension import Catalog
 from chaeksas.contracts.service_app import Caller, Operation, ServiceAppManifest, Usage
 
@@ -215,25 +215,18 @@ class ExtendRequest(ContractModel):
     lock_s: int = Field(ge=1)
 
 
-class ConsumerVersions(ContractModel):
-    """일꾼의 판 — 무엇을 돌리는가는 열린 사전이다 (앱 판·`service_kit` 판 등)."""
+class FolderConsumer(ContractModel):
+    """일꾼 폴더의 `<이름>.consumer.json` — **일꾼이 들어오는 유일한 길** (C15 §일꾼 들이기, ADR-0122).
 
-    consumer: str
-
-
-class ConsumerEnrollRequest(SchemaVersioned):
-    """`POST /api/v1/consumers/enroll` — 일꾼 들이기 요청 (C15 §일꾼 들이기, ADR-0092 §1과 같은 결).
-
-    `manifests`는 들일 때 함께 올린다(토픽마다 하나, `app_id` = 토픽) — Center가 앱을 읽으러 가지
-    않는다 (ADR-0102 §3). 외부 확장 토픽은 비워도 된다(작업 목록은 등록된 정의에서 온다).
+    배포가 Center 쪽 일꾼 폴더에 복사한다. Center는 토큰 **원문을 모른다** — 해시만 받고, 일꾼은 원문을
+    `Authorization: Bearer`로 싣는다. 토픽은 여기 적은 것으로 고정된다. 만료·회전이 없다(공개키가 없다).
     """
 
-    machine_id: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-    name: str
-    os: str
-    versions: ConsumerVersions
-    public_key: PublicKey
+    name: str = Field(min_length=1)
     topics: list[Topic] = Field(min_length=1)
+    #: 토큰 원문(UTF-8)의 SHA-256, 소문자 16진 64자.
+    token_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    #: 서비스 앱 토픽이면 그 manifest (`app_id` = 토픽). 외부 확장 토픽은 비운다 — 작업 목록은 정의에서 온다.
     manifests: list[ServiceAppManifest] = Field(default_factory=list)
 
 
@@ -323,10 +316,8 @@ __all__ = [
     "CallToken",
     "CatalogUpload",
     "CompleteRequest",
-    "ConsumerEnrollRequest",
     "ConsumerInfo",
     "ExternalTaskInfo",
-    "ConsumerVersions",
     "ExtendRequest",
     "ExternalTaskCreate",
     "ExternalTaskCreated",

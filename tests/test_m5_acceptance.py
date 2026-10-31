@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import os
 import threading
-import time
 from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -35,10 +34,9 @@ from typing import Any
 
 import httpx
 import pytest
-import uvicorn
 from canned_answers import canned
-from center_admin import register_extension
 from consumers import mock_fleet
+from consumers import serve as consumers_serve
 from stub_model import StubModel
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -89,15 +87,9 @@ M5 = bundle()
 
 
 def serve(app: Any) -> tuple[str, Any, threading.Thread]:
-    """ASGI 앱 하나를 127.0.0.1의 빈 포트에 띄운다."""
-    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=0, log_level="warning"))
-    thread = threading.Thread(target=server.run, daemon=True)
-    thread.start()
-    deadline = time.monotonic() + 30
-    while not server.started and time.monotonic() < deadline:
-        time.sleep(0.02)
-    assert server.started, "앱이 뜨지 않았다"
-    return f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}", server, thread
+    """ASGI 앱 하나를 127.0.0.1의 빈 포트에 띄운다 — 일꾼 도우미가 그 Center의 저장소를 찾게 같은 자리를 쓴다."""
+    found: tuple[str, Any, threading.Thread] = consumers_serve(app)
+    return found
 
 
 @dataclass(frozen=True)
@@ -190,13 +182,14 @@ def center(
     )
     url, server, thread = serve(create_app(settings, store=store))
     with httpx.Client(base_url=url, timeout=30.0) as client:
-        for app_id, make in external_defs.BUILDERS.items():
-            register_extension(client, make(mock_apps.urls[app_id]), headers=ADMIN)
+        # 외부 확장 정의는 **어댑터 일꾼이 들고 있다가 올린다** (ADR-0122) — Center에 따로 등록하지 않는다.
+        definitions = [make(mock_apps.urls[app_id]) for app_id, make in external_defs.BUILDERS.items()]
         stops = mock_fleet(
             client,
             center_url=url,
             built=mock_apps.built,
             external_ids=list(external_defs.BUILDERS),
+            definitions=definitions,
             folder=root / "workers",
         )
 

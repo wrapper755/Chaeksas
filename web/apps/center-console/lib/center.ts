@@ -7,6 +7,7 @@ import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
 import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
 import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
+import type { ConsumerFolderScan } from "@chaeksas/api-types/c7-consumer-folder-scan";
 import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
 
 /**
@@ -29,8 +30,6 @@ import type { DependentInfo } from "@chaeksas/api-types/c5-dependent-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 import type { EnrollmentDecision } from "@chaeksas/api-types/c5-enrollment-decision";
-import type { ConsumerInfo } from "@chaeksas/api-types/c15-consumer-info";
-import type { TopicStatus } from "@chaeksas/api-types/c15-topic-status";
 import type { ExternalTaskInfo } from "@chaeksas/api-types/c15-external-task-info";
 import type { ScheduleInfo } from "@chaeksas/api-types/c5-schedule-info";
 import type { CenterKeyCreated } from "@chaeksas/api-types/c7-center-key-created";
@@ -175,25 +174,10 @@ export const center = {
 
   extension: (extensionId: string) =>
     call<ExtensionResource>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}`),
-  /** 외부 확장 등록 — 정의만 보낸다. 검사를 지나면 **Center가 서명한다** (C13 E6, ADR-0090). */
-  registerExtension: (definition: unknown) =>
-    call<ExtensionResource>("/api/v1/resources/extensions", {
-      method: "POST",
-      body: JSON.stringify({ definition }),
-    }),
-  /** 등록 해제 — 그 판을 쓰는 BPM 프로세스는 실행 불가가 된다. **되살릴 수 없다.** */
-  revokeExtension: (extensionId: string, version: string) =>
-    call<ExtensionResource>("/api/v1/resources/extensions", {
-      method: "DELETE",
-      body: JSON.stringify({ id: extensionId, version }),
-    }),
-
   serviceApp: (appId: string) =>
     call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
-  /** 들인 일꾼 (C15, CON-07 「일꾼」). */
-  consumers: () => call<ConsumerInfo[]>("/api/v1/consumers"),
-  /** 토픽마다 일꾼 수·마지막으로 가져간 때·기다리는 일감 (C15, CON-07 「토픽」). */
-  externalTopics: () => call<TopicStatus[]>("/api/v1/external-topics"),
+  /** Center가 뜰 때 일꾼 폴더를 읽은 결과 (C7, ADR-0122, CON-07 「일꾼 폴더」). */
+  consumerFolder: () => call<ConsumerFolderScan>("/api/v1/resources/consumer-folder"),
   /** 그 실행이 올린 일감 (C15, CON-01 「외부 작업」) — 값 없이 자리·상태·일꾼만. */
   externalTasks: (runId: string) =>
     call<ExternalTaskInfo[]>(`/api/v1/external-tasks?run_id=${encodeURIComponent(runId)}`),
@@ -326,19 +310,18 @@ export const center = {
   purgeCenterKey: (keyId: string) => call<void>(`/api/v1/center-keys/${keyId}/purge`, { method: "POST" }),
 
   /**
-   * 등록 요청 (C5 §등록 승인, ADR-0092) — CON-03·CON-12 「승인 대기」·CON-07 「일꾼 승인 대기」. 기본은 대기 중인 것만.
+   * 등록 요청 (C5 §등록 승인, ADR-0092) — CON-03·CON-12 「승인 대기」, CON-11. 기본은 대기 중인 것만.
    * 사람은 키를 보지 않는다 — 승인 응답에도 원문이 없다.
    */
-  enrollments: (type: "bot_ui" | "server_runner" | "studio" | "consumer") =>
+  enrollments: (type: "bot_ui" | "server_runner" | "studio") =>
     call<EnrollmentInfo[]>(`/api/v1/enrollments?type=${type}`),
   /** 모든 상태의 등록 요청 — CON-16 「앱 로그」가 이력으로 읽는다 (C5 `state`는 쉼표로 여럿). */
   enrollmentHistory: () =>
     call<EnrollmentInfo[]>("/api/v1/enrollments?state=pending,approved,rejected,expired"),
-  /** `topics`는 일꾼(`type: consumer`)만 — 요청한 토픽 안에서 줄인다. 비우면 요청한 것 그대로 (C5). */
-  approveEnrollment: (id: string, name?: string, topics?: string[]) =>
+  approveEnrollment: (id: string, name?: string) =>
     call<EnrollmentDecision>(`/api/v1/enrollments/${encodeURIComponent(id)}/approve`, {
       method: "POST",
-      body: JSON.stringify({ ...(name ? { name } : {}), ...(topics && topics.length > 0 ? { topics } : {}) }),
+      body: JSON.stringify(name ? { name } : {}),
     }),
   rejectEnrollment: (id: string, reason?: string) =>
     call<EnrollmentInfo>(`/api/v1/enrollments/${encodeURIComponent(id)}/reject`, {

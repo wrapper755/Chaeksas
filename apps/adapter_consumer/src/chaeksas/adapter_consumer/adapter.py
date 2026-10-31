@@ -89,6 +89,8 @@ class AdapterService:
 
     definition: ExtensionManifest
     environ: Mapping[str, str] = field(default_factory=lambda: dict(os.environ))
+    #: 정의 파일에서 읽은 **그대로**의 정의 — Center에 올린다 (해시가 원문에서 나오므로 모델로 다시 쓰지 않는다).
+    raw: dict[str, Any] | None = None
     client: Any = None  # httpx.Client (시험이 끼운다)
     resolver: Any = None  # 호스트 → IP (시험이 끼운다)
     idempotency: InMemoryIdempotencyStore = field(default_factory=InMemoryIdempotencyStore)
@@ -97,6 +99,11 @@ class AdapterService:
     @property
     def app_id(self) -> str:
         return self.definition.id
+
+    @property
+    def extension_definition(self) -> dict[str, Any] | None:
+        """일꾼이 Center에 올릴 외부 확장 정의 (`service_kit.Consumer.publish`, ADR-0122)."""
+        return self.raw
 
     @property
     def manifest(self) -> ServiceAppManifest:

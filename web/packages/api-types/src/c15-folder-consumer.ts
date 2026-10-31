@@ -3,26 +3,19 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 /**
- * `POST /api/v1/consumers/enroll` — 일꾼 들이기 요청 (C15 §일꾼 들이기, ADR-0092 §1과 같은 결).
+ * 일꾼 폴더의 `<이름>.consumer.json` — **일꾼이 들어오는 유일한 길** (C15 §일꾼 들이기, ADR-0122).
  *
- * `manifests`는 들일 때 함께 올린다(토픽마다 하나, `app_id` = 토픽) — Center가 앱을 읽으러 가지
- * 않는다 (ADR-0102 §3). 외부 확장 토픽은 비워도 된다(작업 목록은 등록된 정의에서 온다).
+ * 배포가 Center 쪽 일꾼 폴더에 복사한다. Center는 토큰 **원문을 모른다** — 해시만 받고, 일꾼은 원문을
+ * `Authorization: Bearer`로 싣는다. 토픽은 여기 적은 것으로 고정된다. 만료·회전이 없다(공개키가 없다).
  */
-export interface ConsumerEnrollRequest {
-  machine_id: string;
+export interface FolderConsumer {
   manifests?: ServiceAppManifest[];
   name: string;
-  os: string;
-  public_key: string;
-  /**
-   * 이 계약의 schema 번호
-   */
-  schema: number;
+  token_sha256: string;
   /**
    * @minItems 1
    */
   topics: [string, ...string[]];
-  versions: ConsumerVersions;
   [k: string]: unknown;
 }
 /**
@@ -81,12 +74,5 @@ export interface ResourceCatalog {
   catalog_url: string;
   label?: string | null;
   type: string;
-  [k: string]: unknown;
-}
-/**
- * 일꾼의 판 — 무엇을 돌리는가는 열린 사전이다 (앱 판·`service_kit` 판 등).
- */
-export interface ConsumerVersions {
-  consumer: string;
   [k: string]: unknown;
 }

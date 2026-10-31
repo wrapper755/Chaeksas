@@ -1,8 +1,12 @@
 """일꾼 — Center에서 일감을 가져가 작업 함수에 주고 끝냈다고 알린다 (C11·C15, ADR-0102).
 
     consumer = Consumer([service], center_url="http://center:8800", token=TokenFile.at(folder))
-    consumer.publish()            # manifest·카탈로그 올리기 (뜰 때)
+    consumer.publish()            # 외부 확장 정의·manifest·카탈로그 올리기 (뜰 때)
     consumer.run(stop_event)      # 가져가기 롱폴링 → 수행 → 끝내기
+
+**들이기는 없다** (ADR-0122) — 일꾼은 Center의 **일꾼 폴더**에 놓인 `<이름>.consumer.json`(토큰 해시)으로만
+들어온다. 토큰 원문은 그 파일을 지은 사람이 준다(`chk-center consumer-file`) — `<접두>CENTER__TOKEN` 환경변수나
+토큰 파일 `consumer-token.json`의 `token`.
 
 지키는 것:
 
@@ -13,6 +17,8 @@
 - 카탈로그는 **`revision`이 바뀌었을 때만** 올린다 (C7 — 같은 판을 다시 쓰면 계획 캐시가 버려진다).
 - 토큰은 원문을 파일에만 둔다(`0600` — 서버 쪽 앱이라 OS 비밀 저장소가 없을 수 있다). 환경변수
   `<접두>CENTER__TOKEN`이 있으면 그것이 이긴다 (개발·CI·컨테이너).
+- 외부 확장을 맡은 토픽(`extension_definition`이 있는 것)은 **제 정의를 올린다** — Center가 검사·서명한다
+  (`PUT /consumers/self/extension`, ADR-0122). 더 높은 판이 이미 있으면(409) 로그만 남기고 이어 간다.
 """
 
 from __future__ import annotations
@@ -21,7 +27,6 @@ import contextlib
 import json
 import logging
 import os
-import platform
 import threading
 import time
 from collections.abc import Callable, Sequence
@@ -31,7 +36,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from chaeksas.contracts.enrollment import EnrollStatus, new_keypair, open_sealed, public_of
+from chaeksas.contracts.enrollment import open_sealed
 from chaeksas.contracts.external_task import MAX_WAIT_S, FetchResponse, LockedTask
 from chaeksas.contracts.service_app import CenterRegistration
 from chaeksas.service_kit.app import TopicService
@@ -102,70 +107,6 @@ class TokenFile:
         return self._read().get(name)
 
 
-# ─────────────────────────── 들이기 ───────────────────────────
-
-
-@dataclass
-class Enrollment:
-    """일꾼 들이기 (C15 §일꾼 들이기 — PC 실행기 등록 요청과 같은 결, ADR-0092 §1).
-
-    `step()`을 되풀이해 부른다: 처음에는 요청을 보내고 요청 코드를 돌려주며, 승인되면 토큰을 열어
-    `TokenFile`에 두고 `None`을 돌려준다(다 됐다).
-    """
-
-    center_url: str
-    name: str
-    topics: Sequence[str]
-    manifests: Sequence[dict[str, Any]]
-    tokens: TokenFile
-    machine_id: str
-    client: Any | None = None
-
-    def _http(self) -> Any:
-        import httpx  # noqa: PLC0415
-
-        return self.client or httpx.Client(base_url=self.center_url, timeout=10.0)
-
-    def step(self) -> str | None:
-        """한 걸음 — 기다리는 중이면 요청 코드, 다 됐으면 `None`. 거절·만료면 `RuntimeError`."""
-        if self.tokens.token():
-            return None
-        secret = self.tokens.secret()
-        if secret is None:
-            secret, _ = new_keypair()
-            self.tokens.save(secret=secret)
-        enrollment_id = self.tokens.get("enrollment_id")
-        http = self._http()
-        if not enrollment_id:
-            made = http.post(
-                "/api/v1/consumers/enroll",
-                json={
-                    "schema": 1,
-                    "machine_id": self.machine_id,
-                    "name": self.name,
-                    "os": platform.system().lower() or "unknown",
-                    "versions": {"consumer": "0.1.0"},
-                    "public_key": public_of(secret),
-                    "topics": list(self.topics),
-                    "manifests": list(self.manifests),
-                },
-            )
-            made.raise_for_status()
-            status = EnrollStatus.model_validate(made.json())
-            self.tokens.save(enrollment_id=status.enrollment_id)
-            return status.code
-        got = http.get(f"/api/v1/consumers/enroll/{enrollment_id}")
-        got.raise_for_status()
-        status = EnrollStatus.model_validate(got.json())
-        if status.state == "approved" and status.sealed_key is not None:
-            self.tokens.save(token=open_sealed(secret, status.sealed_key, salt=status.enrollment_id))
-            return None
-        if status.state in ("rejected", "expired"):
-            self.tokens.save(enrollment_id="")
-            raise RuntimeError(f"일꾼 들이기가 {status.state}되었다: {status.reason or ''}".strip())
-        return status.code
-
-
 # ─────────────────────────── 가져가기 ───────────────────────────
 
 
@@ -205,7 +146,7 @@ class Consumer:
     def _headers(self) -> dict[str, str]:
         token = self.tokens.token()
         if not token:
-            raise RuntimeError("일꾼 토큰이 없다 — 먼저 들인다 (Enrollment)")
+            raise RuntimeError("일꾼 토큰이 없다 — Center 일꾼 폴더의 파일을 지을 때 받은 토큰을 주세요 (ADR-0122)")
         return {"Authorization": f"Bearer {token}"}
 
     def registration(self) -> CenterRegistration:
@@ -217,9 +158,21 @@ class Consumer:
     # ── 올리기 ──
 
     def publish(self, *, force: bool = False) -> None:
-        """manifest(뜰 때 한 번)와 카탈로그(판이 바뀌었을 때)를 올린다 (C15 §manifest·카탈로그 올리기)."""
+        """외부 확장 정의·manifest(뜰 때 한 번)와 카탈로그(판이 바뀌었을 때)를 올린다 (C15)."""
         http = self._http()
         for service in self.services:
+            definition = getattr(service, "extension_definition", None)
+            slot = f"extension:{service.app_id}"
+            if isinstance(definition, dict) and (force or slot not in self._published):
+                answer = http.put(
+                    "/api/v1/consumers/self/extension", json={"definition": definition}, headers=self._headers()
+                )
+                if answer.status_code == 409:
+                    # 같은 판에 다른 내용·철회된 판·더 높은 판이 이미 있다 — 사람이 판을 올려야 한다.
+                    log.warning("외부 확장 %s의 정의를 Center가 받지 않았다: %s", service.app_id, answer.text)
+                else:
+                    answer.raise_for_status()
+                self._published[slot] = True
             key = f"manifest:{service.app_id}"
             if force or key not in self._published:
                 answer = http.put(
@@ -332,4 +285,4 @@ def start_in_thread(consumer: Consumer) -> tuple[threading.Thread, threading.Eve
     return thread, stop
 
 
-__all__ = ["BACKOFF_S", "TOKEN_FILE", "Consumer", "Enrollment", "TokenFile", "start_in_thread"]
+__all__ = ["BACKOFF_S", "TOKEN_FILE", "Consumer", "TokenFile", "start_in_thread"]

@@ -1,7 +1,8 @@
 """시험이 **일꾼**을 Center에 들이고 돌리는 길 — 자리가 하나다 (C15, ADR-0102).
 
-**이것은 제품 코드가 아니다.** 사람은 Center 콘솔 「일꾼 승인 대기」에서 요청 코드를 맞춰 누르고, 시험은
-관리자 토큰으로 같은 승인 API를 부른다. 토큰은 **봉해서** 받는다 — 제품과 같은 `Enrollment`가 연다.
+**이것은 제품 코드가 아니다.** 사람은 Center의 일꾼 폴더에 `<이름>.consumer.json`(토큰 해시)을 두고 Center를
+다시 띄운다 (ADR-0122). 시험은 Center를 다시 띄우지 않고 **폴더가 쓰는 함수 그대로**(`consumer_folder.admit`)로
+들인다 — 토큰 원문은 시험이 지어 `TokenFile`에 둔다.
 
 `client`는 `TestClient`(in-process)든 진짜 소켓의 `httpx.Client`든 된다. 일꾼을 **스레드에서** 오래
 돌리려면(롱폴링) 진짜 소켓 Center를 쓴다 — `serve()`가 띄운다.
@@ -18,9 +19,25 @@ from typing import Any
 
 import uvicorn
 
-from chaeksas.service_kit import Consumer, Enrollment, TokenFile, TopicService
+from chaeksas.center.consumer_folder import admit, new_token, token_sha256
+from chaeksas.center.storage import Store
+from chaeksas.contracts.external_task import FolderConsumer
+from chaeksas.service_kit import Consumer, TokenFile, TopicService
 
 ADMIN = {"Authorization": "Bearer t-admin"}
+
+
+#: `serve()`가 띄운 앱 — 주소로 그 Center의 저장소를 찾는다 (`store_of`).
+_SERVED: dict[str, Any] = {}
+
+
+def store_of(client: Any) -> Store:
+    """그 Center의 저장소 — `TestClient`면 앱에서, 진짜 소켓이면 `serve()`가 적어 둔 앱에서."""
+    app = getattr(client, "app", None)
+    if app is None or not hasattr(app, "state"):
+        app = _SERVED[str(client.base_url).rstrip("/")]
+    store: Store = app.state.store
+    return store
 
 
 def serve(app: Any) -> tuple[str, Any, threading.Thread]:
@@ -32,7 +49,9 @@ def serve(app: Any) -> tuple[str, Any, threading.Thread]:
     while not server.started and time.monotonic() < deadline:
         time.sleep(0.02)
     assert server.started, "앱이 뜨지 않았다"
-    return f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}", server, thread
+    url = f"http://127.0.0.1:{server.servers[0].sockets[0].getsockname()[1]}"
+    _SERVED[url] = app
+    return url, server, thread
 
 
 def enroll(
@@ -43,27 +62,19 @@ def enroll(
     name: str = "시험 일꾼",
     folder: Path | None = None,
     machine: str | None = None,
-    headers: dict[str, str] = ADMIN,
+    headers: dict[str, str] = ADMIN,  # noqa: ARG001 — 옛 부르는 꼴을 받는다 (승인이 없어졌다, ADR-0122)
 ) -> TokenFile:
-    """일꾼 하나를 들인다 — 요청 → 관리자 승인 → 봉한 토큰을 연다. 돌려주는 것은 토큰 자리다."""
+    """일꾼 하나를 들인다 — 일꾼 폴더가 하는 일 그대로. 돌려주는 것은 토큰 자리다."""
     where = folder or Path(tempfile.mkdtemp(prefix="consumer-"))
     tokens = TokenFile.at(where)
-    step = Enrollment(
-        center_url="",
-        name=name,
-        topics=list(topics),
-        manifests=list(manifests),
-        tokens=tokens,
-        machine_id=machine or ("e" * 48 + format(abs(hash(where)) % 16**16, "016x")),
-        client=client,
+    raw = new_token()
+    spec = FolderConsumer.model_validate(
+        {"name": name, "topics": list(topics), "token_sha256": token_sha256(raw), "manifests": list(manifests)}
     )
-    code = step.step()
-    assert code, "들이기 요청이 요청 코드를 받지 못했다"
-    enrollment_id = tokens.get("enrollment_id")
-    approved = client.post(f"/api/v1/enrollments/{enrollment_id}/approve", json={}, headers=headers)
-    assert approved.status_code == 200, approved.text
-    assert step.step() is None
-    assert tokens.token(), "승인했는데 토큰을 열지 못했다"
+    stem = machine or f"test-{format(abs(hash(where.resolve().as_posix())) % 16**12, '012x')}"
+    got = admit(store_of(client), stem, spec)
+    assert got.outcome in ("registered", "unchanged"), got
+    tokens.save(token=raw)
     return tokens
 
 
@@ -90,18 +101,19 @@ def mock_fleet(
     center_url: str,
     built: Sequence[Any],
     external_ids: Sequence[str] = (),
+    definitions: Sequence[dict[str, Any]] = (),
     folder: Path,
 ) -> list[threading.Event]:
     """업무 예제가 부르는 모의 앱을 **일꾼으로** 붙인다 (C15) — 묶음 시험이 함께 쓴다.
 
     - C11 모의 앱들(`built` — `mock_apps.c11.Built`)은 **일꾼 하나**가 토픽 여럿을 맡는다 (`chk-mock-apps`와 같다).
-    - 외부 모의 앱(`external_ids`)은 **어댑터 일꾼**이 맡는다 — 정의는 이미 Center에 등록돼 있어야 한다.
-      127.0.0.1을 부르므로 사설망을 열고, 키는 아무 글이나 받는 모의라 `dev-key`를 준다.
+    - 외부 모의 앱(`external_ids`)은 **어댑터 일꾼**이 맡고 **제 정의를 올린다**(ADR-0122) — `definitions`가
+      그 정의들이다. 127.0.0.1을 부르므로 사설망을 열고, 키는 아무 글이나 받는 모의라 `dev-key`를 준다.
 
     돌려주는 것은 멈추는 이벤트들이다 — 시험이 끝나면 모두 `set()`.
     """
-    from chaeksas.adapter_consumer.adapter import AdapterService, ext_env  # noqa: PLC0415
-    from chaeksas.adapter_consumer.main import load_definitions  # noqa: PLC0415
+    from chaeksas.adapter_consumer.adapter import ext_env  # noqa: PLC0415
+    from chaeksas.adapter_consumer.main import service_of  # noqa: PLC0415
 
     stops: list[threading.Event] = []
     services = [one.service for one in built]
@@ -118,11 +130,10 @@ def mock_fleet(
         tokens = enroll(http, topics=list(external_ids), name="어댑터 일꾼", folder=folder / "adapter")
         environ = {"CHK_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"}
         environ |= {ext_env(one, "KEY"): "dev-key" for one in external_ids}
-        loaded = load_definitions(center_url, str(tokens.token()), list(external_ids), client=http)
-        assert {one.app_id for one in loaded} == set(external_ids), "외부 정의를 다 받지 못했다"
-        adapters = [AdapterService(definition=one.definition, environ=environ) for one in loaded]
+        adapters = [service_of(one, environ=environ) for one in definitions]
+        assert {one.app_id for one in adapters} == set(external_ids), "외부 정의가 맡은 토픽과 다르다"
         stops.append(start(adapters, center_url=center_url, tokens=tokens)[1])
     return stops
 
 
-__all__ = ["ADMIN", "enroll", "mock_fleet", "serve", "start"]
+__all__ = ["ADMIN", "enroll", "mock_fleet", "serve", "start", "store_of"]

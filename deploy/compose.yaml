@@ -25,12 +25,17 @@ services:
       # 같이 뜨는 서버 실행기를 승인 없이 들이는 비밀 (ADR-0117) — 아래 실행기와 **같은 값**이다.
       CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN: ${CHK_SERVER_RUNNER__JOIN_TOKEN:?들이기 비밀을 .env에 넣으세요 (CHK_SERVER_RUNNER__JOIN_TOKEN)}
       CHK_CENTER__PORT: "8800"
+      # 일꾼 폴더 (ADR-0122) — 일꾼은 여기 놓인 `<이름>.consumer.json`(토큰 해시)으로만 들어온다. 함께 배포되는
+      # 프로그램이 제 파일을 아래 볼륨에 복사해 두면 Center가 **뜰 때** 들인다. 바꾸거나 빼면 Center를 다시 띄운다.
+      CHK_CENTER__CONSUMERS_DIR: /consumers
     ports:
       # 컨테이너 안의 포트는 문서의 기본값 그대로 두고, **호스트 쪽만** 바꿀 수 있게 한다
       # (한 PC에서 프로토타입과 같이 띄우면 겹친다 — `docs/04-setup.md` §6의 주의).
       - "${CHK_CENTER__HOST_PORT:-8800}:8800"
     volumes:
       - center-data:/data
+      # 읽기만 한다. **폴더가 원본이다** — 파일을 빼고 다시 띄우면 일꾼 키가 폐기되고 그 일꾼만 맡던 확장은 철회된다.
+      - ${CHK_CENTER__CONSUMERS_HOST_DIR:-./consumers}:/consumers:ro
     restart: unless-stopped
 
   server-runner:

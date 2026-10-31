@@ -1,11 +1,11 @@
 """`service_kit.consumer` — 일꾼이 Center에서 일감을 가져가 수행하고 끝낸다 (C15, ADR-0102).
 
-진짜 Center를 in-process(`TestClient`)로 띄우고 **제품의 `Enrollment`·`Consumer`**가 그것과 오간다.
+진짜 Center를 in-process(`TestClient`)로 띄우고 **제품의 `Consumer`**가 그것과 오간다
+(일꾼은 일꾼 폴더로 들인다, ADR-0122).
 스레드 없이 `run_once()`로 한 바퀴씩 민다 — 롱폴링·스레드는 `test_c15_round_trip.py`가 본다.
 
 | 보는 것 | 왜 |
 | --- | --- |
-| 들이기는 요청 코드 → 승인 → 봉한 토큰을 연다, 거절되면 멈춘다 | 사람이 토큰을 옮기지 않는다 (ADR-0092) |
 | 환경변수 토큰이 파일을 이긴다 | 개발·CI·컨테이너 |
 | `run_once`: 가져가기 → 수행 → `complete`, 실패는 `fail`과 코드 | C15 끝내기 |
 | 앞의 수행이 아직 돌면(`in_progress`) **아무것도 보내지 않는다** | 먼저 끝낸 쪽이 이긴다 |
@@ -32,7 +32,6 @@ from chaeksas.contracts.extension import Catalog
 from chaeksas.contracts.service_app import MODE_DETERMINISTIC, OpRequest, ServiceAppManifest, idempotency_key
 from chaeksas.service_kit import (
     Consumer,
-    Enrollment,
     OpError,
     OpResult,
     Service,
@@ -164,39 +163,7 @@ class Counting:
         return self.inner.post(path, **kw)
 
 
-# ─────────────────────────── 들이기 ───────────────────────────
-
-
-def test_enrollment_waits_for_approval_then_opens_the_sealed_token(center: TestClient, tmp_path: Path) -> None:
-    tokens = TokenFile.at(tmp_path / "c")
-    step = Enrollment(
-        center_url="", name="일꾼", topics=[TOPIC], manifests=[], tokens=tokens, machine_id="a" * 64, client=center
-    )
-    code = step.step()
-    assert code, "처음에는 요청 코드를 받는다"
-    assert step.step() == code, "승인 전에는 같은 코드로 기다린다"
-    assert tokens.token() is None
-
-    enrollment_id = tokens.get("enrollment_id")
-    assert center.post(f"/api/v1/enrollments/{enrollment_id}/approve", json={}, headers=ADMIN).status_code == 200
-    assert step.step() is None
-    raw = tokens.token()
-    assert raw and (tmp_path / "c" / "consumer-token.json").exists()
-    assert step.step() is None, "토큰이 있으면 다시 청하지 않는다"
-
-
-def test_a_rejected_enrollment_stops_and_can_ask_again(center: TestClient, tmp_path: Path) -> None:
-    tokens = TokenFile.at(tmp_path / "c")
-    step = Enrollment(
-        center_url="", name="일꾼", topics=[TOPIC], manifests=[], tokens=tokens, machine_id="b" * 64, client=center
-    )
-    step.step()
-    enrollment_id = tokens.get("enrollment_id")
-    rejected = center.post(f"/api/v1/enrollments/{enrollment_id}/reject", json={"reason": "모르는 서버"}, headers=ADMIN)
-    assert rejected.status_code == 200, rejected.text
-    with pytest.raises(RuntimeError, match="rejected"):
-        step.step()
-    assert not tokens.get("enrollment_id"), "다음 걸음은 새로 청한다"
+# ─────────────────────────── 토큰 ───────────────────────────
 
 
 def test_the_environment_token_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
