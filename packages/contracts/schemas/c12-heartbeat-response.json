@@ -443,6 +443,11 @@
       "title": "Paused",
       "type": "boolean"
     },
+    "restart": {
+      "default": false,
+      "title": "Restart",
+      "type": "boolean"
+    },
     "rotated_key": {
       "anyOf": [
         {

@@ -6,7 +6,7 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기 ↔ Center, 외부 시스템 → Center (메시지) |
 | 코드 위치 | `packages/contracts/server_runner.py` |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0038](../decisions/0038-approval-request-channel.md), [0054](../decisions/0054-server-run-state-and-concurrency.md), [0056](../decisions/0056-bounded-seen-maps.md), [0057](../decisions/0058-absorbed-messages-travel-with-the-snapshot.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0016](../decisions/0016-server-first.md), [0038](../decisions/0038-approval-request-channel.md), [0054](../decisions/0054-server-run-state-and-concurrency.md), [0056](../decisions/0056-bounded-seen-maps.md), [0057](../decisions/0058-absorbed-messages-travel-with-the-snapshot.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md) |
 | 관련 화면 | CON-12 서버 실행, CON-05, CON-04, CON-11 |
 
 ## 목적
@@ -73,6 +73,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 | --- | --- |
 | `GET /api/v1/server-runners` | 목록 (상태·용량·실행 중·기다리는 실행·대기열·준비 상태·확장·최근 배치 결정·**키 앞자리와 만료**). **콘솔 토큰만** — Center API 키로는 볼 수 없다 (C5 권한표) |
 | `POST /api/v1/server-runners/{id}/pause` / `resume` | 일시 중지·다시 시작. 다음 하트비트 응답의 `paused`로 전달된다 |
+| `POST /api/v1/server-runners/{id}/restart` | **재시작** ([ADR-0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md)). 다음 하트비트 응답의 `restart`로 전달되고 그때부터 작업을 싣지 않는다. 실행기가 다시 등록하면 지운다. 없는 실행기는 404 |
 | `POST /api/v1/server-runners/{id}/mark-lost` | 유실 처리. 오프라인인 실행기만 (온라인이면 409 `runner_online`). 그 실행기의 실행을 `failed`(`runner_lost`)로 닫고 결재를 회수한다 (C6 `host_lost`) |
 
 ## 모델
@@ -91,6 +92,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 | 만드는 키 | 「PC 실행기용」 | 「서버 실행기용」 |
 | 받은 키를 두는 곳 | OS 비밀 저장소 | OS 비밀 저장소(`chaeksas-server-runner`, 이름 `center_api_key`). **운영자가 비밀 폴더 `CHK_SERVER_RUNNER__SECRETS_DIR`를 적으면 그 폴더의 `secrets.json`**(컨테이너 — [ADR-0100](../decisions/0100-server-runner-secrets-dir.md)) |
 
+- **함께 배포된 실행기는 들이기 비밀로 바로 승인된다** ([ADR-0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md)). 운영자가 같은 값을 Center(`CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN`)와 실행기(`CHK_SERVER_RUNNER__JOIN_TOKEN`)에 주면 실행기가 등록 요청에 헤더 `X-CHK-Join-Token`을 싣고, Center는 값이 맞으면 그 요청을 **받는 자리에서 승인**해 응답에 봉한 키(`state: approved`, `sealed_key`)를 바로 싣는다. 승인한 사람은 `decided_by: "join_token"`이다. 비밀은 요청 본문·저장된 요청에 들어가지 않는다(헤더다). **헤더가 있는데 Center에 값이 없거나 다르면 403 `join_token_invalid`**이고 대기 줄을 만들지 않는다 — 틀린 설정이 조용히 「승인 대기」로 떨어지면 운영자가 왜 안 들어오는지 모른다. 비밀은 길고 무작위여야 한다(틀린 시도는 줄을 남기지 않아 막기 수에 들지 않는다). 헤더가 없으면 지금처럼 승인을 기다린다(다른 호스트에 따로 띄운 실행기). `deploy/compose.yaml`의 실행기는 이 길이다.
 - **환경변수로 키가 오면** 등록 요청을 보내지 않는다 (CI·자동화의 길이다).
 - **비밀 폴더를 적으면 그것이 비밀 저장소다** (ADR-0100) — 폴더 0700·파일 0600, 깨진 파일은 덮지 않는다. 적었으면 OS 비밀 저장소가 있어도 그 폴더가 이긴다. `deploy/compose.yaml`의 실행기는 이 길이다(볼륨 `server-runner-secrets`).
 - **비밀 폴더도 OS 비밀 저장소도 없으면 등록 요청을 보내지 않는다.** 받은 키를 둘 곳이 없어서다 — 사람이 자리를 정해 주지 않은 평문 파일로 흘리지 않는다 (CLAUDE.md §5). 로그에 그 둘(`CHK_SERVER_RUNNER__SECRETS_DIR`·`CHK_SERVER_RUNNER__CENTER_API_KEY`)을 적은 한 줄을 찍고 끝 코드 2다.
@@ -119,7 +121,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 
 | 필드 | 뜻 |
 | --- | --- |
-| `schema`, `status` | `status`는 열린 문자열. 알려진 값: `running`, `paused`, `draining`, `error` |
+| `schema`, `status` | `status`는 열린 문자열. 알려진 값: `running`, `paused`, `draining`(재시작을 받아 도는 실행이 끝나기를 기다린다), `error` |
 | `capacity` | `{max, running}`. `running`은 기다리는 실행을 뺀 수 |
 | `running[]` | `{run_id, bpm_process_id, version, node_id, started_at, job_id?}` |
 | `waiting[]` | `{run_id, bpm_process_id, version, waiting_for: "approval" \| "message" \| "timer" \| "delegation" \| "external_task", request_id?, message_name?, correlation?, until?, job_id?, task_id?, since}` |
@@ -151,6 +153,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 | `delegations[]` | **끝난 PC 위임의 결과** — `{job_id, run_id, state, outputs?, reason?}` (§PC 위임). ack가 올 때까지 다시 싣는다 |
 | `paused` | true면 새 작업을 받지 않는다 (CON-12 「일시 중지」). 실행 중인 것은 끝까지 간다 |
 | `rotated_key`? | 만료 14일 전부터 새 키 (C4 §키 회전과 같다) |
+| `restart` | true면 **재시작** (CON-02 「재시작」, ADR-0117). 실행기는 새 작업을 받지 않고(`status: draining`) 자리를 쥔 실행이 끝나고 올릴 ack가 없으면 **끝 코드 0으로 스스로 끝난다** — 다시 띄우는 것은 감독하는 쪽(compose `restart: unless-stopped`·systemd)이다. 기다리는 실행은 저장소에 있어 다시 뜨면 이어 간다(ADR-0054). Center는 실행기가 다시 등록할 때 지운다 |
 
 #### 서비스 앱 키 — 없다
 
@@ -159,7 +162,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 ### Center가 작업을 나누는 규칙
 
 1. 서버 대상 작업(`target.type=server_runner`)은 Center 대기열(`queued`)에 쌓인다. 순서는 들어온 순서다.
-2. 하트비트마다 Center는 실행기의 빈자리를 계산한다: `capacity.max - capacity.running`, `paused`면 0.
+2. 하트비트마다 Center는 실행기의 빈자리를 계산한다: `capacity.max - capacity.running`, `paused`이거나 재시작을 요청해 두었으면 0.
 3. 대기열 앞에서부터 실어 보내되, **BPM 프로세스별 상한**(배포의 `max_concurrency`, 기본 5)을 넘는 작업은 건너뛰고 다음 것을 본다. 건너뛴 작업의 `state_reason`은 `per_bot_limit`으로 표시한다 (CON-12 「대기 이유」).
 4. 실행기가 여럿이면 빈자리가 많은 쪽부터 준다. **한 실행은 시작한 실행기에 끝까지 머문다** (상태가 그 실행기 저장소에 있으므로).
 
@@ -371,6 +374,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | **함께 배포된 실행기는 들이기 비밀로 바로 승인**(헤더 `X-CHK-Join-Token`, 403 `join_token_invalid`)과 **재시작**(`POST …/server-runners/{id}/restart`, `HeartbeatResponse.restart`, `ServerRunnerInfo.restart_requested_at?`). 선택 칸이라 옛 실행기는 그대로 돈다(재시작 지시를 모를 뿐이다) | [0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md) |
 | 2026-10-31 | 1 | 설치를 목록과 맞춘다 — 덮는 봉투가 없는 설치는 `not_ready`, 기다리는 실행은 그대로. 칸은 그대로다 | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-29 | 1 | **§긴 외부 작업** — `waiting[]`에 `external_task` 갈래와 짝 칸 `task_id`. 결과는 실행기가 C15로 묻고 이 계약에 내려오는 칸은 없다. 선택 칸이라 옛 Center는 그대로 돈다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-29 | 1 | §서비스 앱 키와 작업 나누기 규칙 5(`keys_pending`)를 걷었다 — 서버 실행기는 서비스 앱을 C15 외부 작업으로 부른다 | [0102](../decisions/0102-calling-outside-is-pull.md) |

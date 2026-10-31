@@ -65,6 +65,8 @@ class Settings:
     #: 코드·설정 파일에 넣지 않고 환경변수로 준다 (CLAUDE.md §5).
     admin_token: str | None = None
     read_token: str | None = None
+    #: 같이 배포된 서버 실행기를 승인 없이 들이는 비밀 (C12 §등록 요청과 승인, ADR-0117). 비면 그 길이 닫힌다.
+    server_runner_join_token: str | None = None
     #: 첫 관리자 계정 (ADR-0090 §2) — **계정이 하나도 없을 때만** 쓴다. 비밀번호를 비우면 Center가
     #: 만들어 로그와 데이터 폴더의 파일에 둔다. 아이디를 비우면 `admin`이다.
     first_admin_username: str | None = None
@@ -99,6 +101,7 @@ class Settings:
             runner_heartbeat_s=int(_env("RUNNER_HEARTBEAT_S") or DEFAULT_RUNNER_HEARTBEAT_S),
             admin_token=_env("ADMIN_TOKEN"),
             read_token=_env("READ_TOKEN"),
+            server_runner_join_token=_env("SERVER_RUNNER_JOIN_TOKEN"),
             first_admin_username=_env("FIRST_ADMIN__USERNAME"),
             first_admin_password=_env("FIRST_ADMIN__PASSWORD"),
             external_task_max_waiters=int(

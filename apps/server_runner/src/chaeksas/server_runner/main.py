@@ -23,7 +23,12 @@ from types import FrameType
 from chaeksas.server_runner import agent as agent_mod
 from chaeksas.server_runner import enroll
 from chaeksas.server_runner.center_client import CenterProblem
-from chaeksas.server_runner.credentials import ENV_CENTER_API_KEY, Credentials, SecretsUnavailable
+from chaeksas.server_runner.credentials import (
+    ENV_CENTER_API_KEY,
+    ENV_JOIN_TOKEN,
+    Credentials,
+    SecretsUnavailable,
+)
 from chaeksas.server_runner.settings import Settings
 
 # 한글을 찍는 CLI는 stdout을 UTF-8로 고정한다 (Windows 기본 코드페이지에서 죽는다 — CLAUDE.md §5).
@@ -34,8 +39,10 @@ log = logging.getLogger(__name__)
 
 #: 키가 없을 때 사람에게 할 말. **어디에 넣어야 하는지까지** 적는다.
 NO_KEY = (
-    "Center API 키가 아직 없습니다 — 등록 요청을 보냈으니 Center 콘솔 「서버 실행」의 「승인 대기」에서 "
-    f"로그의 요청 코드와 같은 줄을 승인하세요 (또는 환경변수 {ENV_CENTER_API_KEY}로 키를 주세요)"
+    "Center API 키가 아직 없습니다 — 등록 요청을 보냈으니 Center 콘솔 「BPM 프로세스」 → 「서버」 탭의 "
+    "「승인 대기」에서 로그의 요청 코드와 같은 줄을 승인하세요 "
+    f"(들이기 비밀 {ENV_JOIN_TOKEN}을 Center와 같게 주면 승인 없이 들어옵니다. "
+    f"또는 환경변수 {ENV_CENTER_API_KEY}로 키를 주세요)"
 )
 
 
@@ -109,6 +116,10 @@ def _loop(found: agent_mod.Agent, settings: Settings) -> int:
     )
     while not stop.is_set():
         found.tick()
+        if found.restart_ready():
+            # 콘솔 「재시작」 (ADR-0117) — **다시 띄우는 것은 감독하는 쪽**(compose·systemd)이다.
+            log.info("재시작하려고 끝낸다 (도는 실행 없음)")
+            return 0
         if found.blocked_by:
             # 사람이 고쳐야 하는 문제다 — 두드려도 같다. 끝내는 쪽이 운영자에게 더 분명하다
             # (systemd가 다시 띄우면 로그에 같은 줄이 쌓인다).

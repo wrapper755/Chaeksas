@@ -298,6 +298,14 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             raise ApiError(404, "not_found", f"서버 실행기 {runner_id}가 없다")
         return {"server_runner_id": runner_id, "paused": False}
 
+    @app.post(f"{API}/server-runners/{{runner_id}}/restart")
+    def restart_runner(request: Request, runner_id: str) -> Any:
+        require_admin(authenticate(request))
+        at = server_runner.request_restart(app.state.store, runner_id)
+        if at is None:
+            raise ApiError(404, "not_found", f"서버 실행기 {runner_id}가 없다")
+        return {"server_runner_id": runner_id, "restart_requested_at": at}
+
     @app.post(f"{API}/server-runners/{{runner_id}}/mark-lost")
     def mark_runner_lost(request: Request, runner_id: str) -> Any:
         require_admin(authenticate(request))

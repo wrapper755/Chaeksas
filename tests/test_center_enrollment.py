@@ -287,6 +287,62 @@ def test_server_runner_enrolls_the_same_way(client: TestClient) -> None:
     assert response.status_code == 200, response.text
 
 
+# ─────────────── 들이기 비밀 (C12, ADR-0117) ───────────────
+
+JOIN = "j" * 43
+
+
+@pytest.fixture
+def joined(store: Store, tmp_path: Path) -> Iterator[TestClient]:
+    settings = Settings(
+        admin_token="t-admin", read_token="t-read", package_dir=tmp_path / "packages", server_runner_join_token=JOIN
+    )
+    with TestClient(create_app(settings, store=store)) as found:
+        yield found
+
+
+def test_a_bundled_runner_is_approved_on_the_spot(joined: TestClient, store: Store) -> None:
+    """같이 배포된 실행기 — 답이 곧 `approved`이고 봉함이 실려 있다. 「승인 대기」에 줄이 없다."""
+    private, public = new_keypair()
+    response = joined.post(
+        "/api/v1/server-runner/enroll", json=runner_body(public), headers={"X-CHK-Join-Token": JOIN}
+    )
+    assert response.status_code == 201, response.text
+    status = EnrollStatus.model_validate(response.json())
+    assert status.state == "approved" and status.sealed_key is not None
+    key = open_sealed(private, status.sealed_key, salt=status.enrollment_id)
+    assert joined.get("/api/v1/enrollments?type=server_runner", headers=READ).json() == []
+    row = store.row("SELECT decided_by, request_json FROM enrollments WHERE enrollment_id = ?", (status.enrollment_id,))
+    assert row is not None and row["decided_by"] == "join_token"
+    assert JOIN not in str(row["request_json"]), "비밀은 저장된 요청에 들어가지 않는다"
+    registered = joined.post(
+        "/api/v1/server-runner/register", json=runner_body(public), headers={"Authorization": f"Bearer {key}"}
+    )
+    assert registered.status_code == 200, registered.text
+
+    # 볼륨을 잃고 다시 와도 들어온다 — 같은 기계의 자리를 이어받는다.
+    _, public2 = new_keypair()
+    second = joined.post(
+        "/api/v1/server-runner/enroll", json=runner_body(public2), headers={"X-CHK-Join-Token": JOIN}
+    ).json()
+    assert second["state"] == "approved"
+
+
+def test_a_wrong_join_token_is_refused_without_a_pending_row(joined: TestClient, client: TestClient) -> None:
+    _, public = new_keypair()
+    for app, value in ((joined, "x" * 43), (client, JOIN)):  # 다르다 / Center에 없다
+        response = app.post(
+            "/api/v1/server-runner/enroll", json=runner_body(public), headers={"X-CHK-Join-Token": value}
+        )
+        assert response.status_code == 403 and response.json()["code"] == "join_token_invalid"
+    assert joined.get("/api/v1/enrollments?type=server_runner", headers=READ).json() == []
+
+
+def test_without_the_header_a_runner_still_waits(joined: TestClient) -> None:
+    _, public = new_keypair()
+    assert enroll(joined, runner_body(public), kind="server-runner").state == "pending"
+
+
 # ─────────────── 키 회전 (C4 §키 회전) ───────────────
 
 

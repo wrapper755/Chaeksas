@@ -280,6 +280,11 @@ MIGRATIONS: tuple[Step, ...] = (
             "CREATE TABLE timer_sweeps (id INTEGER PRIMARY KEY CHECK (id = 1), at TEXT NOT NULL)",
         ),
     ),
+    Step(
+        18,
+        "서버 실행기 재시작 — 요청한 시각, 다시 등록하면 지운다 (C12 운영 API, ADR-0117)",
+        ("ALTER TABLE server_runners ADD COLUMN restart_requested_at TEXT",),
+    ),
 )
 
 

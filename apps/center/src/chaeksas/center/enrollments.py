@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import hmac
 import secrets
 from datetime import datetime, timedelta
 from typing import Any
@@ -49,6 +50,8 @@ from chaeksas.contracts.server_runner import ServerRunnerEnrollRequest
 #: 등록(`register`)이 없어 그 PC는 키 자체에만 묶인다 (C5 §Studio 등록 요청과 승인, ADR-0093).
 TABLES = {"bot_ui": host_keys.BOT_UI, "server_runner": host_keys.SERVER_RUNNER}
 STUDIO = "studio"
+#: 들이기 비밀로 승인한 요청의 「누가」 (ADR-0117) — 사람 계정 이름과 겹치지 않는다(계정은 `_`를 쓰지 않는다).
+JOIN_TOKEN_ACTOR = "join_token"
 #: 요청 본문 모델 — 각자의 `RegisterRequest` + `public_key` (Studio는 제 모양).
 MODELS: dict[str, Any] = {
     "bot_ui": EnrollRequest,
@@ -103,8 +106,20 @@ def _with_key_expiry(store: Store, row: Any, found: EnrollStatus) -> EnrollStatu
     )
 
 
-def request(store: Store, *, kind: str, body: dict[str, Any], remote_addr: str | None) -> EnrollStatus:
-    """`POST …/enroll` (C4·C12). 인증이 없다 — 내려 줄 키는 요청의 공개키로 봉한다."""
+def request(
+    store: Store,
+    *,
+    kind: str,
+    body: dict[str, Any],
+    remote_addr: str | None,
+    join_token: str | None = None,
+    expected_join_token: str | None = None,
+) -> EnrollStatus:
+    """`POST …/enroll` (C4·C12). 인증이 없다 — 내려 줄 키는 요청의 공개키로 봉한다.
+
+    **들이기 비밀이 실려 오면** (C12, ADR-0117) 그 자리에서 승인해 봉한 키를 바로 싣는다 —
+    승인은 버튼과 **같은 `approve()`**다. 실려 왔는데 맞지 않으면 403이고 대기 줄을 만들지 않는다.
+    """
     try:
         wanted = MODELS[kind].model_validate(body)
     except ValueError as e:
@@ -131,8 +146,15 @@ def request(store: Store, *, kind: str, body: dict[str, Any], remote_addr: str |
                 f"같은 곳에서 {RATE_WINDOW_S // 60}분에 {RATE_MAX}건까지 요청할 수 있다",
                 {"retry_after_s": RATE_WINDOW_S},
             )
+    joined = join_token is not None
+    if join_token is not None and not (
+        expected_join_token
+        and hmac.compare_digest(join_token.encode("utf-8"), expected_join_token.encode("utf-8"))
+    ):
+        # 틀린 비밀은 줄을 남기지 않는다 — 지키는 것은 비밀의 길이다(`.env.example`이 무작위 32바이트를 권한다).
+        raise ApiError(403, "join_token_invalid", "들이기 비밀이 Center의 것과 다르거나 Center에 없다")
     waiting = store.row("SELECT COUNT(*) AS n FROM enrollments WHERE state = 'pending'")
-    if waiting is not None and int(waiting["n"]) >= QUEUE_MAX:
+    if not joined and waiting is not None and int(waiting["n"]) >= QUEUE_MAX:
         raise ApiError(
             429, "enroll_queue_full", f"승인을 기다리는 요청이 {QUEUE_MAX}건이라 더 받지 않는다", {"retry_after_s": 600}
         )
@@ -163,6 +185,9 @@ def request(store: Store, *, kind: str, body: dict[str, Any], remote_addr: str |
                 expires_at,
             ),
         )
+    if joined:
+        approve(store, enrollment_id, name=None, actor=JOIN_TOKEN_ACTOR)
+        return status(store, enrollment_id, kind=kind)
     return EnrollStatus(enrollment_id=enrollment_id, state="pending", code=code, expires_at=expires_at)
 
 
@@ -473,6 +498,7 @@ def adopt_successor(store: Store, key: keys.KeyRecord) -> None:
 
 
 __all__ = [
+    "JOIN_TOKEN_ACTOR",
     "TABLES",
     "adopt_successor",
     "approve",

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button, ConfirmDialog, ErrorBanner } from "@chaeksas/ui";
-import { markRunnerLost, setRunnerPaused } from "@/app/actions";
+import { markRunnerLost, restartRunner, setRunnerPaused } from "@/app/actions";
 
 /**
  * CON-12 관리자 모드 단추 — 「일시 중지...」/「다시 시작」, 오프라인 실행기의 「유실 처리...」.
@@ -97,6 +97,67 @@ export function ServerRunnerActions({
         confirmLabel="유실 처리"
         onConfirm={lose}
         onCancel={() => setAsking(null)}
+      />
+    </div>
+  );
+}
+
+/**
+ * 목록 줄의 「재시작...」 (CON-02 「서버」 탭, ADR-0117) — 관리자만.
+ *
+ * 요청해 두었으면 끄고(상태가 「재시작 중」이다), 오프라인이면 끄고 까닭을 툴팁에 적는다 — 하트비트로만
+ * 전해지는 지시라 오프라인 실행기에는 닿지 않는다.
+ */
+export function RestartRunner({
+  runnerId,
+  name,
+  online,
+  requested,
+  running,
+}: {
+  runnerId: string;
+  name: string;
+  online: boolean;
+  requested: boolean;
+  running: number;
+}) {
+  const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  function apply() {
+    start(async () => {
+      const result = await restartRunner(runnerId);
+      setError(result.error ?? null);
+      setAsking(false);
+    });
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={pending || requested || !online}
+        title={
+          requested
+            ? "재시작을 요청해 두었습니다."
+            : !online
+              ? "오프라인인 실행기에는 재시작을 전할 수 없습니다."
+              : undefined
+        }
+        onClick={() => setAsking(true)}
+      >
+        재시작...
+      </Button>
+      {error ? <ErrorBanner message={error} /> : null}
+      <ConfirmDialog
+        open={asking}
+        title={`「${name}」을 재시작할까요?`}
+        description={`새 작업을 받지 않고, 도는 실행 ${running}건이 끝나면 스스로 끝납니다. Center와 함께 배포된 실행기는 compose가 다시 띄웁니다. 기다리는 실행은 이어 갑니다.`}
+        confirmLabel="재시작"
+        onConfirm={apply}
+        onCancel={() => setAsking(false)}
       />
     </div>
   );

@@ -23,6 +23,7 @@ export interface ServerRunnerHeartbeatResponse {
   messages?: MessageDispatch[];
   next_heartbeat_s?: number;
   paused?: boolean;
+  restart?: boolean;
   rotated_key?: RotatedKey | null;
   server_time: string;
   [k: string]: unknown;

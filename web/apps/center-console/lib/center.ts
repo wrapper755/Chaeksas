@@ -136,6 +136,9 @@ export const center = {
     call<unknown>(`/api/v1/server-runners/${encodeURIComponent(runnerId)}/pause`, { method: "POST" }),
   resumeRunner: (runnerId: string) =>
     call<unknown>(`/api/v1/server-runners/${encodeURIComponent(runnerId)}/resume`, { method: "POST" }),
+  /** 재시작 (C12, ADR-0117). 다음 하트비트 응답의 `restart`로 전달된다. */
+  restartRunner: (runnerId: string) =>
+    call<unknown>(`/api/v1/server-runners/${encodeURIComponent(runnerId)}/restart`, { method: "POST" }),
   /** 유실 처리 (C12). **오프라인인 실행기만** — 온라인이면 409 `runner_online`이다. */
   markRunnerLost: (runnerId: string) =>
     call<unknown>(`/api/v1/server-runners/${encodeURIComponent(runnerId)}/mark-lost`, {

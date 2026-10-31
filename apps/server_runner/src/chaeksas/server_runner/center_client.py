@@ -21,6 +21,7 @@ import httpx
 from chaeksas.contracts.enrollment import EnrollStatus
 from chaeksas.contracts.resources import ExtensionResource, ServiceAppResource
 from chaeksas.contracts.server_runner import (
+    JOIN_TOKEN_HEADER,
     DelegationRequest,
     DelegationResponse,
     ServerRunnerEnrollRequest,
@@ -118,6 +119,7 @@ class CenterClient:
         method: str = "POST",
         api: str | None = None,
         params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         body = httpx.Request("POST", "http://x", json=payload).content if payload is not None else b""
         if len(body) > MAX_REQUEST_KB * 1024:
@@ -138,7 +140,8 @@ class CenterClient:
                 # 토큰·키는 ASCII만 (CLAUDE.md §5). **키가 없으면 싣지 않는다** — 등록 요청 두
                 # 경로는 인증이 없다 (C12 §등록 요청과 승인).
                 headers={"Content-Type": "application/json"}
-                | ({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {}),
+                | ({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})
+                | (headers or {}),
             )
         except httpx.HTTPError as e:
             raise Unreachable(
@@ -155,9 +158,13 @@ class CenterClient:
         except ValueError as e:
             raise CenterProblem("Center 응답이 JSON이 아닙니다") from e
 
-    def enroll(self, request: ServerRunnerEnrollRequest) -> EnrollStatus:
-        """키가 없을 때 등록 요청 (C12 §등록 요청과 승인 — 인증 없음)."""
-        return EnrollStatus.model_validate(self._send("/enroll", request.to_json_dict()))
+    def enroll(self, request: ServerRunnerEnrollRequest, *, join_token: str | None = None) -> EnrollStatus:
+        """키가 없을 때 등록 요청 (C12 §등록 요청과 승인 — 인증 없음).
+
+        들이기 비밀이 있으면 **헤더로** 싣는다 (ADR-0117) — 맞으면 답이 곧 `approved`다.
+        """
+        extra = {JOIN_TOKEN_HEADER: join_token} if join_token else None
+        return EnrollStatus.model_validate(self._send("/enroll", request.to_json_dict(), headers=extra))
 
     def enroll_status(self, enrollment_id: str) -> EnrollStatus:
         return EnrollStatus.model_validate(self._send(f"/enroll/{enrollment_id}", None, method="GET"))
