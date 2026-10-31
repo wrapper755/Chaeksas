@@ -258,7 +258,6 @@ def pc_beat(center: TestClient, bot_ui_id: str, **over: Any) -> dict[str, Any]:
             "status": "idle",
             "current_run": None,
             "queue": {"max": 5, "items": []},
-            "worker": {"state": "off"},
             **over,
         },
         headers={"Authorization": f"Bearer {PC_KEYS[bot_ui_id]}"},

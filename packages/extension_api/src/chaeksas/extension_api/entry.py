@@ -1,9 +1,9 @@
-"""`entry` 문자열(`"ui_automation.client:UiTaskExecutor"`) → 실제 객체.
+"""`entry` 문자열(`"my_ext.client:MyTaskExecutor"`) → 실제 객체.
 
-확장 정의(C13)의 `executor`·`editor`·`tool_ui.tools`·`preflight`가 코드를 이 형식으로
+확장 정의(C13)의 `executor`·`editor`·`preflight`가 코드를 이 형식으로
 가리킨다. 모듈 이름은 **확장 이름 공간(`chaeksas.ext`) 밑에서 먼저** 찾는다 (ADR-0019).
 
-    ui_automation.client:UiTaskExecutor  →  chaeksas.ext.ui_automation.client.UiTaskExecutor
+    my_ext.client:MyTaskExecutor  →  chaeksas.ext.my_ext.client.MyTaskExecutor
 
 **쓸 수 있는 확장은 설치 파일에 든 것(내장·사내)뿐이다** (ADR-0018 §3). 아무 모듈이나 가리켜
 import시키지 못하게, 부르는 쪽이 `root`로 그 확장의 패키지를 못 박는다 — 확장 호스트는 늘 그렇게
@@ -27,7 +27,7 @@ class EntryError(ValueError):
 
 
 def module_root(extension_id: str) -> str:
-    """확장 id → 그 확장의 파이썬 패키지 (`ui-automation` → `chaeksas.ext.ui_automation`)."""
+    """확장 id → 그 확장의 파이썬 패키지 (`my-ext` → `chaeksas.ext.my_ext`)."""
     return f"{EXTENSION_NAMESPACE}.{extension_id.replace('-', '_')}"
 
 

@@ -20,25 +20,13 @@ REGISTRY = CONSOLE / "lib" / "console-pages.generated.ts"
 SHELL = CONSOLE / "components" / "Shell.tsx"
 
 
-def test_every_contributed_page_reaches_the_console() -> None:
-    """기여한 화면 하나하나가 레지스트리에 있다 — **확장을 더하면 줄이 생긴다.**"""
-    host = load_host()
-    found = host.console_pages()
-    assert found, "내장 확장이 콘솔 화면을 기여한다"
+def test_the_registry_is_what_the_installed_extensions_contribute() -> None:
+    """레지스트리는 **깔린 확장의 기여 그대로**다 — 지금은 화면을 기여한 확장이 없어 비어 있다 (ADR-0114)."""
+    found = load_host().console_pages()
     text = REGISTRY.read_text(encoding="utf-8")
-    for one in found:
-        assert f'"{one.value.module}"' in text, one.value.module
-        assert f'"{one.value.label}"' in text, one.value.label
-        assert f'"{one.extension_id}"' in text, "어느 확장의 것인지로 묶는다"
-
-
-def test_every_contributed_page_has_a_module_now() -> None:
-    """세 화면(UIA-01~03)이 다 열린다 — 레지스트리에 줄이 있고 경로가 `Route`다 (ADR-0042 §2)."""
+    assert not found and "CONSOLE_PAGES: Record<string, ConsolePage[]> = {}" in text
     modules = (CONSOLE / "lib" / "console-modules.ts").read_text(encoding="utf-8")
-    for one in load_host().console_pages():
-        assert f'"{one.value.module}":' in modules, f"{one.value.module}의 화면이 레지스트리에 없다"
-    for route in ("overview", "selectors", "monitoring"):
-        assert (CONSOLE / "app" / "ext" / "ui-automation" / route / "page.tsx").is_file(), route
+    assert "CONSOLE_MODULES: Record<string, Route> = {}" in modules, "없는 화면의 경로가 남았다"
 
 
 def test_the_console_keeps_no_list_of_its_own() -> None:
@@ -53,16 +41,16 @@ def test_the_console_can_tell_which_extension_the_app_belongs_to() -> None:
     status = AdminStatus.model_validate(
         {
             "schema": 1,
-            "app_id": "ui-automation",
-            "name": "UI 자동화",
+            "app_id": "doc-ocr",
+            "name": "문서 인식",
             "version": "0.4.0",
             "category": "system",
-            "extension": {"id": "ui-automation", "version": "0.4.0"},
+            "extension": {"id": "doc-ocr", "version": "0.4.0"},
             "started_at": "2026-10-09T09:00:00+09:00",
         }
     )
     assert status.extension is not None
-    assert status.extension.id == "ui-automation"
+    assert status.extension.id == "doc-ocr"
     # 확장의 서버 부분이 아닌 앱은 그냥 없다 (빈 목록이 된다).
     assert AdminStatus.model_validate(
         {

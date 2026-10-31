@@ -35,7 +35,7 @@ DEFINITION: dict[str, Any] = {
     "name": "문서 인식",
     "publisher": "사내",
     "tier": "internal",
-    "api": ">=1,<2",
+    "api": ">=2,<3",
     "service": {"protocol": "chk-c11", "base_url": "https://ocr.example.com"},
     "contributes": {
         "task_types": [
@@ -82,7 +82,7 @@ def host_with(definition: dict[str, Any] | None = None) -> ExtensionHost:
     found.add_installed(
         json.dumps(definition or DEFINITION).encode("utf-8"),
         origin="test",
-        root="chaeksas.ext.ui_automation",
+        root="fake_extension",
     )
     return found
 

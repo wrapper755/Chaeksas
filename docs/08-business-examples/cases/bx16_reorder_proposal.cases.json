@@ -8,7 +8,8 @@
       "inputs": {},
       "expected": {
         "제안수": 2,
-        "발주건수": 2
+        "발주건수": 2,
+        "출력준비": true
       },
       "approvals": {
         "Approve_Order": {
@@ -16,11 +17,8 @@
         }
       },
       "delegations": {
-        "Call_ErpInput": {
-          "발주번호목록": [
-            "PO-1001",
-            "PO-1002"
-          ]
+        "Call_Print": {
+          "확인됨": true
         }
       },
       "manual": false

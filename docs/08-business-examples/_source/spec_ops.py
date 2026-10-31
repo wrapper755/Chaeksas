@@ -278,39 +278,3 @@ EXAMPLES.append(Example(
              "외부 앱의 키는 BPM 프로세스에 없다 — 어댑터 일꾼의 설정이다 (ADR-0102). 읽기만 하는 길이 따로 필요하면 그 일꾼이 가른다."],
 ))
 
-# ───────────────────────────── BX-36 ─────────────────────────────
-EXAMPLES.append(Example(
-    id="BX-36", file="bx36_legacy_migration", name="레거시 화면 데이터 이관", dept="운영·법무·IT·고객",
-    origin="프로토타입 데스크톱 작업(work_desktop_ui)·시나리오 3의 교훈 → 새로 설계", 
-    run_location="pc", trigger="PC BPM 프로세스 수동 실행 — 이관 기간에 담당자가 묶음마다",
-    background="""
-API도 내보내기 기능도 없는 오래된 사내 데스크톱 프로그램에서 고객 카드를 한 장씩 열어 값을 읽고, 새 CRM에 API로 넣는다. 읽기는 화면(PC), 쓰기는 서비스 앱. 화면 모양이 예외적인 카드(필드 누락 등)는 AI 태스크(데스크톱 자율)로 읽는다.
-""",
-    why_location="데스크톱 화면 읽기 → PC. CRM 쓰기는 같은 BPM 프로세스 안에서 서비스 앱으로 (PC에서도 서비스 앱 호출 가능).",
-    inputs=[("고객번호목록", "list", True, "이번 묶음")],
-    nodes=[
-        start("Start", "묶음 시작"),
-        ui("Task_Read", "카드 읽기", "legacy.customer.card",
-           [dict(key="search.no", action="fill", value="{번호}"), dict(key="search.go", action="click"),
-            dict(key="card.fields", action="read_table", result="카드")],
-           loop=dict(collection="고객번호목록", item="번호", result="카드", collect_into="카드목록")),
-        script("Task_Split", "예외 카드 고르기", "카드값 = [{r['항목']: r['값'] for r in c} for c in 카드목록]\n정상 = [c for c in 카드값 if 빈칸없음(c, ['이름', '연락처', '주소', '등급'])]\n예외번호 = [n for n, c in zip(고객번호목록, 카드값) if not 빈칸없음(c, ['이름', '연락처', '주소', '등급'])]\n수작업 = []"),
-        ai("Task_ReadOdd", "예외 카드 읽기 (자율)",
-           goal("레거시 고객 관리 프로그램에서 고객번호 `번호`의 카드를 연다. 이 카드는 표준 화면과 모양이 다르다.",
-                "이름·연락처·주소·등급을 읽는다.", "어떤 값도 고치지 않는다.", "- `카드`: dict"),
-           "desktop", {"카드": "dict"}, loop=dict(collection="예외번호", item="번호", result="카드", collect_into="예외카드")),
-        script("Task_OddFail", "예외는 사람에게", "예외카드 = []\n수작업 = 예외번호"),
-        svc("Task_Import", "CRM에 넣기", "crm", "upsert_customers", {"customers": "정상 + 예외카드"}, {"넣음": "result"}),
-        end("End"),
-    ],
-    flows=[f("Start", "Task_Read"), f("Task_Read", "Task_Split"), f("Task_Split", "Task_ReadOdd"), f("Task_ReadOdd", "Task_Import"), f("Task_Import", "End"),
-           f("Bnd_OddFail", "Task_OddFail"), f("Task_OddFail", "Task_Import")],
-    boundaries=[bnd("Bnd_OddFail", "Task_ReadOdd", "error", "재생 실패", error="TASK_FAILED")],
-    extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}, {"id": "crm", "version": ">=1,<2"}],
-    defaults={"forbidden_actions": ["저장·삭제 버튼을 누르지 않는다"], "desktop": {"app": "CustomerManager"}},
-    cases=[Case("5건 묶음", {"고객번호목록": ["C001", "C002", "C003", "C004", "C005"]}, {"넣음": {"count": 5}, "수작업": []})],
-    features=["UI 태스크(등록 화면)와 AI 데스크톱 자율 태스크를 한 BPM 프로세스에", "PC BPM 프로세스에서 서비스 앱 호출", "upsert로 재실행 안전"],
-    lessons=["프로토타입 시나리오 3에서 데스크톱을 AI가 직접 몰면 자율 388초, 재생 56초였다 — 등록된 화면은 UI 태스크로(LLM 없음), 예외만 AI 태스크로.",
-             "운영 BPM 프로세스는 결정 수행(재생)이다. 모양이 제각각인 예외 카드는 재생 명세가 맞지 않을 수 있다 — 그때 운영에서 몰래 자율 수행으로 넘어가지 않는다(ADR-0010). 오류 경계로 받아 `수작업` 목록으로 사람에게 넘기고, 정상 카드는 그대로 넣는다.",
-             "`read_table`은 표의 머리글·줄을 돌려준다 (C10). 카드처럼 「항목 | 값」 격자는 표로 읽고 스크립트에서 사전으로 바꾼다."],
-))

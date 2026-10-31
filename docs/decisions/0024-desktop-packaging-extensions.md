@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-03). 설치 프로그램은 [ADR-0068](0068-installer-inno-setup-per-user.md)(Inno Setup, 사용자별) |
+| 상태 | 수락 (2026-10-03). 설치 프로그램은 [ADR-0068](0068-installer-inno-setup-per-user.md)(Inno Setup, 사용자별) · 로컬 런타임을 같은 실행 파일로 띄우는 것과 빌드 검사의 런타임 기동은 걷었다 ([ADR-0114](0114-remove-ui-automation.md)) |
 | 날짜 | 2026-10-02 |
 | 관련 | 스파이크 `spikes/S5-extension-packaging/`(Windows)·`.../linux-core-hook/`(Linux, 확장 호스트와 훅), ADR-0018(확장), ADR-0019(이름 공간), ADR-0021(DPI), ADR-0022(Studio 캔버스), ADR-0023(자동 시작), 계약 C13 |
 | 구현 | 훅: `packages/core/src/chaeksas/core/__pyinstaller/`, **빌드: `packaging/build.py`**, **빌드 검사: `packages/core/.../selftest.py` + 두 앱의 `--selftest`**, CI 산출물: `.github/workflows/desktop.yml` (배선 검사 `tests/test_extension_host.py`). 설치 파일: `packaging/installer/chaeksas.iss`([ADR-0068](0068-installer-inno-setup-per-user.md)). **로컬 런타임 기동**은 Bot UI의 `--selftest --start-runtimes`가 평소와 같은 길(`runtimes.check_start` → `Runtimes.ensure`)로 띄워 `health`·`status`까지 본다 (`tests/test_selftest_runtimes.py`) |

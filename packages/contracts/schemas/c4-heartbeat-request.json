@@ -412,18 +412,6 @@
         "core": {
           "title": "Core",
           "type": "string"
-        },
-        "worker": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Worker"
         }
       },
       "required": [
@@ -431,62 +419,6 @@
         "core"
       ],
       "title": "Versions",
-      "type": "object"
-    },
-    "WorkerState": {
-      "additionalProperties": true,
-      "description": "Worker 프로세스 상태. `off`는 \"필요할 때 시작, 아직 안 띄움\".",
-      "properties": {
-        "reserved_for": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Reserved For"
-        },
-        "restarts": {
-          "default": 0,
-          "title": "Restarts",
-          "type": "integer"
-        },
-        "session": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Session"
-        },
-        "state": {
-          "title": "State",
-          "type": "string"
-        },
-        "version": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Version"
-        }
-      },
-      "required": [
-        "state"
-      ],
-      "title": "WorkerState",
       "type": "object"
     }
   },
@@ -573,17 +505,13 @@
         }
       ],
       "default": null
-    },
-    "worker": {
-      "$ref": "#/$defs/WorkerState"
     }
   },
   "required": [
     "schema",
     "status",
     "current_run",
-    "queue",
-    "worker"
+    "queue"
   ],
   "title": "HeartbeatRequest",
   "type": "object"

@@ -230,7 +230,7 @@ class ExtensionTask(ContractModel):
     """
 
     type: str  # 태스크 종류 id (예: ui_task)
-    extension: str  # 확장 id (예: ui-automation)
+    extension: str  # 확장 id (예: crm)
     data: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -6,13 +6,12 @@
 - Agent가 **그 일이 일어난 자리에서** `Notices`에 넣고(배포를 적용한 자리, 실행이 끝난 자리…),
   화면이 주기마다 `take()`로 **거둬 간다**. 하트비트 사이에 생긴 것도 쌓여 있다가 함께 나간다.
 - **같은 알림을 두 번 띄우지 않는다** — 아직 거둬 가지 않은 것과 같으면 넣지 않고, 「바뀌었나」로
-  내는 알림(연결·런타임)은 **지난 값**을 들고 있다가 바뀔 때만 낸다.
+  내는 알림(연결)은 **지난 값**을 들고 있다가 바뀔 때만 낸다.
 - **쌓이기만 하지는 않는다** — 창을 오래 닫아 둔 PC에서 알림이 수백 개가 되면 거둬 갈 때 다
   띄우게 된다. 상한을 넘으면 **오래된 것부터 버린다** (방금 일이 더 급하다).
 - 「사람이 볼 때까지」는 `sticky`다. 밀리초는 **참고값**이다 — Windows는 표시 시간을 제 설정대로
   쓴다. 그래서 급한 알림은 **알림 센터에 남는 것**으로 지킨다 (운영자가 나중에 본다).
-- 문구는 `06-screens/bot-ui.md`의 BUI-05 표가 원본이다. **런타임 이름은 확장이 준 `label`**을
-  쓴다 — 플랫폼 코드에 「Worker」라고 적으면 PC 실행기가 어느 확장인지 아는 셈이다 (ADR-0018).
+- 문구는 `06-screens/bot-ui.md`의 BUI-05 표가 원본이다.
 
 """
 
@@ -41,8 +40,6 @@ CENTER_OFFLINE = "center_offline"
 CENTER_BACK = "center_back"
 KEY_REJECTED = "key_rejected"
 KEY_EXPIRING = "key_expiring"
-RUNTIME_RESTARTED = "runtime_restarted"
-RUNTIME_GAVE_UP = "runtime_gave_up"
 QUEUED = "queued"
 QUEUE_FULL = "queue_full"
 QUEUE_EXPIRED = "queue_expired"
@@ -90,8 +87,6 @@ class Notices:
     _told: set[str] = field(default_factory=set)
     #: 지난 주기에 Center에 닿았나 — `None`은 아직 한 번도 돌지 않았다는 뜻이다.
     _online: bool | None = None
-    #: 런타임마다 지난 `(상태, 연속 실패 수)`.
-    _runtimes: dict[str, tuple[str, int]] = field(default_factory=dict)
     #: 키 만료를 알린 **날짜**(`YYYY-MM-DD`). 하루 한 번만 알리는 자리다.
     _key_told_on: str = ""
 
@@ -272,32 +267,6 @@ class Notices:
             )
         )
 
-    # ── 로컬 런타임 (C13 — 이름은 확장이 준다) ──
-
-    def runtime(self, runtime_id: str, *, label: str, state: str, restarts: int, why: str = "") -> None:
-        """런타임 상태가 **바뀔 때만** 낸다 (`restarting` → 다시 띄웠다, `stopped` → 그만뒀다)."""
-        now = (state, restarts)
-        before = self._runtimes.get(runtime_id)
-        self._runtimes[runtime_id] = now
-        if before is None or before == now:
-            return
-        if state == "stopped":
-            self.add(
-                Notice(
-                    kind=RUNTIME_GAVE_UP,
-                    text=(
-                        f"{label}를 띄울 수 없습니다 — {why or '사유를 모릅니다'}. "
-                        "UI 태스크가 있는 BPM 프로세스는 실행되지 않습니다"
-                    ),
-                    action=ACTION_WINDOW,
-                    sticky=True,
-                    level="error",
-                )
-            )
-            return
-        if state == "restarting" or (state == "running" and restarts > before[1]):
-            self.add(Notice(kind=RUNTIME_RESTARTED, text=f"{label}가 멈춰 다시 띄웠습니다", level="warning"))
-
     # ── 대기열 (ADR-0014) ──
 
     def queued(self, *, bot: str, position: int, running: str) -> None:
@@ -352,8 +321,6 @@ __all__ = [
     "QUEUED",
     "QUEUE_EXPIRED",
     "QUEUE_FULL",
-    "RUNTIME_GAVE_UP",
-    "RUNTIME_RESTARTED",
     "RUN_FAILED",
     "SHORT_S",
     "Notice",

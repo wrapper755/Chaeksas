@@ -22,7 +22,6 @@ from chaeksas.contracts import (
     ServiceAppNeed,
     TaskTypeNeed,
     Trigger,
-    WorkerState,
     missing_data_keys,
     missing_keys,
     validate,
@@ -118,7 +117,7 @@ def test_unknown_event_kind_is_accepted() -> None:
 def test_known_kind_missing_data_keys_are_reported() -> None:
     e = event(kind="run_finished", data={"status": "success"})
     assert missing_data_keys(e) == [
-        "ai_tasks", "duration_s", "human_requests", "replayed_tasks", "service_calls", "ui_tasks"
+        "ai_tasks", "duration_s", "human_requests", "replayed_tasks", "service_calls"
     ]
 
 
@@ -126,7 +125,7 @@ def test_known_kind_with_all_keys_passes() -> None:
     e = event(
         kind="run_finished",
         data={"status": "success", "duration_s": 12, "ai_tasks": 1, "replayed_tasks": 0,
-              "ui_tasks": 0, "service_calls": 2, "human_requests": 0},
+              "service_calls": 2, "human_requests": 0},
     )
     assert missing_data_keys(e) == []
 
@@ -134,9 +133,7 @@ def test_known_kind_with_all_keys_passes() -> None:
 def test_missing_keys_looks_at_a_line_before_it_is_one() -> None:
     """엔진이 확장의 `{kind, data}`를 **줄이 되기 전에** 본다 (ADR-0041) — 같은 규칙이다."""
     assert missing_keys("something_new_in_v2", {}) == []
-    assert missing_keys("ui_session", {"business_key": "k", "page_id": "p"}) == [
-        "fallback_depth_max", "healed", "result", "steps"
-    ]
+    assert missing_keys("human_requested", {"layer": "approval"}) == ["request_id", "where"]
     assert missing_keys("log", {"level": "warn", "message": "한 줄"}) == []
 
 
@@ -149,7 +146,6 @@ def heartbeat(**over: Any) -> HeartbeatRequest:
         "status": "idle",
         "current_run": None,
         "queue": {"max": 20, "items": []},
-        "worker": {"state": "off", "version": "0.3.0", "restarts": 0, "session": "idle"},
     }
     return HeartbeatRequest.model_validate(base | over)
 
@@ -157,7 +153,6 @@ def heartbeat(**over: Any) -> HeartbeatRequest:
 def test_unknown_status_does_not_reject_the_heartbeat() -> None:
     """프로토타입 결함 — 상태 값이 닫힌 목록이라 모르는 상태 하나로 하트비트 전체가 422였다."""
     assert heartbeat(status="updating_itself").status == "updating_itself"
-    assert heartbeat(worker={"state": "weird", "restarts": 0}).worker.state == "weird"
 
 
 def test_current_run_cannot_hold_two_runs() -> None:
@@ -170,13 +165,14 @@ def test_current_run_is_required_but_may_be_null() -> None:
     assert heartbeat().current_run is None
     with pytest.raises(ValidationError):
         HeartbeatRequest.model_validate(
-            {"schema": 1, "status": "idle", "queue": {"max": 20}, "worker": {"state": "off"}}
+            {"schema": 1, "status": "idle", "queue": {"max": 20}}
         )
 
 
-def test_queue_and_worker_are_required() -> None:
+def test_queue_is_required() -> None:
     assert Queue(max=20).items == []
-    assert WorkerState(state="off").restarts == 0
+    with pytest.raises(ValidationError):
+        HeartbeatRequest.model_validate({"schema": 1, "status": "idle", "current_run": None})
 
 
 # ─────────────── C1: 검사 규칙 ───────────────
@@ -502,7 +498,7 @@ def test_the_contract_status_table_matches_each_document() -> None:
         cells = [one.strip() for one in line.split("|")]
         listed[cells[1].split("]")[0].lstrip("[")] = _status(cells[4])
 
-    assert len(listed) == 15, f"계약 열다섯이 목록에 있어야 한다: {sorted(listed)}"
+    assert len(listed) == 12, f"계약 열둘(C1~C7·C11~C15)이 목록에 있어야 한다: {sorted(listed)}"
     for name, said in sorted(listed.items()):
         found = next(docs.glob(f"{name}-*.md"))
         head = next(x for x in found.read_text(encoding="utf-8").splitlines() if x.startswith("| 상태 |"))

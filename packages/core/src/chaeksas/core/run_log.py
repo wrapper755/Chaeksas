@@ -154,7 +154,6 @@ def summarize(events: Iterable[RunEvent]) -> dict[str, Any]:
     counts = {
         "ai_tasks": 0,
         "replayed_tasks": 0,
-        "ui_tasks": 0,
         "service_calls": 0,
         "human_requests": 0,
         "confirmations": 0,
@@ -162,8 +161,6 @@ def summarize(events: Iterable[RunEvent]) -> dict[str, Any]:
     for event in events:
         if event.kind == "service_call":
             counts["service_calls"] += 1
-        elif event.kind == "ui_session":
-            counts["ui_tasks"] += 1
         elif event.kind == "human_requested":
             counts["human_requests"] += 1
             # `layer`는 **열린 문자열**이다 — 모르는 값은 확인으로 세지 않는다 (C3).

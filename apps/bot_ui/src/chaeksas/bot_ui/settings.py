@@ -19,7 +19,6 @@ from chaeksas.core.senders import DEFAULT_ATTACHMENT_MB, SECURITY_STARTTLS, Smtp
 
 #: 기본값의 원본은 `docs/04-setup.md` §6의 표다.
 DEFAULT_CENTER_URL = "http://localhost:8800"
-DEFAULT_WORKER_PORT = 8899
 DEFAULT_WEBHOOK_PORT = 8790
 #: 대기열 크기 (ADR-0014 — 실행 자리는 1로 고정이라 설정이 없다).
 DEFAULT_QUEUE_MAX = 20
@@ -28,11 +27,6 @@ DEFAULT_QUEUE_MAX = 20
 DEFAULT_LLM_MODEL = "qwen2.5:7b"
 
 ENV_PREFIX = "CHK_BOT_UI__"
-
-#: 로컬 런타임 시작 방식 (BUI-03 「로컬 런타임」).
-START_WHEN_NEEDED = "when_needed"
-START_ALWAYS = "always"
-
 
 def _env(name: str, default: str | None = None) -> str | None:
     return os.environ.get(f"{ENV_PREFIX}{name}", default)
@@ -58,18 +52,6 @@ def data_dir() -> Path:
     if override:
         return Path(override)
     return Path(platformdirs.user_data_dir("chaeksas", appauthor=False)) / "bot-ui"
-
-
-@dataclass(frozen=True)
-class RuntimeSettings:
-    """로컬 런타임 하나의 설정 (BUI-03). 지금은 Worker 프로세스뿐이다 (확장이 기여한다)."""
-
-    runtime_id: str
-    port: int
-    start: str = START_WHEN_NEEDED
-
-    def to_json_dict(self) -> dict[str, Any]:
-        return {"runtime_id": self.runtime_id, "port": self.port, "start": self.start}
 
 
 @dataclass(frozen=True)
@@ -108,9 +90,6 @@ class Settings:
     smtp_attachment_mb: float = DEFAULT_ATTACHMENT_MB
     #: 웹훅을 보낼 수 있는 호스트. **기본은 비어 있고 비면 아무 데도 보내지 않는다** (ADR-0059 §2).
     webhook_allowed_hosts: tuple[str, ...] = ()
-    runtimes: tuple[RuntimeSettings, ...] = field(
-        default_factory=lambda: (RuntimeSettings(runtime_id="worker", port=DEFAULT_WORKER_PORT),)
-    )
     #: 확장별 설정 (BUI-03 「확장별 설정」, C13 `configuration`). `{확장 id: {칸: 값}}`.
     #: **비밀 칸은 여기 들어오지 않는다** — OS 비밀 저장소로 간다 (`credentials.py`).
     extensions: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
@@ -149,9 +128,6 @@ class Settings:
     def config_path(self) -> Path:
         return data_dir() / "settings.json"
 
-    def runtime(self, runtime_id: str) -> RuntimeSettings | None:
-        return next((r for r in self.runtimes if r.runtime_id == runtime_id), None)
-
     def to_json_dict(self) -> dict[str, Any]:
         return {
             "center_url": self.center_url,
@@ -173,7 +149,6 @@ class Settings:
             "smtp_sender": self.smtp_sender,
             "smtp_attachment_mb": self.smtp_attachment_mb,
             "webhook_allowed_hosts": list(self.webhook_allowed_hosts),
-            "runtimes": [r.to_json_dict() for r in self.runtimes],
             "extensions": {key: dict(value) for key, value in self.extensions.items()},
             "disabled_extensions": list(self.disabled_extensions),
         }
@@ -192,10 +167,6 @@ class Settings:
 
     def with_env(self) -> Settings:
         """환경변수로 덮어쓴 사본. `CHK_BOT_UI__CENTER__URL`처럼 중첩은 `__`."""
-        runtimes = list(self.runtimes)
-        worker_port = _env("WORKER__PORT")
-        if worker_port:
-            runtimes = [replace(r, port=int(worker_port)) if r.runtime_id == "worker" else r for r in runtimes]
         return replace(
             self,
             center_url=_env("CENTER__URL") or self.center_url,
@@ -214,19 +185,10 @@ class Settings:
             smtp_username=_env("SMTP__USERNAME") or self.smtp_username,
             smtp_sender=_env("SMTP__FROM") or self.smtp_sender,
             webhook_allowed_hosts=_hosts(_env("WEBHOOK__ALLOWED_HOSTS")) or self.webhook_allowed_hosts,
-            runtimes=tuple(runtimes),
         )
 
     @classmethod
     def from_json_dict(cls, raw: dict[str, Any]) -> Settings:
-        runtimes = tuple(
-            RuntimeSettings(
-                runtime_id=str(item["runtime_id"]),
-                port=int(item["port"]),
-                start=str(item.get("start", START_WHEN_NEEDED)),
-            )
-            for item in raw.get("runtimes", [])
-        )
         base = cls()
         return replace(
             base,
@@ -251,7 +213,6 @@ class Settings:
             webhook_allowed_hosts=tuple(
                 str(one).strip() for one in raw.get("webhook_allowed_hosts", []) if str(one).strip()
             ),
-            runtimes=runtimes or base.runtimes,
             extensions={
                 str(key): dict(value)
                 for key, value in (raw.get("extensions") or {}).items()
@@ -281,10 +242,6 @@ __all__ = [
     "DEFAULT_LLM_MODEL",
     "DEFAULT_QUEUE_MAX",
     "DEFAULT_WEBHOOK_PORT",
-    "DEFAULT_WORKER_PORT",
-    "START_ALWAYS",
-    "START_WHEN_NEEDED",
-    "RuntimeSettings",
     "Settings",
     "data_dir",
 ]

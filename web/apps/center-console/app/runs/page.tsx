@@ -20,7 +20,7 @@ import { sourceLabel } from "@/lib/labels";
  * Studio가 보낸 기록에는 `bot_ui_id`가 **없다** — 그 키에 묶인 PC가 없어서다. 화면은 「—」로
  * 보이고 「실행한 쪽」이 `Studio`라고 말한다.
  *
- * 셈 열(AI 태스크·재생·UI 태스크·결재·확인)은 `run_finished`가 세어 보낸 것이다 — **도는 중에는
+ * 셈 열(AI 태스크·재생·결재·확인)은 `run_finished`가 세어 보낸 것이다 — **도는 중에는
  * 비어 있고 「—」로 보인다** (줄을 다시 읽어 세지 않는다, C3).
  */
 
@@ -164,7 +164,6 @@ export default async function RunsPage({
     },
     { key: "ai_tasks", header: "AI 태스크", width: "11ch", align: "right", cell: (row) => tally(row.ai_tasks) },
     { key: "replayed_tasks", header: "재생", width: "8ch", align: "right", cell: (row) => tally(row.replayed_tasks) },
-    { key: "ui_tasks", header: "UI 태스크", width: "11ch", align: "right", cell: (row) => tally(row.ui_tasks) },
     {
       key: "human_requests",
       header: "결재·확인",

@@ -8,7 +8,7 @@
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/resources.py`, `…/center_keys.py` (import `chaeksas.contracts.resources`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | 리소스 [`c7-extension-resource.json`](../../packages/contracts/schemas/c7-extension-resource.json) · [`c7-service-app-resource.json`](../../packages/contracts/schemas/c7-service-app-resource.json) · [`c7-contributed-resource.json`](../../packages/contracts/schemas/c7-contributed-resource.json) · [`c7-runtime-resource.json`](../../packages/contracts/schemas/c7-runtime-resource.json) / 키 [`c7-center-key-create-request.json`](../../packages/contracts/schemas/c7-center-key-create-request.json) · [`c7-center-key-info.json`](../../packages/contracts/schemas/c7-center-key-info.json) · [`c7-center-key-created.json`](../../packages/contracts/schemas/c7-center-key-created.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
-| 관련 화면 | CON-07 리소스, CON-11 Center API 키, STU-03 리소스 탐색기, STU-13·14·15, BUI-11, TOL-03 |
+| 관련 화면 | CON-07 리소스, CON-11 Center API 키, STU-03 리소스 탐색기, STU-14·15, BUI-11 |
 
 > [ADR-0102](../decisions/0102-calling-outside-is-pull.md) (2026-10-29): 서비스 앱 주소 등록·`/manifest`·`/healthz` 읽기, 외부 앱 키(운영·시험용), 외부 확장 주소 덮어쓰기는 **없다**. 주소·키는 일꾼만 들고, manifest·카탈로그는 일꾼이 올리며(C15 `PUT …/consumers/self/manifest`) 상태는 「마지막으로 가져간 때」가 말한다.
 
@@ -20,7 +20,7 @@
 
 - 확장
 - 서비스 앱(확장의 서버 부분)과 그 작업
-- **확장이 기여한 자원** (예: UI 화면)
+- **확장이 기여한 자원** (예: 사내 확장의 인감 견본)
 - 런타임
 
 이 목록은 세 곳에서 쓴다.
@@ -33,7 +33,7 @@
 
 > 상태: **돈다.** 2026-10-29부터 **Center는 바깥 기능을 읽으러 가지 않는다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)) — 서비스 앱은 C15 **일꾼**으로 들어와 manifest·카탈로그를 **올리고**, 살아 있음은 「마지막으로 가져간 때」가 말한다. 외부 확장은 정의를 등록하고(관리자 — Center가 봉투에 서명한다, C13 E6·ADR-0090) 그 토픽을 **어댑터 일꾼**이 가져간다. **런타임·확장은 따로 등록받지 않는다** — C4·C12 보고와 일꾼이 올린 manifest에서 모은다. Center API 키 관리는 M2부터 돈다.
 
-**플랫폼 계약은 특정 확장을 모른다** (ADR-0018). 확장이 기여한 자원은 C13 §5의 **공통 카탈로그 형식**으로만 다룬다. 예를 들어 「UI 화면」의 모양은 UI 자동화 확장(C9)이 정하고, Center는 해석하지 않고 넘긴다.
+**플랫폼 계약은 특정 확장을 모른다** (ADR-0018). 확장이 기여한 자원은 C13 §5의 **공통 카탈로그 형식**으로만 다룬다. 자원의 모양(`data`)은 그 확장이 정하고, Center는 해석하지 않고 넘긴다.
 
 **Center는 바깥 기능의 주소도 키도 들지 않는다** (ADR-0102). 서비스 앱 키는 없어졌고(「누가 불러도 되나」는 배포가 가린다 — C15 §올리기), 외부 앱의 주소·키는 어댑터 일꾼의 설정에만 있다. Center에서 나가는 연결도 없다 — 일꾼이 Center로 들어온다.
 
@@ -54,7 +54,7 @@
 
 | 메서드·경로 | 인증 | 뜻 |
 | --- | --- | --- |
-| `GET /resources?type=extension\|service_app\|contributed\|runtime[&resource_type=ui_page]` | 읽기 | 목록 |
+| `GET /resources?type=extension\|service_app\|contributed\|runtime[&resource_type=<종류>]` | 읽기 | 목록 |
 | `GET /resources/extensions/{id}` | 읽기 | 확장 하나 (C13) |
 | `GET /resources/service-apps/{app_id}` | 읽기 | 서비스 앱 하나 (manifest 전체) |
 | `GET /resources/contributed/{resource_type}/{id}` | 읽기 | 확장 기여 자원 하나 |
@@ -70,7 +70,7 @@
 | --- | --- |
 | `id`, `version`, `name`, `publisher`, `tier`, `definition_hash` | C13 |
 | `protocol` | `chk-c11` / `http-adapter` / 없음 (클라이언트 기여만) |
-| `contributes_summary` | 기여 지점별 이름 (예: `task_types: [ui_task]`) |
+| `contributes_summary` | 기여 지점별 이름 (예: `task_types: [seal_check]`) |
 | `service_app_id`? | 서버 부분 |
 | `installed_on` | 이 확장을 가진 PC 실행기·서버 실행기 수와 버전 분포 (C4·C12 보고. Studio는 세지 않음) |
 | `status` | 서버 부분 상태. 값은 `ServiceAppResource.status`와 같고 **서버 부분이 아예 없으면 `n/a`**다. 그 토픽을 가져가는 일꾼으로 본다 (§리소스 모으는 방식) |
@@ -97,18 +97,18 @@
 
 | 필드 | 뜻 |
 | --- | --- |
-| `resource_type` | 예: `ui_page` |
+| `resource_type` | 확장이 정한 종류 (예: `seal_specimen`) |
 | `id`, `name`, `summary`, `updated_at` | 카탈로그 항목 (C13 §5) |
 | `extension_id` | 이 자원을 기여한 확장 |
 | `revision` | 카탈로그 판 번호 |
-| `data` | 확장 고유 내용. Center는 해석하지 않는다 (UI 화면이면 C9 카탈로그 항목) |
+| `data` | 확장 고유 내용. Center는 해석하지 않는다 |
 | `used_by` | 이 자원을 쓰는 BPM 프로세스 (C1 `requires.resources`와 대조) |
 
 ### RuntimeResource
 
 | 모델 | 필드 |
 | --- | --- |
-| RuntimeResource | `host{type: bot_ui \| server_runner, id, name}`, `os`, `versions{bot_ui?, core, worker?}`, `browsers[]`, `desktop_backend`?, `extensions[]` |
+| RuntimeResource | `host{type: bot_ui \| server_runner, id, name}`, `os`, `versions{bot_ui?, core}`, `browsers[]`, `desktop_backend`?, `extensions[]` |
 
 ### 목록 응답 공통
 
@@ -182,6 +182,7 @@ CenterKeyInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | 칸은 그대로다. 확장 기여 자원의 예(UI 화면)를 걷고 `RuntimeResource.versions`에서 `worker`를 뺐다 — UI 자동화 확장이 없다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-29 | 1 | **Center는 바깥 기능을 읽으러 가지 않는다** — 서비스 앱 등록·주소·해제·`/manifest`·`/healthz`·`trust` 읽기, 외부 앱 키(운영·시험용), 외부 확장 주소 덮어쓰기, 어댑터 `health` 두드리기를 걷었다. 서비스 앱·기여 자원은 일꾼이 올리고 상태는 토픽이 말한다(`consumers` 칸). `base_url`은 빈다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | §외부 확장 주소 — `PUT/DELETE …/extensions/{id}/address`, `ExtensionResource.address{base_url, set_at, set_by}`, 사유 `address_outside_definition`. 선택 칸이라 schema는 그대로다 | [0097](../decisions/0097-external-extension-address-from-center.md) |
 | 2026-10-25 | 1 | `GET /signing-keys`(인증 없음), §외부 앱 키(운영 `PUT/DELETE …/extensions/{id}/app-key`·시험용 `…/app-key/test`, `ExtensionResource.app_key{run, test}`), `trust`의 `pin_mismatch`, `ServiceAppResource.trust` | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |

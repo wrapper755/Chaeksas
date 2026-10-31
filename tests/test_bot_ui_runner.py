@@ -450,9 +450,8 @@ def test_the_runner_turns_off_the_same_extensions_as_the_bot_ui() -> None:
     args = runner_args(**common, off_extensions=("ui-automation", "doc-ocr"))
     assert args[args.index("--off") :] == ["--off", "ui-automation", "--off", "doc-ocr"]
 
-    # 실행 프로세스 쪽 — 끈 확장은 수행기를 내지 않는다 (「없는 태스크 종류」와 같은 자리로 떨어진다).
-    assert extension_tasks({}).executor("ui_task") is not None
-    assert extension_tasks({}, off=["ui-automation"]).executor("ui_task") is None
+    # 실행 프로세스 쪽 — 깔린 확장이 없으면 어떤 종류도 수행기가 없다 (「없는 태스크 종류」, ADR-0114).
+    assert extension_tasks({}, off=["doc-ocr"]).executor("ocr_task") is None
 
 
 def test_a_runner_that_does_not_know_the_wait_says_nothing() -> None:
@@ -654,7 +653,7 @@ def test_the_ack_carries_the_values_and_a_plain_job_does_not(
     outputs.write(running.outputs_path, {"결과코드": "OK"})
     RunLog(run_id=running.run_id, path=log_path(data_dir, running.run_id)).emit(
         "run_finished", status="success", duration_s=0.1,
-        ai_tasks=0, replayed_tasks=0, ui_tasks=0, service_calls=0, human_requests=0,
+        ai_tasks=0, replayed_tasks=0, service_calls=0, human_requests=0,
     )
 
     done = launcher.tick()

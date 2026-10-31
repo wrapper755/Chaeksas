@@ -284,7 +284,7 @@ def put_catalog(
 ) -> dict[str, Any]:
     """`PUT /consumers/self/catalogs/{type}` (C15) — 일꾼이 올린 카탈로그를 쌓는다.
 
-    **`revision`이 같으면 항목을 다시 쓰지 않는다** (C7) — 같은 것을 다시 쓰면 Studio·Worker의
+    **`revision`이 같으면 항목을 다시 쓰지 않는다** (C7) — 같은 것을 다시 쓰면 Studio의
     계획 캐시가 공연히 버려진다. 승인된 토픽의 것만 받는다.
     """
     app_id = str(raw.get("app_id") or "")
@@ -457,7 +457,7 @@ def _refuse(problems: list[Any], *, status: int = 422) -> None:
 def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[ExtensionResource, bool]:
     """`POST /resources/extensions` — 정의를 받아 **Center가 `extension` 봉투로 서명한다** (C13 E6, ADR-0090).
 
-    관문은 관리자 계정이다. 검사(E1·E2·E3·E4·E8)를 모두 지난 정의에만 서명한다 — 정의가 BPM 프로세스의
+    관문은 관리자 계정이다. 검사(E1·E2·E3·E4)를 모두 지난 정의에만 서명한다 — 정의가 BPM 프로세스의
     키를 어느 주소로 보낼지 정하므로 배포와 같은 관문이다. 봉투는 정의와 함께 그대로 두고
     실행하는 쪽이 다시 검증한다(E6).
     """
@@ -467,7 +467,6 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
         ExtensionManifest,
         check_size,
         definition_hash,
-        environment_conflicts,
         task_type_conflicts,
         validate,
         verify_external,
@@ -486,10 +485,9 @@ def register_extension(store: Store, found: Caller, raw: dict[str, Any]) -> tupl
     # E1·E2·E3 — 외부 확장에 코드 기여가 없고, 등급이 external이고, 어댑터 선언이 안전한가.
     _refuse(validate(manifest, from_center=True))
 
-    # E4·E8 — 이미 등록된 **다른** 확장들과 겹치지 않는가.
+    # E4 — 이미 등록된 **다른** 확장들과 겹치지 않는가.
     others = [one for one in _registered_manifests(store) if one.id != manifest.id]
     _refuse(task_type_conflicts([*others, manifest]), status=409)
-    _refuse(environment_conflicts([*others, manifest]), status=409)
 
     computed = definition_hash(definition)
     body = json.dumps(definition, ensure_ascii=False, sort_keys=True)
@@ -572,7 +570,7 @@ def _revoked_info(store: Store, extension_id: str, version: str) -> ExtensionRes
 
 
 def _registered_manifests(store: Store) -> list[Any]:
-    """등록돼 있고 **철회되지 않은** 외부 확장 정의들 (E4·E8 대조에 쓴다)."""
+    """등록돼 있고 **철회되지 않은** 외부 확장 정의들 (E4 대조에 쓴다)."""
     from chaeksas.contracts.extension import ExtensionManifest  # noqa: PLC0415
 
     out = []

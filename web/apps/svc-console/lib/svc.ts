@@ -3,11 +3,6 @@ import "server-only";
 import { cookies } from "next/headers";
 import type { AdminStatus } from "@chaeksas/api-types/c11-admin-status";
 import type { UsagePage } from "@chaeksas/api-types/c11-usage-page";
-import type { ConsoleOverview } from "@chaeksas/api-types/c9-console-overview";
-import type { PageListing } from "@chaeksas/api-types/c9-page-listing";
-import type { PageDetail } from "@chaeksas/api-types/c9-page-detail";
-import type { PathResult } from "@chaeksas/api-types/c9-path-result";
-import type { SessionPage } from "@chaeksas/api-types/c9-session-page";
 import type { ErrorBody } from "@chaeksas/api-types/c5-error-body";
 import { COOKIE_NAME, open, type Session } from "./session";
 
@@ -74,13 +69,4 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 export const svc = {
   status: () => call<AdminStatus>("/admin/v1/status"),
   usage: (limit = 100) => call<UsagePage>(`/admin/v1/usage?limit=${limit}`),
-  // 앱 고유 관리 경로 (확장이 기여한 화면이 읽는다 — C9 §관리 콘솔이 읽는 길).
-  // 모든 앱에 있는 길이 아니다: 그 확장의 화면에서만 부른다 (`console.pages`, ADR-0042).
-  uiAutomationOverview: () => call<ConsoleOverview>("/admin/v1/overview"),
-  uiAutomationPages: () => call<PageListing>("/admin/v1/pages"),
-  // 화면 id에 점·하이픈이 오고(C9) 경로에 들어가므로 인코딩한다.
-  uiAutomationPage: (pageId: string) => call<PageDetail>(`/admin/v1/pages/${encodeURIComponent(pageId)}`),
-  uiAutomationPath: (start: string, goal: string) =>
-    call<PathResult>(`/admin/v1/path?start=${encodeURIComponent(start)}&goal=${encodeURIComponent(goal)}`),
-  uiAutomationSessions: (limit = 100) => call<SessionPage>(`/admin/v1/sessions?limit=${limit}`),
 };

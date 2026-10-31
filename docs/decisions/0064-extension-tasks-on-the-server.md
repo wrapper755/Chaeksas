@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-16) |
+| 상태 | 수락 (2026-10-16) · 「로컬 런타임」이 걷혀 전제가 사라졌다 ([ADR-0114](0114-remove-ui-automation.md)) |
 | 날짜 | 2026-10-16 |
 | 관련 | [ADR-0014](0014-one-bot-per-pc.md) §4, [ADR-0018](0018-extensions.md), [ADR-0024](0024-desktop-packaging-extensions.md), [ADR-0043](0043-turned-off-extensions.md), 계약 C1 R2·C12·C13, 화면 CON-12, `docs/09-gaps.md` §3-14 |
 

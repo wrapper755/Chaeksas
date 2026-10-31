@@ -25,7 +25,7 @@ hiddenimports: list[str] = []
 
 found = sorted(entry_points(group=GROUP), key=lambda e: e.name)
 for ep in found:
-    package = ep.value  # 확장의 파이썬 패키지 (예: chaeksas.ext.ui_automation)
+    package = ep.value  # 확장의 파이썬 패키지 (예: chaeksas.ext.<id>)
     hiddenimports.append(package)
     hiddenimports += collect_submodules(package)
     datas += collect_data_files(package)

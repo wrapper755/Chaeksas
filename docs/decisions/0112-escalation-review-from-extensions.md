@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 · UI 자동화의 「시도한 로케이터」·「끝낸 스텝」 표는 확장과 함께 걷었다 — `TaskFailed(review=…)`는 남는다 ([ADR-0114](0114-remove-ui-automation.md)) |
 | 날짜 | 2026-10-30 |
 | 관련 | 계약 C6(`review`), C10(`StepResult`), C13 §4(`executor`), C3(`human_requested`), [ADR-0018](0018-extensions.md), [ADR-0041](0041-extension-run-events.md), [ADR-0042](0042-extension-contributed-panels.md), [ADR-0078](0078-field-approval-shows-what-to-judge.md), [ADR-0106](0106-pc-escalation-asks-a-person.md), 09-gaps §3-18 |
 

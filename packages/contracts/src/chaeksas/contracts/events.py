@@ -29,7 +29,6 @@ REQUIRED_DATA_KEYS: dict[str, frozenset[str]] = {
     "log": frozenset({"level", "message"}),
     "agent": frozenset({"step", "action"}),
     "llm_usage": frozenset({"model", "input_tokens", "output_tokens"}),
-    "ui_session": frozenset({"business_key", "page_id", "result", "steps", "fallback_depth_max", "healed"}),
     "service_call": frozenset(
         {"app_id", "operation", "mode", "mode_used", "status", "duration_ms", "key_ref",
          "node_instance", "attempt", "call_seq"}
@@ -41,7 +40,7 @@ REQUIRED_DATA_KEYS: dict[str, frozenset[str]] = {
     "run_waiting": frozenset({"waiting_for"}),
     "run_resumed": frozenset({"after_s"}),
     "run_finished": frozenset(
-        {"status", "duration_s", "ai_tasks", "replayed_tasks", "ui_tasks", "service_calls", "human_requests"}
+        {"status", "duration_s", "ai_tasks", "replayed_tasks", "service_calls", "human_requests"}
     ),
 }
 
@@ -143,7 +142,6 @@ class RunInfo(ContractModel):
     #: 줄을 다시 읽어 세지 않는다 (요약은 받을 때 만든다).
     ai_tasks: int | None = None
     replayed_tasks: int | None = None
-    ui_tasks: int | None = None
     service_calls: int | None = None
     human_requests: int | None = None
     #: `human_requests` 중 **확인**(`layer: confirmation`)의 수 (CON-02 「확인률」).

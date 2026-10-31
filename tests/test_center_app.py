@@ -78,7 +78,6 @@ def heartbeat_body(**over: Any) -> dict[str, Any]:
         "status": "idle",
         "current_run": None,
         "queue": {"max": 20, "items": []},
-        "worker": {"state": "off", "restarts": 0},
     }
     body.update(over)
     return body
@@ -421,13 +420,11 @@ def test_heartbeat_keeps_the_latest_state(client: TestClient) -> None:
             "started_at": "2026-10-03T10:15:00+09:00",
             "source": "job",
         },
-        worker={"state": "running", "restarts": 0, "session": "bot"},
     )
     assert client.post("/api/v1/bot-ui/heartbeat", json=running, headers=auth).status_code == 200
     found = client.get("/api/v1/bot-uis", headers=READ).json()[0]
     assert found["status"] == "running"
     assert found["current_run"]["run_id"] == "run_1"
-    assert found["worker"]["session"] == "bot"
 
 
 def test_versions_say_whether_the_pc_runs_a_packed_build(client: TestClient) -> None:

@@ -6,7 +6,7 @@
 | --- | --- |
 | 상태 | **초안** (2026-10-01) — 코드 작업 전 준비물 |
 | 형식 | [C14 BPMN 확장 속성](../03-contracts/C14-bpmn-extensions.md) |
-| 쓰는 곳 | M3 엔진 회귀 시험, M4 UI 태스크, M5 결재·확장, M7 서버 실행 — 각 마일스톤의 **인수 시험 묶음** ([05-roadmap](../05-roadmap.md)). Studio 「예제 BPM 프로세스 가져오기...」(STU-01), 사용자 교육 |
+| 쓰는 곳 | M3 엔진 회귀 시험, M5 결재·확장, M7 서버 실행 — 각 마일스톤의 **인수 시험 묶음** ([05-roadmap](../05-roadmap.md)). Studio 「예제 BPM 프로세스 가져오기...」(STU-01), 사용자 교육 |
 | 작성 규칙 | [writing-guide.md](writing-guide.md) — 프로토타입에서 시나리오 쓰기가 어려웠던 이유와 규칙 |
 
 프로토타입에서 BPM Studio를 만들며 가장 애먹은 것은 화면이 아니라 **돌릴 업무 시나리오**였다. 시나리오가 없으니 기능이 맞는지 판단할 수 없었고, 그때그때 만든 예제는 목표 문구·파라미터·케이스가 서로 어긋났다. 이 폴더는 그 일을 코드보다 먼저 해 둔다.
@@ -61,7 +61,6 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [BX-01](finance.md#bx-01-월별-청구서-대사) | 월별 청구서 대사 | 서버 | 타이머 | — | 순차 반복 AI 태스크(`collect_into`); AI 문서 읽기(doc) + 규칙은 스크립트로; 조건부 결재(Center 결재함) |
 | [BX-02](finance.md#bx-02-매일-아침-환율-점검-보고) | 매일 아침 환율 점검 보고 | 서버 | 타이머 | — | API AI 태스크 + 업무 파라미터(재생 때 `$param`); 조건부 결재; 파일 출력 → 메일 첨부 |
 | [BX-03](finance.md#bx-03-지출-결재) | 지출 결재 | 서버 | 메시지 `expense_request` | — | 메시지 시작(외부 시스템 → Center); 비중단 타이머 경계(리마인드) + 중단 타이머 경계(마감); 타이머 기간을 변수로 |
-| [BX-04](finance.md#bx-04-세금계산서-발행-포털--회계-프로그램) | 세금계산서 발행 (포털 → 회계 프로그램) | PC | 타이머 | ui-automation | PC BPM 프로세스 + UI 태스크(웹 읽기·데스크톱 입력); UI 태스크 반복; 프로세스 기본값(금지 행동·확인 트리거) |
 | [BX-05](finance.md#bx-05-월말-마감-체크리스트) | 월말 마감 체크리스트 | 서버 | 타이머 | — | 병렬 분기·합류; 받기 태스크 3개 + 상관 키(`마감월`); 받기 태스크의 비중단 타이머(독촉) |
 | [BX-06](finance.md#bx-06-다건-거래처-신용-조회) | 다건 거래처 신용 조회 | 서버 | 작업 지시 | ext-credit | 외부 확장(HTTP 어댑터)의 서비스 앱 태스크; 병렬 다중 인스턴스 (서버에서 동시); 규칙 태스크 반복 (한 건씩 DMN) |
 | [BX-07](finance.md#bx-07-법인카드-사용-내역-정리) | 법인카드 사용 내역 정리 | 서버 | 타이머 | — | AI 분류 반복 + 규칙 점검 분리 (판단은 규칙, 분류는 AI); 규칙 태스크 반복 + DMN `COLLECT` (한 건에 위반 여러 개, 없으면 빈 목록); 조건부 결재 |
@@ -75,10 +74,8 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [BX-11](scm.md#bx-11-입찰-접수와-마감) | 입찰 접수와 마감 | 서버 | 작업 지시 | — | 받기 태스크 루프 + 경계 타이머(마감) + 경계 메시지(취소, 상관 키 `입찰번호`); 루프백 흐름; 경계 타이머에 **고정 시각** (기간이 아니라) |
 | [BX-12](scm.md#bx-12-배송비-계산) | 배송비 계산 | 서버 | BPM 프로세스 호출 | — | DMN 결정표(FIRST, 다중 출력); 공유 BPM 프로세스 (BX-15가 호출); 경계값 케이스 |
 | [BX-13](scm.md#bx-13-반품-처리) | 반품 처리 | 서버 | 메시지 `return_request` | shop | 메시지 시작 + 받기 태스크(상관 키); 받기 태스크의 중단 타이머(자동 취소); AI 분류 → 스크립트 계산 → 서비스 앱 작업 |
-| [BX-14](scm.md#bx-14-공급사-포털-주문-내역-수집) | 공급사 포털 주문 내역 수집 | PC | 타이머 | ui-automation | 브라우저 프로필 세션 + 확인 트리거로 로그인 처리 (BPM 프로세스가 비밀번호를 다루지 않음); 확인 트리거(로그인·2단계 인증·캡차); PC의 doc AI 태스크(공유 폴더 파일) |
 | [BX-15](scm.md#bx-15-견적서-작성) | 견적서 작성 | 서버 | 메시지 `quote_request` | erp, crm | BPM 프로세스 호출(call activity) — 넘기는 변수만 넘어감; 점 표기 입력 매핑(`고객.지역`); 결재로 값 조정, 반려하면 허용 한도(10%)로 |
-| [BX-16](scm.md#bx-16-재고-발주-제안-서버--erp-입력-pc) | 재고 발주 제안 (서버) → ERP 입력 (PC) | 서버 | 타이머 | wms | 서버 + PC로 **한 부분만 맡기기** (`chk:call.delegate`); 위임 실패를 오류 경계로 받기; 결재 반려 시 발주 안 함 |
-| [BX-17](scm.md#bx-17-erp-발주-화면-입력) | ERP 발주 화면 입력 | PC | 작업 지시 | ui-automation | 데스크톱 UI 태스크 반복; 다른 BPM 프로세스가 만든 작업 지시로 시작; 확인 트리거(경고 창) |
+| [BX-16](scm.md#bx-16-재고-발주-제안-서버--발주서-출력-준비-pc) | 재고 발주 제안 (서버) → 발주서 출력 준비 (PC) | 서버 | 타이머 | wms | 서버 + PC로 **한 부분만 맡기기** (`chk:call.delegate`); 위임 실패를 오류 경계로 받기; 결재 반려 시 발주 안 함 |
 
 ### 인사·총무 ([hr.md](hr.md))
 
@@ -101,7 +98,6 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [BX-33](ops.md#bx-33-it-권한-신청) | IT 권한 신청 | 서버 | 메시지 `access_request` | directory | DMN이 결재선 길이를 정함; 결재 3단계 — 중간 반려 시 바로 끝으로; 기본값 있는 결재 칸(`기간`) |
 | [BX-34](ops.md#bx-34-장애-알림-대응) | 장애 알림 대응 | 서버 | 메시지 `monitor_alert` | observability | 중단 타이머 경계 연쇄(에스컬레이션 사다리); 결재를 「확인 버튼」으로 쓰기; 받기 태스크로 끝내기 |
 | [BX-35](ops.md#bx-35-voc-주간-분석) | VOC 주간 분석 | 서버 | 타이머 | ext-helpdesk | 묶음 단위 병렬 AI (비용·시간 조절); AI 두 단계 — 대량 분류 → 요약 |
-| [BX-36](ops.md#bx-36-레거시-화면-데이터-이관) | 레거시 화면 데이터 이관 | PC | PC BPM 프로세스 수동 실행 | ui-automation, crm | UI 태스크(등록 화면)와 AI 데스크톱 자율 태스크를 한 BPM 프로세스에; PC BPM 프로세스에서 서비스 앱 호출; upsert로 재실행 안전 |
 
 ### 기능 예제 ([feature-examples.md](feature-examples.md))
 
@@ -112,7 +108,6 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [FX-03](feature-examples.md#fx-03-bpm-프로세스-호출과-매핑) | BPM 프로세스 호출과 매핑 | 서버 | 수동 실행 | — | `chk:call` 입력·출력 매핑; 같은 대상 두 번 호출 |
 | [FX-03b](feature-examples.md#fx-03b-금액-분기-호출-대상) | 금액 분기 (호출 대상) | 서버 | BPM 프로세스 호출 | — | 배타 게이트웨이 + 기본 흐름; 경계값 |
 | [FX-04](feature-examples.md#fx-04-폴더-감시-조건-시작-대체) | 폴더 감시 (조건 시작 대체) | 서버 | 타이머 | — | 조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링; 끝 이벤트 둘; 파일 목록 태스크 (`chk:fileList`) |
-| [FX-05](feature-examples.md#fx-05-데스크톱-ai-태스크-자율) | 데스크톱 AI 태스크 (자율) | PC | PC BPM 프로세스 수동 실행 | — | `domain: desktop` (자율); PC 전용 — 서버로 두면 B6 오류 |
 | [FX-06](feature-examples.md#fx-06-문서-ai-태스크) | 문서 AI 태스크 | 서버 | 수동 실행 | — | `domain: doc`; 도구 지정 |
 | [FX-07](feature-examples.md#fx-07-메일-보내기) | 메일 보내기 | 서버 | 수동 실행 | — | `sendTask` + `chk:email`; 파일 출력 → 첨부; `store_as` |
 | [FX-08](feature-examples.md#fx-08-오류-경계와-대체-경로) | 오류 경계와 대체 경로 | 서버 | 수동 실행 | — | 오류 경계 `TASK_FAILED`; 실패 후 합류 |
@@ -122,11 +117,9 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [FX-12](feature-examples.md#fx-12-타이머-시작--파일-출력) | 타이머 시작 + 파일 출력 | 서버 | 타이머 | — | 타이머 시작(cron); `dataObjectReference` + `chk:dataOutput` |
 | [FX-13](feature-examples.md#fx-13-신호-던지기받기) | 신호 던지기·받기 | 서버 | 수동 실행 | — | 중간 던지기 신호 / 중간 받기 신호 / 경계 신호; 한 실행 안의 가지 사이 신호 (C14 범위); 중간 받기 타이머로 순서 잡기 |
 | [FX-14](feature-examples.md#fx-14-중간-타이머와-결재-시간-제한) | 중간 타이머와 결재 시간 제한 | 서버 | 수동 실행 | — | 중간 받기 타이머; 결재 + 중단 타이머 경계 |
-| [FX-15](feature-examples.md#fx-15-웹-양식-제출-pc) | 웹 양식 제출 (PC) | PC | PC BPM 프로세스 수동 실행 | ui-automation | UI 태스크 fill/click/read (C10 동작); 화면 이동(`navigates`); 읽은 문구로 분기 |
-| [FX-16](feature-examples.md#fx-16-현장-확인-pc-결재-위치) | 현장 확인 (PC 결재 위치) | PC | PC BPM 프로세스 수동 실행 | ui-automation | 결재 위치 `field` (BUI-04 창); 확인 중에도 실행 자리 유지 |
 | [FX-17](feature-examples.md#fx-17-웹훅-보내기) | 웹훅 보내기 | 서버 | 수동 실행 | — | `chk:webhook` body `fields:[…]`; `SEND_FAILED` |
 | [FX-18](feature-examples.md#fx-18-병렬-반복) | 병렬 반복 | 서버 | 수동 실행 | web-reader | `isSequential=false`; 결과 순서 = 입력 순서 (C14); PC에서는 차례로 돈다 |
-| [FX-19](feature-examples.md#fx-19-수동-확인-pc) | 수동 확인 (PC) | PC | PC BPM 프로세스 수동 실행 | — | `manualTask` + `chk:approval` (칸 없음) |
+| [FX-19](feature-examples.md#fx-19-수동-확인-pc) | 수동 확인 (PC) | PC | PC BPM 프로세스 수동 실행 | — | `manualTask` + `chk:approval` (칸 없음); BX-16이 **PC 위임**으로 부른다 — `확인됨`을 `outputs`로 돌려준다 |
 | [FX-20](feature-examples.md#fx-20-외부-확장-http-어댑터-호출) | 외부 확장 HTTP 어댑터 호출 | 서버 | 수동 실행 | ext-credit | 외부 확장 어댑터; Admin 서명된 정의만 사용 |
 | [FX-21](feature-examples.md#fx-21-결정표-적중-정책-uniqueany) | 결정표 적중 정책 (UNIQUE·ANY) | 서버 | 수동 실행 | — | DMN 적중 정책 `UNIQUE`; DMN 적중 정책 `ANY` (겹치는 줄, 같은 결과); 맞는 줄 없음 = 모든 출력 `None` |
 | [FX-22](feature-examples.md#fx-22-파일-출력--csv-덧붙이기와-txt) | 파일 출력 — csv 덧붙이기와 txt | 서버 | 수동 실행 | — | 파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만); 파일 출력 `txt` + `template`; 쓴 파일을 `chk:fileList`로 되세기 |
@@ -138,42 +131,41 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 
 | 요소 | 예제 |
 | --- | --- |
-| 시작 — 없음(작업 지시·호출) | BX-06, BX-11, BX-12, BX-17, BX-24, BX-37, BX-36, FX-01, FX-02, FX-03, FX-03b, FX-05, FX-06, FX-07, FX-08, FX-09, FX-11, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-20, FX-21, FX-22, FX-23, FX-24, FX-25 |
-| 시작 — 타이머 | BX-01, BX-02, BX-04, BX-05, BX-07, BX-08, BX-14, BX-16, BX-23, BX-35, FX-04, FX-12 |
+| 시작 — 없음(작업 지시·호출) | BX-06, BX-11, BX-12, BX-24, BX-37, FX-01, FX-02, FX-03, FX-03b, FX-06, FX-07, FX-08, FX-09, FX-11, FX-13, FX-14, FX-17, FX-18, FX-19, FX-20, FX-21, FX-22, FX-23, FX-24, FX-25 |
+| 시작 — 타이머 | BX-01, BX-02, BX-05, BX-07, BX-08, BX-16, BX-23, BX-35, FX-04, FX-12 |
 | 시작 — 메시지 | BX-03, BX-10, BX-13, BX-15, BX-20, BX-21, BX-22, BX-30, BX-31, BX-32, BX-33, BX-34, FX-10 |
 | 끝 — 종료(terminate) | BX-11 |
-| 스크립트 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-14, BX-15, BX-16, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-35, BX-36, FX-02, FX-03, FX-03b, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-15, FX-16, FX-17, FX-18, FX-19, FX-21, FX-22, FX-24, FX-25 |
+| 스크립트 | BX-01, BX-02, BX-03, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-15, BX-16, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-35, FX-02, FX-03, FX-03b, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-17, FX-18, FX-19, FX-21, FX-22, FX-24, FX-25 |
 | AI 태스크 — llm | BX-05, BX-07, BX-08, BX-11, BX-13, BX-15, BX-20, BX-23, BX-30, BX-37, BX-31, BX-32, BX-34, BX-35, FX-09, FX-10, FX-23 |
 | AI 태스크 — api | BX-02, FX-01, FX-08, FX-10 |
-| AI 태스크 — doc | BX-01, BX-07, BX-10, BX-14, BX-30, FX-06 |
+| AI 태스크 — doc | BX-01, BX-07, BX-10, BX-30, FX-06 |
 | AI 태스크 — web | **없음** |
-| AI 태스크 — desktop | BX-36, FX-05 |
-| UI 태스크 (UI 자동화 확장) | BX-04, BX-14, BX-17, BX-36, FX-15, FX-16 |
-| 서비스 앱 태스크 | BX-06, BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-35, BX-36, FX-10, FX-18, FX-20 |
+| AI 태스크 — desktop | **없음** |
+| 서비스 앱 태스크 | BX-06, BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-35, FX-10, FX-18, FX-20 |
 | 규칙 (DMN) | BX-06, BX-07, BX-08, BX-12, BX-23, BX-33, FX-02, FX-21 |
-| 결재 (userTask) | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14, FX-16, FX-24 |
+| 결재 (userTask) | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14, FX-24 |
 | 수동 확인 (manualTask) | FX-19 |
-| 메일 보내기 | BX-01, BX-02, BX-04, BX-05, BX-06, BX-11, BX-13, BX-16, BX-20, BX-22, BX-31, BX-33, BX-34, BX-35, FX-07 |
+| 메일 보내기 | BX-01, BX-02, BX-05, BX-06, BX-11, BX-13, BX-16, BX-20, BX-22, BX-31, BX-33, BX-34, BX-35, FX-07 |
 | 웹훅 보내기 | BX-03, BX-10, BX-21, BX-30, FX-10, FX-17 |
 | 메시지 받기 (receiveTask) | BX-05, BX-11, BX-13, BX-34, FX-13 |
 | BPM 프로세스 호출 | BX-15, BX-21, BX-30, FX-03 |
 | 위임 (`chk:call.delegate`) | BX-16, FX-24 |
 | 일괄 기동 (반복 위임) | FX-24 |
 | 하위 프로세스 | BX-20, BX-22 |
-| 배타 게이트웨이 | BX-01, BX-02, BX-03, BX-04, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-15, BX-16, BX-21, BX-22, BX-30, BX-37, BX-31, BX-32, BX-33, FX-03b, FX-04, FX-10, FX-13, FX-15, FX-16, FX-21, FX-24, FX-25 |
+| 배타 게이트웨이 | BX-01, BX-02, BX-03, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-15, BX-16, BX-21, BX-22, BX-30, BX-37, BX-31, BX-32, BX-33, FX-03b, FX-04, FX-10, FX-13, FX-21, FX-24, FX-25 |
 | 포함 게이트웨이 | BX-10 |
 | 병렬 게이트웨이 | BX-05, BX-20, BX-22, BX-30, FX-11, FX-13 |
 | 중간 던지기 — 이정표(없음) | BX-05 |
 | 중간 던지기·받기 — 신호 | FX-13 |
 | 중간 받기 — 타이머 | FX-13, FX-14 |
-| 반복 — 차례 | BX-01, BX-04, BX-06, BX-07, BX-08, BX-17, BX-23, BX-36, FX-09 |
+| 반복 — 차례 | BX-01, BX-06, BX-07, BX-08, BX-23, FX-09 |
 | 반복 — 병렬 | BX-06, BX-23, BX-35, FX-18, FX-24 |
 | 경계 — 타이머 중단 | BX-03, BX-11, BX-13, BX-34, FX-14 |
 | 경계 — 타이머 비중단 | BX-03, BX-05, BX-20 |
-| 경계 — 오류 | BX-01, BX-02, BX-03, BX-16, BX-22, BX-32, BX-36, FX-08, FX-10, FX-17, FX-24 |
+| 경계 — 오류 | BX-01, BX-02, BX-03, BX-16, BX-22, BX-32, FX-08, FX-10, FX-17, FX-24 |
 | 경계 — 메시지 | BX-11 |
 | 경계 — 신호 | FX-13 |
-| 파일 출력 — md | BX-01, BX-02, BX-03, BX-04, BX-11, BX-15, BX-30, FX-07, FX-12 |
+| 파일 출력 — md | BX-01, BX-02, BX-03, BX-11, BX-15, BX-30, FX-07, FX-12 |
 | 파일 출력 — txt | FX-22 |
 | 파일 출력 — csv | FX-22 |
 | 파일 출력 — json | BX-05 |
@@ -188,32 +180,30 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 기능 | 예제 |
 | --- | --- |
 | 실행 위치 서버 | BX-01, BX-02, BX-03, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-12, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-30, BX-37, BX-31, BX-32, BX-33, BX-34, BX-35, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-10, FX-11, FX-12, FX-13, FX-14, FX-17, FX-18, FX-20, FX-21, FX-22, FX-23, FX-24, FX-25 |
-| 실행 위치 PC | BX-04, BX-14, BX-17, BX-36, FX-05, FX-15, FX-16, FX-19 |
+| 실행 위치 PC | FX-19 |
 | 결재 위치 Center 결재함 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-08, BX-10, BX-11, BX-15, BX-16, BX-20, BX-21, BX-30, BX-31, BX-32, BX-33, BX-34, FX-04, FX-08, FX-14, FX-24 |
-| 결재 위치 현장(PC) | FX-16, FX-19 |
-| UI 자동화 확장 (내장) | BX-04, BX-14, BX-17, BX-36, FX-15, FX-16 |
+| 결재 위치 현장(PC) | FX-19 |
 | 외부 확장 (HTTP 어댑터) | BX-06, BX-10, BX-32, BX-35, FX-20 |
-| 사내 확장 서비스 앱 | BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-36, FX-10, FX-18 |
+| 사내 확장 서비스 앱 | BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, FX-10, FX-18 |
 | 한 프로세스에 서비스 앱 여러 개 | BX-10, BX-15, BX-22, BX-23, BX-32 |
-| 프로세스 기본값 (금지 행동·확인 트리거) | BX-01, BX-04, BX-14, BX-17, BX-36 |
-| 업무 파라미터 | BX-02, BX-05, BX-07, BX-14, BX-20, BX-23, FX-01, FX-08, FX-10 |
+| 프로세스 기본값 (금지 행동·확인 트리거) | BX-01 |
+| 업무 파라미터 | BX-02, BX-05, BX-07, BX-20, BX-23, FX-01, FX-08, FX-10 |
 | 다른 예제를 호출 (공유 BPM 프로세스) | BX-15, BX-21, BX-30, FX-03 |
-| 수동 케이스 (사람이 폼 확인) | BX-01, BX-02, BX-04, BX-14, BX-20, FX-16 |
+| 수동 케이스 (사람이 폼 확인) | BX-01, BX-02, BX-20 |
 | DMN 적중 정책 UNIQUE | FX-21 |
 | DMN 적중 정책 FIRST | BX-06, BX-08, BX-12, BX-23, BX-33, FX-02 |
 | DMN 적중 정책 ANY | FX-21 |
 | DMN 적중 정책 COLLECT | BX-07 |
-| 재생 모드 `plan` (기본) | BX-01, BX-02, BX-05, BX-07, BX-08, BX-10, BX-11, BX-13, BX-14, BX-15, BX-20, BX-23, BX-30, BX-37, BX-31, BX-32, BX-34, BX-35, BX-36, FX-01, FX-05, FX-06, FX-08, FX-09, FX-10, FX-23 |
+| 재생 모드 `plan` (기본) | BX-01, BX-02, BX-05, BX-07, BX-08, BX-10, BX-11, BX-13, BX-15, BX-20, BX-23, BX-30, BX-37, BX-31, BX-32, BX-34, BX-35, FX-01, FX-06, FX-08, FX-09, FX-10, FX-23 |
 | 재생 모드 `full` | FX-23 |
 | 재생 모드 `none` | FX-23 |
 
 ## 마일스톤별 인수 시험 묶음
 
-예제가 쓰는 기능으로 자동으로 정한다: 기본 M3(Studio 시험 실행), UI 태스크·데스크톱 → M4, 서비스 앱·확장 → M5. 처음 통과한 뒤에는 회귀로 계속 돈다. M5에서 PC 예제는 Center 배포 → PC 실행기 실행으로, M7에서 서버 예제는 서버 실행기에서 다시 통과해야 한다.
+예제가 쓰는 기능으로 자동으로 정한다: 기본 M3(Studio 시험 실행), 서비스 앱·확장 → M5. 처음 통과한 뒤에는 회귀로 계속 돈다. M5에서 PC 예제는 Center 배포 → PC 실행기 실행으로, M7에서 서버 예제는 서버 실행기에서 다시 통과해야 한다.
 
 | 마일스톤 | 처음 통과해야 하는 예제 | 다시 통과 |
 | --- | --- | --- |
 | M3 | BX-01, BX-02, BX-03, BX-05, BX-07, BX-11, BX-12, BX-30, BX-37, FX-01, FX-02, FX-03, FX-03b, FX-04, FX-06, FX-07, FX-08, FX-09, FX-11, FX-12, FX-13, FX-14, FX-17, FX-19, FX-21, FX-22, FX-23, FX-24, FX-25 |  |
-| M4 | BX-04, BX-14, BX-17, FX-05, FX-15, FX-16 |  |
-| M5 | BX-06, BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-35, BX-36, FX-10, FX-18, FX-20 | PC 예제: Center 배포 → PC 실행기 |
+| M5 | BX-06, BX-08, BX-10, BX-13, BX-15, BX-16, BX-20, BX-21, BX-22, BX-23, BX-24, BX-31, BX-32, BX-33, BX-34, BX-35, FX-10, FX-18, FX-20 | PC 예제: Center 배포 → PC 실행기 |
 | M7 | — | 서버 예제 전부: 서버 실행기 |

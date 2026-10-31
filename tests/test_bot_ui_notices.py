@@ -104,35 +104,6 @@ def test_coming_back_with_nothing_to_send_says_just_that() -> None:
     assert found.take()[0].text == "Center 연결 복구"
 
 
-def test_a_runtime_that_was_restarted_and_then_gave_up() -> None:
-    """이름은 **확장이 준 `label`**이다 (ADR-0018 — 플랫폼은 어느 확장인지 모른다)."""
-    found = Notices()
-    found.runtime("worker", label="Worker 프로세스", state="running", restarts=0)
-    assert not found.pending, "처음 본 상태는 알릴 거리가 아니다"
-
-    found.runtime("worker", label="Worker 프로세스", state="restarting", restarts=1)
-    told = found.take()
-    assert [(one.kind, one.text) for one in told] == [
-        (module.RUNTIME_RESTARTED, "Worker 프로세스가 멈춰 다시 띄웠습니다")
-    ]
-
-    found.runtime("worker", label="Worker 프로세스", state="stopped", restarts=4, why="포트가 쓰이고 있습니다")
-    told = found.take()
-    assert told[0].kind == module.RUNTIME_GAVE_UP
-    assert "포트가 쓰이고 있습니다" in told[0].text
-    assert "UI 태스크가 있는 BPM 프로세스는 실행되지 않습니다" in told[0].text
-    assert told[0].sticky, "사람이 볼 때까지 — 이 PC에서 UI 태스크가 아예 안 돈다"
-
-
-def test_the_same_runtime_state_is_not_told_again() -> None:
-    found = Notices()
-    found.runtime("worker", label="Worker", state="running", restarts=0)
-    found.runtime("worker", label="Worker", state="stopped", restarts=4, why="왜")
-    found.take()
-    found.runtime("worker", label="Worker", state="stopped", restarts=4, why="왜")
-    assert not found.pending
-
-
 def test_approvals_and_confirmations_are_told_apart() -> None:
     """결재는 「결재가 필요합니다」, 확인은 **어느 태스크**인지까지 (BUI-05 표)."""
     found = Notices()

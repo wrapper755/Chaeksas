@@ -57,7 +57,6 @@ MAX_LIMIT = 500
 COUNTS = (
     "ai_tasks",
     "replayed_tasks",
-    "ui_tasks",
     "service_calls",
     "human_requests",
     "confirmations",

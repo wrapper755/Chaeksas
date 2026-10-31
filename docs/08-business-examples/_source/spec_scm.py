@@ -1,4 +1,4 @@
-"""구매·영업·물류 예제 (BX-10 ~ BX-17)."""
+"""구매·영업·물류 예제 (BX-10 ~ BX-16)."""
 
 from exdsl import *  # noqa: F401,F403
 
@@ -203,43 +203,6 @@ EXAMPLES.append(Example(
              "입고 메시지가 받기 태스크보다 먼저 오면(분류 AI가 도는 중) C12가 `no_receiver`로 거부한다 — 메시지 보관은 README 「아직 정하지 않은 것」."],
 ))
 
-# ───────────────────────────── BX-14 ─────────────────────────────
-EXAMPLES.append(Example(
-    id="BX-14", file="bx14_supplier_portal_orders", name="공급사 포털 주문 내역 수집", dept="구매·영업·물류",
-    origin="프로토타입 시나리오 8 (제안만 됨 — 웹 세션·프로필 유지) → UI 태스크로", 
-    run_location="pc", trigger="타이머 — 매일 08:00 (PC BPM 프로세스)",
-    background="""
-API가 없는 공급사 웹 포털에서 어제 주문 내역 표를 읽고, 사내 공유 시트(xlsx)에 덧붙인다. 로그인 세션은 그 PC의 브라우저 프로필(`supplier-portal`)에 남아 있다. 세션이 끊기거나 2단계 인증을 요구하면 확인 창이 뜨고, 사람이 로그인한 뒤 BPM 프로세스가 이어간다.
-""",
-    why_location="API가 없는 웹 화면, 사내 인증서·2단계 인증이 걸린 브라우저 프로필 → **PC**. 결과 파일 덧붙이기는 PC에서 같이 한다.",
-    inputs=[("조회일", "string", False, "`YYYY-MM-DD`, 비우면 어제")],
-    nodes=[
-        start("Start", "매일 08:00", kind="timer", cycle="0 8 * * *"),
-        script("Task_Date", "조회일 정하기", "조회일 = 조회일 or 어제()"),
-        ui("Task_Orders", "주문 내역 읽기", "supplier.portal.orders",
-           [dict(key="filter.date", action="fill", value="{조회일}"), dict(key="filter.search", action="click"),
-            dict(key="orders.table", action="read_table", result="주문")]),
-        ai("Task_Append", "공유 시트에 덧붙이기",
-           goal("`주문`은 포털 표의 줄 목록이다. 업무 파라미터 `시트경로`가 공유 xlsx다.",
-                "`주문`을 시트 마지막 줄 다음에 덧붙이고 저장한다. 이미 같은 주문번호가 있으면 건너뛴다.",
-                "기존 줄을 고치거나 지우지 않는다.", "- `추가건수`: int\n- `건너뜀`: int"),
-           "doc", {"추가건수": "int", "건너뜀": "int"}, tools=["excel_writer_tool"], params={"시트경로": "\\\\fileserver\\구매\\주문수집.xlsx"}),
-        end("End"),
-    ],
-    flows=[f("Start", "Task_Date"), f("Task_Date", "Task_Orders"), f("Task_Orders", "Task_Append"), f("Task_Append", "End")],
-    extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}],
-    defaults={"confirm_triggers": ["로그인 화면", "2단계 인증 화면", "캡차"], "forbidden_actions": ["주문 취소·수정 버튼을 누르지 않는다"], "web": {"profile": "supplier-portal"}},
-    cases=[Case("어제 주문", {"조회일": "2026-09-30"}, {"추가건수": 3}),
-           Case("같은 날 다시 실행", {"조회일": "2026-09-30"}, {"추가건수": 0, "건너뜀": 3}, description="멱등 — 중복 덧붙이지 않음"),
-           Case("로그인 만료", {"조회일": "2026-09-30"}, {}, manual=True, description="프로필 세션을 지우고 실행 — 확인 창이 뜨고 사람이 로그인하면 계속")],
-    features=["브라우저 프로필 세션 + 확인 트리거로 로그인 처리 (BPM 프로세스가 비밀번호를 다루지 않음)", "확인 트리거(로그인·2단계 인증·캡차)", "PC의 doc AI 태스크(공유 폴더 파일)",
-              "재실행 멱등 (주문번호로 건너뛰기)"],
-    lessons=["로그인 정보를 목표·파라미터·UI 스텝 값에 쓰면 패키지에 비밀이 들어간다 — 로그인은 사람이 프로필에 해 두고, 끊기면 확인 트리거로 (CLAUDE.md 보안 규칙).",
-             "포털 화면이 바뀌면 셀렉터 사다리 + 자가 치유(C8)가 먼저 버틴다. 치유가 한도를 넘으면 전환(escalated) — PC BPM 프로세스는 확인 창으로 넘긴다 (C10).",
-             "매일 돌리되 「어제」만 읽으면 실행이 하루 빠졌을 때 구멍이 난다 — 재실행 멱등(주문번호로 건너뛰기) 덕분에 조회일을 입력으로 넣어 다시 돌리면 된다.",
-             "「같은 날 다시 실행」 케이스를 처음부터 둔다 — 재시도·재실행이 중복을 만들지 않는지."],
-))
-
 # ───────────────────────────── BX-15 ─────────────────────────────
 EXAMPLES.append(Example(
     id="BX-15", file="bx15_quotation", name="견적서 작성", dept="구매·영업·물류",
@@ -285,15 +248,15 @@ EXAMPLES.append(Example(
 
 # ───────────────────────────── BX-16 ─────────────────────────────
 EXAMPLES.append(Example(
-    id="BX-16", file="bx16_reorder_proposal", name="재고 발주 제안 (서버) → ERP 입력 (PC)", dept="구매·영업·물류",
+    id="BX-16", file="bx16_reorder_proposal", name="재고 발주 제안 (서버) → 발주서 출력 준비 (PC)", dept="구매·영업·물류",
     origin="새로 설계 — 서버와 PC를 나누는 대표 예", 
     run_location="server", trigger="타이머 — 매일 07:00",
     background="""
-재고 데이터를 API로 읽어 안전재고 아래로 떨어진 품목의 발주 수량을 계산하고 구매 담당이 확인한다. 확인된 발주는 **ERP 화면 입력이 필요한데 ERP에 API가 없다.** 그래서 서버 BPM 프로세스가 그 한 부분만 **PC에 맡긴다** — 「발주 입력」 PC BPM 프로세스(BX-17)를 `chk:call.delegate`로 부르고([ADR-0062](../decisions/0062-pc-delegation.md)), 입력이 끝나면 **발주번호 목록을 받아** 이어 간다. 어느 PC에서 돌릴지는 **Center가 고른다**(그 BPM 프로세스가 배포된 활성 PC 중 대기열이 짧은 곳) — 그림에 PC 이름을 적지 않는다.
+재고 데이터를 API로 읽어 안전재고 아래로 떨어진 품목의 발주 수량을 계산하고 구매 담당이 확인한다. 확정된 발주서는 **구매팀 PC의 프린터로 뽑는다** — 서버는 그 PC 앞의 일(용지 넣기)을 할 수 없다. 그래서 서버 BPM 프로세스가 그 한 부분만 **PC에 맡긴다** — 「수동 확인」 PC BPM 프로세스(FX-19)를 `chk:call.delegate`로 부르고([ADR-0062](../decisions/0062-pc-delegation.md)), 사람이 확인하면 **`확인됨`을 받아** 이어 간다. 어느 PC에서 돌릴지는 **Center가 고른다**(그 BPM 프로세스가 배포된 활성 PC 중 대기열이 짧은 곳) — 그림에 PC 이름을 적지 않는다.
 
-실패·거절·만료는 **오류 경계**로 온다. 여기서는 담당자에게 메일로 알리고 끝낸다 — 발주는 사람이 ERP에서 직접 넣는다.
+실패·거절·만료는 **오류 경계**로 온다. 여기서는 담당자에게 메일로 알리고 끝낸다 — 발주서는 사람이 직접 뽑는다.
 """,
-    why_location="계산·결재는 서버, 화면 입력만 PC — **업무를 두 BPM 프로세스로 쪼갠다.** PC 쪽은 짧게 끝나 실행 자리를 오래 잡지 않는다.",
+    why_location="계산·결재는 서버, PC 앞의 일만 PC — **업무를 두 BPM 프로세스로 쪼갠다.** PC 쪽은 짧게 끝나 실행 자리를 오래 잡지 않는다.",
     nodes=[
         start("Start", "매일 07:00", kind="timer", cycle="0 7 * * 1-5"),
         svc("Task_Stock", "재고 읽기", "wms", "list_stock", {}, {"재고": "items"}),
@@ -302,62 +265,35 @@ EXAMPLES.append(Example(
         appr("Approve_Order", "발주 확인", "발주 제안 확인", ["제안"], [fld("승인", "제안대로 발주합니까?", "bool", True), fld("메모", "메모")], location="center"),
         xgw("Gw_Order", "발주?"),
         script("Task_Confirm", "확정", "확정 = 제안"),
-        call("Call_ErpInput", "ERP 입력 (PC 위임)", "Proc_bx17_erp_po_entry",
-             {"발주": "확정"}, {"발주번호목록": "발주번호목록"},
-             delegate=dict(bpm_process_id="bx17-erp-po-entry")),
-        script("Task_Note", "발주번호 기록", "발주건수 = len(발주번호목록)"),
-        mail("Task_Failed", "입력 실패 알림", ["purchasing@example.com"], "ERP 발주 입력 실패",
-             "발주 {제안수}건의 ERP 입력이 끝나지 않았습니다. 사유: {error_message}\nERP에서 직접 확인해 주세요."),
+        call("Call_Print", "출력 준비 (PC 위임)", "Proc_fx19_manual_task_pc",
+             {}, {"출력준비": "확인됨"},
+             delegate=dict(bpm_process_id="fx19-manual-task-pc")),
+        script("Task_Note", "발주 기록", "발주건수 = len(확정)"),
+        mail("Task_Failed", "출력 준비 실패 알림", ["purchasing@example.com"], "발주서 출력 준비 실패",
+             "발주 {제안수}건의 발주서 출력 준비가 끝나지 않았습니다. 사유: {error_message}\n직접 뽑아 주세요."),
         end("End"),
     ],
     flows=[f("Start", "Task_Stock"), f("Task_Stock", "Task_Calc"), f("Task_Calc", "Gw_Any"),
            f("Gw_Any", "Approve_Order", "제안수 > 0", "있음"), f("Gw_Any", "End", default=True, name="없음"),
            f("Approve_Order", "Gw_Order"), f("Gw_Order", "Task_Confirm", "승인", "발주"), f("Gw_Order", "End", default=True, name="보류"),
-           f("Task_Confirm", "Call_ErpInput"), f("Call_ErpInput", "Task_Note"), f("Task_Note", "End"),
+           f("Task_Confirm", "Call_Print"), f("Call_Print", "Task_Note"), f("Task_Note", "End"),
            f("Bnd_Delegation", "Task_Failed"), f("Task_Failed", "End")],
-    boundaries=[bnd("Bnd_Delegation", "Call_ErpInput", "error", "위임 실패", error="DELEGATION_FAILED")],
+    boundaries=[bnd("Bnd_Delegation", "Call_Print", "error", "위임 실패", error="DELEGATION_FAILED")],
     extensions=[{"id": "wms", "version": ">=1,<2"}],
-    variables=[("발주번호목록", "list", "Call_ErpInput (PC 위임)", "BX-17이 ERP에서 읽어 온 발주번호")],
-    cases=[Case("부족 2품목", {}, {"제안수": 2, "발주건수": 2}, {"Approve_Order": {"승인": True}},
+    variables=[("출력준비", "bool", "Call_Print (PC 위임)", "FX-19에서 사람이 확인했나")],
+    cases=[Case("부족 2품목", {}, {"제안수": 2, "발주건수": 2, "출력준비": True}, {"Approve_Order": {"승인": True}},
                 "모의 WMS가 2품목을 안전재고 아래로 돌려준다. PC 위임 결과는 케이스가 적는다",
-                delegations={"Call_ErpInput": {"발주번호목록": ["PO-1001", "PO-1002"]}}),
+                delegations={"Call_Print": {"확인됨": True}}),
            Case("PC 입력이 실패", {}, {"제안수": 2}, {"Approve_Order": {"승인": True}},
                 "위임 결과를 **적어 두지 않으면** 그 자리에서 실패다 — 오류 경계가 받는 것을 본다",
                 delegations={})],
     features=["서버 + PC로 **한 부분만 맡기기** (`chk:call.delegate`)", "위임 실패를 오류 경계로 받기", "결재 반려 시 발주 안 함"],
     lessons=["한 BPM 프로세스 안에 서버 일과 PC 일을 섞지 않는다 — 실행 위치는 BPM 프로세스 단위이고(ADR-0015), **PC가 필요한 한 부분은 위임으로 떼어 낸다** (ADR-0062).",
              "위임 대상은 **패키지 안의 정의가 아니다** — 따로 올리고 따로 배포한 PC BPM 프로세스이다. 그래서 `requires.libs`에 들어가지 않고, 검사도 패키지 안에서 찾지 않는다 (B14).",
-             "**받을 값은 대상이 `outputs`로 선언해야 한다** (C1) — 선언하지 않으면 현장에서 값이 올라오지 않는다 (C4 `JobAck.outputs`가 선언한 것만 거른다). BX-17에 `발주번호목록`을 선언해 두었다.",
+             "**받을 값은 대상이 `outputs`로 선언해야 한다** (C1) — 선언하지 않으면 현장에서 값이 올라오지 않는다 (C4 `JobAck.outputs`가 선언한 것만 거른다). FX-19에 `확인됨`을 선언해 두었다.",
              "**어느 PC인지 적지 않는다** — 비우면 Center가 고른다(배포된·활성인·대기열이 짧은 곳). 그림에 PC 이름을 적으면 배포가 정하는 자리를 그림이 가로챈다 (ADR-0049).",
-             "`bpm_process_id`에 적는 것은 **패키지 id**다 (C1 `id`) — 예제 파일 이름이 아니다. 밑줄은 들어갈 수 없어(`^[a-z0-9][a-z0-9._-]{0,99}$`) BX-17의 패키지 id는 `bx17-erp-po-entry`다. 처음에는 파일 이름을 그대로 적어 두었는데, Center가 `no_deployment`로 거절해서야 드러났다 — **글자로만 가리키는 자리는 시험이 돌려 봐야 안다**. 지금은 생성기가 짝을 대조한다.",
-             "전에는 이 자리를 **사내 확장 서비스 앱**(`center-jobs`, Center 작업 지시 API를 감싼 것)으로 메우고 있었다 — 계약에 위임 요소가 없던 때의 우회였고, ADR-0062가 그 공백을 닫았다."],
+             "`bpm_process_id`에 적는 것은 **패키지 id**다 (C1 `id`) — 예제 파일 이름이 아니다. 밑줄은 들어갈 수 없어(`^[a-z0-9][a-z0-9._-]{0,99}$`) FX-19의 패키지 id는 `fx19-manual-task-pc`다. 처음에는 파일 이름을 그대로 적어 두었는데, Center가 `no_deployment`로 거절해서야 드러났다 — **글자로만 가리키는 자리는 시험이 돌려 봐야 안다**. 지금은 생성기가 짝을 대조한다.",
+             "전에는 이 자리를 **사내 확장 서비스 앱**(`center-jobs`, Center 작업 지시 API를 감싼 것)으로 메우고 있었다 — 계약에 위임 요소가 없던 때의 우회였고, ADR-0062가 그 공백을 닫았다.",
+             "맡기는 대상은 ERP 화면 입력(BX-17, UI 태스크)이었다 — UI 자동화 확장을 걷으며(ADR-0114) 사람이 PC 앞에서 하는 확인(FX-19)으로 바꿨다. 위임의 모양은 그대로다."],
 ))
 
-# ───────────────────────────── BX-17 ─────────────────────────────
-EXAMPLES.append(Example(
-    id="BX-17", file="bx17_erp_po_entry", name="ERP 발주 화면 입력", dept="구매·영업·물류",
-    origin="새로 설계 — BX-16의 PC 쪽",
-    run_location="pc", trigger="작업 지시 — BX-16이 **PC 위임**으로 만든다 (어느 PC인지는 Center가 고른다)",
-    background="""
-확정된 발주 목록을 받아 ERP 데스크톱 클라이언트의 발주 입력 화면에 한 건씩 입력하고 발주번호를 읽어 온다. 읽어 온 **발주번호 목록을 `outputs`로 선언해** 맡긴 쪽(BX-16)에게 돌려준다 ([ADR-0062](../decisions/0062-pc-delegation.md) — 선언한 것만 올라간다, C4 `JobAck.outputs`).
-""",
-    why_location="API 없는 데스크톱 ERP 화면 → PC. 결재가 없어 짧게 끝난다.",
-    inputs=[("발주", "list", True, "{품목, 수량}")],
-    outputs=["발주번호목록"],
-    nodes=[
-        start("Start", "작업 지시"),
-        ui("Task_Entry", "발주 입력", "erp.desktop.po_entry",
-           [dict(key="po.item", action="fill", value="{건.품목}"), dict(key="po.qty", action="fill", value="{건.수량}"),
-            dict(key="po.save", action="click"), dict(key="po.number", action="read", result="발주번호")],
-           loop=dict(collection="발주", item="건", result="발주번호", collect_into="발주번호목록")),
-        end("End"),
-    ],
-    flows=[f("Start", "Task_Entry"), f("Task_Entry", "End")],
-    boundaries=[],
-    extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}],
-    defaults={"confirm_triggers": ["재고 부족 경고 창"], "forbidden_actions": ["삭제 버튼을 누르지 않는다"], "desktop": {"app": "ERP Client"}},
-    cases=[Case("2건 입력", {"발주": [{"품목": "P-100", "수량": 40}, {"품목": "P-200", "수량": 10}]}, {"발주번호목록": ["*", "*"]}, description="`*`는 「값이 있음」")],
-    features=["데스크톱 UI 태스크 반복", "다른 BPM 프로세스가 만든 작업 지시로 시작", "확인 트리거(경고 창)"],
-    lessons=["데스크톱 자동화는 Windows에서 S1 스파이크로 먼저 검증한다 (UIA 백엔드).",
-             "건마다 저장 → 발주번호 읽기를 한 세트로. 중간에 실패한 실행을 그대로 다시 돌리면 이미 입력된 건이 또 들어간다 — Worker는 재시작 때 조작 스텝을 자동으로 다시 하지 않으므로(C10) 사람이 ERP에서 확인한 뒤 남은 건만 넣는다."],
-))

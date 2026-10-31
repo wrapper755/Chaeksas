@@ -159,13 +159,3 @@ def test_the_status_never_shows_the_key_or_the_address() -> None:
     client = app_with(llm)
     raw = client.get("/admin/v1/status", headers=ADMIN).text
     assert SECRET not in raw and "gw.internal" not in raw
-
-
-def test_the_ui_automation_app_reports_its_model_line(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
-    """UI 자동화 앱도 같은 자리를 쓴다 — 치유·목표로 계획이 붙을 곳이다."""
-    from chaeksas.ext.ui_automation.service.app import ENV_PREFIX, create  # noqa: PLC0415
-
-    monkeypatch.setenv(f"{ENV_PREFIX}LLM__BASE_URL", "http://gw")
-    monkeypatch.setenv(f"{ENV_PREFIX}LLM__MODEL", "heal-model")
-    with TestClient(create(db_path=tmp_path / "uia.sqlite3", admin_token="t-admin")) as client:
-        assert status_line(client) == {"name": "llm", "status": "unknown", "detail": "모델 heal-model"}

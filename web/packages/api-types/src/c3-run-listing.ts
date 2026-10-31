@@ -34,7 +34,6 @@ export interface RunInfo {
   source?: string | null;
   started_at?: string | null;
   status?: string;
-  ui_tasks?: number | null;
   version?: string | null;
   [k: string]: unknown;
 }

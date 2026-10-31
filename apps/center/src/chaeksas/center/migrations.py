@@ -280,6 +280,11 @@ MIGRATIONS: tuple[Step, ...] = (
             "CREATE TABLE timer_sweeps (id INTEGER PRIMARY KEY CHECK (id = 1), at TEXT NOT NULL)",
         ),
     ),
+    Step(
+        18,
+        "CON-03 「셀렉터 등록」을 걷는다 — UI 자동화 확장과 함께 (ADR-0114)",
+        ("ALTER TABLE bot_uis DROP COLUMN selector_registration",),
+    ),
 )
 
 

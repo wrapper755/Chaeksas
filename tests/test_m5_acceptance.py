@@ -245,15 +245,15 @@ def test_both_external_definitions_survive_re_verification(directory: AppDirecto
 
 #: BX-16이 맡기는 **PC BPM 프로세스 패키지 id**와 그 예제 파일. 패키지 id는 파일 이름이 아니다 —
 #: C1 `id`에 밑줄이 들어갈 수 없어 `-`다 (그 예제의 「배운 것」에 있다).
-BX16_TARGET = "bx17-erp-po-entry"
-BX16_TARGET_EXAMPLE = "bx17_erp_po_entry"
+BX16_TARGET = "fx19-manual-task-pc"
+BX16_TARGET_EXAMPLE = "fx19_manual_task_pc"
 
 
 def test_bx16_delegates_to_the_pc_bot_that_declares_the_outputs() -> None:
     """**그림과 대상이 맞물리나** (ADR-0062, C14 `chk:call.delegate`).
 
     전에는 이 자리를 사내 확장 서비스 앱(`center-jobs`)으로 메우고 있었고, 그래서 시험이
-    **진짜 소켓 Center·연동용 키·등록된 PC 실행기·배포된 BX-17** 넷을 세워야 했다. 위임이
+    **진짜 소켓 Center·연동용 키·등록된 PC 실행기·배포된 PC BPM 프로세스** 넷을 세워야 했다. 위임이
     본문이 된 뒤로는 그 발판이 **필요하지 않다** — Studio 시험 실행은 케이스의 `delegations`로
     돈다. 진짜 Center·진짜 PC를 거치는 한 바퀴는 `test_server_runner_delegation.py`가 본다.
 
@@ -262,7 +262,7 @@ def test_bx16_delegates_to_the_pc_bot_that_declares_the_outputs() -> None:
     from chaeksas.contracts.bpmn_ext import read_process  # noqa: PLC0415
 
     caller = read_process((EXAMPLES / "bx16_reorder_proposal.bpmn").read_text(encoding="utf-8"))
-    node = next(one for one in caller.nodes if one.id == "Call_ErpInput")
+    node = next(one for one in caller.nodes if one.id == "Call_Print")
     call = node.prop("call")
     assert call is not None and call.delegate is not None
     assert call.delegate.bpm_process_id == BX16_TARGET
@@ -374,9 +374,7 @@ def run_all(
 #: 아직 초록이 아닌 예제와 **그 이유**. 비어 있으면 묶음이 다 돈다는 뜻이다.
 #:
 #: 하나라도 새로 막히면 여기에 **이유를 적고** 넣는다. 조용히 빼면 묶음이 거짓말을 한다.
-REMAINING: dict[str, str] = {
-    "bx36_legacy_migration": "`desktop` AI 태스크 — Windows 몫이다 (M4 인수 시험과 같은 자리)",
-}
+REMAINING: dict[str, str] = {}
 
 #: BX-33은 **일부러** B11 경고를 남긴 교육 예제다 (ADR-0039) — 「낮음」 갈래가 실행에서 죽는 것이
 #: 그 예제의 요점이라 「아직 안 되는 것」이 아니다. 아래에서 **그 의도된 동작을** 시험한다.
@@ -388,7 +386,7 @@ GREEN = [one for one in M5 if one not in REMAINING and one != BY_DESIGN]
 
 def test_the_bundle_is_read_from_the_examples() -> None:
     """묶음 목록을 사람이 옮겨 적지 않는다 — 어긋나는 순간 시험이 거짓말을 한다."""
-    assert len(M5) == 20
+    assert len(M5) == 19
     assert set(REMAINING) <= set(M5), f"남은 목록에 묶음 밖 예제가 있다: {set(REMAINING) - set(M5)}"
     assert BY_DESIGN in M5 and BY_DESIGN not in REMAINING
     assert len(GREEN) == 18, f"초록이 {len(GREEN)}개다 — 막힌 것이 있으면 REMAINING에 이유를 적는다"
@@ -445,7 +443,7 @@ def test_an_m5_example_passes_all_its_cases(
     """케이스가 **모두 통과**한다 — 서비스 앱은 진짜로 불린다.
 
     **BX-16의 Center 발판은 없어졌다** — PC 위임이 본문이 되어(ADR-0062) 그 예제가 작업을
-    만들지 않으므로 연동용 키·등록된 PC 실행기·배포된 BX-17이 필요하지 않다. 위임 결과는 케이스가
+    만들지 않으므로 연동용 키·등록된 PC 실행기·배포된 대상이 필요하지 않다. 위임 결과는 케이스가
     적는다 (C14 `delegations`).
     """
     results = run_all(tmp_path, example, caller, model, mock_apps, center_url=center.url)
@@ -465,8 +463,6 @@ def test_a_remaining_example_still_fails_for_the_written_reason(
     example: str,
 ) -> None:
     """아직 안 되는 것은 **안 된다고 적어 둔다** — 조용히 초록이 되면 목록이 썩는다."""
-    if example == "bx36_legacy_migration":
-        pytest.skip("데스크톱 예제 — Windows 몫이다")
     results = run_all(tmp_path, example, caller, model, mock_apps, center_url=center.url)
     bad = [(c.name, o.verdict) for c, o in results if o.verdict not in (PASS, NO_EXPECT)]
     assert bad, f"{example}: 이제 통과한다 — REMAINING에서 지운다 ({REMAINING[example]})"

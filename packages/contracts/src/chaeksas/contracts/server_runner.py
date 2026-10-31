@@ -79,7 +79,7 @@ __all__ = [  # C4·C2가 소유한 것 — 여기서는 다시 내보내기만 (
 
 
 class RunnerVersions(ContractModel):
-    """C4 `Versions`와 **칸이 다르다** — 서버에는 Worker가 없다."""
+    """C4 `Versions`와 **칸이 다르다** — 서버 실행기의 판이다."""
 
     server_runner: str
     core: str

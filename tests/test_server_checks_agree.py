@@ -113,7 +113,7 @@ def answers(processes: dict[str, BpmProcess], locations: dict[str, list[str]]) -
 def test_every_example_gets_the_same_answer_from_b6_and_r2(
     imported: dict[str, BpmProcess], locations: dict[str, list[str]]
 ) -> None:
-    assert len(imported) > 50, "예제를 찾지 못했다"
+    assert len(imported) >= 45, "예제를 찾지 못했다"
     apart = answers(imported, locations)
     disagree = {example: both for example, both in apart.items() if both["B6"] != both["R2"]}
     assert not disagree, f"B6와 R2가 다르게 답한다: {disagree}"

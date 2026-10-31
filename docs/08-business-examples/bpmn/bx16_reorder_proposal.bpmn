@@ -7,7 +7,7 @@
   xmlns:chk="urn:chaeksas:bpmn:1"
   id="Defs_bx16_reorder_proposal" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:error id="Err_DELEGATION_FAILED" name="DELEGATION_FAILED" errorCode="DELEGATION_FAILED" />
-  <bpmn:process id="Proc_bx16_reorder_proposal" name="재고 발주 제안 (서버) → ERP 입력 (PC)" isExecutable="true">
+  <bpmn:process id="Proc_bx16_reorder_proposal" name="재고 발주 제안 (서버) → 발주서 출력 준비 (PC)" isExecutable="true">
     <bpmn:extensionElements>
       <chk:process>{
   "run_location": "server",
@@ -90,36 +90,34 @@
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
       <bpmn:script>확정 = 제안</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:callActivity id="Call_ErpInput" name="ERP 입력 (PC 위임)" calledElement="Proc_bx17_erp_po_entry">
+    <bpmn:callActivity id="Call_Print" name="출력 준비 (PC 위임)" calledElement="Proc_fx19_manual_task_pc">
       <bpmn:extensionElements>
         <chk:call>{
   "delegate": {
-    "bpm_process_id": "bx17-erp-po-entry"
+    "bpm_process_id": "fx19-manual-task-pc"
   },
-  "input": {
-    "발주": "확정"
-  },
+  "input": {},
   "output": {
-    "발주번호목록": "발주번호목록"
+    "출력준비": "확인됨"
   }
 }</chk:call>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
     </bpmn:callActivity>
-    <bpmn:scriptTask id="Task_Note" name="발주번호 기록" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Note" name="발주 기록" scriptFormat="chk-expr">
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
-      <bpmn:script>발주건수 = len(발주번호목록)</bpmn:script>
+      <bpmn:script>발주건수 = len(확정)</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:sendTask id="Task_Failed" name="입력 실패 알림">
+    <bpmn:sendTask id="Task_Failed" name="출력 준비 실패 알림">
       <bpmn:extensionElements>
         <chk:email>{
   "to": [
     "purchasing@example.com"
   ],
-  "subject": "ERP 발주 입력 실패",
-  "body": "발주 {제안수}건의 ERP 입력이 끝나지 않았습니다. 사유: {error_message}\nERP에서 직접 확인해 주세요.",
+  "subject": "발주서 출력 준비 실패",
+  "body": "발주 {제안수}건의 발주서 출력 준비가 끝나지 않았습니다. 사유: {error_message}\n직접 뽑아 주세요.",
   "attachments": [],
   "store_as": null
 }</chk:email>
@@ -133,7 +131,7 @@
       <bpmn:incoming>Flow_11</bpmn:incoming>
       <bpmn:incoming>Flow_13</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:boundaryEvent id="Bnd_Delegation" name="위임 실패" attachedToRef="Call_ErpInput">
+    <bpmn:boundaryEvent id="Bnd_Delegation" name="위임 실패" attachedToRef="Call_Print">
       <bpmn:outgoing>Flow_12</bpmn:outgoing>
       <bpmn:errorEventDefinition errorRef="Err_DELEGATION_FAILED" />
     </bpmn:boundaryEvent>
@@ -149,8 +147,8 @@
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">승인</bpmn:conditionExpression>
     </bpmn:sequenceFlow>
     <bpmn:sequenceFlow id="Flow_08" name="보류" sourceRef="Gw_Order" targetRef="End" />
-    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Confirm" targetRef="Call_ErpInput" />
-    <bpmn:sequenceFlow id="Flow_10" sourceRef="Call_ErpInput" targetRef="Task_Note" />
+    <bpmn:sequenceFlow id="Flow_09" sourceRef="Task_Confirm" targetRef="Call_Print" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Call_Print" targetRef="Task_Note" />
     <bpmn:sequenceFlow id="Flow_11" sourceRef="Task_Note" targetRef="End" />
     <bpmn:sequenceFlow id="Flow_12" sourceRef="Bnd_Delegation" targetRef="Task_Failed" />
     <bpmn:sequenceFlow id="Flow_13" sourceRef="Task_Failed" targetRef="End" />
@@ -164,7 +162,7 @@
       <bpmndi:BPMNShape id="Approve_Order_di" bpmnElement="Approve_Order"><dc:Bounds x="726" y="230" width="100" height="80" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gw_Order_di" bpmnElement="Gw_Order" isMarkerVisible="true"><dc:Bounds x="896" y="245" width="50" height="50" /><bpmndi:BPMNLabel><dc:Bounds x="876" y="299" width="90" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Confirm_di" bpmnElement="Task_Confirm"><dc:Bounds x="1016" y="380" width="100" height="80" /></bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Call_ErpInput_di" bpmnElement="Call_ErpInput"><dc:Bounds x="1186" y="380" width="100" height="80" /></bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Call_Print_di" bpmnElement="Call_Print"><dc:Bounds x="1186" y="380" width="100" height="80" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Note_di" bpmnElement="Task_Note"><dc:Bounds x="1356" y="380" width="100" height="80" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Failed_di" bpmnElement="Task_Failed"><dc:Bounds x="1356" y="530" width="100" height="80" /></bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_di" bpmnElement="End"><dc:Bounds x="1526" y="102" width="36" height="36" /><bpmndi:BPMNLabel><dc:Bounds x="1506" y="142" width="76" height="27" /></bpmndi:BPMNLabel></bpmndi:BPMNShape>

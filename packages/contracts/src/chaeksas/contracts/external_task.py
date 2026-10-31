@@ -56,17 +56,13 @@ RETRY_STATUS_CODES: dict[int, str] = {503: "dependency_down", 429: "rate_limited
 
 #: 일꾼을 들이는 요청 종류 (`contracts.enrollment.ENROLLMENT_TYPES`에 더한다).
 CONSUMER = "consumer"
-#: 호출 토큰 (C15 「정한 것」) — PC 실행기가 제 키로 청해 실행 프로세스·Worker·Tool UI에 넘긴다.
+#: 호출 토큰 (C15 「정한 것」) — PC 실행기가 제 키로 청해 실행 프로세스에 넘긴다.
 CALL_TOKEN = "call_token"
 CALL_TOKEN_HOURS = 24
 #: 호출 토큰이 열 수 있는 경로의 앞자리 — 밖은 403 `call_token_scope`.
 CALL_TOKEN_PATH = "/api/v1/external-tasks"
-#: 호출 토큰이 **읽을** 수 있는 곳 — 리소스 목록(C7, 도구·편집기가 카탈로그를 읽는다). GET만.
+#: 호출 토큰이 **읽을** 수 있는 곳 — 리소스 목록(C7, 카탈로그를 읽는다). GET만.
 CALL_TOKEN_READ_PATH = "/api/v1/resources"
-
-#: 등록 세션의 `run_id` 앞자리 (C9 — Tool UI 셀렉터 등록·그 시험). BPM 프로세스가 없으므로 「그 BPM 프로세스가 토픽을
-#: 요구하나」 대신 「그 PC에 셀렉터 등록이 켜졌나」를 본다 (C15 §올리기).
-REGISTRATION_RUN_PREFIX = "reg_"
 
 #: Studio 시험 실행의 `run_id` 앞자리 (C11 `run_id` — 「Studio 단독 시험이면 `test_<hex>`」).
 TEST_RUN_PREFIX = "test_"
@@ -323,7 +319,6 @@ __all__ = [
     "STATE_FAILED",
     "STATE_LOCKED",
     "STATE_PENDING",
-    "REGISTRATION_RUN_PREFIX",
     "TEST_RUN_PREFIX",
     "CallToken",
     "CatalogUpload",

@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-10-20) |
+| 상태 | 대체됨([ADR-0114](0114-remove-ui-automation.md)) — 원래 수락 (2026-10-20) |
 | 구현 | `apps/tool_ui`(창·설정·한 세션 하나 — `QLocalServer`), 기여 지점 `tool_ui.tools`(`core.extensions.ExtensionHost.tools`), Bot UI 바로가기 `apps/bot_ui/tool_launch.py`, 묶기 진입 `packaging/botui_main.py`, 설치 바로가기 `packaging/installer/chaeksas.iss`(`ToolUiName`). 시험 `tests/test_tool_ui.py` |
 | 날짜 | 2026-10-20 |
 | 대체 | [ADR-0018](0018-extensions.md) 기여 지점 표의 `bot_ui.utilities` 한 줄과 「셀렉터 등록 = Bot UI 유틸리티」. [ADR-0012](0012-bot-ui.md)의 ③(이미 0018이 확장 기여로 바꾼 것)을 **어느 프로그램이 띄우나**까지 옮긴다 |

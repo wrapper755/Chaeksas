@@ -2,7 +2,6 @@
 
 - 모델: `GET <주소>/v1/models` — 닿는지, 키가 맞는지 (ADR-0027 — OpenAI 호환).
 - Center: `GET <주소>/api/v1/resources?type=service_app` — 닿는지, Studio용 키가 맞는지 (C7).
-- Worker: `GET http://127.0.0.1:<포트>/v1/health` — 토큰 없이 답하는 유일한 자리 (C10).
 서비스 앱 키는 묻지 않는다 — 없어졌다 (ADR-0102). 시험 실행은 Studio 키로 Center에 올린다.
 
 키 값은 결과 글에 **들어가지 않는다**. `client`는 시험이 끼운다 (httpx와 같은 모양).
@@ -11,7 +10,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from typing import Any
 
 #: Worker는 이 PC에만 바인드한다 (C10).
@@ -92,43 +90,7 @@ def center_status(base_url: str, api_key: str | None, *, client: Any = None) -> 
     return f"연결됨 — 서비스 앱 {len(items)}개를 읽었습니다"
 
 
-@dataclass(frozen=True)
-class WorkerPlace:
-    """Studio가 쓰는 Worker 자리 — PC 실행기가 남긴 것 (`Extensions.runtime_settings`)."""
-
-    port: int | None
-    token_dir: str | None
-
-
-def worker_place(values: Mapping[str, Any], runtime_id: str = "worker") -> WorkerPlace:
-    port = values.get(f"runtime.{runtime_id}.port")
-    token_dir = values.get(f"runtime.{runtime_id}.token_dir")
-    return WorkerPlace(port=int(port) if port else None, token_dir=str(token_dir) if token_dir else None)
-
-
-def worker_status(place: WorkerPlace, *, client: Any = None) -> str:
-    if place.port is None:
-        return "Worker를 기여한 확장이 없습니다."
-    try:
-        answer = _get(f"http://{LOCAL_HOST}:{place.port}/v1/health", client=client)
-    except Exception as e:  # noqa: BLE001
-        if _reachable(e):
-            raise
-        return "PC 실행기가 꺼져 있거나 Worker가 떠 있지 않습니다."
-    if answer.status_code >= 400:
-        return f"포트 {place.port}의 무언가가 {answer.status_code}로 답했습니다 — Worker가 아닐 수 있습니다"
-    try:
-        body = answer.json()
-    except ValueError:
-        body = {}
-    version = body.get("version") if isinstance(body, dict) else None
-    return f"실행 중 — Worker {version}" if version else "실행 중"
-
-
 __all__ = [
-    "WorkerPlace",
     "center_status",
     "llm_status",
-    "worker_place",
-    "worker_status",
 ]

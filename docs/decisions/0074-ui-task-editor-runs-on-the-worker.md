@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨([ADR-0114](0114-remove-ui-automation.md)) — 원래 수락 |
 | 날짜 | 2026-10-18 |
 | 관련 | STU-13, BUI-08, C10, C13 예약 설정 키, [ADR-0008](0008-map-driver-hands-boundary.md), [ADR-0013](0013-api-keys.md), [ADR-0014](0014-one-bot-per-pc.md), [ADR-0035](0035-ui-goal-planning.md), [ADR-0073](0073-studio-settings-only-what-is-used.md), 09-gaps §7-6 |
 

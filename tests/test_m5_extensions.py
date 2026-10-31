@@ -231,18 +231,18 @@ def test_a_read_token_cannot_register(client: TestClient) -> None:
     assert answer.status_code == 403
 
 
-# ─────────────────────────── 겹침 (E4·E8) ───────────────────────────
+# ─────────────────────────── 겹침 (E4) ───────────────────────────
 
 
 def test_conflicting_contributions_cannot_even_be_declared(client: TestClient) -> None:
-    """**E4·E8은 외부 확장으로 띄울 수 없다** — E1이 먼저 막는다.
+    """**E4는 외부 확장으로 띄울 수 없다** — E1이 먼저 막는다.
 
-    `task_types`·`agent_environments`는 `entry`(코드)를 요구하고, 외부 확장에는 코드 기여를
-    넣을 수 없다 (E1). 그래서 태스크 종류·AI 환경이 겹치는 일은 **설치된 확장들 사이**에서만
-    생기고, 그것은 확장 호스트가 본다 (Center가 아니라).
+    `task_types`는 코드(수행기)를 기여하는 자리이고, 외부 확장에는 코드 기여를 넣을 수 없다 (E1).
+    그래서 태스크 종류가 겹치는 일은 **설치된 확장들 사이**에서만 생기고, 그것은 확장 호스트가
+    본다 (Center가 아니라).
     """
     found = definition(
-        contributes={"agent_environments": [{"domain": "web", "entry": "x:Y"}]}
+        contributes={"task_types": [{"id": "ocr_task", "label": "OCR", "run_locations": ["pc"]}]}
     )
     answer = register(client, found)
     assert answer.status_code == 422

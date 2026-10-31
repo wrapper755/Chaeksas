@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 대체됨([ADR-0114](0114-remove-ui-automation.md)) — 원래 수락 |
 | 날짜 | 2026-10-09 |
 | 관련 | [C9](../03-contracts/C9-ui-page-registry.md), [C8](../03-contracts/C8-ui-automation-plan-heal-report.md), [09-gaps](../09-gaps.md) §2-3·§4-7, 화면 UIA-01·02, [ADR-0010](0010-service-apps.md) |
 

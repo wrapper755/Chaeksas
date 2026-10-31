@@ -2,8 +2,8 @@
 
 > 상태: **구현됨** (M5 조각 13). 인수 시험이 쓰는 것은 M5 조각 14다.
 
-제품이 아니다. `docs/08-business-examples/`의 예제 53개가 서비스 앱 **15개**를 부르고
-(작업 **30개**), 그 앱이 하나도 없으면 M5 인수 시험을 돌릴 수 없다. 여기에 거짓 데이터로
+제품이 아니다. `docs/08-business-examples/`의 예제 48개가 서비스 앱 **15개**를 부르고
+(작업 **29개**), 그 앱이 하나도 없으면 M5 인수 시험을 돌릴 수 없다. 여기에 거짓 데이터로
 답하는 앱을 둔다.
 
 멤버는 하나다 — `samples/mock_apps` (import 이름 `chaeksas.mock_apps`). 앱 열다섯 개를
@@ -31,27 +31,15 @@
 
 ```bash
 uv run chk-mock-apps list                 # 무엇이 있나, 기본 포트는 몇인가
-uv run chk-mock-apps serve                # 전부 한 포트(8010)에, /<app_id> 밑에 (웹 화면은 /site 밑에)
+uv run chk-mock-apps serve                # 전부 한 포트(8010)에, /<app_id> 밑에
 uv run chk-mock-apps serve --app erp      # 하나만, 그 앱의 기본 포트에
 ```
 
-`serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다(관리 API·시나리오 제어·웹 화면·외부 앱 둘).
+`serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다(관리 API·시나리오 제어·외부 앱 둘).
 **C11 앱 열셋의 업무 호출은 그 포트로 받지 않는다** — 아래 「Center에 붙기」대로 일꾼 하나가 Center에서 가져간다.
 앱 열다섯 개를 따로 띄우지 않아도 된다.
 
-### 웹 화면 (`/site`)
-
-예제가 가리키는 **웹 화면**도 같은 포트에 뜬다 — 공급사 포털(BX-04 `/site/transactions`,
-BX-14 `/site/portal`), 사내 신청서(`/site/form` → `/site/done`), 공지(`/site/notices`).
-**M4 인수 시험이 쓰는 HTML과 같은 것**이다(`sites.py`의 `PAGES` 하나를 둘이 쓴다) — 현장 PC에서
-TOL-03(구 BUI-06)으로 등록하고 BPM 프로세스가 읽는 화면이 시험이 본 화면과 다르면 「시험은 되는데 현장은 안 된다」가
-생긴다. 화면은 조회 조건을 보지 않는다(대상월을 넣어도 표는 그대로다 — 케이스가 기대하는 값이다).
-화면 안의 이동은 상대 경로라 `/site` 밑에서도 밖으로 새지 않는다.
-
-BX-04의 다른 한쪽인 **회계 프로그램**(데스크톱)은 `uv run python tests/fake_desktop_apps.py taxbook`
-으로 띄운다 (Windows — UIA로 보이는 진짜 창이다).
-
-기본 포트는 `docs/04-setup.md` §6의 「다음 서비스 앱: 8010부터 10씩」을 따른다
+기본 포트는 `docs/04-setup.md` §6의 「서비스 앱: 8010부터 10씩」을 따른다
 (`catalog.port_of`가 유일한 자리다, ADR-0011). 옮기려면 `CHK_SVC_<앱 id>__PORT`.
 
 ### Center에 붙기 (일꾼)
@@ -123,9 +111,7 @@ curl -X POST localhost:8010/erp/mock/v1/scenario -d '{"name":"이관1건"}'
 진짜 서비스 앱이 흉내 내서는 안 된다. **인증이 없으므로 이 앱들은 개발 PC·시험망에서만 띄운다**
 (`serve`의 기본 바인드가 127.0.0.1인 것도 그 이유다).
 
-## 하나는 여기 없다
-
-- **`ui-automation`** — 진짜 내장 확장이라 여기 없다 (BX-36이 쓴다).
+## 여기 없는 것
 
 **`center-jobs`는 걷어냈다** — 진짜 Center의 `POST /jobs`를 부르던 앱이고, BX-16이 「서버가 PC에
 일을 넘기는 요소가 없다」를 메우려고 쓰던 **우회**였다. [ADR-0062](../docs/decisions/0062-pc-delegation.md)가
@@ -152,7 +138,6 @@ samples/mock_apps/src/chaeksas/mock_apps/
 ├─ catalog.py      # 무엇이 있나, 기본 포트
 ├─ cli.py          # chk-mock-apps
 ├─ fixtures.py     # 앱 경계를 넘는 거짓 데이터 (사람·거래처)
-├─ sites.py        # 예제가 가리키는 웹 화면 (/site — M4 인수 시험과 같은 HTML)
 ├─ apps/           # C11 앱 하나 = 모듈 하나 (APP 하나를 내보낸다)
 └─ external/
    ├─ apps.py        # 남의 API 흉내 둘 (service_kit을 쓰지 않는다)

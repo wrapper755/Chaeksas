@@ -224,65 +224,6 @@ EXAMPLES.append(Example(
              "결과 정리 스크립트는 네 갈래 어디서 와도 같은 변수를 읽는다. 결재 칸(`승인여부`·`결재의견`)과 `기한초과`는 결재를 거치지 않는 길에서는 생기지 않으므로 사전 점검에서 먼저 정해 둔다 (B11)."],
 ))
 
-# ───────────────────────────── BX-04 ─────────────────────────────
-EXAMPLES.append(Example(
-    id="BX-04", file="bx04_tax_invoice_issue", name="세금계산서 발행 (포털 → 회계 프로그램)", dept="재무·회계",
-    origin="프로토타입 시나리오 3 (실제로 만들어 돌림)", 
-    run_location="pc", trigger="타이머 — 매월 1일 09:00, 또는 PC BPM 프로세스 수동 실행",
-    background="""
-공급사 웹 포털에서 지난달 거래 내역 표를 읽어, 사내 회계 프로그램(데스크톱)의 발행대장에 한 줄씩 입력하고 저장한다. 시트 합계와 포털 합계가 같은지 검증한 뒤 발행 보고서를 남기고 담당자에게 알린다.
-""",
-    why_location="""
-웹 포털 화면과 데스크톱 회계 프로그램을 조작해야 한다 → **PC**. 실행 위치를 서버로 두면 Studio 「실행 전 검사」가 UI 태스크를 오류로 막는다 (C14 B6).
-""",
-    inputs=[("대상월", "string", False, "`YYYY-MM`, 비우면 지난달"), ("최소발행금액", "int", False, "합계가 이보다 작으면 발행하지 않음"),
-            ("담당자메일", "string", False, "", "tax@example.com")],
-    nodes=[
-        start("Start", "매월 1일", kind="timer", cycle="0 9 1 * *"),
-        script("Task_Prepare", "발행 준비", "대상월 = 대상월 or 지난달()\n최소발행금액 = 최소발행금액 or 0"),
-        ui("Task_ReadPortal", "거래 내역 조회", "supplier.portal.transactions",
-           [dict(key="filter.month", action="fill", value="{대상월}"), dict(key="filter.search", action="click"),
-            dict(key="result.table", action="read_table", result="거래내역")]),
-        script("Task_Sum", "합계 검산", "건수 = len(거래내역)\n포털합계 = 합계(거래내역, '금액')\n발행대상 = 건수 > 0 and 포털합계 >= 최소발행금액"),
-        xgw("Gw_Issue", "발행 대상?"),
-        ui("Task_EnterBook", "회계 프로그램 입력", "accounting.taxbook.sheet",
-           [dict(key="row.next", action="fill", value="{행}"), dict(key="menu.save", action="click")],
-           loop=dict(collection="거래내역", item="행", result="입력결과", collect_into="입력결과목록")),
-        ui("Task_ReadTotal", "시트 합계 읽기", "accounting.taxbook.sheet", [dict(key="cell.total", action="read", result="시트합계")]),
-        script("Task_Verify", "발행 검증", "검증통과 = 시트합계 == 포털합계\n검증메모 = '' if 검증통과 else '합계가 다름'"),
-        mail("Task_Notify", "담당자 통지", ["{담당자메일}"], "[{대상월}] 세금계산서 발행 {건수}건 — 검증 {검증통과}", "보고서를 첨부합니다.",
-             attachments=["보고서경로"], store_as="통지결과"),
-        end("End_Skip", "발행 안 함"),
-        end("End"),
-    ],
-    flows=[f("Start", "Task_Prepare"), f("Task_Prepare", "Task_ReadPortal"), f("Task_ReadPortal", "Task_Sum"), f("Task_Sum", "Gw_Issue"),
-           f("Gw_Issue", "Task_EnterBook", "발행대상", "발행"), f("Gw_Issue", "End_Skip", default=True, name="대상 없음"),
-           f("Task_EnterBook", "Task_ReadTotal"), f("Task_ReadTotal", "Task_Verify"), f("Task_Verify", "Task_Notify"), f("Task_Notify", "End")],
-    data=[out("Data_Report", "발행 보고", "Task_Verify", "세금계산서/{대상월}_발행보고.md",
-              template="# 세금계산서 발행 보고 — {대상월}\n\n- 건수: {건수}\n- 포털 합계: {포털합계}\n"
-                       "- 회계 시트 합계: {시트합계}\n- 검증: {검증통과} {검증메모}\n",
-              store_as="보고서경로")],
-    extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}],
-    defaults={"forbidden_actions": ["포털에서 수정·삭제 링크를 누르지 않는다", "발행대장의 머리글과 합계 수식 칸을 고치지 않는다"],
-              "confirm_triggers": ["포털 로그인 화면이 나타남"], "web": {"profile": "supplier-portal"}},
-    variables=[("거래내역", "list", "Task_ReadPortal", "표의 줄"), ("포털합계", "int", "Task_Sum", ""), ("시트합계", "int", "Task_ReadTotal", ""),
-               ("검증통과", "bool", "Task_Verify", "")],
-    cases=[
-        Case("정상 발행", {"대상월": "2026-08"}, {"건수": 4, "검증통과": True}),
-        Case("발행 대상 없음", {"대상월": "2026-08", "최소발행금액": 1000000}, {"발행대상": False}),
-        Case("로그인 만료", {"대상월": "2026-08"}, {}, manual=True, description="포털 세션이 만료되면 확인 창(CMN-01)으로 사람이 로그인한 뒤 계속"),
-    ],
-    features=["PC BPM 프로세스 + UI 태스크(웹 읽기·데스크톱 입력)", "UI 태스크 반복", "프로세스 기본값(금지 행동·확인 트리거)",
-              "확인(confirmation) — 로그인 화면", "실행 위치 PC의 정당한 사례 (서버 우선의 예외)"],
-    lessons=["프로토타입은 이 업무를 HYBRID AI 태스크 하나로 했다 (자율 388초, 재생 56초). 새 구조에서는 등록된 화면이면 UI 태스크(셀렉터 사다리)로 — LLM 없이 기계적 속도.",
-             "합성 키 입력(Ctrl+S)이 조용히 무시됐다 (Wayland) — 저장은 메뉴 요소(`menu.save`)로 등록한다. Windows에서는 S1 스파이크로 확인.",
-             "`.xlsx`로 저장하면 경고 창이 무인 실행을 막았다 — 데스크톱 앱의 모달은 확인 트리거로 등록한다.",
-             "셀 읽기가 수식을 돌려줬다 — `read`는 계산된 값을 읽도록 요소를 등록한다.",
-             "남은 프로세스가 다음 실행을 가로챘다 — UI 태스크 「실행 후 닫기」를 켠다.",
-             "시작 주소를 케이스마다 바꿀 수 없었다 — 시작 주소는 화면 등록(C9)의 기본 주소, 케이스는 필터 값만 바꾼다."],
-    samples="프로토타입은 the-internet.herokuapp.com/tables(4줄, 합계 251)와 `taxbook.ods`를 썼다. 새 구조에서는 사내 시험 포털 화면을 TOL-03으로 등록해 쓴다.",
-))
-
 # ───────────────────────────── BX-05 ─────────────────────────────
 EXAMPLES.append(Example(
     id="BX-05", file="bx05_month_end_close", name="월말 마감 체크리스트", dept="재무·회계",

@@ -74,10 +74,10 @@
 | --- | --- | --- |
 | `core` | str | 필요한 런타임 코어 버전 범위 (예: `>=0.3,<0.4`) |
 | `tools` | str[] | 쓰는 도구 이름 전체 (AI 태스크의 허용 도구 합) |
-| `domains` | str[] | AI 태스크 대상 환경 합: `llm` `api` `doc` `web` `desktop` |
+| `domains` | str[] | AI 태스크 대상 환경 합: `llm` `api` `doc` `web` `desktop`. **`web`·`desktop`은 낱말로만 남는다** — 그 환경을 주는 확장이 없어 실행하는 쪽의 사전 점검이 `missing_agent_environment`로 시작 전에 막는다 ([ADR-0114](../decisions/0114-remove-ui-automation.md)) |
 | `settings` | str[] | 실행하는 쪽이 갖춰야 할 설정 이름: `llm` `vlm` `smtp` |
-| `service_apps` | ServiceAppNeed[] | 부르는 서비스 앱(= C15 토픽)과 작업 (아래). UI 태스크가 있으면 `ui-automation`이 들어간다 |
-| `resources` | `{type, id}`[] | 확장이 기여한 자원 중 쓰는 것 (예: `{type: "ui_page", id: "erp.order.form"}`). Center 리소스 목록(C7 확장 기여 자원)과 대조 |
+| `service_apps` | ServiceAppNeed[] | 부르는 서비스 앱(= C15 토픽)과 작업 (아래). 제 앱을 부르는 확장(C13 `requires_keys[].purpose: run`)의 태스크가 있으면 그 확장 id가 들어간다 |
+| `resources` | `{type, id}`[] | 확장이 기여한 자원 중 쓰는 것 (예: `{type: "seal_specimen", id: "hq.corporate-seal"}`). Center 리소스 목록(C7 확장 기여 자원)과 대조 |
 | `extensions` | `{id, version, definition_hash?}`[] | 쓰는 확장과 버전 범위 (C13). 외부 확장이면 `definition_hash`로 정의를 고정한다. Studio가 채운다 |
 | `task_types` | `{id, extension, run_locations?}`[] | 쓰는 태스크 종류 중 **확장이 기여한 것**과, 그 확장 정의에 적힌 실행 위치. Studio가 빌드할 때 확장 정의에서 옮겨 적는다. Center는 이것으로 R2를 판정하고, 실행하는 쪽은 자기 확장 정의로 다시 확인한다. **`run_locations`는 아는 쪽이 준다 — 모르면 넣지 않는다**: 빌드하는 PC에 그 확장이 깔려 있지 않거나 꺼져 있으면(ADR-0043) 적을 값이 없다 |
 | `libs` | str[] | 복사해 넣은 공유 BPM 프로세스 `<id>@<version>` |
@@ -102,7 +102,7 @@
 | --- | --- | --- |
 | `approval_center` | bool | Center 결재함으로 가는 결재가 있다 |
 | `approval_field` | bool | 「현장」 결재 위치(현장 PC 창)가 있다 |
-| `confirmation` | bool | 실행 중 확인(막힘)이 생길 수 있다 (AI 태스크 확인 트리거, UI 태스크 전환) |
+| `confirmation` | bool | 실행 중 확인(막힘)이 생길 수 있다 (AI 태스크 확인 트리거, 확장 태스크의 전환) |
 
 ### Trigger, Provides, Built
 
@@ -144,7 +144,7 @@ Studio(빌드 때), Center(업로드 때), PC 실행기·서버 실행기(설치
 | # | 규칙 | 위반 시 |
 | --- | --- | --- |
 | R1 | `kind=bpm_process`면 `run_location`, `entry`, `process_id`가 있다 (`run_location`은 생략 시 `server`로 채움) | 422 |
-| R2 | `run_location=server`면: `requires.domains`에 `web`·`desktop` 없음, `requires.task_types[]`가 **`run_locations`를 적었으면** 거기에 `server`가 있음 (예: `ui_task`는 `pc`만이라 불가), `human.approval_field=false`, `human.confirmation=false` | 422 `server_incompatible` + 걸린 항목 목록 |
+| R2 | `run_location=server`면: `requires.domains`에 `web`·`desktop` 없음, `requires.task_types[]`가 **`run_locations`를 적었으면** 거기에 `server`가 있음 (`pc`만 적은 종류는 불가), `human.approval_field=false`, `human.confirmation=false` | 422 `server_incompatible` + 걸린 항목 목록 |
 | R3 | `run_location=server`인 BPM 프로세스가 `run_location=pc`인 **공유 BPM 프로세스**를 부르면 **거부**다. PC 위임의 길이 아니다 — 패키지에 복사해 넣은 정의는 **PC에서 돌릴 길이 없다**(작업은 배포된 패키지를 가리키고 공유 BPM 프로세스에는 진입이 없다, R1). 위임은 `requires.delegations`로 적는다 ([ADR-0062](../decisions/0062-pc-delegation.md)) | 422 `delegation_not_supported` |
 | R8 | (Center, 배포 때) `run_location=server`면 `requires.service_apps[].operations`가 모두 C11 manifest에서 `server_ok=true`이고 결정 수행을 지원한다 (리소스 목록 C7과 대조). 업로드 때는 경고만 | 배포 422 `operation_not_server_ok` / `operation_not_deterministic` |
 | R4 | (없앴다 — 키 참조 칸이 없다, ADR-0102. 번호는 다시 쓰지 않는다) | — |
@@ -213,26 +213,26 @@ PC(빌드 기계도 그렇다)에서 만든 **올바른 패키지가 업로드�
 }
 ```
 
-PC BPM 프로세스 (UI 태스크가 있음):
+PC BPM 프로세스 (현장 확인과 사내 확장 태스크가 있음 — 확장은 C13 예시의 가상 확장):
 
 ```json
 {
   "schema": 1,
   "kind": "bpm_process",
-  "id": "erp.order-entry",
+  "id": "legal.contract-seal",
   "version": "2.1.0",
   "run_location": "pc",
   "entry": "process/main.bpmn",
-  "process_id": "order_entry",
+  "process_id": "contract_seal",
   "triggers": [{"kind": "timer", "expression": "0 9 1 * *"}],
   "requires": {
-    "domains": ["llm"],
+    "domains": ["llm", "doc"],
     "service_apps": [
-      {"app_id": "ui-automation", "operations": ["plan", "heal", "report"]}
+      {"app_id": "seal-check", "operations": ["compare"]}
     ],
-    "resources": [{"type": "ui_page", "id": "erp.order.form"}],
-    "task_types": [{"id": "ui_task", "extension": "ui-automation", "run_locations": ["pc"]}],
-    "extensions": [{"id": "ui-automation", "version": ">=0.4,<0.5"}],
+    "resources": [{"type": "seal_specimen", "id": "hq.corporate-seal"}],
+    "task_types": [{"id": "seal_check", "extension": "seal-check", "run_locations": ["pc", "server"]}],
+    "extensions": [{"id": "seal-check", "version": ">=1.2,<1.3"}],
     "os": ["windows"]
   },
   "human": {"approval_center": false, "approval_field": true, "confirmation": true},
@@ -270,6 +270,7 @@ PC BPM 프로세스 (UI 태스크가 있음):
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | 칸은 그대로다. PC 예시를 UI 태스크 대신 사내 확장 태스크로 바꿨고, `domains`의 `web`·`desktop`은 낱말로만 남아 사전 점검이 막는다고 적었다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | **타이머 일정을 Center가 `triggers`로 쓴다** — 「실행하는 쪽은 `triggers`로 일정을 잡지 않는다」를 그대로 두되 일정을 쥐는 자리가 Center임을 적었고, **R13**(타이머 식을 읽을 수 있다)을 더했다. 칸은 그대로다. 예제의 식은 모두 지난다(`0 18 L * *` 포함) | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | `requires.service_apps[].key_ref`·`task_key_refs`와 **R4를 걷었다** — 빌드가 적지 않고, 옛 패키지에 적혀 있으면 모르는 칸으로 받아 두고 보지 않는다(원칙 3). 선택 칸을 걷은 것이고 받는 쪽이 옛 칸을 거부하지 않으므로 **판을 올리지 않는다** (C4의 키 칸을 걷을 때와 같은 결) | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `key_ref`·`task_key_refs`는 옛 패키지를 읽는 칸으로만 남는다(키가 없다). `app_id`가 C15 토픽이고 배포된 Bot이 올려도 되는 토픽을 정한다 | [0102](../decisions/0102-calling-outside-is-pull.md) |

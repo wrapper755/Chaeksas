@@ -14,22 +14,4 @@ export interface ConsolePage {
  * `module`을 실제 화면으로 잇는 것은 `console-modules.ts`이고, 없는 모듈은 **끄고 이유를
  * 가까이에 적는다** (U3).
  */
-export const CONSOLE_PAGES: Record<string, ConsolePage[]> = {
-  "ui-automation": [
-    {
-      "id": "overview",
-      "label": "개요",
-      "module": "ui-automation/overview"
-    },
-    {
-      "id": "selectors",
-      "label": "셀렉터",
-      "module": "ui-automation/selectors"
-    },
-    {
-      "id": "monitoring",
-      "label": "모니터링",
-      "module": "ui-automation/monitoring"
-    }
-  ]
-};
+export const CONSOLE_PAGES: Record<string, ConsolePage[]> = {};

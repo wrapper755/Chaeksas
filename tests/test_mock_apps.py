@@ -91,13 +91,13 @@ def test_every_operation_the_examples_call_exists(examples: dict[str, set[str]])
 
 
 def test_the_example_count_matches_the_handoff_tally(examples: dict[str, set[str]]) -> None:
-    """앱 15개·작업 30개 — 이 수가 바뀌면 조각의 범위가 바뀐 것이다.
+    """앱 15개·작업 29개 — 이 수가 바뀌면 조각의 범위가 바뀐 것이다.
 
     열여섯이었다 — BX-16이 PC 위임을 쓰게 되면서(ADR-0062) `center-jobs`가 **부르는 데가
     없어져** 걷어냈다. 위에 있는 「예제가 부르지 않는 작업」 검사가 그것을 바로 잡아 주었다.
     """
     assert len(examples) == 15
-    assert sum(len(ops) for ops in examples.values()) == 30
+    assert sum(len(ops) for ops in examples.values()) == 29
 
 
 # ─────────────────────────── C11 (뼈대가 주는 것) ───────────────────────────
@@ -307,13 +307,6 @@ def test_bx10_acme_is_not_on_the_sanctions_list() -> None:
     assert output(app, "screen_sanctions", {"name": "Acme Trading"})["hits"] == []
     hit = output(app, "screen_sanctions", {"name": "제재상사"}, node_instance=2)["hits"]
     assert len(hit) == 1
-
-
-def test_bx36_upsert_counts_what_it_was_given() -> None:
-    """BX-36 「5건 묶음」이 `{"count": 5}`를 기대한다."""
-    _, app = client_for(catalog.c11("crm") or catalog.C11_APPS[0])
-    customers = [{"이름": f"고객{i}"} for i in range(5)]
-    assert output(app, "upsert_customers", {"customers": customers})["result"]["count"] == 5
 
 
 def test_bx32_search_finds_something_for_the_case_body() -> None:
@@ -634,46 +627,3 @@ def test_handlers_take_the_request_and_the_scenario() -> None:
     from chaeksas.mock_apps.c11 import Scenario  # noqa: PLC0415
 
     assert found.answer(request, Scenario())["items"]
-
-
-# ─────────────────────────── 웹 화면 (`/site`) ───────────────────────────
-
-
-def test_the_web_pages_ride_the_all_in_one_port() -> None:
-    """현장 PC의 사람이 BX-04의 공급사 포털을 열 수 있다 — 시험이 쓰는 것과 **같은 HTML**이다 (09-gaps §6)."""
-    from chaeksas.mock_apps import sites  # noqa: PLC0415
-    from chaeksas.mock_apps.cli import all_in_one  # noqa: PLC0415
-
-    root, _ = all_in_one()
-    client = TestClient(root)
-    assert client.get("/").json()["site"] == sites.MOUNT
-
-    found = client.get(f"{sites.MOUNT}/transactions")
-    assert found.status_code == 200
-    assert found.headers["content-type"].startswith("text/html")
-    assert found.text == sites.PAGES["/transactions"]
-    # 예제가 등록하는 시맨틱 키의 자리 (`filter.month`·`filter.search`·`result.table`).
-    for anchor in ('id="month"', 'id="search"', 'id="transactions"'):
-        assert anchor in found.text
-    # 모르는 경로는 공지 목록 — 시험 서버와 같은 규칙.
-    assert client.get(f"{sites.MOUNT}/notice/2").text == sites.PAGES["/notices"]
-
-
-def test_links_on_the_pages_stay_under_the_mount() -> None:
-    """화면 안의 이동은 **상대 경로**다 — `/done`이면 `/site` 밑에서 띄웠을 때 밖으로 샌다."""
-    from chaeksas.mock_apps import sites  # noqa: PLC0415
-
-    for path, html in sites.PAGES.items():
-        assert 'href="/' not in html and 'action="/' not in html, path
-
-
-def test_all_in_one_hands_every_c11_app_to_one_consumer() -> None:
-    """한 포트의 모든 앱 = **일꾼 하나** (C15) — C11 앱 열셋이 토픽이 되고 외부 앱 둘은 빠진다.
-
-    외부 앱은 어댑터 일꾼(`apps/adapter_consumer`)이 HTTP로 부른다 — 일꾼의 토픽이 아니다.
-    """
-    from chaeksas.mock_apps.cli import all_in_one  # noqa: PLC0415
-
-    _, built = all_in_one()
-    assert sorted(one.service.app_id for one in built) == sorted(one.app_id for one in catalog.C11_APPS)
-    assert not set(external_apps.BUILDERS) & {one.service.app_id for one in built}

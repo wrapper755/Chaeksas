@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | PC 실행기(실행 중 BPM 프로세스)·서버 실행기·Studio(선택) → Center |
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/events.py` (import `chaeksas.contracts.events`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | [`c3-run-event.json`](../../packages/contracts/schemas/c3-run-event.json) · [`c3-event-batch-response.json`](../../packages/contracts/schemas/c3-event-batch-response.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
-| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0041](../decisions/0041-extension-run-events.md) |
+| 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0014](../decisions/0014-one-bot-per-pc.md), [0015](../decisions/0015-run-location.md), [0041](../decisions/0041-extension-run-events.md), [0114](../decisions/0114-remove-ui-automation.md) |
 
 ## 목적
 
@@ -41,11 +41,10 @@
 | kind | 언제 | `data` 필수 키 | `data` 선택 키 |
 | --- | --- | --- | --- |
 | `run_started` | 실행 시작 (항상 seq 1) | `bpm_process_id`(**패키지 id** — C1 `id`. 그림의 process id가 아니다, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)), `version`, `run_location`(`pc`\|`server`), `executor`(`bot_ui`\|`server_runner`\|`studio`), `mode`(`autonomous`\|`deterministic`), `source`(시작 출처, C4 `source`와 같은 값: `job`\|`manual`\|`watch`\|`schedule`(**Center의 일정이 만든 작업** — `requested_by`가 `timer:`, [ADR-0110](../decisions/0110-center-keeps-the-schedule.md))\|`message`\|`test`\|**`delegation`**(위임으로 받은 작업 — PC·서버)) | `job_id`, `parent_run_id`(**맡긴 서버 실행** — 위임으로 시작된 실행에만, [ADR-0062](../decisions/0062-pc-delegation.md)·[ADR-0082](../decisions/0082-batch-start.md)), `queued_s`(대기열에서 기다린 초, PC), `case_id`(Studio 시험 실행의 케이스 이름) |
-| `node_state` | 노드 상태가 바뀜 | `state`(`started`\|`completed`\|`failed`\|`skipped`\|`replayed`\|`waiting`) | `task_type`(`ai_task`\|`ui_task`\|`service_task`\|`approval`\|…), `error_code`, `message`(한 줄) |
+| `node_state` | 노드 상태가 바뀜 | `state`(`started`\|`completed`\|`failed`\|`skipped`\|`replayed`\|`waiting`) | `task_type`(`ai_task`\|`service_task`\|`approval`\|확장 태스크 종류 id\|…), `error_code`, `message`(한 줄) |
 | `log` | 사람이 읽는 한 줄 | `level`(`info`\|`warn`\|`error`), `message` | |
 | `agent` | AI 태스크의 단계 하나 | `step`, `action`(`plan`\|`tool`\|`extract`\|`finish`) | `tool`, `summary`(값 제외) |
 | `llm_usage` | AI 태스크가 모델을 쓴 양 | `model`, `input_tokens`, `output_tokens` | `provider`. **금액은 넣지 않는다** (Center가 가격표로 계산) |
-| `ui_session` | UI 태스크 한 번이 끝남 (Worker 보고 요약) | `business_key`(`<run_id>:<node_id>:<node_instance>:<attempt>`, C10), `page_id`, `result`(`success`\|`escalated`\|`failed`), `steps`, `fallback_depth_max`, `healed` | `session_id` |
 | `service_call` | 서비스 앱 작업 호출이 끝남 | `app_id`, `operation`, `mode`, `mode_used`, `status`(HTTP 코드), `duration_ms`, `key_ref`, `node_instance`, `attempt`, `call_seq` | `error_code`, `replayed`, `model`, `input_tokens`, `output_tokens` (C11 `usage`와 같은 이름) |
 | `human_requested` | 결재·확인 요청 | `layer`(`approval`\|`confirmation`), `request_id`(C6과 같은 id), `where`(`center`\|`field`) | `form_key`, `expires_at` |
 | `human_answered` | 답을 받음 (값 없음) | `request_id`, `answered_by` | `answered_via`(대리 답이면 그 키 이름 — C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)) |
@@ -53,7 +52,7 @@
 | `human_withdrawn` | 답 없이 끝남 — Center에서 회수되었거나 만료됨 (C6, [ADR-0038](../decisions/0038-approval-request-channel.md)) | `request_id`, `reason`(`admin_withdraw`\|`expired`\|`host_lost`, 열린 문자열) | |
 | `run_waiting` | (서버) 상태를 저장하고 기다리기 시작 | `waiting_for`(`approval`\|`message`\|`timer`\|**`delegation`**\|**`external_task`**) | `request_id`, `until`, `job_id`(**위임일 때 그 작업** — C12 `waiting[]`의 짝 칸과 같다), `task_id`(**긴 외부 작업일 때 그 일감** — C15, [ADR-0103](../decisions/0103-long-external-tasks.md)) |
 | `run_resumed` | (서버) 저장된 실행을 이어 감 | `after_s` | `reason`(`answer`\|`message`\|`timer`\|`restart`\|`withdraw`\|**`delegation`**(PC 위임의 결과가 돌아왔다, [ADR-0062](../decisions/0062-pc-delegation.md))\|**`external_task`**(외부 작업이 끝났다 — 실패·만료로 돌아온 것도, [ADR-0103](../decisions/0103-long-external-tasks.md))) |
-| `run_finished` | 실행 끝 (항상 마지막) | `status`(`success`\|`failed`\|`cancelled`), `duration_s`, `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests` | `error_code`, `error_message`(한 줄), `confirmations` |
+| `run_finished` | 실행 끝 (항상 마지막) | `status`(`success`\|`failed`\|`cancelled`), `duration_s`, `ai_tasks`, `replayed_tasks`, `service_calls`, `human_requests` | `error_code`, `error_message`(한 줄), `confirmations` |
 
 - **`human_requests`는 결재와 확인을 합친 수**다. 확인만 따로 세는 `confirmations`는 **선택 칸**이다 — 아는 쪽(보내는 쪽)이 `human_requested`의 `layer`로 센다. **옛 PC 실행기는 넣지 않고**, 받는 쪽은 그때 「확인만은 모른다」로 다룬다(0으로 보지 않는다 — 「확인이 없었다」와 「세지 않았다」는 다르다). 결재 수는 `human_requests - confirmations`다 (칸을 둘 두지 않는다).
 - 배포 적용 결정은 실행이 아니므로 실행 이벤트로 보내지 않는다 → C4 하트비트의 `deployment_results` (CON-03 「최근 배치 결정」).
@@ -67,7 +66,7 @@
 
 ## 확장이 남기는 이벤트
 
-`ui_session`처럼 **뜻을 확장이 아는** 줄은 확장이 만들고, **줄을 쓰는 것은 엔진이다** ([ADR-0041](../decisions/0041-extension-run-events.md)).
+**뜻을 확장이 아는** 줄은 확장이 만들고, **줄을 쓰는 것은 엔진이다** ([ADR-0041](../decisions/0041-extension-run-events.md)).
 
 | 누가 | 무엇을 |
 | --- | --- |
@@ -77,9 +76,9 @@
 - **확장은 실행의 구조를 모른다.** `seq`는 실행 하나에서 단조라서 토큰이 여럿일 때 확장이 매길 수 없고, 어느 노드였나도 엔진만 안다. 확장이 `data`에 이 칸들을 적어 보내도 **엔진 것이 이긴다** (떼어 내고 쓴다).
 - **거르는 자리는 하나다.** 엔진이 `data`에 `sanitize()`를 걸어 원칙 6을 지킨다 — 수·참거짓·짧은 글은 그대로, 긴 글은 잘라서, 목록·사전은 개수만. 확장을 믿고 통과시키지 않는다.
 - **어긋난 줄은 떨어뜨리고 실행은 이어 간다.** 알려진 `kind`인데 `data` 필수 키가 빠지면(`contracts.events.missing_keys()`) **그 줄만 버리고** `log`(`level: warn`)로 왜 버렸는지 남긴다. 업무 실패가 아니다 — 기록 한 줄 때문에 다 된 업무를 깨지 않는다 (위의 호환 규칙, C4 실행 기록 전송이 거부된 줄을 지나간 것으로 치는 것과 같은 결).
-- **실패한 태스크도 남긴다.** UI 태스크가 전환(사람에게 넘김)으로 끝난 것이 CON-01에서 가장 보고 싶은 줄이다.
-- **진행 중에는 남기지 않는다** — 태스크가 끝날 때 한 번이다. 오래 도는 태스크의 중간 상태는 확장 쪽 길(C8 보고 → UIA-03)이 본다.
-- 지금 이 길로 오는 것은 `ui_session` 하나다 (UI 자동화 확장의 UI 태스크 수행기).
+- **실패한 태스크도 남긴다.** 전환(사람에게 넘김)으로 끝난 태스크가 CON-01에서 가장 보고 싶은 줄이다.
+- **진행 중에는 남기지 않는다** — 태스크가 끝날 때 한 번이다. 오래 도는 태스크의 중간 상태는 확장 쪽 길(그 서비스 앱의 관리 콘솔)이 본다.
+- 지금 이 길로 줄을 내는 확장은 없다 ([ADR-0114](../decisions/0114-remove-ui-automation.md)). 확장이 낸 `kind`는 위 표에 없으면 **모르는 종류**로 저장된다(원칙 3).
 
 ## 예시
 
@@ -87,14 +86,13 @@
 [
   {"schema": 1, "run_id": "run_20261001_101500_a1b2c3", "seq": 1, "ts": "2026-10-01T10:15:00+09:00",
    "kind": "run_started",
-   "data": {"bpm_process_id": "erp.order-entry", "version": "2.1.0", "run_location": "pc",
+   "data": {"bpm_process_id": "legal.contract-seal", "version": "2.1.0", "run_location": "pc",
             "executor": "bot_ui", "mode": "deterministic", "source": "job", "job_id": "job_8f3e", "queued_s": 42}},
   {"schema": 1, "run_id": "run_20261001_101500_a1b2c3", "seq": 2, "ts": "2026-10-01T10:15:01+09:00",
-   "kind": "node_state", "node_id": "Task_fill_order", "data": {"state": "started", "task_type": "ui_task"}},
+   "kind": "node_state", "node_id": "Task_check_original", "data": {"state": "started"}},
   {"schema": 1, "run_id": "run_20261001_101500_a1b2c3", "seq": 3, "ts": "2026-10-01T10:15:20+09:00",
-   "kind": "ui_session", "node_id": "Task_fill_order",
-   "data": {"business_key": "run_20261001_101500_a1b2c3:Task_fill_order:1:1", "page_id": "erp.order.form",
-            "result": "success", "steps": 6, "fallback_depth_max": 1, "healed": false}}
+   "kind": "human_requested", "node_id": "Task_check_original",
+   "data": {"layer": "confirmation", "request_id": "req_7c21", "where": "field"}}
 ]
 ```
 
@@ -123,7 +121,7 @@
 | `bpm_process_id`, `version`, `run_location`, `executor`, `mode`, `source` | str | | `run_started`의 `data`에서 추린 것 |
 | `started_at` | str | ✓ | 첫 이벤트의 `ts` (`run_started`가 아직 없으면 받은 시각) |
 | `finished_at`, `duration_s`, `error_code` | | | `run_finished`에서 |
-| `ai_tasks`, `replayed_tasks`, `ui_tasks`, `service_calls`, `human_requests`, `confirmations` | int | | `run_finished`의 셈 그대로 (CON-01 목록 열). **끝나지 않은 실행은 없다** — 줄을 다시 읽어 세지 않는다. `confirmations`는 보낸 쪽이 넣었을 때만 있다 |
+| `ai_tasks`, `replayed_tasks`, `service_calls`, `human_requests`, `confirmations` | int | | `run_finished`의 셈 그대로 (CON-01 목록 열). **끝나지 않은 실행은 없다** — 줄을 다시 읽어 세지 않는다. `confirmations`는 보낸 쪽이 넣었을 때만 있다 |
 | `bot_ui_id` | str | | **어느 PC가 보냈나.** Center가 **읽을 때 채운다** — 보내는 쪽은 적지 않는다 |
 | `events` | int | ✓ | 지금까지 받은 줄 수 |
 
@@ -154,6 +152,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | **`ui_session` 종류와 `run_finished`·`RunInfo`의 `ui_tasks` 셈을 걷었다** — 내보내던 UI 자동화 확장이 없다. 받는 쪽은 옛 줄의 `ui_session`을 모르는 종류로, `ui_tasks`를 모르는 칸으로 받아 둔다(원칙 3) | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | `source: schedule`을 **쓰는 쪽이 생겼다** — Center의 일정이 만든 작업(`requested_by` `timer:<식>`)으로 시작한 실행이다. 값은 처음부터 있었다 | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-20 | 1 | **`run_started.bpm_process_id`는 패키지 id다** — 엔진이 그림의 process id(`Proc_…`)를 적어 작업·배포·C12와 이름이 갈라졌다(09-gaps §2-5). 실행하는 쪽이 `Engine.start(bpm_process_id=…)`로 넘긴다. 형식은 그대로이고, 이전에 올라간 기록은 고쳐 쓰지 않는다 | [0086](../decisions/0086-run-identity-is-the-package-id.md) |
 | 2026-10-20 | 1 | `human_answered`의 선택 칸 `answered_via` — 누가 답했나(`answered_by`)와 어느 길로 왔나를 가른다 | [0081](../decisions/0081-answering-on-behalf.md) |

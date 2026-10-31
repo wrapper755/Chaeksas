@@ -16,7 +16,7 @@ Python 3.12 고정 · uv 워크스페이스. 저장소 이름은 [대응표](REA
 ## 핵심 개념
 
 - 실행 흐름: SpiffWorkflow가 ServiceTask에 도달하면 브리지가 페이로드를 만든다. 페이로드에는 `mission`, `business_parameters`, `execution_environment`, `guardrails`가 담긴다. LangGraph 루프(prime → reason ⇄ execute/heal → evaluate)가 이를 받아 돈다. 결과는 스키마 검증 후 프로세스 변수로 넘긴다.
-- 대상 환경: LLM, WEB, DESKTOP, API, DOCUMENT, HYBRID. (새 설계에서는 UI 태스크·서비스 앱 태스크로 나뉜다 — [용어집](../02-glossary.md) 태스크 종류)
+- 대상 환경: LLM, WEB, DESKTOP, API, DOCUMENT, HYBRID. (새 설계에서는 AI 태스크의 대상 환경(`domain`)과 서비스 앱 태스크로 나뉜다 — [용어집](../02-glossary.md) 태스크 종류)
 - 도구 규칙: `@tool` + docstring이 유일한 설명서다. 예외를 던지지 않고 오류 문자열을 반환한다. `registry.py`가 단일 원본이고, 허용 도구는 화이트리스트다.
 - 재생: 성공 궤적을 ChromaDB에 저장한다. 다음에는 LLM 없이 재실행하고, 실패하면 자율 모드로 돌아가 성공 궤적으로 덮어쓴다.
 - 데스크톱 3계층: ① 접근성 트리(AT-SPI) → ② 스크린샷 + VLM 좌표 → ③ 사람 확인.

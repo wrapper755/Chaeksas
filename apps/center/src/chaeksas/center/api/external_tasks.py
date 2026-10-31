@@ -50,7 +50,6 @@ from chaeksas.contracts.external_task import (
     MAX_VALUE_BYTES,
     MAX_WAIT_S,
     PURGE_AFTER_DAYS,
-    REGISTRATION_RUN_PREFIX,
     RETRYABLE_CODES,
     STATE_CANCELLED,
     STATE_COMPLETED,
@@ -87,8 +86,6 @@ POSTER_KEY_TYPES = frozenset({"bot_ui", "server_runner", "studio"})
 STUDIO = "studio"
 #: 키 종류 → 등록 표 (소유·배포 대조의 대상). Studio는 표가 없다 (C5 §Studio 등록 요청과 승인).
 _HOST_IDS = {"bot_ui": bot_ui.id_for_key, "server_runner": server_runner.id_for_key}
-#: 등록 작업의 추가 권한 (C9 `registry_write`) — CON-03 「셀렉터 등록」을 켠 PC만 (ADR-0094 §6).
-REGISTRY_SCOPE = "registry_write"
 #: 한 번 기다릴 때 깨어나 다시 보는 간격 (초) — 잠금이 풀리거나 기한이 지나는 것은 종이 울리지 않는다.
 _RECHECK_S = 1.0
 #: 본문 한도 — 값 한도(1 MB) 위에 칸 몇 개가 더 붙는다.
@@ -212,25 +209,12 @@ def _bot_requires(store: Store, poster: Poster, *, bot: str | None, version: str
     return topic in wanted
 
 
-def _selector_registration_on(store: Store, bot_ui_id: str | None) -> bool:
-    if bot_ui_id is None:
-        return False
-    row = store.row("SELECT selector_registration FROM bot_uis WHERE bot_ui_id = ?", (bot_ui_id,))
-    return row is not None and bool(row["selector_registration"])
-
-
 def _authorize(store: Store, poster: Poster, task: ExternalTaskCreate) -> int:
     """「불러도 되나」 (C15 §올리기 표). 통과하면 기한(초)을 돌려준다."""
     run_id = task.idempotency.run_id
     if poster.kind == STUDIO:
         if not run_id.startswith(TEST_RUN_PREFIX):
             raise ApiError(403, "run_not_owned", f"Studio는 시험 실행(`{TEST_RUN_PREFIX}…`)으로만 올린다")
-    elif poster.kind == "bot_ui" and run_id.startswith(REGISTRATION_RUN_PREFIX):
-        # 등록 세션 (C9 — Tool UI 셀렉터 등록·그 시험). BPM 프로세스가 없다 — 그 PC의 스위치가 관문이다.
-        if task.mode == "autonomous":
-            raise ApiError(403, "mode_not_allowed", "자율 수행은 Studio에서만 올린다")
-        if not _selector_registration_on(store, poster.host_id):
-            raise ApiError(403, "registration_off", "이 PC에는 「셀렉터 등록」이 켜져 있지 않다 (CON-03)")
     else:
         if run_id.startswith(TEST_RUN_PREFIX) or not _owns_the_run(store, run_id=run_id, key_id=poster.key_id):
             raise ApiError(403, "run_not_owned", "이 키의 실행이 아니다")
@@ -254,14 +238,11 @@ def _authorize(store: Store, poster: Poster, task: ExternalTaskCreate) -> int:
         if not operation.supports(task.mode):
             raise ApiError(422, "mode_unsupported", f"작업 「{task.operation}」은 {task.mode}를 받지 않는다")
         if operation.required_scopes:
-            granted = (
-                {REGISTRY_SCOPE}
-                if poster.kind == "bot_ui" and _selector_registration_on(store, poster.host_id)
-                else set()
+            # 추가 권한을 주는 길이 지금은 없다 — 그런 작업은 아무도 올리지 못한다 (ADR-0114).
+            raise ApiError(
+                403, "scope_missing", "이 작업에 필요한 권한을 줄 길이 없다",
+                {"scopes": sorted(operation.required_scopes)},
             )
-            lacking = sorted(set(operation.required_scopes) - granted)
-            if lacking:
-                raise ApiError(403, "scope_missing", "이 작업에 필요한 권한이 켜져 있지 않다", {"scopes": lacking})
         timeout = timeout or operation.timeout_s
     return timeout or DEFAULT_TIMEOUT_S
 

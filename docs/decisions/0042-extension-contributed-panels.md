@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 · 데스크톱 위젯 기여(`bot_ui.panels`)는 걷었다 — 웹 콘솔 화면(`console.pages`)과 선언 기여는 남는다 ([ADR-0114](0114-remove-ui-automation.md)) |
 | 날짜 | 2026-10-09 |
 | 관련 | [C13](../03-contracts/C13-extension-manifest.md) `console.pages`·`bot_ui.utilities`, [ADR-0018](0018-extensions.md), [ADR-0024](0024-desktop-packaging-extensions.md), [ADR-0017](0017-web-nextjs-design-system.md), 화면 BUI-09·UIA-01~03·STU-03, [09-gaps](../09-gaps.md) §4-2·§4-4·§4-7 |
 

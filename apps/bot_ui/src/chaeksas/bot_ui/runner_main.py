@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from chaeksas.bot_ui.credentials import ENV_CALL_TOKEN, Credentials
-from chaeksas.bot_ui.runtimes import HostSettings
+from chaeksas.bot_ui.host_settings import HostSettings
 from chaeksas.contracts.extension import CALL_TOKEN_SECRET
 from chaeksas.core import control, outputs, requests
 from chaeksas.core.app_directory import AppDirectory, read_directory
@@ -94,7 +94,7 @@ def extension_tasks(
     off: Sequence[str] = (),
     call_token: CallTokenHolder | None = None,
 ) -> HostTasks:
-    """이 실행의 확장 — 설치된 것을 읽고, PC 실행기가 넘긴 확장별 설정(Worker 자리 등)을 붙인다.
+    """이 실행의 확장 — 설치된 것을 읽고, PC 실행기가 넘긴 확장별 설정을 붙인다.
 
     **사람이 BUI-11에서 끈 확장은 여기서도 기여를 내지 않는다** (ADR-0043) — 끌 id는 PC 실행기가
     넘긴다(`--off`). 그런 BPM 프로세스는 사전 점검이 이미 막지만, 「꺼짐」의 뜻이 앱마다 달라지면 안 된다.
@@ -334,7 +334,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--llm-model", default="")
     # `location: follow` 결재를 어디서 답하나 (BUI-03 「원격 결재」, ADR-0038).
     parser.add_argument("--approval-where", default=WHERE_FIELD, choices=(WHERE_FIELD, WHERE_CENTER))
-    # 확장별 설정 (그 칸 + 예약 키 — Worker 자리). **비밀은 없다** (키는 참조 이름으로 푼다).
+    # 확장별 설정 (그 칸 + 예약 키). **비밀은 없다** (키는 참조 이름으로 푼다).
     parser.add_argument("--extensions", type=Path, default=None, help="확장별 설정 JSON 파일")
     # 사람이 BUI-11에서 끈 확장 (ADR-0043) — 끌 id는 PC 실행기가 준다.
     parser.add_argument("--off", action="append", default=[], help="끈 확장 id (여러 번)")

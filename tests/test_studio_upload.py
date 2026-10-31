@@ -399,13 +399,13 @@ def test_the_run_location_table_comes_from_the_host_and_goes_to_all_three(
     """
     table = window.task_type_locations()
     assert table == window.extensions.host.task_type_locations()
-    assert table["ui_task"] == ["pc"], "내장 확장이 선언한 값이다 (ADR-0015)"
+    # 지금은 깔린 확장이 없어 비어 있다 (ADR-0114) — 비어 있어도 **같은 것**이 셋에 간다.
 
     examples = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
     from chaeksas.studio.workspace import Workspace
 
     window.process = Workspace(tmp_path / "작업").ensure().import_example(
-        examples, "bx04_tax_invoice_issue"
+        examples, "fx19_manual_task_pc"
     )
     monkeypatch.setattr(type(window), "saved_to_disk", lambda self: True)
     monkeypatch.setattr(type(window), "may_drop_edits", lambda self: True)

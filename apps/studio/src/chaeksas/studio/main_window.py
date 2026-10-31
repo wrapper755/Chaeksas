@@ -7,8 +7,8 @@
 **메뉴 동작 중 큰 두 묶음은 떼어 냈다** (이 파일이 500줄 선을 넘어서다, CLAUDE.md §4):
 `export_actions`(내보내기·올리기 넷)와 `run_actions`(시험 실행 몰이). 둘은 창을 받아 쓰고,
 창은 그들이 쓰는 **작은 길**만 공개한다 — `saved_to_disk()`·`readiness()`·`say()`·
-`show_preflight()`·`show_variables()`·`variables_running()`·`reset_ui_sessions()`·`show_ui_session()`. 창이 그 일의
-속을 알지는 않는다 — 아래 탭의 글·줄은 떼어 낸 모듈과 `ui_sessions.py`가 짓는다.
+`show_preflight()`·`show_variables()`·`variables_running()`. 창이 그 일의
+속을 알지는 않는다 — 아래 탭의 글·줄은 떼어 낸 모듈이 짓는다.
 """
 
 from __future__ import annotations
@@ -63,8 +63,6 @@ from chaeksas.studio.replay_specs import ReplaySpecs, specs_of
 from chaeksas.studio.runner import CaseRun, Outcome, Plan
 from chaeksas.studio.settings import Settings
 from chaeksas.studio.settings_dialog import StudioSettingsDialog
-from chaeksas.studio.ui_sessions import Row as UiSessionRow
-from chaeksas.studio.ui_sessions import UiSessions
 from chaeksas.studio.variables import known_names, made_by
 from chaeksas.studio.variables_tab import RUNNING, VariablesTab
 from chaeksas.studio.workspace import BpmProcess, Definition, Workspace
@@ -164,10 +162,6 @@ class MainWindow(QMainWindow):
         self.preflight = Preflight(self)
         self.preflight.jumping.connect(lambda node_id: self.canvas.call("select", node_id))
 
-        # STU-09 「UI 태스크」. 재료는 C3 `ui_session`이라 **플랫폼이 그린다** (ADR-0042 — 확장이
-        # 기여한 칸이 아니다. BUI-09는 재료가 C10이라 그쪽이 그린다).
-        self.ui_sessions = UiSessions(self)
-
         # 「변수」 — 입력·출력 **정의**와 시험 실행의 지금 값 (STU-01). 그림은 캔버스에서 읽고
         # 「적용」은 캔버스로 넘긴다 (ADR-0022). 캔버스가 바뀔 때마다 읽으면 한 번에 몇 번씩이라 모아 읽는다.
         self.variables = VariablesTab(self)
@@ -228,7 +222,6 @@ class MainWindow(QMainWindow):
         self.bottom_tabs = bottom
         bottom.addTab(self.log_view, "로그")
         bottom.addTab(self.preflight, "검사")
-        bottom.addTab(self.ui_sessions, "UI 태스크")
         bottom.addTab(self.variables, "변수")
 
         split = QSplitter(Qt.Orientation.Vertical, self)
@@ -371,7 +364,7 @@ class MainWindow(QMainWindow):
         center_actions.refresh_resources(self, reader=reader)
 
     def call_tokens(self) -> str | None:
-        """호출 토큰 (C15) — Worker가 Studio를 대신해 외부 작업을 올릴 때. 설정이 바뀌면 새로 짓는다."""
+        """호출 토큰 (C15) — 확장이 Studio를 대신해 외부 작업을 올릴 때. 설정이 바뀌면 새로 짓는다."""
         held = getattr(self, "_call_tokens", None)
         if held is None or held.base_url != (self.settings.center_url or "").strip():
             held = call_token.from_settings(self.settings)
@@ -794,14 +787,6 @@ class MainWindow(QMainWindow):
             self.variables.set_locked(True, RUNNING)
         else:
             self.refresh_variables()
-
-    def reset_ui_sessions(self) -> None:
-        """「UI 태스크」 탭을 비운다 — 실행 하나가 시작할 때 (STU-09)."""
-        self.ui_sessions.reset_rows()
-
-    def show_ui_session(self, row: UiSessionRow) -> None:
-        """UI 세션 한 줄을 더한다. **줄은 `ui_sessions.row_of`가 짓는다** (Qt를 모르는 자리)."""
-        self.ui_sessions.add(row)
 
     def show_variables_tab(self) -> None:
         self.bottom_tabs.setCurrentWidget(self.variables)

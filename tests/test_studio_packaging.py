@@ -14,6 +14,7 @@ import json
 import zipfile
 from pathlib import Path
 
+import fake_extension
 import pytest
 
 from chaeksas.contracts.bpmn_ext import read_process
@@ -44,10 +45,10 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-exampl
 RECONCILIATION = "bx01_invoice_reconciliation"
 CREDIT = "bx06_bulk_credit_check"
 EXPENSE = "bx03_expense_approval"
-#: **확장 태스크**(UI 태스크)가 있는 예제 — 실행 위치는 확장 정의만 안다 (C13).
-EXTENSION = "bx04_tax_invoice_issue"
+#: **확장 태스크**가 있는 그림 — 실행 위치는 확장 정의만 안다 (C13). 시험용 확장으로 만든다.
+EXTENSION = fake_extension.DRAWING
 #: 확장 호스트가 주는 표 (`ExtensionHost.task_type_locations()`).
-UI_TASK_ON_PC = {"ui_task": ["pc"]}
+TASK_ON_PC = {"fake_task": ["pc"]}
 
 #: 시작 이벤트 다섯을 한 그림에 — C1 `triggers[].kind`가 BPMN 이벤트 정의와 1:1인지 본다.
 #: 메시지·신호는 **id가 아니라 `name`**이 나가야 한다 (C12).
@@ -75,7 +76,8 @@ FIVE_START_EVENTS = """<?xml version="1.0" encoding="UTF-8"?>
 
 
 def imported(tmp_path: Path, example: str) -> BpmProcess:
-    return Workspace(tmp_path / "작업").ensure().import_example(EXAMPLES, example)
+    source = fake_extension.drawing(tmp_path / "src") if example == EXTENSION else EXAMPLES
+    return Workspace(tmp_path / "작업").ensure().import_example(source, example)
 
 
 # ─────────────────────────── 그림에서 모으기 ───────────────────────────
@@ -118,10 +120,10 @@ def test_a_task_types_run_locations_come_from_the_extension_table(tmp_path: Path
     """
     made = imported(tmp_path, EXTENSION)
     (need,) = collect_requires(made).task_types
-    assert (need.id, need.extension) == ("ui_task", "ui-automation")
+    assert (need.id, need.extension) == ("fake_task", fake_extension.EXTENSION_ID)
     assert need.run_locations is None, "모르는 것을 빈 목록으로 적었다"
 
-    (told,) = collect_requires(made, task_type_locations=UI_TASK_ON_PC).task_types
+    (told,) = collect_requires(made, task_type_locations=TASK_ON_PC).task_types
     assert told.run_locations == ["pc"]
 
 
@@ -148,12 +150,12 @@ def test_a_server_process_with_an_extension_task_is_not_falsely_rejected(tmp_pat
     unknown = build_manifest(server)
     assert [v.code for v in validate(unknown)] == []
     # 서버를 지원한다고 선언했을 때: 막지 않는다.
-    ok = build_manifest(server, task_type_locations={"ui_task": ["pc", "server"]})
+    ok = build_manifest(server, task_type_locations={"fake_task": ["pc", "server"]})
     assert [v.code for v in validate(ok)] == []
     # PC 전용이라고 선언했을 때: **막는다.** 그래야 설계자가 Studio에서 안다.
-    caught = validate(build_manifest(server, task_type_locations=UI_TASK_ON_PC))
+    caught = validate(build_manifest(server, task_type_locations=TASK_ON_PC))
     assert [v.code for v in caught] == ["server_incompatible"]
-    assert "task_types:ui_task" in caught[0].items
+    assert "task_types:fake_task" in caught[0].items
 
 
 #: PC 위임 하나만 든 서버 그림 (ADR-0062). 예제 묶음에는 아직 위임이 없어 여기서 만든다.

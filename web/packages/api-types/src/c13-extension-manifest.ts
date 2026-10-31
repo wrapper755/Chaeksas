@@ -31,9 +31,6 @@ export interface ExtensionManifest {
  * 기여 지점 (ADR-0018 §2). **모르는 열쇠는 무시한다** (호환 규칙) — `extra="allow"`가 보관한다.
  */
 export interface Contributes {
-  agent_environments?: AgentEnvironmentContribution[];
-  "bot_ui.local_runtimes"?: LocalRuntime[];
-  "bot_ui.panels"?: Panel[];
   configuration?: ConfigurationItem[];
   "console.pages"?: ConsolePage[];
   preflight?: PreflightContribution[];
@@ -41,76 +38,6 @@ export interface Contributes {
   "studio.editors"?: StudioEditorContribution[];
   "studio.resource_views"?: ResourceView[];
   task_types?: TaskTypeContribution[];
-  "tool_ui.tools"?: Tool[];
-  [k: string]: unknown;
-}
-/**
- * AI 태스크 한 domain의 눈과 손 (`extension_api.AgentEnvironment`, ADR-0037).
- */
-export interface AgentEnvironmentContribution {
-  domain: string;
-  entry: string;
-  [k: string]: unknown;
-}
-/**
- * PC 실행기가 띄우고 감시하는 로컬 프로세스 (BUI-09·11).
- *
- * **명령줄은 확장이 적지 않는다** (schema 2, ADR-0024). `entry`가 런타임을 실행하는 코드를
- * 가리키고, PC 실행기가 **자기 실행 파일을 자식으로 다시 띄워** 그 `entry`를 부른다 — 설치
- * 파일로 묶은 앱 안에는 콘솔 스크립트가 없기 때문이다.
- *
- * 포트를 코드에 적지 않는다 — 설정 이름(`port_setting`)과 기본값만 둔다 (CLAUDE.md §5).
- */
-export interface LocalRuntime {
-  default_port?: number | null;
-  entry: string;
-  health?: string | null;
-  id: string;
-  label: string;
-  port_setting?: string | null;
-  reserve?: RuntimeReserve | null;
-  shutdown?: RuntimeCall | null;
-  start?: string;
-  status?: RuntimeCall | null;
-  token_dir?: boolean;
-  [k: string]: unknown;
-}
-/**
- * 실행 예약 방법 — PC 실행기가 런타임의 계약을 모른 채 실행 동안 그 런타임을 묶는다 (ADR-0014 §4).
- *
- * `POST <path>` `{run_id}`로 예약하고 `DELETE <path>`로 푼다. 관리 토큰은 런타임 폴더의
- * `token_file`에서 읽어 `header`에 싣는다. 409면 다른 쪽이 쓰는 중이다 — BPM 프로세스는 기다린다.
- */
-export interface RuntimeReserve {
-  header: string;
-  path: string;
-  token_file: string;
-  [k: string]: unknown;
-}
-/**
- * 런타임에 보내는 관리 호출 하나 — `{path, header, token_file}`.
- *
- * PC 실행기는 런타임의 계약(C10 등)을 **모르고** 이 선언대로만 부른다. 토큰은 런타임 폴더의
- * `token_file`에서 **부를 때마다** 읽는다 — 런타임이 다시 뜨면 토큰이 바뀐다 (ADR-0023).
- */
-export interface RuntimeCall {
-  header: string;
-  path: string;
-  token_file: string;
-  [k: string]: unknown;
-}
-/**
- * 플랫폼 화면의 한 칸을 **확장이 그린다** (BUI-09, ADR-0042).
- *
- * 열 이름·단위가 **확장의 말**인 표가 여기로 온다 — 플랫폼이 그리면 그 확장을 알게 된다
- * (ADR-0018). `entry`는 `extension_api.BotUiPanel`이다.
- */
-export interface Panel {
-  entry: string;
-  id: string;
-  label: string;
-  runtime?: string | null;
-  surface: string;
   [k: string]: unknown;
 }
 /**
@@ -202,20 +129,9 @@ export interface Executor {
   [k: string]: unknown;
 }
 /**
- * Tool UI에 더하는 도구 하나 (`tool_ui.tools`, TOL-01 — ADR-0077). 예: UI 셀렉터 등록(TOL-03~05).
- */
-export interface Tool {
-  entry: string;
-  id: string;
-  label: string;
-  needs_runtime?: string | null;
-  [k: string]: unknown;
-}
-/**
  * 이 확장이 쓰는 서비스 앱 키 하나.
  *
  * - `run`: BPM 프로세스가 작업을 부를 때. BPM 프로세스의 키 참조로 지정한다.
- * - `utility`: Tool UI의 도구가 쓸 때 (ADR-0077). `configuration`의 `secret` 칸으로 받는다.
  */
 export interface KeyNeed {
   config_key?: string | null;

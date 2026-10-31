@@ -132,7 +132,7 @@ class RuntimeResource(ContractModel):
 
     host: RuntimeHost
     os: str | None = None
-    versions: dict[str, str] = Field(default_factory=dict)  # {bot_ui?, core, worker?}
+    versions: dict[str, str] = Field(default_factory=dict)  # {bot_ui?, core}
     browsers: list[str] = Field(default_factory=list)
     desktop_backend: str | None = None
     extensions: list[dict[str, Any]] = Field(default_factory=list)

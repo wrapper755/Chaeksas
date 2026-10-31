@@ -249,8 +249,6 @@ class CaseRun(QObject):
     marked = Signal(dict)
     #: 변수 한 벌 (STU-09 「변수」 탭).
     varied = Signal(dict)
-    #: UI 세션 하나가 끝났다 — C3 `ui_session`의 `data` (STU-09 「UI 태스크」 탭).
-    ui_session = Signal(object)
     #: 끝났다.
     ended = Signal(object)
 
@@ -513,9 +511,6 @@ class CaseRun(QObject):
             self.said.emit(f"[AI] {event.node_id} {data.get('step')}단계 {data.get('action')}")
         elif event.kind == "service_call":
             self.said.emit(f"[서비스 앱] {data.get('app_id')}/{data.get('operation')} → {data.get('status')}")
-        elif event.kind == "ui_session":
-            # 줄은 「UI 태스크」 탭이 짓는다 — 여기서는 **그 이벤트를 그대로** 올린다 (ADR-0041).
-            self.ui_session.emit(event)
         elif event.kind == "human_requested":
             self.said.emit(f"[결재] {event.node_id} 요청")
         elif event.kind == "run_finished":

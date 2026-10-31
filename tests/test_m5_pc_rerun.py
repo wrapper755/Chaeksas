@@ -1,9 +1,9 @@
 """PC 예제 재통과 — **Center 배포 → PC 실행기 실행**으로 한 번 더 (M5 조각 15).
 
 로드맵 M5 인수 시험의 두 번째 칸이다: 「PC 예제는 Center 배포 → PC 실행기 실행으로 다시 통과」.
-M3·M4·M5 묶음에서 **실행 위치가 `pc`인 예제**가 그 대상이고, 목록은 예제에서 읽는다.
+M3·M5 묶음에서 **실행 위치가 `pc`인 예제**가 그 대상이고, 목록은 예제에서 읽는다.
 
-Studio 시험 실행(M3·M4·M5 인수 시험)과 **무엇이 다른가**가 이 파일의 요점이다.
+Studio 시험 실행(M3·M5 인수 시험)과 **무엇이 다른가**가 이 파일의 요점이다.
 
 | | Studio 시험 실행 | 여기 |
 | --- | --- | --- |
@@ -81,10 +81,6 @@ def pc_examples() -> list[str]:
 
 PC = pc_examples()
 
-#: 화면을 만지는 예제와 **무엇이 있어야 도는가**. 없으면 건너뛴다 (M4 인수 시험과 같은 자리).
-NEEDS_BROWSER = {"bx04_tax_invoice_issue", "bx14_supplier_portal_orders", "fx15_web_form", "fx16_web_review_field"}
-NEEDS_DESKTOP = {"bx17_erp_po_entry", "fx05_desktop_autonomous", "bx36_legacy_migration"}
-
 #: 작업 지시로 줄 입력 — 케이스의 `inputs`를 그대로 쓴다 (C5 `inputs`).
 #: 비어 있는 예제는 작업만 만들면 된다.
 def case_inputs(example: str) -> dict[str, Any]:
@@ -113,10 +109,10 @@ def field_answers(example: str) -> dict[str, dict[str, Any]]:
 def center(tmp_path: Path) -> Iterator[TestClient]:
     """진짜 Center + **일꾼으로 들인** 모의 앱들. 서명 키는 Center가 처음 뜰 때 만든다 (ADR-0090).
 
-    PC 예제 중 BX-36이 `crm`을 쓴다. **확장이 Center에 없으면 배포가 막히므로**(C7 누락 검사) 모의 앱을
-    일꾼으로 들여 manifest를 올린다 — 사내 확장의 정의는 Center에 없고 manifest의 `extension` 칸이
-    출처다 (ADR-0102 — 주소를 넣는 칸은 없다). 여기서는 일꾼을 **돌리지 않는다** — 끝까지 도는 FX-19는
-    서비스 앱을 부르지 않는다.
+    **확장이 Center에 없으면 배포가 막히므로**(C7 누락 검사) 모의 앱을 일꾼으로 들여 manifest를 올린다 —
+    사내 확장의 정의는 Center에 없고 manifest의 `extension` 칸이 출처다 (ADR-0102 — 주소를 넣는 칸은
+    없다). 지금 PC 예제(FX-19)는 확장을 요구하지 않지만, PC 예제가 늘면 그대로 받는다. 여기서는 일꾼을
+    **돌리지 않는다** — FX-19는 서비스 앱을 부르지 않는다.
     """
     store = Store(tmp_path / "center.sqlite3")
     settings = CenterSettings(
@@ -299,69 +295,27 @@ def finished(agent: Agent, running: Any, *, timeout_s: float = 90.0) -> tuple[st
 
 # ─────────────────────────── 묶음 ───────────────────────────
 
-#: 아직 **돌리지는** 못하는 예제와 그 이유. 조용히 빼면 묶음이 거짓말을 한다.
-#:
-#: 화면을 만지는 일곱은 **배포·설치까지는 여기서 보고**(아래 첫 시험), 돌리는 것은 아직이다 —
-#: 가짜 앱·브라우저·**화면 등록**(C9)을 깔아야 하고 그 판은 M4 인수 시험이 가지고 있다
-#: (`tests/test_m4_acceptance.py`의 `desktop_host`·페이지 등록). 거기서 **실행 자체는 초록**이다.
-#: 여기서 새로운 것은 **배포 길**이고 그것은 여덟 개 모두 본다.
-_SCREEN_WHY = (
-    "화면 준비(가짜 앱·브라우저·C9 화면 등록)를 이 묶음이 아직 갖추지 않았다 — "
-    "배포·설치는 여기서 보고, 실행 자체는 M4 인수 시험이 본다"
-)
-REMAINING: dict[str, str] = {one: _SCREEN_WHY for one in sorted(NEEDS_BROWSER | NEEDS_DESKTOP)}
+#: 아직 **돌리지는** 못하는 예제와 그 이유. 조용히 빼면 묶음이 거짓말을 한다. **지금은 없다** —
+#: 화면을 만지는 PC 예제는 UI 자동화 확장과 함께 걷었다 (ADR-0114).
+REMAINING: dict[str, str] = {}
 
-#: 배포하고 **끝까지 돌리는** 예제 — 화면이 필요 없는 것들이다.
+#: 배포하고 **끝까지 돌리는** 예제.
 GREEN = [one for one in PC if one not in REMAINING]
 
 
 def test_the_pc_examples_are_read_from_the_drawings() -> None:
     """어느 것이 PC 예제인지 **그림이 정한다** — 사람이 옮겨 적지 않는다."""
-    assert len(PC) == 8, PC
+    assert PC == ["fx19_manual_task_pc"], PC
     assert set(REMAINING) <= set(PC), f"남은 목록에 PC 밖 예제가 있다: {set(REMAINING) - set(PC)}"
     # **아무것도 안 돌리는** 일을 막는다 — 끝까지 도는 것이 하나는 있어야 한다.
-    assert GREEN, "끝까지 돌리는 예제가 없다"
-    assert len(GREEN) == 1, f"끝까지 도는 것이 {len(GREEN)}개다 — 늘면 REMAINING에서 지운다: {GREEN}"
-
-
-@pytest.mark.parametrize("example", sorted(REMAINING))
-def test_a_remaining_example_at_least_gets_deployed(example: str) -> None:
-    """돌리지 못하는 것도 **왜인지 적혀 있다.** 배포는 위 시험이 여덟 개 모두 본다."""
-    assert REMAINING[example], example
-    assert example in NEEDS_BROWSER | NEEDS_DESKTOP, f"{example}: 사유가 화면 때문이 아니다"
-
-
-def test_the_examples_ask_for_the_extension_version_we_actually_have() -> None:
-    """예제의 `requires.extensions` 범위가 **설치된 확장**을 받아들이는가.
-
-    어긋나면 Center가 배포를 막는다 (C7 누락 검사 — `version_mismatch`). 예제에는
-    프로토타입 시절의 `>=0.4,<0.5`가 남아 있었고 실제 내장 확장은 0.1.0이라, **여섯 예제가
-    모두 배포되지 않았다.** 여기서 둘을 대조해 다시 어긋나지 않게 한다.
-    """
-    from chaeksas.contracts._semver import satisfies  # noqa: PLC0415
-
-    host = load_extensions()
-    have = {one.id: one.version for one in host.states()}
-    assert "ui-automation" in have, f"내장 확장이 켜지지 않았다 (켜진 것: {sorted(have)})"
-    for example in PC:
-        process = read_process((EXAMPLES / f"{example}.bpmn").read_text(encoding="utf-8"))
-        for need in process.info.extensions:
-            if need.id not in have:
-                continue
-            assert satisfies(have[need.id], need.version), (
-                f"{example}: {need.id} {need.version}를 요구하는데 깔린 것은 {have[need.id]}다"
-            )
+    assert GREEN == PC, f"끝까지 돌지 못하는 PC 예제가 생겼다 — REMAINING에 사유를 적는다: {set(PC) - set(GREEN)}"
 
 
 @pytest.mark.parametrize("example", PC)
 def test_every_pc_example_deploys_and_installs(
     center: TestClient, agent: Agent, tmp_path: Path, example: str
 ) -> None:
-    """**여덟 개 모두** Center를 거쳐 설치된다 — 화면이 없어도 여기까지는 돈다.
-
-    돌리는 것(아래)은 브라우저·데스크톱이 있어야 하지만, **서명·승인·배포·설치**(C2 V1~V7)는
-    환경과 무관하다. 가르지 않으면 브라우저 없는 PC에서 그 길이 하나도 시험되지 않는다.
-    """
+    """PC 예제가 **모두** Center를 거쳐 설치된다 — **서명·승인·배포·설치**(C2 V1~V7)."""
     client = center
     info = deploy(center, agent, packaged(tmp_path, example))
     found = client.get("/api/v1/deployments", headers=ADMIN).json()

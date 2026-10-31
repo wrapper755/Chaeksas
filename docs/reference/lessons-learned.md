@@ -18,7 +18,7 @@
 | 저장소 간 계약 협상 | "문서 → 다른 세션에 알림 → 코드"로 매번 왕복. LLM 비용 질문 5개는 답 없이 남음 | 모노레포, 계약 패키지 하나 |
 | 계약 복사본 | 프로토타입 UI 자동화 서버가 Worker 계약을 복사, 원본이 어느 쪽인지 문서마다 다름 | 복사본 금지 |
 | 버전 표시 불일치 | protocol 패키지 1.2.0 / Center 고정 태그 v1.3 / 코드 내용 v1.4 | `schema` 정수 하나 |
-| 두 묶음이 서로 모름 | 실제 BPM 엔진(프로토타입 Bot)이 Worker를 부르는 경로가 없음. Worker는 "미정의 BPM/RPA 봇"을 가정 | 처음부터 Bot → Worker 계약(C10) |
+| 두 묶음이 서로 모름 | 실제 BPM 엔진(프로토타입 Bot)이 Worker를 부르는 경로가 없음. Worker는 "미정의 BPM/RPA 봇"을 가정 | 부르는 쪽과 받는 쪽 사이의 계약을 먼저 쓴다 (`docs/03-contracts/`) |
 | 같은 기능 두 벌 | 웹 자동화, 치유, 사람 개입, LLM 설정, 웹 화면, 트레이 앱이 각각 두 개 | 구성요소 책임표(`01-architecture` §2) |
 | 같은 말 다른 뜻 | "Bot", "job", "agent"가 저장소마다 다름 | 용어집 먼저 |
 | Linux 전용 가정 | `/usr/bin/python3`, `systemd --user`, `os.killpg`, `file:///home/...`, AT-SPI만 실검증 | Windows 주 환경, OS 차이는 인터페이스 뒤로 |

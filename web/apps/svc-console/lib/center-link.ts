@@ -14,17 +14,6 @@ export function isRunId(value: string | null | undefined): value is string {
   return typeof value === "string" && RUN_ID.test(value);
 }
 
-/**
- * C10 `business_key`(`<run_id>:<node_id>:<node_instance>:<attempt>`)의 run_id.
- * 셀렉터 시험(`reg_…`)·Studio 편집기 시험(`stu_…`)처럼 실행이 아닌 키는 `null`이다.
- */
-export function runIdOfBusinessKey(key: string | null | undefined): string | null {
-  if (typeof key !== "string") return null;
-  const parts = key.split(":");
-  if (parts.length !== 4) return null;
-  return isRunId(parts[0]) ? parts[0] : null;
-}
-
 /** CON-01 실행 상세 주소. 주소 설정이 없거나 실행 id가 아니면 `null` — **링크만 없다**. */
 export function centerRunUrl(base: string | null | undefined, runId: string | null | undefined): string | null {
   const root = (base ?? "").trim().replace(/\/+$/, "");

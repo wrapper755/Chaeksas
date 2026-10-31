@@ -46,7 +46,6 @@ export interface Versions {
   bot_ui: string;
   build?: BuildStamp | null;
   core: string;
-  worker?: string | null;
   [k: string]: unknown;
 }
 /**

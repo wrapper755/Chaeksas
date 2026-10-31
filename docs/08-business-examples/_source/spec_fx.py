@@ -73,17 +73,6 @@ FX("FX-04", "fx04_folder_poll", "폴더 감시 (조건 시작 대체)", "프로�
    lessons=["조건 시작은 「무엇이 바뀌면 다시 평가하나」가 정의되지 않아 프로토타입에서 한 번만 돌았다.", "폴링은 실행이 자주 생긴다 — 「없음」 실행은 이력에서 접어 보이게(CON-04 필터).",
             "폴더를 훑는 것은 식이 아니라 태스크다 — 디스크를 읽고 실행마다 결과가 달라진다 (ADR-0025·ADR-0026)."])
 
-FX("FX-05", "fx05_desktop_autonomous", "데스크톱 AI 태스크 (자율)", "프로토타입 example_desktop", "pc", "PC BPM 프로세스 수동 실행",
-   "등록되지 않은 데스크톱 앱(계산기)을 AI가 보고 조작한다.", "데스크톱 화면 → PC.",
-   [start("Start"), ai("Task_Calc", "계산기", goal("계산기 앱을 연다.", "`식`을 계산해 결과 표시값을 읽는다.", "다른 앱을 열지 않는다.", "- `결과`: number"),
-                       "desktop", {"결과": "number"}), end("End")],
-   [f("Start", "Task_Calc"), f("Task_Calc", "End")],
-   inputs=[("식", "string", True, "")], 
-   defaults={"desktop": {"app": "Calculator"}, "limits": {"timeout_s": 120}},
-   cases=[Case("곱셈", {"식": "12*34"}, {"결과": 408})],
-   features=["`domain: desktop` (자율)", "PC 전용 — 서버로 두면 B6 오류"],
-   lessons=["Linux에서 합성 키 입력이 무시되는 일이 있었다 — Windows UIA로 S1에서 검증.", "반복 업무면 화면을 등록해 UI 태스크로 바꾼다."])
-
 FX("FX-06", "fx06_document_read", "문서 AI 태스크", "프로토타입 example_document", "server", "수동 실행",
    "PDF 한 장에서 정해진 값을 읽는다.", SRV,
    [start("Start"), ai("Task_Read", "PDF 읽기", goal("`파일`은 견적서 PDF다.", "공급자·합계·유효기간을 읽는다.", "값을 계산하지 않는다.", "- `견적`: {공급자, 합계(int), 유효기간(date)}"),
@@ -206,39 +195,6 @@ FX("FX-14", "fx14_timers", "중간 타이머와 결재 시간 제한", "프로�
    features=["중간 받기 타이머", "결재 + 중단 타이머 경계"],
    lessons=["시간 초과로 끝난 결재는 「취소됨」(실패 아님)으로 표시된다."])
 
-FX("FX-15", "fx15_web_form", "웹 양식 제출 (PC)", "프로토타입 example_web_form", "pc", "PC BPM 프로세스 수동 실행",
-   "웹 신청서를 채워 제출하고, 제출되면 담당자 연락처를 읽는다.", "사내 웹 화면 조작 → PC.",
-   [start("Start"), script("Task_Prepare", "신청 내용", "신청 = dict(이름='홍길동', 내용='장비 요청')"),
-    ui("Task_Submit", "제출", "intranet.request.form",
-       [dict(key="form.name", action="fill", value="{신청.이름}"), dict(key="form.body", action="fill", value="{신청.내용}"),
-        dict(key="form.submit", action="click", navigates=True), dict(key="result.message", action="read", result="제출메시지")]),
-    xgw("Gw_Submitted", "제출됨?"),
-    ui("Task_Lookup", "담당자 연락처", "intranet.request.done", [dict(key="owner.contact", action="read", result="연락처")]),
-    script("Task_NotSubmitted", "미제출 기록", "메모 = '제출 실패'"), end("End")],
-   [f("Start", "Task_Prepare"), f("Task_Prepare", "Task_Submit"), f("Task_Submit", "Gw_Submitted"),
-    f("Gw_Submitted", "Task_Lookup", "'접수' in 제출메시지", "예"), f("Gw_Submitted", "Task_NotSubmitted", default=True, name="아니오"),
-    f("Task_Lookup", "End"), f("Task_NotSubmitted", "End")],
-   extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}], 
-   cases=[Case("시험 페이지", {}, {"제출메시지": "*", "연락처": "*"})],
-   features=["UI 태스크 fill/click/read (C10 동작)", "화면 이동(`navigates`)", "읽은 문구로 분기"],
-   lessons=["프로토타입은 WEB AI 태스크(자율)였다 — 등록 화면이면 UI 태스크로."])
-
-FX("FX-16", "fx16_web_review_field", "현장 확인 (PC 결재 위치)", "프로토타입 example_web_review", "pc", "PC BPM 프로세스 수동 실행",
-   "웹 페이지에서 정보를 모으고, **그 PC 앞의 사람이** 바로 확인한 뒤 다음 단계로 간다. PC BPM 프로세스는 확인이 끝날 때까지 자리를 쥔다 (ADR-0014).",
-   "사람이 화면을 같이 보며 확인해야 하는 짧은 확인 — PC, 현장 결재.",
-   [start("Start"),
-    ui("Task_Collect", "정보 모으기", "intranet.notice.list", [dict(key="notice.table", action="read_table", result="공지")]),
-    appr("Approve_Review", "현장 확인", "수집 결과 확인", ["공지"], [fld("승인", "다음 단계로", "bool", True)], location="field"),
-    xgw("Gw_Ok", "승인?"),
-    ui("Task_Follow", "첫 링크 열기", "intranet.notice.list", [dict(key="notice.first_link", action="click")]),
-    script("Task_Skip", "건너뜀", "메모 = '사용자 보류'"), end("End")],
-   [f("Start", "Task_Collect"), f("Task_Collect", "Approve_Review"), f("Approve_Review", "Gw_Ok"),
-    f("Gw_Ok", "Task_Follow", "승인", "예"), f("Gw_Ok", "Task_Skip", default=True, name="아니오"), f("Task_Follow", "End"), f("Task_Skip", "End")],
-   extensions=[{"id": "ui-automation", "version": ">=0.1,<0.2"}], 
-   cases=[Case("승인", {}, {"승인": True}, {"Approve_Review": {"승인": True}}), Case("사람이 확인", {}, {}, manual=True)],
-   features=["결재 위치 `field` (BUI-04 창)", "확인 중에도 실행 자리 유지"],
-   lessons=["며칠 걸릴 수 있는 결재는 `field`로 두지 않는다 — 서버 BPM 프로세스로 옮기고 `center`. 실행 전 검사가 `field` + 긴 시간 제한을 경고한다."])
-
 FX("FX-17", "fx17_webhook", "웹훅 보내기", "프로토타입 example_webhook", "server", "수동 실행",
    "변수 일부를 JSON으로 POST하고 응답을 저장한다.", SRV,
    [start("Start"), script("Task_Make", "보낼 값", "건수 = 3\n상태 = '완료'"),
@@ -267,8 +223,9 @@ FX("FX-19", "fx19_manual_task_pc", "수동 확인 (PC)", "프로토타입 manual
    [start("Start"), appr("Manual_Paper", "용지 넣기", "프린터에 용지를 넣어 주세요", ["오늘"], [], location="field", manual=True),
     script("Task_Done", "기록", "확인됨 = True"), end("End")],
    [f("Start", "Manual_Paper"), f("Manual_Paper", "Task_Done"), f("Task_Done", "End")],
+   outputs=["확인됨"],
    cases=[Case("확인", {}, {"확인됨": True}, {"Manual_Paper": {"decision": "approve"}})],
-   features=["`manualTask` + `chk:approval` (칸 없음)"],
+   features=["`manualTask` + `chk:approval` (칸 없음)", "BX-16이 **PC 위임**으로 부른다 — `확인됨`을 `outputs`로 돌려준다"],
    lessons=["수동 작업은 결재와 같은 창(C6)을 쓰되 칸이 없다 — 화면에는 「확인」 하나만. 프로토타입 시나리오 2도 실물 수령을 이렇게 확인했다.",
             "**칸이 없어도 답은 비어 있지 않다** — 폼이 없는 결재의 답은 `decision`(`approve`/`reject`)이다 (C6). "
             "케이스에 `{}`를 적었더니 Studio 시험 실행이 답을 거절하고 같은 자리를 되풀이했다 (조각 3e-3).",

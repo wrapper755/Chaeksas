@@ -116,18 +116,6 @@
         "core": {
           "title": "Core",
           "type": "string"
-        },
-        "worker": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Worker"
         }
       },
       "required": [

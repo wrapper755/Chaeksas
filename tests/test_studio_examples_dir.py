@@ -22,5 +22,5 @@ def test_the_default_examples_folder_is_the_one_in_the_checkout() -> None:
 
 def test_the_default_lists_the_examples_without_being_told_where() -> None:
     found = example_ids()
-    assert "bx04_tax_invoice_issue" in found
+    assert "bx01_invoice_reconciliation" in found
     assert len(found) == len(list(EXAMPLES_DIR.glob("*.bpmn")))

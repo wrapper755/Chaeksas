@@ -1,4 +1,4 @@
-"""STU-10 설정 — 「외형」·「LLM」·「Center」·「확장별 설정」·「Worker」 (ADR-0073 — 「서비스 앱」은 없다, ADR-0102).
+"""STU-10 설정 — 「외형」·「LLM」·「Center」·「확장별 설정」 (ADR-0073 — 「서비스 앱」은 없다, ADR-0102).
 
 보는 것:
 
@@ -24,12 +24,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from chaeksas.studio.checks import (  # noqa: E402
-    WorkerPlace,
-    center_status,
-    llm_status,
-    worker_status,
-)
+from chaeksas.studio.checks import center_status, llm_status  # noqa: E402
 from chaeksas.studio.credentials import (  # noqa: E402
     CENTER_KEY_NAME,
     ENV_CENTER_API_KEY,
@@ -124,7 +119,7 @@ def test_only_the_categories_something_reads_are_listed(
     """ADR-0073 — 메일·비밀은 읽는 곳이 없어 없고, 남은 분류에 「(아직)」이 없다."""
     found = dialog(settings, extensions, Vault())
     labels = [found.categories.item(i).text() for i in range(found.categories.count())]
-    assert labels == list(CATEGORIES) == ["외형", "LLM", "Center", "확장별 설정", "Worker"]
+    assert labels == list(CATEGORIES) == ["외형", "LLM", "Center", "확장별 설정"]
     assert found.categories.currentItem().text() == "LLM", "처음에는 모델 칸을 연다"
 
 
@@ -148,7 +143,7 @@ DEMO: dict[str, Any] = {
     "name": "데모 확장",
     "publisher": "Chaeksas",
     "tier": "builtin",
-    "api": ">=1,<2",
+    "api": ">=2,<3",
     "contributes": {
         "configuration": [
             {"key": "region", "label": "지역", "scope": "studio", "schema": {"type": "string"}},
@@ -448,37 +443,14 @@ def test_the_center_probe_carries_the_key_and_asks_only_for_service_apps() -> No
     assert "chk_ctr_123" not in shown
 
 
-def test_worker_status() -> None:
-    alive = mock(lambda r: httpx.Response(200, json={"status": "ok", "version": "0.1.0"}))
-    assert worker_status(WorkerPlace(port=8899, token_dir=None), client=alive) == "실행 중 — Worker 0.1.0"
-
-    def refuse(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("거부", request=request)
-
-    assert "꺼져 있거나" in worker_status(WorkerPlace(port=8899, token_dir=None), client=mock(refuse))
-    assert worker_status(WorkerPlace(port=None, token_dir=None)).startswith("Worker를 기여한 확장이 없")
-
-
-def test_the_worker_page_shows_the_place_the_runs_use(qt: Any, settings: Settings, extensions: Extensions) -> None:
-    """시험 실행이 쓰는 자리와 **같은 것**을 보인다 (PC 실행기가 남긴 `runtime.json`, 없으면 기본 포트)."""
-    from chaeksas.studio.extensions import bot_ui_data_dir  # noqa: PLC0415
-
-    folder = bot_ui_data_dir() / "runtimes" / "worker"
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / "runtime.json").write_text(json.dumps({"port": 9777}), encoding="utf-8")
-    found = dialog(settings, extensions, Vault())
-    assert found.worker_port.text() == "9777"
-    assert Path(found.worker_tokens.text()) == folder
-
-
 # ─────────────────────────── 시험 실행이 같은 창고를 쓴다 ───────────────────────────
 
 
 def test_runs_resolve_the_call_token_and_extension_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
     """`call_token`은 Studio가 청한 호출 토큰이고(C15), 나머지는 그 확장의 비밀 칸이다."""
     vault = Vault()
-    vault.set_password("chaeksas-studio", "ext:ui-automation:note", "비밀")
-    found = StudioSecrets(credentials=Credentials(vault), extension_id="ui-automation", call_tokens=lambda: "chk_ctr_x")
+    vault.set_password("chaeksas-studio", "ext:crm:note", "비밀")
+    found = StudioSecrets(credentials=Credentials(vault), extension_id="crm", call_tokens=lambda: "chk_ctr_x")
     assert found.resolve("call_token") == "chk_ctr_x"
     assert found.resolve("note") == "비밀"
     assert StudioSecrets(credentials=Credentials(vault)).resolve("call_token") is None, "청하는 쪽이 없으면 없다"

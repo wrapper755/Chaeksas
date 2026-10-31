@@ -46,13 +46,7 @@ from chaeksas.bot_ui import autostart as autostart_module
 from chaeksas.bot_ui.agent import Agent
 from chaeksas.bot_ui.center_client import CenterProblem, KeyRejected, MachineMismatch, Unreachable
 from chaeksas.bot_ui.credentials import SecretsUnavailable
-from chaeksas.bot_ui.settings import (
-    START_ALWAYS,
-    START_WHEN_NEEDED,
-    RuntimeSettings,
-    Settings,
-    data_dir,
-)
+from chaeksas.bot_ui.settings import Settings, data_dir
 from chaeksas.contracts import SCOPE_BOT_UI, ConfigurationItem
 from chaeksas.core.senders import KNOWN_SECURITY, SECURITY_NONE, SECURITY_STARTTLS
 from chaeksas.qt.theme import set_role
@@ -87,7 +81,6 @@ class SettingsDialog(QDialog):
         self._add_tab("모델", self._model_box())
         self._add_tab("파일", self._files_box())
         self._add_tab("보내기", self._sending_box())
-        self._add_tab("로컬 런타임", self._runtime_box())
         for name, box in self._extension_boxes():
             self._add_tab(name, box)
         self._add_tab("나중에", self._later_box())
@@ -440,22 +433,6 @@ class SettingsDialog(QDialog):
             self.webhook_hosts.item(i).text() for i in range(self.webhook_hosts.count())
         )
 
-    def _runtime_box(self) -> QWidget:
-        box = QWidget()
-        form = QFormLayout(box)
-        worker = self._agent.settings.runtime("worker")
-
-        self.worker_port = QSpinBox()
-        self.worker_port.setRange(1024, 65535)
-        self.worker_port.setValue(worker.port if worker else 0)
-        form.addRow("Worker 포트", self.worker_port)
-
-        self.worker_always = QCheckBox("항상 띄워 두기 (끄면 필요할 때 시작)")
-        self.worker_always.setChecked(bool(worker and worker.start == START_ALWAYS))
-        form.addRow(self.worker_always)
-
-        return box
-
     def _extension_boxes(self) -> list[tuple[str, QWidget]]:
         """BUI-03 「확장별 설정」 — **확장마다 탭 하나**(이름은 확장 이름).
 
@@ -588,11 +565,6 @@ class SettingsDialog(QDialog):
         self._show_code()
 
     def _pending_settings(self) -> Settings:
-        worker = RuntimeSettings(
-            runtime_id="worker",
-            port=self.worker_port.value(),
-            start=START_ALWAYS if self.worker_always.isChecked() else START_WHEN_NEEDED,
-        )
         return replace(
             self._agent.settings,
             center_url=self.center_url.text().strip() or self._agent.settings.center_url,
@@ -612,7 +584,6 @@ class SettingsDialog(QDialog):
             smtp_sender=self.smtp_from.text().strip(),
             smtp_attachment_mb=float(self.smtp_attachment.value()),
             webhook_allowed_hosts=self.webhook_host_list(),
-            runtimes=(worker,),
             extensions={**self._agent.settings.extensions, **self._extension_values()},
         )
 

@@ -121,10 +121,10 @@ def test_both_apps_read_the_same_selftest_flags(tmp_path: Path) -> None:
     from chaeksas.core.selftest import main  # noqa: PLC0415
 
     out = tmp_path / "selftest.json"
-    code = main(["--selftest", str(out), "--want", "ui-automation", "--expect-version", "0.2.0"], prog="t")
+    code = main(["--selftest", str(out), "--want", "없는-확장", "--expect-version", "0.2.0"], prog="t")
     found = json.loads(out.read_text(encoding="utf-8"))
     assert code == 1  # 묶지 않은 앱에는 찍힌 판이 없다
-    assert found["steps"]["entry_points"]["ok"]
+    assert not found["steps"]["entry_points"]["ok"], "`--want`가 읽혔다 — 없는 확장이라 실패다"
     assert not found["steps"]["build"]["ok"]
 
 
@@ -177,11 +177,11 @@ def test_bot_ui_reports_build_only_when_packed(monkeypatch: pytest.MonkeyPatch) 
     from chaeksas.bot_ui import agent as bot_agent  # noqa: PLC0415
 
     class _Agent:
-        supervisors: dict[str, object] = {}
+        pass
 
     monkeypatch.setattr(build_info, "stamp", lambda: None)
     plain = bot_agent.Agent.versions(_Agent())  # type: ignore[arg-type]
-    assert plain.build is None and plain.worker is None
+    assert plain.build is None
 
     monkeypatch.setattr(build_info, "stamp", lambda: GOOD)
     packed = bot_agent.Agent.versions(_Agent())  # type: ignore[arg-type]

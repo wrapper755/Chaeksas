@@ -11,8 +11,10 @@
 | --- | --- | --- | --- |
 | 프로토타입 Studio·Bot (Admin 포함) → 새 Studio, Bot UI(실행 부분) | AgentWorks | `~/Workspace/AgentWorks` | [proto-studio-bot.md](proto-studio-bot.md) |
 | 프로토타입 Center | AgentCenter | `~/Workspace/AgentCenter` | [proto-center.md](proto-center.md) |
-| 프로토타입 UI 자동화 서버 (→ 새 UI 자동화 앱) | TapTap | `~/Workspace/TapTap` | [proto-ui-automation.md](proto-ui-automation.md) |
-| 프로토타입 Worker → 새 Worker 프로세스 + Bot UI의 UI 셀렉터 등록 | TapTapWorker | `~/Workspace/TapTapWorker` | [proto-worker.md](proto-worker.md) |
+| 프로토타입 UI 자동화 서버 (→ UI 자동화 앱 — 지금은 없다\*) | TapTap | `~/Workspace/TapTap` | [proto-ui-automation.md](proto-ui-automation.md) |
+| 프로토타입 Worker (→ Worker 프로세스·UI 셀렉터 등록 — 지금은 없다\*) | TapTapWorker | `~/Workspace/TapTapWorker` | [proto-worker.md](proto-worker.md) |
+
+\* UI 자동화 확장(UI 자동화 앱·Worker 프로세스·UI 셀렉터 등록)은 이 저장소에서 걷었다 — 다시 들일 때 이 두 프로토타입이 출발점이다 ([ADR-0114](../decisions/0114-remove-ui-automation.md)). 아래 표의 그쪽 줄도 같다.
 
 프로토타입 코드 안의 용어는 새 용어와 다르다. 코드를 읽을 때 아래처럼 바꿔 읽는다.
 
@@ -24,11 +26,11 @@
 | HITL (execution 층) | 확인 |
 | escalation, User Task 전환 | 전환 |
 | Dashboard | Center 콘솔 |
-| TapTap 서버, 셀렉터 서버 | UI 자동화 앱 |
+| TapTap 서버, 셀렉터 서버 | UI 자동화 앱\* |
 | 프로토타입 Bot (aw-bot, 현장 실행 프로그램) | Bot UI |
-| Worker 트레이·화면 등록 탭 | Bot UI의 「UI 셀렉터 등록」 |
+| Worker 트레이·화면 등록 탭 | 「UI 셀렉터 등록」\* |
 | Worker 문서의 "Bot"(임의의 BPM/RPA 봇) | 실행 중인 Bot (Bot UI가 실행) |
-| job (UI 자동화 서버) | UI 세션 |
+| job (UI 자동화 서버) | UI 세션\* |
 | `.awpkg` | 패키지 |
 | `AW_`, `AC_`, `TAPTAP_` 환경변수 | `CHK_` |
 

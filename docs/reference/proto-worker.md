@@ -1,5 +1,7 @@
 # 프로토타입 Worker
 
+> Worker 프로세스·UI 셀렉터 등록은 이 저장소에서 걷었다 — 다시 들일 때의 참고로 남긴다 ([ADR-0114](../decisions/0114-remove-ui-automation.md)).
+
 `requires-python >=3.11`(실사용 3.14) · Playwright + PySide6/qasync + FastAPI. 저장소 이름은 [대응표](README.md) 참고.
 최상위 패키지 이름이 `src`다 (프로토타입 UI 자동화 서버와 충돌).
 
@@ -16,7 +18,7 @@
   - 제안을 로컬에서 검증한다. 요소가 정확히 하나여야 하고 역할이 맞아야 한다.
   - 치유 한도를 넘으면 전환한다.
 - **오프라인 (`src/client/cache.py`):** 계획 캐시, 등록 대기 큐, 보고 대기 큐(JSONL, 순서 보장).
-- **GUI (`src/gui/`):** 트레이 앱, 화면 등록 탭, 실행/테스트 탭 → [../06-screens/worker.md](../06-screens/worker.md).
+- **GUI (`src/gui/`):** 트레이 앱, 화면 등록 탭, 실행/테스트 탭 (새 구조에 대응하는 화면은 없다).
 
 ## 가져올 것
 

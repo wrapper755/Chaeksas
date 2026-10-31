@@ -87,11 +87,6 @@ export const CONTRACT_MODULES = [
   "c7-extension-revoke-request",
   "c7-runtime-resource",
   "c7-service-app-resource",
-  "c9-console-overview",
-  "c9-page-detail",
-  "c9-page-listing",
-  "c9-path-result",
-  "c9-session-page",
 ] as const;
 
 export type ContractModule = (typeof CONTRACT_MODULES)[number];

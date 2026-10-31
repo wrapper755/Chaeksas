@@ -148,7 +148,7 @@ def test_the_summary_comes_from_the_events(client: Any) -> None:
 
 def test_a_finished_run_says_so(client: Any) -> None:
     post(client, [started(), event(2, "run_finished", status="success", duration_s=12.5,
-                                   ai_tasks=1, replayed_tasks=0, ui_tasks=0, service_calls=0,
+                                   ai_tasks=1, replayed_tasks=0, service_calls=0,
                                    human_requests=0)])
     found = read(client, f"/api/v1/runs/{RUN}").json()
     assert found["status"] == "success" and found["duration_s"] == 12.5
@@ -157,7 +157,7 @@ def test_a_finished_run_says_so(client: Any) -> None:
 def test_a_late_batch_does_not_un_finish_a_run(client: Any) -> None:
     """늦게 온 줄이 끝난 실행을 「도는 중」으로 되돌리면 목록이 거짓말을 한다."""
     post(client, [started(), event(5, "run_finished", status="failed", duration_s=1,
-                                   ai_tasks=0, replayed_tasks=0, ui_tasks=0, service_calls=0,
+                                   ai_tasks=0, replayed_tasks=0, service_calls=0,
                                    human_requests=0)])
     post(client, [event(2, "run_waiting", waiting_for="approval")])
     assert read(client, f"/api/v1/runs/{RUN}").json()["status"] == "failed"
@@ -196,7 +196,7 @@ def test_a_resumed_line_does_not_un_finish_a_run(client: Any) -> None:
     """**끝난 것은 되돌리지 않는다** — 차례가 어긋난 배치에도 (`_update_run`과 같은 규칙)."""
     post(client, [started(), event(2, "run_waiting", waiting_for="approval"),
                   event(4, "run_finished", status="success", duration_s=2,
-                        ai_tasks=0, replayed_tasks=0, ui_tasks=0, service_calls=0,
+                        ai_tasks=0, replayed_tasks=0, service_calls=0,
                         human_requests=1),
                   event(3, "run_resumed", after_s=1.5, reason="answer")])
     assert read(client, f"/api/v1/runs/{RUN}").json()["status"] == "success"
@@ -230,18 +230,17 @@ def test_the_listing_can_be_narrowed_by_run_location(client: Any) -> None:
 
 def test_the_listing_keeps_the_counts_the_sender_counted(client: Any) -> None:
     """CON-01 목록의 셈 열 — **보낸 쪽이 센 것**을 그대로 둔다 (줄을 다시 읽어 세지 않는다)."""
-    post(client, [started(), event(2, "ui_session", business_key=f"{RUN}:T:1:1", page_id="p",
-                                   result="success", steps=3, fallback_depth_max=1, healed=False)])
+    post(client, [started(), event(2, "log", level="info", message="한 줄")])
     running = read(client, f"/api/v1/runs/{RUN}").json()
     # **도는 중에는 비어 있다** — 0으로 보이면 「아무것도 없었다」로 읽힌다.
-    assert running["ui_tasks"] is None and running["ai_tasks"] is None
+    assert running["service_calls"] is None and running["ai_tasks"] is None
 
     post(client, [event(3, "run_finished", status="success", duration_s=2, ai_tasks=2,
-                        replayed_tasks=1, ui_tasks=1, service_calls=4, human_requests=0)])
+                        replayed_tasks=1, service_calls=4, human_requests=0)])
     found = read(client, f"/api/v1/runs/{RUN}").json()
-    assert (found["ai_tasks"], found["replayed_tasks"], found["ui_tasks"]) == (2, 1, 1)
+    assert (found["ai_tasks"], found["replayed_tasks"]) == (2, 1)
     assert (found["service_calls"], found["human_requests"]) == (4, 0)
-    assert read(client, "/api/v1/runs").json()["runs"][0]["ui_tasks"] == 1, "목록에도 실린다"
+    assert read(client, "/api/v1/runs").json()["runs"][0]["service_calls"] == 4, "목록에도 실린다"
 
 
 def test_the_confirmation_count_is_optional_and_kept_as_sent(client: Any) -> None:
@@ -251,7 +250,7 @@ def test_the_confirmation_count_is_optional_and_kept_as_sent(client: Any) -> Non
     같아져 확인률이 조용히 낮아진다.
     """
     post(client, [started(), event(2, "run_finished", status="success", duration_s=2, ai_tasks=0,
-                                   replayed_tasks=0, ui_tasks=0, service_calls=0,
+                                   replayed_tasks=0, service_calls=0,
                                    human_requests=3, confirmations=1)])
     found = read(client, f"/api/v1/runs/{RUN}").json()
     assert (found["human_requests"], found["confirmations"]) == (3, 1)
@@ -259,7 +258,7 @@ def test_the_confirmation_count_is_optional_and_kept_as_sent(client: Any) -> Non
     old = "run_20261005_101600_b2c3d4"
     post(client, [{**started(), "run_id": old},
                   {**event(2, "run_finished", status="success", duration_s=1, ai_tasks=0,
-                           replayed_tasks=0, ui_tasks=0, service_calls=0, human_requests=2),
+                           replayed_tasks=0, service_calls=0, human_requests=2),
                    "run_id": old}], run_id=old)
     without = read(client, f"/api/v1/runs/{old}").json()
     assert without["human_requests"] == 2

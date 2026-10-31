@@ -20,18 +20,17 @@ MEMBERS = {
     "packages/service_kit": "chaeksas.service_kit",
     "apps/studio": "chaeksas.studio",
     "apps/bot_ui": "chaeksas.bot_ui",
-    "apps/tool_ui": "chaeksas.tool_ui",
     "apps/server_runner": "chaeksas.server_runner",
     # 외부 앱을 부르는 범용 일꾼 (C13 §4·C15, ADR-0102).
     "apps/adapter_consumer": "chaeksas.adapter_consumer",
     "apps/center": "chaeksas.center",
-    "extensions/ui_automation": "chaeksas.ext.ui_automation",
     # 제품이 아니다 — 업무 예제가 부르는 모의 앱 (01-architecture §8).
     "samples/mock_apps": "chaeksas.mock_apps",
 }
 
 #: 멤버를 찾는 자리. `pyproject.toml`의 `[tool.uv.workspace].members`와 같아야 한다.
-MEMBER_GLOBS = ("packages/*", "apps/*", "extensions/*", "samples/*")
+#: 확장(`extensions/*`)은 지금 없다 — 들일 때 다시 더한다 (ADR-0114).
+MEMBER_GLOBS = ("packages/*", "apps/*", "samples/*")
 
 
 def test_interpreter_is_312() -> None:
@@ -62,13 +61,11 @@ def test_member_is_importable(module: str) -> None:
 
 
 def test_chaeksas_is_namespace_package() -> None:
-    """chaeksas·chaeksas.ext는 PEP 420 네임스페이스 — __init__.py를 두면 멤버 하나만 보인다."""
+    """chaeksas는 PEP 420 네임스페이스 — __init__.py를 두면 멤버 하나만 보인다."""
     import chaeksas
-    import chaeksas.ext
 
     assert chaeksas.__file__ is None, "chaeksas/__init__.py가 생겼다 — 지워야 한다"
-    assert chaeksas.ext.__file__ is None, "chaeksas/ext/__init__.py가 생겼다 — 지워야 한다"
-    # 멤버마다 src/chaeksas를 하나씩 더한다 (확장도 chaeksas/ext/를 담고 있으므로 포함).
+    # 멤버마다 src/chaeksas를 하나씩 더한다.
     assert len(chaeksas.__path__) == len(MEMBERS)
 
 

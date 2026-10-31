@@ -321,7 +321,7 @@ def coverage(examples: list[Example]) -> list[str]:
         ("끝 — 종료(terminate)", has("end", kind="terminate")),
         ("스크립트", has("script")), ("AI 태스크 — llm", ai_domain("llm")), ("AI 태스크 — api", ai_domain("api")),
         ("AI 태스크 — doc", ai_domain("doc")), ("AI 태스크 — web", ai_domain("web")), ("AI 태스크 — desktop", ai_domain("desktop")),
-        ("UI 태스크 (UI 자동화 확장)", has("ui")), ("서비스 앱 태스크", has("svc")), ("규칙 (DMN)", has("rule")),
+        ("서비스 앱 태스크", has("svc")), ("규칙 (DMN)", has("rule")),
         ("결재 (userTask)", has("appr")), ("수동 확인 (manualTask)", has("manual")),
         ("메일 보내기", has("mail")), ("웹훅 보내기", has("hook")), ("메시지 받기 (receiveTask)", has("recv")),
         ("BPM 프로세스 호출", lambda e: any(n.kind == "call" and not n.props.get("delegate") for n in nodes(e))),
@@ -346,9 +346,8 @@ def coverage(examples: list[Example]) -> list[str]:
     plat_rows = [
         ("실행 위치 서버", lambda e: e.run_location == "server"), ("실행 위치 PC", lambda e: e.run_location == "pc"),
         ("결재 위치 Center 결재함", appr_loc("center")), ("결재 위치 현장(PC)", appr_loc("field")),
-        ("UI 자동화 확장 (내장)", ext(lambda i: i == "ui-automation")),
         ("외부 확장 (HTTP 어댑터)", ext(lambda i: i.startswith("ext-"))),
-        ("사내 확장 서비스 앱", ext(lambda i: i not in ("ui-automation",) and not i.startswith("ext-"))),
+        ("사내 확장 서비스 앱", ext(lambda i: not i.startswith("ext-"))),
         ("한 프로세스에 서비스 앱 여러 개", lambda e: len({n.props["task"]["app_id"] for n in nodes(e) if n.kind == "svc"}) > 1),
         ("프로세스 기본값 (금지 행동·확인 트리거)", lambda e: bool(e.defaults.get("forbidden_actions") or e.defaults.get("confirm_triggers"))),
         ("업무 파라미터", lambda e: any(n.kind == "ai" and n.props["task"]["params"] for n in nodes(e))),
@@ -376,24 +375,22 @@ def coverage(examples: list[Example]) -> list[str]:
           "## 플랫폼 기능 커버리지", "", "| 기능 | 예제 |", "| --- | --- |"]
     L += [f"| {a} | {ids(p)} |" for a, p in plat_rows]
     L += ["", "## 마일스톤별 인수 시험 묶음", "",
-          "예제가 쓰는 기능으로 자동으로 정한다: 기본 M3(Studio 시험 실행), UI 태스크·데스크톱 → M4, 서비스 앱·확장 → M5. "
+          "예제가 쓰는 기능으로 자동으로 정한다: 기본 M3(Studio 시험 실행), 서비스 앱·확장 → M5. "
           "처음 통과한 뒤에는 회귀로 계속 돈다. M5에서 PC 예제는 Center 배포 → PC 실행기 실행으로, M7에서 서버 예제는 서버 실행기에서 다시 통과해야 한다.", "",
           "| 마일스톤 | 처음 통과해야 하는 예제 | 다시 통과 |", "| --- | --- | --- |"]
     by = {}
     for e in examples:
         by.setdefault(first_milestone(e), []).append(e.id)
     again = {"M5": "PC 예제: Center 배포 → PC 실행기", "M7": "서버 예제 전부: 서버 실행기"}
-    for k in ("M3", "M4", "M5", "M7"):
+    for k in ("M3", "M5", "M7"):
         L.append(f"| {k} | {', '.join(by.get(k, [])) or '—'} | {again.get(k, '')} |")
     return L
 
 
 def first_milestone(e: Example) -> str:
     ns = list(all_nodes(e.nodes))
-    if any(n.kind == "svc" for n in ns) or e.extensions and any(x["id"] != "ui-automation" for x in e.extensions):
+    if any(n.kind == "svc" for n in ns) or e.extensions:
         return "M5"
-    if any(n.kind == "ui" or (n.kind == "ai" and n.props["task"]["domain"] in ("web", "desktop")) for n in ns):
-        return "M4"
     return "M3"
 
 

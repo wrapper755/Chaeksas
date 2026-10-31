@@ -580,7 +580,7 @@ ELSEWHERE: dict[str, str] = {
     ),
     "bx16_reorder_proposal": (
         "`test_bx16_delegates_a_part_to_a_pc_and_continues`가 본다 — **PC 위임**이라(ADR-0062) "
-        "맡긴 작업을 끝내 줄 PC가 있어야 한다(등록된 PC 실행기·배포된 BX-17·그 PC의 작업 ack). "
+        "맡긴 작업을 끝내 줄 PC가 있어야 한다(등록된 PC 실행기·배포된 FX-19·그 PC의 작업 ack). "
         "아무도 끝내 주지 않으면 그 실행은 영원히 기다리므로 파라미터 묶음에 넣지 않는다. "
     ),
 }
@@ -594,7 +594,7 @@ def test_the_server_examples_are_read_from_the_drawings() -> None:
     assert "bx03_expense_approval" in SERVER
     assert "fx03b_amount_branch" in SERVER
     # PC 예제는 여기 들지 않는다 (그쪽은 `test_m5_pc_rerun.py`다).
-    assert "bx04_tax_invoice_issue" not in SERVER
+    assert "fx19_manual_task_pc" not in SERVER
 
 
 def test_every_server_example_is_in_the_bundle_or_has_a_reason() -> None:
@@ -775,7 +775,7 @@ def test_the_canned_answers_are_the_shared_ones() -> None:
 # ─────────── BX-16: 서버 BPM 프로세스가 PC에 **한 부분을 맡긴다** (전용 발판, ADR-0062) ───────────
 
 #: 맡길 PC 예제 — 그 PC에 **배포돼 있어야** 위임이 작업이 된다 (C5 `no_deployment`).
-BX16_TARGET = "bx17_erp_po_entry"
+BX16_TARGET = "fx19_manual_task_pc"
 
 #: 가짜 PC의 Center API 키 (`bot_ui_id` → 키). 위임 결과를 **그 PC의 ack로** 올린다 (C4).
 PC_KEYS: dict[str, str] = {}
@@ -783,8 +783,8 @@ PC_KEYS: dict[str, str] = {}
 def register_a_pc(client: Any) -> str:
     """등록된 PC 실행기 하나 — 작업이 갈 PC다 (C4 「키 묶기」). `bot_ui_id`를 준다.
 
-    **하트비트까지 보낸다** — 확장을 보고하지 않으면 Center가 `ui-automation`을 몰라 그것을
-    요구하는 BX-17의 **배포가 막힌다** (C7 누락 검사). `Agent`를 쓰지 않고 C4를 직접 부른다 —
+    **하트비트까지 보낸다** — 깔린 확장을 보고한다(지금은 없다 — 확장을 요구하는 PC BPM 프로세스는
+    보고가 없으면 **배포가 막힌다**, C7 누락 검사). `Agent`를 쓰지 않고 C4를 직접 부른다 —
     여기서 보는 것은 PC 실행기가 아니라 **작업이 만들어지나**다.
     """
     from chaeksas.core.extensions import load_host
@@ -811,7 +811,6 @@ def register_a_pc(client: Any) -> str:
             "status": "idle",
             "current_run": None,
             "queue": {"max": 20, "items": []},
-            "worker": {"state": "off", "version": "0.1.0", "restarts": 0, "session": "idle"},
             "versions": versions,
             "extensions": [one.to_json_dict() for one in load_host().states()],
         },
@@ -855,7 +854,6 @@ class FakePc:
                         "status": "idle",
                         "current_run": None,
                         "queue": {"max": 20, "items": []},
-                        "worker": {"state": "off"},
                         "job_acks": [ack],
                     },
                     headers={"Authorization": f"Bearer {PC_KEYS[self.bot_ui_id]}"},
@@ -901,9 +899,9 @@ def test_bx16_delegates_a_part_to_a_pc_and_continues(
 
     전에는 이 자리를 사내 확장 서비스 앱(`center-jobs`)으로 메우고 있었고, 그래서 발판이 넷
     필요했다 — **소켓 Center**(모의 앱이 제 스레드에서 `POST /jobs`를 불러야 했다)·연동용 키·
-    등록된 PC 실행기·배포된 BX-17. **위임이 본문이 되어 앞의 둘이 없어졌다**: 맡기는 것은 실행기
+    등록된 PC 실행기·배포된 PC BPM 프로세스. **위임이 본문이 되어 앞의 둘이 없어졌다**: 맡기는 것은 실행기
     자신이고(`CenterDelegator`) 작업을 만드는 것은 Center다. 남은 둘은 그대로다 — 맡길 PC가
-    **등록돼 있고** 그 PC에 BX-17이 **배포돼 있어야** 한다 (C5 `no_deployment`).
+    **등록돼 있고** 그 PC에 FX-19가 **배포돼 있어야** 한다 (C5 `no_deployment`).
 
     묶음에 넣지 않는 까닭은 하나다 — **아무도 끝내 주지 않으면 서버 실행이 영원히 기다린다**
     (위임은 PC의 작업 ack로 돌아온다, C4). 그래서 가짜 PC가 그 자리를 맡는다.

@@ -1,8 +1,9 @@
 """PC 실행기의 사전 점검 — 준비되지 않은 BPM 프로세스는 **띄우지 않고** 그 까닭을 Center에 올린다 (ADR-0013, C4).
 
 서비스 앱 키는 없어졌다 (ADR-0102 — 바깥 기능은 C15로 Center를 거쳐 부르고 「불러도 되나」는 배포가
-가린다). 그래서 막는 까닭으로는 **사람이 끈 확장**을 쓴다 — BX-36이 UI 태스크를 쓰니 `ui-automation`을
-끄면 막힌다 (ADR-0043).
+가린다). 그래서 막는 까닭으로는 **사람이 끈 확장**을 쓴다 — 시험용 확장(`tests/fake_extension.py`)의
+태스크를 쓰는 그림을 만들고 그 확장을 끄면 막힌다 (ADR-0043). 업무 예제에는 확장 태스크를 쓰는 것이
+지금 없다 (ADR-0114) — FX-19의 확인 자리를 그 태스크로 바꿔 쓴다.
 
 | 보는 것 | 왜 |
 | --- | --- |
@@ -18,6 +19,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import fake_extension
 from conftest import FakeCredentials
 
 from chaeksas.bot_ui.agent import Agent
@@ -27,9 +29,8 @@ from chaeksas.bot_ui.store import Store
 from chaeksas.core.extensions import load_host
 from chaeksas.core.packages import InstalledBot, install
 
-EXAMPLE = "bx36_legacy_migration"
-EXAMPLES = Path("docs/08-business-examples/bpmn")
-OFF = "ui-automation"
+EXAMPLE = fake_extension.DRAWING
+OFF = fake_extension.EXTENSION_ID
 
 
 def install_example(tmp_path: Path) -> InstalledBot:
@@ -37,16 +38,19 @@ def install_example(tmp_path: Path) -> InstalledBot:
     from chaeksas.studio.packaging import export  # noqa: PLC0415
     from chaeksas.studio.workspace import Workspace  # noqa: PLC0415
 
-    made = Workspace(tmp_path / "studio").ensure().import_example(EXAMPLES, EXAMPLE)
+    source = fake_extension.drawing(tmp_path / "src")
+    made = Workspace(tmp_path / "studio").ensure().import_example(source, EXAMPLE)
     return install(data_dir(), export(made, tmp_path / "bot.zip"))
 
 
 def make_agent(tmp_path: Path, *, off: tuple[str, ...] = (OFF,)) -> Agent:
+    host = load_host(off=off)
+    host.add_installed(fake_extension.definition_bytes(), origin="test", root=fake_extension.ROOT)
     return Agent(
         settings=Settings(center_url="http://127.0.0.1:1"),
         store=Store.load(tmp_path / "state.json"),
         credentials=FakeCredentials(),
-        host=load_host(off=off),
+        host=host,
     )
 
 
@@ -99,7 +103,7 @@ def test_a_ready_bot_starts(tmp_path: Path) -> None:
 
 
 class _FakeChild:
-    """실행 프로세스 대신 — **띄웠나**까지만 본다 (실제 실행은 M4·M5 인수 시험이 본다)."""
+    """실행 프로세스 대신 — **띄웠나**까지만 본다 (실제 실행은 M5 PC 재통과가 본다)."""
 
     def __init__(self, **_: Any) -> None:
         self.started = 0

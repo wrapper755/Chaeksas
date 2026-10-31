@@ -47,7 +47,7 @@
 C5의 `DELETE /jobs/{id}`가 서버 대상 `accepted`를 202로 받아 `cancel_jobs`로 내려 주고, 실행기가
 그 실행을 닫는다(**기다리는 실행도** — 스레드를 놓았으므로 깃발만 세워 두면 볼 사람이 없다).
 이미 끝나 가던 것은 `cancel_refused`다. 맡긴 PC 위임도 **함께 거둔다** (§PC 위임). **PC는
-그대로 거절이다** — 화면을 만지는 중일 수 있어 현장 사람만 멈춘다 (C4·ADR-0014).
+그대로 거절이다** — 현장 사람이 보며 하는 일일 수 있어 현장 사람만 멈춘다 (C4·ADR-0014).
 
 **기다리는 실행은 담아 두고 자리를 놓는다** (ADR-0054 §3) — 결재를 Center 결재함에 올리고
 (C6 — 서버의 창구는 Center만이다) 하트비트로 내려온 답으로 **되살려 이어 간다**. **재시작도
@@ -106,7 +106,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 
 `extensions[]`는 **이 서버에 깔린 확장**이다 (C4와 같은 모양). Center는 그것으로 C7 확장 자원의
 `installed_on`을 세므로, 싣지 않으면 **서버에만 깔린 확장을 요구하는 BPM 프로세스의 배포가 막힌다**
-(「확장 누락」이 배포를 막는 셋 중 하나다). **서버는 로컬 런타임을 띄우지 않으므로**
+(「확장 누락」이 배포를 막는 셋 중 하나다). **서버에는 현장이 없으므로**
 `run_locations`에 `server`를 적은 태스크 종류만 여기서 돈다 ([ADR-0064](../decisions/0064-extension-tasks-on-the-server.md), C13 `run_locations`).
 
 → `{server_runner_id: "srv_<hex8>", admin_keys, heartbeat_interval_s: 10, server_time}`
@@ -223,7 +223,7 @@ Center는 메시지를 이렇게 처리한다.
 
 ### PC 위임 (서버 BPM 프로세스 → PC BPM 프로세스·서버 BPM 프로세스)
 
-서버 BPM 프로세스가 화면 조작·현장 확인이 필요한 한 부분을 **따로 배포된 PC BPM 프로세스**에 맡긴다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 그림은 C14 `chk:call.delegate`, 매니페스트는 C1 `requires.delegations`다.
+서버 BPM 프로세스가 현장 확인·PC 전용 자원이 필요한 한 부분을 **따로 배포된 PC BPM 프로세스**에 맡긴다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 그림은 C14 `chk:call.delegate`, 매니페스트는 C1 `requires.delegations`다.
 
 **대상이 서버 BPM 프로세스이어도 같은 길이다** ([ADR-0082](../decisions/0082-batch-start.md)) — Center가 그 판의 **매니페스트 `run_location`**을 읽어 `pc`면 아래대로 PC를 고르고, `server`면 **서버 실행기 대상 작업**(`{type: server_runner}`, 실행기는 Center가 고른다 — §Center가 작업을 나누는 규칙)을 만든다. 멱등·`requested_by`·결과 보관·거두기는 같은 함수다. 반복 위임(일괄 기동)이 이 길로 N건을 낸다.
 
