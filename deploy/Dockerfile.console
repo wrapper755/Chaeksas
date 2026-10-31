@@ -26,7 +26,8 @@ COPY --from=deps /web/node_modules node_modules
 COPY --from=deps /web/packages packages
 COPY --from=deps /web/apps apps
 COPY web/ ./
-RUN corepack enable && pnpm --filter "@chaeksas/${APP}" build
+RUN corepack enable && pnpm --filter "@chaeksas/${APP}" build \
+ && mkdir -p apps/${APP}/public
 
 FROM node:${NODE_VERSION} AS runtime
 ARG APP
@@ -35,6 +36,8 @@ WORKDIR /web
 # `output: standalone`이 필요한 것만 모아 준다 (pnpm 워크스페이스라 앱 경로가 그대로 남는다).
 COPY --from=build /web/apps/${APP}/.next/standalone ./
 COPY --from=build /web/apps/${APP}/.next/static ./apps/${APP}/.next/static
+# `standalone`은 `public/`을 담지 않는다 — 옮기지 않으면 로고·배경 그림이 404다. 없는 앱도 있어 빌드 단계가 빈 폴더를 만든다.
+COPY --from=build /web/apps/${APP}/public ./apps/${APP}/public
 # 서버 진입점 경로에 APP이 들어가므로 환경변수로 옮겨 CMD를 고정한다.
 ENV CHK_CONSOLE_SERVER=/web/apps/${APP}/server.js
 
