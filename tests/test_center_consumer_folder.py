@@ -9,6 +9,7 @@
    있거나 폴더가 붙지 않았으면 아무것도 거두지 않는다.
 5. **잘못된 파일은 Center를 막지 않고** 사유가 `GET /resources/consumer-folder`로 나온다.
 6. 등록 요청(`POST /consumers/enroll`)과 콘솔 확장 등록(`POST /resources/extensions`)은 없다.
+7. **연동용·대리 답용 키도 같은 폴더의 `<이름>.key.json`으로 들어온다** (ADR-0123) — 권한은 콘솔 발급 키와 같다.
 """
 
 from __future__ import annotations
@@ -291,3 +292,86 @@ def test_an_unreadable_file_or_a_missing_folder_revokes_nothing(boot: Boot, fold
 
     client = boot(consumers_dir=tmp_path / "붙지 않은 볼륨")
     assert current(client)["version"] == "1.0.0"
+
+
+# ─────────────────────────── 연동용·대리 답용 키 (ADR-0123) ───────────────────────────
+
+
+def key(token: str, key_type: str = "integration", **over: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {"name": "nowview", "type": key_type, "token_sha256": consumer_folder.token_sha256(token)}
+    body.update(over)
+    return body
+
+
+def keys_listed(client: TestClient) -> list[tuple[str, str, str]]:
+    got = client.get("/api/v1/center-keys", headers=ADMIN).json()
+    return sorted((one["name"], one["type"], one["state"]) for one in got)
+
+
+ON_BEHALF = {"X-CHK-On-Behalf-Of": "%EA%B9%80%EC%B2%A0%EC%88%98"}  # 김철수
+
+
+def test_key_files_let_integration_and_relay_keys_in(boot: Boot, folder: Path) -> None:
+    put(folder, "nowview.key.json", key(TOKEN_A))
+    put(folder, "nowview-relay.key.json", key(TOKEN_B, "relay", name="nowview-relay"))
+    client = boot()
+
+    assert outcomes(client) == {
+        "nowview-relay.key.json": ("registered", None),
+        "nowview.key.json": ("registered", None),
+    }
+    assert keys_listed(client) == [("nowview", "integration", "active"), ("nowview-relay", "relay", "active")]
+    # 권한은 종류가 정한다 — 콘솔에서 발급한 키와 같다.
+    assert client.get("/api/v1/virtual-workers/vw_none", headers=bearer(TOKEN_A)).status_code == 404
+    assert client.get("/api/v1/approvals", headers={**bearer(TOKEN_B), **ON_BEHALF}).status_code == 200
+    assert client.get("/api/v1/jobs", headers=bearer(TOKEN_B)).status_code == 403
+    assert fetch(client, TOKEN_A, ["ext-ocr"]).status_code == 403
+
+    client = boot()
+    assert {one for one, _ in outcomes(client).values()} == {"unchanged"}
+    assert len(keys_listed(client)) == 2
+
+
+def test_changing_or_removing_a_key_file_revokes_the_key(boot: Boot, folder: Path) -> None:
+    path = put(folder, "nowview.key.json", key(TOKEN_A))
+    boot()
+    put(folder, "nowview.key.json", key(TOKEN_B))
+    client = boot()
+    assert outcomes(client) == {"nowview.key.json": ("registered", None)}
+    assert client.get("/api/v1/virtual-workers/vw_none", headers=bearer(TOKEN_A)).status_code in (401, 403)
+    assert client.get("/api/v1/virtual-workers/vw_none", headers=bearer(TOKEN_B)).status_code == 404
+    # 폐기된 토큰은 되살아나지 않는다.
+    put(folder, "nowview.key.json", key(TOKEN_A))
+    assert outcomes(boot()) == {"nowview.key.json": ("refused", "token_revoked")}
+
+    put(folder, "nowview.key.json", key(TOKEN_B))
+    boot()
+    path.unlink()
+    client = boot()
+    assert [(one["kind"], one["outcome"], one["id"]) for one in scanned(client)["items"]] == [
+        ("key", "revoked", "nowview")
+    ]
+    assert keys_listed(client) == [("nowview", "integration", "revoked"), ("nowview", "integration", "revoked")]
+
+
+def test_bad_key_files_are_refused_and_tokens_are_not_shared(boot: Boot, folder: Path) -> None:
+    put(folder, "worker.consumer.json", worker(TOKEN_A))
+    put(folder, "same.key.json", key(TOKEN_A))
+    put(folder, "studio.key.json", key(TOKEN_B, "studio"))
+    put(folder, "broken.key.json", "{ 아니다")
+    client = boot()
+    assert outcomes(client) == {
+        "worker.consumer.json": ("registered", None),
+        "same.key.json": ("refused", "token_in_use"),
+        "studio.key.json": ("refused", "input_invalid"),
+        "broken.key.json": ("refused", "unreadable"),
+    }
+    assert keys_listed(client) == [("worker", "consumer", "active")]
+
+
+def test_the_cli_writes_a_key_file_with_only_the_hash(tmp_path: Path) -> None:
+    path, raw = consumer_folder.write_key_file(tmp_path, "nowview", "relay")
+    body = json.loads(path.read_text(encoding="utf-8"))
+    assert path.name == "nowview.key.json"
+    assert body == {"name": "nowview", "type": "relay", "token_sha256": consumer_folder.token_sha256(raw)}
+    assert raw not in path.read_text(encoding="utf-8")

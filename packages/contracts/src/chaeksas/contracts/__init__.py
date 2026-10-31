@@ -150,6 +150,7 @@ from chaeksas.contracts.center_keys import (
     CenterKeyCreated,
     CenterKeyCreateRequest,
     CenterKeyInfo,
+    FolderKey,
     expires_soon,
 )
 from chaeksas.contracts.center_keys import key_state as center_key_state
@@ -360,6 +361,7 @@ __all__ = [
     "CompleteRequest",
     "ConsumerInfo",
     "FolderConsumer",
+    "FolderKey",
     "ExtendRequest",
     "ExternalTaskCreate",
     "ExternalTaskCreated",

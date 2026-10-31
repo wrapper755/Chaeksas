@@ -120,7 +120,7 @@ export function KeyMenu({ row }: { row: CenterKeyInfo }) {
       <dt className="text-text-secondary">이름</dt>
       <dd>{row.name}</dd>
       <dt className="text-text-secondary">앞자리</dt>
-      <dd className="font-mono text-body-sm">{row.prefix}…</dd>
+      <dd className="font-mono text-body-sm">{row.prefix ? `${row.prefix}…` : "—"}</dd>
       <dt className="text-text-secondary">연결된 대상</dt>
       <dd>{row.bound_to ? (row.bound_to.name ?? row.bound_to.id) : "등록 전"}</dd>
     </dl>

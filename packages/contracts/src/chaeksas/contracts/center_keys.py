@@ -12,7 +12,7 @@ import re
 from datetime import datetime, timedelta
 from typing import Annotated
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from chaeksas.contracts._base import ContractModel, Timestamp, Violation
 
@@ -31,6 +31,8 @@ ISSUABLE_KEY_TYPES = frozenset({"bot_ui", "studio", "server_runner", "integratio
 #: 실행 기록에서 막고, 결재에서는 `X-CHK-On-Behalf-Of`의 그 사람이 담당자인 것만 보인다.
 RELAY_KEY_TYPE = "relay"
 KNOWN_KEY_STATES = frozenset({"active", "expired", "revoked"})
+#: 일꾼 폴더의 키 파일(`<이름>.key.json`)로 들일 수 있는 종류 (ADR-0123) — 함께 설치되는 연동 시스템이 쓰는 둘.
+FOLDER_KEY_TYPES = frozenset({"integration", RELAY_KEY_TYPE})
 
 KeyId = Annotated[str, Field(pattern=r"^ck_[0-9a-f]{8}$")]
 KeyRaw = Annotated[str, Field(pattern=rf"^{KEY_PREFIX}[A-Za-z0-9_-]{{{KEY_RANDOM_LEN}}}$")]
@@ -80,6 +82,26 @@ class BoundTo(ContractModel):
     name: str | None = None
     machine_name: str | None = None
     first_seen: Timestamp | None = None
+
+
+class FolderKey(ContractModel):
+    """일꾼 폴더의 `<이름>.key.json` — 연동용·대리 답용 키를 **Center가 뜰 때** 들인다 (C7 §폴더 키, ADR-0123).
+
+    설치가 원문을 짓고 Center에는 **해시만** 둔다. 권한은 CON-11에서 발급한 같은 종류의 키와 같고, 만료·회전이
+    없다(공개키가 없다). 키의 자리는 파일 이름이 정한다 — `name`은 CON-11에 보이는 키 이름이다.
+    """
+
+    name: str = Field(min_length=1)
+    type: str  # FOLDER_KEY_TYPES
+    #: 토큰 원문(UTF-8)의 SHA-256, 소문자 16진 64자.
+    token_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+    @field_validator("type")
+    @classmethod
+    def _known_type(cls, value: str) -> str:
+        if value not in FOLDER_KEY_TYPES:
+            raise ValueError(f"폴더로 들일 수 있는 키 종류가 아니다 ({', '.join(sorted(FOLDER_KEY_TYPES))})")
+        return value
 
 
 class CenterKeyCreateRequest(ContractModel):
