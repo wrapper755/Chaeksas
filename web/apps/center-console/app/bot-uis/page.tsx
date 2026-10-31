@@ -5,6 +5,7 @@ import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } 
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
 import { STATE_LABEL } from "@/lib/center-keys";
+import { KeyMenu } from "@/components/KeyMenu";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
@@ -164,6 +165,10 @@ export default async function BotUisPage({ searchParams }: { searchParams: Promi
       cell: (row) => <StatusBadge group="API 키" label={STATE_LABEL[row.state] ?? row.state} />,
     },
   ];
+  // 키 폐기·삭제는 그 Studio 줄에서 한다 — API 키 화면은 없다 (ADR-0124).
+  if (found.mode === "admin") {
+    studioColumns.push({ key: "actions", header: "", width: "6ch", cell: (row) => <KeyMenu row={row} /> });
+  }
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/bot-uis">
@@ -222,9 +227,6 @@ export default async function BotUisPage({ searchParams }: { searchParams: Promi
             ) : (
               <DataTable columns={studioColumns} rows={studios} rowKey={(row) => row.key_id} caption="Studio 목록" />
             )}
-            <p className="text-caption text-text-muted">
-              폐기·삭제는 「API 키」의 「승인으로 들인 키」에서 합니다.
-            </p>
           </section>
       )}
     </Shell>

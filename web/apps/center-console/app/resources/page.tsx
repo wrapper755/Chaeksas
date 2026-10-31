@@ -1,4 +1,7 @@
 import Link from "next/link";
+import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
+import { KeyMenu } from "@/components/KeyMenu";
+import { STATE_LABEL, TYPE_LABEL, consoleIssuedKeys, folderKey } from "@/lib/center-keys";
 import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
@@ -67,6 +70,7 @@ export default async function ResourcesPage({
   let kinds: ContributedKind[] = [];
   let failure: string | null = null;
   let folder: ConsumerFolderScan | null = null;
+  let keys: CenterKeyInfo[] = [];
   // 어떤 기여 탭이 있는지는 **Center가 안다** (확장이 기여한 종류). 탭 이름을 화면이 짓지 않는다.
   try {
     kinds = (await center.contributedKinds()).items;
@@ -93,6 +97,8 @@ export default async function ResourcesPage({
   // 일꾼 폴더는 따로 잡는다 — 못 읽으면 칸이 없을 뿐이다 (ADR-0122).
   try {
     if (!contributedTab) folder = await center.consumerFolder();
+    // 일꾼·폴더 키의 폐기는 그 줄에서 한다 — API 키 화면은 없다 (ADR-0124).
+    if (folder?.configured) keys = await center.centerKeys();
   } catch {
     folder = null;
   }
@@ -148,7 +154,7 @@ export default async function ResourcesPage({
       ) : (
         <>
           <Features rows={rows} />
-          {folder?.configured ? <ConsumerFolder scan={folder} /> : null}
+          {folder?.configured ? <ConsumerFolder scan={folder} keys={keys} admin={found.mode === "admin"} /> : null}
         </>
       )}
     </Shell>
@@ -226,14 +232,49 @@ function folderTarget(row: ConsumerFolderItem): string {
  * 「일꾼 폴더」 (ADR-0122·0123) — Center가 **뜰 때** 일꾼 파일·키 파일을 들인 결과와, 맡은 일꾼이 없어 거둔 확장. 고치는
  * 단추는 없다 — 파일을 바꾸거나 빼고 Center를 다시 띄우는 것이 고치는 길이다.
  */
-function ConsumerFolder({ scan }: { scan: ConsumerFolderScan }) {
+function ConsumerFolder({ scan, keys, admin }: { scan: ConsumerFolderScan; keys: CenterKeyInfo[]; admin: boolean }) {
   const items = scan.items ?? [];
   const columns: Array<Column<ConsumerFolderItem>> = [
     { key: "file", header: "파일", mono: true, cell: (row) => row.file ?? "—" },
     { key: "target", header: "대상", mono: true, cell: folderTarget },
     { key: "outcome", header: "결과", width: "10ch", cell: (row) => FOLDER_OUTCOME[row.outcome] ?? row.outcome },
     { key: "message", header: "사유", cell: (row) => row.message ?? "" },
+    {
+      key: "key_state",
+      header: "키 상태",
+      width: "12ch",
+      cell: (row) => {
+        const key = folderKey(row, keys);
+        return key ? <StatusBadge group="API 키" label={STATE_LABEL[key.state] ?? key.state} /> : "—";
+      },
+    },
   ];
+  if (admin) {
+    columns.push({
+      key: "actions",
+      header: "",
+      width: "6ch",
+      cell: (row) => {
+        const key = folderKey(row, keys);
+        return key ? <KeyMenu row={key} /> : null;
+      },
+    });
+  }
+  const issued = consoleIssuedKeys(keys);
+  const issuedColumns: Array<Column<CenterKeyInfo>> = [
+    { key: "name", header: "이름" },
+    { key: "type", header: "종류", width: "12ch", cell: (row) => TYPE_LABEL[row.type] ?? row.type },
+    { key: "prefix", header: "앞자리", width: "20ch", mono: true, cell: (row) => `${row.prefix}…` },
+    { key: "created_at", header: "만든 날", width: "16ch", cell: (row) => time(row.created_at) },
+    { key: "last_used_at", header: "마지막 사용", width: "16ch", cell: (row) => time(row.last_used_at) },
+    {
+      key: "state",
+      header: "상태",
+      width: "12ch",
+      cell: (row) => <StatusBadge group="API 키" label={STATE_LABEL[row.state] ?? row.state} />,
+    },
+  ];
+  if (admin) issuedColumns.push({ key: "actions", header: "", width: "6ch", cell: (row) => <KeyMenu row={row} /> });
   return (
     <section
       id="consumer-folder"
@@ -255,6 +296,13 @@ function ConsumerFolder({ scan }: { scan: ConsumerFolderScan }) {
           caption="일꾼 폴더"
         />
       )}
+      {/* 폴더 파일이 아닌 연동 키 — 있을 때만 (ADR-0124 §3). 새로 만드는 단추는 없다. */}
+      {issued.length > 0 ? (
+        <>
+          <h3 className="mt-4 text-h3 font-semibold">콘솔에서 발급한 연동 키</h3>
+          <DataTable columns={issuedColumns} rows={issued} rowKey={(row) => row.key_id} caption="콘솔에서 발급한 연동 키" />
+        </>
+      ) : null}
     </section>
   );
 }

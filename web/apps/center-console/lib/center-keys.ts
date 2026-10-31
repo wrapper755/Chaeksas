@@ -1,5 +1,5 @@
 /**
- * CON-11 줄마다의 동작 — **그 줄의 키에** 할 수 있는 것만 낸다 (화면 문서 CON-11 「키 목록」 끝 칸).
+ * 키 줄마다의 동작 — **그 줄의 키에** 할 수 있는 것만 낸다 (화면 문서 CON-11 「키 동작」 — 동작은 그 키가 가리키는 화면에 있다, ADR-0124).
  *
  * 화면을 모르는 함수라 vitest가 잰다. 판정은 Center도 한다(폐기되지 않은 키는 409 `not_revoked`) —
  * 여기는 「할 수 없는 일을 보이지 않게」 하는 자리다. 어느 줄이든 할 일이 하나는 있다.
@@ -24,29 +24,62 @@ export function keyActions(row: Pick<CenterKeyInfo, "state" | "bound_to" | "enro
   return { actions };
 }
 
-/** 승인이 만드는 종류 (ADR-0092·0093, 일꾼은 C15) — CON-11 「승인으로 들인 키」 표. */
-const ENROLLED_TYPES = new Set(["bot_ui", "studio", "server_runner", "consumer"]);
-
-/**
- * CON-11의 두 표로 가른다 — 「연동 키」(「새 키...」가 만드는 것)와 「승인으로 들인 키」.
- * **종류로 가른다**(자동화로 발급한 PC 실행기용 키도 아래로 간다). 모르는 종류는 위로 — 사라지지 않게.
- */
-export function splitKeys<T extends Pick<CenterKeyInfo, "type">>(rows: T[]): { integration: T[]; enrolled: T[] } {
-  const integration: T[] = [];
-  const enrolled: T[] = [];
-  for (const row of rows) (ENROLLED_TYPES.has(row.type) ? enrolled : integration).push(row);
-  return { integration, enrolled };
-}
-
-/** 종류 표기 (CON-11 「종류」 열·필터). 필터의 고를 거리도 이 차례다. */
+/** 종류 표기 — 「콘솔에서 발급한 연동 키」 표의 「종류」 열. */
 export const TYPE_LABEL: Record<string, string> = {
-  bot_ui: "Bot용",
-  studio: "Studio용",
-  server_runner: "서버 실행기용",
-  consumer: "일꾼용",
   integration: "연동용",
   relay: "대리 답용",
 };
+
+/** 일꾼 폴더 줄의 키 종류 — 일꾼 줄은 일꾼용, 키 줄은 연동용·대리 답용 (ADR-0122·0123). */
+const FOLDER_TYPES: Record<string, string[]> = {
+  consumer: ["consumer"],
+  key: ["integration", "relay"],
+};
+
+/**
+ * 키 여럿에서 **그 대상의 지금 키** 하나를 고른다 — 사용 중인 것, 없으면 가장 최근에 만든 것.
+ * 폴더 파일이 바뀔 때마다 옛 키가 폐기된 채 남아 같은 이름이 여럿이다 (ADR-0123).
+ */
+export function currentKey<T extends Pick<CenterKeyInfo, "state" | "created_at">>(rows: T[]): T | null {
+  const active = rows.find((row) => row.state === "active");
+  if (active) return active;
+  return rows.reduce<T | null>((best, row) => (!best || row.created_at > best.created_at ? row : best), null);
+}
+
+/**
+ * 일꾼 폴더의 줄(`kind`·`id`)이 가리키는 키 (CON-07, ADR-0124 §2) — **이름·종류·앞자리 없음**으로 잇는다.
+ * 폴더 키는 원문을 몰라 앞자리가 비어 있다. 거둔 확장 줄처럼 키가 없는 줄은 `null`.
+ */
+export function folderKey<T extends Pick<CenterKeyInfo, "name" | "type" | "prefix" | "state" | "created_at">>(
+  item: { kind?: string; id?: string | null },
+  keys: T[],
+): T | null {
+  // `kind`가 없으면 일꾼 줄이다 (C7 `ConsumerFolderItem.kind`의 기본값).
+  const types = FOLDER_TYPES[item.kind ?? "consumer"];
+  if (!types || !item.id) return null;
+  return currentKey(keys.filter((key) => key.name === item.id && types.includes(key.type) && !key.prefix));
+}
+
+/**
+ * Bot·서버 실행기가 보고에 싣는 키 앞자리로 그 키를 찾는다 (CON-03·CON-12 상세의 「API 키」).
+ * 묶인 대상의 id는 기계 id라 화면의 id와 다르다 — 앞자리(16자)로 잇는다.
+ */
+export function keyByPrefix<T extends Pick<CenterKeyInfo, "type" | "prefix" | "state" | "created_at">>(
+  keys: T[],
+  type: string,
+  prefix: string | null | undefined,
+): T | null {
+  if (!prefix) return null;
+  return currentKey(keys.filter((key) => key.type === type && key.prefix === prefix));
+}
+
+/**
+ * 「콘솔에서 발급한 연동 키」 — 연동용·대리 답용인데 앞자리가 있는 것 (ADR-0123 전에 CON-11이 발급했다).
+ * 있을 때만 보인다 — 사라지면 끊을 길이 없다 (ADR-0124 §3).
+ */
+export function consoleIssuedKeys<T extends Pick<CenterKeyInfo, "type" | "prefix">>(keys: T[]): T[] {
+  return keys.filter((key) => Object.hasOwn(TYPE_LABEL, key.type) && Boolean(key.prefix));
+}
 
 /** 상태 표기 — `status_map`의 「API 키」 묶음과 같은 글이다. */
 export const STATE_LABEL: Record<string, string> = {
@@ -54,14 +87,3 @@ export const STATE_LABEL: Record<string, string> = {
   expired: "만료",
   revoked: "폐기됨",
 };
-
-/**
- * 주소의 필터(`?type=&state=`)에서 **아는 값만** 남긴다 — 모르는 글을 Center로 넘기지 않고
- * (빈 목록이 「키가 없다」로 읽힌다) 고르는 칸도 「(전체)」로 돌아간다.
- */
-export function keyFilter(query: { type?: string; state?: string }): { type?: string; state?: string } {
-  const found: { type?: string; state?: string } = {};
-  if (query.type && Object.hasOwn(TYPE_LABEL, query.type)) found.type = query.type;
-  if (query.state && Object.hasOwn(STATE_LABEL, query.state)) found.state = query.state;
-  return found;
-}
