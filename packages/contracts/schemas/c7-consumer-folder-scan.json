@@ -1,8 +1,8 @@
 {
   "$defs": {
-    "ExtensionFolderItem": {
+    "ConsumerFolderItem": {
       "additionalProperties": true,
-      "description": "확장 폴더의 파일 하나를 읽은 결과 (ADR-0121). 읽지 못했으면 `id`·`version`이 없다.\n\n`revoked`는 파일이 **폴더에서 빠져** 거둔 것이라 `file`이 없다. 일꾼이면 `id`가 일꾼 이름이다.",
+      "description": "일꾼 폴더의 한 줄 (ADR-0121). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.\n\n`revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼(파일이 빠졌다)이나, 맡은 일꾼이 없어진 외부 확장이다.",
       "properties": {
         "code": {
           "anyOf": [
@@ -41,7 +41,7 @@
           "title": "Id"
         },
         "kind": {
-          "default": "extension",
+          "default": "consumer",
           "title": "Kind",
           "type": "string"
         },
@@ -77,13 +77,13 @@
       "required": [
         "outcome"
       ],
-      "title": "ExtensionFolderItem",
+      "title": "ConsumerFolderItem",
       "type": "object"
     }
   },
-  "$id": "urn:chaeksas:contracts:c7-extension-folder-scan",
+  "$id": "urn:chaeksas:contracts:c7-consumer-folder-scan",
   "additionalProperties": true,
-  "description": "`GET /resources/extension-folder` — Center가 **마지막으로 뜰 때** 확장 폴더를 읽은 결과 (ADR-0121).",
+  "description": "`GET /resources/consumer-folder` — Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (ADR-0121).",
   "properties": {
     "configured": {
       "default": false,
@@ -104,7 +104,7 @@
     },
     "items": {
       "items": {
-        "$ref": "#/$defs/ExtensionFolderItem"
+        "$ref": "#/$defs/ConsumerFolderItem"
       },
       "title": "Items",
       "type": "array"
@@ -134,6 +134,6 @@
       "title": "Scanned At"
     }
   },
-  "title": "ExtensionFolderScan",
+  "title": "ConsumerFolderScan",
   "type": "object"
 }

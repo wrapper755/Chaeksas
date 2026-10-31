@@ -41,8 +41,8 @@
 
 | 종류 | 출처 | 갱신 |
 | --- | --- | --- |
-| 확장 | 내장·사내: 일꾼 manifest의 `extension` 필드와 실행하는 쪽의 보고(C4·C12 `extensions`). 외부: 서명된 정의 등록(C13) — 콘솔(API)로 올리거나 **Center가 뜰 때 확장 폴더에서 들인다**(ADR-0121) | 등록·보고·manifest 올림 때, Center가 뜰 때 |
-| 서비스 앱 | 내장·사내: 그 앱 id를 토픽으로 승인받은 **일꾼이 올린 manifest** (C15). 외부: 외부 확장 등록과 함께 생기고 작업 목록은 정의의 어댑터 작업에서 만든다 | 일꾼이 올릴 때 |
+| 확장 | 내장·사내: 일꾼 manifest의 `extension` 필드와 실행하는 쪽의 보고(C4·C12 `extensions`). 외부: **그 토픽의 일꾼이 올린 정의**(C15 `PUT …/consumers/self/extension`, Center가 서명 — C13, ADR-0121) | 보고·manifest·정의 올림 때, Center가 뜰 때(일꾼이 빠진 확장 철회) |
+| 서비스 앱 | 내장·사내: 그 앱 id를 토픽으로 맡은 **일꾼이 올린 manifest** (C15). 외부: 외부 확장 등록과 함께 생기고 작업 목록은 정의의 어댑터 작업에서 만든다 | 일꾼이 올릴 때 |
 | 확장 기여 자원 | **일꾼이 올린 카탈로그** (C15 `PUT …/consumers/self/catalogs/{type}`) — 내장·사내는 서비스 앱이, 외부는 어댑터 일꾼이 정의의 `contributes.resources[].catalog_url`을 읽어 올린다. Center가 외부 주소를 읽지 않는다 | 올릴 때. `revision`이 같으면 다시 쓰지 않는다 |
 | 런타임 | PC 실행기 등록·하트비트(C4), 서버 실행기(C12) | 하트비트 때 |
 
@@ -56,12 +56,12 @@
 | --- | --- | --- |
 | `GET /resources?type=extension\|service_app\|contributed\|runtime[&resource_type=<종류>]` | 읽기 | 목록 |
 | `GET /resources/extensions/{id}` | 읽기 | 확장 하나 (C13) |
-| `GET /resources/extension-folder` | 읽기 | Center가 **마지막으로 뜰 때** 확장 폴더를 읽은 결과 (`ExtensionFolderScan`, ADR-0121) |
+| `GET /resources/consumer-folder` | 읽기 | Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (`ConsumerFolderScan`, ADR-0121) |
 | `GET /resources/service-apps/{app_id}` | 읽기 | 서비스 앱 하나 (manifest 전체) |
 | `GET /resources/contributed/{resource_type}/{id}` | 읽기 | 확장 기여 자원 하나 |
 | `GET /signing-keys` | **없음** (공개키다) | 믿는 키 목록 (C2 `AdminKey[]` — 하트비트의 `admin_keys`와 같은 것). 어댑터 일꾼이 외부 확장 봉투를 다시 검증하려고 받는다 |
 
-외부 확장의 등록·해제는 C13 경로(관리자만 — Center가 봉투에 서명한다)로 한다. 서비스 앱을 **등록하는 길은 없다** — 일꾼 승인(C5 `POST /enrollments/{id}/approve`, `type: consumer`)이 그 자리다.
+외부 확장은 **그 토픽의 일꾼이 정의를 올린다**(C15 `PUT …/consumers/self/extension` — Center가 봉투에 서명한다, ADR-0121). 콘솔·API로 등록·해제하는 길은 없다. 서비스 앱을 **등록하는 길도 없다** — 일꾼 폴더의 일꾼 파일(C15 §일꾼 들이기)이 그 자리다.
 
 ## 모델
 
@@ -77,34 +77,31 @@
 | `status` | 서버 부분 상태. 값은 `ServiceAppResource.status`와 같고 **서버 부분이 아예 없으면 `n/a`**다. 그 토픽을 가져가는 일꾼으로 본다 (§리소스 모으는 방식) |
 | `status_reasons`, `checked_at`? | 상태의 사유와 마지막으로 본 때. 서버 부분이 없으면 비어 있다 |
 | `definition`, `envelope` | 외부 확장만. 실행하는 쪽이 받아 검증한다 |
-| `source`? | 외부 확장만 — `console`(콘솔·API로 올렸다) / `folder`(Center가 뜰 때 확장 폴더에서 들인 **기본 확장**, ADR-0121 — 콘솔이 등록·해제하지 않는다). 같은 판을 두 길로 들이면 **처음 들인 쪽**이다 |
 
-### ExtensionFolderScan (확장 폴더)
+### ConsumerFolderScan (일꾼 폴더)
 
-확장 폴더(`CHK_CENTER__EXTENSIONS_DIR`, 기본 `<데이터>/extensions`)의 기본 확장(`*.extension.json`)과 승인 없는 일꾼(`*.consumer.json`, C15)을 Center가 뜰 때 한 번 읽은 결과다 (ADR-0121). 확장을 들이는 관문은 C13 등록과 **같다**(크기·모양·E1~E4 → Center 서명). 결과는 메모리에만 있고 다시 뜨면 새로 읽는다.
+일꾼 폴더(`CHK_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)의 일꾼 파일(`<이름>.consumer.json`, C15 §일꾼 들이기)을 Center가 뜰 때 한 번 읽은 결과다 (ADR-0121). 맡은 일꾼이 없어져 거둔 외부 확장도 함께 싣는다. 결과는 메모리에만 있고 다시 뜨면 새로 읽는다.
 
 | 필드 | 뜻 |
 | --- | --- |
 | `configured` | 폴더가 있나(사람이 적었으면 늘 `true`). `false`면 나머지는 비어 있다 |
 | `dir`?, `scanned_at`? | 읽은 폴더와 때 |
 | `problem`? | 폴더 자체를 읽지 못한 까닭(없음·폴더가 아님). 있으면 `items`는 비어 있다 |
-| `items[]` | 하나마다 `{kind, file?, id?, version?, outcome, code?, message?}`. `kind`: `extension` / `consumer`(`id`가 일꾼 이름). `outcome`: `registered`(새로 들였다·바꿨다) / `unchanged`(그대로) / `skipped`(`older_than_registered` — 더 높은 판이 이미 등록돼 있다) / `refused`(C13 등록이 돌려주는 코드 그대로, 읽지 못하면 `unreadable`, 일꾼은 `input_invalid`·`token_revoked`·`token_in_use`) / `revoked`(파일이 **폴더에서 빠져** 거뒀다 — `file`이 없다) |
+| `items[]` | 하나마다 `{kind, file?, id?, version?, outcome, code?, message?}`. `kind`: `consumer`(`id`가 일꾼 이름) / `extension`(맡은 일꾼이 없어 거둔 외부 확장). `outcome`: `registered`(들였다·바꿨다) / `unchanged`(그대로) / `refused`(`unreadable`·`input_invalid`·`token_revoked`·`token_in_use`) / `revoked`(**빠져서** 거뒀다 — `file`이 없다) |
 
 ```json
 {
   "configured": true,
-  "dir": "/extensions",
+  "dir": "/consumers",
   "scanned_at": "2026-10-31T09:00:00+09:00",
   "items": [
-    {"kind": "extension", "file": "external.extension.json", "id": "external", "version": "0.1.0", "outcome": "registered"},
-    {"kind": "consumer", "file": "external.consumer.json", "id": "worker", "outcome": "unchanged"},
+    {"kind": "consumer", "file": "worker.consumer.json", "id": "worker", "outcome": "unchanged"},
+    {"kind": "consumer", "id": "old-worker", "outcome": "revoked", "message": "폴더에서 빠져 키를 폐기했습니다"},
     {"kind": "extension", "id": "ext-ocr", "version": "1.0.0", "outcome": "revoked",
-     "message": "폴더에서 빠져 등록을 해제했습니다"}
+     "message": "맡은 일꾼이 없어 등록을 해제했습니다"}
   ]
 }
 ```
-
-외부 확장의 상태도 **Center가 두드리지 않는다** — 그 토픽의 일꾼(어댑터 일꾼)이 말한다 (§리소스 모으는 방식).
 
 ### ServiceAppResource
 
@@ -197,7 +194,6 @@ CenterKeyInfo 필드:
 | 404 | `not_found` | |
 | 409 | `not_revoked` | 폐기되지 않은 키를 지우려 함 (`POST /center-keys/{key_id}/purge`) |
 | 409 | `id_conflict` | 같은 `id`가 이미 있음 (확장과 서비스 앱이 같은 이름 공간) |
-| 409 | `managed_by_folder` | 확장 폴더가 들인 기본 확장을 콘솔·API로 등록·해제하려 함 (ADR-0121 — 폴더의 파일을 바꾸고 Center를 다시 띄운다) |
 | 422 | `manifest_invalid` | 일꾼이 올린 manifest가 C11과 맞지 않음 |
 | 422 | `host_not_allowed` | 외부 주소가 `allowed_hosts` 밖이거나 사설망 |
 | 422 | `key_type_unknown` | |
@@ -210,7 +206,7 @@ CenterKeyInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-31 | 1 | 확장 폴더 — `GET /resources/extension-folder`(`ExtensionFolderScan` — 기본 확장과 승인 없는 일꾼, 빠지면 `revoked`), `ExtensionResource.source`(`console`·`folder`). 오류 409 `managed_by_folder`. 선택 칸이라 schema는 그대로다 | [0121](../decisions/0121-extension-folder.md) |
+| 2026-10-31 | 1 | 일꾼 폴더 — `GET /resources/consumer-folder`(`ConsumerFolderScan`). 외부 확장의 출처가 **일꾼이 올린 정의**가 되었다(C15 `PUT …/self/extension`) — 등록·해제 경로는 C13에서 걷었다. 선택 칸이라 schema는 그대로다 | [0121](../decisions/0121-extension-folder.md) |
 | 2026-10-31 | 1 | 칸은 그대로다. 확장 기여 자원의 예(UI 화면)를 걷고 `RuntimeResource.versions`에서 `worker`를 뺐다 — UI 자동화 확장이 없다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-29 | 1 | **Center는 바깥 기능을 읽으러 가지 않는다** — 서비스 앱 등록·주소·해제·`/manifest`·`/healthz`·`trust` 읽기, 외부 앱 키(운영·시험용), 외부 확장 주소 덮어쓰기, 어댑터 `health` 두드리기를 걷었다. 서비스 앱·기여 자원은 일꾼이 올리고 상태는 토픽이 말한다(`consumers` 칸). `base_url`은 빈다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | §외부 확장 주소 — `PUT/DELETE …/extensions/{id}/address`, `ExtensionResource.address{base_url, set_at, set_by}`, 사유 `address_outside_definition`. 선택 칸이라 schema는 그대로다 | [0097](../decisions/0097-external-extension-address-from-center.md) |

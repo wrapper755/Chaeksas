@@ -292,7 +292,7 @@ MIGRATIONS: tuple[Step, ...] = (
     ),
     Step(
         20,
-        "외부 확장이 어디서 들어왔나 — 콘솔(NULL)·확장 폴더(`folder`) (C7 `ExtensionResource.source`, ADR-0121)",
+        "외부 확장이 어디서 들어왔나 — 콘솔(NULL)·일꾼(`worker`, 맡은 일꾼이 빠지면 거둔다) (ADR-0121)",
         ("ALTER TABLE extensions ADD COLUMN source TEXT",),
     ),
 )

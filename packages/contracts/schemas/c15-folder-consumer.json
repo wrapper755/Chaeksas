@@ -204,7 +204,7 @@
   },
   "$id": "urn:chaeksas:contracts:c15-folder-consumer",
   "additionalProperties": true,
-  "description": "확장 폴더의 `*.consumer.json` — **승인 없이 들이는 일꾼** (C15 §승인 없는 일꾼, ADR-0121).\n\n배포가 확장 정의와 함께 복사한다. Center는 토큰 **원문을 모른다** — 해시만 받고, 일꾼은 원문을\n`Authorization: Bearer`로 싣는다. 토픽은 여기 적은 것으로 고정된다. 만료·회전이 없다(공개키가 없다).",
+  "description": "일꾼 폴더의 `<이름>.consumer.json` — **일꾼이 들어오는 유일한 길** (C15 §일꾼 들이기, ADR-0121).\n\n배포가 Center 쪽 일꾼 폴더에 복사한다. Center는 토큰 **원문을 모른다** — 해시만 받고, 일꾼은 원문을\n`Authorization: Bearer`로 싣는다. 토픽은 여기 적은 것으로 고정된다. 만료·회전이 없다(공개키가 없다).",
   "properties": {
     "manifests": {
       "items": {

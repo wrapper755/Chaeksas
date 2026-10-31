@@ -25,7 +25,7 @@
 - 방식: JSON 봉투.
   - 승인 봉투: C5 `PUT /packages/{id}/{version}/signature`를 관리자가 부르면 Center가 짓는다. Center는 패키지를 내려줄 때 이 봉투를 zip 안 `SIGNATURE` 파일로 **넣어서** 준다. `content_hash`는 `SIGNATURE`를 빼고 계산하므로 해시는 바뀌지 않는다.
   - 배포·철회 봉투: C5 `POST·DELETE /deployments`에서 Center가 짓는다. 실행하는 쪽에는 C4 하트비트 응답 `deployments[]`로 전달한다.
-  - 외부 확장 봉투: C7 `POST·DELETE /resources/extensions`에서 Center가 짓는다 (C13 E6).
+  - 외부 확장 봉투: 일꾼이 정의를 올릴 때(C15 `PUT …/consumers/self/extension`)와 맡은 일꾼이 빠져 거둘 때 Center가 짓는다 (C13 E6, ADR-0121).
   - **바깥에서 서명한 봉투를 받는 길은 없다.**
 - 인증: 관리자(계정 세션 또는 관리자 토큰)만 부를 수 있다 (C5 권한표).
 - 멱등성:

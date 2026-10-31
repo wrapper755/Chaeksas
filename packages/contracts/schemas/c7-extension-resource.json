@@ -140,18 +140,6 @@
       "default": null,
       "title": "Service App Id"
     },
-    "source": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Source"
-    },
     "status": {
       "default": "n/a",
       "title": "Status",

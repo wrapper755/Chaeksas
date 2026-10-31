@@ -251,17 +251,10 @@ def extensions(store: Store, *, probe: bool = True) -> list[ExtensionResource]:
                 checked_at=checked,
                 definition=definition,
                 envelope=json.loads(registered["envelope_json"]) if registered is not None else None,
-                source=_source_of(registered),
             )
         )
     return out
 
-
-def _source_of(row: Any) -> str | None:
-    """외부 확장 줄이 어디서 들어왔나 (C7, ADR-0121). 비어 있으면 콘솔(API) 등록이다."""
-    if row is None:
-        return None
-    return str(row["source"] or "console")
 
 
 def _protocol_of(definition: dict[str, Any] | None, app: ServiceAppResource | None) -> str | None:
@@ -465,11 +458,11 @@ def _refuse(problems: list[Any], *, status: int = 422) -> None:
 def register_extension(
     store: Store, found: Caller, raw: dict[str, Any], *, source: str | None = None
 ) -> tuple[ExtensionResource, bool]:
-    """`POST /resources/extensions` — 정의를 받아 **Center가 `extension` 봉투로 서명한다** (C13 E6, ADR-0090).
+    """외부 확장 정의를 받아 **Center가 `extension` 봉투로 서명한다** (C13 E6, ADR-0090·0121).
 
-    관문은 관리자 계정이다. 검사(E1·E2·E3·E4)를 모두 지난 정의에만 서명한다 — 정의가 BPM 프로세스의
-    키를 어느 주소로 보낼지 정하므로 배포와 같은 관문이다. 봉투는 정의와 함께 그대로 두고
-    실행하는 쪽이 다시 검증한다(E6). 확장 폴더도 **이 함수 하나**를 지난다 — `source="folder"` (ADR-0121).
+    부르는 쪽은 그 토픽을 맡은 **일꾼**이다(`PUT /consumers/self/extension` — 토픽 대조는 그쪽이 한다).
+    검사(E1·E2·E3·E4)를 모두 지난 정의에만 서명한다 — 정의가 외부 앱을 부르는 길을 정하므로 배포와 같은
+    관문이다. 봉투는 정의와 함께 그대로 두고 실행하는 쪽이 다시 검증한다(E6).
     """
     from chaeksas.center import signer  # noqa: PLC0415
     from chaeksas.center.api.signing import admin_keys  # noqa: PLC0415 — 순환 import를 피한다
@@ -485,8 +478,6 @@ def register_extension(
     definition = raw.get("definition")
     if not isinstance(definition, dict):
         raise ApiError(422, "input_invalid", "`definition`에 확장 정의를 보내세요")
-    if source != "folder" and isinstance(definition.get("id"), str):
-        refuse_folder_managed(store, definition["id"])
 
     _refuse(check_size(json.dumps(definition, ensure_ascii=False).encode("utf-8")), status=413)
     try:
@@ -503,6 +494,13 @@ def register_extension(
 
     computed = definition_hash(definition)
     body = json.dumps(definition, ensure_ascii=False, sort_keys=True)
+
+    # 이미 더 높은 판이 있으면 받지 않는다 — 옛 일꾼이 다시 떠도 지금 판이 내려가지 않는다 (ADR-0121).
+    newer = _newer_registered(store, manifest.id, manifest.version)
+    if newer is not None:
+        raise ApiError(
+            409, "older_than_registered", f"{manifest.id}@{newer}이 이미 등록돼 있어 {manifest.version}은 받지 않는다"
+        )
 
     before = store.row("SELECT * FROM extensions WHERE id = ? AND version = ?", (manifest.id, manifest.version))
     if before is not None:
@@ -529,29 +527,25 @@ def register_extension(
     return extension(store, manifest.id), True
 
 
-def folder_managed(store: Store, extension_id: str) -> bool:
-    """확장 폴더가 들인 확장인가 (철회되지 않은 `folder` 줄이 있다) — 콘솔이 등록·해제하지 않는다 (ADR-0121)."""
-    return (
-        store.row(
-            "SELECT 1 FROM extensions WHERE id = ? AND source = 'folder' AND revoked_json IS NULL", (extension_id,)
-        )
-        is not None
-    )
+def _newer_registered(store: Store, ext_id: str, version: str) -> str | None:
+    """철회되지 않은 판 가운데 `version`보다 높은 것 (가장 높은 것). 판을 읽을 수 없으면 비교하지 않는다."""
+    from chaeksas.contracts._semver import InvalidVersion, compare  # noqa: PLC0415
+
+    best: str | None = None
+    for row in store.rows("SELECT version FROM extensions WHERE id = ? AND revoked_json IS NULL", (ext_id,)):
+        other = str(row["version"])
+        try:
+            if compare(other, version) > 0 and (best is None or compare(other, best) > 0):
+                best = other
+        except InvalidVersion:
+            continue
+    return best
 
 
-def refuse_folder_managed(store: Store, extension_id: str) -> None:
-    if folder_managed(store, extension_id):
-        raise ApiError(
-            409,
-            "managed_by_folder",
-            f"{extension_id}은 확장 폴더가 들인 기본 확장이다 — 폴더의 파일을 바꾸고 Center를 다시 띄우세요",
-        )
+def revoke_extension(store: Store, extension_id: str, version: str, *, reason: str, by: str) -> ExtensionResource:
+    """등록 해제 — Center가 `extension_revoke` 봉투를 지어 서명한다 (C13·C2, ADR-0090).
 
-
-def revoke_extension(
-    store: Store, extension_id: str, version: str, *, reason: str, by: str, from_folder: bool = False
-) -> ExtensionResource:
-    """`DELETE /resources/extensions` — Center가 `extension_revoke` 봉투를 지어 서명한다 (C13·C2, ADR-0090).
+    콘솔·API 길은 없다 — 맡은 일꾼이 일꾼 폴더에서 빠지면 그 폴더가 부른다 (ADR-0121).
 
     **쓰는 BPM 프로세스가 있어도 막지 않는다** (C13) — 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라,
     쓰는 쪽이 있을 때 더 거둬야 한다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).
@@ -561,9 +555,6 @@ def revoke_extension(
     found = store.row("SELECT * FROM extensions WHERE id = ? AND version = ?", (extension_id, version))
     if found is None:
         raise ApiError(404, "not_found", f"등록된 확장이 없다: {extension_id}@{version}")
-    if not from_folder:
-        # 폴더가 들인 기본 확장은 폴더에서 빼고 다시 띄우면 거둔다 (ADR-0121) — 콘솔이 거두지 않는다.
-        refuse_folder_managed(store, extension_id)
     if not found["revoked_json"]:
         envelope = signer.seal(
             store,
@@ -602,7 +593,6 @@ def _revoked_info(store: Store, extension_id: str, version: str) -> ExtensionRes
         status="n/a",
         definition=definition,
         envelope=json.loads(row["envelope_json"]),
-        source=_source_of(row),
     )
 
 

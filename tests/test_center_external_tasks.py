@@ -38,7 +38,6 @@ from chaeksas.center.auth import Caller
 from chaeksas.center.errors import ApiError
 from chaeksas.center.settings import Settings as CenterSettings
 from chaeksas.center.storage import Store
-from chaeksas.contracts.enrollment import EnrollStatus, new_keypair, open_sealed
 from chaeksas.contracts.external_task import FetchRequest
 from chaeksas.contracts.hashing import MANIFEST_NAME, content_hash_zip
 
@@ -164,32 +163,19 @@ def consumer(
     *,
     seed: str = "c",
     topics: list[str] | None = None,
-    grant: list[str] | None = None,
     manifest: dict[str, Any] | None = MANIFEST,
 ) -> str:
-    """일꾼 하나를 들인다 — 요청 → 승인 → 봉한 토큰을 연다. 돌려주는 것은 일꾼 토큰이다."""
-    private, public = new_keypair()
-    body: dict[str, Any] = {
-        "schema": 1,
-        "machine_id": (seed * 64)[:64] if seed in "0123456789abcdef" else "c" * 64,
-        "name": f"일꾼 {seed}",
-        "os": "linux",
-        "versions": {"consumer": "0.1.0"},
-        "public_key": public,
-        "topics": topics or [TOPIC],
-    }
-    if manifest is not None:
-        body["manifests"] = [manifest]
-    made = center.post("/api/v1/consumers/enroll", json=body)
-    assert made.status_code == 201, made.text
-    enrollment_id = made.json()["enrollment_id"]
-    approved = center.post(
-        f"/api/v1/enrollments/{enrollment_id}/approve", json={"topics": grant} if grant else {}, headers=ADMIN
+    """일꾼 하나를 들인다 — 일꾼 폴더가 하는 일 그대로 (ADR-0121). 돌려주는 것은 일꾼 토큰이다."""
+    from consumers import enroll  # noqa: PLC0415
+
+    tokens = enroll(
+        center,
+        topics=topics or [TOPIC],
+        manifests=[manifest] if manifest is not None else [],
+        name=f"일꾼 {seed}",
+        machine=f"worker-{seed}",
     )
-    assert approved.status_code == 200, approved.text
-    status = EnrollStatus.model_validate(center.get(f"/api/v1/consumers/enroll/{enrollment_id}").json())
-    assert status.state == "approved" and status.sealed_key is not None
-    return open_sealed(private, status.sealed_key, salt=enrollment_id)
+    return str(tokens.token())
 
 
 def task_body(**over: Any) -> dict[str, Any]:
@@ -352,33 +338,15 @@ def test_an_integration_key_cannot_post(center: TestClient) -> None:
     assert post(center, key).status_code == 403
 
 
-# ─────────────────────────── 일꾼 들이기 ───────────────────────────
+# ─────────────────────────── 일꾼 (일꾼 폴더로 들인다, ADR-0121) ───────────────────────────
 
 
-def test_topics_are_granted_only_within_what_was_asked(center: TestClient, store: Store) -> None:
-    token = consumer(center, topics=[TOPIC, "nowview-sc02"], grant=["nowview-sc02"])
+def test_topics_are_fixed_by_the_worker_file(center: TestClient) -> None:
+    token = consumer(center, topics=["nowview-sc02"])
     refused = center.post(
         "/api/v1/consumers/fetch", json={"topics": [TOPIC], "wait_s": 0}, headers=bearer(token)
     )
     assert refused.status_code == 403 and refused.json()["code"] == "topic_not_granted"
-
-    _, public = new_keypair()
-    made = center.post(
-        "/api/v1/consumers/enroll",
-        json={
-            "schema": 1,
-            "machine_id": "d" * 64,
-            "name": "일꾼 d",
-            "os": "linux",
-            "versions": {"consumer": "0.1.0"},
-            "public_key": public,
-            "topics": [TOPIC],
-        },
-    )
-    outside = center.post(
-        f"/api/v1/enrollments/{made.json()['enrollment_id']}/approve", json={"topics": ["other"]}, headers=ADMIN
-    )
-    assert outside.status_code == 422 and outside.json()["code"] == "topic_not_requested"
 
 
 def test_a_console_lists_consumers_and_topics(center: TestClient, field: str) -> None:

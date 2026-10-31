@@ -6,7 +6,6 @@ import type { FeatureRow } from "@/lib/features";
 import { Shell } from "@/components/Shell";
 import { loadFeatures } from "../../load";
 import { time } from "../../page";
-import { RevokeExtension } from "../../tools";
 
 /**
  * CON-07 상세 (기능 하나). 맨 위는 「쓸 수 있나」와 「할 일」이고, 그 아래에는 **사람이 판단하거나
@@ -27,20 +26,14 @@ export default async function FeaturePage({
   const wanted = decodeURIComponent(key);
 
   let row: FeatureRow | null = null;
-  let version = "";
-  let source: string | undefined;
   let failure: string | null = null;
   try {
     const got = await loadFeatures();
     row = got.rows.find((one) => one.key === wanted) ?? null;
-    const ext = got.input.extensions.find((one) => one.id === wanted);
-    version = ext?.version ?? "";
-    source = ext?.source ?? undefined;
     if (!row) failure = "그런 기능이 없습니다.";
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
-  const admin = found.mode === "admin";
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/resources">
@@ -81,8 +74,8 @@ export default async function FeaturePage({
                     <span className="ml-2 text-caption text-text-muted">마지막으로 가져간 때 {time(row.checkedAt)}</span>
                   ) : null}
                   {row.consumers === 0 ? (
-                    <Link className="ml-2 underline" href="/resources#consumer-enrollments">
-                      일꾼 승인 대기
+                    <Link className="ml-2 underline" href="/resources#consumer-folder">
+                      일꾼 폴더
                     </Link>
                   ) : null}
                 </dd>
@@ -102,27 +95,10 @@ export default async function FeaturePage({
                 </dd>
               </>
             ) : null}
-            {row.external && source ? (
-              <>
-                <dt className="text-text-muted">출처</dt>
-                <dd>{source === "folder" ? "확장 폴더 (기본 확장)" : "콘솔 (「기능 추가 (외부)」)"}</dd>
-              </>
-            ) : null}
             <dt className="text-text-muted">id</dt>
             <dd className="font-mono text-caption">{row.id}</dd>
           </dl>
 
-          {admin && row.external ? (
-            <section className="flex flex-col gap-2">
-              <h2 className="text-h2 font-semibold">등록 해제</h2>
-              {source === "folder" ? (
-                // 기본 확장은 폴더가 원본이다 — 콘솔이 거두지 않는다 (ADR-0121).
-                <p className="text-body text-text-muted">확장 폴더에서 파일을 빼고 Center를 다시 띄우면 해제됩니다.</p>
-              ) : (
-                <RevokeExtension extensionId={row.id} version={version} users={row.usedBy.length} />
-              )}
-            </section>
-          ) : null}
         </div>
       ) : null}
     </Shell>

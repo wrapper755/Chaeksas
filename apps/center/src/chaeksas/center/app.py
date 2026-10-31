@@ -15,7 +15,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, Response
 
-from chaeksas.center import accounts, extension_folder, keys, signer
+from chaeksas.center import accounts, consumer_folder, keys, signer
 from chaeksas.center.api import (
     approvals,
     bot_ui,
@@ -60,7 +60,6 @@ from chaeksas.contracts.center_api import (
     LIST_LIMIT_DEFAULT,
     DeploymentRequest,
     DeploymentRevokeRequest,
-    ExtensionRevokeRequest,
     RevokeRequest,
 )
 from chaeksas.contracts.center_keys import CenterKeyCreated, CenterKeyCreateRequest
@@ -92,9 +91,10 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             data_dir=data_folder,
         )
 
-    # 확장 폴더도 **뜰 때** 들인다 (ADR-0121) — 서명 키가 갖춰진 뒤에. 잘못된 파일은 사유만 남고 Center는 뜬다.
-    app.state.extension_folder = extension_folder.scan(
-        app.state.store, settings.extensions_dir, required=settings.extensions_dir_explicit
+    # 일꾼 폴더도 **뜰 때** 들인다 (ADR-0121) — 서명 키가 갖춰진 뒤에(거둘 확장에 서명한다). 잘못된 파일은
+    # 사유만 남고 Center는 뜬다.
+    app.state.consumer_folder = consumer_folder.scan(
+        app.state.store, settings.consumers_dir, required=settings.consumers_dir_explicit
     )
 
     def authenticate(request: Request) -> Caller:
@@ -452,11 +452,11 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         require_read(authenticate(request))
         return resources.contributed_resource(app.state.store, resource_type, resource_id)
 
-    @app.get(f"{API}/resources/extension-folder")
-    def get_extension_folder(request: Request) -> Any:
-        """Center가 마지막으로 뜰 때 확장 폴더를 읽은 결과 (C7, ADR-0121)."""
+    @app.get(f"{API}/resources/consumer-folder")
+    def get_consumer_folder(request: Request) -> Any:
+        """Center가 마지막으로 뜰 때 일꾼 폴더를 읽은 결과 (C7, ADR-0121)."""
         require_read(authenticate(request))
-        return app.state.extension_folder.to_json_dict()
+        return app.state.consumer_folder.to_json_dict()
 
     @app.get(f"{API}/resources/extensions/{{extension_id}}")
     def get_extension(request: Request, extension_id: str) -> Any:
@@ -467,22 +467,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def get_service_app(request: Request, app_id: str) -> Any:
         require_read(authenticate(request))
         return resources.service_app(app.state.store, app_id)
-
-    @app.post(f"{API}/resources/extensions")
-    async def register_extension(request: Request) -> Any:
-        """외부 확장 등록. 검사를 지나면 Center가 `extension` 봉투로 서명한다 (C13 E6, ADR-0090)."""
-        found = require_admin(authenticate(request))
-        info, created = resources.register_extension(app.state.store, found, await _json(request))
-        return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
-
-    @app.delete(f"{API}/resources/extensions")
-    async def revoke_extension(request: Request) -> Any:
-        """등록 해제 (C13). Center가 `extension_revoke` 봉투로 서명한다. **되살릴 수 없다.**"""
-        found = require_admin(authenticate(request))
-        wanted = _model(ExtensionRevokeRequest, await _json(request))
-        return resources.revoke_extension(
-            app.state.store, wanted.id, wanted.version, reason=wanted.reason, by=found.actor
-        )
 
     @app.get(f"{API}/signing-keys")
     def public_signing_keys() -> Any:

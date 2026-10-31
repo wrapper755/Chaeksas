@@ -32,12 +32,10 @@ KNOWN_RESOURCE_TYPES = frozenset({"extension", "service_app", "contributed", "ru
 KNOWN_SERVICE_APP_STATUSES = frozenset({"ok", "degraded", "unreachable", "unknown"})
 KNOWN_EXTENSION_TIERS = frozenset({"builtin", "internal", "external"})  # C13
 KNOWN_PROTOCOLS = frozenset({"chk-c11", "http-adapter"})  # 없으면 클라이언트 기여만
-#: 외부 확장이 어디서 들어왔나 (`ExtensionResource.source`, ADR-0121).
-KNOWN_EXTENSION_SOURCES = frozenset({"console", "folder"})
-#: 확장 폴더의 파일 하나를 읽은 결과 (`ExtensionFolderItem.outcome`, ADR-0121).
-KNOWN_FOLDER_OUTCOMES = frozenset({"registered", "unchanged", "skipped", "refused", "revoked"})
-#: 확장 폴더가 다루는 것 (`ExtensionFolderItem.kind`) — 확장 정의(`*.extension.json`)와 일꾼(`*.consumer.json`).
-KNOWN_FOLDER_KINDS = frozenset({"extension", "consumer"})
+#: 일꾼 폴더의 한 줄 결과 (`ConsumerFolderItem.outcome`, ADR-0121).
+KNOWN_FOLDER_OUTCOMES = frozenset({"registered", "unchanged", "refused", "revoked"})
+#: 일꾼 폴더가 다루는 것 (`ConsumerFolderItem.kind`) — 일꾼과, 맡은 일꾼이 없어 거둔 외부 확장.
+KNOWN_FOLDER_KINDS = frozenset({"consumer", "extension"})
 # 수행 모드 값은 C11이 소유한다 (`service_app.MODES`).
 
 #: 누락 검사 결과의 `type`·`reason` (C7 「누락 검사」 표).
@@ -87,36 +85,34 @@ class ExtensionResource(ContractModel):
     # 외부 확장만 — 실행하는 쪽이 받아 검증한다 (C2 `extension` 봉투).
     definition: dict[str, Any] | None = None
     envelope: dict[str, Any] | None = None
-    #: 외부 확장만 — 콘솔(API)로 올렸나(`console`), Center가 뜰 때 확장 폴더에서 들였나(`folder`) (ADR-0121).
-    source: str | None = None  # KNOWN_EXTENSION_SOURCES
 
 
-class ExtensionFolderItem(ContractModel):
-    """확장 폴더의 파일 하나를 읽은 결과 (ADR-0121). 읽지 못했으면 `id`·`version`이 없다.
+class ConsumerFolderItem(ContractModel):
+    """일꾼 폴더의 한 줄 (ADR-0121). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.
 
-    `revoked`는 파일이 **폴더에서 빠져** 거둔 것이라 `file`이 없다. 일꾼이면 `id`가 일꾼 이름이다.
+    `revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼(파일이 빠졌다)이나, 맡은 일꾼이 없어진 외부 확장이다.
     """
 
-    kind: str = "extension"  # KNOWN_FOLDER_KINDS
+    kind: str = "consumer"  # KNOWN_FOLDER_KINDS
     file: str | None = None
     id: str | None = None
     version: str | None = None
     outcome: str  # KNOWN_FOLDER_OUTCOMES
-    #: `skipped`·`refused`의 까닭 — 콘솔 등록이 돌려주는 것과 같은 코드다. 읽지 못하면 `unreadable`.
+    #: `refused`의 까닭 — `unreadable`·`input_invalid`·`token_revoked`·`token_in_use`.
     code: str | None = None
     message: str | None = None
 
 
-class ExtensionFolderScan(ContractModel):
-    """`GET /resources/extension-folder` — Center가 **마지막으로 뜰 때** 확장 폴더를 읽은 결과 (ADR-0121)."""
+class ConsumerFolderScan(ContractModel):
+    """`GET /resources/consumer-folder` — Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (ADR-0121)."""
 
-    #: `CHK_CENTER__EXTENSIONS_DIR`가 있나. 없으면 나머지는 비어 있다.
+    #: 폴더가 있나(사람이 `CHK_CENTER__CONSUMERS_DIR`를 적었으면 늘 `true`). 없으면 나머지는 비어 있다.
     configured: bool = False
     dir: str | None = None
     scanned_at: Timestamp | None = None
     #: 폴더 자체를 읽지 못한 까닭 (없음·폴더가 아님). 있으면 `items`는 비어 있다.
     problem: str | None = None
-    items: list[ExtensionFolderItem] = Field(default_factory=list)
+    items: list[ConsumerFolderItem] = Field(default_factory=list)
 
 
 class ServiceAppResource(ContractModel):

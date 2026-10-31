@@ -334,14 +334,6 @@ class RevokeRequest(ContractModel):
     reason: str = "관리자 철회"
 
 
-class ExtensionRevokeRequest(ContractModel):
-    """`DELETE /resources/extensions` — 관리자만 (C7·C13). 그 판을 쓰는 BPM 프로세스는 실행 불가가 된다."""
-
-    id: str
-    version: str
-    reason: str = "관리자 철회"
-
-
 def validate_deployment(
     envelope: Envelope,
     *,

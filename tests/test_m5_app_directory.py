@@ -544,8 +544,8 @@ def test_the_runner_calls_the_external_app_through_the_adapter_consumer(
     import httpx  # noqa: PLC0415
     from consumers import enroll, serve, start  # noqa: PLC0415
 
-    from chaeksas.adapter_consumer.adapter import AdapterService, ext_env  # noqa: PLC0415
-    from chaeksas.adapter_consumer.main import load_definitions  # noqa: PLC0415
+    from chaeksas.adapter_consumer.adapter import ext_env  # noqa: PLC0415
+    from chaeksas.adapter_consumer.main import service_of  # noqa: PLC0415
     from chaeksas.bot_ui.runner_main import Runner  # noqa: PLC0415
     from chaeksas.core.engine import State  # noqa: PLC0415
     from chaeksas.core.packages import InstalledBot  # noqa: PLC0415
@@ -562,14 +562,12 @@ def test_the_runner_calls_the_external_app_through_the_adapter_consumer(
     url, server, thread = serve(app)
     try:
         with httpx.Client(base_url=url, timeout=30) as http:
-            assert register(http, found).status_code == 201
             tokens = enroll(http, topics=[APP], folder=tmp_path / "adapter")
             studio = http.post("/api/v1/center-keys", json={"name": "설계자", "type": "studio"}, headers=ADMIN)
             studio_key = str(studio.json()["key"])
-            [loaded] = load_definitions(url, str(tokens.token()), [APP], client=http)
-        service = AdapterService(
-            definition=loaded.definition,
-            environ={ext_env(APP, "KEY"): "ocr-secret-1", "CHK_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"},
+        # 어댑터 일꾼이 **제 정의를 들고 있다가** 뜰 때 올린다 (ADR-0121) — `start()`의 `publish`가 올린다.
+        service = service_of(
+            found, environ={ext_env(APP, "KEY"): "ocr-secret-1", "CHK_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"}
         )
         _, stop = start([service], center_url=url, tokens=tokens)
         try:

@@ -19,7 +19,7 @@
 | 무엇인가 | 사내 확장의 **서버 부분** | 우리 계약을 모르는 **남의 API** 흉내 |
 | 뼈대 | `packages/service_kit` (C11) | 없다 — 평범한 FastAPI |
 | 붙는 길 | **일꾼**으로 Center에서 일감을 가져간다 (C15, `service_kit.consumer`) | **어댑터 일꾼**(`chk-adapter-consumer`)이 HTTP 어댑터로 부른다 (C13 §4·C15) |
-| Center에 어떻게 아는가 | 일꾼이 들어올 때 **manifest를 올린다** (C15 — 관리자가 CON-07 「일꾼 승인 대기」에서 승인) | 관리자가 **정의**를 등록하고 Center가 서명한다 (C13 E6) |
+| Center에 어떻게 아는가 | 일꾼이 뜰 때 **manifest를 올린다** (C15 — 일꾼은 Center 일꾼 폴더의 파일로 들어온다) | **어댑터 일꾼이 정의를 올리고** Center가 서명한다 (C13 E6, ADR-0121) |
 | 키 | 없다 — 「불러도 되나」는 Center가 배포로 가린다 (ADR-0102) | 어댑터 일꾼 설정의 키를 받아서 확인만 한다 (`CHK_MOCK_EXT_<앱>__TOKEN`을 주면 그 값만 받는다) |
 
 외부 앱이 C11로 답하면 어댑터가 하는 일(템플릿 채우기·제한 JSONPath로 읽기·`error_when`)을
@@ -49,10 +49,16 @@ CHK_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 uv run chk-mock-apps serve
 ```
 
 C11 앱 열셋이 **일꾼 하나**로 Center에 붙는다 (C15, [ADR-0102](../docs/decisions/0102-calling-outside-is-pull.md)) —
-토픽 열셋을 한 토큰으로 맡는다. 토큰이 없으면 들이기 요청을 보내고 **요청 코드를 화면에 찍는다**. 관리자가
-CON-07 「일꾼 승인 대기」에서 같은 코드를 승인하면 토큰을 받아 `CHK_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)에
-둔다. `CHK_MOCK_APPS__CENTER__TOKEN`이 있으면 그것을 쓴다(시험·CI). 주소를 주지 않으면 업무 호출을 받지
-않는다(관리 API·시나리오 제어만). **키는 없다** — 모의 앱도, 부르는 쪽도.
+토픽 열셋을 한 토큰으로 맡는다. **들이기 요청·승인은 없다** ([ADR-0121](../docs/decisions/0121-extension-folder.md)) —
+Center 쪽에서 일꾼 파일을 짓고 Center를 다시 띄운 뒤, 찍힌 토큰을 `CHK_MOCK_APPS__CENTER__TOKEN`에 넣는다:
+
+```bash
+uv run chk-center consumer-file mock-apps --topics erp,…   # C11 앱 id들 — chk-mock-apps list가 보인다
+CHK_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 CHK_MOCK_APPS__CENTER__TOKEN=chk_ctr_… uv run chk-mock-apps serve
+```
+
+토큰이 없으면 붙지 않고 짓는 명령을 찍는다. 주소를 주지 않으면 업무 호출을 받지 않는다(관리 API·시나리오
+제어만). **키는 없다** — 모의 앱도, 부르는 쪽도.
 
 ### 외부 확장 등록
 
@@ -62,22 +68,24 @@ CON-07 「일꾼 승인 대기」에서 같은 코드를 승인하면 토큰을 
 uv run chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
 ```
 
-그 파일을 관리자가 CON-07 「기능 추가 (외부)」로 올리면 Center가 서명해 등록한다 (C13 E6, ADR-0090).
+그 파일을 **어댑터 일꾼**에 주면 일꾼이 뜰 때 Center에 올리고 Center가 서명해 등록한다 (C13 E6, ADR-0121).
 모의 앱은 127.0.0.1에 뜨므로 정의가 `allow_private_network: true`를 켠다. 주소를 진짜 외부 호스트로
 주면 그 칸은 저절로 꺼진다.
 
 외부 앱을 부르는 것은 **어댑터 일꾼**이다 — 주소·키는 그 일꾼의 설정에만 있다 (`docs/04-setup.md` §5):
 
 ```bash
+uv run chk-center consumer-file adapter --topics ext-credit,ext-helpdesk   # 찍힌 토큰을 아래에
 CHK_ADAPTER__CENTER__URL=http://127.0.0.1:8800 \
-CHK_ADAPTER__EXTENSIONS=ext-credit,ext-helpdesk \
+CHK_ADAPTER__CENTER__TOKEN=chk_ctr_… \
+CHK_ADAPTER__DEFINITIONS=ext-credit.json:ext-helpdesk.json \
 CHK_ADAPTER__ALLOW_PRIVATE_NETWORK=1 \
 uv run chk-adapter-consumer
 ```
 
 127.0.0.1로 나가려면 정의의 `allow_private_network`와 일꾼의 `CHK_ADAPTER__ALLOW_PRIVATE_NETWORK` **둘 다** 열어야
 한다. 키를 확인하게 하려면 앱에 `CHK_MOCK_EXT_CREDIT__TOKEN`(`ext-helpdesk`는 `CHK_MOCK_EXT_HELPDESK__TOKEN`)을, 일꾼에
-같은 값을 `CHK_ADAPTER__EXT__EXT_CREDIT__KEY`로 준다. 이 일꾼도 들일 때 요청 코드를 찍고 CON-07에서 승인한다.
+같은 값을 `CHK_ADAPTER__EXT__EXT_CREDIT__KEY`로 준다.
 
 ## 거짓 데이터는 **케이스가 정한다**
 

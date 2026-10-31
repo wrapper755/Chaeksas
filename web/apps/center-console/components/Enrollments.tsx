@@ -11,8 +11,7 @@ import { decideEnrollment } from "@/app/actions";
  * 사람이 하는 일은 하나다: 현장 화면(서버는 로그)의 **요청 코드**가 이 줄과 같은지 보고 들인다.
  * 키는 Center가 만들어 봉해 두므로 여기에 키가 나오지 않는다.
  *
- * 일꾼(CON-07 「일꾼 승인 대기」, C15)은 승인 창에 「토픽」 칸이 더 있다 — 일꾼이 요청한 토픽 안에서
- * 줄여 줄 수 있고, 비우면 요청한 것 그대로다 (C5 `approve {topics?}`).
+ * 일꾼(C15)은 여기 오지 않는다 — 일꾼 폴더의 파일로만 들어온다 (ADR-0121).
  */
 export function Enrollments({
   rows,
@@ -20,7 +19,6 @@ export function Enrollments({
   canDecide,
   nameHelp = "사람이 알아볼 이름. 비우면 요청이 보낸 이름을 씁니다.",
   title = "승인 대기",
-  withTopics = false,
   id,
 }: {
   rows: EnrollmentInfo[];
@@ -29,16 +27,13 @@ export function Enrollments({
   canDecide: boolean;
   /** 승인 창 「이름」 칸의 도움말 — Studio는 그 이름이 「누가」라서 다르게 말한다 (CON-11). */
   nameHelp?: string;
-  /** 섹션 제목 — CON-07은 「일꾼 승인 대기」. */
+  /** 섹션 제목. */
   title?: string;
-  /** 일꾼 요청이면 승인 창에 「토픽」 칸을 둔다. */
-  withTopics?: boolean;
   /** 다른 화면이 이 섹션으로 걸 때의 앵커. */
   id?: string;
 }) {
   const [asking, setAsking] = useState<{ kind: "approve" | "reject"; row: EnrollmentInfo } | null>(null);
   const [text, setText] = useState("");
-  const [topics, setTopics] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [working, start] = useTransition();
 
@@ -46,7 +41,6 @@ export function Enrollments({
 
   function open(kind: "approve" | "reject", row: EnrollmentInfo) {
     setText(kind === "approve" ? row.name : "");
-    setTopics(requestedTopics(row).join(", "));
     setAsking({ kind, row });
   }
 
@@ -54,8 +48,7 @@ export function Enrollments({
     if (!asking) return;
     const { kind, row } = asking;
     start(async () => {
-      const wanted = withTopics ? topics.split(",").map((one) => one.trim()).filter(Boolean) : undefined;
-      const done = await decideEnrollment(row.enrollment_id, kind, text, wanted);
+      const done = await decideEnrollment(row.enrollment_id, kind, text);
       setError(done.error ?? null);
       setAsking(null);
     });
@@ -85,19 +78,9 @@ export function Enrollments({
     { key: "expires_at", header: "남은 시간", width: "10ch", cell: (row) => left(row.expires_at) },
     {
       key: "existing",
-      header: where === "서버 실행기 로그" ? "이 서버의 자리" : withTopics ? "이 일꾼의 자리" : "이 PC의 자리",
+      header: where === "서버 실행기 로그" ? "이 서버의 자리" : "이 PC의 자리",
       cell: (row) => (row.existing ? `「${row.existing.name}」을 이어받음` : "새로"),
     },
-    ...(withTopics
-      ? [
-          {
-            key: "topics",
-            header: "요청한 토픽",
-            mono: true,
-            cell: (row: EnrollmentInfo) => requestedTopics(row).join(", ") || "—",
-          } satisfies Column<EnrollmentInfo>,
-        ]
-      : []),
     {
       key: "state",
       header: "상태",
@@ -163,15 +146,6 @@ export function Enrollments({
           onChange={(event) => setText(event.target.value)}
           help={nameHelp}
         />
-        {withTopics ? (
-          <Field
-            className="mt-4"
-            label="토픽"
-            value={topics}
-            onChange={(event) => setTopics(event.target.value)}
-            help="이 일꾼이 가져가도 되는 토픽. 쉼표로 가릅니다. 일꾼이 요청한 것 안에서만 줄일 수 있고, 비우면 요청한 것 그대로입니다."
-          />
-        ) : null}
       </Dialog>
 
       <Dialog
@@ -199,15 +173,6 @@ export function Enrollments({
       </Dialog>
     </section>
   );
-}
-
-/**
- * 일꾼이 요청한 토픽. C5 `EnrollmentInfo`에 칸이 아직 없어 있을 때만 읽는다 — 없으면 빈 목록이고
- * 승인 창은 「비우면 요청한 것 그대로」로 승인한다.
- */
-function requestedTopics(row: EnrollmentInfo): string[] {
-  const raw = (row as { topics?: unknown }).topics;
-  return Array.isArray(raw) ? raw.map(String) : [];
 }
 
 function clock(value: string): string {

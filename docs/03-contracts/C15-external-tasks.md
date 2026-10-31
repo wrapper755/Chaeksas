@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | 서버 실행기·실행 프로세스·Studio → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
 | 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0062](../decisions/0062-pc-delegation.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0102](../decisions/0102-calling-outside-is-pull.md), [0107](../decisions/0107-outcome-unknown-asks-a-person.md), [0114](../decisions/0114-remove-ui-automation.md) |
-| 관련 화면 | CON-07 리소스 (일꾼 승인·토픽 상태), CON-01 (실행 상세의 「외부 작업」) |
+| 관련 화면 | CON-07 리소스 (기능 목록·일꾼 폴더), CON-01 (실행 상세의 「외부 작업」) |
 
 ## 목적
 
@@ -28,12 +28,12 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 | `GET /api/v1/external-tasks/{task_id}?wait_s=` | 올린 쪽 | 결과 기다리기 (롱폴링). 아직이면 `wait_s`(최대 25) 뒤 `state: pending` |
 | `POST /api/v1/external-tasks/{task_id}/ack` | 올린 쪽 | 결과를 받았다 → 값을 지운다 |
 | `POST /api/v1/external-tasks/{task_id}/cancel` | 올린 쪽 | 거두기 (실행이 취소됐다) |
-| `POST /api/v1/consumers/enroll` | 없음 (요청 코드) | 일꾼 들이기 요청 — PC 실행기 등록과 같은 승인 (ADR-0092 §1) |
 | `POST /api/v1/consumers/fetch` | 일꾼 토큰 | 가져가기 (롱폴링, 최대 25초). 하트비트를 겸한다 |
 | `POST /api/v1/consumers/tasks/{task_id}/complete` | 잠근 일꾼 | 끝냈다 + 출력 |
 | `POST /api/v1/consumers/tasks/{task_id}/fail` | 잠근 일꾼 | 실패 + 사유 |
 | `POST /api/v1/consumers/tasks/{task_id}/extend` | 잠근 일꾼 | 잠금 늘리기 |
 | `PUT /api/v1/consumers/self/manifest` | 일꾼 토큰 | manifest 올리기 (C11 `ServiceAppManifest` 모양 그대로) |
+| `PUT /api/v1/consumers/self/extension` | 일꾼 토큰 | 맡은 외부 확장의 정의 올리기 — Center가 검사·서명한다 (§외부 확장 정의 올리기) |
 | `PUT /api/v1/consumers/self/catalogs/{resource_type}` | 일꾼 토큰 | 기여 자원 카탈로그 올리기 (C13 §5 `Catalog`) |
 | `GET /api/v1/external-tasks?run_id=` | 콘솔 토큰 | 그 실행이 올린 일감들 (`ExternalTaskInfo[]`, 올린 순) — CON-01 「외부 작업」. **업무 값은 없다** |
 
@@ -104,7 +104,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ### 가져가기 (`FetchRequest` → `FetchResponse`)
 
-요청 `{topics: [str], max_tasks: int, wait_s: int, lock_s: int}`. 일꾼은 **들일 때 승인받은 토픽만** 적을 수 있다(밖이면 403 `topic_not_granted`).
+요청 `{topics: [str], max_tasks: int, wait_s: int, lock_s: int}`. 일꾼은 **일꾼 파일에 적힌 토픽만** 적을 수 있다(밖이면 403 `topic_not_granted`).
 
 응답 `{tasks: [LockedTask], rotated_token?: str}`. 일감이 없으면 `wait_s`까지 물고 있다가 빈 목록을 준다.
 
@@ -139,20 +139,16 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 입력·출력·오류 글은 싣지 않는다 (원칙 6) — 값은 부른 쪽이 받으면 지워지고, 남는 것은 누가·언제·성패다.
 
-### 일꾼 들이기
+### 일꾼 들이기 (일꾼 폴더)
 
-`POST /api/v1/consumers/enroll` `{machine_id, name, os, versions, public_key, topics: [str], manifests: [ServiceAppManifest]}` — 일꾼 하나가 **토픽 여럿**을 맡을 수 있다(모의 앱 열셋, 어댑터 일꾼이 외부 확장 여럿을 맡는 것). manifest는 토픽마다 하나(`app_id` = 토픽)이고 외부 확장 토픽은 비워도 된다(작업 목록은 등록된 정의에서 온다). 관리자가 CON-07 「일꾼 승인 대기」에서 같은 요청 코드를 승인하면 일꾼 토큰을 그 공개키로 봉해 내려 준다(봉함·요청 코드는 `contracts.enrollment` 한 자리 — ADR-0092). 토픽은 **승인할 때** 정해진다(일꾼이 적은 것을 관리자가 줄일 수 있다). 외부 확장 토픽은 그 정의가 Center에 등록되어 있어야 한다(E6).
-
-### 승인 없는 일꾼 (확장 폴더)
-
-함께 배포되는 고정 프로그램의 일꾼은 **요청 코드·승인 없이** 들어온다 ([ADR-0121](../decisions/0121-extension-folder.md)). 배포가 Center의 확장 폴더(`CHK_CENTER__EXTENSIONS_DIR`, 기본 `<데이터>/extensions`)에 `<이름>.consumer.json`(`FolderConsumer`)을 복사해 두면 Center가 **뜰 때** 그 일꾼을 들인다.
+일꾼은 **Center 쪽 일꾼 폴더의 파일로만** 들어온다 — 요청 코드·승인이 없다 ([ADR-0121](../decisions/0121-extension-folder.md)). 배포가 일꾼 폴더(`CHK_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)에 `<이름>.consumer.json`(`FolderConsumer`)을 복사해 두면 Center가 **뜰 때** 그 일꾼을 들인다. 폴더에 쓸 수 있는 사람을 관리자로 본다. 일꾼 하나가 **토픽 여럿**을 맡을 수 있다(모의 앱 열셋, 어댑터 일꾼이 외부 확장 여럿을 맡는 것).
 
 | 필드 | 뜻 |
 | --- | --- |
-| `name` | 일꾼 이름 (CON-07 「일꾼」·로그에 보인다) |
-| `topics` | 맡는 토픽 — **고정**이다. 밖의 토픽을 가져가려 하면 403 `topic_not_granted` |
+| `name` | 일꾼 이름 (CON-07·로그에 보인다) |
+| `topics` | 맡는 토픽(서비스 앱 id·외부 확장 id) — **고정**이다. 밖의 토픽을 가져가려 하면 403 `topic_not_granted` |
 | `token_sha256` | 일꾼 토큰 **원문(UTF-8)의 SHA-256**, 소문자 16진 64자. Center는 원문을 모른다 |
-| `manifests`? | 서비스 앱 토픽이면 그 manifest(`app_id` = 토픽). 외부 확장 토픽은 비운다 |
+| `manifests`? | 서비스 앱 토픽의 manifest(`app_id` = 토픽). 비워도 된다 — 일꾼이 뜰 때 올린다 |
 
 ```json
 {
@@ -162,15 +158,24 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 }
 ```
 
-- 일꾼은 토큰 원문을 지금처럼 `Authorization: Bearer`로 싣고 `POST /consumers/fetch`부터 부른다 — `enroll`을 부르지 않는다. 원문은 `chk_ctr_` + 무작위 40자(C7 키 모양)로 짓기를 권한다(Center는 모양을 보지 않는다 — 해시만 맞춘다).
-- 키에는 **만료·회전이 없다**(공개키가 없다). 해시를 바꾸면 옛 키를 폐기한다. **폐기된 토큰은 되살아나지 않는다**(`token_revoked`).
-- 파일이 빠지면 키를 폐기하고 일꾼을 지운다. 읽지 못한 파일은 그 일꾼을 지우지 않는다. 결과는 C7 `GET /resources/extension-folder`(`kind: consumer`)와 Center 로그에 남는다.
-- 승인 대기에 뜨지 않는다. 일감 흐름(가져감·끝냄·실패)은 Center 로그에 일꾼 이름·일감 id·토픽·작업·오류 코드로 남는다(값은 찍지 않는다).
+- 파일은 `chk-center consumer-file <이름> --topics a,b [--dir 폴더]`가 짓는다 — 토큰(`chk_ctr_` + 무작위 40자, C7 키 모양)을 지어 해시만 쓰고 **원문은 한 번만** 찍는다. 다른 도구로 지어도 된다(Center는 모양을 보지 않고 해시만 맞춘다).
+- 일꾼은 토큰 원문을 `Authorization: Bearer`로 싣고 `POST /consumers/fetch`부터 부른다.
+- 키에는 **만료·회전이 없다**(공개키가 없다). 해시를 바꾸면 옛 키를 폐기한다. **폐기된 토큰은 되살아나지 않는다**(`token_revoked`), 다른 키가 쓰는 해시는 거절한다(`token_in_use`).
+- **폴더가 원본이다** — 파일이 빠지면 키를 폐기하고 일꾼을 지운다. 읽지 못한 파일은 그 일꾼을 지우지 않고, 폴더가 없으면(볼륨이 안 붙었다) 아무것도 지우지 않는다. 결과는 C7 `GET /resources/consumer-folder`와 Center 로그에 남는다.
+- 일감 흐름(가져감·끝냄·실패)은 Center 로그에 일꾼 이름·일감 id·토픽·작업·오류 코드로 남는다(값은 찍지 않는다).
+
+### 외부 확장 정의 올리기
+
+외부 확장의 정의는 **그것을 수행하는 일꾼이 들고 있다** — 일꾼은 뜰 때 `PUT /api/v1/consumers/self/extension` `{definition}`(C13 정의)을 올리고 Center가 C13 등록과 같은 관문(크기·모양·E1~E4)을 지나면 C2 `extension` 봉투에 서명한다 (ADR-0121). 답은 C7 `ExtensionResource`(정의·봉투 포함)이고 새로 등록하면 201, 같은 것이면 200이다.
+
+- 정의의 `id`는 그 일꾼의 **토픽 안**이어야 한다 — 밖이면 403 `topic_not_granted`.
+- 같은 판에 다른 내용은 409 `id_conflict`, 철회된 판은 409 `extension_revoked`, **더 높은 판이 이미 있으면 409 `older_than_registered`**(옛 일꾼이 다시 떠도 지금 판이 내려가지 않는다). 내용을 바꾸려면 판을 올린다.
+- 일꾼이 올린 확장 가운데 **어느 일꾼의 토픽에도 없게 된 것**은 Center가 뜰 때 철회한다(일꾼 파일이 빠졌다). 콘솔·API로 등록·해제하는 길은 없다.
 
 ### manifest·카탈로그 올리기
 
-- `PUT /api/v1/consumers/self/manifest` — 본문은 ServiceAppManifest 하나. 그 `app_id`가 승인된 토픽 밖이면 403 `topic_not_granted`. 같은 `app_id`의 것을 바꾼다. 판이 바뀌면 일꾼이 뜰 때 다시 올린다.
-- `PUT /api/v1/consumers/self/catalogs/{resource_type}` `{app_id, catalog}` — C13 §5 `Catalog`. Center는 `revision`이 같으면 다시 쓰지 않는다(C7). 승인된 토픽의 것만 받는다. 이 카탈로그가 C7 기여 자원·Studio 리소스 탐색기(STU-03)의 고를 거리가 된다 — **Center도 Studio도 앱의 주소를 모른다.**
+- `PUT /api/v1/consumers/self/manifest` — 본문은 ServiceAppManifest 하나. 그 `app_id`가 일꾼의 토픽 밖이면 403 `topic_not_granted`. 같은 `app_id`의 것을 바꾼다. 판이 바뀌면 일꾼이 뜰 때 다시 올린다.
+- `PUT /api/v1/consumers/self/catalogs/{resource_type}` `{app_id, catalog}` — C13 §5 `Catalog`. Center는 `revision`이 같으면 다시 쓰지 않는다(C7). 일꾼의 토픽 것만 받는다. 이 카탈로그가 C7 기여 자원·Studio 리소스 탐색기(STU-03)의 고를 거리가 된다 — **Center도 Studio도 앱의 주소를 모른다.**
 
 ## 부르는 쪽의 규칙
 
@@ -236,10 +241,10 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 - **호출 토큰은 PC 실행기(또는 Studio)가 제 Center API 키로 청한다** — `POST /api/v1/call-tokens` → `{token, expires_at}`(수명 24시간). 봉하지 않는다: 청하는 길이 이미 그 PC 실행기의 키로 인증된 연결이라 다른 응답과 같은 길로 온다(환경변수 키처럼 **공개키가 없는 PC 실행기도** 받을 수 있어야 한다 — 하트비트 봉함으로는 그 PC 실행기가 못 받는다). PC 실행기는 실행을 띄울 때 하나 청해 실행 프로세스에게 제어 파일로 넘긴다(만료 2시간 전부터 새것을 같은 길로 넣는다). 토큰은 PC 실행기 **메모리에만** 있고 비밀 저장소에 두지 않는다. **호출 토큰으로 부르면 Center는 그 PC 실행기의 Center API 키로 부른 것과 같이 본다** — 소유(C3)·배포 대조가 같은 신원으로 돈다. 호출 토큰은 `/api/v1/external-tasks`와 **리소스 목록 읽기**(`GET /api/v1/resources…` — 확장 클라이언트가 기여 자원 카탈로그를 읽는 자리) 밖을 모두 403 `call_token_scope`로 막는다. 서버 실행기·Studio는 제 프로세스 안에서 부르므로 제 Center API 키를 쓴다.
 - **롱폴링 상한은 설정의 기본 200** (`CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` — 올리는 쪽·일꾼의 기다림을 함께 센다). 한 번 가져가기에 잠글 수 있는 수는 **10건까지**(`max_tasks`가 그보다 크면 10으로 깎는다).
-- **어댑터 일꾼은 C13 「전송」의 바깥 앱 명부를 일꾼 토큰으로 받는다** (조각 3) — 승인된 토픽의 외부 확장 정의·봉투만 준다. 받은 쪽은 봉투를 다시 검증한다(E6).
+- **어댑터 일꾼은 맡은 외부 확장의 정의를 제가 들고 있다가 올린다** (ADR-0121, §외부 확장 정의 올리기) — `CHK_ADAPTER__DEFINITIONS`의 파일들이다. Center에서 받지 않는다.
 - 출력 검사는 **`output_schema.required`의 칸이 다 있는가**까지다 — 계약 패키지에 JSON Schema 검증기를 두지 않는다(입력 쪽도 그렇다). 더 깊은 모양은 일꾼과 엔진의 `output` 매핑이 본다.
 
-> 제안: CON-07 토픽 상태 — 일꾼 수 · 마지막으로 가져간 때 · 쌓인 일감 · 가장 오래 기다린 일감 (조각 5).
+- `GET /consumers`·`GET /external-topics`는 콘솔 토큰으로 읽는 길로 남는다 — CON-07에는 그 표가 없다(지켜볼 것은 Center 로그에서 본다, ADR-0121).
 
 ## 호환 규칙
 
@@ -250,7 +255,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-31 | 1 | §승인 없는 일꾼 — 확장 폴더의 `*.consumer.json`(`FolderConsumer`)으로 요청 코드·승인 없이 들어오는 일꾼. 토픽 고정, 만료·회전 없음. 경로·모양은 그대로다 | [0121](../decisions/0121-extension-folder.md) |
+| 2026-10-31 | 1 | **일꾼은 일꾼 폴더로만 들어온다** — `<이름>.consumer.json`(`FolderConsumer`, 토큰 해시), 토픽 고정, 만료·회전 없음. `POST /consumers/enroll`·`ConsumerEnrollRequest`를 걷었다. **외부 확장 정의는 일꾼이 올린다** — `PUT /consumers/self/extension` | [0121](../decisions/0121-extension-folder.md) |
 | 2026-10-31 | 1 | **등록 세션(`reg_…`)과 거절 `registration_off`를 걷었다** — 셀렉터 등록 도구(Tool UI)와 「셀렉터 등록」 스위치가 없다. 부르는 쪽은 서버 실행기·실행 프로세스·Studio 셋이다. `required_scopes`를 적은 작업은 켜 줄 길이 없어 `scope_missing`이다. 경로·모양은 그대로다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | **`GET /external-tasks?run_id=`**(콘솔 토큰, `ExternalTaskInfo[]`) — CON-01 「외부 작업」이 일감이 어디서 멈췄는지(기다림·일꾼이 쥠·다시 나감)를 본다. 값·오류 글은 싣지 않는다. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `fail`·결과 `error`에 **`outcome_unknown`**(기본 false)을 더했다 — 요청이 닿았을 수 있는데 답을 못 받았다. 어댑터 일꾼이 `idempotent: false` 작업에서 적고, PC의 `chk:serviceCall`은 사람에게 묻는다. 선택 칸이라 판은 그대로다 | [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |

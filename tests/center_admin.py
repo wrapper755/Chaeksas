@@ -1,8 +1,9 @@
 """시험이 Center에 **관리자로** 승인·배포·외부 확장 등록을 시키는 길 — 자리가 하나다 (ADR-0090).
 
 **이것은 제품 코드가 아니다.** 사람은 Center 콘솔에서 누르고, 시험은 관리자 토큰으로 같은
-API를 부른다. 봉투는 **Center가 짓고 서명한다** — 시험이 Admin 키를 만들거나 봉투에 서명하지
-않는다. 현장(PC 실행기·서버 실행기)은 하트비트의 `admin_keys`에 든 Center 공개키로 다시 검증한다.
+API를 부른다(외부 확장은 일꾼이 올린다 — ADR-0121). 봉투는 **Center가 짓고 서명한다** — 시험이 Admin
+키를 만들거나 봉투에 서명하지 않는다. 현장(PC 실행기·서버 실행기)은 하트비트의 `admin_keys`에 든
+Center 공개키로 다시 검증한다.
 
 `client`는 `TestClient`(in-process)든 진짜 소켓의 `httpx.Client`든 된다 — 둘 다 같은 메서드를 쓴다.
 `expect`는 바라는 상태 코드이고 다르면 본문을 붙여 그 자리에서 멈춘다(거부를 보려는 시험은 그
@@ -116,32 +117,34 @@ def register_extension(
     client: Any,
     definition: dict[str, Any],
     *,
-    headers: dict[str, str] = ADMIN,
+    headers: dict[str, str] = ADMIN,  # noqa: ARG001 — 옛 부르는 꼴을 받는다
     expect: int | tuple[int, ...] | None = (200, 201),
 ) -> httpx.Response:
-    """외부 확장 등록 (C7 `POST /resources/extensions`) — 정의만 보내고 Center가 서명한다."""
-    return _check(client.post(f"{API}/resources/extensions", json={"definition": definition}, headers=headers), expect)
+    """외부 확장 등록 — **그 토픽을 맡은 일꾼이 제 정의를 올린다** (C15 `PUT …/self/extension`, ADR-0121).
 
+    시험은 그 확장 id를 토픽으로 맡은 일꾼을 들이고(일꾼 폴더와 같은 함수) 그 토큰으로 올린다.
+    """
+    from consumers import enroll  # noqa: PLC0415 — 시험 도우미끼리 순환을 피한다
 
-def revoke_extension(
-    client: Any,
-    extension_id: str,
-    version: str,
-    *,
-    reason: str = "시험 철회",
-    headers: dict[str, str] = ADMIN,
-    expect: int | tuple[int, ...] | None = 200,
-) -> httpx.Response:
-    """외부 확장 등록 해제 (C7 `DELETE /resources/extensions`). **되살릴 수 없다.**"""
-    return _check(
-        client.request(
-            "DELETE",
-            f"{API}/resources/extensions",
-            json={"id": extension_id, "version": version, "reason": reason},
-            headers=headers,
-        ),
-        expect,
+    ext_id = str(definition.get("id"))
+    tokens = enroll(client, topics=[ext_id], name=f"{ext_id} 일꾼", machine=f"ext-{ext_id}")
+    answer = client.put(
+        f"{API}/consumers/self/extension",
+        json={"definition": definition},
+        headers={"Authorization": f"Bearer {tokens.token()}"},
     )
+    return _check(answer, expect)
+
+
+def revoke_extension(client: Any, extension_id: str, version: str, *, reason: str = "시험 철회") -> dict[str, Any]:
+    """외부 확장 등록 해제 — 콘솔·API 길은 없다 (ADR-0121). 일꾼 폴더가 거둘 때 쓰는 함수를 그대로 부른다."""
+    from consumers import store_of  # noqa: PLC0415
+
+    from chaeksas.center.api import resources  # noqa: PLC0415
+
+    return resources.revoke_extension(
+        store_of(client), extension_id, version, reason=reason, by="시험"
+    ).to_json_dict()
 
 
 class CenterProblem(RuntimeError):
@@ -228,18 +231,6 @@ class AdminCenter:
 
     def cancel_job(self, job_id: str) -> dict[str, Any]:
         return dict(self.call("DELETE", f"/jobs/{job_id}"))
-
-    # ── 외부 확장 (C13) ──
-
-    def register_extension(self, definition: dict[str, Any]) -> tuple[ExtensionResource, bool]:
-        """정의를 올린다 — 봉투는 Center가 짓는다. 둘째 값은 「새로 등록했나」(201 ↔ 200)."""
-        found = self.call("POST", "/resources/extensions", body={"definition": definition})
-        return ExtensionResource.model_validate(found), self.last_status == 201
-
-    def revoke_extension(self, extension_id: str, version: str, *, reason: str = "시험 철회") -> dict[str, Any]:
-        body = {"id": extension_id, "version": version, "reason": reason}
-        found = self.call("DELETE", "/resources/extensions", body=body)
-        return dict(found) if isinstance(found, dict) else {}
 
     def extensions(self) -> list[ExtensionResource]:
         found = self.call("GET", "/resources?type=extension")

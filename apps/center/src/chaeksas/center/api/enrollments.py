@@ -90,9 +90,7 @@ async def approve_enrollment(request: Request, enrollment_id: str) -> Any:
         body = EnrollmentApproveRequest.model_validate(await _json(request))
     except ValueError as e:
         raise ApiError(422, "input_invalid", "승인 요청이 계약과 맞지 않는다") from e
-    return enrollments.approve(
-        _store(request), enrollment_id, name=body.name, actor=found.actor, topics=body.topics
-    )
+    return enrollments.approve(_store(request), enrollment_id, name=body.name, actor=found.actor)
 
 
 @router.post("/enrollments/{enrollment_id}/reject")

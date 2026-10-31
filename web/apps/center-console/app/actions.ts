@@ -295,67 +295,6 @@ export async function cancelJob(jobId: string): Promise<ActionResult> {
   return {};
 }
 
-/** 올린 파일을 JSON으로 읽는다. 사람이 고른 파일이라 **왜 안 되는지 한 줄로** 말한다. */
-async function jsonFile(form: FormData, field: string, label: string): Promise<unknown> {
-  const found = form.get(field);
-  if (!(found instanceof File) || found.size === 0) {
-    throw new Error(`${label}을 고르세요.`);
-  }
-  try {
-    return JSON.parse(await found.text());
-  } catch {
-    throw new Error(`${label}이 JSON이 아닙니다 (${found.name}).`);
-  }
-}
-
-/**
- * 외부 확장 등록 (CON-07 「확장 추가」).
- *
- * **정의 파일 하나**를 올린다. C13 검사(E1~E8)를 지나면 Center가 서명해 둔다 (ADR-0090) —
- * 검사 결과는 Center가 칸별 사유와 함께 돌려주므로 그것을 그대로 보인다.
- */
-export async function registerExtension(form: FormData): Promise<void> {
-  const back = (query: string): Route => `/resources?${query}` as Route;
-  let definition: unknown;
-  try {
-    definition = await jsonFile(form, "definition", "확장 정의 파일");
-  } catch (cause) {
-    const said = cause instanceof Error ? cause.message : "파일을 읽지 못했습니다.";
-    redirect(back(`error=${encodeURIComponent(said)}`));
-  }
-
-  try {
-    await center.registerExtension(definition);
-  } catch (cause) {
-    redirect(back(`error=${encodeURIComponent(violations(cause))}`));
-  }
-  revalidatePath("/resources", "layout");
-  redirect(back("extension=1"));
-}
-
-/** 등록 해제 — 확인 창을 거쳐서만 온다. **되살릴 수 없다.** */
-export async function revokeExtension(extensionId: string, version: string): Promise<ActionResult> {
-  try {
-    await center.revokeExtension(extensionId, version);
-  } catch (cause) {
-    return { error: violations(cause) };
-  }
-  revalidatePath("/resources", "layout");
-  redirect("/resources?revoked=1" as Route);
-}
-
-/** C13 검사 위반을 **칸별 사유까지** 한 줄로 (E3은 어디가 틀렸는지가 요점이다). */
-function violations(cause: unknown): string {
-  if (!(cause instanceof CenterError)) return message(cause);
-  const found = cause.body?.detail?.violations;
-  if (!Array.isArray(found) || found.length === 0) return cause.message;
-  const said = (found as Array<{ rule?: string; message?: string }>)
-    .slice(0, 5)
-    .map((one) => `[${one.rule ?? "?"}] ${one.message ?? ""}`)
-    .join(" · ");
-  return `${cause.message} — ${said}`;
-}
-
 /**
  * 패키지 삭제 (CON-06 「삭제...」). **되돌릴 수 없다** — 확인 창을 거쳐서만 온다.
  *
@@ -414,14 +353,9 @@ export async function decideEnrollment(
   enrollmentId: string,
   decision: "approve" | "reject",
   text: string,
-  /** 일꾼(`type: consumer`, C15)만 — 요청한 토픽 안에서 줄인다. 비우면 요청한 것 그대로. */
-  topics?: string[],
 ): Promise<ActionResult> {
   try {
-    if (decision === "approve") {
-      const wanted = (topics ?? []).map((one) => one.trim()).filter(Boolean);
-      await center.approveEnrollment(enrollmentId, text.trim() || undefined, wanted.length > 0 ? wanted : undefined);
-    }
+    if (decision === "approve") await center.approveEnrollment(enrollmentId, text.trim() || undefined);
     else await center.rejectEnrollment(enrollmentId, text.trim() || undefined);
   } catch (cause) {
     return { error: message(cause) };

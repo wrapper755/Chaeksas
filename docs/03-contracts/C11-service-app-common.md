@@ -5,7 +5,7 @@
 | 상태 | **구현됨** (2026-10-09, [09-gaps](../09-gaps.md) §1 대조) — 2026-10-29부터 **일꾼**이다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)): 앱은 C15로 Center에서 일감을 가져가고 HTTP로 업무 호출을 받지 않는다 |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서비스 앱(일꾼) → Center (C15 가져가기·끝내기). 업무 호출의 모양은 부르는 쪽이 C15로 Center에 올린 것이다 |
-| 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py`, 받는 쪽 뼈대 `packages/service_kit/` (`service_kit.consumer` — 가져가기 루프·들이기), **부르는 쪽 `chaeksas.core.services`** (`CenterServiceCaller` — 멱등 칸·재시도·C3 `service_call` 기록). 보기: 업무 예제가 부르는 **모의 앱 열셋**은 [`samples/`](../../samples/README.md) |
+| 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py`, 받는 쪽 뼈대 `packages/service_kit/` (`service_kit.consumer` — 가져가기 루프), **부르는 쪽 `chaeksas.core.services`** (`CenterServiceCaller` — 멱등 칸·재시도·C3 `service_call` 기록). 보기: 업무 예제가 부르는 **모의 앱 열셋**은 [`samples/`](../../samples/README.md) |
 | JSON Schema | [`c11-service-app-manifest.json`](../../packages/contracts/schemas/c11-service-app-manifest.json) · [`c11-op-request.json`](../../packages/contracts/schemas/c11-op-request.json) · [`c11-op-response.json`](../../packages/contracts/schemas/c11-op-response.json) · [`c11-health-response.json`](../../packages/contracts/schemas/c11-health-response.json) |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0015](../decisions/0015-run-location.md), [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 관련 화면 | STU-14, SVC-00·01·03, CON-07 |
@@ -18,7 +18,7 @@
 
 | 길 | 인증 | 뜻 |
 | --- | --- | --- |
-| C15 `POST /api/v1/consumers/enroll`·`fetch`·`…/complete·fail·extend` | 일꾼 토큰 | 들이기, 일감 가져가기·끝내기 |
+| C15 `fetch`·`…/complete·fail·extend`·`PUT …/self/manifest` | 일꾼 토큰 (일꾼 폴더로 들인다, ADR-0121) | 일감 가져가기·끝내기, manifest 올리기 |
 | C15 `PUT /api/v1/consumers/self/manifest`·`…/catalogs/{type}` | 일꾼 토큰 | manifest(작업 목록)·기여 자원 카탈로그 올리기 |
 | `GET /healthz` | 없음 | 살아 있는지 (운영자·컨테이너 점검용 — **Center는 읽지 않는다**) |
 | 관리 콘솔 (웹) | 관리자 토큰 | SVC-00·01·03 (+ 앱 고유 화면). 기본 포트 = API 포트 + 1 |
@@ -171,7 +171,7 @@ AdminStatus:
 
 ## `service_kit`이 제공하는 것
 
-새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: 가져가기 루프(`Consumer` — 들이기·토큰 보관·manifest와 카탈로그 올리기·끝내기 — 잠금은 늘리지 않고 작업 `timeout_s`만큼 잡는다, C15), 멱등 저장소, 오류 형식, 사용 기록, `/healthz`, 관리 콘솔 공통 화면(SVC-00·01·03), 모델 연결(`CHK_SVC_<APP>__LLM__*`), 설정(`CHK_SVC_<APP>__CENTER__URL`·`…__CENTER__TOKEN`·`…__DATA_DIR`), 포트(관리 API 8000·8010…, 콘솔 +1).
+새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: 가져가기 루프(`Consumer` — 토큰 읽기·manifest와 카탈로그 올리기·끝내기 — 잠금은 늘리지 않고 작업 `timeout_s`만큼 잡는다, C15), 멱등 저장소, 오류 형식, 사용 기록, `/healthz`, 관리 콘솔 공통 화면(SVC-00·01·03), 모델 연결(`CHK_SVC_<APP>__LLM__*`), 설정(`CHK_SVC_<APP>__CENTER__URL`·`…__CENTER__TOKEN`·`…__DATA_DIR`), 포트(관리 API 8000·8010…, 콘솔 +1).
 
 ## 변경 이력
 

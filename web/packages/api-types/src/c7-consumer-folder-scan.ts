@@ -3,22 +3,22 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 /**
- * `GET /resources/extension-folder` — Center가 **마지막으로 뜰 때** 확장 폴더를 읽은 결과 (ADR-0121).
+ * `GET /resources/consumer-folder` — Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (ADR-0121).
  */
-export interface ExtensionFolderScan {
+export interface ConsumerFolderScan {
   configured?: boolean;
   dir?: string | null;
-  items?: ExtensionFolderItem[];
+  items?: ConsumerFolderItem[];
   problem?: string | null;
   scanned_at?: string | null;
   [k: string]: unknown;
 }
 /**
- * 확장 폴더의 파일 하나를 읽은 결과 (ADR-0121). 읽지 못했으면 `id`·`version`이 없다.
+ * 일꾼 폴더의 한 줄 (ADR-0121). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.
  *
- * `revoked`는 파일이 **폴더에서 빠져** 거둔 것이라 `file`이 없다. 일꾼이면 `id`가 일꾼 이름이다.
+ * `revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼(파일이 빠졌다)이나, 맡은 일꾼이 없어진 외부 확장이다.
  */
-export interface ExtensionFolderItem {
+export interface ConsumerFolderItem {
   code?: string | null;
   file?: string | null;
   id?: string | null;
