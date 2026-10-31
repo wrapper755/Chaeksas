@@ -158,7 +158,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
   const columns: Array<Column<BotRow>> = [
     {
       key: "id",
-      header: "BPM 프로세스",
+      header: "프로세스",
       mono: true,
       cell: (row) => (
         <Link className="underline" href={packageHref(row)}>
@@ -235,7 +235,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
     { key: "last_success", header: "최근 성공", width: "18ch", cell: (row) => time(row.last_success) },
     {
       key: "pcs",
-      header: "배포된 PC 실행기",
+      header: "배포된 Bot",
       width: "14ch",
       align: "right",
       // **건수가 아니라 PC 수**다 (ADR-0046). 건수는 툴팁에 — 같은 PC에 옛 배포가 살아 있으면
@@ -267,7 +267,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
   return (
     <Shell mode={found.mode} actor={found.actor} current="/bots">
       <header className="mb-4">
-        <h1 className="text-h1 font-bold">BPM 프로세스</h1>
+        <h1 className="text-h1 font-bold">프로세스</h1>
       </header>
 
       <nav className="mb-4 flex flex-wrap gap-2" aria-label="실행 위치">
@@ -291,7 +291,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
         <ErrorBanner message={failure} />
       ) : rows.length === 0 ? (
         <EmptyState
-          title={place === "server" ? "올라온 서버 BPM 프로세스가 없습니다." : "올라온 PC BPM 프로세스가 없습니다."}
+          title={place === "server" ? "올라온 서버 프로세스가 없습니다." : "올라온 PC 프로세스가 없습니다."}
           hint="Studio에서 「Center로 올리기」로 올리세요."
         />
       ) : (
@@ -315,11 +315,11 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
             columns={shown}
             rows={rows}
             rowKey={(row) => `${row.id}@${row.version}`}
-            caption="BPM 프로세스·버전별 준비도"
+            caption="프로세스·버전별 준비도"
           />
           <p className="text-body-sm text-text-muted">
             {CONFIRM_NOTE} 셈은 끝난 실행만 셉니다 — 도는 중인 실행은 표본에 들어가지 않습니다.
-            BPM 프로세스마다 최근 {SCAN}건을 훑어 버전별로 {SAMPLE}회까지 셉니다 (그보다 적으면 표본 수가
+            프로세스마다 최근 {SCAN}건을 훑어 버전별로 {SAMPLE}회까지 셉니다 (그보다 적으면 표본 수가
             작게 보입니다).
           </p>
 

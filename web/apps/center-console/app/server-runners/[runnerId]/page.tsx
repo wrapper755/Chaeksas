@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DEPLOYMENT_REASON } from "@/lib/app-logs";
 import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
@@ -20,20 +21,6 @@ import { ServerRunnerActions } from "../actions-ui";
  * (C12) 상세에 넣으면 같은 작업이 실행기마다 모두 보인다. 목록 쪽에 한 번만 있다.
  */
 
-/** 배치 결정 사유 코드 → 글 (C2 위반 코드). 모르는 값은 **그대로 보인다** (원칙 10). */
-const WHY: Record<string, string> = {
-  bad_signature: "서명이 맞지 않음",
-  unknown_key: "모르는 서명 키",
-  revoked_key: "서명 키 철회됨",
-  wrong_kind: "봉투 종류가 다름",
-  expired: "유효 기간 지남",
-  not_yet: "아직 시작 전",
-  wrong_target: "다른 대상용",
-  hash_mismatch: "패키지 내용이 다름",
-  unsigned_package: "승인 서명 없음",
-  unsupported_alg: "모르는 서명 방식",
-  float_in_payload: "봉투에 소수가 들어 있음",
-};
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -118,7 +105,7 @@ export default async function ServerRunnerPage({
         </Link>
       ),
     },
-    { key: "bpm_process_id", header: "서버 BPM 프로세스" },
+    { key: "bpm_process_id", header: "서버 프로세스" },
     { key: "version", header: "버전", width: "10ch", mono: true },
     // 「현재 노드」는 보고가 늦으면 비어 있다 — 0이나 빈 글로 꾸미지 않는다.
     { key: "node_id", header: "현재 노드", width: "20ch", mono: true, cell: (row) => row.node_id ?? "—" },
@@ -144,7 +131,7 @@ export default async function ServerRunnerPage({
         </Link>
       ),
     },
-    { key: "bpm_process_id", header: "서버 BPM 프로세스" },
+    { key: "bpm_process_id", header: "서버 프로세스" },
     { key: "waiting_for", header: "기다리는 것", cell: waitingFor },
     {
       key: "since",
@@ -179,7 +166,7 @@ export default async function ServerRunnerPage({
   ];
 
   const limitColumns: Array<Column<(typeof limits)[number]>> = [
-    { key: "bot", header: "서버 BPM 프로세스" },
+    { key: "bot", header: "서버 프로세스" },
     { key: "version", header: "배포 버전", width: "12ch", mono: true },
     {
       key: "limit",
@@ -234,7 +221,7 @@ export default async function ServerRunnerPage({
     },
     { key: "deployment_id", header: "배포 id", width: "22ch", mono: true },
     { key: "bpm_process_id", header: "패키지", cell: (row) => `${row.bpm_process_id}@${row.version}` },
-    { key: "reason", header: "사유", cell: (row) => (row.reason ? (WHY[row.reason] ?? row.reason) : "—") },
+    { key: "reason", header: "사유", cell: (row) => (row.reason ? (DEPLOYMENT_REASON[row.reason] ?? row.reason) : "—") },
   ];
 
   return (
@@ -359,7 +346,7 @@ export default async function ServerRunnerPage({
             </p>
           </Section>
 
-          <Section title="BPM 프로세스별 상한">
+          <Section title="프로세스별 상한">
             {limits.length === 0 ? (
               <p className="text-body-sm text-text-muted">
                 이 실행기에 걸린 활성 배포가 없습니다. 「배포」에서 배포하세요.
@@ -369,7 +356,7 @@ export default async function ServerRunnerPage({
                 columns={limitColumns}
                 rows={limits}
                 rowKey={(row) => `${row.bot}@${row.version}`}
-                caption="BPM 프로세스별 상한"
+                caption="프로세스별 상한"
               />
             )}
           </Section>

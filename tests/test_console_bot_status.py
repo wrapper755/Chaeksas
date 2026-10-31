@@ -221,7 +221,7 @@ def register(client: TestClient, *, readiness: list[dict[str, Any]]) -> None:
 def test_the_nav_opens_the_page() -> None:
     """탐색의 꺼진 줄이 **주소를 갖는다** — 화면이 생겼으니 「아직 없습니다」가 남아 있으면 거짓말이다."""
     shell = (CONSOLE / "components" / "Shell.tsx").read_text(encoding="utf-8")
-    assert '{ label: "BPM 프로세스", href: "/bots" }' in shell
+    assert '{ label: "프로세스", href: "/bots" }' in shell
     assert "CON-02는 아직" not in shell
     assert (CONSOLE / "app" / "bots" / "page.tsx").is_file()
 
@@ -354,13 +354,13 @@ def test_deployment_rows_carry_the_pc_the_version_went_to(client: TestClient) ->
 
 
 def test_the_column_counts_pcs_and_does_not_resolve_a_wildcard(client: TestClient) -> None:
-    """화면이 **수를 센다** — 「배포」(건수)가 아니라 「배포된 PC 실행기」다 (ADR-0046).
+    """화면이 **수를 센다** — 「배포」(건수)가 아니라 「배포된 Bot」(PC 실행기 — 콘솔 이름, ADR-0121)이다 (ADR-0046).
 
     **셈 자체는 이제 `web`의 vitest가 잰다** (`lib/summary.test.ts`) — 여기서는 파이썬이 볼 수
     있는 것만 본다: 열 이름이 바뀌었는가, 화면이 그 함수를 쓰는가, `*`를 푸는 코드가 사라졌는가.
     """
     page = (CONSOLE / "app" / "bots" / "page.tsx").read_text(encoding="utf-8")
-    assert 'header: "배포된 PC 실행기"' in page
+    assert 'header: "배포된 Bot"' in page
     assert 'header: "배포"' not in page, "건수로 보이던 열은 없다"
     assert "deployedPcs" in page
 

@@ -20,7 +20,7 @@ import { KIND_LABEL, STATUS_LABEL, packageHref, time } from "../../page";
 
 /** `relation` → 사람 말 (C5). 모르는 값은 그대로 보인다 (원칙 10). */
 const RELATION_LABEL: Record<string, string> = {
-  lib: "공유 BPM 프로세스",
+  lib: "공유 프로세스",
 };
 
 const LOCATION_LABEL: Record<string, string> = { pc: "PC", server: "서버" };
@@ -37,7 +37,7 @@ function requirements(info: PackageInfo): Array<[string, string]> {
     ["서비스 앱", (requires.service_apps ?? []).map((one) => one.app_id).join(", ")],
     ["확장", (requires.extensions ?? []).map((one) => `${one.id} ${one.version}`).join(", ")],
     ["태스크 종류", (requires.task_types ?? []).map((one) => one.id).join(", ")],
-    ["공유 BPM 프로세스", (requires.libs ?? []).join(", ")],
+    ["공유 프로세스", (requires.libs ?? []).join(", ")],
     ["런타임", (requires.runtimes ?? []).join(", ")],
     ["OS", (requires.os ?? []).join(", ")],
   ];

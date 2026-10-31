@@ -75,4 +75,4 @@ export function cancelControl(job: Pick<JobInfo, "state" | "target" | "cancel_re
 export const STOP_CONFIRM = "도는 실행을 멈춥니다. 한 일은 되돌리지 않습니다 — 이미 보낸 메일·웹훅은 그대로입니다.";
 
 /** 도는 PC 실행의 단추를 끈 까닭 (CON-05). */
-export const PC_RUNNING_REASON = "실행 중인 PC BPM 프로세스는 현장에서 멈춥니다 (PC 실행기 「중지」)";
+export const PC_RUNNING_REASON = "실행 중인 PC 프로세스는 현장에서 멈춥니다 (PC 실행기 「중지」)";

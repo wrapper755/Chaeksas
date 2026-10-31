@@ -23,7 +23,7 @@ export function RevokeDeployment({ deploymentId, label }: { deploymentId: string
       <ConfirmDialog
         open={asking}
         title={`${label} 배포를 철회할까요?`}
-        description="현장은 다음 하트비트에 이 BPM 프로세스를 내립니다. 도는 실행은 끝까지 갑니다. 되돌릴 수 없습니다 — 다시 쓰려면 새로 배포하세요."
+        description="현장은 다음 하트비트에 이 프로세스를 내립니다. 도는 실행은 끝까지 갑니다. 되돌릴 수 없습니다 — 다시 쓰려면 새로 배포하세요."
         confirmLabel="철회"
         danger
         onConfirm={() =>

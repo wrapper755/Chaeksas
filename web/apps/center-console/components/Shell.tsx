@@ -33,16 +33,23 @@ type NavItem =
 const LATER_BADGE = "아직";
 
 /**
- * 상위 메뉴 넷 (CON-00 [N]). **지금 화면이 든 것만 펼쳐** 열리고 누르면 접고 편다 — `<details>`라
+ * 상위 메뉴 다섯 (CON-00 [N]). **지금 화면이 든 것만 펼쳐** 열리고 누르면 접고 편다 — `<details>`라
  * JS가 없어도 된다.
  */
 const NAV: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "운영 현황",
     items: [
-      { label: "로그", href: "/runs" },
-      { label: "BPM 프로세스", href: "/bots" },
-      { label: "데스크톱 앱", href: "/bot-uis" },
+      { label: "프로세스", href: "/bots" },
+      { label: "앱", href: "/bot-uis" },
+    ],
+  },
+  {
+    // 같은 둘(프로세스·앱)을 「지금 모습」(위)과 「지나온 이력」(여기)으로 가른다 (ADR-0121).
+    label: "로그",
+    items: [
+      { label: "프로세스", href: "/runs" },
+      { label: "앱", href: "/app-logs" },
     ],
   },
   {

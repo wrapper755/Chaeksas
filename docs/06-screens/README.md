@@ -76,17 +76,17 @@
 새 업무 하나가 만들어져 운영되기까지 거치는 화면이다.
 
 0. **준비 (서버)** — 설치하는 사람이 `.env`에 첫 관리자 아이디·비밀번호를 적고 Center를 띄운다. 서비스 앱·어댑터 일꾼은 Center 일꾼 폴더에 일꾼 파일을 두고(`chk-center consumer-file`) 찍힌 토큰과 Center 주소를 주어 띄운다 — 외부 확장 정의는 어댑터 일꾼이 들고 있다가 올리고, 외부 앱의 주소·키는 어댑터 일꾼의 설정에만 넣는다 ([ADR-0102](../decisions/0102-calling-outside-is-pull.md), [ADR-0122](../decisions/0122-consumer-folder.md)). 관리자는 [CON-07](center-console.md#con-07-리소스-신규) 「일꾼 폴더」에서 들어왔는지 본다. 서버 BPM 프로세스를 쓸 거면 서버 실행기에 Center 주소를 주고 띄운 뒤, 로그의 요청 코드와 같은 줄을 [CON-12](center-console.md#con-12-서버-실행-신규-m7) 「승인 대기」에서 승인한다 (컨테이너는 환경변수로 키를 준다 — C12).
-1. **준비 (PC)** — 설치 담당자가 PC 실행기 설정에 Center 주소를 넣고([BUI-03](bot-ui.md#bui-03-설정등록)) 화면에 뜬 요청 코드를 관리자에게 알리면, 관리자가 [CON-03](center-console.md#con-03-데스크톱-앱) 「승인 대기」에서 같은 코드를 승인한다 — 키는 Center가 내려 준다 ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). **서비스 앱 키는 없다** — BPM 프로세스는 바깥 기능을 Center의 외부 작업으로 부르고, 불러도 되는가는 7 「배포」가 정한다 (C15).
+1. **준비 (PC)** — 설치 담당자가 PC 실행기 설정에 Center 주소를 넣고([BUI-03](bot-ui.md#bui-03-설정등록)) 화면에 뜬 요청 코드를 관리자에게 알리면, 관리자가 [CON-03](center-console.md#con-03-앱) 「승인 대기」에서 같은 코드를 승인한다 — 키는 Center가 내려 준다 ([ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)). **서비스 앱 키는 없다** — BPM 프로세스는 바깥 기능을 Center의 외부 작업으로 부르고, 불러도 되는가는 7 「배포」가 정한다 (C15).
 3. **BPM 프로세스 만들기** — 설계자가 Studio에서 새 BPM 프로세스를 만들고 실행 위치를 정한다 — 기본은 서버, 현장 확인·PC 전용 자원이 필요하면 PC ([ADR-0016](../decisions/0016-server-first.md)). [STU-05](studio.md#stu-05-새-bpm-프로세스), [STU-06](studio.md#stu-06-bpm-프로세스-정보)
 4. **그리기** — BPMN을 그리고 태스크마다 속성을 채운다. 서비스 앱 태스크는 리소스 탐색기의 작업을 고른다. [STU-01](studio.md#stu-01-메인-창), [STU-03](studio.md#stu-03-리소스-탐색기), [STU-14](studio.md#stu-14-서비스-앱-태스크-편집기-신규)
 5. **시험** — 시험 케이스를 만들고 자율 수행으로 실행한다. AI 태스크는 학습되어 재생 명세가 생기고, 결정 수행(재생)으로 운영과 같은 방식을 미리 확인한다. [STU-07](studio.md#stu-07-시험-케이스), [STU-08](studio.md#stu-08-실행-대화상자), [STU-09](studio.md#stu-09-실행-표시와-결과)
-6. **올리기** — 패키지로 Center에 올린다 (후보 상태). 패키지에는 키가 없다. [STU-01](studio.md#stu-01-메인-창) 파일 메뉴, [CON-02](center-console.md#con-02-bpm-프로세스)
-7. **승인·배포** — 관리자가 콘솔에서 승인하고([CON-02](center-console.md#con-02-bpm-프로세스)), PC BPM 프로세스는 PC 실행기에, 서버 BPM 프로세스는 서버 실행기에 배포한다([CON-15](center-console.md#con-15-배포-신규)). 봉투는 Center가 서명한다.
-8. **적용** — PC: PC 실행기가 하트비트로 배포를 받아 BPM 프로세스를 설치하고 사전 점검(확장 포함)을 한다 ([BUI-04](bot-ui.md#bui-04-bpm-프로세스-탭-실행대기열설치된-bpm-프로세스), [CON-03](center-console.md#con-03-데스크톱-앱)). 서버: 서버 실행기가 배포를 받는다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
+6. **올리기** — 패키지로 Center에 올린다 (후보 상태). 패키지에는 키가 없다. [STU-01](studio.md#stu-01-메인-창) 파일 메뉴, [CON-02](center-console.md#con-02-프로세스)
+7. **승인·배포** — 관리자가 콘솔에서 승인하고([CON-02](center-console.md#con-02-프로세스)), PC BPM 프로세스는 PC 실행기에, 서버 BPM 프로세스는 서버 실행기에 배포한다([CON-15](center-console.md#con-15-배포-신규)). 봉투는 Center가 서명한다.
+8. **적용** — PC: PC 실행기가 하트비트로 배포를 받아 BPM 프로세스를 설치하고 사전 점검(확장 포함)을 한다 ([BUI-04](bot-ui.md#bui-04-bpm-프로세스-탭-실행대기열설치된-bpm-프로세스), [CON-03](center-console.md#con-03-앱)). 서버: 서버 실행기가 배포를 받는다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
 9. **작업 지시** — 운영자가 콘솔에서 작업을 만들거나, 외부 시스템(연동용 키)·감시 모드·일정·메시지로 시작된다. [CON-05](center-console.md#con-05-작업-지시)
 10. **실행** — PC: PC 실행기가 BPM 프로세스를 결정 수행으로 실행한다. 한 PC에서 실행 중인 BPM 프로세스는 하나이고 나머지는 대기열에서 기다린다 ([ADR-0014](../decisions/0014-one-bot-per-pc.md), [BUI-01](bot-ui.md#bui-01-트레이)). 서버: 서버 실행기가 여러 건을 동시에 실행한다 ([CON-12](center-console.md#con-12-서버-실행-신규-m7)).
 11. **결재** — 결재자가 콘솔 결재함 또는 현장 PC 창에서 답한다. [CON-04](center-console.md#con-04-결재함), [CMN-01](#5-공용-창-cmn-01-결재--확인-창)
-12. **확인** — 운영자가 로그·BPM 프로세스 화면을, 서비스 앱 관리자가 사용 기록을 본다. [CON-01](center-console.md#con-01-로그), [CON-02](center-console.md#con-02-bpm-프로세스), [SVC-03](service-app-console.md#svc-03-사용-기록)
+12. **확인** — 운영자가 로그·BPM 프로세스 화면을, 서비스 앱 관리자가 사용 기록을 본다. [CON-01](center-console.md#con-01-프로세스-로그), [CON-02](center-console.md#con-02-프로세스), [SVC-03](service-app-console.md#svc-03-사용-기록)
 
 ## 5. 공용 창 CMN-01: 결재 / 확인 창
 
@@ -151,9 +151,9 @@ Studio 시험 실행과 PC 실행기의 BPM 프로세스 실행에서 같은 창
 | BUI-10 | 서비스 앱 키 — **없어졌다** (ADR-0102, 서비스 앱 키가 없다) | PC 실행기 | — | M5 | 폐기 |
 | BUI-11 | 확장 | PC 실행기 | 설치 담당자 | M4 | 신규 (ADR-0018) |
 | CON-00 | 공통 틀 | Center 콘솔 | 모두 | M2 | 프로토타입 |
-| CON-01 | 로그 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
-| CON-02 | BPM 프로세스 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
-| CON-03 | 데스크톱 앱 (PC 실행기·Studio) | Center 콘솔 | 운영자 | M2 | 프로토타입 확장 |
+| CON-01 | 프로세스 로그 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
+| CON-02 | 프로세스 | Center 콘솔 | 운영자 | M3 | 프로토타입 |
+| CON-03 | 앱 (Studio·Bot) | Center 콘솔 | 운영자 | M2 | 프로토타입 확장 |
 | CON-04 | 결재함 | Center 콘솔 | 결재자 | M5 | 프로토타입 |
 | CON-05 | 작업 지시 | Center 콘솔 | 운영자 | M5 | 프로토타입 확장 (만들기 추가) |
 | CON-06 | 공통 패키지 | Center 콘솔 | 운영자 | M5 | 프로토타입 |
@@ -163,6 +163,7 @@ Studio 시험 실행과 PC 실행기의 BPM 프로세스 실행에서 같은 창
 | CON-13 | 가상 직원 | Center 콘솔 | 운영자·감독자 | — | 신규 ([ADR-0085](../decisions/0085-virtual-worker-resource.md)) |
 | CON-14 | 관리자 계정 | Center 콘솔 | 관리자 | — | 신규 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) |
 | CON-15 | 배포 | Center 콘솔 | 관리자 | — | 신규 (ADM-03을 옮겼다, ADR-0090) |
+| CON-16 | 앱 로그 | Center 콘솔 | 운영자 | — | 신규 ([ADR-0121](../decisions/0121-center-console-says-process.md)) |
 | SVC-00 | 공통 틀 | 서비스 앱 관리 콘솔 | 서비스 앱 관리자 | M2 | 신규 (`service_kit`) |
 | SVC-01 | 상태 | 서비스 앱 관리 콘솔 | 서비스 앱 관리자 | M2 | 신규 |
 | SVC-02 | API 키 — **없어졌다** (ADR-0102, 서비스 앱 키가 없다) | 서비스 앱 관리 콘솔 | — | M2 | 폐기 |

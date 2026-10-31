@@ -20,7 +20,7 @@ const ALL = [
 ];
 
 describe("runsOnServer", () => {
-  it("서버 실행기에 배포된 BPM 프로세스만 서버다", () => {
+  it("서버 실행기에 배포된 프로세스만 서버다", () => {
     expect(runsOnServer(ALL, "정산")).toBe(true);
     expect(runsOnServer(ALL, "발주")).toBe(false);
     expect(runsOnServer(ALL, "없음")).toBe(false);

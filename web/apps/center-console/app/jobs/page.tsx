@@ -92,8 +92,8 @@ export default async function JobsPage({
       ),
     },
     { key: "location", header: "실행 위치", width: "8ch", cell: location },
-    { key: "target", header: "PC 실행기", width: "14ch", cell: (row) => targetName(row, botUis) },
-    { key: "bot", header: "BPM 프로세스", cell: botLabel },
+    { key: "target", header: "Bot", width: "14ch", cell: (row) => targetName(row, botUis) },
+    { key: "bot", header: "프로세스", cell: botLabel },
     {
       // **키만** 보인다 (U10) — 값은 상세에서 접힌 채로만.
       key: "inputs",
@@ -107,7 +107,7 @@ export default async function JobsPage({
         const from = delegatedFrom(row);
         return from ? (
           <Link className="underline" href={`/runs/${encodeURIComponent(from)}`}>
-            서버 BPM 프로세스 ({from})
+            서버 프로세스 ({from})
           </Link>
         ) : (
           // 일정이 만든 작업은 「일정 <식>」이다 (C5 예약값 `timer:`, ADR-0110).
@@ -176,7 +176,7 @@ export default async function JobsPage({
           </div>
         </fieldset>
         <label className="flex flex-col gap-1 text-body-sm">
-          <span className="text-text-muted">PC 실행기</span>
+          <span className="text-text-muted">Bot</span>
           <select
             name="bot_ui"
             defaultValue={botUi}

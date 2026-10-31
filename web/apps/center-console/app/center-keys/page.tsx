@@ -154,7 +154,7 @@ export default async function CenterKeysPage({
             ) : enrolled.length === 0 ? (
               <EmptyState
                 title="승인으로 들인 키가 없습니다."
-                hint="PC 실행기·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — PC 실행기·Studio는 「데스크톱 앱」, 서버 실행기는 「BPM 프로세스」의 「서버」 탭에서 승인합니다."
+                hint="PC 실행기·Studio·서버 실행기에 Center 주소를 넣으면 등록 요청이 옵니다 — Studio·Bot은 「앱」, 서버 실행기는 「프로세스」의 「서버」 탭에서 승인합니다."
               />
             ) : (
               <DataTable

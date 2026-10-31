@@ -48,7 +48,8 @@ export async function login(_previous: ActionResult, form: FormData): Promise<Ac
       expires: new Date(made.expires_at),
     },
   );
-  redirect("/bot-uis");
+  // 첫 화면 — 메뉴 맨 위 「운영 현황 › 프로세스」 (ADR-0121).
+  redirect("/bots");
 }
 
 export async function logout(): Promise<void> {
@@ -517,7 +518,7 @@ export async function createDeployment(form: FormData): Promise<void> {
     expires_at: when("expires_at"),
   };
 
-  if (!botId || !version) fail("배포할 BPM 프로세스와 버전을 고르세요.");
+  if (!botId || !version) fail("배포할 프로세스와 버전을 고르세요.");
   let targets: Array<{ type: string; id: string }>;
   let limit: number | undefined;
   if (place === "server") {
@@ -528,7 +529,7 @@ export async function createDeployment(form: FormData): Promise<void> {
     if (limit !== undefined && !(Number.isInteger(limit) && limit >= 1)) fail("동시 실행 상한은 1 이상의 정수입니다.");
   } else {
     targets = form.getAll("bot_ui").map((one) => ({ type: "bot_ui", id: String(one) })).filter((one) => one.id);
-    if (targets.length === 0) fail("배포할 PC 실행기를 하나 이상 고르세요.");
+    if (targets.length === 0) fail("배포할 Bot을 하나 이상 고르세요.");
   }
 
   const done: string[] = [];

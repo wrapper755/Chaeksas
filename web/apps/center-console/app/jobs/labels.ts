@@ -26,12 +26,12 @@ export const REASON_LABEL: Record<string, string> = {
   queue_full: "대기열 가득",
   no_deployment: "배포 없음",
   not_ready: "준비 안 됨",
-  bot_ui_shutdown: "PC 실행기 종료",
-  bot_ui_lost: "PC 실행기 기록 유실",
-  server_location: "서버 실행 BPM 프로세스",
+  bot_ui_shutdown: "Bot 종료",
+  bot_ui_lost: "Bot 기록 유실",
+  server_location: "서버 실행 프로세스",
   cancelled_on_pc: "현장에서 취소",
   global_limit: "서버 실행기 빈자리 없음",
-  per_bot_limit: "BPM 프로세스별 동시 실행 상한",
+  per_bot_limit: "프로세스별 동시 실행 상한",
   paused: "일시 중지",
 };
 
@@ -85,7 +85,7 @@ export function stateNote(job: JobInfo, botUis: BotUiInfo[]): string | null {
   if (job.state === "queued" && job.queue_position) {
     const host = botUis.find((one) => one.bot_ui_id === job.target.id);
     const running = host?.current_run?.bpm_process_id;
-    return `PC 실행기 대기열 ${job.queue_position}번째${running ? ` — 실행 중 ${running}` : ""}`;
+    return `Bot 대기열 ${job.queue_position}번째${running ? ` — 실행 중 ${running}` : ""}`;
   }
   return null;
 }

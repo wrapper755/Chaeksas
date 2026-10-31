@@ -149,7 +149,7 @@ export async function ServerRunners({ admin }: { admin: boolean }) {
     },
     {
       key: "bpm_process_id",
-      header: "서버 BPM 프로세스",
+      header: "서버 프로세스",
       cell: (row) => `${row.bpm_process_id}@${row.version ?? "(배포된 버전)"}`,
     },
     { key: "requested_at", header: "요청 시각", width: "16ch", cell: (row) => time(row.requested_at) },

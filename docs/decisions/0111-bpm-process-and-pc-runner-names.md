@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 (Center 콘솔 화면 글의 「BPM 프로세스」는 [ADR-0121](0121-center-console-says-process.md)이 「프로세스」로 대체) |
 | 날짜 | 2026-10-30 |
 | 관련 | `docs/02-glossary.md` §0·§1, [ADR-0012](0012-bot-ui.md)(대체하지 않는다 — 구조는 그대로다), [ADR-0015](0015-run-location.md), [ADR-0023](0023-bot-ui-process-supervision.md), [ADR-0068](0068-installer-inno-setup-per-user.md) |
 

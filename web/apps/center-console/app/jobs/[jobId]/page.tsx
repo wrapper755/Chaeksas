@@ -70,7 +70,7 @@ export default async function JobPage({
       {failure ? <ErrorBanner message={failure} /> : null}
       {asked.created ? (
         <p className="mb-4 text-body text-status-completed-fg">
-          작업을 만들었습니다. {job?.target.type === "server_runner" ? "서버 실행기" : "PC 실행기"}가 다음
+          작업을 만들었습니다. {job?.target.type === "server_runner" ? "서버 실행기가" : "Bot이"} 다음
           하트비트에 받아 갑니다.
         </p>
       ) : null}
@@ -85,12 +85,12 @@ export default async function JobPage({
               </div>
             </Row>
             <Row label="실행 위치">{location(job)}</Row>
-            <Row label="PC 실행기">{targetName(job, botUis)}</Row>
-            <Row label="BPM 프로세스">{botLabel(job)}</Row>
+            <Row label="Bot">{targetName(job, botUis)}</Row>
+            <Row label="프로세스">{botLabel(job)}</Row>
             <Row label="요청자">
               {from ? (
                 <Link className="underline" href={`/runs/${encodeURIComponent(from)}`}>
-                  서버 BPM 프로세스 ({from})
+                  서버 프로세스 ({from})
                 </Link>
               ) : (
                 timerRequester(job.requested_by) ?? job.requested_by

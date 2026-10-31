@@ -70,7 +70,7 @@ describe("percent", () => {
 });
 
 describe("summarize", () => {
-  it("(BPM 프로세스, 버전)으로 묶고 성공·AI·재생을 센다", () => {
+  it("(프로세스, 버전)으로 묶고 성공·AI·재생을 센다", () => {
     const found = summarize([
       run({ ai_tasks: 2, replayed_tasks: 1 }),
       run({ status: "failed", ai_tasks: 1, replayed_tasks: 1 }),
@@ -116,7 +116,7 @@ describe("summarize", () => {
     expect(percent(one.confirmations, one.confirm_sample)).toBe("100%");
   });
 
-  it("id·버전·상태가 없는 줄은 건너뛴다 (Studio가 보낸 기록에는 BPM 프로세스가 없다)", () => {
+  it("id·버전·상태가 없는 줄은 건너뛴다 (Studio가 보낸 기록에는 프로세스가 없다)", () => {
     const found = summarize([
       run({ bpm_process_id: undefined }),
       run({ version: undefined }),
@@ -149,7 +149,7 @@ describe("deployedPcs", () => {
     expect(found).toEqual({ pcs: 1, deployments: 2 });
   });
 
-  it("다른 판·다른 BPM 프로세스·서버 대상은 세지 않는다 (열 이름이 「배포된 PC 실행기」다)", () => {
+  it("다른 판·다른 프로세스·서버 대상은 세지 않는다 (열 이름이 「배포된 PC 실행기」다)", () => {
     const found = deployedPcs(
       [
         deployment({ target: { type: "bot_ui", id: "bui_2222" } }),
@@ -260,7 +260,7 @@ describe("serverDeployments", () => {
 });
 
 describe("botLimitRows", () => {
-  it("줄은 **배포**가 정한다 — 준비 상태를 아직 안 올린 BPM 프로세스도 보인다", () => {
+  it("줄은 **배포**가 정한다 — 준비 상태를 아직 안 올린 프로세스도 보인다", () => {
     // 거꾸로 `readiness`로 줄을 지으면 「배포는 했는데 왜 안 도나」가 화면에서 사라진다.
     const rows = botLimitRows(runner(), [serverDeployment()]);
     expect(rows).toHaveLength(1);
@@ -293,7 +293,7 @@ describe("botLimitRows", () => {
     expect(botLimitRows(found, [serverDeployment()])[0]?.running).toBe(2);
   });
 
-  it("같은 BPM 프로세스의 판이 둘 살아 있으면 **줄도 둘**이다", () => {
+  it("같은 프로세스의 판이 둘 살아 있으면 **줄도 둘**이다", () => {
     const rows = botLimitRows(runner(), [
       serverDeployment({ version: "2.0.0" }),
       serverDeployment(),
@@ -318,9 +318,9 @@ describe("botLimitRows", () => {
 describe("queueReason", () => {
   it("Center가 적는 사유는 `per_bot_limit` 하나 — n은 **배포 봉투**에서 온다", () => {
     const job = queuedJob({ state_reason: "per_bot_limit" });
-    expect(queueReason(job, [runner()], [serverDeployment({ max_concurrency: 2 })])).toBe("BPM 프로세스별 상한 2");
+    expect(queueReason(job, [runner()], [serverDeployment({ max_concurrency: 2 })])).toBe("프로세스별 상한 2");
     // 적혀 있지 않으면 **숫자를 지어내지 않는다**.
-    expect(queueReason(job, [runner()], [serverDeployment()])).toBe("BPM 프로세스별 상한");
+    expect(queueReason(job, [runner()], [serverDeployment()])).toBe("프로세스별 상한");
   });
 
   it("사유 없이 남은 것은 「전체 상한」, 다 멈춰 있으면 「일시 중지」", () => {

@@ -37,7 +37,7 @@ const CHOICES = ["", "running", "waiting", "success", "failed", "cancelled"];
 
 /** C3 `executor` → 화면 표기 (「PC 실행기 또는 서버 실행기」 열). **어느 PC인지는 모른다.** */
 const EXECUTOR: Record<string, string> = {
-  bot_ui: "PC 실행기",
+  bot_ui: "Bot",
   server_runner: "서버 실행기",
   studio: "Studio",
 };
@@ -55,11 +55,11 @@ function tally(value: number | null | undefined): string {
 
 /** PC 실행기 목록을 못 받았을 때 (U3 — 좁히기는 그래도 돈다). */
 export const NO_BOT_UI_LIST =
-  "PC 실행기 목록을 받지 못해 이름 대신 id로 보입니다 — 좁히기는 그대로 됩니다.";
+  "Bot 목록을 받지 못해 이름 대신 id로 보입니다 — 좁히기는 그대로 됩니다.";
 
 /** Studio·토큰이 보낸 기록에는 PC가 없다는 말 (U3 — 「—」 옆에 까닭을 둔다). */
 export const NO_PC_NOTE =
-  "「PC 실행기」가 비어 있는 기록은 PC가 아닌 쪽(Studio 시험 실행)이 보낸 것입니다.";
+  "「Bot」가 비어 있는 기록은 PC가 아닌 쪽(Studio 시험 실행)이 보낸 것입니다.";
 
 export function time(value: string | null | undefined): string {
   if (!value) return "—";
@@ -141,13 +141,13 @@ export default async function RunsPage({
         </Link>
       ),
     },
-    { key: "bpm_process_id", header: "BPM 프로세스", cell: (row) => row.bpm_process_id ?? "—" },
+    { key: "bpm_process_id", header: "프로세스", cell: (row) => row.bpm_process_id ?? "—" },
     { key: "version", header: "버전", width: "10ch", cell: (row) => row.version ?? "—" },
     { key: "run_location", header: "실행 위치", width: "10ch", cell: (row) => where(row.run_location) },
     { key: "executor", header: "실행한 쪽", width: "12ch", cell: (row) => EXECUTOR[row.executor ?? ""] ?? "—" },
     {
       key: "bot_ui_id",
-      header: "PC 실행기",
+      header: "Bot",
       width: "14ch",
       // 이름을 모르면 **id를 보인다** — 「—」로 지우면 PC를 아는데도 모르는 것처럼 된다.
       cell: (row) => (row.bot_ui_id ? (pcName.get(row.bot_ui_id) ?? row.bot_ui_id) : "—"),
@@ -177,7 +177,7 @@ export default async function RunsPage({
   return (
     <Shell mode={found.mode} actor={found.actor} current="/runs">
       <header className="mb-4">
-        <h1 className="text-h1 font-bold">로그</h1>
+        <h1 className="text-h1 font-bold">프로세스 로그</h1>
       </header>
 
       <form className="filter-card flex flex-wrap items-end gap-3" method="get">
@@ -196,7 +196,7 @@ export default async function RunsPage({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-body-sm">
-          BPM 프로세스
+          프로세스
           <input
             name="bpm_process_id"
             defaultValue={query.bpm_process_id ?? ""}
@@ -219,7 +219,7 @@ export default async function RunsPage({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-body-sm">
-          PC 실행기
+          Bot
           <select
             name="bot_ui_id"
             defaultValue={query.bot_ui_id ?? ""}
@@ -267,7 +267,7 @@ export default async function RunsPage({
             caption="실행 목록"
             empty={{
               title: "조건에 맞는 실행이 없습니다.",
-              hint: "Studio 시험 실행이나 PC 실행기가 보낸 기록이 여기 쌓입니다.",
+              hint: "Studio 시험 실행이나 Bot이 보낸 기록이 여기 쌓입니다.",
             }}
           />
           {rows.length > 0 ? <p className="text-body-sm text-text-muted">{total}건</p> : null}
