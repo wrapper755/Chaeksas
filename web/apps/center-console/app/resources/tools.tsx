@@ -38,7 +38,7 @@ export function RevokeExtension({ extensionId, version, users }: { extensionId: 
       <ConfirmDialog
         open={asking}
         title={`${extensionId} ${version}의 등록을 해제할까요?`}
-        description={`${users > 0 ? `이 정의를 쓰는 BPM 프로세스 ${users}개가 실행 불가가 됩니다. ` : ""}되살릴 수 없습니다.`}
+        description={`${users > 0 ? `이 정의를 쓰는 프로세스 ${users}개가 실행 불가가 됩니다. ` : ""}되살릴 수 없습니다.`}
         confirmLabel="등록 해제"
         danger
         onConfirm={() =>

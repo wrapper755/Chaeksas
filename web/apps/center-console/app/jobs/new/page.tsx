@@ -139,7 +139,7 @@ export default async function NewJobPage({
       {/* 1. 고르기 — GET이라 주소에 남고 JS가 없어도 돈다. */}
       <form className="filter-card flex flex-wrap items-end gap-3" method="get">
         <label className="flex flex-col gap-1 text-body-sm">
-          <span className="text-text-muted">BPM 프로세스</span>
+          <span className="text-text-muted">프로세스</span>
           <select name="bot" defaultValue={bot} className={FIELD}>
             <option value="">(고르세요)</option>
             {bots.map((one) => (
@@ -156,7 +156,7 @@ export default async function NewJobPage({
           </p>
         ) : bot ? (
           <label className="flex flex-col gap-1 text-body-sm">
-            <span className="text-text-muted">PC 실행기</span>
+            <span className="text-text-muted">Bot</span>
             <select name="bot_ui" defaultValue={botUi} className={FIELD}>
               <option value="">(고르세요)</option>
               {places.map((one) => (
@@ -187,14 +187,14 @@ export default async function NewJobPage({
 
       {bots.length === 0 && !failure ? (
         <p className="text-body text-text-secondary">
-          배포된 BPM 프로세스가 없습니다. 「배포」에서 배포한 뒤 만드세요.
+          배포된 프로세스가 없습니다. 「배포」에서 배포한 뒤 만드세요.
         </p>
       ) : null}
       {bot && !server && places.length === 0 ? (
-        <ErrorBanner message="이 BPM 프로세스가 배포된 PC 실행기가 없습니다 — 「배포」에서 배포한 뒤 만드세요." />
+        <ErrorBanner message="이 프로세스가 배포된 Bot이 없습니다 — 「배포」에서 배포한 뒤 만드세요." />
       ) : null}
       {bot && botUi && versions.length === 0 ? (
-        <ErrorBanner message="이 PC 실행기에 유효한 배포가 없습니다." />
+        <ErrorBanner message="이 Bot에 유효한 배포가 없습니다." />
       ) : null}
 
       {/* 2. 만들기 — 서버 액션. 입력 칸의 타입은 서버가 매니페스트를 다시 읽어 맞춘다. */}
@@ -213,7 +213,7 @@ export default async function NewJobPage({
           <fieldset className="flex flex-col gap-3 rounded-lg border border-border-default bg-bg-surface p-3">
             <legend className="px-1 text-body font-medium">입력 변수</legend>
             {inputs.length === 0 ? (
-              <p className="text-body-sm text-text-muted">이 BPM 프로세스는 받는 입력을 적어 두지 않았습니다.</p>
+              <p className="text-body-sm text-text-muted">이 프로세스는 받는 입력을 적어 두지 않았습니다.</p>
             ) : (
               inputs.map((one) => <InputField key={one.name} input={one} />)
             )}

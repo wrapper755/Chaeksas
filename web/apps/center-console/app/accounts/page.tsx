@@ -15,7 +15,7 @@ const ROLE_LABEL: Record<string, string> = { admin: "관리자", viewer: "보기
 export default async function AccountsPage() {
   const found = await session();
   if (!found) redirect("/login");
-  if (found.mode !== "admin") redirect("/bot-uis");
+  if (found.mode !== "admin") redirect("/bots");
 
   let rows: AccountInfo[] = [];
   let failure: string | null = null;

@@ -17,8 +17,8 @@ import { Shell } from "@/components/Shell";
 export const COMMON_KINDS = ["process_lib"] as const;
 
 export const KIND_LABEL: Record<string, string> = {
-  process_lib: "공유 BPM 프로세스",
-  bpm_process: "BPM 프로세스",
+  process_lib: "공유 프로세스",
+  bpm_process: "프로세스",
 };
 
 /** C5 상태 → `status_map`의 「패키지」 표기. 모르는 값은 **그대로 보인다** (원칙 10). */
@@ -108,7 +108,7 @@ export default async function PackagesPage() {
       {failure ? (
         <ErrorBanner message={failure} />
       ) : rows.length === 0 ? (
-        <EmptyState title="올라온 공통 패키지가 없습니다." hint="Studio의 「공유 BPM 프로세스로 내보내기...」로 만든 패키지를 올리세요." />
+        <EmptyState title="올라온 공통 패키지가 없습니다." hint="Studio의 「공유 프로세스로 내보내기...」로 만든 패키지를 올리세요." />
       ) : (
         <DataTable
           columns={columns}

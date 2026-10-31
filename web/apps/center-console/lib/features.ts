@@ -128,9 +128,9 @@ function hostTodos(row: ExtensionResource, input: FeatureInput, bots: PackageInf
   }
   const out: Todo[] = [];
   const where = (n: number) => `${n}대`;
-  if (missing > 0) out.push({ kind: "missing_on_hosts", text: `PC ${where(missing)}에 없음`, href: "/bot-uis" });
-  if (off > 0) out.push({ kind: "off_on_hosts", text: `PC ${where(off)}에서 꺼짐`, href: "/bot-uis" });
-  if (wrong > 0) out.push({ kind: "wrong_version", text: `PC ${where(wrong)}가 맞지 않는 판`, href: "/bot-uis" });
+  if (missing > 0) out.push({ kind: "missing_on_hosts", text: `PC ${where(missing)}에 없음`, href: "/bot-uis?tab=bot" });
+  if (off > 0) out.push({ kind: "off_on_hosts", text: `PC ${where(off)}에서 꺼짐`, href: "/bot-uis?tab=bot" });
+  if (wrong > 0) out.push({ kind: "wrong_version", text: `PC ${where(wrong)}가 맞지 않는 판`, href: "/bot-uis?tab=bot" });
   return out;
 }
 

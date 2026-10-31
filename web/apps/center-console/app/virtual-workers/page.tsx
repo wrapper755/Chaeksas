@@ -49,7 +49,7 @@ export default async function VirtualWorkersPage({
       ),
     },
     { key: "id", header: "id", width: "20ch", mono: true },
-    { key: "intake", header: "접수 BPM 프로세스", mono: true },
+    { key: "intake", header: "접수 프로세스", mono: true },
     { key: "supervisors", header: "감독자", cell: (row) => (row.supervisors ?? []).join(", ") || "—" },
     {
       key: "state",
@@ -92,11 +92,11 @@ export default async function VirtualWorkersPage({
               <input name="supervisors" className={INPUT} />
             </label>
             <label className="flex flex-col gap-1 text-body-sm">
-              <span className="text-text-muted">접수 BPM 프로세스 (패키지 id) *</span>
+              <span className="text-text-muted">접수 프로세스 (패키지 id) *</span>
               <input name="intake" required className={INPUT} />
             </label>
             <p className="text-caption text-text-muted">
-              접수 BPM 프로세스에 결재 없는 일괄 기동이 있으면 등록되지 않습니다.
+              접수 프로세스에 결재 없는 일괄 기동이 있으면 등록되지 않습니다.
             </p>
             <div>
               <Button type="submit" variant="primary">

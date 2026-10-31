@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Route } from "next";
 import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
@@ -12,7 +13,7 @@ import { lastReportNote } from "@/lib/labels";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
 /**
- * CON-03 데스크톱 앱 — PC 실행기(목록)와 Studio. 표가 둘이고 각각 위에 그 프로그램의 「승인 대기」가 있다.
+ * CON-03 앱 — 탭 「Studio」/「Bot」(PC 실행기, ADR-0121). 탭마다 표 하나와 그 위의 「승인 대기」가 있다.
  *
  * PC 실행기 값은 **PC 실행기가 하트비트로 보고한 그대로**다 (C4·C5 `BotUiInfo`). Center가 더하는 것은
  * 온라인 판정과 키 정보뿐이다. 상세(대기열·배포·확장·최근 배치 결정)는 이름을 누르면 열린다.
@@ -64,9 +65,17 @@ export function statusLabel(status: string): string {
 }
 
 
-export default async function BotUisPage() {
+/** 탭 — 이 차례이고 기본은 Studio다 (CON-03). */
+type AppTab = "studio" | "bot";
+const TABS: Array<{ tab: AppTab; label: string }> = [
+  { tab: "studio", label: "Studio" },
+  { tab: "bot", label: "Bot" },
+];
+
+export default async function BotUisPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const found = await session();
   if (!found) redirect("/login");
+  const tab: AppTab = (await searchParams).tab === "bot" ? "bot" : "studio";
 
   let rows: BotUiInfo[] = [];
   let enrollments: EnrollmentInfo[] = [];
@@ -94,7 +103,7 @@ export default async function BotUisPage() {
     },
     {
       key: "name",
-      header: "PC 실행기 이름",
+      header: "Bot 이름",
       cell: (row) => (
         <Link className="underline" href={`/bot-uis/${encodeURIComponent(row.bot_ui_id)}`}>
           {row.name}
@@ -159,31 +168,46 @@ export default async function BotUisPage() {
   return (
     <Shell mode={found.mode} actor={found.actor} current="/bot-uis">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-4">
-        <h1 className="text-h1 font-bold">데스크톱 앱</h1>
-        <CenterAddress url={CENTER_PUBLIC_URL} who="PC 실행기·Studio" />
+        <h1 className="text-h1 font-bold">앱</h1>
+        <CenterAddress url={CENTER_PUBLIC_URL} who={tab === "bot" ? "Bot" : "Studio"} />
       </header>
+
+      <nav className="mb-4 flex flex-wrap gap-2" aria-label="앱 종류">
+        {TABS.map((one) => (
+          <Link
+            key={one.tab}
+            href={`/bot-uis?tab=${one.tab}` as Route}
+            aria-current={tab === one.tab ? "page" : undefined}
+            className={
+              tab === one.tab
+                ? "rounded-md border border-transparent bg-primary-subtle px-3 py-1 text-body font-semibold text-primary"
+                : "rounded-md border border-border-default bg-bg-surface px-3 py-1 text-body text-text-secondary hover:bg-bg-subtle"
+            }
+          >
+            {one.label} ({one.tab === "bot" ? rows.length : studios.length})
+          </Link>
+        ))}
+      </nav>
 
       {failure ? (
         <ErrorBanner message={failure} action={<Button variant="secondary">다시 시도</Button>} />
-      ) : (
-        <div className="flex flex-col gap-8">
+      ) : tab === "bot" ? (
           <section className="flex flex-col gap-3">
             <h2 className="text-h2 font-semibold">
-              PC 실행기{rows.length > 0 ? ` · ${online}/${rows.length} 온라인` : ""}
+              Bot{rows.length > 0 ? ` · ${online}/${rows.length} 온라인` : ""}
             </h2>
             <Enrollments rows={enrollments} where="현장 화면" canDecide={found.mode === "admin"} />
             {rows.length === 0 ? (
               <EmptyState
-                title="등록된 PC 실행기가 없습니다."
+                title="등록된 Bot이 없습니다."
                 hint="현장 PC의 PC 실행기 설정에 Center 주소를 넣으면 등록 요청을 보냅니다. 현장 화면의 요청 코드와 같은 줄을 위의 「승인 대기」에서 승인하세요."
               />
             ) : (
-              <DataTable columns={columns} rows={rows} rowKey={(row) => row.bot_ui_id} caption="PC 실행기 목록" />
+              <DataTable columns={columns} rows={rows} rowKey={(row) => row.bot_ui_id} caption="Bot 목록" />
             )}
           </section>
-
+      ) : (
           <section className="flex flex-col gap-3">
-            <h2 className="text-h2 font-semibold">Studio</h2>
             <Enrollments
               rows={studioEnrollments}
               where="Studio 설정 창"
@@ -202,7 +226,6 @@ export default async function BotUisPage() {
               폐기·삭제는 「API 키」의 「승인으로 들인 키」에서 합니다.
             </p>
           </section>
-        </div>
       )}
     </Shell>
   );

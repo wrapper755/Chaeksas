@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DEPLOYMENT_REASON } from "@/lib/app-logs";
 import { redirect } from "next/navigation";
 import { DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
@@ -19,20 +20,6 @@ import { sourceLabel } from "@/lib/labels";
  * **두 쪽을 여기서 맞춰 보인다** — 「배포는 했는데 왜 안 도나」가 한 화면에서 풀려야 한다.
  */
 
-/** 배치 결정 사유 코드 → 글 (C2 위반 코드). 모르는 값은 **그대로 보인다** (원칙 10). */
-const WHY: Record<string, string> = {
-  bad_signature: "서명이 맞지 않음",
-  unknown_key: "모르는 서명 키",
-  revoked_key: "서명 키 철회됨",
-  wrong_kind: "봉투 종류가 다름",
-  expired: "유효 기간 지남",
-  not_yet: "아직 시작 전",
-  wrong_target: "다른 PC용",
-  hash_mismatch: "패키지 내용이 다름",
-  unsigned_package: "승인 서명 없음",
-  unsupported_alg: "모르는 서명 방식",
-  float_in_payload: "봉투에 소수가 들어 있음",
-};
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -104,7 +91,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
     { key: "order", header: "순서", width: "7ch", align: "right" },
     {
       key: "bpm_process_id",
-      header: "BPM 프로세스",
+      header: "프로세스",
       cell: (row) => `${row.bpm_process_id}${row.version ? `@${row.version}` : ""}`,
     },
     { key: "source", header: "출처", width: "10ch", cell: (row) => sourceLabel(row.source) },
@@ -125,7 +112,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
         </Link>
       ),
     },
-    { key: "bpm_process_id", header: "BPM 프로세스" },
+    { key: "bpm_process_id", header: "프로세스" },
     { key: "version", header: "버전", width: "10ch", mono: true },
     { key: "validity", header: "유효 기간", width: "26ch", cell: validity },
     {
@@ -170,7 +157,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
       header: "패키지",
       cell: (row) => `${row.bpm_process_id}@${row.version}`,
     },
-    { key: "reason", header: "사유", cell: (row) => (row.reason ? (WHY[row.reason] ?? row.reason) : "—") },
+    { key: "reason", header: "사유", cell: (row) => (row.reason ? (DEPLOYMENT_REASON[row.reason] ?? row.reason) : "—") },
   ];
 
   return (
@@ -182,7 +169,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
       {failure ? <ErrorBanner message={failure} /> : null}
 
       {!info && !failure ? (
-        <EmptyState title="그 PC 실행기가 없습니다." hint="목록에서 다시 고르세요." />
+        <EmptyState title="그 Bot이 없습니다." hint="목록에서 다시 고르세요." />
       ) : null}
 
       {info ? (
@@ -196,7 +183,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
             </p>
           ) : null}
           {info.disabled ? (
-            <ErrorBanner message="비활성화됨 — 이 PC에 새 작업·배포를 보내지 않습니다. 실행 중인 BPM 프로세스는 끝까지 돕니다." />
+            <ErrorBanner message="비활성화됨 — 이 PC에 새 작업·배포를 보내지 않습니다. 실행 중인 프로세스는 끝까지 돕니다." />
           ) : null}
 
           <Section title="요약">
@@ -252,7 +239,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
           <Section title="배포">
             {deployments.length === 0 ? (
               <p className="text-body-sm text-text-muted">
-                이 PC 실행기에 걸린 활성 배포가 없습니다. 「배포」에서 배포하세요.
+                이 Bot에 걸린 활성 배포가 없습니다. 「배포」에서 배포하세요.
               </p>
             ) : (
               <DataTable
@@ -279,7 +266,7 @@ export default async function BotUiPage({ params }: { params: Promise<{ botUiId:
 
           <Section title="최근 배치 결정">
             {results.length === 0 ? (
-              <p className="text-body-sm text-text-muted">PC 실행기가 올린 배치 결정이 아직 없습니다.</p>
+              <p className="text-body-sm text-text-muted">Bot이 올린 배치 결정이 아직 없습니다.</p>
             ) : (
               <DataTable
                 columns={resultColumns}

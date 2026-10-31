@@ -151,7 +151,7 @@ export default async function ResourcesPage({
 
       {shortfall.length > 0 ? (
         <div className="mb-4">
-          <ErrorBanner message={`BPM 프로세스가 요구하지만 쓸 수 없는 기능: ${shortfall.join(" · ")}`} />
+          <ErrorBanner message={`프로세스가 요구하지만 쓸 수 없는 기능: ${shortfall.join(" · ")}`} />
         </div>
       ) : null}
       {failure ? <ErrorBanner message={failure} /> : null}
@@ -338,7 +338,7 @@ function Contributed({ kind, items }: { kind: ContributedKind; items: Contribute
     { key: "updated_at", header: "마지막 갱신", width: "16ch", cell: (row) => time(row.updated_at) },
     {
       key: "used_by",
-      header: "쓰는 BPM 프로세스",
+      header: "쓰는 프로세스",
       cell: (row) => ((row.used_by ?? []).length > 0 ? (row.used_by ?? []).join(", ") : "—"),
     },
   ];

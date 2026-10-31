@@ -26,7 +26,7 @@ export const WITHDRAW_LABEL: Record<string, string> = {
   answered_in_field: "현장에서 먼저 답함",
   run_ended: "실행이 끝남",
   admin_withdraw: "관리자 회수",
-  host_lost: "PC 실행기 기록 유실",
+  host_lost: "Bot 기록 유실",
 };
 
 export function time(value: string | null | undefined): string {
@@ -107,7 +107,7 @@ export default async function ApprovalsPage({
     { key: "host", header: "실행하는 곳", width: "16ch", cell: where },
     {
       key: "bpm_process_id",
-      header: "BPM 프로세스",
+      header: "프로세스",
       cell: (row) => `${row.bpm_process_id}@${row.version}`,
     },
     {
