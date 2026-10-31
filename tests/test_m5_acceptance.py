@@ -182,7 +182,7 @@ def center(
     )
     url, server, thread = serve(create_app(settings, store=store))
     with httpx.Client(base_url=url, timeout=30.0) as client:
-        # 외부 확장 정의는 **어댑터 일꾼이 들고 있다가 올린다** (ADR-0121) — Center에 따로 등록하지 않는다.
+        # 외부 확장 정의는 **어댑터 일꾼이 들고 있다가 올린다** (ADR-0122) — Center에 따로 등록하지 않는다.
         definitions = [make(mock_apps.urls[app_id]) for app_id, make in external_defs.BUILDERS.items()]
         stops = mock_fleet(
             client,

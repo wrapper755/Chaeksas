@@ -102,7 +102,7 @@ class AdapterService:
 
     @property
     def extension_definition(self) -> dict[str, Any] | None:
-        """일꾼이 Center에 올릴 외부 확장 정의 (`service_kit.Consumer.publish`, ADR-0121)."""
+        """일꾼이 Center에 올릴 외부 확장 정의 (`service_kit.Consumer.publish`, ADR-0122)."""
         return self.raw
 
     @property

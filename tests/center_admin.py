@@ -1,7 +1,7 @@
 """시험이 Center에 **관리자로** 승인·배포·외부 확장 등록을 시키는 길 — 자리가 하나다 (ADR-0090).
 
 **이것은 제품 코드가 아니다.** 사람은 Center 콘솔에서 누르고, 시험은 관리자 토큰으로 같은
-API를 부른다(외부 확장은 일꾼이 올린다 — ADR-0121). 봉투는 **Center가 짓고 서명한다** — 시험이 Admin
+API를 부른다(외부 확장은 일꾼이 올린다 — ADR-0122). 봉투는 **Center가 짓고 서명한다** — 시험이 Admin
 키를 만들거나 봉투에 서명하지 않는다. 현장(PC 실행기·서버 실행기)은 하트비트의 `admin_keys`에 든
 Center 공개키로 다시 검증한다.
 
@@ -120,7 +120,7 @@ def register_extension(
     headers: dict[str, str] = ADMIN,  # noqa: ARG001 — 옛 부르는 꼴을 받는다
     expect: int | tuple[int, ...] | None = (200, 201),
 ) -> httpx.Response:
-    """외부 확장 등록 — **그 토픽을 맡은 일꾼이 제 정의를 올린다** (C15 `PUT …/self/extension`, ADR-0121).
+    """외부 확장 등록 — **그 토픽을 맡은 일꾼이 제 정의를 올린다** (C15 `PUT …/self/extension`, ADR-0122).
 
     시험은 그 확장 id를 토픽으로 맡은 일꾼을 들이고(일꾼 폴더와 같은 함수) 그 토큰으로 올린다.
     """
@@ -137,7 +137,7 @@ def register_extension(
 
 
 def revoke_extension(client: Any, extension_id: str, version: str, *, reason: str = "시험 철회") -> dict[str, Any]:
-    """외부 확장 등록 해제 — 콘솔·API 길은 없다 (ADR-0121). 일꾼 폴더가 거둘 때 쓰는 함수를 그대로 부른다."""
+    """외부 확장 등록 해제 — 콘솔·API 길은 없다 (ADR-0122). 일꾼 폴더가 거둘 때 쓰는 함수를 그대로 부른다."""
     from consumers import store_of  # noqa: PLC0415
 
     from chaeksas.center.api import resources  # noqa: PLC0415

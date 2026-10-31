@@ -51,13 +51,13 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C5-packages-deployments-jobs", 0, VirtualWorkerInfo),  # 가상 직원 (ADR-0085)
     ("C6-approvals", 0, ApprovalCreateRequest),
     ("C6-approvals", 1, TypeAdapter(dict[str, Any])),  # 표 값이 든 검토 자료 (ADR-0112)
-    ("C7-resources-center-keys", 0, ConsumerFolderScan),  # 일꾼 폴더 (ADR-0121)
+    ("C7-resources-center-keys", 0, ConsumerFolderScan),  # 일꾼 폴더 (ADR-0122)
     ("C12-server-runner-center", 0, ServerRunnerHeartbeatRequest),
     ("C12-server-runner-center", 1, MessageRequest),  # 외부 시스템이 넣는 메시지
     ("C13-extension-manifest", 0, Catalog),  # 공통 카탈로그 형식
     ("C13-extension-manifest", 1, ExtensionManifest),  # 내장 확장
     ("C13-extension-manifest", 2, ExtensionManifest),  # 외부 확장
-    ("C15-external-tasks", 0, FolderConsumer),  # 일꾼 파일 (ADR-0121)
+    ("C15-external-tasks", 0, FolderConsumer),  # 일꾼 파일 (ADR-0122)
     ("C15-external-tasks", 1, ExternalTaskCreate),  # 일감 올리기
     ("C15-external-tasks", 2, FetchResponse),  # 일꾼이 받은 것
 ]

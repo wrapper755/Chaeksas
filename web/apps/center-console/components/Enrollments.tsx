@@ -11,7 +11,7 @@ import { decideEnrollment } from "@/app/actions";
  * 사람이 하는 일은 하나다: 현장 화면(서버는 로그)의 **요청 코드**가 이 줄과 같은지 보고 들인다.
  * 키는 Center가 만들어 봉해 두므로 여기에 키가 나오지 않는다.
  *
- * 일꾼(C15)은 여기 오지 않는다 — 일꾼 폴더의 파일로만 들어온다 (ADR-0121).
+ * 일꾼(C15)은 여기 오지 않는다 — 일꾼 폴더의 파일로만 들어온다 (ADR-0122).
  */
 export function Enrollments({
   rows,

@@ -565,7 +565,7 @@ def test_the_runner_calls_the_external_app_through_the_adapter_consumer(
             tokens = enroll(http, topics=[APP], folder=tmp_path / "adapter")
             studio = http.post("/api/v1/center-keys", json={"name": "설계자", "type": "studio"}, headers=ADMIN)
             studio_key = str(studio.json()["key"])
-        # 어댑터 일꾼이 **제 정의를 들고 있다가** 뜰 때 올린다 (ADR-0121) — `start()`의 `publish`가 올린다.
+        # 어댑터 일꾼이 **제 정의를 들고 있다가** 뜰 때 올린다 (ADR-0122) — `start()`의 `publish`가 올린다.
         service = service_of(
             found, environ={ext_env(APP, "KEY"): "ocr-secret-1", "CHK_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"}
         )

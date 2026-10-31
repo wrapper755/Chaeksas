@@ -1,4 +1,4 @@
-"""외부 확장 등록 — 그 토픽을 맡은 일꾼이 올리고 Center가 서명한다 (C13·C2·C15, ADR-0090·0121).
+"""외부 확장 등록 — 그 토픽을 맡은 일꾼이 올리고 Center가 서명한다 (C13·C2·C15, ADR-0090·0122).
 
 진짜 Center를 in-process로 띄우고 **일꾼이** 정의를 올린다(`center_admin.register_extension`) — 봉투는
 **Center가 짓는다**. 콘솔·API로 등록·해제하는 길은 없다.

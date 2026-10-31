@@ -3,7 +3,7 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 /**
- * `GET /resources/consumer-folder` — Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (ADR-0121).
+ * `GET /resources/consumer-folder` — Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (ADR-0122).
  */
 export interface ConsumerFolderScan {
   configured?: boolean;
@@ -14,7 +14,7 @@ export interface ConsumerFolderScan {
   [k: string]: unknown;
 }
 /**
- * 일꾼 폴더의 한 줄 (ADR-0121). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.
+ * 일꾼 폴더의 한 줄 (ADR-0122). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.
  *
  * `revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼(파일이 빠졌다)이나, 맡은 일꾼이 없어진 외부 확장이다.
  */

@@ -141,7 +141,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ### 일꾼 들이기 (일꾼 폴더)
 
-일꾼은 **Center 쪽 일꾼 폴더의 파일로만** 들어온다 — 요청 코드·승인이 없다 ([ADR-0121](../decisions/0121-extension-folder.md)). 배포가 일꾼 폴더(`CHK_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)에 `<이름>.consumer.json`(`FolderConsumer`)을 복사해 두면 Center가 **뜰 때** 그 일꾼을 들인다. 폴더에 쓸 수 있는 사람을 관리자로 본다. 일꾼 하나가 **토픽 여럿**을 맡을 수 있다(모의 앱 열셋, 어댑터 일꾼이 외부 확장 여럿을 맡는 것).
+일꾼은 **Center 쪽 일꾼 폴더의 파일로만** 들어온다 — 요청 코드·승인이 없다 ([ADR-0122](../decisions/0122-consumer-folder.md)). 배포가 일꾼 폴더(`CHK_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)에 `<이름>.consumer.json`(`FolderConsumer`)을 복사해 두면 Center가 **뜰 때** 그 일꾼을 들인다. 폴더에 쓸 수 있는 사람을 관리자로 본다. 일꾼 하나가 **토픽 여럿**을 맡을 수 있다(모의 앱 열셋, 어댑터 일꾼이 외부 확장 여럿을 맡는 것).
 
 | 필드 | 뜻 |
 | --- | --- |
@@ -166,7 +166,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ### 외부 확장 정의 올리기
 
-외부 확장의 정의는 **그것을 수행하는 일꾼이 들고 있다** — 일꾼은 뜰 때 `PUT /api/v1/consumers/self/extension` `{definition}`(C13 정의)을 올리고 Center가 C13 등록과 같은 관문(크기·모양·E1~E4)을 지나면 C2 `extension` 봉투에 서명한다 (ADR-0121). 답은 C7 `ExtensionResource`(정의·봉투 포함)이고 새로 등록하면 201, 같은 것이면 200이다.
+외부 확장의 정의는 **그것을 수행하는 일꾼이 들고 있다** — 일꾼은 뜰 때 `PUT /api/v1/consumers/self/extension` `{definition}`(C13 정의)을 올리고 Center가 C13 등록과 같은 관문(크기·모양·E1~E4)을 지나면 C2 `extension` 봉투에 서명한다 (ADR-0122). 답은 C7 `ExtensionResource`(정의·봉투 포함)이고 새로 등록하면 201, 같은 것이면 200이다.
 
 - 정의의 `id`는 그 일꾼의 **토픽 안**이어야 한다 — 밖이면 403 `topic_not_granted`.
 - 같은 판에 다른 내용은 409 `id_conflict`, 철회된 판은 409 `extension_revoked`, **더 높은 판이 이미 있으면 409 `older_than_registered`**(옛 일꾼이 다시 떠도 지금 판이 내려가지 않는다). 내용을 바꾸려면 판을 올린다.
@@ -241,10 +241,10 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 - **호출 토큰은 PC 실행기(또는 Studio)가 제 Center API 키로 청한다** — `POST /api/v1/call-tokens` → `{token, expires_at}`(수명 24시간). 봉하지 않는다: 청하는 길이 이미 그 PC 실행기의 키로 인증된 연결이라 다른 응답과 같은 길로 온다(환경변수 키처럼 **공개키가 없는 PC 실행기도** 받을 수 있어야 한다 — 하트비트 봉함으로는 그 PC 실행기가 못 받는다). PC 실행기는 실행을 띄울 때 하나 청해 실행 프로세스에게 제어 파일로 넘긴다(만료 2시간 전부터 새것을 같은 길로 넣는다). 토큰은 PC 실행기 **메모리에만** 있고 비밀 저장소에 두지 않는다. **호출 토큰으로 부르면 Center는 그 PC 실행기의 Center API 키로 부른 것과 같이 본다** — 소유(C3)·배포 대조가 같은 신원으로 돈다. 호출 토큰은 `/api/v1/external-tasks`와 **리소스 목록 읽기**(`GET /api/v1/resources…` — 확장 클라이언트가 기여 자원 카탈로그를 읽는 자리) 밖을 모두 403 `call_token_scope`로 막는다. 서버 실행기·Studio는 제 프로세스 안에서 부르므로 제 Center API 키를 쓴다.
 - **롱폴링 상한은 설정의 기본 200** (`CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` — 올리는 쪽·일꾼의 기다림을 함께 센다). 한 번 가져가기에 잠글 수 있는 수는 **10건까지**(`max_tasks`가 그보다 크면 10으로 깎는다).
-- **어댑터 일꾼은 맡은 외부 확장의 정의를 제가 들고 있다가 올린다** (ADR-0121, §외부 확장 정의 올리기) — `CHK_ADAPTER__DEFINITIONS`의 파일들이다. Center에서 받지 않는다.
+- **어댑터 일꾼은 맡은 외부 확장의 정의를 제가 들고 있다가 올린다** (ADR-0122, §외부 확장 정의 올리기) — `CHK_ADAPTER__DEFINITIONS`의 파일들이다. Center에서 받지 않는다.
 - 출력 검사는 **`output_schema.required`의 칸이 다 있는가**까지다 — 계약 패키지에 JSON Schema 검증기를 두지 않는다(입력 쪽도 그렇다). 더 깊은 모양은 일꾼과 엔진의 `output` 매핑이 본다.
 
-- `GET /consumers`·`GET /external-topics`는 콘솔 토큰으로 읽는 길로 남는다 — CON-07에는 그 표가 없다(지켜볼 것은 Center 로그에서 본다, ADR-0121).
+- `GET /consumers`·`GET /external-topics`는 콘솔 토큰으로 읽는 길로 남는다 — CON-07에는 그 표가 없다(지켜볼 것은 Center 로그에서 본다, ADR-0122).
 
 ## 호환 규칙
 
@@ -255,7 +255,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-31 | 1 | **일꾼은 일꾼 폴더로만 들어온다** — `<이름>.consumer.json`(`FolderConsumer`, 토큰 해시), 토픽 고정, 만료·회전 없음. `POST /consumers/enroll`·`ConsumerEnrollRequest`를 걷었다. **외부 확장 정의는 일꾼이 올린다** — `PUT /consumers/self/extension` | [0121](../decisions/0121-extension-folder.md) |
+| 2026-10-31 | 1 | **일꾼은 일꾼 폴더로만 들어온다** — `<이름>.consumer.json`(`FolderConsumer`, 토큰 해시), 토픽 고정, 만료·회전 없음. `POST /consumers/enroll`·`ConsumerEnrollRequest`를 걷었다. **외부 확장 정의는 일꾼이 올린다** — `PUT /consumers/self/extension` | [0122](../decisions/0122-consumer-folder.md) |
 | 2026-10-31 | 1 | **등록 세션(`reg_…`)과 거절 `registration_off`를 걷었다** — 셀렉터 등록 도구(Tool UI)와 「셀렉터 등록」 스위치가 없다. 부르는 쪽은 서버 실행기·실행 프로세스·Studio 셋이다. `required_scopes`를 적은 작업은 켜 줄 길이 없어 `scope_missing`이다. 경로·모양은 그대로다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | **`GET /external-tasks?run_id=`**(콘솔 토큰, `ExternalTaskInfo[]`) — CON-01 「외부 작업」이 일감이 어디서 멈췄는지(기다림·일꾼이 쥠·다시 나감)를 본다. 값·오류 글은 싣지 않는다. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `fail`·결과 `error`에 **`outcome_unknown`**(기본 false)을 더했다 — 요청이 닿았을 수 있는데 답을 못 받았다. 어댑터 일꾼이 `idempotent: false` 작업에서 적고, PC의 `chk:serviceCall`은 사람에게 묻는다. 선택 칸이라 판은 그대로다 | [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |

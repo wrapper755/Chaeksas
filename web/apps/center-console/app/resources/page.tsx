@@ -22,7 +22,7 @@ import { RefreshResources } from "./tools";
  * 내용이라 Center도 콘솔도 해석하지 않는다 (C13 §5, ADR-0018).
  *
  * 서비스 앱·외부 앱은 **일꾼**으로 Center에 들어온다 (C15, ADR-0102). 일꾼은 Center 쪽 **일꾼 폴더**의 파일로만
- * 들어오고 외부 확장 정의는 그 일꾼이 올린다 (ADR-0121) — 이 화면에는 등록·승인·해제 단추가 없다. 「기능」 탭
+ * 들어오고 외부 확장 정의는 그 일꾼이 올린다 (ADR-0122) — 이 화면에는 등록·승인·해제 단추가 없다. 「기능」 탭
  * 아래의 「일꾼 폴더」가 Center가 뜰 때 들인 결과를 보인다. 주소·키를 넣는 칸은 없다.
  */
 
@@ -90,7 +90,7 @@ export default async function ResourcesPage({
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
-  // 일꾼 폴더는 따로 잡는다 — 못 읽으면 칸이 없을 뿐이다 (ADR-0121).
+  // 일꾼 폴더는 따로 잡는다 — 못 읽으면 칸이 없을 뿐이다 (ADR-0122).
   try {
     if (!contributedTab) folder = await center.consumerFolder();
   } catch {
@@ -221,7 +221,7 @@ function folderTarget(row: ConsumerFolderItem): string {
 }
 
 /**
- * 「일꾼 폴더」 (ADR-0121) — Center가 **뜰 때** 일꾼 파일을 들인 결과와, 맡은 일꾼이 없어 거둔 확장. 고치는
+ * 「일꾼 폴더」 (ADR-0122) — Center가 **뜰 때** 일꾼 파일을 들인 결과와, 맡은 일꾼이 없어 거둔 확장. 고치는
  * 단추는 없다 — 파일을 바꾸거나 빼고 Center를 다시 띄우는 것이 고치는 길이다.
  */
 function ConsumerFolder({ scan }: { scan: ConsumerFolderScan }) {

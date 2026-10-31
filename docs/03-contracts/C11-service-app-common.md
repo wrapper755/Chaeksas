@@ -18,7 +18,7 @@
 
 | 길 | 인증 | 뜻 |
 | --- | --- | --- |
-| C15 `fetch`·`…/complete·fail·extend`·`PUT …/self/manifest` | 일꾼 토큰 (일꾼 폴더로 들인다, ADR-0121) | 일감 가져가기·끝내기, manifest 올리기 |
+| C15 `fetch`·`…/complete·fail·extend`·`PUT …/self/manifest` | 일꾼 토큰 (일꾼 폴더로 들인다, ADR-0122) | 일감 가져가기·끝내기, manifest 올리기 |
 | C15 `PUT /api/v1/consumers/self/manifest`·`…/catalogs/{type}` | 일꾼 토큰 | manifest(작업 목록)·기여 자원 카탈로그 올리기 |
 | `GET /healthz` | 없음 | 살아 있는지 (운영자·컨테이너 점검용 — **Center는 읽지 않는다**) |
 | 관리 콘솔 (웹) | 관리자 토큰 | SVC-00·01·03 (+ 앱 고유 화면). 기본 포트 = API 포트 + 1 |

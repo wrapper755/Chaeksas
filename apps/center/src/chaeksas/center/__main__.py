@@ -91,7 +91,7 @@ def hosts(argv: list[str]) -> int:
 
 
 def consumer_file(argv: list[str]) -> int:
-    """`chk-center consumer-file <이름> --topics a,b [--dir 폴더]` — 일꾼 폴더의 파일을 짓는다 (ADR-0121).
+    """`chk-center consumer-file <이름> --topics a,b [--dir 폴더]` — 일꾼 폴더의 파일을 짓는다 (ADR-0122).
 
     파일에는 토큰의 **해시만** 쓰고 원문은 **여기서 한 번만** 찍는다 — 그 값을 일꾼의 `…CENTER__TOKEN`에 넣는다.
     Center를 다시 띄워야 들어온다.

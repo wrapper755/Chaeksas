@@ -176,7 +176,7 @@ export const center = {
     call<ExtensionResource>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}`),
   serviceApp: (appId: string) =>
     call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
-  /** Center가 뜰 때 일꾼 폴더를 읽은 결과 (C7, ADR-0121, CON-07 「일꾼 폴더」). */
+  /** Center가 뜰 때 일꾼 폴더를 읽은 결과 (C7, ADR-0122, CON-07 「일꾼 폴더」). */
   consumerFolder: () => call<ConsumerFolderScan>("/api/v1/resources/consumer-folder"),
   /** 그 실행이 올린 일감 (C15, CON-01 「외부 작업」) — 값 없이 자리·상태·일꾼만. */
   externalTasks: (runId: string) =>

@@ -1,4 +1,4 @@
-"""`chk-adapter-consumer` — 외부 앱을 부르는 범용 일꾼 (C13 §4·C15, ADR-0102·0121).
+"""`chk-adapter-consumer` — 외부 앱을 부르는 범용 일꾼 (C13 §4·C15, ADR-0102·0122).
 
     CHK_ADAPTER__CENTER__URL=https://center:8800 \\
     CHK_ADAPTER__CENTER__TOKEN=chk_ctr_… \\

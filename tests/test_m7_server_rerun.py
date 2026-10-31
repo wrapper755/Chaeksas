@@ -215,7 +215,7 @@ def center(tmp_path: Path, mock_apps: MockApps) -> Iterator[CenterHandle]:
     stops: list[threading.Event] = []
     with httpx.Client(base_url=url, timeout=30.0) as client:
         # 정의는 **주소를 담아 커밋할 수 없어** 그 자리에서 짓는다 (`samples/README.md`). 올리는 것은 어댑터
-        # 일꾼이다 (ADR-0121).
+        # 일꾼이다 (ADR-0122).
         definitions = [
             external_definitions.BUILDERS[app_id](base_url) for app_id, base_url in mock_apps.external.items()
         ]

@@ -69,7 +69,7 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 | `GET /bot-uis…` (CON-03), `POST /bot-uis/{id}/disable·enable` | GET만 ✓ | ✓ | — | — | — |
 | `POST /call-tokens` (C15 호출 토큰) | — | — | ✓ | PC 실행기 키만 | — |
 | `POST /external-tasks`, `GET·POST /external-tasks/{id}…` (C15 — 부르는 쪽) | — | — | 호출 토큰·Studio 키 | 서버 실행기 키·호출 토큰 | — |
-| `/consumers/fetch·tasks…·self…` (C15 — 일꾼, 일꾼 폴더로만 들어온다 — ADR-0121) | 일꾼 토큰만 | | | | |
+| `/consumers/fetch·tasks…·self…` (C15 — 일꾼, 일꾼 폴더로만 들어온다 — ADR-0122) | 일꾼 토큰만 | | | | |
 | `GET /consumers`, `GET /external-topics`, `GET /external-tasks?run_id=` (CON-01) | ✓ | ✓ | — | — | — |
 | `GET /schedules` (§일정, CON-02) | ✓ | ✓ | — | — | — |
 | `GET /signing-keys` (C7) | 인증 없음 | | | | |
@@ -321,7 +321,7 @@ PC(PC 실행기)·서버 실행기·**Studio**가 보낸 **등록 요청**(C4·C
 | 메서드·경로 | 뜻 |
 | --- | --- |
 | `GET /enrollments?type=bot_ui\|server_runner\|studio&state=pending` | 요청 목록 (`state`는 쉼표로 여럿, 기본 `pending`) |
-| `POST /enrollments/{enrollment_id}/approve` `{name?}` | 승인. `name`을 비우면 요청의 `name`을 쓴다. 일꾼(C15)은 여기 오지 않는다 — 일꾼 폴더로만 들어온다 (ADR-0121) |
+| `POST /enrollments/{enrollment_id}/approve` `{name?}` | 승인. `name`을 비우면 요청의 `name`을 쓴다. 일꾼(C15)은 여기 오지 않는다 — 일꾼 폴더로만 들어온다 (ADR-0122) |
 | `POST /enrollments/{enrollment_id}/reject` `{reason?}` | 거절. 사유는 요청한 쪽에 그대로 보인다 (200자까지) |
 
 EnrollmentInfo 필드:
@@ -482,7 +482,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-31 | 1 | 등록 승인에서 **일꾼(`consumer`) 갈래를 걷었다** — `approve`의 `topics`·`EnrollmentInfo.topics`, 권한표의 `POST /consumers/enroll`·`POST/DELETE /resources/extensions`. 일꾼은 일꾼 폴더로만 들어오고 외부 확장 정의는 일꾼이 올린다 | [0121](../decisions/0121-extension-folder.md) |
+| 2026-10-31 | 1 | 등록 승인에서 **일꾼(`consumer`) 갈래를 걷었다** — `approve`의 `topics`·`EnrollmentInfo.topics`, 권한표의 `POST /consumers/enroll`·`POST/DELETE /resources/extensions`. 일꾼은 일꾼 폴더로만 들어오고 외부 확장 정의는 일꾼이 올린다 | [0122](../decisions/0122-consumer-folder.md) |
 | 2026-10-31 | 1 | `PUT /bot-uis/{id}/utility`(「셀렉터 등록」)와 `BotUiInfo.worker`·`selector_registration`을 걷었다 — 등록 세션을 여는 UI 자동화 확장이 없다. 권한표 줄 하나가 빠졌다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-31 | 1 | 「이미 배포된 것은 그대로 돈다」를 고르는 조건 하나로 적었다 — Center가 `approved`만 골라 지원 종료가 돌던 배포를 세우던 것을 고쳤다(계약은 그대로다) | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-30 | 1 | **§일정** — 타이머 시작을 Center가 하트비트에서 쓸어 작업으로 만든다. `requested_by`의 예약값 `timer:<식>`(바깥 이름으로 받지 않는다 — `on_behalf_invalid`). 읽기 `GET /schedules`(`ScheduleInfo`, 콘솔 토큰). 권한표에 C15 `GET /external-tasks?run_id=`(CON-01) | [0110](../decisions/0110-center-keeps-the-schedule.md) |

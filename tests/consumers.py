@@ -1,7 +1,7 @@
 """시험이 **일꾼**을 Center에 들이고 돌리는 길 — 자리가 하나다 (C15, ADR-0102).
 
 **이것은 제품 코드가 아니다.** 사람은 Center의 일꾼 폴더에 `<이름>.consumer.json`(토큰 해시)을 두고 Center를
-다시 띄운다 (ADR-0121). 시험은 Center를 다시 띄우지 않고 **폴더가 쓰는 함수 그대로**(`consumer_folder.admit`)로
+다시 띄운다 (ADR-0122). 시험은 Center를 다시 띄우지 않고 **폴더가 쓰는 함수 그대로**(`consumer_folder.admit`)로
 들인다 — 토큰 원문은 시험이 지어 `TokenFile`에 둔다.
 
 `client`는 `TestClient`(in-process)든 진짜 소켓의 `httpx.Client`든 된다. 일꾼을 **스레드에서** 오래
@@ -62,7 +62,7 @@ def enroll(
     name: str = "시험 일꾼",
     folder: Path | None = None,
     machine: str | None = None,
-    headers: dict[str, str] = ADMIN,  # noqa: ARG001 — 옛 부르는 꼴을 받는다 (승인이 없어졌다, ADR-0121)
+    headers: dict[str, str] = ADMIN,  # noqa: ARG001 — 옛 부르는 꼴을 받는다 (승인이 없어졌다, ADR-0122)
 ) -> TokenFile:
     """일꾼 하나를 들인다 — 일꾼 폴더가 하는 일 그대로. 돌려주는 것은 토큰 자리다."""
     where = folder or Path(tempfile.mkdtemp(prefix="consumer-"))
@@ -107,7 +107,7 @@ def mock_fleet(
     """업무 예제가 부르는 모의 앱을 **일꾼으로** 붙인다 (C15) — 묶음 시험이 함께 쓴다.
 
     - C11 모의 앱들(`built` — `mock_apps.c11.Built`)은 **일꾼 하나**가 토픽 여럿을 맡는다 (`chk-mock-apps`와 같다).
-    - 외부 모의 앱(`external_ids`)은 **어댑터 일꾼**이 맡고 **제 정의를 올린다**(ADR-0121) — `definitions`가
+    - 외부 모의 앱(`external_ids`)은 **어댑터 일꾼**이 맡고 **제 정의를 올린다**(ADR-0122) — `definitions`가
       그 정의들이다. 127.0.0.1을 부르므로 사설망을 열고, 키는 아무 글이나 받는 모의라 `dev-key`를 준다.
 
     돌려주는 것은 멈추는 이벤트들이다 — 시험이 끝나면 모두 `set()`.

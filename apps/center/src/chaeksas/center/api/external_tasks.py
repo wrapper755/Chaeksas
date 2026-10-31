@@ -6,7 +6,7 @@
 | `POST /consumers/fetch`, `…/tasks/{id}/complete·fail·extend`, `PUT …/self/manifest·extension` | 일꾼 토큰 |
 | `GET /consumers`, `GET /external-topics` | 콘솔 토큰 |
 
-일꾼은 **일꾼 폴더**로만 들어온다 (`consumer_folder`, ADR-0121) — 요청 코드·승인이 없다.
+일꾼은 **일꾼 폴더**로만 들어온다 (`consumer_folder`, ADR-0122) — 요청 코드·승인이 없다.
 
 지키는 것:
 
@@ -82,10 +82,10 @@ from chaeksas.contracts.external_task import (
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.service_app import DEFAULT_TIMEOUT_S, ServiceAppManifest, Usage
 
-#: 일꾼의 일감 흐름 (ADR-0121 — 승인 없는 일꾼은 콘솔 대신 로그로 본다). **값은 찍지 않는다** (원칙 6).
+#: 일꾼의 일감 흐름 (ADR-0122 — 승인 없는 일꾼은 콘솔 대신 로그로 본다). **값은 찍지 않는다** (원칙 6).
 log = logging.getLogger(__name__)
 
-#: 일꾼이 올린 외부 확장의 출처 (`extensions.source`, ADR-0121) — 맡은 일꾼이 빠지면 일꾼 폴더가 거둔다.
+#: 일꾼이 올린 외부 확장의 출처 (`extensions.source`, ADR-0122) — 맡은 일꾼이 빠지면 일꾼 폴더가 거둔다.
 EXTENSION_SOURCE = "worker"
 
 router = APIRouter(prefix="/api/v1", tags=["external-tasks"])
@@ -593,7 +593,7 @@ def extend(store: Store, consumer: Any, task_id: str, body: ExtendRequest, *, no
 
 
 def put_extension(store: Store, consumer: Any, raw: dict[str, Any]) -> tuple[Any, bool]:
-    """일꾼이 제 외부 확장 정의를 올린다 (ADR-0121). **그 일꾼의 토픽 것만** 받고, 관문은 C13 등록 하나다."""
+    """일꾼이 제 외부 확장 정의를 올린다 (ADR-0122). **그 일꾼의 토픽 것만** 받고, 관문은 C13 등록 하나다."""
     definition = raw.get("definition")
     ext_id = definition.get("id") if isinstance(definition, dict) else None
     if isinstance(ext_id, str) and ext_id not in set(loads(consumer["topics_json"], []) or []):
@@ -892,7 +892,7 @@ async def put_self_manifest(request: Request) -> Any:
 
 @router.put("/consumers/self/extension")
 async def put_self_extension(request: Request) -> Any:
-    """일꾼이 맡은 외부 확장 정의를 올린다 — Center가 검사·서명한다 (C15, ADR-0121). 새로 등록하면 201."""
+    """일꾼이 맡은 외부 확장 정의를 올린다 — Center가 검사·서명한다 (C15, ADR-0122). 새로 등록하면 201."""
     store = _store(request)
     consumer = consumer_of(store, _caller(request))
     info, created = put_extension(store, consumer, await _body(request))

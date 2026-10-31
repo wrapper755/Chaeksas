@@ -4,7 +4,7 @@
     consumer.publish()            # 외부 확장 정의·manifest·카탈로그 올리기 (뜰 때)
     consumer.run(stop_event)      # 가져가기 롱폴링 → 수행 → 끝내기
 
-**들이기는 없다** (ADR-0121) — 일꾼은 Center의 **일꾼 폴더**에 놓인 `<이름>.consumer.json`(토큰 해시)으로만
+**들이기는 없다** (ADR-0122) — 일꾼은 Center의 **일꾼 폴더**에 놓인 `<이름>.consumer.json`(토큰 해시)으로만
 들어온다. 토큰 원문은 그 파일을 지은 사람이 준다(`chk-center consumer-file`) — `<접두>CENTER__TOKEN` 환경변수나
 토큰 파일 `consumer-token.json`의 `token`.
 
@@ -18,7 +18,7 @@
 - 토큰은 원문을 파일에만 둔다(`0600` — 서버 쪽 앱이라 OS 비밀 저장소가 없을 수 있다). 환경변수
   `<접두>CENTER__TOKEN`이 있으면 그것이 이긴다 (개발·CI·컨테이너).
 - 외부 확장을 맡은 토픽(`extension_definition`이 있는 것)은 **제 정의를 올린다** — Center가 검사·서명한다
-  (`PUT /consumers/self/extension`, ADR-0121). 더 높은 판이 이미 있으면(409) 로그만 남기고 이어 간다.
+  (`PUT /consumers/self/extension`, ADR-0122). 더 높은 판이 이미 있으면(409) 로그만 남기고 이어 간다.
 """
 
 from __future__ import annotations
@@ -146,7 +146,7 @@ class Consumer:
     def _headers(self) -> dict[str, str]:
         token = self.tokens.token()
         if not token:
-            raise RuntimeError("일꾼 토큰이 없다 — Center 일꾼 폴더의 파일을 지을 때 받은 토큰을 주세요 (ADR-0121)")
+            raise RuntimeError("일꾼 토큰이 없다 — Center 일꾼 폴더의 파일을 지을 때 받은 토큰을 주세요 (ADR-0122)")
         return {"Authorization": f"Bearer {token}"}
 
     def registration(self) -> CenterRegistration:

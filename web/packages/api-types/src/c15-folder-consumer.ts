@@ -3,7 +3,7 @@
    그다음 `pnpm --filter @chaeksas/api-types generate`. */
 
 /**
- * 일꾼 폴더의 `<이름>.consumer.json` — **일꾼이 들어오는 유일한 길** (C15 §일꾼 들이기, ADR-0121).
+ * 일꾼 폴더의 `<이름>.consumer.json` — **일꾼이 들어오는 유일한 길** (C15 §일꾼 들이기, ADR-0122).
  *
  * 배포가 Center 쪽 일꾼 폴더에 복사한다. Center는 토큰 **원문을 모른다** — 해시만 받고, 일꾼은 원문을
  * `Authorization: Bearer`로 싣는다. 토픽은 여기 적은 것으로 고정된다. 만료·회전이 없다(공개키가 없다).

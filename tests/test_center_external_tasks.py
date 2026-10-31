@@ -165,7 +165,7 @@ def consumer(
     topics: list[str] | None = None,
     manifest: dict[str, Any] | None = MANIFEST,
 ) -> str:
-    """일꾼 하나를 들인다 — 일꾼 폴더가 하는 일 그대로 (ADR-0121). 돌려주는 것은 일꾼 토큰이다."""
+    """일꾼 하나를 들인다 — 일꾼 폴더가 하는 일 그대로 (ADR-0122). 돌려주는 것은 일꾼 토큰이다."""
     from consumers import enroll  # noqa: PLC0415
 
     tokens = enroll(
@@ -338,7 +338,7 @@ def test_an_integration_key_cannot_post(center: TestClient) -> None:
     assert post(center, key).status_code == 403
 
 
-# ─────────────────────────── 일꾼 (일꾼 폴더로 들인다, ADR-0121) ───────────────────────────
+# ─────────────────────────── 일꾼 (일꾼 폴더로 들인다, ADR-0122) ───────────────────────────
 
 
 def test_topics_are_fixed_by_the_worker_file(center: TestClient) -> None:

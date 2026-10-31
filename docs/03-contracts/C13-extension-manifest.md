@@ -9,7 +9,7 @@
 | 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md), [0042](../decisions/0042-extension-contributed-panels.md), [0112](../decisions/0112-escalation-review-from-extensions.md), [0114](../decisions/0114-remove-ui-automation.md) |
 | 관련 화면 | BUI-03·11, STU-03·14·15, CON-07, SVC-00 |
 
-> 상태: **외부 확장 등록이 돈다** — 그 토픽을 맡은 **일꾼이** `PUT /consumers/self/extension`(C15)으로 정의를 올리면 E1·E2·E3·E4를 검사하고 **Center가 C2 `extension` 봉투에 서명해**(ADR-0090) 정의와 봉투를 **그대로** 보관한다 — 실행하는 쪽이 다시 검증한다(E6). 맡은 일꾼이 일꾼 폴더에서 빠지면 Center가 뜰 때 `extension_revoke` 봉투로 거둔다 ([ADR-0121](../decisions/0121-extension-folder.md)). 콘솔·API로 등록·해제하는 길은 없다. **E4는 외부 확장으로 띄울 수 없다** — `task_types`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
+> 상태: **외부 확장 등록이 돈다** — 그 토픽을 맡은 **일꾼이** `PUT /consumers/self/extension`(C15)으로 정의를 올리면 E1·E2·E3·E4를 검사하고 **Center가 C2 `extension` 봉투에 서명해**(ADR-0090) 정의와 봉투를 **그대로** 보관한다 — 실행하는 쪽이 다시 검증한다(E6). 맡은 일꾼이 일꾼 폴더에서 빠지면 Center가 뜰 때 `extension_revoke` 봉투로 거둔다 ([ADR-0122](../decisions/0122-consumer-folder.md)). 콘솔·API로 등록·해제하는 길은 없다. **E4는 외부 확장으로 띄울 수 없다** — `task_types`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
 >
 > `contributes.resources[].catalog_url`은 Center가 읽어 쌓는다 (M5 조각 10) — 내장 확장의 정의가 Center에 없어 `catalog_url`을 찾을 길이 없던 구멍은 **C11에 카탈로그 칸을 더해** 메웠다 (C11 §모델 연결 아래 `resources`).
 >
@@ -39,7 +39,7 @@
 
 외부 확장은 정의 파일만 있다. **서명된 봉투 없이는 쓰이지 않는다.**
 
-정의가 외부 앱을 부르는 길(허용 호스트·인증 방식·작업)을 정하기 때문에, 배포와 같은 관문을 둔다 — 정의는 **그것을 수행하는 일꾼이 들고 있다가** 올리고, 검사를 지나면 Center가 C2 `extension` claim(`{id, version, definition_hash}`)에 서명한다 ([ADR-0090](../decisions/0090-center-admin-accounts.md), [ADR-0121](../decisions/0121-extension-folder.md)). 일꾼은 Center 쪽 **일꾼 폴더**의 파일로만 들어오므로(C15 §일꾼 들이기) 폴더에 쓸 수 있는 사람(관리자)이 들인 일꾼만 올릴 수 있다. 실행하는 쪽은 봉투로 「Center가 등록한 그 정의인가」를 다시 본다.
+정의가 외부 앱을 부르는 길(허용 호스트·인증 방식·작업)을 정하기 때문에, 배포와 같은 관문을 둔다 — 정의는 **그것을 수행하는 일꾼이 들고 있다가** 올리고, 검사를 지나면 Center가 C2 `extension` claim(`{id, version, definition_hash}`)에 서명한다 ([ADR-0090](../decisions/0090-center-admin-accounts.md), [ADR-0122](../decisions/0122-consumer-folder.md)). 일꾼은 Center 쪽 **일꾼 폴더**의 파일로만 들어오므로(C15 §일꾼 들이기) 폴더에 쓸 수 있는 사람(관리자)이 들인 일꾼만 올릴 수 있다. 실행하는 쪽은 봉투로 「Center가 등록한 그 정의인가」를 다시 본다.
 
 1. 일꾼이 뜰 때 `PUT /api/v1/consumers/self/extension` `{definition}`을 올린다 — 정의의 `id`는 그 일꾼의 **토픽 안**이어야 한다(밖이면 403 `topic_not_granted`).
 2. Center가 크기·모양·E1·E2·E3·E4를 보고, 지나면 봉투에 서명해 정의와 함께 둔다.
@@ -297,7 +297,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-31 | 2 | 외부 확장 등록은 **그 토픽의 일꾼이 정의를 올리는 것**이다(C15 `PUT …/self/extension`) — `POST/DELETE /resources/extensions`를 걷었다. 맡은 일꾼이 일꾼 폴더에서 빠지면 Center가 거둔다. 낮은 판은 409 `older_than_registered`. 정의 모양은 그대로다 | [0121](../decisions/0121-extension-folder.md) |
+| 2026-10-31 | 2 | 외부 확장 등록은 **그 토픽의 일꾼이 정의를 올리는 것**이다(C15 `PUT …/self/extension`) — `POST/DELETE /resources/extensions`를 걷었다. 맡은 일꾼이 일꾼 폴더에서 빠지면 Center가 거둔다. 낮은 판은 409 `older_than_registered`. 정의 모양은 그대로다 | [0122](../decisions/0122-consumer-folder.md) |
 | 2026-10-31 | 2 | 기여 지점 `tool_ui.tools`·`bot_ui.panels`·`bot_ui.local_runtimes`·`agent_environments`, **E8**, 예약 키 `runtime.<id>.*`, `scope: tool_ui`, `requires_keys[].purpose: utility`를 걷었다 — UI 자동화 확장과 함께. 걷은 열쇠는 호스트가 경고하고 읽지 않는다(`LEGACY_CONTRIBUTION_KEYS`), E7은 옛 머리도 막는다. 열쇠가 모두 선택이라 schema는 그대로이고 `extension_api`는 **2.0.0**이다(이름을 지웠다 — 예시의 `api`는 `>=2,<3`) | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 2 | 수행기가 전환할 때 **사람에게 보일 검토 자료**(`TaskFailed(review=…)`)를 넘긴다 — `extension_api` **1.5**. 정의는 그대로다 | [0112](../decisions/0112-escalation-review-from-extensions.md) |
 | 2026-10-29 | 2 | `requires_keys`에 키가 없다 — `run`은 빌드가 `requires.service_apps` 줄을 적는 뜻, `extra_scopes`는 Center가 PC 스위치로 건다. 외부 앱은 **어댑터 일꾼**이 부른다 — 주소·키는 그 일꾼 설정(`CHK_ADAPTER__EXT__<확장>__*`), 실행하는 쪽은 정의 검증·고정만. 예약 키 `service.base_url`·`service.key_ref` → `center.url`·`call_token` 비밀, `CHK_RUNTIME__SERVICE_URL` → `CHK_RUNTIME__CENTER_URL`. 예약 접두 `service.` → `center.` | [0102](../decisions/0102-calling-outside-is-pull.md) |

@@ -1,7 +1,7 @@
 # 일꾼 폴더
 
 `deploy/compose.yaml`의 Center가 이 폴더를 `/consumers`(읽기 전용)로 붙여, **뜰 때** 여기의 `<이름>.consumer.json`으로
-일꾼을 들인다 ([ADR-0121](../../docs/decisions/0121-extension-folder.md), C15 §일꾼 들이기). **일꾼이 들어오는 길은
+일꾼을 들인다 ([ADR-0122](../../docs/decisions/0122-consumer-folder.md), C15 §일꾼 들이기). **일꾼이 들어오는 길은
 이것 하나다** — 요청 코드·승인이 없다.
 
 ```bash

@@ -19,7 +19,7 @@
 | 무엇인가 | 사내 확장의 **서버 부분** | 우리 계약을 모르는 **남의 API** 흉내 |
 | 뼈대 | `packages/service_kit` (C11) | 없다 — 평범한 FastAPI |
 | 붙는 길 | **일꾼**으로 Center에서 일감을 가져간다 (C15, `service_kit.consumer`) | **어댑터 일꾼**(`chk-adapter-consumer`)이 HTTP 어댑터로 부른다 (C13 §4·C15) |
-| Center에 어떻게 아는가 | 일꾼이 뜰 때 **manifest를 올린다** (C15 — 일꾼은 Center 일꾼 폴더의 파일로 들어온다) | **어댑터 일꾼이 정의를 올리고** Center가 서명한다 (C13 E6, ADR-0121) |
+| Center에 어떻게 아는가 | 일꾼이 뜰 때 **manifest를 올린다** (C15 — 일꾼은 Center 일꾼 폴더의 파일로 들어온다) | **어댑터 일꾼이 정의를 올리고** Center가 서명한다 (C13 E6, ADR-0122) |
 | 키 | 없다 — 「불러도 되나」는 Center가 배포로 가린다 (ADR-0102) | 어댑터 일꾼 설정의 키를 받아서 확인만 한다 (`CHK_MOCK_EXT_<앱>__TOKEN`을 주면 그 값만 받는다) |
 
 외부 앱이 C11로 답하면 어댑터가 하는 일(템플릿 채우기·제한 JSONPath로 읽기·`error_when`)을
@@ -49,7 +49,7 @@ CHK_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 uv run chk-mock-apps serve
 ```
 
 C11 앱 열셋이 **일꾼 하나**로 Center에 붙는다 (C15, [ADR-0102](../docs/decisions/0102-calling-outside-is-pull.md)) —
-토픽 열셋을 한 토큰으로 맡는다. **들이기 요청·승인은 없다** ([ADR-0121](../docs/decisions/0121-extension-folder.md)) —
+토픽 열셋을 한 토큰으로 맡는다. **들이기 요청·승인은 없다** ([ADR-0122](../docs/decisions/0122-consumer-folder.md)) —
 Center 쪽에서 일꾼 파일을 짓고 Center를 다시 띄운 뒤, 찍힌 토큰을 `CHK_MOCK_APPS__CENTER__TOKEN`에 넣는다:
 
 ```bash
@@ -68,7 +68,7 @@ CHK_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 CHK_MOCK_APPS__CENTER__TOKEN=ch
 uv run chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
 ```
 
-그 파일을 **어댑터 일꾼**에 주면 일꾼이 뜰 때 Center에 올리고 Center가 서명해 등록한다 (C13 E6, ADR-0121).
+그 파일을 **어댑터 일꾼**에 주면 일꾼이 뜰 때 Center에 올리고 Center가 서명해 등록한다 (C13 E6, ADR-0122).
 모의 앱은 127.0.0.1에 뜨므로 정의가 `allow_private_network: true`를 켠다. 주소를 진짜 외부 호스트로
 주면 그 칸은 저절로 꺼진다.
 

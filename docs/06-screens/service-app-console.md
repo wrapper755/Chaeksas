@@ -2,7 +2,7 @@
 
 **서비스 앱마다 자기 관리 콘솔(웹)을 가진다** ([ADR-0013](../decisions/0013-api-keys.md)). 서비스 앱은 Center에 **일꾼**으로 들어와 일감을 가져간다 ([C15](../03-contracts/C15-external-tasks.md), [ADR-0102](../decisions/0102-calling-outside-is-pull.md)) — **서비스 앱 API 키는 없다**(「누가 불러도 되나」는 Center가 배포로 가린다). 그래서 이 콘솔에 키 화면이 없다. 공통 화면(SVC)은 `packages/service_kit`이 제공하고, 앱 고유 화면은 그 앱을 서버 부분으로 가진 확장이 더한다 (아래 「앱 고유 화면」).
 
-일꾼은 Center 일꾼 폴더의 파일로 들어온다 (ADR-0121) — 화면에서 들이는 단계는 없다. Center 리소스 목록(CON-07)에서 각 관리 콘솔로 링크를 건다.
+일꾼은 Center 일꾼 폴더의 파일로 들어온다 (ADR-0122) — 화면에서 들이는 단계는 없다. Center 리소스 목록(CON-07)에서 각 관리 콘솔로 링크를 건다.
 
 > 구현: `service_kit`(Python)은 **관리 API**(`/admin/v1/status`·`usage`)를 제공하고, 화면은 Next.js 앱 `web/apps/svc-console` 한 벌이 그린다. 서비스 앱마다 같은 콘솔을 설정만 바꿔 띄우고(포트 = API + 1), 접속한 앱의 확장에 맞는 고유 화면만 켠다 ([ADR-0017](../decisions/0017-web-nextjs-design-system.md)).
 공통 원칙·상태 표기는 [README.md](README.md) §2·§3.

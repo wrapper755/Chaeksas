@@ -1,7 +1,7 @@
 """`service_kit.consumer` — 일꾼이 Center에서 일감을 가져가 수행하고 끝낸다 (C15, ADR-0102).
 
 진짜 Center를 in-process(`TestClient`)로 띄우고 **제품의 `Consumer`**가 그것과 오간다
-(일꾼은 일꾼 폴더로 들인다, ADR-0121).
+(일꾼은 일꾼 폴더로 들인다, ADR-0122).
 스레드 없이 `run_once()`로 한 바퀴씩 민다 — 롱폴링·스레드는 `test_c15_round_trip.py`가 본다.
 
 | 보는 것 | 왜 |

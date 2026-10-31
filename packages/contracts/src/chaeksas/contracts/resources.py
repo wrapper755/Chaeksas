@@ -32,7 +32,7 @@ KNOWN_RESOURCE_TYPES = frozenset({"extension", "service_app", "contributed", "ru
 KNOWN_SERVICE_APP_STATUSES = frozenset({"ok", "degraded", "unreachable", "unknown"})
 KNOWN_EXTENSION_TIERS = frozenset({"builtin", "internal", "external"})  # C13
 KNOWN_PROTOCOLS = frozenset({"chk-c11", "http-adapter"})  # 없으면 클라이언트 기여만
-#: 일꾼 폴더의 한 줄 결과 (`ConsumerFolderItem.outcome`, ADR-0121).
+#: 일꾼 폴더의 한 줄 결과 (`ConsumerFolderItem.outcome`, ADR-0122).
 KNOWN_FOLDER_OUTCOMES = frozenset({"registered", "unchanged", "refused", "revoked"})
 #: 일꾼 폴더가 다루는 것 (`ConsumerFolderItem.kind`) — 일꾼과, 맡은 일꾼이 없어 거둔 외부 확장.
 KNOWN_FOLDER_KINDS = frozenset({"consumer", "extension"})
@@ -88,7 +88,7 @@ class ExtensionResource(ContractModel):
 
 
 class ConsumerFolderItem(ContractModel):
-    """일꾼 폴더의 한 줄 (ADR-0121). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.
+    """일꾼 폴더의 한 줄 (ADR-0122). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.
 
     `revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼(파일이 빠졌다)이나, 맡은 일꾼이 없어진 외부 확장이다.
     """
@@ -104,7 +104,7 @@ class ConsumerFolderItem(ContractModel):
 
 
 class ConsumerFolderScan(ContractModel):
-    """`GET /resources/consumer-folder` — Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (ADR-0121)."""
+    """`GET /resources/consumer-folder` — Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (ADR-0122)."""
 
     #: 폴더가 있나(사람이 `CHK_CENTER__CONSUMERS_DIR`를 적었으면 늘 `true`). 없으면 나머지는 비어 있다.
     configured: bool = False

@@ -7,7 +7,7 @@
 
 `serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다 (관리 API·시나리오 제어).
 **업무 호출은 그 포트로 받지 않는다** — `CHK_MOCK_APPS__CENTER__URL`을 주면 C11 앱 열셋이 **일꾼 하나**로
-Center에 붙어 일감을 가져간다 (C15, ADR-0102). **들이기는 없다** (ADR-0121) — Center 일꾼 폴더에
+Center에 붙어 일감을 가져간다 (C15, ADR-0102). **들이기는 없다** (ADR-0122) — Center 일꾼 폴더에
 `chk-center consumer-file mock-apps --topics <앱 id들>`로 파일을 짓고 받은 토큰을 `CHK_MOCK_APPS__CENTER__TOKEN`
 (또는 `CHK_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)의 `consumer-token.json`)에 둔다. 없으면 붙지 않고 말한다.
 """
@@ -66,7 +66,7 @@ def _one(app_id: str) -> tuple[FastAPI, Built | None]:
 
 
 def start_consumer(built: list[Built], *, center_url: str, folder: Path) -> Any:
-    """C11 모의 앱들을 **일꾼 하나**로 Center에 붙인다 (C15). 들이기는 없다 — 토큰이 있어야 붙는다 (ADR-0121).
+    """C11 모의 앱들을 **일꾼 하나**로 Center에 붙인다 (C15). 들이기는 없다 — 토큰이 있어야 붙는다 (ADR-0122).
 
     토큰은 Center 일꾼 폴더에 `chk-center consumer-file mock-apps --topics <모의 앱 id들>`로 파일을 짓고 받은
     원문이다(`CHK_MOCK_APPS__CENTER__TOKEN` 또는 데이터 폴더의 `consumer-token.json`). 없으면 붙지 않고 말한다.

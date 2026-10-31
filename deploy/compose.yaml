@@ -25,7 +25,7 @@ services:
       # 같이 뜨는 서버 실행기를 승인 없이 들이는 비밀 (ADR-0117) — 아래 실행기와 **같은 값**이다.
       CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN: ${CHK_SERVER_RUNNER__JOIN_TOKEN:?들이기 비밀을 .env에 넣으세요 (CHK_SERVER_RUNNER__JOIN_TOKEN)}
       CHK_CENTER__PORT: "8800"
-      # 일꾼 폴더 (ADR-0121) — 일꾼은 여기 놓인 `<이름>.consumer.json`(토큰 해시)으로만 들어온다. 함께 배포되는
+      # 일꾼 폴더 (ADR-0122) — 일꾼은 여기 놓인 `<이름>.consumer.json`(토큰 해시)으로만 들어온다. 함께 배포되는
       # 프로그램이 제 파일을 아래 볼륨에 복사해 두면 Center가 **뜰 때** 들인다. 바꾸거나 빼면 Center를 다시 띄운다.
       CHK_CENTER__CONSUMERS_DIR: /consumers
     ports:

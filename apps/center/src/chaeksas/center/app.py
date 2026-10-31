@@ -91,7 +91,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             data_dir=data_folder,
         )
 
-    # 일꾼 폴더도 **뜰 때** 들인다 (ADR-0121) — 서명 키가 갖춰진 뒤에(거둘 확장에 서명한다). 잘못된 파일은
+    # 일꾼 폴더도 **뜰 때** 들인다 (ADR-0122) — 서명 키가 갖춰진 뒤에(거둘 확장에 서명한다). 잘못된 파일은
     # 사유만 남고 Center는 뜬다.
     app.state.consumer_folder = consumer_folder.scan(
         app.state.store, settings.consumers_dir, required=settings.consumers_dir_explicit
@@ -454,7 +454,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.get(f"{API}/resources/consumer-folder")
     def get_consumer_folder(request: Request) -> Any:
-        """Center가 마지막으로 뜰 때 일꾼 폴더를 읽은 결과 (C7, ADR-0121)."""
+        """Center가 마지막으로 뜰 때 일꾼 폴더를 읽은 결과 (C7, ADR-0122)."""
         require_read(authenticate(request))
         return app.state.consumer_folder.to_json_dict()
 

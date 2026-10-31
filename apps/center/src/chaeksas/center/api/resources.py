@@ -458,7 +458,7 @@ def _refuse(problems: list[Any], *, status: int = 422) -> None:
 def register_extension(
     store: Store, found: Caller, raw: dict[str, Any], *, source: str | None = None
 ) -> tuple[ExtensionResource, bool]:
-    """외부 확장 정의를 받아 **Center가 `extension` 봉투로 서명한다** (C13 E6, ADR-0090·0121).
+    """외부 확장 정의를 받아 **Center가 `extension` 봉투로 서명한다** (C13 E6, ADR-0090·0122).
 
     부르는 쪽은 그 토픽을 맡은 **일꾼**이다(`PUT /consumers/self/extension` — 토픽 대조는 그쪽이 한다).
     검사(E1·E2·E3·E4)를 모두 지난 정의에만 서명한다 — 정의가 외부 앱을 부르는 길을 정하므로 배포와 같은
@@ -495,7 +495,7 @@ def register_extension(
     computed = definition_hash(definition)
     body = json.dumps(definition, ensure_ascii=False, sort_keys=True)
 
-    # 이미 더 높은 판이 있으면 받지 않는다 — 옛 일꾼이 다시 떠도 지금 판이 내려가지 않는다 (ADR-0121).
+    # 이미 더 높은 판이 있으면 받지 않는다 — 옛 일꾼이 다시 떠도 지금 판이 내려가지 않는다 (ADR-0122).
     newer = _newer_registered(store, manifest.id, manifest.version)
     if newer is not None:
         raise ApiError(
@@ -545,7 +545,7 @@ def _newer_registered(store: Store, ext_id: str, version: str) -> str | None:
 def revoke_extension(store: Store, extension_id: str, version: str, *, reason: str, by: str) -> ExtensionResource:
     """등록 해제 — Center가 `extension_revoke` 봉투를 지어 서명한다 (C13·C2, ADR-0090).
 
-    콘솔·API 길은 없다 — 맡은 일꾼이 일꾼 폴더에서 빠지면 그 폴더가 부른다 (ADR-0121).
+    콘솔·API 길은 없다 — 맡은 일꾼이 일꾼 폴더에서 빠지면 그 폴더가 부른다 (ADR-0122).
 
     **쓰는 BPM 프로세스가 있어도 막지 않는다** (C13) — 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라,
     쓰는 쪽이 있을 때 더 거둬야 한다. 몇 개가 실행 불가가 되는지는 화면이 미리 말한다 (CON-07).

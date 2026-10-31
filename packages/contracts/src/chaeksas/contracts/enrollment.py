@@ -55,7 +55,7 @@ ROTATE_NOTICE_DAYS = 7
 REASON_MAX = 200
 
 #: 요청할 수 있는 종류 — 만드는 키 종류와 같다 (C7). Studio도 같은 길이다 (ADR-0093).
-ENROLLMENT_TYPES = frozenset({"bot_ui", "server_runner", "studio"})  # 일꾼은 일꾼 폴더로만 (ADR-0121)
+ENROLLMENT_TYPES = frozenset({"bot_ui", "server_runner", "studio"})  # 일꾼은 일꾼 폴더로만 (ADR-0122)
 #: 알려진 상태 (열린 문자열).
 KNOWN_ENROLLMENT_STATES = frozenset({"pending", "approved", "rejected", "expired"})
 
