@@ -4,6 +4,7 @@ import { Button, DataTable, ErrorBanner, StatusBadge, type Column } from "@chaek
 import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
+import { sourceLabel } from "@/lib/labels";
 
 /**
  * CON-01 실행 로그 (목록).
@@ -151,7 +152,7 @@ export default async function RunsPage({
       // 이름을 모르면 **id를 보인다** — 「—」로 지우면 PC를 아는데도 모르는 것처럼 된다.
       cell: (row) => (row.bot_ui_id ? (pcName.get(row.bot_ui_id) ?? row.bot_ui_id) : "—"),
     },
-    { key: "source", header: "시작 방식", width: "10ch", cell: (row) => row.source ?? "—" },
+    { key: "source", header: "시작 방식", width: "10ch", cell: (row) => sourceLabel(row.source) },
     { key: "started_at", header: "시작", width: "14ch", cell: (row) => time(row.started_at) },
     { key: "finished_at", header: "끝", width: "14ch", cell: (row) => time(row.finished_at) },
     {

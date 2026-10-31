@@ -3,6 +3,7 @@ import type { Route } from "next";
 import { Button } from "@chaeksas/ui";
 import { logout } from "@/app/actions";
 import type { Mode } from "@/lib/session";
+import { Refresh } from "./Refresh";
 
 /**
  * CON-00 공통 틀 — 왼쪽 탐색 + 위 막대 + 본문.
@@ -126,6 +127,7 @@ export function Shell({
               {actor}
               <span className="text-text-muted"> · {mode === "admin" ? "관리자" : "보기 전용"}</span>
             </span>
+            <Refresh />
             <form action={logout}>
               <Button type="submit" variant="ghost" size="sm">
                 로그아웃

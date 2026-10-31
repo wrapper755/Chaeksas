@@ -39,7 +39,7 @@ const RUNNING_HINT =
   "지금 도는 세션은 여기서 알 수 없습니다 — 보고는 세션이 끝날 때 옵니다 (현장 PC 실행기의 BUI-09가 보여 줍니다).";
 const NO_SESSIONS = {
   title: "아직 UI 세션 보고가 없습니다.",
-  hint: "BPM 프로세스가 UI 태스크를 돌리거나 BUI-08 「셀렉터 시험」에서 보고를 켜면 쌓입니다.",
+  hint: "BPM 프로세스가 UI 태스크를 돌리거나 Tool UI 「셀렉터 시험」(TOL-05)에서 보고를 켜면 쌓입니다.",
 };
 const NO_FALLBACK = "아직 성공한 실행 기록이 없습니다.";
 

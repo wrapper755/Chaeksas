@@ -3,11 +3,12 @@ import { redirect } from "next/navigation";
 import { Button, DataTable, EmptyState, ErrorBanner, StatusBadge, type Column } from "@chaeksas/ui";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { CenterKeyInfo } from "@chaeksas/api-types/c7-center-key-info";
-import { STATE_LABEL } from "@/app/center-keys/page";
+import { STATE_LABEL } from "@/lib/center-keys";
 import { CENTER_PUBLIC_URL, CenterError, center, session } from "@/lib/center";
 import { CenterAddress } from "@/components/CenterAddress";
 import { Shell } from "@/components/Shell";
 import { Enrollments } from "@/components/Enrollments";
+import { lastReportNote } from "@/lib/labels";
 import type { EnrollmentInfo } from "@chaeksas/api-types/c5-enrollment-info";
 
 /**
@@ -126,13 +127,14 @@ export default async function BotUisPage() {
     { key: "os", header: "OS", width: "20ch" },
     { key: "versions", header: "버전", width: "10ch", mono: true, cell: (row) => row.versions.bot_ui },
     { key: "last_seen_at", header: "마지막 하트비트", width: "16ch", cell: (row) => time(row.last_seen_at) },
-    { key: "current_run", header: "실행 중", cell: running },
+    // 오프라인이면 실행·대기열이 지금 값이 아니다 — 언제 기준인지 칸에 붙인다 (CON-03, U8).
+    { key: "current_run", header: "실행 중", cell: (row) => <AsOf row={row}>{running(row)}</AsOf> },
     {
       key: "queue",
       header: "대기열",
-      width: "9ch",
+      width: "16ch",
       align: "right",
-      cell: (row) => `${row.queue?.items?.length ?? 0}건`,
+      cell: (row) => <AsOf row={row}>{`${row.queue?.items?.length ?? 0}건`}</AsOf>,
     },
     {
       key: "worker",
@@ -225,5 +227,17 @@ export default async function BotUisPage() {
         </div>
       )}
     </Shell>
+  );
+}
+
+/** 칸 값과, 오프라인이면 그 아래 「마지막 보고 <시각> 기준」 (`lastReportNote`). */
+function AsOf({ row, children }: { row: BotUiInfo; children: React.ReactNode }) {
+  const note = lastReportNote(row.online, row.last_seen_at, time);
+  if (!note) return <>{children}</>;
+  return (
+    <span className="flex flex-col">
+      <span>{children}</span>
+      <span className="text-caption text-text-muted">{note}</span>
+    </span>
   );
 }

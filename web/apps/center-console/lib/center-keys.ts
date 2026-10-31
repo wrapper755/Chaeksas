@@ -37,3 +37,31 @@ export function splitKeys<T extends Pick<CenterKeyInfo, "type">>(rows: T[]): { i
   for (const row of rows) (ENROLLED_TYPES.has(row.type) ? enrolled : integration).push(row);
   return { integration, enrolled };
 }
+
+/** 종류 표기 (CON-11 「종류」 열·필터). 필터의 고를 거리도 이 차례다. */
+export const TYPE_LABEL: Record<string, string> = {
+  bot_ui: "PC 실행기용",
+  studio: "Studio용",
+  server_runner: "서버 실행기용",
+  consumer: "일꾼용",
+  integration: "연동용",
+  relay: "대리 답용",
+};
+
+/** 상태 표기 — `status_map`의 「API 키」 묶음과 같은 글이다. */
+export const STATE_LABEL: Record<string, string> = {
+  active: "사용 중",
+  expired: "만료",
+  revoked: "폐기됨",
+};
+
+/**
+ * 주소의 필터(`?type=&state=`)에서 **아는 값만** 남긴다 — 모르는 글을 Center로 넘기지 않고
+ * (빈 목록이 「키가 없다」로 읽힌다) 고르는 칸도 「(전체)」로 돌아간다.
+ */
+export function keyFilter(query: { type?: string; state?: string }): { type?: string; state?: string } {
+  const found: { type?: string; state?: string } = {};
+  if (query.type && Object.hasOwn(TYPE_LABEL, query.type)) found.type = query.type;
+  if (query.state && Object.hasOwn(STATE_LABEL, query.state)) found.state = query.state;
+  return found;
+}
