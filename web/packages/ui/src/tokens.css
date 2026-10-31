@@ -1,21 +1,29 @@
 /* 생성 파일: design/tokens.json에서 만든다. 직접 고치지 말고 원본을 고친 뒤 scripts/gen_tokens.py */
 
 :root {
-  --bg-canvas: #F6F7F9;
+  --bg-canvas: #F3F4F7;
   --bg-surface: #FFFFFF;
-  --bg-subtle: #EEF0F3;
-  --bg-inverse: #1A1D23;
-  --border-default: #DDE1E6;
-  --border-strong: #B9C0CA;
-  --text-primary: #1A1D23;
-  --text-secondary: #4A5361;
-  --text-muted: #5F6875;
+  --bg-subtle: #E8E8E8;
+  --bg-inverse: #0A0A0A;
+  --border-default: #D5D5D5;
+  --border-strong: #AEAEAE;
+  --text-primary: #0A0A0A;
+  --text-secondary: #45484D;
+  --text-muted: #656565;
   --text-inverse: #FFFFFF;
-  --primary: #2552C7;
-  --primary-hover: #1D44A8;
-  --primary-subtle: #E8EEFC;
+  --primary: #5152C1;
+  --primary-hover: #423FAD;
+  --primary-subtle: #E6EAFF;
   --primary-fg: #FFFFFF;
-  --focus: #2552C7;
+  --focus: #757CD3;
+  --chrome-bg: #0F1830;
+  --chrome-fg: #F4F5F9;
+  --chrome-muted: #AAB0C5;
+  --chrome-hover: #26335C;
+  --chrome-border: #3C4B8B;
+  --chrome-side: #26325F;
+  --chrome-side-hover: #313E73;
+  --chrome-edge: #7E7FB3;
   --status-neutral-fg: #4A5361;
   --status-neutral-bg: #EEF0F3;
   --status-neutral-solid: #7D8693;
@@ -40,7 +48,7 @@
   --status-replayed-solid: #0E9AA7;
 
   /* 글꼴 */
-  --font-family-sans: "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --font-family-sans: Geist, "Pretendard Variable", Pretendard, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
   --font-family-mono: "JetBrains Mono", D2Coding, Consolas, "Noto Sans Mono", monospace;
   --font-size-caption: 12px;
   --font-size-body-sm: 13px;
@@ -80,9 +88,9 @@
   --size-control-lg: 40px;
   --size-row-compact: 32px;
   --size-row-default: 36px;
-  --size-nav-width: 232px;
+  --size-nav-width: 224px;
   --size-nav-collapsed: 64px;
-  --size-topbar-height: 56px;
+  --size-topbar-height: 48px;
 
   /* 그림자·움직임 */
   --shadow-sm: 0 1px 2px rgba(16,24,40,0.06);
@@ -94,21 +102,29 @@
 }
 
 [data-theme="dark"] {
-  --bg-canvas: #0F1115;
-  --bg-surface: #171A20;
-  --bg-subtle: #20242C;
-  --bg-inverse: #E8EAEE;
-  --border-default: #2C313A;
-  --border-strong: #3D444F;
-  --text-primary: #E8EAEE;
-  --text-secondary: #B4BBC6;
-  --text-muted: #939CA9;
+  --bg-canvas: #090A0C;
+  --bg-surface: #171717;
+  --bg-subtle: #262626;
+  --bg-inverse: #FAFAFA;
+  --border-default: #3C3C3C;
+  --border-strong: #585858;
+  --text-primary: #FAFAFA;
+  --text-secondary: #C4C4C4;
+  --text-muted: #A1A1A1;
   --text-inverse: #0F1115;
-  --primary: #7AA2FF;
-  --primary-hover: #9AB8FF;
-  --primary-subtle: #1B2A4D;
-  --primary-fg: #0F1115;
-  --focus: #7AA2FF;
+  --primary: #8B94F4;
+  --primary-hover: #9FA9FC;
+  --primary-subtle: #222546;
+  --primary-fg: #0C0E1C;
+  --focus: #7078C7;
+  --chrome-bg: #0A1124;
+  --chrome-fg: #F4F5F9;
+  --chrome-muted: #AAB0C5;
+  --chrome-hover: #1C2647;
+  --chrome-border: #2F3C6C;
+  --chrome-side: #1E2850;
+  --chrome-side-hover: #283463;
+  --chrome-edge: #6A6CA3;
   --status-neutral-fg: #B4BBC6;
   --status-neutral-bg: #232831;
   --status-neutral-solid: #8A93A1;
@@ -135,21 +151,29 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg-canvas: #0F1115;
-    --bg-surface: #171A20;
-    --bg-subtle: #20242C;
-    --bg-inverse: #E8EAEE;
-    --border-default: #2C313A;
-    --border-strong: #3D444F;
-    --text-primary: #E8EAEE;
-    --text-secondary: #B4BBC6;
-    --text-muted: #939CA9;
+    --bg-canvas: #090A0C;
+    --bg-surface: #171717;
+    --bg-subtle: #262626;
+    --bg-inverse: #FAFAFA;
+    --border-default: #3C3C3C;
+    --border-strong: #585858;
+    --text-primary: #FAFAFA;
+    --text-secondary: #C4C4C4;
+    --text-muted: #A1A1A1;
     --text-inverse: #0F1115;
-    --primary: #7AA2FF;
-    --primary-hover: #9AB8FF;
-    --primary-subtle: #1B2A4D;
-    --primary-fg: #0F1115;
-    --focus: #7AA2FF;
+    --primary: #8B94F4;
+    --primary-hover: #9FA9FC;
+    --primary-subtle: #222546;
+    --primary-fg: #0C0E1C;
+    --focus: #7078C7;
+    --chrome-bg: #0A1124;
+    --chrome-fg: #F4F5F9;
+    --chrome-muted: #AAB0C5;
+    --chrome-hover: #1C2647;
+    --chrome-border: #2F3C6C;
+    --chrome-side: #1E2850;
+    --chrome-side-hover: #283463;
+    --chrome-edge: #6A6CA3;
     --status-neutral-fg: #B4BBC6;
     --status-neutral-bg: #232831;
     --status-neutral-solid: #8A93A1;

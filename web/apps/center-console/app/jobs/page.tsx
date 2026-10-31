@@ -152,9 +152,6 @@ export default async function JobsPage({
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-h1 font-bold">작업 지시</h1>
-          <p className="text-body text-text-secondary">
-            배포된 BPM 프로세스를 언제 돌릴지 정합니다. PC 실행기가 다음 하트비트에 받아 갑니다.
-          </p>
         </div>
         {admin ? (
           <Link
@@ -166,7 +163,7 @@ export default async function JobsPage({
         ) : null}
       </header>
 
-      <form className="mb-4 flex flex-wrap items-end gap-4" method="get">
+      <form className="filter-card flex flex-wrap items-end gap-3" method="get">
         <fieldset className="flex flex-col gap-1 text-body-sm">
           <legend className="text-text-muted">상태</legend>
           <div className="flex flex-wrap gap-3">
@@ -183,7 +180,7 @@ export default async function JobsPage({
           <select
             name="bot_ui"
             defaultValue={botUi}
-            className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             <option value="">(전체)</option>
             {botUis.map((one) => (
@@ -204,6 +201,9 @@ export default async function JobsPage({
             className="h-9 w-24 border border-border-strong bg-bg-surface px-2 text-body"
           />
         </label>
+        <Link href="/jobs" className="ml-auto inline-flex h-9 items-center rounded-md px-3 text-body text-text-secondary hover:bg-bg-subtle">
+          초기화
+        </Link>
         <Button type="submit" variant="secondary">
           보기
         </Button>

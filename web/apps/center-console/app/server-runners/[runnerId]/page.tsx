@@ -241,12 +241,6 @@ export default async function ServerRunnerPage({
     <Shell mode={found.mode} actor={found.actor} current="/bots">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">{info?.name ?? wanted}</h1>
-        <p className="text-body text-text-secondary">
-          <Link className="underline" href="/bots?tab=server">
-            BPM 프로세스 현황 (서버)
-          </Link>
-          으로 돌아가기
-        </p>
       </header>
 
       {failure ? <ErrorBanner message={failure} /> : null}
@@ -303,7 +297,7 @@ export default async function ServerRunnerPage({
               <dd>{time(info.last_heartbeat_at)}</dd>
               <dt className="text-text-muted">처음 등록</dt>
               <dd>{time(info.registered_at)}</dd>
-              <dt className="text-text-muted">Center API 키</dt>
+              <dt className="text-text-muted">API 키</dt>
               <dd className="font-mono">
                 {info.key_prefix ? `${info.key_prefix}…` : "—"}
                 {info.key_expires_at ? ` (${fullTime(info.key_expires_at)}까지)` : " (무기한)"}

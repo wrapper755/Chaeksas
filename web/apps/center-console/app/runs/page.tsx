@@ -7,7 +7,7 @@ import { Shell } from "@/components/Shell";
 import { sourceLabel } from "@/lib/labels";
 
 /**
- * CON-01 실행 로그 (목록).
+ * CON-01 로그 (목록).
  *
  * 값은 **실행하는 쪽이 보낸 이벤트에서** 나온다 (C3). Center가 받을 때 요약을 만들어 두므로
  * 목록을 그릴 때 줄을 다시 읽지 않는다.
@@ -177,19 +177,16 @@ export default async function RunsPage({
   return (
     <Shell mode={found.mode} actor={found.actor} current="/runs">
       <header className="mb-4">
-        <h1 className="text-h1 font-bold">실행 로그</h1>
-        <p className="text-body text-text-secondary">
-          실행하는 쪽이 보낸 기록입니다. Center가 꺼져 있던 동안의 기록은 다시 닿을 때 올라옵니다.
-        </p>
+        <h1 className="text-h1 font-bold">로그</h1>
       </header>
 
-      <form className="mb-4 flex flex-wrap items-end gap-3" method="get">
+      <form className="filter-card flex flex-wrap items-end gap-3" method="get">
         <label className="flex flex-col gap-1 text-body-sm">
           상태
           <select
             name="status"
             defaultValue={query.status ?? ""}
-            className="h-9 border border-border-default bg-bg-surface px-2"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             {CHOICES.map((one) => (
               <option key={one || "all"} value={one}>
@@ -204,7 +201,7 @@ export default async function RunsPage({
             name="bpm_process_id"
             defaultValue={query.bpm_process_id ?? ""}
             placeholder="(전체)"
-            className="h-9 border border-border-default bg-bg-surface px-2"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           />
         </label>
         <label className="flex flex-col gap-1 text-body-sm">
@@ -212,7 +209,7 @@ export default async function RunsPage({
           <select
             name="run_location"
             defaultValue={query.run_location ?? ""}
-            className="h-9 border border-border-default bg-bg-surface px-2"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             {PLACES.map((one) => (
               <option key={one || "all"} value={one}>
@@ -226,7 +223,7 @@ export default async function RunsPage({
           <select
             name="bot_ui_id"
             defaultValue={query.bot_ui_id ?? ""}
-            className="h-9 border border-border-default bg-bg-surface px-2"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             <option value="">(전체)</option>
             {pcs.map((one) => (
@@ -241,7 +238,7 @@ export default async function RunsPage({
           <select
             name="limit"
             defaultValue={String(Number(query.limit) || DEFAULT_LIMIT)}
-            className="h-9 border border-border-default bg-bg-surface px-2"
+            className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
           >
             {LIMITS.map((one) => (
               <option key={one} value={one}>
@@ -250,6 +247,9 @@ export default async function RunsPage({
             ))}
           </select>
         </label>
+        <Link href="/runs" className="ml-auto inline-flex h-9 items-center rounded-md px-3 text-body text-text-secondary hover:bg-bg-subtle">
+          초기화
+        </Link>
         <Button type="submit" variant="secondary">
           좁히기
         </Button>

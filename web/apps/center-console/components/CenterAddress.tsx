@@ -5,7 +5,7 @@ import { Button } from "@chaeksas/ui";
 
 /**
  * 「<누가> 설정에 적을 Center 주소」 한 줄과 「복사」 (CON-00) — 주소를 적어 넣을 사람이 보는
- * 화면(CON-03·CON-11·CON-12)에만 둔다. https가 아닌 주소에서는 브라우저가 클립보드를 막으므로
+ * 화면(CON-03·CON-02 「서버」 탭)에만 둔다. https가 아닌 주소에서는 브라우저가 클립보드를 막으므로
  * 그때는 글자를 골라 복사하라고 말한다.
  */
 export function CenterAddress({ url, who }: { url: string; who: string }) {

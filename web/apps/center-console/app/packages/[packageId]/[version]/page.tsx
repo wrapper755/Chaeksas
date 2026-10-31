@@ -135,12 +135,6 @@ export default async function PackagePage({
         <h1 className="text-h1 font-bold">
           {info?.name ?? packageId} <span className="font-mono text-h2">{version}</span>
         </h1>
-        <p className="text-body text-text-secondary">
-          <Link className="underline" href="/packages">
-            공통 패키지
-          </Link>
-          로 돌아가기
-        </p>
       </header>
 
       {failure ? <ErrorBanner message={failure} /> : null}

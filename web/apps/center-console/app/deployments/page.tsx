@@ -128,20 +128,20 @@ export default async function DeploymentsPage({
   return (
     <Shell mode={found.mode} actor={found.actor} current="/deployments">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-h1 font-bold">배포</h1>
-          <p className="text-body text-text-secondary">
-            {showAll ? `전체 ${rows.length}건` : `살아 있는 배포 ${rows.length}건`} ·{" "}
-            <Link className="underline" href={(showAll ? "/deployments" : "/deployments?all=1") as Route}>
-              {showAll ? "살아 있는 것만" : "철회된 것도 보기"}
-            </Link>
-          </p>
-        </div>
-        {found.mode === "admin" ? (
-          <Link href="/deployments/new">
-            <Button variant="primary">새 배포...</Button>
+        <h1 className="text-h1 font-bold">배포</h1>
+        <div className="flex items-center gap-3">
+          <Link
+            className="text-body-sm text-text-secondary underline"
+            href={(showAll ? "/deployments" : "/deployments?all=1") as Route}
+          >
+            {showAll ? "살아 있는 것만" : "철회된 것도 보기"}
           </Link>
-        ) : null}
+          {found.mode === "admin" ? (
+            <Link href="/deployments/new">
+              <Button variant="primary">새 배포...</Button>
+            </Link>
+          ) : null}
+        </div>
       </header>
 
       {asked.created ? (

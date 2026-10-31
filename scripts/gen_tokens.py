@@ -1,5 +1,8 @@
 """디자인 토큰 생성기 — `design/tokens.json` → 웹 CSS·Qt 테마·미리보기 + 명암비 검사.
 
+BPM 흐름 마크(`design/bpm-mark.svg`, 스타일 가이드 §6-1)도 여기서 웹 구성요소·탭 아이콘으로 짓는다 —
+색이 토큰(`primary`)에서 와야 해서다.
+
 실행: `uv run python scripts/gen_tokens.py`
 `--check`: 파일을 쓰지 않고 검사만 하며, 생성물이 원본과 다르면 1로 끝난다 (CI용).
 
@@ -13,7 +16,9 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sys
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +37,10 @@ WEB_THEME = WEB_SRC / "theme.css"
 WEB_STATUS_MAP = WEB_SRC / "status-map.ts"
 QT_DIR = ROOT / "packages" / "qt" / "src" / "chaeksas" / "qt" / "theme"
 PREVIEW = ROOT / "design" / "preview.html"
+#: BPM 흐름 마크 (ADR-0118) — 원본 하나, 웹 구성요소 하나, 콘솔마다 탭 아이콘 하나.
+MARK_SOURCE = ROOT / "design" / "bpm-mark.svg"
+WEB_MARK = WEB_SRC / "bpm-mark.tsx"
+CONSOLE_ICONS = [ROOT / "web" / "apps" / app / "app" / "icon.svg" for app in ("center-console", "svc-console")]
 
 BANNER = "생성 파일: design/tokens.json에서 만든다. 직접 고치지 말고 원본을 고친 뒤 scripts/gen_tokens.py"
 
@@ -87,6 +96,10 @@ def contrast_rows(colors: dict[str, str]) -> list[tuple[str, str, float, float, 
     # UI 요소는 3:1. 테두리는 WCAG 1.4.11의 장식 예외라 **경고만** 한다 (통과=False).
     rows.append(("primary", "bg.surface", contrast(colors["primary"], colors["bg.surface"]), AA_UI, True))
     rows.append(("focus", "bg.surface", contrast(colors["focus"], colors["bg.surface"]), AA_UI, True))
+    # 남색 틀(웹 콘솔의 위 막대·탐색, 스타일 가이드 §2-1) — 글자는 바탕과 고른 줄 위 둘 다에서 읽혀야 한다.
+    for fg in ("chrome.fg", "chrome.muted"):
+        for bg in ("chrome.bg", "chrome.hover", "chrome.side", "chrome.side.hover"):
+            rows.append((fg, bg, contrast(colors[fg], colors[bg]), AA_TEXT, True))
     rows.append(
         ("border.strong", "bg.surface", contrast(colors["border.strong"], colors["bg.surface"]), AA_UI, False)
     )
@@ -337,6 +350,72 @@ def qt_dot_svg(tokens: dict[str, Any], theme: str) -> str:
         f"<!-- {BANNER} ({theme}) -->\n"
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 {size} {size}">'
         f'<circle cx="{half:g}" cy="{half:g}" r="{size * 0.28:g}" fill="{color}"/></svg>\n'
+    )
+
+
+def _mark_shapes() -> tuple[str, list[tuple[str, dict[str, str]]]]:
+    """원본 마크의 `viewBox`와 도형들. 도형만 받는다 — 원본에 다른 것을 넣으면 여기서 멈춘다."""
+    root = ET.fromstring(MARK_SOURCE.read_text(encoding="utf-8"))
+    shapes = []
+    for child in root:
+        tag = child.tag.split("}")[-1]
+        if tag not in {"circle", "line", "rect", "path"}:
+            raise SystemExit(f"bpm-mark.svg: 도형이 아닌 요소 <{tag}> — 원, 선, 네모, 경로만 쓴다")
+        colors = {v for v in child.attrib.values() if v.startswith("#")}
+        if colors:
+            raise SystemExit(f"bpm-mark.svg: 색 값 {sorted(colors)} — currentColor만 쓴다 (색은 토큰에서 온다)")
+        shapes.append((tag, dict(child.attrib)))
+    return root.attrib["viewBox"], shapes
+
+
+def _svg_shapes(shapes: list[tuple[str, dict[str, str]]]) -> str:
+    return "".join("<" + tag + "".join(f' {k}="{v}"' for k, v in attrs.items()) + "/>" for tag, attrs in shapes)
+
+
+def web_mark_tsx() -> str:
+    """웹 구성요소 `BpmMark` — 색은 부모의 글자색(`currentColor`)이라 쓰는 쪽이 `text-primary`를 준다."""
+    view_box, shapes = _mark_shapes()
+
+    def jsx(name: str) -> str:
+        return re.sub(r"-([a-z])", lambda m: m.group(1).upper(), name)
+
+    body = "\n".join(
+        "      <" + tag + "".join(f' {jsx(k)}="{v}"' for k, v in attrs.items()) + " />" for tag, attrs in shapes
+    )
+    return f"""// {BANNER} (design/bpm-mark.svg)
+
+/** BPM 흐름 마크 (스타일 가이드 §6-1, ADR-0118). `label`이 없으면 장식이라 읽지 않는다. */
+export function BpmMark({{ label, className }}: {{ label?: string; className?: string }}) {{
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="{view_box}"
+      className={{className}}
+      role={{label ? "img" : undefined}}
+      aria-label={{label}}
+      aria-hidden={{label ? undefined : true}}
+    >
+      {{label ? <title>{{label}}</title> : null}}
+{body}
+    </svg>
+  );
+}}
+"""
+
+
+def console_icon_svg(tokens: dict[str, Any]) -> str:
+    """브라우저 탭 아이콘 — 마크를 정사각에 가운데 둔다. 색은 밝게·어둡게 `primary` (OS 테마를 따른다)."""
+    view_box, shapes = _mark_shapes()
+    x, y, w, h = (float(n) for n in view_box.split())
+    side = max(w, h)
+    square = f"{x - (side - w) / 2:g} {y - (side - h) / 2:g} {side:g} {side:g}"
+    light = tokens["color"]["light"]["primary"]
+    dark = tokens["color"]["dark"]["primary"]
+    return (
+        f"<!-- {BANNER} (design/bpm-mark.svg) -->\n"
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{square}">'
+        f"<style>g{{color:{light}}}@media (prefers-color-scheme: dark){{g{{color:{dark}}}}}</style>"
+        f"<g>{_svg_shapes(shapes)}</g></svg>\n"
     )
 
 
@@ -716,6 +795,8 @@ def outputs(tokens: dict[str, Any]) -> dict[Path, str]:
         **{QT_DIR / f"dot-{t}.svg": qt_dot_svg(tokens, t) for t in ("light", "dark")},
         # `theme/__init__.py`는 손으로 쓴다 (테마를 **적용하는** 코드가 거기 있다).
         PREVIEW: preview_html(tokens, contrast_rows(tokens["color"]["light"])),
+        WEB_MARK: web_mark_tsx(),
+        **{icon: console_icon_svg(tokens) for icon in CONSOLE_ICONS},
     }
 
 

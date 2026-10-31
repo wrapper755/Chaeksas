@@ -77,11 +77,6 @@ export default async function VirtualWorkerPage({ params }: { params: Promise<{ 
 
   return (
     <Shell mode={found.mode} actor={found.actor} current="/virtual-workers">
-      <p className="mb-2 text-body-sm">
-        <Link className="underline" href="/virtual-workers">
-          가상 직원
-        </Link>
-      </p>
       {failure || !info ? (
         <ErrorBanner message={failure ?? "가상 직원을 읽지 못했습니다"} />
       ) : (
@@ -106,7 +101,7 @@ export default async function VirtualWorkerPage({ params }: { params: Promise<{ 
             <dd>{fullTime(info.updated_at)}</dd>
           </dl>
 
-          <h2 className="mb-2 text-h2 font-bold">최근 일괄</h2>
+          <h2 className="mb-2 text-h2 font-semibold">최근 일괄</h2>
           {(info.batches ?? []).length === 0 ? (
             <EmptyState title="아직 일괄이 없습니다. 접수 BPM 프로세스가 실행되면 여기 보입니다." />
           ) : (

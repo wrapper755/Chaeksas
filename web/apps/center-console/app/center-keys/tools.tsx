@@ -27,7 +27,7 @@ export function KeyTools() {
 
       <Dialog
         open={creating && !showing}
-        title="새 Center API 키"
+        title="새 API 키"
         onClose={() => setCreating(false)}
         footer={
           <>
@@ -49,7 +49,7 @@ export function KeyTools() {
               name="type"
               value={kind}
               onChange={(event) => setKind(event.target.value)}
-              className="border border-border-strong bg-bg-surface px-3 text-body"
+              className="rounded-md border border-border-strong bg-bg-surface px-3 text-body"
               style={{ height: "var(--size-control-md)", borderRadius: "var(--radius-md)" }}
             >
               {/* PC 실행기용·서버 실행기용·Studio용은 여기서 발급하지 않는다 — 등록 승인이 만든다 (ADR-0092·0093). */}

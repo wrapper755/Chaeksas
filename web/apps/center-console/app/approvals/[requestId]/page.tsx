@@ -109,12 +109,6 @@ export default async function ApprovalPage({
     <Shell mode={found.mode} actor={found.actor} current="/approvals">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">{info?.title ?? "결재 요청"}</h1>
-        <p className="text-body text-text-secondary">
-          <Link className="underline" href="/approvals">
-            결재함
-          </Link>
-          으로 돌아가기
-        </p>
       </header>
 
       {failure ? <ErrorBanner message={failure} /> : null}
@@ -243,7 +237,7 @@ export default async function ApprovalPage({
                       <input
                         type="text"
                         name="comment"
-                        className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
+                        className="h-9 rounded-md border border-border-strong bg-bg-surface px-2 text-body"
                       />
                     </label>
                   </>

@@ -1,7 +1,17 @@
 /* 글꼴 자체 호스팅 — **외부 CDN을 쓰지 않는다** (사내망, 스타일 가이드 §2-3).
    패밀리 이름은 `design/tokens.json`의 글꼴 스택에 적힌 이름 그대로다
-   (`Pretendard Variable`, `JetBrains Mono`). 그래서 토큰을 고치지 않고도 이어진다.
-   라이선스: SIL OFL 1.1 — `OFL-Pretendard.txt`, `OFL-JetBrainsMono.txt`. */
+   (`Geist`, `Pretendard Variable`, `JetBrains Mono`). 그래서 토큰을 고치지 않고도 이어진다.
+   라틴 글자는 Geist, 한글은 Pretendard가 받는다 (NowView와 같은 모양 — ADR-0119).
+   라이선스: SIL OFL 1.1 — `OFL-Geist.txt`, `OFL-Pretendard.txt`, `OFL-JetBrainsMono.txt`. */
+
+@font-face {
+  font-family: "Geist";
+  /* 라틴 부분 집합 가변 글꼴 (100~900). 한글이 없으니 스택의 다음(Pretendard)이 받는다. */
+  src: url("./fonts/GeistVariable-latin.woff2") format("woff2-variations");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 
 @font-face {
   font-family: "Pretendard Variable";

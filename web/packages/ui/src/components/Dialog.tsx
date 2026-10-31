@@ -43,7 +43,7 @@ export function Dialog({ open, title, description, children, footer, onClose, wi
       }}
       onClose={onClose}
       style={{ borderRadius: "var(--radius-xl)", boxShadow: "var(--shadow-lg)", maxWidth: `${width}px` }}
-      className="m-auto w-full border border-border-default bg-bg-surface p-6 text-text-primary backdrop:bg-black/40"
+      className="m-auto w-full rounded-xl border border-border-default bg-bg-surface p-6 text-text-primary shadow-lg backdrop:bg-black/40"
     >
       <h2 className="text-h3 font-semibold">{title}</h2>
       {description ? <p className="mt-2 text-body-lg text-text-secondary">{description}</p> : null}

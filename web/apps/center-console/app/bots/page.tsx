@@ -29,7 +29,7 @@ export { NO_RUNS, SAMPLE, SCAN, deployedPcs, percent, summarize };
 export type { BotRow, RunFields };
 
 /**
- * CON-02 BPM 프로세스 현황 — BPM 프로세스·버전별 준비도.
+ * CON-02 BPM 프로세스 — BPM 프로세스·버전별 준비도.
  *
  * **Center가 집계를 갖고 있지 않다.** 실행 요약(C3 `RunInfo`)·보고된 준비 상태(C4
  * `readiness`)·누락 리소스(C5 `missing_resources`)를 **콘솔에서 묶어** 보인다 — Center에 집계
@@ -45,7 +45,7 @@ export type { BotRow, RunFields };
 /** 탭 — 실행 위치 (C1 `run_location`). 서버가 먼저다 (서버 우선, ADR-0016). */
 const TABS: Array<{ place: Place; label: string }> = [
   { place: "server", label: "서버" },
-  { place: "pc", label: "PC (PC 실행기)" },
+  { place: "pc", label: "데스크톱" },
 ];
 
 
@@ -148,8 +148,6 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
 
-  const bots = new Set(rows.map((row) => row.id)).size;
-  const versions = rows.length;
   const counts = { server: 0, pc: 0 };
   for (const row of rows) counts[placeOf(row.run_location)] += 1;
   // 탭은 **실행 위치로** 가른다 — 그래서 표에 「실행 위치」 열이 없다 (CON-02).
@@ -269,10 +267,7 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
   return (
     <Shell mode={found.mode} actor={found.actor} current="/bots">
       <header className="mb-4">
-        <h1 className="text-h1 font-bold">BPM 프로세스 현황</h1>
-        <p className="text-body text-text-secondary">
-          BPM 프로세스 {bots}개, 버전 {versions}개 · 준비도는 최근 {SAMPLE}회 실행 기준
-        </p>
+        <h1 className="text-h1 font-bold">BPM 프로세스</h1>
       </header>
 
       <nav className="mb-4 flex flex-wrap gap-2" aria-label="실행 위치">
@@ -283,8 +278,8 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
             aria-current={place === one.place ? "page" : undefined}
             className={
               place === one.place
-                ? "border border-border-strong bg-bg-subtle px-3 py-1 text-body"
-                : "border border-border-default px-3 py-1 text-body text-text-secondary"
+                ? "rounded-md border border-transparent bg-primary-subtle px-3 py-1 text-body font-semibold text-primary"
+                : "rounded-md border border-border-default bg-bg-surface px-3 py-1 text-body text-text-secondary hover:bg-bg-subtle"
             }
           >
             {one.label} ({counts[one.place]})

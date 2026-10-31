@@ -1,6 +1,6 @@
 import type { Route } from "next";
 import Link from "next/link";
-import { Button, StatusBadge } from "@chaeksas/ui";
+import { BpmMark, Button, StatusBadge } from "@chaeksas/ui";
 import type { AdminStatus } from "@chaeksas/api-types/c11-admin-status";
 import { logout } from "@/app/actions";
 import { NO_MODULE, pagesOf } from "@/lib/console-modules";
@@ -62,13 +62,36 @@ export function Shell({
 }) {
   const nav = [...COMMON, ...appPages(status)];
   return (
-    <div className="flex min-h-screen">
+    <div className="min-h-screen">
+      {/* 남색 위 막대 — Center 콘솔과 같은 틀 (스타일 가이드 §4-1). 앱 이름은 글로 남긴다 (ADR-0118). */}
+      <header
+        className="chrome fixed inset-x-0 top-0 z-40 flex items-center gap-3 border-b-2 border-chrome-edge px-5"
+        style={{ height: "var(--size-topbar-height)" }}
+      >
+        <p className="flex min-w-0 items-center gap-2 text-body font-semibold">
+          <BpmMark className="h-5 w-auto shrink-0" />
+          <span className="truncate">{status?.name ?? "서비스 앱"}</span>
+        </p>
+        <p className="mr-auto hidden min-w-0 truncate text-body-sm text-text-muted md:block">
+          {status ? status.version : "앱"} · <span className="font-mono">{appUrl}</span>
+        </p>
+        <StatusBadge group="서비스 앱" label={appState(status)} />
+        <Refresh />
+        <span className="text-body-sm">
+          관리자<span className="text-text-muted"> · {actor}</span>
+        </span>
+        <form action={logout}>
+          <Button type="submit" variant="ghost" size="sm">
+            나가기
+          </Button>
+        </form>
+      </header>
+
       <nav
         aria-label="주요 탐색"
-        className="shrink-0 border-r border-border-default bg-bg-surface p-3"
-        style={{ width: "var(--size-nav-width)" }}
+        className="chrome chrome-side fixed bottom-0 left-0 z-30 overflow-y-auto p-3"
+        style={{ top: "var(--size-topbar-height)", width: "var(--size-nav-width)" }}
       >
-        <p className="px-2 pb-3 text-h3 font-bold">{status?.name ?? "서비스 앱"}</p>
         <ul className="flex flex-col gap-1">
           {nav.map((item) => (
             <li key={item.label}>
@@ -86,7 +109,7 @@ export function Shell({
                   aria-current={current === item.href ? "page" : undefined}
                   className={
                     current === item.href
-                      ? "block rounded-md bg-primary-subtle px-3 py-2 text-body font-semibold text-primary"
+                      ? "block rounded-md bg-primary px-3 py-2 text-body font-semibold text-primary-fg"
                       : "block rounded-md px-3 py-2 text-body hover:bg-bg-subtle"
                   }
                 >
@@ -98,31 +121,12 @@ export function Shell({
         </ul>
       </nav>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header
-          className="flex shrink-0 items-center justify-between gap-4 border-b border-border-default bg-bg-surface px-6"
-          style={{ height: "var(--size-topbar-height)" }}
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            <p className="truncate text-body-sm text-text-secondary">
-              {status ? `${status.name} ${status.version}` : "앱"} · <span className="font-mono">{appUrl}</span>
-            </p>
-            <StatusBadge group="서비스 앱" label={appState(status)} />
-          </div>
-          <div className="flex items-center gap-3">
-            <Refresh />
-            <span className="text-body-sm">
-              관리자<span className="text-text-muted"> · {actor}</span>
-            </span>
-            <form action={logout}>
-              <Button type="submit" variant="ghost" size="sm">
-                나가기
-              </Button>
-            </form>
-          </div>
-        </header>
-        <main className="min-w-0 flex-1 p-6">{children}</main>
-      </div>
+      <main
+        className="min-w-0 p-6"
+        style={{ marginTop: "var(--size-topbar-height)", marginLeft: "var(--size-nav-width)" }}
+      >
+        {children}
+      </main>
     </div>
   );
 }

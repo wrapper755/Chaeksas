@@ -12,7 +12,7 @@ import { CancelQueuedJob } from "@/app/server-runners/queue-cancel";
 import { RestartRunner } from "@/app/server-runners/actions-ui";
 
 /**
- * 서버 실행기 목록·승인 대기·대기열 — CON-02 「BPM 프로세스 현황」의 「서버」 탭이 그린다 (CON-12 「목록」).
+ * 서버 실행기 목록·승인 대기·대기열 — CON-02 「BPM 프로세스」의 「서버」 탭이 그린다 (CON-12 「목록」).
  *
  * **목록과 상세로 나눈다** — 「실행 중」·「기다리는 실행」·「BPM 프로세스별 상한」은 **실행기 하나의
  * 것**이라 상세(`/server-runners/<id>`)에 있다.
@@ -105,7 +105,7 @@ export async function ServerRunners({ admin }: { admin: boolean }) {
     },
     {
       key: "key",
-      header: "Center API 키",
+      header: "API 키",
       width: "26ch",
       mono: true,
       // 만료는 **연도까지** 적는다 — 「01-01」로는 내일인지 내년인지 모른다 (CON-03과 같다).

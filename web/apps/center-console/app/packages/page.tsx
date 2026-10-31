@@ -103,9 +103,6 @@ export default async function PackagesPage() {
     <Shell mode={found.mode} actor={found.actor} current="/packages">
       <header className="mb-4">
         <h1 className="text-h1 font-bold">공통 패키지</h1>
-        <p className="text-body text-text-secondary">
-          BPM 프로세스가 아닌 패키지 — 여러 BPM 프로세스가 가져다 쓰는 공유 BPM 프로세스입니다.
-        </p>
       </header>
 
       {failure ? (
