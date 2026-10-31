@@ -3,7 +3,7 @@
 속성 패널이 이벤트(시작·중간 받기·중간 던지기·경계·끝)와 받기 태스크를 만나면 탭으로 끼운다.
 **규약은 결재·STU-14와 같다** (`load`/`dump`/`problems`/`changed`) — 다른 것은 둘이다.
 
-- 고치는 것이 **표준 이벤트 정의의 칸**과 `chk:receive`라 `dump()`가
+- 고치는 것이 **표준 이벤트 정의의 칸**과 `bpm:receive`라 `dump()`가
   `{"event": {칸: 값}, "receive": 본문 | None}`을 준다. 캔버스가 `event`를 bpmn-js 명령으로 옮긴다.
 - **이벤트 정의의 종류는 바꾸지 않는다** — 캔버스의 바꾸기 메뉴(렌치)가 한다. 여기서는 그 종류에서
   **엔진이 읽는 칸만** 둔다(타이머 값, 메시지·신호 이름, 오류 코드, 경계의 중단, 받기의 상관 키·받을 값).
@@ -152,12 +152,12 @@ class EventEditor(QWidget):
         self.message_box.setPlaceholderText("메시지 이름 (필수)")
         self.correlation_box = QLineEdit(self)
         self.correlation_box.setPlaceholderText("변수 이름 — 비우면 이름만 맞으면 받습니다")
-        self.correlation_box.setToolTip("그 변수의 값이 같은 메시지만 받습니다 (chk:receive.correlation).")
+        self.correlation_box.setToolTip("그 변수의 값이 같은 메시지만 받습니다 (bpm:receive.correlation).")
         attach(self.correlation_box, names)
         self.payload_box = QLineEdit(self)
         self.payload_box.setPlaceholderText("변수 이름, 쉼표로")
         self.payload_box.setToolTip(
-            "메시지 본문에서 변수가 되는 이름입니다. 적지 않은 것은 버립니다 (chk:receive.payload)."
+            "메시지 본문에서 변수가 되는 이름입니다. 적지 않은 것은 버립니다 (bpm:receive.payload)."
         )
         self.message_note = QLabel(MESSAGE_NOTE, self)
         self.message_note.setWordWrap(True)
@@ -369,7 +369,7 @@ class EventEditor(QWidget):
         return ""
 
     def _receives(self) -> bool:
-        """`chk:receive`를 읽는 자리 — 메시지를 **기다리는** 것 (시작은 작업이 되므로 읽지 않는다)."""
+        """`bpm:receive`를 읽는 자리 — 메시지를 **기다리는** 것 (시작은 작업이 되므로 읽지 않는다)."""
         return self.section() == "Message" and self.bpmn_type != "StartEvent"
 
     def _interrupt_choice(self) -> bool:

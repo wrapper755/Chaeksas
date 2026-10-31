@@ -179,7 +179,7 @@ def test_any_allows_two_rows_only_when_they_agree() -> None:
 
 
 def test_the_input_name_is_the_expression_not_the_label() -> None:
-    """`label`은 사람이 읽는 이름이다 (예제의 「시각」/`시`). `chk:rule.input`은 식 쪽을 쓴다."""
+    """`label`은 사람이 읽는 이름이다 (예제의 「시각」/`시`). `bpm:rule.input`은 식 쪽을 쓴다."""
     xml = table(
         inputs=column(0, "시", "number", label="시각"),
         outputs=result(0, "답"),

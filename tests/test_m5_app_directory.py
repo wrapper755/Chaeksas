@@ -488,12 +488,12 @@ def test_the_server_runner_builds_the_directory_without_a_file(
 
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="finance.invoice" name="세금계산서 처리">
-    <bpmn:extensionElements><chk:process>{props}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{props}</bpm:process></bpmn:extensionElements>
     <bpmn:startEvent id="Start_1"/>
-    <bpmn:serviceTask id="Task_Ocr"><bpmn:extensionElements><chk:serviceCall>{call}
-    </chk:serviceCall></bpmn:extensionElements></bpmn:serviceTask>
+    <bpmn:serviceTask id="Task_Ocr"><bpmn:extensionElements><bpm:serviceCall>{call}
+    </bpm:serviceCall></bpmn:extensionElements></bpmn:serviceTask>
     <bpmn:endEvent id="End_1"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Task_Ocr"/>
     <bpmn:sequenceFlow id="f2" sourceRef="Task_Ocr" targetRef="End_1"/>
@@ -539,7 +539,7 @@ def test_the_runner_calls_the_external_app_through_the_adapter_consumer(
     """한 바퀴 — 패키지 → 엔진 → **Center(C15)** → 어댑터 일꾼 → **진짜 외부 앱** → 변수 → C3 기록.
 
     실행하는 쪽(Studio 키, `test_…` 실행)은 외부 앱의 주소도 키도 모른다. 키는 **어댑터 일꾼의
-    설정**(`CHK_ADAPTER__EXT__EXT_OCR__KEY`)에만 있고, 외부 앱이 받은 `Authorization`이 그것이다.
+    설정**(`BPM_ADAPTER__EXT__EXT_OCR__KEY`)에만 있고, 외부 앱이 받은 `Authorization`이 그것이다.
     """
     import httpx  # noqa: PLC0415
     from consumers import enroll, serve, start  # noqa: PLC0415
@@ -567,7 +567,7 @@ def test_the_runner_calls_the_external_app_through_the_adapter_consumer(
             studio_key = str(studio.json()["key"])
         # 어댑터 일꾼이 **제 정의를 들고 있다가** 뜰 때 올린다 (ADR-0122) — `start()`의 `publish`가 올린다.
         service = service_of(
-            found, environ={ext_env(APP, "KEY"): "ocr-secret-1", "CHK_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"}
+            found, environ={ext_env(APP, "KEY"): "ocr-secret-1", "BPM_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"}
         )
         _, stop = start([service], center_url=url, tokens=tokens)
         try:

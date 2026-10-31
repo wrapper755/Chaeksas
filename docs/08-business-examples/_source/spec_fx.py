@@ -38,7 +38,7 @@ FX("FX-02", "fx02_business_rule", "규칙 태스크 (DMN)", "프로토타입 exa
                         (["-", '"VIP"'], ["0.05", '"VIP"'], ""), (["-", "-"], ["0", '"할인 없음"'], "")])],
    cases=[Case("VIP 대량", {"금액": 1500000, "등급": "VIP"}, {"할인율": 0.2, "최종가": 1200000}),
           Case("일반 소량", {"금액": 50000, "등급": "일반"}, {"할인율": 0})],
-   features=["`businessRuleTask` + `chk:rule` 입력·출력 매핑", "다중 출력 DMN"],
+   features=["`businessRuleTask` + `bpm:rule` 입력·출력 매핑", "다중 출력 DMN"],
    lessons=["프로토타입은 DMN 입력 이름(amount)과 변수 이름(금액)이 같아야 했다 — 새 형식은 `input` 매핑으로 잇는다."])
 
 FX("FX-03", "fx03_call_mapping", "BPM 프로세스 호출과 매핑", "프로토타입 example_call_mapping", "server", "수동 실행",
@@ -49,7 +49,7 @@ FX("FX-03", "fx03_call_mapping", "BPM 프로세스 호출과 매핑", "프로토
     script("Task_Report", "정리", "요약 = f'{신청자구분}/{보증인구분}'"), end("End")],
    [f("Start", "Task_Prepare"), f("Task_Prepare", "Call_A"), f("Call_A", "Call_B"), f("Call_B", "Task_Report"), f("Task_Report", "End")],
    cases=[Case("기본", {}, {"신청자구분": "고액", "보증인구분": "소액"})], called=["fx03b_amount_branch"],
-   features=["`chk:call` 입력·출력 매핑", "같은 대상 두 번 호출"],
+   features=["`bpm:call` 입력·출력 매핑", "같은 대상 두 번 호출"],
    lessons=["출력 매핑 없이 두 번 부르면 `구분`이 덮어써진다."])
 
 FX("FX-03b", "fx03b_amount_branch", "금액 분기 (호출 대상)", "프로토타입 example_call_mapping의 하위", "server", "BPM 프로세스 호출",
@@ -69,7 +69,7 @@ FX("FX-04", "fx04_folder_poll", "폴더 감시 (조건 시작 대체)", "프로�
     f("Approve_Confirm", "End")],
    inputs=[("감시폴더", "string", False, "")],
    cases=[Case("빈 폴더", {"감시폴더": "samples/inbox-empty"}, {"건수": 0}), Case("2건", {"감시폴더": "samples/inbox"}, {"건수": 2}, {"Approve_Confirm": {"처리": True}})],
-   features=["조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링", "끝 이벤트 둘", "파일 목록 태스크 (`chk:fileList`)"],
+   features=["조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링", "끝 이벤트 둘", "파일 목록 태스크 (`bpm:fileList`)"],
    lessons=["조건 시작은 「무엇이 바뀌면 다시 평가하나」가 정의되지 않아 프로토타입에서 한 번만 돌았다.", "폴링은 실행이 자주 생긴다 — 「없음」 실행은 이력에서 접어 보이게(CON-04 필터).",
             "폴더를 훑는 것은 식이 아니라 태스크다 — 디스크를 읽고 실행마다 결과가 달라진다 (ADR-0025·ADR-0026)."])
 
@@ -88,7 +88,7 @@ FX("FX-07", "fx07_email", "메일 보내기", "프로토타입 example_email", "
    [f("Start", "Task_Body"), f("Task_Body", "Task_Mail"), f("Task_Mail", "End")],
    data=[out("Data_Report", "보고", "Task_Body", "fx07/보고.md", template="{보고}", store_as="보고경로")],
    inputs=[("받는사람", "string", True, "")], cases=[Case("로컬 SMTP", {"받는사람": "test@example.com"}, {"발송결과": {"ok": True}})],
-   features=["`sendTask` + `chk:email`", "파일 출력 → 첨부", "`store_as`"],
+   features=["`sendTask` + `bpm:email`", "파일 출력 → 첨부", "`store_as`"],
    lessons=["첨부는 파일 경로 **변수 이름**을 적는다 — 경로 문자열을 직접 쓰지 않는다."])
 
 FX("FX-08", "fx08_error_boundary", "오류 경계와 대체 경로", "프로토타입 example_error_boundary", "server", "수동 실행",
@@ -156,7 +156,7 @@ FX("FX-12", "fx12_daily_report", "타이머 시작 + 파일 출력", "프로토�
    [f("Start", "Task_Summary"), f("Task_Summary", "End")],
    data=[out("Data_Report", "일일 보고서", "Task_Summary", "일일/{오늘}.md", template="# {요약}", store_as="보고경로")],
    cases=[Case("기본", {}, {"보고경로": "*"})],
-   features=["타이머 시작(cron)", "`dataObjectReference` + `chk:dataOutput`"],
+   features=["타이머 시작(cron)", "`dataObjectReference` + `bpm:dataOutput`"],
    lessons=["경로에 `outputs/`를 다시 쓰면 `outputs/outputs/`가 된다 — 경로는 출력 루트 기준 상대 경로."])
 
 FX("FX-13", "fx13_signal", "신호 던지기·받기", "프로토타입 example_signal", "server", "수동 실행",
@@ -203,7 +203,7 @@ FX("FX-17", "fx17_webhook", "웹훅 보내기", "프로토타입 example_webhook
    boundaries=[bnd("Bnd_Fail", "Task_Hook", "error", "실패", error="SEND_FAILED")],
    inputs=[("대상주소", "string", True, "")],
    cases=[Case("로컬 수신기", {"대상주소": {"$test_receiver": "hook"}}, {"응답": {"status": 200}}), Case("주소 없음", {"대상주소": "https://unreachable.invalid/hook"}, {"실패": "*"}, description="DNS 실패 → `SEND_FAILED` 경계")],
-   features=["`chk:webhook` body `fields:[…]`", "`SEND_FAILED`"],
+   features=["`bpm:webhook` body `fields:[…]`", "`SEND_FAILED`"],
    lessons=["body `all`은 모든 변수를 보낸다 — 비밀이 섞일 수 있어 `fields`를 권장 (실행 전 검사 경고)."])
 
 FX("FX-18", "fx18_parallel_loop", "병렬 반복", "새로 — 프로토타입 공백", "server", "수동 실행",
@@ -225,7 +225,7 @@ FX("FX-19", "fx19_manual_task_pc", "수동 확인 (PC)", "프로토타입 manual
    [f("Start", "Manual_Paper"), f("Manual_Paper", "Task_Done"), f("Task_Done", "End")],
    outputs=["확인됨"],
    cases=[Case("확인", {}, {"확인됨": True}, {"Manual_Paper": {"decision": "approve"}})],
-   features=["`manualTask` + `chk:approval` (칸 없음)", "BX-16이 **PC 위임**으로 부른다 — `확인됨`을 `outputs`로 돌려준다"],
+   features=["`manualTask` + `bpm:approval` (칸 없음)", "BX-16이 **PC 위임**으로 부른다 — `확인됨`을 `outputs`로 돌려준다"],
    lessons=["수동 작업은 결재와 같은 창(C6)을 쓰되 칸이 없다 — 화면에는 「확인」 하나만. 프로토타입 시나리오 2도 실물 수령을 이렇게 확인했다.",
             "**칸이 없어도 답은 비어 있지 않다** — 폼이 없는 결재의 답은 `decision`(`approve`/`reject`)이다 (C6). "
             "케이스에 `{}`를 적었더니 Studio 시험 실행이 답을 거절하고 같은 자리를 되풀이했다 (조각 3e-3).",
@@ -301,9 +301,9 @@ FX("FX-22", "fx22_append_output", "파일 출력 — csv 덧붙이기와 txt", "
    cases=[Case("한 줄 쓰기", {"건수": 7, "담당": "김가나"}, {"일지파일수": 2, "일지경로": "일지/처리일지.csv", "글경로": "일지/처리일지.txt"},
                description="csv·txt 둘이 **정말 써졌는지** 파일 목록으로 센다")],
    features=["파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만)", "파일 출력 `txt` + `template`",
-             "쓴 파일을 `chk:fileList`로 되세기"],
+             "쓴 파일을 `bpm:fileList`로 되세기"],
    lessons=["파일 출력 포맷 다섯 중 예제가 밟던 것은 `md`·`json`·`xlsx` 셋뿐이었고 **`append`는 아무도 밟지 않았다** — 코드·계약이 받는 것과 예제가 돌려 본 것은 다르다 (FX-21의 적중 정책과 같은 꼴이다).",
-            "**케이스가 볼 수 있는 것은 변수뿐이다** — 「파일이 생겼다」를 보려면 `chk:fileList`로 세어 변수로 만들어야 한다. `store_as`가 주는 것은 **출력 폴더 기준 상대 경로**라 그것도 기대값으로 쓸 수 있다 (절대 경로를 업무 값에 섞지 않는다, C14).",
+            "**케이스가 볼 수 있는 것은 변수뿐이다** — 「파일이 생겼다」를 보려면 `bpm:fileList`로 세어 변수로 만들어야 한다. `store_as`가 주는 것은 **출력 폴더 기준 상대 경로**라 그것도 기대값으로 쓸 수 있다 (절대 경로를 업무 값에 섞지 않는다, C14).",
             "`append`는 `json`·`xlsx`에 쓸 수 없다 (B5 검사 오류) — 이어 붙일 수 있는 것은 글 꼴 셋(`md`·`txt`·`csv`)이다.",
             "`csv`의 `variables`는 **이름 하나**만 받는다. 둘을 적으면 B5가 막는다 — 한 파일에 표 둘을 넣을 수 없다."])
 
@@ -380,7 +380,7 @@ FX("FX-24", "fx24_batch_intake", "일괄 기동 — 접수 BPM 프로세스", "�
                {"Approve_Batch": {"승인": True}},
                "위임 결과를 **적어 두지 않으면** 그 자리에서 실패다 — 반복 노드의 오류 경계가 **한 번** 받고 나머지 건은 거둔다",
                delegations={})],
-   features=["**일괄 기동** — Call Activity 반복 + 위임 (`chk:loop` + `chk:call.delegate`)", "서버 BPM 프로세스에 위임",
+   features=["**일괄 기동** — Call Activity 반복 + 위임 (`bpm:loop` + `bpm:call.delegate`)", "서버 BPM 프로세스에 위임",
              "**병렬 반복** — 건을 한 번에 맡기고 함께 기다린다 (`isSequential=false`, ADR-0087)",
              "결재 담당자 = **가상 직원의 감독자** (`assignees: \"감독자\"` ← 입력의 값 출처 `virtual_worker.supervisors`, ADR-0099)", "결재 반려 시 기동 없음"],
    lessons=["일괄은 **자원이 아니라 실행 하나**다 — 승인은 보통 결재이고 순서는 그림에 있다 (ADR-0079). 그래서 B16이 그림에서 「결재를 지나지 않는 반복 위임」을 알린다.",

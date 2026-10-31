@@ -94,7 +94,7 @@ def test_platform_does_not_depend_on_extensions() -> None:
 def test_nothing_depends_on_the_samples() -> None:
     """`samples/`는 제품이 아니다 — 아무 멤버도 의존하지 않는다 (01-architecture §8).
 
-    쓰는 쪽은 `tests/`와 사람이 띄우는 `chk-mock-apps`뿐이다.
+    쓰는 쪽은 `tests/`와 사람이 띄우는 `bpm-mock-apps`뿐이다.
     """
     graph = members()
     bad = {name for name in graph if name != "chaeksas-mock-apps" and "chaeksas-mock-apps" in reachable(name, graph)}

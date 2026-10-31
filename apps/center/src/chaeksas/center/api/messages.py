@@ -272,7 +272,7 @@ def _insert(
                 request.idempotency_key,
                 _body_hash(request),
                 now,
-                # **행위자는 본문에서 받지 않는다** (C5) — 키 이름이나 X-CHK-Actor가 정한다.
+                # **행위자는 본문에서 받지 않는다** (C5) — 키 이름이나 X-BPM-Actor가 정한다.
                 actor,
                 delivered_to,
                 run_id,

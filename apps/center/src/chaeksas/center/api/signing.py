@@ -8,7 +8,7 @@
 - **누가 했는지는 계정 이름**으로 남긴다(`approved_by`·`revoked_by`) — 봉투의 `key_id`는 이제
   늘 Center 키라 사람을 말하지 못한다.
 - 믿는 키(`admin_keys`)는 Center 키와, 사람이 서명하던 때 들어온 옛 Admin 키다. 옛 키를 버리는
-  길은 서버 셸의 `chk-center signing-key retire`뿐이다.
+  길은 서버 셸의 `bpm-center signing-key retire`뿐이다.
 """
 
 from __future__ import annotations

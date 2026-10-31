@@ -174,7 +174,7 @@ def test_unreachable_center_does_not_block(settings: Settings, tmp_path: Path) -
         settings=settings,
         client=CenterClient(
             base_url="http://center",
-            api_key="chk_ctr_" + "x" * 40,
+            api_key="bpm_ctr_" + "x" * 40,
             client=httpx.Client(transport=httpx.MockTransport(refuse)),
         ),
     )
@@ -297,14 +297,14 @@ def test_restored_is_kept_when_center_is_down(settings: Settings, tmp_path: Path
     assert found.restored == ["run_20261013_090000_aa11bb"]
 
 
-# ─────────────────────────── CLI (`chk-server-runner`) ───────────────────────────
+# ─────────────────────────── CLI (`bpm-server-runner`) ───────────────────────────
 
 
 def test_without_a_key_it_says_where_to_put_one(
     monkeypatch: pytest.MonkeyPatch, capsys: Any, tmp_path: Path
 ) -> None:
     monkeypatch.delenv(ENV_CENTER_API_KEY, raising=False)
-    monkeypatch.setenv("CHK_SERVER_RUNNER__DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("BPM_SERVER_RUNNER__DATA_DIR", str(tmp_path))
     monkeypatch.setattr(Credentials, "center_api_key", lambda self: None)
     # 비밀 저장소도 없다 — 받은 키를 둘 곳이 없으니 등록 요청을 보내지 않는다 (C12).
     monkeypatch.setattr(Credentials, "available", property(lambda self: False))
@@ -348,7 +348,7 @@ def test_without_a_key_it_asks_center_and_is_let_in_by_approval(
     approved = center.post(f"/api/v1/enrollments/{pending[0]['enrollment_id']}/approve", json={}, headers=ADMIN)
     assert approved.status_code == 200, approved.text
     key = enroll.step(found)
-    assert key is not None and key.startswith("chk_ctr_")
+    assert key is not None and key.startswith("bpm_ctr_")
     assert found.credentials.center_api_key() == key
     assert key not in caplog.text, "키는 로그에 남지 않는다"
     assert not (settings.data_path / enroll.STATE_FILE).exists()
@@ -371,9 +371,9 @@ def test_a_bundled_runner_is_let_in_by_the_join_token(
         found = build(settings, "", joined)
         found.credentials = MemoryCredentials()
         caplog.set_level("INFO")
-        monkeypatch.setenv("CHK_SERVER_RUNNER__JOIN_TOKEN", "j" * 43)
+        monkeypatch.setenv("BPM_SERVER_RUNNER__JOIN_TOKEN", "j" * 43)
         key = enroll.step(found)
-        assert key is not None and key.startswith("chk_ctr_")
+        assert key is not None and key.startswith("bpm_ctr_")
         assert "j" * 43 not in caplog.text
         found.client.api_key = key
         assert found.tick() is True and found.registered
@@ -381,9 +381,9 @@ def test_a_bundled_runner_is_let_in_by_the_join_token(
         # 틀린 비밀은 사람에게 무엇을 맞출지 말한다.
         other = build(settings, "", joined)
         other.credentials = MemoryCredentials()
-        monkeypatch.setenv("CHK_SERVER_RUNNER__JOIN_TOKEN", "x" * 43)
+        monkeypatch.setenv("BPM_SERVER_RUNNER__JOIN_TOKEN", "x" * 43)
         (settings.data_path / enroll.STATE_FILE).unlink(missing_ok=True)
-        with pytest.raises(CenterProblem, match="CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN"):
+        with pytest.raises(CenterProblem, match="BPM_CENTER__SERVER_RUNNER_JOIN_TOKEN"):
             enroll.step(other)
 
 
@@ -406,7 +406,7 @@ def test_restart_drains_then_says_ready(settings: Settings, key: str, center: Te
 def test_once_prints_a_line_without_the_key(
     monkeypatch: pytest.MonkeyPatch, capsys: Any, tmp_path: Path, key: str, center: TestClient
 ) -> None:
-    monkeypatch.setenv("CHK_SERVER_RUNNER__DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("BPM_SERVER_RUNNER__DATA_DIR", str(tmp_path))
     monkeypatch.setenv(ENV_CENTER_API_KEY, key)
     # ASGI로 붙인다 — `--once`가 진짜로 Center를 한 번 두드린다.
     monkeypatch.setattr(
@@ -430,7 +430,7 @@ def test_once_prints_a_line_without_the_key(
 
 def test_runs_dir_is_made(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, key: str, center: TestClient) -> None:
     """실행 기록 폴더가 없으면 나중에 실행기가 뜨지 못한다 (M4에서 실제로 그랬다)."""
-    monkeypatch.setenv("CHK_SERVER_RUNNER__DATA_DIR", str(tmp_path / "fresh"))
+    monkeypatch.setenv("BPM_SERVER_RUNNER__DATA_DIR", str(tmp_path / "fresh"))
     monkeypatch.setenv(ENV_CENTER_API_KEY, key)
     monkeypatch.setattr(
         agent_mod,
@@ -448,9 +448,9 @@ def test_runs_dir_is_made(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, key: 
 
 
 def test_settings_come_from_the_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("CHK_SERVER_RUNNER__CENTER_URL", "http://center:8800")
-    monkeypatch.setenv("CHK_SERVER_RUNNER__MAX_CONCURRENCY", "4")
-    monkeypatch.setenv("CHK_SERVER_RUNNER__DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("BPM_SERVER_RUNNER__CENTER_URL", "http://center:8800")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__MAX_CONCURRENCY", "4")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__DATA_DIR", str(tmp_path))
     found = Settings.from_env()
     assert found.center_url == "http://center:8800"
     assert found.max_concurrency == 4
@@ -460,14 +460,14 @@ def test_settings_come_from_the_environment(monkeypatch: pytest.MonkeyPatch, tmp
 
 def test_a_zero_limit_is_lifted_to_one(monkeypatch: pytest.MonkeyPatch) -> None:
     """상한 0이면 영원히 빈자리가 없다 — 계약이 거부하기 전에 여기서 올린다."""
-    monkeypatch.setenv("CHK_SERVER_RUNNER__MAX_CONCURRENCY", "0")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__MAX_CONCURRENCY", "0")
     assert Settings.from_env().max_concurrency == 1
 
 
 def test_the_key_is_read_from_the_environment_first(monkeypatch: pytest.MonkeyPatch) -> None:
     """서버에서는 환경변수가 주 경로다 (컨테이너·systemd가 그렇게 준다)."""
-    monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_fromenv")
-    assert Credentials().center_api_key() == "chk_ctr_fromenv"
+    monkeypatch.setenv(ENV_CENTER_API_KEY, "bpm_ctr_fromenv")
+    assert Credentials().center_api_key() == "bpm_ctr_fromenv"
 
 
 @pytest.mark.parametrize(
@@ -504,7 +504,7 @@ def test_the_outside_world_comes_from_the_settings(tmp_path: Path, monkeypatch: 
     **주지 않으면 기본값이 남아 부르지 않고 실패한다**(조용히 넘어가지 않는다)는 것이 요점이라,
     여기서는 「준 것이 정말 `RunEnv`에 닿았는가」를 본다.
     """
-    monkeypatch.setenv("CHK_SERVER_RUNNER__LLM__API_KEY", "k-model")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__LLM__API_KEY", "k-model")
     settings = Settings(
         data_path=tmp_path / "runner",
         llm_base_url="http://127.0.0.1:1/v1",
@@ -536,8 +536,8 @@ def test_folder_lists_split_on_the_os_separator(monkeypatch: pytest.MonkeyPatch)
     """
     import os
 
-    monkeypatch.setenv("CHK_SERVER_RUNNER__READABLE_DIRS", os.pathsep.join(["/a", "", "/b"]))
-    monkeypatch.setenv("CHK_SERVER_RUNNER__WRITABLE_DIRS", "")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__READABLE_DIRS", os.pathsep.join(["/a", "", "/b"]))
+    monkeypatch.setenv("BPM_SERVER_RUNNER__WRITABLE_DIRS", "")
     found = Settings.from_env()
     assert [one.as_posix() for one in found.readable_dirs] == ["/a", "/b"]
     assert found.writable_dirs == ()
@@ -545,7 +545,7 @@ def test_folder_lists_split_on_the_os_separator(monkeypatch: pytest.MonkeyPatch)
 
 def test_the_model_key_is_not_in_the_settings(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """키는 **설정에 없다** (CLAUDE.md §5) — 환경변수나 OS 비밀 저장소에서 읽는다."""
-    monkeypatch.setenv("CHK_SERVER_RUNNER__LLM__API_KEY", "k-model")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__LLM__API_KEY", "k-model")
     assert "k-model" not in repr(Settings.from_env())
     assert Credentials().llm_api_key() == "k-model"
 
@@ -600,15 +600,15 @@ def test_service_calls_go_to_center_as_external_tasks(tmp_path: Path) -> None:
 
     found = _Resources()
     client = cast(Any, found)
-    client.api_key = "chk_ctr_first"
+    client.api_key = "bpm_ctr_first"
     made = agent_mod.Agent(settings=Settings(data_path=tmp_path / "runner", center_url="http://c:8800"), client=client)
     env = made.run_env(_FakeBot(requires=_CALLS_ERP))
 
     services = env.services
     assert isinstance(services, CenterServiceCaller)
     assert services.base_url == "http://c:8800" and services.caller_type == "server_runner"
-    client.api_key = "chk_ctr_rotated"
-    assert services.token() == "chk_ctr_rotated", "회전한 키를 그 자리에서 쓴다"
+    client.api_key = "bpm_ctr_rotated"
+    assert services.token() == "bpm_ctr_rotated", "회전한 키를 그 자리에서 쓴다"
     assert found.asked == 0, "서비스 앱 주소를 묻지 않는다"
 
 
@@ -681,10 +681,10 @@ def test_the_sender_comes_from_the_settings(tmp_path: Path, monkeypatch: pytest.
 
     비밀번호는 **설정에 없다** — `credentials.smtp_password()`가 환경변수·비밀 저장소에서 읽는다.
     """
-    monkeypatch.setenv("CHK_SERVER_RUNNER__SMTP__HOST", "smtp.example.com")
-    monkeypatch.setenv("CHK_SERVER_RUNNER__SMTP__FROM", "bot@example.com")
-    monkeypatch.setenv("CHK_SERVER_RUNNER__SMTP__PASSWORD", "비밀")
-    monkeypatch.setenv("CHK_SERVER_RUNNER__WEBHOOK__ALLOWED_HOSTS", "hooks.example.com, a.example.com")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__SMTP__HOST", "smtp.example.com")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__SMTP__FROM", "bot@example.com")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__SMTP__PASSWORD", "비밀")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__WEBHOOK__ALLOWED_HOSTS", "hooks.example.com, a.example.com")
     found = Settings.from_env()
 
     assert found.smtp().host == "smtp.example.com"

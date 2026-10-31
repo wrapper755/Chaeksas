@@ -53,7 +53,7 @@ describe("folderKey", () => {
     key("worker", "consumer", "active", "2026-10-31"),
     key("nowview-relay", "relay", "active", "2026-10-31"),
     // 같은 이름이라도 앞자리가 있으면 콘솔에서 발급한 것 — 폴더 줄과 잇지 않는다.
-    key("nowview-relay", "relay", "active", "2026-11-01", "chk_ctr_abcd1234"),
+    key("nowview-relay", "relay", "active", "2026-11-01", "bpm_ctr_abcd1234"),
   ];
 
   it("일꾼 줄은 일꾼용 키, 키 줄은 연동용·대리 답용 키", () => {
@@ -71,9 +71,9 @@ describe("folderKey", () => {
 describe("consoleIssuedKeys", () => {
   it("앞자리가 있는 연동용·대리 답용만", () => {
     const keys = [
-      key("test1", "integration", "active", "2026-10-31", "chk_ctr_1"),
+      key("test1", "integration", "active", "2026-10-31", "bpm_ctr_1"),
       key("nowview-integration", "integration", "active", "2026-10-31"),
-      key("pc", "bot_ui", "active", "2026-10-31", "chk_ctr_2"),
+      key("pc", "bot_ui", "active", "2026-10-31", "bpm_ctr_2"),
     ];
     expect(consoleIssuedKeys(keys).map((row) => row.name)).toEqual(["test1"]);
   });

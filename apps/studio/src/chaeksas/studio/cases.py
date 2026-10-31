@@ -115,7 +115,7 @@ def messages_of(definition: Definition) -> list[str]:
 
 
 def declared_inputs(definition: Definition) -> list[str]:
-    """`chk:process.inputs`에 적힌 입력 이름 — 이름 콤보에 미리 나온다 (STU-07)."""
+    """`bpm:process.inputs`에 적힌 입력 이름 — 이름 콤보에 미리 나온다 (STU-07)."""
     if definition.process is None:
         return []
     return [i.name for i in definition.process.info.inputs]
@@ -128,7 +128,7 @@ PLAIN_KINDS = ("string", "number", "bool", "json")
 
 
 def declared_input_decls(definition: Definition) -> list[InputDecl]:
-    """정의된 입력 줄 (`chk:process.inputs`, 「변수」 탭) — 「입력 변수」에 미리 깔린다 (STU-07)."""
+    """정의된 입력 줄 (`bpm:process.inputs`, 「변수」 탭) — 「입력 변수」에 미리 깔린다 (STU-07)."""
     return list(definition.process.info.inputs) if definition.process is not None else []
 
 

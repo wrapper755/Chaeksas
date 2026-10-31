@@ -1,4 +1,4 @@
-"""식 `chk-expr`·스크립트·템플릿 ([ADR-0025](../../../../docs/decisions/0025-expression-language.md), C14 §식).
+"""식 `bpm-expr`·스크립트·템플릿 ([ADR-0025](../../../../docs/decisions/0025-expression-language.md), C14 §식).
 
 세 가지를 다룬다.
 

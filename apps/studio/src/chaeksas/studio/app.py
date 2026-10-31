@@ -1,4 +1,4 @@
-"""Studio를 띄운다 — `uv run chk-studio` 또는 `python -m chaeksas.studio`.
+"""Studio를 띄운다 — `uv run bpm-studio` 또는 `python -m chaeksas.studio`.
 
 테마는 `chaeksas.qt.apply_theme()` 한 줄이다 (글꼴 등록 + 생성된 QSS + 팔레트, ADR-0017).
 WebEngine은 **QApplication보다 먼저** 공유 OpenGL을 켜 두어야 한다 (Qt 요구 사항).
@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`chk-studio` 진입점.
+    """`bpm-studio` 진입점.
 
     `--selftest [파일]`은 **묶은 실행 파일의 빌드 검사**다 (ADR-0024) — PC 실행기와 **같은 깃발·
     같은 검사**이고(`core.selftest`) 화면을 띄우지 않는다.
@@ -54,7 +54,7 @@ def _selftest(args: list[str]) -> int:
     """빌드 검사 — **Qt를 띄우지 않는다** (묶인 앱은 콘솔 없이 뜰 수 있어 파일로 받는다)."""
     from chaeksas.core.selftest import main  # noqa: PLC0415
 
-    return main(args[1:], prog="chk-studio")
+    return main(args[1:], prog="bpm-studio")
 
 
 __all__ = ["main"]

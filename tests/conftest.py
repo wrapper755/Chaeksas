@@ -24,10 +24,10 @@ def _bot_ui_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monk
     """**어느 시험도 개발 PC의 PC 실행기 데이터 폴더를 쓰지 않는다.**
 
     기본 위치(Windows `%LOCALAPPDATA%` 밑 `chaeksas/bot-ui`)에 쓰면, 그 PC에서 진짜 PC 실행기를 띄웠을 때 시험이 남긴
-    주소·이름으로 뜬다 (이슈 #3에서 실제로 그랬다). `CHK_BOT_UI__DATA_DIR`는 설정이 읽는 덮어쓰기다.
+    주소·이름으로 뜬다 (이슈 #3에서 실제로 그랬다). `BPM_BOT_UI__DATA_DIR`는 설정이 읽는 덮어쓰기다.
     """
     path = tmp_path_factory.mktemp("bot-ui-data")
-    monkeypatch.setenv("CHK_BOT_UI__DATA_DIR", str(path))
+    monkeypatch.setenv("BPM_BOT_UI__DATA_DIR", str(path))
     yield path
 
 
@@ -40,7 +40,7 @@ def _studio_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monk
     뜬다 — PC 실행기에서 이미 겪은 이슈 #3과 같은 꼴이다.
     """
     path = tmp_path_factory.mktemp("studio-data")
-    monkeypatch.setenv("CHK_STUDIO__DATA_DIR", str(path))
+    monkeypatch.setenv("BPM_STUDIO__DATA_DIR", str(path))
     yield path
 
 
@@ -48,12 +48,12 @@ def _studio_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monk
 def _admin_data_dir_is_temporary(tmp_path_factory: pytest.TempPathFactory, monkeypatch: Any) -> Iterator[Path]:
     """**어느 시험도 개발 PC의 Admin 키 폴더를 쓰지 않는다.** (위 PC 실행기와 같은 까닭)
 
-    한 시험이 없는 환경변수 이름(`CHK_ADMIN__HOME`)으로 돌려 놓은 탓에 돌릴 때마다 진짜 폴더에
+    한 시험이 없는 환경변수 이름(`BPM_ADMIN__HOME`)으로 돌려 놓은 탓에 돌릴 때마다 진짜 폴더에
     「첫 키」가 두 개씩 쌓였다 — Admin이 `--key`로 열두 개 중 하나를 골라야 했고, 그 키들의 암호는
     시험의 것이라 아무도 쓸 수 없었다. 파일마다 덮어쓰는 시험은 그대로 돈다(나중 것이 이긴다).
     """
     path = tmp_path_factory.mktemp("admin-data")
-    monkeypatch.setenv("CHK_ADMIN__DATA_DIR", str(path))
+    monkeypatch.setenv("BPM_ADMIN__DATA_DIR", str(path))
     yield path
 
 

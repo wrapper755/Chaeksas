@@ -49,7 +49,7 @@ def index(**over: Any) -> ResourceIndex:
 
 def ui_automation(version: str = "0.4.2", **over: Any) -> ExtensionResource:
     base: dict[str, Any] = {"id": "ui-automation", "version": version, "tier": "builtin",
-                            "protocol": "chk-c11", "service_app_id": "ui-automation"}
+                            "protocol": "bpm-c11", "service_app_id": "ui-automation"}
     return ExtensionResource.model_validate(base | over)
 
 
@@ -140,7 +140,7 @@ def test_service_app_not_registered() -> None:
 
 
 def external(*ops: dict[str, Any], ext_id: str = "nowview-sc01") -> ExtensionResource:
-    """HTTP 어댑터로 붙은 외부 확장 — `chk:serviceCall`이 서비스 앱처럼 부른다."""
+    """HTTP 어댑터로 붙은 외부 확장 — `bpm:serviceCall`이 서비스 앱처럼 부른다."""
     return ExtensionResource.model_validate({
         "id": ext_id, "version": "0.1.1", "tier": "external", "protocol": "http-adapter",
         "definition": {"id": ext_id, "service": {
@@ -156,7 +156,7 @@ def adapter_op(name: str, *, modes: list[str] | None = None, server_ok: bool = T
 
 
 def test_an_external_app_called_like_a_service_app_counts_as_registered() -> None:
-    """외부 확장을 `chk:serviceCall`로 부르면 C1에는 `service_apps`로 적힌다 — 「등록되지 않음」이 아니다."""
+    """외부 확장을 `bpm:serviceCall`로 부르면 C1에는 `service_apps`로 적힌다 — 「등록되지 않음」이 아니다."""
     m = manifest(run_location="server", requires={"service_apps": [
         {"app_id": "nowview-sc01", "operations": ["validate_source", "compare", "gone", "auto"]}]})
     found = index(extensions=[external(

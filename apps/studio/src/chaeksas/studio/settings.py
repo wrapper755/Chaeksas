@@ -1,4 +1,4 @@
-"""Studio 설정 — 환경변수 `CHK_STUDIO__*` (ADR-0011), 값은 설정 파일에 저장 (STU-10).
+"""Studio 설정 — 환경변수 `BPM_STUDIO__*` (ADR-0011), 값은 설정 파일에 저장 (STU-10).
 
 **포트·경로를 코드에 직접 쓰지 않는다.** 기본값은 여기 한 곳에만 둔다 (`docs/04-setup.md` §6).
 **비밀은 여기 두지 않는다** — Center API 키·모델 키는 OS 비밀 저장소다 (CLAUDE.md §5).
@@ -14,7 +14,7 @@ from typing import Any
 
 import platformdirs
 
-ENV_PREFIX = "CHK_STUDIO__"
+ENV_PREFIX = "BPM_STUDIO__"
 
 #: 기본값의 원본은 `docs/04-setup.md` §6의 표다.
 DEFAULT_CENTER_URL = "http://localhost:8800"

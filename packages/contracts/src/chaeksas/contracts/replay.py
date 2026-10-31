@@ -19,7 +19,7 @@ from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned
 
-#: `chk:aiTask.replay` — 결정 수행에서 무엇을 재사용하나 (C14 §재생).
+#: `bpm:aiTask.replay` — 결정 수행에서 무엇을 재사용하나 (C14 §재생).
 REPLAY_MODES = frozenset({"plan", "full", "none"})
 REPLAY_DEFAULT = "plan"
 

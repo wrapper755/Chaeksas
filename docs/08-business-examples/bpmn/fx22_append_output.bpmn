@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx22_append_output" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx22_append_output" name="파일 출력 — csv 덧붙이기와 txt" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -26,12 +26,12 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Row" name="오늘 한 줄" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Row" name="오늘 한 줄" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:dataOutputAssociation id="DOA_Data_Csv">
@@ -39,7 +39,7 @@
       </bpmn:dataOutputAssociation>
       <bpmn:script>줄 = [{'날짜': str(오늘), '건수': 건수, '담당': 담당}]</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_Text" name="글로도" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Text" name="글로도" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:dataOutputAssociation id="DOA_Data_Txt">
@@ -49,14 +49,14 @@
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Count" name="쓴 파일 세기">
       <bpmn:extensionElements>
-        <chk:fileList>{
+        <bpm:fileList>{
   "folder": "일지",
   "pattern": "*.*",
   "recursive": false,
   "sort": "name",
   "store_as": "일지파일",
   "count_as": "일지파일수"
-}</chk:fileList>
+}</bpm:fileList>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
@@ -71,7 +71,7 @@
     <bpmn:dataObject id="DO_Data_Csv" />
     <bpmn:dataObjectReference id="Data_Csv" name="일지(csv)" dataObjectRef="DO_Data_Csv">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "일지/처리일지.csv",
   "format": "csv",
   "store_as": "일지경로",
@@ -79,19 +79,19 @@
     "줄"
   ],
   "append": true
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
     <bpmn:dataObject id="DO_Data_Txt" />
     <bpmn:dataObjectReference id="Data_Txt" name="일지(txt)" dataObjectRef="DO_Data_Txt">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "일지/처리일지.txt",
   "format": "txt",
   "store_as": "글경로",
   "template": "{본문}\n",
   "append": true
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

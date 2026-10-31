@@ -35,7 +35,7 @@
 | 확장 (내장·사내는 파이썬 패키지, 외부는 정의 파일) | 확장 | 곳곳 (기여 지점) | BPM 프로세스에 공통 기능을 더함. 서버 부분(서비스 앱) + 클라이언트 기여. 확장 정의 C13. **지금 깔린 내장 확장은 없다** ([ADR-0114](decisions/0114-remove-ui-automation.md)) | 플랫폼 흐름 |
 | 모델 클라이언트 (`llm`) | 패키지 | 모델을 부르는 모든 곳 (`core`, 서비스 앱) | OpenAI 호환 `/v1/chat/completions` 어댑터와 그 모양(`Reply`·`ToolSpec`·`LlmError`). **맨 아래** — 우리 멤버를 하나도 모른다 ([ADR-0034](decisions/0034-service-app-model-connection.md)) | 도구 루프·결과 검증·궤적(`core.agent`), 주소·키 보관 |
 | 서비스 앱 뼈대 (`service_kit`) | 패키지 | 서비스 앱 | **일꾼**(`service_kit.consumer` — Center 들이기·가져가기 루프·manifest·카탈로그 올리기, C15), 작업 틀(수행 모드·멱등·오류 형식), 관리 API(상태·사용 기록 — 화면은 `web/apps/svc-console`), `/healthz`, 로깅 | 업무 로직, 업무 호출을 받는 포트 |
-| 어댑터 일꾼 (`adapter_consumer`, `chk-adapter-consumer`) | 프로세스 (서버) | 서버 또는 외부 앱이 있는 망 | 외부 확장 정의(C13)의 HTTP 어댑터를 C15 일꾼으로 돌린다. **외부 앱의 주소·키는 이 일꾼의 설정에만** 있다 ([ADR-0102](decisions/0102-calling-outside-is-pull.md) §4) | 정의 등록(Center) |
+| 어댑터 일꾼 (`adapter_consumer`, `bpm-adapter-consumer`) | 프로세스 (서버) | 서버 또는 외부 앱이 있는 망 | 외부 확장 정의(C13)의 HTTP 어댑터를 C15 일꾼으로 돌린다. **외부 앱의 주소·키는 이 일꾼의 설정에만** 있다 ([ADR-0102](decisions/0102-calling-outside-is-pull.md) §4) | 정의 등록(Center) |
 | Studio | 화면 | 설계자 PC | BPM 프로세스 편집(BPMN), 시험 실행(자율 수행·재생), 학습, 패키지 빌드·업로드 | 배포 결정 |
 | **PC 실행기** | 화면 (트레이) | 현장 PC, 설계자 PC | Center 등록·하트비트(Center API 키), **BPM 프로세스 다운로드·설치·실행**(결정 수행, 실행 자리 하나 + 대기열), 로컬 결재·확인 창, C15 호출 토큰 받기(메모리에만 두고 실행 프로세스에 넘긴다), 확장 켜기·끄기(BUI-11) | 화면 조작 자체 |
 | 실행 프로세스 | 프로세스 | 현장 PC | 실행 중인 BPM 프로세스 하나 (PC 실행기의 자식, 동시에 하나만, [ADR-0014](decisions/0014-one-bot-per-pc.md)) | 다른 실행, 대기열 |
@@ -87,7 +87,7 @@ llm ◀── core, service_kit   (맨 아래 — chaeksas의 아무것도 impor
 - 서비스 앱끼리 서로 import하지 않는다. 필요하면 HTTP로 부른다.
 - `core`는 Qt를 import하지 않는다. 화면은 `studio`, `bot_ui`의 몫.
 - 제품 코드는 `spikes/`를 import하지 않는다.
-- **아무 멤버도 `samples/`를 의존하지 않는다.** `samples/mock_apps`는 업무 예제가 부르는 모의 앱이고(`samples/README.md`), 쓰는 쪽은 `tests/`와 사람이 띄우는 `chk-mock-apps`뿐이다. 그 안의 C11 앱도 서비스 앱이라 `core`를 import하지 않는다.
+- **아무 멤버도 `samples/`를 의존하지 않는다.** `samples/mock_apps`는 업무 예제가 부르는 모의 앱이고(`samples/README.md`), 쓰는 쪽은 `tests/`와 사람이 띄우는 `bpm-mock-apps`뿐이다. 그 안의 C11 앱도 서비스 앱이라 `core`를 import하지 않는다.
 - 위 규칙은 `tests/test_import_direction.py`가 강제한다 (**있음**). 두 가지를 본다: 선언한 의존(`pyproject.toml`, 전이 포함)과 실제 import(AST). 규칙을 더하려면 그 파일의 `FORBIDDEN_DEPS`·`FORBIDDEN_IMPORTS` 표에 줄을 더한다.
 
 ## 6. OS별로 갈리는 지점 (인터페이스 뒤에 둔다)
@@ -143,7 +143,7 @@ Chaeksas/
 │  └─ packages/            # ui(구성요소+토큰 CSS), api-types(계약에서 생성), config
 ├─ design/                 # tokens.json (디자인 토큰 원본), preview.html
 ├─ samples/                # 제품이 아니다 — 업무 예제가 부르는 모의 앱 (워크스페이스 멤버)
-│  └─ mock_apps/           # C11 앱 13 + 외부 앱 2 + 그 C13 어댑터 정의. chk-mock-apps
+│  └─ mock_apps/           # C11 앱 13 + 외부 앱 2 + 그 C13 어댑터 정의. bpm-mock-apps
 ├─ spikes/                 # 실험 (제품 코드에서 import 금지, 워크스페이스 멤버 아님)
 ├─ tests/                  # 앱 간 통합·계약 테스트 + 의존 방향 검사(§5)
 └─ docs/

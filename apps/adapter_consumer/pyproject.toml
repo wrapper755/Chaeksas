@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-chk-adapter-consumer = "chaeksas.adapter_consumer.main:main"
+bpm-adapter-consumer = "chaeksas.adapter_consumer.main:main"
 
 [tool.uv.sources]
 chaeksas-contracts = { workspace = true }

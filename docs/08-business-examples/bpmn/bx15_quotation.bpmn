@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx15_quotation" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_quote_request" name="quote_request" />
   <bpmn:process id="Proc_bx15_quotation" name="견적서 작성" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -48,7 +48,7 @@
       "description": "0~1"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="견적 요청">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -56,7 +56,7 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Price" name="단가 조회">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "erp",
   "operation": "get_prices",
   "input": {
@@ -65,12 +65,12 @@
   "output": {
     "단가표": "prices"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Weight" name="무게·소계" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Weight" name="무게·소계" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>단가 = 표를사전(단가표, '코드')
@@ -82,7 +82,7 @@
     </bpmn:scriptTask>
     <bpmn:callActivity id="Call_Shipping" name="배송비 (BX-12)" calledElement="Proc_bx12_shipping_fee">
       <bpmn:extensionElements>
-        <chk:call>{
+        <bpm:call>{
   "input": {
     "지역": "고객.지역",
     "무게": "무게",
@@ -91,7 +91,7 @@
   "output": {
     "배송비": "배송비"
   }
-}</chk:call>
+}</bpm:call>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
@@ -103,7 +103,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Discount" name="할인 결재">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "견적 할인 승인",
   "description": "",
   "show": [
@@ -127,12 +127,12 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:scriptTask id="Task_Total" name="합계" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Total" name="합계" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
@@ -141,7 +141,7 @@
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Doc" name="견적서 문장">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n견적 수치(`소계`, `할인율`, `배송비`, `합계`)는 이미 확정되었다.\n\n## 할 일\n고객 `고객.이름`에게 보낼 견적서 인사말과 조건 문단을 쓴다.\n\n## 판단하지 않는 것\n수치를 바꾸거나 새 조건을 만들지 않는다.\n\n## 반환\n- `문단`: string",
   "domain": "llm",
   "results": {
@@ -149,7 +149,7 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
@@ -159,7 +159,7 @@
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Attach" name="CRM에 첨부">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "crm",
   "operation": "attach_document",
   "input": {
@@ -169,7 +169,7 @@
   "output": {
     "첨부결과": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
@@ -192,12 +192,12 @@
     <bpmn:dataObject id="DO_Data_Quote" />
     <bpmn:dataObjectReference id="Data_Quote" name="견적서" dataObjectRef="DO_Data_Quote">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "견적/{요청번호}.md",
   "format": "md",
   "store_as": "견적서경로",
   "template": "# 견적서 {요청번호}\n\n{문단}\n\n소계 {소계} / 할인 {할인율} / 배송비 {배송비} / 합계 {합계}"
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

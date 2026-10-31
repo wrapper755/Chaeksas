@@ -39,12 +39,12 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | `build.py` 정의 검사 | 50개 모두 통과 |
 | XML 파싱 | BPMN 50, DMN 7 통과 |
 | bpmn-js 17 가져오기 (Chromium, Playwright) | 50개 모두 경고 없이 열림, 그림 육안 확인 |
-| SpiffWorkflow 3 파서 | BPMN 43개 통과. **규칙 태스크가 있는 7개는 실패** — 기본 파서가 `camunda:decisionRef`를 기대한다. M3에서 `chk:rule`을 읽는 파서 확장이 필요하다. DMN 7개는 모두 통과 |
+| SpiffWorkflow 3 파서 | BPMN 43개 통과. **규칙 태스크가 있는 7개는 실패** — 기본 파서가 `camunda:decisionRef`를 기대한다. M3에서 `bpm:rule`을 읽는 파서 확장이 필요하다. DMN 7개는 모두 통과 |
 | 실행 | 그때는 없었다(엔진은 M3). **지금은** `tests/test_core_engine.py`가 예제 전부를 엔진으로 돌리고, M3·M4·M5·M7 인수 시험 묶음이 케이스 기대값을 대조한다 |
 
 ## 아직 정하지 않은 것 (예제가 드러낸 공백)
 
-닫힌 줄은 지웠다 — 업무 도우미(`core.helpers`, ADR-0025), 말일 cron `L`(`contracts.schedule`, ADR-0110), 결재 담당자(`chk:approval.assignees`, ADR-0080), 모의 앱(`samples/mock_apps`). 남은 줄도 지금 코드와 다시 대조하지 않았다 — `docs/09-gaps.md` §9가 예제를 대조한 목록이다.
+닫힌 줄은 지웠다 — 업무 도우미(`core.helpers`, ADR-0025), 말일 cron `L`(`contracts.schedule`, ADR-0110), 결재 담당자(`bpm:approval.assignees`, ADR-0080), 모의 앱(`samples/mock_apps`). 남은 줄도 지금 코드와 다시 대조하지 않았다 — `docs/09-gaps.md` §9가 예제를 대조한 목록이다.
 
 | 공백 | 예제 | 갈 곳 |
 | --- | --- | --- |
@@ -75,7 +75,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | [BX-12](scm.md#bx-12-배송비-계산) | 배송비 계산 | 서버 | BPM 프로세스 호출 | — | DMN 결정표(FIRST, 다중 출력); 공유 BPM 프로세스 (BX-15가 호출); 경계값 케이스 |
 | [BX-13](scm.md#bx-13-반품-처리) | 반품 처리 | 서버 | 메시지 `return_request` | shop | 메시지 시작 + 받기 태스크(상관 키); 받기 태스크의 중단 타이머(자동 취소); AI 분류 → 스크립트 계산 → 서비스 앱 작업 |
 | [BX-15](scm.md#bx-15-견적서-작성) | 견적서 작성 | 서버 | 메시지 `quote_request` | erp, crm | BPM 프로세스 호출(call activity) — 넘기는 변수만 넘어감; 점 표기 입력 매핑(`고객.지역`); 결재로 값 조정, 반려하면 허용 한도(10%)로 |
-| [BX-16](scm.md#bx-16-재고-발주-제안-서버--발주서-출력-준비-pc) | 재고 발주 제안 (서버) → 발주서 출력 준비 (PC) | 서버 | 타이머 | wms | 서버 + PC로 **한 부분만 맡기기** (`chk:call.delegate`); 위임 실패를 오류 경계로 받기; 결재 반려 시 발주 안 함 |
+| [BX-16](scm.md#bx-16-재고-발주-제안-서버--발주서-출력-준비-pc) | 재고 발주 제안 (서버) → 발주서 출력 준비 (PC) | 서버 | 타이머 | wms | 서버 + PC로 **한 부분만 맡기기** (`bpm:call.delegate`); 위임 실패를 오류 경계로 받기; 결재 반려 시 발주 안 함 |
 
 ### 인사·총무 ([hr.md](hr.md))
 
@@ -104,27 +104,27 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | id | 이름 | 실행 위치 | 시작 | 확장 | 이 예제로 확인하는 것 |
 | --- | --- | --- | --- | --- | --- |
 | [FX-01](feature-examples.md#fx-01-api-ai-태스크) | API AI 태스크 | 서버 | 수동 실행 | — | `domain: api`; 업무 파라미터; 결정 수행 재생 |
-| [FX-02](feature-examples.md#fx-02-규칙-태스크-dmn) | 규칙 태스크 (DMN) | 서버 | 수동 실행 | — | `businessRuleTask` + `chk:rule` 입력·출력 매핑; 다중 출력 DMN |
-| [FX-03](feature-examples.md#fx-03-bpm-프로세스-호출과-매핑) | BPM 프로세스 호출과 매핑 | 서버 | 수동 실행 | — | `chk:call` 입력·출력 매핑; 같은 대상 두 번 호출 |
+| [FX-02](feature-examples.md#fx-02-규칙-태스크-dmn) | 규칙 태스크 (DMN) | 서버 | 수동 실행 | — | `businessRuleTask` + `bpm:rule` 입력·출력 매핑; 다중 출력 DMN |
+| [FX-03](feature-examples.md#fx-03-bpm-프로세스-호출과-매핑) | BPM 프로세스 호출과 매핑 | 서버 | 수동 실행 | — | `bpm:call` 입력·출력 매핑; 같은 대상 두 번 호출 |
 | [FX-03b](feature-examples.md#fx-03b-금액-분기-호출-대상) | 금액 분기 (호출 대상) | 서버 | BPM 프로세스 호출 | — | 배타 게이트웨이 + 기본 흐름; 경계값 |
-| [FX-04](feature-examples.md#fx-04-폴더-감시-조건-시작-대체) | 폴더 감시 (조건 시작 대체) | 서버 | 타이머 | — | 조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링; 끝 이벤트 둘; 파일 목록 태스크 (`chk:fileList`) |
+| [FX-04](feature-examples.md#fx-04-폴더-감시-조건-시작-대체) | 폴더 감시 (조건 시작 대체) | 서버 | 타이머 | — | 조건 시작 이벤트는 지원하지 않음 (C14) → 타이머 폴링; 끝 이벤트 둘; 파일 목록 태스크 (`bpm:fileList`) |
 | [FX-06](feature-examples.md#fx-06-문서-ai-태스크) | 문서 AI 태스크 | 서버 | 수동 실행 | — | `domain: doc`; 도구 지정 |
-| [FX-07](feature-examples.md#fx-07-메일-보내기) | 메일 보내기 | 서버 | 수동 실행 | — | `sendTask` + `chk:email`; 파일 출력 → 첨부; `store_as` |
+| [FX-07](feature-examples.md#fx-07-메일-보내기) | 메일 보내기 | 서버 | 수동 실행 | — | `sendTask` + `bpm:email`; 파일 출력 → 첨부; `store_as` |
 | [FX-08](feature-examples.md#fx-08-오류-경계와-대체-경로) | 오류 경계와 대체 경로 | 서버 | 수동 실행 | — | 오류 경계 `TASK_FAILED`; 실패 후 합류 |
 | [FX-09](feature-examples.md#fx-09-차례-반복) | 차례 반복 | 서버 | 수동 실행 | — | `multiInstanceLoopCharacteristics isSequential=true`; `collect_into` 필수 (C14); 빈 목록 케이스 |
 | [FX-10](feature-examples.md#fx-10-요청-라우팅-운영-비서) | 요청 라우팅 (운영 비서) | 서버 | 메시지 `work_request` | web-reader | 메시지 시작 + AI 라우팅; 가지마다 오류 경계 → 한 실패 처리로 합류; 웹 읽기는 서버에서 확장(서비스 앱)으로 — 서버에서 `domain: web` 불가 |
 | [FX-11](feature-examples.md#fx-11-병렬-분기합류) | 병렬 분기·합류 | 서버 | 수동 실행 | — | 병렬 게이트웨이 짝 |
-| [FX-12](feature-examples.md#fx-12-타이머-시작--파일-출력) | 타이머 시작 + 파일 출력 | 서버 | 타이머 | — | 타이머 시작(cron); `dataObjectReference` + `chk:dataOutput` |
+| [FX-12](feature-examples.md#fx-12-타이머-시작--파일-출력) | 타이머 시작 + 파일 출력 | 서버 | 타이머 | — | 타이머 시작(cron); `dataObjectReference` + `bpm:dataOutput` |
 | [FX-13](feature-examples.md#fx-13-신호-던지기받기) | 신호 던지기·받기 | 서버 | 수동 실행 | — | 중간 던지기 신호 / 중간 받기 신호 / 경계 신호; 한 실행 안의 가지 사이 신호 (C14 범위); 중간 받기 타이머로 순서 잡기 |
 | [FX-14](feature-examples.md#fx-14-중간-타이머와-결재-시간-제한) | 중간 타이머와 결재 시간 제한 | 서버 | 수동 실행 | — | 중간 받기 타이머; 결재 + 중단 타이머 경계 |
-| [FX-17](feature-examples.md#fx-17-웹훅-보내기) | 웹훅 보내기 | 서버 | 수동 실행 | — | `chk:webhook` body `fields:[…]`; `SEND_FAILED` |
+| [FX-17](feature-examples.md#fx-17-웹훅-보내기) | 웹훅 보내기 | 서버 | 수동 실행 | — | `bpm:webhook` body `fields:[…]`; `SEND_FAILED` |
 | [FX-18](feature-examples.md#fx-18-병렬-반복) | 병렬 반복 | 서버 | 수동 실행 | web-reader | `isSequential=false`; 결과 순서 = 입력 순서 (C14); PC에서는 차례로 돈다 |
-| [FX-19](feature-examples.md#fx-19-수동-확인-pc) | 수동 확인 (PC) | PC | PC BPM 프로세스 수동 실행 | — | `manualTask` + `chk:approval` (칸 없음); BX-16이 **PC 위임**으로 부른다 — `확인됨`을 `outputs`로 돌려준다 |
+| [FX-19](feature-examples.md#fx-19-수동-확인-pc) | 수동 확인 (PC) | PC | PC BPM 프로세스 수동 실행 | — | `manualTask` + `bpm:approval` (칸 없음); BX-16이 **PC 위임**으로 부른다 — `확인됨`을 `outputs`로 돌려준다 |
 | [FX-20](feature-examples.md#fx-20-외부-확장-http-어댑터-호출) | 외부 확장 HTTP 어댑터 호출 | 서버 | 수동 실행 | ext-credit | 외부 확장 어댑터; Admin 서명된 정의만 사용 |
 | [FX-21](feature-examples.md#fx-21-결정표-적중-정책-uniqueany) | 결정표 적중 정책 (UNIQUE·ANY) | 서버 | 수동 실행 | — | DMN 적중 정책 `UNIQUE`; DMN 적중 정책 `ANY` (겹치는 줄, 같은 결과); 맞는 줄 없음 = 모든 출력 `None` |
-| [FX-22](feature-examples.md#fx-22-파일-출력--csv-덧붙이기와-txt) | 파일 출력 — csv 덧붙이기와 txt | 서버 | 수동 실행 | — | 파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만); 파일 출력 `txt` + `template`; 쓴 파일을 `chk:fileList`로 되세기 |
+| [FX-22](feature-examples.md#fx-22-파일-출력--csv-덧붙이기와-txt) | 파일 출력 — csv 덧붙이기와 txt | 서버 | 수동 실행 | — | 파일 출력 `csv` + `append: true` (열 이름 줄은 한 번만); 파일 출력 `txt` + `template`; 쓴 파일을 `bpm:fileList`로 되세기 |
 | [FX-23](feature-examples.md#fx-23-재생-모드-셋-planfullnone) | 재생 모드 셋 (plan·full·none) | 서버 | 수동 실행 | — | 재생 모드 `plan`(기본)·`full`·`none`을 한 그림에서; `full`은 도구가 있어야 한다 (B12); `none`은 되밟지 않는다 |
-| [FX-24](feature-examples.md#fx-24-일괄-기동--접수-bpm-프로세스) | 일괄 기동 — 접수 BPM 프로세스 | 서버 | 작업 지시 | — | **일괄 기동** — Call Activity 반복 + 위임 (`chk:loop` + `chk:call.delegate`); 서버 BPM 프로세스에 위임; **병렬 반복** — 건을 한 번에 맡기고 함께 기다린다 (`isSequential=false`, ADR-0087) |
+| [FX-24](feature-examples.md#fx-24-일괄-기동--접수-bpm-프로세스) | 일괄 기동 — 접수 BPM 프로세스 | 서버 | 작업 지시 | — | **일괄 기동** — Call Activity 반복 + 위임 (`bpm:loop` + `bpm:call.delegate`); 서버 BPM 프로세스에 위임; **병렬 반복** — 건을 한 번에 맡기고 함께 기다린다 (`isSequential=false`, ADR-0087) |
 | [FX-25](feature-examples.md#fx-25-일괄-기동의-한-건) | 일괄 기동의 한 건 | 서버 | 작업 지시 | — | 위임으로 시작하는 서버 BPM 프로세스; `outputs` 선언 — 맡긴 쪽이 받을 것 |
 
 ## BPMN 요소 커버리지
@@ -149,7 +149,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 웹훅 보내기 | BX-03, BX-10, BX-21, BX-30, FX-10, FX-17 |
 | 메시지 받기 (receiveTask) | BX-05, BX-11, BX-13, BX-34, FX-13 |
 | BPM 프로세스 호출 | BX-15, BX-21, BX-30, FX-03 |
-| 위임 (`chk:call.delegate`) | BX-16, FX-24 |
+| 위임 (`bpm:call.delegate`) | BX-16, FX-24 |
 | 일괄 기동 (반복 위임) | FX-24 |
 | 하위 프로세스 | BX-20, BX-22 |
 | 배타 게이트웨이 | BX-01, BX-02, BX-03, BX-05, BX-06, BX-07, BX-08, BX-10, BX-11, BX-13, BX-15, BX-16, BX-21, BX-22, BX-30, BX-37, BX-31, BX-32, BX-33, FX-03b, FX-04, FX-10, FX-13, FX-21, FX-24, FX-25 |
@@ -171,7 +171,7 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | 파일 출력 — json | BX-05 |
 | 파일 출력 — xlsx | BX-06, BX-07, BX-35 |
 | 파일 출력 — 덧붙이기 (`append`) | FX-22 |
-| 파일 목록 (`chk:fileList`) | BX-01, FX-04, FX-22 |
+| 파일 목록 (`bpm:fileList`) | BX-01, FX-04, FX-22 |
 
 **없음**인 요소는 C14 schema 1에서 쓰지 않거나(조건 시작) 아직 예제가 없는 것이다.
 

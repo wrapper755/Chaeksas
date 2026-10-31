@@ -32,9 +32,9 @@ RUN_ID = "run_20261004_093000_abc123"
 
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="test.proc" name="시험">
-    <bpmn:extensionElements><chk:process>{props}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{props}</bpm:process></bpmn:extensionElements>
     {body}
   </bpmn:process>
 </bpmn:definitions>
@@ -64,7 +64,7 @@ def process(replay: str = "plan", *, boundary: bool = False) -> Any:
     catcher = (
         '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_Ai">'
         "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
-        '<bpmn:scriptTask id="Task_Recover" scriptFormat="chk-expr">'
+        '<bpmn:scriptTask id="Task_Recover" scriptFormat="bpm-expr">'
         "<bpmn:script>복구 = error_code</bpmn:script></bpmn:scriptTask>"
         '<bpmn:endEvent id="End_2"/>'
         + flow("f3", "Bnd_Fail", "Task_Recover")
@@ -74,8 +74,8 @@ def process(replay: str = "plan", *, boundary: bool = False) -> Any:
     )
     body = (
         '<bpmn:startEvent id="Start_1"/>'
-        f'<bpmn:serviceTask id="Task_Ai"><bpmn:extensionElements><chk:aiTask>{ai_json(replay)}'
-        "</chk:aiTask></bpmn:extensionElements></bpmn:serviceTask>"
+        f'<bpmn:serviceTask id="Task_Ai"><bpmn:extensionElements><bpm:aiTask>{ai_json(replay)}'
+        "</bpm:aiTask></bpmn:extensionElements></bpmn:serviceTask>"
         '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Task_Ai")
         + flow("f2", "Task_Ai", "End_1")
@@ -327,7 +327,7 @@ def test_b12_checks_the_replay_mode(replay: str, tools: list[str], ok: bool) -> 
     )
     body = (
         '<bpmn:startEvent id="Start"/>'
-        f'<bpmn:serviceTask id="T"><bpmn:extensionElements><chk:aiTask>{ai}</chk:aiTask>'
+        f'<bpmn:serviceTask id="T"><bpmn:extensionElements><bpm:aiTask>{ai}</bpm:aiTask>'
         "</bpmn:extensionElements></bpmn:serviceTask>"
         '<bpmn:endEvent id="End"/>'
         + flow("f1", "Start", "T")

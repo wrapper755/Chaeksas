@@ -1,4 +1,4 @@
-"""옮기기 지킴에 걸린 DB를 **사람이** 고치는 도구 (`chk-center hosts`, ADR-0066).
+"""옮기기 지킴에 걸린 DB를 **사람이** 고치는 도구 (`bpm-center hosts`, ADR-0066).
 
 3판(키 묶기 UNIQUE)은 같은 키·같은 기계가 여러 행에 있으면 멈춘다 — **어느 행을 남길지
 짐작하지 않는다** (#57). 그래서 고르는 것은 사람이고, 이 도구는 보이고 은퇴시키기만 한다.
@@ -75,7 +75,7 @@ def retire(conn: sqlite3.Connection, host_id: str) -> str:
     found = next((one for one in duplicates(conn) if one.host_id == host_id), None)
     if found is None:
         raise RepairError(
-            f"{host_id}는 겹친 무리에 없다 — 겹친 행만 은퇴시킬 수 있다 (`chk-center hosts duplicates`)"
+            f"{host_id}는 겹친 무리에 없다 — 겹친 행만 은퇴시킬 수 있다 (`bpm-center hosts duplicates`)"
         )
     id_column, stop_column = _TABLES[found.table]
     tomb = f"{RETIRED}{host_id}"
@@ -100,7 +100,7 @@ def describe(found: list[Duplicate]) -> str:
             lines.append(f"\n{one.table}.{one.column} = {one.shared}")
             last = group
         lines.append(f"  {one.host_id}  「{one.name}」  마지막으로 본 때 {one.last_seen_at or '없음'}")
-    lines.append("\n남길 행을 고르고 나머지를 `chk-center hosts retire <id>`로 은퇴시키세요 (지우지 않는다).")
+    lines.append("\n남길 행을 고르고 나머지를 `bpm-center hosts retire <id>`로 은퇴시키세요 (지우지 않는다).")
     return "\n".join(lines).lstrip("\n")
 
 

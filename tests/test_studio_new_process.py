@@ -21,9 +21,9 @@ from chaeksas.studio.workspace import Workspace, WorkspaceError, read_record  # 
 
 MINIMAL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="Proc_청구" name="청구서 대사">
-    <bpmn:extensionElements><chk:process>{}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{}</bpm:process></bpmn:extensionElements>
     <bpmn:startEvent id="Start_1"/>
     <bpmn:endEvent id="End_1"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="End_1" />

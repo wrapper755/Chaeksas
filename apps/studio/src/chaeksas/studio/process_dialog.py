@@ -5,7 +5,7 @@
 - **작업 폴더 기록**(`process.json`): 이름·버전·설명·담당자·태그. Studio 안에서만 쓰는
   기록이라 계약이 아니다 (`workspace.py`). **설명만 패키지로 간다** (C1 `description`) —
   담당자·태그는 매니페스트에 칸이 없어 설계자가 보는 메모로 남는다.
-- **진입 정의의 `chk:process`**(C14): 실행 위치. 이것은 **그림**이므로
+- **진입 정의의 `bpm:process`**(C14): 실행 위치. 이것은 **그림**이므로
   **캔버스를 거쳐야** 고칠 수 있다 — XML을 파이썬이 직접 만지면 실행 취소와 「저장 안 한
   변경」이 깨진다 (ADR-0022, STU-04와 같은 규칙). 그래서 **진입 정의가 열려 있을 때만**
   그 칸이 켜지고, 아니면 끄고 까닭을 적는다 (U3).
@@ -17,7 +17,7 @@
   (화면 설계서 STU-06) — 사람이 고칠 거리를 알려 줄 뿐이다. 확장 태스크는 실행 위치를
   **확장 정의만** 아니(C13·ADR-0018) 부르는 쪽이 표를 넘긴다 — F6이 쓰는 것과 같은 표다.
 - **「서비스 앱 키」 섹션은 없다** — 키가 없다 (ADR-0102). 옛 그림에 적힌 `service_keys`는
-  **그대로 둔다**(실행 전 검사가 B7 경고로 말한다) — 저장이 읽은 `chk:process`를 통째로 되돌려 쓴다.
+  **그대로 둔다**(실행 전 검사가 B7 경고로 말한다) — 저장이 읽은 `bpm:process`를 통째로 되돌려 쓴다.
 - **읽고 쓰는 것은 진입 정의 하나다.**
 - **그림은 캔버스의 지금 것을 읽는다** — 진입 정의가 열려 있으면 메인 창이 캔버스에서 읽어
   `drawn`으로 넘긴다. 파일에서 읽으면 「적용」한 것이 다시 열었을 때 안 보인다.
@@ -71,7 +71,7 @@ APPLY_NOTE_RECORD_ONLY = "이름·버전·설명·담당자·태그는 바로 �
 
 #: 그림을 고칠 수 없는 까닭 (U3 — 끄고 **가까이에** 적는다).
 NO_CANVAS = (
-    "실행 위치는 **그림**에 있습니다 (`chk:process`) — 진입 정의 「{entry}」를 열면 고칠 수 있습니다."
+    "실행 위치는 **그림**에 있습니다 (`bpm:process`) — 진입 정의 「{entry}」를 열면 고칠 수 있습니다."
 )
 NO_ENTRY = "정의가 없어 실행 위치를 적을 자리가 없습니다 — 먼저 정의를 저장하세요."
 
@@ -152,7 +152,7 @@ class ProcessInfoDialog(QDialog):
         self.task_type_locations = task_type_locations
         #: 진입 정의가 열려 있나 — **그림을 고칠 수 있는가**다 (아니면 실행 위치가 꺼진다).
         self.editable = editable
-        #: 「저장」을 눌러 바뀐 것. 부르는 쪽이 캔버스에 넘길 `chk:process`가 여기 있다.
+        #: 「저장」을 눌러 바뀐 것. 부르는 쪽이 캔버스에 넘길 `bpm:process`가 여기 있다.
         self.saved: BpmProcess | None = None
         self.process_patch: str | None = None
         #: 「이 부분을 PC BPM 프로세스로 나누기...」를 눌렀다 — 창은 저장하지 않고 닫히고 메인 창이
@@ -350,7 +350,7 @@ class ProcessInfoDialog(QDialog):
         self.accept()
 
     def _patch(self) -> str:
-        """캔버스에 넘길 `chk:process` 본문 (JSON 글 그대로 — `setProperties`의 규약).
+        """캔버스에 넘길 `bpm:process` 본문 (JSON 글 그대로 — `setProperties`의 규약).
 
         **읽은 것을 통째로 되돌려 쓴다** — `extensions`·`inputs`·`outputs`를 빼면 그 선언이
         사라진다 (창이 모르는 칸도 지키는 자리다). 옛 그림의 `service_keys`도 모르는 칸으로 **그대로** 간다.

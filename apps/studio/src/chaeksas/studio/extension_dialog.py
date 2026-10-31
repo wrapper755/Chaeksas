@@ -250,13 +250,13 @@ NO_PIN_INTERNAL = "내장·사내 확장은 고정하지 않습니다 — 정의
 NO_PIN_UNVERIFIED = "「새로 고침」으로 Center에서 받아 봉투를 검증한 정의만 고정합니다 (C13 E6)."
 NO_PIN_NOT_OPEN = "진입 정의가 열려 있을 때만 고정합니다 — 그림을 고치는 일입니다 (STU-06과 같은 규칙)."
 NO_PIN_NOT_DECLARED = (
-    "그림이 이 확장을 쓴다고 적지 않았습니다 (`chk:process.extensions`) — "
+    "그림이 이 확장을 쓴다고 적지 않았습니다 (`bpm:process.extensions`) — "
     "버전 범위를 지어내지 않습니다."
 )
 
 
 def pin_patch(info: ProcessInfo, pins: Mapping[str, str | None]) -> str:
-    """고정·해제를 반영한 `chk:process` 본문 (JSON 글 — `setProperties`의 규약).
+    """고정·해제를 반영한 `bpm:process` 본문 (JSON 글 — `setProperties`의 규약).
 
     **읽은 것을 통째로 되돌려 쓴다** — `inputs`·`outputs`처럼 이 창이 모르는 칸이 사라지지
     않게 (STU-06과 같은 자리). 값이 `None`이면 **고정을 지운다**.
@@ -286,7 +286,7 @@ class StudioExtensionsDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.extensions = extensions
-        #: 진입 정의의 `chk:process` — 고정 상태를 여기서 읽는다. `None`이면 고정할 수 없다
+        #: 진입 정의의 `bpm:process` — 고정 상태를 여기서 읽는다. `None`이면 고정할 수 없다
         #: (진입 정의가 열려 있지 않다 — STU-06과 같은 규칙, ADR-0022).
         self.process_info = process_info
         #: 이 창에서 고정·해제한 것 (`확장 id → 해시 또는 None`). 부른 쪽(STU-01)이 캔버스에 넘긴다.
@@ -455,7 +455,7 @@ class StudioExtensionsDialog(QDialog):
         return found.definition_hash if found is not None else None
 
     def _declared(self, extension_id: str) -> bool:
-        """그림이 쓴다고 적었나 (`chk:process.extensions`)."""
+        """그림이 쓴다고 적었나 (`bpm:process.extensions`)."""
         return any(one.id == extension_id for one in (self.process_info.extensions if self.process_info else []))
 
     def _pin_problem(self, found: LoadedExtension | None) -> str:

@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx12_shipping_fee" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_bx12_shipping_fee" name="배송비 계산" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [
@@ -35,14 +35,14 @@
       "description": "일반/우수/VIP"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:businessRuleTask id="Task_Fee" name="배송비 정하기">
       <bpmn:extensionElements>
-        <chk:rule>{
+        <bpm:rule>{
   "decision": "shipping_fee",
   "input": {
     "지역": "지역",
@@ -53,7 +53,7 @@
     "배송비": "fee",
     "근거": "reason"
   }
-}</chk:rule>
+}</bpm:rule>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>

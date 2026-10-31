@@ -67,7 +67,7 @@ def test_raw_key_is_only_in_the_create_response() -> None:
 
 
 def test_raw_key_shape_is_checked() -> None:
-    for bad in (KEY_PREFIX + "A" * 39, KEY_PREFIX + "A" * 41, "chk_svc_" + "A" * 40, "A" * 48):
+    for bad in (KEY_PREFIX + "A" * 39, KEY_PREFIX + "A" * 41, "bpm_svc_" + "A" * 40, "A" * 48):
         with pytest.raises(ValidationError):
             CenterKeyCreated.model_validate(info().to_json_dict() | {"key": bad})
 
@@ -162,7 +162,7 @@ def test_things_people_actually_paste_are_refused() -> None:
         f'"{KEY_PREFIX}{"A" * KEY_RANDOM_LEN}"',  # 따옴표가 함께 복사된 경우
         KEY_PREFIX + "A" * (KEY_RANDOM_LEN - 1),  # 한 글자 짧다
         KEY_PREFIX + "A" * (KEY_RANDOM_LEN + 1),
-        "chk_svc_" + "A" * KEY_RANDOM_LEN,  # 서비스 앱 키 (다른 종류다)
+        "bpm_svc_" + "A" * KEY_RANDOM_LEN,  # 서비스 앱 키 (다른 종류다)
         KEY_PREFIX + "A" * (KEY_RANDOM_LEN - 1) + "!",
     ):
         assert not looks_like_key(pasted), pasted

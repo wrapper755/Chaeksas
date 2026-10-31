@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx07_email" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx07_email" name="메일 보내기" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -20,12 +20,12 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Body" name="본문" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Body" name="본문" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:dataOutputAssociation id="DOA_Data_Report">
@@ -36,7 +36,7 @@
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Mail" name="보내기">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{받는사람}"
   ],
@@ -46,7 +46,7 @@
     "보고경로"
   ],
   "store_as": "발송결과"
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
@@ -60,12 +60,12 @@
     <bpmn:dataObject id="DO_Data_Report" />
     <bpmn:dataObjectReference id="Data_Report" name="보고" dataObjectRef="DO_Data_Report">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "fx07/보고.md",
   "format": "md",
   "store_as": "보고경로",
   "template": "{보고}"
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

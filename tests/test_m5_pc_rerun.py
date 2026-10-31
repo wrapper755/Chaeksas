@@ -69,7 +69,7 @@ def pc_examples() -> list[str]:
     """실행 위치가 `pc`인 예제 — **BPMN에서 읽는다**.
 
     README의 묶음 표에는 「PC 예제」라고만 적혀 있다. 어느 것이 PC인지는 그림이 안다
-    (`chk:process.run_location`) — 사람이 옮겨 적으면 어긋난다.
+    (`bpm:process.run_location`) — 사람이 옮겨 적으면 어긋난다.
     """
     found = []
     for path in sorted(EXAMPLES.glob("*.bpmn")):

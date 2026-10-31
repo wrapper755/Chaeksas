@@ -194,7 +194,7 @@ def test_a_message_catch_shows_its_name_and_receive_body() -> None:
 
 
 def test_a_message_start_has_no_receive_fields() -> None:
-    """메시지 시작은 작업이 된다 — `chk:receive`를 읽지 않으므로 칸이 없다."""
+    """메시지 시작은 작업이 된다 — `bpm:receive`를 읽지 않으므로 칸이 없다."""
     made = loaded("StartEvent", event("Message", message="경비 요청"))
     assert made.correlation_box.isHidden() and made.payload_box.isHidden()
     assert made.dump() == {"event": {"message": "경비 요청"}, "receive": None}

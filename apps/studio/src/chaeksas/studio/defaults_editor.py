@@ -1,4 +1,4 @@
-"""STU-04 BPM 프로세스 기본값 편집기 — `chk:defaults` (C14 §프로세스 수준, ADR-0105·ADR-0033).
+"""STU-04 BPM 프로세스 기본값 편집기 — `bpm:defaults` (C14 §프로세스 수준, ADR-0105·ADR-0033).
 
 속성 패널이 **정의 자체**(`Process`)를 보일 때 탭으로 끼운다 — 빈 상태의 「BPM 프로세스 기본값」 단추가
 그 길이다. **규약은 결재·보내기·STU-14와 같다** (`load`/`dump`/`problems`/`changed`).
@@ -6,7 +6,7 @@
 - 모든 AI 태스크의 기본값이고 **태스크에 적은 값이 이긴다** — `limits`는 칸마다, 목록 둘은 태스크에
   하나라도 적었으면 그것만 (`core.nodes.with_ai_defaults`). `desktop`은 확장 태스크에도 속성 기본값으로
   넘어간다 (`core.nodes._with_defaults`).
-- **`chk:process`는 만지지 않는다** — 입력·출력은 「변수」 탭, 실행 위치는 STU-06, 정의 고정은 STU-15가
+- **`bpm:process`는 만지지 않는다** — 입력·출력은 「변수」 탭, 실행 위치는 STU-06, 정의 고정은 STU-15가
   고친다. 여기서 다시 만들면 같은 칸이 두 자리에 산다.
 - **적어 둔 것을 조용히 바꾸지 않는다.** 다루지 않는 칸(`web` — 계약에 있지만 읽는 곳이 없다)은 읽은
   그대로 돌려주고 경고 한 줄로 말한다. 모든 칸을 비우면 `dump()`가 `None` — 속성 패널이 그 요소를 지운다.
@@ -54,7 +54,7 @@ UNREAD_WEB = (
 
 
 class DefaultsEditor(QWidget):
-    """`chk:defaults` 하나."""
+    """`bpm:defaults` 하나."""
 
     changed = Signal()
 
@@ -135,7 +135,7 @@ class DefaultsEditor(QWidget):
     # ── 규약 ──
 
     def load(self, body: Mapping[str, Any] | None) -> None:
-        """`chk:defaults` 본문(없으면 `None`)을 그린다."""
+        """`bpm:defaults` 본문(없으면 `None`)을 그린다."""
         self._quiet = True
         self._loaded = dict(body) if isinstance(body, Mapping) else {}
         limits = self._loaded.get("limits")

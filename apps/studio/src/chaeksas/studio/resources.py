@@ -109,7 +109,7 @@ EMPTY_TREE = "뿌리를 고르면 그 아래를 봅니다."
 
 #: 만들 노드의 BPMN 종류 — 확장 태스크·서비스 앱 태스크는 둘 다 `serviceTask`다 (C14).
 BPMN_SERVICE_TASK = "bpmn:ServiceTask"
-#: 공유 BPM 프로세스를 부르는 노드 (C14 `chk:call`이 붙는 자리).
+#: 공유 BPM 프로세스를 부르는 노드 (C14 `bpm:call`이 붙는 자리).
 BPMN_CALL_ACTIVITY = "bpmn:CallActivity"
 
 #: 끌어다 놓기가 쓰는 MIME 형식 (ADR-0044). **우리 것만** 캔버스가 받는다 — 페이지 안의
@@ -134,7 +134,7 @@ class Create:
     """「캔버스에 추가」로 만들 노드 하나.
 
     `chk`는 캔버스의 규약 그대로 **`{요소 이름: JSON 글}`**이다 (`setProperties`와 같다).
-    `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `chk:*`가 아니라
+    `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `bpm:*`가 아니라
     요소 자신의 칸이라 만들 때 함께 들어간다.
     """
 
@@ -347,7 +347,7 @@ def _shared_child(
 def _call_activity(process: ProvidedProcess) -> Create:
     """Call Activity 하나 (STU-03 「캔버스에 추가」).
 
-    **만드는 것은 `calledElement`뿐이다** (ADR-0051) — `chk:call`의 입력·출력 짝은 **내 변수
+    **만드는 것은 `calledElement`뿐이다** (ADR-0051) — `bpm:call`의 입력·출력 짝은 **내 변수
     이름**을 알아야 하는 일이라 지어내지 않는다 (속성 패널에서 적는다).
     """
     return Create(
@@ -358,7 +358,7 @@ def _call_activity(process: ProvidedProcess) -> Create:
 
 
 def _shared_note(process: ProvidedProcess) -> str:
-    """정의 한 줄의 「설명」 — **선언한 것**만 쓴다 (`chk:process.inputs`·`outputs`, C1).
+    """정의 한 줄의 「설명」 — **선언한 것**만 쓴다 (`bpm:process.inputs`·`outputs`, C1).
 
     그림에서 어림하지 않는다 — 확장 태스크가 만드는 변수를 플랫폼이 모르므로(ADR-0018)
     「부르는 쪽이 줘야 하는 것」이 거짓이 된다.
@@ -407,7 +407,7 @@ def _operation_tip(operation: service_catalog.Operation) -> str:
 
 
 def _service_call(app: service_catalog.App, operation: service_catalog.Operation) -> Create:
-    """`chk:serviceCall` 하나 (C14) — **키 참조는 넣지 않는다**(BPM 프로세스 설정을 상속한다)."""
+    """`bpm:serviceCall` 하나 (C14) — **키 참조는 넣지 않는다**(BPM 프로세스 설정을 상속한다)."""
     body = {"app_id": app.app_id, "operation": operation.name}
     return Create(
         bpmn=BPMN_SERVICE_TASK,

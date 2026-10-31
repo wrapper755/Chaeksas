@@ -39,7 +39,7 @@ from chaeksas.qt.theme.tokens import colors as token_colors
 
 log = logging.getLogger(__name__)
 
-#: 캔버스가 사는 곳 (`index.html`·`view.html`·`chk-moddle.js`는 우리 것, `vendor/`는 생성물이다).
+#: 캔버스가 사는 곳 (`index.html`·`view.html`·`bpm-moddle.js`는 우리 것, `vendor/`는 생성물이다).
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
 #: 편집하는 페이지 (bpmn-js **모델러**).
@@ -52,15 +52,15 @@ DEFAULT_TIMEOUT_MS = 15_000
 
 #: 페이지의 CSS 변수 ↔ 토큰 (ADR-0101). 페이지는 이 변수만 쓰고 색 값을 적지 않는다.
 CANVAS_TOKENS = {
-    "--chk-surface": "bg.surface",
-    "--chk-subtle": "bg.subtle",
-    "--chk-line": "text.primary",
-    "--chk-text": "text.primary",
-    "--chk-text-muted": "text.muted",
-    "--chk-border": "border.default",
-    "--chk-border-strong": "border.strong",
-    "--chk-accent": "primary",
-    "--chk-accent-subtle": "primary.subtle",
+    "--bpm-surface": "bg.surface",
+    "--bpm-subtle": "bg.subtle",
+    "--bpm-line": "text.primary",
+    "--bpm-text": "text.primary",
+    "--bpm-text-muted": "text.muted",
+    "--bpm-border": "border.default",
+    "--bpm-border-strong": "border.strong",
+    "--bpm-accent": "primary",
+    "--bpm-accent-subtle": "primary.subtle",
 }
 
 
@@ -157,7 +157,7 @@ class Canvas(QWebEngineView):
         """앱의 테마 색을 페이지에 넣는다 — 뜰 때·팔레트가 바뀔 때 (ADR-0101)."""
         colors = canvas_colors(self.theme())
         # 페이지가 뜨기 전 바탕도 같은 색이다 — 어두운 창에서 흰 판이 번쩍이지 않게.
-        self.page().setBackgroundColor(QColor(colors["--chk-surface"]))
+        self.page().setBackgroundColor(QColor(colors["--bpm-surface"]))
         self.page().runJavaScript(f"window.chkTheme && window.chkTheme({json.dumps(colors)})")
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802 — Qt 이름 그대로
@@ -305,7 +305,7 @@ class Canvas(QWebEngineView):
 
         `chk`는 `properties`·`setProperties`와 같은 **`{요소 이름: JSON 글}`**이다.
 
-        `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `chk:*`가 아니라
+        `attrs`는 **그냥 BPMN 속성**이다 (`calledElement` 같은 것, ADR-0051) — `bpm:*`가 아니라
         요소 자신의 칸이라 만들 때 함께 넣는다.
 
         `at`은 **화면 자리**(캔버스 위젯의 CSS 픽셀)다 — 끌어다 놓은 자리다 (ADR-0044).
@@ -330,7 +330,7 @@ class Canvas(QWebEngineView):
     def delegate_node(self, node_id: str, *, name: str, called: str, call: str) -> str:
         """노드 하나를 **위임 호출로 바꾼다** (STU-06a) — 흐름·경계는 그대로, 실행 취소 한 걸음.
 
-        `call`은 `chk:call` 본문(JSON 글)이다. 바뀐 노드의 id를 돌려준다.
+        `call`은 `bpm:call` 본문(JSON 글)이다. 바뀐 노드의 id를 돌려준다.
         """
         found = self.call_sync("delegateNode", node_id, {"name": name, "calledElement": called, "chk": {"call": call}})
         if not found.get("found"):

@@ -53,11 +53,11 @@ RUN_ID = "run_20261008_090000_a1b2c3"
 
 
 def called_by_examples() -> dict[str, set[str]]:
-    """예제가 실제로 부르는 `{app_id: {작업, …}}` — BPMN의 `chk:serviceCall`에서 읽는다."""
+    """예제가 실제로 부르는 `{app_id: {작업, …}}` — BPMN의 `bpm:serviceCall`에서 읽는다."""
     found: dict[str, set[str]] = {}
     for path in sorted(BPMN.glob("*.bpmn")):
         text = path.read_text(encoding="utf-8")
-        for body in re.findall(r"<chk:serviceCall>(.*?)</chk:serviceCall>", text, re.S):
+        for body in re.findall(r"<bpm:serviceCall>(.*?)</bpm:serviceCall>", text, re.S):
             call = json.loads(body)
             found.setdefault(str(call["app_id"]), set()).add(str(call["operation"]))
     return found
@@ -591,7 +591,7 @@ def test_default_ports_follow_the_setup_table() -> None:
 
 
 def test_a_port_can_be_moved_by_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CHK_SVC_KB_SEARCH__PORT", "9999")
+    monkeypatch.setenv("BPM_SVC_KB_SEARCH__PORT", "9999")
     assert catalog.port_of("kb-search") == 9999
 
 

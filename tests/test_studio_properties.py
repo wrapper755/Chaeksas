@@ -55,9 +55,9 @@ def test_a_good_chk_element_passes_and_comes_back_tidy() -> None:
     [
         ("{not json", "JSON이 아닙니다"),
         ("[1, 2]", "객체여야 합니다"),
-        ('{"없는것": {}}', "모르는 `chk:` 요소입니다"),
-        ('{"aiTask": {"goal": "x"}}', "chk:aiTask"),  # domain이 빠졌다
-        ('{"rule": {"input": {}}}', "chk:rule"),  # decision이 빠졌다
+        ('{"없는것": {}}', "모르는 `bpm:` 요소입니다"),
+        ('{"aiTask": {"goal": "x"}}', "bpm:aiTask"),  # domain이 빠졌다
+        ('{"rule": {"input": {}}}', "bpm:rule"),  # decision이 빠졌다
     ],
 )
 def test_a_bad_chk_element_says_what_is_wrong(text: str, complaint: str) -> None:
@@ -67,7 +67,7 @@ def test_a_bad_chk_element_says_what_is_wrong(text: str, complaint: str) -> None
 
 
 def test_an_extension_task_keeps_its_xml_attributes_apart() -> None:
-    """`chk:task`만 `type`·`extension`이 XML 속성이다 (C14 §태스크 종류)."""
+    """`bpm:task`만 `type`·`extension`이 XML 속성이다 (C14 §태스크 종류)."""
     found, problem = check_chk(
         '{"task": {"type": "ocr_task", "extension": "doc-ocr", "data": {"form": "p"}}}'
     )
@@ -108,19 +108,19 @@ def test_errors_and_warnings_are_counted_apart() -> None:
     """C14 — 오류만 실행을 막고, 경고는 보여 주고 사람이 판단한다."""
     xml = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="t">
     <bpmn:startEvent id="Start"/>
     <bpmn:scriptTask id="T"><bpmn:script>값 = 없는변수</bpmn:script></bpmn:scriptTask>
     <bpmn:sendTask id="Send"><bpmn:extensionElements>
-      <chk:webhook>{"url": "https://x.test", "body": "all"}</chk:webhook>
+      <bpm:webhook>{"url": "https://x.test", "body": "all"}</bpm:webhook>
     </bpmn:extensionElements></bpmn:sendTask>
     <bpmn:endEvent id="End"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="T" />
     <bpmn:sequenceFlow id="f2" sourceRef="T" targetRef="Send" />
     <bpmn:sequenceFlow id="f3" sourceRef="Send" targetRef="End" />
     <bpmn:dataObjectReference id="D"><bpmn:extensionElements>
-      <chk:dataOutput>{"path": "a.md", "format": "md"}</chk:dataOutput>
+      <bpm:dataOutput>{"path": "a.md", "format": "md"}</bpm:dataOutput>
     </bpmn:extensionElements></bpmn:dataObjectReference>
   </bpmn:process>
 </bpmn:definitions>"""
@@ -139,13 +139,13 @@ def test_f6_counts_extension_tasks_only_with_the_table() -> None:
     """
     xml = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="t"><bpmn:extensionElements>
-    <chk:process>{"run_location": "server"}</chk:process>
+    <bpm:process>{"run_location": "server"}</bpm:process>
   </bpmn:extensionElements>
     <bpmn:startEvent id="Start"/>
     <bpmn:serviceTask id="T"><bpmn:extensionElements>
-      <chk:task type="ocr_task" extension="doc-ocr">{}</chk:task>
+      <bpm:task type="ocr_task" extension="doc-ocr">{}</bpm:task>
     </bpmn:extensionElements></bpmn:serviceTask>
     <bpmn:endEvent id="End"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="T" />
@@ -194,7 +194,7 @@ def test_a_helper_called_the_wrong_way_shows_up_as_b15() -> None:
     """
     xml = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="t">
     <bpmn:startEvent id="Start"/>
     <bpmn:scriptTask id="Task_Merge"><bpmn:script>주제별 = 세기(전체, '주제')</bpmn:script></bpmn:scriptTask>
@@ -214,11 +214,11 @@ def test_a_helper_called_the_wrong_way_shows_up_as_b15() -> None:
 def test_a_violation_points_at_a_node_so_the_canvas_can_jump() -> None:
     xml = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="t">
     <bpmn:startEvent id="Start"/>
     <bpmn:userTask id="Approve_Hold"><bpmn:extensionElements>
-      <chk:approval>{"title": "t", "show": "보류건수"}</chk:approval>
+      <bpm:approval>{"title": "t", "show": "보류건수"}</bpm:approval>
     </bpmn:extensionElements></bpmn:userTask>
     <bpmn:endEvent id="End"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="Approve_Hold" />
@@ -377,7 +377,7 @@ def test_applying_a_name_and_a_chk_body_comes_back_in_the_saved_xml(canvas: Any)
     assert node is not None and node.name == "할인 다시"
     assert node.prop("rule") is not None and node.prop("rule").output == {"할인율": "discount"}
 
-    # 실행 취소가 먹는다. 표준 속성은 한 걸음이지만 `chk:*`를 함께 고쳤으면 걸음이 여럿이다.
+    # 실행 취소가 먹는다. 표준 속성은 한 걸음이지만 `bpm:*`를 함께 고쳤으면 걸음이 여럿이다.
     for _ in range(3):
         canvas.call_sync("undo")
     back = read_process(canvas.save_xml()).node("Task_Rule")
@@ -491,6 +491,6 @@ def test_an_empty_json_tab_says_so_instead_of_showing_an_example() -> None:
     """흐린 JSON 예시는 적힌 값으로 읽힌다 — 게이트웨이에 `aiTask`가 보여 「항목이 안 보인다」가 됐다."""
     for kind in ("ExclusiveGateway", "ServiceTask", "Task", "SequenceFlow"):
         hint = empty_chk_hint(kind)
-        assert "{" not in hint and "chk:* 설정이 없습니다" in hint
+        assert "{" not in hint and "bpm:* 설정이 없습니다" in hint
     assert all("순서 흐름" in empty_chk_hint(k) for k in GATEWAY_KINDS)
     assert "순서 흐름" not in empty_chk_hint("ServiceTask")

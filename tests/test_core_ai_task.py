@@ -1,8 +1,8 @@
-"""AI 태스크 (`chk:aiTask`) — 운전사 (ADR-0008·ADR-0027).
+"""AI 태스크 (`bpm:aiTask`) — 운전사 (ADR-0008·ADR-0027).
 
 여기서 거듭 보는 것은 셋이다.
 
-1. **도구 화이트리스트** — `chk:aiTask.tools`에 없는 것을 모델이 부르면 **실행 오류**다
+1. **도구 화이트리스트** — `bpm:aiTask.tools`에 없는 것을 모델이 부르면 **실행 오류**다
    (그림·모델이 잘못된 것이라 오류 경계로 우회할 일이 아니다).
 2. **결과 필드 검증** — `results: {이름: 타입}`대로 오지 않으면 **업무 실패**다 (모델은 가끔
    틀리고, 그것은 흐름으로 대처할 거리다).
@@ -37,9 +37,9 @@ RUN_ID = "run_20261004_093000_abc123"
 
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="test.proc" name="시험">
-    <bpmn:extensionElements><chk:process>{{}}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{{}}</bpm:process></bpmn:extensionElements>
     {body}
   </bpmn:process>
 </bpmn:definitions>
@@ -59,7 +59,7 @@ def process(ai: str = AI, *, boundary: bool = False, server: bool = False) -> An
     catcher = (
         '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_Ai">'
         "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
-        '<bpmn:scriptTask id="Task_Recover" scriptFormat="chk-expr">'
+        '<bpmn:scriptTask id="Task_Recover" scriptFormat="bpm-expr">'
         "<bpmn:script>복구 = error_code</bpmn:script></bpmn:scriptTask>"
         '<bpmn:endEvent id="End_2"/>'
         + flow("f3", "Bnd_Fail", "Task_Recover")
@@ -69,14 +69,14 @@ def process(ai: str = AI, *, boundary: bool = False, server: bool = False) -> An
     )
     body = (
         '<bpmn:startEvent id="Start_1"/>'
-        f'<bpmn:serviceTask id="Task_Ai"><bpmn:extensionElements><chk:aiTask>{ai}'
-        "</chk:aiTask></bpmn:extensionElements></bpmn:serviceTask>"
+        f'<bpmn:serviceTask id="Task_Ai"><bpmn:extensionElements><bpm:aiTask>{ai}'
+        "</bpm:aiTask></bpmn:extensionElements></bpmn:serviceTask>"
         '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Task_Ai")
         + flow("f2", "Task_Ai", "End_1")
         + catcher
     )
-    shell = SHELL.replace("<chk:process>{{}}", '<chk:process>{{"run_location": "server"}}') if server else SHELL
+    shell = SHELL.replace("<bpm:process>{{}}", '<bpm:process>{{"run_location": "server"}}') if server else SHELL
     return read_process(shell.format(body=body))
 
 
@@ -404,17 +404,17 @@ def test_the_model_sees_the_values_the_goal_names() -> None:
 
 
 def with_defaults(defaults: dict[str, Any], ai: str = AI, *, boundary: bool = False) -> Any:
-    """`chk:defaults`를 단 그림 — 기본값은 모든 AI 태스크에 간다 (C14)."""
+    """`bpm:defaults`를 단 그림 — 기본값은 모든 AI 태스크에 간다 (C14)."""
     xml = SHELL.replace(
-        "<chk:process>{{}}</chk:process>",
-        "<chk:process>{{}}</chk:process><chk:defaults>"
+        "<bpm:process>{{}}</bpm:process>",
+        "<bpm:process>{{}}</bpm:process><bpm:defaults>"
         + json.dumps(defaults, ensure_ascii=False).replace("{", "{{").replace("}", "}}")
-        + "</chk:defaults>",
+        + "</bpm:defaults>",
     )
     catcher = (
         '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_Ai">'
         "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
-        '<bpmn:scriptTask id="Task_Recover" scriptFormat="chk-expr">'
+        '<bpmn:scriptTask id="Task_Recover" scriptFormat="bpm-expr">'
         "<bpmn:script>복구 = error_code</bpmn:script></bpmn:scriptTask>"
         '<bpmn:endEvent id="End_2"/>' + flow("f3", "Bnd_Fail", "Task_Recover") + flow("f4", "Task_Recover", "End_2")
         if boundary
@@ -422,8 +422,8 @@ def with_defaults(defaults: dict[str, Any], ai: str = AI, *, boundary: bool = Fa
     )
     body = (
         '<bpmn:startEvent id="Start_1"/>'
-        f'<bpmn:serviceTask id="Task_Ai"><bpmn:extensionElements><chk:aiTask>{ai}'
-        "</chk:aiTask></bpmn:extensionElements></bpmn:serviceTask>"
+        f'<bpmn:serviceTask id="Task_Ai"><bpmn:extensionElements><bpm:aiTask>{ai}'
+        "</bpm:aiTask></bpmn:extensionElements></bpmn:serviceTask>"
         '<bpmn:endEvent id="End_1"/>' + flow("f1", "Start_1", "Task_Ai") + flow("f2", "Task_Ai", "End_1") + catcher
     )
     return read_process(xml.format(body=body))
@@ -446,7 +446,7 @@ def test_without_instructions_the_question_is_unchanged() -> None:
 
 
 def test_defaults_reach_every_ai_task_and_the_task_wins() -> None:
-    """`chk:defaults`의 목록은 태스크가 비었을 때만 쓴다 — **태스크에 적은 값이 이긴다** (C14)."""
+    """`bpm:defaults`의 목록은 태스크가 비었을 때만 쓴다 — **태스크에 적은 값이 이긴다** (C14)."""
     defaults = {"forbidden_actions": ["파일을 지우지 않는다"], "confirm_triggers": ["로그인 화면"]}
     model = RecordingLlm(replies=[answer(공급사="한빛상사", 금액=1)])
     engine, run = start(with_defaults(defaults), RunEnv(llm=model))

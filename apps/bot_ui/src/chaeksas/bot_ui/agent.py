@@ -6,7 +6,7 @@
 실행 자리는 **하나**다 (ADR-0014). 자리가 비어 있으면 Center 작업을 바로 시작한 것으로 ack하고,
 차 있으면 대기열에 넣는다. 대기열이 가득 차면 거절한다 (`queue_full`).
 
-BPM 프로세스를 실제로 돌리는 것은 자식 프로세스(`chk-bot-runner`, ADR-0023)다. 이 모듈은 **자리와
+BPM 프로세스를 실제로 돌리는 것은 자식 프로세스(`bpm-bot-runner`, ADR-0023)다. 이 모듈은 **자리와
 대기열만** 관리하고 `claim_slot()`·`release_slot()`으로 자리를 쥐고 놓는다.
 """
 
@@ -950,7 +950,7 @@ class Agent:
                 llm_url=self.settings.llm_base_url,
                 llm_model=self.settings.llm_model,
                 llm_key=self.credentials.llm_api_key() or "",
-                # 보내기도 BUI-03이 정한다 (ADR-0059) — 비어 있으면 `chk:email`이 **보내지
+                # 보내기도 BUI-03이 정한다 (ADR-0059) — 비어 있으면 `bpm:email`이 **보내지
                 # 않고 실패한다**. 웹훅은 적어 둔 호스트만이고 비면 아무 데도 보내지 않는다.
                 smtp=self.settings.smtp(),
                 webhook_hosts=tuple(self.settings.webhook_allowed_hosts),

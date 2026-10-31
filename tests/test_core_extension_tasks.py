@@ -1,4 +1,4 @@
-"""엔진이 확장 태스크를 수행한다 (`chk:task`, C13·ADR-0018, M4 조각 14).
+"""엔진이 확장 태스크를 수행한다 (`bpm:task`, C13·ADR-0018, M4 조각 14).
 
 **엔진은 확장을 모른다** — 태스크 종류 이름으로 수행기를 찾아 넘기고 출력만 받는다.
 그래서 여기 시험도 가짜 확장 하나로 돈다 (UI 자동화를 들이지 않는다).
@@ -33,16 +33,16 @@ RUN = "run_20261005_120000_abcdef"
 
 PROCESS = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1"
+                  xmlns:bpm="urn:chaeksas:bpmn:1"
                   targetNamespace="urn:chaeksas:example">
   <bpmn:process id="Proc_ext" name="확장 태스크" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{"run_location": "pc", "service_keys": {"demo": "demo-key"}}</chk:process>
+      <bpm:process>{"run_location": "pc", "service_keys": {"demo": "demo-key"}}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" />
     <bpmn:serviceTask id="Task_Ext" name="확장 태스크">
       <bpmn:extensionElements>
-        <chk:task type="demo_task" extension="demo">{"page_id": "p", "steps": []}</chk:task>
+        <bpm:task type="demo_task" extension="demo">{"page_id": "p", "steps": []}</bpm:task>
       </bpmn:extensionElements>
     </bpmn:serviceTask>
     <bpmn:endEvent id="End" />
@@ -125,12 +125,12 @@ def events(tmp_path: Path) -> list[dict[str, Any]]:
 
 
 def test_defaults_web_and_desktop_reach_the_task_and_the_task_wins(tmp_path: Path) -> None:
-    """`chk:defaults`의 `web`·`desktop`은 확장 태스크 속성의 기본값이다 — **태스크에 적은 값이 이긴다**
+    """`bpm:defaults`의 `web`·`desktop`은 확장 태스크 속성의 기본값이다 — **태스크에 적은 값이 이긴다**
     (C14, ADR-0033). UI 태스크가 띄울 앱 이름을 이렇게 받는다."""
     with_defaults = PROCESS.replace(
-        '<chk:process>{"run_location": "pc", "service_keys": {"demo": "demo-key"}}</chk:process>',
-        '<chk:process>{"run_location": "pc", "service_keys": {"demo": "demo-key"}}</chk:process>'
-        '<chk:defaults>{"desktop": {"app": "ERP Client"}, "web": {"profile": "업무"}}</chk:defaults>',
+        '<bpm:process>{"run_location": "pc", "service_keys": {"demo": "demo-key"}}</bpm:process>',
+        '<bpm:process>{"run_location": "pc", "service_keys": {"demo": "demo-key"}}</bpm:process>'
+        '<bpm:defaults>{"desktop": {"app": "ERP Client"}, "web": {"profile": "업무"}}</bpm:defaults>',
     ).replace('{"page_id": "p", "steps": []}', '{"page_id": "p", "steps": [], "web": {"profile": "태스크"}}')
     executor = FakeExecutor()
     run = run_it(tmp_path, with_defaults, Host({"demo_task": executor}))
@@ -169,7 +169,7 @@ def test_the_task_properties_are_not_the_values(tmp_path: Path) -> None:
     executor = FakeExecutor()
     run_it(tmp_path, PROCESS, Host({"demo_task": executor}))
     assert "key_ref" in executor.seen[0].__dict__ or executor.seen[0].key_ref
-    assert "chk_svc_" not in json.dumps(executor.seen[0].properties, ensure_ascii=False)
+    assert "bpm_svc_" not in json.dumps(executor.seen[0].properties, ensure_ascii=False)
 
 
 # ─────────────────────────── 실패 ───────────────────────────

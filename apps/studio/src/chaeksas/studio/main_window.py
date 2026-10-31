@@ -820,7 +820,7 @@ class MainWindow(QMainWindow):
         self.canvas.call("saveXML", then=done)
 
     def _apply_variables(self, body: str) -> None:
-        """「변수」 탭의 「적용」 — 열린 정의의 `chk:process`를 **한 걸음으로** 바꾼다 (ADR-0022)."""
+        """「변수」 탭의 「적용」 — 열린 정의의 `bpm:process`를 **한 걸음으로** 바꾼다 (ADR-0022)."""
         try:
             drawn = read_process(self.canvas.save_xml())
         except (CanvasError, BpmnReadError) as e:
@@ -854,7 +854,7 @@ class MainWindow(QMainWindow):
         """STU-06. 기록은 창이 쓰고, **그림은 캔버스가** 쓴다 (XML을 파이썬이 만지지 않는다).
 
         그래서 실행 위치·키 참조는 **진입 정의가 열려 있을 때만** 켜진다 — 창이 그 까닭을
-        적는다 (U3). 열려 있으면 「적용」이 `chk:process`를 한 걸음으로 적용해 **실행 취소도
+        적는다 (U3). 열려 있으면 「적용」이 `bpm:process`를 한 걸음으로 적용해 **실행 취소도
         한 걸음**이다.
         """
         if self.process is None:

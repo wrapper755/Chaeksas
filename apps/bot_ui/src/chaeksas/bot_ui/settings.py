@@ -1,4 +1,4 @@
-"""PC 실행기 설정 — 환경변수 `CHK_BOT_UI__*` (ADR-0011), 값은 설정 파일에 저장 (BUI-03).
+"""PC 실행기 설정 — 환경변수 `BPM_BOT_UI__*` (ADR-0011), 값은 설정 파일에 저장 (BUI-03).
 
 **포트·경로를 코드에 직접 쓰지 않는다.** 기본값은 여기 한 곳에만 둔다 (`docs/04-setup.md` §6).
 **비밀은 여기 두지 않는다** — Center API 키는 OS 비밀 저장소다 (`secrets.py`, CLAUDE.md §5).
@@ -26,7 +26,7 @@ DEFAULT_QUEUE_MAX = 20
 #: 모델 이름의 기본값 (주소는 비어 있다 — 사람이 넣어야 AI 태스크가 돈다).
 DEFAULT_LLM_MODEL = "qwen2.5:7b"
 
-ENV_PREFIX = "CHK_BOT_UI__"
+ENV_PREFIX = "BPM_BOT_UI__"
 
 def _env(name: str, default: str | None = None) -> str | None:
     return os.environ.get(f"{ENV_PREFIX}{name}", default)
@@ -80,7 +80,7 @@ class Settings:
     #: BPM 프로세스가 출력 폴더 **밖에 쓸 수 있는 폴더** (BUI-03 「파일」, ADR-0032). 기본은 비어 있다 —
     #: 적은 폴더 안의 파일은 BPM 프로세스가 고칠 수 있다.
     writable_dirs: tuple[Path, ...] = ()
-    #: 보내기 (BUI-03 「보내기」, ADR-0059). **비우면 `chk:email`이 보내지 않고 실패한다.**
+    #: 보내기 (BUI-03 「보내기」, ADR-0059). **비우면 `bpm:email`이 보내지 않고 실패한다.**
     #: 비밀번호는 여기 없다 — OS 비밀 저장소다 (`credentials.smtp_password()`).
     smtp_host: str = ""
     smtp_port: int = 0
@@ -166,7 +166,7 @@ class Settings:
         return target
 
     def with_env(self) -> Settings:
-        """환경변수로 덮어쓴 사본. `CHK_BOT_UI__CENTER__URL`처럼 중첩은 `__`."""
+        """환경변수로 덮어쓴 사본. `BPM_BOT_UI__CENTER__URL`처럼 중첩은 `__`."""
         return replace(
             self,
             center_url=_env("CENTER__URL") or self.center_url,

@@ -247,7 +247,7 @@ def handle_approval(context: Context) -> Outcome:
     run, node = context.run, context.node
     approval = node.prop("approval")
     if approval is None:
-        raise EngineError("`chk:approval`이 없다", node_id=node.id, code="approval_missing")
+        raise EngineError("`bpm:approval`이 없다", node_id=node.id, code="approval_missing")
 
     instance = context.instance()
     request_id = request_id_for(run.run_id, node.id, instance)
@@ -285,7 +285,7 @@ def handle_approval(context: Context) -> Outcome:
 
 
 def _assignees(spec: list[str] | str | None, variables: Mapping[str, Any], node_id: str) -> list[str]:
-    """C14 `chk:approval.assignees` → C6 `assignees` (ADR-0080).
+    """C14 `bpm:approval.assignees` → C6 `assignees` (ADR-0080).
 
     배열은 이름 그대로, 글자 하나는 **변수 이름**이다. 그 변수가 없거나 모양이 틀리면 실행
     오류다 — 조용히 「담당자 없음」으로 두면 감독자가 사라지고 대리 답이 막힌다. 그림의 버그라
@@ -366,7 +366,7 @@ def handle_rule(context: Context) -> Outcome:
     run, node = context.run, context.node
     spec: Rule | None = node.prop("rule")
     if spec is None:
-        raise EngineError("`chk:rule`이 없다", node_id=node.id, code="rule_missing")
+        raise EngineError("`bpm:rule`이 없다", node_id=node.id, code="rule_missing")
     decision = run.env.decisions.get(spec.decision)
     if decision is None:
         known = ", ".join(sorted(run.env.decisions)) or "없음"
@@ -400,14 +400,14 @@ def handle_rule(context: Context) -> Outcome:
 
 
 def handle_service_task(context: Context) -> Outcome:
-    """`serviceTask` 하나에 세 가지가 올라탄다 — 무엇인지는 `chk:*`가 가린다 (C14 §태스크 종류).
+    """`serviceTask` 하나에 세 가지가 올라탄다 — 무엇인지는 `bpm:*`가 가린다 (C14 §태스크 종류).
 
     | 속성 | 무엇 |
     | --- | --- |
-    | `chk:fileList` | 파일 목록 (ADR-0026) |
-    | `chk:serviceCall` | 서비스 앱 태스크 (C11) |
-    | `chk:aiTask` | AI 태스크 (ADR-0008 「운전사」, ADR-0027) |
-    | `chk:task` | 확장 태스크 (UI 태스크 등) — M4 |
+    | `bpm:fileList` | 파일 목록 (ADR-0026) |
+    | `bpm:serviceCall` | 서비스 앱 태스크 (C11) |
+    | `bpm:aiTask` | AI 태스크 (ADR-0008 「운전사」, ADR-0027) |
+    | `bpm:task` | 확장 태스크 (UI 태스크 등) — M4 |
     """
     node = context.node
     files: FileList | None = node.prop("fileList")
@@ -422,11 +422,11 @@ def handle_service_task(context: Context) -> Outcome:
     extension: ExtensionTask | None = node.prop("task")
     if extension is not None:
         return handle_extension_task(context, extension)
-    raise EngineError("무엇을 하는 서비스 태스크인지 모른다 (`chk:*`가 없다)", node_id=node.id, code="task_empty")
+    raise EngineError("무엇을 하는 서비스 태스크인지 모른다 (`bpm:*`가 없다)", node_id=node.id, code="task_empty")
 
 
 def handle_extension_task(context: Context, spec: ExtensionTask) -> Outcome:
-    """`chk:task` — 확장이 더한 태스크 하나 (C13 `task_types[].executor`, ADR-0018).
+    """`bpm:task` — 확장이 더한 태스크 하나 (C13 `task_types[].executor`, ADR-0018).
 
     **엔진은 그 속을 모른다.** 태스크 종류로 수행기를 찾아 넘기고, 받은 출력만 변수에 담는다.
 
@@ -585,7 +585,7 @@ def write_extension_events(context: Context, events: Sequence[ExtensionEvent]) -
 
 
 def _with_defaults(data: dict[str, Any], defaults: Defaults | None) -> dict[str, Any]:
-    """확장 태스크 속성 + `chk:defaults`의 `web`·`desktop` (C14, ADR-0033).
+    """확장 태스크 속성 + `bpm:defaults`의 `web`·`desktop` (C14, ADR-0033).
 
     **태스크에 적은 값이 이긴다** — 같은 이름이 없을 때만 채운다. 그 속은 보지 않는다
     (플랫폼은 확장 태스크의 속을 모른다, ADR-0018). UI 태스크가 띄울 앱 이름을 여기서 받는다.
@@ -632,7 +632,7 @@ def _seen_by(context: Context, spec: AiTask) -> dict[str, Any]:
 
 
 def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
-    """`chk:aiTask` — 운전사에게 목표를 주고 결과 필드를 받는다 (ADR-0008·ADR-0027).
+    """`bpm:aiTask` — 운전사에게 목표를 주고 결과 필드를 받는다 (ADR-0008·ADR-0027).
 
     화면을 다루는 환경(`web`·`desktop`)은 **지금 돌릴 수 없다** — 눈과 손을 주던 확장을 걷었다
     (ADR-0114). 그림·설치 오류로 멈춘다(재시도로 풀리지 않는다).
@@ -707,7 +707,7 @@ def handle_ai_task(context: Context, spec: AiTask) -> Outcome:
 
 
 def with_ai_defaults(spec: AiTask, defaults: Defaults | None) -> AiTask:
-    """`chk:defaults`를 채운 AI 태스크 — **태스크에 적은 값이 이긴다** (C14, ADR-0105).
+    """`bpm:defaults`를 채운 AI 태스크 — **태스크에 적은 값이 이긴다** (C14, ADR-0105).
 
     `limits`는 칸마다(`timeout_s`·`max_steps`), 목록 둘(`forbidden_actions`·`confirm_triggers`)은
     태스크에 하나라도 적었으면 그것만 쓴다. `web`·`desktop`은 환경을 열 때 따로 합친다.
@@ -729,7 +729,7 @@ def with_ai_defaults(spec: AiTask, defaults: Defaults | None) -> AiTask:
 
 
 def _max_steps(spec: AiTask) -> int | None:
-    """단계 한도 — 태스크 > `chk:defaults.limits` > 엔진 기본값 (`spec`은 이미 기본값을 채운 것이다)."""
+    """단계 한도 — 태스크 > `bpm:defaults.limits` > 엔진 기본값 (`spec`은 이미 기본값을 채운 것이다)."""
     if spec.limits is not None and spec.limits.max_steps:
         return spec.limits.max_steps
     return None
@@ -762,7 +762,7 @@ def _replayed(
 
 
 def handle_service_call(context: Context, spec: ServiceCall) -> Outcome:
-    """`chk:serviceCall` — 서비스 앱의 작업 하나를 부른다 (C11).
+    """`bpm:serviceCall` — 서비스 앱의 작업 하나를 부른다 (C11).
 
     재시도는 **여기서** 한다 — `retry.on`에 든 상태 코드이거나 닿지 못한 것이면 `attempt`를
     올려 다시 부른다. 멱등 키에 `attempt`가 들어가므로 같은 번호로 다시 부르면 앱이 저장된
@@ -877,7 +877,7 @@ def service_attempts(
 
 
 def handle_file_list(context: Context, spec: FileList) -> Outcome:
-    """`chk:fileList` — 폴더를 훑어 파일 경로 목록을 변수에 담는다 (C14, ADR-0026)."""
+    """`bpm:fileList` — 폴더를 훑어 파일 경로 목록을 변수에 담는다 (C14, ADR-0026)."""
     run, node = context.run, context.node
     if not spec.store_as:
         raise EngineError("파일 목록에 `store_as`가 없다 (B5)", node_id=node.id, code="file_list_no_store")
@@ -899,7 +899,7 @@ def handle_file_list(context: Context, spec: FileList) -> Outcome:
 
 
 def handle_send(context: Context) -> Outcome:
-    """`sendTask` — `chk:email` 또는 `chk:webhook`. 실패는 `SEND_FAILED`로 올린다 (C14)."""
+    """`sendTask` — `bpm:email` 또는 `bpm:webhook`. 실패는 `SEND_FAILED`로 올린다 (C14)."""
     node = context.node
     email: Email | None = node.prop("email")
     if email is not None:
@@ -907,7 +907,7 @@ def handle_send(context: Context) -> Outcome:
     webhook: Webhook | None = node.prop("webhook")
     if webhook is not None:
         return _send_webhook(context, webhook)
-    raise EngineError("`chk:email`·`chk:webhook`이 모두 없다", node_id=node.id, code="send_missing")
+    raise EngineError("`bpm:email`·`bpm:webhook`이 모두 없다", node_id=node.id, code="send_missing")
 
 
 def _send_email(context: Context, spec: Email) -> Outcome:
@@ -1008,7 +1008,7 @@ def _webhook_body(context: Context, spec: Webhook, scope: Scope) -> Mapping[str,
 def handle_receive(context: Context) -> Outcome:
     """`receiveTask` — 메시지를 기다린다 (C14 §이벤트).
 
-    상관 키(`chk:receive.correlation`)가 있으면 **그 값이 같은 메시지만** 받는다. 본문에서
+    상관 키(`bpm:receive.correlation`)가 있으면 **그 값이 같은 메시지만** 받는다. 본문에서
     변수가 되는 것은 `payload`에 적은 이름뿐이다.
     """
     return _wait_for(context, WAIT_MESSAGE)
@@ -1064,10 +1064,10 @@ def handle_throw(context: Context) -> Outcome:
 def handle_call(context: Context) -> Outcome:
     """`callActivity` — 다른 BPM 프로세스를 **같은 실행 안에서** 돌린다 (C14).
 
-    **적은 것만 오간다** (`chk:call`의 `input`·`output`). 바깥 토큰은 안쪽이 끝날 때까지
+    **적은 것만 오간다** (`bpm:call`의 `input`·`output`). 바깥 토큰은 안쪽이 끝날 때까지
     세워 두고, 안쪽은 같은 `run_id`·같은 기록을 쓴다 (C3는 실행 하나에 `run_started` 하나다).
 
-    **PC 위임은 여기서 돌리지 않는다** (`chk:call.delegate`, [ADR-0062](../decisions/0062-pc-delegation.md)) —
+    **PC 위임은 여기서 돌리지 않는다** (`bpm:call.delegate`, [ADR-0062](../decisions/0062-pc-delegation.md)) —
     대상이 **다른 패키지**라 이 패키지 안에 그 정의가 없다. 맡길 자리(`RunEnv`의 포트)가
     아직 없으므로 **그림·설치 오류로 멈춘다** — 안쪽을 서버에서 대신 돌리는 폴백은 두지 않는다.
     """
@@ -1115,7 +1115,7 @@ def _delegate(context: Context, spec: Call, delegate: Delegate) -> Outcome:
     맡기는 길은 `RunEnv.delegate` 포트 하나이고, 엔진은 **어디에 맡기는지 모른다**.
 
     **맡길 곳이 없는 것과 맡겼는데 거절당한 것은 다르다** — 앞은 그림·설치 오류(고쳐야 할
-    버그), 뒤는 업무 실패(오류 경계가 받는다). `chk:call.input`은 **맡길 때 값으로** 풀어
+    버그), 뒤는 업무 실패(오류 경계가 받는다). `bpm:call.input`은 **맡길 때 값으로** 풀어
     보낸다 (PC 쪽은 그 그림을 모른다).
     """
     run, node = context.run, context.node

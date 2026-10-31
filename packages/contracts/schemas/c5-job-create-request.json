@@ -30,7 +30,7 @@
   },
   "$id": "urn:chaeksas:contracts:c5-job-create-request",
   "additionalProperties": true,
-  "description": "`POST /jobs`.\n\n`requested_by`는 **본문에서 받지 않는다.** 키 이름이나 `X-CHK-Actor` 헤더로 Center가 채운다.",
+  "description": "`POST /jobs`.\n\n`requested_by`는 **본문에서 받지 않는다.** 키 이름이나 `X-BPM-Actor` 헤더로 Center가 채운다.",
   "properties": {
     "bpm_process_id": {
       "title": "Bpm Process Id",

@@ -15,7 +15,7 @@
 ```
 
 `process.json`은 **Studio 안에서만 쓰는 기록**이라 계약이 아니다 (구성요소 사이를 오가지 않는다).
-패키지 매니페스트(C1)는 내보낼 때 이것과 `chk:process`를 모아 만든다.
+패키지 매니페스트(C1)는 내보낼 때 이것과 `bpm:process`를 모아 만든다.
 """
 
 from __future__ import annotations

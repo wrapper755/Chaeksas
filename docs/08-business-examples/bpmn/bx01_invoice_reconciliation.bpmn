@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx01_invoice_reconciliation" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:error id="Err_SEND_FAILED" name="SEND_FAILED" errorCode="SEND_FAILED" />
   <bpmn:process id="Proc_bx01_invoice_reconciliation" name="월별 청구서 대사" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -34,8 +34,8 @@
       "default": "finance@example.com"
     }
   ]
-}</chk:process>
-      <chk:defaults>{
+}</bpm:process>
+      <bpm:defaults>{
   "limits": {
     "timeout_s": 180,
     "max_steps": 10
@@ -43,7 +43,7 @@
   "forbidden_actions": [
     "파일을 수정·삭제하지 않는다"
   ]
-}</chk:defaults>
+}</bpm:defaults>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="매월 1일">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -51,7 +51,7 @@
         <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 9 1 * *</bpmn:timeCycle>
       </bpmn:timerEventDefinition>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Month" name="대상월 정하기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Month" name="대상월 정하기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:script>대상월 = 대상월 or 지난달()
@@ -59,21 +59,21 @@
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Collect" name="청구서 모으기">
       <bpmn:extensionElements>
-        <chk:fileList>{
+        <bpm:fileList>{
   "folder": "{청구서폴더}/{대상월}",
   "pattern": "*.pdf",
   "recursive": false,
   "sort": "name",
   "store_as": "청구서파일",
   "count_as": "청구서수"
-}</chk:fileList>
+}</bpm:fileList>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_ReadLedger" name="발주 대장 읽기">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`대장파일`은 이번 달 발주 대장(xlsx)이다. 한 줄이 발주 한 건이다.\n\n## 할 일\n모든 줄을 읽어 발주번호·공급사·공급가액·입고여부를 목록으로 돌려준다. 빈 줄과 합계 줄은 뺀다.\n\n## 판단하지 않는 것\n대사·지급 판단은 하지 않는다. 값이 비어 있으면 비운 채로 둔다.\n\n## 반환\n- `발주목록`: list of {발주번호(string), 공급사(string), 공급가액(int), 입고(bool)}",
   "domain": "doc",
   "results": {
@@ -83,14 +83,14 @@
     "excel_parser_tool"
   ],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_ReadInvoice" name="청구서 판독">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`청구서`는 PDF 한 장의 경로다. 공급사마다 양식이 다르다 (공급가액/과세 공급가, 발주번호/PO No./참조 발주).\n\n## 할 일\n이 한 장에서 공급사·청구번호·발주번호·공급가액·부가세·합계를 읽는다.\n\n## 판단하지 않는 것\n다른 청구서와 비교하거나 중복 여부를 판단하지 않는다 (그건 대사 단계의 일).\n\n## 반환\n- `청구`: {공급사, 청구번호, 발주번호(string — 숫자로 바꾸지 않는다), 공급가액(int), 부가세(int), 합계(int)}",
   "domain": "doc",
   "results": {
@@ -100,19 +100,19 @@
     "pdf_text_tool"
   ],
   "params": {}
-}</chk:aiTask>
-        <chk:loop>{
+}</bpm:aiTask>
+        <bpm:loop>{
   "collection": "청구서파일",
   "item": "청구서",
   "result": "청구",
   "collect_into": "청구목록"
-}</chk:loop>
+}</bpm:loop>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Reconcile" name="대사" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Reconcile" name="대사" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
       <bpmn:script>발주 = 표를사전(발주목록, '발주번호')
@@ -134,7 +134,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Hold" name="보류 건 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "청구서 보류 확인",
   "description": "보류 사유를 확인하세요. 승인하면 지급 대상만 지급 요청합니다.",
   "show": [
@@ -162,12 +162,12 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:scriptTask id="Task_Report" name="보고서 만들기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Report" name="보고서 만들기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
@@ -179,7 +179,7 @@
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Mail" name="재무팀에 보내기">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{재무팀메일}"
   ],
@@ -189,12 +189,12 @@
     "대사표경로"
   ],
   "store_as": "발송결과"
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:scriptTask id="Task_MailFailed" name="메일 실패 기록" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_MailFailed" name="메일 실패 기록" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:outgoing>Flow_13</bpmn:outgoing>
       <bpmn:script>발송오류 = error_message</bpmn:script>
@@ -225,12 +225,12 @@
     <bpmn:dataObject id="DO_Data_Table" />
     <bpmn:dataObjectReference id="Data_Table" name="대사표" dataObjectRef="DO_Data_Table">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "대사표/대사표_{대상월}.md",
   "format": "md",
   "store_as": "대사표경로",
   "template": "# 청구서 대사 — {대상월}\n\n- 지급 합계: {지급합계}원\n- 지급 대상: {지급대상}\n- 보류 {보류건수}건: {보류}\n- 미청구 발주: {미청구}\n- 의견: {의견}\n"
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

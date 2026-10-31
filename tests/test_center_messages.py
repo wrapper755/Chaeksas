@@ -639,10 +639,10 @@ def test_a_message_start_carries_on_behalf_of_into_the_job(
             "사유": "파손", "금액": 10_000, "고객메일": "a@example.com"}}
     auth = {"Authorization": f"Bearer {integration_key}"}
     spoof = center.post("/api/v1/messages", json=body,
-                        headers={**auth, "X-CHK-On-Behalf-Of": "server_bot%3Arun_x"})
+                        headers={**auth, "X-BPM-On-Behalf-Of": "server_bot%3Arun_x"})
     assert spoof.status_code == 422 and spoof.json()["code"] == "on_behalf_invalid"
 
-    made = center.post("/api/v1/messages", json=body, headers={**auth, "X-CHK-On-Behalf-Of": "%EA%B9%80"})
+    made = center.post("/api/v1/messages", json=body, headers={**auth, "X-BPM-On-Behalf-Of": "%EA%B9%80"})
     assert made.status_code == 201, made.text
     job = center.get(f"/api/v1/jobs/{made.json()['job_id']}", headers=ADMIN).json()
     assert job["on_behalf_of"] == "김"

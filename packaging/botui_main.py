@@ -1,6 +1,6 @@
 """PyInstaller 진입 스크립트 — PC 실행기 ([ADR-0024](../docs/decisions/0024-desktop-packaging-extensions.md)).
 
-**콘솔 스크립트(`chk-bot-ui`)를 묶지 않는다** — PyInstaller는 모듈이 아니라 **스크립트 하나**를
+**콘솔 스크립트(`bpm-bot-ui`)를 묶지 않는다** — PyInstaller는 모듈이 아니라 **스크립트 하나**를
 받는다. 그래서 진입점을 부르는 얇은 파일을 둔다.
 
 **확장 옵션을 여기 적지 않는다.** `core`가 주는 PyInstaller 훅이 설치된 엔트리 포인트를 훑어

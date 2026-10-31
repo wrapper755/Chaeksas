@@ -1,6 +1,6 @@
 """패키지로 내보내기 — 작업 폴더 → C1 패키지 zip (STU-01 파일 메뉴).
 
-매니페스트는 **그림에서 모은다** — `chk:process`·각 태스크의 `chk:*`를 읽어 「무엇이 필요한가」를
+매니페스트는 **그림에서 모은다** — `bpm:process`·각 태스크의 `bpm:*`를 읽어 「무엇이 필요한가」를
 적는다. 사람이 두 번 적지 않게 (C14 §프로세스 수준: 「패키지 매니페스트는 빌드 때 이것을 모아
 만든다」).
 
@@ -70,7 +70,7 @@ def collect_requires(
 
     `definitions`를 주면 **그 정의들만** 본다 (공유 BPM 프로세스 패키지는 고른 정의만 담는다).
     `inside`는 「이 패키지 안에 있는 정의 id」로, 그 밖을 부르면 `libs`가 된다.
-    **PC 위임은 그 셈에서 빠진다** — `chk:call.delegate`가 붙은 호출은 `delegations`로 가고
+    **PC 위임은 그 셈에서 빠진다** — `bpm:call.delegate`가 붙은 호출은 `delegations`로 가고
     `libs`에 넣지 않는다 (복사해 넣는 것이 아니라 따로 배포된 BPM 프로세스이다, ADR-0062).
 
     `task_type_locations`는 확장 호스트가 주는 `{종류: [실행 위치]}`다
@@ -203,12 +203,12 @@ def collect_human(process: BpmProcess, *, definitions: Sequence[Definition] | No
 def collect_provides(definitions: Sequence[Definition]) -> Provides:
     """공유 BPM 프로세스 패키지가 제공하는 정의들 (C1 `provides.processes`). CON-06이 읽는다.
 
-    **`reads`·`writes`는 선언한 것이다** — `chk:process.inputs`·`outputs`를 그대로 옮긴다.
+    **`reads`·`writes`는 선언한 것이다** — `bpm:process.inputs`·`outputs`를 그대로 옮긴다.
     그림에서 어림하지 않는다: 확장 태스크가 만드는 변수는 플랫폼이 모르고(ADR-0018) 어림한 값을
-    「부르는 쪽이 줘야 하는 것」으로 보이면 거짓말이 된다. 호출(`chk:call`)의 받는 값을 검사하는
+    「부르는 쪽이 줘야 하는 것」으로 보이면 거짓말이 된다. 호출(`bpm:call`)의 받는 값을 검사하는
     B14도 **선언한 `outputs`**와 맞춰 보니 약속은 거기에 있다.
 
-    `description`은 비운다 — **정의마다** 설명 칸이 없다 (C14 `chk:process`). BPM 프로세스 전체의
+    `description`은 비운다 — **정의마다** 설명 칸이 없다 (C14 `bpm:process`). BPM 프로세스 전체의
     설명은 작업 폴더 기록에 있고 `build_manifest`가 그것을 싣는다 (STU-06).
     """
     out = []

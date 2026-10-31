@@ -29,7 +29,7 @@ from chaeksas.service_kit import (
     usage_of,
 )
 
-PREFIX = "CHK_SVC_DEMO__"
+PREFIX = "BPM_SVC_DEMO__"
 ADMIN = {"Authorization": "Bearer t-admin"}
 NOW = "2026-10-05T09:00:00+00:00"
 SECRET = "sk-" + "s" * 30

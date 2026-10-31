@@ -20,7 +20,7 @@ SERVICE = "chaeksas-bot-ui"
 
 #: Center API 키 (C4 — 「PC 실행기용」 종류). 개발·CI용 환경변수.
 CENTER_API_KEY = "center_api_key"
-ENV_CENTER_API_KEY = "CHK_BOT_UI__CENTER_API_KEY"
+ENV_CENTER_API_KEY = "BPM_BOT_UI__CENTER_API_KEY"
 
 #: 등록 요청에 쓴 키 쌍의 **비밀 반쪽** (C4 §등록 요청과 승인). 승인된 키와 회전한 키를 이것으로
 #: 연다. 환경변수 길은 없다 — 이것을 쓰는 것은 승인으로 들어온 PC뿐이다.
@@ -28,21 +28,21 @@ ENROLL_SECRET = "enroll_secret"
 
 #: 실행 프로세스에게 **첫** 호출 토큰을 물려주는 환경변수 (명령줄은 프로세스 목록에 뜬다).
 #: 새것은 제어 파일로 간다 (`core.control.CALL_TOKEN`).
-ENV_CALL_TOKEN = "CHK_BOT_UI__CALL_TOKEN"
+ENV_CALL_TOKEN = "BPM_BOT_UI__CALL_TOKEN"
 
 #: 모델 키 (ADR-0027). 실행 프로세스에게는 **환경변수로** 건넨다 (명령줄에 두지 않는다).
 LLM_API_KEY = "llm-api-key"
-ENV_LLM_API_KEY = "CHK_BOT_UI__LLM__API_KEY"
+ENV_LLM_API_KEY = "BPM_BOT_UI__LLM__API_KEY"
 
 #: SMTP 비밀번호 (BUI-03 「보내기」, ADR-0059). **설정 파일·명령줄에 넣지 않는다** —
 #: 실행 프로세스가 이 저장소에서 제 손으로 읽는다.
 SMTP_PASSWORD = "smtp-password"
-ENV_SMTP_PASSWORD = "CHK_BOT_UI__SMTP__PASSWORD"
+ENV_SMTP_PASSWORD = "BPM_BOT_UI__SMTP__PASSWORD"
 
 
 #: 확장 설정 칸의 이름 공간 (확장마다 가른다).
 EXTENSION_PREFIX = "ext:"
-ENV_EXTENSION_PREFIX = "CHK_BOT_UI__EXT__"
+ENV_EXTENSION_PREFIX = "BPM_BOT_UI__EXT__"
 
 
 def _env_name(text: str) -> str:

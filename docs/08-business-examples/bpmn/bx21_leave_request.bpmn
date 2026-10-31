@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx21_leave_request" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_leave_request" name="leave_request" />
   <bpmn:process id="Proc_bx21_leave_request" name="휴가 신청" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -50,7 +50,7 @@
       "description": "그룹웨어 회신 웹훅"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="휴가 신청">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -58,14 +58,14 @@
     </bpmn:startEvent>
     <bpmn:callActivity id="Call_Balance" name="잔여 휴가 (BX-24)" calledElement="Proc_bx24_leave_balance">
       <bpmn:extensionElements>
-        <chk:call>{
+        <bpm:call>{
   "input": {
     "사번": "사번"
   },
   "output": {
     "잔여": "잔여"
   }
-}</chk:call>
+}</bpm:call>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
@@ -77,7 +77,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Lead" name="팀장 결재">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "휴가 결재 (팀장)",
   "description": "",
   "show": [
@@ -101,7 +101,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
@@ -113,7 +113,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Head" name="부서장 결재">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "휴가 결재 (부서장)",
   "description": "",
   "show": [
@@ -132,7 +132,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
@@ -145,7 +145,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Register" name="근태 등록">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "hris",
   "operation": "register_leave",
   "input": {
@@ -156,17 +156,17 @@
   "output": {
     "등록": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Approved" name="승인 정리" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Approved" name="승인 정리" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_11</bpmn:incoming>
       <bpmn:outgoing>Flow_12</bpmn:outgoing>
       <bpmn:script>결과 = '승인'</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_Reject" name="반려 정리" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Reject" name="반려 정리" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_13</bpmn:outgoing>
@@ -174,13 +174,13 @@
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Reply" name="그룹웨어 회신">
       <bpmn:extensionElements>
-        <chk:webhook>{
+        <bpm:webhook>{
   "url": "{회신주소}",
   "method": "POST",
   "body": "fields:[신청번호, 결과]",
   "timeout_s": 10,
   "store_as": null
-}</chk:webhook>
+}</bpm:webhook>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:incoming>Flow_13</bpmn:incoming>

@@ -5,7 +5,7 @@
 않게 하려는 것이다. 칸은 **글자로 보이고 누르면 그 자리에서 고친다** (`_Edits`). 값 다루기는
 `variables.py`(Qt 없음)에 있다.
 
-**이 탭은 그림을 만지지 않는다** — 「적용」은 `chk:process` 본문을 `applying`으로 올리고 캔버스를
+**이 탭은 그림을 만지지 않는다** — 「적용」은 `bpm:process` 본문을 `applying`으로 올리고 캔버스를
 쥔 메인 창이 넘긴다 (ADR-0022 — 실행 취소가 한 걸음). 그림을 읽는 것도 메인 창이다
 (`show_definition`).
 """
@@ -201,7 +201,7 @@ class _Edits(_Rows):
 class VariablesTab(QWidget):
     """「변수」 탭. 메인 창이 `show_definition`·`show_values`로 채우고 `applying`을 받는다."""
 
-    #: 「적용」 — 캔버스에 넘길 `chk:process` 본문(JSON 글).
+    #: 「적용」 — 캔버스에 넘길 `bpm:process` 본문(JSON 글).
     applying = Signal(str)
 
     def __init__(self, parent: QWidget | None = None) -> None:

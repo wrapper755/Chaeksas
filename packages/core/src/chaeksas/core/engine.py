@@ -404,7 +404,7 @@ class Engine:
     def _step_children(self, run: Run) -> bool:
         """호출(`callActivity`)이 띄운 안쪽 실행을 한 걸음 민다. 민 것이 있으면 참.
 
-        안쪽이 끝나면 `chk:call.output`대로 값을 올려 보내고 바깥 토큰을 이어 간다.
+        안쪽이 끝나면 `bpm:call.output`대로 값을 올려 보내고 바깥 토큰을 이어 간다.
         안쪽이 실패하면 그 실패를 **호출 노드의 업무 실패**로 올린다 (오류 경계가 받는다).
         """
         for key, child in list(run.children.items()):
@@ -439,7 +439,7 @@ class Engine:
         return False
 
     def _collect_call(self, context: Context, child: Run) -> None:
-        """`chk:call.output` — **적은 것만** 올려 보낸다 (프로토타입의 「비면 전부」는 없앴다)."""
+        """`bpm:call.output` — **적은 것만** 올려 보낸다 (프로토타입의 「비면 전부」는 없앴다)."""
         run, node = context.run, context.node
         spec = node.prop("call")
         for variable, theirs in (spec.output if spec else {}).items():
@@ -519,7 +519,7 @@ class Engine:
                 )
             spec: DataOutput | None = target.prop("dataOutput")
             if spec is None:
-                continue  # `chk:dataOutput`이 없는 평범한 데이터 객체 — 쓸 것이 없다
+                continue  # `bpm:dataOutput`이 없는 평범한 데이터 객체 — 쓸 것이 없다
             if not spec.store_as:
                 raise EngineError(
                     f"{target.id}의 파일 출력에 store_as가 없다 (B5)", node_id=node.id, code="data_no_store"
@@ -910,7 +910,7 @@ class Engine:
         node = run.node(found.node_id)
         receive = node.prop("receive")
         if payload and receive is not None:
-            # **적은 이름만** 변수가 된다 (C14 `chk:receive.payload`).
+            # **적은 이름만** 변수가 된다 (C14 `bpm:receive.payload`).
             run.variables.update({k: v for k, v in payload.items() if k in receive.payload})
         return self._wake(run, found)
 
@@ -1138,7 +1138,7 @@ class Engine:
     ) -> State:
         """**PC 위임이 끝났다** — 결과를 받아 이어 간다 (C12 §PC 위임, ADR-0062).
 
-        `state`가 `finished`면 **`chk:call.output`이 적은 것만** 변수가 된다 (C14 — 적은 것만
+        `state`가 `finished`면 **`bpm:call.output`이 적은 것만** 변수가 된다 (C14 — 적은 것만
         오간다). 그 밖에는 **업무 실패**로 올려 오류 경계가 받게 한다 — PC 쪽이 실패·거절·
         만료된 것은 고쳐야 할 버그가 아니라 업무에서 일어난 일이다.
 
@@ -1173,7 +1173,7 @@ class Engine:
             )
             return self._handle_failure(context, error)
 
-        # **적은 것만 오간다** (C14 `chk:call.output` — `{내 변수: 그 BPM 프로세스의 출력}`).
+        # **적은 것만 오간다** (C14 `bpm:call.output` — `{내 변수: 그 BPM 프로세스의 출력}`).
         given = dict(outputs or {})
         mapping = spec.output if spec is not None else {}
         missing = [theirs for theirs in mapping.values() if theirs not in given]
@@ -1216,7 +1216,7 @@ class Engine:
     def external_done(self, run: Run, task_id: str, result: OpOutcome | ServiceCallError) -> State:
         """**넘겨받은 외부 작업이 끝났다** — 동기 호출과 **같은 규칙**으로 이어 간다 (ADR-0103 §3).
 
-        끝났으면 `chk:serviceCall.output`대로 담고, 실패면 `retry`가 받는 것은 다음 `attempt`로
+        끝났으면 `bpm:serviceCall.output`대로 담고, 실패면 `retry`가 받는 것은 다음 `attempt`로
         다시 올린다(또 오래 걸리면 또 기다린다). 다 실패하면 `TaskFailed` — 오류 경계가 받는다.
         """
         owner, waiting, token, node = self._external(run, task_id)

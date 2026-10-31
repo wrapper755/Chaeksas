@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 
 #: 모의 외부 앱의 토큰 환경변수. 주지 않으면 **아무 Bearer나** 받는다 (개발 편의).
 #: 비어 있는 Authorization은 그래도 거절한다 — 어댑터가 키를 싣는지 시험해야 한다.
-TOKEN_ENV = {"ext-credit": "CHK_MOCK_EXT_CREDIT__TOKEN", "ext-helpdesk": "CHK_MOCK_EXT_HELPDESK__TOKEN"}
+TOKEN_ENV = {"ext-credit": "BPM_MOCK_EXT_CREDIT__TOKEN", "ext-helpdesk": "BPM_MOCK_EXT_HELPDESK__TOKEN"}
 
 #: BX-35 「소량 120건」 — `나누기(VOC, 50)`이 3묶음이 되려면 101~150건이어야 한다.
 TICKET_COUNT = 120

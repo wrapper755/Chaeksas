@@ -38,7 +38,7 @@ class LlmError(RuntimeError):
 
 @dataclass(frozen=True)
 class ToolSpec:
-    """모델에게 알려 줄 도구 하나. 이름은 `chk:aiTask.tools`에 적힌 것이다."""
+    """모델에게 알려 줄 도구 하나. 이름은 `bpm:aiTask.tools`에 적힌 것이다."""
 
     name: str
     description: str = ""

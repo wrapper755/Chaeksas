@@ -156,7 +156,7 @@ def create(store: Store, found: Caller, raw: dict[str, Any]) -> tuple[Delegation
             {"bot_ui": request.bot_ui} if request.bot_ui else None,
         )
 
-    # **`requested_by`는 본문으로 가지 않는다** (C5 — 키 이름이나 `X-CHK-Actor`가 정한다).
+    # **`requested_by`는 본문으로 가지 않는다** (C5 — 키 이름이나 `X-BPM-Actor`가 정한다).
     # 위임은 Center가 **행위자를 바꿔** 부른다: `server_bot:<run_id>`(C5 예약값)이라 부르는
     # 쪽이 지어낼 수 없다.
     job, made = jobs_api.create(

@@ -44,7 +44,7 @@
 | [C11](C11-service-app-common.md) | 서비스 앱 공통 (일꾼 — healthz·manifest·작업 모양·수행 모드·멱등, 관리 콘솔 최소 기능) | 모든 서비스 앱(일꾼) → Center (C15) | **구현됨** | 없음 ([ADR-0010](../decisions/0010-service-apps.md), [ADR-0013](../decisions/0013-api-keys.md)) |
 | [C12](C12-server-runner-center.md) | Center API: 서버 실행기 (Center API 키 인증·등록·하트비트, 실행 중·기다리는 실행·대기열 보고, 일시 중지, 메시지, PC 위임 요청·결과) | 서버 실행기 ↔ Center | **구현됨** (M7) | 없음 ([ADR-0015](../decisions/0015-run-location.md)) |
 | [C13](C13-extension-manifest.md) | 확장 정의 (`extension.json`: 등급, 서버 부분, 기여 지점, 외부 앱 HTTP 어댑터) | 확장 → Studio·PC 실행기·실행기·서버 실행기·Center | **구현됨** | 없음 ([ADR-0018](../decisions/0018-extensions.md)) |
-| [C14](C14-bpmn-extensions.md) | BPMN 확장 속성 (`chk:*` — 태스크 종류별 속성, 반복·파일 출력·이벤트 규칙, 시험 케이스 형식·비교 규칙, 실행 전 검사 B1~B16) | Studio → 패키지 → 실행기·서버 실행기, Center 업로드 검사 | **구현됨** | Studio `agentworks:*` 확장 속성 ([업무 예제](../08-business-examples/README.md)가 이 형식으로 쓰였다) |
+| [C14](C14-bpmn-extensions.md) | BPMN 확장 속성 (`bpm:*` — 태스크 종류별 속성, 반복·파일 출력·이벤트 규칙, 시험 케이스 형식·비교 규칙, 실행 전 검사 B1~B16) | Studio → 패키지 → 실행기·서버 실행기, Center 업로드 검사 | **구현됨** | Studio `agentworks:*` 확장 속성 ([업무 예제](../08-business-examples/README.md)가 이 형식으로 쓰였다) |
 | [C15](C15-external-tasks.md) | Center API: 외부 작업 (올리기·기다리기·가져가기(롱폴링)·끝내기, 일꾼 들이기 — 바깥 기능을 부르는 길이 모두 Pull, [ADR-0102](../decisions/0102-calling-outside-is-pull.md)) | 서버 실행기·실행 프로세스·Studio → Center ← 일꾼 | **구현됨** | 없음 |
 | [C16](C16-staff-and-requests.md) | Center API: 직원·요청 (업무 주체 직원과 그 업무, 같은 회사 직원의 업무 요청 — 기다리기·맡기고 끝, 가상 직원을 대신한다, [ADR-0125](../decisions/0125-staff-own-work-and-request-each-other.md)) | 콘솔·연동용 키·서버 실행기 ↔ Center | **초안** | 없음 |
 

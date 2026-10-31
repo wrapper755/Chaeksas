@@ -108,8 +108,8 @@ def receive_key(client: TestClient, private: str, enrollment_id: str, *, kind: s
 def test_seal_opens_only_with_the_matching_private_key() -> None:
     private, public = new_keypair()
     other, _ = new_keypair()
-    sealed = seal(public, "chk_ctr_secret", salt="enr_x")
-    assert open_sealed(private, sealed, salt="enr_x") == "chk_ctr_secret"
+    sealed = seal(public, "bpm_ctr_secret", salt="enr_x")
+    assert open_sealed(private, sealed, salt="enr_x") == "bpm_ctr_secret"
     with pytest.raises(SealError):
         open_sealed(other, sealed, salt="enr_x")
     # 다른 자리의 봉함을 끼워도 열리지 않는다 (salt가 다르다).
@@ -158,7 +158,7 @@ def test_enroll_approve_register_end_to_end(client: TestClient, store: Store) ->
     decision = approve(client, pending.enrollment_id)
     assert decision["host_id"] is None and decision["replaced_key_id"] is None
     key = receive_key(client, private, pending.enrollment_id)
-    assert key.startswith("chk_ctr_")
+    assert key.startswith("bpm_ctr_")
 
     response = client.post(
         "/api/v1/bot-ui/register", json=bot_body(public), headers={"Authorization": f"Bearer {key}"}
@@ -304,7 +304,7 @@ def test_a_bundled_runner_is_approved_on_the_spot(joined: TestClient, store: Sto
     """같이 배포된 실행기 — 답이 곧 `approved`이고 봉함이 실려 있다. 「승인 대기」에 줄이 없다."""
     private, public = new_keypair()
     response = joined.post(
-        "/api/v1/server-runner/enroll", json=runner_body(public), headers={"X-CHK-Join-Token": JOIN}
+        "/api/v1/server-runner/enroll", json=runner_body(public), headers={"X-BPM-Join-Token": JOIN}
     )
     assert response.status_code == 201, response.text
     status = EnrollStatus.model_validate(response.json())
@@ -322,7 +322,7 @@ def test_a_bundled_runner_is_approved_on_the_spot(joined: TestClient, store: Sto
     # 볼륨을 잃고 다시 와도 들어온다 — 같은 기계의 자리를 이어받는다.
     _, public2 = new_keypair()
     second = joined.post(
-        "/api/v1/server-runner/enroll", json=runner_body(public2), headers={"X-CHK-Join-Token": JOIN}
+        "/api/v1/server-runner/enroll", json=runner_body(public2), headers={"X-BPM-Join-Token": JOIN}
     ).json()
     assert second["state"] == "approved"
 
@@ -331,7 +331,7 @@ def test_a_wrong_join_token_is_refused_without_a_pending_row(joined: TestClient,
     _, public = new_keypair()
     for app, value in ((joined, "x" * 43), (client, JOIN)):  # 다르다 / Center에 없다
         response = app.post(
-            "/api/v1/server-runner/enroll", json=runner_body(public), headers={"X-CHK-Join-Token": value}
+            "/api/v1/server-runner/enroll", json=runner_body(public), headers={"X-BPM-Join-Token": value}
         )
         assert response.status_code == 403 and response.json()["code"] == "join_token_invalid"
     assert joined.get("/api/v1/enrollments?type=server_runner", headers=READ).json() == []

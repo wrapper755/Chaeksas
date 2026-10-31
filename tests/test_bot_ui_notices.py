@@ -187,7 +187,7 @@ def agent_with(tmp_path: Path, *, client: Any = None) -> Agent:
     return Agent(
         settings=Settings(center_url="http://center.test"),
         store=Store.load(tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_test"),
+        credentials=FakeCredentials("bpm_ctr_test"),
         client_factory=(lambda _url, _key: client) if client is not None else None,
     )
 

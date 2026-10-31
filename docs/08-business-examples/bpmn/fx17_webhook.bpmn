@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx17_webhook" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:error id="Err_SEND_FAILED" name="SEND_FAILED" errorCode="SEND_FAILED" />
   <bpmn:process id="Proc_fx17_webhook" name="웹훅 보내기" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -21,12 +21,12 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Make" name="보낼 값" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Make" name="보낼 값" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:script>건수 = 3
@@ -34,18 +34,18 @@
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Hook" name="보내기">
       <bpmn:extensionElements>
-        <chk:webhook>{
+        <bpm:webhook>{
   "url": "{대상주소}",
   "method": "POST",
   "body": "fields:[건수, 상태]",
   "timeout_s": 10,
   "store_as": "응답"
-}</chk:webhook>
+}</bpm:webhook>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:scriptTask id="Task_Fail" name="실패" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Fail" name="실패" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:script>실패 = error_message</bpmn:script>

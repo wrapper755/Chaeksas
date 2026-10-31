@@ -2,12 +2,12 @@
 
 클라이언트는 `chaeksas.llm` 하나다 (엔진과 같은 것). 여기서 더하는 것은 서비스 앱의 몫뿐이다.
 
-- **설정은 환경변수로만** 받는다 (`CHK_SVC_<APP>__LLM__*`). 키는 비밀이라 코드·파일에 두지 않는다.
+- **설정은 환경변수로만** 받는다 (`BPM_SVC_<APP>__LLM__*`). 키는 비밀이라 코드·파일에 두지 않는다.
 - 연결되지 않았는데 모델이 필요한 작업이 불리면 **503 `llm_unavailable`** — 지어낸 답을 주지 않는다.
 - 부르다 실패하면 C11 오류로 옮긴다: 잠깐 막힌 것은 `dependency_down`, 그 밖은 `llm_unavailable`.
 - 관리 상태에 `llm` 의존 한 줄을 준다. **키 값·주소는 보이지 않는다.**
 
-    llm = ServiceLlm.from_env("CHK_SVC_UI_AUTOMATION__")
+    llm = ServiceLlm.from_env("BPM_SVC_UI_AUTOMATION__")
     app = create_app(manifest, handlers, keys=store, llm=llm)
 
     def heal(request):
@@ -36,7 +36,7 @@ DEPENDENCY_DOWN = "dependency_down"
 
 @dataclass(frozen=True)
 class LlmSettings:
-    """`CHK_SVC_<APP>__LLM__*`에서 읽은 것. **주소와 모델 이름이 둘 다 있어야** 연결이다."""
+    """`BPM_SVC_<APP>__LLM__*`에서 읽은 것. **주소와 모델 이름이 둘 다 있어야** 연결이다."""
 
     base_url: str = ""
     model: str = ""
@@ -54,7 +54,7 @@ class LlmSettings:
 
     @classmethod
     def from_env(cls, prefix: str, environ: Mapping[str, str] | None = None) -> LlmSettings:
-        """`prefix`는 앱의 접두사 그대로다 (`CHK_SVC_UI_AUTOMATION__`).
+        """`prefix`는 앱의 접두사 그대로다 (`BPM_SVC_UI_AUTOMATION__`).
 
         시간이 숫자가 아니면 **띄울 때 멈춘다** — 틀린 설정으로 조용히 기본값을 쓰지 않는다.
         """
@@ -117,7 +117,7 @@ class ServiceLlm:
         if self.client is None:
             raise OpError(
                 LLM_UNAVAILABLE,
-                "이 앱에 모델이 설정되지 않았다 (CHK_SVC_<APP>__LLM__BASE_URL·MODEL)",
+                "이 앱에 모델이 설정되지 않았다 (BPM_SVC_<APP>__LLM__BASE_URL·MODEL)",
                 status=503,
             )
         try:

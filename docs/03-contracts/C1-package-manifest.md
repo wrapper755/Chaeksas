@@ -18,7 +18,7 @@
 - 방식: 파일. 패키지 zip 루트의 `manifest.json` (UTF-8, LF). 업로드는 C5.
 - 인증: 해당 없음 (패키지 자체는 C2 서명 봉투로 보호).
 - 멱등성: 같은 `id`+`version`·같은 `content_hash`를 다시 올리면 200 (재시도 안전). 내용이 다르면 409 (C5) → 버전을 올린다.
-- 크기 한도: `manifest.json` 256 KB, 패키지 zip 50 MB (Center 설정 `CHK_CENTER__PACKAGE__MAX_MB`).
+- 크기 한도: `manifest.json` 256 KB, 패키지 zip 50 MB (Center 설정 `BPM_CENTER__PACKAGE__MAX_MB`).
 
 ### 패키지 구성
 
@@ -52,7 +52,7 @@
 | `triggers` | Trigger[] | | 시작 방법 | 1 |
 | `requires` | Requires | ✓ | 실행에 필요한 것 (아래) | 1 |
 | `human` | HumanNeeds | ✓ | 사람 개입 종류 (서버 검사에 씀) | 1 |
-| `inputs` | ManifestInput[] | | 진입 정의가 받는 입력 (`chk:process.inputs`를 그대로 옮긴 것 — `source?` 포함). 작업을 만드는 화면(CON-05)이 입력 칸을 그린다(**`source`가 있는 입력은 그리지 않는다** — Center가 넣는다). Center는 `source`가 있는 이름이 작업 `inputs`에 오면 거절한다(C5 `input_not_from_caller`, [ADR-0099](../decisions/0099-input-value-source.md)). 실행하는 쪽은 이것이 아니라 BPMN을 본다 | 1 |
+| `inputs` | ManifestInput[] | | 진입 정의가 받는 입력 (`bpm:process.inputs`를 그대로 옮긴 것 — `source?` 포함). 작업을 만드는 화면(CON-05)이 입력 칸을 그린다(**`source`가 있는 입력은 그리지 않는다** — Center가 넣는다). Center는 `source`가 있는 이름이 작업 `inputs`에 오면 거절한다(C5 `input_not_from_caller`, [ADR-0099](../decisions/0099-input-value-source.md)). 실행하는 쪽은 이것이 아니라 BPMN을 본다 | 1 |
 | `outputs` | str[] | | 실행이 끝나면 만드는 변수 이름 | 1 |
 | `provides` | Provides | `process_lib`만 | 제공하는 BPM 프로세스 목록 | 1 |
 | `built` | Built | ✓ | 누가 언제 무엇으로 빌드했나 | 1 |
@@ -81,7 +81,7 @@
 | `extensions` | `{id, version, definition_hash?}`[] | 쓰는 확장과 버전 범위 (C13). 외부 확장이면 `definition_hash`로 정의를 고정한다. Studio가 채운다 |
 | `task_types` | `{id, extension, run_locations?}`[] | 쓰는 태스크 종류 중 **확장이 기여한 것**과, 그 확장 정의에 적힌 실행 위치. Studio가 빌드할 때 확장 정의에서 옮겨 적는다. Center는 이것으로 R2를 판정하고, 실행하는 쪽은 자기 확장 정의로 다시 확인한다. **`run_locations`는 아는 쪽이 준다 — 모르면 넣지 않는다**: 빌드하는 PC에 그 확장이 깔려 있지 않거나 꺼져 있으면(ADR-0043) 적을 값이 없다 |
 | `libs` | str[] | 복사해 넣은 공유 BPM 프로세스 `<id>@<version>` |
-| `delegations` | str[] | **PC 위임**으로 부르는 PC BPM 프로세스 `<id>@<version>` 또는 `<id>`(판을 비우면 배포된 판). 복사해 넣는 것이 **아니다** — 따로 올리고 따로 배포한 BPM 프로세스라 `libs/`에 들어가지 않는다 ([ADR-0062](../decisions/0062-pc-delegation.md)). Studio가 그림(`chk:call.delegate`)에서 모은다 |
+| `delegations` | str[] | **PC 위임**으로 부르는 PC BPM 프로세스 `<id>@<version>` 또는 `<id>`(판을 비우면 배포된 판). 복사해 넣는 것이 **아니다** — 따로 올리고 따로 배포한 BPM 프로세스라 `libs/`에 들어가지 않는다 ([ADR-0062](../decisions/0062-pc-delegation.md)). Studio가 그림(`bpm:call.delegate`)에서 모은다 |
 | `runtimes` | str[] | 예: `node>=20`, `chromium` |
 | `os` | str[] | `windows` `linux`. 비면 제한 없음 |
 
@@ -154,7 +154,7 @@ Studio(빌드 때), Center(업로드 때), PC 실행기·서버 실행기(설치
 **R7은 없어졌다** — 툴팩 해시를 검사하던 규칙이고 툴팩 갈래가 사라졌다 ([ADR-0050](../decisions/0050-no-toolpack-kind.md)). **번호는 다시 쓰지 않는다** (오류 코드는 사람이 기억한다).
 | R9 | `triggers[].kind`가 위 다섯 중 하나다 | 422 `unknown_trigger_kind` + 걸린 값 목록 |
 | R10 | `requires.delegations`가 있으면 `run_location=server`다 — **PC 위임은 서버 BPM 프로세스만 한다** (PC 실행은 그 PC의 자리를 끝까지 쥐므로 PC가 PC를 기다리면 서로를 기다린다, [ADR-0014](../decisions/0014-one-bot-per-pc.md)). C14 B14가 그림에서 같은 것을 보지만 **매니페스트를 보는 쪽은 그림을 읽지 않는다** | 422 `delegation_not_from_pc` + 걸린 BPM 프로세스 목록 |
-| R11 | `requires.settings`가 아는 값 중 하나다 (`llm`·`vlm`·`smtp`) — **R9와 같은 까닭**이다: 그림에서 기계가 옮기는 값이고(`chk:email` → `smtp`) 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다(`core.preflight`). 모르는 이름은 그 점검을 **아무 말 없이 지나가** 준비되지 않은 BPM 프로세스가 실행된다 | 422 `unknown_setting` + 걸린 값 목록 |
+| R11 | `requires.settings`가 아는 값 중 하나다 (`llm`·`vlm`·`smtp`) — **R9와 같은 까닭**이다: 그림에서 기계가 옮기는 값이고(`bpm:email` → `smtp`) 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다(`core.preflight`). 모르는 이름은 그 점검을 **아무 말 없이 지나가** 준비되지 않은 BPM 프로세스가 실행된다 | 422 `unknown_setting` + 걸린 값 목록 |
 | R12 | `requires.delegations`에 **자기 `id`가 없다** — 자기 자신에게 위임하지 않는다 (끝나지 않는 되부름이다, [ADR-0082](../decisions/0082-batch-start.md)). 그림은 자기 패키지 id를 모르므로 매니페스트가 본다 | 422 `delegation_to_self` + 그 항목 |
 | R13 | `triggers[kind=timer].expression`을 **Center가 읽을 수 있다** — 5필드 cron(`*`·수·`a-b`·`/n`·쉼표, 일 칸 `L`, 요일 0~7) 또는 ISO `R[n]/<시작>/<기간>`·`R[n]/<기간>`(1분 이상). **R9와 같은 까닭**이다: 일정은 Center가 이 식으로 쓰므로(C5 §일정) 읽지 못하는 식은 그 BPM 프로세스를 **아무 말 없이 영영 돌지 않게** 한다. 읽는 함수는 `contracts.schedule` 하나다 ([ADR-0110](../decisions/0110-center-keeps-the-schedule.md)) | 422 `timer_expression_invalid` + 걸린 식과 까닭 |
 

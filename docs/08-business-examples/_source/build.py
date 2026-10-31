@@ -130,7 +130,7 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
     if sorted({n.props["called"].removeprefix("Proc_") for n in plain}) != sorted(set(e.called)):
         errs.append(f"{e.id}: called 목록과 호출 노드가 다름")
 
-    # **PC 위임 ↔ 대상 BPM 프로세스** (C14 `chk:call.delegate`, ADR-0062) — 대상은 다른 패키지라 플랫폼
+    # **PC 위임 ↔ 대상 BPM 프로세스** (C14 `bpm:call.delegate`, ADR-0062) — 대상은 다른 패키지라 플랫폼
     # 검사는 들여다보지 않지만, 여기서는 **대상도 예제**라 짝을 맞춰 볼 수 있다. 이 자리가
     # 그래야 하는 까닭: 패키지 id는 **글자로만 가리키는 자리**라 틀려도 실행할 때까지 숨는다
     # (BX-16이 파일 이름을 적어 두었던 일 — 그 예제의 「배운 것」에 있다).
@@ -325,7 +325,7 @@ def coverage(examples: list[Example]) -> list[str]:
         ("결재 (userTask)", has("appr")), ("수동 확인 (manualTask)", has("manual")),
         ("메일 보내기", has("mail")), ("웹훅 보내기", has("hook")), ("메시지 받기 (receiveTask)", has("recv")),
         ("BPM 프로세스 호출", lambda e: any(n.kind == "call" and not n.props.get("delegate") for n in nodes(e))),
-        ("위임 (`chk:call.delegate`)", lambda e: any(n.kind == "call" and n.props.get("delegate") for n in nodes(e))),
+        ("위임 (`bpm:call.delegate`)", lambda e: any(n.kind == "call" and n.props.get("delegate") for n in nodes(e))),
         ("일괄 기동 (반복 위임)", lambda e: any(n.kind == "call" and n.props.get("delegate") and n.props.get("loop") for n in nodes(e))),
         ("하위 프로세스", has("sub")),
         ("배타 게이트웨이", has("xgw")), ("포함 게이트웨이", has("igw")), ("병렬 게이트웨이", has("pgw")),
@@ -341,7 +341,7 @@ def coverage(examples: list[Example]) -> list[str]:
             for fmt in ("md", "txt", "csv", "json", "xlsx")
         ],
         ("파일 출력 — 덧붙이기 (`append`)", lambda e: any(d.props.get("append") for d in e.data)),
-        ("파일 목록 (`chk:fileList`)", has("flist")),
+        ("파일 목록 (`bpm:fileList`)", has("flist")),
     ]
     plat_rows = [
         ("실행 위치 서버", lambda e: e.run_location == "server"), ("실행 위치 PC", lambda e: e.run_location == "pc"),

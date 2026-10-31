@@ -4,13 +4,13 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx11_bid_collection" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_bid_cancelled" name="bid_cancelled" />
   <bpmn:message id="Msg_bid_quote" name="bid_quote" />
   <bpmn:process id="Proc_bx11_bid_collection" name="입찰 접수와 마감" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -48,32 +48,32 @@
       "default": []
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="공고 발행">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:receiveTask id="Recv_Quote" name="견적 받기" messageRef="Msg_bid_quote">
       <bpmn:extensionElements>
-        <chk:receive>{
+        <bpm:receive>{
   "correlation": "입찰번호",
   "payload": [
     "견적"
   ]
-}</chk:receive>
+}</bpm:receive>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:receiveTask>
-    <bpmn:scriptTask id="Task_Record" name="견적 기록" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Record" name="견적 기록" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>견적목록 = 견적목록 + [견적]
 응찰사메일 = 응찰사메일 + [견적.회신메일]
 응찰수 = len(견적목록)</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_Close" name="접수 마감" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Close" name="접수 마감" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:script>응찰수 = len(견적목록)</bpmn:script>
@@ -85,7 +85,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Compare" name="견적 비교표">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`견적목록`은 공급사별 견적이다 (단가, 납기, 조건). `품목`은 공고 품목이다.\n\n## 할 일\n품목별로 견적을 비교하는 표를 만들고, 가격·납기·조건의 장단점을 한 줄씩 적는다.\n\n## 판단하지 않는 것\n낙찰사를 정하지 않는다. 견적에 없는 값을 추정하지 않는다.\n\n## 반환\n- `비교표`: markdown 표 문자열\n- `요약`: string",
   "domain": "llm",
   "results": {
@@ -94,7 +94,7 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
@@ -104,7 +104,7 @@
     </bpmn:serviceTask>
     <bpmn:userTask id="Approve_Award" name="낙찰사 선택">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "낙찰사 선택",
   "description": "",
   "show": [
@@ -127,14 +127,14 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sendTask id="Task_NotifyAward" name="결과 통보">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{응찰사메일}"
   ],
@@ -142,7 +142,7 @@
   "body": "낙찰사: {낙찰사}",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
@@ -155,7 +155,7 @@
     </bpmn:endEvent>
     <bpmn:sendTask id="Task_NotifyCancel" name="취소 통보">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{응찰사메일}"
   ],
@@ -163,7 +163,7 @@
   "body": "공고가 취소되었습니다.",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_11</bpmn:incoming>
       <bpmn:outgoing>Flow_12</bpmn:outgoing>
@@ -180,9 +180,9 @@
     </bpmn:boundaryEvent>
     <bpmn:boundaryEvent id="Bnd_Cancel" name="입찰 취소" attachedToRef="Recv_Quote">
       <bpmn:extensionElements>
-        <chk:receive>{
+        <bpm:receive>{
   "correlation": "입찰번호"
-}</chk:receive>
+}</bpm:receive>
       </bpmn:extensionElements>
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
       <bpmn:messageEventDefinition messageRef="Msg_bid_cancelled" />
@@ -204,12 +204,12 @@
     <bpmn:dataObject id="DO_Data_Compare" />
     <bpmn:dataObjectReference id="Data_Compare" name="비교표" dataObjectRef="DO_Data_Compare">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "입찰/{입찰번호}_비교.md",
   "format": "md",
   "store_as": "비교표경로",
   "template": "# {입찰번호} 견적 비교\n\n{비교표}\n\n{요약}"
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

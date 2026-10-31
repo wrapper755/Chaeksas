@@ -275,7 +275,7 @@ def test_a_filled_none_still_passes_validation_for_optional_fields() -> None:
 
 
 def test_assignees_are_normalized_once_for_every_comparison() -> None:
-    """담당자·`?assignee=`·`X-CHK-On-Behalf-Of`가 같은 함수를 거쳐야 같은 이름이 같게 보인다."""
+    """담당자·`?assignee=`·`X-BPM-On-Behalf-Of`가 같은 함수를 거쳐야 같은 이름이 같게 보인다."""
     decomposed = "\u1100\u1161\u11b7"  # 「감」을 자모로 쪼갠 것
     assert normalize_name(f"  {decomposed}독 ") == "감독"
     assert normalize_assignees(["김감독", " 김감독", "", "이감독"]) == ["김감독", "이감독"]

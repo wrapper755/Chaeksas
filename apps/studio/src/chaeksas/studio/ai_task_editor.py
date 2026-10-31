@@ -1,13 +1,13 @@
-"""STU-04 AI 태스크 편집기 — `chk:aiTask` (C14 §AI 태스크, ADR-0008·ADR-0028).
+"""STU-04 AI 태스크 편집기 — `bpm:aiTask` (C14 §AI 태스크, ADR-0008·ADR-0028).
 
-속성 패널이 `chk:aiTask`가 있는 태스크를 만나면 탭으로 끼운다. **규약은 결재·보내기·STU-14와 같다**
+속성 패널이 `bpm:aiTask`가 있는 태스크를 만나면 탭으로 끼운다. **규약은 결재·보내기·STU-14와 같다**
 (`load`/`dump`/`problems`/`changed`).
 
 - **적어 둔 것을 조용히 바꾸지 않는다.** 편집기가 다루지 않는 칸(`web` — 계약에 있지만 웹 환경을 주는
   확장이 없다)은 읽은 그대로 돌려준다.
 - 「지시문」(`forbidden_actions`·`confirm_triggers`)과 「제한 시간」(`limits.timeout_s`)은 엔진이 읽는다
   ([ADR-0105](../../../../docs/decisions/0105-ai-task-limits-and-instructions.md)) — 금지 행동은 **모델에게
-  주는 말일 뿐**이라 화면도 그렇게 말한다. 비우면 BPM 프로세스 기본값(`chk:defaults`)을 따른다.
+  주는 말일 뿐**이라 화면도 그렇게 말한다. 비우면 BPM 프로세스 기본값(`bpm:defaults`)을 따른다.
   업무 파라미터도 그 줄을 고치지 않았으면 **읽은 값 그대로** 간다(글로 보였다 되읽으면 모양이 바뀔 수 있다).
 - 「적용」을 막는 것은 **엔진·검사가 거부할 것**뿐이다 — 결과 이름(빈 칸·겹침·변수 규칙, B8 타입),
   업무 파라미터(빈 이름·겹침·타입에 맞지 않는 값), 도구 없는 `replay: full`(B12), 서버에서 웹·데스크톱(B6).
@@ -155,7 +155,7 @@ class AiTaskEditor(QWidget):
         self.node_id = node_id
         #: 시험 실행 중인가 — 그동안은 「명세 잊기」를 끈다.
         self.running = running
-        #: 이 노드의 반복 항목 (`chk:loop.item`) — 목표에 없어도 모델에게 간다.
+        #: 이 노드의 반복 항목 (`bpm:loop.item`) — 목표에 없어도 모델에게 간다.
         self.loop_item = loop_item
         self._loaded: dict[str, Any] = {}
         self._quiet = False
@@ -410,7 +410,7 @@ class AiTaskEditor(QWidget):
     # ── 규약 ──
 
     def load(self, body: Mapping[str, Any]) -> None:
-        """그림에 적힌 `chk:aiTask`를 그린다 (없으면 빈 것)."""
+        """그림에 적힌 `bpm:aiTask`를 그린다 (없으면 빈 것)."""
         self._quiet = True
         self._loaded = dict(body)
         self.goal_box.setPlainText(str(body.get("goal") or ""))
@@ -458,7 +458,7 @@ class AiTaskEditor(QWidget):
         self._refresh()
 
     def dump(self) -> dict[str, Any]:
-        """`chk:aiTask` 본문 — **읽은 것 위에** 고친 칸만 얹는다."""
+        """`bpm:aiTask` 본문 — **읽은 것 위에** 고친 칸만 얹는다."""
         out = dict(self._loaded)
         out["goal"] = self.goal_box.toPlainText()
         out["domain"] = self.domain() or str(self._loaded.get("domain") or "")
@@ -494,7 +494,7 @@ class AiTaskEditor(QWidget):
             warnings.append("목표가 비어 있습니다.")
         if domain == "desktop" and not self.app_box.text().strip():
             warnings.append(
-                "띄울 앱이 없습니다 — BPM 프로세스 기본값(chk:defaults.desktop.app)에도 없으면 실행 때 업무 실패입니다."
+                "띄울 앱이 없습니다 — BPM 프로세스 기본값(bpm:defaults.desktop.app)에도 없으면 실행 때 업무 실패입니다."
             )
         others = [name for name in self.tools() if name not in self._builtin]
         if others:

@@ -83,7 +83,7 @@ class TaskContext:
     run_location: str = RUN_LOCATION_PC
     #: 태스크 입력 (BPM 프로세스 변수에서 꺼낸 것).
     inputs: Mapping[str, Any] = field(default_factory=dict)
-    #: BPMN `chk:*` 확장 속성 (C14) — 태스크 종류가 정한 모양이다.
+    #: BPMN `bpm:*` 확장 속성 (C14) — 태스크 종류가 정한 모양이다.
     properties: Mapping[str, Any] = field(default_factory=dict)
     #: UI 세션처럼 실행을 잇는 키 (C10).
     business_key: str | None = None

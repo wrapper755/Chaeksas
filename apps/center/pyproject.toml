@@ -17,7 +17,7 @@ dependencies = [
 chaeksas-contracts = { workspace = true }
 
 [project.scripts]
-chk-center = "chaeksas.center.__main__:main"
+bpm-center = "chaeksas.center.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

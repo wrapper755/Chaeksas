@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx18_parallel_loop" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx18_parallel_loop" name="병렬 반복" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -25,14 +25,14 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Check" name="상태 확인">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "web-reader",
   "operation": "head",
   "input": {
@@ -41,19 +41,19 @@
   "output": {
     "상태": "status"
   }
-}</chk:serviceCall>
-        <chk:loop>{
+}</bpm:serviceCall>
+        <bpm:loop>{
   "collection": "주소목록",
   "item": "주소",
   "result": "상태",
   "collect_into": "상태목록"
-}</chk:loop>
+}</bpm:loop>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="false" />
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Count" name="정상 수" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Count" name="정상 수" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>정상 = len([s for s in 상태목록 if s == 200])</bpmn:script>

@@ -47,11 +47,11 @@ class TaskEditor(Protocol):
         ...
 
     def load(self, properties: Mapping[str, Any]) -> None:
-        """BPMN `chk:*` 속성(C14)을 칸에 채운다."""
+        """BPMN `bpm:*` 속성(C14)을 칸에 채운다."""
         ...
 
     def dump(self) -> Mapping[str, Any]:
-        """칸의 값을 BPMN `chk:*` 속성으로 돌려준다."""
+        """칸의 값을 BPMN `bpm:*` 속성으로 돌려준다."""
         ...
 
 

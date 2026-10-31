@@ -4,13 +4,13 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx10_operator_routing" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_work_request" name="work_request" />
   <bpmn:error id="Err_TASK_FAILED" name="TASK_FAILED" errorCode="TASK_FAILED" />
   <bpmn:process id="Proc_fx10_operator_routing" name="요청 라우팅 (운영 비서)" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -33,7 +33,7 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="요청">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -41,7 +41,7 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Triage" name="분류">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`요청`은 직원 메시지다.\n\n## 할 일\nintent를 exchange_rate | answer | web_summary 중 하나로.\n\n## 판단하지 않는 것\n요청을 처리하지 않는다.\n\n## 반환\n- `intent`: string",
   "domain": "llm",
   "results": {
@@ -49,7 +49,7 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
@@ -62,7 +62,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Rate" name="환율 조회">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n직원이 환율을 물었다. 공개 환율 API(업무 파라미터 `주소`)를 쓴다.\n\n## 할 일\nUSD/KRW 환율을 조회해 한 문장으로 답한다.\n\n## 판단하지 않는 것\n환율 전망·투자 조언을 하지 않는다.\n\n## 반환\n- `답`: string",
   "domain": "api",
   "results": {
@@ -74,14 +74,14 @@
   "params": {
     "주소": "https://api.frankfurter.dev/v1/latest?base=USD&amp;symbols=KRW"
   }
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Answer" name="답변">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`요청`은 직원 메시지다.\n\n## 할 일\n`요청`에 짧게 답한다.\n\n## 판단하지 않는 것\n사내 정책·규정은 지어내지 않는다 — 모르면 모른다고 답한다.\n\n## 반환\n- `답`: string",
   "domain": "llm",
   "results": {
@@ -89,14 +89,14 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Web" name="웹 요약">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "web-reader",
   "operation": "summarize_url",
   "input": {
@@ -105,12 +105,12 @@
   "output": {
     "답": "summary"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Fail" name="실패 답" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Fail" name="실패 답" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:incoming>Flow_11</bpmn:incoming>
@@ -119,13 +119,13 @@
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Reply" name="회신">
       <bpmn:extensionElements>
-        <chk:webhook>{
+        <bpm:webhook>{
   "url": "{회신주소}",
   "method": "POST",
   "body": "fields:[답]",
   "timeout_s": 10,
   "store_as": null
-}</chk:webhook>
+}</bpm:webhook>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:incoming>Flow_07</bpmn:incoming>

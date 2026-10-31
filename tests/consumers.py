@@ -106,7 +106,7 @@ def mock_fleet(
 ) -> list[threading.Event]:
     """업무 예제가 부르는 모의 앱을 **일꾼으로** 붙인다 (C15) — 묶음 시험이 함께 쓴다.
 
-    - C11 모의 앱들(`built` — `mock_apps.c11.Built`)은 **일꾼 하나**가 토픽 여럿을 맡는다 (`chk-mock-apps`와 같다).
+    - C11 모의 앱들(`built` — `mock_apps.c11.Built`)은 **일꾼 하나**가 토픽 여럿을 맡는다 (`bpm-mock-apps`와 같다).
     - 외부 모의 앱(`external_ids`)은 **어댑터 일꾼**이 맡고 **제 정의를 올린다**(ADR-0122) — `definitions`가
       그 정의들이다. 127.0.0.1을 부르므로 사설망을 열고, 키는 아무 글이나 받는 모의라 `dev-key`를 준다.
 
@@ -128,7 +128,7 @@ def mock_fleet(
         stops.append(start(services, center_url=center_url, tokens=tokens)[1])
     if external_ids:
         tokens = enroll(http, topics=list(external_ids), name="어댑터 일꾼", folder=folder / "adapter")
-        environ = {"CHK_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"}
+        environ = {"BPM_ADAPTER__ALLOW_PRIVATE_NETWORK": "1"}
         environ |= {ext_env(one, "KEY"): "dev-key" for one in external_ids}
         adapters = [service_of(one, environ=environ) for one in definitions]
         assert {one.app_id for one in adapters} == set(external_ids), "외부 정의가 맡은 토픽과 다르다"

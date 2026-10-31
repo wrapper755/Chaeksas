@@ -1,4 +1,4 @@
-"""실행 프로세스 — **BPM 프로세스 하나를 돌리는 자식 프로세스** (ADR-0023, 진입점 `chk-bot-runner`).
+"""실행 프로세스 — **BPM 프로세스 하나를 돌리는 자식 프로세스** (ADR-0023, 진입점 `bpm-bot-runner`).
 
 PC 실행기는 이것을 띄우기만 하고 기다리지 않는다. 주고받는 길은 파일 한 벌이다 (ADR-0031).
 
@@ -314,7 +314,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    parser = argparse.ArgumentParser(prog="chk-bot-runner", description="BPM 프로세스 하나를 돌린다")
+    parser = argparse.ArgumentParser(prog="bpm-bot-runner", description="BPM 프로세스 하나를 돌린다")
     parser.add_argument("--package", required=True, type=Path, help="풀어 놓은 패키지 폴더")
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--data-dir", required=True, type=Path)
@@ -383,7 +383,7 @@ def main(argv: list[str] | None = None) -> int:
             readable=tuple(found.readable),
             writable=tuple(found.writable),
             llm_url=found.llm_url,
-            llm_key=os.environ.get("CHK_BOT_UI__LLM__API_KEY", ""),
+            llm_key=os.environ.get("BPM_BOT_UI__LLM__API_KEY", ""),
             llm_model=found.llm_model,
             extensions=extension_tasks(
                 json.loads(found.extensions.read_text(encoding="utf-8")) if found.extensions else {},
@@ -396,7 +396,7 @@ def main(argv: list[str] | None = None) -> int:
             if found.center_url
             else None,
             # 보내기 — **서버 실행기와 같은 함수**가 짓는다 (ADR-0059). 설정이 비면
-            # `chk:email`·`chk:webhook`이 **보내지 않고 실패한다**.
+            # `bpm:email`·`bpm:webhook`이 **보내지 않고 실패한다**.
             sender=make_sender(
                 smtp=SmtpConfig(
                     host=found.smtp_host,

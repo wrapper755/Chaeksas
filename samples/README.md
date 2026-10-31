@@ -10,7 +10,7 @@
 `pyproject.toml` 열다섯 개로 쪼개지 않는다.
 
 **아무 멤버도 `samples/`를 의존하지 않는다** (`tests/test_import_direction.py`가 막는다).
-쓰는 쪽은 `tests/`와 사람이 띄우는 `chk-mock-apps`뿐이다.
+쓰는 쪽은 `tests/`와 사람이 띄우는 `bpm-mock-apps`뿐이다.
 
 ## 두 종류다
 
@@ -18,9 +18,9 @@
 | --- | --- | --- |
 | 무엇인가 | 사내 확장의 **서버 부분** | 우리 계약을 모르는 **남의 API** 흉내 |
 | 뼈대 | `packages/service_kit` (C11) | 없다 — 평범한 FastAPI |
-| 붙는 길 | **일꾼**으로 Center에서 일감을 가져간다 (C15, `service_kit.consumer`) | **어댑터 일꾼**(`chk-adapter-consumer`)이 HTTP 어댑터로 부른다 (C13 §4·C15) |
+| 붙는 길 | **일꾼**으로 Center에서 일감을 가져간다 (C15, `service_kit.consumer`) | **어댑터 일꾼**(`bpm-adapter-consumer`)이 HTTP 어댑터로 부른다 (C13 §4·C15) |
 | Center에 어떻게 아는가 | 일꾼이 뜰 때 **manifest를 올린다** (C15 — 일꾼은 Center 일꾼 폴더의 파일로 들어온다) | **어댑터 일꾼이 정의를 올리고** Center가 서명한다 (C13 E6, ADR-0122) |
-| 키 | 없다 — 「불러도 되나」는 Center가 배포로 가린다 (ADR-0102) | 어댑터 일꾼 설정의 키를 받아서 확인만 한다 (`CHK_MOCK_EXT_<앱>__TOKEN`을 주면 그 값만 받는다) |
+| 키 | 없다 — 「불러도 되나」는 Center가 배포로 가린다 (ADR-0102) | 어댑터 일꾼 설정의 키를 받아서 확인만 한다 (`BPM_MOCK_EXT_<앱>__TOKEN`을 주면 그 값만 받는다) |
 
 외부 앱이 C11로 답하면 어댑터가 하는 일(템플릿 채우기·제한 JSONPath로 읽기·`error_when`)을
 하나도 시험하지 못한다. 그래서 일부러 남의 API처럼 생겼다 — 낙타 표기(`bizNo`), 자기만의
@@ -30,9 +30,9 @@
 ## 띄우기
 
 ```bash
-uv run chk-mock-apps list                 # 무엇이 있나, 기본 포트는 몇인가
-uv run chk-mock-apps serve                # 전부 한 포트(8010)에, /<app_id> 밑에
-uv run chk-mock-apps serve --app erp      # 하나만, 그 앱의 기본 포트에
+uv run bpm-mock-apps list                 # 무엇이 있나, 기본 포트는 몇인가
+uv run bpm-mock-apps serve                # 전부 한 포트(8010)에, /<app_id> 밑에
+uv run bpm-mock-apps serve --app erp      # 하나만, 그 앱의 기본 포트에
 ```
 
 `serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다(관리 API·시나리오 제어·외부 앱 둘).
@@ -40,21 +40,21 @@ uv run chk-mock-apps serve --app erp      # 하나만, 그 앱의 기본 포트�
 앱 열다섯 개를 따로 띄우지 않아도 된다.
 
 기본 포트는 `docs/04-setup.md` §6의 「서비스 앱: 8010부터 10씩」을 따른다
-(`catalog.port_of`가 유일한 자리다, ADR-0011). 옮기려면 `CHK_SVC_<앱 id>__PORT`.
+(`catalog.port_of`가 유일한 자리다, ADR-0011). 옮기려면 `BPM_SVC_<앱 id>__PORT`.
 
 ### Center에 붙기 (일꾼)
 
 ```bash
-CHK_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 uv run chk-mock-apps serve
+BPM_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 uv run bpm-mock-apps serve
 ```
 
 C11 앱 열셋이 **일꾼 하나**로 Center에 붙는다 (C15, [ADR-0102](../docs/decisions/0102-calling-outside-is-pull.md)) —
 토픽 열셋을 한 토큰으로 맡는다. **들이기 요청·승인은 없다** ([ADR-0122](../docs/decisions/0122-consumer-folder.md)) —
-Center 쪽에서 일꾼 파일을 짓고 Center를 다시 띄운 뒤, 찍힌 토큰을 `CHK_MOCK_APPS__CENTER__TOKEN`에 넣는다:
+Center 쪽에서 일꾼 파일을 짓고 Center를 다시 띄운 뒤, 찍힌 토큰을 `BPM_MOCK_APPS__CENTER__TOKEN`에 넣는다:
 
 ```bash
-uv run chk-center consumer-file mock-apps --topics erp,…   # C11 앱 id들 — chk-mock-apps list가 보인다
-CHK_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 CHK_MOCK_APPS__CENTER__TOKEN=chk_ctr_… uv run chk-mock-apps serve
+uv run bpm-center consumer-file mock-apps --topics erp,…   # C11 앱 id들 — bpm-mock-apps list가 보인다
+BPM_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 BPM_MOCK_APPS__CENTER__TOKEN=bpm_ctr_… uv run bpm-mock-apps serve
 ```
 
 토큰이 없으면 붙지 않고 짓는 명령을 찍는다. 주소를 주지 않으면 업무 호출을 받지 않는다(관리 API·시나리오
@@ -65,7 +65,7 @@ CHK_MOCK_APPS__CENTER__URL=http://127.0.0.1:8800 CHK_MOCK_APPS__CENTER__TOKEN=ch
 정의는 **주소를 담아** 그대로 커밋할 수 없다 (포트가 띄울 때 정해진다). CLI가 그 자리에서 쓴다.
 
 ```bash
-uv run chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
+uv run bpm-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
 ```
 
 그 파일을 **어댑터 일꾼**에 주면 일꾼이 뜰 때 Center에 올리고 Center가 서명해 등록한다 (C13 E6, ADR-0122).
@@ -75,17 +75,17 @@ uv run chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o e
 외부 앱을 부르는 것은 **어댑터 일꾼**이다 — 주소·키는 그 일꾼의 설정에만 있다 (`docs/04-setup.md` §5):
 
 ```bash
-uv run chk-center consumer-file adapter --topics ext-credit,ext-helpdesk   # 찍힌 토큰을 아래에
-CHK_ADAPTER__CENTER__URL=http://127.0.0.1:8800 \
-CHK_ADAPTER__CENTER__TOKEN=chk_ctr_… \
-CHK_ADAPTER__DEFINITIONS=ext-credit.json:ext-helpdesk.json \
-CHK_ADAPTER__ALLOW_PRIVATE_NETWORK=1 \
-uv run chk-adapter-consumer
+uv run bpm-center consumer-file adapter --topics ext-credit,ext-helpdesk   # 찍힌 토큰을 아래에
+BPM_ADAPTER__CENTER__URL=http://127.0.0.1:8800 \
+BPM_ADAPTER__CENTER__TOKEN=bpm_ctr_… \
+BPM_ADAPTER__DEFINITIONS=ext-credit.json:ext-helpdesk.json \
+BPM_ADAPTER__ALLOW_PRIVATE_NETWORK=1 \
+uv run bpm-adapter-consumer
 ```
 
-127.0.0.1로 나가려면 정의의 `allow_private_network`와 일꾼의 `CHK_ADAPTER__ALLOW_PRIVATE_NETWORK` **둘 다** 열어야
-한다. 키를 확인하게 하려면 앱에 `CHK_MOCK_EXT_CREDIT__TOKEN`(`ext-helpdesk`는 `CHK_MOCK_EXT_HELPDESK__TOKEN`)을, 일꾼에
-같은 값을 `CHK_ADAPTER__EXT__EXT_CREDIT__KEY`로 준다.
+127.0.0.1로 나가려면 정의의 `allow_private_network`와 일꾼의 `BPM_ADAPTER__ALLOW_PRIVATE_NETWORK` **둘 다** 열어야
+한다. 키를 확인하게 하려면 앱에 `BPM_MOCK_EXT_CREDIT__TOKEN`(`ext-helpdesk`는 `BPM_MOCK_EXT_HELPDESK__TOKEN`)을, 일꾼에
+같은 값을 `BPM_ADAPTER__EXT__EXT_CREDIT__KEY`로 준다.
 
 ## 거짓 데이터는 **케이스가 정한다**
 
@@ -123,7 +123,7 @@ curl -X POST localhost:8010/erp/mock/v1/scenario -d '{"name":"이관1건"}'
 
 **`center-jobs`는 걷어냈다** — 진짜 Center의 `POST /jobs`를 부르던 앱이고, BX-16이 「서버가 PC에
 일을 넘기는 요소가 없다」를 메우려고 쓰던 **우회**였다. [ADR-0062](../docs/decisions/0062-pc-delegation.md)가
-PC 위임(`chk:call.delegate`)으로 그 공백을 닫아 BX-16이 더 이상 작업을 만들지 않는다 — 부르는
+PC 위임(`bpm:call.delegate`)으로 그 공백을 닫아 BX-16이 더 이상 작업을 만들지 않는다 — 부르는
 예제가 없는 앱은 두지 않는다 (`tests/test_mock_apps.py`의 「예제가 부르지 않는 작업」 검사가
 그것을 지킨다).
 
@@ -144,7 +144,7 @@ PC 위임(`chk:call.delegate`)으로 그 공백을 닫아 BX-16이 더 이상 �
 samples/mock_apps/src/chaeksas/mock_apps/
 ├─ c11.py          # MockApp·Op → service_kit 앱 하나 (+ /mock/v1/scenario)
 ├─ catalog.py      # 무엇이 있나, 기본 포트
-├─ cli.py          # chk-mock-apps
+├─ cli.py          # bpm-mock-apps
 ├─ fixtures.py     # 앱 경계를 넘는 거짓 데이터 (사람·거래처)
 ├─ apps/           # C11 앱 하나 = 모듈 하나 (APP 하나를 내보낸다)
 └─ external/

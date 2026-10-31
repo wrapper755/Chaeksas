@@ -4,24 +4,24 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx08_error_boundary" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:error id="Err_TASK_FAILED" name="TASK_FAILED" errorCode="TASK_FAILED" />
   <bpmn:process id="Proc_fx08_error_boundary" name="오류 경계와 대체 경로" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
   "inputs": []
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Fetch" name="환율 조회">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n업무 파라미터 `주소`를 GET.\n\n## 할 일\n`rates.KRW`를 꺼낸다.\n\n## 판단하지 않는 것\n값을 지어내지 않는다. 응답이 없으면 실패한다 (오류 경계가 받는다).\n\n## 반환\n- `원화`: number",
   "domain": "api",
   "results": {
@@ -37,12 +37,12 @@
     "timeout_s": 20,
     "max_steps": 3
   }
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Fallback" name="기본값" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Fallback" name="기본값" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
       <bpmn:script>원화 = 1350
@@ -50,7 +50,7 @@
     </bpmn:scriptTask>
     <bpmn:userTask id="Approve_Check" name="확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "환율 확인",
   "description": "",
   "show": [
@@ -66,7 +66,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:incoming>Flow_04</bpmn:incoming>

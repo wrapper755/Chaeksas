@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx37_clause_review" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_bx37_clause_review" name="조항 검토 (공유)" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [
@@ -39,7 +39,7 @@
       }
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -51,7 +51,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Review" name="조항 검토">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`조항`은 계약서의 `종류` 조항 원문이다. `표준조항[종류]`가 사내 표준이다.\n\n## 할 일\n표준과 비교해 위험 점수(0 없음 ~ 5 매우 높음), 이유, 수정 제안 문구를 낸다.\n\n## 판단하지 않는 것\n다른 종류의 조항을 평가하지 않는다.\n\n## 반환\n- `결과`: {점수(int), 이유(string), 제안(string)}",
   "domain": "llm",
   "results": {
@@ -59,12 +59,12 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Missing" name="조항 없음" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Missing" name="조항 없음" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:script>결과 = dict(점수=3, 이유='조항이 없음', 제안=표준조항[종류])</bpmn:script>

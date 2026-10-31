@@ -1,4 +1,4 @@
-"""Center 설정 — 환경변수 `CHK_CENTER__*` (ADR-0011).
+"""Center 설정 — 환경변수 `BPM_CENTER__*` (ADR-0011).
 
 **포트·경로를 코드에 직접 쓰지 않는다.** 기본값은 여기 한 곳에만 둔다 (`docs/04-setup.md` §6).
 """
@@ -26,7 +26,7 @@ MAX_REQUEST_KB = 256
 MAX_PACKAGE_MB = 200
 
 
-ENV_PREFIX = "CHK_CENTER__"
+ENV_PREFIX = "BPM_CENTER__"
 
 
 def _env(name: str, default: str | None = None) -> str | None:

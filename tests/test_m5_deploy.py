@@ -935,7 +935,7 @@ def test_the_heartbeat_carries_the_envelope_and_keys(center: Center, tmp_path: P
     agent = Agent(
         settings=BotSettings(),
         store=BotStore.load(tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_test"),
+        credentials=FakeCredentials("bpm_ctr_test"),
     )
     agent.store.state.bot_ui_id = BOT_UI
     one = deployer(center, tmp_path)
@@ -959,7 +959,7 @@ def test_the_results_ride_the_next_heartbeat(center: Center, tmp_path: Path) -> 
     agent = Agent(
         settings=BotSettings(),
         store=BotStore.load(tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_test"),
+        credentials=FakeCredentials("bpm_ctr_test"),
     )
     made = DeploymentResult(
         deployment_id="dep_3f9a1c07",
@@ -1103,7 +1103,7 @@ def test_the_pc_runner_refuses_a_withdrawn_bot_and_says_so(center: Center, tmp_p
     agent = Agent(
         settings=BotSettings(),
         store=BotStore.load(tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_test"),
+        credentials=FakeCredentials("bpm_ctr_test"),
     )
     agent.store.state.bot_ui_id = BOT_UI
     field = deployer(center, tmp_path)

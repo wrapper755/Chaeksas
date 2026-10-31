@@ -32,8 +32,8 @@ from chaeksas.contracts.signing import AdminKey, Envelope
 
 TOKEN = "t-admin"
 ADMIN = {"Authorization": f"Bearer {TOKEN}"}
-TOKEN_A = "chk_ctr_" + "a" * 40
-TOKEN_B = "chk_ctr_" + "b" * 40
+TOKEN_A = "bpm_ctr_" + "a" * 40
+TOKEN_B = "bpm_ctr_" + "b" * 40
 
 
 @pytest.fixture
@@ -211,11 +211,11 @@ def test_the_default_folder_may_be_missing(tmp_path: Path) -> None:
 
 
 def test_settings_read_the_folder_from_the_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("CHK_CENTER__CONSUMERS_DIR", str(tmp_path))
+    monkeypatch.setenv("BPM_CENTER__CONSUMERS_DIR", str(tmp_path))
     found = Settings.from_env()
     assert (found.consumers_dir, found.consumers_dir_explicit) == (tmp_path, True)
-    monkeypatch.delenv("CHK_CENTER__CONSUMERS_DIR")
-    monkeypatch.setenv("CHK_CENTER__DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.delenv("BPM_CENTER__CONSUMERS_DIR")
+    monkeypatch.setenv("BPM_CENTER__DATA_DIR", str(tmp_path / "data"))
     found = Settings.from_env()
     assert (found.consumers_dir, found.consumers_dir_explicit) == (tmp_path / "data" / "consumers", False)
 
@@ -308,7 +308,7 @@ def keys_listed(client: TestClient) -> list[tuple[str, str, str]]:
     return sorted((one["name"], one["type"], one["state"]) for one in got)
 
 
-ON_BEHALF = {"X-CHK-On-Behalf-Of": "%EA%B9%80%EC%B2%A0%EC%88%98"}  # 김철수
+ON_BEHALF = {"X-BPM-On-Behalf-Of": "%EA%B9%80%EC%B2%A0%EC%88%98"}  # 김철수
 
 
 def test_key_files_let_integration_and_relay_keys_in(boot: Boot, folder: Path) -> None:

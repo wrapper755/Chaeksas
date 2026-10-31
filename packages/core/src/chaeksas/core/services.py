@@ -1,4 +1,4 @@
-"""서비스 앱 태스크가 바깥 앱을 부르는 자리 — `chk:serviceCall` (C11·C15).
+"""서비스 앱 태스크가 바깥 앱을 부르는 자리 — `bpm:serviceCall` (C11·C15).
 
 보내기(`core.senders`)와 같은 꼴이다. 엔진은 **무엇을 부를지**만 만들고, 실제로 부르는 일은
 실행하는 쪽이 끼우는 어댑터가 한다. 제품의 어댑터는 `CenterServiceCaller` 하나다 — Center에
@@ -7,7 +7,7 @@
 
 **어댑터를 주지 않으면 부르지 않고 실패한다.** 조용히 건너뛰면 업무가 안 돌아간 채로 흘러간다.
 
-재시도는 **엔진이** 한다 (`chk:serviceCall.retry`를 아는 쪽이 엔진이다). 어댑터는 한 번 왕복할
+재시도는 **엔진이** 한다 (`bpm:serviceCall.retry`를 아는 쪽이 엔진이다). 어댑터는 한 번 왕복할
 뿐이고, 다시 부를 만한 실패인지만 `ServiceCallError.retryable`로 알려 준다 (C11 §오류).
 """
 
@@ -21,7 +21,7 @@ from typing import Any, Protocol
 
 from chaeksas.contracts.service_app import Caller
 
-#: C11 §오류 — 다시 불러 볼 만한 상태 코드. `chk:serviceCall.retry.on`의 기본값이기도 하다.
+#: C11 §오류 — 다시 불러 볼 만한 상태 코드. `bpm:serviceCall.retry.on`의 기본값이기도 하다.
 RETRYABLE_STATUS = (429, 503, 504)
 
 #: 다시 불러도 똑같은 것 (키·권한·입력·없는 작업). 사람이 고쳐야 한다.
@@ -37,7 +37,7 @@ FATAL_CODES = frozenset(
 class ServiceCallError(RuntimeError):
     """서비스 앱 호출이 실패했다.
 
-    `retryable`이 참이면 엔진이 `chk:serviceCall.retry`에 따라 `attempt`를 올려 다시 부른다.
+    `retryable`이 참이면 엔진이 `bpm:serviceCall.retry`에 따라 `attempt`를 올려 다시 부른다.
     `outcome_unknown`이면 **처리됐는지 모른다** (C15, ADR-0107) — PC 실행은 사람에게 묻는다.
     """
 
@@ -185,7 +185,7 @@ FINAL_STATES = frozenset({"completed", "failed", "expired", "cancelled"})
 
 @dataclass
 class CenterServiceCaller:
-    """`chk:serviceCall`을 **Center에 외부 작업으로 올리고** 결과를 기다린다 (C15, ADR-0102).
+    """`bpm:serviceCall`을 **Center에 외부 작업으로 올리고** 결과를 기다린다 (C15, ADR-0102).
 
     부르는 쪽은 서비스 앱·외부 앱의 주소도 키도 모른다 — Center 주소와 토큰(서버 실행기·Studio는
     제 Center API 키, 실행 프로세스는 호출 토큰)뿐이다. 엔진은 무엇이 바뀌었는지 모른다 —

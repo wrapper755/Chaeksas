@@ -228,7 +228,7 @@ def test_e3_http_is_only_for_declared_private_network() -> None:
 
 def test_e3_protocol_and_adapter_must_match() -> None:
     definition = external()
-    definition["service"]["protocol"] = "chk-c11"
+    definition["service"]["protocol"] = "bpm-c11"
     assert "adapter_invalid" in codes(definition)
 
     definition = external()

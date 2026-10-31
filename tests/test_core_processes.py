@@ -103,8 +103,8 @@ def test_the_child_environment_carries_utf8_and_what_we_pass(tmp_path: Path) -> 
     """준 환경변수는 그대로 가고, 그 위에 UTF-8 설정이 얹힌다."""
     log = tmp_path / "env.log"
     child = ChildProcess(
-        args=python("import os; print(os.environ['CHK_TEST_MARK'], os.environ['PYTHONUTF8'])"),
-        env={"CHK_TEST_MARK": "표시", "PATH": os.environ.get("PATH", "")},
+        args=python("import os; print(os.environ['BPM_TEST_MARK'], os.environ['PYTHONUTF8'])"),
+        env={"BPM_TEST_MARK": "표시", "PATH": os.environ.get("PATH", "")},
         log_path=log,
         name="worker",
     )

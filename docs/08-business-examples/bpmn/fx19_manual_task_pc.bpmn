@@ -4,25 +4,25 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx19_manual_task_pc" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx19_manual_task_pc" name="수동 확인 (PC)" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "pc",
   "extensions": [],
   "outputs": [
     "확인됨"
   ],
   "inputs": []
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:manualTask id="Manual_Paper" name="용지 넣기">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "프린터에 용지를 넣어 주세요",
   "description": "",
   "show": [
@@ -30,12 +30,12 @@
   ],
   "fields": [],
   "location": "field"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:manualTask>
-    <bpmn:scriptTask id="Task_Done" name="기록" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Done" name="기록" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>확인됨 = True</bpmn:script>

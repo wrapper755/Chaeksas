@@ -17,7 +17,7 @@ export type Mode = "admin" | "read";
 
 export interface Session {
   mode: Mode;
-  /** Center 세션 토큰 (`chk_ses_…`). **서버 안에서만 쓴다.** */
+  /** Center 세션 토큰 (`bpm_ses_…`). **서버 안에서만 쓴다.** */
   token: string;
   /** 계정 아이디 — 위 막대에 보이고, Center 기록의 「누가」가 된다. */
   actor: string;
@@ -27,10 +27,10 @@ export const COOKIE_NAME = "chk_console_session";
 const ALGORITHM = "aes-256-gcm";
 
 function key(): Buffer {
-  const secret = process.env.CHK_CONSOLE__SESSION_SECRET;
+  const secret = process.env.BPM_CONSOLE__SESSION_SECRET;
   if (!secret || secret.length < 16) {
     // 비밀이 없으면 세션을 만들 수 없다 — 약한 기본값을 쓰지 않는다 (CLAUDE.md §5).
-    throw new Error("CHK_CONSOLE__SESSION_SECRET이 없거나 너무 짧다 (16자 이상)");
+    throw new Error("BPM_CONSOLE__SESSION_SECRET이 없거나 너무 짧다 (16자 이상)");
   }
   return scryptSync(secret, "chaeksas-console", 32);
 }

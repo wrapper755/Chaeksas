@@ -108,7 +108,7 @@ class Outcome:
 
 
 def tool_specs(spec: AiTask, tools: Mapping[str, Tool]) -> list[ToolSpec]:
-    """모델에게 알려 줄 도구 — **`chk:aiTask.tools`에 적힌 것만**. 없는 도구는 알려 주지 않는다.
+    """모델에게 알려 줄 도구 — **`bpm:aiTask.tools`에 적힌 것만**. 없는 도구는 알려 주지 않는다.
 
     도구가 **자기 설명과 인자 모양을 들고 있으면** 그것을 쓴다 (`core.tools.ToolDef`,
     ADR-0030) — 이름만 알려 주면 모델이 인자를 지어낸다.
@@ -126,7 +126,7 @@ def tool_specs(spec: AiTask, tools: Mapping[str, Tool]) -> list[ToolSpec]:
 def opening_messages(spec: AiTask, *, context: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
     """첫 물음. `goal`(Markdown)과 받아야 할 결과 필드를 적는다.
 
-    `context`를 주지 않으면 **업무 파라미터**(`chk:aiTask.params`)를 쓴다 — 주소 같은 값을
+    `context`를 주지 않으면 **업무 파라미터**(`bpm:aiTask.params`)를 쓴다 — 주소 같은 값을
     목표 문장이 아니라 파라미터로 두어야 재생이 그 문장에 묶이지 않는다 (예제 FX-01·BX-02).
     """
     wanted = ", ".join(f"{name}({kind})" for name, kind in spec.results.items()) or "없음"
@@ -144,7 +144,7 @@ def opening_messages(spec: AiTask, *, context: Mapping[str, Any] | None = None) 
     user += ["", f"## 반환\n다음 필드를 가진 JSON 객체 하나: {wanted}"]
     context = spec.params if context is None else context
     if context:
-        # 업무 파라미터(`chk:aiTask.params`)는 **값**이다 — 모델에는 주되 기록에는 남기지 않는다.
+        # 업무 파라미터(`bpm:aiTask.params`)는 **값**이다 — 모델에는 주되 기록에는 남기지 않는다.
         user += ["", "## 파라미터", json.dumps(dict(context), ensure_ascii=False)]
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

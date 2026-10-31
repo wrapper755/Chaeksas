@@ -4,13 +4,13 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx03_expense_approval" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_expense_request" name="expense_request" />
   <bpmn:error id="Err_SEND_FAILED" name="SEND_FAILED" errorCode="SEND_FAILED" />
   <bpmn:process id="Proc_bx03_expense_approval" name="지출 결재" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -73,13 +73,13 @@
       "default": "P7D"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="지출 신청 도착">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
       <bpmn:messageEventDefinition messageRef="Msg_expense_request" />
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Precheck" name="사전 점검" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Precheck" name="사전 점검" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:script>기한초과 = False
@@ -94,7 +94,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Expense" name="결재 대기">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "지출 결재",
   "description": "기한이 지나면 자동 반려됩니다.",
   "show": [
@@ -120,20 +120,20 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sendTask id="Task_Remind" name="리마인드">
       <bpmn:extensionElements>
-        <chk:webhook>{
+        <bpm:webhook>{
   "url": "{회신주소}",
   "method": "POST",
   "body": "fields:[신청번호, 리마인드기한]",
   "timeout_s": 10,
   "store_as": "리마인드발송"
-}</chk:webhook>
+}</bpm:webhook>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
@@ -141,12 +141,12 @@
     <bpmn:endEvent id="End_Remind" name="리마인드 끝">
       <bpmn:incoming>Flow_07</bpmn:incoming>
     </bpmn:endEvent>
-    <bpmn:scriptTask id="Task_Expired" name="기한 초과" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Expired" name="기한 초과" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
       <bpmn:script>기한초과 = True</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_Result" name="결과 정리" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Result" name="결과 정리" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:incoming>Flow_09</bpmn:incoming>
@@ -158,18 +158,18 @@
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Reply" name="신청자에게 회신">
       <bpmn:extensionElements>
-        <chk:webhook>{
+        <bpm:webhook>{
   "url": "{회신주소}",
   "method": "POST",
   "body": "fields:[신청번호, 결과, 결재의견]",
   "timeout_s": 10,
   "store_as": "회신결과"
-}</chk:webhook>
+}</bpm:webhook>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:scriptTask id="Task_ReplyFailed" name="회신 실패 기록" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_ReplyFailed" name="회신 실패 기록" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:outgoing>Flow_13</bpmn:outgoing>
       <bpmn:script>회신오류 = error_message</bpmn:script>
@@ -212,12 +212,12 @@
     <bpmn:dataObject id="DO_Data_Log" />
     <bpmn:dataObjectReference id="Data_Log" name="처리 기록" dataObjectRef="DO_Data_Log">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "지출결재/{신청번호}.md",
   "format": "md",
   "store_as": "기록경로",
   "template": "# 지출 결재 {신청번호}\n\n- 결과: {결과}\n- 의견: {결재의견}\n"
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

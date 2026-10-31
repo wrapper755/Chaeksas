@@ -29,9 +29,9 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-exampl
 
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="test.proc" name="시험">
-    <bpmn:extensionElements><chk:process>{process_props}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{process_props}</bpm:process></bpmn:extensionElements>
     {body}
   </bpmn:process>
 </bpmn:definitions>
@@ -54,7 +54,7 @@ def script(id_: str, body: str, *, data: str = "") -> str:
         else ""
     )
     return (
-        f'<bpmn:scriptTask id="{id_}" scriptFormat="chk-expr">{association}'
+        f'<bpmn:scriptTask id="{id_}" scriptFormat="bpm-expr">{association}'
         f"<bpmn:script>{body}</bpmn:script></bpmn:scriptTask>"
     )
 
@@ -62,7 +62,7 @@ def script(id_: str, body: str, *, data: str = "") -> str:
 def data_object(id_: str, props: str) -> str:
     return (
         f'<bpmn:dataObjectReference id="{id_}"><bpmn:extensionElements>'
-        f"<chk:dataOutput>{props}</chk:dataOutput></bpmn:extensionElements></bpmn:dataObjectReference>"
+        f"<bpm:dataOutput>{props}</bpm:dataOutput></bpmn:extensionElements></bpmn:dataObjectReference>"
     )
 
 
@@ -132,7 +132,7 @@ def test_a_collect_rule_gives_a_list(tmp_path: Path) -> None:
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
         + script("Task_Row", "요일 = '토'\n시 = 23\n업종 = '유흥'\n금액 = 600000")
-        + f'<bpmn:businessRuleTask id="Task_Rule"><bpmn:extensionElements><chk:rule>{rule}</chk:rule>'
+        + f'<bpmn:businessRuleTask id="Task_Rule"><bpmn:extensionElements><bpm:rule>{rule}</bpm:rule>'
         + "</bpmn:extensionElements></bpmn:businessRuleTask>"
         + '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Task_Row")
@@ -148,7 +148,7 @@ def test_a_rule_without_its_dmn_stops_the_run(tmp_path: Path) -> None:
     """패키지에 `.dmn`이 없으면 **조용히 지나가지 않는다.**"""
     rule = '{"decision": "없는표", "input": {}, "output": {"답": "x"}}'
     process = straight(
-        middle=f'<bpmn:businessRuleTask id="Task_Rule"><bpmn:extensionElements><chk:rule>{rule}</chk:rule>'
+        middle=f'<bpmn:businessRuleTask id="Task_Rule"><bpmn:extensionElements><bpm:rule>{rule}</bpm:rule>'
         "</bpmn:extensionElements></bpmn:businessRuleTask>",
         node_id="Task_Rule",
     )
@@ -162,8 +162,8 @@ def test_a_rule_without_its_dmn_stops_the_run(tmp_path: Path) -> None:
 
 def file_list_process(props: str) -> Any:
     return straight(
-        middle=f'<bpmn:serviceTask id="Task_List"><bpmn:extensionElements><chk:fileList>{props}'
-        "</chk:fileList></bpmn:extensionElements></bpmn:serviceTask>",
+        middle=f'<bpmn:serviceTask id="Task_List"><bpmn:extensionElements><bpm:fileList>{props}'
+        "</bpm:fileList></bpmn:extensionElements></bpmn:serviceTask>",
         node_id="Task_List",
     )
 
@@ -216,8 +216,8 @@ def test_a_folder_outside_the_allowed_roots_is_denied_and_not_caught(tmp_path: P
     props = f'{{"folder": "{outside.as_posix()}", "store_as": "파일"}}'
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
-        + f'<bpmn:serviceTask id="Task_List"><bpmn:extensionElements><chk:fileList>{props}'
-        + "</chk:fileList></bpmn:extensionElements></bpmn:serviceTask>"
+        + f'<bpmn:serviceTask id="Task_List"><bpmn:extensionElements><bpm:fileList>{props}'
+        + "</bpm:fileList></bpmn:extensionElements></bpmn:serviceTask>"
         + '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_List">'
         + "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
         + script("Task_Recover", "복구 = 1")
@@ -240,8 +240,8 @@ def test_a_missing_folder_is_a_task_failure_the_boundary_can_catch(tmp_path: Pat
     props = f'{{"folder": "{(share / "없는폴더").as_posix()}", "store_as": "파일"}}'
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
-        + f'<bpmn:serviceTask id="Task_List"><bpmn:extensionElements><chk:fileList>{props}'
-        + "</chk:fileList></bpmn:extensionElements></bpmn:serviceTask>"
+        + f'<bpmn:serviceTask id="Task_List"><bpmn:extensionElements><bpm:fileList>{props}'
+        + "</bpm:fileList></bpmn:extensionElements></bpmn:serviceTask>"
         + '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_List">'
         + "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
         + script("Task_Recover", "복구 = error_code")
@@ -368,7 +368,7 @@ def test_a_file_written_after_an_approval_sees_the_form_answer(tmp_path: Path) -
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
         + '<bpmn:userTask id="Approve_1"><bpmn:extensionElements>'
-        + f"<chk:approval>{approval}</chk:approval></bpmn:extensionElements>"
+        + f"<bpm:approval>{approval}</bpm:approval></bpmn:extensionElements>"
         + '<bpmn:dataOutputAssociation id="DOA_1"><bpmn:targetRef>Data_Out</bpmn:targetRef>'
         + "</bpmn:dataOutputAssociation></bpmn:userTask>"
         + data_object("Data_Out", props)
@@ -390,7 +390,7 @@ def test_a_file_written_after_an_approval_sees_the_form_answer(tmp_path: Path) -
 def send_process(element: str, props: str, *, data: str = "") -> Any:
     middle = (
         f'<bpmn:sendTask id="Task_Send"><bpmn:extensionElements>'
-        f"<chk:{element}>{props}</chk:{element}></bpmn:extensionElements></bpmn:sendTask>"
+        f"<bpm:{element}>{props}</bpm:{element}></bpmn:extensionElements></bpmn:sendTask>"
     )
     return make(
         '<bpmn:startEvent id="Start_1"/>'
@@ -430,7 +430,7 @@ def test_without_a_sender_the_mail_is_not_sent_and_the_boundary_catches_it(tmp_p
     """기본은 **보내지 않고 실패**다 — 조용히 삼키면 보냈는지 아무도 모른다."""
     props = '{"to": ["{받는사람}"], "subject": "x", "body": "{본문}"}'
     middle = (
-        f'<bpmn:sendTask id="Task_Send"><bpmn:extensionElements><chk:email>{props}</chk:email>'
+        f'<bpmn:sendTask id="Task_Send"><bpmn:extensionElements><bpm:email>{props}</bpm:email>'
         "</bpmn:extensionElements></bpmn:sendTask>"
     )
     process = make(

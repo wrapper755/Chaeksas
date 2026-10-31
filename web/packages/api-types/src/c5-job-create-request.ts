@@ -5,7 +5,7 @@
 /**
  * `POST /jobs`.
  *
- * `requested_by`는 **본문에서 받지 않는다.** 키 이름이나 `X-CHK-Actor` 헤더로 Center가 채운다.
+ * `requested_by`는 **본문에서 받지 않는다.** 키 이름이나 `X-BPM-Actor` 헤더로 Center가 채운다.
  */
 export interface JobCreateRequest {
   bpm_process_id: string;

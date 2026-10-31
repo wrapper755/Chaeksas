@@ -101,7 +101,7 @@
       "title": "Expires At"
     },
     "key": {
-      "pattern": "^chk_ctr_[A-Za-z0-9_-]{40}$",
+      "pattern": "^bpm_ctr_[A-Za-z0-9_-]{40}$",
       "title": "Key",
       "type": "string"
     },

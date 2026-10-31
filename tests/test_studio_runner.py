@@ -371,27 +371,27 @@ def test_an_example_that_needs_a_model_says_so_instead_of_pretending(app: Any, t
 #: **읽는 사람을 위한 것**이라 패키지에 그 정의가 없어도 된다 — 대상은 다른 패키지다.
 DELEGATING = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_dlg" targetNamespace="urn:chaeksas:test">
+  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs_dlg" targetNamespace="urn:chaeksas:test">
   <bpmn:error id="Err_DLG" name="DELEGATION_FAILED" errorCode="DELEGATION_FAILED" />
   <bpmn:process id="Proc_fx03b_amount_branch" name="위임" isExecutable="true">
-    <bpmn:extensionElements><chk:process>{"run_location": "server",
-      "inputs": [{"name": "청구번호", "type": "string", "required": true}]}</chk:process>
+    <bpmn:extensionElements><bpm:process>{"run_location": "server",
+      "inputs": [{"name": "청구번호", "type": "string", "required": true}]}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" />
     <bpmn:callActivity id="Call_Erp" name="ERP 화면 입력" calledElement="Proc_erp_input">
-      <bpmn:extensionElements><chk:call>{"delegate":
+      <bpmn:extensionElements><bpm:call>{"delegate":
         {"bpm_process_id": "fin.erp-input", "version": "1.0.0"},
-        "input": {"전표번호": "청구번호"}, "output": {"입력결과": "결과코드"}}</chk:call>
+        "input": {"전표번호": "청구번호"}, "output": {"입력결과": "결과코드"}}</bpm:call>
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:scriptTask id="Task_After" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_After" scriptFormat="bpm-expr">
       <bpmn:script>마무리 = 입력결과 + "-확인"</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:endEvent id="End" />
     <bpmn:boundaryEvent id="Bnd_Dlg" name="위임 실패" attachedToRef="Call_Erp">
       <bpmn:errorEventDefinition errorRef="Err_DLG" />
     </bpmn:boundaryEvent>
-    <bpmn:scriptTask id="Task_Fallback" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Fallback" scriptFormat="bpm-expr">
       <bpmn:script>마무리 = "사람이 처리"</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:endEvent id="End_Fallback" />
@@ -436,7 +436,7 @@ def test_a_case_gives_the_delegation_result_and_the_run_finishes(app: Any, tmp_p
 
 
 def test_only_what_the_graph_reads_becomes_a_variable(app: Any, tmp_path: Path) -> None:
-    """**적은 것만 오간다** (C14 `chk:call.output`) — 돌려준 나머지는 버린다."""
+    """**적은 것만 오간다** (C14 `bpm:call.output`) — 돌려준 나머지는 버린다."""
     made, definition, settings = delegating(tmp_path)
     case = Case(
         name="덤",

@@ -1,15 +1,15 @@
-"""`chk-adapter-consumer` — 외부 앱을 부르는 범용 일꾼 (C13 §4·C15, ADR-0102·0122).
+"""`bpm-adapter-consumer` — 외부 앱을 부르는 범용 일꾼 (C13 §4·C15, ADR-0102·0122).
 
-    CHK_ADAPTER__CENTER__URL=https://center:8800 \\
-    CHK_ADAPTER__CENTER__TOKEN=chk_ctr_… \\
-    CHK_ADAPTER__DEFINITIONS=ext-credit.extension.json:ext-helpdesk.extension.json \\
-    CHK_ADAPTER__EXT__EXT_CREDIT__KEY=… \\
-    chk-adapter-consumer
+    BPM_ADAPTER__CENTER__URL=https://center:8800 \\
+    BPM_ADAPTER__CENTER__TOKEN=bpm_ctr_… \\
+    BPM_ADAPTER__DEFINITIONS=ext-credit.extension.json:ext-helpdesk.extension.json \\
+    BPM_ADAPTER__EXT__EXT_CREDIT__KEY=… \\
+    bpm-adapter-consumer
 
 1. **들이기는 없다** — Center의 일꾼 폴더에 이 일꾼의 `<이름>.consumer.json`(토큰 해시·토픽 = 맡을 확장 id)이 있어야
-   한다(`chk-center consumer-file`이 짓고 토큰 원문을 한 번 찍는다). 원문은 `CHK_ADAPTER__CENTER__TOKEN` 또는
-   `CHK_ADAPTER__DATA_DIR`(기본 `.adapter-consumer`)의 `consumer-token.json`.
-2. 맡을 외부 확장의 **정의는 이 일꾼이 들고 있다** — `CHK_ADAPTER__DEFINITIONS`(파일 경로, `os.pathsep`으로 여럿)를
+   한다(`bpm-center consumer-file`이 짓고 토큰 원문을 한 번 찍는다). 원문은 `BPM_ADAPTER__CENTER__TOKEN` 또는
+   `BPM_ADAPTER__DATA_DIR`(기본 `.adapter-consumer`)의 `consumer-token.json`.
+2. 맡을 외부 확장의 **정의는 이 일꾼이 들고 있다** — `BPM_ADAPTER__DEFINITIONS`(파일 경로, `os.pathsep`으로 여럿)를
    읽어 뜰 때 Center에 올리고 Center가 검사·서명한다 (`PUT /consumers/self/extension`). 읽지 못한 정의는 맡지 않는다.
 3. 가져가기 루프 (`service_kit.Consumer`) — 일감마다 그 정의의 어댑터를 돌린다.
 
@@ -62,7 +62,7 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    parser = argparse.ArgumentParser(prog="chk-adapter-consumer", description="외부 앱을 부르는 범용 일꾼 (C15)")
+    parser = argparse.ArgumentParser(prog="bpm-adapter-consumer", description="외부 앱을 부르는 범용 일꾼 (C15)")
     parser.add_argument("--center-url", default=_env("CENTER__URL"))
     parser.add_argument(
         "--definitions", default=_env("DEFINITIONS"), help=f"맡을 외부 확장 정의 파일 ({os.pathsep}로 여럿)"
@@ -72,14 +72,14 @@ def main(argv: list[str] | None = None) -> int:
     paths = [Path(one) for one in str(found.definitions).split(os.pathsep) if one.strip()]
     if not found.center_url or not paths:
         print(
-            "Center 주소(CHK_ADAPTER__CENTER__URL)와 정의 파일(CHK_ADAPTER__DEFINITIONS)이 필요하다", file=sys.stderr
+            "Center 주소(BPM_ADAPTER__CENTER__URL)와 정의 파일(BPM_ADAPTER__DEFINITIONS)이 필요하다", file=sys.stderr
         )
         return 2
     tokens = TokenFile.at(found.data_dir, env_prefix=ENV_PREFIX)
     if not tokens.token():
         print(
-            "일꾼 토큰이 없다 — Center 일꾼 폴더에 이 일꾼의 파일을 두고(chk-center consumer-file) 받은 토큰을"
-            " CHK_ADAPTER__CENTER__TOKEN에 넣으세요",
+            "일꾼 토큰이 없다 — Center 일꾼 폴더에 이 일꾼의 파일을 두고(bpm-center consumer-file) 받은 토큰을"
+            " BPM_ADAPTER__CENTER__TOKEN에 넣으세요",
             file=sys.stderr,
         )
         return 2

@@ -1,8 +1,8 @@
 """STU-01 아래 탭 「변수」의 값 다루기 — **Qt를 모른다** (탭은 `variables_tab.py`).
 
-이 BPM 프로세스가 **받는 것(입력)·내놓는 것(출력)의 정의**는 그림의 `chk:process.inputs`·
+이 BPM 프로세스가 **받는 것(입력)·내놓는 것(출력)의 정의**는 그림의 `bpm:process.inputs`·
 `outputs`(C14)에 산다. 그래서 고치는 자리는 「BPM 프로세스 정보」(STU-06)가 아니라 캔버스 쪽이고,
-쓰기는 **캔버스를 거친다** (ADR-0022 — `chk:process`를 통째로 되돌려 써서 실행 취소가 한 걸음).
+쓰기는 **캔버스를 거친다** (ADR-0022 — `bpm:process`를 통째로 되돌려 써서 실행 취소가 한 걸음).
 
 여기 있는 것: 표 한 줄(`InputRow`)과 그 검사·짓기, 그림이 만드는 변수와 「만드는 곳」, 다른 화면이
 고를 거리로 쓰는 이름 목록, 「지금 값」 칸의 글.
@@ -135,7 +135,7 @@ def problem(inputs: Sequence[InputRow], outputs: Sequence[str]) -> str:
 
 
 def build_inputs(rows: Sequence[InputRow]) -> list[InputDecl]:
-    """표 → `chk:process.inputs`. 읽어 온 줄은 **모르는 칸을 남긴 채** 고친다."""
+    """표 → `bpm:process.inputs`. 읽어 온 줄은 **모르는 칸을 남긴 채** 고친다."""
     out: list[InputDecl] = []
     for row in rows:
         value, _bad = parse_default(row.type, row.default)
@@ -153,7 +153,7 @@ def build_inputs(rows: Sequence[InputRow]) -> list[InputDecl]:
 
 
 def process_patch(info: ProcessInfo, inputs: Sequence[InputRow], outputs: Sequence[str]) -> str:
-    """캔버스에 넘길 `chk:process` 본문 (JSON 글 — `setProperties`의 규약).
+    """캔버스에 넘길 `bpm:process` 본문 (JSON 글 — `setProperties`의 규약).
 
     **읽은 것을 통째로 되돌려 쓴다** — `run_location`·`extensions`처럼 이 탭이
     모르는 칸이 사라지지 않게 (STU-06·STU-15와 같은 자리).

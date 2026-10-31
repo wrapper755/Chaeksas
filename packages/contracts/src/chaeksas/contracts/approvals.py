@@ -25,7 +25,7 @@ from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp, 
 DEFAULT_TITLE = "결재 요청"
 
 #: `review`·`answer`의 **값**은 결재가 끝난 뒤 이만큼 지나면 지운다
-#: (`CHK_CENTER__APPROVAL__VALUE_DAYS`). 누가·언제·결과는 남는다.
+#: (`BPM_CENTER__APPROVAL__VALUE_DAYS`). 누가·언제·결과는 남는다.
 VALUE_RETENTION_DAYS = 30
 
 #: 폼이 없을 때의 답 모양.
@@ -49,13 +49,13 @@ AUTO_WITHDRAW_REASONS = {
 def normalize_name(raw: str) -> str:
     """사람 이름 하나 — 앞뒤 공백을 걷고 NFC로 맞춘다 (ADR-0080).
 
-    담당자 대조·`?assignee=`·`X-CHK-On-Behalf-Of`가 **같은 함수**를 거쳐야 같은 이름이 같게 보인다.
+    담당자 대조·`?assignee=`·`X-BPM-On-Behalf-Of`가 **같은 함수**를 거쳐야 같은 이름이 같게 보인다.
     """
     return unicodedata.normalize("NFC", raw).strip()
 
 
 def normalize_assignees(value: Any) -> list[str]:
-    """결재 담당자 (C14 `chk:approval.assignees`를 푼 값) → C6 `assignees[]`.
+    """결재 담당자 (C14 `bpm:approval.assignees`를 푼 값) → C6 `assignees[]`.
 
     이름 하나(글자) 또는 이름 목록을 받는다. 빈 것·겹치는 것은 버리고 순서는 지킨다.
     `None`은 「담당자 없음」이다. **그 밖의 모양은 `TypeError`** — 그림의 버그라
@@ -205,8 +205,8 @@ class ApprovalInfo(ApprovalCreateRequest):
 class AnswerRequest(ContractModel):
     """`POST /api/v1/approvals/{request_id}/answer`.
 
-    `answered_by`는 **본문에서 받지 않는다.** 콘솔 BFF가 `X-CHK-Actor` 헤더로 보내고,
-    대리 답용 키는 `X-CHK-On-Behalf-Of`로 보낸다 (ADR-0081 — 그 사람이 담당자일 때만 받는다).
+    `answered_by`는 **본문에서 받지 않는다.** 콘솔 BFF가 `X-BPM-Actor` 헤더로 보내고,
+    대리 답용 키는 `X-BPM-On-Behalf-Of`로 보낸다 (ADR-0081 — 그 사람이 담당자일 때만 받는다).
     """
 
     answer: dict[str, Any]

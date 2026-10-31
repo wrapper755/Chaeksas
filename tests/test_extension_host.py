@@ -237,13 +237,13 @@ def test_context_carries_settings_and_secrets(host: ExtensionHost) -> None:
         BUILTIN_ID,
         host="bot_ui",
         settings=Settings({"registrar_key": "ref-name"}),
-        secrets=Secrets({"ref-name": "chk_svc_xxx"}),
+        secrets=Secrets({"ref-name": "bpm_svc_xxx"}),
         log=logging.getLogger("test"),
     )
     assert ctx.extension_id == BUILTIN_ID
     assert ctx.api_version == API_VERSION
     assert ctx.setting("registrar_key") == "ref-name"
-    assert ctx.secret("ref-name") == "chk_svc_xxx"
+    assert ctx.secret("ref-name") == "bpm_svc_xxx"
     assert ctx.secret("없는-참조") is None
 
 

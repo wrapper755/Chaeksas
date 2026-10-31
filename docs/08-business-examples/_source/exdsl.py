@@ -108,7 +108,7 @@ class Example:
     kind: str = "business"  # business | feature
     called: list[str] = field(default_factory=list)  # 호출하는 다른 예제 file
     milestone: str = ""  # build.py가 쓰는 기능으로 정한다
-    outputs: list[str] = field(default_factory=list)  # chk:process.outputs (호출 대상이면 필수)
+    outputs: list[str] = field(default_factory=list)  # bpm:process.outputs (호출 대상이면 필수)
     #: 입력 이름 → **값 출처** (C14 `inputs[].source`, ADR-0099). 적지 않은 입력은 부르는 쪽이다.
     input_sources: dict[str, str] = field(default_factory=dict)
 
@@ -159,7 +159,7 @@ def rule(id, name, decision, input, output, loop=None):
 
 
 def flist(id, name, folder, store_as, pattern="*", recursive=False, sort="name", limit=None, count_as=None):
-    """파일 목록 태스크 (`chk:fileList`). 디스크를 읽으므로 식이 아니라 태스크다 (ADR-0026)."""
+    """파일 목록 태스크 (`bpm:fileList`). 디스크를 읽으므로 식이 아니라 태스크다 (ADR-0026)."""
     return Node(id, "flist", name, dict(task=dict(
         folder=folder, pattern=pattern, recursive=recursive, sort=sort,
         **({"limit": limit} if limit is not None else {}),
@@ -181,7 +181,7 @@ def recv(id, name, message, correlation, payload=None):
 
 
 def call(id, name, called, input, output, delegate=None, loop=None):
-    """다른 BPM 프로세스 호출. `delegate`를 주면 **위임**이다 (C14 `chk:call.delegate`).
+    """다른 BPM 프로세스 호출. `delegate`를 주면 **위임**이다 (C14 `bpm:call.delegate`).
 
     위임의 대상은 **패키지 안의 정의가 아니라 따로 배포된 BPM 프로세스**이라(ADR-0062) `called`는
     읽는 사람을 위한 표시로만 남는다 — 검사가 패키지 안에서 찾지 않는다 (B14). PC BPM 프로세스이든
@@ -520,7 +520,7 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
     loop = ""
 
     def ext_el(tag, d, attrs=""):
-        return f"{ind}  <bpmn:extensionElements>\n{ind}    <chk:{tag}{attrs}>{jtext(d)}</chk:{tag}>\n{ind}  </bpmn:extensionElements>\n"
+        return f"{ind}  <bpmn:extensionElements>\n{ind}    <bpm:{tag}{attrs}>{jtext(d)}</bpm:{tag}>\n{ind}  </bpmn:extensionElements>\n"
 
     if p.get("loop"):
         lp = p["loop"]
@@ -536,7 +536,7 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
         tag = {"start": "startEvent", "end": "endEvent", "throw": "intermediateThrowEvent", "catch": "intermediateCatchEvent"}[k]
         ev = event_def({k: v for k, v in p.items() if k not in ("correlation", "payload")}, ex, ind + "  ")
         if p.get("correlation"):
-            io = (f"{ind}  <bpmn:extensionElements>\n{ind}    <chk:receive>{jtext({'correlation': p['correlation'], 'payload': p.get('payload', [])})}</chk:receive>\n"
+            io = (f"{ind}  <bpmn:extensionElements>\n{ind}    <bpm:receive>{jtext({'correlation': p['correlation'], 'payload': p.get('payload', [])})}</bpm:receive>\n"
                   f"{ind}  </bpmn:extensionElements>\n") + io
         return f'{ind}<bpmn:{tag} id="{n.id}" name="{nm}">\n{io}{ev}{ind}</bpmn:{tag}>\n'
     if k in ("xgw", "igw", "pgw"):
@@ -548,7 +548,7 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
         return f'{ind}<bpmn:{tag} id="{n.id}" name="{nm}"{dflt}>\n{io}{ind}</bpmn:{tag}>\n'
     if k == "script":
         code = escape(p["code"])
-        return (f'{ind}<bpmn:scriptTask id="{n.id}" name="{nm}" scriptFormat="chk-expr">\n{io}{dassoc}'
+        return (f'{ind}<bpmn:scriptTask id="{n.id}" name="{nm}" scriptFormat="bpm-expr">\n{io}{dassoc}'
                 f'{ind}  <bpmn:script>{code}</bpmn:script>\n{ind}</bpmn:scriptTask>\n')
     if k in ("ai", "svc"):
         t = dict(p["task"])
@@ -558,7 +558,7 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
             body = ext_el("serviceCall", t)
         if p.get("loop"):
             body = body.replace(f"{ind}  </bpmn:extensionElements>\n",
-                                f"{ind}    <chk:loop>{jtext(lp2)}</chk:loop>\n{ind}  </bpmn:extensionElements>\n")
+                                f"{ind}    <bpm:loop>{jtext(lp2)}</bpm:loop>\n{ind}  </bpmn:extensionElements>\n")
         return f'{ind}<bpmn:serviceTask id="{n.id}" name="{nm}">\n{body}{io}{dassoc}{loop}{ind}</bpmn:serviceTask>\n'
     if k in ("appr", "manual"):
         tag = "userTask" if k == "appr" else "manualTask"
@@ -567,7 +567,7 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
         body = ext_el("rule", p["task"])
         if p.get("loop"):
             body = body.replace(f"{ind}  </bpmn:extensionElements>\n",
-                                f"{ind}    <chk:loop>{jtext(lp2)}</chk:loop>\n{ind}  </bpmn:extensionElements>\n")
+                                f"{ind}    <bpm:loop>{jtext(lp2)}</bpm:loop>\n{ind}  </bpmn:extensionElements>\n")
         return f'{ind}<bpmn:businessRuleTask id="{n.id}" name="{nm}">\n{body}{io}{dassoc}{loop}{ind}</bpmn:businessRuleTask>\n'
     if k == "flist":
         return f'{ind}<bpmn:serviceTask id="{n.id}" name="{nm}">\n{ext_el("fileList", p["task"])}{io}{dassoc}{ind}</bpmn:serviceTask>\n'
@@ -581,7 +581,7 @@ def node_xml(n: Node, ex: Example, flows_all, data_by_writer, ind="    "):
         body = ext_el("call", p["task"])
         if p.get("loop"):
             body = body.replace(f"{ind}  </bpmn:extensionElements>\n",
-                                f"{ind}    <chk:loop>{jtext(lp2)}</chk:loop>\n{ind}  </bpmn:extensionElements>\n")
+                                f"{ind}    <bpm:loop>{jtext(lp2)}</bpm:loop>\n{ind}  </bpmn:extensionElements>\n")
         return (f'{ind}<bpmn:callActivity id="{n.id}" name="{nm}" calledElement="{p["called"]}">\n'
                 f'{body}{io}{dassoc}{loop}{ind}</bpmn:callActivity>\n')
     if k == "sub":
@@ -619,7 +619,7 @@ def boundary_xml(b: Boundary, ex, flows, ind):
     outg = [fl for fl in flows if fl.src == b.id]
     io = "".join(f"{ind}  <bpmn:outgoing>{fl.id}</bpmn:outgoing>\n" for fl in outg)
     if b.props.get("correlation"):
-        io = (f"{ind}  <bpmn:extensionElements>\n{ind}    <chk:receive>{jtext({'correlation': b.props['correlation']})}</chk:receive>\n"
+        io = (f"{ind}  <bpmn:extensionElements>\n{ind}    <bpm:receive>{jtext({'correlation': b.props['correlation']})}</bpm:receive>\n"
               f"{ind}  </bpmn:extensionElements>\n") + io
     ci = "" if b.interrupting else ' cancelActivity="false"'
     ev = event_def(dict(kind=b.kind, **{k: v for k, v in b.props.items() if k != "correlation"}), ex, ind + "  ")
@@ -694,7 +694,7 @@ def to_bpmn(ex: Example) -> str:
          '  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"',
          '  xmlns:di="http://www.omg.org/spec/DD/20100524/DI"',
          '  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"',
-         f'  xmlns:chk="{NS_CHK}"',
+         f'  xmlns:bpm="{NS_CHK}"',
          f'  id="Defs_{ex.file}" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">']
     for m in sorted(msgs):
         s.append(f'  <bpmn:message id="Msg_{m}" name="{m}" />')
@@ -704,9 +704,9 @@ def to_bpmn(ex: Example) -> str:
         s.append(f'  <bpmn:error id="Err_{e}" name="{e}" errorCode="{e}" />')
     s.append(f'  <bpmn:process id="{pid}" name="{escape(ex.name)}" isExecutable="true">')
     s.append("    <bpmn:extensionElements>")
-    s.append(f"      <chk:process>{jtext(proc_meta)}</chk:process>")
+    s.append(f"      <bpm:process>{jtext(proc_meta)}</bpm:process>")
     if ex.defaults:
-        s.append(f"      <chk:defaults>{jtext(ex.defaults)}</chk:defaults>")
+        s.append(f"      <bpm:defaults>{jtext(ex.defaults)}</bpm:defaults>")
     s.append("    </bpmn:extensionElements>")
     body = ""
     for n in ex.nodes:
@@ -718,7 +718,7 @@ def to_bpmn(ex: Example) -> str:
     for d in ex.data:
         body += (f'    <bpmn:dataObject id="DO_{d.id}" />\n'
                  f'    <bpmn:dataObjectReference id="{d.id}" name="{escape(d.name)}" dataObjectRef="DO_{d.id}">\n'
-                 f'      <bpmn:extensionElements>\n        <chk:dataOutput>{jtext(d.props)}</chk:dataOutput>\n      </bpmn:extensionElements>\n'
+                 f'      <bpmn:extensionElements>\n        <bpm:dataOutput>{jtext(d.props)}</bpm:dataOutput>\n      </bpmn:extensionElements>\n'
                  f"    </bpmn:dataObjectReference>\n")
     s.append(body.rstrip("\n"))
     s.append("  </bpmn:process>")
@@ -968,7 +968,7 @@ def to_card(ex: Example, bpmn_rel: str, cases_rel: str) -> str:
     L += ["**업무 배경과 목표**", "", ex.background.strip(), "",
           f"**왜 {'서버' if ex.run_location == 'server' else 'PC'}에서 도는가**", "", ex.why_location.strip(), ""]
     if ex.inputs:
-        L += ["**입력** (`chk:process.inputs` — 작업 지시·메시지 본문·케이스가 채운다. 값 출처가 있으면 Center가 넣는다)", "", "| 이름 | 타입 | 필수 | 기본값 | 값 출처 | 뜻 |", "| --- | --- | --- | --- | --- | --- |"]
+        L += ["**입력** (`bpm:process.inputs` — 작업 지시·메시지 본문·케이스가 채운다. 값 출처가 있으면 Center가 넣는다)", "", "| 이름 | 타입 | 필수 | 기본값 | 값 출처 | 뜻 |", "| --- | --- | --- | --- | --- | --- |"]
         L += [f"| `{i[0]}` | {i[1]} | {'✓' if i[2] else ''} | {md_cell(json.dumps(i[4], ensure_ascii=False)) if len(i) > 4 else ''} | {('`' + ex.input_sources[i[0]] + '`') if i[0] in ex.input_sources else '부르는 쪽'} | {md_cell(i[3])} |" for i in ex.inputs]
         L.append("")
     L += ["**흐름 (노드)**", "", "| id | 이름 | 종류 | 핵심 속성 | 다음 |", "| --- | --- | --- | --- | --- |"]

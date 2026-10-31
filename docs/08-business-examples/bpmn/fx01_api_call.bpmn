@@ -4,23 +4,23 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx01_api_call" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx01_api_call" name="API AI 태스크" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
   "inputs": []
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Api" name="API 호출">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n업무 파라미터 `주소`가 JSON API다.\n\n## 할 일\nGET으로 한 번 불러 `rates.KRW`를 꺼낸다.\n\n## 판단하지 않는 것\n값을 지어내지 않는다. 응답에 없으면 실패한다.\n\n## 반환\n- `원화`: number",
   "domain": "api",
   "results": {
@@ -32,7 +32,7 @@
   "params": {
     "주소": "https://api.frankfurter.dev/v1/latest?base=USD&amp;symbols=KRW"
   }
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>

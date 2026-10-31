@@ -55,7 +55,7 @@ StaffRequest에 다음을 더한다. `recent_runs`·`requests`·`open_approvals`
 | C12 | `MessageRequest` (메시지 시작) | `staff?` | 작업과 같은 규칙 |
 | C12 | 위임 요청 | `staff?`, `mode?` | 아래 §요청 |
 | C12 | `JobDispatch` | `staff?` = `{id, name, company}` | 서버 작업을 내려줄 때 붙인다. 저장하지 않는다 |
-| C14 | `chk:call.delegate` | `staff?`(식), `mode?` | 아래 §요청. `mode: handoff`이면 `chk:call.output`이 비어야 한다 (B14 오류) |
+| C14 | `bpm:call.delegate` | `staff?`(식), `mode?` | 아래 §요청. `mode: handoff`이면 `bpm:call.output`이 비어야 한다 (B14 오류) |
 | C14·C1 | `inputs[].source` | `staff.id` (`string`)·`staff.name` (`string`)·`staff.company` (`string`) | Center가 넣는 값 출처. 부르는 쪽은 줄 수 없다(`input_not_from_caller`) |
 
 ### 없어지는 것

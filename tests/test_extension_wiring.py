@@ -30,12 +30,12 @@ def test_runner_secrets_give_the_call_token_and_extension_secrets(monkeypatch: p
     from chaeksas.bot_ui.runner_main import CallTokenHolder  # noqa: PLC0415
 
     monkeypatch.setattr(Credentials, "extension_secret", lambda self, ext, ref: f"{ext}/{ref}")
-    holder = CallTokenHolder(value="chk_ctr_first")
+    holder = CallTokenHolder(value="bpm_ctr_first")
     found = RunnerSecrets(Credentials(), "crm", call_token=holder)
     assert found.resolve("note") == "crm/note"
-    assert found.resolve("call_token") == "chk_ctr_first"
-    holder.value = "chk_ctr_renewed"
-    assert found.resolve("call_token") == "chk_ctr_renewed", "새 토큰을 그 자리에서 쓴다"
+    assert found.resolve("call_token") == "bpm_ctr_first"
+    holder.value = "bpm_ctr_renewed"
+    assert found.resolve("call_token") == "bpm_ctr_renewed", "새 토큰을 그 자리에서 쓴다"
 
 
 def test_the_extension_settings_ride_in_a_file_not_on_the_command_line(tmp_path: Path) -> None:
@@ -48,5 +48,5 @@ def test_the_extension_settings_ride_in_a_file_not_on_the_command_line(tmp_path:
 
 
 def test_studio_resolves_extension_secrets_from_the_environment_first(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CHK_STUDIO__EXT__CRM__NOTE", "from-env")
+    monkeypatch.setenv("BPM_STUDIO__EXT__CRM__NOTE", "from-env")
     assert StudioSecrets(extension_id="crm").resolve("note") == "from-env"

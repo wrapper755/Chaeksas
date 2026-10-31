@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx30_contract_review" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_contract_review" name="contract_review" />
   <bpmn:process id="Proc_bx30_contract_review" name="계약서 검토" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -39,7 +39,7 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="검토 요청">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -47,7 +47,7 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Extract" name="조항 뽑기">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`계약서`는 계약서 PDF다.\n\n## 할 일\n손해배상, 지식재산, 해지 조항의 원문을 찾아 그대로 옮긴다. 조항 번호도 적는다.\n\n## 판단하지 않는 것\n조항이 유리한지 불리한지 판단하지 않는다. 없으면 빈 문자열.\n\n## 반환\n- `손해배상조항`: string\n- `지재권조항`: string\n- `해지조항`: string",
   "domain": "doc",
   "results": {
@@ -59,7 +59,7 @@
     "pdf_text_tool"
   ],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
@@ -72,7 +72,7 @@
     </bpmn:parallelGateway>
     <bpmn:callActivity id="Call_Damages" name="손해배상 검토" calledElement="Proc_bx37_clause_review">
       <bpmn:extensionElements>
-        <chk:call>{
+        <bpm:call>{
   "input": {
     "조항": "손해배상조항",
     "종류": "'손해배상'"
@@ -80,14 +80,14 @@
   "output": {
     "손해배상결과": "결과"
   }
-}</chk:call>
+}</bpm:call>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
     </bpmn:callActivity>
     <bpmn:callActivity id="Call_IP" name="지재권 검토" calledElement="Proc_bx37_clause_review">
       <bpmn:extensionElements>
-        <chk:call>{
+        <bpm:call>{
   "input": {
     "조항": "지재권조항",
     "종류": "'지식재산'"
@@ -95,14 +95,14 @@
   "output": {
     "지재권결과": "결과"
   }
-}</chk:call>
+}</bpm:call>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
     </bpmn:callActivity>
     <bpmn:callActivity id="Call_Term" name="해지 검토" calledElement="Proc_bx37_clause_review">
       <bpmn:extensionElements>
-        <chk:call>{
+        <bpm:call>{
   "input": {
     "조항": "해지조항",
     "종류": "'해지'"
@@ -110,7 +110,7 @@
   "output": {
     "해지결과": "결과"
   }
-}</chk:call>
+}</bpm:call>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
@@ -121,7 +121,7 @@
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:scriptTask id="Task_Grade" name="위험 등급" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Grade" name="위험 등급" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
       <bpmn:script>점수 = [손해배상결과.점수, 지재권결과.점수, 해지결과.점수]
@@ -134,7 +134,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Legal" name="법무팀 검토">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "계약 위험 검토",
   "description": "",
   "show": [
@@ -159,14 +159,14 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_11</bpmn:incoming>
       <bpmn:outgoing>Flow_13</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:serviceTask id="Task_Opinion" name="의견서 쓰기">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n세 조항의 검토 결과(`손해배상결과`, `지재권결과`, `해지결과`)와 `등급`, 법무 의견(있으면 `의견`)이 있다.\n\n## 할 일\n요청자가 읽을 검토 의견서를 쓴다: 요약 → 조항별 위험과 수정 제안 → 결론.\n\n## 판단하지 않는 것\n검토 결과에 없는 새 위험을 만들지 않는다.\n\n## 반환\n- `의견서`: string (markdown)",
   "domain": "llm",
   "results": {
@@ -174,7 +174,7 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:incoming>Flow_13</bpmn:incoming>
@@ -185,13 +185,13 @@
     </bpmn:serviceTask>
     <bpmn:sendTask id="Task_Reply" name="의견서 회신">
       <bpmn:extensionElements>
-        <chk:webhook>{
+        <bpm:webhook>{
   "url": "{회신주소}",
   "method": "POST",
   "body": "fields:[요청번호, 등급, 의견서경로]",
   "timeout_s": 10,
   "store_as": null
-}</chk:webhook>
+}</bpm:webhook>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_14</bpmn:incoming>
       <bpmn:outgoing>Flow_15</bpmn:outgoing>
@@ -219,12 +219,12 @@
     <bpmn:dataObject id="DO_Data_Opinion" />
     <bpmn:dataObjectReference id="Data_Opinion" name="검토 의견서" dataObjectRef="DO_Data_Opinion">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "계약검토/{요청번호}.md",
   "format": "md",
   "store_as": "의견서경로",
   "template": "{의견서}"
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

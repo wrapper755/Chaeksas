@@ -329,7 +329,7 @@ class SettingsDialog(QDialog):
     def _sending_box(self) -> QWidget:
         """BUI-03 「보내기」 ([ADR-0059](../../../../../docs/decisions/0059-sending-mail-and-webhooks.md)).
 
-        **비어 있으면 `chk:email`이 보내지 않고 실패한다** — 조용히 넘어가지 않는다. 비밀번호는
+        **비어 있으면 `bpm:email`이 보내지 않고 실패한다** — 조용히 넘어가지 않는다. 비밀번호는
         설정 파일이 아니라 OS 비밀 저장소로 간다 (CLAUDE.md §5).
         """
         box = QWidget()
@@ -492,7 +492,7 @@ class SettingsDialog(QDialog):
 
     def _initial_result(self) -> str:
         if self._agent.credentials.center_key_from_env():
-            return "환경변수의 키를 씁니다 (CHK_BOT_UI__CENTER_API_KEY)."
+            return "환경변수의 키를 씁니다 (BPM_BOT_UI__CENTER_API_KEY)."
         if not self._agent.credentials.center_api_key():
             return enrollment_text(self._agent)
         if self._agent.registered:

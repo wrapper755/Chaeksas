@@ -330,7 +330,7 @@ def test_inputs_must_be_an_object() -> None:
 
 
 def test_requested_by_is_not_taken_from_the_body() -> None:
-    """행위자는 키 이름이나 X-CHK-Actor 헤더로 Center가 채운다 — 본문의 값은 신원이 아니다."""
+    """행위자는 키 이름이나 X-BPM-Actor 헤더로 Center가 채운다 — 본문의 값은 신원이 아니다."""
     req = job(requested_by="사칭")
     assert "requested_by" not in JobCreateRequest.model_fields
     assert req.to_json_dict()["requested_by"] == "사칭"  # 보관은 하지만 모델 필드가 아니다

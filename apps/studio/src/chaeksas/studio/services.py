@@ -187,7 +187,7 @@ def reader_for(settings: Any, api_key: str | None) -> CenterReader | None:
 def from_settings(settings: Any) -> Services:
     """STU-10 설정과 비밀 저장소에서 한 벌 (`main_window`가 실행마다 한 번 짓는다).
 
-    키는 **환경변수가 먼저**다 (`CHK_STUDIO__CENTER_API_KEY`) — `credentials.py`와 같은 규칙.
+    키는 **환경변수가 먼저**다 (`BPM_STUDIO__CENTER_API_KEY`) — `credentials.py`와 같은 규칙.
     """
     from chaeksas.studio.credentials import StudioCredentials  # noqa: PLC0415 — 순환 피함
 

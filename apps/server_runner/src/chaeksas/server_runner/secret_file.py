@@ -1,6 +1,6 @@
 """비밀 폴더 — OS 비밀 저장소가 없는 컨테이너에서 받은 키를 둘 자리 (ADR-0100).
 
-**운영자가 고를 때만 쓴다** — 환경변수 `CHK_SERVER_RUNNER__SECRETS_DIR`가 있어야 켜진다. 없으면
+**운영자가 고를 때만 쓴다** — 환경변수 `BPM_SERVER_RUNNER__SECRETS_DIR`가 있어야 켜진다. 없으면
 지금처럼 OS 비밀 저장소만 보고, 그것도 없으면 등록 요청을 보내지 않는다 (C12). 몰래 평문 파일로
 흘리지 않는다는 규칙(CLAUDE.md §5)은 그대로이고, 이것은 **사람이 자리를 정해 준 경우**다.
 
@@ -19,7 +19,7 @@ import sys
 import threading
 from pathlib import Path
 
-ENV_SECRETS_DIR = "CHK_SERVER_RUNNER__SECRETS_DIR"
+ENV_SECRETS_DIR = "BPM_SERVER_RUNNER__SECRETS_DIR"
 FILE_NAME = "secrets.json"
 
 

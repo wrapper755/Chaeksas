@@ -43,7 +43,7 @@
 
 「부른 쪽」은 일감의 `caller`를 `<종류>:<호스트>`로 적은 것이다 (예: `bot_ui:bui_…`, `server_runner:srv_…`, `studio:…` — C11 `UsageRecord.key_name`에 담긴다).
 
-「실행 id」는 **CON-01 실행 상세로 가는 링크**다 ([ADR-0075](../decisions/0075-service-console-links-to-center-console.md)) — Center 콘솔 주소는 이 콘솔의 설정 `CHK_SVC_CONSOLE__CENTER_CONSOLE_URL`(브라우저가 여는 주소)이 주고, **없으면 링크만 없다**. C3 `run_id` 모양(`run_…`·`test_…`)일 때만 잇는다.
+「실행 id」는 **CON-01 실행 상세로 가는 링크**다 ([ADR-0075](../decisions/0075-service-console-links-to-center-console.md)) — Center 콘솔 주소는 이 콘솔의 설정 `BPM_SVC_CONSOLE__CENTER_CONSOLE_URL`(브라우저가 여는 주소)이 주고, **없으면 링크만 없다**. C3 `run_id` 모양(`run_…`·`test_…`)일 때만 잇는다.
 
 > 제안: 필터(부른 쪽, 작업, 결과, 기간)와 「부른 쪽별 합계」 탭(호출 수·실패 수·LLM 사용량). 지금은 최근 100건 목록뿐이다.
 

@@ -226,7 +226,7 @@ def test_switching_channel_in_the_panel_removes_the_other() -> None:
     editor.url_box.setText("https://hooks.example.com/x")
     changes, problem = panel.patch()
     assert problem is None
-    assert changes["chk"]["email"] is None, "캔버스가 chk:email을 지운다"
+    assert changes["chk"]["email"] is None, "캔버스가 bpm:email을 지운다"
     assert json.loads(changes["chk"]["webhook"])["url"] == "https://hooks.example.com/x"
 
 

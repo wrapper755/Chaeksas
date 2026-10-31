@@ -210,7 +210,7 @@ class BotUiApp:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """`chk-bot-ui` 진입점.
+    """`bpm-bot-ui` 진입점.
 
     `--selftest [파일]`은 **묶은 실행 파일의 빌드 검사**다 (ADR-0024) — 확장이 다 보이는지
     보고 끝난다. 화면을 띄우지 않는다.
@@ -234,7 +234,7 @@ def run_selftest(args: list[str]) -> int:
     """
     from chaeksas.core.selftest import main  # noqa: PLC0415 — 평소 기동을 무겁게 하지 않는다
 
-    return main(args[1:], prog="chk-bot-ui")
+    return main(args[1:], prog="bpm-bot-ui")
 
 
 __all__ = ["SHUTDOWN_WAIT_S", "BotUiApp", "main"]

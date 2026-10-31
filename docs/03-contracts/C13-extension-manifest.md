@@ -17,7 +17,7 @@
 >
 > **실행하는 쪽은 정의만 본다** ([ADR-0102](../decisions/0102-calling-outside-is-pull.md)) — 외부 앱을 **부르는 것은 어댑터 일꾼**이고 실행하는 쪽은 C15로 올린다. 그래도 PC 실행기·서버 실행기·Studio는 BPM 프로세스를 띄우기 **전에** `GET /resources/extensions/{id}`(정의·봉투)를 받아 `chaeksas.core.app_directory`로 **봉투를 다시 검증하고**(E6) **패키지가 고정한 `definition_hash`와 대조해**(C1) 다르면 **시작조차 하지 않는다** — 중간에 알면 이미 한 일을 되돌릴 수 없다. 닿지 못하면 들고 있던 것을 쓰고(ADR-0007), 404는 버린다(철회는 보안 동작이다). 묻는 대상은 매니페스트의 `requires.extensions` **전부**이고 어느 것이 외부인가는 Center의 답이 말해 준다. **서비스 앱 주소는 받지 않는다** — 누구도 들지 않는다.
 >
-> **어댑터 일꾼**(`chk-adapter-consumer`, `apps/adapter_consumer`)은 같은 정의를 일꾼 토큰으로 받아 봉투를 다시 검증하고 §4를 돌린다. **주소·키는 그 일꾼의 설정이 쥔다** — 확장마다 `CHK_ADAPTER__EXT__<확장>__BASE_URL`(없으면 정의의 `base_url`)·`…__KEY`(키를 받는 앱만)·`…__TEST_BASE_URL`·`…__TEST_KEY`(시험 일감 — `origin: test` — 에 쓴다, 없으면 운영 쪽)·`CHK_ADAPTER__ALLOW_PRIVATE_NETWORK`(정의가 허용해도 일꾼 설정이 또 열어야 사설 IP로 나간다 — 기본 닫힘). OAuth·mTLS 같은 인증을 늘리는 일도 이 일꾼 안의 일이다.
+> **어댑터 일꾼**(`bpm-adapter-consumer`, `apps/adapter_consumer`)은 같은 정의를 일꾼 토큰으로 받아 봉투를 다시 검증하고 §4를 돌린다. **주소·키는 그 일꾼의 설정이 쥔다** — 확장마다 `BPM_ADAPTER__EXT__<확장>__BASE_URL`(없으면 정의의 `base_url`)·`…__KEY`(키를 받는 앱만)·`…__TEST_BASE_URL`·`…__TEST_KEY`(시험 일감 — `origin: test` — 에 쓴다, 없으면 운영 쪽)·`BPM_ADAPTER__ALLOW_PRIVATE_NETWORK`(정의가 허용해도 일꾼 설정이 또 열어야 사설 IP로 나간다 — 기본 닫힘). OAuth·mTLS 같은 인증을 늘리는 일도 이 일꾼 안의 일이다.
 
 
 
@@ -83,7 +83,7 @@
 
 | 필드 | 뜻 |
 | --- | --- |
-| `protocol` | `chk-c11`(C11을 따르는 서비스 앱) 또는 `http-adapter`(외부 앱, §4) |
+| `protocol` | `bpm-c11`(C11을 따르는 서비스 앱) 또는 `http-adapter`(외부 앱, §4) |
 | `base_url` | 기본 주소. **쓰는 쪽은 그 서버 부분을 부르는 일꾼 하나다** — C11 앱은 제 자리에 떠 있고(누구도 이 주소로 부르지 않는다, 참고로만 남는다), 외부 앱은 어댑터 일꾼이 쓰되 **일꾼 설정의 `BASE_URL`이 이긴다**(정의의 `allowed_hosts`·`allow_private_network` 안에서만, ADR-0102) |
 | `adapter` | `protocol=http-adapter`일 때만 (§4) |
 
@@ -158,7 +158,7 @@
 | --- | --- |
 | `allowed_hosts` | 부를 수 있는 호스트 목록 (정확한 이름, 와일드카드 없음). `base_url`·`catalog_url`·`health`의 호스트가 모두 이 안에 있어야 한다 |
 | `allow_private_network` | 기본 false. 사설망·루프백·링크 로컬 주소를 부르려면 true여야 하고, 이것도 서명 대상이다 |
-| `auth` | `{type: "bearer" \| "header", name?}`. 값은 어댑터 일꾼 설정의 키(`CHK_ADAPTER__EXT__<확장>__KEY`). **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)) — 어댑터 일꾼은 키를 싣지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
+| `auth` | `{type: "bearer" \| "header", name?}`. 값은 어댑터 일꾼 설정의 키(`BPM_ADAPTER__EXT__<확장>__KEY`). **쿼리 문자열 인증은 없다** (주소·로그에 키가 남는다). 템플릿에서는 키를 쓸 수 없다 **없으면 키를 받지 않는 앱이다** ([ADR-0091](../decisions/0091-external-apps-without-auth-take-no-key.md)) — 어댑터 일꾼은 키를 싣지 않는다. 그래서 `requires_keys`에 `purpose: run`을 적으면 `auth`도 있어야 한다 (E3) |
 | `limits` | `{timeout_s: 60, max_response_kb: 1024}` |
 | `health` | 선택. `{path, expect_status: 200}`. **지금 읽는 쪽이 없다** — Center는 외부 앱을 두드리지 않고 상태를 토픽에서 읽는다(C7·C15, [ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 받아 두기만 한다 |
 | `operations` | 아래 Operation[] |
@@ -181,7 +181,7 @@ Operation:
 - PC: 확인(`confirmation`)으로 넘긴다. 「계속」은 `attempt`를 올려 다시 부르고, 「중단」은 업무 실패(`TASK_FAILED`)다.
 - 서버: 실행 실패 또는 오류 경계 이벤트로 보낸다(`TASK_FAILED`).
 
-어댑터 일꾼은 요청을 **보낸 뒤** 답을 받지 못한 실패(읽기 시간 초과·끊김)를 C15 `fail`에 `code: unreachable`·`outcome_unknown: true`로 올린다 — 연결 단계에서 실패해 요청이 나가지 않았으면 모름이 아니다. 부르는 쪽(`chk:serviceCall`)이 그 칸을 보고 위처럼 가른다 (C15 「결과 모름」, [ADR-0107](../decisions/0107-outcome-unknown-asks-a-person.md)). **확장 로컬 수행기**가 `TaskFailed(escalate="confirmation")`로 올리는 것도 같은 결이다 — PC는 확인, 서버는 오류 경계 `ESCALATED` ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)).
+어댑터 일꾼은 요청을 **보낸 뒤** 답을 받지 못한 실패(읽기 시간 초과·끊김)를 C15 `fail`에 `code: unreachable`·`outcome_unknown: true`로 올린다 — 연결 단계에서 실패해 요청이 나가지 않았으면 모름이 아니다. 부르는 쪽(`bpm:serviceCall`)이 그 칸을 보고 위처럼 가른다 (C15 「결과 모름」, [ADR-0107](../decisions/0107-outcome-unknown-asks-a-person.md)). **확장 로컬 수행기**가 `TaskFailed(escalate="confirmation")`로 올리는 것도 같은 결이다 — PC는 확인, 서버는 오류 경계 `ESCALATED` ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)).
 
 ### 4-2. 템플릿 규칙 (주입 막기)
 
@@ -231,7 +231,7 @@ Operation:
 {
   "schema": 2, "id": "seal-check", "version": "1.2.0", "name": "인감 대조", "publisher": "사내 IT",
   "tier": "internal", "api": ">=2,<3",
-  "service": {"protocol": "chk-c11", "base_url": "http://svc-seal:8000"},
+  "service": {"protocol": "bpm-c11", "base_url": "http://svc-seal:8000"},
   "contributes": {
     "task_types": [{"id": "seal_check", "label": "인감 대조", "icon": "stamp", "bpmn": "serviceTask",
                     "editor": {"kind": "schema"},
@@ -300,7 +300,7 @@ Studio 「확장」(STU-15)의 「정의 파일 열기...」는 E1·E3을 로컬
 | 2026-10-31 | 2 | 외부 확장 등록은 **그 토픽의 일꾼이 정의를 올리는 것**이다(C15 `PUT …/self/extension`) — `POST/DELETE /resources/extensions`를 걷었다. 맡은 일꾼이 일꾼 폴더에서 빠지면 Center가 거둔다. 낮은 판은 409 `older_than_registered`. 정의 모양은 그대로다 | [0122](../decisions/0122-consumer-folder.md) |
 | 2026-10-31 | 2 | 기여 지점 `tool_ui.tools`·`bot_ui.panels`·`bot_ui.local_runtimes`·`agent_environments`, **E8**, 예약 키 `runtime.<id>.*`, `scope: tool_ui`, `requires_keys[].purpose: utility`를 걷었다 — UI 자동화 확장과 함께. 걷은 열쇠는 호스트가 경고하고 읽지 않는다(`LEGACY_CONTRIBUTION_KEYS`), E7은 옛 머리도 막는다. 열쇠가 모두 선택이라 schema는 그대로이고 `extension_api`는 **2.0.0**이다(이름을 지웠다 — 예시의 `api`는 `>=2,<3`) | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 2 | 수행기가 전환할 때 **사람에게 보일 검토 자료**(`TaskFailed(review=…)`)를 넘긴다 — `extension_api` **1.5**. 정의는 그대로다 | [0112](../decisions/0112-escalation-review-from-extensions.md) |
-| 2026-10-29 | 2 | `requires_keys`에 키가 없다 — `run`은 빌드가 `requires.service_apps` 줄을 적는 뜻, `extra_scopes`는 Center가 PC 스위치로 건다. 외부 앱은 **어댑터 일꾼**이 부른다 — 주소·키는 그 일꾼 설정(`CHK_ADAPTER__EXT__<확장>__*`), 실행하는 쪽은 정의 검증·고정만. 예약 키 `service.base_url`·`service.key_ref` → `center.url`·`call_token` 비밀, `CHK_RUNTIME__SERVICE_URL` → `CHK_RUNTIME__CENTER_URL`. 예약 접두 `service.` → `center.` | [0102](../decisions/0102-calling-outside-is-pull.md) |
+| 2026-10-29 | 2 | `requires_keys`에 키가 없다 — `run`은 빌드가 `requires.service_apps` 줄을 적는 뜻, `extra_scopes`는 Center가 PC 스위치로 건다. 외부 앱은 **어댑터 일꾼**이 부른다 — 주소·키는 그 일꾼 설정(`BPM_ADAPTER__EXT__<확장>__*`), 실행하는 쪽은 정의 검증·고정만. 예약 키 `service.base_url`·`service.key_ref` → `center.url`·`call_token` 비밀, `BPM_RUNTIME__SERVICE_URL` → `BPM_RUNTIME__CENTER_URL`. 예약 접두 `service.` → `center.` | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | `requires_keys`의 키는 Center가 내려 준다 — `run`은 배포 대상마다, `utility`는 CON-03 「셀렉터 등록」을 켠 PC에. `config_key`는 무시한다(호환), 호스트가 `ctx.secret("utility")`로 준다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-25 | 2 | `adapter.auth`가 없는 외부 앱은 **키를 받지 않는 앱**이라고 적었다. E3가 `run` 키를 적고 `auth`가 없는 정의를 거부한다 — 키를 실을 자리 없이 키를 요구하던 모순이었다. 칸은 그대로라 schema도 그대로다 | [0091](../decisions/0091-external-apps-without-auth-take-no-key.md) |
 | 2026-10-24 | 2 | 외부 확장 등록·해제는 **봉투 대신 정의(해제는 `{id, version}`)를 받고 Center가 서명한다**. `DELETE …/extensions/{id}` 꼴을 없앴다 | [0090](../decisions/0090-center-admin-accounts.md) |

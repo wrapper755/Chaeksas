@@ -84,8 +84,8 @@
 ### 믿는 키 (`admin_keys`)
 
 - 믿는 키는 **Center 서명 키**와 사람이 서명하던 때 들어온 **옛 Admin 키**다. Center가 C4·C12 하트비트로 그대로 내려 준다 (`AdminKey` — 「Center」라는 이름이 붙은 것이 Center 키다).
-- Center 서명 키는 **Center가 처음 뜰 때 만들어 DB에 둔다**. 서버 셸의 `chk-center signing-key rotate`로 바꾸면 새 키가 그 뒤를 서명하고 **옛 키는 믿는 목록에 남는다**(이미 나간 승인·배포가 산다).
-- 키를 믿지 않게 하는 것은 `chk-center signing-key retire <key_id>`뿐이다 — `revoked_at`이 붙고, 그 키가 서명한 승인·배포는 실행하는 쪽에서 V2 `revoked_key`로 거부된다. **지금 서명하는 키는 버릴 수 없다**(먼저 바꾼다).
+- Center 서명 키는 **Center가 처음 뜰 때 만들어 DB에 둔다**. 서버 셸의 `bpm-center signing-key rotate`로 바꾸면 새 키가 그 뒤를 서명하고 **옛 키는 믿는 목록에 남는다**(이미 나간 승인·배포가 산다).
+- 키를 믿지 않게 하는 것은 `bpm-center signing-key retire <key_id>`뿐이다 — `revoked_at`이 붙고, 그 키가 서명한 승인·배포는 실행하는 쪽에서 V2 `revoked_key`로 거부된다. **지금 서명하는 키는 버릴 수 없다**(먼저 바꾼다).
 
 ## 검증 규칙
 

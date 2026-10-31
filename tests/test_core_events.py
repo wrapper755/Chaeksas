@@ -28,10 +28,10 @@ RUN_ID = "run_20261004_093000_abc123"
 
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   {definitions}
   <bpmn:process id="{process_id}" name="시험">
-    <bpmn:extensionElements><chk:process>{props}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{props}</bpm:process></bpmn:extensionElements>
     {body}
   </bpmn:process>
 </bpmn:definitions>
@@ -64,7 +64,7 @@ def flow(id_: str, source: str, target: str) -> str:
 
 def script(id_: str, body: str) -> str:
     return (
-        f'<bpmn:scriptTask id="{id_}" scriptFormat="chk-expr">'
+        f'<bpmn:scriptTask id="{id_}" scriptFormat="bpm-expr">'
         f"<bpmn:script>{body}</bpmn:script></bpmn:scriptTask>"
     )
 
@@ -151,8 +151,8 @@ APPROVAL = '{"title": "결재해 주세요"}'
 def approval_with_boundary(*, cancel: str = "true", duration: str = "PT1H") -> Any:
     return make(
         '<bpmn:startEvent id="Start_1"/>'
-        + f'<bpmn:userTask id="Approve_1"><bpmn:extensionElements><chk:approval>{APPROVAL}'
-        + "</chk:approval></bpmn:extensionElements></bpmn:userTask>"
+        + f'<bpmn:userTask id="Approve_1"><bpmn:extensionElements><bpm:approval>{APPROVAL}'
+        + "</bpm:approval></bpmn:extensionElements></bpmn:userTask>"
         + f'<bpmn:boundaryEvent id="Bnd_Late" attachedToRef="Approve_1" cancelActivity="{cancel}">'
         + f"<bpmn:timerEventDefinition><bpmn:timeDuration>{duration}</bpmn:timeDuration>"
         + "</bpmn:timerEventDefinition></bpmn:boundaryEvent>"
@@ -244,7 +244,7 @@ def receive_process(*, correlation: bool = True) -> Any:
     return make(
         '<bpmn:startEvent id="Start_1"/>'
         + '<bpmn:receiveTask id="Recv_1" messageRef="Msg_done"><bpmn:extensionElements>'
-        + f"<chk:receive>{body}</chk:receive></bpmn:extensionElements></bpmn:receiveTask>"
+        + f"<bpm:receive>{body}</bpm:receive></bpmn:extensionElements></bpmn:receiveTask>"
         + script("Task_After", "결과 = 검수통과")
         + '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Recv_1")
@@ -289,7 +289,7 @@ def test_a_message_boundary_interrupts_a_receive_task() -> None:
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
         + '<bpmn:receiveTask id="Recv_1" messageRef="Msg_done"><bpmn:extensionElements>'
-        + '<chk:receive>{"payload": ["검수통과"]}</chk:receive></bpmn:extensionElements></bpmn:receiveTask>'
+        + '<bpm:receive>{"payload": ["검수통과"]}</bpm:receive></bpmn:extensionElements></bpmn:receiveTask>'
         + '<bpmn:boundaryEvent id="Bnd_Cancel" attachedToRef="Recv_1">'
         + '<bpmn:messageEventDefinition messageRef="Msg_cancel"/></bpmn:boundaryEvent>'
         + script("Task_After", "결과 = 1")
@@ -343,8 +343,8 @@ def test_a_signal_boundary_aborts_a_waiting_approval() -> None:
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
         + '<bpmn:parallelGateway id="Gw_Fork"/>'
-        + f'<bpmn:userTask id="Approve_1"><bpmn:extensionElements><chk:approval>{APPROVAL}'
-        + "</chk:approval></bpmn:extensionElements></bpmn:userTask>"
+        + f'<bpmn:userTask id="Approve_1"><bpmn:extensionElements><bpm:approval>{APPROVAL}'
+        + "</bpm:approval></bpmn:extensionElements></bpmn:userTask>"
         + '<bpmn:boundaryEvent id="Bnd_Abort" attachedToRef="Approve_1">'
         + '<bpmn:signalEventDefinition signalRef="Sig_abort"/></bpmn:boundaryEvent>'
         + script("Task_Done", "승인 = 1")
@@ -386,7 +386,7 @@ def caller_process(mapping: str) -> Any:
         '<bpmn:startEvent id="Start_1"/>'
         + script("Task_Set", "값 = 21")
         + '<bpmn:callActivity id="Call_1" calledElement="other.proc"><bpmn:extensionElements>'
-        + f"<chk:call>{mapping}</chk:call></bpmn:extensionElements></bpmn:callActivity>"
+        + f"<bpm:call>{mapping}</bpm:call></bpmn:extensionElements></bpmn:callActivity>"
         + script("Task_After", "최종 = 답 + 0")
         + '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Task_Set")
@@ -414,7 +414,7 @@ def test_a_missing_call_target_stops_the_run() -> None:
     assert run.error is not None and run.error.code == "call_target_missing"
 
 
-#: 위임 하나 — 값 하나를 주고 하나를 받는다 (`chk:call.delegate`, ADR-0062).
+#: 위임 하나 — 값 하나를 주고 하나를 받는다 (`bpm:call.delegate`, ADR-0062).
 DELEGATION = (
     '{"delegate": {"bpm_process_id": "fin.erp-input", "version": "1.2.0"}, '
     '"input": {"전표번호": "값"}, "output": {"답": "결과코드"}}'
@@ -440,7 +440,7 @@ def test_a_delegation_is_handed_over_and_waits() -> None:
 
 
 def test_a_finished_delegation_maps_only_what_is_listed() -> None:
-    """돌아온 값 중 **적은 것만** 변수가 된다 (C14 — `chk:call.output`)."""
+    """돌아온 값 중 **적은 것만** 변수가 된다 (C14 — `bpm:call.output`)."""
     port = RecordingDelegator()
     engine, run = start(caller_process(DELEGATION), RunEnv(processes={}, delegate=port))
     engine.run_until_blocked(run)
@@ -540,8 +540,8 @@ def test_a_called_process_can_wait_for_a_human() -> None:
     """안쪽이 결재를 기다리면 바깥도 함께 기다린다 (실행 자리는 하나다)."""
     child = make(
         '<bpmn:startEvent id="Sub_Start"/>'
-        + f'<bpmn:userTask id="Sub_Approve"><bpmn:extensionElements><chk:approval>{APPROVAL}'
-        + "</chk:approval></bpmn:extensionElements></bpmn:userTask>"
+        + f'<bpmn:userTask id="Sub_Approve"><bpmn:extensionElements><bpm:approval>{APPROVAL}'
+        + "</bpm:approval></bpmn:extensionElements></bpmn:userTask>"
         + script("Sub_After", "결과 = 7")
         + '<bpmn:endEvent id="Sub_End"/>'
         + flow("sf1", "Sub_Start", "Sub_Approve")
@@ -553,7 +553,7 @@ def test_a_called_process_can_wait_for_a_human() -> None:
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
         + '<bpmn:callActivity id="Call_1" calledElement="human.proc"><bpmn:extensionElements>'
-        + '<chk:call>{"output": {"답": "결과"}}</chk:call></bpmn:extensionElements></bpmn:callActivity>'
+        + '<bpm:call>{"output": {"답": "결과"}}</bpm:call></bpmn:extensionElements></bpmn:callActivity>'
         + '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Call_1")
         + flow("f2", "Call_1", "End_1")
@@ -575,8 +575,8 @@ def test_a_called_process_speaks_with_the_outer_package_id() -> None:
 
     child = make(
         '<bpmn:startEvent id="Sub_Start"/>'
-        + f'<bpmn:userTask id="Sub_Approve"><bpmn:extensionElements><chk:approval>{APPROVAL}'
-        + "</chk:approval></bpmn:extensionElements></bpmn:userTask>"
+        + f'<bpmn:userTask id="Sub_Approve"><bpmn:extensionElements><bpm:approval>{APPROVAL}'
+        + "</bpm:approval></bpmn:extensionElements></bpmn:userTask>"
         + '<bpmn:endEvent id="Sub_End"/>'
         + flow("sf1", "Sub_Start", "Sub_Approve")
         + flow("sf2", "Sub_Approve", "Sub_End"),
@@ -750,7 +750,7 @@ def batch_process(
         '<bpmn:startEvent id="Start_1"/>'
         + script("Task_Set", "건들 = [10, 20, 30]")
         + '<bpmn:callActivity id="Call_Batch" calledElement="Proc_item"><bpmn:extensionElements>'
-        + f"<chk:call>{call}</chk:call><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
+        + f"<bpm:call>{call}</bpm:call><bpm:loop>{loop}</bpm:loop></bpmn:extensionElements>"
         + f'<bpmn:multiInstanceLoopCharacteristics isSequential="{str(sequential).lower()}" />'
         + "</bpmn:callActivity>"
         + '<bpmn:endEvent id="End_1"/>'

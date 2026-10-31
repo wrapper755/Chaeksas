@@ -1,4 +1,4 @@
-"""C14. BPMN 확장 속성 (`chk:*`) — BPM 프로세스 정의 파일 형식.
+"""C14. BPMN 확장 속성 (`bpm:*`) — BPM 프로세스 정의 파일 형식.
 
 단일 원본: `docs/03-contracts/C14-bpmn-extensions.md`. Studio(쓰기)·실행기(읽기)·Center(검사)가
 **같은 모델**을 쓴다.
@@ -7,14 +7,14 @@
 
 | 묶음 | 무엇 |
 | --- | --- |
-| 속성 모델 | `bpmn:extensionElements` 안 `chk:*` 요소의 JSON (`ProcessInfo`·`AiTask`·`Approval` …) |
+| 속성 모델 | `bpmn:extensionElements` 안 `bpm:*` 요소의 JSON (`ProcessInfo`·`AiTask`·`Approval` …) |
 | 그래프 | BPMN 파일을 읽어 만든 노드·흐름 (`read_process()` → `BpmnProcess`) |
 | 검사 | `validate()` — B1~B14. 오류와 **경고**를 함께 돌려준다 (`Violation.severity`) |
 
 읽기는 표준 라이브러리(`xml.etree`)로만 한다. 의존성을 늘리지 않고, Center가 업로드된 파일을
 검사할 때도 같은 코드를 쓴다.
 
-**확장이 더한 태스크(`chk:task`)의 속 내용은 여기서 모른다** (ADR-0018). `type`·`extension`만
+**확장이 더한 태스크(`bpm:task`)의 속 내용은 여기서 모른다** (ADR-0018). `type`·`extension`만
 보고, JSON 본문은 그 확장의 계약이 검사한다.
 """
 
@@ -45,9 +45,9 @@ from chaeksas.contracts.manifest import (
 from chaeksas.contracts.replay import REPLAY_DEFAULT, REPLAY_MODES
 
 #: 네임스페이스. 우리 속성은 전부 이 하나에 담는다.
-CHK_NS = "urn:chaeksas:bpmn:1"
+BPM_NS = "urn:chaeksas:bpmn:1"
 BPMN_NS = "http://www.omg.org/spec/BPMN/20100524/MODEL"
-_CHK = f"{{{CHK_NS}}}"
+_CHK = f"{{{BPM_NS}}}"
 _BPMN = f"{{{BPMN_NS}}}"
 
 #: 변수 이름 — 한글을 쓸 수 있고, 공백·하이픈은 못 쓰고 숫자로 시작할 수 없다 (식에서 이름이 된다).
@@ -97,7 +97,7 @@ FIELD_APPROVAL_MAX_HOURS = 24
 #: 처럼 파일 이름에 쓴다). 늘어나면 C14 문서의 표와 함께 고친다.
 BUILTIN_VARS = frozenset({"오늘", "지금", "run_id"})
 
-#: **확장 태스크가 무엇을 만드는지 플랫폼은 모른다** (ADR-0018 — `chk:task`의 속은 그 확장 것이다).
+#: **확장 태스크가 무엇을 만드는지 플랫폼은 모른다** (ADR-0018 — `bpm:task`의 속은 그 확장 것이다).
 #: 그 뒤의 변수를 「없다」고 말할 수 없어, 이 표시가 붙은 자리에서는 B11이 입을 닫는다.
 #: 확장 호스트가 `extension_task_vars`를 주면 표시 대신 실제 이름이 들어온다.
 UNKNOWN_VARS = "*"
@@ -182,7 +182,7 @@ class VirtualWorkerIdentity(ContractModel):
 
 
 class ProcessInfo(ContractModel):
-    """`chk:process` — BPM 프로세스 정보 (STU-06). 빌드가 이것을 모아 C1 매니페스트를 만든다."""
+    """`bpm:process` — BPM 프로세스 정보 (STU-06). 빌드가 이것을 모아 C1 매니페스트를 만든다."""
 
     run_location: RunLocation | None = None
     extensions: list[ExtensionNeed] = Field(default_factory=list)
@@ -194,7 +194,7 @@ class ProcessInfo(ContractModel):
 
 
 class Defaults(ContractModel):
-    """`chk:defaults` — 모든 AI·UI 태스크의 기본값. **태스크에 적은 값이 이긴다.**"""
+    """`bpm:defaults` — 모든 AI·UI 태스크의 기본값. **태스크에 적은 값이 이긴다.**"""
 
     limits: Limits | None = None
     forbidden_actions: list[str] = Field(default_factory=list)
@@ -207,7 +207,7 @@ class Defaults(ContractModel):
 
 
 class AiTask(ContractModel):
-    """`chk:aiTask` — AI = 운전사 (ADR-0008). `goal`은 Markdown이다."""
+    """`bpm:aiTask` — AI = 운전사 (ADR-0008). `goal`은 Markdown이다."""
 
     goal: str
     domain: str  # KNOWN_DOMAINS (정의는 C1 쪽 하나다 — `manifest.py`)
@@ -224,7 +224,7 @@ class AiTask(ContractModel):
 
 
 class ExtensionTask(ContractModel):
-    """`chk:task` — 확장이 더한 태스크 종류 (C13 `task_types`).
+    """`bpm:task` — 확장이 더한 태스크 종류 (C13 `task_types`).
 
     **속 내용(`data`)은 플랫폼이 해석하지 않는다.** 그 확장의 계약이 검사한다 (ADR-0018).
     """
@@ -240,7 +240,7 @@ class Retry(ContractModel):
 
 
 class ServiceCall(ContractModel):
-    """`chk:serviceCall` — 서비스 앱 태스크. C15 외부 작업으로 간다(`app_id` = 토픽). **키는 없다** (ADR-0102)."""
+    """`bpm:serviceCall` — 서비스 앱 태스크. C15 외부 작업으로 간다(`app_id` = 토픽). **키는 없다** (ADR-0102)."""
 
     app_id: str
     operation: str
@@ -251,7 +251,7 @@ class ServiceCall(ContractModel):
 
 
 class Approval(ContractModel):
-    """`chk:approval` — 결재(`userTask`)와 확인(`manualTask`). 폼은 C6과 같은 모양이다."""
+    """`bpm:approval` — 결재(`userTask`)와 확인(`manualTask`). 폼은 C6과 같은 모양이다."""
 
     title: str
     description: str | None = None
@@ -270,7 +270,7 @@ class Approval(ContractModel):
 
 
 class Rule(ContractModel):
-    """`chk:rule` — 규칙 태스크. DMN은 **한 건**을 판정한다 (목록은 반복으로)."""
+    """`bpm:rule` — 규칙 태스크. DMN은 **한 건**을 판정한다 (목록은 반복으로)."""
 
     decision: str  # 같은 패키지의 DMN 결정 id
     input: dict[str, str] = Field(default_factory=dict)  # {DMN 입력 이름: 식}
@@ -278,7 +278,7 @@ class Rule(ContractModel):
 
 
 class Email(ContractModel):
-    """`chk:email` — 메일 보내기."""
+    """`bpm:email` — 메일 보내기."""
 
     to: list[str] = Field(default_factory=list)
     cc: list[str] = Field(default_factory=list)
@@ -289,7 +289,7 @@ class Email(ContractModel):
 
 
 class Webhook(ContractModel):
-    """`chk:webhook` — 웹훅 보내기. 주소는 허용 호스트 규칙(C13 §4-3과 같은 해석기)을 따른다."""
+    """`bpm:webhook` — 웹훅 보내기. 주소는 허용 호스트 규칙(C13 §4-3과 같은 해석기)을 따른다."""
 
     url: str
     method: str = "POST"
@@ -299,14 +299,14 @@ class Webhook(ContractModel):
 
 
 class Receive(ContractModel):
-    """`chk:receive` — 메시지 받기·경계·중간 받기의 상관 키와 본문."""
+    """`bpm:receive` — 메시지 받기·경계·중간 받기의 상관 키와 본문."""
 
     correlation: str | None = None  # 변수 이름 — 이 값이 같은 메시지만 받는다
     payload: list[str] = Field(default_factory=list)  # 본문에서 변수로 들어오는 이름
 
 
 class Delegate(ContractModel):
-    """`chk:call.delegate` — **PC 위임** ([ADR-0062](../decisions/0062-pc-delegation.md)).
+    """`bpm:call.delegate` — **PC 위임** ([ADR-0062](../decisions/0062-pc-delegation.md)).
 
     부르는 것은 **따로 올리고 따로 배포한 PC BPM 프로세스 패키지**다 — 이 패키지 안의 정의가 아니다.
     그래서 `calledElement`가 가리키는 것을 패키지 안에서 찾지 않는다 (B14).
@@ -321,7 +321,7 @@ class Delegate(ContractModel):
 
 
 class Call(ContractModel):
-    """`chk:call` — 다른 BPM 프로세스 호출. **적은 것만 오간다.**"""
+    """`bpm:call` — 다른 BPM 프로세스 호출. **적은 것만 오간다.**"""
 
     input: dict[str, str] = Field(default_factory=dict)  # {호출 대상 변수: 식}
     output: dict[str, str] = Field(default_factory=dict)  # {내 변수: 호출 대상 변수}
@@ -330,7 +330,7 @@ class Call(ContractModel):
 
 
 class Loop(ContractModel):
-    """`chk:loop` — 반복(다중 인스턴스). `collect_into`가 **필수**다 (빠지면 반복이 멈춘다)."""
+    """`bpm:loop` — 반복(다중 인스턴스). `collect_into`가 **필수**다 (빠지면 반복이 멈춘다)."""
 
     collection: str
     item: str
@@ -339,7 +339,7 @@ class Loop(ContractModel):
 
 
 class DataOutput(ContractModel):
-    """`chk:dataOutput` — 파일 출력. `store_as`가 **필수**다 (경로를 받는 유일한 길)."""
+    """`bpm:dataOutput` — 파일 출력. `store_as`가 **필수**다 (경로를 받는 유일한 길)."""
 
     path: str
     format: str  # FILE_FORMATS
@@ -351,7 +351,7 @@ class DataOutput(ContractModel):
 
 
 class FileList(ContractModel):
-    """`chk:fileList` — 파일 목록 태스크 ([ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)).
+    """`bpm:fileList` — 파일 목록 태스크 ([ADR-0026](../decisions/0026-file-paths-and-file-list-task.md)).
 
     디스크를 읽으므로 식의 도우미가 아니라 **태스크**다 (ADR-0025 §식에 두지 않는 것).
     `store_as`가 **필수**다 — 결과를 받을 길이 그것뿐이다.
@@ -366,7 +366,7 @@ class FileList(ContractModel):
     count_as: str | None = None  # 개수가 들어갈 변수
 
 
-#: `chk:*` 요소 이름 → 모델. 모르는 요소는 무시한다 (호환 규칙).
+#: `bpm:*` 요소 이름 → 모델. 모르는 요소는 무시한다 (호환 규칙).
 ELEMENT_MODELS: dict[str, type[ContractModel]] = {
     "process": ProcessInfo,
     "defaults": Defaults,
@@ -397,7 +397,7 @@ class Flow:
     target: str
     has_condition: bool = False
     is_default: bool = False
-    #: 조건식 본문 (`chk-expr`). 검사는 있는지만 보지만 **엔진은 이것을 평가한다** (M3).
+    #: 조건식 본문 (`bpm-expr`). 검사는 있는지만 보지만 **엔진은 이것을 평가한다** (M3).
     condition: str | None = None
 
 
@@ -428,9 +428,9 @@ class Node:
     id: str
     kind: str
     name: str | None = None
-    #: 이 노드의 `chk:*` 속성. 열쇠는 요소 이름(`aiTask`), 값은 **읽은 모델**이다.
+    #: 이 노드의 `bpm:*` 속성. 열쇠는 요소 이름(`aiTask`), 값은 **읽은 모델**이다.
     props: dict[str, Any] = field(default_factory=dict)
-    #: 읽히지 않은 `chk:*` (B1이 사유를 남긴다).
+    #: 읽히지 않은 `bpm:*` (B1이 사유를 남긴다).
     bad_props: dict[str, str] = field(default_factory=dict)
     attached_to: str | None = None  # 경계 이벤트가 붙은 노드
     #: 이벤트 정의 이름 (`timerEventDefinition` 등). 어떤 이벤트인지 가린다.
@@ -525,7 +525,7 @@ def _text(element: ElementTree.Element) -> str:
 
 
 def _read_props(holder: ElementTree.Element | None) -> tuple[dict[str, Any], dict[str, str]]:
-    """`extensionElements` 안의 `chk:*`를 모델로 읽는다. `(읽은 것, 못 읽은 것)`."""
+    """`extensionElements` 안의 `bpm:*`를 모델로 읽는다. `(읽은 것, 못 읽은 것)`."""
     good: dict[str, Any] = {}
     bad: dict[str, str] = {}
     if holder is None:
@@ -536,7 +536,7 @@ def _read_props(holder: ElementTree.Element | None) -> tuple[dict[str, Any], dic
         name = child.tag[len(_CHK) :]
         model = ELEMENT_MODELS.get(name)
         if model is None:
-            continue  # 모르는 `chk:*`는 무시한다 (호환 규칙)
+            continue  # 모르는 `bpm:*`는 무시한다 (호환 규칙)
         raw = _text(child)
         try:
             payload = json.loads(raw) if raw else {}
@@ -674,7 +674,7 @@ def _mark_defaults(scope: ElementTree.Element, flows: list[Flow]) -> None:
 def read_process(xml: str | bytes) -> BpmnProcess:
     """BPMN 파일 하나를 읽는다. `bpmn:process`가 여러 개면 **첫 번째**를 쓴다.
 
-    읽지 못한 `chk:*`는 버리지 않고 `bad_props`에 사유와 함께 남긴다 — B1이 그것을 보고한다.
+    읽지 못한 `bpm:*`는 버리지 않고 `bad_props`에 사유와 함께 남긴다 — B1이 그것을 보고한다.
     """
     try:
         root = ElementTree.fromstring(xml)
@@ -1209,10 +1209,10 @@ def available_vars(
 def _check_b1_b2(process: BpmnProcess) -> list[Violation]:
     out: list[Violation] = []
     for name, reason in process.bad_props.items():
-        out.append(_error("B1", f"chk:{name}이 모델과 맞지 않는다 ({reason})", items=[process.id]))
+        out.append(_error("B1", f"bpm:{name}이 모델과 맞지 않는다 ({reason})", items=[process.id]))
     for node in process.all_nodes():
         for name, reason in node.bad_props.items():
-            out.append(_error("B1", f"{node.id}의 chk:{name}이 모델과 맞지 않는다 ({reason})"))
+            out.append(_error("B1", f"{node.id}의 bpm:{name}이 모델과 맞지 않는다 ({reason})"))
         approval: Approval | None = node.prop("approval")
         if approval is not None:
             bad = [name for name in approval.show if not is_var_name(name)]
@@ -1350,11 +1350,11 @@ def _check_b7(process: BpmnProcess) -> list[Violation]:
     """옛 칸이 적혀 있으면 경고 한 줄 — **거부하지 않는다** (옛 그림도 그대로 읽히고 돈다)."""
     where: list[str] = []
     if OLD_KEY_FIELDS["process"] in (process.info.model_extra or {}):
-        where.append(f"chk:process.{OLD_KEY_FIELDS['process']}")
+        where.append(f"bpm:process.{OLD_KEY_FIELDS['process']}")
     for node in process.all_nodes():
         call: ServiceCall | None = node.prop("serviceCall")
         if call is not None and OLD_KEY_FIELDS["serviceCall"] in (call.model_extra or {}):
-            where.append(f"{node.id}: chk:serviceCall.{OLD_KEY_FIELDS['serviceCall']}")
+            where.append(f"{node.id}: bpm:serviceCall.{OLD_KEY_FIELDS['serviceCall']}")
     if not where:
         return []
     return [
@@ -1644,7 +1644,7 @@ def validate(
       건너뛴다 (ADR-0062). **모르는 것으로 막지 않는다.**
 
     여기서 하지 않는 것:
-    - **확장 태스크의 속 내용** (`chk:task`의 JSON). 그 확장의 계약이 검사한다 — 예를 들어 UI
+    - **확장 태스크의 속 내용** (`bpm:task`의 JSON). 그 확장의 계약이 검사한다 — 예를 들어 UI
       태스크 스텝의 `action`이 C10 동작 목록에 있는지는 UI 자동화 확장이 본다 (ADR-0018).
     - 식 언어의 문법·도우미 함수 이름. 문법은 `core.expr`가, 도우미 인자 모양은 B15가 본다
       (ADR-0025 — 계약은 도우미 구현을 import하지 않는다).

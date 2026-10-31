@@ -17,7 +17,7 @@
 | C11 | `service_app` | 서비스 앱 공통 (manifest·작업 호출·키·멱등). 뼈대는 `chaeksas.service_kit` |
 | C12 | `server_runner` | 서버 실행기 등록·하트비트·메시지 + 자리 셈·작업 고르기·되살리기 판정 |
 | C13 | `extension` | 확장 정의 + 검사 규칙 E1~E6. 호스트는 `chaeksas.core.extensions` |
-| C14 | `bpmn_ext` | BPMN 확장 속성(`chk:*`) 모델 + BPMN 읽기 + 검사 B1~B14 + 시험 케이스 형식 |
+| C14 | `bpmn_ext` | BPMN 확장 속성(`bpm:*`) 모델 + BPMN 읽기 + 검사 B1~B14 + 시험 케이스 형식 |
 | C14 | `dmn` | 규칙 태스크가 쓰는 DMN 결정표 읽기·판정 |
 | C14 | `replay` | 재생 명세 (`memory/specs.json`, C1 패키지 구성) |
 

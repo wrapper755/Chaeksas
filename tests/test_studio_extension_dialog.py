@@ -267,7 +267,7 @@ def test_detail_shows_the_five_contribution_points() -> None:
 
 def test_c11_service_app_does_not_invent_an_operation_list() -> None:
     """C11 앱의 작업은 그 앱의 manifest에서 온다 — 정의에 없는 것을 지어내지 않는다 (C7)."""
-    window = dialog(host_with(builtin(service={"protocol": "chk-c11", "base_url": "http://svc:8000"})))
+    window = dialog(host_with(builtin(service={"protocol": "bpm-c11", "base_url": "http://svc:8000"})))
     shown = window.detail.toPlainText()
     assert "작업 목록은 그 앱의 manifest에서 옵니다" in shown
 
@@ -561,7 +561,7 @@ def test_each_state_gets_its_own_colour() -> None:
 
 
 def drawing(*needs: dict[str, Any]) -> ProcessInfo:
-    """진입 정의의 `chk:process` — 쓰는 확장을 적어 둔 그림."""
+    """진입 정의의 `bpm:process` — 쓰는 확장을 적어 둔 그림."""
     return ProcessInfo.model_validate({"run_location": "server", "extensions": list(needs)})
 
 

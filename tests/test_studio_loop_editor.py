@@ -67,7 +67,7 @@ def test_unknown_keys_survive() -> None:
 
 
 def test_a_loop_without_the_marker_shows_as_in_turn() -> None:
-    """표시 없이 `chk:loop`만 있으면 엔진은 차례로 돈다 — 그렇게 보인다."""
+    """표시 없이 `bpm:loop`만 있으면 엔진은 차례로 돈다 — 그렇게 보인다."""
     assert loaded(MODE_NONE, LOOP).mode() == MODE_SEQUENTIAL
 
 
@@ -218,7 +218,7 @@ def test_changing_both_sends_both() -> None:
     changes, problem = panel.patch()
     assert problem is None
     assert changes["multiInstance"] == MODE_PARALLEL
-    assert set(changes["chk"]) == {"aiTask"}, "본문이 그대로면 chk:loop는 보내지 않는다"
+    assert set(changes["chk"]) == {"aiTask"}, "본문이 그대로면 bpm:loop는 보내지 않는다"
     assert json.loads(changes["chk"]["aiTask"])["goal"] == "다른 목표"
 
 

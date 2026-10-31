@@ -36,7 +36,7 @@ DEFINITION: dict[str, Any] = {
     "publisher": "사내",
     "tier": "internal",
     "api": ">=2,<3",
-    "service": {"protocol": "chk-c11", "base_url": "https://ocr.example.com"},
+    "service": {"protocol": "bpm-c11", "base_url": "https://ocr.example.com"},
     "contributes": {
         "task_types": [
             {"id": "ocr_task", "label": "문서 인식", "executor": {"entry": "x:Y"}, "run_locations": ["pc"]},
@@ -185,13 +185,13 @@ def test_configuration_comes_from_the_environment(monkeypatch: pytest.MonkeyPatc
 def test_a_secret_field_does_not_come_through_the_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     """**비밀은 설정에 섞이지 않는다** (ADR-0013) — 그것을 푸는 것은 `Secrets`다."""
     host = host_with()
-    monkeypatch.setenv(extension_config_env("doc-ocr", "ocr_key"), "chk_svc_secret")
+    monkeypatch.setenv(extension_config_env("doc-ocr", "ocr_key"), "bpm_svc_secret")
 
     values = ext_mod.settings_for(host, "doc-ocr")
     assert values.get("ocr_key") is None
 
     secrets = ext_mod.RunnerSecrets(credentials=Credentials(), extension_id="doc-ocr")
-    assert secrets.resolve("ocr_key") == "chk_svc_secret"
+    assert secrets.resolve("ocr_key") == "bpm_svc_secret"
 
 
 def test_a_field_of_another_scope_is_not_given(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -203,11 +203,11 @@ def test_a_field_of_another_scope_is_not_given(monkeypatch: pytest.MonkeyPatch) 
 def test_the_call_token_is_this_runners_own_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """확장이 외부 작업을 올릴 토큰(`call_token`)은 **이 실행기의 Center API 키**다 (C15) — 다른 비밀은
     그 확장의 비밀 칸이다."""
-    monkeypatch.setenv("CHK_SERVER_RUNNER__CENTER_API_KEY", "chk_ctr_runner")
+    monkeypatch.setenv("BPM_SERVER_RUNNER__CENTER_API_KEY", "bpm_ctr_runner")
     monkeypatch.setenv(extension_config_env("doc-ocr", "ocr_key"), "from-ext")
 
     secrets = ext_mod.RunnerSecrets(credentials=Credentials(), extension_id="doc-ocr")
-    assert secrets.resolve("call_token") == "chk_ctr_runner"
+    assert secrets.resolve("call_token") == "bpm_ctr_runner"
     assert secrets.resolve("ocr_key") == "from-ext"
 
 

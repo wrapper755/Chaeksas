@@ -91,7 +91,7 @@ def test_the_manifest_is_collected_from_the_drawing(tmp_path: Path) -> None:
 
 
 def test_a_mail_task_asks_for_smtp(tmp_path: Path) -> None:
-    """`chk:email`이 있으면 `requires.settings`에 `smtp`가 간다 (C1, ADR-0059 §4).
+    """`bpm:email`이 있으면 `requires.settings`에 `smtp`가 간다 (C1, ADR-0059 §4).
 
     적어 두지 않으면 **사전 점검이 「SMTP가 없다」를 미리 말할 수 없다** — 현장은 메일을
     보내려는 순간에야 안다. 09-gaps §3-11이 이 자리였다.
@@ -162,13 +162,13 @@ def test_a_server_process_with_an_extension_task_is_not_falsely_rejected(tmp_pat
 #: `calledElement`는 **읽는 사람을 위한 것**이라 패키지에 그 정의가 없어도 된다.
 DELEGATING = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_d" targetNamespace="urn:chaeksas:test">
+  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs_d" targetNamespace="urn:chaeksas:test">
   <bpmn:process id="Proc_fx03b_amount_branch" name="위임" isExecutable="true">
-    <bpmn:extensionElements><chk:process>{"run_location": "server"}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{"run_location": "server"}</bpm:process></bpmn:extensionElements>
     <bpmn:startEvent id="Start" />
     <bpmn:callActivity id="Call_Erp" calledElement="Proc_erp_input">
-      <bpmn:extensionElements><chk:call>{"delegate":
-        {"bpm_process_id": "fin.erp-input", "version": "1.2.0"}, "output": {"결과": "결과코드"}}</chk:call>
+      <bpmn:extensionElements><bpm:call>{"delegate":
+        {"bpm_process_id": "fin.erp-input", "version": "1.2.0"}, "output": {"결과": "결과코드"}}</bpm:call>
       </bpmn:extensionElements>
     </bpmn:callActivity>
     <bpmn:endEvent id="End" />
@@ -353,7 +353,7 @@ def test_a_missing_entry_file_blocks_the_export(tmp_path: Path) -> None:
 
 
 def test_the_inputs_go_into_the_manifest(tmp_path: Path) -> None:
-    """작업 지시 화면(CON-05)이 입력 칸을 그린다 — `chk:process.inputs`를 그대로 옮긴다 (C1)."""
+    """작업 지시 화면(CON-05)이 입력 칸을 그린다 — `bpm:process.inputs`를 그대로 옮긴다 (C1)."""
     made = build_manifest(imported(tmp_path, RECONCILIATION))
     names = [one.name for one in made.inputs]
     assert names[:2] == ["대상월", "청구서폴더"]
@@ -395,9 +395,9 @@ def test_a_shared_package_says_what_it_provides(tmp_path: Path) -> None:
 
 
 def test_reads_and_writes_are_what_the_definition_declared(tmp_path: Path) -> None:
-    """**선언한 것**을 옮긴다 (`chk:process.inputs`·`outputs`) — 그림에서 어림하지 않는다.
+    """**선언한 것**을 옮긴다 (`bpm:process.inputs`·`outputs`) — 그림에서 어림하지 않는다.
 
-    호출(`chk:call`)의 받는 값을 보는 B14도 선언한 `outputs`와 맞춰 보니 약속은 거기에 있다.
+    호출(`bpm:call`)의 받는 값을 보는 B14도 선언한 `outputs`와 맞춰 보니 약속은 거기에 있다.
     확장 태스크가 만드는 변수는 플랫폼이 모르므로(ADR-0018) 어림한 값을 「부르는 쪽이 줘야
     하는 것」으로 보이면 거짓말이 된다.
     """

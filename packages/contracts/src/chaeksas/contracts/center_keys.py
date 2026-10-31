@@ -16,8 +16,8 @@ from pydantic import Field, field_validator
 
 from chaeksas.contracts._base import ContractModel, Timestamp, Violation
 
-#: 키 원문 — `chk_ctr_` + 무작위 40자. 화면에는 앞자리 16자만 보인다.
-KEY_PREFIX = "chk_ctr_"
+#: 키 원문 — `bpm_ctr_` + 무작위 40자. 화면에는 앞자리 16자만 보인다.
+KEY_PREFIX = "bpm_ctr_"
 KEY_RANDOM_LEN = 40
 PREFIX_LEN = 16
 
@@ -28,7 +28,7 @@ EXPIRY_WARNING_DAYS = 14
 #: `type`은 열린 문자열이지만 Center는 이 다섯만 발급한다.
 ISSUABLE_KEY_TYPES = frozenset({"bot_ui", "studio", "server_runner", "integration", "relay"})
 #: 대리 답용 키 (ADR-0081) — **결재 읽기·답뿐**이다. Center는 이 종류를 `require_read`·작업·
-#: 실행 기록에서 막고, 결재에서는 `X-CHK-On-Behalf-Of`의 그 사람이 담당자인 것만 보인다.
+#: 실행 기록에서 막고, 결재에서는 `X-BPM-On-Behalf-Of`의 그 사람이 담당자인 것만 보인다.
 RELAY_KEY_TYPE = "relay"
 KNOWN_KEY_STATES = frozenset({"active", "expired", "revoked"})
 #: 일꾼 폴더의 키 파일(`<이름>.key.json`)로 들일 수 있는 종류 (ADR-0123) — 함께 설치되는 연동 시스템이 쓰는 둘.
@@ -39,7 +39,7 @@ KeyRaw = Annotated[str, Field(pattern=rf"^{KEY_PREFIX}[A-Za-z0-9_-]{{{KEY_RANDOM
 
 
 def prefix_of(key: str) -> str:
-    """키 원문 → 화면에 보이는 앞자리 (`chk_ctr_` + 무작위 8자)."""
+    """키 원문 → 화면에 보이는 앞자리 (`bpm_ctr_` + 무작위 8자)."""
     return key[:PREFIX_LEN]
 
 

@@ -1,8 +1,8 @@
-"""`chk-center` — Center API를 띄운다.
+"""`bpm-center` — Center API를 띄운다.
 
-    CHK_CENTER__FIRST_ADMIN__PASSWORD=... uv run chk-center
+    BPM_CENTER__FIRST_ADMIN__PASSWORD=... uv run bpm-center
 
-포트·경로는 환경변수로 바꾼다 (`CHK_CENTER__PORT` 등, `docs/04-setup.md` §6).
+포트·경로는 환경변수로 바꾼다 (`BPM_CENTER__PORT` 등, `docs/04-setup.md` §6).
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ if hasattr(sys.stdout, "reconfigure"):
 
 
 def signing_key(argv: list[str]) -> int:
-    """`chk-center signing-key list|rotate|retire <key_id>` — Center 서명 키 (ADR-0090 §5).
+    """`bpm-center signing-key list|rotate|retire <key_id>` — Center 서명 키 (ADR-0090 §5).
 
     **서버 셸에서만** 쓴다. `rotate`는 새 키가 그 뒤의 서명을 맡고 옛 키는 믿는 목록에 남는다.
     `retire`는 그 키가 서명한 승인·배포를 **모두 무효**로 만든다 — 그래서 한 번 더 묻는다.
@@ -26,7 +26,7 @@ def signing_key(argv: list[str]) -> int:
     from chaeksas.center.storage import Store
 
     if not argv or argv[0] not in ("list", "rotate", "retire") or (argv[0] == "retire" and len(argv) < 2):
-        print("쓰는 법: chk-center signing-key list | rotate | retire <key_id> [-y]")
+        print("쓰는 법: bpm-center signing-key list | rotate | retire <key_id> [-y]")
         return 2
     store = Store(Settings.from_env().db_path)
     try:
@@ -57,7 +57,7 @@ def signing_key(argv: list[str]) -> int:
 
 
 def hosts(argv: list[str]) -> int:
-    """`chk-center hosts duplicates|retire <id>` — 겹친 기계 행을 **사람이** 고른다 (ADR-0066).
+    """`bpm-center hosts duplicates|retire <id>` — 겹친 기계 행을 **사람이** 고른다 (ADR-0066).
 
     3판(키 묶기 UNIQUE)의 지킴에 걸려 Center가 뜨지 않을 때 쓴다. **`Store`를 열지 않는다** —
     열면 옮기기가 돌고 그 지킴에 다시 걸린다. Center를 **멈춘 채로** 쓴다.
@@ -68,7 +68,7 @@ def hosts(argv: list[str]) -> int:
     from chaeksas.center.settings import Settings
 
     if not argv or argv[0] not in ("duplicates", "retire") or (argv[0] == "retire" and len(argv) < 2):
-        print("쓰는 법: chk-center hosts duplicates | chk-center hosts retire <bot_ui_id|server_runner_id>")
+        print("쓰는 법: bpm-center hosts duplicates | bpm-center hosts retire <bot_ui_id|server_runner_id>")
         return 2
     path = Settings.from_env().db_path
     if not Path(path).is_file():
@@ -91,7 +91,7 @@ def hosts(argv: list[str]) -> int:
 
 
 def consumer_file(argv: list[str]) -> int:
-    """`chk-center consumer-file <이름> --topics a,b [--dir 폴더]` — 일꾼 폴더의 파일을 짓는다 (ADR-0122).
+    """`bpm-center consumer-file <이름> --topics a,b [--dir 폴더]` — 일꾼 폴더의 파일을 짓는다 (ADR-0122).
 
     파일에는 토큰의 **해시만** 쓰고 원문은 **여기서 한 번만** 찍는다 — 그 값을 일꾼의 `…CENTER__TOKEN`에 넣는다.
     Center를 다시 띄워야 들어온다.
@@ -101,10 +101,10 @@ def consumer_file(argv: list[str]) -> int:
     from chaeksas.center.consumer_folder import write_file  # noqa: PLC0415
     from chaeksas.center.settings import Settings  # noqa: PLC0415
 
-    parser = argparse.ArgumentParser(prog="chk-center consumer-file", description="일꾼 폴더의 일꾼 파일을 짓는다")
+    parser = argparse.ArgumentParser(prog="bpm-center consumer-file", description="일꾼 폴더의 일꾼 파일을 짓는다")
     parser.add_argument("name", help="일꾼 이름 — 파일 이름(<이름>.consumer.json)이기도 하다")
     parser.add_argument("--topics", required=True, help="맡을 토픽 (쉼표로) — 서비스 앱 id·외부 확장 id")
-    parser.add_argument("--dir", type=Path, default=None, help="일꾼 폴더 (기본: CHK_CENTER__CONSUMERS_DIR)")
+    parser.add_argument("--dir", type=Path, default=None, help="일꾼 폴더 (기본: BPM_CENTER__CONSUMERS_DIR)")
     found = parser.parse_args(argv)
     topics = [one.strip() for one in str(found.topics).split(",") if one.strip()]
     folder = found.dir or Settings.from_env().consumers_dir
@@ -119,7 +119,7 @@ def consumer_file(argv: list[str]) -> int:
 
 
 def key_file(argv: list[str]) -> int:
-    """`chk-center key-file <이름> --type integration|relay [--dir 폴더]` — 일꾼 폴더의 키 파일을 짓는다 (ADR-0123).
+    """`bpm-center key-file <이름> --type integration|relay [--dir 폴더]` — 일꾼 폴더의 키 파일을 짓는다 (ADR-0123).
 
     파일에는 키의 **해시만** 쓰고 원문은 **여기서 한 번만** 찍는다. Center를 다시 띄워야 들어온다.
     """
@@ -129,10 +129,10 @@ def key_file(argv: list[str]) -> int:
     from chaeksas.center.settings import Settings  # noqa: PLC0415
     from chaeksas.contracts.center_keys import FOLDER_KEY_TYPES  # noqa: PLC0415
 
-    parser = argparse.ArgumentParser(prog="chk-center key-file", description="일꾼 폴더의 키 파일을 짓는다")
+    parser = argparse.ArgumentParser(prog="bpm-center key-file", description="일꾼 폴더의 키 파일을 짓는다")
     parser.add_argument("name", help="키 이름 — 파일 이름(<이름>.key.json)이기도 하다")
     parser.add_argument("--type", required=True, choices=sorted(FOLDER_KEY_TYPES), help="키 종류")
-    parser.add_argument("--dir", type=Path, default=None, help="일꾼 폴더 (기본: CHK_CENTER__CONSUMERS_DIR)")
+    parser.add_argument("--dir", type=Path, default=None, help="일꾼 폴더 (기본: BPM_CENTER__CONSUMERS_DIR)")
     found = parser.parse_args(argv)
     folder = found.dir or Settings.from_env().consumers_dir
     if folder is None:
@@ -166,7 +166,7 @@ def main() -> int:
         app = create_app(settings)
     except FirstAdminError as e:
         # 설치할 때 고치는 것이 가장 싸다 — 규칙에 안 맞는 비밀번호로 뜨지 않는다 (ADR-0090 §2).
-        print(f"오류: {e} — .env의 CHK_CENTER__FIRST_ADMIN__*를 고치세요")
+        print(f"오류: {e} — .env의 BPM_CENTER__FIRST_ADMIN__*를 고치세요")
         return 2
     print(f"Center API: http://{settings.host}:{settings.port}  (DB {settings.db_path})")
     uvicorn.run(app, host=settings.host, port=settings.port, log_level="info")

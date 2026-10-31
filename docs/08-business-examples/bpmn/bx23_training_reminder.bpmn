@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx23_training_reminder" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_bx23_training_reminder" name="필수 교육 이수 독려" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -22,7 +22,7 @@
   ],
   "outputs": [],
   "inputs": []
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="매주 수요일">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -32,21 +32,21 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_List" name="미이수자">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "lms",
   "operation": "list_incomplete",
   "input": {},
   "output": {
     "미이수": "items"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:businessRuleTask id="Task_Level" name="독려 단계">
       <bpmn:extensionElements>
-        <chk:rule>{
+        <bpm:rule>{
   "decision": "training_nudge",
   "input": {
     "남은일수": "사람.남은일수"
@@ -54,26 +54,26 @@
   "output": {
     "단계": "단계"
   }
-}</chk:rule>
-        <chk:loop>{
+}</bpm:rule>
+        <bpm:loop>{
   "collection": "미이수",
   "item": "사람",
   "result": "단계",
   "collect_into": "단계목록"
-}</chk:loop>
+}</bpm:loop>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="true" />
     </bpmn:businessRuleTask>
-    <bpmn:scriptTask id="Task_Merge" name="대상 만들기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Merge" name="대상 만들기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
       <bpmn:script>대상목록 = [dict(p, 단계=s) for p, s in zip(미이수, 단계목록)]</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Write" name="안내 메일 쓰기">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`대상`은 미이수자 한 명(이름, 메일, 팀장메일, 교육명, 마감일, 남은일수, 링크, 단계)이다. 교육 시스템이 돌려준 값에 `단계`를 붙였다.\n\n## 할 일\n단계에 맞는 안내 메일 제목과 본문을 쓴다. 받는 사람은 `대상.메일`, 「팀장참조」·「인사팀보고」면 참조에 `대상.팀장메일`(인사팀보고는 업무 파라미터 `인사팀메일`도). 이수 링크는 `대상.링크`를 그대로 쓴다.\n\n## 판단하지 않는 것\n불이익을 과장하지 않는다.\n\n## 반환\n- `메일`: {받는사람, 참조, 제목, 본문}",
   "domain": "llm",
   "results": {
@@ -83,13 +83,13 @@
   "params": {
     "인사팀메일": "hr@example.com"
   }
-}</chk:aiTask>
-        <chk:loop>{
+}</bpm:aiTask>
+        <bpm:loop>{
   "collection": "대상목록",
   "item": "대상",
   "result": "메일",
   "collect_into": "메일목록"
-}</chk:loop>
+}</bpm:loop>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
@@ -97,7 +97,7 @@
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Send" name="일괄 발송">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "mailer",
   "operation": "send_bulk",
   "input": {
@@ -106,7 +106,7 @@
   "output": {
     "발송": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>

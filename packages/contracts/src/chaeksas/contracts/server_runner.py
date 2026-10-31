@@ -44,14 +44,14 @@ from chaeksas.contracts.signing import AdminKey
 DEFAULT_HEARTBEAT_S = 10
 OFFLINE_AFTER_S = 180
 
-#: 실행기 하나가 **한 번에 도는** 실행 수의 기본 상한 (`CHK_SERVER_RUNNER__MAX_CONCURRENCY`).
+#: 실행기 하나가 **한 번에 도는** 실행 수의 기본 상한 (`BPM_SERVER_RUNNER__MAX_CONCURRENCY`).
 DEFAULT_MAX_CONCURRENCY = 10
 #: BPM 프로세스 하나가 한 번에 도는 수의 기본 상한 (배포의 `max_concurrency`, ADR-0016).
 DEFAULT_PER_BOT_CONCURRENCY = 5
 
 #: 같이 배포된 실행기가 등록 요청에 싣는 **들이기 비밀**의 헤더 (C12 §등록 요청과 승인, ADR-0117).
 #: 본문이 아니라 헤더다 — 요청 본문은 「승인 대기」를 위해 저장된다.
-JOIN_TOKEN_HEADER = "X-CHK-Join-Token"
+JOIN_TOKEN_HEADER = "X-BPM-Join-Token"
 
 ServerRunnerId = Annotated[str, Field(pattern=r"^srv_[0-9a-f]{8}$")]
 

@@ -1,7 +1,7 @@
-"""STU-04 규칙 편집기 — 규칙 태스크의 `chk:rule` (C14 §규칙 태스크와 DMN, ADR-0109).
+"""STU-04 규칙 편집기 — 규칙 태스크의 `bpm:rule` (C14 §규칙 태스크와 DMN, ADR-0109).
 
 속성 패널이 규칙 태스크(`businessRuleTask`)를 만나면 탭으로 끼운다. **규약은 결재·STU-14와 같다**
-(`load`/`dump`/`problems`/`changed`). 고치는 것은 `chk:rule` **통째로**이고 `dump()`는 본문 또는 `None`(없음)이다.
+(`load`/`dump`/`problems`/`changed`). 고치는 것은 `bpm:rule` **통째로**이고 `dump()`는 본문 또는 `None`(없음)이다.
 
 - **결정표 자체는 여기서 고치지 않는다** — 「결정표 편집...」이 STU-04a 창(`decision_dialog.py`)을 열고 그 창의
   「저장」이 `.dmn`을 바로 쓴다. 저장하면 이 탭이 결정표를 **다시 읽는다**(입력 줄·출력 고를 거리가 따라 바뀐다).
@@ -161,7 +161,7 @@ class RuleEditor(QWidget):
     # ── 규약 ──
 
     def load(self, found: Mapping[str, Any] | None) -> None:
-        """`chk:rule` 본문(없으면 `None`)을 그린다."""
+        """`bpm:rule` 본문(없으면 `None`)을 그린다."""
         self._had = found is not None
         self._loaded = dict(found or {})
         self._quiet = True
@@ -178,7 +178,7 @@ class RuleEditor(QWidget):
         self._refresh()
 
     def dump(self) -> dict[str, Any] | None:
-        """`chk:rule` 본문. 그림에 없었고 아무것도 적지 않았으면 `None`."""
+        """`bpm:rule` 본문. 그림에 없었고 아무것도 적지 않았으면 `None`."""
         decision = self.decision()
         inputs = self.input_map()
         outputs = self.output_map()

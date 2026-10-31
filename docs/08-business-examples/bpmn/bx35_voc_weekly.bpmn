@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx35_voc_weekly" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_bx35_voc_weekly" name="VOC 주간 분석" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -28,7 +28,7 @@
       ]
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="매주 월요일">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -36,14 +36,14 @@
         <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 7 * * 1</bpmn:timeCycle>
       </bpmn:timerEventDefinition>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Range" name="기간 정하기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Range" name="기간 정하기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:script>시작일 = 날짜더하기(오늘, -7)</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Fetch" name="지난주 VOC">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "ext-helpdesk",
   "operation": "export_tickets",
   "input": {
@@ -52,19 +52,19 @@
   "output": {
     "VOC": "items"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Chunk" name="50건씩 묶기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Chunk" name="50건씩 묶기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
       <bpmn:script>묶음 = 쪼개기(VOC, 50)</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Analyze" name="묶음 분석">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`한묶음`은 고객 문의·리뷰 최대 50건이다.\n\n## 할 일\n건마다 주제(자유 단어 1~2개)와 감성(긍정|중립|부정)을 붙인다.\n\n## 판단하지 않는 것\n건을 합치거나 빼지 않는다.\n\n## 반환\n- `분석`: list of {id, 주제, 감성}",
   "domain": "llm",
   "results": {
@@ -72,19 +72,19 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
-        <chk:loop>{
+}</bpm:aiTask>
+        <bpm:loop>{
   "collection": "묶음",
   "item": "한묶음",
   "result": "분석",
   "collect_into": "분석묶음"
-}</chk:loop>
+}</bpm:loop>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="false" />
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Merge" name="합치고 세기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Merge" name="합치고 세기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
       <bpmn:dataOutputAssociation id="DOA_Data_Detail">
@@ -96,7 +96,7 @@
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Brief" name="경영진 요약">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`주제별` 건수와 `부정비율`, 대표 문의 몇 개가 있다.\n\n## 할 일\n한 장 요약을 쓴다: 이번 주 핵심 3가지, 늘어난 불만, 제안.\n\n## 판단하지 않는 것\n숫자를 새로 만들지 않는다.\n\n## 반환\n- `요약`: string",
   "domain": "llm",
   "results": {
@@ -104,14 +104,14 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sendTask id="Task_Send" name="배포">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{경영진메일}"
   ],
@@ -121,7 +121,7 @@
     "상세경로"
   ],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
@@ -140,7 +140,7 @@
     <bpmn:dataObject id="DO_Data_Detail" />
     <bpmn:dataObjectReference id="Data_Detail" name="상세" dataObjectRef="DO_Data_Detail">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "VOC/{오늘}_상세.xlsx",
   "format": "xlsx",
   "store_as": "상세경로",
@@ -148,7 +148,7 @@
     "전체",
     "주제별"
   ]
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

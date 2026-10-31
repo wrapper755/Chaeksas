@@ -1,6 +1,6 @@
 """어떤 모의 앱이 있는가 — 한 자리에 모아 둔다.
 
-`app_id`는 **업무 예제의 `chk:serviceCall.app_id` 그대로**다. 예제가 부르는 것이 여기
+`app_id`는 **업무 예제의 `bpm:serviceCall.app_id` 그대로**다. 예제가 부르는 것이 여기
 없으면 M5 인수 시험을 돌릴 수 없으므로, `tests/test_mock_apps.py`가 예제 BPMN에서
 읽어 이 표와 대조한다 — 손으로 맞춘 목록이 아니다.
 """
@@ -52,7 +52,7 @@ EXTERNAL_IDS: tuple[str, ...] = tuple(definitions.BUILDERS)
 PORT_BASE = 8010
 PORT_STEP = 10
 
-#: 한 포트에 다 띄울 때 쓰는 포트 (`chk-mock-apps serve`의 기본). 앱은 `/<app_id>`에 붙는다.
+#: 한 포트에 다 띄울 때 쓰는 포트 (`bpm-mock-apps serve`의 기본). 앱은 `/<app_id>`에 붙는다.
 ALL_IN_ONE_PORT = 8010
 
 
@@ -76,14 +76,14 @@ def operations() -> dict[str, tuple[str, ...]]:
 
 
 def port_of(app_id: str) -> int:
-    """그 앱의 기본 포트. `CHK_SVC_<앱>__PORT`가 있으면 그 값이다.
+    """그 앱의 기본 포트. `BPM_SVC_<앱>__PORT`가 있으면 그 값이다.
 
     포트 숫자를 코드에 흩어 적지 않는다 — 이 함수가 유일한 자리다 (ADR-0011).
     """
     order = ids()
     if app_id not in order:
         raise KeyError(app_id)
-    env = "CHK_SVC_" + app_id.replace("-", "_").upper() + "__PORT"
+    env = "BPM_SVC_" + app_id.replace("-", "_").upper() + "__PORT"
     given = os.environ.get(env, "").strip()
     if given:
         return int(given)

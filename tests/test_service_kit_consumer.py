@@ -167,8 +167,8 @@ class Counting:
 
 
 def test_the_environment_token_wins(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CHK_SVC_TAX__CENTER__TOKEN", "from-env")
-    tokens = TokenFile.at(tmp_path, env_prefix="CHK_SVC_TAX__")
+    monkeypatch.setenv("BPM_SVC_TAX__CENTER__TOKEN", "from-env")
+    tokens = TokenFile.at(tmp_path, env_prefix="BPM_SVC_TAX__")
     tokens.save(token="from-file")
     assert tokens.token() == "from-env"
 

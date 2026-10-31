@@ -36,13 +36,13 @@ ROOT = Path(__file__).resolve().parent.parent
 GATED = (ROOT / "docs/08-business-examples/bpmn/fx24_batch_intake.bpmn").read_text(encoding="utf-8")
 #: **결재 없이** 목록으로 바로 반복 위임한다 — B16이 걸린다.
 UNGATED = """<?xml version="1.0" encoding="UTF-8"?>
-<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:chk="urn:chaeksas:bpmn:1" id="D">
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpm="urn:chaeksas:bpmn:1" id="D">
   <bpmn:process id="Proc_fx24_batch_intake" isExecutable="true">
-    <bpmn:extensionElements><chk:process>{"run_location": "server"}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{"run_location": "server"}</bpm:process></bpmn:extensionElements>
     <bpmn:startEvent id="Start" />
     <bpmn:callActivity id="Call_Batch" calledElement="Proc_item"><bpmn:extensionElements>
-      <chk:call>{"delegate": {"bpm_process_id": "fx25-batch-item"}, "input": {"번호": "건"}, "output": {}}</chk:call>
-      <chk:loop>{"collection": "인입", "item": "건", "collect_into": "끝"}</chk:loop>
+      <bpm:call>{"delegate": {"bpm_process_id": "fx25-batch-item"}, "input": {"번호": "건"}, "output": {}}</bpm:call>
+      <bpm:loop>{"collection": "인입", "item": "건", "collect_into": "끝"}</bpm:loop>
     </bpmn:extensionElements><bpmn:multiInstanceLoopCharacteristics isSequential="true" /></bpmn:callActivity>
     <bpmn:endEvent id="End" />
     <bpmn:sequenceFlow id="f1" sourceRef="Start" targetRef="Call_Batch" />
@@ -107,7 +107,7 @@ def relay(center: TestClient, person: str) -> dict[str, str]:
     made = center.post("/api/v1/center-keys", json={"name": "chaeksachat", "type": "relay"}, headers=ADMIN)
     from urllib.parse import quote  # noqa: PLC0415
 
-    return {"Authorization": f"Bearer {made.json()['key']}", "X-CHK-On-Behalf-Of": quote(person)}
+    return {"Authorization": f"Bearer {made.json()['key']}", "X-BPM-On-Behalf-Of": quote(person)}
 
 
 # ─────────────────────────── 관문 ───────────────────────────
@@ -242,7 +242,7 @@ def integration(center: TestClient, *, person: str | None = None) -> dict[str, s
     if person is not None:
         from urllib.parse import quote  # noqa: PLC0415
 
-        out["X-CHK-On-Behalf-Of"] = quote(person)
+        out["X-BPM-On-Behalf-Of"] = quote(person)
     return out
 
 
