@@ -93,7 +93,9 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         )
 
     # 확장 폴더도 **뜰 때** 들인다 (ADR-0121) — 서명 키가 갖춰진 뒤에. 잘못된 파일은 사유만 남고 Center는 뜬다.
-    app.state.extension_folder = extension_folder.scan(app.state.store, settings.extensions_dir)
+    app.state.extension_folder = extension_folder.scan(
+        app.state.store, settings.extensions_dir, required=settings.extensions_dir_explicit
+    )
 
     def authenticate(request: Request) -> Caller:
         return caller(

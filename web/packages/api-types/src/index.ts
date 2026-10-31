@@ -34,6 +34,7 @@ export const CONTRACT_MODULES = [
   "c15-fail-request",
   "c15-fetch-request",
   "c15-fetch-response",
+  "c15-folder-consumer",
   "c15-locked-task",
   "c15-topic-status",
   "c2-claim-deployment",

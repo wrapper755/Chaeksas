@@ -485,6 +485,8 @@ def register_extension(
     definition = raw.get("definition")
     if not isinstance(definition, dict):
         raise ApiError(422, "input_invalid", "`definition`에 확장 정의를 보내세요")
+    if source != "folder" and isinstance(definition.get("id"), str):
+        refuse_folder_managed(store, definition["id"])
 
     _refuse(check_size(json.dumps(definition, ensure_ascii=False).encode("utf-8")), status=413)
     try:
@@ -527,7 +529,28 @@ def register_extension(
     return extension(store, manifest.id), True
 
 
-def revoke_extension(store: Store, extension_id: str, version: str, *, reason: str, by: str) -> ExtensionResource:
+def folder_managed(store: Store, extension_id: str) -> bool:
+    """확장 폴더가 들인 확장인가 (철회되지 않은 `folder` 줄이 있다) — 콘솔이 등록·해제하지 않는다 (ADR-0121)."""
+    return (
+        store.row(
+            "SELECT 1 FROM extensions WHERE id = ? AND source = 'folder' AND revoked_json IS NULL", (extension_id,)
+        )
+        is not None
+    )
+
+
+def refuse_folder_managed(store: Store, extension_id: str) -> None:
+    if folder_managed(store, extension_id):
+        raise ApiError(
+            409,
+            "managed_by_folder",
+            f"{extension_id}은 확장 폴더가 들인 기본 확장이다 — 폴더의 파일을 바꾸고 Center를 다시 띄우세요",
+        )
+
+
+def revoke_extension(
+    store: Store, extension_id: str, version: str, *, reason: str, by: str, from_folder: bool = False
+) -> ExtensionResource:
     """`DELETE /resources/extensions` — Center가 `extension_revoke` 봉투를 지어 서명한다 (C13·C2, ADR-0090).
 
     **쓰는 BPM 프로세스가 있어도 막지 않는다** (C13) — 확장 해제는 **정의에 문제가 있어 거두는 보안 동작**이라,
@@ -538,6 +561,9 @@ def revoke_extension(store: Store, extension_id: str, version: str, *, reason: s
     found = store.row("SELECT * FROM extensions WHERE id = ? AND version = ?", (extension_id, version))
     if found is None:
         raise ApiError(404, "not_found", f"등록된 확장이 없다: {extension_id}@{version}")
+    if not from_folder:
+        # 폴더가 들인 기본 확장은 폴더에서 빼고 다시 띄우면 거둔다 (ADR-0121) — 콘솔이 거두지 않는다.
+        refuse_folder_managed(store, extension_id)
     if not found["revoked_json"]:
         envelope = signer.seal(
             store,

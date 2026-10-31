@@ -67,6 +67,7 @@ from chaeksas.contracts import (
     FailRequest,
     FetchRequest,
     FetchResponse,
+    FolderConsumer,
     HealthResponse,
     HeartbeatRequest,
     HeartbeatResponse,
@@ -176,6 +177,7 @@ MODELS: list[tuple[str, Any]] = [
     ("c15-extend-request", ExtendRequest),
     ("c15-consumer-enroll-request", ConsumerEnrollRequest),
     ("c15-consumer-info", ConsumerInfo),
+    ("c15-folder-consumer", FolderConsumer),
     ("c15-topic-status", TopicStatus),
     ("c15-external-task-info", ExternalTaskInfo),
     ("c5-error-body", ErrorBody),  # C11과 같은 오류 형식

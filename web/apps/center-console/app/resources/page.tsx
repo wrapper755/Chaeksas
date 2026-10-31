@@ -267,11 +267,17 @@ function Features({ rows, admin }: { rows: FeatureRow[]; admin: boolean }) {
 }
 
 const FOLDER_OUTCOME: Record<string, string> = {
-  registered: "등록함",
-  unchanged: "이미 있음",
+  registered: "들임",
+  unchanged: "그대로",
   skipped: "건너뜀",
   refused: "거절",
+  revoked: "해제함",
 };
+
+function folderTarget(row: ExtensionFolderItem): string {
+  if (!row.id) return "—";
+  return row.kind === "consumer" ? `일꾼 ${row.id}` : `${row.id}@${row.version ?? "?"}`;
+}
 
 /**
  * 「확장 폴더」 (ADR-0121) — Center가 **뜰 때** 폴더의 정의 파일을 들인 결과. 고치는 단추는 없다 —
@@ -280,13 +286,8 @@ const FOLDER_OUTCOME: Record<string, string> = {
 function ExtensionFolder({ scan }: { scan: ExtensionFolderScan }) {
   const items = scan.items ?? [];
   const columns: Array<Column<ExtensionFolderItem>> = [
-    { key: "file", header: "파일", mono: true },
-    {
-      key: "extension",
-      header: "확장",
-      mono: true,
-      cell: (row) => (row.id ? `${row.id}@${row.version ?? "?"}` : "—"),
-    },
+    { key: "file", header: "파일", mono: true, cell: (row) => row.file ?? "—" },
+    { key: "target", header: "대상", mono: true, cell: folderTarget },
     { key: "outcome", header: "결과", width: "10ch", cell: (row) => FOLDER_OUTCOME[row.outcome] ?? row.outcome },
     { key: "message", header: "사유", cell: (row) => row.message ?? "" },
   ];
@@ -299,9 +300,14 @@ function ExtensionFolder({ scan }: { scan: ExtensionFolderScan }) {
       {scan.problem ? (
         <ErrorBanner message={scan.problem} />
       ) : items.length === 0 ? (
-        <p className="text-body text-text-muted">폴더에 확장 정의 파일(*.extension.json)이 없습니다.</p>
+        <p className="text-body text-text-muted">폴더에 확장 정의(*.extension.json)·일꾼(*.consumer.json) 파일이 없습니다.</p>
       ) : (
-        <DataTable columns={columns} rows={items} rowKey={(row) => row.file} caption="확장 폴더" />
+        <DataTable
+          columns={columns}
+          rows={items}
+          rowKey={(row) => `${row.kind}:${row.file ?? ""}:${row.id ?? ""}:${row.version ?? ""}`}
+          caption="확장 폴더"
+        />
       )}
     </section>
   );

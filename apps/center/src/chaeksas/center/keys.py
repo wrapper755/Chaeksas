@@ -167,6 +167,10 @@ def find(store: Store, raw: str) -> KeyRecord | None:
     for row in store.rows("SELECT * FROM center_keys WHERE prefix = ?", (prefix_of(raw),)):
         if hmac.compare_digest(row["key_hash"], wanted):
             return _record(row)
+    # 확장 폴더의 일꾼 키는 **해시만** 안다 — 앞자리가 비어 있다 (ADR-0121, C15 §승인 없는 일꾼).
+    for row in store.rows("SELECT * FROM center_keys WHERE prefix = '' AND key_hash = ?", (wanted,)):
+        if hmac.compare_digest(row["key_hash"], wanted):
+            return _record(row)
     return None
 
 

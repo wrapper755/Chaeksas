@@ -15,11 +15,14 @@ export interface ExtensionFolderScan {
 }
 /**
  * 확장 폴더의 파일 하나를 읽은 결과 (ADR-0121). 읽지 못했으면 `id`·`version`이 없다.
+ *
+ * `revoked`는 파일이 **폴더에서 빠져** 거둔 것이라 `file`이 없다. 일꾼이면 `id`가 일꾼 이름이다.
  */
 export interface ExtensionFolderItem {
   code?: string | null;
-  file: string;
+  file?: string | null;
   id?: string | null;
+  kind?: string;
   message?: string | null;
   outcome: string;
   version?: string | null;

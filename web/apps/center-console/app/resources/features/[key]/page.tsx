@@ -105,7 +105,7 @@ export default async function FeaturePage({
             {row.external && source ? (
               <>
                 <dt className="text-text-muted">출처</dt>
-                <dd>{source === "folder" ? "확장 폴더 (Center가 뜰 때 들였습니다)" : "콘솔 (「기능 추가 (외부)」)"}</dd>
+                <dd>{source === "folder" ? "확장 폴더 (기본 확장)" : "콘솔 (「기능 추가 (외부)」)"}</dd>
               </>
             ) : null}
             <dt className="text-text-muted">id</dt>
@@ -115,7 +115,12 @@ export default async function FeaturePage({
           {admin && row.external ? (
             <section className="flex flex-col gap-2">
               <h2 className="text-h2 font-semibold">등록 해제</h2>
-              <RevokeExtension extensionId={row.id} version={version} users={row.usedBy.length} />
+              {source === "folder" ? (
+                // 기본 확장은 폴더가 원본이다 — 콘솔이 거두지 않는다 (ADR-0121).
+                <p className="text-body text-text-muted">확장 폴더에서 파일을 빼고 Center를 다시 띄우면 해제됩니다.</p>
+              ) : (
+                <RevokeExtension extensionId={row.id} version={version} users={row.usedBy.length} />
+              )}
             </section>
           ) : null}
         </div>

@@ -143,6 +143,30 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 `POST /api/v1/consumers/enroll` `{machine_id, name, os, versions, public_key, topics: [str], manifests: [ServiceAppManifest]}` — 일꾼 하나가 **토픽 여럿**을 맡을 수 있다(모의 앱 열셋, 어댑터 일꾼이 외부 확장 여럿을 맡는 것). manifest는 토픽마다 하나(`app_id` = 토픽)이고 외부 확장 토픽은 비워도 된다(작업 목록은 등록된 정의에서 온다). 관리자가 CON-07 「일꾼 승인 대기」에서 같은 요청 코드를 승인하면 일꾼 토큰을 그 공개키로 봉해 내려 준다(봉함·요청 코드는 `contracts.enrollment` 한 자리 — ADR-0092). 토픽은 **승인할 때** 정해진다(일꾼이 적은 것을 관리자가 줄일 수 있다). 외부 확장 토픽은 그 정의가 Center에 등록되어 있어야 한다(E6).
 
+### 승인 없는 일꾼 (확장 폴더)
+
+함께 배포되는 고정 프로그램의 일꾼은 **요청 코드·승인 없이** 들어온다 ([ADR-0121](../decisions/0121-extension-folder.md)). 배포가 Center의 확장 폴더(`CHK_CENTER__EXTENSIONS_DIR`, 기본 `<데이터>/extensions`)에 `<이름>.consumer.json`(`FolderConsumer`)을 복사해 두면 Center가 **뜰 때** 그 일꾼을 들인다.
+
+| 필드 | 뜻 |
+| --- | --- |
+| `name` | 일꾼 이름 (CON-07 「일꾼」·로그에 보인다) |
+| `topics` | 맡는 토픽 — **고정**이다. 밖의 토픽을 가져가려 하면 403 `topic_not_granted` |
+| `token_sha256` | 일꾼 토큰 **원문(UTF-8)의 SHA-256**, 소문자 16진 64자. Center는 원문을 모른다 |
+| `manifests`? | 서비스 앱 토픽이면 그 manifest(`app_id` = 토픽). 외부 확장 토픽은 비운다 |
+
+```json
+{
+  "name": "worker",
+  "topics": ["external"],
+  "token_sha256": "e36b99c67b24ab562d1e7ba5c86534b24078502e8566b71257dfce7886be5ea0"
+}
+```
+
+- 일꾼은 토큰 원문을 지금처럼 `Authorization: Bearer`로 싣고 `POST /consumers/fetch`부터 부른다 — `enroll`을 부르지 않는다. 원문은 `chk_ctr_` + 무작위 40자(C7 키 모양)로 짓기를 권한다(Center는 모양을 보지 않는다 — 해시만 맞춘다).
+- 키에는 **만료·회전이 없다**(공개키가 없다). 해시를 바꾸면 옛 키를 폐기한다. **폐기된 토큰은 되살아나지 않는다**(`token_revoked`).
+- 파일이 빠지면 키를 폐기하고 일꾼을 지운다. 읽지 못한 파일은 그 일꾼을 지우지 않는다. 결과는 C7 `GET /resources/extension-folder`(`kind: consumer`)와 Center 로그에 남는다.
+- 승인 대기에 뜨지 않는다. 일감 흐름(가져감·끝냄·실패)은 Center 로그에 일꾼 이름·일감 id·토픽·작업·오류 코드로 남는다(값은 찍지 않는다).
+
 ### manifest·카탈로그 올리기
 
 - `PUT /api/v1/consumers/self/manifest` — 본문은 ServiceAppManifest 하나. 그 `app_id`가 승인된 토픽 밖이면 403 `topic_not_granted`. 같은 `app_id`의 것을 바꾼다. 판이 바뀌면 일꾼이 뜰 때 다시 올린다.
@@ -226,6 +250,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-10-31 | 1 | §승인 없는 일꾼 — 확장 폴더의 `*.consumer.json`(`FolderConsumer`)으로 요청 코드·승인 없이 들어오는 일꾼. 토픽 고정, 만료·회전 없음. 경로·모양은 그대로다 | [0121](../decisions/0121-extension-folder.md) |
 | 2026-10-31 | 1 | **등록 세션(`reg_…`)과 거절 `registration_off`를 걷었다** — 셀렉터 등록 도구(Tool UI)와 「셀렉터 등록」 스위치가 없다. 부르는 쪽은 서버 실행기·실행 프로세스·Studio 셋이다. `required_scopes`를 적은 작업은 켜 줄 길이 없어 `scope_missing`이다. 경로·모양은 그대로다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | **`GET /external-tasks?run_id=`**(콘솔 토큰, `ExternalTaskInfo[]`) — CON-01 「외부 작업」이 일감이 어디서 멈췄는지(기다림·일꾼이 쥠·다시 나감)를 본다. 값·오류 글은 싣지 않는다. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-29 | 1 | `fail`·결과 `error`에 **`outcome_unknown`**(기본 false)을 더했다 — 요청이 닿았을 수 있는데 답을 못 받았다. 어댑터 일꾼이 `idempotent: false` 작업에서 적고, PC의 `chk:serviceCall`은 사람에게 묻는다. 선택 칸이라 판은 그대로다 | [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |

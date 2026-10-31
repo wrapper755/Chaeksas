@@ -237,6 +237,21 @@ class ConsumerEnrollRequest(SchemaVersioned):
     manifests: list[ServiceAppManifest] = Field(default_factory=list)
 
 
+class FolderConsumer(ContractModel):
+    """확장 폴더의 `*.consumer.json` — **승인 없이 들이는 일꾼** (C15 §승인 없는 일꾼, ADR-0121).
+
+    배포가 확장 정의와 함께 복사한다. Center는 토큰 **원문을 모른다** — 해시만 받고, 일꾼은 원문을
+    `Authorization: Bearer`로 싣는다. 토픽은 여기 적은 것으로 고정된다. 만료·회전이 없다(공개키가 없다).
+    """
+
+    name: str = Field(min_length=1)
+    topics: list[Topic] = Field(min_length=1)
+    #: 토큰 원문(UTF-8)의 SHA-256, 소문자 16진 64자.
+    token_sha256: Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+    #: 서비스 앱 토픽이면 그 manifest (`app_id` = 토픽). 외부 확장 토픽은 비운다 — 작업 목록은 정의에서 온다.
+    manifests: list[ServiceAppManifest] = Field(default_factory=list)
+
+
 class ExternalTaskInfo(ContractModel):
     """`GET /api/v1/external-tasks?run_id=`의 한 줄 — 콘솔이 보는 일감 (CON-01 「외부 작업」).
 

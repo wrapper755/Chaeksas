@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -78,6 +79,9 @@ from chaeksas.contracts.external_task import (
 )
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.service_app import DEFAULT_TIMEOUT_S, ServiceAppManifest, Usage
+
+#: 일꾼의 일감 흐름 (ADR-0121 — 승인 없는 일꾼은 콘솔 대신 로그로 본다). **값은 찍지 않는다** (원칙 6).
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["external-tasks"])
 
@@ -461,6 +465,8 @@ def take(store: Store, consumer: Any, request: FetchRequest, *, now: str | None 
             )
             if cur.rowcount:
                 taken.append(str(one["task_id"]))
+                name, task, topic, operation = consumer["name"], one["task_id"], one["topic"], one["operation"]
+                log.info("일꾼 %s: 일감 %s (%s.%s)을 가져갔다", name, task, topic, operation)
     return [_locked_task(store.row("SELECT * FROM external_tasks WHERE task_id = ?", (task_id,))) for task_id in taken]
 
 
@@ -506,6 +512,7 @@ def complete(store: Store, consumer: Any, task_id: str, body: CompleteRequest, *
         "usage": body.usage.to_json_dict() if body.usage else None,
     }
     keep = bool(row["want_result"])
+    log.info("일꾼 %s: 일감 %s (%s.%s)을 끝냈다", consumer["name"], task_id, row["topic"], row["operation"])
     _finish(
         store,
         task_id,
@@ -529,6 +536,9 @@ def fail(store: Store, consumer: Any, task_id: str, body: FailRequest, *, now: s
         error["outcome_unknown"] = True
     if body.detail:
         error["detail"] = body.detail
+    log.warning(
+        "일꾼 %s: 일감 %s (%s.%s)이 실패했다 — %s", consumer["name"], task_id, row["topic"], row["operation"], body.code
+    )
     _finish(
         store, task_id, state=STATE_FAILED, output=None, extra={"error": error}, acked=not row["want_result"], now=now
     )
@@ -608,7 +618,7 @@ def _consumer_info(store: Store, row: Any) -> ConsumerInfo:
         consumer_id=row["consumer_id"],
         name=row["name"],
         topics=loads(row["topics_json"], []) or [],
-        key_prefix=record.prefix if record else None,
+        key_prefix=(record.prefix or None) if record else None,
         approved_at=row["approved_at"],
         last_fetch_at=row["last_fetch_at"],
         apps=[f"{one.get('app_id')}@{one.get('version')}" for one in _held_manifests(row)],

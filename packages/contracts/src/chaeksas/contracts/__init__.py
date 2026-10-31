@@ -235,6 +235,7 @@ from chaeksas.contracts.external_task import (
     FailRequest,
     FetchRequest,
     FetchResponse,
+    FolderConsumer,
     LockedTask,
     TopicStatus,
 )
@@ -361,6 +362,7 @@ __all__ = [
     "CompleteRequest",
     "ConsumerEnrollRequest",
     "ConsumerInfo",
+    "FolderConsumer",
     "ExtendRequest",
     "ExternalTaskCreate",
     "ExternalTaskCreated",

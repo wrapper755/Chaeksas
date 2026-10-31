@@ -32,7 +32,9 @@
 | Center 서명 키 | `signing key` | Center | 승인·배포·외부 확장 봉투에 Center가 대신 서명하는 키. DB에 있고 공개키는 믿는 키 목록(`admin_keys`)으로 현장에 내려간다 [ADR-0090](decisions/0090-center-admin-accounts.md) |
 | **확장** | `extension` | 묶음 | **BPM 프로세스에 공통 기능을 더하는 묶음.** 확장 정의(C13 `extension.json`)로 태스크 종류·작업·Studio 편집기 등을 **기여**한다. 등급: 내장 / 사내 / 외부. **지금 깔린 내장 확장은 없다** ([ADR-0018](decisions/0018-extensions.md), [ADR-0114](decisions/0114-remove-ui-automation.md)) |
 | 확장 정의 | `extension.json` | 파일 | 확장이 무엇을 더하는지 선언 (C13) |
-| 확장 폴더 | `extensions_dir` | Center | Center가 **뜰 때** 읽어 외부 확장으로 등록하는 정의 파일(`*.extension.json`) 폴더. `CHK_CENTER__EXTENSIONS_DIR`. 콘솔 등록과 같은 관문이고 서명은 Center가 한다 ([ADR-0121](decisions/0121-extension-folder.md)). 「묶음 확장」이라 쓰지 않는다 |
+| 확장 폴더 | `extensions_dir` | Center | Center가 **뜰 때** 읽는 폴더. 기본 확장(`*.extension.json`)과 승인 없는 일꾼(`*.consumer.json`)을 들인다. `CHK_CENTER__EXTENSIONS_DIR`(기본 `<데이터>/extensions`). **폴더가 원본이다** — 빼면 거둔다 ([ADR-0121](decisions/0121-extension-folder.md)). 「묶음 확장」이라 쓰지 않는다 |
+| 기본 확장 | `source: folder` | Center | 확장 폴더가 들인 외부 확장. 콘솔이 등록·해제하지 않는다. 예: NowView 일꾼의 `external`(BPMN ServiceTask의 External Service 자리) |
+| 승인 없는 일꾼 | `FolderConsumer` | Center | 확장 폴더의 `*.consumer.json`(이름·토픽·토큰 해시)으로 요청 코드·승인 없이 들어오는 일꾼. 토픽 고정, 만료·회전 없음 (C15) |
 | 기여 / 기여 지점 | `contributes` | 개념 | 확장이 플랫폼에 끼워 넣는 것 / 끼워 넣을 수 있는 자리 (VS Code의 contribution point와 같은 뜻) |
 | 내장 확장 / 사내 확장 / 외부 확장 | `builtin` / `internal` / `external` | 등급 | 이 저장소에 있음 / 다른 사내 저장소 / 정의 파일만 (외부 앱). 외부 확장은 코드를 기여할 수 없다 |
 | 외부 앱 | `external app` | 서버 | 이 저장소·C11 밖의 서버 앱 (흔히 "외부 LLM 앱"이라 부르는 것). 외부 확장의 서버 부분으로, 관리자가 등록한(Center가 서명한) 확장 정의의 HTTP 어댑터로만 붙는다 |

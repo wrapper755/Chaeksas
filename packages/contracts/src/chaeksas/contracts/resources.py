@@ -35,7 +35,9 @@ KNOWN_PROTOCOLS = frozenset({"chk-c11", "http-adapter"})  # 없으면 클라이�
 #: 외부 확장이 어디서 들어왔나 (`ExtensionResource.source`, ADR-0121).
 KNOWN_EXTENSION_SOURCES = frozenset({"console", "folder"})
 #: 확장 폴더의 파일 하나를 읽은 결과 (`ExtensionFolderItem.outcome`, ADR-0121).
-KNOWN_FOLDER_OUTCOMES = frozenset({"registered", "unchanged", "skipped", "refused"})
+KNOWN_FOLDER_OUTCOMES = frozenset({"registered", "unchanged", "skipped", "refused", "revoked"})
+#: 확장 폴더가 다루는 것 (`ExtensionFolderItem.kind`) — 확장 정의(`*.extension.json`)와 일꾼(`*.consumer.json`).
+KNOWN_FOLDER_KINDS = frozenset({"extension", "consumer"})
 # 수행 모드 값은 C11이 소유한다 (`service_app.MODES`).
 
 #: 누락 검사 결과의 `type`·`reason` (C7 「누락 검사」 표).
@@ -90,9 +92,13 @@ class ExtensionResource(ContractModel):
 
 
 class ExtensionFolderItem(ContractModel):
-    """확장 폴더의 파일 하나를 읽은 결과 (ADR-0121). 읽지 못했으면 `id`·`version`이 없다."""
+    """확장 폴더의 파일 하나를 읽은 결과 (ADR-0121). 읽지 못했으면 `id`·`version`이 없다.
 
-    file: str
+    `revoked`는 파일이 **폴더에서 빠져** 거둔 것이라 `file`이 없다. 일꾼이면 `id`가 일꾼 이름이다.
+    """
+
+    kind: str = "extension"  # KNOWN_FOLDER_KINDS
+    file: str | None = None
     id: str | None = None
     version: str | None = None
     outcome: str  # KNOWN_FOLDER_OUTCOMES
