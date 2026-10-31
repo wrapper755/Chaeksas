@@ -388,6 +388,8 @@ BotUiInfo 필드:
 
 ## 가상 직원 (CON-13)
 
+> 제안: 이 절은 [C16](C16-staff-and-requests.md) 「직원·요청」으로 바뀐다 ([ADR-0125](../decisions/0125-staff-own-work-and-request-each-other.md) — 수락, 구현 전). 아래는 지금 코드다.
+
 사람이 아닌 업무 주체 — 접수 BPM 프로세스·감독자를 묶는다 ([ADR-0085](../decisions/0085-virtual-worker-resource.md), 용어집 §2-1). **일괄은 자원이 아니다** — 접수 BPM 프로세스 실행 한 번이고(ADR-0079) 여기서는 **읽을 때** 이어 붙인다.
 
 | 메서드·경로 | 인증 | 뜻 |

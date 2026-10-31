@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락. **§2의 「차례로 돈다」를 [ADR-0087](0087-parallel-loop-on-the-server.md)이 대체** (서버의 병렬 반복은 함께 맡기고 한 건 실패가 나머지를 거둔다) |
+| 상태 | 수락. **§2의 「차례로 돈다」를 [ADR-0087](0087-parallel-loop-on-the-server.md)이 대체** (서버의 병렬 반복은 함께 맡기고 한 건 실패가 나머지를 거둔다). §4의 「막는 것은 W3다」는 [ADR-0125](0125-staff-own-work-and-request-each-other.md)가 대체 — 막는 자리는 없고 B16은 경고만이다 |
 | 날짜 | 2026-10-20 |
 | 관련 | [ADR-0079](0079-virtual-worker-is-an-intake-bot.md)(접수 Bot — 이 ADR이 그 결정 2·3을 정한다), [ADR-0062](0062-pc-delegation.md)(PC 위임 — 이 ADR이 대상을 넓힌다), [ADR-0054](0054-server-run-state-and-concurrency.md), [ADR-0018](0018-extensions.md), [ADR-0039](0039-optional-variables-and-b11.md), [C14](../03-contracts/C14-bpmn-extensions.md) §PC 위임·§반복, [C12](../03-contracts/C12-server-runner-center.md) §PC 위임, [C3](../03-contracts/C3-run-events.md) |
 

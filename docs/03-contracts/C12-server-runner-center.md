@@ -226,6 +226,8 @@ Center는 메시지를 이렇게 처리한다.
 
 ### PC 위임 (서버 BPM 프로세스 → PC BPM 프로세스·서버 BPM 프로세스)
 
+> 제안: 위임 요청에 받는 직원(`staff`)과 방식(`mode: wait|handoff`)이 더해지고 Center가 같은 회사인지 본다 ([C16](C16-staff-and-requests.md) §요청, [ADR-0125](../decisions/0125-staff-own-work-and-request-each-other.md) — 구현 전).
+
 서버 BPM 프로세스가 현장 확인·PC 전용 자원이 필요한 한 부분을 **따로 배포된 PC BPM 프로세스**에 맡긴다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 그림은 C14 `chk:call.delegate`, 매니페스트는 C1 `requires.delegations`다.
 
 **대상이 서버 BPM 프로세스이어도 같은 길이다** ([ADR-0082](../decisions/0082-batch-start.md)) — Center가 그 판의 **매니페스트 `run_location`**을 읽어 `pc`면 아래대로 PC를 고르고, `server`면 **서버 실행기 대상 작업**(`{type: server_runner}`, 실행기는 Center가 고른다 — §Center가 작업을 나누는 규칙)을 만든다. 멱등·`requested_by`·결과 보관·거두기는 같은 함수다. 반복 위임(일괄 기동)이 이 길로 N건을 낸다.

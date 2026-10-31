@@ -498,7 +498,7 @@ def test_the_contract_status_table_matches_each_document() -> None:
         cells = [one.strip() for one in line.split("|")]
         listed[cells[1].split("]")[0].lstrip("[")] = _status(cells[4])
 
-    assert len(listed) == 12, f"계약 열둘(C1~C7·C11~C15)이 목록에 있어야 한다: {sorted(listed)}"
+    assert len(listed) == 13, f"계약 열셋(C1~C7·C11~C16)이 목록에 있어야 한다: {sorted(listed)}"
     for name, said in sorted(listed.items()):
         found = next(docs.glob(f"{name}-*.md"))
         head = next(x for x in found.read_text(encoding="utf-8").splitlines() if x.startswith("| 상태 |"))
