@@ -217,11 +217,13 @@ const FOLDER_OUTCOME: Record<string, string> = {
 
 function folderTarget(row: ConsumerFolderItem): string {
   if (!row.id) return "—";
-  return row.kind === "consumer" ? `일꾼 ${row.id}` : `${row.id}@${row.version ?? "?"}`;
+  if (row.kind === "consumer") return `일꾼 ${row.id}`;
+  if (row.kind === "key") return `키 ${row.id}`;
+  return `${row.id}@${row.version ?? "?"}`;
 }
 
 /**
- * 「일꾼 폴더」 (ADR-0122) — Center가 **뜰 때** 일꾼 파일을 들인 결과와, 맡은 일꾼이 없어 거둔 확장. 고치는
+ * 「일꾼 폴더」 (ADR-0122·0123) — Center가 **뜰 때** 일꾼 파일·키 파일을 들인 결과와, 맡은 일꾼이 없어 거둔 확장. 고치는
  * 단추는 없다 — 파일을 바꾸거나 빼고 Center를 다시 띄우는 것이 고치는 길이다.
  */
 function ConsumerFolder({ scan }: { scan: ConsumerFolderScan }) {
@@ -244,7 +246,7 @@ function ConsumerFolder({ scan }: { scan: ConsumerFolderScan }) {
       {scan.problem ? (
         <ErrorBanner message={scan.problem} />
       ) : items.length === 0 ? (
-        <p className="text-body text-text-muted">폴더에 일꾼 파일(*.consumer.json)이 없습니다.</p>
+        <p className="text-body text-text-muted">폴더에 일꾼 파일(*.consumer.json)·키 파일(*.key.json)이 없습니다.</p>
       ) : (
         <DataTable
           columns={columns}

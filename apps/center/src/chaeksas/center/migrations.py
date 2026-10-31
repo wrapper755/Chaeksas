@@ -295,6 +295,11 @@ MIGRATIONS: tuple[Step, ...] = (
         "외부 확장이 어디서 들어왔나 — 콘솔(NULL)·일꾼(`worker`, 맡은 일꾼이 빠지면 거둔다) (ADR-0122)",
         ("ALTER TABLE extensions ADD COLUMN source TEXT",),
     ),
+    Step(
+        21,
+        "일꾼 폴더의 키 파일로 들인 연동용·대리 답용 키 — 그 파일 이름(확장자 앞), 빠지면 폐기한다 (ADR-0123)",
+        ("ALTER TABLE center_keys ADD COLUMN folder_file TEXT",),
+    ),
 )
 
 

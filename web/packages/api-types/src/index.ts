@@ -85,6 +85,7 @@ export const CONTRACT_MODULES = [
   "c7-consumer-folder-scan",
   "c7-contributed-resource",
   "c7-extension-resource",
+  "c7-folder-key",
   "c7-runtime-resource",
   "c7-service-app-resource",
 ] as const;

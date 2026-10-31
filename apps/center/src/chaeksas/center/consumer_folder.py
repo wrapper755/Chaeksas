@@ -1,4 +1,4 @@
-"""일꾼 폴더 — Center가 **뜰 때** 일꾼을 들인다. 일꾼이 들어오는 길은 이것 하나다 (ADR-0122, C15).
+"""일꾼 폴더 — Center가 **뜰 때** 일꾼과 폴더 키를 들인다. 일꾼이 들어오는 길은 이것 하나다 (ADR-0122, C15).
 
 배포가 `<이름>.consumer.json`(C15 `FolderConsumer` — 이름·토픽·**토큰 해시**)을 일꾼 폴더
 (`CHK_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)에 복사해 두면 여기서 한 번 읽는다. 요청 코드·승인이 없다 —
@@ -9,6 +9,10 @@
 - **폴더가 원본이다** — 파일이 빠지면 키를 폐기하고 일꾼을 지운다. 일꾼이 올린 외부 확장 가운데 어느 일꾼의
   토픽에도 없게 된 것은 철회한다. 읽지 못한 파일이 있거나 폴더가 없으면 **아무것도 거두지 않는다**.
 - **잘못된 파일이 Center를 막지 않는다** — 사유는 로그와 `GET /resources/consumer-folder`(C7)로 간다.
+
+같은 폴더의 `<이름>.key.json`(C7 `FolderKey`)은 **연동용·대리 답용 키**다 (ADR-0123) — 함께 설치되는 연동 시스템이
+설치 때 원문을 짓고 Center에는 해시만 둔다. 뜻은 일꾼 파일과 같다(한 번 읽음·해시가 바뀌면 옛 키 폐기·폐기된
+토큰은 되살아나지 않음·파일이 빠지면 폐기). 키의 자리는 `center_keys.folder_file`(파일 이름의 확장자 앞)이다.
 """
 
 from __future__ import annotations
@@ -25,13 +29,15 @@ from pydantic import ValidationError
 from chaeksas.center import keys
 from chaeksas.center.api import external_tasks, resources
 from chaeksas.center.storage import Store, dumps, loads, now_iso
-from chaeksas.contracts.center_keys import KEY_PREFIX, KEY_RANDOM_LEN
+from chaeksas.contracts.center_keys import KEY_PREFIX, KEY_RANDOM_LEN, FolderKey
 from chaeksas.contracts.external_task import CONSUMER, FolderConsumer
 from chaeksas.contracts.resources import ConsumerFolderItem, ConsumerFolderScan
 
 log = logging.getLogger(__name__)
 
 SUFFIX = ".consumer.json"
+#: 연동용·대리 답용 키 파일 (ADR-0123).
+KEY_SUFFIX = ".key.json"
 #: 일꾼이 한 일(확장 올리기·거두기)의 「누가」 머리, 폴더가 거둘 때의 「누가」.
 ACTOR = "일꾼 폴더"
 #: 일꾼이 올린 외부 확장의 출처 (`extensions.source`).
@@ -77,6 +83,7 @@ def scan(store: Store, folder: Path | None, *, required: bool = True) -> Consume
             log.exception("일꾼 폴더 %s를 들이다 터졌다", path.name)
             items.append(_refused(path, spec.name, "internal", f"들이다 오류가 났습니다: {type(e).__name__}"))
     items.extend(_drop_missing(store, present))
+    items.extend(_scan_keys(store, folder))
     if unreadable:
         log.warning("일꾼 폴더: 읽지 못한 파일이 있어 일꾼이 올린 확장을 거두지 않는다")
     else:
@@ -188,27 +195,116 @@ def _revoke_orphans(store: Store, topics: set[str]) -> list[ConsumerFolderItem]:
     return out
 
 
-def _read(path: Path) -> tuple[FolderConsumer | None, tuple[str, str]]:
+def _read(path: Path, model: type[Any] = FolderConsumer) -> tuple[Any, tuple[str, str]]:
     try:
         # Windows에서 저장한 파일의 BOM도 받는다.
         raw: Any = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, UnicodeDecodeError, ValueError) as e:
         return None, ("unreadable", f"파일을 JSON으로 읽지 못했습니다: {e}")
     try:
-        return FolderConsumer.model_validate(raw), ("", "")
+        return model.model_validate(raw), ("", "")
     except ValidationError as e:
         first = e.errors()[0]
         where = ".".join(str(one) for one in first.get("loc", ())) or "(전체)"
         return None, ("input_invalid", f"{where}: {first.get('msg')}")
 
 
-def _refused(path: Path, name: str | None, code: str, message: str) -> ConsumerFolderItem:
-    return _refused_at(path.name, name, code, message)
+def _refused(path: Path, name: str | None, code: str, message: str, *, kind: str = "consumer") -> ConsumerFolderItem:
+    return _refused_at(path.name, name, code, message, kind=kind)
 
 
-def _refused_at(file: str | None, name: str | None, code: str, message: str) -> ConsumerFolderItem:
+def _refused_at(
+    file: str | None, name: str | None, code: str, message: str, *, kind: str = "consumer"
+) -> ConsumerFolderItem:
     log.warning("일꾼 폴더 %s를 들이지 않았다 (%s): %s", file, code, message)
-    return ConsumerFolderItem(file=file, id=name, outcome="refused", code=code, message=message)
+    return ConsumerFolderItem(kind=kind, file=file, id=name, outcome="refused", code=code, message=message)
+
+
+# ─────────────────────────── 연동용·대리 답용 키 (`<이름>.key.json`, ADR-0123) ───────────────────────────
+
+
+def _scan_keys(store: Store, folder: Path) -> list[ConsumerFolderItem]:
+    items: list[ConsumerFolderItem] = []
+    present: set[str] = set()
+    for path in sorted(folder.glob(f"*{KEY_SUFFIX}")):
+        if not path.is_file():
+            continue
+        stem = path.name[: -len(KEY_SUFFIX)]
+        # 읽지 못해도 자리는 남긴다 — 파일이 있는 한 그 키를 폐기하지 않는다.
+        present.add(stem)
+        spec, why = _read(path, FolderKey)
+        if spec is None:
+            items.append(_refused(path, None, *why, kind="key"))
+            continue
+        try:
+            items.append(admit_key(store, stem, spec, file=path.name))
+        except Exception as e:  # noqa: BLE001 — 한 파일이 Center를 막지 않는다
+            log.exception("일꾼 폴더 %s를 들이다 터졌다", path.name)
+            items.append(
+                _refused(path, spec.name, "internal", f"들이다 오류가 났습니다: {type(e).__name__}", kind="key")
+            )
+    items.extend(_drop_missing_keys(store, present))
+    return items
+
+
+def admit_key(store: Store, stem: str, spec: FolderKey, *, file: str | None = None) -> ConsumerFolderItem:
+    """키 하나를 들인다(또는 맞춘다). 권한은 CON-11에서 발급한 같은 종류의 키와 같다 — 종류가 권한이다."""
+    row = store.row(
+        "SELECT key_id, name, type FROM center_keys WHERE folder_file = ? AND revoked_at IS NULL", (stem,)
+    )
+    held = store.row("SELECT key_id, revoked_at FROM center_keys WHERE key_hash = ?", (spec.token_sha256,))
+    if held is not None and held["revoked_at"] is not None:
+        return _refused_at(
+            file, spec.name, "token_revoked", "이 토큰은 폐기됐습니다 — 새 토큰으로 바꾸세요", kind="key"
+        )
+    same_key = row is not None and held is not None and held["key_id"] == row["key_id"]
+    if held is not None and not same_key:
+        return _refused_at(file, spec.name, "token_in_use", "이 토큰은 이미 다른 키가 씁니다", kind="key")
+    if same_key and row is not None and row["name"] == spec.name and row["type"] == spec.type:
+        return ConsumerFolderItem(kind="key", file=file, id=spec.name, outcome="unchanged")
+
+    now = now_iso()
+    with store.tx() as cur:
+        if same_key and row is not None:
+            cur.execute(
+                "UPDATE center_keys SET name = ?, type = ? WHERE key_id = ?", (spec.name, spec.type, row["key_id"])
+            )
+        else:
+            if row is not None:
+                cur.execute(
+                    "UPDATE center_keys SET revoked_at = ? WHERE key_id = ? AND revoked_at IS NULL",
+                    (now, row["key_id"]),
+                )
+            # 일꾼 키처럼 **앞자리가 비어 있다** — 원문을 모르니 해시로만 찾는다 (`keys.find`).
+            cur.execute(
+                "INSERT INTO center_keys (key_id, name, type, prefix, key_hash, created_at, expires_at, folder_file)"
+                " VALUES (?, ?, ?, '', ?, ?, NULL, ?)",
+                (keys.new_key_id(), spec.name, spec.type, spec.token_sha256, now, stem),
+            )
+    log.info("일꾼 폴더 %s: %s 키 %s를 들였다", file or stem, spec.type, spec.name)
+    return ConsumerFolderItem(kind="key", file=file, id=spec.name, outcome="registered")
+
+
+def _drop_missing_keys(store: Store, present: set[str]) -> list[ConsumerFolderItem]:
+    """파일이 빠진 키 — 폐기한다. 행은 남는다(CON-11에 「폐기됨」으로 보인다)."""
+    out: list[ConsumerFolderItem] = []
+    now = now_iso()
+    for row in store.rows(
+        "SELECT key_id, name, folder_file FROM center_keys WHERE folder_file IS NOT NULL AND revoked_at IS NULL"
+    ):
+        if str(row["folder_file"]) in present:
+            continue
+        with store.tx() as cur:
+            cur.execute(
+                "UPDATE center_keys SET revoked_at = ? WHERE key_id = ? AND revoked_at IS NULL", (now, row["key_id"])
+            )
+        log.info("일꾼 폴더: 파일이 빠져 키 %s를 폐기했다", row["name"])
+        out.append(
+            ConsumerFolderItem(
+                kind="key", id=str(row["name"]), outcome="revoked", message="폴더에서 빠져 키를 폐기했습니다"
+            )
+        )
+    return out
 
 
 # ─────────────────────────── 파일 짓기 (`chk-center consumer-file`) ───────────────────────────
@@ -221,6 +317,17 @@ def new_token() -> str:
 
 def token_sha256(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def write_key_file(folder: Path, name: str, key_type: str) -> tuple[Path, str]:
+    """`<이름>.key.json`을 쓰고 `(파일, 토큰 원문)`을 돌려준다 (ADR-0123). 원문은 파일에 넣지 않는다."""
+    raw = new_token()
+    spec = FolderKey(name=name, type=key_type, token_sha256=token_sha256(raw))
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{name}{KEY_SUFFIX}"
+    body = {"name": spec.name, "type": spec.type, "token_sha256": spec.token_sha256}
+    path.write_text(json.dumps(body, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path, raw
 
 
 def write_file(folder: Path, name: str, topics: list[str]) -> tuple[Path, str]:

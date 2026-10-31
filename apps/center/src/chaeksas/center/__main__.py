@@ -118,6 +118,33 @@ def consumer_file(argv: list[str]) -> int:
     return 0
 
 
+def key_file(argv: list[str]) -> int:
+    """`chk-center key-file <이름> --type integration|relay [--dir 폴더]` — 일꾼 폴더의 키 파일을 짓는다 (ADR-0123).
+
+    파일에는 키의 **해시만** 쓰고 원문은 **여기서 한 번만** 찍는다. Center를 다시 띄워야 들어온다.
+    """
+    import argparse  # noqa: PLC0415
+
+    from chaeksas.center.consumer_folder import write_key_file  # noqa: PLC0415
+    from chaeksas.center.settings import Settings  # noqa: PLC0415
+    from chaeksas.contracts.center_keys import FOLDER_KEY_TYPES  # noqa: PLC0415
+
+    parser = argparse.ArgumentParser(prog="chk-center key-file", description="일꾼 폴더의 키 파일을 짓는다")
+    parser.add_argument("name", help="키 이름 — 파일 이름(<이름>.key.json)이기도 하다")
+    parser.add_argument("--type", required=True, choices=sorted(FOLDER_KEY_TYPES), help="키 종류")
+    parser.add_argument("--dir", type=Path, default=None, help="일꾼 폴더 (기본: CHK_CENTER__CONSUMERS_DIR)")
+    found = parser.parse_args(argv)
+    folder = found.dir or Settings.from_env().consumers_dir
+    if folder is None:
+        print("일꾼 폴더가 필요하다")
+        return 2
+    path, raw = write_key_file(folder, found.name, found.type)
+    print(f"키 파일을 썼다: {path}")
+    print(f"키 (이번 한 번만 보인다 — 부르는 시스템의 설정에 넣으세요): {raw}")
+    print("Center를 다시 띄우면 들어온다.")
+    return 0
+
+
 def main() -> int:
     import uvicorn
 
@@ -131,6 +158,8 @@ def main() -> int:
         return hosts(sys.argv[2:])
     if len(sys.argv) > 1 and sys.argv[1] == "consumer-file":
         return consumer_file(sys.argv[2:])
+    if len(sys.argv) > 1 and sys.argv[1] == "key-file":
+        return key_file(sys.argv[2:])
 
     settings = Settings.from_env()
     try:

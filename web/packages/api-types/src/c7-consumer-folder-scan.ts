@@ -14,9 +14,9 @@ export interface ConsumerFolderScan {
   [k: string]: unknown;
 }
 /**
- * 일꾼 폴더의 한 줄 (ADR-0122). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.
+ * 일꾼 폴더의 한 줄 (ADR-0122·0123). 일꾼·키면 `id`가 그 이름이고, 읽지 못했으면 없다.
  *
- * `revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼(파일이 빠졌다)이나, 맡은 일꾼이 없어진 외부 확장이다.
+ * `revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼·키(파일이 빠졌다)나, 맡은 일꾼이 없어진 외부 확장이다.
  */
 export interface ConsumerFolderItem {
   code?: string | null;

@@ -56,7 +56,7 @@ export default async function CenterKeysPage({
         return row.enrollment_id ? `${target} · 승인으로 발급` : target;
       },
     },
-    { key: "prefix", header: "앞자리", width: "20ch", mono: true, cell: (row) => `${row.prefix}…` },
+    { key: "prefix", header: "앞자리", width: "20ch", mono: true, cell: (row) => (row.prefix ? `${row.prefix}…` : "—") },
     { key: "created_at", header: "만든 날", width: "13ch", cell: (row) => day(row.created_at) },
     { key: "expires_at", header: "만료", width: "13ch", cell: (row) => day(row.expires_at) },
     { key: "last_used_at", header: "마지막 사용", width: "13ch", cell: (row) => day(row.last_used_at) },

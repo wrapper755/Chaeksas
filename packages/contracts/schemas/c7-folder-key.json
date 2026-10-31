@@ -1,0 +1,28 @@
+{
+  "$id": "urn:chaeksas:contracts:c7-folder-key",
+  "additionalProperties": true,
+  "description": "일꾼 폴더의 `<이름>.key.json` — 연동용·대리 답용 키를 **Center가 뜰 때** 들인다 (C7 §폴더 키, ADR-0123).\n\n설치가 원문을 짓고 Center에는 **해시만** 둔다. 권한은 CON-11에서 발급한 같은 종류의 키와 같고, 만료·회전이\n없다(공개키가 없다). 키의 자리는 파일 이름이 정한다 — `name`은 CON-11에 보이는 키 이름이다.",
+  "properties": {
+    "name": {
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "token_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Token Sha256",
+      "type": "string"
+    },
+    "type": {
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "type",
+    "token_sha256"
+  ],
+  "title": "FolderKey",
+  "type": "object"
+}

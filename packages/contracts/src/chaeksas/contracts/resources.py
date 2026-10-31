@@ -34,8 +34,9 @@ KNOWN_EXTENSION_TIERS = frozenset({"builtin", "internal", "external"})  # C13
 KNOWN_PROTOCOLS = frozenset({"chk-c11", "http-adapter"})  # 없으면 클라이언트 기여만
 #: 일꾼 폴더의 한 줄 결과 (`ConsumerFolderItem.outcome`, ADR-0122).
 KNOWN_FOLDER_OUTCOMES = frozenset({"registered", "unchanged", "refused", "revoked"})
-#: 일꾼 폴더가 다루는 것 (`ConsumerFolderItem.kind`) — 일꾼과, 맡은 일꾼이 없어 거둔 외부 확장.
-KNOWN_FOLDER_KINDS = frozenset({"consumer", "extension"})
+#: 일꾼 폴더가 다루는 것 (`ConsumerFolderItem.kind`) — 일꾼, 키 파일의 연동용·대리 답용 키(ADR-0123), 맡은 일꾼이
+#: 없어 거둔 외부 확장.
+KNOWN_FOLDER_KINDS = frozenset({"consumer", "key", "extension"})
 # 수행 모드 값은 C11이 소유한다 (`service_app.MODES`).
 
 #: 누락 검사 결과의 `type`·`reason` (C7 「누락 검사」 표).
@@ -88,9 +89,9 @@ class ExtensionResource(ContractModel):
 
 
 class ConsumerFolderItem(ContractModel):
-    """일꾼 폴더의 한 줄 (ADR-0122). 일꾼이면 `id`가 일꾼 이름이고, 읽지 못했으면 없다.
+    """일꾼 폴더의 한 줄 (ADR-0122·0123). 일꾼·키면 `id`가 그 이름이고, 읽지 못했으면 없다.
 
-    `revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼(파일이 빠졌다)이나, 맡은 일꾼이 없어진 외부 확장이다.
+    `revoked`는 **빠져서** 거둔 것이라 `file`이 없다 — 일꾼·키(파일이 빠졌다)나, 맡은 일꾼이 없어진 외부 확장이다.
     """
 
     kind: str = "consumer"  # KNOWN_FOLDER_KINDS

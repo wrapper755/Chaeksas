@@ -87,7 +87,7 @@
 | `configured` | 폴더가 있나(사람이 적었으면 늘 `true`). `false`면 나머지는 비어 있다 |
 | `dir`?, `scanned_at`? | 읽은 폴더와 때 |
 | `problem`? | 폴더 자체를 읽지 못한 까닭(없음·폴더가 아님). 있으면 `items`는 비어 있다 |
-| `items[]` | 하나마다 `{kind, file?, id?, version?, outcome, code?, message?}`. `kind`: `consumer`(`id`가 일꾼 이름) / `extension`(맡은 일꾼이 없어 거둔 외부 확장). `outcome`: `registered`(들였다·바꿨다) / `unchanged`(그대로) / `refused`(`unreadable`·`input_invalid`·`token_revoked`·`token_in_use`) / `revoked`(**빠져서** 거뒀다 — `file`이 없다) |
+| `items[]` | 하나마다 `{kind, file?, id?, version?, outcome, code?, message?}`. `kind`: `consumer`(`id`가 일꾼 이름) / `key`(키 파일의 키, `id`가 키 이름 — §폴더 키) / `extension`(맡은 일꾼이 없어 거둔 외부 확장). `outcome`: `registered`(들였다·바꿨다) / `unchanged`(그대로) / `refused`(`unreadable`·`input_invalid`·`token_revoked`·`token_in_use`) / `revoked`(**빠져서** 거뒀다 — `file`이 없다) |
 
 ```json
 {
@@ -96,6 +96,7 @@
   "scanned_at": "2026-10-31T09:00:00+09:00",
   "items": [
     {"kind": "consumer", "file": "worker.consumer.json", "id": "worker", "outcome": "unchanged"},
+    {"kind": "key", "file": "nowview.key.json", "id": "nowview", "outcome": "registered"},
     {"kind": "consumer", "id": "old-worker", "outcome": "revoked", "message": "폴더에서 빠져 키를 폐기했습니다"},
     {"kind": "extension", "id": "ext-ocr", "version": "1.0.0", "outcome": "revoked",
      "message": "맡은 일꾼이 없어 등록을 해제했습니다"}
@@ -185,6 +186,26 @@ CenterKeyInfo 필드:
 | `state` | `active` / `expired` / `revoked`. 화면 표기는 「사용 중」 / 「만료」 / 「폐기됨」 |
 
 - 키 원문은 `chk_ctr_<무작위 40자>`이고, Center는 해시만 저장한다.
+- **연동용·대리 답용 키는 일꾼 폴더의 키 파일로도 들인다** (§폴더 키).
+
+### 폴더 키
+
+함께 설치되는 연동 시스템의 키는 설치가 짓는다 ([0123](../decisions/0123-folder-keys.md)) — 일꾼 폴더(`CHK_CENTER__CONSUMERS_DIR`, C15 §일꾼 들이기)의 `<이름>.key.json`(`FolderKey`)을 Center가 **뜰 때 한 번** 읽는다. 원문은 폴더에 없다.
+
+```json
+{"name": "nowview", "type": "integration", "token_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}
+```
+
+| 필드 | 뜻 |
+| --- | --- |
+| `name` | CON-11에 보이는 키 이름 |
+| `type` | `integration` / `relay`만. 다른 것은 `input_invalid` |
+| `token_sha256` | 키 원문(UTF-8)의 SHA-256, 소문자 16진 64자. 원문의 권장 꼴은 위 키 원문과 같다(`chk_ctr_` + 40자) — Center는 해시만 맞춘다 |
+
+- **권한은 종류가 정한다** — `POST /center-keys`로 발급한 같은 종류의 키와 같다(C5 권한표). 앞자리(`prefix`)는 빈 글이고(CON-11 「—」) 만료·회전이 없다.
+- 키의 자리는 **파일 이름**(확장자 앞)이다. 해시가 바뀌면 옛 키를 폐기하고 새 키를 만든다. **폐기된 토큰은 되살아나지 않고**(`token_revoked`), 다른 키(일꾼 키 포함)가 쓰는 해시는 `token_in_use`다. **파일이 빠지면 폐기한다**(행은 남는다). 읽지 못한 파일은 자리를 지킨다.
+- 결과는 `ConsumerFolderScan.items[]`의 `kind: key` 줄이다. `chk-center key-file <이름> --type integration|relay [--dir 폴더]`가 파일을 짓고 원문을 한 번 찍는다.
+
 - 기본 만료는 1년. 만료 14일 전부터 CON-11에 보인다. **등록 승인이 만든 키는 Center가 그때부터 회전한다** (C4 §키 회전) — PC 실행기 알림(BUI-05)은 회전이 7일 전까지 닿지 않았을 때만, 회전하지 않는 키는 14일 전부터다.
 
 ## 오류
@@ -206,6 +227,7 @@ CenterKeyInfo 필드:
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-11-01 | 1 | §폴더 키 — 일꾼 폴더의 `<이름>.key.json`(`FolderKey`)으로 연동용·대리 답용 키를 들인다. `ConsumerFolderItem.kind`에 `key`. 선택 칸이라 schema는 그대로다 | [0123](../decisions/0123-folder-keys.md) |
 | 2026-10-31 | 1 | 일꾼 폴더 — `GET /resources/consumer-folder`(`ConsumerFolderScan`). 외부 확장의 출처가 **일꾼이 올린 정의**가 되었다(C15 `PUT …/self/extension`) — 등록·해제 경로는 C13에서 걷었다. 선택 칸이라 schema는 그대로다 | [0122](../decisions/0122-consumer-folder.md) |
 | 2026-10-31 | 1 | 칸은 그대로다. 확장 기여 자원의 예(UI 화면)를 걷고 `RuntimeResource.versions`에서 `worker`를 뺐다 — UI 자동화 확장이 없다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-29 | 1 | **Center는 바깥 기능을 읽으러 가지 않는다** — 서비스 앱 등록·주소·해제·`/manifest`·`/healthz`·`trust` 읽기, 외부 앱 키(운영·시험용), 외부 확장 주소 덮어쓰기, 어댑터 `health` 두드리기를 걷었다. 서비스 앱·기여 자원은 일꾼이 올리고 상태는 토픽이 말한다(`consumers` 칸). `base_url`은 빈다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
