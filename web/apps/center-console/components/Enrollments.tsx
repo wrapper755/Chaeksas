@@ -40,7 +40,7 @@ export function Enrollments({
 }) {
   const [asking, setAsking] = useState<{ kind: "approve" | "reject"; row: EnrollmentInfo } | null>(null);
   const [text, setText] = useState("");
-  const [company, setCompany] = useState(companies?.length === 1 ? companies[0].id : "");
+  const [company, setCompany] = useState(companies?.length === 1 ? (companies[0]?.id ?? "") : "");
   const [error, setError] = useState<string | null>(null);
   const [working, start] = useTransition();
 
