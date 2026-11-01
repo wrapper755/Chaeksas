@@ -8,7 +8,7 @@
 | 코드 위치 | `packages/contracts/src/chaeksas/contracts/resources.py`, `…/center_keys.py` (import `chaeksas.contracts.resources`, [ADR-0019](../decisions/0019-package-names.md)) |
 | JSON Schema | 리소스 [`c7-extension-resource.json`](../../packages/contracts/schemas/c7-extension-resource.json) · [`c7-service-app-resource.json`](../../packages/contracts/schemas/c7-service-app-resource.json) · [`c7-contributed-resource.json`](../../packages/contracts/schemas/c7-contributed-resource.json) · [`c7-runtime-resource.json`](../../packages/contracts/schemas/c7-runtime-resource.json) / 키 [`c7-center-key-create-request.json`](../../packages/contracts/schemas/c7-center-key-create-request.json) · [`c7-center-key-info.json`](../../packages/contracts/schemas/c7-center-key-info.json) · [`c7-center-key-created.json`](../../packages/contracts/schemas/c7-center-key-created.json) — `uv run python scripts/gen_schemas.py`로 모델에서 생성 |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0015](../decisions/0015-run-location.md), [0018](../decisions/0018-extensions.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
-| 관련 화면 | CON-07 리소스, CON-11 Center API 키, STU-03 리소스 탐색기, STU-14·15, BUI-11 |
+| 관련 화면 | STU-03 리소스 탐색기, STU-14·15, BUI-11 |
 
 > [ADR-0102](../decisions/0102-calling-outside-is-pull.md) (2026-10-29): 서비스 앱 주소 등록·`/manifest`·`/healthz` 읽기, 외부 앱 키(운영·시험용), 외부 확장 주소 덮어쓰기는 **없다**. 주소·키는 일꾼만 들고, manifest·카탈로그는 일꾼이 올리며(C15 `PUT …/consumers/self/manifest`) 상태는 「마지막으로 가져간 때」가 말한다.
 
@@ -23,11 +23,10 @@
 - **확장이 기여한 자원** (예: 사내 확장의 인감 견본)
 - 런타임
 
-이 목록은 세 곳에서 쓴다.
+이 목록은 두 곳에서 쓴다 (콘솔의 리소스 화면 CON-07은 걷었다 — ADR-0128).
 
 - Studio: 리소스 탐색기와 태스크 편집기
 - Center: 배포 전 누락 검사
-- 운영자: CON-07
 
 **2. Center API 키 관리** (CON-11).
 

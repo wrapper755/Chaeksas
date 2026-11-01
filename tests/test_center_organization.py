@@ -197,3 +197,23 @@ def test_a_company_admin_approves_devices_into_its_own_company_only(client: Test
     assert key, "승인한 키가 있다"
     listed = made(client.get(f"{API}/enrollments?state=approved", headers=mine), 200)
     assert [one["company"] for one in listed] == ["company2"]
+
+
+def test_a_company_detail_shows_only_company_wide_work(client: TestClient) -> None:
+    """CON-13 [W]·[R] — 회사 상세는 **회사 공통** 자리 업무만, 직원 자리 업무는 그 직원 상세에."""
+    organize(client)
+    made(upload(client, build_package(), company="default"))
+    made(upload(client, build_package(package_id="kim-work", place={"scope": "staff", "staff": "kim"}),
+                company="default"))
+    for package_id in ("invoice-check", "kim-work"):
+        approve(client, package_id, "1.0.0")
+        made(client.post(f"{API}/deployments", json={"target": {"type": "server_runner", "id": "*"},
+                                                     "bpm_process_id": package_id, "version": "1.0.0"},
+                         headers=ADMIN), 200)
+    company = made(client.get(f"{API}/companies/default", headers=ADMIN), 200)
+    assert [one["bpm_process_id"] for one in company["work"]] == ["invoice-check"]
+    assert company["work"][0]["versions"] == ["1.0.0"] and company["recent_runs"] == []
+    kim = made(client.get(f"{API}/staff/kim", headers=ADMIN), 200)
+    assert [one["bpm_process_id"] for one in kim["work"]] == ["kim-work"]
+    # 목록에는 싣지 않는다 — 하나 읽기에서만 찬다.
+    assert all(one["work"] == [] for one in made(client.get(f"{API}/companies", headers=ADMIN), 200))

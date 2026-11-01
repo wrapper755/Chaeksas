@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | 확장 작성자 → Studio·PC 실행기·실행기·서버 실행기(확장 호스트), Center(리소스 목록·검사), 관리 콘솔 |
 | 코드 위치 | `chaeksas.contracts.extension`, 인터페이스 `packages/extension_api/`, 호스트 `chaeksas.core.extensions` |
 | 관련 ADR | [0018](../decisions/0018-extensions.md), [0010](../decisions/0010-service-apps.md), [0013](../decisions/0013-api-keys.md), [0041](../decisions/0041-extension-run-events.md), [0042](../decisions/0042-extension-contributed-panels.md), [0112](../decisions/0112-escalation-review-from-extensions.md), [0114](../decisions/0114-remove-ui-automation.md) |
-| 관련 화면 | BUI-03·11, STU-03·14·15, CON-07, SVC-00 |
+| 관련 화면 | BUI-03·11, STU-03·14·15, SVC-00 |
 
 > 상태: **외부 확장 등록이 돈다** — 그 토픽을 맡은 **일꾼이** `PUT /consumers/self/extension`(C15)으로 정의를 올리면 E1·E2·E3·E4를 검사하고 **Center가 C2 `extension` 봉투에 서명해**(ADR-0090) 정의와 봉투를 **그대로** 보관한다 — 실행하는 쪽이 다시 검증한다(E6). 맡은 일꾼이 일꾼 폴더에서 빠지면 Center가 뜰 때 `extension_revoke` 봉투로 거둔다 ([ADR-0122](../decisions/0122-consumer-folder.md)). 콘솔·API로 등록·해제하는 길은 없다. **E4는 외부 확장으로 띄울 수 없다** — `task_types`가 `entry`(코드)를 요구하고 E1이 그것을 먼저 막기 때문이다. 그 겹침은 설치된 확장들 사이에서만 생기고 확장 호스트가 본다.
 >

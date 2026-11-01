@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 · **표의 CON-07 두 줄(일꾼·폴더 키, 예전에 발급한 연동 키)은 [ADR-0128](0128-console-drops-the-resources-screen.md)이 대체한다** — 리소스 화면이 없어져 그 키 동작은 콘솔에 없다 |
 | 날짜 | 2026-11-01 |
 | 관련 | 화면 CON-03·CON-07·CON-11·CON-12, 계약 C7(바뀌지 않는다), [ADR-0092](0092-keys-are-issued-and-delivered-by-center.md), [ADR-0093](0093-studio-is-let-in-by-approval.md), [ADR-0095](0095-deleting-revoked-center-keys.md), [ADR-0117](0117-bundled-server-runner-joins-by-shared-secret.md), [ADR-0122](0122-consumer-folder.md), [ADR-0123](0123-folder-keys.md) |
 

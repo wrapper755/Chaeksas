@@ -58,6 +58,7 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { label: "결재함", href: "/approvals" },
       { label: "작업 지시", href: "/jobs" },
+      { label: "조직", href: "/organization" },
     ],
   },
   {
@@ -65,7 +66,6 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { label: "공통 패키지", href: "/packages" },
       { label: "배포", href: "/deployments" },
-      { label: "리소스", href: "/resources" },
     ],
   },
   {

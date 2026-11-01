@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { center, CenterError, session, signIn, signOut } from "@/lib/center";
 import { fromCaller } from "@/lib/inputs";
+import type { OrgKind } from "@/lib/organization";
 import { COOKIE_NAME, seal } from "@/lib/session";
 
 /**
@@ -330,7 +331,6 @@ export async function deletePackage(packageId: string, version: string): Promise
 function revalidateKeys() {
   revalidatePath("/bot-uis", "layout");
   revalidatePath("/server-runners", "layout");
-  revalidatePath("/resources");
 }
 
 export async function revokeCenterKey(keyId: string): Promise<ActionResult> {
@@ -360,7 +360,6 @@ export async function decideEnrollment(
     return { error: message(cause) };
   }
   revalidatePath("/bot-uis", "layout");
-  revalidatePath("/resources", "layout");
   revalidatePath("/server-runners", "layout");
   revalidatePath("/bots");
   return {};
@@ -545,4 +544,58 @@ export async function changeOwnPassword(_previous: ActionResult, form: FormData)
   }
   (await cookies()).delete(COOKIE_NAME);
   redirect("/login?changed=1" as Route);
+}
+
+// ─────────────────── 조직 (CON-13) ───────────────────
+
+function orgHref(kind: OrgKind, id: string): Route {
+  return `/organization?node=${encodeURIComponent(`${kind}:${id}`)}` as Route;
+}
+
+/**
+ * 「새 회사...」·「새 부서...」·「새 직원...」 — 만들면 **그 자리를 고른다**. id 규칙·회사 안의 부서인지는
+ * Center가 본다 (한 자리에서만 판정한다).
+ */
+export async function createOrgItem(_previous: ActionResult, form: FormData): Promise<ActionResult> {
+  const kind = String(form.get("kind") ?? "") as OrgKind;
+  const id = String(form.get("id") ?? "").trim();
+  const body: Record<string, unknown> = { id, name: String(form.get("name") ?? "").trim() };
+  if (kind !== "company") body.company = String(form.get("company") ?? "");
+  if (kind === "staff") body.department = String(form.get("department") ?? "") || null;
+  try {
+    await center.createOrgItem(kind, body);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/organization");
+  redirect(orgHref(kind, id));
+}
+
+/**
+ * 멈추기·다시 쓰기·이름 바꾸기·부서 옮기기 — 한 길이다 (C16 `PUT`은 **본문 전체**). 부르는 쪽이 지금 값에
+ * 바꿀 칸만 얹어 넘긴다.
+ */
+export async function updateOrgItem(
+  kind: OrgKind,
+  id: string,
+  body: Record<string, unknown>,
+): Promise<ActionResult> {
+  try {
+    await center.updateOrgItem(kind, id, body);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/organization");
+  return {};
+}
+
+/** 등록 해제 — 되면 그 회사를 고른다. 가리키는 것이 있으면 Center가 409 `in_use`로 막는다. */
+export async function removeOrgItem(kind: "department" | "staff", id: string, company: string): Promise<ActionResult> {
+  try {
+    await center.removeOrgItem(kind, id);
+  } catch (cause) {
+    return { error: message(cause) };
+  }
+  revalidatePath("/organization");
+  redirect(orgHref("company", company));
 }

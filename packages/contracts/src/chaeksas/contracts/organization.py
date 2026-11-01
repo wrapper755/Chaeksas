@@ -62,18 +62,6 @@ class CompanyRequest(ContractModel):
     state: str = STATE_ACTIVE  # 열린 문자열 (KNOWN_ORG_STATES)
 
 
-class CompanyInfo(CompanyRequest):
-    """`GET /companies…` — 셈은 읽을 때 센다."""
-
-    created_at: Timestamp
-    updated_at: Timestamp
-    departments: int = 0
-    staff: int = 0
-    processes: int = 0
-    bot_uis: int = 0
-    studios: int = 0
-
-
 class DepartmentRequest(ContractModel):
     """`POST /departments`·`PUT /departments/{id}` — **한 단계**다(부서 안의 부서는 없다)."""
 
@@ -89,7 +77,7 @@ class WorkItem(ContractModel):
     bpm_process_id: str
     #: 살아 있는 배포의 판 (없으면 빈 목록 — 「배포 없음」).
     versions: list[str] = Field(default_factory=list)
-    #: 그 판 매니페스트의 C1 `triggers`를 옮긴 것 (`{kind, schedule?, message?}`).
+    #: 그 판 매니페스트의 C1 `triggers`를 옮긴 것 (`{kind, name?, expression?}`).
     triggers: list[dict[str, str]] = Field(default_factory=list)
 
 
@@ -99,6 +87,21 @@ class RecentRun(ContractModel):
     status: str | None = None  # C3 `RunInfo.status`와 같은 값
     started_at: Timestamp | None = None
     requested_by: str | None = None
+
+
+class CompanyInfo(CompanyRequest):
+    """`GET /companies…` — 셈은 읽을 때 센다."""
+
+    created_at: Timestamp
+    updated_at: Timestamp
+    departments: int = 0
+    staff: int = 0
+    processes: int = 0
+    bot_uis: int = 0
+    studios: int = 0
+    #: 하나를 읽을 때만 찬다 — **회사 공통** 자리의 업무와 그 최근 실행 (부서·직원 자리는 그쪽 상세에).
+    work: list[WorkItem] = Field(default_factory=list)
+    recent_runs: list[RecentRun] = Field(default_factory=list)
 
 
 class DepartmentInfo(DepartmentRequest):

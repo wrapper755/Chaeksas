@@ -8,22 +8,6 @@ import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
-import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
-import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
-import type { ConsumerFolderScan } from "@chaeksas/api-types/c7-consumer-folder-scan";
-import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
-
-/**
- * 기여 자원 **종류** 한 줄 (CON-07 탭). Center가 계약 모델 없이 짓는 모양이라 여기 적는다 —
- * C7은 자원 자체(`ContributedResource`)만 정하고, 「어떤 탭이 있나」는 화면의 일이다.
- */
-export interface ContributedKind {
-  resource_type: string;
-  label: string;
-  count: number;
-  extensions: string[];
-  errors: string[];
-}
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { JobCreateRequest } from "@chaeksas/api-types/c5-job-create-request";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
@@ -41,6 +25,7 @@ import type { AccountInfo } from "@chaeksas/api-types/c5-account-info";
 import type { DeploymentRequest } from "@chaeksas/api-types/c5-deployment-request";
 import type { SessionInfo } from "@chaeksas/api-types/c5-session-info";
 import { COOKIE_NAME, open, type Session } from "./session";
+import type { OrgKind } from "./organization";
 
 /**
  * BFF — **브라우저는 Center API를 직접 부르지 않는다** (ADR-0017 §1).
@@ -115,6 +100,13 @@ export function signOut(token: string): Promise<void> {
   return send<void>("/api/v1/auth/logout", { method: "POST" }, token);
 }
 
+/** 조직 경로 (C16). */
+const ORG_PATH: Record<OrgKind, string> = {
+  company: "/api/v1/companies",
+  department: "/api/v1/departments",
+  staff: "/api/v1/staff",
+};
+
 const pkg = (packageId: string, version: string) =>
   `/api/v1/packages/${encodeURIComponent(packageId)}/${encodeURIComponent(version)}`;
 
@@ -160,24 +152,6 @@ export const center = {
       { method: "DELETE" },
     ),
 
-  /** 리소스 목록 (C7·CON-07). `{items, fetched_at}` 그대로 돌려준다. */
-  resources: <T>(type?: string) =>
-    call<{ items: T[]; fetched_at: string }>(`/api/v1/resources${type ? `?type=${type}` : ""}`),
-  /** 기여 자원 **종류** 목록 (CON-07 탭 하나씩). 읽기 실패도 함께 온다. */
-  contributedKinds: () =>
-    call<{ items: ContributedKind[]; fetched_at: string }>("/api/v1/resources/contributed-kinds"),
-  /** 그 종류의 기여 자원들. `data`는 확장 고유 내용이라 **해석하지 않는다** (C13 §5). */
-  contributed: (resourceType: string) =>
-    call<{ items: ContributedResource[]; fetched_at: string }>(
-      `/api/v1/resources?type=contributed&resource_type=${encodeURIComponent(resourceType)}`,
-    ),
-
-  extension: (extensionId: string) =>
-    call<ExtensionResource>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}`),
-  serviceApp: (appId: string) =>
-    call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
-  /** Center가 뜰 때 일꾼 폴더를 읽은 결과 (C7, ADR-0122, CON-07 「일꾼 폴더」). */
-  consumerFolder: () => call<ConsumerFolderScan>("/api/v1/resources/consumer-folder"),
   /** 그 실행이 올린 일감 (C15, CON-01 「외부 작업」) — 값 없이 자리·상태·일꾼만. */
   externalTasks: (runId: string) =>
     call<ExternalTaskInfo[]>(`/api/v1/external-tasks?run_id=${encodeURIComponent(runId)}`),
@@ -317,6 +291,18 @@ export const center = {
   companies: () => call<CompanyInfo[]>("/api/v1/companies"),
   departments: () => call<DepartmentInfo[]>("/api/v1/departments"),
   staffList: () => call<StaffInfo[]>("/api/v1/staff"),
+  /** 하나 읽기 — 그 자리 업무(`work`)와 최근 실행(`recent_runs`)이 찬다 (CON-13 [W]·[R]). */
+  orgItem: <T = CompanyInfo | DepartmentInfo | StaffInfo>(kind: OrgKind, id: string) =>
+    call<T>(`${ORG_PATH[kind]}/${encodeURIComponent(id)}`),
+  /** 만들기 (`POST`) — 같은 id가 있으면 409 `exists`. */
+  createOrgItem: (kind: OrgKind, body: Record<string, unknown>) =>
+    call<unknown>(ORG_PATH[kind], { method: "POST", body: JSON.stringify(body) }),
+  /** 바꾸기 (`PUT`) — **본문 전체**로 바꾼다 (C16). */
+  updateOrgItem: (kind: OrgKind, id: string, body: Record<string, unknown>) =>
+    call<unknown>(`${ORG_PATH[kind]}/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  /** 등록 해제 — 가리키는 것이 있으면 409 `in_use`. 회사에는 없다. */
+  removeOrgItem: (kind: "department" | "staff", id: string) =>
+    call<void>(`${ORG_PATH[kind]}/${encodeURIComponent(id)}`, { method: "DELETE" }),
   rejectEnrollment: (id: string, reason?: string) =>
     call<EnrollmentInfo>(`/api/v1/enrollments/${encodeURIComponent(id)}/reject`, {
       method: "POST",

@@ -46,9 +46,9 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 계약 열둘의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. 그 뒤 2026-10-31 대조가 **새로 일곱**(§3-21~27)을 찾았다 — 넷(§3-21~24)은 업무에 닿고, §3-25는 엔진의 흠, §3-26·27은 작은 칸과 「미정」 모음이다. 그중 배포의 끝 둘(§3-22·23)은 [ADR-0113](decisions/0113-field-follows-withdrawn-deployments.md)으로 닫았다. UI 자동화 확장을 걷으며(ADR-0114) 다시 들일 때 정할 것을 §3-28에 모았다.
 
-### 3-29. 조직·업무 자리 — Center·Studio·승인 화면은 돈다, 조직 화면이 아직
+### 3-29. 조직·업무 자리 — Center·Studio·콘솔은 돈다, PC 작업의 자리와 연동 키의 회사가 아직
 
-[ADR-0125](decisions/0125-organization-and-work-placement.md)·[ADR-0127](decisions/0127-studio-picks-the-work-place.md), 계약 [C16](03-contracts/C16-organization.md) 「합의」. 도는 것: 조직 API, 장비의 회사(등록 승인), 올릴 때 업무 자리 검사(매니페스트 `place`), PC 배포의 회사 관문, 작업의 주인·`owner_stopped`·서버 작업의 `place`, 회사 관리자 거르기, STU-12b 자리 고르기, 콘솔 승인 창·등록 승인·계정의 회사. 가상 직원은 없앴다. **남은 것**: ① 조직 화면 CON-13(나무 + 상세 — 화면 문서에 있다, 지금은 API로 만든다) ② CON-01의 회사·부서·직원 열 ③ PC 작업에 `place` 나르기(> 미정 — C4 실행기 파일) ④ 연동용·대리 답용 키의 회사(> 미정) ⑤ 직원 사이의 업무 요청 ADR(ADR-0125 §8 — 조직이 선 뒤).
+[ADR-0125](decisions/0125-organization-and-work-placement.md)·[ADR-0127](decisions/0127-studio-picks-the-work-place.md), 계약 [C16](03-contracts/C16-organization.md) 「합의」. 도는 것: 조직 API, 장비의 회사(등록 승인), 올릴 때 업무 자리 검사(매니페스트 `place`), PC 배포의 회사 관문, 작업의 주인·`owner_stopped`·서버 작업의 `place`, 회사 관리자 거르기, STU-12b 자리 고르기, 콘솔 승인 창·등록 승인·계정의 회사, 조직 화면 CON-13, CON-01의 회사·부서·직원 열. 가상 직원은 없앴다. **남은 것**: ① PC 작업에 `place` 나르기(> 미정 — C4 실행기 파일) ② 연동용·대리 답용 키의 회사(> 미정) ③ 직원 사이의 업무 요청 ADR(ADR-0125 §8 — 조직이 선 뒤).
 
 ### 3-21. PC BPM 프로세스로 메시지를 넣는 길이 없다
 
@@ -108,7 +108,6 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 ### 3-27. 「미정」으로 적혀 있는데 이 목록에 없던 것
 
 - **PC 작업에 작업의 주인이 가지 않는다** — C14 §입력의 값 출처, C4 `JobDispatch.place`(C16). PC 실행기는 그 칸을 읽지 않아, PC BPM 프로세스가 `company.*`·`department.*`·`staff.*` 출처 입력을 필수로 선언하면 시작하지 못한다. 먼저 정할 것: C4 실행기 파일에 싣는 길 하나다(Center가 `place`를 붙이는 조각 2 뒤의 일).
-- **CON-07 「할 일」을 확장 정의에서 짓기** — `06-screens/center-console.md` CON-07 「> 미정」: Center가 내장·사내 확장의 정의를 갖지 않는다. 먼저 정할 것: C13 정의를 Center로 올리나.
 
 ### 3-28. UI 자동화 확장을 다시 들인다
 
@@ -338,7 +337,7 @@ CON-07 상세 「서버 주소」에서 넣고 **정의의 허용 호스트 안�
 | 8-5 | CON-00 위 막대 | 「새로 고침」 | **닫았다** — 아이디·역할 옆, 「로그아웃」 앞에 `components/Refresh.tsx`(`router.refresh()` — 다시 읽는 것은 서버 쪽이라 브라우저에 토큰이 오지 않는다) | — |
 | 8-6 | CON-11 | 키 목록 필터 「종류」·「상태」 | **닫았다** — GET 폼과 「좁히기」(JS 없음), 두 표에 함께 걸린다. 주소의 값은 `lib/center-keys.ts`의 `keyFilter()`가 아는 것만 남겨 Center `?type=&state=`로 넘긴다(vitest). 좁혀 빈 표는 「조건에 맞는 키가 없습니다.」 | — |
 | 8-7 | CON-03 목록 | 오프라인 줄의 실행·대기열 칸에 「마지막 보고 <시각> 기준」 | **닫았다** — 두 칸 아래 작은 글로 붙는다(`lib/labels.ts`의 `lastReportNote()`, vitest — 온라인·보고 없음이면 붙이지 않는다). 「런타임」 열은 §3-28(C4 `runtimes.browsers`)이라 그대로 빈다 | — |
-| 8-8 | CON-07 | 기여 자원 줄의 상세(「이 자원을 쓰는 BPM 프로세스」), 「할 일」 → CON-03 **그 PC들만** | `app/resources/page.tsx:334-372` `Contributed`는 평평한 표, `lib/features.ts:131-133`은 필터 없는 `/bot-uis`. 「쓰는 BPM 프로세스」는 §3-24 때문에 늘 빈다 | §3-24가 먼저다 |
+| 8-8 | CON-07 | 기여 자원 줄의 상세, 「할 일」 → CON-03 그 PC들만 | **걷었다** — 화면을 없앴다 ([ADR-0128](decisions/0128-console-drops-the-resources-screen.md)) | — |
 | 8-9 | CON-02 | (흠) 사람에게 마크다운 별표가 보인다 | **닫았다** — 별표를 걷어 「셈은 끝난 실행만 셉니다」 | — |
 | 8-12 | STU-02 | 줄 종류별 문맥 메뉴(「정의 삭제...」·「BPM 프로세스 삭제...」·「다른 그룹으로 이동...」·「새 그룹...」·「그룹 삭제」·「새로 고침」), 끌어 옮기기, 삭제 확인 | `explorer.py:146`이 `CustomContextMenu`를 켜지만 `customContextMenuRequested`를 잇는 곳이 없다(유일한 연결은 `resources.py:639` — STU-03). `workspace.py`에 정의·BPM 프로세스·그룹을 지우거나 옮기는 함수가 없다 | 지우기의 범위(케이스·학습 자료)와 「다른 정의가 부르면 거부」를 B14와 같은 함수로 볼지 |
 | 8-13 | STU-02 「학습·검증」 | 「AI 태스크 N개 · 학습 a/N · 재생 검증 v/N · 케이스 통과 p/S」 | `explorer.py:39-47`이 「AI 태스크 N개 · 정의 N개」 — docstring이 「아직 비어 있다」고 적었는데 화면 문서에는 상태 줄이 없다 | 「재생 검증」은 명세에 칸이 없어 7-11에서 이미 걷었다 — 같이 걷을지 |

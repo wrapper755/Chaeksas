@@ -8,7 +8,7 @@
 | 코드 위치 | 모델 `packages/contracts/src/chaeksas/contracts/service_app.py`, 받는 쪽 뼈대 `packages/service_kit/` (`service_kit.consumer` — 가져가기 루프), **부르는 쪽 `chaeksas.core.services`** (`CenterServiceCaller` — 멱등 칸·재시도·C3 `service_call` 기록). 보기: 업무 예제가 부르는 **모의 앱 열셋**은 [`samples/`](../../samples/README.md) |
 | JSON Schema | [`c11-service-app-manifest.json`](../../packages/contracts/schemas/c11-service-app-manifest.json) · [`c11-op-request.json`](../../packages/contracts/schemas/c11-op-request.json) · [`c11-op-response.json`](../../packages/contracts/schemas/c11-op-response.json) · [`c11-health-response.json`](../../packages/contracts/schemas/c11-health-response.json) |
 | 관련 ADR | [0010](../decisions/0010-service-apps.md), [0015](../decisions/0015-run-location.md), [0102](../decisions/0102-calling-outside-is-pull.md) |
-| 관련 화면 | STU-14, SVC-00·01·03, CON-07 |
+| 관련 화면 | STU-14, SVC-00·01·03 |
 
 ## 목적
 
