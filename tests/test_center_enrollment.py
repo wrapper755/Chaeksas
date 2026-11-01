@@ -89,6 +89,8 @@ def enroll(client: TestClient, body: dict[str, Any], *, kind: str = "bot-ui") ->
 
 
 def approve(client: TestClient, enrollment_id: str, **body: Any) -> dict[str, Any]:
+    # PC 실행기·Studio는 회사를 정해 승인한다 (C16) — 서버 실행기는 받은 회사를 무시한다.
+    body.setdefault("company", "default")
     response = client.post(f"/api/v1/enrollments/{enrollment_id}/approve", json=body, headers=ADMIN)
     assert response.status_code == 200, response.text
     return dict(response.json())
@@ -213,14 +215,18 @@ def test_reject_tells_the_reason_and_cannot_be_decided_twice(client: TestClient)
     assert response.status_code == 200, response.text
     status = client.get(f"/api/v1/bot-ui/enroll/{pending.enrollment_id}").json()
     assert status["state"] == "rejected" and status["reason"] == "모르는 PC"
-    twice = client.post(f"/api/v1/enrollments/{pending.enrollment_id}/approve", json={}, headers=ADMIN)
+    twice = client.post(
+        f"/api/v1/enrollments/{pending.enrollment_id}/approve", json={"company": "default"}, headers=ADMIN
+    )
     assert twice.status_code == 409 and twice.json()["code"] == "enrollment_closed"
 
 
 def test_only_admin_decides(client: TestClient) -> None:
     _, public = new_keypair()
     pending = enroll(client, bot_body(public))
-    refused = client.post(f"/api/v1/enrollments/{pending.enrollment_id}/approve", json={}, headers=READ)
+    refused = client.post(
+        f"/api/v1/enrollments/{pending.enrollment_id}/approve", json={"company": "default"}, headers=READ
+    )
     assert refused.status_code == 403
     assert client.get("/api/v1/enrollments").status_code == 401
 

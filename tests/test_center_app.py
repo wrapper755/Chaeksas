@@ -545,6 +545,8 @@ def build_package(
     kind: str = "bpm_process",
     requires: dict[str, Any] | None = None,
     provides: dict[str, Any] | None = None,
+    place: dict[str, Any] | None = None,
+    run_location: str = "server",
 ) -> bytes:
     """C1 매니페스트가 든 작은 패키지 zip. 해시는 실제로 계산해 넣는다.
 
@@ -568,12 +570,14 @@ def build_package(
     }
     if kind == "bpm_process":
         manifest |= {
-            "run_location": "server",
+            "run_location": run_location,
             "entry": "process/main.bpmn",
             "process_id": "Proc_invoice",
         }
     if provides is not None:
         manifest["provides"] = provides
+    if place is not None:
+        manifest["place"] = place  # 업무 자리 (C1 `place`, ADR-0127)
 
     def zip_bytes(manifest_json: str) -> bytes:
         buffer = io.BytesIO()

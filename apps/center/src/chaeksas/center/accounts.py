@@ -27,6 +27,7 @@ from chaeksas.contracts.accounts import (
     LOGIN_FAILURES_MAX,
     LOGIN_LOCK_MINUTES,
     ROLE_ADMIN,
+    ROLE_COMPANY_ADMIN,
     SESSION_HOURS,
     SESSION_PREFIX,
     AccountInfo,
@@ -128,6 +129,7 @@ def _info(row: Any) -> AccountInfo:
         password_changed_at=row["password_changed_at"],
         disabled_at=row["disabled_at"],
         last_login_at=row["last_login_at"],
+        company=row["company"],
     )
 
 
@@ -157,18 +159,35 @@ def _role(role: str) -> str:
     return role
 
 
-def create(store: Store, *, username: str, password: str, role: str, by: str) -> AccountInfo:
+def _company_for(store: Store, role: str, company: str | None) -> str | None:
+    """역할에 맞는 회사 (C16, ADR-0125 §5) — Center 관리자는 없고, 회사 관리자는 꼭 있고, 보기 전용은 고른다."""
+    company = (company or "").strip() or None
+    if role == ROLE_ADMIN:
+        if company is not None:
+            raise ApiError(422, "input_invalid", "Center 관리자에게는 회사를 두지 않습니다 — 회사 관리자로 만드세요")
+        return None
+    if role == ROLE_COMPANY_ADMIN and company is None:
+        raise ApiError(422, "company_required", "회사 관리자에게는 회사가 있어야 합니다")
+    if company is not None and store.row("SELECT 1 FROM companies WHERE id = ?", (company,)) is None:
+        raise ApiError(404, "not_found", f"그 회사가 없습니다: {company}")
+    return company
+
+
+def create(
+    store: Store, *, username: str, password: str, role: str, by: str, company: str | None = None
+) -> AccountInfo:
     _refuse(username_violation(username))
     _refuse(password_violation(password))
     _role(role)
+    company = _company_for(store, role, company)
     if store.row("SELECT 1 FROM accounts WHERE username = ?", (username,)) is not None:
         raise ApiError(409, "account_exists", f"이미 있는 아이디입니다: {username}")
     at = now_iso()
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO accounts (username, password_hash, role, created_at, created_by, disabled_at,"
-            " password_changed_at, last_login_at) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL)",
-            (username, hash_password(password), role, at, by, at),
+            " password_changed_at, last_login_at, company) VALUES (?, ?, ?, ?, ?, NULL, ?, NULL, ?)",
+            (username, hash_password(password), role, at, by, at, company),
         )
     return get(store, username)
 
@@ -188,11 +207,17 @@ def update(
     disabled: bool | None = None,
     password: str | None = None,
     data_dir: Path | None = None,
+    company: str | None = None,
 ) -> AccountInfo:
-    """역할·멈춤·비밀번호를 바꾼다 (관리자). 비운 칸은 그대로다."""
+    """역할·회사·멈춤·비밀번호를 바꾼다 (Center 관리자). 비운 칸은 그대로다."""
     row = _row(store, username)
     if role is not None:
         _role(role)
+    # 역할이나 회사가 바뀌면 **둘을 함께** 맞춰 본다 — 회사 관리자에게서 회사를 뺄 수 없다.
+    new_role = role or str(row["role"])
+    new_company = _company_for(
+        store, new_role, company if company is not None else (None if new_role == ROLE_ADMIN else row["company"])
+    )
     if password is not None:
         _refuse(password_violation(password))
 
@@ -212,6 +237,7 @@ def update(
     with store.tx() as cur:
         if role is not None:
             cur.execute("UPDATE accounts SET role = ? WHERE username = ?", (role, username))
+        cur.execute("UPDATE accounts SET company = ? WHERE username = ?", (new_company, username))
         if disabled is not None:
             cur.execute(
                 "UPDATE accounts SET disabled_at = ? WHERE username = ?",

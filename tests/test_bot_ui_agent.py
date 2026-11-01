@@ -371,7 +371,9 @@ def approve_all(center: TestClient) -> list[dict[str, Any]]:
     admin = {"Authorization": f"Bearer {ADMIN}"}
     pending = center.get("/api/v1/enrollments", headers=admin).json()
     for one in pending:
-        response = center.post(f"/api/v1/enrollments/{one['enrollment_id']}/approve", json={}, headers=admin)
+        response = center.post(
+            f"/api/v1/enrollments/{one['enrollment_id']}/approve", json={"company": "default"}, headers=admin
+        )
         assert response.status_code == 200, response.text
     return list(pending)
 

@@ -25,6 +25,7 @@ from chaeksas.center.api import (
     external_tasks,
     jobs,
     messages,
+    organization,
     package_access,
     packages,
     resources,
@@ -37,8 +38,10 @@ from chaeksas.center.auth import (
     Caller,
     bearer,
     caller,
+    company_scope,
     require_admin,
     require_approval_read,
+    require_center_admin,
     require_console,
     require_package_read,
     require_read,
@@ -113,6 +116,20 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     app.include_router(delegations.router)
     app.include_router(external_tasks.router)
     app.include_router(runs.router)
+    app.include_router(organization.router)
+
+    def _own_package(found: Caller, package_id: str, version: str) -> None:
+        """회사가 정해진 쪽은 **제 회사의 패키지만** 다룬다 (C16). Center 전체를 보는 쪽은 원래 길이 답한다."""
+        if found.company is not None:
+            packages.info_of(app.state.store, package_id, version, company=found.company)
+
+    def _own_bot_ui(found: Caller, bot_ui_id: str) -> None:
+        """회사가 정해진 쪽은 **제 회사의 PC만** 다룬다 — 남의 것은 같은 404 (C16)."""
+        if found.company is None:
+            return
+        row = app.state.store.row("SELECT company FROM bot_uis WHERE bot_ui_id = ?", (bot_ui_id,))
+        if row is None or row["company"] != found.company:
+            raise ApiError(404, "not_found", f"PC 실행기 {bot_ui_id}가 없다")
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
@@ -160,12 +177,12 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.get(f"{API}/accounts")
     def list_accounts(request: Request) -> Any:
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         return accounts.listing(app.state.store)
 
     @app.post(f"{API}/accounts", status_code=201)
     async def create_account(request: Request) -> Any:
-        found = require_admin(authenticate(request))
+        found = require_center_admin(authenticate(request))
         wanted = _model(AccountCreateRequest, await _json(request))
         return accounts.create(
             app.state.store,
@@ -173,15 +190,17 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             password=wanted.password,
             role=wanted.role,
             by=found.actor,
+            company=wanted.company,
         )
 
     @app.put(f"{API}/accounts/{{username}}")
     async def update_account(request: Request, username: str) -> Any:
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         wanted = _model(AccountUpdateRequest, await _json(request))
         return accounts.update(
             app.state.store,
             username,
+            company=wanted.company,
             role=wanted.role,
             disabled=wanted.disabled,
             password=wanted.password,
@@ -192,7 +211,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.post(f"{API}/center-keys", status_code=201)
     async def create_center_key(request: Request) -> Any:
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         body = await _json(request)
         try:
             wanted = CenterKeyCreateRequest.model_validate(body)
@@ -211,14 +230,17 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.get(f"{API}/center-keys")
     def list_center_keys(request: Request, type: str | None = None, state: str | None = None) -> Any:
-        require_read(authenticate(request))
+        found = require_read(authenticate(request))
         now = now_iso()
-        return [k.info(now=now) for k in keys.listing(app.state.store, key_type=type, state=state)]
+        listed = keys.listing(app.state.store, key_type=type, state=state)
+        if found.company is not None:
+            listed = [k for k in listed if k.company == found.company]  # 제 회사 장비의 키만 (C16)
+        return [k.info(now=now) for k in listed]
 
     @app.delete(f"{API}/center-keys/{{key_id}}")
     def revoke_center_key(request: Request, key_id: str) -> Any:
         """폐기. **지우지 않는다** — 폐기 시각을 남겨 「누가 언제 썼나」를 볼 수 있게 한다."""
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         record = keys.get(app.state.store, key_id)
         if record is None:
             raise ApiError(404, "not_found", f"키 {key_id}가 없다")
@@ -230,7 +252,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     @app.post(f"{API}/center-keys/{{key_id}}/purge", status_code=204)
     def purge_center_key(request: Request, key_id: str) -> None:
         """삭제 (CON-11, ADR-0095). **폐기된 키만** — 폐기 → 삭제 두 걸음이다."""
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         if keys.get(app.state.store, key_id) is None:
             raise ApiError(404, "not_found", f"키 {key_id}가 없다")
         if not keys.purge(app.state.store, key_id):
@@ -239,7 +261,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     @app.post(f"{API}/center-keys/{{key_id}}/unbind")
     def unbind_center_key(request: Request, key_id: str) -> Any:
         """PC 묶음 풀기 (CON-11). PC를 다시 설치해 `machine_id`가 바뀐 경우."""
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         record = keys.get(app.state.store, key_id)
         if record is None:
             raise ApiError(404, "not_found", f"키 {key_id}가 없다")
@@ -252,19 +274,21 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     @app.get(f"{API}/bot-uis")
     def list_bot_uis(request: Request) -> Any:
         # **콘솔 토큰만** (C5 권한표) — 현장 키로 남의 PC 현황을 읽지 못한다.
-        require_console(authenticate(request))
-        return bot_ui.bot_ui_listing(app.state.store)
+        found = require_console(authenticate(request))
+        return bot_ui.bot_ui_listing(app.state.store, company=company_scope(found))
 
     @app.post(f"{API}/bot-uis/{{bot_ui_id}}/disable")
     def disable_bot_ui(request: Request, bot_ui_id: str) -> Any:
-        require_admin(authenticate(request))
+        found = require_admin(authenticate(request))
+        _own_bot_ui(found, bot_ui_id)
         if not bot_ui.set_disabled(app.state.store, bot_ui_id, disabled=True):
             raise ApiError(404, "not_found", f"PC 실행기 {bot_ui_id}가 없다")
         return {"bot_ui_id": bot_ui_id, "disabled": True}
 
     @app.post(f"{API}/bot-uis/{{bot_ui_id}}/enable")
     def enable_bot_ui(request: Request, bot_ui_id: str) -> Any:
-        require_admin(authenticate(request))
+        found = require_admin(authenticate(request))
+        _own_bot_ui(found, bot_ui_id)
         if not bot_ui.set_disabled(app.state.store, bot_ui_id, disabled=False):
             raise ApiError(404, "not_found", f"PC 실행기 {bot_ui_id}가 없다")
         return {"bot_ui_id": bot_ui_id, "disabled": False}
@@ -278,21 +302,21 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.post(f"{API}/server-runners/{{runner_id}}/pause")
     def pause_runner(request: Request, runner_id: str) -> Any:
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         if not server_runner.set_paused(app.state.store, runner_id, paused=True):
             raise ApiError(404, "not_found", f"서버 실행기 {runner_id}가 없다")
         return {"server_runner_id": runner_id, "paused": True}
 
     @app.post(f"{API}/server-runners/{{runner_id}}/resume")
     def resume_runner(request: Request, runner_id: str) -> Any:
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         if not server_runner.set_paused(app.state.store, runner_id, paused=False):
             raise ApiError(404, "not_found", f"서버 실행기 {runner_id}가 없다")
         return {"server_runner_id": runner_id, "paused": False}
 
     @app.post(f"{API}/server-runners/{{runner_id}}/restart")
     def restart_runner(request: Request, runner_id: str) -> Any:
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         at = server_runner.request_restart(app.state.store, runner_id)
         if at is None:
             raise ApiError(404, "not_found", f"서버 실행기 {runner_id}가 없다")
@@ -300,7 +324,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
 
     @app.post(f"{API}/server-runners/{{runner_id}}/mark-lost")
     def mark_runner_lost(request: Request, runner_id: str) -> Any:
-        require_admin(authenticate(request))
+        require_center_admin(authenticate(request))
         found = server_runner.mark_lost(app.state.store, runner_id)
         return found
 
@@ -318,8 +342,10 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         if uploaded is None or isinstance(uploaded, str):
             raise ApiError(422, "input_invalid", "multipart 칸 `file`에 zip을 보내세요")
         raw = await uploaded.read()
+        # 패키지는 **올린 쪽의 회사** 것이다 (C16) — Studio 키면 그 키의 회사, 자동화 토큰은 칸 `company`.
+        wanted_company = found.company or (str(form.get("company") or "") or None)
         info, created = packages.upload(
-            app.state.store, package_dir=settings.package_dir, raw=raw, actor=found.actor
+            app.state.store, package_dir=settings.package_dir, raw=raw, actor=found.actor, company=wanted_company
         )
         return Utf8JSONResponse(status_code=201 if created else 200, content=info.to_json_dict())
 
@@ -327,7 +353,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     def list_packages(
         request: Request, kind: str | None = None, status: str | None = None, id: str | None = None
     ) -> Any:
-        require_package_read(authenticate(request))
+        found = require_package_read(authenticate(request))
         # 누락 리소스는 **읽을 때** 리소스 목록과 대조해 센다 (C5 `missing_resources`).
         return packages.listing(
             app.state.store,
@@ -335,25 +361,28 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             status=status,
             package_id=id,
             index=resources.index(app.state.store),
+            company=company_scope(found),
         )
 
     @app.get(f"{API}/packages/{{package_id}}/{{version}}/info")
     def package_info(request: Request, package_id: str, version: str) -> Any:
-        require_package_read(authenticate(request))
+        found = require_package_read(authenticate(request))
         return packages.info_of(
-            app.state.store, package_id, version, index=resources.index(app.state.store)
+            app.state.store, package_id, version, index=resources.index(app.state.store), company=company_scope(found)
         )
 
     @app.get(f"{API}/packages/{{package_id}}/{{version}}/dependents")
     def package_dependents(request: Request, package_id: str, version: str) -> Any:
         """이 패키지를 쓰는 패키지 (C5·CON-06 「이 패키지를 쓰는 패키지」)."""
-        require_package_read(authenticate(request))
+        found = require_package_read(authenticate(request))
+        _own_package(found, package_id, version)
         return packages.dependents(app.state.store, package_id, version)
 
     @app.delete(f"{API}/packages/{{package_id}}/{{version}}")
     def delete_package(request: Request, package_id: str, version: str) -> Any:
         """삭제 (C5). 서명이 필요 없다 — 막는 쪽이라서 관리자가 관문이다."""
-        require_admin(authenticate(request))
+        found = require_admin(authenticate(request))
+        _own_package(found, package_id, version)
         packages.remove(
             app.state.store, package_dir=settings.package_dir, package_id=package_id, version=version
         )
@@ -391,20 +420,25 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     @app.put(f"{API}/packages/{{package_id}}/{{version}}/status")
     async def set_package_status(request: Request, package_id: str, version: str) -> Any:
         """지원 종료 표시 (C5). **서명이 없다** — 허용하는 쪽이 아니라 막는 쪽이라서다."""
-        require_admin(authenticate(request))
+        found = require_admin(authenticate(request))
+        _own_package(found, package_id, version)
         return packages.set_status(app.state.store, package_id, version, await _json(request))
 
     # ─────────────────── 승인·배포 — Center가 서명한다 (C2·C5, ADR-0090) ───────────────────
 
     @app.put(f"{API}/packages/{{package_id}}/{{version}}/signature")
     def approve_package(request: Request, package_id: str, version: str) -> Any:
-        """승인. 본문 없음 — Center가 `package` 봉투를 지어 서명한다."""
+        """승인. 본문 없음 — Center가 `package` 봉투를 지어 서명한다.
+
+        업무 자리는 매니페스트 것을 보여 주기만 한다 (ADR-0127)."""
         found = require_admin(authenticate(request))
+        _own_package(found, package_id, version)
         return signing.approve_package(app.state.store, package_id, version, by=found.actor)
 
     @app.post(f"{API}/packages/{{package_id}}/{{version}}/revoke")
     async def revoke_package(request: Request, package_id: str, version: str) -> Any:
         found = require_admin(authenticate(request))
+        _own_package(found, package_id, version)
         wanted = _model(RevokeRequest, await _json(request))
         return signing.revoke_package(
             app.state.store, package_id, version, reason=wanted.reason, by=found.actor
@@ -415,20 +449,24 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         """배포 (C5). Center가 `deployment` 봉투를 지어 서명하고 받아 두었다가 그대로 내려 준다."""
         found = require_admin(authenticate(request))
         wanted = _model(DeploymentRequest, await _json(request))
-        made = deployments.create(app.state.store, wanted, by=found.actor)
+        made = deployments.create(app.state.store, wanted, by=found.actor, company=company_scope(found))
         return made
 
     @app.delete(f"{API}/deployments")
     async def revoke_deployment(request: Request) -> Any:
         found = require_admin(authenticate(request))
         wanted = _model(DeploymentRevokeRequest, await _json(request))
-        made = deployments.revoke(app.state.store, wanted.deployment_id, reason=wanted.reason, by=found.actor)
+        made = deployments.revoke(
+            app.state.store, wanted.deployment_id, reason=wanted.reason, by=found.actor, company=company_scope(found)
+        )
         return made
 
     @app.get(f"{API}/deployments")
     def list_deployments(request: Request, bot_ui: str | None = None, active: bool = False) -> Any:
-        require_read(authenticate(request))
-        return deployments.listing(app.state.store, target_id=bot_ui, active_only=active)
+        found = require_read(authenticate(request))
+        return deployments.listing(
+            app.state.store, target_id=bot_ui, active_only=active, company=company_scope(found)
+        )
 
     # ─────────────────── 리소스 (C7·CON-07) ───────────────────
 
@@ -488,7 +526,8 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         host: str | None = None,
         assignee: str | None = None,
     ) -> Any:
-        on_behalf = require_approval_read(authenticate(request))
+        found = authenticate(request)
+        on_behalf = require_approval_read(found)
         return approvals.listing(
             app.state.store,
             state=state,
@@ -496,12 +535,14 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             host=host,
             assignee=assignee,
             on_behalf=on_behalf,
+            company=company_scope(found),
         )
 
     @app.get(f"{API}/approvals/{{request_id}}")
     def get_approval(request: Request, request_id: str) -> Any:
-        on_behalf = require_approval_read(authenticate(request))
-        return approvals.get(app.state.store, request_id, on_behalf=on_behalf)
+        found = authenticate(request)
+        on_behalf = require_approval_read(found)
+        return approvals.get(app.state.store, request_id, on_behalf=on_behalf, company=company_scope(found))
 
     @app.post(f"{API}/approvals/{{request_id}}/answer")
     async def answer_approval(request: Request, request_id: str) -> Any:
@@ -526,8 +567,15 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
     @app.get(f"{API}/schedules")
     def list_schedules(request: Request) -> Any:
         # 일정은 콘솔이 본다 (C5 §일정, CON-02) — 현장 키로 남의 일정을 읽지 못한다.
-        require_console(authenticate(request))
-        return [one.to_json_dict() for one in timers.schedules(app.state.store, tz=settings.zone())]
+        found = require_console(authenticate(request))
+        listed = timers.schedules(app.state.store, tz=settings.zone())
+        if found.company is not None:
+            mine = {
+                str(r["id"])
+                for r in app.state.store.rows("SELECT DISTINCT id FROM packages WHERE company = ?", (found.company,))
+            }
+            listed = [one for one in listed if one.bpm_process_id in mine]  # 제 회사 것만 (C16)
+        return [one.to_json_dict() for one in listed]
 
     @app.get(f"{API}/jobs")
     def list_jobs(
