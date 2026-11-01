@@ -113,7 +113,7 @@ def _refuse(problems: Sequence[Any]) -> None:
 
 
 def create(
-    store: Store, wanted: DeploymentRequest, *, by: str
+    store: Store, wanted: DeploymentRequest, *, by: str, company: str | None = None
 ) -> DeploymentInfo:
     """배포한다 (C5 `POST /deployments`). Center가 `deployment` 봉투를 지어 서명한다 (ADR-0090).
 
@@ -121,7 +121,8 @@ def create(
     """
     from chaeksas.center.api import packages  # noqa: PLC0415 — 순환 import를 피한다
 
-    package = packages.info_of(store, wanted.bpm_process_id, wanted.version)
+    # 회사 관리자는 **제 회사의 패키지만** 배포한다 — 남의 것은 없는 것과 같은 404 (C16).
+    package = packages.info_of(store, wanted.bpm_process_id, wanted.version, company=company)
     claim: dict[str, Any] = {
         "kind": "deployment",
         "deployment_id": f"dep_{secrets.token_hex(4)}",
@@ -181,6 +182,7 @@ def _accept(store: Store, raw: Any) -> DeploymentInfo:
 
     _refuse_missing_resources(package.manifest, store)
     _refuse_unapproved_delegations(package.manifest, store)
+    _refuse_other_company(store, package.company, claim.get("target") or {})
     target = claim.get("target") or {}
 
     with store.tx() as cur:
@@ -269,6 +271,18 @@ def _refuse_unapproved_delegations(manifest: Manifest | None, store: Store) -> N
     )
 
 
+def _refuse_other_company(store: Store, company: str | None, target: Any) -> None:
+    """**PC 배포는 그 회사의 PC에만** — 422 `company_mismatch` (C16, ADR-0125 §2).
+
+    서버 실행기는 Center 공용이라 보지 않는다. 회사를 모르는 옛 행(옮기기 전)은 막지 않는다.
+    """
+    if str(target.get("type") or "") != "bot_ui" or company is None:
+        return
+    row = store.row("SELECT company FROM bot_uis WHERE bot_ui_id = ?", (str(target.get("id") or ""),))
+    if row is not None and row["company"] is not None and row["company"] != company:
+        raise ApiError(422, "company_mismatch", "그 PC 실행기는 다른 회사의 것이다 — 그 회사의 PC를 고르세요")
+
+
 def _refuse_missing_resources(manifest: Manifest | None, store: Store) -> None:
     """배포를 막는 누락만 거부한다 (C7 §누락 검사).
 
@@ -293,10 +307,17 @@ def _refuse_missing_resources(manifest: Manifest | None, store: Store) -> None:
     )
 
 
-def revoke(store: Store, deployment_id: str, *, reason: str, by: str) -> DeploymentInfo:
+def revoke(
+    store: Store, deployment_id: str, *, reason: str, by: str, company: str | None = None
+) -> DeploymentInfo:
     """배포를 철회한다 (C5 `DELETE /deployments`). Center가 `revoke` 봉투를 지어 서명한다. **되살릴 수 없다.**"""
     found = store.row("SELECT * FROM deployments WHERE deployment_id = ?", (deployment_id,))
-    if found is None:
+    owner = (
+        store.row("SELECT company FROM packages WHERE id = ? LIMIT 1", (found["bpm_process_id"],))
+        if found is not None
+        else None
+    )
+    if found is None or (company is not None and (owner is None or owner["company"] != company)):
         raise ApiError(404, "not_found", f"그 배포가 없다: {deployment_id}")
     if found["revoked_json"]:
         return _row(store, found)  # 멱등
@@ -317,6 +338,7 @@ def listing(
     target_id: str | None = None,
     target_type: str = "bot_ui",
     active_only: bool = False,
+    company: str | None = None,
 ) -> list[DeploymentInfo]:
     """`GET /deployments` (C5). 철회된 것도 **행이 남으므로** 목록에 보인다.
 
@@ -325,6 +347,10 @@ def listing(
     (`GET /deployments?target_id=`는 PC 실행기 id를 받는다).
     """
     rows = store.rows("SELECT * FROM deployments ORDER BY at DESC")
+    if company is not None:
+        # 회사가 정해진 쪽은 **제 회사 패키지의 배포만** (C16).
+        mine = {str(r["id"]) for r in store.rows("SELECT DISTINCT id FROM packages WHERE company = ?", (company,))}
+        rows = [one for one in rows if one["bpm_process_id"] in mine]
     out = [_row(store, one) for one in rows]
     if target_id:
         wanted = {target_id} | ({TARGET_ANY} if target_type in WILDCARD_TARGETS else set())

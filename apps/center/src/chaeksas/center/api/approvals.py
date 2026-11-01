@@ -182,10 +182,23 @@ def _assignees_of(row: Any) -> list[str]:
     return list(loads(row["assignees_json"], []) or [])
 
 
-def get(store: Store, request_id: str, *, on_behalf: str | None = None) -> ApprovalInfo:
-    """하나. `on_behalf`가 있으면(대리 답용 키) **그 사람이 담당인 결재만** — 아니면 404 (ADR-0081)."""
+def _company_of(store: Store, row: Any) -> str | None:
+    """그 결재가 속한 회사 — 그 실행의 업무 자리에서 (C16). 실행 목록과 **같은 함수**다."""
+    from chaeksas.center.api.runs import place_of_run  # noqa: PLC0415 — 순환 import를 피한다
+
+    return place_of_run(store, str(row["run_id"]), row["bpm_process_id"])[0]
+
+
+def get(
+    store: Store, request_id: str, *, on_behalf: str | None = None, company: str | None = None
+) -> ApprovalInfo:
+    """하나. `on_behalf`가 있으면(대리 답용 키) **그 사람이 담당인 결재만** — 아니면 404 (ADR-0081).
+
+    `company`가 있으면(회사가 정해진 계정) **제 회사 실행의 결재만**이다 (C16)."""
     row = _must(store, request_id)
-    if on_behalf is not None and on_behalf not in _assignees_of(row):
+    if (on_behalf is not None and on_behalf not in _assignees_of(row)) or (
+        company is not None and _company_of(store, row) != company
+    ):
         raise ApiError(404, "not_found", f"결재 {request_id}가 없다")  # 있다는 것조차 알리지 않는다
     return _info(row, store)
 
@@ -198,6 +211,7 @@ def listing(
     host: str | None = None,
     assignee: str | None = None,
     on_behalf: str | None = None,
+    company: str | None = None,
 ) -> list[ApprovalInfo]:
     """`GET /approvals` (CON-04 결재함). 최신순.
 
@@ -217,6 +231,7 @@ def listing(
         and (bpm_process_id is None or row["bpm_process_id"] == bpm_process_id)
         and (host is None or row["host_id"] == host)
         and (wanted is None or wanted in _assignees_of(row))
+        and (company is None or _company_of(store, row) == company)
     ]
 
 
@@ -240,6 +255,8 @@ def answer(store: Store, found: Caller, request_id: str, raw: dict[str, Any]) ->
     elif found.is_admin:
         answered_by = found.actor
         row = _must(store, request_id)
+        if found.company is not None and _company_of(store, row) != found.company:
+            raise ApiError(404, "not_found", f"결재 {request_id}가 없다")
     else:
         raise ApiError(403, "admin_only", "결재에 답하려면 관리자 토큰이나 대리 답용 키가 필요하다")
     _refuse_if_not_open(store, row)

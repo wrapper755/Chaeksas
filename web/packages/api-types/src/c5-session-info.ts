@@ -6,6 +6,7 @@
  * 로그인 응답. **`token`은 이 응답에만 실린다** — 콘솔 서버가 쿠키에 담고 브라우저에 내려 주지 않는다.
  */
 export interface SessionInfo {
+  company?: string | null;
   expires_at: string;
   role: string;
   token: string;

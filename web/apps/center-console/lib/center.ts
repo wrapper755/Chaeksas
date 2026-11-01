@@ -1,6 +1,9 @@
 import "server-only";
 
 import { cookies } from "next/headers";
+import type { CompanyInfo } from "@chaeksas/api-types/c16-company-info";
+import type { DepartmentInfo } from "@chaeksas/api-types/c16-department-info";
+import type { StaffInfo } from "@chaeksas/api-types/c16-staff-info";
 import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
@@ -234,9 +237,12 @@ export const center = {
 
   /** 관리자 계정 (C5 §관리자 계정·CON-14). 관리자만. */
   accounts: () => call<AccountInfo[]>("/api/v1/accounts"),
-  createAccount: (body: { username: string; password: string; role: string }) =>
+  createAccount: (body: { username: string; password: string; role: string; company?: string | null }) =>
     call<AccountInfo>("/api/v1/accounts", { method: "POST", body: JSON.stringify(body) }),
-  updateAccount: (username: string, body: { role?: string; disabled?: boolean; password?: string }) =>
+  updateAccount: (
+    username: string,
+    body: { role?: string; company?: string | null; disabled?: boolean; password?: string },
+  ) =>
     call<AccountInfo>(`/api/v1/accounts/${encodeURIComponent(username)}`, {
       method: "PUT",
       body: JSON.stringify(body),
@@ -301,11 +307,16 @@ export const center = {
   /** 모든 상태의 등록 요청 — CON-16 「앱 로그」가 이력으로 읽는다 (C5 `state`는 쉼표로 여럿). */
   enrollmentHistory: () =>
     call<EnrollmentInfo[]>("/api/v1/enrollments?state=pending,approved,rejected,expired"),
-  approveEnrollment: (id: string, name?: string) =>
+  /** 승인 — PC 실행기·Studio는 **회사를 정해** 들인다 (C16). 서버 실행기는 회사를 보내지 않는다. */
+  approveEnrollment: (id: string, name?: string, company?: string) =>
     call<EnrollmentDecision>(`/api/v1/enrollments/${encodeURIComponent(id)}/approve`, {
       method: "POST",
-      body: JSON.stringify(name ? { name } : {}),
+      body: JSON.stringify({ ...(name ? { name } : {}), ...(company ? { company } : {}) }),
     }),
+  /** 조직 (C16) — 회사가 정해진 계정에게는 Center가 제 회사 것만 준다. */
+  companies: () => call<CompanyInfo[]>("/api/v1/companies"),
+  departments: () => call<DepartmentInfo[]>("/api/v1/departments"),
+  staffList: () => call<StaffInfo[]>("/api/v1/staff"),
   rejectEnrollment: (id: string, reason?: string) =>
     call<EnrollmentInfo>(`/api/v1/enrollments/${encodeURIComponent(id)}/reject`, {
       method: "POST",

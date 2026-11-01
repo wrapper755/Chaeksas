@@ -52,6 +52,8 @@ export interface BotRow {
   last_success: string | null;
   /** 이 판을 「실행 불가」로 보고한 PC 실행기 수 (C4 `readiness.ready === false`). */
   blocked: number;
+  /** 승인 창에 보일 「회사: … · 업무 자리: …」 (C16, ADR-0127 — 보여 주기만 한다). */
+  place_line?: string;
   /** 그 PC들이 말한 막은 점검 코드 (툴팁). */
   blocked_codes: string[];
   /**

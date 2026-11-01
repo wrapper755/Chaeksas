@@ -420,7 +420,7 @@ def test_what_is_there_moves_into_the_default_company(tmp_path: Path) -> None:
     assert _columns(db, "virtual_workers") == []
 
 
-def test_a_virtual_worker_becomes_staff_and_its_intake_is_placed_with_it(tmp_path: Path) -> None:
+def test_a_virtual_worker_becomes_staff(tmp_path: Path) -> None:
     db = tmp_path / "center.sqlite3"
     conn = _database_before_organization(db)
     _virtual_worker(conn, "finance-intake", "fx24-batch-intake")
@@ -429,20 +429,6 @@ def test_a_virtual_worker_becomes_staff_and_its_intake_is_placed_with_it(tmp_pat
     assert conn.execute("SELECT id, company, department, name FROM staff").fetchall() == [
         ("finance-intake", "default", None, "finance-intake 이름")
     ]
-    assert conn.execute("SELECT bpm_process_id, company, scope, staff FROM process_places").fetchall() == [
-        ("fx24-batch-intake", "default", "staff", "finance-intake")
-    ]
-    conn.close()
-
-
-def test_an_intake_shared_by_two_virtual_workers_is_left_without_a_place(tmp_path: Path) -> None:
-    """누구의 일인지 **짐작하지 않는다** — 둘 다 직원이 되고, 자리는 사람이 고른다."""
-    db = tmp_path / "center.sqlite3"
-    conn = _database_before_organization(db)
-    _virtual_worker(conn, "vw-a", "shared-intake")
-    _virtual_worker(conn, "vw-b", "shared-intake")
-    conn.commit()
-    migrate(conn, baseline=SCHEMA)
-    assert [row[0] for row in conn.execute("SELECT id FROM staff ORDER BY id")] == ["vw-a", "vw-b"]
-    assert conn.execute("SELECT COUNT(*) FROM process_places").fetchone() == (0,)
+    # 22판이 지어 둔 접수 BPM 프로세스의 자리는 23판이 표째 지운다 — 자리는 매니페스트에서 읽는다 (ADR-0127).
+    assert _columns(db, "process_places") == []
     conn.close()

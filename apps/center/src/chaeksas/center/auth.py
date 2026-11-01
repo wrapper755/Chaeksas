@@ -31,7 +31,7 @@ from fastapi import Request
 from chaeksas.center import accounts, enrollments, keys
 from chaeksas.center.errors import ApiError
 from chaeksas.center.storage import Store, now_iso
-from chaeksas.contracts.accounts import ROLE_ADMIN, SESSION_PREFIX
+from chaeksas.contracts.accounts import ROLE_ADMIN, ROLE_COMPANY_ADMIN, SESSION_PREFIX
 from chaeksas.contracts.approvals import normalize_name
 from chaeksas.contracts.center_api import ON_BEHALF_HEADER, on_behalf_violation
 from chaeksas.contracts.center_keys import RELAY_KEY_TYPE
@@ -64,6 +64,9 @@ class Caller:
     on_behalf: str | None = None
     #: 세션으로 불렀으면 그 계정 아이디 (ADR-0090). 토큰·키로 부르면 `None`.
     account: str | None = None
+    #: **이 부르는 쪽이 보는 회사** (C16, ADR-0125 §5). 회사 관리자·회사 보기 전용 계정과 회사 소유
+    #: 장비(Studio·PC 실행기)의 키에 있다. `None`이면 Center 전체다(Center 관리자·자동화 토큰·서버 실행기).
+    company: str | None = None
 
     @property
     def is_admin(self) -> bool:
@@ -124,8 +127,9 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
         found = accounts.session_of(store, token)
         if found is None:
             raise ApiError(401, "session_expired", "로그인이 끝났습니다 — 다시 로그인하세요")
-        kind = "admin" if found.role == ROLE_ADMIN else "read"
-        return Caller(kind=kind, actor=found.username, account=found.username)
+        # 회사 관리자는 **제 회사 안에서** 관리자다 — 무엇을 하든 회사로 걸린다 (`company_scope`).
+        kind = "admin" if found.role in (ROLE_ADMIN, ROLE_COMPANY_ADMIN) else "read"
+        return Caller(kind=kind, actor=found.username, account=found.username, company=found.company)
 
     # 토큰이 비어 있으면(설정하지 않았으면) 그 권한으로는 부를 수 없다.
     if admin_token and hmac.compare_digest(token, admin_token):
@@ -152,7 +156,7 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
         enrollments.delivered(store, record, public_key=None)
     # 키로 부를 때는 X-BPM-Actor를 믿지 않는다 (C5). 사람 대신 부르는 키만 On-Behalf-Of를 듣는다.
     on_behalf = _on_behalf(request) if record.type in ON_BEHALF_KEY_TYPES else None
-    return Caller(kind="key", actor=record.name, key=record, on_behalf=on_behalf)
+    return Caller(kind="key", actor=record.name, key=record, on_behalf=on_behalf, company=record.company)
 
 
 def _call_token_may(request: Request) -> bool:
@@ -166,6 +170,29 @@ def require_admin(found: Caller) -> Caller:
     if not found.is_admin:
         raise ApiError(403, "admin_only", "관리자만 할 수 있다")
     return found
+
+
+def require_center_admin(found: Caller) -> Caller:
+    """**Center 관리자만** — 회사가 없는 관리자다 (C16, ADR-0125 §5).
+
+    회사 만들기, 관리자 계정, 서버 실행기·일꾼처럼 **Center 공용인 것**을 다루는 자리다. 회사
+    관리자는 `require_admin`은 지나지만 여기서 막힌다.
+    """
+    require_admin(found)
+    if found.company is not None:
+        raise ApiError(403, "center_admin_only", "Center 관리자만 할 수 있다 (회사 관리자는 제 회사 것만 다룬다)")
+    return found
+
+
+def company_scope(found: Caller) -> str | None:
+    """이 부르는 쪽이 보는 회사 — 목록을 거르고 쓰기를 막는 기준이다. `None`이면 Center 전체다."""
+    return found.company
+
+
+def require_company(found: Caller, owner: str | None, *, what: str = "그것") -> None:
+    """회사가 정해진 쪽은 **제 회사 것만** — 아니면 404(있다는 것조차 알리지 않는다, C16)."""
+    if found.company is not None and owner != found.company:
+        raise ApiError(404, "not_found", f"{what}이 없다")
 
 
 def require_read(found: Caller) -> Caller:

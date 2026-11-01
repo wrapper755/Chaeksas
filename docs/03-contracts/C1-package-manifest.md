@@ -47,6 +47,7 @@
 | `name` | str | | 화면 표시 이름 | 1 |
 | `description` | str | | | 1 |
 | `run_location` | `"server"` \| `"pc"` | `bpm_process`만 ✓ | **실행 위치.** 생략하면 `server` (서버 우선). 다른 kind에는 두지 않는다 | 1 |
+| `place` | object? | `bpm_process`만 | **업무 자리** — 이 BPM 프로세스가 누구의 일인가 (C16 `Place`: `{scope: company\|department\|staff, department?, staff?}`). **Studio가 「Center로 올리기」에서 고른다**. 비우면 회사 공통이고, 회사는 올린 Studio의 회사다. Center가 올릴 때 그 회사 안의 부서·직원인지 본다 ([ADR-0127](../decisions/0127-studio-picks-the-work-place.md)) | 1 |
 | `entry` | str | `bpm_process`만 ✓ | 진입 정의 경로 (예: `process/main.bpmn`) | 1 |
 | `process_id` | str | `bpm_process`만 ✓ | 진입 정의의 BPMN process id | 1 |
 | `triggers` | Trigger[] | | 시작 방법 | 1 |
@@ -157,6 +158,7 @@ Studio(빌드 때), Center(업로드 때), PC 실행기·서버 실행기(설치
 | R11 | `requires.settings`가 아는 값 중 하나다 (`llm`·`vlm`·`smtp`) — **R9와 같은 까닭**이다: 그림에서 기계가 옮기는 값이고(`bpm:email` → `smtp`) 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다(`core.preflight`). 모르는 이름은 그 점검을 **아무 말 없이 지나가** 준비되지 않은 BPM 프로세스가 실행된다 | 422 `unknown_setting` + 걸린 값 목록 |
 | R12 | `requires.delegations`에 **자기 `id`가 없다** — 자기 자신에게 위임하지 않는다 (끝나지 않는 되부름이다, [ADR-0082](../decisions/0082-batch-start.md)). 그림은 자기 패키지 id를 모르므로 매니페스트가 본다 | 422 `delegation_to_self` + 그 항목 |
 | R13 | `triggers[kind=timer].expression`을 **Center가 읽을 수 있다** — 5필드 cron(`*`·수·`a-b`·`/n`·쉼표, 일 칸 `L`, 요일 0~7) 또는 ISO `R[n]/<시작>/<기간>`·`R[n]/<기간>`(1분 이상). **R9와 같은 까닭**이다: 일정은 Center가 이 식으로 쓰므로(C5 §일정) 읽지 못하는 식은 그 BPM 프로세스를 **아무 말 없이 영영 돌지 않게** 한다. 읽는 함수는 `contracts.schedule` 하나다 ([ADR-0110](../decisions/0110-center-keeps-the-schedule.md)) | 422 `timer_expression_invalid` + 걸린 식과 까닭 |
+| R14 | `place`는 `kind=bpm_process`에만 있고, `scope`가 아는 값(`company`·`department`·`staff`)이며 그에 맞는 칸만 있다(`department`는 부서 자리에, `staff`는 직원 자리에) — 부서·직원이 **올린 회사 안에** 있는지는 Center가 올릴 때 본다(C16 `place_outside_company`, ADR-0127) | 422 |
 
 **R2는 모르는 것을 막지 않는다.** 태스크 종류의 실행 위치는 **확장 정의만** 안다 (C13
 `task_types[].run_locations`, ADR-0018) — 빌드하는 PC에 그 확장이 없거나 꺼져 있으면 Studio가
@@ -270,6 +272,7 @@ PC BPM 프로세스 (현장 확인과 사내 확장 태스크가 있음 — 확�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-11-01 | 1 | `place?`(업무 자리, C16) — Studio가 올릴 때 고른다. 선택 칸이라 옛 패키지는 회사 공통이다 | [0127](../decisions/0127-studio-picks-the-work-place.md) |
 | 2026-10-31 | 1 | 칸은 그대로다. PC 예시를 UI 태스크 대신 사내 확장 태스크로 바꿨고, `domains`의 `web`·`desktop`은 낱말로만 남아 사전 점검이 막는다고 적었다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | **타이머 일정을 Center가 `triggers`로 쓴다** — 「실행하는 쪽은 `triggers`로 일정을 잡지 않는다」를 그대로 두되 일정을 쥐는 자리가 Center임을 적었고, **R13**(타이머 식을 읽을 수 있다)을 더했다. 칸은 그대로다. 예제의 식은 모두 지난다(`0 18 L * *` 포함) | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | `requires.service_apps[].key_ref`·`task_key_refs`와 **R4를 걷었다** — 빌드가 적지 않고, 옛 패키지에 적혀 있으면 모르는 칸으로 받아 두고 보지 않는다(원칙 3). 선택 칸을 걷은 것이고 받는 쪽이 옛 칸을 거부하지 않으므로 **판을 올리지 않는다** (C4의 키 칸을 걷을 때와 같은 결) | [0102](../decisions/0102-calling-outside-is-pull.md) |

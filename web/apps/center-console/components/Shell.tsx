@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Route } from "next";
 import { BpmMark, Button } from "@chaeksas/ui";
 import { logout } from "@/app/actions";
+import { session } from "@/lib/center";
 import type { Mode } from "@/lib/session";
 import { Refresh } from "./Refresh";
 
@@ -76,7 +77,7 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
   },
 ];
 
-export function Shell({
+export async function Shell({
   mode,
   actor,
   current,
@@ -87,6 +88,10 @@ export function Shell({
   current: string;
   children: React.ReactNode;
 }) {
+  // **회사가 정해진 계정**(회사 관리자·회사 보기 전용)에게는 Center 관리자만의 메뉴를 가린다 (C16).
+  const company = (await session())?.company ?? null;
+  const centerAdmin = mode === "admin" && !company;
+  const roleLabel = mode === "admin" ? (company ? "회사 관리자" : "관리자") : "보기 전용";
   return (
     <div className="min-h-screen">
       {/* 남색 위 막대 — 화면 폭 전체 (NowView와 같은 틀, 스타일 가이드 §4-1). 이름 대신 마크다 (ADR-0118). */}
@@ -99,7 +104,11 @@ export function Shell({
         </Link>
         <span className="text-body-sm whitespace-nowrap">
           {actor}
-          <span className="text-text-muted"> · {mode === "admin" ? "관리자" : "보기 전용"}</span>
+          <span className="text-text-muted">
+            {" "}
+            · {roleLabel}
+            {company ? ` · ${company}` : ""}
+          </span>
         </span>
         <Refresh />
         <form action={logout}>
@@ -116,7 +125,7 @@ export function Shell({
       >
         <ul className="flex flex-col gap-1">
           {NAV.map((group) => {
-            const items = group.items.filter((item) => !item.adminOnly || mode === "admin");
+            const items = group.items.filter((item) => !item.adminOnly || centerAdmin);
             if (items.length === 0) return null;
             return (
               <li key={group.label}>

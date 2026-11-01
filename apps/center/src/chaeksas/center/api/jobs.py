@@ -20,6 +20,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any
 
+from chaeksas.center import organization
 from chaeksas.center.api import deployments
 from chaeksas.center.auth import Caller
 from chaeksas.center.errors import ApiError
@@ -160,14 +161,23 @@ def create(
     target = request.target
     version = _resolved_version(store, request)
     _refuse_sourced_inputs(store, bot=request.bpm_process_id, version=version, inputs=request.inputs)
+    # **작업의 주인** — 그 판의 업무 자리(매니페스트 `place`)와 패키지의 회사 (C16, ADR-0127). 작업
+    # 행에 **만들 때의 것**을 적는다. 회사 관리자는 제 회사의 BPM 프로세스만, 멈춘 주인은 새 작업이 없다.
+    package = store.row(
+        "SELECT company, manifest_json FROM packages WHERE id = ? AND version = ?", (request.bpm_process_id, version)
+    )
+    owner_place = organization.owner_of(store, package)
+    if not by_center and found.company is not None and owner_place.company != found.company:
+        raise ApiError(404, "no_deployment", f"{request.bpm_process_id}이 없다")
+    organization.refuse_stopped(store, owner_place)
 
     job_id = new_job_id()
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO jobs (job_id, bpm_process_id, version, target_type, target_id, inputs_json,"
             " expires_at, note, owner, idempotency_key, body_hash, requested_by, requested_at, state,"
-            " on_behalf_of)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " on_behalf_of, company, department, staff)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 job_id,
                 request.bpm_process_id,
@@ -189,6 +199,9 @@ def create(
                 # 연동용 키가 실은 사람 — **주장**이라 적기만 한다 (ADR-0081). `requested_by`는
                 # 그대로 키 이름이다: PC 실행기가 그 칸의 `server_bot:`로 위임을 가른다.
                 None if by_center else found.on_behalf,
+                owner_place.company,
+                owner_place.department,
+                owner_place.staff,
             ),
         )
     return info_of(store, _must(store, job_id)), True
@@ -273,7 +286,7 @@ def _must(store: Store, job_id: str) -> Any:
 def get(store: Store, found: Caller, job_id: str, *, write: bool = False) -> JobInfo:
     scope = _scope(found, write=write)
     row = _must(store, job_id)
-    if scope is not None and row["owner"] != scope:
+    if (scope is not None and row["owner"] != scope) or (found.company is not None and row["company"] != found.company):
         # **남의 작업은 없는 것과 같다** — 있다는 것조차 알려 주지 않는다 (C5 「자기 것만」).
         raise ApiError(404, "not_found", f"작업 {job_id}가 없다")
     return info_of(store, row)
@@ -298,6 +311,7 @@ def listing(
         row
         for row in rows
         if (scope is None or row["owner"] == scope)
+        and (found.company is None or row["company"] == found.company)
         and (not states or row["state"] in states)
         and (target_type is None or row["target_type"] == target_type)
         and (target_id is None or row["target_id"] == target_id)
@@ -495,6 +509,8 @@ def _server_dispatch(
                 requested_at=row["requested_at"],
                 expires_at=row["expires_at"],
                 note=row["note"],
+                # **작업의 주인을 붙인다** (C12·C16) — 행에는 id만, 이름은 내려줄 때 읽는다.
+                place=organization.identity(store, row["company"], row["department"], row["staff"]),
             )
         )
     return out
@@ -769,6 +785,9 @@ def info_of(store: Store, row: Any) -> JobInfo:
         dispatched_at=row["dispatched_at"],
         run_id=row["run_id"],
         run_status=run_status,
+        company=row["company"],
+        department=row["department"],
+        staff=row["staff"],
     )
 
 

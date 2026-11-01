@@ -125,6 +125,9 @@ class BpmProcess:
     description: str = ""
     owner: str = ""
     tags: tuple[str, ...] = ()
+    #: **업무 자리** — 「Center로 올리기」 확인 창(STU-12b)에서 고른 것 (C16 `Place`의 JSON, ADR-0127).
+    #: 비면 회사 공통이다. 빌드가 매니페스트(C1 `place`)로 옮기고, 다음 올리기에 미리 골라져 있다.
+    place: dict[str, str] | None = None
     definitions: list[Definition] = field(default_factory=list)
     #: 받아 둔 공유 BPM 프로세스 (ADR-0048). **편집 대상이 아니라** `definitions`에 없다.
     libs: tuple[InstalledLib, ...] = ()
@@ -208,6 +211,13 @@ class Group:
 
 def _record_path(folder: Path) -> Path:
     return folder / RECORD_NAME
+
+
+def _place(raw: object) -> dict[str, str] | None:
+    """기록의 업무 자리 — 모양이 틀리면 **없는 것**으로 본다(기록 하나로 열리지 않으면 안 된다)."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("scope"), str):
+        return None
+    return {str(k): str(v) for k, v in raw.items() if isinstance(v, str)}
 
 
 def _tags(raw: object) -> tuple[str, ...]:
@@ -318,6 +328,7 @@ def write_record(process: BpmProcess) -> Path:
                 **({"description": process.description} if process.description else {}),
                 **({"owner": process.owner} if process.owner else {}),
                 **({"tags": list(process.tags)} if process.tags else {}),
+                **({"place": dict(process.place)} if process.place else {}),
                 # 받아 둔 공유 BPM 프로세스 (ADR-0048). **패키지로 가지 않는다** — 계약이
                 # 아니라 Studio 기록이다 (패키지에는 `libs/` 파일과 `requires.libs`가 간다).
                 **({"libs": [one.to_json() for one in process.libs]} if process.libs else {}),
@@ -374,6 +385,7 @@ class Workspace:
             description=str(record.get("description") or ""),
             owner=str(record.get("owner") or ""),
             tags=_tags(record.get("tags")),
+            place=_place(record.get("place")),
             libs=_libs(record.get("libs")),
         )
         process.definitions = list(self._definitions(folder))
@@ -515,7 +527,7 @@ class Workspace:
             if source.is_dir():
                 shutil.copytree(source, made.folder / folder, dirs_exist_ok=True)
         made.description, made.owner = process.description, process.owner
-        made.tags, made.libs = process.tags, process.libs
+        made.tags, made.libs, made.place = process.tags, process.libs, process.place
         write_record(made)
         return self.read(made.folder, target_group)
 

@@ -12,6 +12,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, model_validator
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Sha256, Timestamp, Violation
+from chaeksas.contracts.organization import KNOWN_PLACE_SCOPES, Place
 
 PackageKind = Literal["bpm_process", "process_lib"]
 RunLocation = Literal["server", "pc"]
@@ -172,6 +173,8 @@ class Manifest(SchemaVersioned):
     name: str | None = None
     description: str | None = None
     run_location: RunLocation | None = None
+    #: **업무 자리** (C16, ADR-0127) — Studio가 올릴 때 고른다. 비우면 회사 공통이다. 회사는 올린 Studio의 것이다.
+    place: Place | None = None
     entry: str | None = None
     process_id: str | None = None
     triggers: list[Trigger] = Field(default_factory=list)
@@ -339,6 +342,21 @@ def _check_r13(m: Manifest) -> list[Violation]:
     ]
 
 
+def _check_r14(m: Manifest) -> list[Violation]:
+    """업무 자리는 BPM 프로세스에만 있고 아는 범위다 (C1 R14, ADR-0127).
+
+    칸과 범위가 맞는지는 `Place` 모델이 읽을 때 본다. 부서·직원이 **올린 회사 안에** 있는지는 조직을
+    아는 Center가 올릴 때 본다(`organization.place_violation`) — 매니페스트만으로는 알 수 없다.
+    """
+    if m.place is None:
+        return []
+    if m.kind != "bpm_process":
+        return [Violation(rule="R14", code="place_not_for_lib", message=f"kind={m.kind}에는 업무 자리를 두지 않는다")]
+    if m.place.scope not in KNOWN_PLACE_SCOPES:
+        return [Violation(rule="R14", code="input_invalid", message=f"모르는 업무 자리 범위다: {m.place.scope}")]
+    return []
+
+
 def _check_r11(m: Manifest) -> list[Violation]:
     """`requires.settings`가 계약에 적힌 것 중 하나인가 (C1 R11).
 
@@ -405,4 +423,5 @@ def validate(
         *_check_r11(m),
         *_check_r12(m),
         *_check_r13(m),
+        *_check_r14(m),
     ]

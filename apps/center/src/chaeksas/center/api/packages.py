@@ -87,8 +87,13 @@ def read_manifest(path: Path) -> Manifest:
         ) from e
 
 
-def upload(store: Store, *, package_dir: Path, raw: bytes, actor: str) -> tuple[PackageInfo, bool]:
+def upload(
+    store: Store, *, package_dir: Path, raw: bytes, actor: str, company: str | None = None
+) -> tuple[PackageInfo, bool]:
     """패키지 하나를 받는다. `(정보, 새로 만들었나)`.
+
+    **패키지는 올린 쪽의 회사 것이다** (C16 — Studio는 회사 소유다). 업무 자리(매니페스트 `place`)의
+    부서·직원이 그 회사 안인지 여기서 본다(ADR-0127) — 승인할 때는 보여 주기만 한다.
 
     같은 id·버전·해시로 다시 보내면 **200으로 그대로 돌려준다** (재시도가 안전해야 한다).
     해시가 다르면 409 — 올린 것을 몰래 바꾸지 못한다.
@@ -107,6 +112,14 @@ def upload(store: Store, *, package_dir: Path, raw: bytes, actor: str) -> tuple[
         blocking = [str(v) for v in problems]
         if blocking:
             raise ApiError(422, "manifest_invalid", "C1 검사에 걸렸다", {"violations": blocking})
+        company = _upload_company(store, company)
+        _refuse_place(store, manifest, company)
+        other = store.row(
+            "SELECT company FROM packages WHERE id = ? AND company IS NOT ? LIMIT 1", (manifest.id, company)
+        )
+        if other is not None:
+            # id는 Center 전체에서 하나다 — 다른 회사의 판을 이어 올릴 수 없다.
+            raise ApiError(409, "package_id_taken", f"{manifest.id}은 다른 회사의 BPM 프로세스 id다 — id를 바꾸세요")
 
         existing = store.row(
             "SELECT * FROM packages WHERE id = ? AND version = ?", (manifest.id, manifest.version)
@@ -126,8 +139,8 @@ def upload(store: Store, *, package_dir: Path, raw: bytes, actor: str) -> tuple[
         with store.tx() as cur:
             cur.execute(
                 "INSERT INTO packages (id, version, kind, name, status, run_location, content_hash,"
-                " manifest_json, file_name, size_bytes, uploaded_at, uploaded_by)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " manifest_json, file_name, size_bytes, uploaded_at, uploaded_by, company)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     manifest.id,
                     manifest.version,
@@ -141,11 +154,37 @@ def upload(store: Store, *, package_dir: Path, raw: bytes, actor: str) -> tuple[
                     len(raw),
                     now_iso(),
                     actor,
+                    company,
                 ),
             )
         return info_of(store, manifest.id, manifest.version), True
     finally:
         staged.unlink(missing_ok=True)
+
+
+def _upload_company(store: Store, company: str | None) -> str:
+    """올린 쪽의 회사 — Studio 키면 그 키의 회사, 자동화 토큰이면 적은 것(없으면 회사가 하나뿐일 때만)."""
+    from chaeksas.center import organization  # noqa: PLC0415 — 순환 import를 피한다
+
+    chosen = company or organization.only_company(store)
+    if not chosen:
+        raise ApiError(422, "company_required", "어느 회사의 패키지인지 정해지지 않았다 (C16)")
+    if not organization.company_exists(store, chosen):
+        raise ApiError(404, "not_found", f"그 회사가 없습니다: {chosen}")
+    return chosen
+
+
+def _refuse_place(store: Store, manifest: Manifest, company: str) -> None:
+    """업무 자리가 그 회사 안인가 (C16 `place_outside_company`, ADR-0127). R14가 모양은 이미 보았다."""
+    if manifest.place is None:
+        return
+    from chaeksas.center import organization  # noqa: PLC0415 — 순환 import를 피한다
+    from chaeksas.contracts.organization import place_violation  # noqa: PLC0415
+
+    departments, staff = organization.place_maps(store)
+    found = place_violation(manifest.place, company=company, departments=departments, staff=staff, kind=manifest.kind)
+    if found is not None:
+        raise ApiError(422, found.code or "input_invalid", found.message)
 
 
 def with_signature(path: Path, envelope: Any) -> bytes:
@@ -195,6 +234,8 @@ def _info(row: Any, index: Any = None) -> PackageInfo:
         missing_resources=_missing(manifest, index),
         download_count=row["download_count"],
         last_downloaded_at=row["last_downloaded_at"],
+        company=row["company"] if "company" in keys else None,
+        place=manifest.place,
     )
 
 
@@ -207,9 +248,12 @@ def _missing(manifest: Manifest, index: Any) -> list[Any]:
     return missing(manifest, index)
 
 
-def info_of(store: Store, package_id: str, version: str, index: Any = None) -> PackageInfo:
+def info_of(
+    store: Store, package_id: str, version: str, index: Any = None, *, company: str | None = None
+) -> PackageInfo:
+    """하나. `company`를 주면 **그 회사 것만** — 남의 것은 없는 것과 같은 404다 (C16)."""
     row = store.row("SELECT * FROM packages WHERE id = ? AND version = ?", (package_id, version))
-    if row is None:
+    if row is None or (company is not None and row["company"] != company):
         raise ApiError(404, "not_found", f"{package_id}@{version}이 없다")
     return _info(row, index)
 
@@ -221,8 +265,11 @@ def listing(
     status: str | None = None,
     package_id: str | None = None,
     index: Any = None,
+    company: str | None = None,
 ) -> list[PackageInfo]:
     rows = store.rows("SELECT * FROM packages ORDER BY id, version")
+    if company is not None:
+        rows = [r for r in rows if r["company"] == company]
     found = [_info(r, index) for r in rows]
     if kind:
         found = [p for p in found if p.kind == kind]

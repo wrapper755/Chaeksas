@@ -270,6 +270,7 @@ def _info(store: Store, row: Any) -> EnrollmentInfo:
         decided_at=row["decided_at"],
         reason=row["reason"],
         key_id=row["key_id"],
+        company=row["company"],
     )
 
 
@@ -298,11 +299,35 @@ def _pending(store: Store, enrollment_id: str) -> Any:
 
 
 def approve(
-    store: Store, enrollment_id: str, *, name: str | None, actor: str
+    store: Store,
+    enrollment_id: str,
+    *,
+    name: str | None,
+    actor: str,
+    company: str | None = None,
+    scope: str | None = None,
 ) -> EnrollmentDecision:
-    """승인 (C5). 키를 만들어 **그 기계에 미리 묶고** 요청의 공개키로 봉해 둔다."""
+    """승인 (C5). 키를 만들어 **그 기계에 미리 묶고** 요청의 공개키로 봉해 둔다.
+
+    **PC 실행기·Studio는 회사를 정해 승인한다** (C16, ADR-0125 §2) — 회사 관리자(`scope`)는 제 회사로만.
+    서버 실행기는 Center 공용이라 회사를 받지 않고, Center 관리자만 승인한다.
+    """
     row = _pending(store, enrollment_id)
     kind = str(row["type"])
+    if kind == "server_runner":
+        if scope is not None:
+            raise ApiError(403, "center_admin_only", "서버 실행기는 Center 관리자만 승인한다 (Center 공용이다)")
+        company = None
+    else:
+        company = company or scope
+        if not company:
+            raise ApiError(422, "company_required", "이 장비가 속할 회사를 고르세요 (C16)")
+        if scope is not None and company != scope:
+            raise ApiError(404, "not_found", f"그 회사가 없습니다: {company}")
+        from chaeksas.center import organization  # noqa: PLC0415 — 순환 import를 피한다
+
+        if not organization.company_exists(store, company):
+            raise ApiError(404, "not_found", f"그 회사가 없습니다: {company}")
     machine_id = str(row["machine_id"])
     shown = (name or "").strip() or str(row["name"])
 
@@ -332,14 +357,15 @@ def approve(
         bound=BoundTo(type=kind, id=machine_id, name=shown),
         enrollment_id=enrollment_id,
         public_key=str(row["public_key"]),
+        company=company,
     )
     sealed = seal(str(row["public_key"]), raw, salt=enrollment_id)
     del raw  # 원문은 봉함 안에만 남는다
     with store.tx() as cur:
         cur.execute(
             "UPDATE enrollments SET state = 'approved', decided_by = ?, decided_at = ?, key_id = ?,"
-            " sealed_json = ?, replaced_key_id = ? WHERE enrollment_id = ?",
-            (actor, now, record.key_id, dumps(sealed.to_json_dict()), replaced, enrollment_id),
+            " sealed_json = ?, replaced_key_id = ?, company = ? WHERE enrollment_id = ?",
+            (actor, now, record.key_id, dumps(sealed.to_json_dict()), replaced, company, enrollment_id),
         )
     return EnrollmentDecision(key_id=record.key_id, host_id=host_id, replaced_key_id=replaced)
 
@@ -401,6 +427,7 @@ def rotation_for(store: Store, key: keys.KeyRecord, *, host_id: str) -> RotatedK
         bound=key.bound_to,
         enrollment_id=key.enrollment_id,
         public_key=key.public_key,
+        company=key.company,  # 회전해도 같은 회사의 장비다 (C16)
     )
     sealed = seal(key.public_key, raw, salt=host_id)
     del raw

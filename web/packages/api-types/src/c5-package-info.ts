@@ -43,6 +43,7 @@ export interface Manifest {
   kind: "bpm_process" | "process_lib";
   name?: string | null;
   outputs?: string[];
+  place?: Place | null;
   process_id?: string | null;
   provides?: Provides | null;
   requires: Requires;
@@ -86,6 +87,15 @@ export interface ManifestInput {
   required?: boolean;
   source?: string | null;
   type: string;
+  [k: string]: unknown;
+}
+/**
+ * 업무 자리 — BPM 프로세스(패키지 id)마다 하나. **회사는 적지 않는다** — 패키지의 회사다.
+ */
+export interface Place {
+  department?: string | null;
+  scope: string;
+  staff?: string | null;
   [k: string]: unknown;
 }
 export interface Provides {
@@ -186,15 +196,6 @@ export interface MissingResource {
   id: string;
   reason: string;
   type: string;
-  [k: string]: unknown;
-}
-/**
- * 업무 자리 — BPM 프로세스(패키지 id)마다 하나. **회사는 적지 않는다** — 패키지의 회사다.
- */
-export interface Place {
-  department?: string | null;
-  scope: string;
-  staff?: string | null;
   [k: string]: unknown;
 }
 /**

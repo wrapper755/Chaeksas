@@ -163,6 +163,17 @@
           "title": "Outputs",
           "type": "array"
         },
+        "place": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Place"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "process_id": {
           "anyOf": [
             {

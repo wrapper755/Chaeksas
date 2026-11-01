@@ -80,7 +80,16 @@ def list_enrollments(request: Request, type: str | None = None, state: str | Non
     found: Caller = request.app.state.authenticate(request)
     require_read(found)
     states = [one.strip() for one in state.split(",") if one.strip()] if state else None
-    return enrollments.listing(_store(request), kind=type, states=states)
+    found_all = enrollments.listing(_store(request), kind=type, states=states)
+    if found.company is None:
+        return found_all
+    # 회사가 정해진 쪽 (C16): **아직 회사가 없는 요청**(대기 중인 PC 실행기·Studio)은 제 회사로 승인할 수
+    # 있으니 보이고, 결정된 것은 제 회사 것만. 서버 실행기는 Center 공용이라 보이지 않는다.
+    return [
+        one
+        for one in found_all
+        if one.type != "server_runner" and (one.state == "pending" or one.company == found.company)
+    ]
 
 
 @router.post("/enrollments/{enrollment_id}/approve")
@@ -90,12 +99,18 @@ async def approve_enrollment(request: Request, enrollment_id: str) -> Any:
         body = EnrollmentApproveRequest.model_validate(await _json(request))
     except ValueError as e:
         raise ApiError(422, "input_invalid", "승인 요청이 계약과 맞지 않는다") from e
-    return enrollments.approve(_store(request), enrollment_id, name=body.name, actor=found.actor)
+    return enrollments.approve(
+        _store(request), enrollment_id, name=body.name, actor=found.actor, company=body.company, scope=found.company
+    )
 
 
 @router.post("/enrollments/{enrollment_id}/reject")
 async def reject_enrollment(request: Request, enrollment_id: str) -> Any:
     found: Caller = require_admin(request.app.state.authenticate(request))
+    if found.company is not None:
+        row = _store(request).row("SELECT type FROM enrollments WHERE enrollment_id = ?", (enrollment_id,))
+        if row is not None and row["type"] == "server_runner":
+            raise ApiError(403, "center_admin_only", "서버 실행기는 Center 관리자만 결정한다 (Center 공용이다)")
     try:
         body = EnrollmentRejectRequest.model_validate(await _json(request))
     except ValueError as e:

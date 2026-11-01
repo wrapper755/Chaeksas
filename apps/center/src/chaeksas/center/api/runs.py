@@ -249,8 +249,24 @@ def bot_ui_of(store: Store, owner_key_id: str | None) -> str | None:
     return bot_ui.id_for_key(store, owner_key_id)
 
 
+def place_of_run(store: Store, run_id: str, bpm_process_id: str | None) -> tuple[str | None, str | None, str | None]:
+    """그 실행의 업무 자리 — **작업 행에 적힌 만들 때의 것**, 작업이 없으면 패키지의 회사 (C16).
+
+    `bot_ui_of`와 같은 결이다 — 실행 요약에 적지 않고 **읽을 때** 찾는다(C3에 칸이 없다).
+    """
+    job = store.row("SELECT company, department, staff FROM jobs WHERE run_id = ? LIMIT 1", (run_id,))
+    if job is not None and job["company"] is not None:
+        return job["company"], job["department"], job["staff"]
+    if bpm_process_id:
+        package = store.row("SELECT company FROM packages WHERE id = ? LIMIT 1", (bpm_process_id,))
+        if package is not None:
+            return package["company"], None, None
+    return None, None, None
+
+
 def _info(row: Any, store: Store) -> RunInfo:
     summary = loads(row["summary_json"], {}) or {}
+    company, department, staff = place_of_run(store, row["run_id"], summary.get("bpm_process_id"))
     counted = store.row("SELECT COUNT(*) AS n FROM run_events WHERE run_id = ?", (row["run_id"],))
     tallies = {name: summary.get(name) for name in COUNTS}
     return RunInfo(
@@ -271,6 +287,9 @@ def _info(row: Any, store: Store) -> RunInfo:
         error_code=summary.get("error_code"),
         **tallies,
         events=int(counted["n"]) if counted else 0,
+        company=company,
+        department=department,
+        staff=staff,
     )
 
 
@@ -282,6 +301,7 @@ def listing(
     run_location: str | None = None,
     bot_ui_id: str | None = None,
     limit: int = DEFAULT_LIMIT,
+    company: str | None = None,
 ) -> RunListing:
     """최근 실행부터 (CON-01 목록). 좁히기는 상태·BPM 프로세스·실행 위치·**PC 실행기**다.
 
@@ -301,6 +321,8 @@ def listing(
         found = [one for one in found if one.run_location == run_location]
     if bot_ui_id:
         found = [one for one in found if one.bot_ui_id == bot_ui_id]
+    if company is not None:
+        found = [one for one in found if one.company == company]  # 제 회사 것만 (C16)
     return RunListing(runs=found[: max(1, min(limit, MAX_LIMIT))], total=len(found))
 
 
@@ -335,7 +357,7 @@ def get_runs(
     bot_ui_id: str | None = None,
     limit: int = DEFAULT_LIMIT,
 ) -> Any:
-    require_read(request.app.state.authenticate(request))
+    found = require_read(request.app.state.authenticate(request))
     return listing(
         request.app.state.store,
         status=status,
@@ -343,19 +365,33 @@ def get_runs(
         run_location=run_location,
         bot_ui_id=bot_ui_id,
         limit=limit,
+        company=_company_reader(found),
     )
+
+
+def _company_reader(found: Caller) -> str | None:
+    """실행 목록을 회사로 거르는 쪽 — **사람의 계정만**이다. 장비 키는 지금처럼 읽는다(C3 소유가 따로 있다)."""
+    return found.company if found.account is not None else None
+
+
+def _visible(store: Store, found: Caller, run_id: str) -> RunInfo:
+    got = info_of(store, run_id)
+    reader = _company_reader(found)
+    if reader is not None and got.company != reader:
+        raise ApiError(404, "not_found", f"실행 {run_id}이 없다")
+    return got
 
 
 @router.get("/{run_id}")
 def get_run(run_id: str, request: Request) -> Any:
-    require_read(request.app.state.authenticate(request))
-    return info_of(request.app.state.store, run_id)
+    found = require_read(request.app.state.authenticate(request))
+    return _visible(request.app.state.store, found, run_id)
 
 
 @router.get("/{run_id}/events")
 def get_events(run_id: str, request: Request) -> Any:
-    require_read(request.app.state.authenticate(request))
-    info_of(request.app.state.store, run_id)  # 없으면 404
+    found = require_read(request.app.state.authenticate(request))
+    _visible(request.app.state.store, found, run_id)  # 없으면 404
     return RunEventsResponse(run_id=run_id, events=events_of(request.app.state.store, run_id))
 
 

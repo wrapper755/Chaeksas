@@ -265,7 +265,11 @@ def approve_studio(center: Any, name: str = "김OO 설계 PC") -> None:
     admin = {"Authorization": "Bearer t-admin"}
     pending = center.get("/api/v1/enrollments?type=studio", headers=admin).json()
     assert len(pending) == 1
-    done = center.post(f"/api/v1/enrollments/{pending[0]['enrollment_id']}/approve", json={"name": name}, headers=admin)
+    done = center.post(
+        f"/api/v1/enrollments/{pending[0]['enrollment_id']}/approve",
+        json={"name": name, "company": "default"},
+        headers=admin,
+    )
     assert done.status_code == 200, done.text
 
 

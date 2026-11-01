@@ -88,7 +88,7 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
         if row is None:
             cur.execute(
                 "INSERT INTO bot_uis (bot_ui_id, key_id, machine_id, name, os, versions_json,"
-                " runtimes_json, registered_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                " runtimes_json, registered_at, company) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     bot_ui_id,
                     key.key_id,
@@ -98,13 +98,16 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
                     dumps(request.versions.to_json_dict()),
                     dumps(runtimes) if runtimes else None,
                     now_iso(),
+                    # 그 PC의 회사는 **그 키의 회사**다 — 등록을 승인할 때 정했다 (C16).
+                    key.company,
                 ),
             )
         elif adopted is not None:
             # 이어받은 자리의 **상태는 비운다** — 옛 키가 보고한 것이다 (C4). 다음 하트비트가 채운다.
             cur.execute(
                 "UPDATE bot_uis SET key_id = ?, machine_id = ?, name = ?, os = ?, versions_json = ?,"
-                " runtimes_json = ?, last_seen_at = NULL, state_json = NULL WHERE bot_ui_id = ?",
+                " runtimes_json = ?, last_seen_at = NULL, state_json = NULL,"
+                " company = COALESCE(?, company) WHERE bot_ui_id = ?",
                 (
                     key.key_id,
                     request.machine_id,
@@ -112,6 +115,7 @@ def register(store: Store, caller: Caller, body: dict[str, Any], *, heartbeat_in
                     request.os,
                     dumps(request.versions.to_json_dict()),
                     dumps(runtimes) if runtimes else None,
+                    key.company,
                     bot_ui_id,
                 ),
             )
@@ -213,7 +217,7 @@ def heartbeat(
     )
 
 
-def bot_ui_listing(store: Store) -> list[BotUiInfo]:
+def bot_ui_listing(store: Store, *, company: str | None = None) -> list[BotUiInfo]:
     """CON-03 「PC 실행기 현황」 (C5 `BotUiInfo`).
 
     상태는 **PC 실행기가 하트비트로 보고한 그대로** 싣고, Center가 더하는 것은 온라인 판정과
@@ -222,6 +226,8 @@ def bot_ui_listing(store: Store) -> list[BotUiInfo]:
     now = datetime.fromisoformat(now_iso())
     out = []
     for row in store.rows("SELECT * FROM bot_uis ORDER BY name"):
+        if company is not None and row["company"] != company:
+            continue  # 회사가 정해진 쪽은 제 회사의 PC만 (C16)
         last_seen = row["last_seen_at"]
         online = bool(
             last_seen and (now - datetime.fromisoformat(last_seen)).total_seconds() <= ONLINE_WITHIN_S
@@ -256,6 +262,7 @@ def bot_ui_listing(store: Store) -> list[BotUiInfo]:
                 )
                 if record
                 else None,
+                company=row["company"],
             )
         )
     return out

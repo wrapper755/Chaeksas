@@ -257,7 +257,6 @@ from chaeksas.contracts.manifest import (
     validate,
 )
 from chaeksas.contracts.organization import (
-    ApproveRequest,
     CompanyInfo,
     CompanyRequest,
     DepartmentInfo,
@@ -265,7 +264,6 @@ from chaeksas.contracts.organization import (
     OrgRef,
     Place,
     PlaceIdentity,
-    PlaceInfo,
     StaffInfo,
     StaffRequest,
     place_values,
@@ -371,7 +369,6 @@ from chaeksas.contracts.signing import (
 )
 
 __all__ = [
-    "ApproveRequest",
     "CompanyInfo",
     "CompanyRequest",
     "DepartmentInfo",
@@ -379,7 +376,6 @@ __all__ = [
     "OrgRef",
     "Place",
     "PlaceIdentity",
-    "PlaceInfo",
     "StaffInfo",
     "StaffRequest",
     "place_values",

@@ -71,6 +71,8 @@ class KeyRecord:
     public_key: str | None = None
     #: 회전으로 갈아 줄 새 키 (새 키로 첫 요청이 오면 이 키를 폐기한다).
     successor_id: str | None = None
+    #: 그 장비가 속한 회사 (C16 — Studio·PC 실행기 키에만 있다. 등록을 승인할 때 정한다).
+    company: str | None = None
 
     def state(self, *, now: str) -> str:
         return key_state(now=now, expires_at=self.expires_at, revoked_at=self.revoked_at)
@@ -106,6 +108,7 @@ def _record(row: Any) -> KeyRecord:
         enrollment_id=row["enrollment_id"],
         public_key=row["public_key"],
         successor_id=row["successor_id"],
+        company=row["company"],
     )
 
 
@@ -118,6 +121,7 @@ def issue(
     bound: BoundTo | None = None,
     enrollment_id: str | None = None,
     public_key: str | None = None,
+    company: str | None = None,
 ) -> tuple[KeyRecord, str]:
     """키를 발급한다. `(기록, 원문)` — **원문은 이때만 볼 수 있다.**
 
@@ -134,11 +138,12 @@ def issue(
         bound_to=bound,
         enrollment_id=enrollment_id,
         public_key=public_key,
+        company=company,
     )
     with store.tx() as cur:
         cur.execute(
             "INSERT INTO center_keys (key_id, name, type, prefix, key_hash, created_at, expires_at,"
-            " bound_json, enrollment_id, public_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " bound_json, enrollment_id, public_key, company) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 record.key_id,
                 name,
@@ -150,6 +155,7 @@ def issue(
                 dumps(bound.to_json_dict()) if bound is not None else None,
                 enrollment_id,
                 public_key,
+                company,
             ),
         )
     return record, raw

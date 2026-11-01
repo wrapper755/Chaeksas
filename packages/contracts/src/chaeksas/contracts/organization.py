@@ -40,7 +40,6 @@ DEFAULT_COMPANY_NAME = "기본 회사"
 RECENT_RUNS = 20
 
 #: C16 오류 코드 (C16 §오류).
-CODE_PLACE_REQUIRED = "place_required"
 CODE_PLACE_OUTSIDE_COMPANY = "place_outside_company"
 CODE_PLACE_NOT_FOR_LIB = "place_not_for_lib"
 CODE_COMPANY_MISMATCH = "company_mismatch"
@@ -150,25 +149,6 @@ class Place(ContractModel):
         if need_staff != (self.staff is not None):
             raise ValueError("직원 자리에만 staff를 적는다")
         return self
-
-
-class PlaceInfo(Place):
-    """`GET /packages/{id}/place` — 지금 자리와 그 회사, 누가 언제 바꿨나."""
-
-    bpm_process_id: str
-    company: OrgId
-    updated_at: Timestamp
-    updated_by: str
-
-
-class ApproveRequest(ContractModel):
-    """`PUT /packages/{id}/{version}/signature`의 본문 (C16 — 지금까지는 본문이 없었다).
-
-    그 BPM 프로세스에 자리가 **아직 없으면** `place`가 필요하다(`place_required`). 있으면 비워 두고,
-    적으면 바꾼다. 공유 BPM 프로세스(`process_lib`)에는 적지 않는다.
-    """
-
-    place: Place | None = None
 
 
 class OrgRef(ContractModel):
