@@ -331,7 +331,6 @@ export async function deletePackage(packageId: string, version: string): Promise
 function revalidateKeys() {
   revalidatePath("/bot-uis", "layout");
   revalidatePath("/server-runners", "layout");
-  revalidatePath("/resources");
 }
 
 export async function revokeCenterKey(keyId: string): Promise<ActionResult> {
@@ -361,7 +360,6 @@ export async function decideEnrollment(
     return { error: message(cause) };
   }
   revalidatePath("/bot-uis", "layout");
-  revalidatePath("/resources", "layout");
   revalidatePath("/server-runners", "layout");
   revalidatePath("/bots");
   return {};

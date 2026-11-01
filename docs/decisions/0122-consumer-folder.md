@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 · **CON-07 「일꾼 폴더」 칸과 그 줄의 「...」는 [ADR-0128](0128-console-drops-the-resources-screen.md)이 걷었다** — 폴더가 원본인 것은 그대로다 |
 | 날짜 | 2026-10-31 |
 | 관련 | 계약 C15(§일꾼 들이기·`FolderConsumer`·`PUT …/consumers/self/extension`), C13(§외부 확장 등록·E1~E6), C7(`GET /resources/consumer-folder`), C5(§등록 승인 — `consumer` 갈래를 걷는다), 화면 CON-07, [ADR-0090](0090-center-admin-accounts.md), [ADR-0092](0092-keys-are-issued-and-delivered-by-center.md), [ADR-0102](0102-calling-outside-is-pull.md), [ADR-0117](0117-bundled-server-runner-joins-by-shared-secret.md), `deploy/compose.yaml` |
 

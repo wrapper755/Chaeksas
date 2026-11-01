@@ -8,22 +8,6 @@ import type { BotUiInfo } from "@chaeksas/api-types/c5-bot-ui-info";
 import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import type { ApprovalInfo } from "@chaeksas/api-types/c6-approval-info";
 import type { ServerRunnerInfo } from "@chaeksas/api-types/c12-server-runner-info";
-import type { ServiceAppResource } from "@chaeksas/api-types/c7-service-app-resource";
-import type { ExtensionResource } from "@chaeksas/api-types/c7-extension-resource";
-import type { ConsumerFolderScan } from "@chaeksas/api-types/c7-consumer-folder-scan";
-import type { ContributedResource } from "@chaeksas/api-types/c7-contributed-resource";
-
-/**
- * 기여 자원 **종류** 한 줄 (CON-07 탭). Center가 계약 모델 없이 짓는 모양이라 여기 적는다 —
- * C7은 자원 자체(`ContributedResource`)만 정하고, 「어떤 탭이 있나」는 화면의 일이다.
- */
-export interface ContributedKind {
-  resource_type: string;
-  label: string;
-  count: number;
-  extensions: string[];
-  errors: string[];
-}
 import type { JobInfo } from "@chaeksas/api-types/c5-job-info";
 import type { JobCreateRequest } from "@chaeksas/api-types/c5-job-create-request";
 import type { PackageInfo } from "@chaeksas/api-types/c5-package-info";
@@ -168,24 +152,6 @@ export const center = {
       { method: "DELETE" },
     ),
 
-  /** 리소스 목록 (C7·CON-07). `{items, fetched_at}` 그대로 돌려준다. */
-  resources: <T>(type?: string) =>
-    call<{ items: T[]; fetched_at: string }>(`/api/v1/resources${type ? `?type=${type}` : ""}`),
-  /** 기여 자원 **종류** 목록 (CON-07 탭 하나씩). 읽기 실패도 함께 온다. */
-  contributedKinds: () =>
-    call<{ items: ContributedKind[]; fetched_at: string }>("/api/v1/resources/contributed-kinds"),
-  /** 그 종류의 기여 자원들. `data`는 확장 고유 내용이라 **해석하지 않는다** (C13 §5). */
-  contributed: (resourceType: string) =>
-    call<{ items: ContributedResource[]; fetched_at: string }>(
-      `/api/v1/resources?type=contributed&resource_type=${encodeURIComponent(resourceType)}`,
-    ),
-
-  extension: (extensionId: string) =>
-    call<ExtensionResource>(`/api/v1/resources/extensions/${encodeURIComponent(extensionId)}`),
-  serviceApp: (appId: string) =>
-    call<ServiceAppResource>(`/api/v1/resources/service-apps/${encodeURIComponent(appId)}`),
-  /** Center가 뜰 때 일꾼 폴더를 읽은 결과 (C7, ADR-0122, CON-07 「일꾼 폴더」). */
-  consumerFolder: () => call<ConsumerFolderScan>("/api/v1/resources/consumer-folder"),
   /** 그 실행이 올린 일감 (C15, CON-01 「외부 작업」) — 값 없이 자리·상태·일꾼만. */
   externalTasks: (runId: string) =>
     call<ExternalTaskInfo[]>(`/api/v1/external-tasks?run_id=${encodeURIComponent(runId)}`),

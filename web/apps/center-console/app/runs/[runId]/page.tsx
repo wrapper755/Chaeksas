@@ -267,12 +267,6 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
       key: "topic",
       header: "토픽",
       mono: true,
-      // 일꾼이 없거나 조용한지는 CON-07 「토픽」 표가 말한다.
-      cell: (row) => (
-        <Link className="underline" href="/resources">
-          {row.topic}
-        </Link>
-      ),
     },
     { key: "operation", header: "작업", mono: true },
     {

@@ -7,7 +7,7 @@
 | 보내는 쪽 → 받는 쪽 | 서버 실행기·실행 프로세스·Studio → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
 | 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
 | 관련 ADR | [0007](../decisions/0007-client-initiated-communication.md), [0062](../decisions/0062-pc-delegation.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0102](../decisions/0102-calling-outside-is-pull.md), [0107](../decisions/0107-outcome-unknown-asks-a-person.md), [0114](../decisions/0114-remove-ui-automation.md) |
-| 관련 화면 | CON-07 리소스 (기능 목록·일꾼 폴더), CON-01 (실행 상세의 「외부 작업」) |
+| 관련 화면 | CON-01 (실행 상세의 「외부 작업」) |
 
 ## 목적
 
