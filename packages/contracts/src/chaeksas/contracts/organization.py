@@ -77,7 +77,7 @@ class WorkItem(ContractModel):
     bpm_process_id: str
     #: 살아 있는 배포의 판 (없으면 빈 목록 — 「배포 없음」).
     versions: list[str] = Field(default_factory=list)
-    #: 그 판 매니페스트의 C1 `triggers`를 옮긴 것 (`{kind, schedule?, message?}`).
+    #: 그 판 매니페스트의 C1 `triggers`를 옮긴 것 (`{kind, name?, expression?}`).
     triggers: list[dict[str, str]] = Field(default_factory=list)
 
 

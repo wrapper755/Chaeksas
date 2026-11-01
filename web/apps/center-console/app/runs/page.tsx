@@ -5,6 +5,7 @@ import type { RunInfo } from "@chaeksas/api-types/c3-run-info";
 import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { sourceLabel } from "@/lib/labels";
+import { namesOf, orgName } from "@/lib/organization";
 
 /**
  * CON-01 로그 (목록).
@@ -73,6 +74,23 @@ export function seconds(value: number | null | undefined): string {
   return value === null || value === undefined ? "—" : `${Math.round(value * 10) / 10}초`;
 }
 
+/**
+ * 회사·부서·직원 이름표 (C16) — 「회사」·「부서」·「직원」 열은 `RunInfo`의 id를 이름으로 보인다.
+ * **못 받아도 목록은 그린다** — 빈 표면 id 그대로 보인다 (U3).
+ */
+export async function loadOrgNames(): Promise<Record<"company" | "department" | "staff", Record<string, string>>> {
+  try {
+    const [companies, departments, staff] = await Promise.all([
+      center.companies(),
+      center.departments(),
+      center.staffList(),
+    ]);
+    return { company: namesOf(companies), department: namesOf(departments), staff: namesOf(staff) };
+  } catch {
+    return { company: {}, department: {}, staff: {} };
+  }
+}
+
 export function where(value: string | null | undefined): string {
   return value === "pc" ? "PC" : value === "server" ? "서버" : "—";
 }
@@ -122,6 +140,7 @@ export default async function RunsPage({
     pcFailure = NO_BOT_UI_LIST;
   }
   const pcName = new Map(pcs.map((one) => [one.bot_ui_id, one.name]));
+  const org = await loadOrgNames();
 
   const columns: Array<Column<RunInfo>> = [
     {
@@ -152,6 +171,10 @@ export default async function RunsPage({
       // 이름을 모르면 **id를 보인다** — 「—」로 지우면 PC를 아는데도 모르는 것처럼 된다.
       cell: (row) => (row.bot_ui_id ? (pcName.get(row.bot_ui_id) ?? row.bot_ui_id) : "—"),
     },
+    // 자리는 Center가 그 실행의 작업에서 붙인다 (C16) — Studio 시험 실행·작업 없는 실행은 「—」.
+    { key: "company", header: "회사", width: "12ch", cell: (row) => orgName(row.company, org.company) },
+    { key: "department", header: "부서", width: "12ch", cell: (row) => orgName(row.department, org.department) },
+    { key: "staff", header: "직원", width: "12ch", cell: (row) => orgName(row.staff, org.staff) },
     { key: "source", header: "시작 방식", width: "10ch", cell: (row) => sourceLabel(row.source) },
     { key: "started_at", header: "시작", width: "14ch", cell: (row) => time(row.started_at) },
     { key: "finished_at", header: "끝", width: "14ch", cell: (row) => time(row.finished_at) },

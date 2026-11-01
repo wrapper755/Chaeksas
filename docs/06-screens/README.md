@@ -160,7 +160,7 @@ Studio 시험 실행과 PC 실행기의 BPM 프로세스 실행에서 같은 창
 | CON-07 | 리소스 | Center 콘솔 | 운영자 | M5 | 신규 |
 | CON-11 | API 키 — 없어짐 (ADR-0124, 키 동작은 대상 화면으로) | Center 콘솔 | 운영자 | M2 | 폐기 |
 | CON-12 | 서버 실행 | Center 콘솔 | 운영자 | M7 | 신규 |
-| CON-13 | 조직 | Center 콘솔 | Center 관리자·회사 관리자 | — | 아직 ([ADR-0125](../decisions/0125-organization-and-work-placement.md) — 가상 직원 화면은 걷었다) |
+| CON-13 | 조직 | Center 콘솔 | Center 관리자·회사 관리자 | — | 신규 ([ADR-0125](../decisions/0125-organization-and-work-placement.md) — 가상 직원 화면은 걷었다) |
 | CON-14 | 관리자 계정 | Center 콘솔 | 관리자 | — | 신규 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) |
 | CON-15 | 배포 | Center 콘솔 | 관리자 | — | 신규 (ADM-03을 옮겼다, ADR-0090) |
 | CON-16 | 앱 로그 | Center 콘솔 | 운영자 | — | 신규 ([ADR-0121](../decisions/0121-center-console-says-process.md)) |

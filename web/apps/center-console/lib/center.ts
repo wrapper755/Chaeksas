@@ -41,6 +41,7 @@ import type { AccountInfo } from "@chaeksas/api-types/c5-account-info";
 import type { DeploymentRequest } from "@chaeksas/api-types/c5-deployment-request";
 import type { SessionInfo } from "@chaeksas/api-types/c5-session-info";
 import { COOKIE_NAME, open, type Session } from "./session";
+import type { OrgKind } from "./organization";
 
 /**
  * BFF — **브라우저는 Center API를 직접 부르지 않는다** (ADR-0017 §1).
@@ -114,6 +115,13 @@ export function signIn(username: string, password: string): Promise<SessionInfo>
 export function signOut(token: string): Promise<void> {
   return send<void>("/api/v1/auth/logout", { method: "POST" }, token);
 }
+
+/** 조직 경로 (C16). */
+const ORG_PATH: Record<OrgKind, string> = {
+  company: "/api/v1/companies",
+  department: "/api/v1/departments",
+  staff: "/api/v1/staff",
+};
 
 const pkg = (packageId: string, version: string) =>
   `/api/v1/packages/${encodeURIComponent(packageId)}/${encodeURIComponent(version)}`;
@@ -317,6 +325,18 @@ export const center = {
   companies: () => call<CompanyInfo[]>("/api/v1/companies"),
   departments: () => call<DepartmentInfo[]>("/api/v1/departments"),
   staffList: () => call<StaffInfo[]>("/api/v1/staff"),
+  /** 하나 읽기 — 그 자리 업무(`work`)와 최근 실행(`recent_runs`)이 찬다 (CON-13 [W]·[R]). */
+  orgItem: <T = CompanyInfo | DepartmentInfo | StaffInfo>(kind: OrgKind, id: string) =>
+    call<T>(`${ORG_PATH[kind]}/${encodeURIComponent(id)}`),
+  /** 만들기 (`POST`) — 같은 id가 있으면 409 `exists`. */
+  createOrgItem: (kind: OrgKind, body: Record<string, unknown>) =>
+    call<unknown>(ORG_PATH[kind], { method: "POST", body: JSON.stringify(body) }),
+  /** 바꾸기 (`PUT`) — **본문 전체**로 바꾼다 (C16). */
+  updateOrgItem: (kind: OrgKind, id: string, body: Record<string, unknown>) =>
+    call<unknown>(`${ORG_PATH[kind]}/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(body) }),
+  /** 등록 해제 — 가리키는 것이 있으면 409 `in_use`. 회사에는 없다. */
+  removeOrgItem: (kind: "department" | "staff", id: string) =>
+    call<void>(`${ORG_PATH[kind]}/${encodeURIComponent(id)}`, { method: "DELETE" }),
   rejectEnrollment: (id: string, reason?: string) =>
     call<EnrollmentInfo>(`/api/v1/enrollments/${encodeURIComponent(id)}/reject`, {
       method: "POST",

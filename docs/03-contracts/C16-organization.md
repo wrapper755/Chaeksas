@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **합의** (2026-11-01) — 모델·판정(`packages/contracts/organization.py`, C1 R14)과 **Center 쪽이 돈다**: 조직 API(`center/organization.py`·`api/organization.py`), 등록 승인의 회사, 올릴 때 회사·업무 자리 검사, PC 배포의 `company_mismatch`, 작업의 주인·`owner_stopped`·`JobDispatch.place`, `RunInfo`·`JobInfo`·결재의 회사, 회사 관리자 거르기. 서버 실행기가 `place`를 값 출처로 푼다. Studio는 STU-12b에서 자리를 고르고, 콘솔은 승인 창에 자리를 보이고 등록 승인·계정에 회사를 고른다. **남은 것**: 조직 화면(CON-13), PC 작업에 `place` 나르기(> 미정), 연동용·대리 답용 키의 회사(> 미정) |
+| 상태 | **합의** (2026-11-01) — 모델·판정(`packages/contracts/organization.py`, C1 R14)과 **Center 쪽이 돈다**: 조직 API(`center/organization.py`·`api/organization.py`), 등록 승인의 회사, 올릴 때 회사·업무 자리 검사, PC 배포의 `company_mismatch`, 작업의 주인·`owner_stopped`·`JobDispatch.place`, `RunInfo`·`JobInfo`·결재의 회사, 회사 관리자 거르기. 서버 실행기가 `place`를 값 출처로 푼다. Studio는 STU-12b에서 자리를 고르고, 콘솔은 승인 창에 자리를 보이고 등록 승인·계정에 회사를 고른다. 콘솔 조직 화면(CON-13)·CON-01의 자리 열도 돈다. **남은 것**: PC 작업에 `place` 나르기(> 미정), 연동용·대리 답용 키의 회사(> 미정) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 콘솔(Center 관리자·회사 관리자)·연동용 키 ↔ Center (조직·업무 자리), Center → 서버 실행기 (작업의 자리) |
 | 코드 위치 | `packages/contracts/organization.py`, Center `migrations.py` 22판 · (예정) `api/organization.py`·`api/packages.py`·`enrollments.py`·`accounts.py` |
@@ -106,7 +106,7 @@ C5 §가상 직원 전부(`/virtual-workers`, `VirtualWorkerRequest`·`VirtualWo
   "updated_at": "2026-11-01T09:00:00+09:00",
   "work": [
     {"bpm_process_id": "buy.request", "versions": ["1.0.0"],
-     "triggers": [{"kind": "timer", "schedule": "0 8 * * 1-5"}]}
+     "triggers": [{"kind": "timer", "expression": "0 8 * * 1-5"}]}
   ],
   "recent_runs": [
     {"run_id": "run_20261101_080000_a1b2c3", "bpm_process_id": "buy.request", "status": "success",

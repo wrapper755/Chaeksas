@@ -8,7 +8,8 @@ import { CenterError, center, session } from "@/lib/center";
 import { FINISHED, TASK_STATE, type ResumeRow, duration, resumes, taskPlace, waitTotals } from "@/lib/summary";
 import { type NodeBar, type NodeRow, bars, llmSteps, timeline } from "@/lib/timeline";
 import { Shell } from "@/components/Shell";
-import { LABEL, seconds, time, where } from "../page";
+import { LABEL, loadOrgNames, seconds, time, where } from "../page";
+import { orgName } from "@/lib/organization";
 
 /**
  * CON-01 로그 (상세).
@@ -154,6 +155,7 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
 
+  const org = await loadOrgNames();
   const nodes = timeline(events);
   const llm = llmSteps(events);
   const seen = counts(events);
@@ -333,6 +335,11 @@ export default async function RunPage({ params }: { params: Promise<{ runId: str
               </dd>
               <dt className="text-text-muted">실행 위치</dt>
               <dd>{where(info.run_location)}</dd>
+              <dt className="text-text-muted">회사 · 부서 · 직원</dt>
+              <dd>
+                {orgName(info.company, org.company)} · {orgName(info.department, org.department)} ·{" "}
+                {orgName(info.staff, org.staff)}
+              </dd>
               <dt className="text-text-muted">수행 모드</dt>
               <dd>{info.mode === "deterministic" ? "결정 수행" : info.mode === "autonomous" ? "자율 수행" : "—"}</dd>
               <dt className="text-text-muted">시작 · 끝</dt>
