@@ -106,4 +106,5 @@ def test_r14_the_place_rides_the_manifest_of_a_bpm_process_only() -> None:
     assert "R14" not in rules()
     assert "R14" not in rules(place={"scope": "department", "department": "purchasing"})
     assert "R14" in rules(place={"scope": "team"})
-    assert "R14" in rules(kind="process_lib", run_location=None, entry=None, process_id=None, place={"scope": "company"})
+    lib = {"kind": "process_lib", "run_location": None, "entry": None, "process_id": None}
+    assert "R14" in rules(**lib, place={"scope": "company"})
