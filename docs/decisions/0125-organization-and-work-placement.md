@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 (2026-11-01) · **§3(업무 자리를 승인할 때 관리자가 고른다, 서명 밖)과 §5의 그 부분은 [ADR-0127](0127-studio-picks-the-work-place.md)이 대체한다** — 자리는 Studio가 올릴 때 고르고 매니페스트에 실린다. — 조각 1(계약 모델·판정, Center 저장소 22판)이 들어가 [C16](../03-contracts/C16-organization.md)이 「합의」다. **§6 가상 직원 없애기도 조각 1에서 했다**(사용자 요청 — 코드·화면·예제·시험). 조각 2~4·6이 남았다(조각 5 FX-24 옮기기는 함께 끝났다). **직원 사이의 업무 요청은 이 ADR의 범위가 아니다** — 조직이 서고 나서 따로 정한다(§8) |
+| 상태 | 수락 (2026-11-01) · **§3(업무 자리를 승인할 때 관리자가 고른다, 서명 밖)과 §5의 그 부분은 [ADR-0127](0127-studio-picks-the-work-place.md)이 대체한다** — 자리는 Studio가 올릴 때 고르고 매니페스트에 실린다. — 조각 1(계약 모델·판정, Center 저장소 22판)이 들어가 [C16](../03-contracts/C16-organization.md)이 「합의」다. **§6 가상 직원 없애기도 조각 1에서 했다**(사용자 요청 — 코드·화면·예제·시험). **조각 2(Center)와 조각 4의 승인·등록·계정 화면도 들어갔다** — 남은 것은 조직 화면(CON-13)과 조각 6(직원 사이 요청)이다. **직원 사이의 업무 요청은 이 ADR의 범위가 아니다** — 조직이 서고 나서 따로 정한다(§8) |
 | 날짜 | 2026-11-01 |
 | 관련 | [ADR-0090](0090-center-admin-accounts.md)(관리자 계정 — 회사 관리자를 더한다), [ADR-0092](0092-keys-are-issued-and-delivered-by-center.md)·[ADR-0093](0093-studio-is-let-in-by-approval.md)(등록 승인 — 회사를 고른다), [ADR-0085](0085-virtual-worker-resource.md)(대체), [ADR-0099](0099-input-value-source.md)(§1 출처 `virtual_worker.*` 대체), [ADR-0079](0079-virtual-worker-is-an-intake-bot.md)·[ADR-0082](0082-batch-start.md)(B16 관문), [ADR-0110](0110-center-keeps-the-schedule.md), [ADR-0046](0046-no-wildcard-pc-deployment.md). 계약 C16(새로)·C1·C3·C5·C12·C14. 화면 CON-02·CON-03·CON-13·CON-14. 바깥 요청: NowView 요청서 「계정이 자기 업무(BPM)를 갖고, 다른 계정의 업무를 요청한다」 |
 

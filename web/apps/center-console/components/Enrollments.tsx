@@ -20,6 +20,7 @@ export function Enrollments({
   nameHelp = "사람이 알아볼 이름. 비우면 요청이 보낸 이름을 씁니다.",
   title = "승인 대기",
   id,
+  companies,
 }: {
   rows: EnrollmentInfo[];
   /** 확인 창 첫 줄이 가리키는 자리 — 「현장 화면」(PC 실행기) / 「서버 실행기 로그」. */
@@ -31,9 +32,15 @@ export function Enrollments({
   title?: string;
   /** 다른 화면이 이 섹션으로 걸 때의 앵커. */
   id?: string;
+  /**
+   * 들일 회사의 고를 거리 (C16 — PC 실행기·Studio는 회사 소유다). 주면 승인 창에 「회사」가 생기고
+   * **고르지 않으면 승인하지 않는다**. 서버 실행기는 Center 공용이라 주지 않는다.
+   */
+  companies?: Array<{ id: string; name: string }>;
 }) {
   const [asking, setAsking] = useState<{ kind: "approve" | "reject"; row: EnrollmentInfo } | null>(null);
   const [text, setText] = useState("");
+  const [company, setCompany] = useState(companies?.length === 1 ? companies[0].id : "");
   const [error, setError] = useState<string | null>(null);
   const [working, start] = useTransition();
 
@@ -48,7 +55,7 @@ export function Enrollments({
     if (!asking) return;
     const { kind, row } = asking;
     start(async () => {
-      const done = await decideEnrollment(row.enrollment_id, kind, text);
+      const done = await decideEnrollment(row.enrollment_id, kind, text, companies ? company : undefined);
       setError(done.error ?? null);
       setAsking(null);
     });
@@ -123,7 +130,7 @@ export function Enrollments({
             <Button variant="secondary" onClick={() => setAsking(null)}>
               취소
             </Button>
-            <Button variant="primary" disabled={working} onClick={decide}>
+            <Button variant="primary" disabled={working || (companies !== undefined && !company)} onClick={decide}>
               승인
             </Button>
           </>
@@ -146,6 +153,24 @@ export function Enrollments({
           onChange={(event) => setText(event.target.value)}
           help={nameHelp}
         />
+        {companies ? (
+          <label className="mt-4 flex flex-col gap-1 text-body-sm">
+            회사
+            <select
+              value={company}
+              onChange={(event) => setCompany(event.target.value)}
+              className="h-9 border border-border-strong bg-bg-surface px-2 text-body"
+            >
+              <option value="">고르세요</option>
+              {companies.map((one) => (
+                <option key={one.id} value={one.id}>
+                  {one.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-text-muted">이 장비가 속할 회사입니다. 그 회사의 BPM 프로세스만 다룹니다.</span>
+          </label>
+        ) : null}
       </Dialog>
 
       <Dialog

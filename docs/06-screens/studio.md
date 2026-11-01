@@ -475,7 +475,7 @@ id 규칙(「id는 소문자·숫자·`.`·`_`·`-`만 쓰고 소문자나 숫�
 
 ### STU-12b 「Center로 올리기」 확인 창 (BPM 프로세스)
 
-> 상태: **아직** — [ADR-0127](../decisions/0127-studio-picks-the-work-place.md). 지금은 확인 창 없이 바로 올린다.
+> 상태: **돈다** — `upload_dialog.py`(창)·`upload.read_organization`(고를 거리)·`workspace.BpmProcess.place`(기록)·`packaging.build_manifest`(매니페스트 `place`). [ADR-0127](../decisions/0127-studio-picks-the-work-place.md).
 
 ```
 +---------------------------------------------+

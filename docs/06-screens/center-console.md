@@ -494,7 +494,7 @@ UI 자동화 개요·셀렉터·모니터링 화면이었다. UI 자동화 확�
 
 ## CON-13 조직 (아직)
 
-> 상태: **아직 없다** — 계약(C16)은 「합의」이고 Center API·화면은 [ADR-0125](../decisions/0125-organization-and-work-placement.md) 조각 2~4다. 메뉴에는 아직 없다.
+> 상태: **이 화면은 아직 없다** — Center API(`/companies`·`/departments`·`/staff`)는 돈다(C16). 그때까지 회사·부서·직원은 API로 만든다. 메뉴에는 아직 없다.
 
 ### 화면 (> 제안: 정해졌고 구현 전 — [ADR-0125](../decisions/0125-organization-and-work-placement.md), [C16](../03-contracts/C16-organization.md))
 
@@ -519,7 +519,7 @@ UI 자동화 개요·셀렉터·모니터링 화면이었다. UI 자동화 확�
 
 빈 상태(회사가 없을 때): 「회사가 없습니다.」 — Center 관리자에게 「새 회사...」.
 
-**함께 바뀌는 화면**
+**함께 바뀌는 화면** — 승인 창·상세·CON-03·CON-14·모든 목록의 거르기는 **돈다**(C16 조각 2). CON-01의 세 열은 아직이다.
 
 | 화면 | 바뀌는 것 |
 | --- | --- |

@@ -46,9 +46,9 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 계약 열둘의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. 그 뒤 2026-10-31 대조가 **새로 일곱**(§3-21~27)을 찾았다 — 넷(§3-21~24)은 업무에 닿고, §3-25는 엔진의 흠, §3-26·27은 작은 칸과 「미정」 모음이다. 그중 배포의 끝 둘(§3-22·23)은 [ADR-0113](decisions/0113-field-follows-withdrawn-deployments.md)으로 닫았다. UI 자동화 확장을 걷으며(ADR-0114) 다시 들일 때 정할 것을 §3-28에 모았다.
 
-### 3-29. 조직·업무 자리 — 계약은 합의, 쓰는 쪽이 아직 (가상 직원은 없앴다)
+### 3-29. 조직·업무 자리 — Center·Studio·승인 화면은 돈다, 조직 화면이 아직
 
-[ADR-0125](decisions/0125-organization-and-work-placement.md), 계약 [C16](03-contracts/C16-organization.md) 「합의」(조각 1 — 모델·판정·저장소 22판), 화면 CON-13 「조직으로 바뀐다」. 바깥 요청(NowView)과 사용자의 방향이 드러냈다 — 업무 주체가 가상 직원(접수 BPM 프로세스 하나 + 감독자)뿐이고, 회사·부서가 없어 여러 회사가 한 Center를 쓰면 서로의 것이 섞이며, 업무가 누구의 일인지 정할 자리가 없다. 먼저 정할 것은 없다 — ADR-0125 「다음 순서」의 조각 2~6이 남았다. 남은 「미정」: 연동용·대리 답용 키를 회사에 묶을지. **직원 사이의 업무 요청**은 조직이 선 뒤 따로 ADR을 쓴다(ADR-0125 §8).
+[ADR-0125](decisions/0125-organization-and-work-placement.md)·[ADR-0127](decisions/0127-studio-picks-the-work-place.md), 계약 [C16](03-contracts/C16-organization.md) 「합의」. 도는 것: 조직 API, 장비의 회사(등록 승인), 올릴 때 업무 자리 검사(매니페스트 `place`), PC 배포의 회사 관문, 작업의 주인·`owner_stopped`·서버 작업의 `place`, 회사 관리자 거르기, STU-12b 자리 고르기, 콘솔 승인 창·등록 승인·계정의 회사. 가상 직원은 없앴다. **남은 것**: ① 조직 화면 CON-13(나무 + 상세 — 화면 문서에 있다, 지금은 API로 만든다) ② CON-01의 회사·부서·직원 열 ③ PC 작업에 `place` 나르기(> 미정 — C4 실행기 파일) ④ 연동용·대리 답용 키의 회사(> 미정) ⑤ 직원 사이의 업무 요청 ADR(ADR-0125 §8 — 조직이 선 뒤).
 
 ### 3-21. PC BPM 프로세스로 메시지를 넣는 길이 없다
 

@@ -36,7 +36,13 @@ export async function login(_previous: ActionResult, form: FormData): Promise<Ac
   }
   (await cookies()).set(
     COOKIE_NAME,
-    seal({ mode: made.role === "admin" ? "admin" : "read", token: made.token, actor: made.username }),
+    seal({
+      // 회사 관리자도 **제 회사 안에서는** 관리자다 — 무엇을 다룰 수 있는지는 Center가 회사로 가른다 (C16).
+      mode: made.role === "admin" || made.role === "company_admin" ? "admin" : "read",
+      token: made.token,
+      actor: made.username,
+      company: made.company ?? null,
+    }),
     {
       httpOnly: true,
       sameSite: "lax",
@@ -345,9 +351,10 @@ export async function decideEnrollment(
   enrollmentId: string,
   decision: "approve" | "reject",
   text: string,
+  company?: string,
 ): Promise<ActionResult> {
   try {
-    if (decision === "approve") await center.approveEnrollment(enrollmentId, text.trim() || undefined);
+    if (decision === "approve") await center.approveEnrollment(enrollmentId, text.trim() || undefined, company);
     else await center.rejectEnrollment(enrollmentId, text.trim() || undefined);
   } catch (cause) {
     return { error: message(cause) };
@@ -497,6 +504,8 @@ export async function createAccount(_previous: ActionResult, form: FormData): Pr
       username: String(form.get("username") ?? "").trim(),
       password: String(form.get("password") ?? ""),
       role: String(form.get("role") ?? "admin"),
+      // 회사 관리자는 회사가 꼭 있고 Center 관리자는 없다 — 맞는지는 Center가 본다 (C16).
+      company: String(form.get("company") ?? "") || null,
     });
   } catch (cause) {
     return { error: message(cause) };

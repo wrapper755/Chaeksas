@@ -14,7 +14,7 @@ const RULE = "12자 이상, 영문과 숫자를 모두 넣습니다.";
 
 const ROLE_SELECT = "h-9 border border-border-strong bg-bg-surface px-2 text-body";
 
-export function NewAccount() {
+export function NewAccount({ companies = [] }: { companies?: Array<{ id: string; name: string }> }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
   const [result, action, pending] = useActionState<ActionResult, FormData>(async (previous, form) => {
@@ -38,9 +38,24 @@ export function NewAccount() {
           <label className="flex flex-col gap-1 text-body-sm">
             역할
             <select name="role" defaultValue="admin" className={ROLE_SELECT}>
-              <option value="admin">관리자</option>
+              <option value="admin">Center 관리자</option>
+              <option value="company_admin">회사 관리자</option>
               <option value="viewer">보기 전용</option>
             </select>
+          </label>
+          <label className="flex flex-col gap-1 text-body-sm">
+            회사
+            <select name="company" defaultValue="" className={ROLE_SELECT}>
+              <option value="">없음 (Center 전체)</option>
+              {companies.map((one) => (
+                <option key={one.id} value={one.id}>
+                  {one.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-text-muted">
+              회사 관리자는 회사가 꼭 있고, Center 관리자는 비웁니다. 보기 전용은 회사를 고르면 그 회사만 봅니다.
+            </span>
           </label>
           <div className="flex justify-end">
             <Button type="submit" variant="primary" disabled={pending}>
@@ -95,8 +110,11 @@ export function AccountMenu({
     );
   }
 
+  // 회사 관리자의 역할은 여기서 바꾸지 않는다 — 「관리자로 바꾸기」가 Center 관리자를 만들면 안 된다 (C16).
   const items: Array<{ ask: Ask; label: string }> = [
-        { ask: "role", label: nextRole === "admin" ? "관리자로 바꾸기..." : "보기 전용으로 바꾸기..." },
+        ...(role === "company_admin"
+          ? []
+          : [{ ask: "role" as Ask, label: nextRole === "admin" ? "관리자로 바꾸기..." : "보기 전용으로 바꾸기..." }]),
         disabled ? { ask: "enable", label: "다시 쓰기" } : { ask: "disable", label: "멈추기..." },
         { ask: "password", label: "비밀번호 새로 정하기..." },
       ];

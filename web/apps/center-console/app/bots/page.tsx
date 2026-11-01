@@ -7,6 +7,7 @@ import type { DeploymentInfo } from "@chaeksas/api-types/c5-deployment-info";
 import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { PackageActions } from "@/components/PackageActions";
+import { namesOf, placeLine, workPlaceLabel } from "@/lib/organization";
 import { ServerRunners } from "@/components/ServerRunners";
 import { Schedules } from "@/components/Schedules";
 import { STATUS_LABEL, packageHref, time } from "@/app/packages/page";
@@ -102,10 +103,14 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
   let failure: string | null = null;
   try {
     // BPM 프로세스·배포·보고된 준비 상태는 **한 번에** 읽는다 (서로를 기다릴 일이 없다).
-    const [packages, botUis, deployments] = await Promise.all([
+    const [packages, botUis, deployments, companyNames, departmentNames, staffNames] = await Promise.all([
       center.packages({ kind: "bpm_process" }),
       center.botUis(),
       center.deployments({ active: true }),
+      // 승인 창에 보일 회사·업무 자리의 **이름** (C16) — 못 읽으면 id로 보인다.
+      center.companies().then(namesOf, () => ({}) as Record<string, string>),
+      center.departments().then(namesOf, () => ({}) as Record<string, string>),
+      center.staffList().then(namesOf, () => ({}) as Record<string, string>),
     ]);
     pcs = botUis as BotUiInfo[];
 
@@ -138,6 +143,10 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
             ...new Set(unusable.flatMap((ready) => ready.blocked ?? [])),
           ],
           ...deployedPcs(deployments as DeploymentInfo[], one.id, one.version),
+          place_line: placeLine(
+            one.company ? (companyNames[one.company] ?? one.company) : null,
+            workPlaceLabel(one.place, { departments: departmentNames, staff: staffNames }),
+          ),
           // **실행 요약은 제 칸만 덮는다** (`RunFields`) — 위에서 센 「실행 불가」·「배포된
           // PC 실행기」가 살아 있어야 한다.
           ...(counts.get(key) ?? NO_RUNS),
@@ -255,7 +264,9 @@ export default async function BotsPage({ searchParams }: { searchParams: Promise
           {
             key: "actions",
             header: "승인",
-            cell: (row: BotRow) => <PackageActions packageId={row.id} version={row.version} status={row.status} />,
+            cell: (row: BotRow) => (
+              <PackageActions packageId={row.id} version={row.version} status={row.status} place={row.place_line} />
+            ),
           } as Column<BotRow>,
         ]
       : []),

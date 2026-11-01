@@ -7,6 +7,7 @@ import type { ProvidedProcess } from "@chaeksas/api-types/c1-manifest";
 import { CenterError, center, session } from "@/lib/center";
 import { Shell } from "@/components/Shell";
 import { PackageActions } from "@/components/PackageActions";
+import { namesOf, placeLine, workPlaceLabel } from "@/lib/organization";
 import { DeletePackage } from "../../tools";
 import { KIND_LABEL, STATUS_LABEL, packageHref, time } from "../../page";
 
@@ -69,14 +70,28 @@ export default async function PackagePage({
   let info: PackageInfo | null = null;
   let users: DependentInfo[] = [];
   let failure: string | null = null;
+  let companyNames: Record<string, string> = {};
+  let departmentNames: Record<string, string> = {};
+  let staffNames: Record<string, string> = {};
   try {
     info = await center.packageInfo(packageId, version);
     users = await center.dependents(packageId, version);
+    // 업무 자리·회사의 **이름**을 찾는다 (C16). 못 읽어도 화면은 id로 보인다 — 자리는 매니페스트 것이다.
+    [companyNames, departmentNames, staffNames] = await Promise.all([
+      center.companies().then(namesOf, () => ({})),
+      center.departments().then(namesOf, () => ({})),
+      center.staffList().then(namesOf, () => ({})),
+    ]);
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
 
   const provides = info?.manifest?.provides ?? null;
+  const company = info?.company ? (companyNames[info.company] ?? info.company) : null;
+  const place =
+    info?.kind === "bpm_process"
+      ? workPlaceLabel(info?.place, { departments: departmentNames, staff: staffNames })
+      : null;
 
   const processColumns: Array<Column<ProvidedProcess>> = [
     { key: "process_id", header: "정의 id", mono: true },
@@ -158,6 +173,14 @@ export default async function PackagePage({
               <dd>{time(info.uploaded_at)}</dd>
               <dt className="text-text-muted">올린 이</dt>
               <dd>{info.uploaded_by}</dd>
+              <dt className="text-text-muted">회사</dt>
+              <dd>{company ?? "—"}</dd>
+              {place ? (
+                <>
+                  <dt className="text-text-muted">업무 자리</dt>
+                  <dd>{place}</dd>
+                </>
+              ) : null}
               <dt className="text-text-muted">승인</dt>
               <dd>
                 {/* 사람이 서명하던 때의 승인에는 계정이 없다 — 서명 키만 남아 있다 (ADR-0090). */}
@@ -236,7 +259,12 @@ export default async function PackagePage({
           {found.mode === "admin" ? (
             <section className="flex flex-col gap-3">
               <h2 className="text-h2 font-semibold">관리</h2>
-              <PackageActions packageId={info.id} version={info.version} status={info.status} />
+              <PackageActions
+                packageId={info.id}
+                version={info.version}
+                status={info.status}
+                place={placeLine(company, place ?? "—")}
+              />
               <DeletePackage packageId={info.id} version={info.version} />
             </section>
           ) : null}

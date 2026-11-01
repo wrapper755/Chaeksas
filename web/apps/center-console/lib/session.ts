@@ -21,6 +21,11 @@ export interface Session {
   token: string;
   /** 계정 아이디 — 위 막대에 보이고, Center 기록의 「누가」가 된다. */
   actor: string;
+  /**
+   * 이 계정이 보는 회사 (C16). **있으면 회사 관리자·회사 보기 전용**이다 — Center가 목록을 그 회사로
+   * 거르고, 콘솔은 Center 관리자만의 메뉴(관리자 계정)를 가린다. 없으면 Center 전체다.
+   */
+  company?: string | null;
 }
 
 export const COOKIE_NAME = "chk_console_session";

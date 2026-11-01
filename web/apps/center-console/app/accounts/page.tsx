@@ -10,24 +10,33 @@ import { AccountMenu, NewAccount } from "./tools";
  * CON-14 관리자 계정 (ADR-0090). **관리자에게만** 보인다. 계정은 지우지 않고 멈춘다 — 기록의
  * 「누가」가 가리킬 곳이 남아야 한다. 마지막 관리자를 멈추거나 내리려 하면 Center가 막는다.
  */
-const ROLE_LABEL: Record<string, string> = { admin: "관리자", viewer: "보기 전용" };
+const ROLE_LABEL: Record<string, string> = { admin: "Center 관리자", company_admin: "회사 관리자", viewer: "보기 전용" };
 
 export default async function AccountsPage() {
   const found = await session();
   if (!found) redirect("/login");
-  if (found.mode !== "admin") redirect("/bots");
+  // **Center 관리자만** (C16 — 회사 관리자는 계정을 다루지 않는다).
+  if (found.mode !== "admin" || found.company) redirect("/bots");
 
   let rows: AccountInfo[] = [];
+  let companies: Array<{ id: string; name: string }> = [];
   let failure: string | null = null;
   try {
     rows = await center.accounts();
+    companies = (await center.companies()).map((one) => ({ id: one.id, name: one.name }));
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
 
   const columns: Array<Column<AccountInfo>> = [
     { key: "username", header: "아이디", mono: true },
-    { key: "role", header: "역할", width: "12ch", cell: (row) => ROLE_LABEL[row.role] ?? row.role },
+    { key: "role", header: "역할", width: "14ch", cell: (row) => ROLE_LABEL[row.role] ?? row.role },
+    {
+      key: "company",
+      header: "회사",
+      width: "14ch",
+      cell: (row) => (row.company ? (companies.find((one) => one.id === row.company)?.name ?? row.company) : "—"),
+    },
     {
       key: "state",
       header: "상태",
@@ -60,7 +69,7 @@ export default async function AccountsPage() {
     <Shell mode={found.mode} actor={found.actor} current="/accounts">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <h1 className="text-h1 font-bold">관리자 계정</h1>
-        <NewAccount />
+        <NewAccount companies={companies} />
       </header>
       {failure ? (
         <ErrorBanner message={failure} />

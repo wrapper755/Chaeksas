@@ -82,6 +82,7 @@ export default async function BotUisPage({ searchParams }: { searchParams: Promi
   let enrollments: EnrollmentInfo[] = [];
   let studios: CenterKeyInfo[] = [];
   let studioEnrollments: EnrollmentInfo[] = [];
+  let companies: Array<{ id: string; name: string }> = [];
   let failure: string | null = null;
   try {
     rows = await center.botUis();
@@ -90,6 +91,8 @@ export default async function BotUisPage({ searchParams }: { searchParams: Promi
     // Studio는 하트비트가 없다 — **승인 하나가 키 하나**라 Studio용 키 목록이 곧 Studio 목록이다 (ADR-0093).
     studios = await center.centerKeys({ type: "studio" });
     studioEnrollments = await center.enrollments("studio");
+    // 승인 창의 「회사」 고를 거리 (C16) — 회사 관리자에게는 Center가 제 회사 하나만 준다.
+    companies = (await center.companies()).map((one) => ({ id: one.id, name: one.name }));
   } catch (cause) {
     failure = cause instanceof CenterError ? cause.message : "알 수 없는 오류가 생겼습니다";
   }
@@ -110,6 +113,13 @@ export default async function BotUisPage({ searchParams }: { searchParams: Promi
           {row.name}
         </Link>
       ),
+    },
+    {
+      // 그 PC가 속한 회사 (C16) — 등록을 승인할 때 정했다.
+      key: "company",
+      header: "회사",
+      width: "14ch",
+      cell: (row) => companies.find((one) => one.id === row.company)?.name ?? row.company ?? "—",
     },
     {
       key: "status",
@@ -201,7 +211,12 @@ export default async function BotUisPage({ searchParams }: { searchParams: Promi
             <h2 className="text-h2 font-semibold">
               Bot{rows.length > 0 ? ` · ${online}/${rows.length} 온라인` : ""}
             </h2>
-            <Enrollments rows={enrollments} where="현장 화면" canDecide={found.mode === "admin"} />
+            <Enrollments
+              rows={enrollments}
+              where="현장 화면"
+              canDecide={found.mode === "admin"}
+              companies={companies}
+            />
             {rows.length === 0 ? (
               <EmptyState
                 title="등록된 Bot이 없습니다."
@@ -217,6 +232,7 @@ export default async function BotUisPage({ searchParams }: { searchParams: Promi
               rows={studioEnrollments}
               where="Studio 설정 창"
               canDecide={found.mode === "admin"}
+              companies={companies}
               nameHelp="이 이름이 Studio에서 올린 것의 「누가」로 남습니다 (예: 김OO 설계 PC)."
             />
             {studios.length === 0 ? (

@@ -77,6 +77,8 @@ class SessionInfo(ContractModel):
     username: Username
     role: str  # KNOWN_ROLES
     expires_at: Timestamp
+    #: 이 계정이 보는 회사 (C16) — 콘솔이 「Center 관리자만」인 메뉴를 가린다. 없으면 Center 전체다.
+    company: str | None = None
 
 
 class WhoAmI(ContractModel):

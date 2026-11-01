@@ -303,7 +303,9 @@ def login(store: Store, *, username: str, password: str) -> SessionInfo:
             (_session_hash(token), username, at, expires),
         )
         cur.execute("UPDATE accounts SET last_login_at = ? WHERE username = ?", (at, username))
-    return SessionInfo(token=token, username=username, role=str(row["role"]), expires_at=expires)
+    return SessionInfo(
+        token=token, username=username, role=str(row["role"]), expires_at=expires, company=row["company"]
+    )
 
 
 def session_of(store: Store, token: str) -> AccountInfo | None:

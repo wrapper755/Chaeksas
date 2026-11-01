@@ -55,7 +55,21 @@ function asksFor(status: string): Ask[] {
   return [];
 }
 
-export function PackageActions({ packageId, version, status }: { packageId: string; version: string; status: string }) {
+export function PackageActions({
+  packageId,
+  version,
+  status,
+  place,
+}: {
+  packageId: string;
+  version: string;
+  status: string;
+  /**
+   * 「회사: … · 업무 자리: …」 — 승인 창에 **보여 주기만** 한다 (ADR-0127). 자리는 Studio가 올릴 때
+   * 골라 매니페스트에 실었고, 틀렸으면 승인하지 않고 Studio에서 다시 올린다.
+   */
+  place?: string;
+}) {
   const [asking, setAsking] = useState<Ask | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -83,7 +97,11 @@ export function PackageActions({ packageId, version, status }: { packageId: stri
       <ConfirmDialog
         open={shown !== null}
         title={`${packageId} ${version} — ${shown?.title ?? ""}`}
-        description={shown?.description}
+        description={
+          asking === "approve" && place
+            ? `${shown?.description ?? ""} ${place}. 자리가 틀렸으면 승인하지 말고 Studio에서 다시 올리세요.`
+            : shown?.description
+        }
         confirmLabel={shown?.confirm ?? ""}
         danger={shown?.danger}
         onConfirm={() =>
