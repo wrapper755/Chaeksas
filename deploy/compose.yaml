@@ -25,6 +25,8 @@ services:
       # 같이 뜨는 서버 실행기를 승인 없이 들이는 비밀 (ADR-0117) — 아래 실행기와 **같은 값**이다.
       BPM_CENTER__SERVER_RUNNER_JOIN_TOKEN: ${BPM_SERVER_RUNNER__JOIN_TOKEN:?들이기 비밀을 .env에 넣으세요 (BPM_SERVER_RUNNER__JOIN_TOKEN)}
       BPM_CENTER__PORT: "8800"
+      # 일정의 벽시계 (ADR-0110). 콘솔도 **같은 값**으로 시각을 보인다 (아래 `TZ`).
+      BPM_CENTER__TIMEZONE: ${BPM_CENTER__TIMEZONE:-Asia/Seoul}
       # 일꾼 폴더 (ADR-0122) — 일꾼은 여기 놓인 `<이름>.consumer.json`(토큰 해시)으로만 들어온다. 함께 배포되는
       # 프로그램이 제 파일을 아래 볼륨에 복사해 두면 Center가 **뜰 때** 들인다. 바꾸거나 빼면 Center를 다시 띄운다.
       # 같은 자리의 `<이름>.key.json`은 연동용·대리 답용 키다 (ADR-0123).
@@ -96,6 +98,9 @@ services:
       BPM_CONSOLE__CENTER_PUBLIC_URL: ${BPM_CONSOLE__CENTER_PUBLIC_URL:-http://localhost:8800}
       BPM_CONSOLE__SESSION_SECRET: ${BPM_CONSOLE__SESSION_SECRET:?세션 비밀을 .env에 넣으세요 (16자 이상)}
       PORT: "8501"
+      # 콘솔은 시각을 **서버에서** 글로 만든다 — 컨테이너 기본(UTC)이면 한국에서 9시간 이르게 보인다.
+      # Center의 일정 시간대와 같은 값을 쓴다.
+      TZ: ${BPM_CENTER__TIMEZONE:-Asia/Seoul}
       # Next.js standalone은 `HOSTNAME`에 바인드하는데 Docker가 그것을 컨테이너 id로 채운다 —
       # 그러면 127.0.0.1을 두드리는 HEALTHCHECK가 닿지 못해 늘 unhealthy다.
       HOSTNAME: "0.0.0.0"
