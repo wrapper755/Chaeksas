@@ -12,9 +12,30 @@ export interface CompanyInfo {
   id: string;
   name: string;
   processes?: number;
+  recent_runs?: RecentRun[];
   staff?: number;
   state?: string;
   studios?: number;
   updated_at: string;
+  work?: WorkItem[];
+  [k: string]: unknown;
+}
+export interface RecentRun {
+  bpm_process_id?: string | null;
+  requested_by?: string | null;
+  run_id: string;
+  started_at?: string | null;
+  status?: string | null;
+  [k: string]: unknown;
+}
+/**
+ * 그 자리에 놓인 업무 하나 — 상세가 읽을 때 모은다.
+ */
+export interface WorkItem {
+  bpm_process_id: string;
+  triggers?: {
+    [k: string]: string;
+  }[];
+  versions?: string[];
   [k: string]: unknown;
 }

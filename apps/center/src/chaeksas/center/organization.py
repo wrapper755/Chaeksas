@@ -22,6 +22,7 @@ from chaeksas.center.storage import Store, loads, now_iso
 from chaeksas.contracts.organization import (
     CODE_OWNER_STOPPED,
     RECENT_RUNS,
+    SCOPE_COMPANY,
     SCOPE_DEPARTMENT,
     SCOPE_STAFF,
     STATE_STOPPED,
@@ -78,7 +79,7 @@ def only_company(store: Store) -> str | None:
 # ─────────────────────────── 회사 ───────────────────────────
 
 
-def _company(store: Store, row: Any) -> CompanyInfo:
+def _company(store: Store, row: Any, *, detail: bool = False) -> CompanyInfo:
     cid = row["id"]
 
     def count(sql: str) -> int:
@@ -100,6 +101,8 @@ def _company(store: Store, row: Any) -> CompanyInfo:
         studios=count(
             "SELECT COUNT(*) AS n FROM center_keys WHERE company = ? AND type = 'studio' AND revoked_at IS NULL"
         ),
+        work=work_at(store, company=cid, scope=SCOPE_COMPANY) if detail else [],
+        recent_runs=recent_runs(store, company=cid) if detail else [],
     )
 
 
@@ -109,7 +112,7 @@ def companies(store: Store, *, company: str | None = None) -> list[CompanyInfo]:
 
 
 def get_company(store: Store, company_id: str, *, company: str | None = None) -> CompanyInfo:
-    return _company(store, _row(store, "company", company_id, company=company))
+    return _company(store, _row(store, "company", company_id, company=company), detail=True)
 
 
 def put_company(store: Store, body: Any, *, company_id: str | None = None) -> tuple[CompanyInfo, bool]:
@@ -337,12 +340,22 @@ def work_at(
     return [one for one in found.values() if one.versions or not live_only]
 
 
-def recent_runs(store: Store, *, department: str | None = None, staff: str | None = None) -> list[RecentRun]:
-    """그 자리 작업의 최근 실행 — 작업 행에 적힌 **만들 때의 자리**로 모은다."""
-    column, value = ("department", department) if department is not None else ("staff", staff)
+def recent_runs(
+    store: Store, *, company: str | None = None, department: str | None = None, staff: str | None = None
+) -> list[RecentRun]:
+    """그 자리 작업의 최근 실행 — 작업 행에 적힌 **만들 때의 자리**로 모은다.
+
+    회사는 **회사 공통** 자리만이다(부서·직원 칸이 빈 작업) — 부서·직원 자리 실행은 그쪽 상세가 보인다.
+    """
+    if company is not None:
+        where, value = "j.company = ? AND j.department IS NULL AND j.staff IS NULL", company
+    elif department is not None:
+        where, value = "j.department = ?", department
+    else:
+        where, value = "j.staff = ?", staff
     rows = store.rows(
         f"SELECT j.run_id, j.bpm_process_id, j.requested_by, r.summary_json FROM jobs j"  # noqa: S608
-        f" JOIN runs r ON r.run_id = j.run_id WHERE j.{column} = ? ORDER BY r.first_seen_at DESC LIMIT ?",
+        f" JOIN runs r ON r.run_id = j.run_id WHERE {where} ORDER BY r.first_seen_at DESC LIMIT ?",
         (value, RECENT_RUNS),
     )
     out = []

@@ -62,18 +62,6 @@ class CompanyRequest(ContractModel):
     state: str = STATE_ACTIVE  # 열린 문자열 (KNOWN_ORG_STATES)
 
 
-class CompanyInfo(CompanyRequest):
-    """`GET /companies…` — 셈은 읽을 때 센다."""
-
-    created_at: Timestamp
-    updated_at: Timestamp
-    departments: int = 0
-    staff: int = 0
-    processes: int = 0
-    bot_uis: int = 0
-    studios: int = 0
-
-
 class DepartmentRequest(ContractModel):
     """`POST /departments`·`PUT /departments/{id}` — **한 단계**다(부서 안의 부서는 없다)."""
 
@@ -99,6 +87,21 @@ class RecentRun(ContractModel):
     status: str | None = None  # C3 `RunInfo.status`와 같은 값
     started_at: Timestamp | None = None
     requested_by: str | None = None
+
+
+class CompanyInfo(CompanyRequest):
+    """`GET /companies…` — 셈은 읽을 때 센다."""
+
+    created_at: Timestamp
+    updated_at: Timestamp
+    departments: int = 0
+    staff: int = 0
+    processes: int = 0
+    bot_uis: int = 0
+    studios: int = 0
+    #: 하나를 읽을 때만 찬다 — **회사 공통** 자리의 업무와 그 최근 실행 (부서·직원 자리는 그쪽 상세에).
+    work: list[WorkItem] = Field(default_factory=list)
+    recent_runs: list[RecentRun] = Field(default_factory=list)
 
 
 class DepartmentInfo(DepartmentRequest):

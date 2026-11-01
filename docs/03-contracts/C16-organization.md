@@ -30,7 +30,7 @@ Center 안에 **회사 > 부서 > 직원** 조직을 두고, Studio·PC 실행�
 | `name` | str | ✓ | 화면 이름 (1~100자) | 1 |
 | `state` | str | | `active`(기본) / `stopped` (열린 문자열). 멈춘 회사는 새 작업·배포·승인을 받지 않는다 | 1 |
 
-CompanyInfo는 `created_at`·`updated_at`과 셈(`departments`·`staff`·`processes`·`bot_uis`·`studios`)을 더한다 — 읽을 때 센다.
+CompanyInfo는 `created_at`·`updated_at`과 셈(`departments`·`staff`·`processes`·`bot_uis`·`studios`)을 더한다 — 읽을 때 센다. 하나 읽기에서는 `work[]`·`recent_runs[]`(아래 StaffInfo와 같은 모양)도 더하는데 **회사 공통 자리의 것만**이다 — 부서·직원 자리 업무와 그 실행은 그쪽 상세가 준다(CON-13 [W]·[R]).
 
 ### DepartmentRequest / DepartmentInfo
 
@@ -139,3 +139,4 @@ C5 §가상 직원 전부(`/virtual-workers`, `VirtualWorkerRequest`·`VirtualWo
 | --- | --- | --- | --- |
 | 2026-11-01 | 1 | 초안 → 합의 (모델·판정·저장소 22판) | [0125](../decisions/0125-organization-and-work-placement.md) |
 | 2026-11-01 | 1 | 업무 자리는 매니페스트(C1 `place`)에 — Studio가 고르고 Center는 올릴 때 검사·승인 때 보이기만. `PUT …/place`·승인 본문·`place_required`를 없앴다 | [0127](../decisions/0127-studio-picks-the-work-place.md) |
+| 2026-11-01 | 1 | `CompanyInfo` 하나 읽기에 `work[]`·`recent_runs[]`(회사 공통 자리) — CON-13 | [0125](../decisions/0125-organization-and-work-placement.md) |
