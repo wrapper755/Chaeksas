@@ -6,17 +6,17 @@
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 콘솔(Center 관리자·회사 관리자)·연동용 키 ↔ Center (조직·업무 자리), Center → 서버 실행기 (작업의 자리) |
 | 코드 위치 | `packages/contracts/organization.py`, Center `migrations.py` 22판 · (예정) `api/organization.py`·`api/packages.py`·`enrollments.py`·`accounts.py` |
-| 관련 ADR | [0125](../decisions/0125-organization-and-work-placement.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0093](../decisions/0093-studio-is-let-in-by-approval.md), [0099](../decisions/0099-input-value-source.md) |
-| 관련 화면 | CON-13 조직, CON-02·CON-06 승인(자리 고르기), CON-03 승인 대기(회사 고르기), CON-14 관리자 계정(회사 관리자), CON-01 (회사·부서·직원 열) |
+| 관련 ADR | [0125](../decisions/0125-organization-and-work-placement.md), [0127](../decisions/0127-studio-picks-the-work-place.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0093](../decisions/0093-studio-is-let-in-by-approval.md), [0099](../decisions/0099-input-value-source.md) |
+| 관련 화면 | CON-13 조직, STU-12 「Center로 올리기」(자리 고르기), CON-02·CON-06 승인(자리 보이기), CON-03 승인 대기(회사 고르기), CON-14 관리자 계정(회사 관리자), CON-01 (회사·부서·직원 열) |
 
 ## 목적
 
-Center 안에 **회사 > 부서 > 직원** 조직을 두고, Studio·PC 실행기를 회사에 묶으며, 올라온 BPM 프로세스를 승인할 때 **회사·부서·직원 중 한 자리**에 놓는다. 이것이 없으면 「누가 무슨 업무를 하나」를 볼 자리가 없고, 여러 회사가 한 Center를 쓸 때 서로의 것이 섞인다.
+Center 안에 **회사 > 부서 > 직원** 조직을 두고, Studio·PC 실행기를 회사에 묶으며, BPM 프로세스를 **회사·부서·직원 중 한 자리**에 놓는다 — 자리는 **Studio가 올릴 때 고르고 매니페스트에 실려 서명된다**(C1 `place`, ADR-0127). Center는 올릴 때 검사하고 승인할 때 보여 준다. 이것이 없으면 「누가 무슨 업무를 하나」를 볼 자리가 없고, 여러 회사가 한 Center를 쓸 때 서로의 것이 섞인다.
 
 ## 전송
 
-- 방식: HTTP `/api/v1/companies…`·`/departments…`·`/staff…`·`/packages/{id}/place` (C5와 같은 공통 규칙).
-- 인증: 회사 만들기·바꾸기는 **Center 관리자**. 부서·직원·업무 자리는 **Center 관리자 또는 그 회사의 회사 관리자**. 읽기는 관리자 계정(회사가 있으면 제 회사만)·읽기 토큰·연동용 키(전부 — > 미정, ADR-0125 §2).
+- 방식: HTTP `/api/v1/companies…`·`/departments…`·`/staff…` (C5와 같은 공통 규칙). 업무 자리는 C1 매니페스트의 `place`라 따로 된 경로가 없다.
+- 인증: 회사 만들기·바꾸기는 **Center 관리자**. 부서·직원은 **Center 관리자 또는 그 회사의 회사 관리자**. 읽기는 관리자 계정(회사가 있으면 제 회사만)·읽기 토큰·**Studio 키(제 회사만 — 올리기 창이 고를 거리를 읽는다, ADR-0127)**·연동용 키(전부 — > 미정, ADR-0125 §2).
 - 멱등성: `POST`는 같은 id가 있으면 409 `exists`. `PUT`은 본문 전체로 바꾼다.
 - 남의 회사 것: **404**다(있다는 것조차 알리지 않는다).
 
@@ -65,19 +65,17 @@ StaffInfo는 하나 읽기에서 `work[]`(이 직원 자리 업무 — `{bpm_pro
 | `department` | str | `scope: department`일 때 |
 | `staff` | str | `scope: staff`일 때 |
 
-회사는 적지 않는다 — **패키지의 회사**다. 부서·직원이 그 회사 밖이면 422 `place_outside_company`.
+회사는 적지 않는다 — **올린 Studio의 회사**다. **C1 매니페스트의 `place`**로 오고(판마다, 서명된다 — ADR-0127), 비우면 회사 공통이다.
 
-| 메서드·경로 | 인증 | 뜻 |
-| --- | --- | --- |
-| `GET /packages/{id}/place` | 읽기 | 지금 자리 (`null` = 자리 없음 — 회사 공통으로 읽는다) |
-| `PUT /packages/{id}/place` | Center 관리자 / 그 회사의 회사 관리자 | 자리 바꾸기. **서명하지 않는다** — 다음 작업부터 새 자리다. `process_lib`이면 422 `place_not_for_lib` |
+- **올릴 때** Center가 본다(`POST /packages`): 부서·직원이 그 회사 안에 있어야 한다 — 아니면 422 `place_outside_company`(없는 id도 같다). `process_lib`에 적었으면 422 `place_not_for_lib`.
+- **승인할 때는 본문이 없다** — 콘솔이 「회사」·「업무 자리」를 보여 주기만 한다. 바꾸려면 Studio가 판을 올려 다시 올린다.
 
 ### 다른 계약에 더하는 칸
 
 | 계약 | 자리 | 칸 | 뜻 |
 | --- | --- | --- | --- |
-| C5 | 승인 (`PUT /packages/{id}/{version}/signature` — 지금은 본문 없음) | 본문 `{place?}` | **그 BPM 프로세스에 자리가 아직 없으면 필수**(422 `place_required`), 있으면 비워 둔다(적으면 바꾼다). `process_lib`에는 적지 않는다 |
-| C5 | `PackageInfo` | `company`, `place?` | `company` = 올린 Studio의 회사 |
+| C1 | 매니페스트 | `place?` (`Place`) | 업무 자리 — Studio가 올리기 창에서 고른다. 비우면 회사 공통 (ADR-0127) |
+| C5 | `PackageInfo` | `company`, `place?` | `company` = 올린 Studio의 회사. `place`는 매니페스트의 것을 옮겨 보인다 |
 | C5 | 배포 | — | PC 대상의 회사 ≠ 패키지의 회사이면 422 `company_mismatch` (`validate_deployment`) |
 | C5 | `JobInfo` | `company`, `department?`, `staff?` | **만들 때의 자리**를 작업 행에 적는다 |
 | C5 | 작업 지시·C12 메시지 시작 | — | 자리의 회사·부서·직원이 멈췄으면 409 `owner_stopped` |
@@ -125,15 +123,14 @@ C5 §가상 직원 전부(`/virtual-workers`, `VirtualWorkerRequest`·`VirtualWo
 | 409 | `exists` | 같은 id로 만들기 | |
 | 409 | `in_use` | 가리키는 것이 있는 조직을 지우기 | 멈춘다 |
 | 409 | `owner_stopped` | 멈춘 회사·부서·직원 자리 업무의 작업 | 다시 켠다 |
-| 422 | `place_required` | 자리 없는 BPM 프로세스를 자리 없이 승인 | 자리를 고른다 |
-| 422 | `place_outside_company` | 다른 회사의 부서·직원 | |
-| 422 | `place_not_for_lib` | 공유 BPM 프로세스에 자리 | |
+| 422 | `place_outside_company` | 올린 매니페스트의 자리가 그 Studio 회사 밖이다 | Studio에서 자리를 다시 고른다 |
+| 422 | `place_not_for_lib` | 공유 BPM 프로세스 매니페스트에 자리 | |
 | 422 | `company_mismatch` | 다른 회사 PC로 배포 | 그 회사의 PC를 고른다 |
 
 ## 호환 규칙
 
-- 받는 쪽이 모르는 필드·`scope` 값을 받으면: 남긴다(README 원칙). 모르는 `scope`로는 자리를 바꾸지 않는다(422 `input_invalid`).
-- 옮기기(ADR-0125 §7): 회사 `default`를 만들고 지금의 장비·패키지를 거기 둔다. 가상 직원은 같은 id의 직원이 되고, 접수 BPM 프로세스의 자리는 그 직원이다. 다른 BPM 프로세스는 자리 없음으로 남는다(회사 공통으로 읽는다).
+- 받는 쪽이 모르는 필드·`scope` 값을 받으면: 남긴다(README 원칙). 모르는 `scope`가 든 매니페스트는 올리지 않는다(422 `input_invalid`).
+- 옮기기(ADR-0125 §7): 회사 `default`를 만들고 지금의 장비·패키지를 거기 둔다. 가상 직원은 같은 id의 직원이 되고,  다른 BPM 프로세스는 자리 없음으로 남는다(회사 공통으로 읽는다).
 - 이전 schema의 `virtual_worker` 칸: 없앴다 — 옛 쪽이 보내면 모르는 칸으로 무시된다(원칙 3).
 
 ## 변경 이력
@@ -141,3 +138,4 @@ C5 §가상 직원 전부(`/virtual-workers`, `VirtualWorkerRequest`·`VirtualWo
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
 | 2026-11-01 | 1 | 초안 → 합의 (모델·판정·저장소 22판) | [0125](../decisions/0125-organization-and-work-placement.md) |
+| 2026-11-01 | 1 | 업무 자리는 매니페스트(C1 `place`)에 — Studio가 고르고 Center는 올릴 때 검사·승인 때 보이기만. `PUT …/place`·승인 본문·`place_required`를 없앴다 | [0127](../decisions/0127-studio-picks-the-work-place.md) |

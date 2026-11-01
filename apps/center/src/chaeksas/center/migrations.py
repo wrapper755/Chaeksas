@@ -355,6 +355,11 @@ MIGRATIONS: tuple[Step, ...] = (
             "ALTER TABLE jobs DROP COLUMN virtual_worker",
         ),
     ),
+    Step(
+        23,
+        "업무 자리는 매니페스트(C1 `place`)에서 읽는다 — 따로 된 자리 표를 지운다 (ADR-0127)",
+        ("DROP TABLE process_places",),
+    ),
 )
 
 

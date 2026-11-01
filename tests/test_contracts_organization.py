@@ -84,3 +84,26 @@ def test_a_dispatched_job_may_carry_its_owner() -> None:
         "place": {"company": {"id": "company1", "name": "회사1"}},
     })
     assert job.place is not None and job.place.department is None
+
+
+def _manifest(**over: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "schema": 1, "kind": "bpm_process", "id": "buy.request", "version": "1.0.0", "entry": "process/main.bpmn",
+        "process_id": "buy", "requires": {}, "human": {},
+        "built": {"by": "studio", "at": "2026-11-01T09:00:00+09:00", "core": "0.3.0", "spec_version": 1},
+        "content_hash": "sha256:" + "0" * 64,
+    }
+    return {**base, **over}
+
+
+def test_r14_the_place_rides_the_manifest_of_a_bpm_process_only() -> None:
+    """업무 자리는 Studio가 고르고 매니페스트에 실린다 (C1 R14, ADR-0127)."""
+    from chaeksas.contracts.manifest import Manifest, validate
+
+    def rules(**over: object) -> set[str]:
+        return {one.rule for one in validate(Manifest.model_validate(_manifest(**over)))}
+
+    assert "R14" not in rules()
+    assert "R14" not in rules(place={"scope": "department", "department": "purchasing"})
+    assert "R14" in rules(place={"scope": "team"})
+    assert "R14" in rules(kind="process_lib", run_location=None, entry=None, process_id=None, place={"scope": "company"})
