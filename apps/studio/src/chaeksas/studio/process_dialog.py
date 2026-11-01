@@ -114,12 +114,17 @@ def server_warning(blockers: Sequence[str]) -> str:
     )
 
 
-def check(*, name: str, version: str, taken: Sequence[str]) -> str:
-    """저장 전 검사. 빈 글이면 괜찮다 — **첫 흠 하나만** 말한다 (빨간 글자 한 줄이다)."""
+def check(*, name: str, version: str, taken: Mapping[str, str], was: str = "") -> str:
+    """저장 전 검사. 빈 글이면 괜찮다 — **첫 흠 하나만** 말한다 (빨간 글자 한 줄이다).
+
+    `taken`은 다른 BPM 프로세스의 `{이름: id}`다. 겹침은 **이름을 바꿀 때만** 본다 —
+    이미 겹친 채 있는 이름(복사해 만든 것)이 버전·설명 고치기를 막으면 안 된다.
+    id를 함께 적는 것은 상대가 목록에서 닫혀 있어 보이지 않을 수 있어서다.
+    """
     if not name.strip():
         return "이름을 적으세요."
-    if name.strip() in taken:
-        return f"같은 이름의 BPM 프로세스가 있습니다: {name.strip()}"
+    if name.strip() != was.strip() and name.strip() in taken:
+        return f"같은 이름의 BPM 프로세스가 있습니다: {name.strip()} (id {taken[name.strip()]})"
     if not re.fullmatch(r"\d+\.\d+\.\d+", version.strip()):
         return f"버전은 `1.0.0` 모양입니다 (받은 값 {version.strip() or '빈 값'})."
     return ""
@@ -313,13 +318,18 @@ class ProcessInfoDialog(QDialog):
 
         검사에 걸리면 **창을 닫지 않는다** (STU-10과 같은 결).
         """
-        taken = [
-            one.name
+        taken = {
+            one.name: one.id
             for group in self.workspace.groups()
             for one in group.processes
             if one.id != self.process.id and one.name
-        ]
-        problem = check(name=self.name_box.text(), version=self.version_box.text(), taken=taken)
+        }
+        problem = check(
+            name=self.name_box.text(),
+            version=self.version_box.text(),
+            taken=taken,
+            was=self.process.name,
+        )
         if problem:
             self.note.setText(problem)
             self.note.setTextFormat(Qt.TextFormat.PlainText)

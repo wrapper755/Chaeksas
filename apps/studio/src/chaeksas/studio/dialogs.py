@@ -33,6 +33,7 @@ from chaeksas.studio.workspace import (
     Definition,
     Workspace,
     WorkspaceError,
+    record_beside,
 )
 
 #: 저장소 뿌리에서 본 업무 예제 자리.
@@ -248,6 +249,14 @@ class NewProcessDialog(QDialog):
         # **이미 있는 id여도 채운다** — 「확인」이 「기존 것을 바꾸기」를 묻는 입구다.
         if ID_PATTERN.match(drawing.id):
             self.id_box.setText(drawing.id)
+        # 옆에 BPM 프로세스 기록이 있으면 **그것이 이긴다** — 작업 폴더 밖에서 관리하는 원본이다.
+        beside = record_beside(path)
+        if ID_PATTERN.match(str(beside.get("id") or "")):
+            self.id_box.setText(str(beside["id"]))
+        if beside.get("name"):
+            self.name_box.setText(str(beside["name"]))
+        if beside.get("version"):
+            self.version_box.setText(str(beside["version"]))
 
     def first(self) -> Path | None:
         """고른 「첫 정의」 파일 — 빈 정의면 `None`."""
@@ -309,9 +318,18 @@ class NewProcessDialog(QDialog):
     def _replace(self, existing: BpmProcess, source: Path) -> None:
         """같은 id가 있으면 막다른 오류 대신 「기존 것을 바꾸기」를 묻는다 (STU-05).
 
-        **기본은 「취소」다** — 덮어쓰기는 되돌릴 수 없다. 바꾸는 것은 진입 정의의 내용뿐이고
-        창에 적은 이름·버전·그룹은 쓰지 않는다.
+        **기본은 「취소」다** — 덮어쓰기는 되돌릴 수 없다. 바꾸는 것은 진입 정의의 내용이고
+        창에 적은 이름·버전·그룹은 쓰지 않는다. 바깥 파일 옆에 같은 id의 기록이 있으면 이름·버전·
+        설명은 그것을 따른다 (`Workspace.replace_entry`).
         """
+        beside = record_beside(source)
+        follows = beside.get("id") == existing.id
+        kept = (
+            "이름·버전은 파일 옆 process.json을 따릅니다 "
+            f"(v{beside.get('version') or existing.version}). 시험 케이스는 그대로 남습니다."
+            if follows
+            else "시험 케이스·이름·버전은 그대로 남습니다."
+        )
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
         box.setWindowTitle(self.windowTitle())
@@ -320,8 +338,7 @@ class NewProcessDialog(QDialog):
             f"({existing.display} {existing.version})"
         )
         box.setInformativeText(
-            f"바꾸면 진입 정의 {existing.entry}만 이 파일로 바뀝니다.\n"
-            "시험 케이스·이름·버전은 그대로 남습니다."
+            f"바꾸면 진입 정의 {existing.entry}가 이 파일로 바뀝니다.\n{kept}"
         )
         replace = box.addButton("기존 것을 바꾸기", QMessageBox.ButtonRole.AcceptRole)
         cancel = box.addButton("취소", QMessageBox.ButtonRole.RejectRole)

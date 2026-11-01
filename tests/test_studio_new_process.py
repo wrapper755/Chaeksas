@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from typing import Any
@@ -175,6 +176,54 @@ def test_importing_an_existing_id_replaces_only_the_entry(
     again = space.find("nowview.sc01")
     assert again is not None and (again.name, again.version) == ("SC01", "0.3.0"), "기록은 그대로"
     assert cases.read_text(encoding="utf-8") == "{}", "시험 케이스는 그대로"
+
+
+def _beside(drawing: Path, **record: str) -> None:
+    """`<폴더>/process/<그림>`의 `<폴더>`에 `process.json`을 둔다 (BPM 프로세스 폴더 모양)."""
+    (drawing.parent.parent / "process.json").write_text(
+        json.dumps({"schema": 1, **record}, ensure_ascii=False), encoding="utf-8"
+    )
+
+
+def test_a_record_beside_the_file_fills_the_dialog(space: Workspace, tmp_path: Path) -> None:
+    """작업 폴더 밖에서 관리하는 BPM 프로세스 — 옆 기록의 id·이름·버전이 그림보다 이긴다."""
+    found = _drawing(tmp_path / "repo" / "company1.sc01" / "process", "그림 이름")
+    _beside(found, id="company1.sc01", name="기록 이름", version="0.1.2")
+    dialog = NewProcessDialog(None, space, imported=found)
+    assert (dialog.id_box.text(), dialog.name_box.text(), dialog.version_box.text()) == (
+        "company1.sc01",
+        "기록 이름",
+        "0.1.2",
+    )
+
+
+def test_replacing_follows_the_version_of_the_record_beside(
+    space: Workspace, tmp_path: Path, monkeypatch: Any
+) -> None:
+    """가져올 때마다 버전이 작업 폴더의 옛 값으로 돌아가지 않는다."""
+    space.create("nowview.sc01", name="SC01", version="0.1.0", first=_drawing(tmp_path, "옛"))
+    newer = _drawing(tmp_path / "repo" / "nowview.sc01" / "process", "새")
+    _beside(newer, id="nowview.sc01", name="SC01", version="0.1.2")
+    seen = _answer_replace(monkeypatch, "기존 것을 바꾸기")
+    dialog = NewProcessDialog(None, space, imported=newer)
+    dialog.accept()
+    assert seen and "0.1.2" in seen[0]
+    again = space.find("nowview.sc01")
+    assert again is not None and again.version == "0.1.2"
+
+
+def test_a_record_beside_with_another_id_is_not_followed(
+    space: Workspace, tmp_path: Path, monkeypatch: Any
+) -> None:
+    space.create("nowview.sc01", name="SC01", version="0.1.0", first=_drawing(tmp_path, "옛"))
+    newer = _drawing(tmp_path / "repo" / "other" / "process", "새")
+    _beside(newer, id="other.thing", name="딴 것", version="9.9.9")
+    _answer_replace(monkeypatch, "기존 것을 바꾸기")
+    dialog = NewProcessDialog(None, space, imported=newer)
+    dialog.id_box.setText("nowview.sc01")
+    dialog.accept()
+    again = space.find("nowview.sc01")
+    assert again is not None and (again.name, again.version) == ("SC01", "0.1.0")
 
 
 def test_cancelling_the_replace_changes_nothing(
