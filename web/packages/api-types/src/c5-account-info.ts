@@ -6,6 +6,7 @@
  * `GET /accounts`의 한 줄. **비밀번호 해시는 나가지 않는다.**
  */
 export interface AccountInfo {
+  company?: string | null;
   created_at: string;
   created_by: string;
   disabled_at?: string | null;

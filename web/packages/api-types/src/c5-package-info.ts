@@ -7,6 +7,7 @@
  */
 export interface PackageInfo {
   approved_by?: string | null;
+  company?: string | null;
   content_hash: string;
   download_count?: number;
   id: string;
@@ -15,6 +16,7 @@ export interface PackageInfo {
   manifest?: Manifest | null;
   missing_resources?: MissingResource[];
   name?: string | null;
+  place?: Place | null;
   preflight?: PreflightSummary;
   run_location?: string | null;
   signed_at?: string | null;
@@ -184,6 +186,15 @@ export interface MissingResource {
   id: string;
   reason: string;
   type: string;
+  [k: string]: unknown;
+}
+/**
+ * 업무 자리 — BPM 프로세스(패키지 id)마다 하나. **회사는 적지 않는다** — 패키지의 회사다.
+ */
+export interface Place {
+  department?: string | null;
+  scope: string;
+  staff?: string | null;
   [k: string]: unknown;
 }
 /**

@@ -155,6 +155,11 @@ class RunInfo(ContractModel):
     #: 어느 PC가 보냈나 (CON-01 「PC 실행기」 필터·열). **Center가 읽을 때 채운다** —
     #: 보내는 쪽은 적지 않는다(신원은 키다, C4). Studio·토큰이 보낸 기록에는 없다.
     bot_ui_id: str | None = None
+    #: **업무 자리** (C16, ADR-0125 §4) — Center가 읽을 때 그 실행의 작업에서 붙인다. `run_started`에는
+    #: 칸이 없다. 작업 없이 시작한 실행(Studio·PC 실행기 수동)에는 없다.
+    company: str | None = None
+    department: str | None = None
+    staff: str | None = None
     events: int = 0
 
 

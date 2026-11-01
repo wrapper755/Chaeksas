@@ -3,6 +3,18 @@
   "additionalProperties": true,
   "description": "`POST /accounts` — 관리자만.",
   "properties": {
+    "company": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company"
+    },
     "password": {
       "title": "Password",
       "type": "string"

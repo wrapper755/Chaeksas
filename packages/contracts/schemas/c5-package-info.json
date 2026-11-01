@@ -314,6 +314,47 @@
       "title": "MissingResource",
       "type": "object"
     },
+    "Place": {
+      "additionalProperties": true,
+      "description": "업무 자리 — BPM 프로세스(패키지 id)마다 하나. **회사는 적지 않는다** — 패키지의 회사다.",
+      "properties": {
+        "department": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Department"
+        },
+        "scope": {
+          "title": "Scope",
+          "type": "string"
+        },
+        "staff": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff"
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "title": "Place",
+      "type": "object"
+    },
     "PreflightSummary": {
       "additionalProperties": true,
       "description": "Studio가 계산한 사전 점검 요약. 값은 코드 목록이다 (C4 `Readiness.blocked`와 같은 결).",
@@ -678,6 +719,18 @@
       "default": null,
       "title": "Approved By"
     },
+    "company": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company"
+    },
     "content_hash": {
       "pattern": "^sha256:[0-9a-f]{64}$",
       "title": "Content Hash",
@@ -738,6 +791,17 @@
       ],
       "default": null,
       "title": "Name"
+    },
+    "place": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Place"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "preflight": {
       "$ref": "#/$defs/PreflightSummary"

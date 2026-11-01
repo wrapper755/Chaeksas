@@ -322,7 +322,7 @@ def test_key_files_let_integration_and_relay_keys_in(boot: Boot, folder: Path) -
     }
     assert keys_listed(client) == [("nowview", "integration", "active"), ("nowview-relay", "relay", "active")]
     # 권한은 종류가 정한다 — 콘솔에서 발급한 키와 같다.
-    assert client.get("/api/v1/virtual-workers/vw_none", headers=bearer(TOKEN_A)).status_code == 404
+    assert client.get("/api/v1/jobs/job_00000000", headers=bearer(TOKEN_A)).status_code == 404
     assert client.get("/api/v1/approvals", headers={**bearer(TOKEN_B), **ON_BEHALF}).status_code == 200
     assert client.get("/api/v1/jobs", headers=bearer(TOKEN_B)).status_code == 403
     assert fetch(client, TOKEN_A, ["ext-ocr"]).status_code == 403
@@ -338,8 +338,8 @@ def test_changing_or_removing_a_key_file_revokes_the_key(boot: Boot, folder: Pat
     put(folder, "nowview.key.json", key(TOKEN_B))
     client = boot()
     assert outcomes(client) == {"nowview.key.json": ("registered", None)}
-    assert client.get("/api/v1/virtual-workers/vw_none", headers=bearer(TOKEN_A)).status_code in (401, 403)
-    assert client.get("/api/v1/virtual-workers/vw_none", headers=bearer(TOKEN_B)).status_code == 404
+    assert client.get("/api/v1/jobs/job_00000000", headers=bearer(TOKEN_A)).status_code in (401, 403)
+    assert client.get("/api/v1/jobs/job_00000000", headers=bearer(TOKEN_B)).status_code == 404
     # 폐기된 토큰은 되살아나지 않는다.
     put(folder, "nowview.key.json", key(TOKEN_A))
     assert outcomes(boot()) == {"nowview.key.json": ("refused", "token_revoked")}

@@ -13,9 +13,10 @@ from typing import Any
 
 import pytest
 
-from chaeksas.contracts.bpmn_ext import VirtualWorkerIdentity, read_process
+from chaeksas.contracts.bpmn_ext import read_process
 from chaeksas.contracts.dmn import read_decisions
 from chaeksas.contracts.events import REQUIRED_DATA_KEYS
+from chaeksas.contracts.organization import OrgRef, PlaceIdentity
 from chaeksas.core.engine import (
     DECISION_KEY,
     Engine,
@@ -361,15 +362,17 @@ def test_the_answerer_goes_into_the_variable_the_graph_named() -> None:
 
 
 SOURCED_PROPS = (
-    '{"inputs": [{"name": "감독자", "type": "list", "required": true, "source": "virtual_worker.supervisors"},'
-    ' {"name": "처리자", "type": "string", "source": "virtual_worker.name"}]}'
+    '{"inputs": [{"name": "감독자", "type": "string", "required": true, "source": "staff.name"},'
+    ' {"name": "회사", "type": "string", "source": "company.name"},'
+    ' {"name": "부서", "type": "string", "source": "department.name"}]}'
 )
 BATCH_APPROVAL = APPROVAL_PROPS[:-1] + ', "location": "center", "assignees": "감독자"}'
-FINANCE = VirtualWorkerIdentity(id="finance-intake", name="재무 가상 직원", supervisors=["김감독", "이감독"])
+#: 직원 자리 업무의 주인 — 부서 없이 회사에 바로 속한 직원 (C16, ADR-0125).
+FINANCE = PlaceIdentity(company=OrgRef(id="company1", name="회사1"), staff=OrgRef(id="kim", name="김감독"))
 
 
 def sourced_process(props: str = BATCH_APPROVAL, process_props: str = SOURCED_PROPS) -> Any:
-    """값 출처가 가상 직원인 입력을 선언하고 그 감독자에게 결재를 거는 그림."""
+    """값 출처가 업무 자리인 입력을 선언하고 그 직원에게 결재를 거는 그림."""
     return make(
         '<bpmn:startEvent id="Start_1"/>'
         + script("Task_Count", "보류건수 = 2")
@@ -383,28 +386,30 @@ def sourced_process(props: str = BATCH_APPROVAL, process_props: str = SOURCED_PR
     )
 
 
-def test_inputs_whose_source_is_the_virtual_worker_are_filled_from_it() -> None:
-    """**가상 직원 정보도 입력 한 줄**이다 — 결재 담당자가 감독자 입력에서 온다 (C14, ADR-0099)."""
+def test_inputs_whose_source_is_the_place_are_filled_from_it() -> None:
+    """**업무 자리도 입력 한 줄**이다 — 결재 담당자가 직원 입력에서 온다 (C14, ADR-0099·ADR-0125)."""
     process = sourced_process()
     engine, run = start(
         process, env=RunEnv(clock=lambda: NOW, approval_where="center"), sourced=sourced_inputs(process.info, FINANCE)
     )
-    assert (run.variables["감독자"], run.variables["처리자"]) == (["김감독", "이감독"], "재무 가상 직원")
+    assert (run.variables["감독자"], run.variables["회사"]) == ("김감독", "회사1")
+    # 그 자리에 없는 것(부서)은 넣지 않는다 — 선언한 입력이라 `None`이다.
+    assert run.variables["부서"] is None
     assert engine.run_until_blocked(run) is State.WAITING
-    assert run.pending is not None and run.pending.assignees == ["김감독", "이감독"]
+    assert run.pending is not None and run.pending.assignees == ["김감독"]
     # 실행 기록에는 값이 가지 않는다 (원칙 6) — 이름이 남는 곳은 C6 담당자다.
-    assert "재무 가상 직원" not in str([e.data for e in run.log.events])
+    assert "회사1" not in str([e.data for e in run.log.events])
 
 
 def test_the_caller_cannot_give_an_input_whose_source_is_elsewhere() -> None:
     """신원을 입력으로 지어낼 수 없다 — `input_not_from_caller`."""
     with pytest.raises(EngineError) as caught:
-        start(sourced_process(), inputs={"감독자": ["아무나"]})
+        start(sourced_process(), inputs={"감독자": "아무나"})
     assert caught.value.code == "input_not_from_caller"
 
 
-def test_a_required_sourced_input_without_a_virtual_worker_does_not_start() -> None:
-    """필수로 둔 감독자는 가상 직원이 없으면 **시작조차 하지 않는다** — 다른 입력과 같은 규칙이다."""
+def test_a_required_sourced_input_without_an_owner_does_not_start() -> None:
+    """필수로 둔 직원 입력은 주인이 없으면 **시작조차 하지 않는다** — 다른 입력과 같은 규칙이다."""
     assert sourced_inputs(sourced_process().info, None) == {}
     with pytest.raises(EngineError) as caught:
         start(sourced_process())
@@ -702,8 +707,10 @@ def example_env(tmp_path: Path) -> RunEnv:
     )
 
 
-#: 예제를 돌릴 때 주는 가상 직원 — 값 출처가 가상 직원인 입력을 선언하지 않은 그림에는 아무 일도 없다.
-DUMMY_WORKER = VirtualWorkerIdentity(id="dummy", name="자리 값 가상 직원", supervisors=["자리 값 감독자"])
+#: 예제를 돌릴 때 주는 주인 — 값 출처가 업무 자리인 입력을 선언하지 않은 그림에는 아무 일도 없다.
+DUMMY_OWNER = PlaceIdentity(
+    company=OrgRef(id="dummy", name="자리 값 회사"), staff=OrgRef(id="dummy", name="자리 값 직원")
+)
 
 
 def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> None:
@@ -738,8 +745,8 @@ def test_no_example_breaks_the_engine_in_an_unexpected_way(tmp_path: Path) -> No
         try:
             run = engine.start(
                 process, run_id=log.run_id, log=log, now=NOW, env=env, inputs=dummy_inputs(process),
-                # 접수 BPM 프로세스(FX-24)의 담당자는 **가상 직원의 감독자**다 — 현장에서는 Center가 붙인다 (ADR-0099).
-                sourced=sourced_inputs(process.info, DUMMY_WORKER),
+                # 업무 자리 출처의 입력(FX-25 `처리자`)은 현장에서는 Center가 붙인다 (ADR-0125).
+                sourced=sourced_inputs(process.info, DUMMY_OWNER),
             )
         except EngineError as e:
             reasons[e.code] = reasons.get(e.code, 0) + 1

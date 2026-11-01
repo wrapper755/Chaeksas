@@ -4,7 +4,7 @@
 
 1. **쓰기는 캔버스를 거친다** (ADR-0022) — 「적용」은 `bpm:process`를 통째로 되돌려 쓰고(모르는
    칸이 남는다) 실행 취소가 한 걸음이다.
-2. **값 출처가 가상 직원이면 타입을 맞추고 잠근다** (ADR-0099, B8과 같은 표).
+2. **값 출처가 Center가 넣는 것(업무 자리)이면 타입을 맞추고 잠근다** (ADR-0099·ADR-0125, B8과 같은 표).
 3. **적용 안 한 편집을 덮지 않는다** — 그림이 바뀌어 다시 읽어도 입력·출력 줄은 그대로다.
 4. 여기 적은 이름이 **다른 화면의 고를 거리**가 된다 — 케이스(STU-07)·속성 패널(STU-04).
 """
@@ -103,7 +103,7 @@ def test_the_first_problem_is_said() -> None:
     assert problem([InputRow(name="")], []) == "입력의 이름을 적으세요."
     assert "쓸 수 없습니다" in problem([InputRow(name="1번")], [])
     assert "둘입니다" in problem([InputRow(name="가"), InputRow(name="가")], [])
-    assert "list여야" in problem([InputRow(name="감독자", source="virtual_worker.supervisors")], [])
+    assert "string여야" in problem([InputRow(name="담당", type="list", source="staff.name")], [])
     assert "int가 아닙니다" not in problem([InputRow(name="수", type="int", default="3")], [])
     assert "기본값" in problem([InputRow(name="수", type="int", default="셋")], [])
     assert "출력의 이름" in problem([], [""])
@@ -127,11 +127,11 @@ def test_the_patch_writes_the_whole_process_back() -> None:
     """**통째로 되돌려 쓴다** — 실행 위치·확장처럼 이 탭이 모르는 칸이 사라지지 않는다."""
     info = info_of(run_location="server", extensions=[{"id": "ui-automation", "version": ">=1"}], outputs=["옛것"])
     body = json.loads(
-        process_patch(info, [InputRow(name="감독자", type="list", source="virtual_worker.supervisors")], ["결과"])
+        process_patch(info, [InputRow(name="담당", type="string", source="staff.name")], ["결과"])
     )
     assert body["run_location"] == "server"
     assert body["extensions"][0]["id"] == "ui-automation"
-    wanted = {"name": "감독자", "type": "list", "required": False, "source": "virtual_worker.supervisors"}
+    wanted = {"name": "담당", "type": "string", "required": False, "source": "staff.name"}
     assert body["inputs"] == [wanted]
     assert body["outputs"] == ["결과"]
     ProcessInfo.model_validate(body)  # C14 모델로 다시 읽힌다
@@ -195,17 +195,18 @@ def test_the_tab_shows_inputs_outputs_and_what_the_drawing_makes(app: Any) -> No
     assert not tab.unapplied and not tab.apply_button.isEnabled()
 
 
-def test_a_virtual_worker_source_pins_and_locks_the_type(app: Any) -> None:
-    """ADR-0099 — 출처가 가상 직원이면 그 출처의 타입으로 맞추고 잠근다 (B8과 같은 표)."""
+def test_a_center_source_pins_and_locks_the_type(app: Any) -> None:
+    """ADR-0099 — 출처가 업무 자리이면 그 출처의 타입으로 맞추고 잠근다 (B8과 같은 표)."""
     tab = shown(app, info_of())
     tab._new_input()  # noqa: SLF001 — 「입력 더하기」
     item = tab.inputs_group.child(0)
     assert item is not None
-    item.setText(NAME, "감독자")
-    tab.set_source(item, "virtual_worker.supervisors")
-    assert item.text(TYPE) == "list" and tab.type_pinned(item)
-    assert item.text(SOURCE) != "virtual_worker.supervisors", "칸에는 사람이 읽는 이름이 보인다"
-    assert tab.input_rows()[0].source == "virtual_worker.supervisors"
+    item.setText(NAME, "담당")
+    item.setText(TYPE, "list")
+    tab.set_source(item, "staff.name")
+    assert item.text(TYPE) == "string" and tab.type_pinned(item)
+    assert item.text(SOURCE) != "staff.name", "칸에는 사람이 읽는 이름이 보인다"
+    assert tab.input_rows()[0].source == "staff.name"
     tab.set_source(item, "caller")
     assert not tab.type_pinned(item)
 

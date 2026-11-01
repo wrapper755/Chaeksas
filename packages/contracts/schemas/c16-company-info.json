@@ -1,0 +1,64 @@
+{
+  "$id": "urn:chaeksas:contracts:c16-company-info",
+  "additionalProperties": true,
+  "description": "`GET /companies…` — 셈은 읽을 때 센다.",
+  "properties": {
+    "bot_uis": {
+      "default": 0,
+      "title": "Bot Uis",
+      "type": "integer"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "departments": {
+      "default": 0,
+      "title": "Departments",
+      "type": "integer"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "processes": {
+      "default": 0,
+      "title": "Processes",
+      "type": "integer"
+    },
+    "staff": {
+      "default": 0,
+      "title": "Staff",
+      "type": "integer"
+    },
+    "state": {
+      "default": "active",
+      "title": "State",
+      "type": "string"
+    },
+    "studios": {
+      "default": 0,
+      "title": "Studios",
+      "type": "integer"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "CompanyInfo",
+  "type": "object"
+}

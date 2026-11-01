@@ -403,6 +403,18 @@
       "title": "Bot Ui Id",
       "type": "string"
     },
+    "company": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company"
+    },
     "current_run": {
       "anyOf": [
         {

@@ -318,10 +318,10 @@ def test_delegation_targets_merge_versions() -> None:
     found = delegation_targets([
         _package("1.0.0", run_location="pc", outputs=["a"], inputs=[
             {"name": "x", "type": "str", "required": True},
-            {"name": "who", "type": "str", "source": "virtual_worker.id"},
+            {"name": "who", "type": "str", "source": "staff.id"},
         ]),
         _package("1.1.0", run_location="pc", outputs=["b"], inputs=[
-            {"name": "who", "type": "str", "source": "virtual_worker.id"},
+            {"name": "who", "type": "str", "source": "staff.id"},
         ]),
     ])["erp-entry"]
     assert found.outputs == ("a", "b")

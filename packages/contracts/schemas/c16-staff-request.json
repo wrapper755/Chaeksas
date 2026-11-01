@@ -1,0 +1,48 @@
+{
+  "$id": "urn:chaeksas:contracts:c16-staff-request",
+  "additionalProperties": true,
+  "description": "`POST /staff`·`PUT /staff/{id}` — 업무의 주체. 사람인지 가상인지 가르지 않는다.",
+  "properties": {
+    "company": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Company",
+      "type": "string"
+    },
+    "department": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Department"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "state": {
+      "default": "active",
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "company",
+    "name"
+  ],
+  "title": "StaffRequest",
+  "type": "object"
+}

@@ -67,8 +67,8 @@ INPUTS, OUTPUTS, MADE, OTHER = range(4)
 NOTE_EDITABLE = "적용하면 그림에 들어갑니다 — 「저장」(Ctrl+S)으로 파일에 씁니다."
 NO_PROCESS = "열린 BPM 프로세스가 없습니다."
 RUNNING = "시험 실행 중에는 고칠 수 없습니다."
-SOURCE_TIP = "가상 직원 출처는 Center가 넣습니다 — 부르는 쪽(작업 지시·메시지)은 줄 수 없습니다."
-PINNED_TIP = "값 출처가 가상 직원이면 타입은 그 출처의 것입니다."
+SOURCE_TIP = "회사·부서·직원 출처는 Center가 업무 자리에서 넣습니다 — 부르는 쪽(작업 지시·메시지)은 줄 수 없습니다."
+PINNED_TIP = "값 출처가 업무 자리이면 타입은 그 출처의 것입니다."
 MADE_TIP = "노드를 지나면 생기는 변수 — 노드 속성에서 고칩니다."
 FIND_HINT = "이름·만드는 곳으로 찾기"
 #: 누르면 콤보가 뜨는 칸이라는 표시 (STU-01 「변수」 탭 [T]).
@@ -372,7 +372,7 @@ class VariablesTab(QWidget):
         self._refresh_buttons()
 
     def set_source(self, item: QTreeWidgetItem, value: str) -> None:
-        """입력 줄의 값 출처를 바꾼다. 가상 직원이면 **그 출처의 타입으로 맞춘다** (B8과 같은 표)."""
+        """입력 줄의 값 출처를 바꾼다. Center가 넣는 출처이면 **그 출처의 타입으로 맞춘다** (B8과 같은 표)."""
         item.setData(SOURCE, SOURCE_VALUE, value)
         item.setText(SOURCE, _source_label(value))
         item.setToolTip(SOURCE, SOURCE_TIP)

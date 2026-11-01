@@ -32,7 +32,6 @@ from chaeksas.center.api import (
     server_runner,
     signing,
     timers,
-    virtual_workers,
 )
 from chaeksas.center.auth import (
     Caller,
@@ -416,7 +415,7 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         """배포 (C5). Center가 `deployment` 봉투를 지어 서명하고 받아 두었다가 그대로 내려 준다."""
         found = require_admin(authenticate(request))
         wanted = _model(DeploymentRequest, await _json(request))
-        made = deployments.create(app.state.store, wanted, by=found.actor, package_dir=settings.package_dir)
+        made = deployments.create(app.state.store, wanted, by=found.actor)
         return made
 
     @app.delete(f"{API}/deployments")
@@ -537,7 +536,6 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
         target_type: str | None = None,
         target_id: str | None = None,
         bpm_process_id: str | None = None,
-        virtual_worker: str | None = None,
         limit: int = LIST_LIMIT_DEFAULT,
         offset: int = 0,
     ) -> Any:
@@ -548,40 +546,9 @@ def create_app(settings: Settings, *, store: Store | None = None) -> FastAPI:
             target_type=target_type,
             target_id=target_id,
             bpm_process_id=bpm_process_id,
-            virtual_worker=virtual_worker,
             limit=limit,
             offset=offset,
         )
-
-    # ─────────────────── 가상 직원 (C5 §가상 직원·CON-13, ADR-0085) ───────────────────
-
-    @app.post(f"{API}/virtual-workers")
-    async def create_virtual_worker(request: Request) -> Any:
-        """등록 — **접수 BPM 프로세스에 결재 없는 일괄 기동이 없어야** 묶인다 (C14 B16)."""
-        require_admin(authenticate(request))
-        made = virtual_workers.create(app.state.store, settings.package_dir, await _json(request))
-        return Utf8JSONResponse(status_code=201, content=made.to_json_dict())
-
-    @app.get(f"{API}/virtual-workers")
-    def list_virtual_workers(request: Request, supervisor: str | None = None) -> Any:
-        on_behalf = virtual_workers.reader(authenticate(request))
-        return virtual_workers.listing(app.state.store, supervisor=supervisor, on_behalf=on_behalf)
-
-    @app.get(f"{API}/virtual-workers/{{worker_id}}")
-    def get_virtual_worker(request: Request, worker_id: str) -> Any:
-        on_behalf = virtual_workers.reader(authenticate(request))
-        return virtual_workers.get(app.state.store, worker_id, on_behalf=on_behalf)
-
-    @app.put(f"{API}/virtual-workers/{{worker_id}}")
-    async def update_virtual_worker(request: Request, worker_id: str) -> Any:
-        require_admin(authenticate(request))
-        return virtual_workers.update(app.state.store, settings.package_dir, worker_id, await _json(request))
-
-    @app.delete(f"{API}/virtual-workers/{{worker_id}}")
-    def delete_virtual_worker(request: Request, worker_id: str) -> Any:
-        require_admin(authenticate(request))
-        virtual_workers.remove(app.state.store, worker_id)
-        return {"deleted": worker_id}
 
     @app.get(f"{API}/jobs/{{job_id}}")
     def get_job(request: Request, job_id: str) -> Any:

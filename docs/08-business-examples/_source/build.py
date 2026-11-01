@@ -96,7 +96,8 @@ def deep_check(e: Example, by_file: dict, dmns: dict) -> list[str]:
     declared = {i[0] for i in e.inputs}
     defaults = {i[0] for i in e.inputs if len(i) > 4}
     # **값 출처** (C14 B8, ADR-0099) — 선언한 입력에만, 아는 출처이고 그 타입이어야 한다.
-    source_types = {"virtual_worker.id": "string", "virtual_worker.name": "string", "virtual_worker.supervisors": "list"}
+    source_types = {one: "string" for one in ("company.id", "company.name", "department.id", "department.name",
+                                              "staff.id", "staff.name")}
     types = {i[0]: i[1] for i in e.inputs}
     for name, source in e.input_sources.items():
         if name not in types:

@@ -108,7 +108,7 @@
 
 | 경로 | 돌려주는 것 |
 | --- | --- |
-| `GET /api/v1/runs?status=&bpm_process_id=&run_location=&bot_ui_id=&virtual_worker=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스·**실행 위치**·**PC 실행기**·**가상 직원**(그 접수 BPM 프로세스의 실행과 그 자식 실행 — C5 §가상 직원), `limit` 기본 50·최대 500 |
+| `GET /api/v1/runs?status=&bpm_process_id=&run_location=&bot_ui_id=&limit=` | `RunListing` — 최근 실행부터. 좁히기는 상태·BPM 프로세스·**실행 위치**·**PC 실행기**, `limit` 기본 50·최대 500 |
 | `GET /api/v1/runs/{run_id}` | `RunInfo` 하나. 없으면 404 `run_not_found` |
 | `GET /api/v1/runs/{run_id}/events` | `RunEventsResponse` — **`seq` 차례로** 전부 (타임라인이 순서를 만든다) |
 
@@ -152,6 +152,7 @@
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-11-01 | 1 | `GET /runs?virtual_worker=`를 걷었다(가상 직원을 없앴다). `RunInfo`에 `company`·`department`·`staff`(C16 — Center가 읽을 때 채운다, 아직 비어 있다) | [0125](../decisions/0125-organization-and-work-placement.md) |
 | 2026-10-31 | 1 | **`ui_session` 종류와 `run_finished`·`RunInfo`의 `ui_tasks` 셈을 걷었다** — 내보내던 UI 자동화 확장이 없다. 받는 쪽은 옛 줄의 `ui_session`을 모르는 종류로, `ui_tasks`를 모르는 칸으로 받아 둔다(원칙 3) | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | `source: schedule`을 **쓰는 쪽이 생겼다** — Center의 일정이 만든 작업(`requested_by` `timer:<식>`)으로 시작한 실행이다. 값은 처음부터 있었다 | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-20 | 1 | **`run_started.bpm_process_id`는 패키지 id다** — 엔진이 그림의 process id(`Proc_…`)를 적어 작업·배포·C12와 이름이 갈라졌다(09-gaps §2-5). 실행하는 쪽이 `Engine.start(bpm_process_id=…)`로 넘긴다. 형식은 그대로이고, 이전에 올라간 기록은 고쳐 쓰지 않는다 | [0086](../decisions/0086-run-identity-is-the-package-id.md) |

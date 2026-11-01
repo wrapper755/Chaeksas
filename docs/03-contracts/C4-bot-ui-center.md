@@ -207,7 +207,7 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 
 | 모델 | 필드 |
 | --- | --- |
-| JobDispatch | `job_id`, `bpm_process_id`, `version`?(없으면 배포된 버전), `inputs`(object), `requested_by`(사람, 예약: `server_bot:<run_id>` — PC 위임), `requested_at`, `expires_at`?, `note`, `virtual_worker`?(`{id, name, supervisors}` — **서버 작업에만** 실린다, C12. PC 실행기에는 오지 않고 PC 실행기는 읽지 않는다 — PC 자식에 나르는 것은 미정이다, [ADR-0099](../decisions/0099-input-value-source.md) §3) |
+| JobDispatch | `job_id`, `bpm_process_id`, `version`?(없으면 배포된 버전), `inputs`(object), `requested_by`(사람, 예약: `server_bot:<run_id>` — PC 위임), `requested_at`, `expires_at`?, `note`, `place`?(작업의 주인 `{company, department?, staff?}` — C16. **서버 작업에만** 실린다, C12. PC 실행기는 읽지 않는다 — PC 작업에 나르는 것은 미정이다) |
 | ApprovalDispatch | `request_id`, `state`(`answered`\|`expired`\|`withdrawn`, C6), `answer`, `answered_by`, `answered_at`, `answered_via`?(대리 답이면 키 이름 — C6, [ADR-0081](../decisions/0081-answering-on-behalf.md)) |
 
 ### 작업 상태 흐름 (Center 쪽, CON-05)
@@ -299,6 +299,7 @@ pending ──(하트비트 응답에 실림)──▶ dispatched ──ack queu
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-11-01 | 1 | `JobDispatch.virtual_worker`를 걷고 `place?`를 더했다(모델이 C12와 같다 — PC 실행기는 읽지 않는다) | [0125](../decisions/0125-organization-and-work-placement.md) |
 | 2026-10-31 | 1 | 하트비트의 **`worker`(WorkerState)**·`versions.worker`·상태 값 `selector_registration`을 걷었다 — Worker 프로세스를 띄우는 확장이 없다. 옛 PC 실행기가 보내도 받는 쪽은 모르는 칸·모르는 값으로 받아 두므로(원칙 3·10) **판을 올리지 않는다**. 호출 토큰은 PC 실행기 메모리에만 있다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-31 | 1 | `deployments`의 「맞춘다」를 풀어 적었다 — 덮는 봉투가 없는 설치는 「실행 불가」, `readiness.blocked`에 `deployment_withdrawn`·`deployment_expired`. 활성에 `deprecated`가 든다(전에도 계약은 그랬고 Center가 어겼다, 09-gaps §3-22). 칸은 그대로다 | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-30 | 1 | `source: schedule` — Center의 일정이 만든 작업(`requested_by` `timer:<식>`)을 대기열에 넣을 때 쓴다(C5 §일정). 값은 처음부터 있었다 | [0110](../decisions/0110-center-keeps-the-schedule.md) |

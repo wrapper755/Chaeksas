@@ -38,9 +38,9 @@ from chaeksas.contracts.bpmn_ext import (
     Node,
     ProcessInfo,
     ServiceCall,
-    VirtualWorkerIdentity,
     duration_hours,
 )
+from chaeksas.contracts.organization import PlaceIdentity, place_values
 from chaeksas.core.delegation import (
     DelegationCall,
     DelegationError,
@@ -153,18 +153,13 @@ def answerer_variables(
     return out
 
 
-def sourced_inputs(info: ProcessInfo, identity: VirtualWorkerIdentity | None) -> dict[str, Any]:
-    """가상 직원 → **출처가 `virtual_worker.*`인 입력의 값** (C14 「입력의 값 출처」, ADR-0099).
+def sourced_inputs(info: ProcessInfo, place: PlaceIdentity | None) -> dict[str, Any]:
+    """업무 자리 → **Center가 넣는 출처의 입력 값** (C14 「입력의 값 출처」, ADR-0099·ADR-0125).
 
-    가상 직원이 없으면 빈 사전이다 — 그 입력은 다른 입력처럼 기본값·필수·`None`을 따른다.
+    출처가 `company.*`·`department.*`·`staff.*`면 작업의 주인(`JobDispatch.place`)에서 온다. 없는 것은
+    넣지 않는다 — 그 입력은 다른 입력처럼 기본값·필수·`None`을 따른다.
     """
-    if identity is None:
-        return {}
-    values = {
-        "virtual_worker.id": identity.id,
-        "virtual_worker.name": identity.name,
-        "virtual_worker.supervisors": list(identity.supervisors),
-    }
+    values = place_values(place) if place is not None else {}
     return {decl.name: values[str(decl.source)] for decl in info.inputs if str(decl.source) in values}
 
 
@@ -210,7 +205,7 @@ class Engine:
         실행하는 쪽이 `version`과 함께 준다. 주지 않으면 그림의 process id를 쓴다.
 
         `sourced`는 **값 출처가 부르는 쪽이 아닌 입력**의 값이다 (ADR-0099) — 서버 실행기는 Center가
-        붙인 가상 직원을 `sourced_inputs()`로 푼 것을, Studio는 케이스 입력을 출처로 가른 것을 준다.
+        붙인 업무 자리를 `sourced_inputs()`로 푼 것을, Studio는 케이스 입력을 출처로 가른 것을 준다.
         `inputs`(부르는 쪽)에 그 이름이 오면 거절한다.
 
         `nested`면 호출(`callActivity`)이 띄운 안쪽 실행이다 — 같은 `run_id`를 쓰고

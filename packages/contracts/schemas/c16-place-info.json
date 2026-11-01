@@ -1,0 +1,63 @@
+{
+  "$id": "urn:chaeksas:contracts:c16-place-info",
+  "additionalProperties": true,
+  "description": "`GET /packages/{id}/place` — 지금 자리와 그 회사, 누가 언제 바꿨나.",
+  "properties": {
+    "bpm_process_id": {
+      "title": "Bpm Process Id",
+      "type": "string"
+    },
+    "company": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Company",
+      "type": "string"
+    },
+    "department": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Department"
+    },
+    "scope": {
+      "title": "Scope",
+      "type": "string"
+    },
+    "staff": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Staff"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    },
+    "updated_by": {
+      "title": "Updated By",
+      "type": "string"
+    }
+  },
+  "required": [
+    "scope",
+    "bpm_process_id",
+    "company",
+    "updated_at",
+    "updated_by"
+  ],
+  "title": "PlaceInfo",
+  "type": "object"
+}

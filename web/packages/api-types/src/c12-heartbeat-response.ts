@@ -80,22 +80,30 @@ export interface JobDispatch {
   };
   job_id: string;
   note?: string | null;
+  place?: PlaceIdentity | null;
   requested_at: string;
   requested_by: string;
   version?: string | null;
-  virtual_worker?: VirtualWorkerIdentity | null;
   [k: string]: unknown;
 }
 /**
- * **가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).
+ * **작업의 주인** — Center가 서버 작업을 내려줄 때 붙인다 (C12 `JobDispatch.place`). 저장하지 않는다.
  *
- * Center가 서버 작업을 내려줄 때 붙인다(C12 `JobDispatch.virtual_worker`, ADR-0099). 실행하는
- * 쪽이 출처가 `virtual_worker.*`인 입력의 값으로 푼다 (`core.engine.sourced_inputs`).
+ * 실행하는 쪽이 출처가 `company.*`·`department.*`·`staff.*`인 입력의 값으로 푼다
+ * (`core.engine.sourced_inputs`). 그 자리에 없는 것(회사 자리 업무의 직원)은 비어 있다.
  */
-export interface VirtualWorkerIdentity {
+export interface PlaceIdentity {
+  company: OrgRef;
+  department?: OrgRef | null;
+  staff?: OrgRef | null;
+  [k: string]: unknown;
+}
+/**
+ * 조직 하나를 가리키는 id와 이름 — 실행하는 쪽이 값 출처로 푼다.
+ */
+export interface OrgRef {
   id: string;
   name: string;
-  supervisors?: string[];
   [k: string]: unknown;
 }
 /**

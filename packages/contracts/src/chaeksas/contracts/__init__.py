@@ -20,6 +20,7 @@
 | C14 | `bpmn_ext` | BPMN 확장 속성(`bpm:*`) 모델 + BPMN 읽기 + 검사 B1~B14 + 시험 케이스 형식 |
 | C14 | `dmn` | 규칙 태스크가 쓰는 DMN 결정표 읽기·판정 |
 | C14 | `replay` | 재생 명세 (`memory/specs.json`, C1 패키지 구성) |
+| C16 | `organization` | 회사 > 부서 > 직원, 업무 자리 + 자리 판정 (초안 → 합의, ADR-0125) |
 
 검사 함수가 계약마다 있어서, 이름이 겹치는 것은 루트에서 계약을 붙여 다시 내보낸다
 (`validate_approval_create`, `validate_center_key_create`). 모듈 안의 이름은 계약 문서 그대로다.
@@ -103,7 +104,6 @@ from chaeksas.contracts.bpmn_ext import (
     Receive,
     Rule,
     ServiceCall,
-    VirtualWorkerIdentity,
     Webhook,
     available_vars,
     blocking,
@@ -137,9 +137,6 @@ from chaeksas.contracts.center_api import (
     PreflightSummary,
     RevokeRequest,
     ScheduleInfo,
-    VirtualWorkerBatch,
-    VirtualWorkerInfo,
-    VirtualWorkerRequest,
     cancel_outcome,
     deployment_refusal,
     validate_deployment,
@@ -259,6 +256,22 @@ from chaeksas.contracts.manifest import (
     Trigger,
     validate,
 )
+from chaeksas.contracts.organization import (
+    ApproveRequest,
+    CompanyInfo,
+    CompanyRequest,
+    DepartmentInfo,
+    DepartmentRequest,
+    OrgRef,
+    Place,
+    PlaceIdentity,
+    PlaceInfo,
+    StaffInfo,
+    StaffRequest,
+    place_values,
+    place_violation,
+    staff_principal,
+)
 from chaeksas.contracts.replay import (
     REPLAY_DEFAULT,
     REPLAY_MODES,
@@ -358,6 +371,20 @@ from chaeksas.contracts.signing import (
 )
 
 __all__ = [
+    "ApproveRequest",
+    "CompanyInfo",
+    "CompanyRequest",
+    "DepartmentInfo",
+    "DepartmentRequest",
+    "OrgRef",
+    "Place",
+    "PlaceIdentity",
+    "PlaceInfo",
+    "StaffInfo",
+    "StaffRequest",
+    "place_values",
+    "place_violation",
+    "staff_principal",
     "CompleteRequest",
     "ConsumerInfo",
     "FolderConsumer",
@@ -474,9 +501,6 @@ __all__ = [
     "ErrorBody",
     "JobCreateRequest",
     "JobInfo",
-    "VirtualWorkerBatch",
-    "VirtualWorkerInfo",
-    "VirtualWorkerRequest",
     "JobTarget",
     "ListParams",
     "PackageInfo",  # `MissingResource`는 C7이 소유한다
@@ -647,7 +671,6 @@ __all__ = [
     "ReplayStep",
     "Rule",
     "ServiceCall",
-    "VirtualWorkerIdentity",
     "Webhook",
     "available_vars",
     "blocking",

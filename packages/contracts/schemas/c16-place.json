@@ -1,0 +1,42 @@
+{
+  "$id": "urn:chaeksas:contracts:c16-place",
+  "additionalProperties": true,
+  "description": "업무 자리 — BPM 프로세스(패키지 id)마다 하나. **회사는 적지 않는다** — 패키지의 회사다.",
+  "properties": {
+    "department": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Department"
+    },
+    "scope": {
+      "title": "Scope",
+      "type": "string"
+    },
+    "staff": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Staff"
+    }
+  },
+  "required": [
+    "scope"
+  ],
+  "title": "Place",
+  "type": "object"
+}

@@ -1,0 +1,35 @@
+{
+  "$id": "urn:chaeksas:contracts:c16-department-request",
+  "additionalProperties": true,
+  "description": "`POST /departments`·`PUT /departments/{id}` — **한 단계**다(부서 안의 부서는 없다).",
+  "properties": {
+    "company": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Company",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "state": {
+      "default": "active",
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "company",
+    "name"
+  ],
+  "title": "DepartmentRequest",
+  "type": "object"
+}

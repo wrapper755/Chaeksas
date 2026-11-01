@@ -6,6 +6,7 @@
  * `POST /enrollments/{id}/approve` — `name`을 비우면 요청의 이름을 쓴다.
  */
 export interface EnrollmentApproveRequest {
+  company?: string | null;
   name?: string | null;
   [k: string]: unknown;
 }

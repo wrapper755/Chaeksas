@@ -297,8 +297,8 @@ def _assignees(spec: list[str] | str | None, variables: Mapping[str, Any], node_
             raise EngineError(f"결재 담당자 변수가 없다: {spec}", node_id=node_id, code="assignees_missing")
         value = variables[spec]
         if value is None:
-            # **변수가 비면 「담당자 없음」이 아니다** — 가상 직원 신원이 없을 때가 이것이다
-            # (ADR-0098, 가상 직원 실행이 아니면 `None`). 담당자 없음은 그림이 빈 배열로 적는다.
+            # **변수가 비면 「담당자 없음」이 아니다** — 값 출처가 채우지 못했을 때가 이것이다
+            # (ADR-0098). 담당자 없음은 그림이 빈 배열로 적는다.
             raise EngineError(f"결재 담당자 변수가 비어 있다: {spec}", node_id=node_id, code="assignees_missing")
     try:
         return normalize_assignees(value)

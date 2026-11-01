@@ -130,7 +130,8 @@ class InputDecl(ContractModel):
     required: bool = False
     description: str | None = None
     default: Any = None
-    #: **값 출처** (ADR-0099) — 비우면 부르는 쪽(`caller`). `virtual_worker.*`면 Center가 넣고
+    #: **값 출처** (ADR-0099) — 비우면 부르는 쪽(`caller`). `company.*`·`department.*`·`staff.*`(C16 업무 자리)면
+    #: Center가 넣고
     #: 부르는 쪽은 줄 수 없다. 열린 문자열이고 아는 값은 `INPUT_SOURCE_TYPES`다 (B8).
     source: str | None = None
 
@@ -162,23 +163,14 @@ class DesktopEnv(ContractModel):
 INPUT_SOURCE_CALLER = "caller"
 #: 아는 출처 → 그 출처가 주는 값의 타입 (B8이 선언한 타입과 맞춰 본다). `caller`는 선언한 대로다.
 INPUT_SOURCE_TYPES = {
-    "virtual_worker.id": "string",
-    "virtual_worker.name": "string",
-    "virtual_worker.supervisors": "list",
+    # 업무 자리에서 온다 (C16, ADR-0125) — Center가 `JobDispatch.place`로 붙인다. 그 자리에 없는 것은 `None`.
+    "company.id": "string",
+    "company.name": "string",
+    "department.id": "string",
+    "department.name": "string",
+    "staff.id": "string",
+    "staff.name": "string",
 }
-
-
-class VirtualWorkerIdentity(ContractModel):
-    """**가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).
-
-    Center가 서버 작업을 내려줄 때 붙인다(C12 `JobDispatch.virtual_worker`, ADR-0099). 실행하는
-    쪽이 출처가 `virtual_worker.*`인 입력의 값으로 푼다 (`core.engine.sourced_inputs`).
-    """
-
-    id: str
-    name: str
-    #: 감독자 이름 — Center가 저장할 때 정규화한 그대로 (ADR-0080 `normalize_assignees`).
-    supervisors: list[str] = Field(default_factory=list)
 
 
 class ProcessInfo(ContractModel):

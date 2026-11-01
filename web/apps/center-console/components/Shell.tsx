@@ -57,7 +57,6 @@ const NAV: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { label: "결재함", href: "/approvals" },
       { label: "작업 지시", href: "/jobs" },
-      { label: "가상 직원", href: "/virtual-workers" },
     ],
   },
   {

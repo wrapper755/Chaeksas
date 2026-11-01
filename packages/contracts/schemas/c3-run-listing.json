@@ -40,6 +40,18 @@
           "default": null,
           "title": "Bpm Process Id"
         },
+        "company": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Company"
+        },
         "confirmations": {
           "anyOf": [
             {
@@ -51,6 +63,18 @@
           ],
           "default": null,
           "title": "Confirmations"
+        },
+        "department": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Department"
         },
         "duration_s": {
           "anyOf": [
@@ -192,6 +216,18 @@
           ],
           "default": null,
           "title": "Source"
+        },
+        "staff": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Staff"
         },
         "started_at": {
           "anyOf": [

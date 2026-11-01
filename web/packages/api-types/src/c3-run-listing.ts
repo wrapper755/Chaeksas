@@ -18,7 +18,9 @@ export interface RunInfo {
   ai_tasks?: number | null;
   bot_ui_id?: string | null;
   bpm_process_id?: string | null;
+  company?: string | null;
   confirmations?: number | null;
+  department?: string | null;
   duration_s?: number | null;
   error_code?: string | null;
   events?: number;
@@ -32,6 +34,7 @@ export interface RunInfo {
   run_location?: string | null;
   service_calls?: number | null;
   source?: string | null;
+  staff?: string | null;
   started_at?: string | null;
   status?: string;
   version?: string | null;

@@ -7,7 +7,7 @@ describe("fromCaller", () => {
     const found = fromCaller([
       { name: "인입", type: "list", required: true },
       { name: "메모", type: "string", source: "caller" },
-      { name: "감독자", type: "list", required: true, source: "virtual_worker.supervisors" },
+      { name: "담당", type: "string", required: true, source: "staff.name" },
     ]);
     expect(found.map((one) => one.name)).toEqual(["인입", "메모"]);
   });

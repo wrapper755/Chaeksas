@@ -24,8 +24,7 @@
       "name": "감독자",
       "type": "list",
       "required": true,
-      "description": "이 일괄을 승인할 사람들 — Center가 가상 직원 등록에서 넣는다",
-      "source": "virtual_worker.supervisors"
+      "description": "이 일괄을 승인할 사람들 — 부르는 쪽이 회사 규칙대로 준다"
     }
   ]
 }</bpm:process>

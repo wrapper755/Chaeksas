@@ -1,0 +1,164 @@
+{
+  "$defs": {
+    "RecentRun": {
+      "additionalProperties": true,
+      "properties": {
+        "bpm_process_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bpm Process Id"
+        },
+        "requested_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Requested By"
+        },
+        "run_id": {
+          "title": "Run Id",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "title": "RecentRun",
+      "type": "object"
+    },
+    "WorkItem": {
+      "additionalProperties": true,
+      "description": "그 자리에 놓인 업무 하나 — 상세가 읽을 때 모은다.",
+      "properties": {
+        "bpm_process_id": {
+          "title": "Bpm Process Id",
+          "type": "string"
+        },
+        "triggers": {
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "title": "Triggers",
+          "type": "array"
+        },
+        "versions": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Versions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "bpm_process_id"
+      ],
+      "title": "WorkItem",
+      "type": "object"
+    }
+  },
+  "$id": "urn:chaeksas:contracts:c16-department-info",
+  "additionalProperties": true,
+  "properties": {
+    "company": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Company",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "processes": {
+      "default": 0,
+      "title": "Processes",
+      "type": "integer"
+    },
+    "recent_runs": {
+      "items": {
+        "$ref": "#/$defs/RecentRun"
+      },
+      "title": "Recent Runs",
+      "type": "array"
+    },
+    "staff": {
+      "default": 0,
+      "title": "Staff",
+      "type": "integer"
+    },
+    "state": {
+      "default": "active",
+      "title": "State",
+      "type": "string"
+    },
+    "updated_at": {
+      "title": "Updated At",
+      "type": "string"
+    },
+    "work": {
+      "items": {
+        "$ref": "#/$defs/WorkItem"
+      },
+      "title": "Work",
+      "type": "array"
+    }
+  },
+  "required": [
+    "id",
+    "company",
+    "name",
+    "created_at",
+    "updated_at"
+  ],
+  "title": "DepartmentInfo",
+  "type": "object"
+}

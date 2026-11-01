@@ -16,8 +16,8 @@ from typing import Annotated, Any
 from pydantic import Field
 
 from chaeksas.contracts._base import ContractModel, SchemaVersioned, Timestamp
-from chaeksas.contracts.bpmn_ext import VirtualWorkerIdentity
 from chaeksas.contracts.enrollment import PublicKey, RotatedKey
+from chaeksas.contracts.organization import PlaceIdentity
 from chaeksas.contracts.signing import AdminKey
 
 #: 하트비트 기본 간격과 온라인 판정 (CON-03).
@@ -223,9 +223,9 @@ class JobDispatch(ContractModel):
     requested_at: Timestamp
     expires_at: Timestamp | None = None
     note: str | None = None
-    #: **가상 직원 신원** — 그 BPM 프로세스가 가상 직원의 접수 BPM 프로세스이면 Center가 내려줄 때 붙인다 (C12,
-    #: ADR-0098). 저장하지 않는다. 접수 BPM 프로세스는 서버에서만 돌아 **PC 실행기에는 오지 않는다**.
-    virtual_worker: VirtualWorkerIdentity | None = None
+    #: **작업의 주인** — 그 BPM 프로세스의 업무 자리를 Center가 내려줄 때 붙인다 (C12·C16, ADR-0125 §4).
+    #: 저장하지 않는다. 출처가 `company.*`·`department.*`·`staff.*`인 입력의 값이 된다.
+    place: PlaceIdentity | None = None
 
 
 class ApprovalDispatch(ContractModel):

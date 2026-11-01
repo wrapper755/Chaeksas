@@ -6,6 +6,7 @@
  * `POST /accounts` — 관리자만.
  */
 export interface AccountCreateRequest {
+  company?: string | null;
   password: string;
   role?: string;
   username: string;

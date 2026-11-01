@@ -3,6 +3,18 @@
   "additionalProperties": true,
   "description": "`GET /accounts`의 한 줄. **비밀번호 해시는 나가지 않는다.**",
   "properties": {
+    "company": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company"
+    },
     "created_at": {
       "title": "Created At",
       "type": "string"

@@ -46,9 +46,9 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 계약 열둘의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. 그 뒤 2026-10-31 대조가 **새로 일곱**(§3-21~27)을 찾았다 — 넷(§3-21~24)은 업무에 닿고, §3-25는 엔진의 흠, §3-26·27은 작은 칸과 「미정」 모음이다. 그중 배포의 끝 둘(§3-22·23)은 [ADR-0113](decisions/0113-field-follows-withdrawn-deployments.md)으로 닫았다. UI 자동화 확장을 걷으며(ADR-0114) 다시 들일 때 정할 것을 §3-28에 모았다.
 
-### 3-29. 조직·업무 자리 — 정했고 구현 전
+### 3-29. 조직·업무 자리 — 계약은 합의, 쓰는 쪽이 아직 (가상 직원은 없앴다)
 
-[ADR-0125](decisions/0125-organization-and-work-placement.md), 계약 [C16](03-contracts/C16-organization.md) 「초안」, 화면 CON-13 「조직으로 바뀐다」. 바깥 요청(NowView)과 사용자의 방향이 드러냈다 — 업무 주체가 가상 직원(접수 BPM 프로세스 하나 + 감독자)뿐이고, 회사·부서가 없어 여러 회사가 한 Center를 쓰면 서로의 것이 섞이며, 업무가 누구의 일인지 정할 자리가 없다. 먼저 정할 것은 없다 — ADR-0125 「다음 순서」 여섯 조각이다. 남은 「미정」: 연동용·대리 답용 키를 회사에 묶을지. **직원 사이의 업무 요청**은 조직이 선 뒤 따로 ADR을 쓴다(ADR-0125 §8).
+[ADR-0125](decisions/0125-organization-and-work-placement.md), 계약 [C16](03-contracts/C16-organization.md) 「합의」(조각 1 — 모델·판정·저장소 22판), 화면 CON-13 「조직으로 바뀐다」. 바깥 요청(NowView)과 사용자의 방향이 드러냈다 — 업무 주체가 가상 직원(접수 BPM 프로세스 하나 + 감독자)뿐이고, 회사·부서가 없어 여러 회사가 한 Center를 쓰면 서로의 것이 섞이며, 업무가 누구의 일인지 정할 자리가 없다. 먼저 정할 것은 없다 — ADR-0125 「다음 순서」의 조각 2~6이 남았다. 남은 「미정」: 연동용·대리 답용 키를 회사에 묶을지. **직원 사이의 업무 요청**은 조직이 선 뒤 따로 ADR을 쓴다(ADR-0125 §8).
 
 ### 3-21. PC BPM 프로세스로 메시지를 넣는 길이 없다
 
@@ -107,7 +107,7 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 ### 3-27. 「미정」으로 적혀 있는데 이 목록에 없던 것
 
-- **PC 자식에 가상 직원 값이 가지 않는다** — C14 §입력의 값 출처, C4 `JobDispatch.virtual_worker`, [ADR-0099](decisions/0099-input-value-source.md) §3 「> 미정」. PC 실행기에 `virtual_worker`를 다루는 코드가 없다. 그래서 PC BPM 프로세스가 `virtual_worker.*` 출처 입력을 필수로 선언하면 위임으로 받은 작업도 시작하지 못한다. 먼저 정할 것: ADR이 적은 「C4 실행기 파일에 싣는다」 하나다.
+- **PC 작업에 작업의 주인이 가지 않는다** — C14 §입력의 값 출처, C4 `JobDispatch.place`(C16). PC 실행기는 그 칸을 읽지 않아, PC BPM 프로세스가 `company.*`·`department.*`·`staff.*` 출처 입력을 필수로 선언하면 시작하지 못한다. 먼저 정할 것: C4 실행기 파일에 싣는 길 하나다(Center가 `place`를 붙이는 조각 2 뒤의 일).
 - **CON-07 「할 일」을 확장 정의에서 짓기** — `06-screens/center-console.md` CON-07 「> 미정」: Center가 내장·사내 확장의 정의를 갖지 않는다. 먼저 정할 것: C13 정의를 Center로 올리나.
 
 ### 3-28. UI 자동화 확장을 다시 들인다
@@ -367,7 +367,7 @@ CON-07 상세 「서버 주소」에서 넣고 **정의의 허용 호스트 안�
 | 결재 `expires`·`APPROVAL_EXPIRED`/`WITHDRAWN` 경계 | 0 | `bpmn_ext.py:262`, `engine.py:1251` | `test_approval_channel.py` |
 | 결재 `location: follow`(기본값) | 0 — 23개 모두 `center`·`field`를 적었다 | `bpmn_ext.py:261` | `test_approval_channel.py` |
 | `answered_by_as`·`answered_via_as` (ADR-0096) | 0 | `bpmn_ext.py:264-269` | `test_core_engine.py` |
-| 입력 출처 `virtual_worker.id` (ADR-0099) | 0 (`.name`·`.supervisors`만 — FX-24·25) | `bpmn_ext.py:164-168` | `test_core_engine.py` |
+| 입력 출처 `company.*`·`department.*`·`staff.*` (ADR-0125) | 1 (`staff.name`만 — FX-25) | `bpmn_ext.py` `INPUT_SOURCE_TYPES` | `test_core_engine.py` |
 | 웹훅 본문 `all`·`template:` | 0 — 6개 모두 `fields:[…]` | `bpmn_ext.py:296` | `test_core_senders.py` |
 | 메시지 중간 받기 | 0 — 중간 받기는 타이머·신호뿐 | `nodes.py:1088` | |
 | 타이머 `timeDate`·ISO 반복 `R[n]/…` 시작 | 0 — 시작 12개 모두 5필드 cron | `engine.py:855-872`, `contracts/schedule.py` | `test_center_timers.py`·`test_core_events.py` |

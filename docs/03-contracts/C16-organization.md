@@ -2,10 +2,10 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **초안** (2026-11-01) — 글이 먼저 있다. 코드는 아직 가상 직원(C5 §가상 직원)이고 회사가 없다. 구현하면 아래 「다른 계약에 더하는 칸」이 각 계약으로 옮겨 가고 C5 §가상 직원이 없어진다 |
+| 상태 | **합의** (2026-11-01) — 모델·판정이 코드로 있다: `packages/contracts/organization.py`(조직·`Place`·`place_violation`·`PlaceIdentity`), 다른 계약의 칸(C5 `PackageInfo`·`JobInfo`·`BotUiInfo`·계정 `company`·역할 `company_admin`, 등록 승인 `company`, C3 `RunInfo`, C12 `JobDispatch.place`, C14 값 출처)과 Center 저장소 22판(기본 회사·조직 표·가상 직원 → 직원). 서버 실행기는 `JobDispatch.place`를 값 출처로 푼다. **쓰는 쪽은 아직이다** — Center API·관문·목록 거르기·콘솔은 조각 2~4([ADR-0125](../decisions/0125-organization-and-work-placement.md) 「다음 순서」). 그때까지 Center는 칸을 채우지 않는다. **가상 직원 기능은 조각 1에서 없앴다**(아래 「없어진 것」) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 콘솔(Center 관리자·회사 관리자)·연동용 키 ↔ Center (조직·업무 자리), Center → 서버 실행기 (작업의 자리) |
-| 코드 위치 | (예정) `packages/contracts/organization.py`, Center `api/organization.py`·`api/packages.py`·`enrollments.py`·`accounts.py` |
+| 코드 위치 | `packages/contracts/organization.py`, Center `migrations.py` 22판 · (예정) `api/organization.py`·`api/packages.py`·`enrollments.py`·`accounts.py` |
 | 관련 ADR | [0125](../decisions/0125-organization-and-work-placement.md), [0090](../decisions/0090-center-admin-accounts.md), [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md), [0093](../decisions/0093-studio-is-let-in-by-approval.md), [0099](../decisions/0099-input-value-source.md) |
 | 관련 화면 | CON-13 조직, CON-02·CON-06 승인(자리 고르기), CON-03 승인 대기(회사 고르기), CON-14 관리자 계정(회사 관리자), CON-01 (회사·부서·직원 열) |
 
@@ -89,9 +89,9 @@ StaffInfo는 하나 읽기에서 `work[]`(이 직원 자리 업무 — `{bpm_pro
 | C12 | `JobDispatch` | `place?` = `{company: {id, name}, department?: {id, name}, staff?: {id, name}}` | 서버 작업을 내려줄 때 붙인다. 저장하지 않는다 |
 | C14·C1 | `inputs[].source` | `company.id`·`company.name`·`department.id`·`department.name`·`staff.id`·`staff.name` (모두 `string`) | Center가 넣는 값 출처. 부르는 쪽은 줄 수 없다(`input_not_from_caller`). 그 자리에 없는 것은 `None` |
 
-### 없어지는 것
+### 없어진 것 (조각 1)
 
-C5 §가상 직원 전부(`/virtual-workers`, `VirtualWorkerRequest`·`VirtualWorkerInfo`, `intake_*` 코드, 배포 때 B16 관문), `JobCreateRequest.virtual_worker`·`JobInfo.virtual_worker`·`?virtual_worker=`, C12 `JobDispatch.virtual_worker`, 값 출처 `virtual_worker.*`, 예약 앞머리 `vw:`. C14 **B16은 경고로 남는다**(Studio 실행 전 검사).
+C5 §가상 직원 전부(`/virtual-workers`, `VirtualWorkerRequest`·`VirtualWorkerInfo`, `intake_*` 코드, 배포 때 B16 관문), `JobCreateRequest.virtual_worker`·`JobInfo.virtual_worker`·`?virtual_worker=`, C12 `JobDispatch.virtual_worker`, 값 출처 `virtual_worker.*`, 예약 앞머리 `vw:`. C14 **B16은 경고로 남는다**(Studio 실행 전 검사). Center 저장소 22판이 가상 직원을 같은 id의 직원으로 옮기고 표·칸을 지운다.
 
 ## 예시
 
@@ -134,10 +134,10 @@ C5 §가상 직원 전부(`/virtual-workers`, `VirtualWorkerRequest`·`VirtualWo
 
 - 받는 쪽이 모르는 필드·`scope` 값을 받으면: 남긴다(README 원칙). 모르는 `scope`로는 자리를 바꾸지 않는다(422 `input_invalid`).
 - 옮기기(ADR-0125 §7): 회사 `default`를 만들고 지금의 장비·패키지를 거기 둔다. 가상 직원은 같은 id의 직원이 되고, 접수 BPM 프로세스의 자리는 그 직원이다. 다른 BPM 프로세스는 자리 없음으로 남는다(회사 공통으로 읽는다).
-- 이전 schema의 `virtual_worker` 칸: 구현하는 판에서 없앤다(옛 이름을 함께 읽지 않는다).
+- 이전 schema의 `virtual_worker` 칸: 없앴다 — 옛 쪽이 보내면 모르는 칸으로 무시된다(원칙 3).
 
 ## 변경 이력
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-11-01 | 1 | 초안 | [0125](../decisions/0125-organization-and-work-placement.md) |
+| 2026-11-01 | 1 | 초안 → 합의 (모델·판정·저장소 22판) | [0125](../decisions/0125-organization-and-work-placement.md) |

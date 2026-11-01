@@ -615,8 +615,8 @@ class Agent:
             # ADR-0082·ADR-0110) — 말해 주는 것은 작업의 `requested_by` 하나다(PC 실행기와 같은 `job_source`).
             source=job_source(job.requested_by),
             parent_run_id=delegated_run(job.requested_by),
-            # 작업에 가상 직원이 있으면 Center가 붙여 보냈다 (ADR-0099).
-            virtual_worker=job.virtual_worker,
+            # 작업의 주인(업무 자리)은 Center가 붙여 보냈다 (ADR-0125).
+            place=job.place,
             store=self.store,
         )
         self.workers[found.run_id] = found
