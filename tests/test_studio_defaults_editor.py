@@ -1,8 +1,8 @@
 """STU-04 BPM 프로세스 기본값 편집기 (`studio/defaults_editor.py`) — 화면 없이, 끝에 메인 창과 캔버스.
 
 보는 것은 다섯이다: 그림에 적힌 것이 **다 보이는가**, 손대지 않으면 **C14 모델로 같은 뜻인가**(업무 예제
-전부), 읽는 곳 없는 칸(`web`)을 **지우지 않고 말하는가**, 속성 패널이 **`chk:defaults`만** 보내는가
-(`chk:process`는 다른 자리의 것이다), 빈 상태의 단추가 **열린 정의를 패널에** 보이는가.
+전부), 읽는 곳 없는 칸(`web`)을 **지우지 않고 말하는가**, 속성 패널이 **`bpm:defaults`만** 보내는가
+(`bpm:process`는 다른 자리의 것이다), 빈 상태의 단추가 **열린 정의를 패널에** 보이는가.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ def test_an_untouched_dump_reads_back_the_same() -> None:
 
 
 def test_every_example_defaults_round_trips() -> None:
-    """업무 예제의 `chk:defaults`가 **손대지 않으면 같은 뜻으로** 돌아온다."""
+    """업무 예제의 `bpm:defaults`가 **손대지 않으면 같은 뜻으로** 돌아온다."""
     seen = 0
     for path in sorted(EXAMPLES.glob("*.bpmn")):
         found = read_process(path.read_text(encoding="utf-8")).defaults
@@ -131,7 +131,7 @@ def test_the_definition_gets_a_defaults_tab() -> None:
 
 
 def test_only_chk_defaults_is_sent() -> None:
-    """`chk:process`는 「변수」 탭·STU-06·STU-15의 것이다 — 이 탭은 그것을 보내지 않는다."""
+    """`bpm:process`는 「변수」 탭·STU-06·STU-15의 것이다 — 이 탭은 그것을 보내지 않는다."""
     panel = process_panel({"process": PROCESS, "defaults": DEFAULTS})
     panel._editor.app_box.setText("Calculator")  # noqa: SLF001
     changes, problem = panel.patch()
@@ -212,7 +212,7 @@ def window(app: Any, tmp_path: Path) -> Any:
 
 
 def test_the_button_shows_the_definition_and_applying_keeps_chk_process(window: Any) -> None:
-    """빈 상태의 단추 → 열린 정의가 패널에 → 「적용」은 `chk:defaults`만 바꾸고 `chk:process`는 그대로다."""
+    """빈 상태의 단추 → 열린 정의가 패널에 → 「적용」은 `bpm:defaults`만 바꾸고 `bpm:process`는 그대로다."""
     from chaeksas.studio import file_actions  # noqa: PLC0415
 
     made = window.workspace.import_example(EXAMPLES, "bx01_invoice_reconciliation")
@@ -233,6 +233,6 @@ def test_the_button_shows_the_definition_and_applying_keeps_chk_process(window: 
 
     assert wait_for(lambda: steps() == 20)
     after = read_process(window.canvas.save_xml())
-    assert after.info == before.info, "chk:process는 그대로다"
+    assert after.info == before.info, "bpm:process는 그대로다"
     assert after.defaults is not None and before.defaults is not None
     assert after.defaults.forbidden_actions == before.defaults.forbidden_actions

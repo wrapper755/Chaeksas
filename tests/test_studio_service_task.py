@@ -211,7 +211,7 @@ CALL = {
 
 
 def test_usage_reads_and_writes_the_contract_shape() -> None:
-    """`chk:serviceCall` → 화면 → 다시 `chk:serviceCall`에서 **잃는 것이 없다**."""
+    """`bpm:serviceCall` → 화면 → 다시 `bpm:serviceCall`에서 **잃는 것이 없다**."""
     assert Usage.of(CALL).to_call() == CALL
 
 
@@ -400,7 +400,7 @@ def test_an_unread_list_does_not_block_what_is_written(app: Any) -> None:
 
 
 def test_the_properties_panel_attaches_the_editor_for_a_service_call(app: Any, catalog: Catalog) -> None:
-    """STU-04가 `chk:serviceCall`을 만나면 STU-14 편집기를 탭으로 끼운다."""
+    """STU-04가 `bpm:serviceCall`을 만나면 STU-14 편집기를 탭으로 끼운다."""
     import json  # noqa: PLC0415
 
     from chaeksas.studio.properties import Properties  # noqa: PLC0415
@@ -550,14 +550,14 @@ def test_without_the_center_answer_the_check_is_skipped() -> None:
 #: 위임 하나가 든 서버 그림 (예제에 없어 여기서 만든다 — ADR-0062).
 DELEGATING_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_dlg" targetNamespace="urn:chaeksas:test">
+  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs_dlg" targetNamespace="urn:chaeksas:test">
   <bpmn:process id="Proc_dlg" name="위임" isExecutable="true">
-    <bpmn:extensionElements><chk:process>{"run_location": "server"}</chk:process>
+    <bpmn:extensionElements><bpm:process>{"run_location": "server"}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" />
     <bpmn:callActivity id="Call_Erp" calledElement="Proc_erp_input">
-      <bpmn:extensionElements><chk:call>{"delegate":
-        {"bpm_process_id": "fin.erp-input"}, "output": {"입력결과": "결과코드"}}</chk:call>
+      <bpmn:extensionElements><bpm:call>{"delegate":
+        {"bpm_process_id": "fin.erp-input"}, "output": {"입력결과": "결과코드"}}</bpm:call>
       </bpmn:extensionElements>
     </bpmn:callActivity>
     <bpmn:endEvent id="End" />

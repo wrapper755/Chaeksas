@@ -303,7 +303,7 @@ def test_duplicate_hosts_stop_the_step_and_say_what_to_do(tmp_path: Path) -> Non
         Store(db)
     said = str(caught.value)
     assert "bui_00000001" in said and "bui_00000002" in said
-    assert "chk-center hosts" in said
+    assert "bpm-center hosts" in said
     assert _versions(db) == [1, 2]
 
 
@@ -374,7 +374,7 @@ def test_the_cli_does_not_open_the_store(
         ("bot_uis", "bui_00000001", "ck_a", "m" * 64, "구매 PC"),
         ("bot_uis", "bui_00000002", "ck_b", "m" * 64, "구매 PC (옛 키)"),
     )
-    monkeypatch.setenv("CHK_CENTER__DB_PATH", str(db))
+    monkeypatch.setenv("BPM_CENTER__DB_PATH", str(db))
 
     assert hosts(["duplicates"]) == 0
     listed = capsys.readouterr().out

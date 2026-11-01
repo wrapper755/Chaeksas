@@ -38,7 +38,7 @@ COPY apps/center/ apps/center/
 RUN uv sync --frozen --package chaeksas-center
 
 # 데이터는 볼륨에 둔다 (DB·패키지 파일).
-ENV CHK_CENTER__DATA_DIR=/data
+ENV BPM_CENTER__DATA_DIR=/data
 VOLUME ["/data"]
 EXPOSE 8800
 
@@ -49,4 +49,4 @@ USER chaeksas
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8800/healthz')"
 
-CMD ["uv", "run", "--frozen", "--package", "chaeksas-center", "chk-center"]
+CMD ["uv", "run", "--frozen", "--package", "chaeksas-center", "bpm-center"]

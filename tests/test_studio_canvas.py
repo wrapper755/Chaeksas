@@ -1,6 +1,6 @@
 """Studio 캔버스 — QtWebEngine 안의 bpmn-js가 **진짜로** 돌아가는지 (ADR-0022·ADR-0029).
 
-S3 스파이크가 Windows에서 확인한 것을 제품 코드로 옮겨 다시 본다: 우리 BPMN(C14 `chk:*`,
+S3 스파이크가 Windows에서 확인한 것을 제품 코드로 옮겨 다시 본다: 우리 BPMN(C14 `bpm:*`,
 한글 JSON 본문)이 불러오기·저장 왕복에서 **의미상** 보존되는가. bpmn-js는 DI 순서를 바꾸고
 기본값 속성을 빼므로 **글자 비교를 쓰지 않는다** (ADR-0022).
 
@@ -30,12 +30,12 @@ EXAMPLES = Path(__file__).resolve().parent.parent / "docs" / "08-business-exampl
 #: 드롭 뒤 캔버스가 답할 때까지 기다릴 시간 (ms) — 답하지 않아도 멈추지 않게 상한을 둔다.
 DROP_TIMEOUT_MS = 15_000
 
-#: 왕복시켜 볼 예제 — `chk:*` 13종이 골고루 들어가게 고른다.
+#: 왕복시켜 볼 예제 — `bpm:*` 13종이 골고루 들어가게 고른다.
 SAMPLES = (
-    "fx02_business_rule",  # chk:rule
-    "fx07_email",  # chk:email + chk:dataOutput
-    "bx03_expense_approval",  # chk:approval + 경계 타이머 + chk:webhook
-    "bx05_month_end_close",  # chk:receive + 이정표 + 병렬
+    "fx02_business_rule",  # bpm:rule
+    "fx07_email",  # bpm:email + bpm:dataOutput
+    "bx03_expense_approval",  # bpm:approval + 경계 타이머 + bpm:webhook
+    "bx05_month_end_close",  # bpm:receive + 이정표 + 병렬
 )
 
 
@@ -90,7 +90,7 @@ def test_the_vendored_bpmn_js_is_in_place() -> None:
     """
     assert (WEB_DIR / "index.html").is_file()
     assert (WEB_DIR / VIEW_PAGE).is_file()
-    assert (WEB_DIR / "chk-moddle.js").is_file()
+    assert (WEB_DIR / "bpm-moddle.js").is_file()
     assert (WEB_DIR / "vendor" / "bpmn-modeler.production.min.js").is_file()
     assert (WEB_DIR / "vendor" / "bpmn-navigated-viewer.production.min.js").is_file()
     assert (WEB_DIR / "vendor" / "bpmn-auto-layout.min.js").is_file()  # ADR-0088
@@ -105,14 +105,14 @@ def test_a_missing_canvas_says_how_to_build_it(app: Any, tmp_path: Path) -> None
 
 @pytest.mark.parametrize("name", SAMPLES)
 def test_an_example_survives_the_canvas_round_trip(canvas: Any, name: str) -> None:
-    """C14 「표준 BPMN 도구(bpmn-js)로 열고 그릴 수 있어야 한다」 — `chk:*`가 살아남는다."""
+    """C14 「표준 BPMN 도구(bpmn-js)로 열고 그릴 수 있어야 한다」 — `bpm:*`가 살아남는다."""
     original = (EXAMPLES / f"{name}.bpmn").read_text(encoding="utf-8")
     found = canvas.call_sync("importXML", original)
     assert found.get("warnings") == [], found.get("warnings")
 
     again = canvas.save_xml()
     assert meaning(again) == meaning(original)
-    assert "chk:" in again, "확장 요소가 그대로 있다"
+    assert "bpm:" in again, "확장 요소가 그대로 있다"
 
 
 def test_the_canvas_reports_what_it_holds(canvas: Any) -> None:
@@ -176,7 +176,7 @@ def test_an_unknown_function_says_so(canvas: Any) -> None:
 
 
 def test_an_extension_task_keeps_its_kind_through_an_edit(canvas: Any) -> None:
-    """`chk:task`의 `type`·`extension`은 **XML 속성**이다 (C14) — 고쳐도 날아가면 안 된다.
+    """`bpm:task`의 `type`·`extension`은 **XML 속성**이다 (C14) — 고쳐도 날아가면 안 된다.
 
     날아가면 패키지가 그 확장을 요구하지 않게 되고(C1), 실행할 때 「모르는 태스크」가 된다.
     """
@@ -215,7 +215,7 @@ def test_an_extension_task_keeps_its_kind_through_an_edit(canvas: Any) -> None:
 
 
 def test_the_process_info_round_trips_through_the_canvas(canvas: Any) -> None:
-    """STU-06이 쓰는 길 — `chk:process`는 **그림**이라 캔버스를 거친다 (ADR-0022).
+    """STU-06이 쓰는 길 — `bpm:process`는 **그림**이라 캔버스를 거친다 (ADR-0022).
 
     창이 다루지 않는 칸(`inputs`)까지 통째로 되돌려 쓰므로, 왕복해도 그것이 남아야 한다.
     """
@@ -276,7 +276,7 @@ def added(
 
 
 def test_called_element_and_chk_call_round_trip(canvas: Any) -> None:
-    """STU-04 「호출」 — 표준 `calledElement`도 `properties`·`setProperties`로 오간다 (`chk:call`과 함께)."""
+    """STU-04 「호출」 — 표준 `calledElement`도 `properties`·`setProperties`로 오간다 (`bpm:call`과 함께)."""
     canvas.create_empty("Proc_call", "호출 시험")
     node_id = added(canvas, {}, "ERP 입력", bpmn="bpmn:CallActivity", attrs={"calledElement": "Proc_erp"})
     found = canvas.call_sync("properties", node_id)
@@ -316,7 +316,7 @@ def test_the_loop_marker_and_chk_loop_round_trip(canvas: Any) -> None:
 
 
 def test_a_resource_becomes_a_node_in_one_undo_step(canvas: Any) -> None:
-    """STU-03 「캔버스에 추가」 — `chk:*`를 달고 **한 번에** 만든다.
+    """STU-03 「캔버스에 추가」 — `bpm:*`를 달고 **한 번에** 만든다.
 
     만든 뒤에 고치면 실행 취소가 두 걸음이 되어 사람이 한 번 되돌렸는데 빈 태스크가 남는다.
     """
@@ -430,7 +430,7 @@ def test_a_drop_of_something_else_is_left_to_the_page(canvas: Any) -> None:
 
 
 def test_a_service_app_operation_becomes_a_service_call(canvas: Any) -> None:
-    """서비스 앱 작업은 `chk:serviceCall`이다 (C14) — 같은 명령이 둘 다 만든다."""
+    """서비스 앱 작업은 `bpm:serviceCall`이다 (C14) — 같은 명령이 둘 다 만든다."""
     canvas.create_empty("Proc_call", "호출 시험")
     body = {"app_id": "svc-invoice", "operation": "issue"}
     node_id = added(canvas, {"serviceCall": json.dumps(body, ensure_ascii=False)}, name="세금계산서 issue")
@@ -469,8 +469,8 @@ def test_a_shared_process_becomes_a_call_activity_with_its_called_element(canvas
     """STU-03 공유 BPM 프로세스 → Call Activity
     ([ADR-0051](../docs/decisions/0051-shared-process-conveniences.md)).
 
-    `calledElement`는 `chk:*`가 아니라 **그냥 BPMN 속성**이라 `attrs`로 간다 — 만드는 길은
-    하나여야(ADR-0044) 실행 취소가 한 걸음이다. **`chk:call`은 넣지 않는다** (입력·출력 짝은
+    `calledElement`는 `bpm:*`가 아니라 **그냥 BPMN 속성**이라 `attrs`로 간다 — 만드는 길은
+    하나여야(ADR-0044) 실행 취소가 한 걸음이다. **`bpm:call`은 넣지 않는다** (입력·출력 짝은
     내 변수 이름을 알아야 하는 일이라 속성 패널에서 적는다).
     """
     canvas.create_empty("Proc_caller", "호출하는 쪽")
@@ -509,7 +509,7 @@ def viewer_page(app: Any) -> Any:
 def test_the_viewer_draws_our_bpmn_and_cannot_edit_it(viewer_page: Any) -> None:
     """**정말 못 고친다** (ADR-0051) — 팔레트를 가린 편집기가 아니라 편집 기능이 없는 뷰어다.
 
-    그래서 모델러에게만 있는 길(`saveXML`·`createTask`·`undo`)이 **아예 없다**. 그림은 `chk:*`가
+    그래서 모델러에게만 있는 길(`saveXML`·`createTask`·`undo`)이 **아예 없다**. 그림은 `bpm:*`가
     든 우리 예제로 보고, 경고 없이 들어가는 것까지 본다(moddle 설명을 뷰어도 쓴다).
     """
     original = (EXAMPLES / "bx03_expense_approval.bpmn").read_text(encoding="utf-8")
@@ -613,7 +613,7 @@ def test_a_node_becomes_a_delegated_call_keeping_flows_and_boundaries(canvas: An
     after = read_process(canvas.save_xml())
     node = after.node(made)
     assert node is not None and node.kind == "callActivity"
-    assert list(node.props) == ["call"], "옛 `chk:approval`은 남지 않는다"
+    assert list(node.props) == ["call"], "옛 `bpm:approval`은 남지 않는다"
     assert json.loads(canvas.call_sync("properties", made)["chk"]["call"])["delegate"]["bpm_process_id"] == "bx03-pc"
     moved = sorted((made if s == "Approve_Expense" else s, made if t == "Approve_Expense" else t) for s, t in edges)
     assert sorted((f.source, f.target) for f in after.flows if made in (f.source, f.target)) == moved
@@ -669,8 +669,8 @@ def test_the_pages_draw_with_theme_variables_and_write_no_colors() -> None:
         text = (WEB_DIR / page).read_text(encoding="utf-8")
         assert "window.chkTheme" in text, page
         for key in ("defaultFillColor", "defaultStrokeColor", "defaultLabelColor"):
-            assert re.search(rf'{key}: "var\(--chk-[a-z-]+, [a-z]+\)"', text), (page, key)
-        used = set(re.findall(r"var\((--chk-[a-z-]+)", text))
+            assert re.search(rf'{key}: "var\(--bpm-[a-z-]+, [a-z]+\)"', text), (page, key)
+        used = set(re.findall(r"var\((--bpm-[a-z-]+)", text))
         assert used <= set(CANVAS_TOKENS), (page, used - set(CANVAS_TOKENS))
         assert not re.search(r"#[0-9a-fA-F]{3,8}\b", text.split("<script")[0]), page
 
@@ -680,7 +680,7 @@ def test_every_canvas_variable_is_a_token_in_both_themes() -> None:
 
     light, dark = canvas_colors("light"), canvas_colors("dark")
     assert set(light) == set(dark) == set(CANVAS_TOKENS)
-    assert light["--chk-surface"] != dark["--chk-surface"]
+    assert light["--bpm-surface"] != dark["--bpm-surface"]
 
 
 def test_the_diagram_follows_the_app_theme_without_reloading(canvas: Any) -> None:
@@ -703,13 +703,13 @@ def test_the_diagram_follows_the_app_theme_without_reloading(canvas: Any) -> Non
         apply_theme(app, choice="dark")
         canvas.load_xml((EXAMPLES / "bx01_invoice_reconciliation.bpmn").read_text(encoding="utf-8"))
         canvas.call_sync("stats")
-        assert js_value(canvas, fill) == rgb(canvas_colors("dark")["--chk-surface"])
+        assert js_value(canvas, fill) == rgb(canvas_colors("dark")["--bpm-surface"])
         before = canvas.call_sync("stats")
 
         apply_theme(app, choice="light")
         app.processEvents()
         canvas.call_sync("stats")
-        assert js_value(canvas, fill) == rgb(canvas_colors("light")["--chk-surface"])
+        assert js_value(canvas, fill) == rgb(canvas_colors("light")["--bpm-surface"])
         assert canvas.call_sync("stats")["elements"] == before["elements"]
     finally:
         apply_theme(app, choice="light")
@@ -841,7 +841,7 @@ def test_a_receive_task_message_round_trips(canvas: Any) -> None:
 
 
 def test_a_data_output_round_trips_and_goes_away(canvas: Any) -> None:
-    """STU-04 「파일 출력」 — 데이터 객체의 `chk:dataOutput`이 캔버스로 오가고 `None`이면 사라진다."""
+    """STU-04 「파일 출력」 — 데이터 객체의 `bpm:dataOutput`이 캔버스로 오가고 `None`이면 사라진다."""
     from chaeksas.contracts.bpmn_ext import DataOutput
 
     canvas.call_sync("importXML", (EXAMPLES / "bx01_invoice_reconciliation.bpmn").read_text(encoding="utf-8"))
@@ -859,7 +859,7 @@ def test_a_data_output_round_trips_and_goes_away(canvas: Any) -> None:
 
 
 def test_the_defaults_round_trip_beside_the_process_info(canvas: Any) -> None:
-    """STU-04 「기본값」 — 정의 자체의 `chk:defaults`만 바꿔도 `chk:process`는 남는다."""
+    """STU-04 「기본값」 — 정의 자체의 `bpm:defaults`만 바꿔도 `bpm:process`는 남는다."""
     from chaeksas.contracts.bpmn_ext import Defaults
 
     canvas.create_empty("Proc_defaults", "기본값 시험")

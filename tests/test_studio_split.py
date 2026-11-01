@@ -37,25 +37,25 @@ LOCATIONS = {"ui_task": ["pc"]}
 
 SERVER = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="Proc_order" name="발주">
-    <bpmn:extensionElements><chk:process>{"run_location": "server",
+    <bpmn:extensionElements><bpm:process>{"run_location": "server",
       "service_keys": {"ui-automation": "erp-ui", "mail-app": "mail-key"},
-      "extensions": [{"id": "ui-automation", "version": "&gt;=1"}, {"id": "other", "version": "1"}]}</chk:process>
+      "extensions": [{"id": "ui-automation", "version": "&gt;=1"}, {"id": "other", "version": "1"}]}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1"/>
-    <bpmn:scriptTask id="Task_Prepare" name="준비" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Prepare" name="준비" scriptFormat="bpm-expr">
       <bpmn:script>확정 = [1, 2]</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:serviceTask id="Task_Erp" name="ERP 입력">
       <bpmn:extensionElements>
-        <chk:task type="ui_task" extension="ui-automation">{"page_id": "erp.po"}</chk:task>
+        <bpm:task type="ui_task" extension="ui-automation">{"page_id": "erp.po"}</bpm:task>
       </bpmn:extensionElements>
     </bpmn:serviceTask>
     <bpmn:userTask id="Task_Check" name="현장 확인">
-      <bpmn:extensionElements><chk:approval>{"title": "확인",
+      <bpmn:extensionElements><bpm:approval>{"title": "확인",
         "fields": [{"key": "승인", "label": "승인", "type": "bool"}],
-        "location": "field"}</chk:approval></bpmn:extensionElements>
+        "location": "field"}</bpm:approval></bpmn:extensionElements>
     </bpmn:userTask>
     <bpmn:endEvent id="End_1"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Task_Prepare"/>
@@ -199,7 +199,7 @@ def drawn(canvas: Any) -> str:
     canvas.append_chain(
         [
             {"bpmn": "bpmn:ScriptTask", "name": "준비", "chk": {},
-             "attrs": {"scriptFormat": "chk-expr", "script": "확정 = [1, 2]"}},
+             "attrs": {"scriptFormat": "bpm-expr", "script": "확정 = [1, 2]"}},
             {"bpmn": "bpmn:ServiceTask", "name": "ERP 입력",
              "chk": {"task": json.dumps({"type": "ui_task", "extension": "ui-automation",
                                          "data": {"page_id": "erp.po"}}, ensure_ascii=False)}},

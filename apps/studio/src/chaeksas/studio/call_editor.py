@@ -1,7 +1,7 @@
-"""STU-04 호출 편집기 — `callActivity`의 `calledElement`와 `chk:call` (C14, ADR-0062).
+"""STU-04 호출 편집기 — `callActivity`의 `calledElement`와 `bpm:call` (C14, ADR-0062).
 
 속성 패널이 Call Activity를 만나면 탭으로 끼운다. **규약은 결재·STU-14와 같다**
-(`load`/`dump`/`problems`/`changed`) — 다른 것은 하나다: 고치는 것이 **표준 속성 하나와 `chk:` 요소
+(`load`/`dump`/`problems`/`changed`) — 다른 것은 하나다: 고치는 것이 **표준 속성 하나와 `bpm:` 요소
 하나**라 `dump()`가 `{"calledElement": 글, "call": 본문}`을 준다.
 
 - 갈래가 둘이다 — **이 패키지에서 부르기**(이 패키지의 정의·`libs/`에 받아 둔 공유 정의, 엔진이
@@ -223,7 +223,7 @@ class CallEditor(QWidget):
     # ── 규약 ──
 
     def load(self, body: Mapping[str, Any]) -> None:
-        """`{"calledElement": 글, "call": chk:call 본문}`을 그린다."""
+        """`{"calledElement": 글, "call": bpm:call 본문}`을 그린다."""
         self._quiet = True
         call = body.get("call")
         self._loaded = dict(call) if isinstance(call, Mapping) else {}

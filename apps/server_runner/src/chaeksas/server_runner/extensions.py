@@ -69,7 +69,7 @@ def settings_for(
 ) -> PlainSettings:
     """그 확장의 설정 칸 + 호스트가 채우는 예약 키 (C13).
 
-    - 칸은 `scope: server_runner`인 것만. 값은 **환경변수**(`CHK_SERVER_RUNNER__EXT__<확장>__<칸>`)
+    - 칸은 `scope: server_runner`인 것만. 값은 **환경변수**(`BPM_SERVER_RUNNER__EXT__<확장>__<칸>`)
       이고 없으면 `None`이다. **비밀 칸은 넣지 않는다** — 그것은 `Secrets`가 푼다 (ADR-0013).
     - `center.url`은 이 실행기가 붙은 Center다 (C13 — 확장 클라이언트가 외부 작업을 올리는 곳).
     """

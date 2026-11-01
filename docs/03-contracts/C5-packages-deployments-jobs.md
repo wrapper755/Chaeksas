@@ -28,8 +28,8 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 - 기본 경로는 `/api/v1`. 본문은 JSON이고, 업로드만 multipart다.
 - 목록 요청은 `limit`(기본 100, 최대 1000)과 `offset`을 쓴다. 시각은 시간대를 포함한 ISO 8601이다.
 - 오류 본문: `{"code": "...", "message": "...", "detail": {...}}` (C11과 같은 형식).
-- **행위자:** `requested_by`, `answered_by`, `uploaded_by`, `approved_by`, `deployed_by`, `revoked_by`는 본문에서 받지 않는다. **세션으로 부르면 계정 아이디**다(로그인이 정한 신원이라 `X-CHK-Actor`를 듣지 않는다, ADR-0090). 키로 부르면 키 이름이다(Studio 키는 **승인할 때 붙인 이름** — §Studio 등록 요청과 승인). 관리자·읽기 토큰(자동화)으로 부르면 `X-CHK-Actor` 헤더의 이름이고, 없으면 「관리자 토큰」·「보기 전용」이다 — 이 헤더는 **토큰으로 부를 때만** 믿는다.
-  - **사람 대신 부르는 키는 `X-CHK-On-Behalf-Of`를 싣는다** ([ADR-0081](../decisions/0081-answering-on-behalf.md)). 대리 답용 키는 결재에 **반드시**(C6), 연동용 키는 `POST /jobs`·`POST /messages`에 **실어도 된다**. 작업에서는 **`on_behalf_of`로 적기만** 하고 `requested_by`는 그대로 키 이름이다 — `requested_by`는 권한의 주인이고 PC 실행기가 그 앞머리 `server_bot:`로 위임 작업을 가르므로, 바깥에서 온 글을 그 칸에 넣지 않는다. 대조할 담당자가 없으니 **주장일 뿐**이고 권한을 바꾸지 않는다. 비었거나 200자를 넘거나 예약 앞머리로 시작하면 422 `on_behalf_invalid`.
+- **행위자:** `requested_by`, `answered_by`, `uploaded_by`, `approved_by`, `deployed_by`, `revoked_by`는 본문에서 받지 않는다. **세션으로 부르면 계정 아이디**다(로그인이 정한 신원이라 `X-BPM-Actor`를 듣지 않는다, ADR-0090). 키로 부르면 키 이름이다(Studio 키는 **승인할 때 붙인 이름** — §Studio 등록 요청과 승인). 관리자·읽기 토큰(자동화)으로 부르면 `X-BPM-Actor` 헤더의 이름이고, 없으면 「관리자 토큰」·「보기 전용」이다 — 이 헤더는 **토큰으로 부를 때만** 믿는다.
+  - **사람 대신 부르는 키는 `X-BPM-On-Behalf-Of`를 싣는다** ([ADR-0081](../decisions/0081-answering-on-behalf.md)). 대리 답용 키는 결재에 **반드시**(C6), 연동용 키는 `POST /jobs`·`POST /messages`에 **실어도 된다**. 작업에서는 **`on_behalf_of`로 적기만** 하고 `requested_by`는 그대로 키 이름이다 — `requested_by`는 권한의 주인이고 PC 실행기가 그 앞머리 `server_bot:`로 위임 작업을 가르므로, 바깥에서 온 글을 그 칸에 넣지 않는다. 대조할 담당자가 없으니 **주장일 뿐**이고 권한을 바꾸지 않는다. 비었거나 200자를 넘거나 예약 앞머리로 시작하면 422 `on_behalf_invalid`.
   - **값은 UTF-8을 퍼센트 인코딩해서** 넣는다 (`운영자 김` → `%EC%9A%B4%EC%98%81%EC%9E%90%20%EA%B9%80`). HTTP 헤더 값에는 ASCII 밖의 글자를 넣을 수 없어서(보내는 쪽 HTTP 라이브러리가 거부한다), 한글 이름을 그대로 실으면 요청 자체가 나가지 않는다. 받는 쪽은 디코딩하고, 디코딩이 실패하면 받은 문자열을 그대로 쓴다.
 
 ### 인증
@@ -103,8 +103,8 @@ Center 쪽에서 BPM 프로세스가 실행되기까지의 흐름을 정한다.
 - **계정은 지우지 않고 멈춘다** (`disabled`). 기록에 남은 이름이 가리킬 곳이 사라지지 않게 한다. 멈춘 계정은 로그인이 403 `account_disabled`이고 세션도 곧바로 끝난다.
 - **마지막 남은 관리자는 멈추거나 보기 전용으로 바꿀 수 없다** — 409 `last_admin`.
 - 로그인이 틀리면 401 `login_failed` 하나다(「아이디가 없다」와 「비밀번호가 틀렸다」를 가르지 않는다). **같은 아이디로 5번 연달아** 틀리면 5분 동안 429 `login_locked`다.
-- 세션은 **12시간** 뒤 끝난다 — 그 뒤에 부르면 401 `session_expired`. 토큰은 `chk_ses_`로 시작하고 Center는 해시만 둔다.
-- **첫 관리자**는 Center 설정(`CHK_CENTER__FIRST_ADMIN__*`, `docs/04-setup.md` §5)이 계정이 하나도 없을 때 한 번 만든다.
+- 세션은 **12시간** 뒤 끝난다 — 그 뒤에 부르면 401 `session_expired`. 토큰은 `bpm_ses_`로 시작하고 Center는 해시만 둔다.
+- **첫 관리자**는 Center 설정(`BPM_CENTER__FIRST_ADMIN__*`, `docs/04-setup.md` §5)이 계정이 하나도 없을 때 한 번 만든다.
 
 AccountInfo 필드: `username`, `role`, `state`(`active` / `disabled`), `created_at`, `created_by`, `password_changed_at`, `disabled_at`?, `last_login_at`?.
 
@@ -240,7 +240,7 @@ JobInfo는 위 필드에 다음을 더한다.
 | --- | --- |
 | `job_id` | `job_<hex8>` |
 | `requested_by` | 사람 이름, 키 이름, 또는 예약값 `server_bot:<run_id>` (PC 위임)·`timer:<식>` (일정 — 아래 §일정) |
-| `on_behalf_of`? | 연동용 키가 `X-CHK-On-Behalf-Of`로 실어 보낸 사람 이름 (**주장** — Center가 대조하지 않는다). 메시지 시작으로 만든 작업에는 그 메시지의 것을 옮긴다 (ADR-0081) |
+| `on_behalf_of`? | 연동용 키가 `X-BPM-On-Behalf-Of`로 실어 보낸 사람 이름 (**주장** — Center가 대조하지 않는다). 메시지 시작으로 만든 작업에는 그 메시지의 것을 옮긴다 (ADR-0081) |
 | `requested_at` | |
 | `state`, `state_reason`? | 아래 상태 표 |
 | `cancel_requested` | bool |
@@ -294,7 +294,7 @@ JobInfo는 위 필드에 다음을 더한다.
 | 무엇 | 규칙 |
 | --- | --- |
 | 하나로 세는 것 | 서버 BPM 프로세스는 **(BPM 프로세스, 버전)마다 차례 하나에 작업 하나**이고 `target`은 `{type: "server_runner"}`(실행기는 Center가 고른다) — 서버 실행기 몇 대에 배포했든 한 번이다. PC BPM 프로세스는 **배포된 PC마다** 작업 하나(`target.id` = 그 PC)다 |
-| 시간대 | Center 한 벌에 하나 — `CHK_CENTER__TIMEZONE`(IANA 이름, 기본 `Asia/Seoul`). 풀 수 없으면 Center가 뜨지 않는다. 없는 시각(서머타임 건너뛰기)은 건너뛰고 두 번 오는 시각은 한 번이다 |
+| 시간대 | Center 한 벌에 하나 — `BPM_CENTER__TIMEZONE`(IANA 이름, 기본 `Asia/Seoul`). 풀 수 없으면 Center가 뜨지 않는다. 없는 시각(서머타임 건너뛰기)은 건너뛰고 두 번 오는 시각은 한 번이다 |
 | 놓친 차례 | Center가 꺼져 있었거나 하트비트가 없어 지나친 차례는 **가장 최근 한 번만** 쏜다. 세는 시작은 **그 대상의 살아 있는 배포 중 가장 이른 것이 생긴 때**와 지난 차례 중 늦은 쪽이다 — 배포 전의 차례는 차례가 아니다. 400일보다 먼 것은 보지 않는다 |
 | 작업 본문 | `inputs`는 **비운다**(기본값과 값 출처가 채운다), `version`은 그 배포의 것, `note`는 `일정 <식> — <차례 벽시계>`, **`expires_at`은 다음 차례**(다음 차례가 없으면 비운다), `idempotency_key`는 `tmr_<일정 해시 16자>_<차례 UTC yyyymmddTHHMMZ>` |
 | 누가 | `requested_by`는 `timer:<식>`이다. 실행하는 쪽은 그것을 보고 실행 기록의 `source`를 **`schedule`**로 적는다(C3·C4) |
@@ -341,7 +341,7 @@ EnrollmentInfo 필드:
 
 - 승인 응답은 `{key_id, host_id, replaced_key_id?}`다 (`host_id`는 이어받았으면 그 `bot_ui_id`·`server_runner_id`, 새 자리면 첫 `register`가 만든다 — 그때까지 `null`).
 - **이미 결정된·만료된 요청은 다시 결정하지 못한다** (409 `enrollment_closed`).
-- 승인은 **행위자를 남긴다** (`decided_by` — 세션이면 계정, 토큰이면 `X-CHK-Actor`).
+- 승인은 **행위자를 남긴다** (`decided_by` — 세션이면 계정, 토큰이면 `X-BPM-Actor`).
 - 승인·거절은 되돌리지 않는다. 잘못 들였으면 CON-03 「비활성화」 또는 그 키를 폐기한다 (C7).
 
 ### Studio 등록 요청과 승인 ([ADR-0093](../decisions/0093-studio-is-let-in-by-approval.md))
@@ -388,6 +388,8 @@ BotUiInfo 필드:
 
 ## 가상 직원 (CON-13)
 
+> 제안: 이 절은 [C16](C16-organization.md) 「조직·업무 자리」로 바뀐다 — 회사·부서·직원, 승인 때 고르는 업무 자리, 회사 관리자, 목록의 회사 거르기 ([ADR-0125](../decisions/0125-organization-and-work-placement.md) — 수락, 구현 전). 아래는 지금 코드다.
+
 사람이 아닌 업무 주체 — 접수 BPM 프로세스·감독자를 묶는다 ([ADR-0085](../decisions/0085-virtual-worker-resource.md), 용어집 §2-1). **일괄은 자원이 아니다** — 접수 BPM 프로세스 실행 한 번이고(ADR-0079) 여기서는 **읽을 때** 이어 붙인다.
 
 | 메서드·경로 | 인증 | 뜻 |
@@ -427,7 +429,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 
 **이어 붙이기** — `GET /runs?virtual_worker=<id>`(C3)·`GET /jobs?virtual_worker=<id>`는 접수 BPM 프로세스의 것과 **그 자식**(실행은 `parent_run_id`, 작업은 `requested_by = server_bot:<접수 실행>`)을 함께 준다. 「접수 BPM 프로세스의 실행」은 실행 기록의 `bpm_process_id`가 **그 패키지 id**인 것이다 (C3 — 실행 기록도 패키지 id로 말한다, [ADR-0086](../decisions/0086-run-identity-is-the-package-id.md)). 저장하지 않고 읽을 때 모은다. **`requested_by`는 바꾸지 않는다** — 접수 BPM 프로세스 작업을 부른 키가 그대로 적힌다.
 
-**신원** — 작업의 `virtual_worker`(고르거나 이어받은 id)가 서버 실행기로 내려갈 때 Center가 등록에서 `{id, name, supervisors}`를 읽어 붙이고(C12 `jobs[].virtual_worker`), 그림이 **값 출처**(`chk:process.inputs[].source` = `virtual_worker.*`)로 선언한 입력에 들어간다 (C14). 그래서 일괄 결재가 `assignees: "감독자"`로 이 자원의 감독자를 그대로 받는다. 멈춘 가상 직원도 붙인다. 값은 저장하지 않는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
+**신원** — 작업의 `virtual_worker`(고르거나 이어받은 id)가 서버 실행기로 내려갈 때 Center가 등록에서 `{id, name, supervisors}`를 읽어 붙이고(C12 `jobs[].virtual_worker`), 그림이 **값 출처**(`bpm:process.inputs[].source` = `virtual_worker.*`)로 선언한 입력에 들어간다 (C14). 그래서 일괄 결재가 `assignees: "감독자"`로 이 자원의 감독자를 그대로 받는다. 멈춘 가상 직원도 붙인다. 값은 저장하지 않는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
 
 ```json
 {
@@ -469,7 +471,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 | 422 | C1 규칙 코드, `target_mismatch`(모르는 대상 종류), `no_deployment`, `version_ambiguous`, `inputs_not_object`, `input_not_from_caller`(값 출처가 있는 입력을 넣었다), `virtual_worker_mismatch`(그 가상 직원의 접수 BPM 프로세스가 아니다 — ADR-0099) | 검사 실패. 모두 **작업 지시(`/jobs`)** 쪽이다 — 배포 쪽 상태 충돌은 위의 409다 |
 | 422 | `intake_unknown` / `intake_not_server` / `intake_not_gated` | 가상 직원의 접수 BPM 프로세스가 승인된 판이 없거나·서버 BPM 프로세스가 아니거나·결재 없는 일괄 기동이 있다 (C14 B16, ADR-0085). 배포 쪽의 `intake_not_gated`는 409다 |
 | 409 | `id_conflict` | 같은 `id`의 가상 직원이 있다 |
-| 422 | `on_behalf_invalid` | `X-CHK-On-Behalf-Of`가 비었거나 200자를 넘거나 예약 앞머리로 시작함 (ADR-0081) |
+| 422 | `on_behalf_invalid` | `X-BPM-On-Behalf-Of`가 비었거나 200자를 넘거나 예약 앞머리로 시작함 (ADR-0081) |
 | 422 | `server_runner_not_available` | 서버 실행기 대상 — M7까지 쓰던 코드이고 지금은 내지 않는다(`SERVER_RUNNER_AVAILABLE`가 켜져 있다, ADR-0016). **배포와 작업 지시가 같다** — 상태 충돌이 아니라 **아직 없는 기능**이라 배포 쪽에서도 422다 |
 | 422 | `not_a_zip`, `manifest_missing`, `manifest_invalid`, `zip_too_many_entries`, `zip_unsafe_path`, `zip_too_large` | 업로드한 zip의 형식 오류. **400이 아니라 422다** — 본문은 읽혔고 내용이 계약과 맞지 않는다 |
 
@@ -494,7 +496,7 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 | 2026-10-25 | 1 | **등록 승인** — `GET /enrollments`·`POST …/approve·reject`, 권한표의 「인증 없음」 줄(등록 요청 두 경로), 오류 `enrollment_closed` | [0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md) |
 | 2026-10-24 | 1 | **관리자 계정과 로그인 세션**을 더했다(`/auth/*`·`/accounts`). 승인·승인 철회·배포·배포 철회는 **봉투 대신 요청을 받고 Center가 서명한다** — 본문이 바뀌었다(`DeploymentRequest`·`{deployment_id, reason}`·`{reason}`). `approved_by`·`deployed_by`·`revoked_by`를 더했다. `POST/DELETE /admin-keys`를 없앴다. 관리자·읽기 토큰은 자동화용으로 남는다. 배포 철회 경로를 코드대로 `DELETE /deployments`(본문에 id)로 고쳐 적었다 | [0090](../decisions/0090-center-admin-accounts.md) |
 | 2026-10-20 | 1 | **가상 직원**(§가상 직원, CON-13) — 등록·읽기·관문(B16, 묶을 때와 배포할 때)·`?virtual_worker=` 이어 붙이기. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0085](../decisions/0085-virtual-worker-resource.md) |
-| 2026-10-20 | 1 | **사람 대신 부르는 길** — `X-CHK-On-Behalf-Of`, `JobInfo.on_behalf_of`(주장, `requested_by`는 그대로), 대리 답용 키 줄, 오류 `on_behalf_invalid` | [0081](../decisions/0081-answering-on-behalf.md) |
+| 2026-10-20 | 1 | **사람 대신 부르는 길** — `X-BPM-On-Behalf-Of`, `JobInfo.on_behalf_of`(주장, `requested_by`는 그대로), 대리 답용 키 줄, 오류 `on_behalf_invalid` | [0081](../decisions/0081-answering-on-behalf.md) |
 | 2026-10-17 | 1 | **`download_count`·`last_downloaded_at`을 더했다** — 내어 준 횟수와 마지막 때(CON-06 「내려받은 횟수」). 셀 열을 더할 수단이 없어 화면에서 뺐던 것을 저장소 옮기기 단계(4판)로 되살렸다. 선택 칸이라 옛 응답을 읽는 쪽은 영향이 없다 | [0065](../decisions/0065-center-schema-migrations.md) |
 | 2026-10-12 | 1 | **툴팩 갈래가 사라졌다** ([ADR-0050](../decisions/0050-no-toolpack-kind.md)) — 내려받기 범위에서 `requires.toolpacks`가 빠지고(공유 BPM 프로세스는 패키지 안 `libs/`로 오므로 **따로 받는 것이 없다**), `dependents.relation`은 `lib` 하나이고 `pinned_hash`는 늘 `null`이다 | 0050 |
 | 2026-10-12 | 1 | **배포 대상은 등록된 PC여야 한다** (404 `target_not_found`). 「대상이 존재한다」를 어느 쪽도 보지 않아 **오타 하나가 201을 받고** 아무에게도 가지 않는 배포로 남았다 — `envelopes_for`는 `target_id`로 맞추고 CON-03에는 그 PC 줄이 없어 보여 줄 자리도 없다. 미리 배포해 두는 길이 막히는 것이 아니다: `bot_ui_id`는 Center가 **첫 등록에서 만들어** 등록 전에는 적을 id가 없다. 읽는 것은 Center, 판정은 계약이다 (ADR-0047 §다시 볼 조건 ②). **작업 지시의 같은 404도 `target_not_found`로 바꿨다** — 같은 조건에 두 이름을 두지 않는다 | 0049 |
@@ -507,9 +509,9 @@ VirtualWorkerInfo는 위에 `created_at`·`updated_at`과 **`batches[]`**(최근
 | 2026-10-07 | 1 | `GET /jobs`의 `state`가 쉼표로 여럿을 받는다 — CON-05의 상태 필터가 여러 개를 고른다 | 0017 |
 | 2026-10-10 | 1 | `GET …/dependents`의 응답 모양(DependentInfo)과 `DELETE /packages/…`의 409 `in_use` `detail`을 적었다 — 표에 줄만 있고 모양이 없어 CON-06을 만들 수 없었다 | — |
 | 2026-10-06 | 1 | `BotUiInfo.deployment_results`를 더했다 — 배치 결정은 하트비트 한 주기만 올라오고 Center가 버리고 있어서, CON-03 「최근 배치 결정」이 그릴 것이 없었다. `DeploymentInfo`의 봉투 유래 칸(`signed_by`·`signed_at`·`not_before`·`expires_at`·`revoked_at`)을 어디서 읽는지 적었다 | 0017 |
-| 2026-10-03 | 1 | `X-CHK-Actor`는 UTF-8 퍼센트 인코딩으로 보낸다 — 한글 이름을 그대로 실으면 HTTP 헤더에 넣을 수 없어 요청이 나가지 않는다 (콘솔을 붙이다 드러났다) | 0017 |
+| 2026-10-03 | 1 | `X-BPM-Actor`는 UTF-8 퍼센트 인코딩으로 보낸다 — 한글 이름을 그대로 실으면 HTTP 헤더에 넣을 수 없어 요청이 나가지 않는다 (콘솔을 붙이다 드러났다) | 0017 |
 | 2026-10-03 | 1 | `GET /bot-uis`(CON-03)의 응답 모델 `BotUiInfo`를 적었다 — 엔드포인트만 권한표에 있고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |
 | 2026-10-15 | 1 | **도는 서버 실행을 멈출 수 있다** — 취소 표의 `accepted` 줄이 **대상 종류로 갈린다**(서버는 202, PC는 그대로 409 `already_started`). 판정은 `cancel_outcome(state, target_type)` 한 함수가 쥐고, 대상을 주지 않으면 **옛 규칙대로** 본다. PC 쪽 규칙과 C4는 **바뀌지 않는다** | [0063](../decisions/0063-stopping-a-running-server-run.md) |
-| 2026-10-01 | 1 | 검토 반영: 엔드포인트별 권한표(읽기 토큰은 GET만, 연동용 키 신설), 행위자는 키·`X-CHK-Actor`에서, 취소는 202와 `cancel_result`(시작된 작업은 `accepted` 유지), 대상 이름 `server_runner`로 통일, `idempotency_key` 범위·충돌, `version_ambiguous`, 패키지 철회·지원 종료 엔드포인트, 툴팩만 따로 내려받기 | 0017 |
+| 2026-10-01 | 1 | 검토 반영: 엔드포인트별 권한표(읽기 토큰은 GET만, 연동용 키 신설), 행위자는 키·`X-BPM-Actor`에서, 취소는 202와 `cancel_result`(시작된 작업은 `accepted` 유지), 대상 이름 `server_runner`로 통일, `idempotency_key` 범위·충돌, `version_ambiguous`, 패키지 철회·지원 종료 엔드포인트, 툴팩만 따로 내려받기 | 0017 |
 | 2026-10-01 | 1 | 확장 반영: 리소스·확장 경로 권한 | 0018 |
 | 2026-10-01 | 1 | 화면 검토 반영: `cancelled_on_pc`, 서버 실행기·Bot UI 운영 경로 권한 | — |

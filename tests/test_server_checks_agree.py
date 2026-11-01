@@ -42,7 +42,7 @@ def _probe(node: str) -> str:
     """노드 하나를 시작·끝 사이에 둔 그림 (실행 위치는 적지 않는다 — 서버로 친다)."""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_p" targetNamespace="urn:chaeksas:test">
+  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs_p" targetNamespace="urn:chaeksas:test">
   <bpmn:process id="Proc_p" name="probe" isExecutable="true">
     <bpmn:startEvent id="Start" />{node}<bpmn:endEvent id="End" />
     <bpmn:sequenceFlow id="F0" sourceRef="Start" targetRef="N" />
@@ -58,18 +58,18 @@ def _task(kind: str, ext: str) -> str:
 def probes(locations: dict[str, list[str]]) -> dict[str, str]:
     """막히는 종류마다 하나, 막히지 않는 것도 섞는다."""
     found = {
-        "확인-위치없음": _task("manualTask", '<chk:approval>{"title": "확인"}</chk:approval>'),
-        "확인-현장": _task("manualTask", '<chk:approval>{"title": "확인", "location": "field"}</chk:approval>'),
-        "결재-현장": _task("userTask", '<chk:approval>{"title": "결재", "location": "field"}</chk:approval>'),
-        "결재-Center": _task("userTask", '<chk:approval>{"title": "결재", "location": "center"}</chk:approval>'),
-        "결재-위치없음": _task("userTask", '<chk:approval>{"title": "결재"}</chk:approval>'),
-        "AI-web": _task("serviceTask", '<chk:aiTask>{"goal": "x", "domain": "web"}</chk:aiTask>'),
-        "AI-desktop": _task("serviceTask", '<chk:aiTask>{"goal": "x", "domain": "desktop"}</chk:aiTask>'),
-        "AI-도메인없음": _task("serviceTask", '<chk:aiTask>{"goal": "x"}</chk:aiTask>'),
+        "확인-위치없음": _task("manualTask", '<bpm:approval>{"title": "확인"}</bpm:approval>'),
+        "확인-현장": _task("manualTask", '<bpm:approval>{"title": "확인", "location": "field"}</bpm:approval>'),
+        "결재-현장": _task("userTask", '<bpm:approval>{"title": "결재", "location": "field"}</bpm:approval>'),
+        "결재-Center": _task("userTask", '<bpm:approval>{"title": "결재", "location": "center"}</bpm:approval>'),
+        "결재-위치없음": _task("userTask", '<bpm:approval>{"title": "결재"}</bpm:approval>'),
+        "AI-web": _task("serviceTask", '<bpm:aiTask>{"goal": "x", "domain": "web"}</bpm:aiTask>'),
+        "AI-desktop": _task("serviceTask", '<bpm:aiTask>{"goal": "x", "domain": "desktop"}</bpm:aiTask>'),
+        "AI-도메인없음": _task("serviceTask", '<bpm:aiTask>{"goal": "x"}</bpm:aiTask>'),
     }
     for task_type, where in sorted(locations.items()):
         extension = task_type.split(".")[0]
-        body = f'<chk:task type="{task_type}" extension="{extension}">{{}}</chk:task>'
+        body = f'<bpm:task type="{task_type}" extension="{extension}">{{}}</bpm:task>'
         found[f"확장-{task_type}-{'/'.join(where)}"] = _task("serviceTask", body)
     return found
 

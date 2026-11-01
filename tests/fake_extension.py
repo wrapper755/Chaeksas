@@ -99,7 +99,7 @@ def drawing(source: Path) -> Path:
     flows = body[body.index("<bpmn:incoming>"):]
     task = (
         f'<bpmn:serviceTask id="Manual_Paper" name="시험 태스크">'
-        f'<bpmn:extensionElements><chk:task type="fake_task" extension="{EXTENSION_ID}">{{}}</chk:task>'
+        f'<bpmn:extensionElements><bpm:task type="fake_task" extension="{EXTENSION_ID}">{{}}</bpm:task>'
         f"</bpmn:extensionElements>{flows}</bpmn:serviceTask>"
     )
     made = head.replace("Proc_fx19_manual_task_pc", f"Proc_{DRAWING}") + task + tail

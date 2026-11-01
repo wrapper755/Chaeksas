@@ -4,14 +4,14 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx05_month_end_close" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_close_purchase_done" name="close_purchase_done" />
   <bpmn:message id="Msg_close_sales_done" name="close_sales_done" />
   <bpmn:message id="Msg_close_stock_done" name="close_stock_done" />
   <bpmn:process id="Proc_bx05_month_end_close" name="월말 마감 체크리스트" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -37,7 +37,7 @@
       "default": "finance@example.com"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="말일 18:00">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -45,7 +45,7 @@
         <bpmn:timeCycle xsi:type="bpmn:tFormalExpression">0 18 L * *</bpmn:timeCycle>
       </bpmn:timerEventDefinition>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Init" name="마감월 정하기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Init" name="마감월 정하기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:script>마감월 = 마감월 or 이번달()</bpmn:script>
@@ -62,43 +62,43 @@
     </bpmn:parallelGateway>
     <bpmn:receiveTask id="Recv_Sales" name="매출 확정 받기" messageRef="Msg_close_sales_done">
       <bpmn:extensionElements>
-        <chk:receive>{
+        <bpm:receive>{
   "correlation": "마감월",
   "payload": [
     "매출확정"
   ]
-}</chk:receive>
+}</bpm:receive>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
     </bpmn:receiveTask>
     <bpmn:receiveTask id="Recv_Purchase" name="매입 확정 받기" messageRef="Msg_close_purchase_done">
       <bpmn:extensionElements>
-        <chk:receive>{
+        <bpm:receive>{
   "correlation": "마감월",
   "payload": [
     "매입확정"
   ]
-}</chk:receive>
+}</bpm:receive>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:receiveTask>
     <bpmn:receiveTask id="Recv_Stock" name="재고 실사 받기" messageRef="Msg_close_stock_done">
       <bpmn:extensionElements>
-        <chk:receive>{
+        <bpm:receive>{
   "correlation": "마감월",
   "payload": [
     "재고실사"
   ]
-}</chk:receive>
+}</bpm:receive>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
     </bpmn:receiveTask>
     <bpmn:sendTask id="Task_RemindSales" name="영업 독촉">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{영업담당}"
   ],
@@ -106,7 +106,7 @@
   "body": "오늘 안에 확정해 주세요.",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
@@ -126,7 +126,7 @@
     </bpmn:intermediateThrowEvent>
     <bpmn:serviceTask id="Task_Journal" name="결산 분개 초안">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`매출확정`, `매입확정`, `재고실사`는 각 부서가 보낸 확정 자료(JSON)다.\n\n## 할 일\n계정과목표(업무 파라미터 `계정과목`)에 맞춰 결산 분개 초안을 만든다.\n\n## 판단하지 않는 것\n금액을 고치거나 누락분을 추정하지 않는다. 맞지 않으면 `불일치`에 적는다.\n\n## 반환\n- `분개초안`: list of {계정, 차변, 대변, 적요}\n- `불일치`: list of string",
   "domain": "llm",
   "results": {
@@ -143,14 +143,14 @@
       "상품"
     ]
   }
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_13</bpmn:incoming>
       <bpmn:outgoing>Flow_14</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:userTask id="Approve_Close" name="마감 승인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "월말 마감 승인",
   "description": "",
   "show": [
@@ -173,7 +173,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_14</bpmn:incoming>
       <bpmn:outgoing>Flow_15</bpmn:outgoing>
@@ -195,7 +195,7 @@
     </bpmn:endEvent>
     <bpmn:sendTask id="Task_Hold" name="마감 보류 알림">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{재무팀메일}"
   ],
@@ -203,7 +203,7 @@
   "body": "{메모}",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_17</bpmn:incoming>
       <bpmn:outgoing>Flow_19</bpmn:outgoing>
@@ -241,7 +241,7 @@
     <bpmn:dataObject id="DO_Data_Journal" />
     <bpmn:dataObjectReference id="Data_Journal" name="결산 분개" dataObjectRef="DO_Data_Journal">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "마감/{마감월}_분개.json",
   "format": "json",
   "store_as": "분개경로",
@@ -251,7 +251,7 @@
     "승인",
     "메모"
   ]
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

@@ -7,7 +7,7 @@
 - **파일 도구는 `Workspace`를 거친다** (ADR-0026) — 출력 폴더와 읽기 허용 폴더 밖은
   `PathDenied`이고 **오류 경계로 받지 않는다** (그림·설정이 잘못된 것이다). 파일이 없거나
   형식이 아니면 **업무 실패**다.
-- **`http_request_tool`은 읽기만 한다** (`GET`·`HEAD`). 보내기는 `chk:send`의 일이다 —
+- **`http_request_tool`은 읽기만 한다** (`GET`·`HEAD`). 보내기는 `bpm:send`의 일이다 —
   어댑터가 막는 자리를 도구로 돌아가지 못하게 한다.
 - **돌려주는 것은 글(str)**이고, 표는 **JSON 한 덩이**다. 길면 자르고 **잘랐다고 말한다** —
   조용히 자르면 모델이 없는 것을 없다고 단정한다.
@@ -292,7 +292,7 @@ class HttpToolError(RuntimeError):
 
 
 def _http_request(url: str, method: str = "GET", headers: Mapping[str, str] | None = None) -> str:
-    """주소 하나를 **읽는다**. 쓰기(POST…)는 없다 — 보내기는 `chk:send`의 일이다."""
+    """주소 하나를 **읽는다**. 쓰기(POST…)는 없다 — 보내기는 `bpm:send`의 일이다."""
     import httpx
 
     want = (method or "GET").upper()

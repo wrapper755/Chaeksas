@@ -5,7 +5,7 @@
     consumer.run(stop_event)      # 가져가기 롱폴링 → 수행 → 끝내기
 
 **들이기는 없다** (ADR-0122) — 일꾼은 Center의 **일꾼 폴더**에 놓인 `<이름>.consumer.json`(토큰 해시)으로만
-들어온다. 토큰 원문은 그 파일을 지은 사람이 준다(`chk-center consumer-file`) — `<접두>CENTER__TOKEN` 환경변수나
+들어온다. 토큰 원문은 그 파일을 지은 사람이 준다(`bpm-center consumer-file`) — `<접두>CENTER__TOKEN` 환경변수나
 토큰 파일 `consumer-token.json`의 `token`.
 
 지키는 것:

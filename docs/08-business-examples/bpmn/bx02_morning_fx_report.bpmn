@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx02_morning_fx_report" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:error id="Err_SEND_FAILED" name="SEND_FAILED" errorCode="SEND_FAILED" />
   <bpmn:process id="Proc_bx02_morning_fx_report" name="매일 아침 환율 점검 보고" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -34,7 +34,7 @@
       "default": "finance@example.com"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="평일 09:00">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -44,7 +44,7 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_FetchFx" name="환율 조회">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n업무 파라미터 `조회주소`가 환율 API 주소다.\n\n## 할 일\n그 주소를 GET으로 한 번 불러 KRW·EUR·JPY 환율과 기준일을 꺼낸다.\n\n## 판단하지 않는 것\n환율이 높은지 낮은지 판단하지 않는다.\n\n## 반환\n- `환율`: {KRW, EUR, JPY} (number)\n- `기준일`: string `YYYY-MM-DD`",
   "domain": "api",
   "results": {
@@ -60,12 +60,12 @@
   "limits": {
     "max_steps": 6
   }
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Check" name="점검" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Check" name="점검" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>상한 = 상한 or {'KRW': 1400}
@@ -80,7 +80,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Warn" name="환율 경고 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "환율 경고 확인",
   "description": "",
   "show": [
@@ -105,12 +105,12 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:scriptTask id="Task_Report" name="보고서 만들기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Report" name="보고서 만들기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
@@ -121,7 +121,7 @@
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Send" name="담당자에게 보내기">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{담당자}"
   ],
@@ -131,12 +131,12 @@
     "보고서경로"
   ],
   "store_as": "발송결과"
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:scriptTask id="Task_SendFailed" name="메일 실패 기록" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_SendFailed" name="메일 실패 기록" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
       <bpmn:script>발송오류 = error_message</bpmn:script>
@@ -164,12 +164,12 @@
     <bpmn:dataObject id="DO_Data_Report" />
     <bpmn:dataObjectReference id="Data_Report" name="아침보고" dataObjectRef="DO_Data_Report">
       <bpmn:extensionElements>
-        <chk:dataOutput>{
+        <bpm:dataOutput>{
   "path": "아침보고/아침보고_{기준일}.md",
   "format": "md",
   "store_as": "보고서경로",
   "template": "# 아침 환율 점검 — {기준일}\n\n- 환율: {환율}\n- 경고 {경고수}건: {경고}\n- 조치: {조치}\n"
-}</chk:dataOutput>
+}</bpm:dataOutput>
       </bpmn:extensionElements>
     </bpmn:dataObjectReference>
   </bpmn:process>

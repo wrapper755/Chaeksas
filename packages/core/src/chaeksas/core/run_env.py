@@ -68,7 +68,7 @@ def make_env(
         # 확장 태스크·`web`·`desktop` AI 태스크 (ADR-0018·ADR-0037) — 없으면 그림·설치 오류가 된다.
         made = replace(made, extensions=extensions)
     if services is not None:
-        # `chk:serviceCall` — 서비스 앱(C11)과 외부 앱(C13)이 **같은 자리**로 간다: Center의 외부
+        # `bpm:serviceCall` — 서비스 앱(C11)과 외부 앱(C13)이 **같은 자리**로 간다: Center의 외부
         # 작업(C15). 없으면 `NoServiceCaller`가 남아 부르지 않고 실패한다.
         made = replace(made, services=services)
     if delegate is not None:

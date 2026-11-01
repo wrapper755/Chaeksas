@@ -4,10 +4,10 @@
 
 | 환경변수 | 뜻 |
 | --- | --- |
-| `CHK_ADAPTER__EXT__<확장>__BASE_URL` | 운영 주소 (없으면 정의의 `base_url`) |
-| `CHK_ADAPTER__EXT__<확장>__KEY` | 운영 키 (키를 받는 앱만 — C13 `auth`) |
-| `CHK_ADAPTER__EXT__<확장>__TEST_BASE_URL` · `…__TEST_KEY` | 시험 일감(`origin: test`)에 쓴다. 없으면 운영 쪽 |
-| `CHK_ADAPTER__ALLOW_PRIVATE_NETWORK` | `1`이면 정의가 허용한 사설망으로 나간다 (기본 닫힘 — 둘 다 열어야 한다) |
+| `BPM_ADAPTER__EXT__<확장>__BASE_URL` | 운영 주소 (없으면 정의의 `base_url`) |
+| `BPM_ADAPTER__EXT__<확장>__KEY` | 운영 키 (키를 받는 앱만 — C13 `auth`) |
+| `BPM_ADAPTER__EXT__<확장>__TEST_BASE_URL` · `…__TEST_KEY` | 시험 일감(`origin: test`)에 쓴다. 없으면 운영 쪽 |
+| `BPM_ADAPTER__ALLOW_PRIVATE_NETWORK` | `1`이면 정의가 허용한 사설망으로 나간다 (기본 닫힘 — 둘 다 열어야 한다) |
 
 해석기는 실행하는 쪽이 쓰던 `core.http_adapter.AdapterCaller` 그대로다 — 막는 규칙(허용 호스트·https·
 DNS 고정·리다이렉트 금지·크기 상한)이 한 벌이다.
@@ -28,7 +28,7 @@ from chaeksas.core.services import OpCall, ServiceCallError
 from chaeksas.service_kit.app import CatalogSource, Outcome
 from chaeksas.service_kit.stores import InMemoryIdempotencyStore, body_hash
 
-ENV_PREFIX = "CHK_ADAPTER__"
+ENV_PREFIX = "BPM_ADAPTER__"
 
 
 def _env_name(text: str) -> str:
@@ -36,7 +36,7 @@ def _env_name(text: str) -> str:
 
 
 def ext_env(extension_id: str, name: str) -> str:
-    """확장 하나의 설정 칸 → 환경변수 이름 (`CHK_ADAPTER__EXT__EXT_CREDIT__BASE_URL`)."""
+    """확장 하나의 설정 칸 → 환경변수 이름 (`BPM_ADAPTER__EXT__EXT_CREDIT__BASE_URL`)."""
     return f"{ENV_PREFIX}EXT__{_env_name(extension_id)}__{name}"
 
 

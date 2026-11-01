@@ -6,11 +6,11 @@
 
 | 모듈 | 무엇 |
 | --- | --- |
-| `settings` | `CHK_SERVER_RUNNER__*` (화면이 없으니 설정 파일도 없다) |
+| `settings` | `BPM_SERVER_RUNNER__*` (화면이 없으니 설정 파일도 없다) |
 | `credentials` | Center API 키 — 환경변수가 먼저, 그다음 OS 비밀 저장소 |
 | `center_client` | C12 등록·하트비트. 오류를 갈라서 올린다 |
 | `agent` | 한 걸음(`tick()`) — **스레드를 만들지 않는다** |
-| `main` | `chk-server-runner` — SIGTERM에 곱게 끝낸다 |
+| `main` | `bpm-server-runner` — SIGTERM에 곱게 끝낸다 |
 
 자세히: docs/01-architecture.md §2, docs/03-contracts/C12-server-runner-center.md.
 """

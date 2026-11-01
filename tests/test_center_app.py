@@ -104,7 +104,7 @@ def test_read_token_cannot_write(client: TestClient) -> None:
 
 def test_unknown_token_is_refused(client: TestClient) -> None:
     # HTTP 헤더는 ASCII다 — 한글 키는 애초에 보낼 수 없다.
-    response = client.get("/api/v1/center-keys", headers={"Authorization": "Bearer chk_ctr_" + "x" * 40})
+    response = client.get("/api/v1/center-keys", headers={"Authorization": "Bearer bpm_ctr_" + "x" * 40})
     assert response.status_code == 401 and response.json()["code"] == "key_invalid"
 
 
@@ -113,7 +113,7 @@ def test_unknown_token_is_refused(client: TestClient) -> None:
 
 def test_issued_key_shows_its_raw_value_only_once(client: TestClient) -> None:
     key_id, raw = issue_key(client)
-    assert raw.startswith("chk_ctr_") and len(raw) == len("chk_ctr_") + 40
+    assert raw.startswith("bpm_ctr_") and len(raw) == len("bpm_ctr_") + 40
 
     listed = client.get("/api/v1/center-keys", headers=READ).json()
     assert [k["key_id"] for k in listed] == [key_id]
@@ -715,7 +715,7 @@ def test_actor_name_with_hangul_travels_percent_encoded(client: TestClient) -> N
     """
     from urllib.parse import quote
 
-    headers = {**ADMIN, "X-CHK-Actor": quote("운영자 김")}
+    headers = {**ADMIN, "X-BPM-Actor": quote("운영자 김")}
     created = client.post(
         "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=headers
     )
@@ -725,7 +725,7 @@ def test_actor_name_with_hangul_travels_percent_encoded(client: TestClient) -> N
 
 def test_actor_name_that_is_not_encoded_is_kept_as_is(client: TestClient) -> None:
     """디코딩이 안 되는 값이 와도 요청을 거부하지 않는다 (이름 하나 때문에 막지 않는다)."""
-    headers = {**ADMIN, "X-CHK-Actor": "plain-name"}
+    headers = {**ADMIN, "X-BPM-Actor": "plain-name"}
     created = client.post(
         "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=headers
     )
@@ -733,11 +733,11 @@ def test_actor_name_that_is_not_encoded_is_kept_as_is(client: TestClient) -> Non
 
 
 def test_actor_header_is_ignored_for_key_callers(client: TestClient) -> None:
-    """키로 부를 때는 `X-CHK-Actor`를 믿지 않는다 (C5) — 키 이름이 행위자다."""
+    """키로 부를 때는 `X-BPM-Actor`를 믿지 않는다 (C5) — 키 이름이 행위자다."""
     from urllib.parse import quote
 
     _key_id, raw = issue_key(client, name="현장 PC 1")
-    auth = {"Authorization": f"Bearer {raw}", "X-CHK-Actor": quote("관리자인 척")}
+    auth = {"Authorization": f"Bearer {raw}", "X-BPM-Actor": quote("관리자인 척")}
     client.post("/api/v1/bot-ui/register", json=register_body(machine=machine_id("pc1")), headers=auth)
     # PC 실행기 키로는 올릴 수 없으니, 행위자가 쓰이는 길(업로드)은 막혀 있다. Studio 키가
     # 올릴 때도 행위자는 **키 이름**이다 — `test_studio_key_uploads_and_reads…`가 본다.
@@ -770,7 +770,7 @@ def test_studio_key_uploads_and_reads_but_bot_ui_key_does_not(client: TestClient
     assert created.status_code == 201, created.text
     # 올린 것은 **후보**다 — 키로는 승인할 수 없다 (C2).
     assert created.json()["status"] == "candidate"
-    # 행위자는 **키 이름**이다 (C5 — 키로 부를 때 `X-CHK-Actor`를 믿지 않는다).
+    # 행위자는 **키 이름**이다 (C5 — 키로 부를 때 `X-BPM-Actor`를 믿지 않는다).
     assert created.json()["uploaded_by"] == "설계자 PC"
     assert len(client.get("/api/v1/packages", headers=studio_auth).json()) == 1
     assert client.get("/api/v1/packages/invoice-check/1.0.0", headers=studio_auth).status_code == 200

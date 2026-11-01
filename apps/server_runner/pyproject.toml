@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-chk-server-runner = "chaeksas.server_runner.main:main"
+bpm-server-runner = "chaeksas.server_runner.main:main"
 
 [tool.uv.sources]
 chaeksas-contracts = { workspace = true }

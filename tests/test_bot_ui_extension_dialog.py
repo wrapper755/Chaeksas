@@ -81,7 +81,7 @@ def builtin(**over: Any) -> dict[str, Any]:
         "publisher": "Chaeksas",
         "tier": "builtin",
         "api": ">=2,<3",
-        "service": {"protocol": "chk-c11", "base_url": "http://svc-ocr:8000"},
+        "service": {"protocol": "bpm-c11", "base_url": "http://svc-ocr:8000"},
         "requires_keys": [{"purpose": "run", "extra_scopes": ["ocr_read"]}],
         "contributes": {
             "task_types": [
@@ -531,7 +531,7 @@ def test_refresh_takes_the_definition_from_center(tmp_path: Path) -> None:
 
     fake = FakeCenter()
     agent = make_agent(host_with(), keys=keys, tmp_path=tmp_path)
-    agent.credentials = FakeCredentials("chk_ctr_test")
+    agent.credentials = FakeCredentials("bpm_ctr_test")
     agent.client_factory = lambda _url, _key: fake  # type: ignore[assignment, return-value]
     window = ExtensionsDialog(agent)
     # 받기 전에는 **요구하는데 없는** 줄이다 (들고 있는 명부가 비어 있다).

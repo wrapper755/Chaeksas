@@ -366,13 +366,13 @@ def test_a_parallel_loop_survives_a_restart_halfway(tmp_path: Path) -> None:
     process = read_process(
         '<?xml version="1.0" encoding="UTF-8"?>'
         '<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" '
-        'xmlns:chk="urn:chaeksas:bpmn:1" id="Defs"><bpmn:process id="p.batch">'
-        '<bpmn:extensionElements><chk:process>{"run_location": "server"}</chk:process></bpmn:extensionElements>'
+        'xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs"><bpmn:process id="p.batch">'
+        '<bpmn:extensionElements><bpm:process>{"run_location": "server"}</bpm:process></bpmn:extensionElements>'
         '<bpmn:startEvent id="S"/>'
-        '<bpmn:scriptTask id="Set" scriptFormat="chk-expr">'
+        '<bpmn:scriptTask id="Set" scriptFormat="bpm-expr">'
         "<bpmn:script>건들 = [1, 2, 3]</bpmn:script></bpmn:scriptTask>"
         '<bpmn:callActivity id="Call"><bpmn:extensionElements>'
-        f"<chk:call>{call}</chk:call><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
+        f"<bpm:call>{call}</bpm:call><bpm:loop>{loop}</bpm:loop></bpmn:extensionElements>"
         '<bpmn:multiInstanceLoopCharacteristics isSequential="false" /></bpmn:callActivity>'
         '<bpmn:endEvent id="E"/>'
         '<bpmn:sequenceFlow id="f1" sourceRef="S" targetRef="Set"/>'

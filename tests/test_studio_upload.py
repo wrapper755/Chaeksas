@@ -196,7 +196,7 @@ def test_an_unknown_key_is_refused_without_leaking_it(
     center: TestClient, tmp_path: Path
 ) -> None:
     """**키 값은 결과 글에 들어가지 않는다** (STU-10 「연결 테스트」와 같은 규칙)."""
-    secret = "chk_ctr_" + "z" * 40
+    secret = "bpm_ctr_" + "z" * 40
     with pytest.raises(upload.UploadFailed) as caught:
         uploader(center, secret).upload(written(tmp_path, package_bytes()))
     assert secret not in str(caught.value)
@@ -219,12 +219,12 @@ def test_no_address_or_key_means_no_uploader() -> None:
         center_url = "http://center.test"
 
     assert upload.uploader_for(Fake(), None) is None
-    assert upload.uploader_for(Fake(), "chk_ctr_x") is not None
+    assert upload.uploader_for(Fake(), "bpm_ctr_x") is not None
 
     class NoUrl:
         center_url = "  "
 
-    assert upload.uploader_for(NoUrl(), "chk_ctr_x") is None
+    assert upload.uploader_for(NoUrl(), "bpm_ctr_x") is None
 
 
 # ─────────────────────────── STU-11 (읽기 전용) ───────────────────────────

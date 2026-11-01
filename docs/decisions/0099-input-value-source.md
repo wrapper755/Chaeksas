@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 · §1의 출처 `virtual_worker.*`·§2·§3은 [ADR-0125](0125-organization-and-work-placement.md)가 대체한다(출처 `company.*`·`department.*`·`staff.*`, 업무 자리에서 온다) — 「입력 한 줄 + 값 출처」라는 모양은 그대로다 |
 | 날짜 | 2026-10-26 |
 | 관련 | [ADR-0098](0098-virtual-worker-identity.md)(이 ADR이 §1·§2의 「접수 Bot 하나에 하나」·§3을 대체한다 — §4 연동용 키 읽기는 그대로), [ADR-0085](0085-virtual-worker-resource.md), [ADR-0080](0080-approval-assignees.md), 계약 C14·C1·C5·C12, 화면 STU-06 |
 

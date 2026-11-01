@@ -49,9 +49,9 @@ RUN_ID = "run_20261007_090000_abc123"
 
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="test.proc" name="시험">
-    <bpmn:extensionElements><chk:process>{{}}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{{}}</bpm:process></bpmn:extensionElements>
     {body}
   </bpmn:process>
 </bpmn:definitions>
@@ -69,7 +69,7 @@ def approval_process(*, kind: str = "userTask", location: str = "follow", extra:
     caught = (
         '<bpmn:boundaryEvent id="Bnd_Gone" attachedToRef="Approve">'
         "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
-        '<bpmn:scriptTask id="Task_Gone" scriptFormat="chk-expr">'
+        '<bpmn:scriptTask id="Task_Gone" scriptFormat="bpm-expr">'
         "<bpmn:script>사유 = error_code</bpmn:script></bpmn:scriptTask>"
         '<bpmn:endEvent id="End_2"/>'
         '<bpmn:sequenceFlow id="g1" sourceRef="Bnd_Gone" targetRef="Task_Gone"/>'
@@ -79,9 +79,9 @@ def approval_process(*, kind: str = "userTask", location: str = "follow", extra:
     )
     return read_process(SHELL.format(body=(
         '<bpmn:startEvent id="Start_1"/>'
-        '<bpmn:scriptTask id="Task_Amount" scriptFormat="chk-expr">'
+        '<bpmn:scriptTask id="Task_Amount" scriptFormat="bpm-expr">'
         "<bpmn:script>금액 = 1100000</bpmn:script></bpmn:scriptTask>"
-        f'<bpmn:{kind} id="Approve"><bpmn:extensionElements><chk:approval>{props}</chk:approval>'
+        f'<bpmn:{kind} id="Approve"><bpmn:extensionElements><bpm:approval>{props}</bpm:approval>'
         f"</bpmn:extensionElements></bpmn:{kind}>"
         '<bpmn:endEvent id="End_1"/>'
         '<bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Task_Amount"/>'
@@ -129,9 +129,9 @@ def form_process(fields: list[dict[str, Any]]) -> Any:
     props = json.dumps({"title": "폼", "show": [], "fields": fields}, ensure_ascii=False)
     return read_process(SHELL.format(body=(
         '<bpmn:startEvent id="Start_1"/>'
-        f'<bpmn:userTask id="Approve"><bpmn:extensionElements><chk:approval>{props}</chk:approval>'
+        f'<bpmn:userTask id="Approve"><bpmn:extensionElements><bpm:approval>{props}</bpm:approval>'
         "</bpmn:extensionElements></bpmn:userTask>"
-        '<bpmn:scriptTask id="Task_Use" scriptFormat="chk-expr">'
+        '<bpmn:scriptTask id="Task_Use" scriptFormat="bpm-expr">'
         "<bpmn:script>본 = 기간</bpmn:script></bpmn:scriptTask>"
         '<bpmn:endEvent id="End_1"/>'
         '<bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Approve"/>'
@@ -478,7 +478,7 @@ def test_a_center_answer_comes_down_the_heartbeat(agent: Agent, center: TestClie
     answered = center.post(
         f"/api/v1/approvals/{found['request_id']}/answer",
         json={"answer": {"decision": "approve"}},
-        headers={**ADMIN_AUTH, "X-CHK-Actor": "kim"},
+        headers={**ADMIN_AUTH, "X-BPM-Actor": "kim"},
     )
     assert answered.status_code == 200, answered.text
 
@@ -587,7 +587,7 @@ def test_a_field_approval_shows_what_to_judge(
 
     body = running.body_of(asked.request_id)
     assert body is not None
-    assert shown["title"] == body["title"], "제목은 그림의 `chk:approval.title`이다 — 노드 id가 아니다"
+    assert shown["title"] == body["title"], "제목은 그림의 `bpm:approval.title`이다 — 노드 id가 아니다"
     assert shown["review"] and "오늘" in shown["review"], "결재자가 판단할 값이 창에 보인다"
     assert finished(agent) == "success"
     assert not running.field_requests_path.exists(), "현장 요청 파일도 끝나면 지운다 (업무 값이 있다)"

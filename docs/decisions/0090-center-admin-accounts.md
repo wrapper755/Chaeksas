@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 |
+| 상태 | 수락 · 역할에 회사 관리자(`company_admin`)가 더해진다 — [ADR-0125](0125-organization-and-work-placement.md) §5 |
 | 날짜 | 2026-10-24 |
 | 관련 | [ADR-0089](0089-admin-ui.md)(이것이 대체한다), [ADR-0013](0013-api-keys.md), [ADR-0017](0017-web-nextjs-design-system.md), 계약 C2·C5·C7·C13, 화면 `center-console.md`(CON-00·02·04·06·07·14·15), 지운 `admin.md` |
 

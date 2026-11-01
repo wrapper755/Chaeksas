@@ -37,12 +37,12 @@ python docs/08-business-examples/_source/build.py --check  # CI: 정의와 생�
 | `build.py` 정의 검사 | 50개 모두 통과 |
 | XML 파싱 | BPMN 50, DMN 7 통과 |
 | bpmn-js 17 가져오기 (Chromium, Playwright) | 50개 모두 경고 없이 열림, 그림 육안 확인 |
-| SpiffWorkflow 3 파서 | BPMN 43개 통과. **규칙 태스크가 있는 7개는 실패** — 기본 파서가 `camunda:decisionRef`를 기대한다. M3에서 `chk:rule`을 읽는 파서 확장이 필요하다. DMN 7개는 모두 통과 |
+| SpiffWorkflow 3 파서 | BPMN 43개 통과. **규칙 태스크가 있는 7개는 실패** — 기본 파서가 `camunda:decisionRef`를 기대한다. M3에서 `bpm:rule`을 읽는 파서 확장이 필요하다. DMN 7개는 모두 통과 |
 | 실행 | 그때는 없었다(엔진은 M3). **지금은** `tests/test_core_engine.py`가 예제 전부를 엔진으로 돌리고, M3·M4·M5·M7 인수 시험 묶음이 케이스 기대값을 대조한다 |
 
 ## 아직 정하지 않은 것 (예제가 드러낸 공백)
 
-닫힌 줄은 지웠다 — 업무 도우미(`core.helpers`, ADR-0025), 말일 cron `L`(`contracts.schedule`, ADR-0110), 결재 담당자(`chk:approval.assignees`, ADR-0080), 모의 앱(`samples/mock_apps`). 남은 줄도 지금 코드와 다시 대조하지 않았다 — `docs/09-gaps.md` §9가 예제를 대조한 목록이다.
+닫힌 줄은 지웠다 — 업무 도우미(`core.helpers`, ADR-0025), 말일 cron `L`(`contracts.schedule`, ADR-0110), 결재 담당자(`bpm:approval.assignees`, ADR-0080), 모의 앱(`samples/mock_apps`). 남은 줄도 지금 코드와 다시 대조하지 않았다 — `docs/09-gaps.md` §9가 예제를 대조한 목록이다.
 
 | 공백 | 예제 | 갈 곳 |
 | --- | --- | --- |

@@ -2,7 +2,7 @@
 
 **서버에서는 환경변수가 주 경로다.** 컨테이너·systemd가 그렇게 준다. 그래도 저장소를 쓸 수
 있으면 읽는다 — 개발 PC에서 PC 실행기·Studio와 같은 방식으로 다룰 수 있게. **운영자가 비밀 폴더
-(`CHK_SERVER_RUNNER__SECRETS_DIR`)를 적으면 그것이 저장소 자리에 들어간다** (ADR-0100) — OS 비밀
+(`BPM_SERVER_RUNNER__SECRETS_DIR`)를 적으면 그것이 저장소 자리에 들어간다** (ADR-0100) — OS 비밀
 저장소가 없는 컨테이너에서도 등록 승인·키 회전이 돈다.
 
 설정 파일·실행 기록·코드에는 넣지 않는다. **쓰기는 저장소가 없으면 분명히 실패한다** (평문으로
@@ -24,25 +24,25 @@ SERVICE = "chaeksas-server-runner"
 
 #: Center API 키 (C12 — 「서버 실행기용」 종류).
 CENTER_API_KEY = "center_api_key"
-ENV_CENTER_API_KEY = "CHK_SERVER_RUNNER__CENTER_API_KEY"
+ENV_CENTER_API_KEY = "BPM_SERVER_RUNNER__CENTER_API_KEY"
 #: 같이 배포된 실행기를 승인 없이 들이는 비밀 (C12 §등록 요청과 승인, ADR-0117) — **환경변수로만** 온다.
-ENV_JOIN_TOKEN = "CHK_SERVER_RUNNER__JOIN_TOKEN"
+ENV_JOIN_TOKEN = "BPM_SERVER_RUNNER__JOIN_TOKEN"
 #: 등록 요청에 쓴 키 쌍의 비밀 반쪽 (C12 §등록 요청과 승인).
 ENROLL_SECRET = "enroll_secret"
 
 #: 모델 키 (ADR-0027). **값은 설정·실행 기록에 넣지 않는다** (CLAUDE.md §5).
 LLM_API_KEY = "llm-api-key"
-ENV_LLM_API_KEY = "CHK_SERVER_RUNNER__LLM__API_KEY"
+ENV_LLM_API_KEY = "BPM_SERVER_RUNNER__LLM__API_KEY"
 
 #: SMTP 비밀번호 (ADR-0059). **설정·실행 기록에 넣지 않는다** (CLAUDE.md §5).
 SMTP_PASSWORD = "smtp-password"
-ENV_SMTP_PASSWORD = "CHK_SERVER_RUNNER__SMTP__PASSWORD"
+ENV_SMTP_PASSWORD = "BPM_SERVER_RUNNER__SMTP__PASSWORD"
 
 #: 확장의 설정 칸 (C13 `configuration`, `scope: server_runner`)과 그 비밀 칸.
-#: **이름 규칙은 PC 실행기의 것과 같다** (`CHK_BOT_UI__EXT__…` — ADR-0064 §2): 서버에는 설정 파일이
+#: **이름 규칙은 PC 실행기의 것과 같다** (`BPM_BOT_UI__EXT__…` — ADR-0064 §2): 서버에는 설정 파일이
 #: 없어 비밀이 아닌 칸도 환경변수로 온다.
 EXTENSION_PREFIX = "ext:"
-ENV_EXTENSION_PREFIX = "CHK_SERVER_RUNNER__EXT__"
+ENV_EXTENSION_PREFIX = "BPM_SERVER_RUNNER__EXT__"
 
 
 class SecretsUnavailable(RuntimeError):

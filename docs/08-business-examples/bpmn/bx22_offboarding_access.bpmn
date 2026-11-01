@@ -4,13 +4,13 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx22_offboarding_access" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_employee_left" name="employee_left" />
   <bpmn:error id="Err_TASK_FAILED" name="TASK_FAILED" errorCode="TASK_FAILED" />
   <bpmn:process id="Proc_bx22_offboarding_access" name="퇴사자 계정 회수" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -50,7 +50,7 @@
       "default": "security@example.com"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="퇴사 처리">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -62,7 +62,7 @@
       <bpmn:startEvent id="Rv_Start" name="시작">
         <bpmn:outgoing>Flow_Sub_Revoke_01</bpmn:outgoing>
       </bpmn:startEvent>
-      <bpmn:scriptTask id="Rv_Init" name="실패 칸 비우기" scriptFormat="chk-expr">
+      <bpmn:scriptTask id="Rv_Init" name="실패 칸 비우기" scriptFormat="bpm-expr">
         <bpmn:incoming>Flow_Sub_Revoke_01</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Revoke_02</bpmn:outgoing>
         <bpmn:script>메일실패 = None
@@ -77,7 +77,7 @@ ERP실패 = None</bpmn:script>
       </bpmn:parallelGateway>
       <bpmn:serviceTask id="Rv_Mail" name="메일">
         <bpmn:extensionElements>
-          <chk:serviceCall>{
+          <bpm:serviceCall>{
   "app_id": "directory",
   "operation": "disable_mail",
   "input": {
@@ -92,14 +92,14 @@ ERP실패 = None</bpmn:script>
       503
     ]
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_Sub_Revoke_03</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Revoke_06</bpmn:outgoing>
       </bpmn:serviceTask>
       <bpmn:serviceTask id="Rv_Vpn" name="VPN">
         <bpmn:extensionElements>
-          <chk:serviceCall>{
+          <bpm:serviceCall>{
   "app_id": "directory",
   "operation": "disable_vpn",
   "input": {
@@ -114,14 +114,14 @@ ERP실패 = None</bpmn:script>
       503
     ]
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_Sub_Revoke_04</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Revoke_09</bpmn:outgoing>
       </bpmn:serviceTask>
       <bpmn:serviceTask id="Rv_Erp" name="ERP">
         <bpmn:extensionElements>
-          <chk:serviceCall>{
+          <bpm:serviceCall>{
   "app_id": "erp",
   "operation": "disable_user",
   "input": {
@@ -136,22 +136,22 @@ ERP실패 = None</bpmn:script>
       503
     ]
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_Sub_Revoke_05</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Revoke_12</bpmn:outgoing>
       </bpmn:serviceTask>
-      <bpmn:scriptTask id="Rv_MailFail" name="메일 실패 기록" scriptFormat="chk-expr">
+      <bpmn:scriptTask id="Rv_MailFail" name="메일 실패 기록" scriptFormat="bpm-expr">
         <bpmn:incoming>Flow_Sub_Revoke_07</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Revoke_08</bpmn:outgoing>
         <bpmn:script>메일실패 = dict(시스템='메일', 오류=error_message)</bpmn:script>
       </bpmn:scriptTask>
-      <bpmn:scriptTask id="Rv_VpnFail" name="VPN 실패 기록" scriptFormat="chk-expr">
+      <bpmn:scriptTask id="Rv_VpnFail" name="VPN 실패 기록" scriptFormat="bpm-expr">
         <bpmn:incoming>Flow_Sub_Revoke_10</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Revoke_11</bpmn:outgoing>
         <bpmn:script>VPN실패 = dict(시스템='VPN', 오류=error_message)</bpmn:script>
       </bpmn:scriptTask>
-      <bpmn:scriptTask id="Rv_ErpFail" name="ERP 실패 기록" scriptFormat="chk-expr">
+      <bpmn:scriptTask id="Rv_ErpFail" name="ERP 실패 기록" scriptFormat="bpm-expr">
         <bpmn:incoming>Flow_Sub_Revoke_13</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Revoke_14</bpmn:outgoing>
         <bpmn:script>ERP실패 = dict(시스템='ERP', 오류=error_message)</bpmn:script>
@@ -211,7 +211,7 @@ ERP실패 = None</bpmn:script>
       <bpmn:sequenceFlow id="Flow_Sub_Revoke_17" sourceRef="Rv_ErpDone" targetRef="Rv_Join" />
       <bpmn:sequenceFlow id="Flow_Sub_Revoke_18" sourceRef="Rv_Join" targetRef="Rv_End" />
     </bpmn:subProcess>
-    <bpmn:scriptTask id="Task_Count" name="실패 모으기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Count" name="실패 모으기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>실패 = [x for x in [메일실패, VPN실패, ERP실패] if x is not None]
@@ -224,7 +224,7 @@ ERP실패 = None</bpmn:script>
     </bpmn:exclusiveGateway>
     <bpmn:sendTask id="Task_Security" name="보안팀 알림">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{보안팀메일}"
   ],
@@ -232,7 +232,7 @@ ERP실패 = None</bpmn:script>
   "body": "실패한 시스템: {실패}",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>

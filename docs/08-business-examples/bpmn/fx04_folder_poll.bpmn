@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx04_folder_poll" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx04_folder_poll" name="폴더 감시 (조건 시작 대체)" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -20,7 +20,7 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="5분마다">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -30,14 +30,14 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_List" name="파일 목록">
       <bpmn:extensionElements>
-        <chk:fileList>{
+        <bpm:fileList>{
   "folder": "{감시폴더}",
   "pattern": "*",
   "recursive": false,
   "sort": "name",
   "store_as": "파일",
   "count_as": "건수"
-}</chk:fileList>
+}</bpm:fileList>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
@@ -49,7 +49,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Confirm" name="처리 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "받은 파일 처리",
   "description": "",
   "show": [
@@ -64,7 +64,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>

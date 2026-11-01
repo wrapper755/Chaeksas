@@ -24,7 +24,7 @@
 | 관리 콘솔 (웹) | 관리자 토큰 | SVC-00·01·03 (+ 앱 고유 화면). 기본 포트 = API 포트 + 1 |
 
 - **앱은 업무 호출을 HTTP로 받지 않는다.** `POST /v1/ops`·`/manifest`·앱 안의 API 키(`/v1/keys/self`·`/center/v1/keys`·`/center/v1/trust`)는 없다. 「누가 불러도 되나」는 Center가 배포로 가린다 (C15 §올리기).
-- 멱등: **멱등 칸 = `(operation, run_id, node_id, node_instance, attempt, call_seq)`** (C15 `idempotency` + `operation`). 같은 칸으로 다시 오면(`delivery` ≥ 2 — 잠금이 지나 다시 나갔다) 수행하지 않고 저장된 결과를 그대로 끝낸다 (`replayed: true`). 같은 칸인데 본문(`input`·`mode`) 해시가 다르면 실패 `idempotency_conflict`. 보관 기간 기본 7일 (`CHK_SVC_<APP>__IDEMPOTENCY_DAYS`).
+- 멱등: **멱등 칸 = `(operation, run_id, node_id, node_instance, attempt, call_seq)`** (C15 `idempotency` + `operation`). 같은 칸으로 다시 오면(`delivery` ≥ 2 — 잠금이 지나 다시 나갔다) 수행하지 않고 저장된 결과를 그대로 끝낸다 (`replayed: true`). 같은 칸인데 본문(`input`·`mode`) 해시가 다르면 실패 `idempotency_conflict`. 보관 기간 기본 7일 (`BPM_SVC_<APP>__IDEMPOTENCY_DAYS`).
   - **부르는 쪽은 재시작 뒤에도 `node_instance`·`attempt`·`call_seq`를 같은 값으로 다시 만들어야 한다** (contracts README 원칙 9) — 그래야 Center가 같은 일감을 돌려준다.
 - 시간 제한: 작업마다 manifest의 `timeout_s` (기본 60). C15 일감의 기한이 된다.
 - 크기 한도: 입력·출력 각 1 MB (C15).
@@ -131,10 +131,10 @@ AdminStatus:
 
 | 환경변수 | 뜻 |
 | --- | --- |
-| `CHK_SVC_<APP>__LLM__BASE_URL` | 모델 주소 (`/v1/chat/completions` 앞까지) |
-| `CHK_SVC_<APP>__LLM__MODEL` | 모델 이름 |
-| `CHK_SVC_<APP>__LLM__API_KEY` | 키 (선택 — 키가 필요 없는 로컬 모델이면 비운다). **비밀이라 환경변수로만** 준다 |
-| `CHK_SVC_<APP>__LLM__TIMEOUT_S` | 한 번 물을 때 기다리는 시간 (기본 120) |
+| `BPM_SVC_<APP>__LLM__BASE_URL` | 모델 주소 (`/v1/chat/completions` 앞까지) |
+| `BPM_SVC_<APP>__LLM__MODEL` | 모델 이름 |
+| `BPM_SVC_<APP>__LLM__API_KEY` | 키 (선택 — 키가 필요 없는 로컬 모델이면 비운다). **비밀이라 환경변수로만** 준다 |
+| `BPM_SVC_<APP>__LLM__TIMEOUT_S` | 한 번 물을 때 기다리는 시간 (기본 120) |
 
 - 주소와 모델 이름이 **둘 다** 있어야 연결된 것이다. 하나만 있으면 설정이 덜 된 것이고 연결되지 않은 것으로 본다 (관리 상태에 그렇게 보인다).
 - 연결되지 않았는데 모델이 필요한 작업이 불리면 **503 `llm_unavailable`** 이다. 모델 없이 지어낸 답을 돌려주지 않는다.
@@ -161,7 +161,7 @@ AdminStatus:
 | `input_invalid` / `mode_unsupported` / `schema_unsupported` | 입력이 스키마와 다름, 작업이 그 모드를 지원 안 함 | 아니다 (업무 실패 — 오류 경계) |
 | `rate_limited` | 앱의 의존이 너무 많다고 함 | **그렇다** (C14 `retry.on` 429) |
 | `dependency_down` | 앱의 의존(LLM·DB)이 죽음 | **그렇다** (C14 `retry.on` 503) |
-| `llm_unavailable` | 모델이 필요한 작업인데 앱에 모델이 설정되지 않음 | 아니다 — 앱 운영자가 `CHK_SVC_<APP>__LLM__*`를 고친다 |
+| `llm_unavailable` | 모델이 필요한 작업인데 앱에 모델이 설정되지 않음 | 아니다 — 앱 운영자가 `BPM_SVC_<APP>__LLM__*`를 고친다 |
 | `internal` | 작업 함수가 예상하지 못한 예외 | 아니다 |
 
 ## 호환 규칙
@@ -171,7 +171,7 @@ AdminStatus:
 
 ## `service_kit`이 제공하는 것
 
-새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: 가져가기 루프(`Consumer` — 토큰 읽기·manifest와 카탈로그 올리기·끝내기 — 잠금은 늘리지 않고 작업 `timeout_s`만큼 잡는다, C15), 멱등 저장소, 오류 형식, 사용 기록, `/healthz`, 관리 콘솔 공통 화면(SVC-00·01·03), 모델 연결(`CHK_SVC_<APP>__LLM__*`), 설정(`CHK_SVC_<APP>__CENTER__URL`·`…__CENTER__TOKEN`·`…__DATA_DIR`), 포트(관리 API 8000·8010…, 콘솔 +1).
+새 서비스 앱은 작업 함수만 쓴다. 나머지는 `service_kit`이 이 계약대로 제공한다: 가져가기 루프(`Consumer` — 토큰 읽기·manifest와 카탈로그 올리기·끝내기 — 잠금은 늘리지 않고 작업 `timeout_s`만큼 잡는다, C15), 멱등 저장소, 오류 형식, 사용 기록, `/healthz`, 관리 콘솔 공통 화면(SVC-00·01·03), 모델 연결(`BPM_SVC_<APP>__LLM__*`), 설정(`BPM_SVC_<APP>__CENTER__URL`·`…__CENTER__TOKEN`·`…__DATA_DIR`), 포트(관리 API 8000·8010…, 콘솔 +1).
 
 ## 변경 이력
 
@@ -181,7 +181,7 @@ AdminStatus:
 | 2026-10-29 | 1 | **앱이 일꾼이 된다** — `POST /v1/ops`·`/manifest`·앱 안의 키(`/v1/keys/self`·`/center/v1/keys`·`/center/v1/trust`)·관리 API의 키 발급을 걷고 C15 가져가기로 같은 작업을 수행한다. 폴백은 시험 일감일 때만, 추가 권한은 Center가 건다, 카탈로그는 일꾼이 올린다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-25 | 1 | §Center가 발급하는 키 — `CENTER__URL`, `GET /center/v1/trust`, `POST /center/v1/keys`(C2 봉투 `service_key`, 해시만), 키 레코드 `issued_by`·`center_key_id`·`issued_for`. 새 경로·선택 칸이라 옛 부르는 쪽은 그대로다 | [0094](../decisions/0094-service-app-keys-ride-the-deployment.md) |
 | 2026-10-03 | 1 | 관리 API(`/admin/v1/status`·`keys`·`usage`)의 경로·모델·권한을 적었다 — ADR-0017이 경로만 말하고 모양이 없어서 콘솔이 타입을 손으로 쓸 수밖에 없었다 | 0017 |
-| 2026-10-05 | 1 | 모델 연결(`CHK_SVC_<APP>__LLM__*`)과 503 `llm_unavailable`, 관리 상태의 `llm` 의존 줄을 적었다 — 서비스 앱은 `core`를 쓸 수 없어 모델 클라이언트를 `chaeksas.llm`으로 내렸다. 모델 칸은 새로 생긴 것이라 기존 앱은 영향이 없다 | 0034 |
+| 2026-10-05 | 1 | 모델 연결(`BPM_SVC_<APP>__LLM__*`)과 503 `llm_unavailable`, 관리 상태의 `llm` 의존 줄을 적었다 — 서비스 앱은 `core`를 쓸 수 없어 모델 클라이언트를 `chaeksas.llm`으로 내렸다. 모델 칸은 새로 생긴 것이라 기존 앱은 영향이 없다 | 0034 |
 | 2026-10-05 | 1 | `Operation.required_scopes`를 더했다 — 추가 권한을 **작업이 선언하고 뼈대가 건다** (C9의 `registry_write`를 앱마다 손으로 거는 것을 막는다). 없던 칸이라 기존 앱은 영향이 없다 | 0013 |
 | 2026-10-01 | 1 | 초안 (키는 앱 관리 콘솔 발급·자체 검증, 멱등 키, `server_ok`) | 0010, 0013, 0015 |
 | 2026-10-01 | 1 | 검토 반영: 멱등 키에 `operation`·`node_instance` 추가와 본문 충돌 409, 폴백은 키가 자율 수행을 허용할 때만, 키 앞자리 규칙, usage 이름 통일, 보관 7일 | — |

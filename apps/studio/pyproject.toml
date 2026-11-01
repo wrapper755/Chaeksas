@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.scripts]
-chk-studio = "chaeksas.studio.__main__:main"
+bpm-studio = "chaeksas.studio.__main__:main"
 
 [tool.uv.sources]
 chaeksas-core = { workspace = true }

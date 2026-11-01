@@ -32,16 +32,16 @@ from chaeksas.contracts.signing import TARGET_ANY, AdminKey, Envelope, verify, v
 
 #: 헤더 이름 — 문자열을 코드 곳곳에 흩어 두지 않는다 (프로토타입에서 문서의 `X-Bot-Id`와
 #: 코드의 `?bot_id=`가 어긋났다).
-ACTOR_HEADER = "X-CHK-Actor"
+ACTOR_HEADER = "X-BPM-Actor"
 """콘솔 서버(BFF)가 로그인 세션의 사용자 이름을 실어 보낸다. **관리자·읽기 토큰일 때만 믿는다.**"""
 
-ON_BEHALF_HEADER = "X-CHK-On-Behalf-Of"
+ON_BEHALF_HEADER = "X-BPM-On-Behalf-Of"
 """사람 대신 부르는 키가 그 사람 이름을 싣는다 (ADR-0081). 퍼센트 인코딩한 UTF-8이다.
 
 대리 답용 키(`relay`)는 결재에 **반드시** 싣고 그 이름이 담당자여야 한다. 연동용 키는 작업·메시지에
 실어도 되고, 그때는 `JobInfo.on_behalf_of`로 **적기만** 한다 (`requested_by`는 키 이름 그대로)."""
 
-#: `X-CHK-On-Behalf-Of` 이름의 길이 상한 (정규화 뒤).
+#: `X-BPM-On-Behalf-Of` 이름의 길이 상한 (정규화 뒤).
 MAX_ON_BEHALF_CHARS = 200
 
 CONTENT_HASH_HEADER = "X-Content-Hash"
@@ -51,7 +51,7 @@ CONTENT_HASH_HEADER = "X-Content-Hash"
 LIST_LIMIT_DEFAULT = 100
 LIST_LIMIT_MAX = 1000
 
-#: 패키지 zip 크기 한도 (Center 설정 `CHK_CENTER__PACKAGE__MAX_MB`). 넘으면 413 `too_large`.
+#: 패키지 zip 크기 한도 (Center 설정 `BPM_CENTER__PACKAGE__MAX_MB`). 넘으면 413 `too_large`.
 MAX_PACKAGE_MB = 50
 
 #: 작업 메모 길이, 멱등 키 기억 기간.
@@ -125,7 +125,7 @@ def job_source(requested_by: str | None) -> str:
 
 
 def on_behalf_violation(name: str) -> Violation | None:
-    """정규화한(`approvals.normalize_name`) `X-CHK-On-Behalf-Of` 이름 중 받지 않을 것 — 422 `on_behalf_invalid`."""
+    """정규화한(`approvals.normalize_name`) `X-BPM-On-Behalf-Of` 이름 중 받지 않을 것 — 422 `on_behalf_invalid`."""
     if not name:
         reason = "비었다"
     elif len(name) > MAX_ON_BEHALF_CHARS:
@@ -469,7 +469,7 @@ class JobTarget(ContractModel):
 class JobCreateRequest(ContractModel):
     """`POST /jobs`.
 
-    `requested_by`는 **본문에서 받지 않는다.** 키 이름이나 `X-CHK-Actor` 헤더로 Center가 채운다.
+    `requested_by`는 **본문에서 받지 않는다.** 키 이름이나 `X-BPM-Actor` 헤더로 Center가 채운다.
     """
 
     bpm_process_id: str
@@ -493,7 +493,7 @@ class JobInfo(JobCreateRequest):
 
     job_id: JobId
     requested_by: str
-    #: 연동용 키가 `X-CHK-On-Behalf-Of`로 실은 사람 (ADR-0081) — **주장**이다. Center가 대조하지 않고
+    #: 연동용 키가 `X-BPM-On-Behalf-Of`로 실은 사람 (ADR-0081) — **주장**이다. Center가 대조하지 않고
     #: 권한을 바꾸지 않는다. `requested_by`(키 이름)는 그대로다.
     on_behalf_of: str | None = None
     requested_at: Timestamp

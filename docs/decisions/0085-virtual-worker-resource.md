@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | 수락 · §3 읽는 쪽과 「다시 볼 조건 ②」는 [ADR-0098](0098-virtual-worker-identity.md)이 이어 정한다 |
+| 상태 | 대체됨([ADR-0125](0125-organization-and-work-placement.md)) — 가상 직원은 조직의 직원(직원 자리 업무)으로 접히고 Center의 B16 관문은 없어진다 (구현 전까지 코드는 이 ADR대로다). §3 읽는 쪽과 「다시 볼 조건 ②」는 [ADR-0098](0098-virtual-worker-identity.md)이 이어 정했다 |
 | 날짜 | 2026-10-20 |
 | 관련 | [ADR-0079](0079-virtual-worker-is-an-intake-bot.md)(접수 Bot — 이 ADR이 그 결정 1·3과 「요청서와 어긋난 것」을 정한다), [ADR-0080](0080-approval-assignees.md), [ADR-0081](0081-answering-on-behalf.md), [ADR-0082](0082-batch-start.md)(B16), [C5](../03-contracts/C5-packages-deployments-jobs.md), [C14](../03-contracts/C14-bpmn-extensions.md) B16, 화면 CON-13, 바깥 요청서 W3 |
 

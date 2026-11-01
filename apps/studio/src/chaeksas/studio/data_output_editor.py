@@ -1,7 +1,7 @@
-"""STU-04 파일 출력 편집기 — 데이터 객체의 `chk:dataOutput` (C14 §파일 출력, ADR-0026).
+"""STU-04 파일 출력 편집기 — 데이터 객체의 `bpm:dataOutput` (C14 §파일 출력, ADR-0026).
 
 속성 패널이 데이터 객체(`DataObjectReference`)를 만나면 탭으로 끼운다. **규약은 결재·보내기·STU-14와
-같다** (`load`/`dump`/`problems`/`changed`). 아직 `chk:dataOutput`이 없는 데이터 객체에도 붙는다 —
+같다** (`load`/`dump`/`problems`/`changed`). 아직 `bpm:dataOutput`이 없는 데이터 객체에도 붙는다 —
 「파일로 씁니다」를 켜고 적용하면 생기고, 끄면 지운다(`dump()`가 `None`).
 
 - **엔진은 템플릿이 있으면 그것만 쓴다** (`core.files._render`) — 그래서 「내용」은 라디오이고 고른 쪽만
@@ -73,7 +73,7 @@ class DataOutputEditor(QWidget):
         lines = self.fontMetrics().lineSpacing()
 
         self.on_box = QCheckBox("이 데이터 객체를 파일로 씁니다", self)
-        self.on_box.setToolTip("끄면 chk:dataOutput을 지웁니다 — 평범한 데이터 객체는 엔진이 건너뜁니다.")
+        self.on_box.setToolTip("끄면 bpm:dataOutput을 지웁니다 — 평범한 데이터 객체는 엔진이 건너뜁니다.")
 
         self.path_box = QLineEdit(self)
         self.path_box.setPlaceholderText("예: 결과/{대상월}_대사.md (필수)")
@@ -164,7 +164,7 @@ class DataOutputEditor(QWidget):
     # ── 규약 ──
 
     def load(self, body: Mapping[str, Any] | None) -> None:
-        """`chk:dataOutput` 본문(없으면 `None`)을 그린다."""
+        """`bpm:dataOutput` 본문(없으면 `None`)을 그린다."""
         self._quiet = True
         self._loaded = dict(body) if isinstance(body, Mapping) else {}
         self.on_box.setChecked(bool(self._loaded))

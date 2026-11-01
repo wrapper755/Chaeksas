@@ -1,4 +1,4 @@
-"""서버 실행기 설정 — 환경변수 `CHK_SERVER_RUNNER__*` (ADR-0011).
+"""서버 실행기 설정 — 환경변수 `BPM_SERVER_RUNNER__*` (ADR-0011).
 
 **화면이 없으므로 설정 파일도 없다** — 서버는 환경변수·compose로 설정한다 (PC 실행기의 BUI-03에
 해당하는 자리가 없다). 기본값은 여기 한 곳에만 둔다 (`docs/04-setup.md` §6).
@@ -36,7 +36,7 @@ DEFAULT_PARK_AFTER_S = 20.0
 #: (앱끼리 import하지 않는다). 둘이 어긋나면 `docs/04-setup.md` §6의 표가 원본이다.
 DEFAULT_LLM_MODEL = "qwen2.5:7b"
 
-ENV_PREFIX = "CHK_SERVER_RUNNER__"
+ENV_PREFIX = "BPM_SERVER_RUNNER__"
 
 
 def _env(name: str, default: str | None = None) -> str | None:
@@ -75,7 +75,7 @@ class Settings:
     #: 출력 폴더 밖은 적어 주지 않으면 `PathDenied`다. 쓸 수 있는 곳은 읽기도 된다.
     readable_dirs: tuple[Path, ...] = ()
     writable_dirs: tuple[Path, ...] = ()
-    #: 보내기 (ADR-0059). **비우면 `chk:email`이 보내지 않고 실패한다** — 조용히 넘어가지 않는다.
+    #: 보내기 (ADR-0059). **비우면 `bpm:email`이 보내지 않고 실패한다** — 조용히 넘어가지 않는다.
     #: 비밀번호는 여기 없다 (`credentials.smtp_password()`).
     smtp_host: str = ""
     smtp_port: int = 0

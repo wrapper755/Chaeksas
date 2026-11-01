@@ -70,7 +70,7 @@
 | 필드 | 뜻 |
 | --- | --- |
 | `id`, `version`, `name`, `publisher`, `tier`, `definition_hash` | C13 |
-| `protocol` | `chk-c11` / `http-adapter` / 없음 (클라이언트 기여만) |
+| `protocol` | `bpm-c11` / `http-adapter` / 없음 (클라이언트 기여만) |
 | `contributes_summary` | 기여 지점별 이름 (예: `task_types: [seal_check]`) |
 | `service_app_id`? | 서버 부분 |
 | `installed_on` | 이 확장을 가진 PC 실행기·서버 실행기 수와 버전 분포 (C4·C12 보고. Studio는 세지 않음) |
@@ -80,7 +80,7 @@
 
 ### ConsumerFolderScan (일꾼 폴더)
 
-일꾼 폴더(`CHK_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)의 일꾼 파일(`<이름>.consumer.json`, C15 §일꾼 들이기)을 Center가 뜰 때 한 번 읽은 결과다 (ADR-0122). 맡은 일꾼이 없어져 거둔 외부 확장도 함께 싣는다. 결과는 메모리에만 있고 다시 뜨면 새로 읽는다.
+일꾼 폴더(`BPM_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)의 일꾼 파일(`<이름>.consumer.json`, C15 §일꾼 들이기)을 Center가 뜰 때 한 번 읽은 결과다 (ADR-0122). 맡은 일꾼이 없어져 거둔 외부 확장도 함께 싣는다. 결과는 메모리에만 있고 다시 뜨면 새로 읽는다.
 
 | 필드 | 뜻 |
 | --- | --- |
@@ -146,7 +146,7 @@
 | 검사 | 결과 `type` / `reason` |
 | --- | --- |
 | `requires.extensions[]`가 있고 버전 범위가 맞나 (외부면 `definition_hash`도) | `extension` / `not_found` / `version_mismatch` / `hash_mismatch` |
-| `requires.service_apps[].app_id`가 등록되어 있나 — 서비스 앱(C11)이거나 **같은 id의 외부 확장(HTTP 어댑터)**이면 등록된 것이다 (`chk:serviceCall`은 둘을 가리지 않는다 — C13 §4) | `service_app` / `not_registered` |
+| `requires.service_apps[].app_id`가 등록되어 있나 — 서비스 앱(C11)이거나 **같은 id의 외부 확장(HTTP 어댑터)**이면 등록된 것이다 (`bpm:serviceCall`은 둘을 가리지 않는다 — C13 §4) | `service_app` / `not_registered` |
 | 그 작업이 있나, 결정 수행을 지원하나, 서버 BPM 프로세스면 `server_ok`인가 — 외부 확장이면 어댑터의 `operations[]`에서 본다 | `operation` / `not_found` / `not_deterministic` / `not_server_ok` |
 | `requires.resources[]` (`{type, id}`)가 확장 기여 자원에 있나 | `resource` / `not_found` |
 
@@ -179,18 +179,18 @@ CenterKeyInfo 필드:
 | --- | --- |
 | `key_id` | `ck_<hex8>` |
 | `name`, `type` | |
-| `prefix` | 앞자리 16자 (`chk_ctr_` + 무작위 8자) |
+| `prefix` | 앞자리 16자 (`bpm_ctr_` + 무작위 8자) |
 | `bound_to`? | `{type, id, name, machine_name?, first_seen}` |
 | `enrollment_id`? | 등록 승인이 만든 키면 그 요청 (C5 §등록 승인). 없으면 사람이·자동화가 발급한 키다 |
 | `created_at`, `expires_at`?, `last_used_at`?, `revoked_at`? | |
 | `state` | `active` / `expired` / `revoked`. 화면 표기는 「사용 중」 / 「만료」 / 「폐기됨」 |
 
-- 키 원문은 `chk_ctr_<무작위 40자>`이고, Center는 해시만 저장한다.
+- 키 원문은 `bpm_ctr_<무작위 40자>`이고, Center는 해시만 저장한다.
 - **연동용·대리 답용 키는 일꾼 폴더의 키 파일로도 들인다** (§폴더 키).
 
 ### 폴더 키
 
-함께 설치되는 연동 시스템의 키는 설치가 짓는다 ([0123](../decisions/0123-folder-keys.md)) — 일꾼 폴더(`CHK_CENTER__CONSUMERS_DIR`, C15 §일꾼 들이기)의 `<이름>.key.json`(`FolderKey`)을 Center가 **뜰 때 한 번** 읽는다. 원문은 폴더에 없다.
+함께 설치되는 연동 시스템의 키는 설치가 짓는다 ([0123](../decisions/0123-folder-keys.md)) — 일꾼 폴더(`BPM_CENTER__CONSUMERS_DIR`, C15 §일꾼 들이기)의 `<이름>.key.json`(`FolderKey`)을 Center가 **뜰 때 한 번** 읽는다. 원문은 폴더에 없다.
 
 ```json
 {"name": "nowview", "type": "integration", "token_sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"}
@@ -200,11 +200,11 @@ CenterKeyInfo 필드:
 | --- | --- |
 | `name` | CON-11에 보이는 키 이름 |
 | `type` | `integration` / `relay`만. 다른 것은 `input_invalid` |
-| `token_sha256` | 키 원문(UTF-8)의 SHA-256, 소문자 16진 64자. 원문의 권장 꼴은 위 키 원문과 같다(`chk_ctr_` + 40자) — Center는 해시만 맞춘다 |
+| `token_sha256` | 키 원문(UTF-8)의 SHA-256, 소문자 16진 64자. 원문의 권장 꼴은 위 키 원문과 같다(`bpm_ctr_` + 40자) — Center는 해시만 맞춘다 |
 
 - **권한은 종류가 정한다** — `POST /center-keys`로 발급한 같은 종류의 키와 같다(C5 권한표). 앞자리(`prefix`)는 빈 글이고(CON-11 「—」) 만료·회전이 없다.
 - 키의 자리는 **파일 이름**(확장자 앞)이다. 해시가 바뀌면 옛 키를 폐기하고 새 키를 만든다. **폐기된 토큰은 되살아나지 않고**(`token_revoked`), 다른 키(일꾼 키 포함)가 쓰는 해시는 `token_in_use`다. **파일이 빠지면 폐기한다**(행은 남는다). 읽지 못한 파일은 자리를 지킨다.
-- 결과는 `ConsumerFolderScan.items[]`의 `kind: key` 줄이다. `chk-center key-file <이름> --type integration|relay [--dir 폴더]`가 파일을 짓고 원문을 한 번 찍는다.
+- 결과는 `ConsumerFolderScan.items[]`의 `kind: key` 줄이다. `bpm-center key-file <이름> --type integration|relay [--dir 폴더]`가 파일을 짓고 원문을 한 번 찍는다.
 
 - 기본 만료는 1년. 만료 14일 전부터 CON-11에 보인다. **등록 승인이 만든 키는 Center가 그때부터 회전한다** (C4 §키 회전) — PC 실행기 알림(BUI-05)은 회전이 7일 전까지 닿지 않았을 때만, 회전하지 않는 키는 14일 전부터다.
 

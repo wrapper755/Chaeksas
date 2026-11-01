@@ -8,7 +8,7 @@
 - **비밀 저장소가 없으면 요청하지 않는다** — 받은 키를 둘 곳이 없다. 평문 파일로 흘리지 않는다.
 - 보낸 요청은 데이터 폴더의 `enrollment.json`에 둔다 — 다시 떠도 같은 요청을 묻는다. 그 파일에는
   키도 봉함도 없다(요청 id·코드·상태뿐이다).
-- **들이기 비밀이 있으면** (`CHK_SERVER_RUNNER__JOIN_TOKEN`, ADR-0117) 등록 요청에 실어 그 자리에서
+- **들이기 비밀이 있으면** (`BPM_SERVER_RUNNER__JOIN_TOKEN`, ADR-0117) 등록 요청에 실어 그 자리에서
   승인된 키를 받는다 — compose로 Center와 같이 띄운 실행기의 길이다. 사람이 승인하지 않는다.
 """
 
@@ -87,8 +87,8 @@ def _ask(agent: Agent, secret: str) -> EnrollStatus:
     except CenterProblem as e:
         if e.code == "join_token_invalid":
             raise CenterProblem(
-                "들이기 비밀이 Center의 것과 다릅니다 — CHK_SERVER_RUNNER__JOIN_TOKEN과 "
-                "Center의 CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN을 같은 값으로 맞추세요"
+                "들이기 비밀이 Center의 것과 다릅니다 — BPM_SERVER_RUNNER__JOIN_TOKEN과 "
+                "Center의 BPM_CENTER__SERVER_RUNNER_JOIN_TOKEN을 같은 값으로 맞추세요"
             ) from e
         raise
     if found.code != request_code(public, found.enrollment_id):

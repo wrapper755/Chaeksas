@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.scripts]
-chk-mock-apps = "chaeksas.mock_apps.cli:main"
+bpm-mock-apps = "chaeksas.mock_apps.cli:main"
 
 [tool.uv.sources]
 chaeksas-service-kit = { workspace = true }

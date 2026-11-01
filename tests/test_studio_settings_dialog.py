@@ -106,7 +106,7 @@ def dialog(settings: Settings, extensions: Extensions, vault: Vault | None, **kw
 
 def approved(vault: Vault) -> Vault:
     """승인된 Studio 키가 있다 (ADR-0093)."""
-    vault.set_password("chaeksas-studio", "center", "chk_ctr_studio")
+    vault.set_password("chaeksas-studio", "center", "bpm_ctr_studio")
     return vault
 
 
@@ -207,14 +207,14 @@ def test_runs_see_what_was_put_in(monkeypatch: pytest.MonkeyPatch) -> None:
     vault = Vault()
     vault.set_password("chaeksas-studio", "ext:demo-ext:token", "tok-stored")
     monkeypatch.setattr("chaeksas.studio.credentials.StudioCredentials._keyring", lambda self: vault)
-    monkeypatch.delenv("CHK_STUDIO__EXT__DEMO_EXT__TOKEN", raising=False)
+    monkeypatch.delenv("BPM_STUDIO__EXT__DEMO_EXT__TOKEN", raising=False)
     found = demo_extensions(configured={"demo-ext": {"region": "부산"}})
     values = dict(getattr(found.settings_for("demo-ext"), "values", {}))
     assert values["region"] == "부산" and "token" not in values and "elsewhere" not in values
     assert demo_extensions().settings_for("demo-ext").get("region") is None, "넣지 않은 칸은 None"
     secrets = StudioSecrets(credentials=Credentials(vault), extension_id="demo-ext")
     assert secrets.resolve("token") == "tok-stored"
-    monkeypatch.setenv("CHK_STUDIO__EXT__DEMO_EXT__TOKEN", "tok-env")
+    monkeypatch.setenv("BPM_STUDIO__EXT__DEMO_EXT__TOKEN", "tok-env")
     assert secrets.resolve("token") == "tok-env", "환경변수가 이긴다"
     assert StudioSecrets(credentials=Credentials(vault)).resolve("token") is None, "확장을 모르면 키 참조만"
 
@@ -310,7 +310,7 @@ def test_stu16_later_keeps_the_request_for_next_time(qt: Any, settings: Settings
 
 def test_stu16_refused_key_offers_asking_again(qt: Any, settings: Settings, center: Any) -> None:
     vault = Vault()
-    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_" + "x" * 40)
+    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "bpm_ctr_" + "x" * 40)
     found = connect_window(replace(settings, center_url="http://center.test"), vault, center, refused=True)
     assert "키가 거부되었습니다" in found.status.text() and not found.again.isHidden()
     found.ask_again()
@@ -329,8 +329,8 @@ def test_need_at_start(center: Any) -> None:
 
     assert ask().kind == ce.NEED_CONNECT
     assert ask(from_env=True).kind == ce.NEED_NONE
-    assert ask(key="chk_ctr_" + "x" * 40).kind == ce.NEED_REFUSED
-    assert ask(key="chk_ctr_" + "x" * 40, base_url="http://127.0.0.1:9", client=None).kind == ce.NEED_UNREACHABLE
+    assert ask(key="bpm_ctr_" + "x" * 40).kind == ce.NEED_REFUSED
+    assert ask(key="bpm_ctr_" + "x" * 40, base_url="http://127.0.0.1:9", client=None).kind == ce.NEED_UNREACHABLE
 
 
 def test_center_tab_hides_ask_again_while_connected(
@@ -348,7 +348,7 @@ def test_center_tab_hides_ask_again_while_connected(
     tab.test_center()
     assert tab.center_result.text() == "연결됨 — 서비스 앱 0개를 읽었습니다" and tab.center_again.isHidden()
 
-    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_" + "x" * 40)  # 폐기된 키라 치자
+    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "bpm_ctr_" + "x" * 40)  # 폐기된 키라 치자
     tab.test_center()
     assert tab.center_result.text() == "키가 거부되었습니다 — 「다시 요청」으로 새로 승인받으세요"
     assert not tab.center_again.isHidden()
@@ -357,7 +357,7 @@ def test_center_tab_hides_ask_again_while_connected(
 def test_an_env_key_skips_the_request(
     qt: Any, settings: Settings, extensions: Extensions, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_env")
+    monkeypatch.setenv(ENV_CENTER_API_KEY, "bpm_ctr_env")
     found = dialog(settings, extensions, Vault())
     assert "환경변수의 키를 씁니다" in found.center_result.text()
     assert found.center_again.isHidden()
@@ -373,12 +373,12 @@ def test_an_empty_center_address_blocks_saving(qt: Any, settings: Settings, exte
 
 def test_the_center_key_env_var_wins(monkeypatch: pytest.MonkeyPatch) -> None:
     vault = Vault()
-    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "chk_ctr_stored")
+    vault.set_password("chaeksas-studio", CENTER_KEY_NAME, "bpm_ctr_stored")
     monkeypatch.delenv(ENV_CENTER_API_KEY, raising=False)
-    assert Credentials(vault).center_api_key() == "chk_ctr_stored"
-    monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_env")
-    assert Credentials(vault).center_api_key() == "chk_ctr_env"
-    assert Credentials(vault).stored_center_api_key() == "chk_ctr_stored", "자리 글은 저장된 것만 본다"
+    assert Credentials(vault).center_api_key() == "bpm_ctr_stored"
+    monkeypatch.setenv(ENV_CENTER_API_KEY, "bpm_ctr_env")
+    assert Credentials(vault).center_api_key() == "bpm_ctr_env"
+    assert Credentials(vault).stored_center_api_key() == "bpm_ctr_stored", "자리 글은 저장된 것만 본다"
 
 
 # ─────────────────────────── 확인들 ───────────────────────────
@@ -438,9 +438,9 @@ def test_the_center_probe_carries_the_key_and_asks_only_for_service_apps() -> No
         seen.append((str(request.url), request.headers.get("authorization", "")))
         return httpx.Response(200, json={"items": []})
 
-    shown = center_status("http://c", "chk_ctr_123", client=mock(answer))
-    assert seen == [("http://c/api/v1/resources?type=service_app", "Bearer chk_ctr_123")]
-    assert "chk_ctr_123" not in shown
+    shown = center_status("http://c", "bpm_ctr_123", client=mock(answer))
+    assert seen == [("http://c/api/v1/resources?type=service_app", "Bearer bpm_ctr_123")]
+    assert "bpm_ctr_123" not in shown
 
 
 # ─────────────────────────── 시험 실행이 같은 창고를 쓴다 ───────────────────────────
@@ -450,8 +450,8 @@ def test_runs_resolve_the_call_token_and_extension_secrets(monkeypatch: pytest.M
     """`call_token`은 Studio가 청한 호출 토큰이고(C15), 나머지는 그 확장의 비밀 칸이다."""
     vault = Vault()
     vault.set_password("chaeksas-studio", "ext:crm:note", "비밀")
-    found = StudioSecrets(credentials=Credentials(vault), extension_id="crm", call_tokens=lambda: "chk_ctr_x")
-    assert found.resolve("call_token") == "chk_ctr_x"
+    found = StudioSecrets(credentials=Credentials(vault), extension_id="crm", call_tokens=lambda: "bpm_ctr_x")
+    assert found.resolve("call_token") == "bpm_ctr_x"
     assert found.resolve("note") == "비밀"
     assert StudioSecrets(credentials=Credentials(vault)).resolve("call_token") is None, "청하는 쪽이 없으면 없다"
 
@@ -464,12 +464,12 @@ def test_studio_asks_center_for_a_call_token_and_keeps_it(monkeypatch: pytest.Mo
 
     def answer(request: httpx.Request) -> httpx.Response:
         asked.append(f"{request.method} {request.url.path} {request.headers.get('authorization')}")
-        return httpx.Response(201, json={"token": "chk_ctr_" + "t" * 40, "expires_at": "2099-01-01T00:00:00+00:00"})
+        return httpx.Response(201, json={"token": "bpm_ctr_" + "t" * 40, "expires_at": "2099-01-01T00:00:00+00:00"})
 
-    tokens = CallTokens(base_url="http://c", api_key="chk_ctr_studio", client=mock(answer))
-    assert tokens() == "chk_ctr_" + "t" * 40
-    assert tokens() == "chk_ctr_" + "t" * 40
-    assert asked == [f"POST {PATH} Bearer chk_ctr_studio"], "한 번만 청한다"
+    tokens = CallTokens(base_url="http://c", api_key="bpm_ctr_studio", client=mock(answer))
+    assert tokens() == "bpm_ctr_" + "t" * 40
+    assert tokens() == "bpm_ctr_" + "t" * 40
+    assert asked == [f"POST {PATH} Bearer bpm_ctr_studio"], "한 번만 청한다"
 
 
 def test_the_model_key_for_runs_comes_from_the_vault(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -477,10 +477,10 @@ def test_the_model_key_for_runs_comes_from_the_vault(monkeypatch: pytest.MonkeyP
 
     vault = Vault()
     vault.set_password("chaeksas-studio", "llm", "sk-stored")
-    monkeypatch.delenv("CHK_STUDIO__LLM__API_KEY", raising=False)
+    monkeypatch.delenv("BPM_STUDIO__LLM__API_KEY", raising=False)
     monkeypatch.setattr("chaeksas.studio.credentials.StudioCredentials._keyring", lambda self: vault)
     assert runner._llm_key() == "sk-stored"
-    monkeypatch.setenv("CHK_STUDIO__LLM__API_KEY", "sk-env")
+    monkeypatch.setenv("BPM_STUDIO__LLM__API_KEY", "sk-env")
     assert runner._llm_key() == "sk-env"
 
 

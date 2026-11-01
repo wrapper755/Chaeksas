@@ -2,7 +2,7 @@
 
 | 항목 | 값 |
 | --- | --- |
-| 상태 | **구현됨** (2026-10-29) — Center(`api/external_tasks.py`, 15판)와 양쪽이 돈다: 부르는 쪽은 `core.services.CenterServiceCaller`(서버 실행기·실행 프로세스·Studio), 일꾼은 `service_kit.consumer`(서비스 앱·모의 앱)와 어댑터 일꾼 `chk-adapter-consumer`(`apps/adapter_consumer`). `tests/test_center_external_tasks.py`·`test_c15_round_trip.py`·`test_service_kit_consumer.py`·`test_adapter_consumer.py`가 지킨다. 서버 실행기는 긴 작업을 기다림으로 넘긴다(ADR-0103) |
+| 상태 | **구현됨** (2026-10-29) — Center(`api/external_tasks.py`, 15판)와 양쪽이 돈다: 부르는 쪽은 `core.services.CenterServiceCaller`(서버 실행기·실행 프로세스·Studio), 일꾼은 `service_kit.consumer`(서비스 앱·모의 앱)와 어댑터 일꾼 `bpm-adapter-consumer`(`apps/adapter_consumer`). `tests/test_center_external_tasks.py`·`test_c15_round_trip.py`·`test_service_kit_consumer.py`·`test_adapter_consumer.py`가 지킨다. 서버 실행기는 긴 작업을 기다림으로 넘긴다(ADR-0103) |
 | schema | 1 |
 | 보내는 쪽 → 받는 쪽 | 서버 실행기·실행 프로세스·Studio → Center (올리기·기다리기), 일꾼 → Center (들이기·가져가기·끝내기) |
 | 코드 위치 | `packages/contracts/external_task.py`, Center `api/external_tasks.py` |
@@ -39,7 +39,7 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 
 - **연결은 늘 Center 쪽으로 나간다.** Center는 일꾼에게도, 부르는 쪽에게도 먼저 연결하지 않는다.
 - 크기 한도: 입력·출력 각 1 MB (C11과 같다).
-- 롱폴링 연결 상한: `CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` (기본 200, 설정 모델에). 넘으면 503 `too_many_waiters` — 잠깐 쉬고 다시 건다.
+- 롱폴링 연결 상한: `BPM_CENTER__EXTERNAL_TASKS__MAX_WAITERS` (기본 200, 설정 모델에). 넘으면 503 `too_many_waiters` — 잠깐 쉬고 다시 건다.
 
 ## 모델
 
@@ -48,7 +48,7 @@ BPM 프로세스가 네트워크 건너의 기능을 부를 때, 부르는 쪽�
 | 필드 | 타입 | 필수 | 뜻 |
 | --- | --- | --- | --- |
 | `schema` | int | ✓ | 1 |
-| `topic` | str | ✓ | 앱 id. BPMN `chk:serviceCall.app_id`, 확장 태스크면 그 확장 id |
+| `topic` | str | ✓ | 앱 id. BPMN `bpm:serviceCall.app_id`, 확장 태스크면 그 확장 id |
 | `operation` | str | ✓ | 작업 이름 (manifest의 것) |
 | `mode` | `autonomous` \| `deterministic` | ✓ | 수행 모드 (원칙 7). 자율 수행은 Studio에서만 받는다 |
 | `idempotency` | object | ✓ | `{run_id, node_id, node_instance, attempt, call_seq}` — C11 멱등 키와 같다(`operation`을 더해 여섯 칸). **같은 칸이면 같은 일감**이다 (다른 본문이면 409 `idempotency_conflict`) |
@@ -99,7 +99,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 - **싣는 쪽**: 일꾼이 `fail`에 적는다. 지금 적는 것은 어댑터 일꾼 하나다 — `idempotent: false` 작업이 요청을 **보낸 뒤** 답을 받지 못했을 때(읽기 시간 초과·끊김, 코드 `unreachable`, C13 §4-1). 연결 단계에서 실패해 요청이 나가지 않았으면 적지 않는다.
 - **`retryable`과 함께 참일 수 없다** — 다시 불러도 안전하면 모름이 아니다. Center는 `retryable`이 참이면 지운다.
-- **부르는 쪽**: PC 실행의 `chk:serviceCall`은 마지막 실패가 이것이면 현장 확인(C6 `confirmation`)으로 멈춘다 — 「계속」은 `attempt`를 올려 **새 일감**으로 다시 부르고, 「중단」은 업무 실패(`TASK_FAILED`)다. 그림이 그 노드에 `TASK_FAILED`를 이름으로 받는 경계를 달았으면 묻지 않는다. 서버 실행은 묻지 않고 업무 실패다(C14).
+- **부르는 쪽**: PC 실행의 `bpm:serviceCall`은 마지막 실패가 이것이면 현장 확인(C6 `confirmation`)으로 멈춘다 — 「계속」은 `attempt`를 올려 **새 일감**으로 다시 부르고, 「중단」은 업무 실패(`TASK_FAILED`)다. 그림이 그 노드에 `TASK_FAILED`를 이름으로 받는 경계를 달았으면 묻지 않는다. 서버 실행은 묻지 않고 업무 실패다(C14).
 - 만료(`expired`)에는 적지 않는다 — Center는 작업이 멱등인지 모른다.
 
 ### 가져가기 (`FetchRequest` → `FetchResponse`)
@@ -141,7 +141,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 
 ### 일꾼 들이기 (일꾼 폴더)
 
-일꾼은 **Center 쪽 일꾼 폴더의 파일로만** 들어온다 — 요청 코드·승인이 없다 ([ADR-0122](../decisions/0122-consumer-folder.md)). 배포가 일꾼 폴더(`CHK_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)에 `<이름>.consumer.json`(`FolderConsumer`)을 복사해 두면 Center가 **뜰 때** 그 일꾼을 들인다. 폴더에 쓸 수 있는 사람을 관리자로 본다. 일꾼 하나가 **토픽 여럿**을 맡을 수 있다(모의 앱 열셋, 어댑터 일꾼이 외부 확장 여럿을 맡는 것).
+일꾼은 **Center 쪽 일꾼 폴더의 파일로만** 들어온다 — 요청 코드·승인이 없다 ([ADR-0122](../decisions/0122-consumer-folder.md)). 배포가 일꾼 폴더(`BPM_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)에 `<이름>.consumer.json`(`FolderConsumer`)을 복사해 두면 Center가 **뜰 때** 그 일꾼을 들인다. 폴더에 쓸 수 있는 사람을 관리자로 본다. 일꾼 하나가 **토픽 여럿**을 맡을 수 있다(모의 앱 열셋, 어댑터 일꾼이 외부 확장 여럿을 맡는 것).
 
 | 필드 | 뜻 |
 | --- | --- |
@@ -158,7 +158,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 }
 ```
 
-- 파일은 `chk-center consumer-file <이름> --topics a,b [--dir 폴더]`가 짓는다 — 토큰(`chk_ctr_` + 무작위 40자, C7 키 모양)을 지어 해시만 쓰고 **원문은 한 번만** 찍는다. 다른 도구로 지어도 된다(Center는 모양을 보지 않고 해시만 맞춘다).
+- 파일은 `bpm-center consumer-file <이름> --topics a,b [--dir 폴더]`가 짓는다 — 토큰(`bpm_ctr_` + 무작위 40자, C7 키 모양)을 지어 해시만 쓰고 **원문은 한 번만** 찍는다. 다른 도구로 지어도 된다(Center는 모양을 보지 않고 해시만 맞춘다).
 - 일꾼은 토큰 원문을 `Authorization: Bearer`로 싣고 `POST /consumers/fetch`부터 부른다.
 - 키에는 **만료·회전이 없다**(공개키가 없다). 해시를 바꾸면 옛 키를 폐기한다. **폐기된 토큰은 되살아나지 않는다**(`token_revoked`), 다른 키가 쓰는 해시는 거절한다(`token_in_use`).
 - **폴더가 원본이다** — 파일이 빠지면 키를 폐기하고 일꾼을 지운다. 읽지 못한 파일은 그 일꾼을 지우지 않고, 폴더가 없으면(볼륨이 안 붙었다) 아무것도 지우지 않는다. 결과는 C7 `GET /resources/consumer-folder`와 Center 로그에 남는다.
@@ -240,8 +240,8 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 ## 정한 것 (처음에 미정이던 셋)
 
 - **호출 토큰은 PC 실행기(또는 Studio)가 제 Center API 키로 청한다** — `POST /api/v1/call-tokens` → `{token, expires_at}`(수명 24시간). 봉하지 않는다: 청하는 길이 이미 그 PC 실행기의 키로 인증된 연결이라 다른 응답과 같은 길로 온다(환경변수 키처럼 **공개키가 없는 PC 실행기도** 받을 수 있어야 한다 — 하트비트 봉함으로는 그 PC 실행기가 못 받는다). PC 실행기는 실행을 띄울 때 하나 청해 실행 프로세스에게 제어 파일로 넘긴다(만료 2시간 전부터 새것을 같은 길로 넣는다). 토큰은 PC 실행기 **메모리에만** 있고 비밀 저장소에 두지 않는다. **호출 토큰으로 부르면 Center는 그 PC 실행기의 Center API 키로 부른 것과 같이 본다** — 소유(C3)·배포 대조가 같은 신원으로 돈다. 호출 토큰은 `/api/v1/external-tasks`와 **리소스 목록 읽기**(`GET /api/v1/resources…` — 확장 클라이언트가 기여 자원 카탈로그를 읽는 자리) 밖을 모두 403 `call_token_scope`로 막는다. 서버 실행기·Studio는 제 프로세스 안에서 부르므로 제 Center API 키를 쓴다.
-- **롱폴링 상한은 설정의 기본 200** (`CHK_CENTER__EXTERNAL_TASKS__MAX_WAITERS` — 올리는 쪽·일꾼의 기다림을 함께 센다). 한 번 가져가기에 잠글 수 있는 수는 **10건까지**(`max_tasks`가 그보다 크면 10으로 깎는다).
-- **어댑터 일꾼은 맡은 외부 확장의 정의를 제가 들고 있다가 올린다** (ADR-0122, §외부 확장 정의 올리기) — `CHK_ADAPTER__DEFINITIONS`의 파일들이다. Center에서 받지 않는다.
+- **롱폴링 상한은 설정의 기본 200** (`BPM_CENTER__EXTERNAL_TASKS__MAX_WAITERS` — 올리는 쪽·일꾼의 기다림을 함께 센다). 한 번 가져가기에 잠글 수 있는 수는 **10건까지**(`max_tasks`가 그보다 크면 10으로 깎는다).
+- **어댑터 일꾼은 맡은 외부 확장의 정의를 제가 들고 있다가 올린다** (ADR-0122, §외부 확장 정의 올리기) — `BPM_ADAPTER__DEFINITIONS`의 파일들이다. Center에서 받지 않는다.
 - 출력 검사는 **`output_schema.required`의 칸이 다 있는가**까지다 — 계약 패키지에 JSON Schema 검증기를 두지 않는다(입력 쪽도 그렇다). 더 깊은 모양은 일꾼과 엔진의 `output` 매핑이 본다.
 
 - `GET /consumers`·`GET /external-topics`는 콘솔 토큰으로 읽는 길로 남는다 — CON-07에는 그 표가 없다(지켜볼 것은 Center 로그에서 본다, ADR-0122).
@@ -258,7 +258,7 @@ C11 오류는 `error.code`로 그대로 온다. C14 `retry.on`의 HTTP 숫자는
 | 2026-10-31 | 1 | **일꾼은 일꾼 폴더로만 들어온다** — `<이름>.consumer.json`(`FolderConsumer`, 토큰 해시), 토픽 고정, 만료·회전 없음. `POST /consumers/enroll`·`ConsumerEnrollRequest`를 걷었다. **외부 확장 정의는 일꾼이 올린다** — `PUT /consumers/self/extension` | [0122](../decisions/0122-consumer-folder.md) |
 | 2026-10-31 | 1 | **등록 세션(`reg_…`)과 거절 `registration_off`를 걷었다** — 셀렉터 등록 도구(Tool UI)와 「셀렉터 등록」 스위치가 없다. 부르는 쪽은 서버 실행기·실행 프로세스·Studio 셋이다. `required_scopes`를 적은 작업은 켜 줄 길이 없어 `scope_missing`이다. 경로·모양은 그대로다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | **`GET /external-tasks?run_id=`**(콘솔 토큰, `ExternalTaskInfo[]`) — CON-01 「외부 작업」이 일감이 어디서 멈췄는지(기다림·일꾼이 쥠·다시 나감)를 본다. 값·오류 글은 싣지 않는다. 새 엔드포인트라 옛 쪽은 영향이 없다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
-| 2026-10-29 | 1 | `fail`·결과 `error`에 **`outcome_unknown`**(기본 false)을 더했다 — 요청이 닿았을 수 있는데 답을 못 받았다. 어댑터 일꾼이 `idempotent: false` 작업에서 적고, PC의 `chk:serviceCall`은 사람에게 묻는다. 선택 칸이라 판은 그대로다 | [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |
+| 2026-10-29 | 1 | `fail`·결과 `error`에 **`outcome_unknown`**(기본 false)을 더했다 — 요청이 닿았을 수 있는데 답을 못 받았다. 어댑터 일꾼이 `idempotent: false` 작업에서 적고, PC의 `bpm:serviceCall`은 사람에게 묻는다. 선택 칸이라 판은 그대로다 | [0107](../decisions/0107-outcome-unknown-asks-a-person.md) |
 | 2026-10-29 | 1 | **받아 간(`ack`) 일감을 같은 본문으로 다시 올리면 다시 줄에 선다**(옛 일감을 돌려주면 빈 결과다). 서버 실행기가 긴 작업을 기다림으로 넘기고 `GET`으로 묻는다 — 경로·모양은 그대로다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-29 | 1 | **구현됨** — 부르는 쪽(서버 실행기·실행기 자식·Studio·Worker·Tool UI)과 일꾼(`service_kit`·어댑터 일꾼)이 붙었다. 옛 Push 길(C11 `/v1/ops`·어댑터 직접 호출·서비스 앱 키 배달)은 걷었다 | [0102](../decisions/0102-calling-outside-is-pull.md) |
 | 2026-10-28 | 1 | 처음 씀 (초안) | [0102](../decisions/0102-calling-outside-is-pull.md) |

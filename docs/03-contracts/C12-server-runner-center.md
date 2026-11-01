@@ -90,12 +90,12 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 | 요청 코드를 보이는 곳 | BUI-03·트레이 | **시작할 때 로그 한 줄**: 「Center에 등록 요청을 보냈습니다. 요청 코드 ABCD-EFGH — Center 콘솔 「서버 실행」에서 승인하세요」. `--once`는 한 걸음만 하고 아직 승인되지 않았으면 끝 코드 1로 끝난다(「사람이 고쳐야 한다」 — 승인이 그 일이다) |
 | 승인하는 곳 | CON-03 「승인 대기」 | CON-12 「승인 대기」 |
 | 만드는 키 | 「PC 실행기용」 | 「서버 실행기용」 |
-| 받은 키를 두는 곳 | OS 비밀 저장소 | OS 비밀 저장소(`chaeksas-server-runner`, 이름 `center_api_key`). **운영자가 비밀 폴더 `CHK_SERVER_RUNNER__SECRETS_DIR`를 적으면 그 폴더의 `secrets.json`**(컨테이너 — [ADR-0100](../decisions/0100-server-runner-secrets-dir.md)) |
+| 받은 키를 두는 곳 | OS 비밀 저장소 | OS 비밀 저장소(`chaeksas-server-runner`, 이름 `center_api_key`). **운영자가 비밀 폴더 `BPM_SERVER_RUNNER__SECRETS_DIR`를 적으면 그 폴더의 `secrets.json`**(컨테이너 — [ADR-0100](../decisions/0100-server-runner-secrets-dir.md)) |
 
-- **함께 배포된 실행기는 들이기 비밀로 바로 승인된다** ([ADR-0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md)). 운영자가 같은 값을 Center(`CHK_CENTER__SERVER_RUNNER_JOIN_TOKEN`)와 실행기(`CHK_SERVER_RUNNER__JOIN_TOKEN`)에 주면 실행기가 등록 요청에 헤더 `X-CHK-Join-Token`을 싣고, Center는 값이 맞으면 그 요청을 **받는 자리에서 승인**해 응답에 봉한 키(`state: approved`, `sealed_key`)를 바로 싣는다. 승인한 사람은 `decided_by: "join_token"`이다. 비밀은 요청 본문·저장된 요청에 들어가지 않는다(헤더다). **헤더가 있는데 Center에 값이 없거나 다르면 403 `join_token_invalid`**이고 대기 줄을 만들지 않는다 — 틀린 설정이 조용히 「승인 대기」로 떨어지면 운영자가 왜 안 들어오는지 모른다. 비밀은 길고 무작위여야 한다(틀린 시도는 줄을 남기지 않아 막기 수에 들지 않는다). 헤더가 없으면 지금처럼 승인을 기다린다(다른 호스트에 따로 띄운 실행기). `deploy/compose.yaml`의 실행기는 이 길이다.
+- **함께 배포된 실행기는 들이기 비밀로 바로 승인된다** ([ADR-0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md)). 운영자가 같은 값을 Center(`BPM_CENTER__SERVER_RUNNER_JOIN_TOKEN`)와 실행기(`BPM_SERVER_RUNNER__JOIN_TOKEN`)에 주면 실행기가 등록 요청에 헤더 `X-BPM-Join-Token`을 싣고, Center는 값이 맞으면 그 요청을 **받는 자리에서 승인**해 응답에 봉한 키(`state: approved`, `sealed_key`)를 바로 싣는다. 승인한 사람은 `decided_by: "join_token"`이다. 비밀은 요청 본문·저장된 요청에 들어가지 않는다(헤더다). **헤더가 있는데 Center에 값이 없거나 다르면 403 `join_token_invalid`**이고 대기 줄을 만들지 않는다 — 틀린 설정이 조용히 「승인 대기」로 떨어지면 운영자가 왜 안 들어오는지 모른다. 비밀은 길고 무작위여야 한다(틀린 시도는 줄을 남기지 않아 막기 수에 들지 않는다). 헤더가 없으면 지금처럼 승인을 기다린다(다른 호스트에 따로 띄운 실행기). `deploy/compose.yaml`의 실행기는 이 길이다.
 - **환경변수로 키가 오면** 등록 요청을 보내지 않는다 (CI·자동화의 길이다).
 - **비밀 폴더를 적으면 그것이 비밀 저장소다** (ADR-0100) — 폴더 0700·파일 0600, 깨진 파일은 덮지 않는다. 적었으면 OS 비밀 저장소가 있어도 그 폴더가 이긴다. `deploy/compose.yaml`의 실행기는 이 길이다(볼륨 `server-runner-secrets`).
-- **비밀 폴더도 OS 비밀 저장소도 없으면 등록 요청을 보내지 않는다.** 받은 키를 둘 곳이 없어서다 — 사람이 자리를 정해 주지 않은 평문 파일로 흘리지 않는다 (CLAUDE.md §5). 로그에 그 둘(`CHK_SERVER_RUNNER__SECRETS_DIR`·`CHK_SERVER_RUNNER__CENTER_API_KEY`)을 적은 한 줄을 찍고 끝 코드 2다.
+- **비밀 폴더도 OS 비밀 저장소도 없으면 등록 요청을 보내지 않는다.** 받은 키를 둘 곳이 없어서다 — 사람이 자리를 정해 주지 않은 평문 파일로 흘리지 않는다 (CLAUDE.md §5). 로그에 그 둘(`BPM_SERVER_RUNNER__SECRETS_DIR`·`BPM_SERVER_RUNNER__CENTER_API_KEY`)을 적은 한 줄을 찍고 끝 코드 2다.
 - 키 회전도 C4 §키 회전과 같다 — 하트비트 답의 `rotated_key`. 환경변수로 받은 키는 회전하지 않는다.
 
 ### RegisterRequest
@@ -104,7 +104,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 
 `versions`는 설치된 패키지의 판이다 — **서버 실행기는 묶지 않으므로**(소스에서 돈다) C4의 `build` 칸이 없다 ([ADR-0067](../decisions/0067-build-stamp.md)).
 
-`max_concurrency`는 설정값 `CHK_SERVER_RUNNER__MAX_CONCURRENCY`이고 기본 10이다.
+`max_concurrency`는 설정값 `BPM_SERVER_RUNNER__MAX_CONCURRENCY`이고 기본 10이다.
 
 `extensions[]`는 **이 서버에 깔린 확장**이다 (C4와 같은 모양). Center는 그것으로 C7 확장 자원의
 `installed_on`을 세므로, 싣지 않으면 **서버에만 깔린 확장을 요구하는 BPM 프로세스의 배포가 막힌다**
@@ -174,7 +174,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 ### 메시지 (외부 시스템 → Center)
 
 `POST /api/v1/messages`, 연동용 키 또는 관리자 토큰으로 부른다.
-연동용 키는 사람 이름을 `X-CHK-On-Behalf-Of`에 실을 수 있고, 메시지 시작으로 만든 작업의 `on_behalf_of`로 옮겨 적힌다 (C5, [ADR-0081](../decisions/0081-answering-on-behalf.md)).
+연동용 키는 사람 이름을 `X-BPM-On-Behalf-Of`에 실을 수 있고, 메시지 시작으로 만든 작업의 `on_behalf_of`로 옮겨 적힌다 (C5, [ADR-0081](../decisions/0081-answering-on-behalf.md)).
 
 | 필드 | 뜻 |
 | --- | --- |
@@ -226,7 +226,8 @@ Center는 메시지를 이렇게 처리한다.
 
 ### PC 위임 (서버 BPM 프로세스 → PC BPM 프로세스·서버 BPM 프로세스)
 
-서버 BPM 프로세스가 현장 확인·PC 전용 자원이 필요한 한 부분을 **따로 배포된 PC BPM 프로세스**에 맡긴다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 그림은 C14 `chk:call.delegate`, 매니페스트는 C1 `requires.delegations`다.
+
+서버 BPM 프로세스가 현장 확인·PC 전용 자원이 필요한 한 부분을 **따로 배포된 PC BPM 프로세스**에 맡긴다 ([ADR-0062](../decisions/0062-pc-delegation.md)). 그림은 C14 `bpm:call.delegate`, 매니페스트는 C1 `requires.delegations`다.
 
 **대상이 서버 BPM 프로세스이어도 같은 길이다** ([ADR-0082](../decisions/0082-batch-start.md)) — Center가 그 판의 **매니페스트 `run_location`**을 읽어 `pc`면 아래대로 PC를 고르고, `server`면 **서버 실행기 대상 작업**(`{type: server_runner}`, 실행기는 Center가 고른다 — §Center가 작업을 나누는 규칙)을 만든다. 멱등·`requested_by`·결과 보관·거두기는 같은 함수다. 반복 위임(일괄 기동)이 이 길로 N건을 낸다.
 
@@ -239,7 +240,7 @@ Center는 메시지를 이렇게 처리한다.
 | `loop_index?` | **반복 차례**(0부터) — 반복이 붙은 호출일 때만. 멱등 키에 들어간다 (C14 §반복) |
 | `bpm_process_id`, `version?` | 부를 PC BPM 프로세스. 판을 비우면 **배포된 판**(둘 이상이면 422 `version_ambiguous`) |
 | `bot_ui?` | **그 PC로만** 보낸다 (그림의 `bot_ui` 식을 실행기가 값으로 풀어 보낸다). 비우면 Center가 고른다. **대상이 서버 BPM 프로세스이면 422 `bot_ui_for_server`** |
-| `inputs` | 그 BPM 프로세스에 줄 입력 (C14 `chk:call.input`을 실행기가 값으로 푼 것) |
+| `inputs` | 그 BPM 프로세스에 줄 입력 (C14 `bpm:call.input`을 실행기가 값으로 푼 것) |
 
 - 응답은 `{job_id, target_type, bot_ui_id?, state}`다 (`target_type`은 `bot_ui`\|`server_runner`, 서버 대상이면 `bot_ui_id`가 없다). **201이 새 작업, 200이 이미 만든 것**이다.
 - **멱등 키는 Center가 짓는다** — `dlg_<run_id>_<node_id>_<node_instance>`, 반복이면 뒤에 `_<loop_index>`가 붙는다(반복이 아니면 지금 키 그대로라 이미 맡겨 둔 위임과 같다). 본문에서 받지 않는다(`requested_by`와 같은 결) — 부르는 쪽마다 짓는 규칙이 갈라지면 되살린 실행이 **작업을 두 번 만든다**. 그래서 ADR-0054의 「마지막 기다림 이후를 다시 한다」가 그대로 성립한다: 다시 요청하면 **같은 작업이 돌아온다**.
@@ -272,7 +273,7 @@ Center는 메시지를 이렇게 처리한다.
 
 서비스 앱·외부 앱의 작업은 C15 외부 작업으로 부른다. **오래 걸리는 것은 기다리는 동안 자리를 놓는다** ([ADR-0103](../decisions/0103-long-external-tasks.md)).
 
-- 실행기는 올린 일감을 **한 번 기다린다**(`CHK_SERVER_RUNNER__PARK_AFTER_S`, 기본 20초). 그 안에 끝나면 지금처럼 이어 간다.
+- 실행기는 올린 일감을 **한 번 기다린다**(`BPM_SERVER_RUNNER__PARK_AFTER_S`, 기본 20초). 그 안에 끝나면 지금처럼 이어 간다.
 - 끝나지 않으면 그 실행은 `waiting[]`의 **`external_task`** 갈래로 넘어가고(짝 칸 `task_id`) 자리를 쥐지 않는다. 스냅샷에 그 일감과 재시도에 쓸 `attempt`·`call_seq`가 함께 담긴다.
 - 결과는 **실행기가 하트비트 주기마다 묻는다** — C15 `GET /external-tasks/{task_id}`. 이 계약에 내려오는 칸은 없다. 끝난 것은 **빈자리가 있고 그 실행을 미는 스레드가 없을 때만** 넣고(결재·메시지·위임과 같은 관문), 넣은 뒤 C15 `ack`를 보낸다.
 - 실행 취소·끊는 경계로 기다림이 걷히면 C15 `cancel`로 **그 일감을 거둔다**. 닿지 못하면 일감은 기한에 저절로 끝난다.
@@ -374,7 +375,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
-| 2026-10-31 | 1 | **함께 배포된 실행기는 들이기 비밀로 바로 승인**(헤더 `X-CHK-Join-Token`, 403 `join_token_invalid`)과 **재시작**(`POST …/server-runners/{id}/restart`, `HeartbeatResponse.restart`, `ServerRunnerInfo.restart_requested_at?`). 선택 칸이라 옛 실행기는 그대로 돈다(재시작 지시를 모를 뿐이다) | [0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md) |
+| 2026-10-31 | 1 | **함께 배포된 실행기는 들이기 비밀로 바로 승인**(헤더 `X-BPM-Join-Token`, 403 `join_token_invalid`)과 **재시작**(`POST …/server-runners/{id}/restart`, `HeartbeatResponse.restart`, `ServerRunnerInfo.restart_requested_at?`). 선택 칸이라 옛 실행기는 그대로 돈다(재시작 지시를 모를 뿐이다) | [0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md) |
 | 2026-10-31 | 1 | 설치를 목록과 맞춘다 — 덮는 봉투가 없는 설치는 `not_ready`, 기다리는 실행은 그대로. 칸은 그대로다 | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-29 | 1 | **§긴 외부 작업** — `waiting[]`에 `external_task` 갈래와 짝 칸 `task_id`. 결과는 실행기가 C15로 묻고 이 계약에 내려오는 칸은 없다. 선택 칸이라 옛 Center는 그대로 돈다 | [0103](../decisions/0103-long-external-tasks.md) |
 | 2026-10-29 | 1 | §서비스 앱 키와 작업 나누기 규칙 5(`keys_pending`)를 걷었다 — 서버 실행기는 서비스 앱을 C15 외부 작업으로 부른다 | [0102](../decisions/0102-calling-outside-is-pull.md) |

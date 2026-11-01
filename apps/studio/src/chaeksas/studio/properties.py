@@ -5,14 +5,14 @@
 | 탭 | 무엇 | 어느 요소에 |
 | --- | --- | --- |
 | 「폼」 | 이름·설명, 흐름 조건식, 스크립트 | 전부 |
-| 「JSON」 | `chk:*` 본문을 **C14 모델로 검증**하며 고친다 | `chk:*`를 가질 수 있는 요소 |
+| 「JSON」 | `bpm:*` 본문을 **C14 모델로 검증**하며 고친다 | `bpm:*`를 가질 수 있는 요소 |
 
 요소별 전용 폼은 요소마다 편집기 모듈이 탭으로 끼운다(`*_editor.py` — 규약은 `load`/`dump`/`problems`/`changed`).
 편집기가 없는 요소는 「JSON」 탭이 그 자리를 메운다.
 
 적용은 **bpmn-js의 `modeling`으로** 한다 (캔버스 `setProperties`) — 그래야 실행 취소와
 「저장 안 한 변경」이 함께 움직인다. 표준 속성(이름·설명·조건식·스크립트)은 한 번에 바꿔 실행
-취소 한 걸음이 되지만, **`chk:*`를 함께 고치면 걸음이 여럿이 된다** — bpmn-js에 여러 명령을
+취소 한 걸음이 되지만, **`bpm:*`를 함께 고치면 걸음이 여럿이 된다** — bpmn-js에 여러 명령을
 한 걸음으로 묶는 간단한 길이 없다. 한 걸음으로 묶는 일은 전용 명령 처리기가 생길 때 한다.
 """
 
@@ -76,32 +76,32 @@ KINDS = {
 CONDITION_KINDS = frozenset({"SequenceFlow"})
 #: 스크립트를 쓸 수 있는 요소.
 SCRIPT_KINDS = frozenset({"ScriptTask"})
-#: 결재·확인 편집기를 붙이는 요소 (C14 `chk:approval` — 결재는 userTask, 확인은 manualTask).
+#: 결재·확인 편집기를 붙이는 요소 (C14 `bpm:approval` — 결재는 userTask, 확인은 manualTask).
 APPROVAL_KINDS = frozenset({"UserTask", "ManualTask"})
-#: 보내기 편집기를 붙이는 요소 (C14 `chk:email`·`chk:webhook`).
+#: 보내기 편집기를 붙이는 요소 (C14 `bpm:email`·`bpm:webhook`).
 SEND_KINDS = frozenset({"SendTask"})
-#: 보내기 편집기가 고르는 `chk:` 요소 — 하나만 남긴다.
+#: 보내기 편집기가 고르는 `bpm:` 요소 — 하나만 남긴다.
 SEND_CHANNELS = ("email", "webhook")
-#: 호출 편집기를 붙이는 요소 (표준 `calledElement` + C14 `chk:call`).
+#: 호출 편집기를 붙이는 요소 (표준 `calledElement` + C14 `bpm:call`).
 CALL_KINDS = frozenset({"CallActivity"})
 #: 반복 편집기를 붙이는 요소 (C14 §반복 — AI·UI·서비스 앱·규칙 태스크와 호출). 다른 편집기 **옆에** 붙는다.
 LOOP_KINDS = frozenset({"ServiceTask", "BusinessRuleTask", "CallActivity"})
 
 
-#: `chk:*`를 갖지 않는 게이트웨이 — 가지의 조건은 나가는 순서 흐름에 있다 (C14). 「게이트웨이」 탭은
+#: `bpm:*`를 갖지 않는 게이트웨이 — 가지의 조건은 나가는 순서 흐름에 있다 (C14). 「게이트웨이」 탭은
 #: 표준 `default`(기본 흐름)만 고친다.
 GATEWAY_KINDS = frozenset({"ExclusiveGateway", "ParallelGateway", "InclusiveGateway"})
-#: 이벤트 편집기를 붙이는 요소 (C14 §이벤트 — 표준 이벤트 정의의 칸과 `chk:receive`).
+#: 이벤트 편집기를 붙이는 요소 (C14 §이벤트 — 표준 이벤트 정의의 칸과 `bpm:receive`).
 EVENT_KINDS = frozenset(
     {"StartEvent", "IntermediateCatchEvent", "IntermediateThrowEvent", "BoundaryEvent", "EndEvent", "ReceiveTask"}
 )
-#: 파일 출력 편집기를 붙이는 요소 (C14 §파일 출력 — `chk:dataOutput`).
+#: 파일 출력 편집기를 붙이는 요소 (C14 §파일 출력 — `bpm:dataOutput`).
 DATA_OBJECT_KINDS = frozenset({"DataObjectReference"})
-#: 정의 자체 — 「기본값」 탭(`chk:defaults`)을 붙인다. 빈 상태의 단추로만 들어온다.
+#: 정의 자체 — 「기본값」 탭(`bpm:defaults`)을 붙인다. 빈 상태의 단추로만 들어온다.
 PROCESS_KINDS = frozenset({"Process"})
-#: 규칙 편집기(`rule_editor`)가 붙는 요소 — `chk:rule`, 결정표는 STU-04a 창 (ADR-0109).
+#: 규칙 편집기(`rule_editor`)가 붙는 요소 — `bpm:rule`, 결정표는 STU-04a 창 (ADR-0109).
 RULE_KINDS = frozenset({"BusinessRuleTask"})
-#: 편집기가 `chk:<이름>` 하나를 **통째로** 쓰고, `None`이면 그 요소를 지우는 자리.
+#: 편집기가 `bpm:<이름>` 하나를 **통째로** 쓰고, `None`이면 그 요소를 지우는 자리.
 WHOLE_OR_NONE = ("defaults", "dataOutput", "rule")
 #: 빈 상태의 단추 (STU-04).
 PROCESS_BUTTON = "BPM 프로세스 기본값"
@@ -117,11 +117,11 @@ def empty_chk_hint(bpmn_type: str) -> str:
     """
     if bpmn_type in GATEWAY_KINDS:
         return (
-            "게이트웨이에는 chk:* 설정이 없습니다.\n"
+            "게이트웨이에는 bpm:* 설정이 없습니다.\n"
             "가지마다의 조건식은 나가는 순서 흐름을 골라 「폼」 탭에서, 기본 흐름은 「게이트웨이」 탭에서 봅니다."
         )
     return (
-        "이 요소에는 chk:* 설정이 없습니다.\n"
+        "이 요소에는 bpm:* 설정이 없습니다.\n"
         "더하려면 설정 이름을 맨 바깥 키로 적습니다 (C14 — aiTask·rule·email 등)."
     )
 
@@ -146,21 +146,21 @@ def check_chk(text: str) -> tuple[dict[str, str], str | None]:
         model = ELEMENT_MODELS.get(name)
         if model is None:
             known = ", ".join(sorted(ELEMENT_MODELS))
-            return {}, f"모르는 `chk:` 요소입니다: {name} (쓸 수 있는 것: {known})"
+            return {}, f"모르는 `bpm:` 요소입니다: {name} (쓸 수 있는 것: {known})"
         try:
             model.model_validate(_for_model(name, value))
         except ValidationError as e:
             first = e.errors()[0] if e.errors() else {"loc": (), "msg": "?"}
             where = ".".join(str(p) for p in first["loc"])
-            return {}, f"chk:{name} — {where}: {first['msg']}" if where else f"chk:{name} — {first['msg']}"
-        # **`chk:task`는 통째로 오간다** — `type`·`extension`은 XML 속성이지만 그것까지
+            return {}, f"bpm:{name} — {where}: {first['msg']}" if where else f"bpm:{name} — {first['msg']}"
+        # **`bpm:task`는 통째로 오간다** — `type`·`extension`은 XML 속성이지만 그것까지
         # 함께 보내야 캔버스가 속성에 쓸 수 있다 (안 그러면 고칠 때마다 종류가 날아간다).
         out[name] = json.dumps(value, ensure_ascii=False, indent=2)
     return out, None
 
 
 def _for_model(name: str, value: Any) -> Any:
-    """`chk:task`만 XML 속성(`type`·`extension`)이 따로다 (C14 §태스크 종류)."""
+    """`bpm:task`만 XML 속성(`type`·`extension`)이 따로다 (C14 §태스크 종류)."""
     if name != "task" or not isinstance(value, dict):
         return value
     return {
@@ -171,7 +171,7 @@ def _for_model(name: str, value: Any) -> Any:
 
 
 def _body_of(chk: dict[str, str], name: str) -> dict[str, Any] | None:
-    """`chk:<name>`의 본문 글 → 사전. 읽지 못하면 `None`.
+    """`bpm:<name>`의 본문 글 → 사전. 읽지 못하면 `None`.
 
     **캔버스는 `{요소: JSON 글}`을 준다** — 사전이 아니다. 글로 받은 것을 여기서 한 번만 읽는다.
     """
@@ -186,7 +186,7 @@ def _body_of(chk: dict[str, str], name: str) -> dict[str, Any] | None:
 
 
 def _task_of(chk: dict[str, str]) -> dict[str, Any] | None:
-    """`chk:task` 본문 글 → `{type, extension, data}`. 읽지 못하면 `None`."""
+    """`bpm:task` 본문 글 → `{type, extension, data}`. 읽지 못하면 `None`."""
     return _body_of(chk, "task")
 
 
@@ -225,13 +225,13 @@ class Properties(QWidget):
         self._editor_baseline_body: Any = None
         #: 그 편집기가 고치는 자리 — `"task"`(STU-13) 또는 `"serviceCall"`(STU-14).
         self._editor_key = ""
-        #: 반복 편집기 — 다른 편집기와 **함께** 붙으므로 자리가 따로다 (`chk:loop`만 만진다).
+        #: 반복 편집기 — 다른 편집기와 **함께** 붙으므로 자리가 따로다 (`bpm:loop`만 만진다).
         self._loop_editor: Any = None
         self._loop_holder: QScrollArea | None = None
         self._loop_baseline: dict[str, Any] = {}
         #: STU-14가 고를 거리 (Center 리소스 목록). 메인 창이 실행·선택 전에 채운다.
         self.catalog: Catalog = Catalog()
-        #: 열린 BPM 프로세스의 실행 위치 (`chk:process.run_location`) — 결재 편집기가 서버에서
+        #: 열린 BPM 프로세스의 실행 위치 (`bpm:process.run_location`) — 결재 편집기가 서버에서
         #: 「현장 PC에서만」을 끈다 (B6과 같은 판정). 메인 창이 정의를 열 때 채운다.
         self.run_location: str | None = None
         #: 변수 이름 칸의 고를 거리 — 「변수」 탭의 이름 (STU-04). 메인 창이 그림을 읽을 때 채우고
@@ -254,7 +254,7 @@ class Properties(QWidget):
         self.head.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         self.process_button = QPushButton(PROCESS_BUTTON, self)
         self.process_button.setObjectName("Secondary")
-        self.process_button.setToolTip("열린 정의 자체 — 모든 AI 태스크의 기본값(chk:defaults)을 고칩니다.")
+        self.process_button.setToolTip("열린 정의 자체 — 모든 AI 태스크의 기본값(bpm:defaults)을 고칩니다.")
         self.process_button.clicked.connect(self.process_wanted)
         self.process_button.setEnabled(False)
 
@@ -262,7 +262,7 @@ class Properties(QWidget):
         self.doc_box = QPlainTextEdit(self)
         self.doc_box.setMaximumHeight(80)
         self.condition_box = QLineEdit(self)
-        self.condition_box.setPlaceholderText("비우면 항상 진행합니다 (chk-expr)")
+        self.condition_box.setPlaceholderText("비우면 항상 진행합니다 (bpm-expr)")
         self.script_box = QPlainTextEdit(self)
         self.script_box.setPlaceholderText("변수 = 식  (한 줄에 하나, ADR-0025)")
 
@@ -363,8 +363,8 @@ class Properties(QWidget):
         둘이 있고 **규약은 하나다** (`load`/`dump`/`problems`/`changed`) — 여기서는 어느 쪽인지
         신경 쓰지 않는다.
 
-        - `chk:serviceCall` → **플랫폼이 가진** STU-14 편집기 (`service_editor`).
-        - `chk:task` → **확장이 기여한** 편집기 (STU-13). **Studio는 어느 확장인지 모른다** —
+        - `bpm:serviceCall` → **플랫폼이 가진** STU-14 편집기 (`service_editor`).
+        - `bpm:task` → **확장이 기여한** 편집기 (STU-13). **Studio는 어느 확장인지 모른다** —
           `type`으로 찾아 붙일 뿐이다 (ADR-0018).
         """
         self._detach_editor()
@@ -422,7 +422,7 @@ class Properties(QWidget):
         self._attach(made, TAB_LABEL, key="serviceCall")
 
     def _attach_ai_task_editor(self, chk: dict[str, Any]) -> None:
-        """AI 태스크 (`chk:aiTask`). 서버 BPM 프로세스면 웹·데스크톱을 끈다 (B6과 같은 판정)."""
+        """AI 태스크 (`bpm:aiTask`). 서버 BPM 프로세스면 웹·데스크톱을 끈다 (B6과 같은 판정)."""
         from chaeksas.studio.ai_task_editor import TAB_LABEL, AiTaskEditor  # noqa: PLC0415
 
         loop = _body_of(chk, "loop") or {}
@@ -439,7 +439,7 @@ class Properties(QWidget):
         self._attach(made, TAB_LABEL, key="aiTask")
 
     def _attach_approval_editor(self, chk: dict[str, Any]) -> None:
-        """결재·확인 (`chk:approval`) — 아직 없는 사람 태스크에도 붙는다 (적용하면 생긴다)."""
+        """결재·확인 (`bpm:approval`) — 아직 없는 사람 태스크에도 붙는다 (적용하면 생긴다)."""
         from chaeksas.studio.approval_editor import (  # noqa: PLC0415
             TAB_APPROVAL,
             TAB_CONFIRMATION,
@@ -452,7 +452,7 @@ class Properties(QWidget):
         self._attach(made, TAB_CONFIRMATION if manual else TAB_APPROVAL, key="approval")
 
     def _attach_send_editor(self, chk: dict[str, Any]) -> None:
-        """보내기 (`chk:email`·`chk:webhook`) — 아직 없는 보내기 태스크에도 붙는다 (적용하면 생긴다)."""
+        """보내기 (`bpm:email`·`bpm:webhook`) — 아직 없는 보내기 태스크에도 붙는다 (적용하면 생긴다)."""
         from chaeksas.studio.send_editor import TAB_LABEL, SendEditor  # noqa: PLC0415
 
         made = SendEditor(self, names=self.known_names)
@@ -461,7 +461,7 @@ class Properties(QWidget):
         self._attach(made, TAB_LABEL, key="send")
 
     def _attach_call_editor(self, chk: dict[str, Any]) -> None:
-        """BPM 프로세스 호출 (`calledElement` + `chk:call`). 위임 대상은 Center 목록(`catalog.bots`)이다."""
+        """BPM 프로세스 호출 (`calledElement` + `bpm:call`). 위임 대상은 Center 목록(`catalog.bots`)이다."""
         from chaeksas.studio.call_editor import TAB_LABEL, CallEditor  # noqa: PLC0415
 
         made = CallEditor(
@@ -474,7 +474,7 @@ class Properties(QWidget):
         self._attach(made, TAB_LABEL, key="call")
 
     def _attach_rule_editor(self, chk: dict[str, Any]) -> None:
-        """규칙 태스크 — `chk:rule` 통째로. 결정표는 탭의 「결정표 편집...」이 STU-04a 창으로 연다."""
+        """규칙 태스크 — `bpm:rule` 통째로. 결정표는 탭의 「결정표 편집...」이 STU-04a 창으로 연다."""
         from chaeksas.studio.rule_editor import TAB_LABEL, RuleEditor  # noqa: PLC0415
 
         made = RuleEditor(self, decisions=self.decision_tables, names=self.known_names)
@@ -482,7 +482,7 @@ class Properties(QWidget):
         self._attach(made, TAB_LABEL, key="rule")
 
     def _attach_defaults_editor(self, chk: dict[str, Any]) -> None:
-        """정의 자체 — `chk:defaults`만. `chk:process`는 「변수」 탭·STU-06·STU-15의 것이다."""
+        """정의 자체 — `bpm:defaults`만. `bpm:process`는 「변수」 탭·STU-06·STU-15의 것이다."""
         from chaeksas.studio.defaults_editor import TAB_LABEL, DefaultsEditor  # noqa: PLC0415
 
         made = DefaultsEditor(self)
@@ -490,7 +490,7 @@ class Properties(QWidget):
         self._attach(made, TAB_LABEL, key="defaults")
 
     def _attach_data_output_editor(self, chk: dict[str, Any]) -> None:
-        """데이터 객체 — `chk:dataOutput`. 아직 없는 데이터 객체에도 붙는다 (켜고 적용하면 생긴다)."""
+        """데이터 객체 — `bpm:dataOutput`. 아직 없는 데이터 객체에도 붙는다 (켜고 적용하면 생긴다)."""
         from chaeksas.studio.data_output_editor import TAB_LABEL, DataOutputEditor  # noqa: PLC0415
 
         made = DataOutputEditor(self, names=self.known_names)
@@ -506,7 +506,7 @@ class Properties(QWidget):
         self._attach(made, TAB_LABEL, key="gateway")
 
     def _attach_event_editor(self, chk: dict[str, Any]) -> None:
-        """이벤트·받기 태스크 — 표준 이벤트 정의의 칸(`event`)과 `chk:receive`."""
+        """이벤트·받기 태스크 — 표준 이벤트 정의의 칸(`event`)과 `bpm:receive`."""
         from chaeksas.studio.event_editor import TAB_LABEL, TAB_RECEIVE, EventEditor  # noqa: PLC0415
 
         bpmn_type = str(self.loaded.get("type") or "")
@@ -625,8 +625,8 @@ class Properties(QWidget):
     def patch(self) -> tuple[dict[str, Any], str | None]:
         """고친 것만 모은다. 틀린 JSON이면 `(빈 것, 사유)`.
 
-        반복 편집기의 것은 **마지막에 얹는다** — 다른 편집기가 고친 `chk:*`와 한 묶음으로 가되
-        `chk:loop` 자리만 쓴다 (서로의 칸을 지우지 않는다).
+        반복 편집기의 것은 **마지막에 얹는다** — 다른 편집기가 고친 `bpm:*`와 한 묶음으로 가되
+        `bpm:loop` 자리만 쓴다 (서로의 칸을 지우지 않는다).
         """
         changes, problem = self._patch_main()
         if problem is not None:
@@ -696,11 +696,11 @@ class Properties(QWidget):
             return {}, problem
         if data is not None:
             if self._editor_key in ("serviceCall", "approval", "aiTask"):
-                # STU-14·결재·AI 태스크는 `chk:<이름>` **통째로** 쓴다 (`data` 같은 포장이 없다).
+                # STU-14·결재·AI 태스크는 `bpm:<이름>` **통째로** 쓴다 (`data` 같은 포장이 없다).
                 changes["chk"] = {self._editor_key: json.dumps(data, ensure_ascii=False, indent=2)}
                 return changes, None
             if self._editor_key == "call":
-                # 표준 속성 하나와 `chk:call` **통째로** — 바뀐 쪽만 보낸다(빈 `chk:call`을 새로 달지 않는다).
+                # 표준 속성 하나와 `bpm:call` **통째로** — 바뀐 쪽만 보낸다(빈 `bpm:call`을 새로 달지 않는다).
                 if data["calledElement"] != str(self.loaded.get("calledElement") or ""):
                     changes["calledElement"] = data["calledElement"]
                 if data["call"] != (_body_of(dict(self.loaded.get("chk") or {}), "call") or {}):
@@ -729,7 +729,7 @@ class Properties(QWidget):
                 sent.update({name: json.dumps(body, ensure_ascii=False, indent=2) for name, body in data.items()})
                 changes["chk"] = sent
                 return changes, None
-            # `chk:task`는 `{type, extension, data}` **통째로** 오간다 — 본문만 보내면
+            # `bpm:task`는 `{type, extension, data}` **통째로** 오간다 — 본문만 보내면
             # 고칠 때마다 `type`·`extension`이 날아간다 (C1 — 패키지가 그 확장을 요구하지 않게 된다).
             task = _task_of(dict(self.loaded.get("chk") or {})) or {}
             changes["chk"] = {"task": json.dumps({**task, "data": data}, ensure_ascii=False, indent=2)}

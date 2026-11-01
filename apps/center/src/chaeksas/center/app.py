@@ -3,7 +3,7 @@
 경로는 C4·C5·C7이 정한 그대로다. 권한은 C5 「권한표」를 `auth`가 한 곳에서 본다.
 
     app = create_app(Settings.from_env())
-    uvicorn.run(app, ...)          # 또는 `chk-center`
+    uvicorn.run(app, ...)          # 또는 `bpm-center`
 
 **콘솔은 여기 없다** (ADR-0017 — `web/apps/center-console`). Center는 API만 가진다.
 """

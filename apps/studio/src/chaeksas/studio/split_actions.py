@@ -1,7 +1,7 @@
 """STU-06a 「PC BPM 프로세스로 나누기」 (ADR-0071).
 
 서버에서 못 하는 **노드 하나**를 새 PC BPM 프로세스(시작 → 그 노드 → 끝)로 옮기고, 원래 자리는 그 노드를
-**위임 호출로 바꾼다** (`chk:call.delegate`, ADR-0062).
+**위임 호출로 바꾼다** (`bpm:call.delegate`, ADR-0062).
 
 지키는 것 넷.
 
@@ -122,7 +122,7 @@ def process_entry_id(pc_id: str) -> str:
 
 
 def call_body(plan: Plan) -> str:
-    """위임 호출의 `chk:call` (C14) — 짝은 **같은 이름**이다."""
+    """위임 호출의 `bpm:call` (C14) — 짝은 **같은 이름**이다."""
     body: dict[str, Any] = {"delegate": {"bpm_process_id": plan.pc_id}}
     if plan.inputs:
         body["input"] = {name: name for name, _ in plan.inputs}
@@ -132,7 +132,7 @@ def call_body(plan: Plan) -> str:
 
 
 def pc_process(plan: Plan, server: ProcessInfo, extension: str | None) -> str:
-    """PC BPM 프로세스의 `chk:process` — 옮긴 노드의 **확장에 해당하는 것만** 서버에서 가져온다 (ADR-0071 4).
+    """PC BPM 프로세스의 `bpm:process` — 옮긴 노드의 **확장에 해당하는 것만** 서버에서 가져온다 (ADR-0071 4).
 
     키 참조는 옮기지 않는다 — 키가 없다 (ADR-0102, C14 B7).
     """
@@ -148,7 +148,7 @@ def pc_process(plan: Plan, server: ProcessInfo, extension: str | None) -> str:
 
 
 def extension_of(chk: dict[str, str]) -> str | None:
-    """옮길 노드가 확장 태스크면 그 확장 id (`chk:task`의 `extension`)."""
+    """옮길 노드가 확장 태스크면 그 확장 id (`bpm:task`의 `extension`)."""
     text = chk.get("task")
     if not text:
         return None

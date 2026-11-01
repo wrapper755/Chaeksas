@@ -37,9 +37,9 @@ NOW = datetime(2026, 10, 4, 9, 30, tzinfo=UTC)
 #: 쓰기 쉬운 BPMN 뼈대. `{body}`에 노드·흐름을 끼운다.
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="{process_id}" name="시험">
-    <bpmn:extensionElements><chk:process>{process_props}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{process_props}</bpm:process></bpmn:extensionElements>
     {body}
   </bpmn:process>
 </bpmn:definitions>
@@ -57,7 +57,7 @@ def flow(id_: str, source: str, target: str, condition: str | None = None) -> st
 
 def script(id_: str, body: str, name: str = "스크립트") -> str:
     return (
-        f'<bpmn:scriptTask id="{id_}" name="{name}" scriptFormat="chk-expr">'
+        f'<bpmn:scriptTask id="{id_}" name="{name}" scriptFormat="bpm-expr">'
         f"<bpmn:script>{body}</bpmn:script></bpmn:scriptTask>"
     )
 
@@ -295,7 +295,7 @@ def approval_process(kind: str = "userTask", props: str = APPROVAL_PROPS) -> Any
         '<bpmn:startEvent id="Start_1"/>'
         + script("Task_Count", "보류건수 = 2")
         + f'<bpmn:{kind} id="Approve_Hold"><bpmn:extensionElements>'
-        + f"<chk:approval>{props}</chk:approval></bpmn:extensionElements></bpmn:{kind}>"
+        + f"<bpm:approval>{props}</bpm:approval></bpmn:extensionElements></bpmn:{kind}>"
         + script("Task_After", "결정 = 진행")
         + '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Task_Count")
@@ -374,7 +374,7 @@ def sourced_process(props: str = BATCH_APPROVAL, process_props: str = SOURCED_PR
         '<bpmn:startEvent id="Start_1"/>'
         + script("Task_Count", "보류건수 = 2")
         + '<bpmn:userTask id="Approve_Hold"><bpmn:extensionElements>'
-        + f"<chk:approval>{props}</chk:approval></bpmn:extensionElements></bpmn:userTask>"
+        + f"<bpm:approval>{props}</bpm:approval></bpmn:extensionElements></bpmn:userTask>"
         + '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Task_Count")
         + flow("f2", "Task_Count", "Approve_Hold")
@@ -643,7 +643,7 @@ def example_service_outputs() -> dict[str, dict[str, Any]]:
     """예제가 서비스 앱에서 **받으려는 필드**에 자리 값을 채워 둔다.
 
     진짜 앱은 M5의 `samples/mock-*`다. 여기서는 「엔진이 어디까지 가는가」만 보므로, 각
-    `chk:serviceCall.output`이 가리키는 응답 필드를 그대로 돌려주는 시늉만 한다.
+    `bpm:serviceCall.output`이 가리키는 응답 필드를 그대로 돌려주는 시늉만 한다.
     """
     out: dict[str, dict[str, Any]] = {}
     for path in sorted(EXAMPLE.glob("*.bpmn")):
@@ -890,9 +890,9 @@ def test_a_sequential_loop_collects_results_in_order() -> None:
     loop = '{"collection": "줄목록", "item": "줄", "result": "값", "collect_into": "모음"}'
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
-        + '<bpmn:scriptTask id="Task_Each" scriptFormat="chk-expr">'
+        + '<bpmn:scriptTask id="Task_Each" scriptFormat="bpm-expr">'
         + "<bpmn:extensionElements>"
-        + f"<chk:loop>{loop}</chk:loop>"
+        + f"<bpm:loop>{loop}</bpm:loop>"
         + "</bpmn:extensionElements>"
         + "<bpmn:script>값 = 줄 * 10</bpmn:script>"
         + '<bpmn:multiInstanceLoopCharacteristics isSequential="true"/>'
@@ -914,8 +914,8 @@ def test_an_empty_loop_collects_an_empty_list() -> None:
     loop = '{"collection": "줄목록", "item": "줄", "result": "값", "collect_into": "모음"}'
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
-        + '<bpmn:scriptTask id="Task_Each" scriptFormat="chk-expr">'
-        + f"<bpmn:extensionElements><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
+        + '<bpmn:scriptTask id="Task_Each" scriptFormat="bpm-expr">'
+        + f"<bpmn:extensionElements><bpm:loop>{loop}</bpm:loop></bpmn:extensionElements>"
         + "<bpmn:script>값 = 줄</bpmn:script>"
         + '<bpmn:multiInstanceLoopCharacteristics isSequential="true"/>'
         + "</bpmn:scriptTask>"
@@ -933,8 +933,8 @@ def test_a_loop_over_something_that_is_not_a_list_fails() -> None:
     loop = '{"collection": "하나", "item": "줄", "result": "값", "collect_into": "모음"}'
     process = make(
         '<bpmn:startEvent id="Start_1"/>'
-        + '<bpmn:scriptTask id="Task_Each" scriptFormat="chk-expr">'
-        + f"<bpmn:extensionElements><chk:loop>{loop}</chk:loop></bpmn:extensionElements>"
+        + '<bpmn:scriptTask id="Task_Each" scriptFormat="bpm-expr">'
+        + f"<bpmn:extensionElements><bpm:loop>{loop}</bpm:loop></bpmn:extensionElements>"
         + "<bpmn:script>값 = 줄</bpmn:script>"
         + '<bpmn:multiInstanceLoopCharacteristics isSequential="true"/>'
         + "</bpmn:scriptTask>"

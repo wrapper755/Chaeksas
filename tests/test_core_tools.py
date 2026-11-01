@@ -5,7 +5,7 @@
 1. **파일 도구는 실행 폴더 밖을 못 본다** (ADR-0026). 그것은 업무 실패가 **아니라** 고쳐야 할
    설정이라, `PathDenied`가 도구 경계를 그대로 넘어간다.
 2. **도구는 자기 설명과 인자 모양을 들고 다닌다** — 이름만 주면 모델이 인자를 지어낸다.
-3. **`http_request_tool`은 읽기만 한다** — 보내기는 `chk:send`의 일이다.
+3. **`http_request_tool`은 읽기만 한다** — 보내기는 `bpm:send`의 일이다.
 4. **자를 때는 잘랐다고 말한다** — 조용히 자르면 모델이 없는 것을 없다고 단정한다.
 5. 못 읽는 것(스캔 PDF·없는 파일·깨진 형식)은 **업무 실패**다 — 오류 경계가 받을 수 있게.
 """
@@ -303,7 +303,7 @@ def test_cutting_says_it_cut() -> None:
 
 
 def test_only_reading_methods_are_allowed(box: dict[str, ToolDef]) -> None:
-    """보내기는 `chk:send`의 일이다 — 어댑터가 막는 자리를 도구로 돌아가지 못하게 한다."""
+    """보내기는 `bpm:send`의 일이다 — 어댑터가 막는 자리를 도구로 돌아가지 못하게 한다."""
     assert HTTP_METHODS == ("GET", "HEAD")
     with pytest.raises(HttpToolError, match="읽기만"):
         box["http_request_tool"](url="https://example.test/보내기", method="POST")

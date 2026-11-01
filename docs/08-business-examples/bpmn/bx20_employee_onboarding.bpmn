@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx20_employee_onboarding" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_new_hire" name="new_hire" />
   <bpmn:process id="Proc_bx20_employee_onboarding" name="입사자 온보딩" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -63,7 +63,7 @@
       "default": "it@example.com"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="입사 확정">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -83,7 +83,7 @@
       </bpmn:parallelGateway>
       <bpmn:serviceTask id="Acc_Mail" name="메일 계정">
         <bpmn:extensionElements>
-          <chk:serviceCall>{
+          <bpm:serviceCall>{
   "app_id": "directory",
   "operation": "create_mail_account",
   "input": {
@@ -93,14 +93,14 @@
   "output": {
     "회사메일": "email"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_Sub_Accounts_02</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Accounts_05</bpmn:outgoing>
       </bpmn:serviceTask>
       <bpmn:serviceTask id="Acc_Chat" name="메신저 계정">
         <bpmn:extensionElements>
-          <chk:serviceCall>{
+          <bpm:serviceCall>{
   "app_id": "directory",
   "operation": "create_chat_account",
   "input": {
@@ -109,14 +109,14 @@
   "output": {
     "메신저": "account"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_Sub_Accounts_03</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Accounts_06</bpmn:outgoing>
       </bpmn:serviceTask>
       <bpmn:serviceTask id="Acc_Group" name="그룹웨어 부서 배정">
         <bpmn:extensionElements>
-          <chk:serviceCall>{
+          <bpm:serviceCall>{
   "app_id": "directory",
   "operation": "assign_department",
   "input": {
@@ -126,7 +126,7 @@
   "output": {
     "배정": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
         </bpmn:extensionElements>
         <bpmn:incoming>Flow_Sub_Accounts_04</bpmn:incoming>
         <bpmn:outgoing>Flow_Sub_Accounts_07</bpmn:outgoing>
@@ -151,7 +151,7 @@
     </bpmn:subProcess>
     <bpmn:serviceTask id="Task_Welcome" name="환영 안내 쓰기">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n입사자 `이름`(`부서`)이 `입사일`에 첫 출근한다. 회사 메일은 `회사메일`이다. 업무 파라미터 `첫날안내`에 공통 일정이 있다.\n\n## 할 일\n입사자에게 보낼 따뜻하고 간결한 환영 메일 본문을 쓴다. 첫날 일정과 계정 정보를 포함한다.\n\n## 판단하지 않는 것\n급여·평가·계약 조건을 언급하지 않는다.\n\n## 반환\n- `환영본문`: string",
   "domain": "llm",
   "results": {
@@ -161,14 +161,14 @@
   "params": {
     "첫날안내": "09:30 로비 집결 → 10:00 오리엔테이션 → 13:00 팀 합류"
   }
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:userTask id="Approve_Equipment" name="장비 지급 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "장비 지급 확인",
   "description": "총무팀: 장비를 지급한 뒤 자산번호를 입력하세요.",
   "show": [
@@ -191,14 +191,14 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sendTask id="Task_MailHire" name="입사자에게">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{개인메일}"
   ],
@@ -206,14 +206,14 @@
   "body": "{환영본문}",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
     </bpmn:sendTask>
     <bpmn:sendTask id="Task_MailLead" name="팀장에게">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{팀장메일}"
   ],
@@ -221,14 +221,14 @@
   "body": "계정·장비 준비가 끝났습니다. 노트북 {노트북}",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
     </bpmn:sendTask>
     <bpmn:sendTask id="Task_Escalate" name="IT 에스컬레이션">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{IT팀메일}"
   ],
@@ -236,7 +236,7 @@
   "body": "확인 부탁드립니다.",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>

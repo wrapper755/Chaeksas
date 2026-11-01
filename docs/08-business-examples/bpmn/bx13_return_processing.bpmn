@@ -4,13 +4,13 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx13_return_processing" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_return_arrived" name="return_arrived" />
   <bpmn:message id="Msg_return_request" name="return_request" />
   <bpmn:process id="Proc_bx13_return_processing" name="반품 처리" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -51,7 +51,7 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="반품 신청">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -59,7 +59,7 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Classify" name="사유 분류">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`사유`는 고객이 직접 쓴 반품 사유다.\n\n## 할 일\n단순변심 / 불량 / 오배송 중 하나로 분류하고 근거를 한 줄로 적는다.\n\n## 판단하지 않는 것\n환불 여부나 금액을 판단하지 않는다.\n\n## 반환\n- `분류`: string (단순변심|불량|오배송)\n- `근거`: string",
   "domain": "llm",
   "results": {
@@ -68,20 +68,20 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:receiveTask id="Recv_Arrived" name="입고 대기" messageRef="Msg_return_arrived">
       <bpmn:extensionElements>
-        <chk:receive>{
+        <bpm:receive>{
   "correlation": "반품번호",
   "payload": [
     "검수통과",
     "검수메모"
   ]
-}</chk:receive>
+}</bpm:receive>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
@@ -93,7 +93,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Refund" name="환불">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "shop",
   "operation": "refund",
   "input": {
@@ -103,14 +103,14 @@
   "output": {
     "환불결과": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sendTask id="Task_Reject" name="반품 불가 안내">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{고객메일}"
   ],
@@ -118,14 +118,14 @@
   "body": "검수 결과: {검수메모}",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:sendTask>
     <bpmn:sendTask id="Task_Cancelled" name="자동 취소 안내">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{고객메일}"
   ],
@@ -133,12 +133,12 @@
   "body": "14일 안에 상품이 도착하지 않아 신청이 취소되었습니다.",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
     </bpmn:sendTask>
-    <bpmn:scriptTask id="Task_Amount" name="환불액 계산" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Amount" name="환불액 계산" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
       <bpmn:script>환불액 = 금액 - (0 if 분류 in ('불량', '오배송') else 3000)</bpmn:script>

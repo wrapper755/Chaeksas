@@ -262,7 +262,7 @@ def _protocol_of(definition: dict[str, Any] | None, app: ServiceAppResource | No
     if definition:
         found = (definition.get("service") or {}).get("protocol")
         return str(found) if found else None
-    return "chk-c11" if app else None
+    return "bpm-c11" if app else None
 
 
 def _contributes_of(definition: dict[str, Any] | None) -> dict[str, list[str]]:

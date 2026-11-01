@@ -243,7 +243,7 @@ BX16_TARGET_EXAMPLE = "fx19_manual_task_pc"
 
 
 def test_bx16_delegates_to_the_pc_bot_that_declares_the_outputs() -> None:
-    """**그림과 대상이 맞물리나** (ADR-0062, C14 `chk:call.delegate`).
+    """**그림과 대상이 맞물리나** (ADR-0062, C14 `bpm:call.delegate`).
 
     전에는 이 자리를 사내 확장 서비스 앱(`center-jobs`)으로 메우고 있었고, 그래서 시험이
     **진짜 소켓 Center·연동용 키·등록된 PC 실행기·배포된 PC BPM 프로세스** 넷을 세워야 했다. 위임이

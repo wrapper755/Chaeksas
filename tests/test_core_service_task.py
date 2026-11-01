@@ -1,4 +1,4 @@
-"""서비스 앱 태스크 (`chk:serviceCall`) — 멱등 칸, 재시도, C3 기록, 그리고 Center로 올리기 (C15).
+"""서비스 앱 태스크 (`bpm:serviceCall`) — 멱등 칸, 재시도, C3 기록, 그리고 Center로 올리기 (C15).
 
 | 보는 것 | 왜 |
 | --- | --- |
@@ -41,9 +41,9 @@ RUN_ID = "run_20261004_093000_abc123"
 
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="test.proc" name="시험">
-    <bpmn:extensionElements><chk:process>{process_props}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{process_props}</bpm:process></bpmn:extensionElements>
     {body}
   </bpmn:process>
 </bpmn:definitions>
@@ -66,7 +66,7 @@ def process(call: str = CALL, *, boundary: bool = False, props: str = PROPS) -> 
     catcher = (
         '<bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_Call">'
         "<bpmn:errorEventDefinition/></bpmn:boundaryEvent>"
-        '<bpmn:scriptTask id="Task_Recover" scriptFormat="chk-expr">'
+        '<bpmn:scriptTask id="Task_Recover" scriptFormat="bpm-expr">'
         "<bpmn:script>복구 = error_code</bpmn:script></bpmn:scriptTask>"
         '<bpmn:endEvent id="End_2"/>'
         + flow("f3", "Bnd_Fail", "Task_Recover")
@@ -76,8 +76,8 @@ def process(call: str = CALL, *, boundary: bool = False, props: str = PROPS) -> 
     )
     body = (
         '<bpmn:startEvent id="Start_1"/>'
-        f'<bpmn:serviceTask id="Task_Call"><bpmn:extensionElements><chk:serviceCall>{call}'
-        "</chk:serviceCall></bpmn:extensionElements></bpmn:serviceTask>"
+        f'<bpmn:serviceTask id="Task_Call"><bpmn:extensionElements><bpm:serviceCall>{call}'
+        "</bpm:serviceCall></bpmn:extensionElements></bpmn:serviceTask>"
         '<bpmn:endEvent id="End_1"/>'
         + flow("f1", "Start_1", "Task_Call")
         + flow("f2", "Task_Call", "End_1")

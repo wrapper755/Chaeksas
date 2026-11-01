@@ -48,10 +48,10 @@ import { COOKIE_NAME, open, type Session } from "./session";
  * 타입은 계약 JSON Schema에서 생성한 것만 쓴다 (손으로 쓰지 않는다).
  */
 
-export const CENTER_URL = process.env.CHK_CONSOLE__CENTER_URL ?? "http://localhost:8800";
+export const CENTER_URL = process.env.BPM_CONSOLE__CENTER_URL ?? "http://localhost:8800";
 
 /** 위 막대에 보일 주소 — 사람이 PC 실행기·Studio에 적는 바깥 주소다. 콘솔이 부르는 주소는 컨테이너 이름일 수 있다. */
-export const CENTER_PUBLIC_URL = process.env.CHK_CONSOLE__CENTER_PUBLIC_URL || CENTER_URL;
+export const CENTER_PUBLIC_URL = process.env.BPM_CONSOLE__CENTER_PUBLIC_URL || CENTER_URL;
 
 export class CenterError extends Error {
   constructor(
@@ -76,7 +76,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 
 /**
  * Center 한 번. 행위자는 **세션이 정한다** (ADR-0090) — Center가 세션 토큰에서 계정 아이디를
- * 읽으므로 `X-CHK-Actor`를 싣지 않는다.
+ * 읽으므로 `X-BPM-Actor`를 싣지 않는다.
  */
 async function send<T>(path: string, init: RequestInit | undefined, token: string | null): Promise<T> {
   const response = await fetch(`${CENTER_URL}${path}`, {
@@ -268,7 +268,7 @@ export const center = {
     return call<JobInfo[]>(`/api/v1/jobs${suffix}`);
   },
   job: (jobId: string) => call<JobInfo>(`/api/v1/jobs/${encodeURIComponent(jobId)}`),
-  /** 만들기. 요청자는 BFF가 `X-CHK-Actor`로 싣는다 (C5 — 본문에 없다). */
+  /** 만들기. 요청자는 BFF가 `X-BPM-Actor`로 싣는다 (C5 — 본문에 없다). */
   createJob: (body: JobCreateRequest) =>
     call<JobInfo>("/api/v1/jobs", { method: "POST", body: JSON.stringify(body) }),
   /** 취소. 200이면 끝, 202면 `cancel_requested` — 현장의 다음 하트비트를 기다린다 (C5). */

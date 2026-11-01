@@ -27,7 +27,7 @@ KNOWN_SETTINGS = frozenset({SETTING_LLM, SETTING_VLM, SETTING_SMTP})
 #: R11이 막는다). 화면이 「studio로 만듦」처럼 풀어 쓸 때 쓰는 목록이다.
 KNOWN_BUILT_BY = frozenset({"studio", "cli"})
 
-#: AI 태스크의 대상 환경 — C14 `chk:aiTask.domain`과 C1 `requires.domains`가 **같은 목록**이다.
+#: AI 태스크의 대상 환경 — C14 `bpm:aiTask.domain`과 C1 `requires.domains`가 **같은 목록**이다.
 #: 거르는 자리는 둘이지만(C14 B8이 그림에서, R2가 매니페스트에서) **정의는 여기 하나**다.
 #: 자리가 C1 쪽인 것은 층 때문이다 — `bpmn_ext`가 이 모듈을 import한다 (거꾸로는 순환이다).
 KNOWN_DOMAINS = frozenset({"llm", "api", "doc", "web", "desktop"})
@@ -56,7 +56,7 @@ class Trigger(ContractModel):
 
 
 class ManifestInput(ContractModel):
-    """진입 정의가 받는 입력 하나 — `chk:process.inputs`를 옮긴 것 (C1). 작업 지시 화면이 칸을 그린다."""
+    """진입 정의가 받는 입력 하나 — `bpm:process.inputs`를 옮긴 것 (C1). 작업 지시 화면이 칸을 그린다."""
 
     name: str
     type: str  # C14 VALUE_TYPES
@@ -343,7 +343,7 @@ def _check_r11(m: Manifest) -> list[Violation]:
     """`requires.settings`가 계약에 적힌 것 중 하나인가 (C1 R11).
 
     **R9와 같은 까닭이다** — 갖춰야 할 설정은 사람이 적는 값이 아니라 **그림에서 Studio가
-    옮기는 값**이고(`chk:email` → `smtp`), 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다
+    옮기는 값**이고(`bpm:email` → `smtp`), 읽는 쪽은 그 이름으로 「이 호스트가 갖췄나」를 본다
     (`core.preflight`). 모르는 이름이 들어오면 그 점검은 **아무 말 없이 지나가** 준비되지 않은
     BPM 프로세스가 실행되고 그 태스크에서 죽는다. R9를 만들기 전 `triggers[].kind`가 겪은 그 꼴이다.
 

@@ -1,7 +1,7 @@
 """일꾼 폴더 — Center가 **뜰 때** 일꾼과 폴더 키를 들인다. 일꾼이 들어오는 길은 이것 하나다 (ADR-0122, C15).
 
 배포가 `<이름>.consumer.json`(C15 `FolderConsumer` — 이름·토픽·**토큰 해시**)을 일꾼 폴더
-(`CHK_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)에 복사해 두면 여기서 한 번 읽는다. 요청 코드·승인이 없다 —
+(`BPM_CENTER__CONSUMERS_DIR`, 기본 `<데이터>/consumers`)에 복사해 두면 여기서 한 번 읽는다. 요청 코드·승인이 없다 —
 폴더에 쓸 수 있는 사람을 관리자로 본다.
 
 - 토픽은 파일에 적은 것으로 고정이고 키에는 만료·회전이 없다(공개키가 없다). 일꾼의 자리는 파일 이름이 정한다.
@@ -307,11 +307,11 @@ def _drop_missing_keys(store: Store, present: set[str]) -> list[ConsumerFolderIt
     return out
 
 
-# ─────────────────────────── 파일 짓기 (`chk-center consumer-file`) ───────────────────────────
+# ─────────────────────────── 파일 짓기 (`bpm-center consumer-file`) ───────────────────────────
 
 
 def new_token() -> str:
-    """일꾼 토큰 원문 — C7 키 모양(`chk_ctr_` + 40자)이다. Center는 모양을 보지 않고 해시만 맞춘다."""
+    """일꾼 토큰 원문 — C7 키 모양(`bpm_ctr_` + 40자)이다. Center는 모양을 보지 않고 해시만 맞춘다."""
     return f"{KEY_PREFIX}{secrets.token_urlsafe(48)[:KEY_RANDOM_LEN]}"
 
 

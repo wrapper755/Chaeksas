@@ -4,13 +4,13 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx32_customer_inquiry" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_cs_inquiry" name="cs_inquiry" />
   <bpmn:error id="Err_TASK_FAILED" name="TASK_FAILED" errorCode="TASK_FAILED" />
   <bpmn:process id="Proc_bx32_customer_inquiry" name="고객 문의 답변 초안" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -43,7 +43,7 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="문의 도착">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -51,7 +51,7 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Search" name="FAQ 검색">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "kb-search",
   "operation": "search",
   "input": {
@@ -61,14 +61,14 @@
   "output": {
     "근거": "hits"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Draft" name="답변 초안">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`본문`은 고객 문의, `근거`는 사내 FAQ 검색 결과(최대 5개)다.\n\n## 할 일\n근거만 사용해 정중한 답변 초안을 쓴다. 근거가 부족하면 `근거부족`을 true로.\n\n## 판단하지 않는 것\n근거에 없는 정책·보상을 약속하지 않는다.\n\n## 반환\n- `초안`: string\n- `근거부족`: bool",
   "domain": "llm",
   "results": {
@@ -77,14 +77,14 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:userTask id="Approve_Agent" name="상담원 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "답변 확인",
   "description": "",
   "show": [
@@ -108,7 +108,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
@@ -120,7 +120,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Post" name="답변 등록">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "ext-helpdesk",
   "operation": "post_reply",
   "input": {
@@ -130,14 +130,14 @@
   "output": {
     "등록": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:userTask id="Approve_Check" name="등록 여부 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "답변 등록 확인",
   "description": "등록 응답을 받지 못했습니다. 헬프데스크 화면에서 확인하세요. 자동으로 다시 보내지 않습니다.",
   "show": [
@@ -158,7 +158,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>

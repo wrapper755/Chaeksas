@@ -36,8 +36,8 @@ RUN uv sync --frozen --package chaeksas-server-runner
 
 # 데이터(배포·실행 기록·기다리는 실행 `state.sqlite3`)와 비밀(받은 Center API 키·서비스 앱 키)은
 # **볼륨 둘로 가른다** — 데이터를 백업·복사해도 키가 따라 나가지 않게 (ADR-0100).
-ENV CHK_SERVER_RUNNER__DATA_DIR=/data \
-    CHK_SERVER_RUNNER__SECRETS_DIR=/secrets
+ENV BPM_SERVER_RUNNER__DATA_DIR=/data \
+    BPM_SERVER_RUNNER__SECRETS_DIR=/secrets
 VOLUME ["/data", "/secrets"]
 
 # 기계 id는 **데이터 볼륨에** 둔다 — 이미지에 `/etc/machine-id`가 있으면 그 이미지로 뜬 실행기가 모두 같은
@@ -47,4 +47,4 @@ RUN rm -f /etc/machine-id /var/lib/dbus/machine-id \
  && mkdir -p /data /secrets && chown -R chaeksas /data /app && chown chaeksas /secrets && chmod 0700 /secrets
 USER chaeksas
 
-CMD ["uv", "run", "--frozen", "--package", "chaeksas-server-runner", "chk-server-runner"]
+CMD ["uv", "run", "--frozen", "--package", "chaeksas-server-runner", "bpm-server-runner"]

@@ -27,7 +27,7 @@ export default function LoginPage() {
             type="password"
             required
             autoComplete="off"
-            help="앱 서버의 CHK_SVC_<APP>__ADMIN_TOKEN."
+            help="앱 서버의 BPM_SVC_<APP>__ADMIN_TOKEN."
           />
           <Field label="이름" name="actor" help="화면에 보일 이름입니다 (비우면 「관리자」)." />
           <Button type="submit" variant="primary" disabled={pending}>

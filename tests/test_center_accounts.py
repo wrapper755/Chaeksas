@@ -3,7 +3,7 @@
 여기 걸린 것:
 
 1. 첫 관리자는 **계정이 없을 때만** 설정으로 만들고, 규칙에 안 맞으면 Center가 뜨지 않는다.
-2. 세션으로 부르면 **행위자는 계정**이다 — `X-CHK-Actor`를 듣지 않는다.
+2. 세션으로 부르면 **행위자는 계정**이다 — `X-BPM-Actor`를 듣지 않는다.
 3. 마지막 관리자는 지킨다. 멈추거나 비밀번호가 바뀌면 그 세션이 끝난다.
 4. 승인·배포 봉투는 **Center 키가 서명하고**, 그 키는 믿는 목록(`admin_keys`)에 있다.
 """
@@ -121,8 +121,8 @@ def test_logout_ends_the_session(client: TestClient) -> None:
 
 
 def test_the_actor_is_the_account_not_the_header(client: TestClient) -> None:
-    """세션으로 부르면 `X-CHK-Actor`를 듣지 않는다 — 신원은 로그인이 정했다."""
-    headers = {**login(client), "X-CHK-Actor": quote("남의 이름")}
+    """세션으로 부르면 `X-BPM-Actor`를 듣지 않는다 — 신원은 로그인이 정했다."""
+    headers = {**login(client), "X-BPM-Actor": quote("남의 이름")}
     created = client.post(
         "/api/v1/packages", files={"file": ("p.zip", build_package(), "application/zip")}, headers=headers
     )

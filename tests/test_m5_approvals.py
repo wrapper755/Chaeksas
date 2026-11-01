@@ -238,7 +238,7 @@ def test_a_good_answer_sticks(client: TestClient, host: dict[str, Any]) -> None:
     answer = client.post(
         f"/api/v1/approvals/{REQUEST}/answer",
         json={"answer": {"approved": True, "memo": "확인했습니다"}},
-        headers={**ADMIN, "X-CHK-Actor": "%EC%9A%B4%EC%98%81%EC%9E%90%20%EA%B9%80"},
+        headers={**ADMIN, "X-BPM-Actor": "%EC%9A%B4%EC%98%81%EC%9E%90%20%EA%B9%80"},
     )
     assert answer.status_code == 200, answer.text
     found = answer.json()
@@ -609,9 +609,9 @@ def test_a_relay_key_sees_only_what_its_person_is_assigned(
     put(client, host, assignees=["김감독"])
     auth = relay(client)
     assert client.get("/api/v1/approvals", headers=auth).json()["code"] == "on_behalf_required"
-    mine = {**auth, "X-CHK-On-Behalf-Of": KIM}
+    mine = {**auth, "X-BPM-On-Behalf-Of": KIM}
     assert [one["request_id"] for one in client.get("/api/v1/approvals", headers=mine).json()] == [REQUEST]
-    other = {**auth, "X-CHK-On-Behalf-Of": "%EB%B0%95"}  # 「박」
+    other = {**auth, "X-BPM-On-Behalf-Of": "%EB%B0%95"}  # 「박」
     assert client.get("/api/v1/approvals", headers=other).json() == []
     # 남의 결재 하나는 **있다는 것조차** 알리지 않는다 (404).
     assert client.get(f"/api/v1/approvals/{REQUEST}", headers=other).status_code == 404
@@ -623,7 +623,7 @@ def test_a_relay_key_sees_only_what_its_person_is_assigned(
 
 def test_a_relay_answer_records_the_person_and_the_route(client: TestClient, host: dict[str, Any]) -> None:
     put(client, host, assignees=["김감독"])
-    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    mine = {**relay(client), "X-BPM-On-Behalf-Of": KIM}
     answered = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=mine)
     assert answered.status_code == 200, answered.text
     found = answered.json()
@@ -636,13 +636,13 @@ def test_a_relay_answer_records_the_person_and_the_route(client: TestClient, hos
 
     # 어느 쪽으로 답해도 결재는 한 번만 닫힌다.
     twice = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": False}},
-                        headers={**ADMIN, "X-CHK-Actor": "%EC%9A%B4%EC%98%81%EC%9E%90"})
+                        headers={**ADMIN, "X-BPM-Actor": "%EC%9A%B4%EC%98%81%EC%9E%90"})
     assert twice.status_code == 409 and twice.json()["code"] == "already_answered"
 
 
 def test_a_relay_answer_for_someone_not_assigned_is_refused(client: TestClient, host: dict[str, Any]) -> None:
     put(client, host, assignees=["이감독"])
-    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    mine = {**relay(client), "X-BPM-On-Behalf-Of": KIM}
     refused = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=mine)
     assert refused.status_code == 403 and refused.json()["code"] == "not_assignee"
 
@@ -651,7 +651,7 @@ def test_an_approval_without_assignees_is_answered_only_in_the_console(
     client: TestClient, host: dict[str, Any]
 ) -> None:
     put(client, host)
-    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    mine = {**relay(client), "X-BPM-On-Behalf-Of": KIM}
     refused = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}}, headers=mine)
     assert refused.status_code == 403 and refused.json()["code"] == "not_assignee"
     # 콘솔(관리자 토큰)은 담당자로 막지 않는다 — 이름이 자칭이라서다 (ADR-0080).
@@ -662,7 +662,7 @@ def test_an_approval_without_assignees_is_answered_only_in_the_console(
 def test_the_console_is_not_blocked_by_assignees(client: TestClient, host: dict[str, Any]) -> None:
     put(client, host, assignees=["이감독"])
     ok = client.post(f"/api/v1/approvals/{REQUEST}/answer", json={"answer": {"approved": True}},
-                     headers={**ADMIN, "X-CHK-Actor": KIM})
+                     headers={**ADMIN, "X-BPM-Actor": KIM})
     assert ok.status_code == 200 and ok.json()["answered_by"] == "김감독"
 
 
@@ -670,13 +670,13 @@ def test_a_bad_on_behalf_name_is_refused(client: TestClient, host: dict[str, Any
     put(client, host, assignees=["김감독"])
     auth = relay(client)
     for bad in ("server_bot%3Arun_x", "%20", "%FF"):
-        found = client.get("/api/v1/approvals", headers={**auth, "X-CHK-On-Behalf-Of": bad})
+        found = client.get("/api/v1/approvals", headers={**auth, "X-BPM-On-Behalf-Of": bad})
         assert found.status_code == 422 and found.json()["code"] == "on_behalf_invalid", bad
 
 
 def test_a_relay_key_does_nothing_but_approvals(client: TestClient, host: dict[str, Any]) -> None:
     """권한은 결재 셋뿐이다 (ADR-0081) — 키가 새도 다른 것이 열리지 않는다."""
-    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    mine = {**relay(client), "X-BPM-On-Behalf-Of": KIM}
     assert client.get("/api/v1/resources", headers=mine).status_code == 403
     assert client.get("/api/v1/runs", headers=mine).status_code == 403
     assert client.post(f"/api/v1/runs/{RUN}/events", json=[], headers=mine).status_code == 403
@@ -727,7 +727,7 @@ def test_the_review_digest_is_set_and_kept_after_the_values_go(
 def test_an_answer_for_what_someone_else_saw_is_refused(client: TestClient, host: dict[str, Any]) -> None:
     """답하는 쪽이 본 것과 다르면 받지 않는다 — 다시 읽어 사람에게 보여야 한다."""
     made = put(client, host, assignees=["김감독"])
-    mine = {**relay(client), "X-CHK-On-Behalf-Of": KIM}
+    mine = {**relay(client), "X-BPM-On-Behalf-Of": KIM}
     wrong = client.post(f"/api/v1/approvals/{REQUEST}/answer",
                         json={"answer": {"approved": True}, "if_review_digest": "sha256:" + "0" * 64}, headers=mine)
     assert wrong.status_code == 409 and wrong.json()["code"] == "review_changed"

@@ -4,16 +4,16 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx11_parallel" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx11_parallel" name="병렬 분기·합류" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
   "inputs": []
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -24,17 +24,17 @@
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:scriptTask id="Task_A" name="A" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_A" name="A" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:script>a = 1</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_B" name="B" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_B" name="B" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
       <bpmn:script>b = 2</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_C" name="C" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_C" name="C" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
       <bpmn:script>c = 3</bpmn:script>
@@ -45,7 +45,7 @@
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:parallelGateway>
-    <bpmn:scriptTask id="Task_Sum" name="합" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Sum" name="합" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
       <bpmn:script>합 = a + b + c</bpmn:script>

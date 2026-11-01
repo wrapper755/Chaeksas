@@ -79,7 +79,7 @@ BPM 프로세스가 호출하는 서버 기능은 **서비스 앱**으로 늘려
 | 결재를 기다리는 BPM 프로세스가 실행 자리를 놓는가 | **확정: PC BPM 프로세스는 끝날 때까지 기다린다** (실제 업무와 같음). 동시 실행·상태 저장이 필요한 업무는 실행 위치를 「서버」로 ([ADR-0015](decisions/0015-run-location.md)) |
 | 서버 실행 BPM 프로세스의 운영 화면 이름 | **확정: 「서버 BPM 프로세스」, PC 쪽은 「BPM 프로세스」** ([ADR-0016](decisions/0016-server-first.md)) |
 | 업무 대부분을 어디서 돌리나 | **확정: 서버 (기본값). PC는 사람·화면이 필요할 때만** ([ADR-0016](decisions/0016-server-first.md)) |
-| 서버 BPM 프로세스가 현장 한 부분만 PC BPM 프로세스에 맡기는가 (PC 위임) | **확정: Call Activity의 `chk:call.delegate`로 Center가 고른 PC에 맡기고 기다린다** ([ADR-0062](decisions/0062-pc-delegation.md)) |
+| 서버 BPM 프로세스가 현장 한 부분만 PC BPM 프로세스에 맡기는가 (PC 위임) | **확정: Call Activity의 `bpm:call.delegate`로 Center가 고른 PC에 맡기고 기다린다** ([ADR-0062](decisions/0062-pc-delegation.md)) |
 | 서버 앱 분류 이름 | **확정: "서비스 앱"** ([ADR-0010](decisions/0010-service-apps.md)) |
 | 결정 수행이 실패하면 자율 수행으로 넘어가는가? | 기본은 넘어가지 않고 실패. 앱·작업별 예외는 manifest 정책 ([ADR-0010](decisions/0010-service-apps.md)) |
 | 무인 실행: 로그인한 사용자 없이 PC 실행기가 Windows 서비스로 BPM 프로세스를 돌리는가? 현장 확인·화면 조작은 화면이 있는 로그인 세션이 필요하다 | **나중에 검토** (첫 릴리스는 로그인 세션의 트레이 앱으로 실행) |

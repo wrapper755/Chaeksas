@@ -4,13 +4,13 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx34_incident_alert" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_monitor_alert" name="monitor_alert" />
   <bpmn:message id="Msg_monitor_recovered" name="monitor_recovered" />
   <bpmn:process id="Proc_bx34_incident_alert" name="장애 알림 대응" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -53,7 +53,7 @@
       "default": "PT10M"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="경보">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -61,7 +61,7 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Logs" name="최근 로그">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "observability",
   "operation": "recent_logs",
   "input": {
@@ -71,14 +71,14 @@
   "output": {
     "로그": "lines"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Summary" name="상황 요약">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`내용`은 경보, `로그`는 최근 15분 로그다.\n\n## 할 일\n무슨 일이 일어나는지 3줄로 요약하고 추정 원인 후보를 최대 3개 적는다.\n\n## 판단하지 않는 것\n조치를 실행하지 않는다. 확실하지 않으면 「추정」이라고 적는다.\n\n## 반환\n- `요약`: string\n- `원인후보`: list",
   "domain": "llm",
   "results": {
@@ -87,14 +87,14 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:userTask id="Approve_Ack1" name="1차 당직 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "장애 확인 (1차)",
   "description": "",
   "show": [
@@ -111,14 +111,14 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_04</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:userTask id="Approve_Ack2" name="2차 당직 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "장애 확인 (2차)",
   "description": "",
   "show": [
@@ -135,14 +135,14 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_05</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:sendTask id="Task_Lead" name="팀장 호출">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{팀장메일}"
   ],
@@ -150,17 +150,17 @@
   "body": "{요약}",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:sendTask>
     <bpmn:receiveTask id="Recv_Recovered" name="복구 기다림" messageRef="Msg_monitor_recovered">
       <bpmn:extensionElements>
-        <chk:receive>{
+        <bpm:receive>{
   "correlation": "경보번호",
   "payload": []
-}</chk:receive>
+}</bpm:receive>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:incoming>Flow_06</bpmn:incoming>

@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx02_business_rule" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx02_business_rule" name="규칙 태스크 (DMN)" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -26,14 +26,14 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:businessRuleTask id="Task_Rule" name="할인 정하기">
       <bpmn:extensionElements>
-        <chk:rule>{
+        <bpm:rule>{
   "decision": "discount_policy",
   "input": {
     "amount": "금액",
@@ -43,12 +43,12 @@
     "할인율": "discount",
     "사유": "discount_reason"
   }
-}</chk:rule>
+}</bpm:rule>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:businessRuleTask>
-    <bpmn:scriptTask id="Task_Price" name="최종가" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Price" name="최종가" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>최종가 = round(금액 * (1 - 할인율))</bpmn:script>

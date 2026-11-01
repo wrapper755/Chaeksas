@@ -1,6 +1,6 @@
 """서버 BPM 프로세스가 **PC BPM 프로세스에 한 자리를 맡기고 결과를 받아 이어 간다** (C12 §PC 위임, ADR-0062).
 
-한 줄로 본다: 작업 지시 → 서버 실행기가 돌림 → `chk:call.delegate`에서 **Center에 맡기고
+한 줄로 본다: 작업 지시 → 서버 실행기가 돌림 → `bpm:call.delegate`에서 **Center에 맡기고
 자리를 놓음** → Center가 PC를 골라 작업으로 만듦 → PC가 작업 ack에 값을 실어 올림 →
 하트비트 응답 `delegations[]` → 서버 실행이 **이어 가서 끝남** → `delegation_acks[]`.
 
@@ -12,7 +12,7 @@
 | 기다리는 줄이 `delegation` + `job_id` | Center가 그 작업으로 결과를 돌려준다 (C12 짝 칸) |
 | 맡기는 동안 **자리를 놓는다** | 상한 1에 위임을 들고도 새 작업을 받는다 (ADR-0062 「증명할 다섯」 1) |
 | 재시작을 건너 **작업이 하나** | 작업 id가 스냅샷과 함께 간다 — 다시 맡기지 않는다 (같은 2) |
-| 선언한 `outputs`가 **변수가 된다** | `chk:call.output`이 적은 것만 (같은 3) |
+| 선언한 `outputs`가 **변수가 된다** | `bpm:call.output`이 적은 것만 (같은 3) |
 | 실패·거절은 **업무 실패** | 조용히 멈추지 않는다 (같은 4) |
 | ack가 올라가면 Center가 **값을 지운다** | 원칙 6의 예외는 좁게 쓴다 |
 | 같은 결과가 두 번 와도 **한 번만** | ack가 올라가기 전에 또 내려온다 (C12) |
@@ -58,20 +58,20 @@ CLAIM = "CLM-2026-001"
 #: 서버 그림 — 위임 하나를 거쳐 그 값을 쓴다. `calledElement`는 **읽는 사람을 위한 것**이다.
 SERVER_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_invoice">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs_invoice">
   <bpmn:process id="Proc_fin_invoice" isExecutable="true">
-    <bpmn:extensionElements><chk:process>{"run_location": "server",
-      "inputs": [{"name": "청구번호", "type": "string", "required": true}]}</chk:process>
+    <bpmn:extensionElements><bpm:process>{"run_location": "server",
+      "inputs": [{"name": "청구번호", "type": "string", "required": true}]}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1" />
     <bpmn:callActivity id="Call_Erp" name="ERP 화면 입력" calledElement="Proc_erp_input">
-      <bpmn:extensionElements><chk:call>{
+      <bpmn:extensionElements><bpm:call>{
         "delegate": {"bpm_process_id": "fin.erp-input", "version": "1.0.0"},
         "input": {"전표번호": "청구번호"},
-        "output": {"입력결과": "결과코드"}}</chk:call>
+        "output": {"입력결과": "결과코드"}}</bpm:call>
       </bpmn:extensionElements>
     </bpmn:callActivity>
-    <bpmn:scriptTask id="Task_After" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_After" scriptFormat="bpm-expr">
       <bpmn:script>마무리 = 입력결과 + "-확인"</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:endEvent id="End_1" />
@@ -87,17 +87,17 @@ SERVER_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 #: 그래서 선언한 `outputs`를 **정말 채운다**.
 PC_BPMN = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_erp">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs_erp">
   <bpmn:process id="Proc_erp_input" isExecutable="true">
-    <bpmn:extensionElements><chk:process>{"run_location": "pc",
+    <bpmn:extensionElements><bpm:process>{"run_location": "pc",
       "inputs": [{"name": "전표번호", "type": "string", "required": true}],
-      "outputs": ["결과코드"]}</chk:process>
+      "outputs": ["결과코드"]}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1" />
-    <bpmn:scriptTask id="Task_Erp" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Erp" scriptFormat="bpm-expr">
       <bpmn:script>결과코드 = "OK-" + 전표번호</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_Note" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Note" scriptFormat="bpm-expr">
       <bpmn:script>현장메모 = "올라가지 않는다"</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:endEvent id="End_1" />
@@ -409,7 +409,7 @@ def test_a_delegation_runs_on_the_pc_and_the_server_run_continues(
     """**맡기고 기다리고 받아 이어 간다** (ADR-0062 — 「증명할 다섯」의 1·3).
 
     보는 것은 넷이다: 기다리는 줄이 Center가 결과를 돌려줄 수 있는 모양인가, 맡기는 동안
-    **자리를 놓는가**, PC가 올린 값이 `chk:call.output`이 적은 변수가 되는가, 그래서 업무가
+    **자리를 놓는가**, PC가 올린 값이 `bpm:call.output`이 적은 변수가 되는가, 그래서 업무가
     **끝까지 갔는가**.
     """
     bot_ui_id = ready(center, runner)
@@ -448,7 +448,7 @@ def test_a_delegation_runs_on_the_pc_and_the_server_run_continues(
 def test_the_outputs_become_the_variables_the_graph_asked_for(
     center: TestClient, runner: agent_mod.Agent
 ) -> None:
-    """**적은 것만 오간다** (C14 `chk:call.output`) — 그 뒤 걸음이 그 값을 쓴다.
+    """**적은 것만 오간다** (C14 `bpm:call.output`) — 그 뒤 걸음이 그 값을 쓴다.
 
     실행이 끝난 뒤에는 일꾼을 거두므로(`collect`) 변수를 보려면 **끝나기 전에** 본다.
     """
@@ -681,7 +681,7 @@ def test_the_field_outputs_reach_the_server_variables(
     # ② 그 값을 작업 ack로 올린다 (C4 — 여기만 흉내다).
     pc_finishes(center, bot_ui_id, job_id, outputs=running.outputs, pc_run_id=running.run_id)
 
-    # ③ 서버 실행이 그 값을 받아 이어 간다 — `chk:call.output`이 적은 변수에 담긴다.
+    # ③ 서버 실행이 그 값을 받아 이어 간다 — `bpm:call.output`이 적은 변수에 담긴다.
     worker = runner.workers[run_id]
     runner.tick()
     worker.join(WAIT_S)

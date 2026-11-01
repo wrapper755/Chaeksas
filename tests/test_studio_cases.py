@@ -292,7 +292,7 @@ def test_a_row_can_be_added_and_dropped(app: Any, tmp_path: Path) -> None:
 
 
 def test_the_declared_inputs_are_offered(app: Any, tmp_path: Path) -> None:
-    """`chk:process.inputs`가 이름 콤보에 미리 나온다 — 오타로 안 맞는 일을 줄인다."""
+    """`bpm:process.inputs`가 이름 콤보에 미리 나온다 — 오타로 안 맞는 일을 줄인다."""
     made, definition = imported(tmp_path, RECONCILIATION)
     if not declared_inputs(definition):
         pytest.skip("이 예제는 입력을 적지 않았다")

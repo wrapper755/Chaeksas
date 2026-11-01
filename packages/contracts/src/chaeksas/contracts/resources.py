@@ -22,7 +22,7 @@ from chaeksas.contracts.extension import AdapterOperation
 from chaeksas.contracts.manifest import Manifest
 from chaeksas.contracts.service_app import Operation
 
-#: 리소스를 다시 읽는 주기 (`CHK_CENTER__RESOURCE__POLL_S`). 「새로 고침」은 즉시.
+#: 리소스를 다시 읽는 주기 (`BPM_CENTER__RESOURCE__POLL_S`). 「새로 고침」은 즉시.
 STATUS_POLL_S = 60
 MANIFEST_POLL_S = 600
 CATALOG_POLL_S = 300
@@ -31,7 +31,7 @@ CATALOG_POLL_S = 300
 KNOWN_RESOURCE_TYPES = frozenset({"extension", "service_app", "contributed", "runtime"})
 KNOWN_SERVICE_APP_STATUSES = frozenset({"ok", "degraded", "unreachable", "unknown"})
 KNOWN_EXTENSION_TIERS = frozenset({"builtin", "internal", "external"})  # C13
-KNOWN_PROTOCOLS = frozenset({"chk-c11", "http-adapter"})  # 없으면 클라이언트 기여만
+KNOWN_PROTOCOLS = frozenset({"bpm-c11", "http-adapter"})  # 없으면 클라이언트 기여만
 #: 일꾼 폴더의 한 줄 결과 (`ConsumerFolderItem.outcome`, ADR-0122).
 KNOWN_FOLDER_OUTCOMES = frozenset({"registered", "unchanged", "refused", "revoked"})
 #: 일꾼 폴더가 다루는 것 (`ConsumerFolderItem.kind`) — 일꾼, 키 파일의 연동용·대리 답용 키(ADR-0123), 맡은 일꾼이
@@ -107,7 +107,7 @@ class ConsumerFolderItem(ContractModel):
 class ConsumerFolderScan(ContractModel):
     """`GET /resources/consumer-folder` — Center가 **마지막으로 뜰 때** 일꾼 폴더를 읽은 결과 (ADR-0122)."""
 
-    #: 폴더가 있나(사람이 `CHK_CENTER__CONSUMERS_DIR`를 적었으면 늘 `true`). 없으면 나머지는 비어 있다.
+    #: 폴더가 있나(사람이 `BPM_CENTER__CONSUMERS_DIR`를 적었으면 늘 `true`). 없으면 나머지는 비어 있다.
     configured: bool = False
     dir: str | None = None
     scanned_at: Timestamp | None = None
@@ -242,7 +242,7 @@ def _check_service_apps(m: Manifest, index: ResourceIndex) -> list[MissingResour
     server = m.run_location == "server"
     for need in m.requires.service_apps:
         app = index.service_app(need.app_id)
-        # `chk:serviceCall`은 서비스 앱과 외부 확장을 가리지 않는다 (C13 §4) — 같은 id의 외부
+        # `bpm:serviceCall`은 서비스 앱과 외부 확장을 가리지 않는다 (C13 §4) — 같은 id의 외부
         # 확장이 있으면 그 어댑터 작업으로 본다. 없다고 하면 등록된 앱에 「등록되지 않음」이 뜬다.
         find_op: Callable[[str], Any]
         if app is not None:

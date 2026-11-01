@@ -19,14 +19,14 @@ export interface Session {
   actor: string;
 }
 
-export const COOKIE_NAME = "chk_svc_console_session";
+export const COOKIE_NAME = "bpm_svc_console_session";
 const ALGORITHM = "aes-256-gcm";
 
 function key(): Buffer {
-  const secret = process.env.CHK_SVC_CONSOLE__SESSION_SECRET;
+  const secret = process.env.BPM_SVC_CONSOLE__SESSION_SECRET;
   if (!secret || secret.length < 16) {
     // 비밀이 없으면 세션을 만들 수 없다 — 약한 기본값을 쓰지 않는다 (CLAUDE.md §5).
-    throw new Error("CHK_SVC_CONSOLE__SESSION_SECRET이 없거나 너무 짧다 (16자 이상)");
+    throw new Error("BPM_SVC_CONSOLE__SESSION_SECRET이 없거나 너무 짧다 (16자 이상)");
   }
   return scryptSync(secret, "chaeksas-svc-console", 32);
 }

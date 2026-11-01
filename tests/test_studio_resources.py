@@ -269,7 +269,7 @@ def test_an_installed_definition_becomes_a_call_activity() -> None:
     """설치된 판의 정의로 **Call Activity를 만든다**
     ([ADR-0051](../docs/decisions/0051-shared-process-conveniences.md)).
 
-    만드는 것은 **`calledElement`뿐**이다 — `chk:call`의 입력·출력 짝은 내 변수 이름을 알아야
+    만드는 것은 **`calledElement`뿐**이다 — `bpm:call`의 입력·출력 짝은 내 변수 이름을 알아야
     하는 일이라 지어내지 않는다 (속성 패널에서 적는다).
     """
     found = root_of(tree_with(installed=held()), resources.ROOT_SHARED)
@@ -449,7 +449,7 @@ def test_a_root_that_creates_nothing_offers_no_node() -> None:
 
 
 def test_a_service_operation_becomes_a_service_call_without_a_key_ref() -> None:
-    """`chk:serviceCall`은 `{app_id, operation}`뿐 — **키 참조는 BPM 프로세스에서 상속한다**."""
+    """`bpm:serviceCall`은 `{app_id, operation}`뿐 — **키 참조는 BPM 프로세스에서 상속한다**."""
     app = root_of(tree_with(), resources.ROOT_SERVICE).items[0]
     operation = app.children[0]
     assert operation.create is not None
@@ -659,7 +659,7 @@ def test_only_a_row_that_makes_something_can_be_dragged() -> None:
 def test_an_installed_shared_definition_drags_its_called_element() -> None:
     """설치하면 그 줄도 끌린다 (ADR-0051) — **끌어다 놓기와 메뉴가 같은 `Create`**다.
 
-    `calledElement`는 `chk:*`가 아니라 그냥 BPMN 속성이라 **실린 글에 `attrs`로** 간다.
+    `calledElement`는 `bpm:*`가 아니라 그냥 BPMN 속성이라 **실린 글에 `attrs`로** 간다.
     """
     window = explorer(tree_with(installed=held()))
     model = window.view.model()
@@ -884,7 +884,7 @@ def test_the_read_only_window_draws_the_diagram_and_says_it_cannot_be_edited(
     """STU-03 「열기 (읽기 전용)」의 창 (ADR-0051) — **정말 못 고치는 페이지**를 띄운다.
 
     머리 한 줄이 **어디서 온 것인지와 못 고친다는 것**을 함께 말하고, 그림이 들어가면 경고
-    줄은 비어 있다 (`chk:*`를 뷰어도 moddle 설명으로 읽는다).
+    줄은 비어 있다 (`bpm:*`를 뷰어도 moddle 설명으로 읽는다).
     """
     from pathlib import Path as _Path
 

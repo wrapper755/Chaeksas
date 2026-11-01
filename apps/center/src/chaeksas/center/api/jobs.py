@@ -184,7 +184,7 @@ def create(
                 owner,
                 request.idempotency_key,
                 _body_hash(request),
-                # **행위자는 본문에서 받지 않는다** (C5) — 키 이름이나 X-CHK-Actor가 정한다.
+                # **행위자는 본문에서 받지 않는다** (C5) — 키 이름이나 X-BPM-Actor가 정한다.
                 found.actor,
                 now,
                 PENDING,

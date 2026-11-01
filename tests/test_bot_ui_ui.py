@@ -24,7 +24,7 @@ from chaeksas.bot_ui.store import Store  # noqa: E402
 from chaeksas.contracts.bot_ui import CurrentRun, JobDispatch  # noqa: E402
 
 AT = "2026-10-03T09:00:00+09:00"
-#: 모양이 맞는 키 (`chk_ctr_` + 무작위 40자). 모양이 틀리면 설정 창이 막는다.
+#: 모양이 맞는 키 (`bpm_ctr_` + 무작위 40자). 모양이 틀리면 설정 창이 막는다.
 
 
 @pytest.fixture(scope="session")
@@ -104,7 +104,7 @@ def agent(tmp_path: Path) -> Agent:
     return Agent(
         settings=Settings(name="재무팀 PC-03"),
         store=Store.load(tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_test"),
+        credentials=FakeCredentials("bpm_ctr_test"),
     )
 
 
@@ -197,7 +197,7 @@ def test_center_tab_has_no_key_field(app: Any, agent: Agent) -> None:
 
     dialog = SettingsDialog(agent)
     assert not hasattr(dialog, "api_key")
-    assert "chk_ctr_test" not in dialog.result_label.text()
+    assert "bpm_ctr_test" not in dialog.result_label.text()
 
 
 def test_center_tab_shows_the_request_code_while_waiting(app: Any, tmp_path: Path) -> None:
@@ -231,9 +231,9 @@ def test_settings_dialog_saves_to_the_file_without_secrets(app: Any, agent: Agen
     assert agent.settings.queue_max == 5
     # 저장은 시험용 데이터 폴더로 간다 (conftest) — 개발 PC의 진짜 설정이 아니다.
     path = agent.settings.config_path
-    assert path.parent == Path(os.environ["CHK_BOT_UI__DATA_DIR"])
+    assert path.parent == Path(os.environ["BPM_BOT_UI__DATA_DIR"])
     # **설정 파일에 키가 없다** (CLAUDE.md §5).
-    assert "chk_ctr_test" not in path.read_text(encoding="utf-8")
+    assert "bpm_ctr_test" not in path.read_text(encoding="utf-8")
 
 
 def test_the_settings_dialog_fits_the_screen_and_keeps_its_buttons(app: Any, agent: Agent) -> None:
@@ -300,7 +300,7 @@ def test_settings_dialog_reports_why_a_connection_failed(app: Any, tmp_path: Pat
     agent = Agent(
         settings=Settings(center_url="http://127.0.0.1:9"),  # 아무도 듣지 않는 포트
         store=Store.load(tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_test"),
+        credentials=FakeCredentials("bpm_ctr_test"),
     )
     dialog = SettingsDialog(agent)
     dialog.test_connection()
@@ -375,7 +375,7 @@ def test_shutdown_reports_center_jobs_as_rejected(app: Any, tmp_path: Path) -> N
     agent = Agent(
         settings=Settings(center_url="http://127.0.0.1:9"),  # 보고는 닿지 못한다 — 디스크에 남아야 한다
         store=Store.load(tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_test"),
+        credentials=FakeCredentials("bpm_ctr_test"),
     )
     agent.store.state.bot_ui_id = "bui_1"
     agent.take_job(job("job_center"))

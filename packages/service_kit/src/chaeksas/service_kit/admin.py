@@ -52,7 +52,7 @@ def admin_guard(request: Request) -> JSONResponse | None:
         return _error(
             503,
             "admin_disabled",
-            "관리자 토큰이 설정되지 않아 관리 API를 쓸 수 없다 (CHK_SVC_<APP>__ADMIN_TOKEN)",
+            "관리자 토큰이 설정되지 않아 관리 API를 쓸 수 없다 (BPM_SVC_<APP>__ADMIN_TOKEN)",
         )
     header = request.headers.get("authorization", "")
     scheme, _, value = header.partition(" ")

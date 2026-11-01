@@ -6,8 +6,8 @@ C15로 Center에서 가져간다).
 
 여기서 더하는 것은 두 가지뿐이다.
 
-- **설정을 환경변수에서 읽는 자리** — 앱마다 `CHK_SVC_<앱 id>__*`다 (`docs/04-setup.md` §6).
-  `app_id`의 `-`는 `_`로 바꾼다 (`kb-search` → `CHK_SVC_KB_SEARCH__`).
+- **설정을 환경변수에서 읽는 자리** — 앱마다 `BPM_SVC_<앱 id>__*`다 (`docs/04-setup.md` §6).
+  `app_id`의 `-`는 `_`로 바꾼다 (`kb-search` → `BPM_SVC_KB_SEARCH__`).
 - **시나리오 제어(`/mock/v1/scenario`)** — 같은 입력에 다른 답이 필요한 케이스가 있다.
   예제 케이스가 그렇게 적어 두었다: BX-08은 「평소」와 「모의 서버에 95일 연체 1건 추가」가
   둘 다 입력이 비어 있다. 시험이 케이스마다 이 자리를 바꾼다.
@@ -49,9 +49,9 @@ SCENARIO_PATH = "/mock/v1/scenario"
 #: 모든 앱이 두 수행 모드를 받는다 — BPM 프로세스는 결정 수행, Studio 시험 실행은 자율 수행이다.
 BOTH_MODES = (MODE_DETERMINISTIC, MODE_AUTONOMOUS)
 
-#: 모든 모의 앱이 함께 읽는 접두사 (`CHK_MOCK_APPS__CENTER__URL`·`…__CENTER__TOKEN`). 모의 앱 열셋은
+#: 모든 모의 앱이 함께 읽는 접두사 (`BPM_MOCK_APPS__CENTER__URL`·`…__CENTER__TOKEN`). 모의 앱 열셋은
 #: **일꾼 하나**다 — 토픽 열셋을 한 토큰으로 맡는다 (C15 §일꾼 들이기).
-SHARED_PREFIX = "CHK_MOCK_APPS__"
+SHARED_PREFIX = "BPM_MOCK_APPS__"
 
 
 class Scenario:
@@ -98,7 +98,7 @@ class Op:
 class MockApp:
     """모의 앱 하나.
 
-    `app_id`는 **예제 BPMN의 `chk:serviceCall.app_id` 그대로**여야 한다 — 그렇지 않으면
+    `app_id`는 **예제 BPMN의 `bpm:serviceCall.app_id` 그대로**여야 한다 — 그렇지 않으면
     예제가 부를 수 없다. `tests/test_mock_apps.py`가 예제에서 읽어 대조한다.
     """
 
@@ -120,7 +120,7 @@ class MockApp:
 
     @property
     def env_prefix(self) -> str:
-        return "CHK_SVC_" + self.app_id.replace("-", "_").upper() + "__"
+        return "BPM_SVC_" + self.app_id.replace("-", "_").upper() + "__"
 
     def env(self, name: str, default: str | None = None) -> str | None:
         return os.environ.get(self.env_prefix + name, default)

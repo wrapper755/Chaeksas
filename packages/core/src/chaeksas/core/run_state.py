@@ -254,11 +254,11 @@ class RunEnv:
     services: ServiceCaller = field(default_factory=NoServiceCaller)
     #: AI 태스크의 모델 (ADR-0027). 기본은 **부르지 않고 실패한다**. 주소·키는 이 어댑터만 안다.
     llm: Llm = field(default_factory=NoLlm)
-    #: AI 태스크가 빌려 쓸 도구 (`chk:aiTask.tools`의 이름 → 함수). 확장이 더한다 (M4).
+    #: AI 태스크가 빌려 쓸 도구 (`bpm:aiTask.tools`의 이름 → 함수). 확장이 더한다 (M4).
     tools: Mapping[str, Tool] = field(default_factory=dict)
     #: 패키지의 재생 명세 (`memory/specs.json`, ADR-0028). 결정 수행이 되밟는다. 없으면 그냥 돈다.
     memory: ReplayMemory | None = None
-    #: 확장 태스크를 수행하는 쪽 (`chk:task`, C13 `task_types[].executor`). 기본은 **없다** —
+    #: 확장 태스크를 수행하는 쪽 (`bpm:task`, C13 `task_types[].executor`). 기본은 **없다** —
     #: 확장이 없는 곳에서 확장 태스크를 만나면 그림 오류로 멈춘다 (조용히 넘어가지 않는다).
     extensions: ExtensionTasks = field(default_factory=lambda: NoExtensionTasks())
     #: **PC 위임**을 맡기는 쪽 (C12 §PC 위임, ADR-0062). 기본은 **맡기지 못한다** — 서버
@@ -491,7 +491,7 @@ def event_kind(node: Node) -> str | None:
 
 
 def correlation_of(run: Run, node: Node) -> Any:
-    """`chk:receive.correlation`이 가리키는 **지금 값** — 이 값이 같은 메시지만 받는다."""
+    """`bpm:receive.correlation`이 가리키는 **지금 값** — 이 값이 같은 메시지만 받는다."""
     receive = node.prop("receive")
     if receive is None or not receive.correlation:
         return None

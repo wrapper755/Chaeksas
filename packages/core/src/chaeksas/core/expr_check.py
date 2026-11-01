@@ -16,7 +16,7 @@ from chaeksas.contracts import SEVERITY_ERROR, Violation
 from chaeksas.contracts.bpmn_ext import BpmnProcess
 from chaeksas.core.expr import ExprError, parse, parse_script
 
-#: 식을 들고 있는 `chk:*` 속성과 그 안의 입력 사전 (`serviceCall.input` 등).
+#: 식을 들고 있는 `bpm:*` 속성과 그 안의 입력 사전 (`serviceCall.input` 등).
 SITES = ("serviceCall", "rule", "call")
 
 

@@ -1,4 +1,4 @@
-"""STU-04 결재·확인 편집기 — `chk:approval` (C14·C6).
+"""STU-04 결재·확인 편집기 — `bpm:approval` (C14·C6).
 
 속성 패널이 결재(`userTask`)·확인(`manualTask`)을 만나면 탭으로 끼운다. **규약은 STU-14와
 같다** (`load`/`dump`/`problems`/`changed`) — 속성 패널은 어느 편집기인지 모른다.
@@ -45,7 +45,7 @@ from chaeksas.qt.theme import set_role
 from chaeksas.qt.theme.tokens import SPACE_2, SPACE_3
 from chaeksas.studio.name_pick import attach
 
-#: 탭 이름 — 결재와 확인은 같은 `chk:approval`이고 이름만 다르다 (C14).
+#: 탭 이름 — 결재와 확인은 같은 `bpm:approval`이고 이름만 다르다 (C14).
 TAB_APPROVAL = "결재"
 TAB_CONFIRMATION = "확인"
 
@@ -55,7 +55,7 @@ COL_KEY, COL_LABEL, COL_TYPE, COL_CHOICES, COL_REQUIRED, COL_DEFAULT = range(len
 #: 폼 칸 타입 (C6 `KNOWN_FIELD_TYPES`) — 보이는 순서.
 FIELD_TYPES = ("text", "number", "bool", "choice")
 
-#: `chk:approval.location` (C14 `APPROVAL_LOCATIONS`) — 보이는 글.
+#: `bpm:approval.location` (C14 `APPROVAL_LOCATIONS`) — 보이는 글.
 LOCATIONS = (
     ("follow", "PC 실행기 설정을 따름"),
     ("center", "Center로 올림"),
@@ -277,7 +277,7 @@ class ApprovalEditor(QWidget):
     # ── 규약 ──
 
     def load(self, body: Mapping[str, Any]) -> None:
-        """그림에 적힌 `chk:approval`을 그린다 (없으면 빈 것)."""
+        """그림에 적힌 `bpm:approval`을 그린다 (없으면 빈 것)."""
         self._quiet = True
         self._loaded = dict(body)
         self.title_box.setText(str(body.get("title") or ""))
@@ -309,7 +309,7 @@ class ApprovalEditor(QWidget):
         self._refresh_location()
 
     def dump(self) -> dict[str, Any]:
-        """`chk:approval` 본문 — **읽은 것 위에** 고친 칸만 얹는다."""
+        """`bpm:approval` 본문 — **읽은 것 위에** 고친 칸만 얹는다."""
         out = dict(self._loaded)
         out["title"] = self.title_box.text().strip()
         _put(out, "description", self.description_box.toPlainText().strip() or None)

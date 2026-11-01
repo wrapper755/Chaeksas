@@ -531,17 +531,17 @@ def test_the_child_builds_the_same_sender(tmp_path: Path, monkeypatch: pytest.Mo
 #: **예제 묶음에는 `outputs`를 선언한 PC 그림이 없어** 여기서 만든다 (위임이 어제 정해졌다).
 DELEGATED = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_erp" targetNamespace="urn:chaeksas:test">
+  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs_erp" targetNamespace="urn:chaeksas:test">
   <bpmn:process id="Proc_fx02_business_rule" name="ERP 입력" isExecutable="true">
-    <bpmn:extensionElements><chk:process>{"run_location": "pc",
+    <bpmn:extensionElements><bpm:process>{"run_location": "pc",
       "inputs": [{"name": "전표번호", "type": "string", "required": true}],
-      "outputs": ["결과코드"]}</chk:process>
+      "outputs": ["결과코드"]}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" />
-    <bpmn:scriptTask id="Task_Do" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Do" scriptFormat="bpm-expr">
       <bpmn:script>결과코드 = "OK-" + 전표번호</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_Note" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Note" scriptFormat="bpm-expr">
       <bpmn:script>메모 = "올라가지 않는다"</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:endEvent id="End" />

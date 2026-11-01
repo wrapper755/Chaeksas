@@ -38,7 +38,7 @@ _RANDOM_BYTES = 48
 
 
 def new_key() -> str:
-    """키 원문 (`chk_ctr_` + 무작위 40자). 돌려준 뒤 **다시 만들 수 없다.**"""
+    """키 원문 (`bpm_ctr_` + 무작위 40자). 돌려준 뒤 **다시 만들 수 없다.**"""
     random = secrets.token_urlsafe(_RANDOM_BYTES).replace("=", "")[:KEY_RANDOM_LEN]
     return f"{KEY_PREFIX}{random}"
 

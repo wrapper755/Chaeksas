@@ -5,7 +5,7 @@
 이것 하나다** — 요청 코드·승인이 없다.
 
 ```bash
-uv run chk-center consumer-file worker --topics external --dir deploy/consumers
+uv run bpm-center consumer-file worker --topics external --dir deploy/consumers
 ```
 
 파일에는 `{"name", "topics", "token_sha256"}`만 있고 토큰 원문은 **명령이 한 번만** 찍는다 — 그 값을 일꾼의
@@ -15,9 +15,9 @@ uv run chk-center consumer-file worker --topics external --dir deploy/consumers
 **연동용·대리 답용 키도 여기서 들인다** ([ADR-0123](../../docs/decisions/0123-folder-keys.md)) — `<이름>.key.json`:
 
 ```bash
-uv run chk-center key-file nowview --type integration --dir deploy/consumers
-uv run chk-center key-file nowview-relay --type relay --dir deploy/consumers
+uv run bpm-center key-file nowview --type integration --dir deploy/consumers
+uv run bpm-center key-file nowview-relay --type relay --dir deploy/consumers
 ```
 
 결과와 사유는 콘솔 CON-07 「일꾼 폴더」와 Center 로그에 보인다. 자리를 바꾸려면 `.env`에
-`CHK_CENTER__CONSUMERS_HOST_DIR`를 적는다. 이 README는 읽지 않는다(이름 꼴이 다르다).
+`BPM_CENTER__CONSUMERS_HOST_DIR`를 적는다. 이 README는 읽지 않는다(이름 꼴이 다르다).

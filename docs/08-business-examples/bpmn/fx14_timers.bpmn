@@ -4,16 +4,16 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx14_timers" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx14_timers" name="중간 타이머와 결재 시간 제한" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
   "inputs": []
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -27,7 +27,7 @@
     </bpmn:intermediateCatchEvent>
     <bpmn:userTask id="Approve_Review" name="15초 결재">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "빠른 결재",
   "description": "",
   "show": [
@@ -42,17 +42,17 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
     </bpmn:userTask>
-    <bpmn:scriptTask id="Task_Answered" name="응답" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Answered" name="응답" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
       <bpmn:script>결과 = '응답'</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_Timeout" name="보류" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Timeout" name="보류" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
       <bpmn:script>결과 = '보류'</bpmn:script>

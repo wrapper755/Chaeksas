@@ -2,7 +2,7 @@
 
 | 부르는 쪽 | 토큰 | 할 수 있는 것 |
 | --- | --- | --- |
-| 콘솔 「보기 전용」 계정 | 세션 토큰 (`chk_ses_…`) | **GET만** |
+| 콘솔 「보기 전용」 계정 | 세션 토큰 (`bpm_ses_…`) | **GET만** |
 | 콘솔 「관리자」 계정 | 세션 토큰 | 쓰기 전부 — 승인·배포·외부 확장은 Center가 서명한다 (ADR-0090) |
 | 자동화(스크립트·시험) | 관리자·읽기 토큰 | 위의 둘과 같다. 설정하지 않으면 그 길이 닫힌다 |
 | PC 실행기·Studio·서버 실행기 | Center API 키 (종류별) | 자기 일만 |
@@ -12,10 +12,10 @@
 배포 표까지 대조하는 관문(`api.package_access.guard_download`)이 따로 있다.
 
 **행위자 이름은 본문에서 받지 않는다** (C5). 세션으로 부르면 **계정 아이디**(로그인이 정한
-신원이라 `X-CHK-Actor`를 듣지 않는다), 키로 부르면 키 이름, 관리자·읽기 토큰으로 부르면
-`X-CHK-Actor` 헤더 — 그 헤더는 **토큰으로 부를 때만** 믿는다.
+신원이라 `X-BPM-Actor`를 듣지 않는다), 키로 부르면 키 이름, 관리자·읽기 토큰으로 부르면
+`X-BPM-Actor` 헤더 — 그 헤더는 **토큰으로 부를 때만** 믿는다.
 
-**사람 대신 부르는 키**(대리 답용·연동용)는 그 사람을 `X-CHK-On-Behalf-Of`로 싣는다 (ADR-0081).
+**사람 대신 부르는 키**(대리 답용·연동용)는 그 사람을 `X-BPM-On-Behalf-Of`로 싣는다 (ADR-0081).
 여기서 **한 번** 풀어 `Caller.on_behalf`에 두고, 결재(담당자 대조)와 작업(`on_behalf_of` 기록)이
 읽는다. 대리 답용 키는 **결재 셋뿐**이라 `require_read`도 지나지 못한다.
 """
@@ -38,7 +38,7 @@ from chaeksas.contracts.center_keys import RELAY_KEY_TYPE
 from chaeksas.contracts.external_task import CALL_TOKEN, CALL_TOKEN_PATH, CALL_TOKEN_READ_PATH
 
 #: 콘솔(BFF)이 로그인한 사용자 이름을 싣는 헤더. **값은 UTF-8 퍼센트 인코딩** (C5).
-ACTOR_HEADER = "X-CHK-Actor"
+ACTOR_HEADER = "X-BPM-Actor"
 
 #: 패키지를 올리고 목록·정보를 볼 수 있는 Center API 키 종류 (C5 권한표).
 #:
@@ -49,7 +49,7 @@ PACKAGE_KEY_TYPE = "studio"
 #: 연동용 키 — 외부 시스템이 작업·메시지를 넣고 가상 직원을 읽는다 (C5 권한표, ADR-0098).
 INTEGRATION_KEY_TYPE = "integration"
 
-#: `X-CHK-On-Behalf-Of`를 읽는 키 종류 (ADR-0081). 다른 쪽이 실어 보내면 **듣지 않는다**.
+#: `X-BPM-On-Behalf-Of`를 읽는 키 종류 (ADR-0081). 다른 쪽이 실어 보내면 **듣지 않는다**.
 ON_BEHALF_KEY_TYPES = frozenset({RELAY_KEY_TYPE, INTEGRATION_KEY_TYPE})
 
 
@@ -60,7 +60,7 @@ class Caller:
     kind: str
     actor: str
     key: keys.KeyRecord | None = None
-    #: 키가 대신 부르는 사람 (`X-CHK-On-Behalf-Of`, 정규화 뒤). 대리 답용·연동용 키일 때만 있다.
+    #: 키가 대신 부르는 사람 (`X-BPM-On-Behalf-Of`, 정규화 뒤). 대리 답용·연동용 키일 때만 있다.
     on_behalf: str | None = None
     #: 세션으로 불렀으면 그 계정 아이디 (ADR-0090). 토큰·키로 부르면 `None`.
     account: str | None = None
@@ -96,9 +96,9 @@ def _console_actor(request: Request, *, fallback: str) -> str:
 
 
 def _on_behalf(request: Request) -> str | None:
-    """`X-CHK-On-Behalf-Of` — 퍼센트 인코딩한 UTF-8 (C5). **틀린 것은 거부한다** (422).
+    """`X-BPM-On-Behalf-Of` — 퍼센트 인코딩한 UTF-8 (C5). **틀린 것은 거부한다** (422).
 
-    `X-CHK-Actor`와 달리 받은 글을 그대로 쓰지 않는다 — 이 이름은 담당자와 **대조하는** 값이라
+    `X-BPM-Actor`와 달리 받은 글을 그대로 쓰지 않는다 — 이 이름은 담당자와 **대조하는** 값이라
     디코딩되지 않은 글자로 맞춰 보면 엉뚱한 사람과 같아질 수 있다.
     """
     if ON_BEHALF_HEADER.lower() not in request.headers:
@@ -150,7 +150,7 @@ def caller(request: Request, store: Store, *, admin_token: str | None, read_toke
     # 받았다는 표시다 (C5 §Studio 등록 요청과 승인). PC 실행기·서버 실행기도 여기서 먼저 지워진다.
     if record.enrollment_id:
         enrollments.delivered(store, record, public_key=None)
-    # 키로 부를 때는 X-CHK-Actor를 믿지 않는다 (C5). 사람 대신 부르는 키만 On-Behalf-Of를 듣는다.
+    # 키로 부를 때는 X-BPM-Actor를 믿지 않는다 (C5). 사람 대신 부르는 키만 On-Behalf-Of를 듣는다.
     on_behalf = _on_behalf(request) if record.type in ON_BEHALF_KEY_TYPES else None
     return Caller(kind="key", actor=record.name, key=record, on_behalf=on_behalf)
 

@@ -53,7 +53,7 @@ def test_credentials_use_the_folder_when_named(
 ) -> None:
     """적어 두면 등록·회전·서비스 앱 키가 모두 그 자리를 쓴다 — 부르는 쪽은 그대로다."""
     monkeypatch.setenv(secret_file.ENV_SECRETS_DIR, str(tmp_path / "secrets"))
-    monkeypatch.delenv("CHK_SERVER_RUNNER__CENTER_API_KEY", raising=False)
+    monkeypatch.delenv("BPM_SERVER_RUNNER__CENTER_API_KEY", raising=False)
     found = Credentials()
     assert found.available
     found.set_enroll_secret("private")

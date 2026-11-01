@@ -28,20 +28,20 @@ RUN_ID = "run_20261029_093000_abc123"
 
 SHELL = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   {errors}
   <bpmn:process id="test.proc" name="시험">
-    <bpmn:extensionElements><chk:process>{{"run_location": "{where}"}}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{{"run_location": "{where}"}}</bpm:process></bpmn:extensionElements>
     <bpmn:startEvent id="Start_1"/>
-    <bpmn:serviceTask id="Task_Call" name="신용 조회"><bpmn:extensionElements><chk:serviceCall>
+    <bpmn:serviceTask id="Task_Call" name="신용 조회"><bpmn:extensionElements><bpm:serviceCall>
       {{"app_id": "ext-credit", "operation": "check", "input": {{}}, "output": {{"등급": "grade"}}}}
-    </chk:serviceCall></bpmn:extensionElements></bpmn:serviceTask>
+    </bpm:serviceCall></bpmn:extensionElements></bpmn:serviceTask>
     <bpmn:endEvent id="End_1"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Task_Call"/>
     <bpmn:sequenceFlow id="f2" sourceRef="Task_Call" targetRef="End_1"/>
     <bpmn:boundaryEvent id="Bnd_Fail" attachedToRef="Task_Call">
       <bpmn:errorEventDefinition {error_ref}/></bpmn:boundaryEvent>
-    <bpmn:scriptTask id="Task_Recover" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Recover" scriptFormat="bpm-expr">
       <bpmn:script>복구 = error_code</bpmn:script></bpmn:scriptTask>
     <bpmn:endEvent id="End_2"/>
     <bpmn:sequenceFlow id="f3" sourceRef="Bnd_Fail" targetRef="Task_Recover"/>

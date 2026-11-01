@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx33_access_request" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_access_request" name="access_request" />
   <bpmn:process id="Proc_bx33_access_request" name="IT 권한 신청" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -56,7 +56,7 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="권한 신청">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -64,7 +64,7 @@
     </bpmn:startEvent>
     <bpmn:businessRuleTask id="Task_Risk" name="위험도">
       <bpmn:extensionElements>
-        <chk:rule>{
+        <bpm:rule>{
   "decision": "access_risk",
   "input": {
     "시스템": "시스템",
@@ -73,14 +73,14 @@
   "output": {
     "위험도": "risk"
   }
-}</chk:rule>
+}</bpm:rule>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:businessRuleTask>
     <bpmn:userTask id="Approve_Lead" name="팀장">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "권한 신청 (팀장)",
   "description": "",
   "show": [
@@ -99,7 +99,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
@@ -111,7 +111,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Owner" name="시스템 관리자">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "권한 신청 (시스템 관리자)",
   "description": "",
   "show": [
@@ -130,7 +130,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
@@ -142,7 +142,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Sec" name="보안팀">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "권한 신청 (보안팀)",
   "description": "",
   "show": [
@@ -168,7 +168,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
@@ -182,7 +182,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Grant" name="권한 부여">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "directory",
   "operation": "grant",
   "input": {
@@ -193,14 +193,14 @@
   "output": {
     "부여": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_12</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Schedule" name="회수 예약">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "directory",
   "operation": "schedule_revoke",
   "input": {
@@ -211,14 +211,14 @@
   "output": {
     "예약": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:outgoing>Flow_13</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sendTask id="Task_Notify" name="결과 안내">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{신청자메일}"
   ],
@@ -226,7 +226,7 @@
   "body": "승인: {승인}",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_11</bpmn:incoming>
       <bpmn:incoming>Flow_13</bpmn:incoming>

@@ -193,7 +193,7 @@ def test_unreachable_center_keeps_running(tmp_path: Path) -> None:
     agent = Agent(
         settings=Settings(center_url="http://127.0.0.1:9"),  # 아무도 듣지 않는 포트
         store=Store(path=tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_x"),
+        credentials=FakeCredentials("bpm_ctr_x"),
     )
     agent.store.state.bot_ui_id = "bui_12345678"
     assert agent.beat() is None
@@ -211,7 +211,7 @@ def test_delivery_is_only_known_after_the_heartbeat_answered(tmp_path: Path) -> 
     agent = Agent(
         settings=Settings(center_url="http://127.0.0.1:9"),  # 아무도 듣지 않는 포트
         store=Store(path=tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_x"),
+        credentials=FakeCredentials("bpm_ctr_x"),
     )
     agent.store.state.bot_ui_id = "bui_12345678"
     agent.store.state.seen_jobs = Seen(grace=0)  # 그물을 걷는다 — 자리가 드러난다
@@ -264,7 +264,7 @@ def test_an_unreachable_center_before_the_first_register_is_quiet(tmp_path: Path
     agent = Agent(
         settings=Settings(center_url="http://127.0.0.1:9"),
         store=Store.load(tmp_path / "state.json"),
-        credentials=FakeCredentials("chk_ctr_x"),
+        credentials=FakeCredentials("bpm_ctr_x"),
     )
     assert agent.beat() is None  # 예외를 올리지 않는다 (사람이 고칠 것이 없다)
     assert isinstance(agent.last_problem, Unreachable)
@@ -340,7 +340,7 @@ def test_the_agent_asks_center_for_a_call_token_and_keeps_it(center: TestClient,
     agent = make_agent(center, tmp_path, key=issue_key(center))
     assert agent.beat() is not None
     first = agent.call_token()
-    assert first and first.startswith("chk_ctr_")
+    assert first and first.startswith("bpm_ctr_")
     assert agent.call_token() == first, "살아 있는 동안 같은 것을 준다"
     assert center.get("/api/v1/bot-uis", headers={"Authorization": f"Bearer {first}"}).status_code == 403, (
         "호출 토큰은 외부 작업 밖을 열지 않는다"
@@ -394,7 +394,7 @@ def test_a_pc_without_a_key_asks_and_is_let_in_by_approval(center: TestClient, t
     assert agent.credentials.enroll_secret(), "비밀 반쪽도 비밀 저장소에 있다"
     # 상태 파일에는 봉함도 키도 없다.
     saved = (tmp_path / "state.json").read_text(encoding="utf-8")
-    assert "chk_ctr_" not in saved and "ciphertext" not in saved
+    assert "bpm_ctr_" not in saved and "ciphertext" not in saved
     assert agent.tray_status() == "대기"
 
 

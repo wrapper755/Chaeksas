@@ -1,15 +1,15 @@
-"""`chk-mock-apps` — 모의 앱을 띄우고, 외부 확장 정의 파일을 쓴다.
+"""`bpm-mock-apps` — 모의 앱을 띄우고, 외부 확장 정의 파일을 쓴다.
 
-    chk-mock-apps list                         # 무엇이 있나, 기본 포트는 몇인가
-    chk-mock-apps serve                        # 전부 한 포트에 (/<app_id> 밑에)
-    chk-mock-apps serve --app erp              # 하나만, 그 앱의 기본 포트에
-    chk-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
+    bpm-mock-apps list                         # 무엇이 있나, 기본 포트는 몇인가
+    bpm-mock-apps serve                        # 전부 한 포트에 (/<app_id> 밑에)
+    bpm-mock-apps serve --app erp              # 하나만, 그 앱의 기본 포트에
+    bpm-mock-apps definition ext-credit --base-url http://127.0.0.1:8150 -o ext-credit.json
 
 `serve`를 앱 없이 부르면 **한 프로세스·한 포트**에 전부 붙는다 (관리 API·시나리오 제어).
-**업무 호출은 그 포트로 받지 않는다** — `CHK_MOCK_APPS__CENTER__URL`을 주면 C11 앱 열셋이 **일꾼 하나**로
+**업무 호출은 그 포트로 받지 않는다** — `BPM_MOCK_APPS__CENTER__URL`을 주면 C11 앱 열셋이 **일꾼 하나**로
 Center에 붙어 일감을 가져간다 (C15, ADR-0102). **들이기는 없다** (ADR-0122) — Center 일꾼 폴더에
-`chk-center consumer-file mock-apps --topics <앱 id들>`로 파일을 짓고 받은 토큰을 `CHK_MOCK_APPS__CENTER__TOKEN`
-(또는 `CHK_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)의 `consumer-token.json`)에 둔다. 없으면 붙지 않고 말한다.
+`bpm-center consumer-file mock-apps --topics <앱 id들>`로 파일을 짓고 받은 토큰을 `BPM_MOCK_APPS__CENTER__TOKEN`
+(또는 `BPM_MOCK_APPS__DATA_DIR`(기본 `.mock-apps`)의 `consumer-token.json`)에 둔다. 없으면 붙지 않고 말한다.
 """
 
 from __future__ import annotations
@@ -68,8 +68,8 @@ def _one(app_id: str) -> tuple[FastAPI, Built | None]:
 def start_consumer(built: list[Built], *, center_url: str, folder: Path) -> Any:
     """C11 모의 앱들을 **일꾼 하나**로 Center에 붙인다 (C15). 들이기는 없다 — 토큰이 있어야 붙는다 (ADR-0122).
 
-    토큰은 Center 일꾼 폴더에 `chk-center consumer-file mock-apps --topics <모의 앱 id들>`로 파일을 짓고 받은
-    원문이다(`CHK_MOCK_APPS__CENTER__TOKEN` 또는 데이터 폴더의 `consumer-token.json`). 없으면 붙지 않고 말한다.
+    토큰은 Center 일꾼 폴더에 `bpm-center consumer-file mock-apps --topics <모의 앱 id들>`로 파일을 짓고 받은
+    원문이다(`BPM_MOCK_APPS__CENTER__TOKEN` 또는 데이터 폴더의 `consumer-token.json`). 없으면 붙지 않고 말한다.
     돌려주는 것은 멈추는 `threading.Event`다. 가져가기는 데몬 스레드에서 돈다.
     """
     import threading  # noqa: PLC0415
@@ -81,7 +81,7 @@ def start_consumer(built: list[Built], *, center_url: str, folder: Path) -> Any:
     stop = threading.Event()
     if not tokens.token():
         _say(
-            f"일꾼 토큰이 없다 — Center 일꾼 폴더에 파일을 짓고(chk-center consumer-file mock-apps --topics"
+            f"일꾼 토큰이 없다 — Center 일꾼 폴더에 파일을 짓고(bpm-center consumer-file mock-apps --topics"
             f" {','.join(one.app_id for one in services)}) 받은 토큰을 {SHARED_PREFIX}CENTER__TOKEN에 넣으세요"
         )
         return stop
@@ -159,7 +159,7 @@ def main(argv: list[str] | None = None) -> int:
     _utf8_stdout()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-    parser = argparse.ArgumentParser(prog="chk-mock-apps", description="업무 예제가 부르는 모의 앱")
+    parser = argparse.ArgumentParser(prog="bpm-mock-apps", description="업무 예제가 부르는 모의 앱")
     sub = parser.add_subparsers(dest="command")
 
     sub.add_parser("list", help="모의 앱 목록과 기본 포트")
@@ -181,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             return _serve(args.app, args.port, args.host)
         except KeyError:
-            print(f"모르는 앱이다: {args.app} (`chk-mock-apps list`를 보라)", file=sys.stderr)
+            print(f"모르는 앱이다: {args.app} (`bpm-mock-apps list`를 보라)", file=sys.stderr)
             return 2
     return _definition(args.app, args.base_url, args.out)
 

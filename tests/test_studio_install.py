@@ -41,9 +41,9 @@ CALLED = "Proc_approve"
 
 DEFINITION = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="{process_id}" name="{name}">
-    <bpmn:extensionElements><chk:process>{{}}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{{}}</bpm:process></bpmn:extensionElements>
     <bpmn:startEvent id="Start_1"/>
     {body}
     <bpmn:endEvent id="End_1"/>
@@ -54,12 +54,12 @@ DEFINITION = """<?xml version="1.0" encoding="UTF-8"?>
 
 CALLER = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="Proc_main" name="주문">
-    <bpmn:extensionElements><chk:process>{{}}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{{}}</bpm:process></bpmn:extensionElements>
     <bpmn:startEvent id="Start_1"/>
     <bpmn:callActivity id="Call_1" name="결재" calledElement="{called}">
-      <bpmn:extensionElements><chk:call>{{"input": {{}}, "output": {{}}}}</chk:call></bpmn:extensionElements>
+      <bpmn:extensionElements><bpm:call>{{"input": {{}}, "output": {{}}}}</bpm:call></bpmn:extensionElements>
     </bpmn:callActivity>
     <bpmn:endEvent id="End_1"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Call_1" />
@@ -71,9 +71,9 @@ CALLER = """<?xml version="1.0" encoding="UTF-8"?>
 #: 규칙 태스크가 있는 정의 — 결정표가 함께 와야 도는 자리다 (§다섯).
 RULE_BODY = (
     '<bpmn:businessRuleTask id="Rule_1" name="등급">'
-    '<bpmn:extensionElements><chk:rule>'
+    '<bpmn:extensionElements><bpm:rule>'
     '{"decision": "grade", "input": {"score": "점수"}, "output": {"등급": "grade"}}'
-    "</chk:rule></bpmn:extensionElements></bpmn:businessRuleTask>"
+    "</bpm:rule></bpmn:extensionElements></bpmn:businessRuleTask>"
 )
 
 #: 그 규칙 태스크가 찾는 결정표 (C1 — lib 패키지의 `process/*.dmn`).
@@ -687,16 +687,16 @@ def test_a_lib_that_center_no_longer_has_is_local_only(
 
 RULE_FLOW = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="{process_id}" name="등급 매기기">
     <bpmn:extensionElements>
-      <chk:process>{{"inputs": [{{"name": "점수", "type": "number"}}]}}</chk:process>
+      <bpm:process>{{"inputs": [{{"name": "점수", "type": "number"}}]}}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1"/>
     <bpmn:businessRuleTask id="Rule_1" name="등급">
-      <bpmn:extensionElements><chk:rule>
+      <bpmn:extensionElements><bpm:rule>
         {{"decision": "grade", "input": {{"score": "점수"}}, "output": {{"등급": "grade"}}}}
-      </chk:rule></bpmn:extensionElements>
+      </bpm:rule></bpmn:extensionElements>
     </bpmn:businessRuleTask>
     <bpmn:endEvent id="End_1"/>
     <bpmn:sequenceFlow id="f1" sourceRef="Start_1" targetRef="Rule_1" />
@@ -707,15 +707,15 @@ RULE_FLOW = """<?xml version="1.0" encoding="UTF-8"?>
 
 CALLER_WITH_INPUT = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs">
+                  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs">
   <bpmn:process id="Proc_main" name="주문">
     <bpmn:extensionElements>
-      <chk:process>{{"inputs": [{{"name": "점수", "type": "number"}}]}}</chk:process>
+      <bpm:process>{{"inputs": [{{"name": "점수", "type": "number"}}]}}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start_1"/>
     <bpmn:callActivity id="Call_1" name="등급" calledElement="{called}">
       <bpmn:extensionElements>
-        <chk:call>{{"input": {{"점수": "점수"}}, "output": {{}}}}</chk:call>
+        <bpm:call>{{"input": {{"점수": "점수"}}, "output": {{}}}}</bpm:call>
       </bpmn:extensionElements>
     </bpmn:callActivity>
     <bpmn:endEvent id="End_1"/>

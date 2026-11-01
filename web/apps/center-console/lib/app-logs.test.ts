@@ -23,7 +23,7 @@ describe("buildAppLog", () => {
           key_id: "k1",
           type: "bot_ui",
           name: "현장 PC 1",
-          prefix: "chk_ctr_ab",
+          prefix: "bpm_ctr_ab",
           created_at: "2026-10-31T02:00:00+00:00",
           revoked_at: "2026-10-31T05:00:00+00:00",
           state: "revoked",

@@ -1,4 +1,4 @@
-"""`chk-server-runner` — 서버 실행기를 띄운다 (화면 없음, C12).
+"""`bpm-server-runner` — 서버 실행기를 띄운다 (화면 없음, C12).
 
 서버에서는 systemd·compose가 이것을 돌린다. **SIGTERM을 받으면 곱게 끝낸다** — 컨테이너가
 멈출 때 반쯤 쓴 상태를 남기지 않는다.
@@ -47,7 +47,7 @@ NO_KEY = (
 
 
 def _parser() -> argparse.ArgumentParser:
-    found = argparse.ArgumentParser(prog="chk-server-runner", description="서버 실행기 (C12)")
+    found = argparse.ArgumentParser(prog="bpm-server-runner", description="서버 실행기 (C12)")
     found.add_argument(
         "--once", action="store_true", help="등록하고 하트비트를 한 번 보낸 뒤 상태를 찍는다"
     )

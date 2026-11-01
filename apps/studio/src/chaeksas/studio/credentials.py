@@ -18,14 +18,14 @@ log = logging.getLogger(__name__)
 SERVICE = "chaeksas-studio"
 #: 모델 키.
 LLM_KEY_NAME = "llm"
-ENV_LLM_API_KEY = "CHK_STUDIO__LLM__API_KEY"
+ENV_LLM_API_KEY = "BPM_STUDIO__LLM__API_KEY"
 #: Center API 키 (`studio` 종류) — 시험 실행이 리소스 목록에서 **앱 주소를 읽는 데만** 쓴다.
 #: 읽기 전용이고, **Studio용**으로 따로 발급받은 것이다 (PC 실행기의 것과 값이 다르다).
 CENTER_KEY_NAME = "center"
-ENV_CENTER_API_KEY = "CHK_STUDIO__CENTER_API_KEY"
+ENV_CENTER_API_KEY = "BPM_STUDIO__CENTER_API_KEY"
 #: 확장의 비밀 설정 칸 — 확장마다 이름 공간을 가른다 (`ext:<확장>:<칸>`, PC 실행기와 같은 규칙).
 EXTENSION_PREFIX = "ext:"
-ENV_EXTENSION_PREFIX = "CHK_STUDIO__EXT__"
+ENV_EXTENSION_PREFIX = "BPM_STUDIO__EXT__"
 
 
 def env_name(text: str) -> str:

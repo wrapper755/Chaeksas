@@ -1,4 +1,4 @@
-"""STU-14 서비스 앱 태스크 편집기 — 앱·작업을 골라 `chk:serviceCall`을 만든다.
+"""STU-14 서비스 앱 태스크 편집기 — 앱·작업을 골라 `bpm:serviceCall`을 만든다.
 
 확장이 기여한 편집기(STU-13)와 **같은 규약**을 쓴다 (`load`/`dump`/`problems`/`changed`) —
 속성 패널은 어느 쪽인지 모르고 탭으로 끼울 뿐이다. 다만 이것은 **플랫폼이 가진 편집기**다:
@@ -75,7 +75,7 @@ def _readonly(text: str) -> QTableWidgetItem:
 
 
 class ServiceTaskEditor(QWidget):
-    """STU-14. 속성 패널이 `chk:serviceCall`을 만났을 때 탭으로 끼운다."""
+    """STU-14. 속성 패널이 `bpm:serviceCall`을 만났을 때 탭으로 끼운다."""
 
     #: 무엇이든 바뀌었다 (속성 패널이 「적용」을 켠다).
     changed = Signal()
@@ -235,7 +235,7 @@ class ServiceTaskEditor(QWidget):
     # ── 규약 (속성 패널이 부른다) ──
 
     def load(self, call: Mapping[str, Any]) -> None:
-        """그림에 적힌 `chk:serviceCall`을 그린다."""
+        """그림에 적힌 `bpm:serviceCall`을 그린다."""
         self._quiet = True
         self.usage = Usage.of(call)
         self._load_apps(self.usage.app_id)
@@ -250,7 +250,7 @@ class ServiceTaskEditor(QWidget):
         self._retell()
 
     def dump(self) -> dict[str, Any]:
-        """지금 화면 → `chk:serviceCall` 본문."""
+        """지금 화면 → `bpm:serviceCall` 본문."""
         return self._current().to_call()
 
     def problems(self) -> tuple[list[str], list[str]]:

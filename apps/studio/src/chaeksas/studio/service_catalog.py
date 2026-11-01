@@ -107,7 +107,7 @@ class App:
 
 @dataclass(frozen=True)
 class CallInput:
-    """호출 대상이 받는 입력 하나 (C14 `chk:process.inputs` · C1 `inputs`)."""
+    """호출 대상이 받는 입력 하나 (C14 `bpm:process.inputs` · C1 `inputs`)."""
 
     name: str
     required: bool = False
@@ -459,7 +459,7 @@ class Usage:
         )
 
     def to_call(self) -> dict[str, Any]:
-        """`chk:serviceCall` 본문. **빈 것은 넣지 않는다** — 그림에 쓸모없는 칸을 남기지 않는다."""
+        """`bpm:serviceCall` 본문. **빈 것은 넣지 않는다** — 그림에 쓸모없는 칸을 남기지 않는다."""
         out: dict[str, Any] = {"app_id": self.app_id, "operation": self.operation}
         if self.inputs:
             out["input"] = dict(self.inputs)

@@ -30,8 +30,8 @@ Username = Annotated[str, Field(pattern=USERNAME_RE.pattern)]
 PASSWORD_MIN = 12
 PASSWORD_MAX = 256
 
-#: 세션 토큰 — `chk_ses_` + 무작위. Center는 해시만 둔다.
-SESSION_PREFIX = "chk_ses_"
+#: 세션 토큰 — `bpm_ses_` + 무작위. Center는 해시만 둔다.
+SESSION_PREFIX = "bpm_ses_"
 #: 세션은 이만큼 지나면 끝난다 (다시 로그인한다).
 SESSION_HOURS = 12
 

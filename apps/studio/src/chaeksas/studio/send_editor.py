@@ -1,7 +1,7 @@
-"""STU-04 보내기 편집기 — `chk:email`·`chk:webhook` (C14 §보내기).
+"""STU-04 보내기 편집기 — `bpm:email`·`bpm:webhook` (C14 §보내기).
 
 속성 패널이 보내기(`sendTask`)를 만나면 탭으로 끼운다. **규약은 결재·STU-14와 같다**
-(`load`/`dump`/`problems`/`changed`) — 다른 것은 하나다: 이 편집기는 `chk:` 요소 **둘 중 하나**를
+(`load`/`dump`/`problems`/`changed`) — 다른 것은 하나다: 이 편집기는 `bpm:` 요소 **둘 중 하나**를
 고르므로 `dump()`가 `{"email": 본문}` 또는 `{"webhook": 본문}`을 준다(속성 패널이 고르지 않은 쪽을 지운다).
 
 - **적어 둔 것을 조용히 바꾸지 않는다.** 편집기가 다루지 않는 칸은 읽은 그대로 돌려준다.
@@ -43,7 +43,7 @@ from chaeksas.studio.name_pick import attach
 #: 탭 이름.
 TAB_LABEL = "보내기"
 
-#: `chk:` 요소 이름 — 채널이 곧 요소다 (C14).
+#: `bpm:` 요소 이름 — 채널이 곧 요소다 (C14).
 CHANNEL_EMAIL = "email"
 CHANNEL_WEBHOOK = "webhook"
 CHANNELS = (CHANNEL_EMAIL, CHANNEL_WEBHOOK)

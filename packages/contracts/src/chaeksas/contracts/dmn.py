@@ -1,6 +1,6 @@
 """C14 §규칙 태스크와 DMN — 결정표를 읽고 **한 건을 판정한다**.
 
-규칙 태스크(`businessRuleTask` + `chk:rule`)가 가리키는 `.dmn` 파일이 여기로 들어온다. 형식
+규칙 태스크(`businessRuleTask` + `bpm:rule`)가 가리키는 `.dmn` 파일이 여기로 들어온다. 형식
 해석이므로 계약 쪽에 둔다 (`bpmn_ext`가 BPMN을 읽는 것과 같은 자리). 읽기는 표준 라이브러리
 (`xml.etree`)로만 한다.
 

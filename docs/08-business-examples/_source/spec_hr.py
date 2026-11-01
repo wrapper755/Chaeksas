@@ -204,5 +204,5 @@ EXAMPLES.append(Example(
     extensions=[{"id": "hris", "version": ">=1,<2"}],
     cases=[Case("E001", {"사번": "E001"}, {"잔여": 11.5}), Case("E002", {"사번": "E002"}, {"잔여": 3})],
     features=["가장 작은 공유 BPM 프로세스 — 호출 대상의 모범"],
-    lessons=["호출 대상은 입력(`chk:process.inputs`)과 출력(`chk:process.outputs`)을 분명히 적는다 — 호출하는 쪽이 매핑할 이름이고, build.py가 호출 매핑과 대조한다."],
+    lessons=["호출 대상은 입력(`bpm:process.inputs`)과 출력(`bpm:process.outputs`)을 분명히 적는다 — 호출하는 쪽이 매핑할 이름이고, build.py가 호출 매핑과 대조한다."],
 ))

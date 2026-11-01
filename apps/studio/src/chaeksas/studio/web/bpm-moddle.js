@@ -1,9 +1,9 @@
 // 생성 파일: C14 모델(`contracts.bpmn_ext.ELEMENT_MODELS`)에서 만든다.
 // 직접 고치지 말고 `uv run python scripts/gen_moddle.py` (ADR-0022·ADR-0029).
-window.CHK_MODDLE = {
+window.BPM_MODDLE = {
   "name": "Chaeksas",
   "uri": "urn:chaeksas:bpmn:1",
-  "prefix": "chk",
+  "prefix": "bpm",
   "xml": {
     "tagAlias": "lowerCase"
   },

@@ -56,12 +56,12 @@ def test_a_broken_settings_file_falls_back_to_defaults(tmp_path: Path) -> None:
 
 
 def test_environment_variables_win(monkeypatch: Any, tmp_path: Path) -> None:
-    """`CHK_BOT_UI__*`가 파일을 덮는다 (ADR-0011 — 중첩은 `__`)."""
+    """`BPM_BOT_UI__*`가 파일을 덮는다 (ADR-0011 — 중첩은 `__`)."""
     path = tmp_path / "settings.json"
     Settings(center_url="http://file:8800", queue_max=5).save(path)
-    monkeypatch.setenv("CHK_BOT_UI__CENTER__URL", "http://env:8800")
-    monkeypatch.setenv("CHK_BOT_UI__QUEUE__MAX", "7")
-    monkeypatch.setenv("CHK_BOT_UI__AUTOSTART", "false")
+    monkeypatch.setenv("BPM_BOT_UI__CENTER__URL", "http://env:8800")
+    monkeypatch.setenv("BPM_BOT_UI__QUEUE__MAX", "7")
+    monkeypatch.setenv("BPM_BOT_UI__AUTOSTART", "false")
 
     found = Settings.load(path)
     assert (found.center_url, found.queue_max) == ("http://env:8800", 7)
@@ -131,8 +131,8 @@ def test_os_label_and_pc_name_are_filled() -> None:
 
 def test_environment_variable_can_stand_in_for_the_keyring(monkeypatch: Any) -> None:
     """헤드리스 CI·개발에서는 환경변수로 준다 (평소에는 OS 비밀 저장소)."""
-    monkeypatch.setenv(ENV_CENTER_API_KEY, "chk_ctr_fromenv")
-    assert Credentials().center_api_key() == "chk_ctr_fromenv"
+    monkeypatch.setenv(ENV_CENTER_API_KEY, "bpm_ctr_fromenv")
+    assert Credentials().center_api_key() == "bpm_ctr_fromenv"
 
 
 def test_saving_without_a_store_fails_loudly(monkeypatch: Any) -> None:
@@ -140,7 +140,7 @@ def test_saving_without_a_store_fails_loudly(monkeypatch: Any) -> None:
     found = Credentials()
     monkeypatch.setattr(found, "_keyring", lambda: None)
     with pytest.raises(SecretsUnavailable, match="비밀 저장소"):
-        found.set_center_api_key("chk_ctr_x")
+        found.set_center_api_key("bpm_ctr_x")
 
 
 # ─────────────────────────── 자동 시작 ───────────────────────────
@@ -208,14 +208,14 @@ def test_an_installed_exe_has_no_arguments_element() -> None:
 
 
 @pytest.mark.skipif(
-    sys.platform != "win32" or not os.environ.get("CHK_TEST_AUTOSTART"),
-    reason="Windows 실기 확인 — `CHK_TEST_AUTOSTART=1`로 켠다 (작업 스케줄러를 실제로 건드린다)",
+    sys.platform != "win32" or not os.environ.get("BPM_TEST_AUTOSTART"),
+    reason="Windows 실기 확인 — `BPM_TEST_AUTOSTART=1`로 켠다 (작업 스케줄러를 실제로 건드린다)",
 )
 def test_windows_autostart_really_registers() -> None:  # pragma: no cover - 실기에서만
     """**실제로** 작업을 등록하고 지운다.
 
     기본으로 돌리지 않는다 — CI 러너는 작업 등록이 막혀 있을 수 있고(실제로 막혔다), 시험이
-    그 PC의 설정을 바꾸게 두어서도 안 된다. Windows PC에서 확인할 때 `CHK_TEST_AUTOSTART=1`로 켠다.
+    그 PC의 설정을 바꾸게 두어서도 안 된다. Windows PC에서 확인할 때 `BPM_TEST_AUTOSTART=1`로 켠다.
     """
     found = autostart_module.WindowsTaskScheduler(task_name="Chaeksas PC 실행기 시험")
     try:
@@ -227,12 +227,12 @@ def test_windows_autostart_really_registers() -> None:  # pragma: no cover - 실
 
 
 def test_linux_autostart_writes_a_desktop_file(tmp_path: Path) -> None:
-    found = autostart_module.FreedesktopAutostart(directory=tmp_path, command=["/usr/bin/chk-bot-ui"])
+    found = autostart_module.FreedesktopAutostart(directory=tmp_path, command=["/usr/bin/bpm-bot-ui"])
     assert not found.enabled()
     found.enable()
     assert found.enabled()
     text = found.path.read_text(encoding="utf-8")
-    assert "Exec=/usr/bin/chk-bot-ui" in text
+    assert "Exec=/usr/bin/bpm-bot-ui" in text
     assert "Type=Application" in text
     found.disable()
     assert not found.enabled()

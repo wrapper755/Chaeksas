@@ -40,9 +40,9 @@ def wrap(body: str, *, process_json: str = '{"run_location": "pc"}') -> str:
     """최소 BPMN 한 벌. 본문만 바꿔 가며 규칙을 시험한다."""
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-  xmlns:chk="urn:chaeksas:bpmn:1" id="Defs_t" targetNamespace="urn:chaeksas:test">
+  xmlns:bpm="urn:chaeksas:bpmn:1" id="Defs_t" targetNamespace="urn:chaeksas:test">
   <bpmn:process id="Proc_t" name="시험" isExecutable="true">
-    <bpmn:extensionElements><chk:process>{process_json}</chk:process></bpmn:extensionElements>
+    <bpmn:extensionElements><bpm:process>{process_json}</bpm:process></bpmn:extensionElements>
     {body}
   </bpmn:process>
 </bpmn:definitions>"""
@@ -107,7 +107,7 @@ def test_read_process_reads_chk_elements() -> None:
     xml = wrap(
         line(
             '<bpmn:serviceTask id="Task_Ai"><bpmn:extensionElements>'
-            '<chk:aiTask>{"goal": "## 할 일", "domain": "llm", "results": {"요약": "string"}}</chk:aiTask>'
+            '<bpm:aiTask>{"goal": "## 할 일", "domain": "llm", "results": {"요약": "string"}}</bpm:aiTask>'
             "</bpmn:extensionElements></bpmn:serviceTask>"
         )
     )
@@ -125,7 +125,7 @@ def test_extension_task_keeps_its_body_opaque() -> None:
     xml = wrap(
         line(
             '<bpmn:serviceTask id="Task_Ui"><bpmn:extensionElements>'
-            '<chk:task type="ui_task" extension="ui-automation">{"page_id": "erp.order", "steps": []}</chk:task>'
+            '<bpm:task type="ui_task" extension="ui-automation">{"page_id": "erp.order", "steps": []}</bpm:task>'
             "</bpmn:extensionElements></bpmn:serviceTask>"
         )
     )
@@ -147,8 +147,8 @@ def test_broken_xml_and_missing_process_raise() -> None:
 
 
 def test_unknown_chk_element_is_ignored() -> None:
-    """모르는 `chk:*`는 거부하지 않는다 (호환 규칙)."""
-    xml = wrap(line('<bpmn:serviceTask id="T"><bpmn:extensionElements><chk:future>{}</chk:future>'
+    """모르는 `bpm:*`는 거부하지 않는다 (호환 규칙)."""
+    xml = wrap(line('<bpmn:serviceTask id="T"><bpmn:extensionElements><bpm:future>{}</bpm:future>'
                     "</bpmn:extensionElements></bpmn:serviceTask>"))
     task = read_process(xml).node("T")
     assert task is not None and task.props == {} and task.bad_props == {}
@@ -159,21 +159,21 @@ def test_unknown_chk_element_is_ignored() -> None:
 
 def test_b1_reports_chk_json_that_does_not_fit() -> None:
     xml = wrap(line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-                    '<chk:aiTask>{"domain": "llm"}</chk:aiTask>'  # goal이 없다
+                    '<bpm:aiTask>{"domain": "llm"}</bpm:aiTask>'  # goal이 없다
                     "</bpmn:extensionElements></bpmn:serviceTask>"))
     assert "B1" in codes(xml)
 
 
 def test_b2_show_must_be_variable_names() -> None:
     xml = wrap(line('<bpmn:userTask id="Ap"><bpmn:extensionElements>'
-                    '<chk:approval>{"title": "확인", "show": ["대상 월"]}</chk:approval>'
+                    '<bpm:approval>{"title": "확인", "show": ["대상 월"]}</bpm:approval>'
                     "</bpmn:extensionElements></bpmn:userTask>"))
     assert "B2" in codes(xml)
 
 
 def _approval(kind: str, body: str) -> str:
     return wrap(line(f'<bpmn:{kind} id="Ap"><bpmn:extensionElements>'
-                     f"<chk:approval>{body}</chk:approval>"
+                     f"<bpm:approval>{body}</bpm:approval>"
                      f"</bpmn:extensionElements></bpmn:{kind}>"))
 
 
@@ -212,7 +212,7 @@ def _sourced(source: str, kind: str) -> str:
     """값 출처가 있는 입력 하나를 선언하고 결재 담당자로 쓰는 그림 (ADR-0099)."""
     return wrap(
         line('<bpmn:userTask id="Ap"><bpmn:extensionElements>'
-             '<chk:approval>{"title": "일괄 승인", "assignees": "감독자"}</chk:approval>'
+             '<bpm:approval>{"title": "일괄 승인", "assignees": "감독자"}</bpm:approval>'
              "</bpmn:extensionElements></bpmn:userTask>"),
         process_json=(
             f'{{"run_location": "server", "inputs": [{{"name": "감독자", "type": "{kind}", "source": "{source}"}}]}}'
@@ -246,21 +246,21 @@ def _batch(*, before: str = "", show: str = '["건들"]', approval: bool = True)
     """접수 BPM 프로세스 모양 — 목록을 만들고 (결재하고) 반복 위임으로 기동한다 (ADR-0082)."""
     gate = (
         '<bpmn:userTask id="Ap"><bpmn:extensionElements>'
-        f'<chk:approval>{{"title": "일괄 승인", "show": {show}}}</chk:approval>'
+        f'<bpm:approval>{{"title": "일괄 승인", "show": {show}}}</bpm:approval>'
         "</bpmn:extensionElements></bpmn:userTask>"
     )
     call = ('<bpmn:callActivity id="Call_Batch" calledElement="Proc_item"><bpmn:extensionElements>'
-            '<chk:call>{"delegate": {"bpm_process_id": "ops.item"}, "input": {"번호": "건"}, '
-            '"output": {}}</chk:call>'
-            '<chk:loop>{"collection": "건들", "item": "건", "collect_into": "끝"}</chk:loop>'
+            '<bpm:call>{"delegate": {"bpm_process_id": "ops.item"}, "input": {"번호": "건"}, '
+            '"output": {}}</bpm:call>'
+            '<bpm:loop>{"collection": "건들", "item": "건", "collect_into": "끝"}</bpm:loop>'
             '</bpmn:extensionElements><bpmn:multiInstanceLoopCharacteristics isSequential="true" />'
             "</bpmn:callActivity>")
     steps = ["Start", "Make"] + (["Ap"] if approval else []) + (["Again"] if before else []) + ["Call_Batch", "End"]
     body = ('<bpmn:startEvent id="Start" />'
-            '<bpmn:scriptTask id="Make" scriptFormat="chk-expr">'
+            '<bpmn:scriptTask id="Make" scriptFormat="bpm-expr">'
             "<bpmn:script>건들 = [1, 2]</bpmn:script></bpmn:scriptTask>"
             + (gate if approval else "")
-            + (f'<bpmn:scriptTask id="Again" scriptFormat="chk-expr">'
+            + (f'<bpmn:scriptTask id="Again" scriptFormat="bpm-expr">'
                f"<bpmn:script>{before}</bpmn:script></bpmn:scriptTask>" if before else "")
             + call + '<bpmn:endEvent id="End" />'
             + "".join(f'<bpmn:sequenceFlow id="f{i}" sourceRef="{a}" targetRef="{b}" />'
@@ -306,8 +306,8 @@ def test_b3_unconditional_branch_must_be_default() -> None:
 
 def test_b4_loop_needs_collect_into() -> None:
     xml = wrap(line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-                    '<chk:aiTask>{"goal": "x", "domain": "llm"}</chk:aiTask>'
-                    '<chk:loop>{"collection": "목록", "item": "건"}</chk:loop>'
+                    '<bpm:aiTask>{"goal": "x", "domain": "llm"}</bpm:aiTask>'
+                    '<bpm:loop>{"collection": "목록", "item": "건"}</bpm:loop>'
                     "</bpmn:extensionElements>"
                     '<bpmn:multiInstanceLoopCharacteristics isSequential="true" /></bpmn:serviceTask>'))
     assert "B4" in codes(xml)
@@ -316,7 +316,7 @@ def test_b4_loop_needs_collect_into() -> None:
 def test_b5_file_output_needs_store_as_and_content() -> None:
     xml = wrap(line('<bpmn:scriptTask id="T"><bpmn:script>a = 1</bpmn:script></bpmn:scriptTask>')
                + '<bpmn:dataObjectReference id="D" dataObjectRef="DO"><bpmn:extensionElements>'
-                 '<chk:dataOutput>{"path": "보고.md", "format": "md"}</chk:dataOutput>'
+                 '<bpm:dataOutput>{"path": "보고.md", "format": "md"}</bpm:dataOutput>'
                  "</bpmn:extensionElements></bpmn:dataObjectReference>")
     found = codes(xml)
     assert found.count("B5") == 2  # store_as 없음 + template·variables 모두 없음
@@ -324,7 +324,7 @@ def test_b5_file_output_needs_store_as_and_content() -> None:
 
 def data_output(props: str) -> str:
     return ('<bpmn:dataObjectReference id="D"><bpmn:extensionElements>'
-            f"<chk:dataOutput>{props}</chk:dataOutput>"
+            f"<bpm:dataOutput>{props}</bpm:dataOutput>"
             "</bpmn:extensionElements></bpmn:dataObjectReference>")
 
 
@@ -342,7 +342,7 @@ def test_b5_file_output_format_rules() -> None:
 
 
 def file_list(props: str) -> str:
-    return (f'<bpmn:serviceTask id="T"><bpmn:extensionElements><chk:fileList>{props}</chk:fileList>'
+    return (f'<bpmn:serviceTask id="T"><bpmn:extensionElements><bpm:fileList>{props}</bpm:fileList>'
             "</bpmn:extensionElements></bpmn:serviceTask>")
 
 
@@ -370,7 +370,7 @@ def test_b11_sees_what_the_file_list_makes_and_reads() -> None:
 def test_b6_server_cannot_run_pc_only_things() -> None:
     xml = wrap(
         line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-             '<chk:aiTask>{"goal": "x", "domain": "web"}</chk:aiTask>'
+             '<bpm:aiTask>{"goal": "x", "domain": "web"}</bpm:aiTask>'
              "</bpmn:extensionElements></bpmn:serviceTask>"),
         process_json='{"run_location": "server"}',
     )
@@ -378,7 +378,7 @@ def test_b6_server_cannot_run_pc_only_things() -> None:
     # PC면 괜찮다.
     assert "B6" not in codes(wrap(
         line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-             '<chk:aiTask>{"goal": "x", "domain": "web"}</chk:aiTask>'
+             '<bpm:aiTask>{"goal": "x", "domain": "web"}</bpm:aiTask>'
              "</bpmn:extensionElements></bpmn:serviceTask>")))
 
 
@@ -386,7 +386,7 @@ def test_b6_a_confirmation_cannot_run_on_the_server() -> None:
     """확인(manualTask)은 늘 현장이다 — 패키지 R2(`human.confirmation`)와 같은 판정이어야
     시험 실행은 되는데 올리기만 막히는 일이 없다."""
     task = line('<bpmn:manualTask id="C"><bpmn:extensionElements>'
-                '<chk:approval>{"title": "확인"}</chk:approval>'
+                '<bpm:approval>{"title": "확인"}</bpm:approval>'
                 "</bpmn:extensionElements></bpmn:manualTask>")
     found = [v for v in validate(read_process(wrap(task, process_json='{"run_location": "server"}'))) if v.rule == "B6"]
     assert found and any(item.startswith("C:") for item in found[0].items)
@@ -397,7 +397,7 @@ def test_b6_asks_the_host_about_extension_task_locations() -> None:
     """어느 태스크 종류가 PC 전용인지 플랫폼은 스스로 모른다 (ADR-0018)."""
     xml = wrap(
         line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-             '<chk:task type="ui_task" extension="ui-automation">{}</chk:task>'
+             '<bpm:task type="ui_task" extension="ui-automation">{}</bpm:task>'
              "</bpmn:extensionElements></bpmn:serviceTask>"),
         process_json='{"run_location": "server"}',
     )
@@ -409,7 +409,7 @@ def test_b7_warns_about_the_old_key_fields_and_still_reads_them() -> None:
     """옛 칸(`key_ref`·`service_keys`)은 **거부하지 않고 말한다** — 키가 없다 (ADR-0102, C14 B7)."""
     def task(call: str) -> str:
         return ('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-                f"<chk:serviceCall>{call}</chk:serviceCall>"
+                f"<bpm:serviceCall>{call}</bpm:serviceCall>"
                 "</bpmn:extensionElements></bpmn:serviceTask>")
     plain = task('{"app_id": "erp", "operation": "read"}')
     assert "B7" not in codes(wrap(line(plain)))
@@ -419,7 +419,7 @@ def test_b7_warns_about_the_old_key_fields_and_still_reads_them() -> None:
     found = [v for v in validate(read_process(old)) if v.rule == "B7"]
     assert len(found) == 1 and not found[0].blocks, "경고 한 줄이다 — 이름 규칙은 더 보지 않는다"
     assert found[0].code == "old_key_field"
-    assert found[0].items == ["chk:process.service_keys", "T: chk:serviceCall.key_ref"]
+    assert found[0].items == ["bpm:process.service_keys", "T: bpm:serviceCall.key_ref"]
     process = read_process(old)
     assert process.info.model_extra == {"service_keys": {"erp": "erp-reader"}}, "모르는 칸으로 받아 둔다"
 
@@ -433,11 +433,11 @@ def test_no_example_writes_the_old_key_fields() -> None:
 
 def test_b8_result_types_and_code_like_names() -> None:
     bad_type = wrap(line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-                         '<chk:aiTask>{"goal": "x", "domain": "llm", "results": {"합계": "integer"}}</chk:aiTask>'
+                         '<bpm:aiTask>{"goal": "x", "domain": "llm", "results": {"합계": "integer"}}</bpm:aiTask>'
                          "</bpmn:extensionElements></bpmn:serviceTask>"))
     assert "B8" in codes(bad_type)
     warn = wrap(line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-                     '<chk:aiTask>{"goal": "x", "domain": "llm", "results": {"발주번호": "int"}}</chk:aiTask>'
+                     '<bpm:aiTask>{"goal": "x", "domain": "llm", "results": {"발주번호": "int"}}</bpm:aiTask>'
                      "</bpmn:extensionElements></bpmn:serviceTask>"))
     found = validate(read_process(warn))
     assert [v.severity for v in found if v.rule == "B8"] == ["warning"]
@@ -462,7 +462,7 @@ def test_the_domain_lists_are_defined_in_one_place_only() -> None:
     assert PC_ONLY_DOMAINS < KNOWN_DOMAINS
     # B8이 알려 주는 목록도 그 하나에서 온다 (손으로 적은 목록이 아니다).
     bad = wrap(line('<bpmn:serviceTask id="T"><bpmn:extensionElements>'
-                    '<chk:aiTask>{"goal": "x", "domain": "Web"}</chk:aiTask>'
+                    '<bpm:aiTask>{"goal": "x", "domain": "Web"}</bpm:aiTask>'
                     "</bpmn:extensionElements></bpmn:serviceTask>"))
     found = [v for v in validate(read_process(bad)) if v.rule == "B8"]
     assert [v.items for v in found] == [sorted(KNOWN_DOMAINS)]
@@ -507,7 +507,7 @@ def test_b11_warns_about_a_variable_made_on_only_one_path() -> None:
     body = (
         '<bpmn:startEvent id="Start" /><bpmn:exclusiveGateway id="Gw" default="F2" />'
         '<bpmn:serviceTask id="Task_A"><bpmn:extensionElements>'
-        '<chk:aiTask>{"goal": "x", "domain": "llm", "results": {"대체": "string"}}</chk:aiTask>'
+        '<bpm:aiTask>{"goal": "x", "domain": "llm", "results": {"대체": "string"}}</bpm:aiTask>'
         "</bpmn:extensionElements></bpmn:serviceTask>"
         '<bpmn:scriptTask id="Task_B"><bpmn:script>통과 = True</bpmn:script></bpmn:scriptTask>'
         '<bpmn:exclusiveGateway id="Merge" />'
@@ -551,7 +551,7 @@ def test_b11_says_nothing_after_an_extension_task() -> None:
     """확장 태스크가 무엇을 만드는지 모르면 「없다」고 말하지 않는다 (ADR-0018)."""
     xml = wrap(
         line('<bpmn:serviceTask id="T_Ui"><bpmn:extensionElements>'
-             '<chk:task type="ui_task" extension="ui-automation">{}</chk:task>'
+             '<bpm:task type="ui_task" extension="ui-automation">{}</bpm:task>'
              "</bpmn:extensionElements></bpmn:serviceTask>",
              '<bpmn:scriptTask id="T_Use"><bpmn:script>합 = 거래내역</bpmn:script></bpmn:scriptTask>')
     )
@@ -569,8 +569,8 @@ def test_b11_allows_builtin_variables() -> None:
 
 def test_b12_approval_fields_and_boundary_hosts() -> None:
     bad_choice = wrap(line('<bpmn:userTask id="Ap"><bpmn:extensionElements>'
-                           '<chk:approval>{"title": "t", "fields": [{"key": "k", "label": "l", "type": "choice"}]}'
-                           "</chk:approval></bpmn:extensionElements></bpmn:userTask>"))
+                           '<bpm:approval>{"title": "t", "fields": [{"key": "k", "label": "l", "type": "choice"}]}'
+                           "</bpm:approval></bpmn:extensionElements></bpmn:userTask>"))
     assert "B12" in codes(bad_choice)
     bad_host = wrap(
         '<bpmn:startEvent id="Start" /><bpmn:exclusiveGateway id="Gw" />'
@@ -586,7 +586,7 @@ def test_b12_approval_fields_and_boundary_hosts() -> None:
 
 def test_b13_warns_about_webhook_sending_everything() -> None:
     xml = wrap(line('<bpmn:sendTask id="T"><bpmn:extensionElements>'
-                    '<chk:webhook>{"url": "https://x.example.com/h", "body": "all"}</chk:webhook>'
+                    '<bpm:webhook>{"url": "https://x.example.com/h", "body": "all"}</bpm:webhook>'
                     "</bpmn:extensionElements></bpmn:sendTask>"))
     found = [v for v in validate(read_process(xml)) if v.rule == "B13"]
     assert len(found) == 1 and found[0].severity == "warning"
@@ -594,7 +594,7 @@ def test_b13_warns_about_webhook_sending_everything() -> None:
 
 def test_b13_warns_about_long_field_approvals() -> None:
     xml = wrap(line('<bpmn:userTask id="Ap"><bpmn:extensionElements>'
-                    '<chk:approval>{"title": "t", "location": "field", "expires": "P3D"}</chk:approval>'
+                    '<bpm:approval>{"title": "t", "location": "field", "expires": "P3D"}</bpm:approval>'
                     "</bpmn:extensionElements></bpmn:userTask>"))
     assert "B13" in [v.rule for v in validate(read_process(xml))]
 
@@ -635,8 +635,8 @@ def test_b14_timer_start_cannot_need_inputs() -> None:
 
 def test_b14_matches_rule_against_dmn_and_call_against_target() -> None:
     xml = wrap(line('<bpmn:businessRuleTask id="R"><bpmn:extensionElements>'
-                    '<chk:rule>{"decision": "등급판정", "input": {"연체일": "일"}, '
-                    '"output": {"등급": "grade"}}</chk:rule>'
+                    '<bpm:rule>{"decision": "등급판정", "input": {"연체일": "일"}, '
+                    '"output": {"등급": "grade"}}</bpm:rule>'
                     "</bpmn:extensionElements></bpmn:businessRuleTask>"))
     ok = DecisionIo(inputs=("연체일",), outputs=("grade",))
     assert "B14" not in codes(xml, dmn_decisions={"등급판정": ok})
@@ -650,10 +650,10 @@ def test_b14_matches_rule_against_dmn_and_call_against_target() -> None:
 #: 위임 호출 하나. `calledElement`는 **읽는 사람을 위한 것**이라 패키지에 없어도 된다.
 DELEGATION = (
     '<bpmn:callActivity id="Call_Erp" calledElement="Proc_erp_input">'
-    "<bpmn:extensionElements><chk:call>"
+    "<bpmn:extensionElements><bpm:call>"
     '{"delegate": {"bpm_process_id": "fin.erp-input", "version": "1.2.0", "bot_ui": "담당자PC"}, '
     '"input": {"전표번호": "청구번호"}, "output": {"입력결과": "결과코드"}}'
-    "</chk:call></bpmn:extensionElements></bpmn:callActivity>"
+    "</bpm:call></bpmn:extensionElements></bpmn:callActivity>"
 )
 SERVER = (
     '{"run_location": "server", "inputs": ['

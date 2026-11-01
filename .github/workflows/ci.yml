@@ -91,7 +91,7 @@ jobs:
       - name: 계약 JSON Schema 최신 여부
         run: uv run python scripts/gen_schemas.py --check
 
-      # Studio 캔버스가 `chk:*`를 타입으로 다루는 설명 (ADR-0022·0029 §3).
+      # Studio 캔버스가 `bpm:*`를 타입으로 다루는 설명 (ADR-0022·0029 §3).
       - name: bpmn-moddle 설명 최신 여부
         run: uv run python scripts/gen_moddle.py --check
 

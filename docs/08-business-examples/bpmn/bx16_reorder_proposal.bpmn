@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx16_reorder_proposal" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:error id="Err_DELEGATION_FAILED" name="DELEGATION_FAILED" errorCode="DELEGATION_FAILED" />
   <bpmn:process id="Proc_bx16_reorder_proposal" name="재고 발주 제안 (서버) → 발주서 출력 준비 (PC)" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -19,7 +19,7 @@
   ],
   "outputs": [],
   "inputs": []
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="매일 07:00">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -29,19 +29,19 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Stock" name="재고 읽기">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "wms",
   "operation": "list_stock",
   "input": {},
   "output": {
     "재고": "items"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Calc" name="발주량 계산" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Calc" name="발주량 계산" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>제안 = [dict(품목=x.code, 수량=x.safety * 2 - x.qty) for x in 재고 if x.qty &lt; x.safety]
@@ -54,7 +54,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Order" name="발주 확인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "발주 제안 확인",
   "description": "",
   "show": [
@@ -75,7 +75,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
@@ -85,14 +85,14 @@
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:exclusiveGateway>
-    <bpmn:scriptTask id="Task_Confirm" name="확정" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Confirm" name="확정" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
       <bpmn:script>확정 = 제안</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:callActivity id="Call_Print" name="출력 준비 (PC 위임)" calledElement="Proc_fx19_manual_task_pc">
       <bpmn:extensionElements>
-        <chk:call>{
+        <bpm:call>{
   "delegate": {
     "bpm_process_id": "fx19-manual-task-pc"
   },
@@ -100,19 +100,19 @@
   "output": {
     "출력준비": "확인됨"
   }
-}</chk:call>
+}</bpm:call>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
     </bpmn:callActivity>
-    <bpmn:scriptTask id="Task_Note" name="발주 기록" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Note" name="발주 기록" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_10</bpmn:incoming>
       <bpmn:outgoing>Flow_11</bpmn:outgoing>
       <bpmn:script>발주건수 = len(확정)</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:sendTask id="Task_Failed" name="출력 준비 실패 알림">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "purchasing@example.com"
   ],
@@ -120,7 +120,7 @@
   "body": "발주 {제안수}건의 발주서 출력 준비가 끝나지 않았습니다. 사유: {error_message}\n직접 뽑아 주세요.",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:outgoing>Flow_13</bpmn:outgoing>

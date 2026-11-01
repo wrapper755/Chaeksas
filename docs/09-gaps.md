@@ -15,13 +15,13 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 **「문서에 돈다고 적혀 있다」와 「부르는 쪽이 있다」는 다르다.**
 
-**2026-10-31에 한 번 더 대조했다** (main `dacdc3b`) — §3과 로드맵의 코드 항목이 다 비었는데, 지난번 §3-20(타이머 시작을 깨우는 자리)이 목록에 없다가 코드를 대조하다 나왔기 때문이다. 계약 열다섯은 칸·상태값·트리거마다 **쓰는 쪽과 읽는 쪽**을 `git grep`으로 세었고(`tests/`와 계약 모듈은 뺐다), 화면 문서는 라벨 글을 코드에서 찾았고, 업무 예제는 55개의 `chk:*`를 모두 읽어 쓰인 키를 셌다. 새로 찾은 것은 §3-21~27·§8·§9이고, 대조하다 찾은 **낡은 줄은 그 자리에서 고쳤다**(§2).
+**2026-10-31에 한 번 더 대조했다** (main `dacdc3b`) — §3과 로드맵의 코드 항목이 다 비었는데, 지난번 §3-20(타이머 시작을 깨우는 자리)이 목록에 없다가 코드를 대조하다 나왔기 때문이다. 계약 열다섯은 칸·상태값·트리거마다 **쓰는 쪽과 읽는 쪽**을 `git grep`으로 세었고(`tests/`와 계약 모듈은 뺐다), 화면 문서는 라벨 글을 코드에서 찾았고, 업무 예제는 55개의 `bpm:*`를 모두 읽어 쓰인 키를 셌다. 새로 찾은 것은 §3-21~27·§8·§9이고, 대조하다 찾은 **낡은 줄은 그 자리에서 고쳤다**(§2).
 
 ## 1. 계약 문서 상태
 
 | 계약 | 문서 머리말 | 코드 | 「구현됨」까지 남은 것 |
 | --- | --- | --- | --- |
-| C1 | **구현됨** | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | — (닫았다 — Studio가 `Provides`를 짓고 CON-06이 읽는다). — (닫았다). `definition_hash`는 **STU-15에서 사람이 고정한다**([ADR-0060](decisions/0060-pinning-external-definitions.md) — 고정하지 않으면 경고만 한다), `requires.settings`는 Studio가 그림에서 채운다 (`chk:email` → `smtp`, [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)) |
+| C1 | **구현됨** | `contracts.manifest` R1~R8 (R8은 Center 배포가 짓는다) | — (닫았다 — Studio가 `Provides`를 짓고 CON-06이 읽는다). — (닫았다). `definition_hash`는 **STU-15에서 사람이 고정한다**([ADR-0060](decisions/0060-pinning-external-definitions.md) — 고정하지 않으면 경고만 한다), `requires.settings`는 Studio가 그림에서 채운다 (`bpm:email` → `smtp`, [ADR-0059](decisions/0059-sending-mail-and-webhooks.md)) |
 | C2 | **구현됨** | `contracts.hashing`·`signing` V1~V8 | — (닫았다) |
 | C3 | **구현됨** | `contracts.events`·`core.run_log` | — (닫았다: 확장이 남기는 줄은 [ADR-0041](decisions/0041-extension-run-events.md), `case_id`·`queued_s`는 아는 쪽이 넣는다, `confirmations`는 **세는 쪽**이 가르고 `bot_ui_id`는 **Center가 읽을 때** 채운다) |
 | C4 | **구현됨** | `contracts.bot_ui`, Center·PC 실행기 양쪽 | — (`key_expires_at`으로 BUI-05 Center API 키 만료를 닫았다). `runtimes.browsers`·`desktop_backend`는 채우는 쪽이 없다 — §3-28 |
@@ -45,6 +45,10 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 ## 3. 계약 쪽 기능 공백
 
 계약 열둘의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. 그 뒤 2026-10-31 대조가 **새로 일곱**(§3-21~27)을 찾았다 — 넷(§3-21~24)은 업무에 닿고, §3-25는 엔진의 흠, §3-26·27은 작은 칸과 「미정」 모음이다. 그중 배포의 끝 둘(§3-22·23)은 [ADR-0113](decisions/0113-field-follows-withdrawn-deployments.md)으로 닫았다. UI 자동화 확장을 걷으며(ADR-0114) 다시 들일 때 정할 것을 §3-28에 모았다.
+
+### 3-29. 조직·업무 자리 — 정했고 구현 전
+
+[ADR-0125](decisions/0125-organization-and-work-placement.md), 계약 [C16](03-contracts/C16-organization.md) 「초안」, 화면 CON-13 「조직으로 바뀐다」. 바깥 요청(NowView)과 사용자의 방향이 드러냈다 — 업무 주체가 가상 직원(접수 BPM 프로세스 하나 + 감독자)뿐이고, 회사·부서가 없어 여러 회사가 한 Center를 쓰면 서로의 것이 섞이며, 업무가 누구의 일인지 정할 자리가 없다. 먼저 정할 것은 없다 — ADR-0125 「다음 순서」 여섯 조각이다. 남은 「미정」: 연동용·대리 답용 키를 회사에 묶을지. **직원 사이의 업무 요청**은 조직이 선 뒤 따로 ADR을 쓴다(ADR-0125 §8).
 
 ### 3-21. PC BPM 프로세스로 메시지를 넣는 길이 없다
 
@@ -142,7 +146,7 @@ BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `te
 더했다(`retryable`과 함께 참일 수 없다 — Center가 지운다). 어댑터 해석기(`core.http_adapter`)가 `idempotent: false` 작업에서
 요청을 **보낸 뒤** 답을 못 받았을 때(읽기 시간 초과·끊김)만 싣고 — 연결 단계 실패(`ConnectError`·`ConnectTimeout`)는
 요청이 나가지 않아 모름이 아니다 — 어댑터 일꾼이 `service_kit.Outcome`으로 나르며 `CenterServiceCaller`가
-`ServiceCallError.outcome_unknown`으로 옮긴다. 엔진의 `chk:serviceCall`은 재시도를 다 쓴 마지막 실패가 모름이고 **PC
+`ServiceCallError.outcome_unknown`으로 옮긴다. 엔진의 `bpm:serviceCall`은 재시도를 다 쓴 마지막 실패가 모름이고 **PC
 실행**이면 ADR-0106과 같은 현장 확인으로 멈춘다(`Pending.retry_attempt`·`retry_call_seq`) — 「계속」은 `attempt`를 올려
 **같은 `call_seq`로 다시 부르고**(새 일감, 출력이 채워진다), 「중단」은 서버와 같은 `TASK_FAILED`다. `TASK_FAILED`를 이름으로
 받는 경계가 있으면 묻지 않고, 서버는 그대로 오류 경계다(BX-32가 그 모양이다). 남겨 둔 것: 잠금이 지나 만료된 일감
@@ -165,14 +169,14 @@ BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `te
 ### 3-17. 바깥 기능을 부르는 길 (Pull) — **닫았다**
 
 [ADR-0102](decisions/0102-calling-outside-is-pull.md)가 「네트워크를 건너는 바깥 호출은 모두 Pull」로 정했고 [C15](03-contracts/C15-external-tasks.md)는 **구현됨**이다.
-부르는 쪽 셋(서버 실행기·실행 프로세스·Studio — `core.services.CenterServiceCaller`)과 일꾼(`service_kit.consumer` — 서비스 앱·모의 앱 열셋, 어댑터 일꾼 `chk-adapter-consumer`)이 붙었고,
+부르는 쪽 셋(서버 실행기·실행 프로세스·Studio — `core.services.CenterServiceCaller`)과 일꾼(`service_kit.consumer` — 서비스 앱·모의 앱 열셋, 어댑터 일꾼 `bpm-adapter-consumer`)이 붙었고,
 옛 길(C11 `POST /v1/ops`·`/manifest`·앱 안의 키, HTTP 어댑터 직접 호출, 서비스 앱 키 배달 ADR-0094, Center의 외부 앱
 키·주소 덮어쓰기 ADR-0097)은 걷었다. 남았던 둘도 닫았다:
 
 - ~~긴 작업~~ (조각 6) — **닫았다** ([ADR-0103](decisions/0103-long-external-tasks.md)): 서버 실행기는 한 번 기다려
   (`PARK_AFTER_S`, 기본 20초) 끝나지 않은 일감을 다섯째 기다림 `external_task`로 넘기고 자리를 놓는다. 결과는
   하트비트 주기마다 C15로 묻고, 걷히면 거두고, 받아 간 값을 잃으면 같은 칸으로 다시 올린다.
-- ~~C14의 옛 칸~~ — **걷었다**: C14 `chk:serviceCall.key_ref`·`chk:process.service_keys`와 C1
+- ~~C14의 옛 칸~~ — **걷었다**: C14 `bpm:serviceCall.key_ref`·`bpm:process.service_keys`와 C1
   `requires.service_apps[].key_ref`·`task_key_refs`·R4가 모델·빌드·검사에서 없어졌다. 예제 생성기(`exdsl.py`)가
   더 적지 않아 업무 예제에 없고, 옛 그림·패키지는 모르는 칸으로 읽어(원칙 3) **B7이 경고 한 줄**로
   말한다(`old_key_field`). 선택 칸을 걷은 것이라 판은 올리지 않았다(C4의 키 칸과 같은 결).
@@ -184,12 +188,12 @@ BX-23이 작업 지시 없이 서버 실행기에서 끝까지 도는 것을 `te
 [ADR-0062](decisions/0062-pc-delegation.md)가 정했고(선택지 셋을 두고 골랐다) **계약 다섯·엔진·
 꽂는 쪽 둘·현장에서 값이 올라오는 길이 모두 돈다**. 그래서 ADR 끝의 **「증명할 다섯」이 다 찼다**:
 서버 실행이 위임으로 멈추면 **자리를 놓고**, 재시작을 건너 **작업이 하나**이며(작업 id가 스냅샷과
-함께 간다), **선언한 `outputs`가 값으로 돌아와** `chk:call.output`이 적은 변수에 담기고, 실패·거절은
+함께 간다), **선언한 `outputs`가 값으로 돌아와** `bpm:call.output`이 적은 변수에 담기고, 실패·거절은
 **오류 경계가 받고**, Studio 시험 실행은 **케이스가 적어 둔 결과로** 끝까지 간다. 지키는 시험은 셋이다
 — `tests/test_core_events.py`(엔진)·`test_studio_runner.py`(케이스 포트)·`test_server_runner_delegation.py`
 (실행기·Center, 마지막 하나는 **PC를 진짜 자식 프로세스로 돌려** 현장이 만든 값이 서버 변수에
 담기는 것까지 본다). **업무 예제에도 들어왔다** — BX-16이 쓰던 사내 확장 우회(`center-jobs`)를
-걷어내고 `chk:call.delegate`로 다시 썼다(2026-10-16). 그 예제가 제품 흠 하나를 드러냈다:
+걷어내고 `bpm:call.delegate`로 다시 썼다(2026-10-16). 그 예제가 제품 흠 하나를 드러냈다:
 `import_example`이 **위임 대상까지 작업 폴더로 끌어와** 매니페스트가 그 BPM 프로세스의 요구사항을 제
 것처럼 모았다(BX-16이 맡기는 PC BPM 프로세스의 태스크 종류를 요구해 서버 BPM 프로세스가 `not_ready`가 됐다).
 
@@ -319,7 +323,7 @@ CON-07 상세 「서버 주소」에서 넣고 **정의의 허용 호스트 안�
 
 | 자리 | 화면 | 남은 것 | 먼저 정할 것 |
 | --- | --- | --- | --- |
-| 7-11 | STU-04 「요소별 편집기」의 나머지 | 폼이 있는 것은 **AI 태스크**(`ai_task_editor.py`)·**결재·확인**(`approval_editor.py`)·**보내기**(`send_editor.py` — 메일·웹훅)·**BPM 프로세스 호출**(`call_editor.py` — PC 위임 포함)·**반복**(`loop_editor.py` — 다른 편집기 탭 옆에 하나 더)·**게이트웨이**(`gateway_editor.py` — 기본 흐름)·**이벤트·받기 태스크**(`event_editor.py` — 타이머·메시지·신호·오류·경계의 중단, `chk:receive`)·**데이터 객체**(`data_output_editor.py` — `chk:dataOutput`)·**BPM 프로세스(정의) 자체**(`defaults_editor.py` — `chk:defaults`, 빈 상태의 「BPM 프로세스 기본값」 단추로 들어간다. `chk:process`는 「변수」 탭·STU-06·STU-15가 고치므로 다시 만들지 않았다)·**규칙 태스크**(`rule_editor.py` — `chk:rule`의 결정·입력·출력 짝. 결정표 격자는 따로 뜨는 창 STU-04a `decision_dialog.py`이고 창의 「저장」이 `.dmn`을 바로 쓴다, [ADR-0109](decisions/0109-studio-writes-decision-tables.md))·서비스 앱 태스크(STU-14)·순서 흐름의 조건식·스크립트 태스크다 — 화면 문서의 표는 그 폼들을 약속하는데 상태 줄이 없어 「돈다」로 읽혔다(2026-10-23, 결재 폼이 「이름·설명」만 보여 드러났다). **AI 태스크 폼의 「재생 명세」 한 줄·「명세 잊기」**(속성 패널이 열린 정의의 process id로 `memory/specs.json`을 읽는다 — `replay_specs.py`, 잊기는 「적용」을 기다리지 않고 시험 실행 중에는 꺼진다)와 **목표 미리보기**(엔진과 같은 `goal_names`로 모델에게 가는 이름)까지 와서 **화면 문서가 약속한 폼은 다 돈다**. 「재생 검증 결과」는 명세에 그런 칸이 없어 문서에서 뺐다. 남은 것은 웹 환경 칸뿐이고 웹 환경을 주는 확장이 생길 때의 일이다 | 없다 — 요소마다 C14 모델이 칸을 정해 두었다. 보내기·AI 태스크는 화면 문서가 C14에 없거나 **엔진이 읽지 않는** 칸(웹훅 헤더·메일 HTML 여부, AI의 시작 주소·로그인·창 제목·「복합」 환경·환경별 도구 검증)을 약속하고 있어 **계약에 있고 엔진이 읽는 칸만으로** 문서를 다시 썼다. `chk:aiTask`의 `forbidden_actions`·`confirm_triggers`·`limits.timeout_s`는 **엔진이 읽고 폼에도 있다** ([ADR-0105](decisions/0105-ai-task-limits-and-instructions.md)). C14에 있는데 쓰이지 않는 것은 `web`(웹 환경을 주는 확장이 없다)뿐이다 — 정의 폼도 그것과 「창 숨김」(계약에 없다)을 두지 않고, 그림에 있는 `web`은 남기고 말한다. 이벤트도 같은 원칙으로 다시 썼다 — 「수신 주소」·조건 이벤트의 식·확인 주기·「다음 실행 미리보기」(주기)는 두지 않았고, 시작 타이머의 주기는 **매니페스트(C1 `triggers`)에 실리고 배포되면 Center가 그 일정으로 깨운다**고 폼이 말한다(§3-20 — 주기는 Center와 같은 `contracts.schedule`로 본다) |
+| 7-11 | STU-04 「요소별 편집기」의 나머지 | 폼이 있는 것은 **AI 태스크**(`ai_task_editor.py`)·**결재·확인**(`approval_editor.py`)·**보내기**(`send_editor.py` — 메일·웹훅)·**BPM 프로세스 호출**(`call_editor.py` — PC 위임 포함)·**반복**(`loop_editor.py` — 다른 편집기 탭 옆에 하나 더)·**게이트웨이**(`gateway_editor.py` — 기본 흐름)·**이벤트·받기 태스크**(`event_editor.py` — 타이머·메시지·신호·오류·경계의 중단, `bpm:receive`)·**데이터 객체**(`data_output_editor.py` — `bpm:dataOutput`)·**BPM 프로세스(정의) 자체**(`defaults_editor.py` — `bpm:defaults`, 빈 상태의 「BPM 프로세스 기본값」 단추로 들어간다. `bpm:process`는 「변수」 탭·STU-06·STU-15가 고치므로 다시 만들지 않았다)·**규칙 태스크**(`rule_editor.py` — `bpm:rule`의 결정·입력·출력 짝. 결정표 격자는 따로 뜨는 창 STU-04a `decision_dialog.py`이고 창의 「저장」이 `.dmn`을 바로 쓴다, [ADR-0109](decisions/0109-studio-writes-decision-tables.md))·서비스 앱 태스크(STU-14)·순서 흐름의 조건식·스크립트 태스크다 — 화면 문서의 표는 그 폼들을 약속하는데 상태 줄이 없어 「돈다」로 읽혔다(2026-10-23, 결재 폼이 「이름·설명」만 보여 드러났다). **AI 태스크 폼의 「재생 명세」 한 줄·「명세 잊기」**(속성 패널이 열린 정의의 process id로 `memory/specs.json`을 읽는다 — `replay_specs.py`, 잊기는 「적용」을 기다리지 않고 시험 실행 중에는 꺼진다)와 **목표 미리보기**(엔진과 같은 `goal_names`로 모델에게 가는 이름)까지 와서 **화면 문서가 약속한 폼은 다 돈다**. 「재생 검증 결과」는 명세에 그런 칸이 없어 문서에서 뺐다. 남은 것은 웹 환경 칸뿐이고 웹 환경을 주는 확장이 생길 때의 일이다 | 없다 — 요소마다 C14 모델이 칸을 정해 두었다. 보내기·AI 태스크는 화면 문서가 C14에 없거나 **엔진이 읽지 않는** 칸(웹훅 헤더·메일 HTML 여부, AI의 시작 주소·로그인·창 제목·「복합」 환경·환경별 도구 검증)을 약속하고 있어 **계약에 있고 엔진이 읽는 칸만으로** 문서를 다시 썼다. `bpm:aiTask`의 `forbidden_actions`·`confirm_triggers`·`limits.timeout_s`는 **엔진이 읽고 폼에도 있다** ([ADR-0105](decisions/0105-ai-task-limits-and-instructions.md)). C14에 있는데 쓰이지 않는 것은 `web`(웹 환경을 주는 확장이 없다)뿐이다 — 정의 폼도 그것과 「창 숨김」(계약에 없다)을 두지 않고, 그림에 있는 `web`은 남기고 말한다. 이벤트도 같은 원칙으로 다시 썼다 — 「수신 주소」·조건 이벤트의 식·확인 주기·「다음 실행 미리보기」(주기)는 두지 않았고, 시작 타이머의 주기는 **매니페스트(C1 `triggers`)에 실리고 배포되면 Center가 그 일정으로 깨운다**고 폼이 말한다(§3-20 — 주기는 Center와 같은 `contracts.schedule`로 본다) |
 
 ## 8. 화면 문서가 약속했는데 코드에 없는 것 (2026-10-31 대조)
 
@@ -352,7 +356,7 @@ CON-07 상세 「서버 주소」에서 넣고 **정의의 허용 호스트 안�
 
 ## 9. 업무 예제가 밟지 않는 기능 (2026-10-31 대조)
 
-예제 55개의 `chk:*` JSON을 모두 읽어 쓰인 키를 세고 이벤트·게이트웨이 요소를 찾았다. 커버리지 표(`_source/build.py:279-388`)는 **노드 종류 + 칸 하나**로 행을 짓고 런타임 응답은 보지 못하므로, 아래는 표에 행이 없거나 행이 있어도 0인 것이다. **케이스 형식이 서비스 응답을 지어낼 수 없다** — 케이스 키는 `inputs`·`expected`·`approvals`·`manual`·`messages`·`delegations`뿐이라 「서비스가 실패·보류·결과 모름」을 예제가 시험하지 못하고 설명 글로만 적는다(BX-32의 「실패·결과 모름을 오류 경계로」가 그렇다 — 케이스는 정상 길 하나다). 아래 기능은 대부분 **단위·통합 시험은 있다** — 빠진 것은 「예제가 오라클」인 자리다.
+예제 55개의 `bpm:*` JSON을 모두 읽어 쓰인 키를 세고 이벤트·게이트웨이 요소를 찾았다. 커버리지 표(`_source/build.py:279-388`)는 **노드 종류 + 칸 하나**로 행을 짓고 런타임 응답은 보지 못하므로, 아래는 표에 행이 없거나 행이 있어도 0인 것이다. **케이스 형식이 서비스 응답을 지어낼 수 없다** — 케이스 키는 `inputs`·`expected`·`approvals`·`manual`·`messages`·`delegations`뿐이라 「서비스가 실패·보류·결과 모름」을 예제가 시험하지 못하고 설명 글로만 적는다(BX-32의 「실패·결과 모름을 오류 경계로」가 그렇다 — 케이스는 정상 길 하나다). 아래 기능은 대부분 **단위·통합 시험은 있다** — 빠진 것은 「예제가 오라클」인 자리다.
 
 | 기능 | 예제 | 코드 | 시험 |
 | --- | --- | --- | --- |
@@ -367,7 +371,7 @@ CON-07 상세 「서버 주소」에서 넣고 **정의의 허용 호스트 안�
 | 웹훅 본문 `all`·`template:` | 0 — 6개 모두 `fields:[…]` | `bpmn_ext.py:296` | `test_core_senders.py` |
 | 메시지 중간 받기 | 0 — 중간 받기는 타이머·신호뿐 | `nodes.py:1088` | |
 | 타이머 `timeDate`·ISO 반복 `R[n]/…` 시작 | 0 — 시작 12개 모두 5필드 cron | `engine.py:855-872`, `contracts/schedule.py` | `test_center_timers.py`·`test_core_events.py` |
-| 태스크 단위 AI 덮어쓰기(`aiTask.forbidden_actions`·`confirm_triggers`·`web`·`desktop`) | 0 — `chk:defaults`만 쓴다 | `nodes.py:723-735` | `test_core_ai_task.py` |
+| 태스크 단위 AI 덮어쓰기(`aiTask.forbidden_actions`·`confirm_triggers`·`web`·`desktop`) | 0 — `bpm:defaults`만 쓴다 | `nodes.py:723-735` | `test_core_ai_task.py` |
 | 작은 칸 — `email.cc`·`serviceCall.timeout_s`·`call.delegate.version`·`.bot_ui`·`fileList.limit`·`web.session` | 0 | `bpmn_ext.py:154`·`249`·`284`·`318-320`·`364` | 일부 |
 | AI 태스크 `web` | 0 (표가 이미 「없음」) | 웹 환경을 주는 확장이 없다 | |
 

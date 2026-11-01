@@ -50,7 +50,7 @@ export interface HumanNeeds {
   [k: string]: unknown;
 }
 /**
- * 진입 정의가 받는 입력 하나 — `chk:process.inputs`를 옮긴 것 (C1). 작업 지시 화면이 칸을 그린다.
+ * 진입 정의가 받는 입력 하나 — `bpm:process.inputs`를 옮긴 것 (C1). 작업 지시 화면이 칸을 그린다.
  */
 export interface ManifestInput {
   default?: {

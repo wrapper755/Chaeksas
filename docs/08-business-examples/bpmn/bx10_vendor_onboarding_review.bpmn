@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx10_vendor_onboarding_review" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_vendor_registration" name="vendor_registration" />
   <bpmn:process id="Proc_bx10_vendor_onboarding_review" name="신규 거래처 등록 심사" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -70,7 +70,7 @@
       "description": "포털 회신 웹훅"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="등록 신청">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -84,7 +84,7 @@
     </bpmn:inclusiveGateway>
     <bpmn:serviceTask id="Task_Docs" name="서류 확인">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`서류`는 거래처가 올린 파일 목록이다.\n\n## 할 일\n사업자등록증과 통장 사본이 있는지, 사업자등록증의 번호·상호가 `사업자번호`·`거래처명`과 같은지 확인한다.\n\n## 판단하지 않는 것\n신용이나 거래 적합성은 판단하지 않는다.\n\n## 반환\n- `서류결과`: {충족(bool), 빠진서류(list), 불일치(list)}",
   "domain": "doc",
   "results": {
@@ -95,14 +95,14 @@
     "image_ocr_tool"
   ],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Credit" name="신용 점검">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "ext-credit",
   "operation": "lookup",
   "input": {
@@ -111,14 +111,14 @@
   "output": {
     "신용": "result"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:serviceTask id="Task_Sanction" name="제재 목록 점검">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "compliance",
   "operation": "screen_sanctions",
   "input": {
@@ -127,7 +127,7 @@
   "output": {
     "제재": "hits"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
@@ -138,7 +138,7 @@
       <bpmn:incoming>Flow_07</bpmn:incoming>
       <bpmn:outgoing>Flow_08</bpmn:outgoing>
     </bpmn:inclusiveGateway>
-    <bpmn:scriptTask id="Task_Summary" name="심사 요약" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Summary" name="심사 요약" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
       <bpmn:script>신용 = 신용 if 예상거래액 &gt;= 50000000 else None
@@ -148,7 +148,7 @@
     </bpmn:scriptTask>
     <bpmn:userTask id="Approve_Vendor" name="구매팀장 승인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "신규 거래처 등록",
   "description": "",
   "show": [
@@ -179,7 +179,7 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_09</bpmn:incoming>
       <bpmn:outgoing>Flow_10</bpmn:outgoing>
@@ -191,7 +191,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:serviceTask id="Task_Register" name="ERP 거래처 등록">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "erp",
   "operation": "create_vendor",
   "input": {
@@ -201,20 +201,20 @@
   "output": {
     "거래처코드": "vendor_code"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_11</bpmn:incoming>
       <bpmn:outgoing>Flow_13</bpmn:outgoing>
     </bpmn:serviceTask>
     <bpmn:sendTask id="Task_Reply" name="포털에 결과 회신">
       <bpmn:extensionElements>
-        <chk:webhook>{
+        <bpm:webhook>{
   "url": "{회신주소}",
   "method": "POST",
   "body": "fields:[신청번호, 결정, 의견, 거래처코드]",
   "timeout_s": 10,
   "store_as": "회신결과"
-}</chk:webhook>
+}</bpm:webhook>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_12</bpmn:incoming>
       <bpmn:incoming>Flow_13</bpmn:incoming>

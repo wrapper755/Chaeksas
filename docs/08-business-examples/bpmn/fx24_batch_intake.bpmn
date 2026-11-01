@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx24_batch_intake" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:error id="Err_DELEGATION_FAILED" name="DELEGATION_FAILED" errorCode="DELEGATION_FAILED" />
   <bpmn:process id="Proc_fx24_batch_intake" name="일괄 기동 — 접수 BPM 프로세스" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -28,19 +28,19 @@
       "source": "virtual_worker.supervisors"
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
-    <bpmn:scriptTask id="Task_Count" name="건수 세기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Count" name="건수 세기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
       <bpmn:script>건수 = len(인입)</bpmn:script>
     </bpmn:scriptTask>
     <bpmn:userTask id="Approve_Batch" name="일괄 승인">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "인입 {건수}건 일괄 기동",
   "description": "",
   "show": [
@@ -63,7 +63,7 @@
   ],
   "location": "center",
   "assignees": "감독자"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
@@ -75,7 +75,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:callActivity id="Call_Batch" name="건마다 기동 (위임 반복)" calledElement="Proc_fx25_batch_item">
       <bpmn:extensionElements>
-        <chk:call>{
+        <bpm:call>{
   "delegate": {
     "bpm_process_id": "fx25-batch-item"
   },
@@ -86,25 +86,25 @@
   "output": {
     "처리결과": "처리결과"
   }
-}</chk:call>
-        <chk:loop>{
+}</bpm:call>
+        <bpm:loop>{
   "collection": "인입",
   "item": "건",
   "result": "처리결과",
   "collect_into": "결과목록"
-}</chk:loop>
+}</bpm:loop>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_06</bpmn:outgoing>
       <bpmn:multiInstanceLoopCharacteristics isSequential="false" />
     </bpmn:callActivity>
-    <bpmn:scriptTask id="Task_Tally" name="결과 세기" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Tally" name="결과 세기" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>
       <bpmn:script>등록수 = len([x for x in 결과목록 if x == '등록'])
 보류수 = len(결과목록) - 등록수</bpmn:script>
     </bpmn:scriptTask>
-    <bpmn:scriptTask id="Task_Failed" name="기동 실패" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Failed" name="기동 실패" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_08</bpmn:incoming>
       <bpmn:outgoing>Flow_09</bpmn:outgoing>
       <bpmn:script>실패사유 = error_message</bpmn:script>

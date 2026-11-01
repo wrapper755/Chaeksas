@@ -57,7 +57,7 @@ class Step:
 
 #: 키 묶기를 어긴 행 — `(표, 칸, 값, 행 id)`. **겹친 무리의 모든 행**을 돌려준다
 #: (`GROUP_CONCAT`처럼 SQLite에만 있는 함수를 쓰지 않는다 — PostgreSQL 길을 닫지 않는다).
-#: 3판의 지킴이자 `chk-center hosts duplicates`가 쓰는 질의다 — **한 자리에 둔다**.
+#: 3판의 지킴이자 `bpm-center hosts duplicates`가 쓰는 질의다 — **한 자리에 둔다**.
 DUPLICATE_HOSTS = """
 SELECT 'bot_uis' AS host_table, 'key_id' AS host_column, key_id AS shared, bot_ui_id AS host_id
   FROM bot_uis WHERE key_id IN (SELECT key_id FROM bot_uis GROUP BY key_id HAVING COUNT(*) > 1)
@@ -95,8 +95,8 @@ MIGRATIONS: tuple[Step, ...] = (
         guard=DUPLICATE_HOSTS,
         guard_help=(
             "같은 키·같은 기계가 여러 행에 있다 (2026-10-08 전에 만든 DB에서 생길 수 있다). "
-            "**어느 행을 남길지는 사람이 고른다** — `chk-center hosts duplicates`로 보고 "
-            "`chk-center hosts retire <id>`로 나머지를 은퇴시킨 뒤 다시 띄우세요 (docs/04-setup.md)"
+            "**어느 행을 남길지는 사람이 고른다** — `bpm-center hosts duplicates`로 보고 "
+            "`bpm-center hosts retire <id>`로 나머지를 은퇴시킨 뒤 다시 띄우세요 (docs/04-setup.md)"
         ),
     ),
     Step(

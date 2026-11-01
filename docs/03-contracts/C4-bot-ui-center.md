@@ -24,7 +24,7 @@ PC 실행기가 **등록 요청**을 보내 관리자의 승인으로 Center API
 - 인증: `Authorization: Bearer <Center API 키>` (종류 「PC 실행기용」 — 승인이 만든 키, 또는 자동화·시험용으로 관리자 토큰이 발급한 키). **등록 요청 두 경로만 인증이 없다.** **PC 실행기의 신원은 키로 정한다.** 경로·본문에 `bot_ui_id`를 넣지 않는다.
 - 키 묶기: **키 하나 ↔ PC 하나 ↔ PC 실행기 행 하나**다 (아래 [키 묶기](#키-묶기)).
 - 키 종류: 「PC 실행기용」 키만 받는다. Studio용·서버 실행기용 키로 부르면 403 `wrong_key_type`.
-- 키 형식: `chk_ctr_<무작위 40자>`, 앞자리 16자만 화면에 (C11과 같은 규칙).
+- 키 형식: `bpm_ctr_<무작위 40자>`, 앞자리 16자만 화면에 (C11과 같은 규칙).
 - 멱등성: `register`는 같은 키·같은 `machine_id`면 같은 `bot_ui_id`를 돌려준다 (정보만 갱신). `heartbeat`는 매번 상태를 덮어쓴다. `job_acks`·`approval_acks`는 같은 것을 다시 보내도 한 번만 반영한다.
 - 크기 한도: 요청 256 KB.
 - **`current_run`은 비어 있어도 `null`로 싣는다.** 「필수이지만 비어 있을 수 있는」 필드라서, `None`인 선택 필드처럼 빼 버리면 받는 쪽이 「필수 필드 누락」으로 422를 돌려준다 (`ContractModel.to_json_dict()`가 필수 필드의 `null`은 남긴다).
@@ -32,7 +32,7 @@ PC 실행기가 **등록 요청**을 보내 관리자의 승인으로 Center API
 
 ## 등록 요청과 승인
 
-> 상태: **돈다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — Center `center/enrollments.py`·`api/enrollments.py`, PC 실행기 `agent.request_enrollment()`·`enroll_step()`, 봉함·요청 코드는 `chaeksas.contracts.enrollment` 한 자리다. 시험: `tests/test_center_enrollment.py`·`tests/test_bot_ui_agent.py`. 개발·CI의 환경변수 길(`CHK_BOT_UI__CENTER_API_KEY`)은 그대로 남는다.
+> 상태: **돈다** (2026-10-25, [ADR-0092](../decisions/0092-keys-are-issued-and-delivered-by-center.md)) — Center `center/enrollments.py`·`api/enrollments.py`, PC 실행기 `agent.request_enrollment()`·`enroll_step()`, 봉함·요청 코드는 `chaeksas.contracts.enrollment` 한 자리다. 시험: `tests/test_center_enrollment.py`·`tests/test_bot_ui_agent.py`. 개발·CI의 환경변수 길(`BPM_BOT_UI__CENTER_API_KEY`)은 그대로 남는다.
 
 설치하는 사람은 **Center 주소만** 넣는다. 키를 만드는 것도 내려 주는 것도 Center이고, 사람은 **이 PC를 들일지 승인만** 한다.
 
@@ -46,7 +46,7 @@ PC 실행기가 **등록 요청**을 보내 관리자의 승인으로 Center API
 | 6 | PC 실행기 | 다음에 물을 때 봉한 키를 받아 열고 OS 비밀 저장소에 둔 뒤 `register`를 부른다 (그다음은 지금과 같다) |
 | 7 | Center | 그 키로 `register`가 성공하면 **봉해 둔 것을 지운다** — 그것이 받았다는 표시다 |
 
-- **환경변수로 키가 오면**(`CHK_BOT_UI__CENTER_API_KEY` — 개발·CI) 등록 요청을 보내지 않는다.
+- **환경변수로 키가 오면**(`BPM_BOT_UI__CENTER_API_KEY` — 개발·CI) 등록 요청을 보내지 않는다.
 - **요청 코드**: `SHA-256(public_key ‖ enrollment_id)`를 base32(RFC 4648, 대문자, 덧붙임 없음)로 적은 앞 8자를 `XXXX-XXXX`로 보인다. 공개키와 Center가 준 id 둘로 정해지므로 **사람이 지어 맞출 수 없고**, 가운데서 응답을 바꿔치면 PC 실행기가 계산한 값과 어긋나 띄우지 않는다. 같은 PC가 다시 요청하면 코드도 바뀐다.
 - **승인 대기는 24시간**이다. 지나면 `expired`이고 PC 실행기는 새 요청을 보낸다(코드가 바뀐다). 같은 `machine_id`가 대기 중에 다시 요청하면 **옛 요청을 닫고** 새것만 남긴다 — CON-03에 같은 PC가 두 줄 서지 않는다.
 - **승인된 키를 24시간 안에 `register`로 쓰지 않으면** Center가 그 키를 폐기하고 요청을 `expired`로 닫는다.
@@ -181,7 +181,7 @@ BPM 프로세스는 서비스 앱을 C15 외부 작업으로 부르므로 **현�
 
 **`JobAck.outputs`는 위임만 쓴다** (C12 §PC 위임, [ADR-0062](../decisions/0062-pc-delegation.md)). 원칙 6의 **명시한 예외**라 좁게 쓴다. 서버 실행기도 C12 `job_acks[]`의 같은 칸을 같은 규칙으로 쓴다 ([ADR-0082](../decisions/0082-batch-start.md)).
 
-- **그 BPM 프로세스가 선언한 `outputs`만** 싣는다 (C1 `outputs`) — 그 선언이 곧 「부르는 쪽이 받을 것」이고, 호출의 매핑(C14 `chk:call.output`)은 서버 그림에만 있어 PC는 모른다. 선언이 없으면 **아무것도 싣지 않는다**.
+- **그 BPM 프로세스가 선언한 `outputs`만** 싣는다 (C1 `outputs`) — 그 선언이 곧 「부르는 쪽이 받을 것」이고, 호출의 매핑(C14 `bpm:call.output`)은 서버 그림에만 있어 PC는 모른다. 선언이 없으면 **아무것도 싣지 않는다**.
 - **끝났을 때만** 싣는다 (`finished`·`failed`… — 작업 상태를 옮기는 ack가 아닌 것들). `started`에 실어 보내면 기다리는 서버 실행이 **빈 값으로 이어 간다**.
 - **위임으로 받은 작업만**이다 (`requested_by`가 `server_bot:<run_id>`). 평범한 작업에 실어 보내도 **Center가 버린다** — 받을 쪽이 없다.
 - Center는 받은 값을 그 서버 실행기에게 **하트비트로 내려 주고 ack가 오면 지운다** (C12).

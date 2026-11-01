@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_fx06_document_read" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_fx06_document_read" name="문서 AI 태스크" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [],
   "outputs": [],
@@ -20,14 +20,14 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Read" name="PDF 읽기">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`파일`은 견적서 PDF다.\n\n## 할 일\n공급자·합계·유효기간을 읽는다.\n\n## 판단하지 않는 것\n값을 계산하지 않는다.\n\n## 반환\n- `견적`: {공급자, 합계(int), 유효기간(date)}",
   "domain": "doc",
   "results": {
@@ -37,7 +37,7 @@
     "pdf_text_tool"
   ],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>

@@ -107,7 +107,7 @@ class Workspace:
         return found
 
 
-# ─────────────────────────── 파일 목록 (chk:fileList) ───────────────────────────
+# ─────────────────────────── 파일 목록 (bpm:fileList) ───────────────────────────
 
 
 @dataclass(frozen=True)
@@ -154,7 +154,7 @@ def list_files(workspace: Workspace, spec: FileList, scope: Scope) -> Listing:
     return Listing(paths=paths, folder=folder)
 
 
-# ─────────────────────────── 파일 출력 (chk:dataOutput) ───────────────────────────
+# ─────────────────────────── 파일 출력 (bpm:dataOutput) ───────────────────────────
 
 
 @dataclass(frozen=True)

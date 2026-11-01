@@ -4,11 +4,11 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx24_leave_balance" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:process id="Proc_bx24_leave_balance" name="잔여 휴가 조회 (공유)" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -27,14 +27,14 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="시작">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Ledger" name="연차 원장">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "hris",
   "operation": "get_leave_ledger",
   "input": {
@@ -43,12 +43,12 @@
   "output": {
     "원장": "ledger"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
     </bpmn:serviceTask>
-    <bpmn:scriptTask id="Task_Calc" name="잔여 계산" scriptFormat="chk-expr">
+    <bpmn:scriptTask id="Task_Calc" name="잔여 계산" scriptFormat="bpm-expr">
       <bpmn:incoming>Flow_02</bpmn:incoming>
       <bpmn:outgoing>Flow_03</bpmn:outgoing>
       <bpmn:script>잔여 = 원장.발생 - 원장.사용 - 원장.예정</bpmn:script>

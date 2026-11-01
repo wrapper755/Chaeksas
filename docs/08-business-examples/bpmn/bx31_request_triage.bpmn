@@ -4,12 +4,12 @@
   xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
   xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-  xmlns:chk="urn:chaeksas:bpmn:1"
+  xmlns:bpm="urn:chaeksas:bpmn:1"
   id="Defs_bx31_request_triage" targetNamespace="urn:chaeksas:examples" exporter="chaeksas-examples" exporterVersion="1">
   <bpmn:message id="Msg_ops_request" name="ops_request" />
   <bpmn:process id="Proc_bx31_request_triage" name="업무 요청 접수·분배" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{
+      <bpm:process>{
   "run_location": "server",
   "extensions": [
     {
@@ -38,7 +38,7 @@
       "description": ""
     }
   ]
-}</chk:process>
+}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" name="요청 도착">
       <bpmn:outgoing>Flow_01</bpmn:outgoing>
@@ -46,7 +46,7 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Task_Classify" name="요청 분류">
       <bpmn:extensionElements>
-        <chk:aiTask>{
+        <bpm:aiTask>{
   "goal": "## 상황\n`본문`은 직원이 자유롭게 쓴 요청이다.\n\n## 할 일\n종류(장비|권한|시설|기타), 긴급도(높음|보통|낮음), 한 줄 요약, 확신도(0~1)를 낸다.\n\n## 판단하지 않는 것\n요청을 직접 처리하거나 해결책을 제시하지 않는다.\n\n## 반환\n- `종류`: string\n- `긴급도`: string\n- `요약`: string\n- `확신도`: number",
   "domain": "llm",
   "results": {
@@ -57,7 +57,7 @@
   },
   "tools": [],
   "params": {}
-}</chk:aiTask>
+}</bpm:aiTask>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_01</bpmn:incoming>
       <bpmn:outgoing>Flow_02</bpmn:outgoing>
@@ -69,7 +69,7 @@
     </bpmn:exclusiveGateway>
     <bpmn:userTask id="Approve_Manual" name="사람이 분류">
       <bpmn:extensionElements>
-        <chk:approval>{
+        <bpm:approval>{
   "title": "요청 분류",
   "description": "",
   "show": [
@@ -105,14 +105,14 @@
     }
   ],
   "location": "center"
-}</chk:approval>
+}</bpm:approval>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_04</bpmn:incoming>
       <bpmn:outgoing>Flow_05</bpmn:outgoing>
     </bpmn:userTask>
     <bpmn:serviceTask id="Task_Ticket" name="티켓 만들기">
       <bpmn:extensionElements>
-        <chk:serviceCall>{
+        <bpm:serviceCall>{
   "app_id": "ticketing",
   "operation": "create_ticket",
   "input": {
@@ -124,7 +124,7 @@
   "output": {
     "티켓번호": "id"
   }
-}</chk:serviceCall>
+}</bpm:serviceCall>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_03</bpmn:incoming>
       <bpmn:incoming>Flow_05</bpmn:incoming>
@@ -132,7 +132,7 @@
     </bpmn:serviceTask>
     <bpmn:sendTask id="Task_Ack" name="접수 확인">
       <bpmn:extensionElements>
-        <chk:email>{
+        <bpm:email>{
   "to": [
     "{요청자}"
   ],
@@ -140,7 +140,7 @@
   "body": "티켓 {티켓번호}로 접수되었습니다. 담당: {종류} 팀",
   "attachments": [],
   "store_as": null
-}</chk:email>
+}</bpm:email>
       </bpmn:extensionElements>
       <bpmn:incoming>Flow_06</bpmn:incoming>
       <bpmn:outgoing>Flow_07</bpmn:outgoing>

@@ -49,17 +49,17 @@ WAIT_S = 20.0
 #: 확장 태스크 하나로 끝나는 그림 — 사람도, 바깥 앱도 없다.
 PROCESS = """<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
-                  xmlns:chk="urn:chaeksas:bpmn:1"
+                  xmlns:bpm="urn:chaeksas:bpmn:1"
                   targetNamespace="urn:chaeksas:test">
   <bpmn:process id="Proc_doc_summary" name="문서 요약" isExecutable="true">
     <bpmn:extensionElements>
-      <chk:process>{"run_location": "server", "service_keys": {},
-        "extensions": [], "outputs": [], "inputs": []}</chk:process>
+      <bpm:process>{"run_location": "server", "service_keys": {},
+        "extensions": [], "outputs": [], "inputs": []}</bpm:process>
     </bpmn:extensionElements>
     <bpmn:startEvent id="Start" />
     <bpmn:serviceTask id="Task_Sum" name="요약">
       <bpmn:extensionElements>
-        <chk:task type="sum_task" extension="doc-ocr">{"length": 3}</chk:task>
+        <bpm:task type="sum_task" extension="doc-ocr">{"length": 3}</bpm:task>
       </bpmn:extensionElements>
     </bpmn:serviceTask>
     <bpmn:endEvent id="End" />

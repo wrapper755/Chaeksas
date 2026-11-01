@@ -303,7 +303,7 @@ def test_an_extensions_server_part_status_comes_from_its_consumer(client: TestCl
                       topics=["uia"])
     fetch(client, worker, topic="uia")
     found = client.get("/api/v1/resources/extensions/ui-automation", headers=READ_AUTH).json()
-    assert (found["service_app_id"], found["protocol"], found["status"]) == ("uia", "chk-c11", "ok")
+    assert (found["service_app_id"], found["protocol"], found["status"]) == ("uia", "bpm-c11", "ok")
     assert found["installed_on"]["hosts"] == 1
 
 

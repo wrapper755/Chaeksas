@@ -2,7 +2,7 @@
 
 보는 것은 넷이다: 업무 예제의 호출이 **손대지 않으면 같은 본문으로** 돌아오는가, 엔진·검사·Center가
 거부할 것을 **「적용」 전에 막는가**(대상을 모르면 건너뛰는가), 「채우기」가 **빈 자리만** 더하는가,
-속성 패널이 `calledElement`와 `chk:call`을 **통째로** 넘기는가.
+속성 패널이 `calledElement`와 `bpm:call`을 **통째로** 넘기는가.
 """
 
 from __future__ import annotations

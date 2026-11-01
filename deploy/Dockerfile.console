@@ -39,7 +39,7 @@ COPY --from=build /web/apps/${APP}/.next/static ./apps/${APP}/.next/static
 # `standalone`은 `public/`을 담지 않는다 — 옮기지 않으면 로고·배경 그림이 404다. 없는 앱도 있어 빌드 단계가 빈 폴더를 만든다.
 COPY --from=build /web/apps/${APP}/public ./apps/${APP}/public
 # 서버 진입점 경로에 APP이 들어가므로 환경변수로 옮겨 CMD를 고정한다.
-ENV CHK_CONSOLE_SERVER=/web/apps/${APP}/server.js
+ENV BPM_CONSOLE_SERVER=/web/apps/${APP}/server.js
 
 # 컨테이너 안에서는 비관리자로 돈다 (node 이미지의 `node` 사용자, uid 1000).
 USER node
@@ -47,4 +47,4 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"
 
-CMD ["sh", "-c", "exec node \"$CHK_CONSOLE_SERVER\""]
+CMD ["sh", "-c", "exec node \"$BPM_CONSOLE_SERVER\""]

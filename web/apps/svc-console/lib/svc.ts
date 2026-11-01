@@ -9,18 +9,18 @@ import { COOKIE_NAME, open, type Session } from "./session";
 /**
  * BFF — **브라우저는 서비스 앱의 관리 API를 직접 부르지 않는다** (ADR-0017 §1).
  *
- * 콘솔 한 벌이 모든 서비스 앱의 콘솔을 그린다. 어느 앱을 보는지는 **설정**(`CHK_SVC_CONSOLE__APP_URL`)으로
+ * 콘솔 한 벌이 모든 서비스 앱의 콘솔을 그린다. 어느 앱을 보는지는 **설정**(`BPM_SVC_CONSOLE__APP_URL`)으로
  * 정하고, 앱 이름·버전·고유 메뉴는 `/admin/v1/status`의 `app_id`에서 온다 (화면 설계서 SVC-00).
  * 타입은 계약 JSON Schema에서 생성한 것만 쓴다 (손으로 쓰지 않는다).
  */
 
-export const APP_URL = process.env.CHK_SVC_CONSOLE__APP_URL ?? "http://localhost:8000";
+export const APP_URL = process.env.BPM_SVC_CONSOLE__APP_URL ?? "http://localhost:8000";
 
 /**
  * **브라우저가 여는** Center 콘솔 주소 — 「실행 id」를 CON-01로 잇는 데만 쓴다 (ADR-0075). 선택이다:
  * 없으면 링크만 없다. 콘솔 서버는 Center를 부르지 않는다 (토큰도 없다).
  */
-export const CENTER_CONSOLE_URL = process.env.CHK_SVC_CONSOLE__CENTER_CONSOLE_URL ?? "";
+export const CENTER_CONSOLE_URL = process.env.BPM_SVC_CONSOLE__CENTER_CONSOLE_URL ?? "";
 
 export class SvcError extends Error {
   constructor(

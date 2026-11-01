@@ -5,7 +5,7 @@
 [tool.uv.workspace]
 members = ["packages/*", "apps/*", "samples/*"]
 # samples/는 제품이 아니다 — 업무 예제가 부르는 모의 앱이다 (01-architecture §8).
-#   멤버로 둔 것은 `uv run chk-mock-apps`로 띄우고 `tests/`가 import하기 때문이다.
+#   멤버로 둔 것은 `uv run bpm-mock-apps`로 띄우고 `tests/`가 import하기 때문이다.
 #   제품 코드는 samples/를 import하지 않는다 (test_import_direction.py가 막는다).
 # spikes/는 멤버가 아니다 — 제품 코드가 import하지 않는다 (CLAUDE.md §3).
 # web/은 pnpm 워크스페이스다 (ADR-0017).
