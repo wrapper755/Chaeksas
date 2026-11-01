@@ -303,6 +303,18 @@ def read_record(folder: Path) -> dict[str, object]:
     return raw if isinstance(raw, dict) else {}
 
 
+def record_beside(definition: Path) -> dict[str, object]:
+    """바깥 `.bpmn`이 BPM 프로세스 폴더 모양(`<폴더>/process/<파일>` 옆에 `process.json`)이면
+    그 기록, 아니면 빈 사전 (STU-05 「파일에서 가져오기」).
+
+    작업 폴더 밖(예: 업무 저장소의 체크아웃)에서 BPM 프로세스를 관리하면 **버전·이름은 그 기록이
+    원본**이다 — 그림만 가져오고 기록을 버리면 가져올 때마다 버전이 작업 폴더의 옛 값으로 돌아간다.
+    """
+    if definition.parent.name != "process":
+        return {}
+    return read_record(definition.parent.parent)
+
+
 def write_record(process: BpmProcess) -> Path:
     found = _record_path(process.folder)
     found.parent.mkdir(parents=True, exist_ok=True)
@@ -449,11 +461,20 @@ class Workspace:
     def replace_entry(self, process: BpmProcess, source: Path) -> BpmProcess:
         """진입 정의의 **내용만** 바깥 파일로 바꾼다 (STU-05 「기존 것을 바꾸기」).
 
-        파일 이름은 기존 진입 이름 그대로다 — 기록·케이스가 그 이름을 가리킨다. 이름·버전·
-        케이스는 건드리지 않는다. **쓰기 전에 읽어 본다** — 읽지 못하면 아무것도 바뀌지 않는다.
+        파일 이름은 기존 진입 이름 그대로다 — 기록·케이스가 그 이름을 가리킨다. 케이스는 건드리지
+        않는다. 이름·버전·설명은 **바깥 파일 옆에 같은 id의 기록이 있을 때만** 그것을 따른다
+        (`record_beside` — 그쪽이 원본이다). **쓰기 전에 읽어 본다** — 읽지 못하면 아무것도
+        바뀌지 않는다.
         """
         text, _ = _readable_definition(source)
         self.save_definition(process, process.entry, text)
+        beside = record_beside(source)
+        if beside.get("id") == process.id:
+            fresh = self.read(process.folder, process.group)
+            fresh.name = str(beside.get("name") or fresh.name)
+            fresh.version = str(beside.get("version") or fresh.version)
+            fresh.description = str(beside.get("description") or fresh.description)
+            write_record(fresh)
         return self.read(process.folder, process.group)
 
     def save_definition(self, process: BpmProcess, file_name: str, xml: str) -> Path:

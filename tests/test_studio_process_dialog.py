@@ -130,10 +130,16 @@ def test_the_window_and_b6_use_the_same_table_for_extension_tasks(space: Workspa
 
 
 def test_the_check_says_the_first_problem_only() -> None:
-    assert check(name="이름", version="1.0.0", taken=[]) == ""
-    assert "이름을 적으세요" in check(name="  ", version="1.0.0", taken=[])
-    assert "같은 이름" in check(name="겹침", version="1.0.0", taken=["겹침"])
-    assert "버전은" in check(name="이름", version="1.0", taken=[])
+    assert check(name="이름", version="1.0.0", taken={}) == ""
+    assert "이름을 적으세요" in check(name="  ", version="1.0.0", taken={})
+    assert "a.other" in check(name="겹침", version="1.0.0", taken={"겹침": "a.other"})
+    assert "버전은" in check(name="이름", version="1.0", taken={})
+
+
+def test_a_name_already_shared_does_not_block_other_edits() -> None:
+    """복사해 만든 BPM 프로세스는 이름이 겹친 채 있다 — 버전만 올리는 것을 막지 않는다."""
+    assert check(name="겹침", version="1.0.1", taken={"겹침": "a.other"}, was="겹침") == ""
+    assert "같은 이름" in check(name="겹침", version="1.0.1", taken={"겹침": "a.other"}, was="옛 이름")
 
 
 # ─────────────────────────── 창 ───────────────────────────
