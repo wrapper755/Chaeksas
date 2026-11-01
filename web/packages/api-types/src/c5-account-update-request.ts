@@ -9,6 +9,7 @@
  * 길은 `PUT /auth/password`다.
  */
 export interface AccountUpdateRequest {
+  company?: string | null;
   disabled?: boolean | null;
   password?: string | null;
   role?: string | null;

@@ -31,8 +31,8 @@
       "name": "처리자",
       "type": "string",
       "required": false,
-      "description": "일괄을 낸 가상 직원의 이름 — Center가 넣는다(맡긴 일괄의 가상 직원). 혼자 기동하면 비어 있다",
-      "source": "virtual_worker.name"
+      "description": "이 업무 자리의 직원 이름 — Center가 넣는다. 직원 자리가 아니면 비어 있다",
+      "source": "staff.name"
     }
   ]
 }</bpm:process>

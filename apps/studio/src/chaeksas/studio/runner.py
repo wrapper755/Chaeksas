@@ -330,7 +330,7 @@ class CaseRun(QObject):
             given = resolve_inputs(
                 case.inputs if case else {}, now=self._started, receiver=self.receiver
             )
-            # **값 출처로 가른다** (ADR-0099) — 현장에서는 Center가 넣는 값(가상 직원)을 시험에서는
+            # **값 출처로 가른다** (ADR-0099) — 현장에서는 Center가 넣는 값(업무 자리)을 시험에서는
             # 케이스가 같은 「입력 변수」에 적는다. 엔진은 부르는 쪽 값과 따로 받는다.
             not_caller = {decl.name for decl in definition.process.info.inputs if not decl.from_caller}
             inputs = {name: value for name, value in given.items() if name not in not_caller}

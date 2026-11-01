@@ -1,0 +1,29 @@
+{
+  "$id": "urn:chaeksas:contracts:c16-company-request",
+  "additionalProperties": true,
+  "description": "`POST /companies`·`PUT /companies/{id}` — Center 관리자만.",
+  "properties": {
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "state": {
+      "default": "active",
+      "title": "State",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name"
+  ],
+  "title": "CompanyRequest",
+  "type": "object"
+}

@@ -117,7 +117,7 @@ export const STATUS_MAP = {
     "적용": "done",
     "거부": "failed",
   },
-  "가상 직원": {
+  "조직": {
     "사용 중": "done",
     "멈춤": "neutral",
   },

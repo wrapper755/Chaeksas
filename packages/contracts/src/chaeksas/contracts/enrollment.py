@@ -234,6 +234,7 @@ class EnrollmentInfo(ContractModel):
     decided_by: str | None = None
     decided_at: Timestamp | None = None
     reason: str | None = None
+    company: str | None = None  # 승인할 때 고른 회사 (C16)
     key_id: str | None = None
 
 
@@ -241,6 +242,9 @@ class EnrollmentApproveRequest(ContractModel):
     """`POST /enrollments/{id}/approve` — `name`을 비우면 요청의 이름을 쓴다."""
 
     name: str | None = None
+    #: 그 장비가 속할 회사 (C16, ADR-0125 §2). PC 실행기·Studio는 **필수**가 되고(구현 조각 2),
+    #: 서버 실행기는 Center 공용이라 적지 않는다.
+    company: str | None = None
 
 
 class EnrollmentRejectRequest(ContractModel):

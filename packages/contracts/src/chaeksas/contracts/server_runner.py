@@ -285,8 +285,6 @@ class MessageRequest(SchemaVersioned):
     correlation: Any = None
     payload: dict[str, Any] = Field(default_factory=dict)
     idempotency_key: str | None = None
-    #: **메시지 시작**으로 만들 작업의 가상 직원 id — C5 `JobCreateRequest.virtual_worker`와 같다 (ADR-0099).
-    virtual_worker: str | None = None
 
 
 class DelegationRequest(SchemaVersioned):

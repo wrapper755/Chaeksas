@@ -106,31 +106,31 @@ BPMN 2.0 파일 안에 우리 태스크의 속성을 적는 방법을 정한다.
 
 ### 입력의 값 출처 (`bpm:process.inputs[].source`)
 
-BPM 프로세스가 받는 정보는 **입력 한 목록**이다. 대부분은 부르는 쪽이 넣지만, **가상 직원 정보**처럼 Center가 넣는 값도 같은 목록에 한 줄로 선언하고 `source`로 출처만 다르게 적는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
+BPM 프로세스가 받는 정보는 **입력 한 목록**이다. 대부분은 부르는 쪽이 넣지만, **업무 자리(회사·부서·직원)**처럼 Center가 넣는 값도 같은 목록에 한 줄로 선언하고 `source`로 출처만 다르게 적는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
 
 ```json
 {"run_location": "server",
  "inputs": [
    {"name": "인입", "type": "list", "required": true, "description": "{번호, 금액} 목록"},
-   {"name": "감독자", "type": "list", "required": true, "source": "virtual_worker.supervisors"}
+   {"name": "담당", "type": "string", "required": true, "source": "staff.name"}
  ]}
 ```
 
 | `source` | 값을 넣는 쪽 | 타입 |
 | --- | --- | --- |
 | (없음) — `caller` | **부르는 쪽** — 작업 `inputs`·메시지 본문·위임 `bpm:call.input`·시험 케이스 | 선언한 대로 |
-| `virtual_worker.id` | **Center** — 이 실행을 돌리는 가상 직원(C5 §가상 직원)의 id | `string` |
-| `virtual_worker.name` | **Center** — 가상 직원의 이름 | `string` |
-| `virtual_worker.supervisors` | **Center** — 감독자 이름 목록 (등록 때 정규화한 그대로). 결재에 `"assignees": "감독자"`로 쓴다 | `list` |
+| `company.id`·`company.name` | **Center** — 이 BPM 프로세스의 업무 자리(C16)의 회사 | `string` |
+| `department.id`·`department.name` | **Center** — 업무 자리의 부서. 부서 자리 업무·부서가 있는 직원 자리 업무만 있고 나머지는 `None` | `string` |
+| `staff.id`·`staff.name` | **Center** — 업무 자리의 직원. 직원 자리 업무만 있고 나머지는 `None` | `string` |
 
 - **출처가 `caller`가 아닌 입력은 부르는 쪽이 줄 수 없다** — Center가 작업을 만들 때 422 `input_not_from_caller`로 거절하고(C5 — 위임도 같다), 엔진도 `input_not_from_caller`로 거절한다. 신원을 입력으로 지어낼 길이 없다.
-- 값은 서버 작업이 내려갈 때 Center가 붙인 가상 직원(C12 `JobDispatch.virtual_worker`)에서 엔진이 넣는다. **어느 가상 직원인지는 부르는 쪽이 id로 적는다**(C5 `virtual_worker`) — 비우면 그 BPM 프로세스를 접수 BPM 프로세스로 쓰는 가상 직원이 하나뿐일 때만 그것이다.
-- 값이 없으면 다른 입력과 같다 — **기본값 → 필수면 시작하지 않음(`input_required`) → `None`**. 그래서 「감독자」를 필수로 두면 가상 직원 없이 돌린 접수 BPM 프로세스는 시작조차 하지 않는다. 필수가 아니면 `None`이고, 그것을 결재 담당자로 쓰면 결재를 만들 때 `assignees_missing`으로 멈춘다.
-- **위임한 자식 작업은 가상 직원을 이어받는다** — 자식 BPM 프로세스가 이 출처의 입력을 선언했으면 값이 들어간다. 부모가 `bpm:call.input`으로 넘기는 것이 아니다(넘기면 위의 422로 업무 실패다). PC 자식에는 아직 값이 가지 않는다 (> 미정: ADR-0099 §3).
+- 업무 자리 출처(`company.*`·`department.*`·`staff.*`, [ADR-0125](../decisions/0125-organization-and-work-placement.md))는 C12 `JobDispatch.place`에서 엔진이 넣는다. **검사(B8)와 엔진·서버 실행기는 받지만 Center는 아직 붙이지 않는다**(C16 「합의」 — 조각 2) — 지금은 늘 기본값·`None`이다.
+- 값이 없으면 다른 입력과 같다 — **기본값 → 필수면 시작하지 않음(`input_required`) → `None`**. 그래서 「담당」을 필수로 두면 직원 자리가 아닌 업무로 돌렸을 때 시작조차 하지 않는다. 필수가 아니면 `None`이고, 그것을 결재 담당자로 쓰면 결재를 만들 때 `assignees_missing`으로 멈춘다.
+- **위임한 자식 작업은 제 업무 자리로 돈다** — 자식 BPM 프로세스가 이 출처의 입력을 선언했으면 그 자식의 자리에서 값이 들어간다. 부모가 `bpm:call.input`으로 넘기는 것이 아니다(넘기면 위의 422로 업무 실패다). PC 작업에는 아직 싣지 않는다 (> 미정).
 - 실행 기록(C3)에는 값이 가지 않는다(입력 값은 원래 개수만 남는다).
 - Studio 시험 실행은 케이스의 `inputs`에 **다른 입력처럼** 적은 값을 쓴다.
 
-> 상태: 돈다 — 서버 실행기가 받은 가상 직원을 `Engine.start(virtual_worker=…)`로 넘기고 엔진이 출처대로 넣는다 (`core.engine.sourced_inputs`). Studio는 케이스 입력을 출처로 갈라 준다.
+> 상태: 검사·엔진·서버 실행기·Studio가 돈다 — 서버 실행기가 받은 `JobDispatch.place`를 `core.engine.sourced_inputs`로 풀어 넘기고, Studio는 케이스 입력을 출처로 갈라 준다. **Center가 `place`를 붙이는 것은 아직이다**(C16 조각 2).
 
 ### PC 위임 (`bpm:call.delegate`)
 
@@ -311,7 +311,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 
 - `approvals`는 노드 id → 폼 응답이다. **PC 실행의 전환 확인**(확장 태스크 전환·AI 태스크 확인 트리거)도 **그 태스크의 노드 id**로 적는다 — `{"decision": "approve"}`가 「계속」(결과 없이 넘어간다), `reject`가 「중단」(`ESCALATED`). **적지 않으면 「중단」으로 친다**(기다리지 않는다 — 적지 않은 위임과 같은 결이고, 경계를 시험하는 길이다). `manual` 케이스는 결재처럼 기다린다 ([ADR-0106](../decisions/0106-pc-escalation-asks-a-person.md)). **서비스 호출의 결과 모름 확인**도 같은 자리다 — `approve`가 「다시 부른다」, `reject`·적지 않음이 「중단」(`TASK_FAILED`) ([ADR-0107](../decisions/0107-outcome-unknown-asks-a-person.md)).
 - `answered_by`(선택): 노드 id → **답한 사람** 이름. 그림이 `answered_by_as`로 받는 값이다. 적지 않으면 「시험 케이스」다 — Studio에는 「Studio 사용자」가 없어 지어내지 않는다 ([ADR-0096](../decisions/0096-answerer-into-variables.md)).
-- `inputs`에는 **출처가 가상 직원인 입력도** 다른 입력처럼 적는다 — 현장에서는 Center가 넣는 값을 시험에서는 케이스가 적는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
+- `inputs`에는 **출처가 업무 자리인 입력도** 다른 입력처럼 적는다 — 현장에서는 Center가 넣는 값을 시험에서는 케이스가 적는다 ([ADR-0099](../decisions/0099-input-value-source.md)).
 - `delegations`(선택): 노드 id → **PC 위임이 돌려주는 값**(그 BPM 프로세스가 선언한 `outputs`). Studio에는 부를 PC BPM 프로세스의 그림이 없고(다른 패키지다) 있다 해도 현장 확인이라 설계자 PC에서 답할 사람이 없으므로, **케이스가 결과를 적는다** — 결재 답·메시지와 같은 결이다 ([ADR-0062](../decisions/0062-pc-delegation.md) §2). **적어 두지 않은 위임은 그 자리에서 실패**다(기다리지 않는다 — 기다리게 두면 끝나지 않는다: 현장 PC도 Center도 없다). 사유 코드는 **`DELEGATION_FAILED`**, 진짜 PC 실행이 실패했을 때와 **같은 것**이다 — 그래서 적어 두지 않는 것이 **그림의 오류 경계를 시험하는 길**이다. `manual`은 이것을 막지 않는다(결재는 사람이 창에서 답할 수 있지만 위임은 Studio에 답할 사람이 없다).
   - 값을 적되 **그림이 읽는 이름을 빼면**(`{}`도 그렇다) 역시 업무 실패다 — 빈 값으로 이어 가지 않는다 (「그 BPM 프로세스의 판이 바뀌었다」가 현장에서 이 꼴이다).
 - `manual: true`인 케이스는 자동 응답이 있어도 쓰지 않고 실제 창을 띄운다. 폼을 사람이 보는지 확인하는 용도다.
@@ -349,7 +349,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | B5 | 파일 출력에 `store_as`가 있고 `template`·`variables` 중 하나가 있다. `xlsx`에 `template`를 쓰지 않고, `csv`의 `variables`는 이름 하나이며, `append`는 `md`·`txt`·`csv`에만 있다. 파일 목록에 `store_as`가 있고 `pattern`에 경로 구분자가 없다 | 오류 |
 | B6 | 실행 위치가 `server`면 `pc`만 적은 확장 태스크·`web`/`desktop` 도메인 AI 태스크·`location: field` 결재·**확인(`manualTask`)**이 없다 (C1 R2 — 확인은 늘 현장이라 서버에는 답할 사람이 없다, ADR-0015) | 오류 |
 | B7 | 옛 칸 `bpm:serviceCall.key_ref`·`bpm:process.service_keys`가 적혀 있으면 **말한다** — 서비스 앱 키가 없어 아무도 보지 않는다([ADR-0102](../decisions/0102-calling-outside-is-pull.md)). 읽기는 거부하지 않는다(모르는 칸으로 받아 둔다, 원칙 3). 지우려면 STU-04 「JSON」 탭에서 그 칸을 뺀다 | 경고 |
-| B8 | 결과 필드 타입이 `string`·`int`·`number`·`bool`·`list`·`dict`·`date` 중 하나다. 입력의 `source`가 아는 값이고 그 출처의 타입과 맞다(`virtual_worker.supervisors`는 `list`, 나머지는 `string`). 번호처럼 보이는 문자열(예: 발주번호 `PO-2608-001`)을 `int`로 두면 경고 | 오류 / 경고 |
+| B8 | 결과 필드 타입이 `string`·`int`·`number`·`bool`·`list`·`dict`·`date` 중 하나다. 입력의 `source`가 아는 값이고 그 출처의 타입과 맞다(`company.*`·`department.*`·`staff.*`는 모두 `string`). 번호처럼 보이는 문자열(예: 발주번호 `PO-2608-001`)을 `int`로 두면 경고 | 오류 / 경고 |
 | B9 | 연결되지 않은 노드가 없다 (들어오는 흐름·나가는 흐름) | 오류 |
 | B10 | 노드 id가 생성형(`Activity_[0-9a-z]{7}`)이면 경고 | 경고 |
 | B11 | 어떤 경로로는 만들어지지 않는 변수를 읽는다 (예: 한 가지에서만 생기는 결재 칸을 합류 뒤에 읽음, 프로세스 `inputs`에 없는 메시지 본문 변수) | 경고 ([ADR-0039](../decisions/0039-optional-variables-and-b11.md) — 경로 어림이라 막지 않는다) |
@@ -357,7 +357,7 @@ DMN 파일은 패키지 안에 그대로 들어가고, 결정 하나(`dmn:decisi
 | B13 | 웹훅 `body: all` (비밀이 섞일 수 있음), `location: field` 결재에 하루 넘는 시간 제한 | 경고 |
 | B14 | 병렬 분기와 합류의 가지 수가 맞다 (오류 경계의 대체 흐름을 병렬 합류에 바로 이으면 합류가 영원히 기다린다). 규칙 태스크의 `input`·`output`이 DMN 입력·출력 이름과 맞다. 호출의 `output`이 호출 대상의 `outputs`에 있다 — **PC 위임(`delegate`)은 패키지 안에서 찾지 않고** 그 BPM 프로세스가 선언한 `outputs`와 맞춰 보며(알 때만), `delegate`는 **실행 위치가 `server`일 때만** 쓸 수 있다 (자기 자신을 부르지 않는 것은 C1 R12가 본다). 타이머로 시작하는 BPM 프로세스에 기본값 없는 필수 입력이 없다 | 오류 |
 | B15 | 식·스크립트가 `bpm-expr` 문법 안에 있고, **도우미 함수 호출의 인자 모양**(인자 수·키워드 이름)이 그 도우미와 맞다 (`세기(전체, '주제')`는 `세기`가 인자 하나만 받으므로 오류) | 오류 |
-| B16 | **결재 없는 일괄 기동** — 반복이 붙은 위임 호출에 ① 그 `collection`을 `show`하는 결재를 지나지 않고 닿는 경로가 있거나 ② 그 결재와 반복 사이에 `collection`을 만드는 노드가 있다 (만드는 것은 플랫폼이 아는 것만 센다 — 확장 태스크가 만드는 변수는 모른다). 막는 것은 가상 직원(W3)이 접수 BPM 프로세스를 묶을 때다 ([ADR-0082](../decisions/0082-batch-start.md)) | 경고 |
+| B16 | **결재 없는 일괄 기동** — 반복이 붙은 위임 호출에 ① 그 `collection`을 `show`하는 결재를 지나지 않고 닿는 경로가 있거나 ② 그 결재와 반복 사이에 `collection`을 만드는 노드가 있다 (만드는 것은 플랫폼이 아는 것만 센다 — 확장 태스크가 만드는 변수는 모른다). **막는 자리는 없다** — 사람 없이 도는 일괄도 올바른 그림이라 경고로만 알린다 ([ADR-0082](../decisions/0082-batch-start.md)·[ADR-0125](../decisions/0125-organization-and-work-placement.md) §6) | 경고 |
 
 `validate()`는 오류와 경고를 **함께** 돌려준다 (`Violation.severity`). Studio 「실행 전 검사」는 오류만으로 실행을 막고(`blocking()`), 경고는 보여 주고 사람이 판단한다.
 
@@ -393,6 +393,7 @@ B11은 **어림**이다. 식에서 변수를 이름으로 뽑되 문자열 상�
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-11-01 | 1 | **가상 직원을 없앴다** — 값 출처 `virtual_worker.id`·`.name`·`.supervisors`를 걷고 `company.*`·`department.*`·`staff.*`를 더했다(C16). B16은 Studio 경고로만 남는다 | [0125](../decisions/0125-organization-and-work-placement.md) |
 | 2026-10-31 | 1 | UI 태스크(`bpm:task type="ui_task"`) 줄과 B12의 UI 스텝 동작 대조를 걷었다 — UI 자동화 확장이 없다. `domain`의 `web`·`desktop`은 낱말로 남고 사전 점검 `missing_agent_environment`·엔진 `node_kind_unsupported`로 돌지 않는다. B6은 그대로다. 형식(그림)은 그대로다 | [0114](../decisions/0114-remove-ui-automation.md) |
 | 2026-10-30 | 1 | 타이머 시작의 「일정이 읽는다」를 **Center**로 고쳐 적었다 — 서버 실행기·Bot UI에는 그 코드가 없었고 일정은 Center가 쥔다. 식의 문법(`L`·ISO 시작 생략)을 적었다. 그림은 그대로다 | [0110](../decisions/0110-center-keeps-the-schedule.md) |
 | 2026-10-29 | 1 | `bpm:serviceCall.key_ref`·`bpm:process.service_keys`를 **걷었다**. 옛 그림에 적혀 있으면 모르는 칸으로 받아 두고(원칙 3) **B7이 경고 한 줄로** 말한다(오류가 아니다 — 이름 규칙은 더 보지 않는다). 업무 예제가 더 적지 않으므로 경고가 뜻을 가진다. 선택 칸을 걷은 것이고 옛 그림이 그대로 읽히므로 **판을 올리지 않는다** (C1·C4와 같은 결) | [0102](../decisions/0102-calling-outside-is-pull.md) |

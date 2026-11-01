@@ -10,6 +10,7 @@
  */
 export interface BotUiInfo {
   bot_ui_id: string;
+  company?: string | null;
   current_run?: CurrentRun | null;
   deployment_results?: DeploymentResult[];
   disabled?: boolean;

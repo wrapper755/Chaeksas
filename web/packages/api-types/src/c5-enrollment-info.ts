@@ -7,6 +7,7 @@
  */
 export interface EnrollmentInfo {
   code: string;
+  company?: string | null;
   decided_at?: string | null;
   decided_by?: string | null;
   enrollment_id: string;

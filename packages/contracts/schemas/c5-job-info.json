@@ -53,6 +53,30 @@
       "default": null,
       "title": "Cancel Result"
     },
+    "company": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company"
+    },
+    "department": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Department"
+    },
     "dispatched_at": {
       "anyOf": [
         {
@@ -168,6 +192,18 @@
       "default": null,
       "title": "Run Status"
     },
+    "staff": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Staff"
+    },
     "state": {
       "title": "State",
       "type": "string"
@@ -198,18 +234,6 @@
       ],
       "default": null,
       "title": "Version"
-    },
-    "virtual_worker": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Virtual Worker"
     }
   },
   "required": [

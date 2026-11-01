@@ -463,7 +463,7 @@ def test_an_open_approval_of_an_ended_run_refuses_an_answer(
 
 
 def test_the_heartbeat_sweeps_open_approvals_of_ended_runs(client: TestClient, host: dict[str, Any]) -> None:
-    """답을 기다리지 않아도 **하트비트가 쓸어 거둔다** — 결재함·가상 직원 일괄에 남지 않는다."""
+    """답을 기다리지 않아도 **하트비트가 쓸어 거둔다** — 결재함에 남지 않는다."""
     finish_run(client, host)
     put(client, host)
     client.post("/api/v1/bot-ui/heartbeat", json=heartbeat_body(), headers=host["auth"])

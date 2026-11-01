@@ -54,6 +54,18 @@
       "title": "Code",
       "type": "string"
     },
+    "company": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company"
+    },
     "decided_at": {
       "anyOf": [
         {

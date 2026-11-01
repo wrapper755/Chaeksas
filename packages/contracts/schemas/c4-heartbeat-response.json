@@ -146,6 +146,17 @@
           "default": null,
           "title": "Note"
         },
+        "place": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PlaceIdentity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "requested_at": {
           "title": "Requested At",
           "type": "string"
@@ -165,17 +176,6 @@
           ],
           "default": null,
           "title": "Version"
-        },
-        "virtual_worker": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/VirtualWorkerIdentity"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
         }
       },
       "required": [
@@ -185,6 +185,62 @@
         "requested_at"
       ],
       "title": "JobDispatch",
+      "type": "object"
+    },
+    "OrgRef": {
+      "additionalProperties": true,
+      "description": "조직 하나를 가리키는 id와 이름 — 실행하는 쪽이 값 출처로 푼다.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "OrgRef",
+      "type": "object"
+    },
+    "PlaceIdentity": {
+      "additionalProperties": true,
+      "description": "**작업의 주인** — Center가 서버 작업을 내려줄 때 붙인다 (C12 `JobDispatch.place`). 저장하지 않는다.\n\n실행하는 쪽이 출처가 `company.*`·`department.*`·`staff.*`인 입력의 값으로 푼다\n(`core.engine.sourced_inputs`). 그 자리에 없는 것(회사 자리 업무의 직원)은 비어 있다.",
+      "properties": {
+        "company": {
+          "$ref": "#/$defs/OrgRef"
+        },
+        "department": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OrgRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "staff": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OrgRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "company"
+      ],
+      "title": "PlaceIdentity",
       "type": "object"
     },
     "RotatedKey": {
@@ -241,33 +297,6 @@
         "ciphertext"
       ],
       "title": "Sealed",
-      "type": "object"
-    },
-    "VirtualWorkerIdentity": {
-      "additionalProperties": true,
-      "description": "**가상 직원 신원** — 그 실행을 돌리는 가상 직원 (C5 §가상 직원, ADR-0098).\n\nCenter가 서버 작업을 내려줄 때 붙인다(C12 `JobDispatch.virtual_worker`, ADR-0099). 실행하는\n쪽이 출처가 `virtual_worker.*`인 입력의 값으로 푼다 (`core.engine.sourced_inputs`).",
-      "properties": {
-        "id": {
-          "title": "Id",
-          "type": "string"
-        },
-        "name": {
-          "title": "Name",
-          "type": "string"
-        },
-        "supervisors": {
-          "items": {
-            "type": "string"
-          },
-          "title": "Supervisors",
-          "type": "array"
-        }
-      },
-      "required": [
-        "id",
-        "name"
-      ],
-      "title": "VirtualWorkerIdentity",
       "type": "object"
     }
   },

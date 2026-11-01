@@ -63,7 +63,7 @@
 | 수행 모드 | 자율 수행 / 결정 수행 | 글자로만 표시 (색 없음) |
 | API 키 (Center) | 사용 중 / 만료 / 폐기됨 | done / warning / neutral |
 | 패키지 | 후보 / 승인됨 / 지원 종료 / 철회 / 로컬만 | waiting / done / warning / failed / neutral |
-| 서명·준비·온라인·외부 작업·배치 결정·가상 직원·관리자 계정·배포·등록 요청·기능 | `tokens.json` `status_map` 참고 | — |
+| 서명·준비·온라인·외부 작업·배치 결정·조직·관리자 계정·배포·등록 요청·기능 | `tokens.json` `status_map` 참고 | — |
 | 결재 | 대기 / 답함 / 시간 초과 / 회수됨 (실행하는 쪽이 답을 거절하면 다시 「대기」 + 안내 띠) | waiting / done / warning / neutral |
 | 작업 | 대기 / 전달됨 / 대기열 / 수락 / 거절 / 만료 / 취소됨 | neutral / active / waiting / done / failed / warning / neutral |
 | 서비스 앱 | 정상 / 저하 / 응답 없음 / 확인 전 | done / warning / failed / neutral |
@@ -160,7 +160,7 @@ Studio 시험 실행과 PC 실행기의 BPM 프로세스 실행에서 같은 창
 | CON-07 | 리소스 | Center 콘솔 | 운영자 | M5 | 신규 |
 | CON-11 | API 키 — 없어짐 (ADR-0124, 키 동작은 대상 화면으로) | Center 콘솔 | 운영자 | M2 | 폐기 |
 | CON-12 | 서버 실행 | Center 콘솔 | 운영자 | M7 | 신규 |
-| CON-13 | 가상 직원 | Center 콘솔 | 운영자·감독자 | — | 신규 ([ADR-0085](../decisions/0085-virtual-worker-resource.md)) |
+| CON-13 | 조직 | Center 콘솔 | Center 관리자·회사 관리자 | — | 아직 ([ADR-0125](../decisions/0125-organization-and-work-placement.md) — 가상 직원 화면은 걷었다) |
 | CON-14 | 관리자 계정 | Center 콘솔 | 관리자 | — | 신규 ([ADR-0090](../decisions/0090-center-admin-accounts.md)) |
 | CON-15 | 배포 | Center 콘솔 | 관리자 | — | 신규 (ADM-03을 옮겼다, ADR-0090) |
 | CON-16 | 앱 로그 | Center 콘솔 | 운영자 | — | 신규 ([ADR-0121](../decisions/0121-center-console-says-process.md)) |

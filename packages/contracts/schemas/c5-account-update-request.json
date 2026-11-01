@@ -3,6 +3,18 @@
   "additionalProperties": true,
   "description": "`PUT /accounts/{username}` — 관리자만. 비운 칸은 그대로 둔다.\n\n`password`는 **새로 정해 주는 것**이다(지금 비밀번호를 묻지 않는다). 자기 비밀번호를 바꾸는\n길은 `PUT /auth/password`다.",
   "properties": {
+    "company": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Company"
+    },
     "disabled": {
       "anyOf": [
         {

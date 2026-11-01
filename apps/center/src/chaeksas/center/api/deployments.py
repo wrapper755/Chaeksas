@@ -21,7 +21,6 @@ from __future__ import annotations
 import json
 import secrets
 from collections.abc import Sequence
-from pathlib import Path
 from typing import Any
 
 from chaeksas.center import signer
@@ -114,7 +113,7 @@ def _refuse(problems: Sequence[Any]) -> None:
 
 
 def create(
-    store: Store, wanted: DeploymentRequest, *, by: str, package_dir: Path | None = None
+    store: Store, wanted: DeploymentRequest, *, by: str
 ) -> DeploymentInfo:
     """배포한다 (C5 `POST /deployments`). Center가 `deployment` 봉투를 지어 서명한다 (ADR-0090).
 
@@ -135,17 +134,14 @@ def create(
         value = getattr(wanted, name)
         if value is not None:
             claim[name] = value
-    made = _accept(store, signer.seal(store, claim).to_json_dict(), package_dir=package_dir)
+    made = _accept(store, signer.seal(store, claim).to_json_dict())
     with store.tx() as cur:
         cur.execute("UPDATE deployments SET deployed_by = ? WHERE deployment_id = ?", (by, made.deployment_id))
     return _row(store, store.row("SELECT * FROM deployments WHERE deployment_id = ?", (made.deployment_id,)))
 
 
-def _accept(store: Store, raw: Any, *, package_dir: Path | None = None) -> DeploymentInfo:
-    """서명된 `deployment` 봉투를 받아 둔다 — 사람이 서명하던 때부터 같은 관문이다.
-
-    `package_dir`가 있으면 **가상 직원의 접수 BPM 프로세스 관문**도 본다 (ADR-0085 §2 — 그 판의 그림을 읽는다).
-    """
+def _accept(store: Store, raw: Any) -> DeploymentInfo:
+    """서명된 `deployment` 봉투를 받아 둔다 — 사람이 서명하던 때부터 같은 관문이다."""
     envelope = _envelope(raw)
     keys = admin_keys(store)
     # **봉투를 먼저 본다** — 패키지를 찾기 전에 막아야 없는 패키지의 404로 봉투의 진위가 새지
@@ -185,13 +181,6 @@ def _accept(store: Store, raw: Any, *, package_dir: Path | None = None) -> Deplo
 
     _refuse_missing_resources(package.manifest, store)
     _refuse_unapproved_delegations(package.manifest, store)
-    if package_dir is not None:
-        from chaeksas.center.api import virtual_workers  # noqa: PLC0415 — 순환 import를 피한다
-
-        # 묶인 뒤 **새 판**으로 결재 없는 일괄 기동이 들어오는 길을 막는다 (409 `intake_not_gated`).
-        virtual_workers.deploy_gate(
-            store, package_dir, bot=str(claim.get("bpm_process_id") or ""), version=str(claim.get("version") or "")
-        )
     target = claim.get("target") or {}
 
     with store.tx() as cur:

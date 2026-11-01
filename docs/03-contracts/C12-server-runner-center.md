@@ -146,7 +146,7 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 | `server_time`, `next_heartbeat_s` | |
 | `deployments[]` | `target.type=server_runner`이고 `id`가 이 실행기 또는 `"*"`인 활성 배포 봉투 (C2) |
 | `admin_keys` | 바뀌었을 때만 |
-| `jobs[]` | **빈자리만큼만** 싣는다. C4 JobDispatch와 같은 모양. 작업에 가상 직원이 있으면(C5 `virtual_worker`) `virtual_worker`(`{id, name, supervisors}`)를 붙인다 — Center가 내려줄 때 등록에서 읽어 붙이고 값은 저장하지 않는다. 실행기는 엔진에 넘겨 그림이 값 출처로 선언한 입력에 넣는다 (C14, [ADR-0099](../decisions/0099-input-value-source.md)) |
+| `jobs[]` | **빈자리만큼만** 싣는다. C4 JobDispatch와 같은 모양. 작업의 주인(업무 자리)은 `place`(`{company, department?, staff?}` — 각 `{id, name}`)로 싣는다 — Center가 내려줄 때 읽어 붙이고 값은 저장하지 않는다. 실행기는 엔진에 넘겨 그림이 값 출처로 선언한 입력에 넣는다 (C14·C16, [ADR-0125](../decisions/0125-organization-and-work-placement.md)). **Center는 아직 붙이지 않는다**(C16 「합의」) |
 | `cancel_jobs[]` | |
 | `approvals[]` | 답이 정해진 결재. 기다리던 실행이 이어 간다 |
 | `messages[]` | `{message_id, name, correlation?, payload, received_at}` — **기다리는 실행에 넣을 것만** 내려온다. 메시지 시작은 Center가 작업으로 바꿔 `jobs[]`로 보낸다 (§메시지) |
@@ -182,7 +182,6 @@ ADR-0113) — 답한 하트비트의 `deployments[]`에 덮는 봉투가 없는 
 | `correlation` | 기다리는 실행을 찾는 키 (예: 주문 번호). 없으면 메시지 시작만 |
 | `payload` | object |
 | `idempotency_key` | C5와 같은 규칙 |
-| `virtual_worker` | **메시지 시작**으로 만들 작업의 가상 직원 id — C5 `JobCreateRequest.virtual_worker`와 같은 규칙이다 (ADR-0099). 기다리는 실행에 넣는 메시지에는 쓰지 않는다 |
 
 Center는 메시지를 이렇게 처리한다.
 
@@ -375,6 +374,7 @@ C4와 같다 (401, 403 `key_revoked`·`wrong_key_type`, 409 `machine_mismatch`·
 
 | 날짜 | schema | 바뀐 것 | ADR |
 | --- | --- | --- | --- |
+| 2026-11-01 | 1 | **가상 직원을 없앴다** — 하트비트 `jobs[].virtual_worker`·`MessageRequest.virtual_worker`를 걷고 `jobs[].place?`를 더했다(C16) | [0125](../decisions/0125-organization-and-work-placement.md) |
 | 2026-10-31 | 1 | **함께 배포된 실행기는 들이기 비밀로 바로 승인**(헤더 `X-BPM-Join-Token`, 403 `join_token_invalid`)과 **재시작**(`POST …/server-runners/{id}/restart`, `HeartbeatResponse.restart`, `ServerRunnerInfo.restart_requested_at?`). 선택 칸이라 옛 실행기는 그대로 돈다(재시작 지시를 모를 뿐이다) | [0117](../decisions/0117-bundled-server-runner-joins-by-shared-secret.md) |
 | 2026-10-31 | 1 | 설치를 목록과 맞춘다 — 덮는 봉투가 없는 설치는 `not_ready`, 기다리는 실행은 그대로. 칸은 그대로다 | [0113](../decisions/0113-field-follows-withdrawn-deployments.md) |
 | 2026-10-29 | 1 | **§긴 외부 작업** — `waiting[]`에 `external_task` 갈래와 짝 칸 `task_id`. 결과는 실행기가 C15로 묻고 이 계약에 내려오는 칸은 없다. 선택 칸이라 옛 Center는 그대로 돈다 | [0103](../decisions/0103-long-external-tasks.md) |

@@ -46,7 +46,7 @@ ACTOR_HEADER = "X-BPM-Actor"
 #: 일이 없고(내려받기만 한다), 연동용 키는 작업만 만든다.
 PACKAGE_KEY_TYPE = "studio"
 
-#: 연동용 키 — 외부 시스템이 작업·메시지를 넣고 가상 직원을 읽는다 (C5 권한표, ADR-0098).
+#: 연동용 키 — 외부 시스템이 작업·메시지를 넣는다 (C5 권한표).
 INTEGRATION_KEY_TYPE = "integration"
 
 #: `X-BPM-On-Behalf-Of`를 읽는 키 종류 (ADR-0081). 다른 쪽이 실어 보내면 **듣지 않는다**.

@@ -32,18 +32,6 @@
       "description": "이 계약의 schema 번호",
       "title": "Schema",
       "type": "integer"
-    },
-    "virtual_worker": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Virtual Worker"
     }
   },
   "required": [

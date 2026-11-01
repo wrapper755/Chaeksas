@@ -12,6 +12,8 @@ export interface JobInfo {
   bpm_process_id: string;
   cancel_requested?: boolean;
   cancel_result?: string | null;
+  company?: string | null;
+  department?: string | null;
   dispatched_at?: string | null;
   expires_at?: string | null;
   idempotency_key?: string | null;
@@ -26,11 +28,11 @@ export interface JobInfo {
   requested_by: string;
   run_id?: string | null;
   run_status?: string | null;
+  staff?: string | null;
   state: string;
   state_reason?: string | null;
   target: JobTarget;
   version?: string | null;
-  virtual_worker?: string | null;
   [k: string]: unknown;
 }
 /**

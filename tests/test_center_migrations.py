@@ -383,3 +383,66 @@ def test_the_cli_does_not_open_the_store(
     assert hosts(["retire", "bui_00000002"]) == 0
     assert "겹친 행이 없다" in capsys.readouterr().out
     assert hosts(["retire", "bui_00000001"]) == 2  # 이제 겹치지 않는다 — 은퇴시킬 수 없다
+
+
+# ─────────────────────────── 22판 — 조직 (ADR-0125 §7) ───────────────────────────
+
+
+def _database_before_organization(db: Path) -> sqlite3.Connection:
+    """**21판에 멈춘 DB** — 조직이 생기기 전의 Center."""
+    conn = sqlite3.connect(db)
+    migrate(conn, baseline=SCHEMA, steps=[one for one in MIGRATIONS if one.version <= 21])
+    return conn
+
+
+def _virtual_worker(conn: sqlite3.Connection, worker_id: str, intake: str) -> None:
+    conn.execute(
+        "INSERT INTO virtual_workers (id, name, supervisors_json, intake, state, created_at, updated_at)"
+        " VALUES (?, ?, '[\"김감독\"]', ?, 'active', '2026-10-20T00:00:00+00:00', '2026-10-20T00:00:00+00:00')",
+        (worker_id, f"{worker_id} 이름", intake),
+    )
+
+
+def test_what_is_there_moves_into_the_default_company(tmp_path: Path) -> None:
+    db = tmp_path / "center.sqlite3"
+    conn = _database_before_organization(db)
+    _host(conn, "bot_uis", "bui_00000001", key="ck_a", machine="m" * 64, name="구매 PC")
+    conn.commit()
+    migrate(conn, baseline=SCHEMA)
+    assert conn.execute("SELECT id, name, state FROM companies").fetchall() == [("default", "기본 회사", "active")]
+    assert conn.execute("SELECT company FROM bot_uis").fetchall() == [("default",)]
+    conn.close()
+    for table in ("packages", "bot_uis", "center_keys", "enrollments", "accounts"):
+        assert "company" in _columns(db, table), table
+    assert {"company", "department", "staff"} <= set(_columns(db, "jobs"))
+    # 가상 직원 기능은 없어진다 — 표도 작업의 칸도 남지 않는다.
+    assert "virtual_worker" not in _columns(db, "jobs")
+    assert _columns(db, "virtual_workers") == []
+
+
+def test_a_virtual_worker_becomes_staff_and_its_intake_is_placed_with_it(tmp_path: Path) -> None:
+    db = tmp_path / "center.sqlite3"
+    conn = _database_before_organization(db)
+    _virtual_worker(conn, "finance-intake", "fx24-batch-intake")
+    conn.commit()
+    migrate(conn, baseline=SCHEMA)
+    assert conn.execute("SELECT id, company, department, name FROM staff").fetchall() == [
+        ("finance-intake", "default", None, "finance-intake 이름")
+    ]
+    assert conn.execute("SELECT bpm_process_id, company, scope, staff FROM process_places").fetchall() == [
+        ("fx24-batch-intake", "default", "staff", "finance-intake")
+    ]
+    conn.close()
+
+
+def test_an_intake_shared_by_two_virtual_workers_is_left_without_a_place(tmp_path: Path) -> None:
+    """누구의 일인지 **짐작하지 않는다** — 둘 다 직원이 되고, 자리는 사람이 고른다."""
+    db = tmp_path / "center.sqlite3"
+    conn = _database_before_organization(db)
+    _virtual_worker(conn, "vw-a", "shared-intake")
+    _virtual_worker(conn, "vw-b", "shared-intake")
+    conn.commit()
+    migrate(conn, baseline=SCHEMA)
+    assert [row[0] for row in conn.execute("SELECT id FROM staff ORDER BY id")] == ["vw-a", "vw-b"]
+    assert conn.execute("SELECT COUNT(*) FROM process_places").fetchone() == (0,)
+    conn.close()

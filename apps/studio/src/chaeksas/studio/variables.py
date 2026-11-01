@@ -30,9 +30,12 @@ INPUT_TYPES = ("string", "int", "number", "bool", "list", "dict", "date")
 #: 값 출처 콤보 — (값, 화면 글). 부르는 쪽이 맨 앞이고 기본값이다 (ADR-0099).
 INPUT_SOURCES = (
     (INPUT_SOURCE_CALLER, "부르는 쪽"),
-    ("virtual_worker.id", "가상 직원 — id"),
-    ("virtual_worker.name", "가상 직원 — 이름"),
-    ("virtual_worker.supervisors", "가상 직원 — 감독자"),
+    ("company.id", "회사 — id"),
+    ("company.name", "회사 — 이름"),
+    ("department.id", "부서 — id"),
+    ("department.name", "부서 — 이름"),
+    ("staff.id", "직원 — id"),
+    ("staff.name", "직원 — 이름"),
 )
 #: 「지금 값」 칸에 보이는 글의 길이 — 긴 목록 하나가 칸을 다 차지하면 나머지를 못 본다.
 MAX_VALUE = 200
@@ -127,7 +130,7 @@ def problem(inputs: Sequence[InputRow], outputs: Sequence[str]) -> str:
     for row in inputs:
         wanted = INPUT_SOURCE_TYPES.get(row.source)
         if wanted is not None and row.type != wanted:
-            return f"입력 {row.name.strip()}은 값 출처가 가상 직원이라 타입이 {wanted}여야 합니다"
+            return f"입력 {row.name.strip()}은 값 출처가 업무 자리라 타입이 {wanted}여야 합니다"
         _value, bad = parse_default(row.type, row.default)
         if bad:
             return f"입력 {row.name.strip()}: {bad}"

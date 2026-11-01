@@ -221,17 +221,17 @@ def _sourced(source: str, kind: str) -> str:
 
 
 def test_b8_an_input_source_must_be_known_and_match_its_type() -> None:
-    """ADR-0099 — 감독자는 목록, id·이름은 글자다. 모르는 출처는 오류다."""
-    assert "B8" not in codes(_sourced("virtual_worker.supervisors", "list"))
+    """ADR-0099·ADR-0125 — 업무 자리의 id·이름은 글자다. 모르는 출처는 오류다(가상 직원 출처는 없어졌다)."""
+    assert "B8" not in codes(_sourced("staff.name", "string"))
     assert "B8" not in codes(_sourced("caller", "list"))
-    assert "B8" in codes(_sourced("virtual_worker.supervisors", "string"))
-    assert "B8" in codes(_sourced("virtual_worker.boss", "list"))
+    assert "B8" in codes(_sourced("staff.name", "list"))
+    assert "B8" in codes(_sourced("virtual_worker.supervisors", "list"))
 
 
 def test_a_sourced_input_is_an_input() -> None:
     """같은 형식이다 — 출처가 달라도 선언한 입력이라 B11의 출처이고 `from_caller`만 다르다."""
-    process = read_process(_sourced("virtual_worker.supervisors", "list"))
-    assert "B11" not in codes(_sourced("virtual_worker.supervisors", "list"))
+    process = read_process(_sourced("staff.name", "string"))
+    assert "B11" not in codes(_sourced("staff.name", "string"))
     decl = process.info.input("감독자")
     assert decl is not None and not decl.from_caller
 

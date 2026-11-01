@@ -20,7 +20,9 @@ from chaeksas.contracts._base import ContractModel, Timestamp, Violation
 #: 역할 둘 — 관리자(쓰기 전부)와 보기 전용(GET만, 읽기 토큰이 하던 일).
 ROLE_ADMIN = "admin"
 ROLE_VIEWER = "viewer"
-KNOWN_ROLES = frozenset({ROLE_ADMIN, ROLE_VIEWER})
+#: **회사 관리자** (C16, ADR-0125 §5) — 제 회사의 조직·승인·배포·장비만 다룬다. 회사가 꼭 있다.
+ROLE_COMPANY_ADMIN = "company_admin"
+KNOWN_ROLES = frozenset({ROLE_ADMIN, ROLE_VIEWER, ROLE_COMPANY_ADMIN})
 
 #: 아이디 — 영문 소문자·숫자·`.`·`_`·`-`, 3~32자. 화면 이름도 아이디 그대로다.
 USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")
@@ -96,6 +98,8 @@ class AccountInfo(ContractModel):
     password_changed_at: Timestamp
     disabled_at: Timestamp | None = None
     last_login_at: Timestamp | None = None
+    #: 이 계정이 보는 회사 (C16). 없으면 Center 전체다 — `admin`은 늘 없고 `company_admin`은 늘 있다.
+    company: str | None = None
 
 
 class AccountCreateRequest(ContractModel):
@@ -104,6 +108,7 @@ class AccountCreateRequest(ContractModel):
     username: str
     password: str
     role: str = ROLE_ADMIN
+    company: str | None = None  # `company_admin`은 필수, `viewer`는 선택, `admin`은 비운다 (C16)
 
 
 class AccountUpdateRequest(ContractModel):
@@ -114,6 +119,7 @@ class AccountUpdateRequest(ContractModel):
     """
 
     role: str | None = None
+    company: str | None = None
     disabled: bool | None = None
     password: str | None = None
 

@@ -20,6 +20,5 @@ export interface MessageRequest {
    * 이 계약의 schema 번호
    */
   schema: number;
-  virtual_worker?: string | null;
   [k: string]: unknown;
 }

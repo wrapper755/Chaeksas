@@ -34,7 +34,7 @@ from chaeksas.contracts import (
     MessageRequest,
     RunEvent,
     ServerRunnerHeartbeatRequest,
-    VirtualWorkerInfo,
+    StaffInfo,
     validate_runner_heartbeat,
 )
 
@@ -49,7 +49,6 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C3-run-events", 1, EventBatchResponse),  # 응답
     ("C4-bot-ui-center", 0, HeartbeatRequest),
     ("C4-bot-ui-center", 1, HeartbeatResponse),
-    ("C5-packages-deployments-jobs", 0, VirtualWorkerInfo),  # 가상 직원 (ADR-0085)
     ("C6-approvals", 0, ApprovalCreateRequest),
     ("C6-approvals", 1, TypeAdapter(dict[str, Any])),  # 표 값이 든 검토 자료 (ADR-0112)
     ("C7-resources-center-keys", 0, ConsumerFolderScan),  # 일꾼 폴더 (ADR-0122)
@@ -62,6 +61,7 @@ EXAMPLES: list[tuple[str, int, Any]] = [
     ("C15-external-tasks", 0, FolderConsumer),  # 일꾼 파일 (ADR-0122)
     ("C15-external-tasks", 1, ExternalTaskCreate),  # 일감 올리기
     ("C15-external-tasks", 2, FetchResponse),  # 일꾼이 받은 것
+    ("C16-organization", 0, StaffInfo),  # 직원 하나 (ADR-0125)
 ]
 
 

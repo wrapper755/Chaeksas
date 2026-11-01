@@ -24,6 +24,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+from chaeksas.contracts.organization import DEFAULT_COMPANY_ID, DEFAULT_COMPANY_NAME
+
 log = logging.getLogger(__name__)
 
 #: 판 기록 표. **이 표만은 단계가 아니다** — 판을 읽으려면 먼저 있어야 한다.
@@ -74,6 +76,9 @@ SELECT 'server_runners', 'machine_id', machine_id, server_runner_id
 ORDER BY 1, 2, 3, 4
 """
 
+
+#: 옮기는 단계 안에서 「지금」 — SQL 문은 값을 받지 않으므로 SQLite가 센다(UTC, ISO 8601).
+_NOW_SQL = "strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now')"
 
 #: **더하기만 한다.** 지우거나 고치지 않는다 — 이미 이 단계를 지난 DB가 있다. 잘못 간 단계는
 #: 새 단계로 바로잡는다. 판은 2부터 빈틈 없이 오른다 (시험이 본다).
@@ -299,6 +304,56 @@ MIGRATIONS: tuple[Step, ...] = (
         21,
         "일꾼 폴더의 키 파일로 들인 연동용·대리 답용 키 — 그 파일 이름(확장자 앞), 빠지면 폐기한다 (ADR-0123)",
         ("ALTER TABLE center_keys ADD COLUMN folder_file TEXT",),
+    ),
+    Step(
+        22,
+        "회사 > 부서 > 직원과 업무 자리 — 지금 것은 기본 회사로, 가상 직원은 직원으로 옮기고 없앤다 (C16, ADR-0125)",
+        (
+            "CREATE TABLE companies ("
+            " id TEXT PRIMARY KEY, name TEXT NOT NULL, state TEXT NOT NULL,"
+            " created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE TABLE departments ("
+            " id TEXT PRIMARY KEY, company TEXT NOT NULL, name TEXT NOT NULL, state TEXT NOT NULL,"
+            " created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE INDEX departments_company ON departments (company)",
+            "CREATE TABLE staff ("
+            " id TEXT PRIMARY KEY, company TEXT NOT NULL, department TEXT, name TEXT NOT NULL,"
+            " state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)",
+            "CREATE INDEX staff_company ON staff (company)",
+            # 업무 자리 — BPM 프로세스(패키지 id)마다 하나. **서명하지 않는다** (ADR-0125 §3).
+            "CREATE TABLE process_places ("
+            " bpm_process_id TEXT PRIMARY KEY, company TEXT NOT NULL, scope TEXT NOT NULL,"
+            " department TEXT, staff TEXT, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL)",
+            # 회사 소유: 패키지(올린 Studio의 회사)·PC 실행기·Studio 키·등록 요청. 서버 실행기는 공용이라 없다.
+            "ALTER TABLE packages ADD COLUMN company TEXT",
+            "ALTER TABLE bot_uis ADD COLUMN company TEXT",
+            "ALTER TABLE center_keys ADD COLUMN company TEXT",
+            "ALTER TABLE enrollments ADD COLUMN company TEXT",
+            # 작업은 **만들 때의 자리**를 적는다 (ADR-0125 §4).
+            "ALTER TABLE jobs ADD COLUMN company TEXT",
+            "ALTER TABLE jobs ADD COLUMN department TEXT",
+            "ALTER TABLE jobs ADD COLUMN staff TEXT",
+            # 회사 관리자·회사 보기 전용의 회사. Center 관리자는 비어 있다.
+            "ALTER TABLE accounts ADD COLUMN company TEXT",
+            # 옮기기 (ADR-0125 §7) — 기본 회사를 만들고 지금 것을 모두 거기 둔다.
+            "INSERT INTO companies (id, name, state, created_at, updated_at)"
+            f" VALUES ('{DEFAULT_COMPANY_ID}', '{DEFAULT_COMPANY_NAME}', 'active', {_NOW_SQL}, {_NOW_SQL})",
+            f"UPDATE packages SET company = '{DEFAULT_COMPANY_ID}'",
+            f"UPDATE bot_uis SET company = '{DEFAULT_COMPANY_ID}'",
+            f"UPDATE center_keys SET company = '{DEFAULT_COMPANY_ID}' WHERE type IN ('bot_ui', 'studio')",
+            f"UPDATE jobs SET company = '{DEFAULT_COMPANY_ID}'",
+            # 가상 직원은 같은 id의 직원이 된다(부서 없음). 감독자는 갈 곳이 없다 — 담당은 그림이 정한다.
+            "INSERT INTO staff (id, company, department, name, state, created_at, updated_at)"
+            f" SELECT id, '{DEFAULT_COMPANY_ID}', NULL, name, state, created_at, updated_at FROM virtual_workers",
+            # 접수 BPM 프로세스의 자리는 그 직원이다 — **그 BPM 프로세스를 쓰는 가상 직원이 하나일 때만**.
+            # 여럿이면 누구의 일인지 짐작하지 않고 자리 없음으로 둔다(다음 승인이나 「자리 바꾸기」가 고른다).
+            "INSERT INTO process_places (bpm_process_id, company, scope, department, staff, updated_at, updated_by)"
+            f" SELECT intake, '{DEFAULT_COMPANY_ID}', 'staff', NULL, MIN(id), {_NOW_SQL}, 'migration'"
+            " FROM virtual_workers GROUP BY intake HAVING COUNT(*) = 1",
+            # **가상 직원 기능은 없앤다** — 옮긴 뒤 표와 작업의 칸을 지운다 (ADR-0125 §6).
+            "DROP TABLE virtual_workers",
+            "ALTER TABLE jobs DROP COLUMN virtual_worker",
+        ),
     ),
 )
 

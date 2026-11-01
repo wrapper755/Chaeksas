@@ -27,6 +27,7 @@ from chaeksas.contracts.bot_ui import (
     Versions,
 )
 from chaeksas.contracts.manifest import Manifest
+from chaeksas.contracts.organization import STAFF_PREFIX, Place
 from chaeksas.contracts.resources import MissingResource
 from chaeksas.contracts.signing import TARGET_ANY, AdminKey, Envelope, verify, verify_time
 
@@ -97,7 +98,7 @@ def delegation_requester(run_id: str) -> str:
 
 #: Center가 짓는 주체 이름의 앞머리 — 바깥에서 온 사람 이름이 이것으로 시작하면 받지 않는다.
 #: 받아 두면 기록을 읽는 쪽이 「Center가 지은 주체」와 가를 수 없다 (ADR-0081).
-RESERVED_ACTOR_PREFIXES: tuple[str, ...] = (DELEGATION_REQUESTER_PREFIX, "vw:", "timer:")
+RESERVED_ACTOR_PREFIXES: tuple[str, ...] = (DELEGATION_REQUESTER_PREFIX, STAFF_PREFIX, "timer:")
 
 #: `requested_by`의 예약값 앞머리 — **타이머 시작이 만든 작업**이다 (`timer:<식>`,
 #: [ADR-0110](../decisions/0110-center-keeps-the-schedule.md) §8). 적는 쪽은 Center의 일정,
@@ -216,6 +217,10 @@ class PackageInfo(ContractModel):
     signed_at: Timestamp | None = None
     #: 승인한 사람 (계정 아이디 — ADR-0090). 봉투의 `signed_by`는 이제 늘 Center 키라 사람을 말하지 못한다.
     approved_by: str | None = None
+    #: **올린 Studio의 회사** (C16, ADR-0125). 옮기기 전에 올라온 것은 기본 회사다.
+    company: str | None = None
+    #: 업무 자리 (C16). `bpm_process`에만 있고, 아직 고르지 않았으면 없다(회사 공통으로 읽는다).
+    place: Place | None = None
     preflight: PreflightSummary = Field(default_factory=PreflightSummary)
     manifest: Manifest | None = None
     missing_resources: list[MissingResource] = Field(default_factory=list)
@@ -278,6 +283,8 @@ class BotUiInfo(ContractModel):
     #: 값이라 흘려보내면 「왜 설치가 안 됐나」가 남지 않는다. 최신순 최대 `RECENT_RESULTS`건.
     deployment_results: list[DeploymentResult] = Field(default_factory=list)
     key: BotUiKey | None = None
+    #: 그 PC가 속한 회사 (C16 — 등록을 승인할 때 정한다).
+    company: str | None = None
 
 
 # ─────────────────────────── 배포 ───────────────────────────
@@ -479,9 +486,6 @@ class JobCreateRequest(ContractModel):
     expires_at: Timestamp | None = None
     note: str | None = Field(default=None, max_length=MAX_NOTE_CHARS)
     idempotency_key: str | None = None
-    #: **어느 가상 직원의 일인가** (가상 직원 id, ADR-0099). 그 가상 직원의 `intake`가 이 BPM 프로세스이어야
-    #: 한다. 비우면 그 BPM 프로세스의 가상 직원이 하나뿐일 때만 그것이다. 값(이름·감독자)은 Center가 채운다.
-    virtual_worker: str | None = None
 
 
 class JobInfo(JobCreateRequest):
@@ -505,6 +509,10 @@ class JobInfo(JobCreateRequest):
     dispatched_at: Timestamp | None = None
     run_id: str | None = None
     run_status: str | None = None  # 실행의 성패는 작업 상태가 아니다 (C3 run_finished가 정한다)
+    #: **만들 때의 업무 자리** (C16, ADR-0125 §4) — 작업 행에 적는다. 자리를 바꿔도 이 작업은 그대로다.
+    company: str | None = None
+    department: str | None = None
+    staff: str | None = None
 
 
 class ScheduleInfo(ContractModel):
@@ -529,57 +537,6 @@ class ScheduleInfo(ContractModel):
     last_job_id: str | None = None
     last_missed: int = 0
     last_error: str | None = None  # 작업을 만들지 못한 코드
-
-
-# ─────────────────────────── 가상 직원 (C5 §가상 직원, ADR-0085) ───────────────────────────
-
-#: 가상 직원 상태 (열린 문자열). `stopped`는 **보이기 위한 칸**이다 — 새 작업을 막지 않는다.
-KNOWN_VIRTUAL_WORKER_STATES = frozenset({"active", "stopped"})
-#: 주체 이름의 앞머리 — `vw:<id>`. 바깥에서 온 사람 이름은 이것으로 시작할 수 없다 (ADR-0081).
-VIRTUAL_WORKER_PREFIX = "vw:"
-#: 상세가 주는 최근 일괄 수.
-VIRTUAL_WORKER_RECENT_BATCHES = 20
-
-VirtualWorkerId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$")]
-
-
-class VirtualWorkerRequest(ContractModel):
-    """`POST /virtual-workers`·`PUT /virtual-workers/{id}` — 사람이 아닌 업무 주체 (ADR-0085).
-
-    **기동 허용 목록은 없다** — 접수 BPM 프로세스의 서명된 `requires.delegations`가 그것이다 (ADR-0079).
-    """
-
-    id: VirtualWorkerId
-    name: str = Field(min_length=1)
-    #: 감독자 이름들 — C6 담당자와 같은 정규화(`approvals.normalize_assignees`)를 거쳐 저장한다.
-    supervisors: list[str] = Field(default_factory=list)
-    #: 접수 BPM 프로세스의 **패키지 id** (C1 `id`). 판은 배포가 정한다.
-    intake: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,99}$")
-    state: str = "active"  # 열린 문자열 (KNOWN_VIRTUAL_WORKER_STATES)
-
-
-class VirtualWorkerBatch(ContractModel):
-    """일괄 하나 = 접수 BPM 프로세스 실행 하나 (ADR-0079). **읽을 때** 모은다 — 저장하지 않는다."""
-
-    run_id: str
-    status: str | None = None  # C3 `RunInfo.status`와 같은 값
-    started_at: Timestamp | None = None
-    children: int = 0
-    children_by_status: dict[str, int] = Field(default_factory=dict)
-    open_approvals: list[str] = Field(default_factory=list)
-
-
-class VirtualWorkerInfo(VirtualWorkerRequest):
-    """`GET /virtual-workers…` — 등록 + 최근 일괄(하나를 읽을 때만)."""
-
-    created_at: Timestamp
-    updated_at: Timestamp
-    batches: list[VirtualWorkerBatch] = Field(default_factory=list)
-
-
-def virtual_worker_principal(worker_id: str) -> str:
-    """가상 직원의 주체 이름 — `vw:<id>` (사람 이름·키 이름과 겹치지 않는다)."""
-    return f"{VIRTUAL_WORKER_PREFIX}{worker_id}"
 
 
 def validate_job_create(
