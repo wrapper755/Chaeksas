@@ -448,3 +448,69 @@ def test_the_center_resources_dialog_opens_from_the_explorer(window: Any, monkey
     window.resource_tree.opening_center.emit()
     assert len(opened) == 1
     assert opened[0] is None, "Center 설정이 없으면 읽는 쪽을 만들지 않는다"
+
+
+# ─────────────────────────── STU-12b 업무 자리 (ADR-0127) ───────────────────────────
+
+
+def _organized(center: TestClient, key: str) -> None:
+    """그 Studio 키를 기본 회사의 장비로 두고 부서·직원 하나씩 (C16)."""
+    store = center.app.state.store  # type: ignore[attr-defined]
+    with store.tx() as cur:
+        cur.execute("UPDATE center_keys SET company = 'default' WHERE type = 'studio'")
+    for path, body in (
+        ("departments", {"id": "purchasing", "company": "default", "name": "구매팀"}),
+        ("staff", {"id": "kim", "company": "default", "department": "purchasing", "name": "김구매"}),
+    ):
+        made = center.post(f"/api/v1/{path}", json=body, headers=ADMIN)
+        assert made.status_code == 201, made.text
+
+
+def test_the_upload_window_reads_its_own_company(center: TestClient, studio_key: str) -> None:
+    """고를 거리는 **이 Studio 키로 읽은 제 회사의 조직**이다 (C16 — Studio 키는 제 회사만)."""
+    _organized(center, studio_key)
+    org = upload.read_organization(uploader(center, studio_key))
+    assert org is not None
+    assert (org.company_id, org.company_name) == ("default", "기본 회사")
+    assert [one.id for one in org.departments] == ["purchasing"]
+    assert [one.label for one in org.staff] == ["김구매"]
+
+
+def test_the_upload_window_says_where_the_work_sits(qt_app: Any, center: TestClient, studio_key: str,
+                                                    tmp_path: Path) -> None:
+    from chaeksas.studio.upload_dialog import NO_ORG, UploadDialog
+    from chaeksas.studio.workspace import Workspace
+
+    _organized(center, studio_key)
+    process = Workspace(tmp_path / "작업").ensure().create("buy-request", name="구매 요청")
+    org = upload.read_organization(uploader(center, studio_key))
+
+    dialog = UploadDialog(None, process, org)
+    assert dialog.place() is None, "처음에는 회사 공통이다"
+    dialog.staff.setChecked(True)
+    assert dialog.place() == {"scope": "staff", "staff": "kim"}
+
+    # 지난번 고른 것이 미리 골라져 있다 — 기록(`process.json`)에서.
+    process.place = {"scope": "department", "department": "purchasing"}
+    again = UploadDialog(None, process, org)
+    assert again.place() == {"scope": "department", "department": "purchasing"}
+
+    # 조직을 읽지 못하면 회사 공통만 — 그렇게 말한다.
+    blind = UploadDialog(None, process, None)
+    assert blind.place() is None and not blind.department.isEnabled() and blind.note.text() == NO_ORG
+
+
+def test_the_place_goes_into_the_manifest(tmp_path: Path) -> None:
+    """고른 자리는 매니페스트(C1 `place`)로 간다 — 기록을 다시 읽어도 남는다."""
+    from chaeksas.studio.packaging import build_manifest
+    from chaeksas.studio.workspace import Workspace, write_record
+
+    space = Workspace(tmp_path / "작업").ensure()
+    examples = Path(__file__).resolve().parent.parent / "docs" / "08-business-examples" / "bpmn"
+    process = space.import_example(examples, "bx02_morning_fx_report")
+    process.place = {"scope": "staff", "staff": "kim"}
+    write_record(process)
+    reread = space.read(process.folder, process.group)
+    assert reread.place == {"scope": "staff", "staff": "kim"}
+    manifest = build_manifest(reread)
+    assert manifest.place is not None and manifest.place.staff == "kim"

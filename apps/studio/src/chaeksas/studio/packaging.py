@@ -36,6 +36,7 @@ from chaeksas.contracts.manifest import (
     Trigger,
     validate,
 )
+from chaeksas.contracts.organization import Place
 from chaeksas.studio.workspace import BpmProcess, Definition
 
 #: 패키지에 들어가는 폴더 (C1 패키지 구성). 작업 폴더가 같은 이름을 쓴다.
@@ -283,6 +284,8 @@ def build_manifest(
         # 사람이 STU-06에 적은 설명 (작업 폴더 기록). **비면 넣지 않는다** — 빈 글을 적으면
         # 콘솔이 「설명이 있다」로 읽는다.
         description=process.description or None,
+        # 업무 자리 — 올리기 창에서 고른 것 (C1 `place`, ADR-0127). 비면 회사 공통이라 넣지 않는다.
+        place=Place.model_validate(process.place) if process.place else None,
         # 실행 위치는 **처음부터** 들어간다. 생략하면 서버다 (C1 R1·ADR-0016).
         run_location=entry.process.info.run_location or "server",
         entry=f"process/{entry.path.name}",

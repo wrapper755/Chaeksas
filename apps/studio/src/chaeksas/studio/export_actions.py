@@ -21,6 +21,8 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 from chaeksas.studio import upload
 from chaeksas.studio.dialogs import ShareDefinitionsDialog
 from chaeksas.studio.packaging import PackageError, default_lib_name, default_name, export, export_lib
+from chaeksas.studio.upload_dialog import UploadDialog
+from chaeksas.studio.workspace import write_record
 
 if TYPE_CHECKING:  # pragma: no cover - 순환 import를 피한다 (창이 이 모듈을 부른다)
     from chaeksas.studio.main_window import MainWindow
@@ -129,6 +131,16 @@ def upload_package(window: MainWindow) -> None:
         return
     if not window.saved_to_disk():
         return
+    found = uploader(window)
+    if found is None:
+        return
+    # STU-12b — **업무 자리를 고른다** (ADR-0127). 고른 것은 기록에 남겨 다음에 미리 골라 둔다.
+    go, place = UploadDialog.ask(window, process, upload.read_organization(found))
+    if not go:
+        return
+    if place != process.place:
+        process.place = place
+        write_record(process)
     locations = window.task_type_locations()
     keyed = window.key_extensions()
     _upload(
@@ -140,6 +152,7 @@ def upload_package(window: MainWindow) -> None:
             task_type_locations=locations,
             key_extensions=keyed,
         ),
+        found=found,
     )
 
 
@@ -167,13 +180,15 @@ def upload_shared(window: MainWindow) -> None:
     )
 
 
-def _upload(window: MainWindow, what: str, make: Callable[[Path], Path]) -> None:
+def _upload(
+    window: MainWindow, what: str, make: Callable[[Path], Path], *, found: upload.CenterUploader | None = None
+) -> None:
     """만들어서 올린다 — 담는 것은 **저장된 파일**이다 (부르는 쪽이 관문을 지났다).
 
     순서가 중요하다 — **설정을 먼저 묻는다.** 패키지를 만들고 나서 「Center 설정이 없습니다」
     라고 하면 사람이 한 일이 버려진다.
     """
-    found = uploader(window)
+    found = found or uploader(window)
     if found is None:
         return
 

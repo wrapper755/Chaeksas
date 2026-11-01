@@ -66,6 +66,8 @@ WHY = {
     "forbidden": "Center가 거부했습니다 — Studio용 Center API 키인지 확인하세요 (설정 → Center).",
     "key_invalid": "Center API 키가 거부되었습니다 (설정 → Center).",
     "too_large": "패키지가 너무 큽니다 (Center 제한 50 MB).",
+    "place_outside_company": "그 부서·직원이 이 회사에 없습니다 — 자리를 다시 고르세요.",
+    "package_id_taken": "이 BPM 프로세스 id는 다른 회사가 쓰고 있습니다 — id를 바꾸세요.",
 }
 
 
@@ -110,6 +112,67 @@ class CenterUploader:
             status=str(body.get("status") or ""),
             created=response.status_code == 201,
         )
+
+
+@dataclass(frozen=True)
+class OrgChoice:
+    """올리기 창의 고를 거리 하나 — 부서 또는 직원 (C16)."""
+
+    id: str
+    name: str
+    stopped: bool = False
+
+    @property
+    def label(self) -> str:
+        return f"{self.name} (멈춤)" if self.stopped else self.name
+
+
+@dataclass(frozen=True)
+class Organization:
+    """이 Studio 키로 읽은 **제 회사의 조직** (C16 — Studio 키는 제 회사만 읽는다, ADR-0127)."""
+
+    company_id: str
+    company_name: str
+    departments: tuple[OrgChoice, ...] = ()
+    staff: tuple[OrgChoice, ...] = ()
+
+
+def read_organization(uploader: CenterUploader) -> Organization | None:
+    """STU-12b의 고를 거리 — 회사·부서·직원. **닿지 못하면 `None`**이다(창이 「회사 공통」만 켠다)."""
+    import httpx  # noqa: PLC0415 — 부를 때만 든다
+
+    base = uploader.base_url.rstrip("/") + "/api/v1"
+    headers = {"Authorization": f"Bearer {uploader.api_key}"}
+    own = uploader.client is None
+    client = uploader.client or httpx.Client(timeout=10)
+    try:
+        companies = client.get(f"{base}/companies", headers=headers)
+        departments = client.get(f"{base}/departments", headers=headers)
+        staff = client.get(f"{base}/staff", headers=headers)
+    except httpx.HTTPError as e:
+        log.info("조직을 읽지 못했다: %s", type(e).__name__)
+        return None
+    finally:
+        if own:
+            client.close()
+    if any(one.status_code >= 400 for one in (companies, departments, staff)):
+        return None
+    found = companies.json() or []
+    if len(found) != 1:
+        return None  # Studio 키는 제 회사 하나만 본다 — 아니면 고를 수 없다
+
+    def choices(rows: Any) -> tuple[OrgChoice, ...]:
+        return tuple(
+            OrgChoice(id=str(one["id"]), name=str(one.get("name") or one["id"]), stopped=one.get("state") == "stopped")
+            for one in rows or []
+        )
+
+    return Organization(
+        company_id=str(found[0]["id"]),
+        company_name=str(found[0].get("name") or found[0]["id"]),
+        departments=choices(departments.json()),
+        staff=choices(staff.json()),
+    )
 
 
 def _refused(response: Any) -> str:
