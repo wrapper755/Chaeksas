@@ -347,6 +347,7 @@ def recent_runs(
 
     회사는 **회사 공통** 자리만이다(부서·직원 칸이 빈 작업) — 부서·직원 자리 실행은 그쪽 상세가 보인다.
     """
+    value: str | None
     if company is not None:
         where, value = "j.company = ? AND j.department IS NULL AND j.staff IS NULL", company
     elif department is not None:
