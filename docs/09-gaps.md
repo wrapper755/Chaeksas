@@ -46,9 +46,9 @@ M6의 셋째 완료 기준 — 「모든 계약 문서 상태가 「구현됨」
 
 계약 열둘의 상태는 §1 표에 있다. PC 위임을 닫았고(§3-13) 그 거리가 드러낸 「도는 서버 실행을 멈출 길이 없다」도 [ADR-0063](decisions/0063-stopping-a-running-server-run.md)으로, 「서버 실행기가 확장 태스크를 꽂지 않는다」(§3-14)도 [ADR-0064](decisions/0064-extension-tasks-on-the-server.md)로 닫았다. 일괄 기동이 드러낸 「서버의 병렬 반복」(§3-15)도 [ADR-0087](decisions/0087-parallel-loop-on-the-server.md)로 닫았다. 바깥 요청(NowView R4)이 드러낸 「외부 확장 주소의 입구」(§3-16)도 [ADR-0097](decisions/0097-external-extension-address-from-center.md)로 닫았다. C15(외부 작업, §3-17)도 조각 1~6과 옛 키 칸 걷기로 닫았다. AI 태스크의 거짓 칸을 정리하다(ADR-0105) 드러난 「PC 전환 → 사람 확인」(§3-18)도 [ADR-0106](decisions/0106-pc-escalation-asks-a-person.md)으로 닫았다. 그 길을 닫다 드러난 「어댑터의 결과 모름」(§3-19)도 [ADR-0107](decisions/0107-outcome-unknown-asks-a-person.md)로 닫았다. 다음 거리를 코드와 대조하다 드러난 「타이머 시작을 깨우는 자리」(§3-20)도 [ADR-0110](decisions/0110-center-keeps-the-schedule.md)으로 닫았다. 그 뒤 2026-10-31 대조가 **새로 일곱**(§3-21~27)을 찾았다 — 넷(§3-21~24)은 업무에 닿고, §3-25는 엔진의 흠, §3-26·27은 작은 칸과 「미정」 모음이다. 그중 배포의 끝 둘(§3-22·23)은 [ADR-0113](decisions/0113-field-follows-withdrawn-deployments.md)으로 닫았다. UI 자동화 확장을 걷으며(ADR-0114) 다시 들일 때 정할 것을 §3-28에 모았다.
 
-### 3-29. 직원·요청 — 정했고 구현 전
+### 3-29. 조직·업무 자리 — 정했고 구현 전
 
-[ADR-0125](decisions/0125-staff-own-work-and-request-each-other.md), 계약 [C16](03-contracts/C16-staff-and-requests.md) 「초안」, 화면 CON-13 「직원으로 바뀐다」. 바깥 요청(NowView R1~R6)이 드러냈다 — 업무 주체가 가상 직원(접수 BPM 프로세스 하나 + 감독자)뿐이라 「누가 어떤 업무를 하나」를 그릴 수 없고, 다른 주체의 업무를 부를 길이 패키지 id뿐이며, 기다리지 않는 위임(ADR-0079 「미정」)이 없었다. 먼저 정할 것은 없다 — ADR-0125 「다음 순서」 다섯 조각이다. 남은 「미정」 둘: 운영 중 가상 직원을 옮길 때 회사 id를 받는 길, PC 실행의 맡기고 끝.
+[ADR-0125](decisions/0125-organization-and-work-placement.md), 계약 [C16](03-contracts/C16-organization.md) 「초안」, 화면 CON-13 「조직으로 바뀐다」. 바깥 요청(NowView)과 사용자의 방향이 드러냈다 — 업무 주체가 가상 직원(접수 BPM 프로세스 하나 + 감독자)뿐이고, 회사·부서가 없어 여러 회사가 한 Center를 쓰면 서로의 것이 섞이며, 업무가 누구의 일인지 정할 자리가 없다. 먼저 정할 것은 없다 — ADR-0125 「다음 순서」 여섯 조각이다. 남은 「미정」: 연동용·대리 답용 키를 회사에 묶을지. **직원 사이의 업무 요청**은 조직이 선 뒤 따로 ADR을 쓴다(ADR-0125 §8).
 
 ### 3-21. PC BPM 프로세스로 메시지를 넣는 길이 없다
 
